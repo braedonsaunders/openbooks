@@ -44,7 +44,11 @@ test("close work gets the deep budget", () => {
 
 test("forensics gets the deep budget, plain analytics does not", () => {
   assert.equal(
-    resolveStepBudget("run a forensic review for suspicious round-dollar entries", [], resolveModule),
+    resolveStepBudget(
+      "run a forensic review for suspicious round-dollar entries",
+      [],
+      resolveModule,
+    ),
     STEP_BUDGET_DEEP,
   );
   assert.equal(

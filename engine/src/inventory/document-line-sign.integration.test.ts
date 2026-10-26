@@ -27,7 +27,13 @@ const depsFor = (org: ScratchOrg) => ({
 async function draftApprovedDocument(
   org: ScratchOrg,
   kind: "customer_invoice" | "vendor_bill" | "sales_order" | "sales_fulfillment",
-  line: { quantity: string; unitPrice: string; amount: string; unit?: string; custom?: Record<string, unknown> },
+  line: {
+    quantity: string;
+    unitPrice: string;
+    amount: string;
+    unit?: string;
+    custom?: Record<string, unknown>;
+  },
 ): Promise<{ documentId: string; lineId: string }> {
   const documentId = randomUUID();
   const lineId = randomUUID();
@@ -57,47 +63,66 @@ async function draftApprovedDocument(
 }
 
 async function movementCount(orgId: string, lineId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from inventory_movements
-     where org_id = ${orgId} and document_line_id = ${lineId}`, "objects"));
+     where org_id = ${orgId} and document_line_id = ${lineId}`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
-test("a negative-quantity invoice line is refused and points to the customer credit return flow", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { documentId, lineId } = await draftApprovedDocument(org, "customer_invoice", {
-      quantity: "-1",
-      unitPrice: "100",
-      amount: "-100",
-    });
-    await assert.rejects(
-      postDocument(documentId, depsFor(org)),
-      /negative quantity.*not a return.*customer credit naming the source shipment/s,
-    );
-    assert.equal(await movementCount(org.orgId, lineId), 0, "no stock may move on a refused line");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a negative-quantity invoice line is refused and points to the customer credit return flow",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { documentId, lineId } = await draftApprovedDocument(org, "customer_invoice", {
+        quantity: "-1",
+        unitPrice: "100",
+        amount: "-100",
+      });
+      await assert.rejects(
+        postDocument(documentId, depsFor(org)),
+        /negative quantity.*not a return.*customer credit naming the source shipment/s,
+      );
+      assert.equal(
+        await movementCount(org.orgId, lineId),
+        0,
+        "no stock may move on a refused line",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a negative-quantity bill line is refused and points to the vendor credit return flow", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { documentId, lineId } = await draftApprovedDocument(org, "vendor_bill", {
-      quantity: "-1",
-      unitPrice: "100",
-      amount: "-100",
-    });
-    await assert.rejects(
-      postDocument(documentId, depsFor(org)),
-      /negative quantity.*not a return.*vendor credit naming the source receipt/s,
-    );
-    assert.equal(await movementCount(org.orgId, lineId), 0, "no stock may move on a refused line");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a negative-quantity bill line is refused and points to the vendor credit return flow",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { documentId, lineId } = await draftApprovedDocument(org, "vendor_bill", {
+        quantity: "-1",
+        unitPrice: "100",
+        amount: "-100",
+      });
+      await assert.rejects(
+        postDocument(documentId, depsFor(org)),
+        /negative quantity.*not a return.*vendor credit naming the source receipt/s,
+      );
+      assert.equal(
+        await movementCount(org.orgId, lineId),
+        0,
+        "no stock may move on a refused line",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /**
  * Document line units convert to the item's base unit through the item's
@@ -145,50 +170,71 @@ async function draftApprovedDocumentWithUnit(
 }
 
 async function glBalance(org: ScratchOrg, accountId: string): Promise<bigint> {
-  const r = (await db.execute<{ bal: string }>(sql`
+  const r = await db.execute<{ bal: string }>(
+    sql`
     select coalesce(sum(l.amount), 0)::text as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${org.orgId} and l.account_id = ${accountId}
-       and e.status = 'posted'`, "objects"));
+       and e.status = 'posted'`,
+    "objects",
+  );
   return toUnits(r[0]!.bal);
 }
 
-test("a bill line in boxes receives base units at the converted unit cost", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await setConversions(org, '{"box": 12}');
-    const { documentId, lineId } = await draftApprovedDocumentWithUnit(org, "vendor_bill", {
-      quantity: "2",
-      unit: "box",
-      unitPrice: "120",
-      amount: "240",
-    });
-    await postDocument(documentId, depsFor(org));
-    const movement = (await db.execute<{ quantity: string; unit_cost: string; total_value: string }>(sql`
+test(
+  "a bill line in boxes receives base units at the converted unit cost",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await setConversions(org, '{"box": 12}');
+      const { documentId, lineId } = await draftApprovedDocumentWithUnit(org, "vendor_bill", {
+        quantity: "2",
+        unit: "box",
+        unitPrice: "120",
+        amount: "240",
+      });
+      await postDocument(documentId, depsFor(org));
+      const movement = (
+        await db.execute<{ quantity: string; unit_cost: string; total_value: string }>(
+          sql`
       select quantity::text, unit_cost::text, total_value::text from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`, "objects"))[0]!;
-    assert.equal(toUnits(movement.quantity), toUnits("24"), "2 box x 12 = 24 each");
-    assert.equal(toUnits(movement.unit_cost), toUnits("10"), "$240 over 24 each");
-    assert.equal(toUnits(movement.total_value), toUnits("240"));
-    const layer = (await db.execute<{ remaining: string; unit_cost: string }>(sql`
+       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(toUnits(movement.quantity), toUnits("24"), "2 box x 12 = 24 each");
+      assert.equal(toUnits(movement.unit_cost), toUnits("10"), "$240 over 24 each");
+      assert.equal(toUnits(movement.total_value), toUnits("240"));
+      const layer = (
+        await db.execute<{ remaining: string; unit_cost: string }>(
+          sql`
       select remaining_quantity::text as remaining, unit_cost::text from cost_layers
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`, "objects"))[0]!;
-    assert.equal(toUnits(layer.remaining), toUnits("24"));
-    assert.equal(await glBalance(org, org.accounts.invAsset), toUnits("240"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(toUnits(layer.remaining), toUnits("24"));
+      assert.equal(await glBalance(org, org.accounts.invAsset), toUnits("240"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("an invoice line in boxes issues base units", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     await setConversions(org, '{"box": 12}');
     await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-      quantity: "24", unitCost: "10", subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.clearing, date: org.date,
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "24",
+      unitCost: "10",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
     });
     const { documentId, lineId } = await draftApprovedDocumentWithUnit(org, "customer_invoice", {
       quantity: "2",
@@ -197,9 +243,14 @@ test("an invoice line in boxes issues base units", { skip: !DB }, async () => {
       amount: "30",
     });
     await postDocument(documentId, depsFor(org));
-    const movement = (await db.execute<{ quantity: string }>(sql`
+    const movement = (
+      await db.execute<{ quantity: string }>(
+        sql`
       select quantity::text from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, "objects"))[0]!;
+       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(toUnits(movement.quantity), toUnits("-24"), "2 box x 12 = 24 each issued");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -217,10 +268,19 @@ test("a bill line in a differently-cased unit still converts", { skip: !DB }, as
       amount: "240",
     });
     await postDocument(documentId, depsFor(org));
-    const movement = (await db.execute<{ quantity: string }>(sql`
+    const movement = (
+      await db.execute<{ quantity: string }>(
+        sql`
       select quantity::text from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`, "objects"))[0]!;
-    assert.equal(toUnits(movement.quantity), toUnits("24"), "case and whitespace fold before conversion");
+       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(
+      toUnits(movement.quantity),
+      toUnits("24"),
+      "case and whitespace fold before conversion",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -240,58 +300,129 @@ test("a line in an unconvertible unit is refused, never assumed 1:1", { skip: !D
       postDocument(documentId, depsFor(org)),
       /unit "crate" with no conversion to the item's base unit "ea"/,
     );
-    const count = (await db.execute<{ n: number }>(sql`
+    const count = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineId}`, "objects"))[0]!.n;
+       where org_id = ${org.orgId} and document_line_id = ${lineId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(count, 0, "no stock may move on a refused line");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-
-test("eight-place fulfillment issues exact converted base quantity once and refuses an unrepresentable conversion", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await db.execute(sql`update item_inventory_profiles set unit_conversions='{"bulk":10000,"fraction":1.0001}'::jsonb
+test(
+  "eight-place fulfillment issues exact converted base quantity once and refuses an unrepresentable conversion",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await db.execute(sql`update item_inventory_profiles set unit_conversions='{"bulk":10000,"fraction":1.0001}'::jsonb
       where org_id=${org.orgId} and item_id=${org.items.fifo}`);
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId,
-      quantity: "20000", unitCost: "2", date: org.date, offsetAccountId: org.accounts.clearing,
-    });
-    const source = await draftApprovedDocument(org, "sales_order", { quantity: "1.00000001", unitPrice: "10", amount: "10", unit: "bulk" });
-    const shipment = await draftApprovedDocument(org, "sales_fulfillment", {
-      quantity: "1.00000001", unitPrice: "0", amount: "0", unit: "bulk", custom: { fulfillment: { sourceLineId: source.lineId } },
-    });
-    const loaded = await loadDocumentInventoryLines(db, org.orgId, shipment.documentId);
-    assert.equal(loaded[0]!.quantity, "10000.0001");
-    const issue = () => db.transaction((tx) => applySalesFulfillmentInventoryIssues(tx, org.orgId, null,
-      shipment.documentId, org.date, org.subsidiaryId));
-    assert.equal(await issue(), 1);
-    const posted = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-    assert.equal(posted.quantity, "9999.9999");
-    assert.equal(posted.value, "19999.9998");
-    assert.equal(await issue(), 0);
-    assert.deepEqual(await getOnHand(org.orgId, org.items.fifo, org.stockLocationId), posted);
-    assert.equal(await movementCount(org.orgId, shipment.lineId), 1);
-    const refused = await draftApprovedDocument(org, "sales_fulfillment", {
-      quantity: "1.00000001", unitPrice: "0", amount: "0", unit: "ea", custom: { fulfillment: { sourceLineId: source.lineId } },
-    });
-    await assert.rejects(db.transaction((tx) => applySalesFulfillmentInventoryIssues(tx, org.orgId, null,
-      refused.documentId, org.date, org.subsidiaryId)), /cannot be stored exactly with four decimal places/);
-    assert.equal(await movementCount(org.orgId, refused.lineId), 0);
-    assert.deepEqual(await getOnHand(org.orgId, org.items.fifo, org.stockLocationId), posted);
-    const legacySource = await draftApprovedDocument(org, "sales_order", {
-      quantity: "1.0001", unitPrice: "10", amount: "10", unit: "fraction",
-    });
-    const legacy = await draftApprovedDocument(org, "sales_fulfillment", {
-      quantity: "1.0001", unitPrice: "0", amount: "0", unit: "fraction",
-      custom: { fulfillment: { sourceLineId: legacySource.lineId } },
-    });
-    assert.equal((await loadDocumentInventoryLines(db, org.orgId, legacy.documentId))[0]!.quantity, "1.0002",
-      "eight-place database padding must preserve four-place fulfillment costing arithmetic");
-    assert.equal(await db.transaction((tx) => applySalesFulfillmentInventoryIssues(tx, org.orgId, null,
-      legacy.documentId, org.date, org.subsidiaryId)), 1);
-    assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "9998.9997");
-  } finally { await dropScratchOrg(org.orgId); }
-});
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        quantity: "20000",
+        unitCost: "2",
+        date: org.date,
+        offsetAccountId: org.accounts.clearing,
+      });
+      const source = await draftApprovedDocument(org, "sales_order", {
+        quantity: "1.00000001",
+        unitPrice: "10",
+        amount: "10",
+        unit: "bulk",
+      });
+      const shipment = await draftApprovedDocument(org, "sales_fulfillment", {
+        quantity: "1.00000001",
+        unitPrice: "0",
+        amount: "0",
+        unit: "bulk",
+        custom: { fulfillment: { sourceLineId: source.lineId } },
+      });
+      const loaded = await loadDocumentInventoryLines(db, org.orgId, shipment.documentId);
+      assert.equal(loaded[0]!.quantity, "10000.0001");
+      const issue = () =>
+        db.transaction((tx) =>
+          applySalesFulfillmentInventoryIssues(
+            tx,
+            org.orgId,
+            null,
+            shipment.documentId,
+            org.date,
+            org.subsidiaryId,
+          ),
+        );
+      assert.equal(await issue(), 1);
+      const posted = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      assert.equal(posted.quantity, "9999.9999");
+      assert.equal(posted.value, "19999.9998");
+      assert.equal(await issue(), 0);
+      assert.deepEqual(await getOnHand(org.orgId, org.items.fifo, org.stockLocationId), posted);
+      assert.equal(await movementCount(org.orgId, shipment.lineId), 1);
+      const refused = await draftApprovedDocument(org, "sales_fulfillment", {
+        quantity: "1.00000001",
+        unitPrice: "0",
+        amount: "0",
+        unit: "ea",
+        custom: { fulfillment: { sourceLineId: source.lineId } },
+      });
+      await assert.rejects(
+        db.transaction((tx) =>
+          applySalesFulfillmentInventoryIssues(
+            tx,
+            org.orgId,
+            null,
+            refused.documentId,
+            org.date,
+            org.subsidiaryId,
+          ),
+        ),
+        /cannot be stored exactly with four decimal places/,
+      );
+      assert.equal(await movementCount(org.orgId, refused.lineId), 0);
+      assert.deepEqual(await getOnHand(org.orgId, org.items.fifo, org.stockLocationId), posted);
+      const legacySource = await draftApprovedDocument(org, "sales_order", {
+        quantity: "1.0001",
+        unitPrice: "10",
+        amount: "10",
+        unit: "fraction",
+      });
+      const legacy = await draftApprovedDocument(org, "sales_fulfillment", {
+        quantity: "1.0001",
+        unitPrice: "0",
+        amount: "0",
+        unit: "fraction",
+        custom: { fulfillment: { sourceLineId: legacySource.lineId } },
+      });
+      assert.equal(
+        (await loadDocumentInventoryLines(db, org.orgId, legacy.documentId))[0]!.quantity,
+        "1.0002",
+        "eight-place database padding must preserve four-place fulfillment costing arithmetic",
+      );
+      assert.equal(
+        await db.transaction((tx) =>
+          applySalesFulfillmentInventoryIssues(
+            tx,
+            org.orgId,
+            null,
+            legacy.documentId,
+            org.date,
+            org.subsidiaryId,
+          ),
+        ),
+        1,
+      );
+      assert.equal(
+        (await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity,
+        "9998.9997",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

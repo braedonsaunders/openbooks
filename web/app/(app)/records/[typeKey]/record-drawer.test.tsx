@@ -3,7 +3,8 @@ import test from "node:test";
 
 declare global {
   var __recordToasts: { kind: string; message: string }[] | undefined;
-  var __recordRouter: { push(url: string): void; refresh(): void; pushes: string[]; refreshes: number } | undefined;
+  var __recordRouter:
+    { push(url: string): void; refresh(): void; pushes: string[]; refreshes: number } | undefined;
   var __recordGate: { ok: boolean; reason?: string; warnings?: string[] } | undefined;
   var __recordConfirm: boolean | undefined;
 }
@@ -19,7 +20,10 @@ declare global {
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/records/project", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/records/project",
+  matchMediaMatches: false,
+});
 
 const { stubModules } = await import("../../../../testing/stub-modules");
 stubModules({
@@ -31,7 +35,8 @@ stubModules({
   extra: {
     sonner:
       "export const toast={success(m){(globalThis.__recordToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__recordToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__recordToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
-    "@/lib/confirm": "export async function confirmDialog(){return globalThis.__recordConfirm ?? true}",
+    "@/lib/confirm":
+      "export async function confirmDialog(){return globalThis.__recordConfirm ?? true}",
     "@/lib/client-scripts":
       "export async function runClientScripts(){const g=globalThis.__recordGate;return g!==undefined?{ok:g.ok,reason:g.reason,warnings:g.warnings??[]}:{ok:true,warnings:[]}}",
   },
@@ -67,7 +72,9 @@ const RECORD = {
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -146,9 +153,16 @@ async function openEditorAndSave() {
 
 test("a 409 conflict pins the reason and keeps the user's edits on the stale token", async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === "/api/records/project/11111111-1111-4111-8111-111111111111" && init?.method === "PATCH") {
+    if (
+      url === "/api/records/project/11111111-1111-4111-8111-111111111111" &&
+      init?.method === "PATCH"
+    ) {
       return Response.json(
-        { error: "This record changed after you opened it; reload the record and reapply your changes", code: "revision_conflict" },
+        {
+          error:
+            "This record changed after you opened it; reload the record and reapply your changes",
+          code: "revision_conflict",
+        },
         { status: 409 },
       );
     }
@@ -167,18 +181,27 @@ test("a 409 conflict pins the reason and keeps the user's edits on the stale tok
   );
   const toasts = globalThis.__recordToasts ?? [];
   assert.ok(
-    toasts.some((toast) => toast.kind === "error" && /changed after you opened it/.test(toast.message)),
+    toasts.some(
+      (toast) => toast.kind === "error" && /changed after you opened it/.test(toast.message),
+    ),
     "the refusal must also toast as an error",
   );
   const input = document.querySelector("input");
   assert.equal(input?.value, "Acme", "the conflict must keep the user's edits, not reset the form");
   assert.equal(save.disabled, false, "busy must release after the refusal so the user can retry");
-  assert.equal(globalThis.__recordRouter!.refreshes, 0, "a refused save must not refresh away the pinned context");
+  assert.equal(
+    globalThis.__recordRouter!.refreshes,
+    0,
+    "a refused save must not refresh away the pinned context",
+  );
 });
 
 test("a field validation failure still renders inline at the field", async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === "/api/records/project/11111111-1111-4111-8111-111111111111" && init?.method === "PATCH") {
+    if (
+      url === "/api/records/project/11111111-1111-4111-8111-111111111111" &&
+      init?.method === "PATCH"
+    ) {
       return Response.json(
         {
           error: "Fill every required field before activating",
@@ -207,7 +230,10 @@ test("a field validation failure still renders inline at the field", async (t) =
 
 test("a failed status transition pins instead of toasting into the void", async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === "/api/records/project/11111111-1111-4111-8111-111111111111" && init?.method === "PATCH") {
+    if (
+      url === "/api/records/project/11111111-1111-4111-8111-111111111111" &&
+      init?.method === "PATCH"
+    ) {
       return Response.json({ error: "Database unavailable" }, { status: 500 });
     }
     return null;

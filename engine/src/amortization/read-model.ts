@@ -2,7 +2,12 @@
 import { sql } from "drizzle-orm";
 import { fromUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
-import { livePlanLines, loadSchedule, scheduleBalance, type StoredSchedule } from "./schedule-store.ts";
+import {
+  livePlanLines,
+  loadSchedule,
+  scheduleBalance,
+  type StoredSchedule,
+} from "./schedule-store.ts";
 
 export interface ScheduleDetail {
   schedule: Omit<StoredSchedule, "totalAmount" | "openingAmortized" | "reversed"> & {
@@ -14,7 +19,12 @@ export interface ScheduleDetail {
     subsidiaryName: string | null;
     deferralAccount: string;
     destinationAccount: string;
-    source: { kind: string; documentId: string; documentNumber: string | null; lineNumber: number | null } | null;
+    source: {
+      kind: string;
+      documentId: string;
+      documentNumber: string | null;
+      lineNumber: number | null;
+    } | null;
   };
   balance: { amortized: string; remaining: string; planned: string; posted: string };
   periods: {
@@ -39,18 +49,24 @@ export interface ScheduleDetail {
   supersededPlans: { planRevision: number; periodStart: string; planned: string; status: string }[];
 }
 
-export async function loadScheduleDetail(runner: SqlExecutor, orgId: string, scheduleId: string): Promise<ScheduleDetail> {
+export async function loadScheduleDetail(
+  runner: SqlExecutor,
+  orgId: string,
+  scheduleId: string,
+): Promise<ScheduleDetail> {
   const schedule = await loadSchedule(runner, orgId, scheduleId);
-  const names = (await runner.execute<{
-    template_code: string;
-    template_name: string;
-    subsidiary_name: string | null;
-    deferral_account: string;
-    destination_account: string;
-    document_number: string | null;
-    document_kind: string | null;
-    line_number: number | null;
-  }>(sql`
+  const names = (
+    await runner.execute<{
+      template_code: string;
+      template_name: string;
+      subsidiary_name: string | null;
+      deferral_account: string;
+      destination_account: string;
+      document_number: string | null;
+      document_kind: string | null;
+      line_number: number | null;
+    }>(
+      sql`
     select t.code as template_code, t.name as template_name, sub.name as subsidiary_name,
            concat_ws(' · ', da.number, da.name) as deferral_account,
            concat_ws(' · ', xa.number, xa.name) as destination_account,
@@ -62,16 +78,24 @@ export async function loadScheduleDetail(runner: SqlExecutor, orgId: string, sch
       join accounts xa on xa.org_id = s.org_id and xa.id = s.destination_account_id
       left join documents d on d.org_id = s.org_id and d.id = s.source_document_id
       left join document_lines dl on dl.org_id = s.org_id and dl.id = s.source_line_id
-     where s.org_id = ${orgId} and s.id = ${scheduleId}`, "objects"))[0]!;
+     where s.org_id = ${orgId} and s.id = ${scheduleId}`,
+      "objects",
+    )
+  )[0]!;
   const lines = await livePlanLines(runner, orgId, scheduleId);
   const balance = scheduleBalance(schedule, lines);
   const accountNames = new Map(
-    (await runner.execute<{ id: string; label: string }>(sql`
+    (
+      await runner.execute<{ id: string; label: string }>(
+        sql`
       select a.id, concat_ws(' · ', a.number, a.name) as label
         from accounts a
        where a.org_id = ${orgId}
          and a.id in (select destination_account_id from expense_amortization_schedule_lines
-                       where org_id = ${orgId} and schedule_id = ${scheduleId})`, "objects")).map((row) => [row.id, row.label]),
+                       where org_id = ${orgId} and schedule_id = ${scheduleId})`,
+        "objects",
+      )
+    ).map((row) => [row.id, row.label]),
   );
   const history = await runner.execute<{
     id: string;
@@ -83,19 +107,30 @@ export async function loadScheduleDetail(runner: SqlExecutor, orgId: string, sch
     journal_entry_id: string | null;
     actor_name: string | null;
     created_at: string;
-  }>(sql`
+  }>(
+    sql`
     select e.id, e.kind, e.reason, e.effective_on::text as effective_on,
            e.effective_period_on::text as effective_period_on, e.balance_delta::text as balance_delta,
            e.journal_entry_id, u.name as actor_name, e.created_at::text as created_at
       from expense_amortization_schedule_events e
       left join users u on u.org_id = e.org_id and u.id = e.created_by
      where e.org_id = ${orgId} and e.schedule_id = ${scheduleId}
-     order by e.created_at, e.id`, "objects");
-  const superseded = await runner.execute<{ plan_revision: number; period_start: string; planned_amount: string; status: string }>(sql`
+     order by e.created_at, e.id`,
+    "objects",
+  );
+  const superseded = await runner.execute<{
+    plan_revision: number;
+    period_start: string;
+    planned_amount: string;
+    status: string;
+  }>(
+    sql`
     select plan_revision, period_start::text as period_start, planned_amount::text as planned_amount, status
       from expense_amortization_schedule_lines
      where org_id = ${orgId} and schedule_id = ${scheduleId} and status in ('superseded', 'cancelled')
-     order by plan_revision, period_start`, "objects");
+     order by plan_revision, period_start`,
+    "objects",
+  );
   return {
     schedule: {
       ...schedule,

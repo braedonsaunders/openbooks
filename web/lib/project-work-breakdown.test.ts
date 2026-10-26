@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 import {
   assertTaskTransition,
   parseExpectedTaskVersion,
@@ -8,116 +8,137 @@ import {
   parseWorkBreakdownTaskInput,
   ProjectWorkBreakdownError,
   sameTaskDecimal,
-} from './project-work-breakdown-validation.ts'
-import { stubModules } from '../testing/stub-modules.ts'
+} from "./project-work-breakdown-validation.ts";
+import { stubModules } from "../testing/stub-modules.ts";
 
-
-test('WBS input validation is strict and preserves exact four-decimal values', () => {
+test("WBS input validation is strict and preserves exact four-decimal values", () => {
   assert.deepEqual(
     parseWorkBreakdownTaskInput({
-      code: ' 01.20 ',
-      name: '  Mobilization ',
-      status: 'open',
-      estimatedHours: '12.125',
-      estimatedCost: '101.2300',
-      estimatedPrice: '2500',
-      budgetQuantity: '120.5',
-      budgetUnit: ' m ',
+      code: " 01.20 ",
+      name: "  Mobilization ",
+      status: "open",
+      estimatedHours: "12.125",
+      estimatedCost: "101.2300",
+      estimatedPrice: "2500",
+      budgetQuantity: "120.5",
+      budgetUnit: " m ",
     }),
     {
-      code: '01.20',
-      name: 'Mobilization',
-      status: 'open',
-      estimatedHours: '12.1250',
-      estimatedCost: '101.2300',
-      estimatedPrice: '2500.0000',
-      budgetQuantity: '120.50000000',
-      budgetUnit: 'm',
+      code: "01.20",
+      name: "Mobilization",
+      status: "open",
+      estimatedHours: "12.1250",
+      estimatedCost: "101.2300",
+      estimatedPrice: "2500.0000",
+      budgetQuantity: "120.50000000",
+      budgetUnit: "m",
     },
-  )
+  );
   // Leaving the production pair out keeps the stored pair untouched.
-  assert.equal('budgetQuantity' in parseWorkBreakdownTaskInput({ name: 'Trenching' }), false)
+  assert.equal("budgetQuantity" in parseWorkBreakdownTaskInput({ name: "Trenching" }), false);
 
   for (const input of [
-    { name: '' },
-    { name: 'Invalid status', status: 'draft' },
-    { name: 'Negative hours', estimatedHours: '-1' },
-    { name: 'Negative cost', estimatedCost: '-0.01' },
-    { name: 'Negative price', estimatedPrice: '-5' },
-    { name: 'Quantity without its unit', budgetQuantity: '5' },
-    { name: 'Zero quantity', budgetQuantity: '0', budgetUnit: 'm' },
-    { name: 'Unknown field', postedAmount: '1.00' },
+    { name: "" },
+    { name: "Invalid status", status: "draft" },
+    { name: "Negative hours", estimatedHours: "-1" },
+    { name: "Negative cost", estimatedCost: "-0.01" },
+    { name: "Negative price", estimatedPrice: "-5" },
+    { name: "Quantity without its unit", budgetQuantity: "5" },
+    { name: "Zero quantity", budgetQuantity: "0", budgetUnit: "m" },
+    { name: "Unknown field", postedAmount: "1.00" },
   ]) {
-    assert.throws(
-      () => parseWorkBreakdownTaskInput(input),
-      ProjectWorkBreakdownError,
-    )
+    assert.throws(() => parseWorkBreakdownTaskInput(input), ProjectWorkBreakdownError);
   }
-})
+});
 
-test('closed WBS tasks transition explicitly and never silently', () => {
-  const open = { estimatedHoursChanged: false, estimatedCostChanged: false, reason: null }
+test("closed WBS tasks transition explicitly and never silently", () => {
+  const open = { estimatedHoursChanged: false, estimatedCostChanged: false, reason: null };
   // Open tasks move freely without a reason.
-  for (const to of ['open', 'complete', 'cancelled'] as const) {
-    assertTaskTransition({ from: 'open', to, ...open })
+  for (const to of ["open", "complete", "cancelled"] as const) {
+    assertTaskTransition({ from: "open", to, ...open });
   }
   // Same-state saves and renames on closed tasks need no reason.
-  assertTaskTransition({ from: 'complete', to: 'complete', ...open })
-  assertTaskTransition({ from: 'cancelled', to: 'cancelled', ...open })
+  assertTaskTransition({ from: "complete", to: "complete", ...open });
+  assertTaskTransition({ from: "cancelled", to: "cancelled", ...open });
   // Sideways moves between terminal states refuse with the remedy, even
   // with a reason — the path runs through open.
   assert.throws(
-    () => assertTaskTransition({ from: 'complete', to: 'cancelled', ...open, reason: 'oops' }),
+    () => assertTaskTransition({ from: "complete", to: "cancelled", ...open, reason: "oops" }),
     /Reopen the task before cancelling it/,
-  )
+  );
   assert.throws(
-    () => assertTaskTransition({ from: 'cancelled', to: 'complete', ...open, reason: 'oops' }),
+    () => assertTaskTransition({ from: "cancelled", to: "complete", ...open, reason: "oops" }),
     /Reopen the task before completing it/,
-  )
+  );
   // Reopening and re-budgeting a closed task require a reason.
   assert.throws(
-    () => assertTaskTransition({ from: 'complete', to: 'open', ...open }),
+    () => assertTaskTransition({ from: "complete", to: "open", ...open }),
     /Reopening a closed task requires a reason/,
-  )
+  );
   assert.throws(
-    () => assertTaskTransition({ from: 'cancelled', to: 'open', ...open }),
+    () => assertTaskTransition({ from: "cancelled", to: "open", ...open }),
     /Reopening a closed task requires a reason/,
-  )
+  );
   assert.throws(
-    () => assertTaskTransition({ from: 'complete', to: 'complete', estimatedHoursChanged: true, estimatedCostChanged: false, reason: null }),
+    () =>
+      assertTaskTransition({
+        from: "complete",
+        to: "complete",
+        estimatedHoursChanged: true,
+        estimatedCostChanged: false,
+        reason: null,
+      }),
     /Changing estimates on a closed task requires a reason/,
-  )
+  );
   assert.throws(
-    () => assertTaskTransition({ from: 'cancelled', to: 'cancelled', estimatedHoursChanged: false, estimatedCostChanged: true, reason: null }),
+    () =>
+      assertTaskTransition({
+        from: "cancelled",
+        to: "cancelled",
+        estimatedHoursChanged: false,
+        estimatedCostChanged: true,
+        reason: null,
+      }),
     /Changing estimates on a closed task requires a reason/,
-  )
+  );
   // With a reason, reopening and closed-task budget changes pass.
-  assertTaskTransition({ from: 'complete', to: 'open', ...open, reason: 'client reinstated the scope' })
-  assertTaskTransition({ from: 'cancelled', to: 'cancelled', estimatedHoursChanged: true, estimatedCostChanged: true, reason: 're-estimated after delay' })
-})
+  assertTaskTransition({
+    from: "complete",
+    to: "open",
+    ...open,
+    reason: "client reinstated the scope",
+  });
+  assertTaskTransition({
+    from: "cancelled",
+    to: "cancelled",
+    estimatedHoursChanged: true,
+    estimatedCostChanged: true,
+    reason: "re-estimated after delay",
+  });
+});
 
-test('WBS transition reasons are short text and estimates compare canonically', () => {
-  assert.equal(parseTaskReason(undefined), null)
-  assert.equal(parseTaskReason(null), null)
-  assert.equal(parseTaskReason(''), null)
-  assert.equal(parseTaskReason('  reinstated  '), 'reinstated')
-  assert.throws(() => parseTaskReason(42), /Reason must be text/)
-  assert.throws(() => parseTaskReason('x'.repeat(501)), /500 characters/)
-  assert.equal(sameTaskDecimal(null, null), true)
-  assert.equal(sameTaskDecimal('', null), true)
-  assert.equal(sameTaskDecimal('10', '10.0000'), true)
-  assert.equal(sameTaskDecimal('10', '10.0001'), false)
-  assert.equal(sameTaskDecimal(null, '1'), false)
-})
+test("WBS transition reasons are short text and estimates compare canonically", () => {
+  assert.equal(parseTaskReason(undefined), null);
+  assert.equal(parseTaskReason(null), null);
+  assert.equal(parseTaskReason(""), null);
+  assert.equal(parseTaskReason("  reinstated  "), "reinstated");
+  assert.throws(() => parseTaskReason(42), /Reason must be text/);
+  assert.throws(() => parseTaskReason("x".repeat(501)), /500 characters/);
+  assert.equal(sameTaskDecimal(null, null), true);
+  assert.equal(sameTaskDecimal("", null), true);
+  assert.equal(sameTaskDecimal("10", "10.0000"), true);
+  assert.equal(sameTaskDecimal("10", "10.0001"), false);
+  assert.equal(sameTaskDecimal(null, "1"), false);
+});
 
-test('WBS updates require a valid optimistic-concurrency version', () => {
+test("WBS updates require a valid optimistic-concurrency version", () => {
   assert.equal(
-    parseExpectedTaskVersion('2026-07-28T12:34:56.000000Z'),
-    '2026-07-28T12:34:56.000000Z',
-  )
-  assert.throws(() => parseExpectedTaskVersion(undefined), /valid task version/)
-  assert.throws(() => parseExpectedTaskVersion('not-a-date'), /valid task version/)
-})
+    parseExpectedTaskVersion("2026-07-28T12:34:56.000000Z"),
+    "2026-07-28T12:34:56.000000Z",
+  );
+  assert.throws(() => parseExpectedTaskVersion(undefined), /valid task version/);
+  assert.throws(() => parseExpectedTaskVersion("not-a-date"), /valid task version/);
+});
 
 /**
  * The WBS helper is the direct-by-id boundary for both collection handlers.
@@ -125,23 +146,23 @@ test('WBS updates require a valid optimistic-concurrency version', () => {
  * subsidiary predicate is absent, making the regression fail against the old
  * helper rather than merely checking a source string.
  */
-const scopeStateKey = Symbol.for('openbooks.project-work-breakdown-scope-test')
+const scopeStateKey = Symbol.for("openbooks.project-work-breakdown-scope-test");
 interface ScopeState {
-  allowedSubsidiaryIds: Set<string> | null
-  projectSubsidiary: string | null
-  calls: string[]
+  allowedSubsidiaryIds: Set<string> | null;
+  projectSubsidiary: string | null;
+  calls: string[];
 }
 
 const scopeState: ScopeState = {
   allowedSubsidiaryIds: null,
   projectSubsidiary: null,
   calls: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[scopeStateKey] = scopeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[scopeStateKey] = scopeState;
 
 const scopeMockSources = new Map<string, string>([
   [
-    'mock:drizzle',
+    "mock:drizzle",
     `
       export function sql(strings, ...values) {
         return { strings: Array.from(strings), values }
@@ -149,7 +170,7 @@ const scopeMockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.project-work-breakdown-scope-test')]
       function text(query) {
@@ -192,69 +213,90 @@ const scopeMockSources = new Map<string, string>([
       export { db }
     `,
   ],
-])
+]);
 
-const ALLOWED_SUBSIDIARY = '00000000-0000-4000-8000-00000000a001'
-const DENIED_SUBSIDIARY = '00000000-0000-4000-8000-00000000b001'
-let resolveModules!: () => void
+const ALLOWED_SUBSIDIARY = "00000000-0000-4000-8000-00000000a001";
+const DENIED_SUBSIDIARY = "00000000-0000-4000-8000-00000000b001";
+let resolveModules!: () => void;
 const modulesReady = new Promise<void>((resolve) => {
-  resolveModules = resolve
-})
+  resolveModules = resolve;
+});
 
 // Register these before the top-level dynamic imports below. The repository's
 // trusted runner uses --test-force-exit, which cancels tests registered after a
 // top-level await even when their promises would otherwise settle.
-test('WBS helper blocks reads, creates, and updates outside the caller subsidiary scope', async () => {
-  await modulesReady
-  await runWorkBreakdownScopeTest()
-})
+test("WBS helper blocks reads, creates, and updates outside the caller subsidiary scope", async () => {
+  await modulesReady;
+  await runWorkBreakdownScopeTest();
+});
 
-test('WBS PATCH returns an indistinguishable 404 before task writes for a denied subsidiary', async () => {
-  await modulesReady
-  await runWorkBreakdownPatchScopeTest()
-})
+test("WBS PATCH returns an indistinguishable 404 before task writes for a denied subsidiary", async () => {
+  await modulesReady;
+  await runWorkBreakdownPatchScopeTest();
+});
 
-stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
-    './features': `export { subsidiaryFeatureEnabled } from ${JSON.stringify(new URL('./features.ts', import.meta.url).href)};
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "./features": `export { subsidiaryFeatureEnabled } from ${JSON.stringify(new URL("./features.ts", import.meta.url).href)};
       export async function isFeatureEnabled() { return true }
       export async function acquireFeatureGateLock() {}`,
-  } });
+  },
+});
 
 const scopeHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
-    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/organization/org-feature-lock') return { url: 'mock:org-feature-lock', shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (specifier === "drizzle-orm") return { url: "mock:drizzle", shortCircuit: true };
+    if (specifier === "@openbooks/engine/platform/db")
+      return { url: "mock:db", shortCircuit: true };
+    if (specifier === "@openbooks/engine/organization/org-feature-lock")
+      return { url: "mock:org-feature-lock", shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:org-feature-lock') return { format: 'module', source: `export * from ${JSON.stringify(new URL('../../engine/src/organization/org-feature-lock.ts', import.meta.url).href)}; export async function lockAndCheckOrgFeature() { return true }`, shortCircuit: true }
-    const source = scopeMockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    if (url === "mock:org-feature-lock")
+      return {
+        format: "module",
+        source: `export * from ${JSON.stringify(new URL("../../engine/src/organization/org-feature-lock.ts", import.meta.url).href)}; export async function lockAndCheckOrgFeature() { return true }`,
+        shortCircuit: true,
+      };
+    const source = scopeMockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const scopeModuleSpecifier = './project-work-breakdown.ts?subsidiary-scope-regression' as string
-const workBreakdown = (await import(scopeModuleSpecifier)) as typeof import('./project-work-breakdown.ts')
-scopeHooks.deregister()
+const scopeModuleSpecifier = "./project-work-breakdown.ts?subsidiary-scope-regression" as string;
+const workBreakdown = (await import(
+  scopeModuleSpecifier
+)) as typeof import("./project-work-breakdown.ts");
+scopeHooks.deregister();
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.includes('/lib/authz')) return { url: 'mock:project-route-authz', shortCircuit: true }
-    if (specifier === '@/lib/feature-gates') return { url: 'mock:project-route-feature-gate', shortCircuit: true }
-    if (specifier.includes('/lib/projects-gate')) return { url: 'mock:project-route-gate', shortCircuit: true }
+    if (specifier.includes("/lib/authz"))
+      return { url: "mock:project-route-authz", shortCircuit: true };
+    if (specifier === "@/lib/feature-gates")
+      return { url: "mock:project-route-feature-gate", shortCircuit: true };
+    if (specifier.includes("/lib/projects-gate"))
+      return { url: "mock:project-route-gate", shortCircuit: true };
     // '@/lib/api/json' is not mocked: never double the validation boundary.
-    if (specifier === 'next/server') return { url: 'mock:project-route-next-server', shortCircuit: true }
-    if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
-    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/organization/org-feature-lock') return { url: 'mock:org-feature-lock', shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (specifier === "next/server")
+      return { url: "mock:project-route-next-server", shortCircuit: true };
+    if (specifier === "drizzle-orm") return { url: "mock:drizzle", shortCircuit: true };
+    if (specifier === "@openbooks/engine/platform/db")
+      return { url: "mock:db", shortCircuit: true };
+    if (specifier === "@openbooks/engine/organization/org-feature-lock")
+      return { url: "mock:org-feature-lock", shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:project-route-authz') {
+    if (url === "mock:project-route-authz") {
       return {
-        format: 'module',
+        format: "module",
         source: `
           const state = globalThis[Symbol.for('openbooks.project-work-breakdown-scope-test')]
           export async function guardPermission() {
@@ -262,22 +304,30 @@ registerHooks({
           }
         `,
         shortCircuit: true,
-      }
+      };
     }
-    if (url === 'mock:project-route-gate') {
-      return { format: 'module', source: 'export async function guardProjectsFeature() { return null }', shortCircuit: true }
+    if (url === "mock:project-route-gate") {
+      return {
+        format: "module",
+        source: "export async function guardProjectsFeature() { return null }",
+        shortCircuit: true,
+      };
     }
-    if (url === 'mock:project-route-feature-gate') {
-      return { format: 'module', source: `
+    if (url === "mock:project-route-feature-gate") {
+      return {
+        format: "module",
+        source: `
         const state = globalThis[Symbol.for('openbooks.project-work-breakdown-scope-test')]
         export async function guardFeaturePermission() {
           return { user: { id: 'user-1', orgId: 'org-1' }, permissions: new Set(['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }
         }
-      `, shortCircuit: true }
+      `,
+        shortCircuit: true,
+      };
     }
-    if (url === 'mock:project-route-next-server') {
+    if (url === "mock:project-route-next-server") {
       return {
-        format: 'module',
+        format: "module",
         source: `
           export class NextResponse extends Response {
             static json(data, init) {
@@ -286,168 +336,215 @@ registerHooks({
           }
         `,
         shortCircuit: true,
-      }
+      };
     }
-    if (url === 'mock:org-feature-lock') return { format: 'module', source: `export * from ${JSON.stringify(new URL('../../engine/src/organization/org-feature-lock.ts', import.meta.url).href)}; export async function lockAndCheckOrgFeature() { return true }`, shortCircuit: true }
-    const source = scopeMockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    if (url === "mock:org-feature-lock")
+      return {
+        format: "module",
+        source: `export * from ${JSON.stringify(new URL("../../engine/src/organization/org-feature-lock.ts", import.meta.url).href)}; export async function lockAndCheckOrgFeature() { return true }`,
+        shortCircuit: true,
+      };
+    const source = scopeMockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeModuleSpecifier = '../app/api/projects/[id]/tasks/[taskId]/route.ts?subsidiary-scope-regression' as string
-const workBreakdownRoute = (await import(routeModuleSpecifier)) as typeof import('../app/api/projects/[id]/tasks/[taskId]/route.ts')
-resolveModules()
+const routeModuleSpecifier =
+  "../app/api/projects/[id]/tasks/[taskId]/route.ts?subsidiary-scope-regression" as string;
+const workBreakdownRoute = (await import(
+  routeModuleSpecifier
+)) as typeof import("../app/api/projects/[id]/tasks/[taskId]/route.ts");
+resolveModules();
 
-function resetScope(projectSubsidiary: string | null, allowedSubsidiaryIds: Set<string> | null): void {
-  scopeState.calls.length = 0
-  scopeState.projectSubsidiary = projectSubsidiary
-  scopeState.allowedSubsidiaryIds = allowedSubsidiaryIds
+function resetScope(
+  projectSubsidiary: string | null,
+  allowedSubsidiaryIds: Set<string> | null,
+): void {
+  scopeState.calls.length = 0;
+  scopeState.projectSubsidiary = projectSubsidiary;
+  scopeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
 }
 
 async function runWorkBreakdownScopeTest(): Promise<void> {
-  resetScope(DENIED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
+  resetScope(DENIED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]));
 
   await assert.rejects(
-    workBreakdown.loadWorkBreakdownTasks('org-1', 'project-1', scopeState.allowedSubsidiaryIds),
+    workBreakdown.loadWorkBreakdownTasks("org-1", "project-1", scopeState.allowedSubsidiaryIds),
     (error: unknown) => error instanceof ProjectWorkBreakdownError && error.status === 404,
-  )
+  );
   await assert.rejects(
     workBreakdown.createWorkBreakdownTask({
-      orgId: 'org-1',
-      projectId: 'project-1',
-      actorId: 'user-1',
+      orgId: "org-1",
+      projectId: "project-1",
+      actorId: "user-1",
       allowedSubsidiaryIds: scopeState.allowedSubsidiaryIds,
       input: {
-        code: '01',
-        name: 'Denied create',
-        status: 'open',
-        estimatedHours: '1.0000',
-        estimatedCost: '50.0000',
+        code: "01",
+        name: "Denied create",
+        status: "open",
+        estimatedHours: "1.0000",
+        estimatedCost: "50.0000",
         estimatedPrice: null,
       },
     }),
     (error: unknown) => error instanceof ProjectWorkBreakdownError && error.status === 404,
-  )
+  );
   await assert.rejects(
     workBreakdown.updateWorkBreakdownTask({
-      orgId: 'org-1',
-      projectId: 'project-1',
-      taskId: 'task-1',
-      actorId: 'user-1',
+      orgId: "org-1",
+      projectId: "project-1",
+      taskId: "task-1",
+      actorId: "user-1",
       allowedSubsidiaryIds: scopeState.allowedSubsidiaryIds,
-      expectedUpdatedAt: '2026-08-01T00:00:00.000000Z',
+      expectedUpdatedAt: "2026-08-01T00:00:00.000000Z",
       input: {
-        code: '01',
-        name: 'Denied update',
-        status: 'open',
-        estimatedHours: '3.0000',
-        estimatedCost: '150.0000',
+        code: "01",
+        name: "Denied update",
+        status: "open",
+        estimatedHours: "3.0000",
+        estimatedCost: "150.0000",
         estimatedPrice: null,
       },
     }),
     (error: unknown) => error instanceof ProjectWorkBreakdownError && error.status === 404,
-  )
+  );
   assert.equal(
     scopeState.calls.filter(
-      (statement) => statement.includes('insert into project_tasks') || statement.includes('update project_tasks'),
+      (statement) =>
+        statement.includes("insert into project_tasks") ||
+        statement.includes("update project_tasks"),
     ).length,
     0,
-  )
-  assert.equal(scopeState.calls.filter((statement) => statement.includes('from project_tasks')).length, 0)
-  assert.equal(scopeState.calls.filter((statement) => statement.includes('insert into audit_log')).length, 0)
+  );
+  assert.equal(
+    scopeState.calls.filter((statement) => statement.includes("from project_tasks")).length,
+    0,
+  );
+  assert.equal(
+    scopeState.calls.filter((statement) => statement.includes("insert into audit_log")).length,
+    0,
+  );
 
-  resetScope(ALLOWED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
-  const tasks = await workBreakdown.loadWorkBreakdownTasks('org-1', 'project-1', scopeState.allowedSubsidiaryIds)
-  assert.equal(tasks[0]?.name, 'Allowed task')
+  resetScope(ALLOWED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]));
+  const tasks = await workBreakdown.loadWorkBreakdownTasks(
+    "org-1",
+    "project-1",
+    scopeState.allowedSubsidiaryIds,
+  );
+  assert.equal(tasks[0]?.name, "Allowed task");
   const created = await workBreakdown.createWorkBreakdownTask({
-    orgId: 'org-1',
-    projectId: 'project-1',
-    actorId: 'user-1',
+    orgId: "org-1",
+    projectId: "project-1",
+    actorId: "user-1",
     allowedSubsidiaryIds: scopeState.allowedSubsidiaryIds,
     input: {
-      code: '02',
-      name: 'Allowed create',
-      status: 'open',
-      estimatedHours: '1.0000',
-      estimatedCost: '50.0000',
+      code: "02",
+      name: "Allowed create",
+      status: "open",
+      estimatedHours: "1.0000",
+      estimatedCost: "50.0000",
       estimatedPrice: null,
     },
-  })
-  assert.equal(created.name, 'Allowed create')
+  });
+  assert.equal(created.name, "Allowed create");
   const updated = await workBreakdown.updateWorkBreakdownTask({
-    orgId: 'org-1',
-    projectId: 'project-1',
-    taskId: 'task-1',
-    actorId: 'user-1',
+    orgId: "org-1",
+    projectId: "project-1",
+    taskId: "task-1",
+    actorId: "user-1",
     allowedSubsidiaryIds: scopeState.allowedSubsidiaryIds,
-    expectedUpdatedAt: '2026-08-01T00:00:00.000000Z',
+    expectedUpdatedAt: "2026-08-01T00:00:00.000000Z",
     input: {
-      code: '01',
-      name: 'Allowed update',
-      status: 'open',
-      estimatedHours: '3.0000',
-      estimatedCost: '150.0000',
+      code: "01",
+      name: "Allowed update",
+      status: "open",
+      estimatedHours: "3.0000",
+      estimatedCost: "150.0000",
       estimatedPrice: null,
     },
-  })
-  assert.equal(updated.name, 'Allowed update')
-  assert.ok(scopeState.calls.some((statement) => statement.includes('subsidiary_id = any')))
+  });
+  assert.equal(updated.name, "Allowed update");
+  assert.ok(scopeState.calls.some((statement) => statement.includes("subsidiary_id = any")));
 
-  resetScope(null, null)
-  const unrestricted = await workBreakdown.loadWorkBreakdownTasks('org-1', 'project-1', null)
-  assert.equal(unrestricted[0]?.name, 'Allowed task')
+  resetScope(null, null);
+  const unrestricted = await workBreakdown.loadWorkBreakdownTasks("org-1", "project-1", null);
+  assert.equal(unrestricted[0]?.name, "Allowed task");
 }
 
 async function runWorkBreakdownPatchScopeTest(): Promise<void> {
-  resetScope(DENIED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
+  resetScope(DENIED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]));
 
   const response = await workBreakdownRoute.PATCH(
-    new Request('http://localhost/api/projects/00000000-0000-4000-8000-00000000c001/tasks/00000000-0000-4000-8000-00000000d001', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        code: '01',
-        name: 'Denied route update',
-        status: 'open',
-        estimatedHours: '3.0000',
-        estimatedCost: '150.0000',
-        expectedUpdatedAt: '2026-08-01T00:00:00.000000Z',
+    new Request(
+      "http://localhost/api/projects/00000000-0000-4000-8000-00000000c001/tasks/00000000-0000-4000-8000-00000000d001",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          code: "01",
+          name: "Denied route update",
+          status: "open",
+          estimatedHours: "3.0000",
+          estimatedCost: "150.0000",
+          expectedUpdatedAt: "2026-08-01T00:00:00.000000Z",
+        }),
+      },
+    ),
+    {
+      params: Promise.resolve({
+        id: "00000000-0000-4000-8000-00000000c001",
+        taskId: "00000000-0000-4000-8000-00000000d001",
       }),
-    }),
-    { params: Promise.resolve({ id: '00000000-0000-4000-8000-00000000c001', taskId: '00000000-0000-4000-8000-00000000d001' }) },
-  )
+    },
+  );
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not_found' })
-  assert.equal(scopeState.calls.filter((statement) => statement.includes('from project_tasks')).length, 0)
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+  assert.equal(
+    scopeState.calls.filter((statement) => statement.includes("from project_tasks")).length,
+    0,
+  );
   assert.equal(
     scopeState.calls.filter(
-      (statement) => statement.includes('insert into project_tasks') || statement.includes('update project_tasks'),
+      (statement) =>
+        statement.includes("insert into project_tasks") ||
+        statement.includes("update project_tasks"),
     ).length,
     0,
-  )
-  assert.equal(scopeState.calls.filter((statement) => statement.includes('insert into audit_log')).length, 0)
+  );
+  assert.equal(
+    scopeState.calls.filter((statement) => statement.includes("insert into audit_log")).length,
+    0,
+  );
 
-  resetScope(ALLOWED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
+  resetScope(ALLOWED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]));
   const allowedResponse = await workBreakdownRoute.PATCH(
-    new Request('http://localhost/api/projects/00000000-0000-4000-8000-00000000c001/tasks/00000000-0000-4000-8000-00000000d001', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        code: '01',
-        name: 'Allowed route update',
-        status: 'open',
-        estimatedHours: '3.0000',
-        estimatedCost: '150.0000',
-        expectedUpdatedAt: '2026-08-01T00:00:00.000000Z',
+    new Request(
+      "http://localhost/api/projects/00000000-0000-4000-8000-00000000c001/tasks/00000000-0000-4000-8000-00000000d001",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          code: "01",
+          name: "Allowed route update",
+          status: "open",
+          estimatedHours: "3.0000",
+          estimatedCost: "150.0000",
+          expectedUpdatedAt: "2026-08-01T00:00:00.000000Z",
+        }),
+      },
+    ),
+    {
+      params: Promise.resolve({
+        id: "00000000-0000-4000-8000-00000000c001",
+        taskId: "00000000-0000-4000-8000-00000000d001",
       }),
-    }),
-    { params: Promise.resolve({ id: '00000000-0000-4000-8000-00000000c001', taskId: '00000000-0000-4000-8000-00000000d001' }) },
-  )
+    },
+  );
 
-  assert.equal(allowedResponse.status, 200)
-  assert.equal((await allowedResponse.json()).task.name, 'Allowed update')
-  assert.ok(scopeState.calls.some((statement) => statement.includes('update project_tasks')))
-  assert.ok(scopeState.calls.some((statement) => statement.includes('insert into audit_log')))
+  assert.equal(allowedResponse.status, 200);
+  assert.equal((await allowedResponse.json()).task.name, "Allowed update");
+  assert.ok(scopeState.calls.some((statement) => statement.includes("update project_tasks")));
+  assert.ok(scopeState.calls.some((statement) => statement.includes("insert into audit_log")));
 }

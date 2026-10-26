@@ -1,6 +1,9 @@
 import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { odooAttachmentProvider } from "./attachment-providers.ts";
-import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
+import {
+  syncTransactionAttachments,
+  type AttachmentSyncOptions,
+} from "./transaction-attachments.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { OdooClient, m2oId, type OdooCreds } from "../connectors/odoo.ts";
 import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
@@ -15,7 +18,12 @@ import type {
   SourceOpenItem,
   SourceTrialBalanceRow,
 } from "./source.ts";
-import { allModules, fiscalYearsForEndingRule, monthlySourcePeriods, type ImportedModuleStates } from "./periods.ts";
+import {
+  allModules,
+  fiscalYearsForEndingRule,
+  monthlySourcePeriods,
+  type ImportedModuleStates,
+} from "./periods.ts";
 
 /**
  * Odoo adapter — native `account.move` transactions over JSON-RPC. Moves ARE
@@ -60,21 +68,51 @@ const ODOO_ITEM_KIND: Record<string, string> = {
 };
 
 const MOVE_FIELDS = [
-  "id", "name", "move_type", "state", "partner_id", "invoice_date", "invoice_date_due",
-  "date", "ref", "payment_id", "statement_line_id", "write_date",
+  "id",
+  "name",
+  "move_type",
+  "state",
+  "partner_id",
+  "invoice_date",
+  "invoice_date_due",
+  "date",
+  "ref",
+  "payment_id",
+  "statement_line_id",
+  "write_date",
 ];
 // matching_number has ridden account.move.line since the 13.0 series: a set
 // value means the line is matched (reconciled). No fallback read is kept for
 // older servers — an unknown field fails the pull loudly, never silently
 // unstamped.
-const LINE_FIELDS = ["id", "move_id", "account_id", "name", "balance", "display_type", "tax_ids", "tax_line_id", "partner_id", "matching_number"];
+const LINE_FIELDS = [
+  "id",
+  "move_id",
+  "account_id",
+  "name",
+  "balance",
+  "display_type",
+  "tax_ids",
+  "tax_line_id",
+  "partner_id",
+  "matching_number",
+];
 
 /** Odoo datetime "YYYY-MM-DD HH:MM:SS" (UTC) → Date. */
 const odooTs = (s: string): Date => new Date(s.replace(" ", "T") + "Z");
 
 export class OdooSource implements MigrationSource {
   readonly name = "odoo";
-  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], [], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive', 'email', 'phone'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
+  readonly entityMappingMetadata = entityMappingMetadata(
+    ["accounting_periods", "accounts", "tax_codes", "parties", "items", "files"],
+    [],
+    {
+      accounts: ["number", "name", "type", "isActive"],
+      parties: ["displayName", "kind", "isActive", "email", "phone"],
+      items: ["code", "name", "kind", "isActive"],
+      tax_codes: ["code", "name", "ratePercent", "appliesTo"],
+    },
+  );
   readonly refKey = "odooId";
   readonly baseCurrency: string;
   private readonly orgId: string;
@@ -117,14 +155,37 @@ export class OdooSource implements MigrationSource {
   async accountingPeriods(): Promise<SourceEntity[]> {
     const [companies, moves] = await Promise.all([
       this.client.searchReadAll<{
-        id: number; fiscalyear_last_day: number; fiscalyear_last_month: string;
-        fiscalyear_lock_date: string | false; period_lock_date: string | false; tax_lock_date: string | false;
-      }>("res.company", [], ["id", "fiscalyear_last_day", "fiscalyear_last_month", "fiscalyear_lock_date", "period_lock_date", "tax_lock_date"]),
-      this.client.searchReadAll<{ date: string }>("account.move", [["state", "=", "posted"]], ["date"], "date asc"),
+        id: number;
+        fiscalyear_last_day: number;
+        fiscalyear_last_month: string;
+        fiscalyear_lock_date: string | false;
+        period_lock_date: string | false;
+        tax_lock_date: string | false;
+      }>(
+        "res.company",
+        [],
+        [
+          "id",
+          "fiscalyear_last_day",
+          "fiscalyear_last_month",
+          "fiscalyear_lock_date",
+          "period_lock_date",
+          "tax_lock_date",
+        ],
+      ),
+      this.client.searchReadAll<{ date: string }>(
+        "account.move",
+        [["state", "=", "posted"]],
+        ["date"],
+        "date asc",
+      ),
     ]);
     const company = companies[0];
     if (!company) throw new Error("Odoo company fiscal settings are required for period migration");
-    const dates = moves.map((move) => move.date).filter(Boolean).sort();
+    const dates = moves
+      .map((move) => move.date)
+      .filter(Boolean)
+      .sort();
     const year = Number((await businessToday(this.orgId)).slice(0, 4));
     const start = dates[0] ?? `${year - 7}-01-01`;
     const horizon = `${year + 1}-12-31`;
@@ -135,20 +196,33 @@ export class OdooSource implements MigrationSource {
       if (fullLock && endsOn <= fullLock) return allModules("closed");
       const operational = periodLock && endsOn <= periodLock ? "closed" : "open";
       return {
-        ar: operational, ap: operational, banking: operational, assets: operational,
-        gl: operational, tax: taxLock && endsOn <= taxLock ? "closed" : operational,
+        ar: operational,
+        ap: operational,
+        banking: operational,
+        assets: operational,
+        gl: operational,
+        tax: taxLock && endsOn <= taxLock ? "closed" : operational,
       };
     };
     return monthlySourcePeriods(
       "odoo-period",
-      fiscalYearsForEndingRule(start, horizon, Number(company.fiscalyear_last_month), Number(company.fiscalyear_last_day)),
+      fiscalYearsForEndingRule(
+        start,
+        horizon,
+        Number(company.fiscalyear_last_month),
+        Number(company.fiscalyear_last_day),
+      ),
       stateFor,
     );
   }
 
   private async accounts(): Promise<SourceEntity[]> {
     const rows = await this.client.searchReadAll<{
-      id: number; code: string; name: string; account_type: string; deprecated: boolean;
+      id: number;
+      code: string;
+      name: string;
+      account_type: string;
+      deprecated: boolean;
     }>("account.account", [], ["id", "code", "name", "account_type", "deprecated"]);
     const out: SourceEntity[] = [];
     for (const a of rows) {
@@ -172,15 +246,28 @@ export class OdooSource implements MigrationSource {
 
   private async taxCodes(): Promise<SourceEntity[]> {
     const rows = await this.client.searchReadAll<{
-      id: number; name: string; amount: number; type_tax_use: string; active: boolean;
-    }>("account.tax", [["active", "in", [true, false]]], ["id", "name", "amount", "type_tax_use", "active"]);
+      id: number;
+      name: string;
+      amount: number;
+      type_tax_use: string;
+      active: boolean;
+    }>(
+      "account.tax",
+      [["active", "in", [true, false]]],
+      ["id", "name", "amount", "type_tax_use", "active"],
+    );
     return rows.map((t) => ({
       sourceRef: String(t.id),
       fields: {
         code: `${t.name} (${t.type_tax_use})`,
         name: t.name,
         ratePercent: String(t.amount),
-        appliesTo: t.type_tax_use === "sale" ? "sales" : t.type_tax_use === "purchase" ? "purchases" : "both",
+        appliesTo:
+          t.type_tax_use === "sale"
+            ? "sales"
+            : t.type_tax_use === "purchase"
+              ? "purchases"
+              : "both",
       },
     }));
   }
@@ -190,9 +277,17 @@ export class OdooSource implements MigrationSource {
     // leaves no API-visible successor pointer. No mergedIntoRef is emitted;
     // disappearances take the held path.
     const rows = await this.client.searchReadAll<{
-      id: number; name: string; company_type: string; email: string | false;
-      phone: string | false; active: boolean;
-    }>("res.partner", [["active", "in", [true, false]], ...this.sinceDomain(since)], ["id", "name", "company_type", "email", "phone", "active"]);
+      id: number;
+      name: string;
+      company_type: string;
+      email: string | false;
+      phone: string | false;
+      active: boolean;
+    }>(
+      "res.partner",
+      [["active", "in", [true, false]], ...this.sinceDomain(since)],
+      ["id", "name", "company_type", "email", "phone", "active"],
+    );
     return rows.map((p) => ({
       sourceRef: String(p.id),
       fields: {
@@ -207,8 +302,16 @@ export class OdooSource implements MigrationSource {
 
   private async items(since?: Date | null): Promise<SourceEntity[]> {
     const rows = await this.client.searchReadAll<{
-      id: number; default_code: string | false; name: string; detailed_type: string; active: boolean;
-    }>("product.product", [["active", "in", [true, false]], ...this.sinceDomain(since)], ["id", "default_code", "name", "detailed_type", "active"]);
+      id: number;
+      default_code: string | false;
+      name: string;
+      detailed_type: string;
+      active: boolean;
+    }>(
+      "product.product",
+      [["active", "in", [true, false]], ...this.sinceDomain(since)],
+      ["id", "default_code", "name", "detailed_type", "active"],
+    );
     return rows.map((p) => ({
       sourceRef: String(p.id),
       naturalKey: p.default_code || null,
@@ -223,24 +326,37 @@ export class OdooSource implements MigrationSource {
 
   // --- control accounts (fresh-org derivation) ------------------------------------
 
-  async controlAccounts(): Promise<Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>> {
-    const accounts = await this.client.searchReadAll<{ id: number; name: string; account_type: string }>(
-      "account.account", [], ["id", "name", "account_type"],
-    );
+  async controlAccounts(): Promise<
+    Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>
+  > {
+    const accounts = await this.client.searchReadAll<{
+      id: number;
+      name: string;
+      account_type: string;
+    }>("account.account", [], ["id", "name", "account_type"]);
     const first = (t: string) => accounts.find((a) => a.account_type === t);
     const bank =
-      accounts.find((a) => a.account_type === "asset_cash" && /bank/i.test(a.name)) ?? first("asset_cash");
+      accounts.find((a) => a.account_type === "asset_cash" && /bank/i.test(a.name)) ??
+      first("asset_cash");
 
     // Tax control accounts: the accounts Odoo actually posted tax lines to.
     const taxes = await this.client.searchReadAll<{ id: number; type_tax_use: string }>(
-      "account.tax", [], ["id", "type_tax_use"],
+      "account.tax",
+      [],
+      ["id", "type_tax_use"],
     );
     const taxAccountFor = async (use: string): Promise<string | undefined> => {
       const ids = taxes.filter((t) => t.type_tax_use === use).map((t) => t.id);
       if (ids.length === 0) return undefined;
       const line = await this.client.executeKw<{ account_id: unknown }[]>(
-        "account.move.line", "search_read",
-        [[["display_type", "=", "tax"], ["tax_line_id", "in", ids]]],
+        "account.move.line",
+        "search_read",
+        [
+          [
+            ["display_type", "=", "tax"],
+            ["tax_line_id", "in", ids],
+          ],
+        ],
         { fields: ["account_id"], limit: 1 },
       );
       return m2oId(line[0]?.account_id) ?? undefined;
@@ -261,7 +377,12 @@ export class OdooSource implements MigrationSource {
     const domain = since
       ? [["write_date", ">=", since.toISOString().slice(0, 19).replace("T", " ")]]
       : [];
-    const moves = await this.client.searchReadAll<OdooMove>("account.move", domain, MOVE_FIELDS, "id asc");
+    const moves = await this.client.searchReadAll<OdooMove>(
+      "account.move",
+      domain,
+      MOVE_FIELDS,
+      "id asc",
+    );
 
     // Lines for those moves (chunked 'in' domains).
     const linesByMove = new Map<string, OdooMoveLine[]>();
@@ -270,7 +391,10 @@ export class OdooSource implements MigrationSource {
       const chunk = moveIds.slice(i, i + 200);
       if (chunk.length === 0) continue;
       const rows = await this.client.searchReadAll<OdooMoveLine>(
-        "account.move.line", [["move_id", "in", chunk]], LINE_FIELDS, "id asc",
+        "account.move.line",
+        [["move_id", "in", chunk]],
+        LINE_FIELDS,
+        "id asc",
       );
       for (const l of rows) {
         const key = m2oId(l.move_id)!;
@@ -281,16 +405,20 @@ export class OdooSource implements MigrationSource {
     }
 
     // Payment discrimination + tax rates for the builder.
-    const payments = await this.client.searchReadAll<{ id: number; move_id: unknown; partner_type: string }>(
-      "account.payment", [], ["id", "move_id", "partner_type"],
-    );
+    const payments = await this.client.searchReadAll<{
+      id: number;
+      move_id: unknown;
+      partner_type: string;
+    }>("account.payment", [], ["id", "move_id", "partner_type"]);
     const paymentPartnerType = new Map<string, string>();
     for (const p of payments) {
       const mid = m2oId(p.move_id);
       if (mid) paymentPartnerType.set(mid, p.partner_type);
     }
     const taxes = await this.client.searchReadAll<{ id: number; amount: number }>(
-      "account.tax", [["active", "in", [true, false]]], ["id", "amount"],
+      "account.tax",
+      [["active", "in", [true, false]]],
+      ["id", "amount"],
     );
     const taxRateById = new Map(taxes.map((t) => [t.id, t.amount]));
 
@@ -313,20 +441,26 @@ export class OdooSource implements MigrationSource {
 
     // Applications: the FULL partial-reconcile graph (delta-safe reconciler).
     const partials = await this.client.searchReadAll<{
-      id: number; debit_move_id: unknown; credit_move_id: unknown; amount: number;
+      id: number;
+      debit_move_id: unknown;
+      credit_move_id: unknown;
+      amount: number;
     }>("account.partial.reconcile", [], ["id", "debit_move_id", "credit_move_id", "amount"]);
     const lineIds = new Set<number>();
     for (const p of partials) {
-      const d = m2oId(p.debit_move_id), c = m2oId(p.credit_move_id);
+      const d = m2oId(p.debit_move_id),
+        c = m2oId(p.credit_move_id);
       if (d) lineIds.add(Number(d));
       if (c) lineIds.add(Number(c));
     }
     const lineInfo = new Map<string, { moveId: string; accountRef: string }>();
     const idList = [...lineIds];
     for (let i = 0; i < idList.length; i += 500) {
-      const rows = await this.client.executeKw<{ id: number; move_id: unknown; account_id: unknown }[]>(
-        "account.move.line", "read", [idList.slice(i, i + 500)], { fields: ["move_id", "account_id"] },
-      );
+      const rows = await this.client.executeKw<
+        { id: number; move_id: unknown; account_id: unknown }[]
+      >("account.move.line", "read", [idList.slice(i, i + 500)], {
+        fields: ["move_id", "account_id"],
+      });
       for (const r of rows) {
         lineInfo.set(String(r.id), { moveId: m2oId(r.move_id)!, accountRef: m2oId(r.account_id)! });
       }
@@ -340,7 +474,9 @@ export class OdooSource implements MigrationSource {
       // Receivable: debit side = the invoice (open item), credit side settles it.
       // Payable: credit side = the bill (open item), debit side settles it.
       const [paymentRef, appliedRef] =
-        type === "liability_payable" ? [debit.moveId, credit.moveId] : [credit.moveId, debit.moveId];
+        type === "liability_payable"
+          ? [debit.moveId, credit.moveId]
+          : [credit.moveId, debit.moveId];
       // `amount` is company currency (Odoo multi-currency docs: reconciliation
       // matches "the invoice price in the invoice currency and the ... amount
       // in your company currency"; the foreign legs ride
@@ -368,7 +504,8 @@ export class OdooSource implements MigrationSource {
 
   async trialBalance(): Promise<SourceTrialBalanceRow[]> {
     const groups = await this.client.executeKw<{ account_id: unknown; balance: number }[]>(
-      "account.move.line", "read_group",
+      "account.move.line",
+      "read_group",
       [[["parent_state", "=", "posted"]], ["balance:sum"], ["account_id"]],
       {},
     );
@@ -381,9 +518,11 @@ export class OdooSource implements MigrationSource {
   }
 
   async monthlyActivity(): Promise<SourceAccountMonthRow[]> {
-    const rows = await this.client.searchReadAll<{ account_id: unknown; date: string; balance: number }>(
-      "account.move.line", [["parent_state", "=", "posted"]], ["account_id", "date", "balance"],
-    );
+    const rows = await this.client.searchReadAll<{
+      account_id: unknown;
+      date: string;
+      balance: number;
+    }>("account.move.line", [["parent_state", "=", "posted"]], ["account_id", "date", "balance"]);
     const byBucket = new Map<string, bigint>();
     for (const r of rows) {
       const ref = m2oId(r.account_id);
@@ -400,9 +539,15 @@ export class OdooSource implements MigrationSource {
   async openItems(): Promise<SourceOpenItem[]> {
     const rows = await this.client.searchReadAll<{ id: number; amount_residual: number }>(
       "account.move",
-      [["state", "=", "posted"], ["move_type", "in", ["out_invoice", "in_invoice", "out_refund", "in_refund"]]],
+      [
+        ["state", "=", "posted"],
+        ["move_type", "in", ["out_invoice", "in_invoice", "out_refund", "in_refund"]],
+      ],
       ["id", "amount_residual"],
     );
-    return rows.map((r) => ({ ref: String(r.id), unpaid: formatMoney(String(r.amount_residual ?? 0), 2) }));
+    return rows.map((r) => ({
+      ref: String(r.id),
+      unpaid: formatMoney(String(r.amount_residual ?? 0), 2),
+    }));
   }
 }

@@ -1,13 +1,20 @@
-'use client'
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { cmp } from '@openbooks/engine/money/money'
+"use client";
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { cmp } from "@openbooks/engine/money/money";
 
-import { useMoney } from '@/components/money-provider'
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { EntityDrawer } from '../analytics/_ui/EntityDrawer'
-import { TableDrilldownButton } from '../../../components/table-drilldown-button'
-import type { VendorExposureRow } from '../../../lib/module-home/purchasing'
+import { useMoney } from "@/components/money-provider";
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { EntityDrawer } from "../analytics/_ui/EntityDrawer";
+import { TableDrilldownButton } from "../../../components/table-drilldown-button";
+import type { VendorExposureRow } from "../../../lib/module-home/purchasing";
 
 /**
  * Purchasing-home hero table — one click on any vendor opens the shared
@@ -19,24 +26,38 @@ export function CommitmentsTable({
   rows,
   showPurchaseOrders = true,
 }: {
-  rows: VendorExposureRow[]
-  showPurchaseOrders?: boolean
+  rows: VendorExposureRow[];
+  showPurchaseOrders?: boolean;
 }) {
-  const { money, moneyCompact } = useMoney()
-  const t = useTranslations('purchasing')
-  const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
+  const { money, moneyCompact } = useMoney();
+  const t = useTranslations("purchasing");
+  const [entity, setEntity] = useState<{ id: string; name: string } | null>(null);
 
   return (
     <>
       <SharedTable className="w-full text-sm">
         <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
           <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <SharedTableHead className="px-4 py-2 text-left font-medium">{t('home.hero.vendor')}</SharedTableHead>
-            {showPurchaseOrders ? <SharedTableHead className="px-3 py-2 text-right font-medium">{t('home.hero.openPos')}</SharedTableHead> : null}
-            <SharedTableHead className="px-3 py-2 text-center font-medium">{t('home.hero.openBills')}</SharedTableHead>
-            <SharedTableHead className="px-3 py-2 text-right font-medium">{t('home.hero.oldestDue')}</SharedTableHead>
-            <SharedTableHead className="px-3 py-2 text-right font-medium">{t('home.hero.overdue')}</SharedTableHead>
-            <SharedTableHead className="px-4 py-2 text-right font-medium">{t('home.hero.billedOpen')}</SharedTableHead>
+            <SharedTableHead className="px-4 py-2 text-left font-medium">
+              {t("home.hero.vendor")}
+            </SharedTableHead>
+            {showPurchaseOrders ? (
+              <SharedTableHead className="px-3 py-2 text-right font-medium">
+                {t("home.hero.openPos")}
+              </SharedTableHead>
+            ) : null}
+            <SharedTableHead className="px-3 py-2 text-center font-medium">
+              {t("home.hero.openBills")}
+            </SharedTableHead>
+            <SharedTableHead className="px-3 py-2 text-right font-medium">
+              {t("home.hero.oldestDue")}
+            </SharedTableHead>
+            <SharedTableHead className="px-3 py-2 text-right font-medium">
+              {t("home.hero.overdue")}
+            </SharedTableHead>
+            <SharedTableHead className="px-4 py-2 text-right font-medium">
+              {t("home.hero.billedOpen")}
+            </SharedTableHead>
           </SharedTableRow>
         </SharedTableHeader>
         <SharedTableBody>
@@ -47,29 +68,35 @@ export function CommitmentsTable({
             >
               <SharedTableCell className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
                 {r.partyId ? (
-                  <TableDrilldownButton onActivate={() => setEntity({ id: r.partyId!, name: r.name })}>
+                  <TableDrilldownButton
+                    onActivate={() => setEntity({ id: r.partyId!, name: r.name })}
+                  >
                     {r.name}
                   </TableDrilldownButton>
-                ) : r.name}
-              </SharedTableCell>
-              {showPurchaseOrders ? (
-              <SharedTableCell className="px-3 py-2.5 text-right tabular-nums">
-                {r.openPos > 0 ? (
-                  <span className="text-violet-600 dark:text-violet-400">
-                    {moneyCompact(r.openPoValue)}
-                    <span className="ml-1 text-[11px] text-slate-400">({r.openPos})</span>
-                  </span>
                 ) : (
-                  <span className="text-slate-300 dark:text-slate-600">—</span>
+                  r.name
                 )}
               </SharedTableCell>
+              {showPurchaseOrders ? (
+                <SharedTableCell className="px-3 py-2.5 text-right tabular-nums">
+                  {r.openPos > 0 ? (
+                    <span className="text-violet-600 dark:text-violet-400">
+                      {moneyCompact(r.openPoValue)}
+                      <span className="ml-1 text-[11px] text-slate-400">({r.openPos})</span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-300 dark:text-slate-600">—</span>
+                  )}
+                </SharedTableCell>
               ) : null}
               <SharedTableCell className="px-3 py-2.5 text-center text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                {r.openBills > 0 ? r.openBills : '—'}
+                {r.openBills > 0 ? r.openBills : "—"}
               </SharedTableCell>
-              <SharedTableCell className="px-3 py-2.5 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{r.oldestDue ?? '—'}</SharedTableCell>
+              <SharedTableCell className="px-3 py-2.5 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                {r.oldestDue ?? "—"}
+              </SharedTableCell>
               <SharedTableCell className="px-3 py-2.5 text-right tabular-nums">
-                {cmp(r.overdue, '0') > 0 ? (
+                {cmp(r.overdue, "0") > 0 ? (
                   <span className="text-red-600 dark:text-red-400">{moneyCompact(r.overdue)}</span>
                 ) : (
                   <span className="text-slate-300 dark:text-slate-600">—</span>
@@ -82,7 +109,14 @@ export function CommitmentsTable({
           ))}
         </SharedTableBody>
       </SharedTable>
-      {entity ? <EntityDrawer party={entity.id} name={entity.name} side="ap" onClose={() => setEntity(null)} /> : null}
+      {entity ? (
+        <EntityDrawer
+          party={entity.id}
+          name={entity.name}
+          side="ap"
+          onClose={() => setEntity(null)}
+        />
+      ) : null}
     </>
-  )
+  );
 }

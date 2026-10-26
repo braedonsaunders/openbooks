@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  classifyTimeTicketLinks,
-  type ResolvedLink,
-} from "./field-ticket-time-links.ts";
+import { classifyTimeTicketLinks, type ResolvedLink } from "./field-ticket-time-links.ts";
 
 function row(overrides: Partial<ResolvedLink>): ResolvedLink {
   return {
@@ -21,9 +18,7 @@ function row(overrides: Partial<ResolvedLink>): ResolvedLink {
 }
 
 test("a row missing both the entry and the ticket counts once, never -1", () => {
-  const resolved = [
-    row({ sourceRef: "SRC-unknown", ticketNumber: "FT-unknown" }),
-  ];
+  const resolved = [row({ sourceRef: "SRC-unknown", ticketNumber: "FT-unknown" })];
   const classified = classifyTimeTicketLinks(resolved, 1, 1);
   assert.equal(classified.missingTimeEntries.length, 1);
   assert.equal(classified.missingTickets.length, 0);

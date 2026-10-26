@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { installCompensationReadFixture } from '../../../../testing/compensation-read-fixture';
+import { installCompensationReadFixture } from "../../../../testing/compensation-read-fixture";
 const fixture = installCompensationReadFixture();
 
-const { loadCompensationHome, loadCompCycleDetail, loadHeadcountPlanDetail, loadEquity, lineActionAvailability } =
-  await import("../../../../lib/hrm/compensation.ts");
-
+const {
+  loadCompensationHome,
+  loadCompCycleDetail,
+  loadHeadcountPlanDetail,
+  loadEquity,
+  lineActionAvailability,
+} = await import("../../../../lib/hrm/compensation.ts");
 
 function authzWith(permissions: string[]) {
   return {
@@ -16,7 +20,11 @@ function authzWith(permissions: string[]) {
   } as never;
 }
 
-const MANAGER = authzWith(["hrm.compensation.read", "hrm.compensation.manage", "admin.setup.manage"]);
+const MANAGER = authzWith([
+  "hrm.compensation.read",
+  "hrm.compensation.manage",
+  "admin.setup.manage",
+]);
 const MANAGER_NO_SETUP = authzWith(["hrm.compensation.read", "hrm.compensation.manage"]);
 const READER = authzWith(["hrm.compensation.read"]);
 
@@ -24,23 +32,34 @@ function features(flags: Record<string, boolean>) {
   fixture.features = flags;
 }
 
-test('plan register batches line reads and preserves exact per-plan costs', async () => {
-  fixture.plans = ['one', 'two', 'empty'].map((id) => ({
-    id, name: id, fiscalPeriodFrom: '2026-01-01', fiscalPeriodTo: '2026-12-31', status: 'draft',
+test("plan register batches line reads and preserves exact per-plan costs", async () => {
+  fixture.plans = ["one", "two", "empty"].map((id) => ({
+    id,
+    name: id,
+    fiscalPeriodFrom: "2026-01-01",
+    fiscalPeriodTo: "2026-12-31",
+    status: "draft",
   }));
   fixture.planLines = [
-    { planId: 'one', estAnnualCost: '90071992547409.01' },
-    { planId: 'one', estAnnualCost: '0.01' },
-    { planId: 'two', estAnnualCost: '-0.02' },
-    { planId: 'unlisted', estAnnualCost: '999.00' },
+    { planId: "one", estAnnualCost: "90071992547409.01" },
+    { planId: "one", estAnnualCost: "0.01" },
+    { planId: "two", estAnnualCost: "-0.02" },
+    { planId: "unlisted", estAnnualCost: "999.00" },
   ];
   fixture.planLineReads = [];
   try {
-    const data = await loadCompensationHome(READER, { view: 'plans' });
-    assert.deepEqual(fixture.planLineReads, [{ orgId: 'org-comp-dlg', actorId: 'actor-comp-dlg', planIds: ['one', 'two', 'empty'] }]);
-    assert.deepEqual(data?.plans.map((row) => [row.id, row.totalCost]), [
-      ['one', '90071992547409.02'], ['two', '-0.02'], ['empty', '0.00'],
+    const data = await loadCompensationHome(READER, { view: "plans" });
+    assert.deepEqual(fixture.planLineReads, [
+      { orgId: "org-comp-dlg", actorId: "actor-comp-dlg", planIds: ["one", "two", "empty"] },
     ]);
+    assert.deepEqual(
+      data?.plans.map((row) => [row.id, row.totalCost]),
+      [
+        ["one", "90071992547409.02"],
+        ["two", "-0.02"],
+        ["empty", "0.00"],
+      ],
+    );
   } finally {
     fixture.plans = null;
     fixture.planLines = [];
@@ -71,10 +90,18 @@ test("?cycle=new resolves an open cycle dialog over the four engine kinds", asyn
   fixture.baseCurrency = "USD";
   const data = await loadCompensationHome(MANAGER, { cycle: "new" });
   assert.ok(data, "the home loader still resolves");
-  assert.deepEqual([data.cycleOpen, data.planOpen], [true, false], "?cycle=new opens only the requested dialog");
+  assert.deepEqual(
+    [data.cycleOpen, data.planOpen],
+    [true, false],
+    "?cycle=new opens only the requested dialog",
+  );
   const dialog = data.cycleDialog;
   assert.ok(dialog, "the cycle dialog resolves instead of nothing");
-  assert.equal(dialog.defaultCurrency, "USD", "cycle creation inherits the organization's configured currency");
+  assert.equal(
+    dialog.defaultCurrency,
+    "USD",
+    "cycle creation inherits the organization's configured currency",
+  );
   assert.equal(dialog.closeHref, "/hrm/compensation", "closing navigates the param away");
   assert.deepEqual(
     dialog.kinds.map((k) => k.value),
@@ -92,18 +119,34 @@ test("a requested dialog without the manage grant names the grant and its remedy
   const plan = await loadCompensationHome(READER, { plan: "new" });
   assert.equal(plan?.planOpen, true, "the dialog still opens — a refusal, never nothing");
   assert.ok(plan?.planDialog, "the plan dialog resolves");
-  assert.equal(plan.planDialog.refusal?.title, "You don't have access", "the shared denial title, not a new key");
-  assert.match(plan.planDialog.refusal?.message ?? "", /hrm\.compensation\.manage/, "the missing grant is named");
+  assert.equal(
+    plan.planDialog.refusal?.title,
+    "You don't have access",
+    "the shared denial title, not a new key",
+  );
+  assert.match(
+    plan.planDialog.refusal?.message ?? "",
+    /hrm\.compensation\.manage/,
+    "the missing grant is named",
+  );
   assert.match(
     plan.planDialog.refusal?.message ?? "",
     /ask your administrator/,
     "the remedy names the person to ask",
   );
-  assert.equal(plan.planDialog.remedyHref, null, "a missing grant is remedied by a person, never a link");
+  assert.equal(
+    plan.planDialog.remedyHref,
+    null,
+    "a missing grant is remedied by a person, never a link",
+  );
 
   const cycle = await loadCompensationHome(READER, { cycle: "new" });
   assert.equal(cycle?.cycleOpen, true, "the cycle dialog still opens");
-  assert.match(cycle?.cycleDialog?.refusal?.message ?? "", /hrm\.compensation\.manage/, "the grant is named there too");
+  assert.match(
+    cycle?.cycleDialog?.refusal?.message ?? "",
+    /hrm\.compensation\.manage/,
+    "the grant is named there too",
+  );
 });
 
 test("Payroll off names Payroll with the real switch for setup managers", async () => {
@@ -112,13 +155,21 @@ test("Payroll off names Payroll with the real switch for setup managers", async 
   features({ payroll: false });
   const cycle = await loadCompensationHome(MANAGER, { cycle: "new" });
   assert.equal(cycle?.cycleOpen, true, "the dialog still opens");
-  assert.equal(cycle?.cycleDialog?.refusal?.title, "Payroll is turned off", "the switchboard display name, not the key");
+  assert.equal(
+    cycle?.cycleDialog?.refusal?.title,
+    "Payroll is turned off",
+    "the switchboard display name, not the key",
+  );
   assert.match(
     cycle?.cycleDialog?.refusal?.message ?? "",
     /needs the Payroll feature/,
     "the message names the feature with the shared feature-off copy",
   );
-  assert.equal(cycle?.cycleDialog?.remedyHref, "/admin/setup/features", "setup managers get the real switch");
+  assert.equal(
+    cycle?.cycleDialog?.remedyHref,
+    "/admin/setup/features",
+    "setup managers get the real switch",
+  );
   assert.ok(
     (cycle?.cycleDialog?.remedyLabel ?? "").length > 0,
     "the switch link carries prose, never a key path",
@@ -129,7 +180,11 @@ test("Payroll off without setup rights names the administrator instead", async (
   features({ payroll: false });
   const data = await loadCompensationHome(MANAGER_NO_SETUP, { cycle: "new" });
   assert.ok(data?.cycleDialog?.refusal, "the refusal still rides along");
-  assert.equal(data.cycleDialog.remedyHref, null, "no switch link for viewers who cannot toggle it");
+  assert.equal(
+    data.cycleDialog.remedyHref,
+    null,
+    "no switch link for viewers who cannot toggle it",
+  );
   assert.match(
     data.cycleDialog.refusal.message,
     /ask your administrator/,
@@ -163,9 +218,21 @@ test("equity ?generate=1 resolves the snapshot dialog, or its named refusal", as
   assert.equal(open?.generateOpen, true, "?generate=1 opens the dialog");
   assert.ok(open?.generateDialog, "the dialog resolves instead of nothing");
   assert.equal(open.generateDialog.open, true, "the widget's open state is set");
-  assert.equal(open.generateDialog.closeHref, "/hrm/compensation/equity", "closing navigates the param away");
-  assert.equal(open.generateDialog.groupALabel, "Group A", "the group labels resolve, never key paths");
-  assert.equal(open.generateDialog.groupBLabel, "Group B", "the group labels resolve, never key paths");
+  assert.equal(
+    open.generateDialog.closeHref,
+    "/hrm/compensation/equity",
+    "closing navigates the param away",
+  );
+  assert.equal(
+    open.generateDialog.groupALabel,
+    "Group A",
+    "the group labels resolve, never key paths",
+  );
+  assert.equal(
+    open.generateDialog.groupBLabel,
+    "Group B",
+    "the group labels resolve, never key paths",
+  );
   assert.equal(open.generateDialog.refusal, null, "managers get the form");
 
   const refused = await loadEquity(READER, { generate: "1" });
@@ -204,8 +271,16 @@ test("both specs emit the dialog widgets gated on the loader-derived open state"
   assert.equal(home?.cycleDialog?.open, true, "the cycle payload carries its open state");
   assert.equal(home?.planDialog?.open, true, "the plan payload carries its open state");
   const homeSpec = compensationSpec(home!);
-  assert.deepEqual(widgetBlocks(homeSpec, "hrm-comp-cycle-dialog").map((b) => b.when), [{ $: "cycleOpen" }], "the cycle widget renders once, gated on its open state");
-  assert.deepEqual(widgetBlocks(homeSpec, "hrm-comp-plan-dialog").map((b) => b.when), [{ $: "planOpen" }], "the plan widget renders once, gated on its open state");
+  assert.deepEqual(
+    widgetBlocks(homeSpec, "hrm-comp-cycle-dialog").map((b) => b.when),
+    [{ $: "cycleOpen" }],
+    "the cycle widget renders once, gated on its open state",
+  );
+  assert.deepEqual(
+    widgetBlocks(homeSpec, "hrm-comp-plan-dialog").map((b) => b.when),
+    [{ $: "planOpen" }],
+    "the plan widget renders once, gated on its open state",
+  );
 
   const shut = await loadCompensationHome(MANAGER, {});
   assert.equal(shut?.cycleOpen, false, "no param, no open state");
@@ -251,7 +326,8 @@ test("home tables head their columns from the resolved catalog, never literals",
   features({ payroll: true });
   const data = await loadCompensationHome(MANAGER, {});
   assert.ok(data, "the home loader still resolves");
-  const { CompensationCycleRegister, CompensationPlanRegister } = await import("./CompensationRegisters.tsx");
+  const { CompensationCycleRegister, CompensationPlanRegister } =
+    await import("./CompensationRegisters.tsx");
   const cycle = await CompensationCycleRegister({ data });
   const plan = await CompensationPlanRegister({ data });
   assert.deepEqual(

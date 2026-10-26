@@ -26,12 +26,9 @@ export function ChangeActions({
       const res = await fetch(`/api/accounting/changes/${id}/${action}`, {
         method: "POST",
       });
-      if (!res.ok)
-        throw new Error(await readApiErrorMessage(res, t("lifecycle.failed")));
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("lifecycle.failed")));
       toast.success(
-        action === "submit"
-          ? t("lifecycle.submittedToast")
-          : t("lifecycle.appliedToast"),
+        action === "submit" ? t("lifecycle.submittedToast") : t("lifecycle.appliedToast"),
       );
       router.refresh();
     } catch (e) {

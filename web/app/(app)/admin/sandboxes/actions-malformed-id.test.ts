@@ -27,10 +27,7 @@ const mocks = new Map<string, string>([
       export function can() { return true }
     `,
   ],
-  [
-    "mock:cache",
-    `export function revalidatePath() {}`,
-  ],
+  ["mock:cache", `export function revalidatePath() {}`],
   [
     "mock:jobs",
     `
@@ -45,7 +42,6 @@ const mocks = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -83,7 +79,9 @@ function managerAuthz(): void {
 
 function restrictedManagerAuthz(): void {
   managerAuthz();
-  (state.authz as { allowedSubsidiaryIds: Set<string> | null }).allowedSubsidiaryIds = new Set(["subsidiary-one"]);
+  (state.authz as { allowedSubsidiaryIds: Set<string> | null }).allowedSubsidiaryIds = new Set([
+    "subsidiary-one",
+  ]);
 }
 
 const OP_KEY = "00000000-0000-4000-8000-00000000b001";
@@ -149,5 +147,9 @@ test("as-of sandbox creation refuses synchronously before enqueue without a cuto
     actions.createSandboxAction({ name: "Historical QA", tier: "as_of", clientOpKey: OP_KEY }),
     /as-of sandbox requires a cutoff period/,
   );
-  assert.equal(state.enqueues.length, 0, "invalid as-of operation must never reach the worker queue");
+  assert.equal(
+    state.enqueues.length,
+    0,
+    "invalid as-of operation must never reach the worker queue",
+  );
 });

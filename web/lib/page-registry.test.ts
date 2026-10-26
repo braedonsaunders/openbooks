@@ -1,9 +1,9 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { test } from 'node:test'
-import { describeView, findViews } from '../../scripts/page-registry-source.mjs'
-import { PAGE_REGISTRY, PAGE_ROUTES } from './page-registry'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+import { describeView, findViews } from "../../scripts/page-registry-source.mjs";
+import { PAGE_REGISTRY, PAGE_ROUTES } from "./page-registry";
 
 /**
  * `page-registry.ts` must describe the pages that actually exist.
@@ -25,51 +25,56 @@ import { PAGE_REGISTRY, PAGE_ROUTES } from './page-registry'
  * hundred and sixty-four.
  */
 
-const APP_DIR = join(process.cwd(), 'web', 'app', '(app)')
+const APP_DIR = join(process.cwd(), "web", "app", "(app)");
 
 const fromSource = findViews(APP_DIR).map((file: string) =>
-  describeView(file, readFileSync(file, 'utf8')),
-)
+  describeView(file, readFileSync(file, "utf8")),
+);
 
-test('the source walk actually found the pages', () => {
+test("the source walk actually found the pages", () => {
   // Without this, a broken walk would make every comparison below pass by
   // comparing two empty lists.
-  assert.ok(fromSource.length > 150, `only found ${fromSource.length} views`)
-})
+  assert.ok(fromSource.length > 150, `only found ${fromSource.length} views`);
+});
 
-test('every page is in the registry, and nothing else is', () => {
-  const expected = fromSource.flatMap((view: { routes: Array<{ route: string }> }) =>
-    view.routes.map((mount) => mount.route),
-  ).sort()
-  assert.deepEqual([...PAGE_ROUTES], expected)
-})
+test("every page is in the registry, and nothing else is", () => {
+  const expected = fromSource
+    .flatMap((view: { routes: Array<{ route: string }> }) =>
+      view.routes.map((mount) => mount.route),
+    )
+    .sort();
+  assert.deepEqual([...PAGE_ROUTES], expected);
+});
 
-test('each entry records the loader inputs its page actually takes', () => {
+test("each entry records the loader inputs its page actually takes", () => {
   for (const view of fromSource as Array<{
-    routes: Array<{ route: string; segments: string[]; searchParams: boolean }>
+    routes: Array<{ route: string; segments: string[]; searchParams: boolean }>;
   }>) {
     for (const mount of view.routes) {
-      const entry = PAGE_REGISTRY[mount.route]
-      assert.ok(entry, `missing registry entry for ${mount.route}`)
-      assert.deepEqual([...entry.segments], mount.segments, `segments for ${mount.route}`)
-      assert.equal(entry.searchParams, mount.searchParams, `searchParams for ${mount.route}`)
+      const entry = PAGE_REGISTRY[mount.route];
+      assert.ok(entry, `missing registry entry for ${mount.route}`);
+      assert.deepEqual([...entry.segments], mount.segments, `segments for ${mount.route}`);
+      assert.equal(entry.searchParams, mount.searchParams, `searchParams for ${mount.route}`);
     }
   }
-})
+});
 
-test('every required segment is one the route pattern names', () => {
+test("every required segment is one the route pattern names", () => {
   // A segment the url cannot supply is a page nothing can describe: the caller
   // has no way to learn what value to pass.
   for (const route of PAGE_ROUTES) {
-    const declared = [...route.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1])
+    const declared = [...route.matchAll(/\[([^\]]+)\]/g)].map((match) => match[1]);
     for (const segment of PAGE_REGISTRY[route]!.segments) {
-      assert.ok(declared.includes(segment), `${route} needs [${segment}], which it does not declare`)
+      assert.ok(
+        declared.includes(segment),
+        `${route} needs [${segment}], which it does not declare`,
+      );
     }
   }
-})
+});
 
-test('the registry key and the entry agree on the route', () => {
+test("the registry key and the entry agree on the route", () => {
   for (const [key, entry] of Object.entries(PAGE_REGISTRY)) {
-    assert.equal(entry.route, key)
+    assert.equal(entry.route, key);
   }
-})
+});

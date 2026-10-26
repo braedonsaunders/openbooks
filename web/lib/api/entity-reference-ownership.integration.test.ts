@@ -12,9 +12,8 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // must fail closed the same way, with a tenant-opaque 404.
 const { createRecord, updateRecord } = await import("./writers.ts");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -31,9 +30,30 @@ const resolved: ResolvedApiType = {
 };
 
 const fields: ApiField[] = [
-  { name: "kind", type: "string", required: true, writable: true, description: null, custom: false },
-  { name: "name", type: "string", required: true, writable: true, description: null, custom: false },
-  { name: "cf_ref_party", type: "string", required: false, writable: true, description: null, custom: true },
+  {
+    name: "kind",
+    type: "string",
+    required: true,
+    writable: true,
+    description: null,
+    custom: false,
+  },
+  {
+    name: "name",
+    type: "string",
+    required: true,
+    writable: true,
+    description: null,
+    custom: false,
+  },
+  {
+    name: "cf_ref_party",
+    type: "string",
+    required: false,
+    writable: true,
+    description: null,
+    custom: true,
+  },
 ];
 
 function userFor(orgId: string, actorId: string) {
@@ -52,12 +72,14 @@ function userFor(orgId: string, actorId: string) {
 }
 
 async function seedReferenceDef(orgId: string, actorId: string) {
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     insert into custom_field_defs
       (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
     values
       (${randomUUID()}, ${orgId}, 'items', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${actorId}, ${actorId})
-  `));
+  `),
+  );
 }
 
 test(
@@ -75,11 +97,17 @@ test(
 
       // CREATE with a foreign-org reference must fail closed.
       const refusedCreate = await withOrgContext(orgA.orgId, () =>
-        createRecord(user, resolved, fields, {
-          kind: "service",
-          name: "Foreign ref item",
-          cf_ref_party: foreign,
-        }, { allowedSubsidiaryIds: null }),
+        createRecord(
+          user,
+          resolved,
+          fields,
+          {
+            kind: "service",
+            name: "Foreign ref item",
+            cf_ref_party: foreign,
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         refusedCreate.status,
@@ -87,17 +115,26 @@ test(
         `expected tenant-opaque 404, got ${refusedCreate.status}: ${JSON.stringify(refusedCreate.body)}`,
       );
       const created = await withBypass(() =>
-        db.execute<{ n: number }>(sql`select count(*)::int as n from items where org_id = ${orgA.orgId} and name = 'Foreign ref item'`, "objects"),
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from items where org_id = ${orgA.orgId} and name = 'Foreign ref item'`,
+          "objects",
+        ),
       );
       assert.equal(created[0]?.n ?? -1, 0, "refused create stores nothing");
 
       // CREATE with a dangling uuid must fail closed too.
       const dangling = await withOrgContext(orgA.orgId, () =>
-        createRecord(user, resolved, fields, {
-          kind: "service",
-          name: "Dangling ref item",
-          cf_ref_party: randomUUID(),
-        }, { allowedSubsidiaryIds: null }),
+        createRecord(
+          user,
+          resolved,
+          fields,
+          {
+            kind: "service",
+            name: "Dangling ref item",
+            cf_ref_party: randomUUID(),
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         dangling.status,
@@ -107,18 +144,35 @@ test(
 
       // CREATE with an own-org reference still succeeds.
       const okCreate = await withOrgContext(orgA.orgId, () =>
-        createRecord(user, resolved, fields, {
-          kind: "service",
-          name: "Owned ref item",
-          cf_ref_party: own,
-        }, { allowedSubsidiaryIds: null }),
+        createRecord(
+          user,
+          resolved,
+          fields,
+          {
+            kind: "service",
+            name: "Owned ref item",
+            cf_ref_party: own,
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
-      assert.equal(okCreate.status, 201, `expected 201, got ${okCreate.status}: ${JSON.stringify(okCreate.body)}`);
+      assert.equal(
+        okCreate.status,
+        201,
+        `expected 201, got ${okCreate.status}: ${JSON.stringify(okCreate.body)}`,
+      );
       const itemId = (okCreate.body as { id: string }).id;
 
       // UPDATE swapping in a foreign-org reference must fail closed.
       const refusedUpdate = await withOrgContext(orgA.orgId, () =>
-        updateRecord(user, resolved, fields, itemId, { cf_ref_party: foreign }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          itemId,
+          { cf_ref_party: foreign },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         refusedUpdate.status,
@@ -126,7 +180,10 @@ test(
         `expected tenant-opaque 404, got ${refusedUpdate.status}: ${JSON.stringify(refusedUpdate.body)}`,
       );
       const stored = await withBypass(() =>
-        db.execute<{ custom: Record<string, unknown> }>(sql`select custom from items where id = ${itemId}`, "objects"),
+        db.execute<{ custom: Record<string, unknown> }>(
+          sql`select custom from items where id = ${itemId}`,
+          "objects",
+        ),
       );
       assert.equal(
         (stored[0]?.custom as Record<string, unknown> | undefined)?.ref_party,
@@ -136,9 +193,20 @@ test(
 
       // UPDATE with an own-org reference still succeeds.
       const okUpdate = await withOrgContext(orgA.orgId, () =>
-        updateRecord(user, resolved, fields, itemId, { cf_ref_party: orgA.customerId }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          itemId,
+          { cf_ref_party: orgA.customerId },
+          { allowedSubsidiaryIds: null },
+        ),
       );
-      assert.equal(okUpdate.status, 200, `expected 200, got ${okUpdate.status}: ${JSON.stringify(okUpdate.body)}`);
+      assert.equal(
+        okUpdate.status,
+        200,
+        `expected 200, got ${okUpdate.status}: ${JSON.stringify(okUpdate.body)}`,
+      );
     } finally {
       await withBypass(() => dropScratchOrg(orgA.orgId));
       await withBypass(() => dropScratchOrg(orgB.orgId));

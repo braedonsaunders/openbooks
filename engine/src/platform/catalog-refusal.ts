@@ -76,7 +76,10 @@ export interface CatalogRefusal {
 export function serializeRefusalValues(values: RefusalValues): Record<string, RefusalValue> {
   const out: Record<string, RefusalValue> = {};
   for (const [name, value] of Object.entries(values)) {
-    out[name] = value.kind === "shares" || value.kind === "count" ? { ...value, value: String(value.value) } : value;
+    out[name] =
+      value.kind === "shares" || value.kind === "count"
+        ? { ...value, value: String(value.value) }
+        : value;
   }
   return out;
 }
@@ -85,8 +88,20 @@ export function serializeRefusalValues(values: RefusalValues): Record<string, Re
 export function catalogRefusalOf(error: unknown): CatalogRefusal | null {
   if (!error || typeof error !== "object") return null;
   const candidate = error as Partial<CatalogRefusal>;
-  if (typeof candidate.catalogKey !== "string" || typeof candidate.code !== "string" || typeof candidate.message !== "string" || typeof candidate.remedy !== "string") return null;
-  return { code: candidate.code, catalogKey: candidate.catalogKey, values: serializeRefusalValues(candidate.values ?? {}), message: candidate.message, remedy: candidate.remedy };
+  if (
+    typeof candidate.catalogKey !== "string" ||
+    typeof candidate.code !== "string" ||
+    typeof candidate.message !== "string" ||
+    typeof candidate.remedy !== "string"
+  )
+    return null;
+  return {
+    code: candidate.code,
+    catalogKey: candidate.catalogKey,
+    values: serializeRefusalValues(candidate.values ?? {}),
+    message: candidate.message,
+    remedy: candidate.remedy,
+  };
 }
 
 const DEFAULT_LOCALE = "en-US";
@@ -98,18 +113,28 @@ function groupedInteger(digits: string, locale: string): string {
 const DECIMAL = /^(-)?(\d+)(?:\.(\d+))?$/;
 
 /** Round a plain decimal string half up to `scale` places, exactly. */
-function roundDecimal(value: string, scale: number): { negative: boolean; whole: string; fraction: string } | null {
+function roundDecimal(
+  value: string,
+  scale: number,
+): { negative: boolean; whole: string; fraction: string } | null {
   const match = DECIMAL.exec(value.trim());
   if (!match) return null;
   const fraction = match[3] ?? "";
   let units = BigInt(`${match[2]}${fraction.padEnd(scale, "0").slice(0, scale)}`);
   if (fraction.length > scale && fraction[scale]! >= "5") units += 1n;
   const text = units.toString().padStart(scale + 1, "0");
-  return { negative: match[1] === "-" && units !== 0n, whole: scale > 0 ? text.slice(0, -scale) : text, fraction: scale > 0 ? text.slice(-scale) : "" };
+  return {
+    negative: match[1] === "-" && units !== 0n,
+    whole: scale > 0 ? text.slice(0, -scale) : text,
+    fraction: scale > 0 ? text.slice(-scale) : "",
+  };
 }
 
 function decimalSeparator(locale: string): string {
-  return new Intl.NumberFormat(locale).formatToParts(1.5).find((part) => part.type === "decimal")?.value ?? ".";
+  return (
+    new Intl.NumberFormat(locale).formatToParts(1.5).find((part) => part.type === "decimal")
+      ?.value ?? "."
+  );
 }
 
 /** An exact decimal in the locale's digits and separators, trailing zeros trimmed. */
@@ -122,7 +147,11 @@ function localDecimal(value: string, locale: string): string {
 }
 
 /** A number placed in a locale's template for a style (currency or percent), the digits exact. */
-function inTemplate(digits: { negative: boolean; whole: string; fraction: string }, locale: string, options: Intl.NumberFormatOptions): string | null {
+function inTemplate(
+  digits: { negative: boolean; whole: string; fraction: string },
+  locale: string,
+  options: Intl.NumberFormatOptions,
+): string | null {
   let template: Intl.NumberFormat;
   try {
     template = new Intl.NumberFormat(locale, options);
@@ -130,7 +159,11 @@ function inTemplate(digits: { negative: boolean; whole: string; fraction: string
     return null;
   }
   const parts = template.formatToParts(digits.negative ? -1 : 1);
-  const numeric = (part: Intl.NumberFormatPart) => part.type === "integer" || part.type === "group" || part.type === "decimal" || part.type === "fraction";
+  const numeric = (part: Intl.NumberFormatPart) =>
+    part.type === "integer" ||
+    part.type === "group" ||
+    part.type === "decimal" ||
+    part.type === "fraction";
   const first = parts.findIndex(numeric);
   let last = -1;
   parts.forEach((part, index) => {
@@ -138,21 +171,34 @@ function inTemplate(digits: { negative: boolean; whole: string; fraction: string
   });
   if (first < 0) return null;
   const number = `${groupedInteger(digits.whole, locale)}${digits.fraction ? `${decimalSeparator(locale)}${digits.fraction}` : ""}`;
-  return [...parts.slice(0, first).map((part) => part.value), number, ...parts.slice(last + 1).map((part) => part.value)].join("");
+  return [
+    ...parts.slice(0, first).map((part) => part.value),
+    number,
+    ...parts.slice(last + 1).map((part) => part.value),
+  ].join("");
 }
 
 function currencyAmount(value: string, currency: string, locale: string, places?: number): string {
   let scale = places;
   if (scale === undefined) {
     try {
-      scale = new Intl.NumberFormat(locale, { style: "currency", currency }).resolvedOptions().maximumFractionDigits ?? 2;
+      scale =
+        new Intl.NumberFormat(locale, { style: "currency", currency }).resolvedOptions()
+          .maximumFractionDigits ?? 2;
     } catch {
       return `${value} ${currency}`;
     }
   }
   const rounded = roundDecimal(value, scale);
   if (!rounded) return `${value} ${currency}`;
-  return inTemplate(rounded, locale, { style: "currency", currency, minimumFractionDigits: scale, maximumFractionDigits: scale }) ?? `${value} ${currency}`;
+  return (
+    inTemplate(rounded, locale, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: scale,
+      maximumFractionDigits: scale,
+    }) ?? `${value} ${currency}`
+  );
 }
 
 /**
@@ -164,20 +210,33 @@ export function formatRefusalDate(isoDate: string, locale: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
   if (!match) return isoDate;
   const instant = new Date(`${isoDate}T12:00:00Z`);
-  if (Number.isNaN(instant.getTime()) || instant.toISOString().slice(0, 10) !== isoDate) return isoDate;
-  return new Intl.DateTimeFormat(locale, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }).format(instant);
+  if (Number.isNaN(instant.getTime()) || instant.toISOString().slice(0, 10) !== isoDate)
+    return isoDate;
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(instant);
 }
 
 /** Resolves a catalog term in the reader's language; the engine's own rendering uses its English text. */
 export type TermResolver = (key: string, text: string) => string;
 
 /** One refusal figure in a locale. */
-export function formatRefusalValue(value: RefusalValue, locale: string, term: TermResolver = (_key, text) => text): string {
+export function formatRefusalValue(
+  value: RefusalValue,
+  locale: string,
+  term: TermResolver = (_key, text) => text,
+): string {
   switch (value.kind) {
     case "shares":
     case "count": {
       const text = String(value.value);
-      if (/^-?\d+$/.test(text)) return text.startsWith("-") ? `-${groupedInteger(text.slice(1), locale)}` : groupedInteger(text, locale);
+      if (/^-?\d+$/.test(text))
+        return text.startsWith("-")
+          ? `-${groupedInteger(text.slice(1), locale)}`
+          : groupedInteger(text, locale);
       return localDecimal(text, locale);
     }
     case "money":
@@ -186,9 +245,11 @@ export function formatRefusalValue(value: RefusalValue, locale: string, term: Te
       return value.currency
         ? currencyAmount(value.value, value.currency, locale, perSharePlaces(value.value))
         : (() => {
-          const rounded = roundDecimal(value.value, perSharePlaces(value.value));
-          return rounded ? `${rounded.negative ? "-" : ""}${groupedInteger(rounded.whole, locale)}${rounded.fraction ? `${decimalSeparator(locale)}${rounded.fraction}` : ""}` : value.value;
-        })();
+            const rounded = roundDecimal(value.value, perSharePlaces(value.value));
+            return rounded
+              ? `${rounded.negative ? "-" : ""}${groupedInteger(rounded.whole, locale)}${rounded.fraction ? `${decimalSeparator(locale)}${rounded.fraction}` : ""}`
+              : value.value;
+          })();
     case "decimal":
       return localDecimal(value.value, locale);
     case "multiple":
@@ -197,7 +258,11 @@ export function formatRefusalValue(value: RefusalValue, locale: string, term: Te
       const match = DECIMAL.exec(value.value.trim());
       if (!match) return value.value;
       const fraction = (match[3] ?? "").replace(/0+$/, "");
-      return inTemplate({ negative: match[1] === "-", whole: match[2]!, fraction }, locale, { style: "percent" }) ?? `${value.value}%`;
+      return (
+        inTemplate({ negative: match[1] === "-", whole: match[2]!, fraction }, locale, {
+          style: "percent",
+        }) ?? `${value.value}%`
+      );
     }
     case "date":
       return formatRefusalDate(value.value, locale);
@@ -211,7 +276,9 @@ export function formatRefusalValue(value: RefusalValue, locale: string, term: Te
     case "choice":
       return value.value;
     case "list":
-      return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(value.value);
+      return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(
+        value.value,
+      );
     case "term":
       return term(value.key, value.text);
   }
@@ -229,7 +296,11 @@ function pluralNumber(value: RefusalValue): number | null {
  * formatted under its name, and each share or count figure's number under
  * `<name>Count` for plural selection.
  */
-export function refusalArguments(values: RefusalValues, locale: string, term?: TermResolver): Record<string, string | number> {
+export function refusalArguments(
+  values: RefusalValues,
+  locale: string,
+  term?: TermResolver,
+): Record<string, string | number> {
   const args: Record<string, string | number> = {};
   for (const [name, value] of Object.entries(values)) {
     args[name] = formatRefusalValue(value, locale, term);
@@ -268,7 +339,11 @@ function branches(text: string): Map<string, string> {
   return out;
 }
 
-function renderArgument(inner: string, args: Readonly<Record<string, string | number>>, locale: string): string {
+function renderArgument(
+  inner: string,
+  args: Readonly<Record<string, string | number>>,
+  locale: string,
+): string {
   const comma = inner.indexOf(",");
   const name = (comma < 0 ? inner : inner.slice(0, comma)).trim();
   if (comma < 0) return name in args ? String(args[name]) : `{${inner}}`;
@@ -280,13 +355,21 @@ function renderArgument(inner: string, args: Readonly<Record<string, string | nu
   if (type === "plural") {
     const number = typeof value === "number" ? value : Number(value);
     const exact = options.get(`=${number}`);
-    const category = Number.isFinite(number) ? new Intl.PluralRules(locale).select(number) : "other";
+    const category = Number.isFinite(number)
+      ? new Intl.PluralRules(locale).select(number)
+      : "other";
     const chosen = exact ?? options.get(category) ?? options.get("other") ?? "";
     const base = name.endsWith("Count") ? name.slice(0, -"Count".length) : null;
-    const pound = base && base in args ? String(args[base]) : Number.isFinite(number) ? new Intl.NumberFormat(locale).format(number) : String(value);
+    const pound =
+      base && base in args
+        ? String(args[base])
+        : Number.isFinite(number)
+          ? new Intl.NumberFormat(locale).format(number)
+          : String(value);
     return renderTemplate(chosen, args, locale, pound);
   }
-  if (type === "select") return renderTemplate(options.get(String(value)) ?? options.get("other") ?? "", args, locale);
+  if (type === "select")
+    return renderTemplate(options.get(String(value)) ?? options.get("other") ?? "", args, locale);
   return value === undefined ? `{${inner}}` : String(value);
 }
 
@@ -295,7 +378,12 @@ function renderArgument(inner: string, args: Readonly<Record<string, string | nu
  * arguments with nested messages, `#` inside a plural branch and `''` for a
  * literal apostrophe. An argument with no value stays as written.
  */
-export function renderTemplate(template: string, args: Readonly<Record<string, string | number>>, locale: string, pound?: string): string {
+export function renderTemplate(
+  template: string,
+  args: Readonly<Record<string, string | number>>,
+  locale: string,
+  pound?: string,
+): string {
   let out = "";
   let index = 0;
   while (index < template.length) {
@@ -327,6 +415,11 @@ export function renderTemplate(template: string, args: Readonly<Record<string, s
 }
 
 /** A refusal template rendered with its figures, in English unless a locale is named. */
-export function renderRefusal(template: string, values: RefusalValues, locale = DEFAULT_LOCALE, term?: TermResolver): string {
+export function renderRefusal(
+  template: string,
+  values: RefusalValues,
+  locale = DEFAULT_LOCALE,
+  term?: TermResolver,
+): string {
   return renderTemplate(template, refusalArguments(values, locale, term), locale);
 }

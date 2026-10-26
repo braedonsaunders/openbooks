@@ -18,8 +18,24 @@ const { PackExecutionPanel } = await import("./PackExecutionPanel.tsx");
 const shipment = {
   id: "shipment-1",
   lines: [
-    { lineId: "line-1", itemId: "item-1", itemLabel: "Widget", quantity: "1", unit: "ea", binId: null, binCode: "" },
-    { lineId: "line-2", itemId: "item-2", itemLabel: "Gadget", quantity: "1", unit: "ea", binId: null, binCode: "" },
+    {
+      lineId: "line-1",
+      itemId: "item-1",
+      itemLabel: "Widget",
+      quantity: "1",
+      unit: "ea",
+      binId: null,
+      binCode: "",
+    },
+    {
+      lineId: "line-2",
+      itemId: "item-2",
+      itemLabel: "Gadget",
+      quantity: "1",
+      unit: "ea",
+      binId: null,
+      binCode: "",
+    },
   ],
 } as never;
 
@@ -28,21 +44,41 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 test("creating another carton clears the prior line selection and uses an available bin", async () => {
   const previousFetch = globalThis.fetch;
   const writes: Array<{ code: string; binId: string; lineIds: string[] }> = [];
-  let units: Array<{ id: string; code: string; status: string; binId: string; binCode: string; version: string; lines: Array<{ lineId: string; itemId: string; quantity: string; confirmed: boolean }> }> = [];
+  let units: Array<{
+    id: string;
+    code: string;
+    status: string;
+    binId: string;
+    binCode: string;
+    version: string;
+    lines: Array<{ lineId: string; itemId: string; quantity: string; confirmed: boolean }>;
+  }> = [];
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     if (init?.method === "POST") {
-      const body = JSON.parse(String(init.body)) as { code: string; binId: string; lineIds: string[] };
+      const body = JSON.parse(String(init.body)) as {
+        code: string;
+        binId: string;
+        lineIds: string[];
+      };
       writes.push(body);
       const id = `unit-${writes.length}`;
-      units = [...units, {
-        id,
-        code: body.code,
-        status: "open",
-        binId: body.binId,
-        binCode: "A1",
-        version: "1",
-        lines: body.lineIds.map((lineId) => ({ lineId, itemId: lineId, quantity: "1", confirmed: false })),
-      }];
+      units = [
+        ...units,
+        {
+          id,
+          code: body.code,
+          status: "open",
+          binId: body.binId,
+          binCode: "A1",
+          version: "1",
+          lines: body.lineIds.map((lineId) => ({
+            lineId,
+            itemId: lineId,
+            quantity: "1",
+            confirmed: false,
+          })),
+        },
+      ];
       return Response.json({ id });
     }
     return Response.json({ units, bins: [{ id: "bin-1", code: "A1" }] });
@@ -70,15 +106,17 @@ test("creating another carton clears the prior line selection and uses an availa
     const codeInput = host.querySelector<HTMLInputElement>('input:not([type="checkbox"])');
     assert.ok(codeInput, "carton code field should be available");
     await setTextInput(codeInput, code);
-    const checkbox = [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
-      .find((input) => input.parentElement?.textContent?.includes(itemLabel));
+    const checkbox = [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+      (input) => input.parentElement?.textContent?.includes(itemLabel),
+    );
     assert.ok(checkbox, `${itemLabel} should be available for packing`);
     await act(async () => {
       checkbox.click();
       await tick();
     });
-    const button = [...host.querySelectorAll<HTMLButtonElement>("button")]
-      .find((candidate) => candidate.textContent?.trim() === "Create handling unit");
+    const button = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+      (candidate) => candidate.textContent?.trim() === "Create handling unit",
+    );
     assert.ok(button);
     await act(async () => {
       button.click();
@@ -103,8 +141,20 @@ test("creating another carton clears the prior line selection and uses an availa
     await createCarton("BOX-2", "Gadget");
 
     assert.deepEqual(writes, [
-      { action: "create", shipmentId: "shipment-1", code: "BOX-1", binId: "bin-1", lineIds: ["line-1"] },
-      { action: "create", shipmentId: "shipment-1", code: "BOX-2", binId: "bin-1", lineIds: ["line-2"] },
+      {
+        action: "create",
+        shipmentId: "shipment-1",
+        code: "BOX-1",
+        binId: "bin-1",
+        lineIds: ["line-1"],
+      },
+      {
+        action: "create",
+        shipmentId: "shipment-1",
+        code: "BOX-2",
+        binId: "bin-1",
+        lineIds: ["line-2"],
+      },
     ]);
   } finally {
     await act(async () => root.unmount());

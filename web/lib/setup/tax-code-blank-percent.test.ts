@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
 // A blank Recoverable % on a new tax code was refused with the
 // raw key `invalid-recoverable-percent`. Blank keepDefault inputs must fall
@@ -7,39 +7,50 @@ import test from 'node:test'
 // them — the integrity check read the raw body instead. The validator takes
 // an executor; the create-blank path must never touch storage, so the stub
 // throws on any query. Only server-only is stubbed.
-const { validateEntityIntegrity } = await import('./write.ts')
+const { validateEntityIntegrity } = await import("./write.ts");
 
-import type { SetupEntity } from './registry.ts'
+import type { SetupEntity } from "./registry.ts";
 
-const TAX_CODES = { key: 'tax-codes', fields: [] } as unknown as SetupEntity
-const ORG = '019f5ea3-44c5-72c0-ad3b-ef34c19c8763'
+const TAX_CODES = { key: "tax-codes", fields: [] } as unknown as SetupEntity;
+const ORG = "019f5ea3-44c5-72c0-ad3b-ef34c19c8763";
 
 function noStorage() {
   return {
     execute: () => {
-      throw new Error('blank create input must not query storage')
+      throw new Error("blank create input must not query storage");
     },
-  } as never
+  } as never;
 }
 
-test('a blank recoverable percent falls through to the default', async () => {
+test("a blank recoverable percent falls through to the default", async () => {
   assert.equal(
-    await validateEntityIntegrity(TAX_CODES, { recoverablePercent: '' }, ORG, undefined, noStorage()),
+    await validateEntityIntegrity(
+      TAX_CODES,
+      { recoverablePercent: "" },
+      ORG,
+      undefined,
+      noStorage(),
+    ),
     null,
-    'blank behaves like absent (100%)',
-  )
+    "blank behaves like absent (100%)",
+  );
   assert.equal(
     await validateEntityIntegrity(TAX_CODES, {}, ORG, undefined, noStorage()),
     null,
-    'absent stays accepted',
-  )
-})
+    "absent stays accepted",
+  );
+});
 
-test('an out-of-range recoverable percent is still refused with its key', async () => {
+test("an out-of-range recoverable percent is still refused with its key", async () => {
   assert.equal(
-    await validateEntityIntegrity(TAX_CODES, { recoverablePercent: '150' }, ORG, undefined, noStorage()),
-    'invalid-recoverable-percent',
-    'the drawer maps this key to human copy',
-  )
-})
-
+    await validateEntityIntegrity(
+      TAX_CODES,
+      { recoverablePercent: "150" },
+      ORG,
+      undefined,
+      noStorage(),
+    ),
+    "invalid-recoverable-percent",
+    "the drawer maps this key to human copy",
+  );
+});

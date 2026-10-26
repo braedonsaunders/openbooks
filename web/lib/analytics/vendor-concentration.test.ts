@@ -25,11 +25,21 @@ test("gauge and card agree inside every band", () => {
     gaugeKey: string;
     subKey: string;
   }> = [
-    { hhiScaled: 1000, band: "diversified", gaugeKey: "gauge.diversified", subKey: "sub.diversified" },
+    {
+      hhiScaled: 1000,
+      band: "diversified",
+      gaugeKey: "gauge.diversified",
+      subKey: "sub.diversified",
+    },
     { hhiScaled: 2000, band: "moderate", gaugeKey: "gauge.balanced", subKey: "sub.moderate" },
     // The reported contradiction: hhi ≈ 0.28 read "Balanced" on the gauge
     // and "highly concentrated" on the card. Both must now land concentrated.
-    { hhiScaled: 2800, band: "highlyConcentrated", gaugeKey: "gauge.concentrated", subKey: "sub.highlyConcentrated" },
+    {
+      hhiScaled: 2800,
+      band: "highlyConcentrated",
+      gaugeKey: "gauge.concentrated",
+      subKey: "sub.highlyConcentrated",
+    },
   ];
   for (const c of cases) {
     const verdict = concentrationVerdict(c.hhiScaled, 1500, 2500);

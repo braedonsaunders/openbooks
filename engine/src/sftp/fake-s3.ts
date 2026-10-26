@@ -76,7 +76,10 @@ export function createFakeS3(options?: FakeS3Options): FakeS3 {
     sent.push(command);
     if (command instanceof PutObjectCommand) {
       const input = commandInput(command);
-      objects.set(input["Key"] as string, { bytes: toBytes(input["Body"]), lastModified: new Date() });
+      objects.set(input["Key"] as string, {
+        bytes: toBytes(input["Body"]),
+        lastModified: new Date(),
+      });
       return {};
     }
     if (command instanceof GetObjectCommand) {
@@ -99,7 +102,9 @@ export function createFakeS3(options?: FakeS3Options): FakeS3 {
       // Errors (the batch still returns 200), deleted keys in Deleted —
       // unless the caller passed Quiet, which suppresses Deleted only.
       const input = commandInput(command);
-      const keys = ((input["Delete"] as { Objects?: { Key?: string }[] } | undefined)?.Objects ?? [])
+      const keys = (
+        (input["Delete"] as { Objects?: { Key?: string }[] } | undefined)?.Objects ?? []
+      )
         .map((entry) => entry.Key)
         .filter((key): key is string => typeof key === "string");
       const deleted: { Key: string }[] = [];
@@ -152,7 +157,11 @@ export function createFakeS3(options?: FakeS3Options): FakeS3 {
         } else if (rest.includes(delimiter)) {
           prefixes.add(prefix + rest.split(delimiter)[0]! + delimiter);
         } else {
-          contents.push({ Key: key, Size: objects.get(key)!.bytes.length, LastModified: objects.get(key)!.lastModified });
+          contents.push({
+            Key: key,
+            Size: objects.get(key)!.bytes.length,
+            LastModified: objects.get(key)!.lastModified,
+          });
         }
       }
       return {
@@ -171,7 +180,9 @@ export function createFakeS3(options?: FakeS3Options): FakeS3 {
       // passed through raw, so an unencoded rename fails in tests exactly as
       // it fails against AWS (left behind, re-scanned as a duplicate).
       if (/[ #?]/.test(encodedKey)) {
-        throw new Error(`InvalidRequest: x-amz-copy-source must be URL-encoded (got '${copySource}')`);
+        throw new Error(
+          `InvalidRequest: x-amz-copy-source must be URL-encoded (got '${copySource}')`,
+        );
       }
       const sourceKey = encodedKey
         .split("/")
@@ -179,10 +190,15 @@ export function createFakeS3(options?: FakeS3Options): FakeS3 {
         .join("/");
       const stored = objects.get(sourceKey);
       if (!stored) throw noSuchKey(sourceKey);
-      objects.set(input["Key"] as string, { bytes: Buffer.from(stored.bytes), lastModified: new Date() });
+      objects.set(input["Key"] as string, {
+        bytes: Buffer.from(stored.bytes),
+        lastModified: new Date(),
+      });
       return {};
     }
-    throw new Error(`fake S3 does not implement ${(command as { constructor: { name: string } }).constructor.name}`);
+    throw new Error(
+      `fake S3 does not implement ${(command as { constructor: { name: string } }).constructor.name}`,
+    );
   };
 
   return { objects, sent, client: { send } as unknown as S3Client };
@@ -204,7 +220,8 @@ export function sentDeletes(fake: FakeS3): string[][] {
     .filter((command): command is DeleteObjectsCommand => command instanceof DeleteObjectsCommand)
     .map((command) => {
       const input = commandInput(command);
-      const objects = (input["Delete"] as { Objects?: { Key?: string }[] } | undefined)?.Objects ?? [];
+      const objects =
+        (input["Delete"] as { Objects?: { Key?: string }[] } | undefined)?.Objects ?? [];
       return objects
         .map((entry) => entry.Key)
         .filter((key): key is string => typeof key === "string");

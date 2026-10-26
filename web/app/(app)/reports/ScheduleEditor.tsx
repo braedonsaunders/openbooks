@@ -1,41 +1,49 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Plus, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { useTranslations } from 'next-intl'
-import { useViewerFormat } from '@/lib/viewer-format'
-import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
-import { REPORT_CADENCES, type ReportCadence } from '@openbooks/reports'
-import { confirmDialog } from '@/lib/confirm'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
+import { Badge, Button, Input, Label, Select } from "@openbooks/ui";
+import { REPORT_CADENCES, type ReportCadence } from "@openbooks/reports";
+import { confirmDialog } from "@/lib/confirm";
 
 export type ScheduleRow = {
-  id: string
-  definition_id: string
-  cadence: string
-  day_of_week: number | null
-  day_of_month: number | null
-  hour: number
-  minute: number
-  timezone: string
-  recipient_emails: string[]
-  next_run_at: string
-  active: boolean
-}
+  id: string;
+  definition_id: string;
+  cadence: string;
+  day_of_week: number | null;
+  day_of_month: number | null;
+  hour: number;
+  minute: number;
+  timezone: string;
+  recipient_emails: string[];
+  next_run_at: string;
+  active: boolean;
+};
 
 // Message keys under reports.schedule.weekdays, indexed by day-of-week number.
-const WEEKDAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+const WEEKDAY_KEYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
 
 // Message keys under reports.schedule.describe.weekdays, indexed by day-of-week number.
-const DESCRIBE_WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
+const DESCRIBE_WEEKDAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 // Message keys under reports.schedule.cadences — unknown cadence codes render verbatim.
 const CADENCE_KEY: Record<string, string> = {
-  daily: 'cadences.daily',
-  weekly: 'cadences.weekly',
-  monthly: 'cadences.monthly',
-}
+  daily: "cadences.daily",
+  weekly: "cadences.weekly",
+  monthly: "cadences.monthly",
+};
 
 export function ScheduleEditor({
   definitionId,
@@ -46,74 +54,75 @@ export function ScheduleEditor({
   onDraftStateChange,
   beforeDiscardDraft,
 }: {
-  definitionId: string
-  schedules: ScheduleRow[]
-  canSchedule: boolean
+  definitionId: string;
+  schedules: ScheduleRow[];
+  canSchedule: boolean;
   /** Statement pages snapshot their current filters onto new schedules. */
-  statementParams?: Record<string, string>
+  statementParams?: Record<string, string>;
   /** Fires after any mutation (self-fetching hosts refetch on this). */
-  onChanged?: () => void
-  onDraftStateChange?: (state: { dirty: boolean; busy: boolean }) => void
-  beforeDiscardDraft?: () => Promise<boolean>
+  onChanged?: () => void;
+  onDraftStateChange?: (state: { dirty: boolean; busy: boolean }) => void;
+  beforeDiscardDraft?: () => Promise<boolean>;
 }) {
-  const t = useTranslations('reports.schedule')
-  const tc = useTranslations('common')
-  const viewerFormat = useViewerFormat()
-  const router = useRouter()
-  const [adding, setAdding] = useState(false)
+  const t = useTranslations("reports.schedule");
+  const tc = useTranslations("common");
+  const viewerFormat = useViewerFormat();
+  const router = useRouter();
+  const [adding, setAdding] = useState(false);
 
   /** Localized cadence headline, composed from reports.schedule.describe.*. */
   function describe(s: ScheduleRow): string {
-    const time = `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}`
-    const zone = s.timezone
-    if (s.cadence === 'weekly') {
-      const dayKey = DESCRIBE_WEEKDAY_KEYS[s.day_of_week ?? 1] ?? 'mon'
-      return t('describe.weekly', { day: t(`describe.weekdays.${dayKey}`), time, zone })
+    const time = `${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}`;
+    const zone = s.timezone;
+    if (s.cadence === "weekly") {
+      const dayKey = DESCRIBE_WEEKDAY_KEYS[s.day_of_week ?? 1] ?? "mon";
+      return t("describe.weekly", { day: t(`describe.weekdays.${dayKey}`), time, zone });
     }
-    if (s.cadence === 'monthly') {
-      return t('describe.monthly', { dayOfMonth: s.day_of_month ?? 1, time, zone })
+    if (s.cadence === "monthly") {
+      return t("describe.monthly", { dayOfMonth: s.day_of_month ?? 1, time, zone });
     }
-    return t('describe.daily', { time, zone })
+    return t("describe.daily", { time, zone });
   }
 
   async function toggleActive(s: ScheduleRow) {
     try {
       const res = await fetch(`/api/reports/schedules/${s.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ active: !s.active }),
-      })
-      if (!res.ok) toast.error((await res.json().catch(() => ({}))).error ?? t('updateFailed'))
-      else toast.success(s.active ? t('paused') : t('resumed'))
+      });
+      if (!res.ok) toast.error((await res.json().catch(() => ({}))).error ?? t("updateFailed"));
+      else toast.success(s.active ? t("paused") : t("resumed"));
     } catch {
       // A network failure must toast, never reject unhandled past the button.
-      toast.error(t('updateFailed'))
+      toast.error(t("updateFailed"));
     }
-    onChanged?.()
-    router.refresh()
+    onChanged?.();
+    router.refresh();
   }
 
   async function remove(s: ScheduleRow) {
-    const ok = await confirmDialog({ message: t('deleteConfirm'), tone: 'danger' })
-    if (!ok) return
+    const ok = await confirmDialog({ message: t("deleteConfirm"), tone: "danger" });
+    if (!ok) return;
     try {
-      const res = await fetch(`/api/reports/schedules/${s.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/reports/schedules/${s.id}`, { method: "DELETE" });
       // The error body may not be JSON (proxy 5xx pages): never let the read
       // itself throw, or the failure goes silent with an unhandled rejection.
-      if (!res.ok) toast.error((await res.json().catch(() => ({}))).error ?? tc('feedback.deleteFailed'))
-      else toast.success(t('deleted'))
+      if (!res.ok)
+        toast.error((await res.json().catch(() => ({}))).error ?? tc("feedback.deleteFailed"));
+      else toast.success(t("deleted"));
     } catch {
-      toast.error(tc('feedback.deleteFailed'))
+      toast.error(tc("feedback.deleteFailed"));
     }
-    onChanged?.()
-    router.refresh()
+    onChanged?.();
+    router.refresh();
   }
 
   return (
     <div className="space-y-3">
       {schedules.length === 0 && !adding ? (
         <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-          {t('noScheduleYet')} {canSchedule ? t('addOneHint') : ''}
+          {t("noScheduleYet")} {canSchedule ? t("addOneHint") : ""}
         </div>
       ) : null}
 
@@ -127,24 +136,29 @@ export function ScheduleEditor({
               <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
                 {describe(s)}
               </span>
-              <Badge variant={s.active ? 'success' : 'secondary'}>
-                {s.active ? tc('status.active') : t('pausedBadge')}
+              <Badge variant={s.active ? "success" : "secondary"}>
+                {s.active ? tc("status.active") : t("pausedBadge")}
               </Badge>
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400">
               {s.recipient_emails.length > 0
-                ? t('recipientsTo', { emails: s.recipient_emails.join(', ') })
-                : t('noRecipients')}
-              {' · '}
-              {t('nextRun', { time: viewerFormat.dateTime(new Date(s.next_run_at)) })}
+                ? t("recipientsTo", { emails: s.recipient_emails.join(", ") })
+                : t("noRecipients")}
+              {" · "}
+              {t("nextRun", { time: viewerFormat.dateTime(new Date(s.next_run_at)) })}
             </div>
           </div>
           {canSchedule ? (
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={() => toggleActive(s)}>
-                {s.active ? t('pause') : t('resume')}
+                {s.active ? t("pause") : t("resume")}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => remove(s)} aria-label={t('deleteAria')}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => remove(s)}
+                aria-label={t("deleteAria")}
+              >
                 <Trash2 size={14} />
               </Button>
             </div>
@@ -159,25 +173,25 @@ export function ScheduleEditor({
             statementParams={statementParams}
             onDraftStateChange={onDraftStateChange}
             onDone={() => {
-              setAdding(false)
-              onDraftStateChange?.({ dirty: false, busy: false })
-              onChanged?.()
-              router.refresh()
+              setAdding(false);
+              onDraftStateChange?.({ dirty: false, busy: false });
+              onChanged?.();
+              router.refresh();
             }}
             onCancel={async () => {
-              if (beforeDiscardDraft && !(await beforeDiscardDraft())) return
-              setAdding(false)
-              onDraftStateChange?.({ dirty: false, busy: false })
+              if (beforeDiscardDraft && !(await beforeDiscardDraft())) return;
+              setAdding(false);
+              onDraftStateChange?.({ dirty: false, busy: false });
             }}
           />
         ) : (
           <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-            <Plus size={14} /> {t('addSchedule')}
+            <Plus size={14} /> {t("addSchedule")}
           </Button>
         )
       ) : null}
     </div>
-  )
+  );
 }
 
 function ScheduleForm({
@@ -187,37 +201,44 @@ function ScheduleForm({
   onDone,
   onCancel,
 }: {
-  definitionId: string
-  statementParams?: Record<string, string>
-  onDraftStateChange?: (state: { dirty: boolean; busy: boolean }) => void
-  onDone: () => void
-  onCancel: () => void | Promise<void>
+  definitionId: string;
+  statementParams?: Record<string, string>;
+  onDraftStateChange?: (state: { dirty: boolean; busy: boolean }) => void;
+  onDone: () => void;
+  onCancel: () => void | Promise<void>;
 }) {
-  const { timeZone } = useViewerFormat()
-  const t = useTranslations('reports.schedule')
-  const tc = useTranslations('common')
-  const [cadence, setCadence] = useState<ReportCadence>('weekly')
-  const [dayOfWeek, setDayOfWeek] = useState(1)
-  const [dayOfMonth, setDayOfMonth] = useState(1)
-  const [hour, setHour] = useState(7)
-  const [minute, setMinute] = useState(0)
-  const [timezone, setTimezone] = useState(timeZone)
-  const [recipients, setRecipients] = useState('')
-  const [busy, setBusy] = useState(false)
-  const dirty = cadence !== 'weekly' || dayOfWeek !== 1 || dayOfMonth !== 1 || hour !== 7 || minute !== 0 || timezone !== timeZone || recipients !== ''
+  const { timeZone } = useViewerFormat();
+  const t = useTranslations("reports.schedule");
+  const tc = useTranslations("common");
+  const [cadence, setCadence] = useState<ReportCadence>("weekly");
+  const [dayOfWeek, setDayOfWeek] = useState(1);
+  const [dayOfMonth, setDayOfMonth] = useState(1);
+  const [hour, setHour] = useState(7);
+  const [minute, setMinute] = useState(0);
+  const [timezone, setTimezone] = useState(timeZone);
+  const [recipients, setRecipients] = useState("");
+  const [busy, setBusy] = useState(false);
+  const dirty =
+    cadence !== "weekly" ||
+    dayOfWeek !== 1 ||
+    dayOfMonth !== 1 ||
+    hour !== 7 ||
+    minute !== 0 ||
+    timezone !== timeZone ||
+    recipients !== "";
 
   useEffect(() => {
-    onDraftStateChange?.({ dirty, busy })
-  }, [busy, dirty, onDraftStateChange])
+    onDraftStateChange?.({ dirty, busy });
+  }, [busy, dirty, onDraftStateChange]);
 
   async function save() {
     // busy resets in finally: a network failure must release inert={busy}
     // and the dirty-close guard, or the drawer sticks shut on a dead save.
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch('/api/reports/schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/reports/schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           definitionId,
           ...(statementParams && Object.keys(statementParams).length ? { statementParams } : {}),
@@ -232,26 +253,29 @@ function ScheduleForm({
             .map((s) => s.trim())
             .filter(Boolean),
         }),
-      })
+      });
       if (!res.ok) {
-        toast.error((await res.json().catch(() => ({}))).error ?? t('saveFailed'))
-        return
+        toast.error((await res.json().catch(() => ({}))).error ?? t("saveFailed"));
+        return;
       }
-      toast.success(t('saved'))
-      onDone()
+      toast.success(t("saved"));
+      onDone();
     } catch {
-      toast.error(t('saveFailed'))
+      toast.error(t("saveFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
-  const field = 'space-y-1.5'
+  const field = "space-y-1.5";
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 p-4 dark:border-slate-800" inert={busy}>
+    <div
+      className="space-y-4 rounded-lg border border-slate-200 p-4 dark:border-slate-800"
+      inert={busy}
+    >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className={field}>
-          <Label>{t('cadence')}</Label>
+          <Label>{t("cadence")}</Label>
           <Select value={cadence} onChange={(e) => setCadence(e.target.value as ReportCadence)}>
             {REPORT_CADENCES.map((c) => (
               <option key={c} value={c}>
@@ -260,10 +284,13 @@ function ScheduleForm({
             ))}
           </Select>
         </div>
-        {cadence === 'weekly' ? (
+        {cadence === "weekly" ? (
           <div className={field}>
-            <Label>{t('dayOfWeek')}</Label>
-            <Select value={String(dayOfWeek)} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
+            <Label>{t("dayOfWeek")}</Label>
+            <Select
+              value={String(dayOfWeek)}
+              onChange={(e) => setDayOfWeek(Number(e.target.value))}
+            >
               {WEEKDAY_KEYS.map((d, i) => (
                 <option key={i} value={i}>
                   {t(`weekdays.${d}`)}
@@ -272,54 +299,58 @@ function ScheduleForm({
             </Select>
           </div>
         ) : null}
-        {cadence === 'monthly' ? (
+        {cadence === "monthly" ? (
           <div className={field}>
-            <Label>{t('dayOfMonth')}</Label>
+            <Label>{t("dayOfMonth")}</Label>
             <Input
               type="number"
               min={1}
               max={31}
               value={dayOfMonth}
-              onChange={(e) => setDayOfMonth(Math.min(Math.max(Number(e.target.value) || 1, 1), 31))}
+              onChange={(e) =>
+                setDayOfMonth(Math.min(Math.max(Number(e.target.value) || 1, 1), 31))
+              }
             />
           </div>
         ) : null}
         <div className={field}>
-          <Label>{t('time')}</Label>
+          <Label>{t("time")}</Label>
           <Input
             type="time"
-            value={`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`}
+            value={`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`}
             onChange={(e) => {
-              const [h, m] = e.target.value.split(':')
-              setHour(Number(h) || 0)
-              setMinute(Number(m) || 0)
+              const [h, m] = e.target.value.split(":");
+              setHour(Number(h) || 0);
+              setMinute(Number(m) || 0);
             }}
           />
         </div>
         <div className={field}>
-          <Label>{t('timezone')}</Label>
-          <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="America/Toronto" />
+          <Label>{t("timezone")}</Label>
+          <Input
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            placeholder="America/Toronto"
+          />
         </div>
       </div>
       <div className={field}>
-        <Label>{t('recipients')}</Label>
+        <Label>{t("recipients")}</Label>
         <Input
           value={recipients}
           onChange={(e) => setRecipients(e.target.value)}
-          placeholder={t('recipientsPlaceholder')}
+          placeholder={t("recipientsPlaceholder")}
         />
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {t('recipientsHint')}
-        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t("recipientsHint")}</p>
       </div>
       <div className="flex items-center gap-2">
         <Button size="sm" disabled={busy} onClick={save}>
-          {busy ? tc('actions.saving') : t('saveSchedule')}
+          {busy ? tc("actions.saving") : t("saveSchedule")}
         </Button>
         <Button variant="ghost" size="sm" onClick={onCancel}>
-          {tc('actions.cancel')}
+          {tc("actions.cancel")}
         </Button>
       </div>
     </div>
-  )
+  );
 }

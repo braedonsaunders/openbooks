@@ -7,10 +7,7 @@ import {
   requireHrmEmploymentRead,
   requireOwnEmploymentSubject,
 } from "./authorization.ts";
-import {
-  intervalsOverlap,
-  parseCivilDate,
-} from "./temporal.ts";
+import { intervalsOverlap, parseCivilDate } from "./temporal.ts";
 import { inputGuards } from "./input-guards.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { takeEmployeeConfigurationFence } from "../payroll/fences.ts";
@@ -137,7 +134,9 @@ export const REQUEST_COLUMNS = sql`
   created_at, created_by, updated_at, updated_by
 `;
 
-export const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new HrmChangeRequestError("REFUSED", message));
+export const { requireOrgId, requireActorId, requireId } = inputGuards(
+  (message) => new HrmChangeRequestError("REFUSED", message),
+);
 
 export function requireReason(reason: unknown): string {
   if (typeof reason !== "string" || reason.trim().length === 0) {
@@ -154,10 +153,13 @@ export async function loadRequestForUpdate(
   orgId: string,
   requestId: string,
 ): Promise<RequestRow> {
-  const rows = await exec.execute<RequestRow>(sql`
+  const rows = await exec.execute<RequestRow>(
+    sql`
     select ${REQUEST_COLUMNS} from hrm_employment_change_requests
      where org_id = ${orgId} and id = ${requestId} for update
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = rows[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement — never report
@@ -194,7 +196,8 @@ export async function liveEmploymentVersions(
     effective_from: string;
     effective_to: string | null;
     before: unknown;
-  }>(sql`
+  }>(
+    sql`
     select id, version_no, status,
            effective_from::text as effective_from,
            effective_to::text as effective_to,
@@ -203,7 +206,9 @@ export async function liveEmploymentVersions(
      where org_id = ${orgId} and employment_id = ${employmentId}
        and recorded_until is null
      order by version_no
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -212,10 +217,13 @@ export async function employmentVersionCount(
   orgId: string,
   employmentId: string,
 ): Promise<number> {
-  const rows = await exec.execute<{ n: number }>(sql`
+  const rows = await exec.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0]?.n ?? 0;
 }
 
@@ -260,10 +268,14 @@ export async function requireRequestReadAccess(
     await requireHrmEmploymentRead(exec, orgId, actorId, employmentId);
     return;
   } catch (error) {
-    const kind = typeof payload === "object" && payload !== null
-      ? (payload as { kind?: unknown }).kind
-      : undefined;
-    if (!(error instanceof HrmAuthorizationError) || (kind !== "profile_change" && kind !== "bank_change")) {
+    const kind =
+      typeof payload === "object" && payload !== null
+        ? (payload as { kind?: unknown }).kind
+        : undefined;
+    if (
+      !(error instanceof HrmAuthorizationError) ||
+      (kind !== "profile_change" && kind !== "bank_change")
+    ) {
       throw error;
     }
     await requireOwnEmploymentSubject(exec, orgId, actorId, employmentId, "hrm.self.read");
@@ -294,9 +306,14 @@ export async function assertKindPreconditions(
       );
     }
     if (payload.initialAssignment?.positionId) {
-      const position = (await exec.execute(sql`
+      const position = (
+        await exec.execute(
+          sql`
         select 1 as one from positions where org_id = ${orgId} and id = ${payload.initialAssignment!.positionId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!position) {
         throw new HrmChangeRequestError(
           "INVALID_PAYLOAD",
@@ -321,7 +338,9 @@ export async function assertKindPreconditions(
   // is preserved, never rewritten — a retained active slice beside a
   // terminated one does not make a later termination a duplicate.
   if (payload.kind === "termination") {
-    const overlapping = live.filter((version) => effectiveOverlaps(version, payload.effectiveDate, null));
+    const overlapping = live.filter((version) =>
+      effectiveOverlaps(version, payload.effectiveDate, null),
+    );
     if (overlapping.length > 0 && overlapping.every((version) => version.status === "terminated")) {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -330,9 +349,14 @@ export async function assertKindPreconditions(
     }
   }
   if (payload.kind === "position_assignment" && payload.positionId !== null) {
-    const position = (await exec.execute(sql`
+    const position = (
+      await exec.execute(
+        sql`
       select 1 as one from positions where org_id = ${orgId} and id = ${payload.positionId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!position) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -358,14 +382,17 @@ export async function decidedGatesOfRequest(
   orgId: string,
   requestId: string,
 ): Promise<DecidedGate[]> {
-  const rows = await exec.execute<DecidedGate>(sql`
+  const rows = await exec.execute<DecidedGate>(
+    sql`
     select id as gate_id, status as decision, decided_by, on_behalf_of_user_id,
            decided_at, comment
       from flow_gates
      where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId}
        and status in ('approved', 'rejected')
      order by decided_at, id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -419,7 +446,10 @@ export function effectiveOverlaps(
   end: string | null,
 ): boolean {
   return intervalsOverlap(
-    { start: parseCivilDate(row.effective_from), end: row.effective_to === null ? null : parseCivilDate(row.effective_to) },
+    {
+      start: parseCivilDate(row.effective_from),
+      end: row.effective_to === null ? null : parseCivilDate(row.effective_to),
+    },
     { start: parseCivilDate(start), end: end === null ? null : parseCivilDate(end) },
   );
 }
@@ -430,14 +460,22 @@ export async function assertEmploymentStatusPayrollWindow(
   from: string,
   end: string | null,
 ): Promise<void> {
-  const subject = (await exec.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(sql`
+  const subject = (
+    await exec.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(
+      sql`
     select worker_party_id,employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${employmentId}
-  `, "objects"))[0];
-  if (!subject) throw new HrmChangeRequestError("NOT_FOUND", "Select a saved employment in this organization.");
+  `,
+      "objects",
+    )
+  )[0];
+  if (!subject)
+    throw new HrmChangeRequestError("NOT_FOUND", "Select a saved employment in this organization.");
   // Payroll calculation and commit take this employee-wide fence before
   // their year locks, so a committed-period check cannot race a commit.
   await takeEmployeeConfigurationFence(exec, orgId, subject.worker_party_id);
-  const committed = (await exec.execute<{ pay_date: string }>(sql`
+  const committed = (
+    await exec.execute<{ pay_date: string }>(
+      sql`
     select r.pay_date::text from pay_runs r
     join pay_stubs s on s.org_id=r.org_id and s.pay_run_document_id=r.document_id
     join documents d on d.org_id=r.org_id and d.id=r.document_id
@@ -448,9 +486,15 @@ export async function assertEmploymentStatusPayrollWindow(
       and (((${end}::date is null or r.period_start<${end}::date) and r.period_end>=${from}::date)
         or (r.pay_date>=${from}::date and (${end}::date is null or r.pay_date<${end}::date)))
     limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (committed) {
-    throw new HrmChangeRequestError("REFUSED", `Payroll dated ${committed.pay_date} is committed for this employment window; preserve its status evidence and use a governed correction.`);
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      `Payroll dated ${committed.pay_date} is committed for this employment window; preserve its status evidence and use a governed correction.`,
+    );
   }
 }
 
@@ -462,12 +506,25 @@ export async function assertHistoricalStatusWindow(
   payload: StatusChangePayload,
 ): Promise<void> {
   const end = payload.effectiveTo;
-  if (!payload.historicalObservation || end === null || end > await businessTodayInTx(exec, orgId)) {
-    throw new HrmChangeRequestError("REFUSED", "Record a bounded historical status window ending before the current business day; use an ordinary status change for current employment.");
+  if (
+    !payload.historicalObservation ||
+    end === null ||
+    end > (await businessTodayInTx(exec, orgId))
+  ) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "Record a bounded historical status window ending before the current business day; use an ordinary status change for current employment.",
+    );
   }
   await assertEmploymentStatusPayrollWindow(exec, orgId, employmentId, payload.effectiveFrom, end);
   const live = await liveEmploymentVersions(exec, orgId, employmentId);
-  if (!live.length || live.some(version => effectiveOverlaps(version, payload.effectiveFrom, end))) {
-    throw new HrmChangeRequestError("REFUSED", "A historical observation must fill an uncovered employment window; review the existing status history without overwriting it.");
+  if (
+    !live.length ||
+    live.some((version) => effectiveOverlaps(version, payload.effectiveFrom, end))
+  ) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "A historical observation must fill an uncovered employment window; review the existing status history without overwriting it.",
+    );
   }
 }

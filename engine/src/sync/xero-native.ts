@@ -96,20 +96,32 @@ const POSTED = new Set(["AUTHORISED", "PAID", "POSTED"]);
  * `xero_accounting.yaml`).
  */
 export type XeroPaymentTargetType =
-  | "ACCREC" | "ACCPAY"
-  | "ACCRECCREDIT" | "ACCPAYCREDIT"
-  | "AROVERPAYMENT" | "APOVERPAYMENT"
-  | "ARPREPAYMENT" | "APPREPAYMENT"
-  | "RECEIVE-PREPAYMENT" | "SPEND-PREPAYMENT"
-  | "RECEIVE-OVERPAYMENT" | "SPEND-OVERPAYMENT";
+  | "ACCREC"
+  | "ACCPAY"
+  | "ACCRECCREDIT"
+  | "ACCPAYCREDIT"
+  | "AROVERPAYMENT"
+  | "APOVERPAYMENT"
+  | "ARPREPAYMENT"
+  | "APPREPAYMENT"
+  | "RECEIVE-PREPAYMENT"
+  | "SPEND-PREPAYMENT"
+  | "RECEIVE-OVERPAYMENT"
+  | "SPEND-OVERPAYMENT";
 
 const XERO_PAYMENT_TARGET_TYPES: ReadonlySet<string> = new Set<string>([
-  "ACCREC", "ACCPAY",
-  "ACCRECCREDIT", "ACCPAYCREDIT",
-  "AROVERPAYMENT", "APOVERPAYMENT",
-  "ARPREPAYMENT", "APPREPAYMENT",
-  "RECEIVE-PREPAYMENT", "SPEND-PREPAYMENT",
-  "RECEIVE-OVERPAYMENT", "SPEND-OVERPAYMENT",
+  "ACCREC",
+  "ACCPAY",
+  "ACCRECCREDIT",
+  "ACCPAYCREDIT",
+  "AROVERPAYMENT",
+  "APOVERPAYMENT",
+  "ARPREPAYMENT",
+  "APPREPAYMENT",
+  "RECEIVE-PREPAYMENT",
+  "SPEND-PREPAYMENT",
+  "RECEIVE-OVERPAYMENT",
+  "SPEND-OVERPAYMENT",
 ]);
 
 /**
@@ -189,10 +201,7 @@ export function xeroPaymentTargetIsRefund(type: XeroPaymentTargetType): boolean 
 }
 
 /** Receipt-type PaymentType values: the normal flow, not a refund. */
-const XERO_RECEIPT_PAYMENT_TYPES: ReadonlySet<string> = new Set([
-  "ACCRECPAYMENT",
-  "ACCPAYPAYMENT",
-]);
+const XERO_RECEIPT_PAYMENT_TYPES: ReadonlySet<string> = new Set(["ACCRECPAYMENT", "ACCPAYPAYMENT"]);
 
 /** Refund-type PaymentType values: cash flows opposite to the normal flow. */
 const XERO_REFUND_PAYMENT_TYPES: ReadonlySet<string> = new Set([
@@ -232,20 +241,26 @@ export interface XeroPaymentResolution {
  * refund settled on the right side but with the receipt direction would post
  * cash IN instead of OUT — the direction rides along, never guessed.
  */
-export function xeroPaymentKind(
-  t: XeroDoc,
-): XeroPaymentResolution | { skip: string } {
+export function xeroPaymentKind(t: XeroDoc): XeroPaymentResolution | { skip: string } {
   const targets = [
     t.Invoice?.InvoiceID ? { label: `Invoice:${t.Invoice.InvoiceID}`, type: t.Invoice.Type } : null,
-    t.CreditNote?.CreditNoteID ? { label: `CreditNote:${t.CreditNote.CreditNoteID}`, type: t.CreditNote.Type } : null,
-    t.Prepayment?.PrepaymentID ? { label: `Prepayment:${t.Prepayment.PrepaymentID}`, type: t.Prepayment.Type } : null,
-    t.Overpayment?.OverpaymentID ? { label: `Overpayment:${t.Overpayment.OverpaymentID}`, type: t.Overpayment.Type } : null,
+    t.CreditNote?.CreditNoteID
+      ? { label: `CreditNote:${t.CreditNote.CreditNoteID}`, type: t.CreditNote.Type }
+      : null,
+    t.Prepayment?.PrepaymentID
+      ? { label: `Prepayment:${t.Prepayment.PrepaymentID}`, type: t.Prepayment.Type }
+      : null,
+    t.Overpayment?.OverpaymentID
+      ? { label: `Overpayment:${t.Overpayment.OverpaymentID}`, type: t.Overpayment.Type }
+      : null,
   ].filter((x): x is { label: string; type: string | undefined } => x !== null);
   if (targets.length === 0) {
     return { skip: "payment without a target invoice, credit note, prepayment or overpayment" };
   }
   if (targets.length > 1) {
-    return { skip: `payment settles multiple documents (${targets.map((x) => x.label).join(", ")})` };
+    return {
+      skip: `payment settles multiple documents (${targets.map((x) => x.label).join(", ")})`,
+    };
   }
   const target = targets[0]!;
   if (target.type && XERO_PAYMENT_TARGET_TYPES.has(target.type)) {
@@ -283,11 +298,16 @@ export function buildNativeFromXero(
   const rate = t.CurrencyRate && t.CurrencyRate > 0 ? t.CurrencyRate : 1;
   const home = (v: number | undefined): bigint => toUnits(mulDecimal(String(v ?? 0), String(rate)));
   const byCode = (code?: string): string | null =>
-    code ? ctx.accountByRef.get(opts.accountIdByCode.get(code) ?? "")?.id ?? null : null;
-  const byId = (id?: string): string | null => (id ? ctx.accountByRef.get(id)?.id ?? null : null);
+    code ? (ctx.accountByRef.get(opts.accountIdByCode.get(code) ?? "")?.id ?? null) : null;
+  const byId = (id?: string): string | null => (id ? (ctx.accountByRef.get(id)?.id ?? null) : null);
 
   const id =
-    t.InvoiceID ?? t.CreditNoteID ?? t.PaymentID ?? t.ManualJournalID ?? t.BankTransactionID ?? t.BankTransferID;
+    t.InvoiceID ??
+    t.CreditNoteID ??
+    t.PaymentID ??
+    t.ManualJournalID ??
+    t.BankTransactionID ??
+    t.BankTransferID;
   if (!id) return { skip: "missing id" };
   const sourceRef = `${entity}:${id}`;
   const base = {
@@ -300,10 +320,21 @@ export function buildNativeFromXero(
   };
   if (!base.documentDate) return { skip: "missing date" };
   let n = 0;
-  const mk = (accountId: string, units: bigint, description: string | null = null): NativeDocLine => ({
-    accountId, itemId: null, amount: fromUnits(units),
-    taxAmount: "0", taxOverridden: false, taxCodeId: null,
-    departmentId: null, projectId: null, description, lineNumber: ++n,
+  const mk = (
+    accountId: string,
+    units: bigint,
+    description: string | null = null,
+  ): NativeDocLine => ({
+    accountId,
+    itemId: null,
+    amount: fromUnits(units),
+    taxAmount: "0",
+    taxOverridden: false,
+    taxCodeId: null,
+    departmentId: null,
+    projectId: null,
+    description,
+    lineNumber: ++n,
   });
 
   /** Detail lines from LineItems; tax is grouped per TaxType on its first line. */

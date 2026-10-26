@@ -1,18 +1,18 @@
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { Alert, Badge } from '@openbooks/ui'
-import { notFound } from 'next/navigation'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { Alert, Badge } from "@openbooks/ui";
+import { notFound } from "next/navigation";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
 import {
   previewDerivedRule,
   type DerivedRulePreview,
-} from '@openbooks/engine/payroll/derived-earnings'
-import { DateRangeFilter } from '../../../../../components/date-range-filter'
-import { ListFilterSelect } from '../../../../../components/list-filter-select'
-import { pickString } from '../../../../../lib/list-params'
-import { guardRootSubsidiaryScope, type Authz } from '../../../../../lib/authz'
-import { DerivedRulePreviewTable } from './DerivedRulePreviewTable'
+} from "@openbooks/engine/payroll/derived-earnings";
+import { DateRangeFilter } from "../../../../../components/date-range-filter";
+import { ListFilterSelect } from "../../../../../components/list-filter-select";
+import { pickString } from "../../../../../lib/list-params";
+import { guardRootSubsidiaryScope, type Authz } from "../../../../../lib/authz";
+import { DerivedRulePreviewTable } from "./DerivedRulePreviewTable";
 
 /**
  * Pre-enable preview for a derived earnings rule: pick a rule and a period and
@@ -24,49 +24,58 @@ import { DerivedRulePreviewTable } from './DerivedRulePreviewTable'
  * (engine/src/payroll/derived-earnings.ts), never a second implementation.
  */
 
-const BASE_PATH = '/admin/setup/payroll'
+const BASE_PATH = "/admin/setup/payroll";
 
 export async function DerivedRulePreviewSection({
   authz,
   orgId,
   searchParams: sp,
 }: {
-  authz: Authz
-  orgId: string
-  searchParams: Record<string, string | string[] | undefined>
+  authz: Authz;
+  orgId: string;
+  searchParams: Record<string, string | string[] | undefined>;
 }) {
-  if (await guardRootSubsidiaryScope(authz)) notFound()
-  const t = await getTranslations('payroll.settingsPage')
-  const label = (key: string, fallback: string) => (t.has(key as never) ? t(key as never) : fallback)
+  if (await guardRootSubsidiaryScope(authz)) notFound();
+  const t = await getTranslations("payroll.settingsPage");
+  const label = (key: string, fallback: string) =>
+    t.has(key as never) ? t(key as never) : fallback;
 
-  const [rulesRes, lastRunRes] = (await Promise.all([
-    db.execute<{ id: string; code: string; name: string; is_active: boolean }>(sql`
+  const [rulesRes, lastRunRes] = await Promise.all([
+    db.execute<{ id: string; code: string; name: string; is_active: boolean }>(
+      sql`
       select id, code, name, is_active from pay_derived_rules
-       where org_id = ${orgId} order by sequence, code`, 'objects'),
-    db.execute<{ period_start: string; period_end: string }>(sql`
+       where org_id = ${orgId} order by sequence, code`,
+      "objects",
+    ),
+    db.execute<{ period_start: string; period_end: string }>(
+      sql`
       select period_start, period_end from pay_runs
-       where org_id = ${orgId} order by period_end desc limit 1`, 'objects'),
-  ]))
-  const rules = rulesRes
+       where org_id = ${orgId} order by period_end desc limit 1`,
+      "objects",
+    ),
+  ]);
+  const rules = rulesRes;
 
   // Default to the period the last run covered — the operator is almost always
   // asking "what would this have paid last time?".
-  const lastRun = lastRunRes[0]
-  const today = await businessToday(orgId)
-  const defaultFrom = lastRun ? String(lastRun.period_start).slice(0, 10) : `${today.slice(0, 7)}-01`
-  const defaultTo = lastRun ? String(lastRun.period_end).slice(0, 10) : today
+  const lastRun = lastRunRes[0];
+  const today = await businessToday(orgId);
+  const defaultFrom = lastRun
+    ? String(lastRun.period_start).slice(0, 10)
+    : `${today.slice(0, 7)}-01`;
+  const defaultTo = lastRun ? String(lastRun.period_end).slice(0, 10) : today;
 
-  const ruleId = pickString(sp.rule)
-  const from = pickString(sp.from) ?? defaultFrom
-  const to = pickString(sp.to) ?? defaultTo
+  const ruleId = pickString(sp.rule);
+  const from = pickString(sp.from) ?? defaultFrom;
+  const to = pickString(sp.to) ?? defaultTo;
 
-  let preview: DerivedRulePreview | null = null
-  let failure: string | null = null
+  let preview: DerivedRulePreview | null = null;
+  let failure: string | null = null;
   if (ruleId && rules.some((rule) => rule.id === ruleId)) {
     try {
-      preview = await previewDerivedRule(orgId, ruleId, from, to)
+      preview = await previewDerivedRule(orgId, ruleId, from, to);
     } catch (error) {
-      failure = error instanceof Error ? error.message : String(error)
+      failure = error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -74,12 +83,12 @@ export async function DerivedRulePreviewSection({
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-          {label('derivedPreview.title', 'Preview a derived earnings rule')}
+          {label("derivedPreview.title", "Preview a derived earnings rule")}
         </h2>
         <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">
           {label(
-            'derivedPreview.description',
-            'See which employees and days a rule would hit, and what it would pay, before you enable it.',
+            "derivedPreview.description",
+            "See which employees and days a rule would hit, and what it would pay, before you enable it.",
           )}
         </p>
       </div>
@@ -89,13 +98,13 @@ export async function DerivedRulePreviewSection({
           basePath={BASE_PATH}
           currentParams={sp}
           paramKey="rule"
-          label={label('derivedPreview.rule', 'Rule')}
-          allLabel={label('derivedPreview.selectRule', 'Select a rule…')}
+          label={label("derivedPreview.rule", "Rule")}
+          allLabel={label("derivedPreview.selectRule", "Select a rule…")}
           options={rules.map((rule) => ({ value: rule.id, label: `${rule.code} · ${rule.name}` }))}
         />
         <DateRangeFilter
-          fromLabel={label('derivedPreview.from', 'Period start')}
-          toLabel={label('derivedPreview.to', 'Period end')}
+          fromLabel={label("derivedPreview.from", "Period start")}
+          toLabel={label("derivedPreview.to", "Period end")}
           defaultFrom={defaultFrom}
           defaultTo={defaultTo}
           clearable={false}
@@ -103,32 +112,34 @@ export async function DerivedRulePreviewSection({
       </div>
 
       {rules.length === 0 ? (
-        <Alert>{label('derivedPreview.noRules', 'No derived earnings rules are configured yet.')}</Alert>
+        <Alert>
+          {label("derivedPreview.noRules", "No derived earnings rules are configured yet.")}
+        </Alert>
       ) : null}
       {failure ? <Alert variant="destructive">{failure}</Alert> : null}
       {!preview && rules.length > 0 && !failure ? (
-        <Alert>{label('derivedPreview.pickRule', 'Choose a rule to preview the period.')}</Alert>
+        <Alert>{label("derivedPreview.pickRule", "Choose a rule to preview the period.")}</Alert>
       ) : null}
 
       {preview ? <PreviewBody preview={preview} label={label} /> : null}
     </div>
-  )
+  );
 }
 
 function PreviewBody({
   preview,
   label,
 }: {
-  preview: DerivedRulePreview
-  label: (key: string, fallback: string) => string
+  preview: DerivedRulePreview;
+  label: (key: string, fallback: string) => string;
 }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-        <Badge variant={preview.rule.isActive ? 'success' : 'outline'}>
+        <Badge variant={preview.rule.isActive ? "success" : "outline"}>
           {preview.rule.isActive
-            ? label('derivedPreview.enabled', 'Enabled')
-            : label('derivedPreview.disabled', 'Not enabled yet')}
+            ? label("derivedPreview.enabled", "Enabled")
+            : label("derivedPreview.disabled", "Not enabled yet")}
         </Badge>
         <span>{preview.rule.componentName}</span>
         <span aria-hidden>·</span>
@@ -137,15 +148,15 @@ function PreviewBody({
         </span>
         <span aria-hidden>·</span>
         <span>
-          {label('derivedPreview.employeesPaid', 'Employees paid')}: {preview.employeeCount}
+          {label("derivedPreview.employeesPaid", "Employees paid")}: {preview.employeeCount}
         </span>
       </div>
 
       {preview.grossIsEstimated ? (
         <Alert variant="warning">
           {label(
-            'derivedPreview.grossEstimated',
-            'This rule pays a percentage of gross. The preview estimates gross from approved time and the effective wage; the pay run’s own calculation is authoritative.',
+            "derivedPreview.grossEstimated",
+            "This rule pays a percentage of gross. The preview estimates gross from approved time and the effective wage; the pay run’s own calculation is authoritative.",
           )}
         </Alert>
       ) : null}
@@ -155,20 +166,19 @@ function PreviewBody({
       {preview.coverage ? (
         <Alert variant="destructive">
           <div className="font-medium">
-            {label('derivedPreview.coverageTitle', 'This rule cannot settle the month yet')}
+            {label("derivedPreview.coverageTitle", "This rule cannot settle the month yet")}
           </div>
           <div className="mt-1">
             {label(
-              'derivedPreview.coverageBody',
-              'Some equipment charges in the settled month do not record which operator ran the unit, so the incentive cannot tell who is owed. It refuses rather than pay on the charges that happen to be attributed, which would under-pay. Record the operator on those charges, or narrow this rule so they fall outside it.',
+              "derivedPreview.coverageBody",
+              "Some equipment charges in the settled month do not record which operator ran the unit, so the incentive cannot tell who is owed. It refuses rather than pay on the charges that happen to be attributed, which would under-pay. Record the operator on those charges, or narrow this rule so they fall outside it.",
             )}
           </div>
           <div className="mt-1 tabular-nums">
             {preview.coverage.monthStart} – {preview.coverage.monthEnd}
-            {' · '}
-            {preview.coverage.unattributed} / {preview.coverage.qualifying}
-            {' '}
-            {label('derivedPreview.coverageUnattributed', 'charges without an operator')}
+            {" · "}
+            {preview.coverage.unattributed} / {preview.coverage.qualifying}{" "}
+            {label("derivedPreview.coverageUnattributed", "charges without an operator")}
           </div>
         </Alert>
       ) : null}
@@ -182,38 +192,38 @@ function PreviewBody({
         rows={preview.rows}
         total={preview.total}
         labels={{
-          employee: label('derivedPreview.employee', 'Employee'),
-          jobTitle: label('derivedPreview.jobTitle', 'Job title'),
-          day: label('derivedPreview.day', 'Day'),
-          project: label('derivedPreview.project', 'Job'),
-          quantity: label('derivedPreview.quantity', 'Units'),
-          amount: label('derivedPreview.amount', 'Amount'),
-          total: label('derivedPreview.total', 'Total'),
-          empty: label('derivedPreview.empty', 'This rule pays nothing over the selected period.'),
+          employee: label("derivedPreview.employee", "Employee"),
+          jobTitle: label("derivedPreview.jobTitle", "Job title"),
+          day: label("derivedPreview.day", "Day"),
+          project: label("derivedPreview.project", "Job"),
+          quantity: label("derivedPreview.quantity", "Units"),
+          amount: label("derivedPreview.amount", "Amount"),
+          total: label("derivedPreview.total", "Total"),
+          empty: label("derivedPreview.empty", "This rule pays nothing over the selected period."),
         }}
       />
 
       {preview.excluded.length > 0 ? (
         <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {label('derivedPreview.excludedTitle', 'Excluded by job title')}
+            {label("derivedPreview.excludedTitle", "Excluded by job title")}
           </h3>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             {label(
-              'derivedPreview.excludedDescription',
-              'These employees are kept out by the rule’s exclusion list — the deletion nobody has to remember any more.',
+              "derivedPreview.excludedDescription",
+              "These employees are kept out by the rule’s exclusion list — the deletion nobody has to remember any more.",
             )}
           </p>
           <ul className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
             {preview.excluded.map((person) => (
               <li key={person.employeePartyId}>
                 {person.employeeName}
-                {person.jobTitle ? ` — ${person.jobTitle}` : ''}
+                {person.jobTitle ? ` — ${person.jobTitle}` : ""}
               </li>
             ))}
           </ul>
         </div>
       ) : null}
     </div>
-  )
+  );
 }

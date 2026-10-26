@@ -1,11 +1,10 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { Button, Drawer } from '@openbooks/ui'
+import { useState } from "react";
+import { Button, Drawer } from "@openbooks/ui";
 
 export type CatchUpPick =
-  | { mode: 'post_all' | 'drafts' | 'skip' }
-  | { mode: 'selected'; post: boolean; dates: string[] }
+  { mode: "post_all" | "drafts" | "skip" } | { mode: "selected"; post: boolean; dates: string[] };
 
 export function CatchUpPickerDialog({
   open,
@@ -57,7 +56,11 @@ export function CatchUpPickerDialog({
     <Drawer stacked open={open} onClose={onClose} title={title} size="lg">
       <div className="space-y-5">
         <p className="text-sm text-muted-foreground">{message}</p>
-        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
         <div>
           <p className="mb-2 text-sm text-muted-foreground">{selectHint}</p>
           <ul className="max-h-56 space-y-1 overflow-y-auto text-sm">
@@ -77,10 +80,17 @@ export function CatchUpPickerDialog({
           </ul>
         </div>
         <div className="flex flex-col gap-2">
-          <Button disabled={busy || checked.length === 0} onClick={() => onPick({ mode: "selected", post: true, dates: checked })}>
+          <Button
+            disabled={busy || checked.length === 0}
+            onClick={() => onPick({ mode: "selected", post: true, dates: checked })}
+          >
             {postSelectedLabel}
           </Button>
-          <Button disabled={busy || checked.length === 0} variant="outline" onClick={() => onPick({ mode: "selected", post: false, dates: checked })}>
+          <Button
+            disabled={busy || checked.length === 0}
+            variant="outline"
+            onClick={() => onPick({ mode: "selected", post: false, dates: checked })}
+          >
             {draftSelectedLabel}
           </Button>
           <Button disabled={busy} variant="outline" onClick={() => onPick({ mode: "post_all" })}>
@@ -100,4 +110,3 @@ export function CatchUpPickerDialog({
     </Drawer>
   );
 }
-

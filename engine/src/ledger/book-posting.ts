@@ -33,9 +33,14 @@ export async function resolveDocumentPostingBook(
   primary: { id: string; is_active: boolean; posts_gl: boolean },
   actorId: string | null,
 ): Promise<DocumentPostingBook> {
-  const targetId = doc.kind === "journal" ? doc.accountingBookId ?? null : null;
+  const targetId = doc.kind === "journal" ? (doc.accountingBookId ?? null) : null;
   const primaryCode = async (): Promise<string> =>
-    (await tx.execute<{ code: string }>(sql`select code from accounting_books where org_id = ${doc.orgId} and id = ${primary.id}`, "objects"))[0]?.code ?? "";
+    (
+      await tx.execute<{ code: string }>(
+        sql`select code from accounting_books where org_id = ${doc.orgId} and id = ${primary.id}`,
+        "objects",
+      )
+    )[0]?.code ?? "";
   if (!targetId) return { ...primary, code: await primaryCode(), isPrimary: true };
   // A book-specific journal adjusts one book only; posting one is its own duty.
   if (!actorId || !(await actorHasPermission(tx, doc.orgId, actorId, "gl.post_book_specific"))) {
@@ -44,10 +49,21 @@ export async function resolveDocumentPostingBook(
     );
   }
   if (targetId === primary.id) return { ...primary, code: await primaryCode(), isPrimary: true };
-  const target = (await tx.execute<{ id: string; code: string; is_active: boolean; posts_gl: boolean; is_primary: boolean }>(sql`
+  const target = (
+    await tx.execute<{
+      id: string;
+      code: string;
+      is_active: boolean;
+      posts_gl: boolean;
+      is_primary: boolean;
+    }>(
+      sql`
     select id, code, is_active, posts_gl, is_primary from accounting_books
      where org_id = ${doc.orgId} and id = ${targetId}
-     for share`, "objects"))[0];
+     for share`,
+      "objects",
+    )
+  )[0];
   if (!target || !target.is_active || !target.posts_gl) {
     throw new PostingError(
       `journal ${doc.documentNumber} targets an accounting book that is not an active posting book — choose an active book or the primary book on the journal`,
@@ -58,14 +74,22 @@ export async function resolveDocumentPostingBook(
       `journal ${doc.documentNumber} targets book ${target.code}, but Multi-book accounting is turned off; turn it on in Company Settings → Features or post the journal to the primary book`,
     );
   }
-  return { id: target.id, code: target.code, isPrimary: target.is_primary, is_active: target.is_active, posts_gl: target.posts_gl };
+  return {
+    id: target.id,
+    code: target.code,
+    isPrimary: target.is_primary,
+    is_active: target.is_active,
+    posts_gl: target.posts_gl,
+  };
 }
 
 /**
  * Carry a secondary book's allocation contributions through that book's
  * account mappings, preserving line order (lineage indexes follow it).
  */
-export async function mapBookContributionAccounts<T extends { accountId: string; subsidiaryId?: string | null }>(
+export async function mapBookContributionAccounts<
+  T extends { accountId: string; subsidiaryId?: string | null },
+>(
   tx: SqlExecutor,
   doc: Doc,
   book: { id: string; code: string },
@@ -80,7 +104,10 @@ export async function mapBookContributionAccounts<T extends { accountId: string;
       bookLabel: book.code,
       postingDate,
       entryLabel: `document ${doc.documentNumber}`,
-      lines: lines.map((line) => ({ ...line, subsidiaryId: line.subsidiaryId ?? doc.subsidiaryId ?? fallbackSubsidiaryId })),
+      lines: lines.map((line) => ({
+        ...line,
+        subsidiaryId: line.subsidiaryId ?? doc.subsidiaryId ?? fallbackSubsidiaryId,
+      })),
     });
     return mapped.lines.map((line, index) => ({ ...lines[index]!, accountId: line.accountId }));
   } catch (error) {
@@ -103,11 +130,18 @@ export async function replicateDocumentEntry(
 ): Promise<void> {
   if (!book.isPrimary) return;
   try {
-    await replicateEntryToBooks(tx, postEntry, { orgId: doc.orgId, sourceEntryId: entryId, actorId, requestId: null });
+    await replicateEntryToBooks(tx, postEntry, {
+      orgId: doc.orgId,
+      sourceEntryId: entryId,
+      actorId,
+      requestId: null,
+    });
   } catch (error) {
     if (error instanceof PostingError) throw error;
     if (error instanceof BookTranslationError || error instanceof BookAccountMapError) {
-      throw new PostingError(`document ${doc.documentNumber} (${effectivePostingDate(doc)}): ${error.message}`);
+      throw new PostingError(
+        `document ${doc.documentNumber} (${effectivePostingDate(doc)}): ${error.message}`,
+      );
     }
     throw error;
   }

@@ -28,10 +28,13 @@ test("retro candidate registry projects each registered earning source and its r
   const dialect = new PgDialect();
   const executor = {
     execute: async (query: SQL, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const compiled = dialect.sqlToQuery(query);
       queries.push(compiled.sql);
-      return inMode({ rows: compiled.sql.trimStart().startsWith("select s.employee_party_id") ? [sourceRow] : [] });
+      return inMode({
+        rows: compiled.sql.trimStart().startsWith("select s.employee_party_id") ? [sourceRow] : [],
+      });
     },
   };
 
@@ -43,15 +46,18 @@ test("retro candidate registry projects each registered earning source and its r
   });
 
   assert.equal(candidates.length, 1);
-  assert.deepEqual(candidates[0]?.reasons.map((reason) => reason.source), [
-    "wage_rate",
-    "pay_component",
-    "compensation_package",
-    "union_fringe",
-    "derived_earning_rule",
-    "benefit_election",
-    "unclaimed_time",
-  ]);
+  assert.deepEqual(
+    candidates[0]?.reasons.map((reason) => reason.source),
+    [
+      "wage_rate",
+      "pay_component",
+      "compensation_package",
+      "union_fringe",
+      "derived_earning_rule",
+      "benefit_election",
+      "unclaimed_time",
+    ],
+  );
   const detectionQuery = queries.find((query) => query.includes("from pay_stubs s")) ?? "";
   for (const table of [
     "labor_cost_rates",
@@ -62,6 +68,9 @@ test("retro candidate registry projects each registered earning source and its r
     "hrm_benefit_enrollments",
     "time_entries",
   ]) {
-    assert.ok(detectionQuery.includes(table), `${table} must be represented by the source registry`);
+    assert.ok(
+      detectionQuery.includes(table),
+      `${table} must be represented by the source registry`,
+    );
   }
 });

@@ -1,9 +1,32 @@
-import { bigint, customType, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  customType,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({ dataType: () => "bytea" });
 
-export const EINVOICE_PROFILE_KEYS = ["en16931-cii", "en16931-ubl", "xrechnung-cii", "xrechnung-ubl", "facturx", "peppol-bis", "nlcius", "ehf", "peppol-aunz", "peppol-sg", "pint-aunz", "pint-sg"] as const;
+export const EINVOICE_PROFILE_KEYS = [
+  "en16931-cii",
+  "en16931-ubl",
+  "xrechnung-cii",
+  "xrechnung-ubl",
+  "facturx",
+  "peppol-bis",
+  "nlcius",
+  "ehf",
+  "peppol-aunz",
+  "peppol-sg",
+  "pint-aunz",
+  "pint-sg",
+] as const;
 
 /**
  * Seller identity, payment instructions and the VAT treatment of untaxed

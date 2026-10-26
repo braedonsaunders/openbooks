@@ -70,7 +70,9 @@ async function seedPricing(
   { sandbox = true }: { sandbox?: boolean } = {},
 ): Promise<{ roleId: string }> {
   // The wipe helper keys on env_kind = 'sandbox'; the scratch org is disposable.
-  await h.db.execute(sql`update orgs set env_kind = ${sandbox ? 'sandbox' : 'production'} where id = ${h.org.orgId}`);
+  await h.db.execute(
+    sql`update orgs set env_kind = ${sandbox ? "sandbox" : "production"} where id = ${h.org.orgId}`,
+  );
   const role = await h.db.execute<{ id: string }>(sql`
     insert into customer_roles (org_id, party_id, is_active)
     values (${h.org.orgId}, ${h.org.customerId}, true)
@@ -92,19 +94,26 @@ async function seedPricing(
   return { roleId };
 }
 
-test("an ordinary customer-role delete still refuses while active pricing exists", { skip: !DB }, async () => {
-  const h = await ctx();
-  await seedPricing(h);
-  await assert.rejects(
-    () => h!.withOrg(h!.org.orgId, () => h!.db.execute(sql`
+test(
+  "an ordinary customer-role delete still refuses while active pricing exists",
+  { skip: !DB },
+  async () => {
+    const h = await ctx();
+    await seedPricing(h);
+    await assert.rejects(
+      () =>
+        h!.withOrg(h!.org.orgId, () =>
+          h!.db.execute(sql`
       delete from customer_roles where org_id = ${h!.org.orgId} and party_id = ${h!.org.customerId}
-    `)),
-    (error: unknown) => {
-      assert.match(pgMessage(error), /has active pricing/);
-      return true;
-    },
-  );
-});
+    `),
+        ),
+      (error: unknown) => {
+        assert.match(pgMessage(error), /has active pricing/);
+        return true;
+      },
+    );
+  },
+);
 
 test("the wipe exemption yields to a sandbox wipe but not to an edit", { skip: !DB }, async () => {
   const h = await ctx();
@@ -112,13 +121,14 @@ test("the wipe exemption yields to a sandbox wipe but not to an edit", { skip: !
 
   // A wipe is not an edit: deactivating the role under the wipe GUC still refuses.
   await assert.rejects(
-    () => h!.withOrg(h!.org.orgId, async () => {
-      await h!.db.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
-      await h!.db.execute(sql`
+    () =>
+      h!.withOrg(h!.org.orgId, async () => {
+        await h!.db.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
+        await h!.db.execute(sql`
         update customer_roles set is_active = false
          where org_id = ${h!.org.orgId} and party_id = ${h!.org.customerId}
       `);
-    }),
+      }),
     (error: unknown) => {
       assert.match(pgMessage(error), /has active pricing/);
       return true;
@@ -143,12 +153,13 @@ test("a production tenant is never wiped by a stray wipe GUC", { skip: !DB }, as
   // The exemption is scoped to sandbox orgs: even with the wipe GUC set, an
   // ordinary tenant's active customer role is protected.
   await assert.rejects(
-    () => h!.withOrg(h!.org.orgId, async () => {
-      await h!.db.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
-      await h!.db.execute(sql`
+    () =>
+      h!.withOrg(h!.org.orgId, async () => {
+        await h!.db.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
+        await h!.db.execute(sql`
         delete from customer_roles where org_id = ${h!.org.orgId} and party_id = ${h!.org.customerId}
       `);
-    }),
+      }),
     (error: unknown) => {
       assert.match(pgMessage(error), /has active pricing/);
       return true;

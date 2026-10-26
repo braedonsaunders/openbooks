@@ -47,12 +47,21 @@
  *   migrations are published, digest-pinned bytes, so a line there that
  *   predates a pattern is exempt only by its exact text below.
  */
-import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-const BASELINE = 'scripts/internal-ids-baseline.json'
-const SELF = 'scripts/check-internal-ids.mjs'
-const ROOTS = ['engine/', 'web/', 'schema/src', 'scripts/', 'packages/', 'docs/', 'CHANGELOG.md', 'schema/migrations/']
+const BASELINE = "scripts/internal-ids-baseline.json";
+const SELF = "scripts/check-internal-ids.mjs";
+const ROOTS = [
+  "engine/",
+  "web/",
+  "schema/src",
+  "scripts/",
+  "packages/",
+  "docs/",
+  "CHANGELOG.md",
+  "schema/migrations/",
+];
 
 // Finding/ticket id families. Case-sensitive where product vocabulary would
 // otherwise collide (CI run, THR_EARN, SEC-1 fixtures).
@@ -68,13 +77,13 @@ const ID_PATTERNS = [
   // Review finding ids (F-t06-016, F-reg-003, F-coord-004, ...). Case-
   // sensitive: form and box codes are upper-case (F-1040) and never match.
   /\bF-[a-z]+[0-9]*-[0-9]{2,}\b/,
-]
+];
 
 // Published schema lines that predate a pattern. Their bytes are
 // digest-pinned and never edited, so each is exempt by its exact text, and an
 // entry that no longer matches a line fails the check so the list can only
 // shrink.
-const PUBLISHED_EXEMPTIONS = []
+const PUBLISHED_EXEMPTIONS = [];
 
 // Fleet work-organization wording. Case-insensitive; each shape was removed
 // from the tree, so any reappearance is a regression.
@@ -111,50 +120,57 @@ const FLEET_PATTERNS = [
   /coordinator's\s+and\s+shards/i,
   /run\s+by\s+the\s+integrator/i,
   /integrator's\s+(landing|migration)/i,
-]
+];
 
-const PATTERNS = [...ID_PATTERNS, ...FLEET_PATTERNS]
+const PATTERNS = [...ID_PATTERNS, ...FLEET_PATTERNS];
 
-export function internalIdViolations(files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0')) {
-  const violations = []
-  const unusedExemptions = new Set(PUBLISHED_EXEMPTIONS.map(([file, text]) => `${file}\0${text}`))
+export function internalIdViolations(
+  files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0"),
+) {
+  const violations = [];
+  const unusedExemptions = new Set(PUBLISHED_EXEMPTIONS.map(([file, text]) => `${file}\0${text}`));
   for (const file of files) {
-    if (file === SELF || file === BASELINE) continue
-    if (!ROOTS.some((root) => file === root || file.startsWith(root))) continue
-    if (!existsSync(file)) continue
-    const lines = readFileSync(file, 'utf8').split('\n')
+    if (file === SELF || file === BASELINE) continue;
+    if (!ROOTS.some((root) => file === root || file.startsWith(root))) continue;
+    if (!existsSync(file)) continue;
+    const lines = readFileSync(file, "utf8").split("\n");
     lines.forEach((line, index) => {
-      const hit = PATTERNS.find((pattern) => pattern.test(line))
-      if (hit && unusedExemptions.delete(`${file}\0${line.trim()}`)) return
-      if (hit) violations.push(`${file}:${index + 1}: ${hit} :: ${line.trim().slice(0, 160)}`)
-    })
+      const hit = PATTERNS.find((pattern) => pattern.test(line));
+      if (hit && unusedExemptions.delete(`${file}\0${line.trim()}`)) return;
+      if (hit) violations.push(`${file}:${index + 1}: ${hit} :: ${line.trim().slice(0, 160)}`);
+    });
   }
   for (const stale of unusedExemptions) {
-    const [file, text] = stale.split('\0')
-    if (files.includes(file)) violations.push(`${file}: published exemption no longer matches a line; remove it from ${SELF} :: ${text.slice(0, 120)}`)
+    const [file, text] = stale.split("\0");
+    if (files.includes(file))
+      violations.push(
+        `${file}: published exemption no longer matches a line; remove it from ${SELF} :: ${text.slice(0, 120)}`,
+      );
   }
-  return violations
+  return violations;
 }
 
-const baseline = JSON.parse(readFileSync(BASELINE, 'utf8'))
-const violations = internalIdViolations()
-const lower = process.argv.find((arg) => arg === '--lower' || arg.startsWith('--lower='))
+const baseline = JSON.parse(readFileSync(BASELINE, "utf8"));
+const violations = internalIdViolations();
+const lower = process.argv.find((arg) => arg === "--lower" || arg.startsWith("--lower="));
 if (lower) {
-  const target = violations.length + Number(lower.split('=')[1] ?? 0)
+  const target = violations.length + Number(lower.split("=")[1] ?? 0);
   if (target < baseline.ceiling) {
-    baseline.ceiling = target
-    writeFileSync(BASELINE, JSON.stringify(baseline, null, 2) + '\n')
-    console.log(`lowered internal-ids ceiling to ${target} (total ${violations.length})`)
+    baseline.ceiling = target;
+    writeFileSync(BASELINE, JSON.stringify(baseline, null, 2) + "\n");
+    console.log(`lowered internal-ids ceiling to ${target} (total ${violations.length})`);
   }
 } else {
-  console.log(`checked internal work-tracking language; total=${violations.length} ceiling=${baseline.ceiling}`)
+  console.log(
+    `checked internal work-tracking language; total=${violations.length} ceiling=${baseline.ceiling}`,
+  );
   if (violations.length > baseline.ceiling) {
     console.error(
       `internal work-tracking language is ${violations.length - baseline.ceiling} violation(s) over its ceiling (${BASELINE}). ` +
-        'Rewrite each hit in plain product language (or delete it if the comment only carried the id); the ceiling never rises.',
-    )
-    for (const violation of violations.slice(0, 50)) console.error(`- ${violation}`)
-    if (violations.length > 50) console.error(`- and ${violations.length - 50} more`)
-    process.exitCode = 1
+        "Rewrite each hit in plain product language (or delete it if the comment only carried the id); the ceiling never rises.",
+    );
+    for (const violation of violations.slice(0, 50)) console.error(`- ${violation}`);
+    if (violations.length > 50) console.error(`- and ${violations.length - 50} more`);
+    process.exitCode = 1;
   }
 }

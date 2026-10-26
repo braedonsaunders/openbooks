@@ -1,9 +1,13 @@
 /** BAI2 statement parsing. Split from banking.ts (pure moves only). */
-import { BankingError, type ParsedStatementLine, type ParsedStatement, type StatementSourceContent } from "../banking-core"
-import { decodeStatementSourceText } from "../statement-encoding"
-import { assertRealDate, expandTwoDigitYear } from "./shared"
-import { fromUnits } from "../../money/money.ts"
-
+import {
+  BankingError,
+  type ParsedStatementLine,
+  type ParsedStatement,
+  type StatementSourceContent,
+} from "../banking-core";
+import { decodeStatementSourceText } from "../statement-encoding";
+import { assertRealDate, expandTwoDigitYear } from "./shared";
+import { fromUnits } from "../../money/money.ts";
 
 /**
  * Statement money lands in numeric(19,4) columns (lines and balances alike):
@@ -47,7 +51,8 @@ export function parseBai2(source: StatementSourceContent): ParsedStatement {
     if (f[0] === "02") {
       const d = f[4]; // YYMMDD
       const m = d?.match(/^(\d{2})(\d{2})(\d{2})$/);
-      if (m) statementDate = assertRealDate(expandTwoDigitYear(m[1]!), m[2]!, m[3]!, `BAI2 date "${d}"`);
+      if (m)
+        statementDate = assertRealDate(expandTwoDigitYear(m[1]!), m[2]!, m[3]!, `BAI2 date "${d}"`);
     } else if (f[0] === "03") {
       // One file routinely carries several accounts (one 03 record each), but
       // this parser produces a single statement with one currency, one closing
@@ -92,7 +97,11 @@ export function parseBai2(source: StatementSourceContent): ParsedStatement {
       const referenceAt = afterFundsType(f, 3);
       const bankRef = f[referenceAt] || null;
       const custRef = f[referenceAt + 1] || null;
-      const textDesc = f.slice(referenceAt + 2).join(",").trim() || null;
+      const textDesc =
+        f
+          .slice(referenceAt + 2)
+          .join(",")
+          .trim() || null;
       if (!statementDate) {
         throw new BankingError("BAI2: type-16 transaction before a type-02 header date");
       }

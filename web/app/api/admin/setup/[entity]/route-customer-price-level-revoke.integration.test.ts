@@ -30,10 +30,12 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const entityRoute = context.parentURL?.includes("%5Bentity%5D")
-      ?? context.parentURL?.includes("[entity]");
-    if ((specifier === "../../../../../lib/authz" && entityRoute)
-      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))) {
+    const entityRoute =
+      context.parentURL?.includes("%5Bentity%5D") ?? context.parentURL?.includes("[entity]");
+    if (
+      (specifier === "../../../../../lib/authz" && entityRoute) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -49,10 +51,8 @@ registerHooks({
 const routeUrl = "./route.ts?assignments-revoke-route-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
 
 function authenticate(f: { orgId: string; actorId: string }) {
   routeState.authz = {
@@ -106,16 +106,26 @@ test("revoking a same-day assignment through setup PATCH keeps the row with its 
       assert.equal(id, assignmentId);
 
       // The row stays: priced lineage must survive the revoke.
-      const membership = (await db.execute<{ is_active: boolean; revoked: boolean }>(sql`
+      const membership = (
+        await db.execute<{ is_active: boolean; revoked: boolean }>(
+          sql`
         select is_active, (revoked_at is not null) as revoked from customer_price_level_assignments
-         where org_id = ${org.orgId} and id = ${assignmentId}`, "objects"))[0]!;
+         where org_id = ${org.orgId} and id = ${assignmentId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(membership.is_active, false);
       assert.equal(membership.revoked, true);
 
-      const audits = (await db.execute<{ action: string; actor: string }>(sql`
+      const audits = (
+        await db.execute<{ action: string; actor: string }>(
+          sql`
         select action, actor_id::text as actor from audit_log
          where org_id = ${org.orgId} and table_name = 'customer_price_level_assignments' and row_id = ${assignmentId}
-         order by id desc limit 1`, "objects"))[0];
+         order by id desc limit 1`,
+          "objects",
+        )
+      )[0];
       assert.equal(audits?.action, "update");
       assert.equal(audits?.actor, actorId);
     } finally {
@@ -140,7 +150,9 @@ test("revoking a future-effective assignment through setup PATCH succeeds and is
       await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
         values (${goldId}, ${org.orgId}, 'GOLD9', 'Gold price', 'explicit', false, true)`);
       const today = new Date().toISOString().slice(0, 10);
-      const starts = new Date(Date.parse(`${today}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10);
+      const starts = new Date(Date.parse(`${today}T00:00:00Z`) + 30 * 86400000)
+        .toISOString()
+        .slice(0, 10);
       const assignmentId = randomUUID();
       await db.execute(sql`insert into customer_price_level_assignments (id, org_id, customer_id, price_level_id, effective_from, is_active)
         values (${assignmentId}, ${org.orgId}, ${customerId}, ${goldId}, ${starts}, true)`);
@@ -160,15 +172,25 @@ test("revoking a future-effective assignment through setup PATCH succeeds and is
       const { id } = (await res.json()) as { id: string };
       assert.equal(id, assignmentId);
 
-      const remaining = (await db.execute<{ n: number }>(sql`
+      const remaining = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from customer_price_level_assignments
-         where org_id = ${org.orgId} and id = ${assignmentId}`, "objects"))[0]!.n;
+         where org_id = ${org.orgId} and id = ${assignmentId}`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(remaining, 0);
 
-      const audits = (await db.execute<{ action: string; actor: string }>(sql`
+      const audits = (
+        await db.execute<{ action: string; actor: string }>(
+          sql`
         select action, actor_id::text as actor from audit_log
          where org_id = ${org.orgId} and table_name = 'customer_price_level_assignments' and row_id = ${assignmentId}
-         order by id desc limit 1`, "objects"))[0];
+         order by id desc limit 1`,
+          "objects",
+        )
+      )[0];
       assert.equal(audits?.action, "delete");
       assert.equal(audits?.actor, actorId);
     } finally {

@@ -13,19 +13,39 @@ import { lookupSpotRate } from "../fx/spot-rate.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { EquityError, equityError, fig } from "./errors.ts";
 import type { EquityTermName } from "./refusals/terms.ts";
-import { divideRational, fromLedgerUnits, MONEY_SCALE, multiplyRational, parseDecimal, quantize, type Rational } from "./quantities.ts";
+import {
+  divideRational,
+  fromLedgerUnits,
+  MONEY_SCALE,
+  multiplyRational,
+  parseDecimal,
+  quantize,
+  type Rational,
+} from "./quantities.ts";
 
 /** Decimal places of a stored exchange rate. */
 export const RATE_SCALE = 10;
 
-export const parseRate = (value: string, label: EquityTermName = "exchangeRate"): Rational => parseDecimal(value, label, RATE_SCALE);
+export const parseRate = (value: string, label: EquityTermName = "exchangeRate"): Rational =>
+  parseDecimal(value, label, RATE_SCALE);
 
 function missingRate(from: string, to: string, on: string): EquityError {
-  return equityError("fxRateMissing", { from: fig.text(from), to: fig.text(to), date: fig.date(on) });
+  return equityError("fxRateMissing", {
+    from: fig.text(from),
+    to: fig.text(to),
+    date: fig.date(on),
+  });
 }
 
 /** Units of `to` per unit of `from` on `on`, as the stored rate string. */
-export async function spotRate(runner: SqlExecutor, orgId: string, from: string, to: string, on: string, functional: string): Promise<string> {
+export async function spotRate(
+  runner: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
+  on: string,
+  functional: string,
+): Promise<string> {
   if (from === to) return "1";
   const direct = await lookupSpotRate(runner, orgId, from, to, on);
   if (direct) return direct;
@@ -49,7 +69,11 @@ export function formatRate(rate: Rational): string {
 
 /** Functional ledger units of a foreign amount (ledger units) at a rate: round(amount × rate, 4). */
 export function functionalUnits(txnUnits: bigint, rate: string): bigint {
-  return quantize(multiplyRational(fromLedgerUnits(txnUnits), parseRate(rate)), MONEY_SCALE, "half_up");
+  return quantize(
+    multiplyRational(fromLedgerUnits(txnUnits), parseRate(rate)),
+    MONEY_SCALE,
+    "half_up",
+  );
 }
 
 /** An exact foreign amount restated at a rate (exact). */

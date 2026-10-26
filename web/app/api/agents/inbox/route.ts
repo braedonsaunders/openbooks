@@ -20,8 +20,7 @@ export const GET = defineRoute({
   handler: async ({ request, authz: gate }) => {
     const authz = gate;
     const sp = new URL(request.url).searchParams;
-    const one = (key: string): string | undefined =>
-      pickString(sp.get(key) ?? undefined);
+    const one = (key: string): string | undefined => pickString(sp.get(key) ?? undefined);
     const list = (key: string): string[] =>
       sp
         .get(key)
@@ -29,9 +28,8 @@ export const GET = defineRoute({
         .map((s) => s.trim())
         .filter(Boolean) ?? [];
 
-    const packs = list("packs").filter(
-      (p): p is (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number] =>
-        (CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(p),
+    const packs = list("packs").filter((p): p is (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number] =>
+      (CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(p),
     );
     const q = one("q");
     const hasProposal = one("hasProposal");
@@ -45,16 +43,12 @@ export const GET = defineRoute({
       ...(packs.length > 0 ? { packs } : {}),
       ...(list("severities").length > 0
         ? {
-            severities: list("severities") as (
-              "info" | "warning" | "critical"
-            )[],
+            severities: list("severities") as ("info" | "warning" | "critical")[],
           }
         : {}),
       ...(list("statuses").length > 0
         ? {
-            statuses: list("statuses") as (
-              "open" | "in_review" | "resolved" | "dismissed"
-            )[],
+            statuses: list("statuses") as ("open" | "in_review" | "resolved" | "dismissed")[],
           }
         : {}),
       ...(q ? { query: q } : {}),

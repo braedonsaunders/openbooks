@@ -7,7 +7,10 @@ export function anchoredMenuPosition(
   const padding = Math.min(8, viewport.width / 2, viewport.height / 2);
   const gap = 6;
   const availableHeight = Math.max(0, viewport.height - padding * 2);
-  const below = Math.max(0, Math.min(availableHeight, viewport.height - padding - anchor.bottom - gap));
+  const below = Math.max(
+    0,
+    Math.min(availableHeight, viewport.height - padding - anchor.bottom - gap),
+  );
   const above = Math.max(0, Math.min(availableHeight, anchor.top - gap - padding));
   const useBelow = desiredHeight <= below || below >= above;
   const maxHeight = useBelow ? below : above;

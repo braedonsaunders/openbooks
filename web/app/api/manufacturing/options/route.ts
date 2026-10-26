@@ -19,20 +19,12 @@ export const GET = defineRoute({
   permission: "manufacturing.read",
   feature: "manufacturing",
   handler: async ({ authz, request }) => {
-    const input = Query.safeParse(
-      Object.fromEntries(new URL(request.url).searchParams),
-    );
+    const input = Query.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!input.success)
-      return Response.json(
-        { error: "Invalid manufacturing choice filters." },
-        { status: 400 },
-      );
+      return Response.json({ error: "Invalid manufacturing choice filters." }, { status: 400 });
     const { kind, q, selected } = input.data;
     if (kind === "vendors" && !can(authz, "ap.create"))
-      return Response.json(
-        { error: "missing permission: ap.create" },
-        { status: 403 },
-      );
+      return Response.json({ error: "missing permission: ap.create" }, { status: 403 });
     return withScopeSnapshot(authz.user.orgId, async () =>
       Response.json(
         kind

@@ -51,7 +51,8 @@ export function findingProposalCommand(
   const carried = carriedProposal(summary);
   if (!carried) return null;
   const definition = applicationTool(carried.tool);
-  if (!definition || definition.readOnly || definition.assistantConfirmation !== "always") return null;
+  if (!definition || definition.readOnly || definition.assistantConfirmation !== "always")
+    return null;
   if (!definition.visibleTo(authz)) return null;
   const parsed = definition.inputSchema.safeParse(carried.input);
   if (!parsed.success) return null;

@@ -1,47 +1,50 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 export interface ScopedAccountOption extends Record<string, unknown> {
-  id: string
-  number: string | null
-  name: string
-  type: string
-  subsidiaryId: string | null
-  is_summary: boolean
+  id: string;
+  number: string | null;
+  name: string;
+  type: string;
+  subsidiaryId: string | null;
+  is_summary: boolean;
 }
 
 export interface ScopedPartyOption extends Record<string, unknown> {
-  id: string
-  display_name: string
-  subsidiary_id: string | null
+  id: string;
+  display_name: string;
+  subsidiary_id: string | null;
 }
 
 export interface ScopedDimensionOption extends Record<string, unknown> {
-  id: string
-  name: string
-  subsidiary_id: string | null
+  id: string;
+  name: string;
+  subsidiary_id: string | null;
 }
-
 
 /** Account references visible to one reader, using the same scope as direct account reads. */
 export async function listScopedAccountOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   options: {
-    activeOnly?: boolean
-    postingOnly?: boolean
-    summaryOnly?: boolean
-    reconcilableOnly?: boolean
-    types?: readonly string[]
+    activeOnly?: boolean;
+    postingOnly?: boolean;
+    summaryOnly?: boolean;
+    reconcilableOnly?: boolean;
+    types?: readonly string[];
   } = {},
 ): Promise<ScopedAccountOption[]> {
   const typeFilter = options.types?.length
-    ? sql`and a.type in (${sql.join(options.types.map((type) => sql`${type}`), sql`, `)})`
-    : sql``
-  const rows = await db.execute<ScopedAccountOption>(sql`
+    ? sql`and a.type in (${sql.join(
+        options.types.map((type) => sql`${type}`),
+        sql`, `,
+      )})`
+    : sql``;
+  const rows = await db.execute<ScopedAccountOption>(
+    sql`
     select a.id, a.number, a.name, a.type, a.subsidiary_id as "subsidiaryId", a.is_summary
       from accounts a
      where a.org_id = ${orgId}
@@ -52,8 +55,10 @@ export async function listScopedAccountOptions(
        ${options.reconcilableOnly ? sql`and a.reconcilable` : sql``}
        ${typeFilter}
      order by a.number nulls last, a.name, a.id
-  `, 'objects')
-  return rows
+  `,
+    "objects",
+  );
+  return rows;
 }
 
 /**
@@ -67,36 +72,48 @@ export async function listScopedAccountOptions(
 export async function listScopedPartyOptionsWithCurrent(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  role: 'vendor' | 'customer',
+  role: "vendor" | "customer",
   currentPartyId?: string | null,
 ): Promise<ScopedPartyOption[]> {
-  const options = await listScopedPartyOptions(orgId, allowedSubsidiaryIds, { role, activeOnly: true })
+  const options = await listScopedPartyOptions(orgId, allowedSubsidiaryIds, {
+    role,
+    activeOnly: true,
+  });
   if (currentPartyId && !options.some((option) => option.id === currentPartyId)) {
-    const current = await db.execute<ScopedPartyOption>(sql`
+    const current = await db.execute<ScopedPartyOption>(
+      sql`
       select p.id, p.display_name, p.subsidiary_id from parties p
-       where p.id = ${currentPartyId} and p.org_id = ${orgId} and p.is_active`, 'objects')
+       where p.id = ${currentPartyId} and p.org_id = ${orgId} and p.is_active`,
+      "objects",
+    );
     if (current[0]) {
-      options.push(current[0])
-      options.sort((a, b) => a.display_name.localeCompare(b.display_name))
+      options.push(current[0]);
+      options.sort((a, b) => a.display_name.localeCompare(b.display_name));
     }
   }
-  return options
+  return options;
 }
 
 /** Party references visible to one caller, including intentionally shared parties with a null subsidiary. */
 export async function listScopedPartyOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  options: { role?: 'vendor' | 'customer' | 'employee'; activeOnly?: boolean; kind?: 'person' } = {},
+  options: {
+    role?: "vendor" | "customer" | "employee";
+    activeOnly?: boolean;
+    kind?: "person";
+  } = {},
 ): Promise<ScopedPartyOption[]> {
-  const roleFilter = options.role === 'vendor'
-    ? sql`and exists (select 1 from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
-    : options.role === 'customer'
-      ? sql`and exists (select 1 from customer_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
-      : options.role === 'employee'
-        ? sql`and exists (select 1 from employee_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
-        : sql``
-  const result = await db.execute<ScopedPartyOption>(sql`
+  const roleFilter =
+    options.role === "vendor"
+      ? sql`and exists (select 1 from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
+      : options.role === "customer"
+        ? sql`and exists (select 1 from customer_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
+        : options.role === "employee"
+          ? sql`and exists (select 1 from employee_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
+          : sql``;
+  const result = await db.execute<ScopedPartyOption>(
+    sql`
     select p.id, p.display_name, p.subsidiary_id
       from parties p
      where p.org_id = ${orgId}
@@ -106,8 +123,10 @@ export async function listScopedPartyOptions(
        ${roleFilter}
      order by p.display_name, p.id
      limit 2000
-  `, 'objects')
-  return result
+  `,
+    "objects",
+  );
+  return result;
 }
 
 export async function listScopedCardOptions(
@@ -115,9 +134,14 @@ export async function listScopedCardOptions(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   const result = await db.execute<{
-    id: string; label: string; last_four: string | null; network: string | null;
-    liability_account_id: string; holder: string | null;
-  }>(sql`
+    id: string;
+    label: string;
+    last_four: string | null;
+    network: string | null;
+    liability_account_id: string;
+    holder: string | null;
+  }>(
+    sql`
     select pc.id, pc.label, pc.last_four, pc.network, pc.liability_account_id,
            p.display_name as holder
       from payment_cards pc
@@ -127,15 +151,19 @@ export async function listScopedCardOptions(
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by pc.label
-  `, 'objects')
+  `,
+    "objects",
+  );
   return result.map((card) => ({
     id: card.id,
     label: card.label,
-    display_name: card.last_four ? `${card.network ?? ''} •••• ${card.last_four} — ${card.holder ?? ''}`.trim() : card.label,
+    display_name: card.last_four
+      ? `${card.network ?? ""} •••• ${card.last_four} — ${card.holder ?? ""}`.trim()
+      : card.label,
     last_four: card.last_four,
     network: card.network,
     liability_account_id: card.liability_account_id,
-  }))
+  }));
 }
 
 export async function listScopedDepartmentOptions(
@@ -143,15 +171,18 @@ export async function listScopedDepartmentOptions(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   activeOnly = true,
 ): Promise<ScopedDimensionOption[]> {
-  const result = await db.execute<ScopedDimensionOption>(sql`
+  const result = await db.execute<ScopedDimensionOption>(
+    sql`
     select d.id, d.name, d.subsidiary_id
       from departments d
      where d.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${activeOnly ? sql`and d.is_active` : sql``}
      order by d.name, d.id
-  `, 'objects')
-  return result
+  `,
+    "objects",
+  );
+  return result;
 }
 
 /** Customers that own at least one project the actor can see, for project-scoped selections. */
@@ -159,7 +190,8 @@ export async function listScopedProjectCustomerOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<Array<{ id: string; name: string }>> {
-  const result = await db.execute<{ id: string; name: string }>(sql`
+  const result = await db.execute<{ id: string; name: string }>(
+    sql`
     select c.id::text as id, c.display_name as name
       from parties c
      where c.org_id = ${orgId}
@@ -170,8 +202,10 @@ export async function listScopedProjectCustomerOptions(
        )
      order by c.display_name, c.id
      limit 2000
-  `, 'objects')
-  return result
+  `,
+    "objects",
+  );
+  return result;
 }
 
 export async function listScopedProjectOptions(
@@ -179,7 +213,8 @@ export async function listScopedProjectOptions(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   activeOnly = true,
 ): Promise<ScopedDimensionOption[]> {
-  const result = await db.execute<ScopedDimensionOption>(sql`
+  const result = await db.execute<ScopedDimensionOption>(
+    sql`
     select p.id, p.name, p.subsidiary_id
       from projects p
      where p.org_id = ${orgId}
@@ -187,6 +222,8 @@ export async function listScopedProjectOptions(
        ${activeOnly ? sql`and p.is_active` : sql``}
      order by p.name, p.id
      limit 2000
-  `, 'objects')
-  return result
+  `,
+    "objects",
+  );
+  return result;
 }

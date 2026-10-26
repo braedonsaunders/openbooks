@@ -1,78 +1,154 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { registerHooks } from 'node:module'
-import { randomUUID } from 'node:crypto'
-import type { SessionUser } from '../../../../lib/auth'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { registerHooks } from "node:module";
+import { randomUUID } from "node:crypto";
+import type { SessionUser } from "../../../../lib/auth";
 
-const session: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __projectCustomPreservationSession: session })
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__projectCustomPreservationSession.user}' }
-  if (specifier === '../../../../lib/projects-gate') return { shortCircuit: true, url: 'data:text/javascript,export async function guardProjectsFeature(){return null}' }
-  return next(specifier, context)
-}})
+const session: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __projectCustomPreservationSession: session });
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__projectCustomPreservationSession.user}",
+      };
+    if (specifier === "../../../../lib/projects-gate")
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function guardProjectsFeature(){return null}",
+      };
+    return next(specifier, context);
+  },
+});
 
-const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { PATCH } = await import('./route')
+const { sql } = await import("drizzle-orm");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { PATCH } = await import("./route");
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) })
-const patchRequest = (id: string, body: unknown) => new Request(`http://audit.local/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+const patchRequest = (id: string, body: unknown) =>
+  new Request(`http://audit.local/api/projects/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 
-test('project PATCH preserves omitted required custom fields on a partial edit', async () => {
-  const org = await createScratchOrg()
+test("project PATCH preserves omitted required custom fields on a partial edit", async () => {
+  const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, 'Project custom fields', 'reviewer')
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
-    session.user = { id: actor, orgId: org.orgId, name: 'Project custom fields', email: 'project-custom@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
-    const projectId = randomUUID()
-    await db.execute(sql`insert into projects (id, org_id, name, custom) values (${projectId}, ${org.orgId}, 'Custom-field project', '{"required_code":"R-1"}'::jsonb)`)
+    const actor = await createScratchUser(org.orgId, "Project custom fields", "reviewer");
+    await db.execute(
+      sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+    );
+    session.user = {
+      id: actor,
+      orgId: org.orgId,
+      name: "Project custom fields",
+      email: "project-custom@scratch.test",
+      roles: [],
+      isSuperAdmin: false,
+      envKind: "production",
+      productionOrgId: org.orgId,
+      homeOrgId: org.orgId,
+      homeUserId: actor,
+    };
+    const projectId = randomUUID();
+    await db.execute(
+      sql`insert into projects (id, org_id, name, custom) values (${projectId}, ${org.orgId}, 'Custom-field project', '{"required_code":"R-1"}'::jsonb)`,
+    );
     await db.execute(sql`
       insert into custom_field_defs
         (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
       values
         (${randomUUID()}, ${org.orgId}, 'projects', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${actor}, ${actor}),
         (${randomUUID()}, ${org.orgId}, 'projects', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${actor}, ${actor})
-    `)
+    `);
     await withOrgContext(org.orgId, async () => {
-      const response = await PATCH(patchRequest(projectId, { custom: { optional_note: 'updated' } }), params(projectId))
-      assert.equal(response.status, 200, JSON.stringify(await response.json()))
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`, 'objects'))[0]?.custom
-      assert.deepEqual(stored, { required_code: 'R-1', optional_note: 'updated' })
-    })
+      const response = await PATCH(
+        patchRequest(projectId, { custom: { optional_note: "updated" } }),
+        params(projectId),
+      );
+      assert.equal(response.status, 200, JSON.stringify(await response.json()));
+      const stored = (
+        await db.execute<{ custom: Record<string, unknown> }>(
+          sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]?.custom;
+      assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+    });
   } finally {
-    session.user = null
-    await dropScratchOrg(org.orgId)
+    session.user = null;
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('project PATCH refuses a foreign reference custom value instead of storing it', async () => {
-  const org = await createScratchOrg()
-  const foreign = await createScratchOrg()
+test("project PATCH refuses a foreign reference custom value instead of storing it", async () => {
+  const org = await createScratchOrg();
+  const foreign = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, 'Project ref fence', 'reviewer')
-    await db.execute(sql`update app_roles set permissions='[\"*\"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
-    session.user = { id: actor, orgId: org.orgId, name: 'Project ref fence', email: 'project-ref@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
-    const projectId = randomUUID()
-    await db.execute(sql`insert into projects (id, org_id, name, custom) values (${projectId}, ${org.orgId}, 'Ref fence project', '{}'::jsonb)`)
+    const actor = await createScratchUser(org.orgId, "Project ref fence", "reviewer");
+    await db.execute(
+      sql`update app_roles set permissions='[\"*\"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+    );
+    session.user = {
+      id: actor,
+      orgId: org.orgId,
+      name: "Project ref fence",
+      email: "project-ref@scratch.test",
+      roles: [],
+      isSuperAdmin: false,
+      envKind: "production",
+      productionOrgId: org.orgId,
+      homeOrgId: org.orgId,
+      homeUserId: actor,
+    };
+    const projectId = randomUUID();
+    await db.execute(
+      sql`insert into projects (id, org_id, name, custom) values (${projectId}, ${org.orgId}, 'Ref fence project', '{}'::jsonb)`,
+    );
     await db.execute(sql`
       insert into custom_field_defs
         (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
       values
         (${randomUUID()}, ${org.orgId}, 'projects', 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${actor}, ${actor})
-    `)
+    `);
     await withOrgContext(org.orgId, async () => {
-      const refused = await PATCH(patchRequest(projectId, { custom: { ref_party: foreign.vendorId } }), params(projectId))
-      assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(await refused.json())}`)
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`, 'objects'))[0]?.custom
-      assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, 'refused references store nothing')
-      const saved = await PATCH(patchRequest(projectId, { custom: { ref_party: org.vendorId } }), params(projectId))
-      assert.equal(saved.status, 200, `own-org reference must stay green: ${JSON.stringify(await saved.json())}`)
-    })
+      const refused = await PATCH(
+        patchRequest(projectId, { custom: { ref_party: foreign.vendorId } }),
+        params(projectId),
+      );
+      assert.equal(
+        refused.status,
+        422,
+        `expected 422, got ${refused.status}: ${JSON.stringify(await refused.json())}`,
+      );
+      const stored = (
+        await db.execute<{ custom: Record<string, unknown> }>(
+          sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]?.custom;
+      assert.equal(
+        (stored as Record<string, unknown> | undefined)?.ref_party,
+        undefined,
+        "refused references store nothing",
+      );
+      const saved = await PATCH(
+        patchRequest(projectId, { custom: { ref_party: org.vendorId } }),
+        params(projectId),
+      );
+      assert.equal(
+        saved.status,
+        200,
+        `own-org reference must stay green: ${JSON.stringify(await saved.json())}`,
+      );
+    });
   } finally {
-    session.user = null
-    await dropScratchOrg(foreign.orgId)
-    await dropScratchOrg(org.orgId)
+    session.user = null;
+    await dropScratchOrg(foreign.orgId);
+    await dropScratchOrg(org.orgId);
   }
-})
+});

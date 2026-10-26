@@ -95,16 +95,27 @@ export type StaleApprovalRow = {
 export type PayablesLoaders = {
   /** Org business day (business-date.ts); injectable so unit tests stay DB-free. */
   today: (orgId: string) => Promise<string>;
-  duplicatePairs: (orgId: string, windowDays: number, floor: string) => Promise<DuplicateBillPair[]>;
-  payrunBills: (orgId: string, horizonEnd: string) => Promise<{ due: PayrunBillRow[]; beyondCount: number; beyondTotal: string }>;
+  duplicatePairs: (
+    orgId: string,
+    windowDays: number,
+    floor: string,
+  ) => Promise<DuplicateBillPair[]>;
+  payrunBills: (
+    orgId: string,
+    horizonEnd: string,
+  ) => Promise<{ due: PayrunBillRow[]; beyondCount: number; beyondTotal: string }>;
   discountOpportunities: (orgId: string, minPercent: number) => Promise<DiscountOpportunityRow[]>;
   staleApprovals: (orgId: string, cutoff: string) => Promise<StaleApprovalRow[]>;
 };
 
-async function loadDuplicatePairs(orgId: string, windowDays: number, floor: string): Promise<DuplicateBillPair[]> {
+async function loadDuplicatePairs(
+  orgId: string,
+  windowDays: number,
+  floor: string,
+): Promise<DuplicateBillPair[]> {
   // Kinds narrow Sentinel's spend set to bills: checks and vendor payments
   // are payment instruments whose duplicates surface in banking, not AP.
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     open_doc_id: string;
     open_doc_number: string | null;
     other_doc_id: string;
@@ -120,7 +131,8 @@ async function loadDuplicatePairs(orgId: string, windowDays: number, floor: stri
     party_id: string;
     party_name: string;
     same_memo: boolean;
-  }>(sql`
+  }>(
+    sql`
     with open_bills as (
       select id, document_number, kind, party_id, memo, abs(total) as amt,
              abs(open_balance) as open_amt,
@@ -153,7 +165,9 @@ async function loadDuplicatePairs(orgId: string, windowDays: number, floor: stri
       left join parties p on p.id = o.party_id and p.org_id = ${orgId}
      order by o.amt desc, days_between asc, o.id, d.id
      limit 200
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     openDocId: row.open_doc_id,
     openDocNumber: row.open_doc_number,
@@ -173,7 +187,10 @@ async function loadDuplicatePairs(orgId: string, windowDays: number, floor: stri
   }));
 }
 
-async function loadPayrunBills(orgId: string, horizonEnd: string): Promise<{ due: PayrunBillRow[]; beyondCount: number; beyondTotal: string }> {
+async function loadPayrunBills(
+  orgId: string,
+  horizonEnd: string,
+): Promise<{ due: PayrunBillRow[]; beyondCount: number; beyondTotal: string }> {
   const [due, beyond] = await Promise.all([
     db.execute<{
       doc_id: string;
@@ -182,7 +199,8 @@ async function loadPayrunBills(orgId: string, horizonEnd: string): Promise<{ due
       party_name: string;
       due_date: string;
       open_balance: string;
-    }>(sql`
+    }>(
+      sql`
       select d.id as doc_id, d.document_number as doc_number, d.party_id,
              coalesce(p.display_name, 'Unspecified') as party_name,
              d.due_date::text as due_date, abs(d.open_balance)::text as open_balance
@@ -194,8 +212,11 @@ async function loadPayrunBills(orgId: string, horizonEnd: string): Promise<{ due
          and d.due_date is not null and d.due_date <= ${horizonEnd}
        order by d.due_date, abs(d.open_balance) desc
        limit 25
-    `, "objects"),
-    db.execute<{ beyond_count: number; beyond_total: string }>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<{ beyond_count: number; beyond_total: string }>(
+      sql`
       select count(*)::int as beyond_count,
              coalesce(sum(abs(d.open_balance)), 0)::text as beyond_total
         from documents d
@@ -204,7 +225,9 @@ async function loadPayrunBills(orgId: string, horizonEnd: string): Promise<{ due
          -- Live entries only: the beyond-horizon total counts bills still payable; a voided bill is never paid.
          and d.status = 'posted' and d.open_balance <> 0
          and (d.due_date is null or d.due_date > ${horizonEnd})
-    `, "objects"),
+    `,
+      "objects",
+    ),
   ]);
   return {
     due: due.map((row) => ({
@@ -220,9 +243,12 @@ async function loadPayrunBills(orgId: string, horizonEnd: string): Promise<{ due
   };
 }
 
-async function loadDiscountOpportunities(orgId: string, minPercent: number): Promise<DiscountOpportunityRow[]> {
+async function loadDiscountOpportunities(
+  orgId: string,
+  minPercent: number,
+): Promise<DiscountOpportunityRow[]> {
   const today = await businessToday(orgId);
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     term_id: string;
     term_name: string;
     discount_percent: string;
@@ -233,7 +259,8 @@ async function loadDiscountOpportunities(orgId: string, minPercent: number): Pro
     document_date: string;
     open_balance: string;
     discount_value: string;
-  }>(sql`
+  }>(
+    sql`
     select t.id as term_id, t.name as term_name,
            t.discount_percent::text as discount_percent,
            t.discount_days as discount_days,
@@ -254,7 +281,9 @@ async function loadDiscountOpportunities(orgId: string, minPercent: number): Pro
        and d.document_date + t.discount_days >= ${today}
      order by (abs(d.open_balance) * t.discount_percent / 100) desc
      limit 100
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     termId: row.term_id,
     termName: row.term_name,
@@ -270,7 +299,7 @@ async function loadDiscountOpportunities(orgId: string, minPercent: number): Pro
 }
 
 async function loadStaleApprovals(orgId: string, cutoff: string): Promise<StaleApprovalRow[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     doc_id: string;
     doc_number: string | null;
     kind: string;
@@ -278,7 +307,8 @@ async function loadStaleApprovals(orgId: string, cutoff: string): Promise<StaleA
     document_date: string;
     status: string;
     total: string;
-  }>(sql`
+  }>(
+    sql`
     select d.id as doc_id, d.document_number as doc_number, d.kind,
            coalesce(p.display_name, 'Unspecified') as party_name,
            coalesce(d.document_date, d.posting_date)::text as document_date,
@@ -296,7 +326,9 @@ async function loadStaleApprovals(orgId: string, cutoff: string): Promise<StaleA
        )
      order by coalesce(d.document_date, d.posting_date), abs(coalesce(d.total, 0)) desc
      limit 50
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     docId: row.doc_id,
     docNumber: row.doc_number,
@@ -322,7 +354,13 @@ export async function payablesFindings(
   detectors: ContinuousCloseDetectorPolicy[],
   loaders: PayablesLoaders = productionPayablesLoaders,
 ): Promise<AgentFinding[]> {
-  if (!detectors.some((detector) => detector.enabled && (PAYABLES_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey))) {
+  if (
+    !detectors.some(
+      (detector) =>
+        detector.enabled &&
+        (PAYABLES_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey),
+    )
+  ) {
     return [];
   }
   const today = await loaders.today(orgId);
@@ -352,14 +390,16 @@ export async function payablesFindings(
         agentKey: "payables",
         findingType: "duplicate_bills",
         fingerprint: "payables-duplicates",
-        severity: pairs.length >= duplicatePolicy.parameters.criticalPairCount! ? "critical" : "warning",
+        severity:
+          pairs.length >= duplicatePolicy.parameters.criticalPairCount! ? "critical" : "warning",
         confidence: pairs.some((pair) => pair.sameMemo) ? "0.9000" : "0.7500",
         materiality,
         subjectType: "documents",
         summary: {
           pairCount: pairs.length,
           openExposure: materiality,
-          review: "Confirm whether each pair is a double entry (void one leg) or a double payment (recover the second payment).",
+          review:
+            "Confirm whether each pair is a double entry (void one leg) or a double payment (recover the second payment).",
           href: "/purchasing",
         },
         evidence: pairs.slice(0, 10).map((pair) => ({
@@ -398,7 +438,8 @@ export async function payablesFindings(
         fingerprint: "payables-payrun",
         severity:
           due.length >= payrunPolicy.parameters.criticalItemCount! ||
-          absoluteUnits(materiality) >= absoluteUnits(threshold) * BigInt(payrunPolicy.parameters.criticalMaterialityMultiple!)
+          absoluteUnits(materiality) >=
+            absoluteUnits(threshold) * BigInt(payrunPolicy.parameters.criticalMaterialityMultiple!)
             ? "critical"
             : "warning",
         confidence: "1.0000",
@@ -410,7 +451,8 @@ export async function payablesFindings(
           dueTotal: materiality,
           beyondHorizonCount: beyondCount,
           beyondHorizonTotal: beyondTotal,
-          review: "Pay-run review card, oldest-due first (AP cockpit planner order). Apply the weekly AP cap in the cockpit before releasing.",
+          review:
+            "Pay-run review card, oldest-due first (AP cockpit planner order). Apply the weekly AP cap in the cockpit before releasing.",
           recommended: due.map((bill) => ({
             documentId: bill.docId,
             documentNumber: bill.docNumber,
@@ -438,7 +480,10 @@ export async function payablesFindings(
   const discountPolicy = byKey.get("early_pay_discount_opportunity");
   if (discountPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(discountPolicy, agentThreshold);
-    const rows = await loaders.discountOpportunities(orgId, discountPolicy.parameters.minimumDiscountPercent!);
+    const rows = await loaders.discountOpportunities(
+      orgId,
+      discountPolicy.parameters.minimumDiscountPercent!,
+    );
     const byTerm = new Map<string, DiscountOpportunityRow[]>();
     for (const row of rows) {
       const list = byTerm.get(row.termId) ?? [];
@@ -446,7 +491,9 @@ export async function payablesFindings(
       byTerm.set(row.termId, list);
     }
     for (const [termId, bills] of byTerm) {
-      const materiality = fromUnits(bills.reduce((sum, bill) => sum + toUnits(bill.discountValue), 0n));
+      const materiality = fromUnits(
+        bills.reduce((sum, bill) => sum + toUnits(bill.discountValue), 0n),
+      );
       if (absoluteUnits(materiality) < absoluteUnits(threshold)) continue;
       findings.push({
         agentKey: "payables",
@@ -464,7 +511,8 @@ export async function payablesFindings(
           discountDays: bills[0]!.discountDays,
           billCount: bills.length,
           discountValue: materiality,
-          review: "Pay these bills inside the discount window and claim the terms; confirm the vendor still honours them first.",
+          review:
+            "Pay these bills inside the discount window and claim the terms; confirm the vendor still honours them first.",
           href: "/purchasing",
         },
         evidence: bills.slice(0, 10).map((bill) => ({
@@ -486,7 +534,7 @@ export async function payablesFindings(
   const approvalPolicy = byKey.get("bills_missing_approval");
   if (approvalPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(approvalPolicy, agentThreshold);
-    const cutoff = addCalendarDays(today, -(approvalPolicy.parameters.staleAfterDays!));
+    const cutoff = addCalendarDays(today, -approvalPolicy.parameters.staleAfterDays!);
     const rows = await loaders.staleApprovals(orgId, cutoff);
     if (rows.length > 0) {
       const materiality = fromUnits(rows.reduce((sum, row) => sum + toUnits(row.total), 0n));
@@ -496,7 +544,9 @@ export async function payablesFindings(
         fingerprint: "payables-approvals",
         severity:
           rows.length >= approvalPolicy.parameters.criticalItemCount! ||
-          absoluteUnits(materiality) >= absoluteUnits(threshold) * BigInt(approvalPolicy.parameters.criticalMaterialityMultiple!)
+          absoluteUnits(materiality) >=
+            absoluteUnits(threshold) *
+              BigInt(approvalPolicy.parameters.criticalMaterialityMultiple!)
             ? "critical"
             : "warning",
         confidence: "1.0000",

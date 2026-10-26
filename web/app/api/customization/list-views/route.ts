@@ -20,15 +20,18 @@ import {
   assertSingleListViewDefault,
   claimListViewDefaultSlot,
 } from "../../../../lib/customization/list-view-default";
-const configBody = z.json().refine(
-  (value) => parseListView(value).success,
-  "config must match the saved list view schema",
-);
+const configBody = z
+  .json()
+  .refine((value) => parseListView(value).success, "config must match the saved list view schema");
 const postBodySchema0 = z.strictObject({
-  recordType: z.string().trim().min(1, "recordType is required").refine(
-    (value) => Object.hasOwn(RECORD_TYPE_BY_KEY, value),
-    "recordType must name a supported record type",
-  ),
+  recordType: z
+    .string()
+    .trim()
+    .min(1, "recordType is required")
+    .refine(
+      (value) => Object.hasOwn(RECORD_TYPE_BY_KEY, value),
+      "recordType must name a supported record type",
+    ),
   name: z.string().trim().min(1, "name is required").max(200),
   scope: z.enum(["org", "user"]),
   config: configBody.optional(),
@@ -41,25 +44,24 @@ export const runtime = "nodejs";
 export const GET = defineRoute({
   public: "session",
   handler: async ({ request: req, authz }) => {
-    if (!authz)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
     const recordType = new URL(req.url).searchParams.get("recordType") ?? "";
     if (!RECORD_TYPE_BY_KEY[recordType])
-      return NextResponse.json(
-        { error: "unknown record type" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "unknown record type" }, { status: 400 });
     const refused = await refuseDisabledRecordType(user.orgId, recordType);
     if (refused) return refused;
-    const r = await db.execute(sql`
+    const r = await db.execute(
+      sql`
     select id, record_type as "recordType", name, scope, owner_id as "ownerId",
            is_default as "isDefault", is_active as "isActive", config
       from list_views
      where org_id = ${user.orgId} and record_type = ${recordType} and is_active
        and (scope = 'org' or owner_id = ${user.id})
      order by scope asc, is_default desc, name
-  `, "objects");
+  `,
+      "objects",
+    );
     return NextResponse.json({ rows: r });
   },
 });
@@ -69,8 +71,7 @@ export const POST = defineRoute({
   public: "session",
   body: postBodySchema0,
   handler: async ({ request: _req, authz, body: routeBody }) => {
-    if (!authz)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
 
     const body = routeBody as {
@@ -81,21 +82,14 @@ export const POST = defineRoute({
       isDefault?: boolean;
     };
     if (!body.recordType || !RECORD_TYPE_BY_KEY[body.recordType])
-      return NextResponse.json(
-        { error: "unknown record type" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "unknown record type" }, { status: 400 });
     const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
     if (refused) return refused;
-    if (!body.name?.trim())
-      return NextResponse.json({ error: "name required" }, { status: 400 });
+    if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
     // PATCH refuses a non-boolean isDefault. POST used to coerce with !! so a
     // truthy string (including "false") cleared sibling defaults and stored true.
     if (body.isDefault !== undefined && typeof body.isDefault !== "boolean") {
-      return NextResponse.json(
-        { error: "isDefault must be a boolean" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
     }
     const scope: "org" | "user" = body.scope === "org" ? "org" : "user";
     // org-scope views require the admin permission; personal views are self-service.
@@ -104,9 +98,7 @@ export const POST = defineRoute({
         { error: "missing permission: admin.customization.manage" },
         { status: 403 },
       );
-    const parsed = parseListView(
-      body.config ?? { schemaVersion: 1, recordType: body.recordType },
-    );
+    const parsed = parseListView(body.config ?? { schemaVersion: 1, recordType: body.recordType });
     if (!parsed.success)
       return NextResponse.json(
         { error: "invalid view config", issues: parsed.issues },
@@ -143,16 +135,19 @@ export const POST = defineRoute({
           scope,
           ownerId,
         };
-        if (body.isDefault === true)
-          await claimListViewDefaultSlot(tx, defaultScope);
-        const inserted = (await tx.execute<{ id: string; name: string }>(sql`
+        if (body.isDefault === true) await claimListViewDefaultSlot(tx, defaultScope);
+        const inserted = (
+          await tx.execute<{ id: string; name: string }>(
+            sql`
         insert into list_views (org_id, record_type, name, scope, owner_id, is_default, is_active,
                                 config, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${scope}, ${ownerId},
                 ${body.isDefault === true}, true, ${config}, ${user.id}, ${user.id})
-        returning id, name`, "objects"))[0]!;
-        if (body.isDefault === true)
-          await assertSingleListViewDefault(tx, defaultScope);
+        returning id, name`,
+            "objects",
+          )
+        )[0]!;
+        if (body.isDefault === true) await assertSingleListViewDefault(tx, defaultScope);
         await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'list_views', ${inserted.id}, 'insert', ${JSON.stringify({ name: body.name, scope })}, ${user.id})`);
@@ -165,8 +160,7 @@ export const POST = defineRoute({
       return dbWriteErrorResponse(e, {
         route: "customization:list-views",
         uniqueConflicts: {
-          list_views_org_scope_type_name:
-            "A view with that name already exists",
+          list_views_org_scope_type_name: "A view with that name already exists",
         },
       });
     }

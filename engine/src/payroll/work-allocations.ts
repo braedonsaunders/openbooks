@@ -75,7 +75,8 @@ export async function loadPayrollWorkAllocations(
   },
 ): Promise<PayrollWorkAllocation[]> {
   const ytdStart = `${input.taxYear}-01-01`;
-  const work = await tx.execute<WorkRow>(sql`
+  const work = await tx.execute<WorkRow>(
+    sql`
     select work_region as region, work_subregion as subregion,
            worked_on::text as "workedOn", hours::text as hours
       from time_entries
@@ -83,19 +84,29 @@ export async function loadPayrollWorkAllocations(
        and status = 'approved' and work_region is not null
        and worked_on between ${ytdStart}::date and ${input.periodEnd}::date
      order by worked_on, id
-  `, "objects");
-  const currentWork = work.filter((row) => row.workedOn >= input.periodStart && row.workedOn <= input.periodEnd);
+  `,
+    "objects",
+  );
+  const currentWork = work.filter(
+    (row) => row.workedOn >= input.periodStart && row.workedOn <= input.periodEnd,
+  );
   const ytdDaysByRegion = new Map<string, Set<string>>();
   for (const row of work) {
     const days = ytdDaysByRegion.get(row.region) ?? new Set<string>();
     days.add(row.workedOn);
     ytdDaysByRegion.set(row.region, days);
   }
-  const byRegion = new Map<string, { region: string; subregion: string | null; days: Set<string>; hours: string }>();
+  const byRegion = new Map<
+    string,
+    { region: string; subregion: string | null; days: Set<string>; hours: string }
+  >();
   for (const row of currentWork) {
     const key = `${row.region}\u0000${row.subregion ?? ""}`;
     const bucket = byRegion.get(key) ?? {
-      region: row.region, subregion: row.subregion, days: new Set<string>(), hours: "0",
+      region: row.region,
+      subregion: row.subregion,
+      days: new Set<string>(),
+      hours: "0",
     };
     bucket.days.add(row.workedOn);
     bucket.hours = add(bucket.hours, row.hours);
@@ -103,17 +114,21 @@ export async function loadPayrollWorkAllocations(
   }
 
   const hr = input.employmentId
-    ? await tx.execute<AllocationRow>(sql`
+    ? await tx.execute<AllocationRow>(
+        sql`
         select region, subregion, service_days as "serviceDays",
                work_share::text as "workShare", source
           from payroll_work_location_allocations
          where org_id = ${input.orgId} and employment_id = ${input.employmentId}
            and period_start = ${input.periodStart}::date and period_end = ${input.periodEnd}::date
          order by region, subregion
-      `, "objects")
-    : [] as AllocationRow[];
+      `,
+        "objects",
+      )
+    : ([] as AllocationRow[]);
   const hrYtd = input.employmentId
-    ? await tx.execute<{ region: string; serviceDays: number }>(sql`
+    ? await tx.execute<{ region: string; serviceDays: number }>(
+        sql`
         select region, sum(service_days)::int as "serviceDays"
           from payroll_work_location_allocations
          where org_id = ${input.orgId} and employment_id = ${input.employmentId}
@@ -132,68 +147,95 @@ export async function loadPayrollWorkAllocations(
                                      and payroll_work_location_allocations.period_end
            )
          group by region
-      `, "objects")
-    : [] as { region: string; serviceDays: number }[];
+      `,
+        "objects",
+      )
+    : ([] as { region: string; serviceDays: number }[]);
   const hrYtdDays = new Map(hrYtd.map((row) => [row.region, row.serviceDays]));
 
-  const source: SourceAllocation[] = currentWork.length > 0
-    ? (() => {
-      const regions = new Map<string, { hours: string; source: string }>();
-      const local = [...byRegion.values()].filter((bucket) => bucket.subregion !== null);
-      for (const bucket of byRegion.values()) {
-        const current = regions.get(bucket.region) ?? { hours: "0", source: "approved_time_entries" };
-        current.hours = add(current.hours, bucket.hours);
-        regions.set(bucket.region, current);
-      }
-      return [
-        ...[...regions].map(([region, bucket]) => ({
-          region, subregion: null, workShare: "0",
-          serviceDaysCurrentPeriod: [...(ytdDaysByRegion.get(region) ?? [])]
-            .filter((day) => day >= input.periodStart && day <= input.periodEnd).length,
-          serviceDaysYearToDate: ytdDaysByRegion.get(region)?.size ?? 0,
-          source: bucket.source, hours: bucket.hours,
-        })),
-        ...local.map((bucket) => ({
-          region: bucket.region, subregion: bucket.subregion, workShare: "0",
-          serviceDaysCurrentPeriod: bucket.days.size,
-          serviceDaysYearToDate: ytdDaysByRegion.get(bucket.region)?.size ?? 0,
-          source: "approved_time_entries", hours: bucket.hours,
-        })),
-      ];
-    })()
-    : (() => {
-      const rowsByRegion = new Map<string, AllocationRow[]>();
-      for (const row of hr) rowsByRegion.set(row.region, [...(rowsByRegion.get(row.region) ?? []), row]);
-      const regions: SourceAllocation[] = [];
-      for (const [region, rows] of rowsByRegion) {
-        const explicitRegion = rows.find((row) => row.subregion === null);
-        const leaves = rows.filter((row) => row.subregion !== null);
-        const serviceDays = explicitRegion?.serviceDays ?? (leaves.some((row) => row.serviceDays !== null)
-          ? leaves.reduce((total, row) => total + (row.serviceDays ?? 0), 0) : null);
-        regions.push({
-          region, subregion: null,
-          workShare: explicitRegion?.workShare ?? leaves.reduce((total, row) =>
-            add(total, row.workShare ?? "0"), "0"),
-          serviceDaysCurrentPeriod: serviceDays,
-          serviceDaysYearToDate: ytdDaysByRegion.has(region) || hrYtdDays.has(region)
-            ? (ytdDaysByRegion.get(region)?.size ?? 0) + (hrYtdDays.get(region) ?? 0)
-            : null,
-          source: explicitRegion?.source ?? leaves[0]?.source ?? "hr_records",
-          hours: "0",
-        });
-      }
-      return [
-        ...regions,
-        ...hr.filter((row) => row.subregion !== null).map((row) => ({
-          region: row.region, subregion: row.subregion, workShare: row.workShare ?? "0",
-          serviceDaysCurrentPeriod: row.serviceDays,
-          serviceDaysYearToDate: ytdDaysByRegion.has(row.region) || hrYtdDays.has(row.region)
-            ? (ytdDaysByRegion.get(row.region)?.size ?? 0) + (hrYtdDays.get(row.region) ?? 0)
-            : null,
-          source: row.source, hours: "0",
-        })),
-      ];
-    })();
+  const source: SourceAllocation[] =
+    currentWork.length > 0
+      ? (() => {
+          const regions = new Map<string, { hours: string; source: string }>();
+          const local = [...byRegion.values()].filter((bucket) => bucket.subregion !== null);
+          for (const bucket of byRegion.values()) {
+            const current = regions.get(bucket.region) ?? {
+              hours: "0",
+              source: "approved_time_entries",
+            };
+            current.hours = add(current.hours, bucket.hours);
+            regions.set(bucket.region, current);
+          }
+          return [
+            ...[...regions].map(([region, bucket]) => ({
+              region,
+              subregion: null,
+              workShare: "0",
+              serviceDaysCurrentPeriod: [...(ytdDaysByRegion.get(region) ?? [])].filter(
+                (day) => day >= input.periodStart && day <= input.periodEnd,
+              ).length,
+              serviceDaysYearToDate: ytdDaysByRegion.get(region)?.size ?? 0,
+              source: bucket.source,
+              hours: bucket.hours,
+            })),
+            ...local.map((bucket) => ({
+              region: bucket.region,
+              subregion: bucket.subregion,
+              workShare: "0",
+              serviceDaysCurrentPeriod: bucket.days.size,
+              serviceDaysYearToDate: ytdDaysByRegion.get(bucket.region)?.size ?? 0,
+              source: "approved_time_entries",
+              hours: bucket.hours,
+            })),
+          ];
+        })()
+      : (() => {
+          const rowsByRegion = new Map<string, AllocationRow[]>();
+          for (const row of hr)
+            rowsByRegion.set(row.region, [...(rowsByRegion.get(row.region) ?? []), row]);
+          const regions: SourceAllocation[] = [];
+          for (const [region, rows] of rowsByRegion) {
+            const explicitRegion = rows.find((row) => row.subregion === null);
+            const leaves = rows.filter((row) => row.subregion !== null);
+            const serviceDays =
+              explicitRegion?.serviceDays ??
+              (leaves.some((row) => row.serviceDays !== null)
+                ? leaves.reduce((total, row) => total + (row.serviceDays ?? 0), 0)
+                : null);
+            regions.push({
+              region,
+              subregion: null,
+              workShare:
+                explicitRegion?.workShare ??
+                leaves.reduce((total, row) => add(total, row.workShare ?? "0"), "0"),
+              serviceDaysCurrentPeriod: serviceDays,
+              serviceDaysYearToDate:
+                ytdDaysByRegion.has(region) || hrYtdDays.has(region)
+                  ? (ytdDaysByRegion.get(region)?.size ?? 0) + (hrYtdDays.get(region) ?? 0)
+                  : null,
+              source: explicitRegion?.source ?? leaves[0]?.source ?? "hr_records",
+              hours: "0",
+            });
+          }
+          return [
+            ...regions,
+            ...hr
+              .filter((row) => row.subregion !== null)
+              .map((row) => ({
+                region: row.region,
+                subregion: row.subregion,
+                workShare: row.workShare ?? "0",
+                serviceDaysCurrentPeriod: row.serviceDays,
+                serviceDaysYearToDate:
+                  ytdDaysByRegion.has(row.region) || hrYtdDays.has(row.region)
+                    ? (ytdDaysByRegion.get(row.region)?.size ?? 0) +
+                      (hrYtdDays.get(row.region) ?? 0)
+                    : null,
+                source: row.source,
+                hours: "0",
+              })),
+          ];
+        })();
 
   if (source.length === 0) return [];
   const regional = source.filter((entry) => entry.subregion === null);
@@ -208,42 +250,80 @@ export async function loadPayrollWorkAllocations(
       const totalDays = days.reduce((total, value) => total + BigInt(value), 0n);
       if (totalDays > 0n) {
         regional.forEach((entry, index) => {
-          entry.workShare = shareText((BigInt(days[index]!) * SHARE_SCALE + totalDays / 2n) / totalDays);
+          entry.workShare = shareText(
+            (BigInt(days[index]!) * SHARE_SCALE + totalDays / 2n) / totalDays,
+          );
         });
       }
     }
     for (const regionEntry of regional) {
       const regionLocal = local.filter((entry) => entry.region === regionEntry.region);
-      const totalLocalShares = regionLocal.reduce((total, entry) => total + shareUnits(entry.workShare), 0n);
-      if (totalLocalShares !== 0n || !regionLocal.some((entry) => entry.serviceDaysCurrentPeriod !== null)) continue;
-      const localDays = regionLocal.reduce((total, entry) => total + BigInt(entry.serviceDaysCurrentPeriod ?? 0), 0n);
-      if (localDays > 0n) regionLocal.forEach((entry) => {
-        const withinRegion = (BigInt(entry.serviceDaysCurrentPeriod ?? 0) * SHARE_SCALE + localDays / 2n) / localDays;
-        entry.workShare = shareText((shareUnits(regionEntry.workShare) * withinRegion + SHARE_SCALE / 2n) / SHARE_SCALE);
-      });
+      const totalLocalShares = regionLocal.reduce(
+        (total, entry) => total + shareUnits(entry.workShare),
+        0n,
+      );
+      if (
+        totalLocalShares !== 0n ||
+        !regionLocal.some((entry) => entry.serviceDaysCurrentPeriod !== null)
+      )
+        continue;
+      const localDays = regionLocal.reduce(
+        (total, entry) => total + BigInt(entry.serviceDaysCurrentPeriod ?? 0),
+        0n,
+      );
+      if (localDays > 0n)
+        regionLocal.forEach((entry) => {
+          const withinRegion =
+            (BigInt(entry.serviceDaysCurrentPeriod ?? 0) * SHARE_SCALE + localDays / 2n) /
+            localDays;
+          entry.workShare = shareText(
+            (shareUnits(regionEntry.workShare) * withinRegion + SHARE_SCALE / 2n) / SHARE_SCALE,
+          );
+        });
     }
-    const normalizedShares = regional.reduce((total, entry) => total + shareUnits(entry.workShare), 0n);
+    const normalizedShares = regional.reduce(
+      (total, entry) => total + shareUnits(entry.workShare),
+      0n,
+    );
     if (normalizedShares !== SHARE_SCALE) {
       // Leave unusable shares visible to the jurisdiction rule, which can
       // refuse the required allocation by name instead of guessing.
-      return source.map(({ region, subregion, workShare, source: provenance,
-        serviceDaysCurrentPeriod, serviceDaysYearToDate }) => ({
-        region, subRegion: subregion, workShare, source: provenance,
-        serviceDaysCurrentPeriod, serviceDaysYearToDate, sourceWagesCurrentPeriod: null,
-        sourceWagesYearToDate: null,
-      }));
+      return source.map(
+        ({
+          region,
+          subregion,
+          workShare,
+          source: provenance,
+          serviceDaysCurrentPeriod,
+          serviceDaysYearToDate,
+        }) => ({
+          region,
+          subRegion: subregion,
+          workShare,
+          source: provenance,
+          serviceDaysCurrentPeriod,
+          serviceDaysYearToDate,
+          sourceWagesCurrentPeriod: null,
+          sourceWagesYearToDate: null,
+        }),
+      );
     }
   } else {
-    regional.forEach((entry) => { entry.workShare = ratioShare(entry.hours, totalHours); });
-    local.forEach((entry) => { entry.workShare = ratioShare(entry.hours, totalHours); });
+    regional.forEach((entry) => {
+      entry.workShare = ratioShare(entry.hours, totalHours);
+    });
+    local.forEach((entry) => {
+      entry.workShare = ratioShare(entry.hours, totalHours);
+    });
     const shareTotal = regional.reduce((total, entry) => total + shareUnits(entry.workShare), 0n);
     if (shareTotal !== SHARE_SCALE) {
-      const largest = regional.reduce((best, row) => cmp(row.hours, best.hours) > 0 ? row : best);
+      const largest = regional.reduce((best, row) => (cmp(row.hours, best.hours) > 0 ? row : best));
       largest.workShare = shareText(shareUnits(largest.workShare) + SHARE_SCALE - shareTotal);
     }
   }
 
-  const priorStubs = await tx.execute<{ count: number; traced: number }>(sql`
+  const priorStubs = await tx.execute<{ count: number; traced: number }>(
+    sql`
     select count(*)::int as count,
            count(*) filter (where exists (
              select 1 from jsonb_each_text(coalesce(stub.factors, '{}'::jsonb)) fact(key, value)
@@ -255,10 +335,14 @@ export async function loadPayrollWorkAllocations(
      where stub.org_id = ${input.orgId} and stub.employee_party_id = ${input.employeePartyId}
        and stub.tax_year = ${input.taxYear} and stub.pay_run_document_id <> ${input.documentId}
        and run.run_status = 'committed' and doc.status <> 'voided'
-  `, "objects");
+  `,
+    "objects",
+  );
   const priorStubCount = priorStubs[0]?.count ?? 0;
-  const sourceWageHistoryComplete = priorStubCount === 0 || priorStubs[0]?.traced === priorStubCount;
-  const wageFactors = await tx.execute<{ region: string; wages: string }>(sql`
+  const sourceWageHistoryComplete =
+    priorStubCount === 0 || priorStubs[0]?.traced === priorStubCount;
+  const wageFactors = await tx.execute<{ region: string; wages: string }>(
+    sql`
     select fact.key as region, sum(fact.value::numeric)::text as wages
       from pay_stubs stub
       join pay_runs run on run.org_id = stub.org_id and run.document_id = stub.pay_run_document_id
@@ -269,18 +353,30 @@ export async function loadPayrollWorkAllocations(
        and run.run_status = 'committed' and doc.status <> 'voided'
        and fact.key like 'work_source_wages:%'
      group by fact.key
-  `, "objects");
-  const ytdWages = new Map(wageFactors.map((row) => [row.region.slice("work_source_wages:".length), row.wages]));
-  return source.map(({ region, subregion, workShare, source: provenance,
-    serviceDaysCurrentPeriod, serviceDaysYearToDate }) => ({
-    region,
-    subRegion: subregion,
-    workShare,
-    source: provenance,
-    serviceDaysCurrentPeriod,
-    serviceDaysYearToDate,
-    sourceWagesCurrentPeriod: mulDecimalFactors(input.currentWages, [workShare]),
-    sourceWagesYearToDate: ytdWages.get(region) ?? (sourceWageHistoryComplete ? "0.0000" : null),
-    periodsYearToDate: priorStubCount + 1,
-  }));
+  `,
+    "objects",
+  );
+  const ytdWages = new Map(
+    wageFactors.map((row) => [row.region.slice("work_source_wages:".length), row.wages]),
+  );
+  return source.map(
+    ({
+      region,
+      subregion,
+      workShare,
+      source: provenance,
+      serviceDaysCurrentPeriod,
+      serviceDaysYearToDate,
+    }) => ({
+      region,
+      subRegion: subregion,
+      workShare,
+      source: provenance,
+      serviceDaysCurrentPeriod,
+      serviceDaysYearToDate,
+      sourceWagesCurrentPeriod: mulDecimalFactors(input.currentWages, [workShare]),
+      sourceWagesYearToDate: ytdWages.get(region) ?? (sourceWageHistoryComplete ? "0.0000" : null),
+      periodsYearToDate: priorStubCount + 1,
+    }),
+  );
 }

@@ -52,8 +52,13 @@ import {
   type BucketVerdict,
 } from "@openbooks/engine/sync/gl-reconcile-source-queries";
 
-const ORG = process.argv.find((a) => a.startsWith("--org="))?.split("=")[1]
-  ?? process.env.RECONCILE_ORG ?? (process.env.PROD_ORG ?? (() => { throw new Error("PROD_ORG is required"); })());
+const ORG =
+  process.argv.find((a) => a.startsWith("--org="))?.split("=")[1] ??
+  process.env.RECONCILE_ORG ??
+  process.env.PROD_ORG ??
+  (() => {
+    throw new Error("PROD_ORG is required");
+  })();
 const SINCE = parseSince(process.argv.find((a) => a.startsWith("--since="))?.split("=")[1]);
 /** Explicit opt-in to an empty comparison population (see the verdict below). */
 const ALLOW_EMPTY = process.argv.includes("--allow-empty");
@@ -92,7 +97,9 @@ const line = (verdict: BucketVerdict) => {
 };
 
 (async () => {
-  const org = (await retry(() => db.execute(sql`select name, env_kind from orgs where id = ${ORG}`, "objects")))[0];
+  const org = (
+    await retry(() => db.execute(sql`select name, env_kind from orgs where id = ${ORG}`, "objects"))
+  )[0];
   if (!org) throw new Error(`no such org: ${ORG}`);
   console.log(`${org.name} (${org.env_kind})  —  posting on/after ${SINCE}\n`);
 
@@ -103,7 +110,9 @@ const line = (verdict: BucketVerdict) => {
   // to the display labels, and the grouped queries below still fail loudly.
   let symbolById = new Map<string, string>();
   try {
-    const symbols = await retry(() => client.query<{ id: string; symbol: string }>(SOURCE_CURRENCY_SYMBOL_QUERY));
+    const symbols = await retry(() =>
+      client.query<{ id: string; symbol: string }>(SOURCE_CURRENCY_SYMBOL_QUERY),
+    );
     symbolById = new Map(
       symbols
         .filter((row) => /^[A-Za-z]{3}$/.test(String(row.symbol ?? "").trim()))
@@ -112,7 +121,9 @@ const line = (verdict: BucketVerdict) => {
   } catch {
     // Fall through with display labels only; see the comment above.
   }
-  const subsidiaries = await retry(() => client.query<{ id: string; currency: string; currencylabel: string }>(SOURCE_SUBSIDIARY_QUERY));
+  const subsidiaries = await retry(() =>
+    client.query<{ id: string; currency: string; currencylabel: string }>(SOURCE_SUBSIDIARY_QUERY),
+  );
   const subsidiaryIso = new Map(
     subsidiaries.map((row) => [
       String(row.id),
@@ -120,25 +131,45 @@ const line = (verdict: BucketVerdict) => {
     ]),
   );
 
-  const srcPlRows = await retry(() => client.query<{ subsidiary: string; revenue: string; cost: string }>(sourcePlQuery(SINCE)));
+  const srcPlRows = await retry(() =>
+    client.query<{ subsidiary: string; revenue: string; cost: string }>(sourcePlQuery(SINCE)),
+  );
   const srcRevenue = srcPlRows.map((row) => {
     const iso = subsidiaryIso.get(String(row.subsidiary ?? ""));
-    if (!iso) throw new Error(`source P&L references unmapped subsidiary ${String(row.subsidiary ?? "unstated")}; refresh the source subsidiary population before comparing`);
+    if (!iso)
+      throw new Error(
+        `source P&L references unmapped subsidiary ${String(row.subsidiary ?? "unstated")}; refresh the source subsidiary population before comparing`,
+      );
     return { currency: iso, amount: String(row.revenue ?? "0") };
   });
   const srcCost = srcPlRows.map((row) => {
     const iso = subsidiaryIso.get(String(row.subsidiary ?? ""));
-    if (!iso) throw new Error(`source P&L references unmapped subsidiary ${String(row.subsidiary ?? "unstated")}; refresh the source subsidiary population before comparing`);
+    if (!iso)
+      throw new Error(
+        `source P&L references unmapped subsidiary ${String(row.subsidiary ?? "unstated")}; refresh the source subsidiary population before comparing`,
+      );
     return { currency: iso, amount: String(row.cost ?? "0") };
   });
-  const srcInvRows = await retry(() => client.query<{ currency_id: string; currency_label: string; n: string; total: string }>(sourceInvoiceQuery(SINCE)));
+  const srcInvRows = await retry(() =>
+    client.query<{ currency_id: string; currency_label: string; n: string; total: string }>(
+      sourceInvoiceQuery(SINCE),
+    ),
+  );
   const srcInvoices = srcInvRows.map((row) => ({
-    currency: sourceIsoCurrency("invoice currency", String(row.currency_id ?? row.currency_label ?? ""), row.currency_id, row.currency_label, symbolById),
+    currency: sourceIsoCurrency(
+      "invoice currency",
+      String(row.currency_id ?? row.currency_label ?? ""),
+      row.currency_id,
+      row.currency_label,
+      symbolById,
+    ),
     n: Number(row.n ?? 0),
     total: String(row.total ?? "0"),
   }));
 
-  const ours = await retry(() => db.execute<LedgerTotals>(sql`
+  const ours = await retry(() =>
+    db.execute<LedgerTotals>(
+      sql`
     select s.base_currency as currency, je.subsidiary_id::text as subsidiary,
            coalesce(sum(-jl.amount) filter (where a.type = any(${`{${REVENUE.join(",")}}`}::text[])), 0)::text revenue,
            coalesce(sum(jl.amount) filter (where a.type = any(${`{${COST.join(",")}}`}::text[])), 0)::text cost
@@ -147,30 +178,48 @@ const line = (verdict: BucketVerdict) => {
       join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
       left join subsidiaries s on s.id = je.subsidiary_id and s.org_id = jl.org_id
      where jl.org_id = ${ORG} and je.posting_date >= ${SINCE}
-     group by s.base_currency, je.subsidiary_id`, "objects"));
+     group by s.base_currency, je.subsidiary_id`,
+      "objects",
+    ),
+  );
   for (const row of ours) {
     if (!row.currency) {
-      throw new Error(`postings for subsidiary ${row.subsidiary} have no base currency; assign the legal entity a base currency before comparing`);
+      throw new Error(
+        `postings for subsidiary ${row.subsidiary} have no base currency; assign the legal entity a base currency before comparing`,
+      );
     }
   }
-  const ourInv = await retry(() => db.execute<InvoiceTotals>(sql`
+  const ourInv = await retry(() =>
+    db.execute<InvoiceTotals>(
+      sql`
     select currency, count(*)::int n, coalesce(sum(total), 0)::text total from documents
      where org_id = ${ORG} and kind = 'customer_invoice' and status = 'posted' and document_date >= ${SINCE}
-     group by currency`, "objects"));
+     group by currency`,
+      "objects",
+    ),
+  );
 
   // No FX translation anywhere below: each bucket is compared in its stated
   // currency, and a currency one side lacks zero-fills into a difference.
   // Every verdict below is exact — decimal to the unit, counts to the
   // integer — because no materiality policy authorises a tolerance.
   console.log("LEDGER (one verdict per functional currency; no combined total)");
-  for (const bucket of alignMoneyBuckets(ours.map((row) => ({ currency: String(row.currency), amount: row.revenue })), srcRevenue)) {
+  for (const bucket of alignMoneyBuckets(
+    ours.map((row) => ({ currency: String(row.currency), amount: row.revenue })),
+    srcRevenue,
+  )) {
     line(compareMoneyBucket(`[${bucket.currency}] revenue`, bucket.ours, bucket.theirs));
   }
-  for (const bucket of alignMoneyBuckets(ours.map((row) => ({ currency: String(row.currency), amount: row.cost })), srcCost)) {
+  for (const bucket of alignMoneyBuckets(
+    ours.map((row) => ({ currency: String(row.currency), amount: row.cost })),
+    srcCost,
+  )) {
     line(compareMoneyBucket(`[${bucket.currency}] cost`, bucket.ours, bucket.theirs));
   }
   console.log("\nCUSTOMER INVOICES (one verdict per transaction currency; no combined total)");
-  const invoiceCurrencies = [...new Set([...ourInv.map((row) => row.currency), ...srcInvoices.map((row) => row.currency)])].sort();
+  const invoiceCurrencies = [
+    ...new Set([...ourInv.map((row) => row.currency), ...srcInvoices.map((row) => row.currency)]),
+  ].sort();
   const ourInvByCurrency = new Map(ourInv.map((row) => [row.currency, row]));
   const srcInvByCurrency = new Map(srcInvoices.map((row) => [row.currency, row]));
   for (const currency of invoiceCurrencies) {
@@ -182,7 +231,10 @@ const line = (verdict: BucketVerdict) => {
 
   // Job detail only exists after cutover; before it the history is year-end
   // summary journals with no project, so a job margin spanning both is meaningless.
-  const job = (await retry(() => db.execute<JobTotals>(sql`
+  const job = (
+    await retry(() =>
+      db.execute<JobTotals>(
+        sql`
     select coalesce(sum(-jl.amount) filter (where a.type = any(${`{${REVENUE.join(",")}}`}::text[])), 0)::text revenue,
            coalesce(sum(jl.amount) filter (where a.type = any(${`{${COST.join(",")}}`}::text[])), 0)::text cost,
            coalesce(sum(jl.amount) filter (where je.origin = 'overhead_applied'), 0)::text overhead,
@@ -190,22 +242,31 @@ const line = (verdict: BucketVerdict) => {
       from journal_lines jl
       join accounts a on a.id = jl.account_id
       join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
-     where jl.org_id = ${ORG} and jl.project_id is not null and je.posting_date >= ${SINCE}`, "objects")))[0]!;
+     where jl.org_id = ${ORG} and jl.project_id is not null and je.posting_date >= ${SINCE}`,
+        "objects",
+      ),
+    )
+  )[0]!;
   console.log(`\nJOB-TAGGED (${job.projects} projects, detail exists only after cutover)`);
-  console.log(`  revenue ${formatMoney(job.revenue)}   cost ${formatMoney(job.cost)}   of which applied overhead ${formatMoney(job.overhead)}`);
+  console.log(
+    `  revenue ${formatMoney(job.revenue)}   cost ${formatMoney(job.cost)}   of which applied overhead ${formatMoney(job.overhead)}`,
+  );
   const refusal = emptyPopulationRefusal(verdicts, ALLOW_EMPTY);
   if (refusal) {
     console.error(`\nREFUSES: ${refusal}`);
     process.exitCode = 1;
   } else if (verdictsDiffer(verdicts)) {
-    console.log(`\nDIFFERS: ${verdicts.filter((verdict) => verdict.status !== "ok").length} of ${verdicts.length} buckets disagree with the source system`);
+    console.log(
+      `\nDIFFERS: ${verdicts.filter((verdict) => verdict.status !== "ok").length} of ${verdicts.length} buckets disagree with the source system`,
+    );
     process.exitCode = 1;
   } else {
     console.log(`\nAGREES: all ${verdicts.length} buckets match the source system exactly`);
   }
 })().catch((e) => {
   const chain: string[] = [];
-  for (let c = e; c; c = c.cause) if (c?.message) chain.push(String(c.message).replace(/\s+/g, " ").slice(0, 250));
+  for (let c = e; c; c = c.cause)
+    if (c?.message) chain.push(String(c.message).replace(/\s+/g, " ").slice(0, 250));
   console.error("FATAL:", chain.pop() ?? "unknown");
   process.exit(1);
 });

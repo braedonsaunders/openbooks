@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  createJobLevel,
-  listJobLevels,
-} from "@openbooks/engine/hrm/compensation/architecture";
+import { createJobLevel, listJobLevels } from "@openbooks/engine/hrm/compensation/architecture";
 import { isUuid } from "../../../../lib/list-params";
 import { compensationErrorResponse } from "../compensation/_lib";
 import { createLevelBody } from "../compensation/bodies";
@@ -19,10 +16,7 @@ export const GET = defineRoute({
     const url = new URL(req.url);
     const familyId = url.searchParams.get("familyId");
     if (familyId !== null && familyId !== "" && !isUuid(familyId)) {
-      return NextResponse.json(
-        { error: "familyId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "familyId must be a uuid" }, { status: 400 });
     }
     const includeInactive = url.searchParams.get("includeInactive") === "1";
     try {

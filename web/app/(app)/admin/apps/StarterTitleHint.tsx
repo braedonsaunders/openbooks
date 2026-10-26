@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import { starterTitleState } from '@/lib/apps/starter'
-import type { AppManifest } from '@/lib/apps/manifest'
-import type { AppPackageFile } from '@/lib/apps/package-files'
+import { useTranslations } from "next-intl";
+import { starterTitleState } from "@/lib/apps/starter";
+import type { AppManifest } from "@/lib/apps/manifest";
+import type { AppPackageFile } from "@/lib/apps/package-files";
 
 /**
  * General-tab guidance answering "will renaming this app move its screen
@@ -15,21 +15,20 @@ export function StarterTitleHint({
   files,
   manifest,
 }: {
-  files: Pick<AppPackageFile, 'path' | 'content' | 'isBinary'>[]
-  manifest: AppManifest
+  files: Pick<AppPackageFile, "path" | "content" | "isBinary">[];
+  manifest: AppManifest;
 }) {
-  const t = useTranslations('apps.editor')
-  const state = starterTitleState(files, manifest.frontend)
-  if (state === 'unknown') return null
-  if (state === 'custom')
-    return <p className="text-xs text-slate-500">{t('titleCustom')}</p>
+  const t = useTranslations("apps.editor");
+  const state = starterTitleState(files, manifest.frontend);
+  if (state === "unknown") return null;
+  if (state === "custom") return <p className="text-xs text-slate-500">{t("titleCustom")}</p>;
   return (
     <p className="text-xs text-slate-500">
       {t(
-        manifest.frontend.renderer === 'sandbox'
-          ? 'titleFollowsNameSandbox'
-          : 'titleFollowsNameNative',
+        manifest.frontend.renderer === "sandbox"
+          ? "titleFollowsNameSandbox"
+          : "titleFollowsNameNative",
       )}
     </p>
-  )
+  );
 }

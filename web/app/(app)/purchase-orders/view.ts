@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   page,
   pageHeader,
@@ -10,21 +10,21 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { mergeHref, pickString, isUuid } from '../../../lib/list-params'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { requirePermission, can } from '../../../lib/authz'
-import { purchaseOrderConversionPermission } from '../../../lib/permissions'
-import { CONVERSION_TARGETS } from '../../../lib/order-kinds'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../lib/features'
-import { dropShipOrderStatus } from '@openbooks/engine/sales/drop-ship'
-import { loadOrder } from '../../api/_order/lib'
-import type { OrderDrawer } from '../_order/OrderDrawer'
-import { resolveFormLayout } from '../../../lib/customization/resolve'
-import { customSegmentOptions } from '../../../lib/segments'
+} from "@braedonsaunders/appkit-viewspec";
+import { mergeHref, pickString, isUuid } from "../../../lib/list-params";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { requirePermission, can } from "../../../lib/authz";
+import { purchaseOrderConversionPermission } from "../../../lib/permissions";
+import { CONVERSION_TARGETS } from "../../../lib/order-kinds";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../lib/features";
+import { dropShipOrderStatus } from "@openbooks/engine/sales/drop-ship";
+import { loadOrder } from "../../api/_order/lib";
+import type { OrderDrawer } from "../_order/OrderDrawer";
+import { resolveFormLayout } from "../../../lib/customization/resolve";
+import { customSegmentOptions } from "../../../lib/segments";
 import { taxCodeOptions, taxGroupOptions } from "../../../lib/documents.ts";
-import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
+import { subsidiaryUiOptions } from "../../../lib/subsidiaries";
 
 /**
  * Purchase orders, split into a loader and a spec.
@@ -39,64 +39,72 @@ import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
  * passes, in the native order.
  */
 
-const KIND = 'purchase_order' as const
-const BASE = '/purchase-orders'
-const PARAM = 'order'
-const API = '/api/purchase-orders'
-const CREATE_PARAM = 'orderNew'
-type OrderDrawerProps = Parameters<typeof OrderDrawer>[0]
-type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
+const KIND = "purchase_order" as const;
+const BASE = "/purchase-orders";
+const PARAM = "order";
+const API = "/api/purchase-orders";
+const CREATE_PARAM = "orderNew";
+type OrderDrawerProps = Parameters<typeof OrderDrawer>[0];
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never;
 
 export interface PurchaseOrdersData {
-  title: string
-  description: string
-  canManage: boolean
+  title: string;
+  description: string;
+  canManage: boolean;
   /** The New action hides without the create grant; the header then shows
    * the shared missing-grant hint instead (permission-hint widget). */
-  showCreateHint: boolean
-  createHintAction: string
-  currentParams: Record<string, string | string[] | undefined>
-  newOrderButtonLabel: string
-  baseCurrencyConfigured: boolean
-  createFailedMessage: string
-  showNewRedirect: boolean
-  drawer: (Record<string, unknown> & { remountKey: string }) | null
+  showCreateHint: boolean;
+  createHintAction: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  newOrderButtonLabel: string;
+  baseCurrencyConfigured: boolean;
+  createFailedMessage: string;
+  showNewRedirect: boolean;
+  drawer: (Record<string, unknown> & { remountKey: string }) | null;
 }
 
 export async function loadPurchaseOrders(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PurchaseOrdersData> {
-  const authz = await requirePermission('purchase_orders.read')
-  await requireFeatureEnabled(authz.user.orgId, 'orders')
-  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
-  const dropShipping = await isFeatureEnabled(authz.user.orgId, 'dropShipping')
-  const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
-  const canManage = can(authz, 'purchase_orders.create')
-  const t = await getTranslations('purchaseOrders')
-  const openId = pickString(sp[PARAM])
+  const authz = await requirePermission("purchase_orders.read");
+  await requireFeatureEnabled(authz.user.orgId, "orders");
+  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, "inventory");
+  const dropShipping = await isFeatureEnabled(authz.user.orgId, "dropShipping");
+  const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, "barcodeScanning");
+  const canManage = can(authz, "purchase_orders.create");
+  const t = await getTranslations("purchaseOrders");
+  const openId = pickString(sp[PARAM]);
   // The inventory receive entry deep-links here with the receipt form
   // already raised (?order=<id>&receive=1). The drawer honors it only for
   // an approved order the viewer may receive.
-  const receiveRequested = pickString(sp.receive) === '1'
+  const receiveRequested = pickString(sp.receive) === "1";
   // Only a real document id may reach the uuid comparison: the create view
   // (no id, or the literal 'new') must not bind '' or 'new' to a uuid column.
-  const openDocumentId = openId && isUuid(openId) ? openId : null
+  const openDocumentId = openId && isUuid(openId) ? openId : null;
   // Unsaved-create: ?orderNew=1 opens an editable drawer on an in-memory
   // payload — zero writes on open, zero on Cancel, one idempotent POST on
   // Save. ?order=new deep links keep working through the redirect widget.
-  const creating = pickString(sp[CREATE_PARAM]) === '1' && canManage
-  const opening = (openId && openId !== 'new') || creating
+  const creating = pickString(sp[CREATE_PARAM]) === "1" && canManage;
+  const opening = (openId && openId !== "new") || creating;
   // The draft currency is the org's base currency — never invented. The New
   // button needs it on every render: without a configured currency it keeps
   // the draft-API path (which refuses by name with the setup remedy) instead
   // of opening an unsaved drawer, and a direct create URL opens no draft.
-  const baseCurrency = (await db.execute<{ base_currency: string | null }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`, 'objects'))[0]?.base_currency ?? null
+  const baseCurrency =
+    (
+      await db.execute<{ base_currency: string | null }>(
+        sql`select base_currency from orgs where id = ${authz.user.orgId}`,
+        "objects",
+      )
+    )[0]?.base_currency ?? null;
 
   const [openOrder, pickers] = await Promise.all([
-    openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds) : null,
+    openId && openId !== "new"
+      ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds)
+      : null,
     opening
       ? Promise.all([
-          db.execute<ElementOf<OrderDrawerProps['parties']>>(sql`
+          db.execute<ElementOf<OrderDrawerProps["parties"]>>(sql`
             select p.id, p.display_name from parties p
              where p.org_id = ${authz.user.orgId} and p.is_active
                and exists (
@@ -104,30 +112,38 @@ export async function loadPurchaseOrders(
                   where role.org_id = p.org_id and role.party_id = p.id and role.is_active
                )
              order by p.display_name limit 2000`),
-          db.execute<ElementOf<OrderDrawerProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`),
-          db.execute<ElementOf<OrderDrawerProps['items']>>(sql`
+          db.execute<ElementOf<OrderDrawerProps["accounts"]>>(
+            sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`,
+          ),
+          db.execute<ElementOf<OrderDrawerProps["items"]>>(sql`
             select it.id, it.code, it.name, it.default_rate, it.default_cost, it.income_account_id, it.expense_account_id, it.tax_code_id, it.unit,
                    exists (select 1 from item_inventory_profiles p where p.org_id = it.org_id and p.item_id = it.id) as has_inventory_profile
               from items it
              where it.org_id = ${authz.user.orgId} and it.is_active
                and (
                  ${inventoryEnabled ? sql`true` : sql`it.kind not in ('inventory', 'assembly', 'kit')`}
-                 ${openDocumentId
-                   ? sql`or it.id in (
+                 ${
+                   openDocumentId
+                     ? sql`or it.id in (
                        select item_id from document_lines
                         where org_id = ${authz.user.orgId} and document_id = ${openDocumentId} and item_id is not null
                      )`
-                   : sql``}
+                     : sql``
+                 }
                )
              order by it.name limit 2000`),
           taxCodeOptions(authz.user.orgId),
           taxGroupOptions(authz.user.orgId),
-          db.execute<ElementOf<OrderDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`),
-          db.execute<ElementOf<OrderDrawerProps['projects']>>(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`),
+          db.execute<ElementOf<OrderDrawerProps["departments"]>>(
+            sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`,
+          ),
+          db.execute<ElementOf<OrderDrawerProps["projects"]>>(
+            sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`,
+          ),
           customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
           subsidiaryUiOptions(authz.user.orgId),
           inventoryEnabled
-            ? db.execute<ElementOf<OrderDrawerProps['stockLocations']>>(sql`
+            ? db.execute<ElementOf<OrderDrawerProps["stockLocations"]>>(sql`
               select sl.id, sl.code, l.subsidiary_id as "subsidiaryId"
                 from stock_locations sl
                 join locations l on l.id = sl.location_id and l.org_id = sl.org_id
@@ -135,32 +151,51 @@ export async function loadPurchaseOrders(
             : null,
         ])
       : null,
-  ])
-  const linkedSalesOrderId = openOrder && dropShipping
-    ? (await db.execute<{ sales_order_id: string }>(sql`
+  ]);
+  const linkedSalesOrderId =
+    openOrder && dropShipping
+      ? ((
+          await db.execute<{ sales_order_id: string }>(
+            sql`
         select sales_order_id from drop_ship_orders
-         where org_id = ${authz.user.orgId} and purchase_order_id = ${openDocumentId}`, 'objects'))[0]?.sales_order_id ?? null
-    : null
+         where org_id = ${authz.user.orgId} and purchase_order_id = ${openDocumentId}`,
+            "objects",
+          )
+        )[0]?.sales_order_id ?? null)
+      : null;
   const dropShipLines = linkedSalesOrderId
-    ? await dropShipOrderStatus(db, authz.user.orgId, linkedSalesOrderId, authz.allowedSubsidiaryIds)
-    : []
-  const resolvedForm = openOrder && pickers ? await resolveFormLayout({
-    orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,
-    userRoles: authz.user.roles.map(({ key }) => key), headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
-  }) : null
-  const drawerOrder = openOrder as unknown as OrderDrawerProps['order'] | null
+    ? await dropShipOrderStatus(
+        db,
+        authz.user.orgId,
+        linkedSalesOrderId,
+        authz.allowedSubsidiaryIds,
+      )
+    : [];
+  const resolvedForm =
+    openOrder && pickers
+      ? await resolveFormLayout({
+          orgId: authz.user.orgId,
+          userId: authz.user.id,
+          recordType: KIND,
+          userRoles: authz.user.roles.map(({ key }) => key),
+          headerDefs: [],
+          lineDefs: [],
+          explicitLayoutId: pickString(sp.form),
+        })
+      : null;
+  const drawerOrder = openOrder as unknown as OrderDrawerProps["order"] | null;
   // In-memory payload for the unsaved drawer: a draft header with no number
   // (allocated inside the Save transaction), no lines, no links, and the
   // org's currency/today so totals and date fields render before Save.
   const createDefaults = creating
     ? { currency: baseCurrency, today: await businessToday(authz.user.orgId) }
-    : null
-  const unsavedOrder: OrderDrawerProps['order'] | null =
+    : null;
+  const unsavedOrder: OrderDrawerProps["order"] | null =
     creating && createDefaults?.currency
       ? ({
           doc: {
-            id: '',
-            status: 'draft',
+            id: "",
+            status: "draft",
             currency: createDefaults.currency,
             subsidiary_id: null,
             project_id: null,
@@ -168,10 +203,10 @@ export async function loadPurchaseOrders(
             memo: null,
             due_date: null,
             document_date: createDefaults.today,
-            updated_at: '',
-            subtotal: '0',
-            tax_total: '0',
-            total: '0',
+            updated_at: "",
+            subtotal: "0",
+            tax_total: "0",
+            total: "0",
             party_id: null,
             party_name: null,
             document_number: null,
@@ -179,30 +214,36 @@ export async function loadPurchaseOrders(
           },
           lines: [],
           links: [],
-        } as unknown as OrderDrawerProps['order'])
-      : null
+        } as unknown as OrderDrawerProps["order"])
+      : null;
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
+    title: t("list.title"),
+    description: t("list.description"),
     canManage,
     showCreateHint: !canManage,
-    createHintAction: t('list.createHintAction'),
+    createHintAction: t("list.createHintAction"),
     currentParams: sp,
-    newOrderButtonLabel: t('list.newButton'),
+    newOrderButtonLabel: t("list.newButton"),
     baseCurrencyConfigured: baseCurrency !== null,
-    createFailedMessage: t('list.createDraftFailed'),
-    showNewRedirect: openId === 'new' && canManage,
+    createFailedMessage: t("list.createDraftFailed"),
+    showNewRedirect: openId === "new" && canManage,
     drawer:
       (creating ? unsavedOrder : drawerOrder) && pickers
         ? {
-            remountKey: creating ? 'new-purchase-order' : String(drawerOrder!.doc.id),
+            remountKey: creating ? "new-purchase-order" : String(drawerOrder!.doc.id),
             order: (creating ? unsavedOrder : drawerOrder)!,
-            initialMode: creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+            initialMode: creating || pickString(sp.mode) === "edit" ? "edit" : "view",
             initialReceiveOpen: !creating && receiveRequested ? true : undefined,
             createMode: creating || undefined,
             closeHref: creating
-              ? mergeHref(BASE, sp, { [PARAM]: undefined, [CREATE_PARAM]: undefined, mode: undefined, form: undefined, receive: undefined })
+              ? mergeHref(BASE, sp, {
+                  [PARAM]: undefined,
+                  [CREATE_PARAM]: undefined,
+                  mode: undefined,
+                  form: undefined,
+                  receive: undefined,
+                })
               : undefined,
             kind: KIND,
             orgId: authz.user.orgId,
@@ -216,39 +257,49 @@ export async function loadPurchaseOrders(
             projects: pickers[6].rows,
             segments: pickers[7],
             subsidiaries: pickers[8]
-              .filter((subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id))
-              .map((subsidiary) => ({ id: subsidiary.id, name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}` })),
+              .filter(
+                (subsidiary) =>
+                  !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id),
+              )
+              .map((subsidiary) => ({
+                id: subsidiary.id,
+                name: `${"  ".repeat(subsidiary.depth)}${subsidiary.name}`,
+              })),
             canManage,
             // Purchase orders approve under the same grant that creates them.
-            canApprove: can(authz, 'purchase_orders.create'),
+            canApprove: can(authz, "purchase_orders.create"),
             // Receiving and billing are granted apart from authoring the
             // order; the drawer offers exactly the conversions the convert
             // endpoint will accept (receiving stock also needs items.post).
             allowedConvertKinds: CONVERSION_TARGETS.purchase_order
               .map((target) => target.kind)
-              .filter((target) => can(authz, purchaseOrderConversionPermission(target))
-                && (target !== 'purchase_receipt' || !inventoryEnabled || can(authz, 'items.post'))),
+              .filter(
+                (target) =>
+                  can(authz, purchaseOrderConversionPermission(target)) &&
+                  (target !== "purchase_receipt" || !inventoryEnabled || can(authz, "items.post")),
+              ),
             // Receipt void takes the receiving grant plus the reversal grant
             // when Inventory is on — the same authority the void route
             // enforces for purchase receipts.
-            canVoidReceipt: can(authz, 'goods_receipts.create')
-              && (!inventoryEnabled || can(authz, 'items.reverse')),
+            canVoidReceipt:
+              can(authz, "goods_receipts.create") &&
+              (!inventoryEnabled || can(authz, "items.reverse")),
             layout: resolvedForm?.layout,
             dropShipping,
             dropShipLines,
-            canConfirmDropShip: dropShipping && can(authz, 'items.post'),
+            canConfirmDropShip: dropShipping && can(authz, "items.post"),
             isDropShipPurchaseOrder: linkedSalesOrderId !== null,
             barcodeScanningEnabled,
           }
         : null,
-  }
+  };
 }
 
-const f = ref<PurchaseOrdersData>()
+const f = ref<PurchaseOrdersData>();
 
 export function purchaseOrdersSpec(data: PurchaseOrdersData): PageSpec {
   const newOrder = {
-    widget: 'new-order',
+    widget: "new-order",
     props: {
       apiPath: API,
       base: BASE,
@@ -257,9 +308,9 @@ export function purchaseOrdersSpec(data: PurchaseOrdersData): PageSpec {
       label: data.newOrderButtonLabel,
       createFailedMessage: data.createFailedMessage,
     },
-  }
+  };
   const newOrderRedirect = {
-    widget: 'new-order-redirect',
+    widget: "new-order-redirect",
     props: {
       apiPath: API,
       base: BASE,
@@ -267,22 +318,26 @@ export function purchaseOrdersSpec(data: PurchaseOrdersData): PageSpec {
       createParam: CREATE_PARAM,
       createFailedMessage: data.createFailedMessage,
     },
-  }
+  };
   return page({
-    route: '/purchase-orders',
-    layout: 'list',
+    route: "/purchase-orders",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         actions: [
-          widget(newOrder.widget, newOrder.props, f('canManage')),
-          widget('permission-hint', { permission: 'purchase_orders.create', action: data.createHintAction }, f('showCreateHint')),
+          widget(newOrder.widget, newOrder.props, f("canManage")),
+          widget(
+            "permission-hint",
+            { permission: "purchase_orders.create", action: data.createHintAction },
+            f("showCreateHint"),
+          ),
         ],
       }),
     ],
     body: [
-      widgetBlock('record-list-view', {
+      widgetBlock("record-list-view", {
         recordType: KIND,
         basePath: BASE,
         sp: data.currentParams,
@@ -291,9 +346,9 @@ export function purchaseOrdersSpec(data: PurchaseOrdersData): PageSpec {
         // then the order flyout stacked over it.
         drawer: [
           data.showNewRedirect ? newOrderRedirect : null,
-          data.drawer ? { widget: 'order-drawer', props: { drawer: data.drawer } } : null,
+          data.drawer ? { widget: "order-drawer", props: { drawer: data.drawer } } : null,
         ].filter(Boolean),
       }),
     ],
-  })
+  });
 }

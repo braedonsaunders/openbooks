@@ -6,7 +6,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 

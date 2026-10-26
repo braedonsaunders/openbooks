@@ -4,10 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 import { db } from "../platform/db.ts";
-import {
-  postProjectGlEntry,
-  reverseProjectGlEntry,
-} from "./recognition.ts";
+import { postProjectGlEntry, reverseProjectGlEntry } from "./recognition.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -62,9 +59,7 @@ test(
             },
           ],
         });
-      await assert.rejects(post(), (error) =>
-        errorChainMatches(error, /GL period .* is closed/),
-      );
+      await assert.rejects(post(), (error) => errorChainMatches(error, /GL period .* is closed/));
 
       await db.execute(sql`
         update period_locks
@@ -79,13 +74,7 @@ test(
       assert.ok(sourceId);
 
       await assert.rejects(
-        reverseProjectGlEntry(
-          org.orgId,
-          actorId,
-          sourceId,
-          "bad",
-          org.date,
-        ),
+        reverseProjectGlEntry(org.orgId, actorId, sourceId, "bad", org.date),
         /reversal reason/,
       );
       await db.execute(sql`
@@ -125,14 +114,15 @@ test(
         org.date,
       );
       assert.ok(reversalId);
-      const lineage = (await db.execute<{
-          source_status: string;
-          reversal_status: string;
-          reverses_entry_id: string;
-          audit_events: number;
-          exact_lines: number;
-          source_lines: number;
-        }>(sql`
+      const lineage = await db.execute<{
+        source_status: string;
+        reversal_status: string;
+        reverses_entry_id: string;
+        audit_events: number;
+        exact_lines: number;
+        source_lines: number;
+      }>(
+        sql`
         select source.status as source_status,
                reversal.status as reversal_status,
                reversal.reverses_entry_id,
@@ -163,7 +153,9 @@ test(
           from journal_entries source
           join journal_entries reversal on reversal.id = ${reversalId}
          where source.id = ${sourceId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(lineage[0], {
         source_status: "reversed",
         reversal_status: "posted",
@@ -188,24 +180,49 @@ for (const mode of ["secondary posting", "secondary forecast", "primary forecast
         values(${alternate},${org.orgId},'AAA-ALTERNATE','Alternate book',false,true,${mode !== "secondary forecast"})`);
       await db.execute(sql`update accounting_books set is_active=${mode === "primary forecast"},posts_gl=${mode !== "primary forecast"}
         where org_id=${org.orgId} and id=${org.bookId}`);
-      const post = () => postProjectGlEntry({
-        orgId: org.orgId, actorId, origin: "manual", entryNumber: "PROJECT-BOOK-POLICY",
-        postingDate: org.date, memo: "Project book policy", subsidiaryId: org.subsidiaryId,
-        currency: "CAD", lines: [
-          { accountId: org.accounts.adjustment, amount: "10" },
-          { accountId: org.accounts.clearing, amount: "-10" },
-        ],
-      });
+      const post = () =>
+        postProjectGlEntry({
+          orgId: org.orgId,
+          actorId,
+          origin: "manual",
+          entryNumber: "PROJECT-BOOK-POLICY",
+          postingDate: org.date,
+          memo: "Project book policy",
+          subsidiaryId: org.subsidiaryId,
+          currency: "CAD",
+          lines: [
+            { accountId: org.accounts.adjustment, amount: "10" },
+            { accountId: org.accounts.clearing, amount: "-10" },
+          ],
+        });
       await assert.rejects(post, /no active primary GL book/);
-      const count = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n;
+      const count = (
+        await db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from journal_entries where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(count, 0);
-      await db.execute(sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`);
+      await db.execute(
+        sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`,
+      );
       const id = await post();
-      const entry = (await db.execute<{ book_id: string }>(sql`
-        select book_id from journal_entries where org_id=${org.orgId} and id=${id}`, "objects"))[0]!;
-      assert.equal(entry.book_id, org.bookId, "the explicit primary wins over the earlier-sorting alternate");
-    } finally { await dropScratchOrg(org.orgId); }
+      const entry = (
+        await db.execute<{ book_id: string }>(
+          sql`
+        select book_id from journal_entries where org_id=${org.orgId} and id=${id}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(
+        entry.book_id,
+        org.bookId,
+        "the explicit primary wins over the earlier-sorting alternate",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   });
 }
 
@@ -214,32 +231,48 @@ for (const policy of ["account", "project"] as const) {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const branchId = randomUUID(), projectId = randomUUID();
+      const branchId = randomUUID(),
+        projectId = randomUUID();
       await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
         values(${branchId},${org.orgId},${org.subsidiaryId},'Project branch','CAD','CA')`);
       await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
         values(${projectId},${org.orgId},${policy === "project" ? branchId : org.subsidiaryId},'PROJECT-SCOPE',
                'Project scope',${org.customerId},'active',true,'{}'::jsonb)`);
-      if (policy === "account") await db.execute(sql`update accounts set subsidiary_id=${branchId},subsidiary_include_children=false
+      if (policy === "account")
+        await db.execute(sql`update accounts set subsidiary_id=${branchId},subsidiary_include_children=false
         where org_id=${org.orgId} and id=${org.accounts.adjustment}`);
-      const post = (subsidiaryId: string) => postProjectGlEntry({
-        orgId: org.orgId, actorId, origin: "manual", entryNumber: "PROJECT-ENTITY-POLICY",
-        postingDate: org.date, memo: "Project entity policy", subsidiaryId, currency: "CAD",
-        lines: [
-          { accountId: org.accounts.adjustment, amount: "10", projectId },
-          { accountId: org.accounts.clearing, amount: "-10" },
-        ],
-      });
+      const post = (subsidiaryId: string) =>
+        postProjectGlEntry({
+          orgId: org.orgId,
+          actorId,
+          origin: "manual",
+          entryNumber: "PROJECT-ENTITY-POLICY",
+          postingDate: org.date,
+          memo: "Project entity policy",
+          subsidiaryId,
+          currency: "CAD",
+          lines: [
+            { accountId: org.accounts.adjustment, amount: "10", projectId },
+            { accountId: org.accounts.clearing, amount: "-10" },
+          ],
+        });
       await assert.rejects(post(org.subsidiaryId), /restricted to another subsidiary/);
-      const count = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n;
+      const count = (
+        await db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from journal_entries where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(count, 0);
       await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${org.accounts.adjustment}`);
       await db.execute(sql`update projects set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${projectId}`);
       assert.ok(await post(branchId), "valid parent-to-child configuration remains usable");
-    } finally { await dropScratchOrg(org.orgId); }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   });
 }
 
@@ -250,33 +283,64 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const entry = (postingDate: string) => postProjectGlEntry({
-        orgId: org.orgId, actorId, origin: "manual", entryNumber: "PROJECT-DATE-CONTROL",
-        postingDate, memo: "Project date control", subsidiaryId: org.subsidiaryId,
-        currency: "CAD", lines: [
-          { accountId: org.accounts.adjustment, amount: "10" },
-          { accountId: org.accounts.clearing, amount: "-10" },
-        ],
-      });
+      const entry = (postingDate: string) =>
+        postProjectGlEntry({
+          orgId: org.orgId,
+          actorId,
+          origin: "manual",
+          entryNumber: "PROJECT-DATE-CONTROL",
+          postingDate,
+          memo: "Project date control",
+          subsidiaryId: org.subsidiaryId,
+          currency: "CAD",
+          lines: [
+            { accountId: org.accounts.adjustment, amount: "10" },
+            { accountId: org.accounts.clearing, amount: "-10" },
+          ],
+        });
       // February 30 passes a naive Date.parse guard (V8 rolls it into
       // March) but is not a calendar day: it must fail closed here, before
       // any journal row exists, not as a 22008 from PostgreSQL.
       await assert.rejects(entry("2026-02-30"), /postingDate must be a valid YYYY-MM-DD date/);
-      const posted = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n;
+      const posted = (
+        await db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from journal_entries where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(posted, 0);
       const sourceId = await entry(org.date);
       assert.ok(sourceId);
       await assert.rejects(
-        reverseProjectGlEntry(org.orgId, actorId, sourceId, "Controller approved project correction", "2026-02-30"),
+        reverseProjectGlEntry(
+          org.orgId,
+          actorId,
+          sourceId,
+          "Controller approved project correction",
+          "2026-02-30",
+        ),
         /reversalDate must be a valid YYYY-MM-DD date/,
       );
-      const status = (await db.execute<{ status: string }>(sql`
-        select status from journal_entries where org_id=${org.orgId} and id=${sourceId}`, "objects"))[0]!.status;
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
+        select status from journal_entries where org_id=${org.orgId} and id=${sourceId}`,
+          "objects",
+        )
+      )[0]!.status;
       assert.equal(status, "posted");
-      const reversalId = await reverseProjectGlEntry(org.orgId, actorId, sourceId, "Controller approved project correction", org.date);
+      const reversalId = await reverseProjectGlEntry(
+        org.orgId,
+        actorId,
+        sourceId,
+        "Controller approved project correction",
+        org.date,
+      );
       assert.ok(reversalId, "a real calendar date still reverses");
-    } finally { await dropScratchOrg(org.orgId); }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   },
 );
 
@@ -326,8 +390,11 @@ async function closeAllImported(org: ScratchOrg): Promise<void> {
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  const r = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
@@ -352,16 +419,20 @@ function postArgs(
   };
 }
 
-test("open period: project GL still posts (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const entryId = await postProjectGlEntry(postArgs(org, actorId, "F2-PROJ-OPEN"));
-    assert.ok(entryId, "expected a posted entry id");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "open period: project GL still posts (setup can post, refusal is load-bearing)",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const entryId = await postProjectGlEntry(postArgs(org, actorId, "F2-PROJ-OPEN"));
+      assert.ok(entryId, "expected a posted entry id");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("project GL posting refuses a user-closed period", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -405,7 +476,13 @@ test("project GL reversal refuses a user-closed period", { skip: !DB }, async ()
     assert.ok(entryId);
     await closeGlForUser(org, actorId);
     await assert.rejects(
-      reverseProjectGlEntry(org.orgId, actorId, entryId!, "Gate probe reversal of a closed-period entry", org.date),
+      reverseProjectGlEntry(
+        org.orgId,
+        actorId,
+        entryId!,
+        "Gate probe reversal of a closed-period entry",
+        org.date,
+      ),
       /the GL period covering .* is closed/,
       "a reversal into a user-closed period must be refused",
     );
@@ -422,7 +499,13 @@ test("project GL reversal refuses a source-owned imported lock", { skip: !DB }, 
     assert.ok(entryId);
     await closeAllImported(org);
     await assert.rejects(
-      reverseProjectGlEntry(org.orgId, actorId, entryId!, "Gate probe reversal into an imported lock", org.date),
+      reverseProjectGlEntry(
+        org.orgId,
+        actorId,
+        entryId!,
+        "Gate probe reversal into an imported lock",
+        org.date,
+      ),
       /the GL period covering .* is closed/,
       "a reversal into an imported lock must be refused: reversals are not replay",
     );
@@ -431,22 +514,26 @@ test("project GL reversal refuses a source-owned imported lock", { skip: !DB }, 
   }
 });
 
-test("project GL reversal preserves original FX and complete line evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Reversal evidence", "admin");
-    const entryId = randomUUID();
-    await db.transaction(async (tx) => {
-      const segmentId = randomUUID(), valueId = randomUUID();
-      await tx.execute(sql`insert into segment_definitions(id,org_id,key,name,plural_name)
+test(
+  "project GL reversal preserves original FX and complete line evidence",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Reversal evidence", "admin");
+      const entryId = randomUUID();
+      await db.transaction(async (tx) => {
+        const segmentId = randomUUID(),
+          valueId = randomUUID();
+        await tx.execute(sql`insert into segment_definitions(id,org_id,key,name,plural_name)
         values(${segmentId},${org.orgId},'cost_pool','Cost pool','Cost pools')`);
-      await tx.execute(sql`insert into segment_values(id,org_id,segment_id,name)
+        await tx.execute(sql`insert into segment_values(id,org_id,segment_id,name)
         values(${valueId},${org.orgId},${segmentId},'North')`);
-      await tx.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,
+        await tx.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,
         posting_date,period_id,status,origin,created_by,updated_by)
         values(${entryId},${org.orgId},${org.bookId},${org.subsidiaryId},'PROJECT-FX-MIRROR',
           ${org.date},${org.periodId},'draft','manual',${actor},${actor})`);
-      await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,
+        await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,
         amount,currency,txn_amount,fx_rate,location_id,party_id,quantity,unit,custom,extra_dims,memo)
         values
         (${org.orgId},${entryId},3,${org.accounts.adjustment},${org.subsidiaryId},
@@ -454,12 +541,20 @@ test("project GL reversal preserves original FX and complete line evidence", { s
           '{"evidence":"original-cost"}'::jsonb,${JSON.stringify({ cost_pool: valueId })}::jsonb,'Original evidence'),
         (${org.orgId},${entryId},7,${org.accounts.bank},${org.subsidiaryId},
           -125,'USD',-100,1.25,null,null,null,null,'{}'::jsonb,'{}'::jsonb,'Cash funding')`);
-      await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${actor}
+        await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${actor}
         where org_id=${org.orgId} and id=${entryId}`);
-    });
-    const reversalId = await reverseProjectGlEntry(org.orgId, actor, entryId, "Correct entire original evidence", org.date);
-    assert.ok(reversalId);
-    const evidence = (await db.execute<{ exact: number; count: number }>(sql`
+      });
+      const reversalId = await reverseProjectGlEntry(
+        org.orgId,
+        actor,
+        entryId,
+        "Correct entire original evidence",
+        org.date,
+      );
+      assert.ok(reversalId);
+      const evidence = (
+        await db.execute<{ exact: number; count: number }>(
+          sql`
       select count(*)::int as count,count(*) filter(where
         r.amount=-s.amount and r.txn_amount=-s.txn_amount
         and r.quantity is not distinct from -s.quantity
@@ -467,17 +562,31 @@ test("project GL reversal preserves original FX and complete line evidence", { s
           =(to_jsonb(s)-array['id','entry_id','amount','txn_amount','quantity']::text[]))::int as exact
       from journal_lines s join journal_lines r on r.org_id=s.org_id and r.line_number=s.line_number
         and r.entry_id=${reversalId}
-      where s.org_id=${org.orgId} and s.entry_id=${entryId}`, "objects"))[0]!;
-    assert.deepEqual(evidence, { count: 2, exact: 2 });
-    const again = await reverseProjectGlEntry(org.orgId, actor, entryId, "Repeat same controlled reversal", org.date);
-    assert.equal(again, null);
-    const totals = (await db.execute<{ amount: string; txn: string; quantity: string }>(sql`
+      where s.org_id=${org.orgId} and s.entry_id=${entryId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(evidence, { count: 2, exact: 2 });
+      const again = await reverseProjectGlEntry(
+        org.orgId,
+        actor,
+        entryId,
+        "Repeat same controlled reversal",
+        org.date,
+      );
+      assert.equal(again, null);
+      const totals = (
+        await db.execute<{ amount: string; txn: string; quantity: string }>(
+          sql`
       select sum(amount)::text as amount,sum(txn_amount)::text as txn,sum(quantity)::text as quantity
       from journal_lines where org_id=${org.orgId} and entry_id in(${entryId},${reversalId})
-        and location_id=${org.locationId}`, "objects"))[0]!;
-    assert.deepEqual(totals, { amount: "0.0000", txn: "0.0000", quantity: "0.0000" });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
+        and location_id=${org.locationId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(totals, { amount: "0.0000", txn: "0.0000", quantity: "0.0000" });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

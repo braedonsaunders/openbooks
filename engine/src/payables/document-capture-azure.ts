@@ -1,8 +1,16 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import type { Money } from "../money/brands.ts";
-import { decimalNullCause, decimalNullRefusal, type DecimalNullCause } from "../money/decimal-refusal.ts";
-import { guardedFetch, resolveVerifiedAddresses, type AddressLookup } from "../connectors/ssrf-guard.ts";
+import {
+  decimalNullCause,
+  decimalNullRefusal,
+  type DecimalNullCause,
+} from "../money/decimal-refusal.ts";
+import {
+  guardedFetch,
+  resolveVerifiedAddresses,
+  type AddressLookup,
+} from "../connectors/ssrf-guard.ts";
 
 /**
  * Shared Azure Document Intelligence transport and field readers. Vendor bill
@@ -19,7 +27,15 @@ export const AZURE_DOCUMENT_INTELLIGENCE_API_VERSION = "2024-11-30";
 export function captureContentMatchesMime(bytes: Uint8Array, contentType: string): boolean {
   const prefix = (...values: number[]) => values.every((value, index) => bytes[index] === value);
   if (contentType === "application/xml" || contentType === "text/xml") {
-    try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\uFEFF/, '').trimStart().startsWith('<'); } catch { return false; }
+    try {
+      return new TextDecoder("utf-8", { fatal: true })
+        .decode(bytes)
+        .replace(/^\uFEFF/, "")
+        .trimStart()
+        .startsWith("<");
+    } catch {
+      return false;
+    }
   }
   if (contentType === "application/pdf") return prefix(0x25, 0x50, 0x44, 0x46);
   if (contentType === "image/jpeg") return prefix(0xff, 0xd8, 0xff);
@@ -83,7 +99,11 @@ export type AzureAnalyzeResponse = {
   status?: string;
   error?: { code?: string; message?: string };
   analyzeResult?: {
-    documents?: Array<{ docType?: string; confidence?: number; fields?: Record<string, AzureField> }>;
+    documents?: Array<{
+      docType?: string;
+      confidence?: number;
+      fields?: Record<string, AzureField>;
+    }>;
     pages?: Array<{ pageNumber?: number; width?: number; height?: number }>;
     content?: string;
   };
@@ -102,7 +122,9 @@ export function azureFieldText(field: AzureField | undefined): string | null {
   if (typeof field.valueDate === "string") return field.valueDate.trim() || null;
   if (field.valueAddress) {
     const a = field.valueAddress;
-    const parts = [a.houseNumber, a.road, a.city, a.state, a.postalCode, a.countryRegion].filter(Boolean);
+    const parts = [a.houseNumber, a.road, a.city, a.state, a.postalCode, a.countryRegion].filter(
+      Boolean,
+    );
     if (parts.length) return parts.join(", ");
   }
   return field.content?.trim() || null;
@@ -115,10 +137,15 @@ export function azureFieldText(field: AzureField | undefined): string | null {
  */
 export function normalizeCapturedDecimal(value: unknown): Money | null {
   if (value === null || value === undefined || value === "") return null;
-  let raw = String(value).trim().replace(/[\u00a0\s]/g, "");
+  let raw = String(value)
+    .trim()
+    .replace(/[\u00a0\s]/g, "");
   if (/^[-+]?(\d+(\.\d*)?|\.\d+)[eE][-+]?\d+$/.test(raw)) return fromUnits(toUnits(raw)) as Money;
   const negative = /^\(.*\)$/.test(raw) || raw.startsWith("-");
-  raw = raw.replace(/[()]/g, "").replace(/^[+-]/, "").replace(/[^0-9.,]/g, "");
+  raw = raw
+    .replace(/[()]/g, "")
+    .replace(/^[+-]/, "")
+    .replace(/[^0-9.,]/g, "");
   if (!raw) return null;
 
   const lastComma = raw.lastIndexOf(",");
@@ -157,7 +184,10 @@ export function normalizeCapturedDecimal(value: unknown): Money | null {
  * do not carry comma-separator ambiguity; raw supplied text must survive
  * refusal so every boundary can name it.
  */
-export function azureCapturedMoney(field: AzureField | undefined): { canonical: Money | null; supplied: string | null } {
+export function azureCapturedMoney(field: AzureField | undefined): {
+  canonical: Money | null;
+  supplied: string | null;
+} {
   if (!field) return { canonical: null, supplied: null };
   const typed = field.valueCurrency?.amount ?? field.valueNumber;
   if (typeof typed === "number") {
@@ -165,13 +195,21 @@ export function azureCapturedMoney(field: AzureField | undefined): { canonical: 
     return { canonical: normalizeCapturedDecimal(typed), supplied: null };
   }
   const text = typeof typed === "string" ? typed : field.content;
-  if (typeof text === "number") return { canonical: normalizeCapturedDecimal(text), supplied: null };
+  if (typeof text === "number")
+    return { canonical: normalizeCapturedDecimal(text), supplied: null };
   if (typeof text !== "string" || text.trim() === "") return { canonical: null, supplied: null };
   const canonical = normalizeCapturedDecimal(text);
-  return canonical === null ? { canonical: null, supplied: text.trim() } : { canonical, supplied: null };
+  return canonical === null
+    ? { canonical: null, supplied: text.trim() }
+    : { canonical, supplied: null };
 }
 
-export function azureEvidence(fieldKey: string, field: AzureField, normalizedValue: unknown, lineIndex: number | null): CaptureEvidence {
+export function azureEvidence(
+  fieldKey: string,
+  field: AzureField,
+  normalizedValue: unknown,
+  lineIndex: number | null,
+): CaptureEvidence {
   const region = field.boundingRegions?.[0];
   return {
     fieldKey,
@@ -185,10 +223,15 @@ export function azureEvidence(fieldKey: string, field: AzureField, normalizedVal
 }
 
 /** Attach page geometry to evidence polygons; a polygon without a known page is dropped. */
-export function applyAzurePageGeometry(raw: AzureAnalyzeResponse, evidence: CaptureEvidence[]): void {
-  const pages = new Map((raw.analyzeResult?.pages ?? [])
-    .filter((page) => page.pageNumber && page.width && page.height)
-    .map((page) => [page.pageNumber!, { width: page.width!, height: page.height! }]));
+export function applyAzurePageGeometry(
+  raw: AzureAnalyzeResponse,
+  evidence: CaptureEvidence[],
+): void {
+  const pages = new Map(
+    (raw.analyzeResult?.pages ?? [])
+      .filter((page) => page.pageNumber && page.width && page.height)
+      .map((page) => [page.pageNumber!, { width: page.width!, height: page.height! }]),
+  );
   for (const field of evidence) {
     const page = field.pageNumber ? pages.get(field.pageNumber) : undefined;
     if (field.polygon && page) field.polygon = { ...field.polygon, ...page };
@@ -238,12 +281,18 @@ export function invalidMoneyIssue(
 /** Catalog remedy tokens for one decimal refusal, keyed by its cause. */
 function causeRemedyTokens(cause: DecimalNullCause, maxScale: number): Partial<CaptureIssue> {
   switch (cause.cause) {
-    case "scale": return { expected: String(maxScale), detail: String(maxScale) };
-    case "separator": return { expected: cause.separator };
-    case "decimal-comma": return { expected: cause.dotted };
-    case "ambiguous-comma": return { expected: cause.grouped, detail: cause.dotted };
-    case "currency": return { expected: cause.symbol };
-    default: return {};
+    case "scale":
+      return { expected: String(maxScale), detail: String(maxScale) };
+    case "separator":
+      return { expected: cause.separator };
+    case "decimal-comma":
+      return { expected: cause.dotted };
+    case "ambiguous-comma":
+      return { expected: cause.grouped, detail: cause.dotted };
+    case "currency":
+      return { expected: cause.symbol };
+    default:
+      return {};
   }
 }
 
@@ -267,12 +316,19 @@ export function validateAzureDocumentEndpoint(value: string): URL {
   try {
     endpoint = new URL(value);
   } catch {
-    throw new DocumentEndpointError("Document provider endpoint is not a valid URL — check the endpoint under Platform → AI");
+    throw new DocumentEndpointError(
+      "Document provider endpoint is not a valid URL — check the endpoint under Platform → AI",
+    );
   }
-  if (endpoint.protocol !== "https:") throw new DocumentEndpointError("Document provider endpoint must use HTTPS");
+  if (endpoint.protocol !== "https:")
+    throw new DocumentEndpointError("Document provider endpoint must use HTTPS");
   const host = endpoint.hostname.toLowerCase();
-  if (!(host.endsWith(".cognitiveservices.azure.com") || host.endsWith(".api.cognitive.microsoft.com"))) {
-    throw new DocumentEndpointError("Document provider endpoint is not an Azure Document Intelligence endpoint");
+  if (!(
+    host.endsWith(".cognitiveservices.azure.com") || host.endsWith(".api.cognitive.microsoft.com")
+  )) {
+    throw new DocumentEndpointError(
+      "Document provider endpoint is not an Azure Document Intelligence endpoint",
+    );
   }
   endpoint.pathname = endpoint.pathname.replace(/\/$/, "");
   endpoint.search = "";
@@ -288,7 +344,10 @@ export function validateAzureDocumentEndpoint(value: string): URL {
  * re-resolves through guardedFetch anyway, and this fails the
  * misconfiguration closed before any credential is sent.
  */
-export async function verifyAzureDocumentEndpoint(value: string, lookupAddresses?: AddressLookup): Promise<URL> {
+export async function verifyAzureDocumentEndpoint(
+  value: string,
+  lookupAddresses?: AddressLookup,
+): Promise<URL> {
   const endpoint = validateAzureDocumentEndpoint(value);
   try {
     await resolveVerifiedAddresses(endpoint, lookupAddresses);
@@ -333,12 +392,13 @@ export async function analyzeAzureDocument(input: {
 }): Promise<AzureAnalyzeResponse> {
   const endpoint = await verifyAzureDocumentEndpoint(input.endpoint, input.lookup);
   const model = input.model.trim();
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9._~-]{1,63}$/.test(model)) throw new Error("Invalid document model id");
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._~-]{1,63}$/.test(model))
+    throw new Error("Invalid document model id");
   if (!input.apiKey.trim()) throw new Error("Document provider API key is missing");
   // Operator-configured host: resolve-and-pin per request with no redirects,
   // never the ambient fetch that follows Location anywhere with the key.
-  const runFetch: typeof fetch = input.fetchImpl
-    ?? ((url, init) => guardedFetch(url, init ?? {}, { lookup: input.lookup }));
+  const runFetch: typeof fetch =
+    input.fetchImpl ?? ((url, init) => guardedFetch(url, init ?? {}, { lookup: input.lookup }));
   const url = new URL(
     `${endpoint.pathname}/documentintelligence/documentModels/${encodeURIComponent(model)}:analyze`,
     endpoint,
@@ -353,22 +413,27 @@ export async function analyzeAzureDocument(input: {
     body: Buffer.from(input.bytes),
     signal: AbortSignal.timeout(60_000),
   });
-  if (submitted.status !== 202) throw new Error(`Document provider submission failed: ${await providerError(submitted)}`);
+  if (submitted.status !== 202)
+    throw new Error(`Document provider submission failed: ${await providerError(submitted)}`);
   const operation = submitted.headers.get("operation-location");
   if (!operation) throw new Error("Document provider omitted the operation location");
   const operationUrl = new URL(operation);
-  if (operationUrl.origin !== endpoint.origin) throw new Error("Document provider returned an unexpected operation host");
+  if (operationUrl.origin !== endpoint.origin)
+    throw new Error("Document provider returned an unexpected operation host");
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(5_000, 1_000 + attempt * 200)));
+    if (attempt > 0)
+      await new Promise((resolve) => setTimeout(resolve, Math.min(5_000, 1_000 + attempt * 200)));
     const polled = await runFetch(operationUrl, {
       headers: { "Ocp-Apim-Subscription-Key": input.apiKey },
       signal: AbortSignal.timeout(30_000),
     });
-    if (!polled.ok) throw new Error(`Document provider polling failed: ${await providerError(polled)}`);
+    if (!polled.ok)
+      throw new Error(`Document provider polling failed: ${await providerError(polled)}`);
     const raw = (await polled.json()) as AzureAnalyzeResponse;
     const status = raw.status?.toLowerCase();
-    if (status === "failed") throw new Error(raw.error?.message ?? "Document provider analysis failed");
+    if (status === "failed")
+      throw new Error(raw.error?.message ?? "Document provider analysis failed");
     if (status === "succeeded") return raw;
     if (status !== "running" && status !== "notstarted") {
       throw new Error(`Document provider returned unknown status: ${raw.status ?? "missing"}`);
@@ -389,8 +454,9 @@ export async function testAzureDocumentProvider(input: {
     if (!input.apiKey.trim()) return { ok: false, message: "Document provider API key is missing" };
     const url = new URL(`${endpoint.pathname}/documentintelligence/documentModels`, endpoint);
     url.searchParams.set("api-version", AZURE_DOCUMENT_INTELLIGENCE_API_VERSION);
-    const runFetch: typeof fetch = input.fetchImpl
-      ?? ((fetchUrl, init) => guardedFetch(fetchUrl, init ?? {}, { lookup: input.lookup }));
+    const runFetch: typeof fetch =
+      input.fetchImpl ??
+      ((fetchUrl, init) => guardedFetch(fetchUrl, init ?? {}, { lookup: input.lookup }));
     const response = await runFetch(url, {
       headers: { "Ocp-Apim-Subscription-Key": input.apiKey },
       signal: AbortSignal.timeout(30_000),
@@ -398,6 +464,9 @@ export async function testAzureDocumentProvider(input: {
     if (!response.ok) return { ok: false, message: (await providerError(response)).slice(0, 180) };
     return { ok: true, message: "Connected to the document provider" };
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message.slice(0, 180) : "Connection failed" };
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message.slice(0, 180) : "Connection failed",
+    };
   }
 }

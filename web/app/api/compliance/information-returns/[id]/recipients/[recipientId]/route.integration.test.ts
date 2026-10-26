@@ -29,7 +29,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.ir-recipient-route-test')]
@@ -86,15 +86,10 @@ const { POST } = (await import(postRouteUrl)) as typeof import("../../route.ts")
 // database and fixture imports below are unaffected.
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const {
-  ensureFiling,
-  finalizeFiling,
-  markFilingFiled,
-  recomputeFiling,
-} = await import("@openbooks/engine/compliance/information-returns");
+const { ensureFiling, finalizeFiling, markFilingFiled, recomputeFiling } =
+  await import("@openbooks/engine/compliance/information-returns");
 const { createScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 test.after(() => hooks.deregister());
-
 
 interface ComputedFiling {
   filingId: string;
@@ -112,7 +107,13 @@ async function seedComputedFiling(
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb),
         '{features,informationReturns}', 'true'::jsonb, true)
        where id = ${org.orgId}`);
-    const filing = await ensureFiling({ orgId: org.orgId, taxYear, formType: "1099-NEC", currency: "USD", actorId });
+    const filing = await ensureFiling({
+      orgId: org.orgId,
+      taxYear,
+      formType: "1099-NEC",
+      currency: "USD",
+      actorId,
+    });
     for (let i = 0; i < 2; i++) {
       const partyId = randomUUID();
       await db.execute(sql`
@@ -133,10 +134,13 @@ async function seedComputedFiling(
       );
     }
     await recomputeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
-    const recipients = await db.execute<{ id: string }>(sql`
+    const recipients = await db.execute<{ id: string }>(
+      sql`
       select id from information_return_recipients
        where org_id = ${org.orgId} and filing_id = ${filing.id}
-       order by party_id`, "objects");
+       order by party_id`,
+      "objects",
+    );
     return { filingId: filing.id, recipientIds: recipients.map((row) => row.id) };
   });
 }
@@ -152,8 +156,8 @@ async function seedInformationReturnPayment(
   tinLast4: string,
 ): Promise<void> {
   return withBypassContext(async () => {
-  const sourceDate = `${taxYear}-07-15`;
-  await db.execute(sql`
+    const sourceDate = `${taxYear}-07-15`;
+    await db.execute(sql`
     insert into vendor_roles
       (org_id, party_id, is_t4a, information_return_form, tin_last4, tin_type,
        created_by, updated_by)
@@ -164,11 +168,11 @@ async function seedInformationReturnPayment(
       tin_last4 = excluded.tin_last4, tin_type = 'ein', updated_by = ${actorId}
     where vendor_roles.org_id = ${org.orgId}
   `);
-  const paymentId = randomUUID();
-  const journalEntryId = randomUUID();
-  const journalLineIds = [randomUUID(), randomUUID()];
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`
+    const paymentId = randomUUID();
+    const journalEntryId = randomUUID();
+    const journalLineIds = [randomUUID(), randomUUID()];
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, posting_date, currency, subtotal, tax_total, total,
@@ -179,7 +183,7 @@ async function seedInformationReturnPayment(
               ${JSON.stringify({ bankAccountId: org.accounts.bank, allocations: [] })}::jsonb,
               ${actorId}, ${actorId})
     `);
-    await tx.execute(sql`
+      await tx.execute(sql`
       insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
          period_id, memo, status, source_document_id, origin, created_by, updated_by)
@@ -188,7 +192,7 @@ async function seedInformationReturnPayment(
               'Information-return route fixture', 'draft', ${paymentId}, 'document',
               ${actorId}, ${actorId})
     `);
-    await tx.execute(sql`
+      await tx.execute(sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount,
          currency, txn_amount, fx_rate, party_id, is_open_item, memo)
@@ -200,18 +204,18 @@ async function seedInformationReturnPayment(
          ${org.accounts.bank}, ${org.subsidiaryId}, ${`-${amount}`}, 'CAD',
          ${`-${amount}`}, 1, null, false, 'Information-return route cash source')
     `);
-    await tx.execute(sql`
+      await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_at = now(), posted_by = ${actorId}
        where org_id = ${org.orgId} and id = ${journalEntryId}
     `);
-    await tx.execute(sql`
+      await tx.execute(sql`
       update documents
          set status = 'posted', posted_entry_id = ${journalEntryId},
              posting_period_id = ${org.periodId}
        where org_id = ${org.orgId} and id = ${paymentId}
     `);
-  });
+    });
   });
 }
 
@@ -222,38 +226,60 @@ type RecipientRow = {
   updated_at: Date;
 };
 
-async function recipientRow(
-  orgId: string,
-  recipientId: string,
-): Promise<RecipientRow> {
-  const r = await withOrgContext(orgId, () => db.execute<{ status: string; adjustments: Record<string, string>; exclusion_reason: string | null; updated_at: Date | string }>(sql`
+async function recipientRow(orgId: string, recipientId: string): Promise<RecipientRow> {
+  const r = await withOrgContext(orgId, () =>
+    db.execute<{
+      status: string;
+      adjustments: Record<string, string>;
+      exclusion_reason: string | null;
+      updated_at: Date | string;
+    }>(
+      sql`
     select status, adjustments, exclusion_reason, updated_at
       from information_return_recipients
-     where org_id = ${orgId} and id = ${recipientId}`, "objects"));
+     where org_id = ${orgId} and id = ${recipientId}`,
+      "objects",
+    ),
+  );
   const row = r[0]!;
   // Raw drizzle SQL hands timestamptz back as a string.
   return { ...row, updated_at: new Date(row.updated_at as unknown as string) };
 }
 
 async function filingStatus(orgId: string, filingId: string): Promise<string> {
-  const r = await withOrgContext(orgId, () => db.execute<{ status: string }>(sql`
-    select status from information_return_filings where org_id = ${orgId} and id = ${filingId}`, "objects"));
+  const r = await withOrgContext(orgId, () =>
+    db.execute<{ status: string }>(
+      sql`
+    select status from information_return_filings where org_id = ${orgId} and id = ${filingId}`,
+      "objects",
+    ),
+  );
   return r[0]!.status;
 }
 
 async function recipientAuditCount(orgId: string, recipientId: string): Promise<number> {
-  const r = await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
+  const r = await withOrgContext(orgId, () =>
+    db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'information_return_recipients'
-       and row_id = ${recipientId}`, "objects"));
+       and row_id = ${recipientId}`,
+      "objects",
+    ),
+  );
   return r[0]!.n;
 }
 
 async function filingAudits(orgId: string, filingId: string): Promise<string[]> {
-  const r = await withOrgContext(orgId, () => db.execute<{ action: string }>(sql`
+  const r = await withOrgContext(orgId, () =>
+    db.execute<{ action: string }>(
+      sql`
     select action from audit_log
      where org_id = ${orgId} and table_name = 'information_return_filings' and row_id = ${filingId}
-     order by at, id`, "objects"));
+     order by at, id`,
+      "objects",
+    ),
+  );
   return r.map((row) => row.action);
 }
 
@@ -306,12 +332,15 @@ async function holdFilingLock(orgId: string, filingId: string): Promise<Client> 
 async function waitForRouteBlockedOnFilingRow(): Promise<void> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
-    const r = await db.execute<{ n: number }>(sql`
+    const r = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from pg_stat_activity
        where datname = current_database()
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
-         and query ilike '%information_return%'`, "objects");
+         and query ilike '%information_return%'`,
+      "objects",
+    );
     if ((r[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -324,13 +353,25 @@ test("PATCH through the real route persists signed deltas and audits them once",
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
-    routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(), allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
     const { filingId, recipientIds } = await seedComputedFiling(org, actorId, 2061);
     const target = recipientIds[0]!;
 
-    const res = await withOrgContext(org.orgId, () => PATCH(patchRequest({ adjustments: { nec1: "-250.5" }, adjustmentReason: "duplicate cheque recovered" }), {
-      params: Promise.resolve({ id: filingId, recipientId: target }),
-    }));
+    const res = await withOrgContext(org.orgId, () =>
+      PATCH(
+        patchRequest({
+          adjustments: { nec1: "-250.5" },
+          adjustmentReason: "duplicate cheque recovered",
+        }),
+        {
+          params: Promise.resolve({ id: filingId, recipientId: target }),
+        },
+      ),
+    );
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { id: target });
 
@@ -340,17 +381,23 @@ test("PATCH through the real route persists signed deltas and audits them once",
     assert.equal(await recipientAuditCount(org.orgId, target), 1);
 
     // Malformed input fails closed at the boundary without writing evidence.
-    const badBox = await withOrgContext(org.orgId, () => PATCH(patchRequest({ adjustments: { nec99: "5" }, adjustmentReason: "x" }), {
-      params: Promise.resolve({ id: filingId, recipientId: target }),
-    }));
+    const badBox = await withOrgContext(org.orgId, () =>
+      PATCH(patchRequest({ adjustments: { nec99: "5" }, adjustmentReason: "x" }), {
+        params: Promise.resolve({ id: filingId, recipientId: target }),
+      }),
+    );
     assert.equal(badBox.status, 400);
-    const noReason = await withOrgContext(org.orgId, () => PATCH(patchRequest({ status: "excluded" }), {
-      params: Promise.resolve({ id: filingId, recipientId: target }),
-    }));
+    const noReason = await withOrgContext(org.orgId, () =>
+      PATCH(patchRequest({ status: "excluded" }), {
+        params: Promise.resolve({ id: filingId, recipientId: target }),
+      }),
+    );
     assert.equal(noReason.status, 400);
-    const missing = await withOrgContext(org.orgId, () => PATCH(patchRequest({ status: "excluded", exclusionReason: "x" }), {
-      params: Promise.resolve({ id: filingId, recipientId: randomUUID() }),
-    }));
+    const missing = await withOrgContext(org.orgId, () =>
+      PATCH(patchRequest({ status: "excluded", exclusionReason: "x" }), {
+        params: Promise.resolve({ id: filingId, recipientId: randomUUID() }),
+      }),
+    );
     assert.equal(missing.status, 404);
     assert.equal(await recipientAuditCount(org.orgId, target), 1);
   } finally {
@@ -364,7 +411,11 @@ test("the finalize-versus-PATCH race cannot mutate frozen evidence through the r
   let holder: Client | null = null;
   try {
     const actorId = randomUUID();
-    routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(), allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
     const { filingId, recipientIds } = await seedComputedFiling(org, actorId, 2062);
     const target = recipientIds[0]!;
     const before = await recipientRow(org.orgId, target);
@@ -375,26 +426,38 @@ test("the finalize-versus-PATCH race cannot mutate frozen evidence through the r
     // always committed before it may validate — it must refuse; a route that
     // never synchronized (the old unguarded one) fails the barrier instead.
     holder = await holdFilingLock(org.orgId, filingId);
-    const patchPromise = withOrgContext(org.orgId, () => PATCH(patchRequest({ adjustments: { nec1: "-100" }, adjustmentReason: "late refund" }), {
-      params: Promise.resolve({ id: filingId, recipientId: target }),
-    })).then(async (res) => ({ status: res.status, body: (await res.json()) as { error?: string } }));
+    const patchPromise = withOrgContext(org.orgId, () =>
+      PATCH(patchRequest({ adjustments: { nec1: "-100" }, adjustmentReason: "late refund" }), {
+        params: Promise.resolve({ id: filingId, recipientId: target }),
+      }),
+    ).then(async (res) => ({ status: res.status, body: (await res.json()) as { error?: string } }));
     await waitForRouteBlockedOnFilingRow();
     // The freeze bypasses the service on purpose (raw client with session
     // bypass GUCs, mirroring a committed-outside writer); the wrapper keeps
     // that scope visible to the bypass-scope guard.
     const freeze = holder;
-    await withBypassContext(() => freeze.query(
-      `update information_return_filings
+    await withBypassContext(() =>
+      freeze.query(
+        `update information_return_filings
           set status = 'finalized', finalized_at = now(), finalized_by = $1,
               payer_snapshot = $2::jsonb
         where org_id = $3 and id = $4`,
-      [
-        actorId,
-        JSON.stringify({ name: "Test Payer", orgName: "Test Org", taxIds: {}, taxYear: 2062, formType: "1099-NEC", threshold: "600", currency: "USD" }),
-        org.orgId,
-        filingId,
-      ],
-    ));
+        [
+          actorId,
+          JSON.stringify({
+            name: "Test Payer",
+            orgName: "Test Org",
+            taxIds: {},
+            taxYear: 2062,
+            formType: "1099-NEC",
+            threshold: "600",
+            currency: "USD",
+          }),
+          org.orgId,
+          filingId,
+        ],
+      ),
+    );
     await holder.query("commit");
     await holder.end();
     holder = null;
@@ -405,10 +468,7 @@ test("the finalize-versus-PATCH race cannot mutate frozen evidence through the r
 
     // Frozen storage untouched: no shadow write, not even an updated_at bump.
     const after = await recipientRow(org.orgId, target);
-    assert.deepEqual(
-      { ...after, updated_at: undefined },
-      { ...before, updated_at: undefined },
-    );
+    assert.deepEqual({ ...after, updated_at: undefined }, { ...before, updated_at: undefined });
     assert.equal(after.updated_at.getTime(), before.updated_at.getTime());
     assert.deepEqual(after.adjustments, {});
     assert.equal(await recipientAuditCount(org.orgId, target), 0);
@@ -429,14 +489,26 @@ test("when the edit wins the race its delta is part of the frozen evidence", asy
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
-    routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(), allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
     const { filingId, recipientIds } = await seedComputedFiling(org, actorId, 2063);
     const target = recipientIds[0]!;
 
     const [edit, freeze] = await Promise.allSettled([
-      withOrgContext(org.orgId, () => PATCH(patchRequest({ adjustments: { nec1: "-100" }, adjustmentReason: "refund issued after year end" }), {
-        params: Promise.resolve({ id: filingId, recipientId: target }),
-      })),
+      withOrgContext(org.orgId, () =>
+        PATCH(
+          patchRequest({
+            adjustments: { nec1: "-100" },
+            adjustmentReason: "refund issued after year end",
+          }),
+          {
+            params: Promise.resolve({ id: filingId, recipientId: target }),
+          },
+        ),
+      ),
       finalizeFiling({ orgId: org.orgId, filingId, actorId }),
     ]);
     assert.equal(freeze.status, "fulfilled", "finalize must succeed either way");
@@ -464,16 +536,27 @@ test("the action route refuses to void a FILED return and writes exactly one voi
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
-    routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["compliance.manage", "compliance.file"]), allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["compliance.manage", "compliance.file"]),
+      allowedSubsidiaryIds: null,
+    };
 
     // A filed return is permanent evidence: the action route used to void it
     // with a bare UPDATE; through the service it is refused.
     const filed = await seedComputedFiling(org, actorId, 2064);
     await finalizeFiling({ orgId: org.orgId, filingId: filed.filingId, actorId });
-    await markFilingFiled({ orgId: org.orgId, filingId: filed.filingId, channel: "paper", actorId });
-    const refused = await withOrgContext(org.orgId, () => POST(postRequest({ action: "void", reason: "superseded" }), {
-      params: Promise.resolve({ id: filed.filingId }),
-    }));
+    await markFilingFiled({
+      orgId: org.orgId,
+      filingId: filed.filingId,
+      channel: "paper",
+      actorId,
+    });
+    const refused = await withOrgContext(org.orgId, () =>
+      POST(postRequest({ action: "void", reason: "superseded" }), {
+        params: Promise.resolve({ id: filed.filingId }),
+      }),
+    );
     assert.equal(refused.status, 422);
     assert.match(((await refused.json()) as { error: string }).error, /permanent evidence/);
     assert.equal(await filingStatus(org.orgId, filed.filingId), "filed");
@@ -481,17 +564,21 @@ test("the action route refuses to void a FILED return and writes exactly one voi
     // Voiding before transmission works, through the service, with exactly one
     // atomic audit row.
     const unfrozen = await seedComputedFiling(org, actorId, 2065);
-    const ok = await withOrgContext(org.orgId, () => POST(postRequest({ action: "void", reason: "superseded by corrected return" }), {
-      params: Promise.resolve({ id: unfrozen.filingId }),
-    }));
+    const ok = await withOrgContext(org.orgId, () =>
+      POST(postRequest({ action: "void", reason: "superseded by corrected return" }), {
+        params: Promise.resolve({ id: unfrozen.filingId }),
+      }),
+    );
     assert.equal(ok.status, 200);
     assert.equal(await filingStatus(org.orgId, unfrozen.filingId), "void");
     assert.deepEqual(await filingAudits(org.orgId, unfrozen.filingId), ["compute", "void"]);
 
     // Unknown filing ids fail closed as 404.
-    const missing = await withOrgContext(org.orgId, () => POST(postRequest({ action: "void", reason: "x" }), {
-      params: Promise.resolve({ id: randomUUID() }),
-    }));
+    const missing = await withOrgContext(org.orgId, () =>
+      POST(postRequest({ action: "void", reason: "x" }), {
+        params: Promise.resolve({ id: randomUUID() }),
+      }),
+    );
     assert.equal(missing.status, 404);
   } finally {
     routeState.authz = null;

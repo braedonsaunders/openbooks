@@ -19,9 +19,8 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { GET, POST } = await import("./route.ts");
 
 const SLUG = "shared-restlet";
@@ -68,9 +67,14 @@ async function seedEndpoint(orgId: string, token: string): Promise<void> {
 
 async function runCount(orgId: string): Promise<number> {
   return Number(
-    (await db.execute<{ n: string }>(sql`
+    (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from script_runs where org_id = ${orgId}
-    `, "objects"))[0]!.n,
+    `,
+        "objects",
+      )
+    )[0]!.n,
   );
 }
 
@@ -114,7 +118,7 @@ test("authenticated GET /api/scripts/e/[slug] is 405, names that only POST execu
 
     const getRes = await GET(new Request(`http://audit.local/api/scripts/e/${SLUG}`));
     assert.equal(getRes.status, 405);
-    const getBody = await getRes.json() as { error: string };
+    const getBody = (await getRes.json()) as { error: string };
     assert.match(getBody.error, /only POST executes/);
     assert.match(getBody.error, /POST \/api\/scripts\/e\//);
     assert.equal(await runCount(org.orgId), 0, "GET must not write script_runs");

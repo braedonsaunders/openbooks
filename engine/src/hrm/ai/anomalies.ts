@@ -16,7 +16,10 @@ import { loadAiRailsSettings } from "./settings.ts";
 import { timeBalanceAsOf } from "../leave-read.ts";
 import { abs, add, cmp, mulDecimal, neg } from "../../money/money.ts";
 import { divideDecimal } from "../../money/exact-decimal.ts";
-import { lockPayrollAnomalyReview, payrollAnomalyFinalizeCheck } from "../../payroll/anomaly-finalize-gate.ts";
+import {
+  lockPayrollAnomalyReview,
+  payrollAnomalyFinalizeCheck,
+} from "../../payroll/anomaly-finalize-gate.ts";
 
 /**
  * Native workforce anomaly flags: deterministic pre-run payroll and
@@ -169,7 +172,12 @@ interface PendingFlag {
   explanation: string;
 }
 
-async function assertScanScope(exec: SqlExecutor, orgId: string, actorId: string, timeOnly: boolean): Promise<void> {
+async function assertScanScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  timeOnly: boolean,
+): Promise<void> {
   if ((await actorAllowedSubsidiaryIds(exec, orgId, actorId)) !== null) {
     throw new AiRailsError(
       "ai_forbidden",
@@ -177,7 +185,7 @@ async function assertScanScope(exec: SqlExecutor, orgId: string, actorId: string
     );
   }
   if (await actorHasPermission(exec, orgId, actorId, "payroll.manage")) return;
-  if (timeOnly && await actorHasPermission(exec, orgId, actorId, "time.approve")) return;
+  if (timeOnly && (await actorHasPermission(exec, orgId, actorId, "time.approve"))) return;
   throw new AiRailsError(
     "ai_forbidden",
     timeOnly
@@ -191,7 +199,11 @@ function anomalyFeatureKey(timeOnly: boolean): "timeTracking" | "payroll" {
   return timeOnly ? "timeTracking" : "payroll";
 }
 
-async function assertAnomalyFeature(exec: SqlExecutor, orgId: string, timeOnly: boolean): Promise<void> {
+async function assertAnomalyFeature(
+  exec: SqlExecutor,
+  orgId: string,
+  timeOnly: boolean,
+): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, anomalyFeatureKey(timeOnly)))) {
     throw new AiRailsError(
       "ai_feature_off",
@@ -204,11 +216,17 @@ async function assertAnomalyFeature(exec: SqlExecutor, orgId: string, timeOnly: 
 
 /** Hard rules against live tables. Each returns pending flags; skips are named. */
 async function ruleTerminatedWithPay(
-  exec: SqlExecutor, orgId: string, from: string, to: string,
+  exec: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
 ): Promise<PendingFlag[]> {
   const rows = await exec.execute<{
-    employmentId: string; endedOn: string; inputCount: string;
-  }>(sql`
+    employmentId: string;
+    endedOn: string;
+    inputCount: string;
+  }>(
+    sql`
     with terminated as (
       select distinct v.employment_id
         from worker_employment_versions v
@@ -236,20 +254,28 @@ async function ruleTerminatedWithPay(
            coalesce(sum(i.n), 0)::text as "inputCount"
       from terminated t
       join inputs i on i.employment_id = t.employment_id
-     group by t.employment_id`, "objects");
+     group by t.employment_id`,
+    "objects",
+  );
   return rows.map((r) => ({
     kind: "terminated_with_pay" as const,
     employmentId: r.employmentId,
     detailKey: `terminated:${r.employmentId}`,
     detail: { key: `terminated:${r.employmentId}`, endedOn: r.endedOn, inputCount: r.inputCount },
-    explanation: renderExplanation("terminated_with_pay", { endedOn: r.endedOn, inputCount: r.inputCount }),
+    explanation: renderExplanation("terminated_with_pay", {
+      endedOn: r.endedOn,
+      inputCount: r.inputCount,
+    }),
   }));
 }
 
 async function ruleDuplicateBank(exec: SqlExecutor, orgId: string): Promise<PendingFlag[]> {
   const rows = await exec.execute<{
-    fingerprint: string; lastFour: string; employmentIds: string[];
-  }>(sql`
+    fingerprint: string;
+    lastFour: string;
+    employmentIds: string[];
+  }>(
+    sql`
     select md5(coalesce(lower(b.routing::text), '') || '::' || coalesce(b.account_last_four, '')) as fingerprint,
            max(b.account_last_four) as "lastFour",
            array_agg(distinct e.id::text) as "employmentIds"
@@ -259,7 +285,9 @@ async function ruleDuplicateBank(exec: SqlExecutor, orgId: string): Promise<Pend
      where b.org_id = ${orgId}::uuid and b.is_active and b.approval_status = 'approved'
        and coalesce(b.account_last_four, '') <> ''
      group by 1
-    having count(distinct e.id) > 1`, "objects");
+    having count(distinct e.id) > 1`,
+    "objects",
+  );
   const out: PendingFlag[] = [];
   for (const r of rows) {
     for (const employmentId of r.employmentIds) {
@@ -267,7 +295,11 @@ async function ruleDuplicateBank(exec: SqlExecutor, orgId: string): Promise<Pend
         kind: "duplicate_bank",
         employmentId,
         detailKey: `bank:${r.fingerprint}`,
-        detail: { key: `bank:${r.fingerprint}`, lastFour: r.lastFour, employmentCount: String(r.employmentIds.length) },
+        detail: {
+          key: `bank:${r.fingerprint}`,
+          lastFour: r.lastFour,
+          employmentCount: String(r.employmentIds.length),
+        },
         explanation: renderExplanation("duplicate_bank", {
           lastFour: r.lastFour ?? "—",
           employmentCount: String(r.employmentIds.length),
@@ -279,11 +311,18 @@ async function ruleDuplicateBank(exec: SqlExecutor, orgId: string): Promise<Pend
 }
 
 async function ruleRetroSpike(
-  exec: SqlExecutor, orgId: string, from: string, to: string, threshold: number,
+  exec: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
+  threshold: number,
 ): Promise<PendingFlag[]> {
   const rows = await exec.execute<{
-    employmentId: string | null; amount: string; runDocumentId: string;
-  }>(sql`
+    employmentId: string | null;
+    amount: string;
+    runDocumentId: string;
+  }>(
+    sql`
     select a.employment_id::text as "employmentId", abs(a.amount)::text as amount,
            a.pay_run_document_id::text as "runDocumentId"
       from pay_run_adjustments a
@@ -292,23 +331,40 @@ async function ruleRetroSpike(
      where a.org_id = ${orgId}::uuid
        and a.adjustment_type = 'line'
        and abs(a.amount) > ${threshold}::numeric
-       and r.period_start <= ${to}::date and r.period_end >= ${from}::date`, "objects");
+       and r.period_start <= ${to}::date and r.period_end >= ${from}::date`,
+    "objects",
+  );
   return rows.map((r) => ({
     kind: "retro_spike" as const,
     employmentId: r.employmentId,
     detailKey: `retro:${r.runDocumentId}:${r.employmentId ?? "none"}:${r.amount}`,
-    detail: { key: `retro:${r.runDocumentId}:${r.employmentId ?? "none"}:${r.amount}`, amount: r.amount, threshold: String(threshold) },
-    explanation: renderExplanation("retro_spike", { amount: r.amount, threshold: String(threshold) }),
+    detail: {
+      key: `retro:${r.runDocumentId}:${r.employmentId ?? "none"}:${r.amount}`,
+      amount: r.amount,
+      threshold: String(threshold),
+    },
+    explanation: renderExplanation("retro_spike", {
+      amount: r.amount,
+      threshold: String(threshold),
+    }),
   }));
 }
 
 async function ruleOrphans(
-  exec: SqlExecutor, orgId: string, from: string, to: string,
+  exec: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
 ): Promise<PendingFlag[]> {
   const out: PendingFlag[] = [];
   const benefit = await exec.execute<{
-    id: string; employmentId: string; amount: string; enrollmentId: string; status: string;
-  }>(sql`
+    id: string;
+    employmentId: string;
+    amount: string;
+    enrollmentId: string;
+    status: string;
+  }>(
+    sql`
     select i.id::text as id, i.employment_id::text as "employmentId",
            i.amount::text as amount, i.enrollment_id::text as "enrollmentId", e.status
       from pay_run_benefit_allocations i
@@ -316,21 +372,35 @@ async function ruleOrphans(
         on e.org_id = i.org_id and e.id = i.enrollment_id
      where i.org_id = ${orgId}::uuid and i.status = 'calculated'
        and i.period_from <= ${to}::date and i.period_to >= ${from}::date
-       and (e.status = 'cancelled' or (e.status = 'ended' and e.effective_to < i.period_to))`, "objects");
+       and (e.status = 'cancelled' or (e.status = 'ended' and e.effective_to < i.period_to))`,
+    "objects",
+  );
   for (const r of benefit) {
     out.push({
       kind: "benefit_input_orphan",
       employmentId: r.employmentId,
       detailKey: `benefit-orphan:${r.id}`,
-      detail: { key: `benefit-orphan:${r.id}`, amount: r.amount, enrollmentId: r.enrollmentId, status: r.status },
+      detail: {
+        key: `benefit-orphan:${r.id}`,
+        amount: r.amount,
+        enrollmentId: r.enrollmentId,
+        status: r.status,
+      },
       explanation: renderExplanation("benefit_input_orphan", {
-        amount: r.amount, enrollmentId: r.enrollmentId, status: r.status,
+        amount: r.amount,
+        enrollmentId: r.enrollmentId,
+        status: r.status,
       }),
     });
   }
   const leave = await exec.execute<{
-    id: string; employmentId: string; absenceDate: string; requestId: string; status: string;
-  }>(sql`
+    id: string;
+    employmentId: string;
+    absenceDate: string;
+    requestId: string;
+    status: string;
+  }>(
+    sql`
     select i.id::text as id, i.employment_id::text as "employmentId",
            i.absence_date::text as "absenceDate",
            i.source_leave_request_id::text as "requestId", r.status
@@ -339,15 +409,24 @@ async function ruleOrphans(
         on r.org_id = i.org_id and r.id = i.source_leave_request_id
      where i.org_id = ${orgId}::uuid and i.status = 'pending'
        and i.absence_date between ${from}::date and ${to}::date
-       and r.status in ('cancelled', 'withdrawn', 'rejected')`, "objects");
+       and r.status in ('cancelled', 'withdrawn', 'rejected')`,
+    "objects",
+  );
   for (const r of leave) {
     out.push({
       kind: "leave_input_orphan",
       employmentId: r.employmentId,
       detailKey: `leave-orphan:${r.id}`,
-      detail: { key: `leave-orphan:${r.id}`, absenceDate: r.absenceDate, requestId: r.requestId, status: r.status },
+      detail: {
+        key: `leave-orphan:${r.id}`,
+        absenceDate: r.absenceDate,
+        requestId: r.requestId,
+        status: r.status,
+      },
       explanation: renderExplanation("leave_input_orphan", {
-        absenceDate: r.absenceDate, requestId: r.requestId, status: r.status,
+        absenceDate: r.absenceDate,
+        requestId: r.requestId,
+        status: r.status,
       }),
     });
   }
@@ -355,9 +434,13 @@ async function ruleOrphans(
 }
 
 async function ruleZeroHoursWithPay(
-  exec: SqlExecutor, orgId: string, from: string, to: string,
+  exec: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
 ): Promise<PendingFlag[]> {
-  const rows = await exec.execute<{ employmentId: string; inputCount: string }>(sql`
+  const rows = await exec.execute<{ employmentId: string; inputCount: string }>(
+    sql`
     with inputs as (
       select employment_id, count(*) as n
         from hrm_payroll_inputs
@@ -377,7 +460,9 @@ async function ruleZeroHoursWithPay(
     select i.employment_id::text as "employmentId", i.n::text as "inputCount"
       from inputs i
       join hours h on h.employment_id = i.employment_id
-     where h.h = 0`, "objects");
+     where h.h = 0`,
+    "objects",
+  );
   return rows.map((r) => ({
     kind: "zero_hours_with_pay" as const,
     employmentId: r.employmentId,
@@ -388,29 +473,47 @@ async function ruleZeroHoursWithPay(
 }
 
 async function ruleDuplicateEntries(
-  exec: SqlExecutor, orgId: string, from: string, to: string,
+  exec: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
 ): Promise<PendingFlag[]> {
   const rows = await exec.execute<{
-    partyId: string; workedOn: string; hours: string; taskId: string | null; entryCount: string;
-  }>(sql`
+    partyId: string;
+    workedOn: string;
+    hours: string;
+    taskId: string | null;
+    entryCount: string;
+  }>(
+    sql`
     select employee_party_id::text as "partyId", worked_on::text as "workedOn",
            hours::text as hours, project_task_id::text as "taskId", count(*)::text as "entryCount"
       from time_entries
      where org_id = ${orgId}::uuid and status <> 'rejected'
        and worked_on between ${from}::date and ${to}::date
      group by employee_party_id, worked_on, hours, project_task_id
-    having count(*) > 1`, "objects");
+    having count(*) > 1`,
+    "objects",
+  );
   const out: PendingFlag[] = [];
   for (const r of rows) {
-    const emp = (await exec.execute<{ employmentId: string }>(sql`
+    const emp = (
+      await exec.execute<{ employmentId: string }>(
+        sql`
       select id::text as "employmentId" from worker_employments
        where org_id = ${orgId}::uuid and worker_party_id = ${r.partyId}::uuid
-       limit 1`, "objects"))[0];
+       limit 1`,
+        "objects",
+      )
+    )[0];
     out.push({
       kind: "duplicate_entry",
       employmentId: emp?.employmentId ?? null,
       detailKey: `dup-entry:${r.partyId}:${r.workedOn}:${r.hours}:${r.taskId ?? "none"}`,
-      detail: { key: `dup-entry:${r.partyId}:${r.workedOn}:${r.hours}:${r.taskId ?? "none"}`, entryCount: r.entryCount },
+      detail: {
+        key: `dup-entry:${r.partyId}:${r.workedOn}:${r.hours}:${r.taskId ?? "none"}`,
+        entryCount: r.entryCount,
+      },
       explanation: renderExplanation("duplicate_entry", { entryCount: r.entryCount }),
     });
   }
@@ -418,13 +521,19 @@ async function ruleDuplicateEntries(
 }
 
 async function ruleMissingRates(
-  exec: SqlExecutor, orgId: string, from: string, to: string,
+  exec: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
 ): Promise<{ missing: PendingFlag[]; expired: PendingFlag[] }> {
   const missing: PendingFlag[] = [];
   const expired: PendingFlag[] = [];
   const rows = await exec.execute<{
-    partyId: string; workedOn: string; employmentId: string | null;
-  }>(sql`
+    partyId: string;
+    workedOn: string;
+    employmentId: string | null;
+  }>(
+    sql`
     select distinct t.employee_party_id::text as "partyId", t.worked_on::text as "workedOn",
            e.id::text as "employmentId"
       from time_entries t
@@ -432,16 +541,23 @@ async function ruleMissingRates(
         on e.org_id = t.org_id and e.worker_party_id = t.employee_party_id
      where t.org_id = ${orgId}::uuid and t.status = 'approved'
        and t.worked_on between ${from}::date and ${to}::date
-       and t.cost_rate is null`, "objects");
+       and t.cost_rate is null`,
+    "objects",
+  );
   for (const r of rows) {
-    const rate = (await exec.execute<{ id: string; effectiveTo: string | null }>(sql`
+    const rate = (
+      await exec.execute<{ id: string; effectiveTo: string | null }>(
+        sql`
       select id::text as id, effective_to::text as "effectiveTo"
         from labor_cost_rates
        where org_id = ${orgId}::uuid and is_active
          and (employee_party_id = ${r.partyId}::uuid or employee_party_id is null)
          and effective_from <= ${r.workedOn}::date
        order by effective_from desc
-       limit 1`, "objects"))[0];
+       limit 1`,
+        "objects",
+      )
+    )[0];
     if (!rate) {
       missing.push({
         kind: "missing_rate",
@@ -455,8 +571,15 @@ async function ruleMissingRates(
         kind: "expired_rate",
         employmentId: r.employmentId,
         detailKey: `expired-rate:${r.partyId}:${r.workedOn}`,
-        detail: { key: `expired-rate:${r.partyId}:${r.workedOn}`, workedOn: r.workedOn, endedOn: rate.effectiveTo },
-        explanation: renderExplanation("expired_rate", { workedOn: r.workedOn, endedOn: rate.effectiveTo }),
+        detail: {
+          key: `expired-rate:${r.partyId}:${r.workedOn}`,
+          workedOn: r.workedOn,
+          endedOn: rate.effectiveTo,
+        },
+        explanation: renderExplanation("expired_rate", {
+          workedOn: r.workedOn,
+          endedOn: rate.effectiveTo,
+        }),
       });
     }
   }
@@ -465,19 +588,28 @@ async function ruleMissingRates(
 
 /** HR-13 findings mirrored as flags, only while construction compliance is on. */
 async function ruleConstructionMirror(
-  exec: SqlExecutor, orgId: string, from: string, to: string,
+  exec: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
 ): Promise<{ flags: PendingFlag[]; skipped: string | null }> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, "hrmConstructionCompliance"))) {
     return { flags: [], skipped: "construction findings (hrmConstructionCompliance off)" };
   }
   const rows = await exec.execute<{
-    kind: string; employmentId: string | null; workedOn: string | null; id: string;
-  }>(sql`
+    kind: string;
+    employmentId: string | null;
+    workedOn: string | null;
+    id: string;
+  }>(
+    sql`
     select kind, employment_id::text as "employmentId", worked_on::text as "workedOn",
            id::text as id
       from hrm_compliance_findings
      where org_id = ${orgId}::uuid and status = 'open'
-       and (worked_on is null or (worked_on <= ${to}::date and worked_on >= ${from}::date - interval '90 days'))`, "objects");
+       and (worked_on is null or (worked_on <= ${to}::date and worked_on >= ${from}::date - interval '90 days'))`,
+    "objects",
+  );
   const flags: PendingFlag[] = [];
   for (const r of rows) {
     if (r.kind === "missing_rate") {
@@ -485,7 +617,11 @@ async function ruleConstructionMirror(
         kind: "prevailing_wage_missing",
         employmentId: r.employmentId,
         detailKey: `pw-missing:${r.id}`,
-        detail: { key: `pw-missing:${r.id}`, workedOn: r.workedOn ?? "—", classification: "assigned classification" },
+        detail: {
+          key: `pw-missing:${r.id}`,
+          workedOn: r.workedOn ?? "—",
+          classification: "assigned classification",
+        },
         explanation: renderExplanation("prevailing_wage_missing", {
           workedOn: r.workedOn ?? "—",
           classification: "assigned classification",
@@ -509,18 +645,26 @@ async function ruleConstructionMirror(
 
 /** Negative leave balances after the period, through the leave read service. */
 async function ruleNegativeBalances(
-  exec: SqlExecutor, orgId: string, from: string, to: string,
+  exec: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
 ): Promise<PendingFlag[]> {
   const rows = await exec.execute<{
-    employmentId: string; leaveTypeId: string; leaveType: string;
-  }>(sql`
+    employmentId: string;
+    leaveTypeId: string;
+    leaveType: string;
+  }>(
+    sql`
     select distinct r.employment_id::text as "employmentId",
            r.leave_type_id::text as "leaveTypeId",
            t.name as "leaveType"
       from hrm_leave_requests r
       join hrm_leave_types t on t.org_id = r.org_id and t.id = r.leave_type_id
      where r.org_id = ${orgId}::uuid and r.status = 'approved'
-       and r.starts_on <= ${to}::date and r.ends_on >= ${from}::date`, "objects");
+       and r.starts_on <= ${to}::date and r.ends_on >= ${from}::date`,
+    "objects",
+  );
   const out: PendingFlag[] = [];
   for (const r of rows) {
     let balance: string | null;
@@ -536,7 +680,11 @@ async function ruleNegativeBalances(
         kind: "negative_balance",
         employmentId: r.employmentId,
         detailKey: `neg-balance:${r.employmentId}:${r.leaveTypeId}`,
-        detail: { key: `neg-balance:${r.employmentId}:${r.leaveTypeId}`, leaveType: r.leaveType, balance },
+        detail: {
+          key: `neg-balance:${r.employmentId}:${r.leaveTypeId}`,
+          leaveType: r.leaveType,
+          balance,
+        },
         explanation: renderExplanation("negative_balance", { leaveType: r.leaveType, balance }),
       });
     }
@@ -546,30 +694,51 @@ async function ruleNegativeBalances(
 
 /** Baseline rules against the cohort windows; missing baselines skip by name. */
 async function ruleBaselines(
-  exec: SqlExecutor, orgId: string, from: string, to: string,
-  cohortKey: string, z: number,
+  exec: SqlExecutor,
+  orgId: string,
+  from: string,
+  to: string,
+  cohortKey: string,
+  z: number,
 ): Promise<{ flags: PendingFlag[]; skipped: string[] }> {
   const skipped: string[] = [];
   const flags: PendingFlag[] = [];
-  const baselines = await exec.execute<{ cohortKey: string; metric: string; mean: string; stddev: string }>(sql`
+  const baselines = await exec.execute<{
+    cohortKey: string;
+    metric: string;
+    mean: string;
+    stddev: string;
+  }>(
+    sql`
     select cohort_key as "cohortKey", metric, mean::text as mean, stddev::text as stddev
       from anomaly_baselines
-     where org_id = ${orgId}::uuid`, "objects");
+     where org_id = ${orgId}::uuid`,
+    "objects",
+  );
   if (baselines.length === 0) {
-    return { flags, skipped: ["baseline z-checks (no anomaly_baselines computed yet — run the baseline job)"] };
+    return {
+      flags,
+      skipped: ["baseline z-checks (no anomaly_baselines computed yet — run the baseline job)"],
+    };
   }
   // Cohort grain follows the org's declared key; department grain resolves
   // through the primary assignment, everything else through the employer
   // subsidiary until the pay-schedule and job-level grains land.
-  const cohortSql = cohortKey === "department"
-    ? sql`(select av.department_id::text from employment_assignment_versions av where av.org_id = e.org_id and av.employment_id = e.id and av.recorded_until is null and av.is_primary order by av.version_no desc limit 1)`
-    : sql`e.employer_subsidiary_id::text`;
+  const cohortSql =
+    cohortKey === "department"
+      ? sql`(select av.department_id::text from employment_assignment_versions av where av.org_id = e.org_id and av.employment_id = e.id and av.recorded_until is null and av.is_primary order by av.version_no desc limit 1)`
+      : sql`e.employer_subsidiary_id::text`;
   // Current-period aggregates use the same run-period observation grain as
   // the baseline, rather than blending every overlapping period together.
   const currents = await exec.execute<{
-    employmentId: string; cohort: string | null; net: string; gross: string;
-    periodStart: string; periodEnd: string;
-  }>(sql`
+    employmentId: string;
+    cohort: string | null;
+    net: string;
+    gross: string;
+    periodStart: string;
+    periodEnd: string;
+  }>(
+    sql`
     select s.employment_id::text as "employmentId",
            ${cohortSql} as cohort,
            sum(s.net_pay)::text as net, sum(s.gross)::text as gross,
@@ -580,15 +749,22 @@ async function ruleBaselines(
      where s.org_id = ${orgId}::uuid
        and r.period_start <= ${to}::date and r.period_end >= ${from}::date
      group by s.employment_id, e.org_id, e.id, e.employer_subsidiary_id,
-              r.period_start, r.period_end`, "objects");
+              r.period_start, r.period_end`,
+    "objects",
+  );
   // Hours use exactly the run periods that produced the current stubs. Each
   // approved entry is assigned to the one live employment episode covering
   // its worked date, so a rehire cannot make the same hours appear under both
   // employment records. The distinct period set and EXISTS avoid multiplying
   // an entry when the same employment has more than one run in a period.
   const hoursRows = await exec.execute<{
-    employmentId: string; periodStart: string; periodEnd: string; hours: string; unresolved: boolean;
-  }>(sql`
+    employmentId: string;
+    periodStart: string;
+    periodEnd: string;
+    hours: string;
+    unresolved: boolean;
+  }>(
+    sql`
     with current_periods as (
       select distinct s.employment_id, s.employee_party_id, r.period_start, r.period_end
         from pay_stubs s
@@ -621,11 +797,18 @@ async function ruleBaselines(
            and v.effective_from <= t.worked_on
            and (v.effective_to is null or t.worked_on < v.effective_to)
       ) live_episode on true
-     group by p.employment_id, p.period_start, p.period_end`, "objects");
-  if (hoursRows.some(row => row.unresolved)) {
-    throw new AiRailsError("ai_invalid_input", "Payroll hours require exactly one employment covering each worked date — correct the employment history before scanning anomalies");
+     group by p.employment_id, p.period_start, p.period_end`,
+    "objects",
+  );
+  if (hoursRows.some((row) => row.unresolved)) {
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "Payroll hours require exactly one employment covering each worked date — correct the employment history before scanning anomalies",
+    );
   }
-  const hoursByPeriod = new Map(hoursRows.map((r) => [`${r.employmentId}:${r.periodStart}:${r.periodEnd}`, r.hours]));
+  const hoursByPeriod = new Map(
+    hoursRows.map((r) => [`${r.employmentId}:${r.periodStart}:${r.periodEnd}`, r.hours]),
+  );
   const byCohortMetric = new Map(baselines.map((b) => [`${b.cohortKey}::${b.metric}`, b]));
   for (const c of currents) {
     const cohort = c.cohort ?? "unassigned";
@@ -635,7 +818,11 @@ async function ruleBaselines(
     const checks: { metric: "net_pay" | "gross" | "hours"; actual: string; kind: AnomalyKind }[] = [
       { metric: "net_pay", actual: c.net, kind: "net_pay_spike" },
       { metric: "gross", actual: c.gross, kind: "net_pay_spike" },
-      { metric: "hours", actual: hoursByPeriod.get(`${c.employmentId}:${c.periodStart}:${c.periodEnd}`) ?? "0", kind: "hours_spike" },
+      {
+        metric: "hours",
+        actual: hoursByPeriod.get(`${c.employmentId}:${c.periodStart}:${c.periodEnd}`) ?? "0",
+        kind: "hours_spike",
+      },
     ];
     for (const check of checks) {
       const base = byCohortMetric.get(`${cohort}::${check.metric}`);
@@ -649,19 +836,26 @@ async function ruleBaselines(
       if (baselineBreaches(mean, stddev, check.actual, z)) {
         const zz = zDistance(mean, stddev, check.actual);
         const vars = {
-          actual: String(check.actual), z: zz, cohort,
-          mean, stddev,
+          actual: String(check.actual),
+          z: zz,
+          cohort,
+          mean,
+          stddev,
         };
-        const explanation = check.metric === "gross"
-          ? `Gross ${vars.actual} is ${zz}σ from the ${cohort} baseline (mean ${vars.mean}, σ ${vars.stddev}) — confirm the inputs behind the move.`
-          : renderExplanation(check.kind, vars);
+        const explanation =
+          check.metric === "gross"
+            ? `Gross ${vars.actual} is ${zz}σ from the ${cohort} baseline (mean ${vars.mean}, σ ${vars.stddev}) — confirm the inputs behind the move.`
+            : renderExplanation(check.kind, vars);
         flags.push({
           kind: check.kind,
           employmentId: c.employmentId,
           detailKey: `${check.metric}:${c.employmentId}:${c.periodStart}:${c.periodEnd}:${zz}`,
           detail: {
             key: `${check.metric}:${c.employmentId}:${c.periodStart}:${c.periodEnd}:${zz}`,
-            metric: check.metric, periodFrom: c.periodStart, periodTo: c.periodEnd, ...vars,
+            metric: check.metric,
+            periodFrom: c.periodStart,
+            periodTo: c.periodEnd,
+            ...vars,
           },
           explanation,
         });
@@ -684,18 +878,24 @@ async function persistFlags(
   let alreadyOpen = 0;
   let suppressed = 0;
   const suppressedKeys = new Set(
-    (await exec.execute<{ kind: string; key: string }>(sql`
+    (
+      await exec.execute<{ kind: string; key: string }>(
+        sql`
       select kind, coalesce(detail->>'key', '') as key
         from payroll_anomaly_flags
-       where org_id = ${orgId}::uuid and status = 'false_positive'`, "objects"))
-      .map((r) => suppressionKey(r.kind, r.key)),
+       where org_id = ${orgId}::uuid and status = 'false_positive'`,
+        "objects",
+      )
+    ).map((r) => suppressionKey(r.kind, r.key)),
   );
   for (const flag of pending) {
     if (suppressedKeys.has(suppressionKey(flag.kind, flag.detailKey))) {
       suppressed += 1;
       continue;
     }
-    const existing = (await exec.execute<{ id: string; status: string }>(sql`
+    const existing = (
+      await exec.execute<{ id: string; status: string }>(
+        sql`
       select id::text as id, status from payroll_anomaly_flags
        where org_id = ${orgId}::uuid
          and pay_period_from = ${from}::date and pay_period_to = ${to}::date
@@ -704,18 +904,29 @@ async function persistFlags(
          and kind = ${flag.kind}
          and coalesce(detail->>'key', '') = ${flag.detailKey}
        limit 1
-       for update`, "objects"))[0];
+       for update`,
+        "objects",
+      )
+    )[0];
     if (existing) {
       if (existing.status === "resolved") {
-        const reopened = (await exec.execute<{ id: string }>(sql`
+        const reopened = (
+          await exec.execute<{ id: string }>(
+            sql`
           update payroll_anomaly_flags
              set status = 'open', resolved_by = null, resolved_at = null, reason = null,
                  detail = ${JSON.stringify(flag.detail)}::jsonb, explanation = ${flag.explanation},
                  updated_by = ${actorId}::uuid, updated_at = now()
            where org_id = ${orgId}::uuid and id = ${existing.id}::uuid and status = 'resolved'
-          returning id::text as id`, "objects"))[0];
+          returning id::text as id`,
+            "objects",
+          )
+        )[0];
         if (!reopened) {
-          throw new AiRailsError("ai_flag_missing", `flag ${existing.id} could not be reopened — rerun the scan`);
+          throw new AiRailsError(
+            "ai_flag_missing",
+            `flag ${existing.id} could not be reopened — rerun the scan`,
+          );
         }
         alreadyOpen += 1;
       } else {
@@ -729,7 +940,9 @@ async function persistFlags(
     // a unique violation would abort this scan transaction and fail every
     // later statement with 25P02. Inference-less: the arbiter is an
     // expression index, which ON CONFLICT (columns) cannot name.
-    const inserted = (await exec.execute<{ id: string }>(sql`
+    const inserted = (
+      await exec.execute<{ id: string }>(
+        sql`
       insert into payroll_anomaly_flags (
         org_id, pay_period_from, pay_period_to, employment_id, kind,
         severity, detail, explanation, status, created_by
@@ -740,7 +953,10 @@ async function persistFlags(
         ${flag.explanation}, 'open', ${actorId}::uuid
       -- A matching open flag already records this anomaly; count it as already open below.
       ) on conflict do nothing
-      returning id::text as id`, "objects"))[0];
+      returning id::text as id`,
+        "objects",
+      )
+    )[0];
     if (inserted) created += 1;
     else alreadyOpen += 1;
   }
@@ -766,9 +982,13 @@ export async function scanAnomalies(
   },
 ): Promise<ScanSummary> {
   const { orgId, actorId, periodFrom: from, periodTo: to } = input;
-  if (!orgId || !actorId) throw new AiRailsError("ai_invalid_input", "orgId and actorId are required");
+  if (!orgId || !actorId)
+    throw new AiRailsError("ai_invalid_input", "orgId and actorId are required");
   if (!isCivilDate(from) || !isCivilDate(to) || from > to) {
-    throw new AiRailsError("ai_invalid_input", "periodFrom/periodTo must be YYYY-MM-DD with periodFrom <= periodTo");
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "periodFrom/periodTo must be YYYY-MM-DD with periodFrom <= periodTo",
+    );
   }
   const timeOnly = input.options?.timeOnly === true;
   await assertScanScope(exec, orgId, actorId, timeOnly);
@@ -790,7 +1010,14 @@ export async function scanAnomalies(
     const construction = await ruleConstructionMirror(exec, orgId, from, to);
     pending.push(...construction.flags);
     if (construction.skipped) skipped.push(construction.skipped);
-    const base = await ruleBaselines(exec, orgId, from, to, settings.cohortKey, settings.zThreshold);
+    const base = await ruleBaselines(
+      exec,
+      orgId,
+      from,
+      to,
+      settings.cohortKey,
+      settings.zThreshold,
+    );
     pending.push(...base.flags);
     skipped.push(...base.skipped);
   }
@@ -828,9 +1055,13 @@ export type FlagRow = {
   explanation: string;
   detail: unknown;
   reason: string | null;
-}
+};
 
-async function assertFlagReadScope(exec: SqlExecutor, orgId: string, actorId: string): Promise<{
+async function assertFlagReadScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<{
   payroll: boolean;
   time: boolean;
 }> {
@@ -839,9 +1070,11 @@ async function assertFlagReadScope(exec: SqlExecutor, orgId: string, actorId: st
   const payrollPermission = await actorHasPermission(exec, orgId, actorId, "payroll.manage");
   const timePermission = await actorHasPermission(exec, orgId, actorId, "time.approve");
   const employmentRead = await actorHasPermission(exec, orgId, actorId, "hrm.employment.read");
-  const payroll = payrollPermission && await orgFeatureEnabled(orgId, anomalyFeatureKey(false), exec);
-  const time = (timePermission || employmentRead || payrollPermission)
-    && await orgFeatureEnabled(orgId, anomalyFeatureKey(true), exec);
+  const payroll =
+    payrollPermission && (await orgFeatureEnabled(orgId, anomalyFeatureKey(false), exec));
+  const time =
+    (timePermission || employmentRead || payrollPermission) &&
+    (await orgFeatureEnabled(orgId, anomalyFeatureKey(true), exec));
   if (payroll || time) return { payroll, time };
   throw new AiRailsError(
     "ai_forbidden",
@@ -864,23 +1097,40 @@ export async function listFlags(
   },
 ): Promise<FlagRow[]> {
   if (input.periodFrom !== undefined && !isCivilDate(input.periodFrom)) {
-    throw new AiRailsError("ai_invalid_input", "periodFrom must be a valid calendar date in YYYY-MM-DD format — choose a valid period start");
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "periodFrom must be a valid calendar date in YYYY-MM-DD format — choose a valid period start",
+    );
   }
   if (input.periodTo !== undefined && !isCivilDate(input.periodTo)) {
-    throw new AiRailsError("ai_invalid_input", "periodTo must be a valid calendar date in YYYY-MM-DD format — choose a valid period end");
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "periodTo must be a valid calendar date in YYYY-MM-DD format — choose a valid period end",
+    );
   }
-  if (input.periodFrom !== undefined && input.periodTo !== undefined && input.periodTo < input.periodFrom) {
-    throw new AiRailsError("ai_invalid_input", "periodTo must be on or after periodFrom — choose a valid anomaly period");
+  if (
+    input.periodFrom !== undefined &&
+    input.periodTo !== undefined &&
+    input.periodTo < input.periodFrom
+  ) {
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "periodTo must be on or after periodFrom — choose a valid anomaly period",
+    );
   }
   if (input.employmentId !== undefined && !isUuid(input.employmentId)) {
-    throw new AiRailsError("ai_invalid_input", "employmentId must be a valid UUID — select a saved employment");
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "employmentId must be a valid UUID — select a saved employment",
+    );
   }
   const capabilities = await assertFlagReadScope(exec, input.orgId, input.actorId);
   // Employment flags follow their legal employer; run-wide flags follow
   // the identified payroll document. Unattributed flags fail closed for
   // restricted callers.
   const allowed = await actorAllowedSubsidiaryIds(exec, input.orgId, input.actorId);
-  const rows = await exec.execute<FlagRow>(sql`
+  const rows = await exec.execute<FlagRow>(
+    sql`
     select f.id::text as id, f.kind, f.severity, f.status,
            f.employment_id::text as "employmentId",
            f.pay_period_from::text as "payPeriodFrom",
@@ -907,7 +1157,9 @@ export async function listFlags(
          or (f.kind <> all(${sql.param([...TIME_ANOMALY_KINDS])}::text[]) and ${capabilities.payroll})
        )
        ${subsidiaryVisibleFilter(sql`case when f.employment_id is null then flag_run.subsidiary_id else e.employer_subsidiary_id end`, allowed)}
-     order by f.severity, f.pay_period_from desc, f.id`, "objects");
+     order by f.severity, f.pay_period_from desc, f.id`,
+    "objects",
+  );
   return rows;
 }
 
@@ -942,7 +1194,10 @@ export async function transitionFlag(
 ): Promise<FlagRow> {
   const { orgId, actorId, flagId } = input;
   if (!["acknowledged", "resolved", "false_positive"].includes(input.to)) {
-    throw new AiRailsError("ai_invalid_input", "transition target must be acknowledged, resolved or false_positive");
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "transition target must be acknowledged, resolved or false_positive",
+    );
   }
   if (input.reason.trim().length === 0) {
     throw new AiRailsError(
@@ -961,7 +1216,12 @@ export async function transitionFlag(
         on e.org_id = f.org_id and e.id = f.employment_id
       left join documents flag_run on flag_run.org_id = f.org_id and flag_run.id = f.run_document_id
      where f.org_id = ${orgId}::uuid and f.id = ${flagId}::uuid`;
-  type CurrentFlag = { kind: string; severity: string; status: string; employerSubsidiaryId: string | null };
+  type CurrentFlag = {
+    kind: string;
+    severity: string;
+    status: string;
+    employerSubsidiaryId: string | null;
+  };
   let current = (await exec.execute<CurrentFlag>(currentQuery, "objects"))[0];
   // Unknown, cross-org, and out-of-scope flags answer exactly alike: the
   // refusal must never confirm which half failed.
@@ -973,17 +1233,23 @@ export async function transitionFlag(
   }
   const isTimeFlag = TIME_ANOMALY_KINDS.has(current.kind);
   const authorized = isTimeFlag
-    ? (await actorHasPermission(exec, orgId, actorId, "time.approve")
-      || await actorHasPermission(exec, orgId, actorId, "payroll.manage"))
+    ? (await actorHasPermission(exec, orgId, actorId, "time.approve")) ||
+      (await actorHasPermission(exec, orgId, actorId, "payroll.manage"))
     : await actorHasPermission(exec, orgId, actorId, "payroll.manage");
   const featureOn = await lockAndCheckOrgFeature(exec, orgId, anomalyFeatureKey(isTimeFlag));
   if (!authorized || !featureOn) {
-    throw new AiRailsError("ai_forbidden", "this anomaly flag is outside your enabled payroll or time authority");
+    throw new AiRailsError(
+      "ai_forbidden",
+      "this anomaly flag is outside your enabled payroll or time authority",
+    );
   }
   await lockPayrollAnomalyReview(exec, orgId);
   current = (await exec.execute<CurrentFlag>(sql`${currentQuery} for update of f`, "objects"))[0];
   if (!current || !subsidiaryScopeAllows(allowed, current.employerSubsidiaryId)) {
-    throw new AiRailsError("ai_flag_missing", "flag is missing or outside your legal entity scope — reload and retry");
+    throw new AiRailsError(
+      "ai_flag_missing",
+      "flag is missing or outside your legal entity scope — reload and retry",
+    );
   }
   if (current.status !== "open" && current.status !== "acknowledged") {
     throw new AiRailsError(
@@ -991,14 +1257,17 @@ export async function transitionFlag(
       `flag is already ${current.status} — closed flags stay closed; run a fresh scan for the new period`,
     );
   }
-  if (current.severity === "block"
-    && !(await actorHasPermission(exec, orgId, actorId, "payroll.manage"))) {
+  if (
+    current.severity === "block" &&
+    !(await actorHasPermission(exec, orgId, actorId, "payroll.manage"))
+  ) {
     throw new AiRailsError(
       "ai_forbidden",
       "only the payroll manager reviews blocking flags — escalate this flag to the payroll manager",
     );
   }
-  const rows = await exec.execute<FlagRow>(sql`
+  const rows = await exec.execute<FlagRow>(
+    sql`
     update payroll_anomaly_flags
        set status = ${input.to}, reason = ${input.reason},
            resolved_by = ${actorId}::uuid, resolved_at = now(),
@@ -1008,10 +1277,15 @@ export async function transitionFlag(
            employment_id::text as "employmentId",
            pay_period_from::text as "payPeriodFrom",
            pay_period_to::text as "payPeriodTo",
-           explanation, detail, reason`, "objects");
+           explanation, detail, reason`,
+    "objects",
+  );
   const row = rows[0];
   if (!row) {
-    throw new AiRailsError("ai_flag_missing", `flag ${flagId} matched no row on write — reload and retry`);
+    throw new AiRailsError(
+      "ai_flag_missing",
+      `flag ${flagId} matched no row on write — reload and retry`,
+    );
   }
   await logDecision(exec, {
     orgId,
@@ -1066,14 +1340,20 @@ export async function computeBaselines(
   await assertScanScope(exec, orgId, actorId, false);
   await assertAnomalyFeature(exec, orgId, false);
   const settings = await loadAiRailsSettings(exec, orgId);
-  const cohortKey = settings.cohortKey === "pay_schedule" || settings.cohortKey === "job_level"
-    ? "subsidiary"
-    : settings.cohortKey;
-  const dates = (await exec.execute<{ payDate: string }>(sql`
+  const cohortKey =
+    settings.cohortKey === "pay_schedule" || settings.cohortKey === "job_level"
+      ? "subsidiary"
+      : settings.cohortKey;
+  const dates = (
+    await exec.execute<{ payDate: string }>(
+      sql`
     select distinct pay_date::text as "payDate" from pay_stubs
      where org_id = ${orgId}::uuid
      order by "payDate" desc
-     limit ${windowPeriods}`, "objects")).map((r) => r.payDate);
+     limit ${windowPeriods}`,
+      "objects",
+    )
+  ).map((r) => r.payDate);
   if (dates.length < 2) {
     throw new AiRailsError(
       "ai_baseline_too_early",
@@ -1081,13 +1361,22 @@ export async function computeBaselines(
     );
   }
   const earliest = dates[dates.length - 1];
-  const dateList = sql.join(dates.map((date) => sql`${date}::date`), sql`, `);
-  const cohortSql = cohortKey === "department"
-    ? sql`(select av.department_id::text from employment_assignment_versions av where av.org_id = e.org_id and av.employment_id = e.id and av.recorded_until is null and av.is_primary order by av.version_no desc limit 1)`
-    : sql`e.employer_subsidiary_id::text`;
+  const dateList = sql.join(
+    dates.map((date) => sql`${date}::date`),
+    sql`, `,
+  );
+  const cohortSql =
+    cohortKey === "department"
+      ? sql`(select av.department_id::text from employment_assignment_versions av where av.org_id = e.org_id and av.employment_id = e.id and av.recorded_until is null and av.is_primary order by av.version_no desc limit 1)`
+      : sql`e.employer_subsidiary_id::text`;
   const stats = await exec.execute<{
-    cohort: string; metric: string; mean: string; stddev: string; unresolved: boolean;
-  }>(sql`
+    cohort: string;
+    metric: string;
+    mean: string;
+    stddev: string;
+    unresolved: boolean;
+  }>(
+    sql`
     with window_stubs as (
       select s.employment_id, s.employee_party_id, r.period_start, r.period_end,
              sum(s.net_pay) as net_pay, sum(s.gross) as gross, ${cohortSql} as cohort
@@ -1136,13 +1425,20 @@ export async function computeBaselines(
           ) live_episode on true
          group by p.employment_id, p.period_start, p.period_end, p.cohort
       ) w
-     group by 1`, "objects");
-  if (stats.some(row => row.unresolved)) {
-    throw new AiRailsError("ai_invalid_input", "Payroll baseline hours require exactly one employment covering each worked date — correct the employment history before computing baselines");
+     group by 1`,
+    "objects",
+  );
+  if (stats.some((row) => row.unresolved)) {
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "Payroll baseline hours require exactly one employment covering each worked date — correct the employment history before computing baselines",
+    );
   }
   let computed = 0;
   for (const s of stats) {
-    const done = (await exec.execute<{ id: string }>(sql`
+    const done = (
+      await exec.execute<{ id: string }>(
+        sql`
       insert into anomaly_baselines (
         org_id, cohort_key, metric, window_periods, mean, stddev, computed_at, created_by
       ) values (
@@ -1153,7 +1449,10 @@ export async function computeBaselines(
          set window_periods = excluded.window_periods, mean = excluded.mean,
              stddev = excluded.stddev, computed_at = now(), updated_by = ${actorId}::uuid,
              updated_at = now()
-      returning id::text as id`, "objects"))[0];
+      returning id::text as id`,
+        "objects",
+      )
+    )[0];
     if (done) computed += 1;
   }
   await logDecision(exec, {

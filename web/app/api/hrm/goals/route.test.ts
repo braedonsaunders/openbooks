@@ -79,7 +79,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmGoalsRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmGoalsRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["@/lib/features", "mock:features"],
@@ -90,21 +91,23 @@ const mockUrls = new Map<string, string>([
   ["../review-cycles/_lib", "mock:lib"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" ? "mock:authz" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-goals-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked =
+      mockUrls.get(specifier) ?? (specifier === "@/lib/authz" ? "mock:authz" : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-goals-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000061";
 
@@ -145,7 +148,11 @@ test("an unauthenticated caller never reaches the service", async () => {
 test("list narrows by employment and rejects bad ids before the service runs", async () => {
   reset();
   assert.equal(
-    (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/goals?employmentId=nope"))).status,
+    (
+      await collectionRoute!.GET(
+        new Request("http://openbooks.test/api/hrm/goals?employmentId=nope"),
+      )
+    ).status,
     400,
   );
   assert.deepEqual(routeState.calls, []);
@@ -162,7 +169,11 @@ test("create validates the body through the real parser before the service runs"
   reset();
   assert.equal((await collectionRoute!.POST(postRequest({ title: "X" }))).status, 400);
   assert.equal(
-    (await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, title: "  ", dueOn: "2030-12-31" }))).status,
+    (
+      await collectionRoute!.POST(
+        postRequest({ employmentId: EMPLOYMENT_ID, title: "  ", dueOn: "2030-12-31" }),
+      )
+    ).status,
     400,
   );
   assert.deepEqual(routeState.calls, []);

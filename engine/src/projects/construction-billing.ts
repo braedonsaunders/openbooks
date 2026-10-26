@@ -2,17 +2,27 @@ import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { requestNativeCommandApproval } from "../platform/approval-routing.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { sql } from "drizzle-orm";
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import {
-  lockProjectForScope,
-  subsidiaryScopeAllows,
-} from "../organization/subsidiary-scope.ts";
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from "../organization/org-feature-lock.ts";
+import { lockProjectForScope, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { loadSubsidiaryContext, restrictionAdmits } from "../organization/subsidiaries.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { roundCurrencyMoney, settleCumulativeRetainage } from "../fx/currencies.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "../money/money.ts";
+import {
+  add,
+  cmp,
+  formatMoney,
+  mulPercent,
+  mulRatio,
+  neg,
+  normalizeMoney,
+  sum,
+  toUnits,
+} from "../money/money.ts";
 import { parseMoney, type Money } from "../money/brands.ts";
 import { isUuid } from "../platform/uuid.ts";
 
@@ -42,7 +52,8 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export function requireIsoDate(value: unknown, label: string): string {
   if (typeof value === "string" && ISO_DATE.test(value)) {
     const parsed = new Date(`${value}T00:00:00Z`);
-    if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value) return value;
+    if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value)
+      return value;
   }
   throw new ConstructionBillingError(`${label} must be a valid calendar date (YYYY-MM-DD)`);
 }
@@ -59,7 +70,8 @@ function persistRetainageReleaseAmount(value: unknown): Money {
 /** Persist retainage percent through exact decimal then ledger money. Fail closed. */
 function persistRetainagePercent(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new ConstructionBillingError("retainage percent must be an exact decimal");
+  if (exact === null)
+    throw new ConstructionBillingError("retainage percent must be an exact decimal");
   try {
     return normalizeMoney(exact);
   } catch {
@@ -137,14 +149,19 @@ async function assertApplicationProcedure(
   orgId: string,
   projectId: string,
 ): Promise<void> {
-  const result = await tx.execute<{ supported: boolean }>(sql`
+  const result = await tx.execute<{ supported: boolean }>(
+    sql`
     select pt.invoicing_profile->>'billingProcedure' = 'application_for_payment' as supported
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${projectId}
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!result[0]?.supported) {
-    throw new ConstructionBillingError("This project's billing profile does not use applications for payment");
+    throw new ConstructionBillingError(
+      "This project's billing profile does not use applications for payment",
+    );
   }
 }
 
@@ -197,7 +214,9 @@ export function revisedScheduleValue(
   }
   const revised = add(current, change);
   if (cmp(revised, "0") < 0 || cmp(revised, billed) < 0) {
-    throw new ConstructionBillingError("The change order would reduce the schedule line below its already-billed value");
+    throw new ConstructionBillingError(
+      "The change order would reduce the schedule line below its already-billed value",
+    );
   }
   // add() emits fromUnits-fixed 4dp: the revised value is canonical Money.
   return revised as Money;
@@ -225,17 +244,30 @@ export interface RetainageSettlement {
  * whole currency minor units with the residual carried forward; the net is the
  * current payment due. Exact money throughout — unit-tested.
  */
-export function computeApplication(lines: AppLineInput[], settlement: RetainageSettlement = {}): ComputedApplication {
+export function computeApplication(
+  lines: AppLineInput[],
+  settlement: RetainageSettlement = {},
+): ComputedApplication {
   const { minorUnits = 4, priorExactRetainage = [] } = settlement;
-  const exacts: { sovLineId: string; grossThisPeriod: string; exactRetainage: string; completedToDate: string; percentComplete: string }[] = lines.map((l) => {
+  const exacts: {
+    sovLineId: string;
+    grossThisPeriod: string;
+    exactRetainage: string;
+    completedToDate: string;
+    percentComplete: string;
+  }[] = lines.map((l) => {
     const scheduled = persistRevisedScheduleValueInput(l.scheduledValue || "0");
     const previous = persistPreviousCompleted(l.previousCompleted || "0");
     const previousStored = persistPreviousMaterialsStored(l.previousMaterialsStored || "0");
     const thisPeriod = persistThisPeriodCompleted(l.thisPeriodCompleted || "0");
     const stored = persistMaterialsStored(l.materialsStored || "0");
     const retainagePercent = persistRetainagePercent(l.retainagePercent || "0");
-    if ([scheduled, previous, previousStored, thisPeriod, stored].some((value) => cmp(value, "0") < 0)) {
-      throw new ConstructionBillingError("Schedule values and application amounts cannot be negative");
+    if (
+      [scheduled, previous, previousStored, thisPeriod, stored].some((value) => cmp(value, "0") < 0)
+    ) {
+      throw new ConstructionBillingError(
+        "Schedule values and application amounts cannot be negative",
+      );
     }
     if (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0) {
       throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
@@ -249,14 +281,16 @@ export function computeApplication(lines: AppLineInput[], settlement: RetainageS
     // Withhold on the VALIDATED percent above — the raw input may be blank
     // (which cmp rejects with a bare Error) or un-normalized, bypassing the
     // boundary that every other line amount passes through.
-    const retainage = cmp(retainagePercent, "0") > 0 ? mulPercent(gross, retainagePercent) : "0.0000";
+    const retainage =
+      cmp(retainagePercent, "0") > 0 ? mulPercent(gross, retainagePercent) : "0.0000";
     const completedToDate = add(previous, gross);
     if (cmp(completedToDate, scheduled) > 0) {
       throw new ConstructionBillingError("Application amount exceeds the scheduled value");
     }
-    const percent = cmp(scheduled, "0") > 0 && cmp(completedToDate, "0") >= 0
-      ? formatMoney(mulRatio("100", toUnits(completedToDate), toUnits(scheduled)), 2)
-      : "0.00";
+    const percent =
+      cmp(scheduled, "0") > 0 && cmp(completedToDate, "0") >= 0
+        ? formatMoney(mulRatio("100", toUnits(completedToDate), toUnits(scheduled)), 2)
+        : "0.00";
     return {
       sovLineId: l.sovLineId,
       grossThisPeriod: gross,
@@ -268,7 +302,11 @@ export function computeApplication(lines: AppLineInput[], settlement: RetainageS
   // Settle the exact line retainage into whole minor units, carrying the
   // residual across lines (and across draws via the replay) so the settled
   // total is the rounded cumulative amount exactly.
-  const settled = settleCumulativeRetainage(priorExactRetainage, exacts.map((e) => e.exactRetainage), minorUnits);
+  const settled = settleCumulativeRetainage(
+    priorExactRetainage,
+    exacts.map((e) => e.exactRetainage),
+    minorUnits,
+  );
   const computed: ComputedAppLine[] = exacts.map((e, index) => ({
     sovLineId: e.sovLineId,
     grossThisPeriod: e.grossThisPeriod,
@@ -278,7 +316,9 @@ export function computeApplication(lines: AppLineInput[], settlement: RetainageS
     percentComplete: e.percentComplete,
   }));
   const grossThisPeriod = computed.length ? sum(computed.map((c) => c.grossThisPeriod)) : "0";
-  const retainageThisPeriod = computed.length ? sum(computed.map((c) => c.retainageThisPeriod)) : "0";
+  const retainageThisPeriod = computed.length
+    ? sum(computed.map((c) => c.retainageThisPeriod))
+    : "0";
   return {
     lines: computed,
     grossThisPeriod,
@@ -287,15 +327,18 @@ export function computeApplication(lines: AppLineInput[], settlement: RetainageS
   };
 }
 
-async function nextNumber(tx: SqlExecutor, orgId: string, kind: string, prefix: string): Promise<string> {
+async function nextNumber(
+  tx: SqlExecutor,
+  orgId: string,
+  kind: string,
+  prefix: string,
+): Promise<string> {
   return allocateDocumentNumber(tx, orgId, kind, prefix);
 }
 
-async function retainageReceivableAccount(
-  tx: SqlExecutor,
-  orgId: string,
-): Promise<string | null> {
-  const r = await tx.execute<{ acct: string | null }>(sql`
+async function retainageReceivableAccount(tx: SqlExecutor, orgId: string): Promise<string | null> {
+  const r = await tx.execute<{ acct: string | null }>(
+    sql`
     select a.id as acct
       from orgs o
       join accounts a on a.id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
@@ -303,16 +346,23 @@ async function retainageReceivableAccount(
                      and a.is_active
                      and not a.is_summary
      where o.id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return r[0]?.acct ?? null;
 }
 
 /** Resolve a currency's ISO minor units from the tenant registry. Fail closed:
  * without a registered quantum there is no rounding policy to settle with. */
 async function retainageCurrencyMinorUnits(tx: SqlExecutor, currency: string): Promise<number> {
-  const row = (await tx.execute<{ minor_units: number }>(sql`
+  const row = (
+    await tx.execute<{ minor_units: number }>(
+      sql`
     select minor_units from currencies where code = ${currency}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row || !Number.isInteger(row.minor_units)) {
     throw new ConstructionBillingError(
       `Currency ${currency} is not in the currency registry — add it before billing retainage`,
@@ -340,22 +390,36 @@ async function projectRetainageSettlement(
   // Serialize the replay on the project row, like release creation: two
   // concurrent submits must not read the same settled history, or both
   // settle the same residual and strand a minor unit of dust.
-  const owned = await tx.execute(sql`
+  const owned = await tx.execute(
+    sql`
     select 1 from projects where org_id = ${orgId} and id = ${projectId} for update
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!owned.length) throw new ConstructionBillingError("Project not found");
-  const scope = (await tx.execute<{ currency: string | null }>(sql`
+  const scope = (
+    await tx.execute<{ currency: string | null }>(
+      sql`
     select coalesce(nullif(trim(s.base_currency), ''), o.base_currency) as currency
       from projects p
       join orgs o on o.id = p.org_id
       left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${projectId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!scope?.currency) {
     throw new ConstructionBillingError("Retainage settlement requires a project currency");
   }
   const minorUnits = await retainageCurrencyMinorUnits(tx, scope.currency);
-  const prior = await tx.execute<{ work: string; stored: string; prev_stored: string; percent: string }>(sql`
+  const prior = await tx.execute<{
+    work: string;
+    stored: string;
+    prev_stored: string;
+    percent: string;
+  }>(
+    sql`
     select pal.this_period_completed::text as work, pal.materials_stored::text as stored,
            pal.previous_materials_stored::text as prev_stored,
            coalesce(sl.retainage_percent, pa.retainage_percent)::text as percent
@@ -365,7 +429,9 @@ async function projectRetainageSettlement(
      where pal.org_id = ${orgId} and pa.project_id = ${projectId}
        and pa.application_number < ${currentApplicationNumber} and pa.status <> 'void'
      order by pa.application_number, sl.sort_order
-  `, "objects");
+  `,
+    "objects",
+  );
   const priorExactRetainage = prior.map((row) => {
     const gross = add(row.work, add(row.stored, neg(row.prev_stored)));
     return cmp(row.percent, "0") > 0 ? mulPercent(gross, row.percent) : "0.0000";
@@ -425,7 +491,8 @@ export async function createPayApplication(
     // previous-completed below. That basis stays true because an invoiced
     // draw can never return to approved or void while this later draw exists
     // (voidPayApplication and the invoice void/delete release both refuse).
-    const lifecycle = await tx.execute<{ has_open: boolean; last_period: string | Date | null }>(sql`
+    const lifecycle = await tx.execute<{ has_open: boolean; last_period: string | Date | null }>(
+      sql`
       select
         exists(select 1 from pay_applications where org_id = ${orgId} and project_id = ${projectId}
                and status in ('draft', 'submitted', 'approved')) as has_open,
@@ -433,33 +500,49 @@ export async function createPayApplication(
         -- deserialize a PostgreSQL DATE as a JavaScript Date object.
         (max(period_end) filter (where kind = 'progress' and status in ('invoiced', 'posted')))::text as last_period
         from pay_applications where org_id = ${orgId} and project_id = ${projectId}
-    `, "objects");
-    if (lifecycle[0]?.has_open) throw new ConstructionBillingError("Complete or void the current application before starting another");
+    `,
+      "objects",
+    );
+    if (lifecycle[0]?.has_open)
+      throw new ConstructionBillingError(
+        "Complete or void the current application before starting another",
+      );
     const lastPeriod = lifecycle[0]?.last_period;
-    const lastPeriodDay = lastPeriod instanceof Date
-      ? lastPeriod.toISOString().slice(0, 10)
-      : lastPeriod;
+    const lastPeriodDay =
+      lastPeriod instanceof Date ? lastPeriod.toISOString().slice(0, 10) : lastPeriod;
     if (lastPeriodDay && periodEnd <= lastPeriodDay) {
-      throw new ConstructionBillingError("The period ending must be after the previous invoiced application");
+      throw new ConstructionBillingError(
+        "The period ending must be after the previous invoiced application",
+      );
     }
-    const sov = await tx.execute<{ id: string; scheduled_value: string }>(sql`
+    const sov = await tx.execute<{ id: string; scheduled_value: string }>(
+      sql`
       select id, scheduled_value from sov_lines where org_id = ${orgId} and project_id = ${projectId}
        order by sort_order
-    `, "objects");
-    if (!sov.length) throw new ConstructionBillingError("This project has no Schedule of Values yet");
+    `,
+      "objects",
+    );
+    if (!sov.length)
+      throw new ConstructionBillingError("This project has no Schedule of Values yet");
 
-    const numRes = await tx.execute<{ n: number }>(sql`
+    const numRes = await tx.execute<{ n: number }>(
+      sql`
       select coalesce(max(application_number), 0) + 1 as n
         from pay_applications where org_id = ${orgId} and project_id = ${projectId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const applicationNumber = Number(numRes[0]!.n);
 
-    const app = await tx.execute<{ id: string }>(sql`
+    const app = await tx.execute<{ id: string }>(
+      sql`
       insert into pay_applications (org_id, project_id, application_number, period_end, retainage_percent,
                                     created_by, updated_by)
       values (${orgId}, ${projectId}, ${applicationNumber}, ${periodEnd}, ${exactRetainage}, ${userId}, ${userId})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     const appId = app[0]!.id;
 
     for (const line of sov) {
@@ -467,7 +550,8 @@ export async function createPayApplication(
       // increment already netted via that line's own previous_materials_stored);
       // the stored basis itself is the last posted application's balance, the
       // customer-side mirror of the vendor-application prefill.
-      const prior = await tx.execute<{ prev: string; prev_stored: string }>(sql`
+      const prior = await tx.execute<{ prev: string; prev_stored: string }>(
+        sql`
         select
           coalesce((select sum(pal.this_period_completed + pal.materials_stored - pal.previous_materials_stored)
               from pay_application_lines pal
@@ -478,7 +562,9 @@ export async function createPayApplication(
               join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
              where pal.org_id = ${orgId} and pal.sov_line_id = ${line.id} and pa.status in ('invoiced', 'posted')
              order by pa.application_number desc limit 1), 0) as prev_stored
-      `, "objects");
+      `,
+        "objects",
+      );
       await tx.execute(sql`
         insert into pay_application_lines (org_id, pay_application_id, sov_line_id, previous_completed,
                                            previous_materials_stored, created_by, updated_by)
@@ -509,13 +595,23 @@ export async function submitPayApplication(
     await lockApprovalSubject(orgId, "customer_pay_application", payAppId);
     const tx = db;
     await assertProjectsEnabled(tx, orgId);
-    const appRes = await tx.execute<{ id: string; project_id: string; status: string; retainage_percent: string; application_number: number }>(sql`
+    const appRes = await tx.execute<{
+      id: string;
+      project_id: string;
+      status: string;
+      retainage_percent: string;
+      application_number: number;
+    }>(
+      sql`
       select id, project_id, status, retainage_percent, application_number
         from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const app = appRes[0];
     if (!app) throw new ConstructionBillingError("Application not found");
-    if (app.status !== "draft") throw new ConstructionBillingError("Only a draft application can be submitted");
+    if (app.status !== "draft")
+      throw new ConstructionBillingError("Only a draft application can be submitted");
     // The child→project link never moves, but the project's subsidiary can:
     // recheck scope under the project lock before touching B's draws.
     await lockProjectForScope(tx, orgId, app.project_id, allowedSubsidiaryIds);
@@ -523,21 +619,26 @@ export async function submitPayApplication(
 
     const seen = new Set<string>();
     for (const update of updates) {
-      if (seen.has(update.sovLineId)) throw new ConstructionBillingError("A draw line was supplied more than once");
+      if (seen.has(update.sovLineId))
+        throw new ConstructionBillingError("A draw line was supplied more than once");
       seen.add(update.sovLineId);
       const thisPeriod = persistThisPeriodCompleted(update.thisPeriodCompleted || "0");
       const stored = persistMaterialsStored(update.materialsStored || "0");
       if (cmp(thisPeriod, "0") < 0 || cmp(stored, "0") < 0) {
         throw new ConstructionBillingError("Draw amounts cannot be negative");
       }
-      const updated = await tx.execute<{ id: string }>(sql`
+      const updated = await tx.execute<{ id: string }>(
+        sql`
         update pay_application_lines
            set this_period_completed = ${thisPeriod}, materials_stored = ${stored},
                updated_at = now(), updated_by = ${userId}
          where pay_application_id = ${payAppId} and sov_line_id = ${update.sovLineId} and org_id = ${orgId}
          returning id
-      `, "objects");
-      if (!updated.length) throw new ConstructionBillingError("A draw line does not belong to this application");
+      `,
+        "objects",
+      );
+      if (!updated.length)
+        throw new ConstructionBillingError("A draw line does not belong to this application");
     }
 
     const linesRes = await tx.execute<{
@@ -548,7 +649,8 @@ export async function submitPayApplication(
       this_period_completed: string | null;
       materials_stored: string | null;
       retainage_percent: string | null;
-    }>(sql`
+    }>(
+      sql`
       select pal.sov_line_id, pal.previous_completed, pal.previous_materials_stored,
              pal.this_period_completed, pal.materials_stored,
              sl.scheduled_value, sl.retainage_percent
@@ -556,18 +658,30 @@ export async function submitPayApplication(
         join sov_lines sl on sl.id = pal.sov_line_id and sl.org_id = pal.org_id
        where pal.pay_application_id = ${payAppId} and pal.org_id = ${orgId}
        order by sl.sort_order
-    `, "objects");
-    const settlement = await projectRetainageSettlement(tx, orgId, app.project_id, app.application_number);
-    const computed = computeApplication(linesRes.map((line) => ({
-      sovLineId: line.sov_line_id,
-      scheduledValue: String(line.scheduled_value ?? "0"),
-      previousCompleted: String(line.previous_completed ?? "0"),
-      previousMaterialsStored: String(line.previous_materials_stored ?? "0"),
-      thisPeriodCompleted: String(line.this_period_completed ?? "0"),
-      materialsStored: String(line.materials_stored ?? "0"),
-      retainagePercent: line.retainage_percent != null ? String(line.retainage_percent) : app.retainage_percent,
-    })), settlement);
-    if (cmp(computed.grossThisPeriod, "0") <= 0) throw new ConstructionBillingError("Enter work completed before submitting");
+    `,
+      "objects",
+    );
+    const settlement = await projectRetainageSettlement(
+      tx,
+      orgId,
+      app.project_id,
+      app.application_number,
+    );
+    const computed = computeApplication(
+      linesRes.map((line) => ({
+        sovLineId: line.sov_line_id,
+        scheduledValue: String(line.scheduled_value ?? "0"),
+        previousCompleted: String(line.previous_completed ?? "0"),
+        previousMaterialsStored: String(line.previous_materials_stored ?? "0"),
+        thisPeriodCompleted: String(line.this_period_completed ?? "0"),
+        materialsStored: String(line.materials_stored ?? "0"),
+        retainagePercent:
+          line.retainage_percent != null ? String(line.retainage_percent) : app.retainage_percent,
+      })),
+      settlement,
+    );
+    if (cmp(computed.grossThisPeriod, "0") <= 0)
+      throw new ConstructionBillingError("Enter work completed before submitting");
     await tx.execute(sql`
       update pay_applications
          set status = 'submitted', submitted_at = now(), submitted_by = ${userId},
@@ -598,17 +712,29 @@ export async function approvePayApplication(
     await lockApprovalSubject(orgId, "customer_pay_application", payAppId);
     const tx = db;
     await assertProjectsEnabled(tx, orgId);
-    const appRes = await tx.execute<{ project_id: string; status: string; submitted_by: string | null; created_by: string | null }>(sql`
+    const appRes = await tx.execute<{
+      project_id: string;
+      status: string;
+      submitted_by: string | null;
+      created_by: string | null;
+    }>(
+      sql`
       select project_id, status, submitted_by, created_by
         from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const app = appRes[0];
     if (!app) throw new ConstructionBillingError("Application not found");
-    if (app.status !== "submitted") throw new ConstructionBillingError("Only a submitted application can be approved");
+    if (app.status !== "submitted")
+      throw new ConstructionBillingError("Only a submitted application can be approved");
     await lockProjectForScope(tx, orgId, app.project_id, allowedSubsidiaryIds);
-    const entity = (await db.execute<{ subsidiary_id: string }>(
-        sql`select subsidiary_id from projects where org_id=${orgId} and id=${app.project_id} for share`, "objects",
-      ))[0];
+    const entity = (
+      await db.execute<{ subsidiary_id: string }>(
+        sql`select subsidiary_id from projects where org_id=${orgId} and id=${app.project_id} for share`,
+        "objects",
+      )
+    )[0];
     if (!entity) throw new ConstructionBillingError("Project not found");
     await lockActorCommandAuthority(
       db,
@@ -660,12 +786,15 @@ export async function laterProgressApplicationNumbers(
   projectId: string,
   applicationNumber: number,
 ): Promise<number[]> {
-  const rows = await tx.execute<{ application_number: number }>(sql`
+  const rows = await tx.execute<{ application_number: number }>(
+    sql`
     select application_number from pay_applications
      where org_id = ${orgId} and project_id = ${projectId} and kind = 'progress'
        and application_number > ${applicationNumber} and status <> 'void'
      order by application_number
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => Number(row.application_number));
 }
 
@@ -678,10 +807,12 @@ export function laterProgressApplicationsRefusal(
   transition: "be voided" | "return to approved",
 ): string {
   const named = later.map((n) => `#${n}`).join(", ");
-  const subject = later.length === 1 ? `later application ${named} is` : `later applications ${named} are`;
-  const lead = transition === "be voided"
-    ? `Application #${applicationNumber} cannot be voided`
-    : `This invoice bills application #${applicationNumber}, which cannot return to approved`;
+  const subject =
+    later.length === 1 ? `later application ${named} is` : `later applications ${named} are`;
+  const lead =
+    transition === "be voided"
+      ? `Application #${applicationNumber} cannot be voided`
+      : `This invoice bills application #${applicationNumber}, which cannot return to approved`;
   return (
     `${lead} while ${subject} not void — ` +
     "void the later applications first, newest first; for an invoiced application, void or delete its invoice, then void the application"
@@ -701,20 +832,34 @@ export async function voidPayApplication(
   await db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
     const result = await tx.execute<{
-      project_id: string; status: string; invoice_document_id: string | null; application_number: number; kind: string;
-    }>(sql`
+      project_id: string;
+      status: string;
+      invoice_document_id: string | null;
+      application_number: number;
+      kind: string;
+    }>(
+      sql`
       select project_id, status, invoice_document_id, application_number, kind
         from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const app = result[0];
     if (!app) throw new ConstructionBillingError("Application not found");
     if (!["draft", "submitted", "approved"].includes(app.status) || app.invoice_document_id) {
-      throw new ConstructionBillingError("Only an application that has not been invoiced can be voided");
+      throw new ConstructionBillingError(
+        "Only an application that has not been invoiced can be voided",
+      );
     }
     await lockProjectForScope(tx, orgId, app.project_id, allowedSubsidiaryIds);
     await assertApplicationProcedure(tx, orgId, app.project_id);
     if (app.kind === "progress") {
-      const later = await laterProgressApplicationNumbers(tx, orgId, app.project_id, Number(app.application_number));
+      const later = await laterProgressApplicationNumbers(
+        tx,
+        orgId,
+        app.project_id,
+        Number(app.application_number),
+      );
       if (later.length) {
         throw new ConstructionBillingError(
           laterProgressApplicationsRefusal(Number(app.application_number), later, "be voided"),
@@ -746,18 +891,23 @@ export async function assertProjectIncomeAccountUsable(
   if (!isUuid(accountId)) {
     throw new ConstructionBillingError("Income account not found");
   }
-  const account = (await runner.execute<{
-    id: string;
-    type: string;
-    subsidiary_id: string | null;
-    include_children: boolean;
-  }>(sql`
+  const account = (
+    await runner.execute<{
+      id: string;
+      type: string;
+      subsidiary_id: string | null;
+      include_children: boolean;
+    }>(
+      sql`
     select id, type, subsidiary_id, subsidiary_include_children as include_children
       from accounts
      where org_id = ${orgId} and id = ${accountId}
        and is_active and not is_summary
      for share
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!account) {
     throw new ConstructionBillingError("Income account not found");
   }
@@ -773,12 +923,7 @@ export async function assertProjectIncomeAccountUsable(
     !subsidiaryScopeAllows(allowedSubsidiaryIds, account.subsidiary_id, {
       orgWideNull: true,
     }) ||
-    !restrictionAdmits(
-      context,
-      account.subsidiary_id,
-      account.include_children,
-      projectEntity,
-    )
+    !restrictionAdmits(context, account.subsidiary_id, account.include_children, projectEntity)
   ) {
     throw new ConstructionBillingError(
       "Choose an income account visible to you and available to the project's subsidiary",
@@ -809,14 +954,20 @@ export async function generatePayApplicationInvoice(
       kind: string;
       status: string;
       retainage_percent: string;
-    }>(sql`
+    }>(
+      sql`
       select * from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const app = appRes[0];
     if (!app) throw new ConstructionBillingError("Application not found");
-    if (app.status !== "approved") throw new ConstructionBillingError("Only an approved application can create an invoice");
+    if (app.status !== "approved")
+      throw new ConstructionBillingError("Only an approved application can create an invoice");
     if (app.kind === "retainage_release") {
-      throw new ConstructionBillingError("Void this release application and create a new retainage release to recalculate available funds");
+      throw new ConstructionBillingError(
+        "Void this release application and create a new retainage release to recalculate available funds",
+      );
     }
     await lockProjectForScope(tx, orgId, app.project_id, allowedSubsidiaryIds);
     await assertApplicationProcedure(tx, orgId, app.project_id);
@@ -826,14 +977,18 @@ export async function generatePayApplicationInvoice(
       customer_id: string | null;
       subsidiary_id: string | null;
       currency: string;
-    }>(sql`
+    }>(
+      sql`
       select p.id, p.customer_id, p.subsidiary_id, coalesce(s.base_currency, o.base_currency) as currency
         from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
        where p.id = ${app.project_id} and p.org_id = ${orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const project = projRes[0];
     if (!project) throw new ConstructionBillingError("Project not found");
-    if (!project.customer_id) throw new ConstructionBillingError("The project has no customer to invoice");
+    if (!project.customer_id)
+      throw new ConstructionBillingError("The project has no customer to invoice");
 
     const linesRes = await tx.execute<{
       sov_line_id: string;
@@ -845,7 +1000,8 @@ export async function generatePayApplicationInvoice(
       description: string;
       income_account_id: string | null;
       retainage_percent: string | null;
-    }>(sql`
+    }>(
+      sql`
       select pal.sov_line_id, pal.previous_completed, pal.previous_materials_stored,
              pal.this_period_completed, pal.materials_stored,
              sl.description, sl.scheduled_value, sl.income_account_id, sl.retainage_percent
@@ -853,9 +1009,16 @@ export async function generatePayApplicationInvoice(
         join sov_lines sl on sl.id = pal.sov_line_id and sl.org_id = pal.org_id
        where pal.pay_application_id = ${payAppId} and pal.org_id = ${orgId}
        order by sl.sort_order
-    `, "objects");
+    `,
+      "objects",
+    );
 
-    const settlement = await projectRetainageSettlement(tx, orgId, app.project_id, app.application_number);
+    const settlement = await projectRetainageSettlement(
+      tx,
+      orgId,
+      app.project_id,
+      app.application_number,
+    );
     const computed = computeApplication(
       linesRes.map((l) => ({
         sovLineId: l.sov_line_id,
@@ -864,13 +1027,16 @@ export async function generatePayApplicationInvoice(
         previousMaterialsStored: String(l.previous_materials_stored ?? "0"),
         thisPeriodCompleted: String(l.this_period_completed ?? "0"),
         materialsStored: String(l.materials_stored ?? "0"),
-        retainagePercent: l.retainage_percent != null ? String(l.retainage_percent) : String(app.retainage_percent),
+        retainagePercent:
+          l.retainage_percent != null ? String(l.retainage_percent) : String(app.retainage_percent),
       })),
       settlement,
     );
 
     if (cmp(computed.grossThisPeriod, "0") === 0) {
-      throw new ConstructionBillingError("Nothing to bill — enter work completed on at least one line");
+      throw new ConstructionBillingError(
+        "Nothing to bill — enter work completed on at least one line",
+      );
     }
 
     // Resolve every billed account before numbering or writing invoice/source
@@ -901,7 +1067,11 @@ export async function generatePayApplicationInvoice(
           `Schedule-of-values line "${src.description}" requires an active Income or Other Income account available to the project's subsidiary. Correct its income account before creating an invoice`,
         );
       }
-      preparedLines.push({ accountId: account.id, description: src.description, amount: c.grossThisPeriod });
+      preparedLines.push({
+        accountId: account.id,
+        description: src.description,
+        amount: c.grossThisPeriod,
+      });
     }
     const retAcct = await retainageReceivableAccount(tx, orgId);
     if (cmp(computed.retainageThisPeriod, "0") > 0 && !retAcct) {
@@ -911,14 +1081,17 @@ export async function generatePayApplicationInvoice(
     }
 
     const documentNumber = await nextNumber(tx, orgId, "customer_invoice", "INV-");
-    const invoice = await tx.execute<{ id: string }>(sql`
+    const invoice = await tx.execute<{ id: string }>(
+      sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
                              project_id, subsidiary_id, memo, subtotal, tax_total, total, work_completed_on, created_by)
       values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id},
               ${app.period_end}, ${project.currency}, 'draft', ${app.project_id}, ${project.subsidiary_id},
               ${`Application for Payment #${app.application_number}`}, '0', '0', '0', ${app.period_end}, ${userId})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     const invoiceId = invoice[0]!.id;
 
     let lineNo = 1;
@@ -989,39 +1162,68 @@ export async function releaseRetainage(
     await tx.execute(sql`select id from orgs where id = ${orgId} for share`);
     await assertProjectsEnabled(tx, orgId);
     const exactAmount = persistRetainageReleaseAmount(amount);
-    if (cmp(exactAmount, "0") <= 0) throw new ConstructionBillingError("Release amount must be positive");
+    if (cmp(exactAmount, "0") <= 0)
+      throw new ConstructionBillingError("Release amount must be positive");
     // Recheck the caller's scope under the project lock before reading the
     // entity/customer: a rehome racing the route's unlocked entry check must
     // refuse here. Missing, cross-org, and out-of-scope share one shape.
     await lockProjectForScope(tx, orgId, projectId, allowedSubsidiaryIds);
     // This is also the serialization point for numbering and pending releases.
     // Read the entity/customer only after acquiring the project lock.
-    const projRes = await tx.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null }>(sql`
+    const projRes = await tx.execute<{
+      id: string;
+      customer_id: string | null;
+      subsidiary_id: string | null;
+    }>(
+      sql`
       select id, customer_id, subsidiary_id
         from projects where id = ${projectId} and org_id = ${orgId} for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const project = projRes[0];
-    if (!project?.customer_id) throw new ConstructionBillingError("Project has no customer to invoice");
+    if (!project?.customer_id)
+      throw new ConstructionBillingError("Project has no customer to invoice");
     await assertApplicationProcedure(tx, orgId, projectId);
-    const subsidiary = (await tx.execute<{ currency: string }>(sql`
+    const subsidiary = (
+      await tx.execute<{ currency: string }>(
+        sql`
       select nullif(trim(base_currency), '') as currency from subsidiaries
        where org_id = ${orgId} and id = ${project.subsidiary_id} and is_active and not is_elimination for share
-    `, "objects"))[0];
-    if (!subsidiary?.currency) throw new ConstructionBillingError("Retainage release requires an active project legal entity with a functional currency");
-    const books = await tx.execute<{ id: string }>(sql`
+    `,
+        "objects",
+      )
+    )[0];
+    if (!subsidiary?.currency)
+      throw new ConstructionBillingError(
+        "Retainage release requires an active project legal entity with a functional currency",
+      );
+    const books = await tx.execute<{ id: string }>(
+      sql`
       select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl for share
-    `, "objects");
-    if (books.length !== 1) throw new ConstructionBillingError("Retainage release requires exactly one active primary posting book");
+    `,
+      "objects",
+    );
+    if (books.length !== 1)
+      throw new ConstructionBillingError(
+        "Retainage release requires exactly one active primary posting book",
+      );
     const bookId = books[0]!.id;
 
     const retAcct = await retainageReceivableAccount(tx, orgId);
-    if (!retAcct) throw new ConstructionBillingError("No Retainage Receivable control account is configured");
+    if (!retAcct)
+      throw new ConstructionBillingError("No Retainage Receivable control account is configured");
 
     // Reserve against both posted GL retainage and draft release invoices so
     // two concurrent releases cannot overdraw the subledger before posting.
     // jl.amount is already in the LINE entity's functional currency; jl.currency
     // describes txn_amount, so filtering it would drop converted foreign invoices.
-    const balance = await tx.execute<{ held: string; reserved: string; invalid_reservation: boolean }>(sql`
+    const balance = await tx.execute<{
+      held: string;
+      reserved: string;
+      invalid_reservation: boolean;
+    }>(
+      sql`
       with pending as (
         select d.total, d.currency, d.subsidiary_id, d.project_id
           from pay_applications pa join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
@@ -1034,12 +1236,20 @@ export async function releaseRetainage(
         exists(select 1 from pending where currency is distinct from ${subsidiary.currency}
           or subsidiary_id is distinct from ${project.subsidiary_id}::uuid
           or project_id is distinct from ${projectId}::uuid or total <= 0) as invalid_reservation
-    `, "objects");
+    `,
+      "objects",
+    );
     if (balance[0]?.invalid_reservation) {
-      throw new ConstructionBillingError("Correct or cancel the pending retainage invoice whose amount, currency or legal entity no longer matches this project");
+      throw new ConstructionBillingError(
+        "Correct or cancel the pending retainage invoice whose amount, currency or legal entity no longer matches this project",
+      );
     }
-    const available = add(String(balance[0]?.held ?? "0"), neg(String(balance[0]?.reserved ?? "0")));
-    if (cmp(exactAmount, available) > 0) throw new ConstructionBillingError("Release amount exceeds available retained funds");
+    const available = add(
+      String(balance[0]?.held ?? "0"),
+      neg(String(balance[0]?.reserved ?? "0")),
+    );
+    if (cmp(exactAmount, available) > 0)
+      throw new ConstructionBillingError("Release amount exceeds available retained funds");
     // Collectible totals obey the currency policy: settled draws hold whole
     // minor units, so a fractional release could never reconcile exactly.
     const releaseMinorUnits = await retainageCurrencyMinorUnits(tx, subsidiary.currency);
@@ -1050,14 +1260,17 @@ export async function releaseRetainage(
     }
 
     const documentNumber = await nextNumber(tx, orgId, "customer_invoice", "INV-");
-    const invoice = await tx.execute<{ id: string }>(sql`
+    const invoice = await tx.execute<{ id: string }>(
+      sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
                              project_id, subsidiary_id, memo, subtotal, tax_total, total, created_by)
       values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id}, ${periodEnd},
               ${subsidiary.currency}, 'draft', ${projectId}, ${project.subsidiary_id}, 'Retainage release',
               ${exactAmount}, '0', ${exactAmount}, ${userId})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     const invoiceId = invoice[0]!.id;
     // Positive Retainage Receivable line → CR Retainage Receivable, DR AR.
     await tx.execute(sql`
@@ -1066,18 +1279,24 @@ export async function releaseRetainage(
       values (${orgId}, ${invoiceId}, 1, ${retAcct}, 'Retainage release', '1', ${exactAmount}, ${exactAmount}, false,
             ${projectId}, ${userId})
     `);
-    const numberRes = await tx.execute<{ n: number }>(sql`
+    const numberRes = await tx.execute<{ n: number }>(
+      sql`
       select coalesce(max(application_number), 0) + 1 as n
         from pay_applications where org_id = ${orgId} and project_id = ${projectId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const applicationNumber = Number(numberRes[0]?.n ?? 1);
-    const release = await tx.execute<{ id: string }>(sql`
+    const release = await tx.execute<{ id: string }>(
+      sql`
       insert into pay_applications (org_id, project_id, application_number, period_end, kind, status,
                                     retainage_percent, invoice_document_id, memo, created_by, updated_by)
       values (${orgId}, ${projectId}, ${applicationNumber}, ${periodEnd}, 'retainage_release', 'invoiced',
               '0', ${invoiceId}, 'Retainage release', ${userId}, ${userId})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'pay_applications', ${release[0]!.id}, 'retainage_release',
@@ -1090,11 +1309,19 @@ export async function releaseRetainage(
 
 /** Release a measured customer change order through tenant Flow gates and the native SOV writer. */
 /** The configured project revenue account offered by native construction pickers. */
-export async function projectDefaultIncomeAccount(exec:SqlExecutor,orgId:string):Promise<string|null>{
- const row=(await exec.execute<{id:string}>(sql`select a.id from orgs o join accounts a
+export async function projectDefaultIncomeAccount(
+  exec: SqlExecutor,
+  orgId: string,
+): Promise<string | null> {
+  const row = (
+    await exec.execute<{ id: string }>(
+      sql`select a.id from orgs o join accounts a
    on a.id=nullif(o.settings->'controlAccounts'->>'projectRevenue','')::uuid and a.org_id=o.id
-   where o.id=${orgId} and a.is_active and not a.is_summary`, "objects"))[0];
- return row?.id??null;
+   where o.id=${orgId} and a.is_active and not a.is_summary`,
+      "objects",
+    )
+  )[0];
+  return row?.id ?? null;
 }
 
 export async function submitCustomerChangeOrder(input: {
@@ -1110,13 +1337,19 @@ export async function submitCustomerChangeOrder(input: {
     await lockApprovalSubject(orgId, "customer_change_order", id);
     const tx = db;
     await assertProjectsEnabled(tx, orgId);
-    const link = (await tx.execute<{ project_id: string }>(
-        sql`select project_id from change_orders where org_id=${orgId} and id=${id}`, "objects",
-      ))[0];
+    const link = (
+      await tx.execute<{ project_id: string }>(
+        sql`select project_id from change_orders where org_id=${orgId} and id=${id}`,
+        "objects",
+      )
+    )[0];
     if (!link) throw new ConstructionBillingError("Change order not found.");
-    const entity = (await tx.execute<{ subsidiaryId: string | null }>(
-        sql`select subsidiary_id as "subsidiaryId" from projects where org_id=${orgId} and id=${link.project_id} for update`, "objects",
-      ))[0];
+    const entity = (
+      await tx.execute<{ subsidiaryId: string | null }>(
+        sql`select subsidiary_id as "subsidiaryId" from projects where org_id=${orgId} and id=${link.project_id} for update`,
+        "objects",
+      )
+    )[0];
     if (!entity) throw new ConstructionBillingError("Project not found.");
     const scope = await lockActorCommandAuthority(
       tx,
@@ -1125,39 +1358,39 @@ export async function submitCustomerChangeOrder(input: {
       entity.subsidiaryId,
       input.approvalRunId ? "ar.approve" : "ar.create",
     );
-    const row = (await tx.execute<{
+    const row = (
+      await tx.execute<{
         project_id: string;
         number: string;
         description: string | null;
         amount: string;
         target_sov_line_id: string | null;
         income_account_id: string | null;
-      }>(sql`
+      }>(
+        sql`
     select project_id,number,description,amount::text,target_sov_line_id,income_account_id from change_orders
-     where org_id=${orgId} and id=${id} and status='draft' for update`, "objects"))[0];
+     where org_id=${orgId} and id=${id} and status='draft' for update`,
+        "objects",
+      )
+    )[0];
     if (!row)
-      throw new ConstructionBillingError(
-        "Only the current draft change order can be submitted.",
-      );
+      throw new ConstructionBillingError("Only the current draft change order can be submitted.");
     let carriedIncomeAccountId: string | null = null;
     if (!row.target_sov_line_id) {
       const account =
         row.income_account_id ??
-        (await tx.execute<{ id: string | null }>(
-            sql`select settings->'controlAccounts'->>'projectRevenue' as id from orgs where id=${orgId}`, "objects",
-          ))[0]?.id;
+        (
+          await tx.execute<{ id: string | null }>(
+            sql`select settings->'controlAccounts'->>'projectRevenue' as id from orgs where id=${orgId}`,
+            "objects",
+          )
+        )[0]?.id;
       if (!account)
         throw new ConstructionBillingError(
           "Choose the change order's income account or configure Project Revenue in Company Settings before submitting it.",
         );
       carriedIncomeAccountId = (
-        await assertProjectIncomeAccountUsable(
-          tx,
-          orgId,
-          account,
-          entity.subsidiaryId,
-          scope,
-        )
+        await assertProjectIncomeAccountUsable(tx, orgId, account, entity.subsidiaryId, scope)
       ).id;
     }
     if (
@@ -1177,22 +1410,21 @@ export async function submitCustomerChangeOrder(input: {
     // signed amount in this same transaction.
     const project = await tx.execute<{
       contract_value: string | null;
-    }>(sql`
+    }>(
+      sql`
   select contract_value from projects where id = ${row.project_id} and org_id = ${orgId} for update
-`, "objects");
+`,
+      "objects",
+    );
     const effectRaw = canonicalDecimal(String(row.amount), 4);
     if (effectRaw === null) {
-      throw new ConstructionBillingError(
-        "The change-order amount must be an exact decimal.",
-      );
+      throw new ConstructionBillingError("The change-order amount must be an exact decimal.");
     }
     let effect: string;
     try {
       effect = normalizeMoney(effectRaw);
     } catch {
-      throw new ConstructionBillingError(
-        "Change-order amount is out of range for the ledger",
-      );
+      throw new ConstructionBillingError("Change-order amount is out of range for the ledger");
     }
     const contractValueBefore = project[0]?.contract_value ?? null;
     if (contractValueBefore === null)
@@ -1219,10 +1451,13 @@ export async function submitCustomerChangeOrder(input: {
   values (${orgId}, 'projects', ${row.project_id}, 'contract_value_adjustment',
           ${JSON.stringify({ changeOrderId: id, before: { contractValue: contractValueBefore }, after: { contractValue: contractValueAfter } })}::jsonb,
           ${userId})`);
-    const activeApplication = await tx.execute(sql`
+    const activeApplication = await tx.execute(
+      sql`
   select 1 from pay_applications where org_id = ${orgId} and project_id = ${row.project_id}
    and status in ('draft', 'submitted', 'approved') limit 1
-`, "objects");
+`,
+      "objects",
+    );
     if (activeApplication.length)
       throw new ConstructionBillingError(
         "Complete or void the current application before approving a change order",
@@ -1233,23 +1468,27 @@ export async function submitCustomerChangeOrder(input: {
       const target = await tx.execute<{
         id: string;
         scheduled_value: string;
-      }>(sql`
+      }>(
+        sql`
     select id, scheduled_value
       from sov_lines
      where id = ${row.target_sov_line_id} and org_id = ${orgId} and project_id = ${row.project_id}
      for update
-  `, "objects");
+  `,
+        "objects",
+      );
       if (!target[0])
-        throw new ConstructionBillingError(
-          "The target schedule line no longer exists",
-        );
-      const billed = await tx.execute<{ amount: string }>(sql`
+        throw new ConstructionBillingError("The target schedule line no longer exists");
+      const billed = await tx.execute<{ amount: string }>(
+        sql`
     select coalesce(sum(pal.this_period_completed + pal.materials_stored - pal.previous_materials_stored), 0) as amount
       from pay_application_lines pal
       join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
      where pal.org_id = ${orgId} and pal.sov_line_id = ${row.target_sov_line_id}
        and pa.status in ('invoiced', 'posted')
-  `, "objects");
+  `,
+        "objects",
+      );
       const revisedValue = revisedScheduleValue(
         String(target[0].scheduled_value),
         String(row.amount),
@@ -1266,12 +1505,11 @@ export async function submitCustomerChangeOrder(input: {
             ${userId})`);
     } else {
       if (cmp(effect, "0") <= 0)
-        throw new ConstructionBillingError(
-          "An unallocated change order must be additive",
-        );
+        throw new ConstructionBillingError("An unallocated change order must be additive");
       // Carry the pinned account (or the org default for COs saved
       // without one) so the line bills without a manual edit.
-      const sov = await tx.execute<{ id: string }>(sql`
+      const sov = await tx.execute<{ id: string }>(
+        sql`
     insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, change_order_id, income_account_id,
                            sort_order, created_by, updated_by)
     values (${orgId}, ${row.project_id}, ${"CO-" + row.number}, ${row.description ?? "Change order " + row.number},
@@ -1279,7 +1517,9 @@ export async function submitCustomerChangeOrder(input: {
             (select coalesce(max(sort_order), 0) + 1 from sov_lines where org_id = ${orgId} and project_id = ${row.project_id}),
             ${userId}, ${userId})
     returning id
-  `, "objects");
+  `,
+        "objects",
+      );
       sovLineId = sov[0]!.id;
       await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'sov_lines', ${sovLineId}, 'insert',

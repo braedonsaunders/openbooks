@@ -14,10 +14,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __complianceRecordBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -34,7 +40,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 async function fixture() {
@@ -43,37 +50,58 @@ async function fixture() {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true}}'::jsonb where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true}}'::jsonb where id = ${org.orgId}`,
+    ),
   );
   const partyId = randomUUID();
   const classId = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-    values (${partyId},${org.orgId},'vendor','Record vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${partyId},${org.orgId},'vendor','Record vendor',${org.subsidiaryId},true,'{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into compliance_classes (id, org_id, code, name, lien_waiver_enforcement, default_information_return, created_by, updated_by)
-    values (${classId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
+    values (${classId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into vendor_roles (org_id, party_id, compliance_class_id, created_by, updated_by)
-    values (${org.orgId}, ${partyId}, ${classId}, ${actorId}, ${actorId})`));
-  const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    values (${org.orgId}, ${partyId}, ${classId}, ${actorId}, ${actorId})`),
+  );
+  const requirementId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
     insert into compliance_requirements (org_id, code, name, category, class_id, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', ${classId}, 'block_payment', ${actorId}, ${actorId})
-    returning id`, "objects")))[0]!.id;
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
   return { org, partyId, requirementId };
 }
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new Request("http://records.test/api/compliance/records", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new Request("http://records.test/api/compliance/records", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 async function recordCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_records where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from compliance_records where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -81,11 +109,22 @@ test("record creation refuses a non-calendar effective date without writing", as
   const { org, partyId, requirementId } = await fixture();
   try {
     const response = await post({
-      partyId, requirementId, effectiveFrom: "2026-09-31", expiresOn: "2026-10-15",
+      partyId,
+      requirementId,
+      effectiveFrom: "2026-09-31",
+      expiresOn: "2026-10-15",
     });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.match(json?.error ?? "", /effectivefrom/i, `expected a named date error, got: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      400,
+      `expected 400, got ${response.status}: ${JSON.stringify(json)}`,
+    );
+    assert.match(
+      json?.error ?? "",
+      /effectivefrom/i,
+      `expected a named date error, got: ${JSON.stringify(json)}`,
+    );
     assert.equal(await recordCount(org.orgId), 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -96,11 +135,18 @@ test("record creation refuses a coverage figure wider than numeric(19,4) without
   const { org, partyId, requirementId } = await fixture();
   try {
     const response = await post({
-      partyId, requirementId, effectiveFrom: "2026-07-20", expiresOn: "2026-10-15",
+      partyId,
+      requirementId,
+      effectiveFrom: "2026-07-20",
+      expiresOn: "2026-10-15",
       coverageAmount: "99999999999999999999.99",
     });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.equal(await recordCount(org.orgId), 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -111,7 +157,10 @@ test("record creation still files an ordinary certificate", async () => {
   const { org, partyId, requirementId } = await fixture();
   try {
     const response = await post({
-      partyId, requirementId, effectiveFrom: "2026-07-20", expiresOn: "2026-10-15",
+      partyId,
+      requirementId,
+      effectiveFrom: "2026-07-20",
+      expiresOn: "2026-10-15",
       coverageAmount: "1000000.00",
     });
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));

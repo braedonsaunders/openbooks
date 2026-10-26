@@ -16,20 +16,28 @@ import { EInvoiceRefusal, validateEInvoice } from "./rules.ts";
 import { GERMAN_ALLOWANCES, GERMAN_LINES, germanInvoice } from "./test-fixtures.ts";
 
 function ruleIds(invoice: EInvoice): string[] {
-  return validateEInvoice(invoice).filter((finding) => finding.severity === "fatal").map((finding) => finding.ruleId);
+  return validateEInvoice(invoice)
+    .filter((finding) => finding.severity === "fatal")
+    .map((finding) => finding.ruleId);
 }
 
 test("XRechnung refuses a missing Leitweg-ID as BR-DE-15, and strict rendering throws the findings", () => {
   const invoice = germanInvoice({ buyerReference: null });
   assert.ok(ruleIds(invoice).includes("BR-DE-15"));
-  assert.throws(() => renderEInvoiceXml(invoice), (error: unknown) => {
-    assert.ok(error instanceof EInvoiceRefusal);
-    const finding = error.findings.find((entry) => entry.ruleId === "BR-DE-15")!;
-    assert.equal(finding.term, "BT-10");
-    assert.match(finding.message, /buyer reference/);
-    return true;
-  });
-  assert.doesNotThrow(() => renderEInvoiceXml(invoice, { strict: false }), "previews render despite findings");
+  assert.throws(
+    () => renderEInvoiceXml(invoice),
+    (error: unknown) => {
+      assert.ok(error instanceof EInvoiceRefusal);
+      const finding = error.findings.find((entry) => entry.ruleId === "BR-DE-15")!;
+      assert.equal(finding.term, "BT-10");
+      assert.match(finding.message, /buyer reference/);
+      return true;
+    },
+  );
+  assert.doesNotThrow(
+    () => renderEInvoiceXml(invoice, { strict: false }),
+    "previews render despite findings",
+  );
 });
 
 test("a credit transfer without an account is BR-61 and, under XRechnung, BR-DE-23-a", () => {
@@ -42,13 +50,27 @@ test("a credit transfer without an account is BR-61 and, under XRechnung, BR-DE-
 test("category O cannot be combined with standard-rated supplies", () => {
   const lines: EInvoiceLine[] = [
     GERMAN_LINES[0]!,
-    { id: "3", name: "Disbursed permit fee", quantity: "1", unitCode: "C62", netPrice: "120.00", netAmount: "120.00", vatCategory: "O", vatRate: "0" },
+    {
+      id: "3",
+      name: "Disbursed permit fee",
+      quantity: "1",
+      unitCode: "C62",
+      netPrice: "120.00",
+      netAmount: "120.00",
+      vatCategory: "O",
+      vatRate: "0",
+    },
   ];
-  const ids = ruleIds(germanInvoice({}, {
-    lines,
-    allowanceCharges: [],
-    exemptions: [{ category: "O", reasonCode: "VATEX-EU-O", reason: "Not subject to VAT" }],
-  }));
+  const ids = ruleIds(
+    germanInvoice(
+      {},
+      {
+        lines,
+        allowanceCharges: [],
+        exemptions: [{ category: "O", reasonCode: "VATEX-EU-O", reason: "Not subject to VAT" }],
+      },
+    ),
+  );
   assert.ok(ids.includes("BR-O-11"));
   assert.ok(ids.includes("BR-O-12"));
 });
@@ -56,17 +78,33 @@ test("category O cannot be combined with standard-rated supplies", () => {
 test("posted tax within one currency unit of basis × rate passes BR-CO-17; beyond it is refused", () => {
   // Basis 1017.50 at 19% computes to 193.33. Tax posted per line may legitimately differ by rounding.
   const stated = (taxAmount: string) => ({
-    statedTax: [{ category: "S" as const, rate: "19", taxAmount }, { category: "S" as const, rate: "7", taxAmount: "5.23" }],
+    statedTax: [
+      { category: "S" as const, rate: "19", taxAmount },
+      { category: "S" as const, rate: "7", taxAmount: "5.23" },
+    ],
   });
   const withinTolerance = germanInvoice({}, stated("193.73"));
-  assert.equal(withinTolerance.totals.tax, "198.9600", "the document carries the posted tax, not a recomputation");
+  assert.equal(
+    withinTolerance.totals.tax,
+    "198.9600",
+    "the document carries the posted tax, not a recomputation",
+  );
   assert.deepEqual(ruleIds(withinTolerance), []);
 
   const beyondTolerance = germanInvoice({}, stated("194.83"));
   const finding = validateEInvoice(beyondTolerance).find((entry) => entry.ruleId === "BR-CO-17")!;
   assert.equal(finding.severity, "fatal");
-  assert.deepEqual(finding.params, { category: "S", rate: "19", stated: "194.83", expected: "193.33" });
-  assert.deepEqual(ruleIds(beyondTolerance), ["BR-CO-17"], "the totals still reconcile, so only the tax rule fires");
+  assert.deepEqual(finding.params, {
+    category: "S",
+    rate: "19",
+    stated: "194.83",
+    expected: "193.33",
+  });
+  assert.deepEqual(
+    ruleIds(beyondTolerance),
+    ["BR-CO-17"],
+    "the totals still reconcile, so only the tax rule fires",
+  );
 });
 
 test("totals that do not add up are refused exactly, after rounding to the document precision", () => {
@@ -92,7 +130,11 @@ test("a reverse-charge group must state its exemption reason (BR-AE-10)", () => 
 });
 
 test("the Dutch national rule set applies by seller country: a non-KvK registration is NL-R-003", () => {
-  const { vatBreakdown, totals } = computeEInvoiceAmounts({ lines: GERMAN_LINES, allowanceCharges: GERMAN_ALLOWANCES, currencyDecimals: 2 });
+  const { vatBreakdown, totals } = computeEInvoiceAmounts({
+    lines: GERMAN_LINES,
+    allowanceCharges: GERMAN_ALLOWANCES,
+    currencyDecimals: 2,
+  });
   const seller = (countryCode: string) => ({
     name: "Bouwbedrijf De Vries BV",
     address: { line1: "Damrak 1", city: "Amsterdam", postcode: "1012 LG", countryCode },
@@ -109,7 +151,10 @@ test("the Dutch national rule set applies by seller country: a non-KvK registrat
   });
   const dutch = validateEInvoice(invoice("NL")).find((finding) => finding.ruleId === "NL-R-003");
   assert.equal(dutch?.term, "BT-30");
-  assert.ok(!ruleIds(invoice("BE")).some((id) => id.startsWith("NL-R-")), "a Belgian seller is not judged by Dutch rules");
+  assert.ok(
+    !ruleIds(invoice("BE")).some((id) => id.startsWith("NL-R-")),
+    "a Belgian seller is not judged by Dutch rules",
+  );
 });
 
 test("code lists refuse what they do not know instead of guessing", () => {
@@ -120,12 +165,13 @@ test("code lists refuse what they do not know instead of guessing", () => {
   assert.equal(isKnownVatexCode("VATEX-EU-132-1Q"), true);
   assert.equal(isKnownVatexCode("VATEX-EU-999"), false);
   assert.throws(
-    () => computeEInvoiceAmounts({
-      lines: GERMAN_LINES,
-      allowanceCharges: [],
-      currencyDecimals: 2,
-      statedTax: [{ category: "Z", rate: "0", taxAmount: "4.00" }],
-    }),
+    () =>
+      computeEInvoiceAmounts({
+        lines: GERMAN_LINES,
+        allowanceCharges: [],
+        currencyDecimals: 2,
+        statedTax: [{ category: "Z", rate: "0", taxAmount: "4.00" }],
+      }),
     /no line, allowance or charge in that group/,
   );
 });

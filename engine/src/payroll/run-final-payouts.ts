@@ -1,4 +1,4 @@
-import { vacationBaseIncluded } from './component-statutory-treatment.ts';
+import { vacationBaseIncluded } from "./component-statutory-treatment.ts";
 /**
  * Final-payout earning phases: termination bank settlement and cash-out
  * vacation pay.
@@ -12,14 +12,23 @@ import { type db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { cmp, mulPercent, neg, roundMoney, sum } from "../money/money.ts";
 import { type Money } from "../money/brands.ts";
-import { entitlementBalances, entitlementMoneyValue, planMovementsForStub, type EntitlementPlan } from "./entitlements.ts";
+import {
+  entitlementBalances,
+  entitlementMoneyValue,
+  planMovementsForStub,
+  type EntitlementPlan,
+} from "./entitlements.ts";
 import { type Line } from "./run-stub-records.ts";
 
 export async function settleTerminationBankPayouts(
   tx: Pick<typeof db, "execute">,
   args: {
-    orgId: string; documentId: string; payDate: string; payCurrency: string;
-    employeePartyId: string; employmentId?: string;
+    orgId: string;
+    documentId: string;
+    payDate: string;
+    payCurrency: string;
+    employeePartyId: string;
+    employmentId?: string;
     /** Employee display name, for the unvalued-hours refusal. */
     employeeName: string;
     terminationRun: boolean;
@@ -29,8 +38,16 @@ export async function settleTerminationBankPayouts(
   },
 ): Promise<void> {
   const {
-    orgId, documentId, payDate, payCurrency, employeePartyId, employeeName,
-    terminationRun, plans, lines, entitlementMovements,
+    orgId,
+    documentId,
+    payDate,
+    payCurrency,
+    employeePartyId,
+    employeeName,
+    terminationRun,
+    plans,
+    lines,
+    entitlementMovements,
   } = args;
   // A final pay must clear every accrued bank: the carried balance is paid out
   // with this period's accrual, never left on the books for someone who left.
@@ -42,8 +59,12 @@ export async function settleTerminationBankPayouts(
   // cheque — leaving the liability on the books with nobody to pay it to.
   if (terminationRun && plans.length > 0) {
     const balances = await entitlementBalances(orgId, employeePartyId, payDate, {
-      executor: tx, employmentId: args.employmentId, excludeRunDocumentId: documentId, plans,
-      payCurrency, lockWage: true,
+      executor: tx,
+      employmentId: args.employmentId,
+      excludeRunDocumentId: documentId,
+      plans,
+      payCurrency,
+      lockWage: true,
     });
     for (const balance of balances) {
       if (cmp(balance.balance, "0") <= 0) continue;
@@ -58,19 +79,28 @@ export async function settleTerminationBankPayouts(
       // The ledger movement below stays in the plan's unit — the bank IS
       // hours; only its payout is money.
       const payoutMoney = entitlementMoneyValue({
-        plan: balance.plan, amount: balance.balance, wage: balance.wage, employeeName,
+        plan: balance.plan,
+        amount: balance.balance,
+        wage: balance.wage,
+        employeeName,
       });
       lines.push({
-        componentId: balance.plan.payoutComponentId, kind: "earning",
+        componentId: balance.plan.payoutComponentId,
+        kind: "earning",
         description: `${balance.plan.name} payout (accrued balance)`,
-        amount: payoutMoney, sequence: 44,
+        amount: payoutMoney,
+        sequence: 44,
         entitlementSettlementPlanId: balance.plan.id,
         entitlementMovementKey: `${balance.plan.id}:payout`,
       });
       entitlementMovements.push({
-        planId: balance.plan.id, employeePartyId, movementDate: payDate,
-        amount: neg(roundMoney(balance.balance, 2)), hours: null,
-        kind: "payout", componentId: balance.plan.payoutComponentId,
+        planId: balance.plan.id,
+        employeePartyId,
+        movementDate: payDate,
+        amount: neg(roundMoney(balance.balance, 2)),
+        hours: null,
+        kind: "payout",
+        componentId: balance.plan.payoutComponentId,
         note: "Final pay — bank cleared",
       });
     }
@@ -94,16 +124,28 @@ export function appendCashVacationPay(args: {
   // Cash-out vacation policies bypass the bank entirely: the money is paid,
   // not accrued, so no ledger movement is produced.
   if (payVacationInCash && vacationPercent && cmp(vacationPercent, "0") > 0) {
-    const base = sum(lines
-      .filter((l) => l.kind === "earning" && vacationBaseIncluded(l) && !l.accrualOnly && l.componentId !== args.vacationPayoutComponentId)
-      .map((l) => l.amount));
+    const base = sum(
+      lines
+        .filter(
+          (l) =>
+            l.kind === "earning" &&
+            vacationBaseIncluded(l) &&
+            !l.accrualOnly &&
+            l.componentId !== args.vacationPayoutComponentId,
+        )
+        .map((l) => l.amount),
+    );
     const vacation = mulPercent(base, vacationPercent, 2) as Money;
     if (cmp(vacation, "0") > 0) {
       const c = need("vacation_payout", "earning");
       if (args.replacedComponentIds?.has(c.id as string)) return;
       lines.push({
-        componentId: c.id as string, kind: "earning", description: "Vacation pay",
-        amount: vacation, sequence: 45, fundedByEntitlementBank: false,
+        componentId: c.id as string,
+        kind: "earning",
+        description: "Vacation pay",
+        amount: vacation,
+        sequence: 45,
+        fundedByEntitlementBank: false,
       });
     }
   }

@@ -16,15 +16,20 @@ export async function releaseWorkOrderApproval(args: {
 }): Promise<void> {
   const { subjectId, outcome, comment, ctx } = args;
   await assertManufacturingFeature(db, ctx.orgId, "manufacturing");
-  const before = (await db.execute<{
+  const before = (
+    await db.execute<{
       id: string;
       number: string;
       status: string;
       updated_at: Date;
       updated_by: string | null;
-    }>(sql`
+    }>(
+      sql`
     select id, number, status, updated_at, updated_by from mfg_work_orders
-     where org_id=${ctx.orgId} and id=${subjectId} for update`, "objects"))[0];
+     where org_id=${ctx.orgId} and id=${subjectId} for update`,
+      "objects",
+    )
+  )[0];
   if (!before) throw new ManufacturingNotFoundError();
   if (before.status !== "draft") {
     throw new ManufacturingError(
@@ -38,14 +43,11 @@ export async function releaseWorkOrderApproval(args: {
     );
   }
   if (!ctx.userId) {
-    throw new ManufacturingError(
-      "A signed-in approver is required to release a work order.",
-      {
-        status: 403,
-        code: "approver_required",
-        remedy: "Have an authorized approver decide the work-order approval.",
-      },
-    );
+    throw new ManufacturingError("A signed-in approver is required to release a work order.", {
+      status: 403,
+      code: "approver_required",
+      remedy: "Have an authorized approver decide the work-order approval.",
+    });
   }
   const decision = await readNativeApprovalDecision({
     orgId: ctx.orgId,
@@ -56,14 +58,11 @@ export async function releaseWorkOrderApproval(args: {
     approvalRunId: args.approvalRunId,
   });
   if (!decision)
-    throw new ManufacturingError(
-      "Complete the native Flow gate before deciding this work order.",
-      {
-        status: 409,
-        code: "work_order_approval_required",
-        remedy: "Use the pending work-order Flow gate.",
-      },
-    );
+    throw new ManufacturingError("Complete the native Flow gate before deciding this work order.", {
+      status: 409,
+      code: "work_order_approval_required",
+      remedy: "Use the pending work-order Flow gate.",
+    });
   const reason = comment?.trim() || null;
   if (outcome === "approved") {
     await releaseWorkOrder(db, ctx.orgId, ctx.userId, subjectId, {
@@ -72,18 +71,18 @@ export async function releaseWorkOrderApproval(args: {
     });
     return;
   }
-  const updated = await db.execute(sql`
+  const updated = await db.execute(
+    sql`
     update mfg_work_orders set updated_by=${ctx.userId}, updated_at=now()
-     where org_id=${ctx.orgId} and id=${subjectId} and status='draft' returning id`, "objects");
+     where org_id=${ctx.orgId} and id=${subjectId} and status='draft' returning id`,
+    "objects",
+  );
   if (updated.length !== 1) {
-    throw new ManufacturingError(
-      "The work order changed while its approval was being rejected.",
-      {
-        status: 409,
-        code: "work_order_changed",
-        remedy: "Reload the work order and resolve its current approval state.",
-      },
-    );
+    throw new ManufacturingError("The work order changed while its approval was being rejected.", {
+      status: 409,
+      code: "work_order_changed",
+      remedy: "Reload the work order and resolve its current approval state.",
+    });
   }
   await auditChange(db, {
     orgId: ctx.orgId,

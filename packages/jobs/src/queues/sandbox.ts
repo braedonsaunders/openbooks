@@ -1,11 +1,10 @@
-import { Queue, type JobsOptions } from 'bullmq'
-import { getConnection } from '../connection'
+import { Queue, type JobsOptions } from "bullmq";
+import { getConnection } from "../connection";
 
-export const SANDBOX_QUEUE = 'sandbox'
+export const SANDBOX_QUEUE = "sandbox";
 
 export type SandboxJobInitiator =
-  | { actorId: string; systemReason?: never }
-  | { actorId?: null; systemReason: string }
+  { actorId: string; systemReason?: never } | { actorId?: null; systemReason: string };
 
 /**
  * One sandbox lifecycle operation, run asynchronously so a create/refresh that
@@ -15,20 +14,25 @@ export type SandboxJobInitiator =
  */
 export type SandboxJobData =
   | {
-      op: 'create'
-      productionOrgId: string
-      name: string
-      tier: 'dev' | 'masked' | 'full' | 'as_of'
-      masked: boolean
-      asOfPeriodId?: string | null
-      createdBy?: string | null
-      initiator: SandboxJobInitiator
+      op: "create";
+      productionOrgId: string;
+      name: string;
+      tier: "dev" | "masked" | "full" | "as_of";
+      masked: boolean;
+      asOfPeriodId?: string | null;
+      createdBy?: string | null;
+      initiator: SandboxJobInitiator;
     }
-  | { op: 'refresh'; sandboxId: string; keepCustomizations: boolean; initiator: SandboxJobInitiator }
-  | { op: 'reset'; sandboxId: string; initiator: SandboxJobInitiator }
-  | { op: 'delete'; sandboxId: string; initiator: SandboxJobInitiator }
+  | {
+      op: "refresh";
+      sandboxId: string;
+      keepCustomizations: boolean;
+      initiator: SandboxJobInitiator;
+    }
+  | { op: "reset"; sandboxId: string; initiator: SandboxJobInitiator }
+  | { op: "delete"; sandboxId: string; initiator: SandboxJobInitiator };
 
-let sandboxQueue: Queue<SandboxJobData> | undefined
+let sandboxQueue: Queue<SandboxJobData> | undefined;
 
 export function getSandboxQueue(): Queue<SandboxJobData> {
   sandboxQueue ??= new Queue<SandboxJobData>(SANDBOX_QUEUE, {
@@ -40,10 +44,10 @@ export function getSandboxQueue(): Queue<SandboxJobData> {
       removeOnComplete: { age: 7 * 24 * 3600 },
       removeOnFail: { age: 30 * 24 * 3600 },
     },
-  })
-  return sandboxQueue
+  });
+  return sandboxQueue;
 }
 
 export async function enqueueSandboxOp(data: SandboxJobData, options?: JobsOptions) {
-  return getSandboxQueue().add(data.op, data, options)
+  return getSandboxQueue().add(data.op, data, options);
 }

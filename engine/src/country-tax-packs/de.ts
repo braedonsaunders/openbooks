@@ -1,5 +1,9 @@
 import { constructionReverseChargeRulesForCountry } from "./contractor-reverse-charge.ts";
-import type { ContractorWithholdingSchemeDefinition, CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
+import type {
+  ContractorWithholdingSchemeDefinition,
+  CountryTaxPackDefinition,
+  TaxReturnPack,
+} from "./types.ts";
 
 const DE_USTVA_2026: TaxReturnPack = {
   code: "DE_USTVA",
@@ -10,19 +14,74 @@ const DE_USTVA_2026: TaxReturnPack = {
   submissionChannel: "file_upload",
   governmentFormat: "certified_file",
   submissionUrl: "https://www.elster.de/eportal/formulare-leistungen/alleformulare/ustvaeru",
-  watermark: "Working copy — transmit electronically through ELSTER; official field eligibility and adjustments require filer review",
+  watermark:
+    "Working copy — transmit electronically through ELSTER; official field eligibility and adjustments require filer review",
   boxes: [
-    { lineCode: "81", label: "Kz 81 — taxable supplies at 19%: net assessment base", sign: 1, sequence: 10 },
-    { lineCode: "86", label: "Kz 86 — taxable supplies at 7%: net assessment base", sign: 1, sequence: 20 },
-    { lineCode: "87", label: "Kz 87 — taxable supplies at 0%: net assessment base", sign: 1, sequence: 30 },
-    { lineCode: "41", label: "Kz 41 — intra-Community supplies to customers with a VAT identification number", sign: 1, sequence: 40 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all rates", sign: -1, sequence: 50, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "66", label: "Kz 66 — deductible input VAT from invoices from other businesses", sign: 1, sequence: 60 },
-    { lineCode: "61", label: "Kz 61 — deductible input VAT on intra-Community acquisitions", sign: 1, sequence: 70 },
+    {
+      lineCode: "81",
+      label: "Kz 81 — taxable supplies at 19%: net assessment base",
+      sign: 1,
+      sequence: 10,
+    },
+    {
+      lineCode: "86",
+      label: "Kz 86 — taxable supplies at 7%: net assessment base",
+      sign: 1,
+      sequence: 20,
+    },
+    {
+      lineCode: "87",
+      label: "Kz 87 — taxable supplies at 0%: net assessment base",
+      sign: 1,
+      sequence: 30,
+    },
+    {
+      lineCode: "41",
+      label: "Kz 41 — intra-Community supplies to customers with a VAT identification number",
+      sign: 1,
+      sequence: 40,
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label: "OpenBooks workpaper — output VAT from the ledger, all rates",
+      sign: -1,
+      sequence: 50,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "66",
+      label: "Kz 66 — deductible input VAT from invoices from other businesses",
+      sign: 1,
+      sequence: 60,
+    },
+    {
+      lineCode: "61",
+      label: "Kz 61 — deductible input VAT on intra-Community acquisitions",
+      sign: 1,
+      sequence: 70,
+    },
     { lineCode: "62", label: "Kz 62 — incurred import VAT", sign: 1, sequence: 80 },
-    { lineCode: "67", label: "Kz 67 — deductible input VAT on supplies under § 13b UStG", sign: 1, sequence: 90 },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all rates", sign: 1, sequence: 100, basis: "tax_paid", glMap: "purchases" },
-    { lineCode: "83", label: "Kz 83 — remaining VAT advance payment or surplus", sign: 1, sequence: 110 },
+    {
+      lineCode: "67",
+      label: "Kz 67 — deductible input VAT on supplies under § 13b UStG",
+      sign: 1,
+      sequence: 90,
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — input VAT from the ledger, all rates",
+      sign: 1,
+      sequence: 100,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
+    {
+      lineCode: "83",
+      label: "Kz 83 — remaining VAT advance payment or surplus",
+      sign: 1,
+      sequence: 110,
+    },
   ],
 };
 
@@ -65,10 +124,17 @@ const DE_BAUABZUG: ContractorWithholdingSchemeDefinition = {
     excessCatchUpNotDue: true,
     limits: [
       { amount: "5000", effectiveFrom: "2002-01-01", sourceId: "estg_48" },
-      { amount: "15000", effectiveFrom: "2002-01-01", basis: "exempt_letting", sourceId: "estg_48" },
+      {
+        amount: "15000",
+        effectiveFrom: "2002-01-01",
+        basis: "exempt_letting",
+        sourceId: "estg_48",
+      },
     ],
   },
-  thresholdBases: [{ code: "exempt_letting", name: "Exclusively VAT-exempt letting (§ 4 Nr. 12 UStG)" }],
+  thresholdBases: [
+    { code: "exempt_letting", name: "Exclusively VAT-exempt letting (§ 4 Nr. 12 UStG)" },
+  ],
   // § 48a Abs. 1 EStG: the Anmeldung and the payment are due by the 10th of
   // the month following the month the consideration was paid.
   periodStartDay: 1,
@@ -127,7 +193,8 @@ export const GERMANY_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "bmf_ustva_2026",
-      title: "Federal Ministry of Finance — official 2026 Umsatzsteuer-Voranmeldung forms and instructions",
+      title:
+        "Federal Ministry of Finance — official 2026 Umsatzsteuer-Voranmeldung forms and instructions",
       url: "https://www.bundesfinanzministerium.de/Content/DE/Downloads/BMF_Schreiben/Steuerarten/Umsatzsteuer/2025-12-29-vordruckmuster-USt-voranmeldung-2026.pdf",
       asOf: "2026-08-01",
     },
@@ -148,16 +215,61 @@ export const GERMANY_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: "19",
         role: "standard",
         rates: [
-        { ratePercent: "10", effectiveFrom: "1968-01-01", effectiveTo: "1968-06-30", sourceId: "bmf_vat_rate_history_2026" },
-        { ratePercent: "11", effectiveFrom: "1968-07-01", effectiveTo: "1977-12-31", sourceId: "bmf_vat_rate_history_2026" },
-        { ratePercent: "12", effectiveFrom: "1978-01-01", effectiveTo: "1979-06-30", sourceId: "bmf_vat_rate_history_2026" },
-        { ratePercent: "13", effectiveFrom: "1979-07-01", effectiveTo: "1983-06-30", sourceId: "bmf_vat_rate_history_2026" },
-        { ratePercent: "14", effectiveFrom: "1983-07-01", effectiveTo: "1992-12-31", sourceId: "bmf_vat_rate_history_2026" },
-        { ratePercent: "15", effectiveFrom: "1993-01-01", effectiveTo: "1998-03-31", sourceId: "bmf_vat_rate_history_2026" },
-        { ratePercent: "16", effectiveFrom: "1998-04-01", effectiveTo: "2006-12-31", sourceId: "bmf_vat_rate_history_2026" },
-        { ratePercent: "19", effectiveFrom: "2007-01-01", effectiveTo: "2020-06-30", sourceId: "bmf_vat_rate_history_2026" },
-        { ratePercent: "16", effectiveFrom: "2020-07-01", effectiveTo: "2020-12-31", sourceId: "bmf_vat_rate_history_2026" },
-        { ratePercent: "19", effectiveFrom: "2021-01-01", sourceId: "bmf_vat_rate_history_2026" },
+          {
+            ratePercent: "10",
+            effectiveFrom: "1968-01-01",
+            effectiveTo: "1968-06-30",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "11",
+            effectiveFrom: "1968-07-01",
+            effectiveTo: "1977-12-31",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "12",
+            effectiveFrom: "1978-01-01",
+            effectiveTo: "1979-06-30",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "13",
+            effectiveFrom: "1979-07-01",
+            effectiveTo: "1983-06-30",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "14",
+            effectiveFrom: "1983-07-01",
+            effectiveTo: "1992-12-31",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "15",
+            effectiveFrom: "1993-01-01",
+            effectiveTo: "1998-03-31",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "16",
+            effectiveFrom: "1998-04-01",
+            effectiveTo: "2006-12-31",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "19",
+            effectiveFrom: "2007-01-01",
+            effectiveTo: "2020-06-30",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "16",
+            effectiveFrom: "2020-07-01",
+            effectiveTo: "2020-12-31",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          { ratePercent: "19", effectiveFrom: "2021-01-01", sourceId: "bmf_vat_rate_history_2026" },
         ],
       },
       {
@@ -166,12 +278,42 @@ export const GERMANY_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: "7",
         role: "reduced",
         rates: [
-          { ratePercent: "5", effectiveFrom: "1968-01-01", effectiveTo: "1968-06-30", sourceId: "bmf_vat_rate_history_2026" },
-          { ratePercent: "5.5", effectiveFrom: "1968-07-01", effectiveTo: "1977-12-31", sourceId: "bmf_vat_rate_history_2026" },
-          { ratePercent: "6", effectiveFrom: "1978-01-01", effectiveTo: "1979-06-30", sourceId: "bmf_vat_rate_history_2026" },
-          { ratePercent: "6.5", effectiveFrom: "1979-07-01", effectiveTo: "1983-06-30", sourceId: "bmf_vat_rate_history_2026" },
-          { ratePercent: "7", effectiveFrom: "1983-07-01", effectiveTo: "2020-06-30", sourceId: "bmf_vat_rate_history_2026" },
-          { ratePercent: "5", effectiveFrom: "2020-07-01", effectiveTo: "2020-12-31", sourceId: "bmf_vat_rate_history_2026" },
+          {
+            ratePercent: "5",
+            effectiveFrom: "1968-01-01",
+            effectiveTo: "1968-06-30",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "5.5",
+            effectiveFrom: "1968-07-01",
+            effectiveTo: "1977-12-31",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "6",
+            effectiveFrom: "1978-01-01",
+            effectiveTo: "1979-06-30",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "6.5",
+            effectiveFrom: "1979-07-01",
+            effectiveTo: "1983-06-30",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "7",
+            effectiveFrom: "1983-07-01",
+            effectiveTo: "2020-06-30",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
+          {
+            ratePercent: "5",
+            effectiveFrom: "2020-07-01",
+            effectiveTo: "2020-12-31",
+            sourceId: "bmf_vat_rate_history_2026",
+          },
           { ratePercent: "7", effectiveFrom: "2021-01-01", sourceId: "bmf_vat_rate_history_2026" },
         ],
       },

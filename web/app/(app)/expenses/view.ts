@@ -1,13 +1,20 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { redirect } from 'next/navigation'
-import { can, getAuthz, requirePermission } from '../../../lib/authz'
-import { expenseScope } from '../../../lib/expense-access'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { groupTabs } from '../../../components/module-home/group-tabs'
-import { expensesDashboard, type ExpensesDashboardData } from '../../../lib/expenses-dashboard'
+import { getTranslations } from "next-intl/server";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { redirect } from "next/navigation";
+import { can, getAuthz, requirePermission } from "../../../lib/authz";
+import { expenseScope } from "../../../lib/expense-access";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { groupTabs } from "../../../components/module-home/group-tabs";
+import { expensesDashboard, type ExpensesDashboardData } from "../../../lib/expenses-dashboard";
 
 /**
  * Expense-reports dashboard — the purchasing group's expenses cockpit (a
@@ -34,46 +41,46 @@ import { expensesDashboard, type ExpensesDashboardData } from '../../../lib/expe
  */
 
 export interface ExpensesData {
-  title: string
-  description: string
-  canCreate: boolean
-  tabs: unknown
-  data: ExpensesDashboardData
+  title: string;
+  description: string;
+  canCreate: boolean;
+  tabs: unknown;
+  data: ExpensesDashboardData;
 }
 
 export async function loadExpenses(): Promise<ExpensesData> {
   // The cockpit analyses every employee's spending. A self-service reader
   // works with their own reports, which the report list shows.
-  const viewer = await getAuthz()
-  if (viewer && expenseScope(viewer, 'read') === 'own') redirect('/expenses/reports')
-  const authz = await requirePermission('expenses.read')
-  await requireFeatureEnabled(authz.user.orgId, 'expenses')
-  const t = await getTranslations('expenses')
+  const viewer = await getAuthz();
+  if (viewer && expenseScope(viewer, "read") === "own") redirect("/expenses/reports");
+  const authz = await requirePermission("expenses.read");
+  await requireFeatureEnabled(authz.user.orgId, "expenses");
+  const t = await getTranslations("expenses");
 
   return {
-    title: t('dashboard.title'),
-    description: t('dashboard.description'),
-    canCreate: can(authz, 'expenses.create'),
-    tabs: await groupTabs('purchasing', '/expenses', { orgId: authz.user.orgId }),
+    title: t("dashboard.title"),
+    description: t("dashboard.description"),
+    canCreate: can(authz, "expenses.create"),
+    tabs: await groupTabs("purchasing", "/expenses", { orgId: authz.user.orgId }),
     data: await expensesDashboard(authz.user.orgId, authz.allowedSubsidiaryIds),
-  }
+  };
 }
 
-const f = ref<ExpensesData>()
+const f = ref<ExpensesData>();
 
 export function expensesSpec(data: ExpensesData): PageSpec {
   return page({
-    route: '/expenses',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/expenses",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-3",
         actions: [
-          widget('new-expense', {}, f('canCreate')),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("new-expense", {}, f("canCreate")),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
@@ -83,7 +90,7 @@ export function expensesSpec(data: ExpensesData): PageSpec {
       // holds no user capability the host side must re-derive (authz is
       // checked in the loader before the data is built), and the drawer/drill
       // fetches ride the session cookie inside the shared component.
-      widgetBlock('expenses-dashboard', { data: data.data }),
+      widgetBlock("expenses-dashboard", { data: data.data }),
     ],
-  })
+  });
 }

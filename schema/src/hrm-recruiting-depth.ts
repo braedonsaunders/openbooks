@@ -9,17 +9,13 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { orgs } from "./core";
 import { files } from "./file-cabinet";
 import { auditColumns, id, orgRef } from "./helpers";
 import { parties } from "./parties";
-import {
-  candidates,
-  interviews,
-  offers
-} from "./hrm-recruiting";
+import { candidates, interviews, offers } from "./hrm-recruiting";
 
 /**
  * HRM recruiting depth (migration 0229, HR-18).
@@ -110,7 +106,11 @@ export const scorecards = pgTable(
       foreignColumns: [parties.orgId, parties.id],
     }),
     uniqueIndex("hrm_scorecards_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("hrm_scorecards_org_interview_party").on(t.orgId, t.interviewId, t.interviewerPartyId),
+    uniqueIndex("hrm_scorecards_org_interview_party").on(
+      t.orgId,
+      t.interviewId,
+      t.interviewerPartyId,
+    ),
     index("hrm_scorecards_interview").on(t.orgId, t.interviewId),
   ],
 );

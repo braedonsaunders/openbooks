@@ -1,6 +1,6 @@
 import { installEngineSeams } from "../composition/install.ts";
 installEngineSeams();
-import {seedCloseRunApprovalFixture} from "../testing/close.ts";
+import { seedCloseRunApprovalFixture } from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -32,12 +32,10 @@ function closeFenceKey(org: Pick<ScratchOrg, "orgId" | "periodId" | "bookId">): 
 /** Poll until some backend has granted, or is waiting on, the scope fence.
  * pg_locks exposes a 64-bit advisory key split across classid (high bits)
  * and objid (low bits, displayed unsigned), so both halves must match. */
-async function waitForFenceState(
-  key: string,
-  want: "granted" | "waiting",
-): Promise<boolean> {
+async function waitForFenceState(key: string, want: "granted" | "waiting"): Promise<boolean> {
   for (let attempt = 0; attempt < 400; attempt++) {
-    const rows = (await db.execute<{ n: number }>(sql`
+    const rows = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n
         from pg_locks,
              (select hashtextextended(${key}, 0) as h) as k
@@ -45,7 +43,9 @@ async function waitForFenceState(
          and classid::text = ((k.h >> 32) & 4294967295)::text
          and objid::text = (k.h & 4294967295)::text
          and granted = ${want === "granted"}
-    `, "objects"));
+    `,
+      "objects",
+    );
     if ((rows[0]?.n ?? 0) > 0) return true;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -86,21 +86,27 @@ async function seedApprovedCloseRun(org: ScratchOrg): Promise<{
     bookId: org.bookId,
     actorId: actors.adminId,
   });
-  await seedCloseRunApprovalFixture(org.orgId,runId,actors.adminId);
+  await seedCloseRunApprovalFixture(org.orgId, runId, actors.adminId);
   return { runId, entryId, actorId: actors.adminId };
 }
 
 async function runStatus(runId: string, orgId: string): Promise<string> {
-  const rows = (await db.execute<{ status: string }>(sql`
-    select status from close_runs where id = ${runId} and org_id = ${orgId}`, "objects"));
+  const rows = await db.execute<{ status: string }>(
+    sql`
+    select status from close_runs where id = ${runId} and org_id = ${orgId}`,
+    "objects",
+  );
   return rows[0]!.status;
 }
 
 /** Every GL lock row for the close scope must read 'closed' after a completed close. */
 async function assertScopeLockedClosed(org: ScratchOrg): Promise<void> {
-  const rows = (await db.execute<{ module: string; state: string }>(sql`
+  const rows = await db.execute<{ module: string; state: string }>(
+    sql`
     select module, state from period_locks
-     where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}`, "objects"));
+     where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}`,
+    "objects",
+  );
   assert.ok(rows.length > 0, "a completed close must write module locks");
   for (const row of rows) {
     assert.equal(row.state, "closed", `module ${row.module} must end closed`);
@@ -141,8 +147,13 @@ test(
       await closing;
       assert.equal(await runStatus(runId, org.orgId), "closed");
       await assertScopeLockedClosed(org);
-      const stored = (await db.execute<{ data_fingerprint: string | null }>(sql`
-        select data_fingerprint from close_runs where id = ${runId} and org_id = ${org.orgId}`, "objects"))[0]!.data_fingerprint;
+      const stored = (
+        await db.execute<{ data_fingerprint: string | null }>(
+          sql`
+        select data_fingerprint from close_runs where id = ${runId} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.data_fingerprint;
       // Re-evaluating the settled ledger must agree with the stored evidence:
       // if the close had evaluated before the posting committed, its stored
       // fingerprint would drift from this recomputation now.
@@ -150,8 +161,11 @@ test(
       assert.equal(reread.fingerprint, stored);
       assert.equal(reread.invalidated, 0);
       assert.equal(await runStatus(runId, org.orgId), "closed");
-      const posted = (await db.execute<{ status: string }>(sql`
-        select status from journal_entries where id = ${entryId}`, "objects"));
+      const posted = await db.execute<{ status: string }>(
+        sql`
+        select status from journal_entries where id = ${entryId}`,
+        "objects",
+      );
       assert.equal(posted[0]!.status, "posted");
     } finally {
       if (poster) {
@@ -197,7 +211,7 @@ test(
         bookId: org.bookId,
         actorId: actors.adminId,
       });
-      await seedCloseRunApprovalFixture(org.orgId,runId,actors.adminId);
+      await seedCloseRunApprovalFixture(org.orgId, runId, actors.adminId);
 
       // Sabotage the LAST statement of the close transaction: one 'run.closed'
       // event may exist per run, and one is planted before the close runs, so
@@ -222,23 +236,35 @@ test(
           },
           "the injected failure must be the sabotaged final statement, after all other close writes",
         );
-        const closedLocks = (await db.execute<{ n: number }>(sql`
+        const closedLocks = await db.execute<{ n: number }>(
+          sql`
           select count(*)::int as n from period_locks
            where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}
-             and state = 'closed'`, "objects"));
+             and state = 'closed'`,
+          "objects",
+        );
         assert.equal(closedLocks[0]!.n, 0, "every module lock must roll back");
         assert.equal(await runStatus(runId, org.orgId), "approved");
-        const runRow = (await db.execute<{ closed_at: Date | null }>(sql`
-          select closed_at from close_runs where id = ${runId} and org_id = ${org.orgId}`, "objects"));
+        const runRow = await db.execute<{ closed_at: Date | null }>(
+          sql`
+          select closed_at from close_runs where id = ${runId} and org_id = ${org.orgId}`,
+          "objects",
+        );
         assert.equal(runRow[0]!.closed_at, null);
-        const lockTasks = (await db.execute<{ n: number }>(sql`
+        const lockTasks = await db.execute<{ n: number }>(
+          sql`
           select count(*)::int as n from close_run_tasks
            where run_id = ${runId} and org_id = ${org.orgId}
-             and key in ('lock-subledgers', 'lock-gl') and status = 'complete'`, "objects"));
+             and key in ('lock-subledgers', 'lock-gl') and status = 'complete'`,
+          "objects",
+        );
         assert.equal(lockTasks[0]!.n, 0, "lock task completions must roll back");
-        const closedEvents = (await db.execute<{ n: number }>(sql`
+        const closedEvents = await db.execute<{ n: number }>(
+          sql`
           select count(*)::int as n from close_events
-           where run_id = ${runId} and org_id = ${org.orgId} and event_type = 'run.closed'`, "objects"));
+           where run_id = ${runId} and org_id = ${org.orgId} and event_type = 'run.closed'`,
+          "objects",
+        );
         assert.equal(closedEvents[0]!.n, 1, "only the planted event may remain");
       } finally {
         await db.execute(sql`drop index close_events_run_closed_once_regression`);
@@ -256,11 +282,14 @@ test(
     const org = await createScratchOrg();
     try {
       const actors = await seedFlowActors(org.orgId);
-      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+      const calendar = await db.execute<{ fiscal_calendar_id: string }>(
+        sql`
         select fiscal_calendar_id
           from accounting_periods
          where id = ${org.periodId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       const adjustmentPeriodId = randomUUID();
       await db.execute(sql`
         insert into accounting_periods
@@ -321,22 +350,24 @@ test(
         bookId: org.bookId,
         actorId: actors.adminId,
       });
-      const initial = await refreshCloseRun(
-        org.orgId,
-        runId,
-        actors.adminId,
-      );
-      const initialDrafts = (await db.execute<{ status: string; details: { count: number } }>(sql`
+      const initial = await refreshCloseRun(org.orgId, runId, actors.adminId);
+      const initialDrafts = await db.execute<{ status: string; details: { count: number } }>(
+        sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'drafts-open'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(initialDrafts.length, 0);
-      const initialFx = (await db.execute<{ status: string; details: { count: number } }>(sql`
+      const initialFx = await db.execute<{ status: string; details: { count: number } }>(
+        sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'fx-unrevalued'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(initialFx.length, 0);
 
       await db.execute(sql`
@@ -345,11 +376,7 @@ test(
                updated_at = '2026-07-15 12:01:00+00'
         where id = ${adjustmentDocumentId}
       `);
-      const afterAdjustmentChange = await refreshCloseRun(
-        org.orgId,
-        runId,
-        actors.adminId,
-      );
+      const afterAdjustmentChange = await refreshCloseRun(org.orgId, runId, actors.adminId);
       assert.equal(afterAdjustmentChange.fingerprint, initial.fingerprint);
 
       const unassignedDocumentId = await seedDraftDocument(org.orgId, {
@@ -365,23 +392,25 @@ test(
                updated_at = '2026-07-15 12:02:00+00'
         where id = ${unassignedDocumentId}
       `);
-      const afterUnassignedDocument = await refreshCloseRun(
-        org.orgId,
-        runId,
-        actors.adminId,
-      );
+      const afterUnassignedDocument = await refreshCloseRun(org.orgId, runId, actors.adminId);
       assert.notEqual(afterUnassignedDocument.fingerprint, initial.fingerprint);
-      const exactPeriodDrafts = (await db.execute<{ status: string; details: { count: number } }>(sql`
+      const exactPeriodDrafts = await db.execute<{ status: string; details: { count: number } }>(
+        sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'drafts-open'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.ok(exactPeriodDrafts.length === 0 || exactPeriodDrafts[0]!.status === "resolved");
-      const missingPeriod = (await db.execute<{ status: string; details: { count: number } }>(sql`
+      const missingPeriod = await db.execute<{ status: string; details: { count: number } }>(
+        sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'posting-period-missing'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(missingPeriod[0]!.status, "open");
       assert.equal(Number(missingPeriod[0]!.details.count), 1);
 
@@ -391,17 +420,19 @@ test(
                updated_at = '2026-07-15 12:03:00+00'
         where id = ${unassignedDocumentId}
       `);
-      const afterExactAdjustmentScope = await refreshCloseRun(
-        org.orgId,
-        runId,
-        actors.adminId,
-      );
+      const afterExactAdjustmentScope = await refreshCloseRun(org.orgId, runId, actors.adminId);
       assert.equal(afterExactAdjustmentScope.fingerprint, initial.fingerprint);
-      const resolvedPeriodIdentity = (await db.execute<{ status: string; details: { count: number } }>(sql`
+      const resolvedPeriodIdentity = await db.execute<{
+        status: string;
+        details: { count: number };
+      }>(
+        sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'posting-period-missing'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(resolvedPeriodIdentity[0]!.status, "resolved");
     } finally {
       await dropScratchOrg(org.orgId);

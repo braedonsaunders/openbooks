@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadChannelExceptions, channelExceptionsSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadChannelExceptions, channelExceptionsSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Channels → Exceptions — the needs-attention queue. Each row names its
@@ -10,9 +10,9 @@ export const dynamic = 'force-dynamic'
 export default async function ChannelExceptionsPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadChannelExceptions(sp)
-  return <ModuleView spec={channelExceptionsSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadChannelExceptions(sp);
+  return <ModuleView spec={channelExceptionsSpec(data)} data={data} searchParams={sp} trusted />;
 }

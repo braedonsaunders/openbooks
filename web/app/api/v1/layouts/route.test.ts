@@ -75,18 +75,20 @@ stubModules({
 });
 
 const main = (await import("./route.ts")) as typeof import("./route.ts");
-const vocabulary = (await import("./vocabulary/route.ts")) as typeof import("./vocabulary/route.ts");
+const vocabulary =
+  (await import("./vocabulary/route.ts")) as typeof import("./vocabulary/route.ts");
 const describe = (await import("./describe/route.ts")) as typeof import("./describe/route.ts");
 const validate = (await import("./validate/route.ts")) as typeof import("./validate/route.ts");
 const preview = (await import("./preview/route.ts")) as typeof import("./preview/route.ts");
 const history = (await import("./history/route.ts")) as typeof import("./history/route.ts");
 const restore = (await import("./restore/route.ts")) as typeof import("./restore/route.ts");
 
-const jsonRequest = (url: string, method: string, body?: unknown) => new Request(url, {
-  method,
-  headers: { "content-type": "application/json" },
-  body: body === undefined ? undefined : JSON.stringify(body),
-});
+const jsonRequest = (url: string, method: string, body?: unknown) =>
+  new Request(url, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 const lastCall = () => routeState.calls[routeState.calls.length - 1];
 async function assertInvalidInput(response: Response, error: string) {
   assert.equal(response.status, 422);
@@ -100,12 +102,14 @@ test("GET /api/v1/layouts lists through listLayouts", async () => {
 });
 
 test("PUT /api/v1/layouts stores through setLayout", async () => {
-  const response = await main.PUT(jsonRequest("http://openbooks.test/api/v1/layouts", "PUT", {
-    route: "/banking",
-    spec: { kind: "page" },
-    note: "tidy",
-    scope: "user",
-  }));
+  const response = await main.PUT(
+    jsonRequest("http://openbooks.test/api/v1/layouts", "PUT", {
+      route: "/banking",
+      spec: { kind: "page" },
+      note: "tidy",
+      scope: "user",
+    }),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, set: true });
   assert.deepEqual(lastCall(), {
@@ -115,31 +119,43 @@ test("PUT /api/v1/layouts stores through setLayout", async () => {
 });
 
 test("PUT /api/v1/layouts refuses a missing route", async () => {
-  await assertInvalidInput(await main.PUT(jsonRequest("http://openbooks.test/api/v1/layouts", "PUT", { spec: {} })), "route is required");
+  await assertInvalidInput(
+    await main.PUT(jsonRequest("http://openbooks.test/api/v1/layouts", "PUT", { spec: {} })),
+    "route is required",
+  );
 });
 
 test("DELETE /api/v1/layouts clears by query route", async () => {
-  const response = await main.DELETE(new Request("http://openbooks.test/api/v1/layouts?route=/banking&scope=org"));
+  const response = await main.DELETE(
+    new Request("http://openbooks.test/api/v1/layouts?route=/banking&scope=org"),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, clear: true });
   assert.deepEqual(lastCall(), { fn: "clear", input: { route: "/banking", scope: "org" } });
 });
 
 test("DELETE /api/v1/layouts requires the route query parameter", async () => {
-  await assertInvalidInput(await main.DELETE(new Request("http://openbooks.test/api/v1/layouts")), "route query parameter is required");
+  await assertInvalidInput(
+    await main.DELETE(new Request("http://openbooks.test/api/v1/layouts")),
+    "route query parameter is required",
+  );
 });
 
 test("GET /api/v1/layouts/vocabulary describes through describeLayoutVocabulary", async () => {
-  const response = await vocabulary.GET(new Request("http://openbooks.test/api/v1/layouts/vocabulary"));
+  const response = await vocabulary.GET(
+    new Request("http://openbooks.test/api/v1/layouts/vocabulary"),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, specVersion: "1" });
 });
 
 test("GET /api/v1/layouts/describe forwards route and parsed params", async () => {
-  const response = await describe.GET(new Request(
-    "http://openbooks.test/api/v1/layouts/describe?route=/apps/[key]&params=" +
-      encodeURIComponent(JSON.stringify({ key: "shop" })),
-  ));
+  const response = await describe.GET(
+    new Request(
+      "http://openbooks.test/api/v1/layouts/describe?route=/apps/[key]&params=" +
+        encodeURIComponent(JSON.stringify({ key: "shop" })),
+    ),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, describe: true });
   assert.deepEqual(lastCall(), {
@@ -149,47 +165,74 @@ test("GET /api/v1/layouts/describe forwards route and parsed params", async () =
 });
 
 test("GET /api/v1/layouts/describe requires the route query parameter", async () => {
-  await assertInvalidInput(await describe.GET(new Request("http://openbooks.test/api/v1/layouts/describe")), "route query parameter is required");
+  await assertInvalidInput(
+    await describe.GET(new Request("http://openbooks.test/api/v1/layouts/describe")),
+    "route query parameter is required",
+  );
 });
 
 test("POST /api/v1/layouts/validate checks the draft spec", async () => {
-  const response = await validate.POST(jsonRequest("http://openbooks.test/api/v1/layouts/validate", "POST", { spec: { kind: "page" } }));
+  const response = await validate.POST(
+    jsonRequest("http://openbooks.test/api/v1/layouts/validate", "POST", {
+      spec: { kind: "page" },
+    }),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, validate: true });
   assert.deepEqual(lastCall(), { fn: "validate", input: { spec: { kind: "page" } } });
 });
 
 test("POST /api/v1/layouts/validate refuses a missing spec", async () => {
-  await assertInvalidInput(await validate.POST(jsonRequest("http://openbooks.test/api/v1/layouts/validate", "POST", {})), "spec is required");
+  await assertInvalidInput(
+    await validate.POST(jsonRequest("http://openbooks.test/api/v1/layouts/validate", "POST", {})),
+    "spec is required",
+  );
 });
 
 test("POST /api/v1/layouts/preview stages the draft", async () => {
-  const response = await preview.POST(jsonRequest("http://openbooks.test/api/v1/layouts/preview", "POST", {
-    route: "/banking",
-    spec: { kind: "page" },
-  }));
+  const response = await preview.POST(
+    jsonRequest("http://openbooks.test/api/v1/layouts/preview", "POST", {
+      route: "/banking",
+      spec: { kind: "page" },
+    }),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, preview: true });
-  assert.deepEqual(lastCall(), { fn: "preview", input: { route: "/banking", spec: { kind: "page" }, params: undefined } });
+  assert.deepEqual(lastCall(), {
+    fn: "preview",
+    input: { route: "/banking", spec: { kind: "page" }, params: undefined },
+  });
 });
 
 test("GET /api/v1/layouts/history lists versions for the route", async () => {
-  const response = await history.GET(new Request("http://openbooks.test/api/v1/layouts/history?route=/banking"));
+  const response = await history.GET(
+    new Request("http://openbooks.test/api/v1/layouts/history?route=/banking"),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, history: true });
   assert.deepEqual(lastCall(), { fn: "history", input: { route: "/banking" } });
 });
 
 test("POST /api/v1/layouts/restore republishes by version id", async () => {
-  const response = await restore.POST(jsonRequest("http://openbooks.test/api/v1/layouts/restore", "POST", {
-    route: "/banking",
-    versionId: "version-1",
-  }));
+  const response = await restore.POST(
+    jsonRequest("http://openbooks.test/api/v1/layouts/restore", "POST", {
+      route: "/banking",
+      versionId: "version-1",
+    }),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, restore: true });
-  assert.deepEqual(lastCall(), { fn: "restore", input: { route: "/banking", versionId: "version-1" } });
+  assert.deepEqual(lastCall(), {
+    fn: "restore",
+    input: { route: "/banking", versionId: "version-1" },
+  });
 });
 
 test("POST /api/v1/layouts/restore refuses a missing versionId", async () => {
-  await assertInvalidInput(await restore.POST(jsonRequest("http://openbooks.test/api/v1/layouts/restore", "POST", { route: "/banking" })), "versionId is required");
+  await assertInvalidInput(
+    await restore.POST(
+      jsonRequest("http://openbooks.test/api/v1/layouts/restore", "POST", { route: "/banking" }),
+    ),
+    "versionId is required",
+  );
 });

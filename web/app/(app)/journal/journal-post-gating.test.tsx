@@ -64,8 +64,28 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const TOKEN = "2026-09-17T12:00:00.000000Z";
 
 const BALANCED_LINES = [
-  { account_id: "a1", amount: "100.00", description: "leg one", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
-  { account_id: "a2", amount: "-100.00", description: "leg two", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
+  {
+    account_id: "a1",
+    amount: "100.00",
+    description: "leg one",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
+  {
+    account_id: "a2",
+    amount: "-100.00",
+    description: "leg two",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
 ];
 
 function docWith(status: string) {
@@ -85,7 +105,9 @@ function docWith(status: string) {
 function scriptFetch(postWarnings?: unknown) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.includes("/api/journals/actions") && postWarnings !== undefined) {
       return Response.json({ ok: true, entryId: "e1", warnings: postWarnings });
     }
@@ -160,7 +182,13 @@ async function openActions() {
 
 // The five gating cases below share one mount/open/cleanup head; only the
 // status, the permission, and the asserted buttons differ.
-async function mountGated(t: TestContext, status: string, canPost: boolean, initialMode = "view", postWarnings?: unknown) {
+async function mountGated(
+  t: TestContext,
+  status: string,
+  canPost: boolean,
+  initialMode = "view",
+  postWarnings?: unknown,
+) {
   (globalThis as Record<string, unknown>).__journalRouter = { push() {}, refresh() {} };
   const restoreFetch = scriptFetch(postWarnings);
   t.after(restoreFetch);
@@ -191,7 +219,12 @@ test("edit mode without gl.post offers no Save", async (t) => {
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <JournalDrawer
-            journal={{ doc: { ...docWith("draft"), id: "", document_number: null }, lines: BALANCED_LINES } as never}
+            journal={
+              {
+                doc: { ...docWith("draft"), id: "", document_number: null },
+                lines: BALANCED_LINES,
+              } as never
+            }
             parties={[]}
             accounts={[]}
             departments={[]}
@@ -214,7 +247,11 @@ test("edit mode without gl.post offers no Save", async (t) => {
     });
     host.remove();
   });
-  assert.equal(buttonsNamed("Actions").length, 0, "a read-only new journal exposes no mutation menu");
+  assert.equal(
+    buttonsNamed("Actions").length,
+    0,
+    "a read-only new journal exposes no mutation menu",
+  );
   assert.equal(buttonsNamed("Save").length, 0, "no Save without gl.post, even in the editor");
 });
 
@@ -241,12 +278,35 @@ test("an approved journal with gl.post keeps Void", async (t) => {
 test("a ?mode=edit deep link without gl.post lands read-only", async (t) => {
   await mountGated(t, "draft", false, "edit");
   await openActions();
-  assert.equal(buttonsNamed("Save").length, 0, "the deep link must not strand the reader in an unsavable editor");
+  assert.equal(
+    buttonsNamed("Save").length,
+    0,
+    "the deep link must not strand the reader in an unsavable editor",
+  );
   assert.equal(buttonsNamed("Edit").length, 0, "no Edit to re-enter the editor either");
 });
 test("posting with a budgetary advisory pins every dimension with its remedy", async (t) => {
   await mountGated(t, "draft", true, "view", [
-    { code: "budgetary_control_advisory", overages: [{ scenarioName: "Primary 2026", accountNumber: "5000", accountName: "Program costs", fundCode: "25NP", fundName: "Annual fund", subsidiaryName: "Main Co", departmentName: "Programs", projectName: "Harbor Outreach", locationName: "HQ", className: "Weekend Kitchen", extraDims: { fund: "fund-extra-id", awardYear: "2026" }, available: "75.0000", amountOver: "25.0000" }] },
+    {
+      code: "budgetary_control_advisory",
+      overages: [
+        {
+          scenarioName: "Primary 2026",
+          accountNumber: "5000",
+          accountName: "Program costs",
+          fundCode: "25NP",
+          fundName: "Annual fund",
+          subsidiaryName: "Main Co",
+          departmentName: "Programs",
+          projectName: "Harbor Outreach",
+          locationName: "HQ",
+          className: "Weekend Kitchen",
+          extraDims: { fund: "fund-extra-id", awardYear: "2026" },
+          available: "75.0000",
+          amountOver: "25.0000",
+        },
+      ],
+    },
   ]);
   await openActions();
   const post = buttonsNamed("Post")[0];
@@ -260,7 +320,21 @@ test("posting with a budgetary advisory pins every dimension with its remedy", a
   const alerts = [...document.querySelectorAll('[role="alert"]')].map((p) => p.textContent ?? "");
   assert.equal(alerts.length, 1, "one pinned advisory per overage");
   assert.ok(alerts[0], "the pinned advisory has text");
-  assert.ok(alerts[0].includes("Primary 2026") && alerts[0].includes("HQ") && alerts[0].includes("25.0000"), "the advisory keeps scenario, dimensions, and overage");
-  assert.ok(alerts[0].includes("Programs") && alerts[0].includes("Harbor Outreach") && alerts[0].includes("Weekend Kitchen") && alerts[0].includes("awardYear: 2026") && !alerts[0].includes("fund-extra-id"), "every named dimension renders a recognizable label");
-  assert.ok(alerts[0].includes("copy the approved budget to a draft") && alerts[0].includes("Or link this actual to the open encumbrance that reserved it."), "the advisory names the complete budget revision or encumbrance remedy");
+  assert.ok(
+    alerts[0].includes("Primary 2026") && alerts[0].includes("HQ") && alerts[0].includes("25.0000"),
+    "the advisory keeps scenario, dimensions, and overage",
+  );
+  assert.ok(
+    alerts[0].includes("Programs") &&
+      alerts[0].includes("Harbor Outreach") &&
+      alerts[0].includes("Weekend Kitchen") &&
+      alerts[0].includes("awardYear: 2026") &&
+      !alerts[0].includes("fund-extra-id"),
+    "every named dimension renders a recognizable label",
+  );
+  assert.ok(
+    alerts[0].includes("copy the approved budget to a draft") &&
+      alerts[0].includes("Or link this actual to the open encumbrance that reserved it."),
+    "the advisory names the complete budget revision or encumbrance remedy",
+  );
 });

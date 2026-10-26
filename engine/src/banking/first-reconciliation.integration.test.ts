@@ -108,15 +108,24 @@ test(
         },
         ctx,
       );
-      const statementLineId = (await db.execute<{ id: string }>(sql`
+      const statementLineId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines where org_id = ${org.orgId}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "130" },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: periodLines },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [statementLineId],
+          journalLineIds: periodLines,
+        },
         ctx,
       );
 
@@ -128,42 +137,82 @@ test(
         unmatchedStatementLines: 0,
         matchedJournalLines: 1,
       });
-      assert.deepEqual(await markReconciled(recon.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
-      const status = (await db.execute<{ status: string }>(sql`
+      assert.deepEqual(await markReconciled(recon.id, ctx), {
+        status: "signed_off",
+        journalLinesReconciled: 1,
+      });
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
         select status from reconciliations where org_id = ${org.orgId} and id = ${recon.id}
-      `, "objects"))[0]!.status;
+      `,
+          "objects",
+        )
+      )[0]!.status;
       assert.equal(status, "signed_off");
       const runtimeUrl = process.env.OPENBOOKS_RUNTIME_DB_URL ?? process.env.OPENBOOKS_DB_URL;
       const runtime = new Client({ connectionString: runtimeUrl });
       await runtime.connect();
       try {
         await runtime.query("begin");
-        await runtime.query("select set_config('app.current_org',$1,true),set_config('app.bypass_rls','off',true)", [org.orgId]);
-        await runtime.query("select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)");
-        const posture = (await runtime.query(`select r.rolsuper,r.rolbypassrls,
-          public.openbooks_clone_authority() as allowed from pg_roles r where r.rolname=session_user`)).rows[0];
-        assert.deepEqual(posture, { rolsuper: false, rolbypassrls: false, allowed: false },
-          "the refusal is exercised by the actual runtime login");
-        await assert.rejects(runtime.query(`insert into reconciliation_matches
+        await runtime.query(
+          "select set_config('app.current_org',$1,true),set_config('app.bypass_rls','off',true)",
+          [org.orgId],
+        );
+        await runtime.query(
+          "select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)",
+        );
+        const posture = (
+          await runtime.query(`select r.rolsuper,r.rolbypassrls,
+          public.openbooks_clone_authority() as allowed from pg_roles r where r.rolname=session_user`)
+        ).rows[0];
+        assert.deepEqual(
+          posture,
+          { rolsuper: false, rolbypassrls: false, allowed: false },
+          "the refusal is exercised by the actual runtime login",
+        );
+        await assert.rejects(
+          runtime.query(
+            `insert into reconciliation_matches
           (id,org_id,reconciliation_id,statement_line_id,journal_line_id,group_id,matched_by)
-          values($1,$2,$3,$4,$5,$6,'manual')`, [randomUUID(),org.orgId,recon.id,statementLineId,periodLines[0],randomUUID()]),
-        /signed-off reconciliation matches are immutable/,
-        "runtime flags cannot authorize an additional match on signed-off history");
+          values($1,$2,$3,$4,$5,$6,'manual')`,
+            [randomUUID(), org.orgId, recon.id, statementLineId, periodLines[0], randomUUID()],
+          ),
+          /signed-off reconciliation matches are immutable/,
+          "runtime flags cannot authorize an additional match on signed-off history",
+        );
       } finally {
         await runtime.query("rollback");
         await runtime.end();
       }
-      await assert.rejects(db.execute(sql`update reconciliation_matches set confidence='0.5000'
+      await assert.rejects(
+        db.execute(sql`update reconciliation_matches set confidence='0.5000'
         where org_id=${org.orgId} and reconciliation_id=${recon.id}`),
-      (error: unknown) => /signed-off reconciliation matches are immutable/.test(String((error as { cause?: unknown }).cause ?? error)));
-      await assert.rejects(db.execute(sql`delete from reconciliation_matches
+        (error: unknown) =>
+          /signed-off reconciliation matches are immutable/.test(
+            String((error as { cause?: unknown }).cause ?? error),
+          ),
+      );
+      await assert.rejects(
+        db.execute(sql`delete from reconciliation_matches
         where org_id=${org.orgId} and reconciliation_id=${recon.id}`),
-      (error: unknown) => /signed-off reconciliation matches are immutable/.test(String((error as { cause?: unknown }).cause ?? error)));
-      const signoff = (await db.execute<{ changes: { openingCarriedForward: string; openingCarryStartDate: string } }>(sql`
+        (error: unknown) =>
+          /signed-off reconciliation matches are immutable/.test(
+            String((error as { cause?: unknown }).cause ?? error),
+          ),
+      );
+      const signoff = (
+        await db.execute<{
+          changes: { openingCarriedForward: string; openingCarryStartDate: string };
+        }>(
+          sql`
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'reconciliations' and row_id = ${recon.id}
            and action = 'approve'
-      `, "objects"))[0]!.changes;
+      `,
+          "objects",
+        )
+      )[0]!.changes;
       assert.equal(signoff.openingCarriedForward, "100.0000");
       assert.equal(signoff.openingCarryStartDate, org.date);
 
@@ -190,10 +239,15 @@ test(
         },
         ctx,
       );
-      const statement2Id = (await db.execute<{ id: string }>(sql`
+      const statement2Id = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'second-recon-deposit'
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       const recon2 = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: "2026-07-20", statementBalance: "150" },
         ctx,
@@ -210,14 +264,22 @@ test(
         unmatchedStatementLines: 0,
         matchedJournalLines: 1,
       });
-      assert.deepEqual(await markReconciled(recon2.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
-      const carriedStillOpen = (await db.execute<{ count: number }>(sql`
+      assert.deepEqual(await markReconciled(recon2.id, ctx), {
+        status: "signed_off",
+        journalLinesReconciled: 1,
+      });
+      const carriedStillOpen = (
+        await db.execute<{ count: number }>(
+          sql`
         select count(*)::int as count
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where jl.org_id = ${org.orgId} and jl.account_id = ${org.accounts.bank}
            and jl.reconciliation_id is null and je.posting_date < ${org.date}
-      `, "objects"))[0]!.count;
+      `,
+          "objects",
+        )
+      )[0]!.count;
       assert.equal(carriedStillOpen, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -260,15 +322,24 @@ test(
         },
         ctx,
       );
-      const statementLineId = (await db.execute<{ id: string }>(sql`
+      const statementLineId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines where org_id = ${org.orgId}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "130" },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: periodLines },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [statementLineId],
+          journalLineIds: periodLines,
+        },
         ctx,
       );
 

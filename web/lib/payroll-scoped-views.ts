@@ -1,29 +1,26 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   entitlementOpenings,
   type EntitlementOpeningsResult,
-} from '@openbooks/engine/payroll/entitlements-openings'
+} from "@openbooks/engine/payroll/entitlements-openings";
 import {
   openingBalancesForYear,
   type OpeningBalanceYear,
-} from '@openbooks/engine/payroll/opening-balances'
+} from "@openbooks/engine/payroll/opening-balances";
 import {
   payrollRemittanceSummary,
   type RemittanceGroup,
-} from '@openbooks/engine/payroll/remittance'
-import {
-  orgYearEndFilings,
-  type YearEndFilingSection,
-} from '@openbooks/engine/payroll/yearend'
+} from "@openbooks/engine/payroll/remittance";
+import { orgYearEndFilings, type YearEndFilingSection } from "@openbooks/engine/payroll/yearend";
 import {
   guardPayrollYearEndFilings,
   guardRemittancePeriod,
   payrollVisibleScheduleFilter,
   visiblePayrollEmployeeIds,
-} from '../app/api/payroll/subsidiary-scope'
-import type { Authz } from './authz'
+} from "../app/api/payroll/subsidiary-scope";
+import type { Authz } from "./authz";
 
 /**
  * Payroll reads that carry the caller's subsidiary scope.
@@ -44,18 +41,18 @@ export async function scopedYearEndFilings(
   gate: Authz,
   taxYear: number,
 ): Promise<YearEndFilingSection[] | null> {
-  const filings = await orgYearEndFilings(gate.user.orgId, taxYear)
-  const denied = await guardPayrollYearEndFilings(gate, filings, taxYear)
-  return denied ? null : filings
+  const filings = await orgYearEndFilings(gate.user.orgId, taxYear);
+  const denied = await guardPayrollYearEndFilings(gate, filings, taxYear);
+  return denied ? null : filings;
 }
 
 export async function scopedRemittanceSummary(
   gate: Authz,
   range: { from: string; to: string },
 ): Promise<RemittanceGroup[] | null> {
-  const denied = await guardRemittancePeriod(gate, range.from, range.to)
-  if (denied) return null
-  return payrollRemittanceSummary(gate.user.orgId, range, gate.allowedSubsidiaryIds)
+  const denied = await guardRemittancePeriod(gate, range.from, range.to);
+  if (denied) return null;
+  return payrollRemittanceSummary(gate.user.orgId, range, gate.allowedSubsidiaryIds);
 }
 
 /** Opening balances for a tax year, limited to the employees the caller may see. */
@@ -64,24 +61,29 @@ export async function scopedOpeningBalances(
   taxYear: number,
 ): Promise<OpeningBalanceYear> {
   return withOrgTransaction(gate.user.orgId, async () => {
-    const visible = await visiblePayrollEmployeeIds(gate, true)
-    const data = await openingBalancesForYear(gate.user.orgId, taxYear)
-    if (!visible) return data
-    const rows = data.rows.filter((row) => visible.has(row.employeePartyId))
-    const years = (await db.execute<{ taxYear: number }>(sql`
+    const visible = await visiblePayrollEmployeeIds(gate, true);
+    const data = await openingBalancesForYear(gate.user.orgId, taxYear);
+    if (!visible) return data;
+    const rows = data.rows.filter((row) => visible.has(row.employeePartyId));
+    const years = (
+      await db.execute<{ taxYear: number }>(
+        sql`
       select distinct b.tax_year as "taxYear"
         from payroll_opening_balances b
         join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
        where b.org_id = ${gate.user.orgId}
-         and p.id = any(${`{${[...visible].join(',')}}`}::uuid[])
-       order by b.tax_year desc`, 'objects')).map((row) => Number(row.taxYear))
+         and p.id = any(${`{${[...visible].join(",")}}`}::uuid[])
+       order by b.tax_year desc`,
+        "objects",
+      )
+    ).map((row) => Number(row.taxYear));
     return {
       ...data,
       rows,
       entered: rows.filter((row) => row.amounts !== null).length,
       years,
-    }
-  })
+    };
+  });
 }
 
 /** Entitlement bank carry-ins, limited to the employees the caller may see. */
@@ -90,10 +92,10 @@ export async function scopedEntitlementOpenings(
   opts: { asOf?: string } = {},
 ): Promise<EntitlementOpeningsResult> {
   return withOrgTransaction(gate.user.orgId, async () => {
-    const visible = await visiblePayrollEmployeeIds(gate, true)
-    const data = await entitlementOpenings(gate.user.orgId, opts)
-    if (!visible) return data
-    const rows = data.rows.filter((row) => visible.has(row.employeePartyId))
+    const visible = await visiblePayrollEmployeeIds(gate, true);
+    const data = await entitlementOpenings(gate.user.orgId, opts);
+    if (!visible) return data;
+    const rows = data.rows.filter((row) => visible.has(row.employeePartyId));
     return {
       ...data,
       rows,
@@ -101,13 +103,14 @@ export async function scopedEntitlementOpenings(
       blocked: Object.fromEntries(
         Object.entries(data.blocked).filter(([employeePartyId]) => visible.has(employeePartyId)),
       ),
-    }
-  })
+    };
+  });
 }
 
 /** Active schedules with committed history, visible to the caller. */
 export async function scopedRetroSchedules(gate: Authz): Promise<{ id: string; name: string }[]> {
-  return await db.execute<{ id: string; name: string }>(sql`
+  return await db.execute<{ id: string; name: string }>(
+    sql`
     select s.id, s.name
       from pay_schedules s
      where s.org_id = ${gate.user.orgId} and s.is_active
@@ -118,5 +121,7 @@ export async function scopedRetroSchedules(gate: Authz): Promise<{ id: string; n
           where r.org_id = s.org_id and r.pay_schedule_id = s.id
             and r.run_status = 'committed')
      order by s.name
-  `, 'objects')
+  `,
+    "objects",
+  );
 }

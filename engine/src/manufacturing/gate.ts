@@ -1,11 +1,9 @@
 import type { SqlExecutor } from "../platform/db.ts";
-import {
-  lockAndCheckOrgFeature,
-  orgFeatureEnabled,
-} from "../organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { ManufacturingFeatureDisabledError } from "./errors.ts";
 
-export type ManufacturingFeatureKey = "manufacturing" | "manufacturingMrp" | "manufacturingSubcontract";
+export type ManufacturingFeatureKey =
+  "manufacturing" | "manufacturingMrp" | "manufacturingSubcontract";
 
 export async function assertManufacturingFeature(
   tx: SqlExecutor,

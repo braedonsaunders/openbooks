@@ -13,8 +13,11 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function calendarOf(orgId: string, periodId: string): Promise<string> {
-  const r = await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where id = ${periodId}`, "objects");
+  const r = await db.execute<{ fiscal_calendar_id: string }>(
+    sql`
+    select fiscal_calendar_id from accounting_periods where id = ${periodId}`,
+    "objects",
+  );
   return r[0]!.fiscal_calendar_id;
 }
 
@@ -63,17 +66,21 @@ test("covering resolution never lands in an adjustment period by date", { skip: 
   }
 });
 
-test("covering resolution returns null uncovered or default-less instead of guessing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    assert.equal(await resolveCoveringPeriod(db, org.orgId, "2026-09-01"), null);
-    const defaultCalendar = await calendarOf(org.orgId, org.periodId);
-    await db.execute(sql`
+test(
+  "covering resolution returns null uncovered or default-less instead of guessing",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      assert.equal(await resolveCoveringPeriod(db, org.orgId, "2026-09-01"), null);
+      const defaultCalendar = await calendarOf(org.orgId, org.periodId);
+      await db.execute(sql`
       update fiscal_calendars set is_default = false where id = ${defaultCalendar}`);
-    // The only calendar left is non-default: refusing (null) is the fix —
-    // picking it would be the arbitrary choice this resolver eliminates.
-    assert.equal(await resolveCoveringPeriod(db, org.orgId, "2026-07-15"), null);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // The only calendar left is non-default: refusing (null) is the fix —
+      // picking it would be the arbitrary choice this resolver eliminates.
+      assert.equal(await resolveCoveringPeriod(db, org.orgId, "2026-07-15"), null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

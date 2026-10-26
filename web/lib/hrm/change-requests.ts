@@ -1,21 +1,17 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   HrmChangeRequestError,
   listChangeRequests,
-} from '@openbooks/engine/hrm/change-requests/operations'
-import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
-import { can, type Authz } from '../authz'
-import { setupSectionParams } from '../list-params'
-import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import {
-  resolveQueueStatus,
-  segmentOfServiceStatus,
-  QUEUE_SEGMENTS,
-} from './queue-status'
+} from "@openbooks/engine/hrm/change-requests/operations";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { can, type Authz } from "../authz";
+import { setupSectionParams } from "../list-params";
+import { hrmGroupTabs } from "../../components/module-home/group-tabs";
+import { resolveQueueStatus, segmentOfServiceStatus, QUEUE_SEGMENTS } from "./queue-status";
 
 /**
  * Org-wide employment change-request queue — one read for the working
@@ -35,44 +31,43 @@ import {
  */
 
 /** Bounded page: the service refuses limits outside 1..500. */
-const QUEUE_LIMIT = 500
+const QUEUE_LIMIT = 500;
 
 export interface QueueRow {
-  id: string
-  employmentId: string
-  employeeName: string | null
-  partyId: string | null
-  kind: string
-  effectiveFrom: string | null
-  effectiveTo: string | null
-  status: string
-  requesterName: string | null
-  submittedAt: string | null
-  createdAt: string
+  id: string;
+  employmentId: string;
+  employeeName: string | null;
+  partyId: string | null;
+  kind: string;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  status: string;
+  requesterName: string | null;
+  submittedAt: string | null;
+  createdAt: string;
   /** Display-resolved cells for the shared table block: labels, never ids. */
-  employeeLabel: string
-  employeeHref: string | null
-  kindLabel: string
-  effectiveWindow: string
-  requesterLabel: string
-  submittedLabel: string
-  statusLabel: string
-  statusVariant:
-    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  employeeLabel: string;
+  employeeHref: string | null;
+  kindLabel: string;
+  effectiveWindow: string;
+  requesterLabel: string;
+  submittedLabel: string;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
   /** HR-16 classification (0227): action label + reason code, null when unclassified. */
-  actionLabel: string | null
-  reasonCode: string | null
+  actionLabel: string | null;
+  reasonCode: string | null;
   /** Loader-composed "Action · code" cell (null when unclassified). */
-  actionDisplay: string | null
+  actionDisplay: string | null;
   /** HR-16 event verb of the applied change (0227): chip only when not a plain apply. */
-  verb: string | null
-  verbLabel: string | null
+  verb: string | null;
+  verbLabel: string | null;
   /** Applied employment_changes id for Rescind/Correct (null unless applied). */
-  appliedChangeId: string | null
+  appliedChangeId: string | null;
   /** The request-detail drawer href (?request=<id>, segment preserved). */
-  requestHref: string
+  requestHref: string;
   /** The row's open link label, from the catalog. */
-  openLabel: string
+  openLabel: string;
 }
 
 /** Loader-resolved subject labels for the request-detail drawer, so the
@@ -81,100 +76,100 @@ export interface QueueRow {
  * another segment, or an id the viewer cannot see — the drawer's own fetch
  * then owns the refusal). */
 export interface ChangeRequestDialogSubject {
-  employeeLabel: string
-  kindLabel: string
-  effectiveWindow: string
-  requesterLabel: string
-  submittedLabel: string
-  statusLabel: string
+  employeeLabel: string;
+  kindLabel: string;
+  effectiveWindow: string;
+  requesterLabel: string;
+  submittedLabel: string;
+  statusLabel: string;
 }
 
 export interface QueueSegment {
-  value: string
-  label: string
-  count: number
+  value: string;
+  label: string;
+  count: number;
 }
 
 export interface QueueRefusal {
-  title: string
-  message: string
+  title: string;
+  message: string;
 }
 
 export interface ChangeRequestQueueData {
-  title: string
-  description: string
-  listTitle: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  refusal: QueueRefusal | null
-  hasContent: boolean
-  segmentsLabel: string
-  allLabel: string
-  counts: Record<string, number>
-  total: number
-  truncated: boolean
-  truncatedNote: string
-  segments: QueueSegment[]
-  currentParams: Record<string, string | string[] | undefined>
+  title: string;
+  description: string;
+  listTitle: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  refusal: QueueRefusal | null;
+  hasContent: boolean;
+  segmentsLabel: string;
+  allLabel: string;
+  counts: Record<string, number>;
+  total: number;
+  truncated: boolean;
+  truncatedNote: string;
+  segments: QueueSegment[];
+  currentParams: Record<string, string | string[] | undefined>;
   columns: {
-    employee: string
-    kind: string
-    effective: string
-    requester: string
-    submitted: string
-  }
-  rows: QueueRow[]
-  emptyTitle: string
-  emptyDescription: string
-  canManage: boolean
+    employee: string;
+    kind: string;
+    effective: string;
+    requester: string;
+    submitted: string;
+  };
+  rows: QueueRow[];
+  emptyTitle: string;
+  emptyDescription: string;
+  canManage: boolean;
   /**
    * Verb actions (Rescind/Correct) display gate: the rescind route
    * requires hrm.employment.manage, so the buttons render only for
    * approvers — never as dead buttons that can only refuse.
    */
-  canVerb: boolean
-  departmentOptions: { value: string; label: string }[]
-  statusHeader: string
-  actionsHeader: string
+  canVerb: boolean;
+  departmentOptions: { value: string; label: string }[];
+  statusHeader: string;
+  actionsHeader: string;
   // HR-16 begin
-  actionHeader: string
-  verbHeader: string
+  actionHeader: string;
+  verbHeader: string;
   // HR-16 end
-  proposeButton: string
-  proposeHref: string
-  proposeOpen: boolean
+  proposeButton: string;
+  proposeHref: string;
+  proposeOpen: boolean;
   /** First-employment mode of the propose dialog (?propose=1&hire=1): the
    * employment picker gives way to the Hire drawer. */
-  hireMode: boolean
-  hireHref: string
-  hireLinkLabel: string
+  hireMode: boolean;
+  hireHref: string;
+  hireLinkLabel: string;
   /** Shared return href for the propose and request-detail dialogs: the
    * queue route with the active segment, every dialog param navigated
    * away. */
-  dialogCloseHref: string
-  proposeEmploymentLabel: string
-  proposeEmploymentPlaceholder: string
-  proposeEmpty: string
-  proposeFailed: string
+  dialogCloseHref: string;
+  proposeEmploymentLabel: string;
+  proposeEmploymentPlaceholder: string;
+  proposeEmpty: string;
+  proposeFailed: string;
   /** Request-detail drawer (?request=<id>): open state and id mirror the
    * leave queue's dialog trio. dialogSubject carries the visible row's
    * display labels when the requested id is in the list; the drawer's live
    * fetch stays authoritative for status, payload, reason, and history. */
-  dialogOpen: boolean
-  dialogRequestId: string | null
-  dialogSubject: ChangeRequestDialogSubject | null
+  dialogOpen: boolean;
+  dialogRequestId: string | null;
+  dialogSubject: ChangeRequestDialogSubject | null;
   /** HR-16 rehomed reason-code setup (0227): configured where changes are proposed. */
-  canEditReasons: boolean
-  reasonsHref: string
-  reasonsLabel: string
-  showReasons: boolean
-  reasonsCloseHref: string
+  canEditReasons: boolean;
+  reasonsHref: string;
+  reasonsLabel: string;
+  showReasons: boolean;
+  reasonsCloseHref: string;
   queue: {
-    openEmployee: string
-    notAvailable: string
-  }
+    openEmployee: string;
+    notAvailable: string;
+  };
 }
 
-type ServiceRow = Awaited<ReturnType<typeof listChangeRequests>>[number]
+type ServiceRow = Awaited<ReturnType<typeof listChangeRequests>>[number];
 
 /**
  * HR-16 row resolution: the shared display cells plus the 0227
@@ -187,36 +182,32 @@ async function resolveQueueRows(
   t: Awaited<ReturnType<typeof getTranslations>>,
   orgId: string,
   visible: ServiceRow[],
-  workerByEmployment: Map<
-    string,
-    { name: string | null; partyId: string | null }
-  >,
+  workerByEmployment: Map<string, { name: string | null; partyId: string | null }>,
   requesterByUser: Map<string, string>,
   segment: string | undefined,
 ): Promise<QueueRow[]> {
   const appliedIds = [
     ...new Set(
-      visible
-        .map((row) => row.appliedEmploymentChangeId)
-        .filter((id): id is string => id !== null),
+      visible.map((row) => row.appliedEmploymentChangeId).filter((id): id is string => id !== null),
     ),
-  ]
-  const verbByChange = new Map<string, string>()
+  ];
+  const verbByChange = new Map<string, string>();
   if (appliedIds.length > 0) {
-    const verbs = await db.execute<{ id: string; verb: string }>(sql`
+    const verbs = await db.execute<{ id: string; verb: string }>(
+      sql`
       select id::text as id, verb from employment_changes
-       where org_id = ${orgId}::uuid and id = any(${`{${appliedIds.join(',')}}`}::uuid[])
-    `, 'objects')
-    for (const v of verbs) verbByChange.set(v.id, v.verb)
+       where org_id = ${orgId}::uuid and id = any(${`{${appliedIds.join(",")}}`}::uuid[])
+    `,
+      "objects",
+    );
+    for (const v of verbs) verbByChange.set(v.id, v.verb);
   }
   return visible.map((row) => {
-    const window = effectiveWindow(
-      row.payload as { kind: string } & Record<string, unknown>,
-    )
-    const worker = workerByEmployment.get(row.employmentId)
-    const requesterId = row.submittedBy ?? row.createdBy
-    const kind = (row.payload as { kind: string }).kind
-    const status = row.status
+    const window = effectiveWindow(row.payload as { kind: string } & Record<string, unknown>);
+    const worker = workerByEmployment.get(row.employmentId);
+    const requesterId = row.submittedBy ?? row.createdBy;
+    const kind = (row.payload as { kind: string }).kind;
+    const status = row.status;
     return {
       id: row.id,
       employmentId: row.employmentId,
@@ -226,28 +217,23 @@ async function resolveQueueRows(
       effectiveFrom: window.from,
       effectiveTo: window.to,
       status,
-      requesterName:
-        requesterId !== null
-          ? (requesterByUser.get(requesterId) ?? null)
-          : null,
+      requesterName: requesterId !== null ? (requesterByUser.get(requesterId) ?? null) : null,
       submittedAt: row.submittedAt ? row.submittedAt.toISOString() : null,
       createdAt: row.createdAt.toISOString(),
-      employeeLabel: worker?.name ?? t('queue.notAvailable'),
+      employeeLabel: worker?.name ?? t("queue.notAvailable"),
       employeeHref: worker?.partyId
         ? `/entities/employees?party=${encodeURIComponent(worker.partyId)}`
         : null,
       kindLabel: kindLabelOf(t, kind),
       effectiveWindow:
         window.from === null
-          ? t('queue.notAvailable')
-          : `${window.from} → ${window.to ?? t('employment.episodes.present')}`,
+          ? t("queue.notAvailable")
+          : `${window.from} → ${window.to ?? t("employment.episodes.present")}`,
       requesterLabel:
         requesterId !== null
-          ? (requesterByUser.get(requesterId) ?? t('queue.notAvailable'))
-          : t('queue.notAvailable'),
-      submittedLabel: row.submittedAt
-        ? row.submittedAt.toISOString()
-        : t('queue.notAvailable'),
+          ? (requesterByUser.get(requesterId) ?? t("queue.notAvailable"))
+          : t("queue.notAvailable"),
+      submittedLabel: row.submittedAt ? row.submittedAt.toISOString() : t("queue.notAvailable"),
       statusLabel: t.has(`employment.changeRequests.statusNames.${status}`)
         ? t(`employment.changeRequests.statusNames.${status}`)
         : status,
@@ -258,7 +244,7 @@ async function resolveQueueRows(
           : (row.action ?? null),
       reasonCode: row.reasonCode ?? null,
       actionDisplay: row.action
-        ? `${row.action && t.has(`options.hrmAction.${row.action}`) ? t(`options.hrmAction.${row.action}`) : row.action}${row.reasonCode ? ` · ${row.reasonCode}` : ''}`
+        ? `${row.action && t.has(`options.hrmAction.${row.action}`) ? t(`options.hrmAction.${row.action}`) : row.action}${row.reasonCode ? ` · ${row.reasonCode}` : ""}`
         : null,
       verb: row.appliedEmploymentChangeId
         ? (verbByChange.get(row.appliedEmploymentChangeId) ?? null)
@@ -266,32 +252,28 @@ async function resolveQueueRows(
       verbLabel:
         row.appliedEmploymentChangeId &&
         verbByChange.get(row.appliedEmploymentChangeId) &&
-        verbByChange.get(row.appliedEmploymentChangeId) !== 'apply'
+        verbByChange.get(row.appliedEmploymentChangeId) !== "apply"
           ? t(`queue.verbs.${verbByChange.get(row.appliedEmploymentChangeId)}`)
           : null,
-      appliedChangeId:
-        status === 'applied' ? (row.appliedEmploymentChangeId ?? null) : null,
+      appliedChangeId: status === "applied" ? (row.appliedEmploymentChangeId ?? null) : null,
       requestHref: detailHref(segment, row.id),
-      openLabel: t('queue.openRequest'),
-    }
-  })
+      openLabel: t("queue.openRequest"),
+    };
+  });
 }
 
 /** Request-detail href: the queue route with ?request=<id>, preserving the
  * active status segment so closing the drawer returns to the same list. */
 function detailHref(segment: string | undefined, requestId: string): string {
-  const params = new URLSearchParams()
-  if (segment) params.set('status', segment)
-  params.set('request', requestId)
-  return `/hrm/change-requests?${params.toString()}`
+  const params = new URLSearchParams();
+  if (segment) params.set("status", segment);
+  params.set("request", requestId);
+  return `/hrm/change-requests?${params.toString()}`;
 }
 
 export interface QueueLabels {
-  workerByEmployment: Map<
-    string,
-    { name: string | null; partyId: string | null }
-  >
-  requesterByUser: Map<string, string>
+  workerByEmployment: Map<string, { name: string | null; partyId: string | null }>;
+  requesterByUser: Map<string, string>;
 }
 
 /**
@@ -306,108 +288,106 @@ export async function loadQueueLabels(
   employmentIds: readonly string[],
   userIds: readonly string[],
 ): Promise<QueueLabels> {
-  const workerByEmployment = new Map<
-    string,
-    { name: string | null; partyId: string | null }
-  >()
+  const workerByEmployment = new Map<string, { name: string | null; partyId: string | null }>();
   if (employmentIds.length > 0) {
-    const ids = employmentIds.map((id) => sql`${id}::uuid`)
+    const ids = employmentIds.map((id) => sql`${id}::uuid`);
     const rows = await db.execute<{
-        employmentId: string
-        workerName: string | null
-        partyId: string | null
-      }>(sql`
+      employmentId: string;
+      workerName: string | null;
+      partyId: string | null;
+    }>(
+      sql`
       select w.id::text as "employmentId", p.display_name as "workerName", p.id::text as "partyId"
         from worker_employments w
         join parties p on p.id = w.worker_party_id and p.org_id = w.org_id
-       where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})`, 'objects')
+       where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})`,
+      "objects",
+    );
     for (const row of rows)
       workerByEmployment.set(row.employmentId, {
         name: row.workerName,
         partyId: row.partyId,
-      })
+      });
   }
-  const requesterByUser = new Map<string, string>()
+  const requesterByUser = new Map<string, string>();
   if (userIds.length > 0) {
-    const ids = userIds.map((id) => sql`${id}::uuid`)
+    const ids = userIds.map((id) => sql`${id}::uuid`);
     const rows = await db.execute<{
-        userId: string
-        workerName: string | null
-        userName: string
-      }>(sql`
+      userId: string;
+      workerName: string | null;
+      userName: string;
+    }>(
+      sql`
       select u.id::text as "userId", p.display_name as "workerName", u.name as "userName"
         from users u
         left join parties p on p.id = u.party_id and p.org_id = u.org_id
-       where u.org_id = ${orgId}::uuid and u.id in (${sql.join(ids, sql`, `)})`, 'objects')
-    for (const row of rows)
-      requesterByUser.set(row.userId, row.workerName ?? row.userName)
+       where u.org_id = ${orgId}::uuid and u.id in (${sql.join(ids, sql`, `)})`,
+      "objects",
+    );
+    for (const row of rows) requesterByUser.set(row.userId, row.workerName ?? row.userName);
   }
-  return { workerByEmployment, requesterByUser }
+  return { workerByEmployment, requesterByUser };
 }
 
 function effectiveWindow(payload: { kind: string } & Record<string, unknown>): {
-  from: string | null
-  to: string | null
+  from: string | null;
+  to: string | null;
 } {
   const text = (value: unknown): string | null =>
-    typeof value === 'string' && value !== '' ? value : null
-  if (payload.kind === 'termination') {
-    return { from: text(payload.effectiveDate), to: null }
+    typeof value === "string" && value !== "" ? value : null;
+  if (payload.kind === "termination") {
+    return { from: text(payload.effectiveDate), to: null };
   }
-  return { from: text(payload.effectiveFrom), to: text(payload.effectiveTo) }
+  return { from: text(payload.effectiveFrom), to: text(payload.effectiveTo) };
 }
 
 type Catalog = {
-  (key: string, params?: Record<string, string | number>): string
-  has: (key: string) => boolean
-}
+  (key: string, params?: Record<string, string | number>): string;
+  has: (key: string) => boolean;
+};
 
 /** Header/dialog hrefs preserve the active status segment; the dialog closes by navigating the param away. */
-function queueHref(
-  status: string | undefined,
-  propose: boolean,
-  hire = false,
-): string {
-  const params = new URLSearchParams()
-  if (status) params.set('status', status)
-  if (propose) params.set('propose', '1')
-  if (hire) params.set('hire', '1')
-  const query = params.toString()
-  return query ? `/hrm/change-requests?${query}` : '/hrm/change-requests'
+function queueHref(status: string | undefined, propose: boolean, hire = false): string {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (propose) params.set("propose", "1");
+  if (hire) params.set("hire", "1");
+  const query = params.toString();
+  return query ? `/hrm/change-requests?${query}` : "/hrm/change-requests";
 }
 
 /** Reason-code setup view of the queue page (reasons=1 preserves the segment). */
 function reasonsHref(status: string | undefined): string {
-  const params = new URLSearchParams()
-  if (status) params.set('status', status)
-  params.set('reasons', '1')
-  return `/hrm/change-requests?${params.toString()}`
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  params.set("reasons", "1");
+  return `/hrm/change-requests?${params.toString()}`;
 }
 
 /** The same kind labels the hand-rolled queue rendered, resolved where the rows come from. */
 function kindLabelOf(t: Catalog, kind: string): string {
   const key =
-    kind === 'hire'
-      ? 'kindHire'
-      : kind === 'status_change'
-        ? 'kindStatusChange'
-        : kind === 'assignment_change'
-          ? 'kindAssignmentChange'
-          : kind === 'termination'
-            ? 'kindTermination'
-            : kind === 'bank_change'
-              ? 'kindBankChange'
-              : null
-  return key !== null ? t(`employment.changeRequests.${key}`) : kind
+    kind === "hire"
+      ? "kindHire"
+      : kind === "status_change"
+        ? "kindStatusChange"
+        : kind === "assignment_change"
+          ? "kindAssignmentChange"
+          : kind === "termination"
+            ? "kindTermination"
+            : kind === "bank_change"
+              ? "kindBankChange"
+              : null;
+  return key !== null ? t(`employment.changeRequests.${key}`) : kind;
 }
 
-function changeRequestStatusVariant(status: string): QueueRow['statusVariant'] {
-  if (status === 'draft') return 'secondary'
-  if (status === 'pending_approval') return 'warning'
-  if (status === 'approved') return 'success'
-  if (status === 'rejected') return 'destructive'
-  if (status === 'withdrawn') return 'outline'
-  return 'default'
+function changeRequestStatusVariant(status: string): QueueRow["statusVariant"] {
+  if (status === "draft") return "secondary";
+  if (status === "pending_approval") return "warning";
+  if (status === "approved") return "success";
+  if (status === "rejected") return "destructive";
+  if (status === "withdrawn") return "outline";
+  return "default";
 }
 
 export async function loadChangeRequestQueue(
@@ -417,98 +397,81 @@ export async function loadChangeRequestQueue(
   // The caller (the queue view) owns the page gate — requirePermission plus
   // the hrm switch with a 404. This loader never re-checks either; it
   // resolves the queue for the authorized session it is given.
-  const orgId = authz.user.orgId
-  const t = await getTranslations('hrm')
-  const canManage = can(authz, 'hrm.employment.manage')
+  const orgId = authz.user.orgId;
+  const t = await getTranslations("hrm");
+  const canManage = can(authz, "hrm.employment.manage");
   // Verbs and reason codes ride Human resources, which the page gate
   // already holds: only the grants decide. Reason codes configure where
   // changes are proposed, so the button and section render for managers.
-  const canVerb = can(authz, 'hrm.employment.manage')
-  const reasonsOn = canManage
+  const canVerb = can(authz, "hrm.employment.manage");
+  const reasonsOn = canManage;
 
-  const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
-  const dialogRequestId =
-    typeof sp.request === 'string' && sp.request !== '' ? sp.request : null
-  const dialogCloseHref = queueHref(rawStatus, false)
+  const rawStatus = typeof sp.status === "string" ? sp.status : undefined;
+  const dialogRequestId = typeof sp.request === "string" && sp.request !== "" ? sp.request : null;
+  const dialogCloseHref = queueHref(rawStatus, false);
   const base: Omit<
     ChangeRequestQueueData,
-    | 'refusal'
-    | 'hasContent'
-    | 'rows'
-    | 'counts'
-    | 'total'
-    | 'truncated'
-    | 'segments'
+    "refusal" | "hasContent" | "rows" | "counts" | "total" | "truncated" | "segments"
   > = {
-    title: t('queue.title'),
-    description: t('queue.description'),
-    listTitle: t('queue.listTitle'),
-    tabs: await hrmGroupTabs(authz, '/hrm/change-requests'),
-    segmentsLabel: t('queue.segmentsLabel'),
-    allLabel: t('queue.allLabel'),
-    truncatedNote: t('queue.truncatedNote', { limit: QUEUE_LIMIT }),
+    title: t("queue.title"),
+    description: t("queue.description"),
+    listTitle: t("queue.listTitle"),
+    tabs: await hrmGroupTabs(authz, "/hrm/change-requests"),
+    segmentsLabel: t("queue.segmentsLabel"),
+    allLabel: t("queue.allLabel"),
+    truncatedNote: t("queue.truncatedNote", { limit: QUEUE_LIMIT }),
     // The rehomed reason-code section reads its New/edit drawer
     // from sp.row (SetupEntitySection), so the queue's own segment params
     // ride beside the section's list params — dropping row renders a dead
     // New button at ?reasons=1&row=new. Dialog params (request/propose)
     // stay loader-owned and never leak into the section's links.
     currentParams: {
-      ...(typeof sp.status === 'string' ? { status: sp.status } : {}),
-      ...(typeof sp.reasons === 'string' ? { reasons: sp.reasons } : {}),
+      ...(typeof sp.status === "string" ? { status: sp.status } : {}),
+      ...(typeof sp.reasons === "string" ? { reasons: sp.reasons } : {}),
       ...setupSectionParams(sp),
     },
     columns: {
-      employee: t('queue.columns.employee'),
-      kind: t('queue.columns.kind'),
-      effective: t('queue.columns.effective'),
-      requester: t('queue.columns.requester'),
-      submitted: t('queue.columns.submitted'),
+      employee: t("queue.columns.employee"),
+      kind: t("queue.columns.kind"),
+      effective: t("queue.columns.effective"),
+      requester: t("queue.columns.requester"),
+      submitted: t("queue.columns.submitted"),
     },
-    emptyTitle: t('queue.emptyTitle'),
-    emptyDescription: t('queue.emptyDescription'),
+    emptyTitle: t("queue.emptyTitle"),
+    emptyDescription: t("queue.emptyDescription"),
     canManage,
     canVerb,
     departmentOptions: [],
-    statusHeader: t('employment.changeRequests.statusLabel'),
-    actionsHeader: t('queue.draftBadge'),
+    statusHeader: t("employment.changeRequests.statusLabel"),
+    actionsHeader: t("queue.draftBadge"),
     // HR-16 begin
-    actionHeader: t('queue.columns.action'),
-    verbHeader: t('queue.columns.verb'),
+    actionHeader: t("queue.columns.action"),
+    verbHeader: t("queue.columns.verb"),
     // HR-16 end
-    proposeButton: t('queue.proposeButton'),
-    proposeHref: queueHref(
-      typeof sp.status === 'string' ? sp.status : undefined,
-      true,
-    ),
-    proposeOpen: sp.propose === '1',
-    hireMode: sp.hire === '1',
-    hireHref: queueHref(
-      typeof sp.status === 'string' ? sp.status : undefined,
-      true,
-      true,
-    ),
-    hireLinkLabel: t('queue.proposeHireLink'),
-    proposeEmploymentLabel: t('queue.proposeEmploymentLabel'),
-    proposeEmploymentPlaceholder: t('queue.proposeEmploymentPlaceholder'),
-    proposeEmpty: t('queue.proposeEmpty'),
-    proposeFailed: t('queue.proposeFailed'),
+    proposeButton: t("queue.proposeButton"),
+    proposeHref: queueHref(typeof sp.status === "string" ? sp.status : undefined, true),
+    proposeOpen: sp.propose === "1",
+    hireMode: sp.hire === "1",
+    hireHref: queueHref(typeof sp.status === "string" ? sp.status : undefined, true, true),
+    hireLinkLabel: t("queue.proposeHireLink"),
+    proposeEmploymentLabel: t("queue.proposeEmploymentLabel"),
+    proposeEmploymentPlaceholder: t("queue.proposeEmploymentPlaceholder"),
+    proposeEmpty: t("queue.proposeEmpty"),
+    proposeFailed: t("queue.proposeFailed"),
     dialogOpen: dialogRequestId !== null,
     dialogRequestId,
     dialogCloseHref,
     dialogSubject: null,
     canEditReasons: false,
-    reasonsHref: '/hrm/change-requests?reasons=1',
-    reasonsLabel: t('queue.reasonsButton'),
+    reasonsHref: "/hrm/change-requests?reasons=1",
+    reasonsLabel: t("queue.reasonsButton"),
     showReasons: false,
-    reasonsCloseHref: queueHref(
-      typeof sp.status === 'string' ? sp.status : undefined,
-      false,
-    ),
+    reasonsCloseHref: queueHref(typeof sp.status === "string" ? sp.status : undefined, false),
     queue: {
-      openEmployee: t('queue.openEmployee'),
-      notAvailable: t('queue.notAvailable'),
+      openEmployee: t("queue.openEmployee"),
+      notAvailable: t("queue.notAvailable"),
     },
-  }
+  };
 
   const refuse = (title: string, message: string): ChangeRequestQueueData => ({
     ...base,
@@ -519,17 +482,14 @@ export async function loadChangeRequestQueue(
     total: 0,
     truncated: false,
     segments: [],
-  })
+  });
 
-  const resolved = resolveQueueStatus(rawStatus ?? null)
+  const resolved = resolveQueueStatus(rawStatus ?? null);
   if (!resolved.ok) {
-    return refuse(
-      t('queue.refusalTitle'),
-      t('queue.unknownSegment', { value: rawStatus ?? '' }),
-    )
+    return refuse(t("queue.refusalTitle"), t("queue.unknownSegment", { value: rawStatus ?? "" }));
   }
 
-  let serviceRows: ServiceRow[]
+  let serviceRows: ServiceRow[];
   try {
     // One bounded read for both the counts and the list, so the segments
     // and the rows can never disagree about what was fetched.
@@ -537,61 +497,59 @@ export async function loadChangeRequestQueue(
       orgId,
       actorId: authz.user.id,
       limit: QUEUE_LIMIT,
-    })
+    });
   } catch (error) {
     // The service enforces subsidiary scope per row by refusing: a mixed-
     // scope actor sees the refusal with its remedy, never a partial list
     // pretending to be the whole queue.
-    if (
-      error instanceof HrmAuthorizationError ||
-      error instanceof HrmChangeRequestError
-    ) {
-      return refuse(t('queue.refusalTitle'), (error as Error).message)
+    if (error instanceof HrmAuthorizationError || error instanceof HrmChangeRequestError) {
+      return refuse(t("queue.refusalTitle"), (error as Error).message);
     }
-    throw error
+    throw error;
   }
 
-  const counts: Record<string, number> = {}
-  for (const segment of QUEUE_SEGMENTS) counts[segment] = 0
+  const counts: Record<string, number> = {};
+  for (const segment of QUEUE_SEGMENTS) counts[segment] = 0;
   for (const row of serviceRows) {
-    const segment = segmentOfServiceStatus(row.status)
-    if (segment !== null) counts[segment] = (counts[segment] ?? 0) + 1
+    const segment = segmentOfServiceStatus(row.status);
+    if (segment !== null) counts[segment] = (counts[segment] ?? 0) + 1;
   }
   const segmentLabel = (segment: string): string =>
-    t.has(`queue.segments.${segment}`)
-      ? t(`queue.segments.${segment}`)
-      : segment
+    t.has(`queue.segments.${segment}`) ? t(`queue.segments.${segment}`) : segment;
   const segments: QueueSegment[] = QUEUE_SEGMENTS.map((segment) => ({
     value: segment,
     // FilterChips renders the count separately from the translated label.
     label: segmentLabel(segment),
     count: counts[segment] ?? 0,
-  }))
+  }));
 
   const visible =
     resolved.serviceStatus === null
       ? serviceRows
-      : serviceRows.filter((row) => row.status === resolved.serviceStatus)
+      : serviceRows.filter((row) => row.status === resolved.serviceStatus);
 
   // Display labels only, through the shared resolver the overview
   // cockpit reuses so the two surfaces cannot resolve names differently.
-  const employmentIds = [...new Set(visible.map((row) => row.employmentId))]
+  const employmentIds = [...new Set(visible.map((row) => row.employmentId))];
   const userIds = [
     ...new Set(
       visible
         .flatMap((row) => [row.submittedBy, row.createdBy])
         .filter((id): id is string => id !== null),
     ),
-  ]
+  ];
   const { workerByEmployment, requesterByUser } = await loadQueueLabels(
     orgId,
     employmentIds,
     userIds,
-  )
+  );
   // Departments feed the propose/edit drawer, exactly like the employee
   // drawer's own picker: active names, org-scoped, never ids alone.
-  const departments = await db.execute<{ id: string; name: string }>(sql`
-    select id::text as id, name from departments where org_id = ${orgId}::uuid and is_active order by name`, 'objects')
+  const departments = await db.execute<{ id: string; name: string }>(
+    sql`
+    select id::text as id, name from departments where org_id = ${orgId}::uuid and is_active order by name`,
+    "objects",
+  );
 
   const rows: QueueRow[] = await resolveQueueRows(
     t,
@@ -600,7 +558,7 @@ export async function loadChangeRequestQueue(
     workerByEmployment,
     requesterByUser,
     rawStatus,
-  )
+  );
 
   // The detail drawer names its subject from the visible row when the
   // requested id is in this list; a deep link into another segment (or an
@@ -608,9 +566,7 @@ export async function loadChangeRequestQueue(
   // own fetch owns what renders — data for a permitted request, the named
   // refusal otherwise.
   const active =
-    dialogRequestId !== null
-      ? (rows.find((row) => row.id === dialogRequestId) ?? null)
-      : null
+    dialogRequestId !== null ? (rows.find((row) => row.id === dialogRequestId) ?? null) : null;
   const dialogSubject: ChangeRequestDialogSubject | null = active
     ? {
         employeeLabel: active.employeeLabel,
@@ -620,7 +576,7 @@ export async function loadChangeRequestQueue(
         submittedLabel: active.submittedLabel,
         statusLabel: active.statusLabel,
       }
-    : null
+    : null;
 
   return {
     ...base,
@@ -637,14 +593,9 @@ export async function loadChangeRequestQueue(
       label: row.name,
     })),
     canEditReasons: reasonsOn,
-    reasonsHref: reasonsHref(
-      typeof sp.status === 'string' ? sp.status : undefined,
-    ),
-    reasonsLabel: t('queue.reasonsButton'),
-    showReasons: sp.reasons === '1' && reasonsOn,
-    reasonsCloseHref: queueHref(
-      typeof sp.status === 'string' ? sp.status : undefined,
-      false,
-    ),
-  }
+    reasonsHref: reasonsHref(typeof sp.status === "string" ? sp.status : undefined),
+    reasonsLabel: t("queue.reasonsButton"),
+    showReasons: sp.reasons === "1" && reasonsOn,
+    reasonsCloseHref: queueHref(typeof sp.status === "string" ? sp.status : undefined, false),
+  };
 }

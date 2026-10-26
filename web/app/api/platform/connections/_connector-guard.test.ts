@@ -37,10 +37,7 @@ test("IPv4-mapped IPv6 loopback ::ffff:7f00:1 is refused", async () => {
   const dotted = await connectorUrlRefusal("http://[::ffff:127.0.0.1]/");
   assert.equal(typeof hex, "string", "Node's ::ffff:7f00:1 form must be refused");
   assert.equal(typeof dotted, "string", "::ffff:127.0.0.1 must be refused");
-  assert.equal(
-    await connectionConfigUrlRefusal({ url: "http://[::ffff:7f00:1]/" }),
-    hex,
-  );
+  assert.equal(await connectionConfigUrlRefusal({ url: "http://[::ffff:7f00:1]/" }), hex);
 });
 
 test("public-unicast allowlist refuses RFC1918, ULA, unspecified, loopback, and non-http(s)", async () => {
@@ -48,7 +45,7 @@ test("public-unicast allowlist refuses RFC1918, ULA, unspecified, loopback, and 
     const error = await connectorUrlRefusal(url);
     assert.equal(typeof error, "string", `${name} must be refused, got ${String(error)}`);
   }
-  assert.equal(typeof await connectorUrlRefusal("http://localhost:8069"), "string");
+  assert.equal(typeof (await connectorUrlRefusal("http://localhost:8069")), "string");
   assert.equal(await connectorUrlRefusal("https://1.1.1.1"), null);
   assert.equal(await connectorUrlRefusal("https://[2606:4700:4700::1111]"), null);
 });
@@ -56,11 +53,15 @@ test("public-unicast allowlist refuses RFC1918, ULA, unspecified, loopback, and 
 test("a test fails if 10.0.0.1, fd00::1, or 0.0.0.0 is accepted", async () => {
   for (const url of ["http://10.0.0.1/", "http://[fd00::1]/", "http://0.0.0.0/"]) {
     assert.equal(
-      typeof await connectorUrlRefusal(url),
+      typeof (await connectorUrlRefusal(url)),
       "string",
       `${url} must not be accepted by a public-unicast allowlist`,
     );
-    assert.equal(isPublicUnicastAddress(new URL(url).hostname), false, `${url} is not public unicast`);
+    assert.equal(
+      isPublicUnicastAddress(new URL(url).hostname),
+      false,
+      `${url} is not public unicast`,
+    );
   }
 });
 
@@ -73,7 +74,7 @@ test("a test fails if 192.0.2.1, 198.18.0.1, 198.51.100.1, 203.0.113.1, or 2001:
     "http://[2001:db8::1]/",
   ]) {
     assert.equal(
-      typeof await connectorUrlRefusal(url),
+      typeof (await connectorUrlRefusal(url)),
       "string",
       `${url} must not be accepted by a public-unicast allowlist`,
     );
@@ -87,36 +88,33 @@ test("a test fails if 192.0.2.1, 198.18.0.1, 198.51.100.1, 203.0.113.1, or 2001:
 
 test("DNS A/AAAA results fail closed unless every address is public unicast", async () => {
   assert.equal(
-    typeof await connectorUrlRefusal("http://evil.example/", async () => ["10.0.0.1"]),
+    typeof (await connectorUrlRefusal("http://evil.example/", async () => ["10.0.0.1"])),
     "string",
   );
   assert.equal(
-    typeof await connectorUrlRefusal("http://ula.example/", async () => ["fd00::1"]),
+    typeof (await connectorUrlRefusal("http://ula.example/", async () => ["fd00::1"])),
     "string",
   );
   assert.equal(
-    typeof await connectorUrlRefusal("http://any.example/", async () => ["0.0.0.0"]),
+    typeof (await connectorUrlRefusal("http://any.example/", async () => ["0.0.0.0"])),
     "string",
   );
   assert.equal(
-    typeof await connectorUrlRefusal("http://mix.example/", async () => ["1.1.1.1", "10.0.0.1"]),
+    typeof (await connectorUrlRefusal("http://mix.example/", async () => ["1.1.1.1", "10.0.0.1"])),
     "string",
     "one private A/AAAA must refuse the whole name",
   );
   assert.equal(
-    typeof await connectorUrlRefusal("http://empty.example/", async () => []),
+    typeof (await connectorUrlRefusal("http://empty.example/", async () => [])),
     "string",
   );
   assert.equal(
-    typeof await connectorUrlRefusal("http://nx.example/", async () => {
+    typeof (await connectorUrlRefusal("http://nx.example/", async () => {
       throw new Error("ENOTFOUND");
-    }),
+    })),
     "string",
   );
-  assert.equal(
-    await connectorUrlRefusal("http://ok.example/", async () => ["1.1.1.1"]),
-    null,
-  );
+  assert.equal(await connectorUrlRefusal("http://ok.example/", async () => ["1.1.1.1"]), null);
 });
 
 test("callback-owned OAuth identity keys are refused by name", () => {

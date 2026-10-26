@@ -19,17 +19,9 @@ export const PATCH = defineRoute({
   feature: "hrmCompensation",
   params: z.object({ id: z.string().min(1) }),
   body: updateFamilyBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json(
-        { error: "invalid job family" },
-        { status: 400 },
-      );
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid job family" }, { status: 400 });
 
     try {
       const family = await updateJobFamily({

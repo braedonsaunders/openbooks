@@ -26,7 +26,7 @@ function sqlText(query: unknown): string {
       typeof chunk === "object" &&
       Array.isArray((chunk as { value?: unknown[] }).value)
     ) {
-      out += ((chunk as { value: string[] }).value).join("");
+      out += (chunk as { value: string[] }).value.join("");
     }
   }
   return out;
@@ -41,7 +41,11 @@ test("timesheet weeks are an authorable Flows subject with no hardcoded approver
   // Who approves is authored per tenant, never baked into the profile.
   assert.equal(Object.prototype.hasOwnProperty.call(profile ?? {}, "approver"), false);
   for (const key of ["employeeId", "weekStart", "totalHours", "billableHours", "overtimeHours"]) {
-    assert.equal(profile?.fields.some((f) => f.key === key), true, key);
+    assert.equal(
+      profile?.fields.some((f) => f.key === key),
+      true,
+      key,
+    );
   }
 });
 
@@ -58,10 +62,7 @@ test("a non-uuid subject id resolves to null without touching the database", asy
 });
 
 test("the deep link opens the week's flyout", () => {
-  assert.equal(
-    timesheetWeeksFlowAdapter.deepLink(WEEK_ID),
-    `/timesheets?timesheet=${WEEK_ID}`,
-  );
+  assert.equal(timesheetWeeksFlowAdapter.deepLink(WEEK_ID), `/timesheets?timesheet=${WEEK_ID}`);
 });
 
 test("the label names the person and the week", () => {
@@ -96,7 +97,8 @@ test("an unparseable subject id loads no context instead of throwing", async () 
 test("mixed-department weeks do not route under an arbitrary department", async (t) => {
   const queries: string[] = [];
   t.mock.method(db, "execute", async (query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     queries.push(sqlText(query));
     if (queries.length === 1) {
       return inMode({
@@ -141,7 +143,8 @@ test("mixed-department weeks do not route under an arbitrary department", async 
 
 test("a week with one department still exposes that department for routing", async (t) => {
   t.mock.method(db, "execute", async (query: unknown, mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     if (sqlText(query).includes("case when count(distinct te.department_id)")) {
       return inMode({
         rows: [

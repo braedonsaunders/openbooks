@@ -1,24 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const companySettings: DocArticle = {
-  slug: 'company-settings',
-  title: 'Company Setup',
-  category: 'administration',
+  slug: "company-settings",
+  title: "Company Setup",
+  category: "administration",
   order: 1,
   summary:
-    'Use the configuration center for company, accounting, tax, dimensions, billing, revenue, inventory, workforce, assets, and currency.',
-  updated: '2026-07-22',
+    "Use the configuration center for company, accounting, tax, dimensions, billing, revenue, inventory, workforce, assets, and currency.",
+  updated: "2026-07-22",
   keywords: [
-    'company settings',
-    'setup',
-    'configuration',
-    'tax',
-    'dimension',
-    'currency',
-    'accounting book',
-    'number sequence',
+    "company settings",
+    "setup",
+    "configuration",
+    "tax",
+    "dimension",
+    "currency",
+    "accounting book",
+    "number sequence",
   ],
-  related: ['quick-start', 'chart-of-accounts-and-dimensions', 'roles-and-permissions'],
+  related: ["quick-start", "chart-of-accounts-and-dimensions", "roles-and-permissions"],
   body: `# Company Setup
 
 **Settings → Company Setup** is the tenant-scoped configuration center.
@@ -78,17 +78,26 @@ Assign an owner for each material configuration area and retain approval for
 changes that affect accounting. Configuration workspaces link to their detailed
 articles as coverage is added to this documentation center.
 `,
-}
+};
 
 export const rolesAndPermissions: DocArticle = {
-  slug: 'roles-and-permissions',
-  title: 'Users, Roles, and Permissions',
-  category: 'administration',
+  slug: "roles-and-permissions",
+  title: "Users, Roles, and Permissions",
+  category: "administration",
   order: 2,
-  summary: 'Design least-privilege roles, invite users, separate duties, and test effective access.',
-  updated: '2026-07-19',
-  keywords: ['users', 'roles', 'permissions', 'access', 'least privilege', 'segregation of duties', 'administrator'],
-  related: ['company-settings', 'audit-log', 'navigation-and-records'],
+  summary:
+    "Design least-privilege roles, invite users, separate duties, and test effective access.",
+  updated: "2026-07-19",
+  keywords: [
+    "users",
+    "roles",
+    "permissions",
+    "access",
+    "least privilege",
+    "segregation of duties",
+    "administrator",
+  ],
+  related: ["company-settings", "audit-log", "navigation-and-records"],
   body: `# Users, Roles, and Permissions
 
 Access is organization-scoped and permission-driven. Navigation reflects a
@@ -131,18 +140,26 @@ Use the **Audit Log** to review administrative changes. Do not grant wildcard
 administrator access merely to work around a missing workflow; correct the role
 or underlying permission design.
 `,
-}
+};
 
 export const dataImports: DocArticle = {
-  slug: 'data-imports',
-  title: 'Data Imports',
-  category: 'administration',
+  slug: "data-imports",
+  title: "Data Imports",
+  category: "administration",
   order: 3,
   summary:
-    'Prepare, map, validate, run, and review governed data imports without creating duplicate or orphaned records.',
-  updated: '2026-07-19',
-  keywords: ['CSV import', 'data import', 'mapping', 'validation', 'import history', 'external id', 'migration'],
-  related: ['migration-and-cutover', 'reconciliation-before-cutover', 'audit-log'],
+    "Prepare, map, validate, run, and review governed data imports without creating duplicate or orphaned records.",
+  updated: "2026-07-19",
+  keywords: [
+    "CSV import",
+    "data import",
+    "mapping",
+    "validation",
+    "import history",
+    "external id",
+    "migration",
+  ],
+  related: ["migration-and-cutover", "reconciliation-before-cutover", "audit-log"],
   body: `# Data Imports
 
 Use **Company Setup → Data Import** for supported file-based loads. Import
@@ -186,4 +203,4 @@ File import is appropriate for controlled batches. Use a tenant-configured
 source connection for repeat synchronization or a specialized historical
 capture.
 `,
-}
+};

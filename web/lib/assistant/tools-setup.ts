@@ -14,7 +14,10 @@ import {
 import type { AssistantToolDef, ToolResult } from "./types";
 import { capList } from "./tools-shared";
 import { setupReadProjection, setupReadSource } from "../setup/read-shape";
-import { setupEntityHasSubsidiaryAnchor, setupEntitySubsidiaryFilter } from "../setup/subsidiary-scope";
+import {
+  setupEntityHasSubsidiaryAnchor,
+  setupEntitySubsidiaryFilter,
+} from "../setup/subsidiary-scope";
 
 /**
  * Read tools for the Setup registry (/admin/setup) and the Features
@@ -38,26 +41,38 @@ const listSetupEntitiesTool: AssistantToolDef = {
     limit: z.number().int().min(1).max(50).optional().describe("Page size, default 50"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const { query, offset = 0, limit = 50 } = raw as { query?: string; offset?: number; limit?: number };
+    const {
+      query,
+      offset = 0,
+      limit = 50,
+    } = raw as { query?: string; offset?: number; limit?: number };
     const features = await resolvedFeatureState(authz.user.orgId);
-    const matches = [...SETUP_ENTITY_BY_KEY.values()].filter((entity) =>
-      !query || `${entity.key} ${entity.groupKey}`.toLowerCase().includes(query.toLowerCase()));
+    const matches = [...SETUP_ENTITY_BY_KEY.values()].filter(
+      (entity) =>
+        !query || `${entity.key} ${entity.groupKey}`.toLowerCase().includes(query.toLowerCase()),
+    );
     const items = matches.slice(offset, offset + limit).map((e) => ({
-        key: e.key,
-        groupKey: e.groupKey,
-        table: e.table,
-        rehomed: e.rehomed ?? false,
-        nestedUnder: e.nestedUnder ?? null,
-        parentRecords: e.parentRecords ?? [],
-        featureKey: e.featureKey ?? null,
-        // One authoritative gate reports the enabled state — never a local check.
-        enabled: resolveSetupEntityGate(e, features).enabled,
-        hasActive: e.hasActive,
-      }));
+      key: e.key,
+      groupKey: e.groupKey,
+      table: e.table,
+      rehomed: e.rehomed ?? false,
+      nestedUnder: e.nestedUnder ?? null,
+      parentRecords: e.parentRecords ?? [],
+      featureKey: e.featureKey ?? null,
+      // One authoritative gate reports the enabled state — never a local check.
+      enabled: resolveSetupEntityGate(e, features).enabled,
+      hasActive: e.hasActive,
+    }));
     const nextOffset = offset + items.length < matches.length ? offset + items.length : null;
     return {
       ok: true,
-      data: { total: matches.length, truncated: nextOffset !== null, nextOffset, href: "/admin/setup/readiness", items },
+      data: {
+        total: matches.length,
+        truncated: nextOffset !== null,
+        nextOffset,
+        href: "/admin/setup/readiness",
+        items,
+      },
     };
   },
 };
@@ -69,9 +84,18 @@ const listSetupRecordsTool: AssistantToolDef = {
   category: "search",
   gate: { mode: "anyOf", perms: ["admin.setup.manage"] },
   inputSchema: z.object({
-    entityKey: z.string().max(80).describe("Setup entity key from list_setup_entities, e.g. subsidiaries"),
+    entityKey: z
+      .string()
+      .max(80)
+      .describe("Setup entity key from list_setup_entities, e.g. subsidiaries"),
     query: z.string().max(200).optional().describe("Match across the entity's list columns"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum records to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum records to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { entityKey: string; query?: string; limit?: number };
@@ -80,7 +104,8 @@ const listSetupRecordsTool: AssistantToolDef = {
     if (!base) return { ok: false, error: "setup_entity_not_found" };
     const features = await resolvedFeatureState(orgId);
     // One authoritative gate refuses the read before any storage is touched.
-    if (!resolveSetupEntityGate(base, features).enabled) return { ok: false, error: "feature_disabled" };
+    if (!resolveSetupEntityGate(base, features).enabled)
+      return { ok: false, error: "feature_disabled" };
     // Same feature-derived descriptor the list page renders (drops subsidiary
     // columns when multi-subsidiary is off).
     const entity = setupEntityForFeatureState(base, {
@@ -88,12 +113,30 @@ const listSetupRecordsTool: AssistantToolDef = {
       equipment: featureEnabled(features, "equipment"),
       fieldTickets: featureEnabled(features, "fieldTickets"),
     });
-    if (authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) return { ok: false, error: "forbidden" }
+    if (authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity))
+      return { ok: false, error: "forbidden" };
     const limit = Math.min(a.limit ?? 50, 200);
-    if (entity.dataSource === 'extension-settings') {
-      const rows = (authz.allowedSubsidiaryIds !== null ? [] : await loadExtensionSettingRows(orgId)).filter((row) => !a.query || Object.values(row).some((value) => String(value).toLowerCase().includes(a.query!.toLowerCase())));
-      return { ok: true, data: { entityKey: entity.key, total: rows.length, returned: Math.min(rows.length, limit), truncated: rows.length > limit,
-        href: setupEntityHref(entity), items: rows.slice(0, limit) } };
+    if (entity.dataSource === "extension-settings") {
+      const rows = (
+        authz.allowedSubsidiaryIds !== null ? [] : await loadExtensionSettingRows(orgId)
+      ).filter(
+        (row) =>
+          !a.query ||
+          Object.values(row).some((value) =>
+            String(value).toLowerCase().includes(a.query!.toLowerCase()),
+          ),
+      );
+      return {
+        ok: true,
+        data: {
+          entityKey: entity.key,
+          total: rows.length,
+          returned: Math.min(rows.length, limit),
+          truncated: rows.length > limit,
+          href: setupEntityHref(entity),
+          items: rows.slice(0, limit),
+        },
+      };
     }
     const idColumn = entity.idColumn ?? "id";
     const columnKeys = entity.columns.map((c) => toSnake(c.key));
@@ -110,12 +153,18 @@ const listSetupRecordsTool: AssistantToolDef = {
       ${a.query && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`;
     const orderBy = entity.orderBy ?? (entity.naturalKey ? toSnake(entity.naturalKey) : idColumn);
     const [rowsRes, countRes] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)} ${rowFilter}
          order by ${sql.raw(orderBy)}
-         limit ${limit}`, "objects"),
-      db.execute<{ n: number }>(sql`
-        select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`, "objects"),
+         limit ${limit}`,
+        "objects",
+      ),
+      db.execute<{ n: number }>(
+        sql`
+        select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`,
+        "objects",
+      ),
     ]);
     const total = Number(countRes[0]?.n ?? 0);
     return {
@@ -129,7 +178,7 @@ const listSetupRecordsTool: AssistantToolDef = {
         items: rowsRes.map((row) => ({
           id: row[idColumn],
           ...Object.fromEntries(entity.columns.map((c) => [c.key, row[toSnake(c.key)]])),
-          ...(entity.key === 'pay-components'
+          ...(entity.key === "pay-components"
             ? { supplementalWageCategory: row.supplemental_wage_category }
             : {}),
         })),

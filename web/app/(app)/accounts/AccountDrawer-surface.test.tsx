@@ -2,20 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 declare global {
-  var __acctTestRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
+  var __acctTestRouter:
+    { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
   var __acctTestToasts: { kind: string; message: string }[] | undefined;
 }
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/accounts", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/accounts",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__acctTestRouter}export function usePathname(){return '/accounts'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__acctTestRouter}export function usePathname(){return '/accounts'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
@@ -60,7 +68,9 @@ async function mountDrawer(
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ method: (init?.method ?? "GET").toUpperCase(), body: init?.body?.toString() });
-    return options.response?.() ?? Response.json({ account: { id: "acct-created" } }, { status: 201 });
+    return (
+      options.response?.() ?? Response.json({ account: { id: "acct-created" } }, { status: 201 })
+    );
   }) as typeof fetch;
   window.history.replaceState(null, "", options.url ?? "/accounts");
   globalThis.__acctTestRouter = { push() {}, replace() {}, refresh() {} };
@@ -98,9 +108,8 @@ async function mountDrawer(
 }
 
 function setInput(input: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set as
-    | ((this: HTMLInputElement, value: string) => void)
-    | undefined;
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")
+    ?.set as ((this: HTMLInputElement, value: string) => void) | undefined;
   setter?.call(input, value);
   input.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
@@ -173,8 +182,15 @@ test("single-currency reconcilable accounts select and submit the base currency"
   });
 
   const currency = document.querySelector('[aria-label="Currency restriction"]');
-  assert.ok(currency, "reconcilable accounts can set a settlement currency with Multi-currency off");
-  assert.equal(currency.textContent?.trim(), "US Dollar", "the org base currency is selected by default");
+  assert.ok(
+    currency,
+    "reconcilable accounts can set a settlement currency with Multi-currency off",
+  );
+  assert.equal(
+    currency.textContent?.trim(),
+    "US Dollar",
+    "the org base currency is selected by default",
+  );
   await act(async () => {
     createButton().click();
     await tick();
@@ -269,15 +285,19 @@ test("closing an account drawer removes its selector from the URL immediately", 
 test("a duplicate account number links the account holding it", async (t) => {
   const holderId = "019f0000-0000-4000-8000-000000000007";
   await mountDrawer(t, {
-    response: () => Response.json({
-      error: "number_in_use",
-      field: "number",
-      details: {
-        existingAccountId: holderId,
-        existingAccountName: "Cash Over and Short",
-        existingAccountNumber: "6820",
-      },
-    }, { status: 422 }),
+    response: () =>
+      Response.json(
+        {
+          error: "number_in_use",
+          field: "number",
+          details: {
+            existingAccountId: holderId,
+            existingAccountName: "Cash Over and Short",
+            existingAccountNumber: "6820",
+          },
+        },
+        { status: 422 },
+      ),
   });
   const inputs = [...document.querySelectorAll("input")].filter(
     (el) => (el as HTMLInputElement).type !== "checkbox",

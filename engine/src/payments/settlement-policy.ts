@@ -3,7 +3,8 @@ import { add, cmp, divRate, fromUnits, mulRate, mulRatio, neg, toUnits } from ".
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 
-export type SettlementRateSource = "same_currency" | "provider" | "manual" | "contractual" | "imported";
+export type SettlementRateSource =
+  "same_currency" | "provider" | "manual" | "contractual" | "imported";
 export interface AllocationInput {
   openLineId: string;
   /** Amount consumed from the payment/credit source, in the payment currency. */
@@ -82,13 +83,17 @@ export function sameCurrencyAllocation(
  * cross-rate; it equals the target whenever the rate admits an exact source,
  * and otherwise falls short of it by less than one rounding unit.
  */
-export function sourceSettlingTarget(target: string, rate: string): { source: string; settles: string } {
+export function sourceSettlingTarget(
+  target: string,
+  rate: string,
+): { source: string; settles: string } {
   const targetUnits = toUnits(target);
   if (targetUnits <= 0n) throw new PaymentError("a settled balance must be positive");
   let source = toUnits(divRate(target, rate));
   while (source > 0n && toUnits(mulRate(fromUnits(source), rate)) > targetUnits) source -= 1n;
   while (toUnits(mulRate(fromUnits(source + 1n), rate)) <= targetUnits) source += 1n;
-  if (source <= 0n) throw new PaymentError("the settlement rate settles nothing of this balance; check the rate");
+  if (source <= 0n)
+    throw new PaymentError("the settlement rate settles nothing of this balance; check the rate");
   return { source: fromUnits(source), settles: mulRate(fromUnits(source), rate) };
 }
 
@@ -99,16 +104,22 @@ export function sourceSettlingTarget(target: string, rate: string): { source: st
  * carrying amount to the minor unit. The nearest rate when no ten-place rate
  * is exact (only for amounts beyond the precision a rate can express).
  */
-export function rateMeasuringExactly(transaction: string, carrying: string): { rate: string; exact: boolean } {
+export function rateMeasuringExactly(
+  transaction: string,
+  carrying: string,
+): { rate: string; exact: boolean } {
   const amount = toUnits(transaction);
   const base = toUnits(carrying);
-  if (amount <= 0n || base <= 0n) throw new PaymentError("a carrying rate needs positive transaction and carrying amounts");
+  if (amount <= 0n || base <= 0n)
+    throw new PaymentError("a carrying rate needs positive transaction and carrying amounts");
   const scale = 10_000_000_000n;
   const nearest = (base * scale + amount / 2n) / amount;
-  const render = (units: bigint) => `${units / scale}.${(units % scale).toString().padStart(10, "0")}`;
+  const render = (units: bigint) =>
+    `${units / scale}.${(units % scale).toString().padStart(10, "0")}`;
   for (let step = 0n; step <= 1000n; step += 1n) {
     for (const candidate of step === 0n ? [nearest] : [nearest - step, nearest + step]) {
-      if (candidate > 0n && toUnits(mulRate(transaction, render(candidate))) === base) return { rate: render(candidate), exact: true };
+      if (candidate > 0n && toUnits(mulRate(transaction, render(candidate))) === base)
+        return { rate: render(candidate), exact: true };
     }
   }
   return { rate: render(nearest > 0n ? nearest : 1n), exact: false };
@@ -127,7 +138,11 @@ export interface CrossCurrencyEvidence {
  * evidenced rate: the target extinguished is exactly the cross-rate, so the
  * allocation cross-foots by construction.
  */
-export function crossCurrencyAllocation(openLineId: string, sourceAmount: string, evidence: CrossCurrencyEvidence): AllocationInput {
+export function crossCurrencyAllocation(
+  openLineId: string,
+  sourceAmount: string,
+  evidence: CrossCurrencyEvidence,
+): AllocationInput {
   return {
     openLineId,
     sourceTransactionAmount: fromUnits(toUnits(sourceAmount)),
@@ -156,10 +171,17 @@ export function validateAllocationInputs(allocations: AllocationInput[]): void {
       // Also validates numeric(19,10) precision and positivity.
       mulRate(a.sourceTransactionAmount, a.settlementRate);
     } catch {
-      throw new PaymentError("allocation amounts and settlement rate must be positive exact decimals");
+      throw new PaymentError(
+        "allocation amounts and settlement rate must be positive exact decimals",
+      );
     }
-    if (!a.settlementRateReference?.trim()) throw new PaymentError("settlement-rate evidence reference is required");
-    if (!["same_currency", "provider", "manual", "contractual", "imported"].includes(a.settlementRateSource)) {
+    if (!a.settlementRateReference?.trim())
+      throw new PaymentError("settlement-rate evidence reference is required");
+    if (
+      !["same_currency", "provider", "manual", "contractual", "imported"].includes(
+        a.settlementRateSource,
+      )
+    ) {
       throw new PaymentError("settlement-rate evidence source is invalid");
     }
   }
@@ -172,19 +194,21 @@ export function validateAllocationInputs(allocations: AllocationInput[]): void {
  */
 function allocationSnapshot(allocations: AllocationInput[]): string[] {
   return allocations
-    .map((allocation) => JSON.stringify({
-      openLineId: allocation.openLineId,
-      sourceTransactionAmount: fromUnits(toUnits(allocation.sourceTransactionAmount)),
-      targetTransactionAmount: fromUnits(toUnits(allocation.targetTransactionAmount)),
-      targetBaseAmount:
-        allocation.targetBaseAmount === undefined
-          ? null
-          : fromUnits(toUnits(allocation.targetBaseAmount)),
-      settlementRate: canonicalSettlementRate(allocation.settlementRate),
-      settlementRateSource: allocation.settlementRateSource,
-      settlementRateReference: allocation.settlementRateReference.trim(),
-      settlementFxRateId: allocation.settlementFxRateId ?? null,
-    }))
+    .map((allocation) =>
+      JSON.stringify({
+        openLineId: allocation.openLineId,
+        sourceTransactionAmount: fromUnits(toUnits(allocation.sourceTransactionAmount)),
+        targetTransactionAmount: fromUnits(toUnits(allocation.targetTransactionAmount)),
+        targetBaseAmount:
+          allocation.targetBaseAmount === undefined
+            ? null
+            : fromUnits(toUnits(allocation.targetBaseAmount)),
+        settlementRate: canonicalSettlementRate(allocation.settlementRate),
+        settlementRateSource: allocation.settlementRateSource,
+        settlementRateReference: allocation.settlementRateReference.trim(),
+        settlementFxRateId: allocation.settlementFxRateId ?? null,
+      }),
+    )
     .sort();
 }
 
@@ -204,11 +228,14 @@ export function canonicalSettlementRate(rate: string): string {
   const raw = String(rate).trim();
   const match = raw.match(/^\+?(\d+)(?:\.(\d*))?$/);
   if (!match || (match[2]?.length ?? 0) > 10) {
-    throw new PaymentError("settlement rate must be a positive decimal with at most ten decimal places");
+    throw new PaymentError(
+      "settlement rate must be a positive decimal with at most ten decimal places",
+    );
   }
   const whole = BigInt(match[1]!).toString();
   const fraction = (match[2] ?? "").padEnd(10, "0");
-  if (BigInt(whole) === 0n && !/[1-9]/.test(fraction)) throw new PaymentError("settlement rate must be positive");
+  if (BigInt(whole) === 0n && !/[1-9]/.test(fraction))
+    throw new PaymentError("settlement rate must be positive");
   return `${whole}.${fraction}`;
 }
 
@@ -217,8 +244,15 @@ export function validateSettlementEvidence(
   sourceCurrency: string,
   targetCurrency: string,
 ): void {
-  if (cmp(mulRate(allocation.sourceTransactionAmount, allocation.settlementRate), allocation.targetTransactionAmount) !== 0) {
-    throw new PaymentError("settlement rate does not cross-foot source and target transaction amounts");
+  if (
+    cmp(
+      mulRate(allocation.sourceTransactionAmount, allocation.settlementRate),
+      allocation.targetTransactionAmount,
+    ) !== 0
+  ) {
+    throw new PaymentError(
+      "settlement rate does not cross-foot source and target transaction amounts",
+    );
   }
   if (sourceCurrency === targetCurrency) {
     if (
@@ -246,7 +280,9 @@ export function carryingAmountForSettlement(
   settledTransaction: string,
 ): string {
   if (cmp(settledTransaction, "0") <= 0 || cmp(settledTransaction, openTransaction) > 0) {
-    throw new PaymentError("settlement amount must be positive and cannot exceed the open transaction amount");
+    throw new PaymentError(
+      "settlement amount must be positive and cannot exceed the open transaction amount",
+    );
   }
   // Taking the complete residual consumes the complete carrying value. This
   // prevents proportional rounding from leaving an uncloseable 0.0001 tail.

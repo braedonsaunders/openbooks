@@ -34,7 +34,9 @@ const postBody = z.object({
  */
 export const GET = defineRoute({
   permission: "admin.setup.manage",
-  feature: { none: "The preview reports a disabled Projects feature as a blocker instead of hiding the surface." },
+  feature: {
+    none: "The preview reports a disabled Projects feature as a blocker instead of hiding the surface.",
+  },
   scope: "unrestricted",
   handler: async ({ request, authz }) => {
     const orgId = authz.user.orgId;

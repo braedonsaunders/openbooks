@@ -112,9 +112,12 @@ export function workItemSubjectInScope(
 ): boolean {
   if (allowedSubsidiaryIds === null) return true;
   if (allowedSubsidiaryIds === undefined) return false;
-  if (subjectType === 'budget') return true;
-  if (subjectType === 'account' || subjectType === 'reconciliation') {
-    return subjectSubsidiaryId === null || (subjectSubsidiaryId !== undefined && allowedSubsidiaryIds.has(subjectSubsidiaryId));
+  if (subjectType === "budget") return true;
+  if (subjectType === "account" || subjectType === "reconciliation") {
+    return (
+      subjectSubsidiaryId === null ||
+      (subjectSubsidiaryId !== undefined && allowedSubsidiaryIds.has(subjectSubsidiaryId))
+    );
   }
   return subjectSubsidiaryId != null && allowedSubsidiaryIds.has(subjectSubsidiaryId);
 }

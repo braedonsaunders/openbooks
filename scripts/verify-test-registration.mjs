@@ -66,10 +66,7 @@ function main(argv = process.argv.slice(2)) {
     const selectionPath = argv[index];
     const receiptPath = argv[index + 1];
     const selection = JSON.parse(readFileSync(selectionPath, "utf8"));
-    const missing = filesWithoutTests(
-      selection.files,
-      readFileSync(receiptPath, "utf8"),
-    );
+    const missing = filesWithoutTests(selection.files, readFileSync(receiptPath, "utf8"));
     if (missing.length > 0) {
       failed = true;
       console.error(

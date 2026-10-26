@@ -130,7 +130,9 @@ async function loadExit(
   exitId: string,
   forUpdate = false,
 ): Promise<StoredExit> {
-  const row = (await exec.execute<StoredExit>(sql`
+  const row = (
+    await exec.execute<StoredExit>(
+      sql`
     select x.id,
            x.employment_id as "employmentId",
            e.employer_subsidiary_id as "employerSubsidiaryId",
@@ -153,7 +155,10 @@ async function loadExit(
         on p.org_id = x.org_id and p.id = x.interviewer_party_id
      where x.org_id = ${orgId} and x.id = ${exitId}
      ${forUpdate ? sql`for update of x` : sql``}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -190,14 +195,19 @@ async function appendExitEvent(args: {
   before: ExitRecordDTO | null;
   after: ExitRecordDTO;
 }): Promise<void> {
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const inserted = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into hrm_exit_record_events
       (org_id, exit_record_id, kind, actor_user_id, reason, before_snapshot, after_snapshot)
     values (${args.orgId}, ${args.exitId}, ${args.kind}, ${args.actorId}, ${args.reason},
       ${args.before === null ? null : JSON.stringify(args.before)}::jsonb,
       ${JSON.stringify(args.after)}::jsonb)
     returning id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!inserted) {
     throw new HrmPerformanceError(
       "REFUSED",
@@ -217,13 +227,16 @@ async function requireTerminatedAsOfToday(
   employmentId: string,
   today: string,
 ): Promise<void> {
-  const versions = await exec.execute<{ status: string }>(sql`
+  const versions = await exec.execute<{ status: string }>(
+    sql`
     select status from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
        and recorded_until is null
        and effective_from <= ${today}::date
        and (effective_to is null or effective_to > ${today}::date)
-  `, "objects");
+  `,
+    "objects",
+  );
   if (versions.length === 0) {
     throw new HrmPerformanceError(
       "REFUSED",
@@ -276,9 +289,13 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
   const interviewHeldOn =
     input.interviewHeldOn == null
       ? null
-      : mathRefusal("INVALID_INPUT", () => parseCivilDay(input.interviewHeldOn as string, "interview date"));
+      : mathRefusal("INVALID_INPUT", () =>
+          parseCivilDay(input.interviewHeldOn as string, "interview date"),
+        );
   const interviewerPartyId =
-    input.interviewerPartyId == null ? null : requireUuid(input.interviewerPartyId, "interviewerPartyId");
+    input.interviewerPartyId == null
+      ? null
+      : requireUuid(input.interviewerPartyId, "interviewerPartyId");
   // The interview is a pair (held date with interviewer): a date without a
   // named interviewer, or an interviewer without a date, is refused by name
   // before storage pins it.
@@ -289,16 +306,29 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
     );
   }
   const terminationChangeId =
-    input.terminationChangeId == null ? null : requireUuid(input.terminationChangeId, "terminationChangeId");
+    input.terminationChangeId == null
+      ? null
+      : requireUuid(input.terminationChangeId, "terminationChangeId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    await requireHrmPerformanceOnEmployment(db, orgId, actorId, employmentId, "hrm.performance.manage");
+    await requireHrmPerformanceOnEmployment(
+      db,
+      orgId,
+      actorId,
+      employmentId,
+      "hrm.performance.manage",
+    );
     const today = await businessToday(orgId);
     await requireTerminatedAsOfToday(db, orgId, employmentId, today);
     if (terminationChangeId !== null) {
-      const change = (await db.execute<{ id: string }>(sql`
+      const change = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from employment_changes where org_id = ${orgId} and id = ${terminationChangeId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!change) {
         throw new HrmPerformanceError(
           "NOT_FOUND",
@@ -309,11 +339,16 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
       // the same employment and must itself be the termination — linking
       // another employment's change, or a non-terminating change, would
       // misattribute the exit forever.
-      const terminating = (await db.execute<{ id: string }>(sql`
+      const terminating = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from employment_changes
          where org_id = ${orgId} and id = ${terminationChangeId}
            and employment_id = ${employmentId} and change_kind = 'terminated'
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!terminating) {
         throw new HrmPerformanceError(
           "REFUSED",
@@ -322,9 +357,14 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
       }
     }
     if (interviewerPartyId !== null) {
-      const party = (await db.execute<{ id: string }>(sql`
+      const party = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from parties where org_id = ${orgId} and id = ${interviewerPartyId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!party) {
         throw new HrmPerformanceError(
           "NOT_FOUND",
@@ -334,7 +374,9 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
     }
     let row: StoredExit;
     try {
-      row = (await db.execute<StoredExit>(sql`
+      row = (
+        await db.execute<StoredExit>(
+          sql`
         insert into hrm_exit_records
           (org_id, employment_id, termination_change_id, reason_kind, is_voluntary,
            is_regrettable, would_rehire, interview_held_on, interviewer_party_id,
@@ -360,7 +402,10 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
           recorded_by as "recordedBy",
           recorded_at as "recordedAt",
           revision
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
     } catch (e) {
       // The one-per-employment unique is the authority: a second record is
       // a correction of the first, made by updating it. The constraint
@@ -427,7 +472,13 @@ export async function updateExitRecord(input: UpdateExitInput): Promise<ExitReco
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const current = await loadExit(db, orgId, exitId, true);
-    await requireHrmPerformanceOnEmployment(db, orgId, actorId, current.employmentId, "hrm.performance.manage");
+    await requireHrmPerformanceOnEmployment(
+      db,
+      orgId,
+      actorId,
+      current.employmentId,
+      "hrm.performance.manage",
+    );
     if (input.expectedRevision !== current.revision) {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -446,7 +497,9 @@ export async function updateExitRecord(input: UpdateExitInput): Promise<ExitReco
         ? current.interviewHeldOn
         : input.interviewHeldOn == null
           ? null
-          : mathRefusal("INVALID_INPUT", () => parseCivilDay(input.interviewHeldOn as string, "interview date"));
+          : mathRefusal("INVALID_INPUT", () =>
+              parseCivilDay(input.interviewHeldOn as string, "interview date"),
+            );
     const interviewerPartyId =
       input.interviewerPartyId === undefined
         ? current.interviewerPartyId
@@ -462,11 +515,14 @@ export async function updateExitRecord(input: UpdateExitInput): Promise<ExitReco
     // Omitted keeps, explicit null clears: ?? would mistake a clear for
     // an omission and pin the old value in place.
     const isVoluntary = input.isVoluntary === undefined ? current.isVoluntary : input.isVoluntary;
-    const isRegrettable = input.isRegrettable === undefined ? current.isRegrettable : input.isRegrettable;
+    const isRegrettable =
+      input.isRegrettable === undefined ? current.isRegrettable : input.isRegrettable;
     const wouldRehire = input.wouldRehire === undefined ? current.wouldRehire : input.wouldRehire;
     const destination = input.destination === undefined ? current.destination : input.destination;
     const notes = input.notes === undefined ? current.notes : input.notes;
-    const moved = (await db.execute<never>(sql`
+    const moved =
+      (
+        await db.execute<never>(sql`
       update hrm_exit_records
          set reason_kind = ${reasonKind},
              is_voluntary = ${isVoluntary},
@@ -479,7 +535,8 @@ export async function updateExitRecord(input: UpdateExitInput): Promise<ExitReco
              revision = revision + 1,
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${exitId} and revision = ${input.expectedRevision}
-    `)).rowCount ?? 0;
+    `)
+      ).rowCount ?? 0;
     if (moved !== 1) {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -545,7 +602,8 @@ export async function listExitRecords(args: {
       allowed === null
         ? sql``
         : sql`and ${employerSubsidiaryScope(allowed, "e.employer_subsidiary_id")}`;
-    const rows = await db.execute<StoredExit>(sql`
+    const rows = await db.execute<StoredExit>(
+      sql`
       select x.id,
              x.employment_id as "employmentId",
              e.employer_subsidiary_id as "employerSubsidiaryId",
@@ -570,7 +628,9 @@ export async function listExitRecords(args: {
          ${employmentId === null ? sql`` : sql`and x.employment_id = ${employmentId}`}
          ${scopeFilter}
        order by x.recorded_at desc
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toExitDTO);
   });
 }

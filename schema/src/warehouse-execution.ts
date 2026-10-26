@@ -15,8 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { id, orgRef, money, auditColumns } from "./helpers";
-const documentQuantity = (name: string) =>
-  numeric(name, { precision: 28, scale: 8 });
+const documentQuantity = (name: string) => numeric(name, { precision: 28, scale: 8 });
 export const warehouseExecutionTasks = pgTable(
   "warehouse_execution_tasks",
   {
@@ -45,10 +44,7 @@ export const warehouseExecutionTasks = pgTable(
   },
   (t) => [
     uniqueIndex("warehouse_execution_tasks_org_id_id_key").on(t.orgId, t.id),
-    uniqueIndex("warehouse_execution_tasks_org_id_command_key_key").on(
-      t.orgId,
-      t.commandKey,
-    ),
+    uniqueIndex("warehouse_execution_tasks_org_id_command_key_key").on(t.orgId, t.commandKey),
     uniqueIndex("warehouse_receive_confirmed_line")
       .on(t.orgId, t.documentLineId)
       .where(sql`${t.stage}='receive' and ${t.status}='done'`),
@@ -64,9 +60,7 @@ export const warehouseScanEvents = pgTable("warehouse_scan_events", {
   outcome: text("outcome").notNull(),
   observed: jsonb("observed").notNull(),
   reason: text("reason"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdBy: uuid("created_by").notNull(),
 });
 export const pickWaves = pgTable("pick_waves", {
@@ -79,9 +73,7 @@ export const pickWaves = pgTable("pick_waves", {
   status: text("status").notNull(),
   commandKey: text("command_key").notNull(),
   request: jsonb("request").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdBy: uuid("created_by").notNull(),
 });
 export const pickWaveMembers = pgTable(
@@ -97,11 +89,7 @@ export const pickWaveMembers = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.orgId, t.waveId, t.pickListId] }),
-    uniqueIndex("pick_wave_members_org_id_wave_id_sequence_key").on(
-      t.orgId,
-      t.waveId,
-      t.sequence,
-    ),
+    uniqueIndex("pick_wave_members_org_id_wave_id_sequence_key").on(t.orgId, t.waveId, t.sequence),
   ],
 );
 export const pickExecutionLines = pgTable(
@@ -116,16 +104,11 @@ export const pickExecutionLines = pgTable(
     currentStockLocationId: uuid("current_stock_location_id").notNull(),
     confirmationTaskId: uuid("confirmation_task_id"),
     reason: text("reason"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").notNull(),
   },
   (t) => [
-    uniqueIndex("pick_execution_lines_org_id_line_id_key").on(
-      t.orgId,
-      t.lineId,
-    ),
+    uniqueIndex("pick_execution_lines_org_id_line_id_key").on(t.orgId, t.lineId),
     check(
       "pick_execution_lines_quantity_check",
       sql`${t.pickedQuantity}+${t.shortQuantity}=${t.requestedQuantity}`,
@@ -144,9 +127,7 @@ export const handlingUnits = pgTable(
     initialStockLocationId: uuid("initial_stock_location_id").notNull(),
     shipmentDocumentId: uuid("shipment_document_id").notNull(),
     status: text("status").notNull().default("open"),
-    contentVersion: bigint("content_version", { mode: "bigint" })
-      .notNull()
-      .default(0n),
+    contentVersion: bigint("content_version", { mode: "bigint" }).notNull().default(0n),
     ...auditColumns,
     createdBy: uuid("created_by").notNull(),
     updatedBy: uuid("updated_by").notNull(),
@@ -174,10 +155,7 @@ export const handlingUnitContents = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.orgId, t.handlingUnitId, t.shipmentLineId] }),
-    uniqueIndex("handling_unit_contents_org_id_shipment_line_id_key").on(
-      t.orgId,
-      t.shipmentLineId,
-    ),
+    uniqueIndex("handling_unit_contents_org_id_shipment_line_id_key").on(t.orgId, t.shipmentLineId),
   ],
 );
 export const handlingUnitMoves = pgTable(
@@ -193,14 +171,14 @@ export const handlingUnitMoves = pgTable(
     request: jsonb("request").notNull(),
     movements: jsonb("movements").notNull(),
     reason: text("reason").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").notNull(),
   },
   (t) => [
-    uniqueIndex(
-      "handling_unit_moves_org_id_handling_unit_id_command_key_key",
-    ).on(t.orgId, t.handlingUnitId, t.commandKey),
+    uniqueIndex("handling_unit_moves_org_id_handling_unit_id_command_key_key").on(
+      t.orgId,
+      t.handlingUnitId,
+      t.commandKey,
+    ),
   ],
 );

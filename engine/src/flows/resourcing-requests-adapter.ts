@@ -1,20 +1,10 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
-import {
-  RESOURCING_REQUEST_SUBJECT_KIND,
-  resRequests,
-} from "@openbooks/schema/src/resourcing.ts";
+import { RESOURCING_REQUEST_SUBJECT_KIND, resRequests } from "@openbooks/schema/src/resourcing.ts";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
-import type {
-  FlowExecCtx,
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-} from "./types.ts";
+import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
-import {
-  BUILT_IN_ROLE_NAMES,
-  EVENT_SOURCE_OPTIONS,
-} from "./subject-profiles.ts";
+import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { tableScope } from "./subject-scope.ts";
 
 const REQUEST_STATUSES = [
@@ -58,8 +48,7 @@ export const resourcingRequestSubjectProfile: FlowSubjectProfile = {
   roles: [...BUILT_IN_ROLE_NAMES],
 };
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function loadRequest(subjectId: string) {
   if (!UUID_RE.test(subjectId)) return null;
@@ -102,9 +91,12 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
     return {
       values: {
         id: subjectId,
-        approvalFingerprint: (await db.execute<{ fingerprint: string }>(
-            sql`select public.resourcing_request_approval_fingerprint(r) as fingerprint from res_requests r where r.id=${subjectId}`, "objects",
-          ))[0]?.fingerprint,
+        approvalFingerprint: (
+          await db.execute<{ fingerprint: string }>(
+            sql`select public.resourcing_request_approval_fingerprint(r) as fingerprint from res_requests r where r.id=${subjectId}`,
+            "objects",
+          )
+        )[0]?.fingerprint,
         requestId: subjectId,
         projectId: request.projectId,
         employeePartyId: request.employeePartyId,
@@ -156,9 +148,7 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
   },
 
   async setField(): Promise<void> {
-    throw new Error(
-      "resource requests are frozen on submit; cancel and file a new request",
-    );
+    throw new Error("resource requests are frozen on submit; cancel and file a new request");
   },
 
   async findCandidateIds(limit: number): Promise<string[]> {
@@ -171,12 +161,7 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
     const rows = await db
       .select({ id: resRequests.id })
       .from(resRequests)
-      .where(
-        and(
-          eq(resRequests.orgId, orgId),
-          inArray(resRequests.status, ["draft", "submitted"]),
-        ),
-      )
+      .where(and(eq(resRequests.orgId, orgId), inArray(resRequests.status, ["draft", "submitted"])))
       .orderBy(desc(resRequests.updatedAt))
       .limit(limit);
     return rows.map((row) => row.id);

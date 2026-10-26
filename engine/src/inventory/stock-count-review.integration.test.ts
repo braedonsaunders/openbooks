@@ -47,8 +47,13 @@ async function openReviewedCount(
     lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
   });
   await startStockCount(org.orgId, actorId, count.id);
-  const lineId = (await db.execute<{ id: string }>(sql`
-    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`, "objects"))[0]!.id;
+  const lineId = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`,
+      "objects",
+    )
+  )[0]!.id;
   await recordCountedQuantity(org.orgId, actorId, {
     countId: count.id,
     lineId,
@@ -60,20 +65,13 @@ async function openReviewedCount(
 }
 
 async function nativeFixture(
-  work: (
-    org: ScratchOrg,
-    actors: Awaited<ReturnType<typeof seedFlowActors>>,
-  ) => Promise<void>,
+  work: (org: ScratchOrg, actors: Awaited<ReturnType<typeof seedFlowActors>>) => Promise<void>,
 ) {
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
     for (const id of [actors.submitterId, actors.approver1Id])
-      await grantScratchPermissions(org.orgId, id, [
-        "items.read",
-        "items.manage",
-        "items.post",
-      ]);
+      await grantScratchPermissions(org.orgId, id, ["items.read", "items.manage", "items.post"]);
     await work(org, actors);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -81,16 +79,19 @@ async function nativeFixture(
 }
 async function postAudit(orgId: string, countId: string) {
   return await db.execute<{
-      changes: {
-        review: {
-          policy: { kind: string; runIds: string[] };
-          postedBy: string;
-          totalVariance: string;
-          lineCount: number;
-        };
+    changes: {
+      review: {
+        policy: { kind: string; runIds: string[] };
+        postedBy: string;
+        totalVariance: string;
+        lineCount: number;
       };
-    }>(sql`
- select changes from audit_log where org_id=${orgId} and table_name='stock_counts' and row_id=${countId} and changes->>'operation'='post'`, "objects");
+    };
+  }>(
+    sql`
+ select changes from audit_log where org_id=${orgId} and table_name='stock_counts' and row_id=${countId} and changes->>'operation'='post'`,
+    "objects",
+  );
 }
 
 test(
@@ -117,14 +118,15 @@ test(
         totalVariance: "-1.0000",
         lineCount: 1,
       });
-      const receipt = (await db.execute<{ allowed: boolean }>(
-          sql`select public.flow_ungated_submission_authorized(${org.orgId},'stock_count',${countId},${actors.submitterId}) as allowed`, "objects",
-        ))[0];
+      const receipt = (
+        await db.execute<{ allowed: boolean }>(
+          sql`select public.flow_ungated_submission_authorized(${org.orgId},'stock_count',${countId},${actors.submitterId}) as allowed`,
+          "objects",
+        )
+      )[0];
       assert.equal(receipt?.allowed, true);
       await assert.rejects(
-        withOrgTransaction(org.orgId, () =>
-          postStockCount(org.orgId, actors.submitterId, countId),
-        ),
+        withOrgTransaction(org.orgId, () => postStockCount(org.orgId, actors.submitterId, countId)),
         /already posted/,
       );
       assert.equal((await postAudit(org.orgId, countId)).length, 1);
@@ -145,13 +147,17 @@ test(
         });
       const { countId } = await openReviewedCount(org, actors.submitterId, "9");
       const movementCount = async () =>
-        (await db.execute<{ n: string }>(
-            sql`select count(*)::text as n from inventory_movements where org_id=${org.orgId}`, "objects",
-          ))[0]!.n;
+        (
+          await db.execute<{ n: string }>(
+            sql`select count(*)::text as n from inventory_movements where org_id=${org.orgId}`,
+            "objects",
+          )
+        )[0]!.n;
       const before = await movementCount();
       const pending = await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${org.orgId} and subject_kind='stock_count' and subject_id=${countId} and status='pending' order by id`, "objects",
-        );
+        sql`select id from flow_gates where org_id=${org.orgId} and subject_kind='stock_count' and subject_id=${countId} and status='pending' order by id`,
+        "objects",
+      );
       assert.equal(pending.length, 10);
       await db.execute(
         sql`update flows set enabled=false where org_id=${org.orgId} and subject_kind='stock_count'`,
@@ -172,9 +178,12 @@ test(
         });
         if (index < 9)
           assert.equal(
-            (await db.execute<{ review_released: boolean }>(
-                sql`select review_released from stock_counts where org_id=${org.orgId} and id=${countId}`, "objects",
-              ))[0]?.review_released,
+            (
+              await db.execute<{ review_released: boolean }>(
+                sql`select review_released from stock_counts where org_id=${org.orgId} and id=${countId}`,
+                "objects",
+              )
+            )[0]?.review_released,
             false,
           );
       }
@@ -201,9 +210,12 @@ test(
         preventSelfApproval: false,
       });
       const { countId } = await openReviewedCount(org, actors.submitterId, "9");
-      const gate = (await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${countId} and status='pending'`, "objects",
-        ))[0]!;
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${countId} and status='pending'`,
+          "objects",
+        )
+      )[0]!;
       await decideGate({
         gateId: gate.id,
         userId: actors.submitterId,

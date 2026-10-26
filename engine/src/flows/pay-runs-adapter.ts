@@ -31,7 +31,9 @@ const PAY_RUN_FIELDS = [
   { key: "periodEnd", label: "Period end", type: "date" as const },
   { key: "scheduleName", label: "Pay schedule", type: "text" as const },
   {
-    key: "runType", label: "Run type", type: "enum" as const,
+    key: "runType",
+    label: "Run type",
+    type: "enum" as const,
     options: [
       { value: "regular", label: "Regular" },
       { value: "bonus", label: "Off-cycle bonus" },
@@ -39,7 +41,9 @@ const PAY_RUN_FIELDS = [
     ],
   },
   {
-    key: "runStatus", label: "Calculation status", type: "enum" as const,
+    key: "runStatus",
+    label: "Calculation status",
+    type: "enum" as const,
     options: [
       { value: "draft", label: "Draft" },
       { value: "calculated", label: "Calculated" },
@@ -71,7 +75,8 @@ export const payRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter(
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const base = await documentsAdapter.loadContext(subjectId);
     if (!base) return null;
-    const run = (await db.execute<Record<string, unknown>>(sql`
+    const run = await db.execute<Record<string, unknown>>(
+      sql`
       select r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.run_status, r.run_type,
              r.gross_total, r.net_total, r.employer_cost_total, r.employee_count,
@@ -83,7 +88,9 @@ export const payRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter(
         join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
        where r.document_id = ${subjectId} and r.org_id = d.org_id
-    `, "objects"));
+    `,
+      "objects",
+    );
     const row = run[0];
     if (!row) return base;
     return {

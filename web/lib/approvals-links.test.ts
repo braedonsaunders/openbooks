@@ -34,10 +34,7 @@ export const withTransactionSavepoint = (...args) => fail();`;
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (
-      specifier === "@openbooks/engine/platform/db" ||
-      specifier === "../platform/db.ts"
-    ) {
+    if (specifier === "@openbooks/engine/platform/db" || specifier === "../platform/db.ts") {
       return { shortCircuit: true, format: "module", url: "mock:approval-links-db" };
     }
     return next(specifier, context);
@@ -50,9 +47,8 @@ registerHooks({
   },
 });
 
-const { getFlowAdapter, listFlowSubjectProfiles } = await import(
-  "@openbooks/engine/flows/registry"
-);
+const { getFlowAdapter, listFlowSubjectProfiles } =
+  await import("@openbooks/engine/flows/registry");
 const { approvalRecordHref } = await import("./approvals-links.ts");
 
 const PROBE_ID = "55555555-5555-4555-8555-555555555555";
@@ -88,5 +84,8 @@ test("every gatable subject kind links to a page that exists", () => {
     return pageExists(path) ? [] : [`${kind}: ${path} is not a page`];
   });
   assert.deepEqual(defects, [], `approval record links:\n  ${defects.join("\n  ")}`);
-  assert.equal(approvalRecordHref("fund_release", PROBE_ID), `/nonprofit/releases?release=${PROBE_ID}`);
+  assert.equal(
+    approvalRecordHref("fund_release", PROBE_ID),
+    `/nonprofit/releases?release=${PROBE_ID}`,
+  );
 });

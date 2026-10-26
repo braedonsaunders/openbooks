@@ -4,10 +4,16 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
 import type { Authz } from "./authz";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules } from "../testing/stub-modules.ts";
 
-const state: { gate: Authz | null; reportResolutions: number; stubPdf: Buffer | null } = { gate: null, reportResolutions: 0, stubPdf: null };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-stub-outputs-scope")] = state;
+const state: { gate: Authz | null; reportResolutions: number; stubPdf: Buffer | null } = {
+  gate: null,
+  reportResolutions: 0,
+  stubPdf: null,
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[
+  Symbol.for("openbooks.payroll-stub-outputs-scope")
+] = state;
 // The printable control needs real merged bytes without a Chromium renderer:
 // one minimal page built with the real pdf-lib. Per-stub rendering, record
 // resolution, template lookup, and the real PDFDocument.load/merge in
@@ -30,13 +36,18 @@ const apiJsonUrl = new URL("./api/json.ts", import.meta.url).href;
 // (Symlinked node_modules paths rewrite onto themselves and are harmless.)
 const MAIN_ROOT_URL = "file:///Users/braedonsaunders/Documents/openbooks/";
 const WORKTREE_ROOT_URL = new URL("../../", import.meta.url).href;
-const gateMock = "data:text/javascript," + encodeURIComponent(
-  "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')].gate}");
+const gateMock =
+  "data:text/javascript," +
+  encodeURIComponent(
+    "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')].gate}",
+  );
 // documents/actions authenticates through lib/authz, which reads cookies —
 // unmockable headless. The mock returns the test gate, grants the document
 // permission, and enforces the same subsidiary rule as the real guard so the
 // run-subsidiary gate is genuinely exercised on the way to the evidence.
-const authzMock = "data:text/javascript," + encodeURIComponent(`
+const authzMock =
+  "data:text/javascript," +
+  encodeURIComponent(`
   export async function getAuthz() { return globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')].gate; }
   export function can() { return true; }
   export function guardSubsidiaryScope(gate, subsidiaryId) {
@@ -50,7 +61,9 @@ const authzMock = "data:text/javascript," + encodeURIComponent(`
 // each resolution and returns empty-but-valid report content: the defect
 // under test is the missing population gate BEFORE any report is resolved,
 // and the report contents themselves are covered by the report suite.
-const reportRunMock = "data:text/javascript," + encodeURIComponent(`
+const reportRunMock =
+  "data:text/javascript," +
+  encodeURIComponent(`
   export async function resolveDefinitionToExportData() {
     const state = globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')];
     state.reportResolutions += 1;
@@ -60,56 +73,67 @@ const reportRunMock = "data:text/javascript," + encodeURIComponent(`
 // Only the Chromium renderer entry is substituted, and only for its importer
 // payroll-outputs: the stub returns the minimal valid PDF above, so the real
 // PDFDocument.load/merge still parses and merges every stubbed page.
-const rendererMock = "data:text/javascript," + encodeURIComponent(`
+const rendererMock =
+  "data:text/javascript," +
+  encodeURIComponent(`
   export async function mergeAndPrintPdf() {
     return Buffer.from(globalThis[Symbol.for('openbooks.payroll-stub-outputs-scope')].stubPdf);
   }
 `);
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
-  const parent = decodeURIComponent(context.parentURL ?? "");
-  if (specifier === "./report-run" && parent.endsWith("/web/lib/payroll-evidence.ts")) {
-    return { shortCircuit: true, url: reportRunMock };
-  }
-  if (specifier === "./pdf-templates/render" && parent.endsWith("/web/lib/payroll-outputs.ts")) {
-    return { shortCircuit: true, url: rendererMock };
-  }
-  if (specifier === "../../../../lib/authz"
-    && parent.endsWith("/api/documents/actions/route.ts")) {
-    return { shortCircuit: true, url: authzMock };
-  }
-  // The factory authenticates through `@/` aliases the route-relative
-  // conditions above never match: the session-public document action reads
-  // its session from `@/lib/authz`, and the payroll run routes authenticate
-  // inside `@/lib/feature-gates`. Both stay parent-gated to the factory so
-  // no other importer can observe the test session.
-  if (specifier === "@/lib/authz" && parent.endsWith("/web/lib/api/route.ts")) {
-    return { shortCircuit: true, url: authzMock };
-  }
-  if (specifier === "@/lib/feature-gates" && parent.endsWith("/web/lib/api/route.ts")) {
-    return { shortCircuit: true, url: gateMock };
-  }
-  if (specifier === "../../../../../../lib/feature-gates"
-    && parent.endsWith("/api/payroll/runs/[id]/stubs-pdf/route.ts")) {
-    return { shortCircuit: true, url: gateMock };
-  }
-  if (specifier === "../../../../../lib/feature-gates"
-    && parent.endsWith("/api/payroll/runs/[id]/route.ts")) {
-    return { shortCircuit: true, url: gateMock };
-  }
-  const resolved = next(specifier, context);
-  const rewrite = (url: string) =>
-    url.startsWith(MAIN_ROOT_URL) ? WORKTREE_ROOT_URL + url.slice(MAIN_ROOT_URL.length) : url;
-  if (resolved.url.startsWith(MAIN_ROOT_URL)) {
-    return { url: rewrite(resolved.url), shortCircuit: true };
-  }
-  return resolved;
-} });
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
+    const parent = decodeURIComponent(context.parentURL ?? "");
+    if (specifier === "./report-run" && parent.endsWith("/web/lib/payroll-evidence.ts")) {
+      return { shortCircuit: true, url: reportRunMock };
+    }
+    if (specifier === "./pdf-templates/render" && parent.endsWith("/web/lib/payroll-outputs.ts")) {
+      return { shortCircuit: true, url: rendererMock };
+    }
+    if (
+      specifier === "../../../../lib/authz" &&
+      parent.endsWith("/api/documents/actions/route.ts")
+    ) {
+      return { shortCircuit: true, url: authzMock };
+    }
+    // The factory authenticates through `@/` aliases the route-relative
+    // conditions above never match: the session-public document action reads
+    // its session from `@/lib/authz`, and the payroll run routes authenticate
+    // inside `@/lib/feature-gates`. Both stay parent-gated to the factory so
+    // no other importer can observe the test session.
+    if (specifier === "@/lib/authz" && parent.endsWith("/web/lib/api/route.ts")) {
+      return { shortCircuit: true, url: authzMock };
+    }
+    if (specifier === "@/lib/feature-gates" && parent.endsWith("/web/lib/api/route.ts")) {
+      return { shortCircuit: true, url: gateMock };
+    }
+    if (
+      specifier === "../../../../../../lib/feature-gates" &&
+      parent.endsWith("/api/payroll/runs/[id]/stubs-pdf/route.ts")
+    ) {
+      return { shortCircuit: true, url: gateMock };
+    }
+    if (
+      specifier === "../../../../../lib/feature-gates" &&
+      parent.endsWith("/api/payroll/runs/[id]/route.ts")
+    ) {
+      return { shortCircuit: true, url: gateMock };
+    }
+    const resolved = next(specifier, context);
+    const rewrite = (url: string) =>
+      url.startsWith(MAIN_ROOT_URL) ? WORKTREE_ROOT_URL + url.slice(MAIN_ROOT_URL.length) : url;
+    if (resolved.url.startsWith(MAIN_ROOT_URL)) {
+      return { url: rewrite(resolved.url), shortCircuit: true };
+    }
+    return resolved;
+  },
+});
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { seedAdoption, calculatedRun } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+const { seedAdoption, calculatedRun } =
+  await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
 const { commitPayRun } = await import("@openbooks/engine/payroll/run-commit");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
 const { GET: stubsPdf } = await import("../app/api/payroll/runs/[id]/stubs-pdf/route");
@@ -124,171 +148,267 @@ const { POST: documentAction } = await import("../app/api/documents/actions/rout
  */
 async function opaqueFixture(commit = true) {
   const fx = await withBypassContext(() => seedAdoption());
-  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
+  await withBypassContext(() =>
+    db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`),
+  );
   const { input } = await withBypassContext(() => calculatedRun(fx));
   if (commit) await withOrgContext(fx.orgId, () => commitPayRun(input));
   const hidden = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden stub employer', 'CAD', 'CA')`));
-  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${hidden}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
+  await withBypassContext(() =>
+    db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden stub employer', 'CAD', 'CA')`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`update parties set subsidiary_id = ${hidden}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`),
+  );
   return { fx, documentId: input.documentId };
 }
 
-function scopedGate(fx: { orgId: string; actorId: string; subsidiaryId: string }, permission: string): Authz {
+function scopedGate(
+  fx: { orgId: string; actorId: string; subsidiaryId: string },
+  permission: string,
+): Authz {
   return {
     user: {
-      orgId: fx.orgId, id: fx.actorId, name: 'Scoped payroll operator', email: 'scoped-payroll@example.test',
-      roles: [{ key: 'admin', name: 'Administrator' }], envKind: 'production', productionOrgId: fx.orgId,
-      isSuperAdmin: false, homeOrgId: fx.orgId, homeUserId: fx.actorId,
+      orgId: fx.orgId,
+      id: fx.actorId,
+      name: "Scoped payroll operator",
+      email: "scoped-payroll@example.test",
+      roles: [{ key: "admin", name: "Administrator" }],
+      envKind: "production",
+      productionOrgId: fx.orgId,
+      isSuperAdmin: false,
+      homeOrgId: fx.orgId,
+      homeUserId: fx.actorId,
     },
-    permissions: new Set([permission, 'payroll.read']),
+    permissions: new Set([permission, "payroll.read"]),
     allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
   };
 }
 
-test("stub PDF hides a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { fx, documentId } = await opaqueFixture();
-  try {
-    state.gate = scopedGate(fx, "payroll.read");
-    const refused = await withOrgContext(fx.orgId, () => stubsPdf(
-      new Request("https://openbooks.test/api/payroll/runs/fixture/stubs-pdf"),
-      { params: Promise.resolve({ id: documentId }) },
-    ));
-    // The body is a PDF on the leak path, so peek as text: parsing it as
-    // JSON would throw instead of reporting the 200.
-    const refusedBody = await refused.clone().text();
-    assert.equal(refused.status, 404, JSON.stringify(refusedBody.slice(0, 200)));
-    assert.deepEqual(JSON.parse(refusedBody), { error: "not_found" });
+test(
+  "stub PDF hides a run carrying an out-of-scope employee",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { fx, documentId } = await opaqueFixture();
+    try {
+      state.gate = scopedGate(fx, "payroll.read");
+      const refused = await withOrgContext(fx.orgId, () =>
+        stubsPdf(new Request("https://openbooks.test/api/payroll/runs/fixture/stubs-pdf"), {
+          params: Promise.resolve({ id: documentId }),
+        }),
+      );
+      // The body is a PDF on the leak path, so peek as text: parsing it as
+      // JSON would throw instead of reporting the 200.
+      const refusedBody = await refused.clone().text();
+      assert.equal(refused.status, 404, JSON.stringify(refusedBody.slice(0, 200)));
+      assert.deepEqual(JSON.parse(refusedBody), { error: "not_found" });
 
-    // The run IS printable: the unrestricted control receives the stub PDF,
-    // proving the scoped refusal above is the population check at work.
-    state.gate = { ...scopedGate(fx, "payroll.read"), allowedSubsidiaryIds: null };
-    const control = await withOrgContext(fx.orgId, () => stubsPdf(
-      new Request("https://openbooks.test/api/payroll/runs/fixture/stubs-pdf"),
-      { params: Promise.resolve({ id: documentId }) },
-    ));
-    assert.equal(control.status, 200);
-    assert.match(
-      control.headers.get("content-type") ?? "",
-      /pdf/,
-      "the unrestricted control receives the stub PDF",
-    );
-  } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
-});
+      // The run IS printable: the unrestricted control receives the stub PDF,
+      // proving the scoped refusal above is the population check at work.
+      state.gate = { ...scopedGate(fx, "payroll.read"), allowedSubsidiaryIds: null };
+      const control = await withOrgContext(fx.orgId, () =>
+        stubsPdf(new Request("https://openbooks.test/api/payroll/runs/fixture/stubs-pdf"), {
+          params: Promise.resolve({ id: documentId }),
+        }),
+      );
+      assert.equal(control.status, 200);
+      assert.match(
+        control.headers.get("content-type") ?? "",
+        /pdf/,
+        "the unrestricted control receives the stub PDF",
+      );
+    } finally {
+      state.gate = null;
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
 
-test("stub email refuses a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { fx, documentId } = await opaqueFixture();
-  try {
-    state.gate = scopedGate(fx, "payroll.run");
-    const refused = await withOrgContext(fx.orgId, () => runAction(
-      new Request("https://openbooks.test/api/payroll/runs/fixture", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "email-stubs" }),
-      }),
-      { params: Promise.resolve({ id: documentId }) },
-    ));
-    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()));
-    assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
-  } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
-});
+test(
+  "stub email refuses a run carrying an out-of-scope employee",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { fx, documentId } = await opaqueFixture();
+    try {
+      state.gate = scopedGate(fx, "payroll.run");
+      const refused = await withOrgContext(fx.orgId, () =>
+        runAction(
+          new Request("https://openbooks.test/api/payroll/runs/fixture", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "email-stubs" }),
+          }),
+          { params: Promise.resolve({ id: documentId }) },
+        ),
+      );
+      assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()));
+      assert.match(
+        String(((await refused.json()) as { error: string }).error),
+        /pay run not found/,
+      );
+    } finally {
+      state.gate = null;
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
 
-test("approval submission refuses a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { fx, documentId } = await opaqueFixture(false);
-  try {
-    // The evidence package (journal + register + GL preview) names every
-    // employee's pay, so submitting it for an opaque run must fail closed
-    // before a single report is resolved — like the GL preview action does.
-    state.gate = scopedGate(fx, "payroll.run");
-    state.reportResolutions = 0;
-    const refused = await withOrgContext(fx.orgId, () => runAction(
-      new Request("https://openbooks.test/api/payroll/runs/fixture", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "submit-approval" }),
-      }),
-      { params: Promise.resolve({ id: documentId }) },
-    ));
-    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()).slice(0, 300));
-    assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
-    assert.equal(state.reportResolutions, 0, "a refused submission must resolve no evidence report");
+test(
+  "approval submission refuses a run carrying an out-of-scope employee",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { fx, documentId } = await opaqueFixture(false);
+    try {
+      // The evidence package (journal + register + GL preview) names every
+      // employee's pay, so submitting it for an opaque run must fail closed
+      // before a single report is resolved — like the GL preview action does.
+      state.gate = scopedGate(fx, "payroll.run");
+      state.reportResolutions = 0;
+      const refused = await withOrgContext(fx.orgId, () =>
+        runAction(
+          new Request("https://openbooks.test/api/payroll/runs/fixture", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "submit-approval" }),
+          }),
+          { params: Promise.resolve({ id: documentId }) },
+        ),
+      );
+      assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()).slice(0, 300));
+      assert.match(
+        String(((await refused.json()) as { error: string }).error),
+        /pay run not found/,
+      );
+      assert.equal(
+        state.reportResolutions,
+        0,
+        "a refused submission must resolve no evidence report",
+      );
 
-    state.gate = { ...scopedGate(fx, "payroll.run"), allowedSubsidiaryIds: null };
-    const submitted = await withOrgContext(fx.orgId, () => runAction(
-      new Request("https://openbooks.test/api/payroll/runs/fixture", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "submit-approval" }),
-      }),
-      { params: Promise.resolve({ id: documentId }) },
-    ));
-    assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()).slice(0, 300));
-    assert.ok(state.reportResolutions > 0, "the unrestricted control assembles evidence");
-  } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
-});
+      state.gate = { ...scopedGate(fx, "payroll.run"), allowedSubsidiaryIds: null };
+      const submitted = await withOrgContext(fx.orgId, () =>
+        runAction(
+          new Request("https://openbooks.test/api/payroll/runs/fixture", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "submit-approval" }),
+          }),
+          { params: Promise.resolve({ id: documentId }) },
+        ),
+      );
+      assert.equal(
+        submitted.status,
+        200,
+        JSON.stringify(await submitted.clone().json()).slice(0, 300),
+      );
+      assert.ok(state.reportResolutions > 0, "the unrestricted control assembles evidence");
+    } finally {
+      state.gate = null;
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
 
 /** An on_submit pay-run flow with a gate — a real approval policy, so the
 document submit path assembles evidence. */
 const GATING_GRAPH = {
   schemaVersion: 1,
   nodes: [
-    { id: "t", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
     {
-      id: "g", position: { x: 200, y: 0 },
+      id: "t",
+      position: { x: 0, y: 0 },
+      data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+    },
+    {
+      id: "g",
+      position: { x: 200, y: 0 },
       data: {
         kind: "gate",
         // Assignee targets discriminate on `type`: `kind` fails graph
         // validation and the fail-closed dispatch refuses the submit before
         // the scope check under test is ever reached.
-        gate: { title: "Approve pay run", assignees: [{ type: "role", role: "admin" }], mode: "any", preventSelfApproval: false },
+        gate: {
+          title: "Approve pay run",
+          assignees: [{ type: "role", role: "admin" }],
+          mode: "any",
+          preventSelfApproval: false,
+        },
       },
     },
   ],
   edges: [{ id: "e", source: "t", target: "g" }],
 };
 
-test("document submit refuses evidence assembly for a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  // The generic document submit attaches the same evidence package when the
-  // org gates pay runs — through a second route that must enforce the same
-  // population opacity. A calculated (still draft-document) run assembles.
-  const fx = await withBypassContext(() => seedAdoption());
-  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
-  const { input } = await withBypassContext(() => calculatedRun(fx));
-  await withBypassContext(() => db.execute(sql`
+test(
+  "document submit refuses evidence assembly for a run carrying an out-of-scope employee",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    // The generic document submit attaches the same evidence package when the
+    // org gates pay runs — through a second route that must enforce the same
+    // population opacity. A calculated (still draft-document) run assembles.
+    const fx = await withBypassContext(() => seedAdoption());
+    await withBypassContext(() =>
+      db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`),
+    );
+    const { input } = await withBypassContext(() => calculatedRun(fx));
+    await withBypassContext(() =>
+      db.execute(sql`
     insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
     values (${fx.orgId}, 'Pay run approval', 'pay_run', true,
-            ${JSON.stringify(GATING_GRAPH)}::jsonb, ${fx.actorId}, ${fx.actorId})`));
-  const hidden = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden submit employer', 'CAD', 'CA')`));
-  await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${hidden}
-    where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
-  try {
-    state.gate = scopedGate(fx, "payroll.run");
-    state.reportResolutions = 0;
-    const refused = await withOrgContext(fx.orgId, () => documentAction(
-      new Request("https://openbooks.test/api/documents/actions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "submit", documentId: input.documentId }),
-      }),
-    ));
-    assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()).slice(0, 300));
-    assert.equal((await refused.json() as { error: string }).error,"not_found");
-    assert.equal(state.reportResolutions, 0, "a refused submission must resolve no evidence report");
+            ${JSON.stringify(GATING_GRAPH)}::jsonb, ${fx.actorId}, ${fx.actorId})`),
+    );
+    const hidden = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden submit employer', 'CAD', 'CA')`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`update parties set subsidiary_id = ${hidden}
+    where org_id = ${fx.orgId} and id = ${fx.employeeId}`),
+    );
+    try {
+      state.gate = scopedGate(fx, "payroll.run");
+      state.reportResolutions = 0;
+      const refused = await withOrgContext(fx.orgId, () =>
+        documentAction(
+          new Request("https://openbooks.test/api/documents/actions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "submit", documentId: input.documentId }),
+          }),
+        ),
+      );
+      assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()).slice(0, 300));
+      assert.equal(((await refused.json()) as { error: string }).error, "not_found");
+      assert.equal(
+        state.reportResolutions,
+        0,
+        "a refused submission must resolve no evidence report",
+      );
 
-    state.gate = { ...scopedGate(fx, "payroll.run"), allowedSubsidiaryIds: null };
-    const submitted = await withOrgContext(fx.orgId, () => documentAction(
-      new Request("https://openbooks.test/api/documents/actions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "submit", documentId: input.documentId }),
-      }),
-    ));
-    assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()).slice(0, 300));
-    assert.ok(state.reportResolutions > 0, "the unrestricted control assembles evidence");
-  } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
-});
+      state.gate = { ...scopedGate(fx, "payroll.run"), allowedSubsidiaryIds: null };
+      const submitted = await withOrgContext(fx.orgId, () =>
+        documentAction(
+          new Request("https://openbooks.test/api/documents/actions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "submit", documentId: input.documentId }),
+          }),
+        ),
+      );
+      assert.equal(
+        submitted.status,
+        200,
+        JSON.stringify(await submitted.clone().json()).slice(0, 300),
+      );
+      assert.ok(state.reportResolutions > 0, "the unrestricted control assembles evidence");
+    } finally {
+      state.gate = null;
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);

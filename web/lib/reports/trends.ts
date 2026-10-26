@@ -51,7 +51,8 @@ export async function financialTrends(
       ? sql``
       : sql` and ${column} = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`;
   const book = statementBookIdsExpr(orgId, bookId);
-  const rows = (await db.execute<FinancialTrendRow>(sql`
+  const rows = await db.execute<FinancialTrendRow>(
+    sql`
     with recent as (
       select p.id, p.fiscal_year, p.period_number, p.is_adjustment, p.starts_on, p.ends_on
         from accounting_periods p
@@ -90,6 +91,8 @@ export async function financialTrends(
            ), 0)::text as closing_cash
       from recent p join activity a on a.id = p.id
      order by p.ends_on
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows;
 }

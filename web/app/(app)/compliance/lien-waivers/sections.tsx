@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from "next/link";
 
 /**
  * Waiver number as a link, followed by its direction in muted small text.
@@ -12,9 +12,9 @@ export function WaiverNumberCell({
   href,
   directionLabel,
 }: {
-  waiverNumber: string
-  href: string
-  directionLabel: string
+  waiverNumber: string;
+  href: string;
+  directionLabel: string;
 }) {
   return (
     <>
@@ -23,5 +23,5 @@ export function WaiverNumberCell({
       </Link>
       <span className="ml-2 text-xs text-slate-400">{directionLabel}</span>
     </>
-  )
+  );
 }

@@ -2,16 +2,38 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, cmp, isZero, neg } from "../money/money.ts";
-import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
-import { assertStockLocationAdmitsSubsidiary, resolveProfile, assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
+import {
+  assertStockLocationAdmitsSubsidiary,
+  resolveProfile,
+  assertMovementOwner,
+  inventoryFeatureEnabled,
+} from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry, type JournalLineInput } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
+import {
+  primaryBookId,
+  periodForDate,
+  subsidiaryCurrency,
+  getOnHandWith,
+  lockInventoryPosition,
+  persistReceiptMoney,
+} from "./position.ts";
 import { consumeLayers, recordConsumptions } from "./cost-layers.ts";
 import { type MovementResult } from "./movements.ts";
-import { loadDocumentInventoryLines, inventoryPostingEffectKey, isJsonRecord, isAllowanceLine, loadItemLabels, type DocumentInventoryLine } from "./document-lines.ts";
+import {
+  loadDocumentInventoryLines,
+  inventoryPostingEffectKey,
+  isJsonRecord,
+  isAllowanceLine,
+  loadItemLabels,
+  type DocumentInventoryLine,
+} from "./document-lines.ts";
 import { liveReceiptQuantity, postedReturnQuantity } from "./return-quantities.ts";
 import { PURCHASE_RECEIPT_DOCUMENT_KIND } from "./documents-purchasing.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -46,26 +68,16 @@ export function parseVendorCreditInventoryReturnSelection(
   const sourceReceiptMovementId = evidence.sourceReceiptMovementId;
   const lotId = evidence.lotId ?? null;
   const serialId = evidence.serialId ?? null;
-  if (
-    typeof sourceReceiptMovementId !== "string" ||
-    !isUuid(sourceReceiptMovementId)
-  ) {
+  if (typeof sourceReceiptMovementId !== "string" || !isUuid(sourceReceiptMovementId)) {
     throw new InventoryError(
       `${lineLabel} requires a valid inventoryReturn.sourceReceiptMovementId`,
     );
   }
   if (lotId !== null && !isUuid(lotId)) {
-    throw new InventoryError(
-      `${lineLabel} inventoryReturn.lotId must be a UUID`,
-    );
+    throw new InventoryError(`${lineLabel} inventoryReturn.lotId must be a UUID`);
   }
-  if (
-    serialId !== null &&
-    !isUuid(serialId)
-  ) {
-    throw new InventoryError(
-      `${lineLabel} inventoryReturn.serialId must be a UUID`,
-    );
+  if (serialId !== null && !isUuid(serialId)) {
+    throw new InventoryError(`${lineLabel} inventoryReturn.serialId must be a UUID`);
   }
   return { sourceReceiptMovementId, lotId, serialId };
 }
@@ -92,21 +104,14 @@ export interface VendorCreditInventoryDisposition {
 }
 
 /** Operator label for a credit line: line number plus the item's catalog code. */
-function vendorCreditLineLabel(
-  line: DocumentInventoryLine,
-  labels: Map<string, string>,
-): string {
+function vendorCreditLineLabel(line: DocumentInventoryLine, labels: Map<string, string>): string {
   return `Line ${line.lineNumber} (${labels.get(line.itemId) ?? line.itemId})`;
 }
 
 /** The commercial account for a return or allowance line: purchase price
  * variance first, else the inventory adjustment account. */
-function vendorCreditOffsetAccount(
-  line: DocumentInventoryLine,
-  label: string,
-): string {
-  const offsetAccountId =
-    line.varianceAccountId ?? line.adjustmentAccountId;
+function vendorCreditOffsetAccount(line: DocumentInventoryLine, label: string): string {
+  const offsetAccountId = line.varianceAccountId ?? line.adjustmentAccountId;
   if (!offsetAccountId) {
     throw new InventoryError(
       `${label} is a stocked-item line but the item has no purchase price variance account — ` +
@@ -126,7 +131,11 @@ async function loadVendorCreditInventoryDisposition(
     return { returns: [], allowances: [] };
   }
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
-  const labels = await loadItemLabels(runner, orgId, lines.map((line) => line.itemId));
+  const labels = await loadItemLabels(
+    runner,
+    orgId,
+    lines.map((line) => line.itemId),
+  );
   const returns: VendorCreditInventoryReturnLine[] = [];
   const allowances: VendorCreditInventoryAllowanceLine[] = [];
   for (const line of lines) {
@@ -152,10 +161,7 @@ async function loadVendorCreditInventoryDisposition(
     returns.push({
       ...line,
       offsetAccountId: vendorCreditOffsetAccount(line, label),
-      selection: parseVendorCreditInventoryReturnSelection(
-        line.custom,
-        label,
-      ),
+      selection: parseVendorCreditInventoryReturnSelection(line.custom, label),
     });
   }
   return { returns, allowances };
@@ -167,7 +173,8 @@ async function loadVendorCreditInventoryReturnLines(
   documentId: string,
   requireEvidence: boolean,
 ): Promise<VendorCreditInventoryReturnLine[]> {
-  return (await loadVendorCreditInventoryDisposition(runner, orgId, documentId, requireEvidence)).returns;
+  return (await loadVendorCreditInventoryDisposition(runner, orgId, documentId, requireEvidence))
+    .returns;
 }
 
 interface SourceReceiptEvidence extends Record<string, unknown> {
@@ -192,7 +199,9 @@ async function validateVendorReturnSource(
   line: VendorCreditInventoryReturnLine,
   lock: boolean,
 ): Promise<SourceReceiptEvidence> {
-  const source = (await runner.execute<SourceReceiptEvidence>(sql`
+  const source = (
+    await runner.execute<SourceReceiptEvidence>(
+      sql`
     select movement.id, movement.subsidiary_id, movement.item_id,
            movement.stock_location_id, movement.lot_id, movement.serial_id,
            movement.quantity, movement.kind, movement.status,
@@ -208,12 +217,13 @@ async function validateVendorReturnSource(
      where movement.org_id = ${orgId}
        and movement.id = ${line.selection.sourceReceiptMovementId}
      ${lock ? sql`for update of movement` : sql``}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const label = `document line ${line.lineNumber} (item ${line.itemId})`;
   if (!source || source.kind !== "receipt" || source.status !== "posted") {
-    throw new InventoryError(
-      `${label} must reference a posted receipt movement`,
-    );
+    throw new InventoryError(`${label} must reference a posted receipt movement`);
   }
   // Liveness reads through the helper the bill-coverage path shares: any
   // posted, unreversed reversal nets the receipt down, and a fully reversed
@@ -244,20 +254,21 @@ async function validateVendorReturnSource(
   // Stock arrives either on the vendor bill (legacy bill-is-the-receipt) or
   // on a goods receipt against the purchase order; both name the vendor.
   if (
-    source.source_document_kind !== "vendor_bill"
-    && source.source_document_kind !== PURCHASE_RECEIPT_DOCUMENT_KIND
+    source.source_document_kind !== "vendor_bill" &&
+    source.source_document_kind !== PURCHASE_RECEIPT_DOCUMENT_KIND
   ) {
-    throw new InventoryError(
-      `${label} source receipt is attached to a non-purchase document`,
-    );
+    throw new InventoryError(`${label} source receipt is attached to a non-purchase document`);
   }
   if (!vendorId || source.source_vendor_id !== vendorId) {
-    throw new InventoryError(
-      `${label} source receipt belongs to a different vendor`,
-    );
+    throw new InventoryError(`${label} source receipt belongs to a different vendor`);
   }
   if (line.tracking === "lot_serial") {
-    if (!line.selection.lotId || !line.selection.serialId || source.lot_id!==line.selection.lotId || source.serial_id!==line.selection.serialId)
+    if (
+      !line.selection.lotId ||
+      !line.selection.serialId ||
+      source.lot_id !== line.selection.lotId ||
+      source.serial_id !== line.selection.serialId
+    )
       throw new InventoryError(`${label} requires both identifiers matching its source receipt`);
   } else if (line.tracking === "lot") {
     if (!line.selection.lotId || line.selection.serialId) {
@@ -271,14 +282,10 @@ async function validateVendorReturnSource(
       throw new InventoryError(`${label} requires exactly one selected serial`);
     }
     if (source.serial_id !== line.selection.serialId) {
-      throw new InventoryError(
-        `${label} selected serial does not match its receipt`,
-      );
+      throw new InventoryError(`${label} selected serial does not match its receipt`);
     }
   } else if (line.selection.lotId || line.selection.serialId) {
-    throw new InventoryError(
-      `${label} cannot select lot or serial evidence for an untracked item`,
-    );
+    throw new InventoryError(`${label} cannot select lot or serial evidence for an untracked item`);
   }
   // The already-returned total shares the picker's rule (unreversed posted
   // returns only, read as absolute values like the picker's remaining math),
@@ -309,14 +316,12 @@ export async function resolveVendorCreditInventoryAccounts(
   orgId: string,
   documentId: string,
 ): Promise<Map<string, string>> {
-  const disposition = await loadVendorCreditInventoryDisposition(
-    runner,
-    orgId,
-    documentId,
-    true,
-  );
+  const disposition = await loadVendorCreditInventoryDisposition(runner, orgId, documentId, true);
   return new Map(
-    [...disposition.returns, ...disposition.allowances].map((line) => [line.lineId, line.offsetAccountId]),
+    [...disposition.returns, ...disposition.allowances].map((line) => [
+      line.lineId,
+      line.offsetAccountId,
+    ]),
   );
 }
 
@@ -329,21 +334,9 @@ export async function assertVendorCreditInventoryReturnsPostable(
   vendorId: string | null,
   subsidiaryId: string,
 ): Promise<void> {
-  const lines = await loadVendorCreditInventoryReturnLines(
-    runner,
-    orgId,
-    documentId,
-    true,
-  );
+  const lines = await loadVendorCreditInventoryReturnLines(runner, orgId, documentId, true);
   for (const line of lines) {
-    await validateVendorReturnSource(
-      runner,
-      orgId,
-      vendorId,
-      subsidiaryId,
-      line,
-      false,
-    );
+    await validateVendorReturnSource(runner, orgId, vendorId, subsidiaryId, line, false);
   }
 }
 
@@ -409,15 +402,14 @@ async function returnVendorCreditInventoryLine(
   // deliberately keep their immutable document-line evidence without claiming
   // the source movement's one permitted reversal slot.
   const reversesMovementId =
-    (profile.tracking === "serial" || profile.tracking === "lot_serial") ? sourceReceipt.id : null;
+    profile.tracking === "serial" || profile.tracking === "lot_serial" ? sourceReceipt.id : null;
   const reversalReason = reversesMovementId
     ? `Vendor credit return of receipt ${reversesMovementId}`
     : null;
   // Reversal evidence is required to name an actor. A posting-effect replay
   // may be system initiated, in which case use the documented engine actor
   // rather than weakening the storage invariant with a null author.
-  const movementActorId =
-    reversesMovementId && actorId === null ? SYSTEM_ACTOR_ID : actorId;
+  const movementActorId = reversesMovementId && actorId === null ? SYSTEM_ACTOR_ID : actorId;
 
   // Moving-average stock is one blended pool. Its immutable credit-line
   // evidence still identifies the commercial receipt, while the consumption
@@ -425,42 +417,33 @@ async function returnVendorCreditInventoryLine(
   // originating receipt's own layer and therefore cannot silently substitute
   // a different purchase lot at another cost.
   const sourceReceiptMovementId =
-    profile.costingMethod === "moving_average"
-      ? null
-      : line.selection.sourceReceiptMovementId;
+    profile.costingMethod === "moving_average" ? null : line.selection.sourceReceiptMovementId;
   const selection = {
     lotId: line.selection.lotId,
     serialId: line.selection.serialId,
     sourceReceiptMovementId,
     subsidiaryId,
   };
-  const onHand = await getOnHandWith(
-    runner,
-    orgId,
-    line.itemId,
-    line.stockLocationId,
-    selection,
-  );
+  const onHand = await getOnHandWith(runner, orgId, line.itemId, line.stockLocationId, selection);
   if (cmp(line.quantity, onHand.quantity) > 0) {
     throw new InventoryError(
       `document line ${line.lineNumber} (item ${line.itemId}) cannot return ${line.quantity}; ` +
         `only ${onHand.quantity} remains on the selected receipt/layer`,
     );
   }
-  const { cost, unitCost, consumptions, shortfallQuantity } =
-    await consumeLayers(
-      runner,
-      orgId,
-      profile,
-      line.itemId,
-      line.stockLocationId,
-      line.quantity,
-      onHand,
-      onHand.unitCost,
-      selection,
-      subsidiaryId,
-      movementActorId,
-    );
+  const { cost, unitCost, consumptions, shortfallQuantity } = await consumeLayers(
+    runner,
+    orgId,
+    profile,
+    line.itemId,
+    line.stockLocationId,
+    line.quantity,
+    onHand,
+    onHand.unitCost,
+    selection,
+    subsidiaryId,
+    movementActorId,
+  );
   if (!isZero(shortfallQuantity)) {
     throw new InventoryError(
       `document line ${line.lineNumber} (item ${line.itemId}) would overconsume its selected cost layer`,
@@ -515,7 +498,9 @@ async function returnVendorCreditInventoryLine(
   });
 
   const quantity = persistReceiptMoney(line.quantity, "vendor return quantity");
-  const movement = (await runner.execute<{ id: string }>(sql`
+  const movement = (
+    await runner.execute<{ id: string }>(
+      sql`
     insert into inventory_movements
       (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id,
        lot_id, serial_id, quantity, unit_cost, total_value, document_line_id,
@@ -530,16 +515,12 @@ async function returnVendorCreditInventoryLine(
        ${`Vendor return of receipt ${line.selection.sourceReceiptMovementId}`},
        ${movementActorId}, ${movementActorId})
     returning id
-  `, "objects"))[0]!;
-  await recordConsumptions(
-    runner,
-    orgId,
-    subsidiaryId,
-    consumptions,
-    movement.id,
-    actorId,
-  );
-  if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
+  `,
+      "objects",
+    )
+  )[0]!;
+  await recordConsumptions(runner, orgId, subsidiaryId, consumptions, movement.id, actorId);
+  if (profile.tracking === "serial" || profile.tracking === "lot_serial") {
     await runner.execute(sql`
       update serials
          set status = 'returned', current_stock_location_id = null,
@@ -564,42 +545,43 @@ export async function applyVendorCreditInventoryReturns(
   subsidiaryId: string,
 ): Promise<number> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) return 0;
-  const document = (await runner.execute<{
-    kind: string;
-    party_id: string | null;
-  }>(sql`
+  const document = (
+    await runner.execute<{
+      kind: string;
+      party_id: string | null;
+    }>(
+      sql`
     select kind, party_id from documents
      where org_id = ${orgId} and id = ${documentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!document || document.kind !== "vendor_credit") {
     throw new InventoryError("inventory vendor return requires a vendor credit");
   }
   // Evidence-less historical/migration credits remain financial documents;
   // native posting preflight requires evidence on every inventory item line.
-  const lines = await loadVendorCreditInventoryReturnLines(
-    runner,
-    orgId,
-    documentId,
-    false,
-  );
+  const lines = await loadVendorCreditInventoryReturnLines(runner, orgId, documentId, false);
   for (const key of [
     ...new Set(lines.map((line) => `${line.itemId}:${line.stockLocationId}`)),
   ].sort()) {
     const separator = key.indexOf(":");
-    await lockInventoryPosition(
-      runner,
-      key.slice(0, separator),
-      key.slice(separator + 1),
-    );
+    await lockInventoryPosition(runner, key.slice(0, separator), key.slice(separator + 1));
   }
   let count = 0;
   for (const line of lines) {
-    const seen = (await runner.execute(sql`
+    const seen = (
+      await runner.execute(
+        sql`
       select 1 from inventory_movements
        where org_id = ${orgId} and document_line_id = ${line.lineId}
          and kind = 'return'
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (seen) continue;
     await returnVendorCreditInventoryLine(
       runner,
@@ -624,13 +606,6 @@ export async function applyInventoryReturnsForVendorCredit(
   subsidiaryId: string,
 ): Promise<number> {
   return db.transaction((tx) =>
-    applyVendorCreditInventoryReturns(
-      tx,
-      orgId,
-      actorId,
-      documentId,
-      date,
-      subsidiaryId,
-    ),
+    applyVendorCreditInventoryReturns(tx, orgId, actorId, documentId, date, subsidiaryId),
   );
 }

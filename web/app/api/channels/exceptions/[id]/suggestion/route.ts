@@ -5,10 +5,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { getOrgAiConfig } from "@/lib/assistant/ai-config";
 import { getModel } from "@/lib/assistant/client";
-import {
-  CommerceError,
-  suggestExceptionFix,
-} from "@openbooks/engine/commerce";
+import { CommerceError, suggestExceptionFix } from "@openbooks/engine/commerce";
 import { isUuid } from "@/lib/list-params";
 import { guardChannelOrderScope } from "@/lib/channel-scope";
 
@@ -34,13 +31,17 @@ export const GET = defineRoute({
       const ranking = await explainWithModel(gate.user.orgId, suggestion.explanation);
       return NextResponse.json({ suggestion, ranking });
     } catch (error) {
-      if (error instanceof CommerceError && error.code === "channel_order_unknown") return notFound("record");
+      if (error instanceof CommerceError && error.code === "channel_order_unknown")
+        return notFound("record");
       throw error;
     }
   },
 });
 
-async function explainWithModel(orgId: string, explanation: string): Promise<{ modelRanked: boolean; note: string | null }> {
+async function explainWithModel(
+  orgId: string,
+  explanation: string,
+): Promise<{ modelRanked: boolean; note: string | null }> {
   let model: ReturnType<typeof getModel> = null;
   try {
     model = getModel(await getOrgAiConfig(orgId), "fast");
@@ -53,7 +54,8 @@ async function explainWithModel(orgId: string, explanation: string): Promise<{ m
   try {
     const result = await generateText({
       model,
-      system: "You explain an enterprise-ERP exception fix to a store operator in one plain sentence. Never invent accounts, items or amounts; only reword the given proposal.",
+      system:
+        "You explain an enterprise-ERP exception fix to a store operator in one plain sentence. Never invent accounts, items or amounts; only reword the given proposal.",
       prompt: `Reword in one plain sentence, keeping every name and number exact: ${explanation}`,
       temperature: 0,
       abortSignal: controller.signal,

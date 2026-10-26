@@ -61,7 +61,10 @@ async function handleV1DELETE(request: Request): Promise<NextResponse> {
     if (scope !== undefined && scope !== "org" && scope !== "user") {
       throw new ApplicationError("invalid_input", 'scope must be "org" or "user"', 422);
     }
-    const result = await clearLayout(context, { route, scope: scope as "org" | "user" | undefined });
+    const result = await clearLayout(context, {
+      route,
+      scope: scope as "org" | "user" | undefined,
+    });
     return { status: 200, body: { ok: true, ...result } };
   });
 }

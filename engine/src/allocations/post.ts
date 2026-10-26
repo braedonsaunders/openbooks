@@ -124,8 +124,11 @@ export async function loadPostingBooks(runner: PostRunner, orgId: string): Promi
     is_primary: boolean;
     is_active: boolean;
     posts_gl: boolean;
-  }>(sql`
-    select id, code, is_primary, is_active, posts_gl from accounting_books where org_id = ${orgId}`, "objects");
+  }>(
+    sql`
+    select id, code, is_primary, is_active, posts_gl from accounting_books where org_id = ${orgId}`,
+    "objects",
+  );
   return r.map((b) => ({
     id: b.id,
     code: b.code,
@@ -268,7 +271,8 @@ async function measureDriver(
   if (!deps.driverResolver || !rule.version.driverId) return null;
   const driver = await loadDriver(runner, doc.orgId, rule.version.driverId);
   if (!driver) throw new PostAllocationError(`rule ${rule.rule.key} points at unknown driver`);
-  if (!driver.isActive) throw new PostAllocationError(`rule ${rule.rule.key} points at inactive driver`);
+  if (!driver.isActive)
+    throw new PostAllocationError(`rule ${rule.rule.key} points at inactive driver`);
   // The version's driver vintage resolves through the one shared mapping the
   // period runner uses: prior_period reads the period before the posting
   // period, document_date reads the document's own date — never the live
@@ -278,7 +282,8 @@ async function measureDriver(
     postingDate,
     documentDate: doc.documentDate,
   });
-  if ("refusal" in vintage) throw new PostAllocationError(`rule ${rule.rule.key}: ${vintage.refusal}`);
+  if ("refusal" in vintage)
+    throw new PostAllocationError(`rule ${rule.rule.key}: ${vintage.refusal}`);
   const vector = await deps.driverResolver.resolve({
     orgId: doc.orgId,
     // The registry stores free-text dimensions; resolution treats an
@@ -289,12 +294,17 @@ async function measureDriver(
     actorId: deps.actorId ?? null,
   });
   // A human label for the vintage, named if the vector carries no weight.
-  const asOf = "date" in vintage.asOf
-    ? vintage.asOf.date
-    : ((await runner.execute<{ label: string }>(sql`
+  const asOf =
+    "date" in vintage.asOf
+      ? vintage.asOf.date
+      : ((
+          await runner.execute<{ label: string }>(
+            sql`
         select ${canonicalPeriodLabelSql("p")} as label from accounting_periods p
-         where p.org_id = ${doc.orgId} and p.id = ${vintage.asOf.periodId}`, "objects"))[0]?.label
-        ?? null);
+         where p.org_id = ${doc.orgId} and p.id = ${vintage.asOf.periodId}`,
+            "objects",
+          )
+        )[0]?.label ?? null);
   return { vector, dimension: driver.dimension, asOf };
 }
 
@@ -312,9 +322,12 @@ async function loadDriver(
     is_active: boolean;
     source_kind: string;
     config: unknown;
-  }>(sql`
+  }>(
+    sql`
     select id, key, name, unit, dimension, is_active, source_kind, config
-      from allocation_drivers where org_id = ${orgId} and id = ${driverId} limit 1`, "objects");
+      from allocation_drivers where org_id = ${orgId} and id = ${driverId} limit 1`,
+    "objects",
+  );
   const row = r[0];
   if (!row) return null;
   const config = row.config;
@@ -391,20 +404,29 @@ async function resolveDynamicTargets(
     targetAccountId?: string | null;
   };
   const dimension = dyn.dimension;
-  if (!dimension) throw new PostAllocationError(`rule ${rule.rule.key} has a dynamic target without a dimension`);
+  if (!dimension)
+    throw new PostAllocationError(`rule ${rule.rule.key} has a dynamic target without a dimension`);
   const measured = await measureDriver(rule, deps, doc, postingDate, runner);
   if (!measured) {
-    throw new PostAllocationError(`rule ${rule.rule.key} needs a driver measurement for its dynamic targets`);
+    throw new PostAllocationError(
+      `rule ${rule.rule.key} needs a driver measurement for its dynamic targets`,
+    );
   }
   const include = new Set(dyn.include ?? []);
   const exclude = new Set(dyn.exclude ?? []);
   const minWeight = toUnits(dyn.minWeight ?? "0");
   const table = DYNAMIC_DIMENSION_TABLES[dimension];
-  if (!table) throw new PostAllocationError(`rule ${rule.rule.key} uses unsupported dynamic dimension ${dimension}`);
+  if (!table)
+    throw new PostAllocationError(
+      `rule ${rule.rule.key} uses unsupported dynamic dimension ${dimension}`,
+    );
   // Table and column names are allow-listed above; values stay parameterized.
-  const r = await runner.execute<{ id: string }>(sql`
+  const r = await runner.execute<{ id: string }>(
+    sql`
     select id from ${sql.raw(`public."${table.table}"`)}
-     where org_id = ${doc.orgId} and ${sql.raw(`"${table.activeColumn}"`)} = true`, "objects");
+     where org_id = ${doc.orgId} and ${sql.raw(`"${table.activeColumn}"`)} = true`,
+    "objects",
+  );
   const activeIds = new Set(r.map((row) => row.id));
   const coords: AllocationRuleTarget[] = [];
   const weights: WeightedTarget[] = [];
@@ -431,7 +453,8 @@ async function resolveDynamicTargets(
     });
     weights.push({ key: `dyn:${key}`, weight: value, isRemainder: false });
   }
-  if (coords.length === 0) throw new PostAllocationError(`rule ${rule.rule.key} resolved no dynamic targets`);
+  if (coords.length === 0)
+    throw new PostAllocationError(`rule ${rule.rule.key} resolved no dynamic targets`);
   return {
     coords,
     weights,
@@ -472,7 +495,10 @@ function lineageBase(
   rule: RuleInEffect,
   doc: PostableDocument,
   hash: string,
-): Omit<LineageDraft, "sourceJournalLineId" | "amount" | "residual" | "share" | "driverValue" | "driverTotal"> {
+): Omit<
+  LineageDraft,
+  "sourceJournalLineId" | "amount" | "residual" | "share" | "driverValue" | "driverTotal"
+> {
   return {
     mode: "post",
     ruleId: rule.rule.id,
@@ -497,7 +523,10 @@ function buildContributedLines(args: {
   const { rule, doc, kernelLine, sourceKernelIndex, built, books } = args;
   const version = rule.version;
   const hash = version.definitionHash;
-  if (!hash) throw new PostAllocationError(`rule ${rule.rule.key} has a published version without a definition hash`);
+  if (!hash)
+    throw new PostAllocationError(
+      `rule ${rule.rule.key} has a published version without a definition hash`,
+    );
   const base = lineageBase(rule, doc, hash);
   const lines: ContributedLineWithSource[] = [];
   const reportOnly: ReportOnlyDraft[] = [];
@@ -573,9 +602,10 @@ function buildContributedLines(args: {
     }
     // The offset leg: reclass credits the offset account (or the source
     // coordinate); net_zero_pair always credits the source coordinate.
-    const offsetAccount = version.impact === "reclass"
-      ? (version.offsetAccountId ?? kernelLine.accountId)
-      : kernelLine.accountId;
+    const offsetAccount =
+      version.impact === "reclass"
+        ? (version.offsetAccountId ?? kernelLine.accountId)
+        : kernelLine.accountId;
     const offsetTotal = neg(sum(built.apportioned.targets.map((t) => t.amount)));
     if (!isZero(offsetTotal)) {
       lines.push({
@@ -655,7 +685,9 @@ export function assertContributorBalance(
   }
   for (const group of groups.values()) {
     if (group.total !== 0n) {
-      throw new PostAllocationError(`${group.label} does not balance (sum=${fromUnits(group.total)})`);
+      throw new PostAllocationError(
+        `${group.label} does not balance (sum=${fromUnits(group.total)})`,
+      );
     }
   }
 }
@@ -676,15 +708,16 @@ export async function collectPostContributions(
 
   let postRules: RuleInEffect[];
   try {
-    postRules = deps.rulesOverride ??
+    postRules =
+      deps.rulesOverride ??
       (await listRulesInEffect({ orgId: doc.orgId, mode: "post", onDate: opts.postingDate }));
   } catch (error) {
     if (error instanceof AllocationRuleError) throw new PostAllocationError(error.message);
     throw error;
   }
   if (postRules.length === 0) return empty;
-  const resolveAccountGroup = deps.resolveAccountGroup ??
-    (await makeAccountGroupResolver(doc.orgId, postRules));
+  const resolveAccountGroup =
+    deps.resolveAccountGroup ?? (await makeAccountGroupResolver(doc.orgId, postRules));
   const books = await loadPostingBooks(runner, doc.orgId);
 
   const lines: ContributedLineWithSource[] = [];
@@ -712,7 +745,12 @@ export async function collectPostContributions(
     const winner = selectRule(postRules, coordinate, { resolveAccountGroup });
     if (!winner) continue;
     const resolved = await resolveWeights(winner, deps, doc, opts.postingDate, runner);
-    const apportioned = apportionForRule(kernelLine.amount, resolved.weights, winner, resolved.driverAsOf);
+    const apportioned = apportionForRule(
+      kernelLine.amount,
+      resolved.weights,
+      winner,
+      resolved.driverAsOf,
+    );
     const ruleBooks = resolveRuleBooks(winner, books);
     const built = buildContributedLines({
       rule: winner,
@@ -772,11 +810,20 @@ function apportionForRule(
   driverAsOf?: string | null,
 ): ApportionResult {
   try {
-    return apportionTargets(total, weights, rule.version.residualPolicy, rule.version.residualTargetId);
+    return apportionTargets(
+      total,
+      weights,
+      rule.version.residualPolicy,
+      rule.version.residualTargetId,
+    );
   } catch (error) {
     // All-zero weights refuse here exactly as entry explosion and period runs
     // refuse: posting never splits a line equally over an unmeasured basis.
-    if (error instanceof AllocationApportionError && error.code === "no_driver_weight" && driverAsOf) {
+    if (
+      error instanceof AllocationApportionError &&
+      error.code === "no_driver_weight" &&
+      driverAsOf
+    ) {
       throw new PostAllocationError(
         `rule ${rule.rule.key}: its driver measured no weight for any target for ${driverAsOf}, so there is no basis to apportion ${total} — record the driver values for that month, or change the rule's basis or target weights`,
       );
@@ -863,7 +910,9 @@ export function buildNetZeroPairLines(args: {
   }
   const hash = version.definitionHash;
   if (!hash) {
-    throw new PostAllocationError(`rule ${rule.rule.key} has a published version without a definition hash`);
+    throw new PostAllocationError(
+      `rule ${rule.rule.key} has a published version without a definition hash`,
+    );
   }
   if (isZero(args.total)) {
     throw new PostAllocationError(`rule ${rule.rule.key} has nothing to pair (zero total)`);
@@ -1022,7 +1071,13 @@ export function __testBuildContributedLines(args: {
     doc: args.doc,
     kernelLine: args.kernelLine,
     sourceKernelIndex: args.sourceKernelIndex,
-    built: { coords: args.coords, weights: args.weights, driverId: null, driverVector: null, apportioned },
+    built: {
+      coords: args.coords,
+      weights: args.weights,
+      driverId: null,
+      driverVector: null,
+      apportioned,
+    },
     books: args.books,
   });
 }

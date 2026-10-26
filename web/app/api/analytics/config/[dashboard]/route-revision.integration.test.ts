@@ -12,10 +12,14 @@ import { sql } from "drizzle-orm";
 
 const stateKey = Symbol.for("openbooks.analytics-config-revision-integration");
 interface RouteState {
-  authz: { user: { orgId: string; id: string; roles: { key: string }[] }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } | null;
+  authz: {
+    user: { orgId: string; id: string; roles: { key: string }[] };
+    permissions: Set<string>;
+    allowedSubsidiaryIds: Set<string> | null;
+  } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const realAuthzUrl = new URL("../../../../../lib/authz.ts", import.meta.url).href;
 const mockAuthz = `
@@ -48,7 +52,8 @@ const hooks = registerHooks({
           context.parentURL?.includes("analytics/config/%5Bdashboard%5D/route") === true)) ||
       // The route resolves each dashboard's Company Features gate through the
       // analytics catalog's availability check.
-      (specifier === "../features" && context.parentURL?.includes("/lib/analytics/dashboard-access") === true)
+      (specifier === "../features" &&
+        context.parentURL?.includes("/lib/analytics/dashboard-access") === true)
     ) {
       return { url: "mock:analytics-config-features", shortCircuit: true };
     }
@@ -69,9 +74,7 @@ const routeUrl = "./route.ts?analytics-config-revision-integration";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 const DASHBOARD = "sentinel";
 // Mirrors the sentinel spec defaults (config-spec.ts): whole-object saves
@@ -107,7 +110,11 @@ async function seed(): Promise<{ orgId: string; actorId: string }> {
   // Dashboard config is an org-wide write: the route demands explicit null
   // (unrestricted), and an absent scope fails closed.
   // An administrator: every dashboard's grants and the Setup permission.
-  routeState.authz = { user: { orgId: org.orgId, id: actorId, roles: [] }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+  routeState.authz = {
+    user: { orgId: org.orgId, id: actorId, roles: [] },
+    permissions: new Set(["*"]),
+    allowedSubsidiaryIds: null,
+  };
   return { orgId: org.orgId, actorId };
 }
 
@@ -131,228 +138,220 @@ async function storedSettings(
   orgId: string,
   dashboard: string = DASHBOARD,
 ): Promise<{ values: unknown; revision: number }> {
-  const r = await db.execute<{ values: unknown; revision: number }>(sql`
+  const r = await db.execute<{ values: unknown; revision: number }>(
+    sql`
     select settings -> 'analytics' -> ${dashboard} as values,
            coalesce((settings -> 'analytics' ->> ${`${dashboard}Revision`})::int, 0) as revision
       from orgs where id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return { values: r[0]?.values ?? null, revision: Number(r[0]?.revision ?? 0) };
 }
 
-const { ANALYTICS_CONFIG } = (await import("../../../../../lib/analytics/config-spec.ts")) as typeof import("../../../../../lib/analytics/config-spec.ts");
-test(
-  "GET exposes the revision alongside the effective values",
-  async () => {
-    await seed();
-    const res = await GET(getRequest(), params());
-    assert.equal(res.status, 200);
-    const body = (await res.json()) as { values: unknown; revision: unknown };
-    assert.deepEqual(body.values, DEFAULTS);
-    assert.equal(body.revision, 0);
-  },
-);
+const { ANALYTICS_CONFIG } =
+  (await import("../../../../../lib/analytics/config-spec.ts")) as typeof import("../../../../../lib/analytics/config-spec.ts");
+test("GET exposes the revision alongside the effective values", async () => {
+  await seed();
+  const res = await GET(getRequest(), params());
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { values: unknown; revision: unknown };
+  assert.deepEqual(body.values, DEFAULTS);
+  assert.equal(body.revision, 0);
+});
 
-test(
-  "concurrent edits from one base: the second 409s and nothing is lost",
-  async () => {
-    const f = await seed();
+test("concurrent edits from one base: the second 409s and nothing is lost", async () => {
+  const f = await seed();
 
-    // Admin A changes the duplicate window and commits from revision 0.
-    const adminA = await PUT(
-      putRequest({ expectedRevision: 0, values: { ...DEFAULTS, duplicateDays: 21 } }),
-      params(),
-    );
-    assert.equal(adminA.status, 200);
-    assert.equal(((await adminA.json()) as { revision: number }).revision, 1);
+  // Admin A changes the duplicate window and commits from revision 0.
+  const adminA = await PUT(
+    putRequest({ expectedRevision: 0, values: { ...DEFAULTS, duplicateDays: 21 } }),
+    params(),
+  );
+  assert.equal(adminA.status, 200);
+  assert.equal(((await adminA.json()) as { revision: number }).revision, 1);
 
-    // Admin B edited a different threshold from the same base version. Its
-    // whole-object write must not restore A's threshold to the stale value.
-    const adminB = await PUT(
-      putRequest({ expectedRevision: 0, values: { ...DEFAULTS, duplicateMinAmount: "250.0000" } }),
-      params(),
-    );
-    assert.equal(adminB.status, 409);
-    const conflict = (await adminB.json()) as {
-      error: string;
-      revision: number;
-      values: Record<string, number | string>;
+  // Admin B edited a different threshold from the same base version. Its
+  // whole-object write must not restore A's threshold to the stale value.
+  const adminB = await PUT(
+    putRequest({ expectedRevision: 0, values: { ...DEFAULTS, duplicateMinAmount: "250.0000" } }),
+    params(),
+  );
+  assert.equal(adminB.status, 409);
+  const conflict = (await adminB.json()) as {
+    error: string;
+    revision: number;
+    values: Record<string, number | string>;
+  };
+  assert.match(conflict.error, /changed after you opened it/);
+  assert.equal(conflict.revision, 1);
+  assert.equal(conflict.values.duplicateDays, 21);
+
+  // Nothing is lost: the stored row still holds A's committed change.
+  assert.deepEqual((await storedSettings(f.orgId)).values, { ...DEFAULTS, duplicateDays: 21 });
+
+  // B reapplies onto the live revision and commits.
+  const retry = await PUT(
+    putRequest({
+      expectedRevision: conflict.revision,
+      values: { ...conflict.values, duplicateMinAmount: "250.0000" },
+    }),
+    params(),
+  );
+  assert.equal(retry.status, 200);
+  assert.equal(((await retry.json()) as { revision: number }).revision, 2);
+  assert.deepEqual((await storedSettings(f.orgId)).values, {
+    ...DEFAULTS,
+    duplicateDays: 21,
+    duplicateMinAmount: "250.0000",
+  });
+});
+
+test("a successful update writes one audit row with actor, before, and after", async () => {
+  const f = await seed();
+  const res = await PUT(
+    putRequest({ expectedRevision: 0, values: { ...DEFAULTS, duplicateDays: 21 } }),
+    params(),
+  );
+  assert.equal(res.status, 200);
+
+  const audits = await db.execute<{
+    actor: string;
+    action: string;
+    changes: {
+      before: { analytics: Record<string, unknown> };
+      after: { analytics: Record<string, unknown> };
     };
-    assert.match(conflict.error, /changed after you opened it/);
-    assert.equal(conflict.revision, 1);
-    assert.equal(conflict.values.duplicateDays, 21);
-
-    // Nothing is lost: the stored row still holds A's committed change.
-    assert.deepEqual((await storedSettings(f.orgId)).values, { ...DEFAULTS, duplicateDays: 21 });
-
-    // B reapplies onto the live revision and commits.
-    const retry = await PUT(
-      putRequest({
-        expectedRevision: conflict.revision,
-        values: { ...conflict.values, duplicateMinAmount: "250.0000" },
-      }),
-      params(),
-    );
-    assert.equal(retry.status, 200);
-    assert.equal(((await retry.json()) as { revision: number }).revision, 2);
-    assert.deepEqual((await storedSettings(f.orgId)).values, {
-      ...DEFAULTS,
-      duplicateDays: 21,
-      duplicateMinAmount: "250.0000",
-    });
-  },
-);
-
-test(
-  "a successful update writes one audit row with actor, before, and after",
-  async () => {
-    const f = await seed();
-    const res = await PUT(
-      putRequest({ expectedRevision: 0, values: { ...DEFAULTS, duplicateDays: 21 } }),
-      params(),
-    );
-    assert.equal(res.status, 200);
-
-    const audits = await db.execute<{
-      actor: string;
-      action: string;
-      changes: {
-        before: { analytics: Record<string, unknown> };
-        after: { analytics: Record<string, unknown> };
-      };
-    }>(sql`
+  }>(
+    sql`
       select actor_id as actor, action, changes from audit_log
        where org_id = ${f.orgId} and table_name = 'orgs' and row_id = ${f.orgId}
        order by id desc limit 5
-    `, "objects");
-    assert.equal(audits.length, 1, "exactly one audit row covers the update");
-    const audit = audits[0]!;
-    assert.equal(audit.actor, f.actorId);
-    assert.equal(audit.action, "update");
-    assert.deepEqual(audit.changes.before.analytics[DASHBOARD], {});
-    assert.equal(audit.changes.before.analytics[`${DASHBOARD}Revision`], 0);
-    assert.deepEqual(audit.changes.after.analytics[DASHBOARD], { ...DEFAULTS, duplicateDays: 21 });
-    assert.equal(audit.changes.after.analytics[`${DASHBOARD}Revision`], 1);
-  },
-);
+    `,
+    "objects",
+  );
+  assert.equal(audits.length, 1, "exactly one audit row covers the update");
+  const audit = audits[0]!;
+  assert.equal(audit.actor, f.actorId);
+  assert.equal(audit.action, "update");
+  assert.deepEqual(audit.changes.before.analytics[DASHBOARD], {});
+  assert.equal(audit.changes.before.analytics[`${DASHBOARD}Revision`], 0);
+  assert.deepEqual(audit.changes.after.analytics[DASHBOARD], { ...DEFAULTS, duplicateDays: 21 });
+  assert.equal(audit.changes.after.analytics[`${DASHBOARD}Revision`], 1);
+});
 
-test(
-  "a missing revision is a 409 naming the remedy, never a blind overwrite",
-  async () => {
-    const f = await seed();
-    const res = await PUT(putRequest({ values: DEFAULTS }), params());
-    assert.equal(res.status, 409);
-    assert.match(((await res.json()) as { error: string }).error, /revision is required/);
-    assert.equal((await storedSettings(f.orgId)).revision, 0);
-  },
-);
+test("a missing revision is a 409 naming the remedy, never a blind overwrite", async () => {
+  const f = await seed();
+  const res = await PUT(putRequest({ values: DEFAULTS }), params());
+  assert.equal(res.status, 409);
+  assert.match(((await res.json()) as { error: string }).error, /revision is required/);
+  assert.equal((await storedSettings(f.orgId)).revision, 0);
+});
 
 // Whole-object saves must carry every declared threshold, and money thresholds
 // travel as decimal text, so these fixtures start from the spec's own defaults.
 const UTILIZATION = "utilization";
-const UTILIZATION_DEFAULTS = { ...ANALYTICS_CONFIG.utilization.defaults, costSpikeThreshold: "1000" };
+const UTILIZATION_DEFAULTS = {
+  ...ANALYTICS_CONFIG.utilization.defaults,
+  costSpikeThreshold: "1000",
+};
 const CASHFLOW_DEFAULTS = ANALYTICS_CONFIG.cashflow.defaults;
 
-test(
-  "a non-numeric threshold is a named 422 with nothing saved",
-  async () => {
-    const f = await seed();
-    const res = await PUT(
-      putRequest(
-        { expectedRevision: 0, values: { ...UTILIZATION_DEFAULTS, costSpikeThreshold: "bad" } },
-        UTILIZATION,
-      ),
-      params(UTILIZATION),
-    );
-    assert.equal(res.status, 422);
-    assert.match(((await res.json()) as { error: string }).error, /costSpikeThreshold/);
-    assert.deepEqual(await storedSettings(f.orgId, UTILIZATION), { values: null, revision: 0 });
-  },
-);
+test("a non-numeric threshold is a named 422 with nothing saved", async () => {
+  const f = await seed();
+  const res = await PUT(
+    putRequest(
+      { expectedRevision: 0, values: { ...UTILIZATION_DEFAULTS, costSpikeThreshold: "bad" } },
+      UTILIZATION,
+    ),
+    params(UTILIZATION),
+  );
+  assert.equal(res.status, 422);
+  assert.match(((await res.json()) as { error: string }).error, /costSpikeThreshold/);
+  assert.deepEqual(await storedSettings(f.orgId, UTILIZATION), { values: null, revision: 0 });
+});
 
-test(
-  "an out-of-range threshold is a named 422 with nothing saved",
-  async () => {
-    const f = await seed();
-    const res = await PUT(
-      putRequest(
-        { expectedRevision: 0, values: { ...UTILIZATION_DEFAULTS, targetBillablePct: 999 } },
-        UTILIZATION,
-      ),
-      params(UTILIZATION),
-    );
-    assert.equal(res.status, 422);
-    const error = ((await res.json()) as { error: string }).error;
-    assert.match(error, /targetBillablePct/);
-    assert.match(error, /between 10 and 100/);
-    assert.deepEqual(await storedSettings(f.orgId, UTILIZATION), { values: null, revision: 0 });
-  },
-);
+test("an out-of-range threshold is a named 422 with nothing saved", async () => {
+  const f = await seed();
+  const res = await PUT(
+    putRequest(
+      { expectedRevision: 0, values: { ...UTILIZATION_DEFAULTS, targetBillablePct: 999 } },
+      UTILIZATION,
+    ),
+    params(UTILIZATION),
+  );
+  assert.equal(res.status, 422);
+  const error = ((await res.json()) as { error: string }).error;
+  assert.match(error, /targetBillablePct/);
+  assert.match(error, /between 10 and 100/);
+  assert.deepEqual(await storedSettings(f.orgId, UTILIZATION), { values: null, revision: 0 });
+});
 
-test(
-  "unknown and missing thresholds are named 422s with nothing saved",
-  async () => {
-    const f = await seed();
-    const unknown = await PUT(
-      putRequest(
-        { expectedRevision: 0, values: { ...UTILIZATION_DEFAULTS, bonusRate: 5 } },
-        UTILIZATION,
-      ),
-      params(UTILIZATION),
-    );
-    assert.equal(unknown.status, 422);
-    assert.match(((await unknown.json()) as { error: string }).error, /unknown threshold 'bonusRate'/);
+test("unknown and missing thresholds are named 422s with nothing saved", async () => {
+  const f = await seed();
+  const unknown = await PUT(
+    putRequest(
+      { expectedRevision: 0, values: { ...UTILIZATION_DEFAULTS, bonusRate: 5 } },
+      UTILIZATION,
+    ),
+    params(UTILIZATION),
+  );
+  assert.equal(unknown.status, 422);
+  assert.match(
+    ((await unknown.json()) as { error: string }).error,
+    /unknown threshold 'bonusRate'/,
+  );
 
-    const { minHours: _dropped, ...partial } = UTILIZATION_DEFAULTS;
-    const missing = await PUT(
-      putRequest({ expectedRevision: 0, values: partial }, UTILIZATION),
-      params(UTILIZATION),
-    );
-    assert.equal(missing.status, 422);
-    assert.match(((await missing.json()) as { error: string }).error, /minHours/);
-    assert.deepEqual(await storedSettings(f.orgId, UTILIZATION), { values: null, revision: 0 });
-  },
-);
+  const { minHours: _dropped, ...partial } = UTILIZATION_DEFAULTS;
+  const missing = await PUT(
+    putRequest({ expectedRevision: 0, values: partial }, UTILIZATION),
+    params(UTILIZATION),
+  );
+  assert.equal(missing.status, 422);
+  assert.match(((await missing.json()) as { error: string }).error, /minHours/);
+  assert.deepEqual(await storedSettings(f.orgId, UTILIZATION), { values: null, revision: 0 });
+});
 
-test(
-  "ledger-money thresholds validate exactly: bad cap and bad flag refuse, a good cap normalizes",
-  async () => {
-    const f = await seed();
-    const badCap = await PUT(
-      putRequest(
-        { expectedRevision: 0, values: { weeklyApCap: "bad", restrictToSafe: 0 } },
-        "cashflow",
-      ),
-      params("cashflow"),
-    );
-    assert.equal(badCap.status, 422);
-    assert.match(((await badCap.json()) as { error: string }).error, /weeklyApCap/);
+test("ledger-money thresholds validate exactly: bad cap and bad flag refuse, a good cap normalizes", async () => {
+  const f = await seed();
+  const badCap = await PUT(
+    putRequest(
+      { expectedRevision: 0, values: { weeklyApCap: "bad", restrictToSafe: 0 } },
+      "cashflow",
+    ),
+    params("cashflow"),
+  );
+  assert.equal(badCap.status, 422);
+  assert.match(((await badCap.json()) as { error: string }).error, /weeklyApCap/);
 
-    const badFlag = await PUT(
-      putRequest(
-        { expectedRevision: 0, values: { weeklyApCap: "0.0000", restrictToSafe: 2 } },
-        "cashflow",
-      ),
-      params("cashflow"),
-    );
-    assert.equal(badFlag.status, 422);
-    assert.match(((await badFlag.json()) as { error: string }).error, /restrictToSafe/);
-    assert.deepEqual(await storedSettings(f.orgId, "cashflow"), { values: null, revision: 0 });
+  const badFlag = await PUT(
+    putRequest(
+      { expectedRevision: 0, values: { weeklyApCap: "0.0000", restrictToSafe: 2 } },
+      "cashflow",
+    ),
+    params("cashflow"),
+  );
+  assert.equal(badFlag.status, 422);
+  assert.match(((await badFlag.json()) as { error: string }).error, /restrictToSafe/);
+  assert.deepEqual(await storedSettings(f.orgId, "cashflow"), { values: null, revision: 0 });
 
-    const good = await PUT(
-      putRequest(
-        { expectedRevision: 0, values: { ...CASHFLOW_DEFAULTS, weeklyApCap: "5000", restrictToSafe: 1 } },
-        "cashflow",
-      ),
-      params("cashflow"),
-    );
-    assert.equal(good.status, 200);
-    assert.deepEqual((await storedSettings(f.orgId, "cashflow")).values, {
-      ...CASHFLOW_DEFAULTS,
-      weeklyApCap: "5000.0000",
-      restrictToSafe: 1,
-    });
-  },
-);
+  const good = await PUT(
+    putRequest(
+      {
+        expectedRevision: 0,
+        values: { ...CASHFLOW_DEFAULTS, weeklyApCap: "5000", restrictToSafe: 1 },
+      },
+      "cashflow",
+    ),
+    params("cashflow"),
+  );
+  assert.equal(good.status, 200);
+  assert.deepEqual((await storedSettings(f.orgId, "cashflow")).values, {
+    ...CASHFLOW_DEFAULTS,
+    weeklyApCap: "5000.0000",
+    restrictToSafe: 1,
+  });
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

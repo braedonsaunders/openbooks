@@ -36,11 +36,14 @@ async function postBankJournal(
       values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`DEP-${entryId.slice(0, 8)}`}, ${date},
               ${org.periodId}, 'Deposit', 'draft', 'manual', ${actorId}, ${actorId})`);
     const offset = amount.startsWith("-") ? amount.slice(1) : `-${amount}`;
-    const [bankLine] = await tx.execute<{ id: string }>(sql`
+    const [bankLine] = await tx.execute<{ id: string }>(
+      sql`
       insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
       values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1, 'deposit'),
              (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offset}, 'CAD', ${offset}, 1, 'deposit')
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     await tx.execute(sql`
       update journal_entries set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
        where id = ${entryId} and org_id = ${org.orgId}`);
@@ -83,8 +86,11 @@ async function signedSession(
     },
     ctx,
   );
-  const [line] = await db.execute<{ id: string }>(sql`
-    select id from bank_statement_lines where org_id = ${org.orgId} and statement_id = ${imported.statementId!}`, "objects");
+  const [line] = await db.execute<{ id: string }>(
+    sql`
+    select id from bank_statement_lines where org_id = ${org.orgId} and statement_id = ${imported.statementId!}`,
+    "objects",
+  );
   const recon = await startReconciliation(
     {
       accountId: org.accounts.bank,
@@ -138,11 +144,7 @@ test(
         reason: "Month-end close",
       });
       await assert.rejects(
-        withdrawReconciliationSignOff(
-          reconId,
-          "Late deposit belongs in this period",
-          ctx,
-        ),
+        withdrawReconciliationSignOff(reconId, "Late deposit belongs in this period", ctx),
         /Banking is closed for P07 FY2026 — request a controlled reopen of Banking/,
       );
       await setPeriodLockState({
@@ -161,34 +163,40 @@ test(
         ctx,
       );
       assert.equal(result.journalLinesReleased, 1);
-      assert.equal(
-        result.status,
-        "balanced",
-        "matches survive, so the session still foots",
-      );
-      const session = (await db.execute<{ status: string; signed_off_at: string | null }>(sql`
-      select status, signed_off_at::text from reconciliations where id = ${reconId}`, "objects"))[0]!;
+      assert.equal(result.status, "balanced", "matches survive, so the session still foots");
+      const session = (
+        await db.execute<{ status: string; signed_off_at: string | null }>(
+          sql`
+      select status, signed_off_at::text from reconciliations where id = ${reconId}`,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(session, { status: "balanced", signed_off_at: null });
-      const line = (await db.execute<{
+      const line = (
+        await db.execute<{
           reconciled_at: string | null;
           reconciliation_id: string | null;
-        }>(sql`
-      select reconciled_at::text, reconciliation_id::text from journal_lines where id = ${journal}`, "objects"))[0]!;
+        }>(
+          sql`
+      select reconciled_at::text, reconciliation_id::text from journal_lines where id = ${journal}`,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(line, { reconciled_at: null, reconciliation_id: null });
       const audit = await db.execute<{
-          changes: {
-            operation: string;
-            reason: string;
-            before: { status: string };
-          };
-        }>(sql`
+        changes: {
+          operation: string;
+          reason: string;
+          before: { status: string };
+        };
+      }>(
+        sql`
       select changes from audit_log where org_id = ${org.orgId} and table_name = 'reconciliations' and row_id = ${reconId}
-       and changes->>'operation' = 'withdraw_sign_off'`, "objects");
-      assert.equal(audit.length, 1);
-      assert.equal(
-        audit[0]!.changes.reason,
-        "Late deposit belongs in this period",
+       and changes->>'operation' = 'withdraw_sign_off'`,
+        "objects",
       );
+      assert.equal(audit.length, 1);
+      assert.equal(audit[0]!.changes.reason, "Late deposit belongs in this period");
       assert.equal(audit[0]!.changes.before.status, "signed_off");
 
       // Re-signing restamps the same evidence.
@@ -199,9 +207,7 @@ test(
         "The zero-gate submission must complete its native outcome",
       );
       if (resigned.status !== "signed_off")
-        throw new Error(
-          "The zero-gate submission unexpectedly awaits approval.",
-        );
+        throw new Error("The zero-gate submission unexpectedly awaits approval.");
       assert.equal(resigned.journalLinesReconciled, 1);
 
       // An unsigned session building on the sign-off must go first.
@@ -217,11 +223,7 @@ test(
         ctx,
       );
       await assert.rejects(
-        withdrawReconciliationSignOff(
-          reconId,
-          "Late deposit belongs in this period",
-          ctx,
-        ),
+        withdrawReconciliationSignOff(reconId, "Late deposit belongs in this period", ctx),
         /Discard the open reconciliation through/,
       );
     } finally {
@@ -250,8 +252,7 @@ test(
         db.execute(
           sql`update journal_lines set reconciled_at = null, reconciliation_id = null where id = ${journal}`,
         ),
-        (error: unknown) =>
-          errorChainMatches(error, /reconciliation evidence is append-only/),
+        (error: unknown) => errorChainMatches(error, /reconciliation evidence is append-only/),
       );
     } finally {
       await dropScratchOrg(org.orgId);

@@ -6,7 +6,11 @@ import { createPaymentDocument, updateDraftPayment } from "../../payments/paymen
 import { postPaymentWithApplications } from "../../payments/payment-posting.ts";
 import { sameCurrencyAllocation, type AllocationInput } from "../../payments/settlement-policy.ts";
 import { sum } from "../../money/money.ts";
-import { createDraftDocument, postDraftDocument, releaseDraftIfUngated } from "../../sim/activities/documents.ts";
+import {
+  createDraftDocument,
+  postDraftDocument,
+  releaseDraftIfUngated,
+} from "../../sim/activities/documents.ts";
 import type { SimOrg } from "../../sim/world.ts";
 import type { CorpusEvent, CommercialEvent, JournalEvent, PaymentEvent } from "./types.ts";
 
@@ -67,8 +71,18 @@ export async function replayEvent(
   );
 }
 
-export async function replayEvents(world: SimOrg, events: CorpusEvent[], opts: ReplayOptions): Promise<ReplayResult> {
-  const result: ReplayResult = { posted: 0, paymentsApplied: 0, journals: 0, failures: [], docIdByEvent: new Map() };
+export async function replayEvents(
+  world: SimOrg,
+  events: CorpusEvent[],
+  opts: ReplayOptions,
+): Promise<ReplayResult> {
+  const result: ReplayResult = {
+    posted: 0,
+    paymentsApplied: 0,
+    journals: 0,
+    failures: [],
+    docIdByEvent: new Map(),
+  };
   const failFast = opts.failFast ?? true;
 
   for (const event of events) {
@@ -106,7 +120,11 @@ function resolveProject(opts: ReplayOptions, key: string | null | undefined): st
   return id;
 }
 
-async function replayJournal(world: SimOrg, event: JournalEvent, opts: ReplayOptions): Promise<void> {
+async function replayJournal(
+  world: SimOrg,
+  event: JournalEvent,
+  opts: ReplayOptions,
+): Promise<void> {
   await createScriptJournal(
     world.orgId,
     world.actors.controller,
@@ -125,7 +143,11 @@ async function replayJournal(world: SimOrg, event: JournalEvent, opts: ReplayOpt
   );
 }
 
-async function replayCommercial(world: SimOrg, event: CommercialEvent, opts: ReplayOptions): Promise<string> {
+async function replayCommercial(
+  world: SimOrg,
+  event: CommercialEvent,
+  opts: ReplayOptions,
+): Promise<string> {
   const { documentId } = await createDraftDocument(world, {
     kind: event.kind,
     documentNumber: event.id,
@@ -149,12 +171,17 @@ async function replayCommercial(world: SimOrg, event: CommercialEvent, opts: Rep
 
 /** The control-side open-item line a payment allocation targets. */
 async function openItemLine(world: SimOrg, documentId: string): Promise<string> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select l.id from journal_lines l
       join documents d on d.posted_entry_id = l.entry_id
-     where d.id = ${documentId} and d.org_id = ${world.orgId} and l.is_open_item`, "objects"));
+     where d.id = ${documentId} and d.org_id = ${world.orgId} and l.is_open_item`,
+    "objects",
+  );
   if (rows.length !== 1) {
-    throw new Error(`expected exactly one open-item line for document ${documentId}, found ${rows.length}`);
+    throw new Error(
+      `expected exactly one open-item line for document ${documentId}, found ${rows.length}`,
+    );
   }
   return rows[0]!.id;
 }
@@ -168,7 +195,8 @@ async function replayPayment(
   const allocations: AllocationInput[] = [];
   for (const alloc of event.allocations) {
     const docId = docIdByEvent.get(alloc.event);
-    if (!docId) throw new Error(`payment ${event.id} allocates to unknown/unposted event "${alloc.event}"`);
+    if (!docId)
+      throw new Error(`payment ${event.id} allocates to unknown/unposted event "${alloc.event}"`);
     allocations.push(sameCurrencyAllocation(await openItemLine(world, docId), alloc.amount));
   }
   const actor = event.kind === "vendor_payment" ? world.actors.apClerk : world.actors.arClerk;
@@ -182,9 +210,16 @@ async function replayPayment(
     bankAccountId: world.accounts.bank,
     documentDate: event.date,
     currency: world.currency,
-    memo: event.memo ?? `Corpus payment ${event.id} (${sum(event.allocations.map((a) => a.amount))})`,
+    memo:
+      event.memo ?? `Corpus payment ${event.id} (${sum(event.allocations.map((a) => a.amount))})`,
   });
-  await updateDraftPayment(payment.id, { allocations, bankAccountId: world.accounts.bank }, actor, world.orgId, { allowedSubsidiaryIds: null });
+  await updateDraftPayment(
+    payment.id,
+    { allocations, bankAccountId: world.accounts.bank },
+    actor,
+    world.orgId,
+    { allowedSubsidiaryIds: null },
+  );
   await releaseDraftIfUngated(world, payment.id, actor);
   await postPaymentWithApplications(payment.id, undefined, actor);
 }

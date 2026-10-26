@@ -1,13 +1,17 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
+import "server-only";
+import { sql } from "drizzle-orm";
+import {
+  addCalendarDays,
+  businessToday,
+  weekStartsEndingOn,
+} from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
 import { BANK_KINDS } from "../document-kinds.ts";
-import { bankAccountMembership } from '../banking-accounts'
-import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
-import { statementBookExpr } from '../gl-summary'
-import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
-import { add, cmp, mulDecimal, neg, sum, toUnits } from '@openbooks/engine/money/money'
+import { bankAccountMembership } from "../banking-accounts";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
+import { statementBookExpr } from "../gl-summary";
+import { lineFunctional, presentationCurrency, presentationRates } from "../fx-presentation";
+import { add, cmp, mulDecimal, neg, sum, toUnits } from "@openbooks/engine/money/money";
 
 /**
  * Banking module home — one light round trip for the workspace landing
@@ -18,49 +22,49 @@ import { add, cmp, mulDecimal, neg, sum, toUnits } from '@openbooks/engine/money
  */
 
 export interface BankingAccountRow {
-  id: string
-  number: string | null
-  name: string
-  type: string // 'asset_bank' or a statement-capable liability type
-  currency: string | null
-  balance: string
-  unmatched: number
-  openReconciliationId: string | null
-  reconciledThrough: string | null
-  lastStatementDate: string | null
-  lastImportedAt: string | null
+  id: string;
+  number: string | null;
+  name: string;
+  type: string; // 'asset_bank' or a statement-capable liability type
+  currency: string | null;
+  balance: string;
+  unmatched: number;
+  openReconciliationId: string | null;
+  reconciledThrough: string | null;
+  lastStatementDate: string | null;
+  lastImportedAt: string | null;
   /** Weekly end-of-week balances, oldest → newest (13 points incl. current). */
-  spark: number[]
+  spark: number[];
 }
 
 export interface BankingHome {
-  accounts: BankingAccountRow[]
-  totalCash: string
-  totalCards: string
-  unmatchedLines: number
-  openRecons: number
+  accounts: BankingAccountRow[];
+  totalCash: string;
+  totalCards: string;
+  unmatchedLines: number;
+  openRecons: number;
   /** Net posted flow across bank accounts over the trailing 7 days. */
-  netFlow7d: string
+  netFlow7d: string;
   /** Org cash (asset_bank) end-of-week balances, oldest → newest. */
-  trend: { weekStart: string; balance: string }[]
+  trend: { weekStart: string; balance: string }[];
   badges: {
-    activeRules: number
-    totalRules: number
-    statements: number
-    lastImportedAt: string | null
-    txns7d: number
-  }
+    activeRules: number;
+    totalRules: number;
+    statements: number;
+    lastImportedAt: string | null;
+    txns7d: number;
+  };
 }
 
-const TREND_WEEKS = 13
+const TREND_WEEKS = 13;
 
 /** Shared accounts are visible within a nonempty entity view. An explicitly
  * empty view has no account visibility, including accounts shared by entities. */
 function bankAccountScope(subIds: string[] | undefined) {
-  if (subIds === undefined) return sql``
-  if (subIds.length === 0) return sql` and false`
-  const ids = sql`${`{${subIds.join(',')}}`}::uuid[]`
-  return sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${ids}))`
+  if (subIds === undefined) return sql``;
+  if (subIds.length === 0) return sql` and false`;
+  const ids = sql`${`{${subIds.join(",")}}`}::uuid[]`;
+  return sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${ids}))`;
 }
 
 /**
@@ -78,11 +82,12 @@ async function bankRosterRows(
   // Active subsidiary view: the roster keeps only accounts whose restriction
   // intersects it (null = shared). Book scope: the primary posting book,
   // like bank reconciliation itself.
-  const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
-  const summaryScope = subArr ? sql` and g.subsidiary_id = any(${subArr})` : sql``
-  const membership = bankAccountMembership()
-  const acctScope = bankAccountScope(subIds)
-  const rows = await db.execute(sql`
+  const subArr = subIds !== undefined ? sql`${`{${subIds.join(",")}}`}::uuid[]` : null;
+  const summaryScope = subArr ? sql` and g.subsidiary_id = any(${subArr})` : sql``;
+  const membership = bankAccountMembership();
+  const acctScope = bankAccountScope(subIds);
+  const rows = await db.execute(
+    sql`
       select a.id, a.number, a.name, a.type, a.currency_restriction,
              bal.func as func,
              coalesce(bal.balance, 0) as balance,
@@ -120,8 +125,10 @@ async function bankRosterRows(
            order by s.imported_at desc limit 1) st on true
        where a.org_id = ${orgId} and ${membership}${acctScope}
        order by a.type, coalesce(bal.balance, 0) desc
-    `, 'objects')
-  return rows as Record<string, unknown>[]
+    `,
+    "objects",
+  );
+  return rows as Record<string, unknown>[];
 }
 
 /**
@@ -130,22 +137,22 @@ async function bankRosterRows(
  * and reconciliation history are unnecessary for this count; missing exchange
  * rates cannot refuse a tile that shows no currency.
  */
-export async function bankingReconCount(
-  orgId: string,
-  subIds?: string[],
-): Promise<number> {
-  const acctScope = bankAccountScope(subIds)
-  const result = await db.execute<{ n: string }>(sql`
+export async function bankingReconCount(orgId: string, subIds?: string[]): Promise<number> {
+  const acctScope = bankAccountScope(subIds);
+  const result = await db.execute<{ n: string }>(
+    sql`
     select count(*) as n
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
       join accounts a on a.id = s.account_id and a.org_id = s.org_id
      where a.org_id = ${orgId} and l.match_status = 'unmatched'
        and ${bankAccountMembership()}${acctScope}
-  `, 'objects')
-  const row = result[0]
-  if (!row) throw new Error('The reconciliation count did not return its total.')
-  return Number(row.n)
+  `,
+    "objects",
+  );
+  const row = result[0];
+  if (!row) throw new Error("The reconciliation count did not return its total.");
+  return Number(row.n);
 }
 
 export async function bankingHome(
@@ -158,11 +165,14 @@ export async function bankingHome(
    */
   includeNullSubsidiary?: boolean,
 ): Promise<BankingHome> {
-  const today = await businessToday(orgId)
-  const ago7 = addCalendarDays(today, -7)
-  const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
-  const trendFrom = weekStarts[0]!
-  const txList = sql`(${sql.join(BANK_KINDS.map((kind) => sql`${kind}`), sql`, `)})`
+  const today = await businessToday(orgId);
+  const ago7 = addCalendarDays(today, -7);
+  const weekStarts = weekStartsEndingOn(today, TREND_WEEKS);
+  const trendFrom = weekStarts[0]!;
+  const txList = sql`(${sql.join(
+    BANK_KINDS.map((kind) => sql`${kind}`),
+    sql`, `,
+  )})`;
   // Active subsidiary view: journal sums scope to the subtree's lines, and the
   // roster keeps only accounts whose restriction intersects it (null = shared).
   // Book scope: the cockpit reads the primary posting book, like bank
@@ -171,13 +181,13 @@ export async function bankingHome(
   // An explicitly empty scope is a caller whose visibility resolved to nothing
   // and must read no rows — never degrade to the whole organization. `[]`
   // binds as an empty uuid array so every `= any(...)` leg matches nothing.
-  const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
-  const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
+  const subArr = subIds !== undefined ? sql`${`{${subIds.join(",")}}`}::uuid[]` : null;
+  const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``;
   // Cash and the roster include all active bank/card leaf accounts, even
   // before reconciliation is configured. Match/import enforce eligibility
   // separately; subsidiary and posting-book visibility remain scoped here.
-  const membership = bankAccountMembership()
-  const acctScope = bankAccountScope(subIds)
+  const membership = bankAccountMembership();
+  const acctScope = bankAccountScope(subIds);
   // Document-side counts match root-owned rows only for unrestricted
   // root-covering views; the limb never widens an empty scope (see filters).
   const docScope =
@@ -185,10 +195,10 @@ export async function bankingHome(
       ? sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))`
       : subArr
         ? sql` and d.subsidiary_id = any(${subArr})`
-        : sql``
-  const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
+        : sql``;
+  const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`;
 
-  const [rosterRows, flowsRes, badgesRes] = (await Promise.all([
+  const [rosterRows, flowsRes, badgesRes] = await Promise.all([
     // Roster — one row per active bank/card account with balance + workflow
     // state, off the shared query the reconciliation count also reads.
     bankRosterRows(orgId, subIds),
@@ -196,7 +206,14 @@ export async function bankingHome(
     // 7-day figure, folded in as a second grouped shape would cost another
     // scan — computed in JS from daily-precision rows instead is overkill;
     // one extra filtered aggregate below keeps this a single pass).
-    db.execute<{ account_id: string; wk: string; func: string | null; flow: string; flow_7d: string | null }>(sql`
+    db.execute<{
+      account_id: string;
+      wk: string;
+      func: string | null;
+      flow: string;
+      flow_7d: string | null;
+    }>(
+      sql`
       select jl.account_id,
              (date_trunc('week', je.posting_date))::date as wk,
              sub.base_currency as func,
@@ -211,9 +228,12 @@ export async function bankingHome(
          and je.posting_date >= ${trendFrom}
          and ${excludePeriodEndJournals(sql`je.origin`)}
        group by 1, 2, 3
-    `, 'objects'),
+    `,
+      "objects",
+    ),
     // Directory badges — org-wide counts for the workspace's other pages.
-    db.execute(sql`
+    db.execute(
+      sql`
       select
         (select count(*) from bank_match_rules r where r.org_id = ${orgId} and r.is_active) as active_rules,
         (select count(*) from bank_match_rules r where r.org_id = ${orgId}) as total_rules,
@@ -227,8 +247,10 @@ export async function bankingHome(
             and d.status = 'posted' -- Live entries only: the badge counts transactions still posted today
             and d.voided_at is null
             ${docScope}) as txns_7d
-    `, 'objects'),
-  ]))
+    `,
+      "objects",
+    ),
+  ]);
 
   // Week grid, oldest → newest, aligned with date_trunc('week', …) (Monday).
 
@@ -238,81 +260,95 @@ export async function bankingHome(
   // at the tile-date (closing) spot and re-sum in one basis, so balances,
   // sparklines, and the trend never mix subsidiary currencies and the
   // backward walk stays consistent. Missing coverage fails closed.
-  const base = await presentationCurrency(orgId)
+  const base = await presentationCurrency(orgId);
   const rates = await presentationRates(
     orgId,
     base,
-    [...rosterRows.map((r) => (typeof r.func === 'string' ? r.func : null)), ...flowsRes.map((r) => r.func)],
+    [
+      ...rosterRows.map((r) => (typeof r.func === "string" ? r.func : null)),
+      ...flowsRes.map((r) => r.func),
+    ],
     today,
-  )
+  );
   const tr = (amount: unknown, func: unknown): string =>
-    mulDecimal(String(amount ?? 0), rates.get(lineFunctional(typeof func === "string" ? func : null, base))!)
+    mulDecimal(
+      String(amount ?? 0),
+      rates.get(lineFunctional(typeof func === "string" ? func : null, base))!,
+    );
 
-  const flows = new Map<string, Map<string, string>>()
+  const flows = new Map<string, Map<string, string>>();
   for (const r of flowsRes) {
-    const wk = String(r.wk).slice(0, 10)
-    let m = flows.get(r.account_id)
-    if (!m) flows.set(r.account_id, (m = new Map()))
-    m.set(wk, add(m.get(wk) ?? '0', tr(r.flow, r.func)))
+    const wk = String(r.wk).slice(0, 10);
+    let m = flows.get(r.account_id);
+    if (!m) flows.set(r.account_id, (m = new Map()));
+    m.set(wk, add(m.get(wk) ?? "0", tr(r.flow, r.func)));
   }
 
-  const byAccount = new Map<string, { row: Record<string, unknown>; balance: string }>()
+  const byAccount = new Map<string, { row: Record<string, unknown>; balance: string }>();
   for (const a of rosterRows) {
-    const cur = byAccount.get(String(a.id)) ?? { row: a, balance: '0' }
-    cur.balance = add(cur.balance, tr(a.balance, a.func))
-    byAccount.set(String(a.id), cur)
+    const cur = byAccount.get(String(a.id)) ?? { row: a, balance: "0" };
+    cur.balance = add(cur.balance, tr(a.balance, a.func));
+    byAccount.set(String(a.id), cur);
   }
 
   const accounts: BankingAccountRow[] = [...byAccount.values()]
     .map(({ row: a, balance }) => {
-    const weekly = flows.get(String(a.id))
-    const sparkBalances: string[] = new Array(weekStarts.length)
-    let running = balance
-    for (let i = weekStarts.length - 1; i >= 0; i--) {
-      sparkBalances[i] = running
-      running = add(running, neg(weekly?.get(weekStarts[i]!) ?? '0'))
-    }
-    return {
-      id: String(a.id),
-      number: a.number == null ? null : String(a.number),
-      name: String(a.name),
-      type: String(a.type),
-      currency: a.currency_restriction == null ? null : String(a.currency_restriction),
-      balance,
-      unmatched: Number(a.unmatched),
-      openReconciliationId: a.open_reconciliation_id == null ? null : String(a.open_reconciliation_id),
-      reconciledThrough: a.reconciled_through == null ? null : String(a.reconciled_through),
-      lastStatementDate: a.last_statement_date == null ? null : String(a.last_statement_date),
-      lastImportedAt: a.last_imported_at ? String(a.last_imported_at) : null,
-      spark: boundedChartCoordinates(sparkBalances),
-    }
+      const weekly = flows.get(String(a.id));
+      const sparkBalances: string[] = new Array(weekStarts.length);
+      let running = balance;
+      for (let i = weekStarts.length - 1; i >= 0; i--) {
+        sparkBalances[i] = running;
+        running = add(running, neg(weekly?.get(weekStarts[i]!) ?? "0"));
+      }
+      return {
+        id: String(a.id),
+        number: a.number == null ? null : String(a.number),
+        name: String(a.name),
+        type: String(a.type),
+        currency: a.currency_restriction == null ? null : String(a.currency_restriction),
+        balance,
+        unmatched: Number(a.unmatched),
+        openReconciliationId:
+          a.open_reconciliation_id == null ? null : String(a.open_reconciliation_id),
+        reconciledThrough: a.reconciled_through == null ? null : String(a.reconciled_through),
+        lastStatementDate: a.last_statement_date == null ? null : String(a.last_statement_date),
+        lastImportedAt: a.last_imported_at ? String(a.last_imported_at) : null,
+        spark: boundedChartCoordinates(sparkBalances),
+      };
     })
     // The roster query orders by type then raw leg balance; re-apply on the
     // translated per-account balances (identical for single-currency views).
-    .sort((x, y) => (x.type < y.type ? -1 : x.type > y.type ? 1 : -cmp(x.balance, y.balance)))
+    .sort((x, y) => (x.type < y.type ? -1 : x.type > y.type ? 1 : -cmp(x.balance, y.balance)));
 
-  const bankIds = new Set(accounts.filter((a) => a.type === 'asset_bank').map((a) => a.id))
-  let netFlow7d = '0'
+  const bankIds = new Set(accounts.filter((a) => a.type === "asset_bank").map((a) => a.id));
+  let netFlow7d = "0";
   for (const r of flowsRes) {
-    if (r.flow_7d != null && bankIds.has(r.account_id)) netFlow7d = add(netFlow7d, tr(r.flow_7d, r.func))
+    if (r.flow_7d != null && bankIds.has(r.account_id))
+      netFlow7d = add(netFlow7d, tr(r.flow_7d, r.func));
   }
 
   const trend = weekStarts.map((weekStart, i) => ({
     weekStart,
-    balance: sum(accounts.filter((a) => a.type === 'asset_bank').map((a) => {
-      const current = byAccount.get(a.id)!.balance
-      const weekly = flows.get(a.id)
-      return weekStarts.slice(i + 1).reduce((prior, week) => add(prior, neg(weekly?.get(week) ?? '0')), current)
-    })),
-  }))
+    balance: sum(
+      accounts
+        .filter((a) => a.type === "asset_bank")
+        .map((a) => {
+          const current = byAccount.get(a.id)!.balance;
+          const weekly = flows.get(a.id);
+          return weekStarts
+            .slice(i + 1)
+            .reduce((prior, week) => add(prior, neg(weekly?.get(week) ?? "0")), current);
+        }),
+    ),
+  }));
 
-  const badge = badgesRes[0] ?? {}
+  const badge = badgesRes[0] ?? {};
   return {
     accounts,
-    totalCash: sum(accounts.filter((a) => a.type === 'asset_bank').map((a) => a.balance)),
+    totalCash: sum(accounts.filter((a) => a.type === "asset_bank").map((a) => a.balance)),
     // Every non-bank Banking account is a liability (card or statement-bearing credit line/loan),
     // so the cards total matches the roster's card-side section.
-    totalCards: sum(accounts.filter((a) => a.type !== 'asset_bank').map((a) => a.balance)),
+    totalCards: sum(accounts.filter((a) => a.type !== "asset_bank").map((a) => a.balance)),
     unmatchedLines: accounts.reduce((s, a) => s + a.unmatched, 0),
     openRecons: accounts.reduce((s, a) => s + (a.openReconciliationId ? 1 : 0), 0),
     netFlow7d,
@@ -324,20 +360,20 @@ export async function bankingHome(
       lastImportedAt: badge.last_imported_at ? String(badge.last_imported_at) : null,
       txns7d: Number(badge.txns_7d ?? 0),
     },
-  }
+  };
 }
 
 /** Scale exact monetary chart values to bounded 0..1 coordinates at the chart boundary. */
 export function boundedChartCoordinates(values: readonly string[]): number[] {
-  if (values.length === 0) return []
-  const units = values.map(toUnits)
-  let minimum = units[0]!
-  let maximum = minimum
+  if (values.length === 0) return [];
+  const units = values.map(toUnits);
+  let minimum = units[0]!;
+  let maximum = minimum;
   for (const value of units.slice(1)) {
-    if (value < minimum) minimum = value
-    if (value > maximum) maximum = value
+    if (value < minimum) minimum = value;
+    if (value > maximum) maximum = value;
   }
-  const span = maximum - minimum
-  if (span === 0n) return values.map(() => 0.5)
-  return units.map((value) => Number(((value - minimum) * 10_000n) / span) / 10_000)
+  const span = maximum - minimum;
+  if (span === 0n) return values.map(() => 0.5);
+  return units.map((value) => Number(((value - minimum) * 10_000n) / span) / 10_000);
 }

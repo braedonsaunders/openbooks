@@ -6,7 +6,12 @@ import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { PspSettlementError, summarizeSettlement } from "./psp-settlement-core.ts";
 import type { SettlementLineKind } from "./psp-settlement-core.ts";
-import { MATCHABLE_SETTLEMENT_LINE_KINDS, auditSettlementLine, requireBankingFeature, settlementLineDocumentInEntity } from "./psp-settlement-matching.ts";
+import {
+  MATCHABLE_SETTLEMENT_LINE_KINDS,
+  auditSettlementLine,
+  requireBankingFeature,
+  settlementLineDocumentInEntity,
+} from "./psp-settlement-matching.ts";
 import type { SettlementLineLock } from "./psp-settlement-matching.ts";
 import { periodForDate } from "./psp-settlement-posting-context.ts";
 
@@ -28,11 +33,23 @@ export async function clearSettlementBatchJournal(
   if (scope === undefined) throw new ScopeNotFoundError();
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const batch = (await db.execute<{ id: string; status: string; subsidiary_id: string | null; external_ref: string; settlement_date: string; journal_entry_id: string | null }>(sql`
+    const batch = (
+      await db.execute<{
+        id: string;
+        status: string;
+        subsidiary_id: string | null;
+        external_ref: string;
+        settlement_date: string;
+        journal_entry_id: string | null;
+      }>(
+        sql`
       select id, status, subsidiary_id, external_ref, settlement_date::text, journal_entry_id
         from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
     if (batch.status === "void") {
@@ -50,9 +67,14 @@ export async function clearSettlementBatchJournal(
       );
     }
     const sourceBook = batch.journal_entry_id
-      ? (await db.execute<{ book_id: string }>(sql`
+      ? ((
+          await db.execute<{ book_id: string }>(
+            sql`
           select book_id from journal_entries where id = ${batch.journal_entry_id} and org_id = ${orgId}
-        `, "objects"))[0]?.book_id ?? null
+        `,
+            "objects",
+          )
+        )[0]?.book_id ?? null)
       : null;
     if (!sourceBook) {
       throw new PspSettlementError(
@@ -67,13 +89,16 @@ export async function clearSettlementBatchJournal(
       modules: ["banking"],
     });
     const matchableList = `{"${[...MATCHABLE_SETTLEMENT_LINE_KINDS].join('","')}"}`;
-    const lines = await db.execute<{ id: string; meta: unknown }>(sql`
+    const lines = await db.execute<{ id: string; meta: unknown }>(
+      sql`
       select id, meta from psp_settlement_lines
        where org_id = ${orgId} and batch_id = ${batchId}
          and kind = any(${matchableList}::text[])
          and meta->'recognizedByJournalEntry'->>'via' = 'batch'
        order by line_number for update
-    `, "objects");
+    `,
+      "objects",
+    );
     if (lines.length === 0) {
       throw new PspSettlementError(
         `payout ${batch.external_ref} carries no batch-level journal recognition to reverse`,
@@ -81,7 +106,8 @@ export async function clearSettlementBatchJournal(
     }
     const numbers = new Set<string>();
     for (const line of lines) {
-      const before = (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
+      const before =
+        (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
       const number = (before as Record<string, unknown> | null)?.["number"];
       if (typeof number === "string") numbers.add(number);
       const updated = await db.execute<never>(sql`
@@ -91,9 +117,17 @@ export async function clearSettlementBatchJournal(
          where id = ${line.id} and org_id = ${orgId} and batch_id = ${batchId}
       `);
       if ((updated.rowCount ?? 0) !== 1) {
-        throw new PspSettlementError(`settlement line ${line.id} could not be unmarked; reload the payout and try again`);
+        throw new PspSettlementError(
+          `settlement line ${line.id} could not be unmarked; reload the payout and try again`,
+        );
       }
-      await auditSettlementLine(orgId, line.id, "unmark-journal", { before: { recognizedByJournalEntry: before }, after: { recognizedByJournalEntry: null } }, actorId);
+      await auditSettlementLine(
+        orgId,
+        line.id,
+        "unmark-journal",
+        { before: { recognizedByJournalEntry: before }, after: { recognizedByJournalEntry: null } },
+        actorId,
+      );
     }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -127,30 +161,63 @@ export async function suggestSettlementBatchJournal(
   const scope = allowedSubsidiaryIds;
   if (scope === undefined) throw new ScopeNotFoundError();
   return withOrg(orgId, async () => {
-    const batch = (await db.execute<{ id: string; status: string; subsidiary_id: string | null; external_ref: string; settlement_date: string; currency: string; journal_entry_id: string | null }>(sql`
+    const batch = (
+      await db.execute<{
+        id: string;
+        status: string;
+        subsidiary_id: string | null;
+        external_ref: string;
+        settlement_date: string;
+        currency: string;
+        journal_entry_id: string | null;
+      }>(
+        sql`
       select id, status, subsidiary_id, external_ref, settlement_date::text, currency, journal_entry_id
         from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
     if (batch.status === "void") {
-      throw new PspSettlementError(`payout ${batch.external_ref} is void; voided history needs no recognition`);
+      throw new PspSettlementError(
+        `payout ${batch.external_ref} is void; voided history needs no recognition`,
+      );
     }
-    const totals = (await db.execute<{ charge_total: string; excluded_lines: string }>(sql`
+    const totals = (
+      await db.execute<{ charge_total: string; excluded_lines: string }>(
+        sql`
       select coalesce(sum(amount) filter (where kind = 'charge' and (currency is null or currency = ${batch.currency})), 0)::text as charge_total,
              count(*) filter (where kind = 'charge' and currency is not null and currency <> ${batch.currency})::text as excluded_lines
         from psp_settlement_lines
        where org_id = ${orgId} and batch_id = ${batchId}
-    `, "objects"))[0] ?? { charge_total: "0", excluded_lines: "0" };
+    `,
+        "objects",
+      )
+    )[0] ?? { charge_total: "0", excluded_lines: "0" };
     const excluded = Number(totals.excluded_lines);
     // A zero charge total matches everything, and a mixed-currency batch
     // cannot prove equality in one currency: both refuse candidates by
     // construction rather than proposing a wrong journal.
     if (totals.charge_total === "0" || totals.charge_total === "0.0000" || excluded > 0) {
-      return { batchId, chargeTotal: totals.charge_total, currency: batch.currency, excludedOtherCurrencyLines: excluded, candidates: [] };
+      return {
+        batchId,
+        chargeTotal: totals.charge_total,
+        currency: batch.currency,
+        excludedOtherCurrencyLines: excluded,
+        candidates: [],
+      };
     }
-    const rows = await db.execute<{ id: string; number: string; posting_date: string; revenue_total: string; subsidiary_id: string | null }>(sql`
+    const rows = await db.execute<{
+      id: string;
+      number: string;
+      posting_date: string;
+      revenue_total: string;
+      subsidiary_id: string | null;
+    }>(
+      sql`
       select e.id, e.entry_number as number, e.posting_date::text as posting_date,
              abs(sum(l.txn_amount))::text as revenue_total, e.subsidiary_id
         from journal_entries e
@@ -167,14 +234,29 @@ export async function suggestSettlementBatchJournal(
       having abs(sum(l.txn_amount)) = abs(${totals.charge_total}::numeric)
        order by e.posting_date desc, e.entry_number
        limit 10
-    `, "objects");
-    const candidates: { id: string; number: string; postingDate: string; revenueTotal: string }[] = [];
+    `,
+      "objects",
+    );
+    const candidates: { id: string; number: string; postingDate: string; revenueTotal: string }[] =
+      [];
     for (const row of rows) {
       if (!subsidiaryScopeAllows(scope, row.subsidiary_id)) continue;
-      if (!(await settlementLineDocumentInEntity(orgId, batch.subsidiary_id, row.subsidiary_id))) continue;
-      candidates.push({ id: row.id, number: row.number, postingDate: row.posting_date, revenueTotal: row.revenue_total });
+      if (!(await settlementLineDocumentInEntity(orgId, batch.subsidiary_id, row.subsidiary_id)))
+        continue;
+      candidates.push({
+        id: row.id,
+        number: row.number,
+        postingDate: row.posting_date,
+        revenueTotal: row.revenue_total,
+      });
     }
-    return { batchId, chargeTotal: totals.charge_total, currency: batch.currency, excludedOtherCurrencyLines: excluded, candidates };
+    return {
+      batchId,
+      chargeTotal: totals.charge_total,
+      currency: batch.currency,
+      excludedOtherCurrencyLines: excluded,
+      candidates,
+    };
   });
 }
 
@@ -203,12 +285,25 @@ export async function deleteSettlementDraft(
   await assertNotSandbox(orgId, "delete a PSP settlement draft");
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const batch = (await db.execute<{ id: string; status: string; provider: string; external_ref: string; subsidiary_id: string | null; net_amount: string; settlement_date: string }>(sql`
+    const batch = (
+      await db.execute<{
+        id: string;
+        status: string;
+        provider: string;
+        external_ref: string;
+        subsidiary_id: string | null;
+        net_amount: string;
+        settlement_date: string;
+      }>(
+        sql`
       select id, status, provider, external_ref, subsidiary_id, net_amount::text, settlement_date::text
         from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId}
        for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
     if (batch.status !== "draft") {
@@ -216,17 +311,22 @@ export async function deleteSettlementDraft(
         `batch is ${batch.status}; only an unposted draft can be deleted — reverse a posted batch instead`,
       );
     }
-    const lines = await db.execute<{ line_number: number; kind: string; amount: string }>(sql`
+    const lines = await db.execute<{ line_number: number; kind: string; amount: string }>(
+      sql`
       select line_number, kind, amount::text from psp_settlement_lines
        where batch_id = ${batchId} and org_id = ${orgId}
        order by line_number
-    `, "objects");
+    `,
+      "objects",
+    );
     await db.execute(sql`
       delete from psp_settlement_lines where batch_id = ${batchId} and org_id = ${orgId}`);
     const deleted = await db.execute<never>(sql`
       delete from psp_settlement_batches where id = ${batchId} and org_id = ${orgId} and status = 'draft'`);
     if ((deleted.rowCount ?? 0) !== 1) {
-      throw new PspSettlementError(`settlement draft ${batchId} could not be deleted; reload and try again`);
+      throw new PspSettlementError(
+        `settlement draft ${batchId} could not be deleted; reload and try again`,
+      );
     }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -238,7 +338,11 @@ export async function deleteSettlementDraft(
                   status: "draft",
                   netAmount: batch.net_amount,
                   settlementDate: batch.settlement_date,
-                  lines: lines.map((line) => ({ line: line.line_number, kind: line.kind, amount: line.amount })),
+                  lines: lines.map((line) => ({
+                    line: line.line_number,
+                    kind: line.kind,
+                    amount: line.amount,
+                  })),
                 },
                 after: null,
                 reason,
@@ -262,21 +366,32 @@ export async function markSettlementLineAdjustment(
 ): Promise<{ lineId: string; kind: SettlementLineKind }> {
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const batch = (await db.execute<{ id: string; status: string; subsidiary_id: string | null }>(sql`
+    const batch = (
+      await db.execute<{ id: string; status: string; subsidiary_id: string | null }>(
+        sql`
       select id, status, subsidiary_id from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
-    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id))
+      throw new ScopeNotFoundError();
     if (batch.status !== "draft") {
       throw new PspSettlementError(
         `batch is ${batch.status}; a posted payout's line kinds are history — reverse the batch and re-import it to reclassify`,
       );
     }
-    const line = (await db.execute<SettlementLineLock>(sql`
+    const line = (
+      await db.execute<SettlementLineLock>(
+        sql`
       select id, kind, document_id, amount::text, currency from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!line) {
       throw new PspSettlementError(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and try again`,
@@ -298,14 +413,23 @@ export async function markSettlementLineAdjustment(
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
     `);
     if ((moved.rowCount ?? 0) !== 1) {
-      throw new PspSettlementError(`settlement line ${lineId} could not be reclassified; reload the payout and try again`);
+      throw new PspSettlementError(
+        `settlement line ${lineId} could not be reclassified; reload the payout and try again`,
+      );
     }
-    const stored = await db.execute<{ kind: string; amount: string; currency: string | null }>(sql`
+    const stored = await db.execute<{ kind: string; amount: string; currency: string | null }>(
+      sql`
       select kind, amount::text, currency from psp_settlement_lines
        where batch_id = ${batchId} and org_id = ${orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const totals = summarizeSettlement(
-      stored.map((row) => ({ kind: row.kind as SettlementLineKind, amount: row.amount, currency: row.currency })),
+      stored.map((row) => ({
+        kind: row.kind as SettlementLineKind,
+        amount: row.amount,
+        currency: row.currency,
+      })),
     );
     const restamped = await db.execute<never>(sql`
       update psp_settlement_batches
@@ -316,10 +440,14 @@ export async function markSettlementLineAdjustment(
        where id = ${batchId} and org_id = ${orgId}
     `);
     if ((restamped.rowCount ?? 0) !== 1) {
-      throw new PspSettlementError(`settlement batch ${batchId} could not be refooted after reclassification`);
+      throw new PspSettlementError(
+        `settlement batch ${batchId} could not be refooted after reclassification`,
+      );
     }
     await auditSettlementLine(
-      orgId, lineId, "reclassify",
+      orgId,
+      lineId,
+      "reclassify",
       { before: { kind: line.kind }, after: { kind: "adjustment", netAmount: totals.netAmount } },
       actorId,
     );
@@ -340,17 +468,17 @@ export type DepositTieoutLine = {
 export type DepositTieout =
   | { status: "not_posted"; batchId: string }
   | {
-    status: "tied" | "untied";
-    batchId: string;
-    provider: string;
-    externalRef: string;
-    netAmount: string;
-    currency: string;
-    settlementDate: string;
-    depositLines: DepositTieoutLine[];
-    /** Net minus tied deposit total; null when currencies differ. */
-    gapAmount: string | null;
-  };
+      status: "tied" | "untied";
+      batchId: string;
+      provider: string;
+      externalRef: string;
+      netAmount: string;
+      currency: string;
+      settlementDate: string;
+      depositLines: DepositTieoutLine[];
+      /** Net minus tied deposit total; null when currencies differ. */
+      gapAmount: string | null;
+    };
 
 /**
  * Tie a posted payout to its bank deposit through the existing bank
@@ -366,47 +494,57 @@ export async function batchDepositTieout(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<DepositTieout> {
   return withOrg(orgId, async () => {
-    const batch = (await db.execute<{
-      id: string;
-      provider: string;
-      external_ref: string;
-      status: string;
-      currency: string;
-      net_amount: string;
-      settlement_date: string;
-      bank_account_id: string | null;
-      journal_entry_id: string | null;
-      subsidiary_id: string | null;
-    }>(sql`
+    const batch = (
+      await db.execute<{
+        id: string;
+        provider: string;
+        external_ref: string;
+        status: string;
+        currency: string;
+        net_amount: string;
+        settlement_date: string;
+        bank_account_id: string | null;
+        journal_entry_id: string | null;
+        subsidiary_id: string | null;
+      }>(
+        sql`
       select id, provider, external_ref, status, currency, net_amount::text,
              settlement_date::text, bank_account_id, journal_entry_id, subsidiary_id
         from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
-    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id))
+      throw new ScopeNotFoundError();
     if (batch.status !== "posted" || !batch.journal_entry_id || !batch.bank_account_id) {
       return { status: "not_posted", batchId };
     }
     // Ledger sums name their book state: only live legs tie to a deposit.
-    const legs = await db.execute<{ id: string }>(sql`
+    const legs = await db.execute<{ id: string }>(
+      sql`
       select jl.id from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${orgId} and jl.entry_id = ${batch.journal_entry_id}
          and jl.account_id = ${batch.bank_account_id}
          and je.status in ('posted', 'reversed')
-    `, "objects");
-    if (legs.length === 0) return {
-      status: "untied",
-      batchId,
-      provider: batch.provider,
-      externalRef: batch.external_ref,
-      netAmount: batch.net_amount,
-      currency: batch.currency,
-      settlementDate: batch.settlement_date,
-      depositLines: [],
-      gapAmount: batch.net_amount,
-    };
+    `,
+      "objects",
+    );
+    if (legs.length === 0)
+      return {
+        status: "untied",
+        batchId,
+        provider: batch.provider,
+        externalRef: batch.external_ref,
+        netAmount: batch.net_amount,
+        currency: batch.currency,
+        settlementDate: batch.settlement_date,
+        depositLines: [],
+        gapAmount: batch.net_amount,
+      };
     const legIds = legs.map((leg) => leg.id);
     const deposits = await db.execute<{
       statement_line_id: string;
@@ -416,15 +554,21 @@ export async function batchDepositTieout(
       currency: string;
       description: string | null;
       bank_transaction_id: string | null;
-    }>(sql`
+    }>(
+      sql`
       select sl.id as statement_line_id, sl.statement_id, sl.posted_on::text,
              sl.amount::text, sl.currency, sl.description, sl.bank_transaction_id
         from reconciliation_matches m
         join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
        where m.org_id = ${orgId}
-         and m.journal_line_id in (${sql.join(legIds.map((legId) => sql`${legId}::uuid`), sql`, `)})
+         and m.journal_line_id in (${sql.join(
+           legIds.map((legId) => sql`${legId}::uuid`),
+           sql`, `,
+         )})
        order by sl.posted_on, sl.id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (deposits.length === 0) {
       return {
         status: "untied",
@@ -438,7 +582,9 @@ export async function batchDepositTieout(
         gapAmount: batch.net_amount,
       };
     }
-    const foreign = deposits.find((row) => row.currency.toUpperCase() !== batch.currency.toUpperCase());
+    const foreign = deposits.find(
+      (row) => row.currency.toUpperCase() !== batch.currency.toUpperCase(),
+    );
     let gapAmount: string | null = null;
     if (!foreign) {
       let tied = 0n;

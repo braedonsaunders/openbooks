@@ -92,8 +92,11 @@ export const compCycleLines = pgTable(
       columns: [t.orgId, t.approverPartyId],
       foreignColumns: [parties.orgId, parties.id],
     }),
-    foreignKey({ name: "hrm_comp_cycle_lines_org_id_fkey", columns: [t.orgId], foreignColumns: [orgs.id] }),
-
+    foreignKey({
+      name: "hrm_comp_cycle_lines_org_id_fkey",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
 
     uniqueIndex("hrm_comp_cycle_lines_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("hrm_comp_cycle_lines_one_per_employment").on(t.cycleId, t.employmentId),
@@ -121,7 +124,11 @@ export const compStatements = pgTable(
     ...auditColumns,
   },
   (t) => [
-    foreignKey({ name: "hrm_comp_statements_org_id_fkey", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "hrm_comp_statements_org_id_fkey",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
 
     foreignKey({
       name: "hrm_comp_statements_file_tenant_fkey",
@@ -147,8 +154,11 @@ export const payInformationRequests = pgTable(
     ...auditColumns,
   },
   (t) => [
-    foreignKey({ name: "hrm_pay_information_requests_org_id_fkey", columns: [t.orgId], foreignColumns: [orgs.id] }),
-
+    foreignKey({
+      name: "hrm_pay_information_requests_org_id_fkey",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
 
     check(
       "hrm_pay_information_requests_status",
@@ -156,4 +166,3 @@ export const payInformationRequests = pgTable(
     ),
   ],
 );
-

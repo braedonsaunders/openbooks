@@ -5,7 +5,12 @@ import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
 import { cmp, fromUnits, isZero, mulRate, neg, toUnits } from "../money/money.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
-import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  uuidArray,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import {
   PspSettlementError,
@@ -52,13 +57,23 @@ async function buildFxLegs(
     currency: string | null;
     document_id: string | null;
     meta: unknown;
-  }>(sql`
+  }>(
+    sql`
     select line_number, kind, amount::text, currency, document_id, meta
       from psp_settlement_lines
      where batch_id = ${batchId} and org_id = ${orgId}
      order by line_number
-  `, "objects");
-  const bookedKinds = new Set(["charge", "refund", "dispute", "dispute_reversal", "adjustment", "transfer"]);
+  `,
+    "objects",
+  );
+  const bookedKinds = new Set([
+    "charge",
+    "refund",
+    "dispute",
+    "dispute_reversal",
+    "adjustment",
+    "transfer",
+  ]);
   let refund = 0n;
   let dispute = 0n;
   let adjustment = 0n;
@@ -66,12 +81,13 @@ async function buildFxLegs(
   for (const row of rows) {
     const lineCurrency = (row.currency ?? b.currency).toUpperCase();
     const meta = (row.meta ?? {}) as Record<string, unknown>;
-    const rateIntoPayout = lineCurrency === b.currency
-      ? "1"
-      : requireFxRate(
-        meta.exchangeRate ?? fxPlan.conversionRate,
-        `settlement line ${row.line_number} exchange_rate`,
-      );
+    const rateIntoPayout =
+      lineCurrency === b.currency
+        ? "1"
+        : requireFxRate(
+            meta.exchangeRate ?? fxPlan.conversionRate,
+            `settlement line ${row.line_number} exchange_rate`,
+          );
     const convertedBase = toUnits(mulRate(mulRate(row.amount, rateIntoPayout), fxPlan.payoutRate));
     let bookedBase = convertedBase;
     if (bookedKinds.has(row.kind)) {
@@ -84,16 +100,21 @@ async function buildFxLegs(
           );
         }
       } else if (row.document_id != null) {
-        const receipt = (await db.execute<{
-          status: string;
-          currency: string;
-          total: string;
-          fx_rate: string;
-        }>(sql`
+        const receipt = (
+          await db.execute<{
+            status: string;
+            currency: string;
+            total: string;
+            fx_rate: string;
+          }>(
+            sql`
           select status, currency, total::text, fx_rate::text
             from documents
            where id = ${row.document_id} and org_id = ${orgId}
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (!receipt) {
           throw new PspSettlementError(
             `settlement line ${row.line_number} links receipt ${row.document_id}, which is not in this organization; relink the line and import again`,
@@ -116,11 +137,7 @@ async function buildFxLegs(
         }
         bookedBase = toUnits(mulRate(receipt.total, receipt.fx_rate));
       }
-      realized += settlementFxRealizedDelta(
-        row.kind,
-        convertedBase,
-        bookedBase,
-      );
+      realized += settlementFxRealizedDelta(row.kind, convertedBase, bookedBase);
     }
     if (row.kind === "refund") refund += bookedBase < 0n ? -bookedBase : bookedBase;
     else if (row.kind === "dispute") dispute += bookedBase < 0n ? -bookedBase : bookedBase;
@@ -156,54 +173,59 @@ export async function postSettlementBatch(
 ): Promise<{ entryId: string }> {
   await assertNotSandbox(orgId, "post a PSP settlement");
   return await withOrg(orgId, async () => {
-    const batch = (await db.execute<{
-        id: string;
-        status: string;
-        currency: string;
-        gross_amount: string;
-        fee_amount: string;
-        refund_amount: string;
-        dispute_amount: string;
-        adjustment_amount: string;
-        net_amount: string;
-        fx_amount: string;
-        settlement_date: string;
-        bank_account_id: string | null;
-        fee_account_id: string | null;
-        dispute_account_id: string | null;
-        fx_account_id: string | null;
-        clearing_account_id: string | null;
-        subsidiary_id: string | null;
-        provider: string;
-        external_ref: string;
-        memo: string | null;
-        journal_entry_id: string | null;
-        source_currency: string | null;
-        conversion_rate: string | null;
-        conversion_rate_source: string | null;
-        payout_rate: string | null;
-        payout_rate_source: string | null;
-      }>(sql`
+    const batch = await db.execute<{
+      id: string;
+      status: string;
+      currency: string;
+      gross_amount: string;
+      fee_amount: string;
+      refund_amount: string;
+      dispute_amount: string;
+      adjustment_amount: string;
+      net_amount: string;
+      fx_amount: string;
+      settlement_date: string;
+      bank_account_id: string | null;
+      fee_account_id: string | null;
+      dispute_account_id: string | null;
+      fx_account_id: string | null;
+      clearing_account_id: string | null;
+      subsidiary_id: string | null;
+      provider: string;
+      external_ref: string;
+      memo: string | null;
+      journal_entry_id: string | null;
+      source_currency: string | null;
+      conversion_rate: string | null;
+      conversion_rate_source: string | null;
+      payout_rate: string | null;
+      payout_rate_source: string | null;
+    }>(
+      sql`
       select b.*
         from psp_settlement_batches b
        where b.id = ${batchId} and b.org_id = ${orgId}
        for update of b
-    `, "objects"));
+    `,
+      "objects",
+    );
     const b = batch[0];
     if (!b) throw new ScopeNotFoundError();
-    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, b.subsidiary_id)) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, b.subsidiary_id))
+      throw new ScopeNotFoundError();
     if (b.status === "posted") {
       if (!b.journal_entry_id) {
-        throw new PspSettlementError(
-          "posted batch is missing its journal entry",
-        );
+        throw new PspSettlementError("posted batch is missing its journal entry");
       }
       return { entryId: b.journal_entry_id };
     }
     if (b.status === "void") throw new PspSettlementError("batch is void");
-    const controls = (await db.execute<{ c: Record<string, string> | null }>(sql`
+    const controls = await db.execute<{ c: Record<string, string> | null }>(
+      sql`
       select settings->'controlAccounts' as c from orgs where id = ${orgId} for share
-    `, "objects"));
+    `,
+      "objects",
+    );
     const c = controls[0]?.c ?? {};
     // Keep hierarchy and functional currency stable through validation and posting.
     await db.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
@@ -238,7 +260,8 @@ export async function postSettlementBatch(
     if (!subsidiary?.baseCurrency) {
       throw new PspSettlementError("settlement subsidiary is missing");
     }
-    if (!subsidiary.isActive) throw new PspSettlementError(`subsidiary "${subsidiary.name}" is inactive`);
+    if (!subsidiary.isActive)
+      throw new PspSettlementError(`subsidiary "${subsidiary.name}" is inactive`);
     // Cross-currency batches post at evidenced rates: every foreign leg
     // converts through the batch conversion_rate (or its own exchange_rate)
     // into payout currency, then through payout_rate into base. A missing
@@ -253,9 +276,10 @@ export async function postSettlementBatch(
     } | null = null;
     if (fxBatch) {
       const sourceCurrency = (b.source_currency ?? b.currency).toUpperCase();
-      const conversionRate = b.source_currency != null
-        ? requireFxRate(b.conversion_rate, "settlement conversion_rate")
-        : "1";
+      const conversionRate =
+        b.source_currency != null
+          ? requireFxRate(b.conversion_rate, "settlement conversion_rate")
+          : "1";
       if (b.currency !== baseCurrency && b.payout_rate == null) {
         throw new PspSettlementError(
           `cross-currency PSP settlement ${b.currency}→${baseCurrency} requires payout_rate evidence; re-import the same provider reference with payout_rate to repair this draft`,
@@ -266,25 +290,20 @@ export async function postSettlementBatch(
           `cross-currency PSP settlement carries source currency ${sourceCurrency} without conversion_rate evidence; re-import the same provider reference with conversion_rate to repair this draft`,
         );
       }
-      const payoutRate = b.currency === baseCurrency
-        ? "1"
-        : requireFxRate(b.payout_rate, "settlement payout_rate");
+      const payoutRate =
+        b.currency === baseCurrency ? "1" : requireFxRate(b.payout_rate, "settlement payout_rate");
       fxPlan = { sourceCurrency, conversionRate, payoutRate };
     }
 
     const fxAcct = b.fx_account_id ?? c.fxRealizedGainLoss ?? null;
     if (!isZero(b.fx_amount) && !fxAcct) {
-      throw new PspSettlementError(
-        "realized FX gain/loss account is not configured",
-      );
+      throw new PspSettlementError("realized FX gain/loss account is not configured");
     }
     const disputeAcct = b.dispute_account_id ?? b.fee_account_id;
 
     const periodId = await periodForDate(orgId, b.settlement_date, subsidiaryId);
     if (!periodId)
-      throw new PspSettlementError(
-        `no open accounting period for ${b.settlement_date}`,
-      );
+      throw new PspSettlementError(`no open accounting period for ${b.settlement_date}`);
     const bookId = await primaryBookId(orgId);
     await assertPeriodModulesOpen(db, {
       orgId,
@@ -297,7 +316,14 @@ export async function postSettlementBatch(
     // Build balanced lines in the subsidiary's functional currency. Legs paid
     // in a foreign payout currency carry that currency's amount and the
     // evidenced payout rate, so the ledger records the real foreign balance.
-    type JL = { accountId: string; amount: string; memo: string; currency?: string; txnAmount?: string; fxRate?: string };
+    type JL = {
+      accountId: string;
+      amount: string;
+      memo: string;
+      currency?: string;
+      txnAmount?: string;
+      fxRate?: string;
+    };
     const jlines: JL[] = [];
 
     // A cross-currency batch converts every leg to base at evidenced rates and
@@ -309,27 +335,44 @@ export async function postSettlementBatch(
       const fxLegs = await buildFxLegs(orgId, batchId, b, fxPlan);
       fxRealized = fxLegs.realized;
       if (!isZero(fxRealized) && !fxAcct) {
-        throw new PspSettlementError(
-          "realized FX gain/loss account is not configured",
-        );
+        throw new PspSettlementError("realized FX gain/loss account is not configured");
       }
-      const payoutDetail = (txnAmount: string) => b.currency === baseCurrency
-        ? {}
-        : { currency: b.currency, txnAmount, fxRate: fxPlan!.payoutRate };
+      const payoutDetail = (txnAmount: string) =>
+        b.currency === baseCurrency
+          ? {}
+          : { currency: b.currency, txnAmount, fxRate: fxPlan!.payoutRate };
       if (!isZero(fxLegs.bank)) {
-        jlines.push({ accountId: b.bank_account_id!, amount: fxLegs.bank, memo: "PSP net deposit", ...payoutDetail(b.net_amount) });
+        jlines.push({
+          accountId: b.bank_account_id!,
+          amount: fxLegs.bank,
+          memo: "PSP net deposit",
+          ...payoutDetail(b.net_amount),
+        });
       }
       if (!isZero(fxLegs.fee)) {
-        jlines.push({ accountId: b.fee_account_id!, amount: fxLegs.fee, memo: "PSP processing fees", ...payoutDetail(b.fee_amount) });
+        jlines.push({
+          accountId: b.fee_account_id!,
+          amount: fxLegs.fee,
+          memo: "PSP processing fees",
+          ...payoutDetail(b.fee_amount),
+        });
       }
       if (!isZero(fxLegs.refund)) {
-        jlines.push({ accountId: b.clearing_account_id!, amount: fxLegs.refund, memo: "PSP refunds" });
+        jlines.push({
+          accountId: b.clearing_account_id!,
+          amount: fxLegs.refund,
+          memo: "PSP refunds",
+        });
       }
       if (!isZero(fxLegs.dispute)) {
         jlines.push({ accountId: disputeAcct!, amount: fxLegs.dispute, memo: "PSP disputes" });
       }
       if (!isZero(fxLegs.adjustment)) {
-        jlines.push({ accountId: b.clearing_account_id!, amount: fxLegs.adjustment, memo: "PSP adjustments" });
+        jlines.push({
+          accountId: b.clearing_account_id!,
+          amount: fxLegs.adjustment,
+          memo: "PSP adjustments",
+        });
       }
       if (!isZero(fxRealized)) {
         jlines.push({
@@ -426,14 +469,15 @@ export async function postSettlementBatch(
     // Verify balance.
     const bal = jlines.reduce((s, l) => s + toUnits(l.amount), 0n);
     if (bal !== 0n)
-      throw new PspSettlementError(
-        `settlement journal does not balance: ${fromUnits(bal)}`,
-      );
+      throw new PspSettlementError(`settlement journal does not balance: ${fromUnits(bal)}`);
 
     const accountIds = [...new Set(jlines.map((line) => line.accountId))];
-    const locked = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${orgId}
+    const locked = await db.execute<{ id: string }>(
+      sql`select id from accounts where org_id=${orgId}
       and is_active and not is_summary
-      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`, "objects"));
+      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`,
+      "objects",
+    );
     // Accounts can leave the org (or postability) after import: re-resolve
     // every posting account under the batch lock so a stale reference fails
     // closed naming the account instead of escaping as a raw FK 500.
@@ -446,7 +490,9 @@ export async function postSettlementBatch(
     }
     try {
       await validateSubsidiaryRestrictions(db, {
-        orgId, ctx, docSubsidiaryId: subsidiaryId,
+        orgId,
+        ctx,
+        docSubsidiaryId: subsidiaryId,
         lines: jlines.map((line) => ({ ...line, subsidiaryId })),
       });
     } catch (error) {

@@ -15,13 +15,13 @@ import { releaseBenefitAwardApproval } from "./benefits/awards.ts";
 import { releaseLeaveRequest } from "./leave.ts";
 
 /** Minimal release guard: the owning org of a compensation cycle. */
-async function loadCycleOrg(
-  subjectId: string,
-  orgId: string,
-): Promise<{ org_id: string } | null> {
+async function loadCycleOrg(subjectId: string, orgId: string): Promise<{ org_id: string } | null> {
   if (!isUuid(subjectId)) return null;
-  const result = await db.execute<{ org_id: string }>(sql`
-    select org_id from hrm_comp_cycles where id = ${subjectId} and org_id = ${orgId}`, "objects");
+  const result = await db.execute<{ org_id: string }>(
+    sql`
+    select org_id from hrm_comp_cycles where id = ${subjectId} and org_id = ${orgId}`,
+    "objects",
+  );
   return result[0] ?? null;
 }
 
@@ -39,9 +39,7 @@ type ReleaseArgs = {
  * assignable to the registered release handler type, checked at
  * registration.
  */
-export async function releaseCompCycleApproval(
-  args: ReleaseArgs,
-): Promise<void> {
+export async function releaseCompCycleApproval(args: ReleaseArgs): Promise<void> {
   const { subjectId, outcome, ctx } = args;
   if (!isUuid(subjectId)) {
     throw new Error(`unknown compensation cycle ${subjectId}`);
@@ -63,9 +61,7 @@ export async function releaseCompCycleApproval(
 }
 
 /** Release an employment change-request approval (same seam contract). */
-export async function releaseHrmChangeRequestApproval(
-  args: ReleaseArgs,
-): Promise<void> {
+export async function releaseHrmChangeRequestApproval(args: ReleaseArgs): Promise<void> {
   const { subjectId, outcome, ctx } = args;
   if (!isUuid(subjectId)) {
     throw new Error(`unknown employment change request ${subjectId}`);
@@ -81,9 +77,7 @@ export async function releaseHrmChangeRequestApproval(
 }
 
 /** Release a leave-request approval (same seam contract). */
-export async function releaseLeaveRequestApproval(
-  args: ReleaseArgs,
-): Promise<void> {
+export async function releaseLeaveRequestApproval(args: ReleaseArgs): Promise<void> {
   const { subjectId, outcome, ctx } = args;
   if (!isUuid(subjectId)) {
     throw new Error(`unknown leave request ${subjectId}`);
@@ -102,9 +96,7 @@ export async function releaseLeaveRequestApproval(
 }
 
 /** Release a Benefits reward only after the native gate aggregate resolves. */
-export async function releaseBenefitAwardFlowApproval(
-  args: ReleaseArgs,
-): Promise<void> {
+export async function releaseBenefitAwardFlowApproval(args: ReleaseArgs): Promise<void> {
   await releaseBenefitAwardApproval({
     orgId: args.ctx.orgId,
     actorId: args.ctx.userId ?? "",
@@ -116,9 +108,7 @@ export async function releaseBenefitAwardFlowApproval(
 }
 
 /** Release recurring contribution coverage through the same native decision seam. */
-export async function releaseBenefitEnrollmentFlowApproval(
-  args: ReleaseArgs,
-): Promise<void> {
+export async function releaseBenefitEnrollmentFlowApproval(args: ReleaseArgs): Promise<void> {
   await releaseBenefitEnrollmentApproval({
     orgId: args.ctx.orgId,
     actorId: args.ctx.userId ?? "",

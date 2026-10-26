@@ -6,14 +6,14 @@
 // the list shell.
 
 type ListParams<S extends string = string> = {
-  q: string | undefined
-  sort: S
-  dir: 'asc' | 'desc'
-  page: number
-  perPage: number
-}
+  q: string | undefined;
+  sort: S;
+  dir: "asc" | "desc";
+  page: number;
+  perPage: number;
+};
 
-type Search = Record<string, string | string[] | undefined>
+type Search = Record<string, string | string[] | undefined>;
 
 /**
  * True when `value` is a UUID. Use to guard `[id]` route params before querying
@@ -21,28 +21,28 @@ type Search = Record<string, string | string[] | undefined>
  * Postgres "invalid input syntax for type uuid" error instead of a clean 404.
  * Re-exported from the engine so web and engine apply one definition.
  */
-export { isUuid } from '@openbooks/engine/platform/identifiers'
+export { isUuid } from "@openbooks/engine/platform/identifiers";
 
 export function parseListParams<S extends string>(
   searchParams: Search,
-  config: { sort: S; dir?: 'asc' | 'desc'; perPage?: number; allowedSorts: readonly S[] },
+  config: { sort: S; dir?: "asc" | "desc"; perPage?: number; allowedSorts: readonly S[] },
 ): ListParams<S> {
-  const q = pickString(searchParams.q)
-  const rawSort = pickString(searchParams.sort)
-  const sort = config.allowedSorts.includes(rawSort as S) ? (rawSort as S) : config.sort
+  const q = pickString(searchParams.q);
+  const rawSort = pickString(searchParams.sort);
+  const sort = config.allowedSorts.includes(rawSort as S) ? (rawSort as S) : config.sort;
   const dir =
-    pickString(searchParams.dir) === 'asc'
-      ? 'asc'
-      : pickString(searchParams.dir) === 'desc'
-        ? 'desc'
-        : (config.dir ?? 'desc')
-  const page = clamp(Number(pickString(searchParams.page) ?? '1'), 1, 10_000)
+    pickString(searchParams.dir) === "asc"
+      ? "asc"
+      : pickString(searchParams.dir) === "desc"
+        ? "desc"
+        : (config.dir ?? "desc");
+  const page = clamp(Number(pickString(searchParams.page) ?? "1"), 1, 10_000);
   const perPage = clamp(
     Number(pickString(searchParams.perPage) ?? String(config.perPage ?? 25)),
     5,
     100,
-  )
-  return { q: q && q.length ? q : undefined, sort, dir, page, perPage }
+  );
+  return { q: q && q.length ? q : undefined, sort, dir, page, perPage };
 }
 
 /**
@@ -53,7 +53,7 @@ export function parseListParams<S extends string>(
 export function parsePrefixedListParams<S extends string>(
   searchParams: Search,
   prefix: string,
-  config: { sort: S; dir?: 'asc' | 'desc'; perPage?: number; allowedSorts: readonly S[] },
+  config: { sort: S; dir?: "asc" | "desc"; perPage?: number; allowedSorts: readonly S[] },
 ): ListParams<S> {
   return parseListParams(
     {
@@ -64,7 +64,7 @@ export function parsePrefixedListParams<S extends string>(
       perPage: searchParams[`${prefix}PerPage`],
     },
     config,
-  )
+  );
 }
 
 /**
@@ -78,23 +78,23 @@ export function parsePrefixedListParams<S extends string>(
  * only widen the list, never empty it.
  */
 export function hasActiveListFilters(args: {
-  q: string | undefined
-  quickValues: Record<string, string | undefined>
-  savedViewFilterCount: number
+  q: string | undefined;
+  quickValues: Record<string, string | undefined>;
+  savedViewFilterCount: number;
 }): boolean {
-  if (args.q && args.q.trim().length > 0) return true
-  if (Object.values(args.quickValues).some((value) => value !== undefined)) return true
-  return args.savedViewFilterCount > 0
+  if (args.q && args.q.trim().length > 0) return true;
+  if (Object.values(args.quickValues).some((value) => value !== undefined)) return true;
+  return args.savedViewFilterCount > 0;
 }
 
 /** Keep an empty page window distinct from a truly empty result set. */
 export function pagedListVisibility(total: number, pageRows: number) {
-  return { hasRows: pageRows > 0, hasResults: total > 0, isEmpty: total === 0 }
+  return { hasRows: pageRows > 0, hasResults: total > 0, isEmpty: total === 0 };
 }
 
 export function pickString(v: string | string[] | undefined): string | undefined {
-  if (Array.isArray(v)) return v[0]
-  return v
+  if (Array.isArray(v)) return v[0];
+  return v;
 }
 
 /**
@@ -116,35 +116,35 @@ export function setupSectionParams(
    *  its drawer reads. */
   rowParams: readonly string[] = [],
 ): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const key of ['row', ...rowParams, 'q', 'showInactive', 'sort', 'dir', 'page', 'perPage']) {
-    const value = pickString(searchParams[key])
-    if (value !== undefined) out[key] = value
+  const out: Record<string, string> = {};
+  for (const key of ["row", ...rowParams, "q", "showInactive", "sort", "dir", "page", "perPage"]) {
+    const value = pickString(searchParams[key]);
+    if (value !== undefined) out[key] = value;
   }
   for (const [key, value] of Object.entries(searchParams)) {
-    if (!key.startsWith('f_')) continue
-    const picked = pickString(value)
-    if (picked !== undefined) out[key] = picked
+    if (!key.startsWith("f_")) continue;
+    const picked = pickString(value);
+    if (picked !== undefined) out[key] = picked;
   }
-  return out
+  return out;
 }
 
 export function clamp(n: number, min: number, max: number): number {
-  if (!Number.isFinite(n)) return min
-  return Math.max(min, Math.min(max, Math.trunc(n)))
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
 export function buildHref(
   base: string,
   params: Record<string, string | number | undefined | null>,
 ): string {
-  const usp = new URLSearchParams()
+  const usp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
-    if (v === undefined || v === null || v === '') continue
-    usp.set(k, String(v))
+    if (v === undefined || v === null || v === "") continue;
+    usp.set(k, String(v));
   }
-  const q = usp.toString()
-  return q ? `${base}?${q}` : base
+  const q = usp.toString();
+  return q ? `${base}?${q}` : base;
 }
 
 export function mergeHref(
@@ -156,21 +156,21 @@ export function mergeHref(
   // merge from it so chaining builds never emits a second "?". Without this,
   // mergeHref("/close?tab=periods", {}, { fy: 2025 }) produced
   // "/close?tab=periods?fy=2025" — a broken URL, not a merged one.
-  const queryIndex = base.indexOf('?')
-  const path = queryIndex === -1 ? base : base.slice(0, queryIndex)
-  const merged: Record<string, string | number | undefined | null> = {}
+  const queryIndex = base.indexOf("?");
+  const path = queryIndex === -1 ? base : base.slice(0, queryIndex);
+  const merged: Record<string, string | number | undefined | null> = {};
   if (queryIndex !== -1) {
     for (const [k, v] of new URLSearchParams(base.slice(queryIndex + 1))) {
-      merged[k] = v
+      merged[k] = v;
     }
   }
   for (const [k, v] of Object.entries(current)) {
-    merged[k] = pickString(v) ?? undefined
+    merged[k] = pickString(v) ?? undefined;
   }
   for (const [k, v] of Object.entries(overrides)) {
-    merged[k] = v
+    merged[k] = v;
   }
-  return buildHref(path, merged)
+  return buildHref(path, merged);
 }
 
 /**
@@ -189,15 +189,15 @@ export function buildListDrawerHref(
   drawerValue: string,
   exclusiveParams: readonly string[] = [],
 ): string {
-  const cleared = Object.fromEntries(exclusiveParams.map((key) => [key, undefined]))
+  const cleared = Object.fromEntries(exclusiveParams.map((key) => [key, undefined]));
   const returnHref = mergeHref(base, current, {
     ...cleared,
     [drawerParam]: undefined,
     drawerReturn: undefined,
-  })
+  });
   return mergeHref(base, current, {
     ...cleared,
     [drawerParam]: drawerValue,
     drawerReturn: returnHref,
-  })
+  });
 }

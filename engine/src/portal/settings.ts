@@ -52,7 +52,12 @@ export const DEFAULT_PORTAL_SETTINGS: PortalSettings = {
   },
   returnWindowDays: 30,
   returnReasons: ["damaged", "wrong_item", "not_as_described", "changed_mind", "late_delivery"],
-  returnResolutions: { refund: true, exchange: true, storeCredit: true, storeCreditBonusPercent: "0" },
+  returnResolutions: {
+    refund: true,
+    exchange: true,
+    storeCredit: true,
+    storeCreditBonusPercent: "0",
+  },
   saveOffers: [],
 };
 
@@ -86,17 +91,25 @@ export function mergePortalSettings(row: SettingsRow | null): PortalSettings {
     }
   }
   return {
-    portalName: typeof row.portal_name === "string" && row.portal_name.trim() ? row.portal_name : DEFAULT_PORTAL_SETTINGS.portalName,
+    portalName:
+      typeof row.portal_name === "string" && row.portal_name.trim()
+        ? row.portal_name
+        : DEFAULT_PORTAL_SETTINGS.portalName,
     sections,
-    returnWindowDays: Number.isInteger(row.return_window_days) && row.return_window_days >= 0
-      ? row.return_window_days
-      : DEFAULT_PORTAL_SETTINGS.returnWindowDays,
+    returnWindowDays:
+      Number.isInteger(row.return_window_days) && row.return_window_days >= 0
+        ? row.return_window_days
+        : DEFAULT_PORTAL_SETTINGS.returnWindowDays,
     returnReasons: Array.isArray(row.return_reasons)
-      ? row.return_reasons.filter((reason): reason is string => typeof reason === "string" && reason.trim().length > 0)
+      ? row.return_reasons.filter(
+          (reason): reason is string => typeof reason === "string" && reason.trim().length > 0,
+        )
       : [...DEFAULT_PORTAL_SETTINGS.returnReasons],
     returnResolutions: resolutions,
     saveOffers: Array.isArray(row.save_offers)
-      ? (row.save_offers.filter((offer): offer is PortalSaveOffer => isSaveOffer(offer)) as PortalSaveOffer[])
+      ? (row.save_offers.filter((offer): offer is PortalSaveOffer =>
+          isSaveOffer(offer),
+        ) as PortalSaveOffer[])
       : [],
   };
 }
@@ -107,8 +120,12 @@ function isSaveOffer(value: unknown): boolean {
   if (typeof offer.id !== "string" || !offer.id.trim()) return false;
   if (offer.kind === "pause") return typeof offer.label === "string" && !!offer.label.trim();
   if (offer.kind === "discount") {
-    return typeof offer.label === "string" && !!offer.label.trim()
-      && typeof offer.promotionCode === "string" && !!offer.promotionCode.trim();
+    return (
+      typeof offer.label === "string" &&
+      !!offer.label.trim() &&
+      typeof offer.promotionCode === "string" &&
+      !!offer.promotionCode.trim()
+    );
   }
   return false;
 }
@@ -118,14 +135,23 @@ export function returnWindowDeadline(documentDate: string, windowDays: number): 
   return addCalendarDays(documentDate, windowDays);
 }
 
-export async function readPortalSettings(orgId: string, runner: SqlExecutor = db): Promise<PortalSettings> {
-  const row = (await runner.execute<SettingsRow>(sql`
+export async function readPortalSettings(
+  orgId: string,
+  runner: SqlExecutor = db,
+): Promise<PortalSettings> {
+  const row =
+    (
+      await runner.execute<SettingsRow>(
+        sql`
     select portal_name, sections, return_window_days, return_reasons, return_resolutions, save_offers
       from customer_portal_settings
      where org_id = ${orgId} and effective_from <= current_date
      order by effective_from desc
      limit 1
-  `, "objects"))[0] ?? null;
+  `,
+        "objects",
+      )
+    )[0] ?? null;
   return mergePortalSettings(row);
 }
 
@@ -169,50 +195,95 @@ function parseSettingsInput(
   settings.sections = { ...stored.sections };
   settings.returnReasons = [...stored.returnReasons];
   if (input.portalName !== undefined) {
-    if (typeof input.portalName !== "string" || !input.portalName.trim() || input.portalName.trim().length > 80) {
-      throw portalRefusal("The portal name must be 1–80 characters", "invalid_input", 422, "Enter a short customer-facing portal name");
+    if (
+      typeof input.portalName !== "string" ||
+      !input.portalName.trim() ||
+      input.portalName.trim().length > 80
+    ) {
+      throw portalRefusal(
+        "The portal name must be 1–80 characters",
+        "invalid_input",
+        422,
+        "Enter a short customer-facing portal name",
+      );
     }
     settings.portalName = input.portalName.trim();
   }
   if (input.sections !== undefined) {
     if (!input.sections || typeof input.sections !== "object" || Array.isArray(input.sections)) {
-      throw portalRefusal("Portal sections must name each section on or off", "invalid_input", 422, "Switch each portal section on or off");
+      throw portalRefusal(
+        "Portal sections must name each section on or off",
+        "invalid_input",
+        422,
+        "Switch each portal section on or off",
+      );
     }
     for (const section of PORTAL_SECTIONS) {
       const value = (input.sections as Record<string, unknown>)[section];
       if (value !== undefined) {
         if (typeof value !== "boolean") {
-          throw portalRefusal(`Portal section ${section} must be on or off`, "invalid_input", 422, "Switch each portal section on or off");
+          throw portalRefusal(
+            `Portal section ${section} must be on or off`,
+            "invalid_input",
+            422,
+            "Switch each portal section on or off",
+          );
         }
         settings.sections[section] = value;
       }
     }
   }
   if (input.returnWindowDays !== undefined) {
-    const days = typeof input.returnWindowDays === "string" && input.returnWindowDays.trim() !== ""
-      ? Number(input.returnWindowDays)
-      : input.returnWindowDays;
+    const days =
+      typeof input.returnWindowDays === "string" && input.returnWindowDays.trim() !== ""
+        ? Number(input.returnWindowDays)
+        : input.returnWindowDays;
     if (typeof days !== "number" || !Number.isInteger(days) || days < 0 || days > 365) {
-      throw portalRefusal("The return window must be 0–365 days", "invalid_input", 422, "Enter whole days from 0 to 365");
+      throw portalRefusal(
+        "The return window must be 0–365 days",
+        "invalid_input",
+        422,
+        "Enter whole days from 0 to 365",
+      );
     }
     settings.returnWindowDays = days;
   }
   if (input.returnReasons !== undefined && input.returnReasons !== null) {
-    if (!Array.isArray(input.returnReasons) || input.returnReasons.length > 20
-      || !input.returnReasons.every((reason) => typeof reason === "string" && reason.trim() && reason.trim().length <= 40)) {
-      throw portalRefusal("Return reasons must be up to 20 short labels", "invalid_input", 422, "List up to twenty short return reasons");
+    if (
+      !Array.isArray(input.returnReasons) ||
+      input.returnReasons.length > 20 ||
+      !input.returnReasons.every(
+        (reason) => typeof reason === "string" && reason.trim() && reason.trim().length <= 40,
+      )
+    ) {
+      throw portalRefusal(
+        "Return reasons must be up to 20 short labels",
+        "invalid_input",
+        422,
+        "List up to twenty short return reasons",
+      );
     }
     settings.returnReasons = input.returnReasons.map((reason) => (reason as string).trim());
   }
   if (input.returnResolutions !== undefined) {
     const resolutions = input.returnResolutions as Record<string, unknown>;
     if (!resolutions || typeof resolutions !== "object" || Array.isArray(resolutions)) {
-      throw portalRefusal("Return resolutions must name each outcome on or off", "invalid_input", 422, "Switch refund, exchange and store credit on or off");
+      throw portalRefusal(
+        "Return resolutions must name each outcome on or off",
+        "invalid_input",
+        422,
+        "Switch refund, exchange and store credit on or off",
+      );
     }
     for (const key of ["refund", "exchange", "storeCredit"] as const) {
       if (resolutions[key] !== undefined) {
         if (typeof resolutions[key] !== "boolean") {
-          throw portalRefusal(`Return resolution ${key} must be on or off`, "invalid_input", 422, "Switch refund, exchange and store credit on or off");
+          throw portalRefusal(
+            `Return resolution ${key} must be on or off`,
+            "invalid_input",
+            422,
+            "Switch refund, exchange and store credit on or off",
+          );
         }
         settings.returnResolutions[key] = resolutions[key];
       }
@@ -220,17 +291,40 @@ function parseSettingsInput(
     if (resolutions.storeCreditBonusPercent !== undefined) {
       const bonus = String(resolutions.storeCreditBonusPercent);
       if (!/^\d{1,3}(\.\d{1,2})?$/.test(bonus) || Number(bonus) > 100) {
-        throw portalRefusal("The store credit bonus must be 0–100 percent", "invalid_input", 422, "Enter a bonus percent from 0 to 100");
+        throw portalRefusal(
+          "The store credit bonus must be 0–100 percent",
+          "invalid_input",
+          422,
+          "Enter a bonus percent from 0 to 100",
+        );
       }
       settings.returnResolutions.storeCreditBonusPercent = bonus;
     }
-    if (!settings.returnResolutions.refund && !settings.returnResolutions.exchange && !settings.returnResolutions.storeCredit) {
-      throw portalRefusal("At least one return outcome must stay on", "invalid_input", 422, "Keep refund, exchange or store credit enabled");
+    if (
+      !settings.returnResolutions.refund &&
+      !settings.returnResolutions.exchange &&
+      !settings.returnResolutions.storeCredit
+    ) {
+      throw portalRefusal(
+        "At least one return outcome must stay on",
+        "invalid_input",
+        422,
+        "Keep refund, exchange or store credit enabled",
+      );
     }
   }
   if (input.saveOffers !== undefined) {
-    if (!Array.isArray(input.saveOffers) || input.saveOffers.length > 10 || !input.saveOffers.every(isSaveOffer)) {
-      throw portalRefusal("Save offers must each name a pause or a discount with a promotion code", "invalid_input", 422, "Add up to ten pause or discount offers with labels");
+    if (
+      !Array.isArray(input.saveOffers) ||
+      input.saveOffers.length > 10 ||
+      !input.saveOffers.every(isSaveOffer)
+    ) {
+      throw portalRefusal(
+        "Save offers must each name a pause or a discount with a promotion code",
+        "invalid_input",
+        422,
+        "Add up to ten pause or discount offers with labels",
+      );
     }
     settings.saveOffers = input.saveOffers as PortalSaveOffer[];
   }
@@ -255,22 +349,38 @@ export async function savePortalSettings(
   actorId: string,
   input: SavePortalSettingsInput,
 ): Promise<PortalSettings> {
-  if (input.effectiveFrom !== undefined && input.effectiveFrom !== null && !/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) {
-    throw portalRefusal("The effective date must be a calendar date", "invalid_input", 422, "Pick the date the new portal rules start");
+  if (
+    input.effectiveFrom !== undefined &&
+    input.effectiveFrom !== null &&
+    !/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)
+  ) {
+    throw portalRefusal(
+      "The effective date must be a calendar date",
+      "invalid_input",
+      422,
+      "Pick the date the new portal rules start",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     const stored = await readPortalSettings(orgId, db);
     const parsed = parseSettingsInput(input, stored);
-    const effectiveFrom = input.effectiveFrom ?? await businessTodayInTx(db, orgId);
-    const existing = (await db.execute<{ id: string }>(sql`
+    const effectiveFrom = input.effectiveFrom ?? (await businessTodayInTx(db, orgId));
+    const existing = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from customer_portal_settings
        where org_id = ${orgId} and effective_from = ${effectiveFrom}
        limit 1
       for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     let settingsId: string;
     if (existing) {
-      const updated = (await db.execute<{ id: string }>(sql`
+      const updated = (
+        await db.execute<{ id: string }>(
+          sql`
         update customer_portal_settings
            set portal_name = ${parsed.portalName}, sections = ${JSON.stringify(parsed.sections)}::jsonb,
                return_window_days = ${parsed.return_window_days},
@@ -280,11 +390,22 @@ export async function savePortalSettings(
                updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${existing.id}
         returning id
-      `, "objects"))[0];
-      if (!updated) throw portalRefusal("The portal settings changed while saving", "changed_concurrently", 409, "Reload the portal settings and save again");
+      `,
+          "objects",
+        )
+      )[0];
+      if (!updated)
+        throw portalRefusal(
+          "The portal settings changed while saving",
+          "changed_concurrently",
+          409,
+          "Reload the portal settings and save again",
+        );
       settingsId = updated.id;
     } else {
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into customer_portal_settings
           (org_id, effective_from, portal_name, sections, return_window_days,
            return_reasons, return_resolutions, save_offers, created_by, updated_by)
@@ -293,7 +414,10 @@ export async function savePortalSettings(
                 ${JSON.stringify(parsed.return_resolutions)}::jsonb, ${JSON.stringify(parsed.save_offers)}::jsonb,
                 ${actorId}, ${actorId})
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!inserted) throw new Error("portal settings were not saved");
       settingsId = inserted.id;
     }

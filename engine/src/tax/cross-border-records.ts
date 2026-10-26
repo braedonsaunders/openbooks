@@ -1,10 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import {
-  normalizeVatId,
-  type VatAuthorityScheme,
-} from "../connectors/vat-validation.ts";
+import { normalizeVatId, type VatAuthorityScheme } from "../connectors/vat-validation.ts";
 import { CrossBorderTaxError } from "./cross-border-place-of-supply.ts";
 import { parseCrossBorderElection } from "./cross-border-posting.ts";
 import { validatePartyTaxId, type TaxIdCredentials } from "./vat-id-validation.ts";
@@ -43,25 +40,44 @@ export async function savePartyTaxId(
       "enable Cross-border tax on Company Settings → Features before recording customer tax IDs",
     );
   }
-  const party = (await tx.execute<{ id: string }>(sql`
-      select id from parties where org_id = ${orgId} and id = ${input.partyId}`, "objects"))[0];
+  const party = (
+    await tx.execute<{ id: string }>(
+      sql`
+      select id from parties where org_id = ${orgId} and id = ${input.partyId}`,
+      "objects",
+    )
+  )[0];
   if (!party) {
-    throw new CrossBorderTaxError("this customer belongs to another organization; reload the customer record");
+    throw new CrossBorderTaxError(
+      "this customer belongs to another organization; reload the customer record",
+    );
   }
   const value = normalizeVatId(input.scheme, input.value);
   // Re-adding the number already on file is the same fact, not a second
   // row: history is per value, so return the standing row instead.
-  const existing = (await tx.execute<{ id: string; status: string }>(sql`
+  const existing = (
+    await tx.execute<{ id: string; status: string }>(
+      sql`
       select id, status from party_tax_ids
        where org_id = ${orgId} and party_id = ${input.partyId} and scheme = ${input.scheme} and value = ${value}
-         and is_active`, "objects"))[0];
+         and is_active`,
+      "objects",
+    )
+  )[0];
   if (existing) return { id: existing.id, status: existing.status };
-  const saved = (await tx.execute<{ id: string }>(sql`
+  const saved = (
+    await tx.execute<{ id: string }>(
+      sql`
       insert into party_tax_ids (org_id, party_id, scheme, value, status, created_by, updated_by)
       values (${orgId}, ${input.partyId}, ${input.scheme}, ${value}, 'unverified', ${actorId}, ${actorId})
-      returning id`, "objects"))[0];
+      returning id`,
+      "objects",
+    )
+  )[0];
   if (!saved) {
-    throw new CrossBorderTaxError("the tax ID could not be saved — reload the customer record before retrying");
+    throw new CrossBorderTaxError(
+      "the tax ID could not be saved — reload the customer record before retrying",
+    );
   }
   await tx.execute(sql`
     insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
@@ -124,11 +140,18 @@ async function replaceCorrectionLink(
     );
   }
   if (correctsDocumentId === creditId) {
-    throw new CrossBorderTaxError("a credit memo cannot correct itself — choose the posted invoice it corrects");
+    throw new CrossBorderTaxError(
+      "a credit memo cannot correct itself — choose the posted invoice it corrects",
+    );
   }
-  const target = (await tx.execute<{ kind: string; status: string; partyId: string | null }>(sql`
+  const target = (
+    await tx.execute<{ kind: string; status: string; partyId: string | null }>(
+      sql`
       select kind, status, party_id as "partyId" from documents
-       where org_id = ${orgId} and id = ${correctsDocumentId}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${correctsDocumentId}`,
+      "objects",
+    )
+  )[0];
   if (!target) {
     throw new CrossBorderTaxError(
       "the corrected invoice belongs to another organization; choose a posted customer invoice from this organization",
@@ -152,12 +175,19 @@ async function replaceCorrectionLink(
   await tx.execute(sql`
     delete from document_links
      where org_id = ${orgId} and from_document_id = ${creditId} and link_type = 'corrects'`);
-  const edge = (await tx.execute<{ id: string }>(sql`
+  const edge = (
+    await tx.execute<{ id: string }>(
+      sql`
       insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
       values (${orgId}, ${creditId}, ${correctsDocumentId}, 'corrects', ${actorId}, ${actorId})
-      returning id`, "objects"))[0];
+      returning id`,
+      "objects",
+    )
+  )[0];
   if (!edge) {
-    throw new CrossBorderTaxError("the correction could not be recorded — reload the credit memo before retrying");
+    throw new CrossBorderTaxError(
+      "the correction could not be recorded — reload the credit memo before retrying",
+    );
   }
   await tx.execute(sql`
     insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
@@ -197,9 +227,17 @@ export async function recordSupplyEvidence(
       "record the cross-border classification (a digital service or goods, for a consumer or a business) before recording evidence",
     );
   }
-  const doc = (await tx.execute<{ kind: string; status: string; partyId: string | null }>(sql`
-      select kind, status, party_id as "partyId" from documents where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
-  if (!doc) throw new CrossBorderTaxError("this document belongs to another organization; reload it before recording evidence");
+  const doc = (
+    await tx.execute<{ kind: string; status: string; partyId: string | null }>(
+      sql`
+      select kind, status, party_id as "partyId" from documents where org_id = ${orgId} and id = ${documentId}`,
+      "objects",
+    )
+  )[0];
+  if (!doc)
+    throw new CrossBorderTaxError(
+      "this document belongs to another organization; reload it before recording evidence",
+    );
   if (doc.kind !== "customer_invoice" && doc.kind !== "customer_credit") {
     throw new CrossBorderTaxError("record supply evidence only on a customer invoice or credit");
   }
@@ -214,7 +252,14 @@ export async function recordSupplyEvidence(
     );
   }
   if (doc.kind === "customer_credit" && election.correctsDocumentId !== undefined) {
-    await replaceCorrectionLink(tx, orgId, documentId, doc.partyId, election.correctsDocumentId, actorId);
+    await replaceCorrectionLink(
+      tx,
+      orgId,
+      documentId,
+      doc.partyId,
+      election.correctsDocumentId,
+      actorId,
+    );
   }
   const seen = new Set<string>();
   for (const piece of input.evidence) {
@@ -230,24 +275,33 @@ export async function recordSupplyEvidence(
       );
     }
     if (!piece.source.trim() || piece.source.length > 40) {
-      throw new CrossBorderTaxError("name the observing system for each signal in 40 characters or fewer");
+      throw new CrossBorderTaxError(
+        "name the observing system for each signal in 40 characters or fewer",
+      );
     }
     seen.add(piece.kind);
   }
-  await tx.execute(sql`delete from document_supply_evidence where org_id = ${orgId} and document_id = ${documentId}`);
+  await tx.execute(
+    sql`delete from document_supply_evidence where org_id = ${orgId} and document_id = ${documentId}`,
+  );
   for (const piece of input.evidence) {
     await tx.execute(sql`
       insert into document_supply_evidence (org_id, document_id, kind, country_code, source, observed_on, created_by)
       values (${orgId}, ${documentId}, ${piece.kind}, ${piece.country.trim().toUpperCase()}, ${piece.source.trim()}, current_date, ${actorId})`);
   }
-  const saved = await tx.execute(sql`
+  const saved = await tx.execute(
+    sql`
     update documents
        set custom = coalesce(custom, '{}'::jsonb) || jsonb_build_object('crossBorder', ${JSON.stringify({ supplyKind: election.supplyKind, customerKind: election.customerKind })}::jsonb)
      where org_id = ${orgId} and id = ${documentId}
      returning 1
-  `, "objects");
+  `,
+    "objects",
+  );
   if (saved.length !== 1) {
-    throw new CrossBorderTaxError("the evidence could not be saved — reload the document before retrying");
+    throw new CrossBorderTaxError(
+      "the evidence could not be saved — reload the document before retrying",
+    );
   }
   return { evidence: input.evidence.length };
 }
@@ -275,7 +329,7 @@ export async function validateStoredTaxId(
       "enable Cross-border tax on Company Settings → Features before validating tax IDs",
     );
   }
-  const credentials = options.credentials ?? await authorityCredentialsForOrg(tx, orgId);
+  const credentials = options.credentials ?? (await authorityCredentialsForOrg(tx, orgId));
   const outcome = await validatePartyTaxId(tx, orgId, rowId, {
     actorId,
     credentials,
@@ -283,5 +337,9 @@ export async function validateStoredTaxId(
     revalidateAfterDays: options.revalidateAfterDays,
     reason: "operator validation",
   });
-  return { id: outcome.rowId, status: outcome.status, consultationNumber: outcome.consultationNumber };
+  return {
+    id: outcome.rowId,
+    status: outcome.status,
+    consultationNumber: outcome.consultationNumber,
+  };
 }

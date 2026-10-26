@@ -14,10 +14,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 test("payroll engine scope policy fails closed for a restricted direct caller", () => {
   const allowed = new Set(["11111111-1111-4111-8111-111111111111"]);
   assert.equal(payrollSubsidiaryInScope(allowed, allowed.values().next().value), true);
-  assert.equal(
-    payrollSubsidiaryInScope(allowed, "22222222-2222-4222-8222-222222222222"),
-    false,
-  );
+  assert.equal(payrollSubsidiaryInScope(allowed, "22222222-2222-4222-8222-222222222222"), false);
   assert.equal(payrollSubsidiaryInScope(allowed, null), false);
   assert.equal(payrollSubsidiaryInScope(new Set(), allowed.values().next().value), false);
   assert.equal(payrollSubsidiaryInScope(null, null), true);
@@ -57,11 +54,7 @@ test(
         values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, true, ${actorId}, ${actorId})`);
       }
 
-      const scoped = await openingBalancesForYear(
-        org.orgId,
-        2026,
-        new Set([org.subsidiaryId]),
-      );
+      const scoped = await openingBalancesForYear(org.orgId, 2026, new Set([org.subsidiaryId]));
       assert.deepEqual(
         scoped.rows.map((row) => row.employeePartyId),
         [rootEmployeeId],
@@ -93,10 +86,7 @@ test(
       const unrestricted = await payrollSettings(org.orgId, null);
       const restricted = await payrollSettings(org.orgId, new Set([org.subsidiaryId]));
       assert.deepEqual(restricted, unrestricted);
-      await assert.rejects(
-        payrollSettings(org.orgId, new Set()),
-        /payroll settings not found/,
-      );
+      await assert.rejects(payrollSettings(org.orgId, new Set()), /payroll settings not found/);
       await assert.rejects(
         payrollSettings(org.orgId, new Set([randomUUID()])),
         /payroll settings not found/,
@@ -113,18 +103,29 @@ test(
       );
 
       await seedPayrollComponents(org.orgId, actorId, "CA", new Set([org.subsidiaryId]));
-      const seeded = (await db.execute<{ n: number }>(sql`
+      const seeded =
+        (
+          await db.execute<{ n: number }>(
+            sql`
         select count(*)::int as n from pay_components where org_id = ${org.orgId}
-      `, "objects"))[0]?.n ?? 0;
+      `,
+            "objects",
+          )
+        )[0]?.n ?? 0;
       assert.ok(seeded > 0);
       await assert.rejects(
         seedPayrollComponents(org.orgId, actorId, "CA", new Set()),
         /payroll settings not found/,
       );
       assert.equal(
-        (await db.execute<{ n: number }>(sql`
+        (
+          await db.execute<{ n: number }>(
+            sql`
           select count(*)::int as n from pay_components where org_id = ${org.orgId}
-        `, "objects"))[0]?.n,
+        `,
+            "objects",
+          )
+        )[0]?.n,
         seeded,
       );
 

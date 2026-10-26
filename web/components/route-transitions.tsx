@@ -1,9 +1,14 @@
-'use client'
+"use client";
 
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { usePathname } from 'next/navigation'
-import { DRAWER_VIEW_SWITCH_TRANSITION, VIEW_SWITCH_TRANSITION, ViewTransition, type ViewTransitionClass } from '@openbooks/ui'
-import { useDocumentHidden } from '../lib/use-document-hidden'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import {
+  DRAWER_VIEW_SWITCH_TRANSITION,
+  VIEW_SWITCH_TRANSITION,
+  ViewTransition,
+  type ViewTransitionClass,
+} from "@openbooks/ui";
+import { useDocumentHidden } from "../lib/use-document-hidden";
 
 /**
  * Navigation motion for the authenticated app, built on React's
@@ -36,29 +41,29 @@ import { useDocumentHidden } from '../lib/use-document-hidden'
  */
 
 /** Transition type a hub card attaches to the navigation it starts. */
-export const REPORT_OPEN_TRANSITION = 'report-open'
+export const REPORT_OPEN_TRANSITION = "report-open";
 
 // The last pathname the page pane committed. It is written after commit, so
 // during the render of a navigation it still names the page being left —
 // which is how a render tells a navigation from a same-page update.
-let settledPathname: string | null = null
+let settledPathname: string | null = null;
 // Page placeholders currently mounted. While one is showing, the next update
 // of the pane is the real page arriving in its place.
-let mountedSkeletons = 0
-const motionListeners = new Set<() => void>()
+let mountedSkeletons = 0;
+const motionListeners = new Set<() => void>();
 const subscribeMotion = (listener: () => void) => {
-  motionListeners.add(listener)
+  motionListeners.add(listener);
   return () => {
-    motionListeners.delete(listener)
-  }
-}
+    motionListeners.delete(listener);
+  };
+};
 const notifyMotion = () => {
-  for (const listener of motionListeners) listener()
-}
-const readSettled = () => settledPathname
-const readSkeletonShowing = () => mountedSkeletons > 0
-const readNothingOnServer = () => null
-const readFalseOnServer = () => false
+  for (const listener of motionListeners) listener();
+};
+const readSettled = () => settledPathname;
+const readSkeletonShowing = () => mountedSkeletons > 0;
+const readNothingOnServer = () => null;
+const readFalseOnServer = () => false;
 
 /**
  * True while rendering the page a navigation is moving to. A component that
@@ -66,9 +71,9 @@ const readFalseOnServer = () => false
  * instead of running a second one of its own.
  */
 function useRouteNavigating(): boolean {
-  const pathname = usePathname()
-  const settled = useSyncExternalStore(subscribeMotion, readSettled, readNothingOnServer)
-  return settled !== null && settled !== pathname
+  const pathname = usePathname();
+  const settled = useSyncExternalStore(subscribeMotion, readSettled, readNothingOnServer);
+  return settled !== null && settled !== pathname;
 }
 
 /**
@@ -79,21 +84,21 @@ function useRouteNavigating(): boolean {
  * transparent inside the transition's snapshot.
  */
 export function useRouteEntranceAnimated(): boolean {
-  const navigating = useRouteNavigating()
-  const revealing = useSyncExternalStore(subscribeMotion, readSkeletonShowing, readFalseOnServer)
-  return navigating || revealing
+  const navigating = useRouteNavigating();
+  const revealing = useSyncExternalStore(subscribeMotion, readSkeletonShowing, readFalseOnServer);
+  return navigating || revealing;
 }
 
 export function RouteTransition({ children }: { children: ReactNode }) {
-  const pathname = usePathname()
-  const navigating = useRouteNavigating()
-  const revealing = useSyncExternalStore(subscribeMotion, readSkeletonShowing, readFalseOnServer)
-  const hidden = useDocumentHidden()
+  const pathname = usePathname();
+  const navigating = useRouteNavigating();
+  const revealing = useSyncExternalStore(subscribeMotion, readSkeletonShowing, readFalseOnServer);
+  const hidden = useDocumentHidden();
   useEffect(() => {
-    if (settledPathname === pathname) return
-    settledPathname = pathname
-    notifyMotion()
-  }, [pathname])
+    if (settledPathname === pathname) return;
+    settledPathname = pathname;
+    notifyMotion();
+  }, [pathname]);
   // A navigation moves the old page out and the new one (or its
   // placeholder) in; once a placeholder is showing, the page that replaces
   // it rises into place. A view switch on the same page moves like a
@@ -101,17 +106,25 @@ export function RouteTransition({ children }: { children: ReactNode }) {
   // address — leaves the page still: the pane would otherwise be captured
   // as a layer painted over the drawer. Any other update stays still.
   const update: ViewTransitionClass = hidden
-    ? 'none'
+    ? "none"
     : navigating
-      ? { [DRAWER_VIEW_SWITCH_TRANSITION]: 'none', [REPORT_OPEN_TRANSITION]: 'route-recede', default: 'route-change' }
-      : revealing ? 'route-reveal' : { [VIEW_SWITCH_TRANSITION]: 'route-change', default: 'none' }
+      ? {
+          [DRAWER_VIEW_SWITCH_TRANSITION]: "none",
+          [REPORT_OPEN_TRANSITION]: "route-recede",
+          default: "route-change",
+        }
+      : revealing
+        ? "route-reveal"
+        : { [VIEW_SWITCH_TRANSITION]: "route-change", default: "none" };
   return (
     <ViewTransition default="none" update={update}>
       {/* One box for the pane, so the page is captured as a single layer;
           it keeps the main column's flex sizing for the page inside. */}
-      <div data-route-pane className="flex min-h-0 flex-1 flex-col">{children}</div>
+      <div data-route-pane className="flex min-h-0 flex-1 flex-col">
+        {children}
+      </div>
     </ViewTransition>
-  )
+  );
 }
 
 /**
@@ -119,50 +132,51 @@ export function RouteTransition({ children }: { children: ReactNode }) {
  * and while it is mounted the pane knows the next update is that arrival.
  */
 export function SkeletonTransition({ children }: { children: ReactNode }) {
-  const hidden = useDocumentHidden()
+  const hidden = useDocumentHidden();
   useEffect(() => {
-    mountedSkeletons++
-    notifyMotion()
+    mountedSkeletons++;
+    notifyMotion();
     return () => {
-      mountedSkeletons--
-      notifyMotion()
-    }
-  }, [])
+      mountedSkeletons--;
+      notifyMotion();
+    };
+  }, []);
   return (
-    <ViewTransition exit={hidden ? 'none' : 'skeleton-out'} default="none">
+    <ViewTransition exit={hidden ? "none" : "skeleton-out"} default="none">
       {children}
     </ViewTransition>
-  )
+  );
 }
 
 // Hub sheet → report path, recorded when a sheet is opened, so the report
 // paper can take the opened sheet's transition name when it mounts.
-const openedSheets = new Map<string, string>()
+const openedSheets = new Map<string, string>();
 
 function pathOf(href: string) {
-  return href.split(/[?#]/)[0]!
+  return href.split(/[?#]/)[0]!;
 }
 
 /** A stable view-transition name for one hub sheet (a valid CSS identifier). */
 export function reportSheetName(key: string) {
-  let hash = 2166136261
-  for (let index = 0; index < key.length; index++) hash = Math.imul(hash ^ key.charCodeAt(index), 16777619)
-  return `report-sheet-${(hash >>> 0).toString(36)}`
+  let hash = 2166136261;
+  for (let index = 0; index < key.length; index++)
+    hash = Math.imul(hash ^ key.charCodeAt(index), 16777619);
+  return `report-sheet-${(hash >>> 0).toString(36)}`;
 }
 
 /** Record that the sheet named `name` is opening the report at `href`. */
 export function openReportSheet(href: string, name: string) {
-  openedSheets.set(pathOf(href), name)
+  openedSheets.set(pathOf(href), name);
 }
 
 /** The shared element of the sheet-to-paper morph, on either side. */
 export function ReportSheetTransition({ name, children }: { name: string; children: ReactNode }) {
-  const hidden = useDocumentHidden()
+  const hidden = useDocumentHidden();
   return (
-    <ViewTransition name={name} share={hidden ? 'none' : 'report-sheet'} default="none">
+    <ViewTransition name={name} share={hidden ? "none" : "report-sheet"} default="none">
       {children}
     </ViewTransition>
-  )
+  );
 }
 
 /**
@@ -172,29 +186,29 @@ export function ReportSheetTransition({ name, children }: { name: string; childr
  * way, the paper carries no name and moves with the page.
  */
 export function ReportPaperTransition({ children }: { children: ReactNode }) {
-  const pathname = usePathname()
-  const [name] = useState(() => openedSheets.get(pathname))
-  return name ? <ReportSheetTransition name={name}>{children}</ReportSheetTransition> : children
+  const pathname = usePathname();
+  const [name] = useState(() => openedSheets.get(pathname));
+  return name ? <ReportSheetTransition name={name}>{children}</ReportSheetTransition> : children;
 }
 
 /** Resolves once the page pane has committed `pathname`, or after `limit` ms. */
 function paneSettled(pathname: string, limit: number) {
   return new Promise<void>((resolve) => {
     const done = () => {
-      clearTimeout(timer)
-      motionListeners.delete(check)
-      resolve()
-    }
+      clearTimeout(timer);
+      motionListeners.delete(check);
+      resolve();
+    };
     const check = () => {
-      if (settledPathname === pathname) done()
-    }
-    const timer = setTimeout(done, limit)
-    motionListeners.add(check)
-    check()
-  })
+      if (settledPathname === pathname) done();
+    };
+    const timer = setTimeout(done, limit);
+    motionListeners.add(check);
+    check();
+  });
 }
 
-let replayingTraversal = false
+let replayingTraversal = false;
 
 /**
  * Animates browser back and forward like an in-app navigation.
@@ -216,67 +230,72 @@ let replayingTraversal = false
  * guard's question is never held behind an animation.
  */
 function onHistoryTraversal(event: PopStateEvent) {
-  if (replayingTraversal || event.hasUAVisualTransition) return
-  const state: unknown = event.state
-  if (!state || typeof state !== 'object' || !('__NA' in state)) return
-  if (!document.querySelector('[data-route-pane]') || document.visibilityState === 'hidden') return
-  if (settledPathname === null || settledPathname === location.pathname) return
-  event.stopImmediatePropagation()
+  if (replayingTraversal || event.hasUAVisualTransition) return;
+  const state: unknown = event.state;
+  if (!state || typeof state !== "object" || !("__NA" in state)) return;
+  if (!document.querySelector("[data-route-pane]") || document.visibilityState === "hidden") return;
+  if (settledPathname === null || settledPathname === location.pathname) return;
+  event.stopImmediatePropagation();
 
-  const named: HTMLElement[] = []
-  const name = (element: Element | null | undefined, transitionName: string, transitionClass: string) => {
-    if (!(element instanceof HTMLElement)) return
-    element.style.setProperty('view-transition-name', transitionName)
-    element.style.setProperty('view-transition-class', transitionClass)
-    named.push(element)
-  }
+  const named: HTMLElement[] = [];
+  const name = (
+    element: Element | null | undefined,
+    transitionName: string,
+    transitionClass: string,
+  ) => {
+    if (!(element instanceof HTMLElement)) return;
+    element.style.setProperty("view-transition-name", transitionName);
+    element.style.setProperty("view-transition-class", transitionClass);
+    named.push(element);
+  };
   const clear = () => {
     for (const element of named.splice(0)) {
-      element.style.removeProperty('view-transition-name')
-      element.style.removeProperty('view-transition-class')
+      element.style.removeProperty("view-transition-name");
+      element.style.removeProperty("view-transition-class");
     }
-  }
-  const sheet = (sheetName: string) => document.querySelector(`[data-report-sheet="${CSS.escape(sheetName)}"]`)
-  const paper = () => document.querySelector('[data-report-paper]')
+  };
+  const sheet = (sheetName: string) =>
+    document.querySelector(`[data-report-sheet="${CSS.escape(sheetName)}"]`);
+  const paper = () => document.querySelector("[data-report-paper]");
 
   // Forward onto a report opened from this hub grows its sheet again; back
   // from such a report returns the paper to its sheet.
-  const destination = location.pathname
-  const openingName = openedSheets.get(destination)
-  const opening = openingName !== undefined && sheet(openingName) !== null
-  const returningName = openedSheets.get(settledPathname)
-  const paneClass = opening ? 'route-recede' : 'route-change'
+  const destination = location.pathname;
+  const openingName = openedSheets.get(destination);
+  const opening = openingName !== undefined && sheet(openingName) !== null;
+  const returningName = openedSheets.get(settledPathname);
+  const paneClass = opening ? "route-recede" : "route-change";
 
-  name(document.querySelector('[data-route-pane]'), 'route-pane', paneClass)
-  if (opening) name(sheet(openingName), openingName, 'report-sheet')
-  else if (returningName) name(paper(), returningName, 'report-sheet')
+  name(document.querySelector("[data-route-pane]"), "route-pane", paneClass);
+  if (opening) name(sheet(openingName), openingName, "report-sheet");
+  else if (returningName) name(paper(), returningName, "report-sheet");
 
   const transition = document.startViewTransition({
     types: opening ? [REPORT_OPEN_TRANSITION] : [],
     update: async () => {
-      replayingTraversal = true
+      replayingTraversal = true;
       try {
-        window.dispatchEvent(new PopStateEvent('popstate', { state }))
+        window.dispatchEvent(new PopStateEvent("popstate", { state }));
       } finally {
-        replayingTraversal = false
+        replayingTraversal = false;
       }
       if (location.pathname !== destination) {
-        clear()
-        transition.skipTransition()
-        return
+        clear();
+        transition.skipTransition();
+        return;
       }
       // A restored page that must refetch is shown when it arrives; the limit
       // keeps the old snapshot from holding the screen in the meantime.
-      await paneSettled(destination, 1500)
-      clear()
-      name(document.querySelector('[data-route-pane]'), 'route-pane', paneClass)
-      if (opening) name(paper(), openingName, 'report-sheet')
-      else if (returningName) name(sheet(returningName), returningName, 'report-sheet')
+      await paneSettled(destination, 1500);
+      clear();
+      name(document.querySelector("[data-route-pane]"), "route-pane", paneClass);
+      if (opening) name(paper(), openingName, "report-sheet");
+      else if (returningName) name(sheet(returningName), returningName, "report-sheet");
     },
-  })
+  });
   // A skipped transition rejects `ready`; that is an outcome, not an error.
-  transition.ready.catch(() => {})
-  transition.finished.then(clear, clear)
+  transition.ready.catch(() => {});
+  transition.finished.then(clear, clear);
 }
 
 // Listeners on `window` run in the order they were added, and this one has
@@ -284,13 +303,16 @@ function onHistoryTraversal(event: PopStateEvent) {
 // `instrumentation-client.ts`, which runs before the app hydrates. A
 // development hot reload installs again; the previous instance's listener
 // is replaced rather than left to intercept the replay.
-const TRAVERSAL_LISTENER = Symbol.for('openbooks.route-transitions.history-traversal')
+const TRAVERSAL_LISTENER = Symbol.for("openbooks.route-transitions.history-traversal");
 
 export function installHistoryTraversalTransitions() {
-  if (typeof window === 'undefined' || typeof document.startViewTransition !== 'function') return
-  const registry = window as unknown as Record<symbol, ((event: PopStateEvent) => void) | undefined>
-  const previous = registry[TRAVERSAL_LISTENER]
-  if (previous) window.removeEventListener('popstate', previous, true)
-  registry[TRAVERSAL_LISTENER] = onHistoryTraversal
-  window.addEventListener('popstate', onHistoryTraversal, true)
+  if (typeof window === "undefined" || typeof document.startViewTransition !== "function") return;
+  const registry = window as unknown as Record<
+    symbol,
+    ((event: PopStateEvent) => void) | undefined
+  >;
+  const previous = registry[TRAVERSAL_LISTENER];
+  if (previous) window.removeEventListener("popstate", previous, true);
+  registry[TRAVERSAL_LISTENER] = onHistoryTraversal;
+  window.addEventListener("popstate", onHistoryTraversal, true);
 }

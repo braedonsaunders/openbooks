@@ -26,14 +26,7 @@ export type EconomicsComponent =
   | "ad_spend";
 
 export type EconomicsSourceKind =
-  | "posting"
-  | "fulfilment"
-  | "label"
-  | "payout"
-  | "refund"
-  | "estimate"
-  | "import"
-  | "manual";
+  "posting" | "fulfilment" | "label" | "payout" | "refund" | "estimate" | "import" | "manual";
 
 export interface EconomicsFactInput {
   lineKey: string;
@@ -144,7 +137,12 @@ function parseRateUnits(rate: string, label: string): bigint {
  * zero like the ledger: value = amount × rate ÷ 10^10, restated from the
  * cost precision into the order precision.
  */
-function convertAtRate(amountMinor: bigint, amountExponent: number, rateUnits: bigint, targetExponent: number): bigint {
+function convertAtRate(
+  amountMinor: bigint,
+  amountExponent: number,
+  rateUnits: bigint,
+  targetExponent: number,
+): bigint {
   return roundDiv(
     amountMinor * rateUnits * 10n ** BigInt(targetExponent),
     RATE_SCALE_UNITS * 10n ** BigInt(amountExponent),
@@ -222,16 +220,32 @@ async function convertCostAmount(
 ): Promise<ConvertedCost> {
   const code = (amountCurrency ?? orderCurrency).toUpperCase();
   if (code === orderCurrency) {
-    return { minor: decimalToMinorUnits(amountText, orderMinorUnits), currency: orderCurrency, evidenceSuffix: null };
+    return {
+      minor: decimalToMinorUnits(amountText, orderMinorUnits),
+      currency: orderCurrency,
+      evidenceSuffix: null,
+    };
   }
   const exponent = await foreignExponent(cache, code);
-  return convertMinorCost(decimalToMinorUnits(amountText, exponent), code, orderCurrency, orderMinorUnits, cache, fx);
+  return convertMinorCost(
+    decimalToMinorUnits(amountText, exponent),
+    code,
+    orderCurrency,
+    orderMinorUnits,
+    cache,
+    fx,
+  );
 }
 
 /** Tenant minor-unit precision; an unknown currency refuses instead of converting dust. */
 export async function minorUnitsForCurrency(currency: string): Promise<number> {
-  const row = (await db.execute<{ minor_units: number }>(sql`
-    select minor_units from currencies where code = ${currency}`, "objects"))[0];
+  const row = (
+    await db.execute<{ minor_units: number }>(
+      sql`
+    select minor_units from currencies where code = ${currency}`,
+      "objects",
+    )
+  )[0];
   const minorUnits = row?.minor_units;
   if (minorUnits == null || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
     refuse(
@@ -279,24 +293,42 @@ async function lookupChannelLineItem(
       externalId: line.variantExternalId,
     });
     if (linked?.nativeTable === "items") {
-      const item = (await db.execute<{ id: string }>(sql`
-        select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`, "objects"))[0];
+      const item = (
+        await db.execute<{ id: string }>(
+          sql`
+        select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`,
+          "objects",
+        )
+      )[0];
       if (item) return item.id;
     }
   }
   const sku = typeof line.sku === "string" && line.sku.trim() !== "" ? line.sku.trim() : null;
   if (sku) {
-    const item = (await db.execute<{ id: string }>(sql`
+    const item = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from items where org_id = ${orgId} and code = ${sku} and is_active
-       order by created_at limit 1`, "objects"))[0];
+       order by created_at limit 1`,
+        "objects",
+      )
+    )[0];
     if (item) return item.id;
   }
   return null;
 }
 
-async function channelProvider(orgId: string, channelId: string): Promise<{ kind: string; externalAccount: string }> {
-  const row = (await db.execute<{ kind: string; external_account: string }>(sql`
-    select kind, external_account from sales_channels where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
+async function channelProvider(
+  orgId: string,
+  channelId: string,
+): Promise<{ kind: string; externalAccount: string }> {
+  const row = (
+    await db.execute<{ kind: string; external_account: string }>(
+      sql`
+    select kind, external_account from sales_channels where org_id = ${orgId} and id = ${channelId}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     refuse(
       "channel_not_found",
@@ -308,10 +340,7 @@ async function channelProvider(orgId: string, channelId: string): Promise<{ kind
   return { kind: row.kind, externalAccount: row.external_account };
 }
 
-async function buildRevenueLines(
-  orgId: string,
-  order: ChannelOrderDetail,
-): Promise<RevenueLine[]> {
+async function buildRevenueLines(orgId: string, order: ChannelOrderDetail): Promise<RevenueLine[]> {
   const channel = await channelProvider(orgId, order.channelId);
   const lines: RevenueLine[] = [];
   let index = -1;
@@ -397,11 +426,17 @@ export function attributeRefundLines(
   const fees = refundLines.filter((line) => line.isRestockingFee);
   const returnedKeys = new Set<string>();
   for (const line of returns) {
-    const candidates = revenueLines.filter((revenue) =>
-      line.itemId !== null && revenue.itemId !== null && revenue.itemId === line.itemId,
+    const candidates = revenueLines.filter(
+      (revenue) =>
+        line.itemId !== null && revenue.itemId !== null && revenue.itemId === line.itemId,
     );
     if (candidates.length === 0) {
-      attributed.push({ lineKey: "order", component: "returns", amountMinor: line.amountMinor, sourceRef: `refund:${line.docLineId}` });
+      attributed.push({
+        lineKey: "order",
+        component: "returns",
+        amountMinor: line.amountMinor,
+        sourceRef: `refund:${line.docLineId}`,
+      });
       continue;
     }
     const weights = candidates.map((candidate) => candidate.qtyWeight);
@@ -422,18 +457,29 @@ export function attributeRefundLines(
     // The credit line charges the fee (negative); the margin earns it back.
     const earned = fee.amountMinor < 0n ? -fee.amountMinor : fee.amountMinor;
     if (earned === 0n) continue;
-    const targets = returnedKeys.size > 0
-      ? revenueLines.filter((revenue) => returnedKeys.has(revenue.key))
-      : revenueLines;
+    const targets =
+      returnedKeys.size > 0
+        ? revenueLines.filter((revenue) => returnedKeys.has(revenue.key))
+        : revenueLines;
     const weights = targets.map((target) => (target.gross > 0n ? target.gross : 0n));
     if (targets.length === 0 || weights.reduce((sum, weight) => sum + weight, 0n) === 0n) {
-      attributed.push({ lineKey: "order", component: "restocking_fee", amountMinor: earned, sourceRef: `refund:${fee.docLineId}` });
+      attributed.push({
+        lineKey: "order",
+        component: "restocking_fee",
+        amountMinor: earned,
+        sourceRef: `refund:${fee.docLineId}`,
+      });
       continue;
     }
     const parts = apportion(earned, weights);
     targets.forEach((target, at) => {
       if (parts[at] === 0n) return;
-      attributed.push({ lineKey: target.key, component: "restocking_fee", amountMinor: parts[at]!, sourceRef: `refund:${fee.docLineId}` });
+      attributed.push({
+        lineKey: target.key,
+        component: "restocking_fee",
+        amountMinor: parts[at]!,
+        sourceRef: `refund:${fee.docLineId}`,
+      });
     });
   }
   return attributed;
@@ -467,31 +513,39 @@ interface SettledFee {
  * the order thread is the provider's own source order id.
  */
 async function loadSettledOrderFees(orgId: string, orderExternalId: string): Promise<SettledFee[]> {
-  const rows = await db.execute<SettlementRow>(sql`
+  const rows = await db.execute<SettlementRow>(
+    sql`
     select l.line_number, l.kind, l.external_ref, l.amount::text as amount, l.currency,
            l.meta, l.batch_id, b.currency as batch_currency
       from psp_settlement_lines l
       join psp_settlement_batches b on b.id = l.batch_id and b.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.kind in ('charge', 'refund')
-       and l.meta->>'sourceOrderId' = ${orderExternalId}`, "objects");
+       and l.meta->>'sourceOrderId' = ${orderExternalId}`,
+    "objects",
+  );
   const fees: SettledFee[] = [];
   for (const row of rows) {
     if (!row.external_ref) continue;
-    const siblings = await db.execute<SettlementRow>(sql`
+    const siblings = await db.execute<SettlementRow>(
+      sql`
       select l.line_number, l.kind, l.external_ref, l.amount::text as amount, l.currency,
              l.meta, l.batch_id, b.currency as batch_currency
         from psp_settlement_lines l
         join psp_settlement_batches b on b.id = l.batch_id and b.org_id = l.org_id
        where l.org_id = ${orgId} and l.batch_id = ${row.batch_id}
-         and l.kind = 'fee' and l.external_ref = ${`${row.external_ref}_fee`}`, "objects");
+         and l.kind = 'fee' and l.external_ref = ${`${row.external_ref}_fee`}`,
+      "objects",
+    );
     for (const sibling of siblings) {
       const meta = (sibling.meta ?? {}) as Record<string, unknown>;
       const exchangeRate = typeof meta["exchangeRate"] === "string" ? meta["exchangeRate"] : null;
       fees.push({
         amountText: sibling.amount,
         currency: (sibling.currency ?? row.currency ?? "").toUpperCase(),
-        marketplace: isMarketplaceFeeType(typeof meta["shopifyType"] === "string" ? meta["shopifyType"] : undefined),
+        marketplace: isMarketplaceFeeType(
+          typeof meta["shopifyType"] === "string" ? meta["shopifyType"] : undefined,
+        ),
         sourceRef: `settle:${sibling.batch_id}:${sibling.line_number}`,
         exchangeRate,
         batchCurrency: sibling.batch_currency.toUpperCase(),
@@ -513,22 +567,31 @@ type LabelRow = {
  * on the label. A voided label leaves the set, so its facts withdraw and
  * history shows the reversal.
  */
-async function loadLabelCosts(orgId: string, postingDocumentId: string | null): Promise<LabelRow[]> {
+async function loadLabelCosts(
+  orgId: string,
+  postingDocumentId: string | null,
+): Promise<LabelRow[]> {
   if (!postingDocumentId) return [];
   type RawLabel = { id: string; rate_minor: string; rate_currency: string };
-  const labels = await db.execute<RawLabel>(sql`
+  const labels = await db.execute<RawLabel>(
+    sql`
     select id, rate_minor::text, rate_currency from shipment_labels
-     where org_id = ${orgId} and order_document_id = ${postingDocumentId} and status = 'purchased'`, "objects");
+     where org_id = ${orgId} and order_document_id = ${postingDocumentId} and status = 'purchased'`,
+    "objects",
+  );
   // Posted billing adjustments join the label's cost in their own currency,
   // so a correction restates the order instead of hiding beside the rate.
   type RawAdjustment = { label_id: string; currency: string; total: string };
-  const adjustments = await db.execute<RawAdjustment>(sql`
+  const adjustments = await db.execute<RawAdjustment>(
+    sql`
     select a.label_id, a.currency, sum(a.amount_minor)::text as total
       from shipping_adjustments a
       join shipment_labels l on l.id = a.label_id and l.org_id = a.org_id
      where a.org_id = ${orgId} and l.order_document_id = ${postingDocumentId} and l.status = 'purchased'
        and a.status = 'posted'
-     group by a.label_id, a.currency`, "objects");
+     group by a.label_id, a.currency`,
+    "objects",
+  );
   const costs = new Map<string, LabelRow>();
   for (const label of labels) {
     costs.set(`${label.id}|${label.rate_currency}`, {
@@ -543,7 +606,12 @@ async function loadLabelCosts(orgId: string, postingDocumentId: string | null): 
     const key = `${adjustment.label_id}|${adjustment.currency}`;
     const existing = costs.get(key);
     if (existing) existing.rate_minor += total;
-    else costs.set(key, { id: adjustment.label_id, rate_minor: total, rate_currency: adjustment.currency });
+    else
+      costs.set(key, {
+        id: adjustment.label_id,
+        rate_minor: total,
+        rate_currency: adjustment.currency,
+      });
   }
   return [...costs.values()].filter((cost) => cost.rate_minor !== 0n);
 }
@@ -568,11 +636,19 @@ async function loadSummaryItemWeights(
   channel: { kind: string; externalAccount: string },
   summaryId: string,
 ): Promise<Map<string, SummaryOrderWeight[]>> {
-  const siblings = await db.execute<{ id: string; lines: unknown }>(sql`
+  const siblings = await db.execute<{ id: string; lines: unknown }>(
+    sql`
     select id, lines from channel_orders
      where org_id = ${orgId} and summary_id = ${summaryId}
-     order by id`, "objects");
-  type ParsedLine = { orderId: string; sku: string | null; variantExternalId: string | null; quantity: string };
+     order by id`,
+    "objects",
+  );
+  type ParsedLine = {
+    orderId: string;
+    sku: string | null;
+    variantExternalId: string | null;
+    quantity: string;
+  };
   const parsed: ParsedLine[] = [];
   for (const sibling of siblings) {
     if (!Array.isArray(sibling.lines)) continue;
@@ -580,41 +656,62 @@ async function loadSummaryItemWeights(
       if (raw["giftCard"] === true) continue;
       const quantity = typeof raw["quantity"] === "string" ? raw["quantity"] : null;
       if (!quantity) continue;
-      const sku = typeof raw["sku"] === "string" && raw["sku"].trim() !== "" ? raw["sku"].trim() : null;
-      const variantExternalId = typeof raw["variantExternalId"] === "string" && raw["variantExternalId"].trim() !== ""
-        ? raw["variantExternalId"].trim()
-        : null;
+      const sku =
+        typeof raw["sku"] === "string" && raw["sku"].trim() !== "" ? raw["sku"].trim() : null;
+      const variantExternalId =
+        typeof raw["variantExternalId"] === "string" && raw["variantExternalId"].trim() !== ""
+          ? raw["variantExternalId"].trim()
+          : null;
       parsed.push({ orderId: sibling.id, sku, variantExternalId, quantity });
     }
   }
   const itemByVariant = new Map<string, string>();
-  const variantIds = [...new Set(parsed.map((line) => line.variantExternalId).filter((id): id is string => id !== null))];
+  const variantIds = [
+    ...new Set(
+      parsed.map((line) => line.variantExternalId).filter((id): id is string => id !== null),
+    ),
+  ];
   if (variantIds.length > 0) {
-    const links = await db.execute<{ external_id: string; native_id: string }>(sql`
+    const links = await db.execute<{ external_id: string; native_id: string }>(
+      sql`
       select l.external_id, l.native_id from external_links l
       join items i on i.org_id = l.org_id and i.id = l.native_id and i.is_active
      where l.org_id = ${orgId} and l.provider = ${channel.kind}
        and l.external_account = ${channel.externalAccount}
        and l.object_type = 'variant' and l.native_table = 'items'
-       and l.external_id in (${sql.join(variantIds.map((id) => sql`${id}`), sql`, `)})`, "objects");
+       and l.external_id in (${sql.join(
+         variantIds.map((id) => sql`${id}`),
+         sql`, `,
+       )})`,
+      "objects",
+    );
     for (const link of links) itemByVariant.set(link.external_id, link.native_id);
   }
   const itemBySku = new Map<string, string>();
-  const skus = [...new Set(parsed.map((line) => line.sku).filter((sku): sku is string => sku !== null))];
+  const skus = [
+    ...new Set(parsed.map((line) => line.sku).filter((sku): sku is string => sku !== null)),
+  ];
   if (skus.length > 0) {
-    const found = await db.execute<{ code: string; id: string }>(sql`
+    const found = await db.execute<{ code: string; id: string }>(
+      sql`
       select distinct on (code) code, id from items
-       where org_id = ${orgId} and is_active and code in (${sql.join(skus.map((sku) => sql`${sku}`), sql`, `)})
-       order by code, created_at`, "objects");
+       where org_id = ${orgId} and is_active and code in (${sql.join(
+         skus.map((sku) => sql`${sku}`),
+         sql`, `,
+       )})
+       order by code, created_at`,
+      "objects",
+    );
     for (const row of found) itemBySku.set(row.code, row.id);
   }
   // One entry per order: an order spreading an item across priced lines still
   // takes a single quantity share, split across its own lines afterwards.
   const combined = new Map<string, Map<string, bigint>>();
   for (const line of parsed) {
-    const itemId = (line.variantExternalId && itemByVariant.get(line.variantExternalId))
-      ?? (line.sku && itemBySku.get(line.sku))
-      ?? null;
+    const itemId =
+      (line.variantExternalId && itemByVariant.get(line.variantExternalId)) ??
+      (line.sku && itemBySku.get(line.sku)) ??
+      null;
     if (!itemId) continue;
     const weight = parseQuantityWeight(line.quantity) ?? 0n;
     if (weight === 0n) continue;
@@ -624,16 +721,24 @@ async function loadSummaryItemWeights(
   }
   const weights = new Map<string, SummaryOrderWeight[]>();
   for (const [itemId, perOrder] of combined) {
-    weights.set(itemId, [...perOrder].map(([orderId, weight]) => ({ orderId, weight })));
+    weights.set(
+      itemId,
+      [...perOrder].map(([orderId, weight]) => ({ orderId, weight })),
+    );
   }
   return weights;
 }
 
 /** The summary batch's posted cash sale carrying a summarized order's issues, if posted. */
 async function summaryPostingDocument(orgId: string, summaryId: string): Promise<string | null> {
-  const row = (await db.execute<{ posting_document_id: string | null }>(sql`
+  const row = (
+    await db.execute<{ posting_document_id: string | null }>(
+      sql`
     select posting_document_id from channel_daily_summaries
-     where org_id = ${orgId} and id = ${summaryId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${summaryId}`,
+      "objects",
+    )
+  )[0];
   return row?.posting_document_id ?? null;
 }
 
@@ -642,15 +747,21 @@ async function summaryPostingDocument(orgId: string, summaryId: string): Promise
  * FIFO layer the issue consumed. Returns carry the original issue movement
  * id on the credit line and are handled as returns, never netted here.
  */
-async function loadIssueCosts(orgId: string, postingDocumentId: string | null): Promise<IssueRow[]> {
+async function loadIssueCosts(
+  orgId: string,
+  postingDocumentId: string | null,
+): Promise<IssueRow[]> {
   if (!postingDocumentId) return [];
-  return await db.execute<IssueRow>(sql`
+  return await db.execute<IssueRow>(
+    sql`
     select dl.item_id, sum(m.total_value)::text as total
       from document_lines dl
       join inventory_movements m on m.document_line_id = dl.id and m.org_id = dl.org_id
      where dl.org_id = ${orgId} and dl.document_id = ${postingDocumentId}
        and dl.item_id is not null and m.kind = 'issue' and m.total_value is not null
-     group by dl.item_id`, "objects");
+     group by dl.item_id`,
+    "objects",
+  );
 }
 
 type RefundDocRow = {
@@ -664,13 +775,16 @@ type RefundDocRow = {
 
 /** Posted cash-refund lines against this order's refund events. */
 async function loadRefundLines(orgId: string, orderId: string): Promise<RefundDocRow[]> {
-  return await db.execute<RefundDocRow>(sql`
+  return await db.execute<RefundDocRow>(
+    sql`
     select d.id, dl.id as line_id, dl.item_id, dl.amount::text as amount, d.currency, dl.description
       from channel_order_events e
       join documents d on d.id = e.posting_document_id and d.org_id = e.org_id
       join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
      where e.org_id = ${orgId} and e.order_id = ${orderId} and e.kind = 'refund'
-       and e.posting_document_id is not null and d.status = 'posted'`, "objects");
+       and e.posting_document_id is not null and d.status = 'posted'`,
+    "objects",
+  );
 }
 
 type SpendRow = {
@@ -680,10 +794,17 @@ type SpendRow = {
 };
 
 /** Imported marketing spend for the channel on the order's UTC day. */
-async function loadDayAdSpend(orgId: string, channelId: string, orderDay: string): Promise<SpendRow[]> {
-  const rows = await db.execute<SpendRow>(sql`
+async function loadDayAdSpend(
+  orgId: string,
+  channelId: string,
+  orderDay: string,
+): Promise<SpendRow[]> {
+  const rows = await db.execute<SpendRow>(
+    sql`
     select id, amount_minor, currency from channel_ad_spend
-     where org_id = ${orgId} and channel_id = ${channelId} and spend_date = ${orderDay}::date`, "objects");
+     where org_id = ${orgId} and channel_id = ${channelId} and spend_date = ${orderDay}::date`,
+    "objects",
+  );
   return rows.map((row) => ({ ...row, amount_minor: asMinorUnits(row.amount_minor) }));
 }
 
@@ -693,15 +814,22 @@ type DayRevenueRow = {
 };
 
 /** Current net revenue per channel order of the day, for ad spend weights. */
-async function loadDayRevenue(orgId: string, channelId: string, orderDay: string): Promise<DayRevenueRow[]> {
-  return await db.execute<DayRevenueRow>(sql`
+async function loadDayRevenue(
+  orgId: string,
+  channelId: string,
+  orderDay: string,
+): Promise<DayRevenueRow[]> {
+  return await db.execute<DayRevenueRow>(
+    sql`
     select f.order_id, sum(case when f.component = 'discount' then f.amount_minor else 0 end
       + case when f.component = 'net_revenue' then f.amount_minor else 0 end)::text as revenue
       from channel_order_economics f
       join channel_orders o on o.id = f.order_id and o.org_id = f.org_id
      where f.org_id = ${orgId} and f.channel_id = ${channelId} and f.is_current
        and (o.ordered_at at time zone 'UTC')::date = ${orderDay}::date
-     group by f.order_id`, "objects");
+     group by f.order_id`,
+    "objects",
+  );
 }
 
 /**
@@ -714,13 +842,18 @@ async function loadRealizedFeeRate(
   channelId: string,
   excludeOrderId: string,
 ): Promise<{ fee: bigint; revenue: bigint } | null> {
-  const row = (await db.execute<{ fee: string; revenue: string }>(sql`
+  const row = (
+    await db.execute<{ fee: string; revenue: string }>(
+      sql`
     select coalesce(sum(case when f.component = 'processor_fee' and not f.estimated then -f.amount_minor else 0 end), 0)::text as fee,
            coalesce(sum(case when f.component in ('net_revenue', 'discount') then f.amount_minor else 0 end), 0)::text as revenue
       from channel_order_economics f
      where f.org_id = ${orgId} and f.channel_id = ${channelId} and f.is_current
        and f.order_id <> ${excludeOrderId}
-       and f.as_of > now() - interval '90 days'`, "objects"))[0];
+       and f.as_of > now() - interval '90 days'`,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   const fee = BigInt(row.fee);
   const revenue = BigInt(row.revenue);
@@ -753,15 +886,29 @@ async function buildDesiredFacts(
     if (!revenue) continue;
     const gross = channelLineGrossMinor(line.priceMinor, line.quantity);
     desired.push({
-      lineKey: revenue.key, component: "net_revenue", sourceKind: "posting", sourceRef: "",
-      currency, amountMinor: gross, itemId: revenue.itemId, sku: revenue.sku,
-      promotionCode: revenue.promotionCode, estimated: false,
+      lineKey: revenue.key,
+      component: "net_revenue",
+      sourceKind: "posting",
+      sourceRef: "",
+      currency,
+      amountMinor: gross,
+      itemId: revenue.itemId,
+      sku: revenue.sku,
+      promotionCode: revenue.promotionCode,
+      estimated: false,
     });
     if (line.discountMinor > 0n) {
       desired.push({
-        lineKey: revenue.key, component: "discount", sourceKind: "posting", sourceRef: "",
-        currency, amountMinor: -line.discountMinor, itemId: revenue.itemId, sku: revenue.sku,
-        promotionCode: revenue.promotionCode, estimated: false,
+        lineKey: revenue.key,
+        component: "discount",
+        sourceKind: "posting",
+        sourceRef: "",
+        currency,
+        amountMinor: -line.discountMinor,
+        itemId: revenue.itemId,
+        sku: revenue.sku,
+        promotionCode: revenue.promotionCode,
+        estimated: false,
       });
     }
   }
@@ -771,15 +918,29 @@ async function buildDesiredFacts(
     const revenue = revenueLines.find((candidate) => candidate.key === `ship:${shipIndex}`);
     if (!revenue) continue;
     desired.push({
-      lineKey: revenue.key, component: "net_revenue", sourceKind: "posting", sourceRef: "",
-      currency, amountMinor: ship.amountMinor, itemId: null, sku: null,
-      promotionCode: null, estimated: false,
+      lineKey: revenue.key,
+      component: "net_revenue",
+      sourceKind: "posting",
+      sourceRef: "",
+      currency,
+      amountMinor: ship.amountMinor,
+      itemId: null,
+      sku: null,
+      promotionCode: null,
+      estimated: false,
     });
     if (ship.discountMinor > 0n) {
       desired.push({
-        lineKey: revenue.key, component: "discount", sourceKind: "posting", sourceRef: "",
-        currency, amountMinor: -ship.discountMinor, itemId: null, sku: null,
-        promotionCode: null, estimated: false,
+        lineKey: revenue.key,
+        component: "discount",
+        sourceKind: "posting",
+        sourceRef: "",
+        currency,
+        amountMinor: -ship.discountMinor,
+        itemId: null,
+        sku: null,
+        promotionCode: null,
+        estimated: false,
       });
     }
   }
@@ -790,26 +951,44 @@ async function buildDesiredFacts(
   const pushCogsShare = (share: bigint, sourceRef: string, takers: RevenueLine[]): void => {
     if (share === 0n || takers.length === 0) return;
     const magnitude = share < 0n ? -share : share;
-    const parts = apportion(magnitude, takers.map((taker) => taker.qtyWeight));
+    const parts = apportion(
+      magnitude,
+      takers.map((taker) => taker.qtyWeight),
+    );
     takers.forEach((taker, at) => {
       if (parts[at] === 0n) return;
       desired.push({
-        lineKey: taker.key, component: "cogs", sourceKind: "posting", sourceRef,
-        currency, amountMinor: share < 0n ? -parts[at]! : parts[at]!,
-        itemId: taker.itemId, sku: taker.sku, promotionCode: taker.promotionCode, estimated: false,
+        lineKey: taker.key,
+        component: "cogs",
+        sourceKind: "posting",
+        sourceRef,
+        currency,
+        amountMinor: share < 0n ? -parts[at]! : parts[at]!,
+        itemId: taker.itemId,
+        sku: taker.sku,
+        promotionCode: taker.promotionCode,
+        estimated: false,
       });
     });
   };
-  const issueDocumentId = order.postingDocumentId
-    ?? (order.summaryId ? await summaryPostingDocument(orgId, order.summaryId) : null);
+  const issueDocumentId =
+    order.postingDocumentId ??
+    (order.summaryId ? await summaryPostingDocument(orgId, order.summaryId) : null);
   if (issueDocumentId) {
-    const summaryShares = order.postingDocumentId || !order.summaryId
-      ? null
-      : await loadSummaryItemWeights(orgId, await channelProvider(orgId, order.channelId), order.summaryId);
+    const summaryShares =
+      order.postingDocumentId || !order.summaryId
+        ? null
+        : await loadSummaryItemWeights(
+            orgId,
+            await channelProvider(orgId, order.channelId),
+            order.summaryId,
+          );
     for (const issue of await loadIssueCosts(orgId, issueDocumentId)) {
       const total = decimalToMinorUnits(issue.total, minorUnits);
       if (total === 0n) continue;
-      const takers = revenueLines.filter((line) => line.itemId !== null && line.itemId === issue.item_id);
+      const takers = revenueLines.filter(
+        (line) => line.itemId !== null && line.itemId === issue.item_id,
+      );
       if (takers.length === 0) continue;
       if (!summaryShares) {
         pushCogsShare(total, `posting:${issueDocumentId}`, takers);
@@ -819,13 +998,21 @@ async function buildDesiredFacts(
       const at = vector.findIndex((entry) => entry.orderId === order.id);
       if (at < 0) continue;
       if (vector.every((entry) => entry.weight === 0n)) continue;
-      const parts = apportion(total < 0n ? -total : total, vector.map((entry) => entry.weight));
+      const parts = apportion(
+        total < 0n ? -total : total,
+        vector.map((entry) => entry.weight),
+      );
       pushCogsShare(total < 0n ? -parts[at]! : parts[at]!, `posting:${issueDocumentId}`, takers);
     }
   }
   const orderDay = order.orderedAt.slice(0, 10);
-  const fxFor = (documentRate: string | null): { orgId: string; asOf: string; documentRate: string | null } =>
-    ({ orgId, asOf: orderDay, documentRate });
+  const fxFor = (
+    documentRate: string | null,
+  ): { orgId: string; asOf: string; documentRate: string | null } => ({
+    orgId,
+    asOf: orderDay,
+    documentRate,
+  });
   const fxCache = new Map<string, number>();
   // Carrier labels arrive in minor units already, each allocated across the
   // order's lines by value. A foreign-currency label converts at the
@@ -834,17 +1021,28 @@ async function buildDesiredFacts(
   for (const label of await loadLabelCosts(orgId, order.postingDocumentId)) {
     if (label.rate_minor === 0n) continue;
     const converted = await convertMinorCost(
-      label.rate_minor, label.rate_currency, currency, minorUnits, fxCache, fxFor(null),
+      label.rate_minor,
+      label.rate_currency,
+      currency,
+      minorUnits,
+      fxCache,
+      fxFor(null),
     );
     if (converted.minor === 0n) continue;
     const sourceRef = converted.evidenceSuffix
       ? `label:${label.id}:${converted.evidenceSuffix}`
       : `label:${label.id}:${label.rate_currency}`;
     for (const row of allocateAcrossLines(-converted.minor, revenueLines, (line, amount) => ({
-      lineKey: line?.key ?? "order", component: "shipping_label", sourceKind: "label",
-      sourceRef, currency: converted.currency, amountMinor: amount,
-      itemId: line?.itemId ?? null, sku: line?.sku ?? null,
-      promotionCode: line?.promotionCode ?? null, estimated: false,
+      lineKey: line?.key ?? "order",
+      component: "shipping_label",
+      sourceKind: "label",
+      sourceRef,
+      currency: converted.currency,
+      amountMinor: amount,
+      itemId: line?.itemId ?? null,
+      sku: line?.sku ?? null,
+      promotionCode: line?.promotionCode ?? null,
+      estimated: false,
     }))) {
       desired.push(row);
     }
@@ -855,8 +1053,16 @@ async function buildDesiredFacts(
   const settled = await loadSettledOrderFees(orgId, order.externalId);
   let settledFeeMinor = 0n;
   for (const fee of settled) {
-    const documentRate = fee.exchangeRate && fee.batchCurrency === currency ? fee.exchangeRate : null;
-    const converted = await convertCostAmount(fee.amountText, fee.currency, currency, minorUnits, fxCache, fxFor(documentRate));
+    const documentRate =
+      fee.exchangeRate && fee.batchCurrency === currency ? fee.exchangeRate : null;
+    const converted = await convertCostAmount(
+      fee.amountText,
+      fee.currency,
+      currency,
+      minorUnits,
+      fxCache,
+      fxFor(documentRate),
+    );
     if (converted.minor === 0n) continue;
     const component = fee.marketplace ? "marketplace_fee" : "processor_fee";
     if (!fee.marketplace && converted.currency === currency) settledFeeMinor += converted.minor;
@@ -864,10 +1070,16 @@ async function buildDesiredFacts(
       ? `${fee.sourceRef}:${converted.evidenceSuffix}`
       : `${fee.sourceRef}:${converted.currency}`;
     for (const row of allocateAcrossLines(-converted.minor, revenueLines, (line, amount) => ({
-      lineKey: line?.key ?? "order", component, sourceKind: "payout",
-      sourceRef, currency: converted.currency, amountMinor: amount,
-      itemId: line?.itemId ?? null, sku: line?.sku ?? null,
-      promotionCode: line?.promotionCode ?? null, estimated: false,
+      lineKey: line?.key ?? "order",
+      component,
+      sourceKind: "payout",
+      sourceRef,
+      currency: converted.currency,
+      amountMinor: amount,
+      itemId: line?.itemId ?? null,
+      sku: line?.sku ?? null,
+      promotionCode: line?.promotionCode ?? null,
+      estimated: false,
     }))) {
       desired.push(row);
     }
@@ -875,15 +1087,24 @@ async function buildDesiredFacts(
   if (settledFeeMinor === 0n) {
     const rate = await loadRealizedFeeRate(orgId, order.channelId, order.id);
     if (rate) {
-      const orderRevenue = revenueLines.reduce((sum, line) => sum + line.gross, 0n)
-        + desired.filter((row) => row.component === "discount").reduce((sum, row) => sum + row.amountMinor, 0n);
+      const orderRevenue =
+        revenueLines.reduce((sum, line) => sum + line.gross, 0n) +
+        desired
+          .filter((row) => row.component === "discount")
+          .reduce((sum, row) => sum + row.amountMinor, 0n);
       if (orderRevenue > 0n) {
         const estimate = roundDiv(orderRevenue * rate.fee, rate.revenue);
         for (const row of allocateAcrossLines(-estimate, revenueLines, (line, amount) => ({
-          lineKey: line?.key ?? "order", component: "processor_fee", sourceKind: "estimate",
-          sourceRef: "rate:channel", currency, amountMinor: amount,
-          itemId: line?.itemId ?? null, sku: line?.sku ?? null,
-          promotionCode: line?.promotionCode ?? null, estimated: true,
+          lineKey: line?.key ?? "order",
+          component: "processor_fee",
+          sourceKind: "estimate",
+          sourceRef: "rate:channel",
+          currency,
+          amountMinor: amount,
+          itemId: line?.itemId ?? null,
+          sku: line?.sku ?? null,
+          promotionCode: line?.promotionCode ?? null,
+          estimated: true,
         }))) {
           desired.push(row);
         }
@@ -905,7 +1126,14 @@ async function buildDesiredFacts(
       let groupCurrency = currency;
       let groupSuffix: string | null = null;
       for (const row of group) {
-        const converted = await convertCostAmount(row.amount, row.currency, currency, minorUnits, fxCache, fxFor(null));
+        const converted = await convertCostAmount(
+          row.amount,
+          row.currency,
+          currency,
+          minorUnits,
+          fxCache,
+          fxFor(null),
+        );
         groupCurrency = converted.currency;
         groupSuffix = converted.evidenceSuffix;
         inputs.push({
@@ -918,11 +1146,16 @@ async function buildDesiredFacts(
       for (const attributed of attributeRefundLines(inputs, revenueLines)) {
         const taker = revenueLines.find((line) => line.key === attributed.lineKey) ?? null;
         desired.push({
-          lineKey: attributed.lineKey, component: attributed.component, sourceKind: "refund",
+          lineKey: attributed.lineKey,
+          component: attributed.component,
+          sourceKind: "refund",
           sourceRef: groupSuffix ? `${attributed.sourceRef}:${groupSuffix}` : attributed.sourceRef,
-          currency: groupCurrency, amountMinor: attributed.amountMinor,
-          itemId: taker?.itemId ?? null, sku: taker?.sku ?? null,
-          promotionCode: taker?.promotionCode ?? null, estimated: false,
+          currency: groupCurrency,
+          amountMinor: attributed.amountMinor,
+          itemId: taker?.itemId ?? null,
+          sku: taker?.sku ?? null,
+          promotionCode: taker?.promotionCode ?? null,
+          estimated: false,
         });
       }
     }
@@ -933,7 +1166,10 @@ async function buildDesiredFacts(
   if (spends.length > 0) {
     const dayRevenue = await loadDayRevenue(orgId, order.channelId, orderDay);
     const weights = new Map(dayRevenue.map((row) => [row.order_id, BigInt(row.revenue)]));
-    const weightTotal = [...weights.values()].reduce((sum, weight) => sum + (weight > 0n ? weight : 0n), 0n);
+    const weightTotal = [...weights.values()].reduce(
+      (sum, weight) => sum + (weight > 0n ? weight : 0n),
+      0n,
+    );
     const ownRevenue = weights.get(order.id) ?? 0n;
     if (weightTotal > 0n && ownRevenue > 0n) {
       for (const spend of spends) {
@@ -943,17 +1179,28 @@ async function buildDesiredFacts(
         const share = roundDiv(spend.amount_minor * ownRevenue, weightTotal);
         if (share === 0n) continue;
         const converted = await convertMinorCost(
-          share, spend.currency, currency, minorUnits, fxCache, fxFor(null),
+          share,
+          spend.currency,
+          currency,
+          minorUnits,
+          fxCache,
+          fxFor(null),
         );
         if (converted.minor === 0n) continue;
         const sourceRef = converted.evidenceSuffix
           ? `adspend:${spend.id}:${converted.evidenceSuffix}`
           : `adspend:${spend.id}`;
         for (const row of allocateAcrossLines(-converted.minor, revenueLines, (line, amount) => ({
-          lineKey: line?.key ?? "order", component: "ad_spend", sourceKind: "import",
-          sourceRef, currency: converted.currency, amountMinor: amount,
-          itemId: line?.itemId ?? null, sku: line?.sku ?? null,
-          promotionCode: line?.promotionCode ?? null, estimated: false,
+          lineKey: line?.key ?? "order",
+          component: "ad_spend",
+          sourceKind: "import",
+          sourceRef,
+          currency: converted.currency,
+          amountMinor: amount,
+          itemId: line?.itemId ?? null,
+          sku: line?.sku ?? null,
+          promotionCode: line?.promotionCode ?? null,
+          estimated: false,
         }))) {
           desired.push(row);
         }
@@ -978,17 +1225,24 @@ type StoredFact = {
   version: number;
 };
 
-function factKey(fact: { lineKey: string; component: string; sourceKind: string; sourceRef: string }): string {
+function factKey(fact: {
+  lineKey: string;
+  component: string;
+  sourceKind: string;
+  sourceRef: string;
+}): string {
   return `${fact.lineKey}|${fact.component}|${fact.sourceKind}|${fact.sourceRef}`;
 }
 
 function sameFact(current: StoredFact, desired: EconomicsFactInput): boolean {
-  return current.currency === desired.currency
-    && current.amount_minor === desired.amountMinor
-    && current.estimated === desired.estimated
-    && (current.item_id ?? null) === desired.itemId
-    && (current.sku ?? null) === desired.sku
-    && (current.promotion_code ?? null) === desired.promotionCode;
+  return (
+    current.currency === desired.currency &&
+    current.amount_minor === desired.amountMinor &&
+    current.estimated === desired.estimated &&
+    (current.item_id ?? null) === desired.itemId &&
+    (current.sku ?? null) === desired.sku &&
+    (current.promotion_code ?? null) === desired.promotionCode
+  );
 }
 
 /**
@@ -1005,15 +1259,27 @@ async function writeFacts(
   order: ChannelOrderDetail,
   desired: EconomicsFactInput[],
 ): Promise<{ inserted: number; retired: number }> {
-  const current = (await db.execute<StoredFact>(sql`
+  const current = (
+    await db.execute<StoredFact>(
+      sql`
     select id, line_key, component, source_kind, source_ref, currency, amount_minor,
            item_id, sku, promotion_code, estimated, version
       from channel_order_economics
-     where org_id = ${orgId} and order_id = ${order.id} and is_current`, "objects"))
-    .map((row) => ({ ...row, amount_minor: asMinorUnits(row.amount_minor) }));
-  const byKey = new Map(current.map((row) => [factKey({
-    lineKey: row.line_key, component: row.component, sourceKind: row.source_kind, sourceRef: row.source_ref,
-  }), row]));
+     where org_id = ${orgId} and order_id = ${order.id} and is_current`,
+      "objects",
+    )
+  ).map((row) => ({ ...row, amount_minor: asMinorUnits(row.amount_minor) }));
+  const byKey = new Map(
+    current.map((row) => [
+      factKey({
+        lineKey: row.line_key,
+        component: row.component,
+        sourceKind: row.source_kind,
+        sourceRef: row.source_ref,
+      }),
+      row,
+    ]),
+  );
   let inserted = 0;
   let retired = 0;
   const seen = new Set<string>();
@@ -1038,12 +1304,15 @@ async function writeFacts(
            set is_current = false, updated_by = ${actor}, updated_at = now()
          where org_id = ${orgId} and id = ${existing.id} and is_current`);
       if (retiring.rowCount !== 1) {
-        throw new Error("Order economics restatement matched no row; the fact changed while it restated");
+        throw new Error(
+          "Order economics restatement matched no row; the fact changed while it restated",
+        );
       }
       supersedes = existing.id;
       retired += 1;
     }
-    const created = await db.execute<{ id: string }>(sql`
+    const created = await db.execute<{ id: string }>(
+      sql`
       insert into channel_order_economics
         (org_id, channel_id, order_id, line_key, component, source_kind, source_ref,
          currency, amount_minor, item_id, sku, promotion_code, estimated, version,
@@ -1052,8 +1321,11 @@ async function writeFacts(
         ${want.sourceKind}, ${want.sourceRef}, ${want.currency}, ${want.amountMinor.toString()},
         ${want.itemId}, ${want.sku}, ${want.promotionCode}, ${want.estimated}, ${version},
         ${actor}, ${actor})
-      returning id`, "objects");
-    if (created.length !== 1) throw new Error("Order economics insert returned an unexpected row count");
+      returning id`,
+      "objects",
+    );
+    if (created.length !== 1)
+      throw new Error("Order economics insert returned an unexpected row count");
     inserted += 1;
     if (supersedes) {
       const linked = await db.execute<never>(sql`
@@ -1061,13 +1333,18 @@ async function writeFacts(
            set superseded_by = ${created[0]!.id}, updated_by = ${actor}, updated_at = now()
          where org_id = ${orgId} and id = ${supersedes}`);
       if (linked.rowCount !== 1) {
-        throw new Error("Order economics history link matched no row; the fact changed while it restated");
+        throw new Error(
+          "Order economics history link matched no row; the fact changed while it restated",
+        );
       }
     }
   }
   for (const row of current) {
     const key = factKey({
-      lineKey: row.line_key, component: row.component, sourceKind: row.source_kind, sourceRef: row.source_ref,
+      lineKey: row.line_key,
+      component: row.component,
+      sourceKind: row.source_kind,
+      sourceRef: row.source_ref,
     });
     if (seen.has(key)) continue;
     const withdrawn = await db.execute<never>(sql`
@@ -1075,7 +1352,9 @@ async function writeFacts(
          set is_current = false, updated_by = ${actor}, updated_at = now()
        where org_id = ${orgId} and id = ${row.id} and is_current`);
     if (withdrawn.rowCount !== 1) {
-      throw new Error("Order economics withdrawal matched no row; the fact changed while it withdrew");
+      throw new Error(
+        "Order economics withdrawal matched no row; the fact changed while it withdrew",
+      );
     }
     retired += 1;
   }
@@ -1093,7 +1372,9 @@ export async function recomputeOrderEconomicsScoped(
   actor: string | null,
   orderId: string,
 ): Promise<{ inserted: number; retired: number }> {
-  await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"economics:" + orderId}, 0))`);
+  await db.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${"economics:" + orderId}, 0))`,
+  );
   const order = await loadChannelOrder(orgId, orderId);
   if (!order) {
     refuse(
@@ -1134,7 +1415,11 @@ export async function recomputeOrderEconomics(
  * their own statement and the channel scan recomputes; a retried mark
  * collides on (org, order) and the first mark wins.
  */
-export async function markOrderEconomicsDirty(orgId: string, orderId: string, reason: string): Promise<void> {
+export async function markOrderEconomicsDirty(
+  orgId: string,
+  orderId: string,
+  reason: string,
+): Promise<void> {
   await db.execute(sql`
     insert into channel_order_economics_pending (org_id, order_id, reason)
     values (${orgId}, ${orderId}, ${reason})
@@ -1157,16 +1442,21 @@ export async function recomputePendingOrderEconomics(
     if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
       refuse("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
     }
-    const marks = await db.execute<{ order_id: string }>(sql`
+    const marks = await db.execute<{ order_id: string }>(
+      sql`
       select order_id from channel_order_economics_pending
-       where org_id = ${orgId} order by enqueued_at limit ${limit} for update skip locked`, "objects");
+       where org_id = ${orgId} order by enqueued_at limit ${limit} for update skip locked`,
+      "objects",
+    );
     let orders = 0;
     for (const mark of marks) {
       await recomputeOrderEconomicsScoped(orgId, actor, mark.order_id);
       const cleared = await db.execute<never>(sql`
         delete from channel_order_economics_pending where org_id = ${orgId} and order_id = ${mark.order_id}`);
       if (cleared.rowCount !== 1) {
-        throw new Error("Economics restatement mark matched no row; the queue changed while it drained");
+        throw new Error(
+          "Economics restatement mark matched no row; the queue changed while it drained",
+        );
       }
       orders += 1;
     }
@@ -1175,7 +1465,11 @@ export async function recomputePendingOrderEconomics(
 }
 
 /** CM summation: every row counts in its own currency; CM uses the order's. */
-function sumComponent(facts: EconomicsFact[], currency: string, components: EconomicsComponent[]): bigint {
+function sumComponent(
+  facts: EconomicsFact[],
+  currency: string,
+  components: EconomicsComponent[],
+): bigint {
   return facts
     .filter((fact) => fact.currency === currency && components.includes(fact.component))
     .reduce((sum, fact) => sum + fact.amountMinor, 0n);
@@ -1222,12 +1516,15 @@ export async function getOrderEconomics(orgId: string, orderId: string): Promise
       version: number;
       as_of: string;
     };
-    const rows = await db.execute<CurrentFact>(sql`
+    const rows = await db.execute<CurrentFact>(
+      sql`
       select line_key, component, source_kind, source_ref, currency, amount_minor::text,
              item_id, sku, promotion_code, estimated, version, as_of::text
         from channel_order_economics
        where org_id = ${orgId} and order_id = ${order.id} and is_current
-       order by line_key, component, source_kind, source_ref`, "objects");
+       order by line_key, component, source_kind, source_ref`,
+      "objects",
+    );
     const currency = order.shopCurrency;
     const facts: EconomicsFact[] = rows.map((row) => ({
       lineKey: row.line_key,
@@ -1245,7 +1542,14 @@ export async function getOrderEconomics(orgId: string, orderId: string): Promise
     }));
     const revenue = sumComponent(facts, currency, ["net_revenue", "discount"]);
     const cm1 = revenue + sumComponent(facts, currency, ["cogs", "returns", "restocking_fee"]);
-    const cm2 = cm1 + sumComponent(facts, currency, ["processor_fee", "shipping_label", "marketplace_fee", "stored_value_funding"]);
+    const cm2 =
+      cm1 +
+      sumComponent(facts, currency, [
+        "processor_fee",
+        "shipping_label",
+        "marketplace_fee",
+        "stored_value_funding",
+      ]);
     const cm3 = cm2 + sumComponent(facts, currency, ["ad_spend"]);
     return {
       orderId: order.id,
@@ -1290,7 +1594,10 @@ type SummaryRow = {
  * counts, revenue and CM2 from current facts, the orders still carrying
  * estimated fees, and the imported ad spend beside them.
  */
-export async function getChannelMarginSummary(orgId: string, days = 30): Promise<ChannelMarginSummary[]> {
+export async function getChannelMarginSummary(
+  orgId: string,
+  days = 30,
+): Promise<ChannelMarginSummary[]> {
   if (!Number.isInteger(days) || days < 1 || days > 90) {
     refuse(
       "margin_window_invalid",
@@ -1299,7 +1606,8 @@ export async function getChannelMarginSummary(orgId: string, days = 30): Promise
     );
   }
   return withOrg(orgId, async () => {
-    const rows = await db.execute<SummaryRow>(sql`
+    const rows = await db.execute<SummaryRow>(
+      sql`
       select c.id as channel_id, c.name as channel_name, f.currency, cur.minor_units,
              count(distinct f.order_id)::text as orders,
              coalesce(sum(case when f.component in ('net_revenue', 'discount') then f.amount_minor else 0 end), 0)::text as revenue,
@@ -1312,13 +1620,20 @@ export async function getChannelMarginSummary(orgId: string, days = 30): Promise
         left join currencies cur on cur.code = f.currency
        where f.org_id = ${orgId} and f.is_current and o.ordered_at >= now() - make_interval(days => ${days})
        group by c.id, c.name, f.currency, cur.minor_units
-       order by c.name, f.currency`, "objects");
-    const spend = await db.execute<{ channel_id: string; currency: string; total: string }>(sql`
+       order by c.name, f.currency`,
+      "objects",
+    );
+    const spend = await db.execute<{ channel_id: string; currency: string; total: string }>(
+      sql`
       select channel_id, currency, coalesce(sum(amount_minor), 0)::text as total
         from channel_ad_spend
        where org_id = ${orgId} and spend_date >= (now() - make_interval(days => ${days}))::date
-       group by channel_id, currency`, "objects");
-    const spendByChannel = new Map(spend.map((row) => [`${row.channel_id}|${row.currency}`, BigInt(row.total)]));
+       group by channel_id, currency`,
+      "objects",
+    );
+    const spendByChannel = new Map(
+      spend.map((row) => [`${row.channel_id}|${row.currency}`, BigInt(row.total)]),
+    );
     return rows.map((row) => ({
       channelId: row.channel_id,
       channelName: row.channel_name,
@@ -1341,7 +1656,13 @@ export async function getChannelMarginSummary(orgId: string, days = 30): Promise
 export async function recordChannelAdSpend(
   orgId: string,
   actor: string | null,
-  input: { channelId: string; spendDate: string; amountMinor: bigint; currency: string; source: string },
+  input: {
+    channelId: string;
+    spendDate: string;
+    amountMinor: bigint;
+    currency: string;
+    source: string;
+  },
 ): Promise<{ spendId: string }> {
   return withOrg(orgId, async () => {
     await acquireOrgFeatureGateLock(db, orgId);
@@ -1368,14 +1689,17 @@ export async function recordChannelAdSpend(
     await minorUnitsForCurrency(input.currency);
     // A re-import from the same source replaces that source's day figure:
     // the conflict is expected (imports retry) and the latest file wins.
-    const stored = await db.execute<{ id: string }>(sql`
+    const stored = await db.execute<{ id: string }>(
+      sql`
       insert into channel_ad_spend (org_id, channel_id, spend_date, amount_minor, currency, source, created_by, updated_by)
       values (${orgId}, ${input.channelId}, ${input.spendDate}, ${input.amountMinor.toString()},
         ${input.currency}, ${input.source}, ${actor}, ${actor})
       on conflict (org_id, channel_id, spend_date, source) do update
         set amount_minor = excluded.amount_minor, currency = excluded.currency,
             updated_by = ${actor}, updated_at = now()
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     if (stored.length !== 1) throw new Error("Ad spend store returned an unexpected row count");
     // Every order of the spend day shares the new figure, so every one
     // restates; a day with no orders marks nothing, which is correct.
@@ -1390,4 +1714,3 @@ export async function recordChannelAdSpend(
     return { spendId: stored[0]!.id };
   });
 }
-

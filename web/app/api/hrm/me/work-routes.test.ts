@@ -75,7 +75,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmMeWorkRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmMeWorkRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
@@ -97,7 +98,13 @@ let changeRoute: typeof import("./benefits/change/route.ts") | undefined;
 {
   registerHooks({
     resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
+      const mocked =
+        mockUrls.get(specifier) ??
+        (specifier === "@/lib/authz" || specifier === "./authz"
+          ? "mock:authz"
+          : specifier === "./features"
+            ? "mock:features"
+            : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);
     },
@@ -110,7 +117,9 @@ let changeRoute: typeof import("./benefits/change/route.ts") | undefined;
   const reviewsRouteUrl = "./reviews/route.ts?hrm-me-work-reviews";
   reviewsRoute = (await import(reviewsRouteUrl)) as typeof import("./reviews/route.ts");
   const acknowledgeRouteUrl = "./reviews/acknowledge/route.ts?hrm-me-work-ack";
-  acknowledgeRoute = (await import(acknowledgeRouteUrl)) as typeof import("./reviews/acknowledge/route.ts");
+  acknowledgeRoute = (await import(
+    acknowledgeRouteUrl
+  )) as typeof import("./reviews/acknowledge/route.ts");
   const submitRouteUrl = "./reviews/submit/route.ts?hrm-me-work-submit";
   submitRoute = (await import(submitRouteUrl)) as typeof import("./reviews/submit/route.ts");
   const progressRouteUrl = "./goals/progress/route.ts?hrm-me-work-progress";
@@ -148,130 +157,230 @@ function post(body: unknown): Request {
 }
 
 test("a missing feature flag 404s before any service runs", async () => {
-    reset();
-    routeState.featureOn = false;
-    assert.equal((await reviewsRoute!.GET(readRequest())).status, 404);
-    assert.equal((await benefitsRoute!.GET(readRequest())).status, 404);
-    assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 404);
-    assert.equal((await submitRoute!.POST(post({ reviewId: REVIEW_ID, answers: [] }))).status, 404);
-    assert.equal((await progressRoute!.POST(post({ goalId: GOAL_ID, progressPercent: 10 }))).status, 404);
-    assert.equal((await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], effectiveFrom: "2026-03-01" }))).status, 404);
-    assert.equal((await changeRoute!.POST(post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "x" }))).status, 404);
-    assert.deepEqual(routeState.calls, []);
-  });
-
-  test("an unauthenticated caller never reaches a service", async () => {
-    reset();
-    routeState.gate = { status: 401 };
-    assert.equal((await reviewsRoute!.GET(readRequest())).status, 401);
-    assert.equal((await benefitsRoute!.GET(readRequest())).status, 401);
-    assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 401);
-    assert.equal((await changeRoute!.POST(post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "x" }))).status, 401);
-    assert.deepEqual(routeState.calls, []);
-  });
-
-  test("reads forward org and actor and return the service payload", async () => {
-    reset();
-    const reviews = await reviewsRoute!.GET(readRequest());
-    assert.equal(reviews.status, 200);
-    assert.deepEqual((await reviews.json()).workspace, { fn: "reviews", ok: true, id: "row-1", status: "active" });
-    const benefits = await benefitsRoute!.GET(readRequest());
-    assert.equal(benefits.status, 200);
-    assert.deepEqual(routeState.calls, [
-      { fn: "reviews", args: { orgId: "org-1", actorId: "user-1" } },
-      { fn: "benefits", args: { orgId: "org-1", actorId: "user-1" } },
-    ]);
-    assert.deepEqual(routeState.perms, ["hrm.self.read", "hrm.self.read"]);
-  });
-
-  test("writes validate the body before the service runs", async () => {
-    reset();
-    assert.equal((await acknowledgeRoute!.POST(post({}))).status, 400);
-    assert.equal((await acknowledgeRoute!.POST(post({ reviewId: "nope" }))).status, 400);
-    assert.equal((await submitRoute!.POST(post({ reviewId: REVIEW_ID, answers: [{ answerId: "nope" }] }))).status, 400);
-    assert.equal((await progressRoute!.POST(post({ goalId: GOAL_ID }))).status, 400);
-    assert.equal((await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], effectiveFrom: "March" }))).status, 400);
-    assert.equal((await changeRoute!.POST(post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "  " }))).status, 400);
-    assert.deepEqual(routeState.calls, []);
-    const good = await electRoute!.POST(
-      post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], windowId: WINDOW_ID, effectiveFrom: "2026-03-01" }),
-    );
-    assert.equal(good.status, 201);
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "elect",
-        args: {
-          orgId: "org-1",
-          actorId: "user-1",
+  reset();
+  routeState.featureOn = false;
+  assert.equal((await reviewsRoute!.GET(readRequest())).status, 404);
+  assert.equal((await benefitsRoute!.GET(readRequest())).status, 404);
+  assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 404);
+  assert.equal((await submitRoute!.POST(post({ reviewId: REVIEW_ID, answers: [] }))).status, 404);
+  assert.equal(
+    (await progressRoute!.POST(post({ goalId: GOAL_ID, progressPercent: 10 }))).status,
+    404,
+  );
+  assert.equal(
+    (
+      await electRoute!.POST(
+        post({
           employmentId: EMPLOYMENT_ID,
-          planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}],
-          windowId: WINDOW_ID,
-          classKey: undefined,
-          matchEligible: undefined,
+          planId: PLAN_ID,
+          contributionTerms: [{ ruleId: PLAN_ID, electionMode: "fixed", electedRate: "1" }],
           effectiveFrom: "2026-03-01",
-          effectiveTo: undefined,
-          lifeEventReason: undefined,
-        },
+        }),
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await changeRoute!.POST(
+        post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "x" }),
+      )
+    ).status,
+    404,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("an unauthenticated caller never reaches a service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  assert.equal((await reviewsRoute!.GET(readRequest())).status, 401);
+  assert.equal((await benefitsRoute!.GET(readRequest())).status, 401);
+  assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 401);
+  assert.equal(
+    (
+      await changeRoute!.POST(
+        post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "x" }),
+      )
+    ).status,
+    401,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("reads forward org and actor and return the service payload", async () => {
+  reset();
+  const reviews = await reviewsRoute!.GET(readRequest());
+  assert.equal(reviews.status, 200);
+  assert.deepEqual((await reviews.json()).workspace, {
+    fn: "reviews",
+    ok: true,
+    id: "row-1",
+    status: "active",
+  });
+  const benefits = await benefitsRoute!.GET(readRequest());
+  assert.equal(benefits.status, 200);
+  assert.deepEqual(routeState.calls, [
+    { fn: "reviews", args: { orgId: "org-1", actorId: "user-1" } },
+    { fn: "benefits", args: { orgId: "org-1", actorId: "user-1" } },
+  ]);
+  assert.deepEqual(routeState.perms, ["hrm.self.read", "hrm.self.read"]);
+});
+
+test("writes validate the body before the service runs", async () => {
+  reset();
+  assert.equal((await acknowledgeRoute!.POST(post({}))).status, 400);
+  assert.equal((await acknowledgeRoute!.POST(post({ reviewId: "nope" }))).status, 400);
+  assert.equal(
+    (await submitRoute!.POST(post({ reviewId: REVIEW_ID, answers: [{ answerId: "nope" }] })))
+      .status,
+    400,
+  );
+  assert.equal((await progressRoute!.POST(post({ goalId: GOAL_ID }))).status, 400);
+  assert.equal(
+    (
+      await electRoute!.POST(
+        post({
+          employmentId: EMPLOYMENT_ID,
+          planId: PLAN_ID,
+          contributionTerms: [{ ruleId: PLAN_ID, electionMode: "fixed", electedRate: "1" }],
+          effectiveFrom: "March",
+        }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await changeRoute!.POST(
+        post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "  " }),
+      )
+    ).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+  const good = await electRoute!.POST(
+    post({
+      employmentId: EMPLOYMENT_ID,
+      planId: PLAN_ID,
+      contributionTerms: [{ ruleId: PLAN_ID, electionMode: "fixed", electedRate: "1" }],
+      windowId: WINDOW_ID,
+      effectiveFrom: "2026-03-01",
+    }),
+  );
+  assert.equal(good.status, 201);
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "elect",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        employmentId: EMPLOYMENT_ID,
+        planId: PLAN_ID,
+        contributionTerms: [{ ruleId: PLAN_ID, electionMode: "fixed", electedRate: "1" }],
+        windowId: WINDOW_ID,
+        classKey: undefined,
+        matchEligible: undefined,
+        effectiveFrom: "2026-03-01",
+        effectiveTo: undefined,
+        lifeEventReason: undefined,
       },
-    ]);
-    assert.ok(routeState.perms.length > 0 && routeState.perms.every((perm) => perm === "hrm.self.request"));
-  });
+    },
+  ]);
+  assert.ok(
+    routeState.perms.length > 0 && routeState.perms.every((perm) => perm === "hrm.self.request"),
+  );
+});
 
-  test("an unlinked login is refused as a 403 with the remedy intact", async () => {
-    reset();
-    const { SelfServiceError } = await import(
-      "@openbooks/engine/hrm/self-service/actor"
-    );
-    routeState.serviceThrow = new SelfServiceError(
-      "NO_LINK",
-      "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service",
-    );
-    const reviews = await reviewsRoute!.GET(readRequest());
-    assert.equal(reviews.status, 403);
-    assert.match((await reviews.json()).error as string, /Admin → Users → Link person/);
-    const elect = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], effectiveFrom: "2026-03-01" }));
-    assert.equal(elect.status, 403);
-  });
+test("an unlinked login is refused as a 403 with the remedy intact", async () => {
+  reset();
+  const { SelfServiceError } = await import("@openbooks/engine/hrm/self-service/actor");
+  routeState.serviceThrow = new SelfServiceError(
+    "NO_LINK",
+    "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service",
+  );
+  const reviews = await reviewsRoute!.GET(readRequest());
+  assert.equal(reviews.status, 403);
+  assert.match((await reviews.json()).error as string, /Admin → Users → Link person/);
+  const elect = await electRoute!.POST(
+    post({
+      employmentId: EMPLOYMENT_ID,
+      planId: PLAN_ID,
+      contributionTerms: [{ ruleId: PLAN_ID, electionMode: "fixed", electedRate: "1" }],
+      effectiveFrom: "2026-03-01",
+    }),
+  );
+  assert.equal(elect.status, 403);
+});
 
-  test("another person's review id is refused by identity, never acted on", async () => {
-    reset();
-    const { HrmPerformanceError } = await import(
-      "@openbooks/engine/hrm/performance/errors"
-    );
-    routeState.serviceThrow = new HrmPerformanceError(
-      "FORBIDDEN",
-      "review belongs to another reviewer — only its reviewer submits it",
-    );
-    const response = await submitRoute!.POST(post({ reviewId: REVIEW_ID, answers: [] }));
-    assert.equal(response.status, 403);
-    assert.match((await response.json()).error as string, /only its reviewer submits it/);
-    routeState.serviceThrow = new HrmPerformanceError("NOT_FOUND", "review is not visible in this organization");
-    assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 404);
-    routeState.serviceThrow = new HrmPerformanceError("BAD_STATE", "review is submitted — only a shared review acknowledges");
-    assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 409);
-  });
+test("another person's review id is refused by identity, never acted on", async () => {
+  reset();
+  const { HrmPerformanceError } = await import("@openbooks/engine/hrm/performance/errors");
+  routeState.serviceThrow = new HrmPerformanceError(
+    "FORBIDDEN",
+    "review belongs to another reviewer — only its reviewer submits it",
+  );
+  const response = await submitRoute!.POST(post({ reviewId: REVIEW_ID, answers: [] }));
+  assert.equal(response.status, 403);
+  assert.match((await response.json()).error as string, /only its reviewer submits it/);
+  routeState.serviceThrow = new HrmPerformanceError(
+    "NOT_FOUND",
+    "review is not visible in this organization",
+  );
+  assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 404);
+  routeState.serviceThrow = new HrmPerformanceError(
+    "BAD_STATE",
+    "review is submitted — only a shared review acknowledges",
+  );
+  assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 409);
+});
 
-  test("a closed window refuses elect as a 400 with the remedy intact", async () => {
-    reset();
-    const { BenefitsError } = await import("@openbooks/engine/hrm/benefits/errors");
-    routeState.serviceThrow = new BenefitsError(
-      "REFUSED",
-      "enrollment window is closed — elect inside an open window, or record a life event with a reason",
-    );
-    const response = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], windowId: WINDOW_ID, effectiveFrom: "2026-03-01" }));
-    assert.equal(response.status, 400);
-    assert.match((await response.json()).error as string, /elect inside an open window/);
-    routeState.serviceThrow = new BenefitsError("BAD_STATE", "enrolment is ended — only an active enrolment is changed");
-    assert.equal((await changeRoute!.POST(post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "x" }))).status, 409);
-  });
+test("a closed window refuses elect as a 400 with the remedy intact", async () => {
+  reset();
+  const { BenefitsError } = await import("@openbooks/engine/hrm/benefits/errors");
+  routeState.serviceThrow = new BenefitsError(
+    "REFUSED",
+    "enrollment window is closed — elect inside an open window, or record a life event with a reason",
+  );
+  const response = await electRoute!.POST(
+    post({
+      employmentId: EMPLOYMENT_ID,
+      planId: PLAN_ID,
+      contributionTerms: [{ ruleId: PLAN_ID, electionMode: "fixed", electedRate: "1" }],
+      windowId: WINDOW_ID,
+      effectiveFrom: "2026-03-01",
+    }),
+  );
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error as string, /elect inside an open window/);
+  routeState.serviceThrow = new BenefitsError(
+    "BAD_STATE",
+    "enrolment is ended — only an active enrolment is changed",
+  );
+  assert.equal(
+    (
+      await changeRoute!.POST(
+        post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "x" }),
+      )
+    ).status,
+    409,
+  );
+});
 
-  test("another person's employment id is refused as a 403", async () => {
-    reset();
-    const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
-    routeState.serviceThrow = new HrmAuthorizationError(
-      "Benefit elections from the Me workspace elect only against your own employment — ask a manager holding hrm.benefits.manage to act on your behalf.",
-    );
-    const response = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, contributionTerms: [{ruleId: PLAN_ID,electionMode: "fixed",electedRate: "1"}], effectiveFrom: "2026-03-01" }));
-    assert.equal(response.status, 403);
-    assert.match((await response.json()).error as string, /only against your own employment/);
-  });
+test("another person's employment id is refused as a 403", async () => {
+  reset();
+  const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
+  routeState.serviceThrow = new HrmAuthorizationError(
+    "Benefit elections from the Me workspace elect only against your own employment — ask a manager holding hrm.benefits.manage to act on your behalf.",
+  );
+  const response = await electRoute!.POST(
+    post({
+      employmentId: EMPLOYMENT_ID,
+      planId: PLAN_ID,
+      contributionTerms: [{ ruleId: PLAN_ID, electionMode: "fixed", electedRate: "1" }],
+      effectiveFrom: "2026-03-01",
+    }),
+  );
+  assert.equal(response.status, 403);
+  assert.match((await response.json()).error as string, /only against your own employment/);
+});

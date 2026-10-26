@@ -1,7 +1,7 @@
-import 'server-only'
-import { NextResponse } from 'next/server'
-import { sql, type SQL } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
+import "server-only";
+import { NextResponse } from "next/server";
+import { sql, type SQL } from "drizzle-orm";
+import { db, type SqlExecutor } from "@openbooks/engine/platform/db";
 import {
   EXPENSE_AUTHORITY_PERMISSION,
   expenseOwnerPredicate,
@@ -12,12 +12,12 @@ import {
   expenseGrantScope,
   type ExpenseAccess,
   type ExpenseAuthority,
-} from '@openbooks/engine/records/expense-access'
-import { can, getAuthz, guardPermission, requirePermission, type Authz } from './authz'
-import type { ReportExpenseAccess } from '@openbooks/reports'
-import { resolveAuthzByUserId } from './authz-core'
+} from "@openbooks/engine/records/expense-access";
+import { can, getAuthz, guardPermission, requirePermission, type Authz } from "./authz";
+import type { ReportExpenseAccess } from "@openbooks/reports";
+import { resolveAuthzByUserId } from "./authz-core";
 
-export type { ExpenseAccess, ExpenseAuthority }
+export type { ExpenseAccess, ExpenseAuthority };
 
 /**
  * Expense-report authority at the API and page boundary. The org-wide grants
@@ -28,13 +28,13 @@ export type { ExpenseAccess, ExpenseAuthority }
  */
 
 /** The reach of the caller's authority, or null when they hold no expense grant. */
-export function expenseScope(authz: Authz, authority: ExpenseAuthority): 'all' | 'own' | null {
-  return expenseGrantScope((permission) => can(authz, permission), authority)
+export function expenseScope(authz: Authz, authority: ExpenseAuthority): "all" | "own" | null {
+  return expenseGrantScope((permission) => can(authz, permission), authority);
 }
 
 /** True when the caller works only with their own expense reports. */
 export function ownExpensesOnly(authz: Authz, authority: ExpenseAuthority): boolean {
-  return expenseScope(authz, authority) === 'own'
+  return expenseScope(authz, authority) === "own";
 }
 
 /** The caller's expense access, or null without a grant. */
@@ -43,8 +43,10 @@ export async function expenseAccess(
   authority: ExpenseAuthority,
   executor: SqlExecutor = db,
 ): Promise<ExpenseAccess | null> {
-  const scope = expenseScope(authz, authority)
-  return scope === null ? null : expenseAccessForScope(executor, authz.user.orgId, authz.user.id, scope)
+  const scope = expenseScope(authz, authority);
+  return scope === null
+    ? null
+    : expenseAccessForScope(executor, authz.user.orgId, authz.user.id, scope);
 }
 
 /**
@@ -54,15 +56,15 @@ export async function expenseAccess(
  */
 export function authorizeExpenses(authority: ExpenseAuthority) {
   return async (): Promise<Authz | NextResponse> => {
-    const primary = await guardPermission(EXPENSE_AUTHORITY_PERMISSION[authority])
-    if (!(primary instanceof NextResponse) || primary.status !== 403) return primary
+    const primary = await guardPermission(EXPENSE_AUTHORITY_PERMISSION[authority]);
+    if (!(primary instanceof NextResponse) || primary.status !== 403) return primary;
     for (const grant of expenseAuthorityGrants(authority)) {
-      if (grant === EXPENSE_AUTHORITY_PERMISSION[authority]) continue
-      const alternative = await guardPermission(grant)
-      if (!(alternative instanceof NextResponse)) return alternative
+      if (grant === EXPENSE_AUTHORITY_PERMISSION[authority]) continue;
+      const alternative = await guardPermission(grant);
+      if (!(alternative instanceof NextResponse)) return alternative;
     }
-    return primary
-  }
+    return primary;
+  };
 }
 
 /**
@@ -71,9 +73,11 @@ export function authorizeExpenses(authority: ExpenseAuthority) {
  * explanation when they hold none.
  */
 export async function requireExpensePermission(authority: ExpenseAuthority): Promise<Authz> {
-  const viewer = await getAuthz()
-  const held = viewer ? expenseAuthorityGrants(authority).find((grant) => can(viewer, grant)) : undefined
-  return requirePermission(held ?? EXPENSE_AUTHORITY_PERMISSION[authority])
+  const viewer = await getAuthz();
+  const held = viewer
+    ? expenseAuthorityGrants(authority).find((grant) => can(viewer, grant))
+    : undefined;
+  return requirePermission(held ?? EXPENSE_AUTHORITY_PERMISSION[authority]);
 }
 
 /**
@@ -87,14 +91,19 @@ export async function expenseReportReachable(
   documentId: string,
   executor: SqlExecutor = db,
 ): Promise<boolean> {
-  const access = await expenseAccess(authz, authority, executor)
-  if (!access) return false
-  if (access.scope === 'all') return true
-  const row = (await executor.execute<{ partyId: string | null }>(sql`
+  const access = await expenseAccess(authz, authority, executor);
+  if (!access) return false;
+  if (access.scope === "all") return true;
+  const row = (
+    await executor.execute<{ partyId: string | null }>(
+      sql`
     select party_id as "partyId" from documents
      where id = ${documentId} and org_id = ${authz.user.orgId} and kind = 'expense_report'
-  `, 'objects'))[0]
-  return row !== undefined && expenseAccessAllows(access, row.partyId)
+  `,
+      "objects",
+    )
+  )[0];
+  return row !== undefined && expenseAccessAllows(access, row.partyId);
 }
 
 /**
@@ -103,10 +112,10 @@ export async function expenseReportReachable(
  * read grant.
  */
 export async function expenseListOwnerFilter(orgId: string, userId: string): Promise<SQL | null> {
-  const authz = await resolveAuthzByUserId(orgId, userId)
-  const access = authz ? await expenseAccess(authz, 'read') : null
-  if (!access) return sql`false`
-  return access.scope === 'all' ? null : expenseOwnerPredicate(access, sql`d.party_id`)
+  const authz = await resolveAuthzByUserId(orgId, userId);
+  const access = authz ? await expenseAccess(authz, "read") : null;
+  if (!access) return sql`false`;
+  return access.scope === "all" ? null : expenseOwnerPredicate(access, sql`d.party_id`);
 }
 
 /**
@@ -115,8 +124,11 @@ export async function expenseListOwnerFilter(orgId: string, userId: string): Pro
  * widen it: an org-wide report grant reads no expense report without an
  * expense grant.
  */
-export async function reportExpenseAccess(authz: Authz, executor: SqlExecutor = db): Promise<ReportExpenseAccess> {
-  return (await expenseAccess(authz, 'read', executor)) ?? { scope: 'none' }
+export async function reportExpenseAccess(
+  authz: Authz,
+  executor: SqlExecutor = db,
+): Promise<ReportExpenseAccess> {
+  return (await expenseAccess(authz, "read", executor)) ?? { scope: "none" };
 }
 
-export { ExpenseSelfServiceRefusal, expenseAccessAllows }
+export { ExpenseSelfServiceRefusal, expenseAccessAllows };

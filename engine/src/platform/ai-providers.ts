@@ -152,7 +152,10 @@ export const AI_PROVIDER_SPECS: ProviderSpec[] = [
   },
 ];
 
-const SPEC_BY_VALUE = Object.fromEntries(AI_PROVIDER_SPECS.map((s) => [s.value, s])) as Record<AiProvider, ProviderSpec>;
+const SPEC_BY_VALUE = Object.fromEntries(AI_PROVIDER_SPECS.map((s) => [s.value, s])) as Record<
+  AiProvider,
+  ProviderSpec
+>;
 
 export function isAiProvider(value: unknown): value is AiProvider {
   return typeof value === "string" && Object.hasOwn(SPEC_BY_VALUE, value);
@@ -177,7 +180,10 @@ const PRIVATE_HOST_RE =
   /^(localhost|127\.|0\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|\[?f[cd])/i;
 
 /** Validate and canonicalize a persisted AI endpoint override. */
-export function validateAiBaseUrl(provider: AiProvider, rawBaseUrl: string | null | undefined): string | null {
+export function validateAiBaseUrl(
+  provider: AiProvider,
+  rawBaseUrl: string | null | undefined,
+): string | null {
   const spec = providerSpec(provider);
   const raw = rawBaseUrl?.trim() ?? "";
   if (spec.kind !== "openai-compatible") {
@@ -215,7 +221,10 @@ export function validateAiBaseUrl(provider: AiProvider, rawBaseUrl: string | nul
 }
 
 /** True when the effective endpoint is operator-supplied (custom provider or a base-URL override): its responses are untrusted. */
-export function isOrgControlledAiEndpoint(provider: AiProvider, baseUrl: string | null | undefined): boolean {
+export function isOrgControlledAiEndpoint(
+  provider: AiProvider,
+  baseUrl: string | null | undefined,
+): boolean {
   const spec = SPEC_BY_VALUE[provider];
   if (!spec) return true;
   if (spec.kind !== "openai-compatible") return false;

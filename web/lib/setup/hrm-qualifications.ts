@@ -1,4 +1,4 @@
-import type { SetupEntity } from './types'
+import type { SetupEntity } from "./types";
 
 /**
  * HR-14 qualification Setup entities. Both live rehomed on the
@@ -9,55 +9,55 @@ import type { SetupEntity } from './types'
  */
 
 const BASE_CATEGORIES = [
-  { value: 'certification', labelKey: 'options.hrmQualificationCategory.certification' },
-  { value: 'license', labelKey: 'options.hrmQualificationCategory.license' },
-  { value: 'training', labelKey: 'options.hrmQualificationCategory.training' },
-  { value: 'medical', labelKey: 'options.hrmQualificationCategory.medical' },
-  { value: 'clearance', labelKey: 'options.hrmQualificationCategory.clearance' },
-  { value: 'other', labelKey: 'options.hrmQualificationCategory.other' },
-]
+  { value: "certification", labelKey: "options.hrmQualificationCategory.certification" },
+  { value: "license", labelKey: "options.hrmQualificationCategory.license" },
+  { value: "training", labelKey: "options.hrmQualificationCategory.training" },
+  { value: "medical", labelKey: "options.hrmQualificationCategory.medical" },
+  { value: "clearance", labelKey: "options.hrmQualificationCategory.clearance" },
+  { value: "other", labelKey: "options.hrmQualificationCategory.other" },
+];
 
 export const QUALIFICATION_TYPES_ENTITY: SetupEntity = {
-  key: 'qualification-types',
-  table: 'hrm_qualification_types',
-  groupKey: 'workforce',
-  featureKey: 'hrmCertifications',
+  key: "qualification-types",
+  table: "hrm_qualification_types",
+  groupKey: "workforce",
+  featureKey: "hrmCertifications",
   rehomed: true, // section on the HRM Qualifications page
-  iconKey: 'badge-check',
+  iconKey: "badge-check",
   orgScoped: true,
   actorCols: true,
-  naturalKey: 'code',
+  naturalKey: "code",
   hasActive: true,
-  docSlug: 'qualifications-and-dispatch',
+  docSlug: "qualifications-and-dispatch",
   columns: [
-    { key: 'code', kind: 'code' },
-    { key: 'name', kind: 'text' },
-    { key: 'category', kind: 'badge' },
-    { key: 'validityMonths', kind: 'number' },
-    { key: 'isActive', kind: 'badge-active' },
+    { key: "code", kind: "code" },
+    { key: "name", kind: "text" },
+    { key: "category", kind: "badge" },
+    { key: "validityMonths", kind: "number" },
+    { key: "isActive", kind: "badge-active" },
   ],
   fields: [
-    { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
-    { key: 'name', kind: 'text', required: true },
-    { key: 'category', kind: 'select', required: true, options: BASE_CATEGORIES },
-    { key: 'issuingBody', kind: 'text' },
-    { key: 'validityMonths', kind: 'integer', helpTextKey: 'fieldHelp.hrmQualificationValidity' },
-    { key: 'renewalLeadDays', kind: 'integer' },
-    { key: 'requiresEvidence', kind: 'boolean' },
+    { key: "code", kind: "text", required: true, lockedOnEdit: true },
+    { key: "name", kind: "text", required: true },
+    { key: "category", kind: "select", required: true, options: BASE_CATEGORIES },
+    { key: "issuingBody", kind: "text" },
+    { key: "validityMonths", kind: "integer", helpTextKey: "fieldHelp.hrmQualificationValidity" },
+    { key: "renewalLeadDays", kind: "integer" },
+    { key: "requiresEvidence", kind: "boolean" },
   ],
-}
+};
 
 export const QUALIFICATION_SETTINGS_ENTITY: SetupEntity = {
-  key: 'qualification-settings',
-  table: 'hrm_qualification_settings',
+  key: "qualification-settings",
+  table: "hrm_qualification_settings",
   // Keyed by the org itself (0225 makes org_id the PRIMARY KEY and adds
   // no id column), so the generic reader's default of "id" names a
   // column that does not exist.
-  idColumn: 'org_id',
-  groupKey: 'workforce',
-  featureKey: 'hrmCertifications',
+  idColumn: "org_id",
+  groupKey: "workforce",
+  featureKey: "hrmCertifications",
   rehomed: true, // section on the HRM Qualifications page
-  iconKey: 'settings',
+  iconKey: "settings",
   orgScoped: true,
   actorCols: true,
   // The settings row is a per-org singleton seeded by the service: values
@@ -65,13 +65,13 @@ export const QUALIFICATION_SETTINGS_ENTITY: SetupEntity = {
   hasActive: false,
   allowCreate: false,
   allowDelete: false,
-  docSlug: 'qualifications-and-dispatch',
-  columns: [{ key: 'extraCategories', kind: 'text' }],
+  docSlug: "qualifications-and-dispatch",
+  columns: [{ key: "extraCategories", kind: "text" }],
   fields: [
     {
-      key: 'extraCategories',
-      kind: 'stringArray',
-      helpTextKey: 'fieldHelp.hrmQualificationExtraCategories',
+      key: "extraCategories",
+      kind: "stringArray",
+      helpTextKey: "fieldHelp.hrmQualificationExtraCategories",
     },
   ],
-}
+};

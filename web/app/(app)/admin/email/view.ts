@@ -1,11 +1,18 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { frame, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { readOrgEmailConfigView } from '@openbooks/engine/delivery/email-config/module'
-import { requirePermission } from '../../../../lib/authz'
-import type { ComponentProps } from 'react'
-import type { EmailSettingsForm } from './EmailSettingsForm'
+import { getTranslations } from "next-intl/server";
+import {
+  frame,
+  page,
+  pageHeader,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { readOrgEmailConfigView } from "@openbooks/engine/delivery/email-config/module";
+import { requirePermission } from "../../../../lib/authz";
+import type { ComponentProps } from "react";
+import type { EmailSettingsForm } from "./EmailSettingsForm";
 
 /**
  * Email delivery settings, split into a loader and a spec.
@@ -30,33 +37,33 @@ import type { EmailSettingsForm } from './EmailSettingsForm'
  */
 
 export interface EmailSettingsData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  initial: ComponentProps<typeof EmailSettingsForm>['initial']
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  initial: ComponentProps<typeof EmailSettingsForm>["initial"];
 }
 
 export async function loadEmailSettings(): Promise<EmailSettingsData> {
-  const authz = await requirePermission('admin.setup.manage')
-  const t = await getTranslations('admin')
-  const tHub = await getTranslations('admin.hub')
-  const config = await readOrgEmailConfigView(authz.user.orgId)
+  const authz = await requirePermission("admin.setup.manage");
+  const t = await getTranslations("admin");
+  const tHub = await getTranslations("admin.hub");
+  const config = await readOrgEmailConfigView(authz.user.orgId);
 
   return {
-    title: t('email.title'),
-    description: t('email.description'),
-    backHref: '/admin',
-    backLabel: tHub('title'),
+    title: t("email.title"),
+    description: t("email.description"),
+    backHref: "/admin",
+    backLabel: tHub("title"),
     initial: config,
-  }
+  };
 }
 
-const f = ref<EmailSettingsData>()
+const f = ref<EmailSettingsData>();
 
 export function emailSettingsSpec(data: EmailSettingsData): PageSpec {
   return page({
-    route: '/admin/email',
+    route: "/admin/email",
     // The page owns its own shell (PageContainer) the way the platform hub
     // does — ListPageLayout's sticky-header chrome would nest a second shell
     // around it, so header and body concatenate and the frame renders the
@@ -64,17 +71,17 @@ export function emailSettingsSpec(data: EmailSettingsData): PageSpec {
     // DIRECT children of PageContainer (no wrapper div), so the frame holds
     // exactly those two blocks — the form's `max-w-2xl space-y-6` root
     // belongs to the island itself and must not be placed twice.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      frame('page-container', [
+      frame("page-container", [
         pageHeader({
-          title: f('title'),
-          description: f('description'),
-          back: { href: f('backHref'), label: f('backLabel') },
+          title: f("title"),
+          description: f("description"),
+          back: { href: f("backHref"), label: f("backLabel") },
         }),
-        widgetBlock('email-settings-form', { initial: data.initial }),
+        widgetBlock("email-settings-form", { initial: data.initial }),
       ]),
     ],
-  })
+  });
 }

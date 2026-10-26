@@ -43,19 +43,39 @@ export interface Checkpoint {
   counts: Record<string, number>;
   /** Trial-balance total debits/credits and per-account balances (hashable). */
   trialBalance: { debits: string; credits: string; accounts: number };
-  controlTieOut: { account: string; number: string | null; kind: string; gl: string; subledger: string; direct: string; diff: string }[];
-  inventoryTieOut: { subsidiary: string; account: string; number: string | null; methods: string; gl: string; subledger: string; diff: string }[];
+  controlTieOut: {
+    account: string;
+    number: string | null;
+    kind: string;
+    gl: string;
+    subledger: string;
+    direct: string;
+    diff: string;
+  }[];
+  inventoryTieOut: {
+    subsidiary: string;
+    account: string;
+    number: string | null;
+    methods: string;
+    gl: string;
+    subledger: string;
+    diff: string;
+  }[];
   checks: Check[];
   timings: ReportTiming[];
   pass: boolean;
 }
 
-async function one<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
-  const r = (await db.execute<T>(q, "objects"));
+async function one<T extends Record<string, unknown> = Record<string, unknown>>(
+  q: ReturnType<typeof sql>,
+) {
+  const r = await db.execute<T>(q, "objects");
   return r[0]!;
 }
-async function all<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
-  const r = (await db.execute<T>(q, "objects"));
+async function all<T extends Record<string, unknown> = Record<string, unknown>>(
+  q: ReturnType<typeof sql>,
+) {
+  const r = await db.execute<T>(q, "objects");
   return r;
 }
 
@@ -95,7 +115,11 @@ type SaaSMetricsTieRow = {
 };
 
 async function saasMetricsTieOut(orgId: string): Promise<Check> {
-  const counts = await one<{ fact_rows: number; subscription_rows: number; cohort_rows: number }>(sql`
+  const counts = await one<{
+    fact_rows: number;
+    subscription_rows: number;
+    cohort_rows: number;
+  }>(sql`
     select
       (select count(*)::int from saas_metrics_facts_monthly where org_id = ${orgId}) as fact_rows,
       (select count(*)::int from saas_metrics_monthly where org_id = ${orgId}) as subscription_rows,
@@ -241,8 +265,12 @@ async function saasMetricsTieOut(orgId: string): Promise<Check> {
       join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id and l.account_id = src.deferred_account_id
      group by l.subsidiary_id, date_trunc('month', e.posting_date)::date
   `);
-  const recognizedByKey = new Map(recognized.map((row) => [`${row.month.slice(0, 10)}:${row.subsidiary_id}`, row.amount]));
-  const deferredByKey = new Map(deferred.map((row) => [`${row.month.slice(0, 10)}:${row.subsidiary_id}`, row.amount]));
+  const recognizedByKey = new Map(
+    recognized.map((row) => [`${row.month.slice(0, 10)}:${row.subsidiary_id}`, row.amount]),
+  );
+  const deferredByKey = new Map(
+    deferred.map((row) => [`${row.month.slice(0, 10)}:${row.subsidiary_id}`, row.amount]),
+  );
   const moneyPairs: Array<[keyof SaaSMetricsTieRow, keyof SaaSMetricsTieRow, string]> = [
     ["fact_mrr_start", "sub_mrr_start", "mrr_start"],
     ["fact_mrr_end", "sub_mrr_end", "mrr_end"],
@@ -271,34 +299,64 @@ async function saasMetricsTieOut(orgId: string): Promise<Check> {
       const actual = typeof fact === "string" ? fact : "0.0000";
       const expected = typeof sum === "string" ? sum : "0.0000";
       const residual = fromUnits(toUnits(actual) - toUnits(expected));
-      if (cmp(residual, "0") !== 0) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: ${label} residual ${residual}`);
+      if (cmp(residual, "0") !== 0)
+        failures.push(
+          `${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: ${label} residual ${residual}`,
+        );
     }
     for (const [factKey, sumKey, label] of countPairs) {
-      const fact = typeof row[factKey] === "number" ? row[factKey] as number : 0;
+      const fact = typeof row[factKey] === "number" ? (row[factKey] as number) : 0;
       const sum = row[sumKey] as number;
-      if (fact !== sum) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: ${label} residual ${fact - sum}`);
+      if (fact !== sum)
+        failures.push(
+          `${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: ${label} residual ${fact - sum}`,
+        );
     }
     const movementResidual = row.movement_residual;
-    if (cmp(movementResidual, "0") !== 0) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: movement residual ${movementResidual}`);
-    const recognizedResidual = fromUnits(toUnits(row.fact_recognized_revenue ?? "0") - toUnits(recognizedByKey.get(key) ?? "0"));
-    if (cmp(recognizedResidual, "0") !== 0) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: recognized GL residual ${recognizedResidual}`);
-    const deferredResidual = fromUnits(toUnits(row.fact_deferred_delta ?? "0") - toUnits(deferredByKey.get(key) ?? "0"));
-    if (cmp(deferredResidual, "0") !== 0) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: deferred GL residual ${deferredResidual}`);
+    if (cmp(movementResidual, "0") !== 0)
+      failures.push(
+        `${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: movement residual ${movementResidual}`,
+      );
+    const recognizedResidual = fromUnits(
+      toUnits(row.fact_recognized_revenue ?? "0") - toUnits(recognizedByKey.get(key) ?? "0"),
+    );
+    if (cmp(recognizedResidual, "0") !== 0)
+      failures.push(
+        `${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: recognized GL residual ${recognizedResidual}`,
+      );
+    const deferredResidual = fromUnits(
+      toUnits(row.fact_deferred_delta ?? "0") - toUnits(deferredByKey.get(key) ?? "0"),
+    );
+    if (cmp(deferredResidual, "0") !== 0)
+      failures.push(
+        `${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: deferred GL residual ${deferredResidual}`,
+      );
   }
   if (rows.length === 0) {
-    return { name: "saas-metrics-tieout", ok: false, detail: "cohort metrics exist without monthly subscription or subsidiary facts" };
+    return {
+      name: "saas-metrics-tieout",
+      ok: false,
+      detail: "cohort metrics exist without monthly subscription or subsidiary facts",
+    };
   }
   return {
     name: "saas-metrics-tieout",
     ok: failures.length === 0,
-    detail: failures.length === 0
-      ? `${rows.length} subsidiary-month row(s); movements, additive facts, subscription revenue, and deferred revenue reconcile exactly`
-      : `${failures.length} residual(s); ${failures[0]}`,
+    detail:
+      failures.length === 0
+        ? `${rows.length} subsidiary-month row(s); movements, additive facts, subscription revenue, and deferred revenue reconcile exactly`
+        : `${failures.length} residual(s); ${failures[0]}`,
   };
 }
 
 async function overheadRecomputes(orgId: string): Promise<Check> {
-  const mismatches = await all<{ entry_id: string; line_number: number | null; expected: string | null; actual: string | null; reason: string }>(sql`
+  const mismatches = await all<{
+    entry_id: string;
+    line_number: number | null;
+    expected: string | null;
+    actual: string | null;
+    reason: string;
+  }>(sql`
     with expected as (
       select te.org_id, te.id as time_entry_id, te.overhead_journal_entry_id as entry_id,
              (select sum(round(te.hours * r.rate_percent, 4))::numeric(19,4)
@@ -347,7 +405,6 @@ async function overheadRecomputes(orgId: string): Promise<Check> {
     detail: first
       ? `${mismatches.length} overhead time-entry line mismatch(es); first entry ${first.entry_id}, line ${first.line_number ?? "missing"}: ${first.reason}, expected ${first.expected}, actual ${first.actual ?? "missing"}`
       : "all posted overhead time-entry lines recompute from their effective per-hour rate",
-
   };
 }
 
@@ -404,11 +461,15 @@ async function usageInvoiceTrace(orgId: string): Promise<Check> {
        )
      order by d.document_number, l.line_number
      limit 20`);
-  const detail = issues.length === 0
-    ? "posted usage invoices have complete rating traces and reconcile to their active runs"
-    : issues.map((row) =>
-        `invoice ${row.document_number} (${row.invoice_id}) line ${row.line_number ?? "(missing)"}${row.line_id ? ` ${row.line_id}` : ""}: ${row.issue}`,
-      ).join("; ");
+  const detail =
+    issues.length === 0
+      ? "posted usage invoices have complete rating traces and reconcile to their active runs"
+      : issues
+          .map(
+            (row) =>
+              `invoice ${row.document_number} (${row.invoice_id}) line ${row.line_number ?? "(missing)"}${row.line_id ? ` ${row.line_id}` : ""}: ${row.issue}`,
+          )
+          .join("; ");
   return {
     name: "usage-invoice-trace",
     ok: issues.length === 0,
@@ -424,7 +485,10 @@ async function usageInvoiceTrace(orgId: string): Promise<Check> {
  */
 function runtimeProbeRole(): string {
   const raw = env.OPENBOOKS_RUNTIME_DB_URL?.trim();
-  if (!raw) throw new Error("rls probe refused: OPENBOOKS_RUNTIME_DB_URL is not set, so no RLS-subject role can be assumed");
+  if (!raw)
+    throw new Error(
+      "rls probe refused: OPENBOOKS_RUNTIME_DB_URL is not set, so no RLS-subject role can be assumed",
+    );
   let username: string;
   try {
     username = decodeURIComponent(new URL(raw).username);
@@ -432,7 +496,9 @@ function runtimeProbeRole(): string {
     throw new Error("rls probe refused: OPENBOOKS_RUNTIME_DB_URL is not a valid URL");
   }
   if (!/^[a-z_][a-z0-9_]{0,62}$/.test(username)) {
-    throw new Error("rls probe refused: OPENBOOKS_RUNTIME_DB_URL carries no usable runtime role name");
+    throw new Error(
+      "rls probe refused: OPENBOOKS_RUNTIME_DB_URL carries no usable runtime role name",
+    );
   }
   return username;
 }
@@ -462,47 +528,65 @@ class ProbeUnestablished extends Error {}
  * non-bypassing role can be established the probe reports unestablished
  * rather than passing vacuously or false-positiving.
  */
-export async function probeTableIsolation(orgId: string, foreignId: string): Promise<TableIsolationProbe> {
-  const readLogin = async () => (await db.execute<{ login: string; bypass: boolean }>(sql`
+export async function probeTableIsolation(
+  orgId: string,
+  foreignId: string,
+): Promise<TableIsolationProbe> {
+  const readLogin = async () =>
+    (
+      await db.execute<{ login: string; bypass: boolean }>(
+        sql`
     select current_user as login,
-           coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass`, "objects"))[0]!;
+           coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass`,
+        "objects",
+      )
+    )[0]!;
   try {
-    return await withOrgTransaction(orgId, async () => {
-      const login = await readLogin();
-      let switchNote = "";
-      if (login.bypass) {
-        let role: string;
-        try {
-          role = runtimeProbeRole();
-        } catch (error) {
-          throw new ProbeUnestablished(
-            `probe connection bypasses RLS as ${login.login} and ${(error instanceof Error ? error.message : String(error)).toLowerCase()}`,
-          );
+    return await withOrgTransaction(
+      orgId,
+      async () => {
+        const login = await readLogin();
+        let switchNote = "";
+        if (login.bypass) {
+          let role: string;
+          try {
+            role = runtimeProbeRole();
+          } catch (error) {
+            throw new ProbeUnestablished(
+              `probe connection bypasses RLS as ${login.login} and ${(error instanceof Error ? error.message : String(error)).toLowerCase()}`,
+            );
+          }
+          try {
+            await db.execute(sql`set local role ${sql.identifier(role)}`);
+          } catch (error) {
+            throw new ProbeUnestablished(
+              `probe connection bypasses RLS as ${login.login} and could not assume runtime role ${role}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          const after = await readLogin();
+          if (after.bypass) {
+            throw new ProbeUnestablished(
+              `probe connection bypasses RLS and no runtime role could be assumed (still bypassing as ${after.login} after assuming ${role})`,
+            );
+          }
+          switchNote = ` [table half assumed runtime role ${role}; harness login ${login.login} bypasses RLS]`;
         }
-        try {
-          await db.execute(sql`set local role ${sql.identifier(role)}`);
-        } catch (error) {
-          throw new ProbeUnestablished(
-            `probe connection bypasses RLS as ${login.login} and could not assume runtime role ${role}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-        const after = await readLogin();
-        if (after.bypass) {
-          throw new ProbeUnestablished(
-            `probe connection bypasses RLS and no runtime role could be assumed (still bypassing as ${after.login} after assuming ${role})`,
-          );
-        }
-        switchNote = ` [table half assumed runtime role ${role}; harness login ${login.login} bypasses RLS]`;
-      }
-      const seen = await db.execute<Record<string, unknown>>(sql`select id from documents where id = ${foreignId}`);
-      const own = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${orgId}`, "objects");
-      return {
-        established: true,
-        tableHidden: (seen.rowCount ?? 0) === 0,
-        ownDocs: own[0]!.n,
-        detail: switchNote,
-      };
-    }, { readOnly: true });
+        const seen = await db.execute<Record<string, unknown>>(
+          sql`select id from documents where id = ${foreignId}`,
+        );
+        const own = await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from documents where org_id = ${orgId}`,
+          "objects",
+        );
+        return {
+          established: true,
+          tableHidden: (seen.rowCount ?? 0) === 0,
+          ownDocs: own[0]!.n,
+          detail: switchNote,
+        };
+      },
+      { readOnly: true },
+    );
   } catch (error) {
     // Thrown out of the transaction so it rolls back, role switch and all.
     if (!(error instanceof ProbeUnestablished)) throw error;
@@ -519,14 +603,24 @@ export async function runScenario(
   const timings: ReportTiming[] = [];
 
   // -- counts -----------------------------------------------------------------
-  const docCount = await one<{ n: string }>(sql`select count(*) n from documents where org_id = ${orgId}`);
+  const docCount = await one<{ n: string }>(
+    sql`select count(*) n from documents where org_id = ${orgId}`,
+  );
   // Live entries only: the checkpoint counts documents that stand posted today.
-  const postedDocs = await one<{ n: string }>(sql`select count(*) n from documents where org_id = ${orgId} and status = 'posted'`);
-  const entryCount = await one<{ n: string }>(sql`select count(*) n from journal_entries where org_id = ${orgId} and status in ('posted','reversed')`);
-  const lineCount = await one<{ n: string }>(sql`select count(*) n from journal_lines l join journal_entries e on e.id = l.entry_id where l.org_id = ${orgId} and e.status in ('posted','reversed')`);
+  const postedDocs = await one<{ n: string }>(
+    sql`select count(*) n from documents where org_id = ${orgId} and status = 'posted'`,
+  );
+  const entryCount = await one<{ n: string }>(
+    sql`select count(*) n from journal_entries where org_id = ${orgId} and status in ('posted','reversed')`,
+  );
+  const lineCount = await one<{ n: string }>(
+    sql`select count(*) n from journal_lines l join journal_entries e on e.id = l.entry_id where l.org_id = ${orgId} and e.status in ('posted','reversed')`,
+  );
   const counts = {
-    documents: Number(docCount.n), postedDocuments: Number(postedDocs.n),
-    postedEntries: Number(entryCount.n), postedLines: Number(lineCount.n),
+    documents: Number(docCount.n),
+    postedDocuments: Number(postedDocs.n),
+    postedEntries: Number(entryCount.n),
+    postedLines: Number(lineCount.n),
   };
 
   // -- cutoff: verify AS-OF the last CLOSED period, not the live current month.
@@ -561,7 +655,11 @@ export async function runScenario(
     select coalesce(sum(l.amount), 0) s from journal_lines l
       join journal_entries e on e.id = l.entry_id
      where l.org_id = ${orgId} and e.status in ('posted','reversed')`);
-  checks.push({ name: "global-balance", ok: toUnits(gb.s) === 0n, detail: `sum(all posted lines) = ${gb.s} (want 0)` });
+  checks.push({
+    name: "global-balance",
+    ok: toUnits(gb.s) === 0n,
+    detail: `sum(all posted lines) = ${gb.s} (want 0)`,
+  });
 
   // -- CHECK 2: every posted entry individually balances -----------------------
   const unbal = await one<{ n: string }>(sql`
@@ -570,7 +668,11 @@ export async function runScenario(
         join journal_entries e on e.id = l.entry_id
        where l.org_id = ${orgId} and e.status in ('posted','reversed')
        group by e.id having abs(sum(l.amount)) >= 0.005) x`);
-  checks.push({ name: "per-entry-balance", ok: Number(unbal.n) === 0, detail: `${unbal.n} posted entries do not balance (want 0)` });
+  checks.push({
+    name: "per-entry-balance",
+    ok: Number(unbal.n) === 0,
+    detail: `${unbal.n} posted entries do not balance (want 0)`,
+  });
 
   // -- CHECK 2b: every book balances (functional amount grouped by book) -----
   // Lines carry no book of their own — the book lives on the entry — so this
@@ -586,7 +688,7 @@ export async function runScenario(
      where b.org_id = ${orgId}
      group by b.code`);
   const worstBook = bookBal.reduce(
-    (worst, row) => cmp(abs(row.s), abs(worst.s)) > 0 ? row : worst,
+    (worst, row) => (cmp(abs(row.s), abs(worst.s)) > 0 ? row : worst),
     { code: "", s: "0" },
   );
   checks.push({
@@ -608,7 +710,11 @@ export async function runScenario(
         join journal_entries e on e.id = l.entry_id
        where l.org_id = ${orgId} and e.status in ('posted','reversed')
        group by e.id having abs(sum(l.txn_amount)) >= 0.005) x`);
-  checks.push({ name: "per-entry-txn-balance", ok: Number(tunbal.n) === 0, detail: `${tunbal.n} posted entries do not balance in txn currency (want 0)` });
+  checks.push({
+    name: "per-entry-txn-balance",
+    ok: Number(tunbal.n) === 0,
+    detail: `${tunbal.n} posted entries do not balance in txn currency (want 0)`,
+  });
 
   // -- CHECK 3: open_balance is fresh (stored == recomputed) -------------------
   // Cached balances are denominated in the DOCUMENT currency (migration
@@ -656,8 +762,11 @@ export async function runScenario(
   checks.push({
     name: "open-balance-fresh",
     ok: Number(drift.n) === 0 && Number(drift.m) === 0,
-    detail: `${drift.n} closed-period documents have stale open_balance (want 0)` +
-      (Number(drift.m) > 0 ? `; ${drift.m} have open-item lines in another currency than the document (want 0)` : "") +
+    detail:
+      `${drift.n} closed-period documents have stale open_balance (want 0)` +
+      (Number(drift.m) > 0
+        ? `; ${drift.m} have open-item lines in another currency than the document (want 0)`
+        : "") +
       (drift.worst ? ` — worst: ${drift.worst}` : ""),
   });
 
@@ -737,7 +846,11 @@ export async function runScenario(
       select document_number, kind from t order by document_number limit 5`);
     lineTieDetail += ` — e.g. ${worstLines.map((w) => `${w.document_number}(${w.kind})`).join(", ")}`;
   }
-  checks.push({ name: "document-lines-tieout", ok: Number(lineTie.n) === 0, detail: lineTieDetail });
+  checks.push({
+    name: "document-lines-tieout",
+    ok: Number(lineTie.n) === 0,
+    detail: lineTieDetail,
+  });
 
   // -- CHECK 3d: header↔journal — the header amount must be traceable -------
   // "Header total equals the debit sum" is the loose slogan; the ledger is
@@ -846,7 +959,11 @@ export async function runScenario(
        order by d.ht desc limit 5`);
     docTieDetail += ` — worst: ${worstDocs.map((w) => `${w.document_number}(${w.kind})`).join(", ")}`;
   }
-  checks.push({ name: "document-journal-tieout", ok: Number(docTie.bad) === 0, detail: docTieDetail });
+  checks.push({
+    name: "document-journal-tieout",
+    ok: Number(docTie.bad) === 0,
+    detail: docTieDetail,
+  });
 
   // -- CHECK 4: overhead net-zero pairs never move any account -----------------
   // The application mechanism (DR overhead acct [project] / CR same acct
@@ -858,7 +975,11 @@ export async function runScenario(
         join journal_entries e on e.id = l.entry_id
        where l.org_id = ${orgId} and e.origin = 'overhead_applied' and e.status in ('posted','reversed')
        group by l.account_id having abs(sum(l.amount)) >= 0.005) x`);
-  checks.push({ name: "overhead-pair-zero", ok: Number(ovh.n) === 0, detail: `${ovh.n} accounts moved by overhead_applied entries (want 0 — pairs must net to zero)` });
+  checks.push({
+    name: "overhead-pair-zero",
+    ok: Number(ovh.n) === 0,
+    detail: `${ovh.n} accounts moved by overhead_applied entries (want 0 — pairs must net to zero)`,
+  });
   checks.push(await overheadRecomputes(orgId));
 
   // Netting to zero is necessary but NOT sufficient: a pair can net to zero and
@@ -886,7 +1007,11 @@ export async function runScenario(
   const clrAcct = await one<{ id: string | null }>(sql`
     select (settings->'controlAccounts'->>'laborClearing')::uuid as id from orgs where id = ${orgId}`);
   if (clrAcct.id == null) {
-    checks.push({ name: "labor-clearing", ok: true, detail: "labor clearing not configured (inert)" });
+    checks.push({
+      name: "labor-clearing",
+      ok: true,
+      detail: "labor clearing not configured (inert)",
+    });
   } else {
     const clrBad = await all<{ period: string; bal: string }>(sql`
       select date_trunc('month', e.posting_date)::date::text as period, sum(l.amount)::text as bal
@@ -900,9 +1025,10 @@ export async function runScenario(
     checks.push({
       name: "labor-clearing",
       ok: clrBad.length === 0,
-      detail: clrBad.length === 0
-        ? `0 settled months with clearing residue (want 0 — standards − payroll − variance nets to zero per month as of ${cutoff})`
-        : `${clrBad.length} settled month(s) with clearing residue (want 0) — worst: ${worst!.period} = ${worst!.bal} (post the payroll variance for the period: Admin → Setup → Labor costing, post-variance)`,
+      detail:
+        clrBad.length === 0
+          ? `0 settled months with clearing residue (want 0 — standards − payroll − variance nets to zero per month as of ${cutoff})`
+          : `${clrBad.length} settled month(s) with clearing residue (want 0) — worst: ${worst!.period} = ${worst!.bal} (post the payroll variance for the period: Admin → Setup → Labor costing, post-variance)`,
     });
   }
 
@@ -959,7 +1085,14 @@ export async function runScenario(
        where a.org_id = ${orgId} and a.type in ('asset_receivable','liability_payable')
        group by a.id, a.name, a.number
     )`;
-  const tie = await all<{ account: string; number: string | null; kind: string; gl: string; subledger: string; direct: string }>(sql`
+  const tie = await all<{
+    account: string;
+    number: string | null;
+    kind: string;
+    gl: string;
+    subledger: string;
+    direct: string;
+  }>(sql`
     with recursive ${voidMirrorCtes},
     gl as (
       select a.id, a.name as account, a.number, a.type as kind, sum(l.amount) as gl
@@ -1014,22 +1147,33 @@ export async function runScenario(
     with recursive ${voidMirrorCtes}
     select account, number, mirror::text as mirror from voidtie order by number`);
   const worstVoid = voidTie.reduce(
-    (worst, row) => cmp(abs(row.mirror), worst) > 0 ? abs(row.mirror) : worst,
+    (worst, row) => (cmp(abs(row.mirror), worst) > 0 ? abs(row.mirror) : worst),
     "0.0000",
   );
   const controlTieOut = tie.map((r) => {
     const diff = toUnits(r.gl) - toUnits(r.subledger) - toUnits(r.direct);
-    return { account: r.account, number: r.number, kind: r.kind, gl: r.gl, subledger: r.subledger, direct: r.direct, diff: fromUnits(diff) };
+    return {
+      account: r.account,
+      number: r.number,
+      kind: r.kind,
+      gl: r.gl,
+      subledger: r.subledger,
+      direct: r.direct,
+      diff: fromUnits(diff),
+    };
   });
   const worstTie = controlTieOut.reduce(
-    (worst, row) => cmp(abs(row.diff), worst) > 0 ? abs(row.diff) : worst,
+    (worst, row) => (cmp(abs(row.diff), worst) > 0 ? abs(row.diff) : worst),
     "0.0000",
   );
   checks.push({
     name: "subledger-gl-tieout",
     ok: cmp(worstTie, "0.0100") < 0 && cmp(worstVoid, "0.0100") < 0,
-    detail: `${controlTieOut.length} control accounts; worst |GL − subledger − directJE| = ${worstTie}` +
-      (voidTie.length > 0 ? `; void mirrors net ${worstVoid} across ${voidTie.length} account(s) (want 0)` : ""),
+    detail:
+      `${controlTieOut.length} control accounts; worst |GL − subledger − directJE| = ${worstTie}` +
+      (voidTie.length > 0
+        ? `; void mirrors net ${worstVoid} across ${voidTie.length} account(s) (want 0)`
+        : ""),
   });
 
   checks.push(await saasMetricsTieOut(orgId));
@@ -1050,7 +1194,15 @@ export async function runScenario(
   // (root-subsidiary rows whose line stamp was left null count as the root),
   // and the costing methods sharing an account are listed in the row — an org
   // that gives each method its own account gets one row per method/account.
-  const invTie = await all<{ subsidiary_id: string; subsidiary: string; number: string | null; account: string; methods: string; gl: string; subledger: string }>(sql`
+  const invTie = await all<{
+    subsidiary_id: string;
+    subsidiary: string;
+    number: string | null;
+    account: string;
+    methods: string;
+    gl: string;
+    subledger: string;
+  }>(sql`
     with prof as materialized (
       select p.item_id, p.asset_account_id
         from item_inventory_profiles p
@@ -1103,10 +1255,18 @@ export async function runScenario(
      order by s.name, a.number`);
   const inventoryTieOut = invTie.map((r) => {
     const diff = toUnits(r.gl) - toUnits(r.subledger);
-    return { subsidiary: r.subsidiary, account: r.account, number: r.number, methods: r.methods ?? "", gl: r.gl, subledger: r.subledger, diff: fromUnits(diff) };
+    return {
+      subsidiary: r.subsidiary,
+      account: r.account,
+      number: r.number,
+      methods: r.methods ?? "",
+      gl: r.gl,
+      subledger: r.subledger,
+      diff: fromUnits(diff),
+    };
   });
   const worstInvTie = inventoryTieOut.reduce(
-    (worst, row) => cmp(abs(row.diff), worst) > 0 ? abs(row.diff) : worst,
+    (worst, row) => (cmp(abs(row.diff), worst) > 0 ? abs(row.diff) : worst),
     "0.0000",
   );
   checks.push({
@@ -1196,18 +1356,23 @@ export async function runScenario(
     )
     select * from t where not (rls and force and npol > 0)`);
   let rlsOk = rlsCatalog.length === 0;
-  let rlsDetail = rlsCatalog.length === 0
-    ? "catalog clean"
-    : `catalog gaps: ${rlsCatalog.map((r) => r.tbl).join(", ")}`;
+  let rlsDetail =
+    rlsCatalog.length === 0
+      ? "catalog clean"
+      : `catalog gaps: ${rlsCatalog.map((r) => r.tbl).join(", ")}`;
   if (rlsOk) {
     // bypass: cross-org-by-design — the isolation probe needs a row owned by some other organization.
     const foreign = await withBypassContext(async () => {
-      const r = await db.execute<{ id: string }>(sql`
-        select id from documents where org_id <> ${orgId} limit 1`, "objects");
+      const r = await db.execute<{ id: string }>(
+        sql`
+        select id from documents where org_id <> ${orgId} limit 1`,
+        "objects",
+      );
       return r[0] ?? null;
     });
     if (!foreign) {
-      rlsDetail += "; no foreign-org rows anywhere on this cluster — live probe vacuous, catalog-only";
+      rlsDetail +=
+        "; no foreign-org rows anywhere on this cluster — live probe vacuous, catalog-only";
     } else {
       // The isolation probe owns a separate read-only transaction so its
       // temporary role cannot change the accounting snapshot's write scope.
@@ -1226,16 +1391,18 @@ export async function runScenario(
       // The probe selects only a foreign document's id and must see nothing,
       // so it reads documents with the payroll and expense grants a console
       // operator holding them would have; no row content is returned.
-      const seenView = await runUserSql(
-        `select id from documents where id = '${foreign.id}'`,
-        { orgId, payrollRead: true, expenseRead: true },
-      );
+      const seenView = await runUserSql(`select id from documents where id = '${foreign.id}'`, {
+        orgId,
+        payrollRead: true,
+        expenseRead: true,
+      });
       rlsOk = tableProbe.established && tableProbe.tableHidden && seenView.rowCount === 0;
       rlsDetail += tableProbe.established
         ? `; foreign doc invisible via table=${tableProbe.tableHidden} view=${seenView.rowCount === 0}, own docs visible=${tableProbe.ownDocs}${tableProbe.detail}`
         : `; ${tableProbe.detail}`;
       if (tableProbe.established && tableProbe.ownDocs === 0) {
-        rlsDetail += " (empty org — own-visibility half of the probe not provable here; see the committed RLS red-test)";
+        rlsDetail +=
+          " (empty org — own-visibility half of the probe not provable here; see the committed RLS red-test)";
       }
     }
   }
@@ -1248,25 +1415,36 @@ export async function runScenario(
     timings.push({ report: name, ms: Math.round(performance.now() - t0), rows: rows.length });
   };
   // Trial balance (balance-mode: scans inception..cutoff).
-  await bench("trial_balance", sql`
+  await bench(
+    "trial_balance",
+    sql`
     select a.id, sum(l.amount) as bal from accounts a
       join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
       join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
-     where a.org_id = ${orgId} group by a.id having abs(sum(l.amount)) >= 0.005`);
+     where a.org_id = ${orgId} group by a.id having abs(sum(l.amount)) >= 0.005`,
+  );
   // Balance sheet aggregate (same inception scan).
-  await bench("balance_sheet", sql`
+  await bench(
+    "balance_sheet",
+    sql`
     select a.type, sum(l.amount) as bal from accounts a
       join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
       join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
-     where a.org_id = ${orgId} group by a.type`);
+     where a.org_id = ${orgId} group by a.type`,
+  );
   // P&L for the fiscal year up to the cutoff.
-  await bench("profit_and_loss", sql`
+  await bench(
+    "profit_and_loss",
+    sql`
     select a.id, sum(l.amount) as bal from accounts a
       join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
       join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date between ${fyStart} and ${cutoff}
-     where a.org_id = ${orgId} and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred') group by a.id`);
+     where a.org_id = ${orgId} and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred') group by a.id`,
+  );
   // AR aging (open items by party, signed point-in-time as-of cutoff).
-  await bench("ar_aging", sql`
+  await bench(
+    "ar_aging",
+    sql`
     select d.party_id,
            sum(l.amount - sign(l.amount) * coalesce((
              select sum(ap.amount) from applications ap
@@ -1282,7 +1460,8 @@ export async function runScenario(
        and not exists (select 1 from journal_entries r
                         where r.id = d.reversal_entry_id and r.org_id = d.org_id and r.status in ('posted','reversed')
                           and r.posting_date <= ${cutoff})
-     group by d.party_id`);
+     group by d.party_id`,
+  );
 
   // -- trial-balance totals (for the checkpoint), as-of cutoff ----------------
   const tb = await one<{ debits: string; credits: string; accounts: string }>(sql`
@@ -1296,11 +1475,20 @@ export async function runScenario(
 
   const pass = checks.every((c) => c.ok);
   return {
-    orgId, orgName: org.name, at: opts.at, gitSha: opts.gitSha ?? null, runId: opts.runId ?? null,
-    cutoff, cutoffSource,
+    orgId,
+    orgName: org.name,
+    at: opts.at,
+    gitSha: opts.gitSha ?? null,
+    runId: opts.runId ?? null,
+    cutoff,
+    cutoffSource,
     counts,
     trialBalance: { debits: tb.debits, credits: tb.credits, accounts: Number(tb.accounts) },
-    controlTieOut, inventoryTieOut, checks, timings, pass,
+    controlTieOut,
+    inventoryTieOut,
+    checks,
+    timings,
+    pass,
   };
 }
 

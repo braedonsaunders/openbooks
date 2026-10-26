@@ -23,13 +23,18 @@ function errorChainMatches(error: unknown, pattern: RegExp): boolean {
 // Seed helpers: fixture writes run under the bypass. The rejection assertions
 // below must stay org-scoped (never bypassed): RLS has to permit the write so
 // the kernel guard is what rejects it, which is the whole point of each test.
-async function draftEntry(org: Awaited<ReturnType<typeof createScratchOrg>>, number: string): Promise<string> {
+async function draftEntry(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  number: string,
+): Promise<string> {
   const id = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into journal_entries
       (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
     values (${id}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${number}, ${org.date},
-            ${org.periodId}, 'draft', 'manual')`));
+            ${org.periodId}, 'draft', 'manual')`),
+  );
   return id;
 }
 
@@ -44,11 +49,13 @@ async function line(
   const id = randomUUID();
   // `runner` may be a transaction pinned to an org-scoped connection (writes
   // succeed there) or the pool (needs the bypass); scoping here covers both.
-  await withBypassContext(() => runner.execute(sql`
+  await withBypassContext(() =>
+    runner.execute(sql`
     insert into journal_lines
       (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
     values (${id}, ${org.orgId}, ${entryId}, ${lineNumber}, ${accountId}, ${org.subsidiaryId},
-            ${amount}, 'CAD', ${amount}, 1)`));
+            ${amount}, 'CAD', ${amount}, 1)`),
+  );
   return id;
 }
 
@@ -65,19 +72,25 @@ async function fxLine(
   subsidiaryId?: string,
 ): Promise<string> {
   const id = randomUUID();
-  await withBypassContext(() => runner.execute(sql`
+  await withBypassContext(() =>
+    runner.execute(sql`
     insert into journal_lines
       (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
     values (${id}, ${org.orgId}, ${entryId}, ${lineNumber}, ${accountId}, ${subsidiaryId ?? org.subsidiaryId},
-            ${amount}, 'CAD', ${txnAmount}, 1)`));
+            ${amount}, 'CAD', ${txnAmount}, 1)`),
+  );
   return id;
 }
 
-async function secondSubsidiary(org: Awaited<ReturnType<typeof createScratchOrg>>): Promise<string> {
+async function secondSubsidiary(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+): Promise<string> {
   const id = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, is_elimination, is_active)
-    values (${id}, ${org.orgId}, ${org.subsidiaryId}, 'FX Counter', 'CAD', 'CA', false, true)`));
+    values (${id}, ${org.orgId}, ${org.subsidiaryId}, 'FX Counter', 'CAD', 'CA', false, true)`),
+  );
   return id;
 }
 
@@ -108,26 +121,32 @@ test(
       });
 
       await assert.rejects(
-        withOrgContext(owner.orgId, () => db.execute(sql`
+        withOrgContext(owner.orgId, () =>
+          db.execute(sql`
           insert into document_lines
             (id, org_id, document_id, line_number, account_id, amount)
           values
             (${rejectedLineId}, ${owner.orgId}, ${documentId}, 2, ${foreign.accounts.cogs}, '7')
-        `)),
-        (error: unknown) =>
-          errorChainMatches(error, /document_lines_account_id_fkey/),
+        `),
+        ),
+        (error: unknown) => errorChainMatches(error, /document_lines_account_id_fkey/),
       );
 
-      const state = await withOrgContext(owner.orgId, () => db.execute<{
-        accepted_count: number;
-        rejected_count: number;
-      }>(sql`
+      const state = await withOrgContext(owner.orgId, () =>
+        db.execute<{
+          accepted_count: number;
+          rejected_count: number;
+        }>(
+          sql`
         select
           count(*) filter (where id = ${controlLineId})::int as accepted_count,
           count(*) filter (where id = ${rejectedLineId})::int as rejected_count
         from document_lines
         where org_id = ${owner.orgId}
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
       assert.deepEqual(state[0], {
         accepted_count: 1,
         rejected_count: 0,
@@ -174,36 +193,53 @@ test(
            where id = ${documentId} and org_id = ${org.orgId}
         `);
       });
-      const draftControl = await withOrgContext(org.orgId, () => db.execute<{ description: string | null }>(sql`
+      const draftControl = await withOrgContext(org.orgId, () =>
+        db.execute<{ description: string | null }>(
+          sql`
         select description
           from document_lines
          where id = ${lineId} and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
       assert.equal(draftControl[0]?.description, "draft edit");
-      const before = await withOrgContext(org.orgId, () => db.execute<{ document: unknown; line: unknown }>(sql`
+      const before = await withOrgContext(org.orgId, () =>
+        db.execute<{ document: unknown; line: unknown }>(
+          sql`
         select to_jsonb(d) as document, to_jsonb(l) as line
           from documents d
           join document_lines l on l.document_id = d.id and l.org_id = d.org_id
          where d.id = ${documentId} and d.org_id = ${org.orgId} and l.id = ${lineId}
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
 
       // RED before migration 0034: this direct write committed against an
       // approved parent. GREEN after 0034: the storage guard rejects it.
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.execute(sql`
+        withOrgContext(org.orgId, () =>
+          db.execute(sql`
           update document_lines
              set description = 'tampered'
            where id = ${lineId} and org_id = ${org.orgId}
-        `)),
+        `),
+        ),
         (error: unknown) => errorChainMatches(error, /lines are immutable/),
       );
 
-      const after = await withOrgContext(org.orgId, () => db.execute<{ document: unknown; line: unknown }>(sql`
+      const after = await withOrgContext(org.orgId, () =>
+        db.execute<{ document: unknown; line: unknown }>(
+          sql`
         select to_jsonb(d) as document, to_jsonb(l) as line
           from documents d
           join document_lines l on l.document_id = d.id and l.org_id = d.org_id
          where d.id = ${documentId} and d.org_id = ${org.orgId} and l.id = ${lineId}
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
       assert.deepEqual(after, before, "approved document and line remain byte-for-byte unchanged");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -211,74 +247,107 @@ test(
   },
 );
 
-test("moving a line cannot strand its old entry unbalanced and then post it", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    let a = "";
-    let b = "";
-    let moved = "";
-    let bCredit = "";
-    await withBypassContext(() => db.transaction(async (tx) => {
-      a = await draftEntry(org, "MOVE-A");
-      b = await draftEntry(org, "MOVE-B");
-      moved = await line(tx, org, a, 1, org.accounts.bank, "10");
-      await line(tx, org, a, 2, org.accounts.cogs, "-10");
-      await line(tx, org, b, 1, org.accounts.bank, "20");
-      bCredit = await line(tx, org, b, 2, org.accounts.cogs, "-20");
-    }));
-
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`set constraints all immediate`);
-        await tx.execute(sql`set constraints all deferred`);
-        await tx.execute(sql`update journal_lines set entry_id = ${b}, line_number = 3 where id = ${moved}`);
-        await tx.execute(sql`update journal_lines set amount = '-30', txn_amount = '-30' where id = ${bCredit}`);
-        await tx.execute(sql`update journal_entries set status = 'posted' where id = ${a}`);
-        await tx.execute(sql`set constraints all immediate`);
-      })),
-      (error: unknown) => {
-        const wrapped = error as { message?: string; cause?: { message?: string } };
-        return /does not balance/.test(`${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`);
-      },
-    );
-
-    const state = (await withOrgContext(org.orgId, () => db.execute<{ status: string; balance: string }>(sql`
-      select status, (select sum(amount) from journal_lines where entry_id = ${a})::text as balance
-        from journal_entries where id = ${a}`, "objects")));
-    assert.deepEqual(state[0], { status: "draft", balance: "0.0000" });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("posted status independently refuses entries with fewer than two lines", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const entryId = await draftEntry(org, "EMPTY-POST");
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId}`);
-        await tx.execute(sql`set constraints all immediate`);
-      })),
-      (error: unknown) => {
-        const wrapped = error as { message?: string; cause?: { message?: string } };
-        return /at least two lines/.test(`${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`);
-      },
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("ledger storage rejects cross-organization headers, lines, accounts, and references", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const otherOrg = await createScratchOrg();
+test(
+  "moving a line cannot strand its old entry unbalanced and then post it",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
     try {
+      let a = "";
+      let b = "";
+      let moved = "";
+      let bCredit = "";
+      await withBypassContext(() =>
+        db.transaction(async (tx) => {
+          a = await draftEntry(org, "MOVE-A");
+          b = await draftEntry(org, "MOVE-B");
+          moved = await line(tx, org, a, 1, org.accounts.bank, "10");
+          await line(tx, org, a, 2, org.accounts.cogs, "-10");
+          await line(tx, org, b, 1, org.accounts.bank, "20");
+          bCredit = await line(tx, org, b, 2, org.accounts.cogs, "-20");
+        }),
+      );
+
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-          await tx.execute(sql`set constraints journal_entries_book_id_fkey deferred`);
-          await tx.execute(sql`
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`set constraints all immediate`);
+            await tx.execute(sql`set constraints all deferred`);
+            await tx.execute(
+              sql`update journal_lines set entry_id = ${b}, line_number = 3 where id = ${moved}`,
+            );
+            await tx.execute(
+              sql`update journal_lines set amount = '-30', txn_amount = '-30' where id = ${bCredit}`,
+            );
+            await tx.execute(sql`update journal_entries set status = 'posted' where id = ${a}`);
+            await tx.execute(sql`set constraints all immediate`);
+          }),
+        ),
+        (error: unknown) => {
+          const wrapped = error as { message?: string; cause?: { message?: string } };
+          return /does not balance/.test(
+            `${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`,
+          );
+        },
+      );
+
+      const state = await withOrgContext(org.orgId, () =>
+        db.execute<{ status: string; balance: string }>(
+          sql`
+      select status, (select sum(amount) from journal_lines where entry_id = ${a})::text as balance
+        from journal_entries where id = ${a}`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(state[0], { status: "draft", balance: "0.0000" });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "posted status independently refuses entries with fewer than two lines",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const entryId = await draftEntry(org, "EMPTY-POST");
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(
+              sql`update journal_entries set status = 'posted' where id = ${entryId}`,
+            );
+            await tx.execute(sql`set constraints all immediate`);
+          }),
+        ),
+        (error: unknown) => {
+          const wrapped = error as { message?: string; cause?: { message?: string } };
+          return /at least two lines/.test(
+            `${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`,
+          );
+        },
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "ledger storage rejects cross-organization headers, lines, accounts, and references",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const otherOrg = await createScratchOrg();
+      try {
+        await assert.rejects(
+          withOrgContext(org.orgId, () =>
+            db.transaction(async (tx) => {
+              await tx.execute(sql`set constraints journal_entries_book_id_fkey deferred`);
+              await tx.execute(sql`
             insert into journal_entries
               (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
             values (
@@ -286,42 +355,50 @@ test("ledger storage rejects cross-organization headers, lines, accounts, and re
               'CROSS-ORG-HEADER', ${org.date}, ${org.periodId}, 'draft', 'manual'
             )
           `);
-          await tx.execute(sql`set constraints journal_entries_book_id_fkey immediate`);
-        })),
-        (error: unknown) => errorChainMatches(error, /journal_entries_book_id_fkey|foreign key constraint/i),
-      );
+              await tx.execute(sql`set constraints journal_entries_book_id_fkey immediate`);
+            }),
+          ),
+          (error: unknown) =>
+            errorChainMatches(error, /journal_entries_book_id_fkey|foreign key constraint/i),
+        );
 
-      const otherEntryId = await draftEntry(otherOrg, "CROSS-ORG-LINE-PARENT");
-      await assert.rejects(
-        withOrgContext(org.orgId, () => db.execute(sql`
+        const otherEntryId = await draftEntry(otherOrg, "CROSS-ORG-LINE-PARENT");
+        await assert.rejects(
+          withOrgContext(org.orgId, () =>
+            db.execute(sql`
           insert into journal_lines
             (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
           values (
             ${randomUUID()}, ${org.orgId}, ${otherEntryId},
             1, ${org.accounts.bank}, ${org.subsidiaryId}, 10, 'CAD', 10, 1
           )
-        `)),
-        (error: unknown) => errorChainMatches(error, /does not exist in organization/i),
-      );
+        `),
+          ),
+          (error: unknown) => errorChainMatches(error, /does not exist in organization/i),
+        );
 
-      const accountEntryId = await draftEntry(org, "CROSS-ORG-ACCOUNT");
-      await assert.rejects(
-        withOrgContext(org.orgId, () => db.execute(sql`
+        const accountEntryId = await draftEntry(org, "CROSS-ORG-ACCOUNT");
+        await assert.rejects(
+          withOrgContext(org.orgId, () =>
+            db.execute(sql`
           insert into journal_lines
             (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
           values (
             ${randomUUID()}, ${org.orgId}, ${accountEntryId}, 1,
             ${otherOrg.accounts.bank}, ${org.subsidiaryId}, 10, 'CAD', 10, 1
           )
-        `)),
-        (error: unknown) => errorChainMatches(error, /account .* does not exist in organization/i),
-      );
+        `),
+          ),
+          (error: unknown) =>
+            errorChainMatches(error, /account .* does not exist in organization/i),
+        );
 
-      const referenceEntryId = await draftEntry(org, "CROSS-ORG-REFERENCE");
-      await assert.rejects(
-        withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-          await tx.execute(sql`set constraints journal_lines_party_id_fkey deferred`);
-          await tx.execute(sql`
+        const referenceEntryId = await draftEntry(org, "CROSS-ORG-REFERENCE");
+        await assert.rejects(
+          withOrgContext(org.orgId, () =>
+            db.transaction(async (tx) => {
+              await tx.execute(sql`set constraints journal_lines_party_id_fkey deferred`);
+              await tx.execute(sql`
             insert into journal_lines
               (id, org_id, entry_id, line_number, account_id, subsidiary_id,
                amount, currency, txn_amount, fx_rate, party_id)
@@ -331,14 +408,17 @@ test("ledger storage rejects cross-organization headers, lines, accounts, and re
               (${randomUUID()}, ${org.orgId}, ${referenceEntryId}, 2, ${org.accounts.cogs},
                ${org.subsidiaryId}, -10, 'CAD', -10, 1, null)
           `);
-          await tx.execute(sql`set constraints journal_lines_party_id_fkey immediate`);
-        })),
-        (error: unknown) => errorChainMatches(error, /journal_lines_party_id_fkey|foreign key constraint/i),
-      );
+              await tx.execute(sql`set constraints journal_lines_party_id_fkey immediate`);
+            }),
+          ),
+          (error: unknown) =>
+            errorChainMatches(error, /journal_lines_party_id_fkey|foreign key constraint/i),
+        );
 
-      const controlEntryId = await draftEntry(org, "TENANT-COHERENT-CONTROL");
-      await withBypassContext(() => db.transaction(async (tx) => {
-        await tx.execute(sql`
+        const controlEntryId = await draftEntry(org, "TENANT-COHERENT-CONTROL");
+        await withBypassContext(() =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`
           insert into journal_lines
             (id, org_id, entry_id, line_number, account_id, subsidiary_id,
              amount, currency, txn_amount, fx_rate, party_id)
@@ -348,13 +428,16 @@ test("ledger storage rejects cross-organization headers, lines, accounts, and re
             (${randomUUID()}, ${org.orgId}, ${controlEntryId}, 2, ${org.accounts.cogs},
              ${org.subsidiaryId}, -10, 'CAD', -10, 1, ${org.customerId})
         `);
-        await tx.execute(
-          sql`update journal_entries set status = 'posted' where id = ${controlEntryId} and org_id = ${org.orgId}`,
+            await tx.execute(
+              sql`update journal_entries set status = 'posted' where id = ${controlEntryId} and org_id = ${org.orgId}`,
+            );
+            await tx.execute(sql`set constraints all immediate`);
+          }),
         );
-        await tx.execute(sql`set constraints all immediate`);
-      }));
 
-      const control = await withOrgContext(org.orgId, () => db.execute<{ status: string; lines: number; balance: string }>(sql`
+        const control = await withOrgContext(org.orgId, () =>
+          db.execute<{ status: string; lines: number; balance: string }>(
+            sql`
         select e.status,
                count(l.id)::int as lines,
                coalesce(sum(l.amount), 0)::text as balance
@@ -362,15 +445,19 @@ test("ledger storage rejects cross-organization headers, lines, accounts, and re
           join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
          where e.id = ${controlEntryId} and e.org_id = ${org.orgId}
          group by e.status
-      `, "objects"));
-      assert.deepEqual(control, [{ status: "posted", lines: 2, balance: "0.0000" }]);
+      `,
+            "objects",
+          ),
+        );
+        assert.deepEqual(control, [{ status: "posted", lines: 2, balance: "0.0000" }]);
+      } finally {
+        await dropScratchOrg(otherOrg.orgId);
+      }
     } finally {
-      await dropScratchOrg(otherOrg.orgId);
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 test(
   "reversed ledger history is amendable only through the guarded open-period path",
@@ -380,71 +467,125 @@ test(
     try {
       const originalId = await draftEntry(org, "REV-AMEND-ORIGINAL");
       let originalDebit = "";
-      await withBypassContext(() => db.transaction(async (tx) => {
-        originalDebit = await line(
-          tx,
-          org,
-          originalId,
-          1,
-          org.accounts.bank,
-          "10",
-        );
-        await line(tx, org, originalId, 2, org.accounts.cogs, "-10");
-        await tx.execute(
-          sql`update journal_entries set status = 'posted' where id = ${originalId}`,
-        );
-        await tx.execute(sql`set constraints all immediate`);
-      }));
+      await withBypassContext(() =>
+        db.transaction(async (tx) => {
+          originalDebit = await line(tx, org, originalId, 1, org.accounts.bank, "10");
+          await line(tx, org, originalId, 2, org.accounts.cogs, "-10");
+          await tx.execute(
+            sql`update journal_entries set status = 'posted' where id = ${originalId}`,
+          );
+          await tx.execute(sql`set constraints all immediate`);
+        }),
+      );
 
-      const before = await withOrgContext(org.orgId, () => db.execute<{
-        amount: string;
-        memo: string | null;
-      }>(sql`
+      const before = await withOrgContext(org.orgId, () =>
+        db.execute<{
+          amount: string;
+          memo: string | null;
+        }>(
+          sql`
         select amount::text as amount, memo from journal_lines where id = ${originalDebit}
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
 
       // Posted history is immutable in place, with or without the old amend flag.
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.execute(
-          sql`update journal_lines set memo = 'unguarded' where id = ${originalDebit}`,
-        )),
+        withOrgContext(org.orgId, () =>
+          db.execute(sql`update journal_lines set memo = 'unguarded' where id = ${originalDebit}`),
+        ),
         (error: unknown) =>
-          errorChainMatches(
-            error,
-            /lines of a posted journal entry are immutable/,
-          ),
+          errorChainMatches(error, /lines of a posted journal entry are immutable/),
       );
 
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into period_locks
           (org_id, period_id, book_id, subsidiary_id, module, state, reason)
         values (
           ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId},
           'gl', 'closed', 'Kernel reversed-history amendment test'
         )
-      `));
+      `),
+      );
       // The removed amend escape admits nothing now: not even a memo edit.
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-          await tx.execute(sql`set local openbooks.amend = 'on'`);
-          await tx.execute(
-            sql`update journal_lines set memo = 'closed-period' where id = ${originalDebit}`,
-          );
-        })),
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`set local openbooks.amend = 'on'`);
+            await tx.execute(
+              sql`update journal_lines set memo = 'closed-period' where id = ${originalDebit}`,
+            );
+          }),
+        ),
         (error: unknown) =>
           errorChainMatches(error, /lines of a posted journal entry are immutable/),
       );
       // The guarded correction path names the closed period instead.
       const closedNumber = `REV-AMEND-CLOSED-${randomUUID().slice(0, 8)}`;
       await assert.rejects(
-        withOrgContext(org.orgId, () => postEntry(db, {
+        withOrgContext(org.orgId, () =>
+          postEntry(db, {
+            orgId: org.orgId,
+            bookId: org.bookId,
+            subsidiaryId: org.subsidiaryId,
+            entryNumber: closedNumber,
+            postingDate: org.date,
+            periodId: org.periodId,
+            memo: "reversal refused: period closed",
+            origin: "manual",
+            reversesEntryId: originalId,
+            currency: "CAD",
+            closeModules: ["gl"],
+            lines: [
+              { accountId: org.accounts.bank, amount: "-10" },
+              { accountId: org.accounts.cogs, amount: "10" },
+            ],
+          }),
+        ),
+        (error: unknown) =>
+          errorChainMatches(error, /GL is closed for this period and accounting book/),
+      );
+      // The refused correction leaves no draft behind and touches nothing.
+      const untouched = await withOrgContext(org.orgId, () =>
+        db.execute<{
+          status: string;
+          strays: number;
+        }>(
+          sql`
+        select (select status from journal_entries where id = ${originalId}) as status,
+               (select count(*)::int from journal_entries
+                 where org_id = ${org.orgId} and entry_number = ${closedNumber}) as strays
+      `,
+          "objects",
+        ),
+      );
+      assert.deepEqual(untouched, [{ status: "posted", strays: 0 }]);
+
+      await withBypassContext(() =>
+        db.execute(sql`
+        update period_locks
+           set state = 'open', reopen_expires_at = now() + interval '1 hour'
+         where org_id = ${org.orgId}
+           and period_id = ${org.periodId}
+           and book_id = ${org.bookId}
+           and subsidiary_id = ${org.subsidiaryId}
+           and module = 'gl'
+      `),
+      );
+      // Correction through the ledger API: reversal plus repost, then the
+      // governed posted -> reversed lifecycle marker on the original.
+      const reversalNumber = `REV-AMEND-${randomUUID().slice(0, 8)}`;
+      const posted = await withOrgContext(org.orgId, () =>
+        postEntry(db, {
           orgId: org.orgId,
           bookId: org.bookId,
           subsidiaryId: org.subsidiaryId,
-          entryNumber: closedNumber,
+          entryNumber: reversalNumber,
           postingDate: org.date,
           periodId: org.periodId,
-          memo: "reversal refused: period closed",
+          memo: `Reversal of REV-AMEND-ORIGINAL`,
           origin: "manual",
           reversesEntryId: originalId,
           currency: "CAD",
@@ -453,67 +594,31 @@ test(
             { accountId: org.accounts.bank, amount: "-10" },
             { accountId: org.accounts.cogs, amount: "10" },
           ],
-        })),
-        (error: unknown) =>
-          errorChainMatches(error, /GL is closed for this period and accounting book/),
+        }),
       );
-      // The refused correction leaves no draft behind and touches nothing.
-      const untouched = await withOrgContext(org.orgId, () => db.execute<{
-        status: string;
-        strays: number;
-      }>(sql`
-        select (select status from journal_entries where id = ${originalId}) as status,
-               (select count(*)::int from journal_entries
-                 where org_id = ${org.orgId} and entry_number = ${closedNumber}) as strays
-      `, "objects"));
-      assert.deepEqual(untouched, [{ status: "posted", strays: 0 }]);
-
-      await withBypassContext(() => db.execute(sql`
-        update period_locks
-           set state = 'open', reopen_expires_at = now() + interval '1 hour'
-         where org_id = ${org.orgId}
-           and period_id = ${org.periodId}
-           and book_id = ${org.bookId}
-           and subsidiary_id = ${org.subsidiaryId}
-           and module = 'gl'
-      `));
-      // Correction through the ledger API: reversal plus repost, then the
-      // governed posted -> reversed lifecycle marker on the original.
-      const reversalNumber = `REV-AMEND-${randomUUID().slice(0, 8)}`;
-      const posted = await withOrgContext(org.orgId, () => postEntry(db, {
-        orgId: org.orgId,
-        bookId: org.bookId,
-        subsidiaryId: org.subsidiaryId,
-        entryNumber: reversalNumber,
-        postingDate: org.date,
-        periodId: org.periodId,
-        memo: `Reversal of REV-AMEND-ORIGINAL`,
-        origin: "manual",
-        reversesEntryId: originalId,
-        currency: "CAD",
-        closeModules: ["gl"],
-        lines: [
-          { accountId: org.accounts.bank, amount: "-10" },
-          { accountId: org.accounts.cogs, amount: "10" },
-        ],
-      }));
       await withOrgContext(org.orgId, () =>
-        markEntryReversed(db, { orgId: org.orgId, entryId: originalId }));
+        markEntryReversed(db, { orgId: org.orgId, entryId: originalId }),
+      );
 
       // The original's financial content is byte-identical; only the
       // lifecycle marker moved. The reversal is posted and balanced, so the
       // books still balance across both entries.
-      const history = await withOrgContext(org.orgId, () => db.execute<{
-        id: string;
-        status: string;
-        balance: string;
-      }>(sql`
+      const history = await withOrgContext(org.orgId, () =>
+        db.execute<{
+          id: string;
+          status: string;
+          balance: string;
+        }>(
+          sql`
         select je.id, je.status,
                (select coalesce(sum(amount), 0)::text from journal_lines
                  where entry_id = je.id and org_id = je.org_id) as balance
           from journal_entries je
          where je.id in (${originalId}, ${posted.entryId}) and je.org_id = ${org.orgId}
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
       const byId = new Map(history.map((row) => [row.id, row]));
       assert.deepEqual(byId.get(originalId), {
         id: originalId,
@@ -525,24 +630,28 @@ test(
         status: "posted",
         balance: "0.0000",
       });
-      const after = await withOrgContext(org.orgId, () => db.execute<{
-        amount: string;
-        memo: string | null;
-      }>(sql`
+      const after = await withOrgContext(org.orgId, () =>
+        db.execute<{
+          amount: string;
+          memo: string | null;
+        }>(
+          sql`
         select amount::text as amount, memo from journal_lines where id = ${originalDebit}
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
       assert.deepEqual(after, before);
 
       // Reversed history is immutable in place too.
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.execute(
-          sql`update journal_lines set memo = 'reversed-unguarded' where id = ${originalDebit}`,
-        )),
-        (error: unknown) =>
-          errorChainMatches(
-            error,
-            /lines of a reversed journal entry are immutable/,
+        withOrgContext(org.orgId, () =>
+          db.execute(
+            sql`update journal_lines set memo = 'reversed-unguarded' where id = ${originalDebit}`,
           ),
+        ),
+        (error: unknown) =>
+          errorChainMatches(error, /lines of a reversed journal entry are immutable/),
       );
     } finally {
       await dropScratchOrg(org.orgId);
@@ -558,9 +667,7 @@ test(
     const postLines = async (tx: SqlExecutor, entryId: string) => {
       const debitId = await line(tx, org, entryId, 1, org.accounts.bank, "10");
       await line(tx, org, entryId, 2, org.accounts.cogs, "-10");
-      await tx.execute(
-        sql`update journal_entries set status = 'posted' where id = ${entryId}`,
-      );
+      await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId}`);
       await tx.execute(sql`set constraints all immediate`);
       return debitId;
     };
@@ -590,96 +697,140 @@ test(
         ],
       });
     try {
-      const controllerId = await withBypassContext(() => createScratchUser(org.orgId, "Replay controller", "admin"));
+      const controllerId = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Replay controller", "admin"),
+      );
       const connectionId = randomUUID();
       const runId = randomUUID();
-      await withBypassContext(() => db.transaction(async (tx) => {
-        await tx.execute(sql`
+      await withBypassContext(() =>
+        db.transaction(async (tx) => {
+          await tx.execute(sql`
           insert into connections
             (id, org_id, source, display_name, status, posted_change_policy,
              posted_change_authorized_by, posted_change_authorized_at)
           values (${connectionId}, ${org.orgId}, 'fixture', 'Historical replay', 'active',
                   'append_only_automatic', ${controllerId}, now() - interval '1 minute')
         `);
-        await tx.execute(sql`
+          await tx.execute(sql`
           insert into sync_runs (id, org_id, connection_id, source, kind, status, triggered_by)
           values (${runId}, ${org.orgId}, ${connectionId}, 'fixture', 'incremental', 'running', ${controllerId})
         `);
-      }));
+        }),
+      );
       const firstId = await draftEntry(org, "SOURCE-LOCK-REPLAY-1");
       const secondId = await draftEntry(org, "SOURCE-LOCK-REPLAY-2");
       let firstDebit = "";
-      await withBypassContext(() => db.transaction(async (tx) => {
-        firstDebit = await postLines(tx, firstId);
-        await postLines(tx, secondId);
-      }));
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.transaction(async (tx) => {
+          firstDebit = await postLines(tx, firstId);
+          await postLines(tx, secondId);
+        }),
+      );
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into period_locks
           (org_id, period_id, book_id, subsidiary_id, module, state, reason)
         values (
           ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId},
           'gl', 'closed', 'close.importedPeriodLockReason'
         )
-      `));
+      `),
+      );
 
       // History edits refuse even with both source-replay flags: the amend
       // escape is gone, so connector ownership only matters on the API path.
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-          await tx.execute(sql`set local openbooks.amend = 'on'`);
-          await tx.execute(sql`set local openbooks.migration = 'on'`);
-          await tx.execute(
-            sql`update journal_lines set memo = 'not-source-replay' where id = ${firstDebit}`,
-          );
-        })),
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`set local openbooks.amend = 'on'`);
+            await tx.execute(sql`set local openbooks.migration = 'on'`);
+            await tx.execute(
+              sql`update journal_lines set memo = 'not-source-replay' where id = ${firstDebit}`,
+            );
+          }),
+        ),
         (error: unknown) =>
           errorChainMatches(error, /lines of a posted journal entry are immutable/),
       );
 
-      const locks = await withOrgContext(org.orgId, () => db.execute(sql`
+      const locks = await withOrgContext(org.orgId, () =>
+        db.execute(
+          sql`
         select * from period_locks where org_id = ${org.orgId} order by id
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
       const unauthenticatedNumber = `SOURCE-REPLAY-UNAUTHENTICATED-${randomUUID().slice(0, 8)}`;
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-          await tx.execute(sql`set local openbooks.migration = 'on'`);
-          await replayCorrection(tx, unauthenticatedNumber, firstId);
-        })),
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`set local openbooks.migration = 'on'`);
+            await replayCorrection(tx, unauthenticatedNumber, firstId);
+          }),
+        ),
         (error: unknown) => errorChainMatches(error, /entity accounting period is closed/),
       );
-      assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`
+      assert.equal(
+        (
+          await withOrgContext(org.orgId, () =>
+            db.execute(
+              sql`
         select id from journal_entries where org_id = ${org.orgId} and entry_number = ${unauthenticatedNumber}
-      `, "objects"))).length, 0);
+      `,
+              "objects",
+            ),
+          )
+        ).length,
+        0,
+      );
 
       // The database validates the active run, owning connection and
       // attributable automatic policy before admitting append-only replay.
       const replayNumber = `SOURCE-REPLAY-${randomUUID().slice(0, 8)}`;
-      const replay = await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`set local openbooks.migration = 'on'`);
-        await tx.execute(sql`
+      const replay = await withOrgContext(org.orgId, () =>
+        db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.migration = 'on'`);
+          await tx.execute(sql`
           select set_config('openbooks.connector_replay', 'on', true),
                  set_config('openbooks.connector_replay_request', ${runId}, true),
                  set_config('openbooks.connector_replay_actor', ${controllerId}, true)
         `);
-        return replayCorrection(tx, replayNumber, firstId, controllerId);
-      }));
+          return replayCorrection(tx, replayNumber, firstId, controllerId);
+        }),
+      );
       await withOrgContext(org.orgId, () =>
-        markEntryReversed(db, { orgId: org.orgId, entryId: firstId, actorId: controllerId }));
-      assert.deepEqual(await withOrgContext(org.orgId, () => db.execute(sql`
+        markEntryReversed(db, { orgId: org.orgId, entryId: firstId, actorId: controllerId }),
+      );
+      assert.deepEqual(
+        await withOrgContext(org.orgId, () =>
+          db.execute(
+            sql`
         select * from period_locks where org_id = ${org.orgId} order by id
-      `, "objects")), locks);
-      const replayed = await withOrgContext(org.orgId, () => db.execute<{
-        id: string;
-        status: string;
-      }>(sql`
+      `,
+            "objects",
+          ),
+        ),
+        locks,
+      );
+      const replayed = await withOrgContext(org.orgId, () =>
+        db.execute<{
+          id: string;
+          status: string;
+        }>(
+          sql`
         select id, status from journal_entries
          where id in (${firstId}, ${replay.entryId}) and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
       const replayedById = new Map(replayed.map((row) => [row.id, row.status]));
       assert.equal(replayedById.get(firstId), "reversed");
       assert.equal(replayedById.get(replay.entryId), "posted");
 
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         update period_locks
            set reason = 'controller_close'
          where org_id = ${org.orgId}
@@ -687,26 +838,34 @@ test(
            and book_id = ${org.bookId}
            and subsidiary_id = ${org.subsidiaryId}
            and module = 'gl'
-      `));
+      `),
+      );
       // A controller-owned lock holds against the same replay, and the
       // refused correction leaves no draft behind.
       const refusedNumber = `SOURCE-REPLAY-REFUSED-${randomUUID().slice(0, 8)}`;
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-          await tx.execute(sql`set local openbooks.migration = 'on'`);
-          await replayCorrection(tx, refusedNumber, secondId);
-        })),
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`set local openbooks.migration = 'on'`);
+            await replayCorrection(tx, refusedNumber, secondId);
+          }),
+        ),
         (error: unknown) =>
           errorChainMatches(error, /GL is closed for this period and accounting book/),
       );
-      const held = await withOrgContext(org.orgId, () => db.execute<{
-        status: string;
-        strays: number;
-      }>(sql`
+      const held = await withOrgContext(org.orgId, () =>
+        db.execute<{
+          status: string;
+          strays: number;
+        }>(
+          sql`
         select (select status from journal_entries where id = ${secondId}) as status,
                (select count(*)::int from journal_entries
                  where org_id = ${org.orgId} and entry_number = ${refusedNumber}) as strays
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
       assert.deepEqual(held, [{ status: "posted", strays: 0 }]);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -714,15 +873,19 @@ test(
   },
 );
 
-test("applications enforce independent base and transaction caps at deferred commit", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const targetEntry = await draftEntry(org, "FX-TARGET");
-    const sourceEntry = await draftEntry(org, "FX-SOURCE");
-    const targetLine = randomUUID();
-    const sourceLine = randomUUID();
-    await withBypassContext(() => db.transaction(async (tx) => {
-      await tx.execute(sql`
+test(
+  "applications enforce independent base and transaction caps at deferred commit",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const targetEntry = await draftEntry(org, "FX-TARGET");
+      const sourceEntry = await draftEntry(org, "FX-SOURCE");
+      const targetLine = randomUUID();
+      const sourceLine = randomUUID();
+      await withBypassContext(() =>
+        db.transaction(async (tx) => {
+          await tx.execute(sql`
         insert into journal_lines
           (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, party_id, is_open_item)
         values
@@ -730,13 +893,17 @@ test("applications enforce independent base and transaction caps at deferred com
           (${randomUUID()}, ${org.orgId}, ${targetEntry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-120', 'EUR', '-100', '1.2', null, false),
           (${sourceLine}, ${org.orgId}, ${sourceEntry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '-130', 'USD', '-80', '1.625', ${org.customerId}, true),
           (${randomUUID()}, ${org.orgId}, ${sourceEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '130', 'USD', '80', '1.625', null, false)`);
-      await tx.execute(sql`update journal_entries set status = 'posted' where id in (${targetEntry}, ${sourceEntry})`);
-      await tx.execute(sql`set constraints all immediate`);
-    }));
+          await tx.execute(
+            sql`update journal_entries set status = 'posted' where id in (${targetEntry}, ${sourceEntry})`,
+          );
+          await tx.execute(sql`set constraints all immediate`);
+        }),
+      );
 
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`
           insert into applications
             (org_id, from_line_id, to_line_id, amount, source_amount,
              source_transaction_amount, source_transaction_currency,
@@ -744,16 +911,20 @@ test("applications enforce independent base and transaction caps at deferred com
              settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on)
           values (${org.orgId}, ${sourceLine}, ${targetLine}, '120', '130.0001',
                   '80', 'USD', '100', 'EUR', '1.25', 'manual', 'TEST-RATE', ${org.date})`);
-        await tx.execute(sql`set constraints all immediate`);
-      })),
-      (error: unknown) => {
-        const wrapped = error as { message?: string; cause?: { message?: string } };
-        return /exceeds available amount on source line/.test(`${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`);
-      },
-    );
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`
+            await tx.execute(sql`set constraints all immediate`);
+          }),
+        ),
+        (error: unknown) => {
+          const wrapped = error as { message?: string; cause?: { message?: string } };
+          return /exceeds available amount on source line/.test(
+            `${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`,
+          );
+        },
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`
           insert into applications
             (org_id, from_line_id, to_line_id, amount, source_amount,
              source_transaction_amount, source_transaction_currency,
@@ -761,16 +932,20 @@ test("applications enforce independent base and transaction caps at deferred com
              settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on)
           values (${org.orgId}, ${sourceLine}, ${targetLine}, '120', '130',
                   '80', 'USD', '100.0001', 'EUR', '1.25000125', 'manual', 'TEST-RATE', ${org.date})`);
-        await tx.execute(sql`set constraints all immediate`);
-      })),
-      (error: unknown) => {
-        const wrapped = error as { message?: string; cause?: { message?: string } };
-        return /exceeds transaction amount on target line/.test(`${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`);
-      },
-    );
-    const validApplication = randomUUID();
-    await withBypassContext(() => db.transaction(async (tx) => {
-      await tx.execute(sql`
+            await tx.execute(sql`set constraints all immediate`);
+          }),
+        ),
+        (error: unknown) => {
+          const wrapped = error as { message?: string; cause?: { message?: string } };
+          return /exceeds transaction amount on target line/.test(
+            `${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`,
+          );
+        },
+      );
+      const validApplication = randomUUID();
+      await withBypassContext(() =>
+        db.transaction(async (tx) => {
+          await tx.execute(sql`
         insert into applications
           (id, org_id, from_line_id, to_line_id, amount, source_amount,
            source_transaction_amount, source_transaction_currency,
@@ -778,51 +953,70 @@ test("applications enforce independent base and transaction caps at deferred com
            settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on)
         values (${validApplication}, ${org.orgId}, ${sourceLine}, ${targetLine}, '120', '130',
                 '80', 'USD', '100', 'EUR', '1.25', 'manual', 'TEST-RATE', ${org.date})`);
-      await tx.execute(sql`set constraints all immediate`);
-    }));
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.execute(sql`update applications set settlement_rate_reference = 'CHANGED' where id = ${validApplication}`)),
-      (error: unknown) => {
-        const wrapped = error as { message?: string; cause?: { message?: string } };
-        return /application evidence is immutable/.test(`${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`);
-      },
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+          await tx.execute(sql`set constraints all immediate`);
+        }),
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.execute(
+            sql`update applications set settlement_rate_reference = 'CHANGED' where id = ${validApplication}`,
+          ),
+        ),
+        (error: unknown) => {
+          const wrapped = error as { message?: string; cause?: { message?: string } };
+          return /application evidence is immutable/.test(
+            `${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`,
+          );
+        },
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("two organizations cannot hold the same global SFTP username", { skip: !DB }, async () => {
   const first = await createScratchOrg();
   const second = await createScratchOrg();
   try {
     const username = `global-unique-${randomUUID().slice(0, 8)}`;
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into sftp_servers (org_id, name, username, root_prefix)
-      values (${first.orgId}, 'First Login', ${username}, 'sftp/first')`));
+      values (${first.orgId}, 'First Login', ${username}, 'sftp/first')`),
+    );
 
     // The daemon routes a login by username alone, across every organization:
     // a second tenant claiming the same global login name must fail closed in
     // storage (sftp_servers_username_global), not merely be re-rolled by the
     // creating route.
     await assert.rejects(
-      withOrgContext(second.orgId, () => db.execute(sql`
+      withOrgContext(second.orgId, () =>
+        db.execute(sql`
         insert into sftp_servers (org_id, name, username, root_prefix)
-        values (${second.orgId}, 'Second Login', ${username}, 'sftp/second')`)),
+        values (${second.orgId}, 'Second Login', ${username}, 'sftp/second')`),
+      ),
       (error: unknown) => errorChainMatches(error, /sftp_servers_username_global/),
     );
 
     // Distinct-identity control: different usernames persist for both orgs.
     const secondUsername = `distinct-${randomUUID().slice(0, 8)}`;
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into sftp_servers (org_id, name, username, root_prefix)
-      values (${second.orgId}, 'Second Login', ${secondUsername}, 'sftp/second')`));
+      values (${second.orgId}, 'Second Login', ${secondUsername}, 'sftp/second')`),
+    );
     // Cross-tenant verification: no single org scope can see both rows.
-    const state = await withBypassContext(() => db.execute<{ usernames: string[] }>(sql`
+    const state = await withBypassContext(() =>
+      db.execute<{ usernames: string[] }>(
+        sql`
       select array_agg(username order by username) as usernames
         from sftp_servers
        where org_id = ${first.orgId} or org_id = ${second.orgId}
-    `, "objects"));
+    `,
+        "objects",
+      ),
+    );
     assert.deepEqual(state[0]?.usernames, [secondUsername, username].sort());
   } finally {
     await dropScratchOrg(second.orgId);
@@ -835,10 +1029,17 @@ test("api key scope sets must be non-empty at the storage boundary", { skip: !DB
   try {
     const userId = randomUUID();
     // Users activate only once they hold a role (enforce_user_active_role_assignment).
-    const roleId = (await withBypassContext(() => db.execute(sql`
+    const roleId = (
+      await withBypassContext(() =>
+        db.execute(
+          sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions)
       values (${org.orgId}, ${`key-owner-${userId.slice(0, 8)}`}, 'Key Owner', false, '[]'::jsonb)
-      returning id`, "objects")))[0]!.id as string;
+      returning id`,
+          "objects",
+        ),
+      )
+    )[0]!.id as string;
     const keyId = randomUUID();
     await withBypassContext(async () => {
       await db.execute(sql`
@@ -854,7 +1055,7 @@ test("api key scope sets must be non-empty at the storage boundary", { skip: !DB
       await db.execute(sql`
         insert into api_keys (id, org_id, user_id, name, key_prefix, key_hash, key_preview,
                               scopes, created_by, updated_by)
-        values (${keyId}, ${org.orgId}, ${userId}, 'control', 'ob_live_ctrl', ${'ctrl-' + keyId},
+        values (${keyId}, ${org.orgId}, ${userId}, 'control', 'ob_live_ctrl', ${"ctrl-" + keyId},
                 'abcd', '["gl.read"]'::jsonb, ${userId}, ${userId})`);
     });
 
@@ -862,64 +1063,92 @@ test("api key scope sets must be non-empty at the storage boundary", { skip: !DB
     // empty scope set survives storage (api_keys_scopes_non_empty) — an
     // omitted selection can never become a credential here either.
     await assert.rejects(
-      withOrgContext(org.orgId, () => db.execute(sql`
+      withOrgContext(org.orgId, () =>
+        db.execute(sql`
         insert into api_keys (id, org_id, user_id, name, key_prefix, key_hash, key_preview,
                               scopes, created_by, updated_by)
         values (${randomUUID()}, ${org.orgId}, ${userId}, 'empty-mint', 'ob_live_empty',
-                ${'empty-' + keyId}, 'wxyz', '[]'::jsonb, ${userId}, ${userId})`)),
+                ${"empty-" + keyId}, 'wxyz', '[]'::jsonb, ${userId}, ${userId})`),
+      ),
       (error: unknown) => errorChainMatches(error, /api_keys_scopes_non_empty/),
     );
     await assert.rejects(
-      withOrgContext(org.orgId, () => db.execute(sql`
+      withOrgContext(org.orgId, () =>
+        db.execute(sql`
         update api_keys set scopes = '[]'::jsonb
-         where id = ${keyId} and org_id = ${org.orgId}`)),
+         where id = ${keyId} and org_id = ${org.orgId}`),
+      ),
       (error: unknown) => errorChainMatches(error, /api_keys_scopes_non_empty/),
     );
 
-    const state = await withOrgContext(org.orgId, () => db.execute<{ rows: number; min_scopes: number }>(sql`
+    const state = await withOrgContext(org.orgId, () =>
+      db.execute<{ rows: number; min_scopes: number }>(
+        sql`
       select count(*)::int as rows, min(jsonb_array_length(scopes))::int as min_scopes
         from api_keys
-       where org_id = ${org.orgId}`, "objects"));
+       where org_id = ${org.orgId}`,
+        "objects",
+      ),
+    );
     assert.deepEqual(state[0], { rows: 1, min_scopes: 1 });
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("posted status refuses an FX residual one unit beyond the group bound", { skip: !DB }, async () => {
-  // Balanced everywhere and lawful per line: only the group bound fails
-  // (0.0004 over five lines against 0.00025), so the refusal names the
-  // entry, the subsidiary, and the remedy — and the draft stands as built.
-  const org = await createScratchOrg();
-  try {
-    const entryId = await draftEntry(org, "FX-RESIDUAL-OVER");
-    await withBypassContext(() => db.transaction(async (tx) => {
-      await fxLine(tx, org, entryId, 1, org.accounts.bank, "10.0003", "10.0000");
-      await fxLine(tx, org, entryId, 2, org.accounts.cogs, "20.0000", "20.0000");
-      await fxLine(tx, org, entryId, 3, org.accounts.bank, "-15.0000", "-15.0000");
-      await fxLine(tx, org, entryId, 4, org.accounts.cogs, "-15.0000", "-15.0000");
-      await fxLine(tx, org, entryId, 5, org.accounts.bank, "-0.0003", "-0.0002");
-    }));
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
-        await tx.execute(sql`set constraints all immediate`);
-      })),
-      // Lookaheads: the refusal names the entry before the bound phrase and
-      // the subsidiary after it, so order-dependent matching would lie.
-      (error: unknown) => errorChainMatches(error, new RegExp(
-        `(?=.*${entryId})(?=.*${org.subsidiaryId})(?=.*exceeds the per-entry FX rounding bound)`,
-      )),
-    );
-    const state = await withOrgContext(org.orgId, () => db.execute<{ status: string; lines: number }>(sql`
+test(
+  "posted status refuses an FX residual one unit beyond the group bound",
+  { skip: !DB },
+  async () => {
+    // Balanced everywhere and lawful per line: only the group bound fails
+    // (0.0004 over five lines against 0.00025), so the refusal names the
+    // entry, the subsidiary, and the remedy — and the draft stands as built.
+    const org = await createScratchOrg();
+    try {
+      const entryId = await draftEntry(org, "FX-RESIDUAL-OVER");
+      await withBypassContext(() =>
+        db.transaction(async (tx) => {
+          await fxLine(tx, org, entryId, 1, org.accounts.bank, "10.0003", "10.0000");
+          await fxLine(tx, org, entryId, 2, org.accounts.cogs, "20.0000", "20.0000");
+          await fxLine(tx, org, entryId, 3, org.accounts.bank, "-15.0000", "-15.0000");
+          await fxLine(tx, org, entryId, 4, org.accounts.cogs, "-15.0000", "-15.0000");
+          await fxLine(tx, org, entryId, 5, org.accounts.bank, "-0.0003", "-0.0002");
+        }),
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(
+              sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`,
+            );
+            await tx.execute(sql`set constraints all immediate`);
+          }),
+        ),
+        // Lookaheads: the refusal names the entry before the bound phrase and
+        // the subsidiary after it, so order-dependent matching would lie.
+        (error: unknown) =>
+          errorChainMatches(
+            error,
+            new RegExp(
+              `(?=.*${entryId})(?=.*${org.subsidiaryId})(?=.*exceeds the per-entry FX rounding bound)`,
+            ),
+          ),
+      );
+      const state = await withOrgContext(org.orgId, () =>
+        db.execute<{ status: string; lines: number }>(
+          sql`
       select e.status, count(l.id)::int as lines
         from journal_entries e left join journal_lines l on l.entry_id = e.id
-       where e.id = ${entryId} group by e.status`, "objects"));
-    assert.deepEqual(state[0], { status: "draft", lines: 5 });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where e.id = ${entryId} group by e.status`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(state[0], { status: "draft", lines: 5 });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("draft UPDATEs and DELETEs cannot evade the FX group bound", { skip: !DB }, async () => {
   // Both drafts stay balanced with lawful per-line evidence throughout: the
@@ -934,34 +1163,45 @@ test("draft UPDATEs and DELETEs cannot evade the FX group bound", { skip: !DB },
     let last = "";
     let dropA = "";
     let dropB = "";
-    await withBypassContext(() => db.transaction(async (tx) => {
-      first = await fxLine(tx, org, updated, 1, org.accounts.bank, "10.0002", "10.0000");
-      await fxLine(tx, org, updated, 2, org.accounts.cogs, "20.0000", "20.0000");
-      await fxLine(tx, org, updated, 3, org.accounts.bank, "-15.0000", "-15.0000");
-      await fxLine(tx, org, updated, 4, org.accounts.cogs, "-15.0000", "-15.0000");
-      last = await fxLine(tx, org, updated, 5, org.accounts.bank, "-0.0002", "-0.0002");
-      await fxLine(tx, org, shrunk, 1, org.accounts.bank, "10.0002", "10.0000");
-      dropA = await fxLine(tx, org, shrunk, 2, org.accounts.cogs, "5.0000", "5.0000");
-      dropB = await fxLine(tx, org, shrunk, 3, org.accounts.bank, "-5.0000", "-5.0000");
-      await fxLine(tx, org, shrunk, 4, org.accounts.cogs, "-10.0000", "-10.0000");
-      await fxLine(tx, org, shrunk, 5, org.accounts.bank, "-0.0002", "-0.0002");
-      await tx.execute(sql`update journal_lines set amount = '10.0004' where id = ${first}`);
-      await tx.execute(sql`update journal_lines set amount = '-0.0004' where id = ${last}`);
-      await tx.execute(sql`delete from journal_lines where id in (${dropA}, ${dropB})`);
-    }));
+    await withBypassContext(() =>
+      db.transaction(async (tx) => {
+        first = await fxLine(tx, org, updated, 1, org.accounts.bank, "10.0002", "10.0000");
+        await fxLine(tx, org, updated, 2, org.accounts.cogs, "20.0000", "20.0000");
+        await fxLine(tx, org, updated, 3, org.accounts.bank, "-15.0000", "-15.0000");
+        await fxLine(tx, org, updated, 4, org.accounts.cogs, "-15.0000", "-15.0000");
+        last = await fxLine(tx, org, updated, 5, org.accounts.bank, "-0.0002", "-0.0002");
+        await fxLine(tx, org, shrunk, 1, org.accounts.bank, "10.0002", "10.0000");
+        dropA = await fxLine(tx, org, shrunk, 2, org.accounts.cogs, "5.0000", "5.0000");
+        dropB = await fxLine(tx, org, shrunk, 3, org.accounts.bank, "-5.0000", "-5.0000");
+        await fxLine(tx, org, shrunk, 4, org.accounts.cogs, "-10.0000", "-10.0000");
+        await fxLine(tx, org, shrunk, 5, org.accounts.bank, "-0.0002", "-0.0002");
+        await tx.execute(sql`update journal_lines set amount = '10.0004' where id = ${first}`);
+        await tx.execute(sql`update journal_lines set amount = '-0.0004' where id = ${last}`);
+        await tx.execute(sql`delete from journal_lines where id in (${dropA}, ${dropB})`);
+      }),
+    );
     // Both flips refuse; both rollbacks leave drafts standing.
     for (const entryId of [updated, shrunk]) {
       await assert.rejects(
-        withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-          await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
-          await tx.execute(sql`set constraints all immediate`);
-        })),
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(
+              sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`,
+            );
+            await tx.execute(sql`set constraints all immediate`);
+          }),
+        ),
         (error: unknown) => errorChainMatches(error, /exceeds the per-entry FX rounding bound/),
       );
     }
-    const state = await withOrgContext(org.orgId, () => db.execute<{ drafts: number }>(sql`
+    const state = await withOrgContext(org.orgId, () =>
+      db.execute<{ drafts: number }>(
+        sql`
       select count(*)::int as drafts from journal_entries
-       where id in (${updated}, ${shrunk}) and status = 'draft'`, "objects"));
+       where id in (${updated}, ${shrunk}) and status = 'draft'`,
+        "objects",
+      ),
+    );
     assert.deepEqual(state, [{ drafts: 2 }]);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -976,20 +1216,46 @@ test("the FX group bound never blends subsidiaries", { skip: !DB }, async () => 
   try {
     const counter = await secondSubsidiary(org);
     const entryId = await draftEntry(org, "FX-RESIDUAL-PART");
-    await withBypassContext(() => db.transaction(async (tx) => {
-      await fxLine(tx, org, entryId, 1, org.accounts.bank, "10.0001", "10.0000", org.subsidiaryId);
-      await fxLine(tx, org, entryId, 2, org.accounts.cogs, "-10.0001", "-10.0000", org.subsidiaryId);
-      await fxLine(tx, org, entryId, 3, org.accounts.bank, "5.0000", "5.0000", counter);
-      await fxLine(tx, org, entryId, 4, org.accounts.cogs, "-5.0000", "-5.0000", counter);
-    }));
+    await withBypassContext(() =>
+      db.transaction(async (tx) => {
+        await fxLine(
+          tx,
+          org,
+          entryId,
+          1,
+          org.accounts.bank,
+          "10.0001",
+          "10.0000",
+          org.subsidiaryId,
+        );
+        await fxLine(
+          tx,
+          org,
+          entryId,
+          2,
+          org.accounts.cogs,
+          "-10.0001",
+          "-10.0000",
+          org.subsidiaryId,
+        );
+        await fxLine(tx, org, entryId, 3, org.accounts.bank, "5.0000", "5.0000", counter);
+        await fxLine(tx, org, entryId, 4, org.accounts.cogs, "-5.0000", "-5.0000", counter);
+      }),
+    );
     await assert.rejects(
-      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
-        await tx.execute(sql`set constraints all immediate`);
-      })),
-      (error: unknown) => errorChainMatches(error, new RegExp(
-        `exceeds the per-entry FX rounding bound for subsidiary ${org.subsidiaryId}`,
-      )),
+      withOrgContext(org.orgId, () =>
+        db.transaction(async (tx) => {
+          await tx.execute(
+            sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`,
+          );
+          await tx.execute(sql`set constraints all immediate`);
+        }),
+      ),
+      (error: unknown) =>
+        errorChainMatches(
+          error,
+          new RegExp(`exceeds the per-entry FX rounding bound for subsidiary ${org.subsidiaryId}`),
+        ),
     );
   } finally {
     await dropScratchOrg(org.orgId);

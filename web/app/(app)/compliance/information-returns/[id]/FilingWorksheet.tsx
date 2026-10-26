@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useEffect, useState, useTransition } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   Alert,
   AlertDescription,
@@ -20,34 +20,34 @@ import {
   TableHeader,
   TableRow,
   Textarea,
-} from '@openbooks/ui'
-import { filedBoxAmounts } from '@openbooks/engine/compliance/information-returns-boxes'
-import type { FormBox } from '@openbooks/engine/compliance/information-returns'
-import { promptDialog } from '../../../../../lib/prompt'
-import { readApiErrorMessage } from '../../../../../lib/api-error'
-import type { FilingDetail, RecipientRow } from '../../../../../lib/compliance'
-import { formatBoxAmount } from '../../../../../lib/information-return-format'
-import { FilingExceptionList, type FilingExceptionRow } from './FilingExceptionList'
+} from "@openbooks/ui";
+import { filedBoxAmounts } from "@openbooks/engine/compliance/information-returns-boxes";
+import type { FormBox } from "@openbooks/engine/compliance/information-returns";
+import { promptDialog } from "../../../../../lib/prompt";
+import { readApiErrorMessage } from "../../../../../lib/api-error";
+import type { FilingDetail, RecipientRow } from "../../../../../lib/compliance";
+import { formatBoxAmount } from "../../../../../lib/information-return-format";
+import { FilingExceptionList, type FilingExceptionRow } from "./FilingExceptionList";
 
-const FILING_CHANNELS = ['iris', 'fire', 'provider', 'paper', 'other'] as const
+const FILING_CHANNELS = ["iris", "fire", "provider", "paper", "other"] as const;
 
 /**
  * The status badge tone. A void filing is terminal but not a success — it
  * reads in the muted tone so it never passes for filed at a glance.
  */
-function filingTone(status: FilingDetail['status']): 'success' | 'secondary' | 'warning' {
-  if (status === 'void') return 'secondary'
-  if (status === 'filed' || status === 'finalized') return 'success'
-  return 'warning'
+function filingTone(status: FilingDetail["status"]): "success" | "secondary" | "warning" {
+  if (status === "void") return "secondary";
+  if (status === "filed" || status === "finalized") return "success";
+  return "warning";
 }
 
 function amount(value: string | undefined): string {
-  return formatBoxAmount(value)
+  return formatBoxAmount(value);
 }
 
 export function filed(recipient: RecipientRow, box: string): string {
-  const amounts = filedBoxAmounts(recipient.computedAmounts, recipient.adjustments)
-  return formatBoxAmount(amounts[box])
+  const amounts = filedBoxAmounts(recipient.computedAmounts, recipient.adjustments);
+  return formatBoxAmount(amounts[box]);
 }
 
 /**
@@ -58,12 +58,12 @@ export function filed(recipient: RecipientRow, box: string): string {
  * first question anyone reviewing a 1099 asks.
  */
 export type FilingWorksheetProps = {
-  filing: FilingDetail
-  boxes: FormBox[]
-  canManage: boolean
-  canFile: boolean
-  onDirtyChange?: (dirty: boolean) => void
-}
+  filing: FilingDetail;
+  boxes: FormBox[];
+  canManage: boolean;
+  canFile: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
+};
 
 export function FilingWorksheet({
   filing,
@@ -72,118 +72,127 @@ export function FilingWorksheet({
   canFile,
   onDirtyChange,
 }: FilingWorksheetProps) {
-  const t = useTranslations('compliance')
-  const router = useRouter()
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [exceptions, setExceptions] = useState<FilingExceptionRow[]>([])
-  const [pending, startTransition] = useTransition()
-  const [editing, setEditing] = useState<RecipientRow | null>(null)
-  const [draft, setDraft] = useState<{ adjustments: Record<string, string>; reason: string; excluded: boolean; exclusionReason: string }>({
+  const t = useTranslations("compliance");
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [exceptions, setExceptions] = useState<FilingExceptionRow[]>([]);
+  const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState<RecipientRow | null>(null);
+  const [draft, setDraft] = useState<{
+    adjustments: Record<string, string>;
+    reason: string;
+    excluded: boolean;
+    exclusionReason: string;
+  }>({
     adjustments: {},
-    reason: '',
+    reason: "",
     excluded: false,
-    exclusionReason: '',
-  })
-  const [fileOpen, setFileOpen] = useState(false)
-  const [filingChannel, setFilingChannel] = useState<string>('iris')
-  const [filingReference, setFilingReference] = useState('')
+    exclusionReason: "",
+  });
+  const [fileOpen, setFileOpen] = useState(false);
+  const [filingChannel, setFilingChannel] = useState<string>("iris");
+  const [filingReference, setFilingReference] = useState("");
 
-  const frozen = filing.status === 'finalized' || filing.status === 'filed' || filing.status === 'void'
-  const amountBoxes = boxes.filter((box) => !box.isIndicator)
-  const adjustmentDirty = editing !== null && (
-    draft.reason !== (editing.adjustmentReason ?? '') ||
-    draft.excluded !== (editing.status === 'excluded') ||
-    draft.exclusionReason !== (editing.exclusionReason ?? '') ||
-    amountBoxes.some((box) => (draft.adjustments[box.key] ?? '') !== (editing.adjustments[box.key] ?? ''))
-  )
-  const filingDirty = fileOpen && (
-    filingChannel !== 'iris' || filingReference !== (filing.filingReference ?? '')
-  )
+  const frozen =
+    filing.status === "finalized" || filing.status === "filed" || filing.status === "void";
+  const amountBoxes = boxes.filter((box) => !box.isIndicator);
+  const adjustmentDirty =
+    editing !== null &&
+    (draft.reason !== (editing.adjustmentReason ?? "") ||
+      draft.excluded !== (editing.status === "excluded") ||
+      draft.exclusionReason !== (editing.exclusionReason ?? "") ||
+      amountBoxes.some(
+        (box) => (draft.adjustments[box.key] ?? "") !== (editing.adjustments[box.key] ?? ""),
+      ));
+  const filingDirty =
+    fileOpen && (filingChannel !== "iris" || filingReference !== (filing.filingReference ?? ""));
   useEffect(() => {
-    onDirtyChange?.(adjustmentDirty || filingDirty)
-  }, [adjustmentDirty, filingDirty, onDirtyChange])
+    onDirtyChange?.(adjustmentDirty || filingDirty);
+  }, [adjustmentDirty, filingDirty, onDirtyChange]);
 
   async function post(body: Record<string, unknown>): Promise<unknown | null> {
-    setError(null)
-    setNotice(null)
+    setError(null);
+    setNotice(null);
     const res = await fetch(`/api/compliance/information-returns/${filing.id}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    })
+    });
     // The refusal reads through the shared helper so message, remedy and
     // code render instead of a bare fallback.
     if (!res.ok) {
-      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
-      return null
+      setError(await readApiErrorMessage(res, t("errors.saveFailed")));
+      return null;
     }
-    const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>
-    startTransition(() => router.refresh())
-    return payload
+    const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    startTransition(() => router.refresh());
+    return payload;
   }
 
   async function compute() {
-    const result = (await post({ action: 'compute' })) as
-      | { recipients: number; tracedCash: string; exceptions: FilingExceptionRow[] }
-      | null
+    const result = (await post({ action: "compute" })) as {
+      recipients: number;
+      tracedCash: string;
+      exceptions: FilingExceptionRow[];
+    } | null;
     if (result) {
       setNotice(
-        t('informationReturns.computed', {
+        t("informationReturns.computed", {
           count: result.recipients,
           exceptions: result.exceptions.length,
         }),
-      )
-      setExceptions(result.exceptions)
+      );
+      setExceptions(result.exceptions);
     }
   }
 
   async function voidFiling() {
     const reason = await promptDialog({
-      title: t('informationReturns.voidTitle'),
-      label: t('informationReturns.voidReason'),
-    })
-    if (!reason) return
-    await post({ action: 'void', reason })
+      title: t("informationReturns.voidTitle"),
+      label: t("informationReturns.voidReason"),
+    });
+    if (!reason) return;
+    await post({ action: "void", reason });
   }
 
   function openEditor(recipient: RecipientRow) {
     setDraft({
       adjustments: { ...recipient.adjustments },
-      reason: recipient.adjustmentReason ?? '',
-      excluded: recipient.status === 'excluded',
-      exclusionReason: recipient.exclusionReason ?? '',
-    })
-    setEditing(recipient)
+      reason: recipient.adjustmentReason ?? "",
+      excluded: recipient.status === "excluded",
+      exclusionReason: recipient.exclusionReason ?? "",
+    });
+    setEditing(recipient);
   }
 
   async function saveRecipient() {
-    if (!editing) return
-    setError(null)
+    if (!editing) return;
+    setError(null);
     const res = await fetch(
       `/api/compliance/information-returns/${filing.id}/recipients/${editing.id}`,
       {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           adjustments: draft.adjustments,
           adjustmentReason: draft.reason,
-          status: draft.excluded ? 'excluded' : 'included',
+          status: draft.excluded ? "excluded" : "included",
           exclusionReason: draft.excluded ? draft.exclusionReason : null,
         }),
       },
-    )
+    );
     // The refusal reads through the shared helper so message, remedy and
     // code render instead of a bare fallback.
     if (!res.ok) {
-      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
-      return
+      setError(await readApiErrorMessage(res, t("errors.saveFailed")));
+      return;
     }
-    setEditing(null)
-    startTransition(() => router.refresh())
+    setEditing(null);
+    startTransition(() => router.refresh());
   }
 
-  const included = filing.recipients.filter((r) => r.status === 'included')
+  const included = filing.recipients.filter((r) => r.status === "included");
 
   return (
     <div className="space-y-4">
@@ -200,127 +209,146 @@ export function FilingWorksheet({
       <FilingExceptionList exceptions={exceptions} />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={filingTone(filing.status)}>
-          {t(`filingStatus.${filing.status}`)}
-        </Badge>
+        <Badge variant={filingTone(filing.status)}>{t(`filingStatus.${filing.status}`)}</Badge>
         {canManage && !frozen ? (
           <Button size="sm" variant="secondary" disabled={pending} onClick={compute}>
-            {filing.status === 'draft' ? t('informationReturns.compute') : t('informationReturns.recompute')}
+            {filing.status === "draft"
+              ? t("informationReturns.compute")
+              : t("informationReturns.recompute")}
           </Button>
         ) : null}
-        {canFile && filing.status === 'computed' ? (
-          <Button size="sm" disabled={pending} onClick={() => post({ action: 'finalize' })}>
-            {t('informationReturns.finalize')}
+        {canFile && filing.status === "computed" ? (
+          <Button size="sm" disabled={pending} onClick={() => post({ action: "finalize" })}>
+            {t("informationReturns.finalize")}
           </Button>
         ) : null}
-        {canFile && filing.status === 'finalized' ? (
+        {canFile && filing.status === "finalized" ? (
           <Button size="sm" disabled={pending} onClick={() => setFileOpen(true)}>
-            {t('informationReturns.markFiled')}
+            {t("informationReturns.markFiled")}
           </Button>
         ) : null}
         {included.length > 0 ? (
           <Button asChild size="sm" variant="ghost">
-            <a href={`/api/compliance/information-returns/${filing.id}/copies`} target="_blank" rel="noreferrer">
-              {t('informationReturns.printCopies')}
+            <a
+              href={`/api/compliance/information-returns/${filing.id}/copies`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("informationReturns.printCopies")}
             </a>
           </Button>
         ) : null}
         {canFile && included.length > 0 ? (
           <Button asChild size="sm" variant="ghost">
             <a href={`/api/compliance/information-returns/${filing.id}/export`}>
-              {t('informationReturns.exportTransmittal')}
+              {t("informationReturns.exportTransmittal")}
             </a>
           </Button>
         ) : null}
-        {canFile && filing.status !== 'void' ? (
+        {canFile && filing.status !== "void" ? (
           <Button size="sm" variant="ghost" disabled={pending} onClick={voidFiling}>
-            {t('informationReturns.void')}
+            {t("informationReturns.void")}
           </Button>
         ) : null}
         {filing.filingReference ? (
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {t('informationReturns.filedVia', {
-              channel: filing.filingChannel ?? '',
+            {t("informationReturns.filedVia", {
+              channel: filing.filingChannel ?? "",
               reference: filing.filingReference,
             })}
           </span>
         ) : null}
       </div>
 
-      {frozen && filing.status !== 'void' ? (
+      {frozen && filing.status !== "void" ? (
         <Alert>
-          <AlertDescription>{t('informationReturns.frozenNotice')}</AlertDescription>
+          <AlertDescription>{t("informationReturns.frozenNotice")}</AlertDescription>
         </Alert>
       ) : null}
 
       {filing.recipients.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          {filing.status === 'draft'
-            ? t('informationReturns.noRecipients')
-            : t('informationReturns.computedNoRecipients')}
+          {filing.status === "draft"
+            ? t("informationReturns.noRecipients")
+            : t("informationReturns.computedNoRecipients")}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('informationReturns.columns.recipient')}</TableHead>
-                <TableHead>{t('informationReturns.columns.tin')}</TableHead>
+                <TableHead>{t("informationReturns.columns.recipient")}</TableHead>
+                <TableHead>{t("informationReturns.columns.tin")}</TableHead>
                 {amountBoxes.map((box) => (
                   <TableHead key={box.key} className="text-right whitespace-nowrap">
                     {box.number}
                   </TableHead>
                 ))}
-                <TableHead>{t('informationReturns.columns.status')}</TableHead>
+                <TableHead>{t("informationReturns.columns.status")}</TableHead>
                 {canManage && !frozen ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
               {filing.recipients.map((recipient) => (
-                <TableRow key={recipient.id} className={recipient.status !== 'included' ? 'opacity-60' : undefined}>
+                <TableRow
+                  key={recipient.id}
+                  className={recipient.status !== "included" ? "opacity-60" : undefined}
+                >
                   <TableCell className="font-medium">
-                    <Link href={`/parties?party=${recipient.partyId}&partyTab=compliance`} className="hover:underline">
+                    <Link
+                      href={`/parties?party=${recipient.partyId}&partyTab=compliance`}
+                      className="hover:underline"
+                    >
                       {recipient.legalName ?? recipient.vendorName}
                     </Link>
                     {recipient.adjustmentReason ? (
-                      <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">{recipient.adjustmentReason}</p>
+                      <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">
+                        {recipient.adjustmentReason}
+                      </p>
                     ) : null}
                     {recipient.exclusionReason ? (
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{recipient.exclusionReason}</p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        {recipient.exclusionReason}
+                      </p>
                     ) : null}
                   </TableCell>
                   <TableCell className="tabular-nums text-slate-500 dark:text-slate-400">
-                    {recipient.tinLast4 ? `•••${recipient.tinLast4}` : (
-                      <Badge variant="destructive">{t('readiness.missingTin')}</Badge>
+                    {recipient.tinLast4 ? (
+                      `•••${recipient.tinLast4}`
+                    ) : (
+                      <Badge variant="destructive">{t("readiness.missingTin")}</Badge>
                     )}
                   </TableCell>
                   {amountBoxes.map((box) => {
-                    const hasAdjustment = Boolean(recipient.adjustments[box.key])
+                    const hasAdjustment = Boolean(recipient.adjustments[box.key]);
                     return (
-                      <TableCell key={box.key} className="text-right tabular-nums whitespace-nowrap">
+                      <TableCell
+                        key={box.key}
+                        className="text-right tabular-nums whitespace-nowrap"
+                      >
                         {filed(recipient, box.key)}
                         {hasAdjustment ? (
                           <span
                             className="ml-1 text-xs text-slate-400"
-                            title={t('informationReturns.ledgerFigure', {
-                              value: amount(recipient.computedAmounts[box.key]) || '0.00',
+                            title={t("informationReturns.ledgerFigure", {
+                              value: amount(recipient.computedAmounts[box.key]) || "0.00",
                             })}
                           >
                             *
                           </span>
                         ) : null}
                       </TableCell>
-                    )
+                    );
                   })}
                   <TableCell>
-                    <Badge variant={recipient.status === 'included' ? 'success' : 'secondary'}>
+                    <Badge variant={recipient.status === "included" ? "success" : "secondary"}>
                       {t(`recipientStatus.${recipient.status}`)}
                     </Badge>
                   </TableCell>
                   {canManage && !frozen ? (
                     <TableCell className="text-right">
                       <Button size="sm" variant="ghost" onClick={() => openEditor(recipient)}>
-                        {t('informationReturns.adjust')}
+                        {t("informationReturns.adjust")}
                       </Button>
                     </TableCell>
                   ) : null}
@@ -331,13 +359,15 @@ export function FilingWorksheet({
         </div>
       )}
 
-      <p className="text-xs text-slate-500 dark:text-slate-400">{t('informationReturns.footnote')}</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {t("informationReturns.footnote")}
+      </p>
 
       <Drawer
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing?.legalName ?? editing?.vendorName ?? ''}
-        description={t('informationReturns.adjustDescription')}
+        title={editing?.legalName ?? editing?.vendorName ?? ""}
+        description={t("informationReturns.adjustDescription")}
         size="md"
       >
         {editing ? (
@@ -349,8 +379,8 @@ export function FilingWorksheet({
                     {box.number} · {box.name}
                   </Label>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {t('informationReturns.ledgerFigure', {
-                      value: amount(editing.computedAmounts[box.key]) || '0.00',
+                    {t("informationReturns.ledgerFigure", {
+                      value: amount(editing.computedAmounts[box.key]) || "0.00",
                     })}
                   </p>
                 </div>
@@ -358,7 +388,7 @@ export function FilingWorksheet({
                   className="w-32 text-right tabular-nums"
                   inputMode="decimal"
                   placeholder="0.00"
-                  value={draft.adjustments[box.key] ?? ''}
+                  value={draft.adjustments[box.key] ?? ""}
                   onChange={(event) =>
                     setDraft({
                       ...draft,
@@ -366,12 +396,16 @@ export function FilingWorksheet({
                     })
                   }
                 />
-                <span className="pb-2 text-xs text-slate-400">{t('informationReturns.delta')}</span>
+                <span className="pb-2 text-xs text-slate-400">{t("informationReturns.delta")}</span>
               </div>
             ))}
             <div>
-              <Label>{t('informationReturns.adjustReason')}</Label>
-              <Textarea rows={2} value={draft.reason} onChange={(event) => setDraft({ ...draft, reason: event.target.value })} />
+              <Label>{t("informationReturns.adjustReason")}</Label>
+              <Textarea
+                rows={2}
+                value={draft.reason}
+                onChange={(event) => setDraft({ ...draft, reason: event.target.value })}
+              />
             </div>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -379,11 +413,11 @@ export function FilingWorksheet({
                 checked={draft.excluded}
                 onChange={(event) => setDraft({ ...draft, excluded: event.target.checked })}
               />
-              {t('informationReturns.exclude')}
+              {t("informationReturns.exclude")}
             </label>
             {draft.excluded ? (
               <div>
-                <Label>{t('informationReturns.exclusionReason')}</Label>
+                <Label>{t("informationReturns.exclusionReason")}</Label>
                 <Input
                   value={draft.exclusionReason}
                   onChange={(event) => setDraft({ ...draft, exclusionReason: event.target.value })}
@@ -391,7 +425,7 @@ export function FilingWorksheet({
               </div>
             ) : null}
             <Button disabled={pending} onClick={saveRecipient}>
-              {t('fields.save')}
+              {t("fields.save")}
             </Button>
           </div>
         ) : null}
@@ -400,13 +434,16 @@ export function FilingWorksheet({
       <Drawer
         open={fileOpen}
         onClose={() => setFileOpen(false)}
-        title={t('informationReturns.markFiled')}
+        title={t("informationReturns.markFiled")}
         size="sm"
       >
         <div className="grid gap-3">
           <div>
-            <Label>{t('informationReturns.channel')}</Label>
-            <Select value={filingChannel} onChange={(event) => setFilingChannel(event.target.value)}>
+            <Label>{t("informationReturns.channel")}</Label>
+            <Select
+              value={filingChannel}
+              onChange={(event) => setFilingChannel(event.target.value)}
+            >
               {FILING_CHANNELS.map((value) => (
                 <option key={value} value={value}>
                   {t(`filingChannel.${value}`)}
@@ -415,21 +452,30 @@ export function FilingWorksheet({
             </Select>
           </div>
           <div>
-            <Label>{t('informationReturns.reference')}</Label>
-            <Input value={filingReference} onChange={(event) => setFilingReference(event.target.value)} />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('informationReturns.referenceHint')}</p>
+            <Label>{t("informationReturns.reference")}</Label>
+            <Input
+              value={filingReference}
+              onChange={(event) => setFilingReference(event.target.value)}
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {t("informationReturns.referenceHint")}
+            </p>
           </div>
           <Button
             disabled={pending}
             onClick={async () => {
-              const ok = await post({ action: 'file', channel: filingChannel, reference: filingReference || null })
-              if (ok) setFileOpen(false)
+              const ok = await post({
+                action: "file",
+                channel: filingChannel,
+                reference: filingReference || null,
+              });
+              if (ok) setFileOpen(false);
             }}
           >
-            {t('informationReturns.markFiled')}
+            {t("informationReturns.markFiled")}
           </Button>
         </div>
       </Drawer>
     </div>
-  )
+  );
 }

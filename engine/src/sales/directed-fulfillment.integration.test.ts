@@ -2,22 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  db,
-  withBypassContext,
-  withOrg,
-  withOrgTransaction,
-} from "../platform/db.ts";
+import { db, withBypassContext, withOrg, withOrgTransaction } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedApprovalFlow,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import {
-  createWarehouseOperator,
-  confirmFixturePick,
-} from "../testing/warehouse-execution.ts";
+import { createWarehouseOperator, confirmFixturePick } from "../testing/warehouse-execution.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { getOnHandWith } from "../inventory/position.ts";
 import { activePickReservations } from "../inventory/pick-reservations.ts";
@@ -41,10 +33,7 @@ import {
   sealHandlingUnit,
   moveHandlingUnit,
 } from "./handling-units.ts";
-import {
-  assertPackedUnit,
-  assertShipmentPacked,
-} from "./handling-unit-state.ts";
+import { assertPackedUnit, assertShipmentPacked } from "./handling-unit-state.ts";
 import { getShipmentRates, buyShipmentLabel } from "./shipping-labels.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
@@ -77,9 +66,7 @@ async function order(
       createPickList(tx, org.orgId, actor, {
         salesOrderId: id,
         documentDate: org.date,
-        lines: [
-          { salesOrderLineId: lineId, binId: org.stockLocationId, quantity },
-        ],
+        lines: [{ salesOrderLineId: lineId, binId: org.stockLocationId, quantity }],
         allowedSubsidiaryIds: null,
       }),
     ),
@@ -94,9 +81,7 @@ test(
     const org = await native(() => createScratchOrg());
     let scenarioError: unknown;
     try {
-      const actor = await native(() =>
-        createWarehouseOperator(org.orgId, "Dispatcher"),
-      );
+      const actor = await native(() => createWarehouseOperator(org.orgId, "Dispatcher"));
       await native(async () => {
         await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)
         ||'{"inventory":true,"orders":true,"warehousing":true,"fulfillment":true,"shippingHub":true}'::jsonb) where id=${org.orgId}`);
@@ -110,17 +95,36 @@ test(
           offsetAccountId: org.accounts.clearing,
         });
       });
-      const stockBefore = await native(() => getOnHandWith(db, org.orgId, org.items.fifo, org.stockLocationId));
+      const stockBefore = await native(() =>
+        getOnHandWith(db, org.orgId, org.items.fifo, org.stockLocationId),
+      );
       await assert.rejects(
         order(org, actor, "SO-DIRECT-PRECISION-REFUSED", "2.00000002"),
-        (error: unknown) => error instanceof InventoryError && /cannot be stored exactly with four decimal places/.test(error.message),
+        (error: unknown) =>
+          error instanceof InventoryError &&
+          /cannot be stored exactly with four decimal places/.test(error.message),
       );
-      assert.deepEqual(await native(() => getOnHandWith(db, org.orgId, org.items.fifo, org.stockLocationId)), stockBefore);
-      assert.equal((await native(() => db.execute(sql`select id from documents
-        where org_id=${org.orgId} and kind='pick_list'`, "objects"))).length, 0,
-        "unrepresentable base precision must not create a pick or reservation");
-      await native(() => db.execute(sql`update item_inventory_profiles set unit_conversions='{"bulk":10000}'::jsonb
-        where org_id=${org.orgId} and item_id=${org.items.fifo}`));
+      assert.deepEqual(
+        await native(() => getOnHandWith(db, org.orgId, org.items.fifo, org.stockLocationId)),
+        stockBefore,
+      );
+      assert.equal(
+        (
+          await native(() =>
+            db.execute(
+              sql`select id from documents
+        where org_id=${org.orgId} and kind='pick_list'`,
+              "objects",
+            ),
+          )
+        ).length,
+        0,
+        "unrepresentable base precision must not create a pick or reservation",
+      );
+      await native(() =>
+        db.execute(sql`update item_inventory_profiles set unit_conversions='{"bulk":10000}'::jsonb
+        where org_id=${org.orgId} and item_id=${org.items.fifo}`),
+      );
       const first = await order(org, actor, "SO-DIRECT-LOW", "2.00000002", "bulk");
       const second = await order(org, actor, "SO-DIRECT-HIGH", "2");
       const later = await order(org, actor, "SO-DIRECT-LATER", "2");
@@ -148,27 +152,39 @@ test(
         cutoffAt: cutoff,
         commandKey: randomUUID(),
       };
-      await assert.rejects(releasePickWave(org.orgId, actor, {
-        ...input, pickListIds: [first.pick.id, second.pick.id, later.pick.id], commandKey: randomUUID(),
-      }), ScopeNotFoundError);
-      assert.equal((await native(() => db.execute(sql`select id from pick_waves where org_id=${org.orgId}`, "objects"))).length, 0,
-        "a member beyond the cutoff must refuse the whole explicit wave");
+      await assert.rejects(
+        releasePickWave(org.orgId, actor, {
+          ...input,
+          pickListIds: [first.pick.id, second.pick.id, later.pick.id],
+          commandKey: randomUUID(),
+        }),
+        ScopeNotFoundError,
+      );
+      assert.equal(
+        (
+          await native(() =>
+            db.execute(sql`select id from pick_waves where org_id=${org.orgId}`, "objects"),
+          )
+        ).length,
+        0,
+        "a member beyond the cutoff must refuse the whole explicit wave",
+      );
       const wave = await releasePickWave(org.orgId, actor, input);
       const members = await native(() =>
         db.execute<{
           pick_list_id: string;
           release_status: string;
-        }>(sql`select pick_list_id,release_status
-      from pick_wave_members where org_id=${org.orgId} and wave_id=${wave.waveId} order by sequence`, "objects"),
+        }>(
+          sql`select pick_list_id,release_status
+      from pick_wave_members where org_id=${org.orgId} and wave_id=${wave.waveId} order by sequence`,
+          "objects",
+        ),
       );
       assert.deepEqual(members, [
         { pick_list_id: second.pick.id, release_status: "approved" },
         { pick_list_id: first.pick.id, release_status: "approved" },
       ]);
-      assert.equal(
-        (await releasePickWave(org.orgId, actor, input)).replayed,
-        true,
-      );
+      assert.equal((await releasePickWave(org.orgId, actor, input)).replayed, true);
       await assert.rejects(
         releasePickWave(org.orgId, actor, { ...input, mode: "cutoff" }),
         /different release request/,
@@ -191,8 +207,11 @@ test(
       const pending = await native(() =>
         db.execute<{
           release_status: string;
-        }>(sql`select release_status from pick_wave_members
-      where org_id=${org.orgId} and wave_id=${gated.waveId}`, "objects"),
+        }>(
+          sql`select release_status from pick_wave_members
+      where org_id=${org.orgId} and wave_id=${gated.waveId}`,
+          "objects",
+        ),
       );
       assert.equal(pending[0]?.release_status, "pending_approval");
 
@@ -209,45 +228,81 @@ test(
         }),
         /between zero/,
       );
-      const taskCount = async () => (await native(() => db.execute(sql`select id from warehouse_execution_tasks
-        where org_id=${org.orgId} and document_line_id=${pickLine}`, "objects"))).length;
+      const taskCount = async () =>
+        (
+          await native(() =>
+            db.execute(
+              sql`select id from warehouse_execution_tasks
+        where org_id=${org.orgId} and document_line_id=${pickLine}`,
+              "objects",
+            ),
+          )
+        ).length;
       const beforeTaskCount = await taskCount();
-      await assert.rejects(suggestPickConfirmation(org.orgId, actor, {
-        lineId: pickLine, quantity: "1.000000001", reason: "Unrepresentable source precision", commandKey: randomUUID(),
-      }), /between zero/);
+      await assert.rejects(
+        suggestPickConfirmation(org.orgId, actor, {
+          lineId: pickLine,
+          quantity: "1.000000001",
+          reason: "Unrepresentable source precision",
+          commandKey: randomUUID(),
+        }),
+        /between zero/,
+      );
       const secondView = await withOrgTransaction(org.orgId, () =>
-        getFulfillmentDocument(db, org.orgId, second.pick.id, null));
-      await assert.rejects(suggestPickConfirmation(org.orgId, actor, {
-        lineId: secondView!.lines[0]!.lineId, quantity: "1.00000001",
-        reason: "Unrepresentable base precision", commandKey: randomUUID(),
-      }), /cannot be stored exactly with four decimal places/);
+        getFulfillmentDocument(db, org.orgId, second.pick.id, null),
+      );
+      await assert.rejects(
+        suggestPickConfirmation(org.orgId, actor, {
+          lineId: secondView!.lines[0]!.lineId,
+          quantity: "1.00000001",
+          reason: "Unrepresentable base precision",
+          commandKey: randomUUID(),
+        }),
+        /cannot be stored exactly with four decimal places/,
+      );
       assert.equal(await taskCount(), beforeTaskCount, "refusal must not leave suggested work");
-      assert.equal((await native(() => db.execute(sql`select id from warehouse_execution_tasks
-        where org_id=${org.orgId} and document_line_id=${secondView!.lines[0]!.lineId}`, "objects"))).length, 0);
+      assert.equal(
+        (
+          await native(() =>
+            db.execute(
+              sql`select id from warehouse_execution_tasks
+        where org_id=${org.orgId} and document_line_id=${secondView!.lines[0]!.lineId}`,
+              "objects",
+            ),
+          )
+        ).length,
+        0,
+      );
       const task = await suggestPickConfirmation(org.orgId, actor, {
         lineId: pickLine,
         quantity: "1.00000001",
         reason: "One unit missing on shelf",
         commandKey: randomUUID(),
       });
-      assert.equal(task.quantity, "10000.0001", "conversion retains all eight document places exactly");
+      assert.equal(
+        task.quantity,
+        "10000.0001",
+        "conversion retains all eight document places exactly",
+      );
       const confirm = () =>
-        confirmExecutionTask(
-          org.orgId,
-          actor,
-          { taskId: task.id },
-          (tx, current) => executePickDirection(tx, org.orgId, actor, current),
+        confirmExecutionTask(org.orgId, actor, { taskId: task.id }, (tx, current) =>
+          executePickDirection(tx, org.orgId, actor, current),
         );
       assert.equal((await confirm()).status, "done");
       const again = await confirm();
       assert.ok(again.status === "done" && again.replayed);
-      const execution = (await native(() =>
+      const execution = (
+        await native(() =>
           db.execute<{
             picked_quantity: string;
             short_quantity: string;
-          }>(sql`select picked_quantity::text,short_quantity::text
-      from pick_execution_lines where org_id=${org.orgId} and line_id=${pickLine}`, "objects"),
-        ))[0]!;
+          }>(
+            sql`select picked_quantity::text,short_quantity::text
+      from pick_execution_lines where org_id=${org.orgId} and line_id=${pickLine}`,
+            "objects",
+          ),
+        )
+      )[0]!;
       assert.equal(execution.short_quantity, "1.00000001");
       assert.equal(execution.picked_quantity, "1.00000001");
       const held = await withOrgTransaction(org.orgId, () =>
@@ -265,12 +320,19 @@ test(
         "short picking does not fulfill or cancel demand",
       );
       assert.equal(candidates!.lines[0]!.heldByPickLists, "1.00000001");
-      assert.equal(candidates!.lines[0]!.allocations![0]!.quantity, "2.99959999",
-        "base stock minus exact reservations remains selectable at eight-place document precision");
+      assert.equal(
+        candidates!.lines[0]!.allocations![0]!.quantity,
+        "2.99959999",
+        "base stock minus exact reservations remains selectable at eight-place document precision",
+      );
       const baseCandidates = await withOrgTransaction(org.orgId, () =>
-        pickCandidates(db, org.orgId, second.id, null));
-      assert.equal(baseCandidates!.lines[0]!.allocations![0]!.quantity, "29995.9999",
-        "a quotient exactly representable at four places retains the stock-unit presentation");
+        pickCandidates(db, org.orgId, second.id, null),
+      );
+      assert.equal(
+        baseCandidates!.lines[0]!.allocations![0]!.quantity,
+        "29995.9999",
+        "a quotient exactly representable at four places retains the stock-unit presentation",
+      );
       const shipment = await withOrg(org.orgId, () =>
         db.transaction((tx) =>
           createShipment(tx, org.orgId, actor, {
@@ -313,9 +375,7 @@ test(
         throw new Error("Unpacked unit must not call a carrier");
       };
       await assert.rejects(
-        withOrgTransaction(org.orgId, () =>
-          assertShipmentPacked(db, org.orgId, shipment.id),
-        ),
+        withOrgTransaction(org.orgId, () => assertShipmentPacked(db, org.orgId, shipment.id)),
         /Confirm every/,
       );
       await assert.rejects(
@@ -346,10 +406,7 @@ test(
         /packed handling unit|packing|contents/i,
       );
       assert.equal(carrierCalls, 0);
-      await assert.rejects(
-        sealHandlingUnit(org.orgId, actor, unit.id),
-        /Confirm every/,
-      );
+      await assert.rejects(sealHandlingUnit(org.orgId, actor, unit.id), /Confirm every/);
       const pack = await suggestPackConfirmation(org.orgId, actor, {
         unitId: unit.id,
         lineId: ship!.lines[0]!.lineId,
@@ -361,16 +418,10 @@ test(
         quantity: "10000.0001",
       };
       const doPack = (evidence = scan) =>
-        confirmExecutionTask(
-          org.orgId,
-          actor,
-          { taskId: pack.id, scan: evidence },
-          (tx, current) => executePackDirection(tx, org.orgId, actor, current),
+        confirmExecutionTask(org.orgId, actor, { taskId: pack.id, scan: evidence }, (tx, current) =>
+          executePackDirection(tx, org.orgId, actor, current),
         );
-      assert.equal(
-        (await doPack({ ...scan, bin: "DOCK-DIRECT" })).status,
-        "exception",
-      );
+      assert.equal((await doPack({ ...scan, bin: "DOCK-DIRECT" })).status, "exception");
       assert.equal(
         (
           await native(() =>
@@ -401,10 +452,7 @@ test(
       };
       const move = await moveHandlingUnit(org.orgId, actor, moving);
       assert.equal(move.replayed, false);
-      assert.equal(
-        (await moveHandlingUnit(org.orgId, actor, moving)).replayed,
-        true,
-      );
+      assert.equal((await moveHandlingUnit(org.orgId, actor, moving)).replayed, true);
       await assert.rejects(
         moveHandlingUnit(org.orgId, actor, {
           ...moving,
@@ -448,7 +496,8 @@ test(
               createdBy: actor,
             }),
           );
-          const copied = (await native(() =>
+          const copied = (
+            await native(() =>
               db.execute<{
                 actor: string;
                 unit: string;
@@ -456,23 +505,23 @@ test(
                 dock: string;
                 pack: string;
                 status: string;
-              }>(sql`
+              }>(
+                sql`
           select ob_rebase(${actor}::uuid,target.sandbox_seed) as actor,ob_rebase(${unit.id}::uuid,target.sandbox_seed) as unit,
             ob_rebase(${shipment.id}::uuid,target.sandbox_seed) as shipment,ob_rebase(${dock}::uuid,target.sandbox_seed) as dock,
             ob_rebase(${packBin}::uuid,target.sandbox_seed) as pack,control.status
-          from orgs target join sandboxes control on control.org_id=target.id where target.id=${clone.sandboxOrgId}`, "objects"),
-            ))[0]!;
+          from orgs target join sandboxes control on control.org_id=target.id where target.id=${clone.sandboxOrgId}`,
+                "objects",
+              ),
+            )
+          )[0]!;
           assert.equal(copied.status, "ready");
           const clonedUnit = await withOrgTransaction(clone.sandboxOrgId, () =>
-            assertPackedUnit(
-              db,
-              clone.sandboxOrgId,
-              copied.shipment,
-              copied.unit,
-            ),
+            assertPackedUnit(db, clone.sandboxOrgId, copied.shipment, copied.unit),
           );
           assert.equal(clonedUnit.current_stock_location_id, copied.dock);
-          const evidence = (await native(() =>
+          const evidence = (
+            await native(() =>
               db.execute<{
                 task: string | null;
                 confirmed_by: string;
@@ -482,7 +531,8 @@ test(
                 request_masked: boolean;
                 command_masked: boolean;
                 value_matches: boolean;
-              }>(sql`
+              }>(
+                sql`
           select content.confirmation_task_id as task,content.confirmed_by,
             (move.movements->0->>'shipmentLineId')::uuid=content.shipment_line_id as matches,
             (select code from handling_units where org_id=${clone.sandboxOrgId} and id=${copied.unit})=
@@ -493,26 +543,40 @@ test(
             move.movements->0->'value'=(select movements->0->'value' from handling_unit_moves where org_id=${org.orgId} and id=${move.id}) as value_matches
           from handling_unit_contents content join handling_unit_moves move
             on move.org_id=content.org_id and move.handling_unit_id=content.handling_unit_id
-          where content.org_id=${clone.sandboxOrgId} and content.handling_unit_id=${copied.unit}`, "objects"),
-            ))[0]!;
+          where content.org_id=${clone.sandboxOrgId} and content.handling_unit_id=${copied.unit}`,
+                "objects",
+              ),
+            )
+          )[0]!;
           assert.equal(evidence.task, null);
           assert.equal(evidence.confirmed_by, copied.actor);
-          assert.equal(evidence.code_masked, true, "carton identity follows the selected privacy mode");
+          assert.equal(
+            evidence.code_masked,
+            true,
+            "carton identity follows the selected privacy mode",
+          );
           assert.equal(evidence.reason_masked, true);
           assert.equal(evidence.request_masked, true);
           assert.equal(evidence.command_masked, true);
-          assert.equal(evidence.value_matches, true, "masking preserves exact valued-transfer evidence");
+          assert.equal(
+            evidence.value_matches,
+            true,
+            "masking preserves exact valued-transfer evidence",
+          );
           assert.equal(
             evidence.matches,
             true,
             "copied transfer proof names the copied shipment line",
           );
           assert.equal(
-            (await native(() =>
+            (
+              await native(() =>
                 db.execute(
-                  sql`select id from warehouse_scan_events where org_id=${clone.sandboxOrgId}`, "objects",
+                  sql`select id from warehouse_scan_events where org_id=${clone.sandboxOrgId}`,
+                  "objects",
                 ),
-              )).length,
+              )
+            ).length,
             0,
           );
           assert.equal(
@@ -543,17 +607,14 @@ test(
           try {
             await native(async () => {
               const shells = await db.execute<{ id: string }>(
-                  sql`select id from sandboxes where production_org_id=${org.orgId} and name=${name}`, "objects",
-                );
-              for (const shell of shells)
-                await deleteSandbox(shell.id, { actorId: actor });
+                sql`select id from sandboxes where production_org_id=${org.orgId} and name=${name}`,
+                "objects",
+              );
+              for (const shell of shells) await deleteSandbox(shell.id, { actorId: actor });
             });
           } catch (cleanupError) {
             throw cloneError
-              ? new AggregateError(
-                  [cloneError, cleanupError],
-                  "Carton clone and cleanup failed",
-                )
+              ? new AggregateError([cloneError, cleanupError], "Carton clone and cleanup failed")
               : cleanupError;
           }
         }
@@ -601,9 +662,7 @@ test(
     const org = await native(() => createScratchOrg());
     let scenarioError: unknown;
     try {
-      const actor = await native(() =>
-        createWarehouseOperator(org.orgId, "Packer"),
-      );
+      const actor = await native(() => createWarehouseOperator(org.orgId, "Packer"));
       const orderId = randomUUID(),
         orderLines = [randomUUID(), randomUUID()];
       await native(async () => {
@@ -671,13 +730,29 @@ test(
         lineIds: ship!.lines.map((line) => line.lineId),
       });
       const unitId = unit.id;
-      const members = await native(() => db.execute<{ shipment_line_id: string }>(sql`
-        select shipment_line_id from handling_unit_contents where org_id=${org.orgId} and handling_unit_id=${unitId}`, "objects"));
-      assert.deepEqual(members.map((row) => row.shipment_line_id).sort(), ship!.lines.map((line) => line.lineId).sort());
-      assert.equal((await createHandlingUnit(org.orgId, actor, {
-        shipmentId: shipment.id, code: "TWO-LINE-CARTON", binId: org.stockLocationId,
-        lineIds: ship!.lines.map((line) => line.lineId).reverse(),
-      })).id, unitId, "reordered multi-member selection reopens the same carton");
+      const members = await native(() =>
+        db.execute<{ shipment_line_id: string }>(
+          sql`
+        select shipment_line_id from handling_unit_contents where org_id=${org.orgId} and handling_unit_id=${unitId}`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(
+        members.map((row) => row.shipment_line_id).sort(),
+        ship!.lines.map((line) => line.lineId).sort(),
+      );
+      assert.equal(
+        (
+          await createHandlingUnit(org.orgId, actor, {
+            shipmentId: shipment.id,
+            code: "TWO-LINE-CARTON",
+            binId: org.stockLocationId,
+            lineIds: ship!.lines.map((line) => line.lineId).reverse(),
+          })
+        ).id,
+        unitId,
+        "reordered multi-member selection reopens the same carton",
+      );
       const suggestions: Awaited<ReturnType<typeof suggestPackConfirmation>>[] = [];
       for (const line of ship!.lines)
         suggestions.push(
@@ -697,8 +772,11 @@ test(
         /contents, position or status changed/i,
       );
       const staleEvidence = await native(() =>
-        db.execute(sql`
-        select id from warehouse_scan_events where org_id=${org.orgId} and task_id=${suggestions[1]!.id}`, "objects"),
+        db.execute(
+          sql`
+        select id from warehouse_scan_events where org_id=${org.orgId} and task_id=${suggestions[1]!.id}`,
+          "objects",
+        ),
       );
       assert.equal(
         staleEvidence.length,
@@ -718,10 +796,13 @@ test(
       );
       const snapshot = async () =>
         native(() =>
-          db.execute(sql`select status,content_version,current_stock_location_id,
+          db.execute(
+            sql`select status,content_version,current_stock_location_id,
       (select count(*) from inventory_movements where org_id=${org.orgId}) as movement_count,
       (select count(*) from shipment_labels where org_id=${org.orgId}) as label_count
-      from handling_units where org_id=${org.orgId} and id=${unitId}`, "objects"),
+      from handling_units where org_id=${org.orgId} and id=${unitId}`,
+            "objects",
+          ),
         );
       const before = await snapshot();
       let calls = 0;
@@ -735,15 +816,9 @@ test(
         update fulfillment_lines set pick_line_id=null where org_id=${org.orgId} and line_id=${damaged.lineId}`),
         ),
         (error: unknown) =>
-          /only the carton/.test(
-            String((error as { cause?: unknown }).cause ?? error),
-          ),
+          /only the carton/.test(String((error as { cause?: unknown }).cause ?? error)),
       );
-      assert.deepEqual(
-        await snapshot(),
-        before,
-        "a protected pick identity cannot be removed",
-      );
+      assert.deepEqual(await snapshot(), before, "a protected pick identity cannot be removed");
       for (const coordinate of ["stock_location_id", "carton"] as const) {
         await native(() =>
           db.execute(
@@ -753,9 +828,7 @@ test(
           ),
         );
         await assert.rejects(
-          withOrgTransaction(org.orgId, () =>
-            assertShipmentPacked(db, org.orgId, shipment.id),
-          ),
+          withOrgTransaction(org.orgId, () => assertShipmentPacked(db, org.orgId, shipment.id)),
           /contents changed|unconfirmed/i,
         );
         await assert.rejects(
@@ -799,9 +872,7 @@ test(
         );
       }
       assert.equal(calls, 0);
-      await withOrgTransaction(org.orgId, () =>
-        assertShipmentPacked(db, org.orgId, shipment.id),
-      );
+      await withOrgTransaction(org.orgId, () => assertShipmentPacked(db, org.orgId, shipment.id));
     } catch (error) {
       scenarioError = error;
       throw error;

@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useCallback } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Building2 } from 'lucide-react'
+import { useCallback } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Building2 } from "lucide-react";
 
 /**
  * Subsidiary context switcher for subsidiary-aware operational pages
@@ -16,31 +16,31 @@ export function SubsidiarySwitcher({
   picker,
   value,
   label,
-  paramKey = 'sub',
+  paramKey = "sub",
 }: {
-  picker: { id: string; label: string }[]
+  picker: { id: string; label: string }[];
   /** Currently selected subsidiary id ('' = whole company / root default). */
-  value: string
+  value: string;
   /** Accessible label, e.g. t('subsidiary'). */
-  label: string
-  paramKey?: string
+  label: string;
+  paramKey?: string;
 }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const onChange = useCallback(
     (id: string) => {
-      const next = new URLSearchParams(searchParams?.toString())
-      if (id) next.set(paramKey, id)
-      else next.delete(paramKey)
-      const qs = next.toString()
-      router.push(`${pathname}${qs ? `?${qs}` : ''}` as never)
+      const next = new URLSearchParams(searchParams?.toString());
+      if (id) next.set(paramKey, id);
+      else next.delete(paramKey);
+      const qs = next.toString();
+      router.push(`${pathname}${qs ? `?${qs}` : ""}` as never);
     },
     [router, pathname, searchParams, paramKey],
-  )
+  );
 
-  if (picker.length < 2) return null
+  if (picker.length < 2) return null;
   return (
     <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
       <Building2 size={14} className="shrink-0 text-slate-400" aria-hidden />
@@ -58,5 +58,5 @@ export function SubsidiarySwitcher({
         ))}
       </select>
     </label>
-  )
+  );
 }

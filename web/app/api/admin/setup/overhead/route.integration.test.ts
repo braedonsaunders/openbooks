@@ -13,8 +13,13 @@ import { sql } from "drizzle-orm";
 // strict account validation and all-or-nothing evidenced writes against real
 // PostgreSQL. Only the authorization seam is a test double.
 const stateKey = Symbol.for("openbooks.overhead-route-test");
-const routeState = { gate: null as null | { user: { orgId: string; id: string }; allowedSubsidiaryIds?: Set<string> | null } };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+const routeState = {
+  gate: null as null | {
+    user: { orgId: string; id: string };
+    allowedSubsidiaryIds?: Set<string> | null;
+  },
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.overhead-route-test')]
@@ -38,7 +43,8 @@ registerHooks({
     // route file's relative import. The identical source shares one module
     // instance across both spellings.
     if (
-      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead/route")) ||
+      (specifier === "../../../../../lib/authz" &&
+        context.parentURL?.includes("setup/overhead/route")) ||
       specifier === "@/lib/authz"
     ) {
       return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(mockAuthz)}` };
@@ -56,80 +62,119 @@ registerHooks({
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 
 async function storedApplication(orgId: string): Promise<unknown> {
-  const r = await withBypassContext(() => db.execute(sql`
-    select settings->'overheadApplication' as c from orgs where id = ${orgId}`, "objects"));
+  const r = await withBypassContext(() =>
+    db.execute(
+      sql`
+    select settings->'overheadApplication' as c from orgs where id = ${orgId}`,
+      "objects",
+    ),
+  );
   return r[0]?.c ?? null;
 }
 
 async function applicationAudits(orgId: string): Promise<number> {
-  const r = await withBypassContext(() => db.execute<{ n: number }>(sql`
+  const r = await withBypassContext(() =>
+    db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'orgs'
-       and changes ? 'overheadApplication'`, "objects"));
+       and changes ? 'overheadApplication'`,
+      "objects",
+    ),
+  );
   return r[0]!.n;
 }
 
 async function storedLifecycle(orgId: string): Promise<unknown> {
-  const r = await withBypassContext(() => db.execute(sql`
-    select settings->'overheadRateLifecycle' as c from orgs where id = ${orgId}`, "objects"));
+  const r = await withBypassContext(() =>
+    db.execute(
+      sql`
+    select settings->'overheadRateLifecycle' as c from orgs where id = ${orgId}`,
+      "objects",
+    ),
+  );
   return r[0]?.c ?? null;
 }
 
 async function lifecycleAudits(orgId: string): Promise<number> {
-  const r = await withBypassContext(() => db.execute<{ n: number }>(sql`
+  const r = await withBypassContext(() =>
+    db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'orgs'
-       and changes ? 'overheadRateLifecycle'`, "objects"));
+       and changes ? 'overheadRateLifecycle'`,
+      "objects",
+    ),
+  );
   return r[0]!.n;
 }
 
 async function projectProfileActivity(orgId: string, projectTypeId: string) {
   const [versions, audits] = await Promise.all([
-    withBypassContext(() => db.execute<{ n: number }>(sql`
+    withBypassContext(() =>
+      db.execute<{ n: number }>(sql`
       select count(*)::int as n from project_financial_profile_versions
-       where org_id = ${orgId} and project_type_id = ${projectTypeId}`)),
-    withBypassContext(() => db.execute<{ n: number }>(sql`
+       where org_id = ${orgId} and project_type_id = ${projectTypeId}`),
+    ),
+    withBypassContext(() =>
+      db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${orgId} and table_name = 'project_financial_profile_versions'
          and row_id in (select id from project_financial_profile_versions
-                         where org_id = ${orgId} and project_type_id = ${projectTypeId})`)),
+                         where org_id = ${orgId} and project_type_id = ${projectTypeId})`),
+    ),
   ]);
   return { versions: versions.rows[0]!.n, audits: audits.rows[0]!.n };
 }
 
-async function addProfileType(orgId: string): Promise<{ id: string; profile: Record<string, unknown> }> {
+async function addProfileType(
+  orgId: string,
+): Promise<{ id: string; profile: Record<string, unknown> }> {
   const template = BUILTIN_PROJECT_TYPES.find((type) => type.key === "schedule_of_values")!;
   const id = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into project_types (id, org_id, key, name, billing_method, invoicing_profile, backup_profile)
     values (${id}, ${orgId}, 'scope-overhead-test', 'Scope overhead test', 'fixed_price',
-            ${JSON.stringify(template.invoicingProfile)}::jsonb, ${JSON.stringify(template.backupProfile)}::jsonb)`));
-  await withBypassContext(() => db.execute(sql`
+            ${JSON.stringify(template.invoicingProfile)}::jsonb, ${JSON.stringify(template.backupProfile)}::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into project_financial_profile_versions (org_id, project_type_id, effective_from, financial_profile, reason)
-    values (${orgId}, ${id}, '2000-01-01', ${JSON.stringify(template.financialProfile)}::jsonb, 'scope test baseline')`));
+    values (${orgId}, ${id}, '2000-01-01', ${JSON.stringify(template.financialProfile)}::jsonb, 'scope test baseline')`),
+  );
   return { id, profile: template.financialProfile as unknown as Record<string, unknown> };
 }
 
 function post(body: unknown): Promise<Response> {
-  return POST(new Request("http://localhost/api/admin/setup/overhead", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  }));
+  return POST(
+    new Request("http://localhost/api/admin/setup/overhead", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
 }
 
 test("restricted actors cannot change org-wide overhead application settings", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Setup Admin", "admin"));
-    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
-    const response = await post({ action: "set-application", mode: "net_zero_pair", accountId: org.accounts.adjustment });
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Restricted Setup Admin", "admin"),
+    );
+    routeState.gate = {
+      user: { orgId: org.orgId, id: actorId },
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
+    const response = await post({
+      action: "set-application",
+      mode: "net_zero_pair",
+      accountId: org.accounts.adjustment,
+    });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
     assert.equal(await storedApplication(org.orgId), null);
@@ -143,9 +188,18 @@ test("restricted actors cannot change org-wide overhead application settings", a
 test("restricted actors cannot change org-wide overhead lifecycle settings", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Lifecycle Admin", "admin"));
-    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
-    const response = await post({ action: "set-lifecycle", mode: "scheduled", cadence: "quarterly" });
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Restricted Lifecycle Admin", "admin"),
+    );
+    routeState.gate = {
+      user: { orgId: org.orgId, id: actorId },
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
+    const response = await post({
+      action: "set-lifecycle",
+      mode: "scheduled",
+      cadence: "quarterly",
+    });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
     assert.equal(await storedLifecycle(org.orgId), null);
@@ -159,15 +213,34 @@ test("restricted actors cannot change org-wide overhead lifecycle settings", asy
 test("restricted actors cannot publish org-wide overhead rates", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Publisher", "admin"));
-    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
-    const before = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`, "objects")))[0]!.n;
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Restricted Publisher", "admin"),
+    );
+    routeState.gate = {
+      user: { orgId: org.orgId, id: actorId },
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
+    const before = (
+      await withBypassContext(() =>
+        db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     const response = await post({ action: "publish", effectiveFrom: "2026-10-01", rates: [] });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
-    const after = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`, "objects")))[0]!.n;
+    const after = (
+      await withBypassContext(() =>
+        db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(after, before);
   } finally {
     routeState.gate = null;
@@ -178,10 +251,15 @@ test("restricted actors cannot publish org-wide overhead rates", async () => {
 test("restricted actors cannot publish org-wide project type overhead profiles", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Profile Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Restricted Profile Admin", "admin"),
+    );
     const projectType = await addProfileType(org.orgId);
     const before = await projectProfileActivity(org.orgId, projectType.id);
-    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
+    routeState.gate = {
+      user: { orgId: org.orgId, id: actorId },
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
     const response = await post({
       action: "apply",
       projectTypeIds: [projectType.id],
@@ -201,46 +279,84 @@ test("restricted actors cannot publish org-wide project type overhead profiles",
 test("restricted actors cannot backfill org-wide overhead journals", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Backfill Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Restricted Backfill Admin", "admin"),
+    );
     const departmentId = randomUUID();
     const projectId = randomUUID();
     const timeEntryId = randomUUID();
     const employeeId = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({
         features: { projects: true, timeTracking: true },
         overheadApplication: { mode: "net_zero_pair", accountId: org.accounts.adjustment },
-      })}::jsonb where id = ${org.orgId}`));
-    await withBypassContext(() => db.execute(sql`
-      insert into departments (id, org_id, name) values (${departmentId}, ${org.orgId}, 'Backfill Department')`));
-    await withBypassContext(() => db.execute(sql`
+      })}::jsonb where id = ${org.orgId}`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
+      insert into departments (id, org_id, name) values (${departmentId}, ${org.orgId}, 'Backfill Department')`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into overhead_rates (id, org_id, method, rate_kind, rate_percent, effective_from)
-      values (${randomUUID()}, ${org.orgId}, 'standard', 'per_hour', 10, '2026-01-01')`));
-    await withBypassContext(() => db.execute(sql`
+      values (${randomUUID()}, ${org.orgId}, 'standard', 'per_hour', 10, '2026-01-01')`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${employeeId}, ${org.orgId}, 'person', 'Backfill worker', ${org.subsidiaryId}, true, '{}'::jsonb)`));
-    await withBypassContext(() => db.execute(sql`
+      values (${employeeId}, ${org.orgId}, 'person', 'Backfill worker', ${org.subsidiaryId}, true, '{}'::jsonb)`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
-      values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'BACKFILL-1', 'Backfill job', ${org.customerId}, 'active', true, '{}'::jsonb)`));
-    await withBypassContext(() => db.execute(sql`
+      values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'BACKFILL-1', 'Backfill job', ${org.customerId}, 'active', true, '{}'::jsonb)`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into time_entries
         (id, org_id, employee_party_id, worked_on, hours, project_id, department_id, status,
          cost_rate, cost_rate_currency, cost_rate_subsidiary_id, costing_basis, is_billable,
          custom, created_by, updated_by)
       values (${timeEntryId}, ${org.orgId}, ${employeeId}, '2026-07-01', 2, ${projectId}, ${departmentId}, 'approved',
-              25, 'CAD', ${org.subsidiaryId}, 'actual', false, '{}'::jsonb, ${actorId}, ${actorId})`));
-    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
-    const before = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects")))[0]!.n;
+              25, 'CAD', ${org.subsidiaryId}, 'actual', false, '{}'::jsonb, ${actorId}, ${actorId})`),
+    );
+    routeState.gate = {
+      user: { orgId: org.orgId, id: actorId },
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
+    const before = (
+      await withBypassContext(() =>
+        db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     const response = await post({ action: "backfill-overhead" });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
-    const after = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects")))[0]!.n;
+    const after = (
+      await withBypassContext(() =>
+        db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(after, before);
-    const marker = (await withBypassContext(() => db.execute<{ overheadJournalEntryId: string | null; custom: Record<string, unknown> }>(sql`
+    const marker = (
+      await withBypassContext(() =>
+        db.execute<{ overheadJournalEntryId: string | null; custom: Record<string, unknown> }>(
+          sql`
       select overhead_journal_entry_id as "overheadJournalEntryId", custom
-        from time_entries where org_id = ${org.orgId} and id = ${timeEntryId}`, "objects")))[0]!;
+        from time_entries where org_id = ${org.orgId} and id = ${timeEntryId}`,
+          "objects",
+        ),
+      )
+    )[0]!;
     assert.equal(marker.overheadJournalEntryId, null);
     assert.deepEqual(marker.custom, {});
   } finally {
@@ -252,9 +368,15 @@ test("restricted actors cannot backfill org-wide overhead journals", async () =>
 test("set-application refuses a nonexistent posting account", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Setup Admin", "admin"),
+    );
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
-    const response = await post({ action: "set-application", mode: "net_zero_pair", accountId: randomUUID() });
+    const response = await post({
+      action: "set-application",
+      mode: "net_zero_pair",
+      accountId: randomUUID(),
+    });
     assert.equal(response.status, 422);
     assert.equal(await storedApplication(org.orgId), null);
   } finally {
@@ -266,11 +388,19 @@ test("set-application refuses a nonexistent posting account", async () => {
 test("set-application refuses an inactive account", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Setup Admin", "admin"),
+    );
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
-    await withBypassContext(() => db.execute(sql`
-      update accounts set is_active = false where id = ${org.accounts.adjustment}`));
-    const response = await post({ action: "set-application", mode: "net_zero_pair", accountId: org.accounts.adjustment });
+    await withBypassContext(() =>
+      db.execute(sql`
+      update accounts set is_active = false where id = ${org.accounts.adjustment}`),
+    );
+    const response = await post({
+      action: "set-application",
+      mode: "net_zero_pair",
+      accountId: org.accounts.adjustment,
+    });
     assert.equal(response.status, 422);
     assert.equal(await storedApplication(org.orgId), null);
   } finally {
@@ -282,16 +412,30 @@ test("set-application refuses an inactive account", async () => {
 test("set-application stores a real account with audit evidence", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Setup Admin", "admin"),
+    );
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
-    const response = await post({ action: "set-application", mode: "net_zero_pair", accountId: org.accounts.adjustment });
+    const response = await post({
+      action: "set-application",
+      mode: "net_zero_pair",
+      accountId: org.accounts.adjustment,
+    });
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
-    assert.deepEqual(await storedApplication(org.orgId), { mode: "net_zero_pair", accountId: org.accounts.adjustment });
+    assert.deepEqual(await storedApplication(org.orgId), {
+      mode: "net_zero_pair",
+      accountId: org.accounts.adjustment,
+    });
     assert.equal(await applicationAudits(org.orgId), 1);
-    const evidence = await withBypassContext(() => db.execute(sql`
+    const evidence = await withBypassContext(() =>
+      db.execute(
+        sql`
       select changes, actor_id as "actorId" from audit_log
        where org_id = ${org.orgId} and table_name = 'orgs' and changes ? 'overheadApplication'
-       order by id desc limit 1`, "objects"));
+       order by id desc limit 1`,
+        "objects",
+      ),
+    );
     assert.deepEqual(evidence[0]?.changes, {
       overheadApplication: {
         before: null,
@@ -308,7 +452,9 @@ test("set-application stores a real account with audit evidence", async () => {
 test("set-lifecycle refuses a supplied mode outside the enum without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Setup Admin", "admin"),
+    );
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const response = await post({ action: "set-lifecycle", mode: "hourly", cadence: "monthly" });
     assert.equal(response.status, 422);
@@ -323,7 +469,9 @@ test("set-lifecycle refuses a supplied mode outside the enum without writing", a
 test("set-lifecycle refuses a supplied cadence outside the enum without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Setup Admin", "admin"),
+    );
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const response = await post({ action: "set-lifecycle", mode: "scheduled", cadence: "weekly" });
     assert.equal(response.status, 422);
@@ -338,7 +486,9 @@ test("set-lifecycle refuses a supplied cadence outside the enum without writing"
 test("set-application refuses a supplied mode outside the enum without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Setup Admin", "admin"),
+    );
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const response = await post({ action: "set-application", mode: "amortize" });
     assert.equal(response.status, 422);
@@ -353,7 +503,9 @@ test("set-application refuses a supplied mode outside the enum without writing",
 test("omitted mode/cadence keep the documented defaults", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Setup Admin", "admin"),
+    );
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
     const lifecycle = await post({ action: "set-lifecycle" });
     assert.equal(lifecycle.status, 200, JSON.stringify(await lifecycle.clone().json()));
@@ -373,9 +525,13 @@ test("set-lifecycle audit failure rolls the policy back", async () => {
   const functionName = `overhead_audit_failure_${suffix}`;
   const triggerName = `overhead_audit_failure_trigger_${suffix}`;
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Setup Admin", "admin"));
+    const actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Setup Admin", "admin"),
+    );
     routeState.gate = { user: { orgId: org.orgId, id: actorId } };
-    await withBypassContext(() => db.execute(sql.raw(`
+    await withBypassContext(() =>
+      db.execute(
+        sql.raw(`
       create function public."${functionName}"() returns trigger
       language plpgsql as $$
       begin
@@ -387,27 +543,39 @@ test("set-lifecycle audit failure rolls the policy back", async () => {
       create trigger "${triggerName}"
         before insert on audit_log
         for each row execute function public."${functionName}"();
-    `)));
+    `),
+      ),
+    );
     await assert.rejects(
       () => post({ action: "set-lifecycle", mode: "scheduled", cadence: "quarterly" }),
       (error: unknown) => {
         let current: unknown = error;
         while (current && typeof current === "object") {
           const message = (current as { message?: unknown }).message;
-          if (typeof message === "string" && message.includes("forced overhead audit failure")) return true;
+          if (typeof message === "string" && message.includes("forced overhead audit failure"))
+            return true;
           current = (current as { cause?: unknown }).cause;
         }
         return false;
       },
     );
-    const r = await withBypassContext(() => db.execute(sql`
-      select settings->'overheadRateLifecycle' as c from orgs where id = ${org.orgId}`, "objects"));
+    const r = await withBypassContext(() =>
+      db.execute(
+        sql`
+      select settings->'overheadRateLifecycle' as c from orgs where id = ${org.orgId}`,
+        "objects",
+      ),
+    );
     assert.equal(r[0]?.c ?? null, null);
   } finally {
-    await withBypassContext(() => db.execute(sql.raw(`
+    await withBypassContext(() =>
+      db.execute(
+        sql.raw(`
       drop trigger if exists "${triggerName}" on audit_log;
       drop function if exists public."${functionName}"();
-    `)));
+    `),
+      ),
+    );
     routeState.gate = null;
     await dropScratchOrg(org.orgId);
   }

@@ -1,7 +1,10 @@
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { type PayRunCalculationError, type PayRunRefusalAcknowledgement } from "./run-calculation-evidence.ts";
+import {
+  type PayRunCalculationError,
+  type PayRunRefusalAcknowledgement,
+} from "./run-calculation-evidence.ts";
 
 /** One line of a stub, as `captureCalculatedStubs` hands it back. */
 export interface CapturedStubLine {
@@ -82,7 +85,8 @@ export async function captureCalculatedStubs(
   documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<CapturedStub[]> {
-  const rows = (await tx.execute<Record<string, string | number | null>>(sql`
+  const rows = await tx.execute<Record<string, string | number | null>>(
+    sql`
     select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost, s.factors,
            l.component_id, c.system_key, l.kind, l.description, l.hours, l.derived_quantity, l.derived_rule_code, l.rate, l.amount, l.payment_kind, l.non_cash_account_id,
            l.earned_from::text as earned_from, l.earned_to::text as earned_to,
@@ -95,7 +99,9 @@ export async function captureCalculatedStubs(
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by s.employee_party_id, l.sequence, l.description
-  `, "objects"));
+  `,
+    "objects",
+  );
   const byEmployee = new Map<string, CapturedStub>();
   for (const row of rows) {
     const employeePartyId = String(row.employee_party_id);
@@ -135,8 +141,10 @@ export async function captureCalculatedStubs(
       itemId: row.item_id == null ? null : String(row.item_id),
       expenseAccountId: row.expense_account_id == null ? null : String(row.expense_account_id),
       expenseAccountSource: String(row.expense_account_source ?? "unknown"),
-      expenseAccountEvidence: (row.expense_account_evidence == null ? null : row.expense_account_evidence as unknown as
-        { reason: string; reference: string }),
+      expenseAccountEvidence:
+        row.expense_account_evidence == null
+          ? null
+          : (row.expense_account_evidence as unknown as { reason: string; reference: string }),
       sequence: Number(row.sequence ?? 0),
     });
   }

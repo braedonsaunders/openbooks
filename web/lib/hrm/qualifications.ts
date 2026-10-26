@@ -1,26 +1,29 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { checkAssignmentInternal } from '@openbooks/engine/hrm/qualifications/gating'
-import { listQualificationTypes } from '@openbooks/engine/hrm/qualifications/types'
-import { listAlerts } from '@openbooks/engine/hrm/qualifications/alerts'
-import { HrmQualificationError } from '@openbooks/engine/hrm/qualifications/errors'
-import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { checkAssignmentInternal } from "@openbooks/engine/hrm/qualifications/gating";
+import { listQualificationTypes } from "@openbooks/engine/hrm/qualifications/types";
+import { listAlerts } from "@openbooks/engine/hrm/qualifications/alerts";
+import { HrmQualificationError } from "@openbooks/engine/hrm/qualifications/errors";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import {
   listQualifications,
   type WorkerQualification,
-} from '@openbooks/engine/hrm/qualifications/qualifications'
-import type { DerivedQualificationStatus } from '@openbooks/engine/hrm/qualifications/shared'
-import { listRequirements, subjectKindAvailable } from '@openbooks/engine/hrm/qualifications/requirements'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
-import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import { loadQueueLabels } from './change-requests'
-import { can, type Authz } from '../authz'
-import { setupSectionParams } from '../list-params'
-import { selectCoverageProject } from './qualification-coverage-selection'
+} from "@openbooks/engine/hrm/qualifications/qualifications";
+import type { DerivedQualificationStatus } from "@openbooks/engine/hrm/qualifications/shared";
+import {
+  listRequirements,
+  subjectKindAvailable,
+} from "@openbooks/engine/hrm/qualifications/requirements";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
+import { hrmGroupTabs } from "../../components/module-home/group-tabs";
+import { loadQueueLabels } from "./change-requests";
+import { can, type Authz } from "../authz";
+import { setupSectionParams } from "../list-params";
+import { selectCoverageProject } from "./qualification-coverage-selection";
 
 /**
  * Qualifications page loader (HR-14): the worker qualification ledger by
@@ -32,179 +35,192 @@ import { selectCoverageProject } from './qualification-coverage-selection'
  * hrm.certifications.read — the page gate 404s otherwise.
  */
 
-export type QualificationSegment = 'all' | DerivedQualificationStatus
-export type QualificationSection = 'ledger' | 'requirements' | 'alerts'
+export type QualificationSegment = "all" | DerivedQualificationStatus;
+export type QualificationSection = "ledger" | "requirements" | "alerts";
 
 export interface QualificationRow {
-  id: string
-  employmentId: string
-  workerName: string
-  workerHref: string | null
-  typeCode: string
-  typeName: string
-  status: DerivedQualificationStatus
-  statusLabel: string
-  statusVariant: 'default' | 'success' | 'warn' | 'danger' | 'info'
-  expiryLabel: string | null
-  identifierLabel: string | null
-  openHref: string
+  id: string;
+  employmentId: string;
+  workerName: string;
+  workerHref: string | null;
+  typeCode: string;
+  typeName: string;
+  status: DerivedQualificationStatus;
+  statusLabel: string;
+  statusVariant: "default" | "success" | "warn" | "danger" | "info";
+  expiryLabel: string | null;
+  identifierLabel: string | null;
+  openHref: string;
 }
 
 export interface CoverageColumn {
-  code: string
-  name: string
+  code: string;
+  name: string;
 }
 
 export interface CoverageCellData {
-  label: string
-  variant: 'default' | 'success' | 'warn' | 'danger' | 'info'
+  label: string;
+  variant: "default" | "success" | "warn" | "danger" | "info";
 }
 
 export interface CoverageRowData {
-  employmentId: string
-  workerName: string
+  employmentId: string;
+  workerName: string;
   /** One cell per coverage type, in coverageTypes order. */
-  cells: CoverageCellData[]
+  cells: CoverageCellData[];
 }
 
 export interface RequirementRow {
-  id: string
-  subjectName: string
-  typeCode: string
-  severity: string
-  severityVariant: 'warn' | 'danger'
-  windowLabel: string
+  id: string;
+  subjectName: string;
+  typeCode: string;
+  severity: string;
+  severityVariant: "warn" | "danger";
+  windowLabel: string;
 }
 
 export interface AlertRow {
-  id: string
-  workerName: string
-  typeLabel: string
-  dueOn: string
-  sentLabel: string
+  id: string;
+  workerName: string;
+  typeLabel: string;
+  dueOn: string;
+  sentLabel: string;
 }
 
 export interface QualificationsPageData {
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  canManage: boolean
-  recordHref: string
-  recordLabel: string
-  settingsHref: string
-  settingsLabel: string
-  tiles: { iconKey: string; accent: string; label: string; value: string; tone: 'default' | 'success' | 'warn' | 'danger' | 'info' }[]
-  sectionLabel: string
-  sectionOptions: { value: string; label: string }[]
-  section: QualificationSection
-  segmentsLabel: string
-  allLabel: string
-  segments: { value: string; label: string; count: number }[]
-  segment: QualificationSegment
-  typesLabel: string
-  typesAll: string
-  typeOptions: { value: string; label: string }[]
-  typeFilter: string
-  currentParams: Record<string, string>
-  listTitle: string
-  columns: Record<string, string>
-  openLabel: string
-  emptyTitle: string
-  emptyDescription: string
-  rows: QualificationRow[]
-  truncated: boolean
-  ledgerHint: string
-  dialogQualificationId: string | null
-  dialogCloseHref: string
-  dialogOpen: boolean
-  recordOpen: boolean
-  dialogVisible: boolean
-  taxonomyTitle: string
-  requirementsTitle: string
-  requirementsEmpty: string
-  requirements: RequirementRow[]
-  today: string
-  requirementTypeOptions: { value: string; label: string }[]
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  canManage: boolean;
+  recordHref: string;
+  recordLabel: string;
+  settingsHref: string;
+  settingsLabel: string;
+  tiles: {
+    iconKey: string;
+    accent: string;
+    label: string;
+    value: string;
+    tone: "default" | "success" | "warn" | "danger" | "info";
+  }[];
+  sectionLabel: string;
+  sectionOptions: { value: string; label: string }[];
+  section: QualificationSection;
+  segmentsLabel: string;
+  allLabel: string;
+  segments: { value: string; label: string; count: number }[];
+  segment: QualificationSegment;
+  typesLabel: string;
+  typesAll: string;
+  typeOptions: { value: string; label: string }[];
+  typeFilter: string;
+  currentParams: Record<string, string>;
+  listTitle: string;
+  columns: Record<string, string>;
+  openLabel: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  rows: QualificationRow[];
+  truncated: boolean;
+  ledgerHint: string;
+  dialogQualificationId: string | null;
+  dialogCloseHref: string;
+  dialogOpen: boolean;
+  recordOpen: boolean;
+  dialogVisible: boolean;
+  taxonomyTitle: string;
+  requirementsTitle: string;
+  requirementsEmpty: string;
+  requirements: RequirementRow[];
+  today: string;
+  requirementTypeOptions: { value: string; label: string }[];
   requirementManagerLabels: {
-    title: string
-    subjectKind: string
-    subject: string
-    type: string
-    from: string
-    to: string
-    severity: string
-    block: string
-    warn: string
-    save: string
-    remove: string
-    removeConfirm: string
-    failed: string
-    saved: string
-    search: string
-    searchHint: string
-    searchFailed: string
-    more: string
+    title: string;
+    subjectKind: string;
+    subject: string;
+    type: string;
+    from: string;
+    to: string;
+    severity: string;
+    block: string;
+    warn: string;
+    save: string;
+    remove: string;
+    removeConfirm: string;
+    failed: string;
+    saved: string;
+    search: string;
+    searchHint: string;
+    searchFailed: string;
+    more: string;
     /** Offered subject kinds; equipment is absent while Equipment is off. */
-    subjects: Partial<Record<'project' | 'equipment' | 'position' | 'classification', string>>
-  }
-  requirementsRemoveLabel: string
-  requirementsRemoveConfirm: string
-  requirementsRemoveFailed: string
-  coverageTitle: string
-  coverageProjectLabel: string
-  coverageProjectAll: string
-  coverageEmpty: string
-  projectOptions: { value: string; label: string }[]
-  coverageProjectId: string | null
-  coverageTypes: CoverageColumn[]
-  coverageRows: CoverageRowData[]
-  coverageTruncated: boolean
-  coverageHint: string
-  coverageTotal: number
-  coveragePage: number
-  coveragePerPage: number
-  alertsTitle: string
-  alertsEmpty: string
-  alerts: AlertRow[]
+    subjects: Partial<Record<"project" | "equipment" | "position" | "classification", string>>;
+  };
+  requirementsRemoveLabel: string;
+  requirementsRemoveConfirm: string;
+  requirementsRemoveFailed: string;
+  coverageTitle: string;
+  coverageProjectLabel: string;
+  coverageProjectAll: string;
+  coverageEmpty: string;
+  projectOptions: { value: string; label: string }[];
+  coverageProjectId: string | null;
+  coverageTypes: CoverageColumn[];
+  coverageRows: CoverageRowData[];
+  coverageTruncated: boolean;
+  coverageHint: string;
+  coverageTotal: number;
+  coveragePage: number;
+  coveragePerPage: number;
+  alertsTitle: string;
+  alertsEmpty: string;
+  alerts: AlertRow[];
 }
 
-const STATUS_VARIANT: Record<DerivedQualificationStatus, QualificationRow['statusVariant']> = {
-  valid: 'success',
-  expiring: 'warn',
-  expired: 'danger',
-  revoked: 'default',
-  pending_verification: 'info',
-  not_yet_effective: 'info',
-}
+const STATUS_VARIANT: Record<DerivedQualificationStatus, QualificationRow["statusVariant"]> = {
+  valid: "success",
+  expiring: "warn",
+  expired: "danger",
+  revoked: "default",
+  pending_verification: "info",
+  not_yet_effective: "info",
+};
 
 async function employmentsForParties(
   orgId: string,
   partyIds: string[],
   allowed: ReadonlySet<string> | null,
 ): Promise<Map<string, string>> {
-  if (partyIds.length === 0) return new Map()
-  const rows = await db.execute<{ party: string; employment: string }>(sql`
+  if (partyIds.length === 0) return new Map();
+  const rows = await db.execute<{ party: string; employment: string }>(
+    sql`
       select worker_party_id::text as party, id::text as employment
         from worker_employments
        where org_id = ${orgId} and worker_party_id in (select jsonb_array_elements_text(${JSON.stringify(partyIds)}::jsonb)::uuid)
          ${subsidiaryVisibleFilter(sql`employer_subsidiary_id`, allowed)}
        order by created_at desc
-    `, 'objects')
-  const map = new Map<string, string>()
+    `,
+    "objects",
+  );
+  const map = new Map<string, string>();
   for (const row of rows) {
-    if (!map.has(row.party)) map.set(row.party, row.employment)
+    if (!map.has(row.party)) map.set(row.party, row.employment);
   }
-  return map
+  return map;
 }
 
-type HrmT = Awaited<ReturnType<typeof getTranslations>>
+type HrmT = Awaited<ReturnType<typeof getTranslations>>;
 
 function statusLabel(t: HrmT, status: DerivedQualificationStatus): string {
-  return t.has(`qualifications.statusNames.${status}`) ? t(`qualifications.statusNames.${status}`) : status
+  return t.has(`qualifications.statusNames.${status}`)
+    ? t(`qualifications.statusNames.${status}`)
+    : status;
 }
 
 function severityLabel(t: HrmT, severity: string): string {
-  return t.has(`qualifications.severityNames.${severity}`) ? t(`qualifications.severityNames.${severity}`) : severity
+  return t.has(`qualifications.severityNames.${severity}`)
+    ? t(`qualifications.severityNames.${severity}`)
+    : severity;
 }
 
 export async function loadQualificationsPage(
@@ -212,26 +228,28 @@ export async function loadQualificationsPage(
   sp: Record<string, string | undefined>,
   canManage: boolean,
 ): Promise<QualificationsPageData> {
-  const orgId = authz.user.orgId
-  const actorId = authz.user.id
+  const orgId = authz.user.orgId;
+  const actorId = authz.user.id;
   // Crew reads below resolve employments the gate never authorized, so
   // every crew query carries the reader's subsidiary scope: a restricted
   // reader sees only crew employed by visible subsidiaries, and the gate
   // verdicts run only over those employments.
-  const allowed = authz.allowedSubsidiaryIds
-  const t = await getTranslations('hrm')
-  const segment = (sp.segment ?? 'all') as QualificationSegment
-  const typeFilter = sp.type ?? 'all'
-  const section = (sp.section === 'requirements' || sp.section === 'alerts' ? sp.section : 'ledger') as QualificationSection
-  const today = await businessToday(orgId)
+  const allowed = authz.allowedSubsidiaryIds;
+  const t = await getTranslations("hrm");
+  const segment = (sp.segment ?? "all") as QualificationSegment;
+  const typeFilter = sp.type ?? "all";
+  const section = (
+    sp.section === "requirements" || sp.section === "alerts" ? sp.section : "ledger"
+  ) as QualificationSection;
+  const today = await businessToday(orgId);
 
   const [all, types, requirements, alerts, equipmentSubjects] = await Promise.all([
     listQualifications(db, { orgId, actorId }),
     listQualificationTypes(db, { orgId, actorId }),
     listRequirements(db, { orgId, actorId }),
     listAlerts(db, { orgId, actorId }),
-    subjectKindAvailable(db, orgId, 'equipment'),
-  ])
+    subjectKindAvailable(db, orgId, "equipment"),
+  ]);
 
   const counts: Record<QualificationSegment, number> = {
     all: all.length,
@@ -241,197 +259,282 @@ export async function loadQualificationsPage(
     revoked: 0,
     pending_verification: 0,
     not_yet_effective: 0,
-  }
-  for (const q of all) counts[q.status] += 1
+  };
+  for (const q of all) counts[q.status] += 1;
 
   // Expired and still assigned: expired credentials whose employment sits
   // behind a schedule resource on a project that declares requirements.
-  const gatedProjects = [...new Set(requirements.filter((r) => r.subjectKind === 'project').map((r) => r.subjectId))]
-  let expiredAssigned = 0
+  const gatedProjects = [
+    ...new Set(requirements.filter((r) => r.subjectKind === "project").map((r) => r.subjectId)),
+  ];
+  let expiredAssigned = 0;
   if (gatedProjects.length > 0) {
-    const assigned = (await db.execute<{ employment: string }>(sql`
+    const assigned = (
+      await db.execute<{ employment: string }>(
+        sql`
         select distinct e.id::text as employment
           from schedule_resources r
           join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id in (select jsonb_array_elements_text(${JSON.stringify(gatedProjects)}::jsonb)::uuid)
            ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
-      `, 'objects')).map((r) => r.employment)
-    const assignedSet = new Set(assigned)
-    expiredAssigned = all.filter((q) => q.status === 'expired' && assignedSet.has(q.employmentId)).length
+      `,
+        "objects",
+      )
+    ).map((r) => r.employment);
+    const assignedSet = new Set(assigned);
+    expiredAssigned = all.filter(
+      (q) => q.status === "expired" && assignedSet.has(q.employmentId),
+    ).length;
   }
 
   // Projects with unmet block requirements: at least one assigned
   // employment fails a block check as of today. The probe is exhaustive —
   // a bounded project/crew prefix reported a smaller count as exact.
-  let projectsUnmet = 0
+  let projectsUnmet = 0;
   for (const projectId of gatedProjects) {
-    const crew = (await db.execute<{ employment: string }>(sql`
+    const crew = (
+      await db.execute<{ employment: string }>(
+        sql`
         select distinct e.id::text as employment
           from schedule_resources r
           join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id = ${projectId}::uuid
            ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
-      `, 'objects')).map((r) => r.employment)
+      `,
+        "objects",
+      )
+    ).map((r) => r.employment);
     for (const employmentId of crew) {
-      const verdict = await checkAssignmentInternal(db, orgId, employmentId, 'project', projectId, today)
+      const verdict = await checkAssignmentInternal(
+        db,
+        orgId,
+        employmentId,
+        "project",
+        projectId,
+        today,
+      );
       if (!verdict.ok) {
-        projectsUnmet += 1
-        break
+        projectsUnmet += 1;
+        break;
       }
     }
   }
 
   const filtered = all.filter(
-    (q) => (segment === 'all' || q.status === segment) && (typeFilter === 'all' || q.type.id === typeFilter),
-  )
-  const truncated = filtered.length > 200
-  const page = filtered.slice(0, 200)
+    (q) =>
+      (segment === "all" || q.status === segment) &&
+      (typeFilter === "all" || q.type.id === typeFilter),
+  );
+  const truncated = filtered.length > 200;
+  const page = filtered.slice(0, 200);
 
-  const labels = await loadQueueLabels(orgId, [...new Set(page.map((q) => q.employmentId))], [])
+  const labels = await loadQueueLabels(orgId, [...new Set(page.map((q) => q.employmentId))], []);
 
   const baseParams = (extra: Record<string, string | undefined>): Record<string, string> => {
-    const out: Record<string, string> = {}
-    if (sp.segment) out.segment = sp.segment
-    if (sp.type) out.type = sp.type
-    if (sp.section) out.section = sp.section
-    if (sp.projectId) out.projectId = sp.projectId
-    if (sp.crewPage) out.crewPage = sp.crewPage
+    const out: Record<string, string> = {};
+    if (sp.segment) out.segment = sp.segment;
+    if (sp.type) out.type = sp.type;
+    if (sp.section) out.section = sp.section;
+    if (sp.projectId) out.projectId = sp.projectId;
+    if (sp.crewPage) out.crewPage = sp.crewPage;
     for (const [k, v] of Object.entries(extra)) {
-      if (v === undefined) delete out[k]
-      else out[k] = v
+      if (v === undefined) delete out[k];
+      else out[k] = v;
     }
-    return out
-  }
+    return out;
+  };
   const href = (params: Record<string, string>): string => {
-    const qs = new URLSearchParams(params).toString()
-    return qs ? `/hrm/qualifications?${qs}` : '/hrm/qualifications'
-  }
+    const qs = new URLSearchParams(params).toString();
+    return qs ? `/hrm/qualifications?${qs}` : "/hrm/qualifications";
+  };
 
   const rows: QualificationRow[] = page.map((q: WorkerQualification) => {
-    const label = labels.workerByEmployment.get(q.employmentId)
+    const label = labels.workerByEmployment.get(q.employmentId);
     return {
       id: q.id,
       employmentId: q.employmentId,
       workerName: label?.name ?? q.employmentId,
-      workerHref: label?.partyId ? `/entities/employees?party=${encodeURIComponent(label.partyId)}` : null,
+      workerHref: label?.partyId
+        ? `/entities/employees?party=${encodeURIComponent(label.partyId)}`
+        : null,
       typeCode: q.type.code,
       typeName: q.type.name,
       status: q.status,
-      statusLabel: '',
-      statusVariant: STATUS_VARIANT[q.status] ?? 'default',
+      statusLabel: "",
+      statusVariant: STATUS_VARIANT[q.status] ?? "default",
       expiryLabel: q.expiresOn,
       identifierLabel: q.identifier,
       openHref: href({ ...baseParams({}), qualification: q.id }),
-    }
-  })
+    };
+  });
 
   // Coverage matrix for the selected project (rows = crew employments,
   // cols = required types, cells = gate chips), bounded for the page.
-  const projectOptions = [...new Map(requirements.filter((r) => r.subjectKind === 'project').map((r) => [r.subjectId, r.subjectName])).entries()].map(
-    ([value, label]) => ({ value, label }),
-  )
-  const coverageProjectId = selectCoverageProject(sp.projectId, projectOptions)
+  const projectOptions = [
+    ...new Map(
+      requirements
+        .filter((r) => r.subjectKind === "project")
+        .map((r) => [r.subjectId, r.subjectName]),
+    ).entries(),
+  ].map(([value, label]) => ({ value, label }));
+  const coverageProjectId = selectCoverageProject(sp.projectId, projectOptions);
   const allCoverageTypes = requirements
-    .filter((r) => r.subjectKind === 'project' && r.subjectId === coverageProjectId)
-    .map((r) => ({ code: r.typeCode, name: r.typeName, id: r.typeId }))
+    .filter((r) => r.subjectKind === "project" && r.subjectId === coverageProjectId)
+    .map((r) => ({ code: r.typeCode, name: r.typeName, id: r.typeId }));
   // The spec renders one column per required type (the panel scrolls
   // horizontally), so every type stays visible — never a silent sixth-column cut.
-  const coverageTypes = allCoverageTypes
-  const coverageRows: CoverageRowData[] = []
+  const coverageTypes = allCoverageTypes;
+  const coverageRows: CoverageRowData[] = [];
   // One gate read per employment covers every column, so the matrix pages
   // the crew instead of silently cutting it: every page is complete, the
   // panel hint counts the whole crew, and the pager below the table loads
   // the remainder.
-  const COVERAGE_PER_PAGE = 50
-  let coverageTotal = 0
-  let coveragePage = 1
+  const COVERAGE_PER_PAGE = 50;
+  let coverageTotal = 0;
+  let coveragePage = 1;
   if (coverageProjectId) {
-    coverageTotal = Number((await db.execute<{ n: string }>(sql`
+    coverageTotal = Number(
+      (
+        await db.execute<{ n: string }>(
+          sql`
       select count(distinct r.party_id) as n from schedule_resources r
         join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
        where r.org_id = ${orgId} and r.project_id = ${coverageProjectId}::uuid and r.party_id is not null
          ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
-    `, 'objects'))[0]?.n ?? 0)
-    const pageCount = Math.max(1, Math.ceil(coverageTotal / COVERAGE_PER_PAGE))
-    const requested = Number.parseInt(sp.crewPage ?? '1', 10)
-    coveragePage = Math.min(pageCount, Math.max(1, Number.isNaN(requested) ? 1 : requested))
-    const crewParties = (await db.execute<{ party: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0,
+    );
+    const pageCount = Math.max(1, Math.ceil(coverageTotal / COVERAGE_PER_PAGE));
+    const requested = Number.parseInt(sp.crewPage ?? "1", 10);
+    coveragePage = Math.min(pageCount, Math.max(1, Number.isNaN(requested) ? 1 : requested));
+    const crewParties = (
+      await db.execute<{ party: string }>(
+        sql`
         select distinct r.party_id::text as party from schedule_resources r
           join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id = ${coverageProjectId}::uuid and r.party_id is not null
            ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
          order by r.party_id
          limit ${COVERAGE_PER_PAGE} offset ${(coveragePage - 1) * COVERAGE_PER_PAGE}
-      `, 'objects')).map((r) => r.party)
+      `,
+        "objects",
+      )
+    ).map((r) => r.party);
     // party → employment, then display names through the shared labels.
     // The mapping stays inside the reader's scope: a dual-subsidiary
     // party resolves to its visible employment, never the hidden one.
-    const employmentByParty = await employmentsForParties(orgId, crewParties, allowed)
-    const crewEmployments = [...employmentByParty.values()]
-    const crewLabels = await loadQueueLabels(orgId, crewEmployments, [])
+    const employmentByParty = await employmentsForParties(orgId, crewParties, allowed);
+    const crewEmployments = [...employmentByParty.values()];
+    const crewLabels = await loadQueueLabels(orgId, crewEmployments, []);
     // One gate read per employment covers every column: the verdict
     // already splits blocking from warnings per type.
     for (const employment of crewEmployments) {
-      const verdict = await checkAssignmentInternal(db, orgId, employment, 'project', coverageProjectId, today)
-      const findings = [...(verdict.ok ? verdict.warnings : [...verdict.blocking, ...verdict.warnings])]
+      const verdict = await checkAssignmentInternal(
+        db,
+        orgId,
+        employment,
+        "project",
+        coverageProjectId,
+        today,
+      );
+      const findings = [
+        ...(verdict.ok ? verdict.warnings : [...verdict.blocking, ...verdict.warnings]),
+      ];
       const cells: CoverageCellData[] = coverageTypes.map((type) => {
-        const relevant = findings.filter((f) => f.typeId === type.id)
-        if (relevant.length === 0) return { label: t('qualifications.coverage.qualified'), variant: 'success' as const }
-        const worst = relevant.some((f) => f.severity === 'block') ? 'danger' : ('warn' as const)
-        const reason = relevant[0]!.reason
+        const relevant = findings.filter((f) => f.typeId === type.id);
+        if (relevant.length === 0)
+          return { label: t("qualifications.coverage.qualified"), variant: "success" as const };
+        const worst = relevant.some((f) => f.severity === "block") ? "danger" : ("warn" as const);
+        const reason = relevant[0]!.reason;
         return {
           label: t(`qualifications.coverage.${reason}`),
-          variant: worst === 'danger' ? ('danger' as const) : worst,
-        }
-      })
+          variant: worst === "danger" ? ("danger" as const) : worst,
+        };
+      });
       coverageRows.push({
         employmentId: employment,
         workerName: crewLabels.workerByEmployment.get(employment)?.name ?? employment,
         cells,
-      })
+      });
     }
   }
 
-  const alertWorkerIds = [...new Set(alerts.map((a) => a.employmentId))]
-  const alertLabels = await loadQueueLabels(orgId, alertWorkerIds, [])
+  const alertWorkerIds = [...new Set(alerts.map((a) => a.employmentId))];
+  const alertLabels = await loadQueueLabels(orgId, alertWorkerIds, []);
 
-  const columns: CoverageColumn[] = coverageTypes.map((t) => ({ code: t.code, name: t.name }))
+  const columns: CoverageColumn[] = coverageTypes.map((t) => ({ code: t.code, name: t.name }));
 
   return {
-    title: t('qualifications.title'),
-    description: t('qualifications.description'),
-    tabs: await hrmGroupTabs(authz, '/hrm/qualifications'),
+    title: t("qualifications.title"),
+    description: t("qualifications.description"),
+    tabs: await hrmGroupTabs(authz, "/hrm/qualifications"),
     canManage,
-    recordHref: href({ ...baseParams({}), record: 'new' }),
-    recordLabel: t('qualifications.record'),
-    settingsHref: '/hrm/qualifications',
-    settingsLabel: t('qualifications.settings'),
+    recordHref: href({ ...baseParams({}), record: "new" }),
+    recordLabel: t("qualifications.record"),
+    settingsHref: "/hrm/qualifications",
+    settingsLabel: t("qualifications.settings"),
     tiles: [
-      { iconKey: 'clock', accent: 'amber', label: t('qualifications.tiles.expiring'), value: String(counts.expiring), tone: 'warn' as const },
-      { iconKey: 'alert', accent: 'red', label: t('qualifications.tiles.expiredAssigned'), value: String(expiredAssigned), tone: 'danger' as const },
-      { iconKey: 'hourglass', accent: 'blue', label: t('qualifications.tiles.pending'), value: String(counts.pending_verification), tone: 'info' as const },
-      { iconKey: 'building', accent: 'amber', label: t('qualifications.tiles.projectsUnmet'), value: String(projectsUnmet), tone: 'warn' as const },
+      {
+        iconKey: "clock",
+        accent: "amber",
+        label: t("qualifications.tiles.expiring"),
+        value: String(counts.expiring),
+        tone: "warn" as const,
+      },
+      {
+        iconKey: "alert",
+        accent: "red",
+        label: t("qualifications.tiles.expiredAssigned"),
+        value: String(expiredAssigned),
+        tone: "danger" as const,
+      },
+      {
+        iconKey: "hourglass",
+        accent: "blue",
+        label: t("qualifications.tiles.pending"),
+        value: String(counts.pending_verification),
+        tone: "info" as const,
+      },
+      {
+        iconKey: "building",
+        accent: "amber",
+        label: t("qualifications.tiles.projectsUnmet"),
+        value: String(projectsUnmet),
+        tone: "warn" as const,
+      },
     ],
-    sectionLabel: t('qualifications.sectionLabel'),
-    sectionOptions: (['ledger', 'requirements', 'alerts'] as QualificationSection[]).map((value) => ({
-      value,
-      label: t(`qualifications.sections.${value}`),
-    })),
-    section,
-    segmentsLabel: t('qualifications.segmentsLabel'),
-    allLabel: t('qualifications.allLabel'),
-    segments: (['all', 'expiring', 'expired', 'pending_verification', 'not_yet_effective', 'valid', 'revoked'] as QualificationSegment[]).map(
+    sectionLabel: t("qualifications.sectionLabel"),
+    sectionOptions: (["ledger", "requirements", "alerts"] as QualificationSection[]).map(
       (value) => ({
         value,
-        label: value === 'all' ? t('qualifications.allLabel') : statusLabel(t, value),
-        count: counts[value],
+        label: t(`qualifications.sections.${value}`),
       }),
     ),
+    section,
+    segmentsLabel: t("qualifications.segmentsLabel"),
+    allLabel: t("qualifications.allLabel"),
+    segments: (
+      [
+        "all",
+        "expiring",
+        "expired",
+        "pending_verification",
+        "not_yet_effective",
+        "valid",
+        "revoked",
+      ] as QualificationSegment[]
+    ).map((value) => ({
+      value,
+      label: value === "all" ? t("qualifications.allLabel") : statusLabel(t, value),
+      count: counts[value],
+    })),
     segment,
-    typesLabel: t('qualifications.typesLabel'),
-    typesAll: t('qualifications.typesAll'),
+    typesLabel: t("qualifications.typesLabel"),
+    typesAll: t("qualifications.typesAll"),
     typeOptions: [
-      { value: 'all', label: t('qualifications.typesAll') },
+      { value: "all", label: t("qualifications.typesAll") },
       ...types.filter((x) => x.isActive).map((x) => ({ value: x.id, label: x.code })),
     ],
     typeFilter,
@@ -439,82 +542,94 @@ export async function loadQualificationsPage(
     // drawers from namespaced keys — one URL opens exactly one drawer.
     // The ledger's own params ride beside the section's list params,
     // never instead of them.
-    currentParams: { ...baseParams({}), ...setupSectionParams(sp, ['qtype', 'qsettings']) },
-    listTitle: t('qualifications.listTitle'),
+    currentParams: { ...baseParams({}), ...setupSectionParams(sp, ["qtype", "qsettings"]) },
+    listTitle: t("qualifications.listTitle"),
     columns: {
-      worker: t('qualifications.columns.worker'),
-      type: t('qualifications.columns.type'),
-      status: t('qualifications.columns.status'),
-      expiry: t('qualifications.columns.expiry'),
-      open: t('qualifications.open'),
-      subject: t('qualifications.columns.subject'),
-      severity: t('qualifications.columns.severity'),
-      window: t('qualifications.columns.window'),
-      due: t('qualifications.columns.due'),
-      sent: t('qualifications.columns.sent'),
+      worker: t("qualifications.columns.worker"),
+      type: t("qualifications.columns.type"),
+      status: t("qualifications.columns.status"),
+      expiry: t("qualifications.columns.expiry"),
+      open: t("qualifications.open"),
+      subject: t("qualifications.columns.subject"),
+      severity: t("qualifications.columns.severity"),
+      window: t("qualifications.columns.window"),
+      due: t("qualifications.columns.due"),
+      sent: t("qualifications.columns.sent"),
     },
-    openLabel: t('qualifications.open'),
-    emptyTitle: t('qualifications.emptyTitle'),
-    emptyDescription: t('qualifications.emptyDescription'),
+    openLabel: t("qualifications.open"),
+    emptyTitle: t("qualifications.emptyTitle"),
+    emptyDescription: t("qualifications.emptyDescription"),
     rows: rows.map((r) => ({ ...r, statusLabel: statusLabel(t, r.status) })),
     truncated,
-    ledgerHint: truncated ? t('qualifications.ledgerTruncated', { shown: page.length, total: filtered.length }) : '',
-    dialogQualificationId: sp.qualification && sp.qualification !== 'new' ? sp.qualification : null,
+    ledgerHint: truncated
+      ? t("qualifications.ledgerTruncated", { shown: page.length, total: filtered.length })
+      : "",
+    dialogQualificationId: sp.qualification && sp.qualification !== "new" ? sp.qualification : null,
     dialogCloseHref: href(baseParams({ qualification: undefined, record: undefined })),
-    dialogOpen: !!sp.qualification && sp.qualification !== 'new',
+    dialogOpen: !!sp.qualification && sp.qualification !== "new",
     // F3-37: the blank record form is a write surface like the header
     // record button — it opens only with the manage grant, never for a
     // read-only viewer holding the URL.
-    recordOpen: (sp.qualification === 'new' || sp.record === 'new') && canManage,
-    dialogVisible: (!!sp.qualification && sp.qualification !== 'new') || ((sp.qualification === 'new' || sp.record === 'new') && canManage),
-    taxonomyTitle: t('qualifications.taxonomyTitle'),
-    requirementsTitle: t('qualifications.requirementsTitle'),
-    requirementsEmpty: t('qualifications.requirementsEmpty'),
+    recordOpen: (sp.qualification === "new" || sp.record === "new") && canManage,
+    dialogVisible:
+      (!!sp.qualification && sp.qualification !== "new") ||
+      ((sp.qualification === "new" || sp.record === "new") && canManage),
+    taxonomyTitle: t("qualifications.taxonomyTitle"),
+    requirementsTitle: t("qualifications.requirementsTitle"),
+    requirementsEmpty: t("qualifications.requirementsEmpty"),
     today,
-    requirementTypeOptions: types.filter((type) => type.isActive).map((type) => ({ value: type.id, label: `${type.code} · ${type.name}` })),
+    requirementTypeOptions: types
+      .filter((type) => type.isActive)
+      .map((type) => ({ value: type.id, label: `${type.code} · ${type.name}` })),
     requirementManagerLabels: {
-      title: t('qualifications.requirementManager.title'),
-      subjectKind: t('qualifications.requirementManager.subjectKind'),
-      subject: t('qualifications.requirementManager.subject'),
-      type: t('qualifications.requirementManager.type'),
-      from: t('qualifications.requirementManager.from'),
-      to: t('qualifications.requirementManager.to'),
-      severity: t('qualifications.requirementManager.severity'),
-      block: t('qualifications.requirementManager.block'),
-      warn: t('qualifications.requirementManager.warn'),
-      save: t('qualifications.requirementManager.save'),
-      remove: t('qualifications.requirementManager.remove'),
-      removeConfirm: t('qualifications.requirementManager.removeConfirm'),
-      failed: t('qualifications.requirementManager.failed'),
-      saved: t('qualifications.requirementManager.saved'),
-      search: t('qualifications.requirementManager.search'),
-      searchHint: t('qualifications.requirementManager.searchHint'),
-      searchFailed: t('qualifications.requirementManager.searchFailed'),
-      more: t('qualifications.requirementManager.more'),
+      title: t("qualifications.requirementManager.title"),
+      subjectKind: t("qualifications.requirementManager.subjectKind"),
+      subject: t("qualifications.requirementManager.subject"),
+      type: t("qualifications.requirementManager.type"),
+      from: t("qualifications.requirementManager.from"),
+      to: t("qualifications.requirementManager.to"),
+      severity: t("qualifications.requirementManager.severity"),
+      block: t("qualifications.requirementManager.block"),
+      warn: t("qualifications.requirementManager.warn"),
+      save: t("qualifications.requirementManager.save"),
+      remove: t("qualifications.requirementManager.remove"),
+      removeConfirm: t("qualifications.requirementManager.removeConfirm"),
+      failed: t("qualifications.requirementManager.failed"),
+      saved: t("qualifications.requirementManager.saved"),
+      search: t("qualifications.requirementManager.search"),
+      searchHint: t("qualifications.requirementManager.searchHint"),
+      searchFailed: t("qualifications.requirementManager.searchFailed"),
+      more: t("qualifications.requirementManager.more"),
       // Equipment is a requirement subject only while Equipment is on.
       subjects: {
-        project: t('qualifications.requirementManager.subjects.project'),
-        ...(equipmentSubjects ? { equipment: t('qualifications.requirementManager.subjects.equipment') } : {}),
-        position: t('qualifications.requirementManager.subjects.position'),
-        classification: t('qualifications.requirementManager.subjects.classification'),
+        project: t("qualifications.requirementManager.subjects.project"),
+        ...(equipmentSubjects
+          ? { equipment: t("qualifications.requirementManager.subjects.equipment") }
+          : {}),
+        position: t("qualifications.requirementManager.subjects.position"),
+        classification: t("qualifications.requirementManager.subjects.classification"),
       },
     },
-    requirementsRemoveLabel: t('qualifications.requirementManager.remove'),
-    requirementsRemoveConfirm: t('qualifications.requirementManager.removeConfirm'),
-    requirementsRemoveFailed: t('qualifications.requirementManager.removeFailed'),
+    requirementsRemoveLabel: t("qualifications.requirementManager.remove"),
+    requirementsRemoveConfirm: t("qualifications.requirementManager.removeConfirm"),
+    requirementsRemoveFailed: t("qualifications.requirementManager.removeFailed"),
     requirements: requirements.map((r) => ({
       id: r.id,
       subjectName: r.subjectName,
       typeCode: r.typeCode,
       severity: r.severity,
       severityLabel: severityLabel(t, r.severity),
-      severityVariant: (r.severity === 'block' ? 'danger' : 'warn') as 'danger' | 'warn',
-      windowLabel: r.requiredTo ? `${r.requiredFrom} – ${r.requiredTo}` : t('qualifications.windowOpen', { from: r.requiredFrom }),
+      severityVariant: (r.severity === "block" ? "danger" : "warn") as "danger" | "warn",
+      windowLabel: r.requiredTo
+        ? `${r.requiredFrom} – ${r.requiredTo}`
+        : t("qualifications.windowOpen", { from: r.requiredFrom }),
     })),
-    coverageTitle: t('qualifications.coverageTitle'),
-    coverageProjectLabel: t('qualifications.coverageProjectLabel'),
-    coverageProjectAll: t('qualifications.coverageProjectAll'),
-    coverageEmpty: coverageProjectId ? t('qualifications.coverageEmpty') : t('qualifications.coverageProjectAll'),
+    coverageTitle: t("qualifications.coverageTitle"),
+    coverageProjectLabel: t("qualifications.coverageProjectLabel"),
+    coverageProjectAll: t("qualifications.coverageProjectAll"),
+    coverageEmpty: coverageProjectId
+      ? t("qualifications.coverageEmpty")
+      : t("qualifications.coverageProjectAll"),
     projectOptions,
     coverageProjectId,
     coverageTypes: columns,
@@ -522,27 +637,31 @@ export async function loadQualificationsPage(
     // The hint names the whole crew while the pager loads it: partial
     // exactly when this page shows fewer rows than the crew holds.
     coverageTruncated: coverageTotal > coverageRows.length,
-    coverageHint: coverageTotal > coverageRows.length
-      ? t('qualifications.coverageTruncated', { shown: coverageRows.length, total: coverageTotal })
-      : '',
+    coverageHint:
+      coverageTotal > coverageRows.length
+        ? t("qualifications.coverageTruncated", {
+            shown: coverageRows.length,
+            total: coverageTotal,
+          })
+        : "",
     coverageTotal,
     coveragePage,
     coveragePerPage: COVERAGE_PER_PAGE,
-    alertsTitle: t('qualifications.alertsTitle'),
-    alertsEmpty: t('qualifications.alertsEmpty'),
+    alertsTitle: t("qualifications.alertsTitle"),
+    alertsEmpty: t("qualifications.alertsEmpty"),
     alerts: alerts.map((a) => ({
       id: a.id,
       workerName: alertLabels.workerByEmployment.get(a.employmentId)?.name ?? a.employmentId,
       typeLabel: `${a.typeCode} · ${a.typeName}`,
       dueOn: a.dueOn,
-      sentLabel: a.sentAt ?? t('qualifications.alertDue'),
+      sentLabel: a.sentAt ?? t("qualifications.alertDue"),
     })),
-  }
+  };
 }
 
 export interface QualificationAttention {
-  expiring: number
-  expired: number
+  expiring: number;
+  expired: number;
 }
 
 // HR-14 begin: cockpit attention counts — how many held qualifications
@@ -551,17 +670,20 @@ export interface QualificationAttention {
 // an omitted item, never a zero that reads as all-clear); only
 // authorization and feature refusals degrade to null, infrastructure
 // failures propagate.
-export async function loadQualificationAttention(authz: Authz): Promise<QualificationAttention | null> {
-  if (!can(authz, 'hrm.certifications.read')) return null
+export async function loadQualificationAttention(
+  authz: Authz,
+): Promise<QualificationAttention | null> {
+  if (!can(authz, "hrm.certifications.read")) return null;
   try {
-    const held = await listQualifications(db, { orgId: authz.user.orgId, actorId: authz.user.id })
+    const held = await listQualifications(db, { orgId: authz.user.orgId, actorId: authz.user.id });
     return {
-      expiring: held.filter((q) => q.status === 'expiring').length,
-      expired: held.filter((q) => q.status === 'expired').length,
-    }
+      expiring: held.filter((q) => q.status === "expiring").length,
+      expired: held.filter((q) => q.status === "expired").length,
+    };
   } catch (error) {
-    if (error instanceof HrmQualificationError || error instanceof HrmAuthorizationError) return null
-    throw error
+    if (error instanceof HrmQualificationError || error instanceof HrmAuthorizationError)
+      return null;
+    throw error;
   }
 }
 // HR-14 end

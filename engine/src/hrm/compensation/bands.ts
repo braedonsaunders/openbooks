@@ -87,7 +87,6 @@ function toBandDTO(row: BandRow): PayBandDTO {
   };
 }
 
-
 function requireMoney(value: unknown, what: string): string {
   // Accept what a typed client serializes — a JSON number or a numeric
   // string — through the exact-decimal grammar, and persist the canonical
@@ -122,7 +121,10 @@ export interface CreatePayBandQuery {
  * crosses them. Pure, so the unit test names the refusal without a database.
  */
 export function assertBandOrdered(min: string, target: string | null, max: string): void {
-  if (!(compareDecimal(min, max) <= 0 && (target === null || (compareDecimal(min, target) <= 0 && compareDecimal(target, max) <= 0)))) {
+  if (!(
+    compareDecimal(min, max) <= 0 &&
+    (target === null || (compareDecimal(min, target) <= 0 && compareDecimal(target, max) <= 0))
+  )) {
     throw new CompensationError(
       "REFUSED",
       target === null
@@ -144,7 +146,10 @@ export async function createPayBand(query: CreatePayBandQuery): Promise<PayBandD
   const max = requireMoney(query.max, "band max");
   assertBandOrdered(min, target, max);
   if (typeof query.currency !== "string" || !/^[A-Z]{3}$/.test(query.currency)) {
-    throw new CompensationError("INVALID_INPUT", "band currency must be an ISO 4217 code (e.g. USD)");
+    throw new CompensationError(
+      "INVALID_INPUT",
+      "band currency must be an ISO 4217 code (e.g. USD)",
+    );
   }
   if (query.basis !== "annual" && query.basis !== "hourly") {
     throw new CompensationError("INVALID_INPUT", "band basis is annual or hourly");
@@ -159,9 +164,20 @@ export async function createPayBand(query: CreatePayBandQuery): Promise<PayBandD
     // and an org-wide (null) band needs unrestricted scope — it prices
     // every entity's employees at once. Checked inside the write
     // transaction, beside the grant.
-    await requireCompensationManageForEmployer(db, orgId, actorId, scope.employerSubsidiaryId, "Pay band");
-    const level = (await db.execute<{ id: string; family_id: string | null }>(sql`
-      select id, family_id from hrm_job_levels where org_id = ${orgId} and id = ${levelId}`, "objects"))[0];
+    await requireCompensationManageForEmployer(
+      db,
+      orgId,
+      actorId,
+      scope.employerSubsidiaryId,
+      "Pay band",
+    );
+    const level = (
+      await db.execute<{ id: string; family_id: string | null }>(
+        sql`
+      select id, family_id from hrm_job_levels where org_id = ${orgId} and id = ${levelId}`,
+        "objects",
+      )
+    )[0];
     if (!level) {
       throw new CompensationError("NOT_FOUND", "job level is not visible in this organization");
     }
@@ -185,7 +201,9 @@ export async function createPayBand(query: CreatePayBandQuery): Promise<PayBandD
            and currency = ${query.currency} and basis = ${query.basis}
            and effective_from <= ${query.effectiveFrom}::date
            and (effective_to is null or effective_to >= ${query.effectiveFrom}::date)`);
-      const row = (await db.execute<BandRow>(sql`
+      const row = (
+        await db.execute<BandRow>(
+          sql`
         insert into hrm_pay_bands
           (org_id, family_id, level_id, employer_subsidiary_id, location_id, currency, basis,
            min, target, max, effective_from, created_by, updated_by)
@@ -194,8 +212,15 @@ export async function createPayBand(query: CreatePayBandQuery): Promise<PayBandD
                 ${min}, ${target}, ${max}, ${query.effectiveFrom}, ${actorId}, ${actorId})
         returning id, family_id, level_id, employer_subsidiary_id, location_id, currency, basis,
                   min::text as min, target::text as target, max::text as max,
-                  effective_from::text as effective_from, effective_to::text as effective_to`, "objects"))[0];
-      if (!row) throw new CompensationError("REFUSED", "the band insert matched no row — the save is refused, never a silent success");
+                  effective_from::text as effective_from, effective_to::text as effective_to`,
+          "objects",
+        )
+      )[0];
+      if (!row)
+        throw new CompensationError(
+          "REFUSED",
+          "the band insert matched no row — the save is refused, never a silent success",
+        );
       return toBandDTO(row);
     } catch (e) {
       if (e instanceof CompensationError) throw e;
@@ -218,7 +243,8 @@ export async function listPayBands(query: {
   // readable — only their WRITES need unrestricted scope.
   const allowed = await requireBandsReadScope(orgId, actorId);
   const asOf = query.asOf ?? (await businessToday(orgId));
-  const rows = await db.execute<BandRow>(sql`
+  const rows = await db.execute<BandRow>(
+    sql`
     select id, family_id, level_id, employer_subsidiary_id, location_id, currency, basis,
            min::text as min, target::text as target, max::text as max,
            effective_from::text as effective_from, effective_to::text as effective_to
@@ -227,7 +253,9 @@ export async function listPayBands(query: {
        and (${query.levelId ?? null}::uuid is null or level_id = ${query.levelId ?? null}::uuid)
        and effective_from <= ${asOf}::date
        and (effective_to is null or effective_to >= ${asOf}::date)
-     order by level_id, employer_subsidiary_id nulls last, location_id nulls last`, "objects");
+     order by level_id, employer_subsidiary_id nulls last, location_id nulls last`,
+    "objects",
+  );
   return rows
     .filter(
       (row) =>
@@ -247,7 +275,8 @@ export async function listPayBandVersions(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const allowed = await requireBandsReadScope(orgId, actorId);
-  const rows = await db.execute<BandRow>(sql`
+  const rows = await db.execute<BandRow>(
+    sql`
     select id, family_id, level_id, employer_subsidiary_id, location_id, currency, basis,
            min::text as min, target::text as target, max::text as max,
            effective_from::text as effective_from, effective_to::text as effective_to
@@ -255,8 +284,10 @@ export async function listPayBandVersions(query: {
      where org_id = ${orgId}
        and (${query.levelId ?? null}::uuid is null or level_id = ${query.levelId ?? null}::uuid)
        and (${allowed === null} or employer_subsidiary_id is null
-         or employer_subsidiary_id = any(${`{${[...(allowed ?? [])].join(',')}}`}::uuid[]))
-     order by level_id, effective_from desc, id`, "objects");
+         or employer_subsidiary_id = any(${`{${[...(allowed ?? [])].join(",")}}`}::uuid[]))
+     order by level_id, effective_from desc, id`,
+    "objects",
+  );
   return rows.map(toBandDTO);
 }
 
@@ -271,7 +302,8 @@ export async function resolveBandForScope(
   scope: BandScope & { currency: string; basis: BandBasis },
   asOf: string,
 ): Promise<PayBandDTO | null> {
-  const rows = await db.execute<BandRow>(sql`
+  const rows = await db.execute<BandRow>(
+    sql`
     select id, family_id, level_id, employer_subsidiary_id, location_id, currency, basis,
            min::text as min, target::text as target, max::text as max,
            effective_from::text as effective_from, effective_to::text as effective_to
@@ -288,7 +320,9 @@ export async function resolveBandForScope(
               (case when location_id is not null then 0 else 1 end),
               (case when family_id is not null then 0 else 1 end),
               effective_from desc
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   const row = rows[0];
   return row ? toBandDTO(row) : null;
 }
@@ -303,7 +337,11 @@ function employmentNotVisible(): CompensationError {
  * Explicit booleans, never a caught permission refusal treated as a
  * fallback — a database failure must propagate, never read as a grant.
  */
-async function isOwnEmployment(orgId: string, actorId: string, employmentId: string): Promise<boolean> {
+async function isOwnEmployment(
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<boolean> {
   if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) return false;
   const own = await loadOwnEmploymentIds(db, orgId, actorId);
   return own.includes(employmentId);
@@ -356,21 +394,28 @@ export async function compaRatioFor(
       "band placement for another employment requires the hrm.compensation.read permission — ask an administrator to grant it in /admin/roles, or read your own placement under /me/compensation",
     );
   }
-  const employment = (await db.execute<{
-    worker_party_id: string;
-    employer_subsidiary_id: string;
-  }>(sql`
+  const employment = (
+    await db.execute<{
+      worker_party_id: string;
+      employer_subsidiary_id: string;
+    }>(
+      sql`
     select worker_party_id, employer_subsidiary_id
-      from worker_employments where org_id = ${orgId} and id = ${employmentId}`, "objects"))[0];
+      from worker_employments where org_id = ${orgId} and id = ${employmentId}`,
+      "objects",
+    )
+  )[0];
   if (!employment) {
     throw employmentNotVisible();
   }
-  const primary = (await db.execute<{
-    assignment_id: string;
-    department_id: string | null;
-    location_id: string | null;
-    position_id: string | null;
-  }>(sql`
+  const primary = (
+    await db.execute<{
+      assignment_id: string;
+      department_id: string | null;
+      location_id: string | null;
+      position_id: string | null;
+    }>(
+      sql`
     select assignment_id, department_id, location_id, position_id
       from employment_assignment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
@@ -378,7 +423,10 @@ export async function compaRatioFor(
        and (effective_to is null or effective_to >= ${asOf}::date)
        and recorded_until is null
      order by is_primary desc, effective_from desc
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (!primary) {
     throw new CompensationError(
       "REFUSED",
@@ -387,12 +435,14 @@ export async function compaRatioFor(
   }
   // The position (and its level) at the as-of date, through the
   // assignment's position link — never a copied band id.
-  const position = (await db.execute<{
-    level_id: string | null;
-    department_id: string | null;
-    location_id: string | null;
-    employer_subsidiary_id: string;
-  }>(sql`
+  const position = (
+    await db.execute<{
+      level_id: string | null;
+      department_id: string | null;
+      location_id: string | null;
+      employer_subsidiary_id: string;
+    }>(
+      sql`
     select pv.job_level_id as level_id, pv.department_id, pv.location_id, pv.employer_subsidiary_id
       from position_versions pv
      where pv.org_id = ${orgId} and pv.position_id = ${primary.position_id}
@@ -400,15 +450,23 @@ export async function compaRatioFor(
        and (pv.effective_to is null or pv.effective_to >= ${asOf}::date)
        and pv.recorded_until is null
      order by pv.effective_from desc
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (!position?.level_id) {
     throw new CompensationError(
       "REFUSED",
       "no band covers this employment: the assignment names no architected position at this date — place the position on a job level before reading placement",
     );
   }
-  const level = (await db.execute<{ family_id: string | null }>(sql`
-    select family_id from hrm_job_levels where org_id = ${orgId} and id = ${position.level_id}`, "objects"))[0];
+  const level = (
+    await db.execute<{ family_id: string | null }>(
+      sql`
+    select family_id from hrm_job_levels where org_id = ${orgId} and id = ${position.level_id}`,
+      "objects",
+    )
+  )[0];
   // The payroll-side effective wage at the date, through the
   // labor-costing wage rate service — never a typed number. The org's
   // annual-hours divisor loads before the wage: year-basis rows annualize
@@ -430,16 +488,25 @@ export async function compaRatioFor(
   // through its own cadence (dividing by annual hours and back would shed
   // dust); hourly natives and fallback scopes annualise through the
   // org's annual hours.
-  const native = (await db.execute<{ rate: string; basis: string }>(sql`
+  const native = (
+    await db.execute<{ rate: string; basis: string }>(
+      sql`
     select rate::text as rate, basis
       from labor_cost_rates
      where org_id = ${orgId} and employee_party_id = ${employment.worker_party_id} and is_active
        and effective_from <= ${asOf}::date
        and (effective_to is null or effective_to >= ${asOf}::date)
      order by effective_from desc
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   const annualRate = native
-    ? annualPayRate(String(native.rate), requirePayRateBasis(native.basis), String(settings.annualHours))
+    ? annualPayRate(
+        String(native.rate),
+        requirePayRateBasis(native.basis),
+        String(settings.annualHours),
+      )
     : mul(wage.wage, String(settings.annualHours));
   const band = await resolveBandForScope(
     orgId,

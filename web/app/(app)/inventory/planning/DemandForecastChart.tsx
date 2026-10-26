@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 /**
  * One item-by-location demand picture: history bars (amber where a stockout
@@ -8,26 +8,26 @@
  * is the only place a band around a forecast exists.
  */
 export interface ChartHistoryWeek {
-  weekStart: string
-  quantity: string
-  imputed: boolean
+  weekStart: string;
+  quantity: string;
+  imputed: boolean;
 }
 
 export interface ChartForecastWeek {
-  periodStart: string
-  quantity: string
-  lower: string
-  upper: string
+  periodStart: string;
+  quantity: string;
+  lower: string;
+  upper: string;
 }
 
-const BAR = '#64748b'
-const BAR_IMPUTED = '#d97706'
-const BAND = 'rgba(37, 99, 235, 0.12)'
-const LINE = '#2563eb'
+const BAR = "#64748b";
+const BAR_IMPUTED = "#d97706";
+const BAND = "rgba(37, 99, 235, 0.12)";
+const LINE = "#2563eb";
 
 function num(value: string): number {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function DemandForecastChart({
@@ -35,44 +35,47 @@ export function DemandForecastChart({
   forecast,
   height = 148,
 }: {
-  history: ChartHistoryWeek[]
-  forecast: ChartForecastWeek[]
-  height?: number
+  history: ChartHistoryWeek[];
+  forecast: ChartForecastWeek[];
+  height?: number;
 }) {
-  const width = 560
-  const pad = { top: 10, right: 8, bottom: 20, left: 8 }
-  const innerW = width - pad.left - pad.right
-  const innerH = height - pad.top - pad.bottom
-  const columns = history.length + forecast.length
-  if (columns === 0) return null
+  const width = 560;
+  const pad = { top: 10, right: 8, bottom: 20, left: 8 };
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+  const columns = history.length + forecast.length;
+  if (columns === 0) return null;
   const top = Math.max(
     0,
     ...history.map((week) => num(week.quantity)),
     ...forecast.map((week) => num(week.upper)),
-  )
-  const scale = top > 0 ? innerH / top : 0
-  const step = innerW / columns
-  const barW = Math.max(2, Math.min(18, step * 0.6))
-  const y = (value: number) => pad.top + innerH - value * scale
+  );
+  const scale = top > 0 ? innerH / top : 0;
+  const step = innerW / columns;
+  const barW = Math.max(2, Math.min(18, step * 0.6));
+  const y = (value: number) => pad.top + innerH - value * scale;
 
   const line = forecast
     .map((week, index) => {
-      const x = pad.left + (history.length + index + 0.5) * step
-      return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y(num(week.quantity)).toFixed(1)}`
+      const x = pad.left + (history.length + index + 0.5) * step;
+      return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y(num(week.quantity)).toFixed(1)}`;
     })
-    .join(' ')
+    .join(" ");
   const bandTop = forecast
-    .map((week, index) => `${index === 0 ? 'M' : 'L'}${(pad.left + (history.length + index + 0.5) * step).toFixed(1)},${y(num(week.upper)).toFixed(1)}`)
-    .join(' ')
+    .map(
+      (week, index) =>
+        `${index === 0 ? "M" : "L"}${(pad.left + (history.length + index + 0.5) * step).toFixed(1)},${y(num(week.upper)).toFixed(1)}`,
+    )
+    .join(" ");
   const bandBottom = [...forecast]
     .reverse()
     .map((week, rev) => {
-      const index = forecast.length - 1 - rev
-      return `L${(pad.left + (history.length + index + 0.5) * step).toFixed(1)},${y(num(week.lower)).toFixed(1)}`
+      const index = forecast.length - 1 - rev;
+      return `L${(pad.left + (history.length + index + 0.5) * step).toFixed(1)},${y(num(week.lower)).toFixed(1)}`;
     })
-    .join(' ')
-  const splitX = pad.left + history.length * step
-  const lastHistory = history[history.length - 1]
+    .join(" ");
+  const splitX = pad.left + history.length * step;
+  const lastHistory = history[history.length - 1];
 
   return (
     <svg
@@ -82,8 +85,8 @@ export function DemandForecastChart({
       aria-label="Demand history and forecast"
     >
       {history.map((week, index) => {
-        const value = num(week.quantity)
-        const x = pad.left + (index + 0.5) * step - barW / 2
+        const value = num(week.quantity);
+        const x = pad.left + (index + 0.5) * step - barW / 2;
         return (
           <rect
             key={week.weekStart}
@@ -95,11 +98,9 @@ export function DemandForecastChart({
             opacity={week.imputed ? 0.85 : 0.55}
             rx={1}
           />
-        )
+        );
       })}
-      {forecast.length > 0 && (
-        <path d={`${bandTop} ${bandBottom} Z`} fill={BAND} stroke="none" />
-      )}
+      {forecast.length > 0 && <path d={`${bandTop} ${bandBottom} Z`} fill={BAND} stroke="none" />}
       {history.length > 0 && forecast.length > 0 && lastHistory && (
         <line
           x1={splitX.toFixed(1)}
@@ -113,10 +114,16 @@ export function DemandForecastChart({
       )}
       {forecast.length > 0 && <path d={line} fill="none" stroke={LINE} strokeWidth={2} />}
       {forecast.map((week, index) => {
-        const x = pad.left + (history.length + index + 0.5) * step
+        const x = pad.left + (history.length + index + 0.5) * step;
         return (
-          <circle key={week.periodStart} cx={x.toFixed(1)} cy={y(num(week.quantity)).toFixed(1)} r={2.5} fill={LINE} />
-        )
+          <circle
+            key={week.periodStart}
+            cx={x.toFixed(1)}
+            cy={y(num(week.quantity)).toFixed(1)}
+            r={2.5}
+            fill={LINE}
+          />
+        );
       })}
       {lastHistory && (
         <text x={pad.left} y={(height - 6).toFixed(1)} fontSize={9} fill="#64748b">
@@ -135,5 +142,5 @@ export function DemandForecastChart({
         </text>
       )}
     </svg>
-  )
+  );
 }

@@ -8,17 +8,20 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  seedWorkerEmployment,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 import {
   collectLegacyEmployments,
   EmploymentCollectionError,
   hashCollectedInput,
   type OperatorEmploymentMapping,
 } from "./migration-collect.ts";
-import {
-  preflightEmploymentMigration,
-  type SourcePersonRow,
-} from "./migration-preflight.ts";
+import { preflightEmploymentMigration, type SourcePersonRow } from "./migration-preflight.ts";
 import {
   EmploymentMigrationRefusalError,
   executeEmploymentMigration,
@@ -58,7 +61,11 @@ async function seedSubsidiary(org: ScratchOrg, name: string): Promise<string> {
   return id;
 }
 
-async function seedSchedule(orgId: string, name: string, subsidiaryId: string | null): Promise<string> {
+async function seedSchedule(
+  orgId: string,
+  name: string,
+  subsidiaryId: string | null,
+): Promise<string> {
   const id = randomUUID();
   await withOrg(orgId, async () => {
     await db.execute(sql`
@@ -128,7 +135,11 @@ async function seedCommittedStub(
   });
 }
 
-async function seedApprovedWeek(org: ScratchOrg, partyId: string, weekStart: string): Promise<void> {
+async function seedApprovedWeek(
+  org: ScratchOrg,
+  partyId: string,
+  weekStart: string,
+): Promise<void> {
   await withOrg(org.orgId, async () => {
     await db.execute(sql`
       insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status)
@@ -136,12 +147,24 @@ async function seedApprovedWeek(org: ScratchOrg, partyId: string, weekStart: str
   });
 }
 
-async function seedWork(org: ScratchOrg, partyId: string, workedOn: string, hours = '8', status = 'approved'): Promise<void> {
-  await withOrg(org.orgId, () => db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,status,is_billable,billing_status,costing_basis)
-    values(${org.orgId},${partyId},${workedOn}::date,${hours},${status},false,'unbilled','actual')`));
+async function seedWork(
+  org: ScratchOrg,
+  partyId: string,
+  workedOn: string,
+  hours = "8",
+  status = "approved",
+): Promise<void> {
+  await withOrg(org.orgId, () =>
+    db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,status,is_billable,billing_status,costing_basis)
+    values(${org.orgId},${partyId},${workedOn}::date,${hours},${status},false,'unbilled','actual')`),
+  );
 }
 
-async function seedLedgerMovement(org: ScratchOrg, partyId: string, movementDate: string): Promise<void> {
+async function seedLedgerMovement(
+  org: ScratchOrg,
+  partyId: string,
+  movementDate: string,
+): Promise<void> {
   const planId = randomUUID();
   await withOrg(org.orgId, async () => {
     await db.execute(sql`
@@ -167,9 +190,17 @@ test("clean employees collect to ready rows with observation candidates", { skip
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const scheduleId = await seedSchedule(org.orgId, "Collector biweekly", org.subsidiaryId);
     const active = await seedEmployee(
-      org, "Collector Active", { hiredOn: "2022-03-14" }, { scheduleId });
+      org,
+      "Collector Active",
+      { hiredOn: "2022-03-14" },
+      { scheduleId },
+    );
     const departed = await seedEmployee(
-      org, "Collector Departed", { hiredOn: "2020-01-15", terminatedOn: "2026-04-30" }, { scheduleId });
+      org,
+      "Collector Departed",
+      { hiredOn: "2020-01-15", terminatedOn: "2026-04-30" },
+      { scheduleId },
+    );
     await seedCommittedStub(org, actorId, scheduleId, active.partyId, "2026-09-10");
     await seedCommittedStub(org, actorId, scheduleId, departed.partyId, "2026-04-30");
 
@@ -224,7 +255,9 @@ test("clean employees collect to ready rows with observation candidates", { skip
       assert.ok(evaluated.candidate, "ready rows carry an observation-date candidate");
       assert.equal(evaluated.candidate?.employerSubsidiaryId, org.subsidiaryId);
     }
-    const byParty = new Map(preflight.rows.map((evaluated) => [evaluated.nativePartyId, evaluated]));
+    const byParty = new Map(
+      preflight.rows.map((evaluated) => [evaluated.nativePartyId, evaluated]),
+    );
     assert.equal(byParty.get(active.partyId)?.candidate?.status, "active");
     assert.equal(byParty.get(active.partyId)?.candidate?.effectiveFrom, "2026-09-10");
     assert.equal(byParty.get(active.partyId)?.serviceStart, "2022-03-14");
@@ -235,66 +268,86 @@ test("clean employees collect to ready rows with observation candidates", { skip
   }
 });
 
-test("an org-wide schedule (subsidiary null) collects and classifies ready, never refused", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    // The production shape: one schedule shared by every subsidiary. Its
-    // subsidiary_id is null by design, and the LEFT JOIN still finds it.
-    const scheduleId = await seedSchedule(org.orgId, "Org-wide biweekly", null);
-    const employee = await seedEmployee(
-      org, "Org-wide Employee", { hiredOn: "2021-06-01" }, { scheduleId });
-    await seedCommittedStub(org, actorId, scheduleId, employee.partyId, "2026-09-10");
+test(
+  "an org-wide schedule (subsidiary null) collects and classifies ready, never refused",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      // The production shape: one schedule shared by every subsidiary. Its
+      // subsidiary_id is null by design, and the LEFT JOIN still finds it.
+      const scheduleId = await seedSchedule(org.orgId, "Org-wide biweekly", null);
+      const employee = await seedEmployee(
+        org,
+        "Org-wide Employee",
+        { hiredOn: "2021-06-01" },
+        { scheduleId },
+      );
+      await seedCommittedStub(org, actorId, scheduleId, employee.partyId, "2026-09-10");
 
-    const collected = await collectLegacyEmployments(org.orgId);
-    assert.equal(collected.rows.length, 1);
-    const row = rowByParty(collected.rows, employee.partyId);
-    assert.equal(row.payroll?.present, true);
-    assert.equal(row.payroll?.subsidiaryId, null, "an org-wide schedule corroborates no subsidiary");
-    assert.equal(row.employer.assertedSubsidiaryId, org.subsidiaryId);
+      const collected = await collectLegacyEmployments(org.orgId);
+      assert.equal(collected.rows.length, 1);
+      const row = rowByParty(collected.rows, employee.partyId);
+      assert.equal(row.payroll?.present, true);
+      assert.equal(
+        row.payroll?.subsidiaryId,
+        null,
+        "an org-wide schedule corroborates no subsidiary",
+      );
+      assert.equal(row.employer.assertedSubsidiaryId, org.subsidiaryId);
 
-    const preflight = preflightEmploymentMigration(collected.rows);
-    assert.equal(preflight.counts.ready, 1);
-    assert.equal(preflight.rows[0]?.classification, "ready");
-    assert.equal(preflight.rows[0]?.candidate?.employerSubsidiaryId, org.subsidiaryId);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const preflight = preflightEmploymentMigration(collected.rows);
+      assert.equal(preflight.counts.ready, 1);
+      assert.equal(preflight.rows[0]?.classification, "ready");
+      assert.equal(preflight.rows[0]?.candidate?.employerSubsidiaryId, org.subsidiaryId);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("schedule subsidiary versus party subsidiary collects a conflict the classifier refuses", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const otherSubsidiary = await seedSubsidiary(org, "Second Co");
-    const homeSchedule = await seedSchedule(org.orgId, "Home biweekly", org.subsidiaryId);
-    const otherSchedule = await seedSchedule(org.orgId, "Second biweekly", otherSubsidiary);
-    void homeSchedule;
-    const person = await seedEmployee(
-      org, "Collector Conflict", { hiredOn: "2021-05-01" }, { scheduleId: otherSchedule });
-    await seedCommittedStub(org, actorId, otherSchedule, person.partyId, "2026-09-10");
+test(
+  "schedule subsidiary versus party subsidiary collects a conflict the classifier refuses",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const otherSubsidiary = await seedSubsidiary(org, "Second Co");
+      const homeSchedule = await seedSchedule(org.orgId, "Home biweekly", org.subsidiaryId);
+      const otherSchedule = await seedSchedule(org.orgId, "Second biweekly", otherSubsidiary);
+      void homeSchedule;
+      const person = await seedEmployee(
+        org,
+        "Collector Conflict",
+        { hiredOn: "2021-05-01" },
+        { scheduleId: otherSchedule },
+      );
+      await seedCommittedStub(org, actorId, otherSchedule, person.partyId, "2026-09-10");
 
-    const collected = await collectLegacyEmployments(org.orgId);
-    assert.equal(collected.rows.length, 1);
-    const row = collected.rows[0]!;
-    // The collector reports both facts: party subsidiary asserted, schedule
-    // subsidiary scoped. It never prefers one.
-    assert.equal(row.employer.assertedSubsidiaryId, org.subsidiaryId);
-    assert.equal(row.payroll?.subsidiaryId, otherSubsidiary);
+      const collected = await collectLegacyEmployments(org.orgId);
+      assert.equal(collected.rows.length, 1);
+      const row = collected.rows[0]!;
+      // The collector reports both facts: party subsidiary asserted, schedule
+      // subsidiary scoped. It never prefers one.
+      assert.equal(row.employer.assertedSubsidiaryId, org.subsidiaryId);
+      assert.equal(row.payroll?.subsidiaryId, otherSubsidiary);
 
-    const preflight = preflightEmploymentMigration(collected.rows);
-    assert.equal(preflight.rows.length, 1);
-    const evaluated = preflight.rows[0]!;
-    assert.equal(evaluated.classification, "ambiguous");
-    assert.ok(
-      evaluated.issues.some((issue) => issue.code === "schedule_employer_conflict"),
-      "conflicting employer evidence refuses instead of resolving",
-    );
-    assert.equal(evaluated.candidate, null);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const preflight = preflightEmploymentMigration(collected.rows);
+      assert.equal(preflight.rows.length, 1);
+      const evaluated = preflight.rows[0]!;
+      assert.equal(evaluated.classification, "ambiguous");
+      assert.ok(
+        evaluated.issues.some((issue) => issue.code === "schedule_employer_conflict"),
+        "conflicting employer evidence refuses instead of resolving",
+      );
+      assert.equal(evaluated.candidate, null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // A recorded terminated_on anchors a terminated observation only when NOTHING
 // else does (see the anchorless test below): with activity dated after it the
@@ -306,7 +359,11 @@ test("post-termination activity is reported as a conflict, never preferred", { s
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const scheduleId = await seedSchedule(org.orgId, "Post-term biweekly", org.subsidiaryId);
     const person = await seedEmployee(
-      org, "Collector PostTerm", { hiredOn: "2020-01-15", terminatedOn: "2026-04-30" }, { scheduleId });
+      org,
+      "Collector PostTerm",
+      { hiredOn: "2020-01-15", terminatedOn: "2026-04-30" },
+      { scheduleId },
+    );
     await seedCommittedStub(org, actorId, scheduleId, person.partyId, "2026-06-15");
 
     const collected = await collectLegacyEmployments(org.orgId);
@@ -326,9 +383,21 @@ test("post-termination activity is reported as a conflict, never preferred", { s
       "provenance names the later activity",
     );
 
-    assert.equal(row.observation?.conflict?.terminatedOn, "2026-04-30", "the conflict carries the termination date");
-    assert.equal(row.observation?.conflict?.activityDate, "2026-06-15", "the conflict carries the later activity date");
-    assert.match(row.observation?.conflict?.activityAnchor ?? "", /^pay_stubs:[^@]+@2026-06-15$/, "the conflict names the later anchor");
+    assert.equal(
+      row.observation?.conflict?.terminatedOn,
+      "2026-04-30",
+      "the conflict carries the termination date",
+    );
+    assert.equal(
+      row.observation?.conflict?.activityDate,
+      "2026-06-15",
+      "the conflict carries the later activity date",
+    );
+    assert.match(
+      row.observation?.conflict?.activityAnchor ?? "",
+      /^pay_stubs:[^@]+@2026-06-15$/,
+      "the conflict names the later anchor",
+    );
 
     // The classifier names the conflict as its own verdict: the observation
     // is present, so it is never reported as missing, and the remedy is to
@@ -336,9 +405,14 @@ test("post-termination activity is reported as a conflict, never preferred", { s
     const preflight = preflightEmploymentMigration(collected.rows);
     assert.equal(preflight.rows[0]?.candidate, null);
     assert.equal(preflight.rows[0]?.classification, "requires_review");
-    const verdict = preflight.rows[0]?.issues.find((issue) => issue.code === "post_termination_activity");
+    const verdict = preflight.rows[0]?.issues.find(
+      (issue) => issue.code === "post_termination_activity",
+    );
     assert.ok(verdict, "post-termination activity is a named verdict");
-    assert.match(verdict.detail, /terminated_on 2026-04-30, but pay_stubs:.*@2026-06-15 is dated 2026-06-15/);
+    assert.match(
+      verdict.detail,
+      /terminated_on 2026-04-30, but pay_stubs:.*@2026-06-15 is dated 2026-06-15/,
+    );
     assert.match(verdict.remedy, /correct the termination date/);
     const refusal = await withOrg(org.orgId, () =>
       executeEmploymentMigration({ orgId: org.orgId, rows: collected.rows }),
@@ -371,9 +445,17 @@ test("every anchor source maps to an observation", { skip }, async () => {
   try {
     const scheduleId = await seedSchedule(org.orgId, "Anchor biweekly", org.subsidiaryId);
     const weekly = await seedEmployee(
-      org, "Collector Weekly", { hiredOn: "2023-02-01" }, { scheduleId });
+      org,
+      "Collector Weekly",
+      { hiredOn: "2023-02-01" },
+      { scheduleId },
+    );
     const entitled = await seedEmployee(
-      org, "Collector Entitled", { hiredOn: "2023-03-01" }, { scheduleId });
+      org,
+      "Collector Entitled",
+      { hiredOn: "2023-03-01" },
+      { scheduleId },
+    );
     await seedApprovedWeek(org, weekly.partyId, "2026-09-13");
     await seedWork(org, weekly.partyId, "2026-09-14");
     await seedLedgerMovement(org, entitled.partyId, "2026-09-01");
@@ -396,129 +478,155 @@ test("every anchor source maps to an observation", { skip }, async () => {
   }
 });
 
-test("no anchor and no termination collects a null observation the executor refuses", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scheduleId = await seedSchedule(org.orgId, "Unanchored biweekly", org.subsidiaryId);
-    const person = await seedEmployee(
-      org, "Collector Unanchored", { hiredOn: "2024-01-10" }, { scheduleId });
-    // An active flag on the role is not evidence either: absent terminated_on
-    // never implies active (the ruling is one-directional).
-    await withOrg(org.orgId, () =>
-      db.execute(sql`update employee_roles set is_active = true where id = ${person.roleId}`));
-
-    const collected = await collectLegacyEmployments(org.orgId);
-    assert.equal(collected.rows.length, 1);
-    assert.equal(collected.rows[0]?.nativePartyId, person.partyId);
-    assert.equal(collected.rows[0]?.observation, null);
-
-    const refusal = await withOrg(org.orgId, () =>
-      executeEmploymentMigration({ orgId: org.orgId, rows: collected.rows }),
-    ).then(
-      () => {
-        throw new Error("unanchored collection was expected to refuse");
-      },
-      (error: unknown) => {
-        assert.ok(error instanceof EmploymentMigrationRefusalError);
-        return error;
-      },
-    );
-    assert.ok(
-      refusal.report.persons[0]?.issues.some(
-        (issue) => issue.code === "missing_current_observation",
-      ),
-      "refusal names the missing observation",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("a recorded terminated_on alone anchors a terminated observation that migrates", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scheduleId = await seedSchedule(org.orgId, "Departed biweekly", org.subsidiaryId);
-    const departed = await seedEmployee(
-      org, "Collector Old Departed", { hiredOn: "2015-06-01", terminatedOn: "2019-11-30" }, { scheduleId });
-    const undated = await seedEmployee(
-      org, "Collector Undated", { hiredOn: "2016-02-01" }, { scheduleId });
-
-    const collected = await collectLegacyEmployments(org.orgId);
-    assert.equal(collected.rows.length, 2);
-    const departedRow = rowByParty(collected.rows, departed.partyId);
-    assert.deepEqual(departedRow.observation, {
-      status: "terminated",
-      observedAt: "2019-11-30T00:00:00Z",
-      provenance: "employee_roles.terminated_on",
-    });
-    assert.equal(departedRow.sourceVersion, "collect-v3");
-    // The asymmetry: the same absence of anchors with no termination date
-    // yields nothing, never active.
-    assert.equal(rowByParty(collected.rows, undated.partyId).observation, null);
-
-    const preflight = preflightEmploymentMigration(collected.rows);
-    const byParty = new Map(preflight.rows.map((evaluated) => [evaluated.nativePartyId, evaluated]));
-    assert.equal(byParty.get(departed.partyId)?.classification, "ready");
-    assert.equal(byParty.get(departed.partyId)?.candidate?.status, "terminated");
-    assert.equal(byParty.get(departed.partyId)?.candidate?.effectiveFrom, "2019-11-30");
-    assert.equal(byParty.get(departed.partyId)?.serviceStart, "2015-06-01");
-    assert.equal(byParty.get(undated.partyId)?.candidate, null);
-
-    const report = await withOrg(org.orgId, () =>
-      executeEmploymentMigration({ orgId: org.orgId, rows: collected.rows, dryRun: true, allowPartial: true }),
-    );
-    const outcomes = new Map(report.persons.map((person) => [person.nativePartyId, person]));
-    assert.equal(outcomes.get(departed.partyId)?.outcome, "would_migrate");
-    assert.equal(outcomes.get(undated.partyId)?.outcome, "refused");
-    assert.ok(
-      outcomes.get(undated.partyId)?.issues.some((issue) => issue.code === "missing_current_observation"),
-      "the undated person is still refused for want of an observation",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
 test(
-  "operator mappings attach as resolution evidence with provenance",
+  "no anchor and no termination collects a null observation the executor refuses",
   { skip },
   async () => {
     const org = await createScratchOrg();
     try {
-      const actorId = (await seedFlowActors(org.orgId)).adminId;
-      const scheduleId = await seedSchedule(org.orgId, "Mapped biweekly", org.subsidiaryId);
-      // No hire date on the role: the mapping supplies it.
-      const person = await seedEmployee(org, "Collector Mapped", { hiredOn: null }, { scheduleId });
-      await seedCommittedStub(org, actorId, scheduleId, person.partyId, "2026-09-10");
-      const mappings: OperatorEmploymentMapping[] = [
-        {
-          partyId: person.partyId,
-          employerSubsidiaryId: org.subsidiaryId,
-          hiredOn: "2021-06-01",
-          terminatedOn: null,
+      const scheduleId = await seedSchedule(org.orgId, "Unanchored biweekly", org.subsidiaryId);
+      const person = await seedEmployee(
+        org,
+        "Collector Unanchored",
+        { hiredOn: "2024-01-10" },
+        { scheduleId },
+      );
+      // An active flag on the role is not evidence either: absent terminated_on
+      // never implies active (the ruling is one-directional).
+      await withOrg(org.orgId, () =>
+        db.execute(sql`update employee_roles set is_active = true where id = ${person.roleId}`),
+      );
 
-          rationale: "offer letter on file",
-        },
-      ];
-
-      const collected = await collectLegacyEmployments(org.orgId, { operatorMappings: mappings });
+      const collected = await collectLegacyEmployments(org.orgId);
       assert.equal(collected.rows.length, 1);
-      const row = collected.rows[0]!;
-      assert.equal(row.resolution?.kind, "operator-employer-date-mapping");
-      assert.equal(row.resolution?.hiredOn, "2021-06-01");
-      assert.equal(row.resolution?.rationale, "offer letter on file");
+      assert.equal(collected.rows[0]?.nativePartyId, person.partyId);
+      assert.equal(collected.rows[0]?.observation, null);
 
-      const preflight = preflightEmploymentMigration(collected.rows);
-      // Free text never authorizes: without a decided Flows gate over the
-      // mapping set the mapping is inapplicable, even when complete.
-      assert.ok(preflight.rows[0]?.issues.some((issue) => issue.code === "unapproved_mapping"));
-      assert.notEqual(preflight.rows[0]?.classification, "ready");
-      assert.equal(preflight.rows[0]?.candidate, null);
+      const refusal = await withOrg(org.orgId, () =>
+        executeEmploymentMigration({ orgId: org.orgId, rows: collected.rows }),
+      ).then(
+        () => {
+          throw new Error("unanchored collection was expected to refuse");
+        },
+        (error: unknown) => {
+          assert.ok(error instanceof EmploymentMigrationRefusalError);
+          return error;
+        },
+      );
+      assert.ok(
+        refusal.report.persons[0]?.issues.some(
+          (issue) => issue.code === "missing_current_observation",
+        ),
+        "refusal names the missing observation",
+      );
     } finally {
-    await dropScratchOrg(org.orgId);
-  }
+      await dropScratchOrg(org.orgId);
+    }
   },
 );
+
+test(
+  "a recorded terminated_on alone anchors a terminated observation that migrates",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scheduleId = await seedSchedule(org.orgId, "Departed biweekly", org.subsidiaryId);
+      const departed = await seedEmployee(
+        org,
+        "Collector Old Departed",
+        { hiredOn: "2015-06-01", terminatedOn: "2019-11-30" },
+        { scheduleId },
+      );
+      const undated = await seedEmployee(
+        org,
+        "Collector Undated",
+        { hiredOn: "2016-02-01" },
+        { scheduleId },
+      );
+
+      const collected = await collectLegacyEmployments(org.orgId);
+      assert.equal(collected.rows.length, 2);
+      const departedRow = rowByParty(collected.rows, departed.partyId);
+      assert.deepEqual(departedRow.observation, {
+        status: "terminated",
+        observedAt: "2019-11-30T00:00:00Z",
+        provenance: "employee_roles.terminated_on",
+      });
+      assert.equal(departedRow.sourceVersion, "collect-v3");
+      // The asymmetry: the same absence of anchors with no termination date
+      // yields nothing, never active.
+      assert.equal(rowByParty(collected.rows, undated.partyId).observation, null);
+
+      const preflight = preflightEmploymentMigration(collected.rows);
+      const byParty = new Map(
+        preflight.rows.map((evaluated) => [evaluated.nativePartyId, evaluated]),
+      );
+      assert.equal(byParty.get(departed.partyId)?.classification, "ready");
+      assert.equal(byParty.get(departed.partyId)?.candidate?.status, "terminated");
+      assert.equal(byParty.get(departed.partyId)?.candidate?.effectiveFrom, "2019-11-30");
+      assert.equal(byParty.get(departed.partyId)?.serviceStart, "2015-06-01");
+      assert.equal(byParty.get(undated.partyId)?.candidate, null);
+
+      const report = await withOrg(org.orgId, () =>
+        executeEmploymentMigration({
+          orgId: org.orgId,
+          rows: collected.rows,
+          dryRun: true,
+          allowPartial: true,
+        }),
+      );
+      const outcomes = new Map(report.persons.map((person) => [person.nativePartyId, person]));
+      assert.equal(outcomes.get(departed.partyId)?.outcome, "would_migrate");
+      assert.equal(outcomes.get(undated.partyId)?.outcome, "refused");
+      assert.ok(
+        outcomes
+          .get(undated.partyId)
+          ?.issues.some((issue) => issue.code === "missing_current_observation"),
+        "the undated person is still refused for want of an observation",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test("operator mappings attach as resolution evidence with provenance", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const scheduleId = await seedSchedule(org.orgId, "Mapped biweekly", org.subsidiaryId);
+    // No hire date on the role: the mapping supplies it.
+    const person = await seedEmployee(org, "Collector Mapped", { hiredOn: null }, { scheduleId });
+    await seedCommittedStub(org, actorId, scheduleId, person.partyId, "2026-09-10");
+    const mappings: OperatorEmploymentMapping[] = [
+      {
+        partyId: person.partyId,
+        employerSubsidiaryId: org.subsidiaryId,
+        hiredOn: "2021-06-01",
+        terminatedOn: null,
+
+        rationale: "offer letter on file",
+      },
+    ];
+
+    const collected = await collectLegacyEmployments(org.orgId, { operatorMappings: mappings });
+    assert.equal(collected.rows.length, 1);
+    const row = collected.rows[0]!;
+    assert.equal(row.resolution?.kind, "operator-employer-date-mapping");
+    assert.equal(row.resolution?.hiredOn, "2021-06-01");
+    assert.equal(row.resolution?.rationale, "offer letter on file");
+
+    const preflight = preflightEmploymentMigration(collected.rows);
+    // Free text never authorizes: without a decided Flows gate over the
+    // mapping set the mapping is inapplicable, even when complete.
+    assert.ok(preflight.rows[0]?.issues.some((issue) => issue.code === "unapproved_mapping"));
+    assert.notEqual(preflight.rows[0]?.classification, "ready");
+    assert.equal(preflight.rows[0]?.candidate, null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "an operator mapping for an uncollected party is refused, never dropped",
@@ -539,16 +647,16 @@ test(
         },
       ];
       await assert.rejects(
-      collectLegacyEmployments(org.orgId, { operatorMappings: mappings }),
-      (error: unknown) => {
-        assert.ok(error instanceof EmploymentCollectionError);
-        assert.match((error as Error).message, /did not collect/);
-        return true;
-      },
-    );
+        collectLegacyEmployments(org.orgId, { operatorMappings: mappings }),
+        (error: unknown) => {
+          assert.ok(error instanceof EmploymentCollectionError);
+          assert.match((error as Error).message, /did not collect/);
+          return true;
+        },
+      );
     } finally {
-    await dropScratchOrg(org.orgId);
-  }
+      await dropScratchOrg(org.orgId);
+    }
   },
 );
 
@@ -559,9 +667,17 @@ test("a second org's employees never appear in a collection", { skip }, async ()
     const scheduleA = await seedSchedule(orgA.orgId, "RLS biweekly A", orgA.subsidiaryId);
     const scheduleB = await seedSchedule(orgB.orgId, "RLS biweekly B", orgB.subsidiaryId);
     const employeeA = await seedEmployee(
-      orgA, "Collector Home", { hiredOn: "2022-01-01" }, { scheduleId: scheduleA });
+      orgA,
+      "Collector Home",
+      { hiredOn: "2022-01-01" },
+      { scheduleId: scheduleA },
+    );
     const employeeB = await seedEmployee(
-      orgB, "Collector Away", { hiredOn: "2022-01-01" }, { scheduleId: scheduleB });
+      orgB,
+      "Collector Away",
+      { hiredOn: "2022-01-01" },
+      { scheduleId: scheduleB },
+    );
 
     const collectedA = await collectLegacyEmployments(orgA.orgId);
     assert.equal(collectedA.rows.length, 1);
@@ -610,10 +726,13 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const scheduleId = await seedSchedule(org.orgId, "E2E biweekly", org.subsidiaryId);
-    const active = await seedEmployee(
-      org, "E2E Active", { hiredOn: "2022-03-14" }, { scheduleId });
+    const active = await seedEmployee(org, "E2E Active", { hiredOn: "2022-03-14" }, { scheduleId });
     const departed = await seedEmployee(
-      org, "E2E Departed", { hiredOn: "2020-01-15", terminatedOn: "2026-04-30" }, { scheduleId });
+      org,
+      "E2E Departed",
+      { hiredOn: "2020-01-15", terminatedOn: "2026-04-30" },
+      { scheduleId },
+    );
     await seedCommittedStub(org, actorId, scheduleId, active.partyId, "2026-09-10");
     await seedCommittedStub(org, actorId, scheduleId, departed.partyId, "2026-04-30");
 
@@ -641,8 +760,11 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     assert.equal(appliedReport.totals.alreadyMigrated, 2);
     assert.equal(appliedReport.totals.refused, 0);
     const stored = await withBypassContext(async () => {
-      const result = await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from worker_employments where org_id = ${org.orgId}`, "objects");
+      const result = await db.execute<{ n: string }>(
+        sql`
+        select count(*)::text as n from worker_employments where org_id = ${org.orgId}`,
+        "objects",
+      );
       return result[0]?.n;
     });
     assert.equal(stored, "2");
@@ -661,8 +783,16 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     assert.equal(againReport.totals.refused, 0);
     assert.equal(againReport.persons.length, 2, "the re-run reports both persons");
     for (const person of againReport.persons) {
-      assert.equal(person.classification, "ready", "reuse writes no migration evidence, so preflight still classifies the row ready");
-      assert.equal(person.outcome, "already_migrated", "execution reuses the stub's employment instead of duplicating it");
+      assert.equal(
+        person.classification,
+        "ready",
+        "reuse writes no migration evidence, so preflight still classifies the row ready",
+      );
+      assert.equal(
+        person.outcome,
+        "already_migrated",
+        "execution reuses the stub's employment instead of duplicating it",
+      );
     }
     assert.equal(migrationExitCode(againReport), 0);
   } finally {
@@ -676,7 +806,11 @@ test("two collections of one org are byte-identical", { skip }, async () => {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const scheduleId = await seedSchedule(org.orgId, "Stable biweekly", org.subsidiaryId);
     const person = await seedEmployee(
-      org, "Collector Stable", { hiredOn: "2022-03-14" }, { scheduleId });
+      org,
+      "Collector Stable",
+      { hiredOn: "2022-03-14" },
+      { scheduleId },
+    );
     await seedCommittedStub(org, actorId, scheduleId, person.partyId, "2026-09-10");
 
     const first = await collectLegacyEmployments(org.orgId);
@@ -690,27 +824,45 @@ test("two collections of one org are byte-identical", { skip }, async () => {
   }
 });
 
-test('empty weeks and nil or reversed hours cannot invent employment after termination; actual later work still refuses', { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const person = await seedEmployee(org, 'Former employee', { hiredOn: '2024-01-01', terminatedOn: '2026-01-12' }, null);
-    await seedWork(org, person.partyId, '2026-01-09');
-    await seedApprovedWeek(org, person.partyId, '2026-01-18');
-    await seedWork(org, person.partyId, '2026-01-19', '0');
-    await seedWork(org, person.partyId, '2026-01-20', '8');
-    await seedWork(org, person.partyId, '2026-01-20', '-8');
-    await seedWork(org, person.partyId, '2026-01-21', '8', 'draft');
-    const before = rowByParty((await collectLegacyEmployments(org.orgId)).rows, person.partyId);
-    assert.equal(before.observation?.status, 'terminated');
-    assert.equal(before.observation?.observedAt, '2026-01-12T00:00:00Z');
-    assert.match(before.observation!.provenance, /time_entries:.*@2026-01-09.*employee_roles.terminated_on:2026-01-12/);
-    assert.equal(preflightEmploymentMigration([before]).rows[0]!.classification, 'ready');
-    await seedWork(org, person.partyId, '2026-01-22', '1');
-    const after = rowByParty((await collectLegacyEmployments(org.orgId)).rows, person.partyId);
-    assert.equal(after.observation?.status, 'unknown');
-    assert.equal(after.observation?.conflict?.activityDate, '2026-01-22');
-    const refusal = preflightEmploymentMigration([after]).rows[0]!;
-    assert.ok(refusal.issues.some(issue => issue.code === 'post_termination_activity'));
-    assert.ok(refusal.issues.some(issue => issue.detail.includes('2026-01-12') && issue.detail.includes('2026-01-22')));
-  } finally { await dropScratchOrg(org.orgId); }
-});
+test(
+  "empty weeks and nil or reversed hours cannot invent employment after termination; actual later work still refuses",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const person = await seedEmployee(
+        org,
+        "Former employee",
+        { hiredOn: "2024-01-01", terminatedOn: "2026-01-12" },
+        null,
+      );
+      await seedWork(org, person.partyId, "2026-01-09");
+      await seedApprovedWeek(org, person.partyId, "2026-01-18");
+      await seedWork(org, person.partyId, "2026-01-19", "0");
+      await seedWork(org, person.partyId, "2026-01-20", "8");
+      await seedWork(org, person.partyId, "2026-01-20", "-8");
+      await seedWork(org, person.partyId, "2026-01-21", "8", "draft");
+      const before = rowByParty((await collectLegacyEmployments(org.orgId)).rows, person.partyId);
+      assert.equal(before.observation?.status, "terminated");
+      assert.equal(before.observation?.observedAt, "2026-01-12T00:00:00Z");
+      assert.match(
+        before.observation!.provenance,
+        /time_entries:.*@2026-01-09.*employee_roles.terminated_on:2026-01-12/,
+      );
+      assert.equal(preflightEmploymentMigration([before]).rows[0]!.classification, "ready");
+      await seedWork(org, person.partyId, "2026-01-22", "1");
+      const after = rowByParty((await collectLegacyEmployments(org.orgId)).rows, person.partyId);
+      assert.equal(after.observation?.status, "unknown");
+      assert.equal(after.observation?.conflict?.activityDate, "2026-01-22");
+      const refusal = preflightEmploymentMigration([after]).rows[0]!;
+      assert.ok(refusal.issues.some((issue) => issue.code === "post_termination_activity"));
+      assert.ok(
+        refusal.issues.some(
+          (issue) => issue.detail.includes("2026-01-12") && issue.detail.includes("2026-01-22"),
+        ),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -40,15 +40,11 @@ const routeState: RouteState = {
   identity: null,
   deny(permission) {
     return permission
-      ? NextResponse.json(
-          { error: `missing permission: ${permission}` },
-          { status: 403 },
-        )
+      ? NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
       : NextResponse.json({ error: "unauthorized" }, { status: 401 });
   },
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.sftp-schedule-create-test')]
@@ -85,12 +81,10 @@ const hooks = registerHooks({
 
 const itemUrl = "./route.ts?sftp-schedule-create-test";
 const { POST, GET } = (await import(itemUrl)) as typeof import("./route.ts");
-const { db, withBypass, withOrgContext } =
-  await import("@openbooks/engine/platform/db");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/testing/fixtures");
 test.after(() => hooks.deregister());
-
 
 interface Fixture {
   orgId: string;
@@ -145,10 +139,7 @@ async function createServer(fixture: Fixture): Promise<string> {
 }
 
 /** Promote an account to exactly what the engine import path accepts. */
-async function makeReconcilable(
-  fixture: Fixture,
-  accountId: string,
-): Promise<void> {
+async function makeReconcilable(fixture: Fixture, accountId: string): Promise<void> {
   await withBypass(async () => {
     await db.execute(sql`
       update accounts set reconcilable = true, currency_restriction = 'CAD'
@@ -159,7 +150,8 @@ async function makeReconcilable(
 async function scheduleCount(fixture: Fixture): Promise<number> {
   return withBypass(async () => {
     const r = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from sftp_import_schedules where org_id = ${fixture.orgId}`, "objects",
+      sql`select count(*)::int as n from sftp_import_schedules where org_id = ${fixture.orgId}`,
+      "objects",
     );
     return Number(r[0]!.n);
   });
@@ -189,289 +181,280 @@ async function listSchedules(fixture: Fixture): Promise<unknown> {
   return res.json();
 }
 
-test(
-  "schedule POST refuses an unknown server id without side effect",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      await makeReconcilable(fixture, fixture.bankAccountId);
-      const outcome = await postStatus(fixture, {
-        sftpServerId: randomUUID(),
-        accountId: fixture.bankAccountId,
-        format: "ofx",
-      });
-      assert.equal(outcome.status, 404);
-      assert.deepEqual(outcome.body, { error: "not_found" }, "unknown servers share the tenant-safe not-found response");
-      assert.equal(await scheduleCount(fixture), 0);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule POST refuses an unknown server id without side effect", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    await makeReconcilable(fixture, fixture.bankAccountId);
+    const outcome = await postStatus(fixture, {
+      sftpServerId: randomUUID(),
+      accountId: fixture.bankAccountId,
+      format: "ofx",
+    });
+    assert.equal(outcome.status, 404);
+    assert.deepEqual(
+      outcome.body,
+      { error: "not_found" },
+      "unknown servers share the tenant-safe not-found response",
+    );
+    assert.equal(await scheduleCount(fixture), 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule POST refuses another organization's server as not found",
-  async () => {
-    const fixture = await seed();
-    const other = await seed();
-    try {
-      authorize(fixture);
-      await makeReconcilable(fixture, fixture.bankAccountId);
-      const foreignServerId = await createServer(other);
-      const foreign = await postStatus(fixture, {
-        sftpServerId: foreignServerId,
-        accountId: fixture.bankAccountId,
-        format: "ofx",
-      });
-      const missing = await postStatus(fixture, {
-        sftpServerId: randomUUID(),
-        accountId: fixture.bankAccountId,
-        format: "ofx",
-      });
-      assert.equal(foreign.status, 404);
-      // Tenant non-disclosure: a foreign id is indistinguishable from
-      // absent — a REALISTIC second row, so the message proves it names
-      // neither organization.
-      assert.deepEqual(foreign.body, missing.body);
-      assert.equal(await scheduleCount(fixture), 0);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-      await withBypass(() => dropScratchOrg(other.orgId));
-    }
-  },
-);
+test("schedule POST refuses another organization's server as not found", async () => {
+  const fixture = await seed();
+  const other = await seed();
+  try {
+    authorize(fixture);
+    await makeReconcilable(fixture, fixture.bankAccountId);
+    const foreignServerId = await createServer(other);
+    const foreign = await postStatus(fixture, {
+      sftpServerId: foreignServerId,
+      accountId: fixture.bankAccountId,
+      format: "ofx",
+    });
+    const missing = await postStatus(fixture, {
+      sftpServerId: randomUUID(),
+      accountId: fixture.bankAccountId,
+      format: "ofx",
+    });
+    assert.equal(foreign.status, 404);
+    // Tenant non-disclosure: a foreign id is indistinguishable from
+    // absent — a REALISTIC second row, so the message proves it names
+    // neither organization.
+    assert.deepEqual(foreign.body, missing.body);
+    assert.equal(await scheduleCount(fixture), 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+    await withBypass(() => dropScratchOrg(other.orgId));
+  }
+});
 
-test(
-  "schedule POST refuses an unknown account id without side effect",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture);
-      const outcome = await postStatus(fixture, {
-        sftpServerId: serverId,
-        accountId: randomUUID(),
-        format: "ofx",
-      });
-      assert.equal(outcome.status, 422);
-      assert.deepEqual(outcome.body, {
-        error: "Account not found or not reconcilable",
-      });
-      assert.equal(await scheduleCount(fixture), 0);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule POST refuses an unknown account id without side effect", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture);
+    const outcome = await postStatus(fixture, {
+      sftpServerId: serverId,
+      accountId: randomUUID(),
+      format: "ofx",
+    });
+    assert.equal(outcome.status, 422);
+    assert.deepEqual(outcome.body, {
+      error: "Account not found or not reconcilable",
+    });
+    assert.equal(await scheduleCount(fixture), 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule POST refuses another organization's account like an unknown one",
-  async () => {
-    const fixture = await seed();
-    const other = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture);
-      await makeReconcilable(other, other.bankAccountId);
-      const foreign = await postStatus(fixture, {
-        sftpServerId: serverId,
-        accountId: other.bankAccountId,
-        format: "ofx",
-      });
-      const missing = await postStatus(fixture, {
-        sftpServerId: serverId,
-        accountId: randomUUID(),
-        format: "ofx",
-      });
-      assert.equal(foreign.status, 422);
-      // Same engine message for missing, foreign, and ineligible — a
-      // REALISTIC second account proves the refusal discloses nothing.
-      assert.deepEqual(foreign.body, missing.body);
-      assert.equal(await scheduleCount(fixture), 0);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-      await withBypass(() => dropScratchOrg(other.orgId));
-    }
-  },
-);
+test("schedule POST refuses another organization's account like an unknown one", async () => {
+  const fixture = await seed();
+  const other = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture);
+    await makeReconcilable(other, other.bankAccountId);
+    const foreign = await postStatus(fixture, {
+      sftpServerId: serverId,
+      accountId: other.bankAccountId,
+      format: "ofx",
+    });
+    const missing = await postStatus(fixture, {
+      sftpServerId: serverId,
+      accountId: randomUUID(),
+      format: "ofx",
+    });
+    assert.equal(foreign.status, 422);
+    // Same engine message for missing, foreign, and ineligible — a
+    // REALISTIC second account proves the refusal discloses nothing.
+    assert.deepEqual(foreign.body, missing.body);
+    assert.equal(await scheduleCount(fixture), 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+    await withBypass(() => dropScratchOrg(other.orgId));
+  }
+});
 
-test(
-  "schedule POST refuses a same-org account that cannot back an import",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture);
-      // The scratch bank account is deliberately NOT reconcilable: it is a
-      // real account of this org, yet importStatement would refuse it, so
-      // the schedule must refuse it too — with the engine's own message.
-      const outcome = await postStatus(fixture, {
-        sftpServerId: serverId,
-        accountId: fixture.bankAccountId,
-        format: "ofx",
-      });
-      assert.equal(outcome.status, 422);
-      assert.deepEqual(outcome.body, {
-        error: "Account not found or not reconcilable",
-      });
-      assert.equal(await scheduleCount(fixture), 0);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule POST refuses a same-org account that cannot back an import", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture);
+    // The scratch bank account is deliberately NOT reconcilable: it is a
+    // real account of this org, yet importStatement would refuse it, so
+    // the schedule must refuse it too — with the engine's own message.
+    const outcome = await postStatus(fixture, {
+      sftpServerId: serverId,
+      accountId: fixture.bankAccountId,
+      format: "ofx",
+    });
+    assert.equal(outcome.status, 422);
+    assert.deepEqual(outcome.body, {
+      error: "Account not found or not reconcilable",
+    });
+    assert.equal(await scheduleCount(fixture), 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule POST saves a valid schedule that GET shows with both parents",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture);
-      await makeReconcilable(fixture, fixture.bankAccountId);
-      const outcome = await postStatus(fixture, {
-        sftpServerId: serverId,
-        accountId: fixture.bankAccountId,
-        format: "ofx",
-      });
-      assert.equal(outcome.status, 200);
-      const createdId = (outcome.body as { id?: unknown }).id;
-      assert.ok(isUuid(String(createdId)), "expected a real UUID schedule id");
-      const listing = (await listSchedules(fixture)) as {
-        schedules: Array<{
-          id: string;
-          sftp_server_id: string;
-          account_id: string;
-          server_name: string;
-          account_number: string;
-        }>;
-      };
-      const mine = listing.schedules.find((row) => row.id === createdId);
-      assert.ok(mine, "the saved schedule must be visible in GET");
-      assert.equal(mine.sftp_server_id, serverId);
-      assert.equal(mine.account_id, fixture.bankAccountId);
-      assert.ok(mine.server_name, "GET resolves the owning server name");
-      assert.ok(mine.account_number, "GET resolves the owning account number");
-      const audits = await withBypass(() => db.execute<{
+test("schedule POST saves a valid schedule that GET shows with both parents", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture);
+    await makeReconcilable(fixture, fixture.bankAccountId);
+    const outcome = await postStatus(fixture, {
+      sftpServerId: serverId,
+      accountId: fixture.bankAccountId,
+      format: "ofx",
+    });
+    assert.equal(outcome.status, 200);
+    const createdId = (outcome.body as { id?: unknown }).id;
+    assert.ok(isUuid(String(createdId)), "expected a real UUID schedule id");
+    const listing = (await listSchedules(fixture)) as {
+      schedules: Array<{
+        id: string;
+        sftp_server_id: string;
+        account_id: string;
+        server_name: string;
+        account_number: string;
+      }>;
+    };
+    const mine = listing.schedules.find((row) => row.id === createdId);
+    assert.ok(mine, "the saved schedule must be visible in GET");
+    assert.equal(mine.sftp_server_id, serverId);
+    assert.equal(mine.account_id, fixture.bankAccountId);
+    assert.ok(mine.server_name, "GET resolves the owning server name");
+    assert.ok(mine.account_number, "GET resolves the owning account number");
+    const audits = await withBypass(() =>
+      db.execute<{
         action: string;
         actor_id: string;
         request_id: string | null;
         changes: { after?: { account_id?: string; sftp_server_id?: string } };
-      }>(sql`
+      }>(
+        sql`
         select action, actor_id, request_id, changes from audit_log
          where org_id = ${fixture.orgId} and table_name = 'sftp_import_schedules' and row_id = ${String(createdId)}
-      `, "objects"));
-      assert.equal(audits.length, 1);
-      assert.equal(audits[0]!.action, "insert");
-      assert.equal(audits[0]!.actor_id, fixture.actorId);
-      assert.ok(audits[0]!.request_id, "the audit evidence must carry a request id");
-      assert.equal(audits[0]!.changes.after?.account_id, fixture.bankAccountId);
-      assert.equal(audits[0]!.changes.after?.sftp_server_id, serverId);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+      `,
+        "objects",
+      ),
+    );
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0]!.action, "insert");
+    assert.equal(audits[0]!.actor_id, fixture.actorId);
+    assert.ok(audits[0]!.request_id, "the audit evidence must carry a request id");
+    assert.equal(audits[0]!.changes.after?.account_id, fixture.bankAccountId);
+    assert.equal(audits[0]!.changes.after?.sftp_server_id, serverId);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule POST stores the expected account binding canonically and GET returns it",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture);
-      await makeReconcilable(fixture, fixture.bankAccountId);
-      const outcome = await postStatus(fixture, {
-        sftpServerId: serverId,
-        accountId: fixture.bankAccountId,
-        format: "ofx",
-        expectedExternalAccountId: "br 001-77",
-      });
-      assert.equal(outcome.status, 200);
-      const createdId = (outcome.body as { id?: unknown }).id;
-      const listing = (await listSchedules(fixture)) as {
-        schedules: Array<{ id: string; expected_external_account_id: string | null }>;
-      };
-      const mine = listing.schedules.find((row) => row.id === createdId);
-      assert.equal(mine?.expected_external_account_id, "BR001-77");
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule POST stores the expected account binding canonically and GET returns it", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture);
+    await makeReconcilable(fixture, fixture.bankAccountId);
+    const outcome = await postStatus(fixture, {
+      sftpServerId: serverId,
+      accountId: fixture.bankAccountId,
+      format: "ofx",
+      expectedExternalAccountId: "br 001-77",
+    });
+    assert.equal(outcome.status, 200);
+    const createdId = (outcome.body as { id?: unknown }).id;
+    const listing = (await listSchedules(fixture)) as {
+      schedules: Array<{ id: string; expected_external_account_id: string | null }>;
+    };
+    const mine = listing.schedules.find((row) => row.id === createdId);
+    assert.equal(mine?.expected_external_account_id, "BR001-77");
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule POST without a binding saves null instead of failing the insert",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture);
-      await makeReconcilable(fixture, fixture.bankAccountId);
-      // The binding is optional: an absent value must become SQL null, not
-      // an empty parameter that breaks the insert.
-      const outcome = await postStatus(fixture, {
-        sftpServerId: serverId,
-        accountId: fixture.bankAccountId,
-        format: "ofx",
-      });
-      assert.equal(outcome.status, 200);
-      const createdId = (outcome.body as { id?: unknown }).id;
-      const listing = (await listSchedules(fixture)) as {
-        schedules: Array<{ id: string; expected_external_account_id: string | null }>;
-      };
-      assert.equal(listing.schedules.find((row) => row.id === createdId)?.expected_external_account_id, null);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule POST without a binding saves null instead of failing the insert", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture);
+    await makeReconcilable(fixture, fixture.bankAccountId);
+    // The binding is optional: an absent value must become SQL null, not
+    // an empty parameter that breaks the insert.
+    const outcome = await postStatus(fixture, {
+      sftpServerId: serverId,
+      accountId: fixture.bankAccountId,
+      format: "ofx",
+    });
+    assert.equal(outcome.status, 200);
+    const createdId = (outcome.body as { id?: unknown }).id;
+    const listing = (await listSchedules(fixture)) as {
+      schedules: Array<{ id: string; expected_external_account_id: string | null }>;
+    };
+    assert.equal(
+      listing.schedules.find((row) => row.id === createdId)?.expected_external_account_id,
+      null,
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule POST still refuses malformed ids before any ownership check",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const outcome = await postStatus(fixture, {
-        sftpServerId: "not-a-uuid",
-        accountId: "not-a-uuid",
-        format: "ofx",
-      });
-      assert.equal(outcome.status, 400);
-      assert.deepEqual(outcome.body, {
-        error: "sftpServerId and accountId are required",
-      });
-      assert.equal(await scheduleCount(fixture), 0);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule POST still refuses malformed ids before any ownership check", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const outcome = await postStatus(fixture, {
+      sftpServerId: "not-a-uuid",
+      accountId: "not-a-uuid",
+      format: "ofx",
+    });
+    assert.equal(outcome.status, 400);
+    assert.deepEqual(outcome.body, {
+      error: "sftpServerId and accountId are required",
+    });
+    assert.equal(await scheduleCount(fixture), 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule POST refuses a malformed supplied external-account binding before saving",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture);
-      await makeReconcilable(fixture, fixture.bankAccountId);
-      const outcome = await postStatus(fixture, {
-        sftpServerId: serverId,
-        accountId: fixture.bankAccountId,
-        format: "ofx",
-        expectedExternalAccountId: {},
-      });
-      assert.equal(outcome.status, 400);
-      assert.deepEqual(outcome.body, {
+test("schedule POST refuses a malformed supplied external-account binding before saving", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture);
+    await makeReconcilable(fixture, fixture.bankAccountId);
+    const outcome = await postStatus(fixture, {
+      sftpServerId: serverId,
+      accountId: fixture.bankAccountId,
+      format: "ofx",
+      expectedExternalAccountId: {},
+    });
+    assert.equal(outcome.status, 400);
+    assert.deepEqual(
+      outcome.body,
+      {
         error: "expectedExternalAccountId must be a string or null",
-        issues: [{ path: "expectedExternalAccountId", message: "expectedExternalAccountId must be a string or null" }],
-      }, "the refusal identifies the malformed binding field");
-      assert.equal(await scheduleCount(fixture), 0);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+        issues: [
+          {
+            path: "expectedExternalAccountId",
+            message: "expectedExternalAccountId must be a string or null",
+          },
+        ],
+      },
+      "the refusal identifies the malformed binding field",
+    );
+    assert.equal(await scheduleCount(fixture), 0);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});

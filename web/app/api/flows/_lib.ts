@@ -1,24 +1,23 @@
-import { apiErrorResponse, typedRefusal } from '@/lib/api/error-response';
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { DecisionFailedError, GateError, getFlowAdapter } from '@openbooks/engine/flows/module'
+import { apiErrorResponse, typedRefusal } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { DecisionFailedError, GateError, getFlowAdapter } from "@openbooks/engine/flows/module";
 import {
   FlowSubjectScopeUnresolvedError,
   lockSubjectScope,
   resolveSubjectSubsidiaries,
-} from '@openbooks/engine/flows/subject-scope'
-import { getAuthz, type Authz } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
-import { canReadSubjectRecord } from '../../../lib/flow-subject-authz'
+} from "@openbooks/engine/flows/subject-scope";
+import { getAuthz, type Authz } from "../../../lib/authz";
+import { isFeatureEnabled } from "../../../lib/features";
+import { canReadSubjectRecord } from "../../../lib/flow-subject-authz";
 import { notFound } from "@/lib/api/responses";
 
 /** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */
 
 export async function requireFlowsSession(): Promise<Authz | NextResponse> {
   const authz = await getAuthz();
-  if (!authz)
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await isFeatureEnabled(authz.user.orgId, "flows"))) {
     return notFound("record");
   }
@@ -37,8 +36,7 @@ export async function requireFlowsRecordReader(): Promise<
   { authz: Authz; flowsEnabled: boolean } | NextResponse
 > {
   const authz = await getAuthz();
-  if (!authz)
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   return { authz, flowsEnabled: await isFeatureEnabled(authz.user.orgId, "flows") };
 }
 
@@ -51,9 +49,9 @@ export type GateHeader = {
   assignee_user_id: string | null;
   assignee_role: string | null;
   /** Legal entity owning the approval subject (null = unavailable/rootless). */
-  subsidiary_id: string | null
-  subject_kind: string
-  subject_id: string
+  subsidiary_id: string | null;
+  subject_kind: string;
+  subject_id: string;
 };
 
 /** Load a gate header scoped to the caller's org (null = not found for them). */
@@ -62,29 +60,32 @@ export async function loadGateHeader(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<GateHeader | null> {
-  const r = (await db.execute<Omit<GateHeader, 'subsidiary_id'>>(sql`
+  const r = await db.execute<Omit<GateHeader, "subsidiary_id">>(
+    sql`
     select g.id, g.org_id, g.status, g.assignee_user_id, g.assignee_role,
            g.subject_kind, g.subject_id
       from flow_gates g
      where g.id = ${gateId} and g.org_id = ${orgId}
-  `, 'objects'))
-  const gate = r[0]
-  if (!gate) return null
-  const scope = getFlowAdapter(gate.subject_kind)?.scope
-  if (!scope) throw new FlowSubjectScopeUnresolvedError(gate.subject_kind, gate.subject_id)
+  `,
+    "objects",
+  );
+  const gate = r[0];
+  if (!gate) return null;
+  const scope = getFlowAdapter(gate.subject_kind)?.scope;
+  if (!scope) throw new FlowSubjectScopeUnresolvedError(gate.subject_kind, gate.subject_id);
   const owners = await resolveSubjectSubsidiaries(
     orgId,
     gate.subject_kind,
     scope,
     [gate.subject_id],
     allowedSubsidiaryIds,
-  )
-  const subsidiaryId = owners.get(gate.subject_id) ?? null
+  );
+  const subsidiaryId = owners.get(gate.subject_id) ?? null;
   // A custom scope's visibility is richer than one owner row (an allocation
   // run's whole computation): a restricted caller it hides meets the same
   // answer as a missing gate.
-  if (scope.via === 'custom' && allowedSubsidiaryIds !== null && subsidiaryId === null) return null
-  return { ...gate, subsidiary_id: subsidiaryId }
+  if (scope.via === "custom" && allowedSubsidiaryIds !== null && subsidiaryId === null) return null;
+  return { ...gate, subsidiary_id: subsidiaryId };
 }
 
 /**
@@ -100,10 +101,16 @@ export async function loadFlowSubjectSubsidiary(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<string | null> {
-  const scope = getFlowAdapter(subjectKind)?.scope
-  if (!scope) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId)
-  const owners = await resolveSubjectSubsidiaries(orgId, subjectKind, scope, [subjectId], allowedSubsidiaryIds)
-  return owners.get(subjectId) ?? null
+  const scope = getFlowAdapter(subjectKind)?.scope;
+  if (!scope) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId);
+  const owners = await resolveSubjectSubsidiaries(
+    orgId,
+    subjectKind,
+    scope,
+    [subjectId],
+    allowedSubsidiaryIds,
+  );
+  return owners.get(subjectId) ?? null;
 }
 
 /** Lock the canonical scope owner for the complete record-level flow read.
@@ -115,9 +122,9 @@ export async function lockFlowSubjectScope(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<void> {
-  const scope = getFlowAdapter(subjectKind)?.scope
-  if (!scope) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId)
-  await lockSubjectScope(orgId, subjectKind, scope, subjectId, allowedSubsidiaryIds)
+  const scope = getFlowAdapter(subjectKind)?.scope;
+  if (!scope) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId);
+  await lockSubjectScope(orgId, subjectKind, scope, subjectId, allowedSubsidiaryIds);
 }
 
 /**
@@ -128,38 +135,44 @@ export async function lockFlowSubjectScope(
  * entity and fails closed. Unrestricted callers (null scope) keep every
  * subject. Returns the in-scope subset, preserving order.
  */
-export async function filterFlowRunSubjectsToScope<
-  T extends { kind: string; id: string },
->(
+export async function filterFlowRunSubjectsToScope<T extends { kind: string; id: string }>(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   subjects: readonly T[],
   authz?: Authz,
 ): Promise<T[]> {
-  const visibility=authz ? await Promise.all(subjects.map(subject=>canReadSubjectRecord(authz,subject.kind,subject.id))) : null;
-  const readableSubjects=visibility ? subjects.filter((_,index)=>visibility[index]) : [...subjects];
+  const visibility = authz
+    ? await Promise.all(
+        subjects.map((subject) => canReadSubjectRecord(authz, subject.kind, subject.id)),
+      )
+    : null;
+  const readableSubjects = visibility
+    ? subjects.filter((_, index) => visibility[index])
+    : [...subjects];
   if (allowedSubsidiaryIds === null) return readableSubjects;
   if (readableSubjects.length === 0) return [];
   const idsByKind = new Map<string, string[]>();
   for (const subject of readableSubjects) {
     idsByKind.set(subject.kind, [...(idsByKind.get(subject.kind) ?? []), subject.id]);
   }
-  const ownersByKind = new Map(await Promise.all([...idsByKind].map(async ([kind, ids]) => {
-    const scope = getFlowAdapter(kind)?.scope
-    const owners = scope
-      ? await resolveSubjectSubsidiaries(orgId, kind, scope, ids, allowedSubsidiaryIds)
-      : new Map<string, string | null>()
-    return [kind, owners] as const
-  })));
+  const ownersByKind = new Map(
+    await Promise.all(
+      [...idsByKind].map(async ([kind, ids]) => {
+        const scope = getFlowAdapter(kind)?.scope;
+        const owners = scope
+          ? await resolveSubjectSubsidiaries(orgId, kind, scope, ids, allowedSubsidiaryIds)
+          : new Map<string, string | null>();
+        return [kind, owners] as const;
+      }),
+    ),
+  );
   // Fail-closed scope predicate, mirroring subsidiaryScopeAllows: an
   // unresolved or missing subsidiary is never in scope for a restricted
   // caller.
   return readableSubjects.filter((subject) => {
     const subsidiaryId = ownersByKind.get(subject.kind)?.get(subject.id);
     return (
-      subsidiaryId !== null &&
-      subsidiaryId !== undefined &&
-      allowedSubsidiaryIds.has(subsidiaryId)
+      subsidiaryId !== null && subsidiaryId !== undefined && allowedSubsidiaryIds.has(subsidiaryId)
     );
   });
 }
@@ -184,7 +197,8 @@ export async function gateErrorResponse(e: unknown): Promise<NextResponse> {
   // non-retryable failure is a defect in the decide path, and only that
   // stays a 500. Every non-422 path logs.
   if (e instanceof DecisionFailedError) {
-    if(e.retryable && typedRefusal(e.cause))return apiErrorResponse(e.cause,{details:{decisionRecorded:false}});
+    if (e.retryable && typedRefusal(e.cause))
+      return apiErrorResponse(e.cause, { details: { decisionRecorded: false } });
     if (e.retryable && e.causeKind === "infrastructure") {
       console.error("[flows] approval decision hit infrastructure:", e);
       return NextResponse.json(
@@ -195,9 +209,7 @@ export async function gateErrorResponse(e: unknown): Promise<NextResponse> {
       );
     }
     if (e.retryable) {
-      const status = /already resolved|only a pending/.test(e.message)
-        ? 409
-        : 422;
+      const status = /already resolved|only a pending/.test(e.message) ? 409 : 422;
       if (status === 409) console.error("[flows] approval decision raced:", e);
       return NextResponse.json({ error: e.message }, { status });
     }

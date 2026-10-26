@@ -3,7 +3,9 @@ import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-payroll-employees-route-test");
-interface RouteState { input: unknown }
+interface RouteState {
+  input: unknown;
+}
 const routeState: RouteState = { input: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
@@ -27,7 +29,9 @@ stubModules({
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
 
 test("GET /api/v1/payroll/employees forwards q and limit", async () => {
-  const response = await GET(new Request("http://openbooks.test/api/v1/payroll/employees?q=Ada&limit=5"));
+  const response = await GET(
+    new Request("http://openbooks.test/api/v1/payroll/employees?q=Ada&limit=5"),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.input, { query: "Ada", limit: 5 });
 });

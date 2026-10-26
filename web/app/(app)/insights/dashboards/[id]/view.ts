@@ -1,14 +1,18 @@
-import 'server-only'
+import "server-only";
 
-import { insightVisibilitySql } from '@/lib/insight-access'
-import { notFound } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { insightSourceFilter, loadDashboardEmbed, visibleInsightSourceKeys } from '../../../../api/insights/_lib'
-import type { DashboardBuilder } from './DashboardBuilder'
+import { insightVisibilitySql } from "@/lib/insight-access";
+import { notFound } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../../lib/authz";
+import { isUuid } from "../../../../../lib/list-params";
+import {
+  insightSourceFilter,
+  loadDashboardEmbed,
+  visibleInsightSourceKeys,
+} from "../../../../api/insights/_lib";
+import type { DashboardBuilder } from "./DashboardBuilder";
 
 /**
  * The insights dashboard builder, split into a loader and a spec.
@@ -25,51 +29,57 @@ import type { DashboardBuilder } from './DashboardBuilder'
  * neither should be: they are the difference between a dashboard and a leak.
  */
 
-import type { VizType } from '@openbooks/analytics'
+import type { VizType } from "@openbooks/analytics";
 
-type BuilderProps = Parameters<typeof DashboardBuilder>[0]
+type BuilderProps = Parameters<typeof DashboardBuilder>[0];
 
 export interface InsightsDashboardData {
-  dashboard: BuilderProps['dashboard']
-  cards: BuilderProps['cards']
-  availableCards: BuilderProps['availableCards']
-  pinned: boolean
-  canCreate: boolean
-  canPublish: boolean
+  dashboard: BuilderProps["dashboard"];
+  cards: BuilderProps["cards"];
+  availableCards: BuilderProps["availableCards"];
+  pinned: boolean;
+  canCreate: boolean;
+  canPublish: boolean;
 }
 
 export async function loadInsightsDashboard(id: string): Promise<InsightsDashboardData> {
-  const authz = await requirePermission('insights.read')
-  const canCreate = can(authz, 'insights.create')
-  const canPublish = can(authz, 'insights.publish')
-  const orgId = authz.user.orgId
+  const authz = await requirePermission("insights.read");
+  const canCreate = can(authz, "insights.create");
+  const canPublish = can(authz, "insights.publish");
+  const orgId = authz.user.orgId;
 
-  if (!isUuid(id)) notFound()
+  if (!isUuid(id)) notFound();
 
   // Editors see draft cards on the board too (so a WIP card can be placed);
   // otherwise only published cards render.
-  const embed = await loadDashboardEmbed(id, orgId, { publishedOnly: !canCreate })
-  if (!embed) notFound()
+  const embed = await loadDashboardEmbed(id, orgId, { publishedOnly: !canCreate });
+  if (!embed) notFound();
 
   // Published cards available to drop onto the board.
-  const sourceFilter = insightSourceFilter(await visibleInsightSourceKeys(authz))
+  const sourceFilter = insightSourceFilter(await visibleInsightSourceKeys(authz));
   const available = await db.execute<{
-    id: string
-    name: string
-    description: string | null
-    viz_type: VizType
-  }>(sql`
+    id: string;
+    name: string;
+    description: string | null;
+    viz_type: VizType;
+  }>(
+    sql`
     select id, name, description, viz_type
       from insight_cards
      where org_id = ${orgId} and status = 'published' and ${insightVisibilitySql(authz)}
        and ${sourceFilter}
      order by name asc
-  `, 'objects')
+  `,
+    "objects",
+  );
 
-  const pinned = await db.execute(sql`
+  const pinned = await db.execute(
+    sql`
     select 1 from insight_dashboard_pins
      where org_id = ${orgId} and user_id = ${authz.user.id} and dashboard_id = ${id}
-  `, 'objects')
+  `,
+    "objects",
+  );
 
   return {
     dashboard: {
@@ -85,18 +95,18 @@ export async function loadInsightsDashboard(id: string): Promise<InsightsDashboa
     pinned: pinned.length > 0,
     canCreate,
     canPublish,
-  }
+  };
 }
 
 export function insightsDashboardSpec(data: InsightsDashboardData): PageSpec {
   return page({
-    route: '/insights/dashboards/[id]',
+    route: "/insights/dashboards/[id]",
     // The builder owns its own full-height shell; a page layout would nest a
     // second one around it.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      widgetBlock('insights-dashboard-builder', {
+      widgetBlock("insights-dashboard-builder", {
         dashboard: data.dashboard,
         cards: data.cards,
         availableCards: data.availableCards,
@@ -105,5 +115,5 @@ export function insightsDashboardSpec(data: InsightsDashboardData): PageSpec {
         canPublish: data.canPublish,
       }),
     ],
-  })
+  });
 }

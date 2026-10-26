@@ -70,7 +70,8 @@ async function readCommittedInventoryKeyRow(
   operation: string,
   idempotencyKey: string,
 ): Promise<StoredInventoryKeyRow | null> {
-  const r = (await db.execute<StoredInventoryKeyRow>(sql`
+  const r = await db.execute<StoredInventoryKeyRow>(
+    sql`
     select request_hash as "requestHash", response, completed_at as "completedAt"
       from application_idempotency_keys
      where org_id = ${orgId}
@@ -78,7 +79,9 @@ async function readCommittedInventoryKeyRow(
        and source = ${INVENTORY_ACTION_SOURCE}
        and operation = ${operation}
        and idempotency_key = ${idempotencyKey}
-     limit 1`, "objects"));
+     limit 1`,
+    "objects",
+  );
   return r[0] ?? null;
 }
 
@@ -88,13 +91,16 @@ async function inventoryClaimLockHeld(
   operation: string,
   idempotencyKey: string,
 ): Promise<boolean> {
-  const r = (await db.execute<{ held: boolean }>(sql`
+  const r = await db.execute<{ held: boolean }>(
+    sql`
     select exists (
       select 1 from pg_locks
        where locktype = 'advisory'
          and classid = hashtext(${orgId})::integer
          and objid = hashtext(${`${INVENTORY_ACTION_SOURCE}|${operation}|${idempotencyKey}`})::integer
-    ) as held`, "objects"));
+    ) as held`,
+    "objects",
+  );
   return !!r[0]?.held;
 }
 
@@ -154,14 +160,18 @@ export async function executeIdempotentInventoryAction<T>(
   // replay evidence.
   const claimAndExecute = (): Promise<{ replayed: boolean; value: T } | undefined> =>
     withOrgTransaction(orgId, async () => {
-      const gate = (await db.execute<{ acquired: boolean }>(sql`
+      const gate = await db.execute<{ acquired: boolean }>(
+        sql`
         select pg_try_advisory_xact_lock(
                  hashtext(${orgId}),
                  hashtext(${`${INVENTORY_ACTION_SOURCE}|${operation}|${idempotencyKey}`})
-               ) as acquired`, "objects"));
+               ) as acquired`,
+        "objects",
+      );
       if (!gate[0]?.acquired) return undefined;
 
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into application_idempotency_keys
           (org_id, actor_id, source, operation, idempotency_key, request_hash, expires_at)
         values
@@ -170,7 +180,9 @@ export async function executeIdempotentInventoryAction<T>(
         -- A retained idempotency claim belongs to another attempt; the caller resolves that outcome.
         on conflict (org_id, actor_id, source, operation, idempotency_key)
         do nothing
-        returning id`, "objects"));
+        returning id`,
+        "objects",
+      );
       if (inserted.length === 0) return undefined;
 
       const value = await action.execute();
@@ -218,16 +230,16 @@ export async function executeIdempotentInventoryAction<T>(
     await sleep(Math.min(delay, Math.max(1, deadline - Date.now())) * (0.5 + Math.random()));
     delay = Math.min(delay * 2, RIVAL_POLL_MAX_MS);
   }
-  throw new InventoryIdempotencyConflictError(
-    "an identical inventory action is still in progress",
-  );
+  throw new InventoryIdempotencyConflictError("an identical inventory action is still in progress");
 }
 
 export function normalizeMovementIdempotencyKey(value: string | null | undefined): string | null {
   if (value == null) return null;
   const normalized = value.trim();
   if (normalized.length < 1 || normalized.length > 500) {
-    throw new InventoryError("inventory movement idempotency key must be between 1 and 500 characters");
+    throw new InventoryError(
+      "inventory movement idempotency key must be between 1 and 500 characters",
+    );
   }
   return normalized;
 }

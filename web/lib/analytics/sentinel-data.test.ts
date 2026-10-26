@@ -57,7 +57,11 @@ test("Benford's Law (Nigrini 2012) digit Z never divides by nothing", () => {
 test("flow amount limits collect numeric total conditions per subject kind", () => {
   const graph = {
     nodes: [
-      { id: "t", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_create" } } },
+      {
+        id: "t",
+        position: { x: 0, y: 0 },
+        data: { kind: "trigger", trigger: { trigger: "on_create" } },
+      },
       {
         id: "c",
         position: { x: 0, y: 1 },
@@ -106,7 +110,10 @@ test("flow amount limits ignore non-limits and dedupe repeats", () => {
       {
         id: "n",
         position: { x: 0, y: 1 },
-        data: { kind: "condition", rule: { op: "not", rule: { op: "lt", field: "total", value: "250.50" } } },
+        data: {
+          kind: "condition",
+          rule: { op: "not", rule: { op: "lt", field: "total", value: "250.50" } },
+        },
       },
     ],
     edges: [],

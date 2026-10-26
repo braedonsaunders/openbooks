@@ -7,7 +7,13 @@ import { DOC_KIND_FEATURE } from "../../records/document-kind-features.ts";
 import { requireAggregateBenefitsRead } from "../authorization.ts";
 import { isUuid } from "../../platform/uuid.ts";
 import { BenefitsError } from "./errors.ts";
-import { assertHrmEnabled, db, requireActorId, requireOrgId, withOrgTransaction } from "./shared.ts";
+import {
+  assertHrmEnabled,
+  db,
+  requireActorId,
+  requireOrgId,
+  withOrgTransaction,
+} from "./shared.ts";
 
 /** Explicit native sources, independent of vendor item categories or company titles. */
 export interface TransactionIncentiveSourceQuery {
@@ -42,7 +48,12 @@ export interface TransactionIncentiveSourceSnapshot {
   readonly legalEntityId: string;
   readonly currency: string;
   readonly selectedItemIds: readonly string[];
-  readonly grouping: { readonly id: string; readonly key: string; readonly sourceKind: string; readonly storageColumn: string | null } | null;
+  readonly grouping: {
+    readonly id: string;
+    readonly key: string;
+    readonly sourceKind: string;
+    readonly storageColumn: string | null;
+  } | null;
   readonly lines: readonly TransactionIncentiveSourceLine[];
   readonly digest: string;
 }
@@ -56,17 +67,27 @@ const GROUP_COLUMNS: Readonly<Record<string, SQL>> = {
 };
 
 function nativeId(value: unknown, label: string): string {
-  if (!isUuid(value)) throw new BenefitsError("INVALID_INPUT", `${label} must be a native record UUID — reload the selection and retry`);
+  if (!isUuid(value))
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      `${label} must be a native record UUID — reload the selection and retry`,
+    );
   return value.toLowerCase();
 }
 
 function checkedIds(ids: readonly string[], label: string): string[] {
   if (!Array.isArray(ids) || ids.length === 0) {
-    throw new BenefitsError("INVALID_INPUT", `${label} is empty — select explicit native records before measuring an incentive`);
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      `${label} is empty — select explicit native records before measuring an incentive`,
+    );
   }
   const checked = ids.map((id) => nativeId(id, label));
   if (new Set(checked).size !== checked.length) {
-    throw new BenefitsError("INVALID_INPUT", `${label} includes a duplicate — select each source record once`);
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      `${label} includes a duplicate — select each source record once`,
+    );
   }
   return [...checked].sort();
 }
@@ -86,55 +107,127 @@ function checkedIds(ids: readonly string[], label: string): string[] {
 export async function measureTransactionIncentiveSources(
   query: TransactionIncentiveSourceQuery,
 ): Promise<TransactionIncentiveSourceSnapshot> {
-  const orgId = requireOrgId(query.orgId), actorId = requireActorId(query.actorId);
+  const orgId = requireOrgId(query.orgId),
+    actorId = requireActorId(query.actorId);
   const legalEntityId = nativeId(query.legalEntityId, "legalEntityId");
-  const itemIds = checkedIds(query.itemIds, "itemIds"), lineIds = checkedIds(query.lineIds, "lineIds");
-  if (!/^[A-Z]{3}$/.test(query.currency)) throw new BenefitsError("INVALID_INPUT", "select the program's ISO currency before measuring transactions");
+  const itemIds = checkedIds(query.itemIds, "itemIds"),
+    lineIds = checkedIds(query.lineIds, "lineIds");
+  if (!/^[A-Z]{3}$/.test(query.currency))
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "select the program's ISO currency before measuring transactions",
+    );
   const permittedKinds = new Set(["sales_order", "customer_invoice", "field_ticket", "quote"]);
-  if (!permittedKinds.has(query.documentKind)) throw new BenefitsError("INVALID_INPUT", "select a supported native commercial document kind before measuring transactions");
+  if (!permittedKinds.has(query.documentKind))
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "select a supported native commercial document kind before measuring transactions",
+    );
   const permission = documentKindPermissions(query.documentKind)?.read;
-  if (!permission) throw new BenefitsError("REFUSED", "the source document kind has no native read contract — select a supported source");
+  if (!permission)
+    throw new BenefitsError(
+      "REFUSED",
+      "the source document kind has no native read contract — select a supported source",
+    );
   return withOrgTransaction(orgId, async () => {
     const scope = await requireAggregateBenefitsRead(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     if (!(await actorHasPermission(db, orgId, actorId, permission))) {
-      throw new BenefitsError("REFUSED", `reading this incentive's transaction evidence requires ${permission} — ask an administrator to grant source access in Roles`);
+      throw new BenefitsError(
+        "REFUSED",
+        `reading this incentive's transaction evidence requires ${permission} — ask an administrator to grant source access in Roles`,
+      );
     }
-    if (scope !== null && !scope.has(legalEntityId)) throw new BenefitsError("NOT_FOUND", "transaction sources are not visible in this organization and legal-entity scope");
-    const entity = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and id = ${legalEntityId} for share`, "objects"))[0];
-    if (!entity) throw new BenefitsError("NOT_FOUND", "transaction sources are not visible in this organization and legal-entity scope");
+    if (scope !== null && !scope.has(legalEntityId))
+      throw new BenefitsError(
+        "NOT_FOUND",
+        "transaction sources are not visible in this organization and legal-entity scope",
+      );
+    const entity = (
+      await db.execute<{ id: string }>(
+        sql`select id from subsidiaries where org_id = ${orgId} and id = ${legalEntityId} for share`,
+        "objects",
+      )
+    )[0];
+    if (!entity)
+      throw new BenefitsError(
+        "NOT_FOUND",
+        "transaction sources are not visible in this organization and legal-entity scope",
+      );
     const sourceFeature = DOC_KIND_FEATURE[query.documentKind];
     if (sourceFeature && !(await lockAndCheckOrgFeature(db, orgId, sourceFeature))) {
-      throw new BenefitsError("REFUSED", `${sourceFeature} is off — enable the source capability in Company Settings → Features before measuring transactions`);
+      throw new BenefitsError(
+        "REFUSED",
+        `${sourceFeature} is off — enable the source capability in Company Settings → Features before measuring transactions`,
+      );
     }
-    const knownItems = await db.execute<{ id: string }>(sql`
+    const knownItems = await db.execute<{ id: string }>(
+      sql`
       select id from items where org_id = ${orgId} and id = any(${`{${itemIds.join(",")}}`}::uuid[]) order by id for share
-    `, "objects");
-    if (knownItems.length !== itemIds.length) throw new BenefitsError("NOT_FOUND", "one or more selected items are not available in this organization — reselect the program items");
+    `,
+      "objects",
+    );
+    if (knownItems.length !== itemIds.length)
+      throw new BenefitsError(
+        "NOT_FOUND",
+        "one or more selected items are not available in this organization — reselect the program items",
+      );
 
     let grouping: TransactionIncentiveSourceSnapshot["grouping"] = null;
     let groupExpression = sql`${legalEntityId}::text`;
     if (query.groupingSegmentId !== null) {
       const segmentId = nativeId(query.groupingSegmentId, "groupingSegmentId");
-      const segment = (await db.execute<{ id: string; key: string; source_kind: string; storage_column: string | null; feature_key: string | null }>(sql`
+      const segment = (
+        await db.execute<{
+          id: string;
+          key: string;
+          source_kind: string;
+          storage_column: string | null;
+          feature_key: string | null;
+        }>(
+          sql`
         select id, key, source_kind, storage_column, feature_key from segment_definitions
          where org_id = ${orgId} and id = ${segmentId} for share
-      `, "objects"))[0];
-      if (!segment) throw new BenefitsError("NOT_FOUND", "the grouping dimension is not available in this organization — reselect the native dimension");
+      `,
+          "objects",
+        )
+      )[0];
+      if (!segment)
+        throw new BenefitsError(
+          "NOT_FOUND",
+          "the grouping dimension is not available in this organization — reselect the native dimension",
+        );
       const feature = segment.storage_column === "project_id" ? "projects" : segment.feature_key;
       if (feature && !(await lockAndCheckOrgFeature(db, orgId, feature))) {
-        throw new BenefitsError("REFUSED", `${feature} is off — enable the grouping capability in Company Settings → Features; recorded dimensions are preserved`);
+        throw new BenefitsError(
+          "REFUSED",
+          `${feature} is off — enable the grouping capability in Company Settings → Features; recorded dimensions are preserved`,
+        );
       }
       if (segment.source_kind === "custom" && segment.storage_column === null) {
         // JSON concatenation respects an explicit null line override; coalesce
         // would resurrect the header value and charge the wrong group.
         groupExpression = sql`(d.extra_dims || l.extra_dims)->>${segment.key}`;
-      } else if (segment.source_kind === "builtin" && segment.storage_column && GROUP_COLUMNS[segment.storage_column]) {
+      } else if (
+        segment.source_kind === "builtin" &&
+        segment.storage_column &&
+        GROUP_COLUMNS[segment.storage_column]
+      ) {
         groupExpression = GROUP_COLUMNS[segment.storage_column]!;
-      } else throw new BenefitsError("REFUSED", "the selected dimension has no supported native storage mapping — correct its definition before measuring");
-      grouping = { id: segment.id, key: segment.key, sourceKind: segment.source_kind, storageColumn: segment.storage_column };
+      } else
+        throw new BenefitsError(
+          "REFUSED",
+          "the selected dimension has no supported native storage mapping — correct its definition before measuring",
+        );
+      grouping = {
+        id: segment.id,
+        key: segment.key,
+        sourceKind: segment.source_kind,
+        storageColumn: segment.storage_column,
+      };
     }
-    const rows = await db.execute<TransactionIncentiveSourceLine & Record<string, unknown>>(sql`
+    const rows = await db.execute<TransactionIncentiveSourceLine & Record<string, unknown>>(
+      sql`
       select l.id::text as "sourceId", d.id::text as "documentId", d.document_number as "documentNumber",
              d.revision_seq::text as "documentRevision", d.document_date::text as "documentDate", d.status,
              l.item_id::text as "itemId", l.amount::text as amount, l.quantity::text as quantity,
@@ -143,27 +236,68 @@ export async function measureTransactionIncentiveSources(
        where d.org_id = ${orgId} and d.subsidiary_id = ${legalEntityId} and d.kind = ${query.documentKind}
          and l.id = any(${`{${lineIds.join(",")}}`}::uuid[])
        order by d.id, l.id for share of d, l
-    `, "objects");
-    if (rows.length !== lineIds.length) throw new BenefitsError("NOT_FOUND", "one or more transaction lines are missing or outside the selected organization, legal entity or document kind — reselect the source set");
+    `,
+      "objects",
+    );
+    if (rows.length !== lineIds.length)
+      throw new BenefitsError(
+        "NOT_FOUND",
+        "one or more transaction lines are missing or outside the selected organization, legal entity or document kind — reselect the source set",
+      );
     const requiredStatus = query.documentKind === "customer_invoice" ? "posted" : "approved";
     for (const row of rows) {
-      if (row.status !== requiredStatus) throw new BenefitsError("REFUSED", `document ${row.documentNumber} is ${row.status} — select ${requiredStatus} sources; drafts, pending approvals and voided history never create fresh incentives`);
-      if (!itemIds.includes(row.itemId)) throw new BenefitsError("REFUSED", `document ${row.documentNumber} includes a line outside the program's selected items — reconcile source selection before valuation`);
-      if (row.currency !== query.currency) throw new BenefitsError("REFUSED", `document ${row.documentNumber} uses ${row.currency}, not ${query.currency} — select a program in that currency; transaction incentives never invent an exchange rate`);
-      if (!isUuid(row.groupId)) throw new BenefitsError("REFUSED", `document ${row.documentNumber} line ${row.sourceId} has no valid ${grouping?.key ?? "company"} assignment — record the required dimension on the source before approving it, or select the appropriate reviewed source`);
+      if (row.status !== requiredStatus)
+        throw new BenefitsError(
+          "REFUSED",
+          `document ${row.documentNumber} is ${row.status} — select ${requiredStatus} sources; drafts, pending approvals and voided history never create fresh incentives`,
+        );
+      if (!itemIds.includes(row.itemId))
+        throw new BenefitsError(
+          "REFUSED",
+          `document ${row.documentNumber} includes a line outside the program's selected items — reconcile source selection before valuation`,
+        );
+      if (row.currency !== query.currency)
+        throw new BenefitsError(
+          "REFUSED",
+          `document ${row.documentNumber} uses ${row.currency}, not ${query.currency} — select a program in that currency; transaction incentives never invent an exchange rate`,
+        );
+      if (!isUuid(row.groupId))
+        throw new BenefitsError(
+          "REFUSED",
+          `document ${row.documentNumber} line ${row.sourceId} has no valid ${grouping?.key ?? "company"} assignment — record the required dimension on the source before approving it, or select the appropriate reviewed source`,
+        );
     }
     if (grouping?.sourceKind === "custom") {
       const groupIds = [...new Set(rows.map((row) => row.groupId))];
-      const values = await db.execute<{ id: string }>(sql`
+      const values = await db.execute<{ id: string }>(
+        sql`
         select id from segment_values where org_id = ${orgId} and segment_id = ${grouping.id}
           and id = any(${`{${groupIds.join(",")}}`}::uuid[]) order by id for share
-      `, "objects");
+      `,
+        "objects",
+      );
       // Inactive historical values still identify their recorded group. The
       // active editor registry is not a reason to erase old transaction facts.
-      if (values.length !== groupIds.length) throw new BenefitsError("REFUSED", "a recorded grouping value belongs to another dimension or organization — reconcile the original source assignment before settlement");
+      if (values.length !== groupIds.length)
+        throw new BenefitsError(
+          "REFUSED",
+          "a recorded grouping value belongs to another dimension or organization — reconcile the original source assignment before settlement",
+        );
     }
-    const lines = [...rows].sort((a, b) => a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0);
-    const snapshot = { documentKind: query.documentKind, legalEntityId, currency: query.currency, selectedItemIds: itemIds, grouping, lines };
-    return { ...snapshot, digest: createHash("sha256").update(JSON.stringify(snapshot)).digest("hex") };
+    const lines = [...rows].sort((a, b) =>
+      a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0,
+    );
+    const snapshot = {
+      documentKind: query.documentKind,
+      legalEntityId,
+      currency: query.currency,
+      selectedItemIds: itemIds,
+      grouping,
+      lines,
+    };
+    return {
+      ...snapshot,
+      digest: createHash("sha256").update(JSON.stringify(snapshot)).digest("hex"),
+    };
   });
 }

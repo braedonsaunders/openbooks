@@ -38,7 +38,12 @@ export class DemandPlanningError extends InventoryError {
 
 export class DemandPlanningNotFoundError extends DemandPlanningError {
   constructor() {
-    super("this planning record does not exist in this organization", "subsidiary_not_found", "choose a planning record listed in Inventory planning", 404);
+    super(
+      "this planning record does not exist in this organization",
+      "subsidiary_not_found",
+      "choose a planning record listed in Inventory planning",
+      404,
+    );
   }
 }
 
@@ -69,15 +74,30 @@ export async function assertDemandPlanningFeature(runner: Runner, orgId: string)
 /** Shared audit writer for the planning layers above this module. */
 export async function auditPlanningChange(
   tx: SqlExecutor,
-  args: { orgId: string; actorId: string; table: string; rowId: string; action: "insert" | "update"; before: unknown; after: unknown },
+  args: {
+    orgId: string;
+    actorId: string;
+    table: string;
+    rowId: string;
+    action: "insert" | "update";
+    before: unknown;
+    after: unknown;
+  },
 ): Promise<void> {
-  const inserted = await tx.execute<{ id: string }>(sql`
+  const inserted = await tx.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${args.orgId}, ${args.table}, ${args.rowId}, ${args.action},
       ${JSON.stringify({ before: args.before, after: args.after })}::jsonb, ${args.actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (inserted.length !== 1) {
-    refuse("The planning change was not recorded in the audit history.", "planning_write_failed", "retry the change");
+    refuse(
+      "The planning change was not recorded in the audit history.",
+      "planning_write_failed",
+      "retry the change",
+    );
   }
 }
 
@@ -178,50 +198,89 @@ export async function listDemandPolicies(
   orgId: string,
 ): Promise<Map<string, DemandItemPolicy>> {
   await assertDemandPlanningFeature(tx as Runner, orgId);
-  const rows = await tx.execute<PolicyRow>(sql`
+  const rows = await tx.execute<PolicyRow>(
+    sql`
     select item_id, lead_time_days, review_cycle_days, service_level::text,
            moq_qty::text, case_pack_qty::text, preferred_supplier_id::text,
            forecast_method, history_weeks
-      from demand_item_policies where org_id = ${orgId}`, "objects");
+      from demand_item_policies where org_id = ${orgId}`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.item_id, toPolicy(row)]));
 }
 
 function checkPolicyInput(input: DemandItemPolicy): void {
   const fail = (message: string, remedy: string): never =>
     refuse(message, "invalid_planning_input", remedy, 400);
-  if (input.leadTimeDays !== null && (!Number.isInteger(input.leadTimeDays) || input.leadTimeDays < 0)) {
-    fail("Lead time must be a whole number of days, zero or more.", "enter a lead time of 0 days or more");
+  if (
+    input.leadTimeDays !== null &&
+    (!Number.isInteger(input.leadTimeDays) || input.leadTimeDays < 0)
+  ) {
+    fail(
+      "Lead time must be a whole number of days, zero or more.",
+      "enter a lead time of 0 days or more",
+    );
   }
-  if (input.reviewCycleDays !== null && (!Number.isInteger(input.reviewCycleDays) || input.reviewCycleDays < 0)) {
-    fail("Review cycle must be a whole number of days, zero or more.", "enter a review cycle of 0 days or more");
+  if (
+    input.reviewCycleDays !== null &&
+    (!Number.isInteger(input.reviewCycleDays) || input.reviewCycleDays < 0)
+  ) {
+    fail(
+      "Review cycle must be a whole number of days, zero or more.",
+      "enter a review cycle of 0 days or more",
+    );
   }
   if (input.serviceLevel !== null) {
     try {
       const level = normalizeDecimal(input.serviceLevel, 4);
       if (cmp(level, "0.5") < 0 || cmp(level, "0.9999") > 0) {
-        fail(`Service level ${input.serviceLevel} is outside 50% to 99.99%.`, "choose a service level from 50% to 99.99%");
+        fail(
+          `Service level ${input.serviceLevel} is outside 50% to 99.99%.`,
+          "choose a service level from 50% to 99.99%",
+        );
       }
     } catch {
-      fail(`Service level ${input.serviceLevel} is not a decimal.`, "enter the service level as a decimal, for example 0.95");
+      fail(
+        `Service level ${input.serviceLevel} is not a decimal.`,
+        "enter the service level as a decimal, for example 0.95",
+      );
     }
   }
-  for (const [label, value] of [["MOQ", input.moqQty], ["case pack", input.casePackQty]] as const) {
+  for (const [label, value] of [
+    ["MOQ", input.moqQty],
+    ["case pack", input.casePackQty],
+  ] as const) {
     if (value !== null) {
       try {
         const quantity = normalizeDecimal(value, 4);
-        if (cmp(quantity, ZERO_QTY) < 0 || (label === "case pack" && cmp(quantity, ZERO_QTY) === 0)) {
-          fail(`${label} must be ${label === "case pack" ? "positive" : "zero or more"}.`, `enter a ${label === "case pack" ? "positive" : "non-negative"} ${label}`);
+        if (
+          cmp(quantity, ZERO_QTY) < 0 ||
+          (label === "case pack" && cmp(quantity, ZERO_QTY) === 0)
+        ) {
+          fail(
+            `${label} must be ${label === "case pack" ? "positive" : "zero or more"}.`,
+            `enter a ${label === "case pack" ? "positive" : "non-negative"} ${label}`,
+          );
         }
       } catch {
         fail(`${label} ${value} is not a quantity.`, `enter the ${label} as a decimal quantity`);
       }
     }
   }
-  if (input.historyWeeks !== null && (!Number.isInteger(input.historyWeeks) || input.historyWeeks < 4 || input.historyWeeks > 156)) {
+  if (
+    input.historyWeeks !== null &&
+    (!Number.isInteger(input.historyWeeks) || input.historyWeeks < 4 || input.historyWeeks > 156)
+  ) {
     fail("History must cover 4 to 156 weeks.", "choose a history window from 4 to 156 weeks");
   }
-  if (input.forecastMethod !== null && !["auto", "seasonal", "intermittent", "average"].includes(input.forecastMethod)) {
-    fail(`Forecast method ${input.forecastMethod} is not a planning method.`, "choose auto, seasonal, intermittent or average");
+  if (
+    input.forecastMethod !== null &&
+    !["auto", "seasonal", "intermittent", "average"].includes(input.forecastMethod)
+  ) {
+    fail(
+      `Forecast method ${input.forecastMethod} is not a planning method.`,
+      "choose auto, seasonal, intermittent or average",
+    );
   }
 }
 
@@ -239,21 +298,44 @@ export async function saveDemandPolicy(
   checkPolicyInput(input);
   const stocked = await stockedItems(tx as Runner, orgId, [input.itemId]);
   if (!stocked.has(input.itemId)) {
-    refuse("This item carries no stock: it has no inventory costing profile.", "item_not_stocked", "add an inventory costing profile to the item first", 422);
+    refuse(
+      "This item carries no stock: it has no inventory costing profile.",
+      "item_not_stocked",
+      "add an inventory costing profile to the item first",
+      422,
+    );
   }
   if (input.preferredSupplierId) {
-    const supplier = (await tx.execute<{ id: string }>(sql`
-      select id from parties where org_id = ${orgId} and id = ${input.preferredSupplierId}`, "objects"))[0];
+    const supplier = (
+      await tx.execute<{ id: string }>(
+        sql`
+      select id from parties where org_id = ${orgId} and id = ${input.preferredSupplierId}`,
+        "objects",
+      )
+    )[0];
     if (!supplier) {
-      refuse("The preferred supplier is not a party of this organization.", "invalid_planning_input", "choose a supplier from this organization's parties", 422);
+      refuse(
+        "The preferred supplier is not a party of this organization.",
+        "invalid_planning_input",
+        "choose a supplier from this organization's parties",
+        422,
+      );
     }
   }
-  const before = (await tx.execute<PolicyRow>(sql`
+  const before =
+    (
+      await tx.execute<PolicyRow>(
+        sql`
     select item_id, lead_time_days, review_cycle_days, service_level::text,
            moq_qty::text, case_pack_qty::text, preferred_supplier_id::text,
            forecast_method, history_weeks
-      from demand_item_policies where org_id = ${orgId} and item_id = ${input.itemId}`, "objects"))[0] ?? null;
-  const saved = (await tx.execute<PolicyRow>(sql`
+      from demand_item_policies where org_id = ${orgId} and item_id = ${input.itemId}`,
+        "objects",
+      )
+    )[0] ?? null;
+  const saved = (
+    await tx.execute<PolicyRow>(
+      sql`
     insert into demand_item_policies
       (org_id, item_id, lead_time_days, review_cycle_days, service_level, moq_qty,
        case_pack_qty, preferred_supplier_id, forecast_method, history_weeks, created_by, updated_by)
@@ -268,10 +350,18 @@ export async function saveDemandPolicy(
       updated_at = now(), updated_by = ${actorId}
     returning item_id, lead_time_days, review_cycle_days, service_level::text,
       moq_qty::text, case_pack_qty::text, preferred_supplier_id::text,
-      forecast_method, history_weeks`, "objects"))[0];
+      forecast_method, history_weeks`,
+      "objects",
+    )
+  )[0];
   // The upsert targets one item row, so anything but one saved row is a lost
   // write, never a merge into another item's policy.
-  if (!saved) refuse("The planning policy was not saved.", "planning_write_failed", "retry saving the policy");
+  if (!saved)
+    refuse(
+      "The planning policy was not saved.",
+      "planning_write_failed",
+      "retry saving the policy",
+    );
   await auditPlanningChange(tx, {
     orgId,
     actorId,

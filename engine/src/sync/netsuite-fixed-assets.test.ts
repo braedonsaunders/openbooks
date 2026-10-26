@@ -13,12 +13,20 @@ import {
 } from "./netsuite-fixed-assets.ts";
 
 test("unassigned journal-link metadata is preserved separately from financial asset history", () => {
-  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistjournal: "348279", custrecord_deprhistamount: null }),false);
-  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistamount: "0.0000" }),true);
-  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistamount: "1.00" }),true);
-  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistbookvalue: "12.00" }),true);
+  assert.equal(
+    netSuiteFamHistoryHasFinancialFacts({
+      custrecord_deprhistjournal: "348279",
+      custrecord_deprhistamount: null,
+    }),
+    false,
+  );
+  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistamount: "0.0000" }), true);
+  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistamount: "1.00" }), true);
+  assert.equal(
+    netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistbookvalue: "12.00" }),
+    true,
+  );
 });
-
 
 test("NetSuite FAM dates remain date-only", () => {
   assert.equal(netSuiteFamDate("11/14/2021"), "2021-11-14");
@@ -44,7 +52,10 @@ test("NetSuite FAM state reconciles current cost to exact book value", () => {
     { cost: state.cost, accumulated: state.accumulated, bookValue: state.bookValue },
     { cost: "20316.1500", accumulated: "838.7700", bookValue: "19477.3800" },
   );
-  assert.equal(mergeNetSuiteFamTaxAttributes({ ca_cca_class: "8" }, { nsId: "type-1" }).ca_cca_class, "8");
+  assert.equal(
+    mergeNetSuiteFamTaxAttributes({ ca_cca_class: "8" }, { nsId: "type-1" }).ca_cca_class,
+    "8",
+  );
 });
 const acquisitionRow = (overrides: Record<string, unknown> = {}) => ({
   id: "history-1",
@@ -54,7 +65,9 @@ const acquisitionRow = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const admittedEvent = (overrides: Partial<NetSuiteFamExistingAcquisition> = {}): NetSuiteFamExistingAcquisition => ({
+const admittedEvent = (
+  overrides: Partial<NetSuiteFamExistingAcquisition> = {},
+): NetSuiteFamExistingAcquisition => ({
   id: "event-1",
   kind: "acquired",
   occurredOn: "2024-01-15",
@@ -75,52 +88,78 @@ test("NetSuite FAM history identity is proved only by the exact admission marker
 });
 
 test("NetSuite FAM acquisition planning requires identity and exact money", () => {
-  assert.deepEqual(
-    planNetSuiteFamAcquisitions("asset-1", [acquisitionRow()], null, "2026-07-15"),
-    [{ sourceHistoryId: "history-1", occurredOn: "2024-01-15", amount: "12000.0000" }],
-  );
+  assert.deepEqual(planNetSuiteFamAcquisitions("asset-1", [acquisitionRow()], null, "2026-07-15"), [
+    { sourceHistoryId: "history-1", occurredOn: "2024-01-15", amount: "12000.0000" },
+  ]);
   assert.throws(
-    () => planNetSuiteFamAcquisitions("asset-1", [acquisitionRow({ id: "  " })], null, "2026-07-15"),
+    () =>
+      planNetSuiteFamAcquisitions("asset-1", [acquisitionRow({ id: "  " })], null, "2026-07-15"),
     /without a stable source history id/,
   );
   assert.throws(
-    () => planNetSuiteFamAcquisitions("asset-1", [acquisitionRow(), acquisitionRow()], null, "2026-07-15"),
+    () =>
+      planNetSuiteFamAcquisitions(
+        "asset-1",
+        [acquisitionRow(), acquisitionRow()],
+        null,
+        "2026-07-15",
+      ),
     /repeats source history id history-1/,
   );
   assert.throws(
-    () => planNetSuiteFamAcquisitions("asset-1", [acquisitionRow({ custrecord_deprhistamount: "" })], null, "2026-07-15"),
+    () =>
+      planNetSuiteFamAcquisitions(
+        "asset-1",
+        [acquisitionRow({ custrecord_deprhistamount: "" })],
+        null,
+        "2026-07-15",
+      ),
     /must be an exact decimal/,
   );
   assert.throws(
-    () => planNetSuiteFamAcquisitions("asset-1", [acquisitionRow({ custrecord_deprhistamount: "12,000.00" })], null, "2026-07-15"),
+    () =>
+      planNetSuiteFamAcquisitions(
+        "asset-1",
+        [acquisitionRow({ custrecord_deprhistamount: "12,000.00" })],
+        null,
+        "2026-07-15",
+      ),
     /must be an exact decimal/,
   );
 });
 
 test("NetSuite FAM exact replay reuses the admitted acquisition with nothing to insert", () => {
   const planned = planNetSuiteFamAcquisitions("asset-1", [acquisitionRow()], null, "2026-07-15");
-  assert.deepEqual(
-    reconcileNetSuiteFamAcquisitions("asset-1", planned, [admittedEvent()]),
-    { reusedEventIds: ["event-1"], insert: [] },
+  assert.deepEqual(reconcileNetSuiteFamAcquisitions("asset-1", planned, [admittedEvent()]), {
+    reusedEventIds: ["event-1"],
+    insert: [],
+  });
+  const withNewRow = planNetSuiteFamAcquisitions(
+    "asset-1",
+    [acquisitionRow(), acquisitionRow({ id: "history-2", custrecord_deprhistamount: "500" })],
+    null,
+    "2026-07-15",
   );
-  const withNewRow = planNetSuiteFamAcquisitions("asset-1", [
-    acquisitionRow(),
-    acquisitionRow({ id: "history-2", custrecord_deprhistamount: "500" }),
-  ], null, "2026-07-15");
-  assert.deepEqual(
-    reconcileNetSuiteFamAcquisitions("asset-1", withNewRow, [admittedEvent()]),
-    { reusedEventIds: ["event-1"], insert: [withNewRow[1]!] },
-  );
+  assert.deepEqual(reconcileNetSuiteFamAcquisitions("asset-1", withNewRow, [admittedEvent()]), {
+    reusedEventIds: ["event-1"],
+    insert: [withNewRow[1]!],
+  });
 });
 
 test("NetSuite FAM changed or vanished source history refuses with history preserved", () => {
   const planned = planNetSuiteFamAcquisitions("asset-1", [acquisitionRow()], null, "2026-07-15");
   assert.throws(
-    () => reconcileNetSuiteFamAcquisitions("asset-1", planned, [admittedEvent({ amount: "11999.0000" })]),
+    () =>
+      reconcileNetSuiteFamAcquisitions("asset-1", planned, [
+        admittedEvent({ amount: "11999.0000" }),
+      ]),
     /append-only and has been preserved/,
   );
   assert.throws(
-    () => reconcileNetSuiteFamAcquisitions("asset-1", planned, [admittedEvent({ occurredOn: "2024-01-16" })]),
+    () =>
+      reconcileNetSuiteFamAcquisitions("asset-1", planned, [
+        admittedEvent({ occurredOn: "2024-01-16" }),
+      ]),
     /no longer matches the admitted date or amount/,
   );
   assert.throws(
@@ -128,11 +167,15 @@ test("NetSuite FAM changed or vanished source history refuses with history prese
     /absent from the full source snapshot/,
   );
   assert.throws(
-    () => reconcileNetSuiteFamAcquisitions("asset-1", planned, [admittedEvent({ kind: "revalued" })]),
+    () =>
+      reconcileNetSuiteFamAcquisitions("asset-1", planned, [admittedEvent({ kind: "revalued" })]),
     /conflicts with the admitted native representation/,
   );
   assert.throws(
-    () => reconcileNetSuiteFamAcquisitions("asset-1", planned, [admittedEvent({ journalEntryId: "entry-1" })]),
+    () =>
+      reconcileNetSuiteFamAcquisitions("asset-1", planned, [
+        admittedEvent({ journalEntryId: "entry-1" }),
+      ]),
     /conflicts with the admitted native representation/,
   );
   assert.throws(
@@ -140,22 +183,30 @@ test("NetSuite FAM changed or vanished source history refuses with history prese
     /reversed by a governed native correction/,
   );
   assert.throws(
-    () => reconcileNetSuiteFamAcquisitions("asset-1", planned, [admittedEvent(), admittedEvent({ id: "event-2" })]),
+    () =>
+      reconcileNetSuiteFamAcquisitions("asset-1", planned, [
+        admittedEvent(),
+        admittedEvent({ id: "event-2" }),
+      ]),
     /admitted more than once/,
   );
   assert.throws(
-    () => reconcileNetSuiteFamAcquisitions("asset-1", planned, [admittedEvent({ memo: "[NetSuite FAM history unknown]" })]),
+    () =>
+      reconcileNetSuiteFamAcquisitions("asset-1", planned, [
+        admittedEvent({ memo: "[NetSuite FAM history unknown]" }),
+      ]),
     /without a provable source history identity/,
   );
 });
 
 test("NetSuite FAM state refuses a carrying value above cost", () => {
   assert.throws(
-    () => netSuiteFamState(
-      { id: "bad", custrecord_assetcurrentcost: "10" },
-      { custrecord_slavebookvalue: "10.01" },
-      [],
-    ),
+    () =>
+      netSuiteFamState(
+        { id: "bad", custrecord_assetcurrentcost: "10" },
+        { custrecord_slavebookvalue: "10.01" },
+        [],
+      ),
     /book value .* above current cost/,
   );
 });

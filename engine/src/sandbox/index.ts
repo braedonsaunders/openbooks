@@ -3,7 +3,12 @@ import { db } from "../platform/db.ts";
 
 export { createSandbox, refreshSandbox, resetSandbox, deleteSandbox } from "./lifecycle.ts";
 export { buildChangeSet, applyChangeSet } from "./promote.ts";
-export { isSandboxOrg, assertNotSandbox, getEnvKind, neuterSandbox } from "../organization/sandbox-guard.ts";
+export {
+  isSandboxOrg,
+  assertNotSandbox,
+  getEnvKind,
+  neuterSandbox,
+} from "../organization/sandbox-guard.ts";
 export { runClone } from "./clone.ts";
 export type { SandboxTier } from "./clone.ts";
 
@@ -24,13 +29,16 @@ export interface SandboxSummary {
 
 /** List sandboxes owned by a production org (call from the production context). */
 export async function listSandboxes(productionOrgId: string): Promise<SandboxSummary[]> {
-  const res = await db.execute<SandboxSummary & Record<string, unknown>>(sql`
+  const res = await db.execute<SandboxSummary & Record<string, unknown>>(
+    sql`
     select id, org_id as "orgId", production_org_id as "productionOrgId", name, tier, masked,
            status, last_error as "lastError", last_refresh_at as "lastRefreshAt",
            refresh_schedule as "refreshSchedule", storage_rows as "storageRows", created_at as "createdAt"
       from sandboxes
      where production_org_id = ${productionOrgId}
-     order by created_at desc`, "objects");
+     order by created_at desc`,
+    "objects",
+  );
   return res;
 }
 

@@ -15,7 +15,10 @@ declare global {
 
 // jsdom first: the dialog reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/tax/provisions", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/tax/provisions",
+  matchMediaMatches: false,
+});
 
 const { stubModules } = await import("../../../../testing/stub-modules");
 stubModules({
@@ -41,7 +44,9 @@ function installFetch() {
   globalThis.__provisionPosts = [];
   globalThis.__provisionPushed = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.endsWith("/api/tax/provisions") && (!init || !init.method || init.method === "GET")) {
       return Response.json({ fiscalYears: [2026], framework: "asc740" });
     }
@@ -64,7 +69,9 @@ function buttonsNamed(name: string): HTMLButtonElement[] {
 }
 
 function inputsWithPlaceholder(placeholder: string): HTMLInputElement[] {
-  return [...document.querySelectorAll(`input[placeholder="${placeholder}"]`)] as HTMLInputElement[];
+  return [
+    ...document.querySelectorAll(`input[placeholder="${placeholder}"]`),
+  ] as HTMLInputElement[];
 }
 
 function setInputValue(el: HTMLInputElement, value: string) {
@@ -182,7 +189,9 @@ test("a non-object grid element refusal renders in translated copy naming the ro
   const restore = installFetch();
   globalThis.__provisionPostStatus = {
     status: 400,
-    body: { error: "permanentDifferences[0]: each row must be an object with description and amount" },
+    body: {
+      error: "permanentDifferences[0]: each row must be an object with description and amount",
+    },
   };
   const dialog = await mountDialog();
   try {

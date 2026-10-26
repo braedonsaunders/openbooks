@@ -17,7 +17,14 @@ const { GeofenceSection } = await import("./GeofenceSection");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const field = (messages.timesheets as { field: Record<string, string> }).field;
 
-const FENCE = { id: "fence-1", kind: "circle" as const, center: { lat: 43.65, lng: -79.38 }, radiusM: 150, polygon: null, isActive: true };
+const FENCE = {
+  id: "fence-1",
+  kind: "circle" as const,
+  center: { lat: 43.65, lng: -79.38 },
+  radiusM: 150,
+  polygon: null,
+  isActive: true,
+};
 
 async function render(canManage: boolean, posted: unknown[]) {
   const prior = globalThis.fetch;
@@ -55,9 +62,20 @@ test("geofences list in a table with Add geofence top right and no inline form",
   t.after(view.done);
   const section = view.host.querySelector("[data-drawer-sublist]")!;
   const header = section.firstElementChild!;
-  assert.equal(header.lastElementChild?.textContent?.trim(), field.addGeofence, "the add action is pinned top right");
-  assert.ok(section.querySelector("table")?.textContent?.includes("150 m"), "fences list in the table");
-  assert.equal(view.host.querySelectorAll("input, textarea").length, 0, "the list carries no inline add form");
+  assert.equal(
+    header.lastElementChild?.textContent?.trim(),
+    field.addGeofence,
+    "the add action is pinned top right",
+  );
+  assert.ok(
+    section.querySelector("table")?.textContent?.includes("150 m"),
+    "fences list in the table",
+  );
+  assert.equal(
+    view.host.querySelectorAll("input, textarea").length,
+    0,
+    "the list carries no inline add form",
+  );
 });
 
 test("Add geofence opens a drawer that saves a circle and closes", async (t) => {
@@ -80,13 +98,23 @@ test("Add geofence opens a drawer that saves a circle and closes", async (t) => 
     inputs[1]!.dispatchEvent(new window.Event("input", { bubbles: true }));
     await tick();
   });
-  const save = [...dialog.querySelectorAll("button")].find((button) => button.textContent?.trim() === field.saveGeofence) as HTMLButtonElement;
+  const save = [...dialog.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === field.saveGeofence,
+  ) as HTMLButtonElement;
   await act(async () => {
     save.click();
     await tick();
   });
   await tick();
-  assert.deepEqual(posted, [{ projectId: "project-1", kind: "circle", center: { lat: 43.7, lng: -79.4 }, radiusM: 100, polygon: null }]);
+  assert.deepEqual(posted, [
+    {
+      projectId: "project-1",
+      kind: "circle",
+      center: { lat: 43.7, lng: -79.4 },
+      radiusM: 100,
+      polygon: null,
+    },
+  ]);
 });
 
 test("a viewer without manage rights sees the list without an add action", async (t) => {

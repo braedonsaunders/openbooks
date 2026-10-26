@@ -8,8 +8,7 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // focused integration suite can load the production module under node:test.
 const { createApplicationRecord } = await import("../application/records.ts");
 const { createRecord, updateRecord, deleteRecord } = await import("./writers.ts");
-const { db, env, withBypass, withOrgContext } =
-  await import("@openbooks/engine/platform/db");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
 
@@ -71,11 +70,14 @@ test(
         db.execute<{
           records: string;
           sequences: string;
-        }>(sql`
+        }>(
+          sql`
         select
           (select count(*)::text from custom_records where org_id = ${org.orgId} and type_key = ${typeKey}) as records,
           (select count(*)::text from number_sequences where org_id = ${org.orgId} and document_kind = ${`custrec:${typeKey}`}) as sequences
-      `, "objects"),
+      `,
+          "objects",
+        ),
       );
       assert.deepEqual(afterRejected[0], { records: "0", sequences: "0" });
 
@@ -103,8 +105,7 @@ test(
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const org = await withBypass(() => createScratchOrg());
-    const actorId = (await withBypass(() => seedFlowActors(org.orgId)))
-      .outsiderId;
+    const actorId = (await withBypass(() => seedFlowActors(org.orgId))).outsiderId;
     const fieldId = randomUUID();
     const user = {
       id: actorId,
@@ -177,9 +178,12 @@ test(
       assert.equal(result.status, 403);
 
       const rows = await withBypass(() =>
-        db.execute<{ count: string }>(sql`
+        db.execute<{ count: string }>(
+          sql`
           select count(*)::text as count from items where org_id = ${org.orgId} and name = 'should-not-exist'
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.equal(rows[0]?.count, "0");
     } finally {
@@ -221,24 +225,56 @@ test(
       documentKinds: null,
     };
     const fields: ApiField[] = [
-      { name: "kind", type: "string", required: true, writable: true, description: null, custom: false },
-      { name: "name", type: "string", required: true, writable: true, description: null, custom: false },
-      { name: "cf_required_code", type: "string", required: true, writable: true, description: "Required code", custom: true },
-      { name: "cf_optional_note", type: "string", required: false, writable: true, description: "Optional note", custom: true },
+      {
+        name: "kind",
+        type: "string",
+        required: true,
+        writable: true,
+        description: null,
+        custom: false,
+      },
+      {
+        name: "name",
+        type: "string",
+        required: true,
+        writable: true,
+        description: null,
+        custom: false,
+      },
+      {
+        name: "cf_required_code",
+        type: "string",
+        required: true,
+        writable: true,
+        description: "Required code",
+        custom: true,
+      },
+      {
+        name: "cf_optional_note",
+        type: "string",
+        required: false,
+        writable: true,
+        description: "Optional note",
+        custom: true,
+      },
     ];
 
     try {
-      await withBypass(() => db.execute(sql`
+      await withBypass(() =>
+        db.execute(sql`
         insert into custom_field_defs
           (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
         values
           (${requiredId}, ${org.orgId}, 'items', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${actorId}, ${actorId}),
           (${optionalId}, ${org.orgId}, 'items', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${actorId}, ${actorId})
-      `));
-      await withBypass(() => db.execute(sql`
+      `),
+      );
+      await withBypass(() =>
+        db.execute(sql`
         insert into items (id, org_id, kind, name, custom, created_by, updated_by)
         values (${itemId}, ${org.orgId}, 'service', 'Partial patch item', '{"required_code":"R-1"}'::jsonb, ${actorId}, ${actorId})
-      `));
+      `),
+      );
 
       const result = await withOrgContext(org.orgId, () =>
         updateRecord(
@@ -252,9 +288,12 @@ test(
       );
       assert.equal(result.status, 200);
       const stored = await withBypass(() =>
-        db.execute<{ custom: Record<string, unknown> }>(sql`
+        db.execute<{ custom: Record<string, unknown> }>(
+          sql`
           select custom from items where id = ${itemId} and org_id = ${org.orgId}
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(stored[0]?.custom, { required_code: "R-1", optional_note: "updated" });
     } finally {
@@ -302,11 +341,14 @@ test(
           actor_id: string | null;
           changes: Record<string, unknown>;
           row_id: string;
-        }>(sql`
+        }>(
+          sql`
           select action, actor_id, changes, row_id from audit_log
            where org_id = ${org.orgId} and table_name = 'custom_records'
            order by at, id
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
 
     try {
@@ -359,12 +401,17 @@ test(
       }
 
       // A data update appends a second update row; the live row is intact.
-      const revision = (await withBypass(() =>
-          db.execute<{ revision: string }>(sql`
+      const revision = (
+        await withBypass(() =>
+          db.execute<{ revision: string }>(
+            sql`
             select (revision_seq)::text as revision
               from custom_records where id = ${id} and org_id = ${org.orgId}
-          `, "objects"),
-        ))[0]!.revision;
+          `,
+            "objects",
+          ),
+        )
+      )[0]!.revision;
       const updated = await withOrgContext(org.orgId, () =>
         updateRecord(
           user,
@@ -440,8 +487,22 @@ test(
       documentKinds: null,
     };
     const fields: ApiField[] = [
-      { name: "kind", type: "string", required: true, writable: true, description: null, custom: false },
-      { name: "name", type: "string", required: true, writable: true, description: null, custom: false },
+      {
+        name: "kind",
+        type: "string",
+        required: true,
+        writable: true,
+        description: null,
+        custom: false,
+      },
+      {
+        name: "name",
+        type: "string",
+        required: true,
+        writable: true,
+        description: null,
+        custom: false,
+      },
     ];
     const auditRows = () =>
       withBypass(() =>
@@ -450,11 +511,14 @@ test(
           actor_id: string | null;
           changes: Record<string, unknown>;
           row_id: string;
-        }>(sql`
+        }>(
+          sql`
           select action, actor_id, changes, row_id from audit_log
            where org_id = ${org.orgId} and table_name = 'items'
            order by at, id
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
 
     try {
@@ -475,15 +539,19 @@ test(
         assert.equal(rows.length, 1);
         assert.equal(rows[0]!.action, "insert");
         assert.equal(rows[0]!.actor_id, actorId);
-        assert.equal(
-          ((rows[0]!.changes as { after: { name: string } }).after.name),
-          "Audited item",
-        );
+        assert.equal((rows[0]!.changes as { after: { name: string } }).after.name, "Audited item");
       }
 
       // Update appends an update row with before/after.
       const updated = await withOrgContext(org.orgId, () =>
-        updateRecord(user, resolved, fields, id, { name: "Audited item v2" }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          id,
+          { name: "Audited item v2" },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(updated.status, 200);
       {
@@ -507,7 +575,7 @@ test(
         assert.equal(rows[2]!.action, "delete");
         assert.equal(rows[2]!.actor_id, actorId);
         assert.equal(
-          ((rows[2]!.changes as { before: { name: string } }).before.name),
+          (rows[2]!.changes as { before: { name: string } }).before.name,
           "Audited item v2",
         );
       }
@@ -552,14 +620,31 @@ test(
       documentKinds: null,
     };
     const fields: ApiField[] = [
-      { name: "kind", type: "string", required: true, writable: true, description: null, custom: false },
-      { name: "display_name", type: "string", required: true, writable: true, description: null, custom: false },
+      {
+        name: "kind",
+        type: "string",
+        required: true,
+        writable: true,
+        description: null,
+        custom: false,
+      },
+      {
+        name: "display_name",
+        type: "string",
+        required: true,
+        writable: true,
+        description: null,
+        custom: false,
+      },
     ];
     const roleCount = (partyId: string) =>
       withBypass(() =>
-        db.execute<{ n: string }>(sql`
+        db.execute<{ n: string }>(
+          sql`
           select count(*)::text as n from vendor_roles where org_id = ${org.orgId} and party_id = ${partyId}
-        `, "objects"),
+        `,
+          "objects",
+        ),
       ).then((result) => result[0]?.n);
 
     try {
@@ -579,7 +664,14 @@ test(
       // Renaming the kind away keeps the (now history) role row: the ensure
       // is insert-only and never deactivates an existing role.
       const renamed = await withOrgContext(org.orgId, () =>
-        updateRecord(user, resolved, fields, vendorId, { kind: "company" }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          vendorId,
+          { kind: "company" },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(renamed.status, 200);
       assert.equal(await roleCount(vendorId), "1");
@@ -600,7 +692,14 @@ test(
 
       // … until the kind names a role, on update as on create.
       const adopted = await withOrgContext(org.orgId, () =>
-        updateRecord(user, resolved, fields, companyId, { kind: "vendor" }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          companyId,
+          { kind: "vendor" },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(adopted.status, 200);
       assert.equal(await roleCount(companyId), "1");

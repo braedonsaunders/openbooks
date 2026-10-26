@@ -1,11 +1,11 @@
-import type { ComponentProps } from 'react'
-import Link from 'next/link'
-import { Settings2 } from 'lucide-react'
-import { Badge, Button } from '@openbooks/ui'
-import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
-import { DateRangeFilter } from '../../../../components/date-range-filter'
-import { SearchSelectFilter } from '../../../../components/filter-bar'
-import { ForecastSnapshotButton } from '../ForecastSnapshotButton'
+import type { ComponentProps } from "react";
+import Link from "next/link";
+import { Settings2 } from "lucide-react";
+import { Badge, Button } from "@openbooks/ui";
+import { KpiStrip, type Kpi } from "../../../../components/kpi-strip";
+import { DateRangeFilter } from "../../../../components/date-range-filter";
+import { SearchSelectFilter } from "../../../../components/filter-bar";
+import { ForecastSnapshotButton } from "../ForecastSnapshotButton";
 
 /**
  * Pieces of the forecasts page shared by the page and the widget registry.
@@ -21,14 +21,14 @@ export function ForecastSection({
   labelledBy,
   children,
 }: {
-  labelledBy: string
-  children: React.ReactNode
+  labelledBy: string;
+  children: React.ReactNode;
 }) {
   return (
     <section aria-labelledby={labelledBy} className="space-y-3">
       {children}
     </section>
-  )
+  );
 }
 
 export function ForecastSectionHeading({
@@ -37,10 +37,10 @@ export function ForecastSectionHeading({
   title,
   description,
 }: {
-  id: string
-  icon: React.ReactNode
-  title: string
-  description?: string
+  id: string;
+  icon: React.ReactNode;
+  title: string;
+  description?: string;
 }) {
   return (
     <div className="flex items-start gap-2">
@@ -49,10 +49,12 @@ export function ForecastSectionHeading({
         <h2 id={id} className="text-sm font-semibold text-slate-900 dark:text-slate-100">
           {title}
         </h2>
-        {description ? <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{description}</p> : null}
+        {description ? (
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{description}</p>
+        ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 export function ForecastKpiGroup({ currency, items }: { currency: string; items: Kpi[] }) {
@@ -61,7 +63,7 @@ export function ForecastKpiGroup({ currency, items }: { currency: string; items:
       <Badge variant="secondary">{currency}</Badge>
       <KpiStrip items={items} />
     </div>
-  )
+  );
 }
 
 /**
@@ -70,15 +72,26 @@ export function ForecastKpiGroup({ currency, items }: { currency: string; items:
  * $0. The link opens the pipeline filtered to exactly those records so the
  * missing date can be set where it belongs.
  */
-export function ForecastExcludedNote({ note, href, linkLabel }: { note: string; href: string; linkLabel: string }) {
+export function ForecastExcludedNote({
+  note,
+  href,
+  linkLabel,
+}: {
+  note: string;
+  href: string;
+  linkLabel: string;
+}) {
   return (
     <p className="text-xs text-slate-500 dark:text-slate-400">
-      {note}{' '}
-      <Link href={href as never} className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300">
+      {note}{" "}
+      <Link
+        href={href as never}
+        className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
+      >
         {linkLabel}
       </Link>
     </p>
-  )
+  );
 }
 
 export function ForecastFilters({
@@ -93,16 +106,16 @@ export function ForecastFilters({
   teamLabel,
   teamOptions,
 }: {
-  fromKey: string
-  toKey: string
-  fromLabel: string
-  toLabel: string
-  defaultFrom: string
-  defaultTo: string
-  ownerLabel: string
-  ownerOptions: { value: string; label: string }[]
-  teamLabel: string
-  teamOptions: { value: string; label: string }[]
+  fromKey: string;
+  toKey: string;
+  fromLabel: string;
+  toLabel: string;
+  defaultFrom: string;
+  defaultTo: string;
+  ownerLabel: string;
+  ownerOptions: { value: string; label: string }[];
+  teamLabel: string;
+  teamOptions: { value: string; label: string }[];
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -119,18 +132,18 @@ export function ForecastFilters({
         paramKey="owner"
         label={ownerLabel}
         options={ownerOptions}
-        resetParamKeys={['team']}
+        resetParamKeys={["team"]}
         className="w-full sm:w-48"
       />
       <SearchSelectFilter
         paramKey="team"
         label={teamLabel}
         options={teamOptions}
-        resetParamKeys={['owner']}
+        resetParamKeys={["owner"]}
         className="w-full sm:w-48"
       />
     </div>
-  )
+  );
 }
 
 export function ManageQuotasButton({
@@ -138,9 +151,9 @@ export function ManageQuotasButton({
   label,
   ariaLabel,
 }: {
-  href: string
-  label: string
-  ariaLabel: string
+  href: string;
+  label: string;
+  ariaLabel: string;
 }) {
   return (
     <Button variant="outline" size="sm" asChild>
@@ -149,15 +162,23 @@ export function ManageQuotasButton({
         <span className="hidden sm:inline">{label}</span>
       </Link>
     </Button>
-  )
+  );
 }
 
-export function QuotaEmptyAction({ href, label, size }: { href: string; label: string; size: string }) {
+export function QuotaEmptyAction({
+  href,
+  label,
+  size,
+}: {
+  href: string;
+  label: string;
+  size: string;
+}) {
   return (
-    <Button size={size as ComponentProps<typeof Button>['size']} asChild>
+    <Button size={size as ComponentProps<typeof Button>["size"]} asChild>
       <Link href={href as never}>{label}</Link>
     </Button>
-  )
+  );
 }
 
 export function ForecastSnapshotAction({
@@ -166,10 +187,10 @@ export function ForecastSnapshotAction({
   ownerUserId,
   salesTeamId,
 }: {
-  periodStart: string
-  periodEnd: string
-  ownerUserId: string | null
-  salesTeamId: string | null
+  periodStart: string;
+  periodEnd: string;
+  ownerUserId: string | null;
+  salesTeamId: string | null;
 }) {
   return (
     <ForecastSnapshotButton
@@ -178,5 +199,5 @@ export function ForecastSnapshotAction({
       ownerUserId={ownerUserId}
       salesTeamId={salesTeamId}
     />
-  )
+  );
 }

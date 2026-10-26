@@ -21,10 +21,7 @@
  * the pack registered nothing and was imported by nothing outside
  * `engine/src/payroll/nl/`; both of those statements are now false.)
  */
-import type {
-  PayrollCountryPack,
-  PayrollRemittanceSchedule,
-} from "../pack-types.ts";
+import type { PayrollCountryPack, PayrollRemittanceSchedule } from "../pack-types.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { NL_CERTIFICATES } from "./certificates.ts";
 import { isValidBsn } from "./bsn.ts";
@@ -63,8 +60,8 @@ const NL_WITHHOLDING: PayrollPackWithholding = {
       subRegions: [],
       subRegionConflictRule: "both",
       citation:
-        "Belastingdienst, Handboek Loonheffingen 2026; witte loonbelastingtabellen 2026 "
-        + "(loonbelasting/premie volksverzekeringen), uitgave januari 2026",
+        "Belastingdienst, Handboek Loonheffingen 2026; witte loonbelastingtabellen 2026 " +
+        "(loonbelasting/premie volksverzekeringen), uitgave januari 2026",
     },
   ],
 };
@@ -138,7 +135,15 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
         // on taxable wage — employee pension contributions reduce the
         // grondslag — so a pre-tax protected order moves it and the fixpoint
         // re-derives it, exactly like T4127 factor T.
-        { code: "LH", name: "Loonbelasting/premie volksverzekeringen", systemKey: "loonheffing", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "LH",
+          name: "Loonbelasting/premie volksverzekeringen",
+          systemKey: "loonheffing",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -154,10 +159,42 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
         // and ZW. No fixed ZW percentage is published (Tarieven Tabel 9
         // carries no ZW row; ZW-flex runs inside the Whk beschikking), so the
         // ZW component posts nothing — see computeNlStatutory.
-        { code: "WW", name: "Werkloosheidswet (AWf)", systemKey: "ww", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "WIA", name: "Arbeidsongeschiktheid (Aof + Whk)", systemKey: "wia", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "WKO", name: "Opslag Wko", systemKey: "wko", kind: "employer_contribution", sequence: 212, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "ZW", name: "Ziektewet", systemKey: "zw", kind: "employer_contribution", sequence: 213, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "WW",
+          name: "Werkloosheidswet (AWf)",
+          systemKey: "ww",
+          kind: "employer_contribution",
+          sequence: 210,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "WIA",
+          name: "Arbeidsongeschiktheid (Aof + Whk)",
+          systemKey: "wia",
+          kind: "employer_contribution",
+          sequence: 211,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "WKO",
+          name: "Opslag Wko",
+          systemKey: "wko",
+          kind: "employer_contribution",
+          sequence: 212,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "ZW",
+          name: "Ziektewet",
+          systemKey: "zw",
+          kind: "employer_contribution",
+          sequence: 213,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -167,7 +204,15 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
         // (werkgeversheffing Zvw), assessed on the SV-loon and settled
         // through the loonaangifte. The employee's nominal Zvw premium is
         // paid directly to their insurer and is deliberately NOT a slot.
-        { code: "ZVW", name: "Werkgeversheffing Zorgverzekeringswet", systemKey: "zvw", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "ZVW",
+          name: "Werkgeversheffing Zorgverzekeringswet",
+          systemKey: "zvw",
+          kind: "employer_contribution",
+          sequence: 230,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
   ],
@@ -209,7 +254,8 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   contributoryBases: {
     // No statutory state pension runs through the payroll: pension is
     // sectoral, per employer, with no Belastingdienst tables.
-    pensionable: "Pensioengevend loon (sectoral pension scheme, per employer — no statutory tables)",
+    pensionable:
+      "Pensioengevend loon (sectoral pension scheme, per employer — no statutory tables)",
     insurable: "Premieloon werknemersverzekeringen (WW/WIA/ZW, SV-loon)",
   },
   // Employee-paid vakbondscontributie has no loonheffing deduction: only an

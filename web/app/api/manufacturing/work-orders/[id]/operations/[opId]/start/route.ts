@@ -11,13 +11,24 @@ const Params = z.object({ id: uuidString(), opId: uuidString() });
 const Body = z.object({ startedOn: z.string().nullable() }).strict();
 
 export const POST = defineRoute({
-  permission: "items.post", feature: "manufacturing", params: Params, body: Body,
-  handler: async ({ authz, params, body }) => manufacturingTransaction(authz.user.orgId, async () => {
-    if (!can(authz, "manufacturing.manage")) {
-      return Response.json({ error: "missing permission: manufacturing.manage" }, { status: 403 });
-    }
-    const result = await loadScopedWorkOrder(authz, params.id);
-    if (!result.ok) return result.response;
-    return Response.json(await startWorkOrderOperation(db, authz.user.orgId, authz.user.id, params.id, params.opId, { startedOn: body.startedOn ?? null }));
-  }),
+  permission: "items.post",
+  feature: "manufacturing",
+  params: Params,
+  body: Body,
+  handler: async ({ authz, params, body }) =>
+    manufacturingTransaction(authz.user.orgId, async () => {
+      if (!can(authz, "manufacturing.manage")) {
+        return Response.json(
+          { error: "missing permission: manufacturing.manage" },
+          { status: 403 },
+        );
+      }
+      const result = await loadScopedWorkOrder(authz, params.id);
+      if (!result.ok) return result.response;
+      return Response.json(
+        await startWorkOrderOperation(db, authz.user.orgId, authz.user.id, params.id, params.opId, {
+          startedOn: body.startedOn ?? null,
+        }),
+      );
+    }),
 });

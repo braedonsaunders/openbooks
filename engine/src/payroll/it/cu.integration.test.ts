@@ -72,16 +72,29 @@ async function seedOrg(): Promise<{ orgId: string; actorId: string; scheduleId: 
   }
   // Tenant-deliberated surtax rates: synthetic, not any comune's real figure.
   await upsertStatutoryRate({
-    orgId: org.orgId, actorId, rates: IT_PACK_RATES,
-    rateKey: "it_addizionale_regionale", region: REGION, filingAccountId: null,
-    taxYear: TAX_YEAR, values: { rate: "1.5" },
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
+    orgId: org.orgId,
+    actorId,
+    rates: IT_PACK_RATES,
+    rateKey: "it_addizionale_regionale",
+    region: REGION,
+    filingAccountId: null,
+    taxYear: TAX_YEAR,
+    values: { rate: "1.5" },
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
   });
   await upsertStatutoryRate({
-    orgId: org.orgId, actorId, rates: IT_PACK_RATES,
-    rateKey: "it_addizionale_comunale", region: REGION, subRegion: COMUNE,
-    filingAccountId: null, taxYear: TAX_YEAR, values: { rate: "0.8" },
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
+    orgId: org.orgId,
+    actorId,
+    rates: IT_PACK_RATES,
+    rateKey: "it_addizionale_comunale",
+    region: REGION,
+    subRegion: COMUNE,
+    filingAccountId: null,
+    taxYear: TAX_YEAR,
+    values: { rate: "0.8" },
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
   });
   const scheduleId = randomUUID();
   await db.execute(sql`
@@ -94,8 +107,13 @@ async function seedOrg(): Promise<{ orgId: string; actorId: string; scheduleId: 
 }
 
 async function makeEmployee(
-  orgId: string, subsidiaryId: string, actorId: string, scheduleId: string,
-  name: string, annualRate: string, answers: Record<string, string>,
+  orgId: string,
+  subsidiaryId: string,
+  actorId: string,
+  scheduleId: string,
+  name: string,
+  annualRate: string,
+  answers: Record<string, string>,
 ): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
@@ -129,11 +147,20 @@ async function makeEmployee(
 }
 
 async function payAndCommit(
-  orgId: string, actorId: string, scheduleId: string,
-  periodStart: string, periodEnd: string, payDate: string,
+  orgId: string,
+  actorId: string,
+  scheduleId: string,
+  periodStart: string,
+  periodEnd: string,
+  payDate: string,
 ): Promise<string> {
   const run = await createPayRun({
-    orgId, actorId, payScheduleId: scheduleId, periodStart, periodEnd, payDate,
+    orgId,
+    actorId,
+    payScheduleId: scheduleId,
+    periodStart,
+    periodEnd,
+    payDate,
   });
   const calc = await calculatePayRun({ orgId, actorId, documentId: run.documentId });
   assert.deepEqual(calc.errors, []);
@@ -153,9 +180,14 @@ export interface CuTieOutExpectation {
 /** Every committed IT stub line in the year, keyed for the tie-out. */
 async function committedLineSums(orgId: string): Promise<Map<string, CuTieOutExpectation>> {
   const rows = await db.execute<{
-    employee_party_id: string; kind: string; system_key: string | null; taxable: boolean | null;
-    amount: string; pensionable: string;
-  }>(sql`
+    employee_party_id: string;
+    kind: string;
+    system_key: string | null;
+    taxable: boolean | null;
+    amount: string;
+    pensionable: string;
+  }>(
+    sql`
     select s.employee_party_id, l.kind, pc.system_key, pc.taxable,
            l.amount::text as amount, s.pensionable_earnings::text as pensionable
       from pay_stubs s
@@ -164,17 +196,32 @@ async function committedLineSums(orgId: string): Promise<Map<string, CuTieOutExp
       join pay_stub_lines l on l.org_id = ${orgId} and l.stub_id = s.id
       join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
      where s.org_id = ${orgId} and s.tax_year = ${TAX_YEAR} and s.country = 'IT'
-  `, "objects");
-  const byEmployee = new Map<string, {
-    redditi: string; irpef: string; addreg: string; inps: string; ti: string;
-    imponibile: string; seenPensionable: Set<string>;
-  }>();
+  `,
+    "objects",
+  );
+  const byEmployee = new Map<
+    string,
+    {
+      redditi: string;
+      irpef: string;
+      addreg: string;
+      inps: string;
+      ti: string;
+      imponibile: string;
+      seenPensionable: Set<string>;
+    }
+  >();
   const entry = (id: string) => {
     let found = byEmployee.get(id);
     if (!found) {
       found = {
-        redditi: "0", irpef: "0", addreg: "0", inps: "0", ti: "0",
-        imponibile: "0", seenPensionable: new Set<string>(),
+        redditi: "0",
+        irpef: "0",
+        addreg: "0",
+        inps: "0",
+        ti: "0",
+        imponibile: "0",
+        seenPensionable: new Set<string>(),
       };
       byEmployee.set(id, found);
     }
@@ -198,21 +245,33 @@ async function committedLineSums(orgId: string): Promise<Map<string, CuTieOutExp
       acc.ti = add(acc.ti, String(row.amount));
     }
   }
-  const pensionable = await db.execute<{ employee_party_id: string; pensionable: string }>(sql`
+  const pensionable = await db.execute<{ employee_party_id: string; pensionable: string }>(
+    sql`
     select s.employee_party_id, sum(s.pensionable_earnings)::text as pensionable
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
                      and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${TAX_YEAR} and s.country = 'IT'
      group by s.employee_party_id
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const row of pensionable) {
     entry(String(row.employee_party_id)).imponibile = String(row.pensionable ?? "0");
   }
-  return new Map([...byEmployee.entries()].map(([id, acc]) => [id, {
-    redditi: acc.redditi, irpef: acc.irpef, addreg: acc.addreg,
-    inps: acc.inps, ti: acc.ti, imponibile: acc.imponibile,
-  }]));
+  return new Map(
+    [...byEmployee.entries()].map(([id, acc]) => [
+      id,
+      {
+        redditi: acc.redditi,
+        irpef: acc.irpef,
+        addreg: acc.addreg,
+        inps: acc.inps,
+        ti: acc.ti,
+        imponibile: acc.imponibile,
+      },
+    ]),
+  );
 }
 
 function cuFiling() {
@@ -226,18 +285,39 @@ test(
   { skip: !DB },
   async () => {
     const { orgId, actorId, scheduleId } = await seedOrg();
-    const sub = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgId} and parent_id is null`, "objects"))[0]!.id;
-    const empA = await makeEmployee(orgId, sub, actorId, scheduleId, "Alba Indeterminata", "36000", {
-      domicilio_comune: COMUNE,
-      // The engine refuses an unknown contract term before pricing: both
-      // personas are indeterminate, so the CU tie-out can proceed past it.
-      tempo_determinato: "false",
-    });
-    const empB = await makeEmployee(orgId, sub, actorId, scheduleId, "Bruno Indeterminato", "24000", {
-      domicilio_comune: COMUNE,
-      tempo_determinato: "false",
-    });
+    const sub = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from subsidiaries where org_id = ${orgId} and parent_id is null`,
+        "objects",
+      )
+    )[0]!.id;
+    const empA = await makeEmployee(
+      orgId,
+      sub,
+      actorId,
+      scheduleId,
+      "Alba Indeterminata",
+      "36000",
+      {
+        domicilio_comune: COMUNE,
+        // The engine refuses an unknown contract term before pricing: both
+        // personas are indeterminate, so the CU tie-out can proceed past it.
+        tempo_determinato: "false",
+      },
+    );
+    const empB = await makeEmployee(
+      orgId,
+      sub,
+      actorId,
+      scheduleId,
+      "Bruno Indeterminato",
+      "24000",
+      {
+        domicilio_comune: COMUNE,
+        tempo_determinato: "false",
+      },
+    );
     // Zero assessed saldo for 2025: the channel resolves and prices nothing.
     await db.execute(sql`insert into it_addizionali_opening_balances
       (org_id, employee_party_id, tax_year, regionale_saldo, comunale_saldo, created_by, updated_by)
@@ -248,20 +328,32 @@ test(
     // A third run, calculated but never committed: statutory money exists on
     // its stubs and must not reach the filing.
     const draft = await createPayRun({
-      orgId, actorId, payScheduleId: scheduleId,
-      periodStart: "2025-03-01", periodEnd: "2025-03-31", payDate: "2025-04-03",
+      orgId,
+      actorId,
+      payScheduleId: scheduleId,
+      periodStart: "2025-03-01",
+      periodEnd: "2025-03-31",
+      payDate: "2025-04-03",
     });
     const draftCalc = await calculatePayRun({ orgId, actorId, documentId: draft.documentId });
     assert.deepEqual(draftCalc.errors, []);
-    const draftIrpef = (await db.execute<{ amount: string }>(sql`
+    const draftIrpef = (
+      await db.execute<{ amount: string }>(
+        sql`
       select coalesce(sum(l.amount), 0)::text as amount
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
        where s.org_id = ${orgId} and s.pay_run_document_id = ${draft.documentId}
          and l.kind = 'deduction' and pc.system_key = 'income_tax'
-    `, "objects"))[0]!.amount;
-    assert.ok(cmp(draftIrpef, "0") > 0, "the draft run withholds real IRPEF, so its exclusion is proven");
+    `,
+        "objects",
+      )
+    )[0]!.amount;
+    assert.ok(
+      cmp(draftIrpef, "0") > 0,
+      "the draft run withholds real IRPEF, so its exclusion is proven",
+    );
 
     const filing = cuFiling();
     const data = await filing.population(orgId, TAX_YEAR);
@@ -284,29 +376,54 @@ test(
       assert.ok(row, `population carries employee ${id}`);
       assert.equal(cmp(String(row.redditi), want.redditi), 0, `redditi ties for ${row.employee}`);
       assert.equal(cmp(String(row.irpef), want.irpef), 0, `IRPEF ties for ${row.employee}`);
-      assert.equal(cmp(String(row.addRegionale), want.addreg), 0, `addizionale regionale ties for ${row.employee}`);
+      assert.equal(
+        cmp(String(row.addRegionale), want.addreg),
+        0,
+        `addizionale regionale ties for ${row.employee}`,
+      );
       assert.equal(cmp(String(row.inpsWorker), want.inps), 0, `INPS ties for ${row.employee}`);
-      assert.equal(cmp(String(row.imponibileInps), want.imponibile), 0, `imponibile ties for ${row.employee}`);
-      assert.equal(cmp(String(row.trattamentoIntegrativo), want.ti), 0, `TI ties for ${row.employee}`);
+      assert.equal(
+        cmp(String(row.imponibileInps), want.imponibile),
+        0,
+        `imponibile ties for ${row.employee}`,
+      );
+      assert.equal(
+        cmp(String(row.trattamentoIntegrativo), want.ti),
+        0,
+        `TI ties for ${row.employee}`,
+      );
     }
     // Hand-computed anchor, independent of both queries: monthly salaries of
     // 3.000 (A) and 2.000 (B) across two runs certify 6.000 and 4.000 of
     // redditi — salary earnings are fully taxable, and the TI/somma credits
     // never enter punti 1/2.
-    assert.equal(cmp(String(byId.get(empA)!.redditi), "6000"), 0, "A certifies two months of 3.000");
-    assert.equal(cmp(String(byId.get(empB)!.redditi), "4000"), 0, "B certifies two months of 2.000");
+    assert.equal(
+      cmp(String(byId.get(empA)!.redditi), "6000"),
+      0,
+      "A certifies two months of 3.000",
+    );
+    assert.equal(
+      cmp(String(byId.get(empB)!.redditi), "4000"),
+      0,
+      "B certifies two months of 2.000",
+    );
     assert.equal(byId.get(empA)!.contratto, "tempo indeterminato");
     assert.equal(byId.get(empB)!.contratto, "tempo indeterminato");
     // The draft's money is really absent: population IRPEF plus the draft's
     // IRPEF equals every stub's IRPEF including the draft.
-    const allIrpef = (await db.execute<{ amount: string }>(sql`
+    const allIrpef = (
+      await db.execute<{ amount: string }>(
+        sql`
       select coalesce(sum(l.amount), 0)::text as amount
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
        where s.org_id = ${orgId} and s.tax_year = ${TAX_YEAR} and s.country = 'IT'
          and l.kind = 'deduction' and pc.system_key = 'income_tax'
-    `, "objects"))[0]!.amount;
+    `,
+        "objects",
+      )
+    )[0]!.amount;
     const popIrpef = [...byId.values()].reduce((acc, row) => add(acc, String(row.irpef)), "0");
     assert.equal(cmp(add(popIrpef, draftIrpef), allIrpef), 0, "draft IRPEF is outside the filing");
 
@@ -342,15 +459,8 @@ test(
   },
 );
 
-test(
-  "CU population refuses a year with no committed runs by name",
-  { skip: !DB },
-  async () => {
-    const { orgId } = await seedOrg();
-    const filing = cuFiling();
-    await assert.rejects(
-      filing.population(orgId, TAX_YEAR),
-      /no committed IT pay stubs/,
-    );
-  },
-);
+test("CU population refuses a year with no committed runs by name", { skip: !DB }, async () => {
+  const { orgId } = await seedOrg();
+  const filing = cuFiling();
+  await assert.rejects(filing.population(orgId, TAX_YEAR), /no committed IT pay stubs/);
+});

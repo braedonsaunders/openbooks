@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  ANALYTICS_CONFIG,
-  cleanConfigValues,
-  mergeConfig,
-} from "./config-spec";
+import { ANALYTICS_CONFIG, cleanConfigValues, mergeConfig } from "./config-spec";
 
 /**
  * The Cash Flow forecast-model thresholds live in the analytics threshold

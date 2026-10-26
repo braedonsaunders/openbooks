@@ -11,12 +11,15 @@ export interface IsoCurrency {
   name: string;
 }
 
-export const ISO_CURRENCIES: IsoCurrency[] = SUPPORTED_CURRENCIES.map(
-  ({ code, name }) => ({ code, name }),
-);
+export const ISO_CURRENCIES: IsoCurrency[] = SUPPORTED_CURRENCIES.map(({ code, name }) => ({
+  code,
+  name,
+}));
 
-const REGISTRY_NAME = new Map(SUPPORTED_CURRENCIES.map(({ code, name }) => [code, name]))
-const REGISTRY_MINOR_UNITS = new Map(SUPPORTED_CURRENCIES.map(({ code, minorUnits }) => [code, minorUnits]))
+const REGISTRY_NAME = new Map(SUPPORTED_CURRENCIES.map(({ code, name }) => [code, name]));
+const REGISTRY_MINOR_UNITS = new Map(
+  SUPPORTED_CURRENCIES.map(({ code, minorUnits }) => [code, minorUnits]),
+);
 
 /**
  * ISO accounting exponent for exact-decimal defaults (auto-apply amounts,
@@ -24,7 +27,7 @@ const REGISTRY_MINOR_UNITS = new Map(SUPPORTED_CURRENCIES.map(({ code, minorUnit
  * currency fields are never free text, so this is a backstop, not a rule.
  */
 export function currencyMinorUnits(code: string): number {
-  return REGISTRY_MINOR_UNITS.get(code) ?? 2
+  return REGISTRY_MINOR_UNITS.get(code) ?? 2;
 }
 
 /**
@@ -36,9 +39,13 @@ export function currencyMinorUnits(code: string): number {
  */
 export function currencyDisplayName(code: string, locale: string): string {
   try {
-    return new Intl.DisplayNames([locale], { type: 'currency' }).of(code) ?? REGISTRY_NAME.get(code) ?? code
+    return (
+      new Intl.DisplayNames([locale], { type: "currency" }).of(code) ??
+      REGISTRY_NAME.get(code) ??
+      code
+    );
   } catch {
-    return REGISTRY_NAME.get(code) ?? code
+    return REGISTRY_NAME.get(code) ?? code;
   }
 }
 
@@ -50,5 +57,5 @@ export function currencyOptions(locale: string): { value: string; label: string 
   return SUPPORTED_CURRENCIES.map(({ code }) => ({
     value: code,
     label: `${code} · ${currencyDisplayName(code, locale)}`,
-  })).sort((a, b) => a.label.localeCompare(b.label, locale))
+  })).sort((a, b) => a.label.localeCompare(b.label, locale));
 }

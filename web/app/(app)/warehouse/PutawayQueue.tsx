@@ -2,10 +2,7 @@
 
 import { useState } from "react";
 import { AsyncDrawer } from "@/components/async-url-drawer";
-import {
-  DirectedExecutionForm,
-  useDirectedExecution,
-} from "@/components/directed-execution";
+import { DirectedExecutionForm, useDirectedExecution } from "@/components/directed-execution";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button } from "@openbooks/ui";
@@ -36,20 +33,12 @@ const rowId = (row: StagedStockRowView) =>
  * names every rule tried. One retry identity per row and quantity, so a lost
  * response replays instead of moving the stock twice.
  */
-export function PutawayQueue({
-  rows,
-  canPost,
-}: {
-  rows: StagedStockRowView[];
-  canPost: boolean;
-}) {
+export function PutawayQueue({ rows, canPost }: { rows: StagedStockRowView[]; canPost: boolean }) {
   const t = useTranslations("warehouse");
   const router = useRouter();
   const [busyRow, setBusyRow] = useState<string | null>(null);
   const [postingDate] = useState(useBusinessToday());
-  const execution = useDirectedExecution("/api/inventory/execution", () =>
-    router.refresh(),
-  );
+  const execution = useDirectedExecution("/api/inventory/execution", () => router.refresh());
   async function putAway(row: StagedStockRowView) {
     setBusyRow(rowId(row));
     await execution.prepare({
@@ -80,11 +69,7 @@ export function PutawayQueue({
         searchable
         pageSize={10}
         emptyAsRow
-        empty={
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t("putaway.empty")}
-          </p>
-        }
+        empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t("putaway.empty")}</p>}
         columns={[
           {
             key: "warehouse",
@@ -107,9 +92,7 @@ export function PutawayQueue({
           {
             key: "tracking",
             header: "Lot / serial",
-            cell: (row) =>
-              [row.lotNumber, row.serialNumber].filter(Boolean).join(" / ") ||
-              "—",
+            cell: (row) => [row.lotNumber, row.serialNumber].filter(Boolean).join(" / ") || "—",
           },
           {
             key: "quantity",
@@ -121,11 +104,7 @@ export function PutawayQueue({
             ? [
                 {
                   key: "action",
-                  header: (
-                    <span className="sr-only">
-                      {t("putaway.columns.action")}
-                    </span>
-                  ),
+                  header: <span className="sr-only">{t("putaway.columns.action")}</span>,
                   align: "right" as const,
                   cell: (row: StagedStockRowView) => (
                     <Button

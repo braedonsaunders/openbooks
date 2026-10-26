@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // The 1:1 drawer description rendered the stored ISO instant with
 // millis (detail.when rode getOneOnOne's scheduledAt verbatim). The loader
@@ -11,35 +11,31 @@ import test from 'node:test'
 // Load the REAL zone formatters before the hooks below replace the module:
 // the mock isolates only businessTimeZone (the database read); the pure
 // formatters stay real so the copy cannot drift from the original.
-const realZone = await import('@openbooks/engine/platform/business-date/module')
+const realZone = await import("@openbooks/engine/platform/business-date/module");
 
-const stateKey = Symbol.for('openbooks.me-one-on-ones-page-test')
+const stateKey = Symbol.for("openbooks.me-one-on-ones-page-test");
 const routeState = {
   real: { formatInZone: realZone.formatInZone, formatTimeInZone: realZone.formatTimeInZone },
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const hrmCatalog = JSON.parse(readFileSync(new URL('../../../../messages/en/hrm.json', import.meta.url), 'utf8'))
-;(globalThis as Record<string, unknown>).__meOneOnOnesCatalog = hrmCatalog
+const hrmCatalog = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
+);
+(globalThis as Record<string, unknown>).__meOneOnOnesCatalog = hrmCatalog;
 
-const ONE_ID = '00000000-0000-4000-8000-000000000041'
-const SCHEDULED_AT = '2026-01-15T09:00:00.000Z'
+const ONE_ID = "00000000-0000-4000-8000-000000000041";
+const SCHEDULED_AT = "2026-01-15T09:00:00.000Z";
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `export async function getAuthz() { return { user: { id: 'user-1', orgId: 'org-1' } } }`,
   ],
+  ["mock:features", `export async function requireFeatureEnabled() {}`],
+  ["mock:self-service", `export async function meTabs() { return [] }`],
   [
-    'mock:features',
-    `export async function requireFeatureEnabled() {}`,
-  ],
-  [
-    'mock:self-service',
-    `export async function meTabs() { return [] }`,
-  ],
-  [
-    'mock:intl',
+    "mock:intl",
     `
       const catalog = globalThis.__meOneOnOnesCatalog
       const lookup = (key) => {
@@ -74,7 +70,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:one-on-ones',
+    "mock:one-on-ones",
     `
       const scheduledAt = globalThis.__meOneOnOnesScheduledAt
       export async function listOneOnOnes() {
@@ -105,16 +101,13 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  ["mock:feedback", `export async function listOpenRequestsForParty() { return [] }`],
   [
-    'mock:feedback',
-    `export async function listOpenRequestsForParty() { return [] }`,
-  ],
-  [
-    'mock:approval-person',
+    "mock:approval-person",
     `export async function loadApprovalPerson() { return { partyId: 'party-1' } }`,
   ],
   [
-    'mock:business-date',
+    "mock:business-date",
     `
       const state = globalThis[Symbol.for('openbooks.me-one-on-ones-page-test')]
       export async function businessTimeZone() { return 'America/New_York' }
@@ -122,54 +115,58 @@ const mockSources = new Map<string, string>([
       export function formatTimeInZone(date, timeZone) { return state.real.formatTimeInZone(date, timeZone) }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['../../../../lib/authz', 'mock:authz'],
-  ['../../../../lib/feature-gates', 'mock:features'],
-  ['../../../../lib/hrm/self-service', 'mock:self-service'],
-  ['next-intl/server', 'mock:intl'],
-  ['@openbooks/engine/hrm/performance/one-on-ones', 'mock:one-on-ones'],
-  ['@openbooks/engine/hrm/performance/feedback', 'mock:feedback'],
-  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
-  ['@openbooks/engine/hrm/authorization', 'mock:approval-person'],
-])
+  ["../../../../lib/authz", "mock:authz"],
+  ["../../../../lib/feature-gates", "mock:features"],
+  ["../../../../lib/hrm/self-service", "mock:self-service"],
+  ["next-intl/server", "mock:intl"],
+  ["@openbooks/engine/hrm/performance/one-on-ones", "mock:one-on-ones"],
+  ["@openbooks/engine/hrm/performance/feedback", "mock:feedback"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
+  ["@openbooks/engine/hrm/authorization", "mock:approval-person"],
+]);
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
   },
   load(url, _context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
   },
-})
+});
 
-;(globalThis as Record<string, unknown>).__meOneOnOnesScheduledAt = SCHEDULED_AT
-const { loadMeOneOnOnesPage } = await import('./view')
+(globalThis as Record<string, unknown>).__meOneOnOnesScheduledAt = SCHEDULED_AT;
+const { loadMeOneOnOnesPage } = await import("./view");
 
-test('the drawer names the org-zone wall time, never the raw ISO instant', async () => {
-  const data = await loadMeOneOnOnesPage({ one: ONE_ID })
-  assert.ok(data.detail, 'the drawer detail resolves')
-  assert.equal(data.detail.when, '2026-01-15 04:00')
-  assert.match(data.detail.when, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, 'no T, zone suffix, or millis')
-  assert.equal(data.detail.title, 'Rae Report', 'the heading identifies the person; the description carries the time')
-})
+test("the drawer names the org-zone wall time, never the raw ISO instant", async () => {
+  const data = await loadMeOneOnOnesPage({ one: ONE_ID });
+  assert.ok(data.detail, "the drawer detail resolves");
+  assert.equal(data.detail.when, "2026-01-15 04:00");
+  assert.match(data.detail.when, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/, "no T, zone suffix, or millis");
+  assert.equal(
+    data.detail.title,
+    "Rae Report",
+    "the heading identifies the person; the description carries the time",
+  );
+});
 
-test('list timestamps use the viewer locale and organization time zone', async () => {
-  const data = await loadMeOneOnOnesPage({})
-  assert.match(data.upcoming[0]!.when, /4:00 AM/)
-})
+test("list timestamps use the viewer locale and organization time zone", async () => {
+  const data = await loadMeOneOnOnesPage({});
+  assert.match(data.upcoming[0]!.when, /4:00 AM/);
+});
 
-test('authorMine derives from the delivered author, never a constant', async () => {
-  const data = await loadMeOneOnOnesPage({ one: ONE_ID })
-  assert.ok(data.detail, 'the drawer detail resolves')
+test("authorMine derives from the delivered author, never a constant", async () => {
+  const data = await loadMeOneOnOnesPage({ one: ONE_ID });
+  assert.ok(data.detail, "the drawer detail resolves");
   assert.deepEqual(
     data.detail.items.map((item) => item.authorMine),
     [true, false],
-    'the own-authored note reads mine, the other-authored note does not',
-  )
-})
+    "the own-authored note reads mine, the other-authored note does not",
+  );
+});

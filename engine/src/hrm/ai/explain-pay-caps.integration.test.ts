@@ -3,11 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../../testing/fixtures.ts";
 import { explainPay } from "./explain-pay.ts";
 
 /**
@@ -26,8 +22,13 @@ async function seedEmployment(orgId: string): Promise<{ employmentId: string; pa
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${partyId}, ${orgId}, 'person', 'Capped Worker', true, '{}'::jsonb)`);
-  const subsidiary = (await db.execute<{ id: string }>(sql`
-    select id::text as id from subsidiaries where org_id = ${orgId} limit 1`, "objects"))[0]?.id;
+  const subsidiary = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id::text as id from subsidiaries where org_id = ${orgId} limit 1`,
+      "objects",
+    )
+  )[0]?.id;
   assert.ok(subsidiary, "scratch org needs a subsidiary");
   const employmentId = randomUUID();
   await db.execute(sql`
@@ -58,8 +59,13 @@ async function seedRun(
                                pay_date_offset_days, is_active)
     values (${randomUUID()}, ${orgId}, ${`Sched ${runId.slice(0, 8)}`}, 'biweekly', 26,
             '2026-09-30', 3, true)`);
-  const scheduleId = (await db.execute<{ id: string }>(sql`
-    select id::text as id from pay_schedules where org_id = ${orgId} order by id desc limit 1`, "objects"))[0]!.id;
+  const scheduleId = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id::text as id from pay_schedules where org_id = ${orgId} order by id desc limit 1`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
                            currency, status, created_by, updated_by)
@@ -78,128 +84,161 @@ async function seedRun(
       ${JSON.stringify(opts.factors)}::jsonb)`);
 }
 
-test("a capped EI line shows YTD, the annual maximum, remaining room, and the capped flag", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const adminId = await createScratchUser(org.orgId, "Explain Admin", "explain_admin");
-  await db.execute(sql`
+test(
+  "a capped EI line shows YTD, the annual maximum, remaining room, and the capped flag",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const adminId = await createScratchUser(org.orgId, "Explain Admin", "explain_admin");
+    await db.execute(sql`
     insert into user_permission_overrides (org_id, user_id, permission, effect)
     values (${org.orgId}, ${adminId}, 'payroll.manage', 'grant')`);
-  await db.execute(sql`
+    await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,payroll}', 'true'::jsonb, true)
     where id = ${org.orgId}`);
-  await db.execute(sql`
+    await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
     where id = ${org.orgId}`);
-  await db.execute(sql`
+    await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,aiGovernanceLedger}', 'true'::jsonb, true)
     where id = ${org.orgId}`);
-  try {
-    const { employmentId, partyId } = await seedEmployment(org.orgId);
-    const subsidiary = (await db.execute<{ id: string }>(sql`
-      select id::text as id from subsidiaries where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
-    // Components the trace matches by system key: EI on both sides of the
-    // stub plus an uncapped tax line that must stay empty.
-    const eiDeduction = randomUUID();
-    const eiEmployer = randomUUID();
-    const incomeTax = randomUUID();
-    await db.execute(sql`
+    try {
+      const { employmentId, partyId } = await seedEmployment(org.orgId);
+      const subsidiary = (
+        await db.execute<{ id: string }>(
+          sql`
+      select id::text as id from subsidiaries where org_id = ${org.orgId} limit 1`,
+          "objects",
+        )
+      )[0]!.id;
+      // Components the trace matches by system key: EI on both sides of the
+      // stub plus an uncapped tax line that must stay empty.
+      const eiDeduction = randomUUID();
+      const eiEmployer = randomUUID();
+      const incomeTax = randomUUID();
+      await db.execute(sql`
       insert into pay_components (id, org_id, code, name, kind, country, system_key, basis, is_active, created_by, updated_by)
       values (${eiDeduction}, ${org.orgId}, 'EI', 'EI', 'deduction', 'CA', 'ei', 'fixed_amount', true, ${adminId}, ${adminId}),
              (${eiEmployer}, ${org.orgId}, 'EI_ER', 'EI employer', 'employer_contribution', 'CA', 'ei', 'fixed_amount', true, ${adminId}, ${adminId}),
              (${incomeTax}, ${org.orgId}, 'TAX', 'Income tax', 'deduction', 'CA', 'income_tax', 'fixed_amount', true, ${adminId}, ${adminId})`);
-    // Prior-provider carry-ins: EI premiums and employer EI already paid.
-    await db.execute(sql`
+      // Prior-provider carry-ins: EI premiums and employer EI already paid.
+      await db.execute(sql`
       insert into payroll_opening_balances (org_id, employee_party_id, tax_year, ei_ytd, employer_ei_ytd, created_by, updated_by)
       values (${org.orgId}, ${partyId}, 2026, 200, 100, ${adminId}, ${adminId})`);
-    // A prior committed stub inside the same tax year.
-    const stubPrev = randomUUID();
-    await seedRun(org.orgId, adminId, subsidiary, {
-      stubId: stubPrev, partyId, employmentId, payDate: "2026-10-31",
-      factors: { EI: "800.00", EI_ER: "1120.00" },
-    });
-    // The explained stub: 200 carry-in + 800 prior + 123.07 here reaches
-    // the 2026 EI annual maximum of 1123.07 exactly.
-    const stubCur = randomUUID();
-    await seedRun(org.orgId, adminId, subsidiary, {
-      stubId: stubCur, partyId, employmentId, payDate: "2026-11-30",
-      factors: { EI: "123.07", EI_ER: "172.30" },
-    });
-    await db.execute(sql`
+      // A prior committed stub inside the same tax year.
+      const stubPrev = randomUUID();
+      await seedRun(org.orgId, adminId, subsidiary, {
+        stubId: stubPrev,
+        partyId,
+        employmentId,
+        payDate: "2026-10-31",
+        factors: { EI: "800.00", EI_ER: "1120.00" },
+      });
+      // The explained stub: 200 carry-in + 800 prior + 123.07 here reaches
+      // the 2026 EI annual maximum of 1123.07 exactly.
+      const stubCur = randomUUID();
+      await seedRun(org.orgId, adminId, subsidiary, {
+        stubId: stubCur,
+        partyId,
+        employmentId,
+        payDate: "2026-11-30",
+        factors: { EI: "123.07", EI_ER: "172.30" },
+      });
+      await db.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount, sequence)
       values (${org.orgId}, ${stubCur}, ${eiDeduction}, 'deduction', 'EI', 123.07, 140),
              (${org.orgId}, ${stubCur}, ${eiEmployer}, 'employer_contribution', 'EI (employer)', 172.30, 220),
              (${org.orgId}, ${stubCur}, ${incomeTax}, 'deduction', 'Income tax', 500, 110)`);
 
-    const trace = await explainPay(db, {
-      orgId: org.orgId, actorId: adminId, employmentId, stubId: stubCur,
-    });
-    const ei = trace.deductions.find((line) => line.description === "EI");
-    assert.ok(ei, "the EI deduction line must be in the trace");
-    assert.equal(ei.ytd, "1123.0700");
-    assert.equal(ei.annualMaximum, "1123.07");
-    assert.equal(ei.remainingBeforeMax, "123.0700");
-    assert.equal(ei.capped, true);
+      const trace = await explainPay(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        employmentId,
+        stubId: stubCur,
+      });
+      const ei = trace.deductions.find((line) => line.description === "EI");
+      assert.ok(ei, "the EI deduction line must be in the trace");
+      assert.equal(ei.ytd, "1123.0700");
+      assert.equal(ei.annualMaximum, "1123.07");
+      assert.equal(ei.remainingBeforeMax, "123.0700");
+      assert.equal(ei.capped, true);
 
-    const eiEr = trace.employerContributions.find((line) => line.description === "EI (employer)");
-    assert.ok(eiEr, "the employer EI line must be in the trace");
-    assert.equal(eiEr.ytd, "1392.3000");
-    assert.equal(eiEr.annualMaximum, null);
-    assert.equal(eiEr.remainingBeforeMax, null);
-    assert.equal(eiEr.capped, false);
+      const eiEr = trace.employerContributions.find((line) => line.description === "EI (employer)");
+      assert.ok(eiEr, "the employer EI line must be in the trace");
+      assert.equal(eiEr.ytd, "1392.3000");
+      assert.equal(eiEr.annualMaximum, null);
+      assert.equal(eiEr.remainingBeforeMax, null);
+      assert.equal(eiEr.capped, false);
 
-    const tax = trace.deductions.find((line) => line.description === "Income tax");
-    assert.ok(tax, "the tax line must be in the trace");
-    assert.equal(tax.ytd, null);
-    assert.equal(tax.annualMaximum, null);
-    assert.equal(tax.remainingBeforeMax, null);
-    assert.equal(tax.capped, false);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const tax = trace.deductions.find((line) => line.description === "Income tax");
+      assert.ok(tax, "the tax line must be in the trace");
+      assert.equal(tax.ytd, null);
+      assert.equal(tax.annualMaximum, null);
+      assert.equal(tax.remainingBeforeMax, null);
+      assert.equal(tax.capped, false);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an uncapped EI line shows history with room left and no capped flag", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const adminId = await createScratchUser(org.orgId, "Explain Admin", "explain_admin2");
-  await db.execute(sql`
+test(
+  "an uncapped EI line shows history with room left and no capped flag",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const adminId = await createScratchUser(org.orgId, "Explain Admin", "explain_admin2");
+    await db.execute(sql`
     insert into user_permission_overrides (org_id, user_id, permission, effect)
     values (${org.orgId}, ${adminId}, 'payroll.manage', 'grant')`);
-  await db.execute(sql`
+    await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,payroll}', 'true'::jsonb, true)
     where id = ${org.orgId}`);
-  await db.execute(sql`
+    await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
     where id = ${org.orgId}`);
-  await db.execute(sql`
+    await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,aiGovernanceLedger}', 'true'::jsonb, true)
     where id = ${org.orgId}`);
-  try {
-    const { employmentId, partyId } = await seedEmployment(org.orgId);
-    const subsidiary = (await db.execute<{ id: string }>(sql`
-      select id::text as id from subsidiaries where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
-    const eiDeduction = randomUUID();
-    await db.execute(sql`
+    try {
+      const { employmentId, partyId } = await seedEmployment(org.orgId);
+      const subsidiary = (
+        await db.execute<{ id: string }>(
+          sql`
+      select id::text as id from subsidiaries where org_id = ${org.orgId} limit 1`,
+          "objects",
+        )
+      )[0]!.id;
+      const eiDeduction = randomUUID();
+      await db.execute(sql`
       insert into pay_components (id, org_id, code, name, kind, country, system_key, basis, is_active, created_by, updated_by)
       values (${eiDeduction}, ${org.orgId}, 'EI', 'EI', 'deduction', 'CA', 'ei', 'fixed_amount', true, ${adminId}, ${adminId})`);
-    const stubCur = randomUUID();
-    await seedRun(org.orgId, adminId, subsidiary, {
-      stubId: stubCur, partyId, employmentId, payDate: "2026-03-31",
-      factors: { EI: "50.00" },
-    });
-    await db.execute(sql`
+      const stubCur = randomUUID();
+      await seedRun(org.orgId, adminId, subsidiary, {
+        stubId: stubCur,
+        partyId,
+        employmentId,
+        payDate: "2026-03-31",
+        factors: { EI: "50.00" },
+      });
+      await db.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount, sequence)
       values (${org.orgId}, ${stubCur}, ${eiDeduction}, 'deduction', 'EI', 50, 140)`);
 
-    const trace = await explainPay(db, {
-      orgId: org.orgId, actorId: adminId, employmentId, stubId: stubCur,
-    });
-    const ei = trace.deductions.find((line) => line.description === "EI");
-    assert.ok(ei, "the EI deduction line must be in the trace");
-    assert.equal(ei.ytd, "50.0000");
-    assert.equal(ei.annualMaximum, "1123.07");
-    assert.equal(ei.remainingBeforeMax, "1123.0700");
-    assert.equal(ei.capped, false);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const trace = await explainPay(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        employmentId,
+        stubId: stubCur,
+      });
+      const ei = trace.deductions.find((line) => line.description === "EI");
+      assert.ok(ei, "the EI deduction line must be in the trace");
+      assert.equal(ei.ytd, "50.0000");
+      assert.equal(ei.annualMaximum, "1123.07");
+      assert.equal(ei.remainingBeforeMax, "1123.0700");
+      assert.equal(ei.capped, false);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

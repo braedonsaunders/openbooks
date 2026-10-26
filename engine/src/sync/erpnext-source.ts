@@ -1,16 +1,28 @@
 import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { erpnextAttachmentProvider } from "./attachment-providers.ts";
-import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
+import {
+  syncTransactionAttachments,
+  type AttachmentSyncOptions,
+} from "./transaction-attachments.ts";
 import { ErpNextClient, type ErpNextCreds } from "../connectors/erpnext.ts";
 import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
 import {
-  buildErpInvoice, buildErpJournal, buildErpPayment,
-  type ErpInvoice, type ErpJournal, type ErpPayment,
+  buildErpInvoice,
+  buildErpJournal,
+  buildErpPayment,
+  type ErpInvoice,
+  type ErpJournal,
+  type ErpPayment,
 } from "./erpnext-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
-  EntityStream, MigrationSource, NativeChanges, SourceEntity,
-  SourceAccountMonthRow, SourceOpenItem, SourceTrialBalanceRow,
+  EntityStream,
+  MigrationSource,
+  NativeChanges,
+  SourceEntity,
+  SourceAccountMonthRow,
+  SourceOpenItem,
+  SourceTrialBalanceRow,
 } from "./source.ts";
 import { allModules, monthlySourcePeriods, type SourceFiscalYear } from "./periods.ts";
 
@@ -61,7 +73,16 @@ const INVOICE_FIELDS = ["name", "modified", "docstatus"];
 
 export class ErpNextSource implements MigrationSource {
   readonly name = "erpnext";
-  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], ['customers', 'vendors'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
+  readonly entityMappingMetadata = entityMappingMetadata(
+    ["accounting_periods", "accounts", "tax_codes", "parties", "items", "files"],
+    ["customers", "vendors"],
+    {
+      accounts: ["number", "name", "type", "isActive"],
+      parties: ["displayName", "kind", "isActive"],
+      items: ["code", "name", "kind", "isActive"],
+      tax_codes: ["code", "name", "ratePercent", "appliesTo"],
+    },
+  );
   readonly refKey = "erpId";
   readonly baseCurrency: string;
   private readonly client: ErpNextClient;
@@ -100,12 +121,24 @@ export class ErpNextSource implements MigrationSource {
 
   async accountingPeriods(): Promise<SourceEntity[]> {
     const [years, settings] = await Promise.all([
-      this.client.listAll<{ name: string; year_start_date: string; year_end_date: string; disabled: 0 | 1 }>(
-        "Fiscal Year", ["name", "year_start_date", "year_end_date", "disabled"], [["disabled", "=", 0]], "year_start_date asc",
+      this.client.listAll<{
+        name: string;
+        year_start_date: string;
+        year_end_date: string;
+        disabled: 0 | 1;
+      }>(
+        "Fiscal Year",
+        ["name", "year_start_date", "year_end_date", "disabled"],
+        [["disabled", "=", 0]],
+        "year_start_date asc",
       ),
-      this.client.getDoc<{ acc_frozen_upto?: string | null }>("Accounts Settings", "Accounts Settings"),
+      this.client.getDoc<{ acc_frozen_upto?: string | null }>(
+        "Accounts Settings",
+        "Accounts Settings",
+      ),
     ]);
-    if (years.length === 0) throw new Error("ERPNext fiscal years are required for period migration");
+    if (years.length === 0)
+      throw new Error("ERPNext fiscal years are required for period migration");
     const normalized: SourceFiscalYear[] = years.map((year) => ({
       key: year.name,
       fiscalYear: Number(year.name.match(/\d{4}/)?.[0] ?? year.year_end_date.slice(0, 4)),
@@ -113,19 +146,31 @@ export class ErpNextSource implements MigrationSource {
       endsOn: year.year_end_date,
     }));
     const frozen = settings.acc_frozen_upto ?? null;
-    return monthlySourcePeriods(
-      "erpnext-period",
-      normalized,
-      (endsOn) => allModules(frozen && endsOn <= frozen ? "closed" : "open"),
+    return monthlySourcePeriods("erpnext-period", normalized, (endsOn) =>
+      allModules(frozen && endsOn <= frozen ? "closed" : "open"),
     );
   }
 
   private async accounts(): Promise<SourceEntity[]> {
     const rows = await this.client.listAll<{
-      name: string; account_name: string; account_number: string | null;
-      parent_account: string | null; is_group: 0 | 1; root_type: string;
-      account_type: string | null; disabled: 0 | 1;
-    }>("Account", ["name", "account_name", "account_number", "parent_account", "is_group", "root_type", "account_type", "disabled"]);
+      name: string;
+      account_name: string;
+      account_number: string | null;
+      parent_account: string | null;
+      is_group: 0 | 1;
+      root_type: string;
+      account_type: string | null;
+      disabled: 0 | 1;
+    }>("Account", [
+      "name",
+      "account_name",
+      "account_number",
+      "parent_account",
+      "is_group",
+      "root_type",
+      "account_type",
+      "disabled",
+    ]);
     return rows.map((a) => ({
       sourceRef: a.name,
       naturalKey: a.account_number || null,
@@ -135,7 +180,8 @@ export class ErpNextSource implements MigrationSource {
         name: a.account_name,
         type:
           (a.account_type ? ERP_TYPE_BY_ACCOUNT_TYPE[a.account_type] : undefined) ??
-          ERP_TYPE_BY_ROOT[a.root_type] ?? "asset_current_other",
+          ERP_TYPE_BY_ROOT[a.root_type] ??
+          "asset_current_other",
         isSummary: a.is_group === 1,
         isActive: a.disabled !== 1,
         reconcilable: erpNextReconcilableAccountType(a.account_type),
@@ -147,7 +193,9 @@ export class ErpNextSource implements MigrationSource {
     // Each Tax-typed account is its own code: ERPNext posts every rate to its
     // own ledger account, and the per-code control routing reproduces that.
     const rows = await this.client.listAll<{ name: string; account_name: string; is_group: 0 | 1 }>(
-      "Account", ["name", "account_name", "is_group"], [["account_type", "=", "Tax"]],
+      "Account",
+      ["name", "account_name", "is_group"],
+      [["account_type", "=", "Tax"]],
     );
     return rows
       .filter((a) => a.is_group === 0)
@@ -171,12 +219,18 @@ export class ErpNextSource implements MigrationSource {
     // Merge signals: Customer/Supplier list rows expose `disabled` only — no
     // successor pointer. No mergedIntoRef is emitted; disappearances take the
     // held path.
-    const customers = await this.client.listAll<{ name: string; customer_name: string; customer_type: string; disabled: 0 | 1 }>(
-      "Customer", ["name", "customer_name", "customer_type", "disabled"], this.sinceFilter(since),
-    );
-    const suppliers = await this.client.listAll<{ name: string; supplier_name: string; supplier_type: string; disabled: 0 | 1 }>(
-      "Supplier", ["name", "supplier_name", "supplier_type", "disabled"], this.sinceFilter(since),
-    );
+    const customers = await this.client.listAll<{
+      name: string;
+      customer_name: string;
+      customer_type: string;
+      disabled: 0 | 1;
+    }>("Customer", ["name", "customer_name", "customer_type", "disabled"], this.sinceFilter(since));
+    const suppliers = await this.client.listAll<{
+      name: string;
+      supplier_name: string;
+      supplier_type: string;
+      disabled: 0 | 1;
+    }>("Supplier", ["name", "supplier_name", "supplier_type", "disabled"], this.sinceFilter(since));
     return [
       ...customers.map((c) => ({
         sourceRef: `C:${c.name}`,
@@ -200,8 +254,16 @@ export class ErpNextSource implements MigrationSource {
   }
 
   private async items(since?: Date | null): Promise<SourceEntity[]> {
-    const rows = await this.client.listAll<{ name: string; item_code: string; item_name: string; is_stock_item: 0 | 1; disabled: 0 | 1 }>(
-      "Item", ["name", "item_code", "item_name", "is_stock_item", "disabled"], this.sinceFilter(since),
+    const rows = await this.client.listAll<{
+      name: string;
+      item_code: string;
+      item_name: string;
+      is_stock_item: 0 | 1;
+      disabled: 0 | 1;
+    }>(
+      "Item",
+      ["name", "item_code", "item_name", "is_stock_item", "disabled"],
+      this.sinceFilter(since),
     );
     return rows.map((i) => ({
       sourceRef: i.name,
@@ -217,10 +279,20 @@ export class ErpNextSource implements MigrationSource {
 
   // --- control accounts ------------------------------------------------------------
 
-  async controlAccounts(): Promise<Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>> {
-    const rows = await this.client.listAll<{ name: string; account_type: string | null; is_group: 0 | 1 }>(
-      "Account", ["name", "account_type", "is_group"],
-      [["account_type", "in", ["Receivable", "Payable", "Bank", "Cash", "Tax"]], ["is_group", "=", 0]],
+  async controlAccounts(): Promise<
+    Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>
+  > {
+    const rows = await this.client.listAll<{
+      name: string;
+      account_type: string | null;
+      is_group: 0 | 1;
+    }>(
+      "Account",
+      ["name", "account_type", "is_group"],
+      [
+        ["account_type", "in", ["Receivable", "Payable", "Bank", "Cash", "Tax"]],
+        ["is_group", "=", 0],
+      ],
     );
     const first = (t: string) => rows.find((a) => a.account_type === t)?.name;
     const bank = first("Bank") ?? first("Cash");
@@ -250,22 +322,40 @@ export class ErpNextSource implements MigrationSource {
     };
 
     for (const doctype of ["Sales Invoice", "Purchase Invoice"]) {
-      const heads = await this.client.listAll<{ name: string; modified: string }>(doctype, INVOICE_FIELDS, filt);
+      const heads = await this.client.listAll<{ name: string; modified: string }>(
+        doctype,
+        INVOICE_FIELDS,
+        filt,
+      );
       for (const h of heads) {
         track(h.modified);
         const doc = await this.client.getDoc<ErpInvoice>(doctype, h.name);
         add(buildErpInvoice(ctx, doc), h.name);
       }
     }
-    const payHeads = await this.client.listAll<{ name: string; modified: string }>("Payment Entry", INVOICE_FIELDS, filt);
+    const payHeads = await this.client.listAll<{ name: string; modified: string }>(
+      "Payment Entry",
+      INVOICE_FIELDS,
+      filt,
+    );
     for (const h of payHeads) {
       track(h.modified);
-      add(buildErpPayment(ctx, await this.client.getDoc<ErpPayment>("Payment Entry", h.name)), h.name);
+      add(
+        buildErpPayment(ctx, await this.client.getDoc<ErpPayment>("Payment Entry", h.name)),
+        h.name,
+      );
     }
-    const jeHeads = await this.client.listAll<{ name: string; modified: string }>("Journal Entry", INVOICE_FIELDS, filt);
+    const jeHeads = await this.client.listAll<{ name: string; modified: string }>(
+      "Journal Entry",
+      INVOICE_FIELDS,
+      filt,
+    );
     for (const h of jeHeads) {
       track(h.modified);
-      add(buildErpJournal(ctx, await this.client.getDoc<ErpJournal>("Journal Entry", h.name)), h.name);
+      add(
+        buildErpJournal(ctx, await this.client.getDoc<ErpJournal>("Journal Entry", h.name)),
+        h.name,
+      );
     }
 
     // Applications: every submitted Payment Entry's references (full graph —
@@ -293,7 +383,9 @@ export class ErpNextSource implements MigrationSource {
     const refCurrency = new Map<string, { account: string | null; txn: string | null }>();
     for (const doctype of ["Sales Invoice", "Purchase Invoice", "Sales Order", "Purchase Order"]) {
       const rows = await this.client.listAll<{
-        name: string; currency?: string | null; party_account_currency?: string | null;
+        name: string;
+        currency?: string | null;
+        party_account_currency?: string | null;
       }>(doctype, ["name", "currency", "party_account_currency"], []);
       for (const row of rows) {
         if (!row.name) continue;
@@ -304,14 +396,27 @@ export class ErpNextSource implements MigrationSource {
       }
     }
     const applications: NativeChanges["applications"] = [];
-    const allPays = await this.client.listAll<{ name: string }>("Payment Entry", ["name"], [["docstatus", "=", 1]]);
+    const allPays = await this.client.listAll<{ name: string }>(
+      "Payment Entry",
+      ["name"],
+      [["docstatus", "=", 1]],
+    );
     for (const p of allPays) {
-      const doc = await this.client.getDoc<ErpPayment & { references?: { reference_doctype?: string | null; reference_name: string; allocated_amount: number; exchange_rate?: number | null }[] }>(
-        "Payment Entry", p.name,
-      );
+      const doc = await this.client.getDoc<
+        ErpPayment & {
+          references?: {
+            reference_doctype?: string | null;
+            reference_name: string;
+            allocated_amount: number;
+            exchange_rate?: number | null;
+          }[];
+        }
+      >("Payment Entry", p.name);
       for (const r of doc.references ?? []) {
         if (!(r.allocated_amount > 0)) continue;
-        const pair = r.reference_doctype ? refCurrency.get(`${r.reference_doctype}:${r.reference_name}`) : undefined;
+        const pair = r.reference_doctype
+          ? refCurrency.get(`${r.reference_doctype}:${r.reference_name}`)
+          : undefined;
         const currency = pair?.account ?? pair?.txn ?? "";
         // State the producer rate only when its FROM (the invoice's
         // transaction currency) provably equals the allocation's currency
@@ -321,9 +426,10 @@ export class ErpNextSource implements MigrationSource {
         // the books cannot price themselves.
         const fx = r.exchange_rate;
         const aligned = !!pair?.account && !!pair?.txn && pair.account === pair.txn;
-        const rate = currency && aligned && typeof fx === "number" && Number.isFinite(fx) && fx > 0
-          ? String(fx)
-          : null;
+        const rate =
+          currency && aligned && typeof fx === "number" && Number.isFinite(fx) && fx > 0
+            ? String(fx)
+            : null;
         applications.push({
           paymentRef: p.name,
           appliedRef: r.reference_name,
@@ -334,27 +440,41 @@ export class ErpNextSource implements MigrationSource {
       }
     }
 
-    return { documents, applications, deletedRefs: [], syncedThrough: maxWrite ?? since ?? new Date(0), unbuildable };
+    return {
+      documents,
+      applications,
+      deletedRefs: [],
+      syncedThrough: maxWrite ?? since ?? new Date(0),
+      unbuildable,
+    };
   }
 
   // --- verification ---------------------------------------------------------------------
 
   async trialBalance(): Promise<SourceTrialBalanceRow[]> {
     const rows = await this.client.listAll<{ account: string; debit: number; credit: number }>(
-      "GL Entry", ["account", "debit", "credit"], [["is_cancelled", "=", 0]],
+      "GL Entry",
+      ["account", "debit", "credit"],
+      [["is_cancelled", "=", 0]],
     );
     const byAccount = new Map<string, bigint>();
     for (const g of rows) {
       const u = toUnits(String(g.debit ?? 0)) - toUnits(String(g.credit ?? 0));
       byAccount.set(g.account, (byAccount.get(g.account) ?? 0n) + u);
     }
-    return [...byAccount.entries()].map(([accountRef, bal]) => ({ accountRef, balance: fromUnits(bal) }));
+    return [...byAccount.entries()].map(([accountRef, bal]) => ({
+      accountRef,
+      balance: fromUnits(bal),
+    }));
   }
 
   async monthlyActivity(): Promise<SourceAccountMonthRow[]> {
-    const rows = await this.client.listAll<{ account: string; posting_date: string; debit: number; credit: number }>(
-      "GL Entry", ["account", "posting_date", "debit", "credit"], [["is_cancelled", "=", 0]],
-    );
+    const rows = await this.client.listAll<{
+      account: string;
+      posting_date: string;
+      debit: number;
+      credit: number;
+    }>("GL Entry", ["account", "posting_date", "debit", "credit"], [["is_cancelled", "=", 0]]);
     const byBucket = new Map<string, bigint>();
     for (const g of rows) {
       const key = `${g.account}|${String(g.posting_date).slice(0, 7)}`;
@@ -371,9 +491,12 @@ export class ErpNextSource implements MigrationSource {
     const out: SourceOpenItem[] = [];
     for (const doctype of ["Sales Invoice", "Purchase Invoice"]) {
       const rows = await this.client.listAll<{ name: string; outstanding_amount: number }>(
-        doctype, ["name", "outstanding_amount"], [["docstatus", "=", 1]],
+        doctype,
+        ["name", "outstanding_amount"],
+        [["docstatus", "=", 1]],
       );
-      for (const r of rows) out.push({ ref: r.name, unpaid: formatMoney(String(r.outstanding_amount ?? 0), 2) });
+      for (const r of rows)
+        out.push({ ref: r.name, unpaid: formatMoney(String(r.outstanding_amount ?? 0), 2) });
     }
     return out;
   }

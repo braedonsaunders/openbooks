@@ -33,9 +33,7 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, rate6, U } from "../../../money/payroll-decimal.ts";
 import { mulRatio } from "../../../money/money.ts";
-import {
-  certificateAmount, type PayrollCertificate,
-} from "../../certificates.ts";
+import { certificateAmount, type PayrollCertificate } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
@@ -45,7 +43,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ky.ts";
 
 export interface KyYearRates {
@@ -68,17 +70,19 @@ const KY_EDITIONS_BY_YEAR: Record<number, KyYearRates> = {
   [KY_RATES_2026.year]: KY_RATES_2026,
 };
 
-export const KY_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "42A003 (TCF)(10-2025) 2026 Kentucky Withholding Tax Formula",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Kentucky Department of Revenue, 42A003 (TCF)(10-2025), 2026 Kentucky Withholding Tax "
-    + "Formula — standard deduction $3,360, flat rate 3.5%, monthly and bi-weekly worked "
-    + "examples; Form 42A804 (K-4) (2026)",
-  status: "published",
-  region: "KY",
-}];
+export const KY_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "42A003 (TCF)(10-2025) 2026 Kentucky Withholding Tax Formula",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Kentucky Department of Revenue, 42A003 (TCF)(10-2025), 2026 Kentucky Withholding Tax " +
+      "Formula — standard deduction $3,360, flat rate 3.5%, monthly and bi-weekly worked " +
+      "examples; Form 42A804 (K-4) (2026)",
+    status: "published",
+    region: "KY",
+  },
+];
 
 function compute(
   input: UsStateWithholdingInput,
@@ -181,23 +185,28 @@ export interface LouisvilleDatedRate {
   source: string;
 }
 
-export const LOUISVILLE_RATES: readonly LouisvilleDatedRate[] = [{
-  effectiveFrom: "2026-01-01",
-  resident: pctToRate("2.2"),
-  nonresident: pctToRate("1.45"),
-  source: "Louisville Metro Revenue Commission, 2026 Form W-1REE (resident 2.2%, nonresident 1.45%)",
-}];
+export const LOUISVILLE_RATES: readonly LouisvilleDatedRate[] = [
+  {
+    effectiveFrom: "2026-01-01",
+    resident: pctToRate("2.2"),
+    nonresident: pctToRate("1.45"),
+    source:
+      "Louisville Metro Revenue Commission, 2026 Form W-1REE (resident 2.2%, nonresident 1.45%)",
+  },
+];
 
-export const LOUISVILLE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Louisville Metro occupational license tax (2026 Form W-1REE rates)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Louisville Metro Revenue Commission, Forms and Publications; 2026 Form W-1REE "
-    + "(resident 2.2%, nonresident 1.45% on gross compensation for work within Louisville/Jefferson County)",
-  status: "published",
-  region: "KY",
-}];
+export const LOUISVILLE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Louisville Metro occupational license tax (2026 Form W-1REE rates)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Louisville Metro Revenue Commission, Forms and Publications; 2026 Form W-1REE " +
+      "(resident 2.2%, nonresident 1.45% on gross compensation for work within Louisville/Jefferson County)",
+    status: "published",
+    region: "KY",
+  },
+];
 
 export function louisvilleRateFor(
   payDate: string,
@@ -209,8 +218,8 @@ export function louisvilleRateFor(
     .at(-1);
   if (!period) {
     throw new PayrollError(
-      `no Louisville occupational tax rate is loaded for a pay date of ${payDate} — the Metro Revenue `
-      + `Commission publishes the effective rate. This date is not yet supported by the US pack; contact support — refused by name.`,
+      `no Louisville occupational tax rate is loaded for a pay date of ${payDate} — the Metro Revenue ` +
+        `Commission publishes the effective rate. This date is not yet supported by the US pack; contact support — refused by name.`,
     );
   }
   return {
@@ -249,14 +258,14 @@ function computeLouisville(
         share = rate6(matches[0]!.workShare);
       } catch {
         throw new PayrollError(
-          "KY/LOUISVILLE work allocation must be an exact decimal share from 0 through 1; "
-          + "correct the verified work-share input before calculating",
+          "KY/LOUISVILLE work allocation must be an exact decimal share from 0 through 1; " +
+            "correct the verified work-share input before calculating",
         );
       }
       if (share < 0n || share > 1_000_000n) {
         throw new PayrollError(
-          "KY/LOUISVILLE work allocation is outside 0–1; "
-          + "correct the verified work-share input before calculating",
+          "KY/LOUISVILLE work allocation is outside 0–1; " +
+            "correct the verified work-share input before calculating",
         );
       }
       base = U(mulRatio(D(base), share, 1_000_000n));
@@ -279,7 +288,11 @@ function computeLouisville(
 }
 
 const LOUISVILLE_STATE_ENGINE = defineStateEngine({
-  state: { state: "KY-LOU", label: "Louisville Metro occupational license tax", printedPeriods: null },
+  state: {
+    state: "KY-LOU",
+    label: "Louisville Metro occupational license tax",
+    printedPeriods: null,
+  },
   editions: pairStateRateEditions(Object.values(KY_EDITIONS_BY_YEAR), LOUISVILLE_TAX_YEAR_EDITIONS),
   compute: computeLouisville,
 });
@@ -315,10 +328,10 @@ export const KY_CERTIFICATE: PayrollCertificate = {
   citation:
     "Kentucky Form 42A804 (K-4) (2026); 42A003 (TCF)(10-2025) 2026 Kentucky Withholding Tax Formula",
   summary:
-    "Documents an exemption from Kentucky withholding or a request for additional withholding. "
-    + "\"If neither situation applies, then an employer is not required to maintain Form K-4.\" "
-    + "The formula itself has no allowances — every wage earner is taxed at 3.5% after the "
-    + "$3,360 standard deduction.",
+    "Documents an exemption from Kentucky withholding or a request for additional withholding. " +
+    '"If neither situation applies, then an employer is not required to maintain Form K-4." ' +
+    "The formula itself has no allowances — every wage earner is taxed at 3.5% after the " +
+    "$3,360 standard deduction.",
   storage: "certificate_rows",
   fields: [
     {
@@ -326,16 +339,18 @@ export const KY_CERTIFICATE: PayrollCertificate = {
       label: "Exempt from Kentucky withholding",
       kind: "flag",
       help:
-        "K-4 boxes 1–4: no 2026 Kentucky income-tax liability expected; Fort Campbell "
-        + "nonresident exemption; nonresident military-spouse (SCRA); or resident of a "
-        + "reciprocal state (IL, IN, MI, WV, WI; VA with a daily commute; OH if not a "
-        + "20%-or-greater S-corporation shareholder-employee). Any one box stops withholding. "
-        + "The exemption must be on file before withholding can be stopped.",
+        "K-4 boxes 1–4: no 2026 Kentucky income-tax liability expected; Fort Campbell " +
+        "nonresident exemption; nonresident military-spouse (SCRA); or resident of a " +
+        "reciprocal state (IL, IN, MI, WV, WI; VA with a daily commute; OH if not a " +
+        "20%-or-greater S-corporation shareholder-employee). Any one box stops withholding. " +
+        "The exemption must be on file before withholding can be stopped.",
     },
     {
       key: "additional_per_period",
       label: "Additional withholding per pay period under agreement with employer",
-      kind: "amount", decimals: 4, min: "0",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Added AFTER the 3.5% formula — a flat dollar amount, not a taxable adjustment.",
     },
   ],
@@ -364,33 +379,37 @@ export const KY_LOCALITY_RECORD: PayrollCertificate = {
   scope: { level: "region", region: "KY" },
   purpose: "withholding",
   citation:
-    "Louisville Metro Revenue Commission, Forms and Publications "
-    + "(https://louisvilleky.gov/government/revenue-commission/forms-and-publications); "
-    + "2026 Form W-1REE (resident 2.2%, nonresident 1.45%)",
+    "Louisville Metro Revenue Commission, Forms and Publications " +
+    "(https://louisvilleky.gov/government/revenue-commission/forms-and-publications); " +
+    "2026 Form W-1REE (resident 2.2%, nonresident 1.45%)",
   summary:
-    "Whether the employee's work is performed inside Louisville Metro (Jefferson County) "
-    + "and whether they reside there. Louisville levies its occupational license tax on "
-    + "gross compensation for work within the county at 2.2% for residents and 1.45% for "
-    + "nonresidents; no Kentucky form records either fact, so the employer asserts both "
-    + "from the addresses.",
+    "Whether the employee's work is performed inside Louisville Metro (Jefferson County) " +
+    "and whether they reside there. Louisville levies its occupational license tax on " +
+    "gross compensation for work within the county at 2.2% for residents and 1.45% for " +
+    "nonresidents; no Kentucky form records either fact, so the employer asserts both " +
+    "from the addresses.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "work_in_louisville", label: "Work performed inside Louisville/Jefferson County",
+      key: "work_in_louisville",
+      label: "Work performed inside Louisville/Jefferson County",
       kind: "flag",
       subRegion: { side: "work", code: "LOUISVILLE" },
-      help: "Set when the work address for this employment is inside Louisville Metro "
-        + "(all of Jefferson County) — look the address up against the county boundary. "
-        + "Leave it unset for work performed anywhere else; an unset answer is outside, "
-        + "never unknown.",
+      help:
+        "Set when the work address for this employment is inside Louisville Metro " +
+        "(all of Jefferson County) — look the address up against the county boundary. " +
+        "Leave it unset for work performed anywhere else; an unset answer is outside, " +
+        "never unknown.",
     },
     {
-      key: "resides_in_louisville", label: "Resides inside Louisville/Jefferson County",
+      key: "resides_in_louisville",
+      label: "Resides inside Louisville/Jefferson County",
       kind: "flag",
       subRegion: { side: "residence", code: "LOUISVILLE" },
-      help: "Set when the employee's home address is inside Louisville Metro (all of "
-        + "Jefferson County). A Kentucky resident outside Jefferson County leaves this "
-        + "unset: they owe the state tax but no Louisville occupational tax.",
+      help:
+        "Set when the employee's home address is inside Louisville Metro (all of " +
+        "Jefferson County). A Kentucky resident outside Jefferson County leaves this " +
+        "unset: they owe the state tax but no Louisville occupational tax.",
     },
   ],
 };
@@ -423,14 +442,14 @@ export const KY_REGION: PayrollRegionWithholding = {
       // is collected on both sides under the same code and settled once, on
       // the resident basis.
       citation:
-        "Louisville Metro Revenue Commission, Forms and Publications; 2026 Form W-1REE "
-        + "(resident 2.2%, nonresident 1.45% on gross compensation for work within "
-        + "Louisville/Jefferson County)",
+        "Louisville Metro Revenue Commission, Forms and Publications; 2026 Form W-1REE " +
+        "(resident 2.2%, nonresident 1.45% on gross compensation for work within " +
+        "Louisville/Jefferson County)",
       implemented: true,
     },
   ],
   subRegionConflictRule: "both",
   citation:
-    "Kentucky Department of Revenue, 42A003 (TCF)(10-2025), 2026 Kentucky Withholding Tax "
-    + "Formula; Form 42A804 (K-4) (2026)",
+    "Kentucky Department of Revenue, 42A003 (TCF)(10-2025), 2026 Kentucky Withholding Tax " +
+    "Formula; Form 42A804 (K-4) (2026)",
 };

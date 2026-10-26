@@ -2,11 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { explainPayslip } from "@openbooks/engine/hrm/ai/explain-pay";
-import {
-  aiRailsErrorResponse,
-  requireAnyPerm,
-  uuidParam,
-} from "../../../../lib/ai-rails";
+import { aiRailsErrorResponse, requireAnyPerm, uuidParam } from "../../../../lib/ai-rails";
 import { isFeatureEnabled } from "../../../../lib/features";
 
 export const runtime = "nodejs";
@@ -21,11 +17,7 @@ export const runtime = "nodejs";
 export const GET = defineRoute({
   public: "session",
   handler: async ({ request: req }) => {
-    const gate = await requireAnyPerm([
-      "hrm.self.read",
-      "hrm.employment.read",
-      "payroll.manage",
-    ]);
+    const gate = await requireAnyPerm(["hrm.self.read", "hrm.employment.read", "payroll.manage"]);
     if (gate instanceof NextResponse) return gate;
     if (!(await isFeatureEnabled(gate.user.orgId, "payroll"))) {
       return notFound("record");

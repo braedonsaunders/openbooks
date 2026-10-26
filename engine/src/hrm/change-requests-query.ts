@@ -1,8 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  db,
-  withOrgTransaction,
-} from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
@@ -30,10 +27,13 @@ export async function getChangeRequest(query: GetChangeRequestQuery): Promise<Ch
   const actorId = requireActorId(query.actorId);
   const requestId = requireId(query.requestId, "requestId");
   return withOrgTransaction(orgId, async () => {
-    const rows = await db.execute<RequestRow>(sql`
+    const rows = await db.execute<RequestRow>(
+      sql`
       select ${REQUEST_COLUMNS} from hrm_employment_change_requests
        where org_id = ${orgId} and id = ${requestId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = rows[0];
     if (!row) {
       throw new HrmChangeRequestError(
@@ -54,7 +54,14 @@ export interface ListChangeRequestsQuery {
   readonly limit?: number;
 }
 
-const LIST_STATUSES = ["draft", "pending_approval", "approved", "rejected", "withdrawn", "applied"] as const;
+const LIST_STATUSES = [
+  "draft",
+  "pending_approval",
+  "approved",
+  "rejected",
+  "withdrawn",
+  "applied",
+] as const;
 
 function invalidStatusError(status: unknown): HrmChangeRequestError {
   return new HrmChangeRequestError(
@@ -80,19 +87,26 @@ async function resolveRequestScope(orgId: string, actorId: string) {
   }
   const allowedSubsidiaries = await actorAllowedSubsidiaryIds(db, orgId, actorId);
   const partyId = canReadOwnProfile
-    ? (await db.execute<{ party_id: string | null }>(sql`
-        select party_id::text as party_id from users where org_id = ${orgId} and id = ${actorId}`, "objects"))[0]?.party_id ?? null
+    ? ((
+        await db.execute<{ party_id: string | null }>(
+          sql`
+        select party_id::text as party_id from users where org_id = ${orgId} and id = ${actorId}`,
+          "objects",
+        )
+      )[0]?.party_id ?? null)
     : null;
-  const employerFilter = allowedSubsidiaries === null
-    ? sql`true`
-    : allowedSubsidiaries.size === 0
-      ? sql`false`
-      : sql`e.employer_subsidiary_id = any(${`{${[...allowedSubsidiaries].join(",")}}`}::uuid[])`;
+  const employerFilter =
+    allowedSubsidiaries === null
+      ? sql`true`
+      : allowedSubsidiaries.size === 0
+        ? sql`false`
+        : sql`e.employer_subsidiary_id = any(${`{${[...allowedSubsidiaries].join(",")}}`}::uuid[])`;
   return {
     subsidiaryFilter: canReadEmployment ? employerFilter : sql`false`,
-    ownProfileFilter: partyId === null
-      ? sql`false`
-      : sql`(r.payload ->> 'kind' in ('profile_change', 'bank_change')
+    ownProfileFilter:
+      partyId === null
+        ? sql`false`
+        : sql`(r.payload ->> 'kind' in ('profile_change', 'bank_change')
              and e.worker_party_id = ${partyId}::uuid and ${employerFilter})`,
   };
 }
@@ -128,18 +142,23 @@ function requestListLimit(query: ListChangeRequestsQuery): number {
  * limit. Restricted HR sees only its legal entities, plus its own profile
  * proposals when self-service read is granted.
  */
-export async function listChangeRequests(query: ListChangeRequestsQuery): Promise<ChangeRequestDTO[]> {
+export async function listChangeRequests(
+  query: ListChangeRequestsQuery,
+): Promise<ChangeRequestDTO[]> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const limit = requestListLimit(query);
   return withOrgTransaction(orgId, async () => {
     const scope = await resolveRequestScope(orgId, actorId);
-    const rows = await db.execute<RequestRow>(sql`
+    const rows = await db.execute<RequestRow>(
+      sql`
       select ${REQUEST_COLUMNS} from hrm_employment_change_requests r
        where ${requestVisibilityWhere(query, orgId, scope)}
        order by r.created_at desc, r.id desc
        limit ${limit}
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toDTO);
   });
 }
@@ -165,10 +184,13 @@ export async function countChangeRequests(query: CountChangeRequestsQuery): Prom
   }
   return withOrgTransaction(orgId, async () => {
     const scope = await resolveRequestScope(orgId, actorId);
-    const rows = await db.execute<{ n: string }>(sql`
+    const rows = await db.execute<{ n: string }>(
+      sql`
       select count(*) as n from hrm_employment_change_requests r
        where ${requestVisibilityWhere(query, orgId, scope)}
-    `, "objects");
+    `,
+      "objects",
+    );
     return Number(rows[0]?.n ?? 0);
   });
 }
@@ -182,7 +204,8 @@ export async function listChangeRequestsWithTotal(
   const limit = requestListLimit(query);
   return withOrgTransaction(orgId, async () => {
     const scope = await resolveRequestScope(orgId, actorId);
-    const result = await db.execute<{ n: string; rows: RequestRow[] }>(sql`
+    const result = await db.execute<{ n: string; rows: RequestRow[] }>(
+      sql`
       with visible as materialized (
         select r.id, r.created_at from hrm_employment_change_requests r
         where ${requestVisibilityWhere(query, orgId, scope)}
@@ -195,9 +218,12 @@ export async function listChangeRequestsWithTotal(
       select (select count(*)::text from visible) as n,
         coalesce((select jsonb_agg(to_jsonb(page) order by page.created_at desc, page.id desc)
           from page), '[]'::jsonb) as rows
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = result[0];
-    if (!row) throw new HrmChangeRequestError("REFUSED", "change request queue could not be resolved");
+    if (!row)
+      throw new HrmChangeRequestError("REFUSED", "change request queue could not be resolved");
     return { total: Number(row.n), rows: row.rows.map(toDTO) };
   });
 }

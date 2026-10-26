@@ -35,7 +35,9 @@ function customers(
 }
 
 function vendors(
-  rows: Array<[name: string, expenseCategories: string[], minimum: number, maximum: number, termDays?: number]>,
+  rows: Array<
+    [name: string, expenseCategories: string[], minimum: number, maximum: number, termDays?: number]
+  >,
 ): VendorSpec[] {
   return rows.map(([name, expenseCategories, billMin, billMax, termDays = 30]) => ({
     name,
@@ -118,7 +120,12 @@ export const generalBusiness = tradeProfile({
   industry: "general_business",
   economics: { laborPctOfRevenue: "0.24", cogsPctOfRevenue: "0.48" },
   customers: customers(
-    ["Oak & Main Market", "Westfield Hospitality", "Juniper Home Group", "Parkside Retail Cooperative"],
+    [
+      "Oak & Main Market",
+      "Westfield Hospitality",
+      "Juniper Home Group",
+      "Parkside Retail Cooperative",
+    ],
     ["revenueProduct", "revenueService"],
     [2_500, 38_000],
   ),
@@ -136,7 +143,12 @@ export const engineeringArchitecture = serviceProfile({
   name: "Aperture Engineering Group",
   industry: "engineering_architecture",
   customers: customers(
-    ["City of Redbrook", "Helios Developments", "Northline Transit Authority", "Granite Civic Partners"],
+    [
+      "City of Redbrook",
+      "Helios Developments",
+      "Northline Transit Authority",
+      "Granite Civic Partners",
+    ],
     ["revenueConsulting", "revenueService"],
     [18_000, 185_000],
     45,
@@ -189,7 +201,12 @@ export const wholesaleDistribution = tradeProfile({
   activity: "high",
   economics: { laborPctOfRevenue: "0.13", cogsPctOfRevenue: "0.67" },
   customers: customers(
-    ["Metro Hardware Group", "Summit Restaurant Supply", "Northern Retail Alliance", "Beacon Industrial Stores"],
+    [
+      "Metro Hardware Group",
+      "Summit Restaurant Supply",
+      "Northern Retail Alliance",
+      "Beacon Industrial Stores",
+    ],
     ["revenueProduct"],
     [8_000, 145_000],
   ),
@@ -208,7 +225,12 @@ export const propertyManagement = serviceProfile({
   industry: "property_management",
   economics: { laborPctOfRevenue: "0.34", cogsPctOfRevenue: "0.26" },
   customers: customers(
-    ["Maple Court Residences", "Lakeshore Commercial LP", "Parkview Condominium Corp.", "Westgate Apartments"],
+    [
+      "Maple Court Residences",
+      "Lakeshore Commercial LP",
+      "Parkview Condominium Corp.",
+      "Westgate Apartments",
+    ],
     ["revenueService"],
     [9_000, 68_000],
   ),
@@ -233,7 +255,12 @@ export const nonprofit = tradeProfile({
   industry: "nonprofit",
   economics: { laborPctOfRevenue: "0.41", cogsPctOfRevenue: "0.32" },
   customers: customers(
-    ["Community Services Grant", "Northstar Family Fund", "City Youth Initiative", "Evergreen Corporate Giving"],
+    [
+      "Community Services Grant",
+      "Northstar Family Fund",
+      "City Youth Initiative",
+      "Evergreen Corporate Giving",
+    ],
     ["revenueService", "otherIncome"],
     [12_000, 160_000],
     45,
@@ -303,7 +330,12 @@ export const fieldService = serviceProfile({
   economics: { laborPctOfRevenue: "0.38", cogsPctOfRevenue: "0.24" },
   utilization: 0.72,
   customers: customers(
-    ["Maplewood Townhome Association", "Brightside Dental Offices", "Cedar Lane Property Group", "Residential Service Customers"],
+    [
+      "Maplewood Townhome Association",
+      "Brightside Dental Offices",
+      "Cedar Lane Property Group",
+      "Residential Service Customers",
+    ],
     ["revenueService"],
     [450, 18_000],
     30,

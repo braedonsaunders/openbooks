@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { createManualSchedule } from '@openbooks/engine/amortization'
-import { defineRoute } from '@/lib/api/route'
-import { exactMoney, isoDate, uuidId } from '@/lib/api/json'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createManualSchedule } from "@openbooks/engine/amortization";
+import { defineRoute } from "@/lib/api/route";
+import { exactMoney, isoDate, uuidId } from "@/lib/api/json";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const createBody = z.object({
   templateId: uuidId,
@@ -22,7 +22,7 @@ const createBody = z.object({
   classId: uuidId.nullable().optional(),
   memo: z.string().max(500).nullable().optional(),
   reason: z.string().min(5).max(2000),
-})
+});
 
 /**
  * Record a manual schedule — typically a prepaid balance carried in from
@@ -30,8 +30,8 @@ const createBody = z.object({
  * amortization.
  */
 export const POST = defineRoute({
-  permission: 'amortization.manage',
-  feature: 'expenseAmortization',
+  permission: "amortization.manage",
+  feature: "expenseAmortization",
   body: createBody,
   invalidBodyStatus: 422,
   handler: async ({ authz, body }) => {
@@ -55,7 +55,7 @@ export const POST = defineRoute({
       },
       memo: body.memo ?? null,
       reason: body.reason,
-    })
-    return NextResponse.json(created, { status: 201 })
+    });
+    return NextResponse.json(created, { status: 201 });
   },
-})
+});

@@ -14,9 +14,15 @@ import {
 } from "./auth-policy";
 
 test("session cookies are always secure in production", () => {
-  assert.equal(secureCookiesEnabled({ NODE_ENV: "production", OPENBOOKS_COOKIE_SECURE: "0" }), true);
+  assert.equal(
+    secureCookiesEnabled({ NODE_ENV: "production", OPENBOOKS_COOKIE_SECURE: "0" }),
+    true,
+  );
   assert.equal(secureCookiesEnabled({ NODE_ENV: "development" }), false);
-  assert.equal(secureCookiesEnabled({ NODE_ENV: "development", OPENBOOKS_COOKIE_SECURE: "true" }), true);
+  assert.equal(
+    secureCookiesEnabled({ NODE_ENV: "development", OPENBOOKS_COOKIE_SECURE: "true" }),
+    true,
+  );
 });
 
 test("session cookies are Secure unless a non-production environment is named", () => {
@@ -31,10 +37,7 @@ test("session cookies are Secure unless a non-production environment is named", 
 
 test("sliding-window retry time is based on the oldest real attempt", () => {
   const now = new Date("2026-08-04T12:15:00Z");
-  assert.equal(
-    slidingWindowRetryAfter(new Date("2026-08-04T12:05:00Z"), 15 * 60, now),
-    5 * 60,
-  );
+  assert.equal(slidingWindowRetryAfter(new Date("2026-08-04T12:05:00Z"), 15 * 60, now), 5 * 60);
 });
 
 test("forwarded client addresses require explicit trusted-proxy configuration", () => {
@@ -45,17 +48,15 @@ test("forwarded client addresses require explicit trusted-proxy configuration", 
   assert.equal(untrusted.networkAddress, null);
   assert.equal(networkAddressEvidenceHash(untrusted), "unknown");
   const trusted = authRequestContext(request, { OPENBOOKS_TRUST_PROXY: "1" });
-  assert.equal(
-    trusted.networkAddress,
-    "203.0.113.7",
-  );
+  assert.equal(trusted.networkAddress, "203.0.113.7");
   assert.notEqual(networkAddressEvidenceHash(trusted), "unknown");
 });
 
 test("lockout escalates and resets after a quiet hour", () => {
   const start = new Date("2026-08-04T12:00:00Z");
   let state = nextLockoutState(null, start);
-  for (let i = 1; i < 5; i += 1) state = nextLockoutState(state, new Date(start.getTime() + i * 1000));
+  for (let i = 1; i < 5; i += 1)
+    state = nextLockoutState(state, new Date(start.getTime() + i * 1000));
   assert.equal(state.failureCount, 5);
   assert.equal(state.lockedUntil?.toISOString(), "2026-08-04T12:05:04.000Z");
 
@@ -90,7 +91,10 @@ test("browser mutations reject a cross-origin Origin header", () => {
   });
   assert.equal(hasExpectedOrigin(sameOrigin), true);
   assert.equal(hasExpectedOrigin(crossOrigin), false);
-  assert.equal(hasExpectedOrigin(sameOrigin, { OPENBOOKS_APP_URL: "https://different.example" }), false);
+  assert.equal(
+    hasExpectedOrigin(sameOrigin, { OPENBOOKS_APP_URL: "https://different.example" }),
+    false,
+  );
 });
 
 test("loopback literals share one origin for browser mutations", () => {
@@ -108,48 +112,42 @@ test("loopback literals share one origin for browser mutations", () => {
     true,
   );
   assert.equal(
-    hasExpectedOrigin(
-      put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780"),
-      { OPENBOOKS_APP_URL: "http://localhost:4780" },
-    ),
+    hasExpectedOrigin(put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780"), {
+      OPENBOOKS_APP_URL: "http://localhost:4780",
+    }),
     true,
   );
   assert.equal(
-    hasExpectedOrigin(
-      put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780"),
-      { OPENBOOKS_APP_URL: "http://127.0.0.1:4780" },
-    ),
+    hasExpectedOrigin(put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780"), {
+      OPENBOOKS_APP_URL: "http://127.0.0.1:4780",
+    }),
     true,
   );
   // Scheme, port, and real hosts stay exact — no loosening beyond loopback.
   // (Only the Origin header and the configured origin compare; the request
   // URL's own scheme never enters either side of the check.)
   assert.equal(
-    hasExpectedOrigin(
-      put("http://localhost:4780/api/password-reset", "https://127.0.0.1:4780"),
-      { OPENBOOKS_APP_URL: "http://localhost:4780" },
-    ),
+    hasExpectedOrigin(put("http://localhost:4780/api/password-reset", "https://127.0.0.1:4780"), {
+      OPENBOOKS_APP_URL: "http://localhost:4780",
+    }),
     false,
   );
   assert.equal(
-    hasExpectedOrigin(
-      put("http://localhost:4780/api/password-reset", "http://127.0.0.1:9999"),
-      { OPENBOOKS_APP_URL: "http://localhost:4780" },
-    ),
+    hasExpectedOrigin(put("http://localhost:4780/api/password-reset", "http://127.0.0.1:9999"), {
+      OPENBOOKS_APP_URL: "http://localhost:4780",
+    }),
     false,
   );
   assert.equal(
-    hasExpectedOrigin(
-      put("http://localhost:4780/api/password-reset", "http://attacker.test"),
-      { OPENBOOKS_APP_URL: "http://localhost:4780" },
-    ),
+    hasExpectedOrigin(put("http://localhost:4780/api/password-reset", "http://attacker.test"), {
+      OPENBOOKS_APP_URL: "http://localhost:4780",
+    }),
     false,
   );
   assert.equal(
-    hasExpectedOrigin(
-      put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780"),
-      { OPENBOOKS_APP_URL: "http://127.0.0.2:4780" },
-    ),
+    hasExpectedOrigin(put("http://localhost:4780/api/password-reset", "http://127.0.0.1:4780"), {
+      OPENBOOKS_APP_URL: "http://127.0.0.2:4780",
+    }),
     false,
   );
 });

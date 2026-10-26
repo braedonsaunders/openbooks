@@ -35,12 +35,7 @@ export const PUT = defineRoute({
     try {
       const finding =
         body.action === "acknowledge"
-          ? await acknowledgeFinding(
-              db,
-              gate.user.orgId,
-              gate.user.id,
-              body.findingId,
-            )
+          ? await acknowledgeFinding(db, gate.user.orgId, gate.user.id, body.findingId)
           : await resolveFinding(
               db,
               gate.user.orgId,

@@ -1,4 +1,4 @@
-import { refusalArguments, type RefusalValues } from '@openbooks/engine/platform/catalog-refusal'
+import { refusalArguments, type RefusalValues } from "@openbooks/engine/platform/catalog-refusal";
 
 /**
  * Catalog-backed domain refusals in the reader's language.
@@ -13,31 +13,43 @@ import { refusalArguments, type RefusalValues } from '@openbooks/engine/platform
  */
 
 export interface CatalogRefusalBody {
-  code: string
-  catalogKey: string
-  values: RefusalValues
-  message: string
-  remedy: string
+  code: string;
+  catalogKey: string;
+  values: RefusalValues;
+  message: string;
+  remedy: string;
 }
 
 /** A refusal (an error or its plain-data form) that renders from the catalogs. */
 export function isCatalogRefusal(value: unknown): value is CatalogRefusalBody {
-  if (!value || typeof value !== 'object') return false
-  const candidate = value as Partial<CatalogRefusalBody>
-  return typeof candidate.catalogKey === 'string' && typeof candidate.message === 'string' && typeof candidate.remedy === 'string'
-    && (candidate.values === undefined || (typeof candidate.values === 'object' && candidate.values !== null))
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<CatalogRefusalBody>;
+  return (
+    typeof candidate.catalogKey === "string" &&
+    typeof candidate.message === "string" &&
+    typeof candidate.remedy === "string" &&
+    (candidate.values === undefined ||
+      (typeof candidate.values === "object" && candidate.values !== null))
+  );
 }
 
 /** A root translator: full catalog paths, with `has` to tell a missing entry from a present one. */
 export interface CatalogTranslator {
-  (key: string, values?: Record<string, string | number>): string
-  has(key: string): boolean
+  (key: string, values?: Record<string, string | number>): string;
+  has(key: string): boolean;
 }
 
 /** Message and remedy of a catalog refusal in a locale, through a root translator. */
-export function renderCatalogRefusal(refusal: CatalogRefusalBody, t: CatalogTranslator, locale: string): { message: string; remedy: string } {
-  const base = `refusals.${refusal.catalogKey}`
-  if (!t.has(`${base}.message`) || !t.has(`${base}.remedy`)) return { message: refusal.message, remedy: refusal.remedy }
-  const args = refusalArguments(refusal.values ?? {}, locale, (key, text) => (t.has(key) ? t(key) : text))
-  return { message: t(`${base}.message`, args), remedy: t(`${base}.remedy`, args) }
+export function renderCatalogRefusal(
+  refusal: CatalogRefusalBody,
+  t: CatalogTranslator,
+  locale: string,
+): { message: string; remedy: string } {
+  const base = `refusals.${refusal.catalogKey}`;
+  if (!t.has(`${base}.message`) || !t.has(`${base}.remedy`))
+    return { message: refusal.message, remedy: refusal.remedy };
+  const args = refusalArguments(refusal.values ?? {}, locale, (key, text) =>
+    t.has(key) ? t(key) : text,
+  );
+  return { message: t(`${base}.message`, args), remedy: t(`${base}.remedy`, args) };
 }

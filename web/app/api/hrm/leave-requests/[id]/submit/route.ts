@@ -15,16 +15,10 @@ export const POST = defineRoute({
   feature: "hrm",
   params: z.object({ id: z.string().min(1) }),
   body: submitLeaveRequestBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams }) => {
     const { id } = routeParams;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "request id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
 
     try {
       const request = await submitLeaveRequest({

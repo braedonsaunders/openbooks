@@ -1,4 +1,4 @@
-import { isUuid } from '../list-params';
+import { isUuid } from "../list-params";
 
 /**
  * Per-request ceiling on bulk ids: each id runs its own write in the
@@ -11,8 +11,7 @@ import { isUuid } from '../list-params';
 export const BULK_ACTION_MAX_IDS = 50;
 
 export type BulkActionParse =
-  | { ok: true; action: string; ids: string[] }
-  | { ok: false; error: string };
+  { ok: true; action: string; ids: string[] } | { ok: false; error: string };
 
 const BULK_ACTIONS = ["reprocess", "reject", "materialize"];
 
@@ -24,8 +23,7 @@ const BULK_ACTIONS = ["reprocess", "reject", "materialize"];
 export function parseBulkActionIds(body: unknown): BulkActionParse {
   const data = (body ?? {}) as { action?: unknown; ids?: unknown };
   const action = typeof data.action === "string" ? data.action : "";
-  if (!BULK_ACTIONS.includes(action))
-    return { ok: false, error: 'invalid_action' };
+  if (!BULK_ACTIONS.includes(action)) return { ok: false, error: "invalid_action" };
   // Collect every supplied string id first, then refuse the non-uuid ones
   // with the same not_found the item routes compute: a dash-only string is
   // still a named id (it 404s instead of collapsing into invalid_action),
@@ -33,8 +31,8 @@ export function parseBulkActionIds(body: unknown): BulkActionParse {
   const ids = Array.isArray(data.ids)
     ? [...new Set(data.ids.filter((id) => typeof id === "string"))]
     : [];
-  if (!ids.length) return { ok: false, error: 'invalid_action' };
-  if (!ids.every(isUuid)) return { ok: false, error: 'not_found' };
+  if (!ids.length) return { ok: false, error: "invalid_action" };
+  if (!ids.every(isUuid)) return { ok: false, error: "not_found" };
   if (ids.length > BULK_ACTION_MAX_IDS) {
     return {
       ok: false,

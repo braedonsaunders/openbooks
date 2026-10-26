@@ -23,13 +23,17 @@ const group = (overrides: Partial<UnbilledSourceGroup>): UnbilledSourceGroup => 
   ...overrides,
 });
 
-const plan = (groups: UnbilledSourceGroup[], accrued: Parameters<typeof planUnbilledAccrual>[0]["accrued"] = [], projectRevenue: string | null = PROJECT_REVENUE) =>
+const plan = (
+  groups: UnbilledSourceGroup[],
+  accrued: Parameters<typeof planUnbilledAccrual>[0]["accrued"] = [],
+  projectRevenue: string | null = PROJECT_REVENUE,
+) =>
   planUnbilledAccrual({
     groups,
     accrued,
     rootSubsidiaryId: ROOT,
     functionalCurrencyOf: (id) => (id === ROOT ? "CAD" : id === OTHER ? "JPY" : null),
-    minorUnitsOf: (currency) => ({ CAD: 2, JPY: 0 } as Record<string, number>)[currency] ?? null,
+    minorUnitsOf: (currency) => (({ CAD: 2, JPY: 0 }) as Record<string, number>)[currency] ?? null,
     projectRevenueAccountId: projectRevenue,
   });
 
@@ -42,17 +46,45 @@ test("groups unbilled work per project, entity, revenue account and currency, ro
       // No item income account: the project revenue control account.
       group({ amount: "10.0000", incomeAccountId: null }),
       // A fixed-account profile credits project revenue even when the item has income.
-      group({ projectId: P2, projectName: "Job two", projectSubsidiaryId: OTHER, sourceCurrency: "JPY", amount: "1234.5000", usesProjectRevenue: true, incomeAccountId: null }),
+      group({
+        projectId: P2,
+        projectName: "Job two",
+        projectSubsidiaryId: OTHER,
+        sourceCurrency: "JPY",
+        amount: "1234.5000",
+        usesProjectRevenue: true,
+        incomeAccountId: null,
+      }),
     ],
     [
-      { projectId: P1, subsidiaryId: ROOT, revenueAccountId: ITEM_INCOME, currency: "CAD", amount: "120.0000" },
+      {
+        projectId: P1,
+        subsidiaryId: ROOT,
+        revenueAccountId: ITEM_INCOME,
+        currency: "CAD",
+        amount: "120.0000",
+      },
       // Accrued earlier to an account that no longer carries unbilled work: cleared.
-      { projectId: P1, subsidiaryId: ROOT, revenueAccountId: "00000000-0000-4000-8000-0000000000b9", currency: "CAD", amount: "40.0000" },
+      {
+        projectId: P1,
+        subsidiaryId: ROOT,
+        revenueAccountId: "00000000-0000-4000-8000-0000000000b9",
+        currency: "CAD",
+        amount: "40.0000",
+      },
     ],
   );
   assert.deepEqual(result.problems, []);
   assert.deepEqual(
-    result.lines.map((line) => [line.projectId, line.subsidiaryId, line.revenueAccountId, line.currency, line.unbilled, line.accrued, line.delta]),
+    result.lines.map((line) => [
+      line.projectId,
+      line.subsidiaryId,
+      line.revenueAccountId,
+      line.currency,
+      line.unbilled,
+      line.accrued,
+      line.delta,
+    ]),
     [
       [P1, ROOT, ITEM_INCOME, "CAD", "150.1300", "120.0000", "30.1300"],
       [P1, ROOT, PROJECT_REVENUE, "CAD", "10.0000", "0.0000", "10.0000"],
@@ -66,16 +98,28 @@ test("refuses foreign-currency work and unmapped revenue with remedies instead o
   const result = plan(
     [
       group({ amount: "80.0000", sourceCurrency: "USD" }),
-      group({ projectId: P2, projectName: "Job two", amount: "20.0000", incomeAccountId: null, itemName: "Consulting" }),
+      group({
+        projectId: P2,
+        projectName: "Job two",
+        amount: "20.0000",
+        incomeAccountId: null,
+        itemName: "Consulting",
+      }),
     ],
     [],
     null,
   );
   assert.deepEqual(result.lines, []);
-  assert.deepEqual(result.problems.map((problem) => [problem.code, problem.projectId]), [
-    ["foreign_currency", P1],
-    ["revenue_account_unmapped", P2],
-  ]);
+  assert.deepEqual(
+    result.problems.map((problem) => [problem.code, problem.projectId]),
+    [
+      ["foreign_currency", P1],
+      ["revenue_account_unmapped", P2],
+    ],
+  );
   assert.match(result.problems[0]!.message, /priced in USD, but its functional currency is CAD/);
-  assert.match(result.problems[1]!.message, /Item Consulting on project Job two has no income account/);
+  assert.match(
+    result.problems[1]!.message,
+    /Item Consulting on project Job two has no income account/,
+  );
 });

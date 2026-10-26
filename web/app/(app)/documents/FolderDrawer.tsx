@@ -1,40 +1,40 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { ChevronDown, Download, Loader2, Trash2 } from 'lucide-react'
-import { Button, Input, Label, Popover, Select, UrlDrawer } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import { confirmDialog } from '../../../lib/confirm'
-import { SharePanel } from './SharePanel'
-import { ActivityLog } from './ActivityLog'
-import { DrawerTabs, type DrawerTab } from './DrawerTabs'
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { ChevronDown, Download, Loader2, Trash2 } from "lucide-react";
+import { Button, Input, Label, Popover, Select, UrlDrawer } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../lib/api-error";
+import { confirmDialog } from "../../../lib/confirm";
+import { SharePanel } from "./SharePanel";
+import { ActivityLog } from "./ActivityLog";
+import { DrawerTabs, type DrawerTab } from "./DrawerTabs";
 
 interface TreeFolder {
-  id: string
-  name: string
-  parentId: string | null
-  isSystem: boolean
-  systemKind: string | null
-  isPrivate: boolean
-  isInactive: boolean
-  recordTable: string | null
-  recordId: string | null
-  childCount: number
-  fileCount: number
+  id: string;
+  name: string;
+  parentId: string | null;
+  isSystem: boolean;
+  systemKind: string | null;
+  isPrivate: boolean;
+  isInactive: boolean;
+  recordTable: string | null;
+  recordId: string | null;
+  childCount: number;
+  fileCount: number;
 }
 
 function buildPath(folders: TreeFolder[], id: string): string {
-  const map = new Map(folders.map((f) => [f.id, f]))
-  const parts: string[] = []
-  let current = map.get(id)
+  const map = new Map(folders.map((f) => [f.id, f]));
+  const parts: string[] = [];
+  let current = map.get(id);
   while (current) {
-    parts.unshift(current.name)
-    current = current.parentId ? map.get(current.parentId) : undefined
+    parts.unshift(current.name);
+    current = current.parentId ? map.get(current.parentId) : undefined;
   }
-  return parts.join(' / ')
+  return parts.join(" / ");
 }
 
 export function FolderDrawer({
@@ -44,102 +44,102 @@ export function FolderDrawer({
   parentId,
   canManage,
 }: {
-  mode: 'create' | 'edit'
-  folder?: TreeFolder
-  folders: TreeFolder[]
-  parentId?: string
-  canManage?: boolean
+  mode: "create" | "edit";
+  folder?: TreeFolder;
+  folders: TreeFolder[];
+  parentId?: string;
+  canManage?: boolean;
 }) {
-  const t = useTranslations('documents.folder')
-  const tt = useTranslations('documents.toasts')
-  const tc = useTranslations('common')
-  const router = useRouter()
-  const search = useSearchParams()
+  const t = useTranslations("documents.folder");
+  const tt = useTranslations("documents.toasts");
+  const tc = useTranslations("common");
+  const router = useRouter();
+  const search = useSearchParams();
 
-  const [name, setName] = useState(folder?.name ?? '')
-  const [parent, setParent] = useState(folder?.parentId ?? parentId ?? '')
-  const [isPrivate, setIsPrivate] = useState(folder?.isPrivate ?? false)
-  const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [actionsOpen, setActionsOpen] = useState(false)
+  const [name, setName] = useState(folder?.name ?? "");
+  const [parent, setParent] = useState(folder?.parentId ?? parentId ?? "");
+  const [isPrivate, setIsPrivate] = useState(folder?.isPrivate ?? false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   // Subtabs (existing folders only) — Details / Sharing / Activity.
   const tabs: DrawerTab[] = [
-    { key: 'details', label: t('tabs.details') },
-    ...(canManage ? [{ key: 'sharing', label: t('tabs.sharing') }] : []),
-    { key: 'activity', label: t('tabs.activity') },
-  ]
-  const initialTab = search.get('folderTab') ?? 'details'
-  const [tab, setTab] = useState(tabs.some((x) => x.key === initialTab) ? initialTab : 'details')
+    { key: "details", label: t("tabs.details") },
+    ...(canManage ? [{ key: "sharing", label: t("tabs.sharing") }] : []),
+    { key: "activity", label: t("tabs.activity") },
+  ];
+  const initialTab = search.get("folderTab") ?? "details";
+  const [tab, setTab] = useState(tabs.some((x) => x.key === initialTab) ? initialTab : "details");
 
   // An EXISTING folder ALWAYS opens READ-ONLY (view mode) with an Edit button
   // in the header; Save/Cancel replace it while editing. The create variant is
   // a plain creation form (footer submit).
-  const [uiMode, setUiMode] = useState<'view' | 'edit'>(mode === 'create' ? 'edit' : 'view')
-  const editing = uiMode === 'edit'
+  const [uiMode, setUiMode] = useState<"view" | "edit">(mode === "create" ? "edit" : "view");
+  const editing = uiMode === "edit";
 
   function cancelEdit() {
-    setName(folder?.name ?? '')
-    setParent(folder?.parentId ?? parentId ?? '')
-    setIsPrivate(folder?.isPrivate ?? false)
-    setUiMode('view')
+    setName(folder?.name ?? "");
+    setParent(folder?.parentId ?? parentId ?? "");
+    setIsPrivate(folder?.isPrivate ?? false);
+    setUiMode("view");
   }
 
   function closeHref(): string {
-    const params = new URLSearchParams(search.toString())
-    params.delete('folder')
-    const qs = params.toString()
-    return qs ? `/documents?${qs}` : '/documents'
+    const params = new URLSearchParams(search.toString());
+    params.delete("folder");
+    const qs = params.toString();
+    return qs ? `/documents?${qs}` : "/documents";
   }
 
   // Folders available as move targets (exclude self + descendants for edit mode)
   function availableParents(): { id: string; path: string }[] {
-    if (mode === 'create') {
+    if (mode === "create") {
       return folders
         .filter((f) => !f.isInactive)
-        .map((f) => ({ id: f.id, path: buildPath(folders, f.id) }))
+        .map((f) => ({ id: f.id, path: buildPath(folders, f.id) }));
     }
     // Edit mode: exclude self and descendants
-    const excluded = new Set<string>([folder!.id])
-    let changed = true
+    const excluded = new Set<string>([folder!.id]);
+    let changed = true;
     while (changed) {
-      changed = false
+      changed = false;
       for (const f of folders) {
         if (f.parentId && excluded.has(f.parentId) && !excluded.has(f.id)) {
-          excluded.add(f.id)
-          changed = true
+          excluded.add(f.id);
+          changed = true;
         }
       }
     }
     return folders
       .filter((f) => !excluded.has(f.id) && !f.isInactive)
-      .map((f) => ({ id: f.id, path: buildPath(folders, f.id) }))
+      .map((f) => ({ id: f.id, path: buildPath(folders, f.id) }));
   }
 
   async function handleSave() {
-    if (!name.trim()) return
-    setSaving(true)
-    let fallback = tt('folderCreateFailed')
+    if (!name.trim()) return;
+    setSaving(true);
+    let fallback = tt("folderCreateFailed");
     try {
-      if (mode === 'create') {
-        const res = await fetch('/api/file-cabinet/folders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+      if (mode === "create") {
+        const res = await fetch("/api/file-cabinet/folders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: name.trim(),
             parentId: parent || null,
             isPrivate,
           }),
-        })
+        });
         // The status is checked before the body is parsed: the server's
         // named refusal wins over the generic fallback.
-        if (!res.ok) throw new Error(await readApiErrorMessage(res, tt('folderCreateFailed')))
-        toast.success(tt('folderCreated'))
-        router.push(closeHref())
-        router.refresh()
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, tt("folderCreateFailed")));
+        toast.success(tt("folderCreated"));
+        router.push(closeHref());
+        router.refresh();
       } else if (folder) {
-        fallback = tt('folderRenameFailed')
-        const nextParent = parent || null
+        fallback = tt("folderRenameFailed");
+        const nextParent = parent || null;
         const body: Record<string, unknown> = {
           name: name.trim(),
           // A rename is not a move: omit an unchanged parent so the server
@@ -147,43 +147,52 @@ export function FolderDrawer({
           // a foreign private boundary can never pull the folder to the root.
           ...(nextParent !== (folder.parentId ?? null) ? { parentId: nextParent } : null),
           isPrivate,
-        }
+        };
         const res = await fetch(`/api/file-cabinet/folders/${folder.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-        })
-        if (!res.ok) throw new Error(await readApiErrorMessage(res, tt('folderRenameFailed')))
-        toast.success(tt('folderRenamed'))
-        setUiMode('view')
-        router.refresh()
+        });
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, tt("folderRenameFailed")));
+        toast.success(tt("folderRenamed"));
+        setUiMode("view");
+        router.refresh();
       }
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : fallback)
+      toast.error(error instanceof Error && error.message ? error.message : fallback);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function handleDelete() {
-    if (!folder) return
-    if (!(await confirmDialog({ title: t('delete.title'), message: t('delete.body'), tone: 'danger' }))) return
-    setDeleting(true)
+    if (!folder) return;
+    if (
+      !(await confirmDialog({
+        title: t("delete.title"),
+        message: t("delete.body"),
+        tone: "danger",
+      }))
+    )
+      return;
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/file-cabinet/folders/${folder.id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, tt('folderDeleteFailed')))
-      toast.success(tt('folderDeleted'))
-      router.push(closeHref())
-      router.refresh()
+      const res = await fetch(`/api/file-cabinet/folders/${folder.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tt("folderDeleteFailed")));
+      toast.success(tt("folderDeleted"));
+      router.push(closeHref());
+      router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : tt('folderDeleteFailed'))
+      toast.error(
+        error instanceof Error && error.message ? error.message : tt("folderDeleteFailed"),
+      );
     } finally {
-      setDeleting(false)
+      setDeleting(false);
     }
   }
 
-  const isSystem = folder?.isSystem ?? false
-  const title = mode === 'create' ? t('create.title') : t('edit.title')
+  const isSystem = folder?.isSystem ?? false;
+  const title = mode === "create" ? t("create.title") : t("edit.title");
 
   return (
     <UrlDrawer
@@ -192,18 +201,25 @@ export function FolderDrawer({
       title={title}
       size="md"
       subtabs={
-        mode === 'edit' ? <DrawerTabs tabs={tabs} active={tab} onSelect={setTab} ariaLabel={tc('auditTrail.ariaLabel')} /> : undefined
+        mode === "edit" ? (
+          <DrawerTabs
+            tabs={tabs}
+            active={tab}
+            onSelect={setTab}
+            ariaLabel={tc("auditTrail.ariaLabel")}
+          />
+        ) : undefined
       }
       headerActions={
-        mode === 'edit' ? (
+        mode === "edit" ? (
           editing ? (
             <div className="flex items-center gap-2">
               <Button variant="outline" disabled={saving} onClick={cancelEdit}>
-                {tc('actions.cancel')}
+                {tc("actions.cancel")}
               </Button>
               <Button disabled={saving || !name.trim()} onClick={handleSave}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {tc('actions.save')}
+                {tc("actions.save")}
               </Button>
             </div>
           ) : canManage && !isSystem ? (
@@ -211,15 +227,39 @@ export function FolderDrawer({
               <Button
                 variant="outline"
                 onClick={() => {
-                  setTab('details')
-                  setUiMode('edit')
+                  setTab("details");
+                  setUiMode("edit");
                 }}
               >
-                {tc('actions.edit')}
+                {tc("actions.edit")}
               </Button>
-              <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-48 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tc('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
-                <Button variant="ghost" className="w-full justify-start text-red-600" disabled={deleting} onClick={() => { setActionsOpen(false); void handleDelete() }}>
-                  {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{tc('actions.delete')}
+              <Popover
+                open={actionsOpen}
+                onOpenChange={setActionsOpen}
+                align="end"
+                className="w-48 p-1.5"
+                trigger={
+                  <Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>
+                    {tc("labels.actions")}
+                    <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                }
+              >
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start text-red-600"
+                  disabled={deleting}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    void handleDelete();
+                  }}
+                >
+                  {deleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  {tc("actions.delete")}
                 </Button>
               </Popover>
             </div>
@@ -227,14 +267,14 @@ export function FolderDrawer({
         ) : null
       }
       footer={
-        mode === 'create' ? (
+        mode === "create" ? (
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => router.push(closeHref())}>
-              {tc('actions.cancel')}
+              {tc("actions.cancel")}
             </Button>
             <Button disabled={saving || !name.trim()} onClick={handleSave}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {t('create.submit')}
+              {t("create.submit")}
             </Button>
           </div>
         ) : undefined
@@ -242,32 +282,32 @@ export function FolderDrawer({
     >
       <div className="space-y-4">
         {/* DETAILS TAB (also the whole body in create mode) */}
-        {mode === 'create' || tab === 'details' ? (
+        {mode === "create" || tab === "details" ? (
           <>
             {isSystem ? (
               <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-                {t('systemNoDelete')}
+                {t("systemNoDelete")}
               </p>
             ) : null}
 
             <div className="space-y-1.5">
-              <Label htmlFor="folder-name">{t('edit.nameLabel')}</Label>
+              <Label htmlFor="folder-name">{t("edit.nameLabel")}</Label>
               {editing ? (
                 <Input
                   id="folder-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder={t('create.namePlaceholder')}
+                  placeholder={t("create.namePlaceholder")}
                   disabled={isSystem}
-                  autoFocus={mode === 'create'}
+                  autoFocus={mode === "create"}
                 />
               ) : (
-                <p className="text-sm">{name || '—'}</p>
+                <p className="text-sm">{name || "—"}</p>
               )}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="folder-parent">{t('edit.parentLabel')}</Label>
+              <Label htmlFor="folder-parent">{t("edit.parentLabel")}</Label>
               {editing ? (
                 <Select
                   id="folder-parent"
@@ -283,11 +323,11 @@ export function FolderDrawer({
                   ))}
                 </Select>
               ) : (
-                <p className="text-sm">{parent ? buildPath(folders, parent) : '—'}</p>
+                <p className="text-sm">{parent ? buildPath(folders, parent) : "—"}</p>
               )}
             </div>
 
-            {mode === 'create' || (mode === 'edit' && !isSystem) ? (
+            {mode === "create" || (mode === "edit" && !isSystem) ? (
               <label className="flex items-start gap-2">
                 <input
                   type="checkbox"
@@ -298,20 +338,22 @@ export function FolderDrawer({
                 />
                 <div>
                   <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                    {t('edit.private')}
+                    {t("edit.private")}
                   </span>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('edit.privateHint')}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t("edit.privateHint")}
+                  </p>
                 </div>
               </label>
             ) : null}
 
             {/* Download the whole folder */}
-            {mode === 'edit' && folder ? (
+            {mode === "edit" && folder ? (
               <div className="pt-2">
                 <Button variant="outline" size="sm" asChild>
                   <a href={`/api/file-cabinet/folders/${folder.id}/download-zip`}>
                     <Download className="h-4 w-4" />
-                    {t('downloadZip')}
+                    {t("downloadZip")}
                   </a>
                 </Button>
               </div>
@@ -320,15 +362,15 @@ export function FolderDrawer({
         ) : null}
 
         {/* SHARING TAB — Manager access only */}
-        {mode === 'edit' && tab === 'sharing' && folder && canManage ? (
+        {mode === "edit" && tab === "sharing" && folder && canManage ? (
           <SharePanel resourceType="folder" resourceId={folder.id} />
         ) : null}
 
         {/* ACTIVITY TAB */}
-        {mode === 'edit' && tab === 'activity' && folder ? (
+        {mode === "edit" && tab === "activity" && folder ? (
           <ActivityLog resourceType="folder" resourceId={folder.id} />
         ) : null}
       </div>
     </UrlDrawer>
-  )
+  );
 }

@@ -1,176 +1,283 @@
-'use client'
+"use client";
 
-import { useIdentityState } from '@/lib/use-identity-state'
+import { useIdentityState } from "@/lib/use-identity-state";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { fetchWindow, saveChanges, SchedulingRequestError } from './api'
-import { inverseOf, type BoardChange, type BoardEntry, type BoardWindow, type ChangeResult } from './model'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { fetchWindow, saveChanges, SchedulingRequestError } from "./api";
+import {
+  inverseOf,
+  type BoardChange,
+  type BoardEntry,
+  type BoardWindow,
+  type ChangeResult,
+} from "./model";
 
 export interface BoardNotice {
-  readonly id: number
-  readonly tone: 'error' | 'success'
-  readonly message: string
-  readonly remedy: string | null
+  readonly id: number;
+  readonly tone: "error" | "success";
+  readonly message: string;
+  readonly remedy: string | null;
 }
 
 interface HistoryStep {
-  readonly label: string
-  readonly changes: BoardChange[]
+  readonly label: string;
+  readonly changes: BoardChange[];
 }
 
-const newId = () => crypto.randomUUID()
+const newId = () => crypto.randomUUID();
 
 /**
  * The live state of one people board: its window, saves, and undo history.
  * A save merges the server's results at once and then reloads the window in
  * the background, so the board always settles on what was actually stored.
  */
-export function useBoard(boardId: string, initial: BoardWindow | null, range: { from: string; through: string }, enabled = true) {
-  const t = useTranslations('scheduling')
-  const compatible = (value: BoardWindow | null) => value?.board.id === boardId && value.from === range.from && value.through === range.through
-  const [window, setWindow] = useIdentityState<BoardWindow | null>([boardId], compatible(initial) ? initial : null)
-  const [loading, setLoading] = useIdentityState([boardId, initial, range.from, range.through, enabled], enabled && !compatible(initial))
-  const [observedInitial, setObservedInitial] = useState(initial)
+export function useBoard(
+  boardId: string,
+  initial: BoardWindow | null,
+  range: { from: string; through: string },
+  enabled = true,
+) {
+  const t = useTranslations("scheduling");
+  const compatible = (value: BoardWindow | null) =>
+    value?.board.id === boardId && value.from === range.from && value.through === range.through;
+  const [window, setWindow] = useIdentityState<BoardWindow | null>(
+    [boardId],
+    compatible(initial) ? initial : null,
+  );
+  const [loading, setLoading] = useIdentityState(
+    [boardId, initial, range.from, range.through, enabled],
+    enabled && !compatible(initial),
+  );
+  const [observedInitial, setObservedInitial] = useState(initial);
   if (observedInitial !== initial) {
-    setObservedInitial(initial)
-    if (compatible(initial)) setWindow(initial)
+    setObservedInitial(initial);
+    if (compatible(initial)) setWindow(initial);
   }
-  const [saving, setSaving] = useState(0)
-  const [notices, setNotices] = useState<BoardNotice[]>([])
-  const [undoStack, setUndoStack] = useState<HistoryStep[]>([])
-  const [redoStack, setRedoStack] = useState<HistoryStep[]>([])
-  const noticeSeq = useRef(0)
-  const requestSeq = useRef(0)
-  const loadedRange=useRef(compatible(initial)?`${boardId}|${range.from}|${range.through}`:'')
-  const pending = useRef<AbortController | null>(null)
-  const mounted = useRef(true)
-  const invalidatePending = useCallback(() => { ++requestSeq.current; pending.current?.abort() }, [])
-  useEffect(() => { mounted.current=true; return () => { mounted.current=false; invalidatePending() } }, [invalidatePending])
-  const rangeRef = useRef(range)
-  useLayoutEffect(() => { rangeRef.current = range }, [range])
+  const [saving, setSaving] = useState(0);
+  const [notices, setNotices] = useState<BoardNotice[]>([]);
+  const [undoStack, setUndoStack] = useState<HistoryStep[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryStep[]>([]);
+  const noticeSeq = useRef(0);
+  const requestSeq = useRef(0);
+  const loadedRange = useRef(
+    compatible(initial) ? `${boardId}|${range.from}|${range.through}` : "",
+  );
+  const pending = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+  const invalidatePending = useCallback(() => {
+    ++requestSeq.current;
+    pending.current?.abort();
+  }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      invalidatePending();
+    };
+  }, [invalidatePending]);
+  const rangeRef = useRef(range);
+  useLayoutEffect(() => {
+    rangeRef.current = range;
+  }, [range]);
 
-  const notify = useCallback((tone: BoardNotice['tone'], message: string, remedy: string | null = null) => {
-    const id = ++noticeSeq.current
-    setNotices((current) => [...current.slice(-4), { id, tone, message, remedy }])
-    if (tone === 'success') setTimeout(() => setNotices((current) => current.filter((notice) => notice.id !== id)), 3500)
-  }, [])
-  const dismiss = useCallback((id: number) => setNotices((current) => current.filter((notice) => notice.id !== id)), [])
+  const notify = useCallback(
+    (tone: BoardNotice["tone"], message: string, remedy: string | null = null) => {
+      const id = ++noticeSeq.current;
+      setNotices((current) => [...current.slice(-4), { id, tone, message, remedy }]);
+      if (tone === "success")
+        setTimeout(
+          () => setNotices((current) => current.filter((notice) => notice.id !== id)),
+          3500,
+        );
+    },
+    [],
+  );
+  const dismiss = useCallback(
+    (id: number) => setNotices((current) => current.filter((notice) => notice.id !== id)),
+    [],
+  );
 
   const reload = useCallback(async () => {
-    pending.current?.abort()
-    const abort = new AbortController(); pending.current=abort
-    const seq = ++requestSeq.current
-    const { from, through } = rangeRef.current
+    pending.current?.abort();
+    const abort = new AbortController();
+    pending.current = abort;
+    const seq = ++requestSeq.current;
+    const { from, through } = rangeRef.current;
     try {
-      const next = await fetchWindow(boardId, from, through, t('errors.load'), abort.signal)
+      const next = await fetchWindow(boardId, from, through, t("errors.load"), abort.signal);
       if (seq === requestSeq.current) {
-        if(next.board.id!==boardId||next.from!==from||next.through!==through)throw new SchedulingRequestError('The returned schedule does not match the requested board and dates.','Reload this board window.','schedule_window_mismatch')
-        loadedRange.current=`${boardId}|${from}|${through}`;setWindow(next)
+        if (next.board.id !== boardId || next.from !== from || next.through !== through)
+          throw new SchedulingRequestError(
+            "The returned schedule does not match the requested board and dates.",
+            "Reload this board window.",
+            "schedule_window_mismatch",
+          );
+        loadedRange.current = `${boardId}|${from}|${through}`;
+        setWindow(next);
       }
     } catch (error) {
-      if (seq !== requestSeq.current || abort.signal.aborted || !mounted.current) return
-      notify('error', error instanceof Error ? error.message : t('errors.load'), error instanceof SchedulingRequestError ? error.remedy : null)
+      if (seq !== requestSeq.current || abort.signal.aborted || !mounted.current) return;
+      notify(
+        "error",
+        error instanceof Error ? error.message : t("errors.load"),
+        error instanceof SchedulingRequestError ? error.remedy : null,
+      );
     } finally {
-      if (seq === requestSeq.current) setLoading(false)
+      if (seq === requestSeq.current) setLoading(false);
     }
-  }, [boardId, notify, t, setWindow, setLoading])
+  }, [boardId, notify, t, setWindow, setLoading]);
 
   // A new board or date range loads its window; the server render already
   // supplied the first one.
   useEffect(() => {
-    const key = `${boardId}|${range.from}|${range.through}`
-    if (!enabled || key === loadedRange.current) return
-    void reload()
-  }, [boardId, enabled, range.from, range.through, reload])
+    const key = `${boardId}|${range.from}|${range.through}`;
+    if (!enabled || key === loadedRange.current) return;
+    void reload();
+  }, [boardId, enabled, range.from, range.through, reload]);
 
-  const appliedServerSnapshot = useRef({ boardId, initial })
+  const appliedServerSnapshot = useRef({ boardId, initial });
   // A refreshed server snapshot is authoritative only for its exact window.
   useLayoutEffect(() => {
-    if (appliedServerSnapshot.current.boardId === boardId && appliedServerSnapshot.current.initial === initial) return
-    appliedServerSnapshot.current = { boardId, initial }
-    if (initial?.board.id !== boardId || initial.from !== range.from || initial.through !== range.through) return
-    pending.current?.abort(); ++requestSeq.current
-    loadedRange.current=`${boardId}|${initial.from}|${initial.through}`
-  }, [initial, boardId, range.from, range.through])
+    if (
+      appliedServerSnapshot.current.boardId === boardId &&
+      appliedServerSnapshot.current.initial === initial
+    )
+      return;
+    appliedServerSnapshot.current = { boardId, initial };
+    if (
+      initial?.board.id !== boardId ||
+      initial.from !== range.from ||
+      initial.through !== range.through
+    )
+      return;
+    pending.current?.abort();
+    ++requestSeq.current;
+    loadedRange.current = `${boardId}|${initial.from}|${initial.through}`;
+  }, [initial, boardId, range.from, range.through]);
 
-  const shownWindow = compatible(window) ? window : null
-  const entriesById = useMemo(() => new Map((window?.entries ?? []).map((entry) => [entry.id, entry])), [window])
+  const shownWindow = compatible(window) ? window : null;
+  const entriesById = useMemo(
+    () => new Map((window?.entries ?? []).map((entry) => [entry.id, entry])),
+    [window],
+  );
 
   /** Merge accepted results into the shown window immediately. */
-  const merge = useCallback((changes: readonly BoardChange[], results: readonly ChangeResult[]) => {
-    setWindow((current) => {
-      if (!current) return current
-      const removed = new Set<string>()
-      const added: BoardEntry[] = []
-      results.forEach((result, index) => {
-        if (!result.ok) return
-        const change = changes[index]
-        if (change?.op === 'cancel' && !result.entry) removed.add(change.id)
-        // A staged change keeps the published original on view, marked as replaced.
-        if (change?.op === 'update' && (result.entry?.status === 'published' || !result.replacedId)) removed.add(change.id)
-        if (result.replacedId && result.entry?.status === 'published') removed.add(result.replacedId)
-        if (result.entry) {
-          removed.add(result.entry.id)
-          added.push(result.entry)
-        }
-      })
-      const replaced = new Set(current.replaced)
-      for (const result of results) if (result.ok && result.replacedId && result.entry?.status === 'draft') replaced.add(result.replacedId)
-      return {
-        ...current,
-        entries: [...current.entries.filter((entry) => !removed.has(entry.id)), ...added],
-        replaced: [...replaced],
-      }
-    })
-  }, [setWindow])
+  const merge = useCallback(
+    (changes: readonly BoardChange[], results: readonly ChangeResult[]) => {
+      setWindow((current) => {
+        if (!current) return current;
+        const removed = new Set<string>();
+        const added: BoardEntry[] = [];
+        results.forEach((result, index) => {
+          if (!result.ok) return;
+          const change = changes[index];
+          if (change?.op === "cancel" && !result.entry) removed.add(change.id);
+          // A staged change keeps the published original on view, marked as replaced.
+          if (
+            change?.op === "update" &&
+            (result.entry?.status === "published" || !result.replacedId)
+          )
+            removed.add(change.id);
+          if (result.replacedId && result.entry?.status === "published")
+            removed.add(result.replacedId);
+          if (result.entry) {
+            removed.add(result.entry.id);
+            added.push(result.entry);
+          }
+        });
+        const replaced = new Set(current.replaced);
+        for (const result of results)
+          if (result.ok && result.replacedId && result.entry?.status === "draft")
+            replaced.add(result.replacedId);
+        return {
+          ...current,
+          entries: [...current.entries.filter((entry) => !removed.has(entry.id)), ...added],
+          replaced: [...replaced],
+        };
+      });
+    },
+    [setWindow],
+  );
 
-  const run = useCallback(async (changes: BoardChange[], label: string, history: 'record' | 'undo' | 'redo' = 'record'): Promise<ChangeResult[] | null> => {
-    if (changes.length === 0) return []
-    const before = new Map(entriesById)
-    setSaving((count) => count + 1)
-    try {
-      const { results,distributionRefusals } = await saveChanges(boardId, changes, t('errors.save'))
-      merge(changes, results)
-      for(const refusal of distributionRefusals??[])notify('error',`Bookings saved; schedule email not queued: ${refusal.message}`,refusal.remedy)
-      const refused = results.filter((result): result is Extract<ChangeResult, { ok: false }> => !result.ok)
-      if (refused.length) {
-        const first = refused[0]!
-        notify('error', refused.length === 1 ? first.error : t('notices.someRefused', { count: refused.length, total: results.length, reason: first.error }), first.remedy)
-      }
-      const inverse = inverseOf(changes, results, before, newId)
-      if (inverse.length) {
-        const step = { label, changes: inverse }
-        if (history === 'undo') setRedoStack((stack) => [...stack, step])
-        else {
-          setUndoStack((stack) => [...stack.slice(-49), step])
-          if (history === 'record') setRedoStack([])
+  const run = useCallback(
+    async (
+      changes: BoardChange[],
+      label: string,
+      history: "record" | "undo" | "redo" = "record",
+    ): Promise<ChangeResult[] | null> => {
+      if (changes.length === 0) return [];
+      const before = new Map(entriesById);
+      setSaving((count) => count + 1);
+      try {
+        const { results, distributionRefusals } = await saveChanges(
+          boardId,
+          changes,
+          t("errors.save"),
+        );
+        merge(changes, results);
+        for (const refusal of distributionRefusals ?? [])
+          notify(
+            "error",
+            `Bookings saved; schedule email not queued: ${refusal.message}`,
+            refusal.remedy,
+          );
+        const refused = results.filter(
+          (result): result is Extract<ChangeResult, { ok: false }> => !result.ok,
+        );
+        if (refused.length) {
+          const first = refused[0]!;
+          notify(
+            "error",
+            refused.length === 1
+              ? first.error
+              : t("notices.someRefused", {
+                  count: refused.length,
+                  total: results.length,
+                  reason: first.error,
+                }),
+            first.remedy,
+          );
         }
+        const inverse = inverseOf(changes, results, before, newId);
+        if (inverse.length) {
+          const step = { label, changes: inverse };
+          if (history === "undo") setRedoStack((stack) => [...stack, step]);
+          else {
+            setUndoStack((stack) => [...stack.slice(-49), step]);
+            if (history === "record") setRedoStack([]);
+          }
+        }
+        void reload();
+        return results;
+      } catch (error) {
+        notify(
+          "error",
+          error instanceof Error ? error.message : t("errors.save"),
+          error instanceof SchedulingRequestError ? error.remedy : null,
+        );
+        void reload();
+        return null;
+      } finally {
+        setSaving((count) => count - 1);
       }
-      void reload()
-      return results
-    } catch (error) {
-      notify('error', error instanceof Error ? error.message : t('errors.save'), error instanceof SchedulingRequestError ? error.remedy : null)
-      void reload()
-      return null
-    } finally {
-      setSaving((count) => count - 1)
-    }
-  }, [boardId, entriesById, merge, notify, reload, t])
+    },
+    [boardId, entriesById, merge, notify, reload, t],
+  );
 
   const undo = useCallback(async () => {
-    const step = undoStack.at(-1)
-    if (!step) return
-    setUndoStack((stack) => stack.slice(0, -1))
-    await run(step.changes, step.label, 'undo')
-  }, [run, undoStack])
+    const step = undoStack.at(-1);
+    if (!step) return;
+    setUndoStack((stack) => stack.slice(0, -1));
+    await run(step.changes, step.label, "undo");
+  }, [run, undoStack]);
 
   const redo = useCallback(async () => {
-    const step = redoStack.at(-1)
-    if (!step) return
-    setRedoStack((stack) => stack.slice(0, -1))
-    await run(step.changes, step.label, 'redo')
-  }, [redoStack, run])
+    const step = redoStack.at(-1);
+    if (!step) return;
+    setRedoStack((stack) => stack.slice(0, -1));
+    await run(step.changes, step.label, "redo");
+  }, [redoStack, run]);
 
   return {
     window: shownWindow,
@@ -187,7 +294,7 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
     canRedo: redoStack.length > 0,
     undoLabel: undoStack.at(-1)?.label ?? null,
     entriesById,
-  }
+  };
 }
 
-export type BoardController = ReturnType<typeof useBoard>
+export type BoardController = ReturnType<typeof useBoard>;

@@ -35,27 +35,40 @@ async function seedMonthlyPlan(org: ScratchOrg, actor: string): Promise<string> 
   return planId;
 }
 
-async function seedQuarterlyVersion(org: ScratchOrg, actor: string, planId: string): Promise<string> {
-  const versionId = await createPlanVersion(org.orgId, actor, {
-    planId,
-    effectiveFrom: "2026-01-01",
-    interval: "quarterly",
-    billingTiming: "advance",
-    components: [
-      {
-        componentKey: "fee",
-        name: "Fee",
-        quantity: "1",
-        unitPrice: "300.0000",
-        incomeAccountId: org.accounts.revenue,
-      },
-    ],
-  }, null);
+async function seedQuarterlyVersion(
+  org: ScratchOrg,
+  actor: string,
+  planId: string,
+): Promise<string> {
+  const versionId = await createPlanVersion(
+    org.orgId,
+    actor,
+    {
+      planId,
+      effectiveFrom: "2026-01-01",
+      interval: "quarterly",
+      billingTiming: "advance",
+      components: [
+        {
+          componentKey: "fee",
+          name: "Fee",
+          quantity: "1",
+          unitPrice: "300.0000",
+          incomeAccountId: org.accounts.revenue,
+        },
+      ],
+    },
+    null,
+  );
   await publishPlanVersion(org.orgId, actor, versionId, null);
   return versionId;
 }
 
-async function seedPlainSubscription(org: ScratchOrg, actor: string, planId: string): Promise<string> {
+async function seedPlainSubscription(
+  org: ScratchOrg,
+  actor: string,
+  planId: string,
+): Promise<string> {
   const subscriptionId = randomUUID();
   await db.execute(sql`
     insert into subscriptions
@@ -67,19 +80,31 @@ async function seedPlainSubscription(org: ScratchOrg, actor: string, planId: str
   return subscriptionId;
 }
 
-async function cursors(orgId: string, subscriptionId: string): Promise<{ nextBillOn: string; currentPeriodStart: string }> {
-  const row = (await db.execute<{ nextBillOn: string; currentPeriodStart: string }>(
-    sql`select next_bill_on as "nextBillOn", current_period_start as "currentPeriodStart"
-          from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects",
-  ))[0]!;
+async function cursors(
+  orgId: string,
+  subscriptionId: string,
+): Promise<{ nextBillOn: string; currentPeriodStart: string }> {
+  const row = (
+    await db.execute<{ nextBillOn: string; currentPeriodStart: string }>(
+      sql`select next_bill_on as "nextBillOn", current_period_start as "currentPeriodStart"
+          from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!;
   return { nextBillOn: row.nextBillOn, currentPeriodStart: row.currentPeriodStart };
 }
 
-async function guardedPeriods(orgId: string, subscriptionId: string): Promise<Array<{ startsOn: string; endsOn: string }>> {
-  return await db.execute<{ startsOn: string; endsOn: string }>(sql`
+async function guardedPeriods(
+  orgId: string,
+  subscriptionId: string,
+): Promise<Array<{ startsOn: string; endsOn: string }>> {
+  return await db.execute<{ startsOn: string; endsOn: string }>(
+    sql`
     select period_starts_on as "startsOn", period_ends_on as "endsOn" from subscription_period_invoices
      where org_id = ${orgId} and subscription_id = ${subscriptionId} order by period_starts_on
-  `, "objects");
+  `,
+    "objects",
+  );
 }
 
 async function withOrg(run: (org: ScratchOrg, actor: string) => Promise<void>): Promise<void> {
@@ -99,7 +124,10 @@ test("activating over billed service refuses naming the unbilled boundary", DB, 
     const subscriptionId = await seedPlainSubscription(org, actor, planId);
     const billed = await runDueSubscriptions("2026-01-01");
     assert.equal(billed.billed, 1);
-    assert.deepEqual(await cursors(org.orgId, subscriptionId), { nextBillOn: "2026-02-01", currentPeriodStart: "2026-01-01" });
+    assert.deepEqual(await cursors(org.orgId, subscriptionId), {
+      nextBillOn: "2026-02-01",
+      currentPeriodStart: "2026-01-01",
+    });
     await assert.rejects(
       activateLifecycle(org.orgId, actor, {
         subscriptionId,
@@ -110,33 +138,43 @@ test("activating over billed service refuses naming the unbilled boundary", DB, 
       }),
       /already-billed service through 2026-02-01.*billFromUnbilledBoundary/,
     );
-    assert.deepEqual(await cursors(org.orgId, subscriptionId), { nextBillOn: "2026-02-01", currentPeriodStart: "2026-01-01" });
+    assert.deepEqual(await cursors(org.orgId, subscriptionId), {
+      nextBillOn: "2026-02-01",
+      currentPeriodStart: "2026-01-01",
+    });
   });
 });
 
-test("the controlled transition bills from the boundary and never invoices January twice", DB, async () => {
-  await withOrg(async (org, actor) => {
-    const planId = await seedMonthlyPlan(org, actor);
-    const versionId = await seedQuarterlyVersion(org, actor, planId);
-    const subscriptionId = await seedPlainSubscription(org, actor, planId);
-    await runDueSubscriptions("2026-01-01");
-    await activateLifecycle(org.orgId, actor, {
-      subscriptionId,
-      planVersionId: versionId,
-      termStartsOn: "2026-01-01",
-      termEndsOn: "2027-01-01",
-      renewalPolicy: "none",
-      billFromUnbilledBoundary: true,
+test(
+  "the controlled transition bills from the boundary and never invoices January twice",
+  DB,
+  async () => {
+    await withOrg(async (org, actor) => {
+      const planId = await seedMonthlyPlan(org, actor);
+      const versionId = await seedQuarterlyVersion(org, actor, planId);
+      const subscriptionId = await seedPlainSubscription(org, actor, planId);
+      await runDueSubscriptions("2026-01-01");
+      await activateLifecycle(org.orgId, actor, {
+        subscriptionId,
+        planVersionId: versionId,
+        termStartsOn: "2026-01-01",
+        termEndsOn: "2027-01-01",
+        renewalPolicy: "none",
+        billFromUnbilledBoundary: true,
+      });
+      assert.deepEqual(await cursors(org.orgId, subscriptionId), {
+        nextBillOn: "2026-02-01",
+        currentPeriodStart: "2026-02-01",
+      });
+      const billed = await runDueSubscriptions("2026-02-01");
+      assert.equal(billed.billed, 1);
+      assert.deepEqual(await guardedPeriods(org.orgId, subscriptionId), [
+        { startsOn: "2026-01-01", endsOn: "2026-02-01" },
+        { startsOn: "2026-02-01", endsOn: "2026-05-01" },
+      ]);
     });
-    assert.deepEqual(await cursors(org.orgId, subscriptionId), { nextBillOn: "2026-02-01", currentPeriodStart: "2026-02-01" });
-    const billed = await runDueSubscriptions("2026-02-01");
-    assert.equal(billed.billed, 1);
-    assert.deepEqual(await guardedPeriods(org.orgId, subscriptionId), [
-      { startsOn: "2026-01-01", endsOn: "2026-02-01" },
-      { startsOn: "2026-02-01", endsOn: "2026-05-01" },
-    ]);
-  });
-});
+  },
+);
 
 test("a never-billed subscription activates at its term dates as before", DB, async () => {
   await withOrg(async (org, actor) => {
@@ -150,6 +188,9 @@ test("a never-billed subscription activates at its term dates as before", DB, as
       termEndsOn: "2027-01-01",
       renewalPolicy: "none",
     });
-    assert.deepEqual(await cursors(org.orgId, subscriptionId), { nextBillOn: "2026-01-01", currentPeriodStart: "2026-01-01" });
+    assert.deepEqual(await cursors(org.orgId, subscriptionId), {
+      nextBillOn: "2026-01-01",
+      currentPeriodStart: "2026-01-01",
+    });
   });
 });

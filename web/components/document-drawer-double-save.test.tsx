@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // Save cannot be double-clicked into a duplicate write: save awaits the
 // client-script gate (up to 2 s) before execute sets busy, so two rapid
@@ -22,7 +22,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ar/invoices\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ar/invoices'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -79,8 +87,8 @@ const REV1 = "2026-09-17T12:00:01.000000Z";
 function buttonsNamed(name: string): HTMLButtonElement[] {
   // A drawer that can also post labels its draft save "Save draft".
   const names = name === "Save" ? ["Save", "Save draft"] : [name];
-  return [...document.querySelectorAll("button")].filter(
-    (b) => names.includes(b.textContent?.trim() ?? ""),
+  return [...document.querySelectorAll("button")].filter((b) =>
+    names.includes(b.textContent?.trim() ?? ""),
   ) as HTMLButtonElement[];
 }
 
@@ -93,7 +101,9 @@ test("double-clicking Save sends one write with the loaded revision", async (t) 
   const pending: Array<(response: Response) => void> = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.startsWith("/api/documents/") && init?.method === "PATCH") {
       const body = JSON.parse(String(init.body)) as { expectedUpdatedAt?: string };
       writes.push({ revision: String(body.expectedUpdatedAt) });

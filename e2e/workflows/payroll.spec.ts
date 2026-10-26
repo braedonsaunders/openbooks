@@ -132,13 +132,27 @@ interface RemitGroup {
   partyName: string | null;
   filingAccount: { id: string };
   total: string;
-  components: { componentId: string; code: string; name: string; kind: string; liabilityAccountId: string; amount: string }[];
+  components: {
+    componentId: string;
+    code: string;
+    name: string;
+    kind: string;
+    liabilityAccountId: string;
+    amount: string;
+  }[];
   slices: {
     subsidiaryId: string;
     subsidiaryName: string | null;
     currency: string;
     total: string;
-    components: { componentId: string; code: string; name: string; kind: string; liabilityAccountId: string; amount: string }[];
+    components: {
+      componentId: string;
+      code: string;
+      name: string;
+      kind: string;
+      liabilityAccountId: string;
+      amount: string;
+    }[];
     existingBills: { documentId: string; documentNumber: string; status: string; total: string }[];
   }[];
   existingBills: { documentId: string; documentNumber: string; status: string; total: string }[];
@@ -185,7 +199,9 @@ const ctx = {} as Ctx;
 const digits = (String(Date.now()) + String(process.pid)).slice(-4);
 // The amendment's pay date moves per run so its remittance range is always
 // history-free, even when a retry shares the tenant with an earlier attempt.
-const RETRO_DAY = String(10 + (Number((String(Date.now()) + String(process.pid)).slice(-2)) % 15)).padStart(2, "0");
+const RETRO_DAY = String(
+  10 + (Number((String(Date.now()) + String(process.pid)).slice(-2)) % 15),
+).padStart(2, "0");
 
 function employeeName(base: string): string {
   return `${TAG} ${base}`;
@@ -226,12 +242,16 @@ async function ensureApprovalFlow(
   // policy would park new submissions behind unanswerable gates.
   let res = await api(rq, ctx.baseURL, "GET", "/api/admin/flows");
   const existing = (ok(res, "list flows")["flows"] as { id: string }[]).find(
-    (candidate) =>
-      (candidate as unknown as Record<string, unknown>)["name"] === name,
+    (candidate) => (candidate as unknown as Record<string, unknown>)["name"] === name,
   );
   const flowId =
     existing?.id ??
-    field(await api(rq, ctx.baseURL, "POST", "/api/admin/flows", { name, subjectKind }).then((r) => ok(r, `create flow ${name}`)), "id");
+    field(
+      await api(rq, ctx.baseURL, "POST", "/api/admin/flows", { name, subjectKind }).then((r) =>
+        ok(r, `create flow ${name}`),
+      ),
+      "id",
+    );
   const graph = {
     schemaVersion: 1,
     nodes: [
@@ -302,7 +322,10 @@ async function approveAsSecondUser(gateId: string, comment: string): Promise<voi
   expect(res.ok(), await res.text()).toBe(true);
 }
 
-async function openPage(browser: Browser, path: string): Promise<{ page: Page; close: () => Promise<void> }> {
+async function openPage(
+  browser: Browser,
+  path: string,
+): Promise<{ page: Page; close: () => Promise<void> }> {
   const { context, page } = await authedContext(browser, ctx.baseURL);
   await page.goto(path);
   await dismissSetupWizard(page);
@@ -316,7 +339,10 @@ async function openPage(browser: Browser, path: string): Promise<{ page: Page; c
 
 /** Base-pay component id from the run's adjustable set (wizard review path). */
 async function baseComponentId(rq: APIRequestContext, runId: string): Promise<string> {
-  const detail = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${runId}`), "read adjustable");
+  const detail = ok(
+    await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${runId}`),
+    "read adjustable",
+  );
   const options = detail["adjustableComponents"] as { id: string; code: string }[];
   const base = options.find((option) => option.code === "BASE");
   if (!base) throw new Error("BASE component missing from adjustable set");
@@ -367,7 +393,8 @@ async function createRemittanceBill(
       `reread ${label}`,
     );
     const current = ((fresh["groups"] as RemitGroup[]) ?? []).find(
-      (candidate) => candidate.partyId === partyId && candidate.filingAccount.id === filingAccountId,
+      (candidate) =>
+        candidate.partyId === partyId && candidate.filingAccount.id === filingAccountId,
     );
     const ours = (current?.slices ?? []).find((slice) => slice.subsidiaryId === subsidiaryId);
     for (const stale of ours?.existingBills ?? []) {
@@ -400,10 +427,13 @@ async function releaseBankFile(
   runId: string,
   fileId: string,
 ): Promise<{ text: string; hash: string }> {
-  const response = await rq.fetch(`${new URL(ctx.baseURL).origin}/api/payroll/runs/${runId}/bank-file/${fileId}`, {
-    method: "POST",
-    headers: { Origin: new URL(ctx.baseURL).origin },
-  });
+  const response = await rq.fetch(
+    `${new URL(ctx.baseURL).origin}/api/payroll/runs/${runId}/bank-file/${fileId}`,
+    {
+      method: "POST",
+      headers: { Origin: new URL(ctx.baseURL).origin },
+    },
+  );
   const hash = response.headers()["x-payroll-bank-file-sha256"] ?? "";
   const bytes = await response.body();
   const { createHash } = await import("node:crypto");
@@ -416,7 +446,15 @@ async function createEmployee(
   base: string,
   country: string,
 ): Promise<string> {
-  const draft = ok(await api(rq, ctx.baseURL, "POST", "/api/parties", { displayName: employeeName(base), kind: "person", isActive: false, roles: { employee: { enabled: true } } }), `create ${base}`);
+  const draft = ok(
+    await api(rq, ctx.baseURL, "POST", "/api/parties", {
+      displayName: employeeName(base),
+      kind: "person",
+      isActive: false,
+      roles: { employee: { enabled: true } },
+    }),
+    `create ${base}`,
+  );
   const id = field(draft["party"] as Record<string, unknown>, "id");
   const current = (await rq.get(`/api/parties/${id}`).then((r) => r.json())) as {
     party: { updated_at: string };
@@ -451,7 +489,13 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       // (CA staff are paid in CAD on a USD-base org).
       ok(
         await api(rq, ctx.baseURL, "PUT", "/api/admin/setup/features", {
-          features: { payroll: true, projects: true, multiSubsidiary: true, flows: true, multiCurrency: true },
+          features: {
+            payroll: true,
+            projects: true,
+            multiSubsidiary: true,
+            flows: true,
+            multiCurrency: true,
+          },
         }),
         "features",
       );
@@ -503,7 +547,15 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       // Remittance vendors: create a named inactive party, then activate it.
       ctx.vendor = {};
       for (const key of ["cra", "rq", "irs"]) {
-        const draft = ok(await api(rq, ctx.baseURL, "POST", "/api/parties", { displayName: `${TAG} ${key.toUpperCase()}`, kind: "company", isActive: false, roles: { vendor: { enabled: true } } }), `create ${key}`);
+        const draft = ok(
+          await api(rq, ctx.baseURL, "POST", "/api/parties", {
+            displayName: `${TAG} ${key.toUpperCase()}`,
+            kind: "company",
+            isActive: false,
+            roles: { vendor: { enabled: true } },
+          }),
+          `create ${key}`,
+        );
         const id = field(draft["party"] as Record<string, unknown>, "id");
         const current = (await rq.get(`/api/parties/${id}`).then((r) => r.json())) as {
           party: { updated_at: string };
@@ -537,14 +589,15 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       );
       // Filing accounts group every downstream artefact (remittance, slips).
       // One default per country exists at most: reuse it across retries.
-      const existingFilings = (
-        ok(await api(rq, ctx.baseURL, "GET", "/api/payroll/profiles"), "filing accounts")["filingAccounts"] as {
-          id: string;
-          country: string;
-          subsidiaryId: string | null;
-          isDefault: boolean;
-        }[]
-      );
+      const existingFilings = ok(
+        await api(rq, ctx.baseURL, "GET", "/api/payroll/profiles"),
+        "filing accounts",
+      )["filingAccounts"] as {
+        id: string;
+        country: string;
+        subsidiaryId: string | null;
+        isDefault: boolean;
+      }[];
       const reuseFiling = (country: string, subsidiaryId: string | null): string | null =>
         existingFilings.find(
           (candidate) =>
@@ -581,16 +634,24 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       // already-fetched filing accounts. Either way the suite scopes to an
       // entity it owns rather than depending on what the shared tenant
       // accumulated.
-      const discoveryAttempt = await api(rq, ctx.baseURL, "POST", "/api/admin/setup/pay-schedules", {
-        name: `${TAG} Biweekly Discovery`,
-        frequency: "biweekly",
-        periodsPerYear: 26,
-        anchorPeriodEnd: "2026-01-02",
-        payDateOffsetDays: 3,
-        isActive: true,
-      });
+      const discoveryAttempt = await api(
+        rq,
+        ctx.baseURL,
+        "POST",
+        "/api/admin/setup/pay-schedules",
+        {
+          name: `${TAG} Biweekly Discovery`,
+          frequency: "biweekly",
+          periodsPerYear: 26,
+          anchorPeriodEnd: "2026-01-02",
+          payDateOffsetDays: 3,
+          isActive: true,
+        },
+      );
       if (discoveryAttempt.status === 400) {
-        const problem = String((discoveryAttempt.json as Record<string, unknown> | null)?.error ?? "");
+        const problem = String(
+          (discoveryAttempt.json as Record<string, unknown> | null)?.error ?? "",
+        );
         if (!/subsidiary/i.test(problem)) {
           throw new Error(`discovery schedule → HTTP 400: ${problem.slice(0, 300)}`);
         }
@@ -599,19 +660,27 @@ test.describe.serial("payroll run to remittance to year-end", () => {
           .find((id): id is string => typeof id === "string" && id !== "");
         if (!inherited) {
           throw new Error(
-            "payroll e2e needs a parent subsidiary: the shared tenant has more than one legal entity "
-            + "(so the org-wide discovery schedule is refused) and no filing account names an existing one. "
-            + "Re-run against a fresh tenant.",
+            "payroll e2e needs a parent subsidiary: the shared tenant has more than one legal entity " +
+              "(so the org-wide discovery schedule is refused) and no filing account names an existing one. " +
+              "Re-run against a fresh tenant.",
           );
         }
         ctx.parentSub = inherited;
       } else {
         const schedDiscovery = field(ok(discoveryAttempt, "discovery schedule"), "id");
         const discoveryId = field(
-          ok(await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: schedDiscovery }), "mint discovery run"),
+          ok(
+            await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", {
+              payScheduleId: schedDiscovery,
+            }),
+            "mint discovery run",
+          ),
           "documentId",
         );
-        const discovery = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${discoveryId}`), "read discovery run");
+        const discovery = ok(
+          await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${discoveryId}`),
+          "read discovery run",
+        );
         ctx.parentSub = String((discovery["run"] as Record<string, unknown>)["subsidiaryId"]);
       }
       // US legal entity + schedule under it.
@@ -663,10 +732,16 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         "id",
       );
       ctx.runCA = field(
-        ok(await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: ctx.schedCA }), "mint CA run"),
+        ok(
+          await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: ctx.schedCA }),
+          "mint CA run",
+        ),
         "documentId",
       );
-      const runCA = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${ctx.runCA}`), "read CA run");
+      const runCA = ok(
+        await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${ctx.runCA}`),
+        "read CA run",
+      );
       const header = runCA["run"] as Record<string, unknown>;
       ctx.runCAno = String(header["document_number"]);
       expect(ctx.runCAno).toMatch(/^PAY-/);
@@ -686,14 +761,15 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         ),
         "id",
       );
-      const usFilings = (
-        ok(await api(rq, ctx.baseURL, "GET", "/api/payroll/profiles"), "filing accounts rerun")["filingAccounts"] as {
-          id: string;
-          country: string;
-          subsidiaryId: string | null;
-          isDefault: boolean;
-        }[]
-      );
+      const usFilings = ok(
+        await api(rq, ctx.baseURL, "GET", "/api/payroll/profiles"),
+        "filing accounts rerun",
+      )["filingAccounts"] as {
+        id: string;
+        country: string;
+        subsidiaryId: string | null;
+        isDefault: boolean;
+      }[];
       // One EIN registration per US entity. The default is unique per
       // country, so a retried attempt whose subsidiary is new cannot adopt
       // the previous attempt's default as its own registration: billing
@@ -705,9 +781,13 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       // falling through to whichever country default `limit 1` finds.
       const ownEin = usFilings.find(
         (candidate) =>
-          candidate.country === "US" && candidate.isDefault && (candidate.subsidiaryId ?? null) === ctx.subUS,
+          candidate.country === "US" &&
+          candidate.isDefault &&
+          (candidate.subsidiaryId ?? null) === ctx.subUS,
       );
-      const anyUsDefault = usFilings.find((candidate) => candidate.country === "US" && candidate.isDefault);
+      const anyUsDefault = usFilings.find(
+        (candidate) => candidate.country === "US" && candidate.isDefault,
+      );
       ctx.filingUS =
         ownEin?.id ??
         field(
@@ -830,7 +910,9 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       if (spot.status === 409) {
         const conflict = spot.json as { code?: unknown };
         if (conflict.code !== "duplicate") {
-          throw new Error(`CAD→USD spot conflict is not ours: ${JSON.stringify(spot.json).slice(0, 300)}`);
+          throw new Error(
+            `CAD→USD spot conflict is not ours: ${JSON.stringify(spot.json).slice(0, 300)}`,
+          );
         }
       } else {
         ok(spot, "CAD→USD January spot");
@@ -863,7 +945,10 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         "probe bill fill",
       );
       ok(
-        await api(rq, ctx.baseURL, "POST", "/api/documents/actions", { action: "submit", documentId: probeId }),
+        await api(rq, ctx.baseURL, "POST", "/api/documents/actions", {
+          action: "submit",
+          documentId: probeId,
+        }),
         "probe bill submit",
       );
       const probePosted = await api(rq, ctx.baseURL, "POST", "/api/documents/actions", {
@@ -872,10 +957,16 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       });
       ok(probePosted, "probe bill post");
       if ((probePosted.json as Record<string, unknown>)["ok"] !== true) {
-        throw new Error(`probe bill post refused: ${JSON.stringify(probePosted.json).slice(0, 300)}`);
+        throw new Error(
+          `probe bill post refused: ${JSON.stringify(probePosted.json).slice(0, 300)}`,
+        );
       }
-      const probeDoc = ok(await api(rq, ctx.baseURL, "GET", `/api/documents/${probeId}`), "probe bill readback");
-      const januaryPeriodId = ((probeDoc["doc"] as Record<string, unknown>)["posting_period_id"] as string) ?? "";
+      const probeDoc = ok(
+        await api(rq, ctx.baseURL, "GET", `/api/documents/${probeId}`),
+        "probe bill readback",
+      );
+      const januaryPeriodId =
+        ((probeDoc["doc"] as Record<string, unknown>)["posting_period_id"] as string) ?? "";
       if (!januaryPeriodId) throw new Error("probe bill names no posting period");
       const derived = ok(
         await api(rq, ctx.baseURL, "POST", "/api/consolidation", {
@@ -899,7 +990,12 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       ctx.q1pre = {};
       ctx.retroPayDate = `2026-01-${RETRO_DAY}`;
       const baseline = ok(
-        await api(rq, ctx.baseURL, "GET", `/api/payroll/remittances?from=${RANGE.from}&to=${RANGE.to}`),
+        await api(
+          rq,
+          ctx.baseURL,
+          "GET",
+          `/api/payroll/remittances?from=${RANGE.from}&to=${RANGE.to}`,
+        ),
         "remittance baseline",
       );
       for (const group of baseline["groups"] as RemitGroup[]) {
@@ -916,7 +1012,12 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       }
       // Approval flows: bank-detail fraud control and the pay-run SoD gate,
       // both decided by the second user who can never be the submitter.
-      await ensureApprovalFlow(rq, "Payroll E2E bank detail approval", "party_bank_account", "on_create");
+      await ensureApprovalFlow(
+        rq,
+        "Payroll E2E bank detail approval",
+        "party_bank_account",
+        "on_create",
+      );
       await ensureApprovalFlow(rq, "Payroll E2E pay run approval", "pay_run", "on_submit");
       // Dismiss the first-run setup wizard NOW, before any run calculates:
       // deferring it writes org settings, and a settings write after a
@@ -927,7 +1028,12 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       } finally {
         await setupUi.close();
       }
-      ctx.approverApi = await loginApiContext(browser, ctx.baseURL, ctx.approver.email, ctx.approver.password);
+      ctx.approverApi = await loginApiContext(
+        browser,
+        ctx.baseURL,
+        ctx.approver.email,
+        ctx.approver.password,
+      );
     } finally {
       await context.close();
     }
@@ -996,7 +1102,11 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       ];
       const accountNumbers = ["1234567", "2345678", "3456789"];
       for (let index = 0; index < banks.length; index += 1) {
-        const [employee, country, routing] = banks[index] as [string, string, Record<string, string>];
+        const [employee, country, routing] = banks[index] as [
+          string,
+          string,
+          Record<string, string>,
+        ];
         const created = ok(
           await api(rq, ctx.baseURL, "POST", `/api/parties/${employee}/bank-accounts`, {
             bankName: `${TAG} Test Bank`,
@@ -1108,10 +1218,14 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       // Without the employer attestations the declaring rules fail closed —
       // the suite proves the demand is live before supplying the facts.
       const bare = ok(
-        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.runCA}`, { action: "calculate" }),
+        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.runCA}`, {
+          action: "calculate",
+        }),
         "calculate without attestations",
       );
-      const bareErrors = (bare["errors"] as { message: string }[]).map((e) => e.message).join(" | ");
+      const bareErrors = (bare["errors"] as { message: string }[])
+        .map((e) => e.message)
+        .join(" | ");
       expect(bareErrors).toMatch(/last-and-first-shift/);
       expect(bareErrors).toMatch(/commission-pay status/);
       const calc = ok(
@@ -1128,7 +1242,10 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       expect(calc["employees"]).toBe(2);
       expect(calc["gross"]).toBe(CA_TOTALS.gross);
       expect(calc["net"]).toBe(CA_TOTALS.net);
-      const detail = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${ctx.runCA}`), "read CA stubs");
+      const detail = ok(
+        await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${ctx.runCA}`),
+        "read CA stubs",
+      );
       ctx.stubsCA = asStubs(detail);
       const alice = stubByName(ctx.stubsCA, ALICE.base);
       expect(alice.gross).toBe(ALICE.gross);
@@ -1171,18 +1288,26 @@ test.describe.serial("payroll run to remittance to year-end", () => {
     try {
       const rq = page.request;
       ctx.runUS = field(
-        ok(await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: ctx.schedUS }), "mint US run"),
+        ok(
+          await api(rq, ctx.baseURL, "POST", "/api/payroll/runs", { payScheduleId: ctx.schedUS }),
+          "mint US run",
+        ),
         "documentId",
       );
       const calc = ok(
-        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.runUS}`, { action: "calculate" }),
+        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.runUS}`, {
+          action: "calculate",
+        }),
         "calculate US run",
       );
       expect(calc["errors"]).toEqual([]);
       expect(calc["employees"]).toBe(1);
       expect(calc["gross"]).toBe(SAM.gross);
       expect(calc["net"]).toBe(SAM.net);
-      const detail = ok(await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${ctx.runUS}`), "read US stubs");
+      const detail = ok(
+        await api(rq, ctx.baseURL, "GET", `/api/payroll/runs/${ctx.runUS}`),
+        "read US stubs",
+      );
       ctx.stubsUS = asStubs(detail);
       const sam = stubByName(ctx.stubsUS, SAM.base);
       // 78000 / 26 biweekly periods, exact.
@@ -1217,7 +1342,9 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         [ctx.runUS, ctx.stubsUS],
       ] as [string, Stub[]][]) {
         const preview = ok(
-          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, { action: "preview-gl" }),
+          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, {
+            action: "preview-gl",
+          }),
           `GL preview ${runId}`,
         );
         const legs = preview["legs"] as { accountId: string; amount: string }[];
@@ -1227,19 +1354,27 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         // Legs tie to the stub endpoint: wages debit equals gross, net-pay
         // credits equal net, every stub's employee rides the net leg.
         const wageLegs = legs.filter((leg) => leg.accountId === aid("wage"));
-        expect(sumExact(wageLegs.map((leg) => leg.amount))).toBe(sumExact(stubs.map((s) => s.gross)));
+        expect(sumExact(wageLegs.map((leg) => leg.amount))).toBe(
+          sumExact(stubs.map((s) => s.gross)),
+        );
         const netLegs = legs.filter((leg) => leg.accountId === aid("net"));
-        expect(sumExact(netLegs.map((leg) => neg(leg.amount)))).toBe(sumExact(stubs.map((s) => s.net_pay)));
+        expect(sumExact(netLegs.map((leg) => neg(leg.amount)))).toBe(
+          sumExact(stubs.map((s) => s.net_pay)),
+        );
       }
       // Submit parks both runs; approval is outstanding, not released.
       for (const runId of [ctx.runCA, ctx.runUS]) {
         const submitted = ok(
-          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, { action: "submit-approval" }),
+          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, {
+            action: "submit-approval",
+          }),
           `submit ${runId}`,
         );
         expect(submitted["gated"]).toBe(true);
         const state = ok(
-          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, { action: "approval-state" }),
+          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, {
+            action: "approval-state",
+          }),
           `approval state ${runId}`,
         );
         expect(state["pending"]).toBe(true);
@@ -1263,7 +1398,9 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       }
       for (const runId of [ctx.runCA, ctx.runUS]) {
         const state = ok(
-          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, { action: "approval-state" }),
+          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, {
+            action: "approval-state",
+          }),
           `released state ${runId}`,
         );
         expect(state["released"]).toBe(true);
@@ -1373,7 +1510,12 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       const range = RANGE;
       const readSummary = async (): Promise<RemitGroup[]> => {
         const res = ok(
-          await api(rq, ctx.baseURL, "GET", `/api/payroll/remittances?from=${range.from}&to=${range.to}`),
+          await api(
+            rq,
+            ctx.baseURL,
+            "GET",
+            `/api/payroll/remittances?from=${range.from}&to=${range.to}`,
+          ),
           "remittance summary",
         );
         return res["groups"] as RemitGroup[];
@@ -1393,7 +1535,16 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         nonPeriodic: false,
         taxTreatment: "none",
       };
-      const routed = new Map<string, { componentId: string; name: string; kind: string; liabilityAccountId: string; partyId: string | null }>();
+      const routed = new Map<
+        string,
+        {
+          componentId: string;
+          name: string;
+          kind: string;
+          liabilityAccountId: string;
+          partyId: string | null;
+        }
+      >();
       for (const group of await readSummary()) {
         for (const component of group.components) {
           const known = routed.get(component.code);
@@ -1523,7 +1674,12 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       // own filing accounts (each attempt mints its own EIN) — so a vendor
       // alone does not identify our group. CRA and RQ share the Canadian
       // filing account; IRS uses this attempt's EIN.
-      const ourGroups: { vendorId: string; filingId: string; subsidiaryId: string; billKey: "cra" | "rq" | "irs" }[] = [
+      const ourGroups: {
+        vendorId: string;
+        filingId: string;
+        subsidiaryId: string;
+        billKey: "cra" | "rq" | "irs";
+      }[] = [
         { vendorId: vid("cra"), filingId: ctx.filingCA, subsidiaryId: ctx.caSub, billKey: "cra" },
         { vendorId: vid("rq"), filingId: ctx.filingCA, subsidiaryId: ctx.caSub, billKey: "rq" },
         { vendorId: vid("irs"), filingId: ctx.filingUS, subsidiaryId: ctx.subUS, billKey: "irs" },
@@ -1575,7 +1731,8 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         // against the translated consolidated total), so coverage is per
         // slice — this attempt's slice, since retries share the tenant.
         const group = billed.find(
-          (candidate) => candidate.partyId === spec.vendorId && candidate.filingAccount.id === spec.filingId,
+          (candidate) =>
+            candidate.partyId === spec.vendorId && candidate.filingAccount.id === spec.filingId,
         );
         if (!group) throw new Error("our billed group missing from summary");
         const slice = ourSlice(group, spec.subsidiaryId);
@@ -1611,10 +1768,16 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         [ctx.runUS, ctx.stubsUS, SAM.gross, SAM.net, SAM.cost],
       ] as [string, Stub[], string, string, string][]) {
         const preview = ok(
-          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, { action: "preview-gl" }),
+          await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${runId}`, {
+            action: "preview-gl",
+          }),
           `GL tie-out ${runId}`,
         );
-        const legs = preview["legs"] as { accountId: string; amount: string; description: string }[];
+        const legs = preview["legs"] as {
+          accountId: string;
+          amount: string;
+          description: string;
+        }[];
         const byAccount = new Map<string, string[]>();
         for (const leg of legs) {
           const list = byAccount.get(leg.accountId) ?? [];
@@ -1649,21 +1812,28 @@ test.describe.serial("payroll run to remittance to year-end", () => {
     const { context, page } = await authedContext(browser, ctx.baseURL);
     try {
       const rq = page.request;
-      const yearEnd = ok(await api(rq, ctx.baseURL, "GET", "/api/payroll/year-end?year=2026"), "year-end");
+      const yearEnd = ok(
+        await api(rq, ctx.baseURL, "GET", "/api/payroll/year-end?year=2026"),
+        "year-end",
+      );
       const filings = yearEnd["filings"] as {
         country: string;
         key: string;
         data: { rows: Record<string, string>[]; totals: { label: string; value: string }[] };
       }[];
       const rowsOf = (country: string, key: string): Record<string, string>[] => {
-        const filing = filings.find((candidate) => candidate.country === country && candidate.key === key);
+        const filing = filings.find(
+          (candidate) => candidate.country === country && candidate.key === key,
+        );
         if (!filing) throw new Error(`no ${country}/${key} filing`);
         return filing.data.rows;
       };
       // T4s equal the CA stubs line for line. Rows scope to this run's
       // employees (TAG names), so a retried attempt's slips never leak in.
       const t4 = rowsOf("CA", "t4").filter(
-        (row) => row["employee"] === employeeName(ALICE.base) || row["employee"] === employeeName(JEAN.base),
+        (row) =>
+          row["employee"] === employeeName(ALICE.base) ||
+          row["employee"] === employeeName(JEAN.base),
       );
       expect(t4).toHaveLength(2);
       const t4alice = t4.find((row) => row["employee"] === employeeName(ALICE.base)) ?? {};
@@ -1752,7 +1922,9 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       );
       ctx.retroRun = field(created, "documentId");
       const calc = ok(
-        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.retroRun}`, { action: "calculate" }),
+        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.retroRun}`, {
+          action: "calculate",
+        }),
         "calculate retro run",
       );
       expect(calc["errors"]).toEqual([]);
@@ -1766,20 +1938,31 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       const retroStub = stubByName(asStubs(retroDetail), SAM.base);
       expect(lineAmount(retroStub, "FIT")).toBe(RETRO.fit);
       ok(
-        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.retroRun}`, { action: "submit-approval" }),
+        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.retroRun}`, {
+          action: "submit-approval",
+        }),
         "submit retro run",
       );
       for (const gate of await approverGates()) {
         await approveAsSecondUser(gate, `${TAG} e2e retro review`);
       }
       ok(
-        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.retroRun}`, { action: "commit" }),
+        await api(rq, ctx.baseURL, "POST", `/api/payroll/runs/${ctx.retroRun}`, {
+          action: "commit",
+        }),
         "commit retro run",
       );
       // YTD moved by exactly the amendment: W-2 boxes and the 941.
       // Deltas off the pre-retro read, so shared-tenant history cannot leak.
-      const rerun = ok(await api(rq, ctx.baseURL, "GET", "/api/payroll/year-end?year=2026"), "year-end rerun");
-      const filings = rerun["filings"] as { country: string; key: string; data: { rows: Record<string, string>[] } }[];
+      const rerun = ok(
+        await api(rq, ctx.baseURL, "GET", "/api/payroll/year-end?year=2026"),
+        "year-end rerun",
+      );
+      const filings = rerun["filings"] as {
+        country: string;
+        key: string;
+        data: { rows: Record<string, string>[] };
+      }[];
       const w2 = filings
         .find((filing) => filing.country === "US" && filing.key === "w2")
         ?.data.rows.find((row) => row["employee"] === employeeName(SAM.base));
@@ -1792,13 +1975,25 @@ test.describe.serial("payroll run to remittance to year-end", () => {
       expect(sumExact([q1post["wages"] ?? "0", neg(ctx.q1pre["wages"] ?? "0")])).toBe(RETRO.gross);
       expect(sumExact([q1post["fit"] ?? "0", neg(ctx.q1pre["fit"] ?? "0")])).toBe(RETRO.fit);
       expect(sumExact([q1post["ssTax"] ?? "0", neg(ctx.q1pre["ssTax"] ?? "0")])).toBe("12.4000");
-      expect(sumExact([q1post["medicareTax"] ?? "0", neg(ctx.q1pre["medicareTax"] ?? "0")])).toBe("2.9000");
+      expect(sumExact([q1post["medicareTax"] ?? "0", neg(ctx.q1pre["medicareTax"] ?? "0")])).toBe(
+        "2.9000",
+      );
       // The amendment accrues its own IRS remittance in its own pay period.
       const delta = ok(
-        await api(rq, ctx.baseURL, "GET", `/api/payroll/remittances?from=${ctx.retroPayDate}&to=${ctx.retroPayDate}`),
+        await api(
+          rq,
+          ctx.baseURL,
+          "GET",
+          `/api/payroll/remittances?from=${ctx.retroPayDate}&to=${ctx.retroPayDate}`,
+        ),
         "retro remittance",
       );
-      const deltaGroups = delta["groups"] as { partyId: string; partyName: string | null; filingAccount: { id: string }; total: string }[];
+      const deltaGroups = delta["groups"] as {
+        partyId: string;
+        partyName: string | null;
+        filingAccount: { id: string };
+        total: string;
+      }[];
       expect(deltaGroups).toHaveLength(1);
       const deltaGroup = deltaGroups[0];
       if (!deltaGroup) throw new Error("retro remittance group missing");
@@ -1824,7 +2019,8 @@ test.describe.serial("payroll run to remittance to year-end", () => {
         const [proposed] = await Promise.all([
           ui.page.waitForResponse(
             (response) =>
-              response.url().includes("/api/payroll/retro") && response.request().method() === "POST",
+              response.url().includes("/api/payroll/retro") &&
+              response.request().method() === "POST",
             { timeout: 180_000 },
           ),
           ui.page.getByRole("button", { name: "Find retroactive pay", exact: true }).click(),

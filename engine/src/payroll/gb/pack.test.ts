@@ -12,11 +12,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { taxYearFor } from "../packs.ts";
 import { gbPackFilings } from "./filings.ts";
-import {
-  GB_CERTIFICATES,
-  GB_REGIONS,
-  GB_WITHHOLDING,
-} from "./jurisdictions.ts";
+import { GB_CERTIFICATES, GB_REGIONS, GB_WITHHOLDING } from "./jurisdictions.ts";
 import { GB_PACK_RATES, GB_TAX_YEARS } from "./rates.ts";
 import { GB_PACK } from "./pack.ts";
 
@@ -47,7 +43,13 @@ test("certificates are a starter checklist, a coding notice, a NIC record, and t
   assert.equal(GB_CERTIFICATES.country, "GB");
   assert.deepEqual(
     GB_CERTIFICATES.certificates.map((certificate) => certificate.key),
-    ["gb_starter_checklist", "gb_tax_code_notice", "gb_nic_category", "gb_workplace_pension", "gb_workplace_pension_assessment"],
+    [
+      "gb_starter_checklist",
+      "gb_tax_code_notice",
+      "gb_nic_category",
+      "gb_workplace_pension",
+      "gb_workplace_pension_assessment",
+    ],
   );
   const [checklist, notice] = GB_CERTIFICATES.certificates;
   const declaration = checklist!.fields.find((field) => field.key === "starter_declaration")!;
@@ -92,7 +94,10 @@ test("slots declare PAYE, employee/employer NIC, both loan repayments, the Appre
   }
   assert.deepEqual(
     loans!.components.map((component) => [component.systemKey, component.kind]),
-    [["student_loan", "deduction"], ["postgraduate_loan", "deduction"]],
+    [
+      ["student_loan", "deduction"],
+      ["postgraduate_loan", "deduction"],
+    ],
   );
 });
 
@@ -108,9 +113,7 @@ test("2026/27 IS transcribed with its edition stamp, and the pack is installable
   assert.ok(GB_TAX_YEARS.regionsWithOwnTables.includes("SCT"));
   // SCT publishes separately and now HAS a 2026/27 edition naming it: a year
   // is loaded for SCT only through that edition — no silent rUK fall-through.
-  const sct = GB_TAX_YEARS.editions.find(
-    (entry) => entry.region === "SCT" && entry.year === 2026,
-  );
+  const sct = GB_TAX_YEARS.editions.find((entry) => entry.region === "SCT" && entry.year === 2026);
   assert.equal(sct?.year, 2026);
   assert.equal(sct?.status, "published");
   assert.equal(sct?.effectiveFrom, "2026-04-06");
@@ -126,7 +129,10 @@ test("2026/27 IS transcribed with its edition stamp, and the pack is installable
     );
     assert.equal(prior?.status, "published", `GB ${year}`);
     assert.equal(prior?.effectiveFrom, `${year}-04-06`, `GB ${year}`);
-    assert.match(prior?.citation ?? "", new RegExp(`rates-and-thresholds-for-employers-${year}-to-${year + 1}`));
+    assert.match(
+      prior?.citation ?? "",
+      new RegExp(`rates-and-thresholds-for-employers-${year}-to-${year + 1}`),
+    );
     assert.equal(priorSct?.status, "published", `GB SCT ${year}`);
     assert.equal(priorSct?.effectiveFrom, `${year}-04-06`, `GB SCT ${year}`);
     assert.match(priorSct?.citation ?? "", /scottish-income-tax/);
@@ -165,13 +171,19 @@ test("filings declare the PAYE program type with the P60 and P45 statements", ()
   // each filing): the P60 is the annual statement, the P45 the separation one.
   assert.deepEqual(
     filings.yearEnd.map((filing) => [filing.key, filing.cadence]),
-    [["p60", "annual"], ["p45", "separation"]],
+    [
+      ["p60", "annual"],
+      ["p45", "separation"],
+    ],
   );
   for (const filing of filings.yearEnd) {
     assert.ok(typeof filing.population === "function");
     assert.ok(typeof filing.parseRowId === "function");
     assert.ok(filing.slip, `${filing.key} declares its slip`);
-    assert.ok(filing.downloadRefusal?.includes("RTI"), `${filing.key} refuses the RTI file by name`);
+    assert.ok(
+      filing.downloadRefusal?.includes("RTI"),
+      `${filing.key} refuses the RTI file by name`,
+    );
     assert.equal(filing.amendment.supported, true);
   }
 });

@@ -8,15 +8,8 @@ import { toUnits } from "../money/money.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { postDocument } from "./posting-document.ts";
 import { runPostDocumentEffects } from "./posting-dispatch.ts";
-import {
-  claimPostingEffectsForDocument,
-  type PostingEffectsRow,
-} from "./posting-effects.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { claimPostingEffectsForDocument, type PostingEffectsRow } from "./posting-effects.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -47,12 +40,15 @@ async function glBalanceBySubsidiary(
   accountId: string,
   subsidiaryId: string,
 ): Promise<bigint> {
-  const r = (await db.execute<{ bal: string }>(sql`
+  const r = await db.execute<{ bal: string }>(
+    sql`
     select coalesce(sum(l.amount), 0)::text as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and l.account_id = ${accountId}
-       and e.subsidiary_id = ${subsidiaryId}`, "objects"));
+       and e.subsidiary_id = ${subsidiaryId}`,
+    "objects",
+  );
   return toUnits(r[0]!.bal);
 }
 
@@ -63,12 +59,15 @@ async function layerValueBySubsidiary(
   stockLocationId: string,
   subsidiaryId: string,
 ): Promise<bigint> {
-  const r = (await db.execute<{ v: string }>(sql`
+  const r = await db.execute<{ v: string }>(
+    sql`
     select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as v
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
        and stock_location_id = ${stockLocationId}
-       and subsidiary_id = ${subsidiaryId}`, "objects"));
+       and subsidiary_id = ${subsidiaryId}`,
+    "objects",
+  );
   return toUnits(r[0]!.v);
 }
 
@@ -112,23 +111,34 @@ async function draftRootDocument(
     update documents set status = 'approved'
      where id = ${docId} and org_id = ${org.orgId}`);
   // Guard the premise: the fixture really produced a null-subsidiary header.
-  const [row] = await db.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from documents where id = ${docId}`, "objects");
+  const [row] = await db.execute<{ subsidiary_id: string | null }>(
+    sql`
+      select subsidiary_id from documents where id = ${docId}`,
+    "objects",
+  );
   assert.equal(row?.subsidiary_id ?? null, null);
   return docId;
 }
 
 async function effectsStatus(documentId: string): Promise<string | null> {
-  const r = (await db.execute<{ status: string | null }>(sql`
-    select status from posting_effects where document_id = ${documentId}`, "objects"));
+  const r = await db.execute<{ status: string | null }>(
+    sql`
+    select status from posting_effects where document_id = ${documentId}`,
+    "objects",
+  );
   return r[0]?.status ?? null;
 }
 
 async function firstLineId(documentId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
+  return (
+    await db.execute<{ id: string }>(
+      sql`
       select id from document_lines
        where document_id = ${documentId}
-       order by line_number limit 1`, "objects"))[0]!.id;
+       order by line_number limit 1`,
+      "objects",
+    )
+  )[0]!.id;
 }
 
 interface MovementFacts {
@@ -141,11 +151,14 @@ async function movementFacts(
   documentLineId: string,
   kind: "issue" | "receipt",
 ): Promise<MovementFacts> {
-  const r = (await db.execute<{ n: number; subsidiary_id: string | null }>(sql`
+  const r = await db.execute<{ n: number; subsidiary_id: string | null }>(
+    sql`
     select count(*)::int as n, min(subsidiary_id::text) as subsidiary_id
       from inventory_movements
      where org_id = ${orgId} and document_line_id = ${documentLineId}
-       and kind = ${kind}`, "objects"));
+       and kind = ${kind}`,
+    "objects",
+  );
   return {
     count: r[0]!.n,
     subsidiaryIds: r[0]!.n > 0 ? [r[0]!.subsidiary_id!] : [],
@@ -157,38 +170,40 @@ async function consumptionFacts(
   orgId: string,
   documentLineId: string,
 ): Promise<{ quantity: bigint; value: bigint }> {
-  const r = (await db.execute<{ q: string; v: string }>(sql`
+  const r = await db.execute<{ q: string; v: string }>(
+    sql`
     select coalesce(sum(c.quantity), 0)::text as q,
            coalesce(sum(round(c.quantity * c.unit_cost, 4)), 0)::text as v
       from cost_layer_consumptions c
       join inventory_movements m on m.id = c.issue_movement_id
                                  and m.org_id = c.org_id
-     where c.org_id = ${orgId} and m.document_line_id = ${documentLineId}`, "objects"));
+     where c.org_id = ${orgId} and m.document_line_id = ${documentLineId}`,
+    "objects",
+  );
   return { quantity: toUnits(r[0]!.q), value: toUnits(r[0]!.v) };
 }
 
-test("a root-subsidiary customer invoice relieves stock once and the GL corroborates the layers", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    // The scratch org's single subsidiary is the root (parent_id null).
-    const root = org.subsidiaryId;
+test(
+  "a root-subsidiary customer invoice relieves stock once and the GL corroborates the layers",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // The scratch org's single subsidiary is the root (parent_id null).
+      const root = org.subsidiaryId;
 
-    // Stock exists so the sale has something to relieve.
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "10",
-      unitCost: "2.00",
-      subsidiaryId: root,
-      offsetAccountId: org.accounts.clearing,
-      date: org.date,
-    });
+      // Stock exists so the sale has something to relieve.
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "2.00",
+        subsidiaryId: root,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
 
-    const invoiceId = await draftRootDocument(
-      org,
-      "customer_invoice",
-      "ROOT-INV-1",
-      {
+      const invoiceId = await draftRootDocument(org, "customer_invoice", "ROOT-INV-1", {
         partyId: org.customerId,
         accountId: org.accounts.revenue,
         itemId: org.items.fifo,
@@ -196,158 +211,189 @@ test("a root-subsidiary customer invoice relieves stock once and the GL corrobor
         unitPrice: "5",
         amount: "20",
         stockLocationId: org.stockLocationId,
-      },
-    );
-    const lineId = await firstLineId(invoiceId);
+      });
+      const lineId = await firstLineId(invoiceId);
 
-    await postDocument(invoiceId, deps(org));
+      await postDocument(invoiceId, deps(org));
 
-    // Exactly ONE issue movement, owned by the ROOT legal entity.
-    const issues = await movementFacts(org.orgId, lineId, "issue");
-    assert.equal(issues.count, 1, "the invoice must produce one issue movement");
-    assert.deepEqual(issues.subsidiaryIds, [root]);
+      // Exactly ONE issue movement, owned by the ROOT legal entity.
+      const issues = await movementFacts(org.orgId, lineId, "issue");
+      assert.equal(issues.count, 1, "the invoice must produce one issue movement");
+      assert.deepEqual(issues.subsidiaryIds, [root]);
 
-    // Exactly one layer effect behind that movement: 4 units at 2.00 = 8.00.
-    const consumed = await consumptionFacts(org.orgId, lineId);
-    assert.equal(consumed.quantity, toUnits("4"));
-    assert.equal(consumed.value, toUnits("8"));
+      // Exactly one layer effect behind that movement: 4 units at 2.00 = 8.00.
+      const consumed = await consumptionFacts(org.orgId, lineId);
+      assert.equal(consumed.quantity, toUnits("4"));
+      assert.equal(consumed.value, toUnits("8"));
 
-    // The effect drained through the durable outbox to success — not a
-    // silent skip recorded as success with nothing behind it.
-    assert.equal(await effectsStatus(invoiceId), "succeeded");
+      // The effect drained through the durable outbox to success — not a
+      // silent skip recorded as success with nothing behind it.
+      assert.equal(await effectsStatus(invoiceId), "succeeded");
 
-    // Per-entity GL corroborates the per-entity subledger.
-    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.cogs, root), toUnits("8"));
-    assert.equal(
-      await glBalanceBySubsidiary(org.orgId, org.accounts.invAsset, root),
-      await layerValueBySubsidiary(org.orgId, org.items.fifo, org.stockLocationId, root),
-    );
-    assert.equal(await layerValueBySubsidiary(org.orgId, org.items.fifo, org.stockLocationId, root), toUnits("12"));
-    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.ar, root), toUnits("20"));
-    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.revenue, root), toUnits("-20"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Per-entity GL corroborates the per-entity subledger.
+      assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.cogs, root), toUnits("8"));
+      assert.equal(
+        await glBalanceBySubsidiary(org.orgId, org.accounts.invAsset, root),
+        await layerValueBySubsidiary(org.orgId, org.items.fifo, org.stockLocationId, root),
+      );
+      assert.equal(
+        await layerValueBySubsidiary(org.orgId, org.items.fifo, org.stockLocationId, root),
+        toUnits("12"),
+      );
+      assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.ar, root), toUnits("20"));
+      assert.equal(
+        await glBalanceBySubsidiary(org.orgId, org.accounts.revenue, root),
+        toUnits("-20"),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a root-subsidiary vendor bill receives stock once and the GL corroborates the layers", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const root = org.subsidiaryId;
+test(
+  "a root-subsidiary vendor bill receives stock once and the GL corroborates the layers",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const root = org.subsidiaryId;
 
-    const billId = await draftRootDocument(org, "vendor_bill", "ROOT-BILL-1", {
-      partyId: org.vendorId,
-      itemId: org.items.fifo,
-      quantity: "50",
-      unitPrice: "2",
-      amount: "100",
-      stockLocationId: org.stockLocationId,
-    });
-    const lineId = await firstLineId(billId);
+      const billId = await draftRootDocument(org, "vendor_bill", "ROOT-BILL-1", {
+        partyId: org.vendorId,
+        itemId: org.items.fifo,
+        quantity: "50",
+        unitPrice: "2",
+        amount: "100",
+        stockLocationId: org.stockLocationId,
+      });
+      const lineId = await firstLineId(billId);
 
-    await postDocument(billId, deps(org));
+      await postDocument(billId, deps(org));
 
-    // Exactly ONE receipt movement owned by the ROOT entity, and exactly one
-    // cost layer born from it at the bill's unit cost.
-    const receipts = await movementFacts(org.orgId, lineId, "receipt");
-    assert.equal(receipts.count, 1, "the bill must produce one receipt movement");
-    assert.deepEqual(receipts.subsidiaryIds, [root]);
-    const layers = (await db.execute<{ n: number; unit_cost: string }>(sql`
+      // Exactly ONE receipt movement owned by the ROOT entity, and exactly one
+      // cost layer born from it at the bill's unit cost.
+      const receipts = await movementFacts(org.orgId, lineId, "receipt");
+      assert.equal(receipts.count, 1, "the bill must produce one receipt movement");
+      assert.deepEqual(receipts.subsidiaryIds, [root]);
+      const layers = (
+        await db.execute<{ n: number; unit_cost: string }>(
+          sql`
       select count(*)::int as n, min(unit_cost)::text as unit_cost
         from cost_layers
        where org_id = ${org.orgId} and source_movement_id in (
          select id from inventory_movements
-          where org_id = ${org.orgId} and document_line_id = ${lineId})`, "objects"))[0]!;
-    assert.equal(layers.n, 1);
-    assert.equal(toUnits(layers.unit_cost), toUnits("2"));
+          where org_id = ${org.orgId} and document_line_id = ${lineId})`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(layers.n, 1);
+      assert.equal(toUnits(layers.unit_cost), toUnits("2"));
 
-    assert.equal(await effectsStatus(billId), "succeeded");
+      assert.equal(await effectsStatus(billId), "succeeded");
 
-    // Bill DR'd clearing 100, receipt credited it back; AP carries the debt;
-    // inventory asset equals the layer value inside the root entity.
-    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.clearing, root), 0n);
-    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.ap, root), toUnits("-100"));
-    assert.equal(
-      await glBalanceBySubsidiary(org.orgId, org.accounts.invAsset, root),
-      await layerValueBySubsidiary(org.orgId, org.items.fifo, org.stockLocationId, root),
-    );
-    assert.equal(await layerValueBySubsidiary(org.orgId, org.items.fifo, org.stockLocationId, root), toUnits("100"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Bill DR'd clearing 100, receipt credited it back; AP carries the debt;
+      // inventory asset equals the layer value inside the root entity.
+      assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.clearing, root), 0n);
+      assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.ap, root), toUnits("-100"));
+      assert.equal(
+        await glBalanceBySubsidiary(org.orgId, org.accounts.invAsset, root),
+        await layerValueBySubsidiary(org.orgId, org.items.fifo, org.stockLocationId, root),
+      );
+      assert.equal(
+        await layerValueBySubsidiary(org.orgId, org.items.fifo, org.stockLocationId, root),
+        toUnits("100"),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("replay of a root-subsidiary bill runs its inventory effect exactly once", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const billId = await draftRootDocument(org, "vendor_bill", "ROOT-BILL-R", {
-      partyId: org.vendorId,
-      itemId: org.items.fifo,
-      quantity: "7",
-      unitPrice: "3",
-      amount: "21",
-      stockLocationId: org.stockLocationId,
-    });
-    const lineId = await firstLineId(billId);
+test(
+  "replay of a root-subsidiary bill runs its inventory effect exactly once",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const billId = await draftRootDocument(org, "vendor_bill", "ROOT-BILL-R", {
+        partyId: org.vendorId,
+        itemId: org.items.fifo,
+        quantity: "7",
+        unitPrice: "3",
+        amount: "21",
+        stockLocationId: org.stockLocationId,
+      });
+      const lineId = await firstLineId(billId);
 
-    // Post WITHOUT draining. The receipt commits atomically inside the bill's
-    // posting transaction (bill GL + inventory are one accounting unit); the
-    // durable outbox row is the exactly-once replay gate, not the applier.
-    await postDocument(billId, deps(org), { deferEffects: true });
-    assert.equal(await effectsStatus(billId), "pending");
-    assert.equal(
-      (await movementFacts(org.orgId, lineId, "receipt")).count,
-      1,
-      "the receipt must commit atomically with the bill's posting transaction",
-    );
+      // Post WITHOUT draining. The receipt commits atomically inside the bill's
+      // posting transaction (bill GL + inventory are one accounting unit); the
+      // durable outbox row is the exactly-once replay gate, not the applier.
+      await postDocument(billId, deps(org), { deferEffects: true });
+      assert.equal(await effectsStatus(billId), "pending");
+      assert.equal(
+        (await movementFacts(org.orgId, lineId, "receipt")).count,
+        1,
+        "the receipt must commit atomically with the bill's posting transaction",
+      );
 
-    // First drain re-runs the per-line-idempotent effect and marks the
-    // durable row succeeded without duplicating the receipt.
-    await runPostDocumentEffects(billId);
-    assert.equal(await effectsStatus(billId), "succeeded");
-    const afterFirst = await movementFacts(org.orgId, lineId, "receipt");
-    assert.equal(afterFirst.count, 1);
-    assert.deepEqual(afterFirst.subsidiaryIds, [org.subsidiaryId]);
+      // First drain re-runs the per-line-idempotent effect and marks the
+      // durable row succeeded without duplicating the receipt.
+      await runPostDocumentEffects(billId);
+      assert.equal(await effectsStatus(billId), "succeeded");
+      const afterFirst = await movementFacts(org.orgId, lineId, "receipt");
+      assert.equal(afterFirst.count, 1);
+      assert.deepEqual(afterFirst.subsidiaryIds, [org.subsidiaryId]);
 
-    // A replay that goes back through the claim gate observes terminal
-    // success and performs nothing further.
-    assert.equal(await claimPostingEffectsForDocument(billId), "succeeded");
+      // A replay that goes back through the claim gate observes terminal
+      // success and performs nothing further.
+      assert.equal(await claimPostingEffectsForDocument(billId), "succeeded");
 
-    // A forced re-execution past the gate (operator replay of an already-
-    // succeeded row) is absorbed by the per-line storage idempotency key.
-    const forced = (await db.execute<PostingEffectsRow>(sql`
+      // A forced re-execution past the gate (operator replay of an already-
+      // succeeded row) is absorbed by the per-line storage idempotency key.
+      const forced = (
+        await db.execute<PostingEffectsRow>(
+          sql`
       select id, org_id, document_id, kind, entry_id,
              posting_date::text as posting_date, actor_id, attempt_count,
              lease_token
-        from posting_effects where document_id = ${billId}`, "objects"))[0]!;
-    await runPostDocumentEffects(billId, "approved", {
-      alreadyClaimed: forced,
-    });
+        from posting_effects where document_id = ${billId}`,
+          "objects",
+        )
+      )[0]!;
+      await runPostDocumentEffects(billId, "approved", {
+        alreadyClaimed: forced,
+      });
 
-    const afterReplay = await movementFacts(org.orgId, lineId, "receipt");
-    assert.equal(afterReplay.count, 1, "replay must not duplicate the movement");
-    assert.deepEqual(afterReplay.subsidiaryIds, [org.subsidiaryId]);
-    const layers = (await db.execute<{ n: number }>(sql`
+      const afterReplay = await movementFacts(org.orgId, lineId, "receipt");
+      assert.equal(afterReplay.count, 1, "replay must not duplicate the movement");
+      assert.deepEqual(afterReplay.subsidiaryIds, [org.subsidiaryId]);
+      const layers = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from cost_layers
        where org_id = ${org.orgId} and source_movement_id in (
          select id from inventory_movements
-          where org_id = ${org.orgId} and document_line_id = ${lineId})`, "objects"))[0]!;
-    assert.equal(layers.n, 1, "replay must not duplicate the layer");
-    assert.equal(await effectsStatus(billId), "succeeded");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+          where org_id = ${org.orgId} and document_line_id = ${lineId})`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(layers.n, 1, "replay must not duplicate the layer");
+      assert.equal(await effectsStatus(billId), "succeeded");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a root-subsidiary invoice short of stock refuses its post and commits nothing until the stock arrives", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    // No stock seeded: the COGS issue cannot succeed, so the post must not.
-    const invoiceId = await draftRootDocument(
-      org,
-      "customer_invoice",
-      "ROOT-INV-F",
-      {
+test(
+  "a root-subsidiary invoice short of stock refuses its post and commits nothing until the stock arrives",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // No stock seeded: the COGS issue cannot succeed, so the post must not.
+      const invoiceId = await draftRootDocument(org, "customer_invoice", "ROOT-INV-F", {
         partyId: org.customerId,
         accountId: org.accounts.revenue,
         itemId: org.items.fifo,
@@ -355,57 +401,76 @@ test("a root-subsidiary invoice short of stock refuses its post and commits noth
         unitPrice: "5",
         amount: "20",
         stockLocationId: org.stockLocationId,
-      },
-    );
-    const lineId = await firstLineId(invoiceId);
-    const statusBefore = (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${invoiceId}`, "objects"))[0]!.status;
+      });
+      const lineId = await firstLineId(invoiceId);
+      const statusBefore = (
+        await db.execute<{ status: string }>(
+          sql`
+      select status from documents where id = ${invoiceId}`,
+          "objects",
+        )
+      )[0]!.status;
 
-    await assert.rejects(
-      () => postDocument(invoiceId, deps(org), { deferEffects: true }),
-      /insufficient stock of .*need 4/i,
-    );
-    // The refusal rolled the whole unit back: no status change, no journal,
-    // no receivable or revenue, no effect row, no movement.
-    const after = (await db.execute<{ status: string; entry: string | null }>(sql`
-      select status, posted_entry_id as entry from documents where id = ${invoiceId}`, "objects"))[0]!;
-    assert.equal(after.status, statusBefore);
-    assert.equal(after.entry, null);
-    assert.equal(await effectsStatus(invoiceId), null);
-    assert.equal((await movementFacts(org.orgId, lineId, "issue")).count, 0);
-    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.revenue, org.subsidiaryId), 0n);
-    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.cogs, org.subsidiaryId), 0n);
+      await assert.rejects(
+        () => postDocument(invoiceId, deps(org), { deferEffects: true }),
+        /insufficient stock of .*need 4/i,
+      );
+      // The refusal rolled the whole unit back: no status change, no journal,
+      // no receivable or revenue, no effect row, no movement.
+      const after = (
+        await db.execute<{ status: string; entry: string | null }>(
+          sql`
+      select status, posted_entry_id as entry from documents where id = ${invoiceId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(after.status, statusBefore);
+      assert.equal(after.entry, null);
+      assert.equal(await effectsStatus(invoiceId), null);
+      assert.equal((await movementFacts(org.orgId, lineId, "issue")).count, 0);
+      assert.equal(
+        await glBalanceBySubsidiary(org.orgId, org.accounts.revenue, org.subsidiaryId),
+        0n,
+      );
+      assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.cogs, org.subsidiaryId), 0n);
 
-    // Once stock is received the same post commits revenue and its cost of
-    // sales together, and the post-commit drain moves nothing a second time.
-    await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
-      quantity: "10",
-      unitCost: "2.00",
-      subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.clearing,
-      date: org.date,
-    });
-    await postDocument(invoiceId, deps(org), { deferEffects: true });
-    assert.equal((await movementFacts(org.orgId, lineId, "issue")).count, 1);
-    assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.cogs, org.subsidiaryId), toUnits("8"));
-    await runPostDocumentEffects(invoiceId);
-    assert.equal(await effectsStatus(invoiceId), "succeeded");
-    const issued = await movementFacts(org.orgId, lineId, "issue");
-    assert.equal(issued.count, 1, "the drain issues nothing a second time");
-    assert.deepEqual(issued.subsidiaryIds, [org.subsidiaryId]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Once stock is received the same post commits revenue and its cost of
+      // sales together, and the post-commit drain moves nothing a second time.
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "2.00",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      await postDocument(invoiceId, deps(org), { deferEffects: true });
+      assert.equal((await movementFacts(org.orgId, lineId, "issue")).count, 1);
+      assert.equal(
+        await glBalanceBySubsidiary(org.orgId, org.accounts.cogs, org.subsidiaryId),
+        toUnits("8"),
+      );
+      await runPostDocumentEffects(invoiceId);
+      assert.equal(await effectsStatus(invoiceId), "succeeded");
+      const issued = await movementFacts(org.orgId, lineId, "issue");
+      assert.equal(issued.count, 1, "the drain issues nothing a second time");
+      assert.deepEqual(issued.subsidiaryIds, [org.subsidiaryId]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a received purchase order bills once without duplicating root-entity inventory", { skip: !DB }, async () => {
-  // convertOrder lives behind 'server-only', so the conversion runs in a child
-  // process under the react-server export condition (house pattern from
-  // web/lib/project-dimension-inheritance.integration.test.ts), against the
-  // same database this suite already holds.
-  const source = `
+test(
+  "a received purchase order bills once without duplicating root-entity inventory",
+  { skip: !DB },
+  async () => {
+    // convertOrder lives behind 'server-only', so the conversion runs in a child
+    // process under the react-server export condition (house pattern from
+    // web/lib/project-dimension-inheritance.integration.test.ts), against the
+    // same database this suite already holds.
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -554,20 +619,21 @@ test("a received purchase order bills once without duplicating root-entity inven
       await dropScratchOrg(org.orgId);
     }
   `;
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /CONVERTED-BILL-RECEIVED-ONCE/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /CONVERTED-BILL-RECEIVED-ONCE/);
+  },
+);

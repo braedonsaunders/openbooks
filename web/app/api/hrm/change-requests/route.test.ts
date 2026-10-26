@@ -82,7 +82,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
@@ -91,22 +92,29 @@ const mockUrls = new Map<string, string>([
   ["./_lib", "mock:lib"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      // The real JSON boundary is pure (Request + schema → value) and runs as-is;
-      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-changerequests-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    // The real JSON boundary is pure (Request + schema → value) and runs as-is;
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "@/lib/authz" || specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "./features"
+          ? "mock:features"
+          : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-changerequests-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
 
@@ -134,7 +142,9 @@ test("a missing feature flag 404s before the service runs", async () => {
   );
   assert.equal(get.status, 404);
   assert.deepEqual(routeState.calls, []);
-  const post = await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, payload: {} }));
+  const post = await collectionRoute!.POST(
+    postRequest({ employmentId: EMPLOYMENT_ID, payload: {} }),
+  );
   assert.equal(post.status, 404);
   assert.deepEqual(routeState.calls, []);
 });
@@ -142,7 +152,9 @@ test("a missing feature flag 404s before the service runs", async () => {
 test("an unauthenticated caller never reaches the service", async () => {
   reset();
   routeState.gate = { status: 401 };
-  const response = await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, payload: {} }));
+  const response = await collectionRoute!.POST(
+    postRequest({ employmentId: EMPLOYMENT_ID, payload: {} }),
+  );
   assert.equal(response.status, 401);
   assert.deepEqual(routeState.calls, []);
 });
@@ -154,18 +166,26 @@ test("create validates the body before the service runs", async () => {
     (await collectionRoute!.POST(postRequest({ employmentId: "nope", payload: {} }))).status,
     400,
   );
-  assert.equal((await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID }))).status, 400);
+  assert.equal(
+    (await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID }))).status,
+    400,
+  );
   assert.deepEqual(routeState.calls, []);
 });
 
 test("create forwards org, actor, employment, and payload, then 201s", async () => {
   reset();
   const payload = { kind: "hire", effectiveFrom: "2026-09-01" };
-  const response = await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, payload }));
+  const response = await collectionRoute!.POST(
+    postRequest({ employmentId: EMPLOYMENT_ID, payload }),
+  );
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { request: { id: "request-1", status: "draft" } });
   assert.deepEqual(routeState.calls, [
-    { fn: "create", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, payload } },
+    {
+      fn: "create",
+      args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, payload },
+    },
   ]);
 });
 
@@ -177,18 +197,26 @@ test("a service refusal delegates to the shared mapping with the error intact", 
     postRequest({ employmentId: EMPLOYMENT_ID, payload: { kind: "hire" } }),
   );
   assert.equal(response.status, 409);
-  assert.deepEqual(routeState.mapped.map((m) => m.error), [refusal]);
+  assert.deepEqual(
+    routeState.mapped.map((m) => m.error),
+    [refusal],
+  );
 });
 
 test("list forwards filters and returns the service rows", async () => {
   reset();
   const response = await collectionRoute!.GET(
-    new Request(`http://openbooks.test/api/hrm/change-requests?employment=${EMPLOYMENT_ID}&status=draft`),
+    new Request(
+      `http://openbooks.test/api/hrm/change-requests?employment=${EMPLOYMENT_ID}&status=draft`,
+    ),
   );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { requests: [{ id: "request-1", status: "draft" }] });
   assert.deepEqual(routeState.calls, [
-    { fn: "list", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, status: "draft" } },
+    {
+      fn: "list",
+      args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, status: "draft" },
+    },
   ]);
 });
 

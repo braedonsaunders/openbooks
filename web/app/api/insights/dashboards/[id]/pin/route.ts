@@ -25,12 +25,10 @@ export const POST = defineRoute({
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const user = gate.user;
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
 
     const dashboard = await loadDashboard(id, user.orgId);
-    if (!dashboard)
-      return notFound("record");
+    if (!dashboard) return notFound("record");
 
     const { pin } = routeBody;
 
@@ -42,11 +40,14 @@ export const POST = defineRoute({
       return NextResponse.json({ pinned: false });
     }
 
-    const next = await db.execute<{ n: number }>(sql`
+    const next = await db.execute<{ n: number }>(
+      sql`
     select coalesce(max(sort_order), -1) + 1 as n
       from insight_dashboard_pins
      where org_id = ${user.orgId} and user_id = ${user.id}
-  `, "objects");
+  `,
+      "objects",
+    );
 
     await db
       .insert(insightDashboardPins)

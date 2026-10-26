@@ -1,8 +1,24 @@
 /** Pure recognition-schedule computation. Split from revenue/recognition.ts (pure moves only). */
 import { apportion, cmp, fromUnits, mulPercent, toUnits } from "../money/money.ts";
-import { MAX_RECOGNITION_INITIAL_PERCENT, MAX_RECOGNITION_TERM_MONTHS, MIN_RECOGNITION_INITIAL_PERCENT } from "./recognition-limits.ts";
-import { eventMonth, onRecognitionCalendar, recognitionDate, recognitionInteger, shiftRecognitionDate } from "./recognition-dates.ts";
-import { addMonthsStart, calendarDaysBetween, endOfMonth, inclusiveCalendarDays, startOfMonth } from "../platform/civil-date.ts";
+import {
+  MAX_RECOGNITION_INITIAL_PERCENT,
+  MAX_RECOGNITION_TERM_MONTHS,
+  MIN_RECOGNITION_INITIAL_PERCENT,
+} from "./recognition-limits.ts";
+import {
+  eventMonth,
+  onRecognitionCalendar,
+  recognitionDate,
+  recognitionInteger,
+  shiftRecognitionDate,
+} from "./recognition-dates.ts";
+import {
+  addMonthsStart,
+  calendarDaysBetween,
+  endOfMonth,
+  inclusiveCalendarDays,
+  startOfMonth,
+} from "../platform/civil-date.ts";
 import { RevenueRecognitionError } from "./recognition-transaction-price.ts";
 
 export type RecognitionMethod =
@@ -53,10 +69,16 @@ export interface RecognitionLinePlan {
 /** Cumulative-percent × total, exact to 4dp. */
 export function pctOf(totalUnits: bigint, pct: string): bigint {
   try {
-    if (cmp(pct, MIN_RECOGNITION_INITIAL_PERCENT) < 0 || cmp(pct, MAX_RECOGNITION_INITIAL_PERCENT) > 0) throw new Error("out of range");
+    if (
+      cmp(pct, MIN_RECOGNITION_INITIAL_PERCENT) < 0 ||
+      cmp(pct, MAX_RECOGNITION_INITIAL_PERCENT) > 0
+    )
+      throw new Error("out of range");
     return toUnits(mulPercent(fromUnits(totalUnits), pct, 4));
   } catch {
-    throw new RevenueRecognitionError(`recognition percentage must be a decimal from ${MIN_RECOGNITION_INITIAL_PERCENT} through ${MAX_RECOGNITION_INITIAL_PERCENT}`);
+    throw new RevenueRecognitionError(
+      `recognition percentage must be a decimal from ${MIN_RECOGNITION_INITIAL_PERCENT} through ${MAX_RECOGNITION_INITIAL_PERCENT}`,
+    );
   }
 }
 
@@ -79,7 +101,11 @@ function monthSpan(startOn: string, endOn: string): number {
  * percentage recognized in the first period on top of its ratable share.
  * Returns { month, units } aligned to `start` + i months.
  */
-function spreadWithInitial(input: RecognitionInput, start: string, weights: number[]): { month: string; units: bigint }[] {
+function spreadWithInitial(
+  input: RecognitionInput,
+  start: string,
+  weights: number[],
+): { month: string; units: bigint }[] {
   const totalUnits = toUnits(input.total);
   const initialUnits = pctOf(totalUnits, input.initialAmountPercent ?? "0");
   const parts = apportion(totalUnits - initialUnits, weights.map(BigInt));
@@ -121,7 +147,9 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
   ) {
     const end = resolveEnd(rawStart, input);
     if (calendarDaysBetween(rawStart, end) < 0) {
-      throw new RevenueRecognitionError(`recognition end (${end}) precedes the recognition start (${rawStart})`);
+      throw new RevenueRecognitionError(
+        `recognition end (${end}) precedes the recognition start (${rawStart})`,
+      );
     }
     // Cap explicit endOn spans too: without this, a centuries-wide date
     // range allocates one array entry per month before anything else runs.

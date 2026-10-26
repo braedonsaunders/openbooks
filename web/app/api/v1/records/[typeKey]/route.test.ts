@@ -45,7 +45,7 @@ const routeState: RouteState = {
   creates: [],
   failWith: null,
 };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 stubModules({
   navigation: false,
@@ -140,11 +140,18 @@ test("malformed authenticated commands retain execution audit evidence", async (
       error: "invalid_input",
     },
   ]);
-  assert.equal(routeState.creates.length, 0, "malformed input never reaches the application writer");
+  assert.equal(
+    routeState.creates.length,
+    0,
+    "malformed input never reaches the application writer",
+  );
 
   reset();
 
-  const validResponse = await post(JSON.stringify({ kind: "customer", display_name: "Acme" }), "records-route-test-2");
+  const validResponse = await post(
+    JSON.stringify({ kind: "customer", display_name: "Acme" }),
+    "records-route-test-2",
+  );
 
   assert.equal(validResponse.status, 201);
   assert.deepEqual(await validResponse.json(), { id: "record-1" });
@@ -158,9 +165,15 @@ test("unexpected writer failures stay generic and never echo the thrown message"
   const probe = "sanitizer-probe-9c1e-unique-violation";
   routeState.failWith = `duplicate key value violates unique constraint "custom_records_pkey" (${probe})`;
 
-  const response = await post(JSON.stringify({ kind: "customer", display_name: "Acme" }), "records-route-test-3");
+  const response = await post(
+    JSON.stringify({ kind: "customer", display_name: "Acme" }),
+    "records-route-test-3",
+  );
 
   assert.equal(response.status, 500);
   const body = await response.text();
-  assert.ok(!body.includes(probe), "the 500 body must stay generic instead of carrying the database error text");
+  assert.ok(
+    !body.includes(probe),
+    "the 500 body must stay generic instead of carrying the database error text",
+  );
 });

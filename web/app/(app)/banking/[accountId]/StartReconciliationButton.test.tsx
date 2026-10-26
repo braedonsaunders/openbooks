@@ -1,188 +1,224 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
 
 // Starting a reconciliation parsed the response body BEFORE checking
 // the status with no try/catch, so a non-JSON 502 page threw a SyntaxError
 // out of the handler (no toast) and any thrown fetch left the Start button
 // wedged on "Starting…". Mounts the real button under jsdom and drives the
 // failure paths with scripted fetches.
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/banking/acc-1', scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/banking/acc-1",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const script = {
   errors: [] as string[],
   pushed: [] as string[],
-}
+};
 Object.assign(globalThis, {
   __reconTestRouter: {
-    push(url: string) { script.pushed.push(url) },
+    push(url: string) {
+      script.pushed.push(url);
+    },
     refresh() {},
     replace() {},
     back() {},
     prefetch() {},
   },
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__reconTestRouter}export function usePathname(){return "/banking/acc-1"}export function useSearchParams(){return new URLSearchParams()}' })
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__reconTestRouter}export function usePathname(){return "/banking/acc-1"}export function useSearchParams(){return new URLSearchParams()}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(m){(globalThis.__reconErrorToasts ?? []).push(String(m))}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(m){(globalThis.__reconErrorToasts ?? []).push(String(m))}};export function Toaster(){return null}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { MoneyProvider } = await import('../../../../components/money-provider')
-const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
-const { StartReconciliationButton } = await import('./StartReconciliationButton')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { MoneyProvider } = await import("../../../../components/money-provider");
+const { BusinessDateProvider } = await import("../../../../components/business-date-provider");
+const { StartReconciliationButton } = await import("./StartReconciliationButton");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 async function mount(t: TestContext, responder: (init?: RequestInit) => Response): Promise<void> {
-  script.errors = []
-  script.pushed = []
-  ;(globalThis as Record<string, unknown>).__reconErrorToasts = script.errors
-  const prior = globalThis.fetch
+  script.errors = [];
+  script.pushed = [];
+  (globalThis as Record<string, unknown>).__reconErrorToasts = script.errors;
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    if ((init?.method ?? 'GET') === 'POST') return responder(init)
-    throw new Error(`unexpected fetch ${String(input)}`)
-  }) as typeof fetch
+    if ((init?.method ?? "GET") === "POST") return responder(init);
+    throw new Error(`unexpected fetch ${String(input)}`);
+  }) as typeof fetch;
   t.after(() => {
-    globalThis.fetch = prior
-  })
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const rootHandle = createRoot(host)
+    globalThis.fetch = prior;
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const rootHandle = createRoot(host);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    host.remove()
-    for (const node of [...document.body.children]) node.remove()
-  })
+      rootHandle.unmount();
+    });
+    host.remove();
+    for (const node of [...document.body.children]) node.remove();
+  });
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <BusinessDateProvider today="2026-09-01">
-            <StartReconciliationButton accountId="acc-1" openReconciliationId={null} glBalance="1200.00" />
+            <StartReconciliationButton
+              accountId="acc-1"
+              openReconciliationId={null}
+              glBalance="1200.00"
+            />
           </BusinessDateProvider>
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
 }
 
 function findButton(text: string): HTMLButtonElement | undefined {
-  return [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === text) as HTMLButtonElement | undefined
+  return [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === text,
+  ) as HTMLButtonElement | undefined;
 }
 
 async function click(button: HTMLButtonElement): Promise<void> {
   await act(async () => {
-    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 8; i++) await tick();
+  });
 }
 
-test('reconciliation inputs are associated with their visible labels', async (t) => {
-  await mount(t, () => new Response(null, { status: 200 }))
-  const open = findButton('Start reconciliation')
-  assert.ok(open)
-  await click(open)
-  for (const name of ['Reconcile through', 'Statement balance']) {
-    const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.includes(name))
-    assert.ok(label, `${name} label renders`)
-    assert.ok(label.control, `${name} label controls its input`)
+test("reconciliation inputs are associated with their visible labels", async (t) => {
+  await mount(t, () => new Response(null, { status: 200 }));
+  const open = findButton("Start reconciliation");
+  assert.ok(open);
+  await click(open);
+  for (const name of ["Reconcile through", "Statement balance"]) {
+    const label = [...document.querySelectorAll("label")].find((candidate) =>
+      candidate.textContent?.includes(name),
+    );
+    assert.ok(label, `${name} label renders`);
+    assert.ok(label.control, `${name} label controls its input`);
   }
-})
+});
 
 /** Open the drawer and enter a statement balance so Start enables. */
-async function openAndFill(value = '1250.00'): Promise<void> {
-  const open = findButton('Start reconciliation')
-  assert.ok(open, 'the start button must render')
-  await click(open)
-  const balance = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null
-  assert.ok(balance, 'the drawer must ask for the statement balance')
+async function openAndFill(value = "1250.00"): Promise<void> {
+  const open = findButton("Start reconciliation");
+  assert.ok(open, "the start button must render");
+  await click(open);
+  const balance = document.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null;
+  assert.ok(balance, "the drawer must ask for the statement balance");
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-    setter?.call(balance, value)
-    balance.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-    await tick()
-  })
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    setter?.call(balance, value);
+    balance.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+    await tick();
+  });
 }
 
-test('statement balance input refuses exponent notation without changing exact decimals', async (t) => {
-  await mount(t, () => Response.json({ id: 'rec-9' }))
-  await openAndFill('1e3')
-  const start = findButton('Start')
-  assert.ok(start && start.disabled, 'scientific notation is not a canonical money input')
-})
+test("statement balance input refuses exponent notation without changing exact decimals", async (t) => {
+  await mount(t, () => Response.json({ id: "rec-9" }));
+  await openAndFill("1e3");
+  const start = findButton("Start");
+  assert.ok(start && start.disabled, "scientific notation is not a canonical money input");
+});
 
-test('statement balance input keeps large decimal spelling exact until the API boundary', async (t) => {
-  await mount(t, () => Response.json({ id: 'rec-9' }))
-  await openAndFill('9007199254740993.0123')
-  const start = findButton('Start')
-  assert.ok(start && !start.disabled, 'plain decimals with up to four places are accepted')
-  await click(start)
-  assert.deepEqual(script.pushed, ['/banking/acc-1/reconcile/rec-9'])
-})
+test("statement balance input keeps large decimal spelling exact until the API boundary", async (t) => {
+  await mount(t, () => Response.json({ id: "rec-9" }));
+  await openAndFill("9007199254740993.0123");
+  const start = findButton("Start");
+  assert.ok(start && !start.disabled, "plain decimals with up to four places are accepted");
+  await click(start);
+  assert.deepEqual(script.pushed, ["/banking/acc-1/reconcile/rec-9"]);
+});
 
-test('a single Start click after typing a negative card balance starts the session', async (t) => {
-  const bodies: string[] = []
+test("a single Start click after typing a negative card balance starts the session", async (t) => {
+  const bodies: string[] = [];
   await mount(t, (init) => {
-    bodies.push(String(init?.body ?? ''))
-    return Response.json({ id: 'rec-10' })
-  })
-  await openAndFill('-1250.00')
-  const start = findButton('Start')
-  assert.ok(start && !start.disabled, 'a signed statement balance is an exact decimal and enables Start')
-  await click(start)
-  assert.deepEqual(script.pushed, ['/banking/acc-1/reconcile/rec-10'], 'one click reaches the session')
-  assert.equal(bodies.length, 1, 'one click sends one start request')
-  assert.equal(JSON.parse(bodies[0]!).statementBalance, '-1250.00', 'the negative balance is sent as typed')
-})
+    bodies.push(String(init?.body ?? ""));
+    return Response.json({ id: "rec-10" });
+  });
+  await openAndFill("-1250.00");
+  const start = findButton("Start");
+  assert.ok(
+    start && !start.disabled,
+    "a signed statement balance is an exact decimal and enables Start",
+  );
+  await click(start);
+  assert.deepEqual(
+    script.pushed,
+    ["/banking/acc-1/reconcile/rec-10"],
+    "one click reaches the session",
+  );
+  assert.equal(bodies.length, 1, "one click sends one start request");
+  assert.equal(
+    JSON.parse(bodies[0]!).statementBalance,
+    "-1250.00",
+    "the negative balance is sent as typed",
+  );
+});
 
-test('a non-JSON 502 toasts the translated fallback with the status and releases Start', async (t) => {
-  await mount(t, () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
-  await openAndFill()
-  const start = findButton('Start')
-  assert.ok(start && !start.disabled, 'Start must enable once the balance is entered')
-  await click(start)
-  assert.deepEqual(script.errors, ['Could not start the reconciliation (status 502)'])
-  assert.deepEqual(script.pushed, [], 'a failed start must not navigate')
-  const again = findButton('Start')
-  assert.ok(again && !again.disabled, 'busy must release after a transport failure')
-})
+test("a non-JSON 502 toasts the translated fallback with the status and releases Start", async (t) => {
+  await mount(
+    t,
+    () =>
+      new Response("<html>Bad Gateway</html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+  );
+  await openAndFill();
+  const start = findButton("Start");
+  assert.ok(start && !start.disabled, "Start must enable once the balance is entered");
+  await click(start);
+  assert.deepEqual(script.errors, ["Could not start the reconciliation (status 502)"]);
+  assert.deepEqual(script.pushed, [], "a failed start must not navigate");
+  const again = findButton("Start");
+  assert.ok(again && !again.disabled, "busy must release after a transport failure");
+});
 
-test('a named 422 refusal surfaces the server message', async (t) => {
-  await mount(t, () => Response.json({ error: 'an open session already exists for this account' }, { status: 422 }))
-  await openAndFill()
-  const start = findButton('Start')
-  assert.ok(start, 'Start must render')
-  await click(start)
-  assert.deepEqual(script.errors, ['an open session already exists for this account'])
-})
+test("a named 422 refusal surfaces the server message", async (t) => {
+  await mount(t, () =>
+    Response.json({ error: "an open session already exists for this account" }, { status: 422 }),
+  );
+  await openAndFill();
+  const start = findButton("Start");
+  assert.ok(start, "Start must render");
+  await click(start);
+  assert.deepEqual(script.errors, ["an open session already exists for this account"]);
+});
 
-test('a successful start navigates to the new session', async (t) => {
-  await mount(t, () => Response.json({ id: 'rec-9' }))
-  await openAndFill()
-  const start = findButton('Start')
-  assert.ok(start, 'Start must render')
-  await click(start)
-  assert.deepEqual(script.pushed, ['/banking/acc-1/reconcile/rec-9'])
-})
+test("a successful start navigates to the new session", async (t) => {
+  await mount(t, () => Response.json({ id: "rec-9" }));
+  await openAndFill();
+  const start = findButton("Start");
+  assert.ok(start, "Start must render");
+  await click(start);
+  assert.deepEqual(script.pushed, ["/banking/acc-1/reconcile/rec-9"]);
+});

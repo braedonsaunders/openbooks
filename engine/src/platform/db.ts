@@ -16,7 +16,9 @@ export { runtimeDatabaseRoleCheckRequired } from "./runtime-database-role.ts";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 function loadEnv(): Record<string, string> {
-  const env = resolveDatabaseEnvironment(process.env, () => readFileSync(join(repoRoot, ".env"), "utf8"));
+  const env = resolveDatabaseEnvironment(process.env, () =>
+    readFileSync(join(repoRoot, ".env"), "utf8"),
+  );
   // Mirror the resolved env back into process.env so modules that read
   // process.env directly (e.g. @openbooks/jobs → OPENBOOKS_REDIS_URL) see the
   // file-based dev config too. Process env still wins (only fills gaps).
@@ -36,9 +38,13 @@ const databaseUrl =
 // Cross-tenant work has a physically separate credential and pool. Production
 // never aliases this to the runtime URL; explicit local/test bootstrap may use
 // the migration/admin URL for compatibility with disposable databases.
-const bypassDatabaseUrl = env.OPENBOOKS_BYPASS_DB_URL?.trim()
-  || ((env.NODE_ENV === "development" || env.NODE_ENV === "test")
-    ? (env.OPENBOOKS_BYPASS_DB_URL || env.OPENBOOKS_TEST_ADMIN_DB_URL || env.OPENBOOKS_MIGRATION_DB_URL || env.OPENBOOKS_DB_URL)
+const bypassDatabaseUrl =
+  env.OPENBOOKS_BYPASS_DB_URL?.trim() ||
+  (env.NODE_ENV === "development" || env.NODE_ENV === "test"
+    ? env.OPENBOOKS_BYPASS_DB_URL ||
+      env.OPENBOOKS_TEST_ADMIN_DB_URL ||
+      env.OPENBOOKS_MIGRATION_DB_URL ||
+      env.OPENBOOKS_DB_URL
     : undefined);
 // The one-shot installer (scripts/bootstrap.ts, esbuilt as scripts/bootstrap.mjs
 // in the image) has its own credential contract — migration-owner + runtime
@@ -54,11 +60,15 @@ const isInstaller = env.OPENBOOKS_BOOTSTRAP === "1";
 // image build). The refusal belongs to starting a server, not to building one.
 const isNextBuild = process.env.NEXT_PHASE === "phase-production-build";
 if (env.NODE_ENV === "production" && !bypassDatabaseUrl && !isInstaller && !isNextBuild) {
-  throw new Error("[database-security] refusing production startup: OPENBOOKS_BYPASS_DB_URL must name the dedicated BYPASSRLS login");
+  throw new Error(
+    "[database-security] refusing production startup: OPENBOOKS_BYPASS_DB_URL must name the dedicated BYPASSRLS login",
+  );
 }
 function requireBypassDatabaseUrl(): string {
   if (!bypassDatabaseUrl) {
-    throw new Error("[database-security] cross-tenant operation refused: configure OPENBOOKS_BYPASS_DB_URL with the dedicated BYPASSRLS login");
+    throw new Error(
+      "[database-security] cross-tenant operation refused: configure OPENBOOKS_BYPASS_DB_URL with the dedicated BYPASSRLS login",
+    );
   }
   return bypassDatabaseUrl;
 }
@@ -102,42 +112,55 @@ const basePool = new pg.Pool({
   statement_timeout: 120_000,
 });
 
-const bypassPool = bypassDatabaseUrl ? new pg.Pool({
-  connectionString: bypassDatabaseUrl,
-  max: BYPASS_POOL_MAX,
-  keepAlive: true,
-  connectionTimeoutMillis: 30_000,
-  query_timeout: 120_000,
-  statement_timeout: 120_000,
-  // An idle auxiliary connection must not hold a short-lived process open.
-  allowExitOnIdle: true,
-}) : null;
-const bypassLongPool = bypassDatabaseUrl ? new pg.Pool({
-  connectionString: bypassDatabaseUrl,
-  // A clone holds its slot for the whole run, so one clone plus one
-  // refresh/promote/bypass-replay leaves a third maintenance unit waiting
-  // the 30s connection timeout and then failing. The default stays 2;
-  // raise it with OPENBOOKS_BYPASS_LONG_POOL_MAX where overlapping
-  // maintenance is routine (bounded 1..200 like the request pools).
-  max: poolMax(env.OPENBOOKS_BYPASS_LONG_POOL_MAX, 2),
-  keepAlive: true,
-  connectionTimeoutMillis: 30_000,
-  query_timeout: 0,
-  statement_timeout: 0,
-  allowExitOnIdle: true,
-}) : null;
+const bypassPool = bypassDatabaseUrl
+  ? new pg.Pool({
+      connectionString: bypassDatabaseUrl,
+      max: BYPASS_POOL_MAX,
+      keepAlive: true,
+      connectionTimeoutMillis: 30_000,
+      query_timeout: 120_000,
+      statement_timeout: 120_000,
+      // An idle auxiliary connection must not hold a short-lived process open.
+      allowExitOnIdle: true,
+    })
+  : null;
+const bypassLongPool = bypassDatabaseUrl
+  ? new pg.Pool({
+      connectionString: bypassDatabaseUrl,
+      // A clone holds its slot for the whole run, so one clone plus one
+      // refresh/promote/bypass-replay leaves a third maintenance unit waiting
+      // the 30s connection timeout and then failing. The default stays 2;
+      // raise it with OPENBOOKS_BYPASS_LONG_POOL_MAX where overlapping
+      // maintenance is routine (bounded 1..200 like the request pools).
+      max: poolMax(env.OPENBOOKS_BYPASS_LONG_POOL_MAX, 2),
+      keepAlive: true,
+      connectionTimeoutMillis: 30_000,
+      query_timeout: 0,
+      statement_timeout: 0,
+      allowExitOnIdle: true,
+    })
+  : null;
 // A transient network interruption can make
 // an idle pool client emit 'error'; with no listener, Node crashes the whole
 // process — fatal for long-running jobs. Swallow it: the pool reconnects on the
 // next query, and per-query failures still reject normally (callers catch them).
 basePool.on("error", (err) => {
-  console.error("[pg pool] transient client error (ignored, will reconnect):", (err as Error).message);
+  console.error(
+    "[pg pool] transient client error (ignored, will reconnect):",
+    (err as Error).message,
+  );
 });
 bypassPool?.on("error", (err) => {
-  console.error("[pg trusted pool] transient client error (ignored, will reconnect):", (err as Error).message);
+  console.error(
+    "[pg trusted pool] transient client error (ignored, will reconnect):",
+    (err as Error).message,
+  );
 });
 bypassLongPool?.on("error", (err) => {
-  console.error("[pg trusted maintenance pool] transient client error (ignored, will reconnect):", (err as Error).message);
+  console.error(
+    "[pg trusted maintenance pool] transient client error (ignored, will reconnect):",
+    (err as Error).message,
+  );
 });
 
 // Governed ad-hoc SQL must never compete with request transactions for the
@@ -180,7 +203,10 @@ const longPool = new pg.Pool({
   allowExitOnIdle: true,
 });
 longPool.on("error", (err) => {
-  console.error("[pg longPool] transient client error (ignored, will reconnect):", (err as Error).message);
+  console.error(
+    "[pg longPool] transient client error (ignored, will reconnect):",
+    (err as Error).message,
+  );
 });
 
 /**
@@ -221,7 +247,8 @@ function serializeClientQueries(client: pg.PoolClient): void {
       const statement = typeof input === "string" ? input : input?.text;
       const started = performance.now();
       const observe = () => {
-        if (typeof statement === "string") notifyQueryObserver(observer, statement, performance.now() - started);
+        if (typeof statement === "string")
+          notifyQueryObserver(observer, statement, performance.now() - started);
       };
       const pending = query(...args) as Promise<unknown>;
       pending.then(observe, observe);
@@ -260,15 +287,16 @@ function protectCheckedOutClient(client: pg.PoolClient, label: string): pg.PoolC
 }
 
 const rawLongConnect = async (bypass = false): Promise<pg.PoolClient> =>
-  bypass ? rawBypassConnect(true) : protectCheckedOutClient(await longPool.connect(), "pg longPool");
+  bypass
+    ? rawBypassConnect(true)
+    : protectCheckedOutClient(await longPool.connect(), "pg longPool");
 
 /**
  * Timeout-free bypass checkout for maintenance callers that must see every
  * row (migration replay harnesses). Sessions skip RLS by login, so no GUC is
  * set: callers that stage explicit GUCs must restore them on release.
  */
-export const connectBypassLongClient = async (): Promise<pg.PoolClient> =>
-  rawLongConnect(true);
+export const connectBypassLongClient = async (): Promise<pg.PoolClient> => rawLongConnect(true);
 
 /**
  * Check out isolated capacity for governed user SQL. Tenant context and the
@@ -276,10 +304,7 @@ export const connectBypassLongClient = async (): Promise<pg.PoolClient> =>
  * application role prepares the connection-local tenant context table.
  */
 export const connectGovernedReadClient = async (): Promise<pg.PoolClient> => {
-  const client = protectCheckedOutClient(
-    await governedReadPool.connect(),
-    "pg governed read pool",
-  );
+  const client = protectCheckedOutClient(await governedReadPool.connect(), "pg governed read pool");
   try {
     // The SQL API applies its tenant identity transaction-locally after it
     // prepares the protected temp context. Until then, fail closed even if a
@@ -338,19 +363,26 @@ const dbRuntime = globalThis as DbRuntime;
 // module-local AsyncLocalStorage would make the second graph silently fall
 // back to trusted bypass mode. The process-global singleton preserves the
 // request/transaction context across every import identity and hot reload.
-export const orgContext = dbRuntime.__openbooksOrgContext ??= new AsyncLocalStorage<OrgCtx>();
+export const orgContext = (dbRuntime.__openbooksOrgContext ??= new AsyncLocalStorage<OrgCtx>());
 
 /** External resources staged by nested commands are compensated after the owning transaction rolls back. */
 export function onTransactionRollback(effect: () => Promise<void>): void {
   const effects = orgContext.getStore()?.rollbackEffects;
-  if (!effects) throw new Error('Rollback compensation requires an authoritative transaction boundary');
+  if (!effects)
+    throw new Error("Rollback compensation requires an authoritative transaction boundary");
   effects.push(effect);
 }
 
 async function compensateRollback(effects: (() => Promise<void>)[]): Promise<void> {
   for (const effect of effects) {
-    try { await effect(); }
-    catch (error) { console.error('Transaction rollback compensation failed:', error instanceof Error ? error.message : error); }
+    try {
+      await effect();
+    } catch (error) {
+      console.error(
+        "Transaction rollback compensation failed:",
+        error instanceof Error ? error.message : error,
+      );
+    }
   }
 }
 
@@ -419,7 +451,10 @@ const rawBypassConnect = async (long = false): Promise<pg.PoolClient> => {
   // very bootstrap provisions it, so connecting as it first failed every new
   // install that sets OPENBOOKS_BYPASS_DB_URL (the stock Compose file does).
   if (target && !isInstaller) {
-    return protectCheckedOutClient(await target.connect(), long ? "pg bypass long pool" : "pg bypass pool");
+    return protectCheckedOutClient(
+      await target.connect(),
+      long ? "pg bypass long pool" : "pg bypass pool",
+    );
   }
   // No dedicated bypass credential. Outside the one-shot installer this stays
   // a hard refusal naming the remedy. Inside the installer the base pools ARE
@@ -434,11 +469,18 @@ const rawBypassConnect = async (long = false): Promise<pg.PoolClient> => {
   // traffic; the bypass GUC is never set from user input.
   if (!isInstaller) requireBypassDatabaseUrl();
   const fallbackPool = long ? longPool : basePool;
-  const raw = await (pg.Pool.prototype.connect as (...a: unknown[]) => Promise<pg.PoolClient>).call(fallbackPool);
-  const client = protectCheckedOutClient(raw, long ? "pg installer bypass long pool" : "pg installer bypass pool");
+  const raw = await (pg.Pool.prototype.connect as (...a: unknown[]) => Promise<pg.PoolClient>).call(
+    fallbackPool,
+  );
+  const client = protectCheckedOutClient(
+    raw,
+    long ? "pg installer bypass long pool" : "pg installer bypass pool",
+  );
   sessionScope.delete(client);
   try {
-    await client.query("select set_config('app.bypass_rls', 'on', false), set_config('app.current_org', '', false)");
+    await client.query(
+      "select set_config('app.bypass_rls', 'on', false), set_config('app.current_org', '', false)",
+    );
   } catch (error) {
     client.release(error as Error);
     throw error;
@@ -449,15 +491,21 @@ const rawBypassConnect = async (long = false): Promise<pg.PoolClient> => {
       guardedRelease(error);
       return;
     }
-    client.query("select set_config('app.bypass_rls', 'off', false), set_config('app.current_org', '', false)")
-      .then(() => guardedRelease(), () => guardedRelease(true));
+    client
+      .query(
+        "select set_config('app.bypass_rls', 'off', false), set_config('app.current_org', '', false)",
+      )
+      .then(
+        () => guardedRelease(),
+        () => guardedRelease(true),
+      );
   }) as pg.PoolClient["release"];
   return client;
 };
 
 /** Set tenant scope on a runtime-role client from context (deny if none). */
 async function applyGuc(client: pg.PoolClient, ctx: OrgCtx | undefined): Promise<void> {
-  const org = ctx?.bypass ? "" : ctx?.orgId ?? "";
+  const org = ctx?.bypass ? "" : (ctx?.orgId ?? "");
   await client.query(
     "select set_config('app.current_org', $1, false), set_config('app.bypass_rls', 'off', false)",
     [org],
@@ -478,10 +526,14 @@ const sessionScope = new WeakMap<pg.PoolClient, string>();
 const SESSION_STATE_STATEMENT = /set_config|\b(?:reset|discard)\b|(?:^|;)\s*set\s/i;
 
 function scopeKey(ctx: OrgCtx | undefined, isBypass: boolean): string {
-  return isBypass ? "bypass" : `org:${ctx?.bypass ? "" : ctx?.orgId ?? ""}`;
+  return isBypass ? "bypass" : `org:${ctx?.bypass ? "" : (ctx?.orgId ?? "")}`;
 }
 
-async function ensureSessionScope(client: pg.PoolClient, ctx: OrgCtx | undefined, isBypass: boolean): Promise<void> {
+async function ensureSessionScope(
+  client: pg.PoolClient,
+  ctx: OrgCtx | undefined,
+  isBypass: boolean,
+): Promise<void> {
   const key = scopeKey(ctx, isBypass);
   if (sessionScope.get(client) === key) return;
   sessionScope.delete(client);
@@ -697,12 +749,16 @@ export async function withMaintenanceTransaction<T>(
     // life of the process. Acquiring it here keeps the same autocommit
     // ordering — still before `begin` — under the release.
     if (opts.advisoryLockKey !== undefined) {
-      await client.query("select pg_advisory_lock(hashtextextended($1, 0))", [opts.advisoryLockKey]);
+      await client.query("select pg_advisory_lock(hashtextextended($1, 0))", [
+        opts.advisoryLockKey,
+      ]);
     }
     await client.query("begin");
     if (opts.isolationLevel !== undefined) {
       if (opts.isolationLevel !== "REPEATABLE READ" && opts.isolationLevel !== "SERIALIZABLE") {
-        throw new Error(`unsupported maintenance transaction isolation level: ${opts.isolationLevel}`);
+        throw new Error(
+          `unsupported maintenance transaction isolation level: ${opts.isolationLevel}`,
+        );
       }
       await client.query(`SET TRANSACTION ISOLATION LEVEL ${opts.isolationLevel}`);
     }
@@ -711,7 +767,10 @@ export async function withMaintenanceTransaction<T>(
     // a previous holder would otherwise stay visible to every policy for
     // this whole transaction. Bypass work never reads this GUC — it rides
     // the dedicated BYPASSRLS pool, whose sessions skip policies entirely.
-    await client.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)", [bypass ? "" : orgId]);
+    await client.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+      [bypass ? "" : orgId],
+    );
     const txDb = drizzle({ client });
     // runInOrgContext, not orgContext.run: the scope must outlive the
     // callback's lazy work, or it lands on a pooled connection with the
@@ -730,7 +789,9 @@ export async function withMaintenanceTransaction<T>(
   } finally {
     if (opts.advisoryLockKey !== undefined) {
       try {
-        await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [opts.advisoryLockKey]);
+        await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [
+          opts.advisoryLockKey,
+        ]);
       } catch {
         // A broken connection is discarded by pg when released, lock and all.
       }
@@ -745,10 +806,7 @@ export async function withMaintenanceTransaction<T>(
  * Every non-null tenant participates in the bounded request transaction
  * contract; only an explicit null bypass reaches the maintenance boundary.
  */
-export async function withOrg<T>(
-  orgId: string | null,
-  fn: () => Promise<T>,
-): Promise<T> {
+export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Promise<T> {
   if (orgId === null) return withMaintenanceTransaction(null, fn);
   return withOrgTransaction(orgId, fn);
 }
@@ -951,7 +1009,10 @@ export const db = new Proxy(poolDb, {
     // transaction, so it is verified against the enclosing transaction and
     // refused by name when the enclosing one is weaker, never silently dropped.
     if (prop === "transaction" && current) {
-      return async (fn: (tx: typeof current) => Promise<unknown>, config?: NestedTransactionConfig) => {
+      return async (
+        fn: (tx: typeof current) => Promise<unknown>,
+        config?: NestedTransactionConfig,
+      ) => {
         await assertAmbientTransactionSatisfies(current, config);
         return fn(current);
       };
@@ -998,10 +1059,13 @@ async function assertAmbientTransactionSatisfies(
   config: NestedTransactionConfig | undefined,
 ): Promise<void> {
   if (!config || (config.isolationLevel === undefined && config.accessMode !== "read only")) return;
-  const [row] = await ambient.execute<{ isolation: string; read_only: string }>(sql`
+  const [row] = await ambient.execute<{ isolation: string; read_only: string }>(
+    sql`
     select current_setting('transaction_isolation') as isolation,
            current_setting('transaction_read_only') as read_only
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!row) throw new Error("cannot verify the enclosing transaction's isolation level");
   if (config.isolationLevel !== undefined) {
     const requested = ISOLATION_RANK[config.isolationLevel];

@@ -19,7 +19,8 @@ import type { TaxIdCredentials } from "./vat-id-validation.ts";
 
 export type TaxAuthority = "hmrc" | "abn";
 
-export const TAX_AUTHORITY_PURPOSE = (authority: TaxAuthority): string => `tax.authority.${authority}`;
+export const TAX_AUTHORITY_PURPOSE = (authority: TaxAuthority): string =>
+  `tax.authority.${authority}`;
 
 const HMRC_TOKEN_URL = "https://api.service.hmrc.gov.uk/oauth/token";
 
@@ -66,7 +67,11 @@ function demandAuthority(authority: string): asserts authority is TaxAuthority {
   }
 }
 
-function demandNonEmpty(value: string | null | undefined, field: string, authority: TaxAuthority): string {
+function demandNonEmpty(
+  value: string | null | undefined,
+  field: string,
+  authority: TaxAuthority,
+): string {
   const trimmed = (value ?? "").trim();
   if (!trimmed) {
     throw new CrossBorderTaxError(
@@ -81,13 +86,16 @@ async function readConnection(
   orgId: string,
   authority: TaxAuthority,
 ): Promise<ConnectionRow | null> {
-  const rows = await runner.execute<ConnectionRow>(sql`
+  const rows = await runner.execute<ConnectionRow>(
+    sql`
       select id, sealed_credentials, status,
              token_expires_at::text as token_expires_at,
              last_error, last_verified_at::text as last_verified_at
         from tax_authority_connections
        where org_id = ${orgId} and authority = ${authority}
-       limit 1`, "objects");
+       limit 1`,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
@@ -120,13 +128,20 @@ export async function saveAuthorityCredentials(
             "HMRC client secret",
             authority,
           ),
-          scope: demandNonEmpty((credentials as HmrcClientCredentials).scope, "HMRC OAuth scope", authority),
+          scope: demandNonEmpty(
+            (credentials as HmrcClientCredentials).scope,
+            "HMRC OAuth scope",
+            authority,
+          ),
           accessToken: null as string | null,
           tokenExpiresAt: null as string | null,
         }
-      : { guid: demandNonEmpty((credentials as AbnCredentials).guid, "ABR lookup GUID", authority) };
+      : {
+          guid: demandNonEmpty((credentials as AbnCredentials).guid, "ABR lookup GUID", authority),
+        };
   const sealed = sealJson(stored, { orgId, purpose: TAX_AUTHORITY_PURPOSE(authority) });
-  const rows = await runner.execute<{ id: string }>(sql`
+  const rows = await runner.execute<{ id: string }>(
+    sql`
       insert into tax_authority_connections
         (id, org_id, authority, sealed_credentials, status, token_expires_at,
          last_error, last_verified_at, created_by, updated_by)
@@ -140,7 +155,9 @@ export async function saveAuthorityCredentials(
              last_verified_at = null,
              updated_by = excluded.updated_by,
              updated_at = now()
-      returning id`, "objects");
+      returning id`,
+    "objects",
+  );
   // Under row-level security an unscoped write silently matches nothing: a
   // saved credential no read can observe was not saved.
   if (rows.length !== 1) {
@@ -197,14 +214,17 @@ async function markConnection(
   error: string | null,
   verified: boolean,
 ): Promise<void> {
-  const updated = await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(
+    sql`
       update tax_authority_connections
          set status = ${status},
              last_error = ${error},
              last_verified_at = ${verified ? sql`now()` : sql`last_verified_at`},
              updated_at = now()
        where org_id = ${orgId} and authority = ${authority}
-      returning id`, "objects");
+      returning id`,
+    "objects",
+  );
   if (updated.length !== 1) {
     throw new CrossBorderTaxError(
       `the ${authority === "hmrc" ? "HMRC VAT API" : "ABN Lookup"} connection is gone; reconnect it in Tax setup before validating`,
@@ -233,14 +253,19 @@ export async function fetchHmrcAccessToken(
       HMRC_TOKEN_URL,
       {
         method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded", Accept: "application/json" },
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
         body: body.toString(),
         redirect: "error",
       },
       { describe: "HMRC OAuth", transport },
     );
   } catch {
-    throw new CrossBorderTaxError(`HMRC OAuth is unreachable: refresh the HMRC token in Tax setup later`);
+    throw new CrossBorderTaxError(
+      `HMRC OAuth is unreachable: refresh the HMRC token in Tax setup later`,
+    );
   }
   if (!res.ok) {
     throw new CrossBorderTaxError(
@@ -285,9 +310,20 @@ export async function refreshHmrcToken(
   }
   let stored: HmrcClientCredentials;
   try {
-    stored = unsealAuthorityCredentials<StoredHmrcCredentials>(row.sealed_credentials, orgId, "hmrc");
+    stored = unsealAuthorityCredentials<StoredHmrcCredentials>(
+      row.sealed_credentials,
+      orgId,
+      "hmrc",
+    );
   } catch (error) {
-    await markConnection(runner, orgId, "hmrc", "error", error instanceof Error ? error.message : String(error), false);
+    await markConnection(
+      runner,
+      orgId,
+      "hmrc",
+      "error",
+      error instanceof Error ? error.message : String(error),
+      false,
+    );
     throw error;
   }
   let token: { accessToken: string; expiresInSeconds: number };
@@ -299,11 +335,15 @@ export async function refreshHmrcToken(
     throw error;
   }
   const expiresAt = new Date(Date.now() + token.expiresInSeconds * 1000).toISOString();
-  const resealed = sealJson({ ...stored, accessToken: token.accessToken, tokenExpiresAt: expiresAt }, {
-    orgId,
-    purpose: TAX_AUTHORITY_PURPOSE("hmrc"),
-  });
-  const updated = await runner.execute<{ id: string }>(sql`
+  const resealed = sealJson(
+    { ...stored, accessToken: token.accessToken, tokenExpiresAt: expiresAt },
+    {
+      orgId,
+      purpose: TAX_AUTHORITY_PURPOSE("hmrc"),
+    },
+  );
+  const updated = await runner.execute<{ id: string }>(
+    sql`
       update tax_authority_connections
          set sealed_credentials = ${resealed},
              status = 'ready',
@@ -313,9 +353,13 @@ export async function refreshHmrcToken(
              updated_by = ${actorId},
              updated_at = now()
        where org_id = ${orgId} and authority = 'hmrc'
-      returning id`, "objects");
+      returning id`,
+    "objects",
+  );
   if (updated.length !== 1) {
-    throw new CrossBorderTaxError("the HMRC token was fetched but not stored; refresh the token in Tax setup again");
+    throw new CrossBorderTaxError(
+      "the HMRC token was fetched but not stored; refresh the token in Tax setup again",
+    );
   }
   return readAuthorityConnectionStatus(runner, orgId, "hmrc");
 }
@@ -372,7 +416,11 @@ export async function authorityCredentialsForOrg(
   const abn = await readConnection(runner, orgId, "abn");
   if (abn?.sealed_credentials) {
     try {
-      const stored = unsealAuthorityCredentials<AbnCredentials>(abn.sealed_credentials, orgId, "abn");
+      const stored = unsealAuthorityCredentials<AbnCredentials>(
+        abn.sealed_credentials,
+        orgId,
+        "abn",
+      );
       if (stored.guid?.trim()) credentials.abnGuid = stored.guid.trim();
     } catch {
       // A corrupt sealed blob must not flip verdicts: the authority client
@@ -382,7 +430,11 @@ export async function authorityCredentialsForOrg(
   const hmrc = await readConnection(runner, orgId, "hmrc");
   if (hmrc?.sealed_credentials) {
     try {
-      const stored = unsealAuthorityCredentials<StoredHmrcCredentials>(hmrc.sealed_credentials, orgId, "hmrc");
+      const stored = unsealAuthorityCredentials<StoredHmrcCredentials>(
+        hmrc.sealed_credentials,
+        orgId,
+        "hmrc",
+      );
       const expiry = hmrc.token_expires_at ? Date.parse(hmrc.token_expires_at) : NaN;
       if (stored.accessToken && Number.isFinite(expiry) && expiry > Date.now()) {
         credentials.hmrcAccessToken = stored.accessToken;

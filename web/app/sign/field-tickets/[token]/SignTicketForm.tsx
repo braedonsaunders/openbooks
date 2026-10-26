@@ -1,52 +1,69 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { SignaturePad } from '../../../../components/signature-pad'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useState } from "react";
+import { SignaturePad } from "../../../../components/signature-pad";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /** The signature capture half of the public signing page. Deliberately does
  * not use the app's i18n provider (public route, no session): plain English
  * strings, matching the emailed link's language. */
-export function SignTicketForm(props: { token: string; alreadySigned: boolean; signedBy: string | null }) {
-  const [signature, setSignature] = useState<string | null>(null)
-  const [name, setName] = useState('')
-  const [comment, setComment] = useState('')
-  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>(props.alreadySigned ? 'done' : 'idle')
-  const [error, setError] = useState('')
+export function SignTicketForm(props: {
+  token: string;
+  alreadySigned: boolean;
+  signedBy: string | null;
+}) {
+  const [signature, setSignature] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [comment, setComment] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">(
+    props.alreadySigned ? "done" : "idle",
+  );
+  const [error, setError] = useState("");
 
   async function submit() {
-    if (!signature || !name.trim()) return
-    setState('busy')
+    if (!signature || !name.trim()) return;
+    setState("busy");
     try {
-      const res = await fetch('/api/sign/field-tickets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: props.token, signature, name: name.trim(), comment: comment.trim() || null }),
-      })
+      const res = await fetch("/api/sign/field-tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: props.token,
+          signature,
+          name: name.trim(),
+          comment: comment.trim() || null,
+        }),
+      });
       // The refusal reads through the shared helper so the server's reason
       // renders instead of a bare string.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'Signing failed'))
-      setState('done')
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "Signing failed"));
+      setState("done");
     } catch (e) {
-      setError((e as Error).message)
-      setState('error')
+      setError((e as Error).message);
+      setState("error");
     }
   }
 
-  if (state === 'done') {
+  if (state === "done") {
     return (
       <div className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-center dark:border-teal-800 dark:bg-teal-950/40">
         <p className="text-sm font-medium text-teal-800 dark:text-teal-200">
-          {props.alreadySigned && props.signedBy ? `Already signed by ${props.signedBy}.` : 'Thank you — the timesheet is signed.'}
+          {props.alreadySigned && props.signedBy
+            ? `Already signed by ${props.signedBy}.`
+            : "Thank you — the timesheet is signed."}
         </p>
-        <p className="mt-1 text-xs text-teal-700/80 dark:text-teal-300/80">A confirmation copy will accompany the invoice.</p>
+        <p className="mt-1 text-xs text-teal-700/80 dark:text-teal-300/80">
+          A confirmation copy will accompany the invoice.
+        </p>
       </div>
-    )
+    );
   }
 
   return (
     <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-      <p className="mb-2 text-sm font-medium text-slate-900 dark:text-slate-100">Sign to approve this timesheet</p>
+      <p className="mb-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+        Sign to approve this timesheet
+      </p>
       <SignaturePad onChange={setSignature} clearLabel="Clear" />
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <input
@@ -64,15 +81,15 @@ export function SignTicketForm(props: { token: string; alreadySigned: boolean; s
           onChange={(e) => setComment(e.target.value)}
         />
       </div>
-      {state === 'error' && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+      {state === "error" && <p className="mt-2 text-sm text-rose-600">{error}</p>}
       <button
         type="button"
         onClick={submit}
-        disabled={state === 'busy' || !signature || !name.trim()}
+        disabled={state === "busy" || !signature || !name.trim()}
         className="mt-3 w-full rounded-md bg-teal-600 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
       >
-        {state === 'busy' ? 'Signing…' : 'Sign timesheet'}
+        {state === "busy" ? "Signing…" : "Sign timesheet"}
       </button>
     </div>
-  )
+  );
 }

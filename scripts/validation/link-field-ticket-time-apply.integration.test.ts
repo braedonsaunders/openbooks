@@ -36,24 +36,35 @@ async function ticket(
   projectId: string,
   number: string,
 ): Promise<string> {
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     insert into documents (org_id, kind, document_number, project_id, document_date, currency, status)
     values (${orgId}, 'field_ticket', ${number}, ${projectId}, '2024-06-10', ${currency}, 'approved')
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   return String(rows[0]!.id);
 }
 
 async function setup(orgId: string): Promise<Harness> {
   const currency = String(
-    (await db.execute<{ base_currency: string }>(
-      sql`select base_currency from orgs where id = ${orgId}`, "objects",
-    ))[0]!.base_currency,
+    (
+      await db.execute<{ base_currency: string }>(
+        sql`select base_currency from orgs where id = ${orgId}`,
+        "objects",
+      )
+    )[0]!.base_currency,
   );
   const projectId = String(
-    (await db.execute<{ id: string }>(sql`
+    (
+      await db.execute<{ id: string }>(
+        sql`
         insert into projects (org_id, name) values (${orgId}, 'Race Project') returning id
-      `, "objects"))[0]!.id,
+      `,
+        "objects",
+      )
+    )[0]!.id,
   );
   const ticketA = await ticket(orgId, currency, projectId, `FT-A-${randomUUID().slice(0, 8)}`);
   const ticketB = await ticket(orgId, currency, projectId, `FT-B-${randomUUID().slice(0, 8)}`);
@@ -61,22 +72,28 @@ async function setup(orgId: string): Promise<Harness> {
   return { orgId, projectId, ticketA, ticketB, ticketC };
 }
 
-async function entry(
-  harness: Harness,
-  sourceRef: string,
-  ticketId: string,
-): Promise<string> {
+async function entry(harness: Harness, sourceRef: string, ticketId: string): Promise<string> {
   const employeeId = String(
-    (await db.execute<{ id: string }>(sql`
+    (
+      await db.execute<{ id: string }>(
+        sql`
         insert into parties (org_id, kind, display_name) values (${harness.orgId}, 'employee', 'Race Hand') returning id
-      `, "objects"))[0]!.id,
+      `,
+        "objects",
+      )
+    )[0]!.id,
   );
   return String(
-    (await db.execute<{ id: string }>(sql`
+    (
+      await db.execute<{ id: string }>(
+        sql`
         insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, field_ticket_id, custom)
         values (${harness.orgId}, ${employeeId}, '2024-06-10', '8', ${harness.projectId}, ${ticketId}, ${JSON.stringify({ nsId: sourceRef })}::jsonb)
         returning id
-      `, "objects"))[0]!.id,
+      `,
+        "objects",
+      )
+    )[0]!.id,
   );
 }
 
@@ -105,7 +122,8 @@ async function plan(
 
 async function currentTicket(orgId: string, entryId: string): Promise<string | null> {
   const rows = await db.execute<{ field_ticket_id: string | null }>(
-    sql`select field_ticket_id from time_entries where org_id = ${orgId} and id = ${entryId}`, "objects",
+    sql`select field_ticket_id from time_entries where org_id = ${orgId} and id = ${entryId}`,
+    "objects",
   );
   return rows[0]?.field_ticket_id ? String(rows[0].field_ticket_id) : null;
 }
@@ -115,9 +133,12 @@ test("apply moves the entry and audits the locked before-state", { skip: !DB }, 
   try {
     const harness = await setup(org.orgId);
     const ticketNumber = String(
-      (await db.execute<{ document_number: string }>(
-        sql`select document_number from documents where id = ${harness.ticketB}`, "objects",
-      ))[0]!.document_number,
+      (
+        await db.execute<{ document_number: string }>(
+          sql`select document_number from documents where id = ${harness.ticketB}`,
+          "objects",
+        )
+      )[0]!.document_number,
     );
     const entryId = await entry(harness, "SRC-APPLY", harness.ticketA);
     const batch = [await plan(harness, "SRC-APPLY", ticketNumber)];
@@ -133,8 +154,9 @@ test("apply moves the entry and audits the locked before-state", { skip: !DB }, 
     assert.equal(applied, 1);
     assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketB);
     const audits = await db.execute<{ actor_id: string | null; changes: unknown }>(
-        sql`select actor_id, changes from audit_log where org_id = ${harness.orgId} and request_id = ${runId}`, "objects",
-      );
+      sql`select actor_id, changes from audit_log where org_id = ${harness.orgId} and request_id = ${runId}`,
+      "objects",
+    );
     assert.equal(audits.length, 1);
     const changes = audits[0]!.changes as {
       before: { fieldTicketId: string };
@@ -147,136 +169,187 @@ test("apply moves the entry and audits the locked before-state", { skip: !DB }, 
   }
 });
 
-test("an entry billed between plan and apply refuses and keeps its ticket", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const harness = await setup(org.orgId);
-    const ticketNumber = String(
-      (await db.execute<{ document_number: string }>(
-        sql`select document_number from documents where id = ${harness.ticketB}`, "objects",
-      ))[0]!.document_number,
-    );
-    const entryId = await entry(harness, "SRC-BILLED", harness.ticketA);
-    const batch = [await plan(harness, "SRC-BILLED", ticketNumber)];
-    // The concurrent bill lands after the plan read.
-    await db.execute(sql`
+test(
+  "an entry billed between plan and apply refuses and keeps its ticket",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const harness = await setup(org.orgId);
+      const ticketNumber = String(
+        (
+          await db.execute<{ document_number: string }>(
+            sql`select document_number from documents where id = ${harness.ticketB}`,
+            "objects",
+          )
+        )[0]!.document_number,
+      );
+      const entryId = await entry(harness, "SRC-BILLED", harness.ticketA);
+      const batch = [await plan(harness, "SRC-BILLED", ticketNumber)];
+      // The concurrent bill lands after the plan read.
+      await db.execute(sql`
       update time_entries set billing_status = 'billed'
        where org_id = ${harness.orgId} and id = ${entryId}
     `);
-    const runId = randomUUID();
-    await assert.rejects(
-      () =>
-        withOrg(harness.orgId, () =>
-          applyTimeTicketLinks(harness.orgId, batch, {
-            reason: "test billed race refuses the entry",
-            inputSha256: "test",
-            runId,
-            actorId: null,
-          }),
-        ),
-      (error: unknown) => {
-        const message = String((error as Error).message);
-        assert.match(message, /now protected/);
-        assert.match(message, new RegExp(entryId));
-        return true;
-      },
-    );
-    assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketA);
-    const audits = await db.execute<{ id: string }>(
-        sql`select id from audit_log where org_id = ${harness.orgId} and request_id = ${runId}`, "objects",
+      const runId = randomUUID();
+      await assert.rejects(
+        () =>
+          withOrg(harness.orgId, () =>
+            applyTimeTicketLinks(harness.orgId, batch, {
+              reason: "test billed race refuses the entry",
+              inputSha256: "test",
+              runId,
+              actorId: null,
+            }),
+          ),
+        (error: unknown) => {
+          const message = String((error as Error).message);
+          assert.match(message, /now protected/);
+          assert.match(message, new RegExp(entryId));
+          return true;
+        },
       );
-    assert.equal(audits.length, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketA);
+      const audits = await db.execute<{ id: string }>(
+        sql`select id from audit_log where org_id = ${harness.orgId} and request_id = ${runId}`,
+        "objects",
+      );
+      assert.equal(audits.length, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an entry re-ticketed between plan and apply refuses instead of writing a false before-state", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const harness = await setup(org.orgId);
-    const ticketNumber = String(
-      (await db.execute<{ document_number: string }>(
-        sql`select document_number from documents where id = ${harness.ticketB}`, "objects",
-      ))[0]!.document_number,
-    );
-    const entryId = await entry(harness, "SRC-MOVED", harness.ticketA);
-    const batch = [await plan(harness, "SRC-MOVED", ticketNumber)];
-    // A concurrent ticket edit lands after the plan read.
-    await db.execute(sql`
+test(
+  "an entry re-ticketed between plan and apply refuses instead of writing a false before-state",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const harness = await setup(org.orgId);
+      const ticketNumber = String(
+        (
+          await db.execute<{ document_number: string }>(
+            sql`select document_number from documents where id = ${harness.ticketB}`,
+            "objects",
+          )
+        )[0]!.document_number,
+      );
+      const entryId = await entry(harness, "SRC-MOVED", harness.ticketA);
+      const batch = [await plan(harness, "SRC-MOVED", ticketNumber)];
+      // A concurrent ticket edit lands after the plan read.
+      await db.execute(sql`
       update time_entries set field_ticket_id = ${harness.ticketC}
        where org_id = ${harness.orgId} and id = ${entryId}
     `);
-    const runId = randomUUID();
-    await assert.rejects(
-      () =>
-        withOrg(harness.orgId, () =>
-          applyTimeTicketLinks(harness.orgId, batch, {
-            reason: "test moved race refuses the entry",
-            inputSha256: "test",
-            runId,
-            actorId: null,
-          }),
-        ),
-      (error: unknown) => {
-        const message = String((error as Error).message);
-        assert.match(message, /moved from ticket/);
-        assert.match(message, new RegExp(entryId));
-        return true;
-      },
-    );
-    assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketC);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const runId = randomUUID();
+      await assert.rejects(
+        () =>
+          withOrg(harness.orgId, () =>
+            applyTimeTicketLinks(harness.orgId, batch, {
+              reason: "test moved race refuses the entry",
+              inputSha256: "test",
+              runId,
+              actorId: null,
+            }),
+          ),
+        (error: unknown) => {
+          const message = String((error as Error).message);
+          assert.match(message, /moved from ticket/);
+          assert.match(message, new RegExp(entryId));
+          return true;
+        },
+      );
+      assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketC);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("apply waits for a target ticket rehome and refuses stale project membership", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  let releaseRehome!: () => void;
-  let acquiredRehome!: () => void;
-  const rehomeHeld = new Promise<void>((resolve) => { acquiredRehome = resolve; });
-  const rehomeCanCommit = new Promise<void>((resolve) => { releaseRehome = resolve; });
-  try {
-    const harness = await setup(org.orgId);
-    const ticketNumber = String((await db.execute<{ document_number: string }>(sql`select document_number from documents where id = ${harness.ticketB}`, "objects"))[0]!.document_number);
-    const entryId = await entry(harness, "SRC-REHOME-RACE", harness.ticketA);
-    const batch = [await plan(harness, "SRC-REHOME-RACE", ticketNumber)];
-    const otherProject = String((await db.execute<{ id: string }>(sql`insert into projects (org_id, name) values (${harness.orgId}, 'Rehomed Ticket Project') returning id`, "objects"))[0]!.id);
-
-    const rehome = withOrgTransaction(harness.orgId, async () => {
-      await db.execute(sql`select id from documents where org_id = ${harness.orgId} and id = ${harness.ticketB} for update`);
-      acquiredRehome();
-      await rehomeCanCommit;
-      await db.execute(sql`update documents set project_id = ${otherProject} where org_id = ${harness.orgId} and id = ${harness.ticketB}`);
+test(
+  "apply waits for a target ticket rehome and refuses stale project membership",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    let releaseRehome!: () => void;
+    let acquiredRehome!: () => void;
+    const rehomeHeld = new Promise<void>((resolve) => {
+      acquiredRehome = resolve;
     });
-    await rehomeHeld;
-    const applying = withOrg(harness.orgId, () => applyTimeTicketLinks(harness.orgId, batch, {
-      reason: "test apply serializes with a ticket project change",
-      inputSha256: "test",
-      runId: randomUUID(),
-      actorId: null,
-    }));
+    const rehomeCanCommit = new Promise<void>((resolve) => {
+      releaseRehome = resolve;
+    });
+    try {
+      const harness = await setup(org.orgId);
+      const ticketNumber = String(
+        (
+          await db.execute<{ document_number: string }>(
+            sql`select document_number from documents where id = ${harness.ticketB}`,
+            "objects",
+          )
+        )[0]!.document_number,
+      );
+      const entryId = await entry(harness, "SRC-REHOME-RACE", harness.ticketA);
+      const batch = [await plan(harness, "SRC-REHOME-RACE", ticketNumber)];
+      const otherProject = String(
+        (
+          await db.execute<{ id: string }>(
+            sql`insert into projects (org_id, name) values (${harness.orgId}, 'Rehomed Ticket Project') returning id`,
+            "objects",
+          )
+        )[0]!.id,
+      );
 
-    let waiting = false;
-    for (let attempt = 0; attempt < 100; attempt++) {
-      const activity = await withOrg(harness.orgId, () => db.execute(sql`
+      const rehome = withOrgTransaction(harness.orgId, async () => {
+        await db.execute(
+          sql`select id from documents where org_id = ${harness.orgId} and id = ${harness.ticketB} for update`,
+        );
+        acquiredRehome();
+        await rehomeCanCommit;
+        await db.execute(
+          sql`update documents set project_id = ${otherProject} where org_id = ${harness.orgId} and id = ${harness.ticketB}`,
+        );
+      });
+      await rehomeHeld;
+      const applying = withOrg(harness.orgId, () =>
+        applyTimeTicketLinks(harness.orgId, batch, {
+          reason: "test apply serializes with a ticket project change",
+          inputSha256: "test",
+          runId: randomUUID(),
+          actorId: null,
+        }),
+      );
+
+      let waiting = false;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const activity = await withOrg(harness.orgId, () =>
+          db.execute(
+            sql`
         select pid from pg_stat_activity where datname = current_database()
           and pid <> pg_backend_pid() and wait_event_type = 'Lock'
-          and query ilike '%documents%'`, "objects"));
-      if (activity.length > 0) { waiting = true; break; }
-      await new Promise((resolve) => setTimeout(resolve, 50));
+          and query ilike '%documents%'`,
+            "objects",
+          ),
+        );
+        if (activity.length > 0) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      assert.ok(waiting, "apply waits on the target document lock before attaching the entry");
+      releaseRehome();
+      await rehome;
+      await assert.rejects(applying, /target ticket changed project after the plan/);
+      assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketA);
+    } finally {
+      releaseRehome();
+      await dropScratchOrg(org.orgId);
     }
-    assert.ok(waiting, "apply waits on the target document lock before attaching the entry");
-    releaseRehome();
-    await rehome;
-    await assert.rejects(applying, /target ticket changed project after the plan/);
-    assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketA);
-  } finally {
-    releaseRehome();
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 const LINK_SCRIPT =
   process.env.G37_LINK_UNDER_TEST ??
@@ -325,9 +398,12 @@ function runLinkTool(args: string[]): Promise<{
 
 async function ticketNumber(id: string): Promise<string> {
   return String(
-    (await db.execute<{ document_number: string }>(
-        sql`select document_number from documents where id = ${id}`, "objects",
-      ))[0]!.document_number,
+    (
+      await db.execute<{ document_number: string }>(
+        sql`select document_number from documents where id = ${id}`,
+        "objects",
+      )
+    )[0]!.document_number,
   );
 }
 
@@ -386,8 +462,9 @@ test("the apply records the verified operator on every audit row", { skip: !DB }
     assert.equal(result.code, 0);
     assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketB);
     const audits = await db.execute<{ actor_id: string | null }>(
-        sql`select actor_id from audit_log where org_id = ${harness.orgId} and table_name = 'time_entries'`, "objects",
-      );
+      sql`select actor_id from audit_log where org_id = ${harness.orgId} and table_name = 'time_entries'`,
+      "objects",
+    );
     assert.ok(audits.length > 0);
     for (const audit of audits) {
       assert.equal(audit.actor_id, operatorId);
@@ -402,9 +479,12 @@ test("an entry deleted between plan and apply refuses by name", { skip: !DB }, a
   try {
     const harness = await setup(org.orgId);
     const ticketNumber = String(
-      (await db.execute<{ document_number: string }>(
-        sql`select document_number from documents where id = ${harness.ticketB}`, "objects",
-      ))[0]!.document_number,
+      (
+        await db.execute<{ document_number: string }>(
+          sql`select document_number from documents where id = ${harness.ticketB}`,
+          "objects",
+        )
+      )[0]!.document_number,
     );
     const entryId = await entry(harness, "SRC-GONE", harness.ticketA);
     const batch = [await plan(harness, "SRC-GONE", ticketNumber)];

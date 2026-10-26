@@ -1,15 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const manufacturingOverview: DocArticle = {
-  slug: 'manufacturing-overview',
-  title: 'Manufacturing Overview',
-  category: 'manufacturing',
+  slug: "manufacturing-overview",
+  title: "Manufacturing Overview",
+  category: "manufacturing",
   order: 1,
   summary:
-    'An introduction to manufacturing concepts, production masters, and the movement of costs from raw materials through work in process to finished goods.',
-  updated: '2026-10-11',
-  keywords: ['manufacturing', 'work center', 'routing', 'bill of materials', 'BOM', 'WIP', 'scrap', 'effectivity'],
-  related: ['overhead-costing', 'labor-costing'],
+    "An introduction to manufacturing concepts, production masters, and the movement of costs from raw materials through work in process to finished goods.",
+  updated: "2026-10-11",
+  keywords: [
+    "manufacturing",
+    "work center",
+    "routing",
+    "bill of materials",
+    "BOM",
+    "WIP",
+    "scrap",
+    "effectivity",
+  ],
+  related: ["overhead-costing", "labor-costing"],
   body: `# Manufacturing Overview
 
 Manufacturing describes how a shop turns components into finished goods while
@@ -71,4 +80,4 @@ an item. BOM effectivity dates define when each component line applies, so a
 build uses the component list effective on its production date and later
 changes do not alter historical cost evidence.
 `,
-}
+};

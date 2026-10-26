@@ -7,26 +7,46 @@ import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 /** Drain native receipt effects before a later return makes the posted
  * document unavailable to its retry action. Lease and terminal refusals
  * retain the original outbox ownership and operator remediation path. */
-export async function completePaymentPostingEffectsForReturn(orgId: string, documentId: string,
-  options: { requireEvidence?: boolean } = {}): Promise<void> {
-  const effect = (await db.execute<{ status: string }>(sql`select status from posting_effects
-    where org_id = ${orgId} and document_id = ${documentId}`, "objects"))[0];
+export async function completePaymentPostingEffectsForReturn(
+  orgId: string,
+  documentId: string,
+  options: { requireEvidence?: boolean } = {},
+): Promise<void> {
+  const effect = (
+    await db.execute<{ status: string }>(
+      sql`select status from posting_effects
+    where org_id = ${orgId} and document_id = ${documentId}`,
+      "objects",
+    )
+  )[0];
   // Historical postings without an outbox retain the native void contract.
   if (!effect) {
-    if (options.requireEvidence) throw new PaymentError("Receipt posting-effects evidence is unavailable; reconcile its native posting before resuming the provider return.");
+    if (options.requireEvidence)
+      throw new PaymentError(
+        "Receipt posting-effects evidence is unavailable; reconcile its native posting before resuming the provider return.",
+      );
     return;
   }
   if (effect.status === "succeeded") return;
   try {
     await runPostDocumentEffects(documentId, "approved");
   } catch (error) {
-    throw new PaymentError(`Receipt posting effects could not complete: ${error instanceof Error ? error.message : "unknown effect refusal"}. Resolve the cause on the posted receipt; terminal failures require Retry posting effects with a review reason before resuming the provider return.`, { cause: error });
+    throw new PaymentError(
+      `Receipt posting effects could not complete: ${error instanceof Error ? error.message : "unknown effect refusal"}. Resolve the cause on the posted receipt; terminal failures require Retry posting effects with a review reason before resuming the provider return.`,
+      { cause: error },
+    );
   }
-  const completed = (await db.execute<{ status: string }>(sql`select status from posting_effects
-    where org_id = ${orgId} and document_id = ${documentId}`, "objects"))[0];
-  if (completed?.status !== "succeeded") throw new PaymentError(
-    `Receipt posting effects are ${completed?.status ?? "unavailable"}; wait for their native completion before resuming the provider return. Terminal failures require Retry posting effects on the posted receipt with a review reason.`,
-  );
+  const completed = (
+    await db.execute<{ status: string }>(
+      sql`select status from posting_effects
+    where org_id = ${orgId} and document_id = ${documentId}`,
+      "objects",
+    )
+  )[0];
+  if (completed?.status !== "succeeded")
+    throw new PaymentError(
+      `Receipt posting effects are ${completed?.status ?? "unavailable"}; wait for their native completion before resuming the provider return. Terminal failures require Retry posting effects on the posted receipt with a review reason.`,
+    );
 }
 /** Reverse a posted payment after a bank return and reopen its applications. */
 export async function reversePaymentForReturn(
@@ -37,13 +57,16 @@ export async function reversePaymentForReturn(
   reversalDate?: string,
 ): Promise<string> {
   const reversalId = await withOrg(orgId, async () => {
-    const row = (await db.execute<{ id: string; posted_entry_id: string; document_number: string }>(sql`
+    const row = await db.execute<{ id: string; posted_entry_id: string; document_number: string }>(
+      sql`
       select d.id, d.posted_entry_id, d.document_number
         from documents d
        where d.id = ${paymentDocumentId} and d.org_id = ${orgId}
          and d.kind in ('vendor_payment', 'customer_payment') and d.status = 'posted'
        for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const payment = row[0];
     if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
     await completePaymentPostingEffectsForReturn(orgId, payment.id);
@@ -53,7 +76,9 @@ export async function reversePaymentForReturn(
     // Fail closed here, naming the caller's limit, before any write.
     const reasonText = reason.trim() || payment.document_number;
     if (reasonText.length > 500 - "Bank return: ".length) {
-      throw new PaymentError("bank return reason must fit the void evidence (at most 487 characters)");
+      throw new PaymentError(
+        "bank return reason must fit the void evidence (at most 487 characters)",
+      );
     }
     const voidReason = `Bank return: ${reasonText}`;
     const reversalDay = reversalDate ?? (await businessToday(orgId));
@@ -76,15 +101,20 @@ export async function reversePaymentForReturn(
       // this same transaction, so the displaced request is re-read under the
       // row lock, overwritten, preserved alongside the bank evidence in the
       // audit trail, and its requester notified — never silently adopted.
-      const pending = (await db.execute<{
+      const pending = (
+        await db.execute<{
           void_reason: string | null;
           void_requested_by: string | null;
           void_reversal_date: string | null;
           status: string;
-        }>(sql`
+        }>(
+          sql`
         select void_reason, void_requested_by, void_reversal_date, status
           from documents where id = ${payment.id} and org_id = ${orgId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!pending || pending.status !== "posted") {
         // Not a supersedeable pending request (already voided, or the
         // document moved on): completion returns the existing reversal for

@@ -1,5 +1,5 @@
-import * as React from 'react'
-import { cn } from './utils'
+import * as React from "react";
+import { cn } from "./utils";
 
 export const BaseLabel = React.forwardRef<
   HTMLLabelElement,
@@ -7,8 +7,8 @@ export const BaseLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <label
     ref={ref}
-    className={cn('text-sm leading-none font-medium text-slate-900 dark:text-slate-100', className)}
+    className={cn("text-sm leading-none font-medium text-slate-900 dark:text-slate-100", className)}
     {...props}
   />
-))
-BaseLabel.displayName = 'BaseLabel'
+));
+BaseLabel.displayName = "BaseLabel";

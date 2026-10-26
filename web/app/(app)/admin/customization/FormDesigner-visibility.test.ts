@@ -1,95 +1,117 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/customization?recordType=project&tab=forms&form=new', matchMediaMatches: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/customization?recordType=project&tab=forms&form=new",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
-const { registerHooks } = await import('node:module')
-const { pathToFileURL } = await import('node:url')
-const { join } = await import('node:path')
+const { registerHooks } = await import("node:module");
+const { pathToFileURL } = await import("node:url");
+const { join } = await import("node:path");
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
 // worktree copies so the test runs the code under test.
-const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-const worktreeCustomization = pathToFileURL(join(process.cwd(), 'packages', 'customization', 'src', 'index.ts')).href
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: { pathname: '/admin/customization' } })
+const worktreeUi = pathToFileURL(join(process.cwd(), "packages", "ui", "src", "index.ts")).href;
+const worktreeCustomization = pathToFileURL(
+  join(process.cwd(), "packages", "customization", "src", "index.ts"),
+).href;
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: { pathname: "/admin/customization" } });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '@openbooks/ui') {
-      return { shortCircuit: true, url: worktreeUi }
+    if (specifier === "@openbooks/ui") {
+      return { shortCircuit: true, url: worktreeUi };
     }
-    if (specifier === '@openbooks/customization') {
-      return { shortCircuit: true, url: worktreeCustomization }
+    if (specifier === "@openbooks/customization") {
+      return { shortCircuit: true, url: worktreeCustomization };
     }
 
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { act } = await import('react')
-const { createRoot } = await import('react-dom/client')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { FormDesigner } = await import('./FormDesigner')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { act } = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { FormDesigner } = await import("./FormDesigner");
 
 /**
  * Locked field controls remain disabled while editable fields still toggle.
  */
-test('designer visibility toggles expose pressed state and flip their label', async () => {
-  document.body.innerHTML = ''
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+test("designer visibility toggles expose pressed state and flip their label", async () => {
+  document.body.innerHTML = "";
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   /* eslint-disable react/no-children-prop */
   await act(async () => {
     root.render(
       React.createElement(NextIntlClientProvider, {
-        locale: 'en',
+        locale: "en",
         messages,
-        timeZone: 'UTC',
+        timeZone: "UTC",
         children: React.createElement(FormDesigner, {
-          recordType: 'vendor_bill',
+          recordType: "vendor_bill",
           def: null,
           headerDefs: [],
           lineDefs: [],
           subsidiaryEnabled: false,
         }),
       }),
-    )
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   /* eslint-enable react/no-children-prop */
   try {
-    const lockedBadge = [...document.querySelectorAll('div')].find((node) => node.textContent === 'Locked')
-    assert.ok(lockedBadge, 'built-in locked fields render their lock marker')
-    const lockedRow = lockedBadge?.parentElement?.parentElement
-    assert.equal(lockedRow?.querySelector('button[aria-pressed]')?.hasAttribute('disabled'), true)
-    assert.equal(lockedRow?.querySelector('input:not([type="checkbox"])')?.hasAttribute('disabled'), true)
+    const lockedBadge = [...document.querySelectorAll("div")].find(
+      (node) => node.textContent === "Locked",
+    );
+    assert.ok(lockedBadge, "built-in locked fields render their lock marker");
+    const lockedRow = lockedBadge?.parentElement?.parentElement;
+    assert.equal(lockedRow?.querySelector("button[aria-pressed]")?.hasAttribute("disabled"), true);
+    assert.equal(
+      lockedRow?.querySelector('input:not([type="checkbox"])')?.hasAttribute("disabled"),
+      true,
+    );
     const toggles = [...document.querySelectorAll('button[aria-pressed="true"]')]
-      .filter((b) => !b.hasAttribute('disabled'))
-      .reverse()
-    assert.ok(toggles.length >= 4, `tab, subtab, action and field toggles must render (found ${toggles.length})`)
+      .filter((b) => !b.hasAttribute("disabled"))
+      .reverse();
+    assert.ok(
+      toggles.length >= 4,
+      `tab, subtab, action and field toggles must render (found ${toggles.length})`,
+    );
     for (const toggle of toggles) {
-      assert.equal(toggle.getAttribute('aria-label'), 'Visible')
+      assert.equal(toggle.getAttribute("aria-label"), "Visible");
       await act(async () => {
-        toggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-        await new Promise((resolve) => setTimeout(resolve, 0))
-      })
-      assert.equal(toggle.getAttribute('aria-pressed'), 'false', 'the clicked toggle must report unpressed')
-      assert.equal(toggle.getAttribute('aria-label'), 'Hidden', 'the clicked toggle must offer its Hidden label')
+        toggle.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      assert.equal(
+        toggle.getAttribute("aria-pressed"),
+        "false",
+        "the clicked toggle must report unpressed",
+      );
+      assert.equal(
+        toggle.getAttribute("aria-label"),
+        "Hidden",
+        "the clicked toggle must offer its Hidden label",
+      );
     }
   } finally {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
+      root.unmount();
+    });
+    host.remove();
   }
-})
+});

@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
+import { notFound } from "next/navigation";
 import {
   badge,
   column,
@@ -17,7 +17,7 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
+} from "@braedonsaunders/appkit-viewspec";
 import {
   getCycleDetail,
   getRetentionOverview,
@@ -25,31 +25,28 @@ import {
   listCycleProgress,
   listGoals,
   listMyReviews,
-} from '@openbooks/engine/hrm/performance/performance-read'
-import { isUuid } from '@/lib/list-params'
-import {getCycleManagement,listCycleScopeOptions,listReviewWorklist} from '@openbooks/engine/hrm/performance'
-import { listReviewTemplates } from '@openbooks/engine/hrm/performance/review-cycles'
-import { listExitRecords } from '@openbooks/engine/hrm/performance/exits'
-import { HrmPerformanceError } from '@openbooks/engine/hrm/performance/errors'
+} from "@openbooks/engine/hrm/performance/performance-read";
+import { isUuid } from "@/lib/list-params";
 import {
-  HrmAuthorizationError,
-  loadApprovalPerson,
-} from '@openbooks/engine/hrm/authorization'
-import { db } from '@openbooks/engine/platform/db'
+  getCycleManagement,
+  listCycleScopeOptions,
+  listReviewWorklist,
+} from "@openbooks/engine/hrm/performance";
+import { listReviewTemplates } from "@openbooks/engine/hrm/performance/review-cycles";
+import { listExitRecords } from "@openbooks/engine/hrm/performance/exits";
+import { HrmPerformanceError } from "@openbooks/engine/hrm/performance/errors";
+import { HrmAuthorizationError, loadApprovalPerson } from "@openbooks/engine/hrm/authorization";
+import { db } from "@openbooks/engine/platform/db";
 import {
   loadAiDraftButton,
   loadAiDraftDrawer,
   type AiDraftDrawerData,
-} from '../../../../lib/hrm/ai-rails'
-import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
-import { can, getAuthz } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import {
-  continuousBlocks,
-  loadContinuousTab,
-  type ContinuousData,
-} from './continuous-view'
-import { performanceHref } from '../../../../lib/hrm/workspace-href'
+} from "../../../../lib/hrm/ai-rails";
+import { hrmGroupTabs } from "../../../../components/module-home/group-tabs";
+import { can, getAuthz } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { continuousBlocks, loadContinuousTab, type ContinuousData } from "./continuous-view";
+import { performanceHref } from "../../../../lib/hrm/workspace-href";
 
 /**
  * Performance tab: review cycles as loader-resolved rows, the cycle drawer
@@ -67,54 +64,53 @@ import { performanceHref } from '../../../../lib/hrm/workspace-href'
  * page) decides which rows each viewer sees.
  */
 
-const STATUSES = ['draft', 'open', 'calibrating', 'closed'] as const
+const STATUSES = ["draft", "open", "calibrating", "closed"] as const;
 
 export interface PerformanceCycleRow {
-  id: string
-  name: string
-  period: string
-  template: string
-  selfProgress: string
-  managerProgress: string
-  status: string
-  statusLabel: string
-  statusVariant:
-    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
-  href: string
+  id: string;
+  name: string;
+  period: string;
+  template: string;
+  selfProgress: string;
+  managerProgress: string;
+  status: string;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
+  href: string;
 }
 
 export interface PerformanceSegmentOption {
-  value: string
-  label: string
-  count: number
+  value: string;
+  label: string;
+  count: number;
 }
 
 export interface PerformanceReviewRow {
-  employmentId:string
-  id: string
-  kind: string
-  kindLabel: string
-  status: string
-  statusLabel: string
-  rating: string | null
-  href: string
+  employmentId: string;
+  id: string;
+  kind: string;
+  kindLabel: string;
+  status: string;
+  statusLabel: string;
+  rating: string | null;
+  href: string;
 }
 
 export interface PerformanceAnswer {
-  id: string
-  sectionTitle: string
-  questionPrompt: string | null
-  answerKind: string
-  rating: string | null
-  text: string | null
-  required: boolean
+  id: string;
+  sectionTitle: string;
+  questionPrompt: string | null;
+  answerKind: string;
+  rating: string | null;
+  text: string | null;
+  required: boolean;
 }
 
 export interface PerformanceGoalRow {
-  id: string
-  title: string
-  statusLabel: string
-  progress: number
+  id: string;
+  title: string;
+  statusLabel: string;
+  progress: number;
 }
 
 /**
@@ -124,229 +120,258 @@ export interface PerformanceGoalRow {
  * read never looks like a deleted record again.
  */
 export interface PerformanceLoadError {
-  message: string
-  retryHref: string
-  retryLabel: string
+  message: string;
+  retryHref: string;
+  retryLabel: string;
 }
 
 /** True for the typed absence/scope refusals the missing state already names. */
 function isExpectedAbsence(error: unknown): boolean {
   return (
     error instanceof HrmPerformanceError &&
-    (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')
-  )
+    (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")
+  );
 }
 
 export interface PerformancePageData {
-  title: string
-  description: string
-  tabs: { href: string; label: string; active?: boolean }[]
-  reviewFilters:{paramKey:string;label:string;allLabel:string;options:{value:string;label:string}[]}[]
-  reviewsTab: boolean
-  reviewRows: {id:string;employee:string;reviewer:string;cycle:string;kind:string;status:string;due:string;href:string}[]
-  templatesLabel: string
-  reviewColumns: {employee:string;reviewer:string;cycle:string;kind:string;status:string;due:string}
-  canManage: boolean
-  showCreate: boolean
-  canRetain: boolean
-  addLabel: string
-  addHref: string
-  basePath: string
-  segmentsLabel: string
-  allLabel: string
-  segmentOptions: PerformanceSegmentOption[]
-  currentParams: Record<string, string | string[] | undefined>
+  title: string;
+  description: string;
+  tabs: { href: string; label: string; active?: boolean }[];
+  reviewFilters: {
+    paramKey: string;
+    label: string;
+    allLabel: string;
+    options: { value: string; label: string }[];
+  }[];
+  reviewsTab: boolean;
+  reviewRows: {
+    id: string;
+    employee: string;
+    reviewer: string;
+    cycle: string;
+    kind: string;
+    status: string;
+    due: string;
+    href: string;
+  }[];
+  templatesLabel: string;
+  reviewColumns: {
+    employee: string;
+    reviewer: string;
+    cycle: string;
+    kind: string;
+    status: string;
+    due: string;
+  };
+  canManage: boolean;
+  showCreate: boolean;
+  canRetain: boolean;
+  addLabel: string;
+  addHref: string;
+  basePath: string;
+  segmentsLabel: string;
+  allLabel: string;
+  segmentOptions: PerformanceSegmentOption[];
+  currentParams: Record<string, string | string[] | undefined>;
   columns: {
-    name: string
-    period: string
-    template: string
-    self: string
-    manager: string
-    status: string
-  }
-  rows: PerformanceCycleRow[]
-  empty: string
+    name: string;
+    period: string;
+    template: string;
+    self: string;
+    manager: string;
+    status: string;
+  };
+  rows: PerformanceCycleRow[];
+  empty: string;
   detail: {
-    management: Awaited<ReturnType<typeof getCycleManagement>> | null
-    cycleId: string
-    cycleName: string
-    cycleStatus: string
-    templateName: string
-    period: string
-    reviews: PerformanceReviewRow[]
-    reviewsTitle: string
-    reviewsEmpty: string
-    cols: { kind: string; status: string; rating: string }
+    management: Awaited<ReturnType<typeof getCycleManagement>> | null;
+    cycleId: string;
+    cycleName: string;
+    cycleStatus: string;
+    templateName: string;
+    period: string;
+    reviews: PerformanceReviewRow[];
+    reviewsTitle: string;
+    reviewsEmpty: string;
+    cols: { kind: string; status: string; rating: string };
     calibration: {
-      canOpen: boolean
-      openLabel: string
-      canMove: boolean
-      canForce: boolean
-      canClose: boolean
-      moveLabel: string
-      forceLabel: string
-      forceReasonLabel: string
-      forceReasonPlaceholder: string
-      closeLabel: string
-      gapNote: string | null
-      failed: string
-    }
-    closeHref: string
-  } | null
-  missingDetail: string | null
-  detailError: PerformanceLoadError | null
+      canOpen: boolean;
+      openLabel: string;
+      canMove: boolean;
+      canForce: boolean;
+      canClose: boolean;
+      moveLabel: string;
+      forceLabel: string;
+      forceReasonLabel: string;
+      forceReasonPlaceholder: string;
+      closeLabel: string;
+      gapNote: string | null;
+      failed: string;
+    };
+    closeHref: string;
+  } | null;
+  missingDetail: string | null;
+  detailError: PerformanceLoadError | null;
   review: {
-    id: string
-    revision: number
-    draftSavedAt:string|null
-    instructions:string
-    ratingScale:{min:string;max:string;labels:readonly string[]}
-    kindLabel: string
-    statusLabel: string
-    overallLabel: string
-    overallRating: string | null
-    calibratedLabel: string
-    calibratedRating: string | null
-    calibrationReason: string | null
-    answers: PerformanceAnswer[]
-    goals: PerformanceGoalRow[]
-    goalsTitle: string
-    goalsEmpty: string
+    id: string;
+    revision: number;
+    draftSavedAt: string | null;
+    instructions: string;
+    ratingScale: { min: string; max: string; labels: readonly string[] };
+    kindLabel: string;
+    statusLabel: string;
+    overallLabel: string;
+    overallRating: string | null;
+    calibratedLabel: string;
+    calibratedRating: string | null;
+    calibrationReason: string | null;
+    answers: PerformanceAnswer[];
+    goals: PerformanceGoalRow[];
+    goalsTitle: string;
+    goalsEmpty: string;
     /**
      * Goal authoring: the subject sets their own, HR (manage) sets any in
      * scope — the same authority the goal endpoints enforce. Progress and
      * the add-goal form render only with it.
      */
-    canWriteGoals: boolean
-    employmentId: string
-    canAnswer: boolean
-    canShare: boolean
-    canAcknowledge: boolean
-    canCalibrate: boolean
-    canReopen: boolean
-    submitLabel: string
-    shareLabel: string
-    acknowledgeLabel: string
-    calibrateLabel: string
-    reasonLabel: string
-    reopenLabel: string
-    answerRatingLabel: string
-    answerTextLabel: string
-    requiredLabel: string
-    failed: string
-    cycleId: string
-    closeHref: string
-    draft: { href: string; label: string } | null
-  } | null
-  missingReview: string | null
-  reviewError: PerformanceLoadError | null
+    canWriteGoals: boolean;
+    employmentId: string;
+    canAnswer: boolean;
+    canShare: boolean;
+    canAcknowledge: boolean;
+    canCalibrate: boolean;
+    canReopen: boolean;
+    submitLabel: string;
+    shareLabel: string;
+    acknowledgeLabel: string;
+    calibrateLabel: string;
+    reasonLabel: string;
+    reopenLabel: string;
+    answerRatingLabel: string;
+    answerTextLabel: string;
+    requiredLabel: string;
+    failed: string;
+    cycleId: string;
+    closeHref: string;
+    draft: { href: string; label: string } | null;
+  } | null;
+  missingReview: string | null;
+  reviewError: PerformanceLoadError | null;
   retention: {
-    title: string
+    title: string;
     queueLinks: {
-      href: string
-      label: string
-      iconKey: string
-      badge: { value: string; tone: 'warning' | 'positive' }
-    }[]
-    queueLabel: string
-    interviewQueue: boolean
-    missingCount: number
-    turnoverLabel: string
-    turnoverValue: string
-    regrettableLabel: string
-    regrettableValue: string
-    gapsTitle: string
-    gapsEmpty: string
-    departmentLabel: string
+      href: string;
+      label: string;
+      iconKey: string;
+      badge: { value: string; tone: "warning" | "positive" };
+    }[];
+    queueLabel: string;
+    interviewQueue: boolean;
+    missingCount: number;
+    turnoverLabel: string;
+    turnoverValue: string;
+    regrettableLabel: string;
+    regrettableValue: string;
+    gapsTitle: string;
+    gapsEmpty: string;
+    departmentLabel: string;
     gaps: {
-      employmentHref: string
-      employmentLabel: string
-      departmentLabel: string
-      terminatedFrom: string
-    }[]
-    noInterviewTitle: string
-    noInterviewCount: number
-  } | null
+      employmentHref: string;
+      employmentLabel: string;
+      departmentLabel: string;
+      terminatedFrom: string;
+    }[];
+    noInterviewTitle: string;
+    noInterviewCount: number;
+  } | null;
   exit: {
-    employmentId: string
-    voluntaryLabel: string
-    involuntaryLabel: string
+    employmentId: string;
+    voluntaryLabel: string;
+    involuntaryLabel: string;
     existing: {
-      id: string
-      reasonKind: string
-      isVoluntary: boolean
-      interviewHeldOn: string | null
-      interviewerPartyId: string | null
-      destination: string | null
-      notes: string | null
-      revision: number
-    } | null
-    canRecord: boolean
-    title: string
-    closeHref: string
-  } | null
-  missingExit: string | null
-  exitError: PerformanceLoadError | null
+      id: string;
+      reasonKind: string;
+      isVoluntary: boolean;
+      interviewHeldOn: string | null;
+      interviewerPartyId: string | null;
+      destination: string | null;
+      notes: string | null;
+      revision: number;
+    } | null;
+    canRecord: boolean;
+    title: string;
+    closeHref: string;
+  } | null;
+  missingExit: string | null;
+  exitError: PerformanceLoadError | null;
   create: {
     /** The drawer's accessible name — a dialog must never render untitled. */
-    title: string
-    closeHref: string
-    templates: { value: string; label: string }[]
-    scopeOptions: Awaited<ReturnType<typeof listCycleScopeOptions>>
-    initialTemplateId: string
-    emptyTemplates: string
-    templateLabel: string
-    nameLabel: string
-    startLabel: string
-    endLabel: string
-    submitLabel: string
-    cancelLabel: string
-    setupHint: string
-    setupHref: string | null
-    failed: string
-  } | null
-  drawerOpen: boolean
-  reviewOpen: boolean
-  exitOpen: boolean
+    title: string;
+    closeHref: string;
+    templates: { value: string; label: string }[];
+    scopeOptions: Awaited<ReturnType<typeof listCycleScopeOptions>>;
+    initialTemplateId: string;
+    emptyTemplates: string;
+    templateLabel: string;
+    nameLabel: string;
+    startLabel: string;
+    endLabel: string;
+    submitLabel: string;
+    cancelLabel: string;
+    setupHint: string;
+    setupHref: string | null;
+    failed: string;
+  } | null;
+  drawerOpen: boolean;
+  reviewOpen: boolean;
+  exitOpen: boolean;
   // Each workspace owns one work surface under the shared header tabs.
-  cyclesTab: boolean
-  continuous: ContinuousData
-  draftDrawer: AiDraftDrawerData | null
-  draftDrawerOpen: boolean
+  cyclesTab: boolean;
+  continuous: ContinuousData;
+  draftDrawer: AiDraftDrawerData | null;
+  draftDrawerOpen: boolean;
 }
 
-const f = ref<PerformancePageData>()
-const item = field
+const f = ref<PerformancePageData>();
+const item = field;
 
 export function performanceSpec(data: PerformancePageData): PageSpec {
   return page({
-    route: '/hrm/performance',
-    layout: 'list',
-    bodyClassName: 'space-y-4',
+    route: "/hrm/performance",
+    layout: "list",
+    bodyClassName: "space-y-4",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
           // The primary action first, the strip last — the house order on
           // every list page, so the switcher never moves between siblings.
           widget(
-            'link-button',
-            { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
-            f('showCreate'),
+            "link-button",
+            { href: f("addHref"), label: f("addLabel"), iconKey: "plus" },
+            f("showCreate"),
           ),
-          ...(data.cyclesTab && data.canManage ? [widget('link-button', { href: '/hrm/performance/templates', label: data.templatesLabel, variant: 'outline' })] : []),
+          ...(data.cyclesTab && data.canManage
+            ? [
+                widget("link-button", {
+                  href: "/hrm/performance/templates",
+                  label: data.templatesLabel,
+                  variant: "outline",
+                }),
+              ]
+            : []),
           ...(data.continuous.talent &&
           ((data.continuous.talent.cycleId && !data.continuous.talent.scaleNote) ||
-            data.continuous.talent.view === 'succession')
+            data.continuous.talent.view === "succession")
             ? [
-                widget('hrm-talent-dialog', {
+                widget("hrm-talent-dialog", {
                   dialog: data.continuous.talent.dialog,
                 }),
               ]
             : []),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
@@ -354,17 +379,17 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
       // Same bounded, gapped body as Benefits. Cycles, continuous views and
       // Retention are sibling surfaces and must share the same bottom
       // breathing room instead of each relying on incidental block margins.
-      grid('grid gap-4', [
+      grid("grid gap-4", [
         // The cycles filter on the shared toolbar. The Talent views are the
         // page layout's strip, under the header.
         {
-          ...grid('flex shrink-0 flex-wrap items-center gap-3', [
-            widgetBlock('list-toolbar', {
-              basePath: '/hrm/performance',
+          ...grid("flex shrink-0 flex-wrap items-center gap-3", [
+            widgetBlock("list-toolbar", {
+              basePath: "/hrm/performance",
               currentParams: data.currentParams,
               filters: [
                 {
-                  paramKey: 'status',
+                  paramKey: "status",
                   label: data.segmentsLabel,
                   allLabel: data.allLabel,
                   options: data.segmentOptions,
@@ -372,39 +397,56 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
               ],
             }),
           ]),
-          when: f('cyclesTab'),
+          when: f("cyclesTab"),
         },
         {
-          ...registeredListTable('hrm_performance_rows', {
-            variant: 'app',
-            rows: f('rows'),
-            rowKey: item('id'),
-            empty: { title: f('empty') },
+          ...registeredListTable("hrm_performance_rows", {
+            variant: "app",
+            rows: f("rows"),
+            rowKey: item("id"),
+            empty: { title: f("empty") },
             columns: [
-              column(data.columns.name, link(item('name'), item('href'))),
-              column(data.columns.period, text(item('period'))),
-              column(data.columns.template, text(item('template'))),
-              column(data.columns.self, text(item('selfProgress')), {
-                align: 'right',
-                className: 'tabular-nums',
+              column(data.columns.name, link(item("name"), item("href"))),
+              column(data.columns.period, text(item("period"))),
+              column(data.columns.template, text(item("template"))),
+              column(data.columns.self, text(item("selfProgress")), {
+                align: "right",
+                className: "tabular-nums",
               }),
-              column(data.columns.manager, text(item('managerProgress')), {
-                align: 'right',
-                className: 'tabular-nums',
+              column(data.columns.manager, text(item("managerProgress")), {
+                align: "right",
+                className: "tabular-nums",
               }),
               column(
                 data.columns.status,
-                badge(item('statusLabel'), { variant: item('statusVariant') }),
+                badge(item("statusLabel"), { variant: item("statusVariant") }),
               ),
             ],
           }),
-          when: f('cyclesTab'),
+          when: f("cyclesTab"),
         },
-        ...(data.reviewsTab?[widgetBlock('list-toolbar',{basePath:'/hrm/performance',currentParams:data.currentParams,filters:data.reviewFilters}),registeredListTable('hrm_review_worklist',{rows:f('reviewRows'),rowKey:item('id'),empty:{title:data.empty},columns:[
-          column(data.reviewColumns.employee,link(item('employee'),item('href'))),
-          column(data.reviewColumns.reviewer,text(item('reviewer'))),column(data.reviewColumns.cycle,text(item('cycle'))),
-          column(data.reviewColumns.kind,text(item('kind'))),column(data.reviewColumns.status,badge(item('status'))),
-          column(data.reviewColumns.due,text(item('due')))]})]:[]),
+        ...(data.reviewsTab
+          ? [
+              widgetBlock("list-toolbar", {
+                basePath: "/hrm/performance",
+                currentParams: data.currentParams,
+                filters: data.reviewFilters,
+              }),
+              registeredListTable("hrm_review_worklist", {
+                rows: f("reviewRows"),
+                rowKey: item("id"),
+                empty: { title: data.empty },
+                columns: [
+                  column(data.reviewColumns.employee, link(item("employee"), item("href"))),
+                  column(data.reviewColumns.reviewer, text(item("reviewer"))),
+                  column(data.reviewColumns.cycle, text(item("cycle"))),
+                  column(data.reviewColumns.kind, text(item("kind"))),
+                  column(data.reviewColumns.status, badge(item("status"))),
+                  column(data.reviewColumns.due, text(item("due"))),
+                ],
+              }),
+            ]
+          : []),
         ...continuousBlocks(data.continuous),
         // Retention through the house blocks: three stat tiles and a table,
         // the same vocabulary every other HRM surface uses. It was a bespoke
@@ -412,46 +454,43 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
         // no card around it.
         ...(data.retention
           ? [
-              grid(
-                'grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4',
-                [
-                  statTile({
-                    iconKey: 'gauge',
-                    accent: 'amber',
-                    label: data.retention.turnoverLabel,
-                    value: data.retention.turnoverValue,
-                    tone: 'default',
-                  }),
-                  statTile({
-                    iconKey: 'users',
-                    accent: 'slate',
-                    label: data.retention.regrettableLabel,
-                    value: data.retention.regrettableValue,
-                    tone: 'default',
-                  }),
-                  statTile({
-                    iconKey: 'clipboard',
-                    accent: 'slate',
-                    label: data.retention.noInterviewTitle,
-                    value: String(data.retention.noInterviewCount),
-                    tone: 'default',
-                  }),
-                  statTile({
-                    iconKey: 'list-checks',
-                    accent: 'amber',
-                    label: data.retention.gapsTitle,
-                    value: String(data.retention.missingCount),
-                    tone: 'default',
-                  }),
-                ],
-              ),
-              widgetBlock('live-directory', {
+              grid("grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4", [
+                statTile({
+                  iconKey: "gauge",
+                  accent: "amber",
+                  label: data.retention.turnoverLabel,
+                  value: data.retention.turnoverValue,
+                  tone: "default",
+                }),
+                statTile({
+                  iconKey: "users",
+                  accent: "slate",
+                  label: data.retention.regrettableLabel,
+                  value: data.retention.regrettableValue,
+                  tone: "default",
+                }),
+                statTile({
+                  iconKey: "clipboard",
+                  accent: "slate",
+                  label: data.retention.noInterviewTitle,
+                  value: String(data.retention.noInterviewCount),
+                  tone: "default",
+                }),
+                statTile({
+                  iconKey: "list-checks",
+                  accent: "amber",
+                  label: data.retention.gapsTitle,
+                  value: String(data.retention.missingCount),
+                  tone: "default",
+                }),
+              ]),
+              widgetBlock("live-directory", {
                 items: data.retention.queueLinks,
               }),
-              registeredListTable('hrm_performance_retention_gaps', {
-                variant: 'app',
-                rows: f('retention.gaps'),
-                rowKey: item('employmentHref'),
+              registeredListTable("hrm_performance_retention_gaps", {
+                variant: "app",
+                rows: f("retention.gaps"),
+                rowKey: item("employmentHref"),
                 empty: {
                   title: data.retention.queueLabel,
                   description: data.retention.gapsEmpty,
@@ -459,21 +498,14 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
                 columns: [
                   column(
                     data.retention.queueLabel,
-                    link(item('employmentLabel'), item('employmentHref')),
+                    link(item("employmentLabel"), item("employmentHref")),
                   ),
                   ...(!data.retention.interviewQueue
                     ? [
-                        column(
-                          data.retention.departmentLabel,
-                          text(item('departmentLabel')),
-                        ),
-                        column(
-                          data.columns.period,
-                          text(item('terminatedFrom')),
-                          {
-                            className: 'tabular-nums',
-                          },
-                        ),
+                        column(data.retention.departmentLabel, text(item("departmentLabel"))),
+                        column(data.columns.period, text(item("terminatedFrom")), {
+                          className: "tabular-nums",
+                        }),
                       ]
                     : []),
                 ],
@@ -482,47 +514,47 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
           : []),
       ]),
       {
-        ...widgetBlock('hrm-cycle-drawer', {
+        ...widgetBlock("hrm-cycle-drawer", {
           detail: data.detail,
           missingDetail: data.missingDetail,
           fallbackTitle: data.title,
           loadError: data.detailError,
         }),
-        when: f('drawerOpen'),
+        when: f("drawerOpen"),
       },
       {
-        ...widgetBlock('hrm-review-drawer', {
+        ...widgetBlock("hrm-review-drawer", {
           review: data.review,
           missingReview: data.missingReview,
           fallbackTitle: data.title,
           loadError: data.reviewError,
         }),
-        when: f('reviewOpen'),
+        when: f("reviewOpen"),
       },
       // HR-21: the shared evidence-draft drawer (?draft=<kind>:<id>).
       {
-        ...widgetBlock('hrm-ai-draft-drawer', { draft: data.draftDrawer }),
-        when: f('draftDrawerOpen'),
+        ...widgetBlock("hrm-ai-draft-drawer", { draft: data.draftDrawer }),
+        when: f("draftDrawerOpen"),
       },
       {
-        ...widgetBlock('hrm-cycle-dialog', { create: data.create }),
-        when: f('create'),
+        ...widgetBlock("hrm-cycle-dialog", { create: data.create }),
+        when: f("create"),
       },
       {
-        ...widgetBlock('hrm-exit-drawer', {
+        ...widgetBlock("hrm-exit-drawer", {
           exit: data.exit,
           missingExit: data.missingExit,
           loadError: data.exitError,
         }),
-        when: f('exitOpen'),
+        when: f("exitOpen"),
       },
     ],
-  })
+  });
 }
 
 export async function performanceTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('performance.title')
+  const t = await getTranslations("hrm");
+  return t("performance.title");
 }
 
 export async function loadPerformancePage(
@@ -533,102 +565,98 @@ export async function loadPerformancePage(
   // hrmPerformance switches gate the page itself (HR-7's gating moved
   // under hrmPerformance additively). HRM management and retention stay
   // grants.
-  const authz = await getAuthz()
-  if (!authz) notFound()
-  await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  await requireFeatureEnabled(authz.user.orgId, 'hrmPerformance')
-  const t = await getTranslations('hrm')
-  const commonT = await getTranslations('common')
-  const retryLabel = commonT('actions.retry')
-  const tw=await getTranslations('hrm.talentWorkspace')
-  const openLabel = tw('launchCycle')
-  const tabs = await hrmGroupTabs(authz, '/hrm/performance')
+  const authz = await getAuthz();
+  if (!authz) notFound();
+  await requireFeatureEnabled(authz.user.orgId, "hrm");
+  await requireFeatureEnabled(authz.user.orgId, "hrmPerformance");
+  const t = await getTranslations("hrm");
+  const commonT = await getTranslations("common");
+  const retryLabel = commonT("actions.retry");
+  const tw = await getTranslations("hrm.talentWorkspace");
+  const openLabel = tw("launchCycle");
+  const tabs = await hrmGroupTabs(authz, "/hrm/performance");
 
   // The `mine` pseudo-status is the self-service segment: cycles the actor
   // participates in (subject or reviewer). Non-HR viewers see their slice
   // under every segment; the segment makes it explicit.
-  const rawStatus = typeof sp.status === 'string' ? sp.status : null
+  const rawStatus = typeof sp.status === "string" ? sp.status : null;
   const status =
-    rawStatus !== null && (STATUSES as readonly string[]).includes(rawStatus)
-      ? rawStatus
-      : null
-  const mine = rawStatus === 'mine'
-  const canManage = can(authz, 'hrm.performance.manage')
-  const canRetain = can(authz, 'hrm.retention.read')
+    rawStatus !== null && (STATUSES as readonly string[]).includes(rawStatus) ? rawStatus : null;
+  const mine = rawStatus === "mine";
+  const canManage = can(authz, "hrm.performance.manage");
+  const canRetain = can(authz, "hrm.retention.read");
 
   // The continuous tabs resolve first. Retention is one of them now,
   // so the cycles list, the calibration grid, the talent grid, the feedback
   // settings and the retention figures each get the page to themselves.
   // Loaded here (not beside the retention panel) so every drawer href below
   // preserves the continuous tab through the shared helper.
-  const continuous = await loadContinuousTab(authz, sp, canManage, canRetain)
-  const reviewsTab=sp.tab==='reviews'||(!sp.tab&&!sp.cycle)
-  const cyclesTab = continuous.tab === 'cycles'&&!reviewsTab
-  const worklist=reviewsTab?await listReviewWorklist({orgId:authz.user.orgId,actorId:authz.user.id}):[]
+  const continuous = await loadContinuousTab(authz, sp, canManage, canRetain);
+  const reviewsTab = sp.tab === "reviews" || (!sp.tab && !sp.cycle);
+  const cyclesTab = continuous.tab === "cycles" && !reviewsTab;
+  const worklist = reviewsTab
+    ? await listReviewWorklist({ orgId: authz.user.orgId, actorId: authz.user.id })
+    : [];
   // Drawer hrefs preserve the segment and the continuous tab — a
   // drawer opened from Retention closes back onto Retention, not Cycles.
   const preservedParams = {
     ...(rawStatus ? { status: rawStatus } : {}),
-    ...(reviewsTab?{reviewStatus:sp.reviewStatus,reviewScope:sp.reviewScope,reviewCycle:sp.reviewCycle}:{}),
-    ...(reviewsTab?{tab:'reviews'}:cyclesTab?{tab:'cycles'}:{ tab: continuous.tab }),
-    ...(sp.queue === 'interviews' && continuous.tab === 'retention'
-      ? { queue: 'interviews' }
+    ...(reviewsTab
+      ? { reviewStatus: sp.reviewStatus, reviewScope: sp.reviewScope, reviewCycle: sp.reviewCycle }
       : {}),
-  }
+    ...(reviewsTab ? { tab: "reviews" } : cyclesTab ? { tab: "cycles" } : { tab: continuous.tab }),
+    ...(sp.queue === "interviews" && continuous.tab === "retention" ? { queue: "interviews" } : {}),
+  };
 
   const cycles = cyclesTab
     ? await listCycleProgress({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
       })
-    : []
+    : [];
   const mineReviews = cyclesTab
     ? await listMyReviews({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
       })
-    : { asSubject: [], asReviewer: [] }
+    : { asSubject: [], asReviewer: [] };
   const mineCycleIds = new Set(
     [...mineReviews.asSubject, ...mineReviews.asReviewer].map((r) => r.cycleId),
-  )
+  );
   const visible = cycles.filter(
-    (c) =>
-      (status === null || c.status === status) &&
-      (!mine || mineCycleIds.has(c.id)),
-  )
+    (c) => (status === null || c.status === status) && (!mine || mineCycleIds.has(c.id)),
+  );
   const statusLabel = (value: string): string =>
-    value === 'draft'
-      ? t('performance.statusDraft')
-      : value === 'open'
-        ? t('performance.statusOpen')
-        : value === 'calibrating'
-          ? t('performance.statusCalibrating')
-          : t('performance.statusClosed')
-  const statusVariant = (
-    value: string,
-  ): PerformanceCycleRow['statusVariant'] =>
-    value === 'open'
-      ? 'success'
-      : value === 'calibrating'
-        ? 'warning'
-        : value === 'draft'
-          ? 'secondary'
-          : 'default'
+    value === "draft"
+      ? t("performance.statusDraft")
+      : value === "open"
+        ? t("performance.statusOpen")
+        : value === "calibrating"
+          ? t("performance.statusCalibrating")
+          : t("performance.statusClosed");
+  const statusVariant = (value: string): PerformanceCycleRow["statusVariant"] =>
+    value === "open"
+      ? "success"
+      : value === "calibrating"
+        ? "warning"
+        : value === "draft"
+          ? "secondary"
+          : "default";
   const rows: PerformanceCycleRow[] = visible.map((c) => ({
     id: c.id,
     name: c.name,
     period: `${c.periodStartOn} → ${c.periodEndOn}`,
-    template: c.templateName ?? '—',
+    template: c.templateName ?? "—",
     selfProgress: `${c.submittedSelf}/${c.totalSelf}`,
     managerProgress: `${c.submittedManager}/${c.totalManager}`,
     status: c.status,
     statusLabel: statusLabel(c.status),
     statusVariant: statusVariant(c.status),
     href: performanceHref(preservedParams, { status: rawStatus, cycle: c.id }),
-  }))
+  }));
 
-  const counts = new Map<string, number>()
-  for (const c of cycles) counts.set(c.status, (counts.get(c.status) ?? 0) + 1)
+  const counts = new Map<string, number>();
+  for (const c of cycles) counts.set(c.status, (counts.get(c.status) ?? 0) + 1);
   const segmentOptions: PerformanceSegmentOption[] = [
     ...STATUSES.map((s) => ({
       value: s,
@@ -636,49 +664,62 @@ export async function loadPerformancePage(
       count: counts.get(s) ?? 0,
     })),
     {
-      value: 'mine',
-      label: t('performance.mineSegment'),
+      value: "mine",
+      label: t("performance.mineSegment"),
       count: mineCycleIds?.size ?? 0,
     },
-  ]
+  ];
 
   const cycleId =
-    typeof sp.cycle === 'string' && sp.cycle.length > 0 && sp.cycle !== 'new'
-      ? sp.cycle
-      : null
-  const creating = sp.cycle === 'new' && canManage
-  const reviewId =
-    typeof sp.review === 'string' && sp.review.length > 0 ? sp.review : null
+    typeof sp.cycle === "string" && sp.cycle.length > 0 && sp.cycle !== "new" ? sp.cycle : null;
+  const creating = sp.cycle === "new" && canManage;
+  const reviewId = typeof sp.review === "string" && sp.review.length > 0 ? sp.review : null;
 
-  let detail: PerformancePageData['detail'] = null
-  let missingDetail: string | null = null
-  let detailError: PerformancePageData['detailError'] = null
+  let detail: PerformancePageData["detail"] = null;
+  let missingDetail: string | null = null;
+  let detailError: PerformancePageData["detailError"] = null;
   if (cycleId) {
     try {
       const full = await getCycleDetail({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         cycleId,
-      })
-      let management:NonNullable<PerformancePageData['detail']>['management']=null
-      if(canManage){try{management=await getCycleManagement({orgId:authz.user.orgId,actorId:authz.user.id,cycleId})}catch(error){if(!(error instanceof HrmAuthorizationError))throw error}}
+      });
+      let management: NonNullable<PerformancePageData["detail"]>["management"] = null;
+      if (canManage) {
+        try {
+          management = await getCycleManagement({
+            orgId: authz.user.orgId,
+            actorId: authz.user.id,
+            cycleId,
+          });
+        } catch (error) {
+          if (!(error instanceof HrmAuthorizationError)) throw error;
+        }
+      }
       detail = {
         management,
         cycleId: full.id,
         cycleName: full.name,
         cycleStatus: full.status,
-        templateName: full.templateName ?? '—',
+        templateName: full.templateName ?? "—",
         period: `${full.periodStartOn} → ${full.periodEndOn}`,
         reviews: full.reviews.map((r) => ({
           id: r.id,
-          employmentId:r.employmentId,
+          employmentId: r.employmentId,
           kind: r.kind,
           kindLabel:
-            r.kind === 'self'
-              ? (worklist.find(row=>row.id===r.id)?.employee??'')+' · '+t('performance.kindSelf')
-              : r.kind === 'manager'
-                ? (worklist.find(row=>row.id===r.id)?.employee??'')+' · '+t('performance.kindManager')
-                : (worklist.find(row=>row.id===r.id)?.employee??'')+' · '+t('performance.kindPeer'),
+            r.kind === "self"
+              ? (worklist.find((row) => row.id === r.id)?.employee ?? "") +
+                " · " +
+                t("performance.kindSelf")
+              : r.kind === "manager"
+                ? (worklist.find((row) => row.id === r.id)?.employee ?? "") +
+                  " · " +
+                  t("performance.kindManager")
+                : (worklist.find((row) => row.id === r.id)?.employee ?? "") +
+                  " · " +
+                  t("performance.kindPeer"),
           status: r.status,
           statusLabel: reviewStatusLabel(t, r.status),
           rating: r.calibratedRating ?? r.overallRating,
@@ -688,107 +729,101 @@ export async function loadPerformancePage(
             review: r.id,
           }),
         })),
-        reviewsTitle: t('performance.reviewsTitle'),
-        reviewsEmpty: t('performance.reviewsEmpty'),
+        reviewsTitle: t("performance.reviewsTitle"),
+        reviewsEmpty: t("performance.reviewsEmpty"),
         cols: {
-          kind: t('performance.colKind'),
-          status: t('performance.colStatus'),
-          rating: t('performance.colRating'),
+          kind: t("performance.colKind"),
+          status: t("performance.colStatus"),
+          rating: t("performance.colRating"),
         },
         calibration: {
-          canOpen: management!==null && full.status === 'draft',
+          canOpen: management !== null && full.status === "draft",
           openLabel,
-          canMove: management!==null && full.status === 'open',
-          canForce: management!==null && full.status === 'open',
-          canClose:
-            canManage &&
-            (full.status === 'open' || full.status === 'calibrating'),
-          moveLabel: t('performance.moveToCalibrating'),
-          forceLabel: t('performance.forceCalibrating'),
-          forceReasonLabel: t('performance.forceReason'),
-          forceReasonPlaceholder: t('performance.forceReasonPlaceholder'),
-          closeLabel: t('performance.closeCycle'),
+          canMove: management !== null && full.status === "open",
+          canForce: management !== null && full.status === "open",
+          canClose: canManage && (full.status === "open" || full.status === "calibrating"),
+          moveLabel: t("performance.moveToCalibrating"),
+          forceLabel: t("performance.forceCalibrating"),
+          forceReasonLabel: t("performance.forceReason"),
+          forceReasonPlaceholder: t("performance.forceReasonPlaceholder"),
+          closeLabel: t("performance.closeCycle"),
           gapNote:
             full.managerGapCount !== null && full.managerGapCount > 0
-              ? t('performance.gapNote', { count: full.managerGapCount })
+              ? t("performance.gapNote", { count: full.managerGapCount })
               : null,
-          failed: t('performance.actionFailed'),
+          failed: t("performance.actionFailed"),
         },
         closeHref: performanceHref(preservedParams, { status: rawStatus }),
-      }
+      };
     } catch (error) {
       // A deleted or out-of-scope cycle stays "not found"; anything else
       // is an outage the open drawer must report with a retry.
       if (isExpectedAbsence(error)) {
-        missingDetail = t('performance.cycleNotFound')
+        missingDetail = t("performance.cycleNotFound");
       } else {
         detailError = {
-          message: t('performance.cycleLoadFailed'),
+          message: t("performance.cycleLoadFailed"),
           retryHref: performanceHref(preservedParams, {
             status: rawStatus,
             cycle: cycleId,
           }),
           retryLabel,
-        }
+        };
       }
     }
   }
 
-  let review: PerformancePageData['review'] = null
-  let missingReview: string | null = null
-  let reviewError: PerformancePageData['reviewError'] = null
-  let draftDrawer: AiDraftDrawerData | null = null
+  let review: PerformancePageData["review"] = null;
+  let missingReview: string | null = null;
+  let reviewError: PerformancePageData["reviewError"] = null;
+  let draftDrawer: AiDraftDrawerData | null = null;
   if (reviewId) {
     try {
       const full = await getReviewDetail({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         reviewId,
-      })
+      });
       // The goals read carries its own authority (subject, current
       // manager, or manage grant): an analyst with the read grant, or a
       // period-end reviewer who no longer manages the subject, may read
       // the review but not its goals. Their refusal narrows the drawer
       // to the review — it never fails the drawer with a Retry that
       // always fails. Anything else propagates to the load error below.
-      let goals: Awaited<ReturnType<typeof listGoals>> = []
+      let goals: Awaited<ReturnType<typeof listGoals>> = [];
       try {
         goals = await listGoals({
           orgId: authz.user.orgId,
           actorId: authz.user.id,
           employmentId: full.review.employmentId,
-        })
+        });
       } catch (error) {
-        if (!(error instanceof HrmAuthorizationError)) throw error
+        if (!(error instanceof HrmAuthorizationError)) throw error;
       }
       // Lifecycle affordances mirror the service's actor rules (the
       // endpoints stay authoritative): only the reviewer answers and
       // shares (a manager with the grant may also share), only the
       // subject acknowledges. Status-only checks offered every button
       // to readers who can only be refused.
-      const actorPartyId = (
-        await loadApprovalPerson(db, authz.user.orgId, authz.user.id)
-      ).partyId
-      const isReviewer =
-        actorPartyId !== null && full.review.reviewerPartyId === actorPartyId
-      const isSubject =
-        actorPartyId !== null && full.review.subjectPartyId === actorPartyId
+      const actorPartyId = (await loadApprovalPerson(db, authz.user.orgId, authz.user.id)).partyId;
+      const isReviewer = actorPartyId !== null && full.review.reviewerPartyId === actorPartyId;
+      const isSubject = actorPartyId !== null && full.review.subjectPartyId === actorPartyId;
       review = {
         id: full.review.id,
-        revision:full.review.revision,
-        draftSavedAt:full.review.draftSavedAt,
-        ratingScale:full.ratingScale,
-        instructions:full.instructions,
+        revision: full.review.revision,
+        draftSavedAt: full.review.draftSavedAt,
+        ratingScale: full.ratingScale,
+        instructions: full.instructions,
         kindLabel:
-          full.review.kind === 'self'
-            ? t('performance.kindSelf')
-            : full.review.kind === 'manager'
-              ? t('performance.kindManager')
-              : t('performance.kindPeer'),
+          full.review.kind === "self"
+            ? t("performance.kindSelf")
+            : full.review.kind === "manager"
+              ? t("performance.kindManager")
+              : t("performance.kindPeer"),
         statusLabel: reviewStatusLabel(t, full.review.status),
-        overallLabel: t('performance.overallRating'),
+        overallLabel: t("performance.overallRating"),
         overallRating: full.review.overallRating,
-        calibratedLabel: t('performance.calibratedRating'),
+        calibratedLabel: t("performance.calibratedRating"),
         calibratedRating: full.review.calibratedRating,
         calibrationReason: full.review.calibrationReason,
         answers: full.answers.map((a) => ({
@@ -806,127 +841,130 @@ export async function loadPerformancePage(
           statusLabel: goalStatusLabel(t, g.status),
           progress: g.progressPercent,
         })),
-        goalsTitle: t('performance.goalsTitle'),
-        goalsEmpty: t('performance.goalsEmpty'),
+        goalsTitle: t("performance.goalsTitle"),
+        goalsEmpty: t("performance.goalsEmpty"),
         canWriteGoals: isSubject || canManage,
         employmentId: full.review.employmentId,
-        canAnswer: isReviewer && full.review.status === 'pending' && full.review.cycleStatus === 'open',
+        canAnswer:
+          isReviewer && full.review.status === "pending" && full.review.cycleStatus === "open",
         canShare:
-          full.review.kind !== 'self' &&
-          (full.review.status === 'submitted' ||
-            full.review.status === 'calibrated') &&
+          full.review.kind !== "self" &&
+          (full.review.status === "submitted" || full.review.status === "calibrated") &&
           (isReviewer || canManage),
-        canAcknowledge: isSubject && full.review.status === 'shared',
+        canAcknowledge: isSubject && full.review.status === "shared",
         canCalibrate:
           canManage &&
-          full.review.kind === 'manager' &&
-          full.review.status === 'submitted' &&
-          (full.review.cycleStatus === 'open' || full.review.cycleStatus === 'calibrating'),
+          full.review.kind === "manager" &&
+          full.review.status === "submitted" &&
+          (full.review.cycleStatus === "open" || full.review.cycleStatus === "calibrating"),
         canReopen:
-          canManage &&
-          (full.review.status === 'submitted' ||
-            full.review.status === 'calibrated'),
-        submitLabel: t('performance.submitReview'),
-        shareLabel: t('performance.shareReview'),
-        acknowledgeLabel: t('performance.acknowledgeReview'),
-        calibrateLabel: t('performance.calibrateReview'),
-        reasonLabel: t('performance.reason'),
-        reopenLabel: t('performance.reopenReview'),
-        answerRatingLabel: t('performance.answerRating'),
-        answerTextLabel: t('performance.answerText'),
-        requiredLabel: t('performance.answerRequired'),
-        failed: t('performance.actionFailed'),
+          canManage && (full.review.status === "submitted" || full.review.status === "calibrated"),
+        submitLabel: t("performance.submitReview"),
+        shareLabel: t("performance.shareReview"),
+        acknowledgeLabel: t("performance.acknowledgeReview"),
+        calibrateLabel: t("performance.calibrateReview"),
+        reasonLabel: t("performance.reason"),
+        reopenLabel: t("performance.reopenReview"),
+        answerRatingLabel: t("performance.answerRating"),
+        answerTextLabel: t("performance.answerText"),
+        requiredLabel: t("performance.answerRequired"),
+        failed: t("performance.actionFailed"),
         cycleId: full.review.cycleId,
         closeHref: performanceHref(preservedParams, {
           status: rawStatus,
           cycle: cycleId,
         }),
         draft: null,
-      }
+      };
       // HR-21: "Draft from evidence" on the answer form. Manager and self
       // reviews draft from cycle goals and prior calibrated ratings; peer
       // reviews have no draft kind. Insert targets the first text field.
       const draftKind =
-        full.review.status === 'pending'
-          ? full.review.kind === 'manager'
-            ? 'review_manager'
-            : full.review.kind === 'self'
-              ? 'review_self'
+        full.review.status === "pending"
+          ? full.review.kind === "manager"
+            ? "review_manager"
+            : full.review.kind === "self"
+              ? "review_self"
               : null
-          : null
+          : null;
       const firstText = full.answers.find(
-        (a) => a.answerKind === 'text' || a.answerKind === 'rating_and_text',
-      )
-      const draftLabel =
-        draftKind && firstText ? await loadAiDraftButton(authz) : null
+        (a) => a.answerKind === "text" || a.answerKind === "rating_and_text",
+      );
+      const draftLabel = draftKind && firstText ? await loadAiDraftButton(authz) : null;
       const reviewHref = performanceHref(preservedParams, {
         status: rawStatus,
         cycle: full.review.cycleId,
         review: full.review.id,
-      })
+      });
       if (review && draftKind && firstText && draftLabel) {
         review.draft = {
           href: `${reviewHref}&draft=${draftKind}:${full.review.id}`,
           label: draftLabel,
-        }
+        };
       }
       draftDrawer = await loadAiDraftDrawer({
-        draftParam: typeof sp.draft === 'string' ? sp.draft : null,
+        draftParam: typeof sp.draft === "string" ? sp.draft : null,
         closeHref: reviewHref,
-        fieldId: firstText ? `text-${firstText.id}` : '',
-      })
+        fieldId: firstText ? `text-${firstText.id}` : "",
+      });
     } catch (error) {
       if (isExpectedAbsence(error)) {
-        missingReview = t('performance.reviewNotFound')
+        missingReview = t("performance.reviewNotFound");
       } else {
         reviewError = {
-          message: t('performance.reviewLoadFailed'),
+          message: t("performance.reviewLoadFailed"),
           retryHref: performanceHref(preservedParams, {
             status: rawStatus,
             cycle: cycleId,
             review: reviewId,
           }),
           retryLabel,
-        }
+        };
       }
     }
   }
 
-  let create: PerformancePageData['create'] = null
+  let create: PerformancePageData["create"] = null;
   if (creating) {
     const templates = await listReviewTemplates({
       orgId: authz.user.orgId,
       actorId: authz.user.id,
-    })
+    });
     create = {
-      title: t('performance.newCycle'),
+      title: t("performance.newCycle"),
       closeHref: performanceHref(preservedParams, { status: rawStatus }),
       templates: templates
         .filter((tpl) => tpl.isActive)
         .map((tpl) => ({ value: tpl.id, label: tpl.name })),
-      scopeOptions:await listCycleScopeOptions({orgId:authz.user.orgId,actorId:authz.user.id}),
-      initialTemplateId: templates.some((tpl) => tpl.id === sp.template && tpl.isActive) ? sp.template! : '',
-      emptyTemplates: t('performance.workspace.noReviewForms'),
-      templateLabel: t('performance.templateLabel'),
-      nameLabel: t('performance.newCycleName'),
-      startLabel: t('performance.periodStart'),
-      endLabel: t('performance.periodEnd'),
-      submitLabel: t('performance.createCycle'),
-      cancelLabel: t('performance.cancel'),
-      setupHint: t('performance.workspace.newReviewForm'),
-      setupHref: can(authz, 'admin.setup.manage') ? '/hrm/performance/templates?template=new' : null,
-      failed: t('performance.actionFailed'),
-    }
+      scopeOptions: await listCycleScopeOptions({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+      }),
+      initialTemplateId: templates.some((tpl) => tpl.id === sp.template && tpl.isActive)
+        ? sp.template!
+        : "",
+      emptyTemplates: t("performance.workspace.noReviewForms"),
+      templateLabel: t("performance.templateLabel"),
+      nameLabel: t("performance.newCycleName"),
+      startLabel: t("performance.periodStart"),
+      endLabel: t("performance.periodEnd"),
+      submitLabel: t("performance.createCycle"),
+      cancelLabel: t("performance.cancel"),
+      setupHint: t("performance.workspace.newReviewForm"),
+      setupHref: can(authz, "admin.setup.manage")
+        ? "/hrm/performance/templates?template=new"
+        : null,
+      failed: t("performance.actionFailed"),
+    };
   }
 
   // The exit drawer (?exit=<employmentId>): HR-only, opened from the
   // Retention gaps and the employee drawer. Readers see the record,
   // performance managers record and correct it.
-  const exitEmploymentId =
-    typeof sp.exit === 'string' && sp.exit.length > 0 ? sp.exit : null
-  let exit: PerformancePageData['exit'] = null
-  let missingExit: string | null = null
-  let exitError: PerformancePageData['exitError'] = null
+  const exitEmploymentId = typeof sp.exit === "string" && sp.exit.length > 0 ? sp.exit : null;
+  let exit: PerformancePageData["exit"] = null;
+  let missingExit: string | null = null;
+  let exitError: PerformancePageData["exitError"] = null;
   if (exitEmploymentId) {
     if (isUuid(exitEmploymentId) && (canRetain || canManage)) {
       try {
@@ -934,12 +972,12 @@ export async function loadPerformancePage(
           orgId: authz.user.orgId,
           actorId: authz.user.id,
           employmentId: exitEmploymentId,
-        })
-        const first = exits[0] ?? null
+        });
+        const first = exits[0] ?? null;
         exit = {
           employmentId: exitEmploymentId,
-          voluntaryLabel: t('performance.exitVoluntaryYes'),
-          involuntaryLabel: t('performance.exitVoluntaryNo'),
+          voluntaryLabel: t("performance.exitVoluntaryYes"),
+          involuntaryLabel: t("performance.exitVoluntaryNo"),
           existing: first
             ? {
                 id: first.id,
@@ -953,19 +991,19 @@ export async function loadPerformancePage(
               }
             : null,
           canRecord: canManage,
-          title: t('performance.exitTitle'),
+          title: t("performance.exitTitle"),
           closeHref: performanceHref(preservedParams, {
             status: rawStatus,
             cycle: cycleId,
             review: reviewId,
           }),
-        }
+        };
       } catch (error) {
         if (isExpectedAbsence(error)) {
-          missingExit = t('performance.exitNotFound')
+          missingExit = t("performance.exitNotFound");
         } else {
           exitError = {
-            message: t('performance.exitLoadFailed'),
+            message: t("performance.exitLoadFailed"),
             retryHref: performanceHref(preservedParams, {
               status: rawStatus,
               cycle: cycleId,
@@ -973,76 +1011,72 @@ export async function loadPerformancePage(
               exit: exitEmploymentId,
             }),
             retryLabel,
-          }
+          };
         }
       }
     } else {
-      missingExit = t('performance.exitNotFound')
+      missingExit = t("performance.exitNotFound");
     }
   }
 
-  let retention: PerformancePageData['retention'] = null
-  if (canRetain && continuous.tab === 'retention') {
+  let retention: PerformancePageData["retention"] = null;
+  if (canRetain && continuous.tab === "retention") {
     const overview = await getRetentionOverview({
       orgId: authz.user.orgId,
       actorId: authz.user.id,
-    })
-    const trailing = overview.trailingTwelveMonths
+    });
+    const trailing = overview.trailingTwelveMonths;
     retention = {
       queueLinks: [
         {
-          href: '/hrm/performance?tab=retention',
-          label: t('performance.workspace.exitRecords'),
-          iconKey: 'list-checks',
+          href: "/hrm/performance?tab=retention",
+          label: t("performance.workspace.exitRecords"),
+          iconKey: "list-checks",
           badge: {
             value: String(overview.missingExitRecords.length),
-            tone: overview.missingExitRecords.length ? 'warning' : 'positive',
+            tone: overview.missingExitRecords.length ? "warning" : "positive",
           },
         },
         {
-          href: '/hrm/performance?tab=retention&queue=interviews',
-          label: t('performance.workspace.exitInterviews'),
-          iconKey: 'clipboard-check',
+          href: "/hrm/performance?tab=retention&queue=interviews",
+          label: t("performance.workspace.exitInterviews"),
+          iconKey: "clipboard-check",
           badge: {
             value: String(overview.exitRecordsWithoutInterview.length),
-            tone: overview.exitRecordsWithoutInterview.length
-              ? 'warning'
-              : 'positive',
+            tone: overview.exitRecordsWithoutInterview.length ? "warning" : "positive",
           },
         },
       ],
       queueLabel: t(
-        sp.queue === 'interviews'
-          ? 'performance.workspace.exitInterviews'
-          : 'performance.workspace.exitRecords',
+        sp.queue === "interviews"
+          ? "performance.workspace.exitInterviews"
+          : "performance.workspace.exitRecords",
       ),
       missingCount: overview.missingExitRecords.length,
-      title: t('retention.title'),
-      turnoverLabel: t('retention.turnoverTwelveMonths'),
+      title: t("retention.title"),
+      turnoverLabel: t("retention.turnoverTwelveMonths"),
       turnoverValue:
         trailing?.turnoverRate === null || trailing?.turnoverRate === undefined
-          ? '—'
+          ? "—"
           : `${(trailing.turnoverRate * 100).toFixed(1)}%`,
-      regrettableLabel: t('retention.regrettableLeavers'),
+      regrettableLabel: t("retention.regrettableLeavers"),
       regrettableValue: String(overview.regrettableLeavers),
-      gapsTitle: t('retention.missingExits'),
-      interviewQueue: sp.queue === 'interviews',
+      gapsTitle: t("retention.missingExits"),
+      interviewQueue: sp.queue === "interviews",
       gapsEmpty: t(
-        sp.queue === 'interviews'
-          ? 'retention.noInterviewEmpty'
-          : 'retention.noMissingExits',
+        sp.queue === "interviews" ? "retention.noInterviewEmpty" : "retention.noMissingExits",
       ),
-      departmentLabel: t('home.groups.department'),
+      departmentLabel: t("home.groups.department"),
       gaps:
-        sp.queue === 'interviews'
+        sp.queue === "interviews"
           ? overview.exitRecordsWithoutInterview.map((g) => ({
               employmentHref: performanceHref(
-                { ...preservedParams, queue: 'interviews' },
+                { ...preservedParams, queue: "interviews" },
                 { status: rawStatus, exit: g.employmentId },
               ),
               employmentLabel: g.workerName,
-              departmentLabel: '—',
-              terminatedFrom: '—',
+              departmentLabel: "—",
+              terminatedFrom: "—",
             }))
           : overview.missingExitRecords.map((g) => ({
               employmentHref: performanceHref(preservedParams, {
@@ -1050,50 +1084,97 @@ export async function loadPerformancePage(
                 exit: g.employmentId,
               }),
               employmentLabel: g.workerName,
-              departmentLabel: g.departmentName ?? '—',
+              departmentLabel: g.departmentName ?? "—",
               terminatedFrom: g.terminatedFrom,
             })),
-      noInterviewTitle: t('retention.noInterviewTitle'),
+      noInterviewTitle: t("retention.noInterviewTitle"),
       noInterviewCount: overview.exitRecordsWithoutInterview.length,
-    }
+    };
   }
 
   return {
     reviewsTab,
-    reviewFilters:[{paramKey:'reviewStatus',label:tw('status'),allLabel:tw('allStatuses'),options:['pending','submitted','calibrated','shared','acknowledged'].map(value=>({value,label:reviewStatusLabel(t,value)}))},{paramKey:'reviewScope',label:tw('view'),allLabel:tw('allVisible'),options:[{value:'mine',label:tw('myReviews')},{value:'received',label:tw('receivedReviews')}]},{paramKey:'reviewCycle',label:tw('cycle'),allLabel:tw('allCycles'),options:Array.from(new Map(worklist.map(r=>[r.cycleId,{value:r.cycleId,label:r.cycle}])).values())}],
-    reviewRows:worklist.filter(r=>(!sp.reviewStatus||r.status===sp.reviewStatus)&&(!sp.reviewCycle||r.cycleId===sp.reviewCycle)&&(!sp.reviewScope||(sp.reviewScope==='mine'?r.isReviewer:r.isSubject))).map(r=>({...r,kind:t('performance.kind'+r.kind[0]!.toUpperCase()+r.kind.slice(1)),status:reviewStatusLabel(t,r.status),due:r.due??'—',href:performanceHref(preservedParams,{review:r.id})})),
-    reviewColumns:{employee:tw('employee'),reviewer:tw('reviewer'),cycle:tw('cycle'),kind:tw('reviewType'),status:tw('status'),due:tw('due')},
-    templatesLabel: tw('templates'),
-    title: reviewsTab?tw('reviews'):cyclesTab?tw('manageReviews'):t('performance.title'),
+    reviewFilters: [
+      {
+        paramKey: "reviewStatus",
+        label: tw("status"),
+        allLabel: tw("allStatuses"),
+        options: ["pending", "submitted", "calibrated", "shared", "acknowledged"].map((value) => ({
+          value,
+          label: reviewStatusLabel(t, value),
+        })),
+      },
+      {
+        paramKey: "reviewScope",
+        label: tw("view"),
+        allLabel: tw("allVisible"),
+        options: [
+          { value: "mine", label: tw("myReviews") },
+          { value: "received", label: tw("receivedReviews") },
+        ],
+      },
+      {
+        paramKey: "reviewCycle",
+        label: tw("cycle"),
+        allLabel: tw("allCycles"),
+        options: Array.from(
+          new Map(worklist.map((r) => [r.cycleId, { value: r.cycleId, label: r.cycle }])).values(),
+        ),
+      },
+    ],
+    reviewRows: worklist
+      .filter(
+        (r) =>
+          (!sp.reviewStatus || r.status === sp.reviewStatus) &&
+          (!sp.reviewCycle || r.cycleId === sp.reviewCycle) &&
+          (!sp.reviewScope || (sp.reviewScope === "mine" ? r.isReviewer : r.isSubject)),
+      )
+      .map((r) => ({
+        ...r,
+        kind: t("performance.kind" + r.kind[0]!.toUpperCase() + r.kind.slice(1)),
+        status: reviewStatusLabel(t, r.status),
+        due: r.due ?? "—",
+        href: performanceHref(preservedParams, { review: r.id }),
+      })),
+    reviewColumns: {
+      employee: tw("employee"),
+      reviewer: tw("reviewer"),
+      cycle: tw("cycle"),
+      kind: tw("reviewType"),
+      status: tw("status"),
+      due: tw("due"),
+    },
+    templatesLabel: tw("templates"),
+    title: reviewsTab ? tw("reviews") : cyclesTab ? tw("manageReviews") : t("performance.title"),
     description:
       continuous.calibration?.description ??
       continuous.talent?.description ??
-      (continuous.tab === 'retention'
-        ? t('retention.workspaceDescription')
-        : t('performance.description')),
+      (continuous.tab === "retention"
+        ? t("retention.workspaceDescription")
+        : t("performance.description")),
     tabs,
     canManage,
-    showCreate: canManage && (cyclesTab || continuous.tab === 'calibration'),
+    showCreate: canManage && (cyclesTab || continuous.tab === "calibration"),
     canRetain,
-    addLabel: continuous.calibration?.newLabel ?? t('performance.newCycle'),
+    addLabel: continuous.calibration?.newLabel ?? t("performance.newCycle"),
     addHref:
       continuous.calibration?.newHref ??
-      performanceHref(preservedParams, { status: rawStatus, cycle: 'new' }),
-    basePath: '/hrm/performance',
-    segmentsLabel: t('performance.segmentsLabel'),
-    allLabel: t('performance.allCycles'),
+      performanceHref(preservedParams, { status: rawStatus, cycle: "new" }),
+    basePath: "/hrm/performance",
+    segmentsLabel: t("performance.segmentsLabel"),
+    allLabel: t("performance.allCycles"),
     segmentOptions,
     currentParams: preservedParams,
     columns: {
-      name: t('performance.colName'),
-      period: t('performance.colPeriod'),
-      template: t('performance.colTemplate'),
-      self: t('performance.colSelf'),
-      manager: t('performance.colManager'),
-      status: t('performance.colStatus'),
+      name: t("performance.colName"),
+      period: t("performance.colPeriod"),
+      template: t("performance.colTemplate"),
+      self: t("performance.colSelf"),
+      manager: t("performance.colManager"),
+      status: t("performance.colStatus"),
     },
     rows,
-    empty: reviewsTab?tw('noReviews'):t('performance.empty'),
+    empty: reviewsTab ? tw("noReviews") : t("performance.empty"),
     detail,
     missingDetail,
     detailError,
@@ -1106,37 +1187,29 @@ export async function loadPerformancePage(
     missingExit,
     exitError,
     drawerOpen:
-      !sp.review && (detail !== null ||
-      missingDetail !== null ||
-      detailError !== null ||
-      creating),
-    reviewOpen:
-      review !== null || missingReview !== null || reviewError !== null,
+      !sp.review && (detail !== null || missingDetail !== null || detailError !== null || creating),
+    reviewOpen: review !== null || missingReview !== null || reviewError !== null,
     exitOpen: exit !== null || missingExit !== null || exitError !== null,
     cyclesTab,
     continuous,
     draftDrawer,
     draftDrawerOpen: draftDrawer !== null,
-  }
+  };
 }
 
 function reviewStatusLabel(t: (key: string) => string, status: string): string {
-  return status === 'pending'
-    ? t('performance.reviewPending')
-    : status === 'submitted'
-      ? t('performance.reviewSubmitted')
-      : status === 'calibrated'
-        ? t('performance.reviewCalibrated')
-        : status === 'shared'
-          ? t('performance.reviewShared')
-          : t('performance.reviewAcknowledged')
+  return status === "pending"
+    ? t("performance.reviewPending")
+    : status === "submitted"
+      ? t("performance.reviewSubmitted")
+      : status === "calibrated"
+        ? t("performance.reviewCalibrated")
+        : status === "shared"
+          ? t("performance.reviewShared")
+          : t("performance.reviewAcknowledged");
 }
 
 function goalStatusLabel(t: (key: string) => string, status: string): string {
-  const known = new Set(['active', 'achieved', 'missed', 'cancelled'])
-  return t(
-    known.has(status)
-      ? `me.goalStatus.${status}`
-      : 'me.goalStatus.unknown',
-  )
+  const known = new Set(["active", "achieved", "missed", "cancelled"]);
+  return t(known.has(status) ? `me.goalStatus.${status}` : "me.goalStatus.unknown");
 }

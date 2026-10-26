@@ -1,10 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  buildFilingCalendar,
-  type FilingFrequency,
-  type FilingObligation,
-} from "./nexus.ts";
+import { buildFilingCalendar, type FilingFrequency, type FilingObligation } from "./nexus.ts";
 
 /** Load the org's active registrations and expand them into filing obligations. */
 export async function loadOrgFilingCalendar(
@@ -12,21 +8,22 @@ export async function loadOrgFilingCalendar(
   rangeFrom: string,
   rangeTo: string,
 ): Promise<FilingObligation[]> {
-  const rows = (await db.execute<{
-    id: string
-    subsidiary_id: string | null
-    subsidiary_name: string | null
-    jurisdiction_id: string
-    jurisdiction_name: string
-    jurisdiction_code: string
-    country: string
-    filing_frequency: FilingFrequency
-    filing_period_start_month: number
-    return_form_code: string | null
-    registration_number: string | null
-    effective_from: string | null
-    effective_to: string | null
-  }>(sql`
+  const rows = await db.execute<{
+    id: string;
+    subsidiary_id: string | null;
+    subsidiary_name: string | null;
+    jurisdiction_id: string;
+    jurisdiction_name: string;
+    jurisdiction_code: string;
+    country: string;
+    filing_frequency: FilingFrequency;
+    filing_period_start_month: number;
+    return_form_code: string | null;
+    registration_number: string | null;
+    effective_from: string | null;
+    effective_to: string | null;
+  }>(
+    sql`
     select r.id, r.subsidiary_id, s.name as subsidiary_name, r.jurisdiction_id, j.name as jurisdiction_name, j.code as jurisdiction_code,
            j.country, r.filing_frequency, r.filing_period_start_month, r.return_form_code, r.registration_number,
            r.effective_from::text, r.effective_to::text
@@ -34,7 +31,9 @@ export async function loadOrgFilingCalendar(
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
       left join subsidiaries s on s.org_id=r.org_id and s.id=r.subsidiary_id
      where r.org_id = ${orgId} and r.is_active
-  `, "objects"));
+  `,
+    "objects",
+  );
   return buildFilingCalendar(
     rows.map((r) => ({
       registrationId: r.id,
@@ -55,4 +54,3 @@ export async function loadOrgFilingCalendar(
     rangeTo,
   );
 }
-

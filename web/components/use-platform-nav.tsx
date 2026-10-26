@@ -14,9 +14,5 @@ import type { SidebarNavGroup } from "./sidebar-nav";
 export function useNavGroups(groups: SidebarNavGroup[]): SidebarNavGroup[] {
   const t = useTranslations("platform");
   const platformNav = createOpenBooksPlatformNav(t);
-  return selectPlatformNav(
-    usePathname() ?? "",
-    groups,
-    platformNav.groups as SidebarNavGroup[],
-  );
+  return selectPlatformNav(usePathname() ?? "", groups, platformNav.groups as SidebarNavGroup[]);
 }

@@ -1,15 +1,25 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const webhooks: DocArticle = {
-  slug: 'webhooks',
-  title: 'Webhooks',
-  category: 'administration',
+  slug: "webhooks",
+  title: "Webhooks",
+  category: "administration",
   order: 13,
   summary:
-    'Subscribe URLs to signed domain events — postings, payments, customers, stock — with retried delivery, signature verification, rotation, and an automation action.',
-  updated: '2026-10-05',
-  keywords: ['webhook', 'endpoint', 'signature', 'HMAC', 'delivery', 'retry', 'rotation', 'subscriber', 'domain event'],
-  related: ['automations', 'app-api-reference', 'setup-company-group'],
+    "Subscribe URLs to signed domain events — postings, payments, customers, stock — with retried delivery, signature verification, rotation, and an automation action.",
+  updated: "2026-10-05",
+  keywords: [
+    "webhook",
+    "endpoint",
+    "signature",
+    "HMAC",
+    "delivery",
+    "retry",
+    "rotation",
+    "subscriber",
+    "domain event",
+  ],
+  related: ["automations", "app-api-reference", "setup-company-group"],
   body: `# Webhooks
 
 Webhooks deliver signed domain events to subscriber URLs: postings and voids, payments received, item and customer updates, overdue invoices, stock availability changes, subscription changes, and storefront order exceptions. Each delivery POSTs a JSON envelope and retries with backoff when the receiver is down, so integrations stay in sync without polling.
@@ -78,4 +88,4 @@ def verify_webhook(secret: str, raw_body: bytes, signature: str) -> bool:
 
 Automation recipes gain a **webhook** action (the builder offers it once the feature is on). The action names the subscriber by its endpoint key — **endpointKey** — and the run delivers the recipe event through the same signed transport, with the same retries and run-log rows. When the feature is off or the endpoint is missing or disabled, the run refuses naming Settings → Developers → Webhooks as the remedy.
 `,
-}
+};

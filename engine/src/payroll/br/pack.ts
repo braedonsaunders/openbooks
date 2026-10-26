@@ -43,7 +43,8 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
     example: "123.456.789-09",
     requiredForPayroll: true,
     neededFor: "eSocial",
-    citation: "Receita Federal (CPF): an 11-digit Cadastro de Pessoas Físicas number, presented 000.000.000-00",
+    citation:
+      "Receita Federal (CPF): an 11-digit Cadastro de Pessoas Físicas number, presented 000.000.000-00",
     numericEntry: false,
   },
   installable: true,
@@ -63,8 +64,8 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
     regionNames: { BR: "Brazil" },
     supported: ["BR"],
     unsupportedReason:
-      "income tax withholding for {region} is not implemented: the national IRRF table does not compute end to end. "
-      + "This region is not yet supported by the BR pack; contact support.",
+      "income tax withholding for {region} is not implemented: the national IRRF table does not compute end to end. " +
+      "This region is not yet supported by the BR pack; contact support.",
   },
   jurisdictions: BR_JURISDICTIONS,
   // Two destinations share the money — Receita Federal takes IRRF (DARF),
@@ -82,7 +83,8 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
   retroactivePayTreatment: "periodic",
   contributoryBases: {
     pensionable: "salário-de-contribuição mensal (INSS, EC 103/2019, teto R$ 8.475,55 em 2026)",
-    insurable: "remuneração mensal (FGTS, Lei 8.036/1990 art. 15; contribuição patronal, Lei 8.212/1991 art. 22)",
+    insurable:
+      "remuneração mensal (FGTS, Lei 8.036/1990 art. 15; contribuição patronal, Lei 8.212/1991 art. 22)",
   },
   // Union dues open no withholding treatment: contribuição assistencial is a
   // consensual deduction, never a statutory one.
@@ -102,7 +104,15 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
         // Lei 9.250/1995 art. 3º-A + monthly table on the base AFTER the
         // art. 4º/10 deductions — a pre-tax protected deduction moves it, so
         // taxable_income, re-derived every fixpoint pass like T4127-T/FIT.
-        { code: "IRRF", name: "IRRF", systemKey: "irrf", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "IRRF",
+          name: "IRRF",
+          systemKey: "irrf",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -110,17 +120,49 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
       components: [
         // EC 103/2019 progressive slices × salary-de-contribuição to the
         // teto — no deduction enters the formula.
-        { code: "INSS", name: "INSS (segurado)", systemKey: "inss", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "INSS",
+          name: "INSS (segurado)",
+          systemKey: "inss",
+          kind: "deduction",
+          sequence: 120,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
         // Lei 8.212/1991 art. 22, I: 20% on total remuneration, no teto.
         // Distinct systemKey from the employee share — the engine pushes
         // inss_patronal, never employer-side inss.
-        { code: "INSS-ER", name: "INSS patronal (20%)", systemKey: "inss_patronal", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "INSS-ER",
+          name: "INSS patronal (20%)",
+          systemKey: "inss_patronal",
+          kind: "employer_contribution",
+          sequence: 210,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
         // Art. 22, II × FAP (Lei 10.666/2003 art. 10): the br_rat/br_fap
         // tenant slots. Refused at lookup when undeclared, never guessed.
-        { code: "RAT-ER", name: "RAT × FAP", systemKey: "inss_rat", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "RAT-ER",
+          name: "RAT × FAP",
+          systemKey: "inss_rat",
+          kind: "employer_contribution",
+          sequence: 211,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
         // Terceiros (Sistema S / salário-educação / INCRA): the br_terceiros
         // tenant slot for the establishment's FPAS code.
-        { code: "TERC-ER", name: "Terceiros", systemKey: "inss_terceiros", kind: "employer_contribution", sequence: 212, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "TERC-ER",
+          name: "Terceiros",
+          systemKey: "inss_terceiros",
+          kind: "employer_contribution",
+          sequence: 212,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -129,7 +171,15 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
         // Lei 8.036/1990 art. 15: 8% deposited to the worker's linked
         // account — an employer obligation, NOT withheld. external with a
         // per-component destination (the Caixa party), like ES's TGSS lines.
-        { code: "FGTS", name: "FGTS (8%)", systemKey: "fgts", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "FGTS",
+          name: "FGTS (8%)",
+          systemKey: "fgts",
+          kind: "employer_contribution",
+          sequence: 220,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -140,8 +190,24 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
         // employer INSS contributions due (eSocial S-1200) — the IT
         // refundable-credit shape: a worker credit plus the offsetting
         // employer line on the tax rail, both earnings-assessed.
-        { code: "SF", name: "Salário-família", systemKey: "salario_familia", kind: "credit", sequence: 121, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "SF-COMP", name: "Salário-família (compensação)", systemKey: "salario_familia_comp", kind: "employer_contribution", sequence: 213, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "SF",
+          name: "Salário-família",
+          systemKey: "salario_familia",
+          kind: "credit",
+          sequence: 121,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "SF-COMP",
+          name: "Salário-família (compensação)",
+          systemKey: "salario_familia_comp",
+          kind: "employer_contribution",
+          sequence: 213,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
   ],

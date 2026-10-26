@@ -92,7 +92,10 @@ export function parseFlowEmailPayload(raw: unknown): FlowEmailPayload {
     parsedReplyTo = replyTo;
   }
   return {
-    to, subject, html, text,
+    to,
+    subject,
+    html,
+    text,
     ...(attachments ? { attachments } : {}),
     ...(meta ? { meta } : {}),
     ...(parsedReplyTo ? { replyTo: parsedReplyTo } : {}),
@@ -139,7 +142,8 @@ export async function enqueueFlowEmail(input: {
       { cause: error },
     );
   }
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into scheduler_outbox
       (org_id, kind, subject_id, occurrence_key, status, next_attempt_at, payload)
     values (${input.orgId}, 'flow_email', ${input.runId}, ${input.occurrenceKey}, 'pending', now(),
@@ -147,7 +151,9 @@ export async function enqueueFlowEmail(input: {
     -- The existing occurrence already owns this email; false reports that no new delivery was queued.
     on conflict (kind, occurrence_key) do nothing
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return inserted.length > 0;
 }
 export function schedulerOutboxBackoffMs(attemptCount: number): number {
@@ -169,13 +175,16 @@ export async function enqueueApprovalEscalation(input: {
   orgId: string;
   gateId: string;
 }): Promise<string | null> {
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into scheduler_outbox
       (org_id, kind, subject_id, occurrence_key, status, next_attempt_at)
     values (${input.orgId}, 'approval_escalation', ${input.gateId}, ${input.gateId}, 'pending', now())
     -- The existing gate occurrence already owns its escalation; null reports a duplicate enqueue.
     on conflict (kind, occurrence_key) do nothing
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return inserted[0]?.id ?? null;
 }

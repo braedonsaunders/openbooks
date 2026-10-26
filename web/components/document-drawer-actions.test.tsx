@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -13,7 +13,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -62,7 +70,9 @@ const AP_CLOSED = "AP is closed for this period and accounting book";
 function scriptFetch(handler: (url: string) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -70,7 +80,9 @@ function scriptFetch(handler: (url: string) => Response | null) {
   };
 }
 
-async function mountApprovedBill(options: { status?: string; effectStatus?: string; canPost?: boolean } = {}) {
+async function mountApprovedBill(
+  options: { status?: string; effectStatus?: string; canPost?: boolean } = {},
+) {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   globalThis.__drawerToasts = [];
   const host = document.createElement("div");
@@ -113,7 +125,13 @@ async function mountApprovedBill(options: { status?: string; effectStatus?: stri
             lineDefs={[]}
             canCreate
             canPost={options.canPost ?? true}
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "post", visible: true }],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -170,7 +188,13 @@ async function mountPostedInvoice(settlementHref: string | null) {
             canCreate
             canPost
             settlementHref={settlementHref}
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "post", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "post", visible: true }],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -183,7 +207,9 @@ async function mountPostedInvoice(settlementHref: string | null) {
 }
 
 async function openActionsMenu() {
-  const actions = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("Actions"));
+  const actions = [...document.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("Actions"),
+  );
   assert.ok(actions, "Actions menu must render");
   await act(async () => {
     actions.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -196,7 +222,9 @@ async function openActionsMenu() {
 test("a posted invoice with a settlement link offers Receive payment", async (t) => {
   const restore = scriptFetch(() => null);
   t.after(restore);
-  const { host, root } = await mountPostedInvoice("/receipts?paymentNew=1&mode=edit&partyId=p&applyTo=d");
+  const { host, root } = await mountPostedInvoice(
+    "/receipts?paymentNew=1&mode=edit&partyId=p&applyTo=d",
+  );
   t.after(async () => {
     await act(async () => {
       root.unmount();
@@ -240,7 +268,9 @@ async function clickPost() {
   // The record actions live behind the Actions popover.
   // The drawer shell portals to document.body, outside the mount host.
   const labels = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim());
-  const actions = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("Actions"));
+  const actions = [...document.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("Actions"),
+  );
   assert.ok(actions, `Actions menu must render (buttons: ${JSON.stringify(labels)})`);
   await act(async () => {
     actions.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -280,28 +310,45 @@ test("a 422 post refusal persists as a drawer-header alert", async (t) => {
   assert.equal(errors.length, 1, "the toast still fires alongside the persistent alert");
 });
 
-
 test("posted documents offer a posting-effect retry only for authorized terminal failures", async () => {
   const restore = scriptFetch(() => null);
   try {
     for (const [effectStatus, canPost, retry] of [
-      ['pending', true, false],
-      ['running', true, false],
-      ['failed', true, false],
-      ['terminal_failed', true, true],
-      ['terminal_failed', false, false],
-      ['succeeded', true, false],
+      ["pending", true, false],
+      ["running", true, false],
+      ["failed", true, false],
+      ["terminal_failed", true, true],
+      ["terminal_failed", false, false],
+      ["succeeded", true, false],
     ] as const) {
-      const { host, root } = await mountApprovedBill({ status: 'posted', effectStatus, canPost });
+      const { host, root } = await mountApprovedBill({ status: "posted", effectStatus, canPost });
       try {
-        const actions = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Actions'));
-        assert.ok(actions, 'Actions menu must render');
-        await act(async () => { actions.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await tick(); });
-        assert.equal([...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Retry posting effects'), retry);
-        assert.ok(!document.body.textContent?.includes('Posting effects'), 'posting-effect status is not rendered as drawer content');
-      } finally { await act(async () => root.unmount()); host.remove(); }
+        const actions = [...document.querySelectorAll("button")].find((button) =>
+          button.textContent?.includes("Actions"),
+        );
+        assert.ok(actions, "Actions menu must render");
+        await act(async () => {
+          actions.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+          await tick();
+        });
+        assert.equal(
+          [...document.querySelectorAll("button")].some(
+            (button) => button.textContent?.trim() === "Retry posting effects",
+          ),
+          retry,
+        );
+        assert.ok(
+          !document.body.textContent?.includes("Posting effects"),
+          "posting-effect status is not rendered as drawer content",
+        );
+      } finally {
+        await act(async () => root.unmount());
+        host.remove();
+      }
     }
-  } finally { restore(); }
+  } finally {
+    restore();
+  }
 });
 
 async function mountEditingBill(options: { canCustomize?: boolean } = {}) {
@@ -379,7 +426,9 @@ test("editing a bill without the designer grant offers no Actions button", async
     host.remove();
   });
   assert.ok(
-    [...document.querySelectorAll("button")].some((b) => ["Save", "Save draft"].includes(b.textContent?.trim() ?? "")),
+    [...document.querySelectorAll("button")].some((b) =>
+      ["Save", "Save draft"].includes(b.textContent?.trim() ?? ""),
+    ),
     "the bill is really being edited (Save is primary)",
   );
   assert.equal(actionsButton(), undefined, "no empty Actions popover is offered while editing");

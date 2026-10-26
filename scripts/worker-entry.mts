@@ -12,7 +12,10 @@ import { sql } from "drizzle-orm";
 import { FEATURE_BY_KEY } from "@openbooks/engine/organization/feature-registry";
 import { registerWorkerDuty } from "@openbooks/engine/scheduling/duties";
 import { installEngineSeams } from "@openbooks/engine/composition/install";
-import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "@openbooks/engine/automations/tick";
+import {
+  AUTOMATION_TICK_LOCK_KEY,
+  runAutomationTickClaimed,
+} from "@openbooks/engine/automations/tick";
 import { runQualificationAlertScan } from "@openbooks/engine/hrm/qualifications/alerts";
 import { maintainPatternAssignments } from "@openbooks/engine/schedule-boards/pattern-store";
 import { maintainServiceAgreements } from "@openbooks/engine/service/agreements";
@@ -20,8 +23,17 @@ import { runMaintenanceAlertScan } from "@openbooks/engine/assets/asset-maintena
 import { runInsuranceRenewalScan } from "@openbooks/engine/assets/asset-insurance";
 import { runAssetProposalScanDuty } from "@openbooks/engine/assets/asset-proposals";
 import { SYSTEM_ACTOR_ID } from "@openbooks/engine/banking/banking";
-import { activeRetentionRuleIdsForDuty, evaluateRetentionRule } from "@openbooks/engine/hrm/recruiting/retention";
-import { db, pool, withBypassContext, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
+import {
+  activeRetentionRuleIdsForDuty,
+  evaluateRetentionRule,
+} from "@openbooks/engine/hrm/recruiting/retention";
+import {
+  db,
+  pool,
+  withBypassContext,
+  withOrgContext,
+  withOrgTransaction,
+} from "@openbooks/engine/platform/db";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { runRetentionTick } from "@openbooks/engine/hrm/documents/retention";
 import { drainExportQueue } from "@openbooks/engine/hrm/documents/dsar";
@@ -40,11 +52,7 @@ import { writeNotification } from "@openbooks/engine/inbox/adapters/notification
 import { recoverStaleApCaptureClaims } from "@openbooks/engine/payables/ap-capture-service";
 import { recoverUnenqueuedApCaptures } from "@openbooks/engine/payables/ap-capture-dispatch";
 import { drainStorageCleanupOutbox } from "@openbooks/engine/platform/storage-cleanup";
-import {
-  deriveEmailDeliveryKey,
-  hrmSignatureRequestEmail,
-  sendVia,
-} from "@openbooks/emails";
+import { deriveEmailDeliveryKey, hrmSignatureRequestEmail, sendVia } from "@openbooks/emails";
 
 /**
  * HRM document and recruiting duties (one scanner per key; the registry
@@ -84,10 +92,13 @@ async function orgsWithFeature(feature: string): Promise<string[]> {
   );
   // bypass: scheduler-tick — the duty runner lists every organization with the feature enabled.
   const rows = await withBypassContext(() =>
-    db.execute<{ id: string }>(sql`
+    db.execute<{ id: string }>(
+      sql`
       select id from orgs
        where ${sql.join(links, sql` and `)}
-    `, "objects"),
+    `,
+      "objects",
+    ),
   );
   return rows.map((r) => r.id);
 }
@@ -110,11 +121,19 @@ export async function runHrmOrganizationDuty(
         await run(orgId, await businessToday(orgId));
       });
     } catch (cause) {
-      failures.push(new Error(`organization ${orgId}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause }));
+      failures.push(
+        new Error(
+          `organization ${orgId}: ${cause instanceof Error ? cause.message : String(cause)}`,
+          { cause },
+        ),
+      );
     }
   }
   if (failures.length) {
-    throw new AggregateError(failures, `${key} failed: ${failures.map((error) => error.message).join("; ")}`);
+    throw new AggregateError(
+      failures,
+      `${key} failed: ${failures.map((error) => error.message).join("; ")}`,
+    );
   }
 }
 
@@ -135,10 +154,12 @@ async function withOrgClaim(
   const client = await pool.connect();
   let acquired = false;
   try {
-    const row = (await client.query<{ locked: boolean }>(
-      "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
-      [`${key}:${orgId}:${today}`],
-    )).rows[0];
+    const row = (
+      await client.query<{ locked: boolean }>(
+        "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
+        [`${key}:${orgId}:${today}`],
+      )
+    ).rows[0];
     acquired = row?.locked === true;
     if (!acquired) return;
     await fn();
@@ -184,31 +205,47 @@ export async function runRecruitingRetentionDuty(): Promise<void> {
           console.log(`[worker] hrm-candidate-retention ${orgId}/${ruleId}/${today}: ${run.id}`);
         });
       } catch (cause) {
-        failures.push(new Error(`retention rule ${ruleId}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause }));
+        failures.push(
+          new Error(
+            `retention rule ${ruleId}: ${cause instanceof Error ? cause.message : String(cause)}`,
+            { cause },
+          ),
+        );
       }
     }
-    if (failures.length) throw new AggregateError(failures, failures.map((error) => error.message).join("; "));
+    if (failures.length)
+      throw new AggregateError(failures, failures.map((error) => error.message).join("; "));
   });
 }
 
 /** Keep recurring shift patterns generated through their horizons as the calendar advances. */
 export async function runSchedulePatternDuty(): Promise<void> {
-  await runHrmOrganizationDuty("schedule-pattern-maintenance", "hrmShiftPlanning", async (orgId, today) => {
-    await withOrgClaim("schedule-pattern-maintenance", orgId, today, async () => {
-      const result = await maintainPatternAssignments(orgId);
-      if (result.assignments > 0) console.log(`[worker] schedule-pattern-maintenance ${orgId}: ${JSON.stringify(result)}`);
-    });
-  });
+  await runHrmOrganizationDuty(
+    "schedule-pattern-maintenance",
+    "hrmShiftPlanning",
+    async (orgId, today) => {
+      await withOrgClaim("schedule-pattern-maintenance", orgId, today, async () => {
+        const result = await maintainPatternAssignments(orgId);
+        if (result.assignments > 0)
+          console.log(`[worker] schedule-pattern-maintenance ${orgId}: ${JSON.stringify(result)}`);
+      });
+    },
+  );
 }
 
 /** Keep recurring service agreements generated through their horizons as the calendar advances. */
 export async function runServiceAgreementDuty(): Promise<void> {
-  await runHrmOrganizationDuty("service-agreement-maintenance", "serviceDispatch", async (orgId, today) => {
-    await withOrgClaim("service-agreement-maintenance", orgId, today, async () => {
-      const result = await maintainServiceAgreements(orgId);
-      if (result.generated > 0 || result.failures.length) console.log(`[worker] service-agreement-maintenance ${orgId}: ${JSON.stringify(result)}`);
-    });
-  });
+  await runHrmOrganizationDuty(
+    "service-agreement-maintenance",
+    "serviceDispatch",
+    async (orgId, today) => {
+      await withOrgClaim("service-agreement-maintenance", orgId, today, async () => {
+        const result = await maintainServiceAgreements(orgId);
+        if (result.generated > 0 || result.failures.length)
+          console.log(`[worker] service-agreement-maintenance ${orgId}: ${JSON.stringify(result)}`);
+      });
+    },
+  );
 }
 
 export async function runDsarDuty(): Promise<void> {
@@ -226,16 +263,31 @@ export async function runReminderDuty(): Promise<void> {
       await withOrgTransaction(orgId, async () => {
         const due = await dueReminderSigners(db, orgId, 3);
         for (const signer of due) {
-          const user = (await db.execute<{ id: string; email: string }>(sql`
+          const user = (
+            await db.execute<{ id: string; email: string }>(
+              sql`
             select id, email from users where org_id = ${orgId} and party_id = ${signer.partyId} limit 1
-          `, "objects"))[0];
-          const org = (await db.execute<{ name: string }>(sql`
+          `,
+              "objects",
+            )
+          )[0];
+          const org = (
+            await db.execute<{ name: string }>(
+              sql`
             select name from orgs where id = ${orgId}
-          `, "objects"))[0];
-          const person = (await db.execute<{ name: string; email: string | null }>(sql`
+          `,
+              "objects",
+            )
+          )[0];
+          const person = (
+            await db.execute<{ name: string; email: string | null }>(
+              sql`
             select coalesce(display_name, legal_name, 'Unnamed') as name, email
               from parties where org_id = ${orgId} and id = ${signer.partyId}
-          `, "objects"))[0];
+          `,
+              "objects",
+            )
+          )[0];
           const email = user?.email ?? person?.email ?? null;
           const appBase = (process.env.OPENBOOKS_APP_URL ?? "").trim().replace(/\/+$/, "");
           let delivered = false;
@@ -304,10 +356,13 @@ export async function runReminderDuty(): Promise<void> {
 }
 
 export function registerWorkerDuties(): void {
-  registerWorkerDuty({ key: "journal-auto-reversals", run: async () => {
-    const { runDueJournalReversals } = await import("@openbooks/engine/ledger/journal-reversals");
-    await runDueJournalReversals();
-  } });
+  registerWorkerDuty({
+    key: "journal-auto-reversals",
+    run: async () => {
+      const { runDueJournalReversals } = await import("@openbooks/engine/ledger/journal-reversals");
+      await runDueJournalReversals();
+    },
+  });
   console.log("[worker] duty registered: storage-cleanup");
   registerWorkerDuty({
     key: "storage-cleanup",
@@ -377,9 +432,15 @@ export function registerWorkerDuties(): void {
     },
   });
   console.log("[worker] duty registered: schedule-pattern-maintenance");
-  registerWorkerDuty({ key: "schedule-pattern-maintenance", run: hourly("schedule-pattern-maintenance", runSchedulePatternDuty) });
+  registerWorkerDuty({
+    key: "schedule-pattern-maintenance",
+    run: hourly("schedule-pattern-maintenance", runSchedulePatternDuty),
+  });
   console.log("[worker] duty registered: service-agreement-maintenance");
-  registerWorkerDuty({ key: "service-agreement-maintenance", run: hourly("service-agreement-maintenance", runServiceAgreementDuty) });
+  registerWorkerDuty({
+    key: "service-agreement-maintenance",
+    run: hourly("service-agreement-maintenance", runServiceAgreementDuty),
+  });
   console.log("[worker] duty registered: hrm-dsar-exports");
   registerWorkerDuty({
     key: "hrm-dsar-exports",
@@ -413,12 +474,11 @@ registerWorkerDuties();
 installEngineSeams();
 
 const isMain =
-  typeof process.argv[1] === "string" &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
+  typeof process.argv[1] === "string" && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 /** Load the same deferred transfer runtime exercised by production startup checks. */
 export async function loadDataTransferWorker() {
-  return import('../web/lib/data-io/transfer-worker.ts');
+  return import("../web/lib/data-io/transfer-worker.ts");
 }
 
 if (isMain) {
@@ -426,15 +486,17 @@ if (isMain) {
   // test import of this entry registers duties without starting the world:
   // engine/src/worker/index.ts self-starts on import. No top-level await:
   // tsx compiles scripts-adjacent files as CJS, where TLA is unsupported.
-  void loadDataTransferWorker().then(async ({ startDataTransferWorker }) => {
-    // Resolve deferred transfer dependencies before any worker can publish
-    // a heartbeat, so a startup refusal cannot appear ready briefly.
-    await import("@openbooks/engine/worker/runtime");
-    const stopTransfers = startDataTransferWorker();
-    const { registerProcessWorker } = await import('@openbooks/engine/worker/shutdown');
-    registerProcessWorker({ close: stopTransfers });
-  }).catch((error: unknown) => {
-    console.error("[worker] startup failed:", error);
-    process.exit(1);
-  });
+  void loadDataTransferWorker()
+    .then(async ({ startDataTransferWorker }) => {
+      // Resolve deferred transfer dependencies before any worker can publish
+      // a heartbeat, so a startup refusal cannot appear ready briefly.
+      await import("@openbooks/engine/worker/runtime");
+      const stopTransfers = startDataTransferWorker();
+      const { registerProcessWorker } = await import("@openbooks/engine/worker/shutdown");
+      registerProcessWorker({ close: stopTransfers });
+    })
+    .catch((error: unknown) => {
+      console.error("[worker] startup failed:", error);
+      process.exit(1);
+    });
 }

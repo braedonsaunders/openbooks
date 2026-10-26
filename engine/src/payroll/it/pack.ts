@@ -54,7 +54,8 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
     example: "RSSMRA85T10A562S",
     requiredForPayroll: true,
     neededFor: "Certificazione Unica",
-    citation: "Agenzia delle Entrate: the codice fiscale is a 16-character alphanumeric code (DPR 605/1973)",
+    citation:
+      "Agenzia delle Entrate: the codice fiscale is a 16-character alphanumeric code (DPR 605/1973)",
     numericEntry: false,
   },
   installable: true,
@@ -85,9 +86,9 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
     // missing datum, while an unsupported region refuses the whole payroll.
     supported: IT_REGION_CODES,
     unsupportedReason:
-      "income tax withholding for regione {region} is not implemented: the IT pack computes IRPEF "
-      + "plus the addizionale regionale/comunale for every ISTAT regione, so reaching this message "
-      + "means {region} is not a known ISTAT code.",
+      "income tax withholding for regione {region} is not implemented: the IT pack computes IRPEF " +
+      "plus the addizionale regionale/comunale for every ISTAT regione, so reaching this message " +
+      "means {region} is not a known ISTAT code.",
   },
   jurisdictions: IT_JURISDICTIONS,
   // Withholdings are paid through Modello F24 to the Agenzia delle Entrate —
@@ -130,24 +131,64 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
       components: [
         // IRPEF is assessed on reddito complessivo net of oneri deducibili,
         // so a pre-tax deduction moves it — re-derived by the fixpoint.
-        { code: "IRPEF", name: "IRPEF — imposta sul reddito delle persone fisiche", systemKey: "income_tax", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "IRPEF",
+          name: "IRPEF — imposta sul reddito delle persone fisiche",
+          systemKey: "income_tax",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
         // The conguaglio's refund rail: an over-withheld year returns as a
         // positive credit under the same systemKey, so the remittance nets it
         // against the destination and the GL debits the same F24 liability.
         // Earnings-assessed (computed once, post-fixpoint, never re-derived);
         // a distinct credit row because the remittance negates by COMPONENT kind.
-        { code: "CONG-IRPEF", name: "Conguaglio IRPEF a credito", systemKey: "income_tax", kind: "credit", sequence: 110, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "CONG-IRPEF",
+          name: "Conguaglio IRPEF a credito",
+          systemKey: "income_tax",
+          kind: "credit",
+          sequence: 110,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
         // The TI and c. 4 somma payouts: refundable credits the employer pays
         // the worker and recovers through the F24. Earnings-assessed (computed
         // from gross), pushed once, never re-derived by the protection
         // fixpoint — exactly like an earnings line. They INCREASE net pay.
-        { code: "TI", name: "Trattamento integrativo", systemKey: "ti_payout", kind: "credit", sequence: 140, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "SOMMA", name: "Somma di cui al comma 4 (L. 207/2024)", systemKey: "somma_payout", kind: "credit", sequence: 145, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "TI",
+          name: "Trattamento integrativo",
+          systemKey: "ti_payout",
+          kind: "credit",
+          sequence: 140,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "SOMMA",
+          name: "Somma di cui al comma 4 (L. 207/2024)",
+          systemKey: "somma_payout",
+          kind: "credit",
+          sequence: 145,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
         // L. 199/2025 art. 1 c. 18–21 (IT-TOURISM-2026-IMPL): the 15% credit
         // prices only from the it_turismo_speciale attestation, so this
         // component is unreachable without it; like TI/SOMMA it increases
         // net pay and the employer recovers it via F24.
-        { code: "SPECIALE", name: "Trattamento integrativo speciale (turismo)", systemKey: "speciale_payout", kind: "credit", sequence: 147, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "SPECIALE",
+          name: "Trattamento integrativo speciale (turismo)",
+          systemKey: "speciale_payout",
+          kind: "credit",
+          sequence: 147,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -157,9 +198,33 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
       // protection fixpoint. They REDUCE net pay (deductions).
       key: "sostitutive",
       components: [
-        { code: "SOST-RINNOVI", name: "Sostitutiva 5% aumenti rinnovo CCNL (L. 199/2025)", systemKey: "sostitutiva_rinnovi", kind: "deduction", sequence: 111, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "SOST-TURNI", name: "Sostitutiva 15% indennità notturne/festive/turni (L. 199/2025)", systemKey: "sostitutiva_turni", kind: "deduction", sequence: 112, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "SOST-PREMI", name: "Sostitutiva 1% premi di risultato (L. 208/2015)", systemKey: "sostitutiva_premi", kind: "deduction", sequence: 113, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "SOST-RINNOVI",
+          name: "Sostitutiva 5% aumenti rinnovo CCNL (L. 199/2025)",
+          systemKey: "sostitutiva_rinnovi",
+          kind: "deduction",
+          sequence: 111,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "SOST-TURNI",
+          name: "Sostitutiva 15% indennità notturne/festive/turni (L. 199/2025)",
+          systemKey: "sostitutiva_turni",
+          kind: "deduction",
+          sequence: 112,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "SOST-PREMI",
+          name: "Sostitutiva 1% premi di risultato (L. 208/2015)",
+          systemKey: "sostitutiva_premi",
+          kind: "deduction",
+          sequence: 113,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -167,10 +232,26 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
       components: [
         // Same base as IRPEF (the domicile region's surcharge on the IRPEF
         // taxable income), remitted through the same F24.
-        { code: "ADDREG", name: "Addizionale regionale all'IRPEF", systemKey: "regional_surtax", kind: "deduction", sequence: 115, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "ADDREG",
+          name: "Addizionale regionale all'IRPEF",
+          systemKey: "regional_surtax",
+          kind: "deduction",
+          sequence: 115,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
         // The conguaglio's refund rail for the regionale — same doctrine as
         // CONG-IRPEF above: same key, credit kind, earnings-assessed, one push.
-        { code: "CONG-ADDREG", name: "Conguaglio addizionale regionale a credito", systemKey: "regional_surtax", kind: "credit", sequence: 115, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "CONG-ADDREG",
+          name: "Conguaglio addizionale regionale a credito",
+          systemKey: "regional_surtax",
+          kind: "credit",
+          sequence: 115,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -178,10 +259,26 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
       components: [
         // The domicile comune's surcharge (acconto + saldo mechanics live in
         // the untranscribed tables, not in the slot).
-        { code: "ADDCOM", name: "Addizionale comunale all'IRPEF", systemKey: "municipal_surtax", kind: "deduction", sequence: 120, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "ADDCOM",
+          name: "Addizionale comunale all'IRPEF",
+          systemKey: "municipal_surtax",
+          kind: "deduction",
+          sequence: 120,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
         // The conguaglio's refund rail for the comunale — same doctrine as
         // CONG-IRPEF above: same key, credit kind, earnings-assessed, one push.
-        { code: "CONG-ADDCOM", name: "Conguaglio addizionale comunale a credito", systemKey: "municipal_surtax", kind: "credit", sequence: 120, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "CONG-ADDCOM",
+          name: "Conguaglio addizionale comunale a credito",
+          systemKey: "municipal_surtax",
+          kind: "credit",
+          sequence: 120,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -189,8 +286,24 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
       components: [
         // IVS contributions are rate × retribuzione imponibile; no deduction
         // enters the formula, both shares.
-        { code: "INPS", name: "INPS — contributi IVS a carico del lavoratore", systemKey: "inps", kind: "deduction", sequence: 130, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "INPS-ER", name: "INPS — contributi IVS a carico del datore", systemKey: "inps", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "INPS",
+          name: "INPS — contributi IVS a carico del lavoratore",
+          systemKey: "inps",
+          kind: "deduction",
+          sequence: 130,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "INPS-ER",
+          name: "INPS — contributi IVS a carico del datore",
+          systemKey: "inps",
+          kind: "employer_contribution",
+          sequence: 230,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
   ],

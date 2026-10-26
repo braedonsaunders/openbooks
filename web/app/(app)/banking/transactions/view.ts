@@ -1,21 +1,49 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { can, requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { BANK_KINDS, DOC_KINDS, createPermission, isDocumentCreateKind, postPermission } from "../../../../lib/document-kinds.ts";
-import { canReadDocumentKind } from '../../../../lib/flow-subject-authz'
-import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions, transferAccountOptions } from "../../../../lib/documents.ts";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import { can, requirePermission } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
+import {
+  BANK_KINDS,
+  DOC_KINDS,
+  createPermission,
+  isDocumentCreateKind,
+  postPermission,
+} from "../../../../lib/document-kinds.ts";
+import { canReadDocumentKind } from "../../../../lib/flow-subject-authz";
+import {
+  accountOptions,
+  bankAccountOptions,
+  cardLiabilityAccountOptions,
+  cardOptions,
+  createDocumentSeed,
+  dimensionOptions,
+  partyOptions,
+  taxCodeOptions,
+  taxGroupOptions,
+  transferAccountOptions,
+} from "../../../../lib/documents.ts";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
-import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
-import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
-import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import type { DocumentDrawer } from '../../../../components/document-drawer'
-import type { DocKindConfig } from '../../../../lib/document-kinds'
+import {
+  customFieldViewerFor,
+  loadFieldDefs,
+  visibleCustomFieldDefs,
+} from "../../../../lib/custom-fields";
+import { isMultiSubsidiary, subsidiaryOptions } from "../../../../lib/subsidiaries";
+import { resolveFormLayout } from "../../../../lib/customization/resolve";
+import type { DocumentDrawer } from "../../../../components/document-drawer";
+import type { DocKindConfig } from "../../../../lib/document-kinds";
 
 /**
  * Banking transactions (checks, deposits, card charges/refunds, transfers),
@@ -39,130 +67,146 @@ import type { DocKindConfig } from '../../../../lib/document-kinds'
 
 // The banking transaction kinds that can be created from this page (checks,
 // deposits, card charges/refunds, transfers), surfaced as one New menu.
-const NEW_KINDS = ['check', 'deposit', 'card_charge', 'card_refund', 'transfer'] as const
+const NEW_KINDS = ["check", "deposit", "card_charge", "card_refund", "transfer"] as const;
 
-type DocumentDrawerProps = Parameters<typeof DocumentDrawer>[0]
-type LoadedDocument = NonNullable<Awaited<ReturnType<typeof loadDocument>>>
+type DocumentDrawerProps = Parameters<typeof DocumentDrawer>[0];
+type LoadedDocument = NonNullable<Awaited<ReturnType<typeof loadDocument>>>;
 
 export interface BankingTransactionsDrawer {
   /** Remount key: switching documents must reset the drawer's client state. */
-  remountKey: string
-  basePath: string
-  payload: LoadedDocument | { doc: Record<string, unknown>; lines: Record<string, unknown>[] }
+  remountKey: string;
+  basePath: string;
+  payload: LoadedDocument | { doc: Record<string, unknown>; lines: Record<string, unknown>[] };
   /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
-  createMode: boolean
+  createMode: boolean;
   /** Allocations → entry distributions on (parent gate resolved). */
-  allocationsEntryEnabled: boolean
-  config: DocKindConfig
-  initialMode: 'edit' | 'view'
-  accounts: DocumentDrawerProps['accounts']
-  taxCodes: DocumentDrawerProps['taxCodes']
-  taxGroups: DocumentDrawerProps['taxGroups']
-  departments: DocumentDrawerProps['departments']
-  projects: DocumentDrawerProps['projects']
-  locations: DocumentDrawerProps['locations']
-  classes: DocumentDrawerProps['classes']
-  segments: DocumentDrawerProps['segments']
-  builtinSegments: DocumentDrawerProps['builtinSegments']
-  items: Record<string, unknown>[]
-  cards: DocumentDrawerProps['cards']
-  cardAccounts: DocumentDrawerProps['cardAccounts']
-  bankAccounts: DocumentDrawerProps['bankAccounts']
-  parties: DocumentDrawerProps['parties']
-  subsidiaries: DocumentDrawerProps['subsidiaries']
-  headerDefs: DocumentDrawerProps['headerDefs']
-  lineDefs: DocumentDrawerProps['lineDefs']
-  canCreate: boolean
-  canPost: boolean
-  layout: DocumentDrawerProps['layout']
-  availableLayouts: DocumentDrawerProps['availableLayouts']
-  currentLayoutId: DocumentDrawerProps['currentLayoutId']
-  recordType: string
-  canCustomize: boolean
+  allocationsEntryEnabled: boolean;
+  config: DocKindConfig;
+  initialMode: "edit" | "view";
+  accounts: DocumentDrawerProps["accounts"];
+  taxCodes: DocumentDrawerProps["taxCodes"];
+  taxGroups: DocumentDrawerProps["taxGroups"];
+  departments: DocumentDrawerProps["departments"];
+  projects: DocumentDrawerProps["projects"];
+  locations: DocumentDrawerProps["locations"];
+  classes: DocumentDrawerProps["classes"];
+  segments: DocumentDrawerProps["segments"];
+  builtinSegments: DocumentDrawerProps["builtinSegments"];
+  items: Record<string, unknown>[];
+  cards: DocumentDrawerProps["cards"];
+  cardAccounts: DocumentDrawerProps["cardAccounts"];
+  bankAccounts: DocumentDrawerProps["bankAccounts"];
+  parties: DocumentDrawerProps["parties"];
+  subsidiaries: DocumentDrawerProps["subsidiaries"];
+  headerDefs: DocumentDrawerProps["headerDefs"];
+  lineDefs: DocumentDrawerProps["lineDefs"];
+  canCreate: boolean;
+  canPost: boolean;
+  layout: DocumentDrawerProps["layout"];
+  availableLayouts: DocumentDrawerProps["availableLayouts"];
+  currentLayoutId: DocumentDrawerProps["currentLayoutId"];
+  recordType: string;
+  canCustomize: boolean;
 }
 
 export interface BankingTransactionsData {
-  backHref: string
-  backLabel: string
-  title: string
-  description: string
-  currentParams: Record<string, string | string[] | undefined>
-  canCreate: boolean
+  backHref: string;
+  backLabel: string;
+  title: string;
+  description: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canCreate: boolean;
   /**
    * Per-namespace post decisions for the row actions. Banking kinds span
    * namespaces (card/check post under ap.post, deposit/transfer under
    * gl.post), so one page-level boolean would offer Post to a holder of the
    * wrong grant — the row widget picks by the row's kind.
    */
-  canPostAp: boolean
-  canPostGl: boolean
+  canPostAp: boolean;
+  canPostGl: boolean;
   newButton: {
-    items: { kind: string; label: string }[]
-    basePath: string
-    triggerLabel: string
-  }
-  drawerOpen: boolean
-  drawer: BankingTransactionsDrawer | null
+    items: { kind: string; label: string }[];
+    basePath: string;
+    triggerLabel: string;
+  };
+  drawerOpen: boolean;
+  drawer: BankingTransactionsDrawer | null;
 }
 
 export async function loadBankingTransactions(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<BankingTransactionsData> {
-  const authz = await requirePermission('banking.read')
+  const authz = await requirePermission("banking.read");
   // Per-kind create gating: deposits/transfers need gl.post, card/check need
   // ap.create. A visible New action must never dead-end at the loader's
   // per-kind refusal below, so the menu lists only creatable kinds and the
   // page-level gate follows the filtered list. Server enforcement stays.
-  const creatableKinds = NEW_KINDS.filter((kind) => can(authz, createPermission(kind)))
-  const canCreate = creatableKinds.length > 0
+  const creatableKinds = NEW_KINDS.filter((kind) => can(authz, createPermission(kind)));
+  const canCreate = creatableKinds.length > 0;
   const [inventoryEnabled, equipmentEnabled, allocationsEntryEnabled] = await Promise.all([
-    isFeatureEnabled(authz.user.orgId, 'inventory'),
-    isFeatureEnabled(authz.user.orgId, 'equipment'),
-    isFeatureEnabled(authz.user.orgId, 'allocationsAtEntry'),
-  ])
-  const t = await getTranslations('banking')
-  const basePath = '/banking/transactions'
+    isFeatureEnabled(authz.user.orgId, "inventory"),
+    isFeatureEnabled(authz.user.orgId, "equipment"),
+    isFeatureEnabled(authz.user.orgId, "allocationsAtEntry"),
+  ]);
+  const t = await getTranslations("banking");
+  const basePath = "/banking/transactions";
 
   // -- open document drawer (?doc=<id>) -------------------------------------
-  const rawDocId = typeof sp.doc === 'string' ? sp.doc : undefined
+  const rawDocId = typeof sp.doc === "string" ? sp.doc : undefined;
   // Only a real document id (or 'new') reaches the loader: a malformed
   // ?doc= must never bind to a uuid column and render a 500.
-  const docId = rawDocId === 'new' || (typeof rawDocId === 'string' && isUuid(rawDocId)) ? rawDocId : undefined
+  const docId =
+    rawDocId === "new" || (typeof rawDocId === "string" && isUuid(rawDocId)) ? rawDocId : undefined;
   // Resolve tenant, kind and subsidiary before loading lines or other
   // disclosure-bearing document fields.
-  const docSummary = docId && docId !== 'new'
-    ? (await db.execute<{ kind: string; subsidiaryId: string }>(sql`
+  const docSummary =
+    docId && docId !== "new"
+      ? (
+          await db.execute<{ kind: string; subsidiaryId: string }>(
+            sql`
         select kind, subsidiary_id as "subsidiaryId" from documents
-         where id = ${docId} and org_id = ${authz.user.orgId}`, 'objects'))[0]
-    : undefined
-  const docInScope = !!docSummary
-    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(docSummary.subsidiaryId)))
-  const fieldViewer = customFieldViewerFor(authz)
-  const loadedDoc = docSummary && docInScope && canReadDocumentKind(authz, docSummary.kind)
-    ? await loadDocument(docId!, authz.user.orgId, fieldViewer)
-    : null
-  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId ? loadedDoc : null
-  const openKind = openDoc?.doc.kind as string | undefined
+         where id = ${docId} and org_id = ${authz.user.orgId}`,
+            "objects",
+          )
+        )[0]
+      : undefined;
+  const docInScope =
+    !!docSummary &&
+    (!authz.allowedSubsidiaryIds ||
+      authz.allowedSubsidiaryIds.has(String(docSummary.subsidiaryId)));
+  const fieldViewer = customFieldViewerFor(authz);
+  const loadedDoc =
+    docSummary && docInScope && canReadDocumentKind(authz, docSummary.kind)
+      ? await loadDocument(docId!, authz.user.orgId, fieldViewer)
+      : null;
+  const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId ? loadedDoc : null;
+  const openKind = openDoc?.doc.kind as string | undefined;
   // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
   // over a blank in-memory payload. The kind must belong to this page, the
   // caller must hold its create permission (gl.post for deposits/transfers,
   // ap.create for the rest), and nothing is read or written for an id — the
   // document exists only after an explicit Save.
-  const createKind = typeof sp.kind === 'string' && (BANK_KINDS as readonly string[]).includes(sp.kind)
-    && isDocumentCreateKind(sp.kind) ? sp.kind : undefined
-  const isCreate = docId === 'new' && !!createKind && can(authz, createPermission(createKind))
-  const drawerKind = openKind ?? createKind
-  const drawerOpen = !!(openDoc && openKind && (BANK_KINDS as readonly string[]).includes(openKind)) || isCreate
+  const createKind =
+    typeof sp.kind === "string" &&
+    (BANK_KINDS as readonly string[]).includes(sp.kind) &&
+    isDocumentCreateKind(sp.kind)
+      ? sp.kind
+      : undefined;
+  const isCreate = docId === "new" && !!createKind && can(authz, createPermission(createKind));
+  const drawerKind = openKind ?? createKind;
+  const drawerOpen =
+    !!(openDoc && openKind && (BANK_KINDS as readonly string[]).includes(openKind)) || isCreate;
   // The create seed carries no lines, so the keep-existing-items clause
   // matches nothing — the same items list a blank draft would see.
-  const existingDocId = openDoc ? docId : null
+  const existingDocId = openDoc ? docId : null;
   const pickers = drawerOpen
     ? await Promise.all([
-        accountOptions(DOC_KINDS[drawerKind! as 'card_charge']!),
+        accountOptions(DOC_KINDS[drawerKind! as "card_charge"]!),
         taxCodeOptions(),
         taxGroupOptions(),
         dimensionOptions(),
-        db.execute(sql`
+        db.execute(
+          sql`
           select id, code, name from items
            where org_id = ${authz.user.orgId} and is_active
              and (
@@ -173,78 +217,85 @@ export async function loadBankingTransactions(
                   where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                )
              )
-           order by coalesce(code, name), name limit 2000`, 'objects'),
+           order by coalesce(code, name), name limit 2000`,
+          "objects",
+        ),
         cardOptions(),
         // A transfer's legs take any bank or credit-card account; deposits and
         // checks fund from reconcilable bank accounts only.
-        drawerKind === 'transfer'
+        drawerKind === "transfer"
           ? transferAccountOptions(undefined, authz.allowedSubsidiaryIds)
           : bankAccountOptions(),
-        loadFieldDefs('documents', drawerKind!),
-        loadFieldDefs('document_lines', drawerKind!),
+        loadFieldDefs("documents", drawerKind!),
+        loadFieldDefs("document_lines", drawerKind!),
         // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
         isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
-          if (!multi) return null
-          const options = await subsidiaryOptions()
+          if (!multi) return null;
+          const options = await subsidiaryOptions();
           return authz.allowedSubsidiaryIds
             ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-            : options
+            : options;
         }),
         // Payee options for the optional check payee (checks only — appended
         // last so the indices above never shift).
-        drawerKind === 'check' ? partyOptions('vendor') : Promise.resolve([]),
+        drawerKind === "check" ? partyOptions("vendor") : Promise.resolve([]),
         // Card-liability fallback for the card-charge picker when no card
         // instruments exist — appended after the payee slot so
         // no index above shifts.
-        drawerKind === 'card_charge' || drawerKind === 'card_refund' ? cardLiabilityAccountOptions() : Promise.resolve([]),
+        drawerKind === "card_charge" || drawerKind === "card_refund"
+          ? cardLiabilityAccountOptions()
+          : Promise.resolve([]),
       ])
-    : null
-  const visibleHeaderDefs = pickers ? visibleCustomFieldDefs(pickers[7], fieldViewer) : []
-  const visibleLineDefs = pickers ? visibleCustomFieldDefs(pickers[8], fieldViewer) : []
-  const resolvedForm = drawerOpen && pickers
-    ? await resolveFormLayout({
-        orgId: authz.user.orgId,
-        userId: authz.user.id,
-        recordType: drawerKind!,
-        userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: visibleHeaderDefs,
-        lineDefs: visibleLineDefs,
-        explicitLayoutId: pickString(sp.form),
-      })
-    : null
+    : null;
+  const visibleHeaderDefs = pickers ? visibleCustomFieldDefs(pickers[7], fieldViewer) : [];
+  const visibleLineDefs = pickers ? visibleCustomFieldDefs(pickers[8], fieldViewer) : [];
+  const resolvedForm =
+    drawerOpen && pickers
+      ? await resolveFormLayout({
+          orgId: authz.user.orgId,
+          userId: authz.user.id,
+          recordType: drawerKind!,
+          userRoles: authz.user.roles.map(({ key }) => key),
+          headerDefs: visibleHeaderDefs,
+          lineDefs: visibleLineDefs,
+          explicitLayoutId: pickString(sp.form),
+        })
+      : null;
 
   const newButton = {
     items: creatableKinds.map((kind) => ({ kind, label: t(`txKinds.${kind}`) })),
     basePath,
-    triggerLabel: t('actions.new'),
-  }
+    triggerLabel: t("actions.new"),
+  };
 
   // Blank in-memory payload for unsaved create. The subsidiary defaults to
   // the first in-scope option in multi-subsidiary orgs so the form opens
   // submittable; unrestricted orgs keep the factory root default.
-  const createSeed = isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null
+  const createSeed =
+    isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null;
   const createSubsidiaryDefault = (() => {
-    if (!createSeed || !pickers) return null
-    const options = (pickers[9] ?? []) as { id: string }[]
-    if (options.length === 0) return null
+    if (!createSeed || !pickers) return null;
+    const options = (pickers[9] ?? []) as { id: string }[];
+    if (options.length === 0) return null;
     const inScope = authz.allowedSubsidiaryIds
       ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-      : options
-    return inScope[0]?.id ?? null
-  })()
+      : options;
+    return inScope[0]?.id ?? null;
+  })();
   if (createSeed && createSubsidiaryDefault) {
-    (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
+    (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault;
   }
-  const drawerPayload = openDoc ?? createSeed
+  const drawerPayload = openDoc ?? createSeed;
   const drawer =
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
-          basePath: '/banking/transactions',
+          basePath: "/banking/transactions",
           remountKey: openDoc ? String(openDoc.doc.id) : `new:${drawerKind}`,
           payload: drawerPayload,
           createMode: isCreate,
           config: DOC_KINDS[drawerKind]!,
-          initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
+          initialMode: (isCreate || pickString(sp.mode) === "edit" ? "edit" : "view") as
+            "edit" | "view",
           accounts: pickers[0],
           taxCodes: pickers[1],
           taxGroups: pickers[2],
@@ -256,12 +307,12 @@ export async function loadBankingTransactions(
           builtinSegments: pickers[3].builtinSegments,
           items: pickers[4],
           cards: pickers[5],
-          cardAccounts: pickers[11] as DocumentDrawerProps['cardAccounts'],
+          cardAccounts: pickers[11] as DocumentDrawerProps["cardAccounts"],
           bankAccounts: pickers[6],
-          parties: pickers[10] as DocumentDrawerProps['parties'],
+          parties: pickers[10] as DocumentDrawerProps["parties"],
           subsidiaries: pickers[9] ?? undefined,
-          headerDefs: visibleHeaderDefs as DocumentDrawerProps['headerDefs'],
-          lineDefs: visibleLineDefs as DocumentDrawerProps['lineDefs'],
+          headerDefs: visibleHeaderDefs as DocumentDrawerProps["headerDefs"],
+          lineDefs: visibleLineDefs as DocumentDrawerProps["lineDefs"],
           canCreate: can(authz, createPermission(drawerKind!)),
           canPost: can(authz, postPermission(drawerKind!)),
           allocationsEntryEnabled,
@@ -269,57 +320,57 @@ export async function loadBankingTransactions(
           availableLayouts: resolvedForm.available,
           currentLayoutId: resolvedForm.row?.id ?? null,
           recordType: drawerKind,
-          canCustomize: can(authz, 'admin.customization.manage'),
+          canCustomize: can(authz, "admin.customization.manage"),
         }
-      : null
+      : null;
 
   return {
-    backHref: '/banking',
-    backLabel: t('home.title'),
-    title: t('transactionsPage.title'),
-    description: t('transactionsPage.description'),
+    backHref: "/banking",
+    backLabel: t("home.title"),
+    title: t("transactionsPage.title"),
+    description: t("transactionsPage.description"),
     currentParams: sp,
     canCreate,
-    canPostAp: can(authz, 'ap.post'),
-    canPostGl: can(authz, 'gl.post'),
+    canPostAp: can(authz, "ap.post"),
+    canPostGl: can(authz, "gl.post"),
     newButton,
     drawerOpen: Boolean(drawer),
     drawer,
-  }
+  };
 }
 
-const f = ref<BankingTransactionsData>()
+const f = ref<BankingTransactionsData>();
 
 export function bankingTransactionsSpec(data: BankingTransactionsData): PageSpec {
   const newDocument = {
-    widget: 'new-document',
+    widget: "new-document",
     props: {
       items: data.newButton.items,
       basePath: data.newButton.basePath,
       triggerLabel: data.newButton.triggerLabel,
     },
-  }
+  };
   return page({
-    route: '/banking/transactions',
-    layout: 'list',
+    route: "/banking/transactions",
+    layout: "list",
     header: [
       pageHeader({
-        back: { href: f('backHref'), label: f('backLabel') },
-        title: f('title'),
-        description: f('description'),
-        actions: [widget(newDocument.widget, newDocument.props, f('canCreate'))],
+        back: { href: f("backHref"), label: f("backLabel") },
+        title: f("title"),
+        description: f("description"),
+        actions: [widget(newDocument.widget, newDocument.props, f("canCreate"))],
       }),
     ],
     body: [
       // No `when`: the list always renders. `drawer`/`emptyAction` arrive as
       // null when closed/absent and their slots render nothing. The per-row
-      widgetBlock('record-list-view', {
-        recordType: 'bank_transaction',
-        basePath: '/banking/transactions',
+      widgetBlock("record-list-view", {
+        recordType: "bank_transaction",
+        basePath: "/banking/transactions",
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer ? { widget: "document-drawer", props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newDocument : null,
       }),
     ],
-  })
+  });
 }

@@ -108,13 +108,16 @@ export async function assertSingleListViewDefault(
     ownerId: string | null;
   },
 ): Promise<void> {
-  const counted = await tx.execute<{ n: number }>(sql`
+  const counted = await tx.execute<{ n: number }>(
+    sql`
     select count(*)::int as n
       from list_views
      where org_id = ${args.orgId}
        and record_type = ${args.recordType}
        and scope = ${args.scope}
        and is_default
-       and (scope = 'org' or owner_id = ${args.ownerId})`, "objects");
+       and (scope = 'org' or owner_id = ${args.ownerId})`,
+    "objects",
+  );
   if ((counted[0]?.n ?? 0) > 1) throw new AmbiguousListViewDefaultError();
 }

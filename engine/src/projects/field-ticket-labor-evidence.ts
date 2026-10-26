@@ -4,14 +4,8 @@ import { db, withOrg } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 
 export type FieldTicketLaborEvidenceBasis =
-  | "operational_time"
-  | "source_import"
-  | "controlled_amendment";
-export type TimeClassification =
-  | "regular"
-  | "overtime"
-  | "double_time"
-  | "other";
+  "operational_time" | "source_import" | "controlled_amendment";
+export type TimeClassification = "regular" | "overtime" | "double_time" | "other";
 
 export interface FieldTicketLaborEvidenceLine {
   employeePartyId: string;
@@ -104,21 +98,27 @@ function validateInput(args: CaptureFieldTicketLaborEvidenceArgs): void {
       throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} needs a time-type label`);
     }
     if (!["regular", "overtime", "double_time", "other"].includes(line.timeClassification)) {
-      throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} has an invalid time classification`);
+      throw new FieldTicketLaborEvidenceError(
+        `labor line ${index + 1} has an invalid time classification`,
+      );
     }
     if (
       !ISO_DATE.test(line.workedOn) ||
       !DECIMAL.test(line.hours) ||
       /^-?0(?:\.0+)?$/.test(line.hours)
     ) {
-      throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} needs non-zero decimal hours and an ISO date`);
+      throw new FieldTicketLaborEvidenceError(
+        `labor line ${index + 1} needs non-zero decimal hours and an ISO date`,
+      );
     }
     // ISO_DATE is shape-only: 2026-02-30 passes the regex and then
     // (workedOn)::date throws a raw Postgres error. Calendar-validate
     // through the shared helper so the refusal is always a named
     // FieldTicketLaborEvidenceError and no raw cast reaches the database.
     if (!isIsoCalendarDate(line.workedOn)) {
-      throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} has an impossible calendar date "${line.workedOn}" (expected a real YYYY-MM-DD day)`);
+      throw new FieldTicketLaborEvidenceError(
+        `labor line ${index + 1} has an impossible calendar date "${line.workedOn}" (expected a real YYYY-MM-DD day)`,
+      );
     }
     for (const value of [line.costRate, line.billRate, line.costAmount, line.billAmount]) {
       if (value != null && !DECIMAL.test(value)) {
@@ -127,7 +127,9 @@ function validateInput(args: CaptureFieldTicketLaborEvidenceArgs): void {
     }
     for (const value of [line.costRateCurrency, line.billRateCurrency]) {
       if (value != null && !/^[A-Z]{3}$/.test(value)) {
-        throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} has an invalid rate currency`);
+        throw new FieldTicketLaborEvidenceError(
+          `labor line ${index + 1} has an invalid rate currency`,
+        );
       }
     }
     if (line.sourcePayloadHash && !HASH.test(line.sourcePayloadHash)) {
@@ -135,14 +137,18 @@ function validateInput(args: CaptureFieldTicketLaborEvidenceArgs): void {
     }
     if (line.timeEntryId) {
       if (timeEntryIds.has(line.timeEntryId)) {
-        throw new FieldTicketLaborEvidenceError("a time entry may appear only once in a labor snapshot");
+        throw new FieldTicketLaborEvidenceError(
+          "a time entry may appear only once in a labor snapshot",
+        );
       }
       timeEntryIds.add(line.timeEntryId);
     }
     if (line.sourceSystem && line.sourceLineRef) {
       const key = `${line.sourceSystem}\0${line.sourceLineRef}`;
       if (sourceRefs.has(key)) {
-        throw new FieldTicketLaborEvidenceError("a source line may appear only once in a labor snapshot");
+        throw new FieldTicketLaborEvidenceError(
+          "a source line may appear only once in a labor snapshot",
+        );
       }
       sourceRefs.add(key);
     }
@@ -162,7 +168,8 @@ export async function captureFieldTicketLaborEvidence(
 ): Promise<FieldTicketLaborEvidenceResult> {
   validateInput(args);
   return withOrg(args.orgId, async () => {
-    const ticket = (await db.execute<{ id: string; status: string }>(sql`
+    const ticket = await db.execute<{ id: string; status: string }>(
+      sql`
       select d.id, d.status
         from documents d
         join field_tickets ft
@@ -172,7 +179,9 @@ export async function captureFieldTicketLaborEvidence(
          and d.org_id = ${args.orgId}
          and d.kind = 'field_ticket'
        for update of d, ft
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!ticket[0]) {
       throw new FieldTicketLaborEvidenceError("Field Ticket not found");
     }
@@ -193,13 +202,14 @@ export async function captureFieldTicketLaborEvidence(
       );
     }
 
-    const current = (await db.execute<{
-        id: string;
-        revision: number;
-        source_system: string | null;
-        source_payload_hash: string | null;
-        line_count: number;
-      }>(sql`
+    const current = await db.execute<{
+      id: string;
+      revision: number;
+      source_system: string | null;
+      source_payload_hash: string | null;
+      line_count: number;
+    }>(
+      sql`
       select snapshot.id, snapshot.revision, snapshot.source_system,
              snapshot.source_payload_hash,
              (select count(*)::int
@@ -211,7 +221,9 @@ export async function captureFieldTicketLaborEvidence(
          and snapshot.field_ticket_id = ${args.fieldTicketId}
          and snapshot.superseded_at is null
        for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const existing = current[0] ?? null;
     if (
       existing &&
@@ -265,7 +277,8 @@ export async function captureFieldTicketLaborEvidence(
       `);
     }
 
-    const inserted = (await db.execute<{ id: string; revision: number }>(sql`
+    const inserted = await db.execute<{ id: string; revision: number }>(
+      sql`
       insert into field_ticket_labor_snapshots
         (org_id, field_ticket_id, revision, evidence_basis, reason,
          source_system, source_payload_hash, currency, captured_by)
@@ -277,7 +290,9 @@ export async function captureFieldTicketLaborEvidence(
        where org_id = ${args.orgId}
          and field_ticket_id = ${args.fieldTicketId}
       returning id, revision
-    `, "objects"));
+    `,
+      "objects",
+    );
     const snapshot = inserted[0]!;
 
     if (args.lines.length > 0) {

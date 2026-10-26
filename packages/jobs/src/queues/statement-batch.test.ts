@@ -23,7 +23,10 @@ test("job ids are deterministic per (run, customer) and distinct otherwise", () 
 
 test("job ids refuse non-uuid scope so a retry can never misaddress", () => {
   assert.throws(() => statementBatchJobId({ runId: "not-a-run", partyId: PARTY }), /valid run id/);
-  assert.throws(() => statementBatchJobId({ runId: RUN, partyId: "not-a-party" }), /valid customer id/);
+  assert.throws(
+    () => statementBatchJobId({ runId: RUN, partyId: "not-a-party" }),
+    /valid customer id/,
+  );
   assert.throws(() => statementBatchEmailScope("not-a-run"), /valid run id/);
 });
 

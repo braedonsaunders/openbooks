@@ -1,16 +1,16 @@
-import Link from 'next/link'
-import { toast } from 'sonner'
-import { ActionError } from '@braedonsaunders/appkit-errors'
-import { fetchAppAction } from '../lib/api-error'
-import { confirmDialog } from '../lib/confirm'
-import { previewPostedCorrection } from '../lib/posted-correction-preview'
-import { promptDialog } from '../lib/prompt'
-import { promptVoidReversalPeriod } from '../lib/void-reversal-period'
-import { runClientScripts } from '../lib/client-scripts'
-import { documentCreateHref, isDocumentCreateKind } from '../lib/document-kinds'
-import { parseTenderDrafts } from './cash-tenders-section'
-import type { DocPayload } from './document-drawer-types'
-import { findMissingAccountLine, positiveAmount } from './document-drawer-lines'
+import Link from "next/link";
+import { toast } from "sonner";
+import { ActionError } from "@braedonsaunders/appkit-errors";
+import { fetchAppAction } from "../lib/api-error";
+import { confirmDialog } from "../lib/confirm";
+import { previewPostedCorrection } from "../lib/posted-correction-preview";
+import { promptDialog } from "../lib/prompt";
+import { promptVoidReversalPeriod } from "../lib/void-reversal-period";
+import { runClientScripts } from "../lib/client-scripts";
+import { documentCreateHref, isDocumentCreateKind } from "../lib/document-kinds";
+import { parseTenderDrafts } from "./cash-tenders-section";
+import type { DocPayload } from "./document-drawer-types";
+import { findMissingAccountLine, positiveAmount } from "./document-drawer-lines";
 import {
   buildDocumentCreateRequest,
   buildDocumentSaveRequest,
@@ -20,8 +20,8 @@ import {
   reconcilePersistedDocumentSnapshot,
   revisionFromSuccessfulDocumentSave,
   type DocumentSaveRequest,
-} from './document-drawer-save'
-import type { DocumentDrawerPayloadScope } from './document-drawer-payload'
+} from "./document-drawer-save";
+import type { DocumentDrawerPayloadScope } from "./document-drawer-payload";
 
 /**
  * The drawer's write paths: save (create, edit, posted correction), cancel
@@ -34,13 +34,13 @@ import type { DocumentDrawerPayloadScope } from './document-drawer-payload'
  * and `postNew` continue through the native atomic post command; an approval Flow that gates the record
  * leaves it pending approval, exactly as Submit would.
  */
-export type DocumentSaveThen = 'view' | 'new' | 'close' | 'post' | 'postNew'
+export type DocumentSaveThen = "view" | "new" | "close" | "post" | "postNew";
 
 export function buildDocumentDrawerCommands(
   scope: DocumentDrawerPayloadScope,
   { startFresh }: { startFresh?: () => void } = {},
 ) {
-  const tEntry = scope.tEntry
+  const tEntry = scope.tEntry;
   const {
     isCreate,
     canCreate,
@@ -89,7 +89,7 @@ export function buildDocumentDrawerCommands(
     controlMismatch,
     controlDifference,
     controlInvalid,
-  } = scope
+  } = scope;
 
   // Confirm-before-save duplicate warning for new invoices and bills: a
   // non-voided same-kind document for the same party, date and total (plus
@@ -98,46 +98,64 @@ export function buildDocumentDrawerCommands(
   // open: the save itself stays server-validated, so a down lookup must not
   // block persistence.
   async function confirmNoDuplicate(): Promise<boolean> {
-    if (!isCreate || (config.kind !== 'customer_invoice' && config.kind !== 'vendor_bill' && config.kind !== 'vendor_credit')) return true
-    if (!partyId || !documentDate || !positiveAmount(effectiveTotals.total)) return true
+    if (
+      !isCreate ||
+      (config.kind !== "customer_invoice" &&
+        config.kind !== "vendor_bill" &&
+        config.kind !== "vendor_credit")
+    )
+      return true;
+    if (!partyId || !documentDate || !positiveAmount(effectiveTotals.total)) return true;
     const query = new URLSearchParams({
       kind: config.kind,
       partyId,
       documentDate,
       total: effectiveTotals.total,
-    })
-    if ((config.kind === 'vendor_bill' || config.kind === 'vendor_credit') && referenceNumber.trim()) {
-      query.set('referenceNumber', referenceNumber.trim())
+    });
+    if (
+      (config.kind === "vendor_bill" || config.kind === "vendor_credit") &&
+      referenceNumber.trim()
+    ) {
+      query.set("referenceNumber", referenceNumber.trim());
     }
-    let duplicates: { id: string; documentNumber: string; reason?: string }[] = []
+    let duplicates: { id: string; documentNumber: string; reason?: string }[] = [];
     try {
-      const response = await fetch(`/api/documents/duplicates?${query.toString()}`)
-      if (!response.ok) return true
-      duplicates = ((await response.json()) as { duplicates?: { id: string; documentNumber: string }[] }).duplicates ?? []
+      const response = await fetch(`/api/documents/duplicates?${query.toString()}`);
+      if (!response.ok) return true;
+      duplicates =
+        ((await response.json()) as { duplicates?: { id: string; documentNumber: string }[] })
+          .duplicates ?? [];
     } catch {
-      return true
+      return true;
     }
-    if (duplicates.length === 0) return true
-    const [first, ...rest] = duplicates
+    if (duplicates.length === 0) return true;
+    const [first, ...rest] = duplicates;
     return confirmDialog({
-      title: t('drawer.duplicateTitle'),
+      title: t("drawer.duplicateTitle"),
       message: (
         <>
-          <p>{t('drawer.duplicateBody', { numbers: duplicates.map((match) => match.documentNumber).join(', ') })}</p>
+          <p>
+            {t("drawer.duplicateBody", {
+              numbers: duplicates.map((match) => match.documentNumber).join(", "),
+            })}
+          </p>
           {first ? (
             <p className="mt-2">
-              <Link className="text-teal-700 hover:underline dark:text-teal-300" href={hrefForDocument(first.id)}>
-                {t('drawer.duplicateOpen', { number: first.documentNumber })}
+              <Link
+                className="text-teal-700 hover:underline dark:text-teal-300"
+                href={hrefForDocument(first.id)}
+              >
+                {t("drawer.duplicateOpen", { number: first.documentNumber })}
               </Link>
               {rest.length > 0 ? ` · +${rest.length}` : null}
             </p>
           ) : null}
         </>
       ),
-      confirmLabel: t('drawer.duplicateConfirm'),
+      confirmLabel: t("drawer.duplicateConfirm"),
       // A reflexive Enter must not book a second copy of a bill.
-      defaultAction: 'cancel',
-    })
+      defaultAction: "cancel",
+    });
   }
 
   // Re-entry runs through the shared guard: save awaits the client-script
@@ -152,20 +170,28 @@ export function buildDocumentDrawerCommands(
   // preamble returns the fenced request to write, or 'aborted' for an
   // operator cancellation (which stays silent, exactly as today).
   async function prepareSaveRequest(): Promise<
-    | { outcome: 'create'; request: { path: string; method: 'POST'; headers: Record<string, string>; body: Record<string, unknown> } }
-    | { outcome: 'save'; request: DocumentSaveRequest }
-    | { outcome: 'aborted' }
+    | {
+        outcome: "create";
+        request: {
+          path: string;
+          method: "POST";
+          headers: Record<string, string>;
+          body: Record<string, unknown>;
+        };
+      }
+    | { outcome: "save"; request: DocumentSaveRequest }
+    | { outcome: "aborted" }
   > {
-    let amendmentReason: string | undefined
+    let amendmentReason: string | undefined;
     if (isPosted) {
       const reason = await promptDialog({
-        title: tCommon('amendment.title'),
-        label: tCommon('amendment.reason'),
-        placeholder: tCommon('amendment.placeholder'),
-        confirmLabel: tCommon('actions.save'),
-      })
-      if (!reason) return { outcome: 'aborted' as const }
-      amendmentReason = reason
+        title: tCommon("amendment.title"),
+        label: tCommon("amendment.reason"),
+        placeholder: tCommon("amendment.placeholder"),
+        confirmLabel: tCommon("actions.save"),
+      });
+      if (!reason) return { outcome: "aborted" as const };
+      amendmentReason = reason;
       // A posted edit states its consequence before anything writes, using
       // the same engine classification the correct route enforces. A void
       // and reissue needs an explicit confirm; metadata and reclass confirm
@@ -174,35 +200,35 @@ export function buildDocumentDrawerCommands(
         doc,
         storedLines: persistedBaseline.current.payload.lines ?? [],
         payload: payload_ as Record<string, unknown>,
-      })
+      });
       const confirmed = await confirmDialog({
-        title: tCommon('amendment.consequenceTitle'),
+        title: tCommon("amendment.consequenceTitle"),
         message:
-          consequence === 'void-and-reissue'
-            ? tCommon('amendment.consequenceVoid')
-            : consequence === 'reclass'
-              ? tCommon('amendment.consequenceReclass')
-              : tCommon('amendment.consequenceMetadata'),
-        confirmLabel: tCommon('actions.save'),
-        ...(consequence === 'void-and-reissue' ? { tone: 'danger' as const } : {}),
-      })
-      if (!confirmed) return { outcome: 'aborted' as const }
+          consequence === "void-and-reissue"
+            ? tCommon("amendment.consequenceVoid")
+            : consequence === "reclass"
+              ? tCommon("amendment.consequenceReclass")
+              : tCommon("amendment.consequenceMetadata"),
+        confirmLabel: tCommon("actions.save"),
+        ...(consequence === "void-and-reissue" ? { tone: "danger" as const } : {}),
+      });
+      if (!confirmed) return { outcome: "aborted" as const };
     }
-    setSaveState('saving')
+    setSaveState("saving");
     // Client scripts (sandboxed, opaque-origin evaluator) gate the save: an
     // explicit { abort } blocks; { warnings } toast and proceed; fail-open.
-    const gate = await runClientScripts(config.kind, payload_)
+    const gate = await runClientScripts(config.kind, payload_);
     if (!gate.ok) {
-      refuse(gate.reason, t('toasts.actionFailed'))
-      setSaveState('error')
-      return { outcome: 'aborted' as const }
+      refuse(gate.reason, t("toasts.actionFailed"));
+      setSaveState("error");
+      return { outcome: "aborted" as const };
     }
-    for (const w of gate.warnings) toast.warning(w)
+    for (const w of gate.warnings) toast.warning(w);
     // A currency-mismatched form can never post (the ledger refuses it), so
     // refuse the save up front with the account named.
     if (blockCurrencyMismatch()) {
-      setSaveState('error')
-      return { outcome: 'aborted' as const }
+      setSaveState("error");
+      return { outcome: "aborted" as const };
     }
     // A contentful row without an account can never book either: the
     // server names the line and refuses. Refuse up front with the grid
@@ -212,20 +238,28 @@ export function buildDocumentDrawerCommands(
     // before anything saves; the difference is named so the clerk knows
     // which way the lines are off.
     if (controlInvalid) {
-      refuse(tEntry('controlTotal.invalid'), t('toasts.actionFailed'))
-      setSaveState('error')
-      return { outcome: 'aborted' as const }
+      refuse(tEntry("controlTotal.invalid"), t("toasts.actionFailed"));
+      setSaveState("error");
+      return { outcome: "aborted" as const };
     }
     if (controlMismatch && controlDifference !== null) {
-      refuse(tEntry('controlTotal.mismatch', { difference: money(controlDifference, { currency: doc.currency }) }), t('toasts.actionFailed'))
-      setSaveState('error')
-      return { outcome: 'aborted' as const }
+      refuse(
+        tEntry("controlTotal.mismatch", {
+          difference: money(controlDifference, { currency: doc.currency }),
+        }),
+        t("toasts.actionFailed"),
+      );
+      setSaveState("error");
+      return { outcome: "aborted" as const };
     }
-    const missingAccount = findMissingAccountLine(rows)
+    const missingAccount = findMissingAccountLine(rows);
     if (missingAccount) {
-      refuse(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }), t('toasts.actionFailed'))
-      setSaveState('error')
-      return { outcome: 'aborted' as const }
+      refuse(
+        t("drawer.lineMissingAccount", { line: missingAccount.lineNumber }),
+        t("toasts.actionFailed"),
+      );
+      setSaveState("error");
+      return { outcome: "aborted" as const };
     }
     // Unsaved create: the single collection write. Same client-script and
     // currency gates as an edit above; the server runs the shared writer, so
@@ -234,16 +268,26 @@ export function buildDocumentDrawerCommands(
       // A possible duplicate warns before the write, never instead of it:
       // declining leaves the form exactly as typed for review.
       if (!(await confirmNoDuplicate())) {
-        setSaveState('dirty')
-        return { outcome: 'aborted' as const }
+        setSaveState("dirty");
+        return { outcome: "aborted" as const };
       }
-      if (config.kind === 'rma') {
-        return { outcome: 'create' as const, request: buildReturnCreateRequest(payload_ as Record<string, unknown>, idempotencyKey) }
+      if (config.kind === "rma") {
+        return {
+          outcome: "create" as const,
+          request: buildReturnCreateRequest(payload_ as Record<string, unknown>, idempotencyKey),
+        };
       }
-      return { outcome: 'create' as const, request: buildDocumentCreateRequest(config.kind, payload_ as Record<string, unknown>, idempotencyKey) }
+      return {
+        outcome: "create" as const,
+        request: buildDocumentCreateRequest(
+          config.kind,
+          payload_ as Record<string, unknown>,
+          idempotencyKey,
+        ),
+      };
     }
     return {
-      outcome: 'save' as const,
+      outcome: "save" as const,
       request: buildDocumentSaveRequest(
         String(doc.id),
         documentRevision,
@@ -251,12 +295,15 @@ export function buildDocumentDrawerCommands(
         isPosted,
         amendmentReason,
       ),
-    }
+    };
   }
 
   // Save & new needs an unsaved create form for this kind; kinds without one
   // (and readers who may not create) save to the record instead.
-  const freshFormHref = canCreate && isDocumentCreateKind(config.kind) ? documentCreateHref(basePath, config.kind) : null
+  const freshFormHref =
+    canCreate && isDocumentCreateKind(config.kind)
+      ? documentCreateHref(basePath, config.kind)
+      : null;
 
   /**
    * Leave a saved record for the requested destination. A fresh form for
@@ -264,201 +311,265 @@ export function buildDocumentDrawerCommands(
    * remounts to drop the saved entries and the spent idempotency key.
    */
   function landAfterSave(then: DocumentSaveThen, recordHref: string) {
-    if ((then === 'new' || then === 'postNew') && freshFormHref) {
-      stashCarry()
-      router.push(freshFormHref)
-      if (isCreate) startFresh?.()
-    } else if (then === 'close') {
-      router.push(basePath)
+    if ((then === "new" || then === "postNew") && freshFormHref) {
+      stashCarry();
+      router.push(freshFormHref);
+      if (isCreate) startFresh?.();
+    } else if (then === "close") {
+      router.push(basePath);
     } else {
-      router.push(recordHref)
+      router.push(recordHref);
     }
-    router.refresh()
+    router.refresh();
   }
 
   /** The native post command submits drafts, honors approval Flows and posts atomically. */
-  async function postSaved(documentId: string, documentNumber: string): Promise<'posted' | 'pending' | 'refused'> {
-    const result: { outcome: 'posted' | 'pending' | 'refused' } = { outcome: 'refused' }
-    await execute(() => fetchAppAction('/api/documents/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'post', documentId }),
-    }, { fallback: t('toasts.actionFailed') }), {
-      fallbackMessage: t('toasts.actionFailed'),
-      onOk: (data) => {
-        result.outcome = (data as { pendingApproval?: unknown } | null)?.pendingApproval === true ? 'pending' : 'posted'
-        toast.success(tEntry(result.outcome === 'pending' ? 'postAfterSave.pending' : 'postAfterSave.posted', { number: documentNumber }))
+  async function postSaved(
+    documentId: string,
+    documentNumber: string,
+  ): Promise<"posted" | "pending" | "refused"> {
+    const result: { outcome: "posted" | "pending" | "refused" } = { outcome: "refused" };
+    await execute(
+      () =>
+        fetchAppAction(
+          "/api/documents/actions",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "post", documentId }),
+          },
+          { fallback: t("toasts.actionFailed") },
+        ),
+      {
+        fallbackMessage: t("toasts.actionFailed"),
+        onOk: (data) => {
+          result.outcome =
+            (data as { pendingApproval?: unknown } | null)?.pendingApproval === true
+              ? "pending"
+              : "posted";
+          toast.success(
+            tEntry(
+              result.outcome === "pending" ? "postAfterSave.pending" : "postAfterSave.posted",
+              { number: documentNumber },
+            ),
+          );
+        },
       },
-    })
-    return result.outcome
+    );
+    return result.outcome;
   }
 
-  const save = runExclusive(async (then: DocumentSaveThen = 'view') => {
-    const postContinuation: { run?: () => Promise<void> } = {}
+  const save = runExclusive(async (then: DocumentSaveThen = "view") => {
+    const postContinuation: { run?: () => Promise<void> } = {};
     // Copy for a save the server failed to answer; a reason the server named
     // still pins verbatim, and only this exact copy marks the footer state.
-    const unavailableCopy = t('drawer.saveState.unavailableDetail')
-    let prepared: Awaited<ReturnType<typeof prepareSaveRequest>>
+    const unavailableCopy = t("drawer.saveState.unavailableDetail");
+    let prepared: Awaited<ReturnType<typeof prepareSaveRequest>>;
     try {
-      prepared = await prepareSaveRequest()
+      prepared = await prepareSaveRequest();
     } catch (error) {
       // Preamble bugs surface exactly like a refused save — pinned beside
       // the record and toasted — never a wedged Saving state with no
       // message. The operator reads the localized fallback (a client
       // exception is never usable copy); the console keeps the bug text.
-      console.error('[document-drawer] save preamble failed', error)
-      refuse(null, t('toasts.actionFailed'))
-      setSaveState('error')
-      return
+      console.error("[document-drawer] save preamble failed", error);
+      refuse(null, t("toasts.actionFailed"));
+      setSaveState("error");
+      return;
     }
-    if (prepared.outcome === 'aborted') return
-    if (prepared.outcome === 'create') {
-      const create = prepared.request
+    if (prepared.outcome === "aborted") return;
+    if (prepared.outcome === "create") {
+      const create = prepared.request;
       await execute(
         async () => {
-          const result = await fetchAppAction(create.path, {
-            method: create.method,
-            headers: create.headers,
-            body: JSON.stringify(create.body),
-          }, {
-            fallback: t('toasts.actionFailed'),
-            unavailable: unavailableCopy,
-            codeMessage: (code) => (code === 'document_create_conflict' ? t('drawer.createConflict') : undefined),
-          })
+          const result = await fetchAppAction(
+            create.path,
+            {
+              method: create.method,
+              headers: create.headers,
+              body: JSON.stringify(create.body),
+            },
+            {
+              fallback: t("toasts.actionFailed"),
+              unavailable: unavailableCopy,
+              codeMessage: (code) =>
+                code === "document_create_conflict" ? t("drawer.createConflict") : undefined,
+            },
+          );
           // A success that names no record is not a saved document: refuse it
           // here so the drawer neither toasts nor navigates on it. The key is
           // kept, so a retry replays the same record instead of duplicating it.
-          if (!result.ok || createdDocumentId(result.data) !== null) return result
-          return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('drawer.createUnconfirmed') }) }
+          if (!result.ok || createdDocumentId(result.data) !== null) return result;
+          return {
+            ok: false,
+            error: new ActionError({
+              kind: "refused",
+              serverMessage: t("drawer.createUnconfirmed"),
+            }),
+          };
         },
         {
-          fallbackMessage: t('toasts.actionFailed'),
+          fallbackMessage: t("toasts.actionFailed"),
           onOk: (payload) => {
-            const saved = (payload as DocPayload).doc
-            const recordHref = `${basePath}?doc=${String(saved.id)}`
-            if (then === 'post' || then === 'postNew') {
-              postContinuation.run = () => postSavedThenLand(String(saved.id), String(saved.document_number ?? ''), then, recordHref)
-              return
+            const saved = (payload as DocPayload).doc;
+            const recordHref = `${basePath}?doc=${String(saved.id)}`;
+            if (then === "post" || then === "postNew") {
+              postContinuation.run = () =>
+                postSavedThenLand(
+                  String(saved.id),
+                  String(saved.document_number ?? ""),
+                  then,
+                  recordHref,
+                );
+              return;
             }
-            toast.success(t('toasts.saved', { documentNumber: String(saved.document_number ?? '') }))
+            toast.success(
+              t("toasts.saved", { documentNumber: String(saved.document_number ?? "") }),
+            );
             // Land on the persisted record in view mode: the changed drawer
             // id remounts clean, so Submit/Post is available at once instead
             // of needing a second save to leave the editing caption behind.
-            landAfterSave(then, recordHref)
+            landAfterSave(then, recordHref);
           },
           onRefused: (error) => {
-            setSaveState(error.serverMessage === unavailableCopy ? 'unavailable' : 'error')
+            setSaveState(error.serverMessage === unavailableCopy ? "unavailable" : "error");
           },
         },
-      )
-      await postContinuation.run?.()
-      return
+      );
+      await postContinuation.run?.();
+      return;
     }
-    const request = prepared.request
+    const request = prepared.request;
     await execute(
       async () => {
-        const result = await fetchAppAction(request.path, {
-          method: request.method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(request.body),
-        }, { fallback: t('toasts.actionFailed'), unavailable: unavailableCopy })
+        const result = await fetchAppAction(
+          request.path,
+          {
+            method: request.method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(request.body),
+          },
+          { fallback: t("toasts.actionFailed"), unavailable: unavailableCopy },
+        );
         // An edit that does not name its record and revision cannot be adopted:
         // refuse it here instead of failing silently inside onOk.
-        if (!result.ok || editedDocumentAcknowledged(result.data)) return result
-        return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('drawer.saveUnconfirmed') }) }
+        if (!result.ok || editedDocumentAcknowledged(result.data)) return result;
+        return {
+          ok: false,
+          error: new ActionError({ kind: "refused", serverMessage: t("drawer.saveUnconfirmed") }),
+        };
       },
       {
         // A fresh attempt clears the previous refusal: the alert pins until
         // the next action, not past a successful save.
-        fallbackMessage: t('toasts.actionFailed'),
+        fallbackMessage: t("toasts.actionFailed"),
         onOk: (payload) => {
           const data = payload as DocPayload & {
-            correctionId?: string
-            voidStatus?: 'voided' | 'pending_approval' | 'corrected' | 'reclassified'
-          }
+            correctionId?: string;
+            voidStatus?: "voided" | "pending_approval" | "corrected" | "reclassified";
+          };
           if (isPosted && data.correctionId) {
             // In-place corrections keep the source document: toast the
             // lighter touch and refresh where the operator stands instead
             // of navigating to a replacement draft that does not exist.
-            if (data.voidStatus === 'corrected' || data.voidStatus === 'reclassified') {
-              toast.success(tCommon('amendment.correctionApplied'))
-              router.refresh()
-              return
+            if (data.voidStatus === "corrected" || data.voidStatus === "reclassified") {
+              toast.success(tCommon("amendment.correctionApplied"));
+              router.refresh();
+              return;
             }
             toast.success(
-              data.voidStatus === 'pending_approval'
-                ? t('toasts.submitted')
-                : tCommon('amendment.correctionCreated'),
-            )
-            router.push(hrefForDocument(data.correctionId))
-            router.refresh()
-            return
+              data.voidStatus === "pending_approval"
+                ? t("toasts.submitted")
+                : tCommon("amendment.correctionCreated"),
+            );
+            router.push(hrefForDocument(data.correctionId));
+            router.refresh();
+            return;
           }
-          const savedRevision = revisionFromSuccessfulDocumentSave(data)
+          const savedRevision = revisionFromSuccessfulDocumentSave(data);
           persistedBaseline.current = {
             documentId: String(data.doc.id),
             revision: savedRevision,
             payload: data,
+          };
+          seenPersistedRevisions.current.add(savedRevision);
+          resetForm(data);
+          setDocumentRevision(savedRevision);
+          setSaveState("saved");
+          setDirty(false);
+          setMode("view");
+          const recordHref = hrefForDocument(
+            String(data.doc.id),
+            searchParams.get("form") ?? undefined,
+          );
+          if (
+            (then === "post" || then === "postNew") &&
+            (data.doc.status === "draft" || data.doc.status === "approved")
+          ) {
+            postContinuation.run = () =>
+              postSavedThenLand(
+                String(data.doc.id),
+                String(data.doc.document_number ?? ""),
+                then,
+                recordHref,
+              );
+            return;
           }
-          seenPersistedRevisions.current.add(savedRevision)
-          resetForm(data)
-          setDocumentRevision(savedRevision)
-          setSaveState('saved')
-          setDirty(false)
-          setMode('view')
-          const recordHref = hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined)
-          if ((then === 'post' || then === 'postNew') && (data.doc.status === 'draft' || data.doc.status === 'approved')) {
-            postContinuation.run = () => postSavedThenLand(String(data.doc.id), String(data.doc.document_number ?? ''), then, recordHref)
-            return
-          }
-          toast.success(t('toasts.saved', { documentNumber: String(data.doc.document_number ?? '') }))
+          toast.success(
+            t("toasts.saved", { documentNumber: String(data.doc.document_number ?? "") }),
+          );
           // The save consumes the explicit edit request: landing on the
           // mode-less record URL keeps a later reload in view mode instead
           // of resurrecting the editing caption with nothing to save.
-          landAfterSave(then === 'post' ? 'view' : then === 'postNew' ? 'new' : then, recordHref)
+          landAfterSave(then === "post" ? "view" : then === "postNew" ? "new" : then, recordHref);
         },
         onRefused: (error) => {
           // A save refusal stays on the record, not only in a toast:
           // the typed reason pins as an alert until the next action or edit.
           // A server or connection failure with no named reason keeps the
           // entered values and says so, so the footer must not call it a refusal.
-          setSaveState(error.serverMessage === unavailableCopy ? 'unavailable' : 'error')
+          setSaveState(error.serverMessage === unavailableCopy ? "unavailable" : "error");
         },
       },
-    )
-    await postContinuation.run?.()
-  })
+    );
+    await postContinuation.run?.();
+  });
 
   /** After a save that asked to post: run the lifecycle, then land. */
-  function postSavedThenLand(documentId: string, documentNumber: string, then: 'post' | 'postNew', recordHref: string) {
+  function postSavedThenLand(
+    documentId: string,
+    documentNumber: string,
+    then: "post" | "postNew",
+    recordHref: string,
+  ) {
     return postSaved(documentId, documentNumber).then((outcome) => {
       // A refused post stays on the saved draft so the pinned reason is read.
-      if (outcome === 'refused') {
-        router.push(recordHref)
-        router.refresh()
-        return
+      if (outcome === "refused") {
+        router.push(recordHref);
+        router.refresh();
+        return;
       }
-      landAfterSave(then === 'postNew' ? 'new' : 'view', recordHref)
-    })
+      landAfterSave(then === "postNew" ? "new" : "view", recordHref);
+    });
   }
 
   /** Posting from the drawer is offered where the record could be posted directly after saving. */
-  const canSaveAndPost = canPost && config.kind !== 'project_charge' && config.directPost !== true
+  const canSaveAndPost = canPost && config.kind !== "project_charge" && config.directPost !== true;
 
   // A dirty editor never closes silently: the X button (via beforeClose) and
   // Cancel both ask first, so typed work survives a stray click.
   async function confirmDiscard() {
-    if (mode !== 'edit' || !dirty) return true
+    if (mode !== "edit" || !dirty) return true;
     return confirmDialog({
-      message: tCommon('feedback.unsavedChanges'),
-      confirmLabel: tCommon('confirm.discardChanges'),
-      tone: 'danger',
-    })
+      message: tCommon("feedback.unsavedChanges"),
+      confirmLabel: tCommon("confirm.discardChanges"),
+      tone: "danger",
+    });
   }
 
   async function cancelWithConfirm() {
-    if (!(await confirmDiscard())) return
-    cancel()
+    if (!(await confirmDiscard())) return;
+    cancel();
   }
 
   function cancel() {
@@ -466,100 +577,111 @@ export function buildDocumentDrawerCommands(
     // away and writes nothing — zero writes by construction (the only write
     // this drawer can make is the Save POST above, which Cancel never runs).
     if (isCreate) {
-      router.push(basePath)
-      router.refresh()
-      return
+      router.push(basePath);
+      router.refresh();
+      return;
     }
     const incoming = {
       documentId: String(doc.id),
       revision: persistedPropRevision,
       payload,
-    }
-    const previousDocumentId = persistedBaseline.current.documentId
-    const previouslySeen = new Set(seenPersistedRevisions.current)
+    };
+    const previousDocumentId = persistedBaseline.current.documentId;
+    const previouslySeen = new Set(seenPersistedRevisions.current);
     const decision = reconcilePersistedDocumentSnapshot(
       persistedBaseline.current,
       incoming,
       false,
       previouslySeen,
-    )
+    );
     if (previousDocumentId !== incoming.documentId) {
-      seenPersistedRevisions.current = new Set([persistedPropRevision])
+      seenPersistedRevisions.current = new Set([persistedPropRevision]);
     } else if (decision.rehydrate) {
-      seenPersistedRevisions.current.add(persistedPropRevision)
+      seenPersistedRevisions.current.add(persistedPropRevision);
     }
-    persistedBaseline.current = decision.snapshot
-    resetForm(decision.snapshot.payload)
-    setDocumentRevision(decision.snapshot.revision)
-    setDirty(false)
-    setSaveState('saved')
-    setMode('view')
+    persistedBaseline.current = decision.snapshot;
+    resetForm(decision.snapshot.payload);
+    setDocumentRevision(decision.snapshot.revision);
+    setDirty(false);
+    setSaveState("saved");
+    setMode("view");
   }
 
-  async function act(action: 'submit' | 'post') {
+  async function act(action: "submit" | "post") {
     // Same up-front refusal as save: posting a currency-mismatched record
     // is a certain 422, so name the account before the round trip.
     if (blockCurrencyMismatch()) {
-      return
+      return;
     }
     // Consequence before commit for till money: state in plain words what
     // posting settles — per tender account — before the kernel runs. The
     // section above already cross-foots tendered against the total; this
     // restates it at the commit point so a mis-tendered tap cannot slip
     // through on muscle memory.
-    if (action === 'post' && isCashKind) {
-      const drafts = parseTenderDrafts(customValues.tenders)
+    if (action === "post" && isCashKind) {
+      const drafts = parseTenderDrafts(customValues.tenders);
       const tenderLines = drafts.map((draft) => {
-        const label = draft.methodLabel || draft.kind
-        const reference = draft.reference ? ` ${draft.reference}` : ''
-        if (draft.kind === 'stored_value') {
-          const card = draft.svLast4 ? `…${draft.svLast4}` : t('tenders.unresolvedCard')
-          return `· ${money(draft.amount || '0', { currency: doc.currency })} ${label}${reference} → ${card}`
+        const label = draft.methodLabel || draft.kind;
+        const reference = draft.reference ? ` ${draft.reference}` : "";
+        if (draft.kind === "stored_value") {
+          const card = draft.svLast4 ? `…${draft.svLast4}` : t("tenders.unresolvedCard");
+          return `· ${money(draft.amount || "0", { currency: doc.currency })} ${label}${reference} → ${card}`;
         }
-        const account = tenderAccountOptions.find((option) => option.value === draft.accountId)?.label ?? draft.accountId
-        return `· ${money(draft.amount || '0', { currency: doc.currency })} ${label}${reference} → ${account}`
-      })
+        const account =
+          tenderAccountOptions.find((option) => option.value === draft.accountId)?.label ??
+          draft.accountId;
+        return `· ${money(draft.amount || "0", { currency: doc.currency })} ${label}${reference} → ${account}`;
+      });
       const confirmed = await confirmDialog({
-        title: t('tenders.postTitle'),
-        message: t('tenders.postBody', {
-          number: doc.document_number ?? '',
+        title: t("tenders.postTitle"),
+        message: t("tenders.postBody", {
+          number: doc.document_number ?? "",
           total: money(effectiveTotals.total, { currency: doc.currency }),
-          tenders: tenderLines.join('\n'),
+          tenders: tenderLines.join("\n"),
         }),
-        confirmLabel: tCommon('actions.post'),
-      })
-      if (!confirmed) return
+        confirmLabel: tCommon("actions.post"),
+      });
+      if (!confirmed) return;
     }
-    setPostWarnings([])
-    setMatchRefused(false)
+    setPostWarnings([]);
+    setMatchRefused(false);
     await execute(
       () =>
-        fetchAppAction('/api/documents/actions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, documentId: doc.id }),
-        }, { fallback: t('toasts.actionFailed') }),
+        fetchAppAction(
+          "/api/documents/actions",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, documentId: doc.id }),
+          },
+          { fallback: t("toasts.actionFailed") },
+        ),
       {
-        fallbackMessage: t('toasts.actionFailed'),
+        fallbackMessage: t("toasts.actionFailed"),
         onOk: (data) => {
           const result = data as {
-            pendingApproval?: unknown
-            warnings?: { code: string; accounts?: { accountNumber: string | null; accountName: string }[] }[]
-          } | null
-          const pendingApproval = result?.pendingApproval === true
-          if (pendingApproval) toast.success(t('toasts.submitted'))
-          else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
-          const partyless = (result?.warnings ?? []).find((warning) => warning.code === 'partyless_control_lines')
+            pendingApproval?: unknown;
+            warnings?: {
+              code: string;
+              accounts?: { accountNumber: string | null; accountName: string }[];
+            }[];
+          } | null;
+          const pendingApproval = result?.pendingApproval === true;
+          if (pendingApproval) toast.success(t("toasts.submitted"));
+          else toast.success(action === "submit" ? t("toasts.submitted") : t("toasts.posted"));
+          const partyless = (result?.warnings ?? []).find(
+            (warning) => warning.code === "partyless_control_lines",
+          );
           if (partyless?.accounts?.length) {
             setPostWarnings([
-              t('drawer.partylessControlWarning', {
+              t("drawer.partylessControlWarning", {
                 accounts: partyless.accounts
-                  .map((account) => `${account.accountNumber ?? ''} ${account.accountName}`.trim())
-                  .join(', '),
+                  .map((account) => `${account.accountNumber ?? ""} ${account.accountName}`.trim())
+                  .join(", "),
               }),
-            ])
+            ]);
           }
-          router.refresh()
+          router.refresh();
         },
         onRefused: (error) => {
           // Lifecycle refusals (period locks, missing control accounts,
@@ -570,28 +692,41 @@ export function buildDocumentDrawerCommands(
           // A bill refused until its lines are matched offers the match
           // dialog beside the pinned refusal, keyed on the refusal code —
           // never on message text.
-          if (error.code === 'BILL_LINES_UNMATCHED') setMatchRefused(true)
-          if (error.kind !== 'transport') router.refresh()
+          if (error.code === "BILL_LINES_UNMATCHED") setMatchRefused(true);
+          if (error.kind !== "transport") router.refresh();
         },
       },
-    )
+    );
   }
 
   async function retryPostingEffects() {
     const reason = await promptDialog({
-      title: tPostingEffects('retry'), label: tPostingEffects('reason'),
-      placeholder: tPostingEffects('reasonHelp'),
-    })
-    if (reason === null) return
+      title: tPostingEffects("retry"),
+      label: tPostingEffects("reason"),
+      placeholder: tPostingEffects("reasonHelp"),
+    });
+    if (reason === null) return;
     if (reason.trim().length < 10 || reason.trim().length > 1000) {
-      refuse(tPostingEffects('reasonHelp'), t('toasts.actionFailed'))
-      return
+      refuse(tPostingEffects("reasonHelp"), t("toasts.actionFailed"));
+      return;
     }
-    await execute(() => fetchAppAction('/api/documents/actions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'retry-effects', documentId: doc.id, reason }),
-    }, { fallback: t('toasts.actionFailed') }), { fallbackMessage: t('toasts.actionFailed'),
-      successMessage: tPostingEffects('queued'), onOk: () => router.refresh() })
+    await execute(
+      () =>
+        fetchAppAction(
+          "/api/documents/actions",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "retry-effects", documentId: doc.id, reason }),
+          },
+          { fallback: t("toasts.actionFailed") },
+        ),
+      {
+        fallbackMessage: t("toasts.actionFailed"),
+        successMessage: tPostingEffects("queued"),
+        onOk: () => router.refresh(),
+      },
+    );
   }
 
   async function returnToDraft() {
@@ -600,115 +735,147 @@ export function buildDocumentDrawerCommands(
     // the approved-only gate, the approve-level permission, and every refusal
     // remedy; refusals pin beside the record through the shared handler.
     const reason = await promptDialog({
-      title: tCommon('actions.returnToDraft'),
-      label: tCommon('amendment.reason'),
-      placeholder: tCommon('amendment.returnToDraftPlaceholder'),
-      confirmLabel: tCommon('actions.returnToDraft'),
-    })
-    if (reason === null) return
+      title: tCommon("actions.returnToDraft"),
+      label: tCommon("amendment.reason"),
+      placeholder: tCommon("amendment.returnToDraftPlaceholder"),
+      confirmLabel: tCommon("actions.returnToDraft"),
+    });
+    if (reason === null) return;
     if (reason.trim().length < 5 || reason.trim().length > 500) {
-      refuse(tCommon('amendment.returnToDraftPlaceholder'), t('toasts.actionFailed'))
-      return
+      refuse(tCommon("amendment.returnToDraftPlaceholder"), t("toasts.actionFailed"));
+      return;
     }
-    await execute(() => fetchAppAction('/api/documents/actions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'return_to_draft', documentId: doc.id, reason, expectedUpdatedAt: documentRevision }),
-    }, { fallback: t('toasts.actionFailed') }), { fallbackMessage: t('toasts.actionFailed'),
-      successMessage: tCommon('status.draft'), onOk: () => router.refresh() })
+    await execute(
+      () =>
+        fetchAppAction(
+          "/api/documents/actions",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "return_to_draft",
+              documentId: doc.id,
+              reason,
+              expectedUpdatedAt: documentRevision,
+            }),
+          },
+          { fallback: t("toasts.actionFailed") },
+        ),
+      {
+        fallbackMessage: t("toasts.actionFailed"),
+        successMessage: tCommon("status.draft"),
+        onOk: () => router.refresh(),
+      },
+    );
   }
 
   async function remove() {
     if (
       !(await confirmDialog({
-        title: t('drawer.deleteTitle'),
-        message: t('drawer.deleteDraftBody'),
-        confirmLabel: tCommon('actions.delete'),
-        tone: 'danger',
+        title: t("drawer.deleteTitle"),
+        message: t("drawer.deleteDraftBody"),
+        confirmLabel: tCommon("actions.delete"),
+        tone: "danger",
       }))
     )
-      return
+      return;
     await execute(
       () =>
-        fetchAppAction(`/api/documents/${doc.id}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ expectedUpdatedAt: documentRevision }),
-        }, { fallback: t('toasts.deleteFailed') }),
+        fetchAppAction(
+          `/api/documents/${doc.id}`,
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ expectedUpdatedAt: documentRevision }),
+          },
+          { fallback: t("toasts.deleteFailed") },
+        ),
       {
-        fallbackMessage: t('toasts.deleteFailed'),
-        successMessage: t('toasts.deleted'),
+        fallbackMessage: t("toasts.deleteFailed"),
+        successMessage: t("toasts.deleted"),
         onOk: () => {
-          router.push(basePath)
-          router.refresh()
+          router.push(basePath);
+          router.refresh();
         },
       },
-    )
+    );
   }
 
   async function voidDocument() {
     const reason = await promptDialog({
-      title: tCommon('amendment.voidTitle'),
-      label: tCommon('amendment.reason'),
-      placeholder: tCommon('amendment.voidPlaceholder'),
-      confirmLabel: tCommon('actions.void'),
-    })
-    if (!reason) return
+      title: tCommon("amendment.voidTitle"),
+      label: tCommon("amendment.reason"),
+      placeholder: tCommon("amendment.voidPlaceholder"),
+      confirmLabel: tCommon("actions.void"),
+    });
+    if (!reason) return;
     const reversal = await promptVoidReversalPeriod(doc.id, {
-      title: tCommon('amendment.voidReversalPeriodTitle'),
-      dateLabel: tCommon('amendment.voidReversalDateLabel'),
-      summaryOriginal: tCommon('amendment.voidReversalSummaryOriginal'),
-      summaryReversal: tCommon('amendment.voidReversalSummaryReversal'),
-      fiscalYear: tCommon('amendment.voidReversalFiscalYear'),
-      fallbackNotice: tCommon('amendment.voidReversalFallbackNotice'),
-      closedNotice: tCommon('amendment.voidReversalClosedNotice'),
-      label: tCommon('amendment.voidReversalPeriodLabel'),
-      regularOption: tCommon('amendment.voidReversalPeriodRegular'),
-      confirm: tCommon('actions.void'),
-      cancel: tCommon('confirm.cancel'),
-    })
-    if (reversal.cancelled) return
+      title: tCommon("amendment.voidReversalPeriodTitle"),
+      dateLabel: tCommon("amendment.voidReversalDateLabel"),
+      summaryOriginal: tCommon("amendment.voidReversalSummaryOriginal"),
+      summaryReversal: tCommon("amendment.voidReversalSummaryReversal"),
+      fiscalYear: tCommon("amendment.voidReversalFiscalYear"),
+      fallbackNotice: tCommon("amendment.voidReversalFallbackNotice"),
+      closedNotice: tCommon("amendment.voidReversalClosedNotice"),
+      label: tCommon("amendment.voidReversalPeriodLabel"),
+      regularOption: tCommon("amendment.voidReversalPeriodRegular"),
+      confirm: tCommon("actions.void"),
+      cancel: tCommon("confirm.cancel"),
+    });
+    if (reversal.cancelled) return;
     await execute(
       () =>
         // The enriched read keeps the server's remedy and code on the
         // refusal: a void the periods or approvals refuse pins its reason
         // and next step, never a bare fallback.
-        fetchAppAction(`/api/documents/${doc.id}/void`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            reason,
-            expectedUpdatedAt: documentRevision,
-            ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
-            ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
-          }),
-        }, { fallback: t('toasts.actionFailed') }),
+        fetchAppAction(
+          `/api/documents/${doc.id}/void`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              reason,
+              expectedUpdatedAt: documentRevision,
+              ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
+              ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
+            }),
+          },
+          { fallback: t("toasts.actionFailed") },
+        ),
       {
-        fallbackMessage: t('toasts.actionFailed'),
+        fallbackMessage: t("toasts.actionFailed"),
         onOk: (data) => {
-          const status = (data as { status?: unknown } | null)?.status
-          if (status === 'pending_approval') toast.success(t('toasts.submitted'))
-          else toast.success(tCommon('status.voided'))
+          const status = (data as { status?: unknown } | null)?.status;
+          if (status === "pending_approval") toast.success(t("toasts.submitted"));
+          else toast.success(tCommon("status.voided"));
         },
       },
-    )
-    router.refresh()
+    );
+    router.refresh();
   }
 
   // Per-record "Custom Form" picker (view mode) — switch the form layout for
   // this record, optionally set it as the user's preferred form.
   async function setPreferredForm(layoutId: string | null) {
-    if (!recordType) return
+    if (!recordType) return;
     await execute(
       () =>
-        fetchAppAction('/api/customization/form-preferences', {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recordType, layoutId }),
-        }, { fallback: t('drawer.formPreferredFailed') }),
+        fetchAppAction(
+          "/api/customization/form-preferences",
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ recordType, layoutId }),
+          },
+          { fallback: t("drawer.formPreferredFailed") },
+        ),
       {
-        fallbackMessage: t('drawer.formPreferredFailed'),
-        successMessage: layoutId ? t('drawer.formSetPreferredDone') : t('drawer.formPreferredCleared'),
+        fallbackMessage: t("drawer.formPreferredFailed"),
+        successMessage: layoutId
+          ? t("drawer.formSetPreferredDone")
+          : t("drawer.formPreferredCleared"),
       },
-    )
+    );
   }
 
   return {
@@ -723,7 +890,8 @@ export function buildDocumentDrawerCommands(
     remove,
     voidDocument,
     setPreferredForm,
-  }
+  };
 }
 
-export type DocumentDrawerCommandsScope = DocumentDrawerPayloadScope & ReturnType<typeof buildDocumentDrawerCommands>
+export type DocumentDrawerCommandsScope = DocumentDrawerPayloadScope &
+  ReturnType<typeof buildDocumentDrawerCommands>;

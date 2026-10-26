@@ -19,7 +19,12 @@ export function dateAgeDays(value: string, now = new Date()): number {
   const date = Date.parse(`${value}T00:00:00Z`);
   if (!Number.isFinite(date)) return 0;
   // Year is the wall-clock `now` (live clock in production), which cannot be below 100 — see the allow-list.
-  return Math.max(0, Math.floor((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - date) / 86_400_000));
+  return Math.max(
+    0,
+    Math.floor(
+      (Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - date) / 86_400_000,
+    ),
+  );
 }
 
 export function classifyUnmatchedBankActivity(args: {
@@ -35,11 +40,23 @@ export function classifyUnmatchedBankActivity(args: {
   const age = dateAgeDays(args.oldestDate, args.now);
   const material = absoluteUnits(args.materiality);
   const threshold = absoluteUnits(args.threshold);
-  if (age >= (args.criticalAgeDays ?? 30) || material >= threshold * BigInt(args.criticalMaterialityMultiple ?? 5) || args.count >= (args.criticalItemCount ?? 50)) return "critical";
+  if (
+    age >= (args.criticalAgeDays ?? 30) ||
+    material >= threshold * BigInt(args.criticalMaterialityMultiple ?? 5) ||
+    args.count >= (args.criticalItemCount ?? 50)
+  )
+    return "critical";
   return "warning";
 }
 
-export function classifyBudgetVariance(args: { budget: string; actual: string; accountType: string; threshold: string; minimumVarianceBps?: number; criticalVarianceBps?: number }): {
+export function classifyBudgetVariance(args: {
+  budget: string;
+  actual: string;
+  accountType: string;
+  threshold: string;
+  minimumVarianceBps?: number;
+  criticalVarianceBps?: number;
+}): {
   include: boolean;
   favorable: boolean;
   variance: string;
@@ -55,8 +72,14 @@ export function classifyBudgetVariance(args: { budget: string; actual: string; a
   const income = args.accountType === "income" || args.accountType === "income_other";
   const favorable = income ? variance >= 0n : variance <= 0n;
   const varianceBps = absBudget === 0n ? null : Number((absVariance * 10_000n) / absBudget);
-  const include = !favorable && absVariance >= threshold && (varianceBps === null || varianceBps >= (args.minimumVarianceBps ?? 1_000));
-  const severity: WorkItemSeverity = varianceBps !== null && varianceBps >= (args.criticalVarianceBps ?? 2_500) ? "critical" : "warning";
+  const include =
+    !favorable &&
+    absVariance >= threshold &&
+    (varianceBps === null || varianceBps >= (args.minimumVarianceBps ?? 1_000));
+  const severity: WorkItemSeverity =
+    varianceBps !== null && varianceBps >= (args.criticalVarianceBps ?? 2_500)
+      ? "critical"
+      : "warning";
   return {
     include,
     favorable,
@@ -66,7 +89,14 @@ export function classifyBudgetVariance(args: { budget: string; actual: string; a
   };
 }
 
-export function classifyPeriodPerformance(args: { currentRevenue: string; priorRevenue: string; currentCogs: string; priorCogs: string; threshold: string; minimumRevenueDeclineBps?: number }): {
+export function classifyPeriodPerformance(args: {
+  currentRevenue: string;
+  priorRevenue: string;
+  currentCogs: string;
+  priorCogs: string;
+  threshold: string;
+  minimumRevenueDeclineBps?: number;
+}): {
   revenueDecline: boolean;
   revenueChangeBps: number | null;
   grossMarginDropBps: number | null;
@@ -75,13 +105,24 @@ export function classifyPeriodPerformance(args: { currentRevenue: string; priorR
   const priorRevenue = toUnits(args.priorRevenue);
   const threshold = absoluteUnits(args.threshold);
   const decline = priorRevenue - currentRevenue;
-  const revenueChangeBps = priorRevenue === 0n ? null : Number(((currentRevenue - priorRevenue) * 10_000n) / (priorRevenue < 0n ? -priorRevenue : priorRevenue));
-  const marginBps = (revenue: bigint, cogs: bigint): bigint | null => (revenue === 0n ? null : ((revenue - cogs) * 10_000n) / revenue);
+  const revenueChangeBps =
+    priorRevenue === 0n
+      ? null
+      : Number(
+          ((currentRevenue - priorRevenue) * 10_000n) /
+            (priorRevenue < 0n ? -priorRevenue : priorRevenue),
+        );
+  const marginBps = (revenue: bigint, cogs: bigint): bigint | null =>
+    revenue === 0n ? null : ((revenue - cogs) * 10_000n) / revenue;
   const currentMargin = marginBps(currentRevenue, toUnits(args.currentCogs));
   const priorMargin = marginBps(priorRevenue, toUnits(args.priorCogs));
-  const grossMarginDropBps = currentMargin === null || priorMargin === null ? null : Number(priorMargin - currentMargin);
+  const grossMarginDropBps =
+    currentMargin === null || priorMargin === null ? null : Number(priorMargin - currentMargin);
   return {
-    revenueDecline: decline >= threshold && revenueChangeBps !== null && revenueChangeBps <= -(args.minimumRevenueDeclineBps ?? 1_000),
+    revenueDecline:
+      decline >= threshold &&
+      revenueChangeBps !== null &&
+      revenueChangeBps <= -(args.minimumRevenueDeclineBps ?? 1_000),
     revenueChangeBps,
     grossMarginDropBps,
   };
@@ -92,8 +133,14 @@ export function classifyPeriodPerformance(args: { currentRevenue: string; priorR
  * like debits) and the detector materiality is the inclusion floor, so the
  * only question is the critical multiple.
  */
-export function classifyForensicItem(args: { materiality: string; threshold: string; criticalMaterialityMultiple?: number }): WorkItemSeverity {
+export function classifyForensicItem(args: {
+  materiality: string;
+  threshold: string;
+  criticalMaterialityMultiple?: number;
+}): WorkItemSeverity {
   const material = absoluteUnits(args.materiality);
   const threshold = absoluteUnits(args.threshold);
-  return material >= threshold * BigInt(args.criticalMaterialityMultiple ?? 5) ? "critical" : "warning";
+  return material >= threshold * BigInt(args.criticalMaterialityMultiple ?? 5)
+    ? "critical"
+    : "warning";
 }

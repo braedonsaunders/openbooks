@@ -10,10 +10,7 @@ import {
   filingAccountsById,
   filingAccountRef,
 } from "../filing.ts";
-import {
-  payrollCertificate,
-  resolveCertificate,
-} from "../certificates.ts";
+import { payrollCertificate, resolveCertificate } from "../certificates.ts";
 import { storedTaxCertificates } from "../run-calculation-support.ts";
 import type {
   PayrollFilingData,
@@ -78,12 +75,12 @@ export function assertLohnsteuerbescheinigungYear(taxYear: number): void {
   );
   if (!published) {
     throw new PayrollPackError(
-      `DE Lohnsteuerbescheinigung: no published Ausdruck der elektronischen `
-      + `Lohnsteuerbescheinigung for tax year ${taxYear} — 2026 is the only published edition `
-      + `(BMF Programmablaufplan für den Lohnsteuerabzug 2026, BMF-Schreiben vom 12.11.2025; `
-      + `Ausdruck der elektronischen Lohnsteuerbescheinigung für 2026). Rate tables and form `
-      + `layouts publish separately: filing a prior year's box layout against current money is `
-      + `refused. This layout is not yet supported by the DE pack; contact support.`,
+      `DE Lohnsteuerbescheinigung: no published Ausdruck der elektronischen ` +
+        `Lohnsteuerbescheinigung for tax year ${taxYear} — 2026 is the only published edition ` +
+        `(BMF Programmablaufplan für den Lohnsteuerabzug 2026, BMF-Schreiben vom 12.11.2025; ` +
+        `Ausdruck der elektronischen Lohnsteuerbescheinigung für 2026). Rate tables and form ` +
+        `layouts publish separately: filing a prior year's box layout against current money is ` +
+        `refused. This layout is not yet supported by the DE pack; contact support.`,
     );
   }
 }
@@ -131,42 +128,92 @@ export function bescheinigungszeitraum(
 ): { von: string; bis: string } {
   if (hiredOn == null || hiredOn === "") {
     throw new PayrollPackError(
-      `DE Lohnsteuerbescheinigung: no employment start (hired_on) is recorded for ${employeeName} — `
-      + `the Bescheinigungszeitraum is the duration of the Dienstverhältnis in ${taxYear} (EStG §41b Abs. 1), `
-      + "never inferred from pay dates; record the employment relationship dates before issuing",
+      `DE Lohnsteuerbescheinigung: no employment start (hired_on) is recorded for ${employeeName} — ` +
+        `the Bescheinigungszeitraum is the duration of the Dienstverhältnis in ${taxYear} (EStG §41b Abs. 1), ` +
+        "never inferred from pay dates; record the employment relationship dates before issuing",
     );
   }
   const yearStart = `${taxYear}-01-01`;
   const yearEnd = `${taxYear}-12-31`;
   if (terminatedOn != null && terminatedOn !== "" && terminatedOn < yearStart) {
     throw new PayrollPackError(
-      `DE Lohnsteuerbescheinigung: the employment relationship with ${employeeName} ended ${terminatedOn}, `
-      + `before ${taxYear} — no ${taxYear} certificate is owed for an employee not employed during the year`,
+      `DE Lohnsteuerbescheinigung: the employment relationship with ${employeeName} ended ${terminatedOn}, ` +
+        `before ${taxYear} — no ${taxYear} certificate is owed for an employee not employed during the year`,
     );
   }
   return {
     von: hiredOn < yearStart ? yearStart : hiredOn,
-    bis: terminatedOn == null || terminatedOn === "" || terminatedOn > yearEnd ? yearEnd : terminatedOn,
+    bis:
+      terminatedOn == null || terminatedOn === "" || terminatedOn > yearEnd
+        ? yearEnd
+        : terminatedOn,
   };
 }
 
 const AUSDRUCK_2026 =
-  "Ausdruck der elektronischen Lohnsteuerbescheinigung für 2026 "
-  + "(BMF, Anlage LStH 2026 Anhang 23)";
+  "Ausdruck der elektronischen Lohnsteuerbescheinigung für 2026 " +
+  "(BMF, Anlage LStH 2026 Anhang 23)";
 
 /** Every box the slip prints → the Ausdruck Zeile it comes from. */
-export const LOHNSTEUERBESCHEINIGUNG_CITATIONS: Record<string, { zeile: string; label: string; source: string }> = {
-  "3": { zeile: "Zeile 3", label: "Bruttoarbeitslohn einschl. Sachbezüge", source: `${AUSDRUCK_2026}, Zeile 3` },
-  "4": { zeile: "Zeile 4", label: "Einbehaltene Lohnsteuer von 3.", source: `${AUSDRUCK_2026}, Zeile 4` },
-  "5": { zeile: "Zeile 5", label: "Einbehaltener Solidaritätszuschlag von 3.", source: `${AUSDRUCK_2026}, Zeile 5` },
-  "6": { zeile: "Zeile 6", label: "Einbehaltene Kirchensteuer des Arbeitnehmers von 3.", source: `${AUSDRUCK_2026}, Zeile 6` },
-  "22a": { zeile: "Zeile 22a", label: "Arbeitgeberanteil zur gesetzlichen Rentenversicherung", source: `${AUSDRUCK_2026}, Zeile 22a` },
-  "23a": { zeile: "Zeile 23a", label: "Arbeitnehmeranteil zur gesetzlichen Rentenversicherung", source: `${AUSDRUCK_2026}, Zeile 23a` },
-  "24a": { zeile: "Zeile 24a", label: "Steuerfreie Arbeitgeberzuschüsse zur gesetzlichen Krankenversicherung", source: `${AUSDRUCK_2026}, Zeile 24a` },
-  "24c": { zeile: "Zeile 24c", label: "Steuerfreie Arbeitgeberzuschüsse zur gesetzlichen Pflegeversicherung", source: `${AUSDRUCK_2026}, Zeile 24c` },
-  "25": { zeile: "Zeile 25", label: "Arbeitnehmerbeiträge zur gesetzlichen Krankenversicherung", source: `${AUSDRUCK_2026}, Zeile 25` },
-  "26": { zeile: "Zeile 26", label: "Arbeitnehmerbeiträge zur sozialen Pflegeversicherung", source: `${AUSDRUCK_2026}, Zeile 26` },
-  "27": { zeile: "Zeile 27", label: "Arbeitnehmerbeiträge zur Arbeitslosenversicherung", source: `${AUSDRUCK_2026}, Zeile 27` },
+export const LOHNSTEUERBESCHEINIGUNG_CITATIONS: Record<
+  string,
+  { zeile: string; label: string; source: string }
+> = {
+  "3": {
+    zeile: "Zeile 3",
+    label: "Bruttoarbeitslohn einschl. Sachbezüge",
+    source: `${AUSDRUCK_2026}, Zeile 3`,
+  },
+  "4": {
+    zeile: "Zeile 4",
+    label: "Einbehaltene Lohnsteuer von 3.",
+    source: `${AUSDRUCK_2026}, Zeile 4`,
+  },
+  "5": {
+    zeile: "Zeile 5",
+    label: "Einbehaltener Solidaritätszuschlag von 3.",
+    source: `${AUSDRUCK_2026}, Zeile 5`,
+  },
+  "6": {
+    zeile: "Zeile 6",
+    label: "Einbehaltene Kirchensteuer des Arbeitnehmers von 3.",
+    source: `${AUSDRUCK_2026}, Zeile 6`,
+  },
+  "22a": {
+    zeile: "Zeile 22a",
+    label: "Arbeitgeberanteil zur gesetzlichen Rentenversicherung",
+    source: `${AUSDRUCK_2026}, Zeile 22a`,
+  },
+  "23a": {
+    zeile: "Zeile 23a",
+    label: "Arbeitnehmeranteil zur gesetzlichen Rentenversicherung",
+    source: `${AUSDRUCK_2026}, Zeile 23a`,
+  },
+  "24a": {
+    zeile: "Zeile 24a",
+    label: "Steuerfreie Arbeitgeberzuschüsse zur gesetzlichen Krankenversicherung",
+    source: `${AUSDRUCK_2026}, Zeile 24a`,
+  },
+  "24c": {
+    zeile: "Zeile 24c",
+    label: "Steuerfreie Arbeitgeberzuschüsse zur gesetzlichen Pflegeversicherung",
+    source: `${AUSDRUCK_2026}, Zeile 24c`,
+  },
+  "25": {
+    zeile: "Zeile 25",
+    label: "Arbeitnehmerbeiträge zur gesetzlichen Krankenversicherung",
+    source: `${AUSDRUCK_2026}, Zeile 25`,
+  },
+  "26": {
+    zeile: "Zeile 26",
+    label: "Arbeitnehmerbeiträge zur sozialen Pflegeversicherung",
+    source: `${AUSDRUCK_2026}, Zeile 26`,
+  },
+  "27": {
+    zeile: "Zeile 27",
+    label: "Arbeitnehmerbeiträge zur Arbeitslosenversicherung",
+    source: `${AUSDRUCK_2026}, Zeile 27`,
+  },
 };
 
 /**
@@ -185,15 +232,15 @@ export const LOHNSTEUERBESCHEINIGUNG_GAPS: readonly string[] = [
 ];
 
 const LOHNSTEUERBESCHEINIGUNG_DOWNLOAD_REFUSAL =
-  "the DE pack produces no ELSTER Lohnsteuerbescheinigung transmission (the EStG §41b electronic "
-  + "certificate Datensatz) — the Ausdruck above is the complete employee statement; transmit the "
-  + "certificate data to the Finanzamt through ELSTER directly";
+  "the DE pack produces no ELSTER Lohnsteuerbescheinigung transmission (the EStG §41b electronic " +
+  "certificate Datensatz) — the Ausdruck above is the complete employee statement; transmit the " +
+  "certificate data to the Finanzamt through ELSTER directly";
 
 const LOHNSTEUERBESCHEINIGUNG_AMENDMENT_REFUSAL =
-  "a wrong Lohnsteuerbescheinigung is corrected by retransmitting it flagged as amended (als geändert "
-  + "gekennzeichnet, EStG §41c Satz 5 — §41b Abs. 1 gilt entsprechend) via ELSTER, which this pack does "
-  + "not transmit. Correct the payroll data, re-run and commit, retransmit via ELSTER, and re-print the "
-  + "Ausdruck from the corrected runs";
+  "a wrong Lohnsteuerbescheinigung is corrected by retransmitting it flagged as amended (als geändert " +
+  "gekennzeichnet, EStG §41c Satz 5 — §41b Abs. 1 gilt entsprechend) via ELSTER, which this pack does " +
+  "not transmit. Correct the payroll data, re-run and commit, retransmit via ELSTER, and re-print the " +
+  "Ausdruck from the corrected runs";
 
 /** One employee's certified year per employer, as the DB builder assembles it. */
 export interface DeLohnsteuerbescheinigungSlip {
@@ -247,53 +294,113 @@ export interface DeLohnsteuerbescheinigungSlip {
  * Amounts pass through verbatim: the slip certifies withheld sums, it does
  * not recompute them.
  */
-export function lohnsteuerbescheinigungSlipData(slip: DeLohnsteuerbescheinigungSlip): PayrollFilingSlipData {
-  const steuerklasseFaktor = slip.faktor != null && slip.faktor !== ""
-    ? `${slip.steuerklasse} / ${slip.faktor}`
-    : slip.steuerklasse;
+export function lohnsteuerbescheinigungSlipData(
+  slip: DeLohnsteuerbescheinigungSlip,
+): PayrollFilingSlipData {
+  const steuerklasseFaktor =
+    slip.faktor != null && slip.faktor !== ""
+      ? `${slip.steuerklasse} / ${slip.faktor}`
+      : slip.steuerklasse;
   return {
     formCode: "DE_LSTB",
     formName: "Ausdruck der elektronischen Lohnsteuerbescheinigung",
     formNumber: "Lohnsteuerbescheinigung",
     headerFields: [
       { label: "Arbeitnehmer", value: slip.employeeName },
-      { label: "Bescheinigungszeitraum (Zeile 1)", value: `${slip.zeitraumVon} – ${slip.zeitraumBis}` },
+      {
+        label: "Bescheinigungszeitraum (Zeile 1)",
+        value: `${slip.zeitraumVon} – ${slip.zeitraumBis}`,
+      },
       { label: "Steuerklasse/Faktor", value: steuerklasseFaktor },
       { label: "Zahl der Kinderfreibeträge", value: slip.kinderfreibetraege },
       { label: "Steuerfreier Jahresbetrag", value: slip.freibetragJahr, money: true },
       { label: "Jahreshinzurechnungsbetrag", value: slip.hinzurechnungsbetragJahr, money: true },
       { label: "Kirchensteuermerkmale", value: slip.konfession ?? "— keine" },
       { label: "Beschäftigungsland", value: slip.land || "—" },
-      { label: "Finanzamt, an das die Lohnsteuer abgeführt wurde", value: slip.finanzamt ?? "Unassigned" },
+      {
+        label: "Finanzamt, an das die Lohnsteuer abgeführt wurde",
+        value: slip.finanzamt ?? "Unassigned",
+      },
       {
         label: "Steuerliche Identifikationsnummer (IdNr)",
         value: slip.idNr,
       },
     ],
     boxes: [
-      { code: "3", label: "Bruttoarbeitslohn einschl. Sachbezüge", value: slip.gross, emphasis: true, money: true },
+      {
+        code: "3",
+        label: "Bruttoarbeitslohn einschl. Sachbezüge",
+        value: slip.gross,
+        emphasis: true,
+        money: true,
+      },
       { code: "4", label: "Einbehaltene Lohnsteuer von 3.", value: slip.lst, money: true },
-      { code: "5", label: "Einbehaltener Solidaritätszuschlag von 3.", value: slip.soli, money: true },
-      { code: "6", label: "Einbehaltene Kirchensteuer des Arbeitnehmers von 3.", value: slip.kist, money: true },
-      { code: "23a", label: "Arbeitnehmeranteil zur gesetzlichen Rentenversicherung", value: slip.rvW, money: true },
-      { code: "25", label: "Arbeitnehmerbeiträge zur gesetzlichen Krankenversicherung", value: slip.kvW, money: true },
-      { code: "26", label: "Arbeitnehmerbeiträge zur sozialen Pflegeversicherung", value: slip.pvW, money: true },
-      { code: "27", label: "Arbeitnehmerbeiträge zur Arbeitslosenversicherung", value: slip.avW, money: true },
-      { code: "22a", label: "Arbeitgeberanteil zur gesetzlichen Rentenversicherung", value: slip.rvEr, money: true },
-      { code: "24a", label: "Steuerfreie Arbeitgeberzuschüsse zur gesetzlichen Krankenversicherung", value: slip.kvEr, money: true },
-      { code: "24c", label: "Steuerfreie Arbeitgeberzuschüsse zur gesetzlichen Pflegeversicherung", value: slip.pvEr, money: true },
+      {
+        code: "5",
+        label: "Einbehaltener Solidaritätszuschlag von 3.",
+        value: slip.soli,
+        money: true,
+      },
+      {
+        code: "6",
+        label: "Einbehaltene Kirchensteuer des Arbeitnehmers von 3.",
+        value: slip.kist,
+        money: true,
+      },
+      {
+        code: "23a",
+        label: "Arbeitnehmeranteil zur gesetzlichen Rentenversicherung",
+        value: slip.rvW,
+        money: true,
+      },
+      {
+        code: "25",
+        label: "Arbeitnehmerbeiträge zur gesetzlichen Krankenversicherung",
+        value: slip.kvW,
+        money: true,
+      },
+      {
+        code: "26",
+        label: "Arbeitnehmerbeiträge zur sozialen Pflegeversicherung",
+        value: slip.pvW,
+        money: true,
+      },
+      {
+        code: "27",
+        label: "Arbeitnehmerbeiträge zur Arbeitslosenversicherung",
+        value: slip.avW,
+        money: true,
+      },
+      {
+        code: "22a",
+        label: "Arbeitgeberanteil zur gesetzlichen Rentenversicherung",
+        value: slip.rvEr,
+        money: true,
+      },
+      {
+        code: "24a",
+        label: "Steuerfreie Arbeitgeberzuschüsse zur gesetzlichen Krankenversicherung",
+        value: slip.kvEr,
+        money: true,
+      },
+      {
+        code: "24c",
+        label: "Steuerfreie Arbeitgeberzuschüsse zur gesetzlichen Pflegeversicherung",
+        value: slip.pvEr,
+        money: true,
+      },
     ],
     notes: [
-      "Dieser Ausdruck ist die Arbeitnehmerkopie der elektronisch an das Finanzamt übermittelten Daten "
-      + "(EStG §41b); die ELSTER-Übertragung selbst wird von diesem Pack nicht erzeugt. / This printout "
-      + "is the employee copy of the data transmitted to the Finanzamt; the ELSTER transmission itself "
-      + "is not produced by this pack.",
-      "Umfang: laufende Bezüge der monatlichen 2026-Abrechnung. Versorgungsbezüge (Zeilen 8–10, 29–32), "
-      + "Progressionsvorbehalt (Zeile 15), steuerfreie Leistungen (Zeilen 16–21, 24b), U-Zeiten (Zeile 2) "
-      + "und DBA-Fälle (Zeilen 16, 34) sind nicht abgebildet — vor der Abgabe prüfen. / Scope: monthly-"
-      + "engine laufende Bezüge only; verify the unmodelled Zeilen before filing if any apply.",
-      "No Ausdruck Zeile carries the employer's Arbeitslosenversicherung share — it is not part of this "
-      + "certificate.",
+      "Dieser Ausdruck ist die Arbeitnehmerkopie der elektronisch an das Finanzamt übermittelten Daten " +
+        "(EStG §41b); die ELSTER-Übertragung selbst wird von diesem Pack nicht erzeugt. / This printout " +
+        "is the employee copy of the data transmitted to the Finanzamt; the ELSTER transmission itself " +
+        "is not produced by this pack.",
+      "Umfang: laufende Bezüge der monatlichen 2026-Abrechnung. Versorgungsbezüge (Zeilen 8–10, 29–32), " +
+        "Progressionsvorbehalt (Zeile 15), steuerfreie Leistungen (Zeilen 16–21, 24b), U-Zeiten (Zeile 2) " +
+        "und DBA-Fälle (Zeilen 16, 34) sind nicht abgebildet — vor der Abgabe prüfen. / Scope: monthly-" +
+        "engine laufende Bezüge only; verify the unmodelled Zeilen before filing if any apply.",
+      "No Ausdruck Zeile carries the employer's Arbeitslosenversicherung share — it is not part of this " +
+        "certificate.",
     ],
   };
 }
@@ -342,7 +449,8 @@ export async function lohnsteuerbescheinigungSlips(
         and es.tax_year = ${taxYear} and es.country = 'DE'
         and l.kind = ${kind} and pc.system_key = ${systemKey})`;
   const s = sql.raw("s");
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.employee_party_id, p.display_name, s.filing_account_id,
            max(s.pay_date)::text as last_pay,
            ${earningSum(s)} as gross,
@@ -363,21 +471,30 @@ export async function lohnsteuerbescheinigungSlips(
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'DE'
      group by s.employee_party_id, p.display_name, s.filing_account_id
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollPackError(
-      `DE Lohnsteuerbescheinigung: no committed German (DE) pay stubs for ${taxYear} — commit a `
-      + `${taxYear} DE pay run before issuing Lohnsteuerbescheinigungen (an empty statutory form is `
-      + `never issued; draft and uncommitted runs do not appear on it).`,
+      `DE Lohnsteuerbescheinigung: no committed German (DE) pay stubs for ${taxYear} — commit a ` +
+        `${taxYear} DE pay run before issuing Lohnsteuerbescheinigungen (an empty statutory form is ` +
+        `never issued; draft and uncommitted runs do not appear on it).`,
     );
   }
   // No ANY($array): a bare JavaScript array interpolates as a row
   // constructor, not a PostgreSQL array — filter in JS instead.
   const wanted = new Set(rows.map((row) => String(row.employee_party_id)));
-  const profiles = (await db.execute<{ employee_party_id: string; province: string; sin_encrypted: string | null }>(sql`
+  const profiles = await db.execute<{
+    employee_party_id: string;
+    province: string;
+    sin_encrypted: string | null;
+  }>(
+    sql`
     select employee_party_id, province, sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const landByEmployee = new Map(
     profiles
       .filter((row) => wanted.has(String(row.employee_party_id)))
@@ -386,7 +503,12 @@ export async function lohnsteuerbescheinigungSlips(
   const identifierByEmployee = new Map(
     profiles
       .filter((row) => wanted.has(String(row.employee_party_id)))
-      .map((row) => [String(row.employee_party_id), row.sin_encrypted == null ? null : unsealSecret(row.sin_encrypted, { orgId, purpose: "payroll.employee.sin" })]),
+      .map((row) => [
+        String(row.employee_party_id),
+        row.sin_encrypted == null
+          ? null
+          : unsealSecret(row.sin_encrypted, { orgId, purpose: "payroll.employee.sin" }),
+      ]),
   );
   const elstam = payrollCertificate("DE", "de_elstam");
   const accounts = await filingAccountsById(orgId);
@@ -395,18 +517,29 @@ export async function lohnsteuerbescheinigungSlips(
   // pre-stamping (NULL-account) stubs keep the display they always had.
   // With several, a NULL stub is genuinely unattributable and stays
   // unassigned rather than joining one employer's certificate.
-  const soleFinanzamt = [...accounts.values()].filter((account) =>
-    account.country === "DE" && account.programType === "de_finanzamt" && account.isActive,
+  const soleFinanzamt = [...accounts.values()].filter(
+    (account) =>
+      account.country === "DE" && account.programType === "de_finanzamt" && account.isActive,
   );
   const soleFinanzamtId = soleFinanzamt.length === 1 ? soleFinanzamt[0]!.id : null;
   // Employment relationships for the Bescheinigungszeitraum:
   // hired_on/terminated_on per party; earliest start and latest end win
   // across spells, and a missing start refuses per slip below.
-  const roles = (await db.execute<{ employee_party_id: string; hired_on: string | null; terminated_on: string | null }>(sql`
+  const roles = await db.execute<{
+    employee_party_id: string;
+    hired_on: string | null;
+    terminated_on: string | null;
+  }>(
+    sql`
     select employee_party_id, hired_on::text, terminated_on::text from employee_roles
      where org_id = ${orgId}
-  `, "objects"));
-  const spellsByEmployee = new Map<string, { hiredOn: string | null; terminatedOn: string | null }[]>();
+  `,
+    "objects",
+  );
+  const spellsByEmployee = new Map<
+    string,
+    { hiredOn: string | null; terminatedOn: string | null }[]
+  >();
   for (const role of roles) {
     const key = String(role.employee_party_id);
     if (!wanted.has(key)) continue;
@@ -421,15 +554,23 @@ export async function lohnsteuerbescheinigungSlips(
     const employeeName = String(row.display_name);
     const spells = spellsByEmployee.get(employeePartyId) ?? [];
     const hiredOn = spells.reduce<string | null>(
-      (earliest, spell) => (spell.hiredOn != null && (earliest == null || spell.hiredOn < earliest) ? spell.hiredOn : earliest),
+      (earliest, spell) =>
+        spell.hiredOn != null && (earliest == null || spell.hiredOn < earliest)
+          ? spell.hiredOn
+          : earliest,
       null,
     );
-    const terminatedOn = spells.some((spell) => spell.terminatedOn == null || spell.terminatedOn === "")
+    const terminatedOn = spells.some(
+      (spell) => spell.terminatedOn == null || spell.terminatedOn === "",
+    )
       ? null
       : spells.reduce<string | null>(
-        (latest, spell) => (latest == null || (spell.terminatedOn ?? "") > latest ? (spell.terminatedOn ?? null) : latest),
-        null,
-      );
+          (latest, spell) =>
+            latest == null || (spell.terminatedOn ?? "") > latest
+              ? (spell.terminatedOn ?? null)
+              : latest,
+          null,
+        );
     const { von, bis } = bescheinigungszeitraum(hiredOn, terminatedOn, taxYear, employeeName);
     const lastPay = String(row.last_pay);
     // The certificate's employer: this employment's own filing account, not
@@ -444,9 +585,9 @@ export async function lohnsteuerbescheinigungSlips(
     const idNr = identifierByEmployee.get(employeePartyId) ?? null;
     if (!idNr || !/^\d{11}$/.test(idNr)) {
       throw new PayrollPackError(
-        `DE Lohnsteuerbescheinigung: ${idNr ? "the IdNr is invalid" : "the IdNr is missing"} for `
-        + `${employeeName}; add or correct the 11-digit Steuerliche Identifikationsnummer on the employee `
-        + `payroll profile before issuing (EStG §41b; https://www.gesetze-im-internet.de/estg/__41b.html).`,
+        `DE Lohnsteuerbescheinigung: ${idNr ? "the IdNr is invalid" : "the IdNr is missing"} for ` +
+          `${employeeName}; add or correct the 11-digit Steuerliche Identifikationsnummer on the employee ` +
+          `payroll profile before issuing (EStG §41b; https://www.gesetze-im-internet.de/estg/__41b.html).`,
       );
     }
     // The Merkmale in force for the LAST Lohnzahlungszeitraum — the form's
@@ -462,10 +603,10 @@ export async function lohnsteuerbescheinigungSlips(
     const steuerklasse = resolved.answers["steuerklasse"] ?? null;
     if (!resolved.onFile || steuerklasse == null || steuerklasse === "") {
       throw new PayrollPackError(
-        `DE Lohnsteuerbescheinigung: no ELStAM (de_elstam) with a Steuerklasse is on file for `
-        + `${employeeName} as of ${lastPay} — the certificate must state under which Steuerklasse the `
-        + `Lohnsteuer was withheld (EStG §§39a, 39e). Retrieve ELStAM and file the de_elstam `
-        + `certificate before issuing; refusing rather than assuming Steuerklasse I.`,
+        `DE Lohnsteuerbescheinigung: no ELStAM (de_elstam) with a Steuerklasse is on file for ` +
+          `${employeeName} as of ${lastPay} — the certificate must state under which Steuerklasse the ` +
+          `Lohnsteuer was withheld (EStG §§39a, 39e). Retrieve ELStAM and file the de_elstam ` +
+          `certificate before issuing; refusing rather than assuming Steuerklasse I.`,
       );
     }
     const faktorRaw = resolved.answers["faktor"] ?? null;
@@ -476,9 +617,10 @@ export async function lohnsteuerbescheinigungSlips(
       idNr,
       land: landByEmployee.get(employeePartyId) ?? "",
       steuerklasse,
-      faktor: steuerklasse === "IV" && faktorRaw != null && faktorRaw !== "" && faktorRaw !== "1.000"
-        ? faktorRaw
-        : null,
+      faktor:
+        steuerklasse === "IV" && faktorRaw != null && faktorRaw !== "" && faktorRaw !== "1.000"
+          ? faktorRaw
+          : null,
       kinderfreibetraege: resolved.answers["kinderfreibetrag_anzahl"] ?? "0",
       freibetragJahr: resolved.answers["freibetrag"] ?? "0",
       hinzurechnungsbetragJahr: resolved.answers["hinzurechnungsbetrag"] ?? "0",
@@ -505,7 +647,10 @@ export async function lohnsteuerbescheinigungSlips(
   return slips;
 }
 
-async function lohnsteuerbescheinigungPopulation(orgId: string, taxYear: number): Promise<PayrollFilingData> {
+async function lohnsteuerbescheinigungPopulation(
+  orgId: string,
+  taxYear: number,
+): Promise<PayrollFilingData> {
   const slips = await lohnsteuerbescheinigungSlips(orgId, taxYear);
   let gross = "0";
   let lst = "0";
@@ -568,20 +713,21 @@ async function lohnsteuerbescheinigungSlip(
 ): Promise<PayrollFilingSlipData> {
   const slips = await lohnsteuerbescheinigungSlips(orgId, taxYear);
   const scope = parseLohnsteuerbescheinigungRowId(rowId);
-  const candidates = scope == null
-    ? []
-    : slips.filter((candidate) =>
-      candidate.employeePartyId === scope.employees[0]
-      && (scope.accounts.length === 0 || candidate.filingAccountId === scope.accounts[0]));
+  const candidates =
+    scope == null
+      ? []
+      : slips.filter(
+          (candidate) =>
+            candidate.employeePartyId === scope.employees[0] &&
+            (scope.accounts.length === 0 || candidate.filingAccountId === scope.accounts[0]),
+        );
   if (candidates.length === 0) {
-    throw new PayrollError(
-      `no ${taxYear} Lohnsteuerbescheinigung matches the requested employee`,
-    );
+    throw new PayrollError(`no ${taxYear} Lohnsteuerbescheinigung matches the requested employee`);
   }
   if (candidates.length > 1) {
     throw new PayrollError(
-      `the requested employee holds ${candidates.length} ${taxYear} Lohnsteuerbescheinigungen with `
-      + `different employers — open the row for the employing Finanzamt instead of the bare employee id`,
+      `the requested employee holds ${candidates.length} ${taxYear} Lohnsteuerbescheinigungen with ` +
+        `different employers — open the row for the employing Finanzamt instead of the bare employee id`,
     );
   }
   return lohnsteuerbescheinigungSlipData(candidates[0]!);
@@ -598,10 +744,10 @@ export function lohnsteuerbescheinigungFiling(): PayrollYearEndFiling {
     label: "Ausdruck der elektronischen Lohnsteuerbescheinigung (§41b EStG)",
     cadence: "annual",
     description:
-      "The employee's printout of the annual electronic wage-tax certificate (EStG §41b): "
-      + "certified withheld Lohnsteuer, Solidaritätszuschlag, Kirchensteuer and SV shares per "
-      + "employee and employing establishment (one certificate per employment relationship), "
-      + "from committed runs. The ELSTER transmission itself is not produced.",
+      "The employee's printout of the annual electronic wage-tax certificate (EStG §41b): " +
+      "certified withheld Lohnsteuer, Solidaritätszuschlag, Kirchensteuer and SV shares per " +
+      "employee and employing establishment (one certificate per employment relationship), " +
+      "from committed runs. The ELSTER transmission itself is not produced.",
     population: (orgId, taxYear) => lohnsteuerbescheinigungPopulation(orgId, taxYear),
     parseRowId: parseLohnsteuerbescheinigungRowId,
     slip: { build: (orgId, taxYear, rowId) => lohnsteuerbescheinigungSlip(orgId, taxYear, rowId) },

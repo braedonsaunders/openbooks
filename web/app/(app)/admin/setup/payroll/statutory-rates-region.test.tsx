@@ -1,118 +1,131 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
 declare global {
-  var __ratesRouter: { push(url: string): void; refresh(): void } | undefined
-  var __ratesToasts: { kind: string; message: string }[] | undefined
+  var __ratesRouter: { push(url: string): void; refresh(): void } | undefined;
+  var __ratesToasts: { kind: string; message: string }[] | undefined;
 }
 
 // jsdom first: the section reads browser globals at render.
-const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/setup/payroll', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/payroll",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__ratesRouter}export function usePathname(){return "/admin/setup/payroll"}export function useSearchParams(){return new URLSearchParams()}' })
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__ratesRouter}export function usePathname(){return "/admin/setup/payroll"}export function useSearchParams(){return new URLSearchParams()}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'next/link') {
+    if (specifier === "next/link") {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export default function Link(p){return globalThis.React.createElement('a',{href:p.href},p.children)}`,
-      }
+      };
     }
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export const toast={success(m){(globalThis.__ratesToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__ratesToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}`,
-      }
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../../messages/en')).default
-const settingsPage = (await import('../../../../../messages/en/payroll.json', { with: { type: 'json' } })).default
-  .settingsPage as unknown as Record<string, Record<string, string>>
-const { StatutoryRatesSection } = await import('./StatutoryRatesSection')
-const { selectedHolidayJurisdiction } = await import('./HolidayCalendarSection')
-const { BusinessDateProvider } = await import('../../../../../components/business-date-provider')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../../messages/en")).default;
+const settingsPage = (
+  await import("../../../../../messages/en/payroll.json", { with: { type: "json" } })
+).default.settingsPage as unknown as Record<string, Record<string, string>>;
+const { StatutoryRatesSection } = await import("./StatutoryRatesSection");
+const { selectedHolidayJurisdiction } = await import("./HolidayCalendarSection");
+const { BusinessDateProvider } = await import("../../../../../components/business-date-provider");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const SLOT = {
-  key: 'eit',
-  label: 'EI Tax',
-  scope: 'region',
+  key: "eit",
+  label: "EI Tax",
+  scope: "region",
   programType: null,
-  regions: ['CA-ON'],
-  citation: 'Test statute s.1',
-  variesBecause: '',
+  regions: ["CA-ON"],
+  citation: "Test statute s.1",
+  variesBecause: "",
   systemKeys: [],
   fields: [
     {
-      key: 'rate',
-      label: 'Effective rate',
-      kind: 'rate',
+      key: "rate",
+      label: "Effective rate",
+      kind: "rate",
       decimals: 4,
-      min: '0',
-      max: '1',
+      min: "0",
+      max: "1",
       required: true,
-      help: '',
+      help: "",
     },
   ],
-}
+};
 
 const PAYLOAD = {
   year: 2026,
-  installed: ['XX'],
+  installed: ["XX"],
   packs: [
     {
-      country: 'XX',
-      regionLabel: 'state',
-      knownRegions: ['CA-ON'],
+      country: "XX",
+      regionLabel: "state",
+      knownRegions: ["CA-ON"],
       slots: [SLOT],
       accounts: [],
     },
   ],
   rows: [
     {
-      id: 'row-1',
-      country: 'XX',
-      rateKey: 'eit',
-      region: 'CA-ON',
+      id: "row-1",
+      country: "XX",
+      rateKey: "eit",
+      region: "CA-ON",
       subRegion: null,
       filingAccountId: null,
       accountNumber: null,
       accountName: null,
       taxYear: 2026,
-      values: { rate: '0.0060' },
+      values: { rate: "0.0060" },
     },
   ],
   gaps: [],
   coverage: [],
-}
+};
 
-async function mountRates(putResponder: () => Response | Promise<Response>, getResponder: (url: string) => Response | Promise<Response> = () => Response.json(PAYLOAD)) {
-  globalThis.__ratesRouter = { push() {}, refresh() {} }
-  globalThis.__ratesToasts = []
-  const prior = globalThis.fetch
+async function mountRates(
+  putResponder: () => Response | Promise<Response>,
+  getResponder: (url: string) => Response | Promise<Response> = () => Response.json(PAYLOAD),
+) {
+  globalThis.__ratesRouter = { push() {}, refresh() {} };
+  globalThis.__ratesToasts = [];
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
-    const method = (init?.method ?? 'GET').toUpperCase()
-    if (url.startsWith('/api/payroll/settings/rates') && method === 'GET') return getResponder(url)
-    if (url === '/api/payroll/settings/rates' && method === 'PUT') return putResponder()
-    return Response.json({})
-  }) as typeof fetch
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (url.startsWith("/api/payroll/settings/rates") && method === "GET") return getResponder(url);
+    if (url === "/api/payroll/settings/rates" && method === "PUT") return putResponder();
+    return Response.json({});
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -120,107 +133,149 @@ async function mountRates(putResponder: () => Response | Promise<Response>, getR
           <StatutoryRatesSection initialYear={2026} />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  await tick()
-  await tick()
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
   return {
     async unmount() {
       await act(async () => {
-        root.unmount()
-      })
-      host.remove()
-      globalThis.fetch = prior
+        root.unmount();
+      });
+      host.remove();
+      globalThis.fetch = prior;
     },
-  }
+  };
 }
 
 function setInputById(id: string, value: string) {
-  const input = document.getElementById(id) as HTMLInputElement | null
-  assert.ok(input, `expected an input #${id}`)
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
-  setter.call(input, value)
-  input.dispatchEvent(new window.Event('input', { bubbles: true }))
+  const input = document.getElementById(id) as HTMLInputElement | null;
+  assert.ok(input, `expected an input #${id}`);
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+  setter.call(input, value);
+  input.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
 
 async function openDialog() {
-  const add = [...document.querySelectorAll('button')].find((b) =>
-    (b.textContent ?? '').includes(String(settingsPage.rates?.add ?? 'Add a rate')),
-  ) as HTMLButtonElement | undefined
-  assert.ok(add, 'the section must offer to add a rate')
+  const add = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes(String(settingsPage.rates?.add ?? "Add a rate")),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(add, "the section must offer to add a rate");
   await act(async () => {
-    add.click()
-    await tick()
-  })
-  await tick()
+    add.click();
+    await tick();
+  });
+  await tick();
 }
 
-test('a late tax year response cannot replace the selected year', async () => {
-  const pending: ((response: Response) => void)[] = []; let defer = false; const { unmount } = await mountRates(() => Response.json({ ok: true }), () => defer ? new Promise((resolve) => pending.push(resolve)) : Response.json(PAYLOAD))
-  try { const trigger = document.getElementById('rates-year'); assert.ok(trigger, 'the tax year control is rendered')
+test("a late tax year response cannot replace the selected year", async () => {
+  const pending: ((response: Response) => void)[] = [];
+  let defer = false;
+  const { unmount } = await mountRates(
+    () => Response.json({ ok: true }),
+    () => (defer ? new Promise((resolve) => pending.push(resolve)) : Response.json(PAYLOAD)),
+  );
+  try {
+    const trigger = document.getElementById("rates-year");
+    assert.ok(trigger, "the tax year control is rendered");
     // The house Select carries the id on its visible trigger; drive the
     // hidden native select underneath, which fires the genuine change event.
-    const select = trigger.closest('span')?.querySelector('select[aria-hidden]') as HTMLSelectElement | null; assert.ok(select, 'the tax year control wraps its native select'); assert.ok((document.body.textContent ?? '').includes('0.60%'), 'the stored decimal 0.0060 must read as a human percent')
-    const setValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!; defer = true
-    for (const year of ['2027', '2028']) await act(async () => { setValue.call(select, year); select.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
-    await act(async () => { pending[1]!(Response.json({ ...PAYLOAD, year: 2028 })); await tick() }); await act(async () => { pending[0]!(Response.json({ ...PAYLOAD, year: 2027 })); await tick() })
-    assert.ok(select.value === '2028' && (document.body.textContent ?? '').includes('0.60%'), 'the newer tax year and its rows remain selected')
-  } finally {
-    await unmount()
-  }
-})
-
-test('the rate dialog labels the region picker from the pack, capitalized', async () => {
-  const { unmount } = await mountRates(() => Response.json({ ok: true }))
-  try {
-    await openDialog()
-    const label = document.querySelector('label[for="rate-region"]')
-    assert.ok(label, 'the dialog must label its region picker'); assert.match(label?.textContent ?? '', /State/, 'the pack region token renders capitalized'); assert.doesNotMatch(label?.textContent ?? '', /\bstate\b/, 'the raw token never shows')
-  } finally {
-    await unmount()
-  }
-})
-
-test('the holiday calendar does not choose a jurisdiction when none was selected', () => {
-  assert.equal(selectedHolidayJurisdiction({}), null)
-  assert.equal(selectedHolidayJurisdiction({ jurisdiction: 'NZ-AUK' }), 'NZ-AUK')
-})
-
-test('rate inputs name their scale and range from the declaration', async () => {
-  const { unmount } = await mountRates(() => Response.json({ ok: true }))
-  try {
-    await openDialog()
-    const body = document.body.textContent ?? ''
-    assert.ok(body.includes(String(settingsPage.rates?.rateScaleHint ?? 'Decimal rate')), 'a decimal-rate input names its scale'); assert.ok(body.includes('0–1'), 'the input names the accepted range from the declaration')
-  } finally {
-    await unmount()
-  }
-})
-
-test('the rate dialog keeps the save rejection visible inside the drawer', async () => {
-  const refusal = 'region CA-ON is not open for 2026'
-  const { unmount } = await mountRates(() => Response.json({ error: refusal }, { status: 422 }))
-  try {
-    await openDialog()
-    setInputById('rate-field-rate', '0.0060'); await tick()
-    const save = [...document.querySelectorAll('button')].find(
-      (b) => (b.textContent ?? '').trim() === 'Save',
-    ) as HTMLButtonElement | undefined
-    assert.ok(save, 'the dialog must offer Save'); await act(async () => {
-      save.click()
-      await tick()
-      await tick()
-    })
-    await tick(); const alert = [...document.querySelectorAll('div')].find((el) =>
-      (el.textContent ?? '').includes(refusal),
-    )
-    assert.ok(alert, 'the rejection stays rendered inside the drawer until the next save')
+    const select = trigger
+      .closest("span")
+      ?.querySelector("select[aria-hidden]") as HTMLSelectElement | null;
+    assert.ok(select, "the tax year control wraps its native select");
     assert.ok(
-      [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').trim() === 'Save'),
-      'the drawer stays open on rejection',
-    )
+      (document.body.textContent ?? "").includes("0.60%"),
+      "the stored decimal 0.0060 must read as a human percent",
+    );
+    const setValue = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      "value",
+    )!.set!;
+    defer = true;
+    for (const year of ["2027", "2028"])
+      await act(async () => {
+        setValue.call(select, year);
+        select.dispatchEvent(new window.Event("change", { bubbles: true }));
+        await tick();
+      });
+    await act(async () => {
+      pending[1]!(Response.json({ ...PAYLOAD, year: 2028 }));
+      await tick();
+    });
+    await act(async () => {
+      pending[0]!(Response.json({ ...PAYLOAD, year: 2027 }));
+      await tick();
+    });
+    assert.ok(
+      select.value === "2028" && (document.body.textContent ?? "").includes("0.60%"),
+      "the newer tax year and its rows remain selected",
+    );
   } finally {
-    await unmount()
+    await unmount();
   }
-})
+});
+
+test("the rate dialog labels the region picker from the pack, capitalized", async () => {
+  const { unmount } = await mountRates(() => Response.json({ ok: true }));
+  try {
+    await openDialog();
+    const label = document.querySelector('label[for="rate-region"]');
+    assert.ok(label, "the dialog must label its region picker");
+    assert.match(label?.textContent ?? "", /State/, "the pack region token renders capitalized");
+    assert.doesNotMatch(label?.textContent ?? "", /\bstate\b/, "the raw token never shows");
+  } finally {
+    await unmount();
+  }
+});
+
+test("the holiday calendar does not choose a jurisdiction when none was selected", () => {
+  assert.equal(selectedHolidayJurisdiction({}), null);
+  assert.equal(selectedHolidayJurisdiction({ jurisdiction: "NZ-AUK" }), "NZ-AUK");
+});
+
+test("rate inputs name their scale and range from the declaration", async () => {
+  const { unmount } = await mountRates(() => Response.json({ ok: true }));
+  try {
+    await openDialog();
+    const body = document.body.textContent ?? "";
+    assert.ok(
+      body.includes(String(settingsPage.rates?.rateScaleHint ?? "Decimal rate")),
+      "a decimal-rate input names its scale",
+    );
+    assert.ok(body.includes("0–1"), "the input names the accepted range from the declaration");
+  } finally {
+    await unmount();
+  }
+});
+
+test("the rate dialog keeps the save rejection visible inside the drawer", async () => {
+  const refusal = "region CA-ON is not open for 2026";
+  const { unmount } = await mountRates(() => Response.json({ error: refusal }, { status: 422 }));
+  try {
+    await openDialog();
+    setInputById("rate-field-rate", "0.0060");
+    await tick();
+    const save = [...document.querySelectorAll("button")].find(
+      (b) => (b.textContent ?? "").trim() === "Save",
+    ) as HTMLButtonElement | undefined;
+    assert.ok(save, "the dialog must offer Save");
+    await act(async () => {
+      save.click();
+      await tick();
+      await tick();
+    });
+    await tick();
+    const alert = [...document.querySelectorAll("div")].find((el) =>
+      (el.textContent ?? "").includes(refusal),
+    );
+    assert.ok(alert, "the rejection stays rendered inside the drawer until the next save");
+    assert.ok(
+      [...document.querySelectorAll("button")].some((b) => (b.textContent ?? "").trim() === "Save"),
+      "the drawer stays open on rejection",
+    );
+  } finally {
+    await unmount();
+  }
+});

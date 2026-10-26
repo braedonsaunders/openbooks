@@ -37,14 +37,22 @@ export const expenseReceiptCaptures = pgTable(
     fileId: uuid("file_id"),
     contentHash: text("content_hash").notNull(),
     originalFilename: text("original_filename").notNull(),
-    status: text("status", { enum: ["extracting", "extracted", "failed", "confirmed", "discarded"] }).notNull(),
+    status: text("status", {
+      enum: ["extracting", "extracted", "failed", "confirmed", "discarded"],
+    }).notNull(),
     attempts: integer("attempts").notNull().default(1),
     provider: text("provider", { enum: ["azure_document_intelligence", "llm_vision"] }).notNull(),
     model: text("model").notNull(),
     apiVersion: text("api_version").notNull(),
     normalized: jsonb("normalized").$type<Record<string, unknown>>(),
-    evidence: jsonb("evidence").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
-    issues: jsonb("issues").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
+    evidence: jsonb("evidence")
+      .$type<unknown[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    issues: jsonb("issues")
+      .$type<unknown[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     draft: jsonb("draft").$type<Record<string, unknown>>(),
     overallConfidence: numeric("overall_confidence", { precision: 5, scale: 4 }),
     /** Receipt identity for duplicate detection: the confident reading, then the reviewer's values. */
@@ -70,15 +78,38 @@ export const expenseReceiptCaptures = pgTable(
   },
   (t) => [
     uniqueIndex("expense_receipt_captures_org_id_unique").on(t.orgId, t.id),
-    foreignKey({ name: "expense_receipt_captures_document_fk", columns: [t.orgId, t.documentId], foreignColumns: [documents.orgId, documents.id] }),
-    foreignKey({ name: "expense_receipt_captures_file_fk", columns: [t.orgId, t.fileId], foreignColumns: [files.orgId, files.id] }),
-    foreignKey({ name: "expense_receipt_captures_merchant_party_fk", columns: [t.orgId, t.merchantPartyId], foreignColumns: [parties.orgId, parties.id] }),
-    foreignKey({ name: "expense_receipt_captures_confirmed_account_fk", columns: [t.orgId, t.confirmedAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
+    foreignKey({
+      name: "expense_receipt_captures_document_fk",
+      columns: [t.orgId, t.documentId],
+      foreignColumns: [documents.orgId, documents.id],
+    }),
+    foreignKey({
+      name: "expense_receipt_captures_file_fk",
+      columns: [t.orgId, t.fileId],
+      foreignColumns: [files.orgId, files.id],
+    }),
+    foreignKey({
+      name: "expense_receipt_captures_merchant_party_fk",
+      columns: [t.orgId, t.merchantPartyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
+    foreignKey({
+      name: "expense_receipt_captures_confirmed_account_fk",
+      columns: [t.orgId, t.confirmedAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
     index("expense_receipt_captures_document").on(t.orgId, t.documentId),
     index("expense_receipt_captures_content_hash").on(t.orgId, t.contentHash),
-    index("expense_receipt_captures_receipt_identity").on(t.orgId, t.merchantKey, t.transactionDate),
+    index("expense_receipt_captures_receipt_identity").on(
+      t.orgId,
+      t.merchantKey,
+      t.transactionDate,
+    ),
     index("expense_receipt_captures_file").on(t.orgId, t.fileId),
-    check("expense_receipt_captures_status", sql`${t.status} in ('extracting','extracted','failed','confirmed','discarded')`),
+    check(
+      "expense_receipt_captures_status",
+      sql`${t.status} in ('extracting','extracted','failed','confirmed','discarded')`,
+    ),
     check("expense_receipt_captures_hash", sql`${t.contentHash} ~ '^[a-f0-9]{64}$'`),
   ],
 );

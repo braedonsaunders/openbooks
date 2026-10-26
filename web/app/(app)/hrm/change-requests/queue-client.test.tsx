@@ -1,36 +1,45 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import test from 'node:test'
-import React from 'react'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import React from "react";
 
 // These tests IMPORT the dialog and row-actions islands and render them. The
 // sibling queue.test.ts pins copy and contracts by reading source as text,
 // which cannot fail on a broken import path or an identifier that was typed
 // but never destructured — exactly the defects the gate found in this file's
 // predecessor. A render is the cheapest check that reaches them.
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){} })' })
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: "export const useRouter = () => ({ refresh(){}, push(){} })" });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'sonner') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
+    if (specifier === "sonner") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export const toast = { success(){}, error(){} }",
+      };
     }
 
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
-const { renderToStaticMarkup } = await import('react-dom/server')
-const { NextIntlClientProvider } = await import('next-intl')
-const { ProposeChangeDialog } = await import('./ProposeChangeDialog')
-const { ChangeRequestRowActions } = await import('./ChangeRequestRowActions')
+});
+const { renderToStaticMarkup } = await import("react-dom/server");
+const { NextIntlClientProvider } = await import("next-intl");
+const { ProposeChangeDialog } = await import("./ProposeChangeDialog");
+const { ChangeRequestRowActions } = await import("./ChangeRequestRowActions");
 // tsx compiles JSX classic: the components never import React (Next provides
 // the automatic runtime in production), so the test bridges it.
-Object.assign(globalThis, { React })
-const hrmMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/hrm.json', import.meta.url), 'utf8'))
-const commonMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8'))
-const uiMessages = JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8'))
-const missingMessages: string[] = []
+Object.assign(globalThis, { React });
+const hrmMessages = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
+);
+const commonMessages = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/common.json", import.meta.url), "utf8"),
+);
+const uiMessages = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/ui.json", import.meta.url), "utf8"),
+);
+const missingMessages: string[] = [];
 
 function provider(children: React.ReactNode): React.ReactNode {
   return (
@@ -41,11 +50,11 @@ function provider(children: React.ReactNode): React.ReactNode {
     >
       {children}
     </NextIntlClientProvider>
-  )
+  );
 }
 
-test('the propose dialog renders its employment picker shell without fetching', () => {
-  missingMessages.length = 0
+test("the propose dialog renders its employment picker shell without fetching", () => {
+  missingMessages.length = 0;
   const html = renderToStaticMarkup(
     provider(
       <ProposeChangeDialog
@@ -57,16 +66,16 @@ test('the propose dialog renders its employment picker shell without fetching', 
         closeHref="/hrm/change-requests"
       />,
     ),
-  )
-  assert.match(html, /Employment/)
-  assert.match(html, /role="dialog"/, 'the picker is exposed as a dialog')
+  );
+  assert.match(html, /Employment/);
+  assert.match(html, /role="dialog"/, "the picker is exposed as a dialog");
   assert.ok(
-    !missingMessages.some((message) => message.includes('ui.')),
-    `the picker must resolve shared UI copy: ${missingMessages.join(', ')}`,
-  )
-})
+    !missingMessages.some((message) => message.includes("ui.")),
+    `the picker must resolve shared UI copy: ${missingMessages.join(", ")}`,
+  );
+});
 
-test('a terminal row renders no lifecycle actions', () => {
+test("a terminal row renders no lifecycle actions", () => {
   const html = renderToStaticMarkup(
     provider(
       <ChangeRequestRowActions
@@ -77,11 +86,11 @@ test('a terminal row renders no lifecycle actions', () => {
         departmentOptions={[]}
       />,
     ),
-  )
-  assert.equal(html, '', 'an approved request shows no actions')
-})
+  );
+  assert.equal(html, "", "an approved request shows no actions");
+});
 
-test('a draft row renders its lifecycle actions through the real module', () => {
+test("a draft row renders its lifecycle actions through the real module", () => {
   const html = renderToStaticMarkup(
     provider(
       <ChangeRequestRowActions
@@ -92,6 +101,6 @@ test('a draft row renders its lifecycle actions through the real module', () => 
         departmentOptions={[]}
       />,
     ),
-  )
-  assert.match(html, /button/i, 'a draft request offers actions')
-})
+  );
+  assert.match(html, /button/i, "a draft request offers actions");
+});

@@ -1,8 +1,16 @@
-import { addCalendarDays, addMonthsClamped, civilDateFromParts, daysInCivilMonth, parseIsoDate } from "../platform/civil-date.ts";
+import {
+  addCalendarDays,
+  addMonthsClamped,
+  civilDateFromParts,
+  daysInCivilMonth,
+  parseIsoDate,
+} from "../platform/civil-date.ts";
 import type { SourceEntity } from "./source.ts";
 
 export type ImportedLockState = "open" | "soft_closed" | "closed";
-export type ImportedModuleStates = Partial<Record<"ar" | "ap" | "banking" | "assets" | "tax" | "gl", ImportedLockState>>;
+export type ImportedModuleStates = Partial<
+  Record<"ar" | "ap" | "banking" | "assets" | "tax" | "gl", ImportedLockState>
+>;
 
 export interface SourceFiscalYear {
   key: string;
@@ -48,7 +56,11 @@ export function monthlySourcePeriods(
 }
 
 /** Build fiscal-year ranges covering a source's known operating date span. */
-export function fiscalYearsForRange(start: string, end: string, startMonth: number): SourceFiscalYear[] {
+export function fiscalYearsForRange(
+  start: string,
+  end: string,
+  startMonth: number,
+): SourceFiscalYear[] {
   const first = parseIsoDate(start);
   parseIsoDate(end);
   const years: SourceFiscalYear[] = [];
@@ -74,7 +86,8 @@ export function fiscalYearsForEndingRule(
   const rangeStartYear = parseIsoDate(start).getUTCFullYear();
   const rangeEndYear = parseIsoDate(end).getUTCFullYear();
   const years: SourceFiscalYear[] = [];
-  const endFor = (year: number) => civilDateFromParts(year, endMonth, Math.min(endDay, daysInCivilMonth(year, endMonth)));
+  const endFor = (year: number) =>
+    civilDateFromParts(year, endMonth, Math.min(endDay, daysInCivilMonth(year, endMonth)));
   for (let fiscalYear = rangeStartYear - 1; fiscalYear <= rangeEndYear + 2; fiscalYear++) {
     const endsOn = endFor(fiscalYear);
     const startsOn = addCalendarDays(endFor(fiscalYear - 1), 1);

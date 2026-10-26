@@ -11,7 +11,10 @@ Object.assign(globalThis, { React });
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../../messages/fr")).default;
 const { MoneyProvider } = await import("../../../../components/money-provider");
-const [{ CashTimeline }, { cashWeekEntriesUrl }] = await Promise.all([import("./CashTimeline"), import("./CashWeekFlyout")]);
+const [{ CashTimeline }, { cashWeekEntriesUrl }] = await Promise.all([
+  import("./CashTimeline"),
+  import("./CashWeekFlyout"),
+]);
 
 // The cash timeline must render its chrome from the banking.cash catalog:
 // hardcoded English headers read as untranslated copy under fr/es .
@@ -48,7 +51,13 @@ function render(ui: ReactElement): string {
   );
 }
 
-const ENGLISH_HEADERS = ["Week</th>", "Inflows</th>", "Outflows</th>", "Net</th>", "Ending Cash</th>"];
+const ENGLISH_HEADERS = [
+  "Week</th>",
+  "Inflows</th>",
+  "Outflows</th>",
+  "Net</th>",
+  "Ending Cash</th>",
+];
 
 test("cash timeline headers render from the catalog, not hardcoded English", () => {
   const html = render(
@@ -66,7 +75,11 @@ test("cash timeline headers render from the catalog, not hardcoded English", () 
   assert.match(html, /Net<\/th>/, "Net header renders");
   assert.match(html, /Trésorerie finale<\/th>/, "Ending Cash header is French");
   for (const leaked of ENGLISH_HEADERS.filter((h) => h !== "Net</th>")) {
-    assert.doesNotMatch(html, new RegExp(leaked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${leaked} must not leak English`);
+    assert.doesNotMatch(
+      html,
+      new RegExp(leaked.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      `${leaked} must not leak English`,
+    );
   }
 });
 
@@ -99,5 +112,9 @@ test("cash timeline transaction counts and spill banner render from the catalog"
   assert.match(html, /60 transactions/, "txn count is French");
   assert.match(html, /ne peuvent pas être payées/, "spill banner is French");
   assert.doesNotMatch(html, /txns/, "English txn abbreviation is gone");
-  assert.doesNotMatch(html, /of payables can/, "English banner is gone"); assert.equal(cashWeekEntriesUrl("2026-09-13", ["sub-a", "sub-b"]), "/api/cash/week-entries?week=2026-09-13&sub=sub-a%2Csub-b");
+  assert.doesNotMatch(html, /of payables can/, "English banner is gone");
+  assert.equal(
+    cashWeekEntriesUrl("2026-09-13", ["sub-a", "sub-b"]),
+    "/api/cash/week-entries?week=2026-09-13&sub=sub-a%2Csub-b",
+  );
 });

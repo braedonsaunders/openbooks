@@ -12,11 +12,43 @@ test("account currency preserves explicit foreign denominations and resolves sin
     { sourceRef: "1", fields: { baseCurrency: "CAD" } },
     { sourceRef: "2", fields: { baseCurrency: "EUR" } },
   ];
-  assert.equal(netSuiteAccountCurrency({ id: "916", accttype: "CredCard", subsidiary: "1" }, subsidiaries, new Map()), "CAD");
-  assert.equal(netSuiteAccountCurrency({ id: "917", accttype: "CredCard", subsidiary: "2" }, subsidiaries, new Map()), "EUR");
-  assert.equal(netSuiteAccountCurrency({ id: "bank", accttype: "Bank", subsidiary: "1", currency: "3" }, subsidiaries, new Map([["3", "USD"]])), "USD");
-  assert.throws(() => netSuiteAccountCurrency({ id: "bank", accttype: "Bank", subsidiary: "1", currency: "99" }, subsidiaries, new Map()), /account bank \(99\); check source currency access/);
-  assert.throws(() => netSuiteAccountCurrency({ id: "bank", accttype: "Bank" }, subsidiaries, new Map()), /account bank; check its source subsidiary/);
+  assert.equal(
+    netSuiteAccountCurrency(
+      { id: "916", accttype: "CredCard", subsidiary: "1" },
+      subsidiaries,
+      new Map(),
+    ),
+    "CAD",
+  );
+  assert.equal(
+    netSuiteAccountCurrency(
+      { id: "917", accttype: "CredCard", subsidiary: "2" },
+      subsidiaries,
+      new Map(),
+    ),
+    "EUR",
+  );
+  assert.equal(
+    netSuiteAccountCurrency(
+      { id: "bank", accttype: "Bank", subsidiary: "1", currency: "3" },
+      subsidiaries,
+      new Map([["3", "USD"]]),
+    ),
+    "USD",
+  );
+  assert.throws(
+    () =>
+      netSuiteAccountCurrency(
+        { id: "bank", accttype: "Bank", subsidiary: "1", currency: "99" },
+        subsidiaries,
+        new Map(),
+      ),
+    /account bank \(99\); check source currency access/,
+  );
+  assert.throws(
+    () => netSuiteAccountCurrency({ id: "bank", accttype: "Bank" }, subsidiaries, new Map()),
+    /account bank; check its source subsidiary/,
+  );
 });
 
 /**
@@ -49,7 +81,13 @@ test("NetSuite line pulls carry cleared markers", () => {
 test("NetSuite cleared states normalize with a transaction-date fallback", () => {
   assert.deepEqual(
     normalizeNetSuiteClearedStates([
-      { transaction: "7001", id: "11", cleared: "T", cleareddate: "08/31/2026", trandate: "08/28/2026" },
+      {
+        transaction: "7001",
+        id: "11",
+        cleared: "T",
+        cleareddate: "08/31/2026",
+        trandate: "08/28/2026",
+      },
       { transaction: "7001", id: "12", cleared: "T", cleareddate: null, trandate: "08/28/2026" },
       { transaction: "7002", id: "21", cleared: "F", cleareddate: null, trandate: "08/29/2026" },
     ]),

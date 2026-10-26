@@ -3,16 +3,8 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import {
-  Badge,
-  Button,
-  EmptyState,
-  PageHeader,
-} from "@openbooks/ui";
-import type {
-  SalesRecord,
-  SalesWorkspaceData,
-} from "@openbooks/engine/crm/sales/contracts";
+import { Badge, Button, EmptyState, PageHeader } from "@openbooks/ui";
+import type { SalesRecord, SalesWorkspaceData } from "@openbooks/engine/crm/sales/contracts";
 import { ListPageLayout } from "@/components/page-layout";
 import { PagedTable, type PagedColumn } from "@/components/paged-table";
 import { Pagination } from "@/components/pagination";
@@ -24,16 +16,11 @@ import { ListFilterSelect } from "@/components/list-filter-select";
 import { SearchInput } from "@/components/search-input";
 import { mergeHref } from "@/lib/list-params";
 import { SalesDrawer } from "./SalesDrawer";
-import { DateField } from '@/components/date-field'
-const TerritoryMap = dynamic(
-  () => import("./TerritoryMap").then((m) => m.TerritoryMap),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-96 animate-pulse rounded-xl bg-slate-100" />
-    ),
-  },
-);
+import { DateField } from "@/components/date-field";
+const TerritoryMap = dynamic(() => import("./TerritoryMap").then((m) => m.TerritoryMap), {
+  ssr: false,
+  loading: () => <div className="h-96 animate-pulse rounded-xl bg-slate-100" />,
+});
 function Amount({ amount, currency }: { amount: string; currency: string }) {
   const { money } = useMoney(currency);
   return <span className="font-semibold tabular-nums">{money(amount)}</span>;
@@ -48,44 +35,90 @@ export function SalesWorkspace({
   const t = useTranslations("crm.sales");
   const locale = useLocale();
   const router = useRouter();
-  const base =
-    data.page === "overview" ? "/crm/sales" : `/crm/sales/${data.page}`;
-  const href = (values: Record<string, string | number | null>) =>
-    mergeHref(base, params, values);
+  const base = data.page === "overview" ? "/crm/sales" : `/crm/sales/${data.page}`;
+  const href = (values: Record<string, string | number | null>) => mergeHref(base, params, values);
   const tabs = [
     { href: "/crm/sales", label: t("tabs.overview"), active: data.page === "overview" },
-    { href: "/crm/sales/representatives", label: t("tabs.representatives"), active: data.page === "representatives" },
+    {
+      href: "/crm/sales/representatives",
+      label: t("tabs.representatives"),
+      active: data.page === "representatives",
+    },
     { href: "/crm/sales/teams", label: t("tabs.teams"), active: data.page === "teams" },
     { href: "/crm/sales/quotas", label: t("tabs.quotas"), active: data.page === "quotas" },
-    { href: "/crm/sales/territories", label: t("tabs.territories"), active: data.page === "territories" },
+    {
+      href: "/crm/sales/territories",
+      label: t("tabs.territories"),
+      active: data.page === "territories",
+    },
   ];
-  const territoryFilters = data.page === "territories" ? (
-    <>
-      <ListFilterSelect basePath={base} currentParams={params} paramKey="department" label={t("department")} allLabel={t("allDepartments")} options={data.departments.map(({ id, name }) => ({ value: id, label: name }))} />
-      <ListFilterSelect basePath={base} currentParams={params} paramKey="salesTeam" label={t("team")} allLabel={t("allTeams")} options={data.teams.map(({ id, name }) => ({ value: id, label: name }))} />
-      <ListFilterSelect basePath={base} currentParams={params} paramKey="subsidiary" label={t("legalEntity")} allLabel={t("allEntities")} options={data.subsidiaries.map(({ id, name }) => ({ value: id, label: name }))} />
-      <ListFilterSelect basePath={base} currentParams={params} paramKey="salesRep" label={t("representative")} allLabel={t("allRepresentatives")} options={data.representatives.map(({ id, name }) => ({ value: id, label: name }))} />
-      {data.mapEnabled ? <FilterChips basePath={base} currentParams={params} paramKey="view" label={t("view")} defaultValue="list" hideAll options={[{ value: "list", label: t("list") }, { value: "map", label: t("map") }]} /> : null}
-    </>
-  ) : null;
-  const listToolbar = data.page !== "overview" ? (
-    <>
-      <SearchInput placeholder={t("search")} />
-      {territoryFilters}
-    </>
-  ) : undefined;
+  const territoryFilters =
+    data.page === "territories" ? (
+      <>
+        <ListFilterSelect
+          basePath={base}
+          currentParams={params}
+          paramKey="department"
+          label={t("department")}
+          allLabel={t("allDepartments")}
+          options={data.departments.map(({ id, name }) => ({ value: id, label: name }))}
+        />
+        <ListFilterSelect
+          basePath={base}
+          currentParams={params}
+          paramKey="salesTeam"
+          label={t("team")}
+          allLabel={t("allTeams")}
+          options={data.teams.map(({ id, name }) => ({ value: id, label: name }))}
+        />
+        <ListFilterSelect
+          basePath={base}
+          currentParams={params}
+          paramKey="subsidiary"
+          label={t("legalEntity")}
+          allLabel={t("allEntities")}
+          options={data.subsidiaries.map(({ id, name }) => ({ value: id, label: name }))}
+        />
+        <ListFilterSelect
+          basePath={base}
+          currentParams={params}
+          paramKey="salesRep"
+          label={t("representative")}
+          allLabel={t("allRepresentatives")}
+          options={data.representatives.map(({ id, name }) => ({ value: id, label: name }))}
+        />
+        {data.mapEnabled ? (
+          <FilterChips
+            basePath={base}
+            currentParams={params}
+            paramKey="view"
+            label={t("view")}
+            defaultValue="list"
+            hideAll
+            options={[
+              { value: "list", label: t("list") },
+              { value: "map", label: t("map") },
+            ]}
+          />
+        ) : null}
+      </>
+    ) : null;
+  const listToolbar =
+    data.page !== "overview" ? (
+      <>
+        <SearchInput placeholder={t("search")} />
+        {territoryFilters}
+      </>
+    ) : undefined;
   const columns: PagedColumn<SalesRecord>[] = [
     {
       key: "name",
       header: t("name"),
       cell: (r) => (
         <div>
-          <div className="font-medium text-slate-900 dark:text-slate-100">
-            {r.name}
-          </div>
+          <div className="font-medium text-slate-900 dark:text-slate-100">{r.name}</div>
           <div className="text-xs text-slate-500">
-            {data.subsidiaries.find((s) => s.id === r.subsidiary_id)?.name ??
-              t("legacyScope")}
+            {data.subsidiaries.find((s) => s.id === r.subsidiary_id)?.name ?? t("legacyScope")}
           </div>
         </div>
       ),
@@ -160,23 +193,13 @@ export function SalesWorkspace({
         key: "amount",
         header: t("quota"),
         align: "right",
-        cell: (r) => (
-          <Amount
-            amount={r.amount ?? "0"}
-            currency={r.currency ?? data.baseCurrency}
-          />
-        ),
+        cell: (r) => <Amount amount={r.amount ?? "0"} currency={r.currency ?? data.baseCurrency} />,
       },
       {
         key: "actual",
         header: t("actual"),
         align: "right",
-        cell: (r) => (
-          <Amount
-            amount={r.actual ?? "0"}
-            currency={r.currency ?? data.baseCurrency}
-          />
-        ),
+        cell: (r) => <Amount amount={r.actual ?? "0"} currency={r.currency ?? data.baseCurrency} />,
       },
       {
         key: "status",
@@ -228,14 +251,25 @@ export function SalesWorkspace({
           <PageHeader
             title={t(`tabs.${data.page}`)}
             description={t("description")}
-            actions={<>
-              {data.canManage && data.page !== "overview" ? (
-                <Button onClick={() => router.push(href({ row: "new" }))}>
-                  {t(({ representatives: "designate", teams: "newTeam", quotas: "newQuota", territories: "newTerritory" } as const)[data.page as "representatives" | "teams" | "quotas" | "territories"])}
-                </Button>
-              ) : null}
-              <ModuleHomeTabs tabs={tabs} />
-            </>}
+            actions={
+              <>
+                {data.canManage && data.page !== "overview" ? (
+                  <Button onClick={() => router.push(href({ row: "new" }))}>
+                    {t(
+                      (
+                        {
+                          representatives: "designate",
+                          teams: "newTeam",
+                          quotas: "newQuota",
+                          territories: "newTerritory",
+                        } as const
+                      )[data.page as "representatives" | "teams" | "quotas" | "territories"],
+                    )}
+                  </Button>
+                ) : null}
+                <ModuleHomeTabs tabs={tabs} />
+              </>
+            }
           />
         </>
       }
@@ -244,18 +278,8 @@ export function SalesWorkspace({
       {data.page === "overview" ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {(
-              [
-                "representatives",
-                "teams",
-                "territories",
-                "draftQuotas",
-              ] as const
-            ).map((key, i) => (
-              <Link
-                key={key}
-                href={`/crm/sales/${key === "draftQuotas" ? "quotas" : key}`}
-              >
+            {(["representatives", "teams", "territories", "draftQuotas"] as const).map((key, i) => (
+              <Link key={key} href={`/crm/sales/${key === "draftQuotas" ? "quotas" : key}`}>
                 <HomeStatTile
                   icon={["users", "briefcase", "building", "badge-dollar"][i]!}
                   label={t(key)}
@@ -271,31 +295,19 @@ export function SalesWorkspace({
               title={t("performance")}
               icon="trending-up"
               actions={
-                <Link
-                  className="text-sm text-teal-700"
-                  href={data.reports.quota}
-                >
+                <Link className="text-sm text-teal-700" href={data.reports.quota}>
                   {t("viewReport")}
                 </Link>
               }
             >
-              <form
-                action={base}
-                className="mb-5 flex flex-wrap items-end gap-3"
-              >
+              <form action={base} className="mb-5 flex flex-wrap items-end gap-3">
                 <label className="text-xs">
                   {t("from")}
-                  <DateField
-                    name="periodStart"
-                    defaultValue={data.periodStart}
-                  />
+                  <DateField name="periodStart" defaultValue={data.periodStart} />
                 </label>
                 <label className="text-xs">
                   {t("to")}
-                  <DateField
-                    name="periodEnd"
-                    defaultValue={data.periodEnd}
-                  />
+                  <DateField name="periodEnd" defaultValue={data.periodEnd} />
                 </label>
                 <Button variant="outline" type="submit">
                   {t("apply")}
@@ -315,17 +327,13 @@ export function SalesWorkspace({
                         <Amount amount={s.actual} currency={s.currency} />
                       </p>
                       <p className="text-sm text-slate-500">
-                        {t("approvedTarget")}{" "}
-                        <Amount amount={s.quota} currency={s.currency} />
+                        {t("approvedTarget")} <Amount amount={s.quota} currency={s.currency} />
                       </p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <EmptyState
-                  title={t("noEvidence")}
-                  description={t("evidenceDescription")}
-                />
+                <EmptyState title={t("noEvidence")} description={t("evidenceDescription")} />
               )}
             </HomePanel>
             <div className="space-y-6">
@@ -333,23 +341,48 @@ export function SalesWorkspace({
                 <p className="mb-3 text-sm">
                   {t("unattributedCount", { count: data.counts.unattributed })}
                 </p>
-                <p className="mb-4 text-sm">
-                  {t("undatedCount", { count: data.counts.undated })}
-                </p>
-                <Link
-                  className="text-sm font-medium text-teal-700"
-                  href={data.reports.evidence}
-                >
+                <p className="mb-4 text-sm">{t("undatedCount", { count: data.counts.undated })}</p>
+                <Link className="text-sm font-medium text-teal-700" href={data.reports.evidence}>
                   {t("reviewEvidence")}
                 </Link>
               </HomePanel>
               <HomePanel title={t("planning")} icon="clipboard">
-                <LiveDirectory items={([
-                  { href: "/crm/sales/representatives", label: t("tabs.representatives"), iconKey: "users", badge: { value: new Intl.NumberFormat(locale).format(data.counts.representatives) } },
-                  { href: "/crm/sales/teams", label: t("tabs.teams"), iconKey: "briefcase-business", badge: { value: new Intl.NumberFormat(locale).format(data.counts.teams) } },
-                  { href: "/crm/sales/quotas", label: t("tabs.quotas"), iconKey: "circle-dollar-sign", badge: { value: new Intl.NumberFormat(locale).format(data.counts.draftQuotas) } },
-                  { href: "/crm/sales/territories", label: t("tabs.territories"), iconKey: "building", badge: { value: new Intl.NumberFormat(locale).format(data.counts.territories) } },
-                ] satisfies DirectoryItem[])} />
+                <LiveDirectory
+                  items={
+                    [
+                      {
+                        href: "/crm/sales/representatives",
+                        label: t("tabs.representatives"),
+                        iconKey: "users",
+                        badge: {
+                          value: new Intl.NumberFormat(locale).format(data.counts.representatives),
+                        },
+                      },
+                      {
+                        href: "/crm/sales/teams",
+                        label: t("tabs.teams"),
+                        iconKey: "briefcase-business",
+                        badge: { value: new Intl.NumberFormat(locale).format(data.counts.teams) },
+                      },
+                      {
+                        href: "/crm/sales/quotas",
+                        label: t("tabs.quotas"),
+                        iconKey: "circle-dollar-sign",
+                        badge: {
+                          value: new Intl.NumberFormat(locale).format(data.counts.draftQuotas),
+                        },
+                      },
+                      {
+                        href: "/crm/sales/territories",
+                        label: t("tabs.territories"),
+                        iconKey: "building",
+                        badge: {
+                          value: new Intl.NumberFormat(locale).format(data.counts.territories),
+                        },
+                      },
+                    ] satisfies DirectoryItem[]
+                  }
+                />
               </HomePanel>
             </div>
           </div>
@@ -359,16 +392,12 @@ export function SalesWorkspace({
           {data.page === "territories" && params.view === "map" && data.mapEnabled ? (
             <div className="flex flex-wrap items-end gap-2">{listToolbar}</div>
           ) : null}
-          {data.page === "territories" &&
-          params.view === "map" &&
-          data.mapEnabled ? (
+          {data.page === "territories" && params.view === "map" && data.mapEnabled ? (
             <p className="text-xs text-slate-500">
               {t("customerMapSummary", {
                 shown: data.customerLocations.length,
                 located: data.customerLocationStats.located,
-                missing:
-                  data.customerLocationStats.total -
-                  data.customerLocationStats.located,
+                missing: data.customerLocationStats.total - data.customerLocationStats.located,
               })}{" "}
               ·{" "}
               {t("territoryMapSummary", {
@@ -377,9 +406,7 @@ export function SalesWorkspace({
               })}
             </p>
           ) : null}
-          {data.page === "territories" &&
-          params.view === "map" &&
-          data.mapEnabled ? (
+          {data.page === "territories" && params.view === "map" && data.mapEnabled ? (
             <TerritoryMap
               territories={data.mapTerritories}
               customers={data.customerLocations}
@@ -393,12 +420,7 @@ export function SalesWorkspace({
               rowKey={(r) => r.id}
               onRowClick={(r) => router.push(href({ row: r.id }))}
               rowLabel={(r) => r.name}
-              empty={
-                <EmptyState
-                  title={t("emptyTitle")}
-                  description={t("emptyDescription")}
-                />
-              }
+              empty={<EmptyState title={t("emptyTitle")} description={t("emptyDescription")} />}
               emptyAsRow
               toolbarAfter={listToolbar}
             />
@@ -416,11 +438,7 @@ export function SalesWorkspace({
       )}
       {(data.selected || data.creating) && data.page !== "overview" ? (
         <SalesDrawer
-          key={
-            data.creating
-              ? "new-" + (data.selected?.id ?? "")
-              : (data.selected?.id ?? "new")
-          }
+          key={data.creating ? "new-" + (data.selected?.id ?? "") : (data.selected?.id ?? "new")}
           data={data}
           closeHref={href({ row: null, employee: null })}
         />

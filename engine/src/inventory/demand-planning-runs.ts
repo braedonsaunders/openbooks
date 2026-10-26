@@ -2,11 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { add, cmp, div, fromUnits, mul, neg, toUnits } from "../money/money.ts";
 import { businessToday } from "../platform/business-date.ts";
-import {
-  addCalendarDays,
-  mondayOfIsoWeek,
-  weekStartsEndingOn,
-} from "../platform/civil-date.ts";
+import { addCalendarDays, mondayOfIsoWeek, weekStartsEndingOn } from "../platform/civil-date.ts";
 import { purchaseOrderLineRemainders } from "../records/order-line-remainders.ts";
 import {
   availabilityEntity,
@@ -57,7 +53,8 @@ export async function readHistoryRows(
     and not exists (
       select 1 from inventory_movements reversal
        where reversal.org_id = m.org_id and reversal.reverses_movement_id = m.id)`;
-  const demand = await tx.execute<HistoryRow>(sql`
+  const demand = await tx.execute<HistoryRow>(
+    sql`
     select m.item_id, m.stock_location_id,
            date_trunc('week', m.moved_at)::date::text as week_start,
            sum(case when m.kind = 'issue' then -m.quantity else 0 end)::text as demand_qty,
@@ -68,18 +65,29 @@ export async function readHistoryRows(
        and m.moved_at >= ${windowStart}::date and m.moved_at < (${asOf}::date + 1)
        and ${reversal}
      group by 1, 2, 3
-     order by 1, 2, 3`, "objects");
-  const openingRows = await tx.execute<{ item_id: string; stock_location_id: string; opening: string }>(sql`
+     order by 1, 2, 3`,
+    "objects",
+  );
+  const openingRows = await tx.execute<{
+    item_id: string;
+    stock_location_id: string;
+    opening: string;
+  }>(
+    sql`
     select m.item_id, m.stock_location_id, sum(m.quantity)::text as opening
       from inventory_movements m
      where m.org_id = ${orgId} and m.subsidiary_id = ${subsidiaryId}
        and m.status = 'posted'
        and m.moved_at < ${windowStart}::date
        and ${reversal}
-     group by 1, 2`, "objects");
+     group by 1, 2`,
+    "objects",
+  );
   return {
     demand,
-    opening: new Map(openingRows.map((row) => [`${row.item_id}:${row.stock_location_id}`, row.opening])),
+    opening: new Map(
+      openingRows.map((row) => [`${row.item_id}:${row.stock_location_id}`, row.opening]),
+    ),
   };
 }
 
@@ -90,14 +98,17 @@ async function readPromotionWindows(
   windowStart: string,
   horizonEnd: string,
 ): Promise<PromotionWindow[]> {
-  const rows = await tx.execute<{ code: string; starts_on: string; ends_on: string }>(sql`
+  const rows = await tx.execute<{ code: string; starts_on: string; ends_on: string }>(
+    sql`
     select code, coalesce(starts_at::date, ${windowStart}::date)::text as starts_on,
            coalesce(ends_at::date, ${horizonEnd}::date)::text as ends_on
       from promotions
      where org_id = ${orgId} and status = 'active'
        and (starts_at is null or starts_at::date <= ${horizonEnd}::date)
        and (ends_at is null or ends_at::date >= ${windowStart}::date)
-     order by code`, "objects");
+     order by code`,
+    "objects",
+  );
   return rows.map((row) => ({ code: row.code, startsOn: row.starts_on, endsOn: row.ends_on }));
 }
 
@@ -117,12 +128,20 @@ export async function readOverrides(
   horizonStarts: readonly string[],
 ): Promise<Map<string, OverrideRow>> {
   if (horizonStarts.length === 0) return new Map();
-  const rows = await tx.execute<OverrideRow>(sql`
+  const rows = await tx.execute<OverrideRow>(
+    sql`
     select id, item_id, stock_location_id, period_start::text, quantity::text, reason
       from demand_forecast_overrides
      where org_id = ${orgId}
-       and period_start in (${sql.join(horizonStarts.map((day) => sql`${day}::date`), sql`, `)})`, "objects");
-  return new Map(rows.map((row) => [`${row.item_id}:${row.stock_location_id}:${row.period_start}`, row]));
+       and period_start in (${sql.join(
+         horizonStarts.map((day) => sql`${day}::date`),
+         sql`, `,
+       )})`,
+    "objects",
+  );
+  return new Map(
+    rows.map((row) => [`${row.item_id}:${row.stock_location_id}:${row.period_start}`, row]),
+  );
 }
 
 /** Assemble one item-by-location weekly series with stockout flags. */
@@ -148,8 +167,9 @@ export function buildSeries(
     // location that never stocked the item is not rewritten as stocked out.
     const before = positioned[index - 1];
     const after = positioned[index + 1];
-    const neighbourSold = (before !== undefined && cmp(before.quantity, ZERO_QTY) > 0)
-      || (after !== undefined && cmp(after.quantity, ZERO_QTY) > 0);
+    const neighbourSold =
+      (before !== undefined && cmp(before.quantity, ZERO_QTY) > 0) ||
+      (after !== undefined && cmp(after.quantity, ZERO_QTY) > 0);
     return { weekStart: week.weekStart, quantity: week.quantity, stockout: neighbourSold };
   });
 }
@@ -248,51 +268,97 @@ export async function runDemandPlan(
   raw: RunDemandPlanOptions,
 ): Promise<DemandPlanRun> {
   await assertDemandPlanningFeature(tx as Runner, orgId);
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"demand-plan:" + orgId + ":" + raw.subsidiaryId}, 0))`);
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${"demand-plan:" + orgId + ":" + raw.subsidiaryId}, 0))`,
+  );
   const entity = await availabilityEntity(tx as Runner, orgId, raw.subsidiaryId);
   const horizonWeeks = raw.horizonWeeks ?? 12;
   if (!Number.isInteger(horizonWeeks) || horizonWeeks < 1 || horizonWeeks > 52) {
-    refuse("The planning horizon must be from 1 to 52 weeks.", "invalid_planning_input", "choose a horizon from 1 to 52 weeks", 400);
+    refuse(
+      "The planning horizon must be from 1 to 52 weeks.",
+      "invalid_planning_input",
+      "choose a horizon from 1 to 52 weeks",
+      400,
+    );
   }
-  const asOf = raw.asOf ?? await businessToday(orgId);
+  const asOf = raw.asOf ?? (await businessToday(orgId));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
-    refuse(`Planning date ${asOf} is not a calendar date.`, "invalid_planning_input", "run the plan for a YYYY-MM-DD date", 400);
+    refuse(
+      `Planning date ${asOf} is not a calendar date.`,
+      "invalid_planning_input",
+      "run the plan for a YYYY-MM-DD date",
+      400,
+    );
   }
   const asOfMonday = mondayOfIsoWeek(asOf);
   if (raw.idempotencyKey !== undefined && !UUID_RE.test(raw.idempotencyKey)) {
-    refuse("The planning idempotency key must be a UUID.", "invalid_planning_input", "retry with an Idempotency-Key UUID header", 400);
+    refuse(
+      "The planning idempotency key must be a UUID.",
+      "invalid_planning_input",
+      "retry with an Idempotency-Key UUID header",
+      400,
+    );
   }
   const policies = await listDemandPolicies(tx, orgId);
   // One grid for every item: an item that wants longer history extends the
   // window for all, since a shared grid keeps weekly buckets comparable.
   let historyWeeks = raw.historyWeeks ?? 52;
   for (const policy of policies.values()) {
-    if (policy.historyWeeks !== null && policy.historyWeeks > historyWeeks) historyWeeks = policy.historyWeeks;
+    if (policy.historyWeeks !== null && policy.historyWeeks > historyWeeks)
+      historyWeeks = policy.historyWeeks;
   }
-  if (raw.historyWeeks !== undefined && (!Number.isInteger(raw.historyWeeks) || raw.historyWeeks < 4 || raw.historyWeeks > 156)) {
-    refuse("Planning history must cover 4 to 156 weeks.", "invalid_planning_input", "choose a history window from 4 to 156 weeks", 400);
+  if (
+    raw.historyWeeks !== undefined &&
+    (!Number.isInteger(raw.historyWeeks) || raw.historyWeeks < 4 || raw.historyWeeks > 156)
+  ) {
+    refuse(
+      "Planning history must cover 4 to 156 weeks.",
+      "invalid_planning_input",
+      "choose a history window from 4 to 156 weeks",
+      400,
+    );
   }
   const grid = weekStartsEndingOn(asOfMonday, historyWeeks);
   const windowStart = grid[0]!;
-  const horizonStarts = Array.from({ length: horizonWeeks }, (_, step) => addCalendarDays(asOfMonday, (step + 1) * 7));
+  const horizonStarts = Array.from({ length: horizonWeeks }, (_, step) =>
+    addCalendarDays(asOfMonday, (step + 1) * 7),
+  );
   const horizonEnd = addCalendarDays(asOfMonday, horizonWeeks * 7 + 6);
 
   if (raw.idempotencyKey) {
-    const existing = (await tx.execute<DemandPlanRun>(sql`
+    const existing = (
+      await tx.execute<DemandPlanRun>(
+        sql`
       select id, number, as_of::text as "asOf", horizon_weeks as "horizonWeeks",
              status, parameters, ran_at::text as "ranAt"
-        from demand_forecast_runs where org_id = ${orgId} and id = ${raw.idempotencyKey}`, "objects"))[0];
+        from demand_forecast_runs where org_id = ${orgId} and id = ${raw.idempotencyKey}`,
+        "objects",
+      )
+    )[0];
     if (existing) return { ...existing, replayed: true };
   }
 
   const items = new Map(
-    [...(await stockedItems(tx as Runner, orgId, null))].filter(([, item]) => item.isActive && item.kind !== "kit"),
+    [...(await stockedItems(tx as Runner, orgId, null))].filter(
+      ([, item]) => item.isActive && item.kind !== "kit",
+    ),
   );
   const skipped: Array<{ itemId: string; reason: string }> = [];
   if (items.size === 0) {
-    refuse("No stocked item can be planned: nothing carries an inventory costing profile.", "item_not_stocked", "add an inventory costing profile to an item first", 422);
+    refuse(
+      "No stocked item can be planned: nothing carries an inventory costing profile.",
+      "item_not_stocked",
+      "add an inventory costing profile to an item first",
+      422,
+    );
   }
-  const { demand, opening } = await readHistoryRows(tx, orgId, entity.subsidiaryId, windowStart, asOf);
+  const { demand, opening } = await readHistoryRows(
+    tx,
+    orgId,
+    entity.subsidiaryId,
+    windowStart,
+    asOf,
+  );
   const historyByPair = new Map<string, HistoryRow[]>();
   for (const row of demand) {
     const key = `${row.item_id}:${row.stock_location_id}`;
@@ -302,14 +368,21 @@ export async function runDemandPlan(
   const promoWindows = await readPromotionWindows(tx, orgId, windowStart, horizonEnd);
   const overrides = await readOverrides(tx, orgId, horizonStarts);
   const plannedPromoWeeks = horizonStarts.filter((weekStart) =>
-    promoWindows.some((window) => weekStart <= window.endsOn && addCalendarDays(weekStart, 6) >= window.startsOn),
+    promoWindows.some(
+      (window) => weekStart <= window.endsOn && addCalendarDays(weekStart, 6) >= window.startsOn,
+    ),
   );
 
   const onOrder = new Map<string, string>();
   for (const line of await purchaseOrderLineRemainders(tx, orgId, { openOnly: true })) {
     const item = items.get(line.itemId);
     if (!item || (line.subsidiaryId ?? entity.rootId) !== entity.subsidiaryId) continue;
-    const quantity = openBaseQuantity(line.open, line.unit, item, `${line.documentNumber} line ${line.lineNumber}`);
+    const quantity = openBaseQuantity(
+      line.open,
+      line.unit,
+      item,
+      `${line.documentNumber} line ${line.lineNumber}`,
+    );
     onOrder.set(line.itemId, add(onOrder.get(line.itemId) ?? ZERO_QTY, quantity));
   }
 
@@ -321,7 +394,10 @@ export async function runDemandPlan(
     policySnapshot[item.itemId] = { ...policy, label: item.label };
     const coverDays = policy.leadTimeDays + policy.reviewCycleDays;
     const coverWeeks = Math.max(1, Math.floor((coverDays + 6) / 7));
-    const safetyFactor = mul(zForServiceLevel(policy.serviceLevel), leadTimeFactor(policy.leadTimeDays));
+    const safetyFactor = mul(
+      zForServiceLevel(policy.serviceLevel),
+      leadTimeFactor(policy.leadTimeDays),
+    );
     const itemLocations = locations.filter((location) =>
       historyByPair.has(`${item.itemId}:${location}`),
     );
@@ -329,7 +405,10 @@ export async function runDemandPlan(
     // One replenishment-grade terms read per location: on-hand, committed
     // (kit lines exploded onto components) and unallocated demand come from
     // the same reader the reorder proposals net — never a second sum.
-    const termsByLocation = new Map<string, { onHand: string; committed: string; unallocated: string }>();
+    const termsByLocation = new Map<
+      string,
+      { onHand: string; committed: string; unallocated: string }
+    >();
     for (const location of itemLocations) {
       const terms = await demandTermsByItem(tx as Runner, orgId, {
         ...entity,
@@ -337,7 +416,11 @@ export async function runDemandPlan(
         locations: new Set([location]),
       });
       const entry = terms.get(item.itemId)!;
-      termsByLocation.set(location, { onHand: entry.onHand, committed: entry.committed, unallocated: entry.unallocated });
+      termsByLocation.set(location, {
+        onHand: entry.onHand,
+        committed: entry.committed,
+        unallocated: entry.unallocated,
+      });
     }
     const unallocated = termsByLocation.get(itemLocations[0]!)!.unallocated;
     const arriving = onOrder.get(item.itemId) ?? ZERO_QTY;
@@ -351,13 +434,24 @@ export async function runDemandPlan(
         leadLocation = location;
       }
     }
-    const shortfalls: Array<{ location: string; need: string; have: string; cover: string; avgDaily: string | null; daysOfCover: string | null }> = [];
+    const shortfalls: Array<{
+      location: string;
+      need: string;
+      have: string;
+      cover: string;
+      avgDaily: string | null;
+      daysOfCover: string | null;
+    }> = [];
     const surpluses: Array<{ location: string; surplus: string }> = [];
     for (const location of itemLocations) {
       const terms = termsByLocation.get(location)!;
       const have = add(terms.onHand, neg(terms.committed));
       const pairRows = historyByPair.get(`${item.itemId}:${location}`)!;
-      const series = buildSeries(grid, pairRows, opening.get(`${item.itemId}:${location}`) ?? ZERO_QTY);
+      const series = buildSeries(
+        grid,
+        pairRows,
+        opening.get(`${item.itemId}:${location}`) ?? ZERO_QTY,
+      );
       if (series.every((week) => cmp(week.quantity, ZERO_QTY) === 0 && !week.stockout)) continue;
       let result: ReturnType<typeof forecastDemand>;
       try {
@@ -368,14 +462,21 @@ export async function runDemandPlan(
           plannedPromotionWeeks: plannedPromoWeeks,
         });
       } catch {
-        skipped.push({ itemId: item.itemId, reason: "the demand history fits no forecasting method" });
+        skipped.push({
+          itemId: item.itemId,
+          reason: "the demand history fits no forecasting method",
+        });
         continue;
       }
       const horizonPeriods = result.periods.slice(0, Math.min(coverWeeks, horizonWeeks));
-      const coverQty = horizonPeriods.reduce((total, period) => add(total, period.quantity), ZERO_QTY);
+      const coverQty = horizonPeriods.reduce(
+        (total, period) => add(total, period.quantity),
+        ZERO_QTY,
+      );
       const safety = mul(safetyFactor, result.explanation.residualSigma);
       const avgDaily = coverDays > 0 ? div(coverQty, String(coverDays)) : null;
-      const adjusted = location === leadLocation ? add(add(have, neg(unallocated)), arriving) : have;
+      const adjusted =
+        location === leadLocation ? add(add(have, neg(unallocated)), arriving) : have;
       const need = add(add(coverQty, safety), neg(adjusted));
       const daysOfCover = avgDaily && cmp(avgDaily, ZERO_QTY) > 0 ? div(have, avgDaily) : null;
       for (const [index, period] of result.periods.entries()) {
@@ -397,7 +498,14 @@ export async function runDemandPlan(
         });
       }
       if (cmp(need, ZERO_QTY) > 0) {
-        shortfalls.push({ location, need, have, cover: add(coverQty, safety), avgDaily, daysOfCover });
+        shortfalls.push({
+          location,
+          need,
+          have,
+          cover: add(coverQty, safety),
+          avgDaily,
+          daysOfCover,
+        });
       } else if (cmp(need, ZERO_QTY) < 0) {
         surpluses.push({ location, surplus: neg(need) });
       }
@@ -446,13 +554,24 @@ export async function runDemandPlan(
     }
   }
   if (forecasts.length === 0) {
-    refuse("No demand signal exists for this entity: nothing sold in the history window.", "item_not_stocked", "receive and sell stock first, then run the plan", 422);
+    refuse(
+      "No demand signal exists for this entity: nothing sold in the history window.",
+      "item_not_stocked",
+      "receive and sell stock first, then run the plan",
+      422,
+    );
   }
   const runId = raw.idempotencyKey ?? randomUUID();
-  const nextNumber = (await tx.execute<{ sequence: string }>(sql`
+  const nextNumber =
+    (
+      await tx.execute<{ sequence: string }>(
+        sql`
     select (coalesce(max(substring(number from 5)::bigint)
       filter (where number ~ '^DFP-[0-9]+$'), 0) + 1)::text as sequence
-      from demand_forecast_runs where org_id = ${orgId}`, "objects"))[0]?.sequence ?? "1";
+      from demand_forecast_runs where org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.sequence ?? "1";
   const number = `DFP-${BigInt(nextNumber).toString().padStart(6, "0")}`;
   const parameters: Record<string, unknown> = {
     subsidiaryId: raw.subsidiaryId,
@@ -466,17 +585,31 @@ export async function runDemandPlan(
     promotionWindows: promoWindows,
     skippedItems: skipped,
   };
-  const created = (await tx.execute<DemandPlanRun>(sql`
+  const created = (
+    await tx.execute<DemandPlanRun>(
+      sql`
     insert into demand_forecast_runs
       (id, org_id, number, as_of, horizon_weeks, parameters, status, run_by, created_by, updated_by)
     values (${runId}, ${orgId}, ${number}, ${asOf}, ${horizonWeeks},
       ${JSON.stringify(parameters)}::jsonb, 'draft', ${actorId}, ${actorId}, ${actorId})
     returning id, number, as_of::text as "asOf", horizon_weeks as "horizonWeeks",
-      status, parameters, ran_at::text as "ranAt"`, "objects"))[0];
+      status, parameters, ran_at::text as "ranAt"`,
+      "objects",
+    )
+  )[0];
   if (!created) refuse("The planning run was not saved.", "planning_write_failed", "retry the run");
-  await auditPlanningChange(tx, { orgId, actorId, table: "demand_forecast_runs", rowId: created.id, action: "insert", before: null, after: created });
+  await auditPlanningChange(tx, {
+    orgId,
+    actorId,
+    table: "demand_forecast_runs",
+    rowId: created.id,
+    action: "insert",
+    before: null,
+    after: created,
+  });
   for (const forecast of forecasts) {
-    const inserted = await tx.execute<{ id: string }>(sql`
+    const inserted = await tx.execute<{ id: string }>(
+      sql`
       insert into demand_forecasts
         (org_id, run_id, item_id, stock_location_id, period_start, period_grain,
          forecast_qty, lower_qty, upper_qty, method, explanation, created_by, updated_by)
@@ -484,11 +617,15 @@ export async function runDemandPlan(
         ${forecast.periodStart}, 'week', ${forecast.quantity}, ${forecast.lower},
         ${forecast.upper}, ${forecast.method}, ${JSON.stringify(forecast.explanation)}::jsonb,
         ${actorId}, ${actorId})
-      returning id`, "objects");
-    if (inserted.length !== 1) refuse("A forecast row was not saved.", "planning_write_failed", "retry the run");
+      returning id`,
+      "objects",
+    );
+    if (inserted.length !== 1)
+      refuse("A forecast row was not saved.", "planning_write_failed", "retry the run");
   }
   for (const suggestion of suggestions) {
-    const inserted = await tx.execute<{ id: string }>(sql`
+    const inserted = await tx.execute<{ id: string }>(
+      sql`
       insert into demand_plan_suggestions
         (org_id, run_id, item_id, stock_location_id, action, quantity, due_date,
          planned_start, forecast_qty, projected_supply, days_of_cover, status, created_by, updated_by)
@@ -496,24 +633,52 @@ export async function runDemandPlan(
         ${suggestion.action}, ${suggestion.quantity}, ${suggestion.dueDate},
         ${suggestion.plannedStart}, ${suggestion.forecastQty}, ${suggestion.projectedSupply},
         ${suggestion.daysOfCover}, 'suggested', ${actorId}, ${actorId})
-      returning id`, "objects");
-    if (inserted.length !== 1) refuse("A planning suggestion was not saved.", "planning_write_failed", "retry the run");
+      returning id`,
+      "objects",
+    );
+    if (inserted.length !== 1)
+      refuse("A planning suggestion was not saved.", "planning_write_failed", "retry the run");
   }
-  const completed = (await tx.execute<DemandPlanRun>(sql`
+  const completed = (
+    await tx.execute<DemandPlanRun>(
+      sql`
     update demand_forecast_runs set status = 'complete', ran_at = now(), updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${created.id} and status = 'draft'
     returning id, number, as_of::text as "asOf", horizon_weeks as "horizonWeeks",
-      status, parameters, ran_at::text as "ranAt"`, "objects"))[0];
-  if (!completed) refuse("The planning run did not complete.", "planning_write_failed", "retry the run");
-  await auditPlanningChange(tx, { orgId, actorId, table: "demand_forecast_runs", rowId: completed.id, action: "update", before: created, after: completed });
-  const old = await tx.execute<DemandPlanRun>(sql`
+      status, parameters, ran_at::text as "ranAt"`,
+      "objects",
+    )
+  )[0];
+  if (!completed)
+    refuse("The planning run did not complete.", "planning_write_failed", "retry the run");
+  await auditPlanningChange(tx, {
+    orgId,
+    actorId,
+    table: "demand_forecast_runs",
+    rowId: completed.id,
+    action: "update",
+    before: created,
+    after: completed,
+  });
+  const old = await tx.execute<DemandPlanRun>(
+    sql`
     update demand_forecast_runs set status = 'superseded', updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and status = 'complete' and id <> ${created.id}
        and parameters->>'subsidiaryId' = ${raw.subsidiaryId}
     returning id, number, as_of::text as "asOf", horizon_weeks as "horizonWeeks",
-      status, parameters, ran_at::text as "ranAt"`, "objects");
+      status, parameters, ran_at::text as "ranAt"`,
+    "objects",
+  );
   for (const before of old) {
-    await auditPlanningChange(tx, { orgId, actorId, table: "demand_forecast_runs", rowId: before.id, action: "update", before: { ...before, status: "complete" }, after: before });
+    await auditPlanningChange(tx, {
+      orgId,
+      actorId,
+      table: "demand_forecast_runs",
+      rowId: before.id,
+      action: "update",
+      before: { ...before, status: "complete" },
+      after: before,
+    });
   }
   return { ...completed, replayed: false };
 }

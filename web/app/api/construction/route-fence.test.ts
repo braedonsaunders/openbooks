@@ -1,50 +1,56 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Construction write fence: addSov/addChangeOrder gate Projects at the route
 // entry, then must recheck the gate INSIDE the write transaction. A disable
 // committing between the entry check and the insert must refuse the write
 // instead of committing a hidden SOV line or change order.
 
-const stateKey = Symbol.for('openbooks.construction-fence-test')
-interface DbCall { kind: 'execute' | 'tx-execute'; text: string }
+const stateKey = Symbol.for("openbooks.construction-fence-test");
+interface DbCall {
+  kind: "execute" | "tx-execute";
+  text: string;
+}
 interface FenceState {
-  calls: DbCall[]
+  calls: DbCall[];
   /** Features visible to the pre-transaction entry guard. */
-  entryFeatures: Record<string, boolean>
+  entryFeatures: Record<string, boolean>;
   /** Features visible to the in-transaction fenced recheck. */
-  txFeatures: Record<string, boolean>
+  txFeatures: Record<string, boolean>;
 }
 const fenceState: FenceState = {
   calls: [],
   entryFeatures: { projects: true },
   txFeatures: { projects: true },
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = fenceState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = fenceState;
 
 /** Flatten a drizzle SQL chunk into its raw text for keyword assertions. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((c) => {
-      if (typeof c === 'string') return c
-      const value = (c as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c)
-      return ''
+      if (typeof c === "string") return c;
+      const value = (c as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextConstruction?: unknown }).openbooksSqlTextConstruction = sqlText
+(
+  globalThis as typeof globalThis &
+    Record<string, unknown> & { openbooksSqlTextConstruction?: unknown }
+).openbooksSqlTextConstruction = sqlText;
 
-const PROJECT_ID = '00000000-0000-4000-8000-00000000c001'
+const PROJECT_ID = "00000000-0000-4000-8000-00000000c001";
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       import {AsyncLocalStorage} from 'node:async_hooks';
       const scope=new AsyncLocalStorage();
@@ -104,7 +110,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       export async function getAuthz() {
         return { user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(['ar.create', 'ar.read', 'ar.approve', 'ar.post']), allowedSubsidiaryIds: null }
@@ -119,31 +125,50 @@ const mockSources = new Map<string, string>([
       export function guardSubsidiaryScope() { return null }
     `,
   ],
-])
+]);
 
 // Every runtime export of the real pool module must exist on the double, or a
 // module anywhere in the route's import graph fails to link and the file
 // reports no tests. Exports these paths never call throw if reached.
 {
   const declared = (source: string) =>
-    new Set([...source.matchAll(/^\s*export (?:async )?(?:function|const|let|class) (\w+)/gm)].map((m) => m[1]!))
-  const real = readFileSync(new URL('../../../../engine/src/platform/db.ts', import.meta.url), 'utf8')
+    new Set(
+      [...source.matchAll(/^\s*export (?:async )?(?:function|const|let|class) (\w+)/gm)].map(
+        (m) => m[1]!,
+      ),
+    );
+  const real = readFileSync(
+    new URL("../../../../engine/src/platform/db.ts", import.meta.url),
+    "utf8",
+  );
   const realNames = new Set([
     ...declared(real),
-    ...[...real.matchAll(/^export \{([^}]*)\}/gm)].flatMap((m) => m[1]!.split(',').map((n) => n.trim()).filter(Boolean)),
-  ])
-  const mocked = declared(mockSources.get('mock:db')!)
-  const missing = [...realNames].filter((name) => !mocked.has(name))
-  mockSources.set('mock:db', mockSources.get('mock:db')! + missing
-    .map((name) => `export function ${name}() { throw new Error('unexpected ${name} in the construction fence test') }`)
-    .join('\n'))
+    ...[...real.matchAll(/^export \{([^}]*)\}/gm)].flatMap((m) =>
+      m[1]!
+        .split(",")
+        .map((n) => n.trim())
+        .filter(Boolean),
+    ),
+  ]);
+  const mocked = declared(mockSources.get("mock:db")!);
+  const missing = [...realNames].filter((name) => !mocked.has(name));
+  mockSources.set(
+    "mock:db",
+    mockSources.get("mock:db")! +
+      missing
+        .map(
+          (name) =>
+            `export function ${name}() { throw new Error('unexpected ${name} in the construction fence test') }`,
+        )
+        .join("\n"),
+  );
 }
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+]);
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -155,162 +180,204 @@ const _hooks = registerHooks({
     // engine helpers (business clocks, type defaults) would run their reads
     // on a real connection.
     if (
-      specifier === '@openbooks/engine/platform/db' ||
-      specifier.endsWith('/platform/db.ts') ||
-      (specifier === './db.ts' && context.parentURL?.includes('/engine/src/platform/'))
+      specifier === "@openbooks/engine/platform/db" ||
+      specifier.endsWith("/platform/db.ts") ||
+      (specifier === "./db.ts" && context.parentURL?.includes("/engine/src/platform/"))
     ) {
-      return { url: 'mock:db', shortCircuit: true }
+      return { url: "mock:db", shortCircuit: true };
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
+    const source = mockSources.get(url);
     if (source !== undefined) {
-      return { format: 'module', source, shortCircuit: true }
+      return { format: "module", source, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?construction-fence-test'
-const { POST } = (await import(routeUrl)) as { POST: (req: Request) => Promise<Response> }
+const routeUrl = "./route.ts?construction-fence-test";
+const { POST } = (await import(routeUrl)) as { POST: (req: Request) => Promise<Response> };
 // Both fence halves are loaded for real above (only db and authz are
 // is still registered.
-const { featureGateLockKey: webFenceKey } = (await import('../../../lib/features')) as {
-  featureGateLockKey: (orgId: string) => string
-}
-const { featureGateLockKey: engineFenceKey } = (await import(
-  '@openbooks/engine/organization/org-feature-lock'
-)) as { featureGateLockKey: (orgId: string) => string }
+const { featureGateLockKey: webFenceKey } = (await import("../../../lib/features")) as {
+  featureGateLockKey: (orgId: string) => string;
+};
+const { featureGateLockKey: engineFenceKey } =
+  (await import("@openbooks/engine/organization/org-feature-lock")) as {
+    featureGateLockKey: (orgId: string) => string;
+  };
 
 function reset(): void {
-  fenceState.calls.length = 0
-  fenceState.entryFeatures = { projects: true }
-  fenceState.txFeatures = { projects: true }
+  fenceState.calls.length = 0;
+  fenceState.entryFeatures = { projects: true };
+  fenceState.txFeatures = { projects: true };
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/construction', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/construction", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
 function txTexts(): string[] {
-  return fenceState.calls.filter((c) => c.kind === 'tx-execute').map((c) => c.text)
+  return fenceState.calls.filter((c) => c.kind === "tx-execute").map((c) => c.text);
 }
 
-test('addSov rechecks Projects inside the write transaction before inserting', async () => {
-  reset()
-  const res = await post({ action: 'addSov', projectId: PROJECT_ID, description: 'Mobilization', scheduledValue: '1000' })
-  assert.equal(res.status, 201, JSON.stringify(await res.clone().json().catch(() => null)))
-  const texts = txTexts()
-  const fence = texts.findIndex((t) => t.includes('pg_advisory_xact_lock'))
-  const recheck = texts.findIndex((t) => t.includes('for share') && t.includes('from orgs'))
-  const scopeLock = texts.findIndex((t) => t.includes('for update of p'))
-  const insert = texts.findIndex((t) => t.includes('insert into sov_lines'))
-  assert.ok(fence >= 0, 'the write transaction takes the feature-gate fence')
-  assert.ok(recheck >= 0, 'the write transaction rechecks the gate under a shared row lock')
-  assert.ok(scopeLock >= 0, 'the write transaction locks the project and rechecks scope')
-  assert.ok(insert >= 0, 'the SOV line inserts')
-  assert.ok(fence < recheck && recheck < scopeLock && scopeLock < insert, 'fence, recheck, scope lock, then insert — in that order')
-})
+test("addSov rechecks Projects inside the write transaction before inserting", async () => {
+  reset();
+  const res = await post({
+    action: "addSov",
+    projectId: PROJECT_ID,
+    description: "Mobilization",
+    scheduledValue: "1000",
+  });
+  assert.equal(
+    res.status,
+    201,
+    JSON.stringify(
+      await res
+        .clone()
+        .json()
+        .catch(() => null),
+    ),
+  );
+  const texts = txTexts();
+  const fence = texts.findIndex((t) => t.includes("pg_advisory_xact_lock"));
+  const recheck = texts.findIndex((t) => t.includes("for share") && t.includes("from orgs"));
+  const scopeLock = texts.findIndex((t) => t.includes("for update of p"));
+  const insert = texts.findIndex((t) => t.includes("insert into sov_lines"));
+  assert.ok(fence >= 0, "the write transaction takes the feature-gate fence");
+  assert.ok(recheck >= 0, "the write transaction rechecks the gate under a shared row lock");
+  assert.ok(scopeLock >= 0, "the write transaction locks the project and rechecks scope");
+  assert.ok(insert >= 0, "the SOV line inserts");
+  assert.ok(
+    fence < recheck && recheck < scopeLock && scopeLock < insert,
+    "fence, recheck, scope lock, then insert — in that order",
+  );
+});
 
-test('addSov refused when Projects disables between the entry guard and the insert', async () => {
-  reset()
+test("addSov refused when Projects disables between the entry guard and the insert", async () => {
+  reset();
   // The entry guard still sees the old enabled flag; the disable commits
   // before the write transaction rechecks.
-  fenceState.entryFeatures = { projects: true }
-  fenceState.txFeatures = { projects: false }
-  const res = await post({ action: 'addSov', projectId: PROJECT_ID, description: 'Mobilization', scheduledValue: '1000' })
-  assert.equal(res.status, 422)
-  assert.equal(((await res.json()) as { error: string }).error, 'Projects feature is disabled')
+  fenceState.entryFeatures = { projects: true };
+  fenceState.txFeatures = { projects: false };
+  const res = await post({
+    action: "addSov",
+    projectId: PROJECT_ID,
+    description: "Mobilization",
+    scheduledValue: "1000",
+  });
+  assert.equal(res.status, 422);
+  assert.equal(((await res.json()) as { error: string }).error, "Projects feature is disabled");
   assert.ok(
-    !txTexts().some((t) => t.includes('insert into sov_lines')),
-    'a refused SOV insert must never reach the table',
-  )
-})
+    !txTexts().some((t) => t.includes("insert into sov_lines")),
+    "a refused SOV insert must never reach the table",
+  );
+});
 
-test('addChangeOrder refused when Projects disables between the entry guard and the insert', async () => {
-  reset()
-  fenceState.entryFeatures = { projects: true }
-  fenceState.txFeatures = { projects: false }
-  const res = await post({ action: 'addChangeOrder', projectId: PROJECT_ID, number: 'CO-001', amount: '250' })
-  assert.equal(res.status, 422)
-  assert.equal(((await res.json()) as { error: string }).error, 'Projects feature is disabled')
+test("addChangeOrder refused when Projects disables between the entry guard and the insert", async () => {
+  reset();
+  fenceState.entryFeatures = { projects: true };
+  fenceState.txFeatures = { projects: false };
+  const res = await post({
+    action: "addChangeOrder",
+    projectId: PROJECT_ID,
+    number: "CO-001",
+    amount: "250",
+  });
+  assert.equal(res.status, 422);
+  assert.equal(((await res.json()) as { error: string }).error, "Projects feature is disabled");
   assert.ok(
-    !txTexts().some((t) => t.includes('insert into change_orders')),
-    'a refused change order must never reach the table',
-  )
-})
+    !txTexts().some((t) => t.includes("insert into change_orders")),
+    "a refused change order must never reach the table",
+  );
+});
 
-test('approveChangeOrder takes the fence before touching the draft order', async () => {
-  reset()
+test("approveChangeOrder takes the fence before touching the draft order", async () => {
+  reset();
   // The gate stays enabled: approval proceeds past the fence to the draft
   // lookup (which finds nothing here), proving fence, recheck, then work.
-  const res = await post({ action: 'approveChangeOrder', id: '00000000-0000-4000-8000-00000000c002', approvedOn: '2026-08-31' })
-  assert.equal(res.status, 422)
-  assert.equal(((await res.json()) as { error: string }).error, 'Change order not found.')
-  const texts = txTexts()
-  const fence = texts.findIndex((t) => t.includes('pg_advisory_xact_lock'))
-  const recheck = texts.findIndex((t) => t.includes('for share') && t.includes('from orgs'))
-  const lookup = texts.findIndex((t) => t.includes('from change_orders'))
-  assert.ok(fence >= 0, 'the approval transaction takes the feature-gate fence')
-  assert.ok(recheck >= 0, 'the approval transaction rechecks the gate under a shared row lock')
-  assert.ok(lookup >= 0, 'the draft order is looked up')
-  assert.ok(fence < recheck && recheck < lookup, 'fence, recheck, then work — in that order')
-})
+  const res = await post({
+    action: "approveChangeOrder",
+    id: "00000000-0000-4000-8000-00000000c002",
+    approvedOn: "2026-08-31",
+  });
+  assert.equal(res.status, 422);
+  assert.equal(((await res.json()) as { error: string }).error, "Change order not found.");
+  const texts = txTexts();
+  const fence = texts.findIndex((t) => t.includes("pg_advisory_xact_lock"));
+  const recheck = texts.findIndex((t) => t.includes("for share") && t.includes("from orgs"));
+  const lookup = texts.findIndex((t) => t.includes("from change_orders"));
+  assert.ok(fence >= 0, "the approval transaction takes the feature-gate fence");
+  assert.ok(recheck >= 0, "the approval transaction rechecks the gate under a shared row lock");
+  assert.ok(lookup >= 0, "the draft order is looked up");
+  assert.ok(fence < recheck && recheck < lookup, "fence, recheck, then work — in that order");
+});
 
-test('approveChangeOrder refused when Projects disables between the entry guard and the approval', async () => {
-  reset()
-  fenceState.entryFeatures = { projects: true }
-  fenceState.txFeatures = { projects: false }
-  const res = await post({ action: 'approveChangeOrder', id: '00000000-0000-4000-8000-00000000c002', approvedOn: '2026-08-31' })
-  assert.equal(res.status, 422)
-  assert.equal(((await res.json()) as { error: string }).error, 'Projects feature is disabled')
+test("approveChangeOrder refused when Projects disables between the entry guard and the approval", async () => {
+  reset();
+  fenceState.entryFeatures = { projects: true };
+  fenceState.txFeatures = { projects: false };
+  const res = await post({
+    action: "approveChangeOrder",
+    id: "00000000-0000-4000-8000-00000000c002",
+    approvedOn: "2026-08-31",
+  });
+  assert.equal(res.status, 422);
+  assert.equal(((await res.json()) as { error: string }).error, "Projects feature is disabled");
   assert.ok(
-    !txTexts().some((t) => t.includes('insert into sov_lines')),
-    'a refused approval must never land its SOV line',
-  )
-})
+    !txTexts().some((t) => t.includes("insert into sov_lines")),
+    "a refused approval must never land its SOV line",
+  );
+});
 
-test('voidChangeOrder takes the fence and rechecks Projects before touching the order', async () => {
-  reset()
-  const res = await post({ action: 'voidChangeOrder', id: '00000000-0000-4000-8000-00000000c002' })
-  assert.equal(res.status, 422)
-  assert.equal(((await res.json()) as { error: string }).error, 'Only a draft change order can be voided')
-  const texts = txTexts()
-  const fence = texts.findIndex((t) => t.includes('pg_advisory_xact_lock'))
-  const recheck = texts.findIndex((t) => t.includes('for share') && t.includes('from orgs'))
-  const lookup = texts.findIndex((t) => t.includes('from change_orders'))
-  assert.ok(fence >= 0 && recheck >= 0 && lookup >= 0, 'fence, recheck and lookup all run in the void transaction')
-  assert.ok(fence < recheck && recheck < lookup, 'fence, recheck, then work — in that order')
-})
-
-test('voidChangeOrder refused when Projects disables between the entry guard and the void', async () => {
-  reset()
-  fenceState.entryFeatures = { projects: true }
-  fenceState.txFeatures = { projects: false }
-  const res = await post({ action: 'voidChangeOrder', id: '00000000-0000-4000-8000-00000000c002' })
-  assert.equal(res.status, 422)
-  assert.equal(((await res.json()) as { error: string }).error, 'Projects feature is disabled')
+test("voidChangeOrder takes the fence and rechecks Projects before touching the order", async () => {
+  reset();
+  const res = await post({ action: "voidChangeOrder", id: "00000000-0000-4000-8000-00000000c002" });
+  assert.equal(res.status, 422);
+  assert.equal(
+    ((await res.json()) as { error: string }).error,
+    "Only a draft change order can be voided",
+  );
+  const texts = txTexts();
+  const fence = texts.findIndex((t) => t.includes("pg_advisory_xact_lock"));
+  const recheck = texts.findIndex((t) => t.includes("for share") && t.includes("from orgs"));
+  const lookup = texts.findIndex((t) => t.includes("from change_orders"));
   assert.ok(
-    !txTexts().some((t) => t.includes('change_orders')),
-    'a refused void must never read or write the change order',
-  )
-})
+    fence >= 0 && recheck >= 0 && lookup >= 0,
+    "fence, recheck and lookup all run in the void transaction",
+  );
+  assert.ok(fence < recheck && recheck < lookup, "fence, recheck, then work — in that order");
+});
 
-test('engine and web fences hash the same per-org key', () => {
+test("voidChangeOrder refused when Projects disables between the entry guard and the void", async () => {
+  reset();
+  fenceState.entryFeatures = { projects: true };
+  fenceState.txFeatures = { projects: false };
+  const res = await post({ action: "voidChangeOrder", id: "00000000-0000-4000-8000-00000000c002" });
+  assert.equal(res.status, 422);
+  assert.equal(((await res.json()) as { error: string }).error, "Projects feature is disabled");
+  assert.ok(
+    !txTexts().some((t) => t.includes("change_orders")),
+    "a refused void must never read or write the change order",
+  );
+});
+
+test("engine and web fences hash the same per-org key", () => {
   // The disable path takes the web fence and the engine creators take the
   // engine fence: identical keys are what make those two locks one serial
   // order instead of two independent locks that never meet.
-  for (const orgId of ['org-1', '00000000-0000-4000-8000-000000000000']) {
-    assert.equal(engineFenceKey(orgId), webFenceKey(orgId))
+  for (const orgId of ["org-1", "00000000-0000-4000-8000-000000000000"]) {
+    assert.equal(engineFenceKey(orgId), webFenceKey(orgId));
   }
-  assert.equal(webFenceKey('org-1'), 'openbooks:feature-gate:org-1')
-})
+  assert.equal(webFenceKey("org-1"), "openbooks:feature-gate:org-1");
+});

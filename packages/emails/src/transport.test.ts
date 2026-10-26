@@ -4,7 +4,12 @@ import { deriveEmailDeliveryKey } from "./outcome";
 import { sendVia, type EmailDeliveryIdentity, type EmailTransport } from "./transport";
 
 const ORG = "018f6b2a-7c1d-7d3e-9f4a-2b8c4d5e6f70";
-const base = { to: "customer@example.com", subject: "Invoice overdue", html: "<p>Pay</p>", text: "Pay" };
+const base = {
+  to: "customer@example.com",
+  subject: "Invoice overdue",
+  html: "<p>Pay</p>",
+  text: "Pay",
+};
 
 const transport = (replyTo?: string): EmailTransport => ({
   provider: "resend",
@@ -62,7 +67,11 @@ test("an invalid per-message reply-to refuses before any provider request", asyn
   const restore = stubResend(captured);
   try {
     await assert.rejects(
-      sendVia(transport("default@example.com"), { ...base, replyTo: "not-an-address" }, identity("reply-bad")),
+      sendVia(
+        transport("default@example.com"),
+        { ...base, replyTo: "not-an-address" },
+        identity("reply-bad"),
+      ),
       /reply-to address is invalid/,
     );
     assert.equal(captured.calls, 0, "no provider request may be allocated");

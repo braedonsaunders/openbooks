@@ -80,14 +80,22 @@ const cemtexInputs = (): PayRunBankFileInputs => ({
   },
   credits: [
     {
-      stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIDGET", amount: "2500.0000",
-      employeeNumber: "EMP-0001", routing: { bsb: "062-692" },
+      stubId: "s1",
+      employeePartyId: "p1",
+      employeeName: "ADA WIDGET",
+      amount: "2500.0000",
+      employeeNumber: "EMP-0001",
+      routing: { bsb: "062-692" },
       accountNumber: "43214321",
       bsb: "062-692",
     },
     {
-      stubId: "s2", employeePartyId: "p2", employeeName: "BO SAVER", amount: "1821.5000",
-      employeeNumber: "EMP-0002", routing: { bsb: "062001" },
+      stubId: "s2",
+      employeePartyId: "p2",
+      employeeName: "BO SAVER",
+      amount: "1821.5000",
+      employeeNumber: "EMP-0002",
+      routing: { bsb: "062001" },
       accountNumber: "123456",
       bsb: "062-001",
     },
@@ -171,7 +179,9 @@ test("every golden record is exactly 120 characters with the terminator outside 
 test("an accented employee name folds to ASCII and keeps every record at 120 bytes", () => {
   const inputs = cemtexInputs();
   inputs.credits[0]!.employeeName = "Zoë Ångström";
-  const records = renderCemtex(inputs).content.split("\r\n").filter((line) => line.length > 0);
+  const records = renderCemtex(inputs)
+    .content.split("\r\n")
+    .filter((line) => line.length > 0);
   for (const record of records) assert.equal(Buffer.byteLength(record, "utf8"), 120);
   assert.ok(records.some((record) => record.slice(30, 62) === "Zoe Angstrom".padEnd(32, " ")));
 });
@@ -205,9 +215,12 @@ test("the golden trailer ties to the run at its published offsets", () => {
  */
 test("the published worked example matches at every offset but the payroll-fixed fields", () => {
   const sample = {
-    descriptive: "0067-102 12341234 01CBA       Smith John Allan          301500ABA Test    0704131530                                    ",
-    detail: "1062-692 43214321 500000000001Smith Joan Emma                 ABA Test CR       067-102 12341234Mr John Smith   00000000",
-    trailer: "7999-999            000000000100000000010000000000                        000001                                        ",
+    descriptive:
+      "0067-102 12341234 01CBA       Smith John Allan          301500ABA Test    0704131530                                    ",
+    detail:
+      "1062-692 43214321 500000000001Smith Joan Emma                 ABA Test CR       067-102 12341234Mr John Smith   00000000",
+    trailer:
+      "7999-999            000000000100000000010000000000                        000001                                        ",
   };
   for (const line of Object.values(sample)) assert.equal(line.length, 120);
 
@@ -221,13 +234,15 @@ test("the published worked example matches at every offset but the payroll-fixed
       remitterName: "Mr John Smith",
     },
     processingDate: "2013-04-07",
-    payments: [{
-      amountCents: 1n,
-      bsb: "062-692",
-      accountNumber: "43214321",
-      accountTitle: "Smith Joan Emma",
-      lodgementReference: "ABA Test CR",
-    }],
+    payments: [
+      {
+        amountCents: 1n,
+        bsb: "062-692",
+        accountNumber: "43214321",
+        accountTitle: "Smith Joan Emma",
+        lodgementReference: "ABA Test CR",
+      },
+    ],
   });
   const [descriptive, detail, trailer] = mine.split("\r\n").filter((line) => line.length > 0);
 
@@ -298,7 +313,9 @@ test("a malformed BSB is refused rather than written into the BSB field", () => 
 
 test("a six-digit BSB without a hyphen canonicalizes — the hyphen is formatting, not identity", () => {
   assert.deepEqual(resolveCemtexCreditor("BO SAVER", { bsb: "062001" }, "123456"), {
-    ok: true, bsb: "062-001", accountNumber: "123456",
+    ok: true,
+    bsb: "062-001",
+    accountNumber: "123456",
   });
 });
 
@@ -334,7 +351,8 @@ test("an unconfigured Cemtex originator is refused by name rather than emitting 
           remitterName: "",
         },
       }),
-    (error: Error) => error instanceof PaymentError && /Cemtex originator settings are invalid/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /Cemtex originator settings are invalid/.test(error.message),
   );
 });
 
@@ -347,7 +365,8 @@ test("a profile that originates another format cannot render Cemtex", () => {
         nacha: undefined,
         cemtex: undefined,
       } as unknown as PayrollOriginatorConfig),
-    (error: Error) => error instanceof PayrollError && /originates nacha, not cemtex/.test(error.message),
+    (error: Error) =>
+      error instanceof PayrollError && /originates nacha, not cemtex/.test(error.message),
   );
 });
 
@@ -365,8 +384,12 @@ test("a sub-cent Cemtex credit is refused rather than truncated into the trailer
 
 test("a run past the 500-record file cap is refused, not silently over-long", () => {
   const credits = Array.from({ length: 501 }, (_, i) => ({
-    stubId: `s${i}`, employeePartyId: `p${i}`, employeeName: `EMP ${i}`, amount: "100.0000",
-    employeeNumber: `EMP-${i}`, routing: { bsb: "062-692" },
+    stubId: `s${i}`,
+    employeePartyId: `p${i}`,
+    employeeName: `EMP ${i}`,
+    amount: "100.0000",
+    employeeNumber: `EMP-${i}`,
+    routing: { bsb: "062-692" },
     accountNumber: "43214321",
     bsb: "062-692",
   }));
@@ -416,54 +439,70 @@ async function cemtexProfileOrg(secrets: Record<string, unknown>) {
   return { orgId: org.orgId, profileId };
 }
 
-test("a cemtex_credit bank profile is listed for payroll and resolves its originator", { skip: !DB }, async () => {
-  const fx = await cemtexProfileOrg({
-    bankAbbreviation: "CBA",
-    userName: "ACME PTY LTD",
-    userId: "301500",
-    traceBsb: "067-102",
-    traceAccount: "12341234",
-    remitterName: "Acme Payroll",
-  });
-  // Reachable: the operator's picker sees the profile, on the cemtex format,
-  // fully configured — the "No originating bank profile is set up" dead end
-  // from the AU persona run is gone for this rail.
-  const profiles = await payrollBankProfiles(fx.orgId);
-  assert.deepEqual(
-    profiles.map((p) => ({ name: p.name, format: p.format, currency: p.currency, configured: p.configured })),
-    [{
-      name: "Payroll direct deposit (Cemtex)",
-      format: "cemtex",
-      currency: "AUD",
-      configured: true,
-    }],
-  );
-  const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
-  if (!resolved.ok) assert.fail(`expected a configured Cemtex originator: ${resolved.missing.join(", ")}`);
-  assert.equal(resolved.format, "cemtex");
-  assert.equal(resolved.config.currency, "AUD");
-  assert.deepEqual(resolved.config.cemtex, {
-    bankAbbreviation: "CBA",
-    userName: "ACME PTY LTD",
-    userId: "301500",
-    traceBsb: "067-102",
-    traceAccount: "12341234",
-    remitterName: "Acme Payroll",
-  });
-});
+test(
+  "a cemtex_credit bank profile is listed for payroll and resolves its originator",
+  { skip: !DB },
+  async () => {
+    const fx = await cemtexProfileOrg({
+      bankAbbreviation: "CBA",
+      userName: "ACME PTY LTD",
+      userId: "301500",
+      traceBsb: "067-102",
+      traceAccount: "12341234",
+      remitterName: "Acme Payroll",
+    });
+    // Reachable: the operator's picker sees the profile, on the cemtex format,
+    // fully configured — the "No originating bank profile is set up" dead end
+    // from the AU persona run is gone for this rail.
+    const profiles = await payrollBankProfiles(fx.orgId);
+    assert.deepEqual(
+      profiles.map((p) => ({
+        name: p.name,
+        format: p.format,
+        currency: p.currency,
+        configured: p.configured,
+      })),
+      [
+        {
+          name: "Payroll direct deposit (Cemtex)",
+          format: "cemtex",
+          currency: "AUD",
+          configured: true,
+        },
+      ],
+    );
+    const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
+    if (!resolved.ok)
+      assert.fail(`expected a configured Cemtex originator: ${resolved.missing.join(", ")}`);
+    assert.equal(resolved.format, "cemtex");
+    assert.equal(resolved.config.currency, "AUD");
+    assert.deepEqual(resolved.config.cemtex, {
+      bankAbbreviation: "CBA",
+      userName: "ACME PTY LTD",
+      userId: "301500",
+      traceBsb: "067-102",
+      traceAccount: "12341234",
+      remitterName: "Acme Payroll",
+    });
+  },
+);
 
-test("a cemtex profile with a malformed trace BSB is listed as not configured, naming it", { skip: !DB }, async () => {
-  const fx = await cemtexProfileOrg({
-    bankAbbreviation: "CBA",
-    userName: "ACME PTY LTD",
-    userId: "301500",
-    traceBsb: "bogus",
-    traceAccount: "12341234",
-    remitterName: "Acme Payroll",
-  });
-  const profiles = await payrollBankProfiles(fx.orgId);
-  assert.equal(profiles[0]?.configured, false);
-  const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
-  if (resolved.ok) assert.fail("a malformed trace BSB must not resolve");
-  assert.match(resolved.missing.join(", "), /traceBsb/);
-});
+test(
+  "a cemtex profile with a malformed trace BSB is listed as not configured, naming it",
+  { skip: !DB },
+  async () => {
+    const fx = await cemtexProfileOrg({
+      bankAbbreviation: "CBA",
+      userName: "ACME PTY LTD",
+      userId: "301500",
+      traceBsb: "bogus",
+      traceAccount: "12341234",
+      remitterName: "Acme Payroll",
+    });
+    const profiles = await payrollBankProfiles(fx.orgId);
+    assert.equal(profiles[0]?.configured, false);
+    const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
+    if (resolved.ok) assert.fail("a malformed trace BSB must not resolve");
+    assert.match(resolved.missing.join(", "), /traceBsb/);
+  },
+);

@@ -24,39 +24,117 @@ export class ScheduleError extends Error {
 }
 
 const CHECK_REFUSALS: Record<string, readonly [string, string]> = {
-  schedule_entries_span: ["The booking must end after it starts, leave working time after its break, and last at most 48 hours.", "Correct the start, end or break."],
-  schedule_boards_day_span: ["The board's working day must end after it starts and leave time after the break.", "Correct the day start, day end or break in the board settings."],
-  schedule_boards_views_valid: ["The selected views are not available for this kind of board.", "Choose views offered for the board's row type."],
-  schedule_boards_default_view_listed: ["The default view must be one of the board's views.", "Pick a default view from the enabled views."],
-  schedule_boards_people_settings: ["Timesheet, crew and field ticket pre-fill and notifications apply to people boards only.", "Turn these settings off for a task or resource board."],
-  schedule_boards_resource_kind: ["The board's resource kind or scope is not valid.", "Select equipment units or locations; equipment boards cannot use department or location scope."],
-  schedule_boards_cell_color_rules: ["A cell color rule is not valid.", "Choose a field and match, enter a value, and use a six-digit hex color such as #38bdf8."],
-  schedule_boards_weekend_days: ["The weekend days are not valid.", "Select days of the week in Board settings."],
-  schedule_boards_distribution_entity: ["Whole-board reports need a legal entity.", "Choose a legal entity in Board Settings or use personal reports."],
-  schedule_entries_subject: ["A booking needs exactly one person or resource.", "Reload the board and select a row belonging to its resource kind."],
-  schedule_boards_governed_from: ["Approval requirements belong to tenant Flows.", "Choose live or staged submission timing and configure approval gates in Flows."],
-  schedule_patterns_slots: ["The pattern's slots are not valid.", "Give each slot a cycle day, start, end and break that leaves working time, with no overlapping slots."],
-  schedule_pattern_assignments_ended: ["An ended assignment needs its end date.", "Choose the first date the person no longer works the pattern."],
+  schedule_entries_span: [
+    "The booking must end after it starts, leave working time after its break, and last at most 48 hours.",
+    "Correct the start, end or break.",
+  ],
+  schedule_boards_day_span: [
+    "The board's working day must end after it starts and leave time after the break.",
+    "Correct the day start, day end or break in the board settings.",
+  ],
+  schedule_boards_views_valid: [
+    "The selected views are not available for this kind of board.",
+    "Choose views offered for the board's row type.",
+  ],
+  schedule_boards_default_view_listed: [
+    "The default view must be one of the board's views.",
+    "Pick a default view from the enabled views.",
+  ],
+  schedule_boards_people_settings: [
+    "Timesheet, crew and field ticket pre-fill and notifications apply to people boards only.",
+    "Turn these settings off for a task or resource board.",
+  ],
+  schedule_boards_resource_kind: [
+    "The board's resource kind or scope is not valid.",
+    "Select equipment units or locations; equipment boards cannot use department or location scope.",
+  ],
+  schedule_boards_cell_color_rules: [
+    "A cell color rule is not valid.",
+    "Choose a field and match, enter a value, and use a six-digit hex color such as #38bdf8.",
+  ],
+  schedule_boards_weekend_days: [
+    "The weekend days are not valid.",
+    "Select days of the week in Board settings.",
+  ],
+  schedule_boards_distribution_entity: [
+    "Whole-board reports need a legal entity.",
+    "Choose a legal entity in Board Settings or use personal reports.",
+  ],
+  schedule_entries_subject: [
+    "A booking needs exactly one person or resource.",
+    "Reload the board and select a row belonging to its resource kind.",
+  ],
+  schedule_boards_governed_from: [
+    "Approval requirements belong to tenant Flows.",
+    "Choose live or staged submission timing and configure approval gates in Flows.",
+  ],
+  schedule_patterns_slots: [
+    "The pattern's slots are not valid.",
+    "Give each slot a cycle day, start, end and break that leaves working time, with no overlapping slots.",
+  ],
+  schedule_pattern_assignments_ended: [
+    "An ended assignment needs its end date.",
+    "Choose the first date the person no longer works the pattern.",
+  ],
 };
 
 const CONFLICT_REFUSALS: Record<string, readonly [string, string]> = {
-  schedule_patterns_code_key: ["Another shift pattern already uses this code.", "Choose a different pattern code."],
-  schedule_attendance_devices_org_id_code_key: ["Another attendance device already uses this code.", "Choose a different device code."],
-  schedule_attendance_policies_org_id_board_id_effective_from_key: ["An attendance policy version already starts on this date.", "Choose a later effective date for the new version."],
-  schedule_pattern_exceptions_active: ["This occurrence already has an exception.", "Revoke the existing exception first."],
-  schedule_entry_requests_open_entry: ["This shift already has an open request.", "Withdraw the open request or wait for its decision."],
-  schedule_entry_requests_open_counterpart: ["Your colleague's shift already has an open request.", "Choose another shift or wait for that request's decision."],
-  schedule_entries_pattern_published: ["This pattern occurrence is already booked.", "Reload the board and generate again."],
-  schedule_entries_pattern_draft: ["This pattern occurrence already has an unpublished booking.", "Reload the board and generate again."],
+  schedule_patterns_code_key: [
+    "Another shift pattern already uses this code.",
+    "Choose a different pattern code.",
+  ],
+  schedule_attendance_devices_org_id_code_key: [
+    "Another attendance device already uses this code.",
+    "Choose a different device code.",
+  ],
+  schedule_attendance_policies_org_id_board_id_effective_from_key: [
+    "An attendance policy version already starts on this date.",
+    "Choose a later effective date for the new version.",
+  ],
+  schedule_pattern_exceptions_active: [
+    "This occurrence already has an exception.",
+    "Revoke the existing exception first.",
+  ],
+  schedule_entry_requests_open_entry: [
+    "This shift already has an open request.",
+    "Withdraw the open request or wait for its decision.",
+  ],
+  schedule_entry_requests_open_counterpart: [
+    "Your colleague's shift already has an open request.",
+    "Choose another shift or wait for that request's decision.",
+  ],
+  schedule_entries_pattern_published: [
+    "This pattern occurrence is already booked.",
+    "Reload the board and generate again.",
+  ],
+  schedule_entries_pattern_draft: [
+    "This pattern occurrence already has an unpublished booking.",
+    "Reload the board and generate again.",
+  ],
 };
 
 const EXCLUSION_REFUSALS: Record<string, readonly [string, string]> = {
-  schedule_pattern_assignments_no_overlap: ["This person already works this pattern in an overlapping period.", "End the existing assignment first, or start the new one after it ends."],
-  schedule_attendance_identities_source_window: ["This device identifier is already mapped for an overlapping period.", "End the existing mapping first, or start the new one after it ends."],
-  schedule_attendance_identities_person_window: ["This person already has an identifier on this device for an overlapping period.", "End the existing mapping first, or start the new one after it ends."],
+  schedule_pattern_assignments_no_overlap: [
+    "This person already works this pattern in an overlapping period.",
+    "End the existing assignment first, or start the new one after it ends.",
+  ],
+  schedule_attendance_identities_source_window: [
+    "This device identifier is already mapped for an overlapping period.",
+    "End the existing mapping first, or start the new one after it ends.",
+  ],
+  schedule_attendance_identities_person_window: [
+    "This person already has an identifier on this device for an overlapping period.",
+    "End the existing mapping first, or start the new one after it ends.",
+  ],
 };
 
-type DatabaseCause ={ code?: string; constraint?: string; message?: string; where?: string; cause?: unknown };
+type DatabaseCause = {
+  code?: string;
+  constraint?: string;
+  message?: string;
+  where?: string;
+  cause?: unknown;
+};
 
 /**
  * Translate a database refusal raised by the scheduling tables into the
@@ -64,7 +142,10 @@ type DatabaseCause ={ code?: string; constraint?: string; message?: string; wher
  * refusals for operators; constraint violations are named here. Anything
  * unrecognized is returned unchanged so the original cause is preserved.
  */
-export function scheduleDatabaseRefusal(error: unknown, context: { personName?: string } = {}): unknown {
+export function scheduleDatabaseRefusal(
+  error: unknown,
+  context: { personName?: string } = {},
+): unknown {
   const seen = new Set<object>();
   let cause: unknown = error;
   while (cause && typeof cause === "object" && !seen.has(cause)) {
@@ -86,18 +167,36 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
         remedy: "Ask an administrator to apply the pending database migrations.",
       });
     }
-    if ((detail.code === "23514" || detail.code === "P0001") && /schedule_(?:entr|board|code|source_record|distribution|resource_recipient|roster|attendance|assert|pattern)|schedule_entry_assert/.test(`${detail.where ?? ""} ${detail.constraint ?? ""}`) && detail.message && !detail.constraint) {
+    if (
+      (detail.code === "23514" || detail.code === "P0001") &&
+      /schedule_(?:entr|board|code|source_record|distribution|resource_recipient|roster|attendance|assert|pattern)|schedule_entry_assert/.test(
+        `${detail.where ?? ""} ${detail.constraint ?? ""}`,
+      ) &&
+      detail.message &&
+      !detail.constraint
+    ) {
       return new ScheduleError(detail.message, { code: "schedule_refused" });
     }
     if (detail.code === "23514" && detail.constraint && CHECK_REFUSALS[detail.constraint]) {
       const [message, remedy] = CHECK_REFUSALS[detail.constraint]!;
       return new ScheduleError(message, { code: "schedule_invalid", remedy });
     }
-    if (detail.code === "23P01" && ["schedule_entries_no_double_booking", "schedule_entries_equipment_no_double_booking", "schedule_entries_location_no_double_booking"].includes(detail.constraint ?? "")) {
-      return new ScheduleError(`${context.personName ?? "This person or resource"} is already booked at that time.`, {
-        code: "schedule_double_booked",
-        remedy: "Remove or move the other booking first, or choose another person, resource or time.",
-      });
+    if (
+      detail.code === "23P01" &&
+      [
+        "schedule_entries_no_double_booking",
+        "schedule_entries_equipment_no_double_booking",
+        "schedule_entries_location_no_double_booking",
+      ].includes(detail.constraint ?? "")
+    ) {
+      return new ScheduleError(
+        `${context.personName ?? "This person or resource"} is already booked at that time.`,
+        {
+          code: "schedule_double_booked",
+          remedy:
+            "Remove or move the other booking first, or choose another person, resource or time.",
+        },
+      );
     }
     if (detail.code === "23505" && CONFLICT_REFUSALS[detail.constraint ?? ""]) {
       const [message, remedy] = CONFLICT_REFUSALS[detail.constraint!]!;
@@ -107,23 +206,51 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
       const [message, remedy] = EXCLUSION_REFUSALS[detail.constraint!]!;
       return new ScheduleError(message, { status: 409, code: "schedule_conflict", remedy });
     }
-    if (detail.code === "23505" && /schedule_resource_recipients_(equipment|location)/.test(detail.constraint ?? "")) {
-      return new ScheduleError("This resource already has an active board contact.", {status:409,code:"schedule_stale",remedy:"Edit the existing association or retire it before choosing another contact."});
+    if (
+      detail.code === "23505" &&
+      /schedule_resource_recipients_(equipment|location)/.test(detail.constraint ?? "")
+    ) {
+      return new ScheduleError("This resource already has an active board contact.", {
+        status: 409,
+        code: "schedule_stale",
+        remedy: "Edit the existing association or retire it before choosing another contact.",
+      });
     }
     if (detail.code === "23505" && /schedule_distributions_/.test(detail.constraint ?? "")) {
-      return new ScheduleError("Another send already owns this reviewed schedule.", {status:409,code:"schedule_stale",remedy:"Reload its native Flow and delivery status; the same version is not sent twice."});
+      return new ScheduleError("Another send already owns this reviewed schedule.", {
+        status: 409,
+        code: "schedule_stale",
+        remedy: "Reload its native Flow and delivery status; the same version is not sent twice.",
+      });
     }
     if (detail.code === "23505" && detail.constraint === "schedule_boards_org_id_code_key") {
-      return new ScheduleError("Another board already uses this code.", { code: "schedule_board_code_taken", remedy: "Choose a different board code." });
+      return new ScheduleError("Another board already uses this code.", {
+        code: "schedule_board_code_taken",
+        remedy: "Choose a different board code.",
+      });
     }
-    if (detail.code === "23505" && detail.constraint === "schedule_entries_org_id_supersedes_id_key") {
-      return new ScheduleError("This booking was already changed by someone else.", { status: 409, code: "schedule_stale", remedy: "Reload the board and make the change again." });
+    if (
+      detail.code === "23505" &&
+      detail.constraint === "schedule_entries_org_id_supersedes_id_key"
+    ) {
+      return new ScheduleError("This booking was already changed by someone else.", {
+        status: 409,
+        code: "schedule_stale",
+        remedy: "Reload the board and make the change again.",
+      });
     }
     if (detail.code === "23503" && detail.constraint?.startsWith("schedule_entries_")) {
-      return new ScheduleError("A booking reference is not available in this organization.", { code: "schedule_reference_unavailable", remedy: "Reload the board and choose the person or target again." });
+      return new ScheduleError("A booking reference is not available in this organization.", {
+        code: "schedule_reference_unavailable",
+        remedy: "Reload the board and choose the person or target again.",
+      });
     }
     if (detail.code === "40001" || detail.code === "40P01") {
-      return new ScheduleError("The schedule changed while this was being saved.", { status: 409, code: "schedule_stale", remedy: "Reload the board and try again; nothing in this change was saved." });
+      return new ScheduleError("The schedule changed while this was being saved.", {
+        status: 409,
+        code: "schedule_stale",
+        remedy: "Reload the board and try again; nothing in this change was saved.",
+      });
     }
     cause = detail.cause;
   }

@@ -106,7 +106,9 @@ test("candidate findings propose the top match inside the open session", async (
   });
   const findings = await reconciliationFindings(ORG, "1000.0000", policies(), loaders);
   assert.equal(seenWindow, 14, "the detector window reaches the loader");
-  const candidates = findings.filter((finding) => finding.findingType === "bank_line_match_candidate");
+  const candidates = findings.filter(
+    (finding) => finding.findingType === "bank_line_match_candidate",
+  );
   // $500 is below the $1000 floor — no finding.
   assert.equal(candidates.length, 0, "sub-floor candidates stay silent");
 });
@@ -142,7 +144,9 @@ test("floor and confidence gates compose: big confident pairs propose", async ()
   });
   const loaders = stubLoaders({ candidateAccounts: async () => [big] });
   const findings = await reconciliationFindings(ORG, "1000.0000", policies(), loaders);
-  const candidates = findings.filter((finding) => finding.findingType === "bank_line_match_candidate");
+  const candidates = findings.filter(
+    (finding) => finding.findingType === "bank_line_match_candidate",
+  );
   assert.equal(candidates.length, 1);
   // Default minimum confidence 80 admits only the 0.90 pair; materiality $2500.
   assert.equal(candidates[0]!.materiality, "2500.0000");
@@ -174,7 +178,9 @@ test("accounts without a session list candidates but propose nothing", async () 
   });
   const loaders = stubLoaders({ candidateAccounts: async () => [noSession] });
   const findings = await reconciliationFindings(ORG, "1000.0000", policies(), loaders);
-  const candidates = findings.filter((finding) => finding.findingType === "bank_line_match_candidate");
+  const candidates = findings.filter(
+    (finding) => finding.findingType === "bank_line_match_candidate",
+  );
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0]!.proposal ?? null, null, "no session exists to name in the command");
 });
@@ -211,13 +217,31 @@ test("balanced stale sessions propose sign-off, imbalanced ones do not", async (
 
 test("never-reconciled accounts honour the floor", async () => {
   const rows: NeverReconciledRow[] = [
-    { accountId: "a9", accountNumber: "1020", accountName: "Reserve", activityCount: 12, activityTotal: "800.0000", oldestActivity: "2026-08-01" },
-    { accountId: "a8", accountNumber: "1030", accountName: "Payroll", activityCount: 30, activityTotal: "45000.0000", oldestActivity: "2026-07-01" },
+    {
+      accountId: "a9",
+      accountNumber: "1020",
+      accountName: "Reserve",
+      activityCount: 12,
+      activityTotal: "800.0000",
+      oldestActivity: "2026-08-01",
+    },
+    {
+      accountId: "a8",
+      accountNumber: "1030",
+      accountName: "Payroll",
+      activityCount: 30,
+      activityTotal: "45000.0000",
+      oldestActivity: "2026-07-01",
+    },
   ];
   const loaders = stubLoaders({ neverReconciled: async () => rows });
   const findings = await reconciliationFindings(ORG, "1000.0000", policies(), loaders);
   const never = findings.filter((finding) => finding.findingType === "never_reconciled_account");
   assert.equal(never.length, 1);
   assert.equal(never[0]!.fingerprint, "recon-never:a8");
-  assert.equal(never[0]!.proposal ?? null, null, "the statement balance comes from the bank, not the agent");
+  assert.equal(
+    never[0]!.proposal ?? null,
+    null,
+    "the statement balance comes from the bank, not the agent",
+  );
 });

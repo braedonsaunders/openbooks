@@ -28,20 +28,29 @@ export async function dataDependentFeatureDefault(
   const v = state?.[key];
   if (typeof v === "boolean") return v;
   if (key === "multiSubsidiary") {
-    const r = await runner.execute<{ n: number }>(sql`
+    const r = await runner.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from subsidiaries
-       where org_id = ${orgId} and is_active and not is_elimination`, "objects");
+       where org_id = ${orgId} and is_active and not is_elimination`,
+      "objects",
+    );
     return (r[0]?.n ?? 0) > 1;
   }
-  const r = await runner.execute<{ on: boolean }>(sql`
+  const r = await runner.execute<{ on: boolean }>(
+    sql`
     select (
       exists(select 1 from journal_lines where org_id = ${orgId} and fx_rate <> 1)
       or exists(select 1 from fx_rates where org_id = ${orgId})
-    ) as on`, "objects");
+    ) as on`,
+    "objects",
+  );
   return Boolean(r[0]?.on);
 }
 
-const DATA_DEPENDENT_FEATURE_KEYS: readonly DataDependentFeatureKey[] = ["multiSubsidiary", "multiCurrency"];
+const DATA_DEPENDENT_FEATURE_KEYS: readonly DataDependentFeatureKey[] = [
+  "multiSubsidiary",
+  "multiCurrency",
+];
 
 /**
  * The data-dependent features a feature's requirement chain reaches
@@ -79,9 +88,10 @@ export async function withDataDependentDefaults(
   keys?: readonly string[],
 ): Promise<FeatureState> {
   const resolved: FeatureState = { ...(state ?? {}) };
-  const reached = keys === undefined
-    ? [...DATA_DEPENDENT_FEATURE_KEYS]
-    : [...new Set(keys.flatMap((key) => dataDependentRequirementsOf(key)))];
+  const reached =
+    keys === undefined
+      ? [...DATA_DEPENDENT_FEATURE_KEYS]
+      : [...new Set(keys.flatMap((key) => dataDependentRequirementsOf(key)))];
   for (const key of reached) {
     if (typeof resolved[key] === "boolean") continue;
     resolved[key] = await dataDependentFeatureDefault(runner, orgId, key, state);

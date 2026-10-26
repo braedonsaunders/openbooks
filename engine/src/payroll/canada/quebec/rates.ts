@@ -117,9 +117,9 @@ export const QC_RATES_2026: QcEditionRates = {
  * scripts/payroll-new-tax-year.ts). Newest first, so the resolver picks the
  * latest edition in force on a date.
  */
-export const QC_EDITIONS: readonly QcEditionRates[] = [
-  ...QC_EXTRA_EDITIONS, QC_RATES_2026,
-].slice().sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+export const QC_EDITIONS: readonly QcEditionRates[] = [...QC_EXTRA_EDITIONS, QC_RATES_2026]
+  .slice()
+  .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
 
 /**
  * Resolve the TP-1015.F-V constants in force on a pay date.
@@ -139,14 +139,14 @@ export function qcRatesForPayDate(payDate: string): QcEditionRates {
   const edition = forYear.find((candidate) => payDate >= candidate.effectiveFrom);
   if (!edition) {
     throw new PayrollError(
-      `no TP-1015.F-V constants for pay date ${payDate} — rates for ${year} aren't `
-      + "available in this pack version; update the pack",
+      `no TP-1015.F-V constants for pay date ${payDate} — rates for ${year} aren't ` +
+        "available in this pack version; update the pack",
     );
   }
   if (edition.status !== "published") {
     throw new PayrollError(
-      `the ${year} TP-1015.F-V constants are not available in this pack version — a pay date in `
-      + `${year} cannot be calculated; update the pack`,
+      `the ${year} TP-1015.F-V constants are not available in this pack version — a pay date in ` +
+        `${year} cannot be calculated; update the pack`,
     );
   }
   return edition;

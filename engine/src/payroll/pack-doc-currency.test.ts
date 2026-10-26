@@ -75,7 +75,8 @@ const STALE_CLAIMS: readonly { pattern: RegExp; why: string }[] = [
     why: "the pack is in PAYROLL_COUNTRY_PACKS",
   },
   {
-    pattern: /[Rr]egisters nothing|[Nn]othing here is registered|registers nothing in any generic registry/,
+    pattern:
+      /[Rr]egisters nothing|[Nn]othing here is registered|registers nothing in any generic registry/,
     why: "the pack registers itself, its filings and its settings key",
   },
   {
@@ -101,8 +102,8 @@ for (const [country, file] of Object.entries(PACK_FILES)) {
       assert.equal(
         match,
         null,
-        `${file} says "${match?.[0]}" — ${why}. Prose that contradicts the code is read as `
-        + "authoritative and acted on; update it in the same commit as the behaviour.",
+        `${file} says "${match?.[0]}" — ${why}. Prose that contradicts the code is read as ` +
+          "authoritative and acted on; update it in the same commit as the behaviour.",
       );
     }
   });
@@ -114,8 +115,8 @@ test("every registered pack has its source checked here", () => {
   for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
     assert.ok(
       PACK_FILES[country],
-      `${country} is registered but PACK_FILES names no source for it — add one, so its prose `
-      + "is checked like every other pack's.",
+      `${country} is registered but PACK_FILES names no source for it — add one, so its prose ` +
+        "is checked like every other pack's.",
     );
   }
 });

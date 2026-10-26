@@ -4,11 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import { postPaymentRun } from "./run-posting.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -50,21 +46,22 @@ test(
             (${instructionId}, ${org.orgId}, ${runId}, ${org.vendorId},
              '25', 'CAD', null, 'pending', ${actorId}, ${actorId})`),
       );
-      const outcome = await withBypassContext(() =>
-        postPaymentRun(runId, org.orgId, actorId),
-      );
+      const outcome = await withBypassContext(() => postPaymentRun(runId, org.orgId, actorId));
       assert.deepEqual(outcome, {
         posted: 0,
         failures: [{ payee: "Acme Vendor", error: "instruction has no payment document" }],
       });
       const event = await withBypassContext(() =>
-        db.execute<{ eventType: string; details: unknown }>(sql`
+        db.execute<{ eventType: string; details: unknown }>(
+          sql`
           select event_type as "eventType", details
             from payment_events
            where payment_run_id = ${runId} and org_id = ${org.orgId}
              and event_type = 'run_posting_failed'
            order by created_at desc limit 1
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.equal(event.length, 1, "a run_posting_failed event must exist");
       const details = event[0]!.details as Record<string, unknown>;
@@ -72,9 +69,12 @@ test(
         { payee: "Acme Vendor", error: "instruction has no payment document" },
       ]);
       const run = await withBypassContext(() =>
-        db.execute<{ status: string }>(sql`
+        db.execute<{ status: string }>(
+          sql`
           select status from payment_runs where id = ${runId} and org_id = ${org.orgId}
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.equal(run[0]!.status, "partially_failed");
     } finally {

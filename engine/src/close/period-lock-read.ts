@@ -86,17 +86,32 @@ export async function readExactPeriodLocks(args: {
   return withOrgTransaction(orgId, async () => {
     await lockActorCommandAuthority(db, orgId, actorId, subsidiaryId, "close.read");
 
-    const period = (await db.execute<{ id: string }>(sql`
+    const period = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from accounting_periods
-       where org_id = ${orgId} and id = ${periodId} for share`, "objects"))[0];
+       where org_id = ${orgId} and id = ${periodId} for share`,
+        "objects",
+      )
+    )[0];
     if (!period) throw new CloseError("period not found in this organization");
-    const book = (await db.execute<{ id: string }>(sql`
+    const book = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from accounting_books
-       where org_id = ${orgId} and id = ${bookId} and is_active for share`, "objects"))[0];
+       where org_id = ${orgId} and id = ${bookId} and is_active for share`,
+        "objects",
+      )
+    )[0];
     if (!book) throw new CloseError("active accounting book not found in this organization");
-    const entity = (await db.execute<{ is_active: boolean; is_elimination: boolean }>(sql`
+    const entity = (
+      await db.execute<{ is_active: boolean; is_elimination: boolean }>(
+        sql`
       select is_active, is_elimination from subsidiaries
-       where org_id = ${orgId} and id = ${subsidiaryId} for share`, "objects"))[0];
+       where org_id = ${orgId} and id = ${subsidiaryId} for share`,
+        "objects",
+      )
+    )[0];
     if (!entity || !entity.is_active || entity.is_elimination) {
       throw new CloseError("active legal entity not found in this organization");
     }

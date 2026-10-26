@@ -31,7 +31,12 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Post a balanced bank-side journal for one amount and return its bank line id. */
-async function postBankJournal(org: ScratchOrg, actorId: string, amount: string, label: string): Promise<string> {
+async function postBankJournal(
+  org: ScratchOrg,
+  actorId: string,
+  amount: string,
+  label: string,
+): Promise<string> {
   return db.transaction(async (tx) => {
     const entryId = randomUUID();
     await tx.execute(sql`
@@ -82,8 +87,6 @@ async function setup() {
   return { org, actor, ctx };
 }
 
-
-
 async function lineIdByContent(
   orgId: string,
   statementId: string,
@@ -91,20 +94,34 @@ async function lineIdByContent(
   amount: string,
   description: string,
 ): Promise<string> {
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId}
        and posted_on = ${postedOn} and amount = ${amount} and description = ${description}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   assert.ok(row, `imported line ${postedOn} ${amount} ${description} must exist`);
   return row.id;
 }
 
 async function statementAudit(orgId: string, statementId: string) {
-  return (await db.execute<{ changes: { possibleDuplicatesExcluded?: { description: string; possibleDuplicateOf: string }[] } }>(sql`
+  return (
+    await db.execute<{
+      changes: {
+        possibleDuplicatesExcluded?: { description: string; possibleDuplicateOf: string }[];
+      };
+    }>(
+      sql`
     select changes from audit_log
      where org_id = ${orgId} and table_name = 'bank_statements' and row_id = ${statementId} and action = 'insert'
-  `, "objects"))[0]!.changes;
+  `,
+      "objects",
+    )
+  )[0]!.changes;
 }
 
 test(
@@ -113,7 +130,12 @@ test(
   async () => {
     const { org, ctx } = await setup();
     try {
-      const base = { accountId: org.accounts.bank, source: "manual" as const, statementDate: org.date, currency: "CAD" };
+      const base = {
+        accountId: org.accounts.bank,
+        source: "manual" as const,
+        statementDate: org.date,
+        currency: "CAD",
+      };
       const first = await importStatement(
         {
           ...base,
@@ -125,7 +147,13 @@ test(
         ctx,
       );
       assert.equal(first.imported, 2);
-      const earlierCoffee = await lineIdByContent(org.orgId, first.statementId!, org.date, "-5.0000", "COFFEE SHOP");
+      const earlierCoffee = await lineIdByContent(
+        org.orgId,
+        first.statementId!,
+        org.date,
+        "-5.0000",
+        "COFFEE SHOP",
+      );
 
       // A later file repeats the coffee (re-keyed description) and adds a refund.
       const overlapping = {
@@ -138,7 +166,10 @@ test(
 
       const preview = await importStatement({ ...overlapping, dryRun: true }, ctx);
       assert.equal(preview.statementId, null);
-      assert.deepEqual(preview.lines.map((line) => line.description), ["REFUND"]);
+      assert.deepEqual(
+        preview.lines.map((line) => line.description),
+        ["REFUND"],
+      );
       assert.equal(preview.possibleDuplicates, 1);
       assert.deepEqual(
         preview.possibleDuplicateLines.map((line) => line.possibleDuplicateOf),
@@ -152,12 +183,18 @@ test(
       assert.ok(committed.statementId, "the non-duplicate line still imports");
       assert.equal(committed.imported, 1);
       assert.equal(committed.possibleDuplicates, 1);
-      const written = await db.execute<{ description: string }>(sql`
+      const written = await db.execute<{ description: string }>(
+        sql`
         select description from bank_statement_lines
          where statement_id = ${committed.statementId} and org_id = ${org.orgId}
          order by line_number
-      `, "objects");
-      assert.deepEqual(written.map((row) => row.description), ["REFUND"]);
+      `,
+        "objects",
+      );
+      assert.deepEqual(
+        written.map((row) => row.description),
+        ["REFUND"],
+      );
       const committedAudit = await statementAudit(org.orgId, committed.statementId!);
       assert.deepEqual(
         committedAudit.possibleDuplicatesExcluded?.map((line) => ({
@@ -179,15 +216,29 @@ test(
       );
       assert.equal(optedIn.imported, 1);
       assert.equal(optedIn.possibleDuplicates, 1);
-      const flagged = await db.execute<{ possible_duplicate_of: string | null; bank_transaction_id: string | null }>(sql`
+      const flagged = await db.execute<{
+        possible_duplicate_of: string | null;
+        bank_transaction_id: string | null;
+      }>(
+        sql`
         select possible_duplicate_of, bank_transaction_id from bank_statement_lines
          where statement_id = ${optedIn.statementId!} and org_id = ${org.orgId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(flagged.length, 1);
       assert.equal(flagged[0]!.possible_duplicate_of, earlierCoffee);
-      assert.equal(flagged[0]!.bank_transaction_id, null, "an ID-less line stores no synthetic bank key");
+      assert.equal(
+        flagged[0]!.bank_transaction_id,
+        null,
+        "an ID-less line stores no synthetic bank key",
+      );
       const optedInAudit = await statementAudit(org.orgId, optedIn.statementId!);
-      assert.equal(optedInAudit.possibleDuplicatesExcluded, undefined, "nothing was held out of an opted-in import");
+      assert.equal(
+        optedInAudit.possibleDuplicatesExcluded,
+        undefined,
+        "nothing was held out of an opted-in import",
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -200,28 +251,55 @@ test(
   async () => {
     const { org, actor, ctx } = await setup();
     try {
-      const base = { accountId: org.accounts.bank, source: "manual" as const, statementDate: org.date, currency: "CAD" };
+      const base = {
+        accountId: org.accounts.bank,
+        source: "manual" as const,
+        statementDate: org.date,
+        currency: "CAD",
+      };
       const earlier = await importStatement(
         { ...base, lines: [{ postedOn: org.date, amount: "-7.0000", description: "COFFEE SHOP" }] },
         ctx,
       );
-      const earlierId = await lineIdByContent(org.orgId, earlier.statementId!, org.date, "-7.0000", "COFFEE SHOP");
+      const earlierId = await lineIdByContent(
+        org.orgId,
+        earlier.statementId!,
+        org.date,
+        "-7.0000",
+        "COFFEE SHOP",
+      );
       const statement = await importStatement(
         {
           ...base,
           includePossibleDuplicates: true,
           lines: [
-            { postedOn: org.date, amount: "40.0000", description: "Client receipt", bankTransactionId: "receipt-40" },
+            {
+              postedOn: org.date,
+              amount: "40.0000",
+              description: "Client receipt",
+              bankTransactionId: "receipt-40",
+            },
             { postedOn: org.date, amount: "-7.0000", description: "COFFEE SHOP" },
           ],
         },
         ctx,
       );
-      const receiptId = (await db.execute<{ id: string }>(sql`
+      const receiptId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where statement_id = ${statement.statementId!} and org_id = ${org.orgId} and bank_transaction_id = 'receipt-40'
-      `, "objects"))[0]!.id;
-      const duplicateId = await lineIdByContent(org.orgId, statement.statementId!, org.date, "-7.0000", "COFFEE SHOP");
+      `,
+          "objects",
+        )
+      )[0]!.id;
+      const duplicateId = await lineIdByContent(
+        org.orgId,
+        statement.statementId!,
+        org.date,
+        "-7.0000",
+        "COFFEE SHOP",
+      );
 
       const receiptJournal = await postBankJournal(org, actor, "40.0000", "receipt");
       const coffeeJournal = await postBankJournal(org, actor, "-7.0000", "coffee");
@@ -230,11 +308,19 @@ test(
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [receiptId], journalLineIds: [receiptJournal] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [receiptId],
+          journalLineIds: [receiptJournal],
+        },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [earlierId], journalLineIds: [coffeeJournal] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [earlierId],
+          journalLineIds: [coffeeJournal],
+        },
         ctx,
       );
 
@@ -250,7 +336,8 @@ test(
       await assert.rejects(
         markReconciled(recon.id, ctx),
         (error: unknown) =>
-          error instanceof BankingError && /1 statement line\(s\) through the cutoff remain unmatched/.test(error.message),
+          error instanceof BankingError &&
+          /1 statement line\(s\) through the cutoff remain unmatched/.test(error.message),
       );
 
       // Excluding the unmatched duplicate inside the open cutoff is allowed and

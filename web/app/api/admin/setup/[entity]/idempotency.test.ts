@@ -39,7 +39,10 @@ interface HarnessState {
     actor_id: unknown;
     request_id: unknown;
   }>;
-  orgSettings: { features: Record<string, boolean>; home: { announcements: Array<Record<string, unknown>> } };
+  orgSettings: {
+    features: Record<string, boolean>;
+    home: { announcements: Array<Record<string, unknown>> };
+  };
   statements: Array<{ text: string; values: unknown[] }>;
   fakeExecute: (query: unknown) => Promise<{ rows: Array<Record<string, unknown>> }>;
   NextResponse: typeof NextResponse;
@@ -91,7 +94,10 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = context.parentURL ?? "";
     const isEntityRoute = parent.includes("%5Bentity%5D") || parent.includes("[entity]");
-    if (specifier === "@/lib/authz" || (specifier === "../../../../../lib/authz" && isEntityRoute)) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier === "../../../../../lib/authz" && isEntityRoute)
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     if (specifier === "@openbooks/engine/platform/db" || specifier.endsWith("/platform/db.ts")) {
@@ -201,15 +207,23 @@ async function fakeExecute(query: unknown): Promise<{ rows: Array<Record<string,
   }
 
   // Natural-key duplicate preflight: select id ... where <col> = ? ... limit 1.
-  if (/^select id from \w+\s+where \w+ = \?/.test(t) && t.includes("limit 1")
-    && !t.includes("is_primary") && !t.includes("is_default")) {
+  if (
+    /^select id from \w+\s+where \w+ = \?/.test(t) &&
+    t.includes("limit 1") &&
+    !t.includes("is_primary") &&
+    !t.includes("is_default")
+  ) {
     const table = t.match(/^select id from (\w+)/)![1]!;
     const col = t.match(/^select id from \w+\s+where (\w+)/)![1]!;
     const [val, org, extra] = values;
-    const rows = storeRows(table).filter((row) =>
-      str(row[col]) === str(val)
-      && (org === undefined || str(row.org_id) === str(org))
-      && (extra === undefined || !t.includes("effective_from") || str(row.effective_from) === str(extra)));
+    const rows = storeRows(table).filter(
+      (row) =>
+        str(row[col]) === str(val) &&
+        (org === undefined || str(row.org_id) === str(org)) &&
+        (extra === undefined ||
+          !t.includes("effective_from") ||
+          str(row.effective_from) === str(extra)),
+    );
     return { rows: rows.slice(0, 1).map((row) => ({ id: row.id })) };
   }
 
@@ -224,10 +238,14 @@ async function fakeExecute(query: unknown): Promise<{ rows: Array<Record<string,
   if (t.includes("from audit_log") && t.includes("request_id")) {
     const key = t.match(/changes->'(\w+)'/)?.[1] ?? "after";
     const [org, table, rowId, requestId] = values.map(str);
-    const found = harnessState.audits.find((audit) =>
-      str(audit.org_id) === org && str(audit.table_name) === table
-      && str(audit.row_id) === rowId && str(audit.action) === "insert"
-      && str(audit.request_id) === requestId);
+    const found = harnessState.audits.find(
+      (audit) =>
+        str(audit.org_id) === org &&
+        str(audit.table_name) === table &&
+        str(audit.row_id) === rowId &&
+        str(audit.action) === "insert" &&
+        str(audit.request_id) === requestId,
+    );
     return { rows: found ? [{ after: (found.changes as Record<string, unknown>)[key] }] : [] };
   }
 
@@ -256,11 +274,16 @@ async function fakeExecute(query: unknown): Promise<{ rows: Array<Record<string,
     const table = t.match(/from (\w+)/)![1]!;
     const flag = t.includes("is_default") ? "is_default" : "is_primary";
     return {
-      rows: [{
-        selected: storeRows(table).some((row) =>
-          str(row.org_id) === str(values[0]) && Boolean(row[flag])
-          && (flag === "is_primary" || row.is_active !== false)),
-      }],
+      rows: [
+        {
+          selected: storeRows(table).some(
+            (row) =>
+              str(row.org_id) === str(values[0]) &&
+              Boolean(row[flag]) &&
+              (flag === "is_primary" || row.is_active !== false),
+          ),
+        },
+      ],
     };
   }
   if (t.startsWith("select * from accounting_books")) {
@@ -277,9 +300,12 @@ async function fakeExecute(query: unknown): Promise<{ rows: Array<Record<string,
   // Book demotion on a fresh promotion.
   if (t.startsWith("update accounting_books set")) {
     const [actorId, org, excluded] = values;
-    const demoted = storeRows("accounting_books").filter((row) =>
-      str(row.org_id) === str(org) && row.is_primary
-      && (excluded === undefined || str(row.id) !== str(excluded)));
+    const demoted = storeRows("accounting_books").filter(
+      (row) =>
+        str(row.org_id) === str(org) &&
+        row.is_primary &&
+        (excluded === undefined || str(row.id) !== str(excluded)),
+    );
     for (const row of demoted) {
       row.is_primary = false;
       row.updated_by = actorId;
@@ -292,9 +318,14 @@ async function fakeExecute(query: unknown): Promise<{ rows: Array<Record<string,
     const [org, code, effectiveFrom] = values.map(str) as [string, string, string];
     return {
       rows: storeRows("pay_derived_rules")
-        .filter((row) => str(row.org_id) === org && str(row.code) === code && row.is_active
-          && str(row.effective_from) < effectiveFrom
-          && (row.effective_to == null || str(row.effective_to) >= effectiveFrom))
+        .filter(
+          (row) =>
+            str(row.org_id) === org &&
+            str(row.code) === code &&
+            row.is_active &&
+            str(row.effective_from) < effectiveFrom &&
+            (row.effective_to == null || str(row.effective_to) >= effectiveFrom),
+        )
         .map(clone),
     };
   }
@@ -349,7 +380,10 @@ async function fakeExecute(query: unknown): Promise<{ rows: Array<Record<string,
       // The audit writer confirms the one event it recorded.
       return { rows: [{ id: `audit-${harnessState.audits.length}` }] };
     }
-    if (t.includes("on conflict (id) do nothing") && harnessState.tables.get(table!)?.has(str(row.id))) {
+    if (
+      t.includes("on conflict (id) do nothing") &&
+      harnessState.tables.get(table!)?.has(str(row.id))
+    ) {
       return { rows: [] };
     }
     putRow(table!, row);
@@ -414,14 +448,17 @@ function tableAudits(table: string): HarnessState["audits"] {
 
 /** Index of the key's advisory-lock claim, or -1 when the key never locks. */
 function keyLockIndex(key: string): number {
-  return harnessState.statements.findIndex((statement) =>
-    statement.text.includes("pg_advisory_xact_lock")
-    && statement.values.some((value) => String(value).includes(key)));
+  return harnessState.statements.findIndex(
+    (statement) =>
+      statement.text.includes("pg_advisory_xact_lock") &&
+      statement.values.some((value) => String(value).includes(key)),
+  );
 }
 
 function firstInsertIndex(table: string): number {
   return harnessState.statements.findIndex((statement) =>
-    statement.text.trim().toLowerCase().startsWith(`insert into ${table}`));
+    statement.text.trim().toLowerCase().startsWith(`insert into ${table}`),
+  );
 }
 
 test("missing and malformed keys are refused before any write", async () => {
@@ -431,9 +468,13 @@ test("missing and malformed keys are refused before any write", async () => {
   ] as const) {
     reset();
     const before = harnessState.statements.length;
-    const res = await POST(postRequest("payment-terms", { name: "Net 30", netDays: 30 }, key), call("payment-terms"));
+    const res = await POST(
+      postRequest("payment-terms", { name: "Net 30", netDays: 30 }, key),
+      call("payment-terms"),
+    );
     assert.equal(res.status, 400, name);
-    if (code !== undefined) assert.equal((await res.json() as { code?: string }).code, code, name);
+    if (code !== undefined)
+      assert.equal(((await res.json()) as { code?: string }).code, code, name);
     assert.equal(harnessState.statements.length, before, name);
     assert.equal(tableRows("payment_terms").length, 0, name);
   }
@@ -461,7 +502,7 @@ test("first create stores the key as the row id with its audit image", async () 
     call("payment-terms"),
   );
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
-  assert.equal((await res.json() as { id: string }).id, key);
+  assert.equal(((await res.json()) as { id: string }).id, key);
   const rows = tableRows("payment_terms");
   assert.equal(rows.length, 1);
   assert.equal(rows[0]!.id, key);
@@ -476,7 +517,10 @@ test("first create stores the key as the row id with its audit image", async () 
   const lock = keyLockIndex(key);
   assert.ok(lock >= 0, "the key must be claimed under pg_advisory_xact_lock");
   assert.ok(lock < firstInsertIndex("payment_terms"), "the lock must precede the insert");
-  assert.match(harnessState.statements[firstInsertIndex("payment_terms")]!.text, /on conflict \(id\) do nothing/);
+  assert.match(
+    harnessState.statements[firstInsertIndex("payment_terms")]!.text,
+    /on conflict \(id\) do nothing/,
+  );
 });
 
 test("exact replay returns the original result with no second row or audit", async () => {
@@ -505,7 +549,7 @@ test("changed payload under the same key is a 409 with no overwrite", async () =
     call("payment-terms"),
   );
   assert.equal(conflict.status, 409);
-  assert.equal((await conflict.json() as { code?: string }).code, "idempotency-conflict");
+  assert.equal(((await conflict.json()) as { code?: string }).code, "idempotency-conflict");
   assert.equal(tableRows("payment_terms").length, 1);
   assert.equal(tableRows("payment_terms")[0]!.name, "Net 30");
   assert.equal(tableAudits("payment_terms").length, 1);
@@ -520,7 +564,7 @@ test("a key owned by another org is a 409 that writes nothing there", async () =
     call("payment-terms"),
   );
   assert.equal(res.status, 409);
-  assert.equal((await res.json() as { code?: string }).code, "idempotency-conflict");
+  assert.equal(((await res.json()) as { code?: string }).code, "idempotency-conflict");
   assert.equal(tableRows("payment_terms").length, 1);
   assert.equal(tableRows("payment_terms")[0]!.org_id, ORG_B);
   assert.equal(harnessState.audits.length, 0);
@@ -554,7 +598,7 @@ test("natural-key entity: duplicate key conflicts, same key replays", async () =
     call("tax-codes"),
   );
   assert.equal(duplicate.status, 409);
-  assert.equal((await duplicate.json() as { code?: string }).code, "duplicate");
+  assert.equal(((await duplicate.json()) as { code?: string }).code, "duplicate");
   assert.equal(tableRows("tax_codes").length, 1);
 });
 
@@ -575,7 +619,7 @@ test("natural-key entity: exact retry of the same key replays, changed retry con
     call("tax-codes"),
   );
   assert.equal(conflict.status, 409);
-  assert.equal((await conflict.json() as { code?: string }).code, "idempotency-conflict");
+  assert.equal(((await conflict.json()) as { code?: string }).code, "idempotency-conflict");
   assert.equal(tableRows("tax_codes")[0]!.name, "Idempotent tax");
 });
 
@@ -584,27 +628,60 @@ test("pay-derived rules: versioning stays atomic and replays skip the closure", 
   const componentId = randomUUID();
   const code = `RULE-${randomUUID().slice(0, 8)}`;
   const v1Key = randomUUID();
-  const v1 = await POST(postRequest("pay-derived-rules", {
-    code, name: "Derived rule", componentId, trigger: "time_entry",
-    effectiveFrom: "2026-01-01", isActive: true,
-  }, v1Key), call("pay-derived-rules"));
+  const v1 = await POST(
+    postRequest(
+      "pay-derived-rules",
+      {
+        code,
+        name: "Derived rule",
+        componentId,
+        trigger: "time_entry",
+        effectiveFrom: "2026-01-01",
+        isActive: true,
+      },
+      v1Key,
+    ),
+    call("pay-derived-rules"),
+  );
   assert.equal(v1.status, 200, JSON.stringify(await v1.clone().json()));
   // A later active version closes the prior window in the same transaction.
   const v2Key = randomUUID();
-  const v2 = await POST(postRequest("pay-derived-rules", {
-    code, name: "Derived rule", componentId, trigger: "time_entry",
-    effectiveFrom: "2026-02-01", isActive: true,
-  }, v2Key), call("pay-derived-rules"));
+  const v2 = await POST(
+    postRequest(
+      "pay-derived-rules",
+      {
+        code,
+        name: "Derived rule",
+        componentId,
+        trigger: "time_entry",
+        effectiveFrom: "2026-02-01",
+        isActive: true,
+      },
+      v2Key,
+    ),
+    call("pay-derived-rules"),
+  );
   assert.equal(v2.status, 200, JSON.stringify(await v2.clone().json()));
-  assert.equal((await v2.json() as { id: string }).id, v2Key);
+  assert.equal(((await v2.json()) as { id: string }).id, v2Key);
   const v1Row = tableRows("pay_derived_rules").find((row) => row.id === v1Key);
   assert.equal(v1Row?.effective_to, "2026-01-31");
   const auditsBefore = harnessState.audits.length;
   // Replaying the successor writes nothing and leaves the closure alone.
-  const replay = await POST(postRequest("pay-derived-rules", {
-    code, name: "Derived rule", componentId, trigger: "time_entry",
-    effectiveFrom: "2026-02-01", isActive: true,
-  }, v2Key), call("pay-derived-rules"));
+  const replay = await POST(
+    postRequest(
+      "pay-derived-rules",
+      {
+        code,
+        name: "Derived rule",
+        componentId,
+        trigger: "time_entry",
+        effectiveFrom: "2026-02-01",
+        isActive: true,
+      },
+      v2Key,
+    ),
+    call("pay-derived-rules"),
+  );
   assert.equal(replay.status, 200);
   assert.deepEqual(await replay.json(), { id: v2Key });
   assert.equal(tableRows("pay_derived_rules").length, 2);
@@ -639,14 +716,19 @@ test("accounting books: first-book promotion replays without re-demoting", async
   // A fresh key promoting a second book still demotes the first, atomically.
   const secondKey = randomUUID();
   const second = await POST(
-    postRequest("accounting-books", { code: "BK2", name: "Second book", isPrimary: true }, secondKey),
+    postRequest(
+      "accounting-books",
+      { code: "BK2", name: "Second book", isPrimary: true },
+      secondKey,
+    ),
     call("accounting-books"),
   );
   assert.equal(second.status, 200, JSON.stringify(await second.clone().json()));
   assert.equal(tableRows("accounting_books").find((row) => row.id === firstKey)?.is_primary, false);
   assert.equal(tableRows("accounting_books").find((row) => row.id === secondKey)?.is_primary, true);
-  const demotions = harnessState.audits.filter((audit) =>
-    audit.table_name === "accounting_books" && audit.action === "update");
+  const demotions = harnessState.audits.filter(
+    (audit) => audit.table_name === "accounting_books" && audit.action === "update",
+  );
   assert.equal(demotions.length, 1);
 });
 
@@ -654,11 +736,17 @@ test("home announcements: key becomes the announcement id with replay and refusa
   reset();
   const key = randomUUID();
   const body = { title: "Lobby notice", startsOn: "2026-01-01", audience: "all" };
-  const first = await POST(postRequest("home-announcements", body, key), call("home-announcements"));
+  const first = await POST(
+    postRequest("home-announcements", body, key),
+    call("home-announcements"),
+  );
   assert.equal(first.status, 200, JSON.stringify(await first.clone().json()));
-  assert.equal((await first.json() as { id: string }).id, key);
+  assert.equal(((await first.json()) as { id: string }).id, key);
   assert.equal(harnessState.orgSettings.home.announcements.length, 1);
-  const replay = await POST(postRequest("home-announcements", body, key), call("home-announcements"));
+  const replay = await POST(
+    postRequest("home-announcements", body, key),
+    call("home-announcements"),
+  );
   assert.equal(replay.status, 200);
   assert.deepEqual(await replay.json(), { id: key });
   assert.equal(harnessState.orgSettings.home.announcements.length, 1);
@@ -667,7 +755,7 @@ test("home announcements: key becomes the announcement id with replay and refusa
     call("home-announcements"),
   );
   assert.equal(conflict.status, 409);
-  assert.equal((await conflict.json() as { code?: string }).code, "idempotency-conflict");
+  assert.equal(((await conflict.json()) as { code?: string }).code, "idempotency-conflict");
   assert.equal(harnessState.orgSettings.home.announcements.length, 1);
   assert.equal(harnessState.orgSettings.home.announcements[0]!.title, "Lobby notice");
 });
@@ -702,11 +790,14 @@ test("PATCH never requires the key", async () => {
     call("payment-terms"),
   );
   assert.equal(created.status, 200);
-  const patched = await PATCH(new Request("http://localhost/api/admin/setup/payment-terms", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: key, name: "Net 30 revised", netDays: 30 }),
-  }), call("payment-terms"));
+  const patched = await PATCH(
+    new Request("http://localhost/api/admin/setup/payment-terms", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: key, name: "Net 30 revised", netDays: 30 }),
+    }),
+    call("payment-terms"),
+  );
   assert.equal(patched.status, 200, JSON.stringify(await patched.clone().json()));
   assert.equal(tableRows("payment_terms")[0]!.name, "Net 30 revised");
   assert.ok(harnessState.audits.some((audit) => audit.action === "update"));

@@ -1,82 +1,58 @@
-import { applyDepreciationCorrection } from '@openbooks/engine/assets/depreciation-reversal'
-import { applyProductionLoss } from '@openbooks/engine/manufacturing/loss-disposition'
-import { applyBomRevision } from '@openbooks/engine/inventory/bom-policy'
-import { applyRoutingActivation } from '@openbooks/engine/manufacturing/routings'
-import { applyStandardRollup } from '@openbooks/engine/manufacturing/standard-rollup'
+import { applyDepreciationCorrection } from "@openbooks/engine/assets/depreciation-reversal";
+import { applyProductionLoss } from "@openbooks/engine/manufacturing/loss-disposition";
+import { applyBomRevision } from "@openbooks/engine/inventory/bom-policy";
+import { applyRoutingActivation } from "@openbooks/engine/manufacturing/routings";
+import { applyStandardRollup } from "@openbooks/engine/manufacturing/standard-rollup";
 import {
   applyNetInvestmentAssessment,
   applyNetInvestmentReversal,
-} from '@openbooks/engine/consolidation'
-import { applyDropShipAssessment } from '@openbooks/engine/inventory'
-import { applyExpectedBreakage } from '@openbooks/engine/revenue'
-import { applyProvisionAssessment } from '@openbooks/engine/provisions'
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { applyAssetGroupValuation } from '@openbooks/engine/assets/group-valuations'
+} from "@openbooks/engine/consolidation";
+import { applyDropShipAssessment } from "@openbooks/engine/inventory";
+import { applyExpectedBreakage } from "@openbooks/engine/revenue";
+import { applyProvisionAssessment } from "@openbooks/engine/provisions";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { applyAssetGroupValuation } from "@openbooks/engine/assets/group-valuations";
 import {
   applyLossOfControl,
   applyLossOfControlReversal,
-} from '@openbooks/engine/consolidation/loss-of-control'
-import { NextResponse } from 'next/server'
-import { applyAssetChange } from '@openbooks/engine/assets/asset-changes'
-import { applyLeaseChange } from '@openbooks/engine/revenue/lease-changes'
-import { applyRevenueModification } from '@openbooks/engine/revenue/contract-modifications'
-import { authorizeChange } from '../../_authorization'
-import { applyHolidayObligation } from '@openbooks/engine/payroll/holiday-obligations'
-import { db } from '@openbooks/engine/platform/db'
-import { accessAtLeast, fileAccessLevel } from '@/lib/file-cabinet'
-import { fileViewer } from '@/app/api/file-cabinet/lib'
-export const runtime = 'nodejs'
+} from "@openbooks/engine/consolidation/loss-of-control";
+import { NextResponse } from "next/server";
+import { applyAssetChange } from "@openbooks/engine/assets/asset-changes";
+import { applyLeaseChange } from "@openbooks/engine/revenue/lease-changes";
+import { applyRevenueModification } from "@openbooks/engine/revenue/contract-modifications";
+import { authorizeChange } from "../../_authorization";
+import { applyHolidayObligation } from "@openbooks/engine/payroll/holiday-obligations";
+import { db } from "@openbooks/engine/platform/db";
+import { accessAtLeast, fileAccessLevel } from "@/lib/file-cabinet";
+import { fileViewer } from "@/app/api/file-cabinet/lib";
+export const runtime = "nodejs";
 export const POST = defineRoute({
-  public: 'session',
+  public: "session",
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, params }) => {
     const { id } = await params,
-      gate = await authorizeChange(id, 'apply')
-    if (gate instanceof NextResponse) return gate
+      gate = await authorizeChange(id, "apply");
+    if (gate instanceof NextResponse) return gate;
     try {
-      if (
-        gate.domain === 'manufacturing' &&
-        gate.operation === 'work_order_loss_disposition'
-      )
+      if (gate.domain === "manufacturing" && gate.operation === "work_order_loss_disposition")
         return NextResponse.json(
-          await applyProductionLoss(
-            gate.auth.user.orgId,
-            gate.auth.user.id,
-            id,
-          ),
-        )
-      if (
-        gate.domain === 'manufacturing' &&
-        gate.operation === 'bom_revision_activation'
-      )
+          await applyProductionLoss(gate.auth.user.orgId, gate.auth.user.id, id),
+        );
+      if (gate.domain === "manufacturing" && gate.operation === "bom_revision_activation")
         return NextResponse.json(
           await applyBomRevision(gate.auth.user.orgId, gate.auth.user.id, id),
-        )
-      if (
-        gate.domain === 'manufacturing' &&
-        gate.operation === 'routing_revision_activation'
-      )
+        );
+      if (gate.domain === "manufacturing" && gate.operation === "routing_revision_activation")
         return NextResponse.json(
-          await applyRoutingActivation(
-            gate.auth.user.orgId,
-            gate.auth.user.id,
-            id,
-          ),
-        )
-      if (
-        gate.domain === 'manufacturing' &&
-        gate.operation === 'standard_cost_rollup'
-      )
+          await applyRoutingActivation(gate.auth.user.orgId, gate.auth.user.id, id),
+        );
+      if (gate.domain === "manufacturing" && gate.operation === "standard_cost_rollup")
         return NextResponse.json(
-          await applyStandardRollup(
-            gate.auth.user.orgId,
-            gate.auth.user.id,
-            id,
-          ),
-        )
-      if (gate.domain === 'payroll')
+          await applyStandardRollup(gate.auth.user.orgId, gate.auth.user.id, id),
+        );
+      if (gate.domain === "payroll")
         return NextResponse.json(
           await applyHolidayObligation({
             orgId: gate.auth.user.orgId,
@@ -84,81 +60,54 @@ export const POST = defineRoute({
             changeId: id,
             authorizeFile: async (fileId) =>
               accessAtLeast(
-                await fileAccessLevel(
-                  gate.auth.user.orgId,
-                  fileViewer(gate.auth),
-                  fileId,
-                  db,
-                ),
-                'viewer',
+                await fileAccessLevel(gate.auth.user.orgId, fileViewer(gate.auth), fileId, db),
+                "viewer",
               ),
           }),
-        )
-      if (gate.domain === 'sales')
+        );
+      if (gate.domain === "sales")
         return NextResponse.json(
-          await applyDropShipAssessment(
-            gate.auth.user.orgId,
-            id,
-            gate.auth.user.id,
-          ),
-        )
-      if (gate.domain === 'provision')
+          await applyDropShipAssessment(gate.auth.user.orgId, id, gate.auth.user.id),
+        );
+      if (gate.domain === "provision")
         return NextResponse.json(
-          await applyProvisionAssessment(
-            gate.auth.user.orgId,
-            id,
-            gate.auth.user.id,
-          ),
-        )
-      if (gate.domain === 'consolidation')
+          await applyProvisionAssessment(gate.auth.user.orgId, id, gate.auth.user.id),
+        );
+      if (gate.domain === "consolidation")
         return NextResponse.json(
           await (
-            gate.operation === 'net_investment_oci_reversal'
+            gate.operation === "net_investment_oci_reversal"
               ? applyNetInvestmentReversal
-              : gate.operation === 'net_investment_oci'
+              : gate.operation === "net_investment_oci"
                 ? applyNetInvestmentAssessment
-                : gate.operation === 'reversal'
+                : gate.operation === "reversal"
                   ? applyLossOfControlReversal
                   : applyLossOfControl
           )(gate.auth.user.orgId, id, gate.auth.user.id),
-        )
-      if (
-        gate.domain === 'asset' &&
-        gate.operation === 'source_managed_depreciation_reversal'
-      )
+        );
+      if (gate.domain === "asset" && gate.operation === "source_managed_depreciation_reversal")
         return NextResponse.json(
-          await applyDepreciationCorrection(
-            gate.auth.user.orgId,
-            id,
-            gate.auth.user.id,
-          ),
-        )
-      if (gate.domain === 'asset')
+          await applyDepreciationCorrection(gate.auth.user.orgId, id, gate.auth.user.id),
+        );
+      if (gate.domain === "asset")
         return NextResponse.json(
           await (
-            gate.operation === 'group_valuation'
-              ? applyAssetGroupValuation
-              : applyAssetChange
+            gate.operation === "group_valuation" ? applyAssetGroupValuation : applyAssetChange
           )(gate.auth.user.orgId, id, gate.auth.user.id),
-        )
-      if (gate.domain === 'revenue')
+        );
+      if (gate.domain === "revenue")
         return NextResponse.json(
           await (
-            gate.operation === 'expected_breakage_estimate'
+            gate.operation === "expected_breakage_estimate"
               ? applyExpectedBreakage
               : applyRevenueModification
           )(gate.auth.user.orgId, id, gate.auth.user.id),
-        )
-      if (gate.domain !== 'lease')
-        return NextResponse.json(
-          { error: 'no matching lifecycle action' },
-          { status: 422 },
-        )
-      return NextResponse.json(
-        await applyLeaseChange(gate.auth.user.orgId, id, gate.auth.user.id),
-      )
+        );
+      if (gate.domain !== "lease")
+        return NextResponse.json({ error: "no matching lifecycle action" }, { status: 422 });
+      return NextResponse.json(await applyLeaseChange(gate.auth.user.orgId, id, gate.auth.user.id));
     } catch (e) {
-      return apiErrorResponse(e)
+      return apiErrorResponse(e);
     }
   },
-})
+});

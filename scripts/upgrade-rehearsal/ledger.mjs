@@ -52,7 +52,8 @@ function quoteIdent(name) {
 }
 
 function assertIdentifier(name) {
-  if (!/^[a-z_][a-z0-9_]*$/.test(name)) throw new Error(`refusing to fingerprint unexpected identifier ${JSON.stringify(name)}`);
+  if (!/^[a-z_][a-z0-9_]*$/.test(name))
+    throw new Error(`refusing to fingerprint unexpected identifier ${JSON.stringify(name)}`);
   return name;
 }
 
@@ -63,7 +64,9 @@ async function fingerprintColumns(client, schema, table) {
       order by column_name`,
     [schema, table],
   );
-  return result.rows.map((row) => row.column_name).filter((column) => !VOLATILE_COLUMNS.has(column));
+  return result.rows
+    .map((row) => row.column_name)
+    .filter((column) => !VOLATILE_COLUMNS.has(column));
 }
 
 /**
@@ -87,8 +90,10 @@ export function rowHashQuery(schema, table, columns) {
  * row hashes above.
  */
 export function columnHashQuery(schema, table, columns) {
-  const aggs = columns.map((column, index) =>
-    `sum(('x' || substr(md5(row(t.id, t.${quoteIdent(assertIdentifier(column))})::text), 1, 15))::bit(60)::bigint::numeric)::text as c${index}`);
+  const aggs = columns.map(
+    (column, index) =>
+      `sum(('x' || substr(md5(row(t.id, t.${quoteIdent(assertIdentifier(column))})::text), 1, 15))::bit(60)::bigint::numeric)::text as c${index}`,
+  );
   return `select t.org_id::text as org_id, ${aggs.join(", ")}
   from ${quoteIdent(assertIdentifier(schema))}.${quoteIdent(assertIdentifier(table))} t
  group by t.org_id
@@ -117,20 +122,32 @@ export async function snapshotLedger(client, { schema = "public", columns = null
     const counts = {};
     for (const table of COUNTED_TABLES) {
       counts[table] = (await tableExists(client, table))
-        ? Number((await rows(client, `select count(*)::bigint as n from ${quoteIdent(assertIdentifier(table))}`))[0].n)
+        ? Number(
+            (
+              await rows(
+                client,
+                `select count(*)::bigint as n from ${quoteIdent(assertIdentifier(table))}`,
+              )
+            )[0].n,
+          )
         : null;
     }
 
     const orgs = await rows(client, "select id::text as org_id from orgs order by id");
 
-    const entryStatus = await rows(client, `
+    const entryStatus = await rows(
+      client,
+      `
       select org_id::text, status, count(*)::bigint::text as entries
         from journal_entries
        group by org_id, status
-       order by org_id, status`);
+       order by org_id, status`,
+    );
 
     // Posted-ledger trial balance, per book, account, currency and entry status.
-    const trialBalance = await rows(client, `
+    const trialBalance = await rows(
+      client,
+      `
       select e.org_id::text, e.book_id::text, e.status, l.subsidiary_id::text, l.account_id::text, l.currency,
              count(*)::bigint::text as lines,
              sum(l.amount)::text as amount,
@@ -139,9 +156,12 @@ export async function snapshotLedger(client, { schema = "public", columns = null
         join journal_entries e on e.id = l.entry_id
        where e.status <> 'draft'
        group by e.org_id, e.book_id, e.status, l.subsidiary_id, l.account_id, l.currency
-       order by 1, 2, 3, 4, 5, 6`);
+       order by 1, 2, 3, 4, 5, 6`,
+    );
 
-    const unbalancedEntries = await rows(client, `
+    const unbalancedEntries = await rows(
+      client,
+      `
       select e.org_id::text, e.id::text as entry_id, sum(l.amount)::text as residual
         from journal_entries e
         join journal_lines l on l.entry_id = e.id
@@ -149,23 +169,30 @@ export async function snapshotLedger(client, { schema = "public", columns = null
        group by e.org_id, e.id
       having sum(l.amount) <> 0
        order by 1, 2
-       limit 50`);
+       limit 50`,
+    );
 
-    const documents = await rows(client, `
+    const documents = await rows(
+      client,
+      `
       select org_id::text, kind, status, currency,
              count(*)::bigint::text as documents,
              sum(total)::text as total,
              sum(open_balance)::text as open_balance
         from documents
        group by org_id, kind, status, currency
-       order by 1, 2, 3, 4`);
+       order by 1, 2, 3, 4`,
+    );
 
     const applications = (await tableExists(client, "applications"))
-      ? await rows(client, `
+      ? await rows(
+          client,
+          `
           select org_id::text, count(*)::bigint::text as applications, sum(amount)::text as amount
             from applications
            group by org_id
-           order by 1`)
+           order by 1`,
+        )
       : null;
 
     // Per-record fingerprints over every column the SOURCE release had. The
@@ -176,14 +203,15 @@ export async function snapshotLedger(client, { schema = "public", columns = null
       const present = await fingerprintColumns(client, schema, table);
       const wanted = columns?.[table] ?? present;
       const dropped = wanted.filter((column) => !present.includes(column));
-      rowHashes[table] = dropped.length > 0
-        ? { columns: wanted, dropped, perOrg: [] }
-        : {
-          columns: wanted,
-          dropped: [],
-          perOrg: await rows(client, rowHashQuery(schema, table, wanted)),
-          perColumn: await rows(client, columnHashQuery(schema, table, wanted)),
-        };
+      rowHashes[table] =
+        dropped.length > 0
+          ? { columns: wanted, dropped, perOrg: [] }
+          : {
+              columns: wanted,
+              dropped: [],
+              perOrg: await rows(client, rowHashQuery(schema, table, wanted)),
+              perColumn: await rows(client, columnHashQuery(schema, table, wanted)),
+            };
     }
 
     return {
@@ -218,7 +246,8 @@ function diffKeyed(section, before, after, keyFields, differences) {
       differences.push({ section, key, before: row, after: null });
       continue;
     }
-    if (JSON.stringify(row) !== JSON.stringify(other)) differences.push({ section, key, before: row, after: other });
+    if (JSON.stringify(row) !== JSON.stringify(other))
+      differences.push({ section, key, before: row, after: other });
   }
   for (const [key, row] of right) {
     if (!left.has(key)) differences.push({ section, key, before: null, after: row });
@@ -244,7 +273,13 @@ export function compareSnapshots(before, after) {
   if (JSON.stringify(before.orgs) !== JSON.stringify(after.orgs)) {
     differences.push({ section: "orgs", key: "org ids", before: before.orgs, after: after.orgs });
   }
-  diffKeyed("entryStatus", before.entryStatus, after.entryStatus, ["org_id", "status"], differences);
+  diffKeyed(
+    "entryStatus",
+    before.entryStatus,
+    after.entryStatus,
+    ["org_id", "status"],
+    differences,
+  );
   diffKeyed(
     "trialBalance",
     before.trialBalance,
@@ -252,18 +287,34 @@ export function compareSnapshots(before, after) {
     ["org_id", "book_id", "status", "subsidiary_id", "account_id", "currency"],
     differences,
   );
-  diffKeyed("documents", before.documents, after.documents, ["org_id", "kind", "status", "currency"], differences);
+  diffKeyed(
+    "documents",
+    before.documents,
+    after.documents,
+    ["org_id", "kind", "status", "currency"],
+    differences,
+  );
   if (before.applications !== null && after.applications !== null) {
     diffKeyed("applications", before.applications, after.applications, ["org_id"], differences);
   }
   for (const [table, was] of Object.entries(before.rowHashes ?? {})) {
     const now = after.rowHashes?.[table];
     if (!now) {
-      differences.push({ section: "rowHashes", key: table, before: "present", after: "table missing" });
+      differences.push({
+        section: "rowHashes",
+        key: table,
+        before: "present",
+        after: "table missing",
+      });
       continue;
     }
     if (now.dropped?.length > 0) {
-      differences.push({ section: "rowHashes", key: `${table}: columns dropped by the upgrade`, before: now.dropped, after: null });
+      differences.push({
+        section: "rowHashes",
+        key: `${table}: columns dropped by the upgrade`,
+        before: now.dropped,
+        after: null,
+      });
       continue;
     }
     const first = differences.length;
@@ -275,13 +326,22 @@ export function compareSnapshots(before, after) {
       for (const difference of differences.slice(first)) {
         const x = left.get(difference.key);
         const y = right.get(difference.key);
-        if (x && y) difference.columns = was.columns.filter((_, index) => x[`c${index}`] !== y[`c${index}`]);
+        if (x && y)
+          difference.columns = was.columns.filter((_, index) => x[`c${index}`] !== y[`c${index}`]);
       }
     }
   }
-  for (const [side, snapshot] of [["before", before], ["after", after]]) {
+  for (const [side, snapshot] of [
+    ["before", before],
+    ["after", after],
+  ]) {
     for (const entry of snapshot.unbalancedEntries ?? []) {
-      differences.push({ section: `unbalanced-${side}`, key: entry.entry_id, before: null, after: entry });
+      differences.push({
+        section: `unbalanced-${side}`,
+        key: entry.entry_id,
+        before: null,
+        after: entry,
+      });
     }
   }
   return differences;
@@ -304,5 +364,7 @@ export function candidateHarnessOrgIds(seededOrgIds, snapshot) {
 
 /** The column lists a before-snapshot hashed, for the after-snapshot to reuse. */
 export function fingerprintColumnsOf(snapshot) {
-  return Object.fromEntries(Object.entries(snapshot.rowHashes ?? {}).map(([table, entry]) => [table, entry.columns]));
+  return Object.fromEntries(
+    Object.entries(snapshot.rowHashes ?? {}).map(([table, entry]) => [table, entry.columns]),
+  );
 }

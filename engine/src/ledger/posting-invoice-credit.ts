@@ -78,7 +78,12 @@ export async function assertCustomerInvoiceCredit(
     );
   }
 
-  const mixedCurrency = await findMixedCurrencyExposure(tx, invoice.orgId, invoice.partyId, role.currency);
+  const mixedCurrency = await findMixedCurrencyExposure(
+    tx,
+    invoice.orgId,
+    invoice.partyId,
+    role.currency,
+  );
   if (mixedCurrency) {
     throw new PostingError(
       `customer has open ${mixedCurrency.kind.replaceAll("_", " ")} exposure in ${mixedCurrency.currency}; credit limit is enforced only in ${role.currency} — settle that ${mixedCurrency.currency} balance before posting invoice ${invoice.documentNumber}`,

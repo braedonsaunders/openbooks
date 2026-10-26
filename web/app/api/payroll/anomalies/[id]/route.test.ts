@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
  * PATCH payroll/anomalies/[id] — the flag id binds a uuid column inside
@@ -12,23 +12,25 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
  * (imported for real); only authz, feature flags, and resolveFlag are
  * doubled, and resolveFlag counts its calls so the tests prove it never ran.
  */
-const stateKey = Symbol.for('openbooks.payroll-anomalies-id-test')
-interface RouteState { resolveCalls: number }
-const state: RouteState = { resolveCalls: 0 }
-;(globalThis as Record<symbol, unknown>)[stateKey] = state
+const stateKey = Symbol.for("openbooks.payroll-anomalies-id-test");
+interface RouteState {
+  resolveCalls: number;
+}
+const state: RouteState = { resolveCalls: 0 };
+(globalThis as Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
-      export { can } from '${new URL('../../../../../lib/authz.ts', import.meta.url).href}'
+      export { can } from '${new URL("../../../../../lib/authz.ts", import.meta.url).href}'
       export async function getAuthz() {
         return { user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(['payroll.manage']), allowedSubsidiaryIds: null }
       }
     `,
   ],
   [
-    'mock:ai-rails',
+    "mock:ai-rails",
     `
       export async function requireAnyPerm() {
         return { user: { orgId: 'org-1', id: 'user-1' } }
@@ -39,13 +41,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:features',
+    "mock:features",
     `
       export async function isFeatureEnabled() { return true }
     `,
   ],
   [
-    'mock:anomalies',
+    "mock:anomalies",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-anomalies-id-test')]
       export async function resolveFlag(input) {
@@ -56,73 +58,73 @@ const mockSources = new Map<string, string>([
   ],
   // which the plain node loader refuses. An empty module satisfies the
   // side-effect import; every behavioural import stays real.
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['../../../../../lib/ai-rails', 'mock:ai-rails'],
-  ['../../../../../lib/features', 'mock:features'],
-  ['@/lib/features', 'mock:features'],
-  ['@/lib/authz', 'mock:authz'],
-  ['@openbooks/engine/hrm/ai/anomalies', 'mock:anomalies'],
-])
+  ["../../../../../lib/ai-rails", "mock:ai-rails"],
+  ["../../../../../lib/features", "mock:features"],
+  ["@/lib/features", "mock:features"],
+  ["@/lib/authz", "mock:authz"],
+  ["@openbooks/engine/hrm/ai/anomalies", "mock:anomalies"],
+]);
 
 // The route imports the body parser through the `@/` alias, which the plain
 // node loader does not resolve: redirect that ONE specifier at the real pure
 // module (never a double of it) so the test exercises the real parse.
-const testDir = dirname(fileURLToPath(import.meta.url))
-const realJsonUrl = pathToFileURL(join(testDir, '../../../../../lib/api/json.ts')).href
+const testDir = dirname(fileURLToPath(import.meta.url));
+const realJsonUrl = pathToFileURL(join(testDir, "../../../../../lib/api/json.ts")).href;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@/lib/api/json') return { url: realJsonUrl, shortCircuit: true }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (specifier === "@/lib/api/json") return { url: realJsonUrl, shortCircuit: true };
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?payroll-anomalies-id-test'
-const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-after(() => hooks.deregister())
+const routeUrl = "./route.ts?payroll-anomalies-id-test";
+const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
+after(() => hooks.deregister());
 
 function patch(id: string): Promise<Response> {
   return PATCH(
-    new Request('http://openbooks.test/api/payroll/anomalies/x', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ to: 'acknowledged', reason: 'reviewed' }),
+    new Request("http://openbooks.test/api/payroll/anomalies/x", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to: "acknowledged", reason: "reviewed" }),
     }),
     { params: Promise.resolve({ id }) },
-  )
+  );
 }
 
-test('a 36-dash flag id is refused before resolveFlag runs', async () => {
-  state.resolveCalls = 0
-  const response = await patch('-'.repeat(36))
-  assert.equal(response.status, 400, await response.clone().text())
-  assert.match((await response.json() as { error: string }).error, /must be a uuid/)
-  assert.equal(state.resolveCalls, 0)
-})
+test("a 36-dash flag id is refused before resolveFlag runs", async () => {
+  state.resolveCalls = 0;
+  const response = await patch("-".repeat(36));
+  assert.equal(response.status, 400, await response.clone().text());
+  assert.match(((await response.json()) as { error: string }).error, /must be a uuid/);
+  assert.equal(state.resolveCalls, 0);
+});
 
-test('ungrouped 36-character hex is refused the same way', async () => {
-  const id = '000000000000400080000000000000010000'
-  assert.equal(id.length, 36)
-  state.resolveCalls = 0
-  const response = await patch(id)
-  assert.equal(response.status, 400, await response.clone().text())
-  assert.equal(state.resolveCalls, 0)
-})
+test("ungrouped 36-character hex is refused the same way", async () => {
+  const id = "000000000000400080000000000000010000";
+  assert.equal(id.length, 36);
+  state.resolveCalls = 0;
+  const response = await patch(id);
+  assert.equal(response.status, 400, await response.clone().text());
+  assert.equal(state.resolveCalls, 0);
+});
 
-test('a real uuid reaches resolveFlag', async () => {
-  const id = '00000000-0000-4000-8000-000000000001'
-  state.resolveCalls = 0
-  const response = await patch(id)
-  assert.equal(response.status, 200, await response.clone().text())
-  assert.equal(state.resolveCalls, 1)
-  assert.equal((await response.json() as { flag: { id: string } }).flag.id, id)
-})
+test("a real uuid reaches resolveFlag", async () => {
+  const id = "00000000-0000-4000-8000-000000000001";
+  state.resolveCalls = 0;
+  const response = await patch(id);
+  assert.equal(response.status, 200, await response.clone().text());
+  assert.equal(state.resolveCalls, 1);
+  assert.equal(((await response.json()) as { flag: { id: string } }).flag.id, id);
+});

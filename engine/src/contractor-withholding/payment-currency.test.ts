@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { withholdingCurrencyRate, withholdingStatutoryAmount, withholdingTransactionAmount } from "./payment-currency.ts";
+import {
+  withholdingCurrencyRate,
+  withholdingStatutoryAmount,
+  withholdingTransactionAmount,
+} from "./payment-currency.ts";
 
 test("statutory FX retains ten-place quotes without binary arithmetic", () => {
   assert.equal(withholdingCurrencyRate("0.8000000001"), "0.8000000001");
@@ -15,5 +19,6 @@ test("cash conversion rounds once at the currency quantum", () => {
 });
 
 test("missing, zero, negative and malformed FX cannot become par", () => {
-  for (const rate of [null, undefined, "0", "-1", "1,25", "1e2", "0.00000000001"]) assert.throws(() => withholdingCurrencyRate(rate));
+  for (const rate of [null, undefined, "0", "-1", "1,25", "1e2", "0.00000000001"])
+    assert.throws(() => withholdingCurrencyRate(rate));
 });

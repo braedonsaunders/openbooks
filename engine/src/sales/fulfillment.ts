@@ -1,5 +1,9 @@
 import { assertShipmentPacked } from "./handling-unit-state.ts";
-import { assertSaleableStock, saleableLocation, unheldTracking } from "../inventory/stock-eligibility.ts";
+import {
+  assertSaleableStock,
+  saleableLocation,
+  unheldTracking,
+} from "../inventory/stock-eligibility.ts";
 import { toExactStockQuantity } from "../inventory/costing.ts";
 import { resolveProfile } from "../inventory/profile-policy.ts";
 import { validateTrackingSelection } from "../inventory/tracking.ts";
@@ -19,7 +23,7 @@ import { openQuantitySql } from "../records/order-line-remainders.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { assertWarehouseAdmitsMovement } from "../inventory/warehouses.ts";
 import { getOnHandWith, lockInventoryPosition } from "../inventory/position.ts";
-import { add,cmp,neg } from "../money/money.ts";
+import { add, cmp, neg } from "../money/money.ts";
 import { pickReservationsCte, activePickReservations } from "../inventory/pick-reservations.ts";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -70,7 +74,8 @@ export class FulfillmentRefusal extends Error {
 }
 
 const FULFILLMENT_FEATURE = "fulfillment";
-export const FULFILLMENT_FEATURES_REMEDY = "Turn on Warehousing and Fulfillment on Company Settings → Features";
+export const FULFILLMENT_FEATURES_REMEDY =
+  "Turn on Warehousing and Fulfillment on Company Settings → Features";
 export const CARRIERS_REMEDY = "Warehouse → Carriers";
 
 function fulfillmentDisabled(): FulfillmentRefusal {
@@ -106,10 +111,19 @@ function shown(quantity: string): string {
 function parseQuantity(raw: unknown, field: string): string {
   const quantity = canonicalDecimal(raw, 8);
   if (quantity === null) {
-    throw new FulfillmentRefusal(decimalNullRefusal(field, "a quantity", raw, 8), "invalid_quantity", 422);
+    throw new FulfillmentRefusal(
+      decimalNullRefusal(field, "a quantity", raw, 8),
+      "invalid_quantity",
+      422,
+    );
   }
   if (!isPositiveDecimal(quantity)) {
-    throw new FulfillmentRefusal(`${field} must be greater than zero`, "invalid_quantity", 422, "Enter a positive quantity");
+    throw new FulfillmentRefusal(
+      `${field} must be greater than zero`,
+      "invalid_quantity",
+      422,
+      "Enter a positive quantity",
+    );
   }
   return quantity;
 }
@@ -130,10 +144,13 @@ async function writeAudit(
   action: "insert" | "update" | "void",
   changes: Record<string, unknown>,
 ): Promise<void> {
-  const written = await tx.execute<{ id: string }>(sql`
+  const written = await tx.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'fulfillment_documents', ${documentId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (written.length === 0) throw new Error("fulfilment change was not audited");
 }
 
@@ -155,14 +172,28 @@ interface OrderRow extends Record<string, unknown> {
 
 /** Lock a sales order FOR UPDATE — every order-cycle writer takes the order
  *  before anything that hangs off it. Absent and out-of-scope answer alike. */
-async function lockSalesOrder(tx: SqlExecutor, orgId: string, salesOrderId: string, scope: Scope): Promise<OrderRow> {
-  const order = (await tx.execute<OrderRow>(sql`
+async function lockSalesOrder(
+  tx: SqlExecutor,
+  orgId: string,
+  salesOrderId: string,
+  scope: Scope,
+): Promise<OrderRow> {
+  const order = (
+    await tx.execute<OrderRow>(
+      sql`
     select id, kind, status, document_number, party_id, currency, fx_rate::text as fx_rate, subsidiary_id,
            department_id, project_id, location_id, class_id, extra_dims
       from documents
      where org_id = ${orgId} and id = ${salesOrderId}
-     for update`, "objects"))[0];
-  if (!order || order.kind !== "sales_order" || !subsidiaryScopeAllows(scope, order.subsidiary_id)) {
+     for update`,
+      "objects",
+    )
+  )[0];
+  if (
+    !order ||
+    order.kind !== "sales_order" ||
+    !subsidiaryScopeAllows(scope, order.subsidiary_id)
+  ) {
     throw notFound("Sales order");
   }
   return order;
@@ -200,13 +231,18 @@ async function upstreamOf(
   orgId: string,
   documentId: string,
 ): Promise<{ salesOrderId: string | null; pickListId: string | null }> {
-  const row = (await runner.execute<{ sales_order_id: string | null; pick_list_id: string | null }>(sql`
+  const row = (
+    await runner.execute<{ sales_order_id: string | null; pick_list_id: string | null }>(
+      sql`
     select (select l.from_document_id from document_links l
              where l.org_id = ${orgId} and l.to_document_id = ${documentId}
                and l.link_type in ('reserves', 'ships') limit 1) as sales_order_id,
            (select l.from_document_id from document_links l
              where l.org_id = ${orgId} and l.to_document_id = ${documentId}
-               and l.link_type = 'created_from' limit 1) as pick_list_id`, "objects"))[0];
+               and l.link_type = 'created_from' limit 1) as pick_list_id`,
+      "objects",
+    )
+  )[0];
   return { salesOrderId: row?.sales_order_id ?? null, pickListId: row?.pick_list_id ?? null };
 }
 
@@ -217,14 +253,19 @@ async function lockFulfillmentDocument(
   kind: FulfillmentKind,
   scope: Scope,
 ): Promise<FulfillmentDocRow> {
-  const row = (await tx.execute<FulfillmentDocRow>(sql`
+  const row = (
+    await tx.execute<FulfillmentDocRow>(
+      sql`
     select d.id, d.kind, d.status, d.document_number, d.document_date::text as document_date, d.subsidiary_id,
            fd.stage, fd.warehouse_id, fd.carrier_id, fd.carrier_service, fd.tracking_number,
            fd.sales_fulfillment_id
       from documents d
       join fulfillment_documents fd on fd.document_id = d.id and fd.org_id = d.org_id
      where d.org_id = ${orgId} and d.id = ${documentId}
-     for update of d, fd`, "objects"))[0];
+     for update of d, fd`,
+      "objects",
+    )
+  )[0];
   if (!row || row.kind !== kind || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
     throw notFound(kind === PICK_LIST_KIND ? "Pick list" : "Shipment");
   }
@@ -244,10 +285,20 @@ async function lockChain(
   if (!upstream.salesOrderId) throw notFound(label);
   const order = await lockSalesOrder(tx, orgId, upstream.salesOrderId, scope);
   if (kind === PICK_LIST_KIND) {
-    return { order, pickList: await lockFulfillmentDocument(tx, orgId, documentId, kind, scope), shipment: null };
+    return {
+      order,
+      pickList: await lockFulfillmentDocument(tx, orgId, documentId, kind, scope),
+      shipment: null,
+    };
   }
   if (!upstream.pickListId) throw notFound(label);
-  const pickList = await lockFulfillmentDocument(tx, orgId, upstream.pickListId, PICK_LIST_KIND, scope);
+  const pickList = await lockFulfillmentDocument(
+    tx,
+    orgId,
+    upstream.pickListId,
+    PICK_LIST_KIND,
+    scope,
+  );
   const shipment = await lockFulfillmentDocument(tx, orgId, documentId, kind, scope);
   return { order, pickList, shipment };
 }
@@ -292,12 +343,17 @@ async function assertWithinOpenQuantity(
   heldBy: "active" | "released",
   excludePickListId: string | null,
 ): Promise<void> {
-  const rows = await tx.execute<HeldRow>(sql`
+  const rows = await tx.execute<HeldRow>(
+    sql`
     with ${pickReservationsCte(orgId)},
     requested as (
       select r.sales_order_line_id, r.item_id, sum(r.quantity::numeric) as requested
         from jsonb_to_recordset(${JSON.stringify(
-          requested.map((line) => ({ sales_order_line_id: line.salesOrderLineId, item_id: line.itemId, quantity: line.quantity })),
+          requested.map((line) => ({
+            sales_order_line_id: line.salesOrderLineId,
+            item_id: line.itemId,
+            quantity: line.quantity,
+          })),
         )}::jsonb) as r(sales_order_line_id uuid, item_id uuid, quantity text)
        group by r.sales_order_line_id, r.item_id
     ),
@@ -329,13 +385,16 @@ async function assertWithinOpenQuantity(
        and (bom.effective_from is null or bom.effective_from <= so_doc.document_date)
        and (bom.effective_to is null or so_doc.document_date < bom.effective_to)
       left join held h on h.sales_order_line_id = q.sales_order_line_id and h.item_id = q.item_id
-     order by so.line_number`, "objects");
+     order by so.line_number`,
+    "objects",
+  );
   const over = rows.find((row) => !row.fits);
   if (!over) return;
   const heldText = over.held_by ? `, ${shown(over.reserved)} already on ${over.held_by}` : "";
-  const kitText = over.item_id !== over.order_item_id
-    ? ` component ${over.item_label} (${shown(over.open)} kits open)`
-    : "";
+  const kitText =
+    over.item_id !== over.order_item_id
+      ? ` component ${over.item_label} (${shown(over.open)} kits open)`
+      : "";
   throw new FulfillmentRefusal(
     `${orderNumber} line ${over.line_number}${kitText} has ${shown(over.cap)} open${heldText}; cannot pick ${shown(over.requested)}`,
     "exceeds_open_quantity",
@@ -413,18 +472,36 @@ export async function createPickList(
   input: CreatePickListInput,
 ): Promise<CreatedFulfillmentDocument> {
   for (const line of input.lines) {
-    if (!isUuid(line.salesOrderLineId) || !isUuid(line.binId) || (line.kitComponentItemId && !isUuid(line.kitComponentItemId)))
-      throw new FulfillmentRefusal('Choose a valid order line, component and stock bin','invalid_input',422);
+    if (
+      !isUuid(line.salesOrderLineId) ||
+      !isUuid(line.binId) ||
+      (line.kitComponentItemId && !isUuid(line.kitComponentItemId))
+    )
+      throw new FulfillmentRefusal(
+        "Choose a valid order line, component and stock bin",
+        "invalid_input",
+        422,
+      );
   }
-  const positionSubjects=await tx.execute<{id:string;item_id:string|null}>(sql`select id,item_id from document_lines
+  const positionSubjects = await tx.execute<{ id: string; item_id: string | null }>(
+    sql`select id,item_id from document_lines
     where org_id=${orgId} and document_id=${input.salesOrderId}
-      and id=any(${`{${input.lines.map(line=>line.salesOrderLineId).join(',')}}`}::uuid[])`, "objects");
-  const sourceItems=new Map(positionSubjects.map(line=>[line.id,line.item_id]));
-  const positionKeys=[...new Set(input.lines.flatMap(line=>{
-    const itemId=line.kitComponentItemId??sourceItems.get(line.salesOrderLineId);
-    return itemId?[`${itemId}:${line.binId}`]:[];
-  }))].sort();
-  for (const key of positionKeys) {const [itemId,binId]=key.split(':');await lockInventoryPosition(tx,itemId!,binId!);}
+      and id=any(${`{${input.lines.map((line) => line.salesOrderLineId).join(",")}}`}::uuid[])`,
+    "objects",
+  );
+  const sourceItems = new Map(positionSubjects.map((line) => [line.id, line.item_id]));
+  const positionKeys = [
+    ...new Set(
+      input.lines.flatMap((line) => {
+        const itemId = line.kitComponentItemId ?? sourceItems.get(line.salesOrderLineId);
+        return itemId ? [`${itemId}:${line.binId}`] : [];
+      }),
+    ),
+  ].sort();
+  for (const key of positionKeys) {
+    const [itemId, binId] = key.split(":");
+    await lockInventoryPosition(tx, itemId!, binId!);
+  }
   await assertFulfillmentFeature(tx, orgId);
   if (input.lines.length === 0) {
     throw new FulfillmentRefusal("Select at least one order line to pick", "invalid_input", 422);
@@ -461,7 +538,13 @@ export async function createPickList(
   });
   const seen = new Set<string>();
   for (const line of requested) {
-    const key = [line.salesOrderLineId, line.kitComponentItemId ?? "", line.binId, line.lotId ?? "", line.serialId ?? ""].join(":");
+    const key = [
+      line.salesOrderLineId,
+      line.kitComponentItemId ?? "",
+      line.binId,
+      line.lotId ?? "",
+      line.serialId ?? "",
+    ].join(":");
     if (seen.has(key)) {
       throw new FulfillmentRefusal(
         "An order line appears twice for the same bin, lot and serial",
@@ -477,7 +560,8 @@ export async function createPickList(
   assertOrderOpen(order);
 
   const lineIds = [...new Set(requested.map((line) => line.salesOrderLineId))];
-  const orderLines = await tx.execute<OrderLineRow>(sql`
+  const orderLines = await tx.execute<OrderLineRow>(
+    sql`
     select dl.id, dl.line_number, dl.item_id, i.kind as item_kind,
            dl.description, dl.unit, dl.stock_location_id,
            dl.department_id, dl.project_id, dl.location_id, dl.class_id, dl.extra_dims,
@@ -490,7 +574,9 @@ export async function createPickList(
         on wl.org_id = dl.org_id
        and wl.id = stock_location_warehouse(dl.org_id, dl.stock_location_id)
      where dl.org_id = ${orgId} and dl.document_id = ${order.id}
-       and dl.id = any(${`{${lineIds.join(",")}}`}::uuid[])`, "objects");
+       and dl.id = any(${`{${lineIds.join(",")}}`}::uuid[])`,
+    "objects",
+  );
   const lineById = new Map(orderLines.map((line) => [line.id, line]));
   let warehouse: { id: string; code: string } | null = null;
   for (const id of lineIds) {
@@ -498,7 +584,11 @@ export async function createPickList(
     if (!line) throw notFound("Order line");
     const label = `${order.document_number} line ${line.line_number}`;
     if (!line.is_stock_line || !line.item_id) {
-      throw new FulfillmentRefusal(`${label} is not a stock line; only stock lines are picked`, "not_a_stock_line", 422);
+      throw new FulfillmentRefusal(
+        `${label} is not a stock line; only stock lines are picked`,
+        "not_a_stock_line",
+        422,
+      );
     }
     if (!line.warehouse_id || !line.warehouse_code) {
       throw new FulfillmentRefusal(
@@ -521,11 +611,17 @@ export async function createPickList(
   if (!warehouse) throw notFound("Order line");
 
   const binIds = [...new Set(requested.map((line) => line.binId))];
-  const bins = new Map((await tx.execute<BinRow>(sql`
+  const bins = new Map(
+    (
+      await tx.execute<BinRow>(
+        sql`
     select sl.id, sl.code, sl.is_active, stock_location_warehouse(sl.org_id, sl.id) as warehouse_id
       from stock_locations sl
-     where sl.org_id = ${orgId} and sl.id = any(${`{${binIds.join(",")}}`}::uuid[])`, "objects"))
-    .map((bin) => [bin.id, bin]));
+     where sl.org_id = ${orgId} and sl.id = any(${`{${binIds.join(",")}}`}::uuid[])`,
+        "objects",
+      )
+    ).map((bin) => [bin.id, bin]),
+  );
   for (const id of binIds) {
     const bin = bins.get(id);
     if (!bin || bin.warehouse_id !== warehouse.id) {
@@ -537,7 +633,12 @@ export async function createPickList(
       );
     }
     if (!bin.is_active) {
-      throw new FulfillmentRefusal(`Bin ${bin.code} is inactive`, "bin_inactive", 422, `Choose an active bin inside ${warehouse.code}`);
+      throw new FulfillmentRefusal(
+        `Bin ${bin.code} is inactive`,
+        "bin_inactive",
+        422,
+        `Choose an active bin inside ${warehouse.code}`,
+      );
     }
     await assertWarehouseAdmitsMovement(tx, orgId, bin.id, "outbound");
   }
@@ -547,7 +648,9 @@ export async function createPickList(
   // bin. Each component row is checked against the recipe effective on the
   // pick date; the shipment re-checks it against the ship date.
   const kitComponentUnits = new Map<string, string | null>();
-  const kitLines = requested.filter((line) => lineById.get(line.salesOrderLineId)?.item_kind === "kit");
+  const kitLines = requested.filter(
+    (line) => lineById.get(line.salesOrderLineId)?.item_kind === "kit",
+  );
   if (kitLines.some((line) => line.kitComponentItemId === null)) {
     const direct = kitLines.find((line) => line.kitComponentItemId === null)!;
     throw new FulfillmentRefusal(
@@ -558,7 +661,8 @@ export async function createPickList(
     );
   }
   const nonKitWithComponent = requested.find(
-    (line) => line.kitComponentItemId !== null && lineById.get(line.salesOrderLineId)?.item_kind !== "kit",
+    (line) =>
+      line.kitComponentItemId !== null && lineById.get(line.salesOrderLineId)?.item_kind !== "kit",
   );
   if (nonKitWithComponent) {
     throw new FulfillmentRefusal(
@@ -570,7 +674,9 @@ export async function createPickList(
   }
   for (const line of kitLines) {
     const source = lineById.get(line.salesOrderLineId)!;
-    const recipe = (await tx.execute<{ component_item_id: string; unit: string | null }>(sql`
+    const recipe = (
+      await tx.execute<{ component_item_id: string; unit: string | null }>(
+        sql`
       select b.component_item_id, component.unit
         from bom_components b
         join items component on component.org_id = b.org_id and component.id = b.component_item_id
@@ -578,7 +684,10 @@ export async function createPickList(
          and b.component_item_id = ${line.kitComponentItemId}
          and (b.effective_from is null or b.effective_from <= ${documentDate}::date)
          and (b.effective_to is null or ${documentDate}::date < b.effective_to)
-       limit 1`, "objects"))[0];
+       limit 1`,
+        "objects",
+      )
+    )[0];
     if (!recipe) {
       throw new FulfillmentRefusal(
         `${order.document_number} line ${source.line_number} names a component outside the kit's recipe on ${documentDate}`,
@@ -593,16 +702,35 @@ export async function createPickList(
   for (const line of requested) {
     const source = lineById.get(line.salesOrderLineId)!;
     const itemId = line.kitComponentItemId ?? source.item_id!;
-    const profile=await resolveProfile(orgId,itemId,tx);
-    await assertSaleableStock(tx,orgId,line.binId,line);
-    const unit=line.kitComponentItemId?kitComponentUnits.get(itemId)??null:source.unit;
-    const baseQuantity=toExactStockQuantity(line.quantity,unit,profile.unitConversions??{},profile.baseUnit,'Pick quantity');
-    await validateTrackingSelection(tx,orgId,itemId,line.binId,profile,{...line,quantity:baseQuantity},"issue");
-    const matches = (await tx.execute<{ ok: boolean }>(sql`
+    const profile = await resolveProfile(orgId, itemId, tx);
+    await assertSaleableStock(tx, orgId, line.binId, line);
+    const unit = line.kitComponentItemId ? (kitComponentUnits.get(itemId) ?? null) : source.unit;
+    const baseQuantity = toExactStockQuantity(
+      line.quantity,
+      unit,
+      profile.unitConversions ?? {},
+      profile.baseUnit,
+      "Pick quantity",
+    );
+    await validateTrackingSelection(
+      tx,
+      orgId,
+      itemId,
+      line.binId,
+      profile,
+      { ...line, quantity: baseQuantity },
+      "issue",
+    );
+    const matches = (
+      await tx.execute<{ ok: boolean }>(
+        sql`
       select (${line.lotId}::uuid is null or exists (
                 select 1 from lots where org_id = ${orgId} and id = ${line.lotId}::uuid and item_id = ${itemId}))
          and (${line.serialId}::uuid is null or exists (
-                select 1 from serials where org_id = ${orgId} and id = ${line.serialId}::uuid and item_id = ${itemId})) as ok`, "objects"))[0];
+                select 1 from serials where org_id = ${orgId} and id = ${line.serialId}::uuid and item_id = ${itemId})) as ok`,
+        "objects",
+      )
+    )[0];
     if (!matches?.ok) {
       throw new FulfillmentRefusal(
         `The lot or serial chosen for ${order.document_number} line ${source.line_number} is not of that line's ${line.kitComponentItemId ? "component" : "item"}`,
@@ -645,7 +773,11 @@ export async function createPickList(
     // component's own, so the picked quantity reads in the unit it issues in.
     const componentItemId = line.kitComponentItemId;
     const shaped = componentItemId
-      ? { ...source, item_id: componentItemId, unit: kitComponentUnits.get(componentItemId) ?? null }
+      ? {
+          ...source,
+          item_id: componentItemId,
+          unit: kitComponentUnits.get(componentItemId) ?? null,
+        }
       : source;
     await insertFulfillmentLine(tx, orgId, actorId, pickListId, lineNumber++, shaped, {
       binId: line.binId,
@@ -683,7 +815,9 @@ async function insertFulfillmentDocument(
   },
 ): Promise<string> {
   const { order } = doc;
-  const inserted = (await tx.execute<{ id: string }>(sql`
+  const inserted = (
+    await tx.execute<{ id: string }>(
+      sql`
     insert into documents
       (org_id, kind, document_number, party_id, document_date, currency, fx_rate, status,
        subsidiary_id, department_id, project_id, location_id, class_id, extra_dims, memo,
@@ -693,7 +827,10 @@ async function insertFulfillmentDocument(
        ${order.currency}, ${order.fx_rate}, 'draft', ${order.subsidiary_id}, ${order.department_id},
        ${order.project_id}, ${order.location_id}, ${order.class_id},
        ${JSON.stringify(order.extra_dims ?? {})}::jsonb, ${doc.memo}, '0', '0', '0', ${actorId}, ${actorId})
-    returning id`, "objects"))[0];
+    returning id`,
+      "objects",
+    )
+  )[0];
   if (!inserted) throw new Error("fulfilment document was not recorded");
   const [side] = await tx
     .insert(fulfillmentDocuments)
@@ -717,7 +854,18 @@ async function insertFulfillmentLine(
   actorId: string,
   documentId: string,
   lineNumber: number,
-  source: Pick<OrderLineRow, "id" | "item_id" | "description" | "unit" | "department_id" | "project_id" | "location_id" | "class_id" | "extra_dims">,
+  source: Pick<
+    OrderLineRow,
+    | "id"
+    | "item_id"
+    | "description"
+    | "unit"
+    | "department_id"
+    | "project_id"
+    | "location_id"
+    | "class_id"
+    | "extra_dims"
+  >,
   detail: {
     binId: string;
     quantity: string;
@@ -727,7 +875,9 @@ async function insertFulfillmentLine(
     carton: string | null;
   },
 ): Promise<string> {
-  const line = (await tx.execute<{ id: string }>(sql`
+  const line = (
+    await tx.execute<{ id: string }>(
+      sql`
     insert into document_lines
       (org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount,
        tax_amount, department_id, project_id, location_id, class_id, extra_dims, stock_location_id,
@@ -737,7 +887,10 @@ async function insertFulfillmentLine(
        ${source.unit}, '0', '0', '0', ${source.department_id}, ${source.project_id}, ${source.location_id},
        ${source.class_id}, ${JSON.stringify(source.extra_dims ?? {})}::jsonb, ${detail.binId}, false,
        ${actorId}, ${actorId})
-    returning id`, "objects"))[0];
+    returning id`,
+      "objects",
+    )
+  )[0];
   if (!line) throw new Error("fulfilment line was not recorded");
   const [row] = await tx
     .insert(fulfillmentLines)
@@ -766,21 +919,31 @@ async function insertLink(
   toId: string,
   linkType: "reserves" | "ships" | "created_from",
 ): Promise<void> {
-  const linked = await tx.execute<{ id: string }>(sql`
+  const linked = await tx.execute<{ id: string }>(
+    sql`
     insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
     values (${orgId}, ${fromId}, ${toId}, ${linkType}, ${actorId}, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (linked.length === 0) throw new Error("document link was not recorded");
 }
 
 /** Stock positions (item, bin) a document's lines draw from, sorted into the
  *  canonical fence order. Read without locks. */
-async function documentPositions(runner: SqlExecutor, orgId: string, documentId: string): Promise<[string, string][]> {
-  const rows = await runner.execute<{ item_id: string; bin_id: string }>(sql`
+async function documentPositions(
+  runner: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<[string, string][]> {
+  const rows = await runner.execute<{ item_id: string; bin_id: string }>(
+    sql`
     select distinct item_id, stock_location_id as bin_id
       from document_lines
      where org_id = ${orgId} and document_id = ${documentId}
-       and item_id is not null and stock_location_id is not null`, "objects");
+       and item_id is not null and stock_location_id is not null`,
+    "objects",
+  );
   return rows
     .map((row): [string, string] => [row.item_id, row.bin_id])
     .sort((a, b) => `${a[0]}:${a[1]}`.localeCompare(`${b[0]}:${b[1]}`));
@@ -811,7 +974,13 @@ export async function releasePickList(
     const positions = await documentPositions(db, orgId, input.pickListId);
     for (const [itemId, binId] of positions) await lockInventoryPosition(db, itemId, binId);
     await assertFulfillmentFeature(db, orgId);
-    const { order, pickList } = await lockChain(db, orgId, input.pickListId, PICK_LIST_KIND, input.allowedSubsidiaryIds);
+    const { order, pickList } = await lockChain(
+      db,
+      orgId,
+      input.pickListId,
+      PICK_LIST_KIND,
+      input.allowedSubsidiaryIds,
+    );
     if (pickList.status !== "draft") {
       throw new FulfillmentRefusal(
         `${pickList.document_number} is ${pickList.status}; only a draft pick list can be released`,
@@ -821,16 +990,27 @@ export async function releasePickList(
     }
     assertOrderOpen(order);
 
-    const lines = await db.execute<{ sales_order_line_id: string; item_id: string; quantity: string }>(sql`
+    const lines = await db.execute<{
+      sales_order_line_id: string;
+      item_id: string;
+      quantity: string;
+    }>(
+      sql`
       select fl.sales_order_line_id, line.item_id, line.quantity::text as quantity
         from fulfillment_lines fl
         join document_lines line on line.id = fl.line_id and line.org_id = fl.org_id
-       where fl.org_id = ${orgId} and fl.document_id = ${pickList.id}`, "objects");
+       where fl.org_id = ${orgId} and fl.document_id = ${pickList.id}`,
+      "objects",
+    );
     await assertWithinOpenQuantity(
       db,
       orgId,
       order.document_number,
-      lines.map((line) => ({ salesOrderLineId: line.sales_order_line_id, quantity: line.quantity, itemId: line.item_id })),
+      lines.map((line) => ({
+        salesOrderLineId: line.sales_order_line_id,
+        quantity: line.quantity,
+        itemId: line.item_id,
+      })),
       "released",
       pickList.id,
     );
@@ -838,7 +1018,12 @@ export async function releasePickList(
 
     const submission = await submitAndReleaseIfUngated(PICK_LIST_KIND, pickList.id, actorId);
     if (submission.flowError) {
-      throw new FulfillmentRefusal(submission.flowError, "approval_routing_failed", 422, "Correct the approval flow for pick lists, then release again");
+      throw new FulfillmentRefusal(
+        submission.flowError,
+        "approval_routing_failed",
+        422,
+        "Correct the approval flow for pick lists, then release again",
+      );
     }
     const status = submission.gated ? "pending_approval" : "approved";
     await writeAudit(db, orgId, actorId, pickList.id, "update", {
@@ -850,50 +1035,158 @@ export async function releasePickList(
   });
 }
 
-async function assertBinsCover(tx: SqlExecutor, orgId: string, pickList: FulfillmentDocRow, order: OrderRow): Promise<void> {
+async function assertBinsCover(
+  tx: SqlExecutor,
+  orgId: string,
+  pickList: FulfillmentDocRow,
+  order: OrderRow,
+): Promise<void> {
   const ownerId = order.subsidiary_id ?? (await loadSubsidiaryContext(tx, orgId)).rootId;
-  const selections = await tx.execute<{item_id:string;item_label:string|null;bin_id:string;bin_code:string|null;lot_id:string|null;serial_id:string|null;quantity:string;unit:string|null}>(sql`
+  const selections = await tx.execute<{
+    item_id: string;
+    item_label: string | null;
+    bin_id: string;
+    bin_code: string | null;
+    lot_id: string | null;
+    serial_id: string | null;
+    quantity: string;
+    unit: string | null;
+  }>(
+    sql`
     select dl.item_id,coalesce(i.code,i.name) as item_label,dl.stock_location_id as bin_id,bin.code as bin_code,
            fl.lot_id,fl.serial_id,dl.quantity::text,dl.unit
       from document_lines dl join fulfillment_lines fl on fl.org_id=dl.org_id and fl.line_id=dl.id
       left join items i on i.org_id=dl.org_id and i.id=dl.item_id
       left join stock_locations bin on bin.org_id=dl.org_id and bin.id=dl.stock_location_id
       where dl.org_id=${orgId} and dl.document_id=${pickList.id}
-      order by dl.item_id,dl.stock_location_id,dl.line_number`, "objects");
-  const wanted = new Map<string,{itemId:string;binId:string;lotId:string|null;serialId:string|null;quantity:string}>();
-  const bins = new Map<string,{itemId:string;itemLabel:string;binId:string;binCode:string;quantity:string}>();
+      order by dl.item_id,dl.stock_location_id,dl.line_number`,
+    "objects",
+  );
+  const wanted = new Map<
+    string,
+    {
+      itemId: string;
+      binId: string;
+      lotId: string | null;
+      serialId: string | null;
+      quantity: string;
+    }
+  >();
+  const bins = new Map<
+    string,
+    { itemId: string; itemLabel: string; binId: string; binCode: string; quantity: string }
+  >();
   for (const line of selections) {
-    if (line.item_label===null || line.bin_code===null) throw new FulfillmentRefusal(
-      'The pick line item or bin is unavailable','invalid_input',422,'Choose an inventory item and bin in this organization');
-    const profile = await resolveProfile(orgId,line.item_id,tx,true);
-    const quantity = toExactStockQuantity(line.quantity,line.unit,profile.unitConversions??{},profile.baseUnit,'Pick quantity');
-    await assertSaleableStock(tx,orgId,line.bin_id,{lotId:line.lot_id,serialId:line.serial_id});
-    await validateTrackingSelection(tx,orgId,line.item_id,line.bin_id,profile,{quantity,lotId:line.lot_id,serialId:line.serial_id},"issue");
-    const key = [line.item_id,line.bin_id,line.lot_id??'',line.serial_id??''].join(':');
-    wanted.set(key,{itemId:line.item_id,binId:line.bin_id,lotId:line.lot_id,serialId:line.serial_id,quantity:add(wanted.get(key)?.quantity??'0',quantity)});
+    if (line.item_label === null || line.bin_code === null)
+      throw new FulfillmentRefusal(
+        "The pick line item or bin is unavailable",
+        "invalid_input",
+        422,
+        "Choose an inventory item and bin in this organization",
+      );
+    const profile = await resolveProfile(orgId, line.item_id, tx, true);
+    const quantity = toExactStockQuantity(
+      line.quantity,
+      line.unit,
+      profile.unitConversions ?? {},
+      profile.baseUnit,
+      "Pick quantity",
+    );
+    await assertSaleableStock(tx, orgId, line.bin_id, {
+      lotId: line.lot_id,
+      serialId: line.serial_id,
+    });
+    await validateTrackingSelection(
+      tx,
+      orgId,
+      line.item_id,
+      line.bin_id,
+      profile,
+      { quantity, lotId: line.lot_id, serialId: line.serial_id },
+      "issue",
+    );
+    const key = [line.item_id, line.bin_id, line.lot_id ?? "", line.serial_id ?? ""].join(":");
+    wanted.set(key, {
+      itemId: line.item_id,
+      binId: line.bin_id,
+      lotId: line.lot_id,
+      serialId: line.serial_id,
+      quantity: add(wanted.get(key)?.quantity ?? "0", quantity),
+    });
     const binKey = `${line.item_id}:${line.bin_id}`;
-    bins.set(binKey,{itemId:line.item_id,itemLabel:line.item_label,binId:line.bin_id,binCode:line.bin_code,quantity:add(bins.get(binKey)?.quantity??'0',quantity)});
+    bins.set(binKey, {
+      itemId: line.item_id,
+      itemLabel: line.item_label,
+      binId: line.bin_id,
+      binCode: line.bin_code,
+      quantity: add(bins.get(binKey)?.quantity ?? "0", quantity),
+    });
   }
   for (const bin of bins.values()) {
-    const profile = await resolveProfile(orgId,bin.itemId,tx,true);
-    const holds = await activePickReservations(tx,orgId,{itemId:bin.itemId,binId:bin.binId,subsidiaryId:ownerId,releasedOnly:true,excludePickListId:pickList.id});
-    const reserved = (lotId?:string|null,serialId?:string|null) => holds
-      .filter(h=>lotId===undefined || (h.lotId===lotId && h.serialId===serialId))
-      .reduce((q,h)=>add(q,toExactStockQuantity(h.reserved,h.unit??null,profile.unitConversions??{},profile.baseUnit,'Reserved pick')),'0');
-    const onHand = await getOnHandWith(tx,orgId,bin.itemId,bin.binId,{subsidiaryId:ownerId,saleableOnly:true});
+    const profile = await resolveProfile(orgId, bin.itemId, tx, true);
+    const holds = await activePickReservations(tx, orgId, {
+      itemId: bin.itemId,
+      binId: bin.binId,
+      subsidiaryId: ownerId,
+      releasedOnly: true,
+      excludePickListId: pickList.id,
+    });
+    const reserved = (lotId?: string | null, serialId?: string | null) =>
+      holds
+        .filter((h) => lotId === undefined || (h.lotId === lotId && h.serialId === serialId))
+        .reduce(
+          (q, h) =>
+            add(
+              q,
+              toExactStockQuantity(
+                h.reserved,
+                h.unit ?? null,
+                profile.unitConversions ?? {},
+                profile.baseUnit,
+                "Reserved pick",
+              ),
+            ),
+          "0",
+        );
+    const onHand = await getOnHandWith(tx, orgId, bin.itemId, bin.binId, {
+      subsidiaryId: ownerId,
+      saleableOnly: true,
+    });
     const totalReserved = reserved();
-    if (cmp(bin.quantity,add(onHand.quantity,neg(totalReserved)))>0) {
-      const heldBy = [...new Set(holds.filter(h=>cmp(h.reserved,'0')>0).map(h=>h.pickListNumber))].sort().join(', ');
-      const heldText = heldBy ? `, ${shown(totalReserved)} reserved by ${heldBy}` : '';
+    if (cmp(bin.quantity, add(onHand.quantity, neg(totalReserved))) > 0) {
+      const heldBy = [
+        ...new Set(holds.filter((h) => cmp(h.reserved, "0") > 0).map((h) => h.pickListNumber)),
+      ]
+        .sort()
+        .join(", ");
+      const heldText = heldBy ? `, ${shown(totalReserved)} reserved by ${heldBy}` : "";
       throw new FulfillmentRefusal(
         `Bin ${bin.binCode} holds ${shown(onHand.quantity)} of ${bin.itemLabel}${heldText}; ${pickList.document_number} requests ${shown(bin.quantity)}`,
-        'bin_short',409,'Pick from another bin, receive or transfer stock into this bin, or ship what is available and leave the rest on backorder');
+        "bin_short",
+        409,
+        "Pick from another bin, receive or transfer stock into this bin, or ship what is available and leave the rest on backorder",
+      );
     }
     for (const selection of wanted.values()) {
-      if (selection.itemId!==bin.itemId || selection.binId!==bin.binId) continue;
-      const stock = await getOnHandWith(tx,orgId,bin.itemId,bin.binId,{subsidiaryId:ownerId,lotId:selection.lotId,serialId:selection.serialId,saleableOnly:true});
-      if (cmp(selection.quantity,add(stock.quantity,neg(reserved(selection.lotId,selection.serialId))))>0) throw new FulfillmentRefusal(
-        'Selected lot or serial is no longer available','insufficient_bin_stock',409,'Choose available stock and release again');
+      if (selection.itemId !== bin.itemId || selection.binId !== bin.binId) continue;
+      const stock = await getOnHandWith(tx, orgId, bin.itemId, bin.binId, {
+        subsidiaryId: ownerId,
+        lotId: selection.lotId,
+        serialId: selection.serialId,
+        saleableOnly: true,
+      });
+      if (
+        cmp(
+          selection.quantity,
+          add(stock.quantity, neg(reserved(selection.lotId, selection.serialId))),
+        ) > 0
+      )
+        throw new FulfillmentRefusal(
+          "Selected lot or serial is no longer available",
+          "insufficient_bin_stock",
+          409,
+          "Choose available stock and release again",
+        );
     }
   }
 }
@@ -927,7 +1220,12 @@ interface PickLineRow extends OrderLineRow {
 function cleanCarton(raw: string | null | undefined): string | null {
   const carton = raw?.trim() ?? "";
   if (carton.length > 60) {
-    throw new FulfillmentRefusal("A carton label must be at most 60 characters", "invalid_input", 422, "Shorten the carton label");
+    throw new FulfillmentRefusal(
+      "A carton label must be at most 60 characters",
+      "invalid_input",
+      422,
+      "Shorten the carton label",
+    );
   }
   return carton === "" ? null : carton;
 }
@@ -946,7 +1244,13 @@ export async function createShipment(
 ): Promise<CreatedFulfillmentDocument> {
   await assertFulfillmentFeature(tx, orgId);
   const documentDate = await parseDocumentDate(input.documentDate, orgId);
-  const { order, pickList } = await lockChain(tx, orgId, input.pickListId, PICK_LIST_KIND, input.allowedSubsidiaryIds);
+  const { order, pickList } = await lockChain(
+    tx,
+    orgId,
+    input.pickListId,
+    PICK_LIST_KIND,
+    input.allowedSubsidiaryIds,
+  );
   assertOrderOpen(order);
   if (pickList.status !== "approved" || pickList.stage !== "open") {
     throw new FulfillmentRefusal(
@@ -956,13 +1260,18 @@ export async function createShipment(
       pickList.status === "draft" ? `Release ${pickList.document_number} first` : undefined,
     );
   }
-  const existing = (await tx.execute<{ document_number: string }>(sql`
+  const existing = (
+    await tx.execute<{ document_number: string }>(
+      sql`
     select s.document_number
       from document_links l
       join documents s on s.id = l.to_document_id and s.org_id = l.org_id
      where l.org_id = ${orgId} and l.from_document_id = ${pickList.id} and l.link_type = 'created_from'
        and s.kind = 'shipment' and s.status <> 'voided'
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (existing) {
     throw new FulfillmentRefusal(
       `${pickList.document_number} already ships on ${existing.document_number}`,
@@ -972,7 +1281,10 @@ export async function createShipment(
     );
   }
 
-  const pickLines = await tx.execute<PickLineRow & { pick_item_id: string; pick_unit: string | null }>(sql`
+  const pickLines = await tx.execute<
+    PickLineRow & { pick_item_id: string; pick_unit: string | null }
+  >(
+    sql`
     with ${pickReservationsCte(orgId)}
     select line.id as pick_line_id, line.line_number as pick_line_number, coalesce(r.bin_id,line.stock_location_id) as bin_id,
            coalesce(r.quantity,line.quantity)::text as quantity, fl.lot_id, fl.serial_id, fl.sales_order_line_id,
@@ -986,21 +1298,39 @@ export async function createShipment(
       join document_lines so on so.id = fl.sales_order_line_id and so.org_id = fl.org_id
       left join pick_reservations r on r.pick_line_id = line.id
      where fl.org_id = ${orgId} and fl.document_id = ${pickList.id}
-     order by line.line_number`, "objects");
-  const unconfirmed=(await tx.execute(sql`select line.id from document_lines line
+     order by line.line_number`,
+    "objects",
+  );
+  const unconfirmed = (
+    await tx.execute(
+      sql`select line.id from document_lines line
     join fulfillment_documents fd on fd.org_id=line.org_id and fd.document_id=line.document_id
     left join pick_execution_lines execution on execution.org_id=line.org_id and execution.line_id=line.id
     where line.org_id=${orgId} and line.document_id=${pickList.id} and fd.execution_required
-      and execution.line_id is null limit 1`, "objects"))[0];
-  if(unconfirmed)throw new FulfillmentRefusal("Confirm every suggested pick, including short picks, before creating a shipment", "wrong_stage",409);
+      and execution.line_id is null limit 1`,
+      "objects",
+    )
+  )[0];
+  if (unconfirmed)
+    throw new FulfillmentRefusal(
+      "Confirm every suggested pick, including short picks, before creating a shipment",
+      "wrong_stage",
+      409,
+    );
   const byId = new Map(pickLines.map((line) => [line.pick_line_id, line]));
   const chosen = input.lines
     ? input.lines.map((line, index) => {
         const pick = byId.get(line.pickLineId);
         if (!pick) throw notFound("Pick line");
-        return { pick, quantity: parseQuantity(line.quantity, `Quantity on shipment line ${index + 1}`), carton: cleanCarton(line.carton) };
+        return {
+          pick,
+          quantity: parseQuantity(line.quantity, `Quantity on shipment line ${index + 1}`),
+          carton: cleanCarton(line.carton),
+        };
       })
-    : pickLines.filter((pick) => isPositiveDecimal(pick.reserved)).map((pick) => ({ pick, quantity: pick.reserved, carton: null }));
+    : pickLines
+        .filter((pick) => isPositiveDecimal(pick.reserved))
+        .map((pick) => ({ pick, quantity: pick.reserved, carton: null }));
   if (chosen.length === 0) {
     throw new FulfillmentRefusal(
       `${pickList.document_number} holds nothing left to ship`,
@@ -1009,20 +1339,45 @@ export async function createShipment(
       `Void ${pickList.document_number}; its order lines were fulfilled or cancelled another way`,
     );
   }
-  const directed=(await tx.execute<{execution_required:boolean}>(sql`select execution_required from fulfillment_documents where org_id=${orgId} and document_id=${pickList.id}`, "objects"))[0]!.execution_required;
+  const directed = (
+    await tx.execute<{ execution_required: boolean }>(
+      sql`select execution_required from fulfillment_documents where org_id=${orgId} and document_id=${pickList.id}`,
+      "objects",
+    )
+  )[0]!.execution_required;
   const once = new Set<string>();
   for (const { pick, quantity } of chosen) {
     if (once.has(pick.pick_line_id)) {
-      throw new FulfillmentRefusal(`Pick line ${pick.pick_line_number} is selected twice`, "invalid_input", 422, "Ship each pick line once");
+      throw new FulfillmentRefusal(
+        `Pick line ${pick.pick_line_number} is selected twice`,
+        "invalid_input",
+        422,
+        "Ship each pick line once",
+      );
     }
     once.add(pick.pick_line_id);
-    if(directed) {
-      const execution=(await tx.execute<{matches:boolean}>(sql`select picked_quantity=${quantity}::numeric as matches from pick_execution_lines
-        where org_id=${orgId} and line_id=${pick.pick_line_id}`, "objects"))[0];
-      if(!execution?.matches)throw new FulfillmentRefusal("Ship the full confirmed quantity from each selected pick line", "wrong_stage",409,
-        "Record the actual short pick before creating its shipment; a carton moves the selected pick position as one quantity");
+    if (directed) {
+      const execution = (
+        await tx.execute<{ matches: boolean }>(
+          sql`select picked_quantity=${quantity}::numeric as matches from pick_execution_lines
+        where org_id=${orgId} and line_id=${pick.pick_line_id}`,
+          "objects",
+        )
+      )[0];
+      if (!execution?.matches)
+        throw new FulfillmentRefusal(
+          "Ship the full confirmed quantity from each selected pick line",
+          "wrong_stage",
+          409,
+          "Record the actual short pick before creating its shipment; a carton moves the selected pick position as one quantity",
+        );
     }
-    const fits = (await tx.execute<{ fits: boolean }>(sql`select ${quantity}::numeric <= ${pick.reserved}::numeric as fits`, "objects"))[0]!;
+    const fits = (
+      await tx.execute<{ fits: boolean }>(
+        sql`select ${quantity}::numeric <= ${pick.reserved}::numeric as fits`,
+        "objects",
+      )
+    )[0]!;
     if (!fits.fits) {
       throw new FulfillmentRefusal(
         `Pick line ${pick.pick_line_number} reserves ${shown(pick.reserved)}; cannot ship ${quantity}`,
@@ -1033,12 +1388,18 @@ export async function createShipment(
     }
   }
 
-  const shipTo = (await tx.execute<ShipToAddress & Record<string, unknown>>(sql`
+  const shipTo =
+    (
+      await tx.execute<ShipToAddress & Record<string, unknown>>(
+        sql`
     select a.label, a.line1, a.line2, a.city, a.region, a.postal_code as "postalCode", a.country
       from addresses a
      where a.org_id = ${orgId} and a.party_id = ${order.party_id} and a.is_default_shipping
      order by a.created_at, a.id
-     limit 1`, "objects"))[0] ?? null;
+     limit 1`,
+        "objects",
+      )
+    )[0] ?? null;
 
   const documentNumber = await allocateDocumentNumber(tx, orgId, SHIPMENT_KIND, "SHP-");
   const shipmentId = await insertFulfillmentDocument(tx, orgId, actorId, {
@@ -1049,7 +1410,15 @@ export async function createShipment(
     order,
     warehouseId: pickList.warehouse_id,
     shipToAddress: shipTo
-      ? { label: shipTo.label, line1: shipTo.line1, line2: shipTo.line2, city: shipTo.city, region: shipTo.region, postalCode: shipTo.postalCode, country: shipTo.country }
+      ? {
+          label: shipTo.label,
+          line1: shipTo.line1,
+          line2: shipTo.line2,
+          city: shipTo.city,
+          region: shipTo.region,
+          postalCode: shipTo.postalCode,
+          country: shipTo.country,
+        }
       : null,
   });
   let lineNumber = 1;
@@ -1057,9 +1426,10 @@ export async function createShipment(
     // A kit component row ships the component the pick holds: the shipment
     // line carries the component's item and unit with the component quantity,
     // while still pointing at the kit's order line for open-quantity math.
-    const shaped = pick.pick_item_id && pick.pick_item_id !== pick.item_id
-      ? { ...pick, item_id: pick.pick_item_id, unit: pick.pick_unit }
-      : pick;
+    const shaped =
+      pick.pick_item_id && pick.pick_item_id !== pick.item_id
+        ? { ...pick, item_id: pick.pick_item_id, unit: pick.pick_unit }
+        : pick;
     await insertFulfillmentLine(tx, orgId, actorId, shipmentId, lineNumber++, shaped, {
       binId: pick.bin_id,
       quantity,
@@ -1077,12 +1447,21 @@ export async function createShipment(
     pickListId: pickList.id,
     salesOrderId: order.id,
     stage: "open",
-    lines: chosen.map(({ pick, quantity, carton }) => ({ pickLineId: pick.pick_line_id, quantity, carton })),
+    lines: chosen.map(({ pick, quantity, carton }) => ({
+      pickLineId: pick.pick_line_id,
+      quantity,
+      carton,
+    })),
   });
   return { id: shipmentId, documentNumber };
 }
 
-export async function lockDraftShipment(tx: SqlExecutor, orgId: string, shipmentId: string, scope: Scope): Promise<FulfillmentDocRow> {
+export async function lockDraftShipment(
+  tx: SqlExecutor,
+  orgId: string,
+  shipmentId: string,
+  scope: Scope,
+): Promise<FulfillmentDocRow> {
   const { shipment } = await lockChain(tx, orgId, shipmentId, SHIPMENT_KIND, scope);
   if (!shipment || shipment.status !== "draft" || shipment.stage !== "open") {
     const state = shipment?.stage === "done" ? "complete" : shipment?.status;
@@ -1113,10 +1492,15 @@ export async function setShipmentCarrier(
 ): Promise<void> {
   await assertFulfillmentFeature(tx, orgId);
   const shipment = await lockDraftShipment(tx, orgId, input.shipmentId, input.allowedSubsidiaryIds);
-  const carrier = (await tx.execute<{ id: string; code: string; services: string[]; is_active: boolean }>(sql`
+  const carrier = (
+    await tx.execute<{ id: string; code: string; services: string[]; is_active: boolean }>(
+      sql`
     select id, code, services, is_active from carriers
      where org_id = ${orgId} and id = ${input.carrierId}
-     for share`, "objects"))[0];
+     for share`,
+      "objects",
+    )
+  )[0];
   if (!carrier || !carrier.is_active) {
     throw new FulfillmentRefusal(
       carrier ? `Carrier ${carrier.code} is inactive` : "Carrier not found",
@@ -1136,20 +1520,36 @@ export async function setShipmentCarrier(
   }
   const tracking = input.trackingNumber?.trim() || null;
   if (tracking && tracking.length > 100) {
-    throw new FulfillmentRefusal("A tracking number must be at most 100 characters", "invalid_input", 422);
+    throw new FulfillmentRefusal(
+      "A tracking number must be at most 100 characters",
+      "invalid_input",
+      422,
+    );
   }
-  const updated = await tx.execute<{ document_id: string }>(sql`
+  const updated = await tx.execute<{ document_id: string }>(
+    sql`
     update fulfillment_documents
        set carrier_id = ${carrier.id}, carrier_service = ${service}, tracking_number = ${tracking},
            updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and document_id = ${shipment.id} and stage = 'open'
-    returning document_id`, "objects");
+    returning document_id`,
+    "objects",
+  );
   if (updated.length === 0) {
-    throw new FulfillmentRefusal(`${shipment.document_number} changed while its carrier was being set`, "changed_concurrently", 409, "Reload the shipment and try again");
+    throw new FulfillmentRefusal(
+      `${shipment.document_number} changed while its carrier was being set`,
+      "changed_concurrently",
+      409,
+      "Reload the shipment and try again",
+    );
   }
   await writeAudit(tx, orgId, actorId, shipment.id, "update", {
     mode: "shipment_carrier_set",
-    before: { carrierId: shipment.carrier_id, carrierService: shipment.carrier_service, trackingNumber: shipment.tracking_number },
+    before: {
+      carrierId: shipment.carrier_id,
+      carrierService: shipment.carrier_service,
+      trackingNumber: shipment.tracking_number,
+    },
     after: { carrierId: carrier.id, carrierService: service, trackingNumber: tracking },
   });
 }
@@ -1159,28 +1559,50 @@ export async function setShipmentCartons(
   tx: Tx,
   orgId: string,
   actorId: string,
-  input: { shipmentId: string; cartons: { lineId: string; carton: string | null }[]; allowedSubsidiaryIds: Scope },
+  input: {
+    shipmentId: string;
+    cartons: { lineId: string; carton: string | null }[];
+    allowedSubsidiaryIds: Scope;
+  },
 ): Promise<void> {
   await assertFulfillmentFeature(tx, orgId);
   const shipment = await lockDraftShipment(tx, orgId, input.shipmentId, input.allowedSubsidiaryIds);
   const changes: { lineId: string; before: string | null; after: string | null }[] = [];
   for (const entry of input.cartons) {
     const carton = cleanCarton(entry.carton);
-    const unit=(await tx.execute<{code:string}>(sql`select unit.code from handling_unit_contents content
+    const unit = (
+      await tx.execute<{ code: string }>(
+        sql`select unit.code from handling_unit_contents content
       join handling_units unit on unit.org_id=content.org_id and unit.id=content.handling_unit_id
-      where content.org_id=${orgId} and content.shipment_line_id=${entry.lineId}`, "objects"))[0];
-    if(unit && unit.code!==carton)throw new FulfillmentRefusal("This line belongs to a handling unit; review its assigned carton in Packing", "wrong_stage",409);
-    const updated = (await tx.execute<{ before: string | null }>(sql`
+      where content.org_id=${orgId} and content.shipment_line_id=${entry.lineId}`,
+        "objects",
+      )
+    )[0];
+    if (unit && unit.code !== carton)
+      throw new FulfillmentRefusal(
+        "This line belongs to a handling unit; review its assigned carton in Packing",
+        "wrong_stage",
+        409,
+      );
+    const updated = (
+      await tx.execute<{ before: string | null }>(
+        sql`
       update fulfillment_lines fl
          set carton = ${carton}, updated_at = now(), updated_by = ${actorId}
         from fulfillment_lines prior
        where fl.org_id = ${orgId} and fl.document_id = ${shipment.id} and fl.line_id = ${entry.lineId}
          and prior.line_id = fl.line_id and prior.org_id = fl.org_id
-      returning prior.carton as before`, "objects"))[0];
+      returning prior.carton as before`,
+        "objects",
+      )
+    )[0];
     if (!updated) throw notFound("Shipment line");
     changes.push({ lineId: entry.lineId, before: updated.before, after: carton });
   }
-  await writeAudit(tx, orgId, actorId, shipment.id, "update", { mode: "shipment_cartons_set", changes });
+  await writeAudit(tx, orgId, actorId, shipment.id, "update", {
+    mode: "shipment_cartons_set",
+    changes,
+  });
 }
 
 /**
@@ -1196,15 +1618,26 @@ export async function voidPickList(
 ): Promise<void> {
   await assertFulfillmentFeature(tx, orgId);
   const reason = requireReason(input.reason);
-  const { pickList } = await lockChain(tx, orgId, input.pickListId, PICK_LIST_KIND, input.allowedSubsidiaryIds);
+  const { pickList } = await lockChain(
+    tx,
+    orgId,
+    input.pickListId,
+    PICK_LIST_KIND,
+    input.allowedSubsidiaryIds,
+  );
   assertVoidable(pickList, "Pick list");
-  const shipment = (await tx.execute<{ document_number: string }>(sql`
+  const shipment = (
+    await tx.execute<{ document_number: string }>(
+      sql`
     select s.document_number
       from document_links l
       join documents s on s.id = l.to_document_id and s.org_id = l.org_id
      where l.org_id = ${orgId} and l.from_document_id = ${pickList.id} and l.link_type = 'created_from'
        and s.status <> 'voided'
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (shipment) {
     throw new FulfillmentRefusal(
       `${pickList.document_number} ships on ${shipment.document_number}`,
@@ -1225,28 +1658,65 @@ export async function voidShipment(
 ): Promise<void> {
   await assertFulfillmentFeature(tx, orgId);
   const reason = requireReason(input.reason);
-  const { shipment } = await lockChain(tx, orgId, input.shipmentId, SHIPMENT_KIND, input.allowedSubsidiaryIds);
+  const { shipment } = await lockChain(
+    tx,
+    orgId,
+    input.shipmentId,
+    SHIPMENT_KIND,
+    input.allowedSubsidiaryIds,
+  );
   assertVoidable(shipment!, "Shipment");
-  const paid=(await tx.execute(sql`select id from shipment_labels where org_id=${orgId} and shipment_document_id=${shipment!.id}
-    and status='purchased' limit 1`, "objects"))[0];
-  if(paid)throw new FulfillmentRefusal("Void purchased labels before voiding this shipment", "wrong_stage",409);
+  const paid = (
+    await tx.execute(
+      sql`select id from shipment_labels where org_id=${orgId} and shipment_document_id=${shipment!.id}
+    and status='purchased' limit 1`,
+      "objects",
+    )
+  )[0];
+  if (paid)
+    throw new FulfillmentRefusal(
+      "Void purchased labels before voiding this shipment",
+      "wrong_stage",
+      409,
+    );
   await markVoided(tx, orgId, actorId, shipment!, reason);
-  const units=await tx.execute<{id:string;before_status:string}>(sql`with prior as (select id,status from handling_units
+  const units = await tx.execute<{ id: string; before_status: string }>(
+    sql`with prior as (select id,status from handling_units
       where org_id=${orgId} and shipment_document_id=${shipment!.id} and status in('open','packed') for update)
     update handling_units unit set status='voided',updated_at=now(),updated_by=${actorId}
-    from prior where unit.org_id=${orgId} and unit.id=prior.id returning unit.id,prior.status as before_status`, "objects");
-  for(const unit of units) {
-    const audited=await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-      values(${orgId},'handling_units',${unit.id},'update',${JSON.stringify({operation:"void_carton",shipmentId:shipment!.id,
-        before:{status:unit.before_status},after:{status:"voided"},reason})}::jsonb,${actorId}) returning id`, "objects");
-    if(audited.length!==1)throw new FulfillmentRefusal("Handling-unit void was not audited","changed_concurrently",409);
+    from prior where unit.org_id=${orgId} and unit.id=prior.id returning unit.id,prior.status as before_status`,
+    "objects",
+  );
+  for (const unit of units) {
+    const audited = await tx.execute(
+      sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+      values(${orgId},'handling_units',${unit.id},'update',${JSON.stringify({
+        operation: "void_carton",
+        shipmentId: shipment!.id,
+        before: { status: unit.before_status },
+        after: { status: "voided" },
+        reason,
+      })}::jsonb,${actorId}) returning id`,
+      "objects",
+    );
+    if (audited.length !== 1)
+      throw new FulfillmentRefusal(
+        "Handling-unit void was not audited",
+        "changed_concurrently",
+        409,
+      );
   }
 }
 
 function requireReason(raw: string): string {
   const reason = raw.trim();
   if (!reason) {
-    throw new FulfillmentRefusal("A reason is required to void", "invalid_input", 422, "Enter why the document is being voided");
+    throw new FulfillmentRefusal(
+      "A reason is required to void",
+      "invalid_input",
+      422,
+      "Enter why the document is being voided",
+    );
   }
   return reason;
 }
@@ -1273,15 +1743,29 @@ function assertVoidable(doc: FulfillmentDocRow, label: string): void {
   }
 }
 
-async function markVoided(tx: SqlExecutor, orgId: string, actorId: string, doc: FulfillmentDocRow, reason: string): Promise<void> {
-  const voided = await tx.execute<{ id: string }>(sql`
+async function markVoided(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  doc: FulfillmentDocRow,
+  reason: string,
+): Promise<void> {
+  const voided = await tx.execute<{ id: string }>(
+    sql`
     update documents
        set status = 'voided', voided_at = now(), voided_by = ${actorId}, void_reason = ${reason},
            updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${doc.id} and status = ${doc.status}
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (voided.length === 0) {
-    throw new FulfillmentRefusal(`${doc.document_number} changed while it was being voided`, "changed_concurrently", 409, "Reload and try again");
+    throw new FulfillmentRefusal(
+      `${doc.document_number} changed while it was being voided`,
+      "changed_concurrently",
+      409,
+      "Reload and try again",
+    );
   }
   await writeAudit(tx, orgId, actorId, doc.id, "void", {
     mode: `${doc.kind}_voided`,
@@ -1314,8 +1798,8 @@ export interface FulfillmentLineView {
   serialNumber: string | null;
   pickLineId: string | null;
   carton: string | null;
-  pickedQuantity?:string|null;
-  shortQuantity?:string|null;
+  pickedQuantity?: string | null;
+  shortQuantity?: string | null;
   /**
    * Set when the row covers a kit's component rather than its order line's
    * own item: the kit it belongs to, so the form nests the row under it.
@@ -1344,8 +1828,8 @@ export interface FulfillmentDocumentView {
   shipToAddress: ShipToAddress | null;
   salesFulfillment: { id: string; number: string } | null;
   completedAt: string | null;
-  pickPriority?:number;
-  releaseCutoffAt?:string|null;
+  pickPriority?: number;
+  releaseCutoffAt?: string | null;
   lines: FulfillmentLineView[];
 }
 
@@ -1379,7 +1863,8 @@ interface ViewRow extends Record<string, unknown> {
   sales_fulfillment_id: string | null;
   sales_fulfillment_number: string | null;
   completed_at: string | null;
-  pick_priority:number;release_cutoff_at:string|null;
+  pick_priority: number;
+  release_cutoff_at: string | null;
 }
 
 /**
@@ -1394,7 +1879,9 @@ export async function getFulfillmentDocument(
   scope: Scope,
 ): Promise<FulfillmentDocumentView | null> {
   await assertFulfillmentFeature(runner, orgId);
-  const row = (await runner.execute<ViewRow>(sql`
+  const row = (
+    await runner.execute<ViewRow>(
+      sql`
     select d.id, d.kind, d.document_number, d.status, fd.stage, d.document_date::text as document_date, d.memo,
            d.subsidiary_id, d.party_id, p.display_name as party_name,
            so.id as sales_order_id, so.document_number as sales_order_number,
@@ -1429,16 +1916,33 @@ export async function getFulfillmentDocument(
            and down.kind = 'shipment'
          order by (down.status = 'voided'), down.created_at desc
          limit 1) ship on d.kind = 'pick_list'
-     where d.org_id = ${orgId} and d.id = ${documentId} and d.kind in ('pick_list', 'shipment')`, "objects"))[0];
+     where d.org_id = ${orgId} and d.id = ${documentId} and d.kind in ('pick_list', 'shipment')`,
+      "objects",
+    )
+  )[0];
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) return null;
   const lines = await runner.execute<{
-    line_id: string; line_number: number; item_id: string; item_label: string; description: string | null;
-    bin_id: string; bin_code: string; quantity: string; unit: string | null; sales_order_line_id: string;
-    sales_order_line_number: number; lot_number: string | null; serial_number: string | null;
-    pick_line_id: string | null; carton: string | null;
-    picked_quantity:string|null;short_quantity:string|null;
-    kit_item_id: string | null; kit_label: string | null;
-  }>(sql`
+    line_id: string;
+    line_number: number;
+    item_id: string;
+    item_label: string;
+    description: string | null;
+    bin_id: string;
+    bin_code: string;
+    quantity: string;
+    unit: string | null;
+    sales_order_line_id: string;
+    sales_order_line_number: number;
+    lot_number: string | null;
+    serial_number: string | null;
+    pick_line_id: string | null;
+    carton: string | null;
+    picked_quantity: string | null;
+    short_quantity: string | null;
+    kit_item_id: string | null;
+    kit_label: string | null;
+  }>(
+    sql`
     select line.id as line_id, line.line_number, line.item_id, coalesce(i.code || ' · ' || i.name, i.name) as item_label,
            line.description, line.stock_location_id as bin_id, bin.code as bin_code, line.quantity::text as quantity,
            line.unit, fl.sales_order_line_id, so.line_number as sales_order_line_number,
@@ -1456,7 +1960,9 @@ export async function getFulfillmentDocument(
       left join lots lot on lot.id = fl.lot_id
       left join serials serial on serial.id = fl.serial_id
      where line.org_id = ${orgId} and line.document_id = ${row.id}
-     order by line.line_number`, "objects");
+     order by line.line_number`,
+    "objects",
+  );
   const ref = (id: string | null, number: string | null) => (id && number ? { id, number } : null);
   return {
     id: row.id,
@@ -1472,13 +1978,17 @@ export async function getFulfillmentDocument(
     pickList: ref(row.pick_list_id, row.pick_list_number),
     shipment: ref(row.shipment_id, row.shipment_number),
     warehouse: { id: row.warehouse_id, code: row.warehouse_code, name: row.warehouse_name },
-    carrier: row.carrier_id ? { id: row.carrier_id, code: row.carrier_code ?? "", name: row.carrier_name ?? "" } : null,
+    carrier: row.carrier_id
+      ? { id: row.carrier_id, code: row.carrier_code ?? "", name: row.carrier_name ?? "" }
+      : null,
     carrierService: row.carrier_service,
     trackingNumber: row.tracking_number,
     trackingUrl: trackingUrl(row.tracking_url_template, row.tracking_number),
     shipToAddress: row.ship_to_address,
     salesFulfillment: ref(row.sales_fulfillment_id, row.sales_fulfillment_number),
-    completedAt: row.completed_at,pickPriority:row.pick_priority,releaseCutoffAt:row.release_cutoff_at,
+    completedAt: row.completed_at,
+    pickPriority: row.pick_priority,
+    releaseCutoffAt: row.release_cutoff_at,
     lines: lines.map((line) => ({
       lineId: line.line_id,
       lineNumber: Number(line.line_number),
@@ -1495,10 +2005,12 @@ export async function getFulfillmentDocument(
       serialNumber: line.serial_number,
       pickLineId: line.pick_line_id,
       carton: line.carton,
-      pickedQuantity:line.picked_quantity,shortQuantity:line.short_quantity,
-      kitGroup: line.kit_item_id && line.kit_label
-        ? { kitItemId: line.kit_item_id, kitLabel: line.kit_label }
-        : null,
+      pickedQuantity: line.picked_quantity,
+      shortQuantity: line.short_quantity,
+      kitGroup:
+        line.kit_item_id && line.kit_label
+          ? { kitItemId: line.kit_item_id, kitLabel: line.kit_label }
+          : null,
     })),
   };
 }
@@ -1524,16 +2036,32 @@ export interface FulfillmentListRow {
 export async function listFulfillmentDocuments(
   runner: SqlExecutor,
   orgId: string,
-  filter: { kind: FulfillmentKind; openOnly?: boolean; limit?: number; allowedSubsidiaryIds: Scope },
+  filter: {
+    kind: FulfillmentKind;
+    openOnly?: boolean;
+    limit?: number;
+    allowedSubsidiaryIds: Scope;
+  },
 ): Promise<FulfillmentListRow[]> {
   await assertFulfillmentFeature(runner, orgId);
   const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200);
   const rows = await runner.execute<{
-    id: string; kind: FulfillmentKind; document_number: string; status: string; stage: "open" | "done";
-    document_date: string; subsidiary_id: string | null; party_name: string | null; sales_order_number: string | null;
-    warehouse_code: string; carrier_name: string | null; carrier_service: string | null; tracking_number: string | null;
+    id: string;
+    kind: FulfillmentKind;
+    document_number: string;
+    status: string;
+    stage: "open" | "done";
+    document_date: string;
+    subsidiary_id: string | null;
+    party_name: string | null;
+    sales_order_number: string | null;
+    warehouse_code: string;
+    carrier_name: string | null;
+    carrier_service: string | null;
+    tracking_number: string | null;
     tracking_url_template: string | null;
-  }>(sql`
+  }>(
+    sql`
     select d.id, d.kind, d.document_number, d.status, fd.stage, d.document_date::text as document_date,
            d.subsidiary_id, p.display_name as party_name,
            (select so.document_number from document_links l
@@ -1550,7 +2078,9 @@ export async function listFulfillmentDocuments(
      where d.org_id = ${orgId} and d.kind = ${filter.kind}
        ${filter.openOnly ? sql`and fd.stage = 'open' and d.status <> 'voided'` : sql``}
      order by d.created_at desc, d.id desc
-     limit ${limit}`, "objects");
+     limit ${limit}`,
+    "objects",
+  );
   return rows
     .filter((row) => subsidiaryScopeAllows(filter.allowedSubsidiaryIds, row.subsidiary_id))
     .map((row) => ({
@@ -1580,23 +2110,36 @@ export async function markShipmentComplete(
   tx: SqlExecutor,
   orgId: string,
   actorId: string,
-  input: { shipment: { id: string; documentNumber: string }; pickListId: string; salesFulfillmentId: string },
+  input: {
+    shipment: { id: string; documentNumber: string };
+    pickListId: string;
+    salesFulfillmentId: string;
+  },
 ): Promise<void> {
-  const shipment = await tx.execute<{ document_id: string }>(sql`
+  const shipment = await tx.execute<{ document_id: string }>(
+    sql`
     update fulfillment_documents
        set stage = 'done', sales_fulfillment_id = ${input.salesFulfillmentId},
            completed_at = now(), completed_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and document_id = ${input.shipment.id} and stage = 'open'
-    returning document_id`, "objects");
-  const released = await tx.execute<{ id: string }>(sql`
+    returning document_id`,
+    "objects",
+  );
+  const released = await tx.execute<{ id: string }>(
+    sql`
     update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${input.shipment.id} and status = 'draft'
-    returning id`, "objects");
-  const pickList = await tx.execute<{ document_id: string }>(sql`
+    returning id`,
+    "objects",
+  );
+  const pickList = await tx.execute<{ document_id: string }>(
+    sql`
     update fulfillment_documents
        set stage = 'done', completed_at = now(), completed_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and document_id = ${input.pickListId} and stage = 'open'
-    returning document_id`, "objects");
+    returning document_id`,
+    "objects",
+  );
   if (shipment.length === 0 || released.length === 0 || pickList.length === 0) {
     throw new FulfillmentRefusal(
       `${input.shipment.documentNumber} changed while it was being completed`,
@@ -1654,11 +2197,21 @@ export async function lockShipmentForCompletion(
   const positions = await documentPositions(tx, orgId, shipmentId);
   for (const [itemId, binId] of positions) await lockInventoryPosition(tx, itemId, binId);
   await assertFulfillmentFeature(tx, orgId);
-  const { order, pickList, shipment } = await lockChain(tx, orgId, shipmentId, SHIPMENT_KIND, scope);
+  const { order, pickList, shipment } = await lockChain(
+    tx,
+    orgId,
+    shipmentId,
+    SHIPMENT_KIND,
+    scope,
+  );
   const locked = shipment!;
   if (locked.stage !== "done") {
     if (locked.status !== "draft") {
-      throw new FulfillmentRefusal(`${locked.document_number} is ${locked.status}; it cannot be completed`, "wrong_stage", 409);
+      throw new FulfillmentRefusal(
+        `${locked.document_number} is ${locked.status}; it cannot be completed`,
+        "wrong_stage",
+        409,
+      );
     }
     if (!locked.carrier_id || !locked.carrier_service) {
       throw new FulfillmentRefusal(
@@ -1677,12 +2230,18 @@ export async function lockShipmentForCompletion(
       );
     }
     assertOrderOpen(order);
-    await assertShipmentPacked(tx,orgId,locked.id);
+    await assertShipmentPacked(tx, orgId, locked.id);
   }
   const lines = await tx.execute<{
-    sales_order_line_id: string; order_item_id: string | null; item_id: string | null;
-    quantity: string; bin_id: string; lot_id: string | null; serial_id: string | null;
-  }>(sql`
+    sales_order_line_id: string;
+    order_item_id: string | null;
+    item_id: string | null;
+    quantity: string;
+    bin_id: string;
+    lot_id: string | null;
+    serial_id: string | null;
+  }>(
+    sql`
     select fl.sales_order_line_id, so.item_id as order_item_id, line.item_id,
            line.quantity::text as quantity, line.stock_location_id as bin_id,
            fl.lot_id, fl.serial_id
@@ -1690,7 +2249,9 @@ export async function lockShipmentForCompletion(
       join document_lines line on line.id = fl.line_id and line.org_id = fl.org_id
       join document_lines so on so.id = fl.sales_order_line_id and so.org_id = fl.org_id
      where fl.org_id = ${orgId} and fl.document_id = ${locked.id}
-     order by line.line_number`, "objects");
+     order by line.line_number`,
+    "objects",
+  );
   return {
     shipment: locked,
     pickListId: pickList.id,
@@ -1716,9 +2277,14 @@ export async function fulfillmentDocumentScope(
   documentId: string,
   kind: FulfillmentKind,
 ): Promise<{ id: string; subsidiaryId: string | null } | null> {
-  const row = (await runner.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const row = (
+    await runner.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`
     select id, subsidiary_id from documents
-     where org_id = ${orgId} and id = ${documentId} and kind = ${kind}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${documentId} and kind = ${kind}`,
+      "objects",
+    )
+  )[0];
   return row ? { id: row.id, subsidiaryId: row.subsidiary_id } : null;
 }
 
@@ -1775,19 +2341,47 @@ export async function pickCandidates(
   scope: Scope,
 ): Promise<{ salesOrderId: string; documentNumber: string; lines: PickCandidateLine[] } | null> {
   await assertFulfillmentFeature(runner, orgId);
-  const order = (await runner.execute<{ id: string; document_number: string; status: string; kind: string; subsidiary_id: string | null }>(sql`
+  const order = (
+    await runner.execute<{
+      id: string;
+      document_number: string;
+      status: string;
+      kind: string;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select id, document_number, status, kind, subsidiary_id from documents
-     where org_id = ${orgId} and id = ${salesOrderId}`, "objects"))[0];
-  if (!order || order.kind !== "sales_order" || !subsidiaryScopeAllows(scope, order.subsidiary_id)) return null;
+     where org_id = ${orgId} and id = ${salesOrderId}`,
+      "objects",
+    )
+  )[0];
+  if (!order || order.kind !== "sales_order" || !subsidiaryScopeAllows(scope, order.subsidiary_id))
+    return null;
   const ownerId = order.subsidiary_id ?? (await loadSubsidiaryContext(runner, orgId)).rootId;
-  const orderDate = (await runner.execute<{ document_date: string }>(sql`
+  const orderDate = (
+    await runner.execute<{ document_date: string }>(
+      sql`
     select document_date::text as document_date from documents
-     where org_id = ${orgId} and id = ${order.id}`, "objects"))[0]?.document_date;
+     where org_id = ${orgId} and id = ${order.id}`,
+      "objects",
+    )
+  )[0]?.document_date;
   const rows = await runner.execute<{
-    sales_order_line_id: string; line_number: number; item_id: string; item_kind: string; item_label: string; description: string | null;
-    unit: string | null; warehouse_id: string | null; warehouse_code: string | null; open: string; held: string; pickable: string;
+    sales_order_line_id: string;
+    line_number: number;
+    item_id: string;
+    item_kind: string;
+    item_label: string;
+    description: string | null;
+    unit: string | null;
+    warehouse_id: string | null;
+    warehouse_code: string | null;
+    open: string;
+    held: string;
+    pickable: string;
     bins: { binId: string; binCode: string; onHand: string }[] | null;
-  }>(sql`
+  }>(
+    sql`
     with ${pickReservationsCte(orgId)},
     held as (
       select r.sales_order_line_id, sum(r.reserved) as reserved
@@ -1816,16 +2410,18 @@ export async function pickCandidates(
                       join cost_layers cl on cl.stock_location_id = sl.id and cl.org_id = sl.org_id
                                          and cl.item_id = l.item_id and cl.subsidiary_id = ${ownerId}
                      where sl.org_id = ${orgId} and sl.is_active
-                       and ${saleableLocation(sql`sl.org_id`,sql`sl.id`)}
+                       and ${saleableLocation(sql`sl.org_id`, sql`sl.id`)}
                        and exists(select 1 from inventory_movements source where source.org_id=cl.org_id and source.id=cl.source_movement_id
-                         and ${unheldTracking(sql`source.org_id`,sql`source.lot_id`,sql`source.serial_id`)})
+                         and ${unheldTracking(sql`source.org_id`, sql`source.lot_id`, sql`source.serial_id`)})
                        and stock_location_warehouse(sl.org_id, sl.id) = l.warehouse_id
                      group by sl.id, sl.code
                     having sum(cl.remaining_quantity) > 0) b) as bins
       from lines l
       left join stock_locations wl on wl.id = l.warehouse_id and wl.org_id = ${orgId}
       left join held h on h.sales_order_line_id = l.id
-     order by l.line_number`, "objects");
+     order by l.line_number`,
+    "objects",
+  );
   const kitComponents = await kitPickComponents(runner, orgId, {
     orderId: order.id,
     orderDate,
@@ -1839,11 +2435,23 @@ export async function pickCandidates(
         warehouseId: row.warehouse_id,
       })),
   });
-  const allocations=new Map<string,PhysicalAllocation[]>();
+  const allocations = new Map<string, PhysicalAllocation[]>();
   for (const row of rows) {
-    if (row.warehouse_id && row.item_kind!=='kit') allocations.set(row.sales_order_line_id,await allocationCandidates(runner,orgId,row.item_id,row.warehouse_id,ownerId,row.unit));
-    for (const component of kitComponents.get(row.sales_order_line_id)??[]) {
-      if (row.warehouse_id) component.allocations=await allocationCandidates(runner,orgId,component.componentItemId,row.warehouse_id,ownerId,component.unit??null);
+    if (row.warehouse_id && row.item_kind !== "kit")
+      allocations.set(
+        row.sales_order_line_id,
+        await allocationCandidates(runner, orgId, row.item_id, row.warehouse_id, ownerId, row.unit),
+      );
+    for (const component of kitComponents.get(row.sales_order_line_id) ?? []) {
+      if (row.warehouse_id)
+        component.allocations = await allocationCandidates(
+          runner,
+          orgId,
+          component.componentItemId,
+          row.warehouse_id,
+          ownerId,
+          component.unit ?? null,
+        );
     }
   }
   return {
@@ -1862,8 +2470,10 @@ export async function pickCandidates(
       heldByPickLists: row.held,
       pickable: row.pickable,
       bins: row.bins ?? [],
-      allocations:allocations.get(row.sales_order_line_id)??[],
-      ...(row.item_kind === "kit" ? { kitComponents: kitComponents.get(row.sales_order_line_id) ?? [] } : {}),
+      allocations: allocations.get(row.sales_order_line_id) ?? [],
+      ...(row.item_kind === "kit"
+        ? { kitComponents: kitComponents.get(row.sales_order_line_id) ?? [] }
+        : {}),
     })),
   };
 }
@@ -1881,7 +2491,12 @@ async function kitPickComponents(
     orderId: string;
     orderDate: string | undefined;
     ownerId: string;
-    lines: { salesOrderLineId: string; kitItemId: string; open: string; warehouseId: string | null }[];
+    lines: {
+      salesOrderLineId: string;
+      kitItemId: string;
+      open: string;
+      warehouseId: string | null;
+    }[];
   },
 ): Promise<Map<string, KitComponentCandidate[]>> {
   const out = new Map<string, KitComponentCandidate[]>();
@@ -1896,7 +2511,8 @@ async function kitPickComponents(
     held: string;
     pickable: string;
     bins: { binId: string; binCode: string; onHand: string }[] | null;
-  }>(sql`
+  }>(
+    sql`
     with ${pickReservationsCte(orgId)},
     kit_open as (
       select dl.id as sales_order_line_id, dl.item_id as kit_item_id,
@@ -1925,9 +2541,9 @@ async function kitPickComponents(
                       join cost_layers cl on cl.stock_location_id = sl.id and cl.org_id = sl.org_id
                                          and cl.item_id = b.component_item_id and cl.subsidiary_id = ${scope.ownerId}
                      where sl.org_id = ${orgId} and sl.is_active
-                       and ${saleableLocation(sql`sl.org_id`,sql`sl.id`)}
+                       and ${saleableLocation(sql`sl.org_id`, sql`sl.id`)}
                        and exists(select 1 from inventory_movements source where source.org_id=cl.org_id and source.id=cl.source_movement_id
-                         and ${unheldTracking(sql`source.org_id`,sql`source.lot_id`,sql`source.serial_id`)})
+                         and ${unheldTracking(sql`source.org_id`, sql`source.lot_id`, sql`source.serial_id`)})
                        and stock_location_warehouse(sl.org_id, sl.id) = k.warehouse_id
                      group by sl.id, sl.code
                     having sum(cl.remaining_quantity) > 0) bins) as bins
@@ -1942,7 +2558,9 @@ async function kitPickComponents(
       join items component on component.id = b.component_item_id and component.org_id = ${orgId}
        and component.kind in ('inventory', 'assembly')
       left join held h on h.sales_order_line_id = k.sales_order_line_id and h.item_id = b.component_item_id
-     order by k.sales_order_line_id, b.sort_order, b.component_item_id`, "objects");
+     order by k.sales_order_line_id, b.sort_order, b.component_item_id`,
+    "objects",
+  );
   for (const row of rows) {
     const list = out.get(row.sales_order_line_id) ?? [];
     list.push({

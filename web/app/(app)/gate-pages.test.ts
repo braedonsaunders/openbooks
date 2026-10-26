@@ -19,14 +19,12 @@ declare global {
   var __pageFeatures: Record<string, boolean>;
 }
 
-const shellEn = JSON.parse(readFileSync(join(root, "web", "messages", "en", "shell.json"), "utf8")) as Record<
-  string,
-  Record<string, unknown>
->;
-const adminEn = JSON.parse(readFileSync(join(root, "web", "messages", "en", "admin.json"), "utf8")) as Record<
-  string,
-  unknown
->;
+const shellEn = JSON.parse(
+  readFileSync(join(root, "web", "messages", "en", "shell.json"), "utf8"),
+) as Record<string, Record<string, unknown>>;
+const adminEn = JSON.parse(
+  readFileSync(join(root, "web", "messages", "en", "admin.json"), "utf8"),
+) as Record<string, unknown>;
 (globalThis as Record<string, unknown>).__i18nBundles = { shell: shellEn, admin: adminEn };
 
 const INTL_MOCK = `

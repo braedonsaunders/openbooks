@@ -8,7 +8,16 @@ const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
 });
 const globals = globalThis as Record<string, unknown>;
 const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
+for (const key of [
+  "window",
+  "document",
+  "navigator",
+  "Node",
+  "Element",
+  "HTMLElement",
+  "Event",
+  "self",
+]) {
   if (globals[key] === undefined) globals[key] = domWindow[key];
 }
 if (typeof window.matchMedia !== "function") {
@@ -100,8 +109,18 @@ function payload(): Payload {
       },
     ],
     entries: [
-      { id: "je-1", origin: "contract_cost_amortization", postingDate: "2026-01-31", periodName: "P01 FY2026 · Jan 2026" },
-      { id: "je-0", origin: "contract_cost_capitalize", postingDate: "2026-01-01", periodName: "P01 FY2026 · Jan 2026" },
+      {
+        id: "je-1",
+        origin: "contract_cost_amortization",
+        postingDate: "2026-01-31",
+        periodName: "P01 FY2026 · Jan 2026",
+      },
+      {
+        id: "je-0",
+        origin: "contract_cost_capitalize",
+        postingDate: "2026-01-01",
+        periodName: "P01 FY2026 · Jan 2026",
+      },
     ],
   };
 }
@@ -166,13 +185,11 @@ test("schedule and journal trail render in separate panels with working entry li
   assert.ok(journalHeading, "the trail keeps its title");
   assert.ok(journalHeading.closest("div[hidden]"), "the journal body starts hidden");
 
-  const postedLink = document.querySelector("a[href='/revenue/contract-costs?asset=asset-1&txn=je-1']");
-  assert.ok(postedLink, "the posted period opens its posted journal entry over the drawer");
-  assert.equal(
-    postedLink.closest("div[hidden]"),
-    null,
-    "the per-period entry link starts visible",
+  const postedLink = document.querySelector(
+    "a[href='/revenue/contract-costs?asset=asset-1&txn=je-1']",
   );
+  assert.ok(postedLink, "the posted period opens its posted journal entry over the drawer");
+  assert.equal(postedLink.closest("div[hidden]"), null, "the per-period entry link starts visible");
 
   await act(async () => {
     click(stripTab("Journal trail"));
@@ -184,7 +201,9 @@ test("schedule and journal trail render in separate panels with working entry li
     null,
     "selecting the journal tab shows the trail",
   );
-  const trailLink = document.querySelector("a[href='/revenue/contract-costs?asset=asset-1&txn=je-0']");
+  const trailLink = document.querySelector(
+    "a[href='/revenue/contract-costs?asset=asset-1&txn=je-0']",
+  );
   assert.ok(trailLink, "the trail opens each posted journal entry over the drawer");
   assert.equal(trailLink.closest("div[hidden]"), null, "the trail link shows on its panel");
   assert.ok(

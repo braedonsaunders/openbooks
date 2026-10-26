@@ -9,25 +9,116 @@ const VN_GTGT_01: TaxReturnPack = {
   submissionChannel: "portal_manual",
   governmentFormat: "portal_entry",
   submissionUrl: "https://thuedientu.gdt.gov.vn",
-  watermark: "Working copy — confirm the filing period on the e-tax portal, then file the 01/GTGT return with the General Department of Taxation",
+  watermark:
+    "Working copy — confirm the filing period on the e-tax portal, then file the 01/GTGT return with the General Department of Taxation",
   boxes: [
-    { lineCode: "27", label: "Chỉ tiêu [27] — hàng hóa, dịch vụ bán ra chịu thuế GTGT (doanh thu chưa thuế)", sign: 1, sequence: 10 },
-    { lineCode: "28", label: "Chỉ tiêu [28] — thuế GTGT đầu ra của hàng hóa, dịch vụ bán ra chịu thuế", sign: -1, sequence: 20 },
-    { lineCode: "29", label: "Chỉ tiêu [29] — hàng hóa, dịch vụ bán ra chịu thuế suất 0%", sign: 1, sequence: 30 },
-    { lineCode: "30", label: "Chỉ tiêu [30] — hàng hóa, dịch vụ bán ra chịu thuế suất 5% (doanh thu)", sign: 1, sequence: 40 },
-    { lineCode: "31", label: "Chỉ tiêu [31] — thuế GTGT của hàng hóa, dịch vụ bán ra chịu thuế suất 5%", sign: -1, sequence: 50 },
-    { lineCode: "32", label: "Chỉ tiêu [32] — hàng hóa, dịch vụ bán ra chịu thuế suất 10% (doanh thu)", sign: 1, sequence: 60 },
-    { lineCode: "33", label: "Chỉ tiêu [33] — thuế GTGT của hàng hóa, dịch vụ bán ra chịu thuế suất 10%", sign: -1, sequence: 70 },
-    { lineCode: "25", label: "Chỉ tiêu [25] — thuế GTGT của hàng hóa, dịch vụ mua vào được khấu trừ kỳ này", sign: 1, sequence: 80 },
-    { lineCode: "36", label: "Chỉ tiêu [36] — thuế GTGT phát sinh trong kỳ ([35]−[25])", sign: 1, sequence: 90 },
-    { lineCode: "40", label: "Chỉ tiêu [40] — thuế GTGT còn phải nộp trong kỳ ([40a]−[40b])", sign: 1, sequence: 100 },
-    { lineCode: "PL08-I-05", label: "Phụ lục III Mẫu 01 §I [05] — 8% purchases value (ND 174/2025 reduction schedule, filed with 01/GTGT)", sign: 1, sequence: 102 },
-    { lineCode: "PL08-I-06", label: "Phụ lục III Mẫu 01 §I [06] — 8% purchase input tax", sign: 1, sequence: 104 },
-    { lineCode: "PL08-II-07", label: "Phụ lục III Mẫu 01 §II [07] — 8% sales value", sign: 1, sequence: 106 },
-    { lineCode: "PL08-II-08", label: "Phụ lục III Mẫu 01 §II [08] — 8% sales output tax", sign: -1, sequence: 108 },
-    { lineCode: "PL08-III-09", label: "Phụ lục III Mẫu 01 §III [09]=[08]−[06] — 8% net", sign: 1, sequence: 110 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 120, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 130, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "27",
+      label: "Chỉ tiêu [27] — hàng hóa, dịch vụ bán ra chịu thuế GTGT (doanh thu chưa thuế)",
+      sign: 1,
+      sequence: 10,
+    },
+    {
+      lineCode: "28",
+      label: "Chỉ tiêu [28] — thuế GTGT đầu ra của hàng hóa, dịch vụ bán ra chịu thuế",
+      sign: -1,
+      sequence: 20,
+    },
+    {
+      lineCode: "29",
+      label: "Chỉ tiêu [29] — hàng hóa, dịch vụ bán ra chịu thuế suất 0%",
+      sign: 1,
+      sequence: 30,
+    },
+    {
+      lineCode: "30",
+      label: "Chỉ tiêu [30] — hàng hóa, dịch vụ bán ra chịu thuế suất 5% (doanh thu)",
+      sign: 1,
+      sequence: 40,
+    },
+    {
+      lineCode: "31",
+      label: "Chỉ tiêu [31] — thuế GTGT của hàng hóa, dịch vụ bán ra chịu thuế suất 5%",
+      sign: -1,
+      sequence: 50,
+    },
+    {
+      lineCode: "32",
+      label: "Chỉ tiêu [32] — hàng hóa, dịch vụ bán ra chịu thuế suất 10% (doanh thu)",
+      sign: 1,
+      sequence: 60,
+    },
+    {
+      lineCode: "33",
+      label: "Chỉ tiêu [33] — thuế GTGT của hàng hóa, dịch vụ bán ra chịu thuế suất 10%",
+      sign: -1,
+      sequence: 70,
+    },
+    {
+      lineCode: "25",
+      label: "Chỉ tiêu [25] — thuế GTGT của hàng hóa, dịch vụ mua vào được khấu trừ kỳ này",
+      sign: 1,
+      sequence: 80,
+    },
+    {
+      lineCode: "36",
+      label: "Chỉ tiêu [36] — thuế GTGT phát sinh trong kỳ ([35]−[25])",
+      sign: 1,
+      sequence: 90,
+    },
+    {
+      lineCode: "40",
+      label: "Chỉ tiêu [40] — thuế GTGT còn phải nộp trong kỳ ([40a]−[40b])",
+      sign: 1,
+      sequence: 100,
+    },
+    {
+      lineCode: "PL08-I-05",
+      label:
+        "Phụ lục III Mẫu 01 §I [05] — 8% purchases value (ND 174/2025 reduction schedule, filed with 01/GTGT)",
+      sign: 1,
+      sequence: 102,
+    },
+    {
+      lineCode: "PL08-I-06",
+      label: "Phụ lục III Mẫu 01 §I [06] — 8% purchase input tax",
+      sign: 1,
+      sequence: 104,
+    },
+    {
+      lineCode: "PL08-II-07",
+      label: "Phụ lục III Mẫu 01 §II [07] — 8% sales value",
+      sign: 1,
+      sequence: 106,
+    },
+    {
+      lineCode: "PL08-II-08",
+      label: "Phụ lục III Mẫu 01 §II [08] — 8% sales output tax",
+      sign: -1,
+      sequence: 108,
+    },
+    {
+      lineCode: "PL08-III-09",
+      label: "Phụ lục III Mẫu 01 §III [09]=[08]−[06] — 8% net",
+      sign: 1,
+      sequence: 110,
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label: "OpenBooks workpaper — output VAT from the ledger, all configured rates",
+      sign: -1,
+      sequence: 120,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — input VAT from the ledger, all configured rates",
+      sign: 1,
+      sequence: 130,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
   ],
 };
 
@@ -139,43 +230,50 @@ export const VIETNAM_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "congbao_nd174_window",
-      title: "Công báo 895+896 — Nghị định 174/2025/NĐ-CP: 8% window 2025-07-01 to 2026-12-31, exclusions, invoice treatment",
+      title:
+        "Công báo 895+896 — Nghị định 174/2025/NĐ-CP: 8% window 2025-07-01 to 2026-12-31, exclusions, invoice treatment",
       url: "https://congbaocdn.chinhphu.vn/CongBaoCP/VanBan/2025/6/45374/57334-1-2025895-896174-2025-nd-cp.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "congbao_nq204_mandate",
-      title: "Công báo 849+850 — Nghị quyết 204/2025/QH15 enacting the VAT cut (catalogue record plus signed image-only PDF; operative window read from the implementing decree)",
+      title:
+        "Công báo 849+850 — Nghị quyết 204/2025/QH15 enacting the VAT cut (catalogue record plus signed image-only PDF; operative window read from the implementing decree)",
       url: "https://congbaocdn.chinhphu.vn/CongBaoCP/VanBan/2025/6/45219/57028-1-2025849-850204-2025-qh15.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "congbao_law48_rates",
-      title: "Công báo 1527+1528 — Luật Thuế GTGT 48/2024/QH15, Điều 9: 0%/5%/10% bands, in force 2025-07-01; repeals Luật 13/2008/QH12 (as amended by 31/2013, 71/2014, 106/2016) on entry into force",
+      title:
+        "Công báo 1527+1528 — Luật Thuế GTGT 48/2024/QH15, Điều 9: 0%/5%/10% bands, in force 2025-07-01; repeals Luật 13/2008/QH12 (as amended by 31/2013, 71/2014, 106/2016) on entry into force",
       url: "https://congbaocdn.chinhphu.vn/CongBaoCP/VanBan/2024/11/43576/53720-1-20241527-152848-2024-qh15.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "tradeportal_law13_2008_rates",
-      title: "Luật 13/2008/QH12 (3/6/2008), Điều 8: 0%/5%/10% bands in force from 01/01/2009 — NA law as republished on the Government trade portal (vietnamtradeportal.gov.vn); succession and amendment chain cross-checked primarily against the Law 48/2024 repeal clause on Công báo",
+      title:
+        "Luật 13/2008/QH12 (3/6/2008), Điều 8: 0%/5%/10% bands in force from 01/01/2009 — NA law as republished on the Government trade portal (vietnamtradeportal.gov.vn); succession and amendment chain cross-checked primarily against the Law 48/2024 repeal clause on Công báo",
       url: "https://www.vietnamtradeportal.gov.vn/kcfinder/upload/files/13.2008.QH12.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "congbao_law90_export_def",
-      title: "Công báo 907+908 — Luật 90/2025/QH15, Điều 4: amends the Điều 9.1a export-goods definition only; headline rates unchanged",
+      title:
+        "Công báo 907+908 — Luật 90/2025/QH15, Điều 4: amends the Điều 9.1a export-goods definition only; headline rates unchanged",
       url: "https://congbaocdn.chinhphu.vn/CongBaoCP/VanBan/2025/6/45389/57364-1-2025907-90890-2025-qh15.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "congbao_law149_scrap_rule",
-      title: "Công báo — Luật 149/2025/QH15: amends Điều 9.5 scrap rule only, in force 2026-01-01; headline rates unchanged",
+      title:
+        "Công báo — Luật 149/2025/QH15: amends Điều 9.5 scrap rule only, in force 2026-01-01; headline rates unchanged",
       url: "https://congbaocdn.chinhphu.vn/180507251028987904/2026/1/26/149-17694169460221469064544.docx",
       asOf: "2026-09-18",
     },
     {
       id: "congbao_law09_2026_thresholds",
-      title: "Công báo — Luật 09/2026/QH16: no VAT rate change; household-revenue threshold delegation only",
+      title:
+        "Công báo — Luật 09/2026/QH16: no VAT rate change; household-revenue threshold delegation only",
       url: "https://congbaocdn.chinhphu.vn/180507251028987904/2026/5/27/469536-1779329464_1779843285_signed.docx",
       asOf: "2026-09-18",
     },
@@ -187,13 +285,15 @@ export const VIETNAM_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "congbao_tt94_forms_unchanged",
-      title: "Công báo 1535+1536 — Thông tư 94/2025/TT-BTC: amends refund handling and ID fields; leaves the 01/GTGT boxes untouched",
+      title:
+        "Công báo 1535+1536 — Thông tư 94/2025/TT-BTC: amends refund handling and ID fields; leaves the 01/GTGT boxes untouched",
       url: "https://congbaocdn.chinhphu.vn/CongBaoCP/VanBan/2025/10/46457/59475-1-20251535-153694-2025-tt-btc.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "gdt_etax_portal",
-      title: "General Department of Taxation e-tax filing entry (answers 302 to the e-tax application; content pages unreachable from this sandbox)",
+      title:
+        "General Department of Taxation e-tax filing entry (answers 302 to the e-tax application; content pages unreachable from this sandbox)",
       url: "https://thuedientu.gdt.gov.vn",
       asOf: "2026-09-18",
     },
@@ -207,28 +307,53 @@ export const VIETNAM_TAX_PACK: CountryTaxPackDefinition = {
         name: "Vietnam standard GTGT 10%",
         ratePercent: "10",
         role: "standard",
-        rates: [{ ratePercent: "10", effectiveFrom: "2009-01-01", sourceId: "tradeportal_law13_2008_rates" }],
+        rates: [
+          {
+            ratePercent: "10",
+            effectiveFrom: "2009-01-01",
+            sourceId: "tradeportal_law13_2008_rates",
+          },
+        ],
       },
       {
         code: "VN-VAT-RED8",
         name: "Vietnam temporary reduced GTGT 8% (ND 174/2025, excludes Appendix I/II sectors)",
         ratePercent: "8",
         role: "reduced",
-        rates: [{ ratePercent: "8", effectiveFrom: "2025-07-01", effectiveTo: "2026-12-31", sourceId: "congbao_nd174_window" }],
+        rates: [
+          {
+            ratePercent: "8",
+            effectiveFrom: "2025-07-01",
+            effectiveTo: "2026-12-31",
+            sourceId: "congbao_nd174_window",
+          },
+        ],
       },
       {
         code: "VN-VAT-RED5",
         name: "Vietnam reduced GTGT 5% — water, fertiliser, agricultural services and produce",
         ratePercent: "5",
         role: "reduced",
-        rates: [{ ratePercent: "5", effectiveFrom: "2009-01-01", sourceId: "tradeportal_law13_2008_rates" }],
+        rates: [
+          {
+            ratePercent: "5",
+            effectiveFrom: "2009-01-01",
+            sourceId: "tradeportal_law13_2008_rates",
+          },
+        ],
       },
       {
         code: "VN-VAT-ZERO",
         name: "Vietnam zero-rated GTGT 0% — exports",
         ratePercent: "0",
         role: "zero",
-        rates: [{ ratePercent: "0", effectiveFrom: "2009-01-01", sourceId: "tradeportal_law13_2008_rates" }],
+        rates: [
+          {
+            ratePercent: "0",
+            effectiveFrom: "2009-01-01",
+            sourceId: "tradeportal_law13_2008_rates",
+          },
+        ],
       },
     ],
   },

@@ -28,7 +28,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const routeStateKey = Symbol.for("openbooks.project-merge-route-test");
 const routeState: { gate: unknown } = { gate: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[routeStateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[routeStateKey] = routeState;
 const routeAuthz = `
   const state = globalThis[Symbol.for('openbooks.project-merge-route-test')]
   export async function guardPermission() { return state.gate }
@@ -83,9 +83,9 @@ const routeHooks = registerHooks({
   },
 });
 const mergeRouteUrl = new URL("../../../web/app/api/projects/merge/route.ts", import.meta.url);
-const { POST: postMergeRoute } = await import(
+const { POST: postMergeRoute } = (await import(
   `${mergeRouteUrl.href}?project-merge-route-test`
-) as typeof import("../../../web/app/api/projects/merge/route.ts");
+)) as typeof import("../../../web/app/api/projects/merge/route.ts");
 // The factory resolves its session gate lazily at request time, so the hooks
 // stay registered until the file's tests have all run.
 test.after(() => routeHooks.deregister());
@@ -134,7 +134,9 @@ async function seedPostedEntry(args: {
     values
       (${args.orgId}, ${entry}, 1, ${args.adjustmentAccount}, ${args.subsidiaryId}, ${args.projectId}, '25', 'CAD', '25', '1'),
       (${args.orgId}, ${entry}, 2, ${args.bankAccount}, ${args.subsidiaryId}, ${args.projectId}, '-25', 'CAD', '-25', '1')`);
-  await db.execute(sql`update journal_entries set status = 'posted' where id = ${entry} and org_id = ${args.orgId}`);
+  await db.execute(
+    sql`update journal_entries set status = 'posted' where id = ${entry} and org_id = ${args.orgId}`,
+  );
   return entry;
 }
 
@@ -171,241 +173,412 @@ async function seedReferences(
   await db.execute(sql`
     insert into sov_lines (org_id, project_id, description)
     values (${orgId}, ${projectId}, ${`SOV ${tag}`})`);
-  const encumbrance = await db.execute<{ id: string }>(sql`
+  const encumbrance = await db.execute<{ id: string }>(
+    sql`
     insert into encumbrances
       (org_id, encumbrance_number, source_kind, account_id, subsidiary_id,
        project_id, amount, created_by, updated_by)
     values (${orgId}, ${`ENC-${tag}`}, 'manual', ${accountId}, ${subsidiaryId},
             ${projectId}, '10.0000', ${actorId}, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   assert.equal(encumbrance.length, 1, "project-merge fixture must establish its commitment");
-  const mapping = await db.execute<{ id: string }>(sql`
+  const mapping = await db.execute<{ id: string }>(
+    sql`
     insert into functional_mappings
       (org_id, project_id, function, effective_from, created_by, updated_by)
     values (${orgId}, ${projectId}, 'management_general', '2026-01-01', ${actorId}, ${actorId})
-    returning id`, "objects");
-  assert.equal(mapping.length, 1, "project-merge fixture must establish its effective-dated mapping");
+    returning id`,
+    "objects",
+  );
+  assert.equal(
+    mapping.length,
+    1,
+    "project-merge fixture must establish its effective-dated mapping",
+  );
 }
 
-test("duplicate projects merge every reference and deactivate with a pointer", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-1", "Same job", {
-      source: { system: "other", externalId: "100" },
-      nsId: "100",
-    });
-    // The mirror row carries the legacy connector identity but no envelope —
-    // the exact shape of the tenant's fence-blind loader rows.
-    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-1", "Same job", {
-      nsId: "100",
-    });
-    await seedReferences(org.orgId, org.subsidiaryId, duplicate, "DUP", actor, org.accounts.ap);
-    const programId = randomUUID();
-    await db.execute(sql`
+test(
+  "duplicate projects merge every reference and deactivate with a pointer",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const survivor = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-1",
+        "Same job",
+        {
+          source: { system: "other", externalId: "100" },
+          nsId: "100",
+        },
+      );
+      // The mirror row carries the legacy connector identity but no envelope —
+      // the exact shape of the tenant's fence-blind loader rows.
+      const duplicate = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-1",
+        "Same job",
+        {
+          nsId: "100",
+        },
+      );
+      await seedReferences(org.orgId, org.subsidiaryId, duplicate, "DUP", actor, org.accounts.ap);
+      const programId = randomUUID();
+      await db.execute(sql`
       insert into hrm_benefit_programs
         (id, org_id, code, name, family, currency, effective_from, created_by, updated_by)
       values (${programId}, ${org.orgId}, 'MERGE-SCOPE', 'Merge scope', 'custom', 'CAD', '2026-01-01', ${actor}, ${actor})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into hrm_benefit_program_scopes
         (org_id, program_id, project_id, created_by, updated_by)
       values (${org.orgId}, ${programId}, ${duplicate}, ${actor}, ${actor})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into schedule_patterns
         (org_id, subsidiary_id, code, name, time_zone, cycle_days, cycle_anchor, slots,
          target_kind, project_id, reason, created_by, updated_by)
       values (${org.orgId}, ${org.subsidiaryId}, 'MERGE-PATTERN', 'Merge pattern', 'America/Toronto', 7,
               '2026-01-05', '[{"position":0,"starts":"09:00","ends":"17:00","breakMinutes":30,"qualificationTypeIds":[]}]'::jsonb,
               'project', ${duplicate}, 'Pattern follows its project through a merge', ${actor}, ${actor})`);
-    // A project custom reference pointing at the duplicate follows the merge.
-    await db.execute(sql`
+      // A project custom reference pointing at the duplicate follows the merge.
+      await db.execute(sql`
       insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
       values (${org.orgId}, 'documents', 'job_ref', 'Job', 'reference', '{"referenceTable":"projects"}'::jsonb)`);
-    await db.execute(sql`
+      await db.execute(sql`
       update documents set custom = jsonb_build_object('job_ref', ${duplicate}::text)
        where org_id = ${org.orgId} and project_id = ${duplicate}`);
 
-    const groups = await findDuplicateProjects(org.orgId);
-    const kinds = new Set(groups.flatMap((group) => group.projects.map((p) => p.id).includes(duplicate) ? [group.kind] : []));
-    assert.ok(kinds.has("source_ref") && kinds.has("name_customer") && kinds.has("job_number"));
+      const groups = await findDuplicateProjects(org.orgId);
+      const kinds = new Set(
+        groups.flatMap((group) =>
+          group.projects.map((p) => p.id).includes(duplicate) ? [group.kind] : [],
+        ),
+      );
+      assert.ok(kinds.has("source_ref") && kinds.has("name_customer") && kinds.has("job_number"));
 
-    const preview = await previewProjectMerge(org.orgId, survivor, duplicate);
-    assert.equal(preview.alreadyMerged, false);
-    const moved = new Map(preview.moved.map((m) => [m.table, m.rows]));
-    assert.equal(moved.get("documents"), 1);
-    assert.equal(moved.get("document_lines"), 1);
-    assert.equal(moved.get("time_entries"), 1);
-    assert.equal(moved.get("change_orders"), 1);
-    assert.equal(moved.get("sov_lines"), 1);
-    assert.equal(moved.get("encumbrances"), 1);
-    assert.equal(moved.get("functional_mappings"), 1);
-    assert.equal(moved.get("hrm_benefit_program_scopes"), 1);
-    assert.equal(moved.get("schedule_patterns"), 1);
-    assert.equal(preview.customRefs.length, 1);
+      const preview = await previewProjectMerge(org.orgId, survivor, duplicate);
+      assert.equal(preview.alreadyMerged, false);
+      const moved = new Map(preview.moved.map((m) => [m.table, m.rows]));
+      assert.equal(moved.get("documents"), 1);
+      assert.equal(moved.get("document_lines"), 1);
+      assert.equal(moved.get("time_entries"), 1);
+      assert.equal(moved.get("change_orders"), 1);
+      assert.equal(moved.get("sov_lines"), 1);
+      assert.equal(moved.get("encumbrances"), 1);
+      assert.equal(moved.get("functional_mappings"), 1);
+      assert.equal(moved.get("hrm_benefit_program_scopes"), 1);
+      assert.equal(moved.get("schedule_patterns"), 1);
+      assert.equal(preview.customRefs.length, 1);
 
-    const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
-    assert.equal(result.alreadyMerged, false);
-    assert.ok(result.auditId);
-    for (const table of ["documents", "document_lines", "time_entries", "change_orders", "sov_lines", "encumbrances", "functional_mappings", "hrm_benefit_program_scopes", "schedule_patterns"]) {
-      const left = await db.execute<{ n: string }>(sql`
+      const result = await mergeProjects(org.orgId, {
+        survivorId: survivor,
+        duplicateId: duplicate,
+        actorId: actor,
+      });
+      assert.equal(result.alreadyMerged, false);
+      assert.ok(result.auditId);
+      for (const table of [
+        "documents",
+        "document_lines",
+        "time_entries",
+        "change_orders",
+        "sov_lines",
+        "encumbrances",
+        "functional_mappings",
+        "hrm_benefit_program_scopes",
+        "schedule_patterns",
+      ]) {
+        const left = await db.execute<{ n: string }>(
+          sql`
         select count(*)::text as n from ${sql.identifier(table)}
-         where org_id = ${org.orgId} and project_id = ${duplicate}`, "objects");
-      assert.equal(left[0]?.n, "0", table);
-    }
-    const movedPattern = await db.execute<{ project_id: string; revision: number }>(sql`
+         where org_id = ${org.orgId} and project_id = ${duplicate}`,
+          "objects",
+        );
+        assert.equal(left[0]?.n, "0", table);
+      }
+      const movedPattern = await db.execute<{ project_id: string; revision: number }>(
+        sql`
       select project_id, revision from schedule_patterns
-       where org_id = ${org.orgId} and code = 'MERGE-PATTERN'`, "objects");
-    assert.deepEqual(movedPattern, [{ project_id: survivor, revision: 2 }]);
-    const customLeft = await db.execute<{ n: string }>(sql`
+       where org_id = ${org.orgId} and code = 'MERGE-PATTERN'`,
+        "objects",
+      );
+      assert.deepEqual(movedPattern, [{ project_id: survivor, revision: 2 }]);
+      const customLeft = await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from documents
-       where org_id = ${org.orgId} and custom ->> 'job_ref' = ${duplicate}`, "objects");
-    assert.equal(customLeft[0]?.n, "0");
-    const docs = await db.execute<{ project_id: string }>(sql`
-      select project_id from documents where org_id = ${org.orgId} and project_id = ${survivor}`, "objects");
-    assert.equal(docs.length, 1);
-    const marker = await db.execute<{ is_active: boolean; custom: Record<string, unknown> }>(sql`
-      select is_active, custom from projects where id = ${duplicate} and org_id = ${org.orgId}`, "objects");
-    assert.equal(marker[0]?.is_active, false);
-    assert.deepEqual(
-      (marker[0]?.custom?.["merged_into"] as Record<string, unknown>)?.["survivor"],
-      survivor,
-    );
-    const audit = await db.execute<{ action: string }>(sql`
+       where org_id = ${org.orgId} and custom ->> 'job_ref' = ${duplicate}`,
+        "objects",
+      );
+      assert.equal(customLeft[0]?.n, "0");
+      const docs = await db.execute<{ project_id: string }>(
+        sql`
+      select project_id from documents where org_id = ${org.orgId} and project_id = ${survivor}`,
+        "objects",
+      );
+      assert.equal(docs.length, 1);
+      const marker = await db.execute<{ is_active: boolean; custom: Record<string, unknown> }>(
+        sql`
+      select is_active, custom from projects where id = ${duplicate} and org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(marker[0]?.is_active, false);
+      assert.deepEqual(
+        (marker[0]?.custom?.["merged_into"] as Record<string, unknown>)?.["survivor"],
+        survivor,
+      );
+      const audit = await db.execute<{ action: string }>(
+        sql`
       select action from audit_log
-       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${duplicate}`, "objects");
-    assert.deepEqual(audit.map((row) => row.action), ["merge"]);
+       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${duplicate}`,
+        "objects",
+      );
+      assert.deepEqual(
+        audit.map((row) => row.action),
+        ["merge"],
+      );
 
-    const again = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
-    assert.equal(again.alreadyMerged, true);
-    assert.equal(again.auditId, null);
-    const after = await findDuplicateProjects(org.orgId);
-    assert.ok(!after.some((group) => group.projects.some((p) => p.id === duplicate)));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const again = await mergeProjects(org.orgId, {
+        survivorId: survivor,
+        duplicateId: duplicate,
+        actorId: actor,
+      });
+      assert.equal(again.alreadyMerged, true);
+      assert.equal(again.auditId, null);
+      const after = await findDuplicateProjects(org.orgId);
+      assert.ok(!after.some((group) => group.projects.some((p) => p.id === duplicate)));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("project merge reconciles overlapping benefit scopes and preserves provision identity", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-BEN-A", "Benefit Alpha");
-    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-BEN-B", "Benefit Beta");
-    const programId = randomUUID();
-    await db.execute(sql`
+test(
+  "project merge reconciles overlapping benefit scopes and preserves provision identity",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const a = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-BEN-A",
+        "Benefit Alpha",
+      );
+      const b = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-BEN-B",
+        "Benefit Beta",
+      );
+      const programId = randomUUID();
+      await db.execute(sql`
       insert into hrm_benefit_programs
         (id, org_id, code, name, family, currency, effective_from, created_by, updated_by)
       values (${programId}, ${org.orgId}, 'MERGE-COLLISION', 'Merge collision', 'custom', 'CAD', '2026-01-01', ${actor}, ${actor})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into hrm_benefit_program_scopes
         (org_id, program_id, project_id, created_by, updated_by)
       values (${org.orgId}, ${programId}, ${a}, ${actor}, ${actor}),
              (${org.orgId}, ${programId}, ${b}, ${actor}, ${actor})`);
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
-      /benefit program has project scopes on both projects/,
-    );
-    const scopeCount = (await db.execute<{ n: string }>(sql`
+      await assert.rejects(
+        mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
+        /benefit program has project scopes on both projects/,
+      );
+      const scopeCount = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from hrm_benefit_program_scopes
-       where org_id = ${org.orgId} and program_id = ${programId}`, "objects"))[0]?.n;
-    assert.equal(scopeCount, "2");
+       where org_id = ${org.orgId} and program_id = ${programId}`,
+          "objects",
+        )
+      )[0]?.n;
+      assert.equal(scopeCount, "2");
 
-    const provisionProject = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PROV", "Provision owner");
-    const provisionId = randomUUID();
-    await db.execute(sql`
+      const provisionProject = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-PROV",
+        "Provision owner",
+      );
+      const provisionId = randomUUID();
+      await db.execute(sql`
       insert into provision_obligations
         (id, org_id, subsidiary_id, book_id, name, currency, expense_account_id,
          liability_account_id, created_by, project_id)
       values (${provisionId}, ${org.orgId}, ${org.subsidiaryId}, ${org.bookId}, 'Project obligation', 'CAD',
               ${org.accounts.cogs}, ${org.accounts.ap}, ${actor}, ${provisionProject})`);
-    const other = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PROV-S", "Provision survivor");
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: other, duplicateId: provisionProject, actorId: actor }),
-      /append-only history .*provision_obligations\.project_id/,
-    );
-    const retained = (await db.execute<{ project_id: string }>(sql`
+      const other = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-PROV-S",
+        "Provision survivor",
+      );
+      await assert.rejects(
+        mergeProjects(org.orgId, {
+          survivorId: other,
+          duplicateId: provisionProject,
+          actorId: actor,
+        }),
+        /append-only history .*provision_obligations\.project_id/,
+      );
+      const retained = (
+        await db.execute<{ project_id: string }>(
+          sql`
       select project_id::text as project_id from provision_obligations
-       where org_id = ${org.orgId} and id = ${provisionId}`, "objects"))[0]?.project_id;
-    assert.equal(retained, provisionProject);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and id = ${provisionId}`,
+          "objects",
+        )
+      )[0]?.project_id;
+      assert.equal(retained, provisionProject);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("project merge refuses append-only financial evidence before moving references", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-IMM-1", "Survivor");
-    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-IMM-2", "Duplicate");
-    await withOrgContext(org.orgId, () => recordProjectFinancialAdjustment({
-      orgId: org.orgId,
-      projectId: duplicate,
-      adjustmentDate: "2026-08-04",
-      measure: "actual_cost",
-      amount: "25.00",
-      reason: "recorded project cost",
-    }));
+test(
+  "project merge refuses append-only financial evidence before moving references",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const survivor = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-IMM-1",
+        "Survivor",
+      );
+      const duplicate = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-IMM-2",
+        "Duplicate",
+      );
+      await withOrgContext(org.orgId, () =>
+        recordProjectFinancialAdjustment({
+          orgId: org.orgId,
+          projectId: duplicate,
+          adjustmentDate: "2026-08-04",
+          measure: "actual_cost",
+          amount: "25.00",
+          reason: "recorded project cost",
+        }),
+      );
 
-    await assert.rejects(
-      previewProjectMerge(org.orgId, survivor, duplicate),
-      /append-only history .*project_financial_adjustments.*keep the duplicate as the historical owner/,
-    );
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: null }),
-      /append-only history .*project_financial_adjustments.*keep the duplicate as the historical owner/,
-    );
-    const adjustment = await db.execute<{ project_id: string }>(sql`
+      await assert.rejects(
+        previewProjectMerge(org.orgId, survivor, duplicate),
+        /append-only history .*project_financial_adjustments.*keep the duplicate as the historical owner/,
+      );
+      await assert.rejects(
+        mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: null }),
+        /append-only history .*project_financial_adjustments.*keep the duplicate as the historical owner/,
+      );
+      const adjustment = await db.execute<{ project_id: string }>(
+        sql`
       select project_id from project_financial_adjustments
-       where org_id = ${org.orgId} and project_id = ${duplicate}`, "objects");
-    assert.equal(adjustment.length, 1);
-    const marker = await db.execute<{ is_active: boolean }>(sql`
-      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`, "objects");
-    assert.equal(marker[0]?.is_active, true);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and project_id = ${duplicate}`,
+        "objects",
+      );
+      assert.equal(adjustment.length, 1);
+      const marker = await db.execute<{ is_active: boolean }>(
+        sql`
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(marker[0]?.is_active, true);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("project merge refuses overlapping functional mapping periods before moving either project", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "MAP-1", "Surviving project");
-    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "MAP-2", "Duplicate project");
-    const mappings = await db.execute<{ project_id: string }>(sql`
+test(
+  "project merge refuses overlapping functional mapping periods before moving either project",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const survivor = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "MAP-1",
+        "Surviving project",
+      );
+      const duplicate = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "MAP-2",
+        "Duplicate project",
+      );
+      const mappings = await db.execute<{ project_id: string }>(
+        sql`
       insert into functional_mappings
         (org_id, project_id, function, effective_from, effective_to, created_by, updated_by)
       values
         (${org.orgId}, ${survivor}, 'program', '2026-01-01', '2026-06-30', ${actorId}, ${actorId}),
         (${org.orgId}, ${duplicate}, 'fundraising', '2026-06-01', '2026-12-31', ${actorId}, ${actorId})
-      returning project_id`, "objects");
-    assert.equal(mappings.length, 2, "overlapping project mappings must both exist before merge");
+      returning project_id`,
+        "objects",
+      );
+      assert.equal(mappings.length, 2, "overlapping project mappings must both exist before merge");
 
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId }),
-      (error: unknown) => {
-        assert.ok(error instanceof ProjectMergeError);
-        assert.match(error.message, /functional mappings.*overlapping effective periods/);
-        assert.match(error.message, /2026-06-01/);
-        assert.match(error.message, /2026-01-01/);
-        assert.match(error.message, /Nonprofit Setup/);
-        return true;
-      },
-    );
-    const unchanged = (await db.execute<{ project_id: string }>(sql`
+      await assert.rejects(
+        mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId }),
+        (error: unknown) => {
+          assert.ok(error instanceof ProjectMergeError);
+          assert.match(error.message, /functional mappings.*overlapping effective periods/);
+          assert.match(error.message, /2026-06-01/);
+          assert.match(error.message, /2026-01-01/);
+          assert.match(error.message, /Nonprofit Setup/);
+          return true;
+        },
+      );
+      const unchanged = (
+        await db.execute<{ project_id: string }>(
+          sql`
       select project_id from functional_mappings
        where org_id = ${org.orgId} and project_id in (${survivor}, ${duplicate})
-       order by project_id`, "objects")).map((row) => row.project_id);
-    assert.deepEqual(unchanged, [duplicate, survivor].sort(), "a refused merge cannot rewrite either mapping");
-    const projects = await db.execute<{ id: string; is_active: boolean }>(sql`
+       order by project_id`,
+          "objects",
+        )
+      ).map((row) => row.project_id);
+      assert.deepEqual(
+        unchanged,
+        [duplicate, survivor].sort(),
+        "a refused merge cannot rewrite either mapping",
+      );
+      const projects = await db.execute<{ id: string; is_active: boolean }>(
+        sql`
       select id, is_active from projects
-       where org_id = ${org.orgId} and id in (${survivor}, ${duplicate})`, "objects");
-    assert.equal(projects.length, 2);
-    assert.ok(projects.every((row) => row.is_active), "a refused merge cannot deactivate either project");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and id in (${survivor}, ${duplicate})`,
+        "objects",
+      );
+      assert.equal(projects.length, 2);
+      assert.ok(
+        projects.every((row) => row.is_active),
+        "a refused merge cannot deactivate either project",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a committing merge takes both project row locks before planning", async () => {
   // Two merges racing on overlapping pairs used to plan against unlocked
@@ -418,19 +591,38 @@ test("a committing merge takes both project row locks before planning", async ()
   const holder = await pool.connect();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-L1", "Lock one");
-    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-L2", "Lock two");
+    const survivor = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-L1",
+      "Lock one",
+    );
+    const duplicate = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-L2",
+      "Lock two",
+    );
     await holder.query("BEGIN");
     await holder.query("select set_config('app.bypass_rls', 'on', false)");
     await holder.query("select id from projects where id = $1 for update", [duplicate]);
-    const pending = mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
+    const pending = mergeProjects(org.orgId, {
+      survivorId: survivor,
+      duplicateId: duplicate,
+      actorId: actor,
+    });
     const deadline = Date.now() + 15000;
     for (;;) {
-      const waiting = await db.execute<{ waiting: boolean }>(sql`
+      const waiting = await db.execute<{ waiting: boolean }>(
+        sql`
         select exists(
           select 1 from pg_stat_activity
            where wait_event_type = 'Lock' and query ilike '%from projects%for update%'
-        ) as waiting`, "objects");
+        ) as waiting`,
+        "objects",
+      );
       if (waiting[0]?.waiting) break;
       if (Date.now() > deadline) throw new Error("merge never took the project row locks");
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -439,12 +631,19 @@ test("a committing merge takes both project row locks before planning", async ()
     const result = await pending;
     assert.equal(result.alreadyMerged, false);
     assert.ok(result.auditId);
-    const audits = await db.execute<{ n: string }>(sql`
+    const audits = await db.execute<{ n: string }>(
+      sql`
       select count(*)::text as n from audit_log
-       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${duplicate} and action = 'merge'`, "objects");
+       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${duplicate} and action = 'merge'`,
+      "objects",
+    );
     assert.equal(audits[0]?.n, "1");
   } finally {
-    try { await holder.query("ROLLBACK"); } catch { /* already committed */ }
+    try {
+      await holder.query("ROLLBACK");
+    } catch {
+      /* already committed */
+    }
     holder.release();
     await dropScratchOrg(org.orgId);
   }
@@ -458,8 +657,20 @@ test("project merge refuses cross-subsidiary pairs", async () => {
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${otherSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Other entity', 'CAD', 'CA')`);
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-S1", "Home job");
-    const duplicate = await seedProject(org.orgId, otherSubsidiary, org.customerId, "JOB-S2", "Away job");
+    const survivor = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-S1",
+      "Home job",
+    );
+    const duplicate = await seedProject(
+      org.orgId,
+      otherSubsidiary,
+      org.customerId,
+      "JOB-S2",
+      "Away job",
+    );
     await assert.rejects(
       mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor }),
       /cannot merge projects from different subsidiaries/,
@@ -469,8 +680,18 @@ test("project merge refuses cross-subsidiary pairs", async () => {
       /cannot merge projects from different subsidiaries/,
     );
     // Same-subsidiary pairs still merge.
-    const same = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-S3", "Home twin");
-    const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: same, actorId: actor });
+    const same = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-S3",
+      "Home twin",
+    );
+    const result = await mergeProjects(org.orgId, {
+      survivorId: survivor,
+      duplicateId: same,
+      actorId: actor,
+    });
     assert.equal(result.alreadyMerged, false);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -485,31 +706,69 @@ test("merge enforces the caller subsidiary scope inside the locked transaction",
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-G1", "Scoped one");
-    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-G2", "Scoped two");
+    const a = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-G1",
+      "Scoped one",
+    );
+    const b = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-G2",
+      "Scoped two",
+    );
     // A scope covering the pair merges.
     const ok = await mergeProjects(org.orgId, {
-      survivorId: a, duplicateId: b, actorId: actor, allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      survivorId: a,
+      duplicateId: b,
+      actorId: actor,
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
     });
     assert.equal(ok.alreadyMerged, false);
     // A scope excluding the pair refuses before anything moves.
-    const c = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-G3", "Hidden one");
-    const d = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-G4", "Hidden two");
+    const c = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-G3",
+      "Hidden one",
+    );
+    const d = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-G4",
+      "Hidden two",
+    );
     const excluded = new Set([randomUUID()]);
     await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: c, duplicateId: d, actorId: actor, allowedSubsidiaryIds: excluded }),
+      mergeProjects(org.orgId, {
+        survivorId: c,
+        duplicateId: d,
+        actorId: actor,
+        allowedSubsidiaryIds: excluded,
+      }),
       /outside the caller subsidiary scope/,
     );
     await assert.rejects(
       previewProjectMerge(org.orgId, c, d, excluded),
       /outside the caller subsidiary scope/,
     );
-    const marker = await db.execute<{ is_active: boolean }>(sql`
-      select is_active from projects where id = ${d} and org_id = ${org.orgId}`, "objects");
+    const marker = await db.execute<{ is_active: boolean }>(
+      sql`
+      select is_active from projects where id = ${d} and org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(marker[0]?.is_active, true, "a refused merge deactivates nothing");
     // Unrestricted callers still merge.
     const unrestricted = await mergeProjects(org.orgId, {
-      survivorId: c, duplicateId: d, actorId: actor, allowedSubsidiaryIds: null,
+      survivorId: c,
+      duplicateId: d,
+      actorId: actor,
+      allowedSubsidiaryIds: null,
     });
     assert.equal(unrestricted.alreadyMerged, false);
   } finally {
@@ -517,54 +776,90 @@ test("merge enforces the caller subsidiary scope inside the locked transaction",
   }
 });
 
-test("merge route forwards a scope that narrows after the precheck to the locked service", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-R1", "Route survivor");
-    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-R2", "Route duplicate");
-    const featureWrite = await db.execute<{ id: string }>(sql`
+test(
+  "merge route forwards a scope that narrows after the precheck to the locked service",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const survivor = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-R1",
+        "Route survivor",
+      );
+      const duplicate = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-R2",
+        "Route duplicate",
+      );
+      const featureWrite = await db.execute<{ id: string }>(
+        sql`
       update orgs
          set settings = jsonb_set(
            coalesce(settings, '{}'::jsonb), '{features}',
            coalesce(settings->'features', '{}'::jsonb) || '{"projects":true}'::jsonb, true)
        where id = ${org.orgId}
        returning id
-    `, "objects");
-    assert.equal(featureWrite.length, 1, "the route fixture enables Projects for its organization");
+    `,
+        "objects",
+      );
+      assert.equal(
+        featureWrite.length,
+        1,
+        "the route fixture enables Projects for its organization",
+      );
 
-    class ScopeThatNarrowsAfterRoutePrecheck extends Set<string> {
-      checks = 0;
-      override has(value: string): boolean {
-        this.checks++;
-        return this.checks <= 2 && super.has(value);
+      class ScopeThatNarrowsAfterRoutePrecheck extends Set<string> {
+        checks = 0;
+        override has(value: string): boolean {
+          this.checks++;
+          return this.checks <= 2 && super.has(value);
+        }
       }
-    }
-    const scope = new ScopeThatNarrowsAfterRoutePrecheck([org.subsidiaryId]);
-    routeState.gate = {
-      user: { orgId: org.orgId, id: actor },
-      permissions: new Set(["projects.manage"]),
-      allowedSubsidiaryIds: scope,
-    };
+      const scope = new ScopeThatNarrowsAfterRoutePrecheck([org.subsidiaryId]);
+      routeState.gate = {
+        user: { orgId: org.orgId, id: actor },
+        permissions: new Set(["projects.manage"]),
+        allowedSubsidiaryIds: scope,
+      };
 
-    const response = await postMergeRoute(new Request("http://openbooks.test/api/projects/merge", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ survivorId: survivor, duplicateId: duplicate }),
-    }));
-    assert.equal(response.status, 422, "the locked service rechecks the narrowed caller scope");
-    assert.match((await response.json()).error, /outside the caller subsidiary scope/);
-    assert.equal(scope.checks, 3, "the route checks both rows, then the locked service rechecks the pair");
-    const row = await db.execute<{ is_active: boolean; custom: Record<string, unknown> }>(sql`
+      const response = await postMergeRoute(
+        new Request("http://openbooks.test/api/projects/merge", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ survivorId: survivor, duplicateId: duplicate }),
+        }),
+      );
+      assert.equal(response.status, 422, "the locked service rechecks the narrowed caller scope");
+      assert.match((await response.json()).error, /outside the caller subsidiary scope/);
+      assert.equal(
+        scope.checks,
+        3,
+        "the route checks both rows, then the locked service rechecks the pair",
+      );
+      const row = await db.execute<{ is_active: boolean; custom: Record<string, unknown> }>(
+        sql`
       select is_active, custom from projects where id = ${duplicate} and org_id = ${org.orgId}
-    `, "objects");
-    assert.equal(row[0]?.is_active, true, "the refused route request moves or deactivates nothing");
-    assert.equal(row[0]?.custom?.["merged_into"], undefined);
-  } finally {
-    routeState.gate = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.equal(
+        row[0]?.is_active,
+        true,
+        "the refused route request moves or deactivates nothing",
+      );
+      assert.equal(row[0]?.custom?.["merged_into"], undefined);
+    } finally {
+      routeState.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("merge moves posted journal lines in open periods by reversal plus repost", async () => {
   // A plain in-place rewrite of posted lines dies in the journal guard
@@ -575,17 +870,37 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J1", "Posted one");
-    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J2", "Posted two");
+    const survivor = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-J1",
+      "Posted one",
+    );
+    const duplicate = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-J2",
+      "Posted two",
+    );
     const sourceDocumentId = randomUUID();
     await db.execute(sql`
       insert into documents (id, org_id, subsidiary_id, kind, status, document_number, document_date, currency, project_id)
       values (${sourceDocumentId}, ${org.orgId}, ${org.subsidiaryId}, 'vendor_bill', 'draft',
               ${`BILL-${randomUUID()}`}, ${org.date}, 'CAD', ${duplicate})`);
     const originalEntryId = await seedPostedEntry({
-      orgId: org.orgId, subsidiaryId: org.subsidiaryId, bookId: org.bookId, periodId: org.periodId,
-      date: org.date, adjustmentAccount: org.accounts.adjustment, bankAccount: org.accounts.bank,
-      projectId: duplicate, tag: "JOPEN", sourceDocumentId, custom: { mergeMarker: "preserve" },
+      orgId: org.orgId,
+      subsidiaryId: org.subsidiaryId,
+      bookId: org.bookId,
+      periodId: org.periodId,
+      date: org.date,
+      adjustmentAccount: org.accounts.adjustment,
+      bankAccount: org.accounts.bank,
+      projectId: duplicate,
+      tag: "JOPEN",
+      sourceDocumentId,
+      custom: { mergeMarker: "preserve" },
     });
     const employee = randomUUID();
     await db.execute(sql`
@@ -600,38 +915,57 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
               'unbilled', 'actual', ${originalEntryId}, ${originalEntryId}, ${actor}, ${actor})`);
     const preview = await previewProjectMerge(org.orgId, survivor, duplicate);
     assert.equal(preview.moved.find((m) => m.table === "journal_lines")?.rows, 2);
-    const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
+    const result = await mergeProjects(org.orgId, {
+      survivorId: survivor,
+      duplicateId: duplicate,
+      actorId: actor,
+    });
     assert.equal(result.alreadyMerged, false);
     // History stays on the duplicate: the reversed original plus its negation.
-    const history = await db.execute<{ n: string }>(sql`
+    const history = await db.execute<{ n: string }>(
+      sql`
       select count(*)::text as n from journal_lines
-       where org_id = ${org.orgId} and project_id = ${duplicate}`, "objects");
+       where org_id = ${org.orgId} and project_id = ${duplicate}`,
+      "objects",
+    );
     assert.equal(history[0]?.n, "4");
     // The survivor holds the corrected, posted, balanced copy.
-    const moved = await db.execute<{ n: string; status: string; balance: string }>(sql`
+    const moved = await db.execute<{ n: string; status: string; balance: string }>(
+      sql`
       select count(*)::text as n, max(e.status) as status,
              coalesce(sum(jl.amount), 0)::text as balance
         from journal_lines jl join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
-       where jl.org_id = ${org.orgId} and jl.project_id = ${survivor}`, "objects");
+       where jl.org_id = ${org.orgId} and jl.project_id = ${survivor}`,
+      "objects",
+    );
     assert.equal(moved[0]?.n, "2");
     assert.equal(moved[0]?.status, "posted");
     assert.equal(moved[0]?.balance, "0.0000");
     // Explicit lineage: original reversed, reversal and copy posted.
-    const lineage = await db.execute<{ entry_number: string; status: string }>(sql`
+    const lineage = await db.execute<{ entry_number: string; status: string }>(
+      sql`
       select entry_number, status from journal_entries
        where org_id = ${org.orgId} and entry_number like 'JE-JOPEN%'
-       order by entry_number`, "objects");
+       order by entry_number`,
+      "objects",
+    );
     assert.deepEqual(lineage, [
       { entry_number: "JE-JOPEN", status: "reversed" },
       { entry_number: "JE-JOPEN-C", status: "posted" },
       { entry_number: "JE-JOPEN-R", status: "posted" },
     ]);
     const replacement = await db.execute<{
-      id: string; source_document_id: string | null; reverses_entry_id: string | null; merge_marker: string | null;
-    }>(sql`
+      id: string;
+      source_document_id: string | null;
+      reverses_entry_id: string | null;
+      merge_marker: string | null;
+    }>(
+      sql`
       select id, source_document_id::text, reverses_entry_id::text, custom->>'mergeMarker' as merge_marker
         from journal_entries where org_id = ${org.orgId} and entry_number = 'JE-JOPEN-C'
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.deepEqual(replacement[0], {
       id: replacement[0]?.id,
       source_document_id: sourceDocumentId,
@@ -639,20 +973,27 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
       merge_marker: "preserve",
     });
     const timeEvidence = await db.execute<{
-      cost_journal_entry_id: string | null; overhead_journal_entry_id: string | null;
-    }>(sql`
+      cost_journal_entry_id: string | null;
+      overhead_journal_entry_id: string | null;
+    }>(
+      sql`
       select cost_journal_entry_id::text, overhead_journal_entry_id::text from time_entries
        where org_id = ${org.orgId} and employee_party_id = ${employee}
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.deepEqual(timeEvidence[0], {
       cost_journal_entry_id: replacement[0]?.id,
       overhead_journal_entry_id: replacement[0]?.id,
     });
     // The merge adds no money: posted entries still balance overall.
-    const books = await db.execute<{ balance: string }>(sql`
+    const books = await db.execute<{ balance: string }>(
+      sql`
       select coalesce(sum(jl.amount), 0)::text as balance
         from journal_lines jl join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
-       where jl.org_id = ${org.orgId} and e.status = 'posted'`, "objects");
+       where jl.org_id = ${org.orgId} and e.status = 'posted'`,
+      "objects",
+    );
     assert.equal(books[0]?.balance, "0.0000");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -663,12 +1004,30 @@ test("merge refuses posted journal lines in a closed GL period", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J3", "Closed one");
-    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J4", "Closed two");
+    const survivor = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-J3",
+      "Closed one",
+    );
+    const duplicate = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-J4",
+      "Closed two",
+    );
     await seedPostedEntry({
-      orgId: org.orgId, subsidiaryId: org.subsidiaryId, bookId: org.bookId, periodId: org.periodId,
-      date: org.date, adjustmentAccount: org.accounts.adjustment, bankAccount: org.accounts.bank,
-      projectId: duplicate, tag: "JCLOSED",
+      orgId: org.orgId,
+      subsidiaryId: org.subsidiaryId,
+      bookId: org.bookId,
+      periodId: org.periodId,
+      date: org.date,
+      adjustmentAccount: org.accounts.adjustment,
+      bankAccount: org.accounts.bank,
+      projectId: duplicate,
+      tag: "JCLOSED",
     });
     await db.execute(sql`
       insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by)
@@ -677,12 +1036,12 @@ test("merge refuses posted journal lines in a closed GL period", async () => {
       mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor }),
       /cannot merge: 2 posted journal line\(s\) sit in a closed GL period; reopen the period before merging/,
     );
-    await assert.rejects(
-      previewProjectMerge(org.orgId, survivor, duplicate),
-      /closed GL period/,
+    await assert.rejects(previewProjectMerge(org.orgId, survivor, duplicate), /closed GL period/);
+    const marker = await db.execute<{ is_active: boolean }>(
+      sql`
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`,
+      "objects",
     );
-    const marker = await db.execute<{ is_active: boolean }>(sql`
-      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`, "objects");
     assert.equal(marker[0]?.is_active, true, "a refused merge deactivates nothing");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -699,19 +1058,36 @@ test("merge refuses when billing terms differ", async () => {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const typeA = randomUUID();
     const typeB = randomUUID();
-    for (const [typeId, key] of [[typeA, "merge-a"], [typeB, "merge-b"]] as const) {
+    for (const [typeId, key] of [
+      [typeA, "merge-a"],
+      [typeB, "merge-b"],
+    ] as const) {
       await db.execute(sql`
         insert into project_types (id, org_id, key, name, billing_method, invoicing_profile, backup_profile)
         values (${typeId}, ${org.orgId}, ${key}, ${key}, 'fixed_price', '{}'::jsonb, '{}'::jsonb)`);
     }
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-B1", "Terms one");
-    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-B2", "Terms two");
-    const setTerms = (id: string, value: string, type: string, pref: unknown) => db.execute(sql`
+    const survivor = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-B1",
+      "Terms one",
+    );
+    const duplicate = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-B2",
+      "Terms two",
+    );
+    const setTerms = (id: string, value: string, type: string, pref: unknown) =>
+      db.execute(sql`
       update projects
          set contract_value = ${value}, project_type_id = ${type},
              invoicing_preference = ${JSON.stringify(pref)}::jsonb
        where id = ${id} and org_id = ${org.orgId}`);
-    const attempt = () => mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
+    const attempt = () =>
+      mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
     await setTerms(survivor, "100.0000", typeA, { procedure: "standard" });
     await setTerms(duplicate, "200.0000", typeA, { procedure: "standard" });
     await assert.rejects(attempt(), /disagree on contract value/);
@@ -748,10 +1124,14 @@ test("duplicate listing hides null-subsidiary projects from restricted callers",
     }
     const unrestricted = await findDuplicateProjects(org.orgId, { subsidiaryIds: null });
     assert.ok(
-      unrestricted.some((group) => group.kind === "job_number" && group.projects.some((p) => p.id === nullA)),
+      unrestricted.some(
+        (group) => group.kind === "job_number" && group.projects.some((p) => p.id === nullA),
+      ),
       "unrestricted callers still see the null-subsidiary pair",
     );
-    const restricted = await findDuplicateProjects(org.orgId, { subsidiaryIds: [org.subsidiaryId] });
+    const restricted = await findDuplicateProjects(org.orgId, {
+      subsidiaryIds: [org.subsidiaryId],
+    });
     assert.ok(
       !restricted.some((group) => group.projects.some((p) => p.id === nullA || p.id === nullB)),
       "restricted callers must not see null-subsidiary rows",
@@ -770,8 +1150,20 @@ test("merge refuses while the projects feature is disabled", async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-F1", "Gated one");
-    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-F2", "Gated two");
+    const survivor = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-F1",
+      "Gated one",
+    );
+    const duplicate = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-F2",
+      "Gated two",
+    );
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features,projects}', 'false'::jsonb, true)
        where id = ${org.orgId}`);
@@ -783,13 +1175,20 @@ test("merge refuses while the projects feature is disabled", async () => {
       previewProjectMerge(org.orgId, survivor, duplicate),
       /projects feature is disabled/,
     );
-    const marker = await db.execute<{ is_active: boolean }>(sql`
-      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`, "objects");
+    const marker = await db.execute<{ is_active: boolean }>(
+      sql`
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(marker[0]?.is_active, true, "a refused merge deactivates nothing");
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features,projects}', 'true'::jsonb, true)
        where id = ${org.orgId}`);
-    const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
+    const result = await mergeProjects(org.orgId, {
+      survivorId: survivor,
+      duplicateId: duplicate,
+      actorId: actor,
+    });
     assert.equal(result.alreadyMerged, false);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -819,7 +1218,13 @@ test("project merge refuses cycles, collisions, and spent duplicates", { skip: !
       /change order number CO-1 exists on both projects/,
     );
     // Hierarchy cycle: the survivor sits under the duplicate.
-    const parent = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-P", "Parent");
+    const parent = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-P",
+      "Parent",
+    );
     const child = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-C", "Child");
     await db.execute(sql`
       update projects set parent_id = ${parent} where id = ${child} and org_id = ${org.orgId}`);
@@ -828,7 +1233,13 @@ test("project merge refuses cycles, collisions, and spent duplicates", { skip: !
       /cycle/,
     );
     // Lines on an approved document freeze the merge with a named refusal.
-    const frozen = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-F", "Frozen");
+    const frozen = await seedProject(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      "JOB-F",
+      "Frozen",
+    );
     const frozenDoc = randomUUID();
     await db.execute(sql`
       insert into documents (id, org_id, subsidiary_id, kind, status, document_number, document_date, currency, project_id)
@@ -857,100 +1268,175 @@ test("project merge refuses cycles, collisions, and spent duplicates", { skip: !
   }
 });
 
-test("project merge refuses a second primary baseline and moves schedule rows", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-SB-A", "Baseline Alpha");
-    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-SB-B", "Baseline Beta");
-    await db.execute(sql`
+test(
+  "project merge refuses a second primary baseline and moves schedule rows",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const a = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-SB-A",
+        "Baseline Alpha",
+      );
+      const b = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-SB-B",
+        "Baseline Beta",
+      );
+      await db.execute(sql`
       insert into schedule_baselines (org_id, project_id, name, is_primary)
       values (${org.orgId}, ${a}, 'Primary A', true), (${org.orgId}, ${b}, 'Primary B', true)`);
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
-      /both projects hold a primary schedule baseline/,
-    );
-    // A non-primary baseline is no conflict: it follows the merge, and the
-    // survivor keeps its own primary.
-    await db.execute(sql`
+      await assert.rejects(
+        mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
+        /both projects hold a primary schedule baseline/,
+      );
+      // A non-primary baseline is no conflict: it follows the merge, and the
+      // survivor keeps its own primary.
+      await db.execute(sql`
       update schedule_baselines set is_primary = false
        where org_id = ${org.orgId} and project_id = ${b}`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into schedule_calendars (org_id, project_id, name)
       values (${org.orgId}, ${b}, 'Crew calendar')`);
-    const result = await mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor });
-    assert.equal(result.alreadyMerged, false);
-    for (const table of ["schedule_baselines", "schedule_calendars"]) {
-      const left = await db.execute<{ n: string }>(sql`
+      const result = await mergeProjects(org.orgId, {
+        survivorId: a,
+        duplicateId: b,
+        actorId: actor,
+      });
+      assert.equal(result.alreadyMerged, false);
+      for (const table of ["schedule_baselines", "schedule_calendars"]) {
+        const left = await db.execute<{ n: string }>(
+          sql`
         select count(*)::text as n from ${sql.identifier(table)}
-         where org_id = ${org.orgId} and project_id = ${b}`, "objects");
-      assert.equal(left[0]?.n, "0", table);
-    }
-    const kept = await db.execute<{ n: string }>(sql`
+         where org_id = ${org.orgId} and project_id = ${b}`,
+          "objects",
+        );
+        assert.equal(left[0]?.n, "0", table);
+      }
+      const kept = await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from schedule_baselines
-       where org_id = ${org.orgId} and project_id = ${a} and is_primary`, "objects");
-    assert.equal(kept[0]?.n, "1");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and project_id = ${a} and is_primary`,
+        "objects",
+      );
+      assert.equal(kept[0]?.n, "1");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("project merge refuses pay-application collisions and moves revenue contracts", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const approveApplication = async (id: string) => withOrgTransaction(org.orgId, async () => {
-      const receipt = await routeSubjectSubmission({ orgId: org.orgId, actorId: actor,
-        subjectKind: 'customer_pay_application', subjectId: id, source: 'api' });
-      assert.equal(receipt.policy.kind, 'ungated');
-      assert.equal((await db.execute(sql`update pay_applications set status='approved',approved_by=${actor},
-        approved_at=now(),updated_by=${actor} where org_id=${org.orgId} and id=${id} returning id`, "objects")).length, 1);
-    });
-    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PA-A", "Payapp Alpha");
-    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PA-B", "Payapp Beta");
-    await db.execute(sql`
+test(
+  "project merge refuses pay-application collisions and moves revenue contracts",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const approveApplication = async (id: string) =>
+        withOrgTransaction(org.orgId, async () => {
+          const receipt = await routeSubjectSubmission({
+            orgId: org.orgId,
+            actorId: actor,
+            subjectKind: "customer_pay_application",
+            subjectId: id,
+            source: "api",
+          });
+          assert.equal(receipt.policy.kind, "ungated");
+          assert.equal(
+            (
+              await db.execute(
+                sql`update pay_applications set status='approved',approved_by=${actor},
+        approved_at=now(),updated_by=${actor} where org_id=${org.orgId} and id=${id} returning id`,
+                "objects",
+              )
+            ).length,
+            1,
+          );
+        });
+      const a = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-PA-A",
+        "Payapp Alpha",
+      );
+      const b = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-PA-B",
+        "Payapp Beta",
+      );
+      await db.execute(sql`
       insert into pay_applications (org_id, project_id, application_number, period_end, status)
       values (${org.orgId}, ${a}, 7, '2026-08-31', 'draft'),
              (${org.orgId}, ${b}, 7, '2026-08-31', 'draft')`);
-    const closed = (await db.execute<{ id: string }>(sql`select id from pay_applications
-      where org_id=${org.orgId} and project_id=${b}`, "objects"))[0]!;
-    await approveApplication(closed.id);
-    await db.execute(sql`update pay_applications set status='posted' where org_id=${org.orgId} and id=${closed.id}`);
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
-      /pay application number 7 exists on both projects/,
-    );
-    // Same number reconciled away, but both sides still hold an open
-    // application: the partial unique index would fire on the move.
-    await db.execute(sql`
+      const closed = (
+        await db.execute<{ id: string }>(
+          sql`select id from pay_applications
+      where org_id=${org.orgId} and project_id=${b}`,
+          "objects",
+        )
+      )[0]!;
+      await approveApplication(closed.id);
+      await db.execute(
+        sql`update pay_applications set status='posted' where org_id=${org.orgId} and id=${closed.id}`,
+      );
+      await assert.rejects(
+        mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
+        /pay application number 7 exists on both projects/,
+      );
+      // Same number reconciled away, but both sides still hold an open
+      // application: the partial unique index would fire on the move.
+      await db.execute(sql`
       update pay_applications set application_number = 8
        where org_id = ${org.orgId} and project_id = ${b}`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into pay_applications (org_id, project_id, application_number, period_end, status)
       values (${org.orgId}, ${b}, 9, '2026-08-31', 'draft')`);
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
-      /both projects hold an open pay application/,
-    );
-    // Closed applications and revenue contracts follow the merge.
-    const applications = await db.execute<{ id: string }>(sql`select id from pay_applications where org_id=${org.orgId} and status='draft'`, "objects");
-    for (const application of applications) await approveApplication(application.id);
-    await db.execute(sql`update pay_applications set status = 'posted' where org_id = ${org.orgId}`);
-    await db.execute(sql`
+      await assert.rejects(
+        mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
+        /both projects hold an open pay application/,
+      );
+      // Closed applications and revenue contracts follow the merge.
+      const applications = await db.execute<{ id: string }>(
+        sql`select id from pay_applications where org_id=${org.orgId} and status='draft'`,
+        "objects",
+      );
+      for (const application of applications) await approveApplication(application.id);
+      await db.execute(
+        sql`update pay_applications set status = 'posted' where org_id = ${org.orgId}`,
+      );
+      await db.execute(sql`
       insert into revenue_contracts (org_id, project_id, contract_number, customer_id)
       values (${org.orgId}, ${b}, 'RC-1', ${org.customerId})`);
-    const result = await mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor });
-    assert.equal(result.alreadyMerged, false);
-    for (const table of ["pay_applications", "revenue_contracts"]) {
-      const left = await db.execute<{ n: string }>(sql`
+      const result = await mergeProjects(org.orgId, {
+        survivorId: a,
+        duplicateId: b,
+        actorId: actor,
+      });
+      assert.equal(result.alreadyMerged, false);
+      for (const table of ["pay_applications", "revenue_contracts"]) {
+        const left = await db.execute<{ n: string }>(
+          sql`
         select count(*)::text as n from ${sql.identifier(table)}
-         where org_id = ${org.orgId} and project_id = ${b}`, "objects");
-      assert.equal(left[0]?.n, "0", table);
+         where org_id = ${org.orgId} and project_id = ${b}`,
+          "objects",
+        );
+        assert.equal(left[0]?.n, "0", table);
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 async function seedFieldTime(orgId: string, projectId: string, tag: string, day: string) {
   const foreman = randomUUID();
@@ -1000,110 +1486,183 @@ async function seedWorkerDay(
   return name;
 }
 
-test("project merge moves field-time and HRM rows but leaves filed certified runs", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-FT-A", "Fieldtime Alpha");
-    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-FT-B", "Fieldtime Beta");
-    await seedFieldTime(org.orgId, b, "B", "2026-08-04");
-    await seedWorkerDay(org.orgId, org.subsidiaryId, b, "Perdiem Worker", "2026-08-04");
-    await db.execute(sql`
+test(
+  "project merge moves field-time and HRM rows but leaves filed certified runs",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const a = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-FT-A",
+        "Fieldtime Alpha",
+      );
+      const b = await seedProject(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        "JOB-FT-B",
+        "Fieldtime Beta",
+      );
+      await seedFieldTime(org.orgId, b, "B", "2026-08-04");
+      await seedWorkerDay(org.orgId, org.subsidiaryId, b, "Perdiem Worker", "2026-08-04");
+      await db.execute(sql`
       insert into hrm_compliance_findings (org_id, project_id, kind)
       values (${org.orgId}, ${b}, 'missing_rate')`);
-    // Filed compliance evidence stays on its original project (B-PRJ-03
-    // exclusion): a draft and a submitted run for the same week.
-    for (const [week, status] of [["2026-08-08", "draft"], ["2026-08-01", "submitted"]] as const) {
-      await db.execute(sql`
+      // Filed compliance evidence stays on its original project (B-PRJ-03
+      // exclusion): a draft and a submitted run for the same week.
+      for (const [week, status] of [
+        ["2026-08-08", "draft"],
+        ["2026-08-01", "submitted"],
+      ] as const) {
+        await db.execute(sql`
         insert into hrm_certified_payroll_runs
           (org_id, project_id, week_ending, status, payroll_run_document_ids, payload, format_key,
            generated_at, submitted_at)
         values (${org.orgId}, ${b}, ${week}, ${status}, '{}', '{"rows": []}'::jsonb, 'WH-347',
                 now(), case when ${status} = 'submitted' then now() else null end)`);
-    }
-    const result = await mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor });
-    assert.equal(result.alreadyMerged, false);
-    for (const table of [
-      "crew_time_batches",
-      "project_geofences",
-      "time_kiosks",
-      "time_clock_events",
-      "hrm_per_diem_entries",
-      "hrm_travel_pay_entries",
-      "hrm_compliance_findings",
-    ]) {
-      const left = await db.execute<{ n: string }>(sql`
+      }
+      const result = await mergeProjects(org.orgId, {
+        survivorId: a,
+        duplicateId: b,
+        actorId: actor,
+      });
+      assert.equal(result.alreadyMerged, false);
+      for (const table of [
+        "crew_time_batches",
+        "project_geofences",
+        "time_kiosks",
+        "time_clock_events",
+        "hrm_per_diem_entries",
+        "hrm_travel_pay_entries",
+        "hrm_compliance_findings",
+      ]) {
+        const left = await db.execute<{ n: string }>(
+          sql`
         select count(*)::text as n from ${sql.identifier(table)}
-         where org_id = ${org.orgId} and project_id = ${b}`, "objects");
-      assert.equal(left[0]?.n, "0", table);
-    }
-    const stayed = await db.execute<{ n: string }>(sql`
+         where org_id = ${org.orgId} and project_id = ${b}`,
+          "objects",
+        );
+        assert.equal(left[0]?.n, "0", table);
+      }
+      const stayed = await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from hrm_certified_payroll_runs
-       where org_id = ${org.orgId} and project_id = ${b}`, "objects");
-    assert.equal(stayed[0]?.n, "2");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and project_id = ${b}`,
+        "objects",
+      );
+      assert.equal(stayed[0]?.n, "2");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("project merge refuses field-time and HRM day/kind collisions by name", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const pair = async (code: string, name: string) => ({
-      survivor: await seedProject(org.orgId, org.subsidiaryId, org.customerId, `${code}-S`, `${name} survivor`),
-      duplicate: await seedProject(org.orgId, org.subsidiaryId, org.customerId, `${code}-D`, `${name} duplicate`),
-    });
-    // Same foreman and day on both sides: both batches point at one
-    // foreman row so the foreman-day identity truly collides.
-    const g1 = await pair("JOB-G1", "Foreman");
-    const foremanS = await seedFieldTime(org.orgId, g1.survivor, "S1", "2026-08-04");
-    await seedFieldTime(org.orgId, g1.duplicate, "D1", "2026-08-04");
-    await db.execute(sql`update crew_time_batches set foreman_party_id = ${foremanS} where org_id = ${org.orgId} and project_id = ${g1.duplicate}`);
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: g1.survivor, duplicateId: g1.duplicate, actorId: actor }),
-      /crew time for the same foreman day exists on both projects \(Foreman S1 on 2026-08-04\)/,
-    );
-    // Same geofence kind on both sides.
-    const g2 = await pair("JOB-G2", "Geofence");
-    for (const projectId of [g2.survivor, g2.duplicate]) {
-      await db.execute(sql`
+test(
+  "project merge refuses field-time and HRM day/kind collisions by name",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const pair = async (code: string, name: string) => ({
+        survivor: await seedProject(
+          org.orgId,
+          org.subsidiaryId,
+          org.customerId,
+          `${code}-S`,
+          `${name} survivor`,
+        ),
+        duplicate: await seedProject(
+          org.orgId,
+          org.subsidiaryId,
+          org.customerId,
+          `${code}-D`,
+          `${name} duplicate`,
+        ),
+      });
+      // Same foreman and day on both sides: both batches point at one
+      // foreman row so the foreman-day identity truly collides.
+      const g1 = await pair("JOB-G1", "Foreman");
+      const foremanS = await seedFieldTime(org.orgId, g1.survivor, "S1", "2026-08-04");
+      await seedFieldTime(org.orgId, g1.duplicate, "D1", "2026-08-04");
+      await db.execute(
+        sql`update crew_time_batches set foreman_party_id = ${foremanS} where org_id = ${org.orgId} and project_id = ${g1.duplicate}`,
+      );
+      await assert.rejects(
+        mergeProjects(org.orgId, {
+          survivorId: g1.survivor,
+          duplicateId: g1.duplicate,
+          actorId: actor,
+        }),
+        /crew time for the same foreman day exists on both projects \(Foreman S1 on 2026-08-04\)/,
+      );
+      // Same geofence kind on both sides.
+      const g2 = await pair("JOB-G2", "Geofence");
+      for (const projectId of [g2.survivor, g2.duplicate]) {
+        await db.execute(sql`
         insert into project_geofences (org_id, project_id, kind, center, radius_m)
         values (${org.orgId}, ${projectId}, 'circle', '{"lat": 43.65, "lng": -79.38}'::jsonb, 250)`);
-    }
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: g2.survivor, duplicateId: g2.duplicate, actorId: actor }),
-      /a circle geofence exists on both projects/,
-    );
-    // Same worker day for per-diem and travel pay on both sides.
-    const g3 = await pair("JOB-G3", "Perdiem");
-    await seedWorkerDay(org.orgId, org.subsidiaryId, g3.survivor, "Day Worker", "2026-08-05");
-    const employmentId = (await db.execute<{ id: string }>(sql`
+      }
+      await assert.rejects(
+        mergeProjects(org.orgId, {
+          survivorId: g2.survivor,
+          duplicateId: g2.duplicate,
+          actorId: actor,
+        }),
+        /a circle geofence exists on both projects/,
+      );
+      // Same worker day for per-diem and travel pay on both sides.
+      const g3 = await pair("JOB-G3", "Perdiem");
+      await seedWorkerDay(org.orgId, org.subsidiaryId, g3.survivor, "Day Worker", "2026-08-05");
+      const employmentId = (
+        await db.execute<{ id: string }>(
+          sql`
         select e.id from worker_employments e join parties p on p.id = e.worker_party_id
-         where e.org_id = ${org.orgId} and p.display_name = 'Day Worker'`, "objects"))[0]!.id;
-    const policyId = (await db.execute<{ id: string }>(sql`
-        select id from hrm_per_diem_policies where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
-    await db.execute(sql`
+         where e.org_id = ${org.orgId} and p.display_name = 'Day Worker'`,
+          "objects",
+        )
+      )[0]!.id;
+      const policyId = (
+        await db.execute<{ id: string }>(
+          sql`
+        select id from hrm_per_diem_policies where org_id = ${org.orgId} limit 1`,
+          "objects",
+        )
+      )[0]!.id;
+      await db.execute(sql`
       insert into hrm_per_diem_entries (org_id, employment_id, policy_id, project_id, worked_on, amount, currency)
       values (${org.orgId}, ${employmentId}, ${policyId}, ${g3.duplicate}, '2026-08-05', '18.5000', 'CAD')`);
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: g3.survivor, duplicateId: g3.duplicate, actorId: actor }),
-      /per-diem for the same worker day exists on both projects \(Day Worker on 2026-08-05\)/,
-    );
-    await db.execute(sql`
+      await assert.rejects(
+        mergeProjects(org.orgId, {
+          survivorId: g3.survivor,
+          duplicateId: g3.duplicate,
+          actorId: actor,
+        }),
+        /per-diem for the same worker day exists on both projects \(Day Worker on 2026-08-05\)/,
+      );
+      await db.execute(sql`
       insert into hrm_travel_pay_entries (org_id, employment_id, policy_id, project_id, worked_on, amount, currency)
       values (${org.orgId}, ${employmentId}, ${policyId}, ${g3.survivor}, '2026-08-06', '41.2500', 'CAD'),
              (${org.orgId}, ${employmentId}, ${policyId}, ${g3.duplicate}, '2026-08-06', '41.2500', 'CAD')`);
-    await db.execute(sql`
+      await db.execute(sql`
       delete from hrm_per_diem_entries where org_id = ${org.orgId} and project_id = ${g3.duplicate}`);
-    await assert.rejects(
-      mergeProjects(org.orgId, { survivorId: g3.survivor, duplicateId: g3.duplicate, actorId: actor }),
-      /travel pay for the same worker day exists on both projects \(Day Worker on 2026-08-06\)/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        mergeProjects(org.orgId, {
+          survivorId: g3.survivor,
+          duplicateId: g3.duplicate,
+          actorId: actor,
+        }),
+        /travel pay for the same worker day exists on both projects \(Day Worker on 2026-08-06\)/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // B-PRJ-03: a hand-maintained reference list can only omit. Every typed
 // project_id column in the catalog must either move with the merge
@@ -1113,49 +1672,60 @@ test("project merge refuses field-time and HRM day/kind collisions by name", { s
 // carry a column-specific handling, including hierarchy and immutable source
 // identity certifications that block the merge.
 
-test("project merge covers every catalog project_id column or excludes it by review", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const columns = await db.execute<{ table_name: string; column_name: string }>(sql`
+test(
+  "project merge covers every catalog project_id column or excludes it by review",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const columns = await db.execute<{ table_name: string; column_name: string }>(
+        sql`
         select c.table_name, c.column_name
           from information_schema.columns c
          where c.table_schema = 'public' and c.column_name = 'project_id'
-         order by 1`, "objects");
-    assert.ok(columns.length > 30, "catalog enumeration returned a plausible project_id population");
-    const refs = new Map(PROJECT_REFS.map(([table, column]) => [`${table}.${column}`, table]));
-    const exclusions = new Map(PROJECT_MERGE_EXCLUSIONS);
-    const specialForeignKeys = new Map(
-      PROJECT_MERGE_SPECIAL_FK_HANDLINGS.map(([table, column, reason]) => [
-        `${table}.${column}`,
-        reason,
-      ]),
-    );
-    for (const [table, reason] of PROJECT_MERGE_EXCLUSIONS) {
-      assert.ok(reason.length > 50, `${table} exclusion carries a reviewed reason, not a stub`);
-    }
-    for (const [reference, reason] of specialForeignKeys) {
-      assert.ok(reason.length > 50, `${reference} carries a reviewed merge handling, not a stub`);
-    }
-    const uncovered = columns.filter(
-      (row) => !refs.has(`${row.table_name}.${row.column_name}`) && !exclusions.has(row.table_name),
-    );
-    const uncoveredReferences = uncovered.map((row) => `${row.table_name}.${row.column_name}`);
-    assert.deepEqual(
-      uncoveredReferences,
-      [],
-      `Project references require merge handling or a reviewed exclusion: ${JSON.stringify(uncoveredReferences)}`,
-    );
-    // No stale entries either: every listed table still carries the column.
-    const catalogTables = new Set(columns.map((row) => row.table_name));
-    for (const [table] of PROJECT_REFS) {
-      assert.ok(catalogTables.has(table), `${table} is listed but has no project_id column`);
-    }
-    for (const [table] of PROJECT_MERGE_EXCLUSIONS) {
-      assert.ok(catalogTables.has(table), `${table} is excluded but has no project_id column`);
-    }
-    // The FK derivation agrees: the only project-linked column outside the
-    // project_id population is the hierarchy parent, handled separately.
-    const fkColumns = await db.execute<{ table_name: string; column_name: string }>(sql`
+         order by 1`,
+        "objects",
+      );
+      assert.ok(
+        columns.length > 30,
+        "catalog enumeration returned a plausible project_id population",
+      );
+      const refs = new Map(PROJECT_REFS.map(([table, column]) => [`${table}.${column}`, table]));
+      const exclusions = new Map(PROJECT_MERGE_EXCLUSIONS);
+      const specialForeignKeys = new Map(
+        PROJECT_MERGE_SPECIAL_FK_HANDLINGS.map(([table, column, reason]) => [
+          `${table}.${column}`,
+          reason,
+        ]),
+      );
+      for (const [table, reason] of PROJECT_MERGE_EXCLUSIONS) {
+        assert.ok(reason.length > 50, `${table} exclusion carries a reviewed reason, not a stub`);
+      }
+      for (const [reference, reason] of specialForeignKeys) {
+        assert.ok(reason.length > 50, `${reference} carries a reviewed merge handling, not a stub`);
+      }
+      const uncovered = columns.filter(
+        (row) =>
+          !refs.has(`${row.table_name}.${row.column_name}`) && !exclusions.has(row.table_name),
+      );
+      const uncoveredReferences = uncovered.map((row) => `${row.table_name}.${row.column_name}`);
+      assert.deepEqual(
+        uncoveredReferences,
+        [],
+        `Project references require merge handling or a reviewed exclusion: ${JSON.stringify(uncoveredReferences)}`,
+      );
+      // No stale entries either: every listed table still carries the column.
+      const catalogTables = new Set(columns.map((row) => row.table_name));
+      for (const [table] of PROJECT_REFS) {
+        assert.ok(catalogTables.has(table), `${table} is listed but has no project_id column`);
+      }
+      for (const [table] of PROJECT_MERGE_EXCLUSIONS) {
+        assert.ok(catalogTables.has(table), `${table} is excluded but has no project_id column`);
+      }
+      // The FK derivation agrees: the only project-linked column outside the
+      // project_id population is the hierarchy parent, handled separately.
+      const fkColumns = await db.execute<{ table_name: string; column_name: string }>(
+        sql`
         select t.relname::text as table_name, a.attname::text as column_name
           from pg_constraint c
           join pg_class t on t.oid = c.conrelid
@@ -1165,24 +1735,32 @@ test("project merge covers every catalog project_id column or excludes it by rev
           join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum
           join pg_attribute fa on fa.attrelid = c.confrelid and fa.attnum = fk.attnum
          where n.nspname = 'public' and c.contype = 'f'
-           and c.confrelid = 'projects'::regclass and fa.attname = 'id'`, "objects");
-    const projectIdSet = new Set(columns.map((row) => `${row.table_name}.${row.column_name}`));
-    const directForeignKeys = new Set(fkColumns.map((row) => `${row.table_name}.${row.column_name}`));
-    const unhandledForeignKeys = fkColumns
+           and c.confrelid = 'projects'::regclass and fa.attname = 'id'`,
+        "objects",
+      );
+      const projectIdSet = new Set(columns.map((row) => `${row.table_name}.${row.column_name}`));
+      const directForeignKeys = new Set(
+        fkColumns.map((row) => `${row.table_name}.${row.column_name}`),
+      );
+      const unhandledForeignKeys = fkColumns
         .filter((row) => {
           const reference = `${row.table_name}.${row.column_name}`;
           return !projectIdSet.has(reference) && !specialForeignKeys.has(reference);
         })
         .map((row) => `${row.table_name}.${row.column_name}`);
-    assert.deepEqual(
-      unhandledForeignKeys,
-      [],
-      `Project foreign keys require merge handling: ${JSON.stringify(unhandledForeignKeys)}`,
-    );
-    for (const reference of specialForeignKeys.keys()) {
-      assert.ok(directForeignKeys.has(reference), `${reference} is listed but has no direct project foreign key`);
+      assert.deepEqual(
+        unhandledForeignKeys,
+        [],
+        `Project foreign keys require merge handling: ${JSON.stringify(unhandledForeignKeys)}`,
+      );
+      for (const reference of specialForeignKeys.keys()) {
+        assert.ok(
+          directForeignKeys.has(reference),
+          `${reference} is listed but has no direct project foreign key`,
+        );
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);

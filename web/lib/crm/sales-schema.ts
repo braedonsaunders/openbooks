@@ -1,113 +1,104 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { isIsoCalendarDate } from '@openbooks/engine/crm/sales/contracts'
-import { canonicalDecimal, compareDecimal } from '../exact-decimal'
-import { moneyRefusal } from '../payroll-decimal-refusal'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { isIsoCalendarDate } from "@openbooks/engine/crm/sales/contracts";
+import { canonicalDecimal, compareDecimal } from "../exact-decimal";
+import { moneyRefusal } from "../payroll-decimal-refusal";
 
-const date = z
-  .string()
-  .refine(isIsoCalendarDate, 'Enter a valid calendar date.')
-const nullableId = uuidString().nullable()
-const position = z.tuple([
-  z.number().min(-180).max(180),
-  z.number().min(-90).max(90),
-])
-const ring = z.array(position).min(4).max(200000)
-const geometry = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('Polygon'), coordinates: z.array(ring).min(1) }),
+const date = z.string().refine(isIsoCalendarDate, "Enter a valid calendar date.");
+const nullableId = uuidString().nullable();
+const position = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]);
+const ring = z.array(position).min(4).max(200000);
+const geometry = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("Polygon"), coordinates: z.array(ring).min(1) }),
   z.object({
-    type: z.literal('MultiPolygon'),
+    type: z.literal("MultiPolygon"),
     coordinates: z.array(z.array(ring).min(1)).min(1),
   }),
-])
+]);
 const boundary = z.object({
   country: z.string().regex(/^[A-Z]{3}$/),
-  level: z.enum(['ADM0', 'ADM1', 'ADM2']),
+  level: z.enum(["ADM0", "ADM1", "ADM2"]),
   id: z.string().min(1).max(200),
   name: z.string().min(1).max(200),
   version: z.string().min(1).max(200),
   geometry: geometry
     .optional()
-    .transform(
-      (value) => value ?? { type: 'Polygon' as const, coordinates: [] },
-    ),
-})
+    .transform((value) => value ?? { type: "Polygon" as const, coordinates: [] }),
+});
 export const salesGeographySchema = z.object({
   version: z.literal(1),
   includes: z.array(boundary).max(200),
   excludes: z.array(boundary).max(200),
-  polygons: z
-    .array(z.object({ id: z.string(), name: z.string(), geometry }))
-    .max(20),
-})
+  polygons: z.array(z.object({ id: z.string(), name: z.string(), geometry })).max(20),
+});
 const common = {
   id: uuidString().optional(),
   expectedRevision: z.number().int().positive().optional(),
   name: z.string().trim().min(1).max(200),
   subsidiaryId: uuidString(),
-}
+};
 const rule = z
   .object({
     field: z.enum([
-      'country',
-      'region',
-      'industry',
-      'lifecycleStage',
-      'leadSourceId',
-      'annualRevenue',
-      'employeeCount',
+      "country",
+      "region",
+      "industry",
+      "lifecycleStage",
+      "leadSourceId",
+      "annualRevenue",
+      "employeeCount",
     ]),
-    operator: z.enum(['equals', 'in', 'contains', 'gte', 'lte']),
+    operator: z.enum(["equals", "in", "contains", "gte", "lte"]),
     value: z.union([z.string(), z.array(z.string()), z.number()]),
   })
   .superRefine((r, ctx) => {
-    if (r.operator === 'in' && !Array.isArray(r.value))
+    if (r.operator === "in" && !Array.isArray(r.value))
       ctx.addIssue({
-        code: 'custom',
-        message: 'The in comparison needs a list of values.',
-      })
-    if (r.operator !== 'in' && Array.isArray(r.value))
+        code: "custom",
+        message: "The in comparison needs a list of values.",
+      });
+    if (r.operator !== "in" && Array.isArray(r.value))
       ctx.addIssue({
-        code: 'custom',
-        message: 'This comparison needs one value.',
-      })
-    if (r.field === 'annualRevenue')
+        code: "custom",
+        message: "This comparison needs one value.",
+      });
+    if (r.field === "annualRevenue")
       for (const v of Array.isArray(r.value) ? r.value : [r.value])
         if (canonicalDecimal(v, 4) === null)
           ctx.addIssue({
-            code: 'custom',
-            message: moneyRefusal('Annual revenue', v),
-          })
+            code: "custom",
+            message: moneyRefusal("Annual revenue", v),
+          });
     if (
-      r.field === 'employeeCount' &&
-      (typeof r.value !== 'number' || !Number.isInteger(r.value) || r.value < 0)
+      r.field === "employeeCount" &&
+      (typeof r.value !== "number" || !Number.isInteger(r.value) || r.value < 0)
     )
       ctx.addIssue({
-        code: 'custom',
-        message: 'Employee count must be a non-negative whole number.',
-      })
-  })
+        code: "custom",
+        message: "Employee count must be a non-negative whole number.",
+      });
+  });
 export const salesTerritorySchema = z.strictObject({
   ...common,
-  action: z.literal('territory'),
+  action: z.literal("territory"),
   managerEmployeeId: nullableId,
   defaultEmployeeId: nullableId,
   salesTeamId: nullableId,
   description: z.string().max(4000),
   priority: z.number().int().min(0).max(2147483647),
   rules: z.array(rule).max(50),
-  matchMode: z.enum(['all', 'any']),
+  matchMode: z.enum(["all", "any"]),
   geography: salesGeographySchema,
   effectiveFrom: date,
-  lifecycle: z.enum(['draft', 'active', 'archived']),
+  lifecycle: z.enum(["draft", "active", "archived"]),
   previewRevision: z
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
-})
-export const salesCommandSchema = z.discriminatedUnion('action', [
+});
+export const salesCommandSchema = z.discriminatedUnion("action", [
   z.strictObject({
-    action: z.literal('representative'),
+    action: z.literal("representative"),
     employeeId: uuidString(),
     enabled: z.boolean(),
     since: date,
@@ -115,14 +106,14 @@ export const salesCommandSchema = z.discriminatedUnion('action', [
   }),
   z.strictObject({
     ...common,
-    action: z.literal('team'),
+    action: z.literal("team"),
     managerEmployeeId: nullableId,
     isActive: z.boolean(),
     members: z
       .array(
         z.object({
           employeeId: uuidString(),
-          role: z.enum(['manager', 'member']),
+          role: z.enum(["manager", "member"]),
           validFrom: date,
         }),
       )
@@ -132,7 +123,7 @@ export const salesCommandSchema = z.discriminatedUnion('action', [
   z
     .strictObject({
       ...common,
-      action: z.literal('quota'),
+      action: z.literal("quota"),
       employeeId: nullableId,
       salesTeamId: nullableId,
       parentQuotaId: nullableId,
@@ -142,40 +133,40 @@ export const salesCommandSchema = z.discriminatedUnion('action', [
       periodEnd: date,
       currency: z.string().regex(/^[A-Z]{3}$/),
       amount: z.string().superRefine((value, ctx) => {
-        const parsed = canonicalDecimal(value, 4)
+        const parsed = canonicalDecimal(value, 4);
         if (parsed === null)
           ctx.addIssue({
-            code: 'custom',
-            message: moneyRefusal('Quota amount', value),
-          })
+            code: "custom",
+            message: moneyRefusal("Quota amount", value),
+          });
         else if (
-          compareDecimal(parsed, '0') < 0 ||
-          parsed.replace(/^[+-]/, '').split('.')[0]!.length > 15
+          compareDecimal(parsed, "0") < 0 ||
+          parsed.replace(/^[+-]/, "").split(".")[0]!.length > 15
         )
           ctx.addIssue({
-            code: 'custom',
-            message: 'Enter a non-negative quota with at most 15 whole digits.',
-          })
+            code: "custom",
+            message: "Enter a non-negative quota with at most 15 whole digits.",
+          });
       }),
-      metric: z.enum(['closed_won', 'net_invoiced']),
+      metric: z.enum(["closed_won", "net_invoiced"]),
     })
     .superRefine((v, ctx) => {
       if ((v.employeeId ? 1 : 0) + (v.salesTeamId ? 1 : 0) !== 1)
         ctx.addIssue({
-          code: 'custom',
-          message: 'Choose one employee or sales team.',
-        })
+          code: "custom",
+          message: "Choose one employee or sales team.",
+        });
       if (v.periodEnd < v.periodStart)
         ctx.addIssue({
-          code: 'custom',
-          message: 'The end date must not precede the start date.',
-        })
+          code: "custom",
+          message: "The end date must not precede the start date.",
+        });
     }),
   z.strictObject({
-    action: z.literal('quota-transition'),
+    action: z.literal("quota-transition"),
     id: uuidString(),
     expectedRevision: z.number().int().positive(),
-    lifecycle: z.enum(['draft', 'pending_approval', 'closed']),
+    lifecycle: z.enum(["draft", "pending_approval", "closed"]),
     reason: z.string().trim().min(1).max(4000),
   }),
-])
+]);

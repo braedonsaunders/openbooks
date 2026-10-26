@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { commerceCloseChecks, snapshotCommerceCloseEvidence, type CommerceCloseCheck } from "./commerce-close.ts";
+import {
+  commerceCloseChecks,
+  snapshotCommerceCloseEvidence,
+  type CommerceCloseCheck,
+} from "./commerce-close.ts";
 import { startCloseRun } from "./run-start.ts";
 import { registerChannelAdapter } from "../commerce/adapters.ts";
 import { createChannel, markChannelActive, retryChannel } from "../commerce/channels.ts";
@@ -70,20 +74,55 @@ async function seedCommerceOrg(): Promise<Fixture> {
   const channelId = created.channel.id;
   await withBypass(() => retryChannel(org.orgId, actor, channelId, "test"));
   await withBypass(() => markChannelActive(org.orgId, actor, channelId));
-  const clearing = await withBypass(() => seedPostingAccount(org.orgId, "1015", "Shopify Clearing", "asset_current_other", org.subsidiaryId));
-  const giftLiability = await withBypass(() => seedPostingAccount(org.orgId, "2310", "Gift Card Liability", "liability_current_other", org.subsidiaryId));
-  await withBypass(() =>
-    upsertAccountMap(org.orgId, actor, { channelId, role: "gateway_clearing", key: "shopify_payments", accountId: clearing, effectiveFrom: DAY }),
+  const clearing = await withBypass(() =>
+    seedPostingAccount(
+      org.orgId,
+      "1015",
+      "Shopify Clearing",
+      "asset_current_other",
+      org.subsidiaryId,
+    ),
+  );
+  const giftLiability = await withBypass(() =>
+    seedPostingAccount(
+      org.orgId,
+      "2310",
+      "Gift Card Liability",
+      "liability_current_other",
+      org.subsidiaryId,
+    ),
   );
   await withBypass(() =>
-    upsertAccountMap(org.orgId, actor, { channelId, role: "gift_card_liability", key: "", accountId: giftLiability, effectiveFrom: DAY }),
+    upsertAccountMap(org.orgId, actor, {
+      channelId,
+      role: "gateway_clearing",
+      key: "shopify_payments",
+      accountId: clearing,
+      effectiveFrom: DAY,
+    }),
+  );
+  await withBypass(() =>
+    upsertAccountMap(org.orgId, actor, {
+      channelId,
+      role: "gift_card_liability",
+      key: "",
+      accountId: giftLiability,
+      effectiveFrom: DAY,
+    }),
   );
   const program = await withBypass(() =>
-    createProgram({ orgId: org.orgId, name: "Gift cards", kind: "gift_card", liabilityAccountId: giftLiability, actorId: actor }),
+    createProgram({
+      orgId: org.orgId,
+      name: "Gift cards",
+      kind: "gift_card",
+      liabilityAccountId: giftLiability,
+      actorId: actor,
+    }),
   );
   await withBypass(() =>
     issueStoredValue({
-      orgId: org.orgId, allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      allowedSubsidiaryIds: null,
       programId: program.id,
       // Stored-value minor units are ten-thousandths (units4("50")), not cents.
       amountMinor: 500000n,
@@ -123,7 +162,15 @@ async function seedCommerceOrg(): Promise<Fixture> {
       values (${org.orgId}, ${channelId}, '1001', '#1001', 'CAD', 'CAD',
               6300, 586, 0, 6886, 'paid', 'unfulfilled', ${`${DAY}T12:00:00Z`}::timestamptz, 'posted')`);
   });
-  return { org, actor, channelId, clearing, giftLiability, programId: program.id, sweepEntryId: sweep.entryId };
+  return {
+    org,
+    actor,
+    channelId,
+    clearing,
+    giftLiability,
+    programId: program.id,
+    sweepEntryId: sweep.entryId,
+  };
 }
 
 function matchingProvider(count = 1, grossMinor = 6886n) {
@@ -139,53 +186,73 @@ function byCode(checks: CommerceCloseCheck[], code: string): CommerceCloseCheck 
 test("a clean commerce period passes every completeness check", { skip: !DB }, async () => {
   const fx = await seedCommerceOrg();
   try {
-    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const checks = await withBypass(() =>
+      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+    );
     assert.equal(checks.length, 8);
     for (const check of checks) {
-      assert.equal(check.count, 0, `${check.code} should be clean: ${JSON.stringify(check.details)}`);
+      assert.equal(
+        check.count,
+        0,
+        `${check.code} should be clean: ${JSON.stringify(check.details)}`,
+      );
     }
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }
 });
 
-test("a missing storefront order fails naming the channel, day and gap", { skip: !DB }, async () => {
-  const fx = await seedCommerceOrg();
-  try {
-    const checks = await withBypass(() =>
-      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider(2, 13772n) }),
-    );
-    const orders = byCode(checks, "commerce-orders-incomplete");
-    assert.ok(orders.count > 0);
-    const gaps = (orders.details as { gaps: { channelName: string; day: string; missingCount: number; grossGapMinor: string }[] }).gaps;
-    assert.equal(gaps.length, 1);
-    assert.equal(gaps[0]!.channelName, "Test Shop");
-    assert.equal(gaps[0]!.day, DAY);
-    assert.equal(gaps[0]!.missingCount, 1);
-    assert.equal(gaps[0]!.grossGapMinor, "6886");
-  } finally {
-    await dropScratchOrg(fx.org.orgId);
-  }
-});
+test(
+  "a missing storefront order fails naming the channel, day and gap",
+  { skip: !DB },
+  async () => {
+    const fx = await seedCommerceOrg();
+    try {
+      const checks = await withBypass(() =>
+        commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), {
+          storefrontTotals: matchingProvider(2, 13772n),
+        }),
+      );
+      const orders = byCode(checks, "commerce-orders-incomplete");
+      assert.ok(orders.count > 0);
+      const gaps = (
+        orders.details as {
+          gaps: { channelName: string; day: string; missingCount: number; grossGapMinor: string }[];
+        }
+      ).gaps;
+      assert.equal(gaps.length, 1);
+      assert.equal(gaps[0]!.channelName, "Test Shop");
+      assert.equal(gaps[0]!.day, DAY);
+      assert.equal(gaps[0]!.missingCount, 1);
+      assert.equal(gaps[0]!.grossGapMinor, "6886");
+    } finally {
+      await dropScratchOrg(fx.org.orgId);
+    }
+  },
+);
 
-test("a storefront that cannot be reached fails closed instead of passing", { skip: !DB }, async () => {
-  const fx = await seedCommerceOrg();
-  try {
-    const checks = await withBypass(() =>
-      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), {
-        storefrontTotals: async () => {
-          throw new Error("Shopify refused the credentials (HTTP 401)");
-        },
-      }),
-    );
-    const unreachable = byCode(checks, "commerce-storefront-unreachable");
-    assert.equal(unreachable.count, 1);
-    const orders = byCode(checks, "commerce-orders-incomplete");
-    assert.equal(orders.count, 0);
-  } finally {
-    await dropScratchOrg(fx.org.orgId);
-  }
-});
+test(
+  "a storefront that cannot be reached fails closed instead of passing",
+  { skip: !DB },
+  async () => {
+    const fx = await seedCommerceOrg();
+    try {
+      const checks = await withBypass(() =>
+        commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), {
+          storefrontTotals: async () => {
+            throw new Error("Shopify refused the credentials (HTTP 401)");
+          },
+        }),
+      );
+      const unreachable = byCode(checks, "commerce-storefront-unreachable");
+      assert.equal(unreachable.count, 1);
+      const orders = byCode(checks, "commerce-orders-incomplete");
+      assert.equal(orders.count, 0);
+    } finally {
+      await dropScratchOrg(fx.org.orgId);
+    }
+  },
+);
 
 test("a clearing residual fails naming the account", { skip: !DB }, async () => {
   const fx = await seedCommerceOrg();
@@ -205,14 +272,22 @@ test("a clearing residual fails naming the account", { skip: !DB }, async () => 
         actorId: fx.actor,
         lines: [
           { accountId: fx.clearing, amount: "10.0000", currency: "CAD", txnAmount: "10.0000" },
-          { accountId: fx.org.accounts.revenue, amount: "-10.0000", currency: "CAD", txnAmount: "-10.0000" },
+          {
+            accountId: fx.org.accounts.revenue,
+            amount: "-10.0000",
+            currency: "CAD",
+            txnAmount: "-10.0000",
+          },
         ],
       }),
     );
-    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const checks = await withBypass(() =>
+      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+    );
     const clearing = byCode(checks, "commerce-clearing-residual");
     assert.equal(clearing.count, 1);
-    const accounts = (clearing.details as { accounts: { name: string; residual: string }[] }).accounts;
+    const accounts = (clearing.details as { accounts: { name: string; residual: string }[] })
+      .accounts;
     assert.equal(accounts[0]!.name, "Shopify Clearing");
     assert.equal(accounts[0]!.residual, "10.0000");
   } finally {
@@ -228,10 +303,13 @@ test("a draft payout fails naming the provider reference", { skip: !DB }, async 
         insert into psp_settlement_batches (org_id, provider, external_ref, currency, settlement_date, status)
         values (${fx.org.orgId}, 'stripe', 'po_draft_1', 'CAD', ${DAY}::date, 'draft')`);
     });
-    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const checks = await withBypass(() =>
+      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+    );
     const payouts = byCode(checks, "commerce-payouts-unposted");
     assert.equal(payouts.count, 1);
-    const batches = (payouts.details as { batches: { provider: string; externalRef: string }[] }).batches;
+    const batches = (payouts.details as { batches: { provider: string; externalRef: string }[] })
+      .batches;
     assert.equal(batches[0]!.provider, "stripe");
     assert.equal(batches[0]!.externalRef, "po_draft_1");
   } finally {
@@ -243,23 +321,34 @@ test("a posted payout with an unmatched charge fails naming the batch", { skip: 
   const fx = await seedCommerceOrg();
   try {
     await withBypass(async () => {
-      const batchId = (await db.execute<{ id: string }>(sql`
+      const batchId = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into psp_settlement_batches
           (org_id, provider, external_ref, currency, settlement_date, status, journal_entry_id, posted_at)
         values (${fx.org.orgId}, 'stripe', 'po_posted_1', 'CAD', ${DAY}::date, 'posted',
                 ${fx.sweepEntryId}, ${`${DAY}T12:00:00Z`}::timestamptz)
-        returning id`, "objects"))[0]!.id;
+        returning id`,
+          "objects",
+        )
+      )[0]!.id;
       await db.execute(sql`
         insert into psp_settlement_lines (org_id, batch_id, line_number, kind, external_ref, amount, currency)
         values (${fx.org.orgId}, ${batchId}, 1, 'fee', 'fee_1', 100, 'CAD'),
                (${fx.org.orgId}, ${batchId}, 2, 'charge', 'ch_1', 5000, 'CAD')`);
     });
-    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const checks = await withBypass(() =>
+      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+    );
     const payouts = byCode(checks, "commerce-payouts-unposted");
     // The fee needs no receipt; the charge without a document link does —
     // and the gate counts the one unlinked batch, not its lines.
     assert.equal(payouts.count, 1);
-    const batches = (payouts.details as { unlinkedBatches: { batchRef: string; unevidencedLines: number; unevidencedTotal: string }[] }).unlinkedBatches;
+    const batches = (
+      payouts.details as {
+        unlinkedBatches: { batchRef: string; unevidencedLines: number; unevidencedTotal: string }[];
+      }
+    ).unlinkedBatches;
     assert.equal(batches.length, 1);
     assert.equal(batches[0]!.batchRef, "po_posted_1");
     assert.equal(batches[0]!.unevidencedLines, 1);
@@ -273,22 +362,33 @@ test("three unmatched charges in one payout still count one batch", { skip: !DB 
   const fx = await seedCommerceOrg();
   try {
     await withBypass(async () => {
-      const batchId = (await db.execute<{ id: string }>(sql`
+      const batchId = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into psp_settlement_batches
           (org_id, provider, external_ref, currency, settlement_date, status, journal_entry_id, posted_at)
         values (${fx.org.orgId}, 'stripe', 'po_posted_3', 'CAD', ${DAY}::date, 'posted',
                 ${fx.sweepEntryId}, ${`${DAY}T12:00:00Z`}::timestamptz)
-        returning id`, "objects"))[0]!.id;
+        returning id`,
+          "objects",
+        )
+      )[0]!.id;
       await db.execute(sql`
         insert into psp_settlement_lines (org_id, batch_id, line_number, kind, external_ref, amount, currency)
         values (${fx.org.orgId}, ${batchId}, 1, 'charge', 'ch_1', 1000, 'CAD'),
                (${fx.org.orgId}, ${batchId}, 2, 'charge', 'ch_2', 2000, 'CAD'),
                (${fx.org.orgId}, ${batchId}, 3, 'charge', 'ch_3', 3000, 'CAD')`);
     });
-    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const checks = await withBypass(() =>
+      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+    );
     const payouts = byCode(checks, "commerce-payouts-unposted");
     assert.equal(payouts.count, 1);
-    const batches = (payouts.details as { unlinkedBatches: { batchRef: string; unevidencedLines: number; unevidencedTotal: string }[] }).unlinkedBatches;
+    const batches = (
+      payouts.details as {
+        unlinkedBatches: { batchRef: string; unevidencedLines: number; unevidencedTotal: string }[];
+      }
+    ).unlinkedBatches;
     assert.equal(batches.length, 1);
     assert.equal(batches[0]!.unevidencedLines, 3);
     assert.match(batches[0]!.unevidencedTotal, /6000/);
@@ -312,7 +412,9 @@ test("a parked order fails naming its exception code", { skip: !DB }, async () =
                 'unmapped_sku', 'SKU TEE-BLUE-XL matches no item', 'Map the SKU under Channels → Products, then replay')`);
     });
     const checks = await withBypass(() =>
-      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider(2, 9386n) }),
+      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), {
+        storefrontTotals: matchingProvider(2, 9386n),
+      }),
     );
     const exceptions = byCode(checks, "commerce-exceptions-open");
     assert.equal(exceptions.count, 1);
@@ -324,15 +426,18 @@ test("a parked order fails naming its exception code", { skip: !DB }, async () =
   }
 });
 
-test("commerce close checks honor subsidiary scope across queues and revenue balances", { skip: !DB }, async () => {
-  const fx = await seedCommerceOrg();
-  try {
-    const childId = randomUUID();
-    await withBypass(async () => {
-      await db.execute(sql`insert into subsidiaries
+test(
+  "commerce close checks honor subsidiary scope across queues and revenue balances",
+  { skip: !DB },
+  async () => {
+    const fx = await seedCommerceOrg();
+    try {
+      const childId = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`insert into subsidiaries
         (id,org_id,parent_id,name,base_currency,country)
         values (${childId},${fx.org.orgId},${fx.org.subsidiaryId},'Commerce Child','CAD','CA')`);
-      await db.execute(sql`insert into channel_orders
+        await db.execute(sql`insert into channel_orders
         (org_id,channel_id,external_id,external_number,shop_currency,presentment_currency,
          subtotal_minor,tax_minor,shipping_minor,total_minor,financial_status,fulfilment_status,ordered_at,
          posting_status,exception_code,exception_reason)
@@ -340,48 +445,79 @@ test("commerce close checks honor subsidiary scope across queues and revenue bal
                 'paid','unfulfilled',${`${DAY}T13:00:00Z`}::timestamptz,'pending',null,null),
                (${fx.org.orgId},${fx.channelId},'scoped-exception','#SCOPED-EXCEPTION','CAD','CAD',100,0,0,100,
                 'paid','unfulfilled',${`${DAY}T14:00:00Z`}::timestamptz,'exception','unmapped_sku','Needs mapping')`);
-      await db.execute(sql`insert into channel_order_events
+        await db.execute(sql`insert into channel_order_events
         (org_id,channel_id,order_id,kind,external_id,occurred_at,posting_status)
         select org_id,channel_id,id,'fulfilment','scoped-pending-event',${`${DAY}T15:00:00Z`}::timestamptz,'pending'
           from channel_orders where org_id=${fx.org.orgId} and external_id='1001'`);
-      const contractId = (await db.execute<{ id: string }>(sql`
+        const contractId = (
+          await db.execute<{ id: string }>(
+            sql`
         insert into revenue_contracts (org_id,customer_id,contract_number,currency,scope,subsidiary_id)
-        values (${fx.org.orgId},${fx.org.customerId},'SCOPED-C','CAD','invoice',${fx.org.subsidiaryId}) returning id`, "objects"))[0]!.id;
-      const obligationId = (await db.execute<{ id: string }>(sql`
+        values (${fx.org.orgId},${fx.org.customerId},'SCOPED-C','CAD','invoice',${fx.org.subsidiaryId}) returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        const obligationId = (
+          await db.execute<{ id: string }>(
+            sql`
         insert into performance_obligations
           (org_id,contract_id,description,recognition_rule_id,allocated_price,deferred_account_id,status,created_at)
         values (${fx.org.orgId},${contractId},'Scoped obligation',${fx.org.recognitionRuleId},100,
-                ${fx.org.accounts.deferred},'open',${`${DAY}T00:00:00Z`}::timestamptz) returning id`, "objects"))[0]!.id;
-      const scheduleId = (await db.execute<{ id: string }>(sql`
+                ${fx.org.accounts.deferred},'open',${`${DAY}T00:00:00Z`}::timestamptz) returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        const scheduleId = (
+          await db.execute<{ id: string }>(
+            sql`
         insert into recognition_schedules (org_id,obligation_id,book_id,status,total_amount)
-        values (${fx.org.orgId},${obligationId},${fx.org.bookId},'planned',100) returning id`, "objects"))[0]!.id;
-      await db.execute(sql`insert into recognition_schedule_lines (org_id,schedule_id,period_id,sequence,planned_amount)
+        values (${fx.org.orgId},${obligationId},${fx.org.bookId},'planned',100) returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        await db.execute(sql`insert into recognition_schedule_lines (org_id,schedule_id,period_id,sequence,planned_amount)
         values (${fx.org.orgId},${scheduleId},${fx.org.periodId},1,100)`);
-      const costContractId = (await db.execute<{ id: string }>(sql`
+        const costContractId = (
+          await db.execute<{ id: string }>(
+            sql`
         insert into revenue_contracts (org_id,customer_id,contract_number,currency,scope,subsidiary_id)
-        values (${fx.org.orgId},${fx.org.customerId},'CHILD-COST-C','CAD','invoice',${childId}) returning id`, "objects"))[0]!.id;
-      await db.execute(sql`insert into contract_cost_assets
+        values (${fx.org.orgId},${fx.org.customerId},'CHILD-COST-C','CAD','invoice',${childId}) returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        await db.execute(sql`insert into contract_cost_assets
         (org_id,revenue_contract_id,cost_type,amount_minor,currency,capitalized_on,amort_start_on,amort_end_on,method,status)
         values (${fx.org.orgId},${costContractId},'commission',10000,'CAD',${DAY}::date,${DAY}::date,'2027-06-30','straight_line','active')`);
-    });
+      });
 
-    const child = await withBypass(() => commerceCloseChecks(fx.org.orgId,
-      { ...SCOPE(fx.org), subsidiaryIds: [childId] }, { storefrontTotals: matchingProvider() }));
-    assert.equal(byCode(child, "commerce-orders-incomplete").count, 0);
-    assert.equal(byCode(child, "commerce-exceptions-open").count, 0);
-    assert.equal(byCode(child, "commerce-deferred-gap").count, 0);
-    assert.equal(byCode(child, "commerce-contract-cost-gap").count, 1);
+      const child = await withBypass(() =>
+        commerceCloseChecks(
+          fx.org.orgId,
+          { ...SCOPE(fx.org), subsidiaryIds: [childId] },
+          { storefrontTotals: matchingProvider() },
+        ),
+      );
+      assert.equal(byCode(child, "commerce-orders-incomplete").count, 0);
+      assert.equal(byCode(child, "commerce-exceptions-open").count, 0);
+      assert.equal(byCode(child, "commerce-deferred-gap").count, 0);
+      assert.equal(byCode(child, "commerce-contract-cost-gap").count, 1);
 
-    const root = await withBypass(() => commerceCloseChecks(fx.org.orgId,
-      { ...SCOPE(fx.org), subsidiaryIds: [fx.org.subsidiaryId] }, { storefrontTotals: matchingProvider() }));
-    assert.equal(byCode(root, "commerce-orders-incomplete").count, 3);
-    assert.equal(byCode(root, "commerce-exceptions-open").count, 1);
-    assert.equal(byCode(root, "commerce-deferred-gap").count, 1);
-    assert.equal(byCode(root, "commerce-contract-cost-gap").count, 0);
-  } finally {
-    await dropScratchOrg(fx.org.orgId);
-  }
-});
+      const root = await withBypass(() =>
+        commerceCloseChecks(
+          fx.org.orgId,
+          { ...SCOPE(fx.org), subsidiaryIds: [fx.org.subsidiaryId] },
+          { storefrontTotals: matchingProvider() },
+        ),
+      );
+      assert.equal(byCode(root, "commerce-orders-incomplete").count, 3);
+      assert.equal(byCode(root, "commerce-exceptions-open").count, 1);
+      assert.equal(byCode(root, "commerce-deferred-gap").count, 1);
+      assert.equal(byCode(root, "commerce-contract-cost-gap").count, 0);
+    } finally {
+      await dropScratchOrg(fx.org.orgId);
+    }
+  },
+);
 
 test("a stray journal to the gift liability fails naming the account", { skip: !DB }, async () => {
   const fx = await seedCommerceOrg();
@@ -400,11 +536,18 @@ test("a stray journal to the gift liability fails naming the account", { skip: !
         actorId: fx.actor,
         lines: [
           { accountId: fx.giftLiability, amount: "5.0000", currency: "CAD", txnAmount: "5.0000" },
-          { accountId: fx.org.accounts.revenue, amount: "-5.0000", currency: "CAD", txnAmount: "-5.0000" },
+          {
+            accountId: fx.org.accounts.revenue,
+            amount: "-5.0000",
+            currency: "CAD",
+            txnAmount: "-5.0000",
+          },
         ],
       }),
     );
-    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
+    const checks = await withBypass(() =>
+      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+    );
     const storedValue = byCode(checks, "commerce-stored-value-gap");
     assert.equal(storedValue.count, 1);
     const ties = (storedValue.details as { ties: { name: string; gap: string }[] }).ties;
@@ -415,269 +558,459 @@ test("a stray journal to the gift liability fails naming the account", { skip: !
   }
 });
 
-test("the stored-value tie is scoped by entity and measured in functional currency", { skip: !DB }, async () => {
-  const fx = await seedCommerceOrg();
-  try {
-    // A second legal entity owing USD: its card ties in USD while the CAD
-    // entity stays clean — the old par-valued tie would read this as a gap.
-    const usId = randomUUID();
-    await withBypass(() => db.execute(sql`
+test(
+  "the stored-value tie is scoped by entity and measured in functional currency",
+  { skip: !DB },
+  async () => {
+    const fx = await seedCommerceOrg();
+    try {
+      // A second legal entity owing USD: its card ties in USD while the CAD
+      // entity stays clean — the old par-valued tie would read this as a gap.
+      const usId = randomUUID();
+      await withBypass(() =>
+        db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-      values (${usId}, ${fx.org.orgId}, ${fx.org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`));
-    const usLiability = await withBypass(() =>
-      seedPostingAccount(fx.org.orgId, "2320", "US Gift Card Liability", "liability_current_other", usId));
-    const usClearing = await withBypass(() =>
-      seedPostingAccount(fx.org.orgId, "1016", "US Clearing", "asset_current_other", usId));
-    const program = await withBypass(() =>
-      createProgram({ orgId: fx.org.orgId, name: "US gift cards", kind: "gift_card", liabilityAccountId: usLiability, actorId: fx.actor }));
-    await withBypass(() =>
-      issueStoredValue({
-        orgId: fx.org.orgId, allowedSubsidiaryIds: null,
-        programId: program.id,
-        amountMinor: 250000n,
-        currency: "USD",
-        subsidiaryId: usId,
-        idempotencyKey: `close-proof-us-${fx.org.orgId}`,
-        debitAccountId: usClearing,
-        postingDate: DAY,
-        actorId: fx.actor,
-      }));
-    const clean = await withBypass(() =>
-      commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
-    assert.equal(byCode(clean, "commerce-stored-value-gap").count, 0);
-    // A stray manual journal on the US entity breaks only its tie.
-    await withBypass(() =>
-      postEntry(db, {
-        orgId: fx.org.orgId,
-        bookId: fx.org.bookId,
-        subsidiaryId: usId,
-        entryNumber: "STRAY-US-1",
-        postingDate: DAY,
-        periodId: fx.org.periodId,
-        origin: "commerce_close_fixture",
-        idempotencyKey: `close-proof-stray-us-${fx.org.orgId}`,
-        currency: "USD",
-        actorId: fx.actor,
-        lines: [
-          { accountId: usLiability, amount: "3.0000", currency: "USD", txnAmount: "3.0000" },
-          { accountId: fx.org.accounts.revenue, amount: "-3.0000", currency: "USD", txnAmount: "-3.0000" },
-        ],
-      }));
-    const scopedToCad = await withBypass(() =>
-      commerceCloseChecks(
-        fx.org.orgId,
-        { ...SCOPE(fx.org), subsidiaryIds: [fx.org.subsidiaryId] },
-        { storefrontTotals: matchingProvider() },
-      ));
-    assert.equal(byCode(scopedToCad, "commerce-stored-value-gap").count, 0);
-    const scopedToUs = await withBypass(() =>
-      commerceCloseChecks(
-        fx.org.orgId,
-        { ...SCOPE(fx.org), subsidiaryIds: [usId] },
-        { storefrontTotals: matchingProvider() },
-      ));
-    const storedValue = byCode(scopedToUs, "commerce-stored-value-gap");
-    assert.equal(storedValue.count, 1);
-    const ties = (storedValue.details as {
-      ties: { name: string; subsidiaryName: string; functionalCurrency: string; gap: string }[];
-    }).ties;
-    assert.equal(ties[0]!.name, "US Gift Card Liability");
-    assert.equal(ties[0]!.subsidiaryName, "US Co");
-    assert.equal(ties[0]!.functionalCurrency, "USD");
-    assert.equal(ties[0]!.gap, "3.0000");
-  } finally {
-    await dropScratchOrg(fx.org.orgId);
-  }
-});
+      values (${usId}, ${fx.org.orgId}, ${fx.org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`),
+      );
+      const usLiability = await withBypass(() =>
+        seedPostingAccount(
+          fx.org.orgId,
+          "2320",
+          "US Gift Card Liability",
+          "liability_current_other",
+          usId,
+        ),
+      );
+      const usClearing = await withBypass(() =>
+        seedPostingAccount(fx.org.orgId, "1016", "US Clearing", "asset_current_other", usId),
+      );
+      const program = await withBypass(() =>
+        createProgram({
+          orgId: fx.org.orgId,
+          name: "US gift cards",
+          kind: "gift_card",
+          liabilityAccountId: usLiability,
+          actorId: fx.actor,
+        }),
+      );
+      await withBypass(() =>
+        issueStoredValue({
+          orgId: fx.org.orgId,
+          allowedSubsidiaryIds: null,
+          programId: program.id,
+          amountMinor: 250000n,
+          currency: "USD",
+          subsidiaryId: usId,
+          idempotencyKey: `close-proof-us-${fx.org.orgId}`,
+          debitAccountId: usClearing,
+          postingDate: DAY,
+          actorId: fx.actor,
+        }),
+      );
+      const clean = await withBypass(() =>
+        commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+      );
+      assert.equal(byCode(clean, "commerce-stored-value-gap").count, 0);
+      // A stray manual journal on the US entity breaks only its tie.
+      await withBypass(() =>
+        postEntry(db, {
+          orgId: fx.org.orgId,
+          bookId: fx.org.bookId,
+          subsidiaryId: usId,
+          entryNumber: "STRAY-US-1",
+          postingDate: DAY,
+          periodId: fx.org.periodId,
+          origin: "commerce_close_fixture",
+          idempotencyKey: `close-proof-stray-us-${fx.org.orgId}`,
+          currency: "USD",
+          actorId: fx.actor,
+          lines: [
+            { accountId: usLiability, amount: "3.0000", currency: "USD", txnAmount: "3.0000" },
+            {
+              accountId: fx.org.accounts.revenue,
+              amount: "-3.0000",
+              currency: "USD",
+              txnAmount: "-3.0000",
+            },
+          ],
+        }),
+      );
+      const scopedToCad = await withBypass(() =>
+        commerceCloseChecks(
+          fx.org.orgId,
+          { ...SCOPE(fx.org), subsidiaryIds: [fx.org.subsidiaryId] },
+          { storefrontTotals: matchingProvider() },
+        ),
+      );
+      assert.equal(byCode(scopedToCad, "commerce-stored-value-gap").count, 0);
+      const scopedToUs = await withBypass(() =>
+        commerceCloseChecks(
+          fx.org.orgId,
+          { ...SCOPE(fx.org), subsidiaryIds: [usId] },
+          { storefrontTotals: matchingProvider() },
+        ),
+      );
+      const storedValue = byCode(scopedToUs, "commerce-stored-value-gap");
+      assert.equal(storedValue.count, 1);
+      const ties = (
+        storedValue.details as {
+          ties: { name: string; subsidiaryName: string; functionalCurrency: string; gap: string }[];
+        }
+      ).ties;
+      assert.equal(ties[0]!.name, "US Gift Card Liability");
+      assert.equal(ties[0]!.subsidiaryName, "US Co");
+      assert.equal(ties[0]!.functionalCurrency, "USD");
+      assert.equal(ties[0]!.gap, "3.0000");
+    } finally {
+      await dropScratchOrg(fx.org.orgId);
+    }
+  },
+);
 
-test("an unrecognized plan without its deferral fails naming the account", { skip: !DB }, async () => {
-  const fx = await seedCommerceOrg();
-  try {
-    await withBypass(async () => {
-      const contractId = (await db.execute<{ id: string }>(sql`
+test(
+  "an unrecognized plan without its deferral fails naming the account",
+  { skip: !DB },
+  async () => {
+    const fx = await seedCommerceOrg();
+    try {
+      await withBypass(async () => {
+        const contractId = (
+          await db.execute<{ id: string }>(
+            sql`
         insert into revenue_contracts (org_id, customer_id, contract_number, currency, scope, subsidiary_id)
-        values (${fx.org.orgId}, ${fx.org.customerId}, 'C-1', 'USD', 'invoice', ${fx.org.subsidiaryId}) returning id`, "objects"))[0]!.id;
-      const obligationId = (await db.execute<{ id: string }>(sql`
+        values (${fx.org.orgId}, ${fx.org.customerId}, 'C-1', 'USD', 'invoice', ${fx.org.subsidiaryId}) returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        const obligationId = (
+          await db.execute<{ id: string }>(
+            sql`
         insert into performance_obligations (org_id, contract_id, description, recognition_rule_id, allocated_price, deferred_account_id, status, created_at)
         values (${fx.org.orgId}, ${contractId}, 'Annual plan', ${fx.org.recognitionRuleId}, 1200, ${fx.org.accounts.deferred}, 'open', ${`${DAY}T00:00:00Z`}::timestamptz)
-        returning id`, "objects"))[0]!.id;
-      const scheduleId = (await db.execute<{ id: string }>(sql`
+        returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        const scheduleId = (
+          await db.execute<{ id: string }>(
+            sql`
         insert into recognition_schedules (org_id, obligation_id, book_id, status, total_amount)
-        values (${fx.org.orgId}, ${obligationId}, ${fx.org.bookId}, 'planned', 1200) returning id`, "objects"))[0]!.id;
-      const lineId = (await db.execute<{ id: string }>(sql`
+        values (${fx.org.orgId}, ${obligationId}, ${fx.org.bookId}, 'planned', 1200) returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        const lineId = (
+          await db.execute<{ id: string }>(
+            sql`
         insert into recognition_schedule_lines (org_id, schedule_id, period_id, sequence, planned_amount)
-        values (${fx.org.orgId}, ${scheduleId}, ${fx.org.periodId}, 1, 100) returning id`, "objects"))[0]!.id;
-      const futureEntry = await postEntry(db, {
-        orgId: fx.org.orgId, bookId: fx.org.bookId, subsidiaryId: fx.org.subsidiaryId,
-        entryNumber: "FUTURE-RECOGNITION", postingDate: "2026-07-16", periodId: fx.org.periodId,
-        origin: "revenue_recognition", idempotencyKey: `future-recognition-${fx.org.orgId}`,
-        currency: "CAD", actorId: fx.actor,
-        lines: [
-          { accountId: fx.org.accounts.deferred, amount: "100.0000", currency: "CAD", txnAmount: "100.0000" },
-          { accountId: fx.org.accounts.revenue, amount: "-100.0000", currency: "CAD", txnAmount: "-100.0000" },
-        ],
-      });
-      await db.execute(sql`update recognition_schedule_lines set journal_entry_id=${futureEntry.entryId}
+        values (${fx.org.orgId}, ${scheduleId}, ${fx.org.periodId}, 1, 100) returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        const futureEntry = await postEntry(db, {
+          orgId: fx.org.orgId,
+          bookId: fx.org.bookId,
+          subsidiaryId: fx.org.subsidiaryId,
+          entryNumber: "FUTURE-RECOGNITION",
+          postingDate: "2026-07-16",
+          periodId: fx.org.periodId,
+          origin: "revenue_recognition",
+          idempotencyKey: `future-recognition-${fx.org.orgId}`,
+          currency: "CAD",
+          actorId: fx.actor,
+          lines: [
+            {
+              accountId: fx.org.accounts.deferred,
+              amount: "100.0000",
+              currency: "CAD",
+              txnAmount: "100.0000",
+            },
+            {
+              accountId: fx.org.accounts.revenue,
+              amount: "-100.0000",
+              currency: "CAD",
+              txnAmount: "-100.0000",
+            },
+          ],
+        });
+        await db.execute(sql`update recognition_schedule_lines set journal_entry_id=${futureEntry.entryId}
         where org_id=${fx.org.orgId} and id=${lineId}`);
-    });
-    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
-    const deferred = byCode(checks, "commerce-deferred-gap");
-    assert.equal(deferred.count, 1);
-    const ties = (deferred.details as { ties: { gap: string }[] }).ties;
-    assert.equal(ties[0]!.gap, "100.0000");
-    assert.equal((await withBypass(() => commerceCloseChecks(fx.org.orgId,
-      { ...SCOPE(fx.org), endsOn: "2026-07-15" }, { storefrontTotals: matchingProvider() })))
-      .find((check) => check.code === "commerce-deferred-gap")?.count, 1,
-      "a recognition posted after the close date remains in the as-of plan");
-  } finally {
-    await dropScratchOrg(fx.org.orgId);
-  }
-});
+      });
+      const checks = await withBypass(() =>
+        commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+      );
+      const deferred = byCode(checks, "commerce-deferred-gap");
+      assert.equal(deferred.count, 1);
+      const ties = (deferred.details as { ties: { gap: string }[] }).ties;
+      assert.equal(ties[0]!.gap, "100.0000");
+      assert.equal(
+        (
+          await withBypass(() =>
+            commerceCloseChecks(
+              fx.org.orgId,
+              { ...SCOPE(fx.org), endsOn: "2026-07-15" },
+              { storefrontTotals: matchingProvider() },
+            ),
+          )
+        ).find((check) => check.code === "commerce-deferred-gap")?.count,
+        1,
+        "a recognition posted after the close date remains in the as-of plan",
+      );
+    } finally {
+      await dropScratchOrg(fx.org.orgId);
+    }
+  },
+);
 
-test("a proven commerce task freezes one evidence snapshot, exactly once per fingerprint", { skip: !DB }, async () => {
-  const fx = await seedCommerceOrg();
-  try {
-    const runId = await withBypass(() =>
-      startCloseRun({ orgId: fx.org.orgId, periodId: fx.org.periodId, bookId: fx.org.bookId, actorId: fx.actor }),
-    );
-    const taskId = (await withBypass(() => db.execute<{ id: string }>(sql`
+test(
+  "a proven commerce task freezes one evidence snapshot, exactly once per fingerprint",
+  { skip: !DB },
+  async () => {
+    const fx = await seedCommerceOrg();
+    try {
+      const runId = await withBypass(() =>
+        startCloseRun({
+          orgId: fx.org.orgId,
+          periodId: fx.org.periodId,
+          bookId: fx.org.bookId,
+          actorId: fx.actor,
+        }),
+      );
+      const taskId = (
+        await withBypass(() =>
+          db.execute<{ id: string }>(
+            sql`
         select id from close_run_tasks
-         where org_id = ${fx.org.orgId} and run_id = ${runId} and key = 'commerce-complete'`, "objects")))[0]?.id;
-    assert.ok(taskId, "the run carries the commerce task while Sales Channels is on");
-    // Nothing to freeze before the proof completes.
-    assert.equal(await withOrgContext(fx.org.orgId, () => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), null);
-    await withBypass(async () => {
-      await db.execute(sql`update close_runs set data_fingerprint = 'fp-proof-1' where id = ${runId} and org_id = ${fx.org.orgId}`);
-      await db.execute(sql`update close_run_tasks set status = 'complete' where id = ${taskId} and org_id = ${fx.org.orgId}`);
-    });
-    const evidenceId = await withOrgContext(fx.org.orgId, () => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor));
-    assert.ok(evidenceId);
-    const rows = await withBypass(() => db.execute<{ label: string; snapshot: unknown }>(sql`
+         where org_id = ${fx.org.orgId} and run_id = ${runId} and key = 'commerce-complete'`,
+            "objects",
+          ),
+        )
+      )[0]?.id;
+      assert.ok(taskId, "the run carries the commerce task while Sales Channels is on");
+      // Nothing to freeze before the proof completes.
+      assert.equal(
+        await withOrgContext(fx.org.orgId, () =>
+          snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor),
+        ),
+        null,
+      );
+      await withBypass(async () => {
+        await db.execute(
+          sql`update close_runs set data_fingerprint = 'fp-proof-1' where id = ${runId} and org_id = ${fx.org.orgId}`,
+        );
+        await db.execute(
+          sql`update close_run_tasks set status = 'complete' where id = ${taskId} and org_id = ${fx.org.orgId}`,
+        );
+      });
+      const evidenceId = await withOrgContext(fx.org.orgId, () =>
+        snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor),
+      );
+      assert.ok(evidenceId);
+      const rows = await withBypass(() =>
+        db.execute<{ label: string; snapshot: unknown }>(
+          sql`
         select label, snapshot from close_task_evidence
-         where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`, "objects"));
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0]!.label, "Commerce completeness evidence");
-    const snapshot = rows[0]!.snapshot as { fingerprint: string; checks: { code: string; count: number }[] };
-    assert.equal(snapshot.fingerprint, "fp-proof-1");
-    assert.equal(snapshot.checks.length, 8);
-    // The tokenless test channel cannot be verified live, so the snapshot
-    // records the refusal (one per period day) instead of a clean proof —
-    // and still attaches once.
-    const unreachable = snapshot.checks.find((check) => check.code === "commerce-storefront-unreachable");
-    assert.ok((unreachable?.count ?? 0) > 0);
-    assert.equal(await withOrgContext(fx.org.orgId, () => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), evidenceId);
-    assert.equal(
-      (await withBypass(() => db.execute<{ count: string }>(sql`
+         where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`,
+          "objects",
+        ),
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]!.label, "Commerce completeness evidence");
+      const snapshot = rows[0]!.snapshot as {
+        fingerprint: string;
+        checks: { code: string; count: number }[];
+      };
+      assert.equal(snapshot.fingerprint, "fp-proof-1");
+      assert.equal(snapshot.checks.length, 8);
+      // The tokenless test channel cannot be verified live, so the snapshot
+      // records the refusal (one per period day) instead of a clean proof —
+      // and still attaches once.
+      const unreachable = snapshot.checks.find(
+        (check) => check.code === "commerce-storefront-unreachable",
+      );
+      assert.ok((unreachable?.count ?? 0) > 0);
+      assert.equal(
+        await withOrgContext(fx.org.orgId, () =>
+          snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor),
+        ),
+        evidenceId,
+      );
+      assert.equal(
+        (
+          await withBypass(() =>
+            db.execute<{ count: string }>(
+              sql`
           select count(*)::text as count from close_task_evidence
-           where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`, "objects")))[0]!.count,
-      "1",
-    );
-  } finally {
-    await dropScratchOrg(fx.org.orgId);
-  }
-});
+           where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`,
+              "objects",
+            ),
+          )
+        )[0]!.count,
+        "1",
+      );
+    } finally {
+      await dropScratchOrg(fx.org.orgId);
+    }
+  },
+);
 
-test("a capitalized cost without its asset legs fails naming the shortfall", { skip: !DB }, async () => {
-  const fx = await seedCommerceOrg();
-  try {
-    await withBypass(async () => {
-      const assetAccount = await seedPostingAccount(fx.org.orgId, "1800", "Contract cost asset", "asset_other", fx.org.subsidiaryId);
-      const amortAccount = await seedPostingAccount(fx.org.orgId, "6100", "Commission amortization", "expense", fx.org.subsidiaryId);
-      await db.execute(sql`
+test(
+  "a capitalized cost without its asset legs fails naming the shortfall",
+  { skip: !DB },
+  async () => {
+    const fx = await seedCommerceOrg();
+    try {
+      await withBypass(async () => {
+        const assetAccount = await seedPostingAccount(
+          fx.org.orgId,
+          "1800",
+          "Contract cost asset",
+          "asset_other",
+          fx.org.subsidiaryId,
+        );
+        const amortAccount = await seedPostingAccount(
+          fx.org.orgId,
+          "6100",
+          "Commission amortization",
+          "expense",
+          fx.org.subsidiaryId,
+        );
+        await db.execute(sql`
         insert into contract_cost_policies (org_id, effective_from, asset_account_id, amortization_expense_account_id)
         values (${fx.org.orgId}, '2026-01-01', ${assetAccount}, ${amortAccount})`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into contract_cost_assets (org_id, cost_type, amount_minor, currency, capitalized_on, amort_start_on, amort_end_on, method, status)
         values (${fx.org.orgId}, 'commission', 12000, 'USD', ${DAY}::date, '2026-07-01', '2027-06-30', 'straight_line', 'active')`);
-    });
-    const checks = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
-    const costs = byCode(checks, "commerce-contract-cost-gap");
-    assert.equal(costs.count, 1);
-    const ties = (costs.details as { ties: { gap: string }[] }).ties;
-    assert.equal(ties[0]!.gap, "-120.0000");
-  } finally {
-    await dropScratchOrg(fx.org.orgId);
-  }
-});
+      });
+      const checks = await withBypass(() =>
+        commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+      );
+      const costs = byCode(checks, "commerce-contract-cost-gap");
+      assert.equal(costs.count, 1);
+      const ties = (costs.details as { ties: { gap: string }[] }).ties;
+      assert.equal(ties[0]!.gap, "-120.0000");
+    } finally {
+      await dropScratchOrg(fx.org.orgId);
+    }
+  },
+);
 
-test("a journal-recognised line is evidenced and an explained clearing balance passes", { skip: !DB }, async () => {
-  const fx = await seedCommerceOrg();
-  try {
-    // A posted in-window batch with one unmatched charge line fails the gate.
-    const batchId = randomUUID();
-    let lineId = "";
-    await withBypass(async () => {
-      await db.execute(sql`
+test(
+  "a journal-recognised line is evidenced and an explained clearing balance passes",
+  { skip: !DB },
+  async () => {
+    const fx = await seedCommerceOrg();
+    try {
+      // A posted in-window batch with one unmatched charge line fails the gate.
+      const batchId = randomUUID();
+      let lineId = "";
+      await withBypass(async () => {
+        await db.execute(sql`
         insert into psp_settlement_batches
           (id, org_id, provider, external_ref, currency, settlement_date, status, subsidiary_id, journal_entry_id, posted_at)
         values (${batchId}, ${fx.org.orgId}, 'stripe', 'po_mark_1', 'CAD', ${DAY}::date, 'posted',
                 ${fx.org.subsidiaryId}, ${fx.sweepEntryId}, ${`${DAY}T12:00:00Z`}::timestamptz)`);
-      lineId = (await db.execute<{ id: string }>(sql`
+        lineId = (
+          await db.execute<{ id: string }>(
+            sql`
         insert into psp_settlement_lines (org_id, batch_id, line_number, kind, amount, currency, external_ref)
         values (${fx.org.orgId}, ${batchId}, 1, 'charge', 100, 'CAD', 'charge-1')
-        returning id`, "objects"))[0]!.id;
-    });
-    const failing = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
-    const payoutsOpen = failing.find((check) => check.code === "commerce-payouts-unposted")!;
-    assert.equal(payoutsOpen.count, 1);
-    // Marking the line as recognised by a posted journal entry evidences it.
-    const sale = await withBypass(() =>
-      postEntry(db, {
-        orgId: fx.org.orgId,
-        bookId: fx.org.bookId,
-        subsidiaryId: fx.org.subsidiaryId,
-        entryNumber: `JE-MARK-${fx.org.orgId.slice(0, 8)}`,
-        postingDate: DAY,
-        periodId: fx.org.periodId,
-        origin: "manual",
-        idempotencyKey: `je-mark-${fx.org.orgId}`,
-        currency: "CAD",
-        actorId: fx.actor,
-        lines: [
-          { accountId: fx.org.accounts.bank, amount: "100.0000", currency: "CAD", txnAmount: "100.0000" },
-          { accountId: fx.org.accounts.revenue, amount: "-100.0000", currency: "CAD", txnAmount: "-100.0000" },
-        ],
-      }),
-    );
-    await withBypass(() => markSettlementLineJournal(fx.org.orgId, batchId, lineId, sale.entryId, fx.actor, null));
-    const marked = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
-    assert.equal(marked.find((check) => check.code === "commerce-payouts-unposted")!.count, 0);
-    // An open batch settling after period end explains its clearing legs:
-    // the settlement entry posts in-window against clearing, the payout
-    // lands next month, and the gate lists it instead of failing.
-    const openEntry = await withBypass(() =>
-      postEntry(db, {
-        orgId: fx.org.orgId,
-        bookId: fx.org.bookId,
-        subsidiaryId: fx.org.subsidiaryId,
-        entryNumber: `PSP-OPEN-${fx.org.orgId.slice(0, 8)}`,
-        postingDate: DAY,
-        periodId: fx.org.periodId,
-        origin: "commerce_close_fixture",
-        idempotencyKey: `close-proof-open-${fx.org.orgId}`,
-        currency: "CAD",
-        actorId: fx.actor,
-        lines: [
-          { accountId: fx.org.accounts.bank, amount: "200.0000", currency: "CAD", txnAmount: "200.0000" },
-          { accountId: fx.clearing, amount: "-200.0000", currency: "CAD", txnAmount: "-200.0000" },
-        ],
-      }),
-    );
-    const openBatchId = randomUUID();
-    await withBypass(async () => {
-      await db.execute(sql`
+        returning id`,
+            "objects",
+          )
+        )[0]!.id;
+      });
+      const failing = await withBypass(() =>
+        commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+      );
+      const payoutsOpen = failing.find((check) => check.code === "commerce-payouts-unposted")!;
+      assert.equal(payoutsOpen.count, 1);
+      // Marking the line as recognised by a posted journal entry evidences it.
+      const sale = await withBypass(() =>
+        postEntry(db, {
+          orgId: fx.org.orgId,
+          bookId: fx.org.bookId,
+          subsidiaryId: fx.org.subsidiaryId,
+          entryNumber: `JE-MARK-${fx.org.orgId.slice(0, 8)}`,
+          postingDate: DAY,
+          periodId: fx.org.periodId,
+          origin: "manual",
+          idempotencyKey: `je-mark-${fx.org.orgId}`,
+          currency: "CAD",
+          actorId: fx.actor,
+          lines: [
+            {
+              accountId: fx.org.accounts.bank,
+              amount: "100.0000",
+              currency: "CAD",
+              txnAmount: "100.0000",
+            },
+            {
+              accountId: fx.org.accounts.revenue,
+              amount: "-100.0000",
+              currency: "CAD",
+              txnAmount: "-100.0000",
+            },
+          ],
+        }),
+      );
+      await withBypass(() =>
+        markSettlementLineJournal(fx.org.orgId, batchId, lineId, sale.entryId, fx.actor, null),
+      );
+      const marked = await withBypass(() =>
+        commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+      );
+      assert.equal(marked.find((check) => check.code === "commerce-payouts-unposted")!.count, 0);
+      // An open batch settling after period end explains its clearing legs:
+      // the settlement entry posts in-window against clearing, the payout
+      // lands next month, and the gate lists it instead of failing.
+      const openEntry = await withBypass(() =>
+        postEntry(db, {
+          orgId: fx.org.orgId,
+          bookId: fx.org.bookId,
+          subsidiaryId: fx.org.subsidiaryId,
+          entryNumber: `PSP-OPEN-${fx.org.orgId.slice(0, 8)}`,
+          postingDate: DAY,
+          periodId: fx.org.periodId,
+          origin: "commerce_close_fixture",
+          idempotencyKey: `close-proof-open-${fx.org.orgId}`,
+          currency: "CAD",
+          actorId: fx.actor,
+          lines: [
+            {
+              accountId: fx.org.accounts.bank,
+              amount: "200.0000",
+              currency: "CAD",
+              txnAmount: "200.0000",
+            },
+            {
+              accountId: fx.clearing,
+              amount: "-200.0000",
+              currency: "CAD",
+              txnAmount: "-200.0000",
+            },
+          ],
+        }),
+      );
+      const openBatchId = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`
         insert into psp_settlement_batches
           (id, org_id, provider, external_ref, currency, settlement_date, status, subsidiary_id,
            journal_entry_id, posted_at, clearing_account_id)
         values (${openBatchId}, ${fx.org.orgId}, 'stripe', 'po_open_1', 'CAD', '2026-08-04', 'posted',
                 ${fx.org.subsidiaryId}, ${openEntry.entryId}, ${`${DAY}T12:00:00Z`}::timestamptz, ${fx.clearing})`);
-    });
-    const explained = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
-    const clearing = explained.find((check) => check.code === "commerce-clearing-residual")!;
-    assert.equal(clearing.count, 0);
-    const openItems = (clearing.details as { openItems: { kind: string; ref: string }[] }).openItems;
-    assert.ok(openItems.some((item) => item.kind === "batch" && item.ref === "po_open_1"));
-  } finally {
-    await dropScratchOrg(fx.org.orgId);
-  }
-});
+      });
+      const explained = await withBypass(() =>
+        commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }),
+      );
+      const clearing = explained.find((check) => check.code === "commerce-clearing-residual")!;
+      assert.equal(clearing.count, 0);
+      const openItems = (clearing.details as { openItems: { kind: string; ref: string }[] })
+        .openItems;
+      assert.ok(openItems.some((item) => item.kind === "batch" && item.ref === "po_open_1"));
+    } finally {
+      await dropScratchOrg(fx.org.orgId);
+    }
+  },
+);

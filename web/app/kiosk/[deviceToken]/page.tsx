@@ -1,12 +1,12 @@
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { listKioskWorkers, resolveKioskByToken } from '@openbooks/engine/hrm/field-time/kiosk'
-import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
-import { KioskTerminal } from '../../../components/field-time/KioskTerminal'
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { listKioskWorkers, resolveKioskByToken } from "@openbooks/engine/hrm/field-time/kiosk";
+import { FieldTimeError } from "@openbooks/engine/hrm/field-time/errors";
+import { KioskTerminal } from "../../../components/field-time/KioskTerminal";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * The site kiosk terminal — a full-screen page with no app shell. The
@@ -16,44 +16,56 @@ export const dynamic = 'force-dynamic'
  * each name proves which employee is clocking.
  */
 export default async function KioskPage({ params }: { params: Promise<{ deviceToken: string }> }) {
-  const { deviceToken } = await params
-  let kiosk
+  const { deviceToken } = await params;
+  let kiosk;
   try {
-    kiosk = await resolveKioskByToken(deviceToken)
+    kiosk = await resolveKioskByToken(deviceToken);
   } catch (error) {
-    if (error instanceof FieldTimeError) notFound()
-    throw error
+    if (error instanceof FieldTimeError) notFound();
+    throw error;
   }
-  const t = await getTranslations('timesheets')
+  const t = await getTranslations("timesheets");
   // The device carries no session: listKioskWorkers scopes itself to the
   // kiosk's org and offers employees only (active employment, no row cap —
   // the client searches the list, so a cap would silently hide workers).
   // The project reads below run scoped the same way.
-  const workers = await listKioskWorkers(kiosk.orgId)
+  const workers = await listKioskWorkers(kiosk.orgId);
   const { projectName, projects } = await withOrgTransaction(kiosk.orgId, async () => {
     const projectName = kiosk.projectId
-      ? ((await db.execute<{ name: string }>(sql`
-        select name from projects where org_id = ${kiosk.orgId} and id = ${kiosk.projectId}`, 'objects'))[0]?.name ?? null)
-      : null
+      ? ((
+          await db.execute<{ name: string }>(
+            sql`
+        select name from projects where org_id = ${kiosk.orgId} and id = ${kiosk.projectId}`,
+            "objects",
+          )
+        )[0]?.name ?? null)
+      : null;
     const projects = kiosk.projectId
       ? []
-      : (await db.execute<{ id: string; name: string }>(sql`
+      : await db.execute<{ id: string; name: string }>(
+          sql`
         select id::text as id, name from projects
-         where org_id = ${kiosk.orgId} and is_active order by name limit 200`, 'objects'))
-    return { projectName, projects }
-  })
+         where org_id = ${kiosk.orgId} and is_active order by name limit 200`,
+          "objects",
+        );
+    return { projectName, projects };
+  });
   return (
     <main>
       <KioskTerminal
         deviceToken={deviceToken}
         kioskName={kiosk.name}
         projectId={kiosk.projectId}
-        projectName={kiosk.projectId ? (projectName ?? t('field.kioskChooseProject')) : t('field.kioskChooseProject')}
+        projectName={
+          kiosk.projectId
+            ? (projectName ?? t("field.kioskChooseProject"))
+            : t("field.kioskChooseProject")
+        }
         pinRequired={kiosk.pinRequired}
         photoRequired={kiosk.photoRequired}
         workers={workers}
         projects={projects}
       />
     </main>
-  )
+  );
 }

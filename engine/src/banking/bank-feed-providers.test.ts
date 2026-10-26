@@ -36,14 +36,15 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
 async function close(server: Server): Promise<void> {
   if (!server.listening) return;
   await new Promise<void>((resolve, reject) => {
-    server.close((error) => error ? reject(error) : resolve());
+    server.close((error) => (error ? reject(error) : resolve()));
   });
 }
 
@@ -106,7 +107,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.bank-feed-sync-route-test')]
@@ -124,7 +125,10 @@ const routeHooks = registerHooks({
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
     if (context.parentURL?.includes("bank-feeds") && specifier.startsWith("@/")) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
+      return nextResolve(
+        new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href,
+        context,
+      );
     }
     if (
       context.parentURL?.includes("bank-feeds") &&
@@ -155,7 +159,11 @@ type SyncRouteModule = {
 const routeModuleHref = pathToFileURL(
   fileURLToPath(new URL("../../../web/app/api/banking/bank-feeds/[id]/route.ts", import.meta.url)),
 ).href;
-const { POST: syncRoutePOST, PATCH: syncRoutePATCH, DELETE: syncRouteDELETE } = (await import(routeModuleHref)) as unknown as SyncRouteModule;
+const {
+  POST: syncRoutePOST,
+  PATCH: syncRoutePATCH,
+  DELETE: syncRouteDELETE,
+} = (await import(routeModuleHref)) as unknown as SyncRouteModule;
 // The factory resolves the gate lazily on every request, so the hooks must
 // stay registered until the tests have run; release them after the file.
 after(() => routeHooks.deregister());
@@ -190,7 +198,13 @@ async function seedFeedFixture(): Promise<FeedFixture> {
             ${sealCredentials(org.orgId, { clientId: "client-id", secret: "provider-secret", accessToken: "access-token", env: "sandbox" })},
             'plaid-external-1', 'hourly', null, true, ${userId})
   `);
-  return { orgId: org.orgId, userId, connectionId, accountId: org.accounts.bank, subsidiaryId: org.subsidiaryId };
+  return {
+    orgId: org.orgId,
+    userId,
+    connectionId,
+    accountId: org.accounts.bank,
+    subsidiaryId: org.subsidiaryId,
+  };
 }
 
 /** Put a connection back in the scheduler's due set after a claimed sync. */
@@ -207,10 +221,13 @@ type ConnectionRow = {
 };
 
 async function loadConnection(connectionId: string): Promise<ConnectionRow> {
-  const r = (await db.execute<ConnectionRow>(sql`
+  const r = await db.execute<ConnectionRow>(
+    sql`
     select last_sync_at, status, last_error
       from bank_feed_connections where id = ${connectionId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]!;
 }
 
@@ -218,10 +235,13 @@ type AttemptRow = ConnectionRow & { last_attempt_at: Date | null };
 
 /** Attempt-bookkeeping reader: also surfaces when the connection last TRIED to sync. */
 async function loadAttemptBookkeeping(connectionId: string): Promise<AttemptRow> {
-  const r = (await db.execute<AttemptRow>(sql`
+  const r = await db.execute<AttemptRow>(
+    sql`
     select last_sync_at, last_attempt_at, status, last_error
       from bank_feed_connections where id = ${connectionId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]!;
 }
 
@@ -244,13 +264,14 @@ interface PlaidTransaction {
   iso_currency_code: string;
 }
 
-function feedTxn(
-  id: string,
-  postedOn: string,
-  amount: string,
-  currency = "CAD",
-): PlaidTransaction {
-  return { transaction_id: id, date: postedOn, amount, name: `Feed ${id}`, iso_currency_code: currency };
+function feedTxn(id: string, postedOn: string, amount: string, currency = "CAD"): PlaidTransaction {
+  return {
+    transaction_id: id,
+    date: postedOn,
+    amount,
+    name: `Feed ${id}`,
+    iso_currency_code: currency,
+  };
 }
 
 interface ScriptedResponse {
@@ -297,12 +318,15 @@ type StatementLineRow = {
 };
 
 async function loadStatementLines(orgId: string, accountId: string): Promise<StatementLineRow[]> {
-  const r = (await db.execute<StatementLineRow>(sql`
+  const r = await db.execute<StatementLineRow>(
+    sql`
     select id, bank_transaction_id
       from bank_statement_lines
      where org_id = ${orgId} and account_id = ${accountId}
      order by bank_transaction_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r;
 }
 
@@ -313,7 +337,8 @@ type FeedImportActors = {
 };
 
 async function loadLatestFeedImportActors(orgId: string): Promise<FeedImportActors> {
-  const r = (await db.execute<FeedImportActors>(sql`
+  const r = await db.execute<FeedImportActors>(
+    sql`
     select bs.created_by as "statementActor",
            (select bsl.created_by from bank_statement_lines bsl
              where bsl.statement_id = bs.id order by bsl.line_number limit 1) as "lineActor",
@@ -324,19 +349,24 @@ async function loadLatestFeedImportActors(orgId: string): Promise<FeedImportActo
      where bs.org_id = ${orgId} and bs.source = 'feed_api'
      order by bs.imported_at desc
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]!;
 }
 
 /** Zero UUID must be absent from every actor column the sync can touch. */
 async function countZeroUuidActorRows(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select (
       (select count(*) from audit_log where org_id = ${orgId} and actor_id = ${ZERO_UUID}) +
       (select count(*) from bank_statements where org_id = ${orgId} and created_by = ${ZERO_UUID}) +
       (select count(*) from bank_statement_lines where org_id = ${orgId} and created_by = ${ZERO_UUID})
     )::int as n
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Number(r[0]!.n);
 }
 
@@ -496,10 +526,13 @@ test("every bank-feed adapter confines hostile inputs to trusted HTTPS origins",
 
   const gocardless = getBankFeedAdapter("gocardless");
   assert.ok(gocardless);
-  assert.deepEqual(await gocardless.test({
-    secretId: credentialPayload,
-    secretKey: credentialPayload,
-  }), { ok: true });
+  assert.deepEqual(
+    await gocardless.test({
+      secretId: credentialPayload,
+      secretKey: credentialPayload,
+    }),
+    { ok: true },
+  );
   await gocardless.fetch(
     { secretId: credentialPayload, secretKey: credentialPayload },
     hostileAccountId,
@@ -705,7 +738,10 @@ test("bank-feed refuses a provider body beyond the byte cap without buffering it
         controller.enqueue(new Uint8Array(chunkBytes));
       },
     });
-    return new Response(oversized, { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(oversized, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   }) as typeof fetch;
 
   const truelayer = getBankFeedAdapter("truelayer");
@@ -714,7 +750,10 @@ test("bank-feed refuses a provider body beyond the byte cap without buffering it
     truelayer.fetch({ accessToken: "access-token" }, "account-id", "2026-01-01", "2026-01-31"),
     /TrueLayer response exceeded the 10 MB limit; set this connection to sync hourly/,
   );
-  assert.ok(pulled <= 12, `the reader must stop at the cap, not drain the provider body (pulled ${pulled} chunks)`);
+  assert.ok(
+    pulled <= 12,
+    `the reader must stop at the cap, not drain the provider body (pulled ${pulled} chunks)`,
+  );
 });
 
 test("a due-feed pass stops starting feeds once its budget is spent and leaves the rest due", async () => {
@@ -732,7 +771,11 @@ test("a due-feed pass stops starting feeds once its budget is spent and leaves t
   );
   assert.deepEqual(started, ["a"], "feeds past the budget must never be claimed or fetched");
   assert.equal(deferred, 2);
-  assert.deepEqual(outcomes.map((outcome) => outcome.connectionId), ["a"], "deferred feeds record no failure");
+  assert.deepEqual(
+    outcomes.map((outcome) => outcome.connectionId),
+    ["a"],
+    "deferred feeds record no failure",
+  );
   assert.ok(outcomes.every((outcome) => outcome.error === undefined));
 });
 
@@ -835,23 +878,23 @@ test("Plaid scopes every transaction page to the configured account mapping", as
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(String(init?.body)) as (typeof requestBodies)[number];
     requestBodies.push(body);
-    return new Response(JSON.stringify({
-      transactions: Array.from({length: requestBodies.length === 1 ? 500 : 100}, (_, index) => feedTxn(`page-${requestBodies.length}-${index}`, "2026-08-01", "1")),
-      total_transactions: 600,
-    }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        transactions: Array.from({ length: requestBodies.length === 1 ? 500 : 100 }, (_, index) =>
+          feedTxn(`page-${requestBodies.length}-${index}`, "2026-08-01", "1"),
+        ),
+        total_transactions: 600,
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      },
+    );
   };
 
   const plaid = getBankFeedAdapter("plaid");
   assert.ok(plaid);
-  await plaid.fetch(
-    plaidCredentials,
-    "  plaid-account-42  ",
-    "2026-08-01",
-    "2026-08-23",
-  );
+  await plaid.fetch(plaidCredentials, "  plaid-account-42  ", "2026-08-01", "2026-08-23");
 
   assert.deepEqual(
     requestBodies.map(({ start_date, end_date, options }) => ({
@@ -886,35 +929,49 @@ test("scheduled bank-feed syncs carry the documented system actor, never the zer
   assert.notEqual(systemActorId, "00000000-0000-0000-0000-000000000000");
 });
 
-test("Plaid imports the complete reported population and retains the watermark on incomplete pages", {skip: !DB}, async (t) => {
-  const f = await seedFeedFixture();
-  try {
-    const postedOn = addCalendarDays(new Date().toISOString().slice(0, 10), -1);
-    const transactions = Array.from({length: 600}, (_, index) => feedTxn(`complete-${index}`, postedOn, "1"));
-    const page = (rows: PlaidTransaction[]): ScriptedResponse => ({status: 200, body: {transactions: rows, total_transactions: 600}});
-    const script = [page(transactions.slice(0, 500)), page([])];
-    scriptProvider(t, script);
-    let outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
-    assert.match(String(outcome.error), /incomplete transaction page/);
-    assert.equal((await loadConnection(f.connectionId)).last_sync_at, null);
-    assert.deepEqual(await loadStatementLines(f.orgId, f.accountId), []);
-    await makeDue(f.connectionId);
-    script.push(page(transactions.slice(0, 500)), page(transactions.slice(500)));
-    outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
-    assert.equal(outcome.error, undefined);
-    assert.equal(outcome.imported, 600);
-    assert.ok(asWatermarkMs((await loadConnection(f.connectionId)).last_sync_at));
-    assert.deepEqual((await loadStatementLines(f.orgId, f.accountId)).map(row => row.bank_transaction_id).sort(), transactions.map(row => row.transaction_id!).sort());
-    await makeDue(f.connectionId);
-    script.push(page(transactions.slice(0, 500)), page(transactions.slice(500)));
-    outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
-    assert.equal(outcome.error, undefined);
-    assert.equal(outcome.imported, 0);
-    assert.equal((await loadStatementLines(f.orgId, f.accountId)).length, 600);
-  } finally {
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+test(
+  "Plaid imports the complete reported population and retains the watermark on incomplete pages",
+  { skip: !DB },
+  async (t) => {
+    const f = await seedFeedFixture();
+    try {
+      const postedOn = addCalendarDays(new Date().toISOString().slice(0, 10), -1);
+      const transactions = Array.from({ length: 600 }, (_, index) =>
+        feedTxn(`complete-${index}`, postedOn, "1"),
+      );
+      const page = (rows: PlaidTransaction[]): ScriptedResponse => ({
+        status: 200,
+        body: { transactions: rows, total_transactions: 600 },
+      });
+      const script = [page(transactions.slice(0, 500)), page([])];
+      scriptProvider(t, script);
+      let outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+      assert.match(String(outcome.error), /incomplete transaction page/);
+      assert.equal((await loadConnection(f.connectionId)).last_sync_at, null);
+      assert.deepEqual(await loadStatementLines(f.orgId, f.accountId), []);
+      await makeDue(f.connectionId);
+      script.push(page(transactions.slice(0, 500)), page(transactions.slice(500)));
+      outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+      assert.equal(outcome.error, undefined);
+      assert.equal(outcome.imported, 600);
+      assert.ok(asWatermarkMs((await loadConnection(f.connectionId)).last_sync_at));
+      assert.deepEqual(
+        (await loadStatementLines(f.orgId, f.accountId))
+          .map((row) => row.bank_transaction_id)
+          .sort(),
+        transactions.map((row) => row.transaction_id!).sort(),
+      );
+      await makeDue(f.connectionId);
+      script.push(page(transactions.slice(0, 500)), page(transactions.slice(500)));
+      outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+      assert.equal(outcome.error, undefined);
+      assert.equal(outcome.imported, 0);
+      assert.equal((await loadStatementLines(f.orgId, f.accountId)).length, 600);
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
 
 test(
   "a failed bank-feed sync leaves the success watermark alone so retries recover the missed window",
@@ -946,10 +1003,12 @@ test(
       // have lost — and import every backdated transaction exactly once.
       await makeDue(f.connectionId);
       script.length = 0;
-      script.push(plaidPage([
-        feedTxn("feed-deposit-40d", addCalendarDays(today, -40), "-100.50"),
-        feedTxn("feed-withdrawal-45d", addCalendarDays(today, -45), "20.25"),
-      ]));
+      script.push(
+        plaidPage([
+          feedTxn("feed-deposit-40d", addCalendarDays(today, -40), "-100.50"),
+          feedTxn("feed-withdrawal-45d", addCalendarDays(today, -45), "20.25"),
+        ]),
+      );
       outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
       assert.equal(outcome.error, undefined);
       assert.deepEqual(windows[1], { start_date: addCalendarDays(today, -90), end_date: today });
@@ -966,7 +1025,9 @@ test(
       // the watermark exactly where the successful import ended.
       await makeDue(f.connectionId);
       script.length = 0;
-      script.push(plaidPage([feedTxn("feed-eur-mismatch", addCalendarDays(today, -1), "-5.00", "EUR")]));
+      script.push(
+        plaidPage([feedTxn("feed-eur-mismatch", addCalendarDays(today, -1), "-5.00", "EUR")]),
+      );
       outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
       assert.match(String(outcome.error), /currency/i);
       row = await loadConnection(f.connectionId);
@@ -1019,7 +1080,13 @@ test(
       const banking = (await import("./banking.ts")) as { SYSTEM_ACTOR_ID?: string };
 
       scriptProvider(t, [
-        plaidPage([feedTxn("feed-scheduled", addCalendarDays(new Date().toISOString().slice(0, 10), -3), "-250.00")]),
+        plaidPage([
+          feedTxn(
+            "feed-scheduled",
+            addCalendarDays(new Date().toISOString().slice(0, 10), -3),
+            "-250.00",
+          ),
+        ]),
       ]);
       const outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
       assert.equal(outcome.error, undefined, "the scheduled sync must succeed for this control");
@@ -1055,7 +1122,13 @@ test(
         allowedSubsidiaryIds: null,
       };
       scriptProvider(t, [
-        plaidPage([feedTxn("feed-interactive", addCalendarDays(new Date().toISOString().slice(0, 10), -2), "-75.25")]),
+        plaidPage([
+          feedTxn(
+            "feed-interactive",
+            addCalendarDays(new Date().toISOString().slice(0, 10), -2),
+            "-75.25",
+          ),
+        ]),
       ]);
 
       const response = await syncRoutePOST(
@@ -1097,29 +1170,52 @@ test(
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: null,
     };
-    const probeRequest = () => syncRoutePOST(
-      new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "test" }),
-      }),
-      { params: Promise.resolve({ id: f.connectionId }) },
-    );
+    const probeRequest = () =>
+      syncRoutePOST(
+        new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "test" }),
+        }),
+        { params: Promise.resolve({ id: f.connectionId }) },
+      );
     try {
       let release!: (response: Response) => void;
       let started!: () => void;
-      const responseFromProvider = new Promise<Response>((resolve) => { release = resolve; });
-      const startedProvider = new Promise<void>((resolve) => { started = resolve; });
-      globalThis.fetch = (async () => { started(); return responseFromProvider; }) as typeof fetch;
+      const responseFromProvider = new Promise<Response>((resolve) => {
+        release = resolve;
+      });
+      const startedProvider = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      globalThis.fetch = (async () => {
+        started();
+        return responseFromProvider;
+      }) as typeof fetch;
       const firstProbe = probeRequest();
       await startedProvider;
       const rotated = await syncRoutePATCH(
         new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, {
-          method: "PATCH", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ credentials: { clientId: "client-id", secret: "provider-secret", accessToken: "rotated-token", env: "sandbox" } }),
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            credentials: {
+              clientId: "client-id",
+              secret: "provider-secret",
+              accessToken: "rotated-token",
+              env: "sandbox",
+            },
+          }),
         }),
         { params: Promise.resolve({ id: f.connectionId }) },
       );
       assert.equal(rotated.status, 200);
-      release(new Response(JSON.stringify({ accounts: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+      release(
+        new Response(JSON.stringify({ accounts: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
       const stale = await firstProbe;
       assert.equal(stale.status, 409);
       assert.deepEqual(await stale.json(), { error: "stale probe" });
@@ -1128,21 +1224,43 @@ test(
 
       let releaseDelete!: (response: Response) => void;
       let startedDelete!: () => void;
-      const responseAfterDelete = new Promise<Response>((resolve) => { releaseDelete = resolve; });
-      const startedDeleteProbe = new Promise<void>((resolve) => { startedDelete = resolve; });
-      globalThis.fetch = (async () => { startedDelete(); return responseAfterDelete; }) as typeof fetch;
+      const responseAfterDelete = new Promise<Response>((resolve) => {
+        releaseDelete = resolve;
+      });
+      const startedDeleteProbe = new Promise<void>((resolve) => {
+        startedDelete = resolve;
+      });
+      globalThis.fetch = (async () => {
+        startedDelete();
+        return responseAfterDelete;
+      }) as typeof fetch;
       const deletingProbe = probeRequest();
       await startedDeleteProbe;
       const deleted = await syncRouteDELETE(
-        new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, { method: "DELETE" }),
+        new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, {
+          method: "DELETE",
+        }),
         { params: Promise.resolve({ id: f.connectionId }) },
       );
       assert.equal(deleted.status, 200);
-      releaseDelete(new Response(JSON.stringify({ accounts: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+      releaseDelete(
+        new Response(JSON.stringify({ accounts: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
       const deletedProbe = await deletingProbe;
       assert.equal(deletedProbe.status, 409);
       assert.deepEqual(await deletedProbe.json(), { error: "deleted while testing" });
-      assert.equal((await db.execute(sql`select 1 from bank_feed_connections where id=${f.connectionId} and org_id=${f.orgId}`, "objects")).length, 0);
+      assert.equal(
+        (
+          await db.execute(
+            sql`select 1 from bank_feed_connections where id=${f.connectionId} and org_id=${f.orgId}`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
     } finally {
       globalThis.fetch = originalFetch;
       routeState.authz = null;
@@ -1161,18 +1279,24 @@ test(
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: null,
     };
-    const remove = () => syncRouteDELETE(
-      new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, { method: "DELETE" }),
-      { params: Promise.resolve({ id: f.connectionId }) },
-    );
+    const remove = () =>
+      syncRouteDELETE(
+        new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, {
+          method: "DELETE",
+        }),
+        { params: Promise.resolve({ id: f.connectionId }) },
+      );
     try {
       const responses = await Promise.all([remove(), remove()]);
       assert.deepEqual(responses.map((response) => response.status).sort(), [200, 404]);
-      const audits = await db.execute<{ count: number }>(sql`
+      const audits = await db.execute<{ count: number }>(
+        sql`
         select count(*)::int as count from audit_log
          where org_id = ${f.orgId} and table_name = 'bank_feed_connections'
            and row_id = ${f.connectionId} and action = 'delete'
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(audits[0]?.count, 1);
     } finally {
       routeState.authz = null;
@@ -1181,53 +1305,100 @@ test(
   },
 );
 
-test("scheduled sync fences both claim and provider response against connection changes", { skip: !DB }, async () => {
-  const beforeClaim = await seedFeedFixture();
-  const holder = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-  let holderOpen = false;
-  const originalFetch = globalThis.fetch;
-  try {
-    await holder.connect(); holderOpen = true; await holder.query("begin");
-    await holder.query("select set_config('app.current_org',$1,true),set_config('app.bypass_rls','on',true)", [beforeClaim.orgId]);
-    await holder.query("select id from bank_feed_connections where id=$1 and org_id=$2 for update", [beforeClaim.connectionId, beforeClaim.orgId]);
-    globalThis.fetch = (async () => new Response(JSON.stringify({ accounts: [] }), { status: 200 })) as typeof fetch;
-    const pending = runDueBankFeeds();
-    let waiting = false;
-    for (let i = 0; i < 600 && !waiting; i++) {
-      waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and query ilike '%update bank_feed_connections c%') as waiting`, "objects"))[0]!.waiting;
-      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 25));
+test(
+  "scheduled sync fences both claim and provider response against connection changes",
+  { skip: !DB },
+  async () => {
+    const beforeClaim = await seedFeedFixture();
+    const holder = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+    let holderOpen = false;
+    const originalFetch = globalThis.fetch;
+    try {
+      await holder.connect();
+      holderOpen = true;
+      await holder.query("begin");
+      await holder.query(
+        "select set_config('app.current_org',$1,true),set_config('app.bypass_rls','on',true)",
+        [beforeClaim.orgId],
+      );
+      await holder.query(
+        "select id from bank_feed_connections where id=$1 and org_id=$2 for update",
+        [beforeClaim.connectionId, beforeClaim.orgId],
+      );
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ accounts: [] }), { status: 200 })) as typeof fetch;
+      const pending = runDueBankFeeds();
+      let waiting = false;
+      for (let i = 0; i < 600 && !waiting; i++) {
+        waiting = (
+          await db.execute<{ waiting: boolean }>(
+            sql`select exists(select 1 from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and query ilike '%update bank_feed_connections c%') as waiting`,
+            "objects",
+          )
+        )[0]!.waiting;
+        if (!waiting) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.equal(waiting, true);
+      await holder.query(
+        "update bank_feed_connections set is_active=false, updated_at=clock_timestamp() where id=$1 and org_id=$2",
+        [beforeClaim.connectionId, beforeClaim.orgId],
+      );
+      await holder.query("commit");
+      await holder.end();
+      holderOpen = false;
+      assert.equal(
+        (await pending).some((outcome) => outcome.connectionId === beforeClaim.connectionId),
+        false,
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (holderOpen) {
+        await holder.query("rollback").catch(() => {});
+        await holder.end().catch(() => {});
+      }
+      await dropScratchOrgReporting(beforeClaim.orgId);
     }
-    assert.equal(waiting, true);
-    await holder.query("update bank_feed_connections set is_active=false, updated_at=clock_timestamp() where id=$1 and org_id=$2", [beforeClaim.connectionId, beforeClaim.orgId]);
-    await holder.query("commit"); await holder.end(); holderOpen = false;
-    assert.equal((await pending).some((outcome) => outcome.connectionId === beforeClaim.connectionId), false);
-  } finally {
-    globalThis.fetch = originalFetch;
-    if (holderOpen) { await holder.query("rollback").catch(() => {}); await holder.end().catch(() => {}); }
-    await dropScratchOrgReporting(beforeClaim.orgId);
-  }
-  const f = await seedFeedFixture();
-  let release!: (response: Response) => void;
-  let started!: () => void;
-  const providerResponse = new Promise<Response>((resolve) => { release = resolve; });
-  const providerStarted = new Promise<void>((resolve) => { started = resolve; });
-  globalThis.fetch = (async () => { started(); return providerResponse; }) as typeof fetch;
-  try {
-    const scheduled = runDueBankFeeds();
-    await providerStarted;
-    await db.execute(sql`update bank_feed_connections set external_account_id='plaid-external-2', updated_at=clock_timestamp() where id=${f.connectionId} and org_id=${f.orgId}`);
-    release(new Response(JSON.stringify(plaidPage([feedTxn("stale-provider-response", new Date().toISOString().slice(0, 10), "-31.00")])), { status: 200, headers: { "content-type": "application/json" } }));
-    const outcome = myOutcome(await scheduled, f.connectionId);
-    assert.match(outcome.error ?? "", /configuration changed/);
-    assert.equal((await loadStatementLines(f.orgId, f.accountId)).length, 0);
-    const connection = await loadConnection(f.connectionId);
-    assert.equal(connection.last_sync_at, null);
-    assert.equal(connection.status, "pending");
-  } finally {
-    globalThis.fetch = originalFetch;
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+    const f = await seedFeedFixture();
+    let release!: (response: Response) => void;
+    let started!: () => void;
+    const providerResponse = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    const providerStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    globalThis.fetch = (async () => {
+      started();
+      return providerResponse;
+    }) as typeof fetch;
+    try {
+      const scheduled = runDueBankFeeds();
+      await providerStarted;
+      await db.execute(
+        sql`update bank_feed_connections set external_account_id='plaid-external-2', updated_at=clock_timestamp() where id=${f.connectionId} and org_id=${f.orgId}`,
+      );
+      release(
+        new Response(
+          JSON.stringify(
+            plaidPage([
+              feedTxn("stale-provider-response", new Date().toISOString().slice(0, 10), "-31.00"),
+            ]),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+      const outcome = myOutcome(await scheduled, f.connectionId);
+      assert.match(outcome.error ?? "", /configuration changed/);
+      assert.equal((await loadStatementLines(f.orgId, f.accountId)).length, 0);
+      const connection = await loadConnection(f.connectionId);
+      assert.equal(connection.last_sync_at, null);
+      assert.equal(connection.status, "pending");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
 
 test(
   "Sync Now preserves caller scope through a provider probe when its bank account is rehomed",
@@ -1237,9 +1408,16 @@ test(
     const originalFetch = globalThis.fetch;
     let release!: (response: Response) => void;
     let started!: () => void;
-    const providerResponse = new Promise<Response>((resolve) => { release = resolve; });
-    const providerStarted = new Promise<void>((resolve) => { started = resolve; });
-    globalThis.fetch = (async () => { started(); return providerResponse; }) as typeof fetch;
+    const providerResponse = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    const providerStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    globalThis.fetch = (async () => {
+      started();
+      return providerResponse;
+    }) as typeof fetch;
     try {
       const subA = f.subsidiaryId;
       const subB = randomUUID();
@@ -1247,7 +1425,9 @@ test(
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${subB}, ${f.orgId}, ${subA}, 'Feed scope B', 'CAD', 'CA')
       `);
-      await db.execute(sql`update accounts set subsidiary_id=${subA} where id=${f.accountId} and org_id=${f.orgId}`);
+      await db.execute(
+        sql`update accounts set subsidiary_id=${subA} where id=${f.accountId} and org_id=${f.orgId}`,
+      );
       routeState.authz = {
         user: { orgId: f.orgId, id: f.userId },
         permissions: new Set(["admin.setup.manage"]),
@@ -1255,22 +1435,39 @@ test(
       };
       const pending = syncRoutePOST(
         new Request(`http://localhost/api/banking/bank-feeds/${f.connectionId}`, {
-          method: "POST", headers: { "content-type": "application/json" },
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ action: "sync" }),
         }),
         { params: Promise.resolve({ id: f.connectionId }) },
       );
       await providerStarted;
-      await db.execute(sql`update accounts set subsidiary_id=${subB} where id=${f.accountId} and org_id=${f.orgId}`);
-      release(new Response(JSON.stringify(plaidPage([
-        feedTxn("feed-rehomed-during-sync", addCalendarDays(new Date().toISOString().slice(0, 10), -1), "-30.00"),
-      ]).body), { status: 200, headers: { "content-type": "application/json" } }));
+      await db.execute(
+        sql`update accounts set subsidiary_id=${subB} where id=${f.accountId} and org_id=${f.orgId}`,
+      );
+      release(
+        new Response(
+          JSON.stringify(
+            plaidPage([
+              feedTxn(
+                "feed-rehomed-during-sync",
+                addCalendarDays(new Date().toISOString().slice(0, 10), -1),
+                "-30.00",
+              ),
+            ]).body,
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
       const response = await pending;
       assert.equal(response.status, 422);
       const payload = (await response.json()) as { error?: string };
       assert.match(payload.error ?? "", /not found/);
-      const rows = await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from bank_statement_lines where org_id=${f.orgId} and account_id=${f.accountId}`, "objects");
+      const rows = await db.execute<{ n: number }>(
+        sql`
+        select count(*)::int as n from bank_statement_lines where org_id=${f.orgId} and account_id=${f.accountId}`,
+        "objects",
+      );
       assert.equal(rows[0]!.n, 0, "out-of-scope feed results must not become statement rows");
     } finally {
       globalThis.fetch = originalFetch;
@@ -1303,7 +1500,10 @@ test(
       const attemptMs1 = asWatermarkMs(row.last_attempt_at);
       assert.ok(successMs, "a successful sync advances the success watermark");
       assert.ok(attemptMs1, "a successful sync also records the attempt");
-      assert.ok(Math.abs(attemptMs1! - successMs!) < 5_000, "the attempt and success instants coincide on success");
+      assert.ok(
+        Math.abs(attemptMs1! - successMs!) < 5_000,
+        "the attempt and success instants coincide on success",
+      );
 
       // Age the success watermark: the connection last successfully synced 12
       // days ago. This is the discriminative setup — without it, success and
@@ -1337,8 +1537,15 @@ test(
 
       row = await loadAttemptBookkeeping(f.connectionId);
       const attemptMs2 = asWatermarkMs(row.last_attempt_at);
-      assert.ok(attemptMs2 && attemptMs2 > attemptMs1!, "a failed sync still advances the attempt watermark");
-      assert.equal(asWatermarkMs(row.last_sync_at), agedSuccessMs, "a failed sync never moves the success watermark");
+      assert.ok(
+        attemptMs2 && attemptMs2 > attemptMs1!,
+        "a failed sync still advances the attempt watermark",
+      );
+      assert.equal(
+        asWatermarkMs(row.last_sync_at),
+        agedSuccessMs,
+        "a failed sync never moves the success watermark",
+      );
       assert.equal(row.status, "error");
       assert.ok(row.last_error);
 
@@ -1347,14 +1554,23 @@ test(
       await new Promise((resolve) => setTimeout(resolve, 25));
       await makeDue(f.connectionId);
       script.length = 0;
-      script.push(plaidPage([feedTxn("feed-mismatch", addCalendarDays(today, -1), "-5.00", "EUR")]));
+      script.push(
+        plaidPage([feedTxn("feed-mismatch", addCalendarDays(today, -1), "-5.00", "EUR")]),
+      );
       outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
       assert.match(String(outcome.error), /currency/i);
 
       row = await loadAttemptBookkeeping(f.connectionId);
       const attemptMs3 = asWatermarkMs(row.last_attempt_at);
-      assert.ok(attemptMs3 && attemptMs3 > attemptMs2!, "each failed attempt advances the attempt watermark");
-      assert.equal(asWatermarkMs(row.last_sync_at), agedSuccessMs, "import rejections never move the success watermark");
+      assert.ok(
+        attemptMs3 && attemptMs3 > attemptMs2!,
+        "each failed attempt advances the attempt watermark",
+      );
+      assert.equal(
+        asWatermarkMs(row.last_sync_at),
+        agedSuccessMs,
+        "import rejections never move the success watermark",
+      );
 
       // Recovery: the retry window derives from the SUCCESS watermark alone.
       // If sinceFor ever read the ATTEMPT watermark instead, this start_date
@@ -1363,19 +1579,27 @@ test(
       await makeDue(f.connectionId);
       script.length = 0;
       script.push(
-        plaidPage([feedTxn("feed-recovered-history", addCalendarDays(agedSuccessDay, 5), "-10.00")]),
+        plaidPage([
+          feedTxn("feed-recovered-history", addCalendarDays(agedSuccessDay, 5), "-10.00"),
+        ]),
       );
       outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
       assert.equal(outcome.error, undefined);
       assert.deepEqual(
         windows[windows.length - 1],
-        { start_date: addCalendarDays(agedSuccessDay, -DEFAULT_FEED_SYNC_OVERLAP_DAYS), end_date: today },
+        {
+          start_date: addCalendarDays(agedSuccessDay, -DEFAULT_FEED_SYNC_OVERLAP_DAYS),
+          end_date: today,
+        },
         "the retry window must come from the success watermark (default overlap), not from any attempt",
       );
       assert.equal(outcome.imported, 1);
 
       row = await loadAttemptBookkeeping(f.connectionId);
-      assert.ok(asWatermarkMs(row.last_sync_at)! >= attemptMs1!, "recovery completes: success watermark lives again");
+      assert.ok(
+        asWatermarkMs(row.last_sync_at)! >= attemptMs1!,
+        "recovery completes: success watermark lives again",
+      );
       assert.ok(asWatermarkMs(row.last_attempt_at)! >= attemptMs3!);
     } finally {
       await dropScratchOrgReporting(f.orgId);
@@ -1398,7 +1622,9 @@ test(
       let outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
       assert.equal(outcome.error, undefined);
       assert.equal(outcome.imported, 1);
-      const watermarkDay = asInstantDay(new Date(asWatermarkMs((await loadConnection(f.connectionId)).last_sync_at)!));
+      const watermarkDay = asInstantDay(
+        new Date(asWatermarkMs((await loadConnection(f.connectionId)).last_sync_at)!),
+      );
 
       // The connection opts into a 30-day overlap: a transaction booking 20
       // days behind the watermark — permanently invisible under the old
@@ -1438,12 +1664,14 @@ test(
   async () => {
     const f = await seedFeedFixture();
     try {
-      const lines = [{
-        postedOn: addCalendarDays(new Date().toISOString().slice(0, 10), -1),
-        amount: "-10.00",
-        description: "Sentinel guard control",
-        bankTransactionId: "feed-sentinel-guard",
-      }];
+      const lines = [
+        {
+          postedOn: addCalendarDays(new Date().toISOString().slice(0, 10), -1),
+          amount: "-10.00",
+          description: "Sentinel guard control",
+          bankTransactionId: "feed-sentinel-guard",
+        },
+      ];
       // The deepest boundary that owns statement/audit evidence refuses every
       // flavor of "no actor at all" — zero UUID, blank, whitespace-only — with
       // its own explicit banking-domain error, because once persisted the
@@ -1454,24 +1682,29 @@ test(
             importStatement(
               { accountId: f.accountId, source: "feed_api", lines, currency: "CAD" },
               { orgId: f.orgId, userId: forbidden, allowedSubsidiaryIds: null },
-            )),
+            ),
+          ),
           BankingError,
         );
       }
       // A rejected attempt must have written nothing at all.
-      const rows = (await db.execute<{ n: number }>(sql`
+      const rows = await db.execute<{ n: number }>(
+        sql`
         select (
           (select count(*) from bank_statements where org_id = ${f.orgId}) +
           (select count(*) from bank_statement_lines where org_id = ${f.orgId})
         )::int as n
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(Number(rows[0]!.n), 0);
       // Control: the same statement imports cleanly under a real actor.
       const result = await withOrg(f.orgId, () =>
         importStatement(
           { accountId: f.accountId, source: "feed_api", lines, currency: "CAD" },
           { orgId: f.orgId, userId: f.userId, allowedSubsidiaryIds: null },
-        ));
+        ),
+      );
       assert.equal(result.imported, 1);
       assert.equal(await countZeroUuidActorRows(f.orgId), 0);
     } finally {

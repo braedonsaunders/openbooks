@@ -29,11 +29,7 @@ const NS = "http://developer.intuit.com/";
 
 function value(node: Record<string, unknown>, key: string): string {
   const raw = node[key];
-  if (
-    raw &&
-    typeof raw === "object" &&
-    "#text" in (raw as Record<string, unknown>)
-  ) {
+  if (raw && typeof raw === "object" && "#text" in (raw as Record<string, unknown>)) {
     return String((raw as Record<string, unknown>)["#text"] ?? "");
   }
   return raw == null ? "" : String(raw);
@@ -110,8 +106,7 @@ async function readHead(req: Request, maxBytes: number): Promise<HeadRead> {
       }
       bytes += value.byteLength;
       text += decoder.decode(value, { stream: true });
-      if (bytes > maxBytes)
-        return { ok: true, text, complete: false, reader, decoder, bytes };
+      if (bytes > maxBytes) return { ok: true, text, complete: false, reader, decoder, bytes };
     }
   } catch {
     await reader.cancel().catch(() => undefined);
@@ -150,10 +145,7 @@ function parseEnvelope(text: string): Record<string, unknown> | Response {
   try {
     assertSoapEnvelopeComplexity(text);
   } catch (error) {
-    return fault(
-      error instanceof Error ? error.message : "Malformed SOAP XML",
-      400,
-    );
+    return fault(error instanceof Error ? error.message : "Malformed SOAP XML", 400);
   }
   try {
     return parseXml(text);
@@ -184,10 +176,7 @@ export const POST = defineRoute({
     if (declared != null && declared.trim() !== "") {
       const length = Number(declared);
       if (Number.isSafeInteger(length) && length > QBD_MAX_BODY_BYTES) {
-        return fault(
-          "QuickBooks response exceeds the 256 MiB safety limit",
-          413,
-        );
+        return fault("QuickBooks response exceeds the 256 MiB safety limit", 413);
       }
     }
     const head = await readHead(req, QBD_PREAUTH_MAX_BYTES);
@@ -220,10 +209,7 @@ export const POST = defineRoute({
   },
 });
 
-async function dispatch(
-  id: string,
-  parsed: Record<string, unknown>,
-): Promise<Response> {
+async function dispatch(id: string, parsed: Record<string, unknown>): Promise<Response> {
   // Presence-dispatched: handshake elements are childless or text-only, so
   // firstNode (object-valued nodes only) never matches them.
   if (hasNode(parsed, "serverVersion")) return scalar("serverVersion", "1.0.0");
@@ -265,17 +251,11 @@ async function dispatch(
 
   const lastError = firstNode(parsed, "getLastError");
   if (lastError)
-    return scalar(
-      "getLastError",
-      await webConnectorLastError(value(lastError, "ticket")),
-    );
+    return scalar("getLastError", await webConnectorLastError(value(lastError, "ticket")));
 
   const close = firstNode(parsed, "closeConnection");
   if (close)
-    return scalar(
-      "closeConnection",
-      await closeWebConnectorSession(value(close, "ticket")),
-    );
+    return scalar("closeConnection", await closeWebConnectorSession(value(close, "ticket")));
 
   const connectionError = firstNode(parsed, "connectionError");
   if (connectionError) {

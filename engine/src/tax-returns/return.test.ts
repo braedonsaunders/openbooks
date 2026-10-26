@@ -1,17 +1,38 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CANADA_RETURN_PACKS } from "../country-tax-packs/ca-returns.ts";
-import { assembleReturn, computeTaxReturn, evalFormula, planReturn, registerReturnInputProvider, taxableBaseSideForCode, TaxReturnError, TaxReturnInputError, type TaxReturnBoxDef, type TaxReportLineRow, type TaxReturnRunner } from "./return.ts";
+import {
+  assembleReturn,
+  computeTaxReturn,
+  evalFormula,
+  planReturn,
+  registerReturnInputProvider,
+  taxableBaseSideForCode,
+  TaxReturnError,
+  TaxReturnInputError,
+  type TaxReturnBoxDef,
+  type TaxReportLineRow,
+  type TaxReturnRunner,
+} from "./return.ts";
 
 const codes = (...c: string[]) => new Set(c);
 
 test("evalFormula treats numeric line codes as box references, not literals", () => {
-  const values = new Map([["105", "13000.0000"], ["108", "4000.0000"]]);
+  const values = new Map([
+    ["105", "13000.0000"],
+    ["108", "4000.0000"],
+  ]);
   assert.equal(evalFormula("105 - 108", values, codes("105", "108")), "9000.0000");
 });
 
 test("evalFormula keeps digit-leading alphanumeric box codes whole (5a, 4C, 3.1A)", () => {
-  const values = new Map([["5a", "2100.0000"], ["5b", "800.0000"], ["4A5", "300.0000"], ["4C", "300.0000"], ["OUT", "500.0000"]]);
+  const values = new Map([
+    ["5a", "2100.0000"],
+    ["5b", "800.0000"],
+    ["4A5", "300.0000"],
+    ["4C", "300.0000"],
+    ["OUT", "500.0000"],
+  ]);
   const boxes = codes("5a", "5b", "4A5", "4C", "OUT");
   assert.equal(evalFormula("5a - 5b", values, boxes), "1300.0000");
   assert.equal(evalFormula("4A5", values, boxes), "300.0000");
@@ -19,7 +40,10 @@ test("evalFormula keeps digit-leading alphanumeric box codes whole (5a, 4C, 3.1A
 });
 
 test("evalFormula handles parentheses, unary minus, and true numeric literals", () => {
-  const values = new Map([["105", "9000.0000"], ["108", "4000.0000"]]);
+  const values = new Map([
+    ["105", "9000.0000"],
+    ["108", "4000.0000"],
+  ]);
   assert.equal(evalFormula("(105 - 108) + 100", values, codes("105", "108")), "5100.0000");
   assert.equal(evalFormula("-105", values, codes("105")), "-9000.0000");
   // 200 is not a box code → a literal
@@ -32,22 +56,82 @@ test("evalFormula handles parentheses, unary minus, and true numeric literals", 
 
 test("evalFormula rejects unsupported operators and unknown boxes", () => {
   assert.throws(() => evalFormula("105 * 2", new Map(), codes("105")), TaxReturnError);
-  assert.throws(() => evalFormula("105 - 108", new Map([["105", "1.0000"]]), codes("105", "108")), /not-yet-computed box "108"/);
-  assert.throws(() => evalFormula("105 +", new Map([["105", "1.0000"]]), codes("105")), TaxReturnError);
-  assert.throws(() => evalFormula("abs 105", new Map([["105", "1.0000"]]), codes("105")), TaxReturnError);
-  assert.throws(() => evalFormula("max(105)", new Map([["105", "1.0000"]]), codes("105")), TaxReturnError);
+  assert.throws(
+    () => evalFormula("105 - 108", new Map([["105", "1.0000"]]), codes("105", "108")),
+    /not-yet-computed box "108"/,
+  );
+  assert.throws(
+    () => evalFormula("105 +", new Map([["105", "1.0000"]]), codes("105")),
+    TaxReturnError,
+  );
+  assert.throws(
+    () => evalFormula("abs 105", new Map([["105", "1.0000"]]), codes("105")),
+    TaxReturnError,
+  );
+  assert.throws(
+    () => evalFormula("max(105)", new Map([["105", "1.0000"]]), codes("105")),
+    TaxReturnError,
+  );
 });
 
 // A realistic GST34: 101 sales, 103 GST/HST collected (a credit in the ledger,
 // sign -1 → positive on the return), 106 ITCs (a debit, sign +1), then computed
 // totals: 105 = 103, 108 = 106, net tax 109 = 105 - 108.
 const GST34: TaxReturnBoxDef[] = [
-  { lineCode: "101", label: "Sales", sign: 1, sequence: 1, formula: null, editable: false, pdfField: null },
-  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 2, formula: null, editable: false, pdfField: null },
-  { lineCode: "106", label: "Input tax credits", sign: 1, sequence: 3, formula: null, editable: false, pdfField: null },
-  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 4, formula: "103", editable: false, pdfField: null },
-  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 5, formula: "106", editable: false, pdfField: null },
-  { lineCode: "109", label: "Net tax", sign: 1, sequence: 6, formula: "105 - 108", editable: false, pdfField: null },
+  {
+    lineCode: "101",
+    label: "Sales",
+    sign: 1,
+    sequence: 1,
+    formula: null,
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "103",
+    label: "GST/HST collected",
+    sign: -1,
+    sequence: 2,
+    formula: null,
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "106",
+    label: "Input tax credits",
+    sign: 1,
+    sequence: 3,
+    formula: null,
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "105",
+    label: "Total GST/HST",
+    sign: 1,
+    sequence: 4,
+    formula: "103",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "108",
+    label: "Total ITCs",
+    sign: 1,
+    sequence: 5,
+    formula: "106",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "109",
+    label: "Net tax",
+    sign: 1,
+    sequence: 6,
+    formula: "105 - 108",
+    editable: false,
+    pdfField: null,
+  },
 ];
 
 test("assembleReturn computes a GST34 with sign flips and derived totals", () => {
@@ -84,19 +168,34 @@ test("GST34 puts a positive balance in payment or refund, never both", () => {
   };
 
   // Collected tax exceeds ITCs: the balance is payable in line 115 only.
-  const payable = values(new Map([["103", "-13000.0000"], ["106", "4000.0000"]]));
+  const payable = values(
+    new Map([
+      ["103", "-13000.0000"],
+      ["106", "4000.0000"],
+    ]),
+  );
   assert.equal(payable("113C"), "9000.0000");
   assert.equal(payable("114"), "0.0000");
   assert.equal(payable("115"), "9000.0000");
 
   // ITCs exceed collected tax: the balance is refundable in line 114 only.
-  const refund = values(new Map([["103", "-4000.0000"], ["106", "13000.0000"]]));
+  const refund = values(
+    new Map([
+      ["103", "-4000.0000"],
+      ["106", "13000.0000"],
+    ]),
+  );
   assert.equal(refund("113C"), "-9000.0000");
   assert.equal(refund("114"), "9000.0000");
   assert.equal(refund("115"), "0.0000");
 
   // A balanced return leaves both terminal boxes empty.
-  const balanced = values(new Map([["103", "-4000.0000"], ["106", "4000.0000"]]));
+  const balanced = values(
+    new Map([
+      ["103", "-4000.0000"],
+      ["106", "4000.0000"],
+    ]),
+  );
   assert.equal(balanced("113C"), "0.0000");
   assert.equal(balanced("114"), "0.0000");
   assert.equal(balanced("115"), "0.0000");
@@ -104,7 +203,10 @@ test("GST34 puts a positive balance in payment or refund, never both", () => {
 
 test("assembleReturn marks computed vs GL-mapped boxes and preserves order", () => {
   const boxes = assembleReturn(GST34, new Map());
-  assert.deepEqual(boxes.map((b) => b.lineCode), ["101", "103", "106", "105", "108", "109"]);
+  assert.deepEqual(
+    boxes.map((b) => b.lineCode),
+    ["101", "103", "106", "105", "108", "109"],
+  );
   assert.deepEqual(
     boxes.filter((b) => b.computed).map((b) => b.lineCode),
     ["105", "108", "109"],
@@ -114,60 +216,195 @@ test("assembleReturn marks computed vs GL-mapped boxes and preserves order", () 
 test("assembleReturn evaluates strictly in sequence order (a forward reference throws)", () => {
   // 109 references 105 but is sequenced BEFORE it → not-yet-computed.
   const bad: TaxReturnBoxDef[] = [
-    { lineCode: "109", label: "Net", sign: 1, sequence: 1, formula: "105", editable: false, pdfField: null },
-    { lineCode: "105", label: "Total", sign: 1, sequence: 2, formula: null, editable: false, pdfField: null },
+    {
+      lineCode: "109",
+      label: "Net",
+      sign: 1,
+      sequence: 1,
+      formula: "105",
+      editable: false,
+      pdfField: null,
+    },
+    {
+      lineCode: "105",
+      label: "Total",
+      sign: 1,
+      sequence: 2,
+      formula: null,
+      editable: false,
+      pdfField: null,
+    },
   ];
-  assert.throws(() => assembleReturn(bad, new Map([["105", "1.0000"]])), /not-yet-computed box "105"/);
+  assert.throws(
+    () => assembleReturn(bad, new Map([["105", "1.0000"]])),
+    /not-yet-computed box "105"/,
+  );
 });
 
 // A GST34 with adjustment boxes (104 add / 107 deduct) feeding the totals.
 const GST34_ADJ: TaxReturnBoxDef[] = [
-  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 20, formula: null, editable: false, pdfField: null },
-  { lineCode: "104", label: "Adjustments (add)", sign: 1, sequence: 30, formula: null, editable: true, pdfField: null },
-  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 40, formula: "103 + 104", editable: false, pdfField: null },
-  { lineCode: "106", label: "ITCs", sign: 1, sequence: 50, formula: null, editable: false, pdfField: null },
-  { lineCode: "107", label: "Adjustments (deduct)", sign: 1, sequence: 60, formula: null, editable: true, pdfField: null },
-  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 70, formula: "106 + 107", editable: false, pdfField: null },
-  { lineCode: "109", label: "Net tax", sign: 1, sequence: 80, formula: "105 - 108", editable: false, pdfField: null },
+  {
+    lineCode: "103",
+    label: "GST/HST collected",
+    sign: -1,
+    sequence: 20,
+    formula: null,
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "104",
+    label: "Adjustments (add)",
+    sign: 1,
+    sequence: 30,
+    formula: null,
+    editable: true,
+    pdfField: null,
+  },
+  {
+    lineCode: "105",
+    label: "Total GST/HST",
+    sign: 1,
+    sequence: 40,
+    formula: "103 + 104",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "106",
+    label: "ITCs",
+    sign: 1,
+    sequence: 50,
+    formula: null,
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "107",
+    label: "Adjustments (deduct)",
+    sign: 1,
+    sequence: 60,
+    formula: null,
+    editable: true,
+    pdfField: null,
+  },
+  {
+    lineCode: "108",
+    label: "Total ITCs",
+    sign: 1,
+    sequence: 70,
+    formula: "106 + 107",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "109",
+    label: "Net tax",
+    sign: 1,
+    sequence: 80,
+    formula: "105 - 108",
+    editable: false,
+    pdfField: null,
+  },
 ];
 
 test("adjustment boxes take the filer's amount and flow into the totals", () => {
-  const gl = new Map([["103", "-13000.0000"], ["106", "4000.0000"]])
-  const adj = new Map([["104", "500.0000"], ["107", "200.0000"]])
-  const boxes = assembleReturn(GST34_ADJ, gl, adj)
-  const v = (c: string) => boxes.find((b) => b.lineCode === c)!.value
-  assert.equal(v("104"), "500.0000") // entered as displayed, no sign flip
-  assert.equal(v("105"), "13500.0000") // 13000 + 500
-  assert.equal(v("108"), "4200.0000") // 4000 + 200
-  assert.equal(v("109"), "9300.0000") // 13500 - 4200
-  assert.equal(boxes.find((b) => b.lineCode === "104")!.editable, true)
-})
+  const gl = new Map([
+    ["103", "-13000.0000"],
+    ["106", "4000.0000"],
+  ]);
+  const adj = new Map([
+    ["104", "500.0000"],
+    ["107", "200.0000"],
+  ]);
+  const boxes = assembleReturn(GST34_ADJ, gl, adj);
+  const v = (c: string) => boxes.find((b) => b.lineCode === c)!.value;
+  assert.equal(v("104"), "500.0000"); // entered as displayed, no sign flip
+  assert.equal(v("105"), "13500.0000"); // 13000 + 500
+  assert.equal(v("108"), "4200.0000"); // 4000 + 200
+  assert.equal(v("109"), "9300.0000"); // 13500 - 4200
+  assert.equal(boxes.find((b) => b.lineCode === "104")!.editable, true);
+});
 
 test("an omitted adjustment defaults to zero", () => {
-  const boxes = assembleReturn(GST34_ADJ, new Map([["103", "-13000.0000"], ["106", "4000.0000"]]))
-  assert.equal(boxes.find((b) => b.lineCode === "104")!.value, "0.0000")
-  assert.equal(boxes.find((b) => b.lineCode === "109")!.value, "9000.0000")
-})
+  const boxes = assembleReturn(
+    GST34_ADJ,
+    new Map([
+      ["103", "-13000.0000"],
+      ["106", "4000.0000"],
+    ]),
+  );
+  assert.equal(boxes.find((b) => b.lineCode === "104")!.value, "0.0000");
+  assert.equal(boxes.find((b) => b.lineCode === "109")!.value, "9000.0000");
+});
 
 test("planReturn marks manual boxes (no formula, no GL source) editable", () => {
   const rows: TaxReportLineRow[] = [
-    { lineCode: "103", label: "Collected", sign: -1, sequence: 20, taxCodeId: "gst", basis: "tax_collected", formula: null },
-    { lineCode: "104", label: "Adjustments", sign: 1, sequence: 30, taxCodeId: null, basis: null, formula: null },
-    { lineCode: "105", label: "Total", sign: 1, sequence: 40, taxCodeId: null, basis: null, formula: "103 + 104" },
-  ]
-  const { boxes } = planReturn(rows)
-  const byCode = new Map(boxes.map((b) => [b.lineCode, b]))
-  assert.equal(byCode.get("104")!.editable, true) // manual → editable
-  assert.equal(byCode.get("103")!.editable, false) // GL-mapped
-  assert.equal(byCode.get("105")!.editable, false) // computed
-})
+    {
+      lineCode: "103",
+      label: "Collected",
+      sign: -1,
+      sequence: 20,
+      taxCodeId: "gst",
+      basis: "tax_collected",
+      formula: null,
+    },
+    {
+      lineCode: "104",
+      label: "Adjustments",
+      sign: 1,
+      sequence: 30,
+      taxCodeId: null,
+      basis: null,
+      formula: null,
+    },
+    {
+      lineCode: "105",
+      label: "Total",
+      sign: 1,
+      sequence: 40,
+      taxCodeId: null,
+      basis: null,
+      formula: "103 + 104",
+    },
+  ];
+  const { boxes } = planReturn(rows);
+  const byCode = new Map(boxes.map((b) => [b.lineCode, b]));
+  assert.equal(byCode.get("104")!.editable, true); // manual → editable
+  assert.equal(byCode.get("103")!.editable, false); // GL-mapped
+  assert.equal(byCode.get("105")!.editable, false); // computed
+});
 
 test("planReturn collapses multi-code boxes and collects every GL source", () => {
   // Line 103 (GST/HST collected) sums two tax codes; 105 is computed.
   const rows: TaxReportLineRow[] = [
-    { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 5, taxCodeId: "gst", basis: "tax_amount", formula: null },
-    { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 2, taxCodeId: "hst-on", basis: "tax_amount", formula: null },
-    { lineCode: "105", label: "Total", sign: 1, sequence: 6, taxCodeId: null, basis: null, formula: "103" },
+    {
+      lineCode: "103",
+      label: "GST/HST collected",
+      sign: -1,
+      sequence: 5,
+      taxCodeId: "gst",
+      basis: "tax_amount",
+      formula: null,
+    },
+    {
+      lineCode: "103",
+      label: "GST/HST collected",
+      sign: -1,
+      sequence: 2,
+      taxCodeId: "hst-on",
+      basis: "tax_amount",
+      formula: null,
+    },
+    {
+      lineCode: "105",
+      label: "Total",
+      sign: 1,
+      sequence: 6,
+      taxCodeId: null,
+      basis: null,
+      formula: "103",
+    },
   ];
   const { boxes, glSources } = planReturn(rows);
   // One box per line code; 103 takes the earliest sequence.
@@ -175,7 +412,10 @@ test("planReturn collapses multi-code boxes and collects every GL source", () =>
   assert.equal(boxes.find((b) => b.lineCode === "103")!.sequence, 2);
   // Both tax codes feed line 103; the computed box is not a GL source.
   assert.deepEqual(
-    glSources.filter((s) => s.lineCode === "103").map((s) => s.taxCodeId).sort(),
+    glSources
+      .filter((s) => s.lineCode === "103")
+      .map((s) => s.taxCodeId)
+      .sort(),
     ["gst", "hst-on"],
   );
   assert.equal(glSources.length, 2);
@@ -198,7 +438,10 @@ test("a GL-mapped box with no ledger activity is zero, not missing", () => {
 });
 
 test("max returns the left operand on ties, even when spellings differ", () => {
-  const values = new Map([["A", "1.0"], ["B", "1.00"]]);
+  const values = new Map([
+    ["A", "1.0"],
+    ["B", "1.00"],
+  ]);
   assert.equal(evalFormula("max(A, B)", values, codes("A", "B")), "1.0");
 });
 
@@ -208,18 +451,53 @@ test("fractional numeric literals evaluate, not just integers", () => {
 
 test("assembleReturn evaluates boxes in sequence order regardless of declaration order", () => {
   const boxes: TaxReturnBoxDef[] = [
-    { lineCode: "C", label: "Total", sign: 1, sequence: 3, formula: "A + B", editable: false, pdfField: null },
-    { lineCode: "B", label: "Second", sign: 1, sequence: 2, formula: null, editable: false, pdfField: null },
-    { lineCode: "A", label: "First", sign: 1, sequence: 1, formula: null, editable: false, pdfField: null },
+    {
+      lineCode: "C",
+      label: "Total",
+      sign: 1,
+      sequence: 3,
+      formula: "A + B",
+      editable: false,
+      pdfField: null,
+    },
+    {
+      lineCode: "B",
+      label: "Second",
+      sign: 1,
+      sequence: 2,
+      formula: null,
+      editable: false,
+      pdfField: null,
+    },
+    {
+      lineCode: "A",
+      label: "First",
+      sign: 1,
+      sequence: 1,
+      formula: null,
+      editable: false,
+      pdfField: null,
+    },
   ];
-  const gl = new Map([["A", "10.0000"], ["B", "20.0000"]]);
+  const gl = new Map([
+    ["A", "10.0000"],
+    ["B", "20.0000"],
+  ]);
   const out = assembleReturn(boxes, gl);
   assert.equal(out.find((b) => b.lineCode === "C")!.value, "30.0000");
 });
 
 test("a zero-sign box prints its value unflipped", () => {
   const boxes: TaxReturnBoxDef[] = [
-    { lineCode: "Z", label: "Memo", sign: 0, sequence: 1, formula: null, editable: false, pdfField: null },
+    {
+      lineCode: "Z",
+      label: "Memo",
+      sign: 0,
+      sequence: 1,
+      formula: null,
+      editable: false,
+      pdfField: null,
+    },
   ];
   const out = assembleReturn(boxes, new Map([["Z", "5.0000"]]));
   assert.equal(out[0]!.value, "5.0000");
@@ -278,19 +556,62 @@ test("computeTaxReturn resolves declared input boxes and refuses a missing provi
   const inputKey = "returntest.amount";
   const makeRunner = (): TaxReturnRunner => {
     const responses: unknown[][] = [
-      [{ name: "Test return", submission_channel: "portal_manual", watermark: null, jurisdiction_id: null }],
-      [], [],
-      [{ id: "00000000-0000-4000-8000-000000000001", name: "Root", base_currency: "USD", is_elimination: false, parent_id: null }],
+      [
+        {
+          name: "Test return",
+          submission_channel: "portal_manual",
+          watermark: null,
+          jurisdiction_id: null,
+        },
+      ],
+      [],
+      [],
+      [
+        {
+          id: "00000000-0000-4000-8000-000000000001",
+          name: "Root",
+          base_currency: "USD",
+          is_elimination: false,
+          parent_id: null,
+        },
+      ],
       [{ id: "00000000-0000-4000-8000-000000000002" }],
       [{ tax_collected: null, tax_paid: null }],
-      [{ line_code: "SOURCE", label: "Source amount", sign: 1, sequence: 1, tax_code_id: null, basis: null, input_key: inputKey, formula: null, pdf_field: null }],
+      [
+        {
+          line_code: "SOURCE",
+          label: "Source amount",
+          sign: 1,
+          sequence: 1,
+          tax_code_id: null,
+          basis: null,
+          input_key: inputKey,
+          formula: null,
+          pdf_field: null,
+        },
+      ],
     ];
-    return { execute: (async (_query: unknown, mode?: string) => Promise.resolve({ rows: responses.shift() ?? [], rowCount: 1 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))) as unknown as TaxReturnRunner["execute"] };
+    return {
+      execute: (async (_query: unknown, mode?: string) =>
+        Promise.resolve({ rows: responses.shift() ?? [], rowCount: 1 }).then(
+          <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+        )) as unknown as TaxReturnRunner["execute"],
+    };
   };
   const missingRunner = makeRunner();
   await assert.rejects(
-    computeTaxReturn("org-1", "FORM_INPUT", "2026-01-01", "2026-12-31", {}, { runner: missingRunner }),
-    (error: unknown) => error instanceof TaxReturnInputError && error.message.includes("SOURCE") && error.message.includes(inputKey),
+    computeTaxReturn(
+      "org-1",
+      "FORM_INPUT",
+      "2026-01-01",
+      "2026-12-31",
+      {},
+      { runner: missingRunner },
+    ),
+    (error: unknown) =>
+      error instanceof TaxReturnInputError &&
+      error.message.includes("SOURCE") &&
+      error.message.includes(inputKey),
   );
   const runner = makeRunner();
   let calls = 0;
@@ -300,7 +621,14 @@ test("computeTaxReturn resolves declared input boxes and refuses a missing provi
     assert.deepEqual(keys, [inputKey]);
     return { [inputKey]: "12.3400" };
   });
-  const result = await computeTaxReturn("org-1", "FORM_INPUT", "2026-01-01", "2026-12-31", {}, { runner });
+  const result = await computeTaxReturn(
+    "org-1",
+    "FORM_INPUT",
+    "2026-01-01",
+    "2026-12-31",
+    {},
+    { runner },
+  );
   assert.equal(calls, 1);
   assert.equal(result.boxes[0]?.value, "12.3400");
   assert.deepEqual(result.inputSources, [{ lineCode: "SOURCE", inputKey, value: "12.3400" }]);
@@ -311,25 +639,133 @@ test("computeTaxReturn resolves declared input boxes and refuses a missing provi
 // entered on line 104 with its reason. Lines 110/111 are filer-entered
 // instalments; 112 totals them, and 113A/114/115 settle the balance.
 const GST34_ANNUAL: TaxReturnBoxDef[] = [
-  { lineCode: "103", label: "GST/HST collected", sign: -1, sequence: 20, formula: null, editable: false, pdfField: null },
-  { lineCode: "104", label: "Adjustments (add)", sign: 1, sequence: 30, formula: null, editable: true, pdfField: null },
-  { lineCode: "105", label: "Total GST/HST", sign: 1, sequence: 40, formula: "103 + 104", editable: false, pdfField: null },
-  { lineCode: "106", label: "ITCs", sign: 1, sequence: 50, formula: null, editable: false, pdfField: null },
-  { lineCode: "107", label: "Adjustments (deduct)", sign: 1, sequence: 60, formula: null, editable: true, pdfField: null },
-  { lineCode: "108", label: "Total ITCs", sign: 1, sequence: 70, formula: "106 + 107", editable: false, pdfField: null },
-  { lineCode: "109", label: "Net tax", sign: 1, sequence: 80, formula: "105 - 108", editable: false, pdfField: null },
-  { lineCode: "110", label: "Instalments", sign: 1, sequence: 90, formula: null, editable: true, pdfField: null },
-  { lineCode: "111", label: "Rebates", sign: 1, sequence: 100, formula: null, editable: true, pdfField: null },
-  { lineCode: "112", label: "Total other credits", sign: 1, sequence: 110, formula: "110 + 111", editable: false, pdfField: null },
-  { lineCode: "113A", label: "Balance", sign: 1, sequence: 120, formula: "109 - 112", editable: false, pdfField: null },
-  { lineCode: "114", label: "Refund claimed", sign: 1, sequence: 170, formula: "max(-113A, 0)", editable: false, pdfField: null },
-  { lineCode: "115", label: "Payment enclosed", sign: 1, sequence: 180, formula: "max(113A, 0)", editable: false, pdfField: null },
+  {
+    lineCode: "103",
+    label: "GST/HST collected",
+    sign: -1,
+    sequence: 20,
+    formula: null,
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "104",
+    label: "Adjustments (add)",
+    sign: 1,
+    sequence: 30,
+    formula: null,
+    editable: true,
+    pdfField: null,
+  },
+  {
+    lineCode: "105",
+    label: "Total GST/HST",
+    sign: 1,
+    sequence: 40,
+    formula: "103 + 104",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "106",
+    label: "ITCs",
+    sign: 1,
+    sequence: 50,
+    formula: null,
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "107",
+    label: "Adjustments (deduct)",
+    sign: 1,
+    sequence: 60,
+    formula: null,
+    editable: true,
+    pdfField: null,
+  },
+  {
+    lineCode: "108",
+    label: "Total ITCs",
+    sign: 1,
+    sequence: 70,
+    formula: "106 + 107",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "109",
+    label: "Net tax",
+    sign: 1,
+    sequence: 80,
+    formula: "105 - 108",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "110",
+    label: "Instalments",
+    sign: 1,
+    sequence: 90,
+    formula: null,
+    editable: true,
+    pdfField: null,
+  },
+  {
+    lineCode: "111",
+    label: "Rebates",
+    sign: 1,
+    sequence: 100,
+    formula: null,
+    editable: true,
+    pdfField: null,
+  },
+  {
+    lineCode: "112",
+    label: "Total other credits",
+    sign: 1,
+    sequence: 110,
+    formula: "110 + 111",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "113A",
+    label: "Balance",
+    sign: 1,
+    sequence: 120,
+    formula: "109 - 112",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "114",
+    label: "Refund claimed",
+    sign: 1,
+    sequence: 170,
+    formula: "max(-113A, 0)",
+    editable: false,
+    pdfField: null,
+  },
+  {
+    lineCode: "115",
+    label: "Payment enclosed",
+    sign: 1,
+    sequence: 180,
+    formula: "max(113A, 0)",
+    editable: false,
+    pdfField: null,
+  },
 ];
 
 test("the annual GST34 net tax includes pre-conversion adjustments (Sep-Dec refund plus Jan-Aug payable)", () => {
   // Sep–Dec: 500.00 collected, 571.69 in ITCs, so the period nets to a 71.69 refund.
-  const gl = new Map([["103", "-500.0000"], ["106", "571.6900"]]);
-  const v = (boxes: ReturnType<typeof assembleReturn>, code: string) => boxes.find((b) => b.lineCode === code)!.value;
+  const gl = new Map([
+    ["103", "-500.0000"],
+    ["106", "571.6900"],
+  ]);
+  const v = (boxes: ReturnType<typeof assembleReturn>, code: string) =>
+    boxes.find((b) => b.lineCode === code)!.value;
 
   const unadjusted = assembleReturn(GST34_ANNUAL, gl);
   assert.equal(v(unadjusted, "109"), "-71.6900");
@@ -346,11 +782,16 @@ test("the annual GST34 net tax includes pre-conversion adjustments (Sep-Dec refu
 });
 
 test("an adjustment on a ledger-mapped or computed line is refused by name, never dropped", () => {
-  const gl = new Map([["103", "-500.0000"], ["106", "571.6900"]]);
+  const gl = new Map([
+    ["103", "-500.0000"],
+    ["106", "571.6900"],
+  ]);
   for (const lineCode of ["103", "105", "109"]) {
     assert.throws(
       () => assembleReturn(GST34_ANNUAL, gl, new Map([[lineCode, "10"]])),
-      (error: unknown) => error instanceof TaxReturnError && error.message.includes(`line ${lineCode} is not an adjustment line`),
+      (error: unknown) =>
+        error instanceof TaxReturnError &&
+        error.message.includes(`line ${lineCode} is not an adjustment line`),
       `line ${lineCode} must refuse an adjustment`,
     );
   }

@@ -25,8 +25,7 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
     const { id } = params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid position" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid position" }, { status: 400 });
     const { searchParams } = new URL(req.url);
     const rawDate = searchParams.get("effectiveDate");
     const effectiveDate = rawDate ?? (await businessToday(gate.user.orgId));
@@ -57,8 +56,7 @@ export const PATCH = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params, body }) => {
     const { id } = params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid position" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid position" }, { status: 400 });
     try {
       if (body.action === "close") {
         const position = await closePosition({

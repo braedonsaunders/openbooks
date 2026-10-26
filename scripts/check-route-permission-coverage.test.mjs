@@ -15,10 +15,24 @@ const PUBLIC_SEGMENT_ROOTS = ["/api/v1", "/api/sign"] as const;
 const surface = loadPublicSurface(proxy);
 
 test("factory, jsonObject and sql imports are detected by specifier", () => {
-  assert.equal(analyzeImports(`import { defineRoute } from "@/lib/api/route";`, "web/app/api/x").defineRoute, true);
-  assert.equal(analyzeImports(`import { defineRoute } from "../../../lib/api/route";`, "web/app/api/x").defineRoute, true);
-  assert.equal(analyzeImports(`import { guardPermission } from "../../../lib/authz";`, "web/app/api/x").defineRoute, false);
-  assert.equal(analyzeImports(`import { jsonObject } from "@/lib/api/json";`, "web/app/api/x").jsonObject, true);
+  assert.equal(
+    analyzeImports(`import { defineRoute } from "@/lib/api/route";`, "web/app/api/x").defineRoute,
+    true,
+  );
+  assert.equal(
+    analyzeImports(`import { defineRoute } from "../../../lib/api/route";`, "web/app/api/x")
+      .defineRoute,
+    true,
+  );
+  assert.equal(
+    analyzeImports(`import { guardPermission } from "../../../lib/authz";`, "web/app/api/x")
+      .defineRoute,
+    false,
+  );
+  assert.equal(
+    analyzeImports(`import { jsonObject } from "@/lib/api/json";`, "web/app/api/x").jsonObject,
+    true,
+  );
   assert.equal(analyzeImports(`import { sql } from "drizzle-orm";`, "web/app/api/x").sql, true);
   assert.equal(analyzeImports(`import { sql } from "./other";`, "web/app/api/x").sql, false);
 });
@@ -26,10 +40,14 @@ test("factory, jsonObject and sql imports are detected by specifier", () => {
 test("feature declarations distinguish keys, reasons and empty reasons", () => {
   const [keyed] = findRouteFeatures(`defineRoute({ permission: "a", feature: "orders", handler })`);
   assert.equal(keyed.hasFeature, true);
-  const [none] = findRouteFeatures(`defineRoute({ permission: "a", feature: { none: "always on" }, handler })`);
+  const [none] = findRouteFeatures(
+    `defineRoute({ permission: "a", feature: { none: "always on" }, handler })`,
+  );
   assert.equal(none.noneReason, "always on");
   assert.equal(none.noneEmpty, false);
-  const [empty] = findRouteFeatures(`defineRoute({ permission: "a", feature: { none: "" }, handler })`);
+  const [empty] = findRouteFeatures(
+    `defineRoute({ permission: "a", feature: { none: "" }, handler })`,
+  );
   assert.equal(empty.noneEmpty, true);
   const [missing] = findRouteFeatures(`defineRoute({ permission: "a", handler })`);
   assert.equal(missing.hasFeature, false);
@@ -91,7 +109,10 @@ test("route body schemas and handlers reject opaque validation gaps and request 
     if (item.expected === null) {
       assert.deepEqual(violations, [], item.name);
     } else {
-      assert.ok(violations.some(({ message }) => message.includes(item.expected)), item.name);
+      assert.ok(
+        violations.some(({ message }) => message.includes(item.expected)),
+        item.name,
+      );
     }
   }
 });

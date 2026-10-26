@@ -1,6 +1,6 @@
-import { getTranslations } from "next-intl/server"
-import { ModuleView } from "../../../../../components/viewspec/module-view"
-import { loadPaymentProviders, paymentProvidersSpec } from "./view"
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { loadPaymentProviders, paymentProvidersSpec } from "./view";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export default async function PaymentProvidersPage({
   searchParams,
 }: {
   // Optional: this route natively takes no props.
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = (await searchParams) ?? {};
   const data = await loadPaymentProviders(sp);

@@ -27,7 +27,7 @@ function sqlText(query: unknown): string {
   let out = "";
   for (const c of chunks) {
     if (c && typeof c === "object" && Array.isArray((c as { value?: unknown }).value)) {
-      out += ((c as { value: string[] }).value).join("");
+      out += (c as { value: string[] }).value.join("");
     }
   }
   return out;
@@ -165,12 +165,14 @@ function assignmentJson(employmentId: string, v: FakeAssignment): Record<string,
 function fakeExec(state: FakeState, org: string): SqlExecutor {
   return {
     execute: (async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const text = sqlText(query);
       const params = sqlParams(query);
       if (/from users/i.test(text)) {
         const user = state.users.get(str(params, 0));
-        if (/party_id/i.test(text)) return inMode({ rows: user ? [{ id: str(params, 0), partyId: null }] : [] });
+        if (/party_id/i.test(text))
+          return inMode({ rows: user ? [{ id: str(params, 0), partyId: null }] : [] });
         return inMode({ rows: user ? [{ isSuperAdmin: false, isActive: true }] : [] });
       }
       if (/subsidiary_restriction/i.test(text)) {
@@ -185,8 +187,13 @@ function fakeExec(state: FakeState, org: string): SqlExecutor {
       if (/hrm_employment_change_requests/i.test(text)) {
         // The select list interpolates the recorded-stamp format literal
         // before the ids — locate the employment param, never assume index 1.
-        const employmentId = params.find((param) => typeof param === "string" && state.requests.has(param));
-        const list = [...((typeof employmentId === "string" ? state.requests.get(employmentId) : undefined) ?? [])]
+        const employmentId = params.find(
+          (param) => typeof param === "string" && state.requests.has(param),
+        );
+        const list = [
+          ...((typeof employmentId === "string" ? state.requests.get(employmentId) : undefined) ??
+            []),
+        ]
           // The loader orders newest-first; the fake honors the same contract.
           .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
         return inMode({
@@ -215,22 +222,30 @@ function fakeExec(state: FakeState, org: string): SqlExecutor {
       if (/worker_employment_versions/i.test(text)) {
         if (/\bin\s*\(/i.test(text)) {
           const rows: Record<string, unknown>[] = [];
-          for (const [employmentId, list] of state.versions) rows.push(...list.map((v) => versionJson(employmentId, v)));
+          for (const [employmentId, list] of state.versions)
+            rows.push(...list.map((v) => versionJson(employmentId, v)));
           return inMode({ rows });
         }
         const employmentId = str(params, 1);
         const record = state.employments.get(employmentId);
         return inMode({
-          rows: [{
-            revision: record ? record.revision : null,
-            employment_versions: (state.versions.get(employmentId) ?? []).map((v) => versionJson(employmentId, v)),
-            assignment_versions: (state.assignments.get(employmentId) ?? []).map((v) => assignmentJson(employmentId, v)),
-          }],
+          rows: [
+            {
+              revision: record ? record.revision : null,
+              employment_versions: (state.versions.get(employmentId) ?? []).map((v) =>
+                versionJson(employmentId, v),
+              ),
+              assignment_versions: (state.assignments.get(employmentId) ?? []).map((v) =>
+                assignmentJson(employmentId, v),
+              ),
+            },
+          ],
         });
       }
       if (/employment_assignment_versions/i.test(text)) {
         const rows: Record<string, unknown>[] = [];
-        for (const [employmentId, list] of state.assignments) rows.push(...list.map((v) => assignmentJson(employmentId, v)));
+        for (const [employmentId, list] of state.assignments)
+          rows.push(...list.map((v) => assignmentJson(employmentId, v)));
         return inMode({ rows });
       }
       if (/for share/i.test(text)) {
@@ -260,24 +275,30 @@ function fakeExec(state: FakeState, org: string): SqlExecutor {
         const record = state.employments.get(str(params, 1));
         return inMode({
           rows: record
-            ? [{
-                id: record.id,
-                orgId: org,
-                workerPartyId: record.workerPartyId,
-                employerSubsidiaryId: record.employerSubsidiaryId,
-                revision: record.revision,
-              }]
+            ? [
+                {
+                  id: record.id,
+                  orgId: org,
+                  workerPartyId: record.workerPartyId,
+                  employerSubsidiaryId: record.employerSubsidiaryId,
+                  revision: record.revision,
+                },
+              ]
             : [],
         });
       }
       if (/from subsidiaries/i.test(text)) {
         if (/\bin\s*\(/i.test(text)) {
-          return inMode({ rows: [...state.subsidiaries.entries()].map(([id, name]) => ({ id, name })) });
+          return inMode({
+            rows: [...state.subsidiaries.entries()].map(([id, name]) => ({ id, name })),
+          });
         }
         return inMode({ rows: [] });
       }
       if (/from departments/i.test(text)) {
-        return inMode({ rows: [...state.departments.entries()].map(([id, name]) => ({ id, name })) });
+        return inMode({
+          rows: [...state.departments.entries()].map(([id, name]) => ({ id, name })),
+        });
       }
       throw new Error(`fake runner has no route for: ${text.slice(0, 120)}`);
     }) as SqlExecutor["execute"],
@@ -352,15 +373,21 @@ test("headcount resolves through temporal primitives and groups by subsidiary an
   const employment = seedEmployment(state, { workerPartyId: randomUUID() });
   state.versions.set(employment.id, [activeVersion()]);
   state.assignments.set(employment.id, [primaryAssignment()]);
-  const dto = await loadHeadcountAsOf(fakeExec(state, ORG), { orgId: ORG, actorId: actor, ...ASOF });
+  const dto = await loadHeadcountAsOf(fakeExec(state, ORG), {
+    orgId: ORG,
+    actorId: actor,
+    ...ASOF,
+  });
   assert.equal(dto.total, 1);
-  assert.deepEqual(dto.groups, [{
-    employerSubsidiaryId: SUB_A,
-    employerSubsidiaryName: "Alpha",
-    departmentId: DEPT_SALES,
-    departmentName: "Sales",
-    headcount: 1,
-  }]);
+  assert.deepEqual(dto.groups, [
+    {
+      employerSubsidiaryId: SUB_A,
+      employerSubsidiaryName: "Alpha",
+      departmentId: DEPT_SALES,
+      departmentName: "Sales",
+      headcount: 1,
+    },
+  ]);
 });
 
 test("headcount series resolves every date from one batched temporal census", async () => {
@@ -390,8 +417,14 @@ test("headcount series resolves every date from one batched temporal census", as
     { effectiveDate: "2026-03-31", total: 1 },
     { effectiveDate: "2026-06-15", total: 2 },
   ]);
-  assert.equal(statements.filter((text) => /from worker_employment_versions/i.test(text)).length, 1);
-  assert.equal(statements.filter((text) => /from employment_assignment_versions/i.test(text)).length, 1);
+  assert.equal(
+    statements.filter((text) => /from worker_employment_versions/i.test(text)).length,
+    1,
+  );
+  assert.equal(
+    statements.filter((text) => /from employment_assignment_versions/i.test(text)).length,
+    1,
+  );
 });
 
 test("headcount series refuses an unbounded date list before reading", async () => {
@@ -422,18 +455,26 @@ test("headcount overview shares one scoped temporal census for current groups an
   const actor = seedReader(state);
   state.users.get(actor)!.restriction = { mode: "list", subsidiaryIds: [SUB_A] };
   const local = seedEmployment(state, { workerPartyId: randomUUID() });
-  const foreign = seedEmployment(state, { workerPartyId: randomUUID(), employerSubsidiaryId: SUB_B });
+  const foreign = seedEmployment(state, {
+    workerPartyId: randomUUID(),
+    employerSubsidiaryId: SUB_B,
+  });
   state.versions.set(local.id, [activeVersion({ effectiveFrom: "2026-05-01" })]);
   state.assignments.set(local.id, [primaryAssignment()]);
   state.versions.set(foreign.id, [activeVersion(), activeVersion({ versionNo: 2 })]);
   const statements: string[] = [];
   const base = fakeExec(state, ORG);
-  const exec: SqlExecutor = { execute: (async (query: unknown, mode?: string) => {
-    statements.push(sqlText(query));
-    return base.execute(query as never, mode as never);
-  }) as SqlExecutor["execute"] };
+  const exec: SqlExecutor = {
+    execute: (async (query: unknown, mode?: string) => {
+      statements.push(sqlText(query));
+      return base.execute(query as never, mode as never);
+    }) as SqlExecutor["execute"],
+  };
   const result = await loadHeadcountOverviewAsOf(exec, {
-    orgId: ORG, actorId: actor, ...ASOF, effectiveDates: ["2026-03-31", ASOF.effectiveDate],
+    orgId: ORG,
+    actorId: actor,
+    ...ASOF,
+    effectiveDates: ["2026-03-31", ASOF.effectiveDate],
   });
   assert.equal(result.headcount.total, 1);
   assert.equal(result.headcount.groups[0]?.departmentName, "Sales");
@@ -441,13 +482,23 @@ test("headcount overview shares one scoped temporal census for current groups an
     { effectiveDate: "2026-03-31", total: 0 },
     { effectiveDate: ASOF.effectiveDate, total: 1 },
   ]);
-  for (const table of ["worker_employments", "worker_employment_versions", "employment_assignment_versions"]) {
+  for (const table of [
+    "worker_employments",
+    "worker_employment_versions",
+    "employment_assignment_versions",
+  ]) {
     assert.equal(statements.filter((text) => text.includes(`from ${table}`)).length, 1, table);
   }
   state.users.get(actor)!.grants = [];
-  await assert.rejects(loadHeadcountOverviewAsOf(exec, {
-    orgId: ORG, actorId: actor, ...ASOF, effectiveDates: [ASOF.effectiveDate],
-  }), HrmAuthorizationError);
+  await assert.rejects(
+    loadHeadcountOverviewAsOf(exec, {
+      orgId: ORG,
+      actorId: actor,
+      ...ASOF,
+      effectiveDates: [ASOF.effectiveDate],
+    }),
+    HrmAuthorizationError,
+  );
 });
 
 test("headcount counts on-leave but not offered, suspended, or terminated revisions", async () => {
@@ -457,17 +508,30 @@ test("headcount counts on-leave but not offered, suspended, or terminated revisi
     const employment = seedEmployment(state, { workerPartyId: randomUUID() });
     state.versions.set(employment.id, [activeVersion({ status })]);
   }
-  const dto = await loadHeadcountAsOf(fakeExec(state, ORG), { orgId: ORG, actorId: actor, ...ASOF });
+  const dto = await loadHeadcountAsOf(fakeExec(state, ORG), {
+    orgId: ORG,
+    actorId: actor,
+    ...ASOF,
+  });
   assert.equal(dto.total, 2);
-  assert.equal(dto.groups.reduce((sum, group) => sum + group.headcount, 0), 2);
+  assert.equal(
+    dto.groups.reduce((sum, group) => sum + group.headcount, 0),
+    2,
+  );
 });
 
 test("headcount skips employments with no applicable revision instead of failing", async () => {
   const state = emptyState();
   const actor = seedReader(state);
   const future = seedEmployment(state, { workerPartyId: randomUUID() });
-  state.versions.set(future.id, [activeVersion({ effectiveFrom: "2027-01-01", recordedAt: "2026-06-01T00:00:00.000001Z" })]);
-  const dto = await loadHeadcountAsOf(fakeExec(state, ORG), { orgId: ORG, actorId: actor, ...ASOF });
+  state.versions.set(future.id, [
+    activeVersion({ effectiveFrom: "2027-01-01", recordedAt: "2026-06-01T00:00:00.000001Z" }),
+  ]);
+  const dto = await loadHeadcountAsOf(fakeExec(state, ORG), {
+    orgId: ORG,
+    actorId: actor,
+    ...ASOF,
+  });
   assert.equal(dto.total, 0);
   assert.deepEqual(dto.groups, []);
 });
@@ -478,7 +542,12 @@ test("headcount refuses on ambiguity instead of undercounting", async () => {
   const employment = seedEmployment(state, { workerPartyId: randomUUID() });
   state.versions.set(employment.id, [
     activeVersion({ effectiveFrom: "2026-01-01", effectiveTo: null }),
-    activeVersion({ versionNo: 2, effectiveFrom: "2026-03-01", effectiveTo: null, recordedAt: "2026-03-01T00:00:00.000001Z" }),
+    activeVersion({
+      versionNo: 2,
+      effectiveFrom: "2026-03-01",
+      effectiveTo: null,
+      recordedAt: "2026-03-01T00:00:00.000001Z",
+    }),
   ]);
   await assert.rejects(
     loadHeadcountAsOf(fakeExec(state, ORG), { orgId: ORG, actorId: actor, ...ASOF }),
@@ -501,12 +570,25 @@ test("headcount without the grant is a coded refusal, never a zero", async () =>
 test("headcount filters employments outside the actor's subsidiary scope", async () => {
   const state = emptyState();
   const actor = randomUUID();
-  state.users.set(actor, { grants: ["hrm.employment.read"], restriction: { mode: "list", subsidiaryIds: [SUB_A] } });
-  const inside = seedEmployment(state, { workerPartyId: randomUUID(), employerSubsidiaryId: SUB_A });
-  const outside = seedEmployment(state, { workerPartyId: randomUUID(), employerSubsidiaryId: SUB_B });
+  state.users.set(actor, {
+    grants: ["hrm.employment.read"],
+    restriction: { mode: "list", subsidiaryIds: [SUB_A] },
+  });
+  const inside = seedEmployment(state, {
+    workerPartyId: randomUUID(),
+    employerSubsidiaryId: SUB_A,
+  });
+  const outside = seedEmployment(state, {
+    workerPartyId: randomUUID(),
+    employerSubsidiaryId: SUB_B,
+  });
   state.versions.set(inside.id, [activeVersion()]);
   state.versions.set(outside.id, [activeVersion()]);
-  const dto = await loadHeadcountAsOf(fakeExec(state, ORG), { orgId: ORG, actorId: actor, ...ASOF });
+  const dto = await loadHeadcountAsOf(fakeExec(state, ORG), {
+    orgId: ORG,
+    actorId: actor,
+    ...ASOF,
+  });
   assert.equal(dto.total, 1);
   assert.equal(dto.groups[0]?.employerSubsidiaryId, SUB_A);
 });
@@ -528,13 +610,25 @@ test("episodes list every version oldest-first under the employment gate", async
   const actor = seedReader(state);
   const employment = seedEmployment(state, { workerPartyId: randomUUID(), revision: 2 });
   state.versions.set(employment.id, [
-    activeVersion({ versionNo: 2, status: "on_leave", effectiveFrom: "2026-04-01", recordedAt: "2026-04-01T00:00:00.000001Z" }),
+    activeVersion({
+      versionNo: 2,
+      status: "on_leave",
+      effectiveFrom: "2026-04-01",
+      recordedAt: "2026-04-01T00:00:00.000001Z",
+    }),
     activeVersion(),
   ]);
-  const dto = await loadEmploymentEpisodes(fakeExec(state, ORG), { orgId: ORG, actorId: actor, employmentId: employment.id });
+  const dto = await loadEmploymentEpisodes(fakeExec(state, ORG), {
+    orgId: ORG,
+    actorId: actor,
+    employmentId: employment.id,
+  });
   assert.equal(dto.employmentId, employment.id);
   assert.equal(dto.revision, 2);
-  assert.deepEqual(dto.episodes.map((episode) => episode.versionNo), [1, 2]);
+  assert.deepEqual(
+    dto.episodes.map((episode) => episode.versionNo),
+    [1, 2],
+  );
   assert.equal(dto.episodes[1]?.status, "on_leave");
 });
 
@@ -542,7 +636,11 @@ test("episodes for an invisible employment refuse uniformly, never an empty list
   const state = emptyState();
   const actor = seedReader(state);
   await assert.rejects(
-    loadEmploymentEpisodes(fakeExec(state, ORG), { orgId: ORG, actorId: actor, employmentId: randomUUID() }),
+    loadEmploymentEpisodes(fakeExec(state, ORG), {
+      orgId: ORG,
+      actorId: actor,
+      employmentId: randomUUID(),
+    }),
     HrmAuthorizationError,
   );
 });
@@ -554,18 +652,37 @@ test("change requests list newest-first with revision binding and the run anchor
   const runId = randomUUID();
   state.requests.set(employment.id, [
     {
-      id: randomUUID(), status: "draft", requestRevision: 1, expectedEmploymentRevision: 1,
-      payloadSchemaVersion: "1", reason: null, submittedBy: null, submittedAt: null, flowRunId: null,
-      createdAt: "2026-06-01T00:00:00.000001Z", updatedAt: "2026-06-01T00:00:00.000001Z",
+      id: randomUUID(),
+      status: "draft",
+      requestRevision: 1,
+      expectedEmploymentRevision: 1,
+      payloadSchemaVersion: "1",
+      reason: null,
+      submittedBy: null,
+      submittedAt: null,
+      flowRunId: null,
+      createdAt: "2026-06-01T00:00:00.000001Z",
+      updatedAt: "2026-06-01T00:00:00.000001Z",
     },
     {
-      id: randomUUID(), status: "pending_approval", requestRevision: 2, expectedEmploymentRevision: 1,
-      payloadSchemaVersion: "1", reason: "promotion", submittedBy: randomUUID(),
-      submittedAt: "2026-06-02T00:00:00.000001Z", flowRunId: runId,
-      createdAt: "2026-06-02T00:00:00.000001Z", updatedAt: "2026-06-02T00:00:00.000001Z",
+      id: randomUUID(),
+      status: "pending_approval",
+      requestRevision: 2,
+      expectedEmploymentRevision: 1,
+      payloadSchemaVersion: "1",
+      reason: "promotion",
+      submittedBy: randomUUID(),
+      submittedAt: "2026-06-02T00:00:00.000001Z",
+      flowRunId: runId,
+      createdAt: "2026-06-02T00:00:00.000001Z",
+      updatedAt: "2026-06-02T00:00:00.000001Z",
     },
   ]);
-  const rows = await loadEmploymentChangeRequests(fakeExec(state, ORG), { orgId: ORG, actorId: actor, employmentId: employment.id });
+  const rows = await loadEmploymentChangeRequests(fakeExec(state, ORG), {
+    orgId: ORG,
+    actorId: actor,
+    employmentId: employment.id,
+  });
   assert.equal(rows.length, 2);
   assert.equal(rows[0]?.status, "pending_approval");
   assert.equal(rows[0]?.expectedEmploymentRevision, 1);
@@ -577,7 +694,11 @@ test("change requests for an invisible employment refuse uniformly", async () =>
   const state = emptyState();
   const actor = seedReader(state);
   await assert.rejects(
-    loadEmploymentChangeRequests(fakeExec(state, ORG), { orgId: ORG, actorId: actor, employmentId: randomUUID() }),
+    loadEmploymentChangeRequests(fakeExec(state, ORG), {
+      orgId: ORG,
+      actorId: actor,
+      employmentId: randomUUID(),
+    }),
     HrmAuthorizationError,
   );
 });
@@ -585,15 +706,26 @@ test("change requests for an invisible employment refuse uniformly", async () =>
 test("party resolution returns scoped ids and an honest empty, never null", async () => {
   const state = emptyState();
   const actor = randomUUID();
-  state.users.set(actor, { grants: ["hrm.employment.read"], restriction: { mode: "list", subsidiaryIds: [SUB_A] } });
+  state.users.set(actor, {
+    grants: ["hrm.employment.read"],
+    restriction: { mode: "list", subsidiaryIds: [SUB_A] },
+  });
   const party = randomUUID();
   const inside = seedEmployment(state, { workerPartyId: party, employerSubsidiaryId: SUB_A });
   seedEmployment(state, { workerPartyId: party, employerSubsidiaryId: SUB_B });
   seedEmployment(state, { workerPartyId: party, employerSubsidiaryId: null });
-  const ids = await loadEmploymentsByParty(fakeExec(state, ORG), { orgId: ORG, actorId: actor, workerPartyId: party });
+  const ids = await loadEmploymentsByParty(fakeExec(state, ORG), {
+    orgId: ORG,
+    actorId: actor,
+    workerPartyId: party,
+  });
   assert.deepEqual(ids, [inside.id]);
   assert.deepEqual(
-    await loadEmploymentsByParty(fakeExec(state, ORG), { orgId: ORG, actorId: actor, workerPartyId: randomUUID() }),
+    await loadEmploymentsByParty(fakeExec(state, ORG), {
+      orgId: ORG,
+      actorId: actor,
+      workerPartyId: randomUUID(),
+    }),
     [],
   );
 });

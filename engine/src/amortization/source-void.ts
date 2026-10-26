@@ -8,13 +8,25 @@
  */
 import type { SqlExecutor } from "../platform/db.ts";
 import { recordScheduleEvent } from "./internal.ts";
-import { closePlannedLines, livePlanLines, lockSchedulesForDocument, scheduleBalance, updateSchedule } from "./schedule-store.ts";
+import {
+  closePlannedLines,
+  livePlanLines,
+  lockSchedulesForDocument,
+  scheduleBalance,
+  updateSchedule,
+} from "./schedule-store.ts";
 import { reversePostedAmortization } from "./schedules.ts";
 import { fromUnits } from "../money/money.ts";
 
 export async function cancelAmortizationForVoidedSource(
   runner: SqlExecutor,
-  input: { orgId: string; documentId: string; reversalDate: string; actorId: string | null; reason: string },
+  input: {
+    orgId: string;
+    documentId: string;
+    reversalDate: string;
+    actorId: string | null;
+    reason: string;
+  },
 ): Promise<{ scheduleId: string; entryId: string | null }[]> {
   const out: { scheduleId: string; entryId: string | null }[] = [];
   for (const schedule of await lockSchedulesForDocument(runner, input.orgId, input.documentId)) {
@@ -28,7 +40,12 @@ export async function cancelAmortizationForVoidedSource(
       memo: `Source voided: amortization of ${schedule.scheduleNumber} returned`,
       actorId: input.actorId,
     });
-    await closePlannedLines(runner, input.orgId, lines.filter((line) => line.status === "planned").map((line) => line.id), "cancelled");
+    await closePlannedLines(
+      runner,
+      input.orgId,
+      lines.filter((line) => line.status === "planned").map((line) => line.id),
+      "cancelled",
+    );
     const updated = await updateSchedule(runner, schedule, input.actorId, {
       status: "cancelled",
       cancelled: true,
@@ -39,10 +56,17 @@ export async function cancelAmortizationForVoidedSource(
       orgId: input.orgId,
       scheduleId: schedule.id,
       kind: "source_voided",
-      reason: input.reason.trim().length >= 1 ? input.reason.trim().slice(0, 2000) : "Source document voided.",
+      reason:
+        input.reason.trim().length >= 1
+          ? input.reason.trim().slice(0, 2000)
+          : "Source document voided.",
       effectiveOn: input.reversalDate,
       balanceDelta: -balance.remaining,
-      before: { status: schedule.status, remaining: fromUnits(balance.remaining), amortized: fromUnits(balance.amortized) },
+      before: {
+        status: schedule.status,
+        remaining: fromUnits(balance.remaining),
+        amortized: fromUnits(balance.amortized),
+      },
       after: { status: updated.status, restored: fromUnits(restored.amount) },
       journalEntryId: restored.entryId,
       relatedDocumentId: input.documentId,

@@ -62,9 +62,7 @@ export type PayrollLevyReach = "resident" | "nonresident";
  *   after the release, silently. The employer looks the PSD up and enters it,
  *   the same way they enter their SUI experience rate.
  */
-export type PayrollLevyRateSource =
-  | { kind: "pack" }
-  | { kind: "tenant"; rateKey: string };
+export type PayrollLevyRateSource = { kind: "pack" } | { kind: "tenant"; rateKey: string };
 
 /**
  * Pack-owned arithmetic for simple effective-dated percentage levies,
@@ -202,8 +200,7 @@ export interface PayrollSubRegionLevy {
  * `work_only` — only the work jurisdiction's levy is withheld.
  * `residence_only` — only the residence jurisdiction's levy is withheld.
  */
-export type PayrollSubRegionConflictRule =
-  | "both" | "higher_rate" | "work_only" | "residence_only";
+export type PayrollSubRegionConflictRule = "both" | "higher_rate" | "work_only" | "residence_only";
 
 // ---------------------------------------------------------------------------
 // How a region treats its residents' out-of-region wages
@@ -227,7 +224,10 @@ export type PayrollSubRegionConflictRule =
  *   the resolution order below computes the work region first.
  */
 export type PayrollResidentWithholding =
-  | "none" | "not_required" | "required" | "required_net_of_credit"
+  | "none"
+  | "not_required"
+  | "required"
+  | "required_net_of_credit"
   /**
    * The pack has NOT established this region's rule.
    *
@@ -383,8 +383,8 @@ export function registerPayrollWithholding(
     }
     if (region.residentWithholding === "none" && region.taxesNonresidentWages) {
       throw new PayrollJurisdictionError(
-        `${declaration.country} · ${region.region} levies no resident wage tax but is declared to `
-        + "tax nonresident wages — a region that taxes wages taxes its residents' too",
+        `${declaration.country} · ${region.region} levies no resident wage tax but is declared to ` +
+          "tax nonresident wages — a region that taxes wages taxes its residents' too",
       );
     }
   }
@@ -404,9 +404,12 @@ export function packWithholding(country: string): PayrollPackWithholding {
   const declared = declaredPayrollWithholding().find((entry) => entry.country === country);
   if (!declared) {
     throw new PayrollJurisdictionError(
-      `the ${country || "(unset)"} payroll pack declares no withholding jurisdictions — a pack `
-      + "must declare which of its regions levy income tax and what sits below them. Declared "
-      + "for: " + (declaredPayrollWithholding().map((entry) => entry.country).join(", ") || "none"),
+      `the ${country || "(unset)"} payroll pack declares no withholding jurisdictions — a pack ` +
+        "must declare which of its regions levy income tax and what sits below them. Declared " +
+        "for: " +
+        (declaredPayrollWithholding()
+          .map((entry) => entry.country)
+          .join(", ") || "none"),
     );
   }
   return declared;
@@ -418,8 +421,8 @@ export function regionWithholding(country: string, region: string): PayrollRegio
   const found = pack.regions.find((entry) => entry.region === region);
   if (!found) {
     throw new PayrollJurisdictionError(
-      `the ${country} payroll pack declares no withholding rules for ${region || "(unset)"} — it `
-      + `declares ${pack.regions.length} regions`,
+      `the ${country} payroll pack declares no withholding rules for ${region || "(unset)"} — it ` +
+        `declares ${pack.regions.length} regions`,
     );
   }
   return found;

@@ -1,6 +1,6 @@
-import type { RichTextDocument } from '@openbooks/forms-core';
-import { richMessageParts } from './rich-message';
-import { esc, shell, type EmailOut } from './shell';
+import type { RichTextDocument } from "@openbooks/forms-core";
+import { richMessageParts } from "./rich-message";
+import { esc, shell, type EmailOut } from "./shell";
 export interface ScheduleEmailLine {
   date: string;
   subject: string;
@@ -25,24 +25,21 @@ export function scheduleDistributionEmail(input: {
   lines: readonly ScheduleEmailLine[];
 }): EmailOut {
   const rich = input.messageContent ? richMessageParts(input.messageContent) : null;
-  const message = rich?.text ?? input.message ?? '';
+  const message = rich?.text ?? input.message ?? "";
   const subject = `${input.board} · ${input.from} – ${input.through}`;
   const text =
     `Hello ${input.recipient},\n\n${subject}\nTime zone: ${input.timeZone}\n\n${message}\n\n` +
     input.lines
-      .map(
-        (l) =>
-          `${l.date} · ${l.subject} · ${l.assignment} · ${l.hours} · ${l.status}`,
-      )
-      .join('\n') +
+      .map((l) => `${l.date} · ${l.subject} · ${l.assignment} · ${l.hours} · ${l.status}`)
+      .join("\n") +
     `\n\nDate-only source observations do not establish booked or worked hours.\nVersion: ${input.version}`;
   const rows = input.lines.length
     ? input.lines
         .map(
           (l) =>
-            `<tr>${[l.date, l.subject, l.assignment, l.hours, l.status].map((v) => `<td style="padding:10px;border-bottom:1px solid #e2e8f0;vertical-align:top">${esc(v)}</td>`).join('')}</tr>`,
+            `<tr>${[l.date, l.subject, l.assignment, l.hours, l.status].map((v) => `<td style="padding:10px;border-bottom:1px solid #e2e8f0;vertical-align:top">${esc(v)}</td>`).join("")}</tr>`,
         )
-        .join('')
+        .join("")
     : '<tr><td colspan="5" style="padding:16px;color:#64748b">No published bookings or source-date observations in this window.</td></tr>';
   return {
     subject,

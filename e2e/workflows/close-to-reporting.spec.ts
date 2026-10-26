@@ -114,29 +114,54 @@ test.describe.serial("close to reporting", () => {
       //    controls, and the Projects parent gate the profitability report requires.
       ok(
         await api(req, origin, "PUT", "/api/admin/setup/features", {
-          features: { multiSubsidiary: true, advancedClose: true, projects: true, fixedAssets: true, flows: true, multiCurrency: true },
+          features: {
+            multiSubsidiary: true,
+            advancedClose: true,
+            projects: true,
+            fixedAssets: true,
+            flows: true,
+            multiCurrency: true,
+          },
         }),
         "features",
       );
 
-      const approvalSetup = ok(await api(req, origin, "GET", "/api/admin/flows/quick-approval?subjectKind=close_run"), "close approval setup");
-      const reviewer = (approvalSetup.users as { id: string; email: string }[]).find(user => user.email === APPROVER_EMAIL);
+      const approvalSetup = ok(
+        await api(req, origin, "GET", "/api/admin/flows/quick-approval?subjectKind=close_run"),
+        "close approval setup",
+      );
+      const reviewer = (approvalSetup.users as { id: string; email: string }[]).find(
+        (user) => user.email === APPROVER_EMAIL,
+      );
       expect(reviewer, "the tenant's selected close approver is active").toBeTruthy();
       for (const subjectKind of ["close_run", "close_reopen_request"]) {
-        ok(await api(req, origin, "POST", "/api/admin/flows/quick-approval", {
-          name: `Independent ${subjectKind} review`, subjectKind,
-          approver: { type: "user", userId: reviewer!.id }, preventSelfApproval: true,
-        }), "configure tenant close approval");
+        ok(
+          await api(req, origin, "POST", "/api/admin/flows/quick-approval", {
+            name: `Independent ${subjectKind} review`,
+            subjectKind,
+            approver: { type: "user", userId: reviewer!.id },
+            preventSelfApproval: true,
+          }),
+          "configure tenant close approval",
+        );
       }
 
       // 3. Second subsidiary (child of root) and the adjusting book.
       // The root subsidiary id is what a fresh draft defaults to.
       const rootDraft = ok(await api(req, origin, "POST", "/api/journals/draft", {}), "root draft");
-      const probeDoc = ok(await api(req, origin, "GET", `/api/journals/${rootDraft.id}`), "root draft fetch").doc as Record<string, unknown>;
+      const probeDoc = ok(
+        await api(req, origin, "GET", `/api/journals/${rootDraft.id}`),
+        "root draft fetch",
+      ).doc as Record<string, unknown>;
       SEED.rootSubId = field(probeDoc, "subsidiary_id", "root draft");
       // The probe draft must not survive: an unposted draft with no period is
       // a critical readiness exception, and this suite asserts a clean gate.
-      ok(await api(req, origin, "DELETE", `/api/journals/${rootDraft.id}`, { expectedUpdatedAt: field(probeDoc, "updated_at", "probe draft") }), "drop probe draft");
+      ok(
+        await api(req, origin, "DELETE", `/api/journals/${rootDraft.id}`, {
+          expectedUpdatedAt: field(probeDoc, "updated_at", "probe draft"),
+        }),
+        "drop probe draft",
+      );
       const subB = ok(
         await api(req, origin, "POST", "/api/admin/setup/subsidiaries", {
           name: "Harbour Subsidiary",
@@ -159,19 +184,43 @@ test.describe.serial("close to reporting", () => {
       SEED.adjustingBookId = book.id as string;
 
       // 4. Resolve the template chart by number (the pickers the UI uses).
-      const options = ok(await api(req, origin, "GET", "/api/forms/options?source=gl_accounts"), "accounts");
+      const options = ok(
+        await api(req, origin, "GET", "/api/forms/options?source=gl_accounts"),
+        "accounts",
+      );
       for (const opt of (options.options ?? []) as { value: string; label: string }[]) {
         const number = opt.label.split(" ")[0]!;
         SEED.accounts[number] = opt.value;
       }
-      for (const n of ["1000", "1500", "1510", "3000", "4000", "4100", "5000", "6100", "6300", "6500", "6600", "2100"]) {
+      for (const n of [
+        "1000",
+        "1500",
+        "1510",
+        "3000",
+        "4000",
+        "4100",
+        "5000",
+        "6100",
+        "6300",
+        "6500",
+        "6600",
+        "2100",
+      ]) {
         expect(SEED.accounts[n], `account ${n}`).toBeTruthy();
       }
 
       // 5. Parties: two customers, one vendor. A party only transacts
       // with a non-root subsidiary listed on its entity record.
       async function party(role: string, name: string, extraSubs: string[] = []) {
-        const draft = ok(await api(req, origin, "POST", "/api/parties", { displayName: name, isActive: false, roles: { [role]: { enabled: true } } }), `${role} create`, 201);
+        const draft = ok(
+          await api(req, origin, "POST", "/api/parties", {
+            displayName: name,
+            isActive: false,
+            roles: { [role]: { enabled: true } },
+          }),
+          `${role} create`,
+          201,
+        );
         const id = (draft.party as Record<string, string>).id!;
         const current = ok(await api(req, origin, "GET", `/api/parties/${id}`), `${role} fetch`);
         const party = current.party as Record<string, string>;
@@ -192,7 +241,14 @@ test.describe.serial("close to reporting", () => {
       SEED.vendorAId = await party("vendor", "Northbeam Supplies");
 
       // 6. Project for the profitability report.
-      const projectDraft = ok(await api(req, origin, "POST", "/api/projects", { name: "Harbour Kitchen Refit", isActive: false }), "project create", 201);
+      const projectDraft = ok(
+        await api(req, origin, "POST", "/api/projects", {
+          name: "Harbour Kitchen Refit",
+          isActive: false,
+        }),
+        "project create",
+        201,
+      );
       SEED.projectId = (projectDraft.project as Record<string, string>).id!;
       ok(
         await api(req, origin, "PATCH", `/api/projects/${SEED.projectId}`, {
@@ -215,27 +271,56 @@ test.describe.serial("close to reporting", () => {
         subsidiaryId: SEED.rootSubId,
         documentDate: `${P.from.slice(0, 8)}12`,
         dueDate: `${P.from.slice(0, 8)}28`,
-        lines: [{ accountId: revA, description: "Consulting services", quantity: "1", unitPrice: AMT.invoiceA, amount: AMT.invoiceA }],
+        lines: [
+          {
+            accountId: revA,
+            description: "Consulting services",
+            quantity: "1",
+            unitPrice: AMT.invoiceA,
+            amount: AMT.invoiceA,
+          },
+        ],
       });
       const invB = await postDocument("customer_invoice", {
         partyId: SEED.customerBId,
         subsidiaryId: SEED.subBId,
         documentDate: `${P.from.slice(0, 8)}14`,
         dueDate: `${P.from.slice(0, 8)}28`,
-        lines: [{ accountId: revB, description: "Wholesale order", quantity: "1", unitPrice: AMT.invoiceB, amount: AMT.invoiceB }],
+        lines: [
+          {
+            accountId: revB,
+            description: "Wholesale order",
+            quantity: "1",
+            unitPrice: AMT.invoiceB,
+            amount: AMT.invoiceB,
+          },
+        ],
       });
       await postDocument("vendor_bill", {
         partyId: SEED.vendorAId,
         subsidiaryId: SEED.rootSubId,
         documentDate: `${P.from.slice(0, 8)}15`,
         dueDate: `${P.from.slice(0, 8)}28`,
-        lines: [{ accountId: expA, description: "Rent", quantity: "1", unitPrice: AMT.billA, amount: AMT.billA }],
+        lines: [
+          {
+            accountId: expA,
+            description: "Rent",
+            quantity: "1",
+            unitPrice: AMT.billA,
+            amount: AMT.billA,
+          },
+        ],
       });
       // The bill's posting period resolves the target period id.
       const bill = ok(await api(req, origin, "GET", `/api/documents/${invB}`), "period resolve");
       SEED.periodId = field(bill.doc as Record<string, unknown>, "posting_period_id", "invoice");
 
-      const postJournal = (subsidiaryId: string, documentDate: string, memo: string, lines: { account: string; amount: string; description: string; project?: boolean }[]) =>
+      const postJournal = (
+        subsidiaryId: string,
+        documentDate: string,
+        memo: string,
+        lines: { account: string; amount: string; description: string; project?: boolean }[],
+      ) =>
         postSeedJournal(req, origin, SEED.accounts, {
           subsidiaryId,
           documentDate,
@@ -243,44 +328,111 @@ test.describe.serial("close to reporting", () => {
           lines: lines.map((l) => ({ ...l, ...(l.project ? { projectId: SEED.projectId } : {}) })),
         });
       const C = (n: string) => n;
-      const fundingDocumentId = await postJournal(SEED.rootSubId, `${P.from.slice(0, 8)}05`, "Owner funding", [
-        { account: C("1000"), amount: AMT.funding, description: "Cash in" },
-        { account: C("3000"), amount: `-${AMT.funding}`, description: "Share capital" },
-      ]);
+      const fundingDocumentId = await postJournal(
+        SEED.rootSubId,
+        `${P.from.slice(0, 8)}05`,
+        "Owner funding",
+        [
+          { account: C("1000"), amount: AMT.funding, description: "Cash in" },
+          { account: C("3000"), amount: `-${AMT.funding}`, description: "Share capital" },
+        ],
+      );
       // Retain the actual owner contribution before the consolidated statement
       // uses it as historical capital, including its exact identity rate.
-      const funding = ok(await api(req, origin, "GET", `/api/journals/${fundingDocumentId}`), "funding journal");
-      const fundingEntryId = field(funding.doc as Record<string, unknown>, "posted_entry_id", "funding journal");
-      const entry = ok(await api(req, origin, "GET", `/api/reports/entry/${fundingEntryId}?journal=1`), "funding source");
-      const capital = (entry.lines as Record<string, unknown>[]).find(line => line.account_id === SEED.accounts["3000"]);
+      const funding = ok(
+        await api(req, origin, "GET", `/api/journals/${fundingDocumentId}`),
+        "funding journal",
+      );
+      const fundingEntryId = field(
+        funding.doc as Record<string, unknown>,
+        "posted_entry_id",
+        "funding journal",
+      );
+      const entry = ok(
+        await api(req, origin, "GET", `/api/reports/entry/${fundingEntryId}?journal=1`),
+        "funding source",
+      );
+      const capital = (entry.lines as Record<string, unknown>[]).find(
+        (line) => line.account_id === SEED.accounts["3000"],
+      );
       expect(capital, "capital source is the posted funding line").toBeTruthy();
       const sourceLineId = field(capital!, "source_line_id", "capital source");
-      const sourceBytes = Buffer.from(JSON.stringify({ documentId: fundingDocumentId, entryId: fundingEntryId,
-        sourceLineId, effectiveOn: `${P.from.slice(0, 8)}05`, amount: `-${AMT.funding}`, currency: "USD", rate: "1" }));
-      const folder = ok(await api(req, origin, "POST", "/api/file-cabinet/folders", {
-        name: "Owner contribution evidence", isPrivate: true,
-      }), "funding evidence folder", 201);
+      const sourceBytes = Buffer.from(
+        JSON.stringify({
+          documentId: fundingDocumentId,
+          entryId: fundingEntryId,
+          sourceLineId,
+          effectiveOn: `${P.from.slice(0, 8)}05`,
+          amount: `-${AMT.funding}`,
+          currency: "USD",
+          rate: "1",
+        }),
+      );
+      const folder = ok(
+        await api(req, origin, "POST", "/api/file-cabinet/folders", {
+          name: "Owner contribution evidence",
+          isPrivate: true,
+        }),
+        "funding evidence folder",
+        201,
+      );
       const upload = await req.post(`${origin}/api/file-cabinet/files`, {
-        headers: { origin }, multipart: {
+        headers: { origin },
+        multipart: {
           folderId: field(folder, "id", "evidence folder"),
-          file: { name: "owner-contribution.json", mimeType: "application/json", buffer: sourceBytes },
+          file: {
+            name: "owner-contribution.json",
+            mimeType: "application/json",
+            buffer: sourceBytes,
+          },
         },
       });
       expect(upload.status(), await upload.text()).toBe(201);
       const file = (await upload.json()).file as Record<string, unknown>;
       expect(file.contentHash).toBe(createHash("sha256").update(sourceBytes).digest("hex"));
-      const assessment = ok(await api(req, origin, "POST", "/api/journals/historical-translation", {
-        instruction: { sourceLineId, measurementCurrency: "USD", presentationCurrency: "USD", kind: "contribution",
-          layers: [{ amount: `-${AMT.funding}`, rate: "1", historicalDate: `${P.from.slice(0, 8)}05`,
-            provenance: "Original owner contribution funding schedule", originalLayerId: null,
-            source: { fileId: field(file, "id", "evidence file"), versionId: field(file, "currentVersionId", "evidence file"),
-              contentHash: field(file, "contentHash", "evidence file") } }] },
-        reason: "Retain original owner capital for the consolidated financial statements",
-        idempotencyKey: `owner-capital:${sourceLineId}`,
-      }), "capital assessment", 201);
+      const assessment = ok(
+        await api(req, origin, "POST", "/api/journals/historical-translation", {
+          instruction: {
+            sourceLineId,
+            measurementCurrency: "USD",
+            presentationCurrency: "USD",
+            kind: "contribution",
+            layers: [
+              {
+                amount: `-${AMT.funding}`,
+                rate: "1",
+                historicalDate: `${P.from.slice(0, 8)}05`,
+                provenance: "Original owner contribution funding schedule",
+                originalLayerId: null,
+                source: {
+                  fileId: field(file, "id", "evidence file"),
+                  versionId: field(file, "currentVersionId", "evidence file"),
+                  contentHash: field(file, "contentHash", "evidence file"),
+                },
+              },
+            ],
+          },
+          reason: "Retain original owner capital for the consolidated financial statements",
+          idempotencyKey: `owner-capital:${sourceLineId}`,
+        }),
+        "capital assessment",
+        201,
+      );
       const changeId = field(assessment, "changeId", "capital assessment");
-      ok(await api(req, origin, "POST", `/api/accounting/changes/${changeId}/submit`, {}), "submit capital assessment");
-      const applied = ok(await api(req, origin, "POST", `/api/journals/historical-translation/${changeId}/apply`, {}), "apply capital assessment");
+      ok(
+        await api(req, origin, "POST", `/api/accounting/changes/${changeId}/submit`, {}),
+        "submit capital assessment",
+      );
+      const applied = ok(
+        await api(
+          req,
+          origin,
+          "POST",
+          `/api/journals/historical-translation/${changeId}/apply`,
+          {},
+        ),
+        "apply capital assessment",
+      );
       expect(field(applied, "basisId", "capital assessment")).toBeTruthy();
 
       await postJournal(SEED.subBId, `${P.from.slice(0, 8)}20`, "Office supplies", [
@@ -288,48 +440,97 @@ test.describe.serial("close to reporting", () => {
         { account: C("1000"), amount: `-${AMT.supplies}`, description: "Cash out" },
       ]);
       await postJournal(SEED.rootSubId, `${P.from.slice(0, 8)}10`, "Project revenue", [
-        { account: C("1000"), amount: AMT.projectRevenue, description: "Project receipt", project: true },
-        { account: C("4100"), amount: `-${AMT.projectRevenue}`, description: "Project revenue", project: true },
+        {
+          account: C("1000"),
+          amount: AMT.projectRevenue,
+          description: "Project receipt",
+          project: true,
+        },
+        {
+          account: C("4100"),
+          amount: `-${AMT.projectRevenue}`,
+          description: "Project revenue",
+          project: true,
+        },
       ]);
       await postJournal(SEED.rootSubId, `${P.from.slice(0, 8)}11`, "Project cost", [
-        { account: C("5000"), amount: AMT.projectCost, description: "Project materials", project: true },
-        { account: C("1000"), amount: `-${AMT.projectCost}`, description: "Cash out", project: true },
+        {
+          account: C("5000"),
+          amount: AMT.projectCost,
+          description: "Project materials",
+          project: true,
+        },
+        {
+          account: C("1000"),
+          amount: `-${AMT.projectCost}`,
+          description: "Cash out",
+          project: true,
+        },
       ]);
-      const priorId = await postJournal(SEED.rootSubId, `${P1.from.slice(0, 8)}15`, "Prior month revenue", [
-        { account: C("1000"), amount: AMT.priorRevenue, description: "Cash in" },
-        { account: C("4100"), amount: `-${AMT.priorRevenue}`, description: "Revenue" },
-      ]);
-      const prior = ok(await api(req, origin, "GET", `/api/journals/${priorId}`), "prior period resolve");
-      SEED.priorPeriodId = field(prior.doc as Record<string, unknown>, "posting_period_id", "prior journal");
+      const priorId = await postJournal(
+        SEED.rootSubId,
+        `${P1.from.slice(0, 8)}15`,
+        "Prior month revenue",
+        [
+          { account: C("1000"), amount: AMT.priorRevenue, description: "Cash in" },
+          { account: C("4100"), amount: `-${AMT.priorRevenue}`, description: "Revenue" },
+        ],
+      );
+      const prior = ok(
+        await api(req, origin, "GET", `/api/journals/${priorId}`),
+        "prior period resolve",
+      );
+      SEED.priorPeriodId = field(
+        prior.doc as Record<string, unknown>,
+        "posting_period_id",
+        "prior journal",
+      );
       expect(SEED.periodId, "target period resolved").toBeTruthy();
       expect(SEED.priorPeriodId, "prior period resolved").toBeTruthy();
       expect(SEED.priorPeriodId).not.toBe(SEED.periodId);
 
       // 8. Equipment + depreciation: the product's depreciation run posts to
       //    every active book, which is how the adjusting book earns entries.
-      const expense = ok(await api(req, origin, "POST", "/api/accounts", {
-        number: "6590",
-        name: "Equipment Depreciation",
-        type: "expense",
-        subsidiaryId: SEED.rootSubId,
-      }), "depreciation expense account", 201);
-      const category = ok(await api(req, origin, "POST", "/api/admin/setup/asset-categories", {
-        name: "Commissary Equipment",
-        assetAccountId: SEED.accounts["1500"],
-        accumulatedDepreciationAccountId: SEED.accounts["1510"],
-        depreciationExpenseAccountId: field(expense.account as Record<string, unknown>, "id", "depreciation expense account"),
-        defaultMethod: "straight_line",
-        defaultLifeMonths: 12,
-        defaultConvention: "full_month",
-        isActive: true,
-      }), "asset category");
-      const assetDraft = ok(await api(req, origin, "POST", "/api/assets", {
-        name: "Commissary Server",
-        categoryId: field(category, "id", "asset category"),
-        subsidiaryId: SEED.rootSubId,
-      }), "asset draft", 201);
+      const expense = ok(
+        await api(req, origin, "POST", "/api/accounts", {
+          number: "6590",
+          name: "Equipment Depreciation",
+          type: "expense",
+          subsidiaryId: SEED.rootSubId,
+        }),
+        "depreciation expense account",
+        201,
+      );
+      const category = ok(
+        await api(req, origin, "POST", "/api/admin/setup/asset-categories", {
+          name: "Commissary Equipment",
+          assetAccountId: SEED.accounts["1500"],
+          accumulatedDepreciationAccountId: SEED.accounts["1510"],
+          depreciationExpenseAccountId: field(
+            expense.account as Record<string, unknown>,
+            "id",
+            "depreciation expense account",
+          ),
+          defaultMethod: "straight_line",
+          defaultLifeMonths: 12,
+          defaultConvention: "full_month",
+          isActive: true,
+        }),
+        "asset category",
+      );
+      const assetDraft = ok(
+        await api(req, origin, "POST", "/api/assets", {
+          name: "Commissary Server",
+          categoryId: field(category, "id", "asset category"),
+          subsidiaryId: SEED.rootSubId,
+        }),
+        "asset draft",
+        201,
+      );
       SEED.assetId = assetDraft.id as string;
-      const assetToken = await revisionToken(req, origin, `/api/assets/${SEED.assetId}`, (d) => field(d.asset as Record<string, unknown>, "updated_at", "asset"));
+      const assetToken = await revisionToken(req, origin, `/api/assets/${SEED.assetId}`, (d) =>
+        field(d.asset as Record<string, unknown>, "updated_at", "asset"),
+      );
       ok(
         await api(req, origin, "PATCH", `/api/assets/${SEED.assetId}`, {
           expectedUpdatedAt: assetToken,
@@ -388,14 +589,22 @@ test.describe.serial("close to reporting", () => {
         await api(req, origin, "POST", `/api/banking/reconciliations/${recon.id}/auto-match`, {}),
         "auto-match",
       );
-      expect(field(matched.totals as Record<string, unknown>, "difference", "reconciliation")).toBe("0.0000");
-      ok(await api(req, origin, "POST", `/api/banking/reconciliations/${recon.id}/sign-off`, {}), "sign-off");
+      expect(field(matched.totals as Record<string, unknown>, "difference", "reconciliation")).toBe(
+        "0.0000",
+      );
+      ok(
+        await api(req, origin, "POST", `/api/banking/reconciliations/${recon.id}/sign-off`, {}),
+        "sign-off",
+      );
     } finally {
       await context.close();
     }
   });
 
-  test("starts the close run from the period list and shows a clear readiness", async ({ browser, baseURL }) => {
+  test("starts the close run from the period list and shows a clear readiness", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       // The fiscal-year filter defaults to the current year; a January run
@@ -408,9 +617,14 @@ test.describe.serial("close to reporting", () => {
       // The book picker is a custom listbox over a native select: read the
       // options (values are book ids) from any unstarted row, untouched —
       // Primary is the default selection, the book under test.
-      const bookOptions = await page.locator("tr select option").evaluateAll((els) =>
-        els.map((e) => ({ value: (e as HTMLOptionElement).value, label: (e.textContent ?? "").trim() })),
-      );
+      const bookOptions = await page
+        .locator("tr select option")
+        .evaluateAll((els) =>
+          els.map((e) => ({
+            value: (e as HTMLOptionElement).value,
+            label: (e.textContent ?? "").trim(),
+          })),
+        );
       SEED.primaryBookId = bookOptions.find((o) => o.label.includes("Primary"))?.value ?? "";
       expect(SEED.primaryBookId, "primary book resolved").toBeTruthy();
       const resume = row.getByRole("link", { name: "Resume" });
@@ -418,7 +632,8 @@ test.describe.serial("close to reporting", () => {
         // Dirty tenant (local re-run): follow the existing run instead of
         // starting a second one. CI tenants are pristine, so CI always
         // exercises the Start path below.
-        SEED.runId = new URL((await resume.getAttribute("href")) ?? "", baseURL).searchParams.get("run") ?? "";
+        SEED.runId =
+          new URL((await resume.getAttribute("href")) ?? "", baseURL).searchParams.get("run") ?? "";
       } else {
         const started = page.waitForURL(/\/close\?run=[0-9a-f-]+/);
         await row.getByRole("button", { name: "Start close" }).click();
@@ -432,7 +647,9 @@ test.describe.serial("close to reporting", () => {
       // is the next test's business, not an exception. The wizard renders
       // the same refresh payload the approval gate enforces.
       const refreshed = ok(
-        await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, { action: "refresh" }),
+        await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, {
+          action: "refresh",
+        }),
         "refresh",
       );
       // Exactly one open exception: the material-variance WARNING the seed
@@ -441,7 +658,9 @@ test.describe.serial("close to reporting", () => {
       // not vacant — while no error/critical blocks the gate.
       expect(refreshed.openExceptions).toBe(1);
       await page.goto(`/close?run=${SEED.runId}&stage=readiness`);
-      await expect(page.getByText(new RegExp(`${refreshed.readinessScore}\\s*%`)).first()).toBeVisible();
+      await expect(
+        page.getByText(new RegExp(`${refreshed.readinessScore}\\s*%`)).first(),
+      ).toBeVisible();
       await expect(page.getByText("In progress").first()).toBeVisible();
       await expect(page.getByText("Warning", { exact: true }).first()).toBeVisible();
       await expect(page.getByText("Critical", { exact: true })).toHaveCount(0);
@@ -451,7 +670,10 @@ test.describe.serial("close to reporting", () => {
     }
   });
 
-  test("hard gates refuse approval before cutoffs are done, then release", async ({ browser, baseURL }) => {
+  test("hard gates refuse approval before cutoffs are done, then release", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       // Negative proof first: the gate must bite while manual cutoffs are open.
@@ -474,19 +696,27 @@ test.describe.serial("close to reporting", () => {
           .filter({ hasText: title })
           .filter({ has: page.getByRole("button", { name: "Add evidence" }) })
           .last();
-        await card.getByPlaceholder("Add a note or evidence summary\u2026").fill(`Cutoff verified for ${P.name}`);
+        await card
+          .getByPlaceholder("Add a note or evidence summary\u2026")
+          .fill(`Cutoff verified for ${P.name}`);
         const evidenced = page.waitForResponse(
-          (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}/evidence`) && r.request().method() === "POST",
+          (r) =>
+            r.url().endsWith(`/api/close/runs/${SEED.runId}/evidence`) &&
+            r.request().method() === "POST",
         );
         await card.getByRole("button", { name: "Add evidence" }).click();
         expect((await evidenced).status()).toBe(200);
         const started = page.waitForResponse(
-          (r) => r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) && r.request().method() === "POST",
+          (r) =>
+            r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) &&
+            r.request().method() === "POST",
         );
         await card.getByRole("button", { name: "Start" }).click();
         expect((await started).status()).toBe(200);
         const completed = page.waitForResponse(
-          (r) => r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) && r.request().method() === "POST",
+          (r) =>
+            r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) &&
+            r.request().method() === "POST",
         );
         await card.getByRole("button", { name: "Complete" }).click();
         expect((await completed).status()).toBe(200);
@@ -494,7 +724,9 @@ test.describe.serial("close to reporting", () => {
 
       // With the cutoffs complete the readiness gate is fully green.
       const cleared = ok(
-        await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, { action: "refresh" }),
+        await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, {
+          action: "refresh",
+        }),
         "refresh after cutoffs",
       );
       expect(cleared.openExceptions).toBe(1);
@@ -506,7 +738,10 @@ test.describe.serial("close to reporting", () => {
     }
   });
 
-  test("requests approval in the wizard, approves independently, and locks the period", async ({ browser, baseURL }) => {
+  test("requests approval in the wizard, approves independently, and locks the period", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     const actx = await browser.newContext({ baseURL });
     const apage = await actx.newPage();
@@ -554,7 +789,10 @@ test.describe.serial("close to reporting", () => {
       const locked = page.waitForResponse(
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
-      await Promise.all([acceptConfirm(page), page.getByRole("button", { name: "Lock period" }).click()]);
+      await Promise.all([
+        acceptConfirm(page),
+        page.getByRole("button", { name: "Lock period" }).click(),
+      ]);
       await expectOkResponse(await locked, "lock period");
       await expect(page.getByText("Closed").first()).toBeVisible();
       await expect(page.getByText(/Period locked by/).first()).toBeVisible();
@@ -570,12 +808,15 @@ test.describe.serial("close to reporting", () => {
     try {
       // GL: a manual journal dated inside the closed period.
       const draft = ok(
-        await api(page.request, baseURL!, "POST", "/api/journals/draft", { subsidiaryId: SEED.rootSubId }),
+        await api(page.request, baseURL!, "POST", "/api/journals/draft", {
+          subsidiaryId: SEED.rootSubId,
+        }),
         "refusal draft",
       );
       const id = field(draft, "id", "refusal draft");
       const token = await revisionToken(page.request, baseURL!, `/api/journals/${id}`, (d) =>
-        field(d.doc as Record<string, unknown>, "updated_at", "journal"));
+        field(d.doc as Record<string, unknown>, "updated_at", "journal"),
+      );
       ok(
         await api(page.request, baseURL!, "PATCH", `/api/journals/${id}`, {
           expectedUpdatedAt: token,
@@ -596,8 +837,15 @@ test.describe.serial("close to reporting", () => {
       expect(JSON.stringify(glRefused.json)).toMatch(/closed/i);
       // Discard the refused draft: a draft with no posting period is a
       // critical readiness exception, and the re-drive below must start clean.
-      const discardToken = await revisionToken(page.request, baseURL!, `/api/journals/${id}`, (d) => field(d.doc as Record<string, unknown>, "updated_at", "refused journal"));
-      ok(await api(page.request, baseURL!, "DELETE", `/api/journals/${id}`, { expectedUpdatedAt: discardToken }), "discard refused journal");
+      const discardToken = await revisionToken(page.request, baseURL!, `/api/journals/${id}`, (d) =>
+        field(d.doc as Record<string, unknown>, "updated_at", "refused journal"),
+      );
+      ok(
+        await api(page.request, baseURL!, "DELETE", `/api/journals/${id}`, {
+          expectedUpdatedAt: discardToken,
+        }),
+        "discard refused journal",
+      );
 
       // AR and AP: invoice and bill posts into the same closed scope refuse.
       const arId = await draftSeedDocument(page.request, baseURL!, "customer_invoice", {
@@ -622,9 +870,12 @@ test.describe.serial("close to reporting", () => {
       expect(arRefused.status).toBe(422);
       expect(JSON.stringify(arRefused.json)).toMatch(/closed/i);
       const arToken = await revisionToken(page.request, baseURL!, `/api/documents/${arId}`, (d) =>
-        field((d.doc ?? d) as Record<string, unknown>, "updated_at", "refused invoice"));
+        field((d.doc ?? d) as Record<string, unknown>, "updated_at", "refused invoice"),
+      );
       ok(
-        await api(page.request, baseURL!, "DELETE", `/api/documents/${arId}`, { expectedUpdatedAt: arToken }),
+        await api(page.request, baseURL!, "DELETE", `/api/documents/${arId}`, {
+          expectedUpdatedAt: arToken,
+        }),
         "discard refused invoice",
       );
       const apId = await draftSeedDocument(page.request, baseURL!, "vendor_bill", {
@@ -649,9 +900,12 @@ test.describe.serial("close to reporting", () => {
       expect(apRefused.status).toBe(422);
       expect(JSON.stringify(apRefused.json)).toMatch(/closed/i);
       const apToken = await revisionToken(page.request, baseURL!, `/api/documents/${apId}`, (d) =>
-        field((d.doc ?? d) as Record<string, unknown>, "updated_at", "refused bill"));
+        field((d.doc ?? d) as Record<string, unknown>, "updated_at", "refused bill"),
+      );
       ok(
-        await api(page.request, baseURL!, "DELETE", `/api/documents/${apId}`, { expectedUpdatedAt: apToken }),
+        await api(page.request, baseURL!, "DELETE", `/api/documents/${apId}`, {
+          expectedUpdatedAt: apToken,
+        }),
         "discard refused bill",
       );
     } finally {
@@ -661,7 +915,10 @@ test.describe.serial("close to reporting", () => {
 
   const range = `period=custom&from=${P.from}&to=${P.to}`;
 
-  test("reporting package: profit and loss ties to the seeded journals", async ({ browser, baseURL }) => {
+  test("reporting package: profit and loss ties to the seeded journals", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       await page.goto(`/reports/pnl?${range}`);
@@ -671,8 +928,12 @@ test.describe.serial("close to reporting", () => {
       const revenue = main.locator("tr", { hasText: "Total Revenue" });
       await expect(revenue).toContainText("$25,000.00");
       // Cost: 2,000 project materials; gross 23,000.
-      await expect(main.locator("tr", { hasText: "Total Cost of Goods Sold" })).toContainText("$2,000.00");
-      await expect(main.locator("tr", { hasText: "Gross profit" }).last()).toContainText("$23,000.00");
+      await expect(main.locator("tr", { hasText: "Total Cost of Goods Sold" })).toContainText(
+        "$2,000.00",
+      );
+      await expect(main.locator("tr", { hasText: "Gross profit" }).last()).toContainText(
+        "$23,000.00",
+      );
       // Expenses: 5,000 rent + 1,500 supplies + 10,000 depreciation.
       await expect(main.locator("tr", { hasText: "Total Expenses" })).toContainText("$16,500.00");
       // Net: 25,000 - 2,000 - 16,500.
@@ -682,35 +943,54 @@ test.describe.serial("close to reporting", () => {
     }
   });
 
-  test("reporting package: balance sheet ties to the seeded journals", async ({ browser, baseURL }) => {
+  test("reporting package: balance sheet ties to the seeded journals", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       await page.goto(`/reports/balance-sheet?${range}`);
       const main = page.locator("main");
-      await expect(main.locator("tr", { hasText: "Operating Bank Account" })).toContainText("$32,500.00");
-      await expect(main.locator("tr", { hasText: "Accounts Receivable" })).toContainText("$20,000.00");
+      await expect(main.locator("tr", { hasText: "Operating Bank Account" })).toContainText(
+        "$32,500.00",
+      );
+      await expect(main.locator("tr", { hasText: "Accounts Receivable" })).toContainText(
+        "$20,000.00",
+      );
       await expect(main.locator("tr", { hasText: "Accounts Payable" })).toContainText("$5,000.00");
       await expect(main.locator("tr", { hasText: "Share Capital" })).toContainText("$25,000.00");
-      await expect(main.locator("tr", { hasText: "Total assets" }).last()).toContainText("$42,500.00");
+      await expect(main.locator("tr", { hasText: "Total assets" }).last()).toContainText(
+        "$42,500.00",
+      );
     } finally {
       await context.close();
     }
   });
 
-  test("reporting package: trial balance balances to the seeded journals", async ({ browser, baseURL }) => {
+  test("reporting package: trial balance balances to the seeded journals", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       await page.goto(`/reports/trial-balance?${range}`);
       const main = page.locator("main");
-      await expect(main.locator("tr", { hasText: "Accounts Receivable" })).toContainText("$20,000.00");
+      await expect(main.locator("tr", { hasText: "Accounts Receivable" })).toContainText(
+        "$20,000.00",
+      );
       await expect(main.locator("tr", { hasText: "Service Revenue" })).toContainText("$23,000.00");
-      await expect(main.locator("tr", { hasText: "Operating Bank Account" })).toContainText("$32,500.00");
+      await expect(main.locator("tr", { hasText: "Operating Bank Account" })).toContainText(
+        "$32,500.00",
+      );
     } finally {
       await context.close();
     }
   });
 
-  test("reporting package: cash flow follows the seeded bank activity", async ({ browser, baseURL }) => {
+  test("reporting package: cash flow follows the seeded bank activity", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       await page.goto(`/reports/cash-flow?${range}`);
@@ -721,25 +1001,35 @@ test.describe.serial("close to reporting", () => {
     }
   });
 
-  test("reporting package: AR and AP aging show the unpaid seeded balances", async ({ browser, baseURL }) => {
+  test("reporting package: AR and AP aging show the unpaid seeded balances", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       // As-of pinned to period end: deterministic buckets however late the run is.
       await page.goto(`/reports/aging?${range}`);
       const main = page.locator("main");
-      await expect(main.locator("tr", { hasText: "Harbourlight Foods" })).toContainText("$12,000.00");
+      await expect(main.locator("tr", { hasText: "Harbourlight Foods" })).toContainText(
+        "$12,000.00",
+      );
       await expect(main.locator("tr", { hasText: "Beacon Grocers" })).toContainText("$8,000.00");
       await expect(main).toContainText("$20,000.00");
       await page.goto(`/reports/aging?${range}&side=ap`);
       const payables = page.locator("main");
-      await expect(payables.locator("tr", { hasText: "Northbeam Supplies" })).toContainText("$5,000.00");
+      await expect(payables.locator("tr", { hasText: "Northbeam Supplies" })).toContainText(
+        "$5,000.00",
+      );
       await expect(payables).toContainText("$5,000.00");
     } finally {
       await context.close();
     }
   });
 
-  test("reporting package: project profitability shows the seeded project margin", async ({ browser, baseURL }) => {
+  test("reporting package: project profitability shows the seeded project margin", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       await page.goto(`/reports/project-profitability?${range}`);
@@ -760,9 +1050,15 @@ test.describe.serial("close to reporting", () => {
       // 10,000 depreciation adjustment; selecting it must retain both.
       await page.goto(`/reports/pnl?${range}&book=${SEED.adjustingBookId}`);
       const adjusting = page.locator("main");
-      await expect(adjusting.locator("tr", { hasText: "Total Revenue" })).toContainText("$25,000.00");
-      await expect(adjusting.locator("tr", { hasText: "Total Expenses" })).toContainText("$26,500.00");
-      await expect(adjusting.locator("tr", { hasText: "Net income" }).last()).toContainText("($3,500.00)");
+      await expect(adjusting.locator("tr", { hasText: "Total Revenue" })).toContainText(
+        "$25,000.00",
+      );
+      await expect(adjusting.locator("tr", { hasText: "Total Expenses" })).toContainText(
+        "$26,500.00",
+      );
+      await expect(adjusting.locator("tr", { hasText: "Net income" }).last()).toContainText(
+        "($3,500.00)",
+      );
       // Root subsidiary consolidates its children: identical to unfiltered.
       await page.goto(`/reports/pnl?${range}&sub=${SEED.rootSubId}`);
       const subA = page.locator("main");
@@ -776,16 +1072,23 @@ test.describe.serial("close to reporting", () => {
       // Row-level partition: the child's aging names only its own customer.
       await page.goto(`/reports/aging?${range}&sub=${SEED.subBId}`);
       const subBAging = page.locator("main");
-      await expect(subBAging.locator("tr", { hasText: "Beacon Grocers" })).toContainText("$8,000.00");
+      await expect(subBAging.locator("tr", { hasText: "Beacon Grocers" })).toContainText(
+        "$8,000.00",
+      );
       await expect(subBAging.locator("tr", { hasText: "Harbourlight Foods" })).toHaveCount(0);
       await page.goto(`/reports/aging?${range}`);
-      await expect(page.locator("main").locator("tr", { hasText: "Harbourlight Foods" })).toContainText("$12,000.00");
+      await expect(
+        page.locator("main").locator("tr", { hasText: "Harbourlight Foods" }),
+      ).toContainText("$12,000.00");
     } finally {
       await context.close();
     }
   });
 
-  test("comparative columns show the prior period beside the closed one", async ({ browser, baseURL }) => {
+  test("comparative columns show the prior period beside the closed one", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       await page.goto(`/reports/pnl?${range}&compare=prior_period`);
@@ -845,7 +1148,10 @@ test.describe.serial("close to reporting", () => {
     }
   });
 
-  test("publishes the package with a verifiable binder and enqueues delivery", async ({ browser, baseURL }) => {
+  test("publishes the package with a verifiable binder and enqueues delivery", async ({
+    browser,
+    baseURL,
+  }) => {
     test.setTimeout(300_000);
     const { context, page } = await authedContext(browser, baseURL);
     try {
@@ -853,7 +1159,10 @@ test.describe.serial("close to reporting", () => {
       const published = page.waitForResponse(
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
-      await Promise.all([acceptConfirm(page), page.getByRole("button", { name: "Publish package" }).click()]);
+      await Promise.all([
+        acceptConfirm(page),
+        page.getByRole("button", { name: "Publish package" }).click(),
+      ]);
       await expectOkResponse(await published, "publish package");
       await expect(page.getByText("Published").first()).toBeVisible();
 
@@ -878,7 +1187,8 @@ test.describe.serial("close to reporting", () => {
           action: "send-package",
           packageId: run.reporting_package_id,
           periodId: SEED.periodId,
-          bookId: SEED.primaryBookId, idempotencyKey: crypto.randomUUID(),
+          bookId: SEED.primaryBookId,
+          idempotencyKey: crypto.randomUUID(),
         }),
         "send-package",
       );
@@ -888,14 +1198,19 @@ test.describe.serial("close to reporting", () => {
     }
   });
 
-  test("reopens with reason, posts the adjusting entry, and re-closes", async ({ browser, baseURL }) => {
+  test("reopens with reason, posts the adjusting entry, and re-closes", async ({
+    browser,
+    baseURL,
+  }) => {
     test.setTimeout(300_000);
     const { context, page } = await authedContext(browser, baseURL);
     const actx = await browser.newContext({ baseURL });
     const apage = await actx.newPage();
     try {
       // Request a controlled reopen for GL from the period drawer.
-      await page.goto(`/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`);
+      await page.goto(
+        `/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`,
+      );
       await dismissSetupWizard(page);
       const periodName = `P${P.from.slice(5, 7)} FY${P.from.slice(0, 4)}`;
       const row = page.locator("tr", { hasText: periodName }).first();
@@ -909,7 +1224,9 @@ test.describe.serial("close to reporting", () => {
         .filter({ has: page.getByRole("button", { name: "Reopen" }) })
         .last();
       await glRow.getByRole("button", { name: "Reopen" }).click();
-      await expect(page.getByRole("heading", { name: "Request controlled reopening" })).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Request controlled reopening" }),
+      ).toBeVisible();
       await page.locator("textarea").first().fill("Freight received after close MIB-2291");
       const requested = page.waitForResponse(
         (r) => r.url().endsWith("/api/admin/close") && r.request().method() === "POST",
@@ -917,8 +1234,12 @@ test.describe.serial("close to reporting", () => {
       await page.getByRole("button", { name: "Request reopening" }).click();
       await expectOkResponse(await requested, "request approval");
       // The request appears in the reopen list; follow it for its id.
-      await page.goto(`/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`);
-      const request = page.getByRole("link", { name: new RegExp(`${periodName}.*Primary`) }).first();
+      await page.goto(
+        `/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`,
+      );
+      const request = page
+        .getByRole("link", { name: new RegExp(`${periodName}.*Primary`) })
+        .first();
       await expect(request).toBeVisible();
       await request.click();
       await page.waitForURL(/reopen=/);
@@ -965,7 +1286,9 @@ test.describe.serial("close to reporting", () => {
       // Re-drive the run to a second close and publish: tasks revalidate,
       // approval repeats independently, and the new binder must differ.
       const redriven = ok(
-        await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, { action: "refresh" }),
+        await api(page.request, baseURL!, "POST", `/api/close/runs/${SEED.runId}`, {
+          action: "refresh",
+        }),
         "refresh after adjusting",
       );
       expect(redriven.openExceptions).toBe(1);
@@ -979,19 +1302,27 @@ test.describe.serial("close to reporting", () => {
           .filter({ hasText: title })
           .filter({ has: page.getByRole("button", { name: "Add evidence" }) })
           .last();
-        await card.getByPlaceholder("Add a note or evidence summary\u2026").fill(`Re-cutoff verified for ${P.name}`);
+        await card
+          .getByPlaceholder("Add a note or evidence summary\u2026")
+          .fill(`Re-cutoff verified for ${P.name}`);
         const evidenced = page.waitForResponse(
-          (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}/evidence`) && r.request().method() === "POST",
+          (r) =>
+            r.url().endsWith(`/api/close/runs/${SEED.runId}/evidence`) &&
+            r.request().method() === "POST",
         );
         await card.getByRole("button", { name: "Add evidence" }).click();
         expect((await evidenced).status()).toBe(200);
         const started = page.waitForResponse(
-          (r) => r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) && r.request().method() === "POST",
+          (r) =>
+            r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) &&
+            r.request().method() === "POST",
         );
         await card.getByRole("button", { name: "Start" }).click();
         expect((await started).status()).toBe(200);
         const completed = page.waitForResponse(
-          (r) => r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) && r.request().method() === "POST",
+          (r) =>
+            r.url().includes(`/api/close/runs/${SEED.runId}/tasks/`) &&
+            r.request().method() === "POST",
         );
         await card.getByRole("button", { name: "Complete" }).click();
         expect((await completed).status()).toBe(200);
@@ -1002,10 +1333,13 @@ test.describe.serial("close to reporting", () => {
       );
       await page.getByRole("button", { name: "Request approval" }).click();
       await expectOkResponse(await rerequested, "re-request approval");
-      const gates = ok(await api(apage.request, baseURL!, "GET", "/api/flows/gates"), "gates again");
-      const pending = ((gates.gates ?? []) as { id: string; subjectId: string; status?: string }[]).filter(
-        (g) => g.subjectId === SEED.runId,
+      const gates = ok(
+        await api(apage.request, baseURL!, "GET", "/api/flows/gates"),
+        "gates again",
       );
+      const pending = (
+        (gates.gates ?? []) as { id: string; subjectId: string; status?: string }[]
+      ).filter((g) => g.subjectId === SEED.runId);
       const gate = pending[pending.length - 1];
       expect(gate, "second approval gate").toBeTruthy();
       const redecided = ok(
@@ -1022,7 +1356,10 @@ test.describe.serial("close to reporting", () => {
       const relocked = page.waitForResponse(
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
-      await Promise.all([acceptConfirm(page), page.getByRole("button", { name: "Lock period" }).click()]);
+      await Promise.all([
+        acceptConfirm(page),
+        page.getByRole("button", { name: "Lock period" }).click(),
+      ]);
       await expectOkResponse(await relocked, "re-lock period");
       await page.goto(`/close?run=${SEED.runId}&stage=publish`);
       // A re-publication after a controlled reopen is a restatement: the
@@ -1068,7 +1405,10 @@ test.describe.serial("close to reporting", () => {
     }
   });
 
-  test("audit trail records actor and before/after for close and reopen", async ({ browser, baseURL }) => {
+  test("audit trail records actor and before/after for close and reopen", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       // Close lifecycle timeline: both actors named on their events.

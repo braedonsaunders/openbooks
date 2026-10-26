@@ -206,7 +206,9 @@ export function differenceRetroEarnings(input: {
 }): RetroDifference {
   const buckets = new Map<string, BucketAccumulator>();
   const slot = (bucket: {
-    componentId: string | null; projectId: string | null; departmentId: string | null;
+    componentId: string | null;
+    projectId: string | null;
+    departmentId: string | null;
   }): BucketAccumulator => {
     const key = retroBucketKey(bucket);
     const existing = buckets.get(key);
@@ -216,8 +218,11 @@ export function differenceRetroEarnings(input: {
       projectId: bucket.projectId ?? null,
       departmentId: bucket.departmentId ?? null,
       description: null,
-      original: "0", recomputed: "0", settled: "0",
-      originalHours: null, recomputedHours: null,
+      original: "0",
+      recomputed: "0",
+      settled: "0",
+      originalHours: null,
+      recomputedHours: null,
     };
     buckets.set(key, created);
     return created;
@@ -253,10 +258,7 @@ export function differenceRetroEarnings(input: {
     originalAmount: roundMoney(bucket.original, 2),
     recomputedAmount: roundMoney(bucket.recomputed, 2),
     previouslySettled: roundMoney(bucket.settled, 2),
-    amount: roundMoney(
-      add(add(bucket.recomputed, neg(bucket.original)), neg(bucket.settled)),
-      2,
-    ),
+    amount: roundMoney(add(add(bucket.recomputed, neg(bucket.original)), neg(bucket.settled)), 2),
     originalHours: bucket.originalHours,
     recomputedHours: bucket.recomputedHours,
   }));
@@ -267,7 +269,10 @@ export function differenceRetroEarnings(input: {
   const delta = add(add(recomputedEarnings, neg(originalEarnings)), neg(previouslySettled));
 
   const difference: RetroDifference = {
-    originalEarnings, recomputedEarnings, previouslySettled, delta,
+    originalEarnings,
+    recomputedEarnings,
+    previouslySettled,
+    delta,
     // Largest first, so the review screen leads with the money.
     buckets: rows.sort((a, b) => cmp(b.amount, a.amount)),
   };
@@ -296,8 +301,8 @@ export function assertRetroDifferenceExact(difference: RetroDifference): void {
   );
   if (cmp(identity, difference.delta) !== 0) {
     throw new RetroPayError(
-      `retro difference ${difference.delta} is not ${difference.recomputedEarnings} `
-      + `− ${difference.originalEarnings} − ${difference.previouslySettled}`,
+      `retro difference ${difference.delta} is not ${difference.recomputedEarnings} ` +
+        `− ${difference.originalEarnings} − ${difference.previouslySettled}`,
     );
   }
 }
@@ -312,17 +317,15 @@ export function assertRetroDifferenceExact(difference: RetroDifference): void {
 export function payableRetroBuckets(difference: RetroDifference): RetroBucket[] {
   if (retroOutcome(difference.delta) !== "payable") {
     throw new RetroPayError(
-      `a retro difference of ${difference.delta} is not payable — `
-      + "a backdated decrease is an overpayment recovery, which has its own consent and "
-      + "notice rules and is never netted into a retro cheque",
+      `a retro difference of ${difference.delta} is not payable — ` +
+        "a backdated decrease is an overpayment recovery, which has its own consent and " +
+        "notice rules and is never netted into a retro cheque",
     );
   }
   const paying = difference.buckets.filter((bucket) => cmp(bucket.amount, "0") !== 0);
   const total = sum(paying.map((bucket) => bucket.amount));
   if (cmp(total, difference.delta) !== 0) {
-    throw new RetroPayError(
-      `retro lines ${total} do not equal the ${difference.delta} owed`,
-    );
+    throw new RetroPayError(`retro lines ${total} do not equal the ${difference.delta} owed`);
   }
   return paying;
 }
@@ -364,7 +367,9 @@ export function summarizeRetro(
       // `sum([])`, not the literal "0": every money value this module hands
       // out is the ledger's canonical four-decimal string, so a caller
       // comparing two of them never has to know which path produced it.
-      periods: 0, payable: sum([]), overpaid: sum([]),
+      periods: 0,
+      payable: sum([]),
+      overpaid: sum([]),
     };
     summary.periods += 1;
     if (retroOutcome(entry.delta) === "payable") {

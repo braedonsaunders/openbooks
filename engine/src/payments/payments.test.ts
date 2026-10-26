@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCpa005File, type Cpa005Run } from "../payments-core/rail-cpa005.ts";
-import { buildNachaFile, lowestFreeNachaModifier, nachaFileIdModifierForRunNumber, nachaFileIdModifierForSequence } from "../payments-core/rail-nacha.ts";
+import {
+  buildNachaFile,
+  lowestFreeNachaModifier,
+  nachaFileIdModifierForRunNumber,
+  nachaFileIdModifierForSequence,
+} from "../payments-core/rail-nacha.ts";
 import { buildSepaFile } from "../payments-core/rail-sepa.ts";
-import { carryingAmountForSettlement, persistPaymentFxRate, realizedFxControlAdjustment, sameCurrencyAllocation } from "./settlement-policy.ts";
+import {
+  carryingAmountForSettlement,
+  persistPaymentFxRate,
+  realizedFxControlAdjustment,
+  sameCurrencyAllocation,
+} from "./settlement-policy.ts";
 import { type EftSettings, validateEftSettings } from "../payments-core/rail-settings.ts";
 import { type NachaSettings } from "../payments-core/rail-nacha.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
@@ -13,11 +23,13 @@ test("payment FX rates share the positive, invertible numeric storage domain", (
   assert.equal(persistPaymentFxRate("1.25"), "1.2500000000");
   assert.throws(
     () => persistPaymentFxRate("0.0000000010"),
-    (error: Error) => error instanceof PaymentError && /inverse fit numeric\(19,10\)/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /inverse fit numeric\(19,10\)/.test(error.message),
   );
   assert.throws(
     () => persistPaymentFxRate("1000000000"),
-    (error: Error) => error instanceof PaymentError && /inverse fit numeric\(19,10\)/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /inverse fit numeric\(19,10\)/.test(error.message),
   );
 });
 
@@ -77,14 +89,16 @@ function nachaFile(accountNumber: string, individualName = "FIRST PAYEE"): strin
     effectiveDate: "2026-03-05",
     creationDateTime: "2026-03-03T00:00:00",
     fileIdModifier: "A",
-    entries: [{
-      transactionCode: "22",
-      routingNumber: "021000021",
-      accountNumber,
-      amountCents: 12500n,
-      individualId: "BILL-0001",
-      individualName,
-    }],
+    entries: [
+      {
+        transactionCode: "22",
+        routingNumber: "021000021",
+        accountNumber,
+        amountCents: 12500n,
+        individualId: "BILL-0001",
+        individualName,
+      },
+    ],
   });
 }
 
@@ -146,7 +160,9 @@ test("CPA-005 refuses malformed transaction-code overrides instead of silently u
   assert.match(checked.missing.join(", "), /transactionCode.*three digits/);
   assert.throws(
     () => buildCpa005File(cpa005Run({ settings: malformed })),
-    (error: Error) => error instanceof PaymentError && /transaction code override must be three digits/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError &&
+      /transaction code override must be three digits/.test(error.message),
   );
   const defaultSegment = creditSegments(buildCpa005File(cpa005Run()))[0]!;
   assert.equal(defaultSegment.slice(0, 3), "460", "omitting the override retains the CPA default");
@@ -175,8 +191,13 @@ test("composing the item trace number leaves every other credit-segment offset a
   assert.equal(first.slice(229, 240), "0".repeat(11)); // invalid data element id
 
   // Record framing is unchanged: 1464-character A/C/Z records, CRLF-joined.
-  const records = buildCpa005File(cpa005Run()).split("\r\n").filter((r) => r !== "");
-  assert.deepEqual(records.map((r) => r[0]), ["A", "C", "Z"]);
+  const records = buildCpa005File(cpa005Run())
+    .split("\r\n")
+    .filter((r) => r !== "");
+  assert.deepEqual(
+    records.map((r) => r[0]),
+    ["A", "C", "Z"],
+  );
   for (const record of records) assert.equal(record.length, 1464);
 });
 
@@ -186,7 +207,10 @@ test("composing the item trace number leaves every other credit-segment offset a
 
 /** Each record's UTF-8 byte length — what the bank's offsets actually read. */
 const recordBytes = (content: string, separator: string) =>
-  content.split(separator).filter((r) => r !== "").map((r) => Buffer.byteLength(r, "utf8"));
+  content
+    .split(separator)
+    .filter((r) => r !== "")
+    .map((r) => Buffer.byteLength(r, "utf8"));
 
 test("an accented payee name folds to ASCII and keeps every NACHA record at 94 bytes", () => {
   const content = nachaFile("998877", "Béton Québec Straße");
@@ -210,10 +234,13 @@ test("a payee name with no ASCII spelling is refused naming the payee, the field
   const run = cpa005Run();
   run.payments[0]!.payeeName = "北京建設";
   for (const render of [() => nachaFile("998877", "北京建設"), () => buildCpa005File(run)]) {
-    assert.throws(render, (error: Error) =>
-      error instanceof PaymentError
-      && /(receiver|payee) name "北京建設" contains "北"/.test(error.message)
-      && /Edit the payee's name to Latin letters/.test(error.message));
+    assert.throws(
+      render,
+      (error: Error) =>
+        error instanceof PaymentError &&
+        /(receiver|payee) name "北京建設" contains "北"/.test(error.message) &&
+        /Edit the payee's name to Latin letters/.test(error.message),
+    );
   }
 });
 
@@ -222,7 +249,9 @@ test("a file declared us-ascii is refused at storage when any line is not ASCII,
     () => assertDeclaredAsciiCharset("text/plain; charset=us-ascii", "HEADER\r\nBéton,12.00\r\n"),
     (error: Error) => error instanceof PaymentError && /line 2 contains "é"/.test(error.message),
   );
-  assert.doesNotThrow(() => assertDeclaredAsciiCharset("text/csv; charset=utf-8", "Béton,12.00\r\n"));
+  assert.doesNotThrow(() =>
+    assertDeclaredAsciiCharset("text/csv; charset=utf-8", "Béton,12.00\r\n"),
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -268,7 +297,8 @@ test("the SEPA credit file refuses non-positive payments instead of emitting the
   for (const amount of ["-5.00", "0.00"]) {
     assert.throws(
       () => sepaFile([amount]),
-      (error: Error) => error instanceof PaymentError && /payment amounts must be positive/.test(error.message),
+      (error: Error) =>
+        error instanceof PaymentError && /payment amounts must be positive/.test(error.message),
       `amount "${amount}" must not reach the bank`,
     );
   }
@@ -283,32 +313,38 @@ test("the SEPA credit file refuses sub-cent precision instead of rounding it", (
 
 test("the SEPA credit file refuses a creditor IBAN with an invalid checksum", () => {
   assert.throws(
-    () => buildSepaFile({
-      settings: SEPA_SETTINGS,
-      messageId: "MSG-0001",
-      creationDateTime: "2026-03-03T00:00:00",
-      executionDate: "2026-03-05",
-      payments: [{
-        ...sepaPayment("125.00"),
-        creditorIban: "DE89370400440532013001",
-      }],
-    }),
+    () =>
+      buildSepaFile({
+        settings: SEPA_SETTINGS,
+        messageId: "MSG-0001",
+        creationDateTime: "2026-03-03T00:00:00",
+        executionDate: "2026-03-05",
+        payments: [
+          {
+            ...sepaPayment("125.00"),
+            creditorIban: "DE89370400440532013001",
+          },
+        ],
+      }),
     (error: Error) => error instanceof PaymentError && /creditor IBAN/.test(error.message),
   );
 });
 
 test("the SEPA credit file refuses a malformed creditor BIC when supplied", () => {
   assert.throws(
-    () => buildSepaFile({
-      settings: SEPA_SETTINGS,
-      messageId: "MSG-0001",
-      creationDateTime: "2026-03-03T00:00:00",
-      executionDate: "2026-03-05",
-      payments: [{
-        ...sepaPayment("125.00"),
-        creditorBic: "NOT-A-BIC",
-      }],
-    }),
+    () =>
+      buildSepaFile({
+        settings: SEPA_SETTINGS,
+        messageId: "MSG-0001",
+        creationDateTime: "2026-03-03T00:00:00",
+        executionDate: "2026-03-05",
+        payments: [
+          {
+            ...sepaPayment("125.00"),
+            creditorBic: "NOT-A-BIC",
+          },
+        ],
+      }),
     (error: Error) => error instanceof PaymentError && /creditor BIC/.test(error.message),
   );
 });
@@ -319,10 +355,12 @@ test("the SEPA credit file normalizes a lowercase creditor BIC", () => {
     messageId: "MSG-0001",
     creationDateTime: "2026-03-03T00:00:00",
     executionDate: "2026-03-05",
-    payments: [{
-      ...sepaPayment("125.00"),
-      creditorBic: "cobadeffxxx",
-    }],
+    payments: [
+      {
+        ...sepaPayment("125.00"),
+        creditorBic: "cobadeffxxx",
+      },
+    ],
   });
   assert.match(content, /<BIC>COBADEFFXXX<\/BIC>/);
   assert.doesNotMatch(content, /<BIC>cobadeffxxx<\/BIC>/);
@@ -354,16 +392,19 @@ test("the NACHA credit file refuses to write without an allocated file ID modifi
           effectiveDate: "2026-03-05",
           creationDateTime: "2026-03-03T00:00:00",
           fileIdModifier,
-          entries: [{
-            transactionCode: "22",
-            routingNumber: "021000021",
-            accountNumber: "998877",
-            amountCents: 12500n,
-            individualId: "BILL-0001",
-            individualName: "FIRST PAYEE",
-          }],
+          entries: [
+            {
+              transactionCode: "22",
+              routingNumber: "021000021",
+              accountNumber: "998877",
+              amountCents: 12500n,
+              individualId: "BILL-0001",
+              individualName: "FIRST PAYEE",
+            },
+          ],
         }),
-      (error: Error) => error instanceof PaymentError && /allocated file ID modifier/.test(error.message),
+      (error: Error) =>
+        error instanceof PaymentError && /allocated file ID modifier/.test(error.message),
       `modifier ${JSON.stringify(fileIdModifier)} must not reach the bank`,
     );
   }
@@ -375,14 +416,16 @@ test("the NACHA credit file carries its allocated modifier and real creation tim
     effectiveDate: "2026-03-05",
     creationDateTime: "2026-03-03T14:05:00",
     fileIdModifier: "B",
-    entries: [{
-      transactionCode: "22",
-      routingNumber: "021000021",
-      accountNumber: "998877",
-      amountCents: 12500n,
-      individualId: "BILL-0001",
-      individualName: "FIRST PAYEE",
-    }],
+    entries: [
+      {
+        transactionCode: "22",
+        routingNumber: "021000021",
+        accountNumber: "998877",
+        amountCents: 12500n,
+        individualId: "BILL-0001",
+        individualName: "FIRST PAYEE",
+      },
+    ],
   });
   const header = content.split("\n")[0]!;
   // YYMMDD + HHMM + modifier: 260303 + 1405 + B.
@@ -417,23 +460,35 @@ test("the NACHA creation stamp renders the caller's zoned stamp verbatim", () =>
       effectiveDate: "2026-03-05",
       creationDateTime,
       fileIdModifier: "B",
-      entries: [{
-        transactionCode: "22",
-        routingNumber: "021000021",
-        accountNumber: "998877",
-        amountCents: 12500n,
-        individualId: "BILL-0001",
-        individualName: "FIRST PAYEE",
-      }],
+      entries: [
+        {
+          transactionCode: "22",
+          routingNumber: "021000021",
+          accountNumber: "998877",
+          amountCents: 12500n,
+          individualId: "BILL-0001",
+          individualName: "FIRST PAYEE",
+        },
+      ],
     }).split("\n")[0]!;
   // 2026-03-03T04:05Z is March 3rd 04:05 in UTC but March 2nd 23:05 in New
   // York: each zoned stamp renders exactly its own day and time.
-  assert.ok(file("2026-03-03T04:05:00").includes("2603030405B094"), `UTC stamp: ${file("2026-03-03T04:05:00")}`);
-  assert.ok(file("2026-03-02T23:05:00").includes("2603022305B094"), `New York stamp: ${file("2026-03-02T23:05:00")}`);
+  assert.ok(
+    file("2026-03-03T04:05:00").includes("2603030405B094"),
+    `UTC stamp: ${file("2026-03-03T04:05:00")}`,
+  );
+  assert.ok(
+    file("2026-03-02T23:05:00").includes("2603022305B094"),
+    `New York stamp: ${file("2026-03-02T23:05:00")}`,
+  );
 });
 
 test("the NACHA builder refuses a malformed creation stamp instead of guessing", () => {
-  for (const creationDateTime of ["2026-03-03 04:05:00", "2026-13-03T04:05:00", "not-a-stamp"] as const) {
+  for (const creationDateTime of [
+    "2026-03-03 04:05:00",
+    "2026-13-03T04:05:00",
+    "not-a-stamp",
+  ] as const) {
     assert.throws(
       () =>
         buildNachaFile({
@@ -441,16 +496,19 @@ test("the NACHA builder refuses a malformed creation stamp instead of guessing",
           effectiveDate: "2026-03-05",
           creationDateTime,
           fileIdModifier: "B",
-          entries: [{
-            transactionCode: "22",
-            routingNumber: "021000021",
-            accountNumber: "998877",
-            amountCents: 12500n,
-            individualId: "BILL-0001",
-            individualName: "FIRST PAYEE",
-          }],
+          entries: [
+            {
+              transactionCode: "22",
+              routingNumber: "021000021",
+              accountNumber: "998877",
+              amountCents: 12500n,
+              individualId: "BILL-0001",
+              individualName: "FIRST PAYEE",
+            },
+          ],
         }),
-      (error: Error) => error instanceof PaymentError && /YYYY-MM-DDTHH:MM:SS zoned timestamp/.test(error.message),
+      (error: Error) =>
+        error instanceof PaymentError && /YYYY-MM-DDTHH:MM:SS zoned timestamp/.test(error.message),
       `stamp ${JSON.stringify(creationDateTime)} must not reach the bank`,
     );
   }
@@ -464,16 +522,20 @@ test("the NACHA builder refuses a non-calendar effective date instead of emittin
         effectiveDate: "2026-02-30",
         creationDateTime: "2026-03-03T04:05:00",
         fileIdModifier: "B",
-        entries: [{
-          transactionCode: "22",
-          routingNumber: "021000021",
-          accountNumber: "998877",
-          amountCents: 12500n,
-          individualId: "BILL-0001",
-          individualName: "FIRST PAYEE",
-        }],
+        entries: [
+          {
+            transactionCode: "22",
+            routingNumber: "021000021",
+            accountNumber: "998877",
+            amountCents: 12500n,
+            individualId: "BILL-0001",
+            individualName: "FIRST PAYEE",
+          },
+        ],
       }),
-    (error: Error) => error instanceof PaymentError && /effective date "2026-02-30" is not a valid YYYY-MM-DD civil day/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError &&
+      /effective date "2026-02-30" is not a valid YYYY-MM-DD civil day/.test(error.message),
   );
 });
 
@@ -483,14 +545,22 @@ test("the CPA-005 creation date renders the caller's civil day verbatim", () => 
   // 0YYDDD on every host. March 3rd 2026 is julian day 62, March 2nd day 61.
   const aRecord = (fileCreationDate: string) =>
     buildCpa005File(cpa005Run({ fileCreationDate })).split("\r\n")[0]!;
-  assert.ok(aRecord("2026-03-03").includes("026062"), `March 3rd creation date: ${aRecord("2026-03-03")}`);
-  assert.ok(aRecord("2026-03-02").includes("026061"), `March 2nd creation date: ${aRecord("2026-03-02")}`);
+  assert.ok(
+    aRecord("2026-03-03").includes("026062"),
+    `March 3rd creation date: ${aRecord("2026-03-03")}`,
+  );
+  assert.ok(
+    aRecord("2026-03-02").includes("026061"),
+    `March 2nd creation date: ${aRecord("2026-03-02")}`,
+  );
 });
 
 test("the CPA-005 builder refuses a non-calendar creation day instead of emitting it", () => {
   assert.throws(
     () => buildCpa005File(cpa005Run({ fileCreationDate: "2026-02-30" })),
-    (error: Error) => error instanceof PaymentError && /file creation date "2026-02-30" is not a valid YYYY-MM-DD civil day/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError &&
+      /file creation date "2026-02-30" is not a valid YYYY-MM-DD civil day/.test(error.message),
   );
 });
 
@@ -504,55 +574,65 @@ test("the NACHA credit file refuses an amount that does not fit its field instea
         effectiveDate: "2026-03-05",
         creationDateTime: "2026-03-03T00:00:00",
         fileIdModifier: "A",
-        entries: [{
-          transactionCode: "22",
-          routingNumber: "021000021",
-          accountNumber: "998877",
-          amountCents: 10_000_000_000n,
-          individualId: "BILL-0001",
-          individualName: "FIRST PAYEE",
-        }],
+        entries: [
+          {
+            transactionCode: "22",
+            routingNumber: "021000021",
+            accountNumber: "998877",
+            amountCents: 10_000_000_000n,
+            individualId: "BILL-0001",
+            individualName: "FIRST PAYEE",
+          },
+        ],
       }),
-    (error: Error) => error instanceof PaymentError && /payment amount of 11 digits does not fit its 10-digit field/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError &&
+      /payment amount of 11 digits does not fit its 10-digit field/.test(error.message),
   );
 });
 
 test("the CPA-005 credit file refuses a payee account number longer than its field", () => {
   const run = cpa005Run();
   assert.throws(
-    () => buildCpa005File({
-      ...run,
-      payments: run.payments.map((payment, index) =>
-        index === 0 ? { ...payment, accountNumber: "1234567890123" } : payment,
-      ),
-    }),
-    (error: Error) => error instanceof PaymentError && /payee account number.*12 characters/.test(error.message),
+    () =>
+      buildCpa005File({
+        ...run,
+        payments: run.payments.map((payment, index) =>
+          index === 0 ? { ...payment, accountNumber: "1234567890123" } : payment,
+        ),
+      }),
+    (error: Error) =>
+      error instanceof PaymentError && /payee account number.*12 characters/.test(error.message),
   );
 });
 
 test("the CPA-005 credit file refuses a blank payee account number", () => {
   const run = cpa005Run();
   assert.throws(
-    () => buildCpa005File({
-      ...run,
-      payments: run.payments.map((payment, index) =>
-        index === 0 ? { ...payment, accountNumber: "   " } : payment,
-      ),
-    }),
-    (error: Error) => error instanceof PaymentError && /payee account number.*blank/.test(error.message),
+    () =>
+      buildCpa005File({
+        ...run,
+        payments: run.payments.map((payment, index) =>
+          index === 0 ? { ...payment, accountNumber: "   " } : payment,
+        ),
+      }),
+    (error: Error) =>
+      error instanceof PaymentError && /payee account number.*blank/.test(error.message),
   );
 });
 
 test("the CPA-005 credit file refuses an oversized cross-reference", () => {
   const run = cpa005Run();
   assert.throws(
-    () => buildCpa005File({
-      ...run,
-      payments: run.payments.map((payment, index) =>
-        index === 0 ? { ...payment, crossReference: "12345678901234567890" } : payment,
-      ),
-    }),
-    (error: Error) => error instanceof PaymentError && /cross-reference.*19 characters/.test(error.message),
+    () =>
+      buildCpa005File({
+        ...run,
+        payments: run.payments.map((payment, index) =>
+          index === 0 ? { ...payment, crossReference: "12345678901234567890" } : payment,
+        ),
+      }),
+    (error: Error) =>
+      error instanceof PaymentError && /cross-reference.*19 characters/.test(error.message),
   );
 });
 
@@ -561,13 +641,15 @@ test("a data centre that cannot form a valid trace number refuses to write a fil
     assert.throws(
       () => buildCpa005File(cpa005Run({ settings: { ...EFT, originatingDataCentre } })),
       (error: Error) =>
-        error instanceof PaymentError && /originating direct clearer's data centre/.test(error.message),
+        error instanceof PaymentError &&
+        /originating direct clearer's data centre/.test(error.message),
       `originatingDataCentre "${originatingDataCentre}" must not reach the bank`,
     );
   }
   assert.throws(
     () => buildCpa005File(cpa005Run({ settings: { ...EFT, dataCentre: "1234" } })),
-    (error: Error) => error instanceof PaymentError && /destination data centre/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /destination data centre/.test(error.message),
   );
 });
 
@@ -655,10 +737,30 @@ test("same-currency allocation carries equal amounts and a rate of one", () => {
   assert.equal(withBase.sourceTransactionAmount, withBase.targetTransactionAmount);
 });
 
-test("NACHA builder revalidates originator identity and refuses overlong or non-ASCII routing fields",()=>{
-  for(const patch of [{immediateDestination:'12345678901'},{immediateOrigin:'bad\norigin'},{immediateOrigin:'é'},{odfiRouting:'021000022'}]){
-    assert.throws(()=>buildNachaFile({settings:{...NACHA,...patch},effectiveDate:'2026-03-05',creationDateTime:'2026-03-03T00:00:00',fileIdModifier:'A',entries:[]}),/NACHA originator settings are invalid/);
+test("NACHA builder revalidates originator identity and refuses overlong or non-ASCII routing fields", () => {
+  for (const patch of [
+    { immediateDestination: "12345678901" },
+    { immediateOrigin: "bad\norigin" },
+    { immediateOrigin: "é" },
+    { odfiRouting: "021000022" },
+  ]) {
+    assert.throws(
+      () =>
+        buildNachaFile({
+          settings: { ...NACHA, ...patch },
+          effectiveDate: "2026-03-05",
+          creationDateTime: "2026-03-03T00:00:00",
+          fileIdModifier: "A",
+          entries: [],
+        }),
+      /NACHA originator settings are invalid/,
+    );
   }
-  const text=nachaFile('998877');
-  assert.ok(text.split(/\r?\n/).filter(Boolean).every(line=>line.length===94));
+  const text = nachaFile("998877");
+  assert.ok(
+    text
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .every((line) => line.length === 94),
+  );
 });

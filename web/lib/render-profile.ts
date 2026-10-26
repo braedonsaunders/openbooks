@@ -31,8 +31,13 @@ export function createRenderProfile() {
     onEnd(span) {
       if (span.attributes["next.span_type"] !== AppRenderSpan.getBodyResult) return;
       const route = span.attributes["next.route"];
-      if (typeof route !== "string" || !route.startsWith("/") || route.length > 500 ||
-          /[?#%\s]/.test(route)) return;
+      if (
+        typeof route !== "string" ||
+        !route.startsWith("/") ||
+        route.length > 500 ||
+        /[?#%\s]/.test(route)
+      )
+        return;
       const [seconds, nanos] = span.duration;
       const durationMs = seconds * 1_000 + nanos / 1_000_000;
       if (!Number.isFinite(durationMs) || durationMs < 0) return;
@@ -57,21 +62,23 @@ export function createRenderProfile() {
   function summarize(): RenderProfileSummary {
     const round = (value: number) => Math.round(value * 100) / 100;
     const result: RenderProfileSummary = {
-      routes: [...routes].map(([route, { durations, failedRenders }]) => {
-        durations.sort((a, b) => a - b);
-        const total = durations.reduce((sum, duration) => sum + duration, 0);
-        return {
-          route,
-          renders: durations.length,
-          failedRenders,
-          durationMs: {
-            mean: round(total / durations.length),
-            p95: round(durations[Math.ceil(durations.length * 0.95) - 1]!),
-            max: round(durations[durations.length - 1]!),
-            total: round(total),
-          },
-        };
-      }).sort((a, b) => b.durationMs.total - a.durationMs.total || a.route.localeCompare(b.route)),
+      routes: [...routes]
+        .map(([route, { durations, failedRenders }]) => {
+          durations.sort((a, b) => a - b);
+          const total = durations.reduce((sum, duration) => sum + duration, 0);
+          return {
+            route,
+            renders: durations.length,
+            failedRenders,
+            durationMs: {
+              mean: round(total / durations.length),
+              p95: round(durations[Math.ceil(durations.length * 0.95) - 1]!),
+              max: round(durations[durations.length - 1]!),
+              total: round(total),
+            },
+          };
+        })
+        .sort((a, b) => b.durationMs.total - a.durationMs.total || a.route.localeCompare(b.route)),
       droppedRenders,
     };
     routes = new Map();

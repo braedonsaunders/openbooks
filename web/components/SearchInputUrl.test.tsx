@@ -1,16 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
 const worktreeUi = pathToFileURL(
   (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
 ).href;
-await bootJsdomEnvironment({ url: "http://localhost:4800/agents?q=tax+code", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/agents?q=tax+code",
+  matchMediaMatches: false,
+});
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__searchProbeRouter}export function usePathname(){return \'/agents\'}export function useSearchParams(){return new URLSearchParams(globalThis.__searchProbeQs)}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__searchProbeRouter}export function usePathname(){return '/agents'}export function useSearchParams(){return new URLSearchParams(globalThis.__searchProbeQs)}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {

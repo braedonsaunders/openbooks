@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../../testing/jsdom-env.ts";
 
 // F5-2: ApplicationCommandCard rendered ~10 hardcoded English strings while
 // sibling cards translate through the assistant namespace. A non-en user
@@ -76,7 +76,10 @@ function button(host: HTMLElement, label: string): HTMLButtonElement {
   const found = [...host.querySelectorAll("button")].find(
     (b) => (b.textContent ?? "").trim() === label,
   ) as HTMLButtonElement | undefined;
-  assert.ok(found, `expected a button labelled ${JSON.stringify(label)} in ${JSON.stringify(host.textContent)}`);
+  assert.ok(
+    found,
+    `expected a button labelled ${JSON.stringify(label)} in ${JSON.stringify(host.textContent)}`,
+  );
   return found;
 }
 

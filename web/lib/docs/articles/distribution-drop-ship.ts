@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const distributionDropShip: DocArticle = {
-  slug: 'distribution-drop-ship',
-  title: 'Drop-ship Orders',
-  category: 'transactions',
+  slug: "distribution-drop-ship",
+  title: "Drop-ship Orders",
+  category: "transactions",
   order: 10,
   summary:
-    'Route an issued stock line to a vendor, create its purchase order, confirm the vendor shipment, and invoice the customer through the existing order workflow.',
-  updated: '2026-09-27',
-  keywords: ['drop ship', 'drop shipping', 'vendor shipment', 'direct shipment', 'purchase order'],
-  related: ['sales-workflow', 'purchasing-workflow', 'distribution-pick-ship'],
+    "Route an issued stock line to a vendor, create its purchase order, confirm the vendor shipment, and invoice the customer through the existing order workflow.",
+  updated: "2026-09-27",
+  keywords: ["drop ship", "drop shipping", "vendor shipment", "direct shipment", "purchase order"],
+  related: ["sales-workflow", "purchasing-workflow", "distribution-pick-ship"],
   body: `# Drop-ship Orders
 
 Drop shipping lets a vendor ship an item directly to your customer. The sales
@@ -62,4 +62,4 @@ one transaction, and restores the purchase and sales order quantities. A
 confirmation cannot be voided after the related quantity has been billed or
 when its reversal period is closed.
 `,
-}
+};

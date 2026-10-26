@@ -1,12 +1,12 @@
-import 'server-only'
-import { db } from '@openbooks/engine/platform/db'
+import "server-only";
+import { db } from "@openbooks/engine/platform/db";
 import {
   findPossibleDuplicateDocuments,
   type DuplicateProbeKind,
   type PossibleDuplicate,
-} from '@openbooks/engine/records/document-reference'
+} from "@openbooks/engine/records/document-reference";
 
-export type { DuplicateProbeKind, PossibleDuplicate }
+export type { DuplicateProbeKind, PossibleDuplicate };
 
 /**
  * Possible duplicates of a document about to be saved, inside the caller's
@@ -16,14 +16,14 @@ export type { DuplicateProbeKind, PossibleDuplicate }
  * match. See engine/src/records/document-reference.ts for the matching rule.
  */
 export async function findPossibleDuplicates(input: {
-  orgId: string
-  kind: DuplicateProbeKind
-  partyId: string
-  documentDate?: string | null
-  total?: string | null
-  reference?: string | null
-  excludeId?: string | null
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  orgId: string;
+  kind: DuplicateProbeKind;
+  partyId: string;
+  documentDate?: string | null;
+  total?: string | null;
+  reference?: string | null;
+  excludeId?: string | null;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<PossibleDuplicate[]> {
   return findPossibleDuplicateDocuments(db, input.orgId, {
     kind: input.kind,
@@ -33,5 +33,5 @@ export async function findPossibleDuplicates(input: {
     total: input.total,
     excludeId: input.excludeId,
     allowedSubsidiaryIds: input.allowedSubsidiaryIds,
-  })
+  });
 }

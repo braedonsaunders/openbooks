@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -16,11 +16,8 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import {
-  loadMeDocumentsHome,
-  meDocumentsAuthz,
-} from '../../../../lib/hrm/me-documents'
+} from "@braedonsaunders/appkit-viewspec";
+import { loadMeDocumentsHome, meDocumentsAuthz } from "../../../../lib/hrm/me-documents";
 
 /**
  * Me documents: the person's own documents with inline sign and
@@ -29,28 +26,28 @@ import {
  * the loader 404s otherwise.
  */
 
-const f = field
-const item = field
+const f = field;
+const item = field;
 
-export type MeDocumentsPageData = NonNullable<Awaited<ReturnType<typeof loadMeDocumentsHome>>>
+export type MeDocumentsPageData = NonNullable<Awaited<ReturnType<typeof loadMeDocumentsHome>>>;
 
 export function meDocumentsSpec(data: MeDocumentsPageData): PageSpec {
   return page({
-    route: '/me/documents',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/me/documents",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
           widget(
-            'link-button',
-            { href: '/me/documents?export=1', label: f('requestExportLabel') },
-            f('canRequestExport'),
+            "link-button",
+            { href: "/me/documents?export=1", label: f("requestExportLabel") },
+            f("canRequestExport"),
           ),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
@@ -58,32 +55,29 @@ export function meDocumentsSpec(data: MeDocumentsPageData): PageSpec {
       // Unlinked login: the loader carries the refusal with its remedy
       // (the shared mechanism, same as /me and the clock).
       widgetBlock(
-        'empty-state',
+        "empty-state",
         {
-          title: data.refusal?.title ?? '',
+          title: data.refusal?.title ?? "",
           description: data.refusal?.message,
         },
-        f('refusal'),
+        f("refusal"),
       ),
-      grid('flex h-full min-h-0 flex-col gap-4', [
-        registeredListTable('me_documents_rows', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
-          empty: { title: f('empty') },
+      grid("flex h-full min-h-0 flex-col gap-4", [
+        registeredListTable("me_documents_rows", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
+          empty: { title: f("empty") },
           columns: [
-            column(data.columns.title, text(item('title'))),
-            column(data.columns.sent, text(item('sent'), { fallback: '—' })),
+            column(data.columns.title, text(item("title"))),
+            column(data.columns.sent, text(item("sent"), { fallback: "—" })),
+            column(data.columns.status, badge(item("statusLabel"), { variant: "secondary" })),
             column(
-              data.columns.status,
-              badge(item('statusLabel'), { variant: 'secondary' }),
-            ),
-            column(
-              '',
-              widgetCell('hrm-me-document-actions', {
-                documentId: item('id'),
-                signable: item('signable'),
-                acknowledgeable: item('acknowledgeable'),
+              "",
+              widgetCell("hrm-me-document-actions", {
+                documentId: item("id"),
+                signable: item("signable"),
+                acknowledgeable: item("acknowledgeable"),
                 signLabel: data.signLabel,
                 signNameLabel: data.signNameLabel,
                 acknowledgeLabel: data.acknowledgeLabel,
@@ -93,26 +87,26 @@ export function meDocumentsSpec(data: MeDocumentsPageData): PageSpec {
           ],
         }),
         panel({
-          title: f('exportsTitle'),
-          bodyClassName: 'min-h-0 overflow-y-auto p-0',
+          title: f("exportsTitle"),
+          bodyClassName: "min-h-0 overflow-y-auto p-0",
           blocks: [
-            registeredListTable('me_documents_export_rows', {
-              variant: 'app',
-              rows: f('exportRows'),
-              rowKey: item('id'),
-              empty: { title: f('exportsEmpty') },
+            registeredListTable("me_documents_export_rows", {
+              variant: "app",
+              rows: f("exportRows"),
+              rowKey: item("id"),
+              empty: { title: f("exportsEmpty") },
               columns: [
-                column(data.exportColumns.requested, text(item('requested'))),
-                column(data.exportColumns.status, text(item('statusLabel'))),
+                column(data.exportColumns.requested, text(item("requested"))),
+                column(data.exportColumns.status, text(item("statusLabel"))),
                 column(
                   data.exportColumns.detail,
-                  text(item('incompleteDetail'), { fallback: '—' }),
+                  text(item("incompleteDetail"), { fallback: "—" }),
                 ),
                 column(
-                  '',
-                  widgetCell('hrm-me-export-download', {
-                    downloadable: item('downloadable'),
-                    href: item('downloadHref'),
+                  "",
+                  widgetCell("hrm-me-export-download", {
+                    downloadable: item("downloadable"),
+                    href: item("downloadHref"),
                     label: data.downloadLabel,
                   }),
                 ),
@@ -122,27 +116,25 @@ export function meDocumentsSpec(data: MeDocumentsPageData): PageSpec {
         }),
       ]),
       {
-        ...widgetBlock('hrm-me-export-dialog', {
+        ...widgetBlock("hrm-me-export-dialog", {
           partyId: data.partyId,
           requestExportLabel: data.requestExportLabel,
           requestExportDone: data.requestExportDone,
           actionFailed: data.actionFailed,
         }),
-        when: f('exportOpen'),
+        when: f("exportOpen"),
       },
     ],
-  })
+  });
 }
 
 export async function meDocumentsTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('meDocuments.title')
+  const t = await getTranslations("hrm");
+  return t("meDocuments.title");
 }
 
-export async function loadMeDocumentsPage(
-  sp: Record<string, string | undefined>,
-) {
-  const authz = await meDocumentsAuthz()
-  if (!authz) notFound()
-  return loadMeDocumentsHome(authz, sp)
+export async function loadMeDocumentsPage(sp: Record<string, string | undefined>) {
+  const authz = await meDocumentsAuthz();
+  if (!authz) notFound();
+  return loadMeDocumentsHome(authz, sp);
 }

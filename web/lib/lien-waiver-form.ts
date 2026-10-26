@@ -1,4 +1,4 @@
-import { formatDecimal } from './money-format'
+import { formatDecimal } from "./money-format";
 
 /**
  * Lien-waiver forms — self-authored, statute-shaped facsimiles.
@@ -25,35 +25,32 @@ import { formatDecimal } from './money-format'
  */
 
 export type LienWaiverType =
-  | 'conditional_progress'
-  | 'unconditional_progress'
-  | 'conditional_final'
-  | 'unconditional_final'
+  "conditional_progress" | "unconditional_progress" | "conditional_final" | "unconditional_final";
 
 export interface LienWaiverFormData {
-  waiverNumber: string
-  waiverType: LienWaiverType
-  direction: 'received' | 'issued'
+  waiverNumber: string;
+  waiverType: LienWaiverType;
+  direction: "received" | "issued";
   /** The party giving up lien rights (the subcontractor, or us when issuing). */
-  claimantName: string
+  claimantName: string;
   /** Who is paying (us when receiving, the owner/GC when issuing). */
-  payerName: string
+  payerName: string;
   /** Owner of the improved property, when known. */
-  ownerName?: string | null
-  projectName: string
-  projectAddress?: string | null
-  throughDate: string
-  amount: string
-  currency: string
-  jurisdiction?: string | null
-  billNumber?: string | null
-  notes?: string | null
-  signedByName?: string | null
-  signedByTitle?: string | null
-  signedAt?: string | null
-  notarized: boolean
+  ownerName?: string | null;
+  projectName: string;
+  projectAddress?: string | null;
+  throughDate: string;
+  amount: string;
+  currency: string;
+  jurisdiction?: string | null;
+  billNumber?: string | null;
+  notes?: string | null;
+  signedByName?: string | null;
+  signedByTitle?: string | null;
+  signedAt?: string | null;
+  notarized: boolean;
   /** Signature evidence to print as an audit line (token id, IP, method). */
-  signatureEvidence?: string | null
+  signatureEvidence?: string | null;
 }
 
 /**
@@ -64,84 +61,84 @@ export interface LienWaiverFormData {
  * waivers instead of re-reading the live rows.
  */
 export interface LienWaiverExecutedSnapshot {
-  version: 1
-  takenAt: string
-  takenBy: string | null
-  orgName: string
-  data: LienWaiverFormData
+  version: 1;
+  takenAt: string;
+  takenBy: string | null;
+  orgName: string;
+  data: LienWaiverFormData;
 }
 
 const WAIVER_TYPES: ReadonlySet<string> = new Set([
-  'conditional_progress',
-  'unconditional_progress',
-  'conditional_final',
-  'unconditional_final',
-])
+  "conditional_progress",
+  "unconditional_progress",
+  "conditional_final",
+  "unconditional_final",
+]);
 
 /** Fail-closed shape check for a snapshot read back from storage. */
 export function isLienWaiverExecutedSnapshot(value: unknown): value is LienWaiverExecutedSnapshot {
-  if (typeof value !== 'object' || value === null) return false
-  const snapshot = value as Record<string, unknown>
-  if (snapshot.version !== 1) return false
-  if (typeof snapshot.takenAt !== 'string' || typeof snapshot.orgName !== 'string') return false
-  const data = snapshot.data as Record<string, unknown> | null
-  if (typeof data !== 'object' || data === null) return false
+  if (typeof value !== "object" || value === null) return false;
+  const snapshot = value as Record<string, unknown>;
+  if (snapshot.version !== 1) return false;
+  if (typeof snapshot.takenAt !== "string" || typeof snapshot.orgName !== "string") return false;
+  const data = snapshot.data as Record<string, unknown> | null;
+  if (typeof data !== "object" || data === null) return false;
   return (
-    typeof data.waiverNumber === 'string' &&
-    typeof data.projectName === 'string' &&
-    typeof data.throughDate === 'string' &&
-    typeof data.amount === 'string' &&
-    typeof data.currency === 'string' &&
-    typeof data.claimantName === 'string' &&
-    typeof data.payerName === 'string' &&
-    typeof data.notarized === 'boolean' &&
-    (data.direction === 'received' || data.direction === 'issued') &&
+    typeof data.waiverNumber === "string" &&
+    typeof data.projectName === "string" &&
+    typeof data.throughDate === "string" &&
+    typeof data.amount === "string" &&
+    typeof data.currency === "string" &&
+    typeof data.claimantName === "string" &&
+    typeof data.payerName === "string" &&
+    typeof data.notarized === "boolean" &&
+    (data.direction === "received" || data.direction === "issued") &&
     WAIVER_TYPES.has(data.waiverType as string)
-  )
+  );
 }
 
 export function esc(value: string): string {
   return value.replace(/[&<>"']/g, (c) =>
-    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
-  )
+    c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c === '"' ? "&quot;" : "&#39;",
+  );
 }
 
 // Amounts come from exact decimal database columns. Keep the source text all
 // the way through Intl so high-magnitude values never cross an IEEE-754
 // number boundary before they reach the printed legal document.
-const EXACT_AMOUNT_TEXT = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/
+const EXACT_AMOUNT_TEXT = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/;
 
 export function formatWaiverAmount(amount: string, currency: string): string {
-  const exact = amount.trim()
-  if (!EXACT_AMOUNT_TEXT.test(exact)) return `${esc(currency)} ${esc(amount)}`
-  const formatted = formatDecimal('en-US', exact, {
+  const exact = amount.trim();
+  if (!EXACT_AMOUNT_TEXT.test(exact)) return `${esc(currency)} ${esc(amount)}`;
+  const formatted = formatDecimal("en-US", exact, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
-  return `${esc(currency)} ${formatted}`
+  });
+  return `${esc(currency)} ${formatted}`;
 }
 
 export interface WaiverTypeCopy {
-  title: string
+  title: string;
   /** One-line description used in lists and drawers. */
-  summary: string
+  summary: string;
   /** The operative release paragraph. */
-  operative: (data: LienWaiverFormData) => string
+  operative: (data: LienWaiverFormData) => string;
   /** Statutory-style caution printed in a boxed notice. */
-  notice: string
-  isConditional: boolean
-  isFinal: boolean
+  notice: string;
+  isConditional: boolean;
+  isFinal: boolean;
 }
 
 const scope = (data: LienWaiverFormData) =>
   `labor, services, equipment, and material furnished to the property described below through ${esc(
     data.throughDate,
-  )}`
+  )}`;
 
 export const WAIVER_TYPE_COPY: Record<LienWaiverType, WaiverTypeCopy> = {
   conditional_progress: {
-    title: 'Conditional Waiver and Release on Progress Payment',
-    summary: 'Releases work through a date, effective only when the payment clears.',
+    title: "Conditional Waiver and Release on Progress Payment",
+    summary: "Releases work through a date, effective only when the payment clears.",
     isConditional: true,
     isFinal: false,
     operative: (data) =>
@@ -154,12 +151,12 @@ export const WAIVER_TYPE_COPY: Record<LienWaiverType, WaiverTypeCopy> = {
       `This release covers a progress payment only and does not cover any retention, pending modifications, ` +
       `items furnished after that date, or contract rights that have not yet accrued.`,
     notice:
-      'This is a CONDITIONAL release. It takes effect only after the payment described above has actually been ' +
-      'honoured by the paying bank. If the payment is not honoured, this document releases nothing.',
+      "This is a CONDITIONAL release. It takes effect only after the payment described above has actually been " +
+      "honoured by the paying bank. If the payment is not honoured, this document releases nothing.",
   },
   unconditional_progress: {
-    title: 'Unconditional Waiver and Release on Progress Payment',
-    summary: 'Releases work through a date immediately, whether or not payment clears.',
+    title: "Unconditional Waiver and Release on Progress Payment",
+    summary: "Releases work through a date immediately, whether or not payment clears.",
     isConditional: false,
     isFinal: false,
     operative: (data) =>
@@ -171,13 +168,13 @@ export const WAIVER_TYPE_COPY: Record<LienWaiverType, WaiverTypeCopy> = {
       `any retention, pending modifications, items furnished after that date, or contract rights that have not ` +
       `yet accrued.`,
     notice:
-      'This is an UNCONDITIONAL release. The undersigned loses the rights described above even if the payment ' +
-      'referred to is never received or is not honoured. Do not sign this document until payment has actually ' +
-      'been received and cleared.',
+      "This is an UNCONDITIONAL release. The undersigned loses the rights described above even if the payment " +
+      "referred to is never received or is not honoured. Do not sign this document until payment has actually " +
+      "been received and cleared.",
   },
   conditional_final: {
-    title: 'Conditional Waiver and Release on Final Payment',
-    summary: 'Releases the entire contract, effective only when final payment clears.',
+    title: "Conditional Waiver and Release on Final Payment",
+    summary: "Releases the entire contract, effective only when final payment clears.",
     isConditional: true,
     isFinal: true,
     operative: (data) =>
@@ -189,13 +186,13 @@ export const WAIVER_TYPE_COPY: Record<LienWaiverType, WaiverTypeCopy> = {
       `release any mechanic's lien, stop payment notice, or payment bond right the undersigned has on the ` +
       `property described below, including all retention withheld, for all ${scope(data)}.`,
     notice:
-      'This is a CONDITIONAL FINAL release. On payment clearing it releases EVERY remaining claim on this ' +
-      'project, including retention. Confirm that all change orders, back charges and retention have been ' +
-      'settled before signing.',
+      "This is a CONDITIONAL FINAL release. On payment clearing it releases EVERY remaining claim on this " +
+      "project, including retention. Confirm that all change orders, back charges and retention have been " +
+      "settled before signing.",
   },
   unconditional_final: {
-    title: 'Unconditional Waiver and Release on Final Payment',
-    summary: 'Releases the entire contract immediately, whether or not payment clears.',
+    title: "Unconditional Waiver and Release on Final Payment",
+    summary: "Releases the entire contract immediately, whether or not payment clears.",
     isConditional: false,
     isFinal: true,
     operative: (data) =>
@@ -205,23 +202,23 @@ export const WAIVER_TYPE_COPY: Record<LienWaiverType, WaiverTypeCopy> = {
       )}, and does hereby waive and release any right to a mechanic's lien, stop payment notice, or any right ` +
       `against a labor and material bond on the property described below, including all retention withheld.`,
     notice:
-      'This is an UNCONDITIONAL FINAL release. The undersigned gives up EVERY remaining claim on this project, ' +
-      'including retention, even if the final payment is never received. Do not sign this document until final ' +
-      'payment has actually been received and cleared.',
+      "This is an UNCONDITIONAL FINAL release. The undersigned gives up EVERY remaining claim on this project, " +
+      "including retention, even if the final payment is never received. Do not sign this document until final " +
+      "payment has actually been received and cleared.",
   },
-}
+};
 
 export function waiverTypeCopy(waiverType: string): WaiverTypeCopy {
-  const copy = WAIVER_TYPE_COPY[waiverType as LienWaiverType]
-  if (!copy) throw new Error(`unknown lien waiver type "${waiverType}"`)
-  return copy
+  const copy = WAIVER_TYPE_COPY[waiverType as LienWaiverType];
+  if (!copy) throw new Error(`unknown lien waiver type "${waiverType}"`);
+  return copy;
 }
 
 const FIELD = (label: string, value: string | null | undefined) => `
   <tr>
     <th>${esc(label)}</th>
     <td>${value ? esc(value) : '<span class="blank"></span>'}</td>
-  </tr>`
+  </tr>`;
 
 export interface LienWaiverPrintOptions {
   /**
@@ -230,7 +227,7 @@ export interface LienWaiverPrintOptions {
    * re-reads today's mutable party/project rows, so it must never be mistaken
    * for the document as signed. The banner names the reading date.
    */
-  legacyUnverifiedAsOf?: string | null
+  legacyUnverifiedAsOf?: string | null;
 }
 
 /**
@@ -245,8 +242,8 @@ export function renderLienWaiverBody(
   orgName?: string | null,
   opts?: LienWaiverPrintOptions,
 ): string {
-  const copy = waiverTypeCopy(data.waiverType)
-  const executed = Boolean(data.signedAt && data.signedByName)
+  const copy = waiverTypeCopy(data.waiverType);
+  const executed = Boolean(data.signedAt && data.signedByName);
   return `
 <style>
   :root { --ink: #0f172a; --muted: #64748b; --rule: #cbd5e1; }
@@ -276,28 +273,28 @@ export function renderLienWaiverBody(
   .legacy-notice strong { display: block; text-transform: uppercase; letter-spacing: 0.05em; font-size: 10.5pt; margin-bottom: 4px; }
   .legacy-notice p { margin: 0; font-size: 9.5pt; }
 </style>
-${opts?.legacyUnverifiedAsOf ? `<div class="legacy-notice"><strong>Legacy waiver — executed evidence not captured at signing</strong><p>The names, amounts and dates below reflect current records as of ${esc(opts.legacyUnverifiedAsOf)}, not the document as signed. Rely on the scanned executed copy attached to this waiver; void and reissue it where the record cannot be verified.</p></div>` : ''}
+${opts?.legacyUnverifiedAsOf ? `<div class="legacy-notice"><strong>Legacy waiver — executed evidence not captured at signing</strong><p>The names, amounts and dates below reflect current records as of ${esc(opts.legacyUnverifiedAsOf)}, not the document as signed. Rely on the scanned executed copy attached to this waiver; void and reissue it where the record cannot be verified.</p></div>` : ""}
 <div class="masthead">
   <h1>${esc(copy.title)}</h1>
   <div class="meta">
     ${esc(data.waiverNumber)}<br />
-    ${data.jurisdiction ? `Form follows ${esc(data.jurisdiction)}<br />` : ''}
-    ${orgName ? esc(orgName) : ''}
+    ${data.jurisdiction ? `Form follows ${esc(data.jurisdiction)}<br />` : ""}
+    ${orgName ? esc(orgName) : ""}
   </div>
 </div>
 
 <h2>Identification</h2>
 <table class="fields">
-  ${FIELD('Claimant (releasing party)', data.claimantName)}
-  ${FIELD('Payer', data.payerName)}
-  ${FIELD('Property owner', data.ownerName)}
-  ${FIELD('Project', data.projectName)}
-  ${FIELD('Property / job address', data.projectAddress)}
-  ${FIELD('Through date', data.throughDate)}
-  ${data.billNumber ? FIELD('Invoice covered', data.billNumber) : ''}
+  ${FIELD("Claimant (releasing party)", data.claimantName)}
+  ${FIELD("Payer", data.payerName)}
+  ${FIELD("Property owner", data.ownerName)}
+  ${FIELD("Project", data.projectName)}
+  ${FIELD("Property / job address", data.projectAddress)}
+  ${FIELD("Through date", data.throughDate)}
+  ${data.billNumber ? FIELD("Invoice covered", data.billNumber) : ""}
 </table>
 
-<h2>Amount ${copy.isConditional ? 'of payment' : 'received'}</h2>
+<h2>Amount ${copy.isConditional ? "of payment" : "received"}</h2>
 <p class="amount">${formatWaiverAmount(data.amount, data.currency)}</p>
 
 <h2>Release</h2>
@@ -305,13 +302,15 @@ ${opts?.legacyUnverifiedAsOf ? `<div class="legacy-notice"><strong>Legacy waiver
 
 <div class="notice"><strong>Notice:</strong> ${esc(copy.notice)}</div>
 
-${data.notes ? `<h2>Exceptions and disputed claims</h2><p class="operative">${esc(data.notes)}</p>` : ''}
+${data.notes ? `<h2>Exceptions and disputed claims</h2><p class="operative">${esc(data.notes)}</p>` : ""}
 
 <div class="sig">
   <div>
-    ${executed
-      ? `<div class="sigline executed">${esc(data.signedByName!)}</div>`
-      : '<div class="sigline"></div>'}
+    ${
+      executed
+        ? `<div class="sigline executed">${esc(data.signedByName!)}</div>`
+        : '<div class="sigline"></div>'
+    }
     <div class="siglabel">Signature of claimant's authorised representative</div>
   </div>
   <div>
@@ -330,8 +329,9 @@ ${data.notes ? `<h2>Exceptions and disputed claims</h2><p class="operative">${es
   </div>
 </div>
 
-${data.notarized
-  ? `<div class="notary">
+${
+  data.notarized
+    ? `<div class="notary">
        <strong>Notary acknowledgement</strong><br />
        State/Province of <span class="blank"></span> County of <span class="blank"></span><br /><br />
        Subscribed and sworn before me this <span class="blank"></span> day of <span class="blank"></span>,
@@ -339,16 +339,19 @@ ${data.notarized
        appeared before me.<br /><br />
        Notary signature <span class="blank"></span> Seal <span class="blank"></span>
      </div>`
-  : ''}
+    : ""
+}
 
-${data.signatureEvidence
-  ? `<div class="evidence">Electronic signature evidence — ${esc(data.signatureEvidence)}</div>`
-  : ''}
+${
+  data.signatureEvidence
+    ? `<div class="evidence">Electronic signature evidence — ${esc(data.signatureEvidence)}</div>`
+    : ""
+}
 
 <div class="footnote">
-  Generated by ${orgName ? esc(orgName) : 'openbooks'} from its project records. This form reproduces the
-  operative language of a ${esc(copy.title.toLowerCase())}${data.jurisdiction ? ` under ${esc(data.jurisdiction)}` : ''};
+  Generated by ${orgName ? esc(orgName) : "openbooks"} from its project records. This form reproduces the
+  operative language of a ${esc(copy.title.toLowerCase())}${data.jurisdiction ? ` under ${esc(data.jurisdiction)}` : ""};
   it is not a government-issued form. Have counsel confirm the wording your jurisdiction requires before use.
 </div>
-`
+`;
 }

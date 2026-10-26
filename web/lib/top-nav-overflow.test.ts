@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { visibleTopNavGroupCount } from './top-nav-overflow'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { visibleTopNavGroupCount } from "./top-nav-overflow";
 
-test('keeps every group visible when the groups fit without More', () => {
+test("keeps every group visible when the groups fit without More", () => {
   assert.equal(
     visibleTopNavGroupCount({
       availableWidth: 250,
@@ -11,10 +11,10 @@ test('keeps every group visible when the groups fit without More', () => {
       gap: 4,
     }),
     3,
-  )
-})
+  );
+});
 
-test('reserves the More trigger before choosing the visible prefix', () => {
+test("reserves the More trigger before choosing the visible prefix", () => {
   assert.equal(
     visibleTopNavGroupCount({
       availableWidth: 210,
@@ -23,10 +23,10 @@ test('reserves the More trigger before choosing the visible prefix', () => {
       gap: 4,
     }),
     2,
-  )
-})
+  );
+});
 
-test('shows only More when no group fits alongside it', () => {
+test("shows only More when no group fits alongside it", () => {
   assert.equal(
     visibleTopNavGroupCount({
       availableWidth: 100,
@@ -35,10 +35,10 @@ test('shows only More when no group fits alongside it', () => {
       gap: 4,
     }),
     0,
-  )
-})
+  );
+});
 
-test('handles empty and invalid measurements safely', () => {
+test("handles empty and invalid measurements safely", () => {
   assert.equal(
     visibleTopNavGroupCount({
       availableWidth: Number.NaN,
@@ -47,5 +47,5 @@ test('handles empty and invalid measurements safely', () => {
       gap: -4,
     }),
     0,
-  )
-})
+  );
+});

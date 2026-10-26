@@ -20,7 +20,10 @@ import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts
  * it). Custom (user-authored) definitions are never touched.
  */
 
-const orgs = (await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`, "objects"));
+const orgs = await db.execute<{ id: string; name: string }>(
+  sql`select id, name from orgs order by created_at`,
+  "objects",
+);
 if (orgs.length === 0) {
   console.error("no orgs found — seed an org before seeding built-in reports");
   process.exit(1);

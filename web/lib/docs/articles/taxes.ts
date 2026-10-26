@@ -1,25 +1,25 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const taxJurisdictionsAndNexus: DocArticle = {
-  slug: 'tax-jurisdictions-and-nexus',
-  title: 'Tax Jurisdictions and Nexus',
-  category: 'administration',
+  slug: "tax-jurisdictions-and-nexus",
+  title: "Tax Jurisdictions and Nexus",
+  category: "administration",
   order: 1,
   summary:
-    'Model the authorities that levy indirect tax and record where the business is registered to collect and remit.',
-  updated: '2026-07-21',
+    "Model the authorities that levy indirect tax and record where the business is registered to collect and remit.",
+  updated: "2026-07-21",
   keywords: [
-    'tax jurisdiction',
-    'nexus',
-    'registration',
-    'filing frequency',
-    'filing calendar',
-    'VAT',
-    'GST',
-    'sales and use',
-    'return pack',
+    "tax jurisdiction",
+    "nexus",
+    "registration",
+    "filing frequency",
+    "filing calendar",
+    "VAT",
+    "GST",
+    "sales and use",
+    "return pack",
   ],
-  related: ['tax-configuration', 'tax-returns-and-boxes', 'setup-taxes-group'],
+  related: ["tax-configuration", "tax-returns-and-boxes", "setup-taxes-group"],
   body: `# Tax Jurisdictions and Nexus
 
 Before configuring codes and returns, distinguish jurisdictions where tax
@@ -69,29 +69,29 @@ so historical periods still reflect what was true at the time. From here, move o
 to **Tax Codes, Rates, and Groups** to define what you charge, and **Tax Returns
 and Boxes** to configure the filing structure.
 `,
-}
+};
 
 export const taxReturnsAndBoxes: DocArticle = {
-  slug: 'tax-returns-and-boxes',
-  title: 'Tax Returns and Boxes',
-  category: 'administration',
+  slug: "tax-returns-and-boxes",
+  title: "Tax Returns and Boxes",
+  category: "administration",
   order: 3,
   summary:
-    'Install maintained returns, map ledger activity into return boxes, and produce a form-faithful filing PDF.',
-  updated: '2026-07-21',
+    "Install maintained returns, map ledger activity into return boxes, and produce a form-faithful filing PDF.",
+  updated: "2026-07-21",
   keywords: [
-    'tax return',
-    'return box',
-    'filing',
-    'return pack',
-    'basis',
-    'formula',
-    'form pdf',
-    'facsimile',
-    'official form',
-    'AcroForm',
+    "tax return",
+    "return box",
+    "filing",
+    "return pack",
+    "basis",
+    "formula",
+    "form pdf",
+    "facsimile",
+    "official form",
+    "AcroForm",
   ],
-  related: ['tax-configuration', 'tax-jurisdictions-and-nexus', 'setup-taxes-group'],
+  related: ["tax-configuration", "tax-jurisdictions-and-nexus", "setup-taxes-group"],
   body: `# Tax Returns and Boxes
 
 A **return** turns ledger activity into a government filing. OpenBooks computes
@@ -164,4 +164,4 @@ rounding, and the filing period before you submit. Nexus (see **Tax Jurisdiction
 and Nexus**) determines which periods are due; reconciliation validates the
 amounts reported for those periods.
 `,
-}
+};

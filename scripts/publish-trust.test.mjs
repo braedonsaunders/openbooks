@@ -1,501 +1,602 @@
-import { verificationPartitions } from './verification-receipt.mjs'
-import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { test } from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { verificationPartitions } from "./verification-receipt.mjs";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const publisher = fileURLToPath(new URL('./publish-trust.mjs', import.meta.url))
-const repositoryRoot = dirname(dirname(publisher))
+const publisher = fileURLToPath(new URL("./publish-trust.mjs", import.meta.url));
+const repositoryRoot = dirname(dirname(publisher));
 
-function runPublisher({ conformance, controls, checkpoint, out, sha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', verificationOverride = undefined }) {
-  const verification = join(dirname(out), 'verification.json')
-  writeFileSync(verification, JSON.stringify(verificationOverride === undefined ? { schemaVersion: 1, gitSha: sha, runId: '123', runAttempt: 1,
-    partitions: verificationPartitions.map((name, index) => ({ name, jobId: index + 1, conclusion: 'success',
-      startedAt: '2026-09-30T00:00:00Z', completedAt: '2026-09-30T00:01:00Z' })) } : verificationOverride))
-  const args = [publisher, '--verification', verification, '--conformance', conformance, '--checkpoint', checkpoint, '--out', out, '--sha', sha]
-  if (controls) args.push('--controls', controls)
-  return spawnSync(process.execPath, args, { cwd: repositoryRoot, encoding: 'utf8' })
+function runPublisher({
+  conformance,
+  controls,
+  checkpoint,
+  out,
+  sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  verificationOverride = undefined,
+}) {
+  const verification = join(dirname(out), "verification.json");
+  writeFileSync(
+    verification,
+    JSON.stringify(
+      verificationOverride === undefined
+        ? {
+            schemaVersion: 1,
+            gitSha: sha,
+            runId: "123",
+            runAttempt: 1,
+            partitions: verificationPartitions.map((name, index) => ({
+              name,
+              jobId: index + 1,
+              conclusion: "success",
+              startedAt: "2026-09-30T00:00:00Z",
+              completedAt: "2026-09-30T00:01:00Z",
+            })),
+          }
+        : verificationOverride,
+    ),
+  );
+  const args = [
+    publisher,
+    "--verification",
+    verification,
+    "--conformance",
+    conformance,
+    "--checkpoint",
+    checkpoint,
+    "--out",
+    out,
+    "--sha",
+    sha,
+  ];
+  if (controls) args.push("--controls", controls);
+  return spawnSync(process.execPath, args, { cwd: repositoryRoot, encoding: "utf8" });
 }
 
-test('empty publication refuses before mutating the output directory', () => {
-  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+test("empty publication refuses before mutating the output directory", () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
   try {
-    const conformance = join(tempDirectory, 'conformance')
-    const controls = join(tempDirectory, 'controls')
-    const checkpoint = join(tempDirectory, 'checkpoint')
-    const out = join(tempDirectory, 'trust')
-    const preservedHistory = '[{"gitSha":"previous"}]\n'
-    const preservedBadge = '{"message":"previous"}\n'
+    const conformance = join(tempDirectory, "conformance");
+    const controls = join(tempDirectory, "controls");
+    const checkpoint = join(tempDirectory, "checkpoint");
+    const out = join(tempDirectory, "trust");
+    const preservedHistory = '[{"gitSha":"previous"}]\n';
+    const preservedBadge = '{"message":"previous"}\n';
 
     for (const directory of [conformance, controls, checkpoint, out]) {
-      mkdirSync(directory, { recursive: true })
+      mkdirSync(directory, { recursive: true });
     }
-    writeFileSync(join(out, 'history.json'), preservedHistory)
-    writeFileSync(join(out, 'badge-conformance.json'), preservedBadge)
-    writeFileSync(join(out, 'badge-invariants.json'), preservedBadge)
+    writeFileSync(join(out, "history.json"), preservedHistory);
+    writeFileSync(join(out, "badge-conformance.json"), preservedBadge);
+    writeFileSync(join(out, "badge-invariants.json"), preservedBadge);
 
-    const result = runPublisher({ conformance, controls, checkpoint, out })
+    const result = runPublisher({ conformance, controls, checkpoint, out });
 
-    assert.equal(result.status, 1)
-    assert.match(result.stderr, /refusing to publish an empty trust page/)
-    assert.equal(readFileSync(join(out, 'history.json'), 'utf8'), preservedHistory)
-    assert.equal(readFileSync(join(out, 'badge-conformance.json'), 'utf8'), preservedBadge)
-    assert.equal(readFileSync(join(out, 'badge-invariants.json'), 'utf8'), preservedBadge)
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /refusing to publish an empty trust page/);
+    assert.equal(readFileSync(join(out, "history.json"), "utf8"), preservedHistory);
+    assert.equal(readFileSync(join(out, "badge-conformance.json"), "utf8"), preservedBadge);
+    assert.equal(readFileSync(join(out, "badge-invariants.json"), "utf8"), preservedBadge);
   } finally {
-    rmSync(tempDirectory, { recursive: true, force: true })
+    rmSync(tempDirectory, { recursive: true, force: true });
   }
-})
+});
 
-test('publication writes evidence and history when inputs are present', () => {
-  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+test("publication writes evidence and history when inputs are present", () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
   try {
-    const conformance = join(tempDirectory, 'conformance')
-    const controls = join(tempDirectory, 'controls')
-    const checkpoint = join(tempDirectory, 'checkpoint')
-    const out = join(tempDirectory, 'trust')
-    mkdirSync(conformance, { recursive: true })
-    mkdirSync(controls, { recursive: true })
-    mkdirSync(checkpoint, { recursive: true })
+    const conformance = join(tempDirectory, "conformance");
+    const controls = join(tempDirectory, "controls");
+    const checkpoint = join(tempDirectory, "checkpoint");
+    const out = join(tempDirectory, "trust");
+    mkdirSync(conformance, { recursive: true });
+    mkdirSync(controls, { recursive: true });
+    mkdirSync(checkpoint, { recursive: true });
 
-    const conformanceCases = [{ id: 'case-1', tier: 'ledger', status: 'pass' }]
-    const controlsCases = [{ id: 'alloc-1', tier: 'ledger', status: 'pass', control: 'A12' }]
+    const conformanceCases = [{ id: "case-1", tier: "ledger", status: "pass" }];
+    const controlsCases = [{ id: "alloc-1", tier: "ledger", status: "pass", control: "A12" }];
     writeFileSync(
-      join(conformance, 'conformance.json'),
+      join(conformance, "conformance.json"),
       JSON.stringify({
         totals: { pass: 1, fail: 0, gap: 0 },
         pass: true,
         cases: conformanceCases,
-        gitSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        gitSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         casesSha256: digestOf(conformanceCases),
       }),
-    )
+    );
     writeFileSync(
-      join(controls, 'controls.json'),
+      join(controls, "controls.json"),
       JSON.stringify({
-        kind: 'internal-controls',
+        kind: "internal-controls",
         totals: { pass: 1, fail: 0, gap: 0 },
         pass: true,
         cases: controlsCases,
-        gitSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        gitSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         casesSha256: digestOf(controlsCases),
       }),
-    )
+    );
+    writeFileSync(join(controls, "controls-matrix.md"), "# Internal-controls evidence matrix\n");
     writeFileSync(
-      join(controls, 'controls-matrix.md'),
-      '# Internal-controls evidence matrix\n',
-    )
-    writeFileSync(
-      join(checkpoint, 'checkpoint.json'),
+      join(checkpoint, "checkpoint.json"),
       JSON.stringify({
-        orgName: 'Acme',
+        orgName: "Acme",
         counts: { postedEntries: 1 },
-        checks: [{ name: 'balanced', ok: true }],
+        checks: [{ name: "balanced", ok: true }],
         pass: true,
-        gitSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        gitSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       }),
-    )
+    );
 
-    const result = runPublisher({ conformance, controls, checkpoint, out })
+    const result = runPublisher({ conformance, controls, checkpoint, out });
 
-    assert.equal(result.status, 0, result.stderr)
-    assert.equal(existsSync(join(out, 'badge-conformance.json')), true)
-    assert.equal(existsSync(join(out, 'badge-invariants.json')), true)
-    assert.equal(existsSync(join(out, 'conformance.json')), true)
-    assert.equal(existsSync(join(out, 'controls.json')), true)
-    assert.equal(existsSync(join(out, 'controls-matrix.md')), true)
-    assert.equal(existsSync(join(out, 'checkpoint.json')), true)
-    assert.equal(existsSync(join(out, 'history.json')), true)
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(existsSync(join(out, "badge-conformance.json")), true);
+    assert.equal(existsSync(join(out, "badge-invariants.json")), true);
+    assert.equal(existsSync(join(out, "conformance.json")), true);
+    assert.equal(existsSync(join(out, "controls.json")), true);
+    assert.equal(existsSync(join(out, "controls-matrix.md")), true);
+    assert.equal(existsSync(join(out, "checkpoint.json")), true);
+    assert.equal(existsSync(join(out, "history.json")), true);
 
-    const history = JSON.parse(readFileSync(join(out, 'history.json'), 'utf8'))
-    assert.equal(history.length, 1)
-    assert.equal(history[0].controls.kind, 'internal-controls')
-    assert.deepEqual(history[0].controls.failures, [])
-    const published = JSON.parse(readFileSync(join(out, 'controls.json'), 'utf8'))
-    assert.equal(published.kind, 'internal-controls')
+    const history = JSON.parse(readFileSync(join(out, "history.json"), "utf8"));
+    assert.equal(history.length, 1);
+    assert.equal(history[0].controls.kind, "internal-controls");
+    assert.deepEqual(history[0].controls.failures, []);
+    const published = JSON.parse(readFileSync(join(out, "controls.json"), "utf8"));
+    assert.equal(published.kind, "internal-controls");
   } finally {
-    rmSync(tempDirectory, { recursive: true, force: true })
+    rmSync(tempDirectory, { recursive: true, force: true });
   }
-})
+});
 
-test('controls-only input is refused instead of published as unavailable', () => {
+test("controls-only input is refused instead of published as unavailable", () => {
   // Reversal of the old partial-tolerance contract (owner-accepted finding
   // 7.5): publishing one part while recording the others as unavailable is
   // exactly how a stale component survives under a new SHA. The publisher
   // now requires every component and fails closed.
-  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+  const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
   try {
-    const conformance = join(tempDirectory, 'conformance')
-    const controls = join(tempDirectory, 'controls')
-    const checkpoint = join(tempDirectory, 'checkpoint')
-    const out = join(tempDirectory, 'trust')
-    mkdirSync(controls, { recursive: true })
+    const conformance = join(tempDirectory, "conformance");
+    const controls = join(tempDirectory, "controls");
+    const checkpoint = join(tempDirectory, "checkpoint");
+    const out = join(tempDirectory, "trust");
+    mkdirSync(controls, { recursive: true });
 
-    const controlsCases = [{ id: 'alloc-1', tier: 'ledger', status: 'pass', control: 'A12' }]
+    const controlsCases = [{ id: "alloc-1", tier: "ledger", status: "pass", control: "A12" }];
     writeFileSync(
-      join(controls, 'controls.json'),
+      join(controls, "controls.json"),
       JSON.stringify({
-        kind: 'internal-controls',
+        kind: "internal-controls",
         totals: { pass: 1, fail: 0, gap: 0 },
         pass: true,
         cases: controlsCases,
-        gitSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        gitSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         casesSha256: digestOf(controlsCases),
       }),
-    )
+    );
 
-    const result = runPublisher({ conformance, controls, checkpoint, out })
+    const result = runPublisher({ conformance, controls, checkpoint, out });
 
-    assert.equal(result.status, 1, result.stderr)
-    assert.match(result.stderr, /partial|every component|all three/i)
-    assert.equal(existsSync(out), false, 'a refused publication must leave no output directory')
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /partial|every component|all three/i);
+    assert.equal(existsSync(out), false, "a refused publication must leave no output directory");
   } finally {
-    rmSync(tempDirectory, { recursive: true, force: true })
+    rmSync(tempDirectory, { recursive: true, force: true });
   }
-})
+});
 
 function digestOf(value) {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex')
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-function writeEvidence(dir, { sha, tamper = null, dropSha = false, dropDigest = false, dropCheckpoint = false }) {
-  const conformanceCases = [{ id: 'case-1', tier: 'ledger', status: 'pass' }]
-  const controlsCases = [{ id: 'alloc-1', tier: 'ledger', status: 'pass', control: 'A12' }]
-  if (tamper === 'cases') conformanceCases.push({ id: 'injected', status: 'pass' })
+function writeEvidence(
+  dir,
+  { sha, tamper = null, dropSha = false, dropDigest = false, dropCheckpoint = false },
+) {
+  const conformanceCases = [{ id: "case-1", tier: "ledger", status: "pass" }];
+  const controlsCases = [{ id: "alloc-1", tier: "ledger", status: "pass", control: "A12" }];
+  if (tamper === "cases") conformanceCases.push({ id: "injected", status: "pass" });
   const conformance = {
     totals: { pass: 1, fail: 0, gap: 0 },
     pass: true,
     cases: conformanceCases,
     ...(dropSha ? {} : { gitSha: sha }),
-    ...(dropDigest ? {} : { casesSha256: tamper === 'digest' ? '0'.repeat(64) : digestOf([{ id: 'case-1', tier: 'ledger', status: 'pass' }]) }),
-  }
+    ...(dropDigest
+      ? {}
+      : {
+          casesSha256:
+            tamper === "digest"
+              ? "0".repeat(64)
+              : digestOf([{ id: "case-1", tier: "ledger", status: "pass" }]),
+        }),
+  };
   const controls = {
-    kind: 'internal-controls',
+    kind: "internal-controls",
     totals: { pass: 1, fail: 0, gap: 0 },
     pass: true,
     cases: controlsCases,
     gitSha: sha,
     casesSha256: digestOf(controlsCases),
-  }
-  mkdirSync(join(dir, 'conformance'), { recursive: true })
-  mkdirSync(join(dir, 'controls'), { recursive: true })
-  if (!dropCheckpoint) mkdirSync(join(dir, 'checkpoint'), { recursive: true })
-  writeFileSync(join(dir, 'conformance', 'conformance.json'), JSON.stringify(conformance))
-  writeFileSync(join(dir, 'controls', 'controls.json'), JSON.stringify(controls))
+  };
+  mkdirSync(join(dir, "conformance"), { recursive: true });
+  mkdirSync(join(dir, "controls"), { recursive: true });
+  if (!dropCheckpoint) mkdirSync(join(dir, "checkpoint"), { recursive: true });
+  writeFileSync(join(dir, "conformance", "conformance.json"), JSON.stringify(conformance));
+  writeFileSync(join(dir, "controls", "controls.json"), JSON.stringify(controls));
   if (!dropCheckpoint) {
     writeFileSync(
-      join(dir, 'checkpoint', 'checkpoint.json'),
+      join(dir, "checkpoint", "checkpoint.json"),
       JSON.stringify({
-        orgName: 'Acme',
+        orgName: "Acme",
         counts: { postedEntries: 1 },
-        checks: [{ name: 'balanced', ok: true }],
+        checks: [{ name: "balanced", ok: true }],
         pass: true,
         gitSha: sha,
       }),
-    )
+    );
   }
 }
 
-test('mixed-source evidence is rejected before anything is published', () => {
-  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+test("mixed-source evidence is rejected before anything is published", () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
   try {
-    const out = join(tempDirectory, 'trust')
-    writeEvidence(tempDirectory, { sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })
+    const out = join(tempDirectory, "trust");
+    writeEvidence(tempDirectory, { sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
     // Swap the controls artifact for one produced from another commit.
-    const controlsPath = join(tempDirectory, 'controls', 'controls.json')
-    const controls = JSON.parse(readFileSync(controlsPath, 'utf8'))
-    controls.gitSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
-    writeFileSync(controlsPath, JSON.stringify(controls))
+    const controlsPath = join(tempDirectory, "controls", "controls.json");
+    const controls = JSON.parse(readFileSync(controlsPath, "utf8"));
+    controls.gitSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    writeFileSync(controlsPath, JSON.stringify(controls));
 
     const result = runPublisher({
-      conformance: join(tempDirectory, 'conformance'),
-      controls: join(tempDirectory, 'controls'),
-      checkpoint: join(tempDirectory, 'checkpoint'),
+      conformance: join(tempDirectory, "conformance"),
+      controls: join(tempDirectory, "controls"),
+      checkpoint: join(tempDirectory, "checkpoint"),
       out,
-      sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    })
+      sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
 
-    assert.equal(result.status, 1, result.stderr)
-    assert.match(result.stderr, /mixed-source|same commit|does not match/)
-    assert.equal(existsSync(out), false, 'a rejected publication must leave no output directory')
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /mixed-source|same commit|does not match/);
+    assert.equal(existsSync(out), false, "a rejected publication must leave no output directory");
   } finally {
-    rmSync(tempDirectory, { recursive: true, force: true })
+    rmSync(tempDirectory, { recursive: true, force: true });
   }
-})
+});
 
-test('evidence without source provenance is rejected', () => {
-  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+test("evidence without source provenance is rejected", () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
   try {
-    const out = join(tempDirectory, 'trust')
-    writeEvidence(tempDirectory, { sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', dropSha: true, dropDigest: true })
+    const out = join(tempDirectory, "trust");
+    writeEvidence(tempDirectory, {
+      sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      dropSha: true,
+      dropDigest: true,
+    });
 
     const result = runPublisher({
-      conformance: join(tempDirectory, 'conformance'),
-      controls: join(tempDirectory, 'controls'),
-      checkpoint: join(tempDirectory, 'checkpoint'),
+      conformance: join(tempDirectory, "conformance"),
+      controls: join(tempDirectory, "controls"),
+      checkpoint: join(tempDirectory, "checkpoint"),
       out,
-      sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    })
+      sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
 
-    assert.equal(result.status, 1, result.stderr)
-    assert.match(result.stderr, /provenance|gitSha|source/i)
-    assert.equal(existsSync(out), false, 'a rejected publication must leave no output directory')
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /provenance|gitSha|source/i);
+    assert.equal(existsSync(out), false, "a rejected publication must leave no output directory");
   } finally {
-    rmSync(tempDirectory, { recursive: true, force: true })
+    rmSync(tempDirectory, { recursive: true, force: true });
   }
-})
+});
 
-test('partial publication is refused and leaves the previous bundle intact', () => {
+test("partial publication is refused and leaves the previous bundle intact", () => {
   // A run that could only produce one part must not publish that part over
   // the previous bundle: conditional writes leave the other components
   // stale while history claims the new SHA. Fail closed instead.
-  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+  const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
   try {
-    const out = join(tempDirectory, 'trust')
-    mkdirSync(out, { recursive: true })
-    const staleConformance = '{"stale":true}\n'
-    const staleHistory = '[{"gitSha":"previous"}]\n'
-    writeFileSync(join(out, 'conformance.json'), staleConformance)
-    writeFileSync(join(out, 'history.json'), staleHistory)
-    writeEvidence(tempDirectory, { sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', dropCheckpoint: true })
+    const out = join(tempDirectory, "trust");
+    mkdirSync(out, { recursive: true });
+    const staleConformance = '{"stale":true}\n';
+    const staleHistory = '[{"gitSha":"previous"}]\n';
+    writeFileSync(join(out, "conformance.json"), staleConformance);
+    writeFileSync(join(out, "history.json"), staleHistory);
+    writeEvidence(tempDirectory, {
+      sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      dropCheckpoint: true,
+    });
 
     const result = runPublisher({
-      conformance: join(tempDirectory, 'conformance'),
-      controls: join(tempDirectory, 'controls'),
-      checkpoint: join(tempDirectory, 'checkpoint'),
+      conformance: join(tempDirectory, "conformance"),
+      controls: join(tempDirectory, "controls"),
+      checkpoint: join(tempDirectory, "checkpoint"),
       out,
-      sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    })
+      sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
 
-    assert.equal(result.status, 1, result.stderr)
-    assert.match(result.stderr, /partial|every component|all three/i)
-    assert.equal(readFileSync(join(out, 'conformance.json'), 'utf8'), staleConformance)
-    assert.equal(readFileSync(join(out, 'history.json'), 'utf8'), staleHistory)
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /partial|every component|all three/i);
+    assert.equal(readFileSync(join(out, "conformance.json"), "utf8"), staleConformance);
+    assert.equal(readFileSync(join(out, "history.json"), "utf8"), staleHistory);
   } finally {
-    rmSync(tempDirectory, { recursive: true, force: true })
+    rmSync(tempDirectory, { recursive: true, force: true });
   }
-})
+});
 
-test('a full publication replaces evidence and drops stale components', () => {
-  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+test("a full publication replaces evidence and drops stale components", () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
   try {
-    const out = join(tempDirectory, 'trust')
-    mkdirSync(out, { recursive: true })
-    writeFileSync(join(out, 'conformance.json'), '{"stale":true}\n')
-    writeFileSync(join(out, 'junk-from-a-manual-run.txt'), 'junk\n')
-    writeFileSync(join(out, 'history.json'), '[{"gitSha":"previous"}]\n')
-    writeEvidence(tempDirectory, { sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })
+    const out = join(tempDirectory, "trust");
+    mkdirSync(out, { recursive: true });
+    writeFileSync(join(out, "conformance.json"), '{"stale":true}\n');
+    writeFileSync(join(out, "junk-from-a-manual-run.txt"), "junk\n");
+    writeFileSync(join(out, "history.json"), '[{"gitSha":"previous"}]\n');
+    writeEvidence(tempDirectory, { sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
 
     const result = runPublisher({
-      conformance: join(tempDirectory, 'conformance'),
-      controls: join(tempDirectory, 'controls'),
-      checkpoint: join(tempDirectory, 'checkpoint'),
+      conformance: join(tempDirectory, "conformance"),
+      controls: join(tempDirectory, "controls"),
+      checkpoint: join(tempDirectory, "checkpoint"),
       out,
-      sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    })
+      sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
 
-    assert.equal(result.status, 0, result.stderr)
-    assert.equal(existsSync(join(out, 'junk-from-a-manual-run.txt')), false, 'stale files must not survive the swap')
-    const published = JSON.parse(readFileSync(join(out, 'conformance.json'), 'utf8'))
-    assert.equal(published.gitSha, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'the bundle must be the new evidence, not the stale file')
-    const history = JSON.parse(readFileSync(join(out, 'history.json'), 'utf8'))
-    assert.equal(history.length, 2, 'the append-only trend must survive the swap')
-    assert.equal(history[0].gitSha, 'previous')
-    assert.equal(history[1].gitSha, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      existsSync(join(out, "junk-from-a-manual-run.txt")),
+      false,
+      "stale files must not survive the swap",
+    );
+    const published = JSON.parse(readFileSync(join(out, "conformance.json"), "utf8"));
+    assert.equal(
+      published.gitSha,
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "the bundle must be the new evidence, not the stale file",
+    );
+    const history = JSON.parse(readFileSync(join(out, "history.json"), "utf8"));
+    assert.equal(history.length, 2, "the append-only trend must survive the swap");
+    assert.equal(history[0].gitSha, "previous");
+    assert.equal(history[1].gitSha, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   } finally {
-    rmSync(tempDirectory, { recursive: true, force: true })
+    rmSync(tempDirectory, { recursive: true, force: true });
   }
-})
+});
 
-test('a matrix whose header disagrees with the corpus is refused before publication', () => {
+test("a matrix whose header disagrees with the corpus is refused before publication", () => {
   // The August badge drift: the matrix was refreshed by hand while the badge
   // input came from an older run, and the publisher rendered the stale badge
   // under a new label. The publisher now refuses a bundle whose two
   // renderings of one derivation disagree, before touching the output.
-  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+  const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
   try {
-    const out = join(tempDirectory, 'trust')
-    writeEvidence(tempDirectory, { sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })
+    const out = join(tempDirectory, "trust");
+    writeEvidence(tempDirectory, { sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
     writeFileSync(
-      join(tempDirectory, 'conformance', 'conformance.json'),
+      join(tempDirectory, "conformance", "conformance.json"),
       JSON.stringify({
         totals: { pass: 77, fail: 0, gap: 15, skipped: 0 },
         pass: true,
-        cases: Array.from({ length: 77 }, (_, i) => ({ id: `case-${i}`, tier: 'ledger', status: 'pass' })).concat(
-          Array.from({ length: 15 }, (_, i) => ({ id: `gap-${i}`, status: 'gap' })),
-        ),
-        gitSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        cases: Array.from({ length: 77 }, (_, i) => ({
+          id: `case-${i}`,
+          tier: "ledger",
+          status: "pass",
+        })).concat(Array.from({ length: 15 }, (_, i) => ({ id: `gap-${i}`, status: "gap" }))),
+        gitSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         casesSha256: digestOf(
-          Array.from({ length: 77 }, (_, i) => ({ id: `case-${i}`, tier: 'ledger', status: 'pass' })).concat(
-            Array.from({ length: 15 }, (_, i) => ({ id: `gap-${i}`, status: 'gap' })),
-          ),
+          Array.from({ length: 77 }, (_, i) => ({
+            id: `case-${i}`,
+            tier: "ledger",
+            status: "pass",
+          })).concat(Array.from({ length: 15 }, (_, i) => ({ id: `gap-${i}`, status: "gap" }))),
         ),
       }),
-    )
+    );
     writeFileSync(
-      join(tempDirectory, 'conformance', 'conformance-matrix.md'),
-      '# Accounting standards conformance matrix\n\n**42 passing · 0 failing · 0 gaps · 0 not run**\n',
-    )
+      join(tempDirectory, "conformance", "conformance-matrix.md"),
+      "# Accounting standards conformance matrix\n\n**42 passing · 0 failing · 0 gaps · 0 not run**\n",
+    );
 
     const result = runPublisher({
-      conformance: join(tempDirectory, 'conformance'),
-      controls: join(tempDirectory, 'controls'),
-      checkpoint: join(tempDirectory, 'checkpoint'),
+      conformance: join(tempDirectory, "conformance"),
+      controls: join(tempDirectory, "controls"),
+      checkpoint: join(tempDirectory, "checkpoint"),
       out,
-      sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    })
+      sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
 
-    assert.equal(result.status, 1, result.stderr)
-    assert.match(result.stderr, /badge\/matrix drift|counts differ/)
-    assert.equal(existsSync(out), false, 'a refused publication must leave no output directory')
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /badge\/matrix drift|counts differ/);
+    assert.equal(existsSync(out), false, "a refused publication must leave no output directory");
   } finally {
-    rmSync(tempDirectory, { recursive: true, force: true })
+    rmSync(tempDirectory, { recursive: true, force: true });
   }
-})
+});
 
-test('a matrix agreeing with the corpus publishes a badge restating its totals', () => {
-  const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+test("a matrix agreeing with the corpus publishes a badge restating its totals", () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
   try {
-    const out = join(tempDirectory, 'trust')
-    writeEvidence(tempDirectory, { sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })
-    const cases = [{ id: 'case-1', tier: 'ledger', status: 'pass' }]
+    const out = join(tempDirectory, "trust");
+    writeEvidence(tempDirectory, { sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
+    const cases = [{ id: "case-1", tier: "ledger", status: "pass" }];
     writeFileSync(
-      join(tempDirectory, 'conformance', 'conformance.json'),
+      join(tempDirectory, "conformance", "conformance.json"),
       JSON.stringify({
         totals: { pass: 1, fail: 0, gap: 2, skipped: 0 },
         pass: true,
         cases: cases.concat([
-          { id: 'gap-1', status: 'gap' },
-          { id: 'gap-2', status: 'gap' },
+          { id: "gap-1", status: "gap" },
+          { id: "gap-2", status: "gap" },
         ]),
-        gitSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        gitSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         casesSha256: digestOf(
           cases.concat([
-            { id: 'gap-1', status: 'gap' },
-            { id: 'gap-2', status: 'gap' },
+            { id: "gap-1", status: "gap" },
+            { id: "gap-2", status: "gap" },
           ]),
         ),
       }),
-    )
+    );
     writeFileSync(
-      join(tempDirectory, 'conformance', 'conformance-matrix.md'),
-      '# Accounting standards conformance matrix\n\n**1 passing · 0 failing · 2 gaps · 0 not run**\n',
-    )
+      join(tempDirectory, "conformance", "conformance-matrix.md"),
+      "# Accounting standards conformance matrix\n\n**1 passing · 0 failing · 2 gaps · 0 not run**\n",
+    );
 
     const result = runPublisher({
-      conformance: join(tempDirectory, 'conformance'),
-      controls: join(tempDirectory, 'controls'),
-      checkpoint: join(tempDirectory, 'checkpoint'),
+      conformance: join(tempDirectory, "conformance"),
+      controls: join(tempDirectory, "controls"),
+      checkpoint: join(tempDirectory, "checkpoint"),
       out,
-      sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    })
+      sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    });
 
-    assert.equal(result.status, 0, result.stderr)
-    const badge = JSON.parse(readFileSync(join(out, 'badge-conformance.json'), 'utf8'))
-    assert.equal(badge.message, '1 passing, 2 gaps')
-    assert.equal(badge.gitSha, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    assert.equal(result.status, 0, result.stderr);
+    const badge = JSON.parse(readFileSync(join(out, "badge-conformance.json"), "utf8"));
+    assert.equal(badge.message, "1 passing, 2 gaps");
+    assert.equal(badge.gitSha, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   } finally {
-    rmSync(tempDirectory, { recursive: true, force: true })
+    rmSync(tempDirectory, { recursive: true, force: true });
   }
-})
+});
 
-test('tampered case payloads are rejected by their digest', () => {
-  for (const tamper of ['cases', 'digest']) {
-    const tempDirectory = mkdtempSync(join(tmpdir(), 'openbooks-publish-trust-'))
+test("tampered case payloads are rejected by their digest", () => {
+  for (const tamper of ["cases", "digest"]) {
+    const tempDirectory = mkdtempSync(join(tmpdir(), "openbooks-publish-trust-"));
     try {
-      const out = join(tempDirectory, 'trust')
-      writeEvidence(tempDirectory, { sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', tamper })
+      const out = join(tempDirectory, "trust");
+      writeEvidence(tempDirectory, { sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", tamper });
 
       const result = runPublisher({
-        conformance: join(tempDirectory, 'conformance'),
-        controls: join(tempDirectory, 'controls'),
-        checkpoint: join(tempDirectory, 'checkpoint'),
+        conformance: join(tempDirectory, "conformance"),
+        controls: join(tempDirectory, "controls"),
+        checkpoint: join(tempDirectory, "checkpoint"),
         out,
-        sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      })
+        sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      });
 
-      assert.equal(result.status, 1, `${tamper}: ${result.stderr}`)
-      assert.match(result.stderr, /digest|tamper|integrity/i)
-      assert.equal(existsSync(out), false, 'a rejected publication must leave no output directory')
+      assert.equal(result.status, 1, `${tamper}: ${result.stderr}`);
+      assert.match(result.stderr, /digest|tamper|integrity/i);
+      assert.equal(existsSync(out), false, "a rejected publication must leave no output directory");
     } finally {
-      rmSync(tempDirectory, { recursive: true, force: true })
+      rmSync(tempDirectory, { recursive: true, force: true });
     }
   }
-})
+});
 
-for (const scenario of ['missing receipt', 'abbreviated source', 'skipped ledger', 'empty checkpoint', 'wrong totals']) {
+for (const scenario of [
+  "missing receipt",
+  "abbreviated source",
+  "skipped ledger",
+  "empty checkpoint",
+  "wrong totals",
+]) {
   test(`publication refuses ${scenario} and preserves prior evidence`, () => {
-    const directory = mkdtempSync(join(tmpdir(), 'openbooks-evidence-refusal-'));
+    const directory = mkdtempSync(join(tmpdir(), "openbooks-evidence-refusal-"));
     try {
-      const sha = 'a'.repeat(40);
+      const sha = "a".repeat(40);
       writeEvidence(directory, { sha });
-      const out = join(directory, 'trust');
-      mkdirSync(out); writeFileSync(join(out, 'preserved.md'), 'Prior narrative');
-      if (scenario === 'skipped ledger' || scenario === 'wrong totals') {
-        const path = join(directory, 'conformance', 'conformance.json');
-        const report = JSON.parse(readFileSync(path, 'utf8'));
-        if (scenario === 'skipped ledger') { report.cases[0].status = 'skipped'; report.totals = { pass: 0, skipped: 1 }; }
-        else report.totals.pass = 999;
+      const out = join(directory, "trust");
+      mkdirSync(out);
+      writeFileSync(join(out, "preserved.md"), "Prior narrative");
+      if (scenario === "skipped ledger" || scenario === "wrong totals") {
+        const path = join(directory, "conformance", "conformance.json");
+        const report = JSON.parse(readFileSync(path, "utf8"));
+        if (scenario === "skipped ledger") {
+          report.cases[0].status = "skipped";
+          report.totals = { pass: 0, skipped: 1 };
+        } else report.totals.pass = 999;
         report.casesSha256 = digestOf(report.cases);
         writeFileSync(path, JSON.stringify(report));
       }
-      if (scenario === 'empty checkpoint') {
-        const path = join(directory, 'checkpoint', 'checkpoint.json');
-        const report = JSON.parse(readFileSync(path, 'utf8')); report.checks = [];
+      if (scenario === "empty checkpoint") {
+        const path = join(directory, "checkpoint", "checkpoint.json");
+        const report = JSON.parse(readFileSync(path, "utf8"));
+        report.checks = [];
         writeFileSync(path, JSON.stringify(report));
       }
-      const result = runPublisher({ conformance: join(directory, 'conformance'), controls: join(directory, 'controls'),
-        checkpoint: join(directory, 'checkpoint'), out,
-        sha: scenario === 'abbreviated source' ? sha.slice(0, 7) : sha,
-        verificationOverride: scenario === 'missing receipt' ? null : undefined });
+      const result = runPublisher({
+        conformance: join(directory, "conformance"),
+        controls: join(directory, "controls"),
+        checkpoint: join(directory, "checkpoint"),
+        out,
+        sha: scenario === "abbreviated source" ? sha.slice(0, 7) : sha,
+        verificationOverride: scenario === "missing receipt" ? null : undefined,
+      });
       assert.equal(result.status, 1, result.stderr);
       assert.match(result.stderr, /refus|mixed-source/i);
-      assert.equal(readFileSync(join(out, 'preserved.md'), 'utf8'), 'Prior narrative');
-      assert.equal(existsSync(join(out, 'bundle.json')), false);
-    } finally { rmSync(directory, { recursive: true, force: true }); }
+      assert.equal(readFileSync(join(out, "preserved.md"), "utf8"), "Prior narrative");
+      assert.equal(existsSync(join(out, "bundle.json")), false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 }
-test('repeat publications retain execution history and publish verifiable component digests', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'openbooks-evidence-history-'));
+test("repeat publications retain execution history and publish verifiable component digests", () => {
+  const directory = mkdtempSync(join(tmpdir(), "openbooks-evidence-history-"));
   try {
-    const sha = 'a'.repeat(40); writeEvidence(directory, { sha });
-    const out = join(directory, 'trust'); mkdirSync(out);
-    writeFileSync(join(out, 'mutation.md'), 'Independent evidence provenance');
-    const inputs = { conformance: join(directory, 'conformance'), controls: join(directory, 'controls'), checkpoint: join(directory, 'checkpoint'), out, sha };
+    const sha = "a".repeat(40);
+    writeEvidence(directory, { sha });
+    const out = join(directory, "trust");
+    mkdirSync(out);
+    writeFileSync(join(out, "mutation.md"), "Independent evidence provenance");
+    const inputs = {
+      conformance: join(directory, "conformance"),
+      controls: join(directory, "controls"),
+      checkpoint: join(directory, "checkpoint"),
+      out,
+      sha,
+    };
     assert.equal(runPublisher(inputs).status, 0);
-    const first = JSON.parse(readFileSync(join(out, 'history.json'), 'utf8'))[0];
-    const second = runPublisher(inputs); assert.equal(second.status, 0, second.stderr);
-    const history = JSON.parse(readFileSync(join(out, 'history.json'), 'utf8'));
-    assert.equal(history.length, 2); assert.deepEqual(history[0], first);
-    assert.equal(readFileSync(join(out, 'mutation.md'), 'utf8'), 'Independent evidence provenance');
-    const bundle = JSON.parse(readFileSync(join(out, 'bundle.json'), 'utf8'));
+    const first = JSON.parse(readFileSync(join(out, "history.json"), "utf8"))[0];
+    const second = runPublisher(inputs);
+    assert.equal(second.status, 0, second.stderr);
+    const history = JSON.parse(readFileSync(join(out, "history.json"), "utf8"));
+    assert.equal(history.length, 2);
+    assert.deepEqual(history[0], first);
+    assert.equal(readFileSync(join(out, "mutation.md"), "utf8"), "Independent evidence provenance");
+    const bundle = JSON.parse(readFileSync(join(out, "bundle.json"), "utf8"));
     assert.equal(bundle.gitSha, sha);
     for (const [name, digest] of Object.entries(bundle.components)) {
-      assert.equal(createHash('sha256').update(readFileSync(join(out, name))).digest('hex'), digest, name);
+      assert.equal(
+        createHash("sha256")
+          .update(readFileSync(join(out, name)))
+          .digest("hex"),
+        digest,
+        name,
+      );
     }
-    assert.ok(bundle.components['verification.json']); assert.ok(bundle.components['history.json']);
-  } finally { rmSync(directory, { recursive: true, force: true }); }
+    assert.ok(bundle.components["verification.json"]);
+    assert.ok(bundle.components["history.json"]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
-test('unreadable publication history is refused without replacing prior evidence', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'openbooks-evidence-history-refusal-'));
+test("unreadable publication history is refused without replacing prior evidence", () => {
+  const directory = mkdtempSync(join(tmpdir(), "openbooks-evidence-history-refusal-"));
   try {
-    const sha = 'a'.repeat(40); writeEvidence(directory, { sha });
-    const out = join(directory, 'trust'); mkdirSync(out);
-    writeFileSync(join(out, 'history.json'), '{broken');
-    const result = runPublisher({ conformance: join(directory, 'conformance'), controls: join(directory, 'controls'), checkpoint: join(directory, 'checkpoint'), out, sha });
-    assert.equal(result.status, 1); assert.match(result.stderr, /history is unreadable/);
-    assert.equal(readFileSync(join(out, 'history.json'), 'utf8'), '{broken');
-    assert.equal(existsSync(join(out, 'bundle.json')), false);
-  } finally { rmSync(directory, { recursive: true, force: true }); }
+    const sha = "a".repeat(40);
+    writeEvidence(directory, { sha });
+    const out = join(directory, "trust");
+    mkdirSync(out);
+    writeFileSync(join(out, "history.json"), "{broken");
+    const result = runPublisher({
+      conformance: join(directory, "conformance"),
+      controls: join(directory, "controls"),
+      checkpoint: join(directory, "checkpoint"),
+      out,
+      sha,
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /history is unreadable/);
+    assert.equal(readFileSync(join(out, "history.json"), "utf8"), "{broken");
+    assert.equal(existsSync(join(out, "bundle.json")), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

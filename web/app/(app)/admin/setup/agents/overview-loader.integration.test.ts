@@ -45,7 +45,6 @@ const mockIntl = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-
     if (context.parentURL?.includes("/admin/setup/agents/view.ts")) {
       if (specifier === "../../../../../lib/authz") {
         return { url: "mock:agents-overview-spec-authz", shortCircuit: true };
@@ -74,12 +73,10 @@ const { loadAgentsOverview } = await import("./view.ts");
 hooks.deregister();
 
 const { withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-const { runSetupAgentNow, saveSetupAgentPolicy } = await import(
-  "../../../../../lib/setup/agents.ts"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { runSetupAgentNow, saveSetupAgentPolicy } =
+  await import("../../../../../lib/setup/agents.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -89,7 +86,7 @@ function asManager(orgId: string) {
 }
 
 test("the overview resolves KPI labels and one row per pack", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     asManager(org.orgId);
     const data = await withBypassContext(() => loadAgentsOverview({}));
@@ -120,7 +117,7 @@ test("the overview resolves KPI labels and one row per pack", { skip: !DB }, asy
 });
 
 test("the overview sorts by findings descending", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     asManager(org.orgId);
     const data = await withBypassContext(() =>
@@ -129,7 +126,10 @@ test("the overview sorts by findings descending", { skip: !DB }, async () => {
     assert.equal(data.sort, "findings");
     assert.equal(data.dir, "desc");
     const counts = data.rows.map((row) => row.openFindings);
-    assert.deepEqual([...counts].sort((a, b) => b - a), counts);
+    assert.deepEqual(
+      [...counts].sort((a, b) => b - a),
+      counts,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -138,7 +138,9 @@ test("the overview sorts by findings descending", { skip: !DB }, async () => {
 test("a fresh run resolves a relative last-run cell", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const userId = await withBypassContext(() => createScratchUser(org.orgId, "Overview Admin", "admin"));
+    const userId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Overview Admin", "admin"),
+    );
     asManager(org.orgId);
     await withBypassContext(() =>
       saveSetupAgentPolicy(org.orgId, userId, "accounting", {
@@ -150,7 +152,14 @@ test("a fresh run resolves a relative last-run cell", { skip: !DB }, async () =>
         detectors: [],
       }),
     );
-    await withBypassContext(() => runSetupAgentNow(org.orgId, userId, "accounting", null /* test setup: system provenance, unrestricted */));
+    await withBypassContext(() =>
+      runSetupAgentNow(
+        org.orgId,
+        userId,
+        "accounting",
+        null /* test setup: system provenance, unrestricted */,
+      ),
+    );
     const data = await withBypassContext(() => loadAgentsOverview({}));
     const row = data.rows.find((entry) => entry.agentKey === "accounting")!;
     assert.equal(row.lastRun.hasRun, true);
@@ -166,7 +175,7 @@ test("a fresh run resolves a relative last-run cell", { skip: !DB }, async () =>
 });
 
 test("an unknown sort falls back to pack ascending", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     asManager(org.orgId);
     const data = await withBypassContext(() => loadAgentsOverview({ sort: "nope" }));

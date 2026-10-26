@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -23,7 +23,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -80,7 +88,9 @@ const SEGMENTS: never[] = [];
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -91,8 +101,8 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
 function buttonsNamed(name: string): HTMLButtonElement[] {
   // A drawer that can also post labels its draft save "Save draft".
   const names = name === "Save" ? ["Save", "Save draft"] : [name];
-  return [...document.querySelectorAll("button")].filter(
-    (b) => names.includes(b.textContent?.trim() ?? ""),
+  return [...document.querySelectorAll("button")].filter((b) =>
+    names.includes(b.textContent?.trim() ?? ""),
   ) as HTMLButtonElement[];
 }
 
@@ -111,7 +121,16 @@ function freshGlobals() {
   globalThis.__confirmVerdict = true;
 }
 
-async function mountWarehouseDrawer({ kind = "customer_invoice", stockLocations = [{ id: "loc-1", code: "North" }, { id: "loc-2", code: "South" }], subsidiaries = [], showSubsidiary = false, edit = true }: {
+async function mountWarehouseDrawer({
+  kind = "customer_invoice",
+  stockLocations = [
+    { id: "loc-1", code: "North" },
+    { id: "loc-2", code: "South" },
+  ],
+  subsidiaries = [],
+  showSubsidiary = false,
+  edit = true,
+}: {
   kind?: "customer_invoice" | "vendor_bill";
   stockLocations?: { id: string; code: string }[];
   subsidiaries?: { id: string; name: string; depth: number }[];
@@ -142,10 +161,35 @@ async function mountWarehouseDrawer({ kind = "customer_invoice", stockLocations 
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <DocumentDrawer
-            payload={{ doc, lines: [
-              { id: randomUUID(), line_number: 1, account_id: randomUUID(), item_id: stockedItemId, description: "Stock item", quantity: "1", unit_price: "10", amount: "10", stock_location_id: "loc-1", custom: {} },
-              { id: randomUUID(), line_number: 2, account_id: randomUUID(), item_id: "service-item", description: "Service", quantity: "1", unit_price: "2", amount: "2", stock_location_id: null, custom: {} },
-            ] }}
+            payload={{
+              doc,
+              lines: [
+                {
+                  id: randomUUID(),
+                  line_number: 1,
+                  account_id: randomUUID(),
+                  item_id: stockedItemId,
+                  description: "Stock item",
+                  quantity: "1",
+                  unit_price: "10",
+                  amount: "10",
+                  stock_location_id: "loc-1",
+                  custom: {},
+                },
+                {
+                  id: randomUUID(),
+                  line_number: 2,
+                  account_id: randomUUID(),
+                  item_id: "service-item",
+                  description: "Service",
+                  quantity: "1",
+                  unit_price: "2",
+                  amount: "2",
+                  stock_location_id: null,
+                  custom: {},
+                },
+              ],
+            }}
             config={DOC_KINDS[kind]!}
             basePath={kind === "customer_invoice" ? "/ar/invoices" : "/ap/bills"}
             recordType={kind}
@@ -167,7 +211,17 @@ async function mountWarehouseDrawer({ kind = "customer_invoice", stockLocations 
             segments={SEGMENTS}
             canCreate
             canPost
-            layout={{ header: { groups: showSubsidiary ? [{ id: "subsidiary", fields: [{ key: "subsidiary_id", visible: true }] }] : [] }, lines: { columns: [] }, actions: [] } as never}
+            layout={
+              {
+                header: {
+                  groups: showSubsidiary
+                    ? [{ id: "subsidiary", fields: [{ key: "subsidiary_id", visible: true }] }]
+                    : [],
+                },
+                lines: { columns: [] },
+                actions: [],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -198,7 +252,9 @@ test("warehouse picker appears for stocked invoice lines when operators can choo
   t.after(done);
 
   assert.match(document.body.textContent ?? "", /Warehouse/);
-  const selectedWarehouse = [...document.querySelectorAll("button")].filter((button) => button.textContent?.trim() === "North");
+  const selectedWarehouse = [...document.querySelectorAll("button")].filter(
+    (button) => button.textContent?.trim() === "North",
+  );
   assert.equal(selectedWarehouse.length, 1, "only the stocked row exposes its selected warehouse");
 });
 
@@ -227,7 +283,11 @@ test("an unset subsidiary editor does not display the root as its selection", as
   t.after(done);
 
   assert.match(document.body.textContent ?? "", /Subsidiary/);
-  assert.doesNotMatch(document.body.textContent ?? "", /Main Co/, "an unset field must not impersonate the root subsidiary");
+  assert.doesNotMatch(
+    document.body.textContent ?? "",
+    /Main Co/,
+    "an unset field must not impersonate the root subsidiary",
+  );
 });
 
 test("an unset subsidiary remains visibly unset in view mode", async (t) => {
@@ -242,7 +302,11 @@ test("an unset subsidiary remains visibly unset in view mode", async (t) => {
   t.after(done);
 
   assert.match(document.body.textContent ?? "", /Subsidiary/);
-  assert.doesNotMatch(document.body.textContent ?? "", /Main Co/, "an unset field must not be presented as the root");
+  assert.doesNotMatch(
+    document.body.textContent ?? "",
+    /Main Co/,
+    "an unset field must not be presented as the root",
+  );
 });
 
 test("a converted-bill save sends stable line identities and no native evidence", async (t) => {
@@ -368,7 +432,11 @@ test("a converted-bill save sends stable line identities and no native evidence"
   assert.equal(sentBodies.length, 1, "one save must have been sent");
   const firstLines = (sentBodies[0]!.lines ?? []) as Record<string, unknown>[];
   assert.equal(firstLines.length, 1);
-  assert.equal(firstLines[0]!.lineId, persistedLineId, "the save round-trips the loader line identity");
+  assert.equal(
+    firstLines[0]!.lineId,
+    persistedLineId,
+    "the save round-trips the loader line identity",
+  );
   assert.equal(
     firstLines[0]!.stockLocationId,
     lines[0]!.stock_location_id,

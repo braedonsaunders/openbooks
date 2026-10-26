@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from "zod";
 
 /** Typed request bodies for /api/hrm/recruiting/offer-templates. */
 export const createOfferTemplateBody = z.object({
@@ -15,4 +15,4 @@ export const createOfferTemplateBody = z.object({
     )
     .max(60)
     .optional(),
-})
+});

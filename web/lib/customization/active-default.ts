@@ -5,12 +5,12 @@
  * the designer already exposes (activate, or unset default first).
  */
 
-export type CustomizationDefaultKind = 'view' | 'form'
+export type CustomizationDefaultKind = "view" | "form";
 
 export type DefaultFlags = {
-  isDefault: boolean
-  isActive: boolean
-}
+  isDefault: boolean;
+  isActive: boolean;
+};
 
 /** Merge a PATCH onto the row that would be stored. Omitted flags stay. */
 export function nextDefaultFlags(
@@ -20,20 +20,20 @@ export function nextDefaultFlags(
   return {
     isDefault: patch.isDefault !== undefined ? patch.isDefault : existing.isDefault,
     isActive: patch.isActive !== undefined ? patch.isActive : existing.isActive,
-  }
+  };
 }
 
 export function inactiveDefaultMessage(kind: CustomizationDefaultKind): string {
-  return `An inactive ${kind} cannot be the default — activate it, or unset default before deactivating`
+  return `An inactive ${kind} cannot be the default — activate it, or unset default before deactivating`;
 }
 
 export function refuseInactiveDefault(args: {
-  kind: CustomizationDefaultKind
-  isDefault: boolean
-  isActive: boolean
+  kind: CustomizationDefaultKind;
+  isDefault: boolean;
+  isActive: boolean;
 }): { ok: true } | { ok: false; error: string } {
   if (args.isDefault && !args.isActive) {
-    return { ok: false, error: inactiveDefaultMessage(args.kind) }
+    return { ok: false, error: inactiveDefaultMessage(args.kind) };
   }
-  return { ok: true }
+  return { ok: true };
 }

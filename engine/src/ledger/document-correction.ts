@@ -1,50 +1,64 @@
 /** Controlled posted-document correction command. Adapters provide draft editing,
  * while the engine owns source locking, revision/scope checks and retained evidence. */
-import { sql } from 'drizzle-orm'
-import { db, schema, withOrgTransaction } from '../platform/db.ts'
-import { actorHasPermission } from '../organization/actor-permissions.ts'
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts'
-import { DOC_KIND_FEATURE } from '../records/document-kind-features.ts'
-import { documentKindPermissions } from '../records/document-kind-permissions.ts'
-import { actorAllowedSubsidiaryIds } from '../organization/actor-subsidiaries.ts'
-import { subsidiaryScopeAllows } from '../organization/subsidiary-scope.ts'
-import { documentRevisionCounterSql } from '../records/revision.ts'
+import { sql } from "drizzle-orm";
+import { db, schema, withOrgTransaction } from "../platform/db.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
 import {
-  DocumentEditError, requireDocumentEditRevision, validateCorrectionReason,
-  runDocumentVersionedTransaction, assertNoExistingDocumentCorrection, buildReversalLinkEvidence,
-} from '../records/document-edit-policy.ts'
-import { requestDocumentVoid, suggestVoidReversalDate } from './document-void.ts'
-import { loadDocumentEditCurrent } from './document-service.ts'
-import type { DocumentEditInput, DocumentEditCurrent } from './document-input.ts'
-import { closeModuleForDocument } from '../periods/period-policy.ts'
-import { postEntry } from '../journal/post-entry.ts'
-import { nextFreeEntryNumber } from '../records/entry-number.ts'
-import { loadFieldDefs } from '../records/custom-fields.ts'
-import { neg } from '../money/money.ts'
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from "../organization/org-feature-lock.ts";
+import { DOC_KIND_FEATURE } from "../records/document-kind-features.ts";
+import { documentKindPermissions } from "../records/document-kind-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { documentRevisionCounterSql } from "../records/revision.ts";
+import {
+  DocumentEditError,
+  requireDocumentEditRevision,
+  validateCorrectionReason,
+  runDocumentVersionedTransaction,
+  assertNoExistingDocumentCorrection,
+  buildReversalLinkEvidence,
+} from "../records/document-edit-policy.ts";
+import { requestDocumentVoid, suggestVoidReversalDate } from "./document-void.ts";
+import { loadDocumentEditCurrent } from "./document-service.ts";
+import type { DocumentEditInput, DocumentEditCurrent } from "./document-input.ts";
+import { closeModuleForDocument } from "../periods/period-policy.ts";
+import { postEntry } from "../journal/post-entry.ts";
+import { nextFreeEntryNumber } from "../records/entry-number.ts";
+import { loadFieldDefs } from "../records/custom-fields.ts";
+import { neg } from "../money/money.ts";
 import {
   postedCorrectionFieldClass,
   type PostedCorrectionOutcome,
-} from './posted-correction-fields.ts'
-import type { PostEntryLineInput } from '../journal/post-entry.ts'
+} from "./posted-correction-fields.ts";
+import type { PostEntryLineInput } from "../journal/post-entry.ts";
 
-type DocumentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type DocumentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export interface CorrectionContext {
-  orgId: string
-  userId: string
-  source: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction'
-  runFlows?: boolean
+  orgId: string;
+  userId: string;
+  source: "ui" | "api" | "mcp" | "assistant" | "posted_correction";
+  runFlows?: boolean;
 }
 /** Transitional editor port: callbacks participate in the ambient organization
  * transaction. No callback may commit, dispatch flows or perform external work. */
 export interface CorrectionDraftWriter {
-  createDraft(kind: string, options: {
-    allowedSubsidiaryIds: ReadonlySet<string> | null
-    subsidiaryId: string | null
-    runFlows: false
-    source: CorrectionContext['source']
-  }): Promise<{ id: string; documentNumber: string }>
-  applyEdit(id: string, current: DocumentEditCurrent, input: DocumentEditInput,
-    context: CorrectionContext): Promise<unknown>
+  createDraft(
+    kind: string,
+    options: {
+      allowedSubsidiaryIds: ReadonlySet<string> | null;
+      subsidiaryId: string | null;
+      runFlows: false;
+      source: CorrectionContext["source"];
+    },
+  ): Promise<{ id: string; documentNumber: string }>;
+  applyEdit(
+    id: string,
+    current: DocumentEditCurrent,
+    input: DocumentEditInput,
+    context: CorrectionContext,
+  ): Promise<unknown>;
 }
 
 /**
@@ -89,9 +103,19 @@ function isDimensionField(field: string): field is DimensionField {
 
 /** Header scalar body keys compared against the stored source row. */
 const POSTED_HEADER_FIELDS = [
-  "partyId", "paymentCardId", "documentDate", "dueDate", "postingDate",
-  "expectedPayDate", "subsidiaryId", "currency", "billingMethod",
-  "isFinalInvoice", "paymentHoldReason", "externalRef", "externalSource",
+  "partyId",
+  "paymentCardId",
+  "documentDate",
+  "dueDate",
+  "postingDate",
+  "expectedPayDate",
+  "subsidiaryId",
+  "currency",
+  "billingMethod",
+  "isFinalInvoice",
+  "paymentHoldReason",
+  "externalRef",
+  "externalSource",
   ...Object.keys(POSTED_METADATA_COLUMNS),
   ...Object.keys(POSTED_DIMENSION_COLUMNS),
 ] as const;
@@ -105,10 +129,24 @@ const POSTED_LINE_MATERIAL_FIELDS = [
   // taxInputAmount is excluded: it is never operator input (the edit API
   // takes amount, which persists as the input column), so its stored value
   // can never name a touch the body did not also carry as amount.
-  "accountId", "itemId", "description", "quantity", "unit", "unitPrice",
-  "amount", "taxCodeId", "taxGroupId", "taxAmount",
-  "taxOverridden", "partyId", "departmentId", "projectId", "locationId",
-  "classId", "workFrom", "workTo",
+  "accountId",
+  "itemId",
+  "description",
+  "quantity",
+  "unit",
+  "unitPrice",
+  "amount",
+  "taxCodeId",
+  "taxGroupId",
+  "taxAmount",
+  "taxOverridden",
+  "partyId",
+  "departmentId",
+  "projectId",
+  "locationId",
+  "classId",
+  "workFrom",
+  "workTo",
 ] as const;
 
 const POSTED_LINE_IDENTITY_FIELDS: ReadonlySet<string> = new Set(["lineId"]);
@@ -128,7 +166,10 @@ function normalizeCorrectionDecimal(value: unknown): unknown {
   if (typeof scalar !== "string") return scalar;
   if (!/^-?\d+(\.\d+)?$/.test(scalar)) return scalar;
   const negated = scalar.startsWith("-");
-  const digits = (negated ? scalar.slice(1) : scalar).replace(/^0+(?=\d)/, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+  const digits = (negated ? scalar.slice(1) : scalar)
+    .replace(/^0+(?=\d)/, "")
+    .replace(/(\.\d*?)0+$/, "$1")
+    .replace(/\.$/, "");
   return `${negated ? "-" : ""}${digits === "" ? "0" : digits}`;
 }
 
@@ -152,15 +193,14 @@ function canonicalCorrectionLine(line: Record<string, unknown>): Record<string, 
 }
 
 /** Supplied line-custom keys the stored bag does not already carry as-is. */
-function changedLineCustomKeys(
-  line: Record<string, unknown>,
-  storedCustom: unknown,
-): string[] {
+function changedLineCustomKeys(line: Record<string, unknown>, storedCustom: unknown): string[] {
   const supplied = line.custom;
   if (!supplied || typeof supplied !== "object" || Array.isArray(supplied)) return [];
-  const stored = (storedCustom && typeof storedCustom === "object" && !Array.isArray(storedCustom)
-    ? storedCustom
-    : {}) as Record<string, unknown>;
+  const stored = (
+    storedCustom && typeof storedCustom === "object" && !Array.isArray(storedCustom)
+      ? storedCustom
+      : {}
+  ) as Record<string, unknown>;
   return Object.entries(supplied as Record<string, unknown>)
     .filter(([, value]) => value !== undefined)
     .filter(([key, value]) => JSON.stringify(value ?? null) !== JSON.stringify(stored[key] ?? null))
@@ -176,11 +216,12 @@ function isEmptyCorrectionValue(value: unknown): boolean {
 }
 
 function correctionLineCarriesExtra(line: Record<string, unknown>): boolean {
-  return Object.entries(line).some(([key, value]) =>
-    !POSTED_LINE_IDENTITY_FIELDS.has(key) &&
-    !(POSTED_LINE_MATERIAL_FIELDS as readonly string[]).includes(key) &&
-    key !== "custom" &&
-    !isEmptyCorrectionValue(value),
+  return Object.entries(line).some(
+    ([key, value]) =>
+      !POSTED_LINE_IDENTITY_FIELDS.has(key) &&
+      !(POSTED_LINE_MATERIAL_FIELDS as readonly string[]).includes(key) &&
+      key !== "custom" &&
+      !isEmptyCorrectionValue(value),
   );
 }
 
@@ -201,7 +242,9 @@ async function loadCorrectionSource(
   orgId: string,
   sourceId: string,
 ): Promise<CorrectionSourceHeader | null> {
-  const rows = (await runner.execute<Record<string, unknown>>(sql`
+  const rows = (
+    await runner.execute<Record<string, unknown>>(
+      sql`
     select kind, status, subsidiary_id as "subsidiaryId",
            document_number as "documentNumber",
            document_date::text as "documentDate",
@@ -220,9 +263,16 @@ async function loadCorrectionSource(
            custom, extra_dims as "extraDims"
       from documents
      where id = ${sourceId} and org_id = ${orgId}
-  `, 'objects'))[0] as CorrectionSourceHeader | undefined;
+  `,
+      "objects",
+    )
+  )[0] as CorrectionSourceHeader | undefined;
   if (!rows) return null;
-  return { ...rows, custom: (rows.custom ?? {}) as Record<string, unknown>, extraDims: (rows.extraDims ?? {}) as Record<string, unknown> };
+  return {
+    ...rows,
+    custom: (rows.custom ?? {}) as Record<string, unknown>,
+    extraDims: (rows.extraDims ?? {}) as Record<string, unknown>,
+  };
 }
 
 /** Body keys that differ from the stored source row: the correction's touch set. */
@@ -239,8 +289,10 @@ function changedCorrectionFields(
     const after = normalizeCorrectionScalar(input[field]);
     if (JSON.stringify(before) !== JSON.stringify(after)) changed.push(field);
   }
-  if (input.extraDims !== undefined &&
-      JSON.stringify(input.extraDims ?? {}) !== JSON.stringify(source.extraDims)) {
+  if (
+    input.extraDims !== undefined &&
+    JSON.stringify(input.extraDims ?? {}) !== JSON.stringify(source.extraDims)
+  ) {
     changed.push("extraDims");
   }
   // The writer merges supplied custom keys over the stored bag, so only
@@ -260,17 +312,26 @@ function changedCorrectionFields(
     // storedLines pairs the canonical material shape with the raw custom
     // bag; line custom merges supplied-only like the header bag, so only
     // supplied keys compare (stored-only native evidence is never a touch).
-    const sameShape = sameLength && lines.every((line, index) => {
-      const stored = storedLines[index] as { canonical: Record<string, unknown>; custom: unknown };
-      return JSON.stringify(canonicalCorrectionLine(line)) === JSON.stringify(stored.canonical) &&
-        changedLineCustomKeys(line, stored.custom).length === 0 &&
-        !correctionLineCarriesExtra(line);
-    });
+    const sameShape =
+      sameLength &&
+      lines.every((line, index) => {
+        const stored = storedLines[index] as {
+          canonical: Record<string, unknown>;
+          custom: unknown;
+        };
+        return (
+          JSON.stringify(canonicalCorrectionLine(line)) === JSON.stringify(stored.canonical) &&
+          changedLineCustomKeys(line, stored.custom).length === 0 &&
+          !correctionLineCarriesExtra(line)
+        );
+      });
     if (!sameShape) changed.push("lines");
   }
-  if (input.unsplitDistributionGroups !== undefined &&
-      Array.isArray(input.unsplitDistributionGroups) &&
-      input.unsplitDistributionGroups.length > 0) {
+  if (
+    input.unsplitDistributionGroups !== undefined &&
+    Array.isArray(input.unsplitDistributionGroups) &&
+    input.unsplitDistributionGroups.length > 0
+  ) {
     changed.push("lines");
   }
   return [...new Set(changed)];
@@ -308,11 +369,24 @@ export async function planPostedCorrection(
   const reason = validateCorrectionReason(body.amendmentReason);
   const source = await loadCorrectionSource(db, orgId, sourceId);
   if (!source) throw new DocumentEditError(404, "not found");
-  if ((await db.execute(sql`select id from rebate_claims where org_id=${orgId} and settlement_document_id=${sourceId} limit 1`, 'objects'))[0]) throw new DocumentEditError(422,'Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates');
+  if (
+    (
+      await db.execute(
+        sql`select id from rebate_claims where org_id=${orgId} and settlement_document_id=${sourceId} limit 1`,
+        "objects",
+      )
+    )[0]
+  )
+    throw new DocumentEditError(
+      422,
+      "Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates",
+    );
   if (source.status !== "posted") {
     throw new DocumentEditError(422, "only a posted document can create a correcting replacement");
   }
-  const storedLines = (await db.execute<Record<string, unknown>>(sql`
+  const storedLines = (
+    await db.execute<Record<string, unknown>>(
+      sql`
     select account_id as "accountId", item_id as "itemId", description,
            quantity::text as quantity, unit, unit_price::text as "unitPrice",
            amount::text as amount, tax_code_id as "taxCodeId",
@@ -325,7 +399,10 @@ export async function planPostedCorrection(
       from document_lines
      where org_id = ${orgId} and document_id = ${sourceId}
      order by line_number, id
-  `, 'objects')).map((row) => ({
+  `,
+      "objects",
+    )
+  ).map((row) => ({
     // The edit API takes the gross input amount, which persists as
     // tax_input_amount; the net amount column is derived from it. An
     // untouched inclusive-tax row round-trips gross-to-gross, so the
@@ -336,29 +413,45 @@ export async function planPostedCorrection(
   const changed = changedCorrectionFields(source, storedLines, body);
   const defs = await loadFieldDefs("documents", source.kind);
   const defKeys = new Set(defs.map((def) => def.key));
-  const classes = new Map(changed.map((field) => [field, postedCorrectionFieldClass(field, defKeys)]));
+  const classes = new Map(
+    changed.map((field) => [field, postedCorrectionFieldClass(field, defKeys)]),
+  );
   if ([...classes.values()].some((value) => value === "financial")) {
     return {
-      sourceId, outcome: "void-and-reissue", changedFields: changed,
-      metadataFields: [], metadataAfter: {}, dimensionAfter: {},
-      dimensionFields: [], headerOnlyDimensions: [],
-      reclassDimensions: [], customMetadata: {}, source, reason,
+      sourceId,
+      outcome: "void-and-reissue",
+      changedFields: changed,
+      metadataFields: [],
+      metadataAfter: {},
+      dimensionAfter: {},
+      dimensionFields: [],
+      headerOnlyDimensions: [],
+      reclassDimensions: [],
+      customMetadata: {},
+      source,
+      reason,
     };
   }
   const metadataFields = changed.filter((field) => classes.get(field) === "metadata");
   const dimensionFields = changed.filter(isDimensionField);
   const metadataAfter: Record<string, unknown> = {};
   for (const field of metadataFields) {
-    metadataAfter[field] = normalizeCorrectionScalar((body as unknown as Record<string, unknown>)[field]);
+    metadataAfter[field] = normalizeCorrectionScalar(
+      (body as unknown as Record<string, unknown>)[field],
+    );
   }
   const dimensionAfter: Partial<Record<DimensionField, string | null>> = {};
   for (const field of dimensionFields) {
-    dimensionAfter[field] = normalizeCorrectionScalar((body as unknown as Record<string, unknown>)[field]) as string | null;
+    dimensionAfter[field] = normalizeCorrectionScalar(
+      (body as unknown as Record<string, unknown>)[field],
+    ) as string | null;
   }
   const customMetadata: Record<string, unknown> = {};
   for (const field of changed) {
     if (field.startsWith("custom.") && classes.get(field) === "metadata") {
-      customMetadata[field.slice("custom.".length)] = (body.custom as Record<string, unknown>)[field.slice("custom.".length)];
+      customMetadata[field.slice("custom.".length)] = (body.custom as Record<string, unknown>)[
+        field.slice("custom.".length)
+      ];
     }
   }
   if (changed.length === 0) {
@@ -373,12 +466,16 @@ export async function planPostedCorrection(
   const reclassDimensions: Array<{ field: DimensionField; before: string; after: string }> = [];
   for (const field of dimensionFields) {
     const before = normalizeCorrectionScalar(source[field]) as string | null;
-    const after = normalizeCorrectionScalar((body as unknown as Record<string, unknown>)[field]) as string | null;
+    const after = normalizeCorrectionScalar((body as unknown as Record<string, unknown>)[field]) as
+      string | null;
     if (before === after || before == null || after == null) {
       headerOnlyDimensions.push(field);
       continue;
     }
-    const carried = (await db.execute<{ found: number }>(sql`
+    const carried =
+      (
+        await db.execute<{ found: number }>(
+          sql`
       select 1 as found
         from journal_lines line
         join journal_entries entry
@@ -388,16 +485,26 @@ export async function planPostedCorrection(
          and entry.status = 'posted'
          and ${sql.raw(`line.${POSTED_DIMENSION_COLUMNS[field]}`)} = ${before}
        limit 1
-    `, 'objects')).length > 0;
+    `,
+          "objects",
+        )
+      ).length > 0;
     if (carried) reclassDimensions.push({ field, before, after });
     else headerOnlyDimensions.push(field);
   }
   return {
     sourceId,
     outcome: reclassDimensions.length > 0 ? "reclass" : "metadata-correction",
-    changedFields: changed, metadataFields, metadataAfter, dimensionAfter,
-    dimensionFields, headerOnlyDimensions, reclassDimensions,
-    customMetadata, source, reason,
+    changedFields: changed,
+    metadataFields,
+    metadataAfter,
+    dimensionAfter,
+    dimensionFields,
+    headerOnlyDimensions,
+    reclassDimensions,
+    customMetadata,
+    source,
+    reason,
   };
 }
 
@@ -420,12 +527,16 @@ export async function refuseClosedOriginalPeriod(
     postingDate: plan.source.postingDate,
     subsidiaryId: plan.source.subsidiaryId,
   });
-  if (suggestion.suggestedOpen && !suggestion.fallbackToOpenPeriod &&
-      suggestion.suggestedDate === suggestion.originalDate) {
+  if (
+    suggestion.suggestedOpen &&
+    !suggestion.fallbackToOpenPeriod &&
+    suggestion.suggestedDate === suggestion.originalDate
+  ) {
     return;
   }
   // The period label already names its fiscal year; a bare date carries it.
-  const fiscalYear = suggestion.originalFiscalYear != null ? ` FY${suggestion.originalFiscalYear}` : "";
+  const fiscalYear =
+    suggestion.originalFiscalYear != null ? ` FY${suggestion.originalFiscalYear}` : "";
   const period = suggestion.originalPeriodName ?? `${plan.source.documentDate}${fiscalYear}`;
   throw new PostedCorrectionError(
     422,
@@ -448,24 +559,32 @@ async function authorizePostedCorrection(
   source: { kind: string; status: string; subsidiaryId: string | null },
   ctx: CorrectionContext,
 ): Promise<ReadonlySet<string> | null> {
-  const allowed = await actorAllowedSubsidiaryIds(tx, ctx.orgId, ctx.userId)
+  const allowed = await actorAllowedSubsidiaryIds(tx, ctx.orgId, ctx.userId);
   if (!subsidiaryScopeAllows(allowed, source.subsidiaryId)) {
-    throw new DocumentEditError(404, 'not found')
+    throw new DocumentEditError(404, "not found");
   }
-  const permissions = documentKindPermissions(source.kind)
+  const permissions = documentKindPermissions(source.kind);
   if (!permissions) {
-    throw new DocumentEditError(422, 'this transaction type requires its dedicated correction workflow')
+    throw new DocumentEditError(
+      422,
+      "this transaction type requires its dedicated correction workflow",
+    );
   }
   for (const permission of new Set([permissions.edit, permissions.approve])) {
-    if (!await actorHasPermission(tx, ctx.orgId, ctx.userId, permission)) {
-      throw new DocumentEditError(403, `missing permission: ${permission}`)
+    if (!(await actorHasPermission(tx, ctx.orgId, ctx.userId, permission))) {
+      throw new DocumentEditError(403, `missing permission: ${permission}`);
     }
   }
-  const feature = DOC_KIND_FEATURE[source.kind]
-  if (feature && !await lockAndCheckOrgFeature(tx, ctx.orgId, feature)) {
-    throw new DocumentEditError(422, 'enable the transaction feature in Company Settings → Features before creating a correction')
+  const feature = DOC_KIND_FEATURE[source.kind];
+  if (feature && !(await lockAndCheckOrgFeature(tx, ctx.orgId, feature))) {
+    throw new DocumentEditError(
+      422,
+      "enable the transaction feature in Company Settings → Features before creating a correction",
+    );
   }
-  const existingCorrection = (await tx.execute<{ documentNumber: string }>(sql`
+  const existingCorrection = (
+    await tx.execute<{ documentNumber: string }>(
+      sql`
     select replacement.document_number as "documentNumber"
       from document_links link
       join documents replacement
@@ -475,13 +594,27 @@ async function authorizePostedCorrection(
        and link.to_document_id = ${sourceId}
        and link.link_type = 'reverses'
      limit 1
-  `, 'objects'))[0]
-  assertNoExistingDocumentCorrection(existingCorrection?.documentNumber ?? null)
-  if ((await tx.execute(sql`select id from rebate_claims where org_id=${ctx.orgId} and settlement_document_id=${sourceId} limit 1`, 'objects'))[0]) throw new DocumentEditError(422,'Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates')
-  if (source.status !== 'posted') {
-    throw new DocumentEditError(422, 'only a posted document can create a correcting replacement')
+  `,
+      "objects",
+    )
+  )[0];
+  assertNoExistingDocumentCorrection(existingCorrection?.documentNumber ?? null);
+  if (
+    (
+      await tx.execute(
+        sql`select id from rebate_claims where org_id=${ctx.orgId} and settlement_document_id=${sourceId} limit 1`,
+        "objects",
+      )
+    )[0]
+  )
+    throw new DocumentEditError(
+      422,
+      "Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates",
+    );
+  if (source.status !== "posted") {
+    throw new DocumentEditError(422, "only a posted document can create a correcting replacement");
   }
-  return allowed
+  return allowed;
 }
 
 export async function createPostedCorrection(
@@ -490,84 +623,117 @@ export async function createPostedCorrection(
   ctx: CorrectionContext,
   writer: CorrectionDraftWriter,
 ): Promise<{ id: string; documentNumber: string; kind: string }> {
-  const expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
-  const reason = validateCorrectionReason(body.amendmentReason)
+  const expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt);
+  const reason = validateCorrectionReason(body.amendmentReason);
 
-  return await withOrgTransaction(ctx.orgId, async () => runDocumentVersionedTransaction<
-    DocumentTransaction,
-    { kind: string; status: string; subsidiaryId: string | null; documentDate: string; updatedAt: string },
-    { id: string; documentNumber: string; kind: string }
-  >({
-    expectedRevision,
-    transaction: (work) => db.transaction(work),
-    // The source revision is authoritative only while this lock is held. The
-    // caller's outer command transaction (when present) is reused, so the lock
-    // spans every dependent replacement write.
-    lock: async (tx) => {
-      await acquireOrgFeatureGateLock(tx, ctx.orgId)
-      return (await tx.execute<{
-      kind: string
-      status: string
-      subsidiaryId: string | null
-      documentDate: string
-      updatedAt: string
-    }>(sql`
+  return await withOrgTransaction(ctx.orgId, async () =>
+    runDocumentVersionedTransaction<
+      DocumentTransaction,
+      {
+        kind: string;
+        status: string;
+        subsidiaryId: string | null;
+        documentDate: string;
+        updatedAt: string;
+      },
+      { id: string; documentNumber: string; kind: string }
+    >({
+      expectedRevision,
+      transaction: (work) => db.transaction(work),
+      // The source revision is authoritative only while this lock is held. The
+      // caller's outer command transaction (when present) is reused, so the lock
+      // spans every dependent replacement write.
+      lock: async (tx) => {
+        await acquireOrgFeatureGateLock(tx, ctx.orgId);
+        return (
+          (
+            await tx.execute<{
+              kind: string;
+              status: string;
+              subsidiaryId: string | null;
+              documentDate: string;
+              updatedAt: string;
+            }>(
+              sql`
       select kind, status, subsidiary_id as "subsidiaryId",
              document_date::text as "documentDate",
-             ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
+             ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
        from documents
        where id = ${sourceId} and org_id = ${ctx.orgId}
        for update
-    `, 'objects'))[0] ?? null
-    },
-    mutate: async (tx, source) => {
-      const allowed = await authorizePostedCorrection(tx, sourceId, source, ctx)
-      // The replacement inherits the source's (already scope-gated)
-      // subsidiary unless the body re-homes it; the factory validates the
-      // result against the actor's real scope, never the org root.
-      const replacement = await writer.createDraft(source.kind, {
-        allowedSubsidiaryIds: allowed,
-        subsidiaryId: body.subsidiaryId ?? source.subsidiaryId,
-        runFlows: false,
-        source: ctx.source,
-      })
-      const row = await loadDocumentEditCurrent(replacement.id, ctx.orgId)
-      if (!row) throw new Error(`replacement document ${replacement.id} disappeared during initialization`)
-      if (row.kind !== source.kind || row.status !== 'draft' || !subsidiaryScopeAllows(allowed, row.subsidiaryId)) {
-        throw new DocumentEditError(422, 'the replacement must be a draft of the same transaction type in an authorized subsidiary')
-      }
-      await writer.applyEdit(
-        replacement.id,
-        row,
-        {
-          ...body,
-          // A reissue replaces the source transaction, so it inherits the
-          // source's date unless the amendment moves it. A fresh draft
-          // defaults to today, which would strand the replacement in a later
-          // period the locked original cannot post back into.
-          documentDate: body.documentDate ?? source.documentDate,
-          expectedUpdatedAt: row.updatedAt,
-          // The drawer copies the SOURCE document's rows into the correction
-          // body, identities included: on the fresh replacement those are
-          // foreign, so the copy boundary treats every copied line as new.
-          lines: body.lines?.map((line) => {
-            if (line.lineId === undefined || line.lineId === null) return line
-            const copy = { ...line }
-            delete copy.lineId
-            return copy
-          }),
-        },
-        {
-          ...ctx,
-          source: 'posted_correction',
+    `,
+              "objects",
+            )
+          )[0] ?? null
+        );
+      },
+      mutate: async (tx, source) => {
+        const allowed = await authorizePostedCorrection(tx, sourceId, source, ctx);
+        // The replacement inherits the source's (already scope-gated)
+        // subsidiary unless the body re-homes it; the factory validates the
+        // result against the actor's real scope, never the org root.
+        const replacement = await writer.createDraft(source.kind, {
+          allowedSubsidiaryIds: allowed,
+          subsidiaryId: body.subsidiaryId ?? source.subsidiaryId,
           runFlows: false,
-        },
-      )
-      const edited = await loadDocumentEditCurrent(replacement.id, ctx.orgId)
-      if (!edited || edited.kind !== source.kind || edited.status !== 'draft' || !subsidiaryScopeAllows(allowed, edited.subsidiaryId)) {
-        throw new DocumentEditError(422, 'the correction editor did not retain an authorized draft; reload and retry the correction')
-      }
-      const stamped = await tx.execute<{ id: string }>(sql`
+          source: ctx.source,
+        });
+        const row = await loadDocumentEditCurrent(replacement.id, ctx.orgId);
+        if (!row)
+          throw new Error(
+            `replacement document ${replacement.id} disappeared during initialization`,
+          );
+        if (
+          row.kind !== source.kind ||
+          row.status !== "draft" ||
+          !subsidiaryScopeAllows(allowed, row.subsidiaryId)
+        ) {
+          throw new DocumentEditError(
+            422,
+            "the replacement must be a draft of the same transaction type in an authorized subsidiary",
+          );
+        }
+        await writer.applyEdit(
+          replacement.id,
+          row,
+          {
+            ...body,
+            // A reissue replaces the source transaction, so it inherits the
+            // source's date unless the amendment moves it. A fresh draft
+            // defaults to today, which would strand the replacement in a later
+            // period the locked original cannot post back into.
+            documentDate: body.documentDate ?? source.documentDate,
+            expectedUpdatedAt: row.updatedAt,
+            // The drawer copies the SOURCE document's rows into the correction
+            // body, identities included: on the fresh replacement those are
+            // foreign, so the copy boundary treats every copied line as new.
+            lines: body.lines?.map((line) => {
+              if (line.lineId === undefined || line.lineId === null) return line;
+              const copy = { ...line };
+              delete copy.lineId;
+              return copy;
+            }),
+          },
+          {
+            ...ctx,
+            source: "posted_correction",
+            runFlows: false,
+          },
+        );
+        const edited = await loadDocumentEditCurrent(replacement.id, ctx.orgId);
+        if (
+          !edited ||
+          edited.kind !== source.kind ||
+          edited.status !== "draft" ||
+          !subsidiaryScopeAllows(allowed, edited.subsidiaryId)
+        ) {
+          throw new DocumentEditError(
+            422,
+            "the correction editor did not retain an authorized draft; reload and retry the correction",
+          );
+        }
+        const stamped = await tx.execute<{ id: string }>(
+          sql`
         update documents
            set custom = coalesce(custom, '{}'::jsonb) ||
              ${JSON.stringify({
@@ -581,38 +747,44 @@ export async function createPostedCorrection(
                updated_by = ${ctx.userId}
          where id = ${replacement.id} and org_id = ${ctx.orgId}
          returning id
-      `, 'objects')
-      if (stamped.length !== 1) {
-        throw new DocumentEditError(409, 'the replacement could not be saved; reload the source and retry the correction')
-      }
-      await tx.insert(schema.documentLinks).values({
-        orgId: ctx.orgId,
-        ...buildReversalLinkEvidence({
-          fromDocumentId: replacement.id,
-          toDocumentId: sourceId,
-          reason,
-          requestedBy: ctx.userId,
-        }),
-        createdBy: ctx.userId,
-        updatedBy: ctx.userId,
-      })
-      await tx.execute(sql`
+      `,
+          "objects",
+        );
+        if (stamped.length !== 1) {
+          throw new DocumentEditError(
+            409,
+            "the replacement could not be saved; reload the source and retry the correction",
+          );
+        }
+        await tx.insert(schema.documentLinks).values({
+          orgId: ctx.orgId,
+          ...buildReversalLinkEvidence({
+            fromDocumentId: replacement.id,
+            toDocumentId: sourceId,
+            reason,
+            requestedBy: ctx.userId,
+          }),
+          createdBy: ctx.userId,
+          updatedBy: ctx.userId,
+        });
+        await tx.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (
           ${ctx.orgId}, 'documents', ${replacement.id}, 'insert',
           ${JSON.stringify({
-            mode: 'posted_correction_draft',
+            mode: "posted_correction_draft",
             sourceDocumentId: sourceId,
             reason,
           })}::jsonb,
           ${ctx.userId}, 'posted_correction'
         )
-      `)
-      return { ...replacement, kind: source.kind }
-    },
-  }))
-  }
+      `);
+        return { ...replacement, kind: source.kind };
+      },
+    }),
+  );
+}
 
 type ReclassPostedLeg = {
   entryId: string;
@@ -638,7 +810,7 @@ type ReclassPostedLeg = {
   memo: string | null;
   extraDims: Record<string, unknown>;
   custom: Record<string, unknown>;
-}
+};
 
 /**
  * The header writes one in-place correction applies: metadata columns,
@@ -659,16 +831,23 @@ function inPlaceCorrectionWrites(plan: PostedCorrectionPlan): {
     before[field] = normalizeCorrectionScalar(plan.source[field]);
     after[field] = plan.metadataAfter[field] ?? null;
     const nextMeta = after[field] as string | null;
-    sets.push(nextMeta == null ? sql`${sql.raw(column)} = null` : sql`${sql.raw(column)} = ${nextMeta}`);
+    sets.push(
+      nextMeta == null ? sql`${sql.raw(column)} = null` : sql`${sql.raw(column)} = ${nextMeta}`,
+    );
   }
   // Reclassified dimensions re-point the header link too, so operational
   // reports that inherit the header dimension follow the reclass.
-  for (const field of [...plan.headerOnlyDimensions, ...plan.reclassDimensions.map((dim) => dim.field)]) {
+  for (const field of [
+    ...plan.headerOnlyDimensions,
+    ...plan.reclassDimensions.map((dim) => dim.field),
+  ]) {
     const column = POSTED_DIMENSION_COLUMNS[field];
     before[field] = normalizeCorrectionScalar(plan.source[field]);
     after[field] = plan.dimensionAfter[field] ?? null;
     const next = after[field] as string | null;
-    sets.push(next == null ? sql`${sql.raw(column)} = null` : sql`${sql.raw(column)} = ${next}::uuid`);
+    sets.push(
+      next == null ? sql`${sql.raw(column)} = null` : sql`${sql.raw(column)} = ${next}::uuid`,
+    );
   }
   return { sets, before, after };
 }
@@ -709,7 +888,8 @@ async function applyDimensionReclass(
   ctx: CorrectionContext,
 ): Promise<{ reclassEntryIds: string[] }> {
   const module = closeModuleForDocument(plan.source.kind);
-  const legs = await tx.execute<ReclassPostedLeg>(sql`
+  const legs = await tx.execute<ReclassPostedLeg>(
+    sql`
     select entry.id as "entryId", entry.origin as "entryOrigin",
            entry.posting_date::text as "postingDate", entry.period_id as "periodId",
            entry.book_id as "bookId", line.account_id as "accountId",
@@ -733,16 +913,25 @@ async function applyDimensionReclass(
        and not exists (select 1 from book_entry_replications replica
                         where replica.org_id = entry.org_id and replica.replica_entry_id = entry.id)
      order by entry.book_id, entry.posting_date, entry.id, line.line_number, line.id
-  `, 'objects');
+  `,
+    "objects",
+  );
   if (legs.some((leg) => leg.isCurrencyAdjustment)) {
-    throw new DocumentEditError(422, "Currency adjustment dimensions are retained with the cleared residual. Void the adjustment through its native workflow and create the replacement with the required dimensions.");
+    throw new DocumentEditError(
+      422,
+      "Currency adjustment dimensions are retained with the cleared residual. Void the adjustment through its native workflow and create the replacement with the required dimensions.",
+    );
   }
-  const subsidiaryId = plan.source.subsidiaryId ??
-    legs.find((leg) => leg.subsidiaryId != null)?.subsidiaryId ?? null;
+  const subsidiaryId =
+    plan.source.subsidiaryId ?? legs.find((leg) => leg.subsidiaryId != null)?.subsidiaryId ?? null;
   if (!subsidiaryId) {
-    throw new DocumentEditError(422, "the reclass needs a legal entity — the posted document and its legs carry none");
+    throw new DocumentEditError(
+      422,
+      "the reclass needs a legal entity — the posted document and its legs carry none",
+    );
   }
-  const currency = plan.source.currency ?? legs.find((leg) => leg.currency != null)?.currency ?? null;
+  const currency =
+    plan.source.currency ?? legs.find((leg) => leg.currency != null)?.currency ?? null;
   const reclassEntryIds: string[] = [];
   const books = [...new Set(legs.map((leg) => leg.bookId))];
   for (const bookId of books) {
@@ -750,10 +939,15 @@ async function applyDimensionReclass(
     const bookLegs = legs.filter((row) => row.bookId === bookId);
     const postingContext = bookLegs.find((leg) => leg.entryOrigin !== "correction") ?? bookLegs[0];
     if (!postingContext?.postingDate || !postingContext.periodId) {
-      throw new DocumentEditError(422, "the posted entry has no posting date or period for its dimension reclass");
+      throw new DocumentEditError(
+        422,
+        "the posted entry has no posting date or period for its dimension reclass",
+      );
     }
     for (const leg of bookLegs) {
-      const changedDimensions = plan.reclassDimensions.filter((dim) => leg[dim.field] === dim.before);
+      const changedDimensions = plan.reclassDimensions.filter(
+        (dim) => leg[dim.field] === dim.before,
+      );
       if (changedDimensions.length === 0) continue;
       const carried = {
         accountId: leg.accountId,
@@ -773,11 +967,15 @@ async function applyDimensionReclass(
         custom: leg.custom,
       };
       const outLeg: PostEntryLineInput = {
-        ...carried, amount: neg(leg.amount), txnAmount: neg(leg.txnAmount),
+        ...carried,
+        amount: neg(leg.amount),
+        txnAmount: neg(leg.txnAmount),
         quantity: leg.quantity == null ? null : neg(leg.quantity),
       };
       const inLeg: PostEntryLineInput = {
-        ...carried, amount: leg.amount, txnAmount: leg.txnAmount,
+        ...carried,
+        amount: leg.amount,
+        txnAmount: leg.txnAmount,
         quantity: leg.quantity,
       };
       for (const dim of changedDimensions) inLeg[dim.field] = dim.after;
@@ -788,7 +986,11 @@ async function applyDimensionReclass(
       orgId: ctx.orgId,
       bookId,
       subsidiaryId,
-      entryNumber: await nextFreeEntryNumber(tx, ctx.orgId, `RECLASS-${plan.source.documentNumber}`),
+      entryNumber: await nextFreeEntryNumber(
+        tx,
+        ctx.orgId,
+        `RECLASS-${plan.source.documentNumber}`,
+      ),
       postingDate: postingContext.postingDate,
       periodId: postingContext.periodId,
       memo: `Reclass ${plan.reclassDimensions.map((dim) => dim.field).join(", ")} on ${plan.source.documentNumber}`,
@@ -808,23 +1010,26 @@ async function applyDimensionReclass(
     reclassEntryIds.push(posted.entryId);
   }
   if (reclassEntryIds.length === 0) {
-    throw new DocumentEditError(422, "the posted legs no longer carry the old dimension — reload and retry the correction");
+    throw new DocumentEditError(
+      422,
+      "the posted legs no longer carry the old dimension — reload and retry the correction",
+    );
   }
   return { reclassEntryIds };
 }
 
 export type CorrectPostedDocumentResult =
   | {
-    kind: "void-and-reissue";
-    replacement: { id: string; documentNumber: string; kind: string };
-    voidResult: Awaited<ReturnType<typeof requestDocumentVoid>>;
-  }
+      kind: "void-and-reissue";
+      replacement: { id: string; documentNumber: string; kind: string };
+      voidResult: Awaited<ReturnType<typeof requestDocumentVoid>>;
+    }
   | {
-    kind: "metadata-correction" | "reclass";
-    replacement: { id: string; documentNumber: string; kind: string };
-    voidResult: null;
-    reclassEntryIds: string[];
-  };
+      kind: "metadata-correction" | "reclass";
+      replacement: { id: string; documentNumber: string; kind: string };
+      voidResult: null;
+      reclassEntryIds: string[];
+    };
 
 /**
  * Correct a posted document through the authoritative field classification:
@@ -850,53 +1055,72 @@ export async function correctPostedDocument(
     return withOrgTransaction(context.orgId, async () => {
       const replacement = await createPostedCorrection(sourceId, input, context, writer);
       const voidResult = await requestDocumentVoid({
-        documentId: sourceId, orgId: context.orgId, actorId: context.userId,
+        documentId: sourceId,
+        orgId: context.orgId,
+        actorId: context.userId,
         reason: plan.reason,
         source: context.source === "posted_correction" ? "ui" : context.source,
       });
       return { kind: "void-and-reissue", replacement, voidResult };
     });
   }
-  return withOrgTransaction(context.orgId, async () => runDocumentVersionedTransaction<
-    DocumentTransaction,
-    { kind: string; status: string; subsidiaryId: string | null; documentNumber: string; custom: unknown; updatedAt: string },
-    CorrectPostedDocumentResult
-  >({
-    expectedRevision,
-    transaction: (work) => db.transaction(work),
-    lock: async (tx) => {
-      await acquireOrgFeatureGateLock(tx, context.orgId);
-      return (await tx.execute<{
-        kind: string
-        status: string
-        subsidiaryId: string | null
-        documentNumber: string
-        custom: unknown
-        updatedAt: string
-      }>(sql`
+  return withOrgTransaction(context.orgId, async () =>
+    runDocumentVersionedTransaction<
+      DocumentTransaction,
+      {
+        kind: string;
+        status: string;
+        subsidiaryId: string | null;
+        documentNumber: string;
+        custom: unknown;
+        updatedAt: string;
+      },
+      CorrectPostedDocumentResult
+    >({
+      expectedRevision,
+      transaction: (work) => db.transaction(work),
+      lock: async (tx) => {
+        await acquireOrgFeatureGateLock(tx, context.orgId);
+        return (
+          (
+            await tx.execute<{
+              kind: string;
+              status: string;
+              subsidiaryId: string | null;
+              documentNumber: string;
+              custom: unknown;
+              updatedAt: string;
+            }>(
+              sql`
         select kind, status, subsidiary_id as "subsidiaryId",
                document_number as "documentNumber", custom,
-               ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
+               ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
          from documents
         where id = ${sourceId} and org_id = ${context.orgId}
         for update
-      `, 'objects'))[0] ?? null;
-    },
-    mutate: async (tx, locked) => {
-      await authorizePostedCorrection(tx, sourceId, locked, context);
-      let reclassEntryIds: string[] = [];
-      if (outcome === "reclass") {
-        await refuseClosedOriginalPeriod(tx, context.orgId, plan);
-        ({ reclassEntryIds } = await applyDimensionReclass(tx, plan, context));
-      }
-      const { sets, before, after } = inPlaceCorrectionWrites(plan);
-      const customChanged = Object.keys(plan.customMetadata).length > 0;
-      if (sets.length > 0 || customChanged) {
-        const fragments = [...sets];
-        if (customChanged) {
-          fragments.push(sql`custom = coalesce(custom, '{}'::jsonb) || ${JSON.stringify(plan.customMetadata)}::jsonb`);
+      `,
+              "objects",
+            )
+          )[0] ?? null
+        );
+      },
+      mutate: async (tx, locked) => {
+        await authorizePostedCorrection(tx, sourceId, locked, context);
+        let reclassEntryIds: string[] = [];
+        if (outcome === "reclass") {
+          await refuseClosedOriginalPeriod(tx, context.orgId, plan);
+          ({ reclassEntryIds } = await applyDimensionReclass(tx, plan, context));
         }
-        await tx.execute(sql`
+        const { sets, before, after } = inPlaceCorrectionWrites(plan);
+        const customChanged = Object.keys(plan.customMetadata).length > 0;
+        if (sets.length > 0 || customChanged) {
+          const fragments = [...sets];
+          if (customChanged) {
+            fragments.push(
+              sql`custom = coalesce(custom, '{}'::jsonb) || ${JSON.stringify(plan.customMetadata)}::jsonb`,
+            );
+          }
+          await tx.execute(sql`
           update documents
              set ${sql.join(fragments, sql`, `)},
                  updated_at = greatest(
@@ -906,21 +1130,30 @@ export async function correctPostedDocument(
                  updated_by = ${context.userId}
            where id = ${sourceId} and org_id = ${context.orgId}
         `);
-        for (const [field, value] of Object.entries(plan.customMetadata)) {
-          before[`custom.${field}`] = (locked.custom as Record<string, unknown> | null)?.[field] ?? null;
-          after[`custom.${field}`] = value;
+          for (const [field, value] of Object.entries(plan.customMetadata)) {
+            before[`custom.${field}`] =
+              (locked.custom as Record<string, unknown> | null)?.[field] ?? null;
+            after[`custom.${field}`] = value;
+          }
         }
-      }
-      await writeInPlaceCorrectionAudit(tx, context.orgId, sourceId, context.userId,
-        outcome === "reclass" ? "posted_dimension_reclass" : "posted_metadata_correction",
-        plan.reason, before, after,
-        reclassEntryIds.length > 0 ? { reclassEntryIds } : {});
-      return {
-        kind: outcome,
-        replacement: { id: sourceId, documentNumber: locked.documentNumber, kind: locked.kind },
-        voidResult: null,
-        reclassEntryIds,
-      };
-    },
-  }));
+        await writeInPlaceCorrectionAudit(
+          tx,
+          context.orgId,
+          sourceId,
+          context.userId,
+          outcome === "reclass" ? "posted_dimension_reclass" : "posted_metadata_correction",
+          plan.reason,
+          before,
+          after,
+          reclassEntryIds.length > 0 ? { reclassEntryIds } : {},
+        );
+        return {
+          kind: outcome,
+          replacement: { id: sourceId, documentNumber: locked.documentNumber, kind: locked.kind },
+          voidResult: null,
+          reclassEntryIds,
+        };
+      },
+    }),
+  );
 }

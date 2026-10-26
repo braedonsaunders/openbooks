@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import * as React from 'react'
+import * as React from "react";
 
 /**
  * Hydration-safe media-query match. Subscribes to the query (an external
@@ -11,13 +11,13 @@ import * as React from 'react'
 export function useMediaQuery(query: string, serverSnapshot = true): boolean {
   const subscribe = React.useCallback(
     (onChange: () => void) => {
-      const mq = window.matchMedia(query)
-      mq.addEventListener('change', onChange)
-      return () => mq.removeEventListener('change', onChange)
+      const mq = window.matchMedia(query);
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
     },
     [query],
-  )
-  const getSnapshot = React.useCallback(() => window.matchMedia(query).matches, [query])
-  const getServerSnapshot = React.useCallback(() => serverSnapshot, [serverSnapshot])
-  return React.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+  );
+  const getSnapshot = React.useCallback(() => window.matchMedia(query).matches, [query]);
+  const getServerSnapshot = React.useCallback(() => serverSnapshot, [serverSnapshot]);
+  return React.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

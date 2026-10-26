@@ -166,7 +166,10 @@ export class ShopifyClient {
    * failing the sync, up to the throttle budget. HTTP 429/5xx already
    * retry inside the shared connector loop.
    */
-  async graphql<T>(query: string, variables?: Record<string, unknown>): Promise<ShopifyGraphqlEnvelope<T>> {
+  async graphql<T>(
+    query: string,
+    variables?: Record<string, unknown>,
+  ): Promise<ShopifyGraphqlEnvelope<T>> {
     for (let attempt = 0; ; attempt += 1) {
       const res = await this.postGraphql({ query, variables: variables ?? {} });
       const payload = (await res.json()) as {
@@ -197,7 +200,9 @@ export class ShopifyClient {
       }
       if (errors.length > 0) {
         const first = errors[0]?.message ?? "unknown GraphQL error";
-        throw new Error(`Shopify Admin API refused the call: ${first} — correct the query or scopes and retry`);
+        throw new Error(
+          `Shopify Admin API refused the call: ${first} — correct the query or scopes and retry`,
+        );
       }
       if (res.status === 401 || res.status === 403) {
         throw new Error(
@@ -205,7 +210,9 @@ export class ShopifyClient {
         );
       }
       if (payload.data === undefined) {
-        throw new Error("Shopify answered without data or errors — retry the sync, and ask your administrator if it persists");
+        throw new Error(
+          "Shopify answered without data or errors — retry the sync, and ask your administrator if it persists",
+        );
       }
       return { data: payload.data, throttleStatus: throttle, cost };
     }
@@ -215,7 +222,10 @@ export class ShopifyClient {
   async *paginate<T>(
     query: string,
     variables: Record<string, unknown>,
-    pick: (data: unknown) => { edges: { node: T }[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } },
+    pick: (data: unknown) => {
+      edges: { node: T }[];
+      pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    },
   ): AsyncGenerator<T> {
     let after: string | null = null;
     for (;;) {
@@ -260,10 +270,14 @@ export class ShopifyClient {
     let objectCount: string | null = null;
     for (let poll = 0; poll < this.maxBulkPolls; poll += 1) {
       const current = await this.graphql<{
-        currentBulkOperation: { id: string; status: string; url: string | null; objectCount: string | null; errorCode: string | null } | null;
-      }>(
-        `{ currentBulkOperation(type: QUERY) { id status url objectCount errorCode } }`,
-      );
+        currentBulkOperation: {
+          id: string;
+          status: string;
+          url: string | null;
+          objectCount: string | null;
+          errorCode: string | null;
+        } | null;
+      }>(`{ currentBulkOperation(type: QUERY) { id status url objectCount errorCode } }`);
       const operation = current.data.currentBulkOperation;
       if (!operation) {
         throw new Error("Shopify lost the bulk export — run the catalog import again");
@@ -285,7 +299,11 @@ export class ShopifyClient {
         "Shopify bulk export did not finish in time — it keeps running at Shopify; poll Channels → Activity and re-import when it completes",
       );
     }
-    const file = await fetchWithConnectorRetry(url, { headers: { authorization: `Bearer ${this.token}` } }, { describe: "Shopify", transport: this.transport });
+    const file = await fetchWithConnectorRetry(
+      url,
+      { headers: { authorization: `Bearer ${this.token}` } },
+      { describe: "Shopify", transport: this.transport },
+    );
     const text = await file.text();
     for (const raw of text.split("\n")) {
       const line = raw.trim();
@@ -305,9 +323,19 @@ export class ShopifyClient {
   }
 
   /** Live connectivity probe: the shop's identity and plan surface. */
-  async shopIdentity(): Promise<{ name: string; myshopifyDomain: string; planName: string; currencyCode: string }> {
+  async shopIdentity(): Promise<{
+    name: string;
+    myshopifyDomain: string;
+    planName: string;
+    currencyCode: string;
+  }> {
     const { data } = await this.graphql<{
-      shop: { name: string; myshopifyDomain: string; plan: { displayName: string }; currencyCode: string };
+      shop: {
+        name: string;
+        myshopifyDomain: string;
+        plan: { displayName: string };
+        currencyCode: string;
+      };
     }>(`{ shop { name myshopifyDomain plan { displayName } currencyCode } }`);
     return {
       name: data.shop.name,
@@ -340,7 +368,10 @@ export function buildShopifyInstallUrl(input: {
  * `key=value` query string (hmac itself excluded), compared constant-time.
  * Missing or wrong HMAC refuses — the code is never exchanged on it.
  */
-export function verifyShopifyCallbackHmac(query: Record<string, string | undefined>, clientSecret: string): boolean {
+export function verifyShopifyCallbackHmac(
+  query: Record<string, string | undefined>,
+  clientSecret: string,
+): boolean {
   const received = query.hmac;
   if (!received || !/^[0-9a-f]+$/i.test(received)) return false;
   const message = Object.entries(query)
@@ -364,7 +395,9 @@ export async function exchangeShopifyToken(input: {
 }): Promise<{ accessToken: string; scope: string }> {
   const shop = normalizeShopDomain(input.shopDomain);
   if (!input.code) {
-    throw new Error("Shopify OAuth callback carries no code — start the connection again under Channels → Connect Shopify");
+    throw new Error(
+      "Shopify OAuth callback carries no code — start the connection again under Channels → Connect Shopify",
+    );
   }
   const res = await fetchWithConnectorRetry(
     `https://${shop}/admin/oauth/access_token`,
@@ -386,7 +419,12 @@ export async function exchangeShopifyToken(input: {
   }
   const payload = (await res.json()) as { access_token?: unknown; scope?: unknown };
   if (typeof payload.access_token !== "string" || payload.access_token === "") {
-    throw new Error("Shopify OAuth exchange answered without a token — start the connection again under Channels → Connect Shopify");
+    throw new Error(
+      "Shopify OAuth exchange answered without a token — start the connection again under Channels → Connect Shopify",
+    );
   }
-  return { accessToken: payload.access_token, scope: typeof payload.scope === "string" ? payload.scope : "" };
+  return {
+    accessToken: payload.access_token,
+    scope: typeof payload.scope === "string" ? payload.scope : "",
+  };
 }

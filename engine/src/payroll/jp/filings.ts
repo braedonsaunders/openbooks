@@ -54,19 +54,20 @@ import type {
 } from "../filing-registry.ts";
 
 function refusePopulation(filing: string, box: string, year: number): Promise<PayrollFilingData> {
-  const teigaku = year === 2024
-    ? " For 2024 the 定額減税 fixed-amount credit additionally settles at year-end with carry-forward "
-    + "the engine has no channel for."
-    : "";
+  const teigaku =
+    year === 2024
+      ? " For 2024 the 定額減税 fixed-amount credit additionally settles at year-end with carry-forward " +
+        "the engine has no channel for."
+      : "";
   return Promise.reject(
     new PayrollPackError(
-      `the JP payroll pack declares the ${filing} filing but cannot populate it for tax year ${year}: `
-      + "the engine performs monthly 源泉徴収 only and does not perform 年末調整 "
-      + "(see JP_REFUSED_2026), so no 年調年税額 exists to report "
-      + `in the ${box} box — printing the sum of monthly withholdings there would file a wrong `
-      + "statutory figure. Perform 年末調整 following the NTA's 年末調整のしかた "
-      + "(所得税法第190条) and prepare the filing outside this product."
-      + teigaku,
+      `the JP payroll pack declares the ${filing} filing but cannot populate it for tax year ${year}: ` +
+        "the engine performs monthly 源泉徴収 only and does not perform 年末調整 " +
+        "(see JP_REFUSED_2026), so no 年調年税額 exists to report " +
+        `in the ${box} box — printing the sum of monthly withholdings there would file a wrong ` +
+        "statutory figure. Perform 年末調整 following the NTA's 年末調整のしかた " +
+        "(所得税法第190条) and prepare the filing outside this product." +
+        teigaku,
     ),
   );
 }
@@ -91,22 +92,23 @@ export function jpPackFilings(): PayrollPackFilings {
         label: "給与所得の源泉徴収票",
         cadence: "annual",
         description:
-          "給与所得の源泉徴収票 — the employee's annual withholding record, issued to the employee "
-          + "and filed with the tax office as 法定調書 (所得税法第225条) by January 31 of the following year. "
-          + "Its 源泉徴収税額 box carries the year-end-adjusted tax (年調年税額), never the monthly sum.",
+          "給与所得の源泉徴収票 — the employee's annual withholding record, issued to the employee " +
+          "and filed with the tax office as 法定調書 (所得税法第225条) by January 31 of the following year. " +
+          "Its 源泉徴収税額 box carries the year-end-adjusted tax (年調年税額), never the monthly sum.",
         emptyText: "No 源泉徴収票 can be produced: 年末調整 is not performed.",
-        population: (_orgId, taxYear) => refusePopulation("給与所得の源泉徴収票", "源泉徴収税額", taxYear),
+        population: (_orgId, taxYear) =>
+          refusePopulation("給与所得の源泉徴収票", "源泉徴収税額", taxYear),
         parseRowId: () => refuseRowId(),
         downloadRefusal:
-          "the JP pack produces no e-Tax / 光ディスク等 法定調書 file — the slip figures are not "
-          + "computed; transmit the 源泉徴収票 through e-Tax or submit paper/光ディスク to the tax office",
+          "the JP pack produces no e-Tax / 光ディスク等 法定調書 file — the slip figures are not " +
+          "computed; transmit the 源泉徴収票 through e-Tax or submit paper/光ディスク to the tax office",
         amendment: {
           supported: false,
           refusal:
-            "a wrong 源泉徴収票 is corrected by reissuing a corrected slip to the employee and "
-            + "resubmitting the 法定調書 to the tax office — reissue is not implemented by the JP "
-            + "payroll pack; prepare the corrected slip outside this product (NTA 年末調整のしかた / "
-            + "法定調書の作成と提出の手引) and resubmit",
+            "a wrong 源泉徴収票 is corrected by reissuing a corrected slip to the employee and " +
+            "resubmitting the 法定調書 to the tax office — reissue is not implemented by the JP " +
+            "payroll pack; prepare the corrected slip outside this product (NTA 年末調整のしかた / " +
+            "法定調書の作成と提出の手引) and resubmit",
         },
       },
       {
@@ -114,21 +116,22 @@ export function jpPackFilings(): PayrollPackFilings {
         label: "給与支払報告書",
         cadence: "annual",
         description:
-          "給与支払報告書 — the same per-employee figures reported to the employee's municipality of "
-          + "residence (as of January 1) by January 31 (地方税法第317条の6), the basis of the resident-tax "
-          + "特別徴収 the municipality assigns. Same figures, different recipient and deadline.",
+          "給与支払報告書 — the same per-employee figures reported to the employee's municipality of " +
+          "residence (as of January 1) by January 31 (地方税法第317条の6), the basis of the resident-tax " +
+          "特別徴収 the municipality assigns. Same figures, different recipient and deadline.",
         emptyText: "No 給与支払報告書 can be produced: 年末調整 is not performed.",
-        population: (_orgId, taxYear) => refusePopulation("給与支払報告書", "源泉徴収税額", taxYear),
+        population: (_orgId, taxYear) =>
+          refusePopulation("給与支払報告書", "源泉徴収税額", taxYear),
         parseRowId: () => refuseRowId(),
         downloadRefusal:
-          "the JP pack produces no eLTAX 給与支払報告書 file — the report figures are not computed; "
-          + "submit to the municipality through eLTAX (地方税ポータルシステム) or on paper",
+          "the JP pack produces no eLTAX 給与支払報告書 file — the report figures are not computed; " +
+          "submit to the municipality through eLTAX (地方税ポータルシステム) or on paper",
         amendment: {
           supported: false,
           refusal:
-            "a wrong 給与支払報告書 is corrected by resubmitting a corrected report to the municipality "
-            + "— resubmission is not implemented by the JP payroll pack; prepare the corrected report "
-            + "outside this product and resubmit through eLTAX or on paper",
+            "a wrong 給与支払報告書 is corrected by resubmitting a corrected report to the municipality " +
+            "— resubmission is not implemented by the JP payroll pack; prepare the corrected report " +
+            "outside this product and resubmit through eLTAX or on paper",
         },
       },
       {
@@ -136,20 +139,21 @@ export function jpPackFilings(): PayrollPackFilings {
         label: "給与所得の源泉徴収票等の法定調書合計表",
         cadence: "annual",
         description:
-          "給与所得の源泉徴収票等の法定調書合計表 — the employer summary cover sheet accompanying the "
-          + "法定調書 to the tax office by January 31. It aggregates the adjusted slips it covers.",
+          "給与所得の源泉徴収票等の法定調書合計表 — the employer summary cover sheet accompanying the " +
+          "法定調書 to the tax office by January 31. It aggregates the adjusted slips it covers.",
         emptyText: "No 法定調書合計表 can be produced: 年末調整 is not performed.",
-        population: (_orgId, taxYear) => refusePopulation("給与所得の源泉徴収票等の法定調書合計表", "源泉徴収税額", taxYear),
+        population: (_orgId, taxYear) =>
+          refusePopulation("給与所得の源泉徴収票等の法定調書合計表", "源泉徴収税額", taxYear),
         parseRowId: () => refuseRowId(),
         downloadRefusal:
-          "the JP pack produces no e-Tax / 光ディスク等 法定調書合計表 file — the summary aggregates "
-          + "slips that are not computed; transmit through e-Tax or submit paper/光ディスク to the tax office",
+          "the JP pack produces no e-Tax / 光ディスク等 法定調書合計表 file — the summary aggregates " +
+          "slips that are not computed; transmit through e-Tax or submit paper/光ディスク to the tax office",
         amendment: {
           supported: false,
           refusal:
-            "a wrong 法定調書合計表 is corrected by resubmitting a corrected summary with the corrected "
-            + "法定調書 to the tax office — resubmission is not implemented by the JP payroll pack; "
-            + "prepare the corrected summary outside this product and resubmit",
+            "a wrong 法定調書合計表 is corrected by resubmitting a corrected summary with the corrected " +
+            "法定調書 to the tax office — resubmission is not implemented by the JP payroll pack; " +
+            "prepare the corrected summary outside this product and resubmit",
         },
       },
     ],

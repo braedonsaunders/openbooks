@@ -53,19 +53,24 @@ async function seedRenewableSubscription(
     values (${planId}, ${org.orgId}, 'Renewal Plan', '0', 'CAD', 'monthly', 1,
             ${org.accounts.revenue}, true, ${creatorId})
   `);
-  const versionId = await createPlanVersion(org.orgId, creatorId ?? SYSTEM_ACTOR_ID, {
-    planId,
-    effectiveFrom: "2026-05-01",
-    components: [
-      {
-        componentKey: "platform",
-        name: "Platform fee",
-        quantity: "1",
-        unitPrice: "100.00",
-        incomeAccountId: org.accounts.revenue,
-      },
-    ],
-  }, null);
+  const versionId = await createPlanVersion(
+    org.orgId,
+    creatorId ?? SYSTEM_ACTOR_ID,
+    {
+      planId,
+      effectiveFrom: "2026-05-01",
+      components: [
+        {
+          componentKey: "platform",
+          name: "Platform fee",
+          quantity: "1",
+          unitPrice: "100.00",
+          incomeAccountId: org.accounts.revenue,
+        },
+      ],
+    },
+    null,
+  );
   await publishPlanVersion(org.orgId, creatorId ?? SYSTEM_ACTOR_ID, versionId, null);
   const subscriptionId = randomUUID();
   await db.execute(sql`
@@ -107,8 +112,12 @@ interface AmendmentEvidence extends Record<string, unknown> {
   requestType: string | null;
 }
 
-async function renewalAmendments(orgId: string, subscriptionId: string): Promise<AmendmentEvidence[]> {
-  const rows = (await db.execute<AmendmentEvidence>(sql`
+async function renewalAmendments(
+  orgId: string,
+  subscriptionId: string,
+): Promise<AmendmentEvidence[]> {
+  const rows = await db.execute<AmendmentEvidence>(
+    sql`
     select id::text as id,
            amendment_type as "amendmentType",
            status,
@@ -124,7 +133,9 @@ async function renewalAmendments(orgId: string, subscriptionId: string): Promise
       from subscription_amendments
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
      order by amendment_number
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -133,17 +144,23 @@ async function renewalAmendments(orgId: string, subscriptionId: string): Promise
  * production-kind org in the shared test database, so its aggregate counters
  * say nothing about this slice's subscription — assert on these rows instead.
  */
-async function subscriptionState(orgId: string, subscriptionId: string): Promise<{
+async function subscriptionState(
+  orgId: string,
+  subscriptionId: string,
+): Promise<{
   lastError: string | null;
   periodInvoices: number;
 }> {
-  const row = (await db.execute<{ lastError: string | null; periodInvoices: number }>(sql`
+  const row = await db.execute<{ lastError: string | null; periodInvoices: number }>(
+    sql`
     select s.last_error as "lastError",
            (select count(*)::int from subscription_period_invoices pi
              where pi.org_id = ${orgId} and pi.subscription_id = ${subscriptionId}) as "periodInvoices"
       from subscriptions s
      where s.id = ${subscriptionId} and s.org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return row[0]!;
 }
 
@@ -166,7 +183,11 @@ test(
       assert.equal(evidence.amendmentType, "renew");
       assert.equal(evidence.status, "applied");
       assert.equal(evidence.requestType, "renew");
-      assert.match(evidence.idempotencyKey, /^auto-renew:/, "the deterministic scheduler key is preserved");
+      assert.match(
+        evidence.idempotencyKey,
+        /^auto-renew:/,
+        "the deterministic scheduler key is preserved",
+      );
       assert.equal(evidence.reason, "Automatic renewal");
 
       // The amendment row itself carries the system actor — not NULL, not a
@@ -182,12 +203,21 @@ test(
       assert.equal(evidence.sourceOrigin, "subscription-billing-scheduler");
       assert.equal(evidence.sourceDueOn, "2026-06-15");
 
-      const lifecycle = (await db.execute<{ termEndsOn: string; revision: number }>(sql`
+      const lifecycle = (
+        await db.execute<{ termEndsOn: string; revision: number }>(
+          sql`
         select term_ends_on as "termEndsOn", contract_revision as revision
           from subscription_lifecycles
          where org_id = ${org.orgId} and subscription_id = ${subscriptionId}
-      `, "objects"))[0]!;
-      assert.equal(lifecycle.termEndsOn, "2027-06-15", "the term advanced by the renewal term months");
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(
+        lifecycle.termEndsOn,
+        "2027-06-15",
+        "the term advanced by the renewal term months",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -209,7 +239,11 @@ test(
 
       const [evidence] = await renewalAmendments(org.orgId, subscriptionId);
       assert.ok(evidence, "the auto-renewal produced an amendment");
-      assert.notEqual(evidence.appliedBy, creatorId, "the creator must never be attributed to a background run");
+      assert.notEqual(
+        evidence.appliedBy,
+        creatorId,
+        "the creator must never be attributed to a background run",
+      );
       assert.notEqual(evidence.createdBy, creatorId);
       assert.equal(evidence.appliedBy, SYSTEM_ACTOR_ID);
       assert.equal(evidence.sourceKind, "system");
@@ -263,25 +297,31 @@ test(
     const functionName = `openbooks_test_fail_renewal_${suffix}`;
     const triggerName = `openbooks_test_fail_renewal_${suffix}`;
     const teardown = async () => {
-      await db.execute(sql.raw(`drop trigger if exists ${triggerName} on public.subscription_amendments`));
+      await db.execute(
+        sql.raw(`drop trigger if exists ${triggerName} on public.subscription_amendments`),
+      );
       await db.execute(sql.raw(`drop function if exists public.${functionName}()`));
     };
     try {
-      await db.execute(sql.raw(`
+      await db.execute(
+        sql.raw(`
         create function public.${functionName}() returns trigger
         language plpgsql as $$
         begin
           raise exception 'forced scheduled-renewal failure';
         end
         $$
-      `));
-      await db.execute(sql.raw(`
+      `),
+      );
+      await db.execute(
+        sql.raw(`
         create trigger ${triggerName}
         before insert on public.subscription_amendments
         for each row
         when (new.amendment_type = 'renew' and new.subscription_id = '${subscriptionId}'::uuid)
         execute function public.${functionName}()
-      `));
+      `),
+      );
 
       // The scheduler surfaces the failure through last_error; nothing about
       // the amendment, the lifecycle mutation, or the claim may survive.
@@ -292,12 +332,14 @@ test(
       assert.match(broken.lastError ?? "", /Failed query.*subscription_amendments/s);
       assert.equal(broken.periodInvoices, 0, "nothing was billed behind the refused amendment");
 
-      const before = (await db.execute<{
-        amendments: number;
-        termEndsOn: string | null;
-        revision: number;
-        nextBillOn: string;
-      }>(sql`
+      const before = (
+        await db.execute<{
+          amendments: number;
+          termEndsOn: string | null;
+          revision: number;
+          nextBillOn: string;
+        }>(
+          sql`
         select (select count(*) from subscription_amendments
                  where org_id = ${org.orgId} and subscription_id = ${subscriptionId})::int as amendments,
                l.term_ends_on as "termEndsOn", l.contract_revision as revision,
@@ -305,11 +347,26 @@ test(
           from subscriptions s join subscription_lifecycles l
             on l.subscription_id = s.id and l.org_id = s.org_id
          where s.id = ${subscriptionId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(before.amendments, 0, "no orphan amendment survives a failed renewal");
-      assert.equal(before.termEndsOn, "2026-06-15", "the contract did not extend behind the failed amendment");
-      assert.equal(before.revision, 1, "the revision still reads as activated — the renew's bump rolled back");
-      assert.equal(before.nextBillOn, "2026-06-15", "the billing claim rolled back with the transaction");
+      assert.equal(
+        before.termEndsOn,
+        "2026-06-15",
+        "the contract did not extend behind the failed amendment",
+      );
+      assert.equal(
+        before.revision,
+        1,
+        "the revision still reads as activated — the renew's bump rolled back",
+      );
+      assert.equal(
+        before.nextBillOn,
+        "2026-06-15",
+        "the billing claim rolled back with the transaction",
+      );
 
       await teardown();
 
@@ -319,7 +376,10 @@ test(
       assert.equal(retry.lastError, null);
       const amendments = await renewalAmendments(org.orgId, subscriptionId);
       assert.equal(amendments.length, 1);
-      assert.match(amendments[0]!.idempotencyKey, new RegExp(`^auto-renew:${subscriptionId}:2026-06-15$`));
+      assert.match(
+        amendments[0]!.idempotencyKey,
+        new RegExp(`^auto-renew:${subscriptionId}:2026-06-15$`),
+      );
       assert.equal(amendments[0]!.appliedBy, SYSTEM_ACTOR_ID);
       assert.ok(retry.periodInvoices >= 1, "the retried tick billed through the renewed contract");
     } finally {
@@ -338,8 +398,16 @@ test(
       const subscriptionId = await seedRenewableSubscription(org, null);
       // Driven directly so a regression in prepareAdvancedSubscriptionBilling's
       // own attribution logic fails fast with the original defect's error text.
-      const prepared = await prepareAdvancedSubscriptionBilling(org.orgId, subscriptionId, org.date);
-      assert.equal(prepared, true, "a due auto-renew contract is billable regardless of authorship");
+      const prepared = await prepareAdvancedSubscriptionBilling(
+        org.orgId,
+        subscriptionId,
+        org.date,
+      );
+      assert.equal(
+        prepared,
+        true,
+        "a due auto-renew contract is billable regardless of authorship",
+      );
       const [evidence] = await renewalAmendments(org.orgId, subscriptionId);
       assert.ok(evidence, "prepare itself appended the scheduler renewal amendment");
       assert.equal(evidence.appliedBy, SYSTEM_ACTOR_ID);

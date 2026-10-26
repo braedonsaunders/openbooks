@@ -1,14 +1,13 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadLienWaiversPage, lienWaiversSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadLienWaiversPage, lienWaiversSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('compliance')
-  return { title: t('lienWaivers.title') }
+  const t = await getTranslations("compliance");
+  return { title: t("lienWaivers.title") };
 }
-
 
 /**
  * Lien waivers received from subcontractors and issued to owners.
@@ -18,11 +17,11 @@ export async function generateMetadata() {
  * that reads "signed" here is a waiver that will release a blocked bill.
  */
 export default async function LienWaiversPage({
-  searchParams
+  searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadLienWaiversPage(sp)
-  return <ModuleView spec={lienWaiversSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadLienWaiversPage(sp);
+  return <ModuleView spec={lienWaiversSpec(data)} data={data} searchParams={sp} trusted />;
 }

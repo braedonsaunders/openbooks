@@ -4,10 +4,7 @@ export type BankingSqlExecutor = SqlExecutor;
 import { assertRealDate } from "./statement-parsers/shared";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import {
-  ScopeNotFoundError,
-  subsidiaryScopeAllows,
-} from "../organization/subsidiary-scope.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
 type ReconcilableAccount = {
   id: string;
@@ -26,15 +23,16 @@ export async function loadReconcilableAccount(
   executor: SqlExecutor = db,
   lock = false,
 ): Promise<ReconcilableAccount> {
-  const r = await executor.execute<
-    ReconcilableAccount & { subsidiary_id: string | null }
-  >(sql`
+  const r = await executor.execute<ReconcilableAccount & { subsidiary_id: string | null }>(
+    sql`
     select a.id, a.name, a.number, a.currency_restriction as currency, a.type, a.subsidiary_id
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId}
        and a.reconcilable and a.is_active and not a.is_summary
        ${lock ? sql`for update` : sql``}
-  `, "objects");
+  `,
+    "objects",
+  );
   const account = r[0];
   if (!account) throw new BankingError("Account not found or not reconcilable");
   // Scope before eligibility: an out-of-scope account reads exactly like a
@@ -51,9 +49,10 @@ export async function loadReconcilableAccount(
 }
 
 /** Description normalization for content-overlap comparison (see above). */
-export function requireSessionRowInScope<
-  T extends { subsidiary_id: string | null },
->(row: T | undefined, scope: ReadonlySet<string> | null): asserts row is T {
+export function requireSessionRowInScope<T extends { subsidiary_id: string | null }>(
+  row: T | undefined,
+  scope: ReadonlySet<string> | null,
+): asserts row is T {
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
     throw new ScopeNotFoundError();
   }
@@ -72,11 +71,16 @@ export async function requireBankAccountInScope(
   accountId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const row = (await executor.execute<{ subsidiary_id: string | null }>(sql`
+  const row = (
+    await executor.execute<{ subsidiary_id: string | null }>(
+      sql`
     select a.subsidiary_id
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
     throw new ScopeNotFoundError();
   }
@@ -89,11 +93,16 @@ export async function lockBankAccountInScope(
   accountId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const row = (await executor.execute<{ subsidiary_id: string | null }>(sql`
+  const row = (
+    await executor.execute<{ subsidiary_id: string | null }>(
+      sql`
     select subsidiary_id from accounts
      where id = ${accountId} and org_id = ${orgId}
      for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   requireSessionRowInScope(row, scope);
 }
 
@@ -107,15 +116,20 @@ export async function requireStatementLineAccountInScope(
   statementLineId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<{ account_id: string }> {
-  const row = (await executor.execute<{
+  const row = (
+    await executor.execute<{
       account_id: string;
       subsidiary_id: string | null;
-    }>(sql`
+    }>(
+      sql`
     select l.account_id, a.subsidiary_id
       from bank_statement_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.id = ${statementLineId} and l.org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
     throw new ScopeNotFoundError();
   }
@@ -123,8 +137,7 @@ export async function requireStatementLineAccountInScope(
 }
 
 export function validateReconciliationDate(value: string): void {
-  const match =
-    typeof value === "string" ? value.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  const match = typeof value === "string" ? value.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
   if (!match) throw new BankingError("Through date must be YYYY-MM-DD");
   assertRealDate(match[1]!, match[2]!, match[3]!, "Through date");
 }
@@ -147,11 +160,16 @@ export async function requireCutoffAfterSignedHistory(
   accountId: string,
   throughDate: string,
 ): Promise<void> {
-  const latestSigned = (await executor.execute<{ through_date: string }>(sql`
+  const latestSigned = (
+    await executor.execute<{ through_date: string }>(
+      sql`
     select through_date from reconciliations
      where org_id = ${orgId} and account_id = ${accountId} and status = 'signed_off'
      order by through_date desc limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (latestSigned && throughDate <= latestSigned.through_date) {
     throw new BankingError(
       `Through date must be after the last signed-off reconciliation (${latestSigned.through_date})`,

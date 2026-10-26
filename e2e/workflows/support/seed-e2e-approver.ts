@@ -46,8 +46,11 @@ async function main(): Promise<void> {
   // the tsx loader (the awaited query drains silently), in CI as well as here.
   await client.connect();
   await client.query("select 1");
-  const orgs = await client.query<{ id: string }>("select id from orgs order by created_at limit 1");
-  if (orgs.rows.length !== 1) throw new Error(`expected exactly one org, found ${orgs.rows.length}`);
+  const orgs = await client.query<{ id: string }>(
+    "select id from orgs order by created_at limit 1",
+  );
+  if (orgs.rows.length !== 1)
+    throw new Error(`expected exactly one org, found ${orgs.rows.length}`);
   const orgId = orgs.rows[0]!.id;
 
   try {
@@ -67,10 +70,10 @@ async function main(): Promise<void> {
     const userId =
       created.rows[0]?.id ??
       (
-        await client.query<{ id: string }>("select id from users where org_id = $1 and email = $2", [
-          orgId,
-          email,
-        ])
+        await client.query<{ id: string }>(
+          "select id from users where org_id = $1 and email = $2",
+          [orgId, email],
+        )
       ).rows[0]!.id;
 
     for (const key of ["admin", "approver"]) {

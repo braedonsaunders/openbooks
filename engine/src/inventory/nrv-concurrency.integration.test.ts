@@ -10,68 +10,137 @@ import { getOnHand } from "./position.ts";
 import { receiveInventory, issueInventory } from "./movements.ts";
 import { writeDownInventoryToNrv, reverseInventoryWritedown } from "./nrv.ts";
 
-test("NRV serializes its layer snapshot with an in-flight receipt", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  const receiptWriter = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
-  let pending: ReturnType<typeof writeDownInventoryToNrv> | undefined;
-  try {
-    assert.ok(env.OPENBOOKS_DB_URL, "explicit disposable database connection is required");
-    await receiptWriter.connect();
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const receipt = { itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "10", subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: "2026-07-15" };
-    await receiveInventory(org.orgId, actor, receipt);
-    await receiptWriter.query("begin");
-    // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
-    await receiptWriter.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`inventory:${org.items.fifo}:${org.stockLocationId}`]);
-    await receiptWriter.query("select id from cost_layers where org_id=$1 and item_id=$2 for update", [org.orgId, org.items.fifo]);
-    pending = writeDownInventoryToNrv(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, date: "2026-07-16", nrvPerUnit: "6" });
-    void pending.catch(() => {});
-    await waitForLockWaiter(receiptWriter, { label: "the inventory remeasurement" });
-    await receiveInventory(org.orgId, actor, { ...receipt, date: "2026-07-16", tx: drizzle({ client: receiptWriter }) });
-    await receiptWriter.query("commit");
-    await pending;
-    assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).value, "120.0000");
-    const issued = await issueInventory(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, quantity: "1", offsetAccountId: org.accounts.cogs, date: "2026-07-17" });
-    assert.equal(issued.value, "-6.0000", "FIFO must use a coherent remeasurement of both receipt layers");
-  } finally {
-    await receiptWriter.query("rollback").catch(() => {});
-    if (pending) await pending.catch(() => {});
-    await receiptWriter.end();
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-for (const operation of ["write-down", "reversal"] as const) {
-  test(`NRV waits for reviewed accounting configuration: ${operation}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test(
+  "NRV serializes its layer snapshot with an in-flight receipt",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
     const org = await createScratchOrg();
-    const editor = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
+    const receiptWriter = new pg.Client({
+      connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+    });
     let pending: ReturnType<typeof writeDownInventoryToNrv> | undefined;
     try {
-      await editor.connect();
+      assert.ok(env.OPENBOOKS_DB_URL, "explicit disposable database connection is required");
+      await receiptWriter.connect();
       const actor = (await seedFlowActors(org.orgId)).adminId;
-      await db.execute(sql`update orgs set settings=settings || '{"reportingFramework":"ifrs"}'::jsonb where id=${org.orgId}`);
-      await receiveInventory(org.orgId, actor, {
-        itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "10",
-        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+      const receipt = {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "10",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: "2026-07-15",
+      };
+      await receiveInventory(org.orgId, actor, receipt);
+      await receiptWriter.query("begin");
+      // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
+      await receiptWriter.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+        `inventory:${org.items.fifo}:${org.stockLocationId}`,
+      ]);
+      await receiptWriter.query(
+        "select id from cost_layers where org_id=$1 and item_id=$2 for update",
+        [org.orgId, org.items.fifo],
+      );
+      pending = writeDownInventoryToNrv(org.orgId, actor, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: "2026-07-16",
+        nrvPerUnit: "6",
       });
-      const common = { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, date: org.date };
-      if (operation === "reversal") await writeDownInventoryToNrv(org.orgId, actor, { ...common, nrvPerUnit: "6" });
-      await editor.query("begin");
-      // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
-      await editor.query("update item_inventory_profiles set adjustment_account_id=$1 where org_id=$2 and item_id=$3", [org.accounts.freight, org.orgId, org.items.fifo]);
-      pending = operation === "reversal"
-        ? reverseInventoryWritedown(org.orgId, actor, { ...common, nrvPerUnit: "10" })
-        : writeDownInventoryToNrv(org.orgId, actor, { ...common, nrvPerUnit: "6" });
-      await waitForLockWaiter(editor, { label: "the inventory remeasurement" });
-      await editor.query("commit");
-      const result = await pending;
-      const accounts = await db.execute<{ account_id: string }>(sql`select account_id from journal_lines where org_id=${org.orgId} and entry_id=${result.entryId} and account_id<>${org.accounts.invAsset}`, "objects");
-      assert.deepEqual(accounts, [{ account_id: org.accounts.freight }]);
+      void pending.catch(() => {});
+      await waitForLockWaiter(receiptWriter, { label: "the inventory remeasurement" });
+      await receiveInventory(org.orgId, actor, {
+        ...receipt,
+        date: "2026-07-16",
+        tx: drizzle({ client: receiptWriter }),
+      });
+      await receiptWriter.query("commit");
+      await pending;
+      assert.equal(
+        (await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).value,
+        "120.0000",
+      );
+      const issued = await issueInventory(org.orgId, actor, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        quantity: "1",
+        offsetAccountId: org.accounts.cogs,
+        date: "2026-07-17",
+      });
+      assert.equal(
+        issued.value,
+        "-6.0000",
+        "FIFO must use a coherent remeasurement of both receipt layers",
+      );
     } finally {
-      await editor.query("rollback").catch(() => {});
+      await receiptWriter.query("rollback").catch(() => {});
       if (pending) await pending.catch(() => {});
-      await editor.end();
+      await receiptWriter.end();
       await dropScratchOrg(org.orgId);
     }
-  });
+  },
+);
+
+for (const operation of ["write-down", "reversal"] as const) {
+  test(
+    `NRV waits for reviewed accounting configuration: ${operation}`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      const org = await createScratchOrg();
+      const editor = new pg.Client({
+        connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+      });
+      let pending: ReturnType<typeof writeDownInventoryToNrv> | undefined;
+      try {
+        await editor.connect();
+        const actor = (await seedFlowActors(org.orgId)).adminId;
+        await db.execute(
+          sql`update orgs set settings=settings || '{"reportingFramework":"ifrs"}'::jsonb where id=${org.orgId}`,
+        );
+        await receiveInventory(org.orgId, actor, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          quantity: "10",
+          unitCost: "10",
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.clearing,
+          date: org.date,
+        });
+        const common = {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        };
+        if (operation === "reversal")
+          await writeDownInventoryToNrv(org.orgId, actor, { ...common, nrvPerUnit: "6" });
+        await editor.query("begin");
+        // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
+        await editor.query(
+          "update item_inventory_profiles set adjustment_account_id=$1 where org_id=$2 and item_id=$3",
+          [org.accounts.freight, org.orgId, org.items.fifo],
+        );
+        pending =
+          operation === "reversal"
+            ? reverseInventoryWritedown(org.orgId, actor, { ...common, nrvPerUnit: "10" })
+            : writeDownInventoryToNrv(org.orgId, actor, { ...common, nrvPerUnit: "6" });
+        await waitForLockWaiter(editor, { label: "the inventory remeasurement" });
+        await editor.query("commit");
+        const result = await pending;
+        const accounts = await db.execute<{ account_id: string }>(
+          sql`select account_id from journal_lines where org_id=${org.orgId} and entry_id=${result.entryId} and account_id<>${org.accounts.invAsset}`,
+          "objects",
+        );
+        assert.deepEqual(accounts, [{ account_id: org.accounts.freight }]);
+      } finally {
+        await editor.query("rollback").catch(() => {});
+        if (pending) await pending.catch(() => {});
+        await editor.end();
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }

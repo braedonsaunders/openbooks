@@ -26,10 +26,7 @@ import {
   calculatePlZus2026,
   computePlStatutory,
 } from "./compute-statutory.ts";
-import type {
-  PayrollStatutoryComputeContext,
-  StubLine,
-} from "../statutory-context.ts";
+import type { PayrollStatutoryComputeContext, StubLine } from "../statutory-context.ts";
 import { createPushStatutory } from "../push-statutory.ts";
 
 const DEC_BRUT = "22000.00";
@@ -107,14 +104,31 @@ function adapterCtx(taxYear: number, payDate: string, income: string) {
     }),
   });
   const ctx = {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     tx: {
-      execute: async (_query: unknown, mode?: string) => Promise.resolve({
-        rows: [{ dochod: "200000.0000", podstawa: "242000.0000", payer_first_pay: `${taxYear}-01-15`, payer_first_period: `${taxYear}-01-01` }],
-      }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+      execute: async (_query: unknown, mode?: string) =>
+        Promise.resolve({
+          rows: [
+            {
+              dochod: "200000.0000",
+              podstawa: "242000.0000",
+              payer_first_pay: `${taxYear}-01-15`,
+              payer_first_period: `${taxYear}-01-01`,
+            },
+          ],
+        }).then(<T extends { rows: unknown }>(result: T) =>
+          mode === "objects" ? result.rows : result,
+        ),
     },
-    orgId: "org", subsidiaryId: "payer", employeePartyId: "emp", documentId: "doc",
+    orgId: "org",
+    subsidiaryId: "payer",
+    employeePartyId: "emp",
+    documentId: "doc",
     taxYear,
     region: "PL",
     run: { pay_date: payDate },
@@ -125,13 +139,11 @@ function adapterCtx(taxYear: number, payDate: string, income: string) {
     insurable: "0",
     periodsPerYear: 12,
     resolveStatutoryRates: async () => ({
-      values: (key: string) => key === "pl_wypadkowe" ? { stopa: "1.67" } : null,
+      values: (key: string) => (key === "pl_wypadkowe" ? { stopa: "1.67" } : null),
     }),
     pushStatutory,
     certificateFor: (key: string) =>
-      key === "pl_pit2"
-        ? { answers: { pomniejszenie: "1/12", kup: "miejscowy" } }
-        : null,
+      key === "pl_pit2" ? { answers: { pomniejszenie: "1/12", kup: "miejscowy" } } : null,
     assertRegionSupported: () => {},
   } as unknown as PayrollStatutoryComputeContext;
   return ctx;
@@ -150,6 +162,12 @@ test("adapter dispatches December 22 000 zł to the run's own year", async () =>
 });
 
 test("adapter still refuses untranscribed years by name", async () => {
-  await assert.rejects(() => computePlStatutory(adapterCtx(2027, "2027-06-15", "8000.00")), /has not been transcribed/);
-  await assert.rejects(() => computePlStatutory(adapterCtx(2023, "2023-06-15", "8000.00")), /has not been transcribed/);
+  await assert.rejects(
+    () => computePlStatutory(adapterCtx(2027, "2027-06-15", "8000.00")),
+    /has not been transcribed/,
+  );
+  await assert.rejects(
+    () => computePlStatutory(adapterCtx(2023, "2023-06-15", "8000.00")),
+    /has not been transcribed/,
+  );
 });

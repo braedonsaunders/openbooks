@@ -35,7 +35,13 @@ import {
 const AI_REQUEST_TIMEOUT_MS = 240_000;
 
 export type { AiProvider, ModelTier, ProviderSpec } from "@openbooks/engine/platform/ai-providers";
-export { AI_PROVIDER_SPECS, defaultModel, isAiProvider, providerSpec, validateAiBaseUrl } from "@openbooks/engine/platform/ai-providers";
+export {
+  AI_PROVIDER_SPECS,
+  defaultModel,
+  isAiProvider,
+  providerSpec,
+  validateAiBaseUrl,
+} from "@openbooks/engine/platform/ai-providers";
 
 export type AiConfig = {
   provider: AiProvider;

@@ -1,6 +1,10 @@
 import { abs, add, cmp, neg, sum } from "../money/money.ts";
 import { sumMoney, type Money } from "../money/brands.ts";
-import { PostingError, type CashPostingTender, type CashSaleCloseout } from "../journal/posting-contracts.ts";
+import {
+  PostingError,
+  type CashPostingTender,
+  type CashSaleCloseout,
+} from "../journal/posting-contracts.ts";
 
 /**
  * Paid-at-sale tender evidence for `cash_sale` and `cash_refund`, read from
@@ -119,7 +123,11 @@ export function assertCloseoutTendersMatchTotal(
     if (cmp(closeout.tipsTotal, "0") !== 0) parts.push(`tips ${closeout.tipsTotal}`);
     if (cmp(closeout.feeTotal, "0") !== 0) parts.push(`fees −${closeout.feeTotal}`);
     if (cmp(closeout.overShort, "0") !== 0) {
-      parts.push(cmp(closeout.overShort, "0") > 0 ? `over ${closeout.overShort}` : `short ${closeout.overShort}`);
+      parts.push(
+        cmp(closeout.overShort, "0") > 0
+          ? `over ${closeout.overShort}`
+          : `short ${closeout.overShort}`,
+      );
     }
     throw new PostingError(
       `cash sale ${documentNumber} tenders ${tendered} but ${parts.join(" + ")} = ${add(expected, "0")} — ` +

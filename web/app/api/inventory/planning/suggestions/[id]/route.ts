@@ -13,13 +13,18 @@ const Params = z.object({ id: uuidString() });
  * subsidiary from the suggestion itself instead of trusting a parameter.
  */
 export const GET = defineRoute({
-  permission: "inventory.plan", feature: "demandPlanning", params: Params,
-  handler: async ({ authz, params }) => planningTransaction(authz.user.orgId, async () => {
-    const locked = await getPlanSuggestion(db, authz.user.orgId, params.id);
-    const denied = guardSubsidiaryScope(authz, locked.subsidiaryId);
-    if (denied) return denied;
-    const resolved = (await listPlanSuggestions(db, authz.user.orgId, locked.subsidiaryId, "all"))
-      .find((row) => row.id === params.id) ?? null;
-    return Response.json({ suggestion: resolved, subsidiaryId: locked.subsidiaryId });
-  }),
+  permission: "inventory.plan",
+  feature: "demandPlanning",
+  params: Params,
+  handler: async ({ authz, params }) =>
+    planningTransaction(authz.user.orgId, async () => {
+      const locked = await getPlanSuggestion(db, authz.user.orgId, params.id);
+      const denied = guardSubsidiaryScope(authz, locked.subsidiaryId);
+      if (denied) return denied;
+      const resolved =
+        (await listPlanSuggestions(db, authz.user.orgId, locked.subsidiaryId, "all")).find(
+          (row) => row.id === params.id,
+        ) ?? null;
+      return Response.json({ suggestion: resolved, subsidiaryId: locked.subsidiaryId });
+    }),
 });

@@ -5,8 +5,7 @@ const { sql } = await import("drizzle-orm");
 const { db, pool } = await import("../platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
   await import("../testing/fixtures.ts");
-const { buildRecognitionSchedule, runRevenueRecognition } =
-  await import("./recognition.ts");
+const { buildRecognitionSchedule, runRevenueRecognition } = await import("./recognition.ts");
 for (const change of [
   "obligation-account",
   "rule-account",
@@ -24,10 +23,7 @@ for (const change of [
       const actor = (await seedFlowActors(org.orgId)).adminId;
       const blocker = await pool.connect();
       let task:
-        | Promise<
-            | { value: Awaited<ReturnType<typeof runRevenueRecognition>> }
-            | { error: unknown }
-          >
+        | Promise<{ value: Awaited<ReturnType<typeof runRevenueRecognition>> } | { error: unknown }>
         | undefined;
       try {
         const contract = randomUUID(),
@@ -48,9 +44,7 @@ for (const change of [
             sql`update recognition_schedule_lines set planned_amount=0 where org_id=${org.orgId}`,
           );
         await blocker.query("begin");
-        const pid = Number(
-          (await blocker.query("select pg_backend_pid() as pid")).rows[0].pid,
-        );
+        const pid = Number((await blocker.query("select pg_backend_pid() as pid")).rows[0].pid);
         await blocker.query(
           "select id from performance_obligations where org_id=$1 and id=$2 for update",
           [org.orgId, obligation],
@@ -81,12 +75,7 @@ for (const change of [
             [change === "positive-to-zero" ? "0" : "650", org.orgId],
           );
         }
-        task = runRevenueRecognition(
-          org.orgId,
-          "2026-07-31",
-          actor,
-          obligation,
-        ).then(
+        task = runRevenueRecognition(org.orgId, "2026-07-31", actor, obligation).then(
           (value) => ({ value }),
           (error) => ({ error }),
         );
@@ -108,8 +97,9 @@ for (const change of [
         await blocker.query("commit");
         const result = await task;
         const posted = await db.execute<{ account_id: string; amount: string }>(
-            sql`select jl.account_id,jl.amount from journal_lines jl join journal_entries j on j.org_id=jl.org_id and j.id=jl.entry_id where j.org_id=${org.orgId} and j.origin='revenue_recognition' and jl.amount<0`, "objects",
-          );
+          sql`select jl.account_id,jl.amount from journal_lines jl join journal_entries j on j.org_id=jl.org_id and j.id=jl.entry_id where j.org_id=${org.orgId} and j.origin='revenue_recognition' and jl.amount<0`,
+          "objects",
+        );
         assert.ok(
           result && typeof result === "object" && "value" in result,
           "recognition completed successfully",
@@ -139,14 +129,13 @@ for (const change of [
           );
           assert.equal(
             posted[0]!.amount,
-            change === "amount" || change === "zero-to-positive"
-              ? "-650.0000"
-              : "-1200.0000",
+            change === "amount" || change === "zero-to-positive" ? "-650.0000" : "-1200.0000",
           );
         }
         const amounts = await db.execute<{ planned: string; recognized: string | null }>(
-            sql`select planned_amount as planned, recognized_amount as recognized from recognition_schedule_lines where org_id=${org.orgId}`, "objects",
-          );
+          sql`select planned_amount as planned, recognized_amount as recognized from recognition_schedule_lines where org_id=${org.orgId}`,
+          "objects",
+        );
         if (change !== "forecast-rule" && change !== "missing-accounts")
           assert.equal(
             amounts[0]!.recognized,

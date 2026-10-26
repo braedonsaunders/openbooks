@@ -1,27 +1,30 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { db } from '@openbooks/engine/platform/database'
-import { disconnectShippingAccount } from '@openbooks/engine/sales/shipping-labels'
-import { notFound } from '@/lib/api/responses'
-import { defineRoute } from '@/lib/api/route'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { db } from "@openbooks/engine/platform/database";
+import { disconnectShippingAccount } from "@openbooks/engine/sales/shipping-labels";
+import { notFound } from "@/lib/api/responses";
+import { defineRoute } from "@/lib/api/route";
 
-const accountParams = z.object({ id: uuidString() })
+const accountParams = z.object({ id: uuidString() });
 
 /** Park an account without deleting its labels, quotes, or cost history. */
 export const POST = defineRoute({
-  permission: 'shipping.manage',
-  feature: 'shippingHub',
-  scope: 'unrestricted',
+  permission: "shipping.manage",
+  feature: "shippingHub",
+  scope: "unrestricted",
   params: accountParams,
   handler: async ({ authz, params: { id } }) => {
-    const disconnected = await db.transaction((tx) =>
-      disconnectShippingAccount(tx, authz.user.orgId, authz.user.id, id).then(() => true),
-    ).catch((error: unknown) => {
-      if (error instanceof Error && (error as { code?: unknown }).code === 'not_found') return false
-      throw error
-    })
-    if (!disconnected) return notFound('account', id)
-    return NextResponse.json({ disconnected: true })
+    const disconnected = await db
+      .transaction((tx) =>
+        disconnectShippingAccount(tx, authz.user.orgId, authz.user.id, id).then(() => true),
+      )
+      .catch((error: unknown) => {
+        if (error instanceof Error && (error as { code?: unknown }).code === "not_found")
+          return false;
+        throw error;
+      });
+    if (!disconnected) return notFound("account", id);
+    return NextResponse.json({ disconnected: true });
   },
-})
+});

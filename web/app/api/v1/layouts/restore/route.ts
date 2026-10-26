@@ -25,7 +25,13 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
     if (typeof body.versionId !== "string" || !body.versionId) {
       throw new ApplicationError("invalid_input", "versionId is required", 422);
     }
-    return { status: 200, body: { ok: true, ...(await restoreLayout(context, { route: body.route, versionId: body.versionId })) } };
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        ...(await restoreLayout(context, { route: body.route, versionId: body.versionId })),
+      },
+    };
   });
 }
 

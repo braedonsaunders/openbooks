@@ -28,8 +28,25 @@ import { EquityError, equityError, fig } from "./errors.ts";
 import { governEquityAction } from "./governance.ts";
 import { functionalUnits, spotRate } from "./fx.ts";
 import { noteInterest } from "./interest.ts";
-import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, writeEquityAudit } from "./internal.ts";
-import { assertRunPeriodPostable, instrumentBalance, nextRunPeriodAfter, postEquityEntry, requirePolicyAccount, resolveAccountPolicy, runBlocked, runPeriodsToGenerate, type EquityLeg, type RunPeriodAfter } from "./posting.ts";
+import {
+  assertEquityReadable,
+  currencyExponent,
+  loadLegalEntity,
+  requireEquityReader,
+  writeEquityAudit,
+} from "./internal.ts";
+import {
+  assertRunPeriodPostable,
+  instrumentBalance,
+  nextRunPeriodAfter,
+  postEquityEntry,
+  requirePolicyAccount,
+  resolveAccountPolicy,
+  runBlocked,
+  runPeriodsToGenerate,
+  type EquityLeg,
+  type RunPeriodAfter,
+} from "./posting.ts";
 import { ledgerUnits } from "./quantities.ts";
 import { formatLedger, newEquityId } from "./securities.ts";
 import { loadEquityBook } from "./store.ts";
@@ -64,14 +81,26 @@ export interface InterestPreview {
   blocked: CatalogRefusal | null;
 }
 
-type MeasuredLine = InterestLine & { units: { cumulative: bigint; previous: bigint; period: bigint; functional: bigint }; legs: EquityLeg[] };
+type MeasuredLine = InterestLine & {
+  units: { cumulative: bigint; previous: bigint; period: bigint; functional: bigint };
+  legs: EquityLeg[];
+};
 
-async function lastRun(orgId: string, subsidiaryId: string, onOrBefore?: string): Promise<{ id: string; through_date: string } | undefined> {
-  return (await db.execute<{ id: string; through_date: string }>(sql`
+async function lastRun(
+  orgId: string,
+  subsidiaryId: string,
+  onOrBefore?: string,
+): Promise<{ id: string; through_date: string } | undefined> {
+  return (
+    await db.execute<{ id: string; through_date: string }>(
+      sql`
     select id, through_date::text as through_date from equity_interest_runs
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
        ${onOrBefore ? sql`and through_date <= ${onOrBefore}::date` : sql``}
-     order by through_date desc limit 1`, "objects"))[0];
+     order by through_date desc limit 1`,
+      "objects",
+    )
+  )[0];
 }
 
 /**
@@ -79,8 +108,13 @@ async function lastRun(orgId: string, subsidiaryId: string, onOrBefore?: string)
  * settlement accruals, through `through` when given (runs through that
  * date and settlements dated on or before it).
  */
-async function accrued(orgId: string, subsidiaryId: string, through?: string): Promise<Map<string, bigint>> {
-  const rows = await db.execute<{ security_id: string; amount: string }>(sql`
+async function accrued(
+  orgId: string,
+  subsidiaryId: string,
+  through?: string,
+): Promise<Map<string, bigint>> {
+  const rows = await db.execute<{ security_id: string; amount: string }>(
+    sql`
     select security_id, sum(amount)::text as amount from (
       select l.security_id, l.period_amount as amount from equity_interest_run_lines l
         join equity_interest_runs r on r.org_id = l.org_id and r.id = l.run_id
@@ -92,7 +126,9 @@ async function accrued(orgId: string, subsidiaryId: string, through?: string): P
          ${through ? sql`and e.effective_on <= ${through}::date` : sql``}
          and not exists (select 1 from equity_security_events r where r.org_id = e.org_id and r.kind = 'reverse' and r.reverses_event_id = e.id)
          and not exists (select 1 from equity_security_events v where v.org_id = e.org_id and v.kind = 'void' and v.security_id = e.resulting_security_id)
-    ) accruals group by security_id`, "objects");
+    ) accruals group by security_id`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.security_id, toUnits(row.amount)]));
 }
 
@@ -111,7 +147,10 @@ async function measure(
     if (note.kind !== "note" || note.issueDate > throughDate) continue;
     const state = convertibleState(book, note, throughDate);
     const exponent = await currencyExponent(db, note.currency);
-    const target = state.status === "void" ? 0n : ledgerUnits(noteInterest(state.terms, state.endedOn ?? throughDate), exponent);
+    const target =
+      state.status === "void"
+        ? 0n
+        : ledgerUnits(noteInterest(state.terms, state.endedOn ?? throughDate), exponent);
     const before = previous.get(note.id) ?? 0n;
     const period = target - before;
     if (period === 0n) continue;
@@ -125,7 +164,9 @@ async function measure(
         legs.push(
           { accountId: accounts.expense(), units: functionalPeriod },
           {
-            accountId: accounts.accrued(), units: -functionalPeriod, balance: { securityId: note.id, role: "interest" },
+            accountId: accounts.accrued(),
+            units: -functionalPeriod,
+            balance: { securityId: note.id, role: "interest" },
             foreign: { currency: note.currency, txnUnits: -period, fxRate },
           },
         );
@@ -137,30 +178,49 @@ async function measure(
       if (accounts) {
         for (const group of groups) {
           legs.push({
-            accountId: group.accountId, units: -group.units, balance: { securityId: note.id, role: "interest" },
+            accountId: group.accountId,
+            units: -group.units,
+            balance: { securityId: note.id, role: "interest" },
             foreign: { currency: group.currency, txnUnits: -group.txnUnits, fxRate: group.fxRate },
           });
         }
         legs.push({ accountId: accounts.expense(), units: functionalPeriod });
       }
     } else {
-      throw equityError("interestBelowAccrued", { security: fig.text(note.securityNumber), date: fig.date(throughDate) });
+      throw equityError("interestBelowAccrued", {
+        security: fig.text(note.securityNumber),
+        date: fig.date(throughDate),
+      });
     }
     total += functionalPeriod;
     lines.push({
-      securityId: note.id, securityNumber: note.securityNumber, holderPartyId: note.holderPartyId, currency: note.currency,
-      cumulative: formatLedger(target), previous: formatLedger(before), period: formatLedger(period), fxRate,
+      securityId: note.id,
+      securityNumber: note.securityNumber,
+      holderPartyId: note.holderPartyId,
+      currency: note.currency,
+      cumulative: formatLedger(target),
+      previous: formatLedger(before),
+      period: formatLedger(period),
+      fxRate,
       functional: formatLedger(functionalPeriod),
-      units: { cumulative: target, previous: before, period, functional: functionalPeriod }, legs,
+      units: { cumulative: target, previous: before, period, functional: functionalPeriod },
+      legs,
     });
   }
   return { lines, total };
 }
 
 /** A run dated before the latest posted run refuses: earlier periods are already accrued. */
-function backdated(last: { through_date: string } | undefined, throughDate: string): EquityError | null {
+function backdated(
+  last: { through_date: string } | undefined,
+  throughDate: string,
+): EquityError | null {
   if (!last || throughDate >= last.through_date) return null;
-  return equityError("interestRunBackdated", { last: fig.date(last.through_date) }, { field: "throughDate" });
+  return equityError(
+    "interestRunBackdated",
+    { last: fig.date(last.through_date) },
+    { field: "throughDate" },
+  );
 }
 
 /**
@@ -168,24 +228,48 @@ function backdated(last: { through_date: string } | undefined, throughDate: stri
  * (equity.read). A date before the latest posted run refuses as the run
  * itself would.
  */
-export async function previewInterestRun(input: { orgId: string; actorId: string; subsidiaryId: string; throughDate: string }): Promise<InterestPreview> {
+export async function previewInterestRun(input: {
+  orgId: string;
+  actorId: string;
+  subsidiaryId: string;
+  throughDate: string;
+}): Promise<InterestPreview> {
   const throughDate = requireDate(input.throughDate, "throughDate", "runDate");
   await assertEquityReadable(input.orgId);
-  return withOrgTransaction(input.orgId, async () => {
-    await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
-    const entity = await loadLegalEntity(db, input.orgId, input.subsidiaryId);
-    const book = await loadEquityBook(db, input.orgId, input.subsidiaryId);
-    const last = await lastRun(input.orgId, input.subsidiaryId);
-    const refusal = backdated(last, throughDate);
-    if (refusal) throw refusal;
-    const { lines, total } = await measure(input.orgId, input.subsidiaryId, book, throughDate, entity.currency, null, await accrued(input.orgId, input.subsidiaryId));
-    return {
-      subsidiaryId: input.subsidiaryId, throughDate, currency: entity.currency, lastRunThrough: last?.through_date ?? null,
-      total: formatLedger(total), lines: lines.map(({ units: _units, legs: _legs, ...line }) => line),
-      due: last?.through_date !== throughDate && lines.length > 0,
-      blocked: last?.through_date === throughDate ? null : await runBlocked(input.orgId, input.subsidiaryId, throughDate, "interest"),
-    };
-  }, { isolationLevel: "REPEATABLE READ", readOnly: true });
+  return withOrgTransaction(
+    input.orgId,
+    async () => {
+      await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
+      const entity = await loadLegalEntity(db, input.orgId, input.subsidiaryId);
+      const book = await loadEquityBook(db, input.orgId, input.subsidiaryId);
+      const last = await lastRun(input.orgId, input.subsidiaryId);
+      const refusal = backdated(last, throughDate);
+      if (refusal) throw refusal;
+      const { lines, total } = await measure(
+        input.orgId,
+        input.subsidiaryId,
+        book,
+        throughDate,
+        entity.currency,
+        null,
+        await accrued(input.orgId, input.subsidiaryId),
+      );
+      return {
+        subsidiaryId: input.subsidiaryId,
+        throughDate,
+        currency: entity.currency,
+        lastRunThrough: last?.through_date ?? null,
+        total: formatLedger(total),
+        lines: lines.map(({ units: _units, legs: _legs, ...line }) => line),
+        due: last?.through_date !== throughDate && lines.length > 0,
+        blocked:
+          last?.through_date === throughDate
+            ? null
+            : await runBlocked(input.orgId, input.subsidiaryId, throughDate, "interest"),
+      };
+    },
+    { isolationLevel: "REPEATABLE READ", readOnly: true },
+  );
 }
 
 /**
@@ -196,27 +280,69 @@ export async function previewInterestRun(input: { orgId: string; actorId: string
  * and checks no actor, for the close checklist, the equity overview and the
  * runs view. A missing exchange rate refuses as the run itself would.
  */
-export async function interestRunChanges(orgId: string, subsidiaryId: string, throughDates: readonly string[]): Promise<{ throughDate: string; lastRunThrough: string | null; total: string; lines: number; currency: string }[]> {
+export async function interestRunChanges(
+  orgId: string,
+  subsidiaryId: string,
+  throughDates: readonly string[],
+): Promise<
+  {
+    throughDate: string;
+    lastRunThrough: string | null;
+    total: string;
+    lines: number;
+    currency: string;
+  }[]
+> {
   return withOrgTransaction(orgId, async () => {
     const entity = await loadLegalEntity(db, orgId, subsidiaryId);
     const last = await lastRun(orgId, subsidiaryId);
-    const out: { throughDate: string; lastRunThrough: string | null; total: string; lines: number; currency: string }[] = [];
+    const out: {
+      throughDate: string;
+      lastRunThrough: string | null;
+      total: string;
+      lines: number;
+      currency: string;
+    }[] = [];
     let book: EquityBook | null = null;
     for (const throughDate of throughDates) {
       if (last && last.through_date >= throughDate) {
-        out.push({ throughDate, lastRunThrough: last.through_date, total: "0.0000", lines: 0, currency: entity.currency });
+        out.push({
+          throughDate,
+          lastRunThrough: last.through_date,
+          total: "0.0000",
+          lines: 0,
+          currency: entity.currency,
+        });
         continue;
       }
       book ??= await loadEquityBook(db, orgId, subsidiaryId);
-      const { lines, total } = await measure(orgId, subsidiaryId, book, throughDate, entity.currency, null, await accrued(orgId, subsidiaryId, throughDate));
-      out.push({ throughDate, lastRunThrough: last?.through_date ?? null, total: formatLedger(total), lines: lines.length, currency: entity.currency });
+      const { lines, total } = await measure(
+        orgId,
+        subsidiaryId,
+        book,
+        throughDate,
+        entity.currency,
+        null,
+        await accrued(orgId, subsidiaryId, throughDate),
+      );
+      out.push({
+        throughDate,
+        lastRunThrough: last?.through_date ?? null,
+        total: formatLedger(total),
+        lines: lines.length,
+        currency: entity.currency,
+      });
     }
     return out;
   });
 }
 
 /** The change a note interest run through one date would accrue (see interestRunChanges). */
-export async function interestRunChange(orgId: string, subsidiaryId: string, throughDate: string): Promise<{ lastRunThrough: string | null; total: string; lines: number; currency: string }> {
+export async function interestRunChange(
+  orgId: string,
+  subsidiaryId: string,
+  throughDate: string,
+): Promise<{ lastRunThrough: string | null; total: string; lines: number; currency: string }> {
   const [change] = await interestRunChanges(orgId, subsidiaryId, [throughDate]);
   return change!;
 }
@@ -231,21 +357,47 @@ export async function interestRunChange(orgId: string, subsidiaryId: string, thr
  * run yet or nothing to catch up. A missing exchange rate refuses as the run
  * itself would.
  */
-export async function interestCatchUp(orgId: string, subsidiaryId: string, asOf?: string): Promise<{
-  recognizedThrough: string; total: string; lines: number; currency: string; postsWith: RunPeriodAfter | null; generatePeriods: { calendarId: string; fiscalYear: number } | null;
+export async function interestCatchUp(
+  orgId: string,
+  subsidiaryId: string,
+  asOf?: string,
+): Promise<{
+  recognizedThrough: string;
+  total: string;
+  lines: number;
+  currency: string;
+  postsWith: RunPeriodAfter | null;
+  generatePeriods: { calendarId: string; fiscalYear: number } | null;
 } | null> {
   return withOrgTransaction(orgId, async () => {
     const latest = await lastRun(orgId, subsidiaryId);
-    const last = latest && asOf && asOf < latest.through_date ? await lastRun(orgId, subsidiaryId, asOf) : latest;
+    const last =
+      latest && asOf && asOf < latest.through_date
+        ? await lastRun(orgId, subsidiaryId, asOf)
+        : latest;
     if (!latest || !last) return null;
     const entity = await loadLegalEntity(db, orgId, subsidiaryId);
     const book = await loadEquityBook(db, orgId, subsidiaryId);
-    const { lines, total } = await measure(orgId, subsidiaryId, book, last.through_date, entity.currency, null, await accrued(orgId, subsidiaryId, last.through_date));
+    const { lines, total } = await measure(
+      orgId,
+      subsidiaryId,
+      book,
+      last.through_date,
+      entity.currency,
+      null,
+      await accrued(orgId, subsidiaryId, last.through_date),
+    );
     if (lines.length === 0) return null;
     const postsWith = await nextRunPeriodAfter(db, orgId, subsidiaryId, latest.through_date);
     return {
-      recognizedThrough: last.through_date, total: formatLedger(total), lines: lines.length, currency: entity.currency,
-      postsWith, generatePeriods: postsWith ? null : await runPeriodsToGenerate(db, orgId, latest.through_date),
+      recognizedThrough: last.through_date,
+      total: formatLedger(total),
+      lines: lines.length,
+      currency: entity.currency,
+      postsWith,
+      generatePeriods: postsWith
+        ? null
+        : await runPeriodsToGenerate(db, orgId, latest.through_date),
     };
   });
 }
@@ -263,83 +415,184 @@ export interface InterestRunResult {
  * Post the note interest run through a date (equity.manage; a governed
  * action an Equity action Flow may require approval for).
  */
-export async function postInterestRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<GovernedRunResult<InterestRunResult>> {
+export async function postInterestRun(
+  input: EquityCommand & { subsidiaryId: string; throughDate: string },
+): Promise<GovernedRunResult<InterestRunResult>> {
   const throughDate = requireDate(input.throughDate, "throughDate", "runDate");
   // A run already posted for the date is returned as it stands; nothing is submitted again.
-  const posted = await withOrgTransaction(input.orgId, async () => (await db.execute<{ id: string }>(sql`
+  const posted = await withOrgTransaction(
+    input.orgId,
+    async () =>
+      (
+        await db.execute<{ id: string }>(
+          sql`
     select id from equity_interest_runs
-     where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`, "objects")).length > 0);
+     where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`,
+          "objects",
+        )
+      ).length > 0,
+  );
   if (posted) return { ...(await applyInterestRun(input)), status: "applied", requestId: null };
   // A date whose period has not ended or is closed refuses before anything is submitted for approval.
-  await withOrgTransaction(input.orgId, () => assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "interest"));
-  const outcome = await governEquityAction({
-    orgId: input.orgId, actorId: input.actorId, subsidiaryId: input.subsidiaryId, action: "interest_run",
-    subjectId: null, subjectLabel: `Note interest through ${throughDate}`, effectiveOn: throughDate, reason: null,
-    summary: {}, payload: { subsidiaryId: input.subsidiaryId, throughDate }, idempotencyKey: null,
-  }, (actorId) => applyInterestRun({ ...input, actorId }));
+  await withOrgTransaction(input.orgId, () =>
+    assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "interest"),
+  );
+  const outcome = await governEquityAction(
+    {
+      orgId: input.orgId,
+      actorId: input.actorId,
+      subsidiaryId: input.subsidiaryId,
+      action: "interest_run",
+      subjectId: null,
+      subjectLabel: `Note interest through ${throughDate}`,
+      effectiveOn: throughDate,
+      reason: null,
+      summary: {},
+      payload: { subsidiaryId: input.subsidiaryId, throughDate },
+      idempotencyKey: null,
+    },
+    (actorId) => applyInterestRun({ ...input, actorId }),
+  );
   return outcome.result
     ? { ...outcome.result, status: "applied", requestId: outcome.requestId }
     : { status: "pending_approval", requestId: outcome.requestId, throughDate };
 }
 
 /** Apply the note interest run: the command its approval releases. */
-export async function applyInterestRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<InterestRunResult> {
+export async function applyInterestRun(
+  input: EquityCommand & { subsidiaryId: string; throughDate: string },
+): Promise<InterestRunResult> {
   const throughDate = requireDate(input.throughDate, "throughDate", "runDate");
   return inEquityCommand(input, "equity.manage", async ({ book, currency, entityName }) => {
-    const existing = (await db.execute<{ id: string; total_amount: string; journal_entry_id: string | null; lines: number }>(sql`
+    const existing = (
+      await db.execute<{
+        id: string;
+        total_amount: string;
+        journal_entry_id: string | null;
+        lines: number;
+      }>(
+        sql`
       select r.id, r.total_amount::text as total_amount, r.journal_entry_id,
              (select count(*)::int from equity_interest_run_lines l where l.org_id = r.org_id and l.run_id = r.id) as lines
         from equity_interest_runs r
-       where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId} and r.through_date = ${throughDate}::date`, "objects"))[0];
+       where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId} and r.through_date = ${throughDate}::date`,
+        "objects",
+      )
+    )[0];
     if (existing) {
-      return { runId: existing.id, throughDate, total: existing.total_amount, journalEntryId: existing.journal_entry_id, lines: existing.lines, replayed: true };
+      return {
+        runId: existing.id,
+        throughDate,
+        total: existing.total_amount,
+        journalEntryId: existing.journal_entry_id,
+        lines: existing.lines,
+        replayed: true,
+      };
     }
     const last = await lastRun(input.orgId, input.subsidiaryId);
     const refusal = backdated(last, throughDate);
     if (refusal) throw refusal;
     await assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "interest");
     const previous = await accrued(input.orgId, input.subsidiaryId);
-    const probe = await measure(input.orgId, input.subsidiaryId, book, throughDate, currency, null, previous);
+    const probe = await measure(
+      input.orgId,
+      input.subsidiaryId,
+      book,
+      throughDate,
+      currency,
+      null,
+      previous,
+    );
     if (probe.lines.length === 0) {
       throw last
-        ? equityError("interestNothingDueSince", { date: fig.date(throughDate), last: fig.date(last.through_date) }, { field: "throughDate" })
-        : equityError("interestNothingDue", { date: fig.date(throughDate) }, { field: "throughDate" });
+        ? equityError(
+            "interestNothingDueSince",
+            { date: fig.date(throughDate), last: fig.date(last.through_date) },
+            { field: "throughDate" },
+          )
+        : equityError(
+            "interestNothingDue",
+            { date: fig.date(throughDate) },
+            { field: "throughDate" },
+          );
     }
     const policy = await resolveAccountPolicy(db, input.orgId, input.subsidiaryId, throughDate);
-    const accounts = { expense: () => requirePolicyAccount(policy, "interestExpenseAccountId"), accrued: () => requirePolicyAccount(policy, "accruedInterestAccountId") };
-    const { lines, total } = await measure(input.orgId, input.subsidiaryId, book, throughDate, currency, accounts, previous);
+    const accounts = {
+      expense: () => requirePolicyAccount(policy, "interestExpenseAccountId"),
+      accrued: () => requirePolicyAccount(policy, "accruedInterestAccountId"),
+    };
+    const { lines, total } = await measure(
+      input.orgId,
+      input.subsidiaryId,
+      book,
+      throughDate,
+      currency,
+      accounts,
+      previous,
+    );
     const runId = await newEquityId(db);
     let journalEntryId: string | null = null;
     const legs = lines.flatMap((line) => line.legs);
     if (legs.some((leg) => leg.units !== 0n)) {
       journalEntryId = await postEquityEntry(db, {
-        orgId: input.orgId, subsidiaryId: input.subsidiaryId, currency, postingDate: throughDate,
-        entryNumberBase: `EQ-INT-${throughDate}`, memo: `Convertible note interest through ${throughDate} (${entityName})`,
-        idempotencyKey: `equity:interest-run:${input.subsidiaryId}:${throughDate}`, actorId: input.actorId,
-        auditAction: "equity.interest", auditChanges: { runId, throughDate }, legs,
+        orgId: input.orgId,
+        subsidiaryId: input.subsidiaryId,
+        currency,
+        postingDate: throughDate,
+        entryNumberBase: `EQ-INT-${throughDate}`,
+        memo: `Convertible note interest through ${throughDate} (${entityName})`,
+        idempotencyKey: `equity:interest-run:${input.subsidiaryId}:${throughDate}`,
+        actorId: input.actorId,
+        auditAction: "equity.interest",
+        auditChanges: { runId, throughDate },
+        legs,
       });
     }
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into equity_interest_runs (id, org_id, subsidiary_id, through_date, currency, total_amount, journal_entry_id, created_by)
       values (${runId}, ${input.orgId}, ${input.subsidiaryId}, ${throughDate}::date, ${currency}, ${formatLedger(total)}::numeric, ${journalEntryId}, ${input.actorId})
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("interestRun") });
     if (lines.length > 0) {
-      const values = lines.map((line) => sql`(${input.orgId}, ${input.subsidiaryId}, ${runId}, ${line.securityId}, ${line.currency},
-        ${line.cumulative}::numeric, ${line.previous}::numeric, ${line.period}::numeric, ${line.fxRate}::numeric, ${line.functional}::numeric)`);
-      const written = await db.execute<{ id: string }>(sql`
+      const values = lines.map(
+        (
+          line,
+        ) => sql`(${input.orgId}, ${input.subsidiaryId}, ${runId}, ${line.securityId}, ${line.currency},
+        ${line.cumulative}::numeric, ${line.previous}::numeric, ${line.period}::numeric, ${line.fxRate}::numeric, ${line.functional}::numeric)`,
+      );
+      const written = await db.execute<{ id: string }>(
+        sql`
         insert into equity_interest_run_lines (org_id, subsidiary_id, run_id, security_id, currency, cumulative_amount, previous_amount, period_amount, fx_rate, functional_amount)
         values ${sql.join(values, sql`, `)}
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       if (written.length !== lines.length) {
         throw equityError("notStoredCompletely", { record: fig.choice("interestLines") });
       }
     }
     await writeEquityAudit(db, {
-      orgId: input.orgId, table: "equity_interest_runs", rowId: runId, action: "equity.interest.run", actorId: input.actorId,
-      changes: { before: { lastRunThrough: last?.through_date ?? null }, after: { throughDate, total: formatLedger(total), lines: lines.length, journalEntryId } },
+      orgId: input.orgId,
+      table: "equity_interest_runs",
+      rowId: runId,
+      action: "equity.interest.run",
+      actorId: input.actorId,
+      changes: {
+        before: { lastRunThrough: last?.through_date ?? null },
+        after: { throughDate, total: formatLedger(total), lines: lines.length, journalEntryId },
+      },
     });
-    return { runId, throughDate, total: formatLedger(total), journalEntryId, lines: lines.length, replayed: false };
+    return {
+      runId,
+      throughDate,
+      total: formatLedger(total),
+      journalEntryId,
+      lines: lines.length,
+      replayed: false,
+    };
   });
 }
 
@@ -353,16 +606,41 @@ export interface InterestRunRow {
 }
 
 /** Posted interest runs of a legal entity, latest first. */
-export async function listInterestRuns(input: { orgId: string; actorId: string; subsidiaryId: string }): Promise<InterestRunRow[]> {
+export async function listInterestRuns(input: {
+  orgId: string;
+  actorId: string;
+  subsidiaryId: string;
+}): Promise<InterestRunRow[]> {
   await assertEquityReadable(input.orgId);
-  return withOrgTransaction(input.orgId, async () => {
-    await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
-    const rows = await db.execute<{ id: string; through_date: string; total_amount: string; currency: string; journal_entry_id: string | null; entry_number: string | null }>(sql`
+  return withOrgTransaction(
+    input.orgId,
+    async () => {
+      await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
+      const rows = await db.execute<{
+        id: string;
+        through_date: string;
+        total_amount: string;
+        currency: string;
+        journal_entry_id: string | null;
+        entry_number: string | null;
+      }>(
+        sql`
       select r.id, r.through_date::text as through_date, r.total_amount::text as total_amount, r.currency, r.journal_entry_id, je.entry_number
         from equity_interest_runs r
         left join journal_entries je on je.org_id = r.org_id and je.id = r.journal_entry_id
        where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId}
-       order by r.through_date desc`, "objects");
-    return rows.map((row) => ({ id: row.id, throughDate: row.through_date, total: row.total_amount, currency: row.currency, journalEntryId: row.journal_entry_id, entryNumber: row.entry_number }));
-  }, { isolationLevel: "REPEATABLE READ", readOnly: true });
+       order by r.through_date desc`,
+        "objects",
+      );
+      return rows.map((row) => ({
+        id: row.id,
+        throughDate: row.through_date,
+        total: row.total_amount,
+        currency: row.currency,
+        journalEntryId: row.journal_entry_id,
+        entryNumber: row.entry_number,
+      }));
+    },
+    { isolationLevel: "REPEATABLE READ", readOnly: true },
+  );
 }

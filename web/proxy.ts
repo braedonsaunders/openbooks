@@ -6,8 +6,8 @@ import {
   buildContentSecurityPolicy,
   createContentSecurityPolicyNonce,
 } from "./lib/content-security-policy";
-import { APP_DOCUMENT_CSP, isAppDocumentRequest } from './lib/apps/document-policy';
-import { isFramableContentRequest } from './lib/framable-content';
+import { APP_DOCUMENT_CSP, isAppDocumentRequest } from "./lib/apps/document-policy";
+import { isFramableContentRequest } from "./lib/framable-content";
 import { isPublicPath, isCsrfExemptPath } from "./lib/proxy-policy";
 import { loginReturnPath } from "./lib/login-return-path";
 import { hasTrustedOrigin, isUnsafeMethod } from "./lib/csrf";
@@ -26,11 +26,21 @@ async function validSignature(token: string, secret: string) {
   const parsed = parseSessionTokenFormat(token);
   if (!parsed || parsed.expiresEpoch < Date.now() / 1000) return null;
   const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
   );
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(sessionSigningInput(parsed.payload)));
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(sessionSigningInput(parsed.payload)),
+  );
   const expected = btoa(String.fromCharCode(...new Uint8Array(mac)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
   if (expected.length !== parsed.signature.length) return null;
   let difference = 0;
   for (let index = 0; index < expected.length; index += 1) {
@@ -48,11 +58,11 @@ export async function proxy(req: NextRequest) {
   const nonce = createContentSecurityPolicyNonce();
   const appDocument = isAppDocumentRequest(pathname, req.method);
   const framableContent = isFramableContentRequest(pathname, req.method);
-  const contentSecurityPolicy = appDocument ? APP_DOCUMENT_CSP : buildContentSecurityPolicy(
-    nonce,
-    process.env.NODE_ENV === "development",
-    { framableBySameOrigin: framableContent },
-  );
+  const contentSecurityPolicy = appDocument
+    ? APP_DOCUMENT_CSP
+    : buildContentSecurityPolicy(nonce, process.env.NODE_ENV === "development", {
+        framableBySameOrigin: framableContent,
+      });
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("x-request-id", requestId);
@@ -60,7 +70,7 @@ export async function proxy(req: NextRequest) {
   // incoming CSP header. x-nonce is retained for our explicit <Script>.
   requestHeaders.set("Content-Security-Policy", contentSecurityPolicy);
   const next = () => NextResponse.next({ request: { headers: requestHeaders } });
-  const secured = <T,>(response: NextResponse<T>) => {
+  const secured = <T>(response: NextResponse<T>) => {
     response.headers.set("Content-Security-Policy", contentSecurityPolicy);
     response.headers.set("x-request-id", requestId);
     if (appDocument) {
@@ -133,7 +143,8 @@ export async function proxy(req: NextRequest) {
  * logs; the retry replays the original navigation.
  */
 function unavailablePage(requestId: string): string {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">` +
+  return (
+    `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     `<meta name="robots" content="noindex"><title>Service unavailable</title>` +
     `<style>body{font-family:ui-sans-serif,system-ui,sans-serif;background:#f8fafc;color:#0f172a;` +
@@ -154,7 +165,8 @@ function unavailablePage(requestId: string): string {
     // the current URL (query string included); no request target is embedded,
     // so there is no open-redirect surface.
     `<a class="retry" href="">Try again</a>` +
-    `</main></body></html>`;
+    `</main></body></html>`
+  );
 }
 
 export const config = { matcher: ["/((?!_next/static|_next/image).*)"] };

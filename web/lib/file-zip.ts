@@ -1,29 +1,34 @@
-import 'server-only'
-import JSZip from 'jszip'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { fileReadPredicate, folderPathVisiblePredicate, getFileBlob, type FileViewer } from './file-cabinet'
-import { isMaskedFileContentError } from './file-storage'
+import "server-only";
+import JSZip from "jszip";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  fileReadPredicate,
+  folderPathVisiblePredicate,
+  getFileBlob,
+  type FileViewer,
+} from "./file-cabinet";
+import { isMaskedFileContentError } from "./file-storage";
 
 /** Guardrails — zipping fetches every blob (often from object storage), so cap
  *  the work per request. Bulk selections and folder subtrees both go through
  *  these limits; buildZip enforces the source-byte cap after each authorized
  *  blob is read, before adding it to the in-memory archive. */
-export const MAX_ZIP_FILES = 300
-export const MAX_ZIP_BYTES = 250 * 1024 * 1024 // 250 MB (uncompressed source)
+export const MAX_ZIP_FILES = 300;
+export const MAX_ZIP_BYTES = 250 * 1024 * 1024; // 250 MB (uncompressed source)
 
 export class ZipSizeLimitError extends Error {
-  readonly limit = MAX_ZIP_BYTES
+  readonly limit = MAX_ZIP_BYTES;
 
   constructor() {
-    super(`zip source exceeds ${MAX_ZIP_BYTES / (1024 * 1024)} MB limit`)
-    this.name = 'ZipSizeLimitError'
+    super(`zip source exceeds ${MAX_ZIP_BYTES / (1024 * 1024)} MB limit`);
+    this.name = "ZipSizeLimitError";
   }
 }
 
 export type ZipEntry = {
-  id: string
-  path: string
+  id: string;
+  path: string;
 };
 
 /**
@@ -36,11 +41,11 @@ export type ZipEntry = {
  */
 export function safeZipPath(raw: string): string {
   const segments = raw
-    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, "")
     .split(/[\\/]+/)
-    .map((segment) => segment.replace(/^[A-Za-z]:$/, '').trim())
-    .filter((segment) => segment !== '' && segment !== '.' && segment !== '..')
-  return segments.length > 0 ? segments.join('/') : 'file'
+    .map((segment) => segment.replace(/^[A-Za-z]:$/, "").trim())
+    .filter((segment) => segment !== "" && segment !== "." && segment !== "..");
+  return segments.length > 0 ? segments.join("/") : "file";
 }
 
 /**
@@ -48,11 +53,16 @@ export function safeZipPath(raw: string): string {
  * sub-folders, and their active files). One extra row over the cap is fetched
  * so callers can detect "too many".
  */
-export async function folderZipManifest(orgId: string, folderId: string, viewer: FileViewer): Promise<ZipEntry[]> {
-  const visible = await fileReadPredicate(orgId, viewer)
-  const rootPathVisible = await folderPathVisiblePredicate(orgId, viewer, sql`id`)
-  const childPathVisible = await folderPathVisiblePredicate(orgId, viewer, sql`f.id`)
-  const r = (await db.execute<ZipEntry>(sql`
+export async function folderZipManifest(
+  orgId: string,
+  folderId: string,
+  viewer: FileViewer,
+): Promise<ZipEntry[]> {
+  const visible = await fileReadPredicate(orgId, viewer);
+  const rootPathVisible = await folderPathVisiblePredicate(orgId, viewer, sql`id`);
+  const childPathVisible = await folderPathVisiblePredicate(orgId, viewer, sql`f.id`);
+  const r = await db.execute<ZipEntry>(
+    sql`
     with recursive tree as (
       select id, name, parent_folder_id, name::text as prefix, not ${rootPathVisible} as hidden_path
         from folders where id = ${folderId} and org_id = ${orgId}
@@ -68,23 +78,32 @@ export async function folderZipManifest(orgId: string, folderId: string, viewer:
      where ${visible}
      order by path
      limit ${MAX_ZIP_FILES + 1}
-  `, 'objects'))
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 /** File ids + names for an explicit set of file ids (bulk selection). */
-export async function filesZipManifest(orgId: string, fileIds: string[], viewer: FileViewer): Promise<ZipEntry[]> {
-  if (fileIds.length === 0) return []
-  const visible = await fileReadPredicate(orgId, viewer)
-  const r = (await db.execute<ZipEntry>(sql`
+export async function filesZipManifest(
+  orgId: string,
+  fileIds: string[],
+  viewer: FileViewer,
+): Promise<ZipEntry[]> {
+  if (fileIds.length === 0) return [];
+  const visible = await fileReadPredicate(orgId, viewer);
+  const r = await db.execute<ZipEntry>(
+    sql`
     select fi.id, fi.name as path from files fi
     left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
      where ${visible}
        and fi.id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(fileIds)}::jsonb) as _f(value))
      order by fi.name
      limit ${MAX_ZIP_FILES + 1}
-  `, 'objects'))
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 /**
@@ -99,35 +118,35 @@ export async function buildZip(
   viewer: FileViewer,
   entries: ZipEntry[],
 ): Promise<{ bytes: Buffer; included: number }> {
-  const zip = new JSZip()
-  const used = new Set<string>()
-  let included = 0
-  let sourceBytes = 0
+  const zip = new JSZip();
+  const used = new Set<string>();
+  let included = 0;
+  let sourceBytes = 0;
   for (const e of entries) {
     // A single unreadable blob (missing object, storage hiccup) must not sink
     // the whole archive — skip it. A masked-clone tombstone is NOT skippable:
     // it is a named refusal, so it propagates and fails the archive with its
     // reason instead of silently dropping the file.
     const blob = await getFileBlob(orgId, e.id, viewer).catch((err: unknown) => {
-      if (isMaskedFileContentError(err)) throw err
-      return null
-    })
-    if (!blob) continue
-    if (sourceBytes + blob.bytes.length > MAX_ZIP_BYTES) throw new ZipSizeLimitError()
-    sourceBytes += blob.bytes.length
-    let path = safeZipPath(e.path)
+      if (isMaskedFileContentError(err)) throw err;
+      return null;
+    });
+    if (!blob) continue;
+    if (sourceBytes + blob.bytes.length > MAX_ZIP_BYTES) throw new ZipSizeLimitError();
+    sourceBytes += blob.bytes.length;
+    let path = safeZipPath(e.path);
     if (used.has(path)) {
-      const dot = path.lastIndexOf('.')
-      const stem = dot > 0 ? path.slice(0, dot) : path
-      const ext = dot > 0 ? path.slice(dot) : ''
-      let n = 2
-      while (used.has(`${stem} (${n})${ext}`)) n++
-      path = `${stem} (${n})${ext}`
+      const dot = path.lastIndexOf(".");
+      const stem = dot > 0 ? path.slice(0, dot) : path;
+      const ext = dot > 0 ? path.slice(dot) : "";
+      let n = 2;
+      while (used.has(`${stem} (${n})${ext}`)) n++;
+      path = `${stem} (${n})${ext}`;
     }
-    used.add(path)
-    zip.file(path, blob.bytes)
-    included++
+    used.add(path);
+    zip.file(path, blob.bytes);
+    included++;
   }
-  const bytes = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
-  return { bytes, included }
+  const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  return { bytes, included };
 }

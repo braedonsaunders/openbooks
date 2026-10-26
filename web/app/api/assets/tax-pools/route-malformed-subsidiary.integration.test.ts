@@ -41,7 +41,8 @@ const hooks = registerHooks({
   },
 });
 const { POST } = await import("./route");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 test.after(() => hooks.deregister());
 
 const request = (body: unknown) =>
@@ -55,14 +56,28 @@ test("tax-pool POST maps a malformed subsidiaryId to 404 before SQL", async () =
   const org = await createScratchOrg();
   try {
     state.gate.user = { orgId: org.orgId, id: (await seedFlowActors(org.orgId)).adminId };
-    const malformed = await POST(request({ regime: "ca_cca", taxYear: 2026, subsidiaryId: "not-a-uuid" }));
-    assert.equal(malformed.status, 404, `expected 404, got ${malformed.status}: ${await malformed.text()}`);
+    const malformed = await POST(
+      request({ regime: "ca_cca", taxYear: 2026, subsidiaryId: "not-a-uuid" }),
+    );
+    assert.equal(
+      malformed.status,
+      404,
+      `expected 404, got ${malformed.status}: ${await malformed.text()}`,
+    );
 
     // Control: a well-formed but unknown id keeps its existing 404 contract.
     const unknown = await POST(
-      request({ regime: "ca_cca", taxYear: 2026, subsidiaryId: "11111111-2222-4333-8444-555555555555" }),
+      request({
+        regime: "ca_cca",
+        taxYear: 2026,
+        subsidiaryId: "11111111-2222-4333-8444-555555555555",
+      }),
     );
-    assert.equal(unknown.status, 404, `expected 404, got ${unknown.status}: ${await unknown.text()}`);
+    assert.equal(
+      unknown.status,
+      404,
+      `expected 404, got ${unknown.status}: ${await unknown.text()}`,
+    );
   } finally {
     state.gate.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);

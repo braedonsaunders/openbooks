@@ -44,11 +44,19 @@ const OVERSIZED_LEGACY_MODULES = new Set<string>();
 
 const source = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
 const lineCount = (name: string) => source(name).split("\n").length;
-const parse = (name: string) => ts.createSourceFile(name, source(name), ts.ScriptTarget.Latest, true);
+const parse = (name: string) =>
+  ts.createSourceFile(name, source(name), ts.ScriptTarget.Latest, true);
 
 test("payments uses direct operation modules with no legacy entrypoint", () => {
-  assert.equal(existsSync(new URL("payments.ts", import.meta.url)), false, "legacy entrypoint must be deleted");
-  assert.ok(files.length > 0, "no payments modules discovered — the glob is broken, not the directory");
+  assert.equal(
+    existsSync(new URL("payments.ts", import.meta.url)),
+    false,
+    "legacy entrypoint must be deleted",
+  );
+  assert.ok(
+    files.length > 0,
+    "no payments modules discovered — the glob is broken, not the directory",
+  );
 
   // The exemption list may only shrink: a module that has been split must lose
   // its entry, or the next module to grow past the bound inherits its cover.
@@ -56,8 +64,8 @@ test("payments uses direct operation modules with no legacy entrypoint", () => {
     assert.ok(files.includes(name), `${name} is exempted from the line bound but no longer exists`);
     assert.ok(
       lineCount(name) > LINE_BOUND,
-      `${name} is exempted from the line bound but is now ${lineCount(name)} lines — delete it from `
-      + "OVERSIZED_LEGACY_MODULES; the list may only shrink",
+      `${name} is exempted from the line bound but is now ${lineCount(name)} lines — delete it from ` +
+        "OVERSIZED_LEGACY_MODULES; the list may only shrink",
     );
   }
 
@@ -74,7 +82,11 @@ test("payments implementation dependencies have no facade backimports or static 
       if (!(ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))) continue;
       const specifier = statement.moduleSpecifier;
       if (!specifier || !ts.isStringLiteral(specifier)) continue;
-      assert.notEqual(specifier.text, "./payments.ts", `${file} must depend on the owning implementation, not the public facade`);
+      assert.notEqual(
+        specifier.text,
+        "./payments.ts",
+        `${file} must depend on the owning implementation, not the public facade`,
+      );
       const target = specifier.text.replace(/^\.\//, "");
       if (files.includes(target)) dependencies.push(target);
     }

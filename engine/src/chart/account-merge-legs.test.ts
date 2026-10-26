@@ -53,26 +53,63 @@ test("credit balances keep a positive rate", () => {
 
 test("residues that no positive rate reproduces are refused, not fabricated", () => {
   // Opposite signs: a functional residue against a foreign balance of the other sign.
-  assert.deepEqual(transferRate(group({ currency: "EUR", amount: "-7.0000", txnAmount: "10.0000" })), { ok: false, reason: "inconsistent_rate" });
+  assert.deepEqual(
+    transferRate(group({ currency: "EUR", amount: "-7.0000", txnAmount: "10.0000" })),
+    { ok: false, reason: "inconsistent_rate" },
+  );
   // A functional residue with no foreign balance left (realised differences).
-  assert.deepEqual(transferRate(group({ currency: "EUR", amount: "-10.0000", txnAmount: "0.0000" })), { ok: false, reason: "inconsistent_rate" });
+  assert.deepEqual(
+    transferRate(group({ currency: "EUR", amount: "-10.0000", txnAmount: "0.0000" })),
+    { ok: false, reason: "inconsistent_rate" },
+  );
   // A foreign balance with no functional amount cannot post (lines are non-zero).
-  assert.deepEqual(transferRate(group({ currency: "EUR", amount: "0.0000", txnAmount: "10.0000" })), { ok: false, reason: "zero_functional" });
+  assert.deepEqual(
+    transferRate(group({ currency: "EUR", amount: "0.0000", txnAmount: "10.0000" })),
+    { ok: false, reason: "zero_functional" },
+  );
   // A functional-currency group whose transaction and functional amounts disagree.
-  assert.deepEqual(transferRate(group({ amount: "10.0000", txnAmount: "9.0000" })), { ok: false, reason: "inconsistent_rate" });
+  assert.deepEqual(transferRate(group({ amount: "10.0000", txnAmount: "9.0000" })), {
+    ok: false,
+    reason: "inconsistent_rate",
+  });
 });
 
 test("reclass entries balance per entry, per subsidiary and per dimension, and zero the source", () => {
   const groups = [
-    { ...group({ departmentId: "dept-a", amount: "100.0000", txnAmount: "100.0000" }), fxRate: "1.0000000000" },
-    { ...group({ departmentId: "dept-b", amount: "-40.0000", txnAmount: "-40.0000" }), fxRate: "1.0000000000" },
-    { ...group({ subsidiaryId: "sub-2", currency: "EUR", functionalCurrency: "EUR", amount: "12.5000", txnAmount: "12.5000" }), fxRate: "1.0000000000" },
+    {
+      ...group({ departmentId: "dept-a", amount: "100.0000", txnAmount: "100.0000" }),
+      fxRate: "1.0000000000",
+    },
+    {
+      ...group({ departmentId: "dept-b", amount: "-40.0000", txnAmount: "-40.0000" }),
+      fxRate: "1.0000000000",
+    },
+    {
+      ...group({
+        subsidiaryId: "sub-2",
+        currency: "EUR",
+        functionalCurrency: "EUR",
+        amount: "12.5000",
+        txnAmount: "12.5000",
+      }),
+      fxRate: "1.0000000000",
+    },
     { ...group({ bookId: "book-2", extraDims: { fund: "fund-1" } }), fxRate: "1.0000000000" },
   ];
   const entries = buildReclassEntries(groups, SOURCE, TARGET);
-  assert.deepEqual(entries.map((entry) => `${entry.bookId}|${entry.subsidiaryId}`), ["book-1|sub-1", "book-1|sub-2", "book-2|sub-1"]);
+  assert.deepEqual(
+    entries.map((entry) => `${entry.bookId}|${entry.subsidiaryId}`),
+    ["book-1|sub-1", "book-1|sub-2", "book-2|sub-1"],
+  );
   for (const entry of entries) {
-    assert.equal(cmp(entry.lines.reduce((total, line) => add(total, line.amount), "0"), "0"), 0, "entry balances");
+    assert.equal(
+      cmp(
+        entry.lines.reduce((total, line) => add(total, line.amount), "0"),
+        "0",
+      ),
+      0,
+      "entry balances",
+    );
     assert.ok(entry.lines.every((line) => line.subsidiaryId === entry.subsidiaryId));
     const sourceLines = entry.lines.filter((line) => line.accountId === SOURCE);
     const targetLines = entry.lines.filter((line) => line.accountId === TARGET);
@@ -88,7 +125,9 @@ test("reclass entries balance per entry, per subsidiary and per dimension, and z
     });
   }
   // Every grouped source balance is credited exactly: the source ends at zero.
-  const sourceTotal = entries.flatMap((entry) => entry.lines).filter((line) => line.accountId === SOURCE)
+  const sourceTotal = entries
+    .flatMap((entry) => entry.lines)
+    .filter((line) => line.accountId === SOURCE)
     .reduce((total, line) => add(total, line.amount), "0");
   const grouped = groups.reduce((total, row) => add(total, row.amount), "0");
   assert.equal(cmp(add(sourceTotal, grouped), "0"), 0);
@@ -99,13 +138,30 @@ test("reclass entries are deterministic regardless of input order", () => {
     { ...group({ departmentId: "dept-b" }), fxRate: "1.0000000000" },
     { ...group({ departmentId: "dept-a" }), fxRate: "1.0000000000" },
   ];
-  assert.deepEqual(buildReclassEntries(groups, SOURCE, TARGET), buildReclassEntries([...groups].reverse(), SOURCE, TARGET));
+  assert.deepEqual(
+    buildReclassEntries(groups, SOURCE, TARGET),
+    buildReclassEntries([...groups].reverse(), SOURCE, TARGET),
+  );
 });
 
 test("the consequence digest is stable and changes with any consequence", () => {
-  const base = { sourceAccountId: SOURCE, targetAccountId: TARGET, effectiveDate: "2026-07-31", references: [{ key: "items.expense_account_id", redirect: 2 }] };
+  const base = {
+    sourceAccountId: SOURCE,
+    targetAccountId: TARGET,
+    effectiveDate: "2026-07-31",
+    references: [{ key: "items.expense_account_id", redirect: 2 }],
+  };
   assert.equal(mergeConsequenceDigest(base), mergeConsequenceDigest({ ...base }));
   assert.match(mergeConsequenceDigest(base), /^[0-9a-f]{64}$/);
-  assert.notEqual(mergeConsequenceDigest(base), mergeConsequenceDigest({ ...base, effectiveDate: "2026-08-01" }));
-  assert.notEqual(mergeConsequenceDigest(base), mergeConsequenceDigest({ ...base, references: [{ key: "items.expense_account_id", redirect: 3 }] }));
+  assert.notEqual(
+    mergeConsequenceDigest(base),
+    mergeConsequenceDigest({ ...base, effectiveDate: "2026-08-01" }),
+  );
+  assert.notEqual(
+    mergeConsequenceDigest(base),
+    mergeConsequenceDigest({
+      ...base,
+      references: [{ key: "items.expense_account_id", redirect: 3 }],
+    }),
+  );
 });

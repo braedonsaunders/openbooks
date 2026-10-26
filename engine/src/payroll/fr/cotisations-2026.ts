@@ -82,8 +82,8 @@ export const FR_SMIC_2026 = {
   monthly: "1823.03",
   annual: "21876.36",
   quote:
-    "Décret n° 2025-1228 du 17 décembre 2025: taux horaire du SMIC 12,02 € "
-    + "bruts, SMIC mensuel brut 1 823,03 € (151,67 h) à compter du 1er janvier 2026",
+    "Décret n° 2025-1228 du 17 décembre 2025: taux horaire du SMIC 12,02 € " +
+    "bruts, SMIC mensuel brut 1 823,03 € (151,67 h) à compter du 1er janvier 2026",
 } as const;
 
 /**
@@ -99,9 +99,9 @@ export const FR_ALLOC_FAM_SEUIL_2026 = {
   referenceSmicAnnual: "20966.40",
   annual: "73382.40",
   quote:
-    "URSSAF cotisation allocations familiales (10 June 2026): 5.25% generally; "
-    + "3.45% only for specified exemption/special-regime employers, at or below "
-    + "3.5 × the 31 December 2023 SMIC (annual €20,966.40)",
+    "URSSAF cotisation allocations familiales (10 June 2026): 5.25% generally; " +
+    "3.45% only for specified exemption/special-regime employers, at or below " +
+    "3.5 × the 31 December 2023 SMIC (annual €20,966.40)",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -118,8 +118,14 @@ export const FR_ALLOC_FAM_SEUIL_2026 = {
  * (see FR_COTISATION_REFUSALS_2026); it never guesses which applies.
  */
 export const FR_MALADIE_ER_2026 = {
-  plein: { rate: "0.13", quote: "Assurance maladie, maternité, invalidité, décès Taux plein à 13 %" },
-  reduit: { rate: "0.07", quote: "Assurance maladie, maternité, invalidité, décès Taux réduit à 7 %" },
+  plein: {
+    rate: "0.13",
+    quote: "Assurance maladie, maternité, invalidité, décès Taux plein à 13 %",
+  },
+  reduit: {
+    rate: "0.07",
+    quote: "Assurance maladie, maternité, invalidité, décès Taux réduit à 7 %",
+  },
 } as const;
 
 /**
@@ -171,7 +177,10 @@ export const FR_DIALOGUE_SOCIAL_ER_2026: FrCotisationRate = {
  * en 2026"
  */
 export const FR_CHOMAGE_ER_2026 = {
-  rate: { rate: "0.04", quote: "Contribution assurance chômage 4,00 % dans la limite de 192 240 € en 2026" },
+  rate: {
+    rate: "0.04",
+    quote: "Contribution assurance chômage 4,00 % dans la limite de 192 240 € en 2026",
+  },
   /** Annual cap; the engine scales it to the pay periodicity. */
   capAnnual: FR_QUATRE_PASS_2026,
 } as const;
@@ -189,7 +198,8 @@ export const FR_AGS_ER_2026 = {
   capAnnual: FR_QUATRE_PASS_2026,
   interimVariant: {
     rate: "0.0003",
-    quote: "Cotisation AGS Dans la limite de 192 240 € en 2026 : 0,25 % 0,03 % pour les entreprises de travail temporaire",
+    quote:
+      "Cotisation AGS Dans la limite de 192 240 € en 2026 : 0,25 % 0,03 % pour les entreprises de travail temporaire",
   },
 } as const;
 
@@ -296,7 +306,8 @@ export const FR_CSG_SAL_2026 = {
   },
   nonImposable: {
     rate: "0.068",
-    quote: "CSG non imposable  6,80 % sur 98,25 % du salaire brut dans la limite de 192 240 € en 2026",
+    quote:
+      "CSG non imposable  6,80 % sur 98,25 % du salaire brut dans la limite de 192 240 € en 2026",
   },
 } as const;
 
@@ -354,10 +365,10 @@ export function frCotisationYearForPayDate(payDate: string): 2026 {
   }
   if (payDate < "2026-01-01" || payDate > "2026-12-31") {
     throw new PayrollPackError(
-      `FR cotisations have no transcribed tables for pay date ${payDate}: `
-      + "the FR pack transcribes calendar 2026 only "
-      + "(URSSAF taux secteur privé + plafonds, both rendered January 2026). "
-      + "This date is not yet supported by the FR pack; contact support.",
+      `FR cotisations have no transcribed tables for pay date ${payDate}: ` +
+        "the FR pack transcribes calendar 2026 only " +
+        "(URSSAF taux secteur privé + plafonds, both rendered January 2026). " +
+        "This date is not yet supported by the FR pack; contact support.",
     );
   }
   return 2026;

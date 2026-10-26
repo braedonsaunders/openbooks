@@ -7,7 +7,7 @@
  */
 export class ApprovalRoutingError extends Error {
   constructor(readonly flowError: string) {
-    super(`approval could not be routed: ${flowError}`)
-    this.name = 'ApprovalRoutingError'
+    super(`approval could not be routed: ${flowError}`);
+    this.name = "ApprovalRoutingError";
   }
 }

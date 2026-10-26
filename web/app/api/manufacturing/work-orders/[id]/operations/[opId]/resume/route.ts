@@ -10,10 +10,16 @@ const Params = z.object({ id: uuidString(), opId: uuidString() });
 const Body = z.object({}).strict();
 
 export const POST = defineRoute({
-  permission: "manufacturing.manage", feature: "manufacturing", params: Params, body: Body,
-  handler: async ({ authz, params }) => manufacturingTransaction(authz.user.orgId, async () => {
-    const result = await loadScopedWorkOrder(authz, params.id);
-    if (!result.ok) return result.response;
-    return Response.json(await resumeWorkOrderOperation(db, authz.user.orgId, authz.user.id, params.id, params.opId));
-  }),
+  permission: "manufacturing.manage",
+  feature: "manufacturing",
+  params: Params,
+  body: Body,
+  handler: async ({ authz, params }) =>
+    manufacturingTransaction(authz.user.orgId, async () => {
+      const result = await loadScopedWorkOrder(authz, params.id);
+      if (!result.ok) return result.response;
+      return Response.json(
+        await resumeWorkOrderOperation(db, authz.user.orgId, authz.user.id, params.id, params.opId),
+      );
+    }),
 });

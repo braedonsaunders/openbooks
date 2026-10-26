@@ -91,7 +91,9 @@ export function quarterLabel(isoDate: string): string {
 
 function demandPeriod(scheme: OssScheme, from: string, to: string): void {
   if (!isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
-    throw new CrossBorderTaxError("provide the return period as YYYY-MM-DD dates with from on or before to");
+    throw new CrossBorderTaxError(
+      "provide the return period as YYYY-MM-DD dates with from on or before to",
+    );
   }
   if (scheme === "ioss") {
     if (from !== startOfMonth(from) || to !== endOfMonth(from)) {
@@ -114,7 +116,7 @@ type RegistrationRow = {
   subsidiaryId: string | null;
   identificationState: string;
   registrationNumber: string;
-}
+};
 
 type AttributedLine = {
   country: string;
@@ -124,11 +126,14 @@ type AttributedLine = {
   documentDate: string;
   /** Corrected document's date, else the line's own date. */
   originalDate: string;
-}
+};
 
 function sumLines(lines: AttributedLine[], from: string): OssReturnLine[] {
   const buckets = new Map<string, { base: bigint; tax: bigint }>();
-  const meta = new Map<string, { country: string; rate: string; kind: "supply" | "correction"; quarter: string | null }>();
+  const meta = new Map<
+    string,
+    { country: string; rate: string; kind: "supply" | "correction"; quarter: string | null }
+  >();
   for (const line of lines) {
     const corrected = line.originalDate < from;
     const key = corrected
@@ -182,7 +187,8 @@ export async function computeOssReturn(
   request: OssReturnRequest,
 ): Promise<OssReturn> {
   demandPeriod(request.scheme, request.from, request.to);
-  const registrations = await runner.execute<RegistrationRow>(sql`
+  const registrations = await runner.execute<RegistrationRow>(
+    sql`
       select id, subsidiary_id as "subsidiaryId", identification_state as "identificationState",
              registration_number as "registrationNumber"
         from tax_oss_registrations
@@ -192,7 +198,9 @@ export async function computeOssReturn(
          and effective_from is not null
          and effective_from <= ${request.to}::date
          and (effective_to is null or effective_to >= ${request.from}::date)
-         ${request.registrationId ? sql`and id = ${request.registrationId}` : sql``}`, "objects");
+         ${request.registrationId ? sql`and id = ${request.registrationId}` : sql``}`,
+    "objects",
+  );
   if (registrations.length !== 1) {
     throw new CrossBorderTaxError(
       `register exactly one ${request.scheme === "ioss" ? "IOSS" : "Union OSS"} registration covering ${request.from} to ${request.to} in Tax setup before preparing this return`,
@@ -205,9 +213,8 @@ export async function computeOssReturn(
   // document attributes to that document's quarter below; every other credit
   // nets in its own period as a negative supply. The corrected document
   // resolves through the credit's `corrects` relationship.
-  const current = await runner.execute<
-      AttributedLine & { currency: string }
-    >(sql`
+  const current = await runner.execute<AttributedLine & { currency: string }>(
+    sql`
       select (d.custom -> 'crossBorderSupply' ->> 'country') as country,
              component.rate_percent::text as "ratePercent",
              -- Invoices add to the return; credit memos post positive and
@@ -235,7 +242,9 @@ export async function computeOssReturn(
          and (d.status = 'posted' or (d.status = 'voided' and d.voided_at::date > ${request.to}::date))
          and d.document_date between ${request.from}::date and ${request.to}::date
          and d.custom -> 'crossBorderSupply' ->> 'outcome' = 'customer_country'
-         and component.calculation_type = 'standard'`, "objects");
+         and component.calculation_type = 'standard'`,
+    "objects",
+  );
   // Foreign-currency supplies translate at the ECB spot rate on the last
   // published day on or before the period end — one rate per currency, so
   // every line in that currency converts identically and deterministically.
@@ -266,7 +275,8 @@ export async function computeOssReturn(
 
   // Voids posted away in this period: the voided supply leaves the filed
   // quarter through a correction, mirroring the credit treatment.
-  const voided = await runner.execute<AttributedLine & { currency: string }>(sql`
+  const voided = await runner.execute<AttributedLine & { currency: string }>(
+    sql`
       select (d.custom -> 'crossBorderSupply' ->> 'country') as country,
              component.rate_percent::text as "ratePercent",
              -- A void unwinds the document's economic effect: a voided
@@ -288,10 +298,18 @@ export async function computeOssReturn(
          and d.voided_at::date between ${request.from}::date and ${request.to}::date
          and d.document_date < ${request.from}::date
          and d.custom -> 'crossBorderSupply' ->> 'outcome' = 'customer_country'
-         and component.calculation_type = 'standard'`, "objects");
+         and component.calculation_type = 'standard'`,
+    "objects",
+  );
   for (const row of voided) {
     if (row.currency !== "EUR" && !rates.has(row.currency)) {
-      const evidence = await lookupSpotRateWithEvidence(runner, orgId, row.currency, "EUR", request.to);
+      const evidence = await lookupSpotRateWithEvidence(
+        runner,
+        orgId,
+        row.currency,
+        "EUR",
+        request.to,
+      );
       if (evidence.rate === null) {
         throw new CrossBorderTaxError(
           `OSS returns file in euro but a voided correction holds ${row.currency} with no ECB rate on or before ${request.to}; sync ECB rates (or add a manual spot rate) in FX setup, then prepare the return again`,
@@ -355,7 +373,8 @@ export async function recordOssFxEvidence(
 ): Promise<{ stored: number }> {
   let stored = 0;
   for (const entry of oss.fx) {
-    const rows = await runner.execute<{ id: string }>(sql`
+    const rows = await runner.execute<{ id: string }>(
+      sql`
         insert into tax_oss_fx_evidence
           (id, org_id, scheme, period_from, period_to, currency, rate,
            rate_as_of, rate_source, evidence_digest, created_by, updated_by)
@@ -369,7 +388,9 @@ export async function recordOssFxEvidence(
                evidence_digest = excluded.evidence_digest,
                updated_by = excluded.updated_by,
                updated_at = now()
-        returning id`, "objects");
+        returning id`,
+      "objects",
+    );
     // A write that matches zero rows is a failure: evidence no read can
     // observe was not stored, and the filed figures would lose their proof.
     if (rows.length !== 1) {

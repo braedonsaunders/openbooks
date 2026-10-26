@@ -1,4 +1,12 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, CopyObjectCommand, DeleteObjectsCommand, HeadBucketCommand, type DeleteObjectsCommandOutput } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  CopyObjectCommand,
+  DeleteObjectsCommand,
+  HeadBucketCommand,
+  type DeleteObjectsCommandOutput,
+} from "@aws-sdk/client-s3";
 import { env } from "./db.ts";
 
 /** Shared file-cabinet blob driver used by both web requests and workers. */
@@ -127,19 +135,23 @@ export class FileBlobDeleteError extends Error {
 
 const s3Store: FileBlobStore = {
   async putObject(versionId, bytes, contentType) {
-    await s3().send(new PutObjectCommand({
-      Bucket: env.S3_BUCKET!,
-      Key: objectKey(versionId),
-      Body: bytes,
-      ContentType: contentType,
-    }));
+    await s3().send(
+      new PutObjectCommand({
+        Bucket: env.S3_BUCKET!,
+        Key: objectKey(versionId),
+        Body: bytes,
+        ContentType: contentType,
+      }),
+    );
   },
   async getObject(versionId) {
     try {
-      const result = await s3().send(new GetObjectCommand({
-        Bucket: env.S3_BUCKET!,
-        Key: objectKey(versionId),
-      }));
+      const result = await s3().send(
+        new GetObjectCommand({
+          Bucket: env.S3_BUCKET!,
+          Key: objectKey(versionId),
+        }),
+      );
       if (!result.Body) return null;
       return Buffer.from(await result.Body.transformToByteArray());
     } catch (error) {
@@ -149,11 +161,13 @@ const s3Store: FileBlobStore = {
   },
   async copyObject(fromVersionId, toVersionId) {
     // Server-side copy: bytes never transit the clone worker.
-    await s3().send(new CopyObjectCommand({
-      Bucket: env.S3_BUCKET!,
-      CopySource: encodeS3CopySource(env.S3_BUCKET!, objectKey(fromVersionId)),
-      Key: objectKey(toVersionId),
-    }));
+    await s3().send(
+      new CopyObjectCommand({
+        Bucket: env.S3_BUCKET!,
+        CopySource: encodeS3CopySource(env.S3_BUCKET!, objectKey(fromVersionId)),
+        Key: objectKey(toVersionId),
+      }),
+    );
   },
   async deleteObjects(versionIds) {
     // Fail LOUD: every key not confirmed deleted is collected and refused.
@@ -168,10 +182,12 @@ const s3Store: FileBlobStore = {
       const chunk = versionIds.slice(index, index + 1_000);
       let result: DeleteObjectsCommandOutput;
       try {
-        result = await s3().send(new DeleteObjectsCommand({
-          Bucket: env.S3_BUCKET!,
-          Delete: { Objects: chunk.map((id) => ({ Key: objectKey(id) })) },
-        }));
+        result = await s3().send(
+          new DeleteObjectsCommand({
+            Bucket: env.S3_BUCKET!,
+            Delete: { Objects: chunk.map((id) => ({ Key: objectKey(id) })) },
+          }),
+        );
       } catch (error) {
         detail = error instanceof Error ? error.message : String(error);
         break;
@@ -218,7 +234,8 @@ export function createInMemoryFileBlobStore(): FileBlobStore & { keys(): string[
     },
     async copyObject(fromVersionId, toVersionId) {
       const found = objects.get(fromVersionId);
-      if (!found) throw new Error(`in-memory blob store has no object for version ${fromVersionId}`);
+      if (!found)
+        throw new Error(`in-memory blob store has no object for version ${fromVersionId}`);
       objects.set(toVersionId, { bytes: Buffer.from(found.bytes), contentType: found.contentType });
     },
     async deleteObjects(versionIds) {
@@ -234,7 +251,11 @@ function activeStore(): FileBlobStore {
   return storeOverride ?? s3Store;
 }
 
-export async function putS3Blob(versionId: string, bytes: Buffer, contentType: string): Promise<void> {
+export async function putS3Blob(
+  versionId: string,
+  bytes: Buffer,
+  contentType: string,
+): Promise<void> {
   await activeStore().putObject(versionId, bytes, contentType);
 }
 
@@ -263,23 +284,31 @@ function assertEmailAttachmentId(id: string): void {
   }
 }
 
-export async function putEmailAttachmentBlob(id: string, bytes: Buffer, contentType: string): Promise<void> {
+export async function putEmailAttachmentBlob(
+  id: string,
+  bytes: Buffer,
+  contentType: string,
+): Promise<void> {
   assertEmailAttachmentId(id);
-  await s3().send(new PutObjectCommand({
-    Bucket: env.S3_BUCKET!,
-    Key: emailAttachmentKey(id),
-    Body: bytes,
-    ContentType: contentType,
-  }));
+  await s3().send(
+    new PutObjectCommand({
+      Bucket: env.S3_BUCKET!,
+      Key: emailAttachmentKey(id),
+      Body: bytes,
+      ContentType: contentType,
+    }),
+  );
 }
 
 export async function getEmailAttachmentBlob(id: string): Promise<Buffer | null> {
   assertEmailAttachmentId(id);
   try {
-    const result = await s3().send(new GetObjectCommand({
-      Bucket: env.S3_BUCKET!,
-      Key: emailAttachmentKey(id),
-    }));
+    const result = await s3().send(
+      new GetObjectCommand({
+        Bucket: env.S3_BUCKET!,
+        Key: emailAttachmentKey(id),
+      }),
+    );
     if (!result.Body) return null;
     return Buffer.from(await result.Body.transformToByteArray());
   } catch (error) {
@@ -304,26 +333,38 @@ export async function deleteEmailAttachmentBlobs(ids: string[]): Promise<void> {
       assertEmailAttachmentId(id);
       pending.add(id);
     } catch (error) {
-      console.error("[file-storage] email attachment cleanup failed (object orphaned):", (error as Error).message);
+      console.error(
+        "[file-storage] email attachment cleanup failed (object orphaned):",
+        (error as Error).message,
+      );
     }
   }
   for (let attempt = 0; attempt < 2 && pending.size > 0; attempt += 1) {
     for (const id of [...pending]) {
       try {
-        const result = await s3().send(new DeleteObjectsCommand({
-          Bucket: env.S3_BUCKET!,
-          Delete: { Objects: [{ Key: emailAttachmentKey(id) }], Quiet: true },
-        }));
+        const result = await s3().send(
+          new DeleteObjectsCommand({
+            Bucket: env.S3_BUCKET!,
+            Delete: { Objects: [{ Key: emailAttachmentKey(id) }], Quiet: true },
+          }),
+        );
         const failures = result.Errors ?? [];
         if (failures.length === 0) {
           pending.delete(id);
         } else {
           for (const failure of failures) {
-            console.error("[file-storage] email attachment cleanup failed (object orphaned):", failure.Key, failure.Message);
+            console.error(
+              "[file-storage] email attachment cleanup failed (object orphaned):",
+              failure.Key,
+              failure.Message,
+            );
           }
         }
       } catch (error) {
-        console.error("[file-storage] email attachment cleanup failed (object orphaned):", (error as Error).message);
+        console.error(
+          "[file-storage] email attachment cleanup failed (object orphaned):",
+          (error as Error).message,
+        );
       }
     }
   }
@@ -367,8 +408,10 @@ export function refuseMaskedStorageKind(storageKind: string | null | undefined):
  * instanceof — so match the stable error name as well.
  */
 export function isMaskedFileContentError(err: unknown): boolean {
-  return err instanceof MaskedFileContentError
-    || (err as { name?: string } | null | undefined)?.name === "MaskedFileContentError";
+  return (
+    err instanceof MaskedFileContentError ||
+    (err as { name?: string } | null | undefined)?.name === "MaskedFileContentError"
+  );
 }
 
 export async function deleteS3Blobs(versionIds: string[]): Promise<void> {

@@ -58,9 +58,7 @@ export const POST = defineRoute({
           ? await suggestPickConfirmation(org, actor, body)
           : await suggestPackConfirmation(org, actor, body);
       return NextResponse.json({
-        task: await withOrgTransaction(org, () =>
-          executionTaskView(db, org, actor, task.id),
-        ),
+        task: await withOrgTransaction(org, () => executionTaskView(db, org, actor, task.id)),
       });
     }),
 });

@@ -115,7 +115,8 @@ test("a successful cutover binds the new port before the old listener closes", a
 
   // Disabling stops the daemon and unbinds the port.
   await ensureSftpServer(() =>
-    Promise.resolve({ enabled: false, port: 2222, hostKey, advertisedHost: null }));
+    Promise.resolve({ enabled: false, port: 2222, hostKey, advertisedHost: null }),
+  );
   assert.deepEqual(sftpListenerState(), { listening: false, port: null });
 });
 
@@ -216,8 +217,19 @@ test("enabling the daemon without shared storage configured refuses by name befo
   // importer never sees.
   // Pin the whole storage selection surface: ambient S3 variables would
   // otherwise select object storage and this would bind instead of refusing.
-  const storageVars = ["S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET", "OPENBOOKS_DATA_DIR"];
-  const saved = new Map(storageVars.map((name) => [name, { process: process.env[name], snapshot: (env as Record<string, string | undefined>)[name] }]));
+  const storageVars = [
+    "S3_ENDPOINT",
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "S3_BUCKET",
+    "OPENBOOKS_DATA_DIR",
+  ];
+  const saved = new Map(
+    storageVars.map((name) => [
+      name,
+      { process: process.env[name], snapshot: (env as Record<string, string | undefined>)[name] },
+    ]),
+  );
   for (const name of storageVars) {
     delete process.env[name];
     delete (env as Record<string, string | undefined>)[name];

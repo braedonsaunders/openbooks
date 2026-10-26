@@ -5,10 +5,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { add, cmp, neg, toUnits } from "../money/money.ts";
-import {
-  submitAndReleaseIfUngated,
-  withdrawDocumentSubmission,
-} from "../flows/submit.ts";
+import { submitAndReleaseIfUngated, withdrawDocumentSubmission } from "../flows/submit.ts";
 import { withProviderReturnPosting } from "../payments-core/provider-return-posting.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createPaymentDocument } from "./payment-documents.ts";
@@ -21,10 +18,7 @@ import {
   type AllocationInput,
 } from "./settlement-policy.ts";
 import { disputeRow } from "./psp-automation-disputes.ts";
-import {
-  PspAutomationError,
-  lockReturnReceiptAuthority,
-} from "./psp-automation-context.ts";
+import { PspAutomationError, lockReturnReceiptAuthority } from "./psp-automation-context.ts";
 
 export interface ReturnReceiptPlan {
   disputeId: string;
@@ -57,10 +51,7 @@ function stages(history: unknown): Stage[] {
   return history.flatMap((entry) => {
     if (!entry || typeof entry !== "object") return [];
     const stage = (entry as { returnStage?: Stage }).returnStage;
-    return stage &&
-      isUuid(stage.documentId) &&
-      stage.plan &&
-      Array.isArray(stage.allocations)
+    return stage && isUuid(stage.documentId) && stage.plan && Array.isArray(stage.allocations)
       ? [stage]
       : [];
   });
@@ -89,7 +80,8 @@ async function futureAllocation(
   const available = add(plan.amount, neg(plan.feeAmount ?? "0"));
   if (!plan.applyInvoiceId || cmp(available, "0") <= 0)
     return { allocations: [], onAccountAmount: available };
-  const invoice = (await db.execute<{
+  const invoice = (
+    await db.execute<{
       id: string;
       currency: string;
       party_id: string | null;
@@ -97,7 +89,8 @@ async function futureAllocation(
       open_balance: string;
       line_id: string;
       restored: string;
-    }>(sql`
+    }>(
+      sql`
     select d.id, d.currency, d.party_id, coalesce(d.subsidiary_id, invoice_entry.subsidiary_id) as subsidiary_id, d.open_balance::text as open_balance,
            jl.id as line_id,
            coalesce((select sum(a.target_transaction_amount) from applications a
@@ -109,7 +102,10 @@ async function futureAllocation(
       join journal_lines jl on jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
      where d.org_id = ${orgId} and d.id = ${plan.applyInvoiceId} and d.status = 'posted'
      order by jl.line_number limit 1 for share of d
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (
     !invoice ||
     invoice.currency !== plan.currency ||
@@ -123,10 +119,7 @@ async function futureAllocation(
   const restoredOpen = add(invoice.open_balance, invoice.restored);
   const amount = cmp(available, restoredOpen) < 0 ? available : restoredOpen;
   return {
-    allocations:
-      cmp(amount, "0") > 0
-        ? [sameCurrencyAllocation(invoice.line_id, amount)]
-        : [],
+    allocations: cmp(amount, "0") > 0 ? [sameCurrencyAllocation(invoice.line_id, amount)] : [],
     onAccountAmount: add(available, neg(amount)),
   };
 }
@@ -176,26 +169,29 @@ export async function stageReturnReceipt(
         role: plan.role,
       },
     };
-    const written = (await db.execute<{ id: string }>(sql`
+    const written = (
+      await db.execute<{ id: string }>(
+        sql`
       update documents set custom = ${JSON.stringify(custom)}::jsonb,
         subtotal = ${plan.amount}, tax_total = '0', total = ${plan.amount}, updated_at = now()
        where id = ${payment.id} and org_id = ${orgId} and status = 'draft' returning id
-    `, "objects"))[0];
-    if (!written)
-      throw new PspAutomationError("The return receipt could not be prepared.");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!written) throw new PspAutomationError("The return receipt could not be prepared.");
     await db.execute(sql`insert into document_lines (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount)
       values (${orgId}, ${payment.id}, 1, ${plan.bankAccountId}, '1', ${plan.amount}, ${plan.amount}, '0')`);
     const saved = await db.execute<never>(sql`update payment_disputes
       set status_history = status_history || ${JSON.stringify({ at: new Date().toISOString(), returnStage: stage })}::jsonb, updated_at = now()
       where org_id = ${orgId} and id = ${plan.disputeId}`);
     if (saved.rowCount !== 1)
-      throw new PspAutomationError(
-        "The return's receipt identity could not be recorded.",
-      );
+      throw new PspAutomationError("The return's receipt identity could not be recorded.");
     await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'documents', ${payment.id}, 'update', ${JSON.stringify({ mode: "provider_return_receipt", after: { ...plan, ...shaped } })}::jsonb, ${actorId})`);
   }
-  const receipt = (await db.execute<{
+  const receipt = (
+    await db.execute<{
       status: string;
       total: string;
       subtotal: string;
@@ -207,11 +203,15 @@ export async function stageReturnReceipt(
       subsidiary_id: string | null;
       party_id: string | null;
       custom: Record<string, unknown> | null;
-    }>(sql`
+    }>(
+      sql`
     select status, total::text as total, subtotal::text as subtotal, tax_total::text as tax_total, currency,
            document_date::text, posting_date::text, posting_period_id, subsidiary_id, party_id, custom from documents
      where org_id = ${orgId} and id = ${stage.documentId} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const snapshot = receipt?.custom ?? {};
   if (
     !receipt ||
@@ -226,16 +226,12 @@ export async function stageReturnReceipt(
     receipt.party_id !== plan.partyId ||
     snapshot.bankAccountId !== plan.bankAccountId ||
     snapshot.controlAccountId !== plan.controlAccountId ||
-    canonicalJson(snapshot.allocations ?? []) !==
-      canonicalJson(stage.allocations) ||
-    persistPaymentMoney(
-      snapshot.onAccountAmount ?? "0",
-      "return on-account amount",
-    ) !== toUnits(stage.onAccountAmount) ||
+    canonicalJson(snapshot.allocations ?? []) !== canonicalJson(stage.allocations) ||
+    persistPaymentMoney(snapshot.onAccountAmount ?? "0", "return on-account amount") !==
+      toUnits(stage.onAccountAmount) ||
     persistPaymentMoney(snapshot.feeAmount ?? "0", "return fee amount") !==
       toUnits(plan.feeAmount ?? "0") ||
-    (snapshot.feeIncomeAccountId ?? null) !==
-      (plan.feeIncomeAccountId ?? null) ||
+    (snapshot.feeIncomeAccountId ?? null) !== (plan.feeIncomeAccountId ?? null) ||
     canonicalJson(snapshot.providerReturn ?? null) !==
       canonicalJson({
         disputeId: plan.disputeId,
@@ -248,15 +244,18 @@ export async function stageReturnReceipt(
     );
   }
   const lines = await db.execute<{
-      account_id: string | null;
-      amount: string;
-      quantity: string;
-      unit_price: string;
-      tax_amount: string;
-    }>(sql`
+    account_id: string | null;
+    amount: string;
+    quantity: string;
+    unit_price: string;
+    tax_amount: string;
+  }>(
+    sql`
     select account_id, amount::text, quantity::text, unit_price::text, tax_amount::text from document_lines
      where org_id = ${orgId} and document_id = ${stage.documentId} order by line_number for update
-  `, "objects");
+  `,
+    "objects",
+  );
   if (
     lines.length !== 1 ||
     lines[0]!.account_id !== plan.bankAccountId ||
@@ -270,12 +269,9 @@ export async function stageReturnReceipt(
     );
   }
   if (receipt.status === "draft") {
-    const result = await submitAndReleaseIfUngated(
-      "customer_payment",
-      stage.documentId,
-      actorId,
-      { source: "api" },
-    );
+    const result = await submitAndReleaseIfUngated("customer_payment", stage.documentId, actorId, {
+      source: "api",
+    });
     if (result.flowError)
       throw new PspAutomationError(
         `Return receipt approval could not be routed: ${result.flowError}`,
@@ -290,61 +286,47 @@ export async function stageReturnReceipt(
   return { receiptId: stage.documentId, ready: receipt.status === "approved" };
 }
 
-export async function postReturnReceipt(
-  orgId: string,
-  receiptId: string,
-): Promise<string> {
-  const receipt = (await db.execute<{
+export async function postReturnReceipt(orgId: string, receiptId: string): Promise<string> {
+  const receipt = (
+    await db.execute<{
       custom: { providerReturn?: { disputeId?: string } };
-    }>(sql`
-    select custom from documents where org_id = ${orgId} and id = ${receiptId}`, "objects"))[0];
+    }>(
+      sql`
+    select custom from documents where org_id = ${orgId} and id = ${receiptId}`,
+      "objects",
+    )
+  )[0];
   const disputeId = receipt?.custom?.providerReturn?.disputeId;
   if (!isUuid(disputeId))
-    throw new PspAutomationError(
-      "The receipt has no valid provider return identity.",
-    );
+    throw new PspAutomationError("The receipt has no valid provider return identity.");
   const row = await disputeRow(orgId, disputeId);
   if (row.status !== "pending_review" && row.status !== "opened")
-    throw new PspAutomationError(
-      "The provider return no longer admits receipt posting.",
-    );
-  const stage = stages(row.status_history).find(
-    (item) => item.documentId === receiptId,
-  );
+    throw new PspAutomationError("The provider return no longer admits receipt posting.");
+  const stage = stages(row.status_history).find((item) => item.documentId === receiptId);
   if (!stage || !(await stageReturnReceipt(orgId, stage.plan)).ready)
-    throw new PspAutomationError(
-      "Approve the staged return receipt before resuming its review.",
-    );
+    throw new PspAutomationError("Approve the staged return receipt before resuming its review.");
   const { actorId } = await lockReturnReceiptAuthority(orgId, stage.plan);
   const unit = financialReceiptEffects.getStore();
   if (!unit)
     throw new PspAutomationError(
       "Provider return receipts must post inside their native financial stage.",
     );
-  const entryId = await withProviderReturnPosting(
-    orgId,
-    receiptId,
-    async () => {
-      // A credit-backed refund is a cash-out receipt with a debit open item.
-      // The receipt kernel posts it; the parent command then applies the credit
-      // through the native credit settlement service in the same savepoint.
-      if (stage.plan.role === "credit-refund") {
-        return postDocument(receiptId, await paymentControlDeps(orgId), {
-          deferEffects: true,
-          audit: { actorId, source: "api" },
-        });
-      }
-      return (
-        await postPaymentWithApplications(
-          receiptId,
-          undefined,
-          actorId,
-          "api",
-          { deferEffects: true },
-        )
-      ).entryId;
-    },
-  );
+  const entryId = await withProviderReturnPosting(orgId, receiptId, async () => {
+    // A credit-backed refund is a cash-out receipt with a debit open item.
+    // The receipt kernel posts it; the parent command then applies the credit
+    // through the native credit settlement service in the same savepoint.
+    if (stage.plan.role === "credit-refund") {
+      return postDocument(receiptId, await paymentControlDeps(orgId), {
+        deferEffects: true,
+        audit: { actorId, source: "api" },
+      });
+    }
+    return (
+      await postPaymentWithApplications(receiptId, undefined, actorId, "api", {
+        deferEffects: true,
+      })
+    ).entryId;
+  });
   unit.set(receiptId, orgId);
   return entryId;
 }
@@ -352,9 +334,7 @@ export async function postReturnReceipt(
 /** A refused financial stage rolls back before its review is parked. Effects
  * drain only after the complete return accounting unit has settled its
  * applications and lifecycle. Nested refused stages contribute no receipts. */
-export async function returnFinancialStage<T>(
-  work: () => Promise<T>,
-): Promise<T> {
+export async function returnFinancialStage<T>(work: () => Promise<T>): Promise<T> {
   const parent = financialReceiptEffects.getStore();
   const unit = new Map<string, string>();
   const result = await withTransactionSavepoint(db, () =>
@@ -370,8 +350,7 @@ export async function returnFinancialStage<T>(
     }),
   );
   // Admit nested receipts only after their savepoint has been released.
-  if (parent)
-    for (const [documentId, orgId] of unit) parent.set(documentId, orgId);
+  if (parent) for (const [documentId, orgId] of unit) parent.set(documentId, orgId);
   return result;
 }
 
@@ -383,9 +362,12 @@ export async function withdrawReturnReceipts(
 ): Promise<void> {
   const row = await disputeRow(orgId, disputeId);
   for (const stage of stages(row.status_history)) {
-    const receipt = (await db.execute<{ status: string; subsidiary_id: string }>(
-        sql`select status, subsidiary_id from documents where org_id = ${orgId} and id = ${stage.documentId} for update`, "objects",
-      ))[0];
+    const receipt = (
+      await db.execute<{ status: string; subsidiary_id: string }>(
+        sql`select status, subsidiary_id from documents where org_id = ${orgId} and id = ${stage.documentId} for update`,
+        "objects",
+      )
+    )[0];
     if (!receipt || receipt.subsidiary_id !== stage.plan.subsidiaryId)
       throw new PspAutomationError(
         "The staged receipt's legal entity changed; reconcile it before rejecting the provider review.",

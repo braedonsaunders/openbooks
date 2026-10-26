@@ -51,8 +51,7 @@ export function targetPeriods(now = new Date()) {
   const pStart = new Date(Date.UTC(pEnd.getUTCFullYear(), pEnd.getUTCMonth(), 1));
   const p1End = new Date(Date.UTC(pStart.getUTCFullYear(), pStart.getUTCMonth(), 0));
   const p1Start = new Date(Date.UTC(p1End.getUTCFullYear(), p1End.getUTCMonth(), 1));
-  const name = (d: Date) =>
-    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  const name = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
   return {
     p: { from: iso(pStart), to: iso(pEnd), name: name(pStart) },
     p1: { from: iso(p1Start), to: iso(p1End), name: name(p1Start) },
@@ -101,7 +100,11 @@ export async function api(
 ) {
   const res = await request.fetch(`${baseURL}${path}`, {
     method,
-    headers: { Origin: new URL(baseURL).origin, "Content-Type": "application/json", ...withIdempotencyKey(method) },
+    headers: {
+      Origin: new URL(baseURL).origin,
+      "Content-Type": "application/json",
+      ...withIdempotencyKey(method),
+    },
     data: body === undefined ? undefined : body,
   });
   const text = await res.text();
@@ -170,7 +173,10 @@ export function extractPdfText(buffer: Buffer): string {
       parts.push(
         lit[0]!
           .slice(1, -1)
-          .replace(/\\([nrtbf()\\])/g, (_, c: string) => ({ n: "\n", r: "\r", t: "\t", b: "\b", f: "\f" })[c] ?? c),
+          .replace(
+            /\\([nrtbf()\\])/g,
+            (_, c: string) => ({ n: "\n", r: "\r", t: "\t", b: "\b", f: "\f" })[c] ?? c,
+          ),
       );
     }
   }
@@ -198,10 +204,14 @@ export async function postSeedJournal(
   accounts: Record<string, string>,
   args: { subsidiaryId: string; documentDate: string; memo: string; lines: SeedJournalLine[] },
 ) {
-  const draft = ok(await api(request, baseURL, "POST", "/api/journals/draft", { subsidiaryId: args.subsidiaryId }), "journal draft");
+  const draft = ok(
+    await api(request, baseURL, "POST", "/api/journals/draft", { subsidiaryId: args.subsidiaryId }),
+    "journal draft",
+  );
   const id = field(draft, "id", "journal draft");
   const token = await revisionToken(request, baseURL, `/api/journals/${id}`, (d) =>
-    field(d.doc as Record<string, unknown>, "updated_at", "journal"));
+    field(d.doc as Record<string, unknown>, "updated_at", "journal"),
+  );
   ok(
     await api(request, baseURL, "PATCH", `/api/journals/${id}`, {
       expectedUpdatedAt: token,
@@ -217,7 +227,10 @@ export async function postSeedJournal(
     `journal ${args.memo}`,
   );
   const posted = ok(
-    await api(request, baseURL, "POST", "/api/journals/actions", { action: "post", documentId: id }),
+    await api(request, baseURL, "POST", "/api/journals/actions", {
+      action: "post",
+      documentId: id,
+    }),
     `journal post ${args.memo}`,
   );
   expect(posted.ok).toBe(true);
@@ -231,12 +244,21 @@ export async function draftSeedDocument(
   kind: string,
   patch: Record<string, unknown>,
 ) {
-  const draft = ok(await api(request, baseURL, "POST", "/api/documents/draft", { kind }), `${kind} draft`);
+  const draft = ok(
+    await api(request, baseURL, "POST", "/api/documents/draft", { kind }),
+    `${kind} draft`,
+  );
   const id = field(draft, "id", `${kind} draft`);
   const token = await revisionToken(request, baseURL, `/api/documents/${id}`, (d) =>
-    d.doc ? field(d.doc as Record<string, unknown>, "updated_at", kind) : field(d, "updated_at", kind));
+    d.doc
+      ? field(d.doc as Record<string, unknown>, "updated_at", kind)
+      : field(d, "updated_at", kind),
+  );
   ok(
-    await api(request, baseURL, "PATCH", `/api/documents/${id}`, { expectedUpdatedAt: token, ...patch }),
+    await api(request, baseURL, "PATCH", `/api/documents/${id}`, {
+      expectedUpdatedAt: token,
+      ...patch,
+    }),
     `${kind} fill`,
   );
   return id;
@@ -251,7 +273,10 @@ export async function postSeedDocument(
 ) {
   const id = await draftSeedDocument(request, baseURL, kind, patch);
   const posted = ok(
-    await api(request, baseURL, "POST", "/api/documents/actions", { action: "post", documentId: id }),
+    await api(request, baseURL, "POST", "/api/documents/actions", {
+      action: "post",
+      documentId: id,
+    }),
     `${kind} post`,
   );
   expect(posted.ok).toBe(true);

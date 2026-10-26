@@ -42,10 +42,7 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    "mock:features",
-    `export async function isFeatureEnabled() { return true }`,
-  ],
+  ["mock:features", `export async function isFeatureEnabled() { return true }`],
   [
     "mock:leave-read",
     `
@@ -57,13 +54,12 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    "mock:db",
-    `export const db = {}`,
-  ],
+  ["mock:db", `export const db = {}`],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveBalancesRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmLeaveBalancesRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
@@ -77,7 +73,8 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? '');
+    const mocked =
+      mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? "");
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },
@@ -87,7 +84,9 @@ const hooks = registerHooks({
     return nextLoad(url);
   },
 });
-const balancesRoute: typeof import("./route.ts") | undefined = (await import(new URL("./route.ts?hrm-leave-balances", import.meta.url).href)) as typeof import("./route.ts");
+const balancesRoute: typeof import("./route.ts") | undefined = (await import(
+  new URL("./route.ts?hrm-leave-balances", import.meta.url).href
+)) as typeof import("./route.ts");
 test.after(() => hooks.deregister());
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
@@ -97,14 +96,26 @@ function reset(permissions: string[] = ["hrm.leave.manage"]): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" }, permissions: new Set(permissions) };
   routeState.calls = [];
   routeState.fixture = [
-    { leaveTypeId: TYPE_ID, code: "VAC", name: "Vacation", entitlement: "120", taken: "8", pending: "0", remaining: "112", balance: "112", unlimited: false },
+    {
+      leaveTypeId: TYPE_ID,
+      code: "VAC",
+      name: "Vacation",
+      entitlement: "120",
+      taken: "8",
+      pending: "0",
+      remaining: "112",
+      balance: "112",
+      unlimited: false,
+    },
   ];
 }
 
 test("GET prices the exact remaining-after effect through the native decimal math", async () => {
   reset();
   const res = await balancesRoute!.GET(
-    new Request(`http://x/api/hrm/leave-balances?employmentId=${EMPLOYMENT_ID}&asOf=2026-08-03&leaveTypeId=${TYPE_ID}&hours=8`),
+    new Request(
+      `http://x/api/hrm/leave-balances?employmentId=${EMPLOYMENT_ID}&asOf=2026-08-03&leaveTypeId=${TYPE_ID}&hours=8`,
+    ),
   );
   assert.equal(res.status, 200);
   const body = (await res.json()) as {
@@ -114,7 +125,11 @@ test("GET prices the exact remaining-after effect through the native decimal mat
   };
   assert.equal(body.asOf, "2026-08-03");
   assert.equal(body.balances.length, 1);
-  assert.deepEqual(body.effect, { leaveTypeId: TYPE_ID, remainingAfter: "104" }, "112 minus 8 prices exactly, never a float");
+  assert.deepEqual(
+    body.effect,
+    { leaveTypeId: TYPE_ID, remainingAfter: "104" },
+    "112 minus 8 prices exactly, never a float",
+  );
   assert.deepEqual(routeState.calls[0], {
     fn: "balances",
     args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, asOf: "2026-08-03" },
@@ -132,7 +147,9 @@ test("GET admits a read-only holder — the engine re-checks the employment", as
 
 test("GET refuses a bad employment id and bad hours before the service", async () => {
   reset();
-  const badId = await balancesRoute!.GET(new Request("http://x/api/hrm/leave-balances?employmentId=nope"));
+  const badId = await balancesRoute!.GET(
+    new Request("http://x/api/hrm/leave-balances?employmentId=nope"),
+  );
   assert.equal(badId.status, 400);
   const badHours = await balancesRoute!.GET(
     new Request(`http://x/api/hrm/leave-balances?employmentId=${EMPLOYMENT_ID}&hours=8.001`),

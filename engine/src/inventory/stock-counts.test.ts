@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  assertCountTransition,
-  countVariance,
-  parseCountStatus,
-} from "./stock-counts.ts";
+import { assertCountTransition, countVariance, parseCountStatus } from "./stock-counts.ts";
 import { InventoryError } from "./contracts.ts";
 
 /**
@@ -26,22 +22,28 @@ test("variance refuses a negative counted quantity with a named InventoryError",
   // A physical count is never negative: -1 or -0.0001 must refuse at the
   // engine boundary, never post as a negative variance. Zero stays legal.
   for (const counted of ["-1", "-0.0001"]) {
-    assert.throws(() => countVariance(counted, "10"), (e: unknown) => {
-      assert.ok(e instanceof InventoryError);
-      assert.match((e as Error).message, /counted quantity cannot be negative/i);
-      assert.match((e as Error).message, /zero or more/i);
-      return true;
-    });
+    assert.throws(
+      () => countVariance(counted, "10"),
+      (e: unknown) => {
+        assert.ok(e instanceof InventoryError);
+        assert.match((e as Error).message, /counted quantity cannot be negative/i);
+        assert.match((e as Error).message, /zero or more/i);
+        return true;
+      },
+    );
   }
   assert.equal(countVariance("0", "10"), "-10.0000");
 });
 
 test("variance refuses junk with a named InventoryError, not a bare Error", () => {
-  assert.throws(() => countVariance("twelve", "8"), (e: unknown) => {
-    assert.ok(e instanceof InventoryError);
-    assert.match((e as Error).message, /counted quantity/i);
-    return true;
-  });
+  assert.throws(
+    () => countVariance("twelve", "8"),
+    (e: unknown) => {
+      assert.ok(e instanceof InventoryError);
+      assert.match((e as Error).message, /counted quantity/i);
+      return true;
+    },
+  );
   // Thousands separators are refused rather than coerced: silently stripping
   // "," is how 1,234 becomes 1234 in a quantity.
   assert.throws(() => countVariance("1,234", "8"), /exact decimal/i);

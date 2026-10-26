@@ -1,31 +1,33 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.accounting-home-scope-test')
+const stateKey = Symbol.for("openbooks.accounting-home-scope-test");
 interface State {
-  calls: string[]
-  emptyScope: boolean
+  calls: string[];
+  emptyScope: boolean;
 }
-const state: State = { calls: [], emptyScope: false }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const state: State = { calls: [], emptyScope: false };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
-  return chunks.map((chunk) => {
-    if (typeof chunk === 'string') return chunk
-    const value = (chunk as { value?: unknown[] })?.value
-    if (Array.isArray(value)) return value.map(String).join('')
-    if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-    return ''
-  }).join('')
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
+  return chunks
+    .map((chunk) => {
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
+    })
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextAccounting = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextAccounting = sqlText;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.accounting-home-scope-test')]
       const sqlText = globalThis.openbooksSqlTextAccounting
@@ -68,17 +70,23 @@ const mockSources = new Map<string, string>([
   // nothing to isolate, so a hand copy could only drift. businessToday stays
   // pinned — the explicit export shadows the re-exported one. The old
   // identity addCalendarDays stub is gone: it dated the 7-day window as today.
-  ['mock:business-date', `export * from "@openbooks/engine/platform/business-date/module"; export async function businessToday() { return '2026-08-28' }`],
+  [
+    "mock:business-date",
+    `export * from "@openbooks/engine/platform/business-date/module"; export async function businessToday() { return '2026-08-28' }`,
+  ],
   // `can` exists only to link modules the cockpit reaches that read gates;
   // no test here decides gates.
-  ['mock:authz', `export async function getAuthz() { throw new Error('explicit scope should not resolve request authz') } export function can() { return false }`],
-])
+  [
+    "mock:authz",
+    `export async function getAuthz() { throw new Error('explicit scope should not resolve request authz') } export function can() { return false }`,
+  ],
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
-  ['../authz', 'mock:authz'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
+  ["../authz", "mock:authz"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -86,89 +94,136 @@ const hooks = registerHooks({
     // import must resolve past this hook to the real file instead of looping
     // back into the mock. Re-based to this file so the workspace alias
     // resolves through node_modules like any other real import.
-    if (context.parentURL?.startsWith('mock:')) {
-      return nextResolve(specifier, { ...context, parentURL: import.meta.url })
+    if (context.parentURL?.startsWith("mock:")) {
+      return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const accountingUrl = './accounting.ts?scope-contract'
-const { accountingHome } = (await import(accountingUrl)) as typeof import('./accounting.ts')
-hooks.deregister()
+const accountingUrl = "./accounting.ts?scope-contract";
+const { accountingHome } = (await import(accountingUrl)) as typeof import("./accounting.ts");
+hooks.deregister();
 
 function reset(emptyScope = false): void {
-  state.calls.length = 0
-  state.emptyScope = emptyScope
+  state.calls.length = 0;
+  state.emptyScope = emptyScope;
 }
 
-test('unrestricted Accounting home remains tenant-wide', async () => {
-  reset()
-  const home = await accountingHome('org-1', null, { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
-  assert.equal(home.draftJournals, 2)
-  assert.equal(home.badges.assets, 3)
-  assert.equal(home.closeUnavailable, false, 'unrestricted callers get the run, not a refusal')
-  assert.ok(state.calls.every((query) => !query.includes('and false')))
-  assert.ok(state.calls.some((query) => query.includes('from close_runs')))
-})
+test("unrestricted Accounting home remains tenant-wide", async () => {
+  reset();
+  const home = await accountingHome("org-1", null, {
+    gl: true,
+    close: true,
+    findings: true,
+    accounts: true,
+    budgets: true,
+    assets: true,
+  });
+  assert.equal(home.draftJournals, 2);
+  assert.equal(home.badges.assets, 3);
+  assert.equal(home.closeUnavailable, false, "unrestricted callers get the run, not a refusal");
+  assert.ok(state.calls.every((query) => !query.includes("and false")));
+  assert.ok(state.calls.some((query) => query.includes("from close_runs")));
+});
 
-test('restricted Accounting home scopes legal-entity metrics and fails closed for unscoped badges', async () => {
-  reset()
-  const home = await accountingHome('org-1', new Set(['sub-a', 'sub-b']), { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
-  assert.equal(home.draftJournals, 2)
-  assert.equal(home.badges.assets, 3)
-  const all = state.calls.join('\n')
-  assert.match(all, /je\.subsidiary_id = any/)
-  assert.match(all, /f\.subsidiary_id = any/)
-  assert.ok(!/(?<![\w])a\.subsidiary_id is null/.test(state.calls.find((query) => query.includes('from ai_work_items')) ?? ''), 'shared accounts fail closed in restricted work-item counts')
-  assert.ok(state.calls.find((query) => query.includes('from close_runs'))?.includes('and false'))
+test("restricted Accounting home scopes legal-entity metrics and fails closed for unscoped badges", async () => {
+  reset();
+  const home = await accountingHome("org-1", new Set(["sub-a", "sub-b"]), {
+    gl: true,
+    close: true,
+    findings: true,
+    accounts: true,
+    budgets: true,
+    assets: true,
+  });
+  assert.equal(home.draftJournals, 2);
+  assert.equal(home.badges.assets, 3);
+  const all = state.calls.join("\n");
+  assert.match(all, /je\.subsidiary_id = any/);
+  assert.match(all, /f\.subsidiary_id = any/);
+  assert.ok(
+    !/(?<![\w])a\.subsidiary_id is null/.test(
+      state.calls.find((query) => query.includes("from ai_work_items")) ?? "",
+    ),
+    "shared accounts fail closed in restricted work-item counts",
+  );
+  assert.ok(state.calls.find((query) => query.includes("from close_runs"))?.includes("and false"));
   // Restricted callers who hold close access refuse — like the dashboard —
   // instead of reporting "no close run". The view renders the refusal
   // through the catalog off this flag.
-  assert.equal(home.closeUnavailable, true, 'restricted callers with close access get the refusal')
-  assert.match(all, /from budget_scenarios[\s\S]*budget_lines[\s\S]*not exists/)
-  assert.match(all, /from ai_work_items[\s\S]*subject_type[\s\S]*subsidiary_id/)
-})
+  assert.equal(home.closeUnavailable, true, "restricted callers with close access get the refusal");
+  assert.match(all, /from budget_scenarios[\s\S]*budget_lines[\s\S]*not exists/);
+  assert.match(all, /from ai_work_items[\s\S]*subject_type[\s\S]*subsidiary_id/);
+});
 
-test('callers without close access get no close refusal to name', async () => {
+test("callers without close access get no close refusal to name", async () => {
   // Without close access there is nothing to refuse: the cockpit hides the
   // close section rather than naming a diagnostic the caller cannot hold —
   // for restricted and unrestricted scopes alike.
-  reset()
-  const restricted = await accountingHome('org-1', new Set(['sub-a']), { gl: true, close: false, findings: true, accounts: true, budgets: true, assets: true })
-  assert.equal(restricted.closeUnavailable, false)
-  const open = await accountingHome('org-1', null, { gl: true, close: false, findings: true, accounts: true, budgets: true, assets: true })
-  assert.equal(open.closeUnavailable, false)
-})
+  reset();
+  const restricted = await accountingHome("org-1", new Set(["sub-a"]), {
+    gl: true,
+    close: false,
+    findings: true,
+    accounts: true,
+    budgets: true,
+    assets: true,
+  });
+  assert.equal(restricted.closeUnavailable, false);
+  const open = await accountingHome("org-1", null, {
+    gl: true,
+    close: false,
+    findings: true,
+    accounts: true,
+    budgets: true,
+    assets: true,
+  });
+  assert.equal(open.closeUnavailable, false);
+});
 
-test('empty subsidiary scope returns no Accounting home metrics', async () => {
-  reset(true)
-  const home = await accountingHome('org-1', new Set(), { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
-  assert.equal(home.close.runId, null)
-  assert.equal(home.draftJournals, 0)
-  assert.equal(home.postedJournals7d, 0)
-  assert.deepEqual(home.workItems, { critical: 0, warning: 0, info: 0, total: 0 })
-  assert.deepEqual(home.badges, { accounts: 0, budgets: 0, assets: 0 })
-  assert.ok(state.calls.every((query) => query.includes('and false')))
-})
+test("empty subsidiary scope returns no Accounting home metrics", async () => {
+  reset(true);
+  const home = await accountingHome("org-1", new Set(), {
+    gl: true,
+    close: true,
+    findings: true,
+    accounts: true,
+    budgets: true,
+    assets: true,
+  });
+  assert.equal(home.close.runId, null);
+  assert.equal(home.draftJournals, 0);
+  assert.equal(home.postedJournals7d, 0);
+  assert.deepEqual(home.workItems, { critical: 0, warning: 0, info: 0, total: 0 });
+  assert.deepEqual(home.badges, { accounts: 0, budgets: 0, assets: 0 });
+  assert.ok(state.calls.every((query) => query.includes("and false")));
+});
 
-test('draft journals count draft journal documents, not journal entries', async () => {
+test("draft journals count draft journal documents, not journal entries", async () => {
   // Manual-journal drafts are documents (not entries yet) — the /journal
   // list reads documents, so the hub tile must too. Counting
   // journal_entries with status draft always reads 0 for manual drafts.
-  reset()
-  await accountingHome('org-1', null, { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })
-  const all = state.calls.join('\n')
-  assert.match(all, /from documents[\s\S]*kind = 'journal'[\s\S]*status = 'draft'/)
+  reset();
+  await accountingHome("org-1", null, {
+    gl: true,
+    close: true,
+    findings: true,
+    accounts: true,
+    budgets: true,
+    assets: true,
+  });
+  const all = state.calls.join("\n");
+  assert.match(all, /from documents[\s\S]*kind = 'journal'[\s\S]*status = 'draft'/);
   assert.ok(
     !all.includes("from journal_entries je where je.org_id") || !/je\.status = 'draft'/.test(all),
-    'no journal_entries draft-status count may feed the tile',
-  )
-})
+    "no journal_entries draft-status count may feed the tile",
+  );
+});

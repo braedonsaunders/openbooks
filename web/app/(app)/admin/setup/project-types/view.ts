@@ -1,13 +1,13 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
-import { requireProjectsFeature } from '../../../../../lib/projects-gate'
-import { isFeatureEnabled } from '../../../../../lib/features'
-import type { ProjectTypesWorkspace, ProjectTypeRow } from './ProjectTypesWorkspace'
+import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../../lib/authz";
+import { requireProjectsFeature } from "../../../../../lib/projects-gate";
+import { isFeatureEnabled } from "../../../../../lib/features";
+import type { ProjectTypesWorkspace, ProjectTypeRow } from "./ProjectTypesWorkspace";
 
 /**
  * Project types setup, split into a loader and a spec.
@@ -35,22 +35,23 @@ import type { ProjectTypesWorkspace, ProjectTypeRow } from './ProjectTypesWorksp
  * and a future picker both key on them.
  */
 
-type ProjectTypesWorkspaceProps = Parameters<typeof ProjectTypesWorkspace>[0]
+type ProjectTypesWorkspaceProps = Parameters<typeof ProjectTypesWorkspace>[0];
 
 export interface ProjectTypesData {
-  types: ProjectTypeRow[]
-  dimensions: string[]
-  incomeAccounts: ProjectTypesWorkspaceProps['incomeAccounts']
-  fieldTicketsEnabled: boolean
+  types: ProjectTypeRow[];
+  dimensions: string[];
+  incomeAccounts: ProjectTypesWorkspaceProps["incomeAccounts"];
+  fieldTicketsEnabled: boolean;
 }
 
 export async function loadProjectTypes(): Promise<ProjectTypesData> {
-  const authz = await requirePermission('admin.setup.manage')
-  const orgId = authz.user.orgId
-  await requireProjectsFeature(orgId)
-  const today = await businessToday(orgId)
+  const authz = await requirePermission("admin.setup.manage");
+  const orgId = authz.user.orgId;
+  await requireProjectsFeature(orgId);
+  const today = await businessToday(orgId);
   const [typesRes, dimsRes, acctRes, fieldTicketsEnabled] = await Promise.all([
-    db.execute<ProjectTypeRow>(sql`
+    db.execute<ProjectTypeRow>(
+      sql`
       select id, key, name, description, is_built_in as "isBuiltIn", is_active as "isActive",
              sort_order as "sortOrder", billing_method as "billingMethod",
              version.financial_profile as "financialProfile",
@@ -68,32 +69,40 @@ export async function loadProjectTypes(): Promise<ProjectTypesData> {
            limit 1
         ) version on true
        where project_types.org_id = ${orgId}
-       order by sort_order, name`, 'objects'),
-    db.execute<{ dimension: string }>(sql`select distinct dimension from account_groups where org_id = ${orgId} order by dimension`, 'objects'),
-    db.execute<{ id: string; number: string; name: string }>(sql`
+       order by sort_order, name`,
+      "objects",
+    ),
+    db.execute<{ dimension: string }>(
+      sql`select distinct dimension from account_groups where org_id = ${orgId} order by dimension`,
+      "objects",
+    ),
+    db.execute<{ id: string; number: string; name: string }>(
+      sql`
       select id, number, name from accounts
        where org_id = ${orgId} and is_active and coalesce(is_summary,false) = false
-         and type in ('income','income_other') order by number limit 500`, 'objects'),
-    isFeatureEnabled(orgId, 'fieldTickets'),
-  ])
+         and type in ('income','income_other') order by number limit 500`,
+      "objects",
+    ),
+    isFeatureEnabled(orgId, "fieldTickets"),
+  ]);
 
   return {
     types: typesRes,
     dimensions: dimsRes.map((r) => r.dimension),
     incomeAccounts: acctRes,
     fieldTicketsEnabled,
-  }
+  };
 }
 
 export function projectTypesSpec(data: ProjectTypesData): PageSpec {
   return page({
-    route: '/admin/setup/project-types',
+    route: "/admin/setup/project-types",
     // The setup workspace renders its own shell around every setup page, so
     // a second page layout would nest the chrome. And the
     // `grid gap-5 lg:grid-cols-[16rem_1fr]` wrapper belongs to
     // ProjectTypesWorkspace itself — the spec must NOT place it too, or the
     // page renders that div twice (the bank-feeds `max-w-4xl` precedent).
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
       // The whole page is one client island, passed whole like the crm /
@@ -102,12 +111,12 @@ export function projectTypesSpec(data: ProjectTypesData): PageSpec {
       // behavior (selection state, draft state, fetch mutations, confirm,
       // toast, router.refresh) a spec cannot name. Every prop is
       // loader-resolved data; the entry only binds it.
-      widgetBlock('project-types-workspace', {
+      widgetBlock("project-types-workspace", {
         types: data.types,
         dimensions: data.dimensions,
         incomeAccounts: data.incomeAccounts,
         fieldTicketsEnabled: data.fieldTicketsEnabled,
       }),
     ],
-  })
+  });
 }

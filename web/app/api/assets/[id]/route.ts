@@ -6,10 +6,7 @@ import { NextResponse } from "next/server";
 import { getLocale } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import {
-  documentRevisionSql,
-  isDocumentRevisionToken,
-} from "@openbooks/engine/records/revision";
+import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/records/revision";
 import {
   ASSET_PLACEMENT_FIELD_LABELS,
   assetPlacementShortfall,
@@ -61,36 +58,41 @@ const amount = (field: string) =>
 const nullableDate = (field: string) =>
   z.union([isoDate(`${field} must be a valid calendar date`), z.literal(""), z.null()]);
 const nullableId = uuidString("must be a valid id").nullable();
-const patchBodySchema0 = z
-  .strictObject({
-    // Omitted or malformed tokens reach the named reload refusal below; the
-    // boundary only enforces the string shape.
-    expectedUpdatedAt: z.string().optional(),
-    name: z.string().trim().min(1, "name cannot be empty").optional(),
-    assetNumber: z.string().trim().max(80).optional(),
-    description: z.string().nullable().optional(),
-    categoryId: nullableId.optional(),
-    subsidiaryId: nullableId.optional(),
-    acquisitionCost: z.union([z.literal(""), amount("Acquisition cost"), z.null()]).optional(),
-    salvageValue: z.union([z.literal(""), amount("Salvage value"), z.null()]).optional(),
-    acquiredOn: nullableDate("acquiredOn").optional(),
-    inServiceOn: nullableDate("inServiceOn").optional(),
-    serialNumber: z.string().trim().max(200).nullable().optional(),
-    method: z.json().optional(),
-    depreciationMethodId: z.json().optional(),
-    lifeMonths: z.union([z.number().int(), z.string().regex(/^\d+$/, "lifeMonths must be a whole number"), z.null()]).optional(),
-    ratePercent: z.json().optional(),
-    unitsTotal: z.json().optional(),
-    convention: z.json().optional(),
-    openingAccumulated: z.json().optional(),
-    openingAsOf: z.json().optional(),
-    assetAccountId: nullableId.optional(),
-    accumulatedDepreciationAccountId: nullableId.optional(),
-    depreciationExpenseAccountId: nullableId.optional(),
-    custom: z.record(z.string(), z.json()).optional(),
-    taxDepreciation: z.json().optional(),
-    status: z.enum(["draft", "in_service"]).optional(),
-  });
+const patchBodySchema0 = z.strictObject({
+  // Omitted or malformed tokens reach the named reload refusal below; the
+  // boundary only enforces the string shape.
+  expectedUpdatedAt: z.string().optional(),
+  name: z.string().trim().min(1, "name cannot be empty").optional(),
+  assetNumber: z.string().trim().max(80).optional(),
+  description: z.string().nullable().optional(),
+  categoryId: nullableId.optional(),
+  subsidiaryId: nullableId.optional(),
+  acquisitionCost: z.union([z.literal(""), amount("Acquisition cost"), z.null()]).optional(),
+  salvageValue: z.union([z.literal(""), amount("Salvage value"), z.null()]).optional(),
+  acquiredOn: nullableDate("acquiredOn").optional(),
+  inServiceOn: nullableDate("inServiceOn").optional(),
+  serialNumber: z.string().trim().max(200).nullable().optional(),
+  method: z.json().optional(),
+  depreciationMethodId: z.json().optional(),
+  lifeMonths: z
+    .union([
+      z.number().int(),
+      z.string().regex(/^\d+$/, "lifeMonths must be a whole number"),
+      z.null(),
+    ])
+    .optional(),
+  ratePercent: z.json().optional(),
+  unitsTotal: z.json().optional(),
+  convention: z.json().optional(),
+  openingAccumulated: z.json().optional(),
+  openingAsOf: z.json().optional(),
+  assetAccountId: nullableId.optional(),
+  accumulatedDepreciationAccountId: nullableId.optional(),
+  depreciationExpenseAccountId: nullableId.optional(),
+  custom: z.record(z.string(), z.json()).optional(),
+  taxDepreciation: z.json().optional(),
+  status: z.enum(["draft", "in_service"]).optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -157,9 +159,7 @@ function patchFieldBad(error: FieldRefusal) {
       return bad("Invalid depreciation convention");
     case "invalid_life":
       return bad(
-        typeof error.detail === "string" && error.detail
-          ? error.detail
-          : "Invalid useful life",
+        typeof error.detail === "string" && error.detail ? error.detail : "Invalid useful life",
       );
     case "invalid_rate":
       return bad("Rate must be an exact non-negative percent");
@@ -168,21 +168,13 @@ function patchFieldBad(error: FieldRefusal) {
     case "opening_invalid":
       return bad("Opening accumulated depreciation must be a number");
     case "opening_negative":
-      return bad(
-        "Opening accumulated depreciation must be a non-negative number",
-      );
+      return bad("Opening accumulated depreciation must be a non-negative number");
     case "opening_as_of_invalid":
-      return bad(
-        "Opening as-of date must be a real calendar date (YYYY-MM-DD)",
-      );
+      return bad("Opening as-of date must be a real calendar date (YYYY-MM-DD)");
     case "opening_pair_required":
-      return bad(
-        "Opening accumulated depreciation and its as-of date must be set together",
-      );
+      return bad("Opening accumulated depreciation and its as-of date must be set together");
     case "opening_exceeds_basis":
-      return bad(
-        "Opening accumulated depreciation cannot exceed cost minus salvage",
-      );
+      return bad("Opening accumulated depreciation cannot exceed cost minus salvage");
     case "opening_before_in_service":
       return bad("Opening as-of date cannot precede the in-service month");
     case "invalid_subsidiary":
@@ -256,8 +248,7 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     const search = new URL(req.url).searchParams;
     const page = Number.parseInt(search.get("page") ?? "1", 10);
     const payload = await loadAsset(id, gate.user.orgId, {
@@ -293,20 +284,21 @@ export const PATCH = defineRoute({
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const user = gate.user;
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
 
-    const existRes = await db.execute<ExistingAsset>(sql`
+    const existRes = await db.execute<ExistingAsset>(
+      sql`
     select id, subsidiary_id, category_id, status, custom, acquisition_cost, salvage_value, in_service_on,
            depreciation_method, depreciation_method_id, useful_life_months,
            depreciation_rate_percent, depreciation_units_total, depreciation_convention,
            opening_accumulated_depreciation, opening_accumulated_as_of
       from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-  `, "objects");
+  `,
+      "objects",
+    );
     const existing = existRes[0];
-    if (!existing)
-      return notFound("record");
+    if (!existing) return notFound("record");
 
     const body = routeBody as PatchBody;
     if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
@@ -325,9 +317,12 @@ export const PATCH = defineRoute({
         (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(value))
       )
         return bad("invalid_subsidiary");
-      const valid = await db.execute(sql`
+      const valid = await db.execute(
+        sql`
       select 1 from subsidiaries
-       where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`, "objects");
+       where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`,
+        "objects",
+      );
       if (!valid[0]) return bad("invalid_subsidiary");
       subsidiaryId = value;
     }
@@ -338,7 +333,8 @@ export const PATCH = defineRoute({
       const c = strOrNull(body.categoryId);
       if (!c || !isUuid(c)) return bad("Invalid category");
       const r = await db.execute(
-        sql`select 1 from asset_categories where id = ${c} and org_id = ${user.orgId}`, "objects",
+        sql`select 1 from asset_categories where id = ${c} and org_id = ${user.orgId}`,
+        "objects",
       );
       if (!r[0]) return bad("Category not found");
       categoryId = c.toLowerCase();
@@ -348,12 +344,9 @@ export const PATCH = defineRoute({
     let cost: string | undefined;
     if (body.acquisitionCost !== undefined) {
       const v = moneyOrNull(body.acquisitionCost);
-      if (v === "unreadable")
-        return bad(moneyRefusal("Acquisition cost", body.acquisitionCost));
+      if (v === "unreadable") return bad(moneyRefusal("Acquisition cost", body.acquisitionCost));
       if (v === "too-wide")
-        return bad(
-          "Acquisition cost is out of range — at most 15 whole digits fit the ledger",
-        );
+        return bad("Acquisition cost is out of range — at most 15 whole digits fit the ledger");
       if (v !== null && cmp(v, "0") < 0)
         return bad("Acquisition cost must be a non-negative number");
       cost = v ?? "0";
@@ -361,14 +354,10 @@ export const PATCH = defineRoute({
     let salvage: string | undefined;
     if (body.salvageValue !== undefined) {
       const v = moneyOrNull(body.salvageValue);
-      if (v === "unreadable")
-        return bad(moneyRefusal("Salvage value", body.salvageValue));
+      if (v === "unreadable") return bad(moneyRefusal("Salvage value", body.salvageValue));
       if (v === "too-wide")
-        return bad(
-          "Salvage value is out of range — at most 15 whole digits fit the ledger",
-        );
-      if (v !== null && cmp(v, "0") < 0)
-        return bad("Salvage value must be a non-negative number");
+        return bad("Salvage value is out of range — at most 15 whole digits fit the ledger");
+      if (v !== null && cmp(v, "0") < 0) return bad("Salvage value must be a non-negative number");
       salvage = v ?? "0";
     }
 
@@ -455,8 +444,7 @@ export const PATCH = defineRoute({
         // Supplied values only, so legacy bags cannot lock unrelated edits.
         const suppliedCustom: Record<string, unknown> = {};
         for (const key of Object.keys(body.custom)) {
-          if (validated.cleaned[key] !== undefined)
-            suppliedCustom[key] = validated.cleaned[key];
+          if (validated.cleaned[key] !== undefined) suppliedCustom[key] = validated.cleaned[key];
         }
         await checkCustomReferences(user.orgId, defs, suppliedCustom);
         // Replace only tenant-defined keys. Connector provenance and account
@@ -465,11 +453,7 @@ export const PATCH = defineRoute({
         Object.assign(customUpdates, validated.cleaned);
       }
 
-      const taxClean = await parseTaxDepreciation(
-        db,
-        user.orgId,
-        body.taxDepreciation,
-      );
+      const taxClean = await parseTaxDepreciation(db, user.orgId, body.taxDepreciation);
       if (taxClean !== undefined) customUpdates.taxDepreciation = taxClean;
 
       // Legacy parity: an explicit null method was always refused (the method
@@ -509,20 +493,14 @@ export const PATCH = defineRoute({
     }
 
     const effectiveStatus = status ?? existing.status;
-    const effectiveMethod =
-      method !== undefined ? method : existing.depreciation_method;
+    const effectiveMethod = method !== undefined ? method : existing.depreciation_method;
     const effectiveFormula =
-      depreciationMethodId !== undefined
-        ? depreciationMethodId
-        : existing.depreciation_method_id;
-    const effectiveLife =
-      lifeMonths !== undefined ? lifeMonths : existing.useful_life_months;
+      depreciationMethodId !== undefined ? depreciationMethodId : existing.depreciation_method_id;
+    const effectiveLife = lifeMonths !== undefined ? lifeMonths : existing.useful_life_months;
     const effectiveUnits =
       unitsTotal !== undefined ? unitsTotal : existing.depreciation_units_total;
     const effectiveInService =
-      body.inServiceOn !== undefined
-        ? strOrNull(body.inServiceOn)
-        : existing.in_service_on;
+      body.inServiceOn !== undefined ? strOrNull(body.inServiceOn) : existing.in_service_on;
     const effectiveCost = cost ?? existing.acquisition_cost;
     const effectiveSalvage = salvage ?? existing.salvage_value;
     if (cmp(effectiveSalvage, effectiveCost) > 0)
@@ -532,17 +510,11 @@ export const PATCH = defineRoute({
         ? openingAccumulated
         : existing.opening_accumulated_depreciation;
     const effectiveOpeningAsOf =
-      openingAsOf !== undefined
-        ? openingAsOf
-        : existing.opening_accumulated_as_of;
+      openingAsOf !== undefined ? openingAsOf : existing.opening_accumulated_as_of;
     try {
       checkOpeningPair(effectiveOpening, effectiveOpeningAsOf);
       checkOpeningBasis(effectiveOpening, effectiveCost, effectiveSalvage);
-      checkOpeningMonth(
-        effectiveOpening,
-        effectiveOpeningAsOf,
-        effectiveInService,
-      );
+      checkOpeningMonth(effectiveOpening, effectiveOpeningAsOf, effectiveInService);
     } catch (error) {
       if (error instanceof FieldRefusal) return patchFieldBad(error);
       throw error;
@@ -580,10 +552,7 @@ export const PATCH = defineRoute({
       convention,
       method,
       depreciationMethodId,
-      inServiceOn:
-        body.inServiceOn !== undefined
-          ? strOrNull(body.inServiceOn)
-          : undefined,
+      inServiceOn: body.inServiceOn !== undefined ? strOrNull(body.inServiceOn) : undefined,
       openingAccumulated,
       openingAsOf,
     };
@@ -594,24 +563,28 @@ export const PATCH = defineRoute({
     // fixed: editing it would replan unposted history and reinterpret the periods
     // already posted. Corrections run through controlled adjustments instead.
     // Nothing has posted yet → the edit stays free.
-    const postedRes = await db.execute(sql`
+    const postedRes = await db.execute(
+      sql`
     select 1 from depreciation_schedules s
     join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where s.asset_id = ${id} and s.org_id = ${user.orgId} and l.posted_amount is not null
-     limit 1`, "objects");
-    const basisConflict = postedAssetBasisEditRefusal(
-      !!postedRes[0],
-      existing,
-      requestedBasis,
+     limit 1`,
+      "objects",
     );
-    if (basisConflict)
-      return NextResponse.json({ error: basisConflict }, { status: 409 });
+    const basisConflict = postedAssetBasisEditRefusal(!!postedRes[0], existing, requestedBasis);
+    if (basisConflict) return NextResponse.json({ error: basisConflict }, { status: 409 });
 
     // An asset capitalized from posted transactions carries exactly the cost
     // its reclassification moved into its category's account; cost, category,
     // account and legal entity change only by reversing that acceptance or
     // capitalization (the database refuses the same edit).
-    const capitalized = (await db.execute<{ category_id: string; asset_account_id: string | null; category_account_id: string | null }>(sql`
+    const capitalized = (
+      await db.execute<{
+        category_id: string;
+        asset_account_id: string | null;
+        category_account_id: string | null;
+      }>(
+        sql`
     select a.category_id, a.asset_account_id, c.asset_account_id as category_account_id
       from fixed_assets a join asset_categories c on c.org_id = a.org_id and c.id = a.category_id
      where a.org_id = ${user.orgId} and a.id = ${id} and (
@@ -620,7 +593,10 @@ export const PATCH = defineRoute({
                 where al.org_id = a.org_id and al.asset_id = a.id and al.cip_cost_id is null)
        or exists (select 1 from asset_cip_capitalization_lines cl
                  join asset_cip_capitalizations k on k.org_id = cl.org_id and k.id = cl.capitalization_id and k.status = 'posted'
-                where cl.org_id = a.org_id and cl.asset_id = a.id))`, "objects"))[0];
+                where cl.org_id = a.org_id and cl.asset_id = a.id))`,
+        "objects",
+      )
+    )[0];
     if (
       capitalized &&
       ((cost !== undefined && cmp(cost, existing.acquisition_cost) !== 0) ||
@@ -644,15 +620,16 @@ export const PATCH = defineRoute({
       (depreciationMethodId !== undefined &&
         depreciationMethodId !== existing.depreciation_method_id)
     ) {
-      const inputEvidence = await db.execute(sql`
+      const inputEvidence = await db.execute(
+        sql`
       select 1 from depreciation_schedules s
       join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
       where s.org_id = ${user.orgId} and s.asset_id = ${id} and l.source <> 'formula'
-      limit 1`, "objects");
+      limit 1`,
+        "objects",
+      );
       if (inputEvidence[0])
-        return bad(
-          "Depreciation method cannot change after manual or production evidence exists",
-        );
+        return bad("Depreciation method cannot change after manual or production evidence exists");
     }
 
     try {
@@ -661,12 +638,15 @@ export const PATCH = defineRoute({
         // authoritative asset inside the save transaction so a depreciation
         // posting that commits while this request is preparing cannot be
         // followed by a stale basis update or stale audit before-image.
-        const lockedRes = await tx.execute<ExistingAsset>(sql`
+        const lockedRes = await tx.execute<ExistingAsset>(
+          sql`
         select fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at,
                ${documentRevisionSql(sql`created_at`)} as created_at from fixed_assets
          where id = ${id} and org_id = ${user.orgId}
            ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-         for update`, "objects");
+         for update`,
+          "objects",
+        );
         const lockedExisting = lockedRes[0];
         if (!lockedExisting) throw new AssetNotFoundError("asset not found");
         await refuseFixedAssetRehomeWithEquipment(
@@ -677,9 +657,7 @@ export const PATCH = defineRoute({
           subsidiaryId ?? lockedExisting.subsidiary_id,
         );
         if (lockedExisting.updated_at !== body.expectedUpdatedAt) {
-          throw new PostedBasisEditConflict(
-            "The asset has changed. Reload it before saving.",
-          );
+          throw new PostedBasisEditConflict("The asset has changed. Reload it before saving.");
         }
         await lockAccountOverridesForAssetWrite(
           tx,
@@ -692,26 +670,30 @@ export const PATCH = defineRoute({
           ],
         );
 
-        const lockedPostedRes = await tx.execute(sql`
+        const lockedPostedRes = await tx.execute(
+          sql`
         select 1 from depreciation_schedules s
         join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
          where s.asset_id = ${id} and s.org_id = ${user.orgId} and l.posted_amount is not null
-         limit 1`, "objects");
-        const lifecycleHistory = await tx.execute(sql`
+         limit 1`,
+          "objects",
+        );
+        const lifecycleHistory = await tx.execute(
+          sql`
         select 1 from asset_events event
         join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
         where event.org_id = ${user.orgId} and event.asset_id = ${id}
           and entry.status in ('posted', 'reversed') limit 1
-      `, "objects");
-        const hasHistory =
-          !!lockedPostedRes[0] || !!lifecycleHistory[0];
+      `,
+          "objects",
+        );
+        const hasHistory = !!lockedPostedRes[0] || !!lifecycleHistory[0];
         const lockedBasisConflict = postedAssetBasisEditRefusal(
           hasHistory,
           lockedExisting,
           requestedBasis,
         );
-        if (lockedBasisConflict)
-          throw new PostedBasisEditConflict(lockedBasisConflict);
+        if (lockedBasisConflict) throw new PostedBasisEditConflict(lockedBasisConflict);
         if (
           status !== undefined &&
           status !== lockedExisting.status &&
@@ -726,32 +708,32 @@ export const PATCH = defineRoute({
           const protectedSettings: Record<string, string | null | undefined> = {
             category_id: categoryId,
             subsidiary_id: subsidiaryId,
-            acquired_on:
-              body.acquiredOn !== undefined
-                ? strOrNull(body.acquiredOn)
-                : undefined,
+            acquired_on: body.acquiredOn !== undefined ? strOrNull(body.acquiredOn) : undefined,
           };
-          const defaults = (await tx.execute<Record<string, unknown>>(sql`
+          const defaults = (
+            await tx.execute<Record<string, unknown>>(
+              sql`
           select asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id
             from asset_categories where id = ${lockedExisting.category_id} and org_id = ${user.orgId}
             for share
-        `, "objects"))[0];
+        `,
+              "objects",
+            )
+          )[0];
           const accountChanges: Record<string, string | null | undefined> = {
             asset_account_id: assetAccountId,
             accumulated_depreciation_account_id: accumulatedAccountId,
             depreciation_expense_account_id: expenseAccountId,
           };
           const changedSetting = Object.entries(protectedSettings).some(
-            ([column, value]) =>
-              value !== undefined && value !== lockedExisting[column],
+            ([column, value]) => value !== undefined && value !== lockedExisting[column],
           );
           // The existing drawer resends resolved accounts. A resave that merely
           // repeats the inherited account must remain valid on a posted asset.
           const changedAccount = Object.entries(accountChanges).some(
             ([column, value]) =>
               value !== undefined &&
-              (value ?? defaults?.[column]) !==
-                (lockedExisting[column] ?? defaults?.[column]),
+              (value ?? defaults?.[column]) !== (lockedExisting[column] ?? defaults?.[column]),
           );
           if (changedSetting || changedAccount) {
             throw new PostedBasisEditConflict(
@@ -765,7 +747,9 @@ export const PATCH = defineRoute({
         const custom = { ...(lockedExisting.custom ?? {}) };
         for (const key of customKeys) delete custom[key];
         Object.assign(custom, customUpdates);
-        const updated = (await tx.execute<ExistingAsset>(sql`
+        const updated = (
+          await tx.execute<ExistingAsset>(
+            sql`
         update fixed_assets set
       name = ${body.name !== undefined ? body.name.trim() || "New asset" : sql`name`},
       asset_number = ${body.assetNumber !== undefined ? (strOrNull(body.assetNumber) ?? sql`asset_number`) : sql`asset_number`},
@@ -793,7 +777,10 @@ export const PATCH = defineRoute({
       updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
         returning fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at,
-                  ${documentRevisionSql(sql`created_at`)} as created_at`, "objects"))[0];
+                  ${documentRevisionSql(sql`created_at`)} as created_at`,
+            "objects",
+          )
+        )[0];
         if (!updated) throw new AssetNotFoundError("asset not found");
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -811,17 +798,14 @@ export const PATCH = defineRoute({
           // schedule inputs, and that absence is not the save's failure.
           if (
             !hasHistory &&
-            (effectiveStatus === "in_service" ||
-              effectiveStatus === "fully_depreciated")
+            (effectiveStatus === "in_service" || effectiveStatus === "fully_depreciated")
           ) {
             scheduleBuild = await buildAllSchedulesWithRunner(
               tx,
               id,
               user.orgId,
               user.id,
-              gate.allowedSubsidiaryIds
-                ? [...gate.allowedSubsidiaryIds]
-                : undefined,
+              gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
             );
           }
         } catch (error) {
@@ -862,14 +846,15 @@ export const DELETE = defineRoute({
   handler: async ({ request: _req, authz: gate, params }) => {
     const user = gate.user;
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
-    const visible = await db.execute<{ status: string }>(sql`
+    if (!isUuid(id)) return notFound("record");
+    const visible = await db.execute<{ status: string }>(
+      sql`
     select status from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-  `, "objects");
-    if (!visible[0])
-      return notFound("record");
+  `,
+      "objects",
+    );
+    if (!visible[0]) return notFound("record");
     // Only a draft that was never placed in service may be hard-deleted. Any
     // other status — in service, fully depreciated, disposed, written off —
     // owns financial meaning and leaves only through the lifecycle
@@ -889,9 +874,12 @@ export const DELETE = defineRoute({
     // the depreciation-evidence guard below instead of attempting the delete
     // and tripping the storage guard as a raw 500. The posted journals stay
     // linked to their event evidence either way.
-    const lifecycle = await db.execute(sql`
+    const lifecycle = await db.execute(
+      sql`
     select 1 from asset_events where asset_id = ${id} and org_id = ${user.orgId}
-     limit 1`, "objects");
+     limit 1`,
+      "objects",
+    );
     if (lifecycle[0]) {
       return NextResponse.json(
         {
@@ -905,11 +893,14 @@ export const DELETE = defineRoute({
     // A draft created by an accepted proposal or a capitalization carries
     // cost a posted reclassification moved into its account; it leaves only
     // by reversing that acceptance or capitalization.
-    const capitalized = await db.execute(sql`
+    const capitalized = await db.execute(
+      sql`
     select 1 from asset_proposal_allocations where org_id = ${user.orgId} and asset_id = ${id}
     union all
     select 1 from asset_cip_capitalization_lines where org_id = ${user.orgId} and asset_id = ${id}
-     limit 1`, "objects");
+     limit 1`,
+      "objects",
+    );
     if (capitalized[0]) {
       return NextResponse.json(
         {
@@ -920,13 +911,16 @@ export const DELETE = defineRoute({
       );
     }
 
-    const evidence = await db.execute(sql`
+    const evidence = await db.execute(
+      sql`
     select 1
       from depreciation_schedules s
       join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where s.asset_id = ${id} and s.org_id = ${user.orgId}
        and (l.posted_amount is not null or l.input_id is not null or l.source = 'imported')
-     limit 1`, "objects");
+     limit 1`,
+      "objects",
+    );
     if (evidence[0]) {
       return NextResponse.json(
         {
@@ -947,11 +941,14 @@ export const DELETE = defineRoute({
     let statusConflict: string | null = null;
     const deleted = await db
       .transaction(async (tx) => {
-        const locked = await tx.execute<{ status: string }>(sql`
+        const locked = await tx.execute<{ status: string }>(
+          sql`
       select status from fixed_assets where id = ${id} and org_id = ${user.orgId}
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
         for update
-    `, "objects");
+    `,
+          "objects",
+        );
         if (!locked[0]) return null;
         if (locked[0].status !== "draft") {
           statusConflict = locked[0].status;
@@ -967,9 +964,12 @@ export const DELETE = defineRoute({
         await tx.execute(
           sql`delete from asset_events where asset_id = ${id} and org_id = ${user.orgId}`,
         );
-        const gone = await tx.execute<{ id: string }>(sql`
+        const gone = await tx.execute<{ id: string }>(
+          sql`
       delete from fixed_assets where id = ${id} and org_id = ${user.orgId} returning id
-    `, "objects");
+    `,
+          "objects",
+        );
         if (gone.length !== 1) throw new AssetDeleteNotFoundError();
         return gone[0]!.id;
       })
@@ -985,8 +985,7 @@ export const DELETE = defineRoute({
         { status: 409 },
       );
     }
-    if (!deleted)
-      return notFound("record");
+    if (!deleted) return notFound("record");
 
     return NextResponse.json({ ok: true });
   },

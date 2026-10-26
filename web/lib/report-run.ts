@@ -1,17 +1,21 @@
-import { journalMeasurementExportData } from './journal-measurement-reports'
-import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record-report-catalog'
-import 'server-only'
-import { payrollSupportReportData } from './payroll-support-report'
-import { PayrollSupportReportRefusal } from './payroll-support-report-contract'
-import { trueCostExportData } from './analytics/true-cost-report'
-import { earnedValueExportData } from './earned-value-report'
-import { attendanceExceptionsExportData } from './attendance-exceptions-report'
-import { ScheduleError } from '@openbooks/engine/schedule-boards/errors'
-import { bookDifferenceSelection, bookDifferencesExportData, BookDifferenceSelectionError } from './book-differences-report'
-import { projectBudgetExportData } from './project-budget-report'
-import { sql } from 'drizzle-orm'
-import type { XlsxMoneyContext } from '@openbooks/office'
-import { db } from '@openbooks/engine/platform/db'
+import { journalMeasurementExportData } from "./journal-measurement-reports";
+import { reportEntityCatalog, validateCatalogReportQuery } from "./custom-record-report-catalog";
+import "server-only";
+import { payrollSupportReportData } from "./payroll-support-report";
+import { PayrollSupportReportRefusal } from "./payroll-support-report-contract";
+import { trueCostExportData } from "./analytics/true-cost-report";
+import { earnedValueExportData } from "./earned-value-report";
+import { attendanceExceptionsExportData } from "./attendance-exceptions-report";
+import { ScheduleError } from "@openbooks/engine/schedule-boards/errors";
+import {
+  bookDifferenceSelection,
+  bookDifferencesExportData,
+  BookDifferenceSelectionError,
+} from "./book-differences-report";
+import { projectBudgetExportData } from "./project-budget-report";
+import { sql } from "drizzle-orm";
+import type { XlsxMoneyContext } from "@openbooks/office";
+import { db } from "@openbooks/engine/platform/db";
 import {
   applyBuiltInUrlFilters,
   AS_OF_DEFAULT_PERIOD_PRESET,
@@ -20,7 +24,7 @@ import {
   REPORT_ENTITY_MAP,
   type ReportCustomQuery,
   type ReportRuleGroup,
-} from '@openbooks/reports'
+} from "@openbooks/reports";
 import {
   agingByParty,
   agingDetail,
@@ -37,9 +41,9 @@ import {
   trialBalance,
   type AgingSide,
   type DimFilter,
-} from './reports'
-import { balanceSheetView, profitAndLossView, type StatementView } from './statement-matrix'
-import { budgetVsActualView } from './budget-report'
+} from "./reports";
+import { balanceSheetView, profitAndLossView, type StatementView } from "./statement-matrix";
+import { budgetVsActualView } from "./budget-report";
 import {
   agingExportData,
   agingDetailExportData,
@@ -56,7 +60,7 @@ import {
   trialBalanceExportData,
   type ExportData,
   type Translator,
-} from './report-pdf'
+} from "./report-pdf";
 import {
   applyPeriodOverride,
   executeReportAllPages,
@@ -66,25 +70,44 @@ import {
   resolveReportAsOf,
   streamPagedReportCsv,
   streamPagedReportXlsx,
-} from './custom-reports'
-import { isReportUuidParam, resolveAgingCurrencyParams, type ReportQuery } from './report-filters'
-import { isFeatureEnabled } from './features'
-import { can } from './authz'
-import { requireReportAuthz, canAccessReportDefinition, artifactExpenseRows, type ReportAuthorization, type ReportArtifactExpenseRows } from './report-execution-context'
-import { resolveSubsidiaryView } from './consolidation'
-import { resolvePeriod } from './periods'
-import { reportEntityPermission, reportStatementFeatureKeys, statementKindPermission } from './report-authz'
-import { reportBookSelection } from './report-books'
-import { AvailabilityRefusal } from '@openbooks/engine/inventory/availability'
-import { availabilityExportData, availabilityRefusalText, replenishmentExportData } from './availability-report'
-import { weekStartOf } from '@openbooks/engine/resourcing/weeks'
-import { reportRunLabels } from './report-labels'
-import { runResourcingReport, type ResourcingReportKey } from './resourcing/report-facts'
-import { getTranslations } from 'next-intl/server'
-import { civilDateTranslator, reportPeriodLabel } from './format'
-import { resolveLocale } from './locale'
-import { intercompanyReconciliationExportData } from './intercompany-report'
-import { AccountingContextError, localizeAccountRows, reportAccountingContext, type AccountLabels } from './reports/accounting-context'
+} from "./custom-reports";
+import { isReportUuidParam, resolveAgingCurrencyParams, type ReportQuery } from "./report-filters";
+import { isFeatureEnabled } from "./features";
+import { can } from "./authz";
+import {
+  requireReportAuthz,
+  canAccessReportDefinition,
+  artifactExpenseRows,
+  type ReportAuthorization,
+  type ReportArtifactExpenseRows,
+} from "./report-execution-context";
+import { resolveSubsidiaryView } from "./consolidation";
+import { resolvePeriod } from "./periods";
+import {
+  reportEntityPermission,
+  reportStatementFeatureKeys,
+  statementKindPermission,
+} from "./report-authz";
+import { reportBookSelection } from "./report-books";
+import { AvailabilityRefusal } from "@openbooks/engine/inventory/availability";
+import {
+  availabilityExportData,
+  availabilityRefusalText,
+  replenishmentExportData,
+} from "./availability-report";
+import { weekStartOf } from "@openbooks/engine/resourcing/weeks";
+import { reportRunLabels } from "./report-labels";
+import { runResourcingReport, type ResourcingReportKey } from "./resourcing/report-facts";
+import { getTranslations } from "next-intl/server";
+import { civilDateTranslator, reportPeriodLabel } from "./format";
+import { resolveLocale } from "./locale";
+import { intercompanyReconciliationExportData } from "./intercompany-report";
+import {
+  AccountingContextError,
+  localizeAccountRows,
+  reportAccountingContext,
+  type AccountLabels,
+} from "./reports/accounting-context";
 
 /**
  * The single catalog of built-in report "kinds" and the one place that turns
@@ -97,45 +120,45 @@ import { AccountingContextError, localizeAccountRows, reportAccountingContext, t
  * BOTH engines already emit for PDF/XLSX/CSV.
  */
 export const REPORT_KINDS = [
-  'payroll-support',
-  'pnl',
-  'balance-sheet',
-  'trial-balance',
-  'partners',
-  'aging',
-  'cash-flow',
-  'cash-flow-indirect',
-  'general-ledger',
-  'journal',
-  'registers',
-  'budget',
-  'partner-statement',
-  'project-profitability',
-  'project-budget-vs-actual',
-  'earned-value',
-  'attendance-exceptions',
-  'book-differences',
-  'true-cost',
-  'availability',
-  'replenishment',
-  'resourcing-utilization',
-  'resourcing-bench',
-  'resourcing-capacity-demand',
-  'resourcing-engagement',
-  'intercompany-reconciliation',
-  'statistical-journal',
-  'gl-audit-numbers',
-] as const
-export type ReportKind = (typeof REPORT_KINDS)[number]
+  "payroll-support",
+  "pnl",
+  "balance-sheet",
+  "trial-balance",
+  "partners",
+  "aging",
+  "cash-flow",
+  "cash-flow-indirect",
+  "general-ledger",
+  "journal",
+  "registers",
+  "budget",
+  "partner-statement",
+  "project-profitability",
+  "project-budget-vs-actual",
+  "earned-value",
+  "attendance-exceptions",
+  "book-differences",
+  "true-cost",
+  "availability",
+  "replenishment",
+  "resourcing-utilization",
+  "resourcing-bench",
+  "resourcing-capacity-demand",
+  "resourcing-engagement",
+  "intercompany-reconciliation",
+  "statistical-journal",
+  "gl-audit-numbers",
+] as const;
+export type ReportKind = (typeof REPORT_KINDS)[number];
 
 /** Kinds that render through the multi-column statement engine (StatementView). */
-export const VIEW_KINDS = new Set<ReportKind>(['pnl', 'balance-sheet', 'budget'])
+export const VIEW_KINDS = new Set<ReportKind>(["pnl", "balance-sheet", "budget"]);
 
 export function isReportKind(k: string): k is ReportKind {
-  return (REPORT_KINDS as readonly string[]).includes(k)
+  return (REPORT_KINDS as readonly string[]).includes(k);
 }
 
-export type ResolvedPeriod = { from: string; to: string; label: string }
+export type ResolvedPeriod = { from: string; to: string; label: string };
 
 /**
  * The rich, drill-through page for a seeded statement definition. Statement
@@ -143,54 +166,58 @@ export type ResolvedPeriod = { from: string; to: string; label: string }
  * so the query-builder/runner redirect statement definitions here rather than
  * flattening them. Reverse of the seed catalog's kind→page mapping.
  */
-export function statementPageHref(statement: { kind?: string; params?: Record<string, string> } | null): string {
-  const kind = statement?.kind
-  const p = statement?.params ?? {}
+export function statementPageHref(
+  statement: { kind?: string; params?: Record<string, string> } | null,
+): string {
+  const kind = statement?.kind;
+  const p = statement?.params ?? {};
   switch (kind) {
-    case 'payroll-support':
-      return '/reports/payroll-support'
-    case 'pnl':
-      return '/reports/pnl'
-    case 'balance-sheet':
-      return '/reports/balance-sheet'
-    case 'cash-flow':
-      return '/reports/cash-flow'
-    case 'cash-flow-indirect':
-      return '/reports/cash-flow-indirect'
-    case 'trial-balance':
-      return '/reports/trial-balance'
-    case 'general-ledger':
-      return '/reports/general-ledger'
-    case 'journal':
-      return '/reports/journal'
-    case 'project-profitability':
-      return '/reports/project-profitability'
-    case 'project-budget-vs-actual':
-      return '/reports/project-budget-vs-actual'
-    case 'earned-value':
-      return '/reports/earned-value'
-    case 'attendance-exceptions':
-      return '/reports/attendance-exceptions'
-    case 'book-differences':
-      return '/reports/book-differences'
-    case 'true-cost':
-      return '/reports/true-cost'
-    case 'statistical-journal': return '/reports/statistical-journal'
-    case 'gl-audit-numbers': return '/reports/gl-audit-numbers'
-    case 'intercompany-reconciliation':
-      return '/reports/intercompany-reconciliation'
-    case 'availability':
-      return '/reports/availability'
-    case 'replenishment':
-      return '/reports/replenishment'
-    case 'aging':
-      return `/reports/aging?side=${p.side ?? 'ar'}`
-    case 'registers':
-      return `/reports/registers?side=${p.side ?? 'ar'}`
-    case 'partners':
-      return `/reports/partners?kind=${p.kind ?? 'receivable'}`
+    case "payroll-support":
+      return "/reports/payroll-support";
+    case "pnl":
+      return "/reports/pnl";
+    case "balance-sheet":
+      return "/reports/balance-sheet";
+    case "cash-flow":
+      return "/reports/cash-flow";
+    case "cash-flow-indirect":
+      return "/reports/cash-flow-indirect";
+    case "trial-balance":
+      return "/reports/trial-balance";
+    case "general-ledger":
+      return "/reports/general-ledger";
+    case "journal":
+      return "/reports/journal";
+    case "project-profitability":
+      return "/reports/project-profitability";
+    case "project-budget-vs-actual":
+      return "/reports/project-budget-vs-actual";
+    case "earned-value":
+      return "/reports/earned-value";
+    case "attendance-exceptions":
+      return "/reports/attendance-exceptions";
+    case "book-differences":
+      return "/reports/book-differences";
+    case "true-cost":
+      return "/reports/true-cost";
+    case "statistical-journal":
+      return "/reports/statistical-journal";
+    case "gl-audit-numbers":
+      return "/reports/gl-audit-numbers";
+    case "intercompany-reconciliation":
+      return "/reports/intercompany-reconciliation";
+    case "availability":
+      return "/reports/availability";
+    case "replenishment":
+      return "/reports/replenishment";
+    case "aging":
+      return `/reports/aging?side=${p.side ?? "ar"}`;
+    case "registers":
+      return `/reports/registers?side=${p.side ?? "ar"}`;
+    case "partners":
+      return `/reports/partners?kind=${p.kind ?? "receivable"}`;
     default:
-      return '/reports'
+      return "/reports";
   }
 }
 
@@ -218,8 +245,15 @@ export class ReportResolutionError extends Error {
  *  balance sheet, trial balance, aging) reports balances on; period
  *  statements carry none. */
 export type ResolvedReport =
-  | { render: 'view'; view: StatementView; title: string; periodPhrase: string; requiredPermissions?: string[]; asOf?: string }
-  | { render: 'data'; data: ExportData; requiredPermissions?: string[]; asOf?: string }
+  | {
+      render: "view";
+      view: StatementView;
+      title: string;
+      periodPhrase: string;
+      requiredPermissions?: string[];
+      asOf?: string;
+    }
+  | { render: "data"; data: ExportData; requiredPermissions?: string[]; asOf?: string };
 
 /**
  * Content permissions a line-level ledger statement requires. Journal and
@@ -229,9 +263,9 @@ export type ResolvedReport =
  * is gated by the reports feature only. Aggregated statements blend payroll
  * into wage-expense totals without per-employee detail and owe nothing extra.
  */
-const PAY_RUN_DOCUMENT_KIND = 'pay_run'
+const PAY_RUN_DOCUMENT_KIND = "pay_run";
 function ledgerContentPermissions(lines: ReadonlyArray<{ docKind: string | null }>): string[] {
-  return lines.some((line) => line.docKind === PAY_RUN_DOCUMENT_KIND) ? ['payroll.read'] : []
+  return lines.some((line) => line.docKind === PAY_RUN_DOCUMENT_KIND) ? ["payroll.read"] : [];
 }
 
 /**
@@ -239,61 +273,88 @@ function ledgerContentPermissions(lines: ReadonlyArray<{ docKind: string | null 
  * parameter and resolution as the screen. An unknown or ambiguous context
  * refuses with its remedy rather than exporting base labels silently.
  */
-async function exportAccountLabels(orgId: string, p: URLSearchParams, asOf: string, subsidiaryId: string | undefined): Promise<AccountLabels | null> {
+async function exportAccountLabels(
+  orgId: string,
+  p: URLSearchParams,
+  asOf: string,
+  subsidiaryId: string | undefined,
+): Promise<AccountLabels | null> {
   try {
-    return (await reportAccountingContext(orgId, p.get('ctx'), { asOf, subsidiaryId: subsidiaryId ?? null })).labels
+    return (
+      await reportAccountingContext(orgId, p.get("ctx"), {
+        asOf,
+        subsidiaryId: subsidiaryId ?? null,
+      })
+    ).labels;
   } catch (error) {
-    if (error instanceof AccountingContextError) throw new ReportResolutionError(`${error.message} ${error.remedy}`)
-    throw error
+    if (error instanceof AccountingContextError)
+      throw new ReportResolutionError(`${error.message} ${error.remedy}`);
+    throw error;
   }
 }
 
 export type ResolveReportCtx = {
-  orgId: string
-  t: Translator
-  period: ResolvedPeriod
-  query: ReportQuery
-}
+  orgId: string;
+  t: Translator;
+  period: ResolvedPeriod;
+  query: ReportQuery;
+};
 
 /**
  * Turn one built-in report kind + its request params into the common content
  * contract. Extracted verbatim from the statement export route so exports, the
  * on-screen paper view, and scheduling share exactly one implementation.
  */
-export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: ResolveReportCtx): Promise<ResolvedReport> {
-  const { orgId, query: q } = ctx
+export async function resolveReport(
+  kind: ReportKind,
+  p: URLSearchParams,
+  ctx: ResolveReportCtx,
+): Promise<ResolvedReport> {
+  const { orgId, query: q } = ctx;
   // Period and as-of phrases read their civil dates in the translator's locale.
-  const locale = await resolveLocale()
-  const t = civilDateTranslator(ctx.t, locale)
+  const locale = await resolveLocale();
+  const t = civilDateTranslator(ctx.t, locale);
   // Point-in-time statements report balances as of the window end. A bare
   // request (export, schedule, assistant) carrying no period is dated today
   // through the same default the screen uses — never a fiscal year end that
   // has not happened yet.
-  const period = AS_OF_STATEMENT_KINDS.includes(kind) && !p.get('period') && !p.get('asOf')
-    ? await resolvePeriod(AS_OF_DEFAULT_PERIOD_PRESET, { orgId })
-    : ctx.period
-  const featureKeys = reportStatementFeatureKeys(kind)
-  if (featureKeys.length === 0 && kind.startsWith('resourcing-')) featureKeys.push('resourcing')
+  const period =
+    AS_OF_STATEMENT_KINDS.includes(kind) && !p.get("period") && !p.get("asOf")
+      ? await resolvePeriod(AS_OF_DEFAULT_PERIOD_PRESET, { orgId })
+      : ctx.period;
+  const featureKeys = reportStatementFeatureKeys(kind);
+  if (featureKeys.length === 0 && kind.startsWith("resourcing-")) featureKeys.push("resourcing");
   for (const featureKey of featureKeys) {
     if (!(await isFeatureEnabled(orgId, featureKey))) {
-      throw new ReportResolutionError(`${featureKey} feature is disabled`)
+      throw new ReportResolutionError(`${featureKey} feature is disabled`);
     }
   }
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).
-  const authz = await requireReportAuthz(orgId)
+  const authz = await requireReportAuthz(orgId);
   // The statement's own domain grant (ledger, receivables, payables or the
   // module it reports on), the same rule the hub and the statement pages
   // apply, so an export, schedule or send never reaches data its page refuses.
-  const statementPermission = statementKindPermission(kind, p)
+  const statementPermission = statementKindPermission(kind, p);
   if (statementPermission && !can(authz, statementPermission)) {
-    throw new ReportResolutionError(`This report requires ${statementPermission} — ask an administrator to add that read access to your role.`)
+    throw new ReportResolutionError(
+      `This report requires ${statementPermission} — ask an administrator to add that read access to your role.`,
+    );
   }
-  if (kind === 'payroll-support') {
-    if (!can(authz, 'payroll.read')) throw new ReportResolutionError('This report requires payroll.read — ask an administrator for payroll read access.');
-    try { return { render: 'data', data: await payrollSupportReportData(period, p), requiredPermissions: ['payroll.read'] }; }
-    catch (error) {
-      if (error instanceof PayrollSupportReportRefusal) throw new ReportResolutionError(error.message);
+  if (kind === "payroll-support") {
+    if (!can(authz, "payroll.read"))
+      throw new ReportResolutionError(
+        "This report requires payroll.read — ask an administrator for payroll read access.",
+      );
+    try {
+      return {
+        render: "data",
+        data: await payrollSupportReportData(period, p),
+        requiredPermissions: ["payroll.read"],
+      };
+    } catch (error) {
+      if (error instanceof PayrollSupportReportRefusal)
+        throw new ReportResolutionError(error.message);
       throw error;
     }
   }
@@ -303,94 +364,118 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // its remedy.
   // Earned value reads project operational cost and progress; it takes the
   // projects read grant and the reader's legal-entity scope.
-  if (kind === 'earned-value') {
-    if (!can(authz, 'projects.read')) throw new ReportResolutionError('this report needs permission to read projects')
-    return { render: 'data', data: await earnedValueExportData(authz, p, period) }
+  if (kind === "earned-value") {
+    if (!can(authz, "projects.read"))
+      throw new ReportResolutionError("this report needs permission to read projects");
+    return { render: "data", data: await earnedValueExportData(authz, p, period) };
   }
   // Attendance exceptions read device attendance of roster shifts; they take
   // the attendance read grant and the reader's legal-entity scope.
-  if (kind === 'attendance-exceptions') {
-    if (!can(authz, 'hrm.attendance.read')) throw new ReportResolutionError('this report needs permission to read attendance')
-    try { return { render: 'data', data: await attendanceExceptionsExportData(authz, p, period), requiredPermissions: ['hrm.attendance.read'] } }
-    catch (error) {
-      if (error instanceof ScheduleError) throw new ReportResolutionError(error.remedy ? `${error.message} ${error.remedy}` : error.message)
-      throw error
+  if (kind === "attendance-exceptions") {
+    if (!can(authz, "hrm.attendance.read"))
+      throw new ReportResolutionError("this report needs permission to read attendance");
+    try {
+      return {
+        render: "data",
+        data: await attendanceExceptionsExportData(authz, p, period),
+        requiredPermissions: ["hrm.attendance.read"],
+      };
+    } catch (error) {
+      if (error instanceof ScheduleError)
+        throw new ReportResolutionError(
+          error.remedy ? `${error.message} ${error.remedy}` : error.message,
+        );
+      throw error;
     }
   }
   // Budget vs actual reads one project's budgets and job cost, within the
   // reader's legal-entity scope.
-  if (kind === 'project-budget-vs-actual') {
-    if (!can(authz, 'projects.read')) throw new ReportResolutionError('this report needs permission to read projects')
-    return { render: 'data', data: await projectBudgetExportData(authz, p, period) }
+  if (kind === "project-budget-vs-actual") {
+    if (!can(authz, "projects.read"))
+      throw new ReportResolutionError("this report needs permission to read projects");
+    return { render: "data", data: await projectBudgetExportData(authz, p, period) };
   }
-  if (kind === 'availability' || kind === 'replenishment') {
-    if (!can(authz, 'items.read')) throw new ReportResolutionError('this report needs permission to read items')
+  if (kind === "availability" || kind === "replenishment") {
+    if (!can(authz, "items.read"))
+      throw new ReportResolutionError("this report needs permission to read items");
     try {
-      const data = kind === 'availability' ? await availabilityExportData(authz, p) : await replenishmentExportData(authz, p)
-      return { render: 'data', data }
+      const data =
+        kind === "availability"
+          ? await availabilityExportData(authz, p)
+          : await replenishmentExportData(authz, p);
+      return { render: "data", data };
     } catch (error) {
-      if (error instanceof AvailabilityRefusal) throw new ReportResolutionError(availabilityRefusalText(error))
-      throw error
+      if (error instanceof AvailabilityRefusal)
+        throw new ReportResolutionError(availabilityRefusalText(error));
+      throw error;
     }
   }
   const resourcingKind: Partial<Record<ReportKind, ResourcingReportKey>> = {
-    'resourcing-utilization': 'utilization',
-    'resourcing-bench': 'bench',
-    'resourcing-capacity-demand': 'capacity-demand',
-    'resourcing-engagement': 'engagement',
-  }
-  const resourcingKey = resourcingKind[kind]
+    "resourcing-utilization": "utilization",
+    "resourcing-bench": "bench",
+    "resourcing-capacity-demand": "capacity-demand",
+    "resourcing-engagement": "engagement",
+  };
+  const resourcingKey = resourcingKind[kind];
   if (resourcingKey) {
-    if (!can(authz, 'resourcing.read')) throw new ReportResolutionError('this report requires resourcing.read')
-    const tResourcing = await getTranslations(`resourcing.reports.${resourcingKey}`)
-    const labels = await reportRunLabels()
+    if (!can(authz, "resourcing.read"))
+      throw new ReportResolutionError("this report requires resourcing.read");
+    const tResourcing = await getTranslations(`resourcing.reports.${resourcingKey}`);
+    const labels = await reportRunLabels();
     const result = await runResourcingReport(
       resourcingKey,
       orgId,
       authz.allowedSubsidiaryIds,
       { firstSunday: weekStartOf(period.from), lastSunday: weekStartOf(period.to) },
       {
-        departmentId: p.get('dept') || undefined,
-        jobTitleSearch: p.get('q') || undefined,
-        breakout: (p.get('breakout') || undefined) as 'person' | 'department' | 'job_title' | 'project' | 'customer' | undefined,
+        departmentId: p.get("dept") || undefined,
+        jobTitleSearch: p.get("q") || undefined,
+        breakout: (p.get("breakout") || undefined) as
+          "person" | "department" | "job_title" | "project" | "customer" | undefined,
       },
       {
         report: labels,
         formulas: {
-          utilization: tResourcing('measures.utilization'),
-          booked: tResourcing('measures.booked'),
-          gap: tResourcing('measures.gap'),
-          fill: tResourcing('measures.fill'),
-          margin: tResourcing('measures.margin'),
-          marginPercent: tResourcing('measures.marginPercent'),
-          personCount: tResourcing('measures.personCount'),
-          unknownCapacity: tResourcing('measures.unknownCapacity'),
-          unpricedCount: tResourcing('measures.unpricedCount'),
-          uncostedCount: tResourcing('measures.uncostedCount'),
-          pricedCount: tResourcing('measures.pricedCount'),
-          costedCount: tResourcing('measures.costedCount'),
-          noCapacity: tResourcing('guards.noCapacity'),
-          noRevenue: tResourcing('guards.noRevenue'),
-          noCost: tResourcing('guards.noCost'),
-          undefined: tResourcing('guards.undefined'),
+          utilization: tResourcing("measures.utilization"),
+          booked: tResourcing("measures.booked"),
+          gap: tResourcing("measures.gap"),
+          fill: tResourcing("measures.fill"),
+          margin: tResourcing("measures.margin"),
+          marginPercent: tResourcing("measures.marginPercent"),
+          personCount: tResourcing("measures.personCount"),
+          unknownCapacity: tResourcing("measures.unknownCapacity"),
+          unpricedCount: tResourcing("measures.unpricedCount"),
+          uncostedCount: tResourcing("measures.uncostedCount"),
+          pricedCount: tResourcing("measures.pricedCount"),
+          costedCount: tResourcing("measures.costedCount"),
+          noCapacity: tResourcing("guards.noCapacity"),
+          noRevenue: tResourcing("guards.noRevenue"),
+          noCost: tResourcing("guards.noCost"),
+          undefined: tResourcing("guards.undefined"),
         },
       },
-    )
+    );
     return {
-      render: 'data',
+      render: "data",
       data: runResultToExportData(result, {
-        title: tResourcing('title'),
+        title: tResourcing("title"),
         dateRangeLabel: reportPeriodLabel(ctx.period, locale),
       }),
-      requiredPermissions: ['resourcing.read'],
-    }
+      requiredPermissions: ["resourcing.read"],
+    };
   }
   // A secondary book presents each subsidiary in its own currency; an
   // explicit book that fails validation refuses below, before any figures.
-  const presentationBook = kind === 'budget' || p.get('book') == null
-    ? undefined
-    : (await reportBookSelection(orgId, p.get('book'))).selectedBook.id
-  const subView = await resolveSubsidiaryView(q.subsidiaryId, period.to, authz.allowedSubsidiaryIds, presentationBook)
+  const presentationBook =
+    kind === "budget" || p.get("book") == null
+      ? undefined
+      : (await reportBookSelection(orgId, p.get("book"))).selectedBook.id;
+  const subView = await resolveSubsidiaryView(
+    q.subsidiaryId,
+    period.to,
+    authz.allowedSubsidiaryIds,
+    presentationBook,
+  );
   const dims: DimFilter = {
     departmentId: q.dims.departmentId,
     projectId: q.dims.projectId,
@@ -401,76 +486,104 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     // Unrestricted root-covering views read root-owned (null subsidiary)
     // documents alongside attributed ones; restricted views stay fail-closed.
     includeNullSubsidiary: subView.subsidiary?.includeNullSubsidiary === true,
-  }
-  const secTotal = (section: string) => t('statement.sectionTotal', { section })
+  };
+  const secTotal = (section: string) => t("statement.sectionTotal", { section });
 
   // --- Multi-column statement views (P&L, Balance Sheet, Budget) -------------
   if (VIEW_KINDS.has(kind)) {
-    let view: StatementView | null = null
-    let title = ''
-    let periodPhrase = ''
-    const selectedBook = kind === 'budget' ? undefined : (await reportBookSelection(orgId, p.get('book'))).selectedBook
-    const accountLabels = kind === 'budget' ? null : await exportAccountLabels(orgId, p, period.to, q.subsidiaryId)
-    const matrixOpts = { orgId, bookId: selectedBook?.id, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero, accountLabels, locale }
-    if (kind === 'pnl') {
-      title = t('pnl.title')
-      periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
+    let view: StatementView | null = null;
+    let title = "";
+    let periodPhrase = "";
+    const selectedBook =
+      kind === "budget"
+        ? undefined
+        : (await reportBookSelection(orgId, p.get("book"))).selectedBook;
+    const accountLabels =
+      kind === "budget" ? null : await exportAccountLabels(orgId, p, period.to, q.subsidiaryId);
+    const matrixOpts = {
+      orgId,
+      bookId: selectedBook?.id,
+      breakout: q.breakout,
+      compare: q.compare,
+      basis: q.basis,
+      dims: q.dims,
+      subsidiary: subView.subsidiary,
+      showZero: q.showZero,
+      accountLabels,
+      locale,
+    };
+    if (kind === "pnl") {
+      title = t("pnl.title");
+      periodPhrase = t("pnl.dateRange", { from: period.from, to: period.to });
       view = await profitAndLossView(
         { from: period.from, to: period.to },
         reportPeriodLabel(period, locale),
         {
-          revenue: t('pnl.revenue'),
-          costOfGoodsSold: t('pnl.costOfGoodsSold'),
-          grossProfit: t('pnl.grossProfit'),
-          expenses: t('pnl.expenses'),
-          netIncome: t('pnl.netIncome'),
+          revenue: t("pnl.revenue"),
+          costOfGoodsSold: t("pnl.costOfGoodsSold"),
+          grossProfit: t("pnl.grossProfit"),
+          expenses: t("pnl.expenses"),
+          netIncome: t("pnl.netIncome"),
           totalOf: secTotal,
         },
         matrixOpts,
-      )
-    } else if (kind === 'balance-sheet') {
-      title = t('balanceSheet.title')
-      periodPhrase = t('balanceSheet.asOf', { date: period.to })
+      );
+    } else if (kind === "balance-sheet") {
+      title = t("balanceSheet.title");
+      periodPhrase = t("balanceSheet.asOf", { date: period.to });
       view = await balanceSheetView(
         { from: period.from, to: period.to },
         reportPeriodLabel(period, locale),
         {
-          assets: t('balanceSheet.assets'),
-          liabilities: t('balanceSheet.liabilities'),
-          equity: t('balanceSheet.equity'),
-          totalAssets: secTotal(t('balanceSheet.assets')),
-          totalLiabilities: secTotal(t('balanceSheet.liabilities')),
-          totalEquity: secTotal(t('balanceSheet.equity')),
-          retainedEarningsPrior: t('statement.retainedEarningsPrior'),
-          currentYearEarnings: t('statement.currentYearEarnings'),
-          translationAdjustment: t('statement.translationAdjustment'),
-          liabilitiesAndEquity: t('balanceSheet.liabilitiesAndEquity'),
+          assets: t("balanceSheet.assets"),
+          liabilities: t("balanceSheet.liabilities"),
+          equity: t("balanceSheet.equity"),
+          totalAssets: secTotal(t("balanceSheet.assets")),
+          totalLiabilities: secTotal(t("balanceSheet.liabilities")),
+          totalEquity: secTotal(t("balanceSheet.equity")),
+          retainedEarningsPrior: t("statement.retainedEarningsPrior"),
+          currentYearEarnings: t("statement.currentYearEarnings"),
+          translationAdjustment: t("statement.translationAdjustment"),
+          liabilitiesAndEquity: t("balanceSheet.liabilitiesAndEquity"),
           totalOf: secTotal,
         },
         matrixOpts,
-      )
+      );
     } else {
-      title = t('budget.title')
-      periodPhrase = `${t('budget.description')} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`
-      const scenario = p.get('scenario')
+      title = t("budget.title");
+      periodPhrase = `${t("budget.description")} · ${t("pnl.dateRange", { from: period.from, to: period.to })}`;
+      const scenario = p.get("scenario");
       if (scenario) {
-        view = await budgetVsActualView(scenario, orgId, {
-          actual: t('budget.actual'),
-          budget: t('budget.budget'),
-          variance: t('budget.variance'),
-          variancePct: t('budget.variancePct'),
-          revenue: t('pnl.revenue'),
-          costOfGoodsSold: t('pnl.costOfGoodsSold'),
-          grossProfit: t('pnl.grossProfit'),
-          expenses: t('pnl.expenses'),
-          netIncome: t('pnl.netIncome'),
-          totalOf: secTotal,
-        }, q.dims, dims.subsidiaryIds, { from: period.from, to: period.to })
+        view = await budgetVsActualView(
+          scenario,
+          orgId,
+          {
+            actual: t("budget.actual"),
+            budget: t("budget.budget"),
+            variance: t("budget.variance"),
+            variancePct: t("budget.variancePct"),
+            revenue: t("pnl.revenue"),
+            costOfGoodsSold: t("pnl.costOfGoodsSold"),
+            grossProfit: t("pnl.grossProfit"),
+            expenses: t("pnl.expenses"),
+            netIncome: t("pnl.netIncome"),
+            totalOf: secTotal,
+          },
+          q.dims,
+          dims.subsidiaryIds,
+          { from: period.from, to: period.to },
+        );
       }
     }
-    if (!view) throw new ReportResolutionError('no data')
-    if (selectedBook) periodPhrase = `${selectedBook.name} · ${periodPhrase}`
-    return { render: 'view', view, title, periodPhrase, ...(kind === 'balance-sheet' ? { asOf: period.to } : {}) }
+    if (!view) throw new ReportResolutionError("no data");
+    if (selectedBook) periodPhrase = `${selectedBook.name} · ${periodPhrase}`;
+    return {
+      render: "view",
+      view,
+      title,
+      periodPhrase,
+      ...(kind === "balance-sheet" ? { asOf: period.to } : {}),
+    };
   }
 
   // --- Detail reports (flat tables) -----------------------------------------
@@ -481,154 +594,269 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // keep their primary-book default. Aging rebuilds opens from posted journal
   // lines rather than the documents.open_balance cache; the lines join their
   // entries for the book, so the aging export takes the same detailBookId.
-  const bookParam = p.get('book')
-  const detailBookId = bookParam == null
-    ? undefined
-    : (await reportBookSelection(orgId, bookParam)).selectedBook.id
-  const side: AgingSide = p.get('side') === 'ap' ? 'ap' : 'ar'
+  const bookParam = p.get("book");
+  const detailBookId =
+    bookParam == null ? undefined : (await reportBookSelection(orgId, bookParam)).selectedBook.id;
+  const side: AgingSide = p.get("side") === "ap" ? "ap" : "ar";
   // Payroll confidentiality rides the execution principal: readers without
   // payroll.read get collapsed restricted lines (balanced totals, no employee
   // identity or per-employee amounts) from every ledger-detail reader below.
-  const canSeePayroll = can(authz, 'payroll.read')
+  const canSeePayroll = can(authz, "payroll.read");
   switch (kind) {
-    case 'general-ledger': {
-      const raw = await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId, canSeePayroll })
-      const ledger = { ...raw, accounts: localizeAccountRows(raw.accounts, await exportAccountLabels(orgId, p, period.to, q.subsidiaryId)) }
+    case "general-ledger": {
+      const raw = await generalLedger(period.from, period.to, {
+        accountId: isReportUuidParam(p.get("account")) ? p.get("account")! : undefined,
+        dims,
+        orgId,
+        bookId: detailBookId,
+        canSeePayroll,
+      });
+      const ledger = {
+        ...raw,
+        accounts: localizeAccountRows(
+          raw.accounts,
+          await exportAccountLabels(orgId, p, period.to, q.subsidiaryId),
+        ),
+      };
       return {
-        render: 'data',
-        data: generalLedgerExportData(ledger, t('generalLedger.title'), t),
-        requiredPermissions: ledgerContentPermissions(ledger.accounts.flatMap((account) => account.lines)),
-      }
+        render: "data",
+        data: generalLedgerExportData(ledger, t("generalLedger.title"), t),
+        requiredPermissions: ledgerContentPermissions(
+          ledger.accounts.flatMap((account) => account.lines),
+        ),
+      };
     }
-    case 'journal': {
-      const journal = await journalReport(period.from, period.to, { dims, orgId, bookId: detailBookId, canSeePayroll })
+    case "journal": {
+      const journal = await journalReport(period.from, period.to, {
+        dims,
+        orgId,
+        bookId: detailBookId,
+        canSeePayroll,
+      });
       return {
-        render: 'data',
-        data: journalExportData(journal, t('journal.title'), t),
+        render: "data",
+        data: journalExportData(journal, t("journal.title"), t),
         requiredPermissions: ledgerContentPermissions(journal.entries),
-      }
+      };
     }
-    case 'registers':
+    case "registers":
       return {
-        render: 'data',
+        render: "data",
         data: registerExportData(
-          await partyRegister(side, { from: period.from, to: period.to, dims, orgId, bookId: detailBookId, canSeePayroll }),
-          side === 'ap' ? t('registers.apTitle') : t('registers.arTitle'),
+          await partyRegister(side, {
+            from: period.from,
+            to: period.to,
+            dims,
+            orgId,
+            bookId: detailBookId,
+            canSeePayroll,
+          }),
+          side === "ap" ? t("registers.apTitle") : t("registers.arTitle"),
           t,
         ),
-      }
-    case 'partner-statement': {
-      const partyId = p.get('party')
-      if (!partyId) throw new ReportResolutionError('party required')
-      return { render: 'data', data: partnerStatementExportData(await partnerStatement(partyId, orgId, { from: period.from, to: period.to, side, dims, bookId: detailBookId, canSeePayroll }), t) }
+      };
+    case "partner-statement": {
+      const partyId = p.get("party");
+      if (!partyId) throw new ReportResolutionError("party required");
+      return {
+        render: "data",
+        data: partnerStatementExportData(
+          await partnerStatement(partyId, orgId, {
+            from: period.from,
+            to: period.to,
+            side,
+            dims,
+            bookId: detailBookId,
+            canSeePayroll,
+          }),
+          t,
+        ),
+      };
     }
-    case 'true-cost':
-      return { render: 'data', data: await trueCostExportData(orgId, period) }
-    case 'statistical-journal':
-    case 'gl-audit-numbers':
-      return { render: 'data', data: await journalMeasurementExportData(kind, { orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, from: period.from, to: period.to, label: reportPeriodLabel(period, locale), bookId: detailBookId, locale }), requiredPermissions: ['gl.read'] }
-    case 'intercompany-reconciliation':
+    case "true-cost":
+      return { render: "data", data: await trueCostExportData(orgId, period) };
+    case "statistical-journal":
+    case "gl-audit-numbers":
+      return {
+        render: "data",
+        data: await journalMeasurementExportData(kind, {
+          orgId,
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+          from: period.from,
+          to: period.to,
+          label: reportPeriodLabel(period, locale),
+          bookId: detailBookId,
+          locale,
+        }),
+        requiredPermissions: ["gl.read"],
+      };
+    case "intercompany-reconciliation":
       // Balances as of the window end, within the reader's legal entities.
       return {
-        render: 'data',
-        data: await intercompanyReconciliationExportData(orgId, authz.allowedSubsidiaryIds, period.to, t('balanceSheet.asOf', { date: period.to })),
-        requiredPermissions: ['intercompany.read'],
+        render: "data",
+        data: await intercompanyReconciliationExportData(
+          orgId,
+          authz.allowedSubsidiaryIds,
+          period.to,
+          t("balanceSheet.asOf", { date: period.to }),
+        ),
+        requiredPermissions: ["intercompany.read"],
         asOf: period.to,
-      }
-    case 'project-profitability':
+      };
+    case "project-profitability":
       return {
-        render: 'data',
+        render: "data",
         data: projectProfitabilityExportData(
           await projectProfitability(period.from, period.to, {
             dims,
             customerId: q.customerId,
-            search: p.get('q') ?? undefined,
+            search: p.get("q") ?? undefined,
             projectScope: q.projectScope,
             orgId,
             bookId: detailBookId,
           }),
           t,
         ),
-      }
+      };
   }
 
   // --- Standard scalar statements --------------------------------------------
-  const asOf = p.get('asOf') ?? period.to
-  const from = p.get('from') ?? period.from
-  const to = p.get('to') ?? period.to
+  const asOf = p.get("asOf") ?? period.to;
+  const from = p.get("from") ?? period.from;
+  const to = p.get("to") ?? period.to;
   switch (kind) {
-    case 'trial-balance':
-      return { render: 'data', data: trialBalanceExportData(localizeAccountRows(await trialBalance(asOf, dims, orgId, detailBookId), await exportAccountLabels(orgId, p, asOf, q.subsidiaryId)), asOf, t), asOf }
-    case 'book-differences': {
+    case "trial-balance":
+      return {
+        render: "data",
+        data: trialBalanceExportData(
+          localizeAccountRows(
+            await trialBalance(asOf, dims, orgId, detailBookId),
+            await exportAccountLabels(orgId, p, asOf, q.subsidiaryId),
+          ),
+          asOf,
+          t,
+        ),
+        asOf,
+      };
+    case "book-differences": {
       try {
         // Each book states the view in its own currency for the subsidiaries in it.
-        const selection = await bookDifferenceSelection(orgId, p.get('compareBook'))
-        const primaryView = await resolveSubsidiaryView(q.subsidiaryId, asOf, authz.allowedSubsidiaryIds, selection.primary.id)
-        const compareView = await resolveSubsidiaryView(q.subsidiaryId, asOf, authz.allowedSubsidiaryIds, selection.compare.id)
-        const base = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`, 'objects'))[0]?.base_currency ?? ''
+        const selection = await bookDifferenceSelection(orgId, p.get("compareBook"));
+        const primaryView = await resolveSubsidiaryView(
+          q.subsidiaryId,
+          asOf,
+          authz.allowedSubsidiaryIds,
+          selection.primary.id,
+        );
+        const compareView = await resolveSubsidiaryView(
+          q.subsidiaryId,
+          asOf,
+          authz.allowedSubsidiaryIds,
+          selection.compare.id,
+        );
+        const base =
+          (
+            await db.execute<{ base_currency: string }>(
+              sql`select base_currency from orgs where id = ${orgId}`,
+              "objects",
+            )
+          )[0]?.base_currency ?? "";
         return {
-          render: 'data',
+          render: "data",
           data: await bookDifferencesExportData({
-            orgId, asOf, dims, compareBook: selection.compare.id,
+            orgId,
+            asOf,
+            dims,
+            compareBook: selection.compare.id,
             primaryCurrency: primaryView.currency ?? base,
             compareCurrency: compareView.currency ?? base,
           }),
           asOf,
-        }
+        };
       } catch (error) {
-        if (error instanceof BookDifferenceSelectionError) throw new ReportResolutionError(error.message)
-        throw error
+        if (error instanceof BookDifferenceSelectionError)
+          throw new ReportResolutionError(error.message);
+        throw error;
       }
     }
-    case 'partners': {
+    case "partners": {
       // `kind` is the one partners param end to end (seeded Receivables /
       // Payables declarations, schedule snapshots, the page toggle and
       // statementPageHref all carry kind). `side` stays as a legacy read so
       // a previously exported URL keeps its meaning instead of silently
       // flipping to payables.
-      const raw = p.get('kind') ?? p.get('side')
-      const s = (raw === 'receivable' ? 'receivable' : 'payable') as 'receivable' | 'payable'
-      return { render: 'data', data: partnersExportData(s, await partnerBalances(s, orgId, asOf, detailBookId, dims, canSeePayroll), t), asOf }
+      const raw = p.get("kind") ?? p.get("side");
+      const s = (raw === "receivable" ? "receivable" : "payable") as "receivable" | "payable";
+      return {
+        render: "data",
+        data: partnersExportData(
+          s,
+          await partnerBalances(s, orgId, asOf, detailBookId, dims, canSeePayroll),
+          t,
+        ),
+        asOf,
+      };
     }
-    case 'aging': {
+    case "aging": {
       // Bare export hits default to the screen's as-of (today) through the
       // shared rule — never the fiscal year end. The today
       // lookup runs only when neither as-of nor period was supplied.
-      const asOfParam = p.get('asOf')
-      const periodParam = p.get('period')
+      const asOfParam = p.get("asOf");
+      const periodParam = p.get("period");
       const agingAsOf = resolveAgingAsOf({
         asOf: asOfParam,
         periodParam,
         periodTo: period.to,
-        today: asOfParam ?? periodParam ? period.to : (await resolvePeriod('today', { orgId })).to,
-      })
-      const currencyScope = await agingCurrenciesInScope(side, agingAsOf, dims, orgId)
-      const currency = resolveAgingCurrencyParams(p, currencyScope)
+        today:
+          (asOfParam ?? periodParam) ? period.to : (await resolvePeriod("today", { orgId })).to,
+      });
+      const currencyScope = await agingCurrenciesInScope(side, agingAsOf, dims, orgId);
+      const currency = resolveAgingCurrencyParams(p, currencyScope);
       const agingOpts = {
         bookId: detailBookId,
         basis: currency.basis,
         reportingCurrency: currency.currency,
-      }
-      if (p.get('view') === 'detail') {
+      };
+      if (p.get("view") === "detail") {
         return {
-          render: 'data',
-          data: agingDetailExportData(side, await agingDetail(side, agingAsOf, dims, orgId, agingOpts), t),
+          render: "data",
+          data: agingDetailExportData(
+            side,
+            await agingDetail(side, agingAsOf, dims, orgId, agingOpts),
+            t,
+          ),
           asOf: agingAsOf,
-        }
+        };
       }
       return {
-        render: 'data',
+        render: "data",
         data: agingExportData(side, await agingByParty(side, agingAsOf, dims, orgId, agingOpts), t),
         asOf: agingAsOf,
-      }
+      };
     }
-    case 'cash-flow':
-      return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId, detailBookId, subView.subsidiary), from, to, t) }
-    case 'cash-flow-indirect':
-      return { render: 'data', data: cashFlowIndirectExportData(await cashFlowIndirect(from, to, dims, orgId, detailBookId, subView.subsidiary), from, to, t) }
+    case "cash-flow":
+      return {
+        render: "data",
+        data: cashFlowExportData(
+          await cashFlow(from, to, dims, orgId, detailBookId, subView.subsidiary),
+          from,
+          to,
+          t,
+        ),
+      };
+    case "cash-flow-indirect":
+      return {
+        render: "data",
+        data: cashFlowIndirectExportData(
+          await cashFlowIndirect(from, to, dims, orgId, detailBookId, subView.subsidiary),
+          from,
+          to,
+          t,
+        ),
+      };
   }
 
-  throw new ReportResolutionError('unknown statement')
+  throw new ReportResolutionError("unknown statement");
 }
 
 /**
@@ -643,14 +871,14 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
  *  - query: execute the entity plan and shape it to ExportData.
  */
 type ReportDefinitionRecord = {
-  kind: string
-  slug: string
-  report_type: string
-  name: string
-  description: string | null
-  query: Record<string, unknown> | null
-  statement: { kind?: string; params?: Record<string, string> } | null
-}
+  kind: string;
+  slug: string;
+  report_type: string;
+  name: string;
+  description: string | null;
+  query: Record<string, unknown> | null;
+  statement: { kind?: string; params?: Record<string, string> } | null;
+};
 
 /**
  * Load one definition as SAVED NOW — never a copy captured at scheduling
@@ -660,21 +888,28 @@ type ReportDefinitionRecord = {
  * scheduled delivery reflects the report's current columns and filters,
  * exactly like an on-demand run, on both paths.
  */
-async function loadAuthorizedDefinition(orgId: string, id: string): Promise<{
-  row: ReportDefinitionRecord
-  authz: Awaited<ReturnType<typeof requireReportAuthz>>
+async function loadAuthorizedDefinition(
+  orgId: string,
+  id: string,
+): Promise<{
+  row: ReportDefinitionRecord;
+  authz: Awaited<ReturnType<typeof requireReportAuthz>>;
 }> {
-  const r = (await db.execute<ReportDefinitionRecord>(sql`
+  const r = await db.execute<ReportDefinitionRecord>(
+    sql`
     select kind, slug, report_type, name, description, query, statement
       from report_definitions
      where id = ${id} and org_id = ${orgId} and archived_at is null
-  `, 'objects'))
-  const row = r[0]
-  if (!row) throw new ReportResolutionError('report not found')
+  `,
+    "objects",
+  );
+  const row = r[0];
+  if (!row) throw new ReportResolutionError("report not found");
 
-  const authz = await requireReportAuthz(orgId)
-  if (!(await canAccessReportDefinition(authz, row as ReportAuthorization['definition']))) throw new ReportResolutionError('Report access denied')
-  return { row, authz }
+  const authz = await requireReportAuthz(orgId);
+  if (!(await canAccessReportDefinition(authz, row as ReportAuthorization["definition"])))
+    throw new ReportResolutionError("Report access denied");
+  return { row, authz };
 }
 
 export async function resolveDefinitionToExportData(
@@ -683,44 +918,66 @@ export async function resolveDefinitionToExportData(
   p: URLSearchParams,
   ctx: ResolveReportCtx,
   options: { extraFilters?: ReportRuleGroup | null } = {},
-): Promise<ExportData & { requiredPermissions: string[]; expenseRows?: ReportArtifactExpenseRows; asOf?: string }> {
-  const { row, authz } = await loadAuthorizedDefinition(orgId, id)
+): Promise<
+  ExportData & {
+    requiredPermissions: string[];
+    expenseRows?: ReportArtifactExpenseRows;
+    asOf?: string;
+  }
+> {
+  const { row, authz } = await loadAuthorizedDefinition(orgId, id);
 
-  if (row.report_type === 'statement') {
-    const spec = row.statement ?? {}
-    if (!spec.kind || !isReportKind(spec.kind)) throw new ReportResolutionError('unknown statement kind')
+  if (row.report_type === "statement") {
+    const spec = row.statement ?? {};
+    if (!spec.kind || !isReportKind(spec.kind))
+      throw new ReportResolutionError("unknown statement kind");
     // Request params win; the definition supplies fixed defaults (side, kind…).
-    const params = new URLSearchParams(p)
-    for (const [k, v] of Object.entries(spec.params ?? {})) if (!params.has(k)) params.set(k, v)
-    const resolved = await resolveReport(spec.kind, params, ctx)
+    const params = new URLSearchParams(p);
+    for (const [k, v] of Object.entries(spec.params ?? {})) if (!params.has(k)) params.set(k, v);
+    const resolved = await resolveReport(spec.kind, params, ctx);
     // The artifact records the permission set its CONTENT required (a
     // payroll-bearing journal/GL names payroll.read here); the scheduled
     // render stamps it onto the run snapshot and downloads enforce it.
-    const requiredPermissions = resolved.requiredPermissions ?? []
-    const asOf = resolved.asOf ? { asOf: resolved.asOf } : {}
-    if (resolved.render === 'view') {
-      return { ...statementViewToExportData(resolved.view, {
-        title: resolved.title,
-        dateRangeLabel: resolved.periodPhrase,
-        accountLabel: ctx.t('export.columns.accountName'),
-      }), requiredPermissions, ...asOf }
+    const requiredPermissions = resolved.requiredPermissions ?? [];
+    const asOf = resolved.asOf ? { asOf: resolved.asOf } : {};
+    if (resolved.render === "view") {
+      return {
+        ...statementViewToExportData(resolved.view, {
+          title: resolved.title,
+          dateRangeLabel: resolved.periodPhrase,
+          accountLabel: ctx.t("export.columns.accountName"),
+        }),
+        requiredPermissions,
+        ...asOf,
+      };
     }
-    return { ...resolved.data, requiredPermissions, ...asOf }
+    return { ...resolved.data, requiredPermissions, ...asOf };
   }
 
   // query-type definition → entity engine → ExportData. An explicit period in
   // the request replaces the plan's stored date window (same as the report
   // screen's picker); absent params — e.g. scheduled runs — keep the plan.
-  const { query, title, dateRangeLabel, asOf } = await planDefinitionQuery(row, authz, p, ctx, options)
+  const { query, title, dateRangeLabel, asOf } = await planDefinitionQuery(
+    row,
+    authz,
+    p,
+    ctx,
+    options,
+  );
   // Pageable entity exports deliberately collect every causally stable page;
   // they never inherit the interactive page or the engine's legacy 10k cap.
-  const result = await executeReportAllPages(orgId, query)
-  const entityPermission = reportEntityPermission(query)
-  const expenseRows = artifactExpenseRows(authz, query)
-  return { ...runResultToExportData(result, {
-    title,
-    dateRangeLabel,
-  }), requiredPermissions: entityPermission ? [entityPermission] : [], ...(expenseRows ? { expenseRows } : {}), ...(asOf ? { asOf } : {}) }
+  const result = await executeReportAllPages(orgId, query);
+  const entityPermission = reportEntityPermission(query);
+  const expenseRows = artifactExpenseRows(authz, query);
+  return {
+    ...runResultToExportData(result, {
+      title,
+      dateRangeLabel,
+    }),
+    requiredPermissions: entityPermission ? [entityPermission] : [],
+    ...(expenseRows ? { expenseRows } : {}),
+    ...(asOf ? { asOf } : {}),
+  };
 }
 
 /**
@@ -736,39 +993,53 @@ async function planDefinitionQuery(
   p: URLSearchParams,
   ctx: ResolveReportCtx,
   options: { extraFilters?: ReportRuleGroup | null } = {},
-): Promise<{ query: ReportCustomQuery; title: string; dateRangeLabel: string; asOf: string | null }> {
-  if (!row.query) throw new ReportResolutionError('report has no query')
-  const entityMap = await reportEntityCatalog(authz)
-  let query = mergeReportFilters(validateCatalogReportQuery(row.query, entityMap), options.extraFilters, entityMap)
-  const periodTouched = p.has('period') || p.has('from') || p.has('to')
+): Promise<{
+  query: ReportCustomQuery;
+  title: string;
+  dateRangeLabel: string;
+  asOf: string | null;
+}> {
+  if (!row.query) throw new ReportResolutionError("report has no query");
+  const entityMap = await reportEntityCatalog(authz);
+  let query = mergeReportFilters(
+    validateCatalogReportQuery(row.query, entityMap),
+    options.extraFilters,
+    entityMap,
+  );
+  const periodTouched = p.has("period") || p.has("from") || p.has("to");
   // Derive the native period field before URL-backed built-in filters land.
   // expiresOnOrBefore is an intentional recall cutoff, not permission to turn
   // the entire recall into an implicit fiscal-period report.
-  const periodField = periodTouched ? reportPeriodField(query, entityMap) : null
-  const builtIn = row.kind === 'built_in'
-    ? BUILT_IN_REPORT_DEFINITION_MAP[row.slug]
-    : undefined
+  const periodField = periodTouched ? reportPeriodField(query, entityMap) : null;
+  const builtIn = row.kind === "built_in" ? BUILT_IN_REPORT_DEFINITION_MAP[row.slug] : undefined;
   if (builtIn) {
     // The catalog owns URL-binding semantics, while the stored plan remains
     // authoritative: orgs may tune seeded definitions in place.
-    query = applyBuiltInUrlFilters({ ...builtIn, query }, p)
+    query = applyBuiltInUrlFilters({ ...builtIn, query }, p);
   }
   if (periodField) {
-    query = applyPeriodOverride(query, periodField, { from: ctx.period.from, to: ctx.period.to })
+    query = applyPeriodOverride(query, periodField, { from: ctx.period.from, to: ctx.period.to });
   }
   // A point-in-time source reads as of the request's as-of date, today when
   // none is chosen, exactly as the report screen does.
-  const asOf = !reportPeriodField(query, entityMap) && reportAsOfField(query, entityMap) ? await resolveReportAsOf(p) : null
-  if (asOf) query = { ...query, asOf: asOf.to }
+  const asOf =
+    !reportPeriodField(query, entityMap) && reportAsOfField(query, entityMap)
+      ? await resolveReportAsOf(p)
+      : null;
+  if (asOf) query = { ...query, asOf: asOf.to };
   // The header names the applied window with localized civil dates, as the
   // report screen does, rather than the period preset's name.
-  const t = civilDateTranslator(ctx.t, await resolveLocale())
+  const t = civilDateTranslator(ctx.t, await resolveLocale());
   return {
     query,
     title: builtIn ? t(`builtIns.${row.slug}.name`) : row.name,
-    dateRangeLabel: periodField ? t('pnl.dateRange', { from: ctx.period.from, to: ctx.period.to }) : asOf ? t('balanceSheet.asOf', { date: asOf.to }) : '',
+    dateRangeLabel: periodField
+      ? t("pnl.dateRange", { from: ctx.period.from, to: ctx.period.to })
+      : asOf
+        ? t("balanceSheet.asOf", { date: asOf.to })
+        : "",
     asOf: asOf?.to ?? null,
-  }
+  };
 }
 
 /**
@@ -783,35 +1054,38 @@ export async function streamDefinitionExport(
   p: URLSearchParams,
   ctx: ResolveReportCtx,
   opts: {
-    format: 'csv' | 'xlsx'
-    sectionHeader?: string
-    generatedAt?: Date
-    rowCap?: number
+    format: "csv" | "xlsx";
+    sectionHeader?: string;
+    generatedAt?: Date;
+    rowCap?: number;
     /** XLSX: the money context its money cells are formatted with. */
-    money: XlsxMoneyContext | null
+    money: XlsxMoneyContext | null;
   },
-): Promise<({ format: 'csv'; csv: string } | { format: 'xlsx'; xlsx: Buffer }) & {
-  rowCount: number
-  totalRows: number
-  truncated: boolean
-  asOf?: string
-}> {
-  const { row, authz } = await loadAuthorizedDefinition(orgId, id)
-  if (row.report_type === 'statement') throw new ReportResolutionError('Streaming export needs a query definition')
-  const plan = await planDefinitionQuery(row, authz, p, ctx)
-  const entity = REPORT_ENTITY_MAP[plan.query.entity]
-  if (plan.query.mode !== 'rows' || !entity?.pagination) {
-    throw new ReportResolutionError('Streaming export needs a paged rows-mode entity')
+): Promise<
+  ({ format: "csv"; csv: string } | { format: "xlsx"; xlsx: Buffer }) & {
+    rowCount: number;
+    totalRows: number;
+    truncated: boolean;
+    asOf?: string;
   }
-  if (opts.format === 'csv') {
+> {
+  const { row, authz } = await loadAuthorizedDefinition(orgId, id);
+  if (row.report_type === "statement")
+    throw new ReportResolutionError("Streaming export needs a query definition");
+  const plan = await planDefinitionQuery(row, authz, p, ctx);
+  const entity = REPORT_ENTITY_MAP[plan.query.entity];
+  if (plan.query.mode !== "rows" || !entity?.pagination) {
+    throw new ReportResolutionError("Streaming export needs a paged rows-mode entity");
+  }
+  if (opts.format === "csv") {
     const out = await streamPagedReportCsv(orgId, plan.query, {
       title: plan.title,
       dateRangeLabel: plan.dateRangeLabel,
       sectionHeader: opts.sectionHeader,
       generatedAt: opts.generatedAt,
       rowCap: opts.rowCap,
-    })
-    return { format: 'csv' as const, ...out, ...(plan.asOf ? { asOf: plan.asOf } : {}) }
+    });
+    return { format: "csv" as const, ...out, ...(plan.asOf ? { asOf: plan.asOf } : {}) };
   }
   const out = await streamPagedReportXlsx(orgId, plan.query, {
     title: plan.title,
@@ -819,6 +1093,6 @@ export async function streamDefinitionExport(
     generatedAt: opts.generatedAt,
     rowCap: opts.rowCap,
     money: opts.money,
-  })
-  return { format: 'xlsx' as const, ...out, ...(plan.asOf ? { asOf: plan.asOf } : {}) }
+  });
+  return { format: "xlsx" as const, ...out, ...(plan.asOf ? { asOf: plan.asOf } : {}) };
 }

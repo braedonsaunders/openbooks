@@ -1,9 +1,9 @@
-import { z } from 'zod'
+import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { sql } from 'drizzle-orm'
+import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import {
   PspSettlementError,
@@ -39,20 +39,13 @@ import {
   suggestSettlementBatchJournal,
 } from "@openbooks/engine/payments/settlement";
 import { CommerceError, matchPayoutLines } from "@openbooks/engine/commerce";
-import {
-  can,
-  guardSubsidiaryScope,
-  guardUnrestrictedScope,
-} from "../../../../lib/authz";
+import { can, guardSubsidiaryScope, guardUnrestrictedScope } from "../../../../lib/authz";
 import {
   ScopeNotFoundError,
   subsidiaryVisibleFilter,
   UnrestrictedScopeError,
 } from "@openbooks/engine/organization/scope";
-import {
-  isFeatureEnabled,
-  subsidiaryFeatureEnabled,
-} from "../../../../lib/features";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 import { exactMoney, isoDate } from "@/lib/api/json";
@@ -70,7 +63,10 @@ const configProvider = z.enum([
 const accountReference = uuidString().nullable().optional();
 const subsidiaryReference = uuidString().nullable().optional();
 const calendarDateShape = isoDate("must be a valid calendar date");
-const providerCurrency = z.string().trim().regex(/^[A-Za-z]{3}$/, "must be a three-letter currency code");
+const providerCurrency = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z]{3}$/, "must be a three-letter currency code");
 const recurlyAmount = (field: string) =>
   exactMoney(`${field} must be decimal text; JSON numbers are refused`);
 const chargebeeMinorUnits = z.number().int().safe();
@@ -95,12 +91,16 @@ const recurlyPayload = z.strictObject({
   refund_amount: recurlyAmount("refund_amount").optional(),
   fee_amount: recurlyAmount("fee_amount").optional(),
   net_amount: recurlyAmount("net_amount").optional(),
-  lines: z.array(z.strictObject({
-    type: z.string().trim().min(1),
-    amount: recurlyAmount("line amount"),
-    id: z.string().optional(),
-    description: z.string().optional(),
-  })).optional(),
+  lines: z
+    .array(
+      z.strictObject({
+        type: z.string().trim().min(1),
+        amount: recurlyAmount("line amount"),
+        id: z.string().optional(),
+        description: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 const chargebeePayload = z.strictObject({
@@ -112,12 +112,16 @@ const chargebeePayload = z.strictObject({
   amount_adjusted: chargebeeMinorUnits.optional(),
   adjustment_reason: z.string().nullable().optional(),
   credits_applied: chargebeeMinorUnits.optional(),
-  line_items: z.array(z.strictObject({
-    id: z.string().optional(),
-    description: z.string().optional(),
-    amount: chargebeeMinorUnits.optional(),
-    entity_type: z.string().optional(),
-  })).optional(),
+  line_items: z
+    .array(
+      z.strictObject({
+        id: z.string().optional(),
+        description: z.string().optional(),
+        amount: chargebeeMinorUnits.optional(),
+        entity_type: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 const importAccountReferences = {
@@ -206,25 +210,38 @@ const squarePayoutEntry = z.object({
   gross_amount_money: squareMoney,
   fee_amount_money: squareMoney.optional().nullable(),
   net_amount_money: squareMoney,
-  type_charge_details: z.object({ payment_id: z.string().optional().nullable() }).optional().nullable(),
-  type_refund_details: z.object({ payment_id: z.string().optional().nullable() }).optional().nullable(),
-  type_dispute_details: z.object({ dispute_id: z.string().optional().nullable() }).optional().nullable(),
+  type_charge_details: z
+    .object({ payment_id: z.string().optional().nullable() })
+    .optional()
+    .nullable(),
+  type_refund_details: z
+    .object({ payment_id: z.string().optional().nullable() })
+    .optional()
+    .nullable(),
+  type_dispute_details: z
+    .object({ dispute_id: z.string().optional().nullable() })
+    .optional()
+    .nullable(),
 });
 
 const importBody = z.discriminatedUnion("provider", [
-  z.strictObject({
-    action: z.literal("import"),
-    provider: z.literal("stripe"),
-    externalRef: z.string().trim().min(1).optional(),
-    payoutId: z.string().trim().min(1).optional(),
-    settlementDate: calendarDateShape.optional(),
-    transactions: z.array(stripeTransaction).min(1, "at least one Stripe transaction is required"),
-    fx: fxEvidence.optional(),
-    ...importAccountReferences,
-  }).refine((body) => Boolean(body.externalRef ?? body.payoutId), {
-    path: ["externalRef"],
-    message: "externalRef or payoutId is required",
-  }),
+  z
+    .strictObject({
+      action: z.literal("import"),
+      provider: z.literal("stripe"),
+      externalRef: z.string().trim().min(1).optional(),
+      payoutId: z.string().trim().min(1).optional(),
+      settlementDate: calendarDateShape.optional(),
+      transactions: z
+        .array(stripeTransaction)
+        .min(1, "at least one Stripe transaction is required"),
+      fx: fxEvidence.optional(),
+      ...importAccountReferences,
+    })
+    .refine((body) => Boolean(body.externalRef ?? body.payoutId), {
+      path: ["externalRef"],
+      message: "externalRef or payoutId is required",
+    }),
   z.strictObject({
     action: z.literal("import"),
     provider: z.literal("recurly"),
@@ -247,28 +264,36 @@ const importBody = z.discriminatedUnion("provider", [
     externalRef: z.string().trim().min(1).optional(),
     settlementDate: calendarDateShape.optional(),
     payout: shopifyPayout,
-    transactions: z.array(shopifyTransaction).min(1, "at least one Shopify balance transaction is required"),
+    transactions: z
+      .array(shopifyTransaction)
+      .min(1, "at least one Shopify balance transaction is required"),
     fx: fxEvidence.optional(),
     ...importAccountReferences,
   }),
-  z.strictObject({
-    action: z.literal("import"),
-    provider: z.literal("paypal"),
-    // A Transaction Search export carries no natural reference: the operator
-    // names the export (statement week, settlement id) so the batch stays
-    // idempotent on (provider, external ref).
-    externalRef: z.string().trim().min(1, "externalRef names this PayPal export"),
-    settlementDate: calendarDateShape.optional(),
-    payload: z.object({
-      transactions: z.array(paypalTransaction).min(1, "at least one PayPal transaction is required"),
-    }).optional(),
-    // PayPal settlement report (STL) CSV text, header row included.
-    csv: z.string().min(1).optional(),
-    fx: fxEvidence.optional(),
-    ...importAccountReferences,
-  }).refine((body) => body.payload !== undefined || body.csv !== undefined, {
-    message: "payload or csv is required",
-  }),
+  z
+    .strictObject({
+      action: z.literal("import"),
+      provider: z.literal("paypal"),
+      // A Transaction Search export carries no natural reference: the operator
+      // names the export (statement week, settlement id) so the batch stays
+      // idempotent on (provider, external ref).
+      externalRef: z.string().trim().min(1, "externalRef names this PayPal export"),
+      settlementDate: calendarDateShape.optional(),
+      payload: z
+        .object({
+          transactions: z
+            .array(paypalTransaction)
+            .min(1, "at least one PayPal transaction is required"),
+        })
+        .optional(),
+      // PayPal settlement report (STL) CSV text, header row included.
+      csv: z.string().min(1).optional(),
+      fx: fxEvidence.optional(),
+      ...importAccountReferences,
+    })
+    .refine((body) => body.payload !== undefined || body.csv !== undefined, {
+      message: "payload or csv is required",
+    }),
   z.strictObject({
     action: z.literal("import"),
     provider: z.literal("square"),
@@ -283,9 +308,9 @@ const importBody = z.discriminatedUnion("provider", [
   }),
 ]);
 
-const postBodySchema0 = z.discriminatedUnion('action', [
+const postBodySchema0 = z.discriminatedUnion("action", [
   z.strictObject({
-    action: z.literal('saveConfig'),
+    action: z.literal("saveConfig"),
     provider: configProvider,
     displayName: z.string().trim().min(1).optional(),
     isEnabled: z.boolean({ error: "isEnabled must be a boolean" }).optional(),
@@ -362,9 +387,9 @@ const postBodySchema0 = z.discriminatedUnion('action', [
     reason: z.string().trim().min(1).max(500),
   }),
   z.strictObject({ action: z.literal("accrue"), accrualDate: calendarDateShape }),
-])
+]);
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Provider exports use explicit nulls where the engine's parser inputs use
@@ -395,10 +420,10 @@ function nullsToUndefined<T>(value: T): NullsToUndefined<T> {
 }
 
 export const GET = defineRoute({
-  permission: 'banking.read',
-  feature: 'banking',
+  permission: "banking.read",
+  feature: "banking",
   handler: async ({ request: req, authz: gate }) => {
-    const orgId = gate.user.orgId
+    const orgId = gate.user.orgId;
     // Settlement detail for the reconciliation drawer: one batch with its
     // evidence lines and the linked receipt numbers, under the same scope as
     // the list. A malformed id is a tenant-opaque 404, never a uuid cast 500.
@@ -410,7 +435,8 @@ export const GET = defineRoute({
     const resolveEntry = new URL(req.url).searchParams.get("resolveEntry");
     if (resolveEntry !== null && resolveEntry.trim() !== "") {
       const query = `%${resolveEntry.trim().replace(/[%_\\]/g, "")}%`;
-      const entries = await db.execute(sql`
+      const entries = await db.execute(
+        sql`
         select e.id, e.entry_number as "entryNumber",
                e.posting_date::text as "postingDate", e.status
           from journal_entries e
@@ -420,7 +446,9 @@ export const GET = defineRoute({
            ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, gate.allowedSubsidiaryIds)}
          order by e.posting_date desc, e.entry_number
          limit 10
-      `, "objects");
+      `,
+        "objects",
+      );
       return NextResponse.json({ entries });
     }
     // Document picker for manual line links: posted documents the caller may
@@ -429,7 +457,8 @@ export const GET = defineRoute({
     const resolveDoc = new URL(req.url).searchParams.get("resolveDoc");
     if (resolveDoc !== null && resolveDoc.trim() !== "") {
       const query = `%${resolveDoc.trim().replace(/[%_\\]/g, "")}%`;
-      const docs = await db.execute(sql`
+      const docs = await db.execute(
+        sql`
         select d.id, d.kind, d.document_number as "documentNumber",
                d.total::text as total, d.currency, d.document_date::text as "documentDate"
           from documents d
@@ -438,7 +467,9 @@ export const GET = defineRoute({
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
          order by d.document_date desc, d.document_number
          limit 10
-      `, "objects");
+      `,
+        "objects",
+      );
       return NextResponse.json({ documents: docs });
     }
     // Batch journal suggestion: posted entries whose revenue lines total
@@ -465,7 +496,8 @@ export const GET = defineRoute({
           ? sql` and b.subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
           : sql` and false`
         : sql``;
-      const batch = await db.execute(sql`
+      const batch = await db.execute(
+        sql`
         select b.id, b.provider, b.external_ref as "externalRef", b.status, b.currency,
                b.source_currency as "sourceCurrency", b.conversion_rate::text as "conversionRate",
                b.conversion_rate_source as "conversionRateSource", b.payout_rate::text as "payoutRate",
@@ -492,16 +524,18 @@ export const GET = defineRoute({
           left join accounts fx on fx.org_id = b.org_id and fx.id = b.fx_account_id
          where b.org_id = ${orgId} and b.id = ${batchId}${scopedBatch}
          limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = batch[0] as Record<string, unknown> | undefined;
-      if (!row) return notFound('record')
+      if (!row) return notFound("record");
       // Drafts use the same entity and primary-book resolution as posting;
       // posted history keeps the actual journal identity even if Setup changes.
       const context = await loadSubsidiaryContext(db, orgId);
       const postingEntityId =
-        row.status === 'draft'
+        row.status === "draft"
           ? (row.subsidiaryId ?? (context.multi ? null : context.rootId))
-          : row.recordedSubsidiaryId
+          : row.recordedSubsidiaryId;
       let postingBookId = row.recordedBookId ?? null;
       if (row.status === "draft") {
         try {
@@ -511,21 +545,27 @@ export const GET = defineRoute({
         }
       }
       const book = postingBookId
-        ? (await db.execute<{ name: string }>(sql`
+        ? (
+            await db.execute<{ name: string }>(
+              sql`
             select name from accounting_books where org_id = ${orgId} and id = ${postingBookId}
-          `, "objects"))[0]
+          `,
+              "objects",
+            )
+          )[0]
         : undefined;
       const review = {
         postingEntityId: postingEntityId ?? null,
         postingEntityName:
-          typeof postingEntityId === 'string'
+          typeof postingEntityId === "string"
             ? (context.byId.get(postingEntityId)?.name ?? null)
             : null,
         postingBookId,
         postingBookName: book?.name ?? null,
         postingBasis: row.status === "draft" ? "current" : "recorded",
-      }
-      const lines = await db.execute(sql`
+      };
+      const lines = await db.execute(
+        sql`
         select l.id, l.line_number as "lineNumber", l.kind, l.external_ref as "externalRef",
                l.description, l.amount, l.currency, l.document_id as "documentId",
                d.kind as "documentKind", d.document_number as "documentNumber",
@@ -535,19 +575,24 @@ export const GET = defineRoute({
           left join documents d on d.org_id = l.org_id and d.id = l.document_id
          where l.org_id = ${orgId} and l.batch_id = ${batchId}
          order by l.line_number
-      `, "objects");
+      `,
+        "objects",
+      );
       // The payout drawer reads the deposit tie-out and any in-transit
       // accruals beside the lines: both derive from posted state, so the
       // detail carries them instead of growing new endpoints.
       const tieout = await batchDepositTieout(orgId, batchId, gate.allowedSubsidiaryIds);
-      const accruals = await db.execute(sql`
+      const accruals = await db.execute(
+        sql`
         select id, accrual_date::text as "accrualDate", reversal_date::text as "reversalDate",
                amount, currency, accrual_entry_id as "accrualEntryId",
                reversal_entry_id as "reversalEntryId", status
           from psp_payout_accruals
          where org_id = ${orgId} and batch_id = ${batchId}
          order by accrual_date
-      `, "objects");
+      `,
+        "objects",
+      );
       return NextResponse.json({ batch: { ...row, ...review }, lines, tieout, accruals });
     }
     const subsidiaryFilter = gate.allowedSubsidiaryIds
@@ -565,15 +610,19 @@ export const GET = defineRoute({
         : sql` and false`
       : sql``;
     const subsidiaries = (await subsidiaryFeatureEnabled(orgId))
-      ? await db.execute(sql`
+      ? await db.execute(
+          sql`
       select id, name, base_currency as "baseCurrency"
         from subsidiaries
        where org_id = ${orgId} and is_active and not is_elimination${subsidiaryIdFilter}
        order by name
-    `, "objects")
+    `,
+          "objects",
+        )
       : [];
     const [batches, configs] = await Promise.all([
-      db.execute(sql`
+      db.execute(
+        sql`
       select id, provider, external_ref as "externalRef", status, currency, net_amount as "netAmount",
              fee_amount as "feeAmount", gross_amount as "grossAmount", refund_amount as "refundAmount",
              dispute_amount as "disputeAmount", adjustment_amount as "adjustmentAmount",
@@ -584,13 +633,16 @@ export const GET = defineRoute({
              memo, line_count as "lineCount"
         from psp_settlement_batches where org_id = ${orgId}${subsidiaryFilter}
        order by settlement_date desc, created_at desc
-    `, "objects"),
+    `,
+        "objects",
+      ),
       // Provider configuration is organization-wide and has no subsidiary_id.
       // Do not expose it to a restricted caller when its account defaults may
       // span entities; setup administrators can use the dedicated setup route.
       gate.allowedSubsidiaryIds
         ? Promise.resolve([])
-        : db.execute(sql`
+        : db.execute(
+            sql`
       select id, provider, display_name as "displayName", is_enabled as "isEnabled",
              default_bank_account_id as "defaultBankAccountId",
              default_fee_account_id as "defaultFeeAccountId",
@@ -601,22 +653,23 @@ export const GET = defineRoute({
              default_chargeback_loss_account_id as "defaultChargebackLossAccountId",
              default_dispute_fee_account_id as "defaultDisputeFeeAccountId"
         from psp_provider_configs where org_id = ${orgId}
-    `, "objects"),
-    ])
+    `,
+            "objects",
+          ),
+    ]);
     return NextResponse.json({
       batches,
       configs,
       subsidiaries,
     });
   },
-})
+});
 
 export const POST = defineRoute({
-  public: 'session',
+  public: "session",
   body: postBodySchema0,
   handler: async ({ authz, body }) => {
-    if (!authz)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) {
       return notFound("record");
     }
@@ -629,14 +682,14 @@ export const POST = defineRoute({
         { status: 403 },
       );
     }
-    const orgId = authz.user.orgId
-    const userId = authz.user.id
+    const orgId = authz.user.orgId;
+    const userId = authz.user.id;
 
     try {
       switch (body.action) {
-        case 'saveConfig': {
+        case "saveConfig": {
           const scopeDenied = guardUnrestrictedScope(authz);
-          if (scopeDenied) return scopeDenied
+          if (scopeDenied) return scopeDenied;
           await savePspProviderConfig(
             orgId,
             {
@@ -656,8 +709,8 @@ export const POST = defineRoute({
             },
             userId,
             authz.allowedSubsidiaryIds,
-          )
-          return NextResponse.json({ ok: true })
+          );
+          return NextResponse.json({ ok: true });
         }
         case "import": {
           const denied = guardSubsidiaryScope(authz, body.subsidiaryId ?? null);
@@ -689,15 +742,16 @@ export const POST = defineRoute({
               );
               break;
             case "paypal":
-              parsed = body.csv !== undefined
-                ? parsePaypalSettlementCsv(body.csv, body.externalRef, fallbackDate)
-                : parsePaypalTransactions(
-                    nullsToUndefined({
-                      reference: body.externalRef,
-                      transactions: body.payload!.transactions,
-                    }),
-                    fallbackDate,
-                  );
+              parsed =
+                body.csv !== undefined
+                  ? parsePaypalSettlementCsv(body.csv, body.externalRef, fallbackDate)
+                  : parsePaypalTransactions(
+                      nullsToUndefined({
+                        reference: body.externalRef,
+                        transactions: body.payload!.transactions,
+                      }),
+                      fallbackDate,
+                    );
               break;
             case "square":
               if (body.externalRef !== undefined && body.externalRef !== body.payout.id.trim()) {
@@ -722,10 +776,7 @@ export const POST = defineRoute({
             };
           }
           if (!parsed.externalRef)
-            return NextResponse.json(
-              { error: "externalRef required" },
-              { status: 422 },
-            );
+            return NextResponse.json({ error: "externalRef required" }, { status: 422 });
           const result = await importSettlementBatch(
             orgId,
             userId,
@@ -768,11 +819,7 @@ export const POST = defineRoute({
               { status: 422 },
             );
           }
-          if (!body.reason)
-            return NextResponse.json(
-              { error: "reason required" },
-              { status: 422 },
-            );
+          if (!body.reason) return NextResponse.json({ error: "reason required" }, { status: 422 });
           const reversed = await reverseSettlementBatch(
             orgId,
             body.batchId,
@@ -875,11 +922,7 @@ export const POST = defineRoute({
         }
         case "deleteDraft": {
           if (!isUuid(body.batchId)) return notFound("record");
-          if (!body.reason)
-            return NextResponse.json(
-              { error: "reason required" },
-              { status: 422 },
-            );
+          if (!body.reason) return NextResponse.json({ error: "reason required" }, { status: 422 });
           const deleted = await deleteSettlementDraft(
             orgId,
             body.batchId,
@@ -899,10 +942,7 @@ export const POST = defineRoute({
           return NextResponse.json(accrued);
         }
         default:
-          return NextResponse.json(
-            { error: "unknown action" },
-            { status: 400 },
-          );
+          return NextResponse.json({ error: "unknown action" }, { status: 400 });
       }
     } catch (e) {
       if (e instanceof ScopeNotFoundError) {
@@ -934,4 +974,4 @@ export const POST = defineRoute({
       return apiErrorResponse(e);
     }
   },
-})
+});

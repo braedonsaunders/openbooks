@@ -44,9 +44,12 @@ export async function seedUser(input: SeedUserInput): Promise<SeedUserResult> {
       `unknown organization ${JSON.stringify(input.orgId)}: pass the production org id (uuid) as the first argument to seed-user.ts`,
     );
   }
-  const org = (await db.execute<{ id: string; name: string; env_kind: string }>(sql`
+  const org = await db.execute<{ id: string; name: string; env_kind: string }>(
+    sql`
     select id, name, env_kind from orgs where id = ${input.orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const target = org[0];
   if (!target) {
     throw new Error(
@@ -61,19 +64,26 @@ export async function seedUser(input: SeedUserInput): Promise<SeedUserResult> {
   const salt = randomBytes(16);
   const hash = `${salt.toString("hex")}:${scryptSync(input.password, salt, 64).toString("hex")}`;
   const seeded = await db.transaction(async (tx) => {
-    const roleRow = (await tx.execute<{ id: string }>(sql`
+    const roleRow = await tx.execute<{ id: string }>(
+      sql`
       select id from app_roles where org_id = ${target.id} and key = ${role} limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     const roleId = roleRow[0];
-    if (!roleId) throw new Error(`role ${role} does not exist in organization ${target.name} (${target.id})`);
-    const user = (await tx.execute<{ id: string }>(sql`
+    if (!roleId)
+      throw new Error(`role ${role} does not exist in organization ${target.name} (${target.id})`);
+    const user = await tx.execute<{ id: string }>(
+      sql`
       insert into users (org_id, email, name, password_hash)
       values (${target.id}, ${email}, ${input.name}, ${hash})
       on conflict (org_id, email) do update
         set password_hash = ${hash}, is_active = true, updated_at = now()
       where users.org_id = ${target.id}
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     const userId = user[0]!.id;
     await tx.execute(sql`
       -- The grant is the desired end state: re-seeding a user who already
@@ -111,8 +121,10 @@ export function isSeedUserCli(entrypoint: string | undefined): boolean {
 }
 
 if (isSeedUserCli(process.argv[1])) {
-  void main().then(() => process.exit(0)).catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exit(1);
-  });
+  void main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : error);
+      process.exit(1);
+    });
 }

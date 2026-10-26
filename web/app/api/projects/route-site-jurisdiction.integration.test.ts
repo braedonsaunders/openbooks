@@ -49,20 +49,25 @@ const hooks = registerHooks({
 const { POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
 
-const { db, withBypass} = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
-
+const { db, withBypass } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 async function fixture() {
   const org = await withBypass(() => createScratchOrg());
   const { adminId } = await withBypass(() => seedFlowActors(org.orgId));
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     update orgs
        set settings = jsonb_set(
              coalesce(settings, '{}'::jsonb), '{features,projects}',
              to_jsonb(true::boolean), true)
-     where id = ${org.orgId}`));
-  routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+     where id = ${org.orgId}`),
+  );
+  routeState.authz = {
+    user: { roles: [], orgId: org.orgId, id: adminId },
+    allowedSubsidiaryIds: null,
+  };
   return org;
 }
 
@@ -74,19 +79,35 @@ const postRequest = (body: unknown) =>
   });
 
 const siteOf = async (id: string) =>
-  (await db.execute<{ site_jurisdiction: string | null }>(
-      sql`select site_jurisdiction from projects where id = ${id}`, "objects",
-    ))[0]!.site_jurisdiction;
+  (
+    await db.execute<{ site_jurisdiction: string | null }>(
+      sql`select site_jurisdiction from projects where id = ${id}`,
+      "objects",
+    )
+  )[0]!.site_jurisdiction;
 
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 test("project creation refuses an unknown site jurisdiction without writing", async () => {
   const org = await fixture();
   try {
     const response = await POST(postRequest({ name: "Site job", siteJurisdiction: "Atlantis" }));
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.match(json?.error ?? "", /unknown site jurisdiction/, `expected a named refusal, got: ${JSON.stringify(json)}`);
-    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from projects where org_id = ${org.orgId}`, "objects"))[0]!.n;
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
+    assert.match(
+      json?.error ?? "",
+      /unknown site jurisdiction/,
+      `expected a named refusal, got: ${JSON.stringify(json)}`,
+    );
+    const count = (
+      await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from projects where org_id = ${org.orgId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(count, 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -97,11 +118,15 @@ test("project creation stores a canonicalised site jurisdiction, nullable by def
   const org = await fixture();
   try {
     const createdSite = await POST(postRequest({ name: "Site job", siteJurisdiction: "us-ca" }));
-    const withSite = (await createdSite.json().catch(() => null)) as { project: { id: string } } | null;
+    const withSite = (await createdSite.json().catch(() => null)) as {
+      project: { id: string };
+    } | null;
     assert.equal(createdSite.status, 201, JSON.stringify(withSite));
     assert.equal(await siteOf(withSite!.project.id), "US-CA");
     const createdBare = await POST(postRequest({ name: "Unsurveyed job" }));
-    const withoutSite = (await createdBare.json().catch(() => null)) as { project: { id: string } } | null;
+    const withoutSite = (await createdBare.json().catch(() => null)) as {
+      project: { id: string };
+    } | null;
     assert.equal(createdBare.status, 201, JSON.stringify(withoutSite));
     assert.equal(await siteOf(withoutSite!.project.id), null);
     const patched = await PATCH(

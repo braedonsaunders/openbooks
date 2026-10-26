@@ -1,12 +1,13 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import test from 'node:test';
-import type { SessionUser } from '../auth';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import type { SessionUser } from "../auth";
 
-const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, dropScratchOrg, seedActiveEmployment } = await import('@openbooks/engine/testing/fixtures');
-const { executeAssistantTool } = await import('./registry');
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedActiveEmployment } =
+  await import("@openbooks/engine/testing/fixtures");
+const { executeAssistantTool } = await import("./registry");
 
 function userFor(orgId: string, name: string): SessionUser {
   const userId = randomUUID();
@@ -14,24 +15,26 @@ function userFor(orgId: string, name: string): SessionUser {
     id: userId,
     orgId,
     name,
-    email: `${name.replaceAll(' ', '.').toLowerCase()}@scratch.test`,
-    roles: [{ key: 'ordinary-role', name: 'Ordinary role' }],
+    email: `${name.replaceAll(" ", ".").toLowerCase()}@scratch.test`,
+    roles: [{ key: "ordinary-role", name: "Ordinary role" }],
     isSuperAdmin: false,
-    envKind: 'production',
+    envKind: "production",
     productionOrgId: orgId,
     homeOrgId: orgId,
     homeUserId: userId,
   };
 }
 
-const TIME_PERMS = ['assistant.use', 'time.read'];
-const PROJECT_PERMS = ['assistant.use', 'projects.read'];
+const TIME_PERMS = ["assistant.use", "time.read"];
+const PROJECT_PERMS = ["assistant.use", "projects.read"];
 
 async function enableFeature(orgId: string, key: string) {
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object(${key}::text,true))
     where id=${orgId}
-  `));
+  `),
+  );
 }
 
 /** Employee + submitted week, approved billable project time, and a field ticket. */
@@ -84,126 +87,147 @@ async function seedTime(org: { orgId: string; subsidiaryId: string }) {
   return { employee, hiddenEmployee, project, ticketDoc };
 }
 
-test('time assistant reads: week, search, project time, unbilled, tickets', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  await enableFeature(org.orgId, 'fieldTickets');
-  await enableFeature(org.orgId, 'fieldTime');
-  try {
-    const seed = await seedTime(org);
-    const timeAuthz = {
-      user: userFor(org.orgId, 'Time scope reader'),
-      permissions: new Set(TIME_PERMS),
-      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-    };
-    const projectAuthz = {
-      user: userFor(org.orgId, 'Project time reader'),
-      permissions: new Set(PROJECT_PERMS),
-      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-    };
-    await withOrgContext(org.orgId, async () => {
-      const week = await executeAssistantTool(timeAuthz, 'get_timesheet_week', {
-        employeePartyId: seed.employee,
-        week: '2026-09-16',
+test(
+  "time assistant reads: week, search, project time, unbilled, tickets",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    await enableFeature(org.orgId, "fieldTickets");
+    await enableFeature(org.orgId, "fieldTime");
+    try {
+      const seed = await seedTime(org);
+      const timeAuthz = {
+        user: userFor(org.orgId, "Time scope reader"),
+        permissions: new Set(TIME_PERMS),
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      };
+      const projectAuthz = {
+        user: userFor(org.orgId, "Project time reader"),
+        permissions: new Set(PROJECT_PERMS),
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      };
+      await withOrgContext(org.orgId, async () => {
+        const week = await executeAssistantTool(timeAuthz, "get_timesheet_week", {
+          employeePartyId: seed.employee,
+          week: "2026-09-16",
+        });
+        assert.equal(week.ok, true, JSON.stringify(week));
+        assert.ok(week.ok);
+        const weekData = week.data as { status: string; weekTotalHours: number; rows: unknown[] };
+        assert.equal(weekData.status, "submitted");
+        assert.equal(weekData.weekTotalHours, 16);
+
+        const hiddenWeek = await executeAssistantTool(timeAuthz, "get_timesheet_week", {
+          employeePartyId: seed.hiddenEmployee,
+          week: "2026-09-16",
+        });
+        assert.deepEqual(hiddenWeek, { ok: false, error: "employee_not_found" });
+
+        const search = await executeAssistantTool(timeAuthz, "search_timesheets", {
+          status: "submitted",
+        });
+        assert.equal(search.ok, true, JSON.stringify(search));
+        assert.ok(search.ok);
+        const searchData = search.data as { totalWeeks: number; totalHours: number };
+        assert.equal(searchData.totalWeeks, 1);
+        assert.equal(searchData.totalHours, 16);
+
+        const projectTime = await executeAssistantTool(projectAuthz, "project_time", {
+          projectId: seed.project,
+          dimension: "employee",
+          dimensionId: seed.employee,
+        });
+        assert.equal(projectTime.ok, true, JSON.stringify(projectTime));
+        assert.ok(projectTime.ok);
+
+        const unbilled = await executeAssistantTool(projectAuthz, "unbilled_time", {
+          projectId: seed.project,
+        });
+        assert.equal(unbilled.ok, true, JSON.stringify(unbilled));
+        assert.ok(unbilled.ok);
+        // One approved 8h line at bill 100 / cost 50 is available to bill.
+        assert.deepEqual(unbilled.data, {
+          projectId: seed.project,
+          revenue: "800",
+          cost: "400",
+          hours: 8,
+          timeEntryCount: 1,
+          costLineCount: 0,
+          href: "/projects",
+        });
+
+        const tickets = await executeAssistantTool(timeAuthz, "list_field_tickets", {});
+        assert.equal(tickets.ok, true, JSON.stringify(tickets));
+        assert.ok(tickets.ok);
+        assert.equal((tickets.data as { total: number }).total, 1);
+
+        const ticket = await executeAssistantTool(timeAuthz, "get_field_ticket", {
+          ticketId: seed.ticketDoc,
+        });
+        assert.equal(ticket.ok, true, JSON.stringify(ticket));
+        assert.ok(ticket.ok);
+        assert.equal(
+          (ticket.data as { ticket: { documentNumber: string } }).ticket.documentNumber,
+          "FT-1001",
+        );
+
+        const restrictedTeamStatus = await executeAssistantTool(timeAuthz, "time_clock_status", {
+          scope: "team",
+        });
+        assert.deepEqual(restrictedTeamStatus, {
+          ok: false,
+          error: "team clock status is only available when access covers the whole organization",
+        });
       });
-      assert.equal(week.ok, true, JSON.stringify(week));
-      assert.ok(week.ok);
-      const weekData = week.data as { status: string; weekTotalHours: number; rows: unknown[] };
-      assert.equal(weekData.status, 'submitted');
-      assert.equal(weekData.weekTotalHours, 16);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-      const hiddenWeek = await executeAssistantTool(timeAuthz, 'get_timesheet_week', {
-        employeePartyId: seed.hiddenEmployee,
-        week: '2026-09-16',
+test(
+  "time assistant reads isolate orgs and honor the feature flags",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
+    await enableFeature(orgA.orgId, "fieldTickets");
+    try {
+      const seedA = await seedTime(orgA);
+      const timeAuthzA = {
+        user: userFor(orgA.orgId, "Time org reader"),
+        permissions: new Set(TIME_PERMS),
+        allowedSubsidiaryIds: null as Set<string> | null,
+      };
+      await withOrgContext(orgA.orgId, async () => {
+        const cross = await executeAssistantTool(
+          { ...timeAuthzA, user: { ...timeAuthzA.user, orgId: orgB.orgId } },
+          "get_timesheet_week",
+          { employeePartyId: seedA.employee, week: "2026-09-16" },
+        );
+        assert.deepEqual(cross, { ok: false, error: "employee_not_found" });
+
+        const crossTicket = await executeAssistantTool(
+          { ...timeAuthzA, user: { ...timeAuthzA.user, orgId: orgB.orgId } },
+          "get_field_ticket",
+          { ticketId: seedA.ticketDoc },
+        );
+        // fieldTickets defaults off: org B has no ticket surface at all.
+        assert.deepEqual(crossTicket, { ok: false, error: "fieldTickets_feature_disabled" });
       });
-      assert.deepEqual(hiddenWeek, { ok: false, error: 'employee_not_found' });
-
-      const search = await executeAssistantTool(timeAuthz, 'search_timesheets', { status: 'submitted' });
-      assert.equal(search.ok, true, JSON.stringify(search));
-      assert.ok(search.ok);
-      const searchData = search.data as { totalWeeks: number; totalHours: number };
-      assert.equal(searchData.totalWeeks, 1);
-      assert.equal(searchData.totalHours, 16);
-
-      const projectTime = await executeAssistantTool(projectAuthz, 'project_time', {
-        projectId: seed.project,
-        dimension: 'employee',
-        dimensionId: seed.employee,
-      });
-      assert.equal(projectTime.ok, true, JSON.stringify(projectTime));
-      assert.ok(projectTime.ok);
-
-      const unbilled = await executeAssistantTool(projectAuthz, 'unbilled_time', { projectId: seed.project });
-      assert.equal(unbilled.ok, true, JSON.stringify(unbilled));
-      assert.ok(unbilled.ok);
-      // One approved 8h line at bill 100 / cost 50 is available to bill.
-      assert.deepEqual(unbilled.data, {
-        projectId: seed.project,
-        revenue: '800',
-        cost: '400',
-        hours: 8,
-        timeEntryCount: 1,
-        costLineCount: 0,
-        href: '/projects',
-      });
-
-      const tickets = await executeAssistantTool(timeAuthz, 'list_field_tickets', {});
-      assert.equal(tickets.ok, true, JSON.stringify(tickets));
-      assert.ok(tickets.ok);
-      assert.equal((tickets.data as { total: number }).total, 1);
-
-      const ticket = await executeAssistantTool(timeAuthz, 'get_field_ticket', { ticketId: seed.ticketDoc });
-      assert.equal(ticket.ok, true, JSON.stringify(ticket));
-      assert.ok(ticket.ok);
-      assert.equal((ticket.data as { ticket: { documentNumber: string } }).ticket.documentNumber, 'FT-1001');
-
-      const restrictedTeamStatus = await executeAssistantTool(timeAuthz, 'time_clock_status', { scope: 'team' });
-      assert.deepEqual(restrictedTeamStatus, {
-        ok: false,
-        error: 'team clock status is only available when access covers the whole organization',
-      });
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test('time assistant reads isolate orgs and honor the feature flags', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await withBypassContext(() => createScratchOrg());
-  const orgB = await withBypassContext(() => createScratchOrg());
-  await enableFeature(orgA.orgId, 'fieldTickets');
-  try {
-    const seedA = await seedTime(orgA);
-    const timeAuthzA = {
-      user: userFor(orgA.orgId, 'Time org reader'),
-      permissions: new Set(TIME_PERMS),
-      allowedSubsidiaryIds: null as Set<string> | null,
-    };
-    await withOrgContext(orgA.orgId, async () => {
-      const cross = await executeAssistantTool(
-        { ...timeAuthzA, user: { ...timeAuthzA.user, orgId: orgB.orgId } },
-        'get_timesheet_week',
-        { employeePartyId: seedA.employee, week: '2026-09-16' },
-      );
-      assert.deepEqual(cross, { ok: false, error: 'employee_not_found' });
-
-      const crossTicket = await executeAssistantTool(
-        { ...timeAuthzA, user: { ...timeAuthzA.user, orgId: orgB.orgId } },
-        'get_field_ticket',
-        { ticketId: seedA.ticketDoc },
-      );
-      // fieldTickets defaults off: org B has no ticket surface at all.
-      assert.deepEqual(crossTicket, { ok: false, error: 'fieldTickets_feature_disabled' });
-    });
-    await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"timeTracking":false}'::jsonb)
       where id=${orgA.orgId}
-    `));
-    await withOrgContext(orgA.orgId, async () => {
-      const off = await executeAssistantTool(timeAuthzA, 'search_timesheets', {});
-      assert.deepEqual(off, { ok: false, error: 'timeTracking_feature_disabled' });
-    });
-  } finally {
-    await dropScratchOrg(orgA.orgId);
-    await dropScratchOrg(orgB.orgId);
-  }
-});
+    `),
+      );
+      await withOrgContext(orgA.orgId, async () => {
+        const off = await executeAssistantTool(timeAuthzA, "search_timesheets", {});
+        assert.deepEqual(off, { ok: false, error: "timeTracking_feature_disabled" });
+      });
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);

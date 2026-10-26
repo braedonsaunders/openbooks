@@ -46,7 +46,12 @@ import {
 } from "./billing-history.ts";
 import { monthlyRecurringRevenue } from "../billing/subscription-billing.ts";
 
-function normalize(amount: string, interval: "weekly" | "monthly" | "quarterly" | "annually", count: number, quantity: string): string {
+function normalize(
+  amount: string,
+  interval: "weekly" | "monthly" | "quarterly" | "annually",
+  count: number,
+  quantity: string,
+): string {
   return monthlyRecurringRevenue(amount, interval, count, quantity);
 }
 
@@ -69,10 +74,24 @@ test("chargebee customer maps names, email and currency", () => {
 });
 
 test("chargebee plan converts minor units through the currency exponent", () => {
-  const monthly = mapChargebeePlan({ id: "starter-monthly", name: "Starter", price: 2900, currency_code: "USD", period: 1, period_unit: "month" });
+  const monthly = mapChargebeePlan({
+    id: "starter-monthly",
+    name: "Starter",
+    price: 2900,
+    currency_code: "USD",
+    period: 1,
+    period_unit: "month",
+  });
   assert.equal(monthly.amountMajor, "29.0000");
   assert.equal(monthly.interval, "monthly");
-  const yen = mapChargebeePlan({ id: "starter-jpy", name: "Starter", price: 2900, currency_code: "JPY", period: 1, period_unit: "month" });
+  const yen = mapChargebeePlan({
+    id: "starter-jpy",
+    name: "Starter",
+    price: 2900,
+    currency_code: "JPY",
+    period: 1,
+    period_unit: "month",
+  });
   assert.equal(yen.amountMajor, "2900.0000");
 });
 
@@ -93,7 +112,11 @@ test("chargebee subscription upgrade and downgrade events reconstruct the change
   assert.equal(upgrade?.quantity, "3");
   assert.equal(upgrade?.derived, false);
   assert.equal(upgrade?.effectiveOn, "2024-04-01");
-  const cancel = mapChargebeeEvent({ event_type: "subscription_cancelled", occurred_at: 1725148800, content: {} });
+  const cancel = mapChargebeeEvent({
+    event_type: "subscription_cancelled",
+    occurred_at: 1725148800,
+    content: {},
+  });
   assert.equal(cancel?.kind, "cancel");
 });
 
@@ -107,7 +130,14 @@ test("chargebee invoice balances paid, credited and written-off amounts exactly"
     due_date: 1706745600,
     currency_code: "USD",
     line_items: [
-      { description: "Starter plan", quantity: 1, unit_amount: 2900, amount: 2900, tax_amount: 232, entity_id: "starter-monthly" },
+      {
+        description: "Starter plan",
+        quantity: 1,
+        unit_amount: 2900,
+        amount: 2900,
+        tax_amount: 232,
+        entity_id: "starter-monthly",
+      },
     ],
     tax: 232,
     total: 3132,
@@ -124,7 +154,14 @@ test("chargebee invoice balances paid, credited and written-off amounts exactly"
 });
 
 test("chargebee non-payment transactions do not import as receipts", () => {
-  const refund = mapChargebeePayment({ id: "txn_r1", customer_id: "c1", type: "refund", amount: 1000, currency_code: "USD", date: 1704067200 });
+  const refund = mapChargebeePayment({
+    id: "txn_r1",
+    customer_id: "c1",
+    type: "refund",
+    amount: 1000,
+    currency_code: "USD",
+    date: 1704067200,
+  });
   assert.equal(refund, null);
   const payment = mapChargebeePayment({
     id: "txn_p1",
@@ -137,7 +174,9 @@ test("chargebee non-payment transactions do not import as receipts", () => {
     linked_invoices: [{ invoice_id: "inv_1001", applied_amount: 3132 }],
   });
   assert.equal(payment?.amountMajor, "31.3200");
-  assert.deepEqual(payment?.applications, [{ invoiceExternalId: "inv_1001", amountMajor: "31.3200" }]);
+  assert.deepEqual(payment?.applications, [
+    { invoiceExternalId: "inv_1001", amountMajor: "31.3200" },
+  ]);
 });
 
 test("chargebee credit notes net adjustments and refunds from the open balance", () => {
@@ -159,11 +198,25 @@ test("chargebee credit notes net adjustments and refunds from the open balance",
 });
 
 test("chargebee percent coupons stay percents, never minor units", () => {
-  const percent = mapChargebeeCoupon({ id: "SAVE10", name: "Save ten", discount_type: "percentage", discount_percentage: 10, duration_type: "limited_period", duration_month: 3, status: "active" });
+  const percent = mapChargebeeCoupon({
+    id: "SAVE10",
+    name: "Save ten",
+    discount_type: "percentage",
+    discount_percentage: 10,
+    duration_type: "limited_period",
+    duration_month: 3,
+    status: "active",
+  });
   assert.equal(percent.kind, "percent");
   assert.equal(percent.percentValue, "10");
   assert.equal(percent.durationMonths, 3);
-  const fixed = mapChargebeeCoupon({ id: "FIVE", discount_type: "fixed", discount_amount: 500, currency_code: "USD", status: "active" });
+  const fixed = mapChargebeeCoupon({
+    id: "FIVE",
+    discount_type: "fixed",
+    discount_amount: 500,
+    currency_code: "USD",
+    status: "active",
+  });
   assert.equal(fixed.kind, "amount");
   assert.equal(fixed.amountMajor, "5.0000");
 });
@@ -171,9 +224,10 @@ test("chargebee percent coupons stay percents, never minor units", () => {
 test("chargebee subscription without currency refuses by name", () => {
   assert.throws(
     () => mapChargebeeSubscription({ id: "sub_x", customer_id: "c1", plan_id: "p1" }),
-    (error: unknown) => error instanceof BillingHistoryError
-      && /subscription sub_x names no currency/.test(error.message)
-      && /Set a currency on the subscription in Chargebee/.test(error.remedy),
+    (error: unknown) =>
+      error instanceof BillingHistoryError &&
+      /subscription sub_x names no currency/.test(error.message) &&
+      /Set a currency on the subscription in Chargebee/.test(error.remedy),
   );
 });
 
@@ -235,7 +289,15 @@ test("recurly accounts, plans and invoices map in major units", () => {
     account: { id: "acc_1" },
     subscription_ids: ["sub_recurly_1"],
     currency: "USD",
-    line_items: [{ description: "Starter", quantity: "1", unit_amount: "29.00", subtotal: "29.00", product_code: "starter" }],
+    line_items: [
+      {
+        description: "Starter",
+        quantity: "1",
+        unit_amount: "29.00",
+        subtotal: "29.00",
+        product_code: "starter",
+      },
+    ],
     tax: "2.32",
     total: "31.32",
     balance: "31.32",
@@ -249,9 +311,26 @@ test("recurly accounts, plans and invoices map in major units", () => {
 });
 
 test("recurly failed transactions never become receipts", () => {
-  const failed = mapRecurlyPayment({ id: "txn_f", account: { id: "acc_1" }, status: "failed", type: "purchase", amount: "29.00", currency: "USD", created_at: "2024-01-01" });
+  const failed = mapRecurlyPayment({
+    id: "txn_f",
+    account: { id: "acc_1" },
+    status: "failed",
+    type: "purchase",
+    amount: "29.00",
+    currency: "USD",
+    created_at: "2024-01-01",
+  });
   assert.equal(failed, null);
-  const ok = mapRecurlyPayment({ id: "txn_ok", account: { id: "acc_1" }, status: "successful", type: "purchase", amount: "29.00", currency: "USD", invoice_id: "inv_9", created_at: "2024-01-01" });
+  const ok = mapRecurlyPayment({
+    id: "txn_ok",
+    account: { id: "acc_1" },
+    status: "successful",
+    type: "purchase",
+    amount: "29.00",
+    currency: "USD",
+    invoice_id: "inv_9",
+    created_at: "2024-01-01",
+  });
   assert.deepEqual(ok?.applications, [{ invoiceExternalId: "inv_9", amountMajor: "29.0000" }]);
 });
 
@@ -264,14 +343,27 @@ test("invoice-derived changes mark upgrades as estimates at the new invoice date
     date,
     dueDate: null,
     currency: "USD",
-    lines: [{ description: "plan", quantity: "1", unitPriceMajor: "29.0000", amountMajor: "29.0000", taxAmountMajor: "0.0000", planExternalId: plan }],
+    lines: [
+      {
+        description: "plan",
+        quantity: "1",
+        unitPriceMajor: "29.0000",
+        amountMajor: "29.0000",
+        taxAmountMajor: "0.0000",
+        planExternalId: plan,
+      },
+    ],
     taxTotalMajor: "0.0000",
     totalMajor: "29.0000",
     balanceMajor: "0.0000",
     status: "paid",
     updatedAt: null,
   });
-  const changes = deriveChangesFromInvoices("sub_recurly_1", [line("starter", "2024-01-01"), line("growth", "2024-02-01"), line("growth", "2024-03-01")]);
+  const changes = deriveChangesFromInvoices("sub_recurly_1", [
+    line("starter", "2024-01-01"),
+    line("growth", "2024-02-01"),
+    line("growth", "2024-03-01"),
+  ]);
   assert.equal(changes.length, 1);
   assert.equal(changes[0]?.kind, "plan_change");
   assert.equal(changes[0]?.planExternalId, "growth");
@@ -280,22 +372,42 @@ test("invoice-derived changes mark upgrades as estimates at the new invoice date
 });
 
 test("recurly usage quantities stay quantities, never money", () => {
-  const usage = mapRecurlyUsage({ id: "u_1", quantity: 1500, usage_timestamp: "2024-01-15", measured_unit_id: "seats" }, "sub_recurly_1");
+  const usage = mapRecurlyUsage(
+    { id: "u_1", quantity: 1500, usage_timestamp: "2024-01-15", measured_unit_id: "seats" },
+    "sub_recurly_1",
+  );
   assert.equal(usage.quantityMajor, "1500");
   assert.equal(usage.meterKey, "seats");
 });
 
 test("recurly coupon without a priced currency refuses by name", () => {
   assert.throws(
-    () => mapRecurlyCoupon({ id: "c1", code: "BAD", name: "Bad", discount: { type: "fixed", currencies: [] }, state: "redeemable" }),
-    (error: unknown) => error instanceof BillingHistoryError
-      && /coupon BAD names no priced currency/.test(error.message)
-      && /Price the coupon in a currency in Recurly/.test(error.remedy),
+    () =>
+      mapRecurlyCoupon({
+        id: "c1",
+        code: "BAD",
+        name: "Bad",
+        discount: { type: "fixed", currencies: [] },
+        state: "redeemable",
+      }),
+    (error: unknown) =>
+      error instanceof BillingHistoryError &&
+      /coupon BAD names no priced currency/.test(error.message) &&
+      /Price the coupon in a currency in Recurly/.test(error.remedy),
   );
 });
 
 test("recurly credit maps balance and origin", () => {
-  const credit = mapRecurlyCredit({ id: "cr_1", number: "CR-1", account: { id: "acc_1" }, total: "15.00", balance: "15.00", currency: "USD", origin: "proration", created_at: "2024-02-01" });
+  const credit = mapRecurlyCredit({
+    id: "cr_1",
+    number: "CR-1",
+    account: { id: "acc_1" },
+    total: "15.00",
+    balance: "15.00",
+    currency: "USD",
+    origin: "proration",
+    created_at: "2024-02-01",
+  });
   assert.equal(credit.totalMajor, "15.0000");
   assert.equal(credit.reason, "proration");
 });
@@ -322,7 +434,9 @@ test("maxio subscription keys plans by product and price point", () => {
   });
   assert.equal(sub.planExternalId, "starter:303");
   assert.equal(sub.startOn, "2024-01-01");
-  const customer = mapMaxioCustomer({ customer: { id: 202, first_name: "Ada", last_name: "L", email: "ada@example.com" } });
+  const customer = mapMaxioCustomer({
+    customer: { id: 202, first_name: "Ada", last_name: "L", email: "ada@example.com" },
+  });
   assert.equal(customer.name, "Ada L");
 });
 
@@ -335,7 +449,16 @@ test("maxio invoice balances paid and credited cents exactly", () => {
       number: "1024",
       issue_date: "2024-01-01",
       currency: "USD",
-      line_items: [{ title: "Starter", quantity: 1, unit_price_in_cents: 2900, total_in_cents: 2900, tax_amount_in_cents: 0, product_handle: "starter" }],
+      line_items: [
+        {
+          title: "Starter",
+          quantity: 1,
+          unit_price_in_cents: 2900,
+          total_in_cents: 2900,
+          tax_amount_in_cents: 0,
+          product_handle: "starter",
+        },
+      ],
       tax_amount_in_cents: 0,
       total_amount_in_cents: 2900,
       paid_amount_in_cents: 2900,
@@ -349,27 +472,41 @@ test("maxio invoice balances paid and credited cents exactly", () => {
 });
 
 test("maxio non-payment rows do not import as receipts", () => {
-  const adjustment = mapMaxioPayment({ payment: { id: 1, customer_id: 202, type: "credit", amount_in_cents: 100, created_at: "2024-01-01" } });
+  const adjustment = mapMaxioPayment({
+    payment: {
+      id: 1,
+      customer_id: 202,
+      type: "credit",
+      amount_in_cents: 100,
+      created_at: "2024-01-01",
+    },
+  });
   assert.equal(adjustment, null);
 });
 
 test("maxio price point without currency refuses by name", () => {
   assert.throws(
     () => mapMaxioPlan({ price_point: { id: 303, name: "Monthly", unit_price_in_cents: 2900 } }),
-    (error: unknown) => error instanceof BillingHistoryError
-      && /names no currency/.test(error.message)
-      && /Set a currency on the price point in Maxio/.test(error.remedy),
+    (error: unknown) =>
+      error instanceof BillingHistoryError &&
+      /names no currency/.test(error.message) &&
+      /Set a currency on the price point in Maxio/.test(error.remedy),
   );
 });
 
 test("maxio component usage maps to meter quantities", () => {
-  const usage = mapMaxioUsage({ usage: { id: 55, quantity: 250, component_handle: "seats", recorded_at: "2024-01-15" } }, "101");
+  const usage = mapMaxioUsage(
+    { usage: { id: 55, quantity: 250, component_handle: "seats", recorded_at: "2024-01-15" } },
+    "101",
+  );
   assert.equal(usage.quantityMajor, "250");
   assert.equal(usage.meterKey, "seats");
 });
 
 test("maxio expiring coupons deactivate", () => {
-  const coupon = mapMaxioCoupon({ coupon: { id: 7, code: "OLD", name: "Old", percentage: "10", state: "expired" } });
+  const coupon = mapMaxioCoupon({
+    coupon: { id: 7, code: "OLD", name: "Old", percentage: "10", state: "expired" },
+  });
   assert.equal(coupon.kind, "percent");
   assert.equal(coupon.active, false);
 });
@@ -377,13 +514,26 @@ test("maxio expiring coupons deactivate", () => {
 // --- Zuora --------------------------------------------------------------------------
 
 test("zuora stated amendments map each type to a canonical change", () => {
-  const upgrade = mapZuoraAmendment({ type: "UpdateProduct", effectiveDate: "2024-02-01", productRatePlanChargeId: "charge_growth", sequence: 2 });
+  const upgrade = mapZuoraAmendment({
+    type: "UpdateProduct",
+    effectiveDate: "2024-02-01",
+    productRatePlanChargeId: "charge_growth",
+    sequence: 2,
+  });
   assert.equal(upgrade?.kind, "plan_change");
   assert.equal(upgrade?.derived, false);
-  const remove = mapZuoraAmendment({ type: "RemoveProduct", effectiveDate: "2024-03-01", sequence: 3 });
+  const remove = mapZuoraAmendment({
+    type: "RemoveProduct",
+    effectiveDate: "2024-03-01",
+    sequence: 3,
+  });
   assert.equal(remove?.kind, "quantity_change");
   assert.equal(remove?.quantity, "0");
-  const owner = mapZuoraAmendment({ type: "OwnerTransfer", effectiveDate: "2024-03-01", sequence: 4 });
+  const owner = mapZuoraAmendment({
+    type: "OwnerTransfer",
+    effectiveDate: "2024-03-01",
+    sequence: 4,
+  });
   assert.equal(owner, null);
   const renew = mapZuoraAmendment({ type: "Renewal", effectiveDate: "2025-01-01", sequence: 5 });
   assert.equal(renew?.kind, "renew");
@@ -400,16 +550,42 @@ test("zuora posted invoice with zero balance reads paid", () => {
     currency: "USD",
     status: "Posted",
     invoiceDate: "2024-01-01",
-    invoiceItems: [{ chargeName: "Starter", quantity: "1", unitPrice: "29.00", amount: "29.00", taxAmount: "0.00", chargeId: "charge_starter", subscriptionId: "sub_z1" }],
+    invoiceItems: [
+      {
+        chargeName: "Starter",
+        quantity: "1",
+        unitPrice: "29.00",
+        amount: "29.00",
+        taxAmount: "0.00",
+        chargeId: "charge_starter",
+        subscriptionId: "sub_z1",
+      },
+    ],
   });
   assert.equal(paid.status, "paid");
   assert.equal(paid.subscriptionExternalId, "sub_z1");
-  const open = mapZuoraInvoice({ id: "inv_z2", accountId: "acc_z1", amount: "29.00", balance: "29.00", currency: "USD", status: "Posted", invoiceDate: "2024-02-01", invoiceItems: [] });
+  const open = mapZuoraInvoice({
+    id: "inv_z2",
+    accountId: "acc_z1",
+    amount: "29.00",
+    balance: "29.00",
+    currency: "USD",
+    status: "Posted",
+    invoiceDate: "2024-02-01",
+    invoiceItems: [],
+  });
   assert.equal(open.status, "open");
 });
 
 test("zuora unprocessed payments never become receipts", () => {
-  const pending = mapZuoraPayment({ id: "pay_z1", accountId: "acc_z1", amount: "29.00", currency: "USD", status: "Pending", effectiveDate: "2024-01-02" });
+  const pending = mapZuoraPayment({
+    id: "pay_z1",
+    accountId: "acc_z1",
+    amount: "29.00",
+    currency: "USD",
+    status: "Pending",
+    effectiveDate: "2024-01-02",
+  });
   assert.equal(pending, null);
   const ok = mapZuoraPayment({
     id: "pay_z2",
@@ -425,11 +601,25 @@ test("zuora unprocessed payments never become receipts", () => {
 });
 
 test("zuora revenue schedule maps recognition state", () => {
-  const open = mapZuoraRevenueSchedule({ id: "rs1", invoiceId: "inv_z1", subscriptionId: "sub_z1", revenueScheduleDate: "2024-02-01", amount: "29.00", currency: "USD", status: "Open" });
+  const open = mapZuoraRevenueSchedule({
+    id: "rs1",
+    invoiceId: "inv_z1",
+    subscriptionId: "sub_z1",
+    revenueScheduleDate: "2024-02-01",
+    amount: "29.00",
+    currency: "USD",
+    status: "Open",
+  });
   assert.equal(open.recognized, false);
   assert.equal(open.amountMajor, "29.0000");
   assert.equal(open.periodStart, "2024-02-01");
-  const done = mapZuoraRevenueSchedule({ revenueScheduleNumber: "RS-2", amount: "10.00", currency: "USD", status: "Distributed", revenueScheduleDate: "2024-01-01" });
+  const done = mapZuoraRevenueSchedule({
+    revenueScheduleNumber: "RS-2",
+    amount: "10.00",
+    currency: "USD",
+    status: "Distributed",
+    revenueScheduleDate: "2024-01-01",
+  });
   assert.equal(done.recognized, true);
 });
 
@@ -444,8 +634,28 @@ test("zuora revenue schedules separate recognized from deferred", () => {
     usage: [],
     coupons: [],
     revenueSchedules: [
-      { externalId: "rs1", invoiceExternalId: "inv_z1", subscriptionExternalId: "sub_z1", periodStart: "2024-01-01", periodEnd: "2024-01-31", amountMajor: "29.0000", currency: "USD", recognized: true, updatedAt: null },
-      { externalId: "rs2", invoiceExternalId: "inv_z1", subscriptionExternalId: "sub_z1", periodStart: "2024-02-01", periodEnd: "2024-02-29", amountMajor: "29.0000", currency: "USD", recognized: false, updatedAt: null },
+      {
+        externalId: "rs1",
+        invoiceExternalId: "inv_z1",
+        subscriptionExternalId: "sub_z1",
+        periodStart: "2024-01-01",
+        periodEnd: "2024-01-31",
+        amountMajor: "29.0000",
+        currency: "USD",
+        recognized: true,
+        updatedAt: null,
+      },
+      {
+        externalId: "rs2",
+        invoiceExternalId: "inv_z1",
+        subscriptionExternalId: "sub_z1",
+        periodStart: "2024-02-01",
+        periodEnd: "2024-02-29",
+        amountMajor: "29.0000",
+        currency: "USD",
+        recognized: false,
+        updatedAt: null,
+      },
     ],
   };
   assert.equal(sourceDeferredRevenue(history), "29.0000");
@@ -453,22 +663,53 @@ test("zuora revenue schedules separate recognized from deferred", () => {
 
 test("zuora subscription without a rate plan refuses by name", () => {
   assert.throws(
-    () => mapZuoraSubscription({ id: "sub_z9", accountId: "acc_z1", subscribeToRatePlans: [], contractEffectiveDate: "2024-01-01" }),
-    (error: unknown) => error instanceof BillingHistoryError
-      && /subscription sub_z9 names no rate plan/.test(error.message)
-      && /Correct the subscription rate plans in Zuora/.test(error.remedy),
+    () =>
+      mapZuoraSubscription({
+        id: "sub_z9",
+        accountId: "acc_z1",
+        subscribeToRatePlans: [],
+        contractEffectiveDate: "2024-01-01",
+      }),
+    (error: unknown) =>
+      error instanceof BillingHistoryError &&
+      /subscription sub_z9 names no rate plan/.test(error.message) &&
+      /Correct the subscription rate plans in Zuora/.test(error.remedy),
   );
 });
 
 test("zuora records map contacts, plans, credits and usage", () => {
-  const customer = mapZuoraCustomer({ id: "acc_z1", name: "Acme", currency: "USD", billToContact: { firstName: "Ada", lastName: "L", workEmail: "ada@example.com" } });
+  const customer = mapZuoraCustomer({
+    id: "acc_z1",
+    name: "Acme",
+    currency: "USD",
+    billToContact: { firstName: "Ada", lastName: "L", workEmail: "ada@example.com" },
+  });
   assert.equal(customer.email, "ada@example.com");
-  const plan = mapZuoraPlan({ id: "charge_starter", name: "Starter", pricing: [{ currency: "USD", price: "29.00" }], billingPeriod: "Month" });
+  const plan = mapZuoraPlan({
+    id: "charge_starter",
+    name: "Starter",
+    pricing: [{ currency: "USD", price: "29.00" }],
+    billingPeriod: "Month",
+  });
   assert.equal(plan.amountMajor, "29.0000");
   assert.equal(plan.interval, "monthly");
-  const credit = mapZuoraCreditMemo({ id: "cm_z1", accountId: "acc_z1", amount: "5.00", balance: "5.00", currency: "USD", creditMemoDate: "2024-02-01", reasonCode: "Goodwill" });
+  const credit = mapZuoraCreditMemo({
+    id: "cm_z1",
+    accountId: "acc_z1",
+    amount: "5.00",
+    balance: "5.00",
+    currency: "USD",
+    creditMemoDate: "2024-02-01",
+    reasonCode: "Goodwill",
+  });
   assert.equal(credit.totalMajor, "5.0000");
-  const usage = mapZuoraUsage({ id: "u_z1", subscriptionId: "sub_z1", quantity: "42.5", unitOfMeasure: "licenses", startDateTime: "2024-01-15" });
+  const usage = mapZuoraUsage({
+    id: "u_z1",
+    subscriptionId: "sub_z1",
+    quantity: "42.5",
+    unitOfMeasure: "licenses",
+    startDateTime: "2024-01-15",
+  });
   assert.equal(usage.quantityMajor, "42.5");
 });
 
@@ -477,38 +718,54 @@ test("zuora records map contacts, plans, credits and usage", () => {
 test("preflight names every unmapped plan, currency and tax code with a remedy", () => {
   const preflight = planBillingPreflight(
     {
-      customers: [{ externalId: "c1", name: "Acme", email: null, currency: "USD", updatedAt: null }],
-      plans: [{ externalId: "growth", name: "Growth", amountMajor: "99.0000", currency: "USD", interval: "monthly", intervalCount: 1, updatedAt: null }],
-      subscriptions: [{
-        externalId: "s1",
-        customerExternalId: "c_missing",
-        planExternalId: "growth",
-        quantity: "1",
-        unitAmountMajor: null,
-        currency: "EUR",
-        status: "active",
-        startOn: "2024-01-01",
-        canceledOn: null,
-        trialEndOn: null,
-        currentTermEndOn: null,
-        updatedAt: null,
-        changes: [],
-      }],
-      invoices: [{
-        externalId: "i1",
-        number: null,
-        customerExternalId: "c1",
-        subscriptionExternalId: "s1",
-        date: "2024-01-01",
-        dueDate: null,
-        currency: "EUR",
-        lines: [],
-        taxTotalMajor: "1.9000",
-        totalMajor: "100.9000",
-        balanceMajor: "100.9000",
-        status: "open",
-        updatedAt: null,
-      }],
+      customers: [
+        { externalId: "c1", name: "Acme", email: null, currency: "USD", updatedAt: null },
+      ],
+      plans: [
+        {
+          externalId: "growth",
+          name: "Growth",
+          amountMajor: "99.0000",
+          currency: "USD",
+          interval: "monthly",
+          intervalCount: 1,
+          updatedAt: null,
+        },
+      ],
+      subscriptions: [
+        {
+          externalId: "s1",
+          customerExternalId: "c_missing",
+          planExternalId: "growth",
+          quantity: "1",
+          unitAmountMajor: null,
+          currency: "EUR",
+          status: "active",
+          startOn: "2024-01-01",
+          canceledOn: null,
+          trialEndOn: null,
+          currentTermEndOn: null,
+          updatedAt: null,
+          changes: [],
+        },
+      ],
+      invoices: [
+        {
+          externalId: "i1",
+          number: null,
+          customerExternalId: "c1",
+          subscriptionExternalId: "s1",
+          date: "2024-01-01",
+          dueDate: null,
+          currency: "EUR",
+          lines: [],
+          taxTotalMajor: "1.9000",
+          totalMajor: "100.9000",
+          balanceMajor: "100.9000",
+          status: "open",
+          updatedAt: null,
+        },
+      ],
       creditNotes: [],
       payments: [],
       usage: [],
@@ -530,7 +787,17 @@ test("preflight suggests the native plan matching price, currency and cadence", 
   const preflight = planBillingPreflight(
     {
       customers: [],
-      plans: [{ externalId: "growth", name: "Growth Plan", amountMajor: "99.0000", currency: "USD", interval: "monthly", intervalCount: 1, updatedAt: null }],
+      plans: [
+        {
+          externalId: "growth",
+          name: "Growth Plan",
+          amountMajor: "99.0000",
+          currency: "USD",
+          interval: "monthly",
+          intervalCount: 1,
+          updatedAt: null,
+        },
+      ],
       subscriptions: [],
       invoices: [],
       creditNotes: [],
@@ -540,7 +807,15 @@ test("preflight suggests the native plan matching price, currency and cadence", 
       revenueSchedules: [],
     },
     {
-      plans: [{ id: "native_1", name: "Growth Plan", amountMajor: "99.0000", currency: "USD", interval: "monthly" }],
+      plans: [
+        {
+          id: "native_1",
+          name: "Growth Plan",
+          amountMajor: "99.0000",
+          currency: "USD",
+          interval: "monthly",
+        },
+      ],
       baseCurrency: "USD",
       multiCurrency: true,
       defaultTaxCode: { id: "tax_1", name: "Sales tax" },
@@ -568,13 +843,41 @@ test("mrr folds an upgrade then a downgrade into three monthly readings", () => 
     currentTermEndOn: null,
     updatedAt: null,
     changes: [
-      { seq: 0, effectiveOn: "2024-03-10", kind: "plan_change" as const, planExternalId: "growth", quantity: null, unitAmountMajor: null, derived: false },
-      { seq: 1, effectiveOn: "2024-05-20", kind: "plan_change" as const, planExternalId: "starter", quantity: null, unitAmountMajor: null, derived: false },
+      {
+        seq: 0,
+        effectiveOn: "2024-03-10",
+        kind: "plan_change" as const,
+        planExternalId: "growth",
+        quantity: null,
+        unitAmountMajor: null,
+        derived: false,
+      },
+      {
+        seq: 1,
+        effectiveOn: "2024-05-20",
+        kind: "plan_change" as const,
+        planExternalId: "starter",
+        quantity: null,
+        unitAmountMajor: null,
+        derived: false,
+      },
     ],
   };
-  const months = mrrByMonth([sub], plans, ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06"], normalize);
-  assert.deepEqual(months.map((row) => row.mrrMajor), ["29.0000", "29.0000", "99.0000", "99.0000", "29.0000", "29.0000"]);
-  const january = subscriptionStateAtEndOfMonth({ ...sub, startOn: "2024-02-01" }, plans, "2024-01");
+  const months = mrrByMonth(
+    [sub],
+    plans,
+    ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06"],
+    normalize,
+  );
+  assert.deepEqual(
+    months.map((row) => row.mrrMajor),
+    ["29.0000", "29.0000", "99.0000", "99.0000", "29.0000", "29.0000"],
+  );
+  const january = subscriptionStateAtEndOfMonth(
+    { ...sub, startOn: "2024-02-01" },
+    plans,
+    "2024-01",
+  );
   assert.equal(january.plan, null);
 });
 
@@ -598,11 +901,16 @@ test("mrr prices months before a later cancel at the contracted plan, not the cu
     changes: [],
   };
   const months = mrrByMonth([sub], plans, ["2024-01", "2024-06", "2024-07"], normalize);
-  assert.deepEqual(months.map((row) => row.mrrMajor), ["29.0000", "29.0000", "0.0000"]);
+  assert.deepEqual(
+    months.map((row) => row.mrrMajor),
+    ["29.0000", "29.0000", "0.0000"],
+  );
 });
 
 test("reconciliation ties when both sides match and names the cause when they do not", () => {
-  const plans = new Map([["starter", { amountMajor: "29.0000", interval: "monthly" as const, intervalCount: 1 }]]);
+  const plans = new Map([
+    ["starter", { amountMajor: "29.0000", interval: "monthly" as const, intervalCount: 1 }],
+  ]);
   const sub = {
     externalId: "s1",
     customerExternalId: "c1",
@@ -620,23 +928,35 @@ test("reconciliation ties when both sides match and names the cause when they do
   };
   const source = {
     customers: [{ externalId: "c1", name: "Acme", email: null, currency: "USD", updatedAt: null }],
-    plans: [{ externalId: "starter", name: "Starter", amountMajor: "29.0000", currency: "USD", interval: "monthly" as const, intervalCount: 1, updatedAt: null }],
+    plans: [
+      {
+        externalId: "starter",
+        name: "Starter",
+        amountMajor: "29.0000",
+        currency: "USD",
+        interval: "monthly" as const,
+        intervalCount: 1,
+        updatedAt: null,
+      },
+    ],
     subscriptions: [sub],
-    invoices: [{
-      externalId: "i1",
-      number: null,
-      customerExternalId: "c1",
-      subscriptionExternalId: "s1",
-      date: "2024-01-01",
-      dueDate: null,
-      currency: "USD",
-      lines: [],
-      taxTotalMajor: "0.0000",
-      totalMajor: "29.0000",
-      balanceMajor: "29.0000",
-      status: "open" as const,
-      updatedAt: null,
-    }],
+    invoices: [
+      {
+        externalId: "i1",
+        number: null,
+        customerExternalId: "c1",
+        subscriptionExternalId: "s1",
+        date: "2024-01-01",
+        dueDate: null,
+        currency: "USD",
+        lines: [],
+        taxTotalMajor: "0.0000",
+        totalMajor: "29.0000",
+        balanceMajor: "29.0000",
+        status: "open" as const,
+        updatedAt: null,
+      },
+    ],
     creditNotes: [],
     payments: [],
     usage: [],
@@ -645,7 +965,12 @@ test("reconciliation ties when both sides match and names the cause when they do
   };
   const tied = reconcileBillingHistory(
     source,
-    { subscriptions: [sub], plans, openArByCustomer: new Map([["c1", "29.0000"]]), deferredMajor: "0.0000" },
+    {
+      subscriptions: [sub],
+      plans,
+      openArByCustomer: new Map([["c1", "29.0000"]]),
+      deferredMajor: "0.0000",
+    },
     ["2024-01"],
     normalize,
   );
@@ -658,8 +983,16 @@ test("reconciliation ties when both sides match and names the cause when they do
     normalize,
   );
   assert.equal(broken.ties, false);
-  assert.ok(broken.differences.some((difference) => difference.kind === "mrr" && /s1/.test(difference.explanation)));
-  assert.ok(broken.differences.some((difference) => difference.kind === "open_ar" && difference.ref === "c1"));
+  assert.ok(
+    broken.differences.some(
+      (difference) => difference.kind === "mrr" && /s1/.test(difference.explanation),
+    ),
+  );
+  assert.ok(
+    broken.differences.some(
+      (difference) => difference.kind === "open_ar" && difference.ref === "c1",
+    ),
+  );
 });
 
 test("source open ar nets invoice balances against open credits", () => {
@@ -668,12 +1001,65 @@ test("source open ar nets invoice balances against open credits", () => {
     plans: [],
     subscriptions: [],
     invoices: [
-      { externalId: "i1", number: null, customerExternalId: "c1", subscriptionExternalId: null, date: "2024-01-01", dueDate: null, currency: "USD", lines: [], taxTotalMajor: "0.0000", totalMajor: "100.0000", balanceMajor: "100.0000", status: "open", updatedAt: null },
-      { externalId: "i2", number: null, customerExternalId: "c1", subscriptionExternalId: null, date: "2024-01-01", dueDate: null, currency: "USD", lines: [], taxTotalMajor: "0.0000", totalMajor: "50.0000", balanceMajor: "0.0000", status: "paid", updatedAt: null },
-      { externalId: "i3", number: null, customerExternalId: "c1", subscriptionExternalId: null, date: "2024-01-01", dueDate: null, currency: "USD", lines: [], taxTotalMajor: "0.0000", totalMajor: "20.0000", balanceMajor: "20.0000", status: "void", updatedAt: null },
+      {
+        externalId: "i1",
+        number: null,
+        customerExternalId: "c1",
+        subscriptionExternalId: null,
+        date: "2024-01-01",
+        dueDate: null,
+        currency: "USD",
+        lines: [],
+        taxTotalMajor: "0.0000",
+        totalMajor: "100.0000",
+        balanceMajor: "100.0000",
+        status: "open",
+        updatedAt: null,
+      },
+      {
+        externalId: "i2",
+        number: null,
+        customerExternalId: "c1",
+        subscriptionExternalId: null,
+        date: "2024-01-01",
+        dueDate: null,
+        currency: "USD",
+        lines: [],
+        taxTotalMajor: "0.0000",
+        totalMajor: "50.0000",
+        balanceMajor: "0.0000",
+        status: "paid",
+        updatedAt: null,
+      },
+      {
+        externalId: "i3",
+        number: null,
+        customerExternalId: "c1",
+        subscriptionExternalId: null,
+        date: "2024-01-01",
+        dueDate: null,
+        currency: "USD",
+        lines: [],
+        taxTotalMajor: "0.0000",
+        totalMajor: "20.0000",
+        balanceMajor: "20.0000",
+        status: "void",
+        updatedAt: null,
+      },
     ],
     creditNotes: [
-      { externalId: "cn1", number: null, customerExternalId: "c1", invoiceExternalId: null, date: "2024-01-02", currency: "USD", totalMajor: "10.0000", balanceMajor: "10.0000", reason: null, updatedAt: null },
+      {
+        externalId: "cn1",
+        number: null,
+        customerExternalId: "c1",
+        invoiceExternalId: null,
+        date: "2024-01-02",
+        currency: "USD",
+        totalMajor: "10.0000",
+        balanceMajor: "10.0000",
+        reason: null,
+        updatedAt: null,
+      },
     ],
     payments: [],
     usage: [],

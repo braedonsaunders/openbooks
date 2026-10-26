@@ -24,16 +24,31 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** OFX v1 SGML statement, optionally carrying a BANKACCTFROM/ACCTID. */
 function ofxStatement(fitids: string[], acctId?: string): Buffer {
-  const header =
-    ["OFXHEADER:100", "DATA:OFXSGML", "VERSION:102", "SECURITY:NONE",
-     "ENCODING:USASCII", "CHARSET:1252", "COMPRESSION:NONE", "OLDFILEUID:NONE",
-     "NEWFILEUID:NONE", "", ""].join("\r\n");
-  const acct = acctId ? `<BANKACCTFROM><BANKID>001</BANKID><ACCTID>${acctId}</ACCTID></BANKACCTFROM>` : "";
+  const header = [
+    "OFXHEADER:100",
+    "DATA:OFXSGML",
+    "VERSION:102",
+    "SECURITY:NONE",
+    "ENCODING:USASCII",
+    "CHARSET:1252",
+    "COMPRESSION:NONE",
+    "OLDFILEUID:NONE",
+    "NEWFILEUID:NONE",
+    "",
+    "",
+  ].join("\r\n");
+  const acct = acctId
+    ? `<BANKACCTFROM><BANKID>001</BANKID><ACCTID>${acctId}</ACCTID></BANKACCTFROM>`
+    : "";
   const body =
     `<OFX>${acct}<CURDEF>CAD` +
-    fitids.map((id, i) =>
-      `<STMTTRN><DTPOSTED>20260715</DTPOSTED><TRNAMT>-${(i + 1) * 10}.50</TRNAMT>` +
-      `<NAME>Binding Vendor ${i}</NAME><FITID>${id}</FITID></STMTTRN>`).join("") +
+    fitids
+      .map(
+        (id, i) =>
+          `<STMTTRN><DTPOSTED>20260715</DTPOSTED><TRNAMT>-${(i + 1) * 10}.50</TRNAMT>` +
+          `<NAME>Binding Vendor ${i}</NAME><FITID>${id}</FITID></STMTTRN>`,
+      )
+      .join("") +
     `</OFX>`;
   return Buffer.from(header + body, "utf8");
 }
@@ -103,14 +118,25 @@ async function seedBindingFixture(): Promise<BindingFixture> {
   stageFile(rootPrefix, "inbound-a", "stranger.ofx", ofxStatement(["bind-stranger-1"], "OTHER-99"));
   // Unbound schedule: an identified file pauses with the binding remedy,
   // while an identifier-less file imports on folder isolation.
-  stageFile(rootPrefix, "inbound-b", "identified.ofx", ofxStatement(["bind-unbound-1"], "BR001-77"));
+  stageFile(
+    rootPrefix,
+    "inbound-b",
+    "identified.ofx",
+    ofxStatement(["bind-unbound-1"], "BR001-77"),
+  );
   stageFile(rootPrefix, "inbound-b", "plain.ofx", ofxStatement(["bind-plain-1"]));
   return { orgId: org.orgId, rootPrefix, boundScheduleId, unboundScheduleId };
 }
 
 async function lineCount(orgId: string): Promise<number> {
-  return withOrgContext(orgId, async () =>
-    (await db.execute<{ n: number }>(sql`select count(*)::int as n from bank_statement_lines where org_id = ${orgId}`)).rows[0]!.n,
+  return withOrgContext(
+    orgId,
+    async () =>
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from bank_statement_lines where org_id = ${orgId}`,
+        )
+      ).rows[0]!.n,
   );
 }
 
@@ -121,7 +147,10 @@ test("account identity gates the scheduled import end to end", { skip: !DB }, as
     const runs = await withBypass(() => runDueSftpImports(fixture.orgId));
     const bound = runs.find((r) => r.scheduleId === fixture.boundScheduleId)!;
     const unbound = runs.find((r) => r.scheduleId === fixture.unboundScheduleId)!;
-    assert.ok(bound && unbound, `expected both schedules in scan results; got ${JSON.stringify(runs)}`);
+    assert.ok(
+      bound && unbound,
+      `expected both schedules in scan results; got ${JSON.stringify(runs)}`,
+    );
 
     // RED before the fix: both folders imported every file into the
     // schedule's account with no comparison — the stranger's lines became
@@ -142,12 +171,18 @@ test("account identity gates the scheduled import end to end", { skip: !DB }, as
     // Refused files stay in the folder (never archived as processed);
     // imported ones move into dated, content-hashed processed generations.
     const day = new Date().toISOString().slice(0, 10);
-    assert.deepEqual(listFolder(fixture.rootPrefix, "inbound-a").sort(), ["processed", "stranger.ofx"]);
+    assert.deepEqual(listFolder(fixture.rootPrefix, "inbound-a").sort(), [
+      "processed",
+      "stranger.ofx",
+    ]);
     assert.deepEqual(listFolder(fixture.rootPrefix, join("inbound-a", "processed")), [day]);
     const ownGenerations = listFolder(fixture.rootPrefix, join("inbound-a", "processed", day));
     assert.equal(ownGenerations.length, 1);
     assert.match(ownGenerations[0]!, /^own\.[0-9a-f]{12}\.ofx$/);
-    assert.deepEqual(listFolder(fixture.rootPrefix, "inbound-b").sort(), ["identified.ofx", "processed"]);
+    assert.deepEqual(listFolder(fixture.rootPrefix, "inbound-b").sort(), [
+      "identified.ofx",
+      "processed",
+    ]);
     assert.deepEqual(listFolder(fixture.rootPrefix, join("inbound-b", "processed")), [day]);
     const plainGenerations = listFolder(fixture.rootPrefix, join("inbound-b", "processed", day));
     assert.equal(plainGenerations.length, 1);
@@ -159,20 +194,24 @@ test("account identity gates the scheduled import end to end", { skip: !DB }, as
   }
 });
 
-test("scheduled import uses the binding that wins the claim after discovery", { skip: !DB }, async () => {
-  const fixture = await seedBindingFixture();
-  const triggerName = `sftp_rebind_during_claim_${randomUUID().replaceAll("-", "")}`;
-  const functionName = `${triggerName}_fn`;
-  try {
-    // Reproduce a rebind after the scanner's discovery SELECT but before its
-    // claim UPDATE. A trigger makes that ordering deterministic: the claim
-    // itself observes the newly committed bank identity.
-    await withOrgContext(fixture.orgId, async () => {
-      await db.execute(sql`
+test(
+  "scheduled import uses the binding that wins the claim after discovery",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedBindingFixture();
+    const triggerName = `sftp_rebind_during_claim_${randomUUID().replaceAll("-", "")}`;
+    const functionName = `${triggerName}_fn`;
+    try {
+      // Reproduce a rebind after the scanner's discovery SELECT but before its
+      // claim UPDATE. A trigger makes that ordering deterministic: the claim
+      // itself observes the newly committed bank identity.
+      await withOrgContext(fixture.orgId, async () => {
+        await db.execute(sql`
         update sftp_import_schedules set expected_external_account_id = null
          where id = ${fixture.boundScheduleId} and org_id = ${fixture.orgId}
       `);
-      await db.execute(sql.raw(`
+        await db.execute(
+          sql.raw(`
         create function ${functionName}() returns trigger language plpgsql as $$
         begin
           if new.folder = 'inbound-a' and old.run_claim_token is null and new.run_claim_token is not null then
@@ -181,31 +220,41 @@ test("scheduled import uses the binding that wins the claim after discovery", { 
           return new;
         end;
         $$
-      `));
-      await db.execute(sql.raw(`
+      `),
+        );
+        await db.execute(
+          sql.raw(`
         create trigger ${triggerName} before update on sftp_import_schedules
         for each row execute function ${functionName}()
-      `));
-    });
+      `),
+        );
+      });
 
-    const runs = await withBypass(() => runDueSftpImports(fixture.orgId, fixture.boundScheduleId));
-    const run = runs.find((entry) => entry.scheduleId === fixture.boundScheduleId)!;
-    assert.ok(run, `expected the claimed schedule in scan results; got ${JSON.stringify(runs)}`);
-    const own = run.files.find((entry) => entry.file === "own.ofx")!;
-    assert.ok(own, `expected the staged file outcome; got ${JSON.stringify(run)}`);
-    assert.equal(own.imported, 1, "the claimed run must use the binding returned by its claim update");
-    assert.equal(own.error, undefined);
-    const stranger = run.files.find((entry) => entry.file === "stranger.ofx")!;
-    assert.equal(stranger.imported, 0);
-    assert.match(stranger.error ?? "", /OTHER-99/);
-  } finally {
-    await withOrgContext(fixture.orgId, async () => {
-      await db.execute(sql.raw(`drop trigger if exists ${triggerName} on sftp_import_schedules`));
-      await db.execute(sql.raw(`drop function if exists ${functionName}()`));
-    }).catch(() => undefined);
-    await withBypass(() => dropScratchOrgReporting(fixture.orgId));
-  }
-});
+      const runs = await withBypass(() =>
+        runDueSftpImports(fixture.orgId, fixture.boundScheduleId),
+      );
+      const run = runs.find((entry) => entry.scheduleId === fixture.boundScheduleId)!;
+      assert.ok(run, `expected the claimed schedule in scan results; got ${JSON.stringify(runs)}`);
+      const own = run.files.find((entry) => entry.file === "own.ofx")!;
+      assert.ok(own, `expected the staged file outcome; got ${JSON.stringify(run)}`);
+      assert.equal(
+        own.imported,
+        1,
+        "the claimed run must use the binding returned by its claim update",
+      );
+      assert.equal(own.error, undefined);
+      const stranger = run.files.find((entry) => entry.file === "stranger.ofx")!;
+      assert.equal(stranger.imported, 0);
+      assert.match(stranger.error ?? "", /OTHER-99/);
+    } finally {
+      await withOrgContext(fixture.orgId, async () => {
+        await db.execute(sql.raw(`drop trigger if exists ${triggerName} on sftp_import_schedules`));
+        await db.execute(sql.raw(`drop function if exists ${functionName}()`));
+      }).catch(() => undefined);
+      await withBypass(() => dropScratchOrgReporting(fixture.orgId));
+    }
+  },
+);
 
 test.after(() => {
   rmSync(scratchDataDir, { recursive: true, force: true });

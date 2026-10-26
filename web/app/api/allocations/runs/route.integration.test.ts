@@ -79,16 +79,21 @@ const lineageUrl = "../lineage/route.ts?alloc-runs";
 const lineageRoute = (await import(lineageUrl)) as typeof import("../lineage/route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-const { postProjectGlEntry } = await import(
-  "@openbooks/engine/projects/recognition"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
+const { postProjectGlEntry } = await import("@openbooks/engine/projects/recognition");
 
-
-function authenticate(orgId: string, actorId: string, permissions: string[], allowedSubsidiaryIds: string[] | null = null): void {
-  routeState.authz = { user: { orgId, id: actorId }, permissions: new Set(permissions), allowedSubsidiaryIds };
+function authenticate(
+  orgId: string,
+  actorId: string,
+  permissions: string[],
+  allowedSubsidiaryIds: string[] | null = null,
+): void {
+  routeState.authz = {
+    user: { orgId, id: actorId },
+    permissions: new Set(permissions),
+    allowedSubsidiaryIds,
+  };
 }
 
 async function enableAllocations(orgId: string): Promise<void> {
@@ -175,14 +180,25 @@ async function setup(): Promise<Setup> {
       (org_id, mode, rule_id, version_id, definition_hash, run_id, amount, share)
     values
       (${org.orgId}, 'period', ${ruleId}, ${versionId}, 'hash-r', ${runId}, '10.00', '1.0')`);
-  return { orgId: org.orgId, actorId, ruleId, runId, periodId: org.periodId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, postingDate };
+  return {
+    orgId: org.orgId,
+    actorId,
+    ruleId,
+    runId,
+    periodId: org.periodId,
+    bookId: org.bookId,
+    subsidiaryId: org.subsidiaryId,
+    postingDate,
+  };
 }
 
 test("runs list filters + detail subsidiary scoping", async () => {
   const s = await setup();
   try {
     authenticate(s.orgId, s.actorId, ["allocations.read", "allocations.run", "gl.post"]);
-    const listed = await listRoute.GET(jsonRequest("/api/allocations/runs?status=previewed", "GET"));
+    const listed = await listRoute.GET(
+      jsonRequest("/api/allocations/runs?status=previewed", "GET"),
+    );
     assert.equal(listed.status, 200);
     const body = (await listed.json()) as { runs: { id: string }[]; total: number };
     assert.equal(body.total, 1);
@@ -202,9 +218,12 @@ test("runs list filters + detail subsidiary scoping", async () => {
     authenticate(s.orgId, s.actorId, ["allocations.read", "allocations.run", "gl.post"], []);
     const hidden = await listRoute.GET(jsonRequest("/api/allocations/runs", "GET"));
     assert.deepEqual(await hidden.json(), { runs: [], total: 0 });
-    const hiddenDetail = await detailRoute.GET(jsonRequest(`/api/allocations/runs/${s.runId}`, "GET"), {
-      params: Promise.resolve({ id: s.runId }),
-    });
+    const hiddenDetail = await detailRoute.GET(
+      jsonRequest(`/api/allocations/runs/${s.runId}`, "GET"),
+      {
+        params: Promise.resolve({ id: s.runId }),
+      },
+    );
     assert.equal(hiddenDetail.status, 404);
   } finally {
     routeState.authz = null;
@@ -224,10 +243,12 @@ test("preview runs the real engine", async () => {
     assert.equal(computation.sourceTotal, "100.0000");
 
     authenticate(s.orgId, s.actorId, ["allocations.run"], []);
-    const scoped = await previewRoute.POST(jsonRequest("/api/allocations/runs/preview", "POST", {
-      ...body,
-      subsidiaryId: s.subsidiaryId,
-    }));
+    const scoped = await previewRoute.POST(
+      jsonRequest("/api/allocations/runs/preview", "POST", {
+        ...body,
+        subsidiaryId: s.subsidiaryId,
+      }),
+    );
     assert.equal(scoped.status, 403);
   } finally {
     routeState.authz = null;
@@ -239,8 +260,11 @@ test("S1: restricted preview without a pin is refused and persists nothing", asy
   const s = await setup();
   try {
     const runCount = async (): Promise<number> => {
-      const rows = await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`, "objects");
+      const rows = await db.execute<{ count: string }>(
+        sql`
+        select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`,
+        "objects",
+      );
       return Number(rows[0]?.count ?? 0);
     };
     const before = await runCount();
@@ -249,7 +273,9 @@ test("S1: restricted preview without a pin is refused and persists nothing", asy
     authenticate(s.orgId, s.actorId, ["allocations.run"], [s.subsidiaryId]);
     const omitted = await previewRoute.POST(
       jsonRequest("/api/allocations/runs/preview", "POST", {
-        ruleId: s.ruleId, periodId: s.periodId, bookId: s.bookId,
+        ruleId: s.ruleId,
+        periodId: s.periodId,
+        bookId: s.bookId,
       }),
     );
     assert.equal(omitted.status, 403);
@@ -258,7 +284,10 @@ test("S1: restricted preview without a pin is refused and persists nothing", asy
     // A visible pin still previews.
     const pinned = await previewRoute.POST(
       jsonRequest("/api/allocations/runs/preview", "POST", {
-        ruleId: s.ruleId, periodId: s.periodId, bookId: s.bookId, subsidiaryId: s.subsidiaryId,
+        ruleId: s.ruleId,
+        periodId: s.periodId,
+        bookId: s.bookId,
+        subsidiaryId: s.subsidiaryId,
       }),
     );
     assert.equal(pinned.status, 200);
@@ -272,8 +301,13 @@ test("S1: restricted preview without a pin is refused and persists nothing", asy
 test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", async () => {
   const s = await setup();
   const postedId = randomUUID();
-  const versionId = (await db.execute<{ id: string }>(sql`
-    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`, "objects"))[0]!.id;
+  const versionId = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into allocation_runs
       (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,
@@ -281,12 +315,24 @@ test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", asy
     values
       (${postedId}, ${s.orgId}, ${s.ruleId}, ${versionId}, 'hash-r', ${s.periodId}, ${s.bookId}, ${s.subsidiaryId},
        'posted', 'manual', '10.00', '10.00', '0.00', '{}'::jsonb, ${s.actorId}, ${s.actorId}, ${s.actorId})`);
-  const runState = async (id: string): Promise<{ status: string; journals: number; runs: number }> => {
-    const rows = await db.execute<{ status: string; journal_entry_id: string | null; reversal_entry_id: string | null }>(sql`
+  const runState = async (
+    id: string,
+  ): Promise<{ status: string; journals: number; runs: number }> => {
+    const rows = await db.execute<{
+      status: string;
+      journal_entry_id: string | null;
+      reversal_entry_id: string | null;
+    }>(
+      sql`
       select status, journal_entry_id, reversal_entry_id from allocation_runs
-       where org_id = ${s.orgId} and id = ${id}`, "objects");
-    const counted = await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`, "objects");
+       where org_id = ${s.orgId} and id = ${id}`,
+      "objects",
+    );
+    const counted = await db.execute<{ count: string }>(
+      sql`
+      select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`,
+      "objects",
+    );
     return {
       status: rows[0]!.status,
       journals: [rows[0]!.journal_entry_id, rows[0]!.reversal_entry_id].filter(Boolean).length,
@@ -305,19 +351,28 @@ test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", asy
     assert.equal(post.status, 404);
     assert.deepEqual(await post.json(), { error: "not_found" });
     const reverse = await reverseRoute.POST(
-      jsonRequest(`/api/allocations/runs/${postedId}/reverse`, "POST", { reason: "takeover attempt" }),
+      jsonRequest(`/api/allocations/runs/${postedId}/reverse`, "POST", {
+        reason: "takeover attempt",
+      }),
       { params: Promise.resolve({ id: postedId }) },
     );
     assert.equal(reverse.status, 404);
     const rerun = await rerunRoute.POST(
-      jsonRequest(`/api/allocations/runs/${postedId}/rerun`, "POST", { reason: "takeover attempt" }),
+      jsonRequest(`/api/allocations/runs/${postedId}/rerun`, "POST", {
+        reason: "takeover attempt",
+      }),
       { params: Promise.resolve({ id: postedId }) },
     );
     assert.equal(rerun.status, 404);
     // Nothing changed: no post, no reversal, no fresh run.
     assert.deepEqual(await runState(postedId), before);
-    const previewed = (await db.execute<{ status: string }>(sql`
-      select status from allocation_runs where org_id = ${s.orgId} and id = ${s.runId}`, "objects"))[0];
+    const previewed = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from allocation_runs where org_id = ${s.orgId} and id = ${s.runId}`,
+        "objects",
+      )
+    )[0];
     assert.equal(previewed?.status, "previewed");
   } finally {
     routeState.authz = null;
@@ -332,8 +387,13 @@ test("S4: a pinned run with foreign targets is invisible to the pin holder", asy
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     values (${subB}, ${s.orgId}, ${s.subsidiaryId}, 'Branch Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
   const crossedId = randomUUID();
-  const versionId = (await db.execute<{ id: string }>(sql`
-    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`, "objects"))[0]!.id;
+  const versionId = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into allocation_runs
       (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,
@@ -380,7 +440,10 @@ test("S1: preview validates id shapes at the boundary", async () => {
         jsonRequest("/api/allocations/runs/preview", "POST", { ...good, [field]: value }),
       );
       assert.equal(res.status, 400, `${field} must be refused as 400`);
-      assert.match(((await res.json()) as { error: string }).error, new RegExp(`${field} must be a uuid`));
+      assert.match(
+        ((await res.json()) as { error: string }).error,
+        new RegExp(`${field} must be a uuid`),
+      );
     }
     // Well-formed but unknown ids stay tenant-opaque 404s, never 22P02 500s.
     const unknown = randomUUID();
@@ -484,9 +547,7 @@ test("preview resolves report drivers through the production composition", async
       }),
     );
     assert.equal(res.status, 200);
-    const computation = (
-      await res.json()
-    ) as {
+    const computation = (await res.json()) as {
       computation: {
         sourceTotal: string;
         driver: { vector: { key: string; value: string }[] } | null;
@@ -494,7 +555,9 @@ test("preview resolves report drivers through the production composition", async
     };
     assert.equal(computation.computation.sourceTotal, "1000.0000");
     const vector = new Map(
-      (computation.computation.driver?.vector ?? []).map((e) => [e.key, e.value] as [string, string]),
+      (computation.computation.driver?.vector ?? []).map(
+        (e) => [e.key, e.value] as [string, string],
+      ),
     );
     assert.equal(vector.get(adjustment), "1000.0000");
     assert.equal(vector.get(bank), "0.0000");
@@ -575,7 +638,9 @@ test("lineage drill anchors on one object", async () => {
   const s = await setup();
   try {
     authenticate(s.orgId, s.actorId, ["allocations.read"]);
-    const byRun = await lineageRoute.GET(jsonRequest(`/api/allocations/lineage?runId=${s.runId}`, "GET"));
+    const byRun = await lineageRoute.GET(
+      jsonRequest(`/api/allocations/lineage?runId=${s.runId}`, "GET"),
+    );
     assert.equal(byRun.status, 200);
     const rows = ((await byRun.json()) as { rows: { amount: string }[] }).rows;
     assert.equal(rows.length, 1);
@@ -599,22 +664,36 @@ test("S3: lineage route scopes anchors and paginates", async () => {
     // Restricted to nothing: the pinned run's drill is a 404, not a 200 with
     // foreign amounts.
     authenticate(s.orgId, s.actorId, ["allocations.read"], []);
-    const hidden = await lineageRoute.GET(jsonRequest(`/api/allocations/lineage?runId=${s.runId}`, "GET"));
+    const hidden = await lineageRoute.GET(
+      jsonRequest(`/api/allocations/lineage?runId=${s.runId}`, "GET"),
+    );
     assert.equal(hidden.status, 404);
     // Unrestricted: the shape carries total + truncated, and paging works.
     authenticate(s.orgId, s.actorId, ["allocations.read"]);
-    const paged = await lineageRoute.GET(jsonRequest(`/api/allocations/lineage?runId=${s.runId}&limit=1&offset=0`, "GET"));
+    const paged = await lineageRoute.GET(
+      jsonRequest(`/api/allocations/lineage?runId=${s.runId}&limit=1&offset=0`, "GET"),
+    );
     assert.equal(paged.status, 200);
-    const body = (await paged.json()) as { rows: unknown[]; total: number; truncated: boolean; limit: number; offset: number };
+    const body = (await paged.json()) as {
+      rows: unknown[];
+      total: number;
+      truncated: boolean;
+      limit: number;
+      offset: number;
+    };
     assert.equal(body.total, 1);
     assert.equal(body.rows.length, 1);
     assert.equal(body.truncated, false);
     assert.equal(body.limit, 1);
     assert.equal(body.offset, 0);
-    const empty = await lineageRoute.GET(jsonRequest(`/api/allocations/lineage?runId=${s.runId}&limit=1&offset=5`, "GET"));
+    const empty = await lineageRoute.GET(
+      jsonRequest(`/api/allocations/lineage?runId=${s.runId}&limit=1&offset=5`, "GET"),
+    );
     assert.equal(empty.status, 200);
     assert.deepEqual(((await empty.json()) as { rows: unknown[] }).rows, []);
-    const bad = await lineageRoute.GET(jsonRequest(`/api/allocations/lineage?runId=${s.runId}&limit=nope`, "GET"));
+    const bad = await lineageRoute.GET(
+      jsonRequest(`/api/allocations/lineage?runId=${s.runId}&limit=nope`, "GET"),
+    );
     assert.equal(bad.status, 400);
   } finally {
     routeState.authz = null;

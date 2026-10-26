@@ -62,7 +62,12 @@ function closeoutError(message: string, remedy: string): CashCloseoutError {
 
 /** Tender channels a processor fee may be deducted from. Cash has no
  *  processor; stored value redeems a liability, never a card settlement. */
-export const FEE_TENDER_KINDS: ReadonlySet<string> = new Set(["card", "bank_transfer", "wallet", "gateway"]);
+export const FEE_TENDER_KINDS: ReadonlySet<string> = new Set([
+  "card",
+  "bank_transfer",
+  "wallet",
+  "gateway",
+]);
 
 /**
  * Row-level close-out check shared by the tender writer and the document
@@ -192,7 +197,12 @@ export function parseCashCloseout(
     }
     const row = entry as Record<string, unknown>;
     const position = row.position;
-    if (typeof position !== "number" || !Number.isInteger(position) || position < 1 || position > tenders.length) {
+    if (
+      typeof position !== "number" ||
+      !Number.isInteger(position) ||
+      position < 1 ||
+      position > tenders.length
+    ) {
       throw closeoutError(
         `${label} names tender ${JSON.stringify(position ?? null)}, which is not one of this sale's ${tenders.length} tenders.`,
         "Rebuild the close-out from the tenders on the document.",
@@ -269,18 +279,29 @@ async function resolveControlAccount(
   label: string,
   allowedTypes: readonly string[],
 ): Promise<string> {
-  const mapping = (await runner.execute<{ account_id: string | null }>(sql`
+  const mapping =
+    (
+      await runner.execute<{ account_id: string | null }>(
+        sql`
     select settings->'controlAccounts'->>${role}::text as account_id
-      from orgs where id = ${orgId}`, "objects"))[0]?.account_id ?? null;
+      from orgs where id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.account_id ?? null;
   if (!mapping) {
     throw closeoutError(
       `This sale records ${label}, but no ${label} account is configured.`,
       `Set the ${label} account in Setup → Company & Accounting → Control accounts, then repost.`,
     );
   }
-  const row = (await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
+  const row = (
+    await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(
+      sql`
     select type, is_active, is_summary from accounts
-     where org_id = ${orgId} and id = ${mapping}::uuid`, "objects"))[0];
+     where org_id = ${orgId} and id = ${mapping}::uuid`,
+      "objects",
+    )
+  )[0];
   if (!row || !row.is_active || row.is_summary || !allowedTypes.includes(row.type)) {
     throw closeoutError(
       `The configured ${label} account is not a usable posting account.`,
@@ -325,12 +346,13 @@ export async function resolveCashCloseoutAccounts(
     cashOverShortAccountId:
       parsed.overShortMinor === 0n
         ? null
-        : await resolveControlAccount(runner, orgId, "cashOverShort", closeoutRemedyNoun("over/short"), [
-            "income",
-            "income_other",
-            "expense",
-            "expense_other",
-          ]),
+        : await resolveControlAccount(
+            runner,
+            orgId,
+            "cashOverShort",
+            closeoutRemedyNoun("over/short"),
+            ["income", "income_other", "expense", "expense_other"],
+          ),
   };
 }
 
@@ -341,8 +363,13 @@ export async function assertCloseoutServer(
   serverPartyId: string | null,
 ): Promise<void> {
   if (!serverPartyId) return;
-  const row = (await runner.execute<{ id: string }>(sql`
-    select id from parties where org_id = ${orgId} and id = ${serverPartyId} and is_active`, "objects"))[0];
+  const row = (
+    await runner.execute<{ id: string }>(
+      sql`
+    select id from parties where org_id = ${orgId} and id = ${serverPartyId} and is_active`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw closeoutError(
       "Cash sale close-out names a server who is not an active party in this organization.",
@@ -399,11 +426,18 @@ export async function readTipsPayableExposure(
     allowedSubsidiaryIds: ReadonlySet<string> | null;
   },
 ): Promise<TipsPayableExposureRow[]> {
-  const mapping = (await runner.execute<{ account_id: string | null }>(sql`
+  const mapping =
+    (
+      await runner.execute<{ account_id: string | null }>(
+        sql`
     select settings->'controlAccounts'->>'tipsPayable' as account_id
-      from orgs where id = ${orgId}`, "objects"))[0]?.account_id ?? null;
+      from orgs where id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.account_id ?? null;
   if (!mapping) return [];
-  const rows = await runner.execute<TipsPayableExposureRow>(sql`
+  const rows = await runner.execute<TipsPayableExposureRow>(
+    sql`
     select l.party_id as "partyId", p.display_name as "partyName",
            d.document_date::text as day, d.document_number as "documentNumber",
            sum(round(l.amount * 10000))::bigint::text as "amountMinor"
@@ -420,6 +454,8 @@ export async function readTipsPayableExposure(
        and (${options.to ?? null}::date is null or d.document_date <= (${options.to ?? null})::date)
      group by l.party_id, p.display_name, d.document_date, d.document_number
     having sum(round(l.amount * 10000)) <> 0
-     order by d.document_date, d.document_number`, "objects");
+     order by d.document_date, d.document_number`,
+    "objects",
+  );
   return rows;
 }

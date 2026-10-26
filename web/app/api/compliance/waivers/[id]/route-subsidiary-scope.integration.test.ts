@@ -11,10 +11,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "", allowedSubsidiaryIds: null as ReadonlySet<string> | null };
 Object.assign(globalThis, { __complianceWaiverDeleteScopeState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -37,7 +43,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { DELETE } = await import("./route.ts");
 
 async function fixture() {
@@ -50,28 +57,48 @@ async function fixture() {
   const visiblePartyId = randomUUID();
   const hiddenProjectId = randomUUID();
   const visibleProjectId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
     values (${hiddenPartyId},${org.orgId},'vendor','Hidden vendor',${branchId},true,'{}'::jsonb),
-           (${visiblePartyId},${org.orgId},'vendor','Visible vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+           (${visiblePartyId},${org.orgId},'vendor','Visible vendor',${org.subsidiaryId},true,'{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
     values (${hiddenProjectId},${org.orgId},${branchId},'HID','Hidden project',${org.customerId},'active',true,'{}'::jsonb),
-           (${visibleProjectId},${org.orgId},${org.subsidiaryId},'VIS','Visible project',${org.customerId},'active',true,'{}'::jsonb)`));
-  const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+           (${visibleProjectId},${org.orgId},${org.subsidiaryId},'VIS','Visible project',${org.customerId},'active',true,'{}'::jsonb)`),
+  );
+  const requirementId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
     insert into compliance_requirements (org_id, code, name, category, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${actorId}, ${actorId})
-    returning id`, "objects")))[0]!.id;
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
   const waiverFor = async (partyId: string, projectId: string) =>
-    (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
       insert into compliance_waivers
         (org_id, party_id, requirement_id, project_id, reason, effective_from, expires_on,
          requested_by, approved_by, approved_at, created_by, updated_by)
       values (${org.orgId}, ${partyId}, ${requirementId}, ${projectId},
               'filed bounded exception', '2026-06-01', '2026-08-01',
               ${actorId}, null, null, ${actorId}, ${actorId})
-      returning id`, "objects")))[0]!.id;
+      returning id`,
+          "objects",
+        ),
+      )
+    )[0]!.id;
   return {
     org,
     hiddenWaiverId: await waiverFor(hiddenPartyId, visibleProjectId),
@@ -94,7 +121,11 @@ const revoke = (id: string) =>
 
 async function revokedAt(id: string): Promise<string | null> {
   const rows = await withBypassContext(() =>
-    db.execute<{ revoked_at: string | null }>(sql`select revoked_at from compliance_waivers where id = ${id}`, "objects"));
+    db.execute<{ revoked_at: string | null }>(
+      sql`select revoked_at from compliance_waivers where id = ${id}`,
+      "objects",
+    ),
+  );
   return rows[0]!.revoked_at;
 }
 

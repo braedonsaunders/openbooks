@@ -55,11 +55,14 @@ registerHooks({
 const patchRouteUrl = "./route.ts?journal-line-account-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 
-
-function patchRequest(id: string, body: unknown): { req: Request; ctx: { params: Promise<{ id: string }> } } {
+function patchRequest(
+  id: string,
+  body: unknown,
+): { req: Request; ctx: { params: Promise<{ id: string }> } } {
   return {
     req: new Request(`http://localhost/api/journals/${id}`, {
       method: "PATCH",
@@ -71,27 +74,31 @@ function patchRequest(id: string, body: unknown): { req: Request; ctx: { params:
 }
 
 async function revisionToken(orgId: string, documentId: string): Promise<string> {
-  const row = (await withOrgContext(orgId, () => db.execute<{ updatedAt: string }>(sql`
+  const row = await withOrgContext(orgId, () =>
+    db.execute<{ updatedAt: string }>(
+      sql`
     select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${documentId}
-  `, "objects")));
+  `,
+      "objects",
+    ),
+  );
   return row[0]!.updatedAt;
 }
 
-test(
-  "journals PATCH refuses a foreign-org line account with a domain error",
-  async () => {
-    const orgA = await withBypassContext(() => createScratchOrg());
-    const orgB = await withBypassContext(() => createScratchOrg());
-    try {
-      const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
-      routeState.authz = {
-        user: { orgId: orgA.orgId, id: adminId, roles: [] },
-        permissions: new Set(),
-        allowedSubsidiaryIds: null,
-      };
-      const documentId = randomUUID();
-      await withBypassContext(() => db.execute(sql`
+test("journals PATCH refuses a foreign-org line account with a domain error", async () => {
+  const orgA = await withBypassContext(() => createScratchOrg());
+  const orgB = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
+    routeState.authz = {
+      user: { orgId: orgA.orgId, id: adminId, roles: [] },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    const documentId = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, subsidiary_id, document_date,
            currency, fx_rate, status, subtotal, tax_total, total, custom,
@@ -101,26 +108,33 @@ test(
           ${orgA.subsidiaryId}, ${orgA.date}, 'CAD', 1, 'draft', 100, 0, 100,
           '{}'::jsonb, ${adminId}, ${adminId}
         )
-      `));
-      const token = await revisionToken(orgA.orgId, documentId);
-      // orgB's real COGS account: well-formed, active, but another tenant's.
-      const attempt = patchRequest(documentId, {
-        expectedUpdatedAt: token,
-        lines: [{ accountId: orgB.accounts.cogs, amount: "100", description: "alien leg" }],
-      });
-      const refused = await withOrgContext(orgA.orgId, () => PATCH(attempt.req, attempt.ctx));
-      assert.ok(
-        refused.status === 404 || refused.status === 422,
-        `expected a domain 4xx, got ${refused.status}`,
-      );
-      const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`
+      `),
+    );
+    const token = await revisionToken(orgA.orgId, documentId);
+    // orgB's real COGS account: well-formed, active, but another tenant's.
+    const attempt = patchRequest(documentId, {
+      expectedUpdatedAt: token,
+      lines: [{ accountId: orgB.accounts.cogs, amount: "100", description: "alien leg" }],
+    });
+    const refused = await withOrgContext(orgA.orgId, () => PATCH(attempt.req, attempt.ctx));
+    assert.ok(
+      refused.status === 404 || refused.status === 422,
+      `expected a domain 4xx, got ${refused.status}`,
+    );
+    const lines = (
+      await withOrgContext(orgA.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from document_lines where document_id = ${documentId} and org_id = ${orgA.orgId}
-      `, "objects")))[0]!.n;
-      assert.equal(lines, 0, 'refused foreign-account lines store nothing');
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(orgA.orgId);
-      await dropScratchOrg(orgB.orgId);
-    }
-  },
-);
+      `,
+          "objects",
+        ),
+      )
+    )[0]!.n;
+    assert.equal(lines, 0, "refused foreign-account lines store nothing");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(orgA.orgId);
+    await dropScratchOrg(orgB.orgId);
+  }
+});

@@ -9,10 +9,7 @@ import {
 } from "@openbooks/engine/sales/handling-units";
 import { defineRoute } from "@/lib/api/route";
 import { isoDate, uuidId } from "@/lib/api/json";
-import {
-  executionKey,
-  warehouseExecutionResponse,
-} from "@/lib/api/warehouse-execution";
+import { executionKey, warehouseExecutionResponse } from "@/lib/api/warehouse-execution";
 const body = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("create"),
@@ -36,26 +33,13 @@ export const GET = defineRoute({
   feature: "fulfillment",
   handler: async ({ authz, request }) =>
     warehouseExecutionResponse(async () => {
-      const parsed = uuidId.safeParse(
-        new URL(request.url).searchParams.get("shipmentId"),
-      );
+      const parsed = uuidId.safeParse(new URL(request.url).searchParams.get("shipmentId"));
       if (!parsed.success)
-        return NextResponse.json(
-          { error: "Choose a valid shipment" },
-          { status: 422 },
-        );
+        return NextResponse.json({ error: "Choose a valid shipment" }, { status: 422 });
       const shipmentId = parsed.data;
       return NextResponse.json({
-        units: await getHandlingUnits(
-          authz.user.orgId,
-          authz.user.id,
-          shipmentId,
-        ),
-        bins: await handlingUnitBinOptions(
-          authz.user.orgId,
-          authz.user.id,
-          shipmentId,
-        ),
+        units: await getHandlingUnits(authz.user.orgId, authz.user.id, shipmentId),
+        bins: await handlingUnitBinOptions(authz.user.orgId, authz.user.id, shipmentId),
       });
     }),
 });

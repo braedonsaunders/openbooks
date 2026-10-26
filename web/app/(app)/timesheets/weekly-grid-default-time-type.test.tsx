@@ -31,8 +31,7 @@ stubModules({
     "next/link": "export default function Link(p){return p.children}",
     sonner:
       "export const toast={success(){},error(){},warning(){},info(){}};export function Toaster(){return null}",
-    "../../../lib/confirm":
-      "export async function confirmDialog(){return false}",
+    "../../../lib/confirm": "export async function confirmDialog(){return false}",
     "../../../lib/prompt": "export async function promptDialog(){return null}",
   },
 });
@@ -49,7 +48,15 @@ const { WeeklyGrid } = await import("./WeeklyGrid");
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
+const DAYS = [
+  "2026-07-12",
+  "2026-07-13",
+  "2026-07-14",
+  "2026-07-15",
+  "2026-07-16",
+  "2026-07-17",
+  "2026-07-18",
+];
 
 // Travel prices lowest, so multiplier order lists it first; Regular is the
 // org's flagged standard type and must win as the line default.
@@ -58,8 +65,22 @@ const PICKERS = {
   projects: [{ value: "proj-9", label: "DAY · Day job" }],
   items: [],
   timeTypes: [
-    { value: "tt-travel", label: "Travel", classification: "other", costMultiplier: "0.5", isBillableDefault: true, isDefault: false },
-    { value: "tt-regular", label: "Regular", classification: "regular", costMultiplier: "1", isBillableDefault: true, isDefault: true },
+    {
+      value: "tt-travel",
+      label: "Travel",
+      classification: "other",
+      costMultiplier: "0.5",
+      isBillableDefault: true,
+      isDefault: false,
+    },
+    {
+      value: "tt-regular",
+      label: "Regular",
+      classification: "regular",
+      costMultiplier: "1",
+      isBillableDefault: true,
+      isDefault: true,
+    },
   ],
   departments: [],
 };
@@ -118,7 +139,11 @@ test("new lines default to the flagged standard type, never the first picker ent
   const first = timeTypeTrigger(1);
   assert.ok(first, "the seeded empty line offers a time type");
   assert.match(first.textContent ?? "", /Regular/, "the seeded line starts on the standard type");
-  assert.doesNotMatch(first.textContent ?? "", /Travel/, "multiplier order never leaks into the default");
+  assert.doesNotMatch(
+    first.textContent ?? "",
+    /Travel/,
+    "multiplier order never leaks into the default",
+  );
 
   const addLine = [...document.querySelectorAll("button")].find(
     (b) => b.textContent?.trim() === "Add line",

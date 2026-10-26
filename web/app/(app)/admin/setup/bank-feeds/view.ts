@@ -1,16 +1,16 @@
-import 'server-only'
+import "server-only";
 
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { loadDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/sftp/manager'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission, subsidiaryScopeAllows } from '../../../../../lib/authz'
-import { featureEnabled, resolvedFeatureState } from '../../../../../lib/features'
-import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
-import { listReconcilableBankAccounts } from '../../../../../lib/banking-accounts'
-import type { BankFeedsClient } from './BankFeedsClient'
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { loadDaemonConfig, hostKeyFingerprint } from "@openbooks/engine/sftp/manager";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission, subsidiaryScopeAllows } from "../../../../../lib/authz";
+import { featureEnabled, resolvedFeatureState } from "../../../../../lib/features";
+import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
+import { listReconcilableBankAccounts } from "../../../../../lib/banking-accounts";
+import type { BankFeedsClient } from "./BankFeedsClient";
 
 /**
  * Company Settings → Bank Feeds, split into a loader and a spec.
@@ -40,72 +40,73 @@ import type { BankFeedsClient } from './BankFeedsClient'
  * columns arrive as Dates; they are serialized to ISO strings first.
  */
 
-type BankFeedsClientProps = Parameters<typeof BankFeedsClient>[0]
+type BankFeedsClientProps = Parameters<typeof BankFeedsClient>[0];
 
 export interface BankFeedsData {
-  connections: BankFeedsClientProps['connections']
-  sftpServers: BankFeedsClientProps['sftpServers']
-  sftpSchedules: BankFeedsClientProps['sftpSchedules']
-  accounts: BankFeedsClientProps['accounts']
-  daemon: BankFeedsClientProps['daemon']
+  connections: BankFeedsClientProps["connections"];
+  sftpServers: BankFeedsClientProps["sftpServers"];
+  sftpSchedules: BankFeedsClientProps["sftpSchedules"];
+  accounts: BankFeedsClientProps["accounts"];
+  daemon: BankFeedsClientProps["daemon"];
 }
 
 const iso = (v: unknown): string | null =>
-  v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : null
+  v instanceof Date ? v.toISOString() : typeof v === "string" ? v : null;
 
 /** `bank_feed_connections` joined to `accounts`, as selected below. Timestamps
  *  arrive as Dates from the driver; `iso` also tolerates strings. */
 type ConnectionRow = {
-  id: string
-  name: string
-  provider: string
-  accountId: string
-  status: string
-  externalAccountId: string | null
-  syncCadence: string
-  lastSyncAt: Date | string | null
-  lastAttemptAt: Date | string | null
-  lastResult: unknown
-  lastError: string | null
-  isActive: boolean
-  hasCredentials: boolean
-  accountNumber: string | null
-  accountName: string | null
-}
+  id: string;
+  name: string;
+  provider: string;
+  accountId: string;
+  status: string;
+  externalAccountId: string | null;
+  syncCadence: string;
+  lastSyncAt: Date | string | null;
+  lastAttemptAt: Date | string | null;
+  lastResult: unknown;
+  lastError: string | null;
+  isActive: boolean;
+  hasCredentials: boolean;
+  accountNumber: string | null;
+  accountName: string | null;
+};
 
 type SftpServerRow = {
-  id: string
-  name: string
-  username: string
-  rootPrefix: string
-  isActive: boolean
-  lastConnectedAt: Date | string | null
-}
+  id: string;
+  name: string;
+  username: string;
+  rootPrefix: string;
+  isActive: boolean;
+  lastConnectedAt: Date | string | null;
+};
 
 type SftpScheduleRow = {
-  id: string
-  sftpServerId: string
-  accountId: string
-  format: string
-  folder: string
-  isActive: boolean
-  lastRunAt: Date | string | null
-  accountNumber: string | null
-  accountName: string | null
-  expectedExternalAccountId: string | null
-}
+  id: string;
+  sftpServerId: string;
+  accountId: string;
+  format: string;
+  folder: string;
+  isActive: boolean;
+  lastRunAt: Date | string | null;
+  accountNumber: string | null;
+  accountName: string | null;
+  expectedExternalAccountId: string | null;
+};
 
 export async function loadBankFeeds(): Promise<BankFeedsData> {
-  const authz = await requirePermission('admin.setup.manage')
-  const features = await resolvedFeatureState(authz.user.orgId)
-  if (!featureEnabled(features, 'bankFeeds')) redirect('/admin/setup/features')
+  const authz = await requirePermission("admin.setup.manage");
+  const features = await resolvedFeatureState(authz.user.orgId);
+  if (!featureEnabled(features, "bankFeeds")) redirect("/admin/setup/features");
 
   // Feed targets read through the one reconcilable-bank membership every
   // banking surface agrees on: without the bank/card type filter
   // a reconcilable non-bank account would be offered as a feed target, and
   // its statements could never be reconciled.
   const [conns, eligible, servers, sched, cfg, hdrs] = await Promise.all([
-    db.execute<ConnectionRow>(sql`
+    db.execute<ConnectionRow>(
+      sql`
       select c.id, c.name, c.provider, c.account_id as "accountId", c.status,
              c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
              c.last_sync_at as "lastSyncAt", c.last_attempt_at as "lastAttemptAt",
@@ -117,14 +118,20 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
        where c.org_id = ${authz.user.orgId}
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by c.created_at desc
-    `, 'objects'),
+    `,
+      "objects",
+    ),
     listReconcilableBankAccounts(authz.user.orgId),
-    db.execute<SftpServerRow>(sql`
+    db.execute<SftpServerRow>(
+      sql`
       select id, name, username, root_prefix as "rootPrefix", is_active as "isActive",
              last_connected_at as "lastConnectedAt"
         from sftp_servers where org_id = ${authz.user.orgId} order by created_at desc
-    `, 'objects'),
-    db.execute<SftpScheduleRow>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<SftpScheduleRow>(
+      sql`
       select sc.id, sc.sftp_server_id as "sftpServerId", sc.account_id as "accountId", sc.format, sc.folder,
              sc.is_active as "isActive", sc.last_run_at as "lastRunAt",
              sc.expected_external_account_id as "expectedExternalAccountId",
@@ -134,26 +141,28 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
        where sc.org_id = ${authz.user.orgId}
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by sc.created_at desc
-    `, 'objects'),
+    `,
+      "objects",
+    ),
     loadDaemonConfig(),
     headers(),
-  ])
+  ]);
 
-  const host = cfg.advertisedHost || hdrs.get('host')?.split(':')[0] || 'localhost'
+  const host = cfg.advertisedHost || hdrs.get("host")?.split(":")[0] || "localhost";
   const daemon = {
     enabled: cfg.enabled,
     port: cfg.port,
     host,
     fingerprint: hostKeyFingerprint(cfg.hostKey),
-  }
+  };
   // The connection/schedule account pickers name only the caller's own
   // subsidiaries' accounts, mirroring the setup APIs' scoping.
   const accounts = eligible
     .filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId))
     .map((a) => ({
       id: a.id,
-      label: [a.number, a.name].filter(Boolean).join(' · '),
-    }))
+      label: [a.number, a.name].filter(Boolean).join(" · "),
+    }));
 
   return {
     // Client-side dates stay raw: the island renders them with
@@ -175,20 +184,20 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
     })),
     accounts,
     daemon,
-  }
+  };
 }
 
 export function bankFeedsSpec(data: BankFeedsData): PageSpec {
   return page({
-    route: '/admin/setup/bank-feeds',
+    route: "/admin/setup/bank-feeds",
     // The setup workspace renders its own shell around every setup page, so a
     // second page layout would nest the chrome. And the `mx-auto w-full
     // max-w-4xl space-y-6 p-1` wrapper belongs to BankFeedsClient itself —
     // the spec must NOT place it too, or the page renders that div twice.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      widgetBlock('bank-feeds-workspace', {
+      widgetBlock("bank-feeds-workspace", {
         connections: data.connections,
         sftpServers: data.sftpServers,
         sftpSchedules: data.sftpSchedules,
@@ -196,5 +205,5 @@ export function bankFeedsSpec(data: BankFeedsData): PageSpec {
         daemon: data.daemon,
       }),
     ],
-  })
+  });
 }

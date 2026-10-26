@@ -124,16 +124,16 @@ export interface Au2027Result {
 function scaleFor(input: Au2027Input): readonly AuSchedule1Row[] {
   if (!input.tfnQuoted) {
     throw new PayrollPackError(
-      "AU PAYG withholding with no quoted TFN is refused by name: scale 4 "
-      + "(resident 47%, foreign resident 45%) is a flat-rate cents-ignored "
-      + "withholding the engine does not compute (see AU_REFUSED_2027)",
+      "AU PAYG withholding with no quoted TFN is refused by name: scale 4 " +
+        "(resident 47%, foreign resident 45%) is a flat-rate cents-ignored " +
+        "withholding the engine does not compute (see AU_REFUSED_2027)",
     );
   }
   if (input.workingHolidayMaker) {
     throw new PayrollPackError(
-      "AU PAYG withholding for working holiday makers is refused by name: "
-      + "Schedule 15 turns on registered-employer status and year-to-date "
-      + "payments the pack cannot see (see AU_REFUSED_2027)",
+      "AU PAYG withholding for working holiday makers is refused by name: " +
+        "Schedule 15 turns on registered-employer status and year-to-date " +
+        "payments the pack cannot see (see AU_REFUSED_2027)",
     );
   }
   // The Medicare exemption outranks the threshold claim: the instrument's
@@ -142,9 +142,9 @@ function scaleFor(input: Au2027Input): readonly AuSchedule1Row[] {
   if (input.medicareExemption !== "none") {
     if (input.residency === "foreign_resident") {
       throw new PayrollPackError(
-        "AU PAYG withholding for a foreign resident claiming a Medicare "
-        + "levy exemption is refused by name: no quotable scale covers the "
-        + "combination (see AU_REFUSED_2027)",
+        "AU PAYG withholding for a foreign resident claiming a Medicare " +
+          "levy exemption is refused by name: no quotable scale covers the " +
+          "combination (see AU_REFUSED_2027)",
       );
     }
     if (input.medicareExemption === "full") {
@@ -189,9 +189,9 @@ function weeklyEquivalent(incomeUnits: bigint, periodsPerYear: number): bigint {
     return weeklyEquivalent(incomeUnits * 2n, 12);
   } else {
     throw new PayrollPackError(
-      `AU PAYG withholding for ${periodsPerYear} pays per year is refused by `
-      + "name: the instrument publishes weekly, fortnightly, monthly, bi-monthly "
-      + "(semi-monthly) and quarterly methods only (see AU_REFUSED_2027)",
+      `AU PAYG withholding for ${periodsPerYear} pays per year is refused by ` +
+        "name: the instrument publishes weekly, fortnightly, monthly, bi-monthly " +
+        "(semi-monthly) and quarterly methods only (see AU_REFUSED_2027)",
     );
   }
   return whole + 9900n;
@@ -200,8 +200,8 @@ function weeklyEquivalent(incomeUnits: bigint, periodsPerYear: number): bigint {
 /** Weekly withholding in whole dollars: y = ax − b, 50c up, directly. */
 function weeklyWithholding(xUnits: bigint, scale: readonly AuSchedule1Row[]): bigint {
   const threshold = (lessThan: string): bigint => U(lessThan);
-  const row = scale.find((candidate) =>
-    candidate.lessThan === null || xUnits < threshold(candidate.lessThan),
+  const row = scale.find(
+    (candidate) => candidate.lessThan === null || xUnits < threshold(candidate.lessThan),
   );
   if (row === undefined || row.a === null || row.b === null) return 0n;
   const yScaled = rate6(row.a) * xUnits - U(row.b) * RATE6;
@@ -217,15 +217,16 @@ export function calculateAu2027(input: Au2027Input): Au2027Result {
   }
   const scale = scaleFor(input);
   const weekly = weeklyWithholding(weeklyEquivalent(U(input.income), input.periodsPerYear), scale);
-  const period = input.periodsPerYear === 52
-    ? weekly
-    : input.periodsPerYear === 26
-      ? weekly * 2n
-      : input.periodsPerYear === 12
-        ? (weekly * 13n * 2n + 3n) / 6n
-        : input.periodsPerYear === 24
-          ? ((weekly * 13n * 2n + 3n) / 6n) / 2n
-          : weekly * 13n;
+  const period =
+    input.periodsPerYear === 52
+      ? weekly
+      : input.periodsPerYear === 26
+        ? weekly * 2n
+        : input.periodsPerYear === 12
+          ? (weekly * 13n * 2n + 3n) / 6n
+          : input.periodsPerYear === 24
+            ? (weekly * 13n * 2n + 3n) / 6n / 2n
+            : weekly * 13n;
   // Super Guarantee: 12% of period qualifying earnings (SGAA 17A(2)),
   // capped at the annual maximum contributions base (SGAA 10A(5),
   // AU_SUPER_2027.maxBase): only the headroom remaining after verified
@@ -233,12 +234,12 @@ export function calculateAu2027(input: Au2027Input): Au2027Result {
   // name — see AU_REFUSED_2027 — instead of posting uncapped SG.
   if (input.ytdQualifying == null || input.ytdQualifying === "") {
     throw new PayrollPackError(
-      "AU Super Guarantee cannot accrue without verified year-to-date "
-      + "qualifying earnings: the $270,830 annual maximum contributions base "
-      + "(SGAA s10A(5)) prices only the remaining headroom. Record the "
-      + "qualifying earnings this employer paid the employee this financial year "
-      + "before its payroll ran here (zero when none) on the employee's SG facts "
-      + "(au_sg_administration, opening_qualifying_ytd) before running payroll",
+      "AU Super Guarantee cannot accrue without verified year-to-date " +
+        "qualifying earnings: the $270,830 annual maximum contributions base " +
+        "(SGAA s10A(5)) prices only the remaining headroom. Record the " +
+        "qualifying earnings this employer paid the employee this financial year " +
+        "before its payroll ran here (zero when none) on the employee's SG facts " +
+        "(au_sg_administration, opening_qualifying_ytd) before running payroll",
     );
   }
   const maxBase = U(AU_SUPER_2027.maxBase);
@@ -280,7 +281,9 @@ export async function committedAuQualifyingYearToDate(input: {
   taxYear: number;
   excludeDocumentId: string;
 }): Promise<string> {
-  const row = (await input.tx.execute<{ qualifying: string | null }>(sql`
+  const row = (
+    await input.tx.execute<{ qualifying: string | null }>(
+      sql`
     select round(coalesce(sum((s.factors->>'PI')::numeric), 0), 4)::numeric(24, 4)::text as qualifying
       from pay_stubs s
       join pay_runs r on r.org_id = s.org_id
@@ -294,7 +297,10 @@ export async function committedAuQualifyingYearToDate(input: {
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and d.status <> 'voided'
        and d.subsidiary_id = ${input.subsidiaryId}::uuid
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return typeof row?.qualifying === "string" ? row.qualifying : "0";
 }
 
@@ -302,14 +308,19 @@ export async function computeAuStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    taxYear, pensionable, periodsPerYear,
-    reducedBases, pushStatutory, certificateFor, bool,
+    taxYear,
+    pensionable,
+    periodsPerYear,
+    reducedBases,
+    pushStatutory,
+    certificateFor,
+    bool,
   } = ctx;
   if (taxYear !== 2027) {
     throw new PayrollPackError(
-      `AU PAYG withholding for tax year ${taxYear} has not been transcribed `
-      + "— the AU payroll pack's only transcribed edition is 2026–27 "
-      + "(taxYear 2027). This year is not yet supported by the AU pack; contact support.",
+      `AU PAYG withholding for tax year ${taxYear} has not been transcribed ` +
+        "— the AU payroll pack's only transcribed edition is 2026–27 " +
+        "(taxYear 2027). This year is not yet supported by the AU pack; contact support.",
     );
   }
   // Schedule 5 is not transcribed, and the Schedule 1 engine below prices
@@ -320,10 +331,10 @@ export async function computeAuStatutory(
   const oneOff = ctx.nonPeriodic ?? "";
   if (oneOff !== "" && toUnits(oneOff) > 0n) {
     throw new PayrollPackError(
-      `AU PAYG withholding on a non-periodic one-off of $${oneOff} is refused by name: bonuses and `
-      + "back payments withhold under ATO Schedule 5 (averaging and rebate), which the pack does "
-      + "not transcribe — see AU_REFUSED_2027. Pay the one-off through payroll software that "
-      + "prices Schedule 5; do not run it here unwithheld",
+      `AU PAYG withholding on a non-periodic one-off of $${oneOff} is refused by name: bonuses and ` +
+        "back payments withhold under ATO Schedule 5 (averaging and rebate), which the pack does " +
+        "not transcribe — see AU_REFUSED_2027. Pay the one-off through payroll software that " +
+        "prices Schedule 5; do not run it here unwithheld",
     );
   }
   const tfn = certificateFor("au_tfn_declaration");
@@ -336,7 +347,11 @@ export async function computeAuStatutory(
   }
   const variation = certificateFor("au_medicare_levy_variation")?.answers ?? {};
   const medicareExemption = variation["medicare_exemption"] ?? "none";
-  if (medicareExemption !== "none" && medicareExemption !== "full" && medicareExemption !== "half") {
+  if (
+    medicareExemption !== "none" &&
+    medicareExemption !== "full" &&
+    medicareExemption !== "half"
+  ) {
     throw new PayrollPackError(
       `AU Medicare levy variation declaration exemption answer "${medicareExemption}" is not a declared choice`,
     );
@@ -361,8 +376,8 @@ export async function computeAuStatutory(
   if (openingRaw !== null && openingRaw !== "") {
     if (!ctx.subsidiaryId) {
       throw new PayrollPackError(
-        "AU Super Guarantee needs the paying legal employer: the maximum contributions base "
-        + "is per employer, so the year-to-date qualifying earnings cannot be read without it",
+        "AU Super Guarantee needs the paying legal employer: the maximum contributions base " +
+          "is per employer, so the year-to-date qualifying earnings cannot be read without it",
       );
     }
     const committed = await committedAuQualifyingYearToDate({

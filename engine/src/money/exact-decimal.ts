@@ -76,10 +76,12 @@ export function parseExactDecimal(value: unknown): string | null {
  * of producing Infinity, NaN, or a silently rounded float.
  */
 export function divideDecimal(dividend: string, divisor: string, scale: number): string {
-  if (!Number.isInteger(scale) || scale < 0 || scale > 18) throw new Error("division scale must be an integer from 0 through 18");
+  if (!Number.isInteger(scale) || scale < 0 || scale > 18)
+    throw new Error("division scale must be an integer from 0 through 18");
   const left = toScaled(dividend);
   const right = toScaled(divisor);
-  if (!left || !right) throw new Error(`not exact decimals: ${JSON.stringify(dividend)} / ${JSON.stringify(divisor)}`);
+  if (!left || !right)
+    throw new Error(`not exact decimals: ${JSON.stringify(dividend)} / ${JSON.stringify(divisor)}`);
   if (right.unscaled === 0n) throw new Error(`cannot divide ${JSON.stringify(dividend)} by zero`);
   const numerator = left.unscaled * 10n ** BigInt(right.scale + scale);
   const denominator = right.unscaled * 10n ** BigInt(left.scale);
@@ -96,16 +98,25 @@ export function divideDecimal(dividend: string, divisor: string, scale: number):
 
 /** Exact rate multiplication, rounded only at the caller's declared decimal scale. */
 export function multiplyDecimal(left: string, right: string, scale: number): string {
-  const a=toScaled(left),b=toScaled(right);
-  if (!a || !b) throw new Error(`not exact decimal factors: ${JSON.stringify(left)}, ${JSON.stringify(right)}`);
-  return divideDecimal((a.unscaled*b.unscaled).toString(),(10n ** BigInt(a.scale+b.scale)).toString(),scale);
+  const a = toScaled(left),
+    b = toScaled(right);
+  if (!a || !b)
+    throw new Error(`not exact decimal factors: ${JSON.stringify(left)}, ${JSON.stringify(right)}`);
+  return divideDecimal(
+    (a.unscaled * b.unscaled).toString(),
+    (10n ** BigInt(a.scale + b.scale)).toString(),
+    scale,
+  );
 }
 
 /** Exact decimal subtraction at the larger operand scale; nothing is rounded. */
 export function subtractDecimal(left: string, right: string): string {
-  const a = toScaled(left), b = toScaled(right);
-  if (!a || !b) throw new Error(`not exact decimals: ${JSON.stringify(left)} - ${JSON.stringify(right)}`);
+  const a = toScaled(left),
+    b = toScaled(right);
+  if (!a || !b)
+    throw new Error(`not exact decimals: ${JSON.stringify(left)} - ${JSON.stringify(right)}`);
   const scale = Math.max(a.scale, b.scale);
-  const difference = a.unscaled * 10n ** BigInt(scale - a.scale) - b.unscaled * 10n ** BigInt(scale - b.scale);
+  const difference =
+    a.unscaled * 10n ** BigInt(scale - a.scale) - b.unscaled * 10n ** BigInt(scale - b.scale);
   return divideDecimal(difference.toString(), (10n ** BigInt(scale)).toString(), scale);
 }

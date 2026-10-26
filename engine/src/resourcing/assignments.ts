@@ -27,21 +27,21 @@ interface AssignmentWriteContext {
 }
 
 type AssignmentSubject =
-  | { employeePartyId: string; jobTitle?: never }
-  | { employeePartyId?: never; jobTitle: string };
+  { employeePartyId: string; jobTitle?: never } | { employeePartyId?: never; jobTitle: string };
 
-export type UpsertAssignmentInput = AssignmentWriteContext & AssignmentSubject & {
-  projectId: string;
-  weekStart: string;
-  plannedHours: unknown;
-  isBillable?: boolean;
-  billItemId?: string | null;
-  projectTaskId?: string | null;
-  booking?: Booking;
-  source?: Source;
-  requestId?: string | null;
-  custom?: Record<string, unknown>;
-};
+export type UpsertAssignmentInput = AssignmentWriteContext &
+  AssignmentSubject & {
+    projectId: string;
+    weekStart: string;
+    plannedHours: unknown;
+    isBillable?: boolean;
+    billItemId?: string | null;
+    projectTaskId?: string | null;
+    booking?: Booking;
+    source?: Source;
+    requestId?: string | null;
+    custom?: Record<string, unknown>;
+  };
 
 export interface AssignmentWeeklyTotals {
   subject: { employeePartyId: string } | { jobTitle: string };
@@ -73,10 +73,12 @@ async function inAssignmentWrite<T>(
   context: AssignmentWriteContext,
   work: (tx: SqlExecutor) => Promise<T>,
 ): Promise<T> {
-  return withOrgTransaction(context.orgId, () => db.transaction(async (tx) => {
-    await lockAndRequireResourcing(tx, context.orgId);
-    return work(tx);
-  }));
+  return withOrgTransaction(context.orgId, () =>
+    db.transaction(async (tx) => {
+      await lockAndRequireResourcing(tx, context.orgId);
+      return work(tx);
+    }),
+  );
 }
 
 function refuse(
@@ -129,9 +131,14 @@ async function assertOpenProject(
   input: AssignmentWriteContext & { projectId: string },
 ): Promise<void> {
   await lockProjectForScope(tx, input.orgId, input.projectId, input.allowedSubsidiaryIds, "share");
-  const project = (await tx.execute<{ status: string }>(sql`
+  const project = (
+    await tx.execute<{ status: string }>(
+      sql`
     select status from projects where org_id = ${input.orgId} and id = ${input.projectId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!project) throw new Error("a project disappeared while its scope lock was held");
   if (project.status === "closed" || project.status === "cancelled") {
     refuse(
@@ -177,7 +184,9 @@ async function assertValidSubject(
       "jobTitle",
     );
   }
-  const title = (await tx.execute<{ job_title: string }>(sql`
+  const title = (
+    await tx.execute<{ job_title: string }>(
+      sql`
     select job_title from employee_roles
      where org_id = ${input.orgId} and job_title is not null
        and lower(btrim(job_title)) = lower(${jobTitle})
@@ -190,7 +199,10 @@ async function assertValidSubject(
      where org_id = ${input.orgId} and job_title is not null
        and lower(btrim(job_title)) = lower(${jobTitle})
     limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!title) {
     refuse(
       "assignment_job_title_unknown",
@@ -207,9 +219,14 @@ async function assertReferences(
   input: UpsertAssignmentInput & { projectId: string; source: Source },
 ): Promise<void> {
   if (input.billItemId) {
-    const item = (await tx.execute<{ id: string }>(sql`
+    const item = (
+      await tx.execute<{ id: string }>(
+        sql`
       select id from items where org_id = ${input.orgId} and id = ${input.billItemId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!item) {
       refuse(
         "assignment_bill_item_unknown",
@@ -220,12 +237,17 @@ async function assertReferences(
     }
   }
   if (input.projectTaskId) {
-    const task = (await tx.execute<{ id: string }>(sql`
+    const task = (
+      await tx.execute<{ id: string }>(
+        sql`
       select task.id from project_tasks task
       join projects project on project.org_id = task.org_id and project.id = task.project_id
       where task.org_id = ${input.orgId} and task.id = ${input.projectTaskId}
         and task.project_id = ${input.projectId} and project.org_id = ${input.orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!task) {
       refuse(
         "assignment_project_task_unknown",
@@ -245,11 +267,16 @@ async function assertReferences(
         "requestId",
       );
     }
-    const request = (await tx.execute<{ id: string }>(sql`
+    const request = (
+      await tx.execute<{ id: string }>(
+        sql`
       select id from res_requests
        where org_id = ${input.orgId} and id = ${input.requestId}
          and project_id = ${input.projectId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!request) {
       refuse(
         "assignment_request_unknown",
@@ -304,10 +331,20 @@ export async function validateAssignmentPlan(
   const booking = input.booking ?? "hard";
   const source = input.source ?? "manual";
   if (!RES_ASSIGNMENT_BOOKING_VALUES.includes(booking)) {
-    refuse("assignment_booking_invalid", `booking value ${booking} is not supported`, "choose soft or hard", "booking");
+    refuse(
+      "assignment_booking_invalid",
+      `booking value ${booking} is not supported`,
+      "choose soft or hard",
+      "booking",
+    );
   }
   if (!RES_ASSIGNMENT_SOURCE_VALUES.includes(source)) {
-    refuse("assignment_source_invalid", `source value ${source} is not supported`, "choose manual, request, or pipeline", "source");
+    refuse(
+      "assignment_source_invalid",
+      `source value ${source} is not supported`,
+      "choose manual, request, or pipeline",
+      "source",
+    );
   }
   const prepared = { ...input, booking, source };
   await assertOpenProject(tx, input);
@@ -330,13 +367,20 @@ async function readWeeklyTotals(
   const subjectFilter = input.employeePartyId
     ? sql`employee_party_id = ${input.employeePartyId}`
     : sql`lower(job_title) = lower(${input.jobTitle!.trim()})`;
-  const rows = await tx.execute<{ booking: Booking; planned_hours: string }>(sql`
+  const rows = await tx.execute<{ booking: Booking; planned_hours: string }>(
+    sql`
     select booking, planned_hours::text as planned_hours from res_assignments
      where org_id = ${input.orgId} and week_start = ${input.weekStart}
        and state = 'active' and ${subjectFilter}
-  `, "objects");
-  const hardHours = sum(rows.filter((row) => row.booking === "hard").map((row) => row.planned_hours));
-  const softHours = sum(rows.filter((row) => row.booking === "soft").map((row) => row.planned_hours));
+  `,
+    "objects",
+  );
+  const hardHours = sum(
+    rows.filter((row) => row.booking === "hard").map((row) => row.planned_hours),
+  );
+  const softHours = sum(
+    rows.filter((row) => row.booking === "soft").map((row) => row.planned_hours),
+  );
   return {
     subject: input.employeePartyId
       ? { employeePartyId: input.employeePartyId }
@@ -352,7 +396,9 @@ async function readWeeklyTotals(
 }
 
 /** Create or update one project-week/person-or-role assignment. */
-export async function upsertAssignment(input: UpsertAssignmentInput): Promise<AssignmentWriteResult> {
+export async function upsertAssignment(
+  input: UpsertAssignmentInput,
+): Promise<AssignmentWriteResult> {
   return inAssignmentWrite(input, async (tx) => {
     const validated = await validateAssignmentPlan(tx, input);
     const rowResult = await tx.execute<AssignmentRow>(sql`
@@ -397,23 +443,41 @@ interface AssignmentIdInput extends AssignmentWriteContext {
   assignmentId: string;
 }
 
-async function lockAssignment(
-  tx: SqlExecutor,
-  input: AssignmentIdInput,
-): Promise<AssignmentRow> {
-  const initial = (await tx.execute<{ project_id: string }>(sql`
+async function lockAssignment(tx: SqlExecutor, input: AssignmentIdInput): Promise<AssignmentRow> {
+  const initial = (
+    await tx.execute<{ project_id: string }>(
+      sql`
     select project_id from res_assignments where org_id = ${input.orgId} and id = ${input.assignmentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!initial) {
-    refuse("assignment_unknown", `assignment ${input.assignmentId} does not exist`, "reload the assignment list", "assignmentId");
+    refuse(
+      "assignment_unknown",
+      `assignment ${input.assignmentId} does not exist`,
+      "reload the assignment list",
+      "assignmentId",
+    );
   }
-  await lockProjectForScope(tx, input.orgId, initial.project_id, input.allowedSubsidiaryIds, "share");
-  const locked = (await tx.execute<AssignmentRow>(sql`
+  await lockProjectForScope(
+    tx,
+    input.orgId,
+    initial.project_id,
+    input.allowedSubsidiaryIds,
+    "share",
+  );
+  const locked = (
+    await tx.execute<AssignmentRow>(
+      sql`
     select ${ASSIGNMENT_COLUMNS} from res_assignments
      where org_id = ${input.orgId} and id = ${input.assignmentId}
        and project_id = ${initial.project_id}
      for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!locked) {
     refuse(
       "assignment_changed",
@@ -456,20 +520,24 @@ export async function releaseAssignment(input: AssignmentIdInput): Promise<Assig
     const assignment = updated.rows[0];
     const availability = assignment.employeePartyId
       ? await readAvailability(
-        input.orgId,
-        [assignment.employeePartyId],
-        assignment.weekStart,
-        assignment.weekStart,
-        input.allowedSubsidiaryIds,
-      )
+          input.orgId,
+          [assignment.employeePartyId],
+          assignment.weekStart,
+          assignment.weekStart,
+          input.allowedSubsidiaryIds,
+        )
       : [];
     const figure = availability.find((row) => row.employeePartyId === assignment.employeePartyId);
     const weeklyTotals = assignment.employeePartyId
-      ? await readWeeklyTotals(tx, {
-        ...input,
-        employeePartyId: assignment.employeePartyId,
-        weekStart: assignment.weekStart,
-      }, figure?.netCapacity ?? null)
+      ? await readWeeklyTotals(
+          tx,
+          {
+            ...input,
+            employeePartyId: assignment.employeePartyId,
+            weekStart: assignment.weekStart,
+          },
+          figure?.netCapacity ?? null,
+        )
       : null;
     return { assignment, weeklyTotals };
   });
@@ -481,7 +549,9 @@ export async function deleteAssignment(input: AssignmentIdInput): Promise<void> 
     const current = await lockAssignment(tx, input);
     if (current.employeePartyId) {
       const saturday = addCalendarDays(current.weekStart, 6);
-      const actual = (await tx.execute<{ id: string }>(sql`
+      const actual = (
+        await tx.execute<{ id: string }>(
+          sql`
         select id from time_entries
          where org_id = ${input.orgId}
            and employee_party_id = ${current.employeePartyId}
@@ -489,7 +559,10 @@ export async function deleteAssignment(input: AssignmentIdInput): Promise<void> 
            and worked_on >= ${current.weekStart} and worked_on <= ${saturday}
            and status = 'approved'
          limit 1
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (actual) {
         refuse(
           "assignment_has_approved_time",

@@ -5,8 +5,22 @@ import type { OperatingProfileChoice } from "@openbooks/engine/organization/oper
 
 /** Starting from the cockpit carries the selected composition into the same native create drawer. */
 export function WorkflowStart({ choices }: { choices: OperatingProfileChoice[] }) {
-  const router=useRouter();
-  return <OperatingProfilePicker family="production" initialChoices={choices} value={null} onChoose={(choice,departmentId)=>{
-    router.push("/manufacturing/work-orders?"+new URLSearchParams({record:"new",workflow:choice.value,...(departmentId?{departmentId}:{})}).toString());
-  }}/>;
+  const router = useRouter();
+  return (
+    <OperatingProfilePicker
+      family="production"
+      initialChoices={choices}
+      value={null}
+      onChoose={(choice, departmentId) => {
+        router.push(
+          "/manufacturing/work-orders?" +
+            new URLSearchParams({
+              record: "new",
+              workflow: choice.value,
+              ...(departmentId ? { departmentId } : {}),
+            }).toString(),
+        );
+      }}
+    />
+  );
 }

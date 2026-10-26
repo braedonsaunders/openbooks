@@ -56,8 +56,13 @@ async function seedMonthlyPeriods(
   orgId: string,
   months: { n: number; name: string; from: string; to: string }[],
 ): Promise<void> {
-  const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`, "objects"))[0]!.id;
+  const cal = (
+    await db.execute<{ id: string }>(
+      sql`
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`,
+      "objects",
+    )
+  )[0]!.id;
   for (const m of months) {
     await db.execute(sql`
       insert into accounting_periods
@@ -82,138 +87,215 @@ const MONTHS_2026 = [
 
 async function scheduleRows(orgId: string, leaseId: string) {
   return await db.execute<{
-    sequence: number; due_on: string; period_start: string; period_end: string;
-    opening_liability: string; payment: string; interest: string; principal: string;
-    closing_liability: string; amortization: string | null; single_cost: string | null;
+    sequence: number;
+    due_on: string;
+    period_start: string;
+    period_end: string;
+    opening_liability: string;
+    payment: string;
+    interest: string;
+    principal: string;
+    closing_liability: string;
+    amortization: string | null;
+    single_cost: string | null;
     rou_adjustment: string | null;
-  }>(sql`
+  }>(
+    sql`
     select sequence, due_on::text, period_start::text, period_end::text,
            opening_liability::text, payment::text, interest::text, principal::text,
            closing_liability::text, amortization::text, single_cost::text,
            rou_adjustment::text
       from lease_agreement_schedule_lines
      where org_id = ${orgId} and lease_id = ${leaseId}
-     order by sequence`, "objects");
+     order by sequence`,
+    "objects",
+  );
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"))[0]!.n;
+  return (
+    await db.execute<{ n: number }>(
+      sql`
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!.n;
 }
 
-test("a finance lease onboarded mid-life continues from its stated opening balances", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    await seedMonthlyPeriods(org.orgId, MONTHS_2026);
-    // Six-year lease from 2021-01-01, 2000/month at 6%: 60 periods sit in
-    // the legacy system; 12 remain after the 2025-12-31 cutover.
-    const rate = periodRateFromAnnualPercent("6", 12);
-    const openingLiability = presentValueOfLevelStream({ payment: "2000", periods: 12, rate, timing: "arrears" });
-    const { leaseId } = await createLeaseAgreement(org.orgId, null, {
-      subsidiaryId: org.subsidiaryId,
-      leaseNumber: "L-ONBOARD-1",
-      commencementOn: "2021-01-01",
-      termPeriods: 72,
-      paymentFrequency: "monthly",
-      paymentAmount: "2000",
-      annualDiscountRatePercent: "6",
-      classificationInputs: { transfersOwnership: true },
-      openingBalances: { liability: openingLiability, rouCarrying: openingLiability, asOf: "2025-12-31" },
-      accounts,
-    });
+test(
+  "a finance lease onboarded mid-life continues from its stated opening balances",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      await seedMonthlyPeriods(org.orgId, MONTHS_2026);
+      // Six-year lease from 2021-01-01, 2000/month at 6%: 60 periods sit in
+      // the legacy system; 12 remain after the 2025-12-31 cutover.
+      const rate = periodRateFromAnnualPercent("6", 12);
+      const openingLiability = presentValueOfLevelStream({
+        payment: "2000",
+        periods: 12,
+        rate,
+        timing: "arrears",
+      });
+      const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+        subsidiaryId: org.subsidiaryId,
+        leaseNumber: "L-ONBOARD-1",
+        commencementOn: "2021-01-01",
+        termPeriods: 72,
+        paymentFrequency: "monthly",
+        paymentAmount: "2000",
+        annualDiscountRatePercent: "6",
+        classificationInputs: { transfersOwnership: true },
+        openingBalances: {
+          liability: openingLiability,
+          rouCarrying: openingLiability,
+          asOf: "2025-12-31",
+        },
+        accounts,
+      });
 
-    const commenced = await commenceLease(org.orgId, leaseId, null);
-    assert.equal(commenced.liability, openingLiability, "commencement echoes the stated opening liability");
-    assert.equal(commenced.rouAsset, openingLiability);
-    assert.equal(commenced.commencementEntryId, null, "no commencement journal — the opening-TB import owns the GL balances");
-    assert.equal(await journalCount(org.orgId), 0, "commencement posts nothing");
+      const commenced = await commenceLease(org.orgId, leaseId, null);
+      assert.equal(
+        commenced.liability,
+        openingLiability,
+        "commencement echoes the stated opening liability",
+      );
+      assert.equal(commenced.rouAsset, openingLiability);
+      assert.equal(
+        commenced.commencementEntryId,
+        null,
+        "no commencement journal — the opening-TB import owns the GL balances",
+      );
+      assert.equal(await journalCount(org.orgId), 0, "commencement posts nothing");
 
-    const rows = await scheduleRows(org.orgId, leaseId);
-    assert.equal(rows.length, 12, `only the 12 remaining periods schedule (got ${rows.length})`);
-    assert.deepEqual(
-      rows.map((r) => r.sequence),
-      [61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72],
-      "full-term sequence numbering continues",
-    );
-    assert.ok(rows.every((r) => r.period_end > "2025-12-31"), "no pre-cutover row exists to catch up");
-    assert.equal(rows[0]!.opening_liability, openingLiability, "accretion starts from the stated opening");
-    assert.equal(rows[11]!.closing_liability, "0.0000", "the continued schedule retires to exactly zero");
-    assert.equal(
-      rows.map((r) => r.principal).reduce(add),
-      openingLiability,
-      "principals consume exactly the stated opening liability",
-    );
-    assert.equal(
-      rows.map((r) => r.amortization!).reduce(add),
-      openingLiability,
-      "amortization consumes exactly the stated opening ROU",
-    );
+      const rows = await scheduleRows(org.orgId, leaseId);
+      assert.equal(rows.length, 12, `only the 12 remaining periods schedule (got ${rows.length})`);
+      assert.deepEqual(
+        rows.map((r) => r.sequence),
+        [61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72],
+        "full-term sequence numbering continues",
+      );
+      assert.ok(
+        rows.every((r) => r.period_end > "2025-12-31"),
+        "no pre-cutover row exists to catch up",
+      );
+      assert.equal(
+        rows[0]!.opening_liability,
+        openingLiability,
+        "accretion starts from the stated opening",
+      );
+      assert.equal(
+        rows[11]!.closing_liability,
+        "0.0000",
+        "the continued schedule retires to exactly zero",
+      );
+      assert.equal(
+        rows.map((r) => r.principal).reduce(add),
+        openingLiability,
+        "principals consume exactly the stated opening liability",
+      );
+      assert.equal(
+        rows.map((r) => r.amortization!).reduce(add),
+        openingLiability,
+        "amortization consumes exactly the stated opening ROU",
+      );
 
-    // Post Q1: carrying amounts tie to opening minus posted.
-    const run = await postDueLeaseSchedules(org.orgId, "2026-03-31", null);
-    assert.equal(run.posted, 3);
-    const postedPrincipal = rows.slice(0, 3).map((r) => r.principal).reduce(add);
-    const postedAmort = rows.slice(0, 3).map((r) => r.amortization!).reduce(add);
-    const liabilityRow = (await db.execute<{ v: string }>(sql`
+      // Post Q1: carrying amounts tie to opening minus posted.
+      const run = await postDueLeaseSchedules(org.orgId, "2026-03-31", null);
+      assert.equal(run.posted, 3);
+      const postedPrincipal = rows
+        .slice(0, 3)
+        .map((r) => r.principal)
+        .reduce(add);
+      const postedAmort = rows
+        .slice(0, 3)
+        .map((r) => r.amortization!)
+        .reduce(add);
+      const liabilityRow = (
+        await db.execute<{ v: string }>(
+          sql`
       select (initial_liability - coalesce((
         select sum(principal) from lease_agreement_schedule_lines
          where org_id = ${org.orgId} and lease_id = ${leaseId} and payment_entry_id is not null
-      ), 0))::text as v from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`, "objects"))[0]!.v;
-    const rouRow = (await db.execute<{ v: string }>(sql`
+      ), 0))::text as v from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`,
+          "objects",
+        )
+      )[0]!.v;
+      const rouRow = (
+        await db.execute<{ v: string }>(
+          sql`
       select (initial_rou_asset - coalesce((
         select sum(amortization) from lease_agreement_schedule_lines
          where org_id = ${org.orgId} and lease_id = ${leaseId} and payment_entry_id is not null
-      ), 0))::text as v from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`, "objects"))[0]!.v;
-    assert.equal(liabilityRow, add(openingLiability, neg(postedPrincipal)));
-    assert.equal(rouRow, add(openingLiability, neg(postedAmort)));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      ), 0))::text as v from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`,
+          "objects",
+        )
+      )[0]!.v;
+      assert.equal(liabilityRow, add(openingLiability, neg(postedPrincipal)));
+      assert.equal(rouRow, add(openingLiability, neg(postedAmort)));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an operating lease with divergent opening ROU retires exactly that ROU", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    await seedMonthlyPeriods(org.orgId, MONTHS_2026);
-    const rate = periodRateFromAnnualPercent("6", 12);
-    const openingLiability = presentValueOfLevelStream({ payment: "2000", periods: 12, rate, timing: "arrears" });
-    // Legacy ROU differs from the liability (unamortised initial direct
-    // costs in the outgoing system): the continuation must retire THIS
-    // figure, not re-derive it.
-    const openingRou = add(openingLiability, "500.0000");
-    const { leaseId } = await createLeaseAgreement(org.orgId, null, {
-      subsidiaryId: org.subsidiaryId,
-      leaseNumber: "L-ONBOARD-OP",
-      commencementOn: "2021-01-01",
-      termPeriods: 72,
-      paymentFrequency: "monthly",
-      paymentAmount: "2000",
-      annualDiscountRatePercent: "6",
-      openingBalances: { liability: openingLiability, rouCarrying: openingRou, asOf: "2025-12-31" },
-      accounts,
-    });
-    const commenced = await commenceLease(org.orgId, leaseId, null);
-    assert.equal(commenced.liability, openingLiability);
-    assert.equal(commenced.rouAsset, openingRou);
-    const rows = await scheduleRows(org.orgId, leaseId);
-    assert.equal(rows.length, 12);
-    assert.equal(rows[11]!.closing_liability, "0.0000");
-    assert.equal(
-      rows.map((r) => r.rou_adjustment!).reduce(add),
-      openingRou,
-      `ROU adjustments must consume exactly the stated opening ROU ${openingRou}`,
-    );
-    assert.equal(
-      rows.map((r) => r.principal).reduce(add),
-      openingLiability,
-      "principals still consume exactly the stated opening liability",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "an operating lease with divergent opening ROU retires exactly that ROU",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      await seedMonthlyPeriods(org.orgId, MONTHS_2026);
+      const rate = periodRateFromAnnualPercent("6", 12);
+      const openingLiability = presentValueOfLevelStream({
+        payment: "2000",
+        periods: 12,
+        rate,
+        timing: "arrears",
+      });
+      // Legacy ROU differs from the liability (unamortised initial direct
+      // costs in the outgoing system): the continuation must retire THIS
+      // figure, not re-derive it.
+      const openingRou = add(openingLiability, "500.0000");
+      const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+        subsidiaryId: org.subsidiaryId,
+        leaseNumber: "L-ONBOARD-OP",
+        commencementOn: "2021-01-01",
+        termPeriods: 72,
+        paymentFrequency: "monthly",
+        paymentAmount: "2000",
+        annualDiscountRatePercent: "6",
+        openingBalances: {
+          liability: openingLiability,
+          rouCarrying: openingRou,
+          asOf: "2025-12-31",
+        },
+        accounts,
+      });
+      const commenced = await commenceLease(org.orgId, leaseId, null);
+      assert.equal(commenced.liability, openingLiability);
+      assert.equal(commenced.rouAsset, openingRou);
+      const rows = await scheduleRows(org.orgId, leaseId);
+      assert.equal(rows.length, 12);
+      assert.equal(rows[11]!.closing_liability, "0.0000");
+      assert.equal(
+        rows.map((r) => r.rou_adjustment!).reduce(add),
+        openingRou,
+        `ROU adjustments must consume exactly the stated opening ROU ${openingRou}`,
+      );
+      assert.equal(
+        rows.map((r) => r.principal).reduce(add),
+        openingLiability,
+        "principals still consume exactly the stated opening liability",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("opening balances fail closed on bad cutover input", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -263,31 +345,34 @@ test("opening balances fail closed on bad cutover input", { skip: !DB }, async (
   }
 });
 
-test("an as-of past the term end is refused at creation and at commencement", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    // Fail fast: an as-of no periods remain from can never commence, so
-    // creation refuses it instead of persisting an uncommenceable lease.
-    await assert.rejects(
-      createLeaseAgreement(org.orgId, null, {
-        subsidiaryId: org.subsidiaryId,
-        leaseNumber: "L-BAD-4",
-        commencementOn: "2021-01-01",
-        termPeriods: 72,
-        paymentFrequency: "monthly",
-        paymentAmount: "2000",
-        annualDiscountRatePercent: "6",
-        classificationInputs: { transfersOwnership: true },
-        openingBalances: { liability: "1000", rouCarrying: "1000", asOf: "2027-06-30" },
-        accounts,
-      }),
-      /past the end of the lease term/,
-    );
-    // A legacy row persisted before the creation gate still fails closed at
-    // commencement with no rows written.
-    const legacyId = randomUUID();
-    await db.execute(sql`
+test(
+  "an as-of past the term end is refused at creation and at commencement",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      // Fail fast: an as-of no periods remain from can never commence, so
+      // creation refuses it instead of persisting an uncommenceable lease.
+      await assert.rejects(
+        createLeaseAgreement(org.orgId, null, {
+          subsidiaryId: org.subsidiaryId,
+          leaseNumber: "L-BAD-4",
+          commencementOn: "2021-01-01",
+          termPeriods: 72,
+          paymentFrequency: "monthly",
+          paymentAmount: "2000",
+          annualDiscountRatePercent: "6",
+          classificationInputs: { transfersOwnership: true },
+          openingBalances: { liability: "1000", rouCarrying: "1000", asOf: "2027-06-30" },
+          accounts,
+        }),
+        /past the end of the lease term/,
+      );
+      // A legacy row persisted before the creation gate still fails closed at
+      // commencement with no rows written.
+      const legacyId = randomUUID();
+      await db.execute(sql`
       insert into lease_agreements
         (id, org_id, subsidiary_id, lease_number, status, commencement_on, term_periods,
          payment_frequency, payment_timing, payment_amount, annual_discount_rate_percent,
@@ -303,14 +388,20 @@ test("an as-of past the term end is refused at creation and at commencement", { 
               ${accounts.rouAsset}, ${accounts.leaseLiability}, ${accounts.interestExpense},
               ${accounts.amortizationExpense}, ${accounts.leaseExpense}, ${accounts.payment},
               '{}'::jsonb, null, null)`);
-    await assert.rejects(commenceLease(org.orgId, legacyId, null), /term|remain/i);
-    const lines = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`, "objects"))[0]!.n;
-    assert.equal(lines, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(commenceLease(org.orgId, legacyId, null), /term|remain/i);
+      const lines = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(lines, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a mid-period arrears cutover is refused with a period-end remedy", async () => {
   // Balances measured through 2026-07-15 sit mid-period (July runs 07-01 to
@@ -350,13 +441,22 @@ test("a mid-period arrears cutover is refused with a period-end remedy", async (
       ...base,
       leaseNumber: "L-MID-2",
       commencementOn: "2026-06-01",
-      openingBalances: { liability: boundaryLiability, rouCarrying: boundaryLiability, asOf: "2026-06-30" },
+      openingBalances: {
+        liability: boundaryLiability,
+        rouCarrying: boundaryLiability,
+        asOf: "2026-06-30",
+      },
     });
     const commenced = await commenceLease(org.orgId, leaseId, null);
     assert.equal(commenced.liability, boundaryLiability);
-    const kept = (await db.execute<{ n: number; first: number }>(sql`
+    const kept = (
+      await db.execute<{ n: number; first: number }>(
+        sql`
       select count(*)::int as n, min(sequence)::int as first from lease_agreement_schedule_lines
-       where org_id = ${org.orgId} and lease_id = ${leaseId}`, "objects"))[0]!;
+       where org_id = ${org.orgId} and lease_id = ${leaseId}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(kept.n, 11, "only the post-cutover periods schedule");
     assert.equal(kept.first, 2);
     // A legacy row persisted before the creation gate fails closed at
@@ -379,8 +479,13 @@ test("a mid-period arrears cutover is refused with a period-end remedy", async (
               ${accounts.amortizationExpense}, ${accounts.leaseExpense}, ${accounts.payment},
               '{}'::jsonb, null, null)`);
     await assert.rejects(commenceLease(org.orgId, legacyId, null), /period end/);
-    const rows = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`, "objects"))[0]!.n;
+    const rows = (
+      await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(rows, 0);
   } finally {
     await dropScratchOrg(org.orgId);

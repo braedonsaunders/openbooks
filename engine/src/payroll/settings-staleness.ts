@@ -44,7 +44,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (isRecord(value)) {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
   }
   return JSON.stringify(value) ?? "null";
 }
@@ -63,9 +66,11 @@ function beforeAfterPair(value: unknown): [unknown, unknown] | null {
 
 /** Whether a payroll settings key only routes postings or remittances. */
 export function isPostingOnlyPayrollSetting(key: string): boolean {
-  return PAYROLL_POSTING_ONLY_KEYS.has(key)
-    || declaredRemittanceVendorSettingsKeys().includes(key)
-    || declaredRemittanceFrequencySettingsKeys().includes(key);
+  return (
+    PAYROLL_POSTING_ONLY_KEYS.has(key) ||
+    declaredRemittanceVendorSettingsKeys().includes(key) ||
+    declaredRemittanceFrequencySettingsKeys().includes(key)
+  );
 }
 
 function payrollSettingsAffectCalculation(before: unknown, after: unknown): boolean {
@@ -86,7 +91,8 @@ function settingsSnapshotAffectCalculation(before: unknown, after: unknown): boo
   for (const key of new Set([...Object.keys(beforeSettings), ...Object.keys(afterSettings)])) {
     if (sameValue(beforeSettings[key], afterSettings[key])) continue;
     if (key === "payroll") {
-      if (payrollSettingsAffectCalculation(beforeSettings.payroll, afterSettings.payroll)) return true;
+      if (payrollSettingsAffectCalculation(beforeSettings.payroll, afterSettings.payroll))
+        return true;
       continue;
     }
     if (ORG_POSTING_ONLY_KEYS.has(key)) continue;

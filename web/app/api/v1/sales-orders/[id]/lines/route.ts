@@ -14,5 +14,6 @@ async function handleV1PATCH(
 
 export const PATCH = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1PATCH(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1PATCH(request, { params: Promise.resolve(params as never) } as never),
 });

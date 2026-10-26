@@ -54,7 +54,8 @@ const searchAssets: AssistantToolDef = {
       const like = `%${a.query}%`;
       where = sql`${where} and (f.asset_number ilike ${like} or f.name ilike ${like})`;
     }
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select f.id, f.asset_number as "assetNumber", f.name, f.status,
              f.acquired_on as "acquiredOn", f.in_service_on as "inServiceOn",
              f.acquisition_cost as "acquisitionCost", c.name as category,
@@ -66,14 +67,21 @@ const searchAssets: AssistantToolDef = {
        where ${where}
        order by f.asset_number nulls last, f.name
        limit ${limit}
-    `, "objects");
-    const totals = (await db.execute<{ n: string; cost: string; nbv: string }>(sql`
+    `,
+      "objects",
+    );
+    const totals = (
+      await db.execute<{ n: string; cost: string; nbv: string }>(
+        sql`
       select count(*) as n, coalesce(sum(f.acquisition_cost), 0) as cost,
              coalesce(sum(dep.carrying_value), 0) as nbv
         from fixed_assets f
         ${primaryAccumJoin}
        where ${where}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const total = Number(totals?.n ?? 0);
     return {
       ok: true,
@@ -106,7 +114,11 @@ const getAsset: AssistantToolDef = {
   inputSchema: z.object({
     id: uuidInput.describe("Asset id from search_assets"),
     bookId: uuidInput.optional().describe("Restrict the schedule page to one accounting book"),
-    query: z.string().max(100).optional().describe("Filter schedule lines by period, book, or source"),
+    query: z
+      .string()
+      .max(100)
+      .optional()
+      .describe("Filter schedule lines by period, book, or source"),
     page: z.number().int().min(1).max(100).optional().describe("Schedule page, default 1"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
@@ -144,7 +156,8 @@ const assetTaxPools: AssistantToolDef = {
       return { ok: false, error: "fixedAssets_feature_disabled" };
     }
     const a = raw as { taxYear: number };
-    const rows = await db.execute<Record<string, string>>(sql`
+    const rows = await db.execute<Record<string, string>>(
+      sql`
       select pp.tax_year as "taxYear", tp.class_code as "classCode", tp.regime,
              pp.opening_balance::text as "openingBalance", pp.additions::text as additions,
              pp.dispositions::text as dispositions, pp.allowance::text as allowance,
@@ -155,7 +168,9 @@ const assetTaxPools: AssistantToolDef = {
        where pp.org_id = ${authz.user.orgId} and pp.tax_year = ${a.taxYear}
          ${subsidiaryVisibleFilter(sql`tp.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by tp.class_code
-    `, "objects");
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: {
@@ -178,13 +193,24 @@ const assetTaxPools: AssistantToolDef = {
 
 const searchLeaseAgreements: AssistantToolDef = {
   name: "search_lease_agreements",
-  description: "Find lessee lease agreements by number or description, with contractual timing, currency and status. Read-only; returns links to the native lease workpaper.",
+  description:
+    "Find lessee lease agreements by number or description, with contractual timing, currency and status. Read-only; returns links to the native lease workpaper.",
   category: "search",
   gate: assetGate(),
   feature: "fixedAssets",
   inputSchema: z.object({
-    query: z.string().max(100).optional().describe("Optional text to match against the lease number or description"),
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum number of lease agreements to return, from 1 to 50; defaults to 20"),
+    query: z
+      .string()
+      .max(100)
+      .optional()
+      .describe("Optional text to match against the lease number or description"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum number of lease agreements to return, from 1 to 50; defaults to 20"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "fixedAssets")))
@@ -196,27 +222,38 @@ const searchLeaseAgreements: AssistantToolDef = {
       const query = `%${input.query}%`;
       predicate = sql`${predicate} and (la.lease_number ilike ${query} or la.description ilike ${query})`;
     }
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select la.id,la.lease_number,la.description,la.status,la.subsidiary_id,
         la.commencement_on::text,la.currency,la.payment_amount::text,
         la.payment_timing,la.payment_frequency,la.term_periods,la.revision
       from lease_agreements la where ${predicate}
-      order by la.lease_number,la.id limit ${limit + 1}`, "objects");
-    return { ok: true, data: {
-      items: rows.slice(0, limit).map((row) => ({ ...row, href: `/assets/leases?lease=${row.id}` })),
-      truncated: rows.length > limit,
-      href: "/assets/leases",
-    } };
+      order by la.lease_number,la.id limit ${limit + 1}`,
+      "objects",
+    );
+    return {
+      ok: true,
+      data: {
+        items: rows
+          .slice(0, limit)
+          .map((row) => ({ ...row, href: `/assets/leases?lease=${row.id}` })),
+        truncated: rows.length > limit,
+        href: "/assets/leases",
+      },
+    };
   },
 };
 
 const getLeaseAgreement: AssistantToolDef = {
   name: "get_lease_agreement",
-  description: "Read a lessee lease agreement, its versioned payment/accrual schedule, and approval changes. Reuses the native lease drawer; read-only.",
+  description:
+    "Read a lessee lease agreement, its versioned payment/accrual schedule, and approval changes. Reuses the native lease drawer; read-only.",
   category: "read",
   gate: assetGate(),
   feature: "fixedAssets",
-  inputSchema: z.object({ id: uuidInput.describe("Lease agreement id from search_lease_agreements") }),
+  inputSchema: z.object({
+    id: uuidInput.describe("Lease agreement id from search_lease_agreements"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "fixedAssets")))
       return { ok: false, error: "fixedAssets_feature_disabled" };
@@ -227,4 +264,10 @@ const getLeaseAgreement: AssistantToolDef = {
   },
 };
 
-export const ASSETS_TOOLS: AssistantToolDef[] = [searchAssets, getAsset, assetTaxPools, searchLeaseAgreements, getLeaseAgreement];
+export const ASSETS_TOOLS: AssistantToolDef[] = [
+  searchAssets,
+  getAsset,
+  assetTaxPools,
+  searchLeaseAgreements,
+  getLeaseAgreement,
+];

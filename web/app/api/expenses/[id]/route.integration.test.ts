@@ -1,27 +1,49 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
-import test from 'node:test'
-import { PgDialect } from 'drizzle-orm/pg-core'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
+import test from "node:test";
+import { PgDialect } from "drizzle-orm/pg-core";
 
-const root = pathToFileURL(process.cwd() + '/').href
-const state: { orgId: string; actorId: string; afterRead: ((text: string) => Promise<void>) | null } = {
-  orgId: '', actorId: '', afterRead: null,
-}
-Object.assign(globalThis, { __expenseNativeState: state, __expenseSqlText: (query: Parameters<PgDialect["sqlToQuery"]>[0]) => new PgDialect().sqlToQuery(query).sql })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const root = pathToFileURL(process.cwd() + "/").href;
+const state: {
+  orgId: string;
+  actorId: string;
+  afterRead: ((text: string) => Promise<void>) | null;
+} = {
+  orgId: "",
+  actorId: "",
+  afterRead: null,
+};
+Object.assign(globalThis, {
+  __expenseNativeState: state,
+  __expenseSqlText: (query: Parameters<PgDialect["sqlToQuery"]>[0]) =>
+    new PgDialect().sqlToQuery(query).sql,
+});
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return virtual(`
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return virtual(`
       export async function currentUser() { const s=globalThis.__expenseNativeState; return {
         id:s.actorId, orgId:s.orgId, email:'expense@scratch.test', name:'Expense clerk', roles:[],
         envKind:'production', productionOrgId:s.orgId, homeUserId:s.actorId, homeOrgId:s.orgId, isSuperAdmin:false
       }; }
-    `)
-    if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
-    if (specifier === '@openbooks/engine/platform/db' && (context.parentURL?.endsWith('/web/lib/expenses.ts') || decodeURIComponent(context.parentURL ?? '').endsWith('/web/app/api/expenses/[id]/route.ts'))) return virtual(`
-      import { db as realDb } from ${JSON.stringify(root + 'engine/src/platform/db.ts')};
+    `);
+    if (specifier === "next-intl/server")
+      return virtual(
+        'export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}',
+      );
+    if (
+      specifier === "@openbooks/engine/platform/db" &&
+      (context.parentURL?.endsWith("/web/lib/expenses.ts") ||
+        decodeURIComponent(context.parentURL ?? "").endsWith("/web/app/api/expenses/[id]/route.ts"))
+    )
+      return virtual(`
+      import { db as realDb } from ${JSON.stringify(root + "engine/src/platform/db.ts")};
       export const db = new Proxy(realDb, { get(target, key) {
         if (key !== 'execute') return Reflect.get(target, key);
         return async (query, mode) => {
@@ -30,212 +52,459 @@ registerHooks({
           return result;
         };
       }});
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures')
-const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
-const { submitAndReleaseIfUngated } = await import('@openbooks/engine/flows/submit')
+});
+const { db, pool, withBypassContext, withOrgContext } =
+  await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } =
+  await import("@openbooks/engine/testing/fixtures");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
+const { submitAndReleaseIfUngated } = await import("@openbooks/engine/flows/submit");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-const { assertExpenseEmployee } = await import('@openbooks/engine/records/expense-validation')
-const { GET, PATCH, DELETE } = await import('./route')
+const { assertExpenseEmployee } = await import("@openbooks/engine/records/expense-validation");
+const { GET, PATCH, DELETE } = await import("./route");
 
-async function fixture(work: (org: Awaited<ReturnType<typeof createScratchOrg>>, id: string) => Promise<void>) {
-  const org = await withBypassContext(() => createScratchOrg())
+async function fixture(
+  work: (org: Awaited<ReturnType<typeof createScratchOrg>>, id: string) => Promise<void>,
+) {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.orgId = org.orgId
-    state.actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Expense clerk', 'accountant'))
-    await withBypassContext(() => grantScratchPermissions(org.orgId, state.actorId, ['expenses.read','expenses.create','ap.post']))
-    const id = randomUUID()
+    state.orgId = org.orgId;
+    state.actorId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Expense clerk", "accountant"),
+    );
+    await withBypassContext(() =>
+      grantScratchPermissions(org.orgId, state.actorId, [
+        "expenses.read",
+        "expenses.create",
+        "ap.post",
+      ]),
+    );
+    const id = randomUUID();
     await withBypassContext(async () => {
       await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, memo)
-        values (${id}, ${org.orgId}, 'expense_report', 'draft', ${'EXP-' + id}, ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', 'original')`)
+        values (${id}, ${org.orgId}, 'expense_report', 'draft', ${"EXP-" + id}, ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', 'original')`);
       await db.execute(sql`insert into document_lines (org_id, document_id, line_number, account_id, quantity, unit_price, amount, description, tax_amount)
-        values (${org.orgId}, ${id}, 1, ${org.accounts.cogs}, '1', '10', '10', 'original line', '0')`)
-    })
-    await work(org, id)
+        values (${org.orgId}, ${id}, 1, ${org.accounts.cogs}, '1', '10', '10', 'original line', '0')`);
+    });
+    await work(org, id);
   } finally {
-    state.afterRead = null
-    await dropScratchOrg(org.orgId)
+    state.afterRead = null;
+    await dropScratchOrg(org.orgId);
   }
 }
-const get = (id: string) => withOrgContext(state.orgId, () => GET(new Request('http://expense.test'), { params: Promise.resolve({ id }) }))
-const del = (id: string, body: unknown) => withOrgContext(state.orgId, () => DELETE(new Request('http://expense.test', { method: 'DELETE', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }))
+const get = (id: string) =>
+  withOrgContext(state.orgId, () =>
+    GET(new Request("http://expense.test"), { params: Promise.resolve({ id }) }),
+  );
+const del = (id: string, body: unknown) =>
+  withOrgContext(state.orgId, () =>
+    DELETE(new Request("http://expense.test", { method: "DELETE", body: JSON.stringify(body) }), {
+      params: Promise.resolve({ id }),
+    }),
+  );
 async function exists(id: string) {
-  return (await withOrgContext(state.orgId, () => db.execute<{ id: string }>(sql`select id from documents where id=${id} and org_id=${state.orgId}`, 'objects'))).length > 0
+  return (
+    (
+      await withOrgContext(state.orgId, () =>
+        db.execute<{ id: string }>(
+          sql`select id from documents where id=${id} and org_id=${state.orgId}`,
+          "objects",
+        ),
+      )
+    ).length > 0
+  );
 }
-const patch = (id: string, body: unknown) => withOrgContext(state.orgId, () => PATCH(new Request('http://expense.test', { method: 'PATCH', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }))
+const patch = (id: string, body: unknown) =>
+  withOrgContext(state.orgId, () =>
+    PATCH(new Request("http://expense.test", { method: "PATCH", body: JSON.stringify(body) }), {
+      params: Promise.resolve({ id }),
+    }),
+  );
 async function revision(id: string) {
-  return (await withOrgContext(state.orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${state.orgId}`, 'objects')))[0]!.revision
+  return (
+    await withOrgContext(state.orgId, () =>
+      db.execute<{ revision: string }>(
+        sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${state.orgId}`,
+        "objects",
+      ),
+    )
+  )[0]!.revision;
 }
 
-test('expense GET keeps header, lines, exact revision and subsequent OCC save coherent across a committed writer', async () => {
+test("expense GET keeps header, lines, exact revision and subsequent OCC save coherent across a committed writer", async () => {
   await fixture(async (org, id) => {
-    const oldRevision = await revision(id)
+    const oldRevision = await revision(id);
     state.afterRead = async (text) => {
-      if (!text.includes('from documents d')) return
-      state.afterRead = null
+      if (!text.includes("from documents d")) return;
+      state.afterRead = null;
       await db.transaction(async (tx) => {
-        await tx.execute(sql`update documents set memo='winner', total='20', subtotal='20', updated_at=updated_at + interval '1 microsecond' where id=${id} and org_id=${org.orgId}`)
-        await tx.execute(sql`update document_lines set amount='20', description='winner line' where document_id=${id} and org_id=${org.orgId}`)
-      })
-    }
-    const response = await get(id)
-    assert.equal(response.status, 200)
-    const payload = await response.json()
-    const saved = await patch(id, { expectedUpdatedAt: payload.doc.updated_at, memo: payload.doc.memo, lines: [{ accountId: org.accounts.cogs, amount: '10', description: 'old drawer', settlementType: 'out_of_pocket' }] })
-    const current = (await withOrgContext(org.orgId, () => db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`, 'objects')))[0]!
-    console.log(JSON.stringify({ payloadMemo: payload.doc.memo, payloadLine: payload.lines[0].description, oldRevision, payloadRevision: payload.doc.updated_at, saveStatus: saved.status, finalMemo: current.memo }))
-    assert.equal(saved.status, 409, 'a stale drawer must not receive the winner revision and overwrite it')
-    assert.equal(current.memo, 'winner')
-    assert.equal(payload.lines[0].description, 'original line')
-    assert.equal(payload.lines[0].amount, '10.0000')
-    assert.equal(payload.doc.updated_at, oldRevision)
-  })
-})
+        await tx.execute(
+          sql`update documents set memo='winner', total='20', subtotal='20', updated_at=updated_at + interval '1 microsecond' where id=${id} and org_id=${org.orgId}`,
+        );
+        await tx.execute(
+          sql`update document_lines set amount='20', description='winner line' where document_id=${id} and org_id=${org.orgId}`,
+        );
+      });
+    };
+    const response = await get(id);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    const saved = await patch(id, {
+      expectedUpdatedAt: payload.doc.updated_at,
+      memo: payload.doc.memo,
+      lines: [
+        {
+          accountId: org.accounts.cogs,
+          amount: "10",
+          description: "old drawer",
+          settlementType: "out_of_pocket",
+        },
+      ],
+    });
+    const current = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`, "objects"),
+      )
+    )[0]!;
+    console.log(
+      JSON.stringify({
+        payloadMemo: payload.doc.memo,
+        payloadLine: payload.lines[0].description,
+        oldRevision,
+        payloadRevision: payload.doc.updated_at,
+        saveStatus: saved.status,
+        finalMemo: current.memo,
+      }),
+    );
+    assert.equal(
+      saved.status,
+      409,
+      "a stale drawer must not receive the winner revision and overwrite it",
+    );
+    assert.equal(current.memo, "winner");
+    assert.equal(payload.lines[0].description, "original line");
+    assert.equal(payload.lines[0].amount, "10.0000");
+    assert.equal(payload.doc.updated_at, oldRevision);
+  });
+});
 
-test('expense draft with omitted employee cannot submit or post without reimbursable open-item evidence', async () => {
+test("expense draft with omitted employee cannot submit or post without reimbursable open-item evidence", async () => {
   await fixture(async (org, id) => {
-    const saved = await patch(id, { expectedUpdatedAt: await revision(id), lines: [{ accountId: org.accounts.cogs, amount: '123.45', settlementType: 'out_of_pocket' }] })
-    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
-    const before = await revision(id)
-    let rejection: unknown
+    const saved = await patch(id, {
+      expectedUpdatedAt: await revision(id),
+      lines: [{ accountId: org.accounts.cogs, amount: "123.45", settlementType: "out_of_pocket" }],
+    });
+    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
+    const before = await revision(id);
+    let rejection: unknown;
     try {
-      await withOrgContext(org.orgId, () => submitAndReleaseIfUngated('expense_report', id, state.actorId))
-    } catch (error) { rejection = error }
+      await withOrgContext(org.orgId, () =>
+        submitAndReleaseIfUngated("expense_report", id, state.actorId),
+      );
+    } catch (error) {
+      rejection = error;
+    }
     if (!rejection) {
-      const entry = await withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable: org.accounts.ap } }))
-      console.log('BEFORE missing employee posted', await withOrgContext(org.orgId, () => db.execute(sql`select party_id, is_open_item, amount::text from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`, 'objects')))
+      const entry = await withOrgContext(org.orgId, () =>
+        postDocument(id, {
+          control: {
+            ar: org.accounts.ar,
+            ap: org.accounts.ap,
+            bank: org.accounts.bank,
+            employeePayable: org.accounts.ap,
+          },
+        }),
+      );
+      console.log(
+        "BEFORE missing employee posted",
+        await withOrgContext(org.orgId, () =>
+          db.execute(
+            sql`select party_id, is_open_item, amount::text from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`,
+            "objects",
+          ),
+        ),
+      );
     }
-    assert.match(String(rejection), /employee/i, 'submission must fail at the domain boundary')
-    const header = (await withOrgContext(org.orgId, () => db.execute<{ status: string; submitted_at: unknown; posted_entry_id: unknown }>(sql`select status, submitted_at, posted_entry_id from documents where id=${id}`, 'objects')))[0]!
-    assert.equal(header.status, 'draft')
-    assert.equal(header.submitted_at, null)
-    assert.equal(header.posted_entry_id, null)
-    assert.equal(await revision(id), before, 'rejected submission rolls back revision and evidence')
-    await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`))
-    await assert.rejects(withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })), /employee/i)
-    assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`select id from journal_entries where source_document_id=${id}`, 'objects'))).length, 0)
-  })
-})
+    assert.match(String(rejection), /employee/i, "submission must fail at the domain boundary");
+    const header = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ status: string; submitted_at: unknown; posted_entry_id: unknown }>(
+          sql`select status, submitted_at, posted_entry_id from documents where id=${id}`,
+          "objects",
+        ),
+      )
+    )[0]!;
+    assert.equal(header.status, "draft");
+    assert.equal(header.submitted_at, null);
+    assert.equal(header.posted_entry_id, null);
+    assert.equal(
+      await revision(id),
+      before,
+      "rejected submission rolls back revision and evidence",
+    );
+    await withBypassContext(() =>
+      db.execute(sql`update documents set status='approved' where id=${id}`),
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () =>
+        postDocument(id, {
+          control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+        }),
+      ),
+      /employee/i,
+    );
+    assert.equal(
+      (
+        await withOrgContext(org.orgId, () =>
+          db.execute(sql`select id from journal_entries where source_document_id=${id}`, "objects"),
+        )
+      ).length,
+      0,
+    );
+  });
+});
 
-test('expense GET and PATCH scope checks cannot authorize a different subsidiary snapshot', async () => {
+test("expense GET and PATCH scope checks cannot authorize a different subsidiary snapshot", async () => {
   await fixture(async (org, id) => {
-    const otherSub = randomUUID()
-    await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country) values (${otherSub}, ${org.orgId}, ${org.subsidiaryId}, 'Other entity', 'CAD', 'CA')`))
-    await withBypassContext(() => db.execute(sql`update app_roles
-      set subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[org.subsidiaryId]})}::jsonb
-      where org_id=${org.orgId} and key='accountant'`))
+    const otherSub = randomUUID();
+    await withBypassContext(() =>
+      db.execute(
+        sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country) values (${otherSub}, ${org.orgId}, ${org.subsidiaryId}, 'Other entity', 'CAD', 'CA')`,
+      ),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`update app_roles
+      set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+      where org_id=${org.orgId} and key='accountant'`),
+    );
     state.afterRead = async (text) => {
-      if (!text.includes('from documents')) return
-      state.afterRead = null
-      await db.execute(sql`update documents set subsidiary_id=${otherSub}, memo='restricted entity' where id=${id} and org_id=${org.orgId}`)
-    }
-    const response = await get(id)
+      if (!text.includes("from documents")) return;
+      state.afterRead = null;
+      await db.execute(
+        sql`update documents set subsidiary_id=${otherSub}, memo='restricted entity' where id=${id} and org_id=${org.orgId}`,
+      );
+    };
+    const response = await get(id);
     if (response.status === 200) {
-      const payload = await response.json()
-      assert.equal(payload.doc.subsidiary_id, org.subsidiaryId, 'only the authorized snapshot can be disclosed')
-      assert.equal(payload.doc.memo, 'original')
-    } else assert.equal(response.status, 404)
-    assert.equal((await get(id)).status, 404)
-    await withBypassContext(() => db.execute(sql`update documents set subsidiary_id=${org.subsidiaryId}, memo='original' where id=${id}`))
-    const before = await revision(id)
-    let rehomedRevision = ''
+      const payload = await response.json();
+      assert.equal(
+        payload.doc.subsidiary_id,
+        org.subsidiaryId,
+        "only the authorized snapshot can be disclosed",
+      );
+      assert.equal(payload.doc.memo, "original");
+    } else assert.equal(response.status, 404);
+    assert.equal((await get(id)).status, 404);
+    await withBypassContext(() =>
+      db.execute(
+        sql`update documents set subsidiary_id=${org.subsidiaryId}, memo='original' where id=${id}`,
+      ),
+    );
+    const before = await revision(id);
+    let rehomedRevision = "";
     state.afterRead = async (text) => {
-      if (!text.includes('from documents')) return
-      state.afterRead = null
-      await db.execute(sql`update documents set subsidiary_id=${otherSub} where id=${id} and org_id=${org.orgId}`)
-      rehomedRevision = await revision(id)
-    }
-    const denied = await patch(id, { expectedUpdatedAt: before, memo: 'unauthorized overwrite' })
-    assert.equal(denied.status, 404)
-    assert.equal((await withOrgContext(org.orgId, () => db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`, 'objects')))[0]!.memo, 'original')
-    assert.equal(await revision(id), rehomedRevision, 'denied save leaves the winning rehome revision unchanged')
-  })
-})
+      if (!text.includes("from documents")) return;
+      state.afterRead = null;
+      await db.execute(
+        sql`update documents set subsidiary_id=${otherSub} where id=${id} and org_id=${org.orgId}`,
+      );
+      rehomedRevision = await revision(id);
+    };
+    const denied = await patch(id, { expectedUpdatedAt: before, memo: "unauthorized overwrite" });
+    assert.equal(denied.status, 404);
+    assert.equal(
+      (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`, "objects"),
+        )
+      )[0]!.memo,
+      "original",
+    );
+    assert.equal(
+      await revision(id),
+      rehomedRevision,
+      "denied save leaves the winning rehome revision unchanged",
+    );
+  });
+});
 
-test('expense payload preserves every financial decimal as an exact string', async () => {
+test("expense payload preserves every financial decimal as an exact string", async () => {
   await fixture(async (_org, id) => {
-    await withBypassContext(() => db.transaction(async (tx) => {
-      await tx.execute(sql`update documents set subtotal='999999999999999.9998', tax_total='0.0001', total='999999999999999.9999', fx_rate='1.1234567890' where id=${id}`)
-      await tx.execute(sql`update document_lines set amount='999999999999999.9998', tax_input_amount='999999999999999.9997', tax_amount='0.0001' where document_id=${id}`)
-    }))
-    const payload = await (await get(id)).json()
-    assert.equal(payload.doc.subtotal, '999999999999999.9998')
-    assert.equal(payload.doc.total, '999999999999999.9999')
-    assert.equal(payload.doc.fx_rate, '1.1234567890')
-    assert.equal(payload.lines[0].amount, '999999999999999.9998')
-    assert.equal(payload.lines[0].tax_input_amount, '999999999999999.9997')
-    assert.equal(payload.lines[0].tax_amount, '0.0001')
-  })
-})
+    await withBypassContext(() =>
+      db.transaction(async (tx) => {
+        await tx.execute(
+          sql`update documents set subtotal='999999999999999.9998', tax_total='0.0001', total='999999999999999.9999', fx_rate='1.1234567890' where id=${id}`,
+        );
+        await tx.execute(
+          sql`update document_lines set amount='999999999999999.9998', tax_input_amount='999999999999999.9997', tax_amount='0.0001' where document_id=${id}`,
+        );
+      }),
+    );
+    const payload = await (await get(id)).json();
+    assert.equal(payload.doc.subtotal, "999999999999999.9998");
+    assert.equal(payload.doc.total, "999999999999999.9999");
+    assert.equal(payload.doc.fx_rate, "1.1234567890");
+    assert.equal(payload.lines[0].amount, "999999999999999.9998");
+    assert.equal(payload.lines[0].tax_input_amount, "999999999999999.9997");
+    assert.equal(payload.lines[0].tax_amount, "0.0001");
+  });
+});
 
-test('expense PATCH response cannot bless stale content with a later writer revision', async () => {
+test("expense PATCH response cannot bless stale content with a later writer revision", async () => {
   await fixture(async (org, id) => {
-    const before = await revision(id)
+    const before = await revision(id);
     state.afterRead = async (text) => {
-      if (!text.includes('from documents d')) return
-      state.afterRead = null
+      if (!text.includes("from documents d")) return;
+      state.afterRead = null;
       await db.transaction(async (tx) => {
-        await tx.execute(sql`update documents set memo='later winner', updated_at=updated_at + interval '1 microsecond' where id=${id} and org_id=${org.orgId}`)
-        await tx.execute(sql`update document_lines set description='later winner line' where document_id=${id}`)
-      })
-    }
-    const saved = await patch(id, { expectedUpdatedAt: before, memo: 'first save' })
-    assert.equal(saved.status, 200)
-    const payload = await saved.json()
-    assert.equal(payload.doc.memo, 'first save')
-    assert.equal(payload.lines[0].description, 'original line')
-    assert.equal((await patch(id, { expectedUpdatedAt: payload.doc.updated_at, memo: payload.doc.memo })).status, 409)
-    assert.equal((await withOrgContext(org.orgId, () => db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`, 'objects')))[0]!.memo, 'later winner')
-  })
-})
+        await tx.execute(
+          sql`update documents set memo='later winner', updated_at=updated_at + interval '1 microsecond' where id=${id} and org_id=${org.orgId}`,
+        );
+        await tx.execute(
+          sql`update document_lines set description='later winner line' where document_id=${id}`,
+        );
+      });
+    };
+    const saved = await patch(id, { expectedUpdatedAt: before, memo: "first save" });
+    assert.equal(saved.status, 200);
+    const payload = await saved.json();
+    assert.equal(payload.doc.memo, "first save");
+    assert.equal(payload.lines[0].description, "original line");
+    assert.equal(
+      (await patch(id, { expectedUpdatedAt: payload.doc.updated_at, memo: payload.doc.memo }))
+        .status,
+      409,
+    );
+    assert.equal(
+      (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`, "objects"),
+        )
+      )[0]!.memo,
+      "later winner",
+    );
+  });
+});
 
-test('expense PATCH refuses a party from another organization but saves an own-org party', async () => {
+test("expense PATCH refuses a party from another organization but saves an own-org party", async () => {
   await fixture(async (org, id) => {
     // A foreign UUID passes the global documents FK, so the route itself must
     // refuse it: the draft must never store another tenant's party.
-    const denied = await patch(id, { expectedUpdatedAt: await revision(id), partyId: randomUUID() })
-    assert.equal(denied.status, 404)
+    const denied = await patch(id, {
+      expectedUpdatedAt: await revision(id),
+      partyId: randomUUID(),
+    });
+    assert.equal(denied.status, 404);
     assert.equal(
-      (await withOrgContext(org.orgId, () => db.execute<{ party_id: string | null }>(sql`select party_id from documents where id=${id}`, 'objects')))[0]!.party_id,
+      (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ party_id: string | null }>(
+            sql`select party_id from documents where id=${id}`,
+            "objects",
+          ),
+        )
+      )[0]!.party_id,
       null,
-    )
+    );
     // An own-org party saves even without an employee role: the employee-role
     // gate stays at submit/post so a draft can precede the HR record.
-    const saved = await patch(id, { expectedUpdatedAt: await revision(id), partyId: org.vendorId })
-    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
+    const saved = await patch(id, { expectedUpdatedAt: await revision(id), partyId: org.vendorId });
+    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
     assert.equal(
-      (await withOrgContext(org.orgId, () => db.execute<{ party_id: string | null }>(sql`select party_id from documents where id=${id}`, 'objects')))[0]!.party_id,
+      (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ party_id: string | null }>(
+            sql`select party_id from documents where id=${id}`,
+            "objects",
+          ),
+        )
+      )[0]!.party_id,
       org.vendorId,
-    )
-  })
-})
+    );
+  });
+});
 
-test('expense employee identity rejects vendor-only parties but preserves former dual-role employee reimbursements', async () => {
+test("expense employee identity rejects vendor-only parties but preserves former dual-role employee reimbursements", async () => {
   await fixture(async (org, id) => {
-    await withBypassContext(() => db.execute(sql`update documents set party_id=${org.vendorId} where id=${id}`))
-    const before = await revision(id)
-    await assert.rejects(withOrgContext(org.orgId, () => submitAndReleaseIfUngated('expense_report', id, state.actorId)), /employee in this organization/)
-    assert.equal(await revision(id), before)
-    await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`))
-    await assert.rejects(withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })), /employee in this organization/)
-    assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`select id from journal_entries where source_document_id=${id}`, 'objects'))).length, 0)
-    await withBypassContext(() => db.execute(sql`update documents set status='draft' where id=${id}`))
-    await withBypassContext(() => db.execute(sql`insert into employee_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.vendorId}, false)`))
-    await withBypassContext(() => db.execute(sql`update parties set is_active=false where id=${org.vendorId}`))
-    await assert.rejects(assertExpenseEmployee(db, { kind: 'expense_report', orgId: randomUUID(), partyId: org.vendorId }), /employee in this organization/)
-    assert.equal((await withOrgContext(org.orgId, () => submitAndReleaseIfUngated('expense_report', id, state.actorId))).autoApproved, true)
-    const entry = await withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }))
-    const control = (await withOrgContext(org.orgId, () => db.execute<{ party_id: string; is_open_item: boolean; amount: string }>(sql`select party_id, is_open_item, amount::text from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`, 'objects')))[0]!
-    assert.deepEqual(control, { party_id: org.vendorId, is_open_item: true, amount: '-10.0000' })
-  })
-})
+    await withBypassContext(() =>
+      db.execute(sql`update documents set party_id=${org.vendorId} where id=${id}`),
+    );
+    const before = await revision(id);
+    await assert.rejects(
+      withOrgContext(org.orgId, () =>
+        submitAndReleaseIfUngated("expense_report", id, state.actorId),
+      ),
+      /employee in this organization/,
+    );
+    assert.equal(await revision(id), before);
+    await withBypassContext(() =>
+      db.execute(sql`update documents set status='approved' where id=${id}`),
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () =>
+        postDocument(id, {
+          control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+        }),
+      ),
+      /employee in this organization/,
+    );
+    assert.equal(
+      (
+        await withOrgContext(org.orgId, () =>
+          db.execute(sql`select id from journal_entries where source_document_id=${id}`, "objects"),
+        )
+      ).length,
+      0,
+    );
+    await withBypassContext(() =>
+      db.execute(sql`update documents set status='draft' where id=${id}`),
+    );
+    await withBypassContext(() =>
+      db.execute(
+        sql`insert into employee_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.vendorId}, false)`,
+      ),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`update parties set is_active=false where id=${org.vendorId}`),
+    );
+    await assert.rejects(
+      assertExpenseEmployee(db, {
+        kind: "expense_report",
+        orgId: randomUUID(),
+        partyId: org.vendorId,
+      }),
+      /employee in this organization/,
+    );
+    assert.equal(
+      (
+        await withOrgContext(org.orgId, () =>
+          submitAndReleaseIfUngated("expense_report", id, state.actorId),
+        )
+      ).autoApproved,
+      true,
+    );
+    const entry = await withOrgContext(org.orgId, () =>
+      postDocument(id, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      }),
+    );
+    const control = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ party_id: string; is_open_item: boolean; amount: string }>(
+          sql`select party_id, is_open_item, amount::text from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`,
+          "objects",
+        ),
+      )
+    )[0]!;
+    assert.deepEqual(control, { party_id: org.vendorId, is_open_item: true, amount: "-10.0000" });
+  });
+});
 
-test('expense PATCH preserves omitted required header custom fields on a partial edit', async () => {
+test("expense PATCH preserves omitted required header custom fields on a partial edit", async () => {
   await fixture(async (org, id) => {
     await withBypassContext(async () => {
       await db.execute(sql`
@@ -244,174 +513,323 @@ test('expense PATCH preserves omitted required header custom fields on a partial
         values
           (${randomUUID()}, ${org.orgId}, 'documents', 'expense_report', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${state.actorId}, ${state.actorId}),
           (${randomUUID()}, ${org.orgId}, 'documents', 'expense_report', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${state.actorId}, ${state.actorId})
-      `)
-      await db.execute(sql`update documents set custom = '{"required_code":"R-1"}'::jsonb where id=${id} and org_id=${org.orgId}`)
-    })
-    const saved = await patch(id, { expectedUpdatedAt: await revision(id), custom: { optional_note: 'updated' } })
-    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
-    const stored = (await withOrgContext(org.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${org.orgId}`, 'objects')))[0]?.custom
-    assert.deepEqual(stored, { required_code: 'R-1', optional_note: 'updated' })
-  })
-})
+      `);
+      await db.execute(
+        sql`update documents set custom = '{"required_code":"R-1"}'::jsonb where id=${id} and org_id=${org.orgId}`,
+      );
+    });
+    const saved = await patch(id, {
+      expectedUpdatedAt: await revision(id),
+      custom: { optional_note: "updated" },
+    });
+    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
+    const stored = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ custom: Record<string, unknown> }>(
+          sql`select custom from documents where id=${id} and org_id=${org.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]?.custom;
+    assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+  });
+});
 
-test('expense PATCH refuses a line account from another organization but saves an own-org account', async () => {
+test("expense PATCH refuses a line account from another organization but saves an own-org account", async () => {
   await fixture(async (org, id) => {
-    const foreign = await withBypassContext(() => createScratchOrg())
+    const foreign = await withBypassContext(() => createScratchOrg());
     try {
-      const foreignAccount = (await withOrgContext(foreign.orgId, () => db.execute<{ id: string }>(sql`select id from accounts where org_id=${foreign.orgId} and is_active and not is_summary limit 1`, 'objects')))[0]!.id
+      const foreignAccount = (
+        await withOrgContext(foreign.orgId, () =>
+          db.execute<{ id: string }>(
+            sql`select id from accounts where org_id=${foreign.orgId} and is_active and not is_summary limit 1`,
+            "objects",
+          ),
+        )
+      )[0]!.id;
       // The tenant-coherent lines FK would kill a foreign account at the
       // insert as a 500, so the route itself refuses it with a domain 404.
-      const denied = await patch(id, { expectedUpdatedAt: await revision(id), lines: [{ accountId: foreignAccount, amount: '10', description: 'foreign account', settlementType: 'out_of_pocket' }] })
-      assert.equal(denied.status, 404)
+      const denied = await patch(id, {
+        expectedUpdatedAt: await revision(id),
+        lines: [
+          {
+            accountId: foreignAccount,
+            amount: "10",
+            description: "foreign account",
+            settlementType: "out_of_pocket",
+          },
+        ],
+      });
+      assert.equal(denied.status, 404);
       assert.equal(
-        (await withOrgContext(org.orgId, () => db.execute<{ account_id: string }>(sql`select account_id from document_lines where document_id=${id}`, 'objects')))[0]!.account_id,
+        (
+          await withOrgContext(org.orgId, () =>
+            db.execute<{ account_id: string }>(
+              sql`select account_id from document_lines where document_id=${id}`,
+              "objects",
+            ),
+          )
+        )[0]!.account_id,
         org.accounts.cogs,
-        'the refused save stores no foreign account',
-      )
+        "the refused save stores no foreign account",
+      );
       // An own-org postable account still saves.
-      const saved = await patch(id, { expectedUpdatedAt: await revision(id), lines: [{ accountId: org.accounts.cogs, amount: '10', description: 'home account', settlementType: 'out_of_pocket' }] })
-      assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
+      const saved = await patch(id, {
+        expectedUpdatedAt: await revision(id),
+        lines: [
+          {
+            accountId: org.accounts.cogs,
+            amount: "10",
+            description: "home account",
+            settlementType: "out_of_pocket",
+          },
+        ],
+      });
+      assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
     } finally {
-      await dropScratchOrg(foreign.orgId)
+      await dropScratchOrg(foreign.orgId);
     }
-  })
-})
+  });
+});
 
-
-test('expense DELETE without a revision token is rejected as a 409 without deleting', async () => {
+test("expense DELETE without a revision token is rejected as a 409 without deleting", async () => {
   await fixture(async (org, id) => {
-    const response = await del(id, {})
-    assert.equal(response.status, 409, JSON.stringify(await response.clone().json()))
-    assert.equal(await exists(id), true, 'the draft must survive a token-less delete')
-  })
-})
+    const response = await del(id, {});
+    assert.equal(response.status, 409, JSON.stringify(await response.clone().json()));
+    assert.equal(await exists(id), true, "the draft must survive a token-less delete");
+  });
+});
 
-test('expense DELETE with a stale revision token is rejected as a 409 without deleting', async () => {
+test("expense DELETE with a stale revision token is rejected as a 409 without deleting", async () => {
   await fixture(async (org, id) => {
-    const stale = await revision(id)
-    await withBypassContext(() => db.execute(sql`update documents set memo='concurrent writer', updated_at=updated_at + interval '1 microsecond' where id=${id} and org_id=${org.orgId}`))
-    const response = await del(id, { expectedUpdatedAt: stale })
-    assert.equal(response.status, 409, JSON.stringify(await response.clone().json()))
-    assert.equal(await exists(id), true, 'the draft must survive a stale delete')
-  })
-})
+    const stale = await revision(id);
+    await withBypassContext(() =>
+      db.execute(
+        sql`update documents set memo='concurrent writer', updated_at=updated_at + interval '1 microsecond' where id=${id} and org_id=${org.orgId}`,
+      ),
+    );
+    const response = await del(id, { expectedUpdatedAt: stale });
+    assert.equal(response.status, 409, JSON.stringify(await response.clone().json()));
+    assert.equal(await exists(id), true, "the draft must survive a stale delete");
+  });
+});
 
-test('expense PATCH refuses malformed and foreign line references with domain errors', async () => {
+test("expense PATCH refuses malformed and foreign line references with domain errors", async () => {
   await fixture(async (org, id) => {
-    const foreign = await withBypassContext(() => createScratchOrg())
+    const foreign = await withBypassContext(() => createScratchOrg());
     try {
-      const foreignDept = randomUUID()
-      await withBypassContext(() => db.execute(sql`insert into departments (id, org_id, name) values (${foreignDept}, ${foreign.orgId}, 'Foreign department')`))
-      const line = (extra: Record<string, unknown>) => ({ accountId: org.accounts.cogs, amount: '10', description: 'probe', ...extra })
+      const foreignDept = randomUUID();
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into departments (id, org_id, name) values (${foreignDept}, ${foreign.orgId}, 'Foreign department')`,
+        ),
+      );
+      const line = (extra: Record<string, unknown>) => ({
+        accountId: org.accounts.cogs,
+        amount: "10",
+        description: "probe",
+        ...extra,
+      });
       // A malformed line department dies at the re-insert as 22P02 (raw 500).
-      const malformed = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ departmentId: 'not-a-uuid' })] })
-      assert.equal(malformed.status, 422, JSON.stringify(await malformed.clone().json()))
+      const malformed = await patch(id, {
+        expectedUpdatedAt: await revision(id),
+        lines: [line({ departmentId: "not-a-uuid" })],
+      });
+      assert.equal(malformed.status, 422, JSON.stringify(await malformed.clone().json()));
       // A foreign-org line department dies at the tenant-coherent FK as an
       // unhandled 23503 (raw 500) instead of a tenant-opaque 404.
-      const alien = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ departmentId: foreignDept })] })
-      assert.equal(alien.status, 404, JSON.stringify(await alien.clone().json()))
+      const alien = await patch(id, {
+        expectedUpdatedAt: await revision(id),
+        lines: [line({ departmentId: foreignDept })],
+      });
+      assert.equal(alien.status, 404, JSON.stringify(await alien.clone().json()));
       // An unknown tax code escapes computeBillTotals as a raw Error (500)
       // instead of a domain 422.
-      const tax = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ taxCodeId: 'not-a-uuid' })] })
-      assert.equal(tax.status, 422, JSON.stringify(await tax.clone().json()))
-      const lines = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`, 'objects')))[0]!.n
-      assert.equal(lines, 1, 'refused line references store nothing')
+      const tax = await patch(id, {
+        expectedUpdatedAt: await revision(id),
+        lines: [line({ taxCodeId: "not-a-uuid" })],
+      });
+      assert.equal(tax.status, 422, JSON.stringify(await tax.clone().json()));
+      const lines = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ n: number }>(
+            sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!.n;
+      assert.equal(lines, 1, "refused line references store nothing");
       assert.equal(
-        (await withOrgContext(org.orgId, () => db.execute<{ account_id: string }>(sql`select account_id from document_lines where document_id=${id}`, 'objects')))[0]!.account_id,
+        (
+          await withOrgContext(org.orgId, () =>
+            db.execute<{ account_id: string }>(
+              sql`select account_id from document_lines where document_id=${id}`,
+              "objects",
+            ),
+          )
+        )[0]!.account_id,
         org.accounts.cogs,
-        'the original line survives refused saves',
-      )
+        "the original line survives refused saves",
+      );
     } finally {
-      await dropScratchOrg(foreign.orgId)
+      await dropScratchOrg(foreign.orgId);
     }
-  })
-})
+  });
+});
 
-test('expense PATCH refuses foreign reference custom values on header and lines', async () => {
+test("expense PATCH refuses foreign reference custom values on header and lines", async () => {
   await fixture(async (org, id) => {
-    const foreign = await withBypassContext(() => createScratchOrg())
+    const foreign = await withBypassContext(() => createScratchOrg());
     try {
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into custom_field_defs
           (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
         values
           (${randomUUID()}, ${org.orgId}, 'documents', 'expense_report', 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${state.actorId}, ${state.actorId}),
           (${randomUUID()}, ${org.orgId}, 'document_lines', 'expense_report', 'line_ref', 'Line reference', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${state.actorId}, ${state.actorId})
-      `))
-      const refusedHeader = await patch(id, { expectedUpdatedAt: await revision(id), custom: { ref_party: foreign.vendorId } })
-      assert.equal(refusedHeader.status, 404, JSON.stringify(await refusedHeader.clone().json()))
-      const storedCustom = (await withOrgContext(org.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${org.orgId}`, 'objects')))[0]?.custom
-      assert.equal((storedCustom as Record<string, unknown> | undefined)?.ref_party, undefined, 'refused header references store nothing')
-      const savedHeader = await patch(id, { expectedUpdatedAt: await revision(id), custom: { ref_party: org.vendorId } })
-      assert.equal(savedHeader.status, 200, JSON.stringify(await savedHeader.clone().json()))
-      const line = (custom: Record<string, unknown>) => ({ accountId: org.accounts.cogs, amount: '10', description: 'probe', settlementType: 'out_of_pocket', custom })
-      const refusedLine = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ line_ref: foreign.vendorId })] })
-      assert.equal(refusedLine.status, 404, JSON.stringify(await refusedLine.clone().json()))
-      const lines = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`, 'objects')))[0]!.n
-      assert.equal(lines, 1, 'refused line references store nothing')
-      const savedLine = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ line_ref: org.vendorId })] })
-      assert.equal(savedLine.status, 200, JSON.stringify(await savedLine.clone().json()))
+      `),
+      );
+      const refusedHeader = await patch(id, {
+        expectedUpdatedAt: await revision(id),
+        custom: { ref_party: foreign.vendorId },
+      });
+      assert.equal(refusedHeader.status, 404, JSON.stringify(await refusedHeader.clone().json()));
+      const storedCustom = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ custom: Record<string, unknown> }>(
+            sql`select custom from documents where id=${id} and org_id=${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]?.custom;
+      assert.equal(
+        (storedCustom as Record<string, unknown> | undefined)?.ref_party,
+        undefined,
+        "refused header references store nothing",
+      );
+      const savedHeader = await patch(id, {
+        expectedUpdatedAt: await revision(id),
+        custom: { ref_party: org.vendorId },
+      });
+      assert.equal(savedHeader.status, 200, JSON.stringify(await savedHeader.clone().json()));
+      const line = (custom: Record<string, unknown>) => ({
+        accountId: org.accounts.cogs,
+        amount: "10",
+        description: "probe",
+        settlementType: "out_of_pocket",
+        custom,
+      });
+      const refusedLine = await patch(id, {
+        expectedUpdatedAt: await revision(id),
+        lines: [line({ line_ref: foreign.vendorId })],
+      });
+      assert.equal(refusedLine.status, 404, JSON.stringify(await refusedLine.clone().json()));
+      const lines = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ n: number }>(
+            sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!.n;
+      assert.equal(lines, 1, "refused line references store nothing");
+      const savedLine = await patch(id, {
+        expectedUpdatedAt: await revision(id),
+        lines: [line({ line_ref: org.vendorId })],
+      });
+      assert.equal(savedLine.status, 200, JSON.stringify(await savedLine.clone().json()));
     } finally {
-      await dropScratchOrg(foreign.orgId)
+      await dropScratchOrg(foreign.orgId);
     }
-  })
-})
+  });
+});
 
-test('expense DELETE with the exact revision deletes the draft', async () => {
+test("expense DELETE with the exact revision deletes the draft", async () => {
   await fixture(async (org, id) => {
-    const response = await del(id, { expectedUpdatedAt: await revision(id) })
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    assert.equal(await exists(id), false, 'the exact-revision delete removes the draft')
-  })
-})
+    const response = await del(id, { expectedUpdatedAt: await revision(id) });
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    assert.equal(await exists(id), false, "the exact-revision delete removes the draft");
+  });
+});
 
-test('expense PATCH refuses a malformed document date with a domain error instead of a storage 500', async () => {
+test("expense PATCH refuses a malformed document date with a domain error instead of a storage 500", async () => {
   await fixture(async (org, id) => {
     // A shape-invalid date must fail closed at the route boundary — sibling
     // PATCH routes (journals, payments) validate with isoDate, but this one
     // forwarded the raw string into coalesce(document_date), where Postgres
     // raised 22P02 and the caller received a raw 500.
-    const malformed = await patch(id, { expectedUpdatedAt: await revision(id), documentDate: 'not-a-date' })
-    assert.equal(malformed.status, 422, JSON.stringify(await malformed.clone().json()))
+    const malformed = await patch(id, {
+      expectedUpdatedAt: await revision(id),
+      documentDate: "not-a-date",
+    });
+    assert.equal(malformed.status, 422, JSON.stringify(await malformed.clone().json()));
     // A shape-valid but impossible calendar day must fail closed too.
-    const impossible = await patch(id, { expectedUpdatedAt: await revision(id), documentDate: '2026-02-30' })
-    assert.equal(impossible.status, 422, JSON.stringify(await impossible.clone().json()))
-    const stored = (await withOrgContext(org.orgId, () => db.execute<{ d: string }>(sql`select document_date::text as d from documents where id=${id} and org_id=${org.orgId}`, 'objects')))[0]!.d
-    assert.equal(stored, org.date, 'refused dates write nothing')
+    const impossible = await patch(id, {
+      expectedUpdatedAt: await revision(id),
+      documentDate: "2026-02-30",
+    });
+    assert.equal(impossible.status, 422, JSON.stringify(await impossible.clone().json()));
+    const stored = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ d: string }>(
+          sql`select document_date::text as d from documents where id=${id} and org_id=${org.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!.d;
+    assert.equal(stored, org.date, "refused dates write nothing");
     // A real calendar day still saves.
-    const saved = await patch(id, { expectedUpdatedAt: await revision(id), documentDate: '2026-02-27' })
-    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
-  })
-})
+    const saved = await patch(id, {
+      expectedUpdatedAt: await revision(id),
+      documentDate: "2026-02-27",
+    });
+    assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
+  });
+});
 
+test.after(async () => {
+  await pool.end();
+});
 
-test.after(async () => { await pool.end() })
-
-
-test('expense deferral survives native save and refuses personal lines without changing the draft', async () => {
+test("expense deferral survives native save and refuses personal lines without changing the draft", async () => {
   await fixture(async (org, id) => {
-    const templateId = randomUUID()
-    const prepaidId = randomUUID()
+    const templateId = randomUUID();
+    const prepaidId = randomUUID();
     await withBypassContext(async () => {
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"expenseAmortization":true}'::jsonb) where id=${org.orgId}`)
-      await db.execute(sql`insert into accounts (id, org_id, number, name, type) values (${prepaidId}, ${org.orgId}, '1350', 'Prepaid costs', 'asset_current_other')`)
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"expenseAmortization":true}'::jsonb) where id=${org.orgId}`,
+      );
+      await db.execute(
+        sql`insert into accounts (id, org_id, number, name, type) values (${prepaidId}, ${org.orgId}, '1350', 'Prepaid costs', 'asset_current_other')`,
+      );
       await db.execute(sql`insert into expense_amortization_templates
         (id, org_id, code, name, effective_from, method, term_source, period_count, deferral_account_id)
-        values (${templateId}, ${org.orgId}, 'SERVICE', 'Service period', ${org.date}, 'straight_line', 'service_dates', null, ${prepaidId})`)
-    })
-    const line = { accountId: org.accounts.cogs, amount: '120', settlementType: 'out_of_pocket', amortizationTemplateId: templateId, amortizationStartOn: '2026-07-01', amortizationEndOn: '2026-09-30' }
-    const saved = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line] })
-    assert.equal(saved.status, 200, await saved.clone().text())
-    const loaded = await (await get(id)).json()
-    assert.equal(loaded.lines[0].amortization_template_id, templateId)
-    assert.equal(loaded.lines[0].amortization_start_on, '2026-07-01')
-    assert.equal(loaded.lines[0].amortization_end_on, '2026-09-30')
-    const before = await revision(id)
-    const refused = await patch(id, { expectedUpdatedAt: before, lines: [{ ...line, settlementType: 'personal' }] })
-    assert.equal(refused.status, 422, await refused.clone().text())
-    assert.equal(await revision(id), before)
-    const unchanged = await (await get(id)).json()
-    assert.equal(unchanged.lines[0].settlement_type, 'out_of_pocket')
-    assert.equal(unchanged.lines[0].amortization_template_id, templateId)
-  })
-})
+        values (${templateId}, ${org.orgId}, 'SERVICE', 'Service period', ${org.date}, 'straight_line', 'service_dates', null, ${prepaidId})`);
+    });
+    const line = {
+      accountId: org.accounts.cogs,
+      amount: "120",
+      settlementType: "out_of_pocket",
+      amortizationTemplateId: templateId,
+      amortizationStartOn: "2026-07-01",
+      amortizationEndOn: "2026-09-30",
+    };
+    const saved = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line] });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    const loaded = await (await get(id)).json();
+    assert.equal(loaded.lines[0].amortization_template_id, templateId);
+    assert.equal(loaded.lines[0].amortization_start_on, "2026-07-01");
+    assert.equal(loaded.lines[0].amortization_end_on, "2026-09-30");
+    const before = await revision(id);
+    const refused = await patch(id, {
+      expectedUpdatedAt: before,
+      lines: [{ ...line, settlementType: "personal" }],
+    });
+    assert.equal(refused.status, 422, await refused.clone().text());
+    assert.equal(await revision(id), before);
+    const unchanged = await (await get(id)).json();
+    assert.equal(unchanged.lines[0].settlement_type, "out_of_pocket");
+    assert.equal(unchanged.lines[0].amortization_template_id, templateId);
+  });
+});

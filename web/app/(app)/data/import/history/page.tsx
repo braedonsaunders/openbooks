@@ -1,14 +1,14 @@
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { loadImportHistory, importHistorySpec } from './view'
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { loadImportHistory, importHistorySpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export default async function ImportHistoryPage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = (await searchParams) ?? {}
-  const data = await loadImportHistory(sp)
-  return <ModuleView spec={importHistorySpec()} data={data} searchParams={sp} trusted />
+  const sp = (await searchParams) ?? {};
+  const data = await loadImportHistory(sp);
+  return <ModuleView spec={importHistorySpec()} data={data} searchParams={sp} trusted />;
 }

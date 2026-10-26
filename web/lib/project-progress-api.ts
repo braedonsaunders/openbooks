@@ -1,8 +1,8 @@
-import 'server-only'
-import { NextResponse } from 'next/server'
-import { ProjectProgressError } from '@openbooks/engine/projects/progress'
-import { apiErrorResponse } from './api/error-response'
-import { notFound } from './api/responses'
+import "server-only";
+import { NextResponse } from "next/server";
+import { ProjectProgressError } from "@openbooks/engine/projects/progress";
+import { apiErrorResponse } from "./api/error-response";
+import { notFound } from "./api/responses";
 
 /**
  * API boundary for progress, forecast and earned-value refusals: a missing
@@ -11,6 +11,6 @@ import { notFound } from './api/responses'
  * unexpected failure.
  */
 export function progressErrorResponse(error: unknown): Promise<NextResponse> | NextResponse {
-  if (error instanceof ProjectProgressError && error.status === 404) return notFound('record')
-  return apiErrorResponse(error)
+  if (error instanceof ProjectProgressError && error.status === 404) return notFound("record");
+  return apiErrorResponse(error);
 }

@@ -13,15 +13,18 @@ import type { Authz } from "../../../../../lib/authz";
 // routes, domain services and SQL are native.
 const enabled = !!process.env.OPENBOOKS_DB_URL;
 const identity: { gate: Authz | null } = { gate: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.script-run-id")] = identity;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.script-run-id")] =
+  identity;
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "./authz" && (context.parentURL ?? "").endsWith("/lib/feature-gates.ts")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(
-          "export async function guardPermission(){return globalThis[Symbol.for('openbooks.script-run-id')].gate}",
-        ),
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export async function guardPermission(){return globalThis[Symbol.for('openbooks.script-run-id')].gate}",
+          ),
       };
     }
     return next(specifier, context);
@@ -61,9 +64,12 @@ test("script run-now returns 404 for a malformed script id", { skip: !enabled },
   const org = await fixtureOrg();
   try {
     for (const id of ["not-a-uuid", "new"]) {
-      const response = await POST(new Request(`https://openbooks.test/api/admin/scripts/${id}/run`, { method: "POST" }), {
-        params: Promise.resolve({ id }),
-      });
+      const response = await POST(
+        new Request(`https://openbooks.test/api/admin/scripts/${id}/run`, { method: "POST" }),
+        {
+          params: Promise.resolve({ id }),
+        },
+      );
       assert.equal(response.status, 404, `POST run ${id}`);
     }
   } finally {
@@ -72,20 +78,24 @@ test("script run-now returns 404 for a malformed script id", { skip: !enabled },
   }
 });
 
-test("script PATCH and DELETE return 404 for a malformed script id", { skip: !enabled }, async () => {
-  const org = await fixtureOrg();
-  try {
-    for (const id of ["not-a-uuid", "new"]) {
-      const patched = await PATCH(patchJson(validScript(id)));
-      assert.equal(patched.status, 404, `PATCH ${id}`);
-      const deleted = await DELETE(
-        new Request(`https://openbooks.test/api/admin/scripts/${id}`, { method: "DELETE" }),
-        { params: Promise.resolve({ id }) },
-      );
-      assert.equal(deleted.status, 404, `DELETE ${id}`);
+test(
+  "script PATCH and DELETE return 404 for a malformed script id",
+  { skip: !enabled },
+  async () => {
+    const org = await fixtureOrg();
+    try {
+      for (const id of ["not-a-uuid", "new"]) {
+        const patched = await PATCH(patchJson(validScript(id)));
+        assert.equal(patched.status, 404, `PATCH ${id}`);
+        const deleted = await DELETE(
+          new Request(`https://openbooks.test/api/admin/scripts/${id}`, { method: "DELETE" }),
+          { params: Promise.resolve({ id }) },
+        );
+        assert.equal(deleted.status, 404, `DELETE ${id}`);
+      }
+    } finally {
+      identity.gate = null;
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    identity.gate = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);

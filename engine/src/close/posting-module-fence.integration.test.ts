@@ -13,11 +13,7 @@ import {
 import { setPeriodLockState } from "../periods/period-locks.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -29,30 +25,35 @@ test("document_close_module matches the engine kind map", { skip: !DB }, async (
   const org = await createScratchOrg();
   try {
     const stored = await db.execute<{ kind: string; module: string }>(
-        sql`select kind, close_module as module from public.openbooks_document_close_modules order by kind`, "objects",
-      );
+      sql`select kind, close_module as module from public.openbooks_document_close_modules order by kind`,
+      "objects",
+    );
     assert.deepEqual(
       stored,
-      [...DOCUMENT_KINDS]
-        .sort()
-        .map((kind) => ({ kind, module: closeModuleForDocument(kind) })),
+      [...DOCUMENT_KINDS].sort().map((kind) => ({ kind, module: closeModuleForDocument(kind) })),
       "the close-module registry must mirror the engine kind map exactly",
     );
     // The function must read the table (not a stale copy of the map): a
     // kind the table knows resolves through the function, and the table
     // cannot carry a kind the engine rejects.
     for (const kind of DOCUMENT_KINDS) {
-      const viaFunction = (await db.execute<{ module: string | null }>(
-          sql`select public.document_close_module(${kind}) as module`, "objects",
-        ))[0]!.module;
+      const viaFunction = (
+        await db.execute<{ module: string | null }>(
+          sql`select public.document_close_module(${kind}) as module`,
+          "objects",
+        )
+      )[0]!.module;
       assert.equal(viaFunction, closeModuleForDocument(kind), kind);
     }
     // Deliberate asymmetry, pinned: the engine throws on unknown kinds
     // (fail closed at the app boundary) while storage resolves them to null
     // (GL-only recheck; the deferrable source FK stays the backstop).
-    const unknown = (await db.execute<{ module: string | null }>(
-        sql`select public.document_close_module('no_such_kind') as module`, "objects",
-      ))[0]!.module;
+    const unknown = (
+      await db.execute<{ module: string | null }>(
+        sql`select public.document_close_module('no_such_kind') as module`,
+        "objects",
+      )
+    )[0]!.module;
     assert.equal(unknown, null);
     assert.throws(() => closeModuleForDocument("no_such_kind"));
   } finally {
@@ -107,81 +108,99 @@ async function draftEntryForBill(args: {
   return entry;
 }
 
-test("a draft->posted flip for a module-closed source document is rejected", { skip: !DB }, async () => {
-  // Posting checks the document module at the app boundary, but a concurrent
-  // module-only close can commit between that check and the journal insert
-  // while the trigger rechecks GL only. The fence must recheck the source
-  // document's own close module on draft -> posted.
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
-    const bill = await approvedVendorBill(
-      org.orgId,
-      org.subsidiaryId,
-      org.customerId,
-      org.accounts.revenue,
-      org.date,
-      actor,
-    );
-    await setPeriodLockState({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      module: "ap",
-      state: "closed",
-      actorId: actor,
-      reason: "fence probe: AP closed, GL open",
-    });
-    const entry = await draftEntryForBill({
-      orgId: org.orgId,
-      bookId: org.bookId,
-      periodId: org.periodId,
-      subsidiaryId: org.subsidiaryId,
-      billId: bill,
-      date: org.date,
-      actor,
-      apAccount: org.accounts.ap,
-      revenueAccount: org.accounts.revenue,
-      sourceDocumentId: bill,
-    });
-    // The storage raise surfaces on the driver's cause chain, not on the
-    // outer Drizzle message, so match the whole chain.
-    await assert.rejects(
-      db.execute(sql`update journal_entries set status = 'posted', posted_by = ${actor} where id = ${entry}`),
-      (error: unknown) => {
-        const chain = [error, (error as { cause?: unknown }).cause]
-          .map((part) => String((part as Error)?.message ?? part))
-          .join(" | ");
-        assert.match(chain, /period is closed for AP posting/);
-        return true;
-      },
-    );
-    assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${entry}`, "objects"))[0]!.status,
-      "draft",
-    );
-    // Control: a sourceless GL journal in the same open-GL period still posts.
-    const manual = await draftEntryForBill({
-      orgId: org.orgId,
-      bookId: org.bookId,
-      periodId: org.periodId,
-      subsidiaryId: org.subsidiaryId,
-      billId: bill,
-      date: org.date,
-      actor,
-      apAccount: org.accounts.ap,
-      revenueAccount: org.accounts.revenue,
-      sourceDocumentId: null,
-    });
-    await db.execute(sql`update journal_entries set status = 'posted', posted_by = ${actor} where id = ${manual}`);
-    assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${manual}`, "objects"))[0]!.status,
-      "posted",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a draft->posted flip for a module-closed source document is rejected",
+  { skip: !DB },
+  async () => {
+    // Posting checks the document module at the app boundary, but a concurrent
+    // module-only close can commit between that check and the journal insert
+    // while the trigger rechecks GL only. The fence must recheck the source
+    // document's own close module on draft -> posted.
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
+      const bill = await approvedVendorBill(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        org.accounts.revenue,
+        org.date,
+        actor,
+      );
+      await setPeriodLockState({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        module: "ap",
+        state: "closed",
+        actorId: actor,
+        reason: "fence probe: AP closed, GL open",
+      });
+      const entry = await draftEntryForBill({
+        orgId: org.orgId,
+        bookId: org.bookId,
+        periodId: org.periodId,
+        subsidiaryId: org.subsidiaryId,
+        billId: bill,
+        date: org.date,
+        actor,
+        apAccount: org.accounts.ap,
+        revenueAccount: org.accounts.revenue,
+        sourceDocumentId: bill,
+      });
+      // The storage raise surfaces on the driver's cause chain, not on the
+      // outer Drizzle message, so match the whole chain.
+      await assert.rejects(
+        db.execute(
+          sql`update journal_entries set status = 'posted', posted_by = ${actor} where id = ${entry}`,
+        ),
+        (error: unknown) => {
+          const chain = [error, (error as { cause?: unknown }).cause]
+            .map((part) => String((part as Error)?.message ?? part))
+            .join(" | ");
+          assert.match(chain, /period is closed for AP posting/);
+          return true;
+        },
+      );
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from journal_entries where id = ${entry}`,
+            "objects",
+          )
+        )[0]!.status,
+        "draft",
+      );
+      // Control: a sourceless GL journal in the same open-GL period still posts.
+      const manual = await draftEntryForBill({
+        orgId: org.orgId,
+        bookId: org.bookId,
+        periodId: org.periodId,
+        subsidiaryId: org.subsidiaryId,
+        billId: bill,
+        date: org.date,
+        actor,
+        apAccount: org.accounts.ap,
+        revenueAccount: org.accounts.revenue,
+        sourceDocumentId: null,
+      });
+      await db.execute(
+        sql`update journal_entries set status = 'posted', posted_by = ${actor} where id = ${manual}`,
+      );
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from journal_entries where id = ${manual}`,
+            "objects",
+          )
+        )[0]!.status,
+        "posted",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a module close waits for an in-flight posting window", { skip: !DB }, async () => {
   // The posting kernel holds the shared period fence from BEFORE its
@@ -195,7 +214,11 @@ test("a module close waits for an in-flight posting window", { skip: !DB }, asyn
   try {
     const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
     await poster.query("begin");
-    await poster.query("select public.period_posting_fence($1, $2, $3)", [org.orgId, org.periodId, org.bookId]);
+    await poster.query("select public.period_posting_fence($1, $2, $3)", [
+      org.orgId,
+      org.periodId,
+      org.bookId,
+    ]);
     const probe = await poster.query(
       "select public.period_module_blocks_write($1, $2, $3, $4, 'ap', false) as blocked",
       [org.orgId, org.periodId, org.bookId, org.subsidiaryId],
@@ -213,12 +236,15 @@ test("a module close waits for an in-flight posting window", { skip: !DB }, asyn
     const settled = Promise.allSettled([closer]);
     let sightings = 0;
     for (let attempt = 0; attempt < 200; attempt += 1) {
-      const waiting = await db.execute<{ n: number }>(sql`select count(*)::int as n
+      const waiting = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n
         from pg_stat_activity
        where datname = current_database()
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
-         and wait_event = 'advisory'`, "objects");
+         and wait_event = 'advisory'`,
+        "objects",
+      );
       if (waiting[0]!.n > 0) sightings += 1;
       if (sightings >= 3) break;
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -228,7 +254,8 @@ test("a module close waits for an in-flight posting window", { skip: !DB }, asyn
     const [closeResult] = await settled;
     assert.equal(closeResult!.status, "fulfilled", JSON.stringify(closeResult));
     const closed = await db.execute<{ blocked: boolean }>(
-      sql`select public.period_module_blocks_write(${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'ap', false) as blocked`, "objects",
+      sql`select public.period_module_blocks_write(${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'ap', false) as blocked`,
+      "objects",
     );
     assert.equal(closed[0]!.blocked, true);
   } finally {
@@ -293,11 +320,16 @@ test("soft-close fences posting in the engine and storage twins alike", { skip: 
         error instanceof CloseError && /GL is closed for this period/.test(error.message),
       "the engine twin refuses a soft-closed period",
     );
-    const blocked = (await db.execute<{ blocked: boolean }>(sql`
+    const blocked = (
+      await db.execute<{ blocked: boolean }>(
+        sql`
       select public.period_module_blocks_write(
         ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', false
       ) as blocked
-    `, "objects"))[0]!.blocked;
+    `,
+        "objects",
+      )
+    )[0]!.blocked;
     assert.equal(blocked, true, "the storage twin blocks a soft-closed period");
     // Control: reopening clears both twins together.
     await setPeriodLockState({
@@ -316,194 +348,240 @@ test("soft-close fences posting in the engine and storage twins alike", { skip: 
       subsidiaryIds: [org.subsidiaryId],
       modules: ["gl"],
     });
-    const unblocked = (await db.execute<{ blocked: boolean }>(sql`
+    const unblocked = (
+      await db.execute<{ blocked: boolean }>(
+        sql`
       select public.period_module_blocks_write(
         ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', false
       ) as blocked
-    `, "objects"))[0]!.blocked;
+    `,
+        "objects",
+      )
+    )[0]!.blocked;
     assert.equal(unblocked, false, "an open period passes both twins");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("posting into a closed period refuses at the engine boundary with the module named", { skip: !DB }, async () => {
-  // The app-boundary module check must fire before any journal exists: the
-  // refusal carries the engine's module message, not the storage trigger's.
-  // (If the check call disappeared, the post would still fail — but at the
-  // storage guard with its message instead.)
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
-    const invoiceId = await approvedCustomerInvoice(
-      org.orgId,
-      org.subsidiaryId,
-      org.customerId,
-      org.accounts.revenue,
-      org.date,
-      actor,
-    );
-    await setPeriodLockState({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      module: "ar",
-      state: "closed",
-      actorId: actor,
-      reason: "fence probe: AR closed",
-    });
-    await assert.rejects(
-      postDocument(invoiceId, postingDeps(org)),
-      (error: unknown) =>
-        error instanceof PostingError && /AR is closed for this period/.test(error.message),
-      "the engine check refuses the closed module by name",
-    );
-    const entries = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId}
-    `, "objects"))[0]!.n;
-    assert.equal(entries, 0, "the refused post wrote no journal");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("a module close landing mid-posting waits for the fence: the started posting wins", { skip: !DB }, async () => {
-  // The real postDocument prologue holds the shared period fence across its
-  // module check and journal insert (not a replica): a closer arriving
-  // mid-post must block on the fence, then commit after the posting wins.
-  // If the fence call disappeared from the prologue, the closer would sail
-  // through while the post sleeps and the post would fail.
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
-    const invoiceId = await approvedCustomerInvoice(
-      org.orgId,
-      org.subsidiaryId,
-      org.customerId,
-      org.accounts.revenue,
-      org.date,
-      actor,
-    );
-    await db.execute(sql.raw(`create or replace function public.probe_posting_sleep()
-      returns trigger language plpgsql as $$ begin perform pg_sleep(4); return NEW; end $$`));
-    await db.execute(sql.raw(`create trigger probe_posting_sleep_trigger
-      before insert on journal_entries for each statement
-      execute function public.probe_posting_sleep()`));
+test(
+  "posting into a closed period refuses at the engine boundary with the module named",
+  { skip: !DB },
+  async () => {
+    // The app-boundary module check must fire before any journal exists: the
+    // refusal carries the engine's module message, not the storage trigger's.
+    // (If the check call disappeared, the post would still fail — but at the
+    // storage guard with its message instead.)
+    const org = await createScratchOrg();
     try {
-      const posting = postDocument(invoiceId, postingDeps(org));
-      // Gate the closer on the posting provably sleeping inside the journal
-      // trigger (fence held): a fixed delay would race a loaded database,
-      // where the closer could commit before the posting even starts.
-      let asleep = false;
-      for (let attempt = 0; attempt < 1000; attempt += 1) {
-        const sleeping = await db.execute<{ n: number }>(sql`select count(*)::int as n
-          from pg_stat_activity
-         where datname = current_database()
-           and pid <> pg_backend_pid()
-           and wait_event_type = 'Timeout'
-           and wait_event = 'PgSleep'`, "objects");
-        if (sleeping[0]!.n > 0) {
-          asleep = true;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-      assert.ok(asleep, "the posting must reach its trigger sleep with the fence held");
-      const closer = setPeriodLockState({
+      const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
+      const invoiceId = await approvedCustomerInvoice(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        org.accounts.revenue,
+        org.date,
+        actor,
+      );
+      await setPeriodLockState({
         orgId: org.orgId,
         periodId: org.periodId,
         bookId: org.bookId,
         module: "ar",
         state: "closed",
         actorId: actor,
-        reason: "fence probe: AR close races the posting",
+        reason: "fence probe: AR closed",
       });
-      const settled = Promise.allSettled([closer]);
-      let sightings = 0;
-      for (let attempt = 0; attempt < 300; attempt += 1) {
-        const waiting = await db.execute<{ n: number }>(sql`select count(*)::int as n
+      await assert.rejects(
+        postDocument(invoiceId, postingDeps(org)),
+        (error: unknown) =>
+          error instanceof PostingError && /AR is closed for this period/.test(error.message),
+        "the engine check refuses the closed module by name",
+      );
+      const entries = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(entries, 0, "the refused post wrote no journal");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a module close landing mid-posting waits for the fence: the started posting wins",
+  { skip: !DB },
+  async () => {
+    // The real postDocument prologue holds the shared period fence across its
+    // module check and journal insert (not a replica): a closer arriving
+    // mid-post must block on the fence, then commit after the posting wins.
+    // If the fence call disappeared from the prologue, the closer would sail
+    // through while the post sleeps and the post would fail.
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
+      const invoiceId = await approvedCustomerInvoice(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        org.accounts.revenue,
+        org.date,
+        actor,
+      );
+      await db.execute(
+        sql.raw(`create or replace function public.probe_posting_sleep()
+      returns trigger language plpgsql as $$ begin perform pg_sleep(4); return NEW; end $$`),
+      );
+      await db.execute(
+        sql.raw(`create trigger probe_posting_sleep_trigger
+      before insert on journal_entries for each statement
+      execute function public.probe_posting_sleep()`),
+      );
+      try {
+        const posting = postDocument(invoiceId, postingDeps(org));
+        // Gate the closer on the posting provably sleeping inside the journal
+        // trigger (fence held): a fixed delay would race a loaded database,
+        // where the closer could commit before the posting even starts.
+        let asleep = false;
+        for (let attempt = 0; attempt < 1000; attempt += 1) {
+          const sleeping = await db.execute<{ n: number }>(
+            sql`select count(*)::int as n
+          from pg_stat_activity
+         where datname = current_database()
+           and pid <> pg_backend_pid()
+           and wait_event_type = 'Timeout'
+           and wait_event = 'PgSleep'`,
+            "objects",
+          );
+          if (sleeping[0]!.n > 0) {
+            asleep = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        assert.ok(asleep, "the posting must reach its trigger sleep with the fence held");
+        const closer = setPeriodLockState({
+          orgId: org.orgId,
+          periodId: org.periodId,
+          bookId: org.bookId,
+          module: "ar",
+          state: "closed",
+          actorId: actor,
+          reason: "fence probe: AR close races the posting",
+        });
+        const settled = Promise.allSettled([closer]);
+        let sightings = 0;
+        for (let attempt = 0; attempt < 300; attempt += 1) {
+          const waiting = await db.execute<{ n: number }>(
+            sql`select count(*)::int as n
           from pg_stat_activity
          where datname = current_database()
            and pid <> pg_backend_pid()
            and wait_event_type = 'Lock'
-           and wait_event = 'advisory'`, "objects");
-        if (waiting[0]!.n > 0) sightings += 1;
-        if (sightings >= 3) break;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-      assert.ok(sightings >= 3, "the AR close must wait on the posting's shared fence");
-      await posting;
-      const [closeResult] = await settled;
-      assert.equal(closeResult!.status, "fulfilled", JSON.stringify(closeResult));
-      const status = (await db.execute<{ status: string }>(sql`
+           and wait_event = 'advisory'`,
+            "objects",
+          );
+          if (waiting[0]!.n > 0) sightings += 1;
+          if (sightings >= 3) break;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        assert.ok(sightings >= 3, "the AR close must wait on the posting's shared fence");
+        await posting;
+        const [closeResult] = await settled;
+        assert.equal(closeResult!.status, "fulfilled", JSON.stringify(closeResult));
+        const status = (
+          await db.execute<{ status: string }>(
+            sql`
         select status from documents where id = ${invoiceId}
-      `, "objects"))[0]!.status;
-      assert.equal(status, "posted", "the started posting wins the race");
-      const lock = (await db.execute<{ state: string }>(sql`
+      `,
+            "objects",
+          )
+        )[0]!.status;
+        assert.equal(status, "posted", "the started posting wins the race");
+        const lock = (
+          await db.execute<{ state: string }>(
+            sql`
         select state from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and module = 'ar'
-      `, "objects"))[0]!.state;
-      assert.equal(lock, "closed", "the closer commits once the posting releases the fence");
+      `,
+            "objects",
+          )
+        )[0]!.state;
+        assert.equal(lock, "closed", "the closer commits once the posting releases the fence");
+      } finally {
+        await db.execute(
+          sql.raw(`drop trigger if exists probe_posting_sleep_trigger on journal_entries`),
+        );
+        await db.execute(sql.raw(`drop function if exists public.probe_posting_sleep()`));
+      }
     } finally {
-      await db.execute(sql.raw(`drop trigger if exists probe_posting_sleep_trigger on journal_entries`));
-      await db.execute(sql.raw(`drop function if exists public.probe_posting_sleep()`));
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test("a closed-period posting refusal carries the reopen scope as typed details", { skip: !DB }, async () => {
-  // The refusal link the UI renders is built from these details — never
-  // from parsed message text — so the gate and every domain wrap must
-  // preserve the exact scope the reopen request has to cover.
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
-    const invoiceId = await approvedCustomerInvoice(
-      org.orgId,
-      org.subsidiaryId,
-      org.customerId,
-      org.accounts.revenue,
-      org.date,
-      actor,
-    );
-    await setPeriodLockState({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      module: "ar",
-      state: "closed",
-      actorId: actor,
-      reason: "fence probe: AR closed",
-    });
-    const gate = await assertPeriodModulesOpen(db, {
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      subsidiaryIds: [org.subsidiaryId],
-      modules: ["ar"],
-    }).catch((failure: unknown) => failure);
-    assert.ok(gate instanceof PeriodClosedError, "the gate throws the typed refusal");
-    assert.ok(gate instanceof CloseError, "the typed refusal stays a CloseError");
-    assert.match(gate.message, /AR is closed for this period/);
-    assert.deepEqual(gate.details, {
-      kind: "period-closed",
-      periodId: org.periodId,
-      bookId: org.bookId,
-      subsidiaryId: org.subsidiaryId,
-      module: "ar",
-    });
-    const failure = await postDocument(invoiceId, postingDeps(org)).catch((thrown: unknown) => thrown);
-    assert.ok(failure instanceof PostingError, "the posting wrap keeps its boundary class");
-    assert.match(failure.message, /AR is closed for this period/);
-    assert.deepEqual(
-      failure.details,
-      gate.details,
-      "the posting wrap preserves the gate's scope for the API boundary",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a closed-period posting refusal carries the reopen scope as typed details",
+  { skip: !DB },
+  async () => {
+    // The refusal link the UI renders is built from these details — never
+    // from parsed message text — so the gate and every domain wrap must
+    // preserve the exact scope the reopen request has to cover.
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
+      const invoiceId = await approvedCustomerInvoice(
+        org.orgId,
+        org.subsidiaryId,
+        org.customerId,
+        org.accounts.revenue,
+        org.date,
+        actor,
+      );
+      await setPeriodLockState({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        module: "ar",
+        state: "closed",
+        actorId: actor,
+        reason: "fence probe: AR closed",
+      });
+      const gate = await assertPeriodModulesOpen(db, {
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryIds: [org.subsidiaryId],
+        modules: ["ar"],
+      }).catch((failure: unknown) => failure);
+      assert.ok(gate instanceof PeriodClosedError, "the gate throws the typed refusal");
+      assert.ok(gate instanceof CloseError, "the typed refusal stays a CloseError");
+      assert.match(gate.message, /AR is closed for this period/);
+      assert.deepEqual(gate.details, {
+        kind: "period-closed",
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId,
+        module: "ar",
+      });
+      const failure = await postDocument(invoiceId, postingDeps(org)).catch(
+        (thrown: unknown) => thrown,
+      );
+      assert.ok(failure instanceof PostingError, "the posting wrap keeps its boundary class");
+      assert.match(failure.message, /AR is closed for this period/);
+      assert.deepEqual(
+        failure.details,
+        gate.details,
+        "the posting wrap preserves the gate's scope for the API boundary",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

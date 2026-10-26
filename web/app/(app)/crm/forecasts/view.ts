@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
+import { getLocale, getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
 import {
   badge,
   column,
@@ -20,13 +20,23 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { addCalendarDays, addMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { can, requirePermission } from '../../../../lib/authz'
-import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
-import { calculateForecast, countUndatedForecastExcluded, type ForecastRow } from '../../../../lib/crm'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { getMoneyFormatter } from '../../../../lib/money-server'
+} from "@braedonsaunders/appkit-viewspec";
+import {
+  addCalendarDays,
+  addMonthsStart,
+  businessToday,
+  startOfMonth,
+  isIsoCalendarDate,
+} from "@openbooks/engine/platform/business-date/module";
+import { can, requirePermission } from "../../../../lib/authz";
+import { customerGroupTabs } from "../../../../components/module-home/group-tabs";
+import {
+  calculateForecast,
+  countUndatedForecastExcluded,
+  type ForecastRow,
+} from "../../../../lib/crm";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import { getMoneyFormatter } from "../../../../lib/money-server";
 
 /**
  * Forecasts and quotas, split into a loader and a spec.
@@ -54,163 +64,168 @@ import { getMoneyFormatter } from '../../../../lib/money-server'
  */
 
 type QuotaRow = {
-  id: string
-  owner_name: string | null
-  team_name: string | null
-  period_start: string
-  period_end: string
-  currency: string
-  amount: string
-}
+  id: string;
+  owner_name: string | null;
+  team_name: string | null;
+  period_start: string;
+  period_end: string;
+  currency: string;
+  amount: string;
+};
 
 type SnapshotRow = ForecastRow & {
-  id: string
-  owner_name: string | null
-  team_name: string | null
-  as_of: string | Date
-  snapshot_kind: 'calculated' | 'rep_override' | 'manager_override'
-  override_amount: string | null
-}
+  id: string;
+  owner_name: string | null;
+  team_name: string | null;
+  as_of: string | Date;
+  snapshot_kind: "calculated" | "rep_override" | "manager_override";
+  override_amount: string | null;
+};
 
 export interface ForecastKpiItem {
-  label: string
-  value: string
-  tone?: 'good'
+  label: string;
+  value: string;
+  tone?: "good";
 }
 
 export interface ForecastCurrencyGroup {
-  key: string
-  currency: string
-  items: ForecastKpiItem[]
+  key: string;
+  currency: string;
+  items: ForecastKpiItem[];
 }
 
 export interface QuotaRowView {
-  id: string
-  target: string
-  periodStart: string
-  periodEnd: string
-  quota: string
+  id: string;
+  target: string;
+  periodStart: string;
+  periodEnd: string;
+  quota: string;
 }
 
 export interface SnapshotRowView {
-  id: string
-  asOf: string
-  target: string
-  kindLabel: string
-  kindVariant: 'outline' | 'default' | 'warning'
-  currency: string
-  pipeline: string
-  weighted: string
-  mostLikely: string
-  closed: string
+  id: string;
+  asOf: string;
+  target: string;
+  kindLabel: string;
+  kindVariant: "outline" | "default" | "warning";
+  currency: string;
+  pipeline: string;
+  weighted: string;
+  mostLikely: string;
+  closed: string;
   /** The loader renders the em-dash for a null override, so the cell is bare text either way. */
-  override: string
+  override: string;
 }
 
 export interface ForecastsData {
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof customerGroupTabs>>
-  canConfigureQuotas: boolean
-  canManageForecasts: boolean
-  manageQuotasHref: string
-  manageQuotasLabel: string
-  manageQuotasAriaLabel: string
-  snapshotPeriodStart: string
-  snapshotPeriodEnd: string
-  snapshotOwnerUserId: string | null
-  snapshotTeamId: string | null
-  periodStartLabel: string
-  periodEndLabel: string
-  defaultStart: string
-  defaultEnd: string
-  ownerLabel: string
-  ownerOptions: { value: string; label: string }[]
-  teamLabel: string
-  teamOptions: { value: string; label: string }[]
-  summaryTitle: string
-  quotasTitle: string
-  historyTitle: string
-  historyDescription: string
-  hasForecast: boolean
-  noForecast: boolean
-  currencyGroups: ForecastCurrencyGroup[]
-  hasExcludedUndated: boolean
-  excludedUndatedNote: string
-  excludedUndatedHref: string
-  excludedUndatedLinkLabel: string
-  emptyForecastTitle: string
-  emptyForecastDescription: string
-  hasQuotas: boolean
-  noQuotas: boolean
-  quotaRows: QuotaRowView[]
-  columnTarget: string
-  columnQuota: string
-  emptyQuotaTitle: string
-  emptyQuotaDescription: string
-  quotaEmptyAction: string | null
-  quotaEmptyActionProps: { href: string; label: string; size: string }
-  hasSnapshots: boolean
-  noSnapshots: boolean
-  snapshotRows: SnapshotRowView[]
-  columnAsOf: string
-  columnType: string
-  columnCurrency: string
-  columnPipeline: string
-  columnWeighted: string
-  columnMostLikely: string
-  columnClosed: string
-  columnOverride: string
-  emptyHistoryTitle: string
-  emptyHistoryDescription: string
-  historyEmptyAction: string | null
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof customerGroupTabs>>;
+  canConfigureQuotas: boolean;
+  canManageForecasts: boolean;
+  manageQuotasHref: string;
+  manageQuotasLabel: string;
+  manageQuotasAriaLabel: string;
+  snapshotPeriodStart: string;
+  snapshotPeriodEnd: string;
+  snapshotOwnerUserId: string | null;
+  snapshotTeamId: string | null;
+  periodStartLabel: string;
+  periodEndLabel: string;
+  defaultStart: string;
+  defaultEnd: string;
+  ownerLabel: string;
+  ownerOptions: { value: string; label: string }[];
+  teamLabel: string;
+  teamOptions: { value: string; label: string }[];
+  summaryTitle: string;
+  quotasTitle: string;
+  historyTitle: string;
+  historyDescription: string;
+  hasForecast: boolean;
+  noForecast: boolean;
+  currencyGroups: ForecastCurrencyGroup[];
+  hasExcludedUndated: boolean;
+  excludedUndatedNote: string;
+  excludedUndatedHref: string;
+  excludedUndatedLinkLabel: string;
+  emptyForecastTitle: string;
+  emptyForecastDescription: string;
+  hasQuotas: boolean;
+  noQuotas: boolean;
+  quotaRows: QuotaRowView[];
+  columnTarget: string;
+  columnQuota: string;
+  emptyQuotaTitle: string;
+  emptyQuotaDescription: string;
+  quotaEmptyAction: string | null;
+  quotaEmptyActionProps: { href: string; label: string; size: string };
+  hasSnapshots: boolean;
+  noSnapshots: boolean;
+  snapshotRows: SnapshotRowView[];
+  columnAsOf: string;
+  columnType: string;
+  columnCurrency: string;
+  columnPipeline: string;
+  columnWeighted: string;
+  columnMostLikely: string;
+  columnClosed: string;
+  columnOverride: string;
+  emptyHistoryTitle: string;
+  emptyHistoryDescription: string;
+  historyEmptyAction: string | null;
   historyEmptyActionProps: {
-    periodStart: string
-    periodEnd: string
-    ownerUserId: string | null
-    salesTeamId: string | null
-  }
+    periodStart: string;
+    periodEnd: string;
+    ownerUserId: string | null;
+    salesTeamId: string | null;
+  };
 }
 
 export async function loadForecasts(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ForecastsData> {
-  const authz = await requirePermission('crm.forecasts.read')
+  const authz = await requirePermission("crm.forecasts.read");
   const [t, locale, { money }] = await Promise.all([
-    getTranslations('crm'),
+    getTranslations("crm"),
     getLocale(),
     getMoneyFormatter(authz.user.orgId),
-  ])
-  const today = await businessToday(authz.user.orgId)
-  const defaultStart = startOfMonth(today)
-  const requestedStart = pickString(sp.periodStart)
-  const requestedEnd = pickString(sp.periodEnd)
-  const start = requestedStart && isIsoCalendarDate(requestedStart) ? requestedStart : defaultStart
-  const startBasedEnd = addCalendarDays(addMonthsStart(start, 3), -1)
-  const end = requestedEnd && isIsoCalendarDate(requestedEnd) && requestedEnd >= start ? requestedEnd : startBasedEnd
-  const requestedOwner = pickString(sp.owner)
-  const requestedTeam = pickString(sp.team)
-  const ownerUserId = requestedOwner && isUuid(requestedOwner) ? requestedOwner : null
+  ]);
+  const today = await businessToday(authz.user.orgId);
+  const defaultStart = startOfMonth(today);
+  const requestedStart = pickString(sp.periodStart);
+  const requestedEnd = pickString(sp.periodEnd);
+  const start = requestedStart && isIsoCalendarDate(requestedStart) ? requestedStart : defaultStart;
+  const startBasedEnd = addCalendarDays(addMonthsStart(start, 3), -1);
+  const end =
+    requestedEnd && isIsoCalendarDate(requestedEnd) && requestedEnd >= start
+      ? requestedEnd
+      : startBasedEnd;
+  const requestedOwner = pickString(sp.owner);
+  const requestedTeam = pickString(sp.team);
+  const ownerUserId = requestedOwner && isUuid(requestedOwner) ? requestedOwner : null;
   // Owner and team are intentionally exclusive. The client filters clear the
   // opposite key; owner wins for manually constructed URLs containing both.
-  const salesTeamId = !ownerUserId && requestedTeam && isUuid(requestedTeam) ? requestedTeam : null
+  const salesTeamId = !ownerUserId && requestedTeam && isUuid(requestedTeam) ? requestedTeam : null;
 
-  const [forecast, excludedUndated, quotasResult, snapshotsResult, ownersResult, teamsResult] = await Promise.all([
-    calculateForecast({
-      orgId: authz.user.orgId,
-      periodStart: start,
-      periodEnd: end,
-      ownerUserId,
-      salesTeamId,
-      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    }),
-    countUndatedForecastExcluded({
-      orgId: authz.user.orgId,
-      ownerUserId,
-      salesTeamId,
-      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    }),
-    db.execute<QuotaRow>(sql`
+  const [forecast, excludedUndated, quotasResult, snapshotsResult, ownersResult, teamsResult] =
+    await Promise.all([
+      calculateForecast({
+        orgId: authz.user.orgId,
+        periodStart: start,
+        periodEnd: end,
+        ownerUserId,
+        salesTeamId,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      }),
+      countUndatedForecastExcluded({
+        orgId: authz.user.orgId,
+        ownerUserId,
+        salesTeamId,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      }),
+      db.execute<QuotaRow>(
+        sql`
       select q.*, u.display_name owner_name, st.name team_name
         from crm_sales_quotas q
         left join parties u on u.id = q.employee_id and u.org_id=q.org_id
@@ -221,8 +236,11 @@ export async function loadForecasts(
          ${ownerUserId ? sql`and q.employee_id = (select party_id from users where id=${ownerUserId} and org_id=q.org_id)` : sql``}
          ${salesTeamId ? sql`and q.sales_team_id = ${salesTeamId}` : sql``}
        order by q.period_start desc, coalesce(u.display_name, st.name), q.currency
-    `, 'objects'),
-    db.execute<SnapshotRow>(sql`
+    `,
+        "objects",
+      ),
+      db.execute<SnapshotRow>(
+        sql`
       select s.*, u.name owner_name, st.name team_name
         from crm_forecast_snapshots s
         left join users u on u.id = s.owner_user_id
@@ -233,67 +251,76 @@ export async function loadForecasts(
          ${ownerUserId ? sql`and s.owner_user_id = ${ownerUserId}` : sql``}
          ${salesTeamId ? sql`and s.sales_team_id = ${salesTeamId}` : sql``}
        order by s.as_of desc
-    `, 'objects'),
-    db.execute<{ id: string; name: string }>(sql`
+    `,
+        "objects",
+      ),
+      db.execute<{ id: string; name: string }>(
+        sql`
       select id, name from users
        where org_id = ${authz.user.orgId} and is_active
        order by name
-    `, 'objects'),
-    db.execute<{ id: string; name: string }>(sql`
+    `,
+        "objects",
+      ),
+      db.execute<{ id: string; name: string }>(
+        sql`
       select id, name from crm_sales_teams
        where org_id = ${authz.user.orgId} and is_active
        order by name
-    `, 'objects'),
-  ])
+    `,
+        "objects",
+      ),
+    ]);
 
-  const quotas = quotasResult
-  const snapshots = snapshotsResult
-  const canManageForecasts = authz.allowedSubsidiaryIds === null && can(authz, 'crm.forecasts.manage')
-  const canConfigureQuotas = can(authz, 'crm.setup.manage')
+  const quotas = quotasResult;
+  const snapshots = snapshotsResult;
+  const canManageForecasts =
+    authz.allowedSubsidiaryIds === null && can(authz, "crm.forecasts.manage");
+  const canConfigureQuotas = can(authz, "crm.setup.manage");
 
   // The undated board must show the same population this forecast excluded:
   // carry the active owner/team scope, or the link widens to the whole org.
   // Owner wins over team, mirroring the loader's exclusivity above.
-  const undatedQuery = new URLSearchParams({ view: 'board', undated: '1' })
-  if (ownerUserId) undatedQuery.set('owner', ownerUserId)
-  else if (salesTeamId) undatedQuery.set('team', salesTeamId)
+  const undatedQuery = new URLSearchParams({ view: "board", undated: "1" });
+  if (ownerUserId) undatedQuery.set("owner", ownerUserId);
+  else if (salesTeamId) undatedQuery.set("team", salesTeamId);
 
-  const pipelineLabel = t('forecasts.pipeline')
-  const weightedLabel = t('forecasts.weighted')
-  const mostLikelyLabel = t('forecasts.mostLikely')
-  const closedLabel = t('forecasts.closed')
+  const pipelineLabel = t("forecasts.pipeline");
+  const weightedLabel = t("forecasts.weighted");
+  const mostLikelyLabel = t("forecasts.mostLikely");
+  const closedLabel = t("forecasts.closed");
 
   return {
-    title: t('forecasts.title'),
-    description: t('forecasts.description'),
-    tabs: await customerGroupTabs(authz, '/crm/forecasts'),
+    title: t("forecasts.title"),
+    description: t("forecasts.description"),
+    tabs: await customerGroupTabs(authz, "/crm/forecasts"),
     canConfigureQuotas,
     canManageForecasts,
-    manageQuotasHref: '/crm/sales/quotas',
-    manageQuotasLabel: t('forecasts.manageQuotas'),
-    manageQuotasAriaLabel: t('forecasts.manageQuotas'),
+    manageQuotasHref: "/crm/sales/quotas",
+    manageQuotasLabel: t("forecasts.manageQuotas"),
+    manageQuotasAriaLabel: t("forecasts.manageQuotas"),
     snapshotPeriodStart: start,
     snapshotPeriodEnd: end,
     snapshotOwnerUserId: ownerUserId,
     snapshotTeamId: salesTeamId,
-    periodStartLabel: t('fields.periodStart'),
-    periodEndLabel: t('fields.periodEnd'),
+    periodStartLabel: t("fields.periodStart"),
+    periodEndLabel: t("fields.periodEnd"),
     defaultStart: start,
     defaultEnd: end,
-    ownerLabel: t('fields.owner'),
+    ownerLabel: t("fields.owner"),
     ownerOptions: ownersResult.map((row: { id: string; name: string }) => ({
       value: row.id,
       label: row.name,
     })),
-    teamLabel: t('fields.salesTeam'),
+    teamLabel: t("fields.salesTeam"),
     teamOptions: teamsResult.map((row: { id: string; name: string }) => ({
       value: row.id,
       label: row.name,
     })),
-    summaryTitle: t('forecasts.summary'),
-    quotasTitle: t('forecasts.quotas'),
-    historyTitle: t('forecasts.history'),
-    historyDescription: t('forecasts.snapshotCount', { count: snapshots.length }),
+    summaryTitle: t("forecasts.summary"),
+    quotasTitle: t("forecasts.quotas"),
+    historyTitle: t("forecasts.history"),
+    historyDescription: t("forecasts.snapshotCount", { count: snapshots.length }),
     hasForecast: forecast.length > 0,
     noForecast: forecast.length === 0,
     currencyGroups: forecast.map((row) => ({
@@ -303,7 +330,7 @@ export async function loadForecasts(
         { label: pipelineLabel, value: money(row.pipeline_amount, { currency: row.currency }) },
         { label: weightedLabel, value: money(row.weighted_amount, { currency: row.currency }) },
         {
-          label: t('forecastCategories.worst_case'),
+          label: t("forecastCategories.worst_case"),
           value: money(row.worst_case_amount, { currency: row.currency }),
         },
         {
@@ -311,50 +338,50 @@ export async function loadForecasts(
           value: money(row.most_likely_amount, { currency: row.currency }),
         },
         {
-          label: t('forecastCategories.upside'),
+          label: t("forecastCategories.upside"),
           value: money(row.upside_amount, { currency: row.currency }),
         },
         {
           label: closedLabel,
           value: money(row.closed_amount, { currency: row.currency }),
-          tone: 'good' as const,
+          tone: "good" as const,
         },
       ],
     })),
-    emptyForecastTitle: t('forecasts.emptyForecastTitle'),
-    emptyForecastDescription: t('forecasts.emptyForecastDescription'),
+    emptyForecastTitle: t("forecasts.emptyForecastTitle"),
+    emptyForecastDescription: t("forecasts.emptyForecastDescription"),
     hasExcludedUndated: excludedUndated > 0,
-    excludedUndatedNote: t('forecasts.excludedUndated', { count: excludedUndated }),
+    excludedUndatedNote: t("forecasts.excludedUndated", { count: excludedUndated }),
     excludedUndatedHref: `/crm/opportunities?${undatedQuery}`,
-    excludedUndatedLinkLabel: t('forecasts.viewUndated'),
+    excludedUndatedLinkLabel: t("forecasts.viewUndated"),
     hasQuotas: quotas.length > 0,
     noQuotas: quotas.length === 0,
     quotaRows: quotas.map((row) => ({
       id: row.id,
-      target: row.owner_name ?? row.team_name ?? '—',
+      target: row.owner_name ?? row.team_name ?? "—",
       periodStart: formatDate(row.period_start, locale),
       periodEnd: formatDate(row.period_end, locale),
       quota: money(row.amount, { currency: row.currency }),
     })),
-    columnTarget: t('forecasts.target'),
-    columnQuota: t('forecasts.quota'),
-    emptyQuotaTitle: t('forecasts.emptyQuotaTitle'),
-    emptyQuotaDescription: t('forecasts.emptyQuotaDescription'),
-    quotaEmptyAction: canConfigureQuotas ? 'quota-empty-action' : null,
+    columnTarget: t("forecasts.target"),
+    columnQuota: t("forecasts.quota"),
+    emptyQuotaTitle: t("forecasts.emptyQuotaTitle"),
+    emptyQuotaDescription: t("forecasts.emptyQuotaDescription"),
+    quotaEmptyAction: canConfigureQuotas ? "quota-empty-action" : null,
     quotaEmptyActionProps: {
-      href: '/crm/sales/quotas',
-      label: t('forecasts.manageQuotas'),
-      size: 'sm',
+      href: "/crm/sales/quotas",
+      label: t("forecasts.manageQuotas"),
+      size: "sm",
     },
     hasSnapshots: snapshots.length > 0,
     noSnapshots: snapshots.length === 0,
     snapshotRows: snapshots.map((row) => ({
       id: row.id,
       asOf: new Intl.DateTimeFormat(locale, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
+        dateStyle: "medium",
+        timeStyle: "short",
       }).format(new Date(row.as_of)),
-      target: row.owner_name ?? row.team_name ?? '—',
+      target: row.owner_name ?? row.team_name ?? "—",
       kindLabel: t(`forecasts.snapshotKinds.${row.snapshot_kind}`),
       kindVariant: snapshotBadge(row.snapshot_kind),
       currency: row.currency,
@@ -362,253 +389,254 @@ export async function loadForecasts(
       weighted: money(row.weighted_amount, { currency: row.currency }),
       mostLikely: money(row.most_likely_amount, { currency: row.currency }),
       closed: money(row.closed_amount, { currency: row.currency }),
-      override: row.override_amount === null ? '—' : money(row.override_amount, { currency: row.currency }),
+      override:
+        row.override_amount === null ? "—" : money(row.override_amount, { currency: row.currency }),
     })),
-    columnAsOf: t('forecasts.asOf'),
-    columnType: t('forecasts.snapshotType'),
-    columnCurrency: t('fields.currency'),
+    columnAsOf: t("forecasts.asOf"),
+    columnType: t("forecasts.snapshotType"),
+    columnCurrency: t("fields.currency"),
     columnPipeline: pipelineLabel,
     columnWeighted: weightedLabel,
     columnMostLikely: mostLikelyLabel,
     columnClosed: closedLabel,
-    columnOverride: t('forecasts.override'),
-    emptyHistoryTitle: t('forecasts.emptyHistoryTitle'),
-    emptyHistoryDescription: t('forecasts.emptyHistoryDescription'),
-    historyEmptyAction: canManageForecasts ? 'forecast-snapshot-button' : null,
+    columnOverride: t("forecasts.override"),
+    emptyHistoryTitle: t("forecasts.emptyHistoryTitle"),
+    emptyHistoryDescription: t("forecasts.emptyHistoryDescription"),
+    historyEmptyAction: canManageForecasts ? "forecast-snapshot-button" : null,
     historyEmptyActionProps: {
       periodStart: start,
       periodEnd: end,
       ownerUserId,
       salesTeamId,
     },
-  }
+  };
 }
 
-function snapshotBadge(kind: SnapshotRow['snapshot_kind']): 'outline' | 'default' | 'warning' {
-  if (kind === 'manager_override') return 'warning'
-  if (kind === 'rep_override') return 'default'
-  return 'outline'
+function snapshotBadge(kind: SnapshotRow["snapshot_kind"]): "outline" | "default" | "warning" {
+  if (kind === "manager_override") return "warning";
+  if (kind === "rep_override") return "default";
+  return "outline";
 }
 
 function formatDate(value: string | Date, locale: string) {
-  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`)
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date)
+  const date = value instanceof Date ? value : new Date(`${value}T00:00:00`);
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
 }
 
-const f = ref<ForecastsData>()
-const item = field
-const rootF = rootRef<ForecastsData>()
+const f = ref<ForecastsData>();
+const item = field;
+const rootF = rootRef<ForecastsData>();
 
 export function forecastsSpec(data: ForecastsData): PageSpec {
   return page({
-    route: '/crm/forecasts',
-    layout: 'list',
+    route: "/crm/forecasts",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-3",
         actions: [
           widget(
-            'manage-quotas-button',
+            "manage-quotas-button",
             {
               href: data.manageQuotasHref,
               label: data.manageQuotasLabel,
               ariaLabel: data.manageQuotasAriaLabel,
             },
-            f('canConfigureQuotas'),
+            f("canConfigureQuotas"),
           ),
           widget(
-            'forecast-snapshot-button',
+            "forecast-snapshot-button",
             {
               periodStart: data.snapshotPeriodStart,
               periodEnd: data.snapshotPeriodEnd,
               ownerUserId: data.snapshotOwnerUserId,
               salesTeamId: data.snapshotTeamId,
             },
-            f('canManageForecasts'),
+            f("canManageForecasts"),
           ),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
-      grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('date-range-filter', {
-          fromKey: 'periodStart',
-          toKey: 'periodEnd',
+      grid("flex flex-wrap items-center gap-2", [
+        widgetBlock("date-range-filter", {
+          fromKey: "periodStart",
+          toKey: "periodEnd",
           fromLabel: data.periodStartLabel,
           toLabel: data.periodEndLabel,
           defaultFrom: data.defaultStart,
           defaultTo: data.defaultEnd,
           clearable: false,
         }),
-        widgetBlock('search-select-filter', {
-          paramKey: 'owner',
+        widgetBlock("search-select-filter", {
+          paramKey: "owner",
           label: data.ownerLabel,
           options: data.ownerOptions,
-          resetParamKeys: ['team'],
-          className: 'w-full sm:w-48',
+          resetParamKeys: ["team"],
+          className: "w-full sm:w-48",
         }),
-        widgetBlock('search-select-filter', {
-          paramKey: 'team',
+        widgetBlock("search-select-filter", {
+          paramKey: "team",
           label: data.teamLabel,
           options: data.teamOptions,
-          resetParamKeys: ['owner'],
-          className: 'w-full sm:w-48',
+          resetParamKeys: ["owner"],
+          className: "w-full sm:w-48",
         }),
       ]),
     ],
     body: [
-      grid('space-y-6', [
+      grid("space-y-6", [
         frame(
-          'forecast-section',
+          "forecast-section",
           [
-            widgetBlock('section-heading', {
-              id: 'forecast-summary-heading',
-              iconKey: 'gauge',
+            widgetBlock("section-heading", {
+              id: "forecast-summary-heading",
+              iconKey: "gauge",
               title: data.summaryTitle,
             }),
             {
               ...repeat({
-                items: f('currencyGroups'),
-                itemKey: item('key'),
-                className: 'space-y-4',
+                items: f("currencyGroups"),
+                itemKey: item("key"),
+                className: "space-y-4",
                 unwrapped: true,
                 blocks: [
-                  widgetBlock('forecast-kpi-group', {
-                    currency: item('currency'),
-                    items: item('items'),
+                  widgetBlock("forecast-kpi-group", {
+                    currency: item("currency"),
+                    items: item("items"),
                   }),
                 ],
               }),
-              when: f('hasForecast'),
+              when: f("hasForecast"),
             },
             {
-              ...widgetBlock('empty-state', {
-                icon: 'gauge',
+              ...widgetBlock("empty-state", {
+                icon: "gauge",
                 title: data.emptyForecastTitle,
                 description: data.emptyForecastDescription,
               }),
-              when: f('noForecast'),
+              when: f("noForecast"),
             },
             {
-              ...widgetBlock('forecast-excluded-note', {
+              ...widgetBlock("forecast-excluded-note", {
                 note: data.excludedUndatedNote,
                 href: data.excludedUndatedHref,
                 linkLabel: data.excludedUndatedLinkLabel,
               }),
-              when: f('hasExcludedUndated'),
+              when: f("hasExcludedUndated"),
             },
           ],
-          { labelledBy: 'forecast-summary-heading' },
+          { labelledBy: "forecast-summary-heading" },
         ),
         frame(
-          'forecast-section',
+          "forecast-section",
           [
-            widgetBlock('section-heading', {
-              id: 'quota-heading',
-              iconKey: 'gauge',
+            widgetBlock("section-heading", {
+              id: "quota-heading",
+              iconKey: "gauge",
               title: data.quotasTitle,
             }),
             {
-              ...registeredListTable('crm_forecast_quotas', {
-                variant: 'app',
-                rows: f('quotaRows'),
-                rowKey: item('id'),
+              ...registeredListTable("crm_forecast_quotas", {
+                variant: "app",
+                rows: f("quotaRows"),
+                rowKey: item("id"),
                 columns: [
-                  column(rootF('columnTarget'), text(item('target')), {
-                    className: 'font-medium text-slate-900 dark:text-slate-100',
+                  column(rootF("columnTarget"), text(item("target")), {
+                    className: "font-medium text-slate-900 dark:text-slate-100",
                   }),
-                  column(rootF('periodStartLabel'), text(item('periodStart')), {
-                    className: 'whitespace-nowrap tabular-nums',
+                  column(rootF("periodStartLabel"), text(item("periodStart")), {
+                    className: "whitespace-nowrap tabular-nums",
                   }),
-                  column(rootF('periodEndLabel'), text(item('periodEnd')), {
-                    className: 'whitespace-nowrap tabular-nums',
+                  column(rootF("periodEndLabel"), text(item("periodEnd")), {
+                    className: "whitespace-nowrap tabular-nums",
                   }),
-                  column(rootF('columnQuota'), money(item('quota')), {
-                    align: 'right',
-                    className: 'font-medium tabular-nums',
+                  column(rootF("columnQuota"), money(item("quota")), {
+                    align: "right",
+                    className: "font-medium tabular-nums",
                   }),
                 ],
               }),
-              when: f('hasQuotas'),
+              when: f("hasQuotas"),
             },
             {
-              ...widgetBlock('empty-state', {
-                icon: 'gauge',
+              ...widgetBlock("empty-state", {
+                icon: "gauge",
                 title: data.emptyQuotaTitle,
                 description: data.emptyQuotaDescription,
                 action: data.quotaEmptyAction,
                 actionProps: data.quotaEmptyActionProps,
               }),
-              when: f('noQuotas'),
+              when: f("noQuotas"),
             },
           ],
-          { labelledBy: 'quota-heading' },
+          { labelledBy: "quota-heading" },
         ),
         frame(
-          'forecast-section',
+          "forecast-section",
           [
-            widgetBlock('section-heading', {
-              id: 'history-heading',
-              iconKey: 'history',
+            widgetBlock("section-heading", {
+              id: "history-heading",
+              iconKey: "history",
               title: data.historyTitle,
               description: data.historyDescription,
             }),
             {
-              ...registeredListTable('crm_forecast_snapshots', {
-                variant: 'app',
-                rows: f('snapshotRows'),
-                rowKey: item('id'),
+              ...registeredListTable("crm_forecast_snapshots", {
+                variant: "app",
+                rows: f("snapshotRows"),
+                rowKey: item("id"),
                 columns: [
-                  column(rootF('columnAsOf'), text(item('asOf')), {
-                    className: 'whitespace-nowrap tabular-nums',
+                  column(rootF("columnAsOf"), text(item("asOf")), {
+                    className: "whitespace-nowrap tabular-nums",
                   }),
-                  column(rootF('columnTarget'), text(item('target')), {
-                    className: 'font-medium text-slate-900 dark:text-slate-100',
+                  column(rootF("columnTarget"), text(item("target")), {
+                    className: "font-medium text-slate-900 dark:text-slate-100",
                   }),
                   column(
-                    rootF('columnType'),
-                    badge(item('kindLabel'), { variant: item('kindVariant') }),
+                    rootF("columnType"),
+                    badge(item("kindLabel"), { variant: item("kindVariant") }),
                   ),
-                  column(rootF('columnCurrency'), text(item('currency'))),
-                  column(rootF('columnPipeline'), money(item('pipeline')), {
-                    align: 'right',
-                    className: 'whitespace-nowrap',
+                  column(rootF("columnCurrency"), text(item("currency"))),
+                  column(rootF("columnPipeline"), money(item("pipeline")), {
+                    align: "right",
+                    className: "whitespace-nowrap",
                   }),
-                  column(rootF('columnWeighted'), money(item('weighted')), {
-                    align: 'right',
-                    className: 'whitespace-nowrap',
+                  column(rootF("columnWeighted"), money(item("weighted")), {
+                    align: "right",
+                    className: "whitespace-nowrap",
                   }),
-                  column(rootF('columnMostLikely'), money(item('mostLikely')), {
-                    align: 'right',
-                    className: 'whitespace-nowrap',
+                  column(rootF("columnMostLikely"), money(item("mostLikely")), {
+                    align: "right",
+                    className: "whitespace-nowrap",
                   }),
-                  column(rootF('columnClosed'), money(item('closed')), {
-                    align: 'right',
-                    className: 'whitespace-nowrap',
+                  column(rootF("columnClosed"), money(item("closed")), {
+                    align: "right",
+                    className: "whitespace-nowrap",
                   }),
-                  column(rootF('columnOverride'), money(item('override')), {
-                    align: 'right',
-                    className: 'whitespace-nowrap',
+                  column(rootF("columnOverride"), money(item("override")), {
+                    align: "right",
+                    className: "whitespace-nowrap",
                   }),
                 ],
               }),
-              when: f('hasSnapshots'),
+              when: f("hasSnapshots"),
             },
             {
-              ...widgetBlock('empty-state', {
-                icon: 'camera',
+              ...widgetBlock("empty-state", {
+                icon: "camera",
                 title: data.emptyHistoryTitle,
                 description: data.emptyHistoryDescription,
                 action: data.historyEmptyAction,
                 actionProps: data.historyEmptyActionProps,
               }),
-              when: f('noSnapshots'),
+              when: f("noSnapshots"),
             },
           ],
-          { labelledBy: 'history-heading' },
+          { labelledBy: "history-heading" },
         ),
       ]),
     ],
-  })
+  });
 }

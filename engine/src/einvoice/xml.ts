@@ -32,18 +32,30 @@ export function el(name: string, ...children: XmlChild[]): XmlElement | null {
 }
 
 /** A container with attributes; null when none of its children survived. */
-export function elWith(name: string, attributes: XmlAttributes, ...children: XmlChild[]): XmlElement | null {
+export function elWith(
+  name: string,
+  attributes: XmlAttributes,
+  ...children: XmlChild[]
+): XmlElement | null {
   const kept = present(children);
   return kept.length === 0 ? null : { name, attributes, text: null, children: kept };
 }
 
 /** A container the schema requires even when it has no children. */
-export function required(name: string, attributes: XmlAttributes, ...children: XmlChild[]): XmlElement {
+export function required(
+  name: string,
+  attributes: XmlAttributes,
+  ...children: XmlChild[]
+): XmlElement {
   return { name, attributes, text: null, children: present(children) };
 }
 
 /** A text leaf; null when the value is null, undefined or blank. */
-export function leaf(name: string, value: string | null | undefined, attributes: XmlAttributes = {}): XmlElement | null {
+export function leaf(
+  name: string,
+  value: string | null | undefined,
+  attributes: XmlAttributes = {},
+): XmlElement | null {
   if (value === null || value === undefined || value.trim() === "") return null;
   return { name, attributes, text: value, children: [] };
 }
@@ -65,7 +77,14 @@ export function escapeXml(value: string): string {
 export function assertXmlCharacters(value: string): void {
   for (const character of value) {
     const code = character.codePointAt(0)!;
-    if (!(code === 9 || code === 10 || code === 13 || code >= 0x20 && code <= 0xd7ff || code >= 0xe000 && code <= 0xfffd || code >= 0x10000 && code <= 0x10ffff)) {
+    if (!(
+      code === 9 ||
+      code === 10 ||
+      code === 13 ||
+      (code >= 0x20 && code <= 0xd7ff) ||
+      (code >= 0xe000 && code <= 0xfffd) ||
+      (code >= 0x10000 && code <= 0x10ffff)
+    )) {
       throw new Error("The XML contains a character that XML 1.0 cannot represent.");
     }
   }
@@ -73,7 +92,10 @@ export function assertXmlCharacters(value: string): void {
 
 function attributeText(attributes: XmlAttributes): string {
   return Object.entries(attributes)
-    .filter((entry): entry is [string, string] => entry[1] !== null && entry[1] !== undefined && entry[1] !== "")
+    .filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== null && entry[1] !== undefined && entry[1] !== "",
+    )
     .map(([key, value]) => ` ${key}="${escapeXml(value)}"`)
     .join("");
 }
@@ -109,12 +131,18 @@ export function isIsoDate(value: unknown): value is string {
   const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
   const date = new Date(0);
   date.setUTCFullYear(year, month - 1, day);
-  return year > 0 && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  return (
+    year > 0 &&
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 }
 
 /** An ISO date for UBL, refusing anything that is not one. */
 export function isoDate(value: string, term: string): string {
-  if (!isIsoDate(value)) throw new Error(`${term} must be an ISO date (YYYY-MM-DD), saw "${value}"`);
+  if (!isIsoDate(value))
+    throw new Error(`${term} must be an ISO date (YYYY-MM-DD), saw "${value}"`);
   return value;
 }
 

@@ -41,16 +41,16 @@ export type CellBounds = { rows: number; columns: number };
 export type CellArrow = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 
 /** Move a focused person-week cell by one step, clamping at the board edge. */
-export function nextCell(
-  position: CellPosition,
-  key: CellArrow,
-  bounds: CellBounds,
-): CellPosition {
+export function nextCell(position: CellPosition, key: CellArrow, bounds: CellBounds): CellPosition {
   if (bounds.rows < 1 || bounds.columns < 1) return { row: 0, column: 0 };
-  const delta = key === "ArrowUp" ? [-1, 0]
-    : key === "ArrowDown" ? [1, 0]
-      : key === "ArrowLeft" ? [0, -1]
-        : [0, 1];
+  const delta =
+    key === "ArrowUp"
+      ? [-1, 0]
+      : key === "ArrowDown"
+        ? [1, 0]
+        : key === "ArrowLeft"
+          ? [0, -1]
+          : [0, 1];
   return {
     row: Math.max(0, Math.min(bounds.rows - 1, position.row + delta[0]!)),
     column: Math.max(0, Math.min(bounds.columns - 1, position.column + delta[1]!)),

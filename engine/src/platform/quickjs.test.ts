@@ -36,9 +36,7 @@ async function runScriptLikeProduction(i: number): Promise<string> {
       result.error.dispose();
       throw new Error(
         `sandboxed script ${i} failed: ${
-          typeof err === "object" && err && "message" in err
-            ? String(err.message)
-            : String(err)
+          typeof err === "object" && err && "message" in err ? String(err.message) : String(err)
         }`,
       );
     }

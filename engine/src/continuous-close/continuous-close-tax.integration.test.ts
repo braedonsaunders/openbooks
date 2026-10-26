@@ -33,7 +33,9 @@ function detectorsWith(overrides: Record<string, Record<string, number>> = {}) {
 }
 
 async function scan(orgId: string, overrides: Record<string, Record<string, number>> = {}) {
-  return withSimClock("2026-08-01T12:00:00.000Z", () => taxFindings(orgId, "1000.0000", detectorsWith(overrides)));
+  return withSimClock("2026-08-01T12:00:00.000Z", () =>
+    taxFindings(orgId, "1000.0000", detectorsWith(overrides)),
+  );
 }
 
 /** A posted vendor bill whose single line carries (or omits) a tax code. */
@@ -70,10 +72,14 @@ async function seedPostedBill(
                 '0.0000', '0.0000', 'standard', false, false, 2, null, ${org.accounts.taxInput},
                 null, false)`);
     }
-    await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+    await db.execute(
+      sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+    );
   });
   await withBypassContext(() =>
-    postDocument(documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }),
+    postDocument(documentId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    }),
   );
   return documentId;
 }
@@ -97,7 +103,11 @@ test(
       await seedPostedBill(org, "TAX-TAXED", "2500.0000", codeId);
 
       const findings = await scan(org.orgId, { tax_missing_codes: { lookbackDays: 90 } });
-      assert.equal(findings.length, 1, `only the untaxed kind fires, got ${findings.map((finding) => finding.findingType)}`);
+      assert.equal(
+        findings.length,
+        1,
+        `only the untaxed kind fires, got ${findings.map((finding) => finding.findingType)}`,
+      );
       const finding = findings[0]!;
       assert.equal(finding.agentKey, "tax");
       assert.equal(finding.findingType, "tax_missing_codes");
@@ -130,7 +140,11 @@ test(
       // unlock findings, and no blocked computation (nothing registered).
       let findings = await scan(org.orgId);
       let types = findings.map((finding) => finding.findingType).sort();
-      assert.deepEqual(types, ["tax_missing_registration", "tax_unlocked_period"], `unregistered posture, got ${types}`);
+      assert.deepEqual(
+        types,
+        ["tax_missing_registration", "tax_unlocked_period"],
+        `unregistered posture, got ${types}`,
+      );
 
       // Register the form with one mapped box: the registration finding
       // clears and the return computes, so only the unlock remains.
@@ -157,7 +171,8 @@ test(
       types = findings.map((finding) => finding.findingType).sort();
       assert.deepEqual(types, ["tax_unlocked_period"], `registered posture, got ${types}`);
       assert.equal(
-        findings.find((finding) => finding.findingType === "tax_unlocked_period")?.summary.periodName,
+        findings.find((finding) => finding.findingType === "tax_unlocked_period")?.summary
+          .periodName,
         "P07 FY2026",
         "the unlocked period is named by its fiscal label",
       );
@@ -165,11 +180,17 @@ test(
       // Break the box mapping: the registered return no longer computes, and
       // the pack reports the filing engine's own error as evidence.
       await withBypassContext(async () => {
-        await db.execute(sql`delete from tax_report_lines where org_id = ${org.orgId} and report_code = ${formCode}`);
+        await db.execute(
+          sql`delete from tax_report_lines where org_id = ${org.orgId} and report_code = ${formCode}`,
+        );
       });
       findings = await scan(org.orgId);
       types = findings.map((finding) => finding.findingType).sort();
-      assert.deepEqual(types, ["tax_return_blocked", "tax_unlocked_period"], `broken mapping posture, got ${types}`);
+      assert.deepEqual(
+        types,
+        ["tax_return_blocked", "tax_unlocked_period"],
+        `broken mapping posture, got ${types}`,
+      );
       const blocked = findings.find((finding) => finding.findingType === "tax_return_blocked")!;
       assert.equal(blocked.severity, "critical");
       assert.ok(
@@ -179,12 +200,22 @@ test(
 
       // Restore the mapping and close the tax lock for the latest completed
       // period: full readiness, the pack goes quiet.
-      const book = (await withBypassContext(() =>
-        db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${org.orgId} and is_primary limit 1`, "objects"),
-      ))[0]!;
+      const book = (
+        await withBypassContext(() =>
+          db.execute<{ id: string }>(
+            sql`select id from accounting_books where org_id = ${org.orgId} and is_primary limit 1`,
+            "objects",
+          ),
+        )
+      )[0]!;
       await withBypassContext(async () => {
-        const codeId = (await db.execute<{ id: string }>(sql`
-          select id from tax_codes where org_id = ${org.orgId} and code = 'TAX-READY' limit 1`, "objects"))[0]!;
+        const codeId = (
+          await db.execute<{ id: string }>(
+            sql`
+          select id from tax_codes where org_id = ${org.orgId} and code = 'TAX-READY' limit 1`,
+            "objects",
+          )
+        )[0]!;
         await db.execute(sql`
           insert into tax_report_lines
             (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
@@ -205,15 +236,12 @@ test(
   },
 );
 
-test(
-  "the tax pack persists through a full control-plane run",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      await seedPostedBill(org, "TAX-RUN", "2000.0000", null);
-      await withBypassContext(async () => {
-        await db.execute(sql`
+test("the tax pack persists through a full control-plane run", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    await seedPostedBill(org, "TAX-RUN", "2000.0000", null);
+    await withBypassContext(async () => {
+      await db.execute(sql`
           insert into ai_agent_policies
             (id, org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
              detector_settings, analysis_settings, next_run_at)
@@ -222,39 +250,49 @@ test(
                   ${JSON.stringify({ rootCauseAnalysis: false, recommendations: false, narrative: false })}::jsonb,
                   null)
         `);
-      });
-      const result = await withSimClock("2026-08-01T12:00:00.000Z", () => runContinuousCloseAgent({ orgId: org.orgId, agentKey: "tax", trigger: "manual", allowedSubsidiaryIds: null }));
-      assert.equal((result as { status: string }).status, "completed");
-      assert.ok((result as { detected: number }).detected >= 1, "the run detects the untaxed bill");
-      const persisted = await withBypassContext(() =>
-        db.execute<{ finding_type: string; fingerprint: string }>(sql`
+    });
+    const result = await withSimClock("2026-08-01T12:00:00.000Z", () =>
+      runContinuousCloseAgent({
+        orgId: org.orgId,
+        agentKey: "tax",
+        trigger: "manual",
+        allowedSubsidiaryIds: null,
+      }),
+    );
+    assert.equal((result as { status: string }).status, "completed");
+    assert.ok((result as { detected: number }).detected >= 1, "the run detects the untaxed bill");
+    const persisted = await withBypassContext(() =>
+      db.execute<{ finding_type: string; fingerprint: string }>(
+        sql`
           select finding_type, fingerprint from ai_work_items
            where org_id = ${org.orgId} and agent_key = 'tax'
-        `, "objects"));
-      assert.ok(
-        persisted.some((row) => row.fingerprint === "tax-missing-codes:vendor_bill"),
-        `the finding persists with a stable fingerprint, got ${JSON.stringify(persisted)}`,
-      );
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+        `,
+        "objects",
+      ),
+    );
+    assert.ok(
+      persisted.some((row) => row.fingerprint === "tax-missing-codes:vendor_bill"),
+      `the finding persists with a stable fingerprint, got ${JSON.stringify(persisted)}`,
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
-test(
-  "tax findings never leak across orgs",
-  { skip: !DB },
-  async () => {
-    const orgA = await withBypass(() => createScratchOrg());
-    const orgB = await withBypass(() => createScratchOrg());
-    try {
-      await seedPostedBill(orgA, "TAX-OTHER-ORG", "9000.0000", null);
-      const findingsA = await scan(orgA.orgId, { tax_missing_codes: { lookbackDays: 90 } });
-      assert.ok(findingsA.length > 0, "org A flags its own untaxed lines");
-      assert.deepEqual(await scan(orgB.orgId, { tax_missing_codes: { lookbackDays: 90 } }), [], "org B sees none of org A's lines");
-    } finally {
-      await withBypass(() => dropScratchOrg(orgA.orgId));
-      await withBypass(() => dropScratchOrg(orgB.orgId));
-    }
-  },
-);
+test("tax findings never leak across orgs", { skip: !DB }, async () => {
+  const orgA = await withBypass(() => createScratchOrg());
+  const orgB = await withBypass(() => createScratchOrg());
+  try {
+    await seedPostedBill(orgA, "TAX-OTHER-ORG", "9000.0000", null);
+    const findingsA = await scan(orgA.orgId, { tax_missing_codes: { lookbackDays: 90 } });
+    assert.ok(findingsA.length > 0, "org A flags its own untaxed lines");
+    assert.deepEqual(
+      await scan(orgB.orgId, { tax_missing_codes: { lookbackDays: 90 } }),
+      [],
+      "org B sees none of org A's lines",
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(orgA.orgId));
+    await withBypass(() => dropScratchOrg(orgB.orgId));
+  }
+});

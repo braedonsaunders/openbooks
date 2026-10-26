@@ -49,9 +49,16 @@ type ProjectFinancials = {
  * predicates — the report's defaults.
  */
 async function rankProjectFinancials(orgId: string): Promise<ProjectFinancials[]> {
-  const costSet = sql`(${sql.join(COST_TYPES.map((t) => sql`${t}`), sql`, `)})`;
-  const revenueSet = sql`(${sql.join(REVENUE_TYPES.map((t) => sql`${t}`), sql`, `)})`;
-  const res = await db.execute<Record<string, unknown>>(sql`
+  const costSet = sql`(${sql.join(
+    COST_TYPES.map((t) => sql`${t}`),
+    sql`, `,
+  )})`;
+  const revenueSet = sql`(${sql.join(
+    REVENUE_TYPES.map((t) => sql`${t}`),
+    sql`, `,
+  )})`;
+  const res = await db.execute<Record<string, unknown>>(
+    sql`
     with book as (
       select b.id from accounting_books b
        where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl
@@ -112,7 +119,9 @@ async function rankProjectFinancials(orgId: string): Promise<ProjectFinancials[]
       left join committed cm on cm.project_id = s.id
      where coalesce(a.cost, 0) <> 0 or coalesce(a.revenue, 0) <> 0
      order by s.code, s.name, s.id
-  `, "objects");
+  `,
+    "objects",
+  );
   return res.map((row) => ({
     id: String(row.id),
     code: (row.code as string | null) ?? null,
@@ -130,13 +139,16 @@ async function rankProjectFinancials(orgId: string): Promise<ProjectFinancials[]
 
 /** The margin this fingerprint carried the last time a run persisted it, if any. */
 async function priorPersistedMargin(orgId: string, fingerprint: string): Promise<string | null> {
-  const res = await db.execute<{ margin: string | null }>(sql`
+  const res = await db.execute<{ margin: string | null }>(
+    sql`
     select summary->>'margin' as margin
       from ai_work_items
      where org_id = ${orgId} and agent_key = 'projects' and fingerprint = ${fingerprint}
      order by last_detected_at desc
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   return res[0]?.margin ?? null;
 }
 
@@ -157,7 +169,8 @@ type StaleUnbilledRow = {
  * window: only work older than `unbilledDays` counts as stale.
  */
 async function staleUnbilledByProject(orgId: string, cutoff: string): Promise<StaleUnbilledRow[]> {
-  const res = await db.execute<Record<string, unknown>>(sql`
+  const res = await db.execute<Record<string, unknown>>(
+    sql`
     with aged_time as (
       select te.project_id,
              round(te.hours * coalesce(te.bill_rate, item.default_rate, 0), 4) as bill_amount,
@@ -238,7 +251,9 @@ async function staleUnbilledByProject(orgId: string, cutoff: string): Promise<St
      group by p.id
     having coalesce(sum(c.bill_amount), 0) <> 0
      order by p.id
-  `, "objects");
+  `,
+    "objects",
+  );
   return res.map((row) => ({
     id: String(row.id),
     agedTime: String(row.aged_time),
@@ -380,10 +395,16 @@ export async function projectsFindings(
     const rows = await staleUnbilledByProject(orgId, cutoff);
     const names = new Map<string, { code: string | null; name: string }>();
     if (rows.length > 0) {
-      const nameRes = await db.execute<Record<string, unknown>>(sql`
+      const nameRes = await db.execute<Record<string, unknown>>(
+        sql`
         select id::text as id, code, name from projects
-         where org_id = ${orgId} and id in (${sql.join(rows.map((row) => sql`${row.id}::uuid`), sql`, `)})
-      `, "objects");
+         where org_id = ${orgId} and id in (${sql.join(
+           rows.map((row) => sql`${row.id}::uuid`),
+           sql`, `,
+         )})
+      `,
+        "objects",
+      );
       for (const row of nameRes) {
         names.set(String(row.id), {
           code: (row.code as string | null) ?? null,

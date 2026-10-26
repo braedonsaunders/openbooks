@@ -40,9 +40,17 @@ function textField(node: Record<string, unknown>, field: string, what: string): 
   return (value as string).trim();
 }
 
-function moneyField(node: Record<string, unknown>, field: string, what: string): { amount: string; currency: string } {
+function moneyField(
+  node: Record<string, unknown>,
+  field: string,
+  what: string,
+): { amount: string; currency: string } {
   const money = node[field];
-  if (!isRecord(money) || typeof money.amount !== "string" || typeof money.currencyCode !== "string") {
+  if (
+    !isRecord(money) ||
+    typeof money.amount !== "string" ||
+    typeof money.currencyCode !== "string"
+  ) {
     refuse(
       "shopify_payout_shape",
       `Shopify payout ${what} carries no ${field} money.`,
@@ -50,7 +58,10 @@ function moneyField(node: Record<string, unknown>, field: string, what: string):
       field,
     );
   }
-  return { amount: (money.amount as string).trim(), currency: (money.currencyCode as string).trim() };
+  return {
+    amount: (money.amount as string).trim(),
+    currency: (money.currencyCode as string).trim(),
+  };
 }
 
 type PayoutNode = { id: string; issuedAt: string; net: { amount: string; currency: string } };
@@ -66,7 +77,10 @@ const PAYOUTS_QUERY = `
   }
 `;
 
-function pickPayouts(data: unknown): { edges: { node: PayoutNode }[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } {
+function pickPayouts(data: unknown): {
+  edges: { node: PayoutNode }[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+} {
   const account = isRecord(data) ? data.shopifyPaymentsAccount : null;
   const payouts = isRecord(account) ? account.payouts : null;
   if (!isRecord(payouts) || !Array.isArray(payouts.edges) || !isRecord(payouts.pageInfo)) {
@@ -111,7 +125,10 @@ const PAYOUT_TRANSACTIONS_QUERY = `
   }
 `;
 
-function pickBalanceTransactions(data: unknown, payoutId: string): {
+function pickBalanceTransactions(
+  data: unknown,
+  payoutId: string,
+): {
   edges: { node: BalanceNode }[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
 } {
@@ -139,7 +156,11 @@ export async function fetchShopifyPayouts(
   const limit = opts.limit ?? 20;
   const settlements: ParsedSettlement[] = [];
   let seen = 0;
-  for await (const payout of client.paginate<PayoutNode>(PAYOUTS_QUERY, { first: 50 }, pickPayouts)) {
+  for await (const payout of client.paginate<PayoutNode>(
+    PAYOUTS_QUERY,
+    { first: 50 },
+    pickPayouts,
+  )) {
     if (seen >= limit) break;
     seen += 1;
     const payoutNode = payout as unknown as Record<string, unknown>;
@@ -214,12 +235,17 @@ export async function runDueShopifyPayoutPulls(
   const orgScope = scopedOrgId ? sql`and c.org_id = ${scopedOrgId}` : sql``;
   // bypass: scheduler-tick — the unscoped scan finds pull-enabled Shopify
   // Payments configs across every production organization.
-  const configs = await withBypass(async () =>
-    await db.execute<{ orgId: string; lastPullAt: string | null }>(sql`
+  const configs = await withBypass(
+    async () =>
+      await db.execute<{ orgId: string; lastPullAt: string | null }>(
+        sql`
       select c.org_id as "orgId", c.last_pull_at::text as "lastPullAt"
         from psp_provider_configs c
        where c.provider = 'shopify_payments' and c.is_enabled and c.pull_enabled ${orgScope}
-       order by c.org_id`, "objects"));
+       order by c.org_id`,
+        "objects",
+      ),
+  );
   for (const config of configs) {
     const gated = await withOrg(config.orgId, () => orgFeatureEnabled(config.orgId, "banking"));
     if (!gated) {
@@ -227,11 +253,17 @@ export async function runDueShopifyPayoutPulls(
       continue;
     }
     try {
-      const channels = await withOrg(config.orgId, async () =>
-        await db.execute<{ id: string }>(sql`
+      const channels = await withOrg(
+        config.orgId,
+        async () =>
+          await db.execute<{ id: string }>(
+            sql`
           select id from sales_channels
            where org_id = ${config.orgId} and kind = 'shopify' and status = 'active'
-           order by id`, "objects"));
+           order by id`,
+            "objects",
+          ),
+      );
       if (channels.length === 0) {
         throw new CommerceError(
           "shopify_payout_pull_no_channel",
@@ -249,20 +281,25 @@ export async function runDueShopifyPayoutPulls(
         // Sequential channels share one pull cursor: parallel imports would
         // interleave their idempotency checks and could advance the cursor
         // past a failed channel.
-        const access = await withOrg(config.orgId, () => loadShopifyChannel(config.orgId, channel.id));
+        const access = await withOrg(config.orgId, () =>
+          loadShopifyChannel(config.orgId, channel.id),
+        );
         const client = new ShopifyClient({
           shopDomain: access.shop,
           accessToken: access.accessToken,
           ...(transport ? { transport } : {}),
           apiVersion: access.settings.apiVersion,
         });
-        settlements.push(...await fetchShopifyPayouts(client, { sinceDate }));
+        settlements.push(...(await fetchShopifyPayouts(client, { sinceDate })));
       }
       await importPulledSettlements(config.orgId, "shopify_payments", settlements, null, null);
       result.ran += 1;
     } catch (e) {
       result.failed += 1;
-      result.orgErrors.push({ orgId: config.orgId, error: (e instanceof Error ? e.message : String(e)).slice(0, 1000) });
+      result.orgErrors.push({
+        orgId: config.orgId,
+        error: (e instanceof Error ? e.message : String(e)).slice(0, 1000),
+      });
     }
   }
   return result;

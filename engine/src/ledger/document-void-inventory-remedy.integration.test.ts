@@ -79,10 +79,13 @@ async function seedApprovedDoc(
 
 /** The service item carries a 12-month term: provision the schedule's months. */
 async function seedRecognitionTermPeriods(org: ScratchOrg): Promise<void> {
-  const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
+  const calendar = await db.execute<{ fiscal_calendar_id: string }>(
+    sql`
     select fiscal_calendar_id
       from accounting_periods
-     where id = ${org.periodId} and org_id = ${org.orgId}`, "objects");
+     where id = ${org.periodId} and org_id = ${org.orgId}`,
+    "objects",
+  );
   const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
@@ -120,14 +123,19 @@ async function seedRevenueProject(org: ScratchOrg, code: string): Promise<string
 }
 
 async function docState(orgId: string, documentId: string) {
-  return (await db.execute<{
-    status: string;
-    void_requested_at: string | null;
-    reversal_entry_id: string | null;
-  }>(sql`
+  return (
+    await db.execute<{
+      status: string;
+      void_requested_at: string | null;
+      reversal_entry_id: string | null;
+    }>(
+      sql`
     select status, void_requested_at::text, reversal_entry_id::text
       from documents where id = ${documentId} and org_id = ${orgId}
-  `, "objects"))[0]!;
+  `,
+      "objects",
+    )
+  )[0]!;
 }
 
 async function voidMessage(input: {
@@ -161,47 +169,77 @@ const depsFor = (org: ScratchOrg) => ({
 // adjustment) survives only as the fallback for stock the kernel itself
 // cannot unwind (landed cost, custody, provisional chain), named by the
 // void gate below.
-test("voiding a posted inventory bill reverses its receipt movement and journal", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const billId = await seedApprovedDoc(org, "vendor_bill", "BILL-INVREM-1", org.vendorId, [
-      { itemId: org.items.fifo, quantity: "5", unitPrice: "2", amount: "10", stockLocationId: org.stockLocationId },
-    ]);
-    assert.ok(await postDocument(billId, depsFor(org)));
-    const movements = (await db.execute<{ n: number }>(sql`
+test(
+  "voiding a posted inventory bill reverses its receipt movement and journal",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const billId = await seedApprovedDoc(org, "vendor_bill", "BILL-INVREM-1", org.vendorId, [
+        {
+          itemId: org.items.fifo,
+          quantity: "5",
+          unitPrice: "2",
+          amount: "10",
+          stockLocationId: org.stockLocationId,
+        },
+      ]);
+      assert.ok(await postDocument(billId, depsFor(org)));
+      const movements = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from inventory_movements movement
         join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
-       where movement.org_id = ${org.orgId} and line.document_id = ${billId}`, "objects"))[0]!.n;
-    assert.equal(movements, 1);
-    assert.equal(toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity), toUnits("5"));
+       where movement.org_id = ${org.orgId} and line.document_id = ${billId}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(movements, 1);
+      assert.equal(
+        toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity),
+        toUnits("5"),
+      );
 
-    const message = await voidMessage({ orgId: org.orgId, documentId: billId, actorId: actor });
-    assert.equal(message, null, `void must succeed, refused with: ${message}`);
+      const message = await voidMessage({ orgId: org.orgId, documentId: billId, actorId: actor });
+      assert.equal(message, null, `void must succeed, refused with: ${message}`);
 
-    const state = await docState(org.orgId, billId);
-    assert.equal(state.status, "voided");
-    assert.ok(state.reversal_entry_id, "the void records its reversal entry");
-    assert.equal(toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity), toUnits("0"));
-    assert.doesNotMatch(message ?? "", /Revenue → contract → Cancel recognition/);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const state = await docState(org.orgId, billId);
+      assert.equal(state.status, "voided");
+      assert.ok(state.reversal_entry_id, "the void records its reversal entry");
+      assert.equal(
+        toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity),
+        toUnits("0"),
+      );
+      assert.doesNotMatch(message ?? "", /Revenue → contract → Cancel recognition/);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a kernel-reversed bill receipt does not block the bill void", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const billId = await seedApprovedDoc(org, "vendor_bill", "BILL-INVREM-2", org.vendorId, [
-      { itemId: org.items.fifo, quantity: "5", unitPrice: "2", amount: "10", stockLocationId: org.stockLocationId },
+      {
+        itemId: org.items.fifo,
+        quantity: "5",
+        unitPrice: "2",
+        amount: "10",
+        stockLocationId: org.stockLocationId,
+      },
     ]);
     assert.ok(await postDocument(billId, depsFor(org)));
-    const mv = (await db.execute<{ id: string }>(sql`
+    const mv = await db.execute<{ id: string }>(
+      sql`
       select movement.id from inventory_movements movement
         join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
        where movement.org_id = ${org.orgId} and line.document_id = ${billId}
-         and movement.kind = 'receipt' and movement.status = 'posted'`, "objects"));
+         and movement.kind = 'receipt' and movement.status = 'posted'`,
+      "objects",
+    );
     assert.equal(mv.length, 1);
     await reverseInventoryMovement(org.orgId, actor, {
       movementId: mv[0]!.id,
@@ -223,17 +261,32 @@ test("revenue-only void refusal keeps the exact cancellation remedy", { skip: !D
     const actor = (await seedFlowActors(org.orgId)).adminId;
     await seedRecognitionTermPeriods(org);
     const projectId = await seedRevenueProject(org, "INVREM-REV");
-    const invId = await seedApprovedDoc(org, "customer_invoice", "INV-INVREM-1", org.customerId, [
-      {
-        itemId: org.items.service, quantity: "1", unitPrice: "1200", amount: "1200",
-        accountId: org.accounts.revenue,
-      },
-    ], { projectId, locationId: org.locationId });
+    const invId = await seedApprovedDoc(
+      org,
+      "customer_invoice",
+      "INV-INVREM-1",
+      org.customerId,
+      [
+        {
+          itemId: org.items.service,
+          quantity: "1",
+          unitPrice: "1200",
+          amount: "1200",
+          accountId: org.accounts.revenue,
+        },
+      ],
+      { projectId, locationId: org.locationId },
+    );
     await postDocument(invId, depsFor(org));
-    const obligations = (await db.execute<{ n: number }>(sql`
+    const obligations = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from performance_obligations
        where org_id = ${org.orgId} and status <> 'cancelled'
-         and document_line_id in (select id from document_lines where document_id = ${invId})`, "objects"))[0]!.n;
+         and document_line_id in (select id from document_lines where document_id = ${invId})`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(obligations, 1);
 
     const message = await voidMessage({ orgId: org.orgId, documentId: invId, actorId: actor });
@@ -249,29 +302,60 @@ test("mixed inventory and revenue void refusal names both subledgers", { skip: !
     const actor = (await seedFlowActors(org.orgId)).adminId;
     await seedRecognitionTermPeriods(org);
     // The invoice auto-issues its stocked line on posting: receive cover first.
-    const stockBillId = await seedApprovedDoc(org, "vendor_bill", "BILL-INVREM-STOCK", org.vendorId, [
-      { itemId: org.items.fifo, quantity: "10", unitPrice: "2", amount: "20", stockLocationId: org.stockLocationId },
-    ]);
+    const stockBillId = await seedApprovedDoc(
+      org,
+      "vendor_bill",
+      "BILL-INVREM-STOCK",
+      org.vendorId,
+      [
+        {
+          itemId: org.items.fifo,
+          quantity: "10",
+          unitPrice: "2",
+          amount: "20",
+          stockLocationId: org.stockLocationId,
+        },
+      ],
+    );
     assert.ok(await postDocument(stockBillId, depsFor(org)));
     const projectId = await seedRevenueProject(org, "INVREM-MIX");
-    const invId = await seedApprovedDoc(org, "customer_invoice", "INV-INVREM-2", org.customerId, [
-      {
-        itemId: org.items.fifo, quantity: "4", unitPrice: "5", amount: "20",
-        accountId: org.accounts.revenue, stockLocationId: org.stockLocationId,
-      },
-      {
-        itemId: org.items.service, quantity: "1", unitPrice: "1200", amount: "1200",
-        accountId: org.accounts.revenue,
-      },
-    ], { projectId, locationId: org.locationId });
+    const invId = await seedApprovedDoc(
+      org,
+      "customer_invoice",
+      "INV-INVREM-2",
+      org.customerId,
+      [
+        {
+          itemId: org.items.fifo,
+          quantity: "4",
+          unitPrice: "5",
+          amount: "20",
+          accountId: org.accounts.revenue,
+          stockLocationId: org.stockLocationId,
+        },
+        {
+          itemId: org.items.service,
+          quantity: "1",
+          unitPrice: "1200",
+          amount: "1200",
+          accountId: org.accounts.revenue,
+        },
+      ],
+      { projectId, locationId: org.locationId },
+    );
     await postDocument(invId, depsFor(org));
-    const counts = (await db.execute<{ movements: number; obligations: number }>(sql`
+    const counts = (
+      await db.execute<{ movements: number; obligations: number }>(
+        sql`
       select (select count(*)::int from inventory_movements movement
                join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
               where movement.org_id = ${org.orgId} and line.document_id = ${invId}) as movements,
              (select count(*)::int from performance_obligations
                where org_id = ${org.orgId} and status <> 'cancelled'
-                 and document_line_id in (select id from document_lines where document_id = ${invId})) as obligations`, "objects"))[0]!;
+                 and document_line_id in (select id from document_lines where document_id = ${invId})) as obligations`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(counts.movements, 1);
     assert.equal(counts.obligations, 1);
 
@@ -288,15 +372,25 @@ test("mixed inventory and revenue void refusal names both subledgers", { skip: !
 });
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  return (await db.execute<{ balance: string }>(sql`
+  return (
+    await db.execute<{ balance: string }>(
+      sql`
     select coalesce(sum(amount), 0)::text as balance
-      from journal_lines where org_id = ${orgId} and account_id = ${accountId}`, "objects"))[0]!.balance;
+      from journal_lines where org_id = ${orgId} and account_id = ${accountId}`,
+      "objects",
+    )
+  )[0]!.balance;
 }
 
 async function apOpenLine(orgId: string, entryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
+  return (
+    await db.execute<{ id: string }>(
+      sql`
     select id from journal_lines
-     where org_id = ${orgId} and entry_id = ${entryId} and is_open_item`, "objects"))[0]!.id;
+     where org_id = ${orgId} and entry_id = ${entryId} and is_open_item`,
+      "objects",
+    )
+  )[0]!.id;
 }
 
 // Financial intent of this test: the vendor billed 10 for 5 units that cost
@@ -327,103 +421,149 @@ async function apOpenLine(orgId: string, entryId: string): Promise<string> {
 // accounting-incomplete stock leg for document-linked receipts. That is why
 // the stock leg here is an adjust-out at carried cost, not a reversal. The
 // original bill is never voided and stays posted throughout.
-test("partial credit plus cash with full adjust-out leaves exactly the residual loss", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    // Give the fifo item a variance account DISTINCT from its adjustment
-    // account, so the assertions below prove the correct offset was reused.
-    const varianceAccountId = randomUUID();
-    await db.execute(sql`
+test(
+  "partial credit plus cash with full adjust-out leaves exactly the residual loss",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      // Give the fifo item a variance account DISTINCT from its adjustment
+      // account, so the assertions below prove the correct offset was reused.
+      const varianceAccountId = randomUUID();
+      await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${varianceAccountId}, ${org.orgId}, '5110', 'Purchase Price Variance', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       update item_inventory_profiles set variance_account_id = ${varianceAccountId}
        where org_id = ${org.orgId} and item_id = ${org.items.fifo}`);
-    const profile = (await db.execute<{ adjustment: string; variance: string }>(sql`
+      const profile = (
+        await db.execute<{ adjustment: string; variance: string }>(
+          sql`
       select adjustment_account_id as adjustment, variance_account_id as variance
         from item_inventory_profiles
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`, "objects"))[0]!;
-    assert.equal(profile.adjustment, org.accounts.adjustment);
-    assert.notEqual(profile.variance, profile.adjustment);
-    const billId = await seedApprovedDoc(org, "vendor_bill", "BILL-INVREM-E2E", org.vendorId, [
-      { itemId: org.items.fifo, quantity: "5", unitPrice: "2", amount: "10", stockLocationId: org.stockLocationId },
-    ]);
-    const billEntry = await postDocument(billId, depsFor(org));
-    const billLine = await apOpenLine(org.orgId, billEntry);
-    // Bill: DR clearing 10 / CR AP 10; receipt: DR inventory 10 / CR
-    // clearing 10. Clearing nets to zero; AP owes 10; stock holds 5 units.
-    assert.equal(toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity), toUnits("5"));
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), toUnits("-10"));
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.clearing)), toUnits("0"));
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.invAsset)), toUnits("10"));
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(profile.adjustment, org.accounts.adjustment);
+      assert.notEqual(profile.variance, profile.adjustment);
+      const billId = await seedApprovedDoc(org, "vendor_bill", "BILL-INVREM-E2E", org.vendorId, [
+        {
+          itemId: org.items.fifo,
+          quantity: "5",
+          unitPrice: "2",
+          amount: "10",
+          stockLocationId: org.stockLocationId,
+        },
+      ]);
+      const billEntry = await postDocument(billId, depsFor(org));
+      const billLine = await apOpenLine(org.orgId, billEntry);
+      // Bill: DR clearing 10 / CR AP 10; receipt: DR inventory 10 / CR
+      // clearing 10. Clearing nets to zero; AP owes 10; stock holds 5 units.
+      assert.equal(
+        toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity),
+        toUnits("5"),
+      );
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), toUnits("-10"));
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.clearing)), toUnits("0"));
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.invAsset)), toUnits("10"));
 
-    // Credit 8 of the 10 to the item's own inventory adjustment account
-    // (read from the profile, the same configuration the adjust leg uses):
-    // DR AP 8 / CR adjustment 8. AP now owes 2.
-    const creditId = await seedApprovedDoc(org, "vendor_credit", "VC-INVREM-E2E", org.vendorId, [
-      { itemId: null, quantity: "1", unitPrice: "8", amount: "8", accountId: profile.adjustment },
-    ]);
-    const creditEntry = await postDocument(creditId, depsFor(org));
-    const creditLine = await apOpenLine(org.orgId, creditEntry);
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), toUnits("-2"));
+      // Credit 8 of the 10 to the item's own inventory adjustment account
+      // (read from the profile, the same configuration the adjust leg uses):
+      // DR AP 8 / CR adjustment 8. AP now owes 2.
+      const creditId = await seedApprovedDoc(org, "vendor_credit", "VC-INVREM-E2E", org.vendorId, [
+        { itemId: null, quantity: "1", unitPrice: "8", amount: "8", accountId: profile.adjustment },
+      ]);
+      const creditEntry = await postDocument(creditId, depsFor(org));
+      const creditLine = await apOpenLine(org.orgId, creditEntry);
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), toUnits("-2"));
 
-    // Settle through a real vendor payment: the credit-items reader
-    // (GET /api/payments/credit-items?side=ap) lists the credit line and
-    // PATCH /api/payments/[id] carries it as a credit allocation next to
-    // the 2 cash. The bill and the credit both leave the open-item ledger.
-    const listed = await creditItemsForParty(org.vendorId, "ap", org.orgId);
-    assert.ok(listed.some((item) => item.lineId === creditLine), "credit must be listed as appliable");
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-      orgId: org.orgId, kind: "vendor_payment", createdBy: actor,
-      partyId: org.vendorId, bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: "CAD",
-    });
-    await updateDraftPayment(payment.id, {
-      allocations: [sameCurrencyAllocation(billLine, "2")],
-      creditAllocations: [{ fromLineId: creditLine, toLineId: billLine, amount: "8", sourceDocumentId: creditId }],
-    }, actor, org.orgId,
-  { allowedSubsidiaryIds: null },
-);
-    await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
-    await postPaymentWithApplications(payment.id, undefined, actor);
-    const applied = (await db.execute<{ n: number }>(sql`
+      // Settle through a real vendor payment: the credit-items reader
+      // (GET /api/payments/credit-items?side=ap) lists the credit line and
+      // PATCH /api/payments/[id] carries it as a credit allocation next to
+      // the 2 cash. The bill and the credit both leave the open-item ledger.
+      const listed = await creditItemsForParty(org.vendorId, "ap", org.orgId);
+      assert.ok(
+        listed.some((item) => item.lineId === creditLine),
+        "credit must be listed as appliable",
+      );
+      const payment = await createPaymentDocument({
+        allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        kind: "vendor_payment",
+        createdBy: actor,
+        partyId: org.vendorId,
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        documentDate: org.date,
+        currency: "CAD",
+      });
+      await updateDraftPayment(
+        payment.id,
+        {
+          allocations: [sameCurrencyAllocation(billLine, "2")],
+          creditAllocations: [
+            { fromLineId: creditLine, toLineId: billLine, amount: "8", sourceDocumentId: creditId },
+          ],
+        },
+        actor,
+        org.orgId,
+        { allowedSubsidiaryIds: null },
+      );
+      await db.execute(
+        sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`,
+      );
+      await postPaymentWithApplications(payment.id, undefined, actor);
+      const applied = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from applications
        where org_id = ${org.orgId} and unapplied_at is null
-         and (from_line_id = ${creditLine} or from_line_id = ${billLine} or to_line_id = ${billLine})`, "objects"))[0]!.n;
-    assert.equal(applied, 2);
-    assert.deepEqual(
-      (await openItemsForParty(org.vendorId, "ap", org.orgId)).map((item) => item.lineId),
-      [],
-    );
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), toUnits("0"));
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.bank)), toUnits("-2"));
+         and (from_line_id = ${creditLine} or from_line_id = ${billLine} or to_line_id = ${billLine})`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(applied, 2);
+      assert.deepEqual(
+        (await openItemsForParty(org.vendorId, "ap", org.orgId)).map((item) => item.lineId),
+        [],
+      );
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), toUnits("0"));
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.bank)), toUnits("-2"));
 
-    // Stock out at carried cost through the Inventory Adjust action (drawer
-    // adjust): DR adjustment 10 / CR inventory 10. The adjustment account
-    // nets the 8 credit against the 10 cost, holding exactly the 2
-    // shortfall; clearing is never touched, so GRNI stays closed; stock
-    // reaches zero. COGS and the distinct variance account must stay at
-    // zero — neither leg may leak into them.
-    await adjustInventory(org.orgId, actor, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-      quantityDelta: "-5", subsidiaryId: org.subsidiaryId, date: org.date,
-      memo: "return units to vendor, credited short 2",
-    });
-    assert.equal(toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity), toUnits("0"));
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.invAsset)), toUnits("0"));
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.clearing)), toUnits("0"));
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.adjustment)), toUnits("2"));
-    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.cogs)), toUnits("0"));
-    assert.equal(toUnits(await glBalance(org.orgId, varianceAccountId)), toUnits("0"));
+      // Stock out at carried cost through the Inventory Adjust action (drawer
+      // adjust): DR adjustment 10 / CR inventory 10. The adjustment account
+      // nets the 8 credit against the 10 cost, holding exactly the 2
+      // shortfall; clearing is never touched, so GRNI stays closed; stock
+      // reaches zero. COGS and the distinct variance account must stay at
+      // zero — neither leg may leak into them.
+      await adjustInventory(org.orgId, actor, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantityDelta: "-5",
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+        memo: "return units to vendor, credited short 2",
+      });
+      assert.equal(
+        toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity),
+        toUnits("0"),
+      );
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.invAsset)), toUnits("0"));
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.clearing)), toUnits("0"));
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.adjustment)), toUnits("2"));
+      assert.equal(toUnits(await glBalance(org.orgId, org.accounts.cogs)), toUnits("0"));
+      assert.equal(toUnits(await glBalance(org.orgId, varianceAccountId)), toUnits("0"));
 
-    // The original bill was never voided and stays posted; with live
-    // applications on it the void now refuses at the earlier applied-credits
-    // fence rather than reaching the subledger guard.
-    assert.equal((await docState(org.orgId, billId)).status, "posted");
-    const message = await voidMessage({ orgId: org.orgId, documentId: billId, actorId: actor });
-    assert.match(message ?? "", /live payments or credits applied/);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // The original bill was never voided and stays posted; with live
+      // applications on it the void now refuses at the earlier applied-credits
+      // fence rather than reaching the subledger guard.
+      assert.equal((await docState(org.orgId, billId)).status, "posted");
+      const message = await voidMessage({ orgId: org.orgId, documentId: billId, actorId: actor });
+      assert.match(message ?? "", /live payments or credits applied/);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

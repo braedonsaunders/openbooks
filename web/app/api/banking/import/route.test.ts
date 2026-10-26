@@ -1,41 +1,41 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { decodeStatementSourceText as engineDecodeStatementSourceText } from '@openbooks/engine/banking/banking'
-import { stubModules } from '../../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { decodeStatementSourceText as engineDecodeStatementSourceText } from "@openbooks/engine/banking/banking";
+import { stubModules } from "../../../../testing/stub-modules";
 
 interface ImportCall {
   options: {
-    dryRun?: boolean
-    lines: unknown[]
+    dryRun?: boolean;
+    lines: unknown[];
     sourceEvidence?: {
-      content: string | Uint8Array
-      filename?: string | null
-      contentType?: string | null
-      parserVersion?: string | null
-      csvMapping?: Record<string, number> | null
-    }
-  }
+      content: string | Uint8Array;
+      filename?: string | null;
+      contentType?: string | null;
+      parserVersion?: string | null;
+      csvMapping?: Record<string, number> | null;
+    };
+  };
   context: {
-    orgId: string
-    userId: string
-    allowedSubsidiaryIds: ReadonlySet<string> | null
-  }
+    orgId: string;
+    userId: string;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+  };
 }
 
-const stateKey = Symbol.for('openbooks.bank-import-route-test')
-stubModules({ authz: true })
+const stateKey = Symbol.for("openbooks.bank-import-route-test");
+stubModules({ authz: true });
 const importState = {
   calls: [] as ImportCall[],
   decoderInputs: [] as { content: unknown; source: string }[],
   parsedSources: [] as unknown[],
   decodeStatementSourceText: engineDecodeStatementSourceText,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:feature-gates',
+    "mock:feature-gates",
     `
       export async function guardFeaturePermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
@@ -43,7 +43,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:banking',
+    "mock:banking",
     `
       const state = globalThis[Symbol.for('openbooks.bank-import-route-test')]
       const line = {
@@ -115,243 +115,258 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/banking/banking') {
-      return { url: 'mock:banking', shortCircuit: true }
+    if (specifier === "@openbooks/engine/banking/banking") {
+      return { url: "mock:banking", shortCircuit: true };
     }
-    if (specifier === '../../../../lib/feature-gates') {
-      return { url: 'mock:feature-gates', shortCircuit: true }
+    if (specifier === "../../../../lib/feature-gates") {
+      return { url: "mock:feature-gates", shortCircuit: true };
     }
-    if (specifier === '@/lib/feature-gates') {
-      return { url: 'mock:feature-gates', shortCircuit: true }
+    if (specifier === "@/lib/feature-gates") {
+      return { url: "mock:feature-gates", shortCircuit: true };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
+    const source = mockSources.get(url);
     if (source !== undefined) {
-      return { format: 'module', source, shortCircuit: true }
+      return { format: "module", source, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?mode-validation-test'
-const { POST } = await import(routeUrl) as typeof import('./route.ts')
+const routeUrl = "./route.ts?mode-validation-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const validBody = {
-  accountId: '00000000-0000-4000-8000-00000000c001',
-  source: 'csv',
-  text: 'date,amount,description\n2026-08-23,10.00,Deposit',
+  accountId: "00000000-0000-4000-8000-00000000c001",
+  source: "csv",
+  text: "date,amount,description\n2026-08-23,10.00,Deposit",
   mapping: { date: 0, amount: 1, description: 2 },
-}
+};
 
 async function postMode(mode: string): Promise<Response> {
-  return POST(new Request('http://openbooks.test/api/banking/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...validBody, mode }),
-  }))
+  return POST(
+    new Request("http://openbooks.test/api/banking/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...validBody, mode }),
+    }),
+  );
 }
 
-function utf16Bytes(text: string, byteOrder: 'le' | 'be'): Buffer {
-  const body = Buffer.from(text, 'utf16le')
-  if (byteOrder === 'be') body.swap16()
-  return Buffer.concat([
-    Buffer.from(byteOrder === 'le' ? [0xff, 0xfe] : [0xfe, 0xff]),
-    body,
-  ])
+function utf16Bytes(text: string, byteOrder: "le" | "be"): Buffer {
+  const body = Buffer.from(text, "utf16le");
+  if (byteOrder === "be") body.swap16();
+  return Buffer.concat([Buffer.from(byteOrder === "le" ? [0xff, 0xfe] : [0xfe, 0xff]), body]);
 }
 
 function postDecode(source: string, bytes: Uint8Array): Promise<Response> {
-  return POST(new Request('http://openbooks.test/api/banking/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      source,
-      sourceBytesBase64: Buffer.from(bytes).toString('base64'),
-      mode: 'decode',
+  return POST(
+    new Request("http://openbooks.test/api/banking/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source,
+        sourceBytesBase64: Buffer.from(bytes).toString("base64"),
+        mode: "decode",
+      }),
     }),
-  }))
+  );
 }
 
-test('columns mode returns CSV metadata without persisting', async () => {
-  importState.calls.length = 0
+test("columns mode returns CSV metadata without persisting", async () => {
+  importState.calls.length = 0;
 
-  const response = await postMode('columns')
+  const response = await postMode("columns");
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
-    header: ['date', 'amount', 'description'],
-    sample: [['2026-08-23', '10.00', 'Deposit']],
+    header: ["date", "amount", "description"],
+    sample: [["2026-08-23", "10.00", "Deposit"]],
     rowCount: 2,
-  })
-  assert.equal(importState.calls.length, 0)
-})
+  });
+  assert.equal(importState.calls.length, 0);
+});
 
-test('preview mode invokes the importer in dry-run mode', async () => {
-  importState.calls.length = 0
+test("preview mode invokes the importer in dry-run mode", async () => {
+  importState.calls.length = 0;
 
-  const response = await postMode('preview')
+  const response = await postMode("preview");
 
-  assert.equal(response.status, 200)
-  assert.equal(importState.calls.length, 1)
-  assert.equal(importState.calls[0]?.options.dryRun, true)
-  assert.deepEqual(importState.calls[0]?.context, { orgId: 'org-1', userId: 'user-1', allowedSubsidiaryIds: null })
-  assert.equal((await response.json()).statementId, null)
-})
+  assert.equal(response.status, 200);
+  assert.equal(importState.calls.length, 1);
+  assert.equal(importState.calls[0]?.options.dryRun, true);
+  assert.deepEqual(importState.calls[0]?.context, {
+    orgId: "org-1",
+    userId: "user-1",
+    allowedSubsidiaryIds: null,
+  });
+  assert.equal((await response.json()).statementId, null);
+});
 
-test('import mode invokes the importer with persistence enabled', async () => {
-  importState.calls.length = 0
+test("import mode invokes the importer with persistence enabled", async () => {
+  importState.calls.length = 0;
 
-  const response = await postMode('import')
-  const body = await response.json()
+  const response = await postMode("import");
+  const body = await response.json();
 
-  assert.equal(response.status, 200)
-  assert.equal(importState.calls.length, 1)
-  assert.equal(importState.calls[0]?.options.dryRun, false)
+  assert.equal(response.status, 200);
+  assert.equal(importState.calls.length, 1);
+  assert.equal(importState.calls[0]?.options.dryRun, false);
   assert.deepEqual(importState.calls[0]?.options.sourceEvidence, {
     content: validBody.text,
     filename: null,
-    parserVersion: 'test-parser-v1',
+    parserVersion: "test-parser-v1",
     csvMapping: validBody.mapping,
-  })
-  assert.equal(body.statementId, 'statement-1')
-  assert.equal('lines' in body, false)
-})
+  });
+  assert.equal(body.statementId, "statement-1");
+  assert.equal("lines" in body, false);
+});
 
-test('decode mode applies the engine BOM and declared legacy-encoding policy', async (t) => {
-  const csv = 'date,amount,description\r\n2026-08-24,10.00,Café\r\n'
+test("decode mode applies the engine BOM and declared legacy-encoding policy", async (t) => {
+  const csv = "date,amount,description\r\n2026-08-24,10.00,Café\r\n";
   const legacyOfx = Buffer.concat([
-    Buffer.from('OFXHEADER:100\nENCODING:USASCII\nCHARSET:1252\n\n<OFX>Caf', 'ascii'),
+    Buffer.from("OFXHEADER:100\nENCODING:USASCII\nCHARSET:1252\n\n<OFX>Caf", "ascii"),
     Buffer.from([0xe9, 0x20, 0x96, 0x20, 0x64, 0xe9, 0x70, 0xf4, 0x74]),
-  ])
+  ]);
   const cases = [
     {
-      name: 'Windows-1252 OFX declaration',
-      source: 'ofx',
+      name: "Windows-1252 OFX declaration",
+      source: "ofx",
       bytes: legacyOfx,
-      expected: 'OFXHEADER:100\nENCODING:USASCII\nCHARSET:1252\n\n<OFX>Café – dépôt',
+      expected: "OFXHEADER:100\nENCODING:USASCII\nCHARSET:1252\n\n<OFX>Café – dépôt",
     },
     {
-      name: 'UTF-8 BOM',
-      source: 'csv',
-      bytes: Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(csv, 'utf8')]),
+      name: "UTF-8 BOM",
+      source: "csv",
+      bytes: Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(csv, "utf8")]),
       expected: csv,
     },
-    { name: 'UTF-16LE BOM', source: 'csv', bytes: utf16Bytes(csv, 'le'), expected: csv },
-    { name: 'UTF-16BE BOM', source: 'csv', bytes: utf16Bytes(csv, 'be'), expected: csv },
-  ]
+    { name: "UTF-16LE BOM", source: "csv", bytes: utf16Bytes(csv, "le"), expected: csv },
+    { name: "UTF-16BE BOM", source: "csv", bytes: utf16Bytes(csv, "be"), expected: csv },
+  ];
 
   for (const entry of cases) {
     await t.test(entry.name, async () => {
-      importState.calls.length = 0
-      importState.decoderInputs.length = 0
-      importState.parsedSources.length = 0
+      importState.calls.length = 0;
+      importState.decoderInputs.length = 0;
+      importState.parsedSources.length = 0;
 
-      const response = await postDecode(entry.source, entry.bytes)
+      const response = await postDecode(entry.source, entry.bytes);
 
-      assert.equal(response.status, 200)
-      assert.deepEqual(await response.json(), { text: entry.expected })
-      assert.equal(importState.decoderInputs.length, 1)
-      assert.equal(importState.decoderInputs[0]?.source, entry.source)
-      assert.ok(importState.decoderInputs[0]?.content instanceof Uint8Array)
-      assert.deepEqual(Buffer.from(importState.decoderInputs[0]!.content as Uint8Array), entry.bytes)
-      assert.equal(importState.parsedSources.length, 0)
-      assert.equal(importState.calls.length, 0)
-    })
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { text: entry.expected });
+      assert.equal(importState.decoderInputs.length, 1);
+      assert.equal(importState.decoderInputs[0]?.source, entry.source);
+      assert.ok(importState.decoderInputs[0]?.content instanceof Uint8Array);
+      assert.deepEqual(
+        Buffer.from(importState.decoderInputs[0]!.content as Uint8Array),
+        entry.bytes,
+      );
+      assert.equal(importState.parsedSources.length, 0);
+      assert.equal(importState.calls.length, 0);
+    });
   }
-})
+});
 
-test('decode mode fails closed when a declaration conflicts with BOM-selected bytes', async () => {
-  importState.calls.length = 0
-  importState.decoderInputs.length = 0
-  importState.parsedSources.length = 0
+test("decode mode fails closed when a declaration conflicts with BOM-selected bytes", async () => {
+  importState.calls.length = 0;
+  importState.decoderInputs.length = 0;
+  importState.parsedSources.length = 0;
   const conflictingXml = Buffer.concat([
     Buffer.from([0xef, 0xbb, 0xbf]),
     Buffer.from('<?xml version="1.0" encoding="windows-1252"?><Stmt/>'),
-  ])
+  ]);
 
-  const response = await postDecode('camt053', conflictingXml)
+  const response = await postDecode("camt053", conflictingXml);
 
-  assert.equal(response.status, 422)
+  assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), {
     error: 'Statement source encoding declaration "windows-1252" conflicts with UTF-8 source bytes',
-  })
-  assert.equal(importState.decoderInputs.length, 1)
-  assert.equal(importState.parsedSources.length, 0)
-  assert.equal(importState.calls.length, 0)
-})
+  });
+  assert.equal(importState.decoderInputs.length, 1);
+  assert.equal(importState.parsedSources.length, 0);
+  assert.equal(importState.calls.length, 0);
+});
 
-test('browser upload bytes drive parsing and remain byte-exact source evidence', async () => {
-  importState.calls.length = 0
-  importState.parsedSources.length = 0
+test("browser upload bytes drive parsing and remain byte-exact source evidence", async () => {
+  importState.calls.length = 0;
+  importState.parsedSources.length = 0;
   const uploadedBytes = Buffer.from([
     0xef, 0xbb, 0xbf, 0x64, 0x61, 0x74, 0x65, 0x2c, 0xe9, 0x0d, 0x0a,
-  ])
+  ]);
 
-  const response = await POST(new Request('http://openbooks.test/api/banking/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      ...validBody,
-      text: 'this fallback must not be parsed or retained',
-      sourceBytesBase64: uploadedBytes.toString('base64'),
-      filename: 'statement.csv',
-      contentType: 'text/csv',
-      mode: 'import',
+  const response = await POST(
+    new Request("http://openbooks.test/api/banking/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...validBody,
+        text: "this fallback must not be parsed or retained",
+        sourceBytesBase64: uploadedBytes.toString("base64"),
+        filename: "statement.csv",
+        contentType: "text/csv",
+        mode: "import",
+      }),
     }),
-  }))
+  );
 
-  assert.equal(response.status, 200)
-  assert.equal(importState.parsedSources.length, 1)
-  const parsedSource = importState.parsedSources[0]
-  assert.ok(parsedSource instanceof Uint8Array)
-  assert.deepEqual(Buffer.from(parsedSource), uploadedBytes)
+  assert.equal(response.status, 200);
+  assert.equal(importState.parsedSources.length, 1);
+  const parsedSource = importState.parsedSources[0];
+  assert.ok(parsedSource instanceof Uint8Array);
+  assert.deepEqual(Buffer.from(parsedSource), uploadedBytes);
 
-  const evidence = importState.calls[0]?.options.sourceEvidence
-  assert.ok(evidence)
-  assert.ok(evidence.content instanceof Uint8Array)
-  assert.deepEqual(Buffer.from(evidence.content), uploadedBytes)
-  assert.equal(evidence.filename, 'statement.csv')
-  assert.equal(evidence.contentType, 'text/csv')
-  assert.equal(evidence.parserVersion, 'test-parser-v1')
-  assert.deepEqual(evidence.csvMapping, validBody.mapping)
-})
+  const evidence = importState.calls[0]?.options.sourceEvidence;
+  assert.ok(evidence);
+  assert.ok(evidence.content instanceof Uint8Array);
+  assert.deepEqual(Buffer.from(evidence.content), uploadedBytes);
+  assert.equal(evidence.filename, "statement.csv");
+  assert.equal(evidence.contentType, "text/csv");
+  assert.equal(evidence.parserVersion, "test-parser-v1");
+  assert.deepEqual(evidence.csvMapping, validBody.mapping);
+});
 
-test('non-canonical browser upload base64 is rejected without parsing or persistence', async () => {
-  importState.calls.length = 0
-  importState.parsedSources.length = 0
+test("non-canonical browser upload base64 is rejected without parsing or persistence", async () => {
+  importState.calls.length = 0;
+  importState.parsedSources.length = 0;
 
-  const response = await POST(new Request('http://openbooks.test/api/banking/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      ...validBody,
-      sourceBytesBase64: 'ZGF0ZQ',
-      mode: 'import',
+  const response = await POST(
+    new Request("http://openbooks.test/api/banking/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...validBody,
+        sourceBytesBase64: "ZGF0ZQ",
+        mode: "import",
+      }),
     }),
-  }))
+  );
 
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'Uploaded statement bytes must be canonical base64',
-  })
-  assert.equal(importState.parsedSources.length, 0)
-  assert.equal(importState.calls.length, 0)
-})
+    error: "Uploaded statement bytes must be canonical base64",
+  });
+  assert.equal(importState.parsedSources.length, 0);
+  assert.equal(importState.calls.length, 0);
+});
 
-test('an invalid mode is rejected before persistence', async () => {
-  importState.calls.length = 0
+test("an invalid mode is rejected before persistence", async () => {
+  importState.calls.length = 0;
 
-  const response = await postMode('unexpected')
+  const response = await postMode("unexpected");
 
-  assert.equal(response.status, 400)
-  const body = await response.json() as { error: string; issues: Array<{ path: string }> }
-  assert.equal(body.error, 'mode must be decode, columns, preview or import')
-  assert.deepEqual(body.issues.map((issue) => issue.path), ['mode'])
-  assert.equal(importState.calls.length, 0)
-})
+  assert.equal(response.status, 400);
+  const body = (await response.json()) as { error: string; issues: Array<{ path: string }> };
+  assert.equal(body.error, "mode must be decode, columns, preview or import");
+  assert.deepEqual(
+    body.issues.map((issue) => issue.path),
+    ["mode"],
+  );
+  assert.equal(importState.calls.length, 0);
+});

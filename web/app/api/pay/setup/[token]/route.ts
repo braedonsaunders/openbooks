@@ -1,7 +1,11 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { AutopayError, setupContinueUrl, setupTokenOrgId } from "@openbooks/engine/payments/autopay";
+import {
+  AutopayError,
+  setupContinueUrl,
+  setupTokenOrgId,
+} from "@openbooks/engine/payments/autopay";
 import { isFeatureEnabled } from "@/lib/features";
 import { notFound } from "@/lib/api/responses";
 
@@ -35,6 +39,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     // and hand them the id to quote back.
     const requestId = randomUUID();
     console.error(`pay setup continue failed [requestId=${requestId}]`, e);
-    return NextResponse.json({ error: "failed to start the setup session", requestId }, { status: 500 });
+    return NextResponse.json(
+      { error: "failed to start the setup session", requestId },
+      { status: 500 },
+    );
   }
 }

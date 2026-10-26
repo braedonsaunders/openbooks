@@ -1,24 +1,31 @@
-"use client"
+"use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../../reports/ReportTable"
-import { Badge } from "@openbooks/ui"
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "../../../reports/ReportTable";
+import { Badge } from "@openbooks/ui";
 
 // Single implementation shared by the page and the widget registry: the native page imports
 // it from ./ProvisionPostButton and the spec registry reaches it through here.
-export { ProvisionPostButton } from "./ProvisionPostButton"
+export { ProvisionPostButton } from "./ProvisionPostButton";
 
 export interface ReconStep {
-  key: string
-  label: string
-  amount: string
-  percent: string | null
-  isTotal: boolean
-  totalLabel: string
+  key: string;
+  label: string;
+  amount: string;
+  percent: string | null;
+  isTotal: boolean;
+  totalLabel: string;
 }
 
 export interface ProvisionSummary {
-  label: string
-  value: string
+  label: string;
+  value: string;
 }
 
 /** Native record cells and actions compose the shared table primitives. */
@@ -32,14 +39,14 @@ export function ProvisionReconSection({
   steps,
   summaries,
 }: {
-  title: string
-  pretaxLabel: string
-  pretaxAmount: string
-  enactedRateText: string
-  amountLabel: string
-  percentLabel: string
-  steps: ReconStep[]
-  summaries: ProvisionSummary[]
+  title: string;
+  pretaxLabel: string;
+  pretaxAmount: string;
+  enactedRateText: string;
+  amountLabel: string;
+  percentLabel: string;
+  steps: ReconStep[];
+  summaries: ProvisionSummary[];
 }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -55,18 +62,28 @@ export function ProvisionReconSection({
         <SharedTableBody>
           <SharedTableRow className="text-slate-500 dark:text-slate-400">
             <SharedTableCell className="py-1.5">{pretaxLabel}</SharedTableCell>
-            <SharedTableCell className="py-1.5 text-right tabular-nums">{pretaxAmount}</SharedTableCell>
-            <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-400">{enactedRateText}</SharedTableCell>
+            <SharedTableCell className="py-1.5 text-right tabular-nums">
+              {pretaxAmount}
+            </SharedTableCell>
+            <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-400">
+              {enactedRateText}
+            </SharedTableCell>
           </SharedTableRow>
           {steps.map((step) => (
             <SharedTableRow
               key={step.key}
-              className={step.isTotal ? 'border-t border-slate-200 font-semibold dark:border-slate-700' : ''}
+              className={
+                step.isTotal ? "border-t border-slate-200 font-semibold dark:border-slate-700" : ""
+              }
             >
-              <SharedTableCell className="py-1.5">{step.isTotal ? step.totalLabel : step.label}</SharedTableCell>
-              <SharedTableCell className="py-1.5 text-right tabular-nums">{step.amount}</SharedTableCell>
+              <SharedTableCell className="py-1.5">
+                {step.isTotal ? step.totalLabel : step.label}
+              </SharedTableCell>
+              <SharedTableCell className="py-1.5 text-right tabular-nums">
+                {step.amount}
+              </SharedTableCell>
               <SharedTableCell className="py-1.5 text-right tabular-nums text-slate-500 dark:text-slate-400">
-                {step.percent != null ? `${step.percent}%` : '—'}
+                {step.percent != null ? `${step.percent}%` : "—"}
               </SharedTableCell>
             </SharedTableRow>
           ))}
@@ -78,7 +95,7 @@ export function ProvisionReconSection({
         ))}
       </dl>
     </section>
-  )
+  );
 }
 
 function ProvisionSummaryPair({ label, value }: { label: string; value: string }) {
@@ -87,17 +104,17 @@ function ProvisionSummaryPair({ label, value }: { label: string; value: string }
       <dt className="text-slate-500">{label}</dt>
       <dd className="text-right tabular-nums">{value}</dd>
     </>
-  )
+  );
 }
 
 export interface ProvisionDifference {
-  id: string
-  description: string
-  categorySourceLabel: string
-  bookBasis: string
-  taxBasis: string
-  difference: string
-  taxEffect: string
+  id: string;
+  description: string;
+  categorySourceLabel: string;
+  bookBasis: string;
+  taxBasis: string;
+  difference: string;
+  taxEffect: string;
 }
 
 /** Native record cells and actions compose the shared table primitives. */
@@ -107,10 +124,16 @@ export function ProvisionDifferencesSection({
   columns,
   differences,
 }: {
-  title: string
-  emptyNote: string
-  columns: { item: string; bookBasis: string; taxBasis: string; difference: string; effect: string }
-  differences: ProvisionDifference[]
+  title: string;
+  emptyNote: string;
+  columns: {
+    item: string;
+    bookBasis: string;
+    taxBasis: string;
+    difference: string;
+    effect: string;
+  };
+  differences: ProvisionDifference[];
 }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -130,28 +153,45 @@ export function ProvisionDifferencesSection({
           </SharedTableHeader>
           <SharedTableBody>
             {differences.map((d) => (
-              <SharedTableRow key={d.id} className="border-t border-slate-100 dark:border-slate-800">
+              <SharedTableRow
+                key={d.id}
+                className="border-t border-slate-100 dark:border-slate-800"
+              >
                 <SharedTableCell className="py-1.5">
                   <span className="block">{d.description}</span>
                   <span className="text-xs text-slate-400">{d.categorySourceLabel}</span>
                 </SharedTableCell>
-                <SharedTableCell className="py-1.5 text-right tabular-nums">{d.bookBasis}</SharedTableCell>
-                <SharedTableCell className="py-1.5 text-right tabular-nums">{d.taxBasis}</SharedTableCell>
-                <SharedTableCell className="py-1.5 text-right tabular-nums">{d.difference}</SharedTableCell>
-                <SharedTableCell className="py-1.5 text-right tabular-nums">{d.taxEffect}</SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums">
+                  {d.bookBasis}
+                </SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums">
+                  {d.taxBasis}
+                </SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums">
+                  {d.difference}
+                </SharedTableCell>
+                <SharedTableCell className="py-1.5 text-right tabular-nums">
+                  {d.taxEffect}
+                </SharedTableCell>
               </SharedTableRow>
             ))}
           </SharedTableBody>
         </SharedTable>
       )}
     </section>
-  )
+  );
 }
 
-export function ProvisionStatusBadge({ label, variant }: { label: string; variant: 'success' | 'secondary' | 'outline' }) {
-  return <Badge variant={variant}>{label}</Badge>
+export function ProvisionStatusBadge({
+  label,
+  variant,
+}: {
+  label: string;
+  variant: "success" | "secondary" | "outline";
+}) {
+  return <Badge variant={variant}>{label}</Badge>;
 }
 
 export function ProvisionFrameworkBadge({ label }: { label: string }) {
-  return <Badge variant="outline">{label}</Badge>
+  return <Badge variant="outline">{label}</Badge>;
 }

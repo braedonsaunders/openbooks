@@ -1,45 +1,45 @@
-import 'server-only'
+import "server-only";
 
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { acquireFeatureGateLock, isFeatureEnabled } from './features'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { acquireFeatureGateLock, isFeatureEnabled } from "./features";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
+import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/records/revision";
 import {
   assertTaskTransition,
   ProjectWorkBreakdownError,
   sameTaskDecimal,
   type WorkBreakdownTaskInput,
-} from './project-work-breakdown-validation'
-import { pgTextArrayLiteral } from './pg-array'
+} from "./project-work-breakdown-validation";
+import { pgTextArrayLiteral } from "./pg-array";
 
-type TaskStatus = WorkBreakdownTaskInput['status']
+type TaskStatus = WorkBreakdownTaskInput["status"];
 
-type Executor = Pick<typeof db, 'execute'>
+type Executor = Pick<typeof db, "execute">;
 type TaskRow = {
-  id: string
-  project_id: string
-  code: string | null
-  name: string
-  status: TaskStatus
-  estimated_hours: string | null
-  estimated_cost: string | null
-  estimated_price: string | null
-  budget_quantity: string | null
-  budget_unit: string | null
-  updated_at: string
+  id: string;
+  project_id: string;
+  code: string | null;
+  name: string;
+  status: TaskStatus;
+  estimated_hours: string | null;
+  estimated_cost: string | null;
+  estimated_price: string | null;
+  budget_quantity: string | null;
+  budget_unit: string | null;
+  updated_at: string;
 };
 
 async function assertProjectsEnabled(orgId: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, 'projects'))) {
-    throw new ProjectWorkBreakdownError('Projects feature is disabled', 404)
+  if (!(await isFeatureEnabled(orgId, "projects"))) {
+    throw new ProjectWorkBreakdownError("Projects feature is disabled", 404);
   }
 }
 
 async function assertProjectsEnabledTx(tx: Executor, orgId: string): Promise<void> {
-  await acquireFeatureGateLock(orgId, tx)
-  if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
-    throw new ProjectWorkBreakdownError('Projects feature is disabled', 404)
+  await acquireFeatureGateLock(orgId, tx);
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+    throw new ProjectWorkBreakdownError("Projects feature is disabled", 404);
   }
 }
 
@@ -49,12 +49,16 @@ async function assertProjectsEnabledTx(tx: Executor, orgId: string): Promise<voi
  * re-checked under the caller's transaction, so disabling the feature
  * preserves the recorded quantities. Leaving them out keeps the stored pair.
  */
-async function assertProductionQuantityAllowed(tx: Executor, orgId: string, input: WorkBreakdownTaskInput): Promise<void> {
-  if (input.budgetQuantity === undefined) return
-  if (!(await lockAndCheckOrgFeature(tx, orgId, 'projectProgress'))) {
+async function assertProductionQuantityAllowed(
+  tx: Executor,
+  orgId: string,
+  input: WorkBreakdownTaskInput,
+): Promise<void> {
+  if (input.budgetQuantity === undefined) return;
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "projectProgress"))) {
     throw new ProjectWorkBreakdownError(
-      'Production quantities need Progress tracking — turn it on in Company Settings → Features',
-    )
+      "Production quantities need Progress tracking — turn it on in Company Settings → Features",
+    );
   }
 }
 
@@ -68,43 +72,41 @@ function projectSubsidiaryFilter(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   column: SQL = sql`subsidiary_id`,
 ): SQL {
-  if (allowedSubsidiaryIds === null) return sql``
+  if (allowedSubsidiaryIds === null) return sql``;
   // The public service signatures require this scope argument. Keep an
   // omitted value fail-closed at runtime too, rather than accidentally
   // treating an untrusted caller like an unrestricted one.
-  if (!allowedSubsidiaryIds) return sql`and false`
-  const ids = [...allowedSubsidiaryIds]
-  return ids.length
-    ? sql`and ${column} = any(${pgTextArrayLiteral(ids)}::uuid[])`
-    : sql`and false`
+  if (!allowedSubsidiaryIds) return sql`and false`;
+  const ids = [...allowedSubsidiaryIds];
+  return ids.length ? sql`and ${column} = any(${pgTextArrayLiteral(ids)}::uuid[])` : sql`and false`;
 }
 
 export interface WorkBreakdownTaskClient {
-  id: string
-  code: string
-  name: string
-  status: TaskStatus
-  estimatedHours: string
-  estimatedCost: string
-  estimatedPrice: string
-  budgetQuantity: string
-  budgetUnit: string
-  updatedAt: string
+  id: string;
+  code: string;
+  name: string;
+  status: TaskStatus;
+  estimatedHours: string;
+  estimatedCost: string;
+  estimatedPrice: string;
+  budgetQuantity: string;
+  budgetUnit: string;
+  updatedAt: string;
 }
 
 function clientTask(row: TaskRow): WorkBreakdownTaskClient {
   return {
     id: row.id,
-    code: row.code ?? '',
+    code: row.code ?? "",
     name: row.name,
     status: row.status,
-    estimatedHours: row.estimated_hours ?? '',
-    estimatedCost: row.estimated_cost ?? '',
-    estimatedPrice: row.estimated_price ?? '',
-    budgetQuantity: row.budget_quantity ?? '',
-    budgetUnit: row.budget_unit ?? '',
+    estimatedHours: row.estimated_hours ?? "",
+    estimatedCost: row.estimated_cost ?? "",
+    estimatedPrice: row.estimated_price ?? "",
+    budgetQuantity: row.budget_quantity ?? "",
+    budgetUnit: row.budget_unit ?? "",
     updatedAt: row.updated_at,
-  }
+  };
 }
 
 async function assertProject(
@@ -112,15 +114,18 @@ async function assertProject(
   orgId: string,
   projectId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  lock: 'none' | 'share' | 'update' = 'none',
+  lock: "none" | "share" | "update" = "none",
 ): Promise<void> {
-  const project = (await exec.execute<{ id: string }>(sql`
+  const project = await exec.execute<{ id: string }>(
+    sql`
     select id from projects
      where id = ${projectId} and org_id = ${orgId}
        ${projectSubsidiaryFilter(allowedSubsidiaryIds)}
-     ${lock === 'update' ? sql`for update` : lock === 'share' ? sql`for share` : sql``}
-  `, 'objects'))
-  if (!project[0]) throw new ProjectWorkBreakdownError('Project not found', 404)
+     ${lock === "update" ? sql`for update` : lock === "share" ? sql`for share` : sql``}
+  `,
+    "objects",
+  );
+  if (!project[0]) throw new ProjectWorkBreakdownError("Project not found", 404);
 }
 
 async function taskSnapshot(
@@ -131,27 +136,30 @@ async function taskSnapshot(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   lock = false,
 ): Promise<TaskRow | null> {
-  const result = (await exec.execute<TaskRow>(sql`
+  const result = await exec.execute<TaskRow>(
+    sql`
     select t.id, t.project_id, t.code, t.name, t.status, t.estimated_hours, t.estimated_cost, t.estimated_price, t.budget_quantity, t.budget_unit, ${documentRevisionSql(sql`t.updated_at`)} as updated_at
       from project_tasks t
       join projects p on p.id = t.project_id and p.org_id = t.org_id
      where t.id = ${taskId} and t.project_id = ${projectId} and t.org_id = ${orgId}
        ${projectSubsidiaryFilter(allowedSubsidiaryIds, sql`p.subsidiary_id`)}
      ${lock ? sql`for update of t` : sql``}
-  `, 'objects'))
-  return result[0] ?? null
+  `,
+    "objects",
+  );
+  return result[0] ?? null;
 }
 
 async function recordTaskAudit(args: {
-  exec: Executor
-  orgId: string
-  projectId: string
-  taskId: string
-  actorId: string
-  action: 'insert' | 'update'
-  before: TaskRow | null
-  after: TaskRow
-  reason?: string | null
+  exec: Executor;
+  orgId: string;
+  projectId: string;
+  taskId: string;
+  actorId: string;
+  action: "insert" | "update";
+  before: TaskRow | null;
+  after: TaskRow;
+  reason?: string | null;
 }) {
   await args.exec.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -162,14 +170,14 @@ async function recordTaskAudit(args: {
       ${args.action},
       ${JSON.stringify({
         projectId: args.projectId,
-        source: 'project_work_breakdown',
+        source: "project_work_breakdown",
         before: args.before,
         after: args.after,
         ...(args.reason ? { reason: args.reason } : {}),
       })}::jsonb,
       ${args.actorId}
     )
-  `)
+  `);
 }
 
 export async function loadWorkBreakdownTasks(
@@ -177,33 +185,37 @@ export async function loadWorkBreakdownTasks(
   projectId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<WorkBreakdownTaskClient[]> {
-  await assertProjectsEnabled(orgId)
-  await assertProject(db, orgId, projectId, allowedSubsidiaryIds)
-  const result = (await db.execute<TaskRow>(sql`
+  await assertProjectsEnabled(orgId);
+  await assertProject(db, orgId, projectId, allowedSubsidiaryIds);
+  const result = await db.execute<TaskRow>(
+    sql`
     select t.id, t.project_id, t.code, t.name, t.status, t.estimated_hours, t.estimated_cost, t.estimated_price, t.budget_quantity, t.budget_unit, ${documentRevisionSql(sql`t.updated_at`)} as updated_at
       from project_tasks t
       join projects p on p.id = t.project_id and p.org_id = t.org_id
      where t.project_id = ${projectId} and t.org_id = ${orgId}
        ${projectSubsidiaryFilter(allowedSubsidiaryIds, sql`p.subsidiary_id`)}
      order by t.code nulls last, t.name, t.id
-  `, 'objects'))
-  return result.map(clientTask)
+  `,
+    "objects",
+  );
+  return result.map(clientTask);
 }
 
 export async function createWorkBreakdownTask(args: {
-  orgId: string
-  projectId: string
-  actorId: string
-  allowedSubsidiaryIds: ReadonlySet<string> | null
-  input: WorkBreakdownTaskInput
+  orgId: string;
+  projectId: string;
+  actorId: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+  input: WorkBreakdownTaskInput;
 }): Promise<WorkBreakdownTaskClient> {
   return db.transaction(async (tx) => {
-    await assertProjectsEnabledTx(tx, args.orgId)
+    await assertProjectsEnabledTx(tx, args.orgId);
     // The project row is the transaction-scoped sequencing lock for its WBS.
     // Concurrent creates cannot both observe the same max(schedule_order).
-    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, 'update')
-    await assertProductionQuantityAllowed(tx, args.orgId, args.input)
-    const created = (await tx.execute<TaskRow>(sql`
+    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, "update");
+    await assertProductionQuantityAllowed(tx, args.orgId, args.input);
+    const created = await tx.execute<TaskRow>(
+      sql`
       insert into project_tasks (
         org_id, project_id, code, name, status, estimated_hours, estimated_cost, estimated_price,
         budget_quantity, budget_unit, schedule_order, created_by, updated_by
@@ -219,36 +231,38 @@ export async function createWorkBreakdownTask(args: {
         ${args.actorId}, ${args.actorId}
       )
       returning id, project_id, code, name, status, estimated_hours, estimated_cost, estimated_price, budget_quantity, budget_unit, ${documentRevisionSql(sql`updated_at`)} as updated_at
-    `, 'objects'))
-    const after = created[0]
-    if (!after) throw new ProjectWorkBreakdownError('Task could not be created', 500)
+    `,
+      "objects",
+    );
+    const after = created[0];
+    if (!after) throw new ProjectWorkBreakdownError("Task could not be created", 500);
     await recordTaskAudit({
       exec: tx,
       orgId: args.orgId,
       projectId: args.projectId,
       taskId: after.id,
       actorId: args.actorId,
-      action: 'insert',
+      action: "insert",
       before: null,
       after,
-    })
-    return clientTask(after)
-  })
+    });
+    return clientTask(after);
+  });
 }
 
 export async function updateWorkBreakdownTask(args: {
-  orgId: string
-  projectId: string
-  taskId: string
-  actorId: string
-  allowedSubsidiaryIds: ReadonlySet<string> | null
-  expectedUpdatedAt: string
-  input: WorkBreakdownTaskInput
-  reason?: string | null
+  orgId: string;
+  projectId: string;
+  taskId: string;
+  actorId: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+  expectedUpdatedAt: string;
+  input: WorkBreakdownTaskInput;
+  reason?: string | null;
 }): Promise<WorkBreakdownTaskClient> {
   return db.transaction(async (tx) => {
-    await assertProjectsEnabledTx(tx, args.orgId)
-    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, 'share')
+    await assertProjectsEnabledTx(tx, args.orgId);
+    await assertProject(tx, args.orgId, args.projectId, args.allowedSubsidiaryIds, "share");
     const before = await taskSnapshot(
       tx,
       args.orgId,
@@ -256,13 +270,16 @@ export async function updateWorkBreakdownTask(args: {
       args.taskId,
       args.allowedSubsidiaryIds,
       true,
-    )
-    if (!before) throw new ProjectWorkBreakdownError('Task not found', 404)
-    if (!isDocumentRevisionToken(args.expectedUpdatedAt) || before.updated_at !== args.expectedUpdatedAt) {
+    );
+    if (!before) throw new ProjectWorkBreakdownError("Task not found", 404);
+    if (
+      !isDocumentRevisionToken(args.expectedUpdatedAt) ||
+      before.updated_at !== args.expectedUpdatedAt
+    ) {
       throw new ProjectWorkBreakdownError(
-        'This task changed after you opened it. Refresh and review the latest values.',
+        "This task changed after you opened it. Refresh and review the latest values.",
         409,
-      )
+      );
     }
     // Closed tasks never reopen or re-budget silently: sideways moves
     // between terminal states refuse, and reopening or changing estimates
@@ -274,13 +291,14 @@ export async function updateWorkBreakdownTask(args: {
       estimatedCostChanged: !sameTaskDecimal(before.estimated_cost, args.input.estimatedCost),
       estimatedPriceChanged: !sameTaskDecimal(before.estimated_price, args.input.estimatedPrice),
       reason: args.reason ?? null,
-    })
-    await assertProductionQuantityAllowed(tx, args.orgId, args.input)
-    const quantityUnchanged = args.input.budgetQuantity === undefined
+    });
+    await assertProductionQuantityAllowed(tx, args.orgId, args.input);
+    const quantityUnchanged = args.input.budgetQuantity === undefined;
 
     // The locked snapshot comparison preserves every PostgreSQL microsecond.
     // Advance the token even when multiple writes share a transaction clock.
-    const updated = (await tx.execute<TaskRow>(sql`
+    const updated = await tx.execute<TaskRow>(
+      sql`
       update project_tasks
          set code = ${args.input.code},
              name = ${args.input.name},
@@ -301,13 +319,15 @@ export async function updateWorkBreakdownTask(args: {
               ${projectSubsidiaryFilter(args.allowedSubsidiaryIds, sql`p.subsidiary_id`)}
          )
        returning id, project_id, code, name, status, estimated_hours, estimated_cost, estimated_price, budget_quantity, budget_unit, ${documentRevisionSql(sql`updated_at`)} as updated_at
-    `, 'objects'))
-    const after = updated[0]
+    `,
+      "objects",
+    );
+    const after = updated[0];
     if (!after) {
       throw new ProjectWorkBreakdownError(
-        'This task changed while you were saving. Refresh and review the latest values.',
+        "This task changed while you were saving. Refresh and review the latest values.",
         409,
-      )
+      );
     }
     await recordTaskAudit({
       exec: tx,
@@ -315,11 +335,11 @@ export async function updateWorkBreakdownTask(args: {
       projectId: args.projectId,
       taskId: args.taskId,
       actorId: args.actorId,
-      action: 'update',
+      action: "update",
       before,
       after,
       reason: args.reason ?? null,
-    })
-    return clientTask(after)
-  })
+    });
+    return clientTask(after);
+  });
 }

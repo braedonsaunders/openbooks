@@ -38,14 +38,19 @@ export async function authorizeConnectorReplay(
   executor: SqlExecutor,
   input: AuthorizeConnectorReplayInput,
 ): Promise<{ id: string }> {
-  const inserted = (await executor.execute<{ id: string }>(sql`
+  const inserted = (
+    await executor.execute<{ id: string }>(
+      sql`
     insert into connector_replay_authorizations
       (org_id, connection_id, authorized_by, period_from_id, period_to_id,
        expires_at, reason, created_by, updated_by)
     values (${input.orgId}, ${input.connectionId}, ${input.authorizedBy},
             ${input.periodFromId}, ${input.periodToId}, ${input.expiresAt},
             ${input.reason}, ${input.actorId ?? null}, ${input.actorId ?? null})
-    returning id`, "objects"))[0];
+    returning id`,
+      "objects",
+    )
+  )[0];
   if (!inserted)
     throw new PostingError(
       "the connector replay authorization was not recorded — retry the grant instead of replaying without it",
@@ -68,7 +73,8 @@ export async function findLiveReplayAuthorization(
     connection_id: string;
     reason: string;
     expires_at: Date | string;
-  }>(sql`
+  }>(
+    sql`
     select auth.id, auth.connection_id, auth.reason, auth.expires_at
       from connector_replay_authorizations auth
       join accounting_periods from_period
@@ -89,7 +95,9 @@ export async function findLiveReplayAuthorization(
        and target.starts_on >= least(from_period.starts_on, to_period.starts_on)
        and target.ends_on <= greatest(from_period.ends_on, to_period.ends_on)
      order by auth.authorized_at desc
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   const found = rows[0];
   if (!found) return null;
   return {

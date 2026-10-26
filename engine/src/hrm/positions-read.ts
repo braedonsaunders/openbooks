@@ -48,7 +48,9 @@ import { inputGuards } from "./input-guards.ts";
  * vacancy must never be misattributed.
  */
 
-const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new HrmPositionError("INVALID_INPUT", message));
+const { requireOrgId, requireActorId, requireId } = inputGuards(
+  (message) => new HrmPositionError("INVALID_INPUT", message),
+);
 
 async function assertPositionFeature(exec: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
@@ -125,11 +127,14 @@ async function loadAllVersions(
   const byPosition = new Map<string, StoredPositionVersion[]>();
   if (positionIds.length === 0) return byPosition;
   const ids = positionIds.map((id) => sql`${id}::uuid`);
-  const rows = await exec.execute<StoredPositionVersion>(sql`
+  const rows = await exec.execute<StoredPositionVersion>(
+    sql`
     select ${VERSION_COLUMNS}
       from position_versions
      where org_id = ${orgId}::uuid and position_id in (${sql.join(ids, sql`, `)})
-     order by position_id, version_no`, "objects");
+     order by position_id, version_no`,
+    "objects",
+  );
   for (const row of rows) {
     const list = byPosition.get(row.position_id) ?? [];
     list.push(row);
@@ -158,7 +163,8 @@ async function loadFundingRows(
   const byPosition = new Map<string, FundingPlanRow[]>();
   if (positionIds.length === 0) return byPosition;
   const ids = positionIds.map((id) => sql`${id}::uuid`);
-  const rows = await exec.execute<FundingPlanRow>(sql`
+  const rows = await exec.execute<FundingPlanRow>(
+    sql`
     select f.id::text as id, f.position_id::text as position_id,
            f.period_id::text as period_id, f.funded_fte::text as funded_fte,
            f.funding_source_id::text as funding_source_id,
@@ -167,7 +173,9 @@ async function loadFundingRows(
       from position_funding f
       join accounting_periods p on p.id = f.period_id
      where f.org_id = ${orgId}::uuid and f.position_id in (${sql.join(ids, sql`, `)})
-     order by f.position_id, p.starts_on`, "objects");
+     order by f.position_id, p.starts_on`,
+    "objects",
+  );
   for (const row of rows) {
     const list = byPosition.get(row.position_id) ?? [];
     list.push(row);
@@ -203,7 +211,8 @@ async function loadHolderVersions(
   const byPosition = new Map<string, HolderVersionRow[]>();
   if (positionIds.length === 0) return byPosition;
   const ids = positionIds.map((id) => sql`${id}::uuid`);
-  const rows = await exec.execute<HolderVersionRow & { position_id: string }>(sql`
+  const rows = await exec.execute<HolderVersionRow & { position_id: string }>(
+    sql`
     select av.position_id::text as position_id,
            av.assignment_id::text as assignment_id, a.assignment_key,
            av.employment_id::text as employment_id,
@@ -223,7 +232,9 @@ async function loadHolderVersions(
       join worker_employments e on e.id = av.employment_id and e.org_id = av.org_id
       left join parties p on p.id = e.worker_party_id and p.org_id = e.org_id
      where av.org_id = ${orgId}::uuid and av.position_id in (${sql.join(ids, sql`, `)})
-     order by av.position_id, av.assignment_id, av.version_no`, "objects");
+     order by av.position_id, av.assignment_id, av.version_no`,
+    "objects",
+  );
   for (const row of rows) {
     const list = byPosition.get(row.position_id) ?? [];
     list.push(row);
@@ -353,10 +364,18 @@ function buildRow(args: {
   allowed: Set<string> | null;
   query: Pick<VacancyQuery, "effectiveDate" | "knownAt">;
 }): PositionRowDTO {
-  const { holders, filledTenths } = resolveHolderChains(args.holderRows, args.query, args.positionCode, args.allowed);
+  const { holders, filledTenths } = resolveHolderChains(
+    args.holderRows,
+    args.query,
+    args.positionCode,
+    args.allowed,
+  );
   let fundedTenths = 0n;
   for (const row of args.funding) {
-    if (row.period_starts_on <= args.query.effectiveDate && args.query.effectiveDate <= row.period_ends_on) {
+    if (
+      row.period_starts_on <= args.query.effectiveDate &&
+      args.query.effectiveDate <= row.period_ends_on
+    ) {
       fundedTenths += parseFte(row.funded_fte);
     }
   }
@@ -369,8 +388,16 @@ function buildRow(args: {
   const disagreementWarnings = holders.flatMap((holder) =>
     positionDisagreements(
       args.positionCode,
-      { title: args.version.title, departmentId: args.version.department_id, locationId: args.version.location_id },
-      { title: holder.dto.jobTitle, departmentId: holder.departmentId, locationId: holder.locationId },
+      {
+        title: args.version.title,
+        departmentId: args.version.department_id,
+        locationId: args.version.location_id,
+      },
+      {
+        title: holder.dto.jobTitle,
+        departmentId: holder.departmentId,
+        locationId: holder.locationId,
+      },
     ),
   );
   return {
@@ -390,12 +417,19 @@ function buildRow(args: {
 type StablePosition = { id: string; positionCode: string; revision: number };
 
 async function loadStablePositions(exec: SqlExecutor, orgId: string): Promise<StablePosition[]> {
-  const rows = await exec.execute<{ id: string; positionCode: string; revision: number }>(sql`
+  const rows = await exec.execute<{ id: string; positionCode: string; revision: number }>(
+    sql`
     select id::text as id, position_code as "positionCode", revision
       from positions
      where org_id = ${orgId}::uuid
-     order by position_code`, "objects");
-  return rows.map((row) => ({ id: row.id, positionCode: row.positionCode, revision: row.revision }));
+     order by position_code`,
+    "objects",
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    positionCode: row.positionCode,
+    revision: row.revision,
+  }));
 }
 
 function validateVacancyQuery(query: VacancyQuery): void {
@@ -425,10 +459,10 @@ async function resolveRows(
   for (const position of stable) {
     let resolved;
     try {
-      resolved = resolveAsOf(
-        (versionsByPosition.get(position.id) ?? []).map(toRevision),
-        { effective: query.effectiveDate, asKnown: query.knownAt },
-      );
+      resolved = resolveAsOf((versionsByPosition.get(position.id) ?? []).map(toRevision), {
+        effective: query.effectiveDate,
+        asKnown: query.knownAt,
+      });
     } catch (error) {
       // The establishment does not cover the as-of date (or was never
       // recorded then): legitimately absent from an as-of list, never a
@@ -512,9 +546,12 @@ async function namesById(
 ): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
   const params = ids.map((id) => sql`${id}::uuid`);
-  const rows = await exec.execute<{ id: string; name: string }>(sql`
+  const rows = await exec.execute<{ id: string; name: string }>(
+    sql`
     select id::text as id, name from ${table === "subsidiaries" ? sql`subsidiaries` : sql`departments`}
-     where org_id = ${orgId}::uuid and id in (${sql.join(params, sql`, `)})`, "objects");
+     where org_id = ${orgId}::uuid and id in (${sql.join(params, sql`, `)})`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.id, row.name] as const));
 }
 
@@ -537,7 +574,10 @@ export async function loadVacancyAsOf(exec: SqlExecutor, query: VacancyQuery): P
   ];
   const subsidiaryNames = await namesById(exec, orgId, "subsidiaries", subsidiaryIds);
   const departmentNames = await namesById(exec, orgId, "departments", departmentIds);
-  const grouped = new Map<string, VacancyGroupDTO & { planned: bigint; funded: bigint; filled: bigint }>();
+  const grouped = new Map<
+    string,
+    VacancyGroupDTO & { planned: bigint; funded: bigint; filled: bigint }
+  >();
   for (const row of positions) {
     const subsidiaryName = subsidiaryNames.get(row.version.employerSubsidiaryId);
     if (subsidiaryName === undefined) {
@@ -667,7 +707,9 @@ export interface PositionOptionDTO {
  * picker-side hiding. An unknown or out-of-scope id stays absent rather
  * than leaking existence.
  */
-export async function listPositionOptions(query: PositionOptionsQuery): Promise<readonly PositionOptionDTO[]> {
+export async function listPositionOptions(
+  query: PositionOptionsQuery,
+): Promise<readonly PositionOptionDTO[]> {
   const orgId = requireOrgId(query.orgId);
   requireActorId(query.actorId);
   const limit = query.limit ?? 25;
@@ -679,11 +721,15 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
     const allowed = await requireAggregatePositionRead(db, orgId, query.actorId);
     const fragment = (query.q ?? "").trim();
     const includeId = query.includePositionId?.trim() ? query.includePositionId.trim() : null;
-    const employerScope = allowed === null
-      ? sql``
-      : allowed.size === 0
-        ? sql`and false`
-        : sql`and v.employer_subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})`;
+    const employerScope =
+      allowed === null
+        ? sql``
+        : allowed.size === 0
+          ? sql`and false`
+          : sql`and v.employer_subsidiary_id in (${sql.join(
+              [...allowed].map((id) => sql`${id}::uuid`),
+              sql`, `,
+            )})`;
     type OptionRow = {
       positionId: string;
       code: string;
@@ -691,7 +737,8 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
       status: string;
       subsidiaryId: string;
     };
-    const page = await db.execute<OptionRow>(sql`
+    const page = await db.execute<OptionRow>(
+      sql`
       select p.id::text as "positionId", p.position_code as code,
              v.title, v.status,
              v.employer_subsidiary_id::text as "subsidiaryId"
@@ -707,9 +754,13 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
          ${employerScope}
          ${fragment ? sql`and (p.position_code ilike ${`%${likeEscape(fragment)}%`} escape '\\' or v.title ilike ${`%${likeEscape(fragment)}%`} escape '\\')` : sql``}
        order by p.position_code, p.id
-       limit ${limit}`, "objects");
+       limit ${limit}`,
+      "objects",
+    );
     const pinned = includeId
-      ? (await db.execute<OptionRow>(sql`
+      ? ((
+          await db.execute<OptionRow>(
+            sql`
         select p.id::text as "positionId", p.position_code as code,
                v.title, v.status,
                v.employer_subsidiary_id::text as "subsidiaryId"
@@ -722,7 +773,10 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
              limit 1
           ) v on true
          where p.org_id = ${orgId}::uuid and p.id = ${includeId}::uuid
-           ${employerScope}`, "objects"))[0] ?? null
+           ${employerScope}`,
+            "objects",
+          )
+        )[0] ?? null)
       : null;
     const rows = pinned
       ? [pinned, ...page.filter((row) => row.positionId !== pinned.positionId)]
@@ -755,21 +809,30 @@ export async function getPositionAsOf(query: PositionAsOfQuery): Promise<Positio
     // and returns the actor's lens without prematurely authorizing the live
     // version.
     const allowed = await requireAggregatePositionRead(db, orgId, query.actorId);
-    const subject = (await db.execute<{ positionCode: string; revision: number }>(sql`
+    const subject = (
+      await db.execute<{ positionCode: string; revision: number }>(
+        sql`
       select position_code as "positionCode", revision
         from positions where org_id = ${orgId}::uuid and id = ${query.positionId}::uuid
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!subject) {
-      throw new HrmPositionError("NOT_FOUND", "position is not visible in this organization and legal-entity scope");
+      throw new HrmPositionError(
+        "NOT_FOUND",
+        "position is not visible in this organization and legal-entity scope",
+      );
     }
     validateVacancyQuery(query);
-    const versions = (await loadAllVersions(db, orgId, [query.positionId])).get(query.positionId) ?? [];
+    const versions =
+      (await loadAllVersions(db, orgId, [query.positionId])).get(query.positionId) ?? [];
     let resolved;
     try {
-      resolved = resolveAsOf(
-        versions.map(toRevision),
-        { effective: query.effectiveDate, asKnown: query.knownAt },
-      );
+      resolved = resolveAsOf(versions.map(toRevision), {
+        effective: query.effectiveDate,
+        asKnown: query.knownAt,
+      });
     } catch (error) {
       if (error instanceof NoRevisionError) {
         throw new HrmPositionError(
@@ -780,10 +843,15 @@ export async function getPositionAsOf(query: PositionAsOfQuery): Promise<Positio
       throw error;
     }
     if (allowed !== null && !allowed.has(resolved.payload.employer_subsidiary_id)) {
-      throw new HrmPositionError("NOT_FOUND", "position is not visible in this organization and legal-entity scope");
+      throw new HrmPositionError(
+        "NOT_FOUND",
+        "position is not visible in this organization and legal-entity scope",
+      );
     }
-    const funding = (await loadFundingRows(db, orgId, [query.positionId])).get(query.positionId) ?? [];
-    const holderRows = (await loadHolderVersions(db, orgId, [query.positionId])).get(query.positionId) ?? [];
+    const funding =
+      (await loadFundingRows(db, orgId, [query.positionId])).get(query.positionId) ?? [];
+    const holderRows =
+      (await loadHolderVersions(db, orgId, [query.positionId])).get(query.positionId) ?? [];
     // Holders are independently filtered to the reader's legal-entity scope.
     const row = buildRow({
       id: query.positionId,

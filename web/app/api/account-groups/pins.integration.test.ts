@@ -17,7 +17,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
   shortCircuit: true,
@@ -54,9 +54,8 @@ const routeUrl = new URL("./[id]/pins/route.ts?account-group-pins-test", import.
 const { POST, DELETE } = (await import(routeUrl)) as typeof import("./[id]/pins/route.ts");
 
 const { withBypassContext, db, pool } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 function errorChain(error: unknown): string {
   const cause = (error as { cause?: unknown }).cause;
@@ -70,15 +69,17 @@ async function seed(): Promise<{
   groupA: string;
   groupB: string;
 }> {
-  const org = await withBypassContext(() => (createScratchOrg()));
-  const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   const groupA = randomUUID();
   const groupB = randomUUID();
-  await withBypassContext(() => (db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into account_groups (id, org_id, dimension, key, name, sort_order, match, is_catch_all, is_active, created_by)
     values
       (${groupA}, ${org.orgId}, 'test_dimension', 'group_a', 'Group A', 1, '{}'::jsonb, false, true, ${actorId}),
-      (${groupB}, ${org.orgId}, 'test_dimension', 'group_b', 'Group B', 2, '{}'::jsonb, false, true, ${actorId})`)));
+      (${groupB}, ${org.orgId}, 'test_dimension', 'group_b', 'Group B', 2, '{}'::jsonb, false, true, ${actorId})`),
+  );
   return { orgId: org.orgId, actorId, accountId: org.accounts.cogs, groupA, groupB };
 }
 
@@ -109,143 +110,175 @@ async function waitForAdvisoryWaiter(): Promise<void> {
   throw new Error("timed out waiting for account-group pin advisory lock");
 }
 
-test(
-  "account-group pins are unique in storage and concurrent route moves leave one deterministic winner",
-  async () => {
-    const fixture = await seed();
-    try {
-      await withBypassContext(() => (db.execute(sql`
+test("account-group pins are unique in storage and concurrent route moves leave one deterministic winner", async () => {
+  const fixture = await seed();
+  try {
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into account_group_members (org_id, group_id, account_id, dimension, created_by)
-        values (${fixture.orgId}, ${fixture.groupA}, ${fixture.accountId}, 'test_dimension', ${fixture.actorId})`)));
-      await assert.rejects(
-        withBypassContext(() => (db.execute(sql`
+        values (${fixture.orgId}, ${fixture.groupA}, ${fixture.accountId}, 'test_dimension', ${fixture.actorId})`),
+    );
+    await assert.rejects(
+      withBypassContext(() =>
+        db.execute(sql`
           insert into account_group_members (org_id, group_id, account_id, dimension, created_by)
-          values (${fixture.orgId}, ${fixture.groupB}, ${fixture.accountId}, 'test_dimension', ${fixture.actorId})`))),
-        (error: unknown) => /account_group_members_org_dimension_account|duplicate key value violates unique constraint/.test(errorChain(error)),
-      );
-      await withBypassContext(() => (db.execute(sql`
+          values (${fixture.orgId}, ${fixture.groupB}, ${fixture.accountId}, 'test_dimension', ${fixture.actorId})`),
+      ),
+      (error: unknown) =>
+        /account_group_members_org_dimension_account|duplicate key value violates unique constraint/.test(
+          errorChain(error),
+        ),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
         delete from account_group_members
-         where org_id = ${fixture.orgId} and account_id = ${fixture.accountId}`)));
+         where org_id = ${fixture.orgId} and account_id = ${fixture.accountId}`),
+    );
 
-      const lockKey = `account-group-pin:${fixture.orgId}:test_dimension:${fixture.accountId}`;
-      const holder = await pool.connect();
-      let holderOpen = true;
-      try {
-        await holder.query("begin");
-        await holder.query("select set_config('app.bypass_rls', 'on', true)");
-        await holder.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [lockKey]);
+    const lockKey = `account-group-pin:${fixture.orgId}:test_dimension:${fixture.accountId}`;
+    const holder = await pool.connect();
+    let holderOpen = true;
+    try {
+      await holder.query("begin");
+      await holder.query("select set_config('app.bypass_rls', 'on', true)");
+      await holder.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [lockKey]);
 
-        const first = post(fixture, fixture.groupA);
-        const second = post(fixture, fixture.groupB);
-        await waitForAdvisoryWaiter();
-        await holder.query("commit");
-        holderOpen = false;
+      const first = post(fixture, fixture.groupA);
+      const second = post(fixture, fixture.groupB);
+      await waitForAdvisoryWaiter();
+      await holder.query("commit");
+      holderOpen = false;
 
-        const responses = await Promise.all([first, second]);
-        assert.deepEqual(responses.map((response) => response.status), [200, 200]);
-        const rows = await db.execute<{ group_id: string }>(sql`
+      const responses = await Promise.all([first, second]);
+      assert.deepEqual(
+        responses.map((response) => response.status),
+        [200, 200],
+      );
+      const rows = await db.execute<{ group_id: string }>(
+        sql`
           select group_id
             from account_group_members
            where org_id = ${fixture.orgId}
              and dimension = 'test_dimension'
-             and account_id = ${fixture.accountId}`, "objects");
-        assert.ok(
-          rows[0]?.group_id === fixture.groupA || rows[0]?.group_id === fixture.groupB,
-          "the surviving pin must be one of the requested groups",
-        );
-      } finally {
-        if (holderOpen) await holder.query("rollback").catch(() => undefined);
-        holder.release();
-      }
+             and account_id = ${fixture.accountId}`,
+        "objects",
+      );
+      assert.ok(
+        rows[0]?.group_id === fixture.groupA || rows[0]?.group_id === fixture.groupB,
+        "the surviving pin must be one of the requested groups",
+      );
     } finally {
-      await dropScratchOrgReporting(fixture.orgId);
+      if (holderOpen) await holder.query("rollback").catch(() => undefined);
+      holder.release();
     }
-  },
-);
+  } finally {
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
-test(
-  "account-group pins refuse out-of-scope and shared-chart accounts to restricted callers",
-  async () => {
-    const org = await withBypassContext(() => (createScratchOrg()));
-    const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
-    const groupId = randomUUID();
-    await withBypassContext(() => (db.execute(sql`
+test("account-group pins refuse out-of-scope and shared-chart accounts to restricted callers", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+  const groupId = randomUUID();
+  await withBypassContext(() =>
+    db.execute(sql`
       insert into account_groups (id, org_id, dimension, key, name, sort_order, match, is_catch_all, is_active, created_by)
-      values (${groupId}, ${org.orgId}, 'scope_dimension', 'scope_group', 'Scope Group', 1, '{}'::jsonb, false, true, ${actorId})`)));
-    const entityB = randomUUID();
-    await withBypassContext(() => (db.execute(sql`
+      values (${groupId}, ${org.orgId}, 'scope_dimension', 'scope_group', 'Scope Group', 1, '{}'::jsonb, false, true, ${actorId})`),
+  );
+  const entityB = randomUUID();
+  await withBypassContext(() =>
+    db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-      values (${entityB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')`)));
-    const seedAccount = async (number: string, subsidiaryId: string | null) => {
-      const id = randomUUID();
-      await withBypassContext(() => (db.execute(sql`
+      values (${entityB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')`),
+  );
+  const seedAccount = async (number: string, subsidiaryId: string | null) => {
+    const id = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into accounts (id, org_id, number, name, type, subsidiary_id)
-        values (${id}, ${org.orgId}, ${number}, ${`Pin scope ${number}`}, 'asset_other', ${subsidiaryId})`)));
-      return id;
+        values (${id}, ${org.orgId}, ${number}, ${`Pin scope ${number}`}, 'asset_other', ${subsidiaryId})`),
+    );
+    return id;
+  };
+  // The scratch subsidiary id is not exposed by this fixture file's seed;
+  // resolve the org root (the caller's own entity) directly.
+  const root = await db.execute<{ id: string }>(
+    sql`
+      select id from subsidiaries where org_id = ${org.orgId} and parent_id is null limit 1`,
+    "objects",
+  );
+  const entityA = root[0]!.id;
+  const accountA = await seedAccount("9201", entityA);
+  const accountB = await seedAccount("9202", entityB);
+  const sharedAccount = await seedAccount("9203", null);
+  try {
+    const scopeA = new Set([entityA]);
+    const pin = (accountId: string, scope: Set<string> | null) => {
+      routeState.authz = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: scope };
+      return POST(
+        new Request(`http://openbooks.test/api/account-groups/${groupId}/pins`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ accountId }),
+        }),
+        { params: Promise.resolve({ id: groupId }) },
+      );
     };
-    // The scratch subsidiary id is not exposed by this fixture file's seed;
-    // resolve the org root (the caller's own entity) directly.
-    const root = await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${org.orgId} and parent_id is null limit 1`, "objects");
-    const entityA = root[0]!.id;
-    const accountA = await seedAccount('9201', entityA);
-    const accountB = await seedAccount('9202', entityB);
-    const sharedAccount = await seedAccount('9203', null);
-    try {
-      const scopeA = new Set([entityA]);
-      const pin = (accountId: string, scope: Set<string> | null) => {
-        routeState.authz = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: scope };
-        return POST(
-          new Request(`http://openbooks.test/api/account-groups/${groupId}/pins`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ accountId }),
-          }),
-          { params: Promise.resolve({ id: groupId }) },
-        );
-      };
-      const unpin = (accountId: string, scope: Set<string> | null) => {
-        routeState.authz = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: scope };
-        return DELETE(
-          new Request(`http://openbooks.test/api/account-groups/${groupId}/pins?accountId=${accountId}`, {
-            method: 'DELETE',
-          }),
-          { params: Promise.resolve({ id: groupId }) },
-        );
-      };
-      const deniedB = await pin(accountB, scopeA);
-      assert.equal(deniedB.status, 404);
-      // Hidden and absent accounts answer the tenant-opaque not_found
-      // identically, so an out-of-scope account stays indistinguishable
-      // from a missing one.
-      assert.deepEqual(await deniedB.json(), { error: 'not_found' });
-      const deniedShared = await pin(sharedAccount, scopeA);
-      assert.equal(deniedShared.status, 403);
-      assert.deepEqual(await deniedShared.json(), { error: 'requires unrestricted subsidiary access' });
-      const allowed = await pin(accountA, scopeA);
-      assert.equal(allowed.status, 200);
-      const members = await db.execute<{ n: number }>(sql`
+    const unpin = (accountId: string, scope: Set<string> | null) => {
+      routeState.authz = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: scope };
+      return DELETE(
+        new Request(
+          `http://openbooks.test/api/account-groups/${groupId}/pins?accountId=${accountId}`,
+          {
+            method: "DELETE",
+          },
+        ),
+        { params: Promise.resolve({ id: groupId }) },
+      );
+    };
+    const deniedB = await pin(accountB, scopeA);
+    assert.equal(deniedB.status, 404);
+    // Hidden and absent accounts answer the tenant-opaque not_found
+    // identically, so an out-of-scope account stays indistinguishable
+    // from a missing one.
+    assert.deepEqual(await deniedB.json(), { error: "not_found" });
+    const deniedShared = await pin(sharedAccount, scopeA);
+    assert.equal(deniedShared.status, 403);
+    assert.deepEqual(await deniedShared.json(), {
+      error: "requires unrestricted subsidiary access",
+    });
+    const allowed = await pin(accountA, scopeA);
+    assert.equal(allowed.status, 200);
+    const members = await db.execute<{ n: number }>(
+      sql`
         select count(*)::int as n from account_group_members
-         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`, "objects");
-      assert.equal(members[0]?.n ?? -1, 1, 'the in-scope pin persists');
-      const refused = await db.execute<{ n: number }>(sql`
+         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`,
+      "objects",
+    );
+    assert.equal(members[0]?.n ?? -1, 1, "the in-scope pin persists");
+    const refused = await db.execute<{ n: number }>(
+      sql`
         select count(*)::int as n from account_group_members
-         where org_id = ${org.orgId} and group_id = ${groupId} and account_id in (${accountB}, ${sharedAccount})`, "objects");
-      assert.equal(refused[0]?.n ?? -1, 0, 'refused pins store nothing');
-      // Unpinning follows the same account-subsidiary rule on both verbs.
-      assert.equal((await unpin(accountB, scopeA)).status, 404);
-      assert.equal((await unpin(sharedAccount, scopeA)).status, 403);
-      assert.equal((await unpin(accountA, scopeA)).status, 200);
-      const remaining = await db.execute<{ n: number }>(sql`
+         where org_id = ${org.orgId} and group_id = ${groupId} and account_id in (${accountB}, ${sharedAccount})`,
+      "objects",
+    );
+    assert.equal(refused[0]?.n ?? -1, 0, "refused pins store nothing");
+    // Unpinning follows the same account-subsidiary rule on both verbs.
+    assert.equal((await unpin(accountB, scopeA)).status, 404);
+    assert.equal((await unpin(sharedAccount, scopeA)).status, 403);
+    assert.equal((await unpin(accountA, scopeA)).status, 200);
+    const remaining = await db.execute<{ n: number }>(
+      sql`
         select count(*)::int as n from account_group_members
-         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`, "objects");
-      assert.equal(remaining[0]?.n ?? -1, 0, 'the in-scope unpin removes the pin');
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`,
+      "objects",
+    );
+    assert.equal(remaining[0]?.n ?? -1, 0, "the in-scope unpin removes the pin");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

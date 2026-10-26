@@ -37,11 +37,16 @@ test("every detector spec belongs to a registered agent pack", () => {
  * over time, so no test pins the membership list — detector behaviours are
  * covered by the continuous-close pack suites.
  */
-function assertPackRegistersEnabledDetectors(agentKey: (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number]): void {
+function assertPackRegistersEnabledDetectors(
+  agentKey: (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number],
+): void {
   const specs = detectorSpecsForAgent(agentKey);
   assert.ok(specs.length > 0, `${agentKey} registers at least one detector`);
   const keys = specs.map((spec) => spec.detectorKey);
-  assert.ok(keys.every((key) => key.length > 0), `${agentKey} detector keys are named`);
+  assert.ok(
+    keys.every((key) => key.length > 0),
+    `${agentKey} detector keys are named`,
+  );
   assert.equal(new Set(keys).size, keys.length, `${agentKey} detector keys are unique`);
   const defaults = defaultContinuousCloseDetectors(agentKey);
   assert.deepEqual(
@@ -60,15 +65,17 @@ test("the four detector packs register their detectors and default on", () => {
 test("the forensics pack registers its detectors and defaults on", () => {
   assertPackRegistersEnabledDetectors("forensics");
   assert.throws(
-    () => normalizeContinuousCloseDetectors("forensics", {
-      forensic_weekend_postings: { parameters: { lookbackDays: 0 } },
-    }),
+    () =>
+      normalizeContinuousCloseDetectors("forensics", {
+        forensic_weekend_postings: { parameters: { lookbackDays: 0 } },
+      }),
     /invalid detector parameter/,
   );
   assert.throws(
-    () => normalizeContinuousCloseDetectors("forensics", {
-      forensic_duplicate_bills: { parameters: { duplicateDays: 61 } },
-    }),
+    () =>
+      normalizeContinuousCloseDetectors("forensics", {
+        forensic_duplicate_bills: { parameters: { duplicateDays: 61 } },
+      }),
     /invalid detector parameter/,
   );
 });
@@ -97,15 +104,24 @@ test("new-pack detector tuning validates like the original packs", () => {
       parameters: { criticalAgeDays: 14, criticalCustomerCount: 5, criticalMaterialityMultiple: 3 },
     },
   });
-  assert.deepEqual(enabledDetectorKeys(configured), ["broken_payment_promise", "credit_hold_candidate"]);
+  assert.deepEqual(enabledDetectorKeys(configured), [
+    "broken_payment_promise",
+    "credit_hold_candidate",
+  ]);
   assert.equal(configured[0]!.materialityThreshold, "2500.1250");
 
   assert.throws(
-    () => normalizeContinuousCloseDetectors("payables", { duplicate_bills: { parameters: { duplicateWindowDays: 0 } } }),
+    () =>
+      normalizeContinuousCloseDetectors("payables", {
+        duplicate_bills: { parameters: { duplicateWindowDays: 0 } },
+      }),
     /invalid detector parameter/,
   );
   assert.throws(
-    () => normalizeContinuousCloseDetectors("reconciliation", { bank_line_match_candidate: { materialityThreshold: "-1" } }),
+    () =>
+      normalizeContinuousCloseDetectors("reconciliation", {
+        bank_line_match_candidate: { materialityThreshold: "-1" },
+      }),
     /invalid materiality threshold/,
   );
 });
@@ -114,12 +130,23 @@ test("detector packs stay quiet without touching the DB when nothing is enabled"
   // Every pack short-circuits before its loaders when none of its detectors
   // is enabled, so a fully-disabled agent costs no queries.
   for (const agentKey of ["collections", "payables", "reconciliation", "hygiene"] as const) {
-    const findings = await AGENT_PACKS[agentKey]("00000000-0000-0000-0000-000000000000", "1000.0000", []);
+    const findings = await AGENT_PACKS[agentKey](
+      "00000000-0000-0000-0000-000000000000",
+      "1000.0000",
+      [],
+    );
     assert.deepEqual(findings, [], `${agentKey} emits nothing with no detectors enabled`);
   }
   for (const agentKey of ["collections", "payables", "reconciliation", "hygiene"] as const) {
-    const detectors = defaultContinuousCloseDetectors(agentKey).map((detector) => ({ ...detector, enabled: false }));
-    const findings = await AGENT_PACKS[agentKey]("00000000-0000-0000-0000-000000000000", "1000.0000", detectors);
+    const detectors = defaultContinuousCloseDetectors(agentKey).map((detector) => ({
+      ...detector,
+      enabled: false,
+    }));
+    const findings = await AGENT_PACKS[agentKey](
+      "00000000-0000-0000-0000-000000000000",
+      "1000.0000",
+      detectors,
+    );
     assert.deepEqual(findings, [], `${agentKey} emits nothing when all its detectors are off`);
   }
 });

@@ -1,15 +1,27 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { stubModules } from '../../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
+import { stubModules } from "../../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../../testing/jsdom-env.ts";
 
 const navigation = { replacements: [] as string[] };
 (globalThis as Record<string, unknown>).__cashHorizonNavigation = navigation;
-stubModules({ navigation: { source: 'export const useRouter = () => ({ replace: (url) => globalThis.__cashHorizonNavigation.replacements.push(url) }); export const usePathname = () => "/analytics/cashflow"; export const useSearchParams = () => new URLSearchParams("sub=sub-1");' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      'export const useRouter = () => ({ replace: (url) => globalThis.__cashHorizonNavigation.replacements.push(url) }); export const usePathname = () => "/analytics/cashflow"; export const useSearchParams = () => new URLSearchParams("sub=sub-1");',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 // House render guard: classic JSX transforms and shared tsx caches need React
 // on globalThis before the client control module is evaluated.
-await bootJsdomEnvironment({ html: '<!doctype html><html><body></body></html>', url: 'http://localhost:4800/analytics/cashflow', matchMediaMatches: false });
+await bootJsdomEnvironment({
+  html: "<!doctype html><html><body></body></html>",
+  url: "http://localhost:4800/analytics/cashflow",
+  matchMediaMatches: false,
+});
 // The horizon dropdown dispatches jsdom-realm events: keep jsdom's Event
 // (Node 24 also ships a native global Event that this document will not
 // dispatch as its own) until the shared preset offers an Event option.
@@ -21,9 +33,18 @@ const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
 const { HorizonControl } = await import("../../app/(app)/analytics/cashflow/HorizonControl.tsx");
 const horizonMessages = {
-  analytics: { cashflow: { horizon: { label: "Horizon", aria: "Forecast horizon", weeks: "{count} weeks" } } },
+  analytics: {
+    cashflow: { horizon: { label: "Horizon", aria: "Forecast horizon", weeks: "{count} weeks" } },
+  },
   common: { labels: { none: "None" }, actions: { close: "Close", select: "Select" } },
-  ui: { select: { placeholder: "Select", searchPlaceholder: "Search", noMatches: "No matches", searching: "Searching" } },
+  ui: {
+    select: {
+      placeholder: "Select",
+      searchPlaceholder: "Search",
+      noMatches: "No matches",
+      searching: "Searching",
+    },
+  },
 };
 
 test("formula TAX_RATE prices the enacted rate for the week, exactly", () => {
@@ -283,17 +304,24 @@ test("cashflow horizon control offers shared presets and preserves other query f
       };
       root.render(React.createElement(NextIntlClientProvider, providerProps));
     });
-    const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="Forecast horizon"]');
+    const trigger = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Forecast horizon"]',
+    );
     assert.ok(trigger, "cashflow exposes its forecast horizon selector");
-    assert.deepEqual([...document.querySelectorAll('[role="option"]')].map((option) => option.textContent), []);
+    assert.deepEqual(
+      [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent),
+      [],
+    );
     await act(async () => {
       trigger.click();
     });
-    assert.deepEqual([...document.querySelectorAll('[role="option"]')].map((option) => option.textContent), [
-      "4 weeks", "8 weeks", "13 weeks", "26 weeks",
-    ]);
-    const thirteenWeeks = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')]
-      .find((option) => option.textContent === "13 weeks");
+    assert.deepEqual(
+      [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent),
+      ["4 weeks", "8 weeks", "13 weeks", "26 weeks"],
+    );
+    const thirteenWeeks = [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
+      (option) => option.textContent === "13 weeks",
+    );
     assert.ok(thirteenWeeks, "the supported 13-week standard horizon is selectable");
     await act(async () => thirteenWeeks.click());
     assert.deepEqual(navigation.replacements, ["/analytics/cashflow?sub=sub-1&horizon=13"]);
@@ -372,21 +400,43 @@ test("declared category refusals map to an unavailable state, anything else reth
 
 test("day arithmetic on forecast dates agrees with the platform calendar and refuses outside it", async () => {
   const { addDays, daysBetween, toISO } = await import("./core");
-  const { addCalendarDays, calendarDaysBetween, parseIsoDate } = await import("@openbooks/engine/platform/business-date/module");
+  const { addCalendarDays, calendarDaysBetween, parseIsoDate } =
+    await import("@openbooks/engine/platform/business-date/module");
   const reference = {
     addDays: (d: Date, n: number) => parseIsoDate(addCalendarDays(toISO(d), n)),
     daysBetween: (a: Date, b: Date) => calendarDaysBetween(toISO(a), toISO(b)),
   };
-  const instants = ["0001-01-01T00:00:00Z", "0001-03-01T13:30:00Z", "1899-12-31T23:59:59.999Z", "1969-12-31T12:00:00Z", "1970-01-01T00:00:00Z", "2024-02-28T00:00:00Z", "2024-02-29T18:00:00Z", "2100-02-28T00:00:00Z", "9999-12-31T00:00:00Z"].map((s) => new Date(s));
+  const instants = [
+    "0001-01-01T00:00:00Z",
+    "0001-03-01T13:30:00Z",
+    "1899-12-31T23:59:59.999Z",
+    "1969-12-31T12:00:00Z",
+    "1970-01-01T00:00:00Z",
+    "2024-02-28T00:00:00Z",
+    "2024-02-29T18:00:00Z",
+    "2100-02-28T00:00:00Z",
+    "9999-12-31T00:00:00Z",
+  ].map((s) => new Date(s));
   for (const d of instants) {
     for (const n of [-400, -366, -1, 0, 1, 7, 30, 365, 366, 1461]) {
       let expected: Date | Error, actual: Date | Error;
-      try { expected = reference.addDays(d, n) } catch (e) { expected = e as Error }
-      try { actual = addDays(d, n) } catch (e) { actual = e as Error }
-      if (expected instanceof Error) assert.ok(actual instanceof RangeError, `${d.toISOString()} ${n} refuses`);
-      else assert.equal((actual as Date).getTime(), expected.getTime(), `${d.toISOString()} + ${n}`);
+      try {
+        expected = reference.addDays(d, n);
+      } catch (e) {
+        expected = e as Error;
+      }
+      try {
+        actual = addDays(d, n);
+      } catch (e) {
+        actual = e as Error;
+      }
+      if (expected instanceof Error)
+        assert.ok(actual instanceof RangeError, `${d.toISOString()} ${n} refuses`);
+      else
+        assert.equal((actual as Date).getTime(), expected.getTime(), `${d.toISOString()} + ${n}`);
     }
-    for (const other of instants) assert.equal(daysBetween(d, other), reference.daysBetween(d, other));
+    for (const other of instants)
+      assert.equal(daysBetween(d, other), reference.daysBetween(d, other));
   }
   assert.throws(() => addDays(new Date("9999-12-31T00:00:00Z"), 1), RangeError);
   assert.throws(() => addDays(new Date(Number.NaN), 1), RangeError);

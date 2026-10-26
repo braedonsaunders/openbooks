@@ -24,7 +24,12 @@ const skip = !process.env.OPENBOOKS_DB_URL;
 
 const NS = "legacy-extract";
 
-function readyRow(orgId: string, subId: string, partyId: string, sourceId: string): SourcePersonRow {
+function readyRow(
+  orgId: string,
+  subId: string,
+  partyId: string,
+  sourceId: string,
+): SourcePersonRow {
   return {
     orgId,
     sourceNamespace: NS,
@@ -40,9 +45,7 @@ function readyRow(orgId: string, subId: string, partyId: string, sourceId: strin
     },
     employer: {
       assertedSubsidiaryId: subId,
-      subsidiaryFacts: [
-        { id: subId, orgId, isActive: true, isEliminated: false },
-      ],
+      subsidiaryFacts: [{ id: subId, orgId, isActive: true, isEliminated: false }],
       historicSubsidiaryIds: [],
     },
     role: {
@@ -78,16 +81,22 @@ interface SeededInput {
 
 async function seedInput(org: ScratchOrg, sourceId: string): Promise<SeededInput> {
   const partyId = await withOrg(org.orgId, async () => {
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into parties (org_id, kind, display_name)
-      values (${org.orgId}, 'person', ${`Gate ${sourceId}`}) returning id::text as id`, "objects");
+      values (${org.orgId}, 'person', ${`Gate ${sourceId}`}) returning id::text as id`,
+      "objects",
+    );
     const id = inserted[0]?.id;
     assert.ok(id, "party insert must return exactly one row");
     return id;
   });
   const dir = mkdtempSync(join(tmpdir(), "hrm-gate-"));
   const path = join(dir, "rows.json");
-  writeFileSync(path, `${JSON.stringify([readyRow(org.orgId, org.subsidiaryId, partyId, sourceId)])}\n`);
+  writeFileSync(
+    path,
+    `${JSON.stringify([readyRow(org.orgId, org.subsidiaryId, partyId, sourceId)])}\n`,
+  );
   return { dir, path };
 }
 
@@ -100,7 +109,8 @@ async function tableCounts(orgId: string): Promise<TableCounts> {
   return withBypassContext(async () => {
     const result = await db.execute<{ employments: string; changes: string }>(
       sql`select (select count(*)::text from worker_employments where org_id = ${orgId}) as employments,
-                  (select count(*)::text from employment_changes where org_id = ${orgId}) as changes`, "objects",
+                  (select count(*)::text from employment_changes where org_id = ${orgId}) as changes`,
+      "objects",
     );
     const row = result[0]!;
     return { employments: Number(row.employments), changes: Number(row.changes) };
@@ -149,45 +159,50 @@ async function runCli(
   }
 }
 
-test("production apply without --allow-production refuses and writes nothing", { skip }, async () => {
-  const org = await createScratchOrg();
-  const input = await seedInput(org, "gate-001");
-  try {
-    const before = await tableCounts(org.orgId);
-    assert.deepEqual(before, { employments: 0, changes: 0 });
-    const run = await runCli(org.orgId, input.path, ["--apply"], { NODE_ENV: "production" });
-    assert.equal(run.exit, 1);
-    assert.match(run.output, /\[production_apply_not_acknowledged\]/);
-    // The refusal embeds the evaluated report hash, which can only exist if
-    // the dry-run evaluate ran: no write path exists before the gate.
-    assert.match(run.output, /dry-run report hash is [0-9a-f]{64}/);
-    assert.deepEqual(await tableCounts(org.orgId), before);
-  } finally {
-    rmSync(input.dir, { recursive: true, force: true });
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "production apply without --allow-production refuses and writes nothing",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    const input = await seedInput(org, "gate-001");
+    try {
+      const before = await tableCounts(org.orgId);
+      assert.deepEqual(before, { employments: 0, changes: 0 });
+      const run = await runCli(org.orgId, input.path, ["--apply"], { NODE_ENV: "production" });
+      assert.equal(run.exit, 1);
+      assert.match(run.output, /\[production_apply_not_acknowledged\]/);
+      // The refusal embeds the evaluated report hash, which can only exist if
+      // the dry-run evaluate ran: no write path exists before the gate.
+      assert.match(run.output, /dry-run report hash is [0-9a-f]{64}/);
+      assert.deepEqual(await tableCounts(org.orgId), before);
+    } finally {
+      rmSync(input.dir, { recursive: true, force: true });
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("production apply with the flag but no hash refuses and writes nothing", { skip }, async () => {
-  const org = await createScratchOrg();
-  const input = await seedInput(org, "gate-002");
-  try {
-    const before = await tableCounts(org.orgId);
-    const run = await runCli(
-      org.orgId,
-      input.path,
-      ["--apply", "--allow-production"],
-      { NODE_ENV: "production" },
-    );
-    assert.equal(run.exit, 1);
-    assert.match(run.output, /\[dry_run_hash_missing\]/);
-    assert.match(run.output, /dry-run report hash is [0-9a-f]{64}/);
-    assert.deepEqual(await tableCounts(org.orgId), before);
-  } finally {
-    rmSync(input.dir, { recursive: true, force: true });
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "production apply with the flag but no hash refuses and writes nothing",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    const input = await seedInput(org, "gate-002");
+    try {
+      const before = await tableCounts(org.orgId);
+      const run = await runCli(org.orgId, input.path, ["--apply", "--allow-production"], {
+        NODE_ENV: "production",
+      });
+      assert.equal(run.exit, 1);
+      assert.match(run.output, /\[dry_run_hash_missing\]/);
+      assert.match(run.output, /dry-run report hash is [0-9a-f]{64}/);
+      assert.deepEqual(await tableCounts(org.orgId), before);
+    } finally {
+      rmSync(input.dir, { recursive: true, force: true });
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("apply with NODE_ENV unset refuses and writes nothing", { skip }, async () => {
   const org = await createScratchOrg();
@@ -245,9 +260,7 @@ test("mismatched hash refuses, names the mismatch, and writes nothing", { skip }
   const input = await seedInput(org, "gate-003");
   try {
     // Pre-migrate outside production so the refusal must preserve live rows.
-    const partyAndRow = JSON.parse(
-      readFileSync(input.path, "utf8"),
-    ) as SourcePersonRow[];
+    const partyAndRow = JSON.parse(readFileSync(input.path, "utf8")) as SourcePersonRow[];
     await withOrg(org.orgId, () =>
       executeEmploymentMigration({ orgId: org.orgId, rows: partyAndRow }),
     );
@@ -362,7 +375,11 @@ async function externalCounts(dbUrl: string, orgId: string): Promise<TableCounts
   }
 }
 
-function runSubprocessCli(dbUrl: string, orgId: string, path: string): { exit: number; output: string } {
+function runSubprocessCli(
+  dbUrl: string,
+  orgId: string,
+  path: string,
+): { exit: number; output: string } {
   try {
     const output = execFileSync(
       "npx",
@@ -430,17 +447,17 @@ test("a refused apply issues no writes: table write counters do not move", { ski
   try {
     const counters = async (): Promise<Record<string, number>> =>
       withBypassContext(async () => {
-        const result = await db.execute<{ table: string; ins: string; upd: string; del: string }>(sql`
+        const result = await db.execute<{ table: string; ins: string; upd: string; del: string }>(
+          sql`
           select relname as table, n_tup_ins::text as ins, n_tup_upd::text as upd, n_tup_del::text as del
             from pg_stat_user_tables
            where schemaname = 'public'
              and relname in ('worker_employments', 'worker_employment_versions',
-                             'employment_assignments', 'employment_changes')`, "objects");
+                             'employment_assignments', 'employment_changes')`,
+          "objects",
+        );
         return Object.fromEntries(
-          result.map((row) => [
-            row.table,
-            Number(row.ins) + Number(row.upd) + Number(row.del),
-          ]),
+          result.map((row) => [row.table, Number(row.ins) + Number(row.upd) + Number(row.del)]),
         );
       });
     const before = await counters();

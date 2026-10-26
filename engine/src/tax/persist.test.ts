@@ -20,22 +20,14 @@ const hst: TaxComponentConfig[] = [
 ];
 
 test("imported tax evidence preserves an exact statutory result", () => {
-  const [component] = computeImportedLineTaxEvidence(
-    "100.0000",
-    "13.0000",
-    hst,
-  );
+  const [component] = computeImportedLineTaxEvidence("100.0000", "13.0000", hst);
   assert.equal(component?.taxableAmount, "100.0000");
   assert.equal(component?.taxAmount, "13.0000");
   assert.equal(component?.overridden, false);
 });
 
 test("imported tax evidence explicitly records source allocation and rounding overrides", () => {
-  const [component] = computeImportedLineTaxEvidence(
-    "354.7800",
-    "46.1100",
-    hst,
-  );
+  const [component] = computeImportedLineTaxEvidence("354.7800", "46.1100", hst);
   assert.equal(component?.taxAmount, "46.1100");
   assert.equal(component?.recoverableAmount, "46.1100");
   assert.equal(component?.nonrecoverableAmount, "0.0000");

@@ -30,9 +30,8 @@ export async function processBackupJobData(d: BackupJobData): Promise<unknown> {
  * saturating object storage with parallel uploads.
  */
 export function createBackupWorker(): Worker<BackupJobData> {
-  return new Worker<BackupJobData>(
-    BACKUP_QUEUE,
-    async (job) => processBackupJobData(job.data),
-    { connection: getBlockingConnection(), concurrency: 1 },
-  );
+  return new Worker<BackupJobData>(BACKUP_QUEUE, async (job) => processBackupJobData(job.data), {
+    connection: getBlockingConnection(),
+    concurrency: 1,
+  });
 }

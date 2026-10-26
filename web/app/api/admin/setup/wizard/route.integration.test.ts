@@ -20,7 +20,7 @@ const routeState: {
   authz: Authz | null;
   authzQueue: Authz[];
 } = { authz: null, authzQueue: [] };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.setup-wizard-route-test')]
@@ -30,24 +30,27 @@ const mockAuthz = `
     return authz
   }
 `;
-let authzRealUrl = ''
+let authzRealUrl = "";
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // The route factory loads the same boundary through the @/ alias.
     if (
-      (specifier === "../../../../../lib/authz"
-        && context.parentURL?.includes("setup/wizard"))
-      || (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/wizard")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
     ) {
-      authzRealUrl = nextResolve(specifier, context).url
+      authzRealUrl = nextResolve(specifier, context).url;
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
     if (url === "mock:authz") {
-      return { format: "module", source: `export { guardUnrestrictedScope } from ${JSON.stringify(authzRealUrl)};\n${mockAuthz}`, shortCircuit: true };
+      return {
+        format: "module",
+        source: `export { guardUnrestrictedScope } from ${JSON.stringify(authzRealUrl)};\n${mockAuthz}`,
+        shortCircuit: true,
+      };
     }
     return nextLoad(url, context);
   },
@@ -55,12 +58,9 @@ registerHooks({
 
 const routeUrl = "./route.ts?period-staging-regression-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/platform/db"
-);
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const ADVISORY_CLASS = 21470;
 const ADVISORY_OBJECT = 4242;
@@ -120,9 +120,7 @@ function putRequest(fiscalYearStartMonth: number): Request {
 }
 
 function put(fixture: Fixture, fiscalYearStartMonth: number): Promise<Response> {
-  return withOrgContext(fixture.orgId, () =>
-    PUT(putRequest(fiscalYearStartMonth)),
-  );
+  return withOrgContext(fixture.orgId, () => PUT(putRequest(fiscalYearStartMonth)));
 }
 
 async function ensureCanonicalIndex(): Promise<void> {
@@ -142,9 +140,7 @@ async function ensureCanonicalIndex(): Promise<void> {
  * on a pristine tree with an error that looks like a product regression.
  */
 async function dropCanonicalIndex(): Promise<void> {
-  await withBypassContext(() =>
-    db.execute(sql`drop index if exists periods_org_year_num`),
-  );
+  await withBypassContext(() => db.execute(sql`drop index if exists periods_org_year_num`));
 }
 
 async function periodState(fixture: Fixture): Promise<{
@@ -159,14 +155,17 @@ async function periodState(fixture: Fixture): Promise<{
       periodNumber: number;
       name: string;
       calendarMonth: number;
-    }>(sql`
+    }>(
+      sql`
       select p.fiscal_year as "fiscalYear",
              p.period_number as "periodNumber",
              p.name,
              c.year_start_month as "calendarMonth"
         from accounting_periods p
         join fiscal_calendars c on c.id = p.fiscal_calendar_id
-       where p.id = ${fixture.periodId}`, "objects"),
+       where p.id = ${fixture.periodId}`,
+      "objects",
+    ),
   );
   assert.ok(result[0], "scratch period exists");
   return result[0]!;
@@ -174,8 +173,11 @@ async function periodState(fixture: Fixture): Promise<{
 
 async function canonicalIndexExists(): Promise<boolean> {
   const result = await withBypassContext(() =>
-    db.execute<{ name: string | null }>(sql`
-      select to_regclass('public.periods_org_year_num') as name`, "objects"),
+    db.execute<{ name: string | null }>(
+      sql`
+      select to_regclass('public.periods_org_year_num') as name`,
+      "objects",
+    ),
   );
   return result[0]?.name === "periods_org_year_num";
 }
@@ -185,7 +187,8 @@ async function installStagingPause(orgId: string): Promise<() => Promise<void>> 
   const functionName = `wizard_period_pause_${suffix}`;
   const triggerName = `wizard_period_pause_trigger_${suffix}`;
   await withBypassContext(() =>
-    db.execute(sql.raw(`
+    db.execute(
+      sql.raw(`
       create function public."${functionName}"() returns trigger
       language plpgsql as $$
       begin
@@ -198,14 +201,17 @@ async function installStagingPause(orgId: string): Promise<() => Promise<void>> 
       create trigger "${triggerName}"
         before update of period_number on accounting_periods
         for each row execute function public."${functionName}"();
-    `)),
+    `),
+    ),
   );
   return async () => {
     await withBypassContext(() =>
-      db.execute(sql.raw(`
+      db.execute(
+        sql.raw(`
         drop trigger if exists "${triggerName}" on accounting_periods;
         drop function if exists public."${functionName}"();
-      `)),
+      `),
+      ),
     );
   };
 }
@@ -232,7 +238,8 @@ async function installAuditFailure(actorId: string): Promise<() => Promise<void>
   const functionName = `wizard_audit_failure_${suffix}`;
   const triggerName = `wizard_audit_failure_trigger_${suffix}`;
   await withBypassContext(() =>
-    db.execute(sql.raw(`
+    db.execute(
+      sql.raw(`
       create function public."${functionName}"() returns trigger
       language plpgsql as $$
       begin
@@ -244,14 +251,17 @@ async function installAuditFailure(actorId: string): Promise<() => Promise<void>
       create trigger "${triggerName}"
         before insert on audit_log
         for each row execute function public."${functionName}"();
-    `)),
+    `),
+    ),
   );
   return async () => {
     await withBypassContext(() =>
-      db.execute(sql.raw(`
+      db.execute(
+        sql.raw(`
         drop trigger if exists "${triggerName}" on audit_log;
         drop function if exists public."${functionName}"();
-      `)),
+      `),
+      ),
     );
   };
 }
@@ -261,146 +271,153 @@ function postgresCauseMessage(error: unknown): string {
   return String(cause?.message ?? "");
 }
 
-test(
-  "concurrent tenant setup stages only its own periods under the shared index",
-  async () => {
-    await ensureCanonicalIndex();
-    const first = await seed();
-    const second = await seed();
-    let removePause: (() => Promise<void>) | undefined;
-    const observer = new Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL });
-    let observerOpen = false;
-    try {
-      removePause = await installStagingPause(first.orgId);
-      await observer.connect();
-      observerOpen = true;
-      await observer.query("set statement_timeout = '1000ms'");
-      // 0399 gates the bypass GUC by session role, so the observer connects
-      // as the privileged test login above instead of setting the GUC.
+test("concurrent tenant setup stages only its own periods under the shared index", async () => {
+  await ensureCanonicalIndex();
+  const first = await seed();
+  const second = await seed();
+  let removePause: (() => Promise<void>) | undefined;
+  const observer = new Client({
+    connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL,
+  });
+  let observerOpen = false;
+  try {
+    removePause = await installStagingPause(first.orgId);
+    await observer.connect();
+    observerOpen = true;
+    await observer.query("set statement_timeout = '1000ms'");
+    // 0399 gates the bypass GUC by session role, so the observer connects
+    // as the privileged test login above instead of setting the GUC.
 
-      routeState.authz = null;
-      routeState.authzQueue = [authorize(first), authorize(second)];
-      const firstWrite = put(first, 4);
-      const secondWrite = put(second, 4);
-      await waitForStagingPause(observer);
+    routeState.authz = null;
+    routeState.authzQueue = [authorize(first), authorize(second)];
+    const firstWrite = put(first, 4);
+    const secondWrite = put(second, 4);
+    await waitForStagingPause(observer);
 
-      // A global DROP INDEX would hold catalog locks here and hide the index
-      // from an unrelated observer. Staging must leave both the index and the
-      // other tenant's canonical period available while org A is paused.
-      const observed = await observer.query<{
-        indexName: string | null;
-        otherPeriodNumber: number;
-      }>(`
+    // A global DROP INDEX would hold catalog locks here and hide the index
+    // from an unrelated observer. Staging must leave both the index and the
+    // other tenant's canonical period available while org A is paused.
+    const observed = await observer.query<{
+      indexName: string | null;
+      otherPeriodNumber: number;
+    }>(`
         select to_regclass('public.periods_org_year_num') as "indexName",
                (select period_number from accounting_periods where id = '${second.periodId}') as "otherPeriodNumber"`);
-      assert.equal(observed.rows[0]?.indexName, "periods_org_year_num");
-      assert.ok(
-        Number.isInteger(observed.rows[0]?.otherPeriodNumber)
-        && observed.rows[0]!.otherPeriodNumber > 0,
-        "the unrelated tenant remains in the canonical period range",
-      );
+    assert.equal(observed.rows[0]?.indexName, "periods_org_year_num");
+    assert.ok(
+      Number.isInteger(observed.rows[0]?.otherPeriodNumber) &&
+        observed.rows[0]!.otherPeriodNumber > 0,
+      "the unrelated tenant remains in the canonical period range",
+    );
 
-      const secondResult = await Promise.race([
-        secondWrite.then(() => "completed" as const),
-        new Promise<"timed-out">((resolve) => setTimeout(() => resolve("timed-out"), 1_500)),
-      ]);
-      assert.equal(secondResult, "completed");
+    const secondResult = await Promise.race([
+      secondWrite.then(() => "completed" as const),
+      new Promise<"timed-out">((resolve) => setTimeout(() => resolve("timed-out"), 1_500)),
+    ]);
+    assert.equal(secondResult, "completed");
 
-      const responses = await Promise.all([firstWrite, secondWrite]);
-      assert.deepEqual(responses.map((response) => response.status), [200, 200]);
-      assert.equal(await canonicalIndexExists(), true);
-      assert.deepEqual(await periodState(first), {
-        fiscalYear: 2027,
-        periodNumber: 4,
-        name: "Jul 2026",
-        calendarMonth: 4,
-      });
-      assert.deepEqual(await periodState(second), {
-        fiscalYear: 2027,
-        periodNumber: 4,
-        name: "Jul 2026",
-        calendarMonth: 4,
-      });
-    } finally {
-      routeState.authz = null;
-      routeState.authzQueue = [];
-      if (observerOpen) await observer.end().catch(() => {});
-      await removePause?.();
-      await dropScratchOrg(first.orgId);
-      await dropScratchOrg(second.orgId);
-      await dropCanonicalIndex();
-    }
-  },
-);
+    const responses = await Promise.all([firstWrite, secondWrite]);
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [200, 200],
+    );
+    assert.equal(await canonicalIndexExists(), true);
+    assert.deepEqual(await periodState(first), {
+      fiscalYear: 2027,
+      periodNumber: 4,
+      name: "Jul 2026",
+      calendarMonth: 4,
+    });
+    assert.deepEqual(await periodState(second), {
+      fiscalYear: 2027,
+      periodNumber: 4,
+      name: "Jul 2026",
+      calendarMonth: 4,
+    });
+  } finally {
+    routeState.authz = null;
+    routeState.authzQueue = [];
+    if (observerOpen) await observer.end().catch(() => {});
+    await removePause?.();
+    await dropScratchOrg(first.orgId);
+    await dropScratchOrg(second.orgId);
+    await dropCanonicalIndex();
+  }
+});
 
-test(
-  "fiscal setup rollback leaves the canonical index and period labels intact",
-  async () => {
-    await ensureCanonicalIndex();
-    const fixture = await seed();
-    let removeFailure: (() => Promise<void>) | undefined;
-    try {
-      routeState.authz = authorize(fixture);
-      const before = await periodState(fixture);
-      removeFailure = await installAuditFailure(fixture.actorId);
+test("fiscal setup rollback leaves the canonical index and period labels intact", async () => {
+  await ensureCanonicalIndex();
+  const fixture = await seed();
+  let removeFailure: (() => Promise<void>) | undefined;
+  try {
+    routeState.authz = authorize(fixture);
+    const before = await periodState(fixture);
+    removeFailure = await installAuditFailure(fixture.actorId);
 
-      await assert.rejects(
-        () => put(fixture, 4),
-        (error: unknown) => postgresCauseMessage(error).includes("forced wizard audit failure"),
-      );
+    await assert.rejects(
+      () => put(fixture, 4),
+      (error: unknown) => postgresCauseMessage(error).includes("forced wizard audit failure"),
+    );
 
-      assert.equal(await canonicalIndexExists(), true);
-      assert.deepEqual(await periodState(fixture), before);
-    } finally {
-      routeState.authz = null;
-      routeState.authzQueue = [];
-      await removeFailure?.();
-      await dropScratchOrg(fixture.orgId);
-      await dropCanonicalIndex();
-    }
-  },
-);
+    assert.equal(await canonicalIndexExists(), true);
+    assert.deepEqual(await periodState(fixture), before);
+  } finally {
+    routeState.authz = null;
+    routeState.authzQueue = [];
+    await removeFailure?.();
+    await dropScratchOrg(fixture.orgId);
+    await dropCanonicalIndex();
+  }
+});
 
-test(
-  "omitted base currency is not a foundation change on a posted org",
-  async () => {
-    // Validation permits omitting baseCurrency (only validated/applied when
-    // present), so a re-run of setup that requests no currency change must
-    // succeed even after postings lock the foundation. The check used to
-    // compare undefined against the stored currency and 409 every time.
-    const fixture = await seed();
-    try {
-      // A balanced draft entry: journal_lines rows are what lock the
-      // accounting foundation (canSwitchIndustry probes that table).
-      const spine = await withBypassContext(() => db.execute<{
+test("omitted base currency is not a foundation change on a posted org", async () => {
+  // Validation permits omitting baseCurrency (only validated/applied when
+  // present), so a re-run of setup that requests no currency change must
+  // succeed even after postings lock the foundation. The check used to
+  // compare undefined against the stored currency and 409 every time.
+  const fixture = await seed();
+  try {
+    // A balanced draft entry: journal_lines rows are what lock the
+    // accounting foundation (canSwitchIndustry probes that table).
+    const spine = await withBypassContext(() =>
+      db.execute<{
         bookId: string;
         subsidiaryId: string;
         bankId: string;
         revenueId: string;
-      }>(sql`
+      }>(
+        sql`
         select (select id from accounting_books where org_id = ${fixture.orgId} and is_primary) as "bookId",
                (select id from subsidiaries where org_id = ${fixture.orgId} and parent_id is null) as "subsidiaryId",
                (select id from accounts where org_id = ${fixture.orgId} and number = '1000') as "bankId",
-               (select id from accounts where org_id = ${fixture.orgId} and number = '4000') as "revenueId"`, "objects"));
-      const entryId = randomUUID();
-      await withBypassContext(() => db.execute(sql`
+               (select id from accounts where org_id = ${fixture.orgId} and number = '4000') as "revenueId"`,
+        "objects",
+      ),
+    );
+    const entryId = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
            period_id, memo, status, origin)
         values (${entryId}, ${fixture.orgId}, ${spine[0]!.bookId}, ${spine[0]!.subsidiaryId},
                 'WIZARD-OMITTED-CURRENCY', '2026-07-15', ${fixture.periodId},
-                'omitted currency evidence', 'draft', 'manual')`));
-      await withBypassContext(() => db.execute(sql`
+                'omitted currency evidence', 'draft', 'manual')`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into journal_lines
           (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount)
         values (${fixture.orgId}, ${entryId}, 1, ${spine[0]!.bankId}, ${spine[0]!.subsidiaryId},
                 '1', 'CAD', '1'),
                (${fixture.orgId}, ${entryId}, 2, ${spine[0]!.revenueId}, ${spine[0]!.subsidiaryId},
-                '-1', 'CAD', '-1')`));
-      routeState.authz = authorize(fixture);
-      routeState.authzQueue = [];
-      const response = await withOrgContext(fixture.orgId, () =>
-        PUT(new Request("http://localhost/api/admin/setup/wizard", {
+                '-1', 'CAD', '-1')`),
+    );
+    routeState.authz = authorize(fixture);
+    routeState.authzQueue = [];
+    const response = await withOrgContext(fixture.orgId, () =>
+      PUT(
+        new Request("http://localhost/api/admin/setup/wizard", {
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -418,30 +435,34 @@ test(
               closeCadence: "monthly",
             },
           }),
-        })),
-      );
-      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
-      const after = await withBypassContext(() => db.execute<{ base_currency: string }>(sql`
-        select base_currency from orgs where id = ${fixture.orgId}`, "objects"));
-      assert.equal(after[0]?.base_currency, "CAD");
-    } finally {
-      routeState.authz = null;
-      routeState.authzQueue = [];
-      await dropScratchOrg(fixture.orgId);
-    }
-  },
-);
+        }),
+      ),
+    );
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    const after = await withBypassContext(() =>
+      db.execute<{ base_currency: string }>(
+        sql`
+        select base_currency from orgs where id = ${fixture.orgId}`,
+        "objects",
+      ),
+    );
+    assert.equal(after[0]?.base_currency, "CAD");
+  } finally {
+    routeState.authz = null;
+    routeState.authzQueue = [];
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
-test(
-  "business time zone stores canonical, refuses unknown zones, and survives omission",
-  async () => {
-    const fixture = await seed();
-    try {
-      routeState.authz = authorize(fixture);
-      routeState.authzQueue = [];
-      const putBody = (extra: Record<string, unknown>): Promise<Response> =>
-        withOrgContext(fixture.orgId, () =>
-          PUT(new Request("http://localhost/api/admin/setup/wizard", {
+test("business time zone stores canonical, refuses unknown zones, and survives omission", async () => {
+  const fixture = await seed();
+  try {
+    routeState.authz = authorize(fixture);
+    routeState.authzQueue = [];
+    const putBody = (extra: Record<string, unknown>): Promise<Response> =>
+      withOrgContext(fixture.orgId, () =>
+        PUT(
+          new Request("http://localhost/api/admin/setup/wizard", {
             method: "PUT",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -461,76 +482,92 @@ test(
               },
               ...extra,
             }),
-          })));
-      const zoneOf = async (): Promise<unknown> =>
-        (await withBypassContext(() => db.execute<{ settings: Record<string, unknown> }>(sql`
-          select settings from orgs where id = ${fixture.orgId}`, "objects")))[0]!.settings.timeZone;
+          }),
+        ),
+      );
+    const zoneOf = async (): Promise<unknown> =>
+      (
+        await withBypassContext(() =>
+          db.execute<{ settings: Record<string, unknown> }>(
+            sql`
+          select settings from orgs where id = ${fixture.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!.settings.timeZone;
 
-      // An alias the runtime accepts stores canonical, like Company Settings.
-      const aliased = await putBody({ timeZone: "US/Eastern" });
-      assert.equal(aliased.status, 200, JSON.stringify(await aliased.clone().json()));
-      assert.equal(await zoneOf(), "America/New_York");
-      const zoneAudit = await withBypassContext(() => db.execute<{ change: unknown }>(sql`
+    // An alias the runtime accepts stores canonical, like Company Settings.
+    const aliased = await putBody({ timeZone: "US/Eastern" });
+    assert.equal(aliased.status, 200, JSON.stringify(await aliased.clone().json()));
+    assert.equal(await zoneOf(), "America/New_York");
+    const zoneAudit = await withBypassContext(() =>
+      db.execute<{ change: unknown }>(
+        sql`
         select changes->'settings'->'timeZone' as change from audit_log
          where org_id = ${fixture.orgId} and table_name = 'orgs'
-         order by at desc limit 1`, "objects"));
-      assert.deepEqual(zoneAudit[0]?.change, [null, "America/New_York"]);
+         order by at desc limit 1`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(zoneAudit[0]?.change, [null, "America/New_York"]);
 
-      // An unknown zone refuses before the transaction writes anything.
-      const refused = await putBody({ timeZone: "Not/AZone" });
-      assert.equal(refused.status, 422);
-      assert.deepEqual(await refused.json(), { error: "invalid-time-zone" });
-      assert.equal(await zoneOf(), "America/New_York");
+    // An unknown zone refuses before the transaction writes anything.
+    const refused = await putBody({ timeZone: "Not/AZone" });
+    assert.equal(refused.status, 422);
+    assert.deepEqual(await refused.json(), { error: "invalid-time-zone" });
+    assert.equal(await zoneOf(), "America/New_York");
 
-      // Omission is not a change: a re-run that says nothing about the zone
-      // keeps the stored value.
-      const omitted = await putBody({});
-      assert.equal(omitted.status, 200, JSON.stringify(await omitted.clone().json()));
-      assert.equal(await zoneOf(), "America/New_York");
-    } finally {
-      routeState.authz = null;
-      routeState.authzQueue = [];
-      await dropScratchOrg(fixture.orgId);
-    }
-  },
-);
+    // Omission is not a change: a re-run that says nothing about the zone
+    // keeps the stored value.
+    const omitted = await putBody({});
+    assert.equal(omitted.status, 200, JSON.stringify(await omitted.clone().json()));
+    assert.equal(await zoneOf(), "America/New_York");
+  } finally {
+    routeState.authz = null;
+    routeState.authzQueue = [];
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
-test(
-  "accounting-foundation probe re-runs after the wizard waits for the org lock",
-  async () => {
-    const org = await createScratchOrg();
-    const actorId = await createScratchUser(org.orgId, "Foundation Admin", "admin");
-    const entryId = randomUUID();
-    const holder = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-    const evidence = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-    let holderOpen = false;
-    let evidenceOpen = false;
-    try {
-      await withBypassContext(() => db.execute(sql`
+test("accounting-foundation probe re-runs after the wizard waits for the org lock", async () => {
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Foundation Admin", "admin");
+  const entryId = randomUUID();
+  const holder = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+  const evidence = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+  let holderOpen = false;
+  let evidenceOpen = false;
+  try {
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into currencies (code, name, minor_units)
         values ('USD', 'US Dollar', 2)
-        on conflict (code) do nothing`));
-      await withBypassContext(() => db.execute(sql`
+        on conflict (code) do nothing`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
            period_id, memo, status, origin)
         values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
                 'WIZARD-RACE', ${org.date}, ${org.periodId},
-                'wizard race evidence', 'draft', 'manual')`));
+                'wizard race evidence', 'draft', 'manual')`),
+    );
 
-      routeState.authz = authorize({ orgId: org.orgId, actorId, periodId: org.periodId });
-      routeState.authzQueue = [];
-      await holder.connect();
-      holderOpen = true;
-      await holder.query("begin");
-      await holder.query(
-        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
-        [org.orgId],
-      );
-      await holder.query("select id from orgs where id = $1 for update", [org.orgId]);
+    routeState.authz = authorize({ orgId: org.orgId, actorId, periodId: org.periodId });
+    routeState.authzQueue = [];
+    await holder.connect();
+    holderOpen = true;
+    await holder.query("begin");
+    await holder.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+      [org.orgId],
+    );
+    await holder.query("select id from orgs where id = $1 for update", [org.orgId]);
 
-      const wizard = withOrgContext(org.orgId, () =>
-        PUT(new Request("http://localhost/api/admin/setup/wizard", {
+    const wizard = withOrgContext(org.orgId, () =>
+      PUT(
+        new Request("http://localhost/api/admin/setup/wizard", {
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -549,69 +586,77 @@ test(
               closeCadence: "monthly",
             },
           }),
-        })),
-      );
-      const deadline = Date.now() + 15_000;
-      let wizardWaiting = false;
-      while (Date.now() < deadline) {
-        const waiting = await db.execute<{ count: number }>(sql`
+        }),
+      ),
+    );
+    const deadline = Date.now() + 15_000;
+    let wizardWaiting = false;
+    while (Date.now() < deadline) {
+      const waiting = await db.execute<{ count: number }>(
+        sql`
           select count(*)::int as count
             from pg_stat_activity
            where datname = current_database()
              and pid <> pg_backend_pid()
              and wait_event_type = 'Lock'
-             and query ilike '%from orgs%'`, "objects");
-        if ((waiting[0]?.count ?? 0) > 0) {
-          wizardWaiting = true;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      assert.equal(wizardWaiting, true, "setup wizard did not park on the organization row lock");
-
-      await evidence.connect();
-      evidenceOpen = true;
-      await evidence.query("begin");
-      await evidence.query(
-        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
-        [org.orgId],
+             and query ilike '%from orgs%'`,
+        "objects",
       );
-      await evidence.query(
-        `insert into journal_lines
+      if ((waiting[0]?.count ?? 0) > 0) {
+        wizardWaiting = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(wizardWaiting, true, "setup wizard did not park on the organization row lock");
+
+    await evidence.connect();
+    evidenceOpen = true;
+    await evidence.query("begin");
+    await evidence.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+      [org.orgId],
+    );
+    await evidence.query(
+      `insert into journal_lines
            (org_id, entry_id, line_number, account_id, subsidiary_id,
             amount, currency, txn_amount, fx_rate)
          values ($1, $2, 1, $3, $4, '1', 'CAD', '1', '1'),
                 ($1, $2, 2, $3, $4, '-1', 'CAD', '-1', '1')`,
-        [org.orgId, entryId, org.accounts.bank, org.subsidiaryId],
-      );
-      await evidence.query("commit");
-      await evidence.end();
-      evidenceOpen = false;
-      await holder.query("commit");
-      await holder.end();
-      holderOpen = false;
+      [org.orgId, entryId, org.accounts.bank, org.subsidiaryId],
+    );
+    await evidence.query("commit");
+    await evidence.end();
+    evidenceOpen = false;
+    await holder.query("commit");
+    await holder.end();
+    holderOpen = false;
 
-      const response = await wizard;
-      assert.equal(response.status, 409);
-      assert.deepEqual(await response.json(), {
-        error: "Cannot change base currency after postings exist.",
-        key: "base-currency-locked",
-      });
-      const after = await withBypassContext(() => db.execute<{ base_currency: string }>(sql`
-        select base_currency from orgs where id = ${org.orgId}`, "objects"));
-      assert.equal(after[0]?.base_currency, "CAD");
-    } finally {
-      routeState.authz = null;
-      routeState.authzQueue = [];
-      if (evidenceOpen) {
-        await evidence.query("rollback").catch(() => {});
-        await evidence.end().catch(() => {});
-      }
-      if (holderOpen) {
-        await holder.query("rollback").catch(() => {});
-        await holder.end().catch(() => {});
-      }
-      await dropScratchOrg(org.orgId);
+    const response = await wizard;
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), {
+      error: "Cannot change base currency after postings exist.",
+      key: "base-currency-locked",
+    });
+    const after = await withBypassContext(() =>
+      db.execute<{ base_currency: string }>(
+        sql`
+        select base_currency from orgs where id = ${org.orgId}`,
+        "objects",
+      ),
+    );
+    assert.equal(after[0]?.base_currency, "CAD");
+  } finally {
+    routeState.authz = null;
+    routeState.authzQueue = [];
+    if (evidenceOpen) {
+      await evidence.query("rollback").catch(() => {});
+      await evidence.end().catch(() => {});
     }
-  },
-);
+    if (holderOpen) {
+      await holder.query("rollback").catch(() => {});
+      await holder.end().catch(() => {});
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});

@@ -1,5 +1,5 @@
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { parseJsonBody } from "@/lib/api/json";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -34,14 +34,20 @@ const recordBodySchema = z.record(z.string(), z.json());
  * failing audit write fails the response closed instead of dropping the trail.
  * Returns a plain 500 to return directly when the event cannot be persisted.
  */
-async function emitExecutionEvent(status: number, auth: ApiKeyAuth, error?: string): Promise<NextResponse | null> {
+async function emitExecutionEvent(
+  status: number,
+  auth: ApiKeyAuth,
+  error?: string,
+): Promise<NextResponse | null> {
   try {
     if (!takeClaimedCommandEvidence(auth.audit)) {
-      await insertApiKeyEvent(transportEvent(
-        auth.audit,
-        { orgId: auth.user.orgId, keyId: auth.keyId },
-        { statusCode: status, error: error ?? null },
-      ));
+      await insertApiKeyEvent(
+        transportEvent(
+          auth.audit,
+          { orgId: auth.user.orgId, keyId: auth.keyId },
+          { statusCode: status, error: error ?? null },
+        ),
+      );
     }
     return null;
   } catch (cause) {
@@ -60,7 +66,10 @@ async function handleV1GET(request: Request, route: RouteContext): Promise<NextR
 async function handleV1PATCH(request: Request, route: RouteContext): Promise<NextResponse> {
   return mutate(request, route, async (auth, typeKey, id, body, idempotencyKey) => {
     const result = await updateApplicationRecord(context(auth, request), {
-      typeKey, id, body, idempotencyKey,
+      typeKey,
+      id,
+      body,
+      idempotencyKey,
     });
     return { status: result.status, body: result.result, replayed: result.replayed };
   });
@@ -69,9 +78,12 @@ async function handleV1PATCH(request: Request, route: RouteContext): Promise<Nex
 async function handleV1DELETE(request: Request, route: RouteContext): Promise<NextResponse> {
   return withAuth(request, route, async (auth, typeKey, id) => {
     const idempotencyKey = request.headers.get("idempotency-key")?.trim();
-    if (!idempotencyKey) throw new ApplicationError("invalid_input", "Idempotency-Key header is required", 400);
+    if (!idempotencyKey)
+      throw new ApplicationError("invalid_input", "Idempotency-Key header is required", 400);
     const result = await deleteApplicationRecord(context(auth, request), {
-      typeKey, id, idempotencyKey,
+      typeKey,
+      id,
+      idempotencyKey,
     });
     return { status: result.status, body: result.result, replayed: result.replayed };
   });
@@ -93,7 +105,8 @@ async function mutate(
 ): Promise<NextResponse> {
   return withAuth(request, route, async (auth, typeKey, id) => {
     const idempotencyKey = request.headers.get("idempotency-key")?.trim();
-    if (!idempotencyKey) throw new ApplicationError("invalid_input", "Idempotency-Key header is required", 400);
+    if (!idempotencyKey)
+      throw new ApplicationError("invalid_input", "Idempotency-Key header is required", 400);
     let body: Record<string, unknown>;
     try {
       const parsedBody = await parseJsonBody(request, recordBodySchema);
@@ -128,7 +141,9 @@ async function withAuth(
       status: result.status,
       headers: {
         "cache-control": "no-store",
-        ...(result.replayed === undefined ? {} : { "idempotency-replayed": String(result.replayed) }),
+        ...(result.replayed === undefined
+          ? {}
+          : { "idempotency-replayed": String(result.replayed) }),
       },
     });
   } catch (error) {
@@ -137,7 +152,12 @@ async function withAuth(
       // The versioned v1 failure shape keeps `error` as the machine-readable
       // code with the message beside it; the sanitizer carries both for
       // typed 4xx refusals and genericizes unexpected 500s.
-      return tail ?? apiErrorResponse(error, { details: { error: error.code, message: error.message, details: error.details } });
+      return (
+        tail ??
+        apiErrorResponse(error, {
+          details: { error: error.code, message: error.message, details: error.details },
+        })
+      );
     }
     console.error("[api/v1/records/:id] application operation failed", error);
     const tail = await emitExecutionEvent(500, auth, "internal_error");
@@ -155,15 +175,18 @@ function context(auth: ApiKeyAuth, request: Request) {
 
 export const GET = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1GET(request, { params: Promise.resolve(params as never) } as never),
 });
 
 export const PATCH = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1PATCH(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1PATCH(request, { params: Promise.resolve(params as never) } as never),
 });
 
 export const DELETE = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1DELETE(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1DELETE(request, { params: Promise.resolve(params as never) } as never),
 });

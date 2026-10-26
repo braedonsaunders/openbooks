@@ -1,9 +1,5 @@
 import { Worker } from "bullmq";
-import {
-  AP_CAPTURE_QUEUE,
-  getBlockingConnection,
-  type ApCaptureJobData,
-} from "@openbooks/jobs";
+import { AP_CAPTURE_QUEUE, getBlockingConnection, type ApCaptureJobData } from "@openbooks/jobs";
 import { withOrgContext } from "../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db } from "../platform/db.ts";
@@ -36,7 +32,10 @@ export function createApCaptureWorker(): Worker<ApCaptureJobData> {
   // every other automated post.
   registerCaptureBillPoster({
     post: async ({ orgId, documentId, actorId }) =>
-      postDocument(documentId, await controlDeps(orgId), { deferEffects: true, audit: { actorId, source: "automation" } }),
+      postDocument(documentId, await controlDeps(orgId), {
+        deferEffects: true,
+        audit: { actorId, source: "automation" },
+      }),
     afterCommit: (documentId) => runPostDocumentEffects(documentId, "draft"),
   });
   return new Worker<ApCaptureJobData>(

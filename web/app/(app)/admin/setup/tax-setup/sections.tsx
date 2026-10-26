@@ -1,11 +1,14 @@
-import 'server-only'
+import "server-only";
 
-import Link from 'next/link'
-import { ArrowRight, BadgeCheck, MapPin } from 'lucide-react'
-import { Button, Card, CardContent, PageHeader } from '@openbooks/ui'
-import type { SupportedCountry } from '@openbooks/engine/tax/pack-provisioning'
-import { AuthorityConnectionsClient, type AuthorityConnectionView } from './AuthorityConnectionsClient'
-import { TaxSetupGuide } from '../../../../../components/viewspec/native-widgets.client'
+import Link from "next/link";
+import { ArrowRight, BadgeCheck, MapPin } from "lucide-react";
+import { Button, Card, CardContent, PageHeader } from "@openbooks/ui";
+import type { SupportedCountry } from "@openbooks/engine/tax/pack-provisioning";
+import {
+  AuthorityConnectionsClient,
+  type AuthorityConnectionView,
+} from "./AuthorityConnectionsClient";
+import { TaxSetupGuide } from "../../../../../components/viewspec/native-widgets.client";
 
 /**
  * Shared PageHeader chrome for the tax-setup workspace, plus the guide slot.
@@ -33,22 +36,22 @@ import { TaxSetupGuide } from '../../../../../components/viewspec/native-widgets
  */
 
 export interface TaxSetupGuideProps {
-  countries: SupportedCountry[]
-  installedCodes: string[]
-  step2Title: string
-  step2Description: string
-  step2Stat: string
-  step2Href: string
-  step2Cta: string
-  step3Title: string
-  step3Description: string
-  step3Stat: string
-  step3Href: string
-  step3Cta: string
+  countries: SupportedCountry[];
+  installedCodes: string[];
+  step2Title: string;
+  step2Description: string;
+  step2Stat: string;
+  step2Href: string;
+  step2Cta: string;
+  step3Title: string;
+  step3Description: string;
+  step3Stat: string;
+  step3Href: string;
+  step3Cta: string;
 }
 
 export function TaxSetupHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return <PageHeader title={title} description={subtitle} />
+  return <PageHeader title={title} description={subtitle} />;
 }
 
 export function TaxSetupGuideSlot({ guide }: { guide: TaxSetupGuideProps }) {
@@ -64,7 +67,7 @@ export function TaxSetupGuideSlot({ guide }: { guide: TaxSetupGuideProps }) {
     step3Href,
     step3Cta,
     ...guideProps
-  } = guide
+  } = guide;
   // No wrapper element: the guide owns its own `<div className="space-y-5">`
   // root, and an extra div here would break the native/spec byte comparison.
   return (
@@ -93,7 +96,7 @@ export function TaxSetupGuideSlot({ guide }: { guide: TaxSetupGuideProps }) {
         />
       }
     />
-  )
+  );
 }
 
 /**
@@ -101,8 +104,12 @@ export function TaxSetupGuideSlot({ guide }: { guide: TaxSetupGuideProps }) {
  * (state only, never credential material) and the slot spreads them onto
  * the client component that owns the save/verify forms.
  */
-export function TaxAuthorityConnectionsSlot({ connections }: { connections: AuthorityConnectionView[] }) {
-  return <AuthorityConnectionsClient initial={connections} />
+export function TaxAuthorityConnectionsSlot({
+  connections,
+}: {
+  connections: AuthorityConnectionView[];
+}) {
+  return <AuthorityConnectionsClient initial={connections} />;
 }
 
 export function StepLink({
@@ -114,25 +121,29 @@ export function StepLink({
   href,
   cta,
 }: {
-  n: number
-  icon: React.ReactNode
-  title: string
-  description: string
-  stat: string
-  href: string
-  cta: string
+  n: number;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  stat: string;
+  href: string;
+  cta: string;
 }) {
   return (
     <Card>
       <CardContent className="flex items-center justify-between gap-4 py-4">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">{n}</span>
+          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+            {n}
+          </span>
           <div>
             <div className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100">
               <span className="text-slate-400">{icon}</span>
               {title}
             </div>
-            <p className="mt-0.5 max-w-xl text-sm text-slate-500 dark:text-slate-400">{description}</p>
+            <p className="mt-0.5 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+              {description}
+            </p>
             <p className="mt-1 text-xs font-medium text-teal-700 dark:text-teal-300">{stat}</p>
           </div>
         </div>
@@ -144,5 +155,5 @@ export function StepLink({
         </Button>
       </CardContent>
     </Card>
-  )
+  );
 }

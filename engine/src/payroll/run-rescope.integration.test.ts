@@ -8,10 +8,22 @@ import { cmp, sum } from "../money/money.ts";
 import { setPackSlotAccount } from "./packs.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
-import { createPayRun, discardPayRun, payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "./run-lifecycle.ts";
+import {
+  createPayRun,
+  discardPayRun,
+  payScheduleSubsidiaryProblem,
+  rescopePayScheduleRuns,
+} from "./run-lifecycle.ts";
 import { PayrollError } from "./error.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting, grantScratchPermissions, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+  grantScratchPermissions,
+  seedFlowActors,
+  seedPostingAccount,
+} from "../testing/fixtures.ts";
 import { seedHiredEmployee, seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 import { US_PACK_RATES } from "./us/rates.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
@@ -43,12 +55,12 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
   await db.execute(sql`
     update orgs set settings = settings || ${JSON.stringify({ features: { payroll: true } })}::jsonb where id = ${org.orgId}`);
   await seedPayrollAccountingConfiguration(org.orgId, {
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
-        wagesTo: "expense",
-        countries: ["US"]
-      });
+    wageExpenseAccountId: wageExpense,
+    burdenExpenseAccountId: burdenExpense,
+    netPayAccountId: netPayable,
+    wagesTo: "expense",
+    countries: ["US"],
+  });
 
   await seedPayrollComponents(org.orgId, actorId, "US");
   await setPackSlotAccount(org.orgId, actorId, "US", "fit", irsPayable);
@@ -73,21 +85,44 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3,
             ${options.scopedSchedule ? usSubsidiaryId : null}, true, ${actorId}, ${actorId})`);
   const { employeeId } = await seedHiredEmployee(org.orgId, actorId, {
-    scheduleId, subsidiaryId: usSubsidiaryId, name: "Tex Worker", country: "US",
-    province: "TX", payBasis: "salary", currency: "USD", rate: "104000", rateBasis: "year",
-    annualHours: "2080", partySubsidiaryId: usSubsidiaryId, filingStatus: "married_joint",
+    scheduleId,
+    subsidiaryId: usSubsidiaryId,
+    name: "Tex Worker",
+    country: "US",
+    province: "TX",
+    payBasis: "salary",
+    currency: "USD",
+    rate: "104000",
+    rateBasis: "year",
+    annualHours: "2080",
+    partySubsidiaryId: usSubsidiaryId,
+    filingStatus: "married_joint",
   });
   const einAccountId = await seedUsEinAccount(org.orgId, actorId, usSubsidiaryId, "12-3456789");
   const suiAccountId = await seedUsSuiAccount(org.orgId, actorId, "TX", {
-    federalAccountId: einAccountId, subsidiaryId: usSubsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    federalAccountId: einAccountId,
+    subsidiaryId: usSubsidiaryId,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
     sourceReference: "TX original employer registration",
   });
-  await upsertStatutoryRate({ orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-    region: "TX", filingAccountId: suiAccountId, taxYear: 2026,
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
-    values: { rate: "0.027", wageBase: "9000" } });
-  const profile = await db.execute(sql`update employee_payroll_profiles set filing_account_id=${suiAccountId}
-    where org_id=${org.orgId} and employee_party_id=${employeeId} returning employee_party_id`, "objects");
+  await upsertStatutoryRate({
+    orgId: org.orgId,
+    actorId,
+    rates: US_PACK_RATES,
+    rateKey: "us_sui",
+    region: "TX",
+    filingAccountId: suiAccountId,
+    taxYear: 2026,
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
+    values: { rate: "0.027", wageBase: "9000" },
+  });
+  const profile = await db.execute(
+    sql`update employee_payroll_profiles set filing_account_id=${suiAccountId}
+    where org_id=${org.orgId} and employee_party_id=${employeeId} returning employee_party_id`,
+    "objects",
+  );
   assert.equal(profile.length, 1);
   // Federal withholding distinguishes nonresident aliens before Pub. 15-T.
   await db.execute(sql`
@@ -98,15 +133,24 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
             '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
             ${actorId}, ${actorId})`);
   return {
-    orgId: org.orgId, actorId, rootSubsidiaryId: org.subsidiaryId,
-    usSubsidiaryId, scheduleId, employeeId,
+    orgId: org.orgId,
+    actorId,
+    rootSubsidiaryId: org.subsidiaryId,
+    usSubsidiaryId,
+    scheduleId,
+    employeeId,
   };
 }
 
 async function docOf(orgId: string, documentId: string) {
-  return (await db.execute<{ subsidiary_id: string; currency: string; status: string }>(sql`
+  return (
+    await db.execute<{ subsidiary_id: string; currency: string; status: string }>(
+      sql`
     select subsidiary_id, currency, status from documents where org_id = ${orgId} and id = ${documentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
 }
 
 test(
@@ -116,14 +160,21 @@ test(
     const f = await seedTwoEntityOrg();
     try {
       const run = await createPayRun({
-        orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: f.orgId,
+        actorId: f.actorId,
+        payScheduleId: f.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       const doc = (await docOf(f.orgId, run.documentId))!;
       assert.equal(doc.subsidiary_id, f.rootSubsidiaryId);
       assert.equal(doc.currency, "CAD");
 
-      const result = await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+      const result = await calculatePayRun({
+        orgId: f.orgId,
+        documentId: run.documentId,
+        actorId: f.actorId,
+      });
       assert.equal(result.employees, 0);
       assert.equal(result.gross, "0");
       assert.equal(result.errors.length, 1);
@@ -146,8 +197,11 @@ test(
     const f = await seedTwoEntityOrg();
     try {
       const run = await createPayRun({
-        orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: f.orgId,
+        actorId: f.actorId,
+        payScheduleId: f.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
 
@@ -155,26 +209,42 @@ test(
         update pay_schedules set subsidiary_id = ${f.usSubsidiaryId}
          where id = ${f.scheduleId} and org_id = ${f.orgId}`);
       const scope = await rescopePayScheduleRuns(db, {
-        orgId: f.orgId, payScheduleId: f.scheduleId, actorId: f.actorId,
+        orgId: f.orgId,
+        payScheduleId: f.scheduleId,
+        actorId: f.actorId,
       });
       assert.deepEqual(scope, { reresolved: 1, untouched: 0, skipped: [] });
 
       const doc = (await docOf(f.orgId, run.documentId))!;
       assert.equal(doc.subsidiary_id, f.usSubsidiaryId);
       assert.equal(doc.currency, "USD");
-      const stamped = (await db.execute<{ tax_year: number; run_status: string }>(sql`
+      const stamped = (
+        await db.execute<{ tax_year: number; run_status: string }>(
+          sql`
         select tax_year, run_status from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(stamped.run_status, "draft");
       assert.equal(stamped.tax_year, 2026);
 
-      const result = await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+      const result = await calculatePayRun({
+        orgId: f.orgId,
+        documentId: run.documentId,
+        actorId: f.actorId,
+      });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
       assert.equal(result.gross, "4000.0000");
-      const stub = (await db.execute<{ currency_code: string; gross: string }>(sql`
+      const stub = (
+        await db.execute<{ currency_code: string; gross: string }>(
+          sql`
         select currency_code, gross from pay_stubs where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(stub.currency_code, "USD");
       assert.equal(stub.gross, "4000.0000");
     } finally {
@@ -190,15 +260,22 @@ test(
     const f = await seedTwoEntityOrg();
     try {
       const run = await createPayRun({
-        orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: f.orgId,
+        actorId: f.actorId,
+        payScheduleId: f.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       // Raw re-scope: no eager re-resolve runs. The next test must heal the
       // run itself rather than fail with the frozen entity's error.
       await db.execute(sql`
         update pay_schedules set subsidiary_id = ${f.usSubsidiaryId}
          where id = ${f.scheduleId} and org_id = ${f.orgId}`);
-      const result = await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+      const result = await calculatePayRun({
+        orgId: f.orgId,
+        documentId: run.documentId,
+        actorId: f.actorId,
+      });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
       const doc = (await docOf(f.orgId, run.documentId))!;
@@ -217,8 +294,11 @@ test(
     const f = await seedTwoEntityOrg({ scopedSchedule: true });
     try {
       const run = await createPayRun({
-        orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: f.orgId,
+        actorId: f.actorId,
+        payScheduleId: f.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       const created = (await docOf(f.orgId, run.documentId))!;
       assert.equal(created.subsidiary_id, f.usSubsidiaryId);
@@ -229,24 +309,33 @@ test(
 
       // The journal currency is the document's — the header was the symptom,
       // the journal is the defect.
-      const journal = (await db.execute<{ currency: string; subtotal: string }>(sql`
+      const journal = (
+        await db.execute<{ currency: string; subtotal: string }>(
+          sql`
         select currency, subtotal::text as subtotal from documents
          where org_id = ${f.orgId} and id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(journal.currency, "USD");
-      const lines = (await db.execute<{ amount: string }>(sql`
+      const lines = await db.execute<{ amount: string }>(
+        sql`
         select amount::text as amount from document_lines
          where org_id = ${f.orgId} and document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.ok(lines.length >= 5);
       assert.equal(cmp(sum(lines.map((l) => l.amount)), "0"), 0, "GL projection balances");
 
       await assert.rejects(
         discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId }),
         (error: unknown) =>
-          error instanceof PayrollError
-          && /is committed and cannot be discarded — void it to reverse the posted payroll/
-            .test(error.message),
+          error instanceof PayrollError &&
+          /is committed and cannot be discarded — void it to reverse the posted payroll/.test(
+            error.message,
+          ),
       );
 
       // A document the lifecycle moved past draft is refused on its own terms —
@@ -260,9 +349,11 @@ test(
       await assert.rejects(
         discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId }),
         (error: unknown) =>
-          error instanceof PayrollError
-          && new RegExp(`pay run ${run.documentNumber} is approved and cannot be discarded`).test(error.message)
-          && /only a draft run can be discarded/.test(error.message),
+          error instanceof PayrollError &&
+          new RegExp(`pay run ${run.documentNumber} is approved and cannot be discarded`).test(
+            error.message,
+          ) &&
+          /only a draft run can be discarded/.test(error.message),
       );
     } finally {
       await dropScratchOrgReporting(f.orgId);
@@ -277,65 +368,132 @@ test(
     const f = await seedTwoEntityOrg({ scopedSchedule: true });
     try {
       const run = await createPayRun({
-        orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: f.orgId,
+        actorId: f.actorId,
+        payScheduleId: f.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const calculation = await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+      const calculation = await calculatePayRun({
+        orgId: f.orgId,
+        documentId: run.documentId,
+        actorId: f.actorId,
+      });
       assert.deepEqual(calculation.errors, [], JSON.stringify(calculation.errors));
-      const stubsBefore = (await db.execute<{ n: number }>(sql`
+      const stubsBefore = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from pay_stubs where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(stubsBefore.n, 1);
 
-      const deniedActor = await createScratchUser(f.orgId, "Payroll reader", "payroll_discard_reader");
-      await db.execute(sql`update app_roles set permissions='[]'::jsonb where org_id=${f.orgId} and key='payroll_discard_reader'`);
-      await assert.rejects(() => discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: deniedActor }), /pay run not found/);
-      await assert.rejects(() => discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId, allowedSubsidiaryIds: new Set() }), /pay run not found/);
+      const deniedActor = await createScratchUser(
+        f.orgId,
+        "Payroll reader",
+        "payroll_discard_reader",
+      );
+      await db.execute(
+        sql`update app_roles set permissions='[]'::jsonb where org_id=${f.orgId} and key='payroll_discard_reader'`,
+      );
+      await assert.rejects(
+        () => discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: deniedActor }),
+        /pay run not found/,
+      );
+      await assert.rejects(
+        () =>
+          discardPayRun({
+            orgId: f.orgId,
+            documentId: run.documentId,
+            actorId: f.actorId,
+            allowedSubsidiaryIds: new Set(),
+          }),
+        /pay run not found/,
+      );
       for (const reason of [null, 12, {}, "", "  ", "x".repeat(2001)]) {
-        await assert.rejects(() => discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId, reason: reason as never }), /discard reason/);
+        await assert.rejects(
+          () =>
+            discardPayRun({
+              orgId: f.orgId,
+              documentId: run.documentId,
+              actorId: f.actorId,
+              reason: reason as never,
+            }),
+          /discard reason/,
+        );
       }
-      const discarded = await discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId, reason: "  Replace the unused draft run  " });
-      const audit = await db.execute<{ actor_id: string; changes: { reason: string } }>(sql`
+      const discarded = await discardPayRun({
+        orgId: f.orgId,
+        documentId: run.documentId,
+        actorId: f.actorId,
+        reason: "  Replace the unused draft run  ",
+      });
+      const audit = await db.execute<{ actor_id: string; changes: { reason: string } }>(
+        sql`
         select actor_id,changes from audit_log where org_id=${f.orgId} and row_id=${run.documentId}
           and changes->>'operation'='discard_pay_run'
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.actor_id, f.actorId);
       assert.equal(audit[0]!.changes.reason, "Replace the unused draft run");
-      const sequence = (await db.execute<{ prefix: string }>(sql`
+      const sequence = (
+        await db.execute<{ prefix: string }>(
+          sql`
         select prefix from number_sequences
          where org_id = ${f.orgId} and document_kind = 'pay_run' and subsidiary_id is null
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       assert.ok(sequence?.prefix, "the native pay_run number sequence carries a prefix");
       assert.ok(
         discarded.documentNumber.startsWith(sequence.prefix),
         `discarded run number ${discarded.documentNumber} carries the native sequence prefix ${sequence.prefix}`,
       );
-      const remaining = (await db.execute<{ documents: number; runs: number; stubs: number; adjustments: number }>(sql`
+      const remaining = (
+        await db.execute<{ documents: number; runs: number; stubs: number; adjustments: number }>(
+          sql`
         select (select count(*)::int from documents where org_id = ${f.orgId} and id = ${run.documentId}) as documents,
                (select count(*)::int from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}) as runs,
                (select count(*)::int from pay_stubs where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}) as stubs,
                (select count(*)::int from pay_run_adjustments where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}) as adjustments
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(
         [remaining.documents, remaining.runs, remaining.stubs, remaining.adjustments],
         [0, 0, 0, 0],
         "no table keeps a trace of the discarded run",
       );
-      const ledger = (await db.execute<{ n: number }>(sql`
+      const ledger = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from entitlement_ledger
          where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(ledger.n, 0, "uncommitted ledger movements go with the run");
 
       // Duplicate protection does not outlive the run it protected against.
       const replacement = await createPayRun({
-        orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: f.orgId,
+        actorId: f.actorId,
+        payScheduleId: f.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       assert.ok(replacement.documentId !== run.documentId);
       const result = await calculatePayRun({
-        orgId: f.orgId, documentId: replacement.documentId, actorId: f.actorId,
+        orgId: f.orgId,
+        documentId: replacement.documentId,
+        actorId: f.actorId,
       });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
@@ -369,53 +527,59 @@ test(
   },
 );
 
-test(
-  "committed history stays frozen when its schedule is re-scoped",
-  { skip: !DB },
-  async () => {
-    const f = await seedTwoEntityOrg({ scopedSchedule: true });
-    try {
-      const run = await createPayRun({
-        orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
-      });
-      await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
-      await commitPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+test("committed history stays frozen when its schedule is re-scoped", { skip: !DB }, async () => {
+  const f = await seedTwoEntityOrg({ scopedSchedule: true });
+  try {
+    const run = await createPayRun({
+      orgId: f.orgId,
+      actorId: f.actorId,
+      payScheduleId: f.scheduleId,
+      periodStart: "2026-07-05",
+      periodEnd: "2026-07-18",
+    });
+    await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+    await commitPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
 
-      const otherSub = randomUUID();
-      await db.execute(sql`
+    const otherSub = randomUUID();
+    await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
                                   is_elimination, is_active, custom)
         values (${otherSub}, ${f.orgId}, ${f.rootSubsidiaryId},
                 'CA West', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
-      await db.execute(sql`
+    await db.execute(sql`
         update pay_schedules set subsidiary_id = ${otherSub}
          where id = ${f.scheduleId} and org_id = ${f.orgId}`);
-      const scope = await rescopePayScheduleRuns(db, {
-        orgId: f.orgId, payScheduleId: f.scheduleId, actorId: f.actorId,
-      });
-      assert.equal(scope.reresolved, 0);
-      assert.equal(scope.untouched, 1);
-      // Committed history is not an error, but it must be reported BY NAME —
-      // otherwise the operator believes the whole schedule followed.
-      assert.equal(scope.skipped.length, 1);
-      assert.equal(scope.skipped[0]!.documentId, run.documentId);
-      assert.equal(scope.skipped[0]!.documentNumber, run.documentNumber);
-      assert.match(scope.skipped[0]!.reason, /left on its frozen entity/);
-      assert.match(scope.skipped[0]!.reason, /committed/);
+    const scope = await rescopePayScheduleRuns(db, {
+      orgId: f.orgId,
+      payScheduleId: f.scheduleId,
+      actorId: f.actorId,
+    });
+    assert.equal(scope.reresolved, 0);
+    assert.equal(scope.untouched, 1);
+    // Committed history is not an error, but it must be reported BY NAME —
+    // otherwise the operator believes the whole schedule followed.
+    assert.equal(scope.skipped.length, 1);
+    assert.equal(scope.skipped[0]!.documentId, run.documentId);
+    assert.equal(scope.skipped[0]!.documentNumber, run.documentNumber);
+    assert.match(scope.skipped[0]!.reason, /left on its frozen entity/);
+    assert.match(scope.skipped[0]!.reason, /committed/);
 
-      const doc = (await docOf(f.orgId, run.documentId))!;
-      assert.equal(doc.subsidiary_id, f.usSubsidiaryId, "the posted run keeps its entity");
-      assert.equal(doc.currency, "USD", "the posted run keeps its currency");
-      const status = (await db.execute<{ run_status: string }>(sql`
+    const doc = (await docOf(f.orgId, run.documentId))!;
+    assert.equal(doc.subsidiary_id, f.usSubsidiaryId, "the posted run keeps its entity");
+    assert.equal(doc.currency, "USD", "the posted run keeps its currency");
+    const status = (
+      await db.execute<{ run_status: string }>(
+        sql`
         select run_status from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!;
-      assert.equal(status.run_status, "committed");
-    } finally {
-      await dropScratchOrgReporting(f.orgId);
-    }
-  },
-);
+      `,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(status.run_status, "committed");
+  } finally {
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
 
 test(
   "a commit racing a schedule rescope never resets the committed run; the rescope reports it as skipped",
@@ -431,8 +595,11 @@ test(
     const f = await seedTwoEntityOrg({ scopedSchedule: true });
     try {
       const run = await createPayRun({
-        orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: f.orgId,
+        actorId: f.actorId,
+        payScheduleId: f.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
 
@@ -446,10 +613,15 @@ test(
         update pay_schedules set subsidiary_id = ${otherSub}
          where id = ${f.scheduleId} and org_id = ${f.orgId}`);
 
-      const calculatedStubs = (await db.execute<{ n: number }>(sql`
+      const calculatedStubs = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from pay_stubs
          where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.ok(calculatedStubs > 0, "the calculated run holds stubs for the race to threaten");
 
       // The committing transaction: takes the run row lock (exactly what
@@ -457,9 +629,13 @@ test(
       // the rescope's candidate snapshot still sees the calculating run.
       // It then commits the run and releases the lock.
       let lockedResolve!: () => void;
-      const locked = new Promise<void>((resolve) => { lockedResolve = resolve; });
+      const locked = new Promise<void>((resolve) => {
+        lockedResolve = resolve;
+      });
       let releaseResolve!: () => void;
-      const released = new Promise<void>((resolve) => { releaseResolve = resolve; });
+      const released = new Promise<void>((resolve) => {
+        releaseResolve = resolve;
+      });
       const committer = db.transaction(async (tx) => {
         await tx.execute(sql`
           select r.document_id from pay_runs r
@@ -478,8 +654,11 @@ test(
       await locked;
       const rescoper = db.transaction(async (tx) =>
         rescopePayScheduleRuns(tx, {
-          orgId: f.orgId, payScheduleId: f.scheduleId, actorId: f.actorId,
-        }));
+          orgId: f.orgId,
+          payScheduleId: f.scheduleId,
+          actorId: f.actorId,
+        }),
+      );
       // Let the rescope snapshot the calculating run and block on the row
       // lock; then let the commit land first.
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -493,14 +672,28 @@ test(
       assert.equal(scope.skipped[0]!.documentNumber, run.documentNumber);
 
       // The committed run is intact: status, stubs, and entity all stand.
-      const status = (await db.execute<{ run_status: string }>(sql`
+      const status = (
+        await db.execute<{ run_status: string }>(
+          sql`
         select run_status from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!;
-      assert.equal(status.run_status, "committed", "the race must never reset a committed run to draft");
-      const stubs = (await db.execute<{ n: number }>(sql`
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(
+        status.run_status,
+        "committed",
+        "the race must never reset a committed run to draft",
+      );
+      const stubs = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from pay_stubs
          where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(stubs.n, calculatedStubs, "the committed stubs must survive the rescope");
       const doc = (await docOf(f.orgId, run.documentId))!;
       assert.equal(doc.subsidiary_id, f.usSubsidiaryId, "the posted run keeps its entity");

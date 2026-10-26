@@ -16,13 +16,16 @@ test("uuid shape check refuses zod RFC UUID format calls wherever they are chain
       key: z.string().uuidv4(),
     });
   `);
-  assert.deepEqual(hits.map((hit) => [hit.line, hit.kind, hit.text]), [
-    [4, "zod", ".uuid("],
-    [5, "zod", "z.uuid("],
-    [6, "zod", "z.guid("],
-    [8, "zod", ".uuid("],
-    [9, "zod", ".uuidv4("],
-  ]);
+  assert.deepEqual(
+    hits.map((hit) => [hit.line, hit.kind, hit.text]),
+    [
+      [4, "zod", ".uuid("],
+      [5, "zod", "z.uuid("],
+      [6, "zod", "z.guid("],
+      [8, "zod", ".uuid("],
+      [9, "zod", ".uuidv4("],
+    ],
+  );
 });
 
 test("uuid shape check refuses hand-written RFC variant/version patterns", () => {
@@ -31,7 +34,14 @@ test("uuid shape check refuses hand-written RFC variant/version patterns", () =>
     const B = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89AB][0-9a-f]{3}-[0-9a-f]{12}$/;
     const C = "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[8-9a-b][0-9a-f]{3}-[0-9a-f]{12}$";
   `);
-  assert.deepEqual(hits.map((hit) => [hit.line, hit.kind]), [[2, "rfc"], [3, "rfc"], [4, "rfc"]]);
+  assert.deepEqual(
+    hits.map((hit) => [hit.line, hit.kind]),
+    [
+      [2, "rfc"],
+      [3, "rfc"],
+      [4, "rfc"],
+    ],
+  );
 });
 
 test("uuid shape check accepts the house validators, prose, and unrelated methods", () => {

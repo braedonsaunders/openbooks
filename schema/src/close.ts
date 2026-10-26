@@ -8,7 +8,7 @@ import {
   timestamp,
   unique,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -40,13 +40,7 @@ export const periodLocks = pgTable(
     unique("period_locks_scope")
       .on(t.orgId, t.periodId, t.bookId, t.subsidiaryId, t.module)
       .nullsNotDistinct(),
-    index("period_locks_lookup").on(
-      t.orgId,
-      t.periodId,
-      t.bookId,
-      t.module,
-      t.subsidiaryId,
-    ),
+    index("period_locks_lookup").on(t.orgId, t.periodId, t.bookId, t.module, t.subsidiaryId),
   ],
 );
 
@@ -60,15 +54,7 @@ export const closeRuns = pgTable(
     blueprintId: uuid("blueprint_id").notNull(),
     reportingPackageId: uuid("reporting_package_id"),
     status: text("status", {
-      enum: [
-        "draft",
-        "in_progress",
-        "review",
-        "approved",
-        "closed",
-        "published",
-        "cancelled",
-      ],
+      enum: ["draft", "in_progress", "review", "approved", "closed", "published", "cancelled"],
     })
       .notNull()
       .default("draft"),

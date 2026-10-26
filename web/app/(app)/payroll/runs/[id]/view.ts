@@ -1,20 +1,37 @@
-import 'server-only'
-import { NET_PAY_CLEARING_SETTINGS_KEY, parseNetPayClearingWindows } from '@openbooks/engine/payroll/net-pay-clearing'
-import type { ClearingDesignationOption } from './run-wizard-controls'
+import "server-only";
+import {
+  NET_PAY_CLEARING_SETTINGS_KEY,
+  parseNetPayClearingWindows,
+} from "@openbooks/engine/payroll/net-pay-clearing";
+import type { ClearingDesignationOption } from "./run-wizard-controls";
 
-import { PayrollError } from '@openbooks/engine/payroll/error'
-import { payrollAnomalyFinalizeCheck } from '@openbooks/engine/payroll/anomaly-finalize-gate'
-import { parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement, payRunCalculationRefusals, payRunRefusalDigest, type PayRunCalculationError, type PayRunRefusalAcknowledgement } from "@openbooks/engine/payroll/run-calculation-evidence";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { payrollAnomalyFinalizeCheck } from "@openbooks/engine/payroll/anomaly-finalize-gate";
+import {
+  parsePayRunCalculationErrors,
+  parsePayRunRefusalAcknowledgement,
+  payRunCalculationRefusals,
+  payRunRefusalDigest,
+  type PayRunCalculationError,
+  type PayRunRefusalAcknowledgement,
+} from "@openbooks/engine/payroll/run-calculation-evidence";
 import {
   lockAndCheckPayrollRunPopulation,
   payrollSubsidiaryScopeFilter,
-} from '@openbooks/engine/payroll/scope'
-import { loadWageTimeEntries, sumWageHoursByEmployee } from '@openbooks/engine/payroll/wage-hours'
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+} from "@openbooks/engine/payroll/scope";
+import { loadWageTimeEntries, sumWageHoursByEmployee } from "@openbooks/engine/payroll/wage-hours";
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
 import {
   payRunChanges,
   payRunFunding,
@@ -24,28 +41,34 @@ import {
   type PayRunReadiness,
   type PayRunStaleness,
   type StubChange,
-} from '@openbooks/engine/payroll/readiness'
+} from "@openbooks/engine/payroll/readiness";
 import {
   payRunApprovalState,
   payRunRejection,
   type PayRunApprovalState,
   type PayRunRejection,
-} from '@openbooks/engine/payroll/approval'
+} from "@openbooks/engine/payroll/approval";
 import {
   payrollPaymentMethodSettings,
   resolvedPaymentMethodSql,
-} from '@openbooks/engine/payroll/payment-method'
-import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
-import { factorLabelForPack, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/payroll/packs'
-import { buildRegisterBuckets, type RegisterBucket } from '../../../../../lib/payroll-register-buckets.ts'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { documentKindPermissions, postPermission } from '@openbooks/engine/records/document-kind-permissions'
-import { subsidiaryUiOptions } from '../../../../../lib/subsidiaries'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
-import { isUuid } from '../../../../../lib/list-params'
-import { parseBankCashInputEvidence } from '@openbooks/engine/payroll/run-bank-cash-evidence'
-import { parseDeclaredVacationAccrualEvidence } from '@openbooks/engine/payroll/run-vacation-accrual-input'
-import { groupTabs } from '../../../../../components/module-home/group-tabs'
+} from "@openbooks/engine/payroll/payment-method";
+import { orgYearEndFilings, type YearEndFilingSection } from "@openbooks/engine/payroll/yearend";
+import { factorLabelForPack, PAYROLL_COUNTRY_PACKS } from "@openbooks/engine/payroll/packs";
+import {
+  buildRegisterBuckets,
+  type RegisterBucket,
+} from "../../../../../lib/payroll-register-buckets.ts";
+import { can, requirePermission } from "../../../../../lib/authz";
+import {
+  documentKindPermissions,
+  postPermission,
+} from "@openbooks/engine/records/document-kind-permissions";
+import { subsidiaryUiOptions } from "../../../../../lib/subsidiaries";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
+import { isUuid } from "../../../../../lib/list-params";
+import { parseBankCashInputEvidence } from "@openbooks/engine/payroll/run-bank-cash-evidence";
+import { parseDeclaredVacationAccrualEvidence } from "@openbooks/engine/payroll/run-vacation-accrual-input";
+import { groupTabs } from "../../../../../components/module-home/group-tabs";
 import type {
   AdjustmentRow,
   ComponentOption,
@@ -54,7 +77,7 @@ import type {
   RunHeader,
   StubRow,
   WizardStep,
-} from './RunWizard'
+} from "./RunWizard";
 
 /**
  * One pay run — the processing wizard — split into a loader and a spec.
@@ -81,58 +104,58 @@ import type {
  * does.
  */
 
-const STEPS: readonly WizardStep[] = ['period', 'readiness', 'review', 'gl', 'finish']
+const STEPS: readonly WizardStep[] = ["period", "readiness", "review", "gl", "finish"];
 
 export interface PayRunWizardData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  viewTabs: { href: string; label: string; active?: boolean }[]
-  run: RunHeader
-  stubs: StubRow[]
-  roster: RosterRow[]
-  previousNet: Record<string, string>
-  adjustments: AdjustmentRow[]
-  adjustableComponents: ComponentOption[]
-  remittance: RemittanceRow[]
-  bankAccounts: { id: string; label: string }[]
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  viewTabs: { href: string; label: string; active?: boolean }[];
+  run: RunHeader;
+  stubs: StubRow[];
+  roster: RosterRow[];
+  previousNet: Record<string, string>;
+  adjustments: AdjustmentRow[];
+  adjustableComponents: ComponentOption[];
+  remittance: RemittanceRow[];
+  bankAccounts: { id: string; label: string }[];
   /** Dated net-pay settlement clearing designations, for the finish step's payment control. */
-  clearingDesignations: ClearingDesignationOption[]
-  readiness: PayRunReadiness
-  staleness: PayRunStaleness
-  funding: PayRunFunding
-  changes: StubChange[]
-  separationSections: YearEndFilingSection[]
-  registerReportId: string | null
+  clearingDesignations: ClearingDesignationOption[];
+  readiness: PayRunReadiness;
+  staleness: PayRunStaleness;
+  funding: PayRunFunding;
+  changes: StubChange[];
+  separationSections: YearEndFilingSection[];
+  registerReportId: string | null;
   /** Pack-declared withholding buckets for the review grid and stub header. */
-  registerBuckets: RegisterBucket[]
+  registerBuckets: RegisterBucket[];
   /** Pack-language region column header ("Province" / "State" / "Region"). */
-  regionLabel: string
+  regionLabel: string;
   /** Statutory engine names by stub country for the trace heading. */
-  traceEngines: Record<string, string>
+  traceEngines: Record<string, string>;
   /**
    * Pack-declared trace-factor labels by stub country, resolved through the
    * pack registry exactly like traceEngines. Dynamic keys the run actually
    * carries (SIT_/LIT_ mirrors) are pre-resolved server-side through the
    * pack's describeFactor, so the client payload stays plain data.
    */
-  factorLabels: Record<string, Record<string, string>>
-  canRun: boolean
+  factorLabels: Record<string, Record<string, string>>;
+  canRun: boolean;
   /** Withdrawing an approval to recalculate it (the return-to-draft permission for pay runs). */
-  canWithdrawApproval: boolean
-  initialStep: WizardStep
+  canWithdrawApproval: boolean;
+  initialStep: WizardStep;
   /**
    * The latest calculate's per-employee outcomes, persisted wholesale at
    * calculate time — what commit gates on and the wizard renders. Loader
    * state, not client memory, so the first calculate's exceptions survive a
    * refresh that used to wipe them.
    */
-  calculationErrors: PayRunCalculationError[]
+  calculationErrors: PayRunCalculationError[];
   /** Recorded decision to commit despite refusals, if one was taken. */
-  refusalAcknowledgement: PayRunRefusalAcknowledgement | null
+  refusalAcknowledgement: PayRunRefusalAcknowledgement | null;
   /** Whether the recorded acknowledgement binds to the current refusal set. */
-  refusalsAcknowledged: boolean
+  refusalsAcknowledged: boolean;
   /**
    * Flows approval state for the run, resolved server-side through the
    * native engine — the same `payRunApprovalState` the commit boundary
@@ -141,42 +164,45 @@ export interface PayRunWizardData {
    * resolved on the server, handed to the client, composed with status).
    * With no policy there is no button and commit behaves exactly as before.
    */
-  approval: PayRunApprovalState
+  approval: PayRunApprovalState;
   /**
    * The rejection this run is waiting on (draft, never committed), read from
    * the Flows gate that rejected it. Null when the run was never rejected or
    * has since been resubmitted.
    */
-  rejection: PayRunRejection | null
+  rejection: PayRunRejection | null;
   /** Open block-severity anomaly flags overlapping this run's period. The
    *  commit route refuses while this is nonzero. */
-  anomalyBlocks: number
+  anomalyBlocks: number;
   /**
    * Active, non-elimination entities the caller may see — the target list
    * for the Attribute entity action on a subsidiary-less run. Empty in a
    * single-entity org (where every document already carries the root).
    */
-  entityOptions: { id: string; label: string }[]
+  entityOptions: { id: string; label: string }[];
   /**
    * Attribution is an org-wide act: an entityless run is invisible to
    * scoped roles (the route 404s them like a missing run), so the control
    * renders only for unrestricted callers.
    */
-  canAttributeEntity: boolean
+  canAttributeEntity: boolean;
 }
 
 export async function loadPayRunWizard(
   id: string,
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PayRunWizardData> {
-  const authz = await requirePermission('payroll.read')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'payroll')
-  if (!isUuid(id)) notFound()
-  const t = await getTranslations('payroll')
+  const authz = await requirePermission("payroll.read");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "payroll");
+  if (!isUuid(id)) notFound();
+  const t = await getTranslations("payroll");
 
   return withPayRunReadSnapshot(orgId, async () => {
-    const runs = (await db.execute<RunHeader & { calculation_errors: unknown; refusal_acknowledgement: unknown }>(sql`
+    const runs = await db.execute<
+      RunHeader & { calculation_errors: unknown; refusal_acknowledgement: unknown }
+    >(
+      sql`
       select r.document_id, d.document_number, d.status as document_status, d.currency,
              (d.revision_seq)::text as document_revision,
              d.subsidiary_id, d.posted_entry_id, s.name as schedule_name,
@@ -191,24 +217,27 @@ export async function loadPayRunWizard(
         left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${id}
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-         for share of r,d`, 'objects'))
-    const run = runs[0]
-    if (!run) notFound()
+         for share of r,d`,
+      "objects",
+    );
+    const run = runs[0];
+    if (!run) notFound();
 
     try {
-      await lockAndCheckPayrollRunPopulation(db, orgId, id, authz.allowedSubsidiaryIds)
+      await lockAndCheckPayrollRunPopulation(db, orgId, id, authz.allowedSubsidiaryIds);
     } catch (error) {
-      if (error instanceof PayrollError) notFound()
-      throw error
+      if (error instanceof PayrollError) notFound();
+      throw error;
     }
 
     // The roster resolves each employee's pay rail with the same ladder the
     // engine uses, so the Scope step's "paid by" column can never disagree with
     // what the run will actually do.
-    const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId)
+    const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId);
 
-    const [stubsRes, linesRes, rosterRes, prevRes, remitRes] = (await Promise.all([
-      db.execute<StubRow>(sql`
+    const [stubsRes, linesRes, rosterRes, prevRes, remitRes] = await Promise.all([
+      db.execute<StubRow>(
+        sql`
         select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
                prof.country as country,
                st.gross, st.net_pay, st.employer_cost, st.vacation_accrued,
@@ -218,8 +247,11 @@ export async function loadPayRunWizard(
           left join employee_payroll_profiles prof
             on prof.employee_party_id = st.employee_party_id and prof.org_id = st.org_id
          where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
-         order by p.display_name`, 'objects'),
-      db.execute<(StubRow['lines'])[number]>(sql`
+         order by p.display_name`,
+        "objects",
+      ),
+      db.execute<StubRow["lines"][number]>(
+        sql`
         select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence, l.payment_kind,
                c.code as component_code, pr.name as project_name, dep.name as department_name
           from pay_stub_lines l
@@ -228,13 +260,16 @@ export async function loadPayRunWizard(
           left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
           left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
          where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
-         order by l.stub_id, l.sequence`, 'objects'),
+         order by l.stub_id, l.sequence`,
+        "objects",
+      ),
       // Step 1 roster: everyone the schedule would include, with a
       // wage-configured flag (one-table doctrine — labor_cost_rates,
       // employee scope, effective at the pay date). Approved hours are merged
       // below from the wage-hours read Calculate prices, so the Scope tab can
       // never preview hours Calculate will not pick up.
-      db.execute<Omit<RosterRow, 'approved_hours'>>(sql`
+      db.execute<Omit<RosterRow, "approved_hours">>(
+        sql`
         select p.id as employee_party_id, p.display_name as name, prof.pay_basis,
                -- Every dimension the roster carries, so the scope filters are a
                -- real filter set rather than "department, when there is one".
@@ -274,10 +309,13 @@ export async function loadPayRunWizard(
           left join subsidiaries sub on sub.id = p.subsidiary_id and sub.org_id = p.org_id
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id} and prof.is_active
            ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
-         order by p.display_name`, 'objects'),
+         order by p.display_name`,
+        "objects",
+      ),
       // Variance baseline: each employee's most recent committed stub before
       // this run (net pay delta drives the ±15% review flag).
-      db.execute<{ employee_party_id: string; net_pay: string; pay_date: string }>(sql`
+      db.execute<{ employee_party_id: string; net_pay: string; pay_date: string }>(
+        sql`
         select distinct on (st.employee_party_id)
                st.employee_party_id, st.net_pay, st.pay_date::text as pay_date
           from pay_stubs st
@@ -286,10 +324,13 @@ export async function loadPayRunWizard(
          where st.org_id = ${orgId} and st.pay_run_document_id <> ${id}
            and st.pay_date <= ${run.pay_date}
            ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
-         order by st.employee_party_id, st.pay_date desc, st.created_at desc`, 'objects'),
+         order by st.employee_party_id, st.pay_date desc, st.created_at desc`,
+        "objects",
+      ),
       // Finish-step remittance summary: the committed projection's credit legs
       // grouped by account (net pay owed + statutory/withholding liabilities).
-      db.execute<RemittanceRow>(sql`
+      db.execute<RemittanceRow>(
+        sql`
         select trim(concat_ws(' · ', a.number, a.name)) as account_label,
                sum(dl.amount)::text as amount
           from document_lines dl
@@ -297,30 +338,34 @@ export async function loadPayRunWizard(
          where dl.org_id = ${orgId} and dl.document_id = ${id}
          group by a.id, a.number, a.name
          having sum(dl.amount) < 0
-         order by sum(dl.amount)`, 'objects'),
-    ]))
+         order by sum(dl.amount)`,
+        "objects",
+      ),
+    ]);
 
-    const linesByStub = new Map<string, StubRow['lines']>()
+    const linesByStub = new Map<string, StubRow["lines"]>();
     for (const line of linesRes) {
-      const list = linesByStub.get(line.stub_id)
-      if (list) list.push(line)
-      else linesByStub.set(line.stub_id, [line])
+      const list = linesByStub.get(line.stub_id);
+      if (list) list.push(line);
+      else linesByStub.set(line.stub_id, [line]);
     }
-    const stubs = stubsRes.map((stub) => ({ ...stub, lines: linesByStub.get(stub.id) ?? [] }))
+    const stubs = stubsRes.map((stub) => ({ ...stub, lines: linesByStub.get(stub.id) ?? [] }));
 
     // Scope approved hours come from the wage-hours read Calculate prices —
     // the same rows, never a parallel summary that can disagree with them.
-    const wageHours = sumWageHoursByEmployee(await loadWageTimeEntries(db, {
-      orgId,
-      employeePartyIds: rosterRes.map((row) => String(row.employee_party_id)),
-      periodStart: run.period_start,
-      periodEnd: run.period_end,
-      documentId: id,
-    }))
+    const wageHours = sumWageHoursByEmployee(
+      await loadWageTimeEntries(db, {
+        orgId,
+        employeePartyIds: rosterRes.map((row) => String(row.employee_party_id)),
+        periodStart: run.period_start,
+        periodEnd: run.period_end,
+        documentId: id,
+      }),
+    );
     const roster: RosterRow[] = rosterRes.map((row) => ({
       ...row,
-      approved_hours: wageHours.get(String(row.employee_party_id)) ?? '0',
-    }))
+      approved_hours: wageHours.get(String(row.employee_party_id)) ?? "0",
+    }));
 
     // Register buckets: the review grid and stub header columns
     // come from the installed packs' declared statutory components — labels
@@ -328,40 +373,52 @@ export async function loadPayRunWizard(
     // deduction lines — never from hardcoded CA factor keys. A run whose
     // stubs carry no determinable country falls back to every installable
     // pack rather than to any one country's buckets.
-    const countriesInRun = [...new Set(stubs.map((stub) => stub.country).filter((c): c is string => !!c))]
+    const countriesInRun = [
+      ...new Set(stubs.map((stub) => stub.country).filter((c): c is string => !!c)),
+    ];
     const packsInRun = Object.values(PAYROLL_COUNTRY_PACKS).filter((pack) =>
       countriesInRun.length > 0 ? countriesInRun.includes(pack.country) : pack.installable,
-    )
-    const seenBucketCodes = new Set<string>()
+    );
+    const seenBucketCodes = new Set<string>();
     const declaredBuckets = packsInRun.flatMap((pack) =>
       pack.statutorySlots.flatMap((slot) =>
         slot.components
-          .filter((component) => component.kind === 'deduction')
+          .filter((component) => component.kind === "deduction")
           .filter((component) => {
-            const key = component.code.toUpperCase()
-            if (seenBucketCodes.has(key)) return false
-            seenBucketCodes.add(key)
-            return true
+            const key = component.code.toUpperCase();
+            if (seenBucketCodes.has(key)) return false;
+            seenBucketCodes.add(key);
+            return true;
           })
-          .map((component) => ({ code: component.code, label: component.name, sequence: component.sequence })),
+          .map((component) => ({
+            code: component.code,
+            label: component.name,
+            sequence: component.sequence,
+          })),
       ),
-    )
+    );
     const registerBuckets: RegisterBucket[] = buildRegisterBuckets(
-      linesRes.map((line) => ({ componentCode: line.component_code, kind: line.kind, amount: line.amount })),
+      linesRes.map((line) => ({
+        componentCode: line.component_code,
+        kind: line.kind,
+        amount: line.amount,
+      })),
       declaredBuckets,
-    )
+    );
     // The region column speaks the pack's language ("Province" for CA,
     // "State" for US); a mixed-country run falls back to neutral "Region".
     // Non-English locales fall back to English for the whole run.stub
     // namespace, so a server-composed label here is no worse than before.
-    const regionLabel = packsInRun.length === 1
-      ? packsInRun[0]!.regions.label.slice(0, 1).toUpperCase() + packsInRun[0]!.regions.label.slice(1)
-      : 'Region'
+    const regionLabel =
+      packsInRun.length === 1
+        ? packsInRun[0]!.regions.label.slice(0, 1).toUpperCase() +
+          packsInRun[0]!.regions.label.slice(1)
+        : "Region";
     // Trace-engine names by stub country ("T4127" / "Pub 15-T"), so the stub
     // calculation trace heads the filing regime the numbers came from.
     const traceEngines: Record<string, string> = Object.fromEntries(
       packsInRun.map((pack) => [pack.country, pack.statutoryEngineLabel]),
-    )
+    );
     // Trace-factor labels by stub country, from each pack's own declaration
     // — never a web-layer map, which cannot tell California's CA_TAX from
     // Canada's CA. Keys the static map misses but the run carries (the
@@ -370,25 +427,26 @@ export async function loadPayRunWizard(
     // still unresolved renders raw, exactly as before.
     const factorLabels: Record<string, Record<string, string>> = Object.fromEntries(
       packsInRun.map((pack) => {
-        const labels: Record<string, string> = { ...pack.factorLabels }
+        const labels: Record<string, string> = { ...pack.factorLabels };
         for (const stub of stubs) {
-          if (stub.country !== pack.country) continue
+          if (stub.country !== pack.country) continue;
           for (const key of Object.keys(stub.factors ?? {})) {
             if (labels[key] === undefined) {
-              const resolved = factorLabelForPack(pack, key)
-              if (resolved !== key) labels[key] = resolved
+              const resolved = factorLabelForPack(pack, key);
+              if (resolved !== key) labels[key] = resolved;
             }
           }
         }
-        return [pack.country, labels]
+        return [pack.country, labels];
       }),
-    )
+    );
 
-    const previousNet: Record<string, string> = {}
-    for (const row of prevRes) previousNet[row.employee_party_id] = row.net_pay
+    const previousNet: Record<string, string> = {};
+    for (const row of prevRes) previousNet[row.employee_party_id] = row.net_pay;
 
-    const [adjustmentsRes, adjustableRes] = (await Promise.all([
-      db.execute(sql`
+    const [adjustmentsRes, adjustableRes] = await Promise.all([
+      db.execute(
+        sql`
         select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount::text, a.hours::text,
                a.earned_from::text as earned_from, a.earned_to::text as earned_to,
                a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
@@ -396,8 +454,11 @@ export async function loadPayRunWizard(
           join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
           left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
          where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
-         order by p.display_name, a.created_at`, 'objects'),
-      db.execute(sql`
+         order by p.display_name, a.created_at`,
+        "objects",
+      ),
+      db.execute(
+        sql`
         select component.id, component.code, component.name, component.kind,
                exists(select 1 from entitlement_plans vacation_plan
                  join pay_components accrual_component
@@ -417,62 +478,79 @@ export async function loadPayRunWizard(
                where plan.org_id=component.org_id and plan.is_active and plan.unit in ('hours','money')
                  and component.kind='earning' and component.payment_kind='cash'
                  and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)))
-         order by component.sequence, component.code`, 'objects'),
-    ]))
+         order by component.sequence, component.code`,
+        "objects",
+      ),
+    ]);
     const adjustmentRows = adjustmentsRes.map((row) => {
-      const evidence = parseBankCashInputEvidence(typeof row.note === 'string' ? row.note : null)
-      const declaredVacation = parseDeclaredVacationAccrualEvidence(typeof row.note === 'string' ? row.note : null)
+      const evidence = parseBankCashInputEvidence(typeof row.note === "string" ? row.note : null);
+      const declaredVacation = parseDeclaredVacationAccrualEvidence(
+        typeof row.note === "string" ? row.note : null,
+      );
       return (evidence
-        ? { ...row, note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ''}${evidence.outsideBankAmount ? ` · ${evidence.outsideBankAmount} paid outside bank` : ''}` }
-        : declaredVacation ? { ...row, note: `${declaredVacation.reason} · ${declaredVacation.sourceReference}` } : row) as unknown as AdjustmentRow
-    })
-    const componentRows = adjustableRes as unknown as ComponentOption[]
+        ? {
+            ...row,
+            note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ""}${evidence.outsideBankAmount ? ` · ${evidence.outsideBankAmount} paid outside bank` : ""}`,
+          }
+        : declaredVacation
+          ? { ...row, note: `${declaredVacation.reason} · ${declaredVacation.sourceReference}` }
+          : row) as unknown as AdjustmentRow;
+    });
+    const componentRows = adjustableRes as unknown as ComponentOption[];
 
     // A termination run's Finish step owns the pack-declared SEPARATION
     // filings (the ROE): due within days of the interruption of earnings, so
     // they surface on the run that pays the employee out — the registry's
     // populations filtered to this run's own employees. Nothing here names a
     // country or a form; a pack that declares no separation filing shows none.
-    let separationSections: YearEndFilingSection[] = []
-    if (run.run_type === 'termination') {
-      const runEmployees = new Set(stubs.map((stub) => stub.employee_party_id))
+    let separationSections: YearEndFilingSection[] = [];
+    if (run.run_type === "termination") {
+      const runEmployees = new Set(stubs.map((stub) => stub.employee_party_id));
       separationSections = (await orgYearEndFilings(orgId, run.tax_year))
-        .filter((section) => section.cadence === 'separation')
+        .filter((section) => section.cadence === "separation")
         .map((section) => ({
           ...section,
           data: {
             ...section.data,
             rows: section.data.rows.filter((row) =>
-              runEmployees.has(String(row[section.issue?.idColumn ?? section.data.rowKey] ?? ''))),
+              runEmployees.has(String(row[section.issue?.idColumn ?? section.data.rowKey] ?? "")),
+            ),
           },
         }))
-        .filter((section) => section.populationRefusal != null || section.data.rows.length > 0)
+        .filter((section) => section.populationRefusal != null || section.data.rows.length > 0);
     }
 
-    const stepParam = sp.step as WizardStep | undefined
+    const stepParam = sp.step as WizardStep | undefined;
     const initialStep: WizardStep =
       stepParam && STEPS.includes(stepParam)
         ? stepParam
-        : run.document_status === 'posted' || run.run_status === 'committed'
-          ? 'finish'
-          : run.run_status === 'calculated'
-            ? 'review'
-            : 'period'
+        : run.document_status === "posted" || run.run_status === "committed"
+          ? "finish"
+          : run.run_status === "calculated"
+            ? "review"
+            : "period";
 
-    const registerReport = (await db.execute<{ id: string }>(sql`
+    const registerReport =
+      (
+        await db.execute<{ id: string }>(
+          sql`
       select id from report_definitions
        where org_id = ${orgId} and slug = 'payroll-register' limit 1
-    `, 'objects'))[0] ?? null
+    `,
+          "objects",
+        )
+      )[0] ?? null;
 
     // The refusal record the commit gate binds to, parsed once for every
     // consumer below: the wizard's exception list, the GL-step acknowledgement
     // panel, and the acknowledged flag that enables the commit button.
-    const calculationErrors = parsePayRunCalculationErrors(run.calculation_errors) ?? []
-    const refusalAcknowledgement = parsePayRunRefusalAcknowledgement(run.refusal_acknowledgement)
-    const currentRefusals = payRunCalculationRefusals(calculationErrors)
-    const refusalsAcknowledged = currentRefusals.length === 0
-      || (refusalAcknowledgement != null
-        && refusalAcknowledgement.errorsDigest === payRunRefusalDigest(currentRefusals))
+    const calculationErrors = parsePayRunCalculationErrors(run.calculation_errors) ?? [];
+    const refusalAcknowledgement = parsePayRunRefusalAcknowledgement(run.refusal_acknowledgement);
+    const currentRefusals = payRunCalculationRefusals(calculationErrors);
+    const refusalsAcknowledged =
+      currentRefusals.length === 0 ||
+      (refusalAcknowledgement != null &&
+        refusalAcknowledgement.errorsDigest === payRunRefusalDigest(currentRefusals));
 
     // Readiness, staleness, funding, the per-employee diff and the Flows
     // approval state are engine-owned (one source of truth for what blocks a
@@ -484,46 +562,72 @@ export async function loadPayRunWizard(
       payRunChanges(orgId, id, authz.allowedSubsidiaryIds),
       payRunApprovalState(orgId, id),
       payRunRejection(orgId, id),
-    ])
+    ]);
     // The funding service is the authority for both the account scope and its
     // current book balances. Reuse its scoped rows for the settlement picker so
     // a restricted caller cannot select an account the funding panel omitted.
-    const bankAccounts = funding.accounts.map(({ id, label }) => ({ id, label }))
+    const bankAccounts = funding.accounts.map(({ id, label }) => ({ id, label }));
     // The engine re-resolves and re-validates the designation for the chosen
     // payment date at write time; this only offers it.
-    const clearingWindows = parseNetPayClearingWindows((await db.execute<{ windows: unknown }>(sql`
+    const clearingWindows = parseNetPayClearingWindows(
+      (
+        await db.execute<{ windows: unknown }>(
+          sql`
       select settings->'payroll'->${NET_PAY_CLEARING_SETTINGS_KEY} as windows from orgs where id = ${orgId}
-    `, 'objects'))[0]?.windows)
-    const clearingLabels = clearingWindows.length === 0 ? new Map<string, string>() : new Map((await db.execute<{ id: string; label: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]?.windows,
+    );
+    const clearingLabels =
+      clearingWindows.length === 0
+        ? new Map<string, string>()
+        : new Map(
+            (
+              await db.execute<{ id: string; label: string }>(
+                sql`
       select id::text as id, coalesce(number || ' · ', '') || name as label from accounts
-       where org_id = ${orgId} and id in (${sql.join(clearingWindows.map((window) => sql`${window.accountId}::uuid`), sql`, `)})
-    `, 'objects')).map((row) => [row.id, row.label]))
+       where org_id = ${orgId} and id in (${sql.join(
+         clearingWindows.map((window) => sql`${window.accountId}::uuid`),
+         sql`, `,
+       )})
+    `,
+                "objects",
+              )
+            ).map((row) => [row.id, row.label]),
+          );
     const clearingDesignations = clearingWindows.map((window) => ({
-      id: window.id, accountId: window.accountId, label: clearingLabels.get(window.accountId) ?? window.accountId,
-      effectiveFrom: window.effectiveFrom, effectiveTo: window.effectiveTo,
-    }))
+      id: window.id,
+      accountId: window.accountId,
+      label: clearingLabels.get(window.accountId) ?? window.accountId,
+      effectiveFrom: window.effectiveFrom,
+      effectiveTo: window.effectiveTo,
+    }));
 
     // Match the native commit gate: only open blockers for this run's
     // employment roster, schedule and legal entity keep the action disabled.
-    const anomalyBlocks = (await payrollAnomalyFinalizeCheck(db, { orgId, documentId: id })).openBlockCount
+    const anomalyBlocks = (await payrollAnomalyFinalizeCheck(db, { orgId, documentId: id }))
+      .openBlockCount;
 
-    const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
+    const moduleTabs = await groupTabs("payroll", "/payroll/runs", { orgId });
 
     // Attribution targets: active, non-elimination entities this caller may
     // see. The route re-checks visibility and activity at write time, so a
     // target deactivated after this render still refuses.
     const entityOptions = (await subsidiaryUiOptions(orgId))
-      .filter((option) => authz.allowedSubsidiaryIds == null || authz.allowedSubsidiaryIds.has(option.id))
-      .map((option) => ({ id: option.id, label: option.name }))
+      .filter(
+        (option) => authz.allowedSubsidiaryIds == null || authz.allowedSubsidiaryIds.has(option.id),
+      )
+      .map((option) => ({ id: option.id, label: option.name }));
 
     return {
-      title: `${t('run.title')} ${run.document_number}`,
-      description: `${run.schedule_name ?? ''} · ${run.period_start} – ${run.period_end}`.replace(
+      title: `${t("run.title")} ${run.document_number}`,
+      description: `${run.schedule_name ?? ""} · ${run.period_start} – ${run.period_end}`.replace(
         /^ · /,
-        '',
+        "",
       ),
-      backHref: '/payroll/runs',
-      backLabel: t('list.title'),
+      backHref: "/payroll/runs",
+      backLabel: t("list.title"),
       viewTabs: moduleTabs,
       run,
       stubs,
@@ -531,7 +635,7 @@ export async function loadPayRunWizard(
       previousNet,
       adjustments: adjustmentRows,
       adjustableComponents: componentRows,
-      remittance: run.run_status === 'committed' ? remitRes : [],
+      remittance: run.run_status === "committed" ? remitRes : [],
       bankAccounts,
       clearingDesignations,
       readiness,
@@ -544,8 +648,11 @@ export async function loadPayRunWizard(
       regionLabel,
       traceEngines,
       factorLabels,
-      canRun: can(authz, 'payroll.run'),
-      canWithdrawApproval: can(authz, documentKindPermissions('pay_run')?.approve ?? postPermission('pay_run')),
+      canRun: can(authz, "payroll.run"),
+      canWithdrawApproval: can(
+        authz,
+        documentKindPermissions("pay_run")?.approve ?? postPermission("pay_run"),
+      ),
       initialStep,
       calculationErrors,
       refusalAcknowledgement,
@@ -555,26 +662,26 @@ export async function loadPayRunWizard(
       anomalyBlocks,
       entityOptions,
       canAttributeEntity: authz.allowedSubsidiaryIds == null,
-    }
-  })
+    };
+  });
 }
 
 export function withPayRunReadSnapshot<T>(orgId: string, read: () => Promise<T>): Promise<T> {
-  return withOrgTransaction(orgId, read, { isolationLevel: 'REPEATABLE READ' })
+  return withOrgTransaction(orgId, read, { isolationLevel: "REPEATABLE READ" });
 }
 
-const f = ref<PayRunWizardData>()
+const f = ref<PayRunWizardData>();
 
 export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
   return page({
-    route: '/payroll/runs/[id]',
-    layout: 'list',
+    route: "/payroll/runs/[id]",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        back: { href: f('backHref'), label: f('backLabel') },
-        actions: [widget('module-home-tabs', { tabs: data.viewTabs })],
+        title: f("title"),
+        description: f("description"),
+        back: { href: f("backHref"), label: f("backLabel") },
+        actions: [widget("module-home-tabs", { tabs: data.viewTabs })],
       }),
     ],
     body: [
@@ -583,7 +690,7 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
       // entry binds the identical loader data to the shared RunWizard the
       // wizard renders; the loader-derived initialStep chooses the
       // opening step wherever it renders.
-      widgetBlock('pay-run-wizard', {
+      widgetBlock("pay-run-wizard", {
         run: data.run,
         stubs: data.stubs,
         roster: data.roster,
@@ -616,5 +723,5 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         canAttributeEntity: data.canAttributeEntity,
       }),
     ],
-  })
+  });
 }

@@ -1,5 +1,5 @@
-import type { SetupColumn } from '../../../lib/setup/registry'
-import { UnlinkExternalLinkButton } from './UnlinkExternalLinkButton'
+import type { SetupColumn } from "../../../lib/setup/registry";
+import { UnlinkExternalLinkButton } from "./UnlinkExternalLinkButton";
 
 /**
  * Record-drawer External IDs tabs stay read-only rows with one audited
@@ -8,20 +8,20 @@ import { UnlinkExternalLinkButton } from './UnlinkExternalLinkButton'
  */
 export function externalLinkUnlinkColumn(canManage: boolean) {
   return function renderExternalIdCell(column: SetupColumn, row: Record<string, unknown>) {
-    if (column.key !== 'externalId') return undefined
-    const channelId = typeof row.channel_id === 'string' ? row.channel_id : null
+    if (column.key !== "externalId") return undefined;
+    const channelId = typeof row.channel_id === "string" ? row.channel_id : null;
     return (
       <span className="inline-flex flex-wrap items-center gap-2">
-        <span className="font-mono">{String(row.external_id ?? '')}</span>
+        <span className="font-mono">{String(row.external_id ?? "")}</span>
         <UnlinkExternalLinkButton
           channelId={channelId}
-          provider={String(row.provider ?? '')}
-          externalAccount={String(row.external_account ?? '')}
-          objectType={String(row.object_type ?? '')}
-          externalId={String(row.external_id ?? '')}
+          provider={String(row.provider ?? "")}
+          externalAccount={String(row.external_account ?? "")}
+          objectType={String(row.object_type ?? "")}
+          externalId={String(row.external_id ?? "")}
           canManage={canManage}
         />
       </span>
-    )
-  }
+    );
+  };
 }

@@ -10,31 +10,31 @@
  * loaders cannot drift to three different settings pages; CompanyTab
  * owns the baseCurrency field at that route.
  */
-export const BASE_CURRENCY_SETTINGS_HREF = '/admin/setup/company'
+export const BASE_CURRENCY_SETTINGS_HREF = "/admin/setup/company";
 
 export interface BaseCurrencyNotice {
-  code: 'base-currency-not-configured'
-  title: string
-  description: string
-  actionLabel: string
-  actionHref: string
+  code: "base-currency-not-configured";
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionHref: string;
 }
 
 export function baseCurrencyNotice(copy: {
-  title: string
-  description: string
-  actionLabel: string
+  title: string;
+  description: string;
+  actionLabel: string;
 }): BaseCurrencyNotice {
   return {
-    code: 'base-currency-not-configured',
+    code: "base-currency-not-configured",
     title: copy.title,
     description: copy.description,
     actionLabel: copy.actionLabel,
     actionHref: BASE_CURRENCY_SETTINGS_HREF,
-  }
+  };
 }
 
 /** True exactly when the loader may render money: no notice, no silent undefined currency. */
 export function hasBaseCurrency(baseCurrency: string | null | undefined): baseCurrency is string {
-  return typeof baseCurrency === 'string' && baseCurrency.length > 0
+  return typeof baseCurrency === "string" && baseCurrency.length > 0;
 }

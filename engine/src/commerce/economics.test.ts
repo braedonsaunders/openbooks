@@ -9,8 +9,22 @@ import {
 } from "./economics.ts";
 
 const LINES = [
-  { key: "line:0", gross: 5000n, itemId: "item-tee", sku: "TEE-RED-M", promotionCode: "SAVE10", qtyWeight: 200000000n },
-  { key: "line:1", gross: 1200n, itemId: "item-mug", sku: "MUG-WHITE", promotionCode: null, qtyWeight: 100000000n },
+  {
+    key: "line:0",
+    gross: 5000n,
+    itemId: "item-tee",
+    sku: "TEE-RED-M",
+    promotionCode: "SAVE10",
+    qtyWeight: 200000000n,
+  },
+  {
+    key: "line:1",
+    gross: 1200n,
+    itemId: "item-mug",
+    sku: "MUG-WHITE",
+    promotionCode: null,
+    qtyWeight: 100000000n,
+  },
   { key: "ship:0", gross: 600n, itemId: null, sku: null, promotionCode: null, qtyWeight: 600n },
 ];
 
@@ -35,7 +49,10 @@ test("allocation sums exactly to the source total", () => {
     estimated: false,
   }));
   assert.equal(rows.length, 3);
-  assert.equal(rows.reduce((sum, row) => sum + row.amountMinor, 0n), -450n);
+  assert.equal(
+    rows.reduce((sum, row) => sum + row.amountMinor, 0n),
+    -450n,
+  );
 });
 
 test("a zero-weight total books to the order row instead of dividing", () => {
@@ -64,11 +81,17 @@ test("refunds attribute to the returned lines and fees earn back positive", () =
   ];
   const attributed = attributeRefundLines(inputs, LINES);
   const returns = attributed.filter((row) => row.component === "returns");
-  assert.equal(returns.reduce((sum, row) => sum + row.amountMinor, 0n), -3700n);
+  assert.equal(
+    returns.reduce((sum, row) => sum + row.amountMinor, 0n),
+    -3700n,
+  );
   assert.ok(returns.every((row) => row.lineKey === "line:0" || row.lineKey === "line:1"));
   const fees = attributed.filter((row) => row.component === "restocking_fee");
   // The 500 fee credit earns back as positive margin across returned lines.
-  assert.equal(fees.reduce((sum, row) => sum + row.amountMinor, 0n), 500n);
+  assert.equal(
+    fees.reduce((sum, row) => sum + row.amountMinor, 0n),
+    500n,
+  );
   assert.ok(fees.every((row) => row.amountMinor > 0n));
 });
 

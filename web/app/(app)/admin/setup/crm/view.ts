@@ -1,16 +1,12 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
-import {
-  isUuid,
-  parseListParams,
-  pickString,
-} from '../../../../../lib/list-params'
-import type { CrmSetupTab } from './CrmSetupWorkspace'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
+import { isUuid, parseListParams, pickString } from "../../../../../lib/list-params";
+import type { CrmSetupTab } from "./CrmSetupWorkspace";
 
 /**
  * CRM setup lists: account statuses, opportunity stages and lead sources.
@@ -24,90 +20,102 @@ import type { CrmSetupTab } from './CrmSetupWorkspace'
  * record (organization- and uuid-guarded).
  */
 
-const TABS: CrmSetupTab[] = ['accountStatuses', 'opportunityStatuses', 'sources']
+const TABS: CrmSetupTab[] = ["accountStatuses", "opportunityStatuses", "sources"];
 
 export interface CrmSetupData {
-  tab: CrmSetupTab
-  rows: Record<string, unknown>[]
-  selected: Record<string, unknown> | null
-  creating: boolean
-  total: number
-  page: number
-  perPage: number
-  currentParams: Record<string, string | string[] | undefined>
+  tab: CrmSetupTab;
+  rows: Record<string, unknown>[];
+  selected: Record<string, unknown> | null;
+  creating: boolean;
+  total: number;
+  page: number;
+  perPage: number;
+  currentParams: Record<string, string | string[] | undefined>;
 }
 
 export async function loadCrmSetup(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<CrmSetupData> {
-  const authz = await requirePermission('crm.setup.manage')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'crm')
-  const requestedTab = pickString(sp.tab) as CrmSetupTab | undefined
-  const tab =
-    requestedTab && TABS.includes(requestedTab)
-      ? requestedTab
-      : 'accountStatuses'
+  const authz = await requirePermission("crm.setup.manage");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "crm");
+  const requestedTab = pickString(sp.tab) as CrmSetupTab | undefined;
+  const tab = requestedTab && TABS.includes(requestedTab) ? requestedTab : "accountStatuses";
   const list = parseListParams(sp, {
-    sort: 'default',
-    allowedSorts: ['default'] as const,
+    sort: "default",
+    allowedSorts: ["default"] as const,
     perPage: 25,
-  })
-  const offset = (list.page - 1) * list.perPage
-  const term = `%${list.q ?? ''}%`
+  });
+  const offset = (list.page - 1) * list.perPage;
+  const term = `%${list.q ?? ""}%`;
 
-  let rowsResult
-  let countResult
-  if (tab === 'accountStatuses') {
-    ;[rowsResult, countResult] = await Promise.all([
-      db.execute(sql`
+  let rowsResult;
+  let countResult;
+  if (tab === "accountStatuses") {
+    [rowsResult, countResult] = await Promise.all([
+      db.execute(
+        sql`
         select * from crm_account_statuses
          where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or lifecycle_stage ilike ${term})` : sql``}
-         order by lifecycle_stage, sequence, name limit ${list.perPage} offset ${offset}`, 'objects'),
-      db.execute(
-        sql`select count(*)::int n from crm_account_statuses where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or lifecycle_stage ilike ${term})` : sql``}`, 'objects',
+         order by lifecycle_stage, sequence, name limit ${list.perPage} offset ${offset}`,
+        "objects",
       ),
-    ])
-  } else if (tab === 'opportunityStatuses') {
-    ;[rowsResult, countResult] = await Promise.all([
-      db.execute(sql`
+      db.execute(
+        sql`select count(*)::int n from crm_account_statuses where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or lifecycle_stage ilike ${term})` : sql``}`,
+        "objects",
+      ),
+    ]);
+  } else if (tab === "opportunityStatuses") {
+    [rowsResult, countResult] = await Promise.all([
+      db.execute(
+        sql`
         select * from crm_opportunity_statuses
          where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or default_forecast_category ilike ${term})` : sql``}
-         order by sequence, name limit ${list.perPage} offset ${offset}`, 'objects'),
-      db.execute(
-        sql`select count(*)::int n from crm_opportunity_statuses where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or default_forecast_category ilike ${term})` : sql``}`, 'objects',
+         order by sequence, name limit ${list.perPage} offset ${offset}`,
+        "objects",
       ),
-    ])
+      db.execute(
+        sql`select count(*)::int n from crm_opportunity_statuses where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or default_forecast_category ilike ${term})` : sql``}`,
+        "objects",
+      ),
+    ]);
   } else {
-    ;[rowsResult, countResult] = await Promise.all([
-      db.execute(sql`
+    [rowsResult, countResult] = await Promise.all([
+      db.execute(
+        sql`
         select * from crm_lead_sources
          where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term})` : sql``}
-         order by name limit ${list.perPage} offset ${offset}`, 'objects'),
-      db.execute(
-        sql`select count(*)::int n from crm_lead_sources where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term})` : sql``}`, 'objects',
+         order by name limit ${list.perPage} offset ${offset}`,
+        "objects",
       ),
-    ])
+      db.execute(
+        sql`select count(*)::int n from crm_lead_sources where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term})` : sql``}`,
+        "objects",
+      ),
+    ]);
   }
 
-  const rowParam = pickString(sp.row)
-  const creating = rowParam === 'new'
-  let selected: Record<string, unknown> | null = null
-  if (rowParam && rowParam !== 'new' && isUuid(rowParam)) {
-    let selectedResult
-    if (tab === 'accountStatuses')
+  const rowParam = pickString(sp.row);
+  const creating = rowParam === "new";
+  let selected: Record<string, unknown> | null = null;
+  if (rowParam && rowParam !== "new" && isUuid(rowParam)) {
+    let selectedResult;
+    if (tab === "accountStatuses")
       selectedResult = await db.execute(
-        sql`select * from crm_account_statuses where id=${rowParam} and org_id=${orgId}`, 'objects',
-      )
-    else if (tab === 'opportunityStatuses')
+        sql`select * from crm_account_statuses where id=${rowParam} and org_id=${orgId}`,
+        "objects",
+      );
+    else if (tab === "opportunityStatuses")
       selectedResult = await db.execute(
-        sql`select * from crm_opportunity_statuses where id=${rowParam} and org_id=${orgId}`, 'objects',
-      )
+        sql`select * from crm_opportunity_statuses where id=${rowParam} and org_id=${orgId}`,
+        "objects",
+      );
     else
       selectedResult = await db.execute(
-        sql`select * from crm_lead_sources where id=${rowParam} and org_id=${orgId}`, 'objects',
-      )
-    selected = (selectedResult[0] as Record<string, unknown> | undefined) ?? null
+        sql`select * from crm_lead_sources where id=${rowParam} and org_id=${orgId}`,
+        "objects",
+      );
+    selected = (selectedResult[0] as Record<string, unknown> | undefined) ?? null;
   }
 
   return {
@@ -115,21 +123,19 @@ export async function loadCrmSetup(
     rows: rowsResult as unknown as Record<string, unknown>[],
     selected,
     creating,
-    total: Number(
-      (countResult[0] as { n?: unknown } | undefined)?.n ?? 0,
-    ),
+    total: Number((countResult[0] as { n?: unknown } | undefined)?.n ?? 0),
     page: list.page,
     perPage: list.perPage,
     currentParams: sp,
-  }
+  };
 }
 
 export function crmSetupSpec(data: CrmSetupData): PageSpec {
   return page({
-    route: '/admin/setup/crm',
+    route: "/admin/setup/crm",
     // The setup workspace renders its own shell around every entity page;
     // wrapping it in a second page layout would nest the chrome.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
       // The whole page is one client island, passed whole like the approvals
@@ -137,7 +143,7 @@ export function crmSetupSpec(data: CrmSetupData): PageSpec {
       // table, the pager and the drawer all own
       // client behavior (router.push navigation, row-click routing, draft
       // state) a spec cannot name. Every prop is loader-resolved data.
-      widgetBlock('crm-setup-workspace', {
+      widgetBlock("crm-setup-workspace", {
         tab: data.tab,
         rows: data.rows,
         selected: data.selected,
@@ -148,5 +154,5 @@ export function crmSetupSpec(data: CrmSetupData): PageSpec {
         currentParams: data.currentParams,
       }),
     ],
-  })
+  });
 }

@@ -255,9 +255,9 @@ function tablesForYear(year: number): PlYearTables {
   if (year === 2025) return PL_2025_TABLES;
   if (year === 2024) return PL_2024_TABLES;
   throw new PayrollPackError(
-    `PL withholding for tax year ${year} has not been transcribed `
-    + "— the PL payroll pack's transcribed years are calendar 2024–2026. "
-    + "This year is not yet supported by the PL pack; contact support.",
+    `PL withholding for tax year ${year} has not been transcribed ` +
+      "— the PL payroll pack's transcribed years are calendar 2024–2026. " +
+      "This year is not yet supported by the PL pack; contact support.",
   );
 }
 
@@ -303,8 +303,8 @@ function ytdAmount(value: string, label: string): bigint {
 function requireMonthly(periodsPerYear: number, tables: PlYearTables): void {
   if (periodsPerYear !== 12) {
     throw new PayrollPackError(
-      `PL ${tables.year} prices monthly pay (12 periods per year), got ${periodsPerYear}: `
-      + `non-monthly periodicity is refused by name (see ${tables.refusedListName}).`,
+      `PL ${tables.year} prices monthly pay (12 periods per year), got ${periodsPerYear}: ` +
+        `non-monthly periodicity is refused by name (see ${tables.refusedListName}).`,
     );
   }
 }
@@ -312,15 +312,13 @@ function requireMonthly(periodsPerYear: number, tables: PlYearTables): void {
 /** Gate a pay date to the tables' own calendar year — never extrapolate. */
 function requirePayYear(payDate: string, tables: PlYearTables): void {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate)) {
-    throw new PayrollPackError(
-      `PL tables need an ISO pay date (YYYY-MM-DD), got "${payDate}"`,
-    );
+    throw new PayrollPackError(`PL tables need an ISO pay date (YYYY-MM-DD), got "${payDate}"`);
   }
   if (payDate < `${tables.year}-01-01` || payDate > `${tables.year}-12-31`) {
     throw new PayrollPackError(
-      `PL tables have no transcribed figures for pay date ${payDate}: `
-      + `the PL pack transcribes calendar ${tables.year}. `
-      + "This date is not yet supported by the PL pack; contact support.",
+      `PL tables have no transcribed figures for pay date ${payDate}: ` +
+        `the PL pack transcribes calendar ${tables.year}. ` +
+        "This date is not yet supported by the PL pack; contact support.",
     );
   }
 }
@@ -342,17 +340,17 @@ function parseWymiarEtatu(raw: string | null | undefined): { num: bigint; scale:
   const text = canonicalNonNegativeDecimal(raw, 4);
   if (text === null || compareDecimal(text, "1") > 0) {
     throw new PayrollPackError(
-      `PL working-time fraction (emp pl_wymiar_etatu) must be a decimal above 0 through 1 `
-      + `with at most four decimals ("1" full time, "0.5" half time), got "${raw}". Correct the `
-      + `wymiar etatu on the pl_zatrudnienie certificate before running payroll`,
+      `PL working-time fraction (emp pl_wymiar_etatu) must be a decimal above 0 through 1 ` +
+        `with at most four decimals ("1" full time, "0.5" half time), got "${raw}". Correct the ` +
+        `wymiar etatu on the pl_zatrudnienie certificate before running payroll`,
     );
   }
   const [whole = "0", fraction = ""] = text.split(".");
   const num = BigInt(whole + fraction);
   if (num <= 0n) {
     throw new PayrollPackError(
-      `PL working-time fraction (emp pl_wymiar_etatu) is zero — zero working time is not an `
-      + `employment title the pack prices. Correct the wymiar etatu on the pl_zatrudnienie certificate`,
+      `PL working-time fraction (emp pl_wymiar_etatu) is zero — zero working time is not an ` +
+        `employment title the pack prices. Correct the wymiar etatu on the pl_zatrudnienie certificate`,
     );
   }
   return { num, scale: 10n ** BigInt(fraction.length) };
@@ -360,9 +358,9 @@ function parseWymiarEtatu(raw: string | null | undefined): { num: bigint; scale:
 
 function minWageForMonth(tables: PlYearTables, payDate: string): bigint {
   if (
-    tables.minWageJul !== undefined
-    && tables.minWageSwitch !== undefined
-    && payDate >= tables.minWageSwitch
+    tables.minWageJul !== undefined &&
+    tables.minWageSwitch !== undefined &&
+    payDate >= tables.minWageSwitch
   ) {
     return U(tables.minWageJul);
   }
@@ -467,10 +465,10 @@ export function calculatePlZusWithTables(
   const ageByYear = tables.year - yob;
   if (ageByYear <= 26) {
     throw new PayrollPackError(
-      `PL refuses: the employee turns 26 or less in ${tables.year}, so ulga dla młodych `
-      + "(under-26 exemption) may apply — it needs the exemption-claim channel "
-      + "plus YTD against its limit, and the engine prices the standard scale only "
-      + `(see ${tables.refusedListName}).`,
+      `PL refuses: the employee turns 26 or less in ${tables.year}, so ulga dla młodych ` +
+        "(under-26 exemption) may apply — it needs the exemption-claim channel " +
+        "plus YTD against its limit, and the engine prices the standard scale only " +
+        `(see ${tables.refusedListName}).`,
     );
   }
 
@@ -478,7 +476,10 @@ export function calculatePlZusWithTables(
   // already assessed this year (art. 19 ust. 1 — "Od nadwyżki … nie pobiera
   // się składek").
   const limit = U(tables.limitAnnual);
-  const prior = ytdAmount(input.ytdPodstawaSpoleczne, "PL ZUS year-to-date emerytalne/rentowe base");
+  const prior = ytdAmount(
+    input.ytdPodstawaSpoleczne,
+    "PL ZUS year-to-date emerytalne/rentowe base",
+  );
   const remaining = limit - prior;
   const podstawaSpol = remaining <= 0n ? 0n : brut < remaining ? brut : remaining;
 
@@ -501,10 +502,10 @@ export function calculatePlZusWithTables(
   let fpZwolnioneWiek = false;
   if (ageByYear >= 55 && ageByYear <= 60) {
     throw new PayrollPackError(
-      `PL FP/FS refuses: birth year ${yob} lands in the 55–60 band where ${tables.fpAgeCite} `
-      + "splits the exemption by sex (55 women / 60 men) — no pack channel carries "
-      + "the employee's sex or birth month, so the engine cannot tell whether FP/FS "
-      + `are due (see ${tables.refusedListName}).`,
+      `PL FP/FS refuses: birth year ${yob} lands in the 55–60 band where ${tables.fpAgeCite} ` +
+        "splits the exemption by sex (55 women / 60 men) — no pack channel carries " +
+        "the employee's sex or birth month, so the engine cannot tell whether FP/FS " +
+        `are due (see ${tables.refusedListName}).`,
     );
   }
   if (ageByYear > 60) fpZwolnioneWiek = true;
@@ -550,10 +551,10 @@ export function calculatePlZusWithTables(
       meetsThreshold = true;
     } else {
       throw new PayrollPackError(
-        `PL FP/FS cannot be decided: ${D(brut)} is below the full-time minimum ${D(minWage)}, `
-        + "but the minimum is proportional to working time (art. 259) and no working-time "
-        + "fraction was recorded — a part-time base may still clear its pro-rata threshold. "
-        + "Record the employee's wymiar etatu on the pl_zatrudnienie certificate before running payroll",
+        `PL FP/FS cannot be decided: ${D(brut)} is below the full-time minimum ${D(minWage)}, ` +
+          "but the minimum is proportional to working time (art. 259) and no working-time " +
+          "fraction was recorded — a part-time base may still clear its pro-rata threshold. " +
+          "Record the employee's wymiar etatu on the pl_zatrudnienie certificate before running payroll",
       );
     }
   } else {
@@ -752,9 +753,9 @@ export function calculatePlPitWithTables(
   // Advance: 12 % / 32 % of the split bases minus the oświadczenie
   // reduction, rounded to whole złotych, floored at zero ("nie więcej niż").
   const raw =
-    roundDiv(podstawa12 * rate6(tables.stawkaDolna), RATE6)
-    + roundDiv(podstawa32 * rate6(tables.stawkaGorna), RATE6)
-    - pomnUnits;
+    roundDiv(podstawa12 * rate6(tables.stawkaDolna), RATE6) +
+    roundDiv(podstawa32 * rate6(tables.stawkaGorna), RATE6) -
+    pomnUnits;
   const zaliczka = rZloty(raw < 0n ? 0n : raw);
 
   return {
@@ -831,22 +832,32 @@ export const PL_FACTOR_LABELS: Readonly<Record<string, string>> = {
 export async function computePlStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
-  const { taxYear, region, run, emp, income, nonPeriodic, periodsPerYear, pushStatutory, certificateFor } = ctx;
+  const {
+    taxYear,
+    region,
+    run,
+    emp,
+    income,
+    nonPeriodic,
+    periodsPerYear,
+    pushStatutory,
+    certificateFor,
+  } = ctx;
   // The edition dispatch: an untranscribed year refuses here, before any
   // rate is touched — never falls through to another year's tables.
   const tables = tablesForYear(taxYear);
   if (region !== "PL") {
     throw new PayrollPackError(
-      `PL withholding for region "${region}" is not supported: the pack `
-      + "knows one national region, PL — PIT advances and ZUS contributions "
-      + "are national. There is no second region to fall back to.",
+      `PL withholding for region "${region}" is not supported: the pack ` +
+        "knows one national region, PL — PIT advances and ZUS contributions " +
+        "are national. There is no second region to fall back to.",
     );
   }
   const payDate = run["pay_date"];
   if (!payDate) {
     throw new PayrollPackError(
-      "PL withholding needs the payment month (run pay_date): the 120 000 zł "
-      + `PIT test and the ${groupPl(tables.limitAnnual)} zł ZUS room both resolve year-to-date from it.`,
+      "PL withholding needs the payment month (run pay_date): the 120 000 zł " +
+        `PIT test and the ${groupPl(tables.limitAnnual)} zł ZUS room both resolve year-to-date from it.`,
     );
   }
   requireMonthly(periodsPerYear, tables);
@@ -858,9 +869,9 @@ export async function computePlStatutory(
   const yob = yobRaw === null || yobRaw === undefined ? NaN : Number(yobRaw);
   if (yobRaw === null || yobRaw === undefined || yobRaw === "" || !Number.isInteger(yob)) {
     throw new PayrollPackError(
-      "PL withholding needs the employee's birth year (emp pl_rok_urodzenia): "
-      + `the FP/FS age bar (${tables.fpAgeCite}) and the under-26 refusal cannot be decided `
-      + "without it, and an unknown age must not fall through to standard pricing.",
+      "PL withholding needs the employee's birth year (emp pl_rok_urodzenia): " +
+        `the FP/FS age bar (${tables.fpAgeCite}) and the under-26 refusal cannot be decided ` +
+        "without it, and an unknown age must not fall through to standard pricing.",
     );
   }
 
@@ -868,23 +879,23 @@ export async function computePlStatutory(
   const kup = answers["kup"];
   if (kup !== "miejscowy" && kup !== "dojazd") {
     throw new PayrollPackError(
-      "PL PIT needs an affirmed KUP variant (pl_pit2 … kup = miejscowy 250 zł "
-      + "or dojazd 300 zł, art. 22 ust. 2 pkt 1/3): the two amounts differ and "
-      + "an undeclared residence must not fall through to 250 zł.",
+      "PL PIT needs an affirmed KUP variant (pl_pit2 … kup = miejscowy 250 zł " +
+        "or dojazd 300 zł, art. 22 ust. 2 pkt 1/3): the two amounts differ and " +
+        "an undeclared residence must not fall through to 250 zł.",
     );
   }
   const pomniejszenie = answers["pomniejszenie"];
   if (
-    pomniejszenie !== "1/12"
-    && pomniejszenie !== "1/24"
-    && pomniejszenie !== "1/36"
-    && pomniejszenie !== "nie"
+    pomniejszenie !== "1/12" &&
+    pomniejszenie !== "1/24" &&
+    pomniejszenie !== "1/36" &&
+    pomniejszenie !== "nie"
   ) {
     throw new PayrollPackError(
-      "PL PIT needs an affirmed oświadczenie answer (pl_pit2 … pomniejszenie = "
-      + "1/12, 1/24, 1/36 or nie, art. 31b): whether the employee filed the "
-      + "reduction statement is a certificate answer, and an undeclared answer "
-      + "must not fall through to the 300 zł reduction.",
+      "PL PIT needs an affirmed oświadczenie answer (pl_pit2 … pomniejszenie = " +
+        "1/12, 1/24, 1/36 or nie, art. 31b): whether the employee filed the " +
+        "reduction statement is a certificate answer, and an undeclared answer " +
+        "must not fall through to the 300 zł reduction.",
     );
   }
 
@@ -892,8 +903,8 @@ export async function computePlStatutory(
   const wypadkowePct = rateResolution?.values("pl_wypadkowe", { region: "PL" })?.stopa;
   if (!wypadkowePct) {
     throw new PayrollPackError(
-      "PL wypadkowe refuses this payroll: the employer's ZUS-notified rate is missing. "
-      + "Configure the effective rate in Payroll Setup before calculating the run.",
+      "PL wypadkowe refuses this payroll: the employer's ZUS-notified rate is missing. " +
+        "Configure the effective rate in Payroll Setup before calculating the run.",
     );
   }
 
@@ -902,8 +913,8 @@ export async function computePlStatutory(
   const bonusUnits = U(nonPeriodic === "" ? "0" : nonPeriodic);
   if (!ctx.subsidiaryId) {
     throw new PayrollPackError(
-      "PL withholding needs the paying legal employer: the 120 000 zł PIT threshold and the "
-      + "emerytalne/rentowe annual limit test what this payer paid since 1 January.",
+      "PL withholding needs the paying legal employer: the 120 000 zł PIT threshold and the " +
+        "emerytalne/rentowe annual limit test what this payer paid since 1 January.",
     );
   }
   const ytd = resolvePlYearToDate({
@@ -926,42 +937,76 @@ export async function computePlStatutory(
   // through the pack's employeeFacts declaration (optional: absent is an
   // accepted answer, and the core prices the full-minimum case without it).
   const zatrudnienie = certificateFor("pl_zatrudnienie")?.answers ?? {};
-  const wymiarRaw = empFact("PL", {
-    pl_wymiar_etatu: zatrudnienie["wymiar_etatu"] ?? null,
-  }, "pl_wymiar_etatu");
+  const wymiarRaw = empFact(
+    "PL",
+    {
+      pl_wymiar_etatu: zatrudnienie["wymiar_etatu"] ?? null,
+    },
+    "pl_wymiar_etatu",
+  );
   const wymiarEtatu = resolveEmployeeFact("PL", "pl_wymiar_etatu", wymiarRaw);
 
   const base = D(U(income) + bonusUnits);
-  const zus = calculatePlZusWithTables({
-    brut: base,
-    payDate,
-    periodsPerYear,
-    rokUrodzenia: yob,
-    wymiarEtatu,
-    wypadkowePct,
-    ytdPodstawaSpoleczne: ytd.podstawaSpoleczne,
-  }, tables);
-  const pit = calculatePlPitWithTables({
-    brut: base,
-    zusEe: zus.zusEe,
-    kup,
-    pomniejszenie,
-    payDate,
-    periodsPerYear,
-    ytdDochod: ytd.dochod,
-  }, tables);
+  const zus = calculatePlZusWithTables(
+    {
+      brut: base,
+      payDate,
+      periodsPerYear,
+      rokUrodzenia: yob,
+      wymiarEtatu,
+      wypadkowePct,
+      ytdPodstawaSpoleczne: ytd.podstawaSpoleczne,
+    },
+    tables,
+  );
+  const pit = calculatePlPitWithTables(
+    {
+      brut: base,
+      zusEe: zus.zusEe,
+      kup,
+      pomniejszenie,
+      payDate,
+      periodsPerYear,
+      ytdDochod: ytd.dochod,
+    },
+    tables,
+  );
 
   pushStatutory("pit", "deduction", "Zaliczka na podatek dochodowy (PIT)", pit.zaliczka, 110);
   pushStatutory("zus_emeryt", "deduction", "Składka emerytalna (pracownik)", zus.emerytEe, 120);
   pushStatutory("zus_rent", "deduction", "Składka rentowa (pracownik)", zus.rentEe, 121);
   pushStatutory("zus_chor", "deduction", "Składka chorobowa (pracownik)", zus.chorEe, 122);
   pushStatutory("zus_zdr", "deduction", "Składka zdrowotna (NFZ)", zus.zdrowotna, 123);
-  pushStatutory("zus_emeryt_er", "employer_contribution", "Składka emerytalna (pracodawca)", zus.emerytEr, 210);
-  pushStatutory("zus_rent_er", "employer_contribution", "Składka rentowa (pracodawca)", zus.rentEr, 211);
+  pushStatutory(
+    "zus_emeryt_er",
+    "employer_contribution",
+    "Składka emerytalna (pracodawca)",
+    zus.emerytEr,
+    210,
+  );
+  pushStatutory(
+    "zus_rent_er",
+    "employer_contribution",
+    "Składka rentowa (pracodawca)",
+    zus.rentEr,
+    211,
+  );
   pushStatutory("fp_er", "employer_contribution", "Fundusz Pracy (pracodawca)", zus.fp, 212);
-  pushStatutory("fs_er", "employer_contribution", "Fundusz Solidarnościowy (pracodawca)", zus.fs, 213);
+  pushStatutory(
+    "fs_er",
+    "employer_contribution",
+    "Fundusz Solidarnościowy (pracodawca)",
+    zus.fs,
+    213,
+  );
   pushStatutory("fgsp_er", "employer_contribution", "FGŚP (pracodawca)", zus.fgsp, 214);
-  pushStatutory("wypadkowe_er", "employer_contribution", "Składka wypadkowa (pracodawca)", zus.wypadkoweEr, 215);
+  pushStatutory(
+    "wypadkowe_er",
+    "employer_contribution",
+    "Składka wypadkowa (pracodawca)",
+    zus.wypadkoweEr,
+    215,
+  );
   return {
     BRUTTO: base,
     PODSTAWA_SP: zus.podstawaSpoleczne,

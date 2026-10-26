@@ -13,7 +13,11 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { defineRoute } from "@/lib/api/route";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { notFound } from "@/lib/api/responses";
-import { readSubscriptionCurrency, readSubscriptionCustomerScope, readSubscriptionPlan } from "@/lib/subscriptions/preview-reads";
+import {
+  readSubscriptionCurrency,
+  readSubscriptionCustomerScope,
+  readSubscriptionPlan,
+} from "@/lib/subscriptions/preview-reads";
 
 export const runtime = "nodejs";
 
@@ -45,10 +49,7 @@ export const GET = defineRoute({
         if (denied) return denied;
         const row = await loadSubRow(subscriptionId, orgId);
         const preview = await previewSubscriptionCatchUp(orgId, subscriptionId, asOf);
-        const amount = mul(
-          row.quantity,
-          row.priceOverride ?? row.planAmount,
-        );
+        const amount = mul(row.quantity, row.priceOverride ?? row.planAmount);
         const planCurrency = await readSubscriptionCurrency(orgId, subscriptionId);
         return NextResponse.json({
           asOf,
@@ -62,19 +63,26 @@ export const GET = defineRoute({
       const planId = get("planId");
       const nextBillOn = get("nextBillOn");
       if (!planId || !nextBillOn) {
-        return NextResponse.json({ error: "a subscription or plan with its next bill date is required" }, { status: 400 });
+        return NextResponse.json(
+          { error: "a subscription or plan with its next bill date is required" },
+          { status: 400 },
+        );
       }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(nextBillOn)) {
-        return NextResponse.json({ error: "next bill date must be a calendar date (YYYY-MM-DD)" }, { status: 400 });
+        return NextResponse.json(
+          { error: "next bill date must be a calendar date (YYYY-MM-DD)" },
+          { status: 400 },
+        );
       }
       const plan = await readSubscriptionPlan(orgId, planId);
       if (!plan) return NextResponse.json({ error: "billing plan not found" }, { status: 404 });
       const cadence = normalizeSubscriptionCadence(plan.interval, plan.intervalCount);
       const quantity = normalizeSubscriptionMoney(get("quantity") ?? "1", "quantity", "positive");
       const priceOverrideRaw = get("priceOverride");
-      const priceOverride = priceOverrideRaw != null
-        ? normalizeSubscriptionMoney(priceOverrideRaw, "price override", "nonnegative")
-        : null;
+      const priceOverride =
+        priceOverrideRaw != null
+          ? normalizeSubscriptionMoney(priceOverrideRaw, "price override", "nonnegative")
+          : null;
       const preview = pendingSubscriptionPeriods(
         {
           interval: cadence.interval,

@@ -11,95 +11,88 @@
 // report modules register their own lists for shared catalog checks without
 // changing the core query map.
 
-import { OPERATIONAL_REPORT_ENTITIES } from './operational-entities'
-import { REBATE_REPORT_ENTITIES } from './rebate-entities'
-import type { ReportFilterOperator, ReportRuleGroup } from './types'
-import { HRM_REPORT_ENTITIES } from './hrm-entities'
-import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
-import { AMORTIZATION_REPORT_ENTITIES } from './amortization-entities'
-import { EQUITY_REPORT_ENTITIES } from './equity-entities'
-import { SALES_REPORT_ENTITIES } from './sales-entities'
-import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
-import { DEMAND_REPORT_ENTITIES } from './demand-entities'
-import { RESOURCING_REPORT_ENTITIES } from './resourcing-entities'
-import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
-import { SHIPPING_REPORT_ENTITIES } from './shipping-entities'
-import { STORED_VALUE_REPORT_ENTITIES } from './stored-value-entities'
-import { POS_REPORT_ENTITIES } from './pos-entities'
-import { FIXED_ASSET_REPORT_ENTITIES } from './fixed-asset-entities'
-import { RECOVERY_REPORT_ENTITIES } from './recovery-entities'
-import { BANKING_REPORT_ENTITIES } from './banking-entities'
-import { SERVICE_REPORT_ENTITIES } from './service-entities'
+import { OPERATIONAL_REPORT_ENTITIES } from "./operational-entities";
+import { REBATE_REPORT_ENTITIES } from "./rebate-entities";
+import type { ReportFilterOperator, ReportRuleGroup } from "./types";
+import { HRM_REPORT_ENTITIES } from "./hrm-entities";
+import { CONTRACT_COST_REPORT_ENTITIES } from "./contract-cost-entities";
+import { AMORTIZATION_REPORT_ENTITIES } from "./amortization-entities";
+import { EQUITY_REPORT_ENTITIES } from "./equity-entities";
+import { SALES_REPORT_ENTITIES } from "./sales-entities";
+import { BILLING_IMPORT_REPORT_ENTITIES } from "./billing-import-entities";
+import { DEMAND_REPORT_ENTITIES } from "./demand-entities";
+import { RESOURCING_REPORT_ENTITIES } from "./resourcing-entities";
+import { BENEFITS_REPORT_ENTITIES } from "./benefits-entities";
+import { SHIPPING_REPORT_ENTITIES } from "./shipping-entities";
+import { STORED_VALUE_REPORT_ENTITIES } from "./stored-value-entities";
+import { POS_REPORT_ENTITIES } from "./pos-entities";
+import { FIXED_ASSET_REPORT_ENTITIES } from "./fixed-asset-entities";
+import { RECOVERY_REPORT_ENTITIES } from "./recovery-entities";
+import { BANKING_REPORT_ENTITIES } from "./banking-entities";
+import { SERVICE_REPORT_ENTITIES } from "./service-entities";
 
-export { BANKING_REPORT_ENTITIES } from './banking-entities'
-export { HRM_REPORT_ENTITIES } from './hrm-entities'
-export { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
-export { AMORTIZATION_REPORT_ENTITIES } from './amortization-entities'
-export { EQUITY_REPORT_ENTITIES } from './equity-entities'
-export { STORED_VALUE_REPORT_ENTITIES } from './stored-value-entities'
-export { POS_REPORT_ENTITIES } from './pos-entities'
-export { FIXED_ASSET_REPORT_ENTITIES } from './fixed-asset-entities'
-export { RECOVERY_REPORT_ENTITIES } from './recovery-entities'
+export { BANKING_REPORT_ENTITIES } from "./banking-entities";
+export { HRM_REPORT_ENTITIES } from "./hrm-entities";
+export { CONTRACT_COST_REPORT_ENTITIES } from "./contract-cost-entities";
+export { AMORTIZATION_REPORT_ENTITIES } from "./amortization-entities";
+export { EQUITY_REPORT_ENTITIES } from "./equity-entities";
+export { STORED_VALUE_REPORT_ENTITIES } from "./stored-value-entities";
+export { POS_REPORT_ENTITIES } from "./pos-entities";
+export { FIXED_ASSET_REPORT_ENTITIES } from "./fixed-asset-entities";
+export { RECOVERY_REPORT_ENTITIES } from "./recovery-entities";
 
 export type ReportColumnKind =
-  | 'text'
-  | 'date'
-  | 'timestamp'
-  | 'enum'
-  | 'boolean'
-  | 'uuid'
-  | 'number'
-  | 'money'
+  "text" | "date" | "timestamp" | "enum" | "boolean" | "uuid" | "number" | "money";
 
 /** The value set for a `boolean` column. Postgres accepts these literals for a
  *  boolean comparison, so a stored `eq` rule binds without a cast. */
-const BOOLEAN_OPTIONS = ['true', 'false'] as const
+const BOOLEAN_OPTIONS = ["true", "false"] as const;
 
 /** Every transaction kind the documents table holds — the transaction-type
  *  filter set. One source of truth for both the
  *  transactions and transaction_lines entities. */
 export const TRANSACTION_KINDS = [
-  'vendor_bill',
-  'vendor_credit',
-  'vendor_payment',
-  'customer_invoice',
-  'customer_credit',
-  'cash_sale',
-  'cash_refund',
-  'customer_payment',
-  'expense_report',
-  'check',
-  'card_charge',
-  'card_refund',
-  'transfer',
-  'journal',
-  'purchase_order',
-  'sales_order',
-  'quote',
-  'project_charge',
-] as const
+  "vendor_bill",
+  "vendor_credit",
+  "vendor_payment",
+  "customer_invoice",
+  "customer_credit",
+  "cash_sale",
+  "cash_refund",
+  "customer_payment",
+  "expense_report",
+  "check",
+  "card_charge",
+  "card_refund",
+  "transfer",
+  "journal",
+  "purchase_order",
+  "sales_order",
+  "quote",
+  "project_charge",
+] as const;
 
-const TRANSACTION_STATUSES = ['draft', 'pending_approval', 'approved', 'posted', 'voided'] as const
+const TRANSACTION_STATUSES = ["draft", "pending_approval", "approved", "posted", "voided"] as const;
 
 export type ReportEntityColumn = {
   /** Public key used in stored query plans (snake_case). */
-  key: string
-  label: string
-  kind: ReportColumnKind
+  key: string;
+  label: string;
+  kind: ReportColumnKind;
   /**
    * Table-qualified SQL expression used VERBATIM as the column reference
    * (e.g. `jl.amount`, `coalesce(jl.memo, je.memo)`). Server-defined only —
    * never accepted as SQL from a query plan. Dynamic field names are quoted
    * by the server-owned custom-record catalog.
    */
-  expr: string
+  expr: string;
   /**
    * Enum (and boolean) columns: the known value set. Drives option pickers in
    * the filter UI (e.g. "type is any of Bill, Expense Report…").
    * Values are stored raw; display labels resolve through i18n with a
    * humanized fallback.
    */
-  options?: readonly string[]
+  options?: readonly string[];
   /**
    * True when values in this money column are denominated in the row's
    * transaction currency (documents totals, line amounts, GL txn amounts)
@@ -107,7 +100,7 @@ export type ReportEntityColumn = {
    * breakout on the entity's `currencyColumn` or a single observed/pinned
    * currency — actual mixed-currency aggregates are refused at run time.
    */
-  txnCurrency?: boolean
+  txnCurrency?: boolean;
   /**
    * True when values in this money column are denominated in the row's
    * persisted base-like currency named by the entity's `baseCurrencyColumn`
@@ -120,7 +113,7 @@ export type ReportEntityColumn = {
    * currency. Never infer the denomination from `currency`: that is the
    * transaction currency, not the base.
    */
-  baseMoney?: boolean
+  baseMoney?: boolean;
   /**
    * True when each row carries a running/cumulative value rather than its own
    * movement (e.g. a year-to-date total on every pay stub). Summing such a
@@ -130,20 +123,20 @@ export type ReportEntityColumn = {
    * figures (additive across rows at one point in time, meaningless summed
    * across time) carry the same flag: a snapshot never sums.
    */
-  snapshot?: boolean
+  snapshot?: boolean;
   /**
    * True on a number column that names rather than measures (a tax year, a
    * line, session or version number): it prints as written, never with
    * thousands separators, and spreadsheets keep it as written.
    */
-  identifier?: boolean
+  identifier?: boolean;
   /**
    * True on a number column holding a price or value per share or unit: it
    * reads under the per-share precision rule (per-share.ts) wherever it is
    * shown, while CSV keeps the exact stored value.
    */
-  perShare?: boolean
-}
+  perShare?: boolean;
+};
 
 /** Server-owned normalization metadata for governed metric rows. The
  *  compiler classifies legacy only when the row's currency, version, and
@@ -153,157 +146,157 @@ export type ReportEntityColumn = {
  *  it) — never a second writer source. */
 export type ReportEntityNormalization = {
   /** Table-qualified version expression (e.g. `m.denomination_version`). */
-  versionExpr: string
+  versionExpr: string;
   /** Denomination versions this report reader understands (e.g. `['v1']`). */
-  supportedVersions: readonly string[]
+  supportedVersions: readonly string[];
   /** Raw evidence expression, NULL-testable (e.g. `m.normalization_evidence`).
    *  Absent evidence is NULL; present-but-malformed evidence is non-null and
    *  therefore never legacy — the `evidenceValidExpr` check below decides it. */
-  evidenceExpr: string
+  evidenceExpr: string;
   /** Boolean shape test for present evidence (object carrying a digest hash). */
-  evidenceValidExpr: string
+  evidenceValidExpr: string;
   /** Evidence-carried inputs hash (e.g. `m.normalization_evidence->>'inputs_hash'`). */
-  evidenceHashExpr: string
+  evidenceHashExpr: string;
   /** The row's own inputs hash (e.g. `m.inputs_hash`). */
-  rowHashExpr: string
-}
+  rowHashExpr: string;
+};
 
 /** One catalog-authored native link on a displayed rows-mode cell. Metadata
  *  columns are selected invisibly by the compiler and never become table or
  *  export columns unless the plan explicitly requests them. */
 export type ReportEntityCellLink = {
-  column: string
-  kind: 'transaction'
-  entryIdColumn: string
-  docIdColumn?: string
-  docKindColumn?: string
-}
+  column: string;
+  kind: "transaction";
+  entryIdColumn: string;
+  docIdColumn?: string;
+  docKindColumn?: string;
+};
 
 export type ReportEntity = {
   /** Entity key stored in query plans. */
-  key: string
-  label: string
-  category: string
+  key: string;
+  label: string;
+  category: string;
   /** A line of helpful text shown under the entity name in the picker. */
-  description: string
+  description: string;
   /**
    * Raw FROM clause (without the FROM keyword) — the base table plus any
    * label joins. Server-defined constant.
    */
-  from: string
+  from: string;
   /** Qualified org-scoping column (e.g. `jl.org_id`). The executor ALWAYS
    *  ANDs `orgColumn = $org` into the WHERE — no query escapes the org. */
-  orgColumn: string
+  orgColumn: string;
   /** Server-owned legal-entity boundary. null explicitly denotes shared org metadata. */
-  subsidiaryScope?: { column: string; sharedNull?: boolean } | null
+  subsidiaryScope?: { column: string; sharedNull?: boolean } | null;
   /** Server-owned accounting-book boundary (e.g. `je.book_id`). Present only
    *  on GL sources whose rows inherit an entry's book. Absent by design on
    *  book-independent sources: documents carry no book_id, so transaction
    *  balances stay book-agnostic like the standard aging. */
-  bookScope?: { column: string }
+  bookScope?: { column: string };
   /** Key of the text column carrying the row's transaction-currency code
    *  (e.g. `currency`). Set alongside `txnCurrency` money columns so mixed
    *  transaction-currency aggregates are refused at run time. */
-  currencyColumn?: string
+  currencyColumn?: string;
   /** Key of the text column carrying the row's persisted base-like currency
    *  code (e.g. `base_currency` via the owning subsidiary, or
    *  `reporting_currency` persisted per row on normalized SaaS metrics).
    *  Set alongside `baseMoney` columns; null/absence means the entity has
    *  no base-money columns. Never the `currency` column — that is
    *  transactional. */
-  baseCurrencyColumn?: string
+  baseCurrencyColumn?: string;
   /** Human nouns for the base denomination, used in refusal wording. Absent
    *  means the GL default (`functional currencies` / `Base currency`); SaaS
    *  metric entities author the reporting-currency pair so refusals name the
    *  stored reporting currency instead of a functional base that does not
    *  exist on those rows. */
-  baseDenominationNouns?: { plural: string; breakout: string }
+  baseDenominationNouns?: { plural: string; breakout: string };
   /** False when a single-subsidiary scope must NOT certify a single base
    *  denomination. The default (absent/true) keeps the GL contract: one
    *  subsidiary owns one functional currency. SaaS metric entities set this
    *  to false because their denomination is the row-persisted reporting
    *  currency, which an org-base change can vary independently of the
    *  subsidiary — one subsidiary proves nothing about it. */
-  singleSubsidiaryCertifiesBase?: boolean
+  singleSubsidiaryCertifiesBase?: boolean;
   /** Catalog-authored normalization contract for governed metric rows. When
    *  present, any plan aggregating this entity's `baseMoney` measures
    *  executes normalization-state probes over the same snapshot — pins,
    *  breakouts, and subsidiary scopes never suppress them. All expressions
    *  are server-owned table-qualified fragments, never user input. */
-  normalization?: ReportEntityNormalization
+  normalization?: ReportEntityNormalization;
   /** Columns selectable for output AND filterable. Order is preserved. */
-  columns: ReportEntityColumn[]
-  defaultSort?: { column: string; direction: 'asc' | 'desc' }
+  columns: ReportEntityColumn[];
+  defaultSort?: { column: string; direction: "asc" | "desc" };
   /** Implicit predicate ALWAYS AND-ed into every query against this entity.
    *  Server-generated only, never from user input. */
-  baseFilter?: ReportRuleGroup
+  baseFilter?: ReportRuleGroup;
   /** Permission (beyond reports.read) required to see/run this entity —
    *  sensitive data like payroll wages. Enforced at run time and filtered
    *  from the builder catalog. */
-  requiredPermission?: string
+  requiredPermission?: string;
   /** The entity's rows include expense reports (column keys naming the
    *  document kind and the report's employee). Every execution must state
    *  the reader's expense authority: expense report rows reach only an
    *  org-wide expense reader, or a self-service reader for their own
    *  reports; an execution that states none reads none. */
-  expenseRows?: { kindColumn: string; employeeColumn: string }
+  expenseRows?: { kindColumn: string; employeeColumn: string };
   /** Optional-feature gate (Company Settings → Features). When the feature is
    *  off the entity disappears from the catalog and every execution path
    *  refuses it — same contract as setup-registry `featureKey`. */
-  featureKey?: string
+  featureKey?: string;
   /** Date field governed by the report viewer's implicit period picker.
    *  undefined preserves the ordinary first-date-column fallback; null opts
    *  out. Event-history sources such as lot recall must not acquire a fiscal
    *  window merely because they expose an expiry date. */
-  defaultPeriodField?: string | null
+  defaultPeriodField?: string | null;
   /** Point-in-time sources: the date column of rows that are movements, whose
    *  sum through a date is a position on that date. Every execution bounds
    *  the column from above by the plan's `asOf` (the run's business date when
    *  the plan names none) and never from below, and the report viewer offers
    *  the point-in-time as-of control instead of a period window on it. */
-  asOfField?: string
+  asOfField?: string;
   /** Rows-mode page policy. Absence means this entity is intentionally run as
    *  one bounded result; present means callers may request successive pages
    *  without applying the saved query's legacy 10,000-row materialization cap. */
   pagination?: {
-    defaultPageSize: number
-    maxPageSize: number
-  }
+    defaultPageSize: number;
+    maxPageSize: number;
+  };
   /** Native links for individual displayed cells. */
-  cellLinks?: readonly ReportEntityCellLink[]
+  cellLinks?: readonly ReportEntityCellLink[];
   /** Chronological ordering (SQL ORDER BY body, server-defined constant) that
    *  makes the 'latest' aggregate exact for this entity. Without it, 'latest'
    *  measures are rejected at compile time. */
-  latestOrderExpr?: string
+  latestOrderExpr?: string;
   /** Catalog key used to select the first and last rows for semi-additive
    *  opening and closing measures. */
-  timeKey?: string
-}
+  timeKey?: string;
+};
 
-import { REPORT_AS_OF } from './report-as-of'
+import { REPORT_AS_OF } from "./report-as-of";
 
-export { REPORT_AS_OF, bindReportFromAsOf } from './report-as-of'
+export { REPORT_AS_OF, bindReportFromAsOf } from "./report-as-of";
 
 /** Open quantity of an order line: ordered less fulfilled and cancelled.
  *  The report-catalog statement of the engine rule in
  *  engine/src/records/order-line-remainders.ts; an agreement test pins them. */
-const BACKORDER_OPEN_QUANTITY = '(dl.quantity - dl.quantity_fulfilled - dl.quantity_cancelled)'
+const BACKORDER_OPEN_QUANTITY = "(dl.quantity - dl.quantity_fulfilled - dl.quantity_cancelled)";
 
 /** Shared normalization contract for the SaaS metric entities. Every stored
  *  SaaS amount is normalized to the row's persisted reporting currency, so
  *  all three read entities share one reader capability (`v1`) and one set of
  *  server-owned evidence expressions over their own `m` alias. */
 const SAAS_NORMALIZATION: ReportEntityNormalization = {
-  versionExpr: 'm.denomination_version',
-  supportedVersions: ['v1'],
-  evidenceExpr: 'm.normalization_evidence',
+  versionExpr: "m.denomination_version",
+  supportedVersions: ["v1"],
+  evidenceExpr: "m.normalization_evidence",
   evidenceValidExpr: `(jsonb_typeof(m.normalization_evidence) = 'object' AND (m.normalization_evidence ->> 'inputs_hash') ~ '^[0-9a-f]{64}$')`,
   evidenceHashExpr: `(m.normalization_evidence ->> 'inputs_hash')`,
-  rowHashExpr: 'm.inputs_hash',
-}
+  rowHashExpr: "m.inputs_hash",
+};
 
 /** Reporting-currency nouns shared by the SaaS metric entities. */
-const SAAS_BASE_NOUNS = { plural: 'reporting currencies', breakout: 'Reporting currency' } as const
+const SAAS_BASE_NOUNS = { plural: "reporting currencies", breakout: "Reporting currency" } as const;
 
 /** A ledger line's active applications, read only by the columns that show
  *  an open amount: as a join it ran for every line of every ledger query,
@@ -313,16 +306,16 @@ const LEDGER_LINE_APPLIED = `coalesce((
     FROM applications a
    WHERE (a.to_line_id = jl.id OR a.from_line_id = jl.id)
      AND a.org_id = jl.org_id AND a.unapplied_at IS NULL
-), 0)`
+), 0)`;
 
 export const REPORT_ENTITIES: ReportEntity[] = [
   ...OPERATIONAL_REPORT_ENTITIES,
   {
-    key: 'ledger_lines',
-    label: 'Ledger lines',
-    category: 'general_ledger',
+    key: "ledger_lines",
+    label: "Ledger lines",
+    category: "general_ledger",
     description:
-      'Journal-line detail joined to entry, account, party and dimensions — the raw GL. One row per posted (or draft) journal line.',
+      "Journal-line detail joined to entry, account, party and dimensions — the raw GL. One row per posted (or draft) journal line.",
     from: `journal_lines jl
       JOIN journal_entries je ON je.id = jl.entry_id AND je.org_id = jl.org_id
       JOIN accounts a ON a.id = jl.account_id AND a.org_id = jl.org_id
@@ -334,127 +327,179 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN locations loc ON loc.id = jl.location_id AND loc.org_id = jl.org_id
       LEFT JOIN classes cls ON cls.id = jl.class_id AND cls.org_id = jl.org_id
       JOIN subsidiaries sub ON sub.id = jl.subsidiary_id AND sub.org_id = jl.org_id`,
-    orgColumn: 'jl.org_id',
-    subsidiaryScope: { column: 'jl.subsidiary_id' },
+    orgColumn: "jl.org_id",
+    subsidiaryScope: { column: "jl.subsidiary_id" },
     // Book boundary: every line inherits its entry's book. The executor
     // defaults book-scoped entities to the single active primary book (the
     // standard omitted-book contract); plans that filter, break out, or
     // section by a book column run unclamped so explicit cross-book analysis
     // keeps working with each book labeled.
-    bookScope: { column: 'je.book_id' },
+    bookScope: { column: "je.book_id" },
     // Row-level transaction currency (`jl.currency` = document currency).
-    currencyColumn: 'currency',
+    currencyColumn: "currency",
     // Functional currency: `jl.amount` is stamped per line in the OWNING
     // subsidiary's base_currency (posting applySubsidiaries), so base sums
     // across subsidiaries with different base currencies blend denominations
     // even within one book. Aggregate base money by `base_currency` or with
     // a single observed/pinned base.
-    baseCurrencyColumn: 'base_currency',
+    baseCurrencyColumn: "base_currency",
     columns: [
-      { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'je.posting_date' },
-      { key: 'entry_number', label: 'Entry #', kind: 'text', expr: 'je.entry_number' },
-      { key: 'entry_status', label: 'Entry status', kind: 'enum', expr: 'je.status' },
-      { key: 'origin', label: 'Origin', kind: 'enum', expr: 'je.origin' },
-      { key: 'account_number', label: 'Account #', kind: 'text', expr: 'a.number' },
-      { key: 'account_name', label: 'Account', kind: 'text', expr: 'a.name' },
-      { key: 'account_type', label: 'Account type', kind: 'enum', expr: 'a.type' },
-      { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
-      { key: 'equipment', label: 'Equipment', kind: 'text', expr: 'eq.name' },
-      { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
-      { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
-      { key: 'memo', label: 'Memo', kind: 'text', expr: 'coalesce(jl.memo, je.memo)' },
-      { key: 'amount', label: 'Amount (base)', kind: 'money', expr: 'jl.amount', baseMoney: true },
-      { key: 'debit', label: 'Debit', kind: 'money', expr: 'greatest(jl.amount, 0)', baseMoney: true },
-      { key: 'credit', label: 'Credit', kind: 'money', expr: 'greatest(-jl.amount, 0)', baseMoney: true },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'jl.currency' },
-      { key: 'base_currency', label: 'Base currency', kind: 'text', expr: 'sub.base_currency' },
-      { key: 'txn_amount', label: 'Amount (txn)', kind: 'money', expr: 'jl.txn_amount', txnCurrency: true },
-      { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'jl.quantity' },
-      { key: 'unit', label: 'Unit', kind: 'text', expr: 'jl.unit' },
-      { key: 'due_date', label: 'Due date', kind: 'date', expr: 'jl.due_date' },
-      { key: 'is_open_item', label: 'Open item', kind: 'boolean', expr: 'jl.is_open_item', options: BOOLEAN_OPTIONS },
+      { key: "posting_date", label: "Posting date", kind: "date", expr: "je.posting_date" },
+      { key: "entry_number", label: "Entry #", kind: "text", expr: "je.entry_number" },
+      { key: "entry_status", label: "Entry status", kind: "enum", expr: "je.status" },
+      { key: "origin", label: "Origin", kind: "enum", expr: "je.origin" },
+      { key: "account_number", label: "Account #", kind: "text", expr: "a.number" },
+      { key: "account_name", label: "Account", kind: "text", expr: "a.name" },
+      { key: "account_type", label: "Account type", kind: "enum", expr: "a.type" },
+      { key: "party_name", label: "Party", kind: "text", expr: "p.display_name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "project", label: "Project", kind: "text", expr: "prj.name" },
+      { key: "equipment", label: "Equipment", kind: "text", expr: "eq.name" },
+      { key: "location", label: "Location", kind: "text", expr: "loc.name" },
+      { key: "class", label: "Class", kind: "text", expr: "cls.name" },
+      { key: "memo", label: "Memo", kind: "text", expr: "coalesce(jl.memo, je.memo)" },
+      { key: "amount", label: "Amount (base)", kind: "money", expr: "jl.amount", baseMoney: true },
       {
-        key: 'open_amount',
-        label: 'Open amount (base)',
-        kind: 'money',
+        key: "debit",
+        label: "Debit",
+        kind: "money",
+        expr: "greatest(jl.amount, 0)",
+        baseMoney: true,
+      },
+      {
+        key: "credit",
+        label: "Credit",
+        kind: "money",
+        expr: "greatest(-jl.amount, 0)",
+        baseMoney: true,
+      },
+      { key: "currency", label: "Currency", kind: "text", expr: "jl.currency" },
+      { key: "base_currency", label: "Base currency", kind: "text", expr: "sub.base_currency" },
+      {
+        key: "txn_amount",
+        label: "Amount (txn)",
+        kind: "money",
+        expr: "jl.txn_amount",
+        txnCurrency: true,
+      },
+      { key: "quantity", label: "Quantity", kind: "number", expr: "jl.quantity" },
+      { key: "unit", label: "Unit", kind: "text", expr: "jl.unit" },
+      { key: "due_date", label: "Due date", kind: "date", expr: "jl.due_date" },
+      {
+        key: "is_open_item",
+        label: "Open item",
+        kind: "boolean",
+        expr: "jl.is_open_item",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "open_amount",
+        label: "Open amount (base)",
+        kind: "money",
         expr: `jl.amount - sign(jl.amount) * ${LEDGER_LINE_APPLIED}`,
         baseMoney: true,
       },
       {
-        key: 'has_open_balance',
-        label: 'Has open balance',
-        kind: 'boolean',
+        key: "has_open_balance",
+        label: "Has open balance",
+        kind: "boolean",
         expr: `(jl.amount - sign(jl.amount) * ${LEDGER_LINE_APPLIED}) <> 0`,
         options: BOOLEAN_OPTIONS,
       },
-      { key: 'reconciled_at', label: 'Reconciled at', kind: 'timestamp', expr: 'jl.reconciled_at' },
-      { key: 'entry_id', label: 'Entry (id)', kind: 'uuid', expr: 'je.id' },
-      { key: 'account_id', label: 'Account (id)', kind: 'uuid', expr: 'jl.account_id' },
-      { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'jl.party_id' },
-      { key: 'book', label: 'Book', kind: 'text', expr: 'b.name' },
-      { key: 'book_code', label: 'Book code', kind: 'text', expr: 'b.code' },
-      { key: 'book_id', label: 'Book (id)', kind: 'uuid', expr: 'b.id' },
+      { key: "reconciled_at", label: "Reconciled at", kind: "timestamp", expr: "jl.reconciled_at" },
+      { key: "entry_id", label: "Entry (id)", kind: "uuid", expr: "je.id" },
+      { key: "account_id", label: "Account (id)", kind: "uuid", expr: "jl.account_id" },
+      { key: "party_id", label: "Party (id)", kind: "uuid", expr: "jl.party_id" },
+      { key: "book", label: "Book", kind: "text", expr: "b.name" },
+      { key: "book_code", label: "Book code", kind: "text", expr: "b.code" },
+      { key: "book_id", label: "Book (id)", kind: "uuid", expr: "b.id" },
     ],
-    defaultSort: { column: 'posting_date', direction: 'desc' },
+    defaultSort: { column: "posting_date", direction: "desc" },
   },
   {
-    key: 'documents',
-    label: 'Transactions',
-    category: 'transactions',
+    key: "documents",
+    label: "Transactions",
+    category: "transactions",
     description:
-      'Every transaction — bills, invoices, credits, payments, expense reports, checks, card charges, journals, orders and quotes. Filter Type to focus on one or more kinds.',
+      "Every transaction — bills, invoices, credits, payments, expense reports, checks, card charges, journals, orders and quotes. Filter Type to focus on one or more kinds.",
     from: `documents d
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
       LEFT JOIN departments dep ON dep.id = d.department_id AND dep.org_id = d.org_id
       LEFT JOIN projects prj ON prj.id = d.project_id AND prj.org_id = d.org_id
       LEFT JOIN locations loc ON loc.id = d.location_id AND loc.org_id = d.org_id
       LEFT JOIN classes cls ON cls.id = d.class_id AND cls.org_id = d.org_id`,
-    orgColumn: 'd.org_id',
-    subsidiaryScope: { column: 'd.subsidiary_id' },
+    orgColumn: "d.org_id",
+    subsidiaryScope: { column: "d.subsidiary_id" },
     // No bookScope by design: documents carry no book_id, so transaction
     // balances stay book-agnostic like the standard aging (which reads
     // documents.open_balance unscoped).
     // Header money is denominated in the transaction currency: aggregating it
     // needs a Currency breakout or a single-currency filter.
-    currencyColumn: 'currency',
-    expenseRows: { kindColumn: 'kind', employeeColumn: 'party_id' },
+    currencyColumn: "currency",
+    expenseRows: { kindColumn: "kind", employeeColumn: "party_id" },
     columns: [
-      { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
-      { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
-      { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
-      { key: 'document_date', label: 'Document date', kind: 'date', expr: 'd.document_date' },
-      { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'd.posting_date' },
-      { key: 'due_date', label: 'Due date', kind: 'date', expr: 'd.due_date' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'd.currency' },
-      { key: 'subtotal', label: 'Subtotal', kind: 'money', expr: 'd.subtotal', txnCurrency: true },
-      { key: 'tax_total', label: 'Tax', kind: 'money', expr: 'd.tax_total', txnCurrency: true },
-      { key: 'total', label: 'Total', kind: 'money', expr: 'd.total', txnCurrency: true },
-      { key: 'reference_number', label: 'Reference #', kind: 'text', expr: 'd.reference_number' },
-      { key: 'billing_method', label: 'Billing method', kind: 'enum', expr: 'd.billing_method', options: ['time_and_materials', 'fixed_price'] },
-      { key: 'is_final_invoice', label: 'Final invoice', kind: 'boolean', expr: 'd.is_final_invoice', options: BOOLEAN_OPTIONS },
-      { key: 'payment_hold_reason', label: 'Payment hold', kind: 'text', expr: 'd.payment_hold_reason' },
-      { key: 'expected_pay_date', label: 'Expected pay date', kind: 'date', expr: 'd.expected_pay_date' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
-      { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
-      { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
-      { key: 'memo', label: 'Memo', kind: 'text', expr: 'd.memo' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'd.created_at' },
-      { key: 'id', label: 'Transaction (id)', kind: 'uuid', expr: 'd.id' },
-      { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'd.party_id' },
+      { key: "kind", label: "Type", kind: "enum", expr: "d.kind", options: TRANSACTION_KINDS },
+      { key: "document_number", label: "Document #", kind: "text", expr: "d.document_number" },
+      { key: "party_name", label: "Party", kind: "text", expr: "p.display_name" },
+      { key: "document_date", label: "Document date", kind: "date", expr: "d.document_date" },
+      { key: "posting_date", label: "Posting date", kind: "date", expr: "d.posting_date" },
+      { key: "due_date", label: "Due date", kind: "date", expr: "d.due_date" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "d.status",
+        options: TRANSACTION_STATUSES,
+      },
+      { key: "currency", label: "Currency", kind: "text", expr: "d.currency" },
+      { key: "subtotal", label: "Subtotal", kind: "money", expr: "d.subtotal", txnCurrency: true },
+      { key: "tax_total", label: "Tax", kind: "money", expr: "d.tax_total", txnCurrency: true },
+      { key: "total", label: "Total", kind: "money", expr: "d.total", txnCurrency: true },
+      { key: "reference_number", label: "Reference #", kind: "text", expr: "d.reference_number" },
+      {
+        key: "billing_method",
+        label: "Billing method",
+        kind: "enum",
+        expr: "d.billing_method",
+        options: ["time_and_materials", "fixed_price"],
+      },
+      {
+        key: "is_final_invoice",
+        label: "Final invoice",
+        kind: "boolean",
+        expr: "d.is_final_invoice",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "payment_hold_reason",
+        label: "Payment hold",
+        kind: "text",
+        expr: "d.payment_hold_reason",
+      },
+      {
+        key: "expected_pay_date",
+        label: "Expected pay date",
+        kind: "date",
+        expr: "d.expected_pay_date",
+      },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "project", label: "Project", kind: "text", expr: "prj.name" },
+      { key: "location", label: "Location", kind: "text", expr: "loc.name" },
+      { key: "class", label: "Class", kind: "text", expr: "cls.name" },
+      { key: "memo", label: "Memo", kind: "text", expr: "d.memo" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "d.created_at" },
+      { key: "id", label: "Transaction (id)", kind: "uuid", expr: "d.id" },
+      { key: "party_id", label: "Party (id)", kind: "uuid", expr: "d.party_id" },
     ],
-    defaultSort: { column: 'document_date', direction: 'desc' },
-    timeKey: 'posting_date',
+    defaultSort: { column: "document_date", direction: "desc" },
+    timeKey: "posting_date",
   },
   {
-    key: 'transaction_lines',
-    label: 'Transaction lines',
-    category: 'transactions',
+    key: "transaction_lines",
+    label: "Transaction lines",
+    category: "transactions",
     description:
-      'Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions. The workhorse for job-costing and billing searches.',
+      "Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions. The workhorse for job-costing and billing searches.",
     from: `document_lines dl
       JOIN documents d ON d.id = dl.document_id AND d.org_id = dl.org_id
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
@@ -467,120 +512,226 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN equipment_units eu ON eu.id = dl.equipment_unit_id AND eu.org_id = dl.org_id
       LEFT JOIN locations loc ON loc.id = coalesce(dl.location_id, d.location_id) AND loc.org_id = dl.org_id
       LEFT JOIN classes cls ON cls.id = coalesce(dl.class_id, d.class_id) AND cls.org_id = dl.org_id`,
-    orgColumn: 'dl.org_id',
-    subsidiaryScope: { column: 'd.subsidiary_id' },
+    orgColumn: "dl.org_id",
+    subsidiaryScope: { column: "d.subsidiary_id" },
     // No bookScope by design (see documents): line money follows the header's
     // book-independent totals. Line money is denominated in the header's
     // transaction currency: aggregating it needs a Currency breakout or a
     // single-currency filter.
-    currencyColumn: 'currency',
-    expenseRows: { kindColumn: 'kind', employeeColumn: 'party_id' },
+    currencyColumn: "currency",
+    expenseRows: { kindColumn: "kind", employeeColumn: "party_id" },
     columns: [
-      { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
-      { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
-      { key: 'document_date', label: 'Document date', kind: 'date', expr: 'd.document_date' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
-      { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
-      { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'd.party_id' },
-      { key: 'line_number', label: 'Line #', kind: 'number', identifier: true, expr: 'dl.line_number' },
-      { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
-      { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
-      { key: 'family_name', label: 'Family', kind: 'text', expr: 'fam.name' },
-      { key: 'account_number', label: 'Account #', kind: 'text', expr: 'a.number' },
-      { key: 'account_name', label: 'Account', kind: 'text', expr: 'a.name' },
-      { key: 'description', label: 'Description', kind: 'text', expr: 'dl.description' },
-      { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'dl.quantity' },
-      { key: 'unit', label: 'Unit', kind: 'text', expr: 'dl.unit' },
-      { key: 'unit_price', label: 'Unit price', kind: 'money', expr: 'dl.unit_price', txnCurrency: true },
-      { key: 'amount', label: 'Amount', kind: 'money', expr: 'dl.amount', txnCurrency: true },
-      { key: 'tax_amount', label: 'Tax amount', kind: 'money', expr: 'dl.tax_amount', txnCurrency: true },
-      { key: 'is_billable', label: 'Billable', kind: 'boolean', expr: 'dl.is_billable', options: BOOLEAN_OPTIONS },
-      { key: 'quantity_fulfilled', label: 'Qty fulfilled', kind: 'number', expr: 'dl.quantity_fulfilled' },
-      { key: 'quantity_billed', label: 'Qty billed', kind: 'number', expr: 'dl.quantity_billed' },
-      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
-      { key: 'equipment', label: 'Equipment', kind: 'text', expr: 'eu.name' },
-      { key: 'cost_rate', label: 'Cost rate', kind: 'money', expr: 'dl.cost_rate', txnCurrency: true },
-      { key: 'bill_rate', label: 'Bill rate', kind: 'money', expr: 'dl.bill_rate', txnCurrency: true },
-      { key: 'cost_amount', label: 'Cost amount', kind: 'money', expr: 'dl.cost_amount', txnCurrency: true },
-      { key: 'bill_amount', label: 'Bill amount', kind: 'money', expr: 'dl.bill_amount', txnCurrency: true },
-      { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
-      { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'dl.created_at' },
-      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'dl.id' },
-      { key: 'document_id', label: 'Transaction (id)', kind: 'uuid', expr: 'dl.document_id' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'd.currency' },
+      { key: "kind", label: "Type", kind: "enum", expr: "d.kind", options: TRANSACTION_KINDS },
+      { key: "document_number", label: "Document #", kind: "text", expr: "d.document_number" },
+      { key: "document_date", label: "Document date", kind: "date", expr: "d.document_date" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "d.status",
+        options: TRANSACTION_STATUSES,
+      },
+      { key: "party_name", label: "Party", kind: "text", expr: "p.display_name" },
+      { key: "party_id", label: "Party (id)", kind: "uuid", expr: "d.party_id" },
+      {
+        key: "line_number",
+        label: "Line #",
+        kind: "number",
+        identifier: true,
+        expr: "dl.line_number",
+      },
+      { key: "item_name", label: "Item", kind: "text", expr: "it.name" },
+      { key: "family_code", label: "Family code", kind: "text", expr: "fam.code" },
+      { key: "family_name", label: "Family", kind: "text", expr: "fam.name" },
+      { key: "account_number", label: "Account #", kind: "text", expr: "a.number" },
+      { key: "account_name", label: "Account", kind: "text", expr: "a.name" },
+      { key: "description", label: "Description", kind: "text", expr: "dl.description" },
+      { key: "quantity", label: "Quantity", kind: "number", expr: "dl.quantity" },
+      { key: "unit", label: "Unit", kind: "text", expr: "dl.unit" },
+      {
+        key: "unit_price",
+        label: "Unit price",
+        kind: "money",
+        expr: "dl.unit_price",
+        txnCurrency: true,
+      },
+      { key: "amount", label: "Amount", kind: "money", expr: "dl.amount", txnCurrency: true },
+      {
+        key: "tax_amount",
+        label: "Tax amount",
+        kind: "money",
+        expr: "dl.tax_amount",
+        txnCurrency: true,
+      },
+      {
+        key: "is_billable",
+        label: "Billable",
+        kind: "boolean",
+        expr: "dl.is_billable",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "quantity_fulfilled",
+        label: "Qty fulfilled",
+        kind: "number",
+        expr: "dl.quantity_fulfilled",
+      },
+      { key: "quantity_billed", label: "Qty billed", kind: "number", expr: "dl.quantity_billed" },
+      { key: "employee_name", label: "Employee", kind: "text", expr: "emp.display_name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "project", label: "Project", kind: "text", expr: "prj.name" },
+      { key: "equipment", label: "Equipment", kind: "text", expr: "eu.name" },
+      {
+        key: "cost_rate",
+        label: "Cost rate",
+        kind: "money",
+        expr: "dl.cost_rate",
+        txnCurrency: true,
+      },
+      {
+        key: "bill_rate",
+        label: "Bill rate",
+        kind: "money",
+        expr: "dl.bill_rate",
+        txnCurrency: true,
+      },
+      {
+        key: "cost_amount",
+        label: "Cost amount",
+        kind: "money",
+        expr: "dl.cost_amount",
+        txnCurrency: true,
+      },
+      {
+        key: "bill_amount",
+        label: "Bill amount",
+        kind: "money",
+        expr: "dl.bill_amount",
+        txnCurrency: true,
+      },
+      { key: "location", label: "Location", kind: "text", expr: "loc.name" },
+      { key: "class", label: "Class", kind: "text", expr: "cls.name" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "dl.created_at" },
+      { key: "id", label: "Line (id)", kind: "uuid", expr: "dl.id" },
+      { key: "document_id", label: "Transaction (id)", kind: "uuid", expr: "dl.document_id" },
+      { key: "currency", label: "Currency", kind: "text", expr: "d.currency" },
     ],
-    defaultSort: { column: 'document_date', direction: 'desc' },
+    defaultSort: { column: "document_date", direction: "desc" },
   },
   {
-    key: 'journal_entries',
-    label: 'Journal entries',
-    category: 'general_ledger',
-    description: 'Journal-entry headers — number, posting date, status, origin and memo. Use Ledger lines for line-level GL detail.',
+    key: "journal_entries",
+    label: "Journal entries",
+    category: "general_ledger",
+    description:
+      "Journal-entry headers — number, posting date, status, origin and memo. Use Ledger lines for line-level GL detail.",
     from: `journal_entries je
       JOIN accounting_books b ON b.id = je.book_id AND b.org_id = je.org_id`,
-    orgColumn: 'je.org_id',
-    subsidiaryScope: { column: 'je.subsidiary_id' },
+    orgColumn: "je.org_id",
+    subsidiaryScope: { column: "je.subsidiary_id" },
     // Same book contract as ledger_lines: default to the single active
     // primary book; explicit book filters/breakouts run unclamped.
-    bookScope: { column: 'je.book_id' },
+    bookScope: { column: "je.book_id" },
     columns: [
-      { key: 'entry_number', label: 'Entry #', kind: 'text', expr: 'je.entry_number' },
-      { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'je.posting_date' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'je.status', options: ['draft', 'posted', 'reversed'] },
-      { key: 'origin', label: 'Origin', kind: 'enum', expr: 'je.origin' },
-      { key: 'memo', label: 'Memo', kind: 'text', expr: 'je.memo' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'je.created_at' },
-      { key: 'id', label: 'Entry (id)', kind: 'uuid', expr: 'je.id' },
-      { key: 'source_document_id', label: 'Source transaction (id)', kind: 'uuid', expr: 'je.source_document_id' },
-      { key: 'book', label: 'Book', kind: 'text', expr: 'b.name' },
-      { key: 'book_code', label: 'Book code', kind: 'text', expr: 'b.code' },
-      { key: 'book_id', label: 'Book (id)', kind: 'uuid', expr: 'b.id' },
+      { key: "entry_number", label: "Entry #", kind: "text", expr: "je.entry_number" },
+      { key: "posting_date", label: "Posting date", kind: "date", expr: "je.posting_date" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "je.status",
+        options: ["draft", "posted", "reversed"],
+      },
+      { key: "origin", label: "Origin", kind: "enum", expr: "je.origin" },
+      { key: "memo", label: "Memo", kind: "text", expr: "je.memo" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "je.created_at" },
+      { key: "id", label: "Entry (id)", kind: "uuid", expr: "je.id" },
+      {
+        key: "source_document_id",
+        label: "Source transaction (id)",
+        kind: "uuid",
+        expr: "je.source_document_id",
+      },
+      { key: "book", label: "Book", kind: "text", expr: "b.name" },
+      { key: "book_code", label: "Book code", kind: "text", expr: "b.code" },
+      { key: "book_id", label: "Book (id)", kind: "uuid", expr: "b.id" },
     ],
-    defaultSort: { column: 'posting_date', direction: 'desc' },
+    defaultSort: { column: "posting_date", direction: "desc" },
   },
   {
-    key: 'items',
-    label: 'Items',
-    category: 'catalog',
-    description: 'The item & service catalog — services, inventory, labor, charges and discounts with rates and accounts.',
+    key: "items",
+    label: "Items",
+    category: "catalog",
+    description:
+      "The item & service catalog — services, inventory, labor, charges and discounts with rates and accounts.",
     from: `items it
       LEFT JOIN accounts inc ON inc.id = it.income_account_id AND inc.org_id = it.org_id
       LEFT JOIN accounts exp ON exp.id = it.expense_account_id AND exp.org_id = it.org_id
       LEFT JOIN accounts rec ON rec.id = it.cost_recovery_account_id AND rec.org_id = it.org_id
       LEFT JOIN item_families fam ON fam.id = it.family_id AND fam.org_id = it.org_id`,
-    orgColumn: 'it.org_id',
+    orgColumn: "it.org_id",
     subsidiaryScope: null,
     columns: [
-      { key: 'code', label: 'Code', kind: 'text', expr: 'it.code' },
-      { key: 'name', label: 'Name', kind: 'text', expr: 'it.name' },
-      { key: 'description', label: 'Description', kind: 'text', expr: 'it.description' },
-      { key: 'kind', label: 'Type', kind: 'enum', expr: 'it.kind', options: ['service', 'non_inventory', 'inventory', 'assembly', 'kit', 'other_charge', 'equipment_charge', 'labor', 'absence', 'discount'] },
-      { key: 'category', label: 'Category', kind: 'text', expr: 'it.category' },
-      { key: 'default_rate', label: 'Default rate', kind: 'money', expr: 'it.default_rate' },
-      { key: 'default_cost', label: 'Default cost', kind: 'money', expr: 'it.default_cost' },
-      { key: 'unit', label: 'Unit', kind: 'text', expr: 'it.unit' },
-      { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
-      { key: 'family_name', label: 'Family', kind: 'text', expr: 'fam.name' },
-      { key: 'option_values', label: 'Option values', kind: 'text', expr: 'it.option_values::text' },
-      { key: 'income_account', label: 'Income account', kind: 'text', expr: 'inc.name' },
-      { key: 'expense_account', label: 'Expense account', kind: 'text', expr: 'exp.name' },
-      { key: 'recovery_account', label: 'Cost recovery account', kind: 'text', expr: 'rec.name' },
-      { key: 'show_on_timesheet', label: 'On timesheets', kind: 'boolean', expr: 'it.show_on_timesheet', options: BOOLEAN_OPTIONS },
-      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'it.is_active', options: BOOLEAN_OPTIONS },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'it.created_at' },
-      { key: 'id', label: 'Item (id)', kind: 'uuid', expr: 'it.id' },
+      { key: "code", label: "Code", kind: "text", expr: "it.code" },
+      { key: "name", label: "Name", kind: "text", expr: "it.name" },
+      { key: "description", label: "Description", kind: "text", expr: "it.description" },
+      {
+        key: "kind",
+        label: "Type",
+        kind: "enum",
+        expr: "it.kind",
+        options: [
+          "service",
+          "non_inventory",
+          "inventory",
+          "assembly",
+          "kit",
+          "other_charge",
+          "equipment_charge",
+          "labor",
+          "absence",
+          "discount",
+        ],
+      },
+      { key: "category", label: "Category", kind: "text", expr: "it.category" },
+      { key: "default_rate", label: "Default rate", kind: "money", expr: "it.default_rate" },
+      { key: "default_cost", label: "Default cost", kind: "money", expr: "it.default_cost" },
+      { key: "unit", label: "Unit", kind: "text", expr: "it.unit" },
+      { key: "family_code", label: "Family code", kind: "text", expr: "fam.code" },
+      { key: "family_name", label: "Family", kind: "text", expr: "fam.name" },
+      {
+        key: "option_values",
+        label: "Option values",
+        kind: "text",
+        expr: "it.option_values::text",
+      },
+      { key: "income_account", label: "Income account", kind: "text", expr: "inc.name" },
+      { key: "expense_account", label: "Expense account", kind: "text", expr: "exp.name" },
+      { key: "recovery_account", label: "Cost recovery account", kind: "text", expr: "rec.name" },
+      {
+        key: "show_on_timesheet",
+        label: "On timesheets",
+        kind: "boolean",
+        expr: "it.show_on_timesheet",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "is_active",
+        label: "Active",
+        kind: "boolean",
+        expr: "it.is_active",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "it.created_at" },
+      { key: "id", label: "Item (id)", kind: "uuid", expr: "it.id" },
     ],
-    defaultSort: { column: 'name', direction: 'asc' },
+    defaultSort: { column: "name", direction: "asc" },
   },
   {
-    key: 'inventory_lot_movements',
-    label: 'Inventory lot movements',
-    category: 'inventory',
+    key: "inventory_lot_movements",
+    label: "Inventory lot movements",
+    category: "inventory",
     description:
-      'Append-only movement history for tracked lots, including expiry, item, quantity, value, stock location, source transaction, party, and correction lineage. The traceability source for lot recalls.',
+      "Append-only movement history for tracked lots, including expiry, item, quantity, value, stock location, source transaction, party, and correction lineage. The traceability source for lot recalls.",
     from: `inventory_movements im
       JOIN lots lot ON lot.id = im.lot_id AND lot.org_id = im.org_id
       JOIN items it ON it.id = im.item_id AND it.id = lot.item_id AND it.org_id = im.org_id
@@ -589,71 +740,127 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN document_lines dl ON dl.id = im.document_line_id AND dl.org_id = im.org_id
       LEFT JOIN documents d ON d.id = dl.document_id AND d.org_id = im.org_id
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = im.org_id`,
-    orgColumn: 'im.org_id',
-    subsidiaryScope: { column: 'im.subsidiary_id' },
-    featureKey: 'inventory',
+    orgColumn: "im.org_id",
+    subsidiaryScope: { column: "im.subsidiary_id" },
+    featureKey: "inventory",
     // A recall is event history, not a fiscal-period statement. In particular,
     // expires_on being the first date column must never create an implicit
     // fiscal filter on an otherwise unfiltered recall.
     defaultPeriodField: null,
     pagination: { defaultPageSize: 100, maxPageSize: 500 },
-    expenseRows: { kindColumn: 'document_kind', employeeColumn: 'document_party_id' },
+    expenseRows: { kindColumn: "document_kind", employeeColumn: "document_party_id" },
     columns: [
-      { key: 'lot_number', label: 'Lot #', kind: 'text', expr: 'lot.lot_number' },
-      { key: 'expires_on', label: 'Expiry', kind: 'date', expr: 'lot.expires_on' },
-      { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
-      { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
-      { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
-      { key: 'family_name', label: 'Family', kind: 'text', expr: 'fam.name' },
+      { key: "lot_number", label: "Lot #", kind: "text", expr: "lot.lot_number" },
+      { key: "expires_on", label: "Expiry", kind: "date", expr: "lot.expires_on" },
+      { key: "item_code", label: "Item code", kind: "text", expr: "it.code" },
+      { key: "item_name", label: "Item", kind: "text", expr: "it.name" },
+      { key: "family_code", label: "Family code", kind: "text", expr: "fam.code" },
+      { key: "family_name", label: "Family", kind: "text", expr: "fam.name" },
       {
-        key: 'kind', label: 'Movement type', kind: 'enum', expr: 'im.kind',
+        key: "kind",
+        label: "Movement type",
+        kind: "enum",
+        expr: "im.kind",
         options: [
-          'receipt', 'issue', 'transfer_out', 'transfer_in', 'adjustment',
-          'count', 'assembly_build', 'assembly_consume', 'return',
+          "receipt",
+          "issue",
+          "transfer_out",
+          "transfer_in",
+          "adjustment",
+          "count",
+          "assembly_build",
+          "assembly_consume",
+          "return",
         ],
       },
-      { key: 'moved_at', label: 'Moved at', kind: 'timestamp', expr: 'im.moved_at' },
-      { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'im.quantity' },
-      { key: 'unit_cost', label: 'Unit cost', kind: 'money', expr: 'im.unit_cost' },
-      { key: 'total_value', label: 'Total value', kind: 'money', expr: 'im.total_value' },
-      { key: 'location_code', label: 'Stock location', kind: 'text', expr: 'sl.code' },
-      { key: 'status', label: 'Posting status', kind: 'enum', expr: 'im.status', options: ['pending', 'posted'] },
-      { key: 'document_number', label: 'Transaction #', kind: 'text', expr: 'd.document_number' },
-      { key: 'document_kind', label: 'Transaction type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
-      { key: 'document_party_id', label: 'Party (id)', kind: 'uuid', expr: 'd.party_id' },
-      { key: 'document_date', label: 'Transaction date', kind: 'date', expr: 'd.document_date' },
-      { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
-      { key: 'memo', label: 'Memo', kind: 'text', expr: 'im.memo' },
-      { key: 'reversal_reason', label: 'Reversal reason', kind: 'text', expr: 'im.reversal_reason' },
-      { key: 'movement_id', label: 'Movement (id)', kind: 'uuid', expr: 'im.id' },
-      { key: 'lot_id', label: 'Lot (id)', kind: 'uuid', expr: 'im.lot_id' },
-      { key: 'item_id', label: 'Item (id)', kind: 'uuid', expr: 'im.item_id' },
-      { key: 'stock_location_id', label: 'Stock location (id)', kind: 'uuid', expr: 'im.stock_location_id' },
-      { key: 'document_line_id', label: 'Transaction line (id)', kind: 'uuid', expr: 'im.document_line_id' },
-      { key: 'document_id', label: 'Transaction (id)', kind: 'uuid', expr: 'd.id' },
-      { key: 'journal_entry_id', label: 'Journal entry (id)', kind: 'uuid', expr: 'im.journal_entry_id' },
+      { key: "moved_at", label: "Moved at", kind: "timestamp", expr: "im.moved_at" },
+      { key: "quantity", label: "Quantity", kind: "number", expr: "im.quantity" },
+      { key: "unit_cost", label: "Unit cost", kind: "money", expr: "im.unit_cost" },
+      { key: "total_value", label: "Total value", kind: "money", expr: "im.total_value" },
+      { key: "location_code", label: "Stock location", kind: "text", expr: "sl.code" },
       {
-        key: 'transaction_entry_id', label: 'Transaction entry (id)', kind: 'uuid',
-        expr: 'coalesce(im.journal_entry_id, d.posted_entry_id, d.id)',
+        key: "status",
+        label: "Posting status",
+        kind: "enum",
+        expr: "im.status",
+        options: ["pending", "posted"],
       },
-      { key: 'paired_movement_id', label: 'Paired movement (id)', kind: 'uuid', expr: 'im.paired_movement_id' },
-      { key: 'reverses_movement_id', label: 'Reversed movement (id)', kind: 'uuid', expr: 'im.reverses_movement_id' },
+      { key: "document_number", label: "Transaction #", kind: "text", expr: "d.document_number" },
+      {
+        key: "document_kind",
+        label: "Transaction type",
+        kind: "enum",
+        expr: "d.kind",
+        options: TRANSACTION_KINDS,
+      },
+      { key: "document_party_id", label: "Party (id)", kind: "uuid", expr: "d.party_id" },
+      { key: "document_date", label: "Transaction date", kind: "date", expr: "d.document_date" },
+      { key: "party_name", label: "Party", kind: "text", expr: "p.display_name" },
+      { key: "memo", label: "Memo", kind: "text", expr: "im.memo" },
+      {
+        key: "reversal_reason",
+        label: "Reversal reason",
+        kind: "text",
+        expr: "im.reversal_reason",
+      },
+      { key: "movement_id", label: "Movement (id)", kind: "uuid", expr: "im.id" },
+      { key: "lot_id", label: "Lot (id)", kind: "uuid", expr: "im.lot_id" },
+      { key: "item_id", label: "Item (id)", kind: "uuid", expr: "im.item_id" },
+      {
+        key: "stock_location_id",
+        label: "Stock location (id)",
+        kind: "uuid",
+        expr: "im.stock_location_id",
+      },
+      {
+        key: "document_line_id",
+        label: "Transaction line (id)",
+        kind: "uuid",
+        expr: "im.document_line_id",
+      },
+      { key: "document_id", label: "Transaction (id)", kind: "uuid", expr: "d.id" },
+      {
+        key: "journal_entry_id",
+        label: "Journal entry (id)",
+        kind: "uuid",
+        expr: "im.journal_entry_id",
+      },
+      {
+        key: "transaction_entry_id",
+        label: "Transaction entry (id)",
+        kind: "uuid",
+        expr: "coalesce(im.journal_entry_id, d.posted_entry_id, d.id)",
+      },
+      {
+        key: "paired_movement_id",
+        label: "Paired movement (id)",
+        kind: "uuid",
+        expr: "im.paired_movement_id",
+      },
+      {
+        key: "reverses_movement_id",
+        label: "Reversed movement (id)",
+        kind: "uuid",
+        expr: "im.reverses_movement_id",
+      },
     ],
-    cellLinks: [{
-      column: 'document_number',
-      kind: 'transaction',
-      entryIdColumn: 'transaction_entry_id',
-      docIdColumn: 'document_id',
-      docKindColumn: 'document_kind',
-    }],
-    defaultSort: { column: 'moved_at', direction: 'desc' },
+    cellLinks: [
+      {
+        column: "document_number",
+        kind: "transaction",
+        entryIdColumn: "transaction_entry_id",
+        docIdColumn: "document_id",
+        docKindColumn: "document_kind",
+      },
+    ],
+    defaultSort: { column: "moved_at", direction: "desc" },
   },
   {
-    key: 'backorders',
-    label: 'Backorders',
-    category: 'orders',
+    key: "backorders",
+    label: "Backorders",
+    category: "orders",
     description:
-      'Approved sales-order stock lines still owed to the customer — ordered, fulfilled, cancelled and open quantity per line, with customer, item and stock location.',
+      "Approved sales-order stock lines still owed to the customer — ordered, fulfilled, cancelled and open quantity per line, with customer, item and stock location.",
     // Approved sales orders' stock lines (the item has an inventory costing
     // profile) with open quantity. The open-quantity expression is the engine
     // rule in engine/src/records/order-line-remainders.ts.
@@ -666,140 +873,243 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN item_families fam ON fam.id = it.family_id AND fam.org_id = it.org_id
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
       LEFT JOIN stock_locations sl ON sl.id = dl.stock_location_id AND sl.org_id = dl.org_id`,
-    orgColumn: 'dl.org_id',
-    subsidiaryScope: { column: 'd.subsidiary_id' },
-    featureKey: 'fulfillment',
+    orgColumn: "dl.org_id",
+    subsidiaryScope: { column: "d.subsidiary_id" },
+    featureKey: "fulfillment",
     // A position read, not a fiscal-period statement: the order date must not
     // create an implicit period filter that hides older open orders.
     defaultPeriodField: null,
     columns: [
-      { key: 'document_number', label: 'Order #', kind: 'text', expr: 'd.document_number' },
-      { key: 'document_date', label: 'Order date', kind: 'date', expr: 'd.document_date' },
-      { key: 'party_name', label: 'Customer', kind: 'text', expr: 'p.display_name' },
-      { key: 'line_number', label: 'Line #', kind: 'number', identifier: true, expr: 'dl.line_number' },
-      { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
-      { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
-      { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
-      { key: 'family_name', label: 'Family', kind: 'text', expr: 'fam.name' },
-      { key: 'location_code', label: 'Stock location', kind: 'text', expr: 'sl.code' },
-      { key: 'quantity', label: 'Ordered', kind: 'number', expr: 'dl.quantity' },
-      { key: 'quantity_fulfilled', label: 'Fulfilled', kind: 'number', expr: 'dl.quantity_fulfilled' },
-      { key: 'quantity_cancelled', label: 'Cancelled', kind: 'number', expr: 'dl.quantity_cancelled' },
-      { key: 'open_quantity', label: 'Open', kind: 'number', expr: BACKORDER_OPEN_QUANTITY },
-      { key: 'document_kind', label: 'Transaction type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
-      { key: 'line_id', label: 'Order line (id)', kind: 'uuid', expr: 'dl.id' },
-      { key: 'document_id', label: 'Order (id)', kind: 'uuid', expr: 'd.id' },
-      { key: 'item_id', label: 'Item (id)', kind: 'uuid', expr: 'dl.item_id' },
-      { key: 'transaction_entry_id', label: 'Transaction entry (id)', kind: 'uuid', expr: 'coalesce(d.posted_entry_id, d.id)' },
+      { key: "document_number", label: "Order #", kind: "text", expr: "d.document_number" },
+      { key: "document_date", label: "Order date", kind: "date", expr: "d.document_date" },
+      { key: "party_name", label: "Customer", kind: "text", expr: "p.display_name" },
+      {
+        key: "line_number",
+        label: "Line #",
+        kind: "number",
+        identifier: true,
+        expr: "dl.line_number",
+      },
+      { key: "item_code", label: "Item code", kind: "text", expr: "it.code" },
+      { key: "item_name", label: "Item", kind: "text", expr: "it.name" },
+      { key: "family_code", label: "Family code", kind: "text", expr: "fam.code" },
+      { key: "family_name", label: "Family", kind: "text", expr: "fam.name" },
+      { key: "location_code", label: "Stock location", kind: "text", expr: "sl.code" },
+      { key: "quantity", label: "Ordered", kind: "number", expr: "dl.quantity" },
+      {
+        key: "quantity_fulfilled",
+        label: "Fulfilled",
+        kind: "number",
+        expr: "dl.quantity_fulfilled",
+      },
+      {
+        key: "quantity_cancelled",
+        label: "Cancelled",
+        kind: "number",
+        expr: "dl.quantity_cancelled",
+      },
+      { key: "open_quantity", label: "Open", kind: "number", expr: BACKORDER_OPEN_QUANTITY },
+      {
+        key: "document_kind",
+        label: "Transaction type",
+        kind: "enum",
+        expr: "d.kind",
+        options: TRANSACTION_KINDS,
+      },
+      { key: "line_id", label: "Order line (id)", kind: "uuid", expr: "dl.id" },
+      { key: "document_id", label: "Order (id)", kind: "uuid", expr: "d.id" },
+      { key: "item_id", label: "Item (id)", kind: "uuid", expr: "dl.item_id" },
+      {
+        key: "transaction_entry_id",
+        label: "Transaction entry (id)",
+        kind: "uuid",
+        expr: "coalesce(d.posted_entry_id, d.id)",
+      },
     ],
-    cellLinks: [{
-      column: 'document_number',
-      kind: 'transaction',
-      entryIdColumn: 'transaction_entry_id',
-      docIdColumn: 'document_id',
-      docKindColumn: 'document_kind',
-    }],
-    defaultSort: { column: 'document_date', direction: 'asc' },
+    cellLinks: [
+      {
+        column: "document_number",
+        kind: "transaction",
+        entryIdColumn: "transaction_entry_id",
+        docIdColumn: "document_id",
+        docKindColumn: "document_kind",
+      },
+    ],
+    defaultSort: { column: "document_date", direction: "asc" },
   },
   {
-    key: 'projects',
-    label: 'Projects',
-    category: 'catalog',
-    featureKey: 'projects',
-    description: 'Projects / jobs — status, customer, project type, schedule and PO number.',
+    key: "projects",
+    label: "Projects",
+    category: "catalog",
+    featureKey: "projects",
+    description: "Projects / jobs — status, customer, project type, schedule and PO number.",
     from: `projects prj
       LEFT JOIN parties cust ON cust.id = prj.customer_id AND cust.org_id = prj.org_id
       LEFT JOIN parties mgr ON mgr.id = prj.manager_id AND mgr.org_id = prj.org_id`,
-    orgColumn: 'prj.org_id',
-    subsidiaryScope: { column: 'prj.subsidiary_id' },
+    orgColumn: "prj.org_id",
+    subsidiaryScope: { column: "prj.subsidiary_id" },
     columns: [
-      { key: 'code', label: 'Code', kind: 'text', expr: 'prj.code' },
-      { key: 'name', label: 'Name', kind: 'text', expr: 'prj.name' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'prj.status', options: ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] },
-      { key: 'customer_name', label: 'Customer', kind: 'text', expr: 'cust.display_name' },
-      { key: 'manager_name', label: 'Manager', kind: 'text', expr: 'mgr.display_name' },
-      { key: 'project_type', label: 'Project type', kind: 'enum', expr: "COALESCE((SELECT pt.key FROM project_types pt WHERE pt.id = prj.project_type_id AND pt.org_id = prj.org_id), 'time_and_materials')", options: ['time_and_materials', 'fixed_price', 'cost_plus', 'not_to_exceed', 'schedule_of_values'] },
-      { key: 'customer_po_number', label: 'Customer PO #', kind: 'text', expr: 'prj.customer_po_number' },
-      { key: 'starts_on', label: 'Starts on', kind: 'date', expr: 'prj.starts_on' },
-      { key: 'ends_on', label: 'Ends on', kind: 'date', expr: 'prj.ends_on' },
-      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'prj.is_active', options: BOOLEAN_OPTIONS },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'prj.created_at' },
-      { key: 'id', label: 'Project (id)', kind: 'uuid', expr: 'prj.id' },
+      { key: "code", label: "Code", kind: "text", expr: "prj.code" },
+      { key: "name", label: "Name", kind: "text", expr: "prj.name" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "prj.status",
+        options: ["quoted", "awarded", "active", "substantially_complete", "closed", "cancelled"],
+      },
+      { key: "customer_name", label: "Customer", kind: "text", expr: "cust.display_name" },
+      { key: "manager_name", label: "Manager", kind: "text", expr: "mgr.display_name" },
+      {
+        key: "project_type",
+        label: "Project type",
+        kind: "enum",
+        expr: "COALESCE((SELECT pt.key FROM project_types pt WHERE pt.id = prj.project_type_id AND pt.org_id = prj.org_id), 'time_and_materials')",
+        options: [
+          "time_and_materials",
+          "fixed_price",
+          "cost_plus",
+          "not_to_exceed",
+          "schedule_of_values",
+        ],
+      },
+      {
+        key: "customer_po_number",
+        label: "Customer PO #",
+        kind: "text",
+        expr: "prj.customer_po_number",
+      },
+      { key: "starts_on", label: "Starts on", kind: "date", expr: "prj.starts_on" },
+      { key: "ends_on", label: "Ends on", kind: "date", expr: "prj.ends_on" },
+      {
+        key: "is_active",
+        label: "Active",
+        kind: "boolean",
+        expr: "prj.is_active",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "prj.created_at" },
+      { key: "id", label: "Project (id)", kind: "uuid", expr: "prj.id" },
     ],
-    defaultSort: { column: 'name', direction: 'asc' },
+    defaultSort: { column: "name", direction: "asc" },
   },
   {
-    key: 'timesheets',
-    label: 'Time entries',
-    category: 'time',
-    featureKey: 'timeTracking',
-    description: 'Timesheet entries — employee, date, hours, billable state, project and approval status.',
+    key: "timesheets",
+    label: "Time entries",
+    category: "time",
+    featureKey: "timeTracking",
+    description:
+      "Timesheet entries — employee, date, hours, billable state, project and approval status.",
     from: `time_entries te
       LEFT JOIN parties emp ON emp.id = te.employee_party_id AND emp.org_id = te.org_id
       LEFT JOIN projects prj ON prj.id = te.project_id AND prj.org_id = te.org_id
       LEFT JOIN items it ON it.id = te.item_id AND it.org_id = te.org_id
       LEFT JOIN departments dep ON dep.id = te.department_id AND dep.org_id = te.org_id
       LEFT JOIN equipment_units eq ON eq.id = te.equipment_id AND eq.org_id = te.org_id`,
-    orgColumn: 'te.org_id',
-    subsidiaryScope: { column: 'coalesce(prj.subsidiary_id, emp.subsidiary_id)' },
+    orgColumn: "te.org_id",
+    subsidiaryScope: { column: "coalesce(prj.subsidiary_id, emp.subsidiary_id)" },
     columns: [
-      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
-      { key: 'worked_on', label: 'Worked on', kind: 'date', expr: 'te.worked_on' },
-      { key: 'hours', label: 'Hours', kind: 'number', expr: 'te.hours' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'te.status', options: ['draft', 'submitted', 'approved', 'rejected'] },
-      { key: 'is_billable', label: 'Billable', kind: 'boolean', expr: 'te.is_billable', options: BOOLEAN_OPTIONS },
-      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
-      { key: 'item_name', label: 'Service item', kind: 'text', expr: 'it.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: "employee_name", label: "Employee", kind: "text", expr: "emp.display_name" },
+      { key: "worked_on", label: "Worked on", kind: "date", expr: "te.worked_on" },
+      { key: "hours", label: "Hours", kind: "number", expr: "te.hours" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "te.status",
+        options: ["draft", "submitted", "approved", "rejected"],
+      },
+      {
+        key: "is_billable",
+        label: "Billable",
+        kind: "boolean",
+        expr: "te.is_billable",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "project", label: "Project", kind: "text", expr: "prj.name" },
+      { key: "item_name", label: "Service item", kind: "text", expr: "it.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
       // Private memos stay private — the search engine never surfaces them.
-      { key: 'memo', label: 'Memo', kind: 'text', expr: "(case when te.memo_is_private then null else te.memo end)" },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'te.created_at' },
+      {
+        key: "memo",
+        label: "Memo",
+        kind: "text",
+        expr: "(case when te.memo_is_private then null else te.memo end)",
+      },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "te.created_at" },
       // HR-20 begin: equipment hours ride the entry (0231), priced through
       // the unit's equipment_charge item — null when no equipment ran.
-      { key: 'equipment_unit', label: 'Equipment unit', kind: 'text', expr: 'eq.unit_number' },
-      { key: 'equipment_hours', label: 'Equipment hours', kind: 'number', expr: 'te.equipment_hours' },
-      { key: 'cost_code_ref', label: 'Cost code', kind: 'text', expr: 'te.cost_code_ref' },
+      { key: "equipment_unit", label: "Equipment unit", kind: "text", expr: "eq.unit_number" },
+      {
+        key: "equipment_hours",
+        label: "Equipment hours",
+        kind: "number",
+        expr: "te.equipment_hours",
+      },
+      { key: "cost_code_ref", label: "Cost code", kind: "text", expr: "te.cost_code_ref" },
       // HR-20 end
-      { key: 'id', label: 'Time entry (id)', kind: 'uuid', expr: 'te.id' },
+      { key: "id", label: "Time entry (id)", kind: "uuid", expr: "te.id" },
     ],
-    defaultSort: { column: 'worked_on', direction: 'desc' },
+    defaultSort: { column: "worked_on", direction: "desc" },
   },
   {
-    key: 'timesheet_weeks',
-    label: 'Timesheet weeks',
-    category: 'time',
-    featureKey: 'timeTracking',
-    description: 'Weekly timesheets — who submitted, who approved, when, and the hours each week carries.',
+    key: "timesheet_weeks",
+    label: "Timesheet weeks",
+    category: "time",
+    featureKey: "timeTracking",
+    description:
+      "Weekly timesheets — who submitted, who approved, when, and the hours each week carries.",
     from: `timesheet_weeks tw
       LEFT JOIN parties emp ON emp.id = tw.employee_party_id AND emp.org_id = tw.org_id
       LEFT JOIN users sub ON sub.id = tw.submitted_by
       LEFT JOIN users apr ON apr.id = tw.approved_by`,
-    orgColumn: 'tw.org_id',
-    subsidiaryScope: { column: 'emp.subsidiary_id' },
+    orgColumn: "tw.org_id",
+    subsidiaryScope: { column: "emp.subsidiary_id" },
     columns: [
-      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
-      { key: 'week_start', label: 'Week starting', kind: 'date', expr: 'tw.week_start' },
-      { key: 'week_end', label: 'Week ending', kind: 'date', expr: '(tw.week_start + 6)' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'tw.status', options: ['draft', 'submitted', 'approved', 'rejected'] },
+      { key: "employee_name", label: "Employee", kind: "text", expr: "emp.display_name" },
+      { key: "week_start", label: "Week starting", kind: "date", expr: "tw.week_start" },
+      { key: "week_end", label: "Week ending", kind: "date", expr: "(tw.week_start + 6)" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "tw.status",
+        options: ["draft", "submitted", "approved", "rejected"],
+      },
       // The hours the week covers, aggregated from its entries — the header
       // owns lifecycle, the entries own the hours.
-      { key: 'total_hours', label: 'Total hours', kind: 'number', expr: "(select coalesce(sum(te.hours), 0) from time_entries te where te.org_id = tw.org_id and te.employee_party_id = tw.employee_party_id and te.worked_on between tw.week_start and tw.week_start + 6)" },
-      { key: 'billable_hours', label: 'Billable hours', kind: 'number', expr: "(select coalesce(sum(te.hours) filter (where te.is_billable), 0) from time_entries te where te.org_id = tw.org_id and te.employee_party_id = tw.employee_party_id and te.worked_on between tw.week_start and tw.week_start + 6)" },
-      { key: 'submitted_by', label: 'Submitted by', kind: 'text', expr: 'sub.name' },
-      { key: 'submitted_at', label: 'Submitted at', kind: 'timestamp', expr: 'tw.submitted_at' },
-      { key: 'approved_by', label: 'Approved by', kind: 'text', expr: 'apr.name' },
-      { key: 'approved_at', label: 'Approved at', kind: 'timestamp', expr: 'tw.approved_at' },
-      { key: 'rejection_reason', label: 'Rejection reason', kind: 'text', expr: 'tw.rejection_reason' },
-      { key: 'id', label: 'Timesheet week (id)', kind: 'uuid', expr: 'tw.id' },
+      {
+        key: "total_hours",
+        label: "Total hours",
+        kind: "number",
+        expr: "(select coalesce(sum(te.hours), 0) from time_entries te where te.org_id = tw.org_id and te.employee_party_id = tw.employee_party_id and te.worked_on between tw.week_start and tw.week_start + 6)",
+      },
+      {
+        key: "billable_hours",
+        label: "Billable hours",
+        kind: "number",
+        expr: "(select coalesce(sum(te.hours) filter (where te.is_billable), 0) from time_entries te where te.org_id = tw.org_id and te.employee_party_id = tw.employee_party_id and te.worked_on between tw.week_start and tw.week_start + 6)",
+      },
+      { key: "submitted_by", label: "Submitted by", kind: "text", expr: "sub.name" },
+      { key: "submitted_at", label: "Submitted at", kind: "timestamp", expr: "tw.submitted_at" },
+      { key: "approved_by", label: "Approved by", kind: "text", expr: "apr.name" },
+      { key: "approved_at", label: "Approved at", kind: "timestamp", expr: "tw.approved_at" },
+      {
+        key: "rejection_reason",
+        label: "Rejection reason",
+        kind: "text",
+        expr: "tw.rejection_reason",
+      },
+      { key: "id", label: "Timesheet week (id)", kind: "uuid", expr: "tw.id" },
     ],
-    defaultSort: { column: 'week_start', direction: 'desc' },
+    defaultSort: { column: "week_start", direction: "desc" },
   },
   {
-    key: 'fixed_assets',
-    label: 'Fixed assets',
-    category: 'catalog',
-    featureKey: 'fixedAssets',
-    description: 'The fixed-asset register — status, acquisition, cost, custodian and dimensions.',
+    key: "fixed_assets",
+    label: "Fixed assets",
+    category: "catalog",
+    featureKey: "fixedAssets",
+    description: "The fixed-asset register — status, acquisition, cost, custodian and dimensions.",
     from: `fixed_assets fa
       LEFT JOIN asset_categories ac ON ac.id = fa.category_id AND ac.org_id = fa.org_id
       -- Keep one deterministic primary-book row per asset during migration rollout;
@@ -815,204 +1125,367 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN parties cust ON cust.id = fa.custodian_party_id AND cust.org_id = fa.org_id
       LEFT JOIN projects prj ON prj.id = fa.project_id AND prj.org_id = fa.org_id
       LEFT JOIN departments dep ON dep.id = fa.department_id AND dep.org_id = fa.org_id`,
-    orgColumn: 'fa.org_id',
-    subsidiaryScope: { column: 'fa.subsidiary_id' },
+    orgColumn: "fa.org_id",
+    subsidiaryScope: { column: "fa.subsidiary_id" },
     columns: [
-      { key: 'asset_number', label: 'Asset #', kind: 'text', expr: 'fa.asset_number' },
-      { key: 'name', label: 'Name', kind: 'text', expr: 'fa.name' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'fa.status', options: ['draft', 'in_service', 'fully_depreciated', 'disposed', 'written_off'] },
-      { key: 'category', label: 'Category', kind: 'text', expr: 'ac.name' },
-      { key: 'acquired_on', label: 'Acquired on', kind: 'date', expr: 'fa.acquired_on' },
-      { key: 'in_service_on', label: 'In service on', kind: 'date', expr: 'fa.in_service_on' },
-      { key: 'acquisition_cost', label: 'Original acquisition cost', kind: 'money', expr: 'fa.acquisition_cost' },
-      { key: 'remaining_cost', label: 'Remaining cost (primary book)', kind: 'money', expr: "case when fa.status in ('disposed','written_off') then 0 else fac.cost end" },
-      { key: 'carrying_value', label: 'Carrying value (primary book)', kind: 'money', expr: "case when fa.status in ('disposed','written_off') then 0 else fac.carrying_value end" },
-      { key: 'accumulated_depreciation', label: 'Accumulated depreciation (primary book)', kind: 'money', expr: "case when fa.status in ('disposed','written_off') then 0 else fac.accumulated end" },
-      { key: 'salvage_value', label: 'Salvage value', kind: 'money', expr: 'fa.salvage_value' },
-      { key: 'serial_number', label: 'Serial #', kind: 'text', expr: 'fa.serial_number' },
-      { key: 'custodian_name', label: 'Custodian', kind: 'text', expr: 'cust.display_name' },
-      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'fa.created_at' },
-      { key: 'id', label: 'Asset (id)', kind: 'uuid', expr: 'fa.id' },
+      { key: "asset_number", label: "Asset #", kind: "text", expr: "fa.asset_number" },
+      { key: "name", label: "Name", kind: "text", expr: "fa.name" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "fa.status",
+        options: ["draft", "in_service", "fully_depreciated", "disposed", "written_off"],
+      },
+      { key: "category", label: "Category", kind: "text", expr: "ac.name" },
+      { key: "acquired_on", label: "Acquired on", kind: "date", expr: "fa.acquired_on" },
+      { key: "in_service_on", label: "In service on", kind: "date", expr: "fa.in_service_on" },
+      {
+        key: "acquisition_cost",
+        label: "Original acquisition cost",
+        kind: "money",
+        expr: "fa.acquisition_cost",
+      },
+      {
+        key: "remaining_cost",
+        label: "Remaining cost (primary book)",
+        kind: "money",
+        expr: "case when fa.status in ('disposed','written_off') then 0 else fac.cost end",
+      },
+      {
+        key: "carrying_value",
+        label: "Carrying value (primary book)",
+        kind: "money",
+        expr: "case when fa.status in ('disposed','written_off') then 0 else fac.carrying_value end",
+      },
+      {
+        key: "accumulated_depreciation",
+        label: "Accumulated depreciation (primary book)",
+        kind: "money",
+        expr: "case when fa.status in ('disposed','written_off') then 0 else fac.accumulated end",
+      },
+      { key: "salvage_value", label: "Salvage value", kind: "money", expr: "fa.salvage_value" },
+      { key: "serial_number", label: "Serial #", kind: "text", expr: "fa.serial_number" },
+      { key: "custodian_name", label: "Custodian", kind: "text", expr: "cust.display_name" },
+      { key: "project", label: "Project", kind: "text", expr: "prj.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "fa.created_at" },
+      { key: "id", label: "Asset (id)", kind: "uuid", expr: "fa.id" },
     ],
-    defaultSort: { column: 'asset_number', direction: 'asc' },
+    defaultSort: { column: "asset_number", direction: "asc" },
   },
   {
-    key: 'equipment',
-    label: 'Equipment',
-    category: 'catalog',
-    featureKey: 'equipment',
-    description: 'Financial equipment register with shared charge items, purchase basis, utilization, cost recovery, billing and return.',
+    key: "equipment",
+    label: "Equipment",
+    category: "catalog",
+    featureKey: "equipment",
+    description:
+      "Financial equipment register with shared charge items, purchase basis, utilization, cost recovery, billing and return.",
     from: `equipment_units eu
       LEFT JOIN subsidiaries sub ON sub.id = eu.subsidiary_id AND sub.org_id = eu.org_id
       LEFT JOIN items it ON it.id = eu.charge_item_id AND it.org_id = eu.org_id
       LEFT JOIN fixed_assets fa ON fa.id = eu.fixed_asset_id AND fa.org_id = eu.org_id AND fa.subsidiary_id = eu.subsidiary_id
       LEFT JOIN item_rate_books rb ON rb.id = eu.rate_book_id AND rb.org_id = eu.org_id`,
-    orgColumn: 'eu.org_id',
-    subsidiaryScope: { column: 'eu.subsidiary_id' },
+    orgColumn: "eu.org_id",
+    subsidiaryScope: { column: "eu.subsidiary_id" },
     columns: [
-      { key: 'unit_number', label: 'Equipment #', kind: 'text', expr: 'eu.unit_number' },
-      { key: 'name', label: 'Name', kind: 'text', expr: 'eu.name' },
-      { key: 'description', label: 'Description', kind: 'text', expr: 'eu.description' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'eu.status', options: ['draft', 'active', 'inactive', 'retired'] },
-      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
-      { key: 'charge_item', label: 'Charge item', kind: 'text', expr: 'it.name' },
-      { key: 'fixed_asset_number', label: 'Fixed asset #', kind: 'text', expr: 'fa.asset_number' },
-      { key: 'rate_book', label: 'Rate book', kind: 'text', expr: 'rb.name' },
-      { key: 'purchase_price', label: 'Purchase price', kind: 'money', expr: 'eu.purchase_price' },
-      { key: 'acquired_on', label: 'Acquired on', kind: 'date', expr: 'eu.acquired_on' },
-      { key: 'in_service_on', label: 'In service on', kind: 'date', expr: 'eu.in_service_on' },
-      { key: 'serial_number', label: 'Serial #', kind: 'text', expr: 'eu.serial_number' },
-      { key: 'capacity_quantity', label: 'Capacity', kind: 'number', expr: 'eu.capacity_quantity' },
-      { key: 'capacity_unit', label: 'Capacity unit', kind: 'text', expr: 'eu.capacity_unit' },
-      { key: 'usage', label: 'Charged usage', kind: 'number', expr: `(select coalesce(sum(dl.base_quantity),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))` },
-      { key: 'cost_recovery', label: 'Cost recovery', kind: 'money', expr: `(select coalesce(sum(dl.cost_amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))` },
-      { key: 'billable_value', label: 'Billable value', kind: 'money', expr: `(select coalesce(sum(dl.bill_amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))` },
-      { key: 'billed_revenue', label: 'Billed revenue', kind: 'money', expr: `(select coalesce(sum(dl.amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='customer_invoice' and d.status='posted' -- Live entries only: equipment shows billings from documents currently posted
-      )` },
-      { key: 'depreciation', label: 'Posted depreciation', kind: 'money', expr: `(select coalesce(sum(dsl.posted_amount),0) from fixed_assets fa join depreciation_schedules ds on ds.asset_id=fa.id and ds.org_id=fa.org_id join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id and dsl.org_id=ds.org_id where fa.id=eu.fixed_asset_id and fa.org_id=eu.org_id and fa.subsidiary_id=eu.subsidiary_id and dsl.posted_amount is not null)` },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'eu.created_at' },
-      { key: 'id', label: 'Equipment (id)', kind: 'uuid', expr: 'eu.id' },
+      { key: "unit_number", label: "Equipment #", kind: "text", expr: "eu.unit_number" },
+      { key: "name", label: "Name", kind: "text", expr: "eu.name" },
+      { key: "description", label: "Description", kind: "text", expr: "eu.description" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "eu.status",
+        options: ["draft", "active", "inactive", "retired"],
+      },
+      { key: "subsidiary", label: "Subsidiary", kind: "text", expr: "sub.name" },
+      { key: "charge_item", label: "Charge item", kind: "text", expr: "it.name" },
+      { key: "fixed_asset_number", label: "Fixed asset #", kind: "text", expr: "fa.asset_number" },
+      { key: "rate_book", label: "Rate book", kind: "text", expr: "rb.name" },
+      { key: "purchase_price", label: "Purchase price", kind: "money", expr: "eu.purchase_price" },
+      { key: "acquired_on", label: "Acquired on", kind: "date", expr: "eu.acquired_on" },
+      { key: "in_service_on", label: "In service on", kind: "date", expr: "eu.in_service_on" },
+      { key: "serial_number", label: "Serial #", kind: "text", expr: "eu.serial_number" },
+      { key: "capacity_quantity", label: "Capacity", kind: "number", expr: "eu.capacity_quantity" },
+      { key: "capacity_unit", label: "Capacity unit", kind: "text", expr: "eu.capacity_unit" },
+      {
+        key: "usage",
+        label: "Charged usage",
+        kind: "number",
+        expr: `(select coalesce(sum(dl.base_quantity),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))`,
+      },
+      {
+        key: "cost_recovery",
+        label: "Cost recovery",
+        kind: "money",
+        expr: `(select coalesce(sum(dl.cost_amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))`,
+      },
+      {
+        key: "billable_value",
+        label: "Billable value",
+        kind: "money",
+        expr: `(select coalesce(sum(dl.bill_amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))`,
+      },
+      {
+        key: "billed_revenue",
+        label: "Billed revenue",
+        kind: "money",
+        expr: `(select coalesce(sum(dl.amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='customer_invoice' and d.status='posted' -- Live entries only: equipment shows billings from documents currently posted
+      )`,
+      },
+      {
+        key: "depreciation",
+        label: "Posted depreciation",
+        kind: "money",
+        expr: `(select coalesce(sum(dsl.posted_amount),0) from fixed_assets fa join depreciation_schedules ds on ds.asset_id=fa.id and ds.org_id=fa.org_id join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id and dsl.org_id=ds.org_id where fa.id=eu.fixed_asset_id and fa.org_id=eu.org_id and fa.subsidiary_id=eu.subsidiary_id and dsl.posted_amount is not null)`,
+      },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "eu.created_at" },
+      { key: "id", label: "Equipment (id)", kind: "uuid", expr: "eu.id" },
     ],
-    defaultSort: { column: 'unit_number', direction: 'asc' },
+    defaultSort: { column: "unit_number", direction: "asc" },
   },
   {
-    key: 'tax_codes',
-    label: 'Tax codes',
-    category: 'catalog',
-    description: 'Tax codes — jurisdiction, scope and recoverability.',
+    key: "tax_codes",
+    label: "Tax codes",
+    category: "catalog",
+    description: "Tax codes — jurisdiction, scope and recoverability.",
     from: `tax_codes tc`,
-    orgColumn: 'tc.org_id',
+    orgColumn: "tc.org_id",
     subsidiaryScope: null,
     columns: [
-      { key: 'code', label: 'Code', kind: 'text', expr: 'tc.code' },
-      { key: 'name', label: 'Name', kind: 'text', expr: 'tc.name' },
-      { key: 'country', label: 'Country', kind: 'text', expr: 'tc.country' },
-      { key: 'region', label: 'Region', kind: 'text', expr: 'tc.region' },
-      { key: 'applies_to', label: 'Applies to', kind: 'enum', expr: 'tc.applies_to', options: ['sales', 'purchases', 'both'] },
-      { key: 'recoverable_percent', label: 'Recoverable %', kind: 'number', expr: 'tc.recoverable_percent' },
-      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'tc.is_active', options: BOOLEAN_OPTIONS },
-      { key: 'id', label: 'Tax code (id)', kind: 'uuid', expr: 'tc.id' },
+      { key: "code", label: "Code", kind: "text", expr: "tc.code" },
+      { key: "name", label: "Name", kind: "text", expr: "tc.name" },
+      { key: "country", label: "Country", kind: "text", expr: "tc.country" },
+      { key: "region", label: "Region", kind: "text", expr: "tc.region" },
+      {
+        key: "applies_to",
+        label: "Applies to",
+        kind: "enum",
+        expr: "tc.applies_to",
+        options: ["sales", "purchases", "both"],
+      },
+      {
+        key: "recoverable_percent",
+        label: "Recoverable %",
+        kind: "number",
+        expr: "tc.recoverable_percent",
+      },
+      {
+        key: "is_active",
+        label: "Active",
+        kind: "boolean",
+        expr: "tc.is_active",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "id", label: "Tax code (id)", kind: "uuid", expr: "tc.id" },
     ],
-    defaultSort: { column: 'code', direction: 'asc' },
+    defaultSort: { column: "code", direction: "asc" },
   },
   {
-    key: 'parties',
-    label: 'Parties',
-    category: 'parties',
+    key: "parties",
+    label: "Parties",
+    category: "parties",
     description:
-      'Customers, vendors and employees — one row per party with its role flags and employee detail.',
+      "Customers, vendors and employees — one row per party with its role flags and employee detail.",
     from: `parties pt
       LEFT JOIN customer_roles cr ON cr.party_id = pt.id AND cr.org_id = pt.org_id
       LEFT JOIN vendor_roles vr ON vr.party_id = pt.id AND vr.org_id = pt.org_id
       LEFT JOIN employee_roles er ON er.party_id = pt.id AND er.org_id = pt.org_id`,
-    orgColumn: 'pt.org_id',
-    subsidiaryScope: { column: 'pt.subsidiary_id', sharedNull: true },
+    orgColumn: "pt.org_id",
+    subsidiaryScope: { column: "pt.subsidiary_id", sharedNull: true },
     columns: [
-      { key: 'display_name', label: 'Name', kind: 'text', expr: 'pt.display_name' },
-      { key: 'legal_name', label: 'Legal name', kind: 'text', expr: 'pt.legal_name' },
-      { key: 'kind', label: 'Kind', kind: 'enum', expr: 'pt.kind' },
-      { key: 'short_code', label: 'Short code', kind: 'text', expr: 'pt.short_code' },
-      { key: 'email', label: 'Email', kind: 'text', expr: 'pt.email' },
-      { key: 'phone', label: 'Phone', kind: 'text', expr: 'pt.phone' },
-      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'pt.is_active', options: BOOLEAN_OPTIONS },
-      { key: 'is_customer', label: 'Customer', kind: 'boolean', expr: '(cr.id IS NOT NULL)', options: BOOLEAN_OPTIONS },
-      { key: 'is_vendor', label: 'Vendor', kind: 'boolean', expr: '(vr.id IS NOT NULL)', options: BOOLEAN_OPTIONS },
-      { key: 'is_employee', label: 'Employee', kind: 'boolean', expr: '(er.id IS NOT NULL)', options: BOOLEAN_OPTIONS },
-      { key: 'employee_number', label: 'Employee #', kind: 'text', expr: 'er.employee_number' },
-      { key: 'hired_on', label: 'Hired on', kind: 'date', expr: 'er.hired_on' },
-      { key: 'terminated_on', label: 'Terminated on', kind: 'date', expr: 'er.terminated_on' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'pt.created_at' },
-      { key: 'id', label: 'Party (id)', kind: 'uuid', expr: 'pt.id' },
+      { key: "display_name", label: "Name", kind: "text", expr: "pt.display_name" },
+      { key: "legal_name", label: "Legal name", kind: "text", expr: "pt.legal_name" },
+      { key: "kind", label: "Kind", kind: "enum", expr: "pt.kind" },
+      { key: "short_code", label: "Short code", kind: "text", expr: "pt.short_code" },
+      { key: "email", label: "Email", kind: "text", expr: "pt.email" },
+      { key: "phone", label: "Phone", kind: "text", expr: "pt.phone" },
+      {
+        key: "is_active",
+        label: "Active",
+        kind: "boolean",
+        expr: "pt.is_active",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "is_customer",
+        label: "Customer",
+        kind: "boolean",
+        expr: "(cr.id IS NOT NULL)",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "is_vendor",
+        label: "Vendor",
+        kind: "boolean",
+        expr: "(vr.id IS NOT NULL)",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "is_employee",
+        label: "Employee",
+        kind: "boolean",
+        expr: "(er.id IS NOT NULL)",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "employee_number", label: "Employee #", kind: "text", expr: "er.employee_number" },
+      { key: "hired_on", label: "Hired on", kind: "date", expr: "er.hired_on" },
+      { key: "terminated_on", label: "Terminated on", kind: "date", expr: "er.terminated_on" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "pt.created_at" },
+      { key: "id", label: "Party (id)", kind: "uuid", expr: "pt.id" },
     ],
-    defaultSort: { column: 'display_name', direction: 'asc' },
+    defaultSort: { column: "display_name", direction: "asc" },
   },
   {
-    key: 'accounts',
-    label: 'Accounts',
-    category: 'general_ledger',
-    description: 'The chart of accounts — number, name, type and posting flags.',
+    key: "accounts",
+    label: "Accounts",
+    category: "general_ledger",
+    description: "The chart of accounts — number, name, type and posting flags.",
     from: `accounts a`,
-    orgColumn: 'a.org_id',
-    subsidiaryScope: { column: 'a.subsidiary_id', sharedNull: true },
+    orgColumn: "a.org_id",
+    subsidiaryScope: { column: "a.subsidiary_id", sharedNull: true },
     columns: [
-      { key: 'number', label: 'Account #', kind: 'text', expr: 'a.number' },
-      { key: 'name', label: 'Name', kind: 'text', expr: 'a.name' },
-      { key: 'type', label: 'Type', kind: 'enum', expr: 'a.type' },
-      { key: 'description', label: 'Description', kind: 'text', expr: 'a.description' },
-      { key: 'is_summary', label: 'Summary', kind: 'boolean', expr: 'a.is_summary', options: BOOLEAN_OPTIONS },
-      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'a.is_active', options: BOOLEAN_OPTIONS },
-      { key: 'reconcilable', label: 'Reconcilable', kind: 'boolean', expr: 'a.reconcilable', options: BOOLEAN_OPTIONS },
-      { key: 'currency_restriction', label: 'Currency restriction', kind: 'text', expr: 'a.currency_restriction' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'a.created_at' },
-      { key: 'id', label: 'Account (id)', kind: 'uuid', expr: 'a.id' },
-      { key: 'parent_id', label: 'Parent (id)', kind: 'uuid', expr: 'a.parent_id' },
+      { key: "number", label: "Account #", kind: "text", expr: "a.number" },
+      { key: "name", label: "Name", kind: "text", expr: "a.name" },
+      { key: "type", label: "Type", kind: "enum", expr: "a.type" },
+      { key: "description", label: "Description", kind: "text", expr: "a.description" },
+      {
+        key: "is_summary",
+        label: "Summary",
+        kind: "boolean",
+        expr: "a.is_summary",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "is_active",
+        label: "Active",
+        kind: "boolean",
+        expr: "a.is_active",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "reconcilable",
+        label: "Reconcilable",
+        kind: "boolean",
+        expr: "a.reconcilable",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "currency_restriction",
+        label: "Currency restriction",
+        kind: "text",
+        expr: "a.currency_restriction",
+      },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "a.created_at" },
+      { key: "id", label: "Account (id)", kind: "uuid", expr: "a.id" },
+      { key: "parent_id", label: "Parent (id)", kind: "uuid", expr: "a.parent_id" },
     ],
-    defaultSort: { column: 'number', direction: 'asc' },
+    defaultSort: { column: "number", direction: "asc" },
   },
   {
-    key: 'pay_stubs',
-    label: 'Pay stubs',
-    category: 'payroll',
+    key: "pay_stubs",
+    label: "Pay stubs",
+    category: "payroll",
     description:
-      'One row per employee per pay run — gross, statutory withholdings, net, and employer cost, with run/schedule context. Wage data: requires the payroll permission.',
+      "One row per employee per pay run — gross, statutory withholdings, net, and employer cost, with run/schedule context. Wage data: requires the payroll permission.",
     from: `pay_stubs s
       JOIN pay_runs r ON r.document_id = s.pay_run_document_id AND r.org_id = s.org_id
       JOIN documents d ON d.id = r.document_id AND d.org_id = r.org_id
       JOIN parties p ON p.id = s.employee_party_id AND p.org_id = s.org_id
       LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id AND ps.org_id = r.org_id`,
-    orgColumn: 's.org_id',
-    subsidiaryScope: { column: 'd.subsidiary_id' },
-    requiredPermission: 'payroll.read',
-    featureKey: 'payroll',
-    currencyColumn: 'currency',
+    orgColumn: "s.org_id",
+    subsidiaryScope: { column: "d.subsidiary_id" },
+    requiredPermission: "payroll.read",
+    featureKey: "payroll",
+    currencyColumn: "currency",
     columns: [
-      { key: 'currency', label: 'Pay currency', kind: 'text', expr: 's.currency_code' },
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
-      { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },
-      { key: 'schedule', label: 'Schedule', kind: 'text', expr: 'ps.name' },
-      { key: 'pay_date', label: 'Pay date', kind: 'date', expr: 's.pay_date' },
-      { key: 'period_start', label: 'Period start', kind: 'date', expr: 'r.period_start' },
-      { key: 'period_end', label: 'Period end', kind: 'date', expr: 'r.period_end' },
-      { key: 'tax_year', label: 'Tax year', kind: 'number', identifier: true, expr: 's.tax_year' },
-      { key: 'province', label: 'Province / state', kind: 'text', expr: 's.province' },
+      { key: "currency", label: "Pay currency", kind: "text", expr: "s.currency_code" },
+      { key: "employee", label: "Employee", kind: "text", expr: "p.display_name" },
+      { key: "run_number", label: "Pay run #", kind: "text", expr: "d.document_number" },
+      { key: "schedule", label: "Schedule", kind: "text", expr: "ps.name" },
+      { key: "pay_date", label: "Pay date", kind: "date", expr: "s.pay_date" },
+      { key: "period_start", label: "Period start", kind: "date", expr: "r.period_start" },
+      { key: "period_end", label: "Period end", kind: "date", expr: "r.period_end" },
+      { key: "tax_year", label: "Tax year", kind: "number", identifier: true, expr: "s.tax_year" },
+      { key: "province", label: "Province / state", kind: "text", expr: "s.province" },
       {
-        key: 'run_status', label: 'Run status', kind: 'enum', expr: 'r.run_status',
-        options: ['draft', 'calculated', 'committed'],
+        key: "run_status",
+        label: "Run status",
+        kind: "enum",
+        expr: "r.run_status",
+        options: ["draft", "calculated", "committed"],
       },
       {
-        key: 'paid', label: 'Paid', kind: 'enum',
+        key: "paid",
+        label: "Paid",
+        kind: "enum",
         expr: "case when r.paid_at is not null then 'paid' else 'unpaid' end",
-        options: ['paid', 'unpaid'],
+        options: ["paid", "unpaid"],
       },
-      { key: 'gross', label: 'Gross pay', kind: 'money', txnCurrency: true, expr: 's.gross' },
+      { key: "gross", label: "Gross pay", kind: "money", txnCurrency: true, expr: "s.gross" },
       {
-        key: 'cpp_fica', label: 'CPP / FICA (employee)', kind: 'money', txnCurrency: true,
+        key: "cpp_fica",
+        label: "CPP / FICA (employee)",
+        kind: "money",
+        txnCurrency: true,
         expr: `(coalesce((s.factors->>'C')::numeric, 0) + coalesce((s.factors->>'C2')::numeric, 0)
           + coalesce((s.factors->>'SS')::numeric, 0) + coalesce((s.factors->>'MED')::numeric, 0)
           + coalesce((s.factors->>'MED2')::numeric, 0))`,
       },
-      { key: 'ei', label: 'EI (employee)', kind: 'money', txnCurrency: true, expr: `coalesce((s.factors->>'EI')::numeric, 0)` },
       {
-        key: 'income_tax', label: 'Income tax', kind: 'money', txnCurrency: true,
+        key: "ei",
+        label: "EI (employee)",
+        kind: "money",
+        txnCurrency: true,
+        expr: `coalesce((s.factors->>'EI')::numeric, 0)`,
+      },
+      {
+        key: "income_tax",
+        label: "Income tax",
+        kind: "money",
+        txnCurrency: true,
         expr: `(coalesce((s.factors->>'T')::numeric, 0) + coalesce((s.factors->>'TB')::numeric, 0)
           + coalesce((s.factors->>'FIT')::numeric, 0))`,
       },
-      { key: 'net_pay', label: 'Net pay', kind: 'money', txnCurrency: true, expr: 's.net_pay' },
-      { key: 'employer_cost', label: 'Employer cost', kind: 'money', txnCurrency: true, expr: 's.employer_cost' },
-      { key: 'vacation_accrued', label: 'Vacation accrued', kind: 'money', txnCurrency: true, expr: 's.vacation_accrued' },
-      { key: 'pensionable', label: 'Pensionable earnings', kind: 'money', txnCurrency: true, expr: 's.pensionable_earnings' },
-      { key: 'insurable', label: 'Insurable earnings', kind: 'money', txnCurrency: true, expr: 's.insurable_earnings' },
+      { key: "net_pay", label: "Net pay", kind: "money", txnCurrency: true, expr: "s.net_pay" },
+      {
+        key: "employer_cost",
+        label: "Employer cost",
+        kind: "money",
+        txnCurrency: true,
+        expr: "s.employer_cost",
+      },
+      {
+        key: "vacation_accrued",
+        label: "Vacation accrued",
+        kind: "money",
+        txnCurrency: true,
+        expr: "s.vacation_accrued",
+      },
+      {
+        key: "pensionable",
+        label: "Pensionable earnings",
+        kind: "money",
+        txnCurrency: true,
+        expr: "s.pensionable_earnings",
+      },
+      {
+        key: "insurable",
+        label: "Insurable earnings",
+        kind: "money",
+        txnCurrency: true,
+        expr: "s.insurable_earnings",
+      },
     ],
-    defaultSort: { column: 'pay_date', direction: 'desc' },
+    defaultSort: { column: "pay_date", direction: "desc" },
   },
   {
-    key: 'pay_stub_lines',
-    label: 'Pay stub lines',
-    category: 'payroll',
+    key: "pay_stub_lines",
+    label: "Pay stub lines",
+    category: "payroll",
     description:
-      'Component-level payroll detail — one row per earning, deduction, or employer contribution on a stub, with hours, rate, amount, and running year-to-date. The payroll journal source. Wage data: requires the payroll permission.',
+      "Component-level payroll detail — one row per earning, deduction, or employer contribution on a stub, with hours, rate, amount, and running year-to-date. The payroll journal source. Wage data: requires the payroll permission.",
     from: `pay_stub_lines l
       JOIN pay_stubs s ON s.id = l.stub_id AND s.org_id = l.org_id
       JOIN pay_runs r ON r.document_id = s.pay_run_document_id AND r.org_id = s.org_id
@@ -1022,38 +1495,51 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id AND ps.org_id = r.org_id
       LEFT JOIN projects prj ON prj.id = l.project_id AND prj.org_id = l.org_id
       LEFT JOIN departments dep ON dep.id = l.department_id AND dep.org_id = l.org_id`,
-    orgColumn: 'l.org_id',
-    subsidiaryScope: { column: 'd.subsidiary_id' },
-    requiredPermission: 'payroll.read',
-    featureKey: 'payroll',
-    latestOrderExpr: 's.pay_date DESC, s.id DESC, l.id DESC',
+    orgColumn: "l.org_id",
+    subsidiaryScope: { column: "d.subsidiary_id" },
+    requiredPermission: "payroll.read",
+    featureKey: "payroll",
+    latestOrderExpr: "s.pay_date DESC, s.id DESC, l.id DESC",
     columns: [
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
-      { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },
-      { key: 'schedule', label: 'Schedule', kind: 'text', expr: 'ps.name' },
-      { key: 'pay_date', label: 'Pay date', kind: 'date', expr: 's.pay_date' },
-      { key: 'period_start', label: 'Period start', kind: 'date', expr: 'r.period_start' },
-      { key: 'period_end', label: 'Period end', kind: 'date', expr: 'r.period_end' },
+      { key: "employee", label: "Employee", kind: "text", expr: "p.display_name" },
+      { key: "run_number", label: "Pay run #", kind: "text", expr: "d.document_number" },
+      { key: "schedule", label: "Schedule", kind: "text", expr: "ps.name" },
+      { key: "pay_date", label: "Pay date", kind: "date", expr: "s.pay_date" },
+      { key: "period_start", label: "Period start", kind: "date", expr: "r.period_start" },
+      { key: "period_end", label: "Period end", kind: "date", expr: "r.period_end" },
       {
-        key: 'run_status', label: 'Run status', kind: 'enum', expr: 'r.run_status',
-        options: ['draft', 'calculated', 'committed'],
+        key: "run_status",
+        label: "Run status",
+        kind: "enum",
+        expr: "r.run_status",
+        options: ["draft", "calculated", "committed"],
       },
-      { key: 'component', label: 'Component', kind: 'text', expr: 'coalesce(c.name, l.description)' },
-      { key: 'component_code', label: 'Component code', kind: 'text', expr: 'c.code' },
-      { key: 'line_description', label: 'Line description', kind: 'text', expr: 'l.description' },
       {
-        key: 'line_kind', label: 'Kind', kind: 'enum', expr: 'l.kind',
-        options: ['earning', 'deduction', 'employer_contribution'],
+        key: "component",
+        label: "Component",
+        kind: "text",
+        expr: "coalesce(c.name, l.description)",
       },
-      { key: 'hours', label: 'Hours', kind: 'number', expr: 'l.hours' },
+      { key: "component_code", label: "Component code", kind: "text", expr: "c.code" },
+      { key: "line_description", label: "Line description", kind: "text", expr: "l.description" },
+      {
+        key: "line_kind",
+        label: "Kind",
+        kind: "enum",
+        expr: "l.kind",
+        options: ["earning", "deduction", "employer_contribution"],
+      },
+      { key: "hours", label: "Hours", kind: "number", expr: "l.hours" },
       // Compensation per unit at ledger precision (numeric(19,4)), rendered
       // as money on the stub — a generic number kind would route its
       // aggregates through the lossy numeric shaping instead of the
       // money-exact presentation and denomination classification.
-      { key: 'rate', label: 'Rate', kind: 'money', expr: 'l.rate' },
-      { key: 'amount', label: 'Amount', kind: 'money', expr: 'l.amount' },
+      { key: "rate", label: "Rate", kind: "money", expr: "l.rate" },
+      { key: "amount", label: "Amount", kind: "money", expr: "l.amount" },
       {
-        key: 'ytd_amount', label: 'YTD amount', kind: 'money',
+        key: "ytd_amount",
+        label: "YTD amount",
+        kind: "money",
         snapshot: true,
         expr: `(select coalesce(sum(l2.amount), 0)
         from pay_stub_lines l2
@@ -1066,21 +1552,21 @@ export const REPORT_ENTITIES: ReportEntity[] = [
          and (s2.pay_date < s.pay_date or (s2.pay_date = s.pay_date and s2.id <= s.id))
          and (r2.run_status = 'committed' or s2.pay_run_document_id = s.pay_run_document_id))`,
       },
-      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'tax_year', label: 'Tax year', kind: 'number', identifier: true, expr: 's.tax_year' },
-      { key: 'province', label: 'Province / state', kind: 'text', expr: 's.province' },
-      { key: 'stub_id', label: 'Stub (id)', kind: 'uuid', expr: 's.id' },
-      { key: 'component_id', label: 'Component (id)', kind: 'uuid', expr: 'l.component_id' },
+      { key: "project", label: "Project", kind: "text", expr: "prj.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "tax_year", label: "Tax year", kind: "number", identifier: true, expr: "s.tax_year" },
+      { key: "province", label: "Province / state", kind: "text", expr: "s.province" },
+      { key: "stub_id", label: "Stub (id)", kind: "uuid", expr: "s.id" },
+      { key: "component_id", label: "Component (id)", kind: "uuid", expr: "l.component_id" },
     ],
-    defaultSort: { column: 'pay_date', direction: 'desc' },
+    defaultSort: { column: "pay_date", direction: "desc" },
   },
   {
-    key: 'payroll_parallel_findings',
-    label: 'Parallel run findings',
-    category: 'payroll',
+    key: "payroll_parallel_findings",
+    label: "Parallel run findings",
+    category: "payroll",
     description:
-      'Prior-provider parallel run, cell by cell: for each employee and each component, what the old payroll system paid, what this one calculates, and the difference — classified as an exact match, inside a disclosed tolerance, a material difference, or present on one side only. Wage data: requires the payroll permission.',
+      "Prior-provider parallel run, cell by cell: for each employee and each component, what the old payroll system paid, what this one calculates, and the difference — classified as an exact match, inside a disclosed tolerance, a material difference, or present on one side only. Wage data: requires the payroll permission.",
     // The classification is NOT recomputed here. It is produced once by
     // engine/src/payroll/parallel-run.ts and filed; this entity reads those
     // rows. Restating the rules in SQL would create a second source of truth
@@ -1090,88 +1576,117 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       JOIN payroll_prior_registers reg ON reg.id = cmp.register_id AND reg.org_id = cmp.org_id
       LEFT JOIN documents d ON d.id = cmp.pay_run_document_id AND d.org_id = cmp.org_id
       LEFT JOIN pay_runs r ON r.document_id = cmp.pay_run_document_id AND r.org_id = cmp.org_id`,
-    orgColumn: 'f.org_id',
-    subsidiaryScope: { column: 'd.subsidiary_id' },
-    requiredPermission: 'payroll.read',
-    featureKey: 'payroll',
-    latestOrderExpr: 'cmp.compared_at DESC, f.id DESC',
+    orgColumn: "f.org_id",
+    subsidiaryScope: { column: "d.subsidiary_id" },
+    requiredPermission: "payroll.read",
+    featureKey: "payroll",
+    latestOrderExpr: "cmp.compared_at DESC, f.id DESC",
     columns: [
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'f.employee_name' },
-      { key: 'register', label: 'Prior register', kind: 'text', expr: 'reg.name' },
-      { key: 'provider', label: 'Prior provider', kind: 'text', expr: 'reg.provider_name' },
-      { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },
-      { key: 'pay_date', label: 'Pay date', kind: 'date', expr: 'reg.pay_date' },
-      { key: 'period_start', label: 'Period start', kind: 'date', expr: 'reg.period_start' },
-      { key: 'period_end', label: 'Period end', kind: 'date', expr: 'reg.period_end' },
-      { key: 'component', label: 'Component', kind: 'text', expr: 'f.slot_label' },
-      { key: 'slot', label: 'Component key', kind: 'text', expr: 'f.slot' },
+      { key: "employee", label: "Employee", kind: "text", expr: "f.employee_name" },
+      { key: "register", label: "Prior register", kind: "text", expr: "reg.name" },
+      { key: "provider", label: "Prior provider", kind: "text", expr: "reg.provider_name" },
+      { key: "run_number", label: "Pay run #", kind: "text", expr: "d.document_number" },
+      { key: "pay_date", label: "Pay date", kind: "date", expr: "reg.pay_date" },
+      { key: "period_start", label: "Period start", kind: "date", expr: "reg.period_start" },
+      { key: "period_end", label: "Period end", kind: "date", expr: "reg.period_end" },
+      { key: "component", label: "Component", kind: "text", expr: "f.slot_label" },
+      { key: "slot", label: "Component key", kind: "text", expr: "f.slot" },
       {
-        key: 'line_kind', label: 'Kind', kind: 'enum', expr: 'f.kind',
-        options: ['earning', 'deduction', 'employer_contribution', 'total'],
+        key: "line_kind",
+        label: "Kind",
+        kind: "enum",
+        expr: "f.kind",
+        options: ["earning", "deduction", "employer_contribution", "total"],
       },
       {
         // Option order is load-bearing: a sectioned summary orders enum
         // dimensions by this list, so the differences an operator has to act on
         // come first and the matches settle at the bottom.
-        key: 'classification', label: 'Result', kind: 'enum', expr: 'f.classification',
+        key: "classification",
+        label: "Result",
+        kind: "enum",
+        expr: "f.classification",
         options: [
-          'difference',
-          'employee_prior_only',
-          'employee_our_only',
-          'prior_only',
-          'our_only',
-          'unattributed',
-          'within_tolerance',
-          'match',
+          "difference",
+          "employee_prior_only",
+          "employee_our_only",
+          "prior_only",
+          "our_only",
+          "unattributed",
+          "within_tolerance",
+          "match",
         ],
       },
-      { key: 'prior_amount', label: 'Prior system', kind: 'money', expr: 'f.prior_amount' },
-      { key: 'our_amount', label: 'This system', kind: 'money', expr: 'f.our_amount' },
-      { key: 'difference', label: 'Difference', kind: 'money', expr: 'f.difference' },
+      { key: "prior_amount", label: "Prior system", kind: "money", expr: "f.prior_amount" },
+      { key: "our_amount", label: "This system", kind: "money", expr: "f.our_amount" },
+      { key: "difference", label: "Difference", kind: "money", expr: "f.difference" },
       {
         // Surfaced as a column, never hidden. A tolerance the reader cannot see
         // would defeat the whole exercise.
-        key: 'tolerance_applied', label: 'Tolerance allowed', kind: 'money',
-        expr: 'f.tolerance_applied',
+        key: "tolerance_applied",
+        label: "Tolerance allowed",
+        kind: "money",
+        expr: "f.tolerance_applied",
       },
-      { key: 'source_column', label: 'Source column', kind: 'text', expr: 'f.source_column' },
+      { key: "source_column", label: "Source column", kind: "text", expr: "f.source_column" },
       {
-        key: 'comparison_status', label: 'Comparison outcome', kind: 'enum', expr: 'cmp.status',
-        options: ['differences', 'no_comparable_data', 'clean_within_tolerance', 'clean'],
+        key: "comparison_status",
+        label: "Comparison outcome",
+        kind: "enum",
+        expr: "cmp.status",
+        options: ["differences", "no_comparable_data", "clean_within_tolerance", "clean"],
       },
       {
         // A population count on every row, so a reader never has to infer from
         // the row count whether anything was actually compared.
-        key: 'employees_compared', label: 'Employees compared', kind: 'number',
-        expr: 'cmp.compared_employee_count',
+        key: "employees_compared",
+        label: "Employees compared",
+        kind: "number",
+        expr: "cmp.compared_employee_count",
       },
       {
-        key: 'employees_prior', label: 'Employees on prior register', kind: 'number',
-        expr: 'cmp.prior_employee_count',
+        key: "employees_prior",
+        label: "Employees on prior register",
+        kind: "number",
+        expr: "cmp.prior_employee_count",
       },
       {
-        key: 'employees_ours', label: 'Employees in our run', kind: 'number',
-        expr: 'cmp.our_employee_count',
+        key: "employees_ours",
+        label: "Employees in our run",
+        kind: "number",
+        expr: "cmp.our_employee_count",
       },
       {
-        key: 'unmapped_column_count', label: 'Unmapped source columns', kind: 'number',
-        expr: 'jsonb_array_length(cmp.unmapped_columns)',
+        key: "unmapped_column_count",
+        label: "Unmapped source columns",
+        kind: "number",
+        expr: "jsonb_array_length(cmp.unmapped_columns)",
       },
-      { key: 'blocked_reason', label: 'Why nothing was compared', kind: 'text', expr: 'cmp.blocked_reason' },
-      { key: 'compared_at', label: 'Compared at', kind: 'timestamp', expr: 'cmp.compared_at' },
-      { key: 'run_status', label: 'Run status', kind: 'enum', expr: 'r.run_status',
-        options: ['draft', 'calculated', 'committed', 'voided'] },
-      { key: 'comparison_id', label: 'Comparison (id)', kind: 'uuid', expr: 'cmp.id' },
-      { key: 'employee_id', label: 'Employee (id)', kind: 'uuid', expr: 'f.employee_party_id' },
+      {
+        key: "blocked_reason",
+        label: "Why nothing was compared",
+        kind: "text",
+        expr: "cmp.blocked_reason",
+      },
+      { key: "compared_at", label: "Compared at", kind: "timestamp", expr: "cmp.compared_at" },
+      {
+        key: "run_status",
+        label: "Run status",
+        kind: "enum",
+        expr: "r.run_status",
+        options: ["draft", "calculated", "committed", "voided"],
+      },
+      { key: "comparison_id", label: "Comparison (id)", kind: "uuid", expr: "cmp.id" },
+      { key: "employee_id", label: "Employee (id)", kind: "uuid", expr: "f.employee_party_id" },
     ],
-    defaultSort: { column: 'compared_at', direction: 'desc' },
+    defaultSort: { column: "compared_at", direction: "desc" },
   },
   {
-    key: 'entitlement_balances',
-    label: 'Entitlement balances',
-    category: 'payroll',
+    key: "entitlement_balances",
+    label: "Entitlement balances",
+    category: "payroll",
     description:
-      'One row per employment per pay bank — banked time, vacation, benefit recoup — with the resolved limit for that person and over/near-limit flags. The balance is SUM(entitlement_ledger); nothing else is ever the balance. Wage data: requires the payroll permission.',
+      "One row per employment per pay bank — banked time, vacation, benefit recoup — with the resolved limit for that person and over/near-limit flags. The balance is SUM(entitlement_ledger); nothing else is ever the balance. Wage data: requires the payroll permission.",
     // The balance is the ledger sum. The limit is resolved per employee with
     // the SAME most-specific-wins precedence the wage resolver uses
     // (employee > job title > trade > department > subsidiary > plan default,
@@ -1220,61 +1735,78 @@ export const REPORT_ENTITIES: ReportEntity[] = [
                   lim.effective_from DESC
          LIMIT 1
       ) lim ON TRUE`,
-    orgColumn: 'bal.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
-    requiredPermission: 'payroll.read',
-    featureKey: 'payroll',
+    orgColumn: "bal.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
+    requiredPermission: "payroll.read",
+    featureKey: "payroll",
     columns: [
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
-      { key: 'employer', label: 'Legal employer', kind: 'text', expr: 'employer.name' },
-      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'bal.employment_id' },
-      { key: 'plan', label: 'Plan', kind: 'text', expr: 'pln.name' },
-      { key: 'plan_code', label: 'Plan code', kind: 'text', expr: 'pln.code' },
+      { key: "employee", label: "Employee", kind: "text", expr: "p.display_name" },
+      { key: "employer", label: "Legal employer", kind: "text", expr: "employer.name" },
+      { key: "employment_id", label: "Employment (id)", kind: "uuid", expr: "bal.employment_id" },
+      { key: "plan", label: "Plan", kind: "text", expr: "pln.name" },
+      { key: "plan_code", label: "Plan code", kind: "text", expr: "pln.code" },
       {
-        key: 'unit', label: 'Unit', kind: 'enum', expr: 'pln.unit',
-        options: ['money', 'hours'],
+        key: "unit",
+        label: "Unit",
+        kind: "enum",
+        expr: "pln.unit",
+        options: ["money", "hours"],
       },
       {
-        key: 'direction', label: 'Direction', kind: 'enum', expr: 'pln.direction',
-        options: ['accrue', 'owe'],
+        key: "direction",
+        label: "Direction",
+        kind: "enum",
+        expr: "pln.direction",
+        options: ["accrue", "owe"],
       },
-      { key: 'balance', label: 'Balance', kind: 'money', expr: 'bal.balance' },
-      { key: 'job_title', label: 'Job title', kind: 'text', expr: 'er.job_title' },
-      { key: 'trade', label: 'Trade', kind: 'text', expr: 'trd.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'max_balance', label: 'Limit', kind: 'money', expr: 'lim.max_balance' },
-      { key: 'notify_balance', label: 'Notify at', kind: 'money', expr: 'lim.notify_balance' },
-      { key: 'limit_scope', label: 'Limit set by', kind: 'text', expr: 'lim.scope' },
+      { key: "balance", label: "Balance", kind: "money", expr: "bal.balance" },
+      { key: "job_title", label: "Job title", kind: "text", expr: "er.job_title" },
+      { key: "trade", label: "Trade", kind: "text", expr: "trd.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "max_balance", label: "Limit", kind: "money", expr: "lim.max_balance" },
+      { key: "notify_balance", label: "Notify at", kind: "money", expr: "lim.notify_balance" },
+      { key: "limit_scope", label: "Limit set by", kind: "text", expr: "lim.scope" },
       {
-        key: 'headroom', label: 'Headroom', kind: 'money',
-        expr: 'CASE WHEN lim.max_balance IS NULL THEN NULL ELSE lim.max_balance - bal.balance END',
+        key: "headroom",
+        label: "Headroom",
+        kind: "money",
+        expr: "CASE WHEN lim.max_balance IS NULL THEN NULL ELSE lim.max_balance - bal.balance END",
       },
       {
-        key: 'limit_state', label: 'Limit state', kind: 'enum',
+        key: "limit_state",
+        label: "Limit state",
+        kind: "enum",
         expr: `CASE WHEN lim.max_balance IS NOT NULL AND bal.balance > lim.max_balance THEN 'over'
                     WHEN lim.notify_balance IS NOT NULL AND bal.balance >= lim.notify_balance THEN 'near'
                     WHEN lim.max_balance IS NULL AND lim.notify_balance IS NULL THEN 'unlimited'
                     ELSE 'ok' END`,
-        options: ['over', 'near', 'ok', 'unlimited'],
+        options: ["over", "near", "ok", "unlimited"],
       },
       {
-        key: 'owed_to_employer', label: 'Owed to employer', kind: 'money',
-        expr: 'CASE WHEN bal.balance < 0 THEN -bal.balance ELSE 0 END',
+        key: "owed_to_employer",
+        label: "Owed to employer",
+        kind: "money",
+        expr: "CASE WHEN bal.balance < 0 THEN -bal.balance ELSE 0 END",
       },
-      { key: 'liability_account', label: 'Liability account', kind: 'text', expr: 'acc.name' },
-      { key: 'last_movement_date', label: 'Last movement', kind: 'date', expr: 'bal.last_movement_date' },
-      { key: 'movement_count', label: 'Movements', kind: 'number', expr: 'bal.movement_count' },
-      { key: 'plan_id', label: 'Plan (id)', kind: 'uuid', expr: 'bal.plan_id' },
-      { key: 'employee_id', label: 'Employee (id)', kind: 'uuid', expr: 'bal.employee_party_id' },
+      { key: "liability_account", label: "Liability account", kind: "text", expr: "acc.name" },
+      {
+        key: "last_movement_date",
+        label: "Last movement",
+        kind: "date",
+        expr: "bal.last_movement_date",
+      },
+      { key: "movement_count", label: "Movements", kind: "number", expr: "bal.movement_count" },
+      { key: "plan_id", label: "Plan (id)", kind: "uuid", expr: "bal.plan_id" },
+      { key: "employee_id", label: "Employee (id)", kind: "uuid", expr: "bal.employee_party_id" },
     ],
-    defaultSort: { column: 'plan', direction: 'asc' },
+    defaultSort: { column: "plan", direction: "asc" },
   },
   {
-    key: 'entitlement_service_milestones',
-    label: 'Service milestones',
-    category: 'payroll',
+    key: "entitlement_service_milestones",
+    label: "Service milestones",
+    category: "payroll",
     description:
-      'Every service anniversary an entitlement tier acts on — benefits at 3 months, RRSP at a year, the vacation ladder at 5/10/15 years — with the date each employee reaches it. The source for the milestone letters. Requires the payroll permission.',
+      "Every service anniversary an entitlement tier acts on — benefits at 3 months, RRSP at a year, the vacation ladder at 5/10/15 years — with the date each employee reaches it. The source for the milestone letters. Requires the payroll permission.",
     // Observed service credits and employer-specific effective ladders determine
     // the same civil-date milestone used by payroll; original service dates remain evidence.
     from: `entitlement_service_tiers t
@@ -1311,105 +1843,140 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN entitlement_plans pln ON pln.id=t.plan_id AND pln.org_id=t.org_id
       LEFT JOIN pay_components c ON c.id=t.component_id AND c.org_id=t.org_id
       LEFT JOIN departments dep ON dep.id=er.department_id AND dep.org_id=er.org_id`,
-    orgColumn: 't.org_id',
-    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
-    defaultPeriodField: 'milestone_date',
-    requiredPermission: 'payroll.read',
-    featureKey: 'payroll',
+    orgColumn: "t.org_id",
+    subsidiaryScope: { column: "e.employer_subsidiary_id" },
+    defaultPeriodField: "milestone_date",
+    requiredPermission: "payroll.read",
+    featureKey: "payroll",
     baseFilter: {
-      combinator: 'and',
-      rules: [{ field: 'tier_active', op: 'is_true' }],
+      combinator: "and",
+      rules: [{ field: "tier_active", op: "is_true" }],
     },
     columns: [
-      { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
+      { key: "employee", label: "Employee", kind: "text", expr: "p.display_name" },
       {
-        key: 'milestone_date', label: 'Milestone date', kind: 'date',
-        expr: 'milestone.milestone_date',
+        key: "milestone_date",
+        label: "Milestone date",
+        kind: "date",
+        expr: "milestone.milestone_date",
       },
-      { key: 'hired_on', label: 'Hired on', kind: 'date', expr: 'e.service_start' },
-      { key: 'after_months', label: 'Service (months)', kind: 'number', expr: 't.after_months' },
+      { key: "hired_on", label: "Hired on", kind: "date", expr: "e.service_start" },
+      { key: "after_months", label: "Service (months)", kind: "number", expr: "t.after_months" },
       {
-        key: 'after_years', label: 'Service (years)', kind: 'number',
-        expr: 'round(t.after_months / 12.0, 1)',
+        key: "after_years",
+        label: "Service (years)",
+        kind: "number",
+        expr: "round(t.after_months / 12.0, 1)",
       },
       {
-        key: 'milestone', label: 'Milestone', kind: 'text',
+        key: "milestone",
+        label: "Milestone",
+        kind: "text",
         expr: `coalesce(pln.name, c.name)`,
       },
       {
-        key: 'milestone_kind', label: 'Grants', kind: 'enum',
+        key: "milestone_kind",
+        label: "Grants",
+        kind: "enum",
         expr: `CASE WHEN t.plan_id IS NOT NULL THEN 'accrual rate' ELSE 'eligibility' END`,
-        options: ['accrual rate', 'eligibility'],
+        options: ["accrual rate", "eligibility"],
       },
-      { key: 'accrual_value', label: 'New accrual value', kind: 'number', expr: 't.accrual_value' },
-      { key: 'eligible', label: 'Eligible', kind: 'boolean', expr: 't.eligible', options: BOOLEAN_OPTIONS },
-      { key: 'job_title', label: 'Job title', kind: 'text', expr: 'er.job_title' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'terminated_on', label: 'Terminated on', kind: 'date', expr: 'er.terminated_on' },
-      { key: 'tier_active', label: 'Tier active', kind: 'boolean', expr: 't.is_active', options: BOOLEAN_OPTIONS },
-      { key: 'employee_id', label: 'Employee (id)', kind: 'uuid', expr: 'e.worker_party_id' },
-      { key: 'plan_id', label: 'Plan (id)', kind: 'uuid', expr: 't.plan_id' },
-      { key: 'component_id', label: 'Component (id)', kind: 'uuid', expr: 't.component_id' },
+      { key: "accrual_value", label: "New accrual value", kind: "number", expr: "t.accrual_value" },
+      {
+        key: "eligible",
+        label: "Eligible",
+        kind: "boolean",
+        expr: "t.eligible",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "job_title", label: "Job title", kind: "text", expr: "er.job_title" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "terminated_on", label: "Terminated on", kind: "date", expr: "er.terminated_on" },
+      {
+        key: "tier_active",
+        label: "Tier active",
+        kind: "boolean",
+        expr: "t.is_active",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "employee_id", label: "Employee (id)", kind: "uuid", expr: "e.worker_party_id" },
+      { key: "plan_id", label: "Plan (id)", kind: "uuid", expr: "t.plan_id" },
+      { key: "component_id", label: "Component (id)", kind: "uuid", expr: "t.component_id" },
     ],
-    defaultSort: { column: 'milestone_date', direction: 'asc' },
+    defaultSort: { column: "milestone_date", direction: "asc" },
   },
   {
-    key: 'allocation_runs',
-    label: 'Allocation runs',
-    category: 'general_ledger',
+    key: "allocation_runs",
+    label: "Allocation runs",
+    category: "general_ledger",
     description:
-      'One row per computed or posted period-mode allocation run — rule, version, period, book, source and allocated totals, residual, and status. Requires the allocations permission.',
+      "One row per computed or posted period-mode allocation run — rule, version, period, book, source and allocated totals, residual, and status. Requires the allocations permission.",
     from: `allocation_runs r
       JOIN allocation_rules rule ON rule.id = r.rule_id AND rule.org_id = r.org_id
       JOIN allocation_rule_versions v ON v.id = r.version_id AND v.org_id = r.org_id
       JOIN accounting_periods p ON p.id = r.period_id AND p.org_id = r.org_id
       JOIN accounting_books b ON b.id = r.book_id AND b.org_id = r.org_id
       LEFT JOIN subsidiaries sub ON sub.id = r.subsidiary_id AND sub.org_id = r.org_id`,
-    orgColumn: 'r.org_id',
+    orgColumn: "r.org_id",
     // A null run subsidiary means every subsidiary in scope: scoped readers
     // keep org-wide runs alongside their own entities.
-    subsidiaryScope: { column: 'r.subsidiary_id', sharedNull: true },
+    subsidiaryScope: { column: "r.subsidiary_id", sharedNull: true },
     // Runs are per-book: the standard omitted-book contract clamps to the
     // primary book unless the plan scopes or partitions by a book column.
-    bookScope: { column: 'r.book_id' },
-    requiredPermission: 'allocations.read',
-    featureKey: 'allocations',
+    bookScope: { column: "r.book_id" },
+    requiredPermission: "allocations.read",
+    featureKey: "allocations",
     columns: [
-      { key: 'rule_name', label: 'Rule', kind: 'text', expr: 'rule.name' },
-      { key: 'rule_key', label: 'Rule key', kind: 'text', expr: 'rule.key' },
+      { key: "rule_name", label: "Rule", kind: "text", expr: "rule.name" },
+      { key: "rule_key", label: "Rule key", kind: "text", expr: "rule.key" },
       {
-        key: 'rule_mode', label: 'Rule mode', kind: 'enum', expr: 'rule.mode',
-        options: ['entry', 'post', 'period'],
-      },
-      { key: 'version_no', label: 'Version #', kind: 'number', identifier: true, expr: 'v.version_no' },
-      { key: 'period', label: 'Period', kind: 'text', expr: 'p.name' },
-      { key: 'period_start', label: 'Period start', kind: 'date', expr: 'p.starts_on' },
-      { key: 'period_end', label: 'Period end', kind: 'date', expr: 'p.ends_on' },
-      { key: 'book', label: 'Book', kind: 'text', expr: 'b.name' },
-      { key: 'book_id', label: 'Book (id)', kind: 'uuid', expr: 'b.id' },
-      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
-      {
-        key: 'status', label: 'Status', kind: 'enum', expr: 'r.status',
-        options: ['previewed', 'pending_approval', 'posted', 'reversed', 'failed', 'superseded'],
+        key: "rule_mode",
+        label: "Rule mode",
+        kind: "enum",
+        expr: "rule.mode",
+        options: ["entry", "post", "period"],
       },
       {
-        key: 'trigger_kind', label: 'Trigger', kind: 'enum', expr: 'r.trigger_kind',
-        options: ['manual', 'scheduled', 'close_automation', 'rerun'],
+        key: "version_no",
+        label: "Version #",
+        kind: "number",
+        identifier: true,
+        expr: "v.version_no",
       },
-      { key: 'source_total', label: 'Source total', kind: 'money', expr: 'r.source_total' },
-      { key: 'allocated_total', label: 'Allocated', kind: 'money', expr: 'r.allocated_total' },
-      { key: 'residual', label: 'Residual', kind: 'money', expr: 'r.residual' },
-      { key: 'started_at', label: 'Started at', kind: 'timestamp', expr: 'r.started_at' },
-      { key: 'run_id', label: 'Run (id)', kind: 'uuid', expr: 'r.id' },
+      { key: "period", label: "Period", kind: "text", expr: "p.name" },
+      { key: "period_start", label: "Period start", kind: "date", expr: "p.starts_on" },
+      { key: "period_end", label: "Period end", kind: "date", expr: "p.ends_on" },
+      { key: "book", label: "Book", kind: "text", expr: "b.name" },
+      { key: "book_id", label: "Book (id)", kind: "uuid", expr: "b.id" },
+      { key: "subsidiary", label: "Subsidiary", kind: "text", expr: "sub.name" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "r.status",
+        options: ["previewed", "pending_approval", "posted", "reversed", "failed", "superseded"],
+      },
+      {
+        key: "trigger_kind",
+        label: "Trigger",
+        kind: "enum",
+        expr: "r.trigger_kind",
+        options: ["manual", "scheduled", "close_automation", "rerun"],
+      },
+      { key: "source_total", label: "Source total", kind: "money", expr: "r.source_total" },
+      { key: "allocated_total", label: "Allocated", kind: "money", expr: "r.allocated_total" },
+      { key: "residual", label: "Residual", kind: "money", expr: "r.residual" },
+      { key: "started_at", label: "Started at", kind: "timestamp", expr: "r.started_at" },
+      { key: "run_id", label: "Run (id)", kind: "uuid", expr: "r.id" },
     ],
-    defaultSort: { column: 'period_end', direction: 'desc' },
+    defaultSort: { column: "period_end", direction: "desc" },
   },
   {
-    key: 'allocation_lineage',
-    label: 'Allocation lineage',
-    category: 'general_ledger',
+    key: "allocation_lineage",
+    label: "Allocation lineage",
+    category: "general_ledger",
     description:
-      'Every allocated line traced to its rule version, source period, account, and dimensions, with driver share and amount. Entry and report-only rows have no journal line; only period runs carry period and book context. Requires the allocations permission.',
+      "Every allocated line traced to its rule version, source period, account, and dimensions, with driver share and amount. Entry and report-only rows have no journal line; only period runs carry period and book context. Requires the allocations permission.",
     from: `allocation_lineage l
       JOIN allocation_rules rule ON rule.id = l.rule_id AND rule.org_id = l.org_id
       JOIN allocation_rule_versions v ON v.id = l.version_id AND v.org_id = l.org_id
@@ -1422,45 +1989,48 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN locations loc ON loc.id = jl.location_id AND loc.org_id = l.org_id
       LEFT JOIN classes cls ON cls.id = jl.class_id AND cls.org_id = l.org_id
       LEFT JOIN projects prj ON prj.id = jl.project_id AND prj.org_id = l.org_id`,
-    orgColumn: 'l.org_id',
+    orgColumn: "l.org_id",
     // Rows without a journal line (entry distributions, report-only runs)
     // carry no subsidiary attribution: scoped readers keep those alongside
     // their own entities' GL lineage.
-    subsidiaryScope: { column: 'jl.subsidiary_id', sharedNull: true },
-    requiredPermission: 'allocations.read',
-    featureKey: 'allocations',
+    subsidiaryScope: { column: "jl.subsidiary_id", sharedNull: true },
+    requiredPermission: "allocations.read",
+    featureKey: "allocations",
     // Traceability history, not a fiscal window: the viewer must not acquire
     // an implicit period the way ledger entities do (lot-recall precedent).
     defaultPeriodField: null,
     pagination: { defaultPageSize: 100, maxPageSize: 500 },
     columns: [
-      { key: 'rule_name', label: 'Rule', kind: 'text', expr: 'rule.name' },
+      { key: "rule_name", label: "Rule", kind: "text", expr: "rule.name" },
       {
-        key: 'mode', label: 'Mode', kind: 'enum', expr: 'l.mode',
-        options: ['entry', 'post', 'period'],
+        key: "mode",
+        label: "Mode",
+        kind: "enum",
+        expr: "l.mode",
+        options: ["entry", "post", "period"],
       },
-      { key: 'period', label: 'Period', kind: 'text', expr: 'p.name' },
-      { key: 'book', label: 'Book', kind: 'text', expr: 'b.name' },
-      { key: 'account_number', label: 'Account #', kind: 'text', expr: 'a.number' },
-      { key: 'account_name', label: 'Account', kind: 'text', expr: 'a.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
-      { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
-      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
-      { key: 'share', label: 'Share', kind: 'number', expr: 'l.share' },
-      { key: 'driver_value', label: 'Driver value', kind: 'number', expr: 'l.driver_value' },
-      { key: 'amount', label: 'Amount', kind: 'money', expr: 'l.amount' },
-      { key: 'residual', label: 'Residual', kind: 'money', expr: 'l.residual' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'l.created_at' },
+      { key: "period", label: "Period", kind: "text", expr: "p.name" },
+      { key: "book", label: "Book", kind: "text", expr: "b.name" },
+      { key: "account_number", label: "Account #", kind: "text", expr: "a.number" },
+      { key: "account_name", label: "Account", kind: "text", expr: "a.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "location", label: "Location", kind: "text", expr: "loc.name" },
+      { key: "class", label: "Class", kind: "text", expr: "cls.name" },
+      { key: "project", label: "Project", kind: "text", expr: "prj.name" },
+      { key: "share", label: "Share", kind: "number", expr: "l.share" },
+      { key: "driver_value", label: "Driver value", kind: "number", expr: "l.driver_value" },
+      { key: "amount", label: "Amount", kind: "money", expr: "l.amount" },
+      { key: "residual", label: "Residual", kind: "money", expr: "l.residual" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "l.created_at" },
     ],
-    defaultSort: { column: 'created_at', direction: 'desc' },
+    defaultSort: { column: "created_at", direction: "desc" },
   },
   {
-    key: 'crm_opportunities',
-    label: 'Opportunities',
-    category: 'crm',
+    key: "crm_opportunities",
+    label: "Opportunities",
+    category: "crm",
     description:
-      'Sales opportunities with stages, expected close dates, amounts, probabilities, and account ownership.',
+      "Sales opportunities with stages, expected close dates, amounts, probabilities, and account ownership.",
     from: `crm_opportunities o
       JOIN crm_opportunity_statuses s ON s.id = o.status_id AND s.org_id = o.org_id
       LEFT JOIN parties p ON p.id = o.party_id AND p.org_id = o.org_id
@@ -1472,99 +2042,193 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN departments dep ON dep.id = o.department_id AND dep.org_id = o.org_id
       LEFT JOIN locations loc ON loc.id = o.location_id AND loc.org_id = o.org_id
       LEFT JOIN classes cls ON cls.id = o.class_id AND cls.org_id = o.org_id`,
-    orgColumn: 'o.org_id',
-    subsidiaryScope: { column: 'o.subsidiary_id', sharedNull: true },
-    currencyColumn: 'currency',
-    featureKey: 'crm',
-    requiredPermission: 'crm.opportunities.read',
-    defaultPeriodField: 'expected_close_date',
+    orgColumn: "o.org_id",
+    subsidiaryScope: { column: "o.subsidiary_id", sharedNull: true },
+    currencyColumn: "currency",
+    featureKey: "crm",
+    requiredPermission: "crm.opportunities.read",
+    defaultPeriodField: "expected_close_date",
     columns: [
-      { key: 'opportunity_number', label: 'Opportunity #', kind: 'text', expr: 'o.opportunity_number' },
-      { key: 'title', label: 'Title', kind: 'text', expr: 'o.title' },
-      { key: 'party_name', label: 'Account', kind: 'text', expr: 'p.display_name' },
-      { key: 'contact_name', label: 'Primary contact', kind: 'text', expr: 'c.name' },
-      { key: 'owner_name', label: 'Owner', kind: 'text', expr: 'u.name' },
-      { key: 'sales_team_name', label: 'Sales team', kind: 'text', expr: 'st.name' },
-      { key: 'lead_source_name', label: 'Lead source', kind: 'text', expr: 'ls.name' },
-      { key: 'status_name', label: 'Stage', kind: 'text', expr: 's.name' },
-      { key: 'status_key', label: 'Stage key', kind: 'text', expr: 's.key' },
-      { key: 'is_closed', label: 'Closed', kind: 'boolean', expr: 's.is_closed', options: BOOLEAN_OPTIONS },
-      { key: 'is_won', label: 'Won', kind: 'boolean', expr: 's.is_won', options: BOOLEAN_OPTIONS },
       {
-        key: 'forecast_category', label: 'Forecast category', kind: 'enum', expr: 'o.forecast_category',
-        options: ['omitted', 'worst_case', 'most_likely', 'upside'],
+        key: "opportunity_number",
+        label: "Opportunity #",
+        kind: "text",
+        expr: "o.opportunity_number",
       },
-      { key: 'probability', label: 'Probability (%)', kind: 'number', expr: 'o.probability' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'o.currency' },
-      { key: 'projected_amount', label: 'Projected amount', kind: 'money', expr: 'o.projected_amount', txnCurrency: true },
-      { key: 'weighted_amount', label: 'Weighted amount', kind: 'money', expr: 'o.weighted_amount', txnCurrency: true },
-      { key: 'range_low', label: 'Range low', kind: 'money', expr: 'o.range_low', txnCurrency: true },
-      { key: 'range_high', label: 'Range high', kind: 'money', expr: 'o.range_high', txnCurrency: true },
-      { key: 'expected_close_date', label: 'Expected close date', kind: 'date', expr: 'o.expected_close_date' },
-      { key: 'next_step', label: 'Next step', kind: 'text', expr: 'o.next_step' },
-      { key: 'win_loss_reason', label: 'Win/loss reason', kind: 'text', expr: 'o.win_loss_reason' },
-      { key: 'description', label: 'Description', kind: 'text', expr: 'o.description' },
-      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
-      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
-      { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
-      { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'o.created_at' },
-      { key: 'id', label: 'Opportunity (id)', kind: 'uuid', expr: 'o.id' },
-      { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'o.party_id' },
+      { key: "title", label: "Title", kind: "text", expr: "o.title" },
+      { key: "party_name", label: "Account", kind: "text", expr: "p.display_name" },
+      { key: "contact_name", label: "Primary contact", kind: "text", expr: "c.name" },
+      { key: "owner_name", label: "Owner", kind: "text", expr: "u.name" },
+      { key: "sales_team_name", label: "Sales team", kind: "text", expr: "st.name" },
+      { key: "lead_source_name", label: "Lead source", kind: "text", expr: "ls.name" },
+      { key: "status_name", label: "Stage", kind: "text", expr: "s.name" },
+      { key: "status_key", label: "Stage key", kind: "text", expr: "s.key" },
+      {
+        key: "is_closed",
+        label: "Closed",
+        kind: "boolean",
+        expr: "s.is_closed",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "is_won", label: "Won", kind: "boolean", expr: "s.is_won", options: BOOLEAN_OPTIONS },
+      {
+        key: "forecast_category",
+        label: "Forecast category",
+        kind: "enum",
+        expr: "o.forecast_category",
+        options: ["omitted", "worst_case", "most_likely", "upside"],
+      },
+      { key: "probability", label: "Probability (%)", kind: "number", expr: "o.probability" },
+      { key: "currency", label: "Currency", kind: "text", expr: "o.currency" },
+      {
+        key: "projected_amount",
+        label: "Projected amount",
+        kind: "money",
+        expr: "o.projected_amount",
+        txnCurrency: true,
+      },
+      {
+        key: "weighted_amount",
+        label: "Weighted amount",
+        kind: "money",
+        expr: "o.weighted_amount",
+        txnCurrency: true,
+      },
+      {
+        key: "range_low",
+        label: "Range low",
+        kind: "money",
+        expr: "o.range_low",
+        txnCurrency: true,
+      },
+      {
+        key: "range_high",
+        label: "Range high",
+        kind: "money",
+        expr: "o.range_high",
+        txnCurrency: true,
+      },
+      {
+        key: "expected_close_date",
+        label: "Expected close date",
+        kind: "date",
+        expr: "o.expected_close_date",
+      },
+      { key: "next_step", label: "Next step", kind: "text", expr: "o.next_step" },
+      { key: "win_loss_reason", label: "Win/loss reason", kind: "text", expr: "o.win_loss_reason" },
+      { key: "description", label: "Description", kind: "text", expr: "o.description" },
+      { key: "subsidiary", label: "Subsidiary", kind: "text", expr: "sub.name" },
+      { key: "department", label: "Department", kind: "text", expr: "dep.name" },
+      { key: "location", label: "Location", kind: "text", expr: "loc.name" },
+      { key: "class", label: "Class", kind: "text", expr: "cls.name" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "o.created_at" },
+      { key: "id", label: "Opportunity (id)", kind: "uuid", expr: "o.id" },
+      { key: "party_id", label: "Party (id)", kind: "uuid", expr: "o.party_id" },
     ],
-    defaultSort: { column: 'expected_close_date', direction: 'asc' },
+    defaultSort: { column: "expected_close_date", direction: "asc" },
   },
   {
-    key: 'crm_opportunity_lines',
-    label: 'Opportunity lines',
-    category: 'crm',
+    key: "crm_opportunity_lines",
+    label: "Opportunity lines",
+    category: "crm",
     description:
-      'Line items on sales opportunities with quantities, rates, amounts, cost, and item references.',
+      "Line items on sales opportunities with quantities, rates, amounts, cost, and item references.",
     from: `crm_opportunity_lines ol
       JOIN crm_opportunities o ON o.id = ol.opportunity_id AND o.org_id = ol.org_id
       JOIN crm_opportunity_statuses s ON s.id = o.status_id AND s.org_id = o.org_id
       LEFT JOIN items it ON it.id = ol.item_id AND it.org_id = ol.org_id
       LEFT JOIN parties p ON p.id = o.party_id AND p.org_id = o.org_id
       LEFT JOIN users u ON u.id = o.owner_user_id AND u.org_id = o.org_id`,
-    orgColumn: 'ol.org_id',
-    subsidiaryScope: { column: 'o.subsidiary_id', sharedNull: true },
-    currencyColumn: 'currency',
-    featureKey: 'crm',
-    requiredPermission: 'crm.opportunities.read',
-    defaultPeriodField: 'expected_close_date',
+    orgColumn: "ol.org_id",
+    subsidiaryScope: { column: "o.subsidiary_id", sharedNull: true },
+    currencyColumn: "currency",
+    featureKey: "crm",
+    requiredPermission: "crm.opportunities.read",
+    defaultPeriodField: "expected_close_date",
     columns: [
-      { key: 'opportunity_number', label: 'Opportunity #', kind: 'text', expr: 'o.opportunity_number' },
-      { key: 'opportunity_title', label: 'Opportunity title', kind: 'text', expr: 'o.title' },
-      { key: 'line_number', label: 'Line #', kind: 'number', identifier: true, expr: 'ol.line_number' },
-      { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
-      { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
-      { key: 'description', label: 'Description', kind: 'text', expr: 'ol.description' },
-      { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'ol.quantity' },
-      { key: 'unit', label: 'Unit', kind: 'text', expr: 'ol.unit' },
-      { key: 'unit_price', label: 'Unit price', kind: 'money', expr: 'ol.unit_price', txnCurrency: true },
-      { key: 'amount', label: 'Amount', kind: 'money', expr: 'ol.amount', txnCurrency: true },
-      { key: 'unit_cost', label: 'Unit cost', kind: 'money', expr: 'coalesce(ol.unit_cost, 0)', txnCurrency: true },
-      { key: 'cost_amount', label: 'Cost amount', kind: 'money', expr: 'coalesce(ol.cost_amount, 0)', txnCurrency: true },
-      { key: 'gross_profit', label: 'Gross profit', kind: 'money', expr: '(ol.amount - coalesce(ol.cost_amount, 0))', txnCurrency: true },
-      { key: 'probability', label: 'Probability (%)', kind: 'number', expr: 'coalesce(ol.probability, o.probability)' },
-      { key: 'expected_amount', label: 'Expected amount', kind: 'money', expr: 'ol.expected_amount', txnCurrency: true },
-      { key: 'party_name', label: 'Account', kind: 'text', expr: 'p.display_name' },
-      { key: 'owner_name', label: 'Owner', kind: 'text', expr: 'u.name' },
-      { key: 'status_name', label: 'Stage', kind: 'text', expr: 's.name' },
-      { key: 'expected_close_date', label: 'Expected close date', kind: 'date', expr: 'o.expected_close_date' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'o.currency' },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'ol.created_at' },
-      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'ol.id' },
-      { key: 'opportunity_id', label: 'Opportunity (id)', kind: 'uuid', expr: 'ol.opportunity_id' },
+      {
+        key: "opportunity_number",
+        label: "Opportunity #",
+        kind: "text",
+        expr: "o.opportunity_number",
+      },
+      { key: "opportunity_title", label: "Opportunity title", kind: "text", expr: "o.title" },
+      {
+        key: "line_number",
+        label: "Line #",
+        kind: "number",
+        identifier: true,
+        expr: "ol.line_number",
+      },
+      { key: "item_name", label: "Item", kind: "text", expr: "it.name" },
+      { key: "item_code", label: "Item code", kind: "text", expr: "it.code" },
+      { key: "description", label: "Description", kind: "text", expr: "ol.description" },
+      { key: "quantity", label: "Quantity", kind: "number", expr: "ol.quantity" },
+      { key: "unit", label: "Unit", kind: "text", expr: "ol.unit" },
+      {
+        key: "unit_price",
+        label: "Unit price",
+        kind: "money",
+        expr: "ol.unit_price",
+        txnCurrency: true,
+      },
+      { key: "amount", label: "Amount", kind: "money", expr: "ol.amount", txnCurrency: true },
+      {
+        key: "unit_cost",
+        label: "Unit cost",
+        kind: "money",
+        expr: "coalesce(ol.unit_cost, 0)",
+        txnCurrency: true,
+      },
+      {
+        key: "cost_amount",
+        label: "Cost amount",
+        kind: "money",
+        expr: "coalesce(ol.cost_amount, 0)",
+        txnCurrency: true,
+      },
+      {
+        key: "gross_profit",
+        label: "Gross profit",
+        kind: "money",
+        expr: "(ol.amount - coalesce(ol.cost_amount, 0))",
+        txnCurrency: true,
+      },
+      {
+        key: "probability",
+        label: "Probability (%)",
+        kind: "number",
+        expr: "coalesce(ol.probability, o.probability)",
+      },
+      {
+        key: "expected_amount",
+        label: "Expected amount",
+        kind: "money",
+        expr: "ol.expected_amount",
+        txnCurrency: true,
+      },
+      { key: "party_name", label: "Account", kind: "text", expr: "p.display_name" },
+      { key: "owner_name", label: "Owner", kind: "text", expr: "u.name" },
+      { key: "status_name", label: "Stage", kind: "text", expr: "s.name" },
+      {
+        key: "expected_close_date",
+        label: "Expected close date",
+        kind: "date",
+        expr: "o.expected_close_date",
+      },
+      { key: "currency", label: "Currency", kind: "text", expr: "o.currency" },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "ol.created_at" },
+      { key: "id", label: "Line (id)", kind: "uuid", expr: "ol.id" },
+      { key: "opportunity_id", label: "Opportunity (id)", kind: "uuid", expr: "ol.opportunity_id" },
     ],
-    defaultSort: { column: 'created_at', direction: 'desc' },
+    defaultSort: { column: "created_at", direction: "desc" },
   },
   {
-    key: 'crm_account_profiles',
-    label: 'CRM accounts & leads',
-    category: 'crm',
+    key: "crm_account_profiles",
+    label: "CRM accounts & leads",
+    category: "crm",
     description:
-      'Relationship profiles with lifecycle stages (lead, prospect, customer), qualification, industry, and routing territory.',
+      "Relationship profiles with lifecycle stages (lead, prospect, customer), qualification, industry, and routing territory.",
     from: `crm_account_profiles cp
       JOIN parties p ON p.id = cp.party_id AND p.org_id = cp.org_id
       LEFT JOIN crm_account_statuses s ON s.id = cp.status_id AND s.org_id = cp.org_id
@@ -1572,76 +2236,141 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN crm_sales_territories t ON t.id = cp.territory_id AND t.org_id = cp.org_id
       LEFT JOIN crm_lead_sources ls ON ls.id = cp.lead_source_id AND ls.org_id = cp.org_id
       LEFT JOIN subsidiaries sub ON sub.id = p.subsidiary_id AND sub.org_id = p.org_id`,
-    orgColumn: 'cp.org_id',
-    subsidiaryScope: { column: 'p.subsidiary_id', sharedNull: true },
-    featureKey: 'crm',
-    requiredPermission: 'crm.accounts.read',
-    defaultPeriodField: 'created_at',
+    orgColumn: "cp.org_id",
+    subsidiaryScope: { column: "p.subsidiary_id", sharedNull: true },
+    featureKey: "crm",
+    requiredPermission: "crm.accounts.read",
+    defaultPeriodField: "created_at",
     columns: [
-      { key: 'party_name', label: 'Account name', kind: 'text', expr: 'p.display_name' },
+      { key: "party_name", label: "Account name", kind: "text", expr: "p.display_name" },
       {
-        key: 'lifecycle_stage', label: 'Lifecycle stage', kind: 'enum', expr: 'cp.lifecycle_stage',
-        options: ['lead', 'prospect', 'customer'],
+        key: "lifecycle_stage",
+        label: "Lifecycle stage",
+        kind: "enum",
+        expr: "cp.lifecycle_stage",
+        options: ["lead", "prospect", "customer"],
       },
-      { key: 'status_name', label: 'Status', kind: 'text', expr: 's.name' },
-      { key: 'is_qualified', label: 'Qualified', kind: 'boolean', expr: 's.is_qualified', options: BOOLEAN_OPTIONS },
-      { key: 'is_closed', label: 'Closed', kind: 'boolean', expr: 's.is_closed', options: BOOLEAN_OPTIONS },
-      { key: 'owner_name', label: 'Owner', kind: 'text', expr: 'u.name' },
-      { key: 'territory_name', label: 'Territory', kind: 'text', expr: 't.name' },
-      { key: 'lead_source_name', label: 'Lead source', kind: 'text', expr: 'ls.name' },
-      { key: 'industry', label: 'Industry', kind: 'text', expr: 'cp.industry' },
-      { key: 'category', label: 'Category', kind: 'text', expr: 'cp.category' },
-      { key: 'annual_revenue', label: 'Annual revenue', kind: 'money', expr: 'cp.annual_revenue' },
-      { key: 'employee_count', label: 'Employees', kind: 'number', expr: 'cp.employee_count' },
-      { key: 'qualification_score', label: 'Qualification score', kind: 'number', expr: 'cp.qualification_score' },
-      { key: 'email', label: 'Email', kind: 'text', expr: 'p.email' },
-      { key: 'phone', label: 'Phone', kind: 'text', expr: 'p.phone' },
-      { key: 'website', label: 'Website', kind: 'text', expr: 'p.website' },
-      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
-      { key: 'next_action_at', label: 'Next action at', kind: 'timestamp', expr: 'cp.next_action_at' },
-      { key: 'last_activity_at', label: 'Last activity at', kind: 'timestamp', expr: 'cp.last_activity_at' },
-      { key: 'qualified_at', label: 'Qualified at', kind: 'timestamp', expr: 'cp.qualified_at' },
-      { key: 'converted_at', label: 'Converted at', kind: 'timestamp', expr: 'cp.converted_at' },
-      { key: 'acquired_on', label: 'Acquired on', kind: 'date', expr: 'cp.acquired_on' },
-      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'cp.is_active', options: BOOLEAN_OPTIONS },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'cp.created_at' },
-      { key: 'id', label: 'Profile (id)', kind: 'uuid', expr: 'cp.id' },
-      { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'cp.party_id' },
+      { key: "status_name", label: "Status", kind: "text", expr: "s.name" },
+      {
+        key: "is_qualified",
+        label: "Qualified",
+        kind: "boolean",
+        expr: "s.is_qualified",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "is_closed",
+        label: "Closed",
+        kind: "boolean",
+        expr: "s.is_closed",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "owner_name", label: "Owner", kind: "text", expr: "u.name" },
+      { key: "territory_name", label: "Territory", kind: "text", expr: "t.name" },
+      { key: "lead_source_name", label: "Lead source", kind: "text", expr: "ls.name" },
+      { key: "industry", label: "Industry", kind: "text", expr: "cp.industry" },
+      { key: "category", label: "Category", kind: "text", expr: "cp.category" },
+      { key: "annual_revenue", label: "Annual revenue", kind: "money", expr: "cp.annual_revenue" },
+      { key: "employee_count", label: "Employees", kind: "number", expr: "cp.employee_count" },
+      {
+        key: "qualification_score",
+        label: "Qualification score",
+        kind: "number",
+        expr: "cp.qualification_score",
+      },
+      { key: "email", label: "Email", kind: "text", expr: "p.email" },
+      { key: "phone", label: "Phone", kind: "text", expr: "p.phone" },
+      { key: "website", label: "Website", kind: "text", expr: "p.website" },
+      { key: "subsidiary", label: "Subsidiary", kind: "text", expr: "sub.name" },
+      {
+        key: "next_action_at",
+        label: "Next action at",
+        kind: "timestamp",
+        expr: "cp.next_action_at",
+      },
+      {
+        key: "last_activity_at",
+        label: "Last activity at",
+        kind: "timestamp",
+        expr: "cp.last_activity_at",
+      },
+      { key: "qualified_at", label: "Qualified at", kind: "timestamp", expr: "cp.qualified_at" },
+      { key: "converted_at", label: "Converted at", kind: "timestamp", expr: "cp.converted_at" },
+      { key: "acquired_on", label: "Acquired on", kind: "date", expr: "cp.acquired_on" },
+      {
+        key: "is_active",
+        label: "Active",
+        kind: "boolean",
+        expr: "cp.is_active",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "cp.created_at" },
+      { key: "id", label: "Profile (id)", kind: "uuid", expr: "cp.id" },
+      { key: "party_id", label: "Party (id)", kind: "uuid", expr: "cp.party_id" },
     ],
-    defaultSort: { column: 'created_at', direction: 'desc' },
+    defaultSort: { column: "created_at", direction: "desc" },
   },
   {
-    key: 'crm_activities',
-    label: 'CRM activities',
-    category: 'crm',
+    key: "crm_activities",
+    label: "CRM activities",
+    category: "crm",
     description:
-      'Sales and relationship activities including tasks, calls, events, emails, and notes.',
+      "Sales and relationship activities including tasks, calls, events, emails, and notes.",
     from: `crm_activities a
       LEFT JOIN users ou ON ou.id = a.owner_user_id AND ou.org_id = a.org_id
       LEFT JOIN users au ON au.id = a.assigned_user_id AND au.org_id = a.org_id`,
-    orgColumn: 'a.org_id',
+    orgColumn: "a.org_id",
     subsidiaryScope: null,
-    featureKey: 'crm',
-    requiredPermission: 'crm.activities.read',
-    baseFilter: { combinator: 'and', rules: [{ field: 'is_private', op: 'is_false' }] },
-    defaultPeriodField: 'starts_at',
+    featureKey: "crm",
+    requiredPermission: "crm.activities.read",
+    baseFilter: { combinator: "and", rules: [{ field: "is_private", op: "is_false" }] },
+    defaultPeriodField: "starts_at",
     columns: [
-      { key: 'kind', label: 'Kind', kind: 'enum', expr: 'a.kind', options: ['task', 'call', 'event', 'email', 'note'] },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'a.status', options: ['planned', 'in_progress', 'completed', 'cancelled'] },
-      { key: 'subject', label: 'Subject', kind: 'text', expr: 'a.subject' },
-      { key: 'priority', label: 'Priority', kind: 'enum', expr: 'a.priority', options: ['low', 'normal', 'high', 'urgent'] },
-      { key: 'owner_name', label: 'Owner', kind: 'text', expr: 'ou.name' },
-      { key: 'assigned_name', label: 'Assigned to', kind: 'text', expr: 'au.name' },
-      { key: 'starts_at', label: 'Starts at', kind: 'timestamp', expr: 'a.starts_at' },
-      { key: 'ends_at', label: 'Ends at', kind: 'timestamp', expr: 'a.ends_at' },
-      { key: 'due_at', label: 'Due at', kind: 'timestamp', expr: 'a.due_at' },
-      { key: 'completed_at', label: 'Completed at', kind: 'timestamp', expr: 'a.completed_at' },
-      { key: 'duration_minutes', label: 'Duration (minutes)', kind: 'number', expr: 'a.duration_minutes' },
-      { key: 'is_private', label: 'Private', kind: 'boolean', expr: 'a.is_private', options: BOOLEAN_OPTIONS },
-      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'a.created_at' },
-      { key: 'id', label: 'Activity (id)', kind: 'uuid', expr: 'a.id' },
+      {
+        key: "kind",
+        label: "Kind",
+        kind: "enum",
+        expr: "a.kind",
+        options: ["task", "call", "event", "email", "note"],
+      },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "a.status",
+        options: ["planned", "in_progress", "completed", "cancelled"],
+      },
+      { key: "subject", label: "Subject", kind: "text", expr: "a.subject" },
+      {
+        key: "priority",
+        label: "Priority",
+        kind: "enum",
+        expr: "a.priority",
+        options: ["low", "normal", "high", "urgent"],
+      },
+      { key: "owner_name", label: "Owner", kind: "text", expr: "ou.name" },
+      { key: "assigned_name", label: "Assigned to", kind: "text", expr: "au.name" },
+      { key: "starts_at", label: "Starts at", kind: "timestamp", expr: "a.starts_at" },
+      { key: "ends_at", label: "Ends at", kind: "timestamp", expr: "a.ends_at" },
+      { key: "due_at", label: "Due at", kind: "timestamp", expr: "a.due_at" },
+      { key: "completed_at", label: "Completed at", kind: "timestamp", expr: "a.completed_at" },
+      {
+        key: "duration_minutes",
+        label: "Duration (minutes)",
+        kind: "number",
+        expr: "a.duration_minutes",
+      },
+      {
+        key: "is_private",
+        label: "Private",
+        kind: "boolean",
+        expr: "a.is_private",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "created_at", label: "Created at", kind: "timestamp", expr: "a.created_at" },
+      { key: "id", label: "Activity (id)", kind: "uuid", expr: "a.id" },
     ],
-    defaultSort: { column: 'created_at', direction: 'desc' },
+    defaultSort: { column: "created_at", direction: "desc" },
   },
   // Workforce reports over the HRM employment foundation (0184) and the
   // change-request ledger (0185). Declared in hrm-entities.ts so the HRM
@@ -1679,288 +2408,699 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   // (inside/outside/unavailable) — raw coordinates are worker location
   // and live only in field_clock_coordinates behind hrm.employment.read.
   {
-    key: 'field_clock_events',
-    label: 'Field clock events',
-    category: 'time',
-    featureKey: 'fieldTime',
-    requiredPermission: 'time.read',
-    description: 'Mobile and kiosk clock actions — who, when, where-flagged, and how the pair priced. Geo flags only; raw coordinates need the HRM employment permission.',
+    key: "field_clock_events",
+    label: "Field clock events",
+    category: "time",
+    featureKey: "fieldTime",
+    requiredPermission: "time.read",
+    description:
+      "Mobile and kiosk clock actions — who, when, where-flagged, and how the pair priced. Geo flags only; raw coordinates need the HRM employment permission.",
     from: `time_clock_events ce
       LEFT JOIN parties emp ON emp.id = ce.employee_party_id AND emp.org_id = ce.org_id
       LEFT JOIN projects prj ON prj.id = ce.project_id AND prj.org_id = ce.org_id`,
-    orgColumn: 'ce.org_id',
-    subsidiaryScope: { column: 'coalesce(prj.subsidiary_id, emp.subsidiary_id)' },
+    orgColumn: "ce.org_id",
+    subsidiaryScope: { column: "coalesce(prj.subsidiary_id, emp.subsidiary_id)" },
     columns: [
-      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
-      { key: 'kind', label: 'Action', kind: 'enum', expr: 'ce.kind', options: ['clock_in', 'clock_out', 'break_start', 'break_end', 'switch'] },
-      { key: 'occurred_at', label: 'Device time', kind: 'timestamp', expr: 'ce.occurred_at' },
-      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
-      { key: 'cost_code_ref', label: 'Cost code', kind: 'text', expr: 'ce.cost_code_ref' },
-      { key: 'geo_check', label: 'Geofence', kind: 'enum', expr: 'ce.geo_check', options: ['inside', 'outside', 'unavailable', 'not_required'] },
-      { key: 'accuracy_m', label: 'Fix accuracy (m)', kind: 'number', expr: '(ce.geo->>\'accuracy_m\')' },
-      { key: 'source', label: 'Source', kind: 'enum', expr: 'ce.source', options: ['mobile', 'kiosk', 'crew', 'api'] },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'ce.status', options: ['recorded', 'paired', 'voided'] },
-      { key: 'auto_closed', label: 'Auto-closed', kind: 'boolean', expr: 'ce.auto_closed', options: BOOLEAN_OPTIONS },
-      { key: 'has_photo', label: 'Photo attached', kind: 'boolean', expr: '(ce.photo_file_id is not null)', options: BOOLEAN_OPTIONS },
-      { key: 'id', label: 'Clock event (id)', kind: 'uuid', expr: 'ce.id' },
+      { key: "employee_name", label: "Employee", kind: "text", expr: "emp.display_name" },
+      {
+        key: "kind",
+        label: "Action",
+        kind: "enum",
+        expr: "ce.kind",
+        options: ["clock_in", "clock_out", "break_start", "break_end", "switch"],
+      },
+      { key: "occurred_at", label: "Device time", kind: "timestamp", expr: "ce.occurred_at" },
+      { key: "project", label: "Project", kind: "text", expr: "prj.name" },
+      { key: "cost_code_ref", label: "Cost code", kind: "text", expr: "ce.cost_code_ref" },
+      {
+        key: "geo_check",
+        label: "Geofence",
+        kind: "enum",
+        expr: "ce.geo_check",
+        options: ["inside", "outside", "unavailable", "not_required"],
+      },
+      {
+        key: "accuracy_m",
+        label: "Fix accuracy (m)",
+        kind: "number",
+        expr: "(ce.geo->>'accuracy_m')",
+      },
+      {
+        key: "source",
+        label: "Source",
+        kind: "enum",
+        expr: "ce.source",
+        options: ["mobile", "kiosk", "crew", "api"],
+      },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "ce.status",
+        options: ["recorded", "paired", "voided"],
+      },
+      {
+        key: "auto_closed",
+        label: "Auto-closed",
+        kind: "boolean",
+        expr: "ce.auto_closed",
+        options: BOOLEAN_OPTIONS,
+      },
+      {
+        key: "has_photo",
+        label: "Photo attached",
+        kind: "boolean",
+        expr: "(ce.photo_file_id is not null)",
+        options: BOOLEAN_OPTIONS,
+      },
+      { key: "id", label: "Clock event (id)", kind: "uuid", expr: "ce.id" },
     ],
-    defaultSort: { column: 'occurred_at', direction: 'desc' },
+    defaultSort: { column: "occurred_at", direction: "desc" },
   },
   {
-    key: 'field_clock_coordinates',
-    label: 'Field clock coordinates',
-    category: 'time',
-    featureKey: 'fieldTime',
-    requiredPermission: 'hrm.employment.read',
-    description: 'Raw clock coordinates per event — worker location, visible only with the HRM employment permission. Flags for everyone else live in Field clock events.',
+    key: "field_clock_coordinates",
+    label: "Field clock coordinates",
+    category: "time",
+    featureKey: "fieldTime",
+    requiredPermission: "hrm.employment.read",
+    description:
+      "Raw clock coordinates per event — worker location, visible only with the HRM employment permission. Flags for everyone else live in Field clock events.",
     from: `time_clock_events ce
       LEFT JOIN parties emp ON emp.id = ce.employee_party_id AND emp.org_id = ce.org_id`,
-    orgColumn: 'ce.org_id',
-    subsidiaryScope: { column: 'emp.subsidiary_id' },
+    orgColumn: "ce.org_id",
+    subsidiaryScope: { column: "emp.subsidiary_id" },
     columns: [
-      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
-      { key: 'occurred_at', label: 'Device time', kind: 'timestamp', expr: 'ce.occurred_at' },
-      { key: 'latitude', label: 'Latitude', kind: 'text', expr: '(ce.geo->>\'lat\')' },
-      { key: 'longitude', label: 'Longitude', kind: 'text', expr: '(ce.geo->>\'lng\')' },
-      { key: 'accuracy_m', label: 'Fix accuracy (m)', kind: 'number', expr: '(ce.geo->>\'accuracy_m\')' },
-      { key: 'id', label: 'Clock event (id)', kind: 'uuid', expr: 'ce.id' },
+      { key: "employee_name", label: "Employee", kind: "text", expr: "emp.display_name" },
+      { key: "occurred_at", label: "Device time", kind: "timestamp", expr: "ce.occurred_at" },
+      { key: "latitude", label: "Latitude", kind: "text", expr: "(ce.geo->>'lat')" },
+      { key: "longitude", label: "Longitude", kind: "text", expr: "(ce.geo->>'lng')" },
+      {
+        key: "accuracy_m",
+        label: "Fix accuracy (m)",
+        kind: "number",
+        expr: "(ce.geo->>'accuracy_m')",
+      },
+      { key: "id", label: "Clock event (id)", kind: "uuid", expr: "ce.id" },
     ],
-    defaultSort: { column: 'occurred_at', direction: 'desc' },
+    defaultSort: { column: "occurred_at", direction: "desc" },
   },
   {
-    key: 'crew_time_batches',
-    label: 'Crew time batches',
-    category: 'time',
-    featureKey: 'fieldTime',
-    requiredPermission: 'time.read',
-    description: 'Foreman crew batches per project per day — status across the approval stages, hours and headcount.',
+    key: "crew_time_batches",
+    label: "Crew time batches",
+    category: "time",
+    featureKey: "fieldTime",
+    requiredPermission: "time.read",
+    description:
+      "Foreman crew batches per project per day — status across the approval stages, hours and headcount.",
     from: `crew_time_batches b
       LEFT JOIN parties frm ON frm.id = b.foreman_party_id AND frm.org_id = b.org_id
       LEFT JOIN projects prj ON prj.id = b.project_id AND prj.org_id = b.org_id`,
-    orgColumn: 'b.org_id',
-    subsidiaryScope: { column: 'prj.subsidiary_id' },
+    orgColumn: "b.org_id",
+    subsidiaryScope: { column: "prj.subsidiary_id" },
     columns: [
-      { key: 'foreman_name', label: 'Foreman', kind: 'text', expr: 'frm.display_name' },
-      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
-      { key: 'worked_on', label: 'Worked on', kind: 'date', expr: 'b.worked_on' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'b.status', options: ['draft', 'submitted', 'approved', 'rejected', 'posted'] },
-      { key: 'total_hours', label: 'Total hours', kind: 'number', expr: '(select coalesce(sum(l.hours), 0) from crew_time_batch_lines l where l.batch_id = b.id)' },
-      { key: 'worker_count', label: 'Workers', kind: 'number', expr: '(select count(distinct l.employee_party_id) from crew_time_batch_lines l where l.batch_id = b.id)' },
-      { key: 'line_count', label: 'Lines', kind: 'number', expr: '(select count(*) from crew_time_batch_lines l where l.batch_id = b.id)' },
-      { key: 'submitted_at', label: 'Submitted at', kind: 'timestamp', expr: 'b.submitted_at' },
-      { key: 'id', label: 'Crew batch (id)', kind: 'uuid', expr: 'b.id' },
+      { key: "foreman_name", label: "Foreman", kind: "text", expr: "frm.display_name" },
+      { key: "project", label: "Project", kind: "text", expr: "prj.name" },
+      { key: "worked_on", label: "Worked on", kind: "date", expr: "b.worked_on" },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "b.status",
+        options: ["draft", "submitted", "approved", "rejected", "posted"],
+      },
+      {
+        key: "total_hours",
+        label: "Total hours",
+        kind: "number",
+        expr: "(select coalesce(sum(l.hours), 0) from crew_time_batch_lines l where l.batch_id = b.id)",
+      },
+      {
+        key: "worker_count",
+        label: "Workers",
+        kind: "number",
+        expr: "(select count(distinct l.employee_party_id) from crew_time_batch_lines l where l.batch_id = b.id)",
+      },
+      {
+        key: "line_count",
+        label: "Lines",
+        kind: "number",
+        expr: "(select count(*) from crew_time_batch_lines l where l.batch_id = b.id)",
+      },
+      { key: "submitted_at", label: "Submitted at", kind: "timestamp", expr: "b.submitted_at" },
+      { key: "id", label: "Crew batch (id)", kind: "uuid", expr: "b.id" },
     ],
-    defaultSort: { column: 'worked_on', direction: 'desc' },
+    defaultSort: { column: "worked_on", direction: "desc" },
   },
   {
-    key: 'saas_metrics_subscriptions',
-    label: 'SaaS subscription metrics',
-    category: 'saas_metrics',
-    description: 'Monthly subscription movements with customer and plan names.',
+    key: "saas_metrics_subscriptions",
+    label: "SaaS subscription metrics",
+    category: "saas_metrics",
+    description: "Monthly subscription movements with customer and plan names.",
     from: `saas_metrics_monthly m
       JOIN parties cust ON cust.id = m.customer_id AND cust.org_id = m.org_id
       JOIN subscriptions s ON s.id = m.subscription_id AND s.org_id = m.org_id
       JOIN subscription_plans plan ON plan.id = s.plan_id AND plan.org_id = m.org_id
       JOIN subsidiaries sub ON sub.id = m.subsidiary_id AND sub.org_id = m.org_id`,
-    orgColumn: 'm.org_id',
-    subsidiaryScope: { column: 'm.subsidiary_id' },
-    requiredPermission: 'usage.read',
-    featureKey: 'saasMetrics',
-    timeKey: 'month',
+    orgColumn: "m.org_id",
+    subsidiaryScope: { column: "m.subsidiary_id" },
+    requiredPermission: "usage.read",
+    featureKey: "saasMetrics",
+    timeKey: "month",
     // Every stored amount is normalized to the row's persisted reporting
     // currency, so every money column is baseMoney under that dimension.
-    baseCurrencyColumn: 'reporting_currency',
+    baseCurrencyColumn: "reporting_currency",
     baseDenominationNouns: { ...SAAS_BASE_NOUNS },
     singleSubsidiaryCertifiesBase: false,
     normalization: SAAS_NORMALIZATION,
     columns: [
-      { key: 'month', label: 'Month', kind: 'date', expr: 'm.month' },
-      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
-      { key: 'reporting_currency', label: 'Reporting currency', kind: 'text', expr: 'm.reporting_currency' },
-      { key: 'customer', label: 'Customer', kind: 'text', expr: 'cust.display_name' },
-      { key: 'plan', label: 'Plan', kind: 'text', expr: 'plan.name' },
-      { key: 'subscription_id', label: 'Subscription (id)', kind: 'uuid', expr: 'm.subscription_id' },
-      { key: 'cohort_month', label: 'Cohort month', kind: 'date', expr: 'm.cohort_month' },
-      { key: 'movement', label: 'Movement', kind: 'enum', expr: 'm.movement', options: ['new', 'expansion', 'contraction', 'churn', 'reactivation', 'flat'] },
-      { key: 'mrr_start', label: 'Opening MRR', kind: 'money', expr: 'm.mrr_start', snapshot: true, baseMoney: true },
-      { key: 'mrr_end', label: 'Closing MRR', kind: 'money', expr: 'm.mrr_end', snapshot: true, baseMoney: true },
-      { key: 'new_mrr', label: 'New MRR', kind: 'money', expr: 'm.new_mrr', baseMoney: true },
-      { key: 'expansion_mrr', label: 'Expansion MRR', kind: 'money', expr: 'm.expansion_mrr', baseMoney: true },
-      { key: 'contraction_mrr', label: 'Contraction MRR', kind: 'money', expr: 'm.contraction_mrr', baseMoney: true },
-      { key: 'churned_mrr', label: 'Churned MRR', kind: 'money', expr: 'm.churned_mrr', baseMoney: true },
-      { key: 'reactivation_mrr', label: 'Reactivated MRR', kind: 'money', expr: 'm.reactivation_mrr', baseMoney: true },
-      { key: 'recognized_revenue', label: 'Recognised revenue', kind: 'money', expr: 'm.recognized_revenue', baseMoney: true },
-      { key: 'deferred_delta', label: 'Deferred revenue change', kind: 'money', expr: 'm.deferred_delta', baseMoney: true },
+      { key: "month", label: "Month", kind: "date", expr: "m.month" },
+      { key: "subsidiary", label: "Subsidiary", kind: "text", expr: "sub.name" },
+      {
+        key: "reporting_currency",
+        label: "Reporting currency",
+        kind: "text",
+        expr: "m.reporting_currency",
+      },
+      { key: "customer", label: "Customer", kind: "text", expr: "cust.display_name" },
+      { key: "plan", label: "Plan", kind: "text", expr: "plan.name" },
+      {
+        key: "subscription_id",
+        label: "Subscription (id)",
+        kind: "uuid",
+        expr: "m.subscription_id",
+      },
+      { key: "cohort_month", label: "Cohort month", kind: "date", expr: "m.cohort_month" },
+      {
+        key: "movement",
+        label: "Movement",
+        kind: "enum",
+        expr: "m.movement",
+        options: ["new", "expansion", "contraction", "churn", "reactivation", "flat"],
+      },
+      {
+        key: "mrr_start",
+        label: "Opening MRR",
+        kind: "money",
+        expr: "m.mrr_start",
+        snapshot: true,
+        baseMoney: true,
+      },
+      {
+        key: "mrr_end",
+        label: "Closing MRR",
+        kind: "money",
+        expr: "m.mrr_end",
+        snapshot: true,
+        baseMoney: true,
+      },
+      { key: "new_mrr", label: "New MRR", kind: "money", expr: "m.new_mrr", baseMoney: true },
+      {
+        key: "expansion_mrr",
+        label: "Expansion MRR",
+        kind: "money",
+        expr: "m.expansion_mrr",
+        baseMoney: true,
+      },
+      {
+        key: "contraction_mrr",
+        label: "Contraction MRR",
+        kind: "money",
+        expr: "m.contraction_mrr",
+        baseMoney: true,
+      },
+      {
+        key: "churned_mrr",
+        label: "Churned MRR",
+        kind: "money",
+        expr: "m.churned_mrr",
+        baseMoney: true,
+      },
+      {
+        key: "reactivation_mrr",
+        label: "Reactivated MRR",
+        kind: "money",
+        expr: "m.reactivation_mrr",
+        baseMoney: true,
+      },
+      {
+        key: "recognized_revenue",
+        label: "Recognised revenue",
+        kind: "money",
+        expr: "m.recognized_revenue",
+        baseMoney: true,
+      },
+      {
+        key: "deferred_delta",
+        label: "Deferred revenue change",
+        kind: "money",
+        expr: "m.deferred_delta",
+        baseMoney: true,
+      },
     ],
-    defaultSort: { column: 'month', direction: 'asc' },
+    defaultSort: { column: "month", direction: "asc" },
   },
   {
-    key: 'usage_billing_lines',
-    label: 'Usage billing lines',
-    category: 'saas_metrics',
-    description: 'Rated usage invoice lines with their immutable meter, plan, run and record trace.',
+    key: "usage_billing_lines",
+    label: "Usage billing lines",
+    category: "saas_metrics",
+    description:
+      "Rated usage invoice lines with their immutable meter, plan, run and record trace.",
     from: `document_lines dl
       JOIN documents d ON d.id = dl.document_id AND d.org_id = dl.org_id
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id`,
-    orgColumn: 'dl.org_id',
-    subsidiaryScope: { column: 'd.subsidiary_id' },
-    currencyColumn: 'currency',
-    requiredPermission: 'usage.read',
-    featureKey: 'usageBilling',
-    timeKey: 'document_date',
+    orgColumn: "dl.org_id",
+    subsidiaryScope: { column: "d.subsidiary_id" },
+    currencyColumn: "currency",
+    requiredPermission: "usage.read",
+    featureKey: "usageBilling",
+    timeKey: "document_date",
     baseFilter: {
-      combinator: 'and',
-      rules: [{ field: 'run_id', op: 'is_not_null' }],
+      combinator: "and",
+      rules: [{ field: "run_id", op: "is_not_null" }],
     },
     columns: [
-      { key: 'document_number', label: 'Invoice #', kind: 'text', expr: 'd.document_number' },
-      { key: 'document_date', label: 'Invoice date', kind: 'date', expr: 'd.document_date' },
-      { key: 'status', label: 'Invoice status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
-      { key: 'party_name', label: 'Customer', kind: 'text', expr: 'p.display_name' },
-      { key: 'line_number', label: 'Line #', kind: 'number', identifier: true, expr: 'dl.line_number' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'd.currency' },
-      { key: 'amount', label: 'Amount', kind: 'money', expr: 'dl.amount', txnCurrency: true },
-      { key: 'run_id', label: 'Rating run (id)', kind: 'uuid', expr: "dl.custom->'rating'->>'runId'" },
-      { key: 'plan_version_id', label: 'Plan version (id)', kind: 'uuid', expr: "dl.custom->'rating'->>'planVersionId'" },
-      { key: 'meter_id', label: 'Meter (id)', kind: 'uuid', expr: "dl.custom->'rating'->>'meterId'" },
-      { key: 'meter_key', label: 'Meter key', kind: 'text', expr: "dl.custom->'rating'->>'meterKey'" },
-      { key: 'kind', label: 'Rating kind', kind: 'enum', expr: "dl.custom->'rating'->>'kind'", options: ['graduated', 'volume', 'package', 'overage', 'commit_shortfall'] },
-      { key: 'band_seq', label: 'Band #', kind: 'number', expr: "nullif(dl.custom->'rating'->>'bandSeq', '')::numeric" },
-      { key: 'quantity', label: 'Rated quantity', kind: 'number', expr: "nullif(dl.custom->'rating'->>'quantity', '')::numeric" },
-      { key: 'unit_price', label: 'Rated unit price', kind: 'money', expr: "nullif(dl.custom->'rating'->>'unitPrice', '')::numeric", txnCurrency: true },
-      { key: 'records_hash', label: 'Records hash', kind: 'text', expr: "dl.custom->'rating'->>'recordsHash'" },
-      { key: 'period_start', label: 'Usage period start', kind: 'date', expr: "(dl.custom->'rating'->>'periodStart')::date" },
-      { key: 'period_end', label: 'Usage period end', kind: 'date', expr: "(dl.custom->'rating'->>'periodEnd')::date" },
-      { key: 'commit_window_start', label: 'Commit window start', kind: 'date', expr: "nullif(dl.custom->'rating'->>'commitWindowStart', '')::date" },
-      { key: 'commit_window_end', label: 'Commit window end', kind: 'date', expr: "nullif(dl.custom->'rating'->>'commitWindowEnd', '')::date" },
-      { key: 'rated_total', label: 'Rated total before commit', kind: 'money', expr: "nullif(dl.custom->'rating'->>'ratedTotal', '')::numeric", txnCurrency: true },
+      { key: "document_number", label: "Invoice #", kind: "text", expr: "d.document_number" },
+      { key: "document_date", label: "Invoice date", kind: "date", expr: "d.document_date" },
+      {
+        key: "status",
+        label: "Invoice status",
+        kind: "enum",
+        expr: "d.status",
+        options: TRANSACTION_STATUSES,
+      },
+      { key: "party_name", label: "Customer", kind: "text", expr: "p.display_name" },
+      {
+        key: "line_number",
+        label: "Line #",
+        kind: "number",
+        identifier: true,
+        expr: "dl.line_number",
+      },
+      { key: "currency", label: "Currency", kind: "text", expr: "d.currency" },
+      { key: "amount", label: "Amount", kind: "money", expr: "dl.amount", txnCurrency: true },
+      {
+        key: "run_id",
+        label: "Rating run (id)",
+        kind: "uuid",
+        expr: "dl.custom->'rating'->>'runId'",
+      },
+      {
+        key: "plan_version_id",
+        label: "Plan version (id)",
+        kind: "uuid",
+        expr: "dl.custom->'rating'->>'planVersionId'",
+      },
+      {
+        key: "meter_id",
+        label: "Meter (id)",
+        kind: "uuid",
+        expr: "dl.custom->'rating'->>'meterId'",
+      },
+      {
+        key: "meter_key",
+        label: "Meter key",
+        kind: "text",
+        expr: "dl.custom->'rating'->>'meterKey'",
+      },
+      {
+        key: "kind",
+        label: "Rating kind",
+        kind: "enum",
+        expr: "dl.custom->'rating'->>'kind'",
+        options: ["graduated", "volume", "package", "overage", "commit_shortfall"],
+      },
+      {
+        key: "band_seq",
+        label: "Band #",
+        kind: "number",
+        expr: "nullif(dl.custom->'rating'->>'bandSeq', '')::numeric",
+      },
+      {
+        key: "quantity",
+        label: "Rated quantity",
+        kind: "number",
+        expr: "nullif(dl.custom->'rating'->>'quantity', '')::numeric",
+      },
+      {
+        key: "unit_price",
+        label: "Rated unit price",
+        kind: "money",
+        expr: "nullif(dl.custom->'rating'->>'unitPrice', '')::numeric",
+        txnCurrency: true,
+      },
+      {
+        key: "records_hash",
+        label: "Records hash",
+        kind: "text",
+        expr: "dl.custom->'rating'->>'recordsHash'",
+      },
+      {
+        key: "period_start",
+        label: "Usage period start",
+        kind: "date",
+        expr: "(dl.custom->'rating'->>'periodStart')::date",
+      },
+      {
+        key: "period_end",
+        label: "Usage period end",
+        kind: "date",
+        expr: "(dl.custom->'rating'->>'periodEnd')::date",
+      },
+      {
+        key: "commit_window_start",
+        label: "Commit window start",
+        kind: "date",
+        expr: "nullif(dl.custom->'rating'->>'commitWindowStart', '')::date",
+      },
+      {
+        key: "commit_window_end",
+        label: "Commit window end",
+        kind: "date",
+        expr: "nullif(dl.custom->'rating'->>'commitWindowEnd', '')::date",
+      },
+      {
+        key: "rated_total",
+        label: "Rated total before commit",
+        kind: "money",
+        expr: "nullif(dl.custom->'rating'->>'ratedTotal', '')::numeric",
+        txnCurrency: true,
+      },
     ],
-    defaultSort: { column: 'document_date', direction: 'desc' },
+    defaultSort: { column: "document_date", direction: "desc" },
   },
   {
-    key: 'saas_metrics_facts',
-    label: 'SaaS monthly facts',
-    category: 'saas_metrics',
-    description: 'Monthly additive facts by legal entity, including their revenue basis.',
+    key: "saas_metrics_facts",
+    label: "SaaS monthly facts",
+    category: "saas_metrics",
+    description: "Monthly additive facts by legal entity, including their revenue basis.",
     from: `saas_metrics_facts_monthly m
       JOIN subsidiaries sub ON sub.id = m.subsidiary_id AND sub.org_id = m.org_id`,
-    orgColumn: 'm.org_id',
-    subsidiaryScope: { column: 'm.subsidiary_id' },
-    requiredPermission: 'usage.read',
-    featureKey: 'saasMetrics',
-    timeKey: 'month',
+    orgColumn: "m.org_id",
+    subsidiaryScope: { column: "m.subsidiary_id" },
+    requiredPermission: "usage.read",
+    featureKey: "saasMetrics",
+    timeKey: "month",
     // Every stored amount is normalized to the row's persisted reporting
     // currency, so every money column is baseMoney under that dimension.
-    baseCurrencyColumn: 'reporting_currency',
+    baseCurrencyColumn: "reporting_currency",
     baseDenominationNouns: { ...SAAS_BASE_NOUNS },
     singleSubsidiaryCertifiesBase: false,
     normalization: SAAS_NORMALIZATION,
     columns: [
-      { key: 'month', label: 'Month', kind: 'date', expr: 'm.month' },
-      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
-      { key: 'reporting_currency', label: 'Reporting currency', kind: 'text', expr: 'm.reporting_currency' },
-      { key: 'basis', label: 'Revenue basis', kind: 'enum', expr: 'm.basis', options: ['recognised', 'billed'] },
-      { key: 'mrr_start', label: 'Opening MRR', kind: 'money', expr: 'm.mrr_start', snapshot: true, baseMoney: true },
-      { key: 'mrr_end', label: 'Closing MRR', kind: 'money', expr: 'm.mrr_end', snapshot: true, baseMoney: true },
-      { key: 'new_mrr', label: 'New MRR', kind: 'money', expr: 'm.new_mrr', baseMoney: true },
-      { key: 'expansion_mrr', label: 'Expansion MRR', kind: 'money', expr: 'm.expansion_mrr', baseMoney: true },
-      { key: 'contraction_mrr', label: 'Contraction MRR', kind: 'money', expr: 'm.contraction_mrr', baseMoney: true },
-      { key: 'churned_mrr', label: 'Churned MRR', kind: 'money', expr: 'm.churned_mrr', baseMoney: true },
-      { key: 'reactivation_mrr', label: 'Reactivated MRR', kind: 'money', expr: 'm.reactivation_mrr', baseMoney: true },
-      { key: 'recognized_revenue', label: 'Recognised revenue', kind: 'money', expr: 'm.recognized_revenue', baseMoney: true },
-      { key: 'deferred_delta', label: 'Deferred revenue change', kind: 'money', expr: 'm.deferred_delta', baseMoney: true },
-      { key: 'mrr_at_risk', label: 'MRR at risk', kind: 'money', expr: 'm.mrr_at_risk', baseMoney: true },
-      { key: 'customers_start', label: 'Starting customers', kind: 'number', expr: 'm.customers_start', snapshot: true },
-      { key: 'customers_end', label: 'Ending customers', kind: 'number', expr: 'm.customers_end', snapshot: true },
-      { key: 'customers_new', label: 'New customers', kind: 'number', expr: 'm.customers_new' },
-      { key: 'customers_churned', label: 'Churned customers', kind: 'number', expr: 'm.customers_churned' },
-      { key: 'customers_reactivated', label: 'Reactivated customers', kind: 'number', expr: 'm.customers_reactivated' },
-      { key: 'gl_revenue', label: 'GL revenue', kind: 'money', expr: 'm.gl_revenue', baseMoney: true },
-      { key: 'gl_cogs', label: 'GL cost of goods sold', kind: 'money', expr: 'm.gl_cogs', baseMoney: true },
-      { key: 'bookings', label: 'Bookings', kind: 'money', expr: 'm.bookings', baseMoney: true },
-      { key: 'billings', label: 'Billings', kind: 'money', expr: 'm.billings', baseMoney: true },
-      { key: 'deferred_balance', label: 'Deferred balance', kind: 'money', expr: 'm.deferred_balance', snapshot: true, baseMoney: true },
+      { key: "month", label: "Month", kind: "date", expr: "m.month" },
+      { key: "subsidiary", label: "Subsidiary", kind: "text", expr: "sub.name" },
+      {
+        key: "reporting_currency",
+        label: "Reporting currency",
+        kind: "text",
+        expr: "m.reporting_currency",
+      },
+      {
+        key: "basis",
+        label: "Revenue basis",
+        kind: "enum",
+        expr: "m.basis",
+        options: ["recognised", "billed"],
+      },
+      {
+        key: "mrr_start",
+        label: "Opening MRR",
+        kind: "money",
+        expr: "m.mrr_start",
+        snapshot: true,
+        baseMoney: true,
+      },
+      {
+        key: "mrr_end",
+        label: "Closing MRR",
+        kind: "money",
+        expr: "m.mrr_end",
+        snapshot: true,
+        baseMoney: true,
+      },
+      { key: "new_mrr", label: "New MRR", kind: "money", expr: "m.new_mrr", baseMoney: true },
+      {
+        key: "expansion_mrr",
+        label: "Expansion MRR",
+        kind: "money",
+        expr: "m.expansion_mrr",
+        baseMoney: true,
+      },
+      {
+        key: "contraction_mrr",
+        label: "Contraction MRR",
+        kind: "money",
+        expr: "m.contraction_mrr",
+        baseMoney: true,
+      },
+      {
+        key: "churned_mrr",
+        label: "Churned MRR",
+        kind: "money",
+        expr: "m.churned_mrr",
+        baseMoney: true,
+      },
+      {
+        key: "reactivation_mrr",
+        label: "Reactivated MRR",
+        kind: "money",
+        expr: "m.reactivation_mrr",
+        baseMoney: true,
+      },
+      {
+        key: "recognized_revenue",
+        label: "Recognised revenue",
+        kind: "money",
+        expr: "m.recognized_revenue",
+        baseMoney: true,
+      },
+      {
+        key: "deferred_delta",
+        label: "Deferred revenue change",
+        kind: "money",
+        expr: "m.deferred_delta",
+        baseMoney: true,
+      },
+      {
+        key: "mrr_at_risk",
+        label: "MRR at risk",
+        kind: "money",
+        expr: "m.mrr_at_risk",
+        baseMoney: true,
+      },
+      {
+        key: "customers_start",
+        label: "Starting customers",
+        kind: "number",
+        expr: "m.customers_start",
+        snapshot: true,
+      },
+      {
+        key: "customers_end",
+        label: "Ending customers",
+        kind: "number",
+        expr: "m.customers_end",
+        snapshot: true,
+      },
+      { key: "customers_new", label: "New customers", kind: "number", expr: "m.customers_new" },
+      {
+        key: "customers_churned",
+        label: "Churned customers",
+        kind: "number",
+        expr: "m.customers_churned",
+      },
+      {
+        key: "customers_reactivated",
+        label: "Reactivated customers",
+        kind: "number",
+        expr: "m.customers_reactivated",
+      },
+      {
+        key: "gl_revenue",
+        label: "GL revenue",
+        kind: "money",
+        expr: "m.gl_revenue",
+        baseMoney: true,
+      },
+      {
+        key: "gl_cogs",
+        label: "GL cost of goods sold",
+        kind: "money",
+        expr: "m.gl_cogs",
+        baseMoney: true,
+      },
+      { key: "bookings", label: "Bookings", kind: "money", expr: "m.bookings", baseMoney: true },
+      { key: "billings", label: "Billings", kind: "money", expr: "m.billings", baseMoney: true },
+      {
+        key: "deferred_balance",
+        label: "Deferred balance",
+        kind: "money",
+        expr: "m.deferred_balance",
+        snapshot: true,
+        baseMoney: true,
+      },
     ],
-    defaultSort: { column: 'month', direction: 'asc' },
+    defaultSort: { column: "month", direction: "asc" },
   },
   {
-    key: 'saas_metrics_cohorts',
-    label: 'SaaS cohorts',
-    category: 'saas_metrics',
-    description: 'Monthly customer and MRR levels by subscription cohort.',
+    key: "saas_metrics_cohorts",
+    label: "SaaS cohorts",
+    category: "saas_metrics",
+    description: "Monthly customer and MRR levels by subscription cohort.",
     from: `saas_metrics_cohort_monthly m
       JOIN subsidiaries sub ON sub.id = m.subsidiary_id AND sub.org_id = m.org_id`,
-    orgColumn: 'm.org_id',
-    subsidiaryScope: { column: 'm.subsidiary_id' },
-    requiredPermission: 'usage.read',
-    featureKey: 'saasMetrics',
-    timeKey: 'month',
+    orgColumn: "m.org_id",
+    subsidiaryScope: { column: "m.subsidiary_id" },
+    requiredPermission: "usage.read",
+    featureKey: "saasMetrics",
+    timeKey: "month",
     // Every stored amount is normalized to the row's persisted reporting
     // currency, so every money column is baseMoney under that dimension.
-    baseCurrencyColumn: 'reporting_currency',
+    baseCurrencyColumn: "reporting_currency",
     baseDenominationNouns: { ...SAAS_BASE_NOUNS },
     singleSubsidiaryCertifiesBase: false,
     normalization: SAAS_NORMALIZATION,
     columns: [
-      { key: 'cohort_month', label: 'Cohort month', kind: 'date', expr: 'm.cohort_month' },
-      { key: 'month', label: 'Month', kind: 'date', expr: 'm.month' },
-      { key: 'months_since_start', label: 'Months since start', kind: 'number', expr: 'm.months_since_start' },
-      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
-      { key: 'reporting_currency', label: 'Reporting currency', kind: 'text', expr: 'm.reporting_currency' },
-      { key: 'start_mrr', label: 'Starting MRR', kind: 'money', expr: 'm.start_mrr', snapshot: true, baseMoney: true },
-      { key: 'mrr', label: 'Cohort MRR', kind: 'money', expr: 'm.mrr', snapshot: true, baseMoney: true },
-      { key: 'start_customers', label: 'Starting customers', kind: 'number', expr: 'm.start_customers', snapshot: true },
-      { key: 'customers', label: 'Cohort customers', kind: 'number', expr: 'm.customers', snapshot: true },
+      { key: "cohort_month", label: "Cohort month", kind: "date", expr: "m.cohort_month" },
+      { key: "month", label: "Month", kind: "date", expr: "m.month" },
+      {
+        key: "months_since_start",
+        label: "Months since start",
+        kind: "number",
+        expr: "m.months_since_start",
+      },
+      { key: "subsidiary", label: "Subsidiary", kind: "text", expr: "sub.name" },
+      {
+        key: "reporting_currency",
+        label: "Reporting currency",
+        kind: "text",
+        expr: "m.reporting_currency",
+      },
+      {
+        key: "start_mrr",
+        label: "Starting MRR",
+        kind: "money",
+        expr: "m.start_mrr",
+        snapshot: true,
+        baseMoney: true,
+      },
+      {
+        key: "mrr",
+        label: "Cohort MRR",
+        kind: "money",
+        expr: "m.mrr",
+        snapshot: true,
+        baseMoney: true,
+      },
+      {
+        key: "start_customers",
+        label: "Starting customers",
+        kind: "number",
+        expr: "m.start_customers",
+        snapshot: true,
+      },
+      {
+        key: "customers",
+        label: "Cohort customers",
+        kind: "number",
+        expr: "m.customers",
+        snapshot: true,
+      },
     ],
-    defaultSort: { column: 'cohort_month', direction: 'asc' },
+    defaultSort: { column: "cohort_month", direction: "asc" },
   },
   {
-    key: 'deferred_revenue_runoff',
-    label: 'Deferred revenue runoff',
-    category: 'saas_metrics',
-    description: 'Unposted future recognition by month, deferred account, book and currency.',
+    key: "deferred_revenue_runoff",
+    label: "Deferred revenue runoff",
+    category: "saas_metrics",
+    description: "Unposted future recognition by month, deferred account, book and currency.",
     from: `recognition_schedule_lines rsl
       JOIN recognition_schedules rs ON rs.id = rsl.schedule_id AND rs.org_id = rsl.org_id
       JOIN performance_obligations po ON po.id = rs.obligation_id AND po.org_id = rs.org_id
       JOIN revenue_contracts rc ON rc.id = po.contract_id AND rc.org_id = po.org_id
       JOIN accounting_periods ap ON ap.id = rsl.period_id AND ap.org_id = rsl.org_id
       JOIN accounts a ON a.id = po.deferred_account_id AND a.org_id = po.org_id`,
-    orgColumn: 'rsl.org_id',
-    subsidiaryScope: { column: 'rc.subsidiary_id' },
-    bookScope: { column: 'rs.book_id' },
-    currencyColumn: 'currency',
-    requiredPermission: 'usage.read',
-    featureKey: 'saasMetrics',
-    timeKey: 'month',
+    orgColumn: "rsl.org_id",
+    subsidiaryScope: { column: "rc.subsidiary_id" },
+    bookScope: { column: "rs.book_id" },
+    currencyColumn: "currency",
+    requiredPermission: "usage.read",
+    featureKey: "saasMetrics",
+    timeKey: "month",
     baseFilter: {
-      combinator: 'and',
+      combinator: "and",
       rules: [
-        { field: 'journal_entry_id', op: 'is_null' },
-        { field: 'schedule_status', op: 'in', value: ['planned', 'in_progress'] },
-        { field: 'obligation_status', op: 'neq', value: 'cancelled' },
-        { field: 'future_month', op: 'is_true' },
+        { field: "journal_entry_id", op: "is_null" },
+        { field: "schedule_status", op: "in", value: ["planned", "in_progress"] },
+        { field: "obligation_status", op: "neq", value: "cancelled" },
+        { field: "future_month", op: "is_true" },
       ],
     },
     columns: [
-      { key: 'month', label: 'Month', kind: 'date', expr: "date_trunc('month', ap.starts_on)::date" },
-      { key: 'future_month', label: 'Future month', kind: 'boolean', expr: "date_trunc('month', ap.starts_on)::date > date_trunc('month', current_date)::date", options: ['true', 'false'] },
-      { key: 'deferred_account', label: 'Deferred account', kind: 'text', expr: "a.number || ' · ' || a.name" },
-      { key: 'deferred_account_id', label: 'Deferred account (id)', kind: 'uuid', expr: 'po.deferred_account_id' },
-      { key: 'contract_number', label: 'Contract', kind: 'text', expr: 'rc.contract_number' },
-      { key: 'book_id', label: 'Book (id)', kind: 'uuid', expr: 'rs.book_id' },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'rs.transaction_currency' },
-      { key: 'amount', label: 'Planned recognition', kind: 'money', expr: 'rsl.planned_amount', txnCurrency: true },
-      { key: 'schedule_status', label: 'Schedule status', kind: 'enum', expr: 'rs.status', options: ['planned', 'in_progress', 'complete', 'cancelled'] },
-      { key: 'obligation_status', label: 'Obligation status', kind: 'enum', expr: 'po.status', options: ['open', 'satisfied', 'cancelled'] },
-      { key: 'journal_entry_id', label: 'Journal entry (id)', kind: 'uuid', expr: 'rsl.journal_entry_id' },
+      {
+        key: "month",
+        label: "Month",
+        kind: "date",
+        expr: "date_trunc('month', ap.starts_on)::date",
+      },
+      {
+        key: "future_month",
+        label: "Future month",
+        kind: "boolean",
+        expr: "date_trunc('month', ap.starts_on)::date > date_trunc('month', current_date)::date",
+        options: ["true", "false"],
+      },
+      {
+        key: "deferred_account",
+        label: "Deferred account",
+        kind: "text",
+        expr: "a.number || ' · ' || a.name",
+      },
+      {
+        key: "deferred_account_id",
+        label: "Deferred account (id)",
+        kind: "uuid",
+        expr: "po.deferred_account_id",
+      },
+      { key: "contract_number", label: "Contract", kind: "text", expr: "rc.contract_number" },
+      { key: "book_id", label: "Book (id)", kind: "uuid", expr: "rs.book_id" },
+      { key: "currency", label: "Currency", kind: "text", expr: "rs.transaction_currency" },
+      {
+        key: "amount",
+        label: "Planned recognition",
+        kind: "money",
+        expr: "rsl.planned_amount",
+        txnCurrency: true,
+      },
+      {
+        key: "schedule_status",
+        label: "Schedule status",
+        kind: "enum",
+        expr: "rs.status",
+        options: ["planned", "in_progress", "complete", "cancelled"],
+      },
+      {
+        key: "obligation_status",
+        label: "Obligation status",
+        kind: "enum",
+        expr: "po.status",
+        options: ["open", "satisfied", "cancelled"],
+      },
+      {
+        key: "journal_entry_id",
+        label: "Journal entry (id)",
+        kind: "uuid",
+        expr: "rsl.journal_entry_id",
+      },
     ],
-    defaultSort: { column: 'month', direction: 'asc' },
+    defaultSort: { column: "month", direction: "asc" },
   },
   {
-    key: 'contract_balances',
-    label: 'Contract balances',
-    category: 'transactions',
-    description: 'Billed, recognized and net position per revenue contract on the primary book — contract assets and liabilities.',
+    key: "contract_balances",
+    label: "Contract balances",
+    category: "transactions",
+    description:
+      "Billed, recognized and net position per revenue contract on the primary book — contract assets and liabilities.",
     from: `revenue_contracts rc
       LEFT JOIN parties cust ON cust.id = rc.customer_id AND cust.org_id = rc.org_id
       LEFT JOIN LATERAL (
@@ -1981,101 +3121,183 @@ export const REPORT_ENTITIES: ReportEntity[] = [
           JOIN recognition_schedule_lines l ON l.schedule_id = s.id AND l.org_id = s.org_id
          WHERE o.org_id = rc.org_id AND o.contract_id = rc.id
       ) sched ON true`,
-    orgColumn: 'rc.org_id',
-    subsidiaryScope: { column: 'rc.subsidiary_id' },
-    currencyColumn: 'currency',
-    requiredPermission: 'ar.read',
-    featureKey: 'revenueContracts',
+    orgColumn: "rc.org_id",
+    subsidiaryScope: { column: "rc.subsidiary_id" },
+    currencyColumn: "currency",
+    requiredPermission: "ar.read",
+    featureKey: "revenueContracts",
     defaultPeriodField: null,
     columns: [
-      { key: 'contract_number', label: 'Contract', kind: 'text', expr: 'rc.contract_number' },
-      { key: 'customer', label: 'Customer', kind: 'text', expr: 'cust.display_name' },
-      { key: 'scope', label: 'Coverage', kind: 'enum', expr: 'rc.scope', options: ['invoice', 'order', 'subscription'] },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'rc.status', options: ['draft', 'active', 'complete', 'cancelled'] },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'rc.currency' },
-      { key: 'billed', label: 'Billed', kind: 'money', expr: 'bill.billed', txnCurrency: true },
-      { key: 'recognized', label: 'Recognized', kind: 'money', expr: 'sched.recognized', txnCurrency: true },
-      { key: 'remaining', label: 'Remaining', kind: 'money', expr: 'sched.planned - sched.recognized', txnCurrency: true },
-      { key: 'net', label: 'Net position', kind: 'money', expr: 'bill.billed - sched.recognized', txnCurrency: true },
-      { key: 'position', label: 'Position', kind: 'enum', expr: `CASE WHEN bill.billed - sched.recognized > 0 THEN 'liability' WHEN bill.billed - sched.recognized < 0 THEN 'asset' ELSE 'settled' END`, options: ['asset', 'liability', 'settled'] },
-      { key: 'starts_on', label: 'Starts on', kind: 'date', expr: 'rc.starts_on' },
-      { key: 'ends_on', label: 'Ends on', kind: 'date', expr: 'rc.ends_on' },
+      { key: "contract_number", label: "Contract", kind: "text", expr: "rc.contract_number" },
+      { key: "customer", label: "Customer", kind: "text", expr: "cust.display_name" },
+      {
+        key: "scope",
+        label: "Coverage",
+        kind: "enum",
+        expr: "rc.scope",
+        options: ["invoice", "order", "subscription"],
+      },
+      {
+        key: "status",
+        label: "Status",
+        kind: "enum",
+        expr: "rc.status",
+        options: ["draft", "active", "complete", "cancelled"],
+      },
+      { key: "currency", label: "Currency", kind: "text", expr: "rc.currency" },
+      { key: "billed", label: "Billed", kind: "money", expr: "bill.billed", txnCurrency: true },
+      {
+        key: "recognized",
+        label: "Recognized",
+        kind: "money",
+        expr: "sched.recognized",
+        txnCurrency: true,
+      },
+      {
+        key: "remaining",
+        label: "Remaining",
+        kind: "money",
+        expr: "sched.planned - sched.recognized",
+        txnCurrency: true,
+      },
+      {
+        key: "net",
+        label: "Net position",
+        kind: "money",
+        expr: "bill.billed - sched.recognized",
+        txnCurrency: true,
+      },
+      {
+        key: "position",
+        label: "Position",
+        kind: "enum",
+        expr: `CASE WHEN bill.billed - sched.recognized > 0 THEN 'liability' WHEN bill.billed - sched.recognized < 0 THEN 'asset' ELSE 'settled' END`,
+        options: ["asset", "liability", "settled"],
+      },
+      { key: "starts_on", label: "Starts on", kind: "date", expr: "rc.starts_on" },
+      { key: "ends_on", label: "Ends on", kind: "date", expr: "rc.ends_on" },
     ],
-    defaultSort: { column: 'contract_number', direction: 'asc' },
+    defaultSort: { column: "contract_number", direction: "asc" },
   },
   {
-    key: 'remaining_performance_obligations',
-    label: 'Remaining performance obligations',
-    category: 'transactions',
-    description: 'Transaction price still to recognize per obligation and month on the primary book, with expected timing (ASC 606-10-50-13).',
+    key: "remaining_performance_obligations",
+    label: "Remaining performance obligations",
+    category: "transactions",
+    description:
+      "Transaction price still to recognize per obligation and month on the primary book, with expected timing (ASC 606-10-50-13).",
     from: `performance_obligations po
       JOIN revenue_contracts rc ON rc.id = po.contract_id AND rc.org_id = po.org_id
       JOIN recognition_schedules rs ON rs.obligation_id = po.id AND rs.org_id = po.org_id
       JOIN accounting_books bk ON bk.id = rs.book_id AND bk.org_id = rs.org_id AND bk.is_primary
       JOIN recognition_schedule_lines rsl ON rsl.schedule_id = rs.id AND rsl.org_id = rs.org_id
       JOIN accounting_periods ap ON ap.id = rsl.period_id AND ap.org_id = rsl.org_id`,
-    orgColumn: 'po.org_id',
-    subsidiaryScope: { column: 'rc.subsidiary_id' },
-    currencyColumn: 'currency',
-    requiredPermission: 'ar.read',
-    featureKey: 'revenueContracts',
-    timeKey: 'month',
+    orgColumn: "po.org_id",
+    subsidiaryScope: { column: "rc.subsidiary_id" },
+    currencyColumn: "currency",
+    requiredPermission: "ar.read",
+    featureKey: "revenueContracts",
+    timeKey: "month",
     baseFilter: {
-      combinator: 'and',
+      combinator: "and",
       rules: [
-        { field: 'journal_entry_id', op: 'is_null' },
-        { field: 'schedule_status', op: 'in', value: ['planned', 'in_progress'] },
-        { field: 'obligation_status', op: 'neq', value: 'cancelled' },
+        { field: "journal_entry_id", op: "is_null" },
+        { field: "schedule_status", op: "in", value: ["planned", "in_progress"] },
+        { field: "obligation_status", op: "neq", value: "cancelled" },
       ],
     },
     columns: [
-      { key: 'contract_number', label: 'Contract', kind: 'text', expr: 'rc.contract_number' },
-      { key: 'obligation', label: 'Obligation', kind: 'text', expr: 'po.description' },
-      { key: 'scope', label: 'Coverage', kind: 'enum', expr: 'rc.scope', options: ['invoice', 'order', 'subscription'] },
-      { key: 'month', label: 'Month', kind: 'date', expr: "date_trunc('month', ap.starts_on)::date" },
-      { key: 'timing_band', label: 'Timing', kind: 'enum', expr: `CASE WHEN ap.ends_on <= (current_date + interval '1 year')::date THEN 'within_one_year' WHEN ap.ends_on <= (current_date + interval '2 years')::date THEN 'one_to_two_years' ELSE 'beyond_two_years' END`, options: ['within_one_year', 'one_to_two_years', 'beyond_two_years'] },
-      { key: 'remaining', label: 'Remaining', kind: 'money', expr: 'rsl.planned_amount', txnCurrency: true },
-      { key: 'currency', label: 'Currency', kind: 'text', expr: 'rs.transaction_currency' },
-      { key: 'schedule_status', label: 'Schedule status', kind: 'enum', expr: 'rs.status', options: ['planned', 'in_progress', 'complete', 'cancelled'] },
-      { key: 'obligation_status', label: 'Obligation status', kind: 'enum', expr: 'po.status', options: ['open', 'satisfied', 'cancelled'] },
-      { key: 'journal_entry_id', label: 'Journal entry (id)', kind: 'uuid', expr: 'rsl.journal_entry_id' },
+      { key: "contract_number", label: "Contract", kind: "text", expr: "rc.contract_number" },
+      { key: "obligation", label: "Obligation", kind: "text", expr: "po.description" },
+      {
+        key: "scope",
+        label: "Coverage",
+        kind: "enum",
+        expr: "rc.scope",
+        options: ["invoice", "order", "subscription"],
+      },
+      {
+        key: "month",
+        label: "Month",
+        kind: "date",
+        expr: "date_trunc('month', ap.starts_on)::date",
+      },
+      {
+        key: "timing_band",
+        label: "Timing",
+        kind: "enum",
+        expr: `CASE WHEN ap.ends_on <= (current_date + interval '1 year')::date THEN 'within_one_year' WHEN ap.ends_on <= (current_date + interval '2 years')::date THEN 'one_to_two_years' ELSE 'beyond_two_years' END`,
+        options: ["within_one_year", "one_to_two_years", "beyond_two_years"],
+      },
+      {
+        key: "remaining",
+        label: "Remaining",
+        kind: "money",
+        expr: "rsl.planned_amount",
+        txnCurrency: true,
+      },
+      { key: "currency", label: "Currency", kind: "text", expr: "rs.transaction_currency" },
+      {
+        key: "schedule_status",
+        label: "Schedule status",
+        kind: "enum",
+        expr: "rs.status",
+        options: ["planned", "in_progress", "complete", "cancelled"],
+      },
+      {
+        key: "obligation_status",
+        label: "Obligation status",
+        kind: "enum",
+        expr: "po.status",
+        options: ["open", "satisfied", "cancelled"],
+      },
+      {
+        key: "journal_entry_id",
+        label: "Journal entry (id)",
+        kind: "uuid",
+        expr: "rsl.journal_entry_id",
+      },
     ],
-    defaultSort: { column: 'month', direction: 'asc' },
+    defaultSort: { column: "month", direction: "asc" },
   },
   // HR-20 end
-]
+];
 
-const ledgerLineEntity = REPORT_ENTITIES.find((entity) => entity.key === 'ledger_lines')!
+const ledgerLineEntity = REPORT_ENTITIES.find((entity) => entity.key === "ledger_lines")!;
 const postedLedgerFilter: ReportRuleGroup = {
-  combinator: 'and',
-  rules: [{ field: 'entry_status', op: 'in', value: ['posted', 'reversed'] }],
-}
+  combinator: "and",
+  rules: [{ field: "entry_status", op: "in", value: ["posted", "reversed"] }],
+};
 
 const fundLedgerLines: ReportEntity = {
   ...ledgerLineEntity,
-  key: 'fund_ledger_lines',
-  label: 'Fund ledger lines',
-  description: 'Posted journal lines with fund code, fund name, and restriction class.',
+  key: "fund_ledger_lines",
+  label: "Fund ledger lines",
+  description: "Posted journal lines with fund code, fund name, and restriction class.",
   from: `${ledgerLineEntity.from}
       LEFT JOIN funds fund ON fund.org_id = jl.org_id AND fund.id::text = jl.extra_dims->>'fund'
       LEFT JOIN segment_values fund_value ON fund_value.org_id = fund.org_id AND fund_value.id = fund.id`,
   columns: [
     ...ledgerLineEntity.columns,
-    { key: 'fund_id', label: 'Fund (id)', kind: 'uuid', expr: 'fund.id' },
-    { key: 'fund_code', label: 'Fund code', kind: 'text', expr: 'fund_value.code' },
-    { key: 'fund_name', label: 'Fund', kind: 'text', expr: 'fund_value.name' },
-    { key: 'restriction_class', label: 'Restriction class', kind: 'text', expr: 'fund.restriction_class' },
+    { key: "fund_id", label: "Fund (id)", kind: "uuid", expr: "fund.id" },
+    { key: "fund_code", label: "Fund code", kind: "text", expr: "fund_value.code" },
+    { key: "fund_name", label: "Fund", kind: "text", expr: "fund_value.name" },
+    {
+      key: "restriction_class",
+      label: "Restriction class",
+      kind: "text",
+      expr: "fund.restriction_class",
+    },
   ],
-  featureKey: 'fundAccounting',
-  requiredPermission: 'nonprofit.report',
+  featureKey: "fundAccounting",
+  requiredPermission: "nonprofit.report",
   baseFilter: postedLedgerFilter,
-}
+};
 
 const functionalLedgerLines: ReportEntity = {
   ...ledgerLineEntity,
-  key: 'functional_ledger_lines',
-  label: 'Functional ledger lines',
-  description: 'Posted expense lines with their effective department and project functions.',
+  key: "functional_ledger_lines",
+  label: "Functional ledger lines",
+  description: "Posted expense lines with their effective department and project functions.",
   from: `${ledgerLineEntity.from}
       LEFT JOIN functional_mappings fm_department
         ON fm_department.org_id = jl.org_id AND fm_department.department_id = jl.department_id
@@ -2088,17 +3310,21 @@ const functionalLedgerLines: ReportEntity = {
   columns: [
     ...ledgerLineEntity.columns,
     {
-      key: 'functional_category', label: 'Function', kind: 'enum',
+      key: "functional_category",
+      label: "Function",
+      kind: "enum",
       expr: `CASE
         WHEN fm_department.id IS NOT NULL AND fm_project.id IS NOT NULL
          AND (fm_department.function IS DISTINCT FROM fm_project.function
            OR fm_department.program_key IS DISTINCT FROM fm_project.program_key) THEN NULL
         ELSE coalesce(fm_department.function, fm_project.function)
       END`,
-      options: ['program', 'management_general', 'fundraising'],
+      options: ["program", "management_general", "fundraising"],
     },
     {
-      key: 'program_key', label: 'Program', kind: 'text',
+      key: "program_key",
+      label: "Program",
+      kind: "text",
       expr: `CASE
         WHEN fm_department.id IS NOT NULL AND fm_project.id IS NOT NULL
          AND (fm_department.function IS DISTINCT FROM fm_project.function
@@ -2107,7 +3333,9 @@ const functionalLedgerLines: ReportEntity = {
       END`,
     },
     {
-      key: 'mapping_status', label: 'Mapping status', kind: 'enum',
+      key: "mapping_status",
+      label: "Mapping status",
+      kind: "enum",
       expr: `CASE
         WHEN fm_department.id IS NOT NULL AND fm_project.id IS NOT NULL
          AND (fm_department.function IS DISTINCT FROM fm_project.function
@@ -2115,107 +3343,139 @@ const functionalLedgerLines: ReportEntity = {
         WHEN fm_department.id IS NULL AND fm_project.id IS NULL THEN 'unmapped'
         ELSE 'mapped'
       END`,
-      options: ['mapped', 'unmapped', 'conflict'],
+      options: ["mapped", "unmapped", "conflict"],
     },
   ],
-  featureKey: 'functionalExpenses',
-  requiredPermission: 'nonprofit.report',
+  featureKey: "functionalExpenses",
+  requiredPermission: "nonprofit.report",
   baseFilter: postedLedgerFilter,
-}
+};
 
 const grantPipeline: ReportEntity = {
-  key: 'grant_pipeline',
-  label: 'Grant pipeline',
-  category: 'nonprofit',
-  description: 'Grant awards, sponsors, periods, status, and associated fund classification.',
+  key: "grant_pipeline",
+  label: "Grant pipeline",
+  category: "nonprofit",
+  description: "Grant awards, sponsors, periods, status, and associated fund classification.",
   from: `grants g
       JOIN funds grant_fund ON grant_fund.org_id = g.org_id AND grant_fund.id = g.fund_id
       JOIN segment_values grant_fund_value ON grant_fund_value.org_id = grant_fund.org_id
        AND grant_fund_value.id = grant_fund.id
       JOIN parties sponsor ON sponsor.org_id = g.org_id AND sponsor.id = g.sponsor_party_id
       JOIN orgs grant_org ON grant_org.id = g.org_id`,
-  orgColumn: 'g.org_id',
+  orgColumn: "g.org_id",
   subsidiaryScope: null,
-  featureKey: 'grantManagement',
-  requiredPermission: 'nonprofit.report',
-  baseCurrencyColumn: 'base_currency',
+  featureKey: "grantManagement",
+  requiredPermission: "nonprofit.report",
+  baseCurrencyColumn: "base_currency",
   columns: [
-    { key: 'grant_code', label: 'Grant code', kind: 'text', expr: 'g.code' },
-    { key: 'grant_name', label: 'Grant', kind: 'text', expr: 'g.name' },
-    { key: 'sponsor_name', label: 'Sponsor', kind: 'text', expr: 'sponsor.display_name' },
-    { key: 'sponsor_kind', label: 'Sponsor type', kind: 'enum', expr: 'g.sponsor_kind', options: ['government', 'foundation', 'corporate'] },
-    { key: 'determination', label: 'Determination', kind: 'enum', expr: 'g.determination', options: ['contribution_unconditional', 'contribution_conditional', 'exchange'] },
-    { key: 'award_amount', label: 'Award amount', kind: 'money', expr: 'g.award_amount', baseMoney: true },
-    { key: 'period_from', label: 'Period from', kind: 'date', expr: 'g.period_from' },
-    { key: 'period_to', label: 'Period to', kind: 'date', expr: 'g.period_to' },
-    { key: 'status', label: 'Status', kind: 'enum', expr: 'g.status', options: ['draft', 'awarded', 'active', 'closed_out', 'closed', 'void'] },
-    { key: 'fund_code', label: 'Fund code', kind: 'text', expr: 'grant_fund_value.code' },
-    { key: 'fund_name', label: 'Fund', kind: 'text', expr: 'grant_fund_value.name' },
-    { key: 'restriction_class', label: 'Restriction class', kind: 'text', expr: 'grant_fund.restriction_class' },
-    { key: 'base_currency', label: 'Base currency', kind: 'text', expr: 'grant_org.base_currency' },
+    { key: "grant_code", label: "Grant code", kind: "text", expr: "g.code" },
+    { key: "grant_name", label: "Grant", kind: "text", expr: "g.name" },
+    { key: "sponsor_name", label: "Sponsor", kind: "text", expr: "sponsor.display_name" },
+    {
+      key: "sponsor_kind",
+      label: "Sponsor type",
+      kind: "enum",
+      expr: "g.sponsor_kind",
+      options: ["government", "foundation", "corporate"],
+    },
+    {
+      key: "determination",
+      label: "Determination",
+      kind: "enum",
+      expr: "g.determination",
+      options: ["contribution_unconditional", "contribution_conditional", "exchange"],
+    },
+    {
+      key: "award_amount",
+      label: "Award amount",
+      kind: "money",
+      expr: "g.award_amount",
+      baseMoney: true,
+    },
+    { key: "period_from", label: "Period from", kind: "date", expr: "g.period_from" },
+    { key: "period_to", label: "Period to", kind: "date", expr: "g.period_to" },
+    {
+      key: "status",
+      label: "Status",
+      kind: "enum",
+      expr: "g.status",
+      options: ["draft", "awarded", "active", "closed_out", "closed", "void"],
+    },
+    { key: "fund_code", label: "Fund code", kind: "text", expr: "grant_fund_value.code" },
+    { key: "fund_name", label: "Fund", kind: "text", expr: "grant_fund_value.name" },
+    {
+      key: "restriction_class",
+      label: "Restriction class",
+      kind: "text",
+      expr: "grant_fund.restriction_class",
+    },
+    { key: "base_currency", label: "Base currency", kind: "text", expr: "grant_org.base_currency" },
   ],
-  defaultSort: { column: 'period_to', direction: 'asc' },
-  defaultPeriodField: 'period_from',
-}
+  defaultSort: { column: "period_to", direction: "asc" },
+  defaultPeriodField: "period_from",
+};
 
-REPORT_ENTITIES.push(fundLedgerLines, functionalLedgerLines, grantPipeline)
+REPORT_ENTITIES.push(fundLedgerLines, functionalLedgerLines, grantPipeline);
 
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.assign(
   Object.create(null) as Record<string, ReportEntity>,
   Object.fromEntries(REPORT_ENTITIES.map((e) => [e.key, e])),
-)
+);
 
 class ReportEntityRegistrationError extends Error {
   constructor(message: string) {
-    super(message)
-    this.name = 'ReportEntityRegistrationError'
+    super(message);
+    this.name = "ReportEntityRegistrationError";
   }
 }
 
-const REPORT_ENTITY_LISTS = new Map<string, readonly ReportEntity[]>()
+const REPORT_ENTITY_LISTS = new Map<string, readonly ReportEntity[]>();
 
 /** Register an additional named list of report entities exactly once. */
 export function registerReportEntityList(source: string, entities: readonly ReportEntity[]): void {
-  if (!source.trim()) throw new ReportEntityRegistrationError('report entity source must not be empty')
-  if (source === 'core' || REPORT_ENTITY_LISTS.has(source)) {
-    throw new ReportEntityRegistrationError(`report entity source "${source}" is already registered`)
+  if (!source.trim())
+    throw new ReportEntityRegistrationError("report entity source must not be empty");
+  if (source === "core" || REPORT_ENTITY_LISTS.has(source)) {
+    throw new ReportEntityRegistrationError(
+      `report entity source "${source}" is already registered`,
+    );
   }
 
-  const entitySources = new Map(REPORT_ENTITIES.map((entity) => [entity.key, 'core']))
+  const entitySources = new Map(REPORT_ENTITIES.map((entity) => [entity.key, "core"]));
   for (const [registeredSource, registeredEntities] of REPORT_ENTITY_LISTS) {
-    for (const entity of registeredEntities) entitySources.set(entity.key, registeredSource)
+    for (const entity of registeredEntities) entitySources.set(entity.key, registeredSource);
   }
-  const keysInList = new Set<string>()
+  const keysInList = new Set<string>();
   for (const entity of entities) {
-    const existingSource = entitySources.get(entity.key)
+    const existingSource = entitySources.get(entity.key);
     if (existingSource) {
       throw new ReportEntityRegistrationError(
         `report entity key "${entity.key}" from "${source}" is already registered by "${existingSource}"`,
-      )
+      );
     }
     if (keysInList.has(entity.key)) {
       throw new ReportEntityRegistrationError(
         `report entity key "${entity.key}" is duplicated in source "${source}"`,
-      )
+      );
     }
-    keysInList.add(entity.key)
+    keysInList.add(entity.key);
   }
 
-  REPORT_ENTITY_LISTS.set(source, [...entities])
+  REPORT_ENTITY_LISTS.set(source, [...entities]);
 }
 
 // Built-in sources share the registry's lifecycle. Reloading a server
 // consumer must not register its report definitions a second time.
-registerReportEntityList('resourcing', RESOURCING_REPORT_ENTITIES)
+registerReportEntityList("resourcing", RESOURCING_REPORT_ENTITIES);
 
 /** Enumerate the core catalog followed by each additional registered source. */
 export function allReportEntities(): readonly { source: string; entity: ReportEntity }[] {
   return [
-    ...REPORT_ENTITIES.map((entity) => ({ source: 'core', entity })),
+    ...REPORT_ENTITIES.map((entity) => ({ source: "core", entity })),
     ...[...REPORT_ENTITY_LISTS].flatMap(([source, entities]) =>
       entities.map((entity) => ({ source, entity })),
     ),
-  ]
+  ];
 }
 
 /**
@@ -2252,24 +3512,24 @@ export function bindPayStubIncomeTaxKeys(
   entity: ReportEntity,
   incomeTaxSystemKeys: readonly string[],
 ): ReportEntity {
-  if (entity.key !== 'pay_stubs') {
-    throw new Error(`pay-stub tax binding needs the pay_stubs entity, not ${entity.key}`)
+  if (entity.key !== "pay_stubs") {
+    throw new Error(`pay-stub tax binding needs the pay_stubs entity, not ${entity.key}`);
   }
-  if (!entity.columns.some((column) => column.key === 'income_tax')) {
-    throw new Error('pay-stub tax binding needs an income_tax column')
+  if (!entity.columns.some((column) => column.key === "income_tax")) {
+    throw new Error("pay-stub tax binding needs an income_tax column");
   }
   if (incomeTaxSystemKeys.length === 0) {
-    throw new Error('pay-stub tax binding needs a non-empty income-tax key set')
+    throw new Error("pay-stub tax binding needs a non-empty income-tax key set");
   }
   for (const key of incomeTaxSystemKeys) {
     // Keys inline into the expression as string literals (column
     // expressions are verbatim SQL, never bound parameters), so hold them
     // to the same shape the pay_components_system_key check enforces.
     if (!/^[a-z][a-z0-9_]{0,63}$/.test(key)) {
-      throw new Error(`pay-stub tax binding refuses non-literal system key ${JSON.stringify(key)}`)
+      throw new Error(`pay-stub tax binding refuses non-literal system key ${JSON.stringify(key)}`);
     }
   }
-  const literals = incomeTaxSystemKeys.map((key) => `'${key}'`).join(', ')
+  const literals = incomeTaxSystemKeys.map((key) => `'${key}'`).join(", ");
   return {
     ...entity,
     from: `${entity.from}
@@ -2282,11 +3542,11 @@ export function bindPayStubIncomeTaxKeys(
            and c.system_key in (${literals})
       ) income_tax_lines on true`,
     columns: entity.columns.map((column) =>
-      column.key === 'income_tax'
-        ? { ...column, expr: 'coalesce(income_tax_lines.tax, 0)' }
+      column.key === "income_tax"
+        ? { ...column, expr: "coalesce(income_tax_lines.tax, 0)" }
         : column,
     ),
-  }
+  };
 }
 
 /**
@@ -2344,28 +3604,30 @@ export function bindPayStubSocialKeys(
   eiSystemKeys: readonly string[],
   allSocialSystemKeys: readonly string[],
 ): ReportEntity {
-  if (entity.key !== 'pay_stubs') {
-    throw new Error(`pay-stub social binding needs the pay_stubs entity, not ${entity.key}`)
+  if (entity.key !== "pay_stubs") {
+    throw new Error(`pay-stub social binding needs the pay_stubs entity, not ${entity.key}`);
   }
-  if (!entity.columns.some((column) => column.key === 'cpp_fica')) {
-    throw new Error('pay-stub social binding needs a cpp_fica column')
+  if (!entity.columns.some((column) => column.key === "cpp_fica")) {
+    throw new Error("pay-stub social binding needs a cpp_fica column");
   }
-  if (!entity.columns.some((column) => column.key === 'ei')) {
-    throw new Error('pay-stub social binding needs an ei column')
+  if (!entity.columns.some((column) => column.key === "ei")) {
+    throw new Error("pay-stub social binding needs an ei column");
   }
-  if (entity.from.includes('cpp_fica_lines') || entity.from.includes('ei_lines')) {
-    throw new Error('pay-stub social binding is already applied')
+  if (entity.from.includes("cpp_fica_lines") || entity.from.includes("ei_lines")) {
+    throw new Error("pay-stub social binding is already applied");
   }
   if (allSocialSystemKeys.length === 0) {
-    throw new Error('pay-stub social binding needs a non-empty social-insurance key set')
+    throw new Error("pay-stub social binding needs a non-empty social-insurance key set");
   }
   if (eiSystemKeys.length === 0) {
-    throw new Error('pay-stub social binding needs a non-empty EI key set')
+    throw new Error("pay-stub social binding needs a non-empty EI key set");
   }
-  const all = new Set(allSocialSystemKeys)
+  const all = new Set(allSocialSystemKeys);
   for (const key of eiSystemKeys) {
     if (!all.has(key)) {
-      throw new Error(`pay-stub social binding refuses EI key ${JSON.stringify(key)} outside the derived set`)
+      throw new Error(
+        `pay-stub social binding refuses EI key ${JSON.stringify(key)} outside the derived set`,
+      );
     }
   }
   for (const key of allSocialSystemKeys) {
@@ -2373,14 +3635,19 @@ export function bindPayStubSocialKeys(
     // expressions are verbatim SQL, never bound parameters), so hold them
     // to the same shape the pay_components_system_key check enforces.
     if (!/^[a-z][a-z0-9_]{0,63}$/.test(key)) {
-      throw new Error(`pay-stub social binding refuses non-literal system key ${JSON.stringify(key)}`)
+      throw new Error(
+        `pay-stub social binding refuses non-literal system key ${JSON.stringify(key)}`,
+      );
     }
   }
   // The complement is computed, never enumerated: cpp_fica is the derived
   // set minus the EI pair, so a key the declarations add later is counted
   // on the day its pack registers.
-  const cppLiterals = allSocialSystemKeys.filter((key) => !eiSystemKeys.includes(key)).map((key) => `'${key}'`).join(', ')
-  const eiLiterals = eiSystemKeys.map((key) => `'${key}'`).join(', ')
+  const cppLiterals = allSocialSystemKeys
+    .filter((key) => !eiSystemKeys.includes(key))
+    .map((key) => `'${key}'`)
+    .join(", ");
+  const eiLiterals = eiSystemKeys.map((key) => `'${key}'`).join(", ");
   return {
     ...entity,
     from: `${entity.from}
@@ -2401,42 +3668,42 @@ export function bindPayStubSocialKeys(
            and c.system_key in (${eiLiterals})
       ) ei_lines on true`,
     columns: entity.columns.map((column) =>
-      column.key === 'cpp_fica'
-        ? { ...column, expr: 'coalesce(cpp_fica_lines.total, 0)' }
-        : column.key === 'ei'
-          ? { ...column, expr: 'coalesce(ei_lines.total, 0)' }
+      column.key === "cpp_fica"
+        ? { ...column, expr: "coalesce(cpp_fica_lines.total, 0)" }
+        : column.key === "ei"
+          ? { ...column, expr: "coalesce(ei_lines.total, 0)" }
           : column,
     ),
-  }
+  };
 }
 
 /** Item kinds that belong to the Inventory Features switch. The items report
  *  entity stays available; these values must not appear as filter-picker
  *  options while that switch is off. */
-export const ITEM_INVENTORY_KIND_VALUES = ['inventory', 'assembly', 'kit'] as const
+export const ITEM_INVENTORY_KIND_VALUES = ["inventory", "assembly", "kit"] as const;
 
 /** Apply Features-gated enum options. The entity catalog stays static. */
 export function reportEntityForFeatureState(
   entity: ReportEntity,
   features: { inventory: boolean },
 ): ReportEntity {
-  if (features.inventory || entity.key !== 'items') return entity
+  if (features.inventory || entity.key !== "items") return entity;
   return {
     ...entity,
     columns: entity.columns.map((column) => {
-      if (column.key !== 'kind' || !column.options?.length) return column
+      if (column.key !== "kind" || !column.options?.length) return column;
       return {
         ...column,
         options: column.options.filter(
           (option) => !(ITEM_INVENTORY_KIND_VALUES as readonly string[]).includes(option),
         ),
-      }
+      };
     }),
-  }
+  };
 }
 
 export function entityColumn(entity: ReportEntity, key: string): ReportEntityColumn | null {
-  return entity.columns.find((c) => c.key === key) ?? null
+  return entity.columns.find((c) => c.key === key) ?? null;
 }
 
 /**
@@ -2445,75 +3712,94 @@ export function entityColumn(entity: ReportEntity, key: string): ReportEntityCol
  * half-built plans degrade gracefully.
  */
 export function columnRef(entity: ReportEntity, key: string): string | null {
-  return entityColumn(entity, key)?.expr ?? null
+  return entityColumn(entity, key)?.expr ?? null;
 }
 
 // --- Operators --------------------------------------------------------------
 
 export type ReportOperatorMeta = {
-  key: ReportFilterOperator
-  label: string
+  key: ReportFilterOperator;
+  label: string;
   /** Whether this op needs a value field next to it. */
-  needsValue: 'none' | 'one' | 'list'
+  needsValue: "none" | "one" | "list";
   /** Restrict to specific column kinds (undefined = applies to all). */
-  applicableKinds?: ReportColumnKind[]
-}
+  applicableKinds?: ReportColumnKind[];
+};
 
 const REPORT_OPERATORS: ReportOperatorMeta[] = [
-  { key: 'eq', label: 'equals', needsValue: 'one' },
-  { key: 'neq', label: 'not equals', needsValue: 'one' },
-  { key: 'in', label: 'is any of', needsValue: 'list' },
-  { key: 'not_in', label: 'is none of', needsValue: 'list' },
+  { key: "eq", label: "equals", needsValue: "one" },
+  { key: "neq", label: "not equals", needsValue: "one" },
+  { key: "in", label: "is any of", needsValue: "list" },
+  { key: "not_in", label: "is none of", needsValue: "list" },
   {
-    key: 'gte',
-    label: 'on or after / ≥',
-    needsValue: 'one',
-    applicableKinds: ['date', 'timestamp', 'number', 'money'],
+    key: "gte",
+    label: "on or after / ≥",
+    needsValue: "one",
+    applicableKinds: ["date", "timestamp", "number", "money"],
   },
   {
-    key: 'lte',
-    label: 'on or before / ≤',
-    needsValue: 'one',
-    applicableKinds: ['date', 'timestamp', 'number', 'money'],
+    key: "lte",
+    label: "on or before / ≤",
+    needsValue: "one",
+    applicableKinds: ["date", "timestamp", "number", "money"],
   },
-  { key: 'is_null', label: 'is empty', needsValue: 'none' },
-  { key: 'is_not_null', label: 'is set', needsValue: 'none' },
-  { key: 'is_true', label: 'is yes', needsValue: 'none', applicableKinds: ['boolean'] },
-  { key: 'is_false', label: 'is no', needsValue: 'none', applicableKinds: ['boolean'] },
-  { key: 'contains', label: 'contains', needsValue: 'one', applicableKinds: ['text'] },
+  { key: "is_null", label: "is empty", needsValue: "none" },
+  { key: "is_not_null", label: "is set", needsValue: "none" },
+  { key: "is_true", label: "is yes", needsValue: "none", applicableKinds: ["boolean"] },
+  { key: "is_false", label: "is no", needsValue: "none", applicableKinds: ["boolean"] },
+  { key: "contains", label: "contains", needsValue: "one", applicableKinds: ["text"] },
   {
-    key: 'between_days_ago',
-    label: 'within last N days',
-    needsValue: 'one',
-    applicableKinds: ['date', 'timestamp'],
+    key: "between_days_ago",
+    label: "within last N days",
+    needsValue: "one",
+    applicableKinds: ["date", "timestamp"],
   },
   {
-    key: 'due_within_days',
-    label: 'due within next N days',
-    needsValue: 'one',
-    applicableKinds: ['date', 'timestamp'],
+    key: "due_within_days",
+    label: "due within next N days",
+    needsValue: "one",
+    applicableKinds: ["date", "timestamp"],
   },
-  { key: 'since_today', label: 'is today', needsValue: 'none', applicableKinds: ['date', 'timestamp'] },
-  { key: 'this_week', label: 'is this week', needsValue: 'none', applicableKinds: ['date', 'timestamp'] },
-  { key: 'this_month', label: 'is this month', needsValue: 'none', applicableKinds: ['date', 'timestamp'] },
-  { key: 'this_year', label: 'is this year', needsValue: 'none', applicableKinds: ['date', 'timestamp'] },
   {
-    key: 'before_now',
-    label: 'is in the past (overdue)',
-    needsValue: 'none',
-    applicableKinds: ['date', 'timestamp'],
+    key: "since_today",
+    label: "is today",
+    needsValue: "none",
+    applicableKinds: ["date", "timestamp"],
+  },
+  {
+    key: "this_week",
+    label: "is this week",
+    needsValue: "none",
+    applicableKinds: ["date", "timestamp"],
+  },
+  {
+    key: "this_month",
+    label: "is this month",
+    needsValue: "none",
+    applicableKinds: ["date", "timestamp"],
+  },
+  {
+    key: "this_year",
+    label: "is this year",
+    needsValue: "none",
+    applicableKinds: ["date", "timestamp"],
+  },
+  {
+    key: "before_now",
+    label: "is in the past (overdue)",
+    needsValue: "none",
+    applicableKinds: ["date", "timestamp"],
   },
   {
     // Fiscal-aware relative period (value = a PERIOD_PRESETS id). The web
     // executor resolves it to gte/lte bounds before compiling.
-    key: 'period_preset',
-    label: 'in fiscal period',
-    needsValue: 'one',
-    applicableKinds: ['date', 'timestamp'],
+    key: "period_preset",
+    label: "in fiscal period",
+    needsValue: "one",
+    applicableKinds: ["date", "timestamp"],
   },
-
-]
+];
 
 export function operatorsForKind(kind: ReportColumnKind): ReportOperatorMeta[] {
-  return REPORT_OPERATORS.filter((o) => !o.applicableKinds || o.applicableKinds.includes(kind))
+  return REPORT_OPERATORS.filter((o) => !o.applicableKinds || o.applicableKinds.includes(kind));
 }

@@ -2,16 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  db,
-  pool,
-  withBypassContext,
-  withOrgContext,
-} from "@openbooks/engine/platform/db";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "@openbooks/engine/testing/fixtures";
+import { db, pool, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 import { REPORT_ENTITY_MAP, runCustomQuery } from "@openbooks/reports";
 import { salesTrendQuery, salesTrendFromReport } from "./sales-trend";
 
@@ -22,9 +14,12 @@ test(
     const org = await withBypassContext(() => createScratchOrg());
     try {
       await withOrgContext(org.orgId, async () => {
-        const rep = (await db.execute<{ id: string }>(
-            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Sales trend representative',${org.subsidiaryId}) returning id`, "objects",
-          ))[0]!.id;
+        const rep = (
+          await db.execute<{ id: string }>(
+            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Sales trend representative',${org.subsidiaryId}) returning id`,
+            "objects",
+          )
+        )[0]!.id;
         await db.execute(
           sql`insert into employee_roles(org_id,party_id,is_sales_rep) values(${org.orgId},${rep},true)`,
         );
@@ -35,9 +30,12 @@ test(
           metric = "closed_won",
           employeeId: string | null = rep,
         ) {
-          return (await db.execute<{ id: string }>(
-              sql`insert into crm_sales_evidence(org_id,source_kind,source_id,source_number,event_kind,metric,employee_id,subsidiary_id,currency,amount,effective_date) values(${org.orgId},'opportunity',${randomUUID()},'TREND-TEST','credit',${metric},${employeeId},${org.subsidiaryId},${currency},${amount}::numeric,${date}::date) returning id`, "objects",
-            ))[0]!.id;
+          return (
+            await db.execute<{ id: string }>(
+              sql`insert into crm_sales_evidence(org_id,source_kind,source_id,source_number,event_kind,metric,employee_id,subsidiary_id,currency,amount,effective_date) values(${org.orgId},'opportunity',${randomUUID()},'TREND-TEST','credit',${metric},${employeeId},${org.subsidiaryId},${currency},${amount}::numeric,${date}::date) returning id`,
+              "objects",
+            )
+          )[0]!.id;
         }
         const first = await credit("USD", "100.0001", "2026-09-12");
         await credit("USD", "0.0002", "2026-09-30");
@@ -62,9 +60,7 @@ test(
         assert.equal(trend.months[0], "2025-11-01");
         assert.equal(trend.months.at(-1), "2026-10-01");
         assert.deepEqual(
-          trend.points.sort((a, b) =>
-            (a.month + a.currency).localeCompare(b.month + b.currency),
-          ),
+          trend.points.sort((a, b) => (a.month + a.currency).localeCompare(b.month + b.currency)),
           [
             {
               month: "2026-08-01",
@@ -111,21 +107,15 @@ test(
           { ...options, orgId: randomUUID() },
         ]) {
           assert.deepEqual(
-            salesTrendFromReport(
-              "2026-10-01",
-              await runCustomQuery(pool, query, restricted),
-            ).points,
+            salesTrendFromReport("2026-10-01", await runCustomQuery(pool, query, restricted))
+              .points,
             [],
           );
         }
         assert.deepEqual(
           salesTrendFromReport(
             "2026-10-01",
-            await runCustomQuery(
-              pool,
-              salesTrendQuery(randomUUID(), "2026-10-01"),
-              options,
-            ),
+            await runCustomQuery(pool, salesTrendQuery(randomUUID(), "2026-10-01"), options),
           ).points,
           [],
         );

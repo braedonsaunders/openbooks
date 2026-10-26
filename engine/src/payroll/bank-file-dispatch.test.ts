@@ -38,8 +38,13 @@ const SINGLE: PayRunBankFileInputs = {
   population: { entries: [], total: "2500.0000", excludedCheque: [], excludedTotal: "0.0000" },
   credits: [
     {
-      stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIRED", amount: "2500.0000",
-      employeeNumber: "EMP-0001", routing: {}, accountNumber: "000123456789",
+      stubId: "s1",
+      employeePartyId: "p1",
+      employeeName: "ADA WIRED",
+      amount: "2500.0000",
+      employeeNumber: "EMP-0001",
+      routing: {},
+      accountNumber: "000123456789",
     },
   ],
 };
@@ -155,9 +160,14 @@ test("cpa005 renders 1464-character CPA records through the CPA builder", () => 
   const result = renderPayRunBankFile(
     withCreditRouting(SINGLE, "cpa005", { institution: "004", transit: "12345" }),
     {
-      orgId: "org", documentId: "doc", format: "cpa005",
+      orgId: "org",
+      documentId: "doc",
+      format: "cpa005",
       originator: originatorFor("cpa005", { cpa005: CPA005_SETTINGS }),
-      fileCreationNumber: 7, fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
+      fileCreationNumber: 7,
+      fundsDate: "2026-08-21",
+      createdAt: CREATED_AT,
+      timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -172,9 +182,14 @@ test("nacha renders 94-character ACH records through the NACHA builder", () => {
   const result = renderPayRunBankFile(
     withCreditRouting(SINGLE, "nacha", { aba: "011401533", accountType: "checking" }),
     {
-      orgId: "org", documentId: "doc", format: "nacha",
+      orgId: "org",
+      documentId: "doc",
+      format: "nacha",
       originator: originatorFor("nacha", { nacha: NACHA_SETTINGS }),
-      fileIdModifier: "A", fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
+      fileIdModifier: "A",
+      fundsDate: "2026-08-21",
+      createdAt: CREATED_AT,
+      timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -186,37 +201,81 @@ test("nacha renders 94-character ACH records through the NACHA builder", () => {
 });
 
 test("RBC payroll renders the shared STD152 rail with CAD metadata and exact trailer", () => {
-  const originator = originatorFor("rbc_std152", { rbcStd152: {
-    clientNumber: "1234567890", originatorLongName: "Example Employer", originatorShortName: "Example",
-    transactionCode: "200", serviceCurrency: "CAD", transmission: "file_transfer_legacy", environment: "test",
-  } });
+  const originator = originatorFor("rbc_std152", {
+    rbcStd152: {
+      clientNumber: "1234567890",
+      originatorLongName: "Example Employer",
+      originatorShortName: "Example",
+      transactionCode: "200",
+      serviceCurrency: "CAD",
+      transmission: "file_transfer_legacy",
+      environment: "test",
+    },
+  });
   const inputs = withCreditRouting(SINGLE, "rbc_std152", { institution: "003", transit: "01234" });
-  const request = { orgId: "org", documentId: "doc", format: "rbc_std152" as const, originator,
-    fileCreationNumber: 7, fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC" };
+  const request = {
+    orgId: "org",
+    documentId: "doc",
+    format: "rbc_std152" as const,
+    originator,
+    fileCreationNumber: 7,
+    fundsDate: "2026-08-21",
+    createdAt: CREATED_AT,
+    timeZone: "UTC",
+  };
   const result = renderPayRunBankFile(inputs, request);
   assert.equal(result.currency, "CAD");
   assert.deepEqual(result.trailer, { totalCents: 250_000n, count: 1 });
   const records = result.content.split("\r\n").filter(Boolean);
   assert.equal(records[0]!.length, 94);
-  records.slice(1).forEach(record => assert.equal(record.length, 152));
+  records.slice(1).forEach((record) => assert.equal(record.length, 152));
   assert.equal(records[2]!.slice(86, 93), "2026233");
-  assert.throws(() => renderPayRunBankFile(inputs, { ...request, originator: {
-    ...originator, currency: "USD", rbcStd152: { ...originator.rbcStd152!, serviceCurrency: "USD" },
-  } }), /requires a CAD service and profile/);
-  assert.throws(() => renderPayRunBankFile({ ...inputs, population: { ...inputs.population, total: "2500.0001" },
-    credits: inputs.credits.map(credit => ({ ...credit, amount: "2500.0001" })) }, request), /fraction of one/);
+  assert.throws(
+    () =>
+      renderPayRunBankFile(inputs, {
+        ...request,
+        originator: {
+          ...originator,
+          currency: "USD",
+          rbcStd152: { ...originator.rbcStd152!, serviceCurrency: "USD" },
+        },
+      }),
+    /requires a CAD service and profile/,
+  );
+  assert.throws(
+    () =>
+      renderPayRunBankFile(
+        {
+          ...inputs,
+          population: { ...inputs.population, total: "2500.0001" },
+          credits: inputs.credits.map((credit) => ({ ...credit, amount: "2500.0001" })),
+        },
+        request,
+      ),
+    /fraction of one/,
+  );
 });
 
 test("sepa renders pain.001 XML through the SEPA builder", () => {
   const result = renderPayRunBankFile(
-    withCreditRouting(SINGLE, "sepa", { iban: "FR1420041010050500013M02606" }, {
-      iban: "FR1420041010050500013M02606",
-      bic: "AGRIFRPPXXX",
-    }),
+    withCreditRouting(
+      SINGLE,
+      "sepa",
+      { iban: "FR1420041010050500013M02606" },
+      {
+        iban: "FR1420041010050500013M02606",
+        bic: "AGRIFRPPXXX",
+      },
+    ),
     {
-      orgId: "org", documentId: "doc", format: "sepa",
+      orgId: "org",
+      documentId: "doc",
+      format: "sepa",
       originator: originatorFor("sepa", { sepa: SEPA_SETTINGS }),
-      messageId: "PBF-000007", fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
+      messageId: "PBF-000007",
+      fundsDate: "2026-08-21",
+      createdAt: CREATED_AT,
+      timeZone: "UTC",
     },
   );
   assert.match(result.content, /pain\.001/);
@@ -229,11 +288,20 @@ test("sepa renders pain.001 XML through the SEPA builder", () => {
 
 test("cemtex renders 120-character records through the Cemtex builder", () => {
   const result = renderPayRunBankFile(
-    withCreditRouting(SINGLE, "cemtex", { bsb: "062-692" }, { bsb: "062-692", accountNumber: "43214321" }),
+    withCreditRouting(
+      SINGLE,
+      "cemtex",
+      { bsb: "062-692" },
+      { bsb: "062-692", accountNumber: "43214321" },
+    ),
     {
-      orgId: "org", documentId: "doc", format: "cemtex",
+      orgId: "org",
+      documentId: "doc",
+      format: "cemtex",
       originator: originatorFor("cemtex", { cemtex: CEMTEX_SETTINGS }),
-      fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
+      fundsDate: "2026-08-21",
+      createdAt: CREATED_AT,
+      timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -246,15 +314,25 @@ test("cemtex renders 120-character records through the Cemtex builder", () => {
 
 test("bacs renders Standard 18 records through the Bacs builder", () => {
   const result = renderPayRunBankFile(
-    withCreditRouting(SINGLE, "bacs", { sortCode: "20-45-12" }, {
-      sortCode: "20-45-12",
-      accountNumber: "12345678",
-    }),
+    withCreditRouting(
+      SINGLE,
+      "bacs",
+      { sortCode: "20-45-12" },
+      {
+        sortCode: "20-45-12",
+        accountNumber: "12345678",
+      },
+    ),
     {
-      orgId: "org", documentId: "doc", format: "bacs",
+      orgId: "org",
+      documentId: "doc",
+      format: "bacs",
       originator: originatorFor("bacs", { bacs: BACS_SETTINGS }),
-      bacsVolSerial: "000007", bacsFileNumber: "007",
-      fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
+      bacsVolSerial: "000007",
+      bacsFileNumber: "007",
+      fundsDate: "2026-08-21",
+      createdAt: CREATED_AT,
+      timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -267,17 +345,26 @@ test("bacs renders Standard 18 records through the Bacs builder", () => {
 
 test("zengin renders 120-character 給与振込 records through the Zengin builder", () => {
   const result = renderPayRunBankFile(
-    withCreditRouting(SINGLE, "zengin", { bankCode: "0005", branchCode: "110", depositType: "1" }, {
-      bankCode: "0005",
-      branchCode: "110",
-      depositType: "1",
-      payeeKana: "ｴｲﾃﾞｨｰ",
-      accountNumber: "8000001",
-    }),
+    withCreditRouting(
+      SINGLE,
+      "zengin",
+      { bankCode: "0005", branchCode: "110", depositType: "1" },
+      {
+        bankCode: "0005",
+        branchCode: "110",
+        depositType: "1",
+        payeeKana: "ｴｲﾃﾞｨｰ",
+        accountNumber: "8000001",
+      },
+    ),
     {
-      orgId: "org", documentId: "doc", format: "zengin",
+      orgId: "org",
+      documentId: "doc",
+      format: "zengin",
       originator: originatorFor("zengin", { zengin: ZENGIN_SETTINGS }),
-      fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
+      fundsDate: "2026-08-21",
+      createdAt: CREATED_AT,
+      timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -292,22 +379,32 @@ test("zengin renders 120-character 給与振込 records through the Zengin build
 
 test("cnab240 renders 240-character records through the CNAB 240 BB builder", () => {
   const result = renderPayRunBankFile(
-    withCreditRouting(SINGLE, "cnab240", { banco: "001", agencia: "4321", agenciaDv: "2", contaDv: "3", cpfCnpj: "11144477735" }, {
-      accountNumber: "987654",
-      cnab240: {
-        bancoFavorecido: "001",
-        agencia: "04321",
-        agenciaDv: "2",
-        contaDv: "3",
-        dac: null,
-        inscricaoTipo: "1",
-        inscricaoNumero: "11144477735",
+    withCreditRouting(
+      SINGLE,
+      "cnab240",
+      { banco: "001", agencia: "4321", agenciaDv: "2", contaDv: "3", cpfCnpj: "11144477735" },
+      {
+        accountNumber: "987654",
+        cnab240: {
+          bancoFavorecido: "001",
+          agencia: "04321",
+          agenciaDv: "2",
+          contaDv: "3",
+          dac: null,
+          inscricaoTipo: "1",
+          inscricaoNumero: "11144477735",
+        },
       },
-    }),
+    ),
     {
-      orgId: "org", documentId: "doc", format: "cnab240",
+      orgId: "org",
+      documentId: "doc",
+      format: "cnab240",
       originator: originatorFor("cnab240", { cnab240bb: CNAB240_SETTINGS }),
-      cnabNsa: "000007", fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
+      cnabNsa: "000007",
+      fundsDate: "2026-08-21",
+      createdAt: CREATED_AT,
+      timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -355,10 +452,15 @@ test("each format's arm runs its own builder, proved by cross-wired originators"
     },
     {
       format: "sepa",
-      inputs: withCreditRouting(SINGLE, "sepa", {}, {
-        iban: "FR1420041010050500013M02606",
-        bic: null,
-      }),
+      inputs: withCreditRouting(
+        SINGLE,
+        "sepa",
+        {},
+        {
+          iban: "FR1420041010050500013M02606",
+          bic: null,
+        },
+      ),
       originator: originatorFor("sepa", { nacha: NACHA_SETTINGS }),
       message: /SEPA originator configuration is missing/,
     },
@@ -376,20 +478,38 @@ test("each format's arm runs its own builder, proved by cross-wired originators"
     },
     {
       format: "zengin",
-      inputs: withCreditRouting(SINGLE, "zengin", {}, {
-        bankCode: "0005", branchCode: "110", depositType: "1", payeeKana: "ｴｲﾃﾞｨｰ",
-      }),
+      inputs: withCreditRouting(
+        SINGLE,
+        "zengin",
+        {},
+        {
+          bankCode: "0005",
+          branchCode: "110",
+          depositType: "1",
+          payeeKana: "ｴｲﾃﾞｨｰ",
+        },
+      ),
       originator: originatorFor("zengin", { nacha: NACHA_SETTINGS }),
       message: /Zengin originator configuration is missing/,
     },
     {
       format: "cnab240",
-      inputs: withCreditRouting(SINGLE, "cnab240", {}, {
-        cnab240: {
-          bancoFavorecido: "001", agencia: "04321", agenciaDv: "2", contaDv: "3",
-          dac: null, inscricaoTipo: "1", inscricaoNumero: "11144477735",
+      inputs: withCreditRouting(
+        SINGLE,
+        "cnab240",
+        {},
+        {
+          cnab240: {
+            bancoFavorecido: "001",
+            agencia: "04321",
+            agenciaDv: "2",
+            contaDv: "3",
+            dac: null,
+            inscricaoTipo: "1",
+            inscricaoNumero: "11144477735",
+          },
         },
-      }),
+      ),
       originator: originatorFor("cnab240", { nacha: NACHA_SETTINGS }),
       message: /CNAB 240 originator configuration is missing/,
     },
@@ -403,9 +523,16 @@ test("each format's arm runs its own builder, proved by cross-wired originators"
     assert.throws(
       () =>
         renderPayRunBankFile(inputs, {
-          orgId: "org", documentId: "doc", format, originator,
-          fileCreationNumber: 7, fileIdModifier: "A", messageId: "PBF-000007",
-          fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
+          orgId: "org",
+          documentId: "doc",
+          format,
+          originator,
+          fileCreationNumber: 7,
+          fileIdModifier: "A",
+          messageId: "PBF-000007",
+          fundsDate: "2026-08-21",
+          createdAt: CREATED_AT,
+          timeZone: "UTC",
         }),
       message,
       `${format} did not reach its own builder`,
@@ -442,15 +569,26 @@ test("the record-length table declares every format — sepa's and bacs's nulls 
 test("render refuses an unknown format by its own name, never as NACHA", () => {
   const format = "zz-unknown" as PayRunBankFileFormat;
   const originator = {
-    paymentBankProfileId: "p", profileName: "mystery profile", format,
-    currency: "ZZZ", lineEnding: "lf",
+    paymentBankProfileId: "p",
+    profileName: "mystery profile",
+    format,
+    currency: "ZZZ",
+    lineEnding: "lf",
   } as unknown as PayrollOriginatorConfig;
   assert.throws(
     () =>
-      renderPayRunBankFile({ ...SINGLE, format }, {
-        orgId: "org", documentId: "doc", format, originator,
-        fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
-      }),
+      renderPayRunBankFile(
+        { ...SINGLE, format },
+        {
+          orgId: "org",
+          documentId: "doc",
+          format,
+          originator,
+          fundsDate: "2026-08-21",
+          createdAt: CREATED_AT,
+          timeZone: "UTC",
+        },
+      ),
     (error: unknown) => {
       const message = (error as Error).message;
       assert.match(message, /unknown payroll bank-file format "zz-unknown"/);
@@ -464,9 +602,14 @@ test("the trailer reader refuses an unknown format by name, even fed well-formed
   const nacha = renderPayRunBankFile(
     withCreditRouting(SINGLE, "nacha", { aba: "011401533", accountType: "checking" }),
     {
-      orgId: "org", documentId: "doc", format: "nacha",
+      orgId: "org",
+      documentId: "doc",
+      format: "nacha",
       originator: originatorFor("nacha", { nacha: NACHA_SETTINGS }),
-      fileIdModifier: "A", fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
+      fileIdModifier: "A",
+      fundsDate: "2026-08-21",
+      createdAt: CREATED_AT,
+      timeZone: "UTC",
     },
   );
   // Sanity: those bytes really are a readable NACHA file-control trailer.

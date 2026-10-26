@@ -35,7 +35,12 @@ test("the temporal echo never moves the fingerprint (rerun idempotence survives 
       key: "drv",
       asOf: { periodId: "period-1" },
       vector: [{ key: "a", value: "1000.0000" }],
-      temporal: { mode: "period_activity", from: "2026-07-01", to: "2026-07-31", field: "posting_date" },
+      temporal: {
+        mode: "period_activity",
+        from: "2026-07-01",
+        to: "2026-07-31",
+        field: "posting_date",
+      },
     },
   });
   assert.equal(allocationFingerprint(before), allocationFingerprint(after));

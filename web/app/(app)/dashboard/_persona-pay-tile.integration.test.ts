@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
 // The pay tile reads the EMPLOYEE's own schedule: server copy ('next-intl')
 // is stubbed at the boundary so the assertions pin the reader, not the
@@ -10,38 +10,47 @@ import { sql } from 'drizzle-orm'
 // are hand-derived dates, never a second call into the function under test.
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') {
+    if (specifier === "next-intl/server") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent(
-          'export async function getLocale() { return "en" }'
-          + 'export async function getTranslations() { return (key) => key }',
-        ),
-      }
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            'export async function getLocale() { return "en" }' +
+              "export async function getTranslations() { return (key) => key }",
+          ),
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
-const { loadPersonaMetrics } = await import('./_persona.ts')
-type Authz = import('@/lib/authz.ts').Authz
+const { db, env, withBypass } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
+const { loadPersonaMetrics } = await import("./_persona.ts");
+type Authz = import("@/lib/authz.ts").Authz;
 
-const DB = !!env.OPENBOOKS_DB_URL
+const DB = !!env.OPENBOOKS_DB_URL;
 
 function authzFor(orgId: string, userId: string): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: 'Paid Monthly', orgId,
-      roles: [{ key: 'staff', name: 'staff' }],
-      envKind: 'sandbox', productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "Paid Monthly",
+      orgId,
+      roles: [{ key: "staff", name: "staff" }],
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
-    permissions: new Set(['dashboard.read']),
+    permissions: new Set(["dashboard.read"]),
     allowedSubsidiaryIds: null,
-  }
+  };
 }
 
 /**
@@ -51,41 +60,60 @@ function authzFor(orgId: string, userId: string): Authz {
  * here is weekly while the employee pays monthly on month-end + 5 days, so
  * any answer the weekly schedule would give proves the wrong schedule won.
  */
-test('the pay tile follows the employee schedule through the payroll calendar', { skip: !DB }, async () => {
-  const scratch = await withBypass(() => createScratchOrg())
-  const actorId = (await withBypass(() => createScratchUser(scratch.orgId, 'Paid Monthly', 'staff'))) as unknown as string
-  const partyId = randomUUID()
-  const weeklyId = randomUUID()
-  const monthlyId = randomUUID()
-  await withBypass(async () => {
-    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb) || '{"features": {"payroll": true}}'::jsonb where id = ${scratch.orgId}`)
-    await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${partyId}, ${scratch.orgId}, 'person', 'Paid Monthly')`)
-    await db.execute(sql`update users set party_id = ${partyId} where id = ${actorId} and org_id = ${scratch.orgId}`)
-    // Org default: weekly, paid 3 days after each week-end.
-    await db.execute(sql`
+test(
+  "the pay tile follows the employee schedule through the payroll calendar",
+  { skip: !DB },
+  async () => {
+    const scratch = await withBypass(() => createScratchOrg());
+    const actorId = (await withBypass(() =>
+      createScratchUser(scratch.orgId, "Paid Monthly", "staff"),
+    )) as unknown as string;
+    const partyId = randomUUID();
+    const weeklyId = randomUUID();
+    const monthlyId = randomUUID();
+    await withBypass(async () => {
+      await db.execute(
+        sql`update orgs set settings = coalesce(settings, '{}'::jsonb) || '{"features": {"payroll": true}}'::jsonb where id = ${scratch.orgId}`,
+      );
+      await db.execute(
+        sql`insert into parties (id, org_id, kind, display_name) values (${partyId}, ${scratch.orgId}, 'person', 'Paid Monthly')`,
+      );
+      await db.execute(
+        sql`update users set party_id = ${partyId} where id = ${actorId} and org_id = ${scratch.orgId}`,
+      );
+      // Org default: weekly, paid 3 days after each week-end.
+      await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active, is_default, created_by, updated_by)
-      values (${weeklyId}, ${scratch.orgId}, 'Weekly', 'weekly', 52, '2026-06-28', 3, true, true, ${actorId}, ${actorId})`)
-    // The employee's schedule: monthly on month-end, paid 5 days later.
-    await db.execute(sql`
+      values (${weeklyId}, ${scratch.orgId}, 'Weekly', 'weekly', 52, '2026-06-28', 3, true, true, ${actorId}, ${actorId})`);
+      // The employee's schedule: monthly on month-end, paid 5 days later.
+      await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active, is_default, created_by, updated_by)
-      values (${monthlyId}, ${scratch.orgId}, 'Monthly', 'monthly', 12, '2026-01-31', 5, true, false, ${actorId}, ${actorId})`)
-    await db.execute(sql`
+      values (${monthlyId}, ${scratch.orgId}, 'Monthly', 'monthly', 12, '2026-01-31', 5, true, false, ${actorId}, ${actorId})`);
+      await db.execute(sql`
       insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province)
-      values (${scratch.orgId}, ${partyId}, ${monthlyId}, 'CA', 'ON')`)
-  })
-  try {
-    // Pinned clock: 2026-10-03 with month-end + 5. September's period pays
-    // 2026-10-05, still upcoming, so the tile names it — the next period
-    // would skip a payday the employee has not received yet. Month-end pay
-    // stays month-end — a 28th clamp would land here instead.
-    const metrics = await pinClock('2026-10-03', () =>
-      withBypass(() => loadPersonaMetrics(authzFor(scratch.orgId, actorId), new Set(['payTile']))))
-    assert.ok(metrics.payTile, 'the tile renders for a profiled employee')
-    assert.equal(metrics.payTile.nextPayDate, '2026-10-05', 'next pay date follows the employee monthly schedule, not the weekly default')
-    assert.equal(metrics.payTile.lastPayDate, null)
-  } finally {
-    await withBypass(() => dropScratchOrg(scratch.orgId))
-  }
-})
+      values (${scratch.orgId}, ${partyId}, ${monthlyId}, 'CA', 'ON')`);
+    });
+    try {
+      // Pinned clock: 2026-10-03 with month-end + 5. September's period pays
+      // 2026-10-05, still upcoming, so the tile names it — the next period
+      // would skip a payday the employee has not received yet. Month-end pay
+      // stays month-end — a 28th clamp would land here instead.
+      const metrics = await pinClock("2026-10-03", () =>
+        withBypass(() =>
+          loadPersonaMetrics(authzFor(scratch.orgId, actorId), new Set(["payTile"])),
+        ),
+      );
+      assert.ok(metrics.payTile, "the tile renders for a profiled employee");
+      assert.equal(
+        metrics.payTile.nextPayDate,
+        "2026-10-05",
+        "next pay date follows the employee monthly schedule, not the weekly default",
+      );
+      assert.equal(metrics.payTile.lastPayDate, null);
+    } finally {
+      await withBypass(() => dropScratchOrg(scratch.orgId));
+    }
+  },
+);

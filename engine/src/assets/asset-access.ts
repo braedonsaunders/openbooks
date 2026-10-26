@@ -39,13 +39,19 @@ export async function assertAssetAccess(
     });
   }
   if (!(await lockAndCheckOrgFeature(tx, args.orgId, args.feature))) {
-    refuse("feature_disabled", `${ASSET_DEPTH_FEATURES[args.feature]} is switched off for this organization`, {
-      status: 409,
-      remedy: `Turn on ${ASSET_DEPTH_FEATURES[args.feature]} under Fixed Assets in Company Settings → Features.`,
-    });
+    refuse(
+      "feature_disabled",
+      `${ASSET_DEPTH_FEATURES[args.feature]} is switched off for this organization`,
+      {
+        status: 409,
+        remedy: `Turn on ${ASSET_DEPTH_FEATURES[args.feature]} under Fixed Assets in Company Settings → Features.`,
+      },
+    );
   }
   const allowed = await actorAllowedSubsidiaryIds(tx, args.orgId, args.actorId);
   if (allowed && args.subsidiaryIds.some((id) => !allowed.has(id))) {
-    refuse("subsidiary_scope", "this record belongs to a legal entity outside your authorization", { status: 404 });
+    refuse("subsidiary_scope", "this record belongs to a legal entity outside your authorization", {
+      status: 404,
+    });
   }
 }

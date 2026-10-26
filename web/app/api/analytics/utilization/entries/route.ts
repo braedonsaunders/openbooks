@@ -1,5 +1,5 @@
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { analyticsQueryLive as analyticsQuery } from "../../../../../lib/analytics/query";
@@ -27,16 +27,31 @@ export const GET = defineRoute({
     const item = url.searchParams.get("item");
     const from = url.searchParams.get("from");
     const to = url.searchParams.get("to");
-    if ((!employee && !item) || (employee && item) || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
-      return NextResponse.json({ error: "employee or item, plus valid from/to calendar dates (from <= to) required" }, { status: 400 });
+    if (
+      (!employee && !item) ||
+      (employee && item) ||
+      !isIsoCalendarDate(from) ||
+      !isIsoCalendarDate(to) ||
+      from > to
+    ) {
+      return NextResponse.json(
+        { error: "employee or item, plus valid from/to calendar dates (from <= to) required" },
+        { status: 400 },
+      );
     }
     if ((employee && !isUuid(employee)) || (item && item !== "0" && !isUuid(item))) {
-      return NextResponse.json({ error: "employee or item must be a valid identifier" }, { status: 400 });
+      return NextResponse.json(
+        { error: "employee or item must be a valid identifier" },
+        { status: 400 },
+      );
     }
     const limitRaw = url.searchParams.get("limit");
     const limit = limitRaw === null ? 500 : Math.floor(Number(limitRaw));
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
-      return NextResponse.json({ error: "limit must be an integer from 1 to 500" }, { status: 400 });
+      return NextResponse.json(
+        { error: "limit must be an integer from 1 to 500" },
+        { status: 400 },
+      );
     }
     const cursorRaw = url.searchParams.get("cursor");
     let cursor: { date: string; id: string } | null = null;
@@ -142,16 +157,20 @@ export const GET = defineRoute({
     const hasMore = page.rows.length > limit;
     const rows = hasMore ? page.rows.slice(0, limit) : page.rows;
     const last = rows[rows.length - 1];
-    const nextCursor = hasMore && last ? `${String(last.date).slice(0, 10)}|${String(last.id)}` : null;
+    const nextCursor =
+      hasMore && last ? `${String(last.date).slice(0, 10)}|${String(last.id)}` : null;
     const res = { rows };
 
     // Labour cost translates per leg at the worked date through the same flow
     // path as the dashboard: a leg without rate coverage is a named refusal,
     // never a silent 1:1 mix.
-    const ratesResult = await flowRates(user.orgId, res.rows.map((r) => ({
-      func: (r.func as string | null) ?? null,
-      date: String(r.date ?? from).slice(0, 10),
-    }))).then(
+    const ratesResult = await flowRates(
+      user.orgId,
+      res.rows.map((r) => ({
+        func: (r.func as string | null) ?? null,
+        date: String(r.date ?? from).slice(0, 10),
+      })),
+    ).then(
       (rates) => ({ ok: true as const, rates }),
       (error: unknown) => ({ ok: false as const, error }),
     );
@@ -161,14 +180,17 @@ export const GET = defineRoute({
     const rates = ratesResult.rates;
     let entries;
     try {
-      entries = ((res.rows)).map((r) => {
+      entries = res.rows.map((r) => {
         const native = mul(String(r.cost_rate ?? "0"), String(r.hours ?? "0"));
         return {
           id: r.id,
           date: r.date,
           hours: Number(r.hours ?? 0),
           billable: Boolean(r.is_billable),
-          cost: mulDecimal(native, rates.rateAt((r.func as string | null) ?? null, String(r.date ?? from).slice(0, 10))),
+          cost: mulDecimal(
+            native,
+            rates.rateAt((r.func as string | null) ?? null, String(r.date ?? from).slice(0, 10)),
+          ),
           itemName: r.item_name ?? "—",
           employeeName: r.employee_name ?? "—",
           customerName: r.customer_name ?? r.project_name ?? "",
@@ -178,7 +200,7 @@ export const GET = defineRoute({
     } catch (error) {
       return apiErrorResponse(error);
     }
-    const currency = rates.base || await presentationCurrency(user.orgId);
+    const currency = rates.base || (await presentationCurrency(user.orgId));
     const totalRow = totals.rows[0];
     const groupRows = (result: { rows: unknown[] }) =>
       (result.rows as Array<{ label: unknown; hours: unknown; billable: unknown }>).map((g) => ({
@@ -200,6 +222,5 @@ export const GET = defineRoute({
       },
       page: { limit, nextCursor, hasMore },
     });
-
   },
-})
+});

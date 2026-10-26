@@ -40,8 +40,11 @@ export interface BomWhereUsedPath {
 }
 
 async function itemCode(tx: SqlExecutor, orgId: string, itemId: string): Promise<string> {
-  const result = await tx.execute<{ code: string | null }>(sql`
-    select code from items where org_id = ${orgId} and id = ${itemId}`, "objects");
+  const result = await tx.execute<{ code: string | null }>(
+    sql`
+    select code from items where org_id = ${orgId} and id = ${itemId}`,
+    "objects",
+  );
   const code = result[0]?.code;
   if (!result[0]) {
     throw new ManufacturingError(`item ${itemId} was not found in this organization`, {
@@ -58,7 +61,8 @@ async function effectiveBom(
   itemId: string,
   asOf: string,
 ): Promise<BomRow[]> {
-  const result = await tx.execute<BomRow>(sql`
+  const result = await tx.execute<BomRow>(
+    sql`
     select b.component_item_id as "componentItemId",
            component.code as "componentCode",
            b.quantity_per::text as "quantityPer",
@@ -72,7 +76,9 @@ async function effectiveBom(
        and (b.effective_from is null or b.effective_from <= ${asOf}::date)
        and (b.effective_to is null or ${asOf}::date < b.effective_to)
      order by b.sort_order, b.component_item_id, b.operation_seq nulls first,
-              b.is_byproduct, b.effective_from nulls first`, "objects");
+              b.is_byproduct, b.effective_from nulls first`,
+    "objects",
+  );
   return result;
 }
 
@@ -81,10 +87,13 @@ async function supplyMethod(
   orgId: string,
   itemId: string,
 ): Promise<string | null> {
-  const result = await tx.execute<{ supplyMethod: string }>(sql`
+  const result = await tx.execute<{ supplyMethod: string }>(
+    sql`
     select supply_method as "supplyMethod"
       from mfg_item_policies
-     where org_id = ${orgId} and item_id = ${itemId}`, "objects");
+     where org_id = ${orgId} and item_id = ${itemId}`,
+    "objects",
+  );
   return result[0]?.supplyMethod ?? null;
 }
 
@@ -138,8 +147,21 @@ export async function explodeBom(
     rows: BomRow[],
   ): Promise<void> => {
     for (const row of rows) {
-      const required = bomRequiredQuantity(parentQuantity, row.quantityPer, row.scrapPct,row).quantity;
-      if(!row.isByproduct&&cmp(required,'0')<=0) throw new ManufacturingError(`The required quantity of ${row.componentCode} is below inventory precision.`,{code:'bom_quantity_below_precision',remedy:'Increase the production quantity or revise the formula so every required input is at least 0.0001 base units.'});
+      const required = bomRequiredQuantity(
+        parentQuantity,
+        row.quantityPer,
+        row.scrapPct,
+        row,
+      ).quantity;
+      if (!row.isByproduct && cmp(required, "0") <= 0)
+        throw new ManufacturingError(
+          `The required quantity of ${row.componentCode} is below inventory precision.`,
+          {
+            code: "bom_quantity_below_precision",
+            remedy:
+              "Increase the production quantity or revise the formula so every required input is at least 0.0001 base units.",
+          },
+        );
       const path = [...pathCodes, row.componentCode];
       const line: BomExplosionLine = {
         parentItemId: parentId,
@@ -157,19 +179,25 @@ export async function explodeBom(
 
       const cycleAt = pathIds.indexOf(row.componentItemId);
       if (cycleAt >= 0) {
-        throw new ManufacturingError(`bill of materials cycle: ${[...pathCodes.slice(cycleAt), row.componentCode].join(" → ")}`, {
-          code: "bom_cycle",
-          remedy: "Remove a component link from the named cycle.",
-        });
+        throw new ManufacturingError(
+          `bill of materials cycle: ${[...pathCodes.slice(cycleAt), row.componentCode].join(" → ")}`,
+          {
+            code: "bom_cycle",
+            remedy: "Remove a component link from the named cycle.",
+          },
+        );
       }
       const make = (await supplyMethod(tx, orgId, row.componentItemId)) === "make";
       const childRows = make ? await effectiveBom(tx, orgId, row.componentItemId, asOf) : [];
       if (make && childRows.length > 0) {
         if (pathIds.length > MAX_DEPTH) {
-          throw new ManufacturingError(`bill of materials exceeds depth ${MAX_DEPTH}: ${path.join(" → ")}`, {
-            code: "bom_too_deep",
-            remedy: "Shorten the nested BOM path before exploding it.",
-          });
+          throw new ManufacturingError(
+            `bill of materials exceeds depth ${MAX_DEPTH}: ${path.join(" → ")}`,
+            {
+              code: "bom_too_deep",
+              remedy: "Shorten the nested BOM path before exploding it.",
+            },
+          );
         }
         await expand(
           row.componentItemId,
@@ -199,16 +227,13 @@ export async function whereUsed(
   validateAsOf(asOf);
   const componentCode = await itemCode(tx, orgId, componentItemId);
   const paths: BomWhereUsedPath[] = [];
-  const walk = async (
-    currentId: string,
-    pathIds: string[],
-    pathCodes: string[],
-  ): Promise<void> => {
+  const walk = async (currentId: string, pathIds: string[], pathCodes: string[]): Promise<void> => {
     const parents = await tx.execute<{
       parentItemId: string;
       parentItemCode: string | null;
       operationSeq: number | null;
-    }>(sql`
+    }>(
+      sql`
       select b.assembly_item_id as "parentItemId",
              parent.code as "parentItemCode",
              b.operation_seq as "operationSeq"
@@ -219,21 +244,29 @@ export async function whereUsed(
          and not b.is_byproduct
          and (b.effective_from is null or b.effective_from <= ${asOf}::date)
          and (b.effective_to is null or ${asOf}::date < b.effective_to)
-       order by parent.code, b.operation_seq nulls first, b.sort_order`, "objects");
+       order by parent.code, b.operation_seq nulls first, b.sort_order`,
+      "objects",
+    );
     for (const row of parents) {
       const parentCode = row.parentItemCode?.trim() || row.parentItemId;
       const cycleAt = pathIds.indexOf(row.parentItemId);
       if (cycleAt >= 0) {
-        throw new ManufacturingError(`bill of materials cycle: ${[parentCode, ...pathCodes.slice(0, cycleAt).reverse(), parentCode].join(" → ")}`, {
-          code: "bom_cycle",
-          remedy: "Remove a component link from the named cycle.",
-        });
+        throw new ManufacturingError(
+          `bill of materials cycle: ${[parentCode, ...pathCodes.slice(0, cycleAt).reverse(), parentCode].join(" → ")}`,
+          {
+            code: "bom_cycle",
+            remedy: "Remove a component link from the named cycle.",
+          },
+        );
       }
       if (pathIds.length > MAX_DEPTH) {
-        throw new ManufacturingError(`bill of materials exceeds depth ${MAX_DEPTH}: ${[parentCode, ...pathCodes].join(" → ")}`, {
-          code: "bom_too_deep",
-          remedy: "Shorten the nested BOM path before checking where-used.",
-        });
+        throw new ManufacturingError(
+          `bill of materials exceeds depth ${MAX_DEPTH}: ${[parentCode, ...pathCodes].join(" → ")}`,
+          {
+            code: "bom_too_deep",
+            remedy: "Shorten the nested BOM path before checking where-used.",
+          },
+        );
       }
       const nextIds = [row.parentItemId, ...pathIds];
       const nextCodes = [parentCode, ...pathCodes];

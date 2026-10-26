@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../../testing/jsdom-env.ts";
 
 /**
  * S3b: the Lines panel pages through the whole drill. A 252-row lineage at
@@ -117,7 +117,9 @@ test("S3b: the lineage drill pages to the last row", async () => {
   const root = createRoot(host);
   try {
     await act(async () => {
-      root.render(provider(React.createElement(LineagePanel, { anchor: { runId: "run-1" }, pageSize: 50 })));
+      root.render(
+        provider(React.createElement(LineagePanel, { anchor: { runId: "run-1" }, pageSize: 50 })),
+      );
       await tick();
       await tick();
       await tick();
@@ -125,12 +127,20 @@ test("S3b: the lineage drill pages to the last row", async () => {
     // First page: rows 1–50, Previous parked, Next live.
     assert.deepEqual(calls[0], { limit: 50, offset: 0 });
     assert.equal(status(), "Rows 1-50 of 252.");
-    assert.ok(!document.body.textContent?.includes("252.00"), "row 252 must not render on page one");
+    assert.ok(
+      !document.body.textContent?.includes("252.00"),
+      "row 252 must not render on page one",
+    );
     let pager = buttons();
     assert.equal(pager.previous.disabled, true);
     assert.equal(pager.next.disabled, false);
     // Walk to the last page: 51–100 … 201–250, then 251–252.
-    for (const [from, to] of [[51, 100], [101, 150], [151, 200], [201, 250]] as const) {
+    for (const [from, to] of [
+      [51, 100],
+      [101, 150],
+      [151, 200],
+      [201, 250],
+    ] as const) {
       await click(pager.next);
       assert.equal(status(), `Rows ${from}-${to} of 252.`);
       pager = buttons();
@@ -144,7 +154,10 @@ test("S3b: the lineage drill pages to the last row", async () => {
     // And back one page: Previous is a real control, not decoration.
     await click(pager.previous);
     assert.equal(status(), "Rows 201-250 of 252.");
-    assert.ok(!document.body.textContent?.includes("252.00"), "leaving the last page must drop row 252");
+    assert.ok(
+      !document.body.textContent?.includes("252.00"),
+      "leaving the last page must drop row 252",
+    );
   } finally {
     await act(async () => {
       root.unmount();

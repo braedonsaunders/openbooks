@@ -34,29 +34,42 @@ test("lockProjectForScope returns the locked project only when it is in scope", 
   const scratch = await withBypass(() => createScratchOrg());
   try {
     const hiddenSubsidiary = randomUUID();
-    await withBypass(() => db.execute(sql`
+    await withBypass(() =>
+      db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden lock entity', 'CAD', 'CA')
-    `));
+    `),
+    );
     const visibleProject = await withBypass(() => seedProject(scratch.orgId, scratch.subsidiaryId));
     const hiddenProject = await withBypass(() => seedProject(scratch.orgId, hiddenSubsidiary));
     const scope = new Set([scratch.subsidiaryId]);
 
-    const visible = await withBypass(() => db.transaction((tx) =>
-      lockScopeRow(tx, scratch.orgId, "project", visibleProject, scope)));
+    const visible = await withBypass(() =>
+      db.transaction((tx) => lockScopeRow(tx, scratch.orgId, "project", visibleProject, scope)),
+    );
     assert.deepEqual(visible, { id: visibleProject, subsidiaryId: scratch.subsidiaryId });
 
-    await withBypass(() => assertNotFound(db.transaction((tx) =>
-      lockScopeRow(tx, scratch.orgId, "project", hiddenProject, scope))));
-    await withBypass(() => assertNotFound(db.transaction((tx) =>
-      lockProjectForScope(tx, scratch.orgId, randomUUID(), scope))));
+    await withBypass(() =>
+      assertNotFound(
+        db.transaction((tx) => lockScopeRow(tx, scratch.orgId, "project", hiddenProject, scope)),
+      ),
+    );
+    await withBypass(() =>
+      assertNotFound(
+        db.transaction((tx) => lockProjectForScope(tx, scratch.orgId, randomUUID(), scope)),
+      ),
+    );
 
-    const unrestricted = await withBypass(() => db.transaction((tx) =>
-      lockProjectForScope(tx, scratch.orgId, hiddenProject, null)));
+    const unrestricted = await withBypass(() =>
+      db.transaction((tx) => lockProjectForScope(tx, scratch.orgId, hiddenProject, null)),
+    );
     assert.deepEqual(unrestricted, { id: hiddenProject, subsidiaryId: hiddenSubsidiary });
 
-    const shared = await withBypass(() => db.transaction((tx) =>
-      lockProjectForScope(tx, scratch.orgId, visibleProject, scope, "share")));
+    const shared = await withBypass(() =>
+      db.transaction((tx) =>
+        lockProjectForScope(tx, scratch.orgId, visibleProject, scope, "share"),
+      ),
+    );
     assert.deepEqual(shared, { id: visibleProject, subsidiaryId: scratch.subsidiaryId });
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId));
@@ -67,25 +80,33 @@ test("lockProjectForScope rechecks scope after a concurrent rehome", async () =>
   const scratch = await withBypass(() => createScratchOrg());
   try {
     const otherSubsidiary = randomUUID();
-    await withBypass(() => db.execute(sql`
+    await withBypass(() =>
+      db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${otherSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Rehome target entity', 'CAD', 'CA')
-    `));
+    `),
+    );
     const projectId = await withBypass(() => seedProject(scratch.orgId, scratch.subsidiaryId));
     const scope = new Set([scratch.subsidiaryId]);
 
-    const before = await withBypass(() => db.transaction((tx) =>
-      lockProjectForScope(tx, scratch.orgId, projectId, scope)));
+    const before = await withBypass(() =>
+      db.transaction((tx) => lockProjectForScope(tx, scratch.orgId, projectId, scope)),
+    );
     assert.deepEqual(before, { id: projectId, subsidiaryId: scratch.subsidiaryId });
 
     // A concurrent reassignment moves the project out of scope between reads.
-    await withBypass(() => db.execute(sql`
+    await withBypass(() =>
+      db.execute(sql`
       update projects set subsidiary_id = ${otherSubsidiary}
        where id = ${projectId} and org_id = ${scratch.orgId}
-    `));
+    `),
+    );
 
-    await withBypass(() => assertNotFound(db.transaction((tx) =>
-      lockProjectForScope(tx, scratch.orgId, projectId, scope))));
+    await withBypass(() =>
+      assertNotFound(
+        db.transaction((tx) => lockProjectForScope(tx, scratch.orgId, projectId, scope)),
+      ),
+    );
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId));
   }
@@ -96,14 +117,21 @@ test("withScopeSnapshot holds one snapshot across queries", async () => {
   try {
     const projectId = await withBypass(() => seedProject(scratch.orgId, scratch.subsidiaryId));
     const otherSubsidiary = randomUUID();
-    await withBypass(() => db.execute(sql`
+    await withBypass(() =>
+      db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${otherSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Snapshot target entity', 'CAD', 'CA')
-    `));
+    `),
+    );
     const readSubsidiary = async () =>
-      (await db.execute<{ subsidiary_id: string }>(sql`
+      (
+        await db.execute<{ subsidiary_id: string }>(
+          sql`
         select subsidiary_id from projects where id = ${projectId} and org_id = ${scratch.orgId}
-      `, "objects"))[0]!.subsidiary_id;
+      `,
+          "objects",
+        )
+      )[0]!.subsidiary_id;
 
     // A concurrent reassignment commits mid-snapshot on its own connection
     // (it cannot reuse the test's bypass scope from inside the snapshot);
@@ -129,7 +157,11 @@ test("withScopeSnapshot holds one snapshot across queries", async () => {
       return { first, second };
     });
     assert.equal(seen.first, scratch.subsidiaryId);
-    assert.equal(seen.second, scratch.subsidiaryId, "the snapshot must not see the concurrent commit");
+    assert.equal(
+      seen.second,
+      scratch.subsidiaryId,
+      "the snapshot must not see the concurrent commit",
+    );
     assert.equal(await withBypass(readSubsidiary), otherSubsidiary);
 
     // A throw rolls the snapshot back: no partial unit ever commits.
@@ -142,9 +174,16 @@ test("withScopeSnapshot holds one snapshot across queries", async () => {
       }),
       /boom/,
     );
-    const name = (await withBypass(() => db.execute<{ name: string }>(sql`
+    const name = (
+      await withBypass(() =>
+        db.execute<{ name: string }>(
+          sql`
       select name from projects where id = ${projectId} and org_id = ${scratch.orgId}
-    `, "objects")))[0]!.name;
+    `,
+          "objects",
+        ),
+      )
+    )[0]!.name;
     assert.match(name, /^SCOPE-LOCK-/);
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId));

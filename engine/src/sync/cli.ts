@@ -28,10 +28,16 @@ if (!isUuid(ORG_ID)) {
   console.error("--org <uuid> is required; sync never guesses a tenant");
   process.exit(1);
 }
-const [org] = await db.execute<{ id: string; name: string; env_kind: string }>(sql`
+const [org] = await db.execute<{ id: string; name: string; env_kind: string }>(
+  sql`
   select id, name, env_kind from orgs where id = ${ORG_ID}
-`, "objects");
-if (!org) { console.error("organization not found"); process.exit(1); }
+`,
+  "objects",
+);
+if (!org) {
+  console.error("organization not found");
+  process.exit(1);
+}
 if (org.env_kind !== "sandbox" && !argv.includes("--production")) {
   console.error(
     `${org.name} is ${org.env_kind}; pass --production to sync a live tenant intentionally`,
@@ -51,7 +57,10 @@ if (FULL && PREFLIGHT) {
 
 const conns = await listConnections(org.id);
 const conn = CONN_ID ? await getConnection(org.id, CONN_ID) : conns[0];
-if (!conn) { console.error("no connection configured — add one in the platform page"); process.exit(1); }
+if (!conn) {
+  console.error("no connection configured — add one in the platform page");
+  process.exit(1);
+}
 
 console.log(
   `org=${org.name} connection=${conn.displayName} mode=${
@@ -65,10 +74,7 @@ if (PREFLIGHT) {
     const plan = await preflightFullSync(source, ctxOpts);
     if (OUT_PATH) writeFileSync(OUT_PATH, JSON.stringify(plan, null, 2));
     console.log(JSON.stringify(plan, null, 2));
-    process.exitCode =
-      plan.duplicateSourceRefs.length > 0 || plan.sourceUnbuildable > 0
-        ? 1
-        : 0;
+    process.exitCode = plan.duplicateSourceRefs.length > 0 || plan.sourceUnbuildable > 0 ? 1 : 0;
   } finally {
     await source.dispose?.();
   }
@@ -78,16 +84,18 @@ const r = FULL
   ? await runFullMigration(source, "cli", ctxOpts)
   : await runSync(source, "cli", ctxOpts);
 if (OUT_PATH) writeFileSync(OUT_PATH, JSON.stringify(r, null, 2));
-console.log(JSON.stringify(
-  {
-    ...r,
-    skipped: r.skipped.slice(0, 10),
-    tb: { ...r.tb, mismatches: r.tb.mismatches.slice(0, 10) },
-    openItems: r.openItems
-      ? { ...r.openItems, mismatches: r.openItems.mismatches.slice(0, 10) }
-      : null,
-  },
-  null,
-  1,
-));
+console.log(
+  JSON.stringify(
+    {
+      ...r,
+      skipped: r.skipped.slice(0, 10),
+      tb: { ...r.tb, mismatches: r.tb.mismatches.slice(0, 10) },
+      openItems: r.openItems
+        ? { ...r.openItems, mismatches: r.openItems.mismatches.slice(0, 10) }
+        : null,
+    },
+    null,
+    1,
+  ),
+);
 process.exit(0);

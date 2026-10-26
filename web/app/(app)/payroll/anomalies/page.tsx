@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { anomalyChecksTitle, loadAnomalyChecksPage, anomalyChecksSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { anomalyChecksTitle, loadAnomalyChecksPage, anomalyChecksSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await anomalyChecksTitle() }
+  return { title: await anomalyChecksTitle() };
 }
 
 /**
@@ -14,13 +14,13 @@ export async function generateMetadata() {
 export default async function AnomalyChecksPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const raw = await searchParams
-  const sp: Record<string, string | undefined> = {}
+  const raw = await searchParams;
+  const sp: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(raw)) {
-    sp[key] = Array.isArray(value) ? value[0] : value
+    sp[key] = Array.isArray(value) ? value[0] : value;
   }
-  const data = await loadAnomalyChecksPage(sp)
-  return <ModuleView spec={anomalyChecksSpec(data)} data={data} searchParams={sp} trusted />
+  const data = await loadAnomalyChecksPage(sp);
+  return <ModuleView spec={anomalyChecksSpec(data)} data={data} searchParams={sp} trusted />;
 }

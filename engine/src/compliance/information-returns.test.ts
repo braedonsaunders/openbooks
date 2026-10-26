@@ -45,8 +45,16 @@ test("proportional allocation always re-adds to the total", () => {
 });
 
 test("a one-unit remainder goes to the largest remainder, deterministically", () => {
-  assert.deepEqual(allocateProportionally("0.0001", ["1", "1", "1"]), ["0.0001", "0.0000", "0.0000"]);
-  assert.deepEqual(allocateProportionally("0.0002", ["1", "1", "1"]), ["0.0001", "0.0001", "0.0000"]);
+  assert.deepEqual(allocateProportionally("0.0001", ["1", "1", "1"]), [
+    "0.0001",
+    "0.0000",
+    "0.0000",
+  ]);
+  assert.deepEqual(allocateProportionally("0.0002", ["1", "1", "1"]), [
+    "0.0001",
+    "0.0001",
+    "0.0000",
+  ]);
   // Repeat runs never differ: no Map/Set iteration order in the result.
   const a = allocateProportionally("100.0001", ["3", "3", "3", "1"]);
   const b = allocateProportionally("100.0001", ["3", "3", "3", "1"]);
@@ -71,7 +79,13 @@ function payment(over: Partial<PaymentTrace> = {}): PaymentTrace {
     documentNumber: "PAY-0001",
     paymentDate: "2026-03-15",
     cash: "1000.0000",
-    bills: [{ documentId: "bill-1", applied: "1000.0000", lines: [{ accountId: "acct-sub", weight: "1000.0000" }] }],
+    bills: [
+      {
+        documentId: "bill-1",
+        applied: "1000.0000",
+        lines: [{ accountId: "acct-sub", weight: "1000.0000" }],
+      },
+    ],
     ...over,
   };
 }
@@ -89,38 +103,96 @@ test("a payment settling one mapped bill lands wholly in that box", () => {
 test("recorded backup withholding reports gross remuneration and separate federal tax without inflating bank cash", () => {
   for (const form of [NEC, MISC]) {
     const result = summarizeRecipient({
-      form, defaultBox: form.defaultBox, filingThreshold: "2000", boxByAccount: new Map(),
-      payments: [payment({ cash: "760", backupWithheld: "240", withholdingDeductionIds: ["deduction-1"] })],
+      form,
+      defaultBox: form.defaultBox,
+      filingThreshold: "2000",
+      boxByAccount: new Map(),
+      payments: [
+        payment({ cash: "760", backupWithheld: "240", withholdingDeductionIds: ["deduction-1"] }),
+      ],
     });
     assert.equal(result.amounts.reportableTotal, "1000.0000");
     assert.equal(result.amounts.withheld, "240.0000");
     assert.equal(result.amounts.tracedCash, "760.0000");
-    assert.equal(result.amounts.boxAmounts[form.formType === "1099-NEC" ? "nec4" : "misc4"], "240.0000");
-    assert.equal(result.belowThreshold, false, "any backup tax triggers reporting even below remuneration threshold");
+    assert.equal(
+      result.amounts.boxAmounts[form.formType === "1099-NEC" ? "nec4" : "misc4"],
+      "240.0000",
+    );
+    assert.equal(
+      result.belowThreshold,
+      false,
+      "any backup tax triggers reporting even below remuneration threshold",
+    );
   }
 });
 
 test("backup withholding apportions gross remuneration across expense boxes once", () => {
   const result = summarizeRecipient({
-    form: MISC, defaultBox: "misc3", filingThreshold: "2000", boxByAccount: new Map([["rent", "misc1"], ["other", "misc3"]]),
-    payments: [payment({ cash: "760", backupWithheld: "240", bills: [
-      { documentId: "rent-bill", applied: "600", lines: [{ accountId: "rent", weight: "600" }] },
-      { documentId: "other-bill", applied: "400", lines: [{ accountId: "other", weight: "400" }] },
-    ] })],
+    form: MISC,
+    defaultBox: "misc3",
+    filingThreshold: "2000",
+    boxByAccount: new Map([
+      ["rent", "misc1"],
+      ["other", "misc3"],
+    ]),
+    payments: [
+      payment({
+        cash: "760",
+        backupWithheld: "240",
+        bills: [
+          {
+            documentId: "rent-bill",
+            applied: "600",
+            lines: [{ accountId: "rent", weight: "600" }],
+          },
+          {
+            documentId: "other-bill",
+            applied: "400",
+            lines: [{ accountId: "other", weight: "400" }],
+          },
+        ],
+      }),
+    ],
   });
-  assert.deepEqual(result.amounts.boxAmounts, { misc1: "600.0000", misc3: "400.0000", misc4: "240.0000" });
+  assert.deepEqual(result.amounts.boxAmounts, {
+    misc1: "600.0000",
+    misc3: "400.0000",
+    misc4: "240.0000",
+  });
 });
 
 test("recorded backup evidence refuses duplicate withholding mappings and foreign return types", () => {
-  assert.throws(() => summarizeRecipient({
-    form: NEC, defaultBox: "nec1", filingThreshold: "2000", boxByAccount: new Map([["acct-sub", "nec4"]]),
-    payments: [payment({ cash: "760", backupWithheld: "240" })],
-  }), /overlap recorded backup/);
-  assert.throws(() => summarizeRecipient({
-    form: formDefinition("T4A"), defaultBox: "t4a048", filingThreshold: "500", boxByAccount: new Map(),
-    payments: [payment({ cash: "760", backupWithheld: "240" })],
-  }), /Canadian T4A/);
-  assert.throws(() => allocatePaymentToBoxes({ payment: payment({ backupWithheld: "-1" }), defaultBox: "nec1", boxByAccount: new Map() }), /cannot be negative/);
+  assert.throws(
+    () =>
+      summarizeRecipient({
+        form: NEC,
+        defaultBox: "nec1",
+        filingThreshold: "2000",
+        boxByAccount: new Map([["acct-sub", "nec4"]]),
+        payments: [payment({ cash: "760", backupWithheld: "240" })],
+      }),
+    /overlap recorded backup/,
+  );
+  assert.throws(
+    () =>
+      summarizeRecipient({
+        form: formDefinition("T4A"),
+        defaultBox: "t4a048",
+        filingThreshold: "500",
+        boxByAccount: new Map(),
+        payments: [payment({ cash: "760", backupWithheld: "240" })],
+      }),
+    /Canadian T4A/,
+  );
+  assert.throws(
+    () =>
+      allocatePaymentToBoxes({
+        payment: payment({ backupWithheld: "-1" }),
+        defaultBox: "nec1",
+        boxByAccount: new Map(),
+      }),
+    /cannot be negative/,
+  );
 });
 
 test("spend split across accounts splits across boxes, penny-exact", () => {
@@ -178,7 +250,13 @@ test("a partial payment reports only the cash that left, not the bill", () => {
   const { boxAmounts } = allocatePaymentToBoxes({
     payment: payment({
       cash: "400.0000",
-      bills: [{ documentId: "bill-1", applied: "400.0000", lines: [{ accountId: "acct-sub", weight: "1000.0000" }] }],
+      bills: [
+        {
+          documentId: "bill-1",
+          applied: "400.0000",
+          lines: [{ accountId: "acct-sub", weight: "1000.0000" }],
+        },
+      ],
     }),
     boxByAccount: new Map([["acct-sub", "nec1"]]),
     defaultBox: "nec1",
@@ -192,7 +270,13 @@ test("an early-payment discount reports the cash paid, not the bill settled", ()
   const { boxAmounts } = allocatePaymentToBoxes({
     payment: payment({
       cash: "980.0000",
-      bills: [{ documentId: "bill-1", applied: "1000.0000", lines: [{ accountId: "acct-sub", weight: "1000.0000" }] }],
+      bills: [
+        {
+          documentId: "bill-1",
+          applied: "1000.0000",
+          lines: [{ accountId: "acct-sub", weight: "1000.0000" }],
+        },
+      ],
     }),
     boxByAccount: new Map([["acct-sub", "nec1"]]),
     defaultBox: "nec1",
@@ -204,7 +288,13 @@ test("cash beyond what it settled is an advance and lands in the default box", (
   const { boxAmounts } = allocatePaymentToBoxes({
     payment: payment({
       cash: "1500.0000",
-      bills: [{ documentId: "bill-1", applied: "1000.0000", lines: [{ accountId: "acct-rent", weight: "1000.0000" }] }],
+      bills: [
+        {
+          documentId: "bill-1",
+          applied: "1000.0000",
+          lines: [{ accountId: "acct-rent", weight: "1000.0000" }],
+        },
+      ],
     }),
     boxByAccount: new Map([["acct-rent", "misc1"]]),
     defaultBox: "misc3",
@@ -225,7 +315,9 @@ test("a settled bill with no decomposable lines falls to the default box", () =>
   const { boxAmounts } = allocatePaymentToBoxes({
     payment: payment({
       cash: "800.0000",
-      bills: [{ documentId: "bill-1", applied: "800.0000", lines: [{ accountId: "acct", weight: "0" }] }],
+      bills: [
+        { documentId: "bill-1", applied: "800.0000", lines: [{ accountId: "acct", weight: "0" }] },
+      ],
     }),
     boxByAccount: new Map([["acct", "misc1"]]),
     defaultBox: "misc3",
@@ -260,8 +352,16 @@ test("one payment across two bills allocates per bill", () => {
     payment: payment({
       cash: "3000.0000",
       bills: [
-        { documentId: "b1", applied: "1000.0000", lines: [{ accountId: "rent", weight: "1000.0000" }] },
-        { documentId: "b2", applied: "2000.0000", lines: [{ accountId: "sub", weight: "2000.0000" }] },
+        {
+          documentId: "b1",
+          applied: "1000.0000",
+          lines: [{ accountId: "rent", weight: "1000.0000" }],
+        },
+        {
+          documentId: "b2",
+          applied: "2000.0000",
+          lines: [{ accountId: "sub", weight: "2000.0000" }],
+        },
       ],
     }),
     boxByAccount: new Map([
@@ -346,7 +446,9 @@ test("a box with its own lower threshold files on its own", () => {
     payments: [
       payment({
         cash: "15.0000",
-        bills: [{ documentId: "b", applied: "15.0000", lines: [{ accountId: "roy", weight: "15.0000" }] }],
+        bills: [
+          { documentId: "b", applied: "15.0000", lines: [{ accountId: "roy", weight: "15.0000" }] },
+        ],
       }),
     ],
     boxByAccount: new Map([["roy", "misc2"]]),
@@ -365,7 +467,13 @@ test("fishing boat proceeds file at any amount", () => {
     payments: [
       payment({
         cash: "400.0000",
-        bills: [{ documentId: "b", applied: "400.0000", lines: [{ accountId: "boat", weight: "400.0000" }] }],
+        bills: [
+          {
+            documentId: "b",
+            applied: "400.0000",
+            lines: [{ accountId: "boat", weight: "400.0000" }],
+          },
+        ],
       }),
     ],
     boxByAccount: new Map([["boat", "misc5"]]),
@@ -435,7 +543,13 @@ test("a $1,500 rents recipient files for 2025 but not for 2026", () => {
       payments: [
         payment({
           cash: "1500.0000",
-          bills: [{ documentId: "b", applied: "1500.0000", lines: [{ accountId: "rent", weight: "1500.0000" }] }],
+          bills: [
+            {
+              documentId: "b",
+              applied: "1500.0000",
+              lines: [{ accountId: "rent", weight: "1500.0000" }],
+            },
+          ],
         }),
       ],
       boxByAccount: new Map([["rent", "misc1"]]),
@@ -452,7 +566,13 @@ test("a $700 attorney-gross-proceeds recipient still files for 2026", () => {
     payments: [
       payment({
         cash: "700.0000",
-        bills: [{ documentId: "b", applied: "700.0000", lines: [{ accountId: "legal", weight: "700.0000" }] }],
+        bills: [
+          {
+            documentId: "b",
+            applied: "700.0000",
+            lines: [{ accountId: "legal", weight: "700.0000" }],
+          },
+        ],
       }),
     ],
     boxByAccount: new Map([["legal", "misc10"]]),
@@ -509,7 +629,11 @@ function profile(over: Partial<RecipientProfile> = {}): RecipientProfile {
   };
 }
 
-const amounts = (total: string, boxes: Record<string, string> = { nec1: total }, withheld = "0") => ({
+const amounts = (
+  total: string,
+  boxes: Record<string, string> = { nec1: total },
+  withheld = "0",
+) => ({
   boxAmounts: boxes,
   reportableTotal: total,
   withheld,
@@ -517,7 +641,16 @@ const amounts = (total: string, boxes: Record<string, string> = { nec1: total },
   tracedCash: total,
 });
 
-const exceptionsFor = (p: RecipientProfile, total: string, opts: { belowThreshold?: boolean; boxes?: Record<string, string>; withheld?: string; unmapped?: string[] } = {}) =>
+const exceptionsFor = (
+  p: RecipientProfile,
+  total: string,
+  opts: {
+    belowThreshold?: boolean;
+    boxes?: Record<string, string>;
+    withheld?: string;
+    unmapped?: string[];
+  } = {},
+) =>
   recipientExceptions({
     profile: p,
     amounts: amounts(total, opts.boxes ?? { nec1: total }, opts.withheld ?? "0"),
@@ -585,7 +718,10 @@ test("an unflagged vendor paid over the threshold is surfaced", () => {
     "unflagged_over_threshold",
   ]);
   // A corporation is expected to be unflagged: no false alarm.
-  assert.deepEqual(exceptionsFor(profile({ reportable: false, taxClassification: "s_corp" }), "5000"), []);
+  assert.deepEqual(
+    exceptionsFor(profile({ reportable: false, taxClassification: "s_corp" }), "5000"),
+    [],
+  );
   assert.deepEqual(exceptionsFor(profile({ reportable: false }), "100"), []);
 });
 
@@ -594,7 +730,10 @@ test("backup withholding with nothing withheld is surfaced", () => {
     "backup_withholding_not_withheld",
   ]);
   assert.deepEqual(
-    exceptionsFor(profile({ backupWithholding: true }), "5000", { boxes: { nec1: "5000", nec4: "1200" }, withheld: "1200" }),
+    exceptionsFor(profile({ backupWithholding: true }), "5000", {
+      boxes: { nec1: "5000", nec4: "1200" },
+      withheld: "1200",
+    }),
     [],
   );
 });
@@ -608,7 +747,10 @@ test("an unmapped account is reported per account, by name", () => {
     filingThreshold: "600",
     unmappedAccountNames: ["5100 · Subcontractor Costs", "5200 · Equipment Rental"],
   });
-  assert.deepEqual(found.map((e) => e.kind), ["unmapped_account", "unmapped_account"]);
+  assert.deepEqual(
+    found.map((e) => e.kind),
+    ["unmapped_account", "unmapped_account"],
+  );
   assert.ok(found[0]!.detail.includes("5100 · Subcontractor Costs"));
 });
 
@@ -624,7 +766,10 @@ test("adjustments are added to the computed figure, never replacing it", () => {
 });
 
 test("the filed total excludes withholding and indicator boxes", () => {
-  assert.equal(filedTotal(NEC, { nec1: "5000.0000", nec2: "1.0000", nec4: "600.0000" }), "5000.0000");
+  assert.equal(
+    filedTotal(NEC, { nec1: "5000.0000", nec2: "1.0000", nec4: "600.0000" }),
+    "5000.0000",
+  );
 });
 
 test("recipient copies can only be furnished from a frozen filing", () => {
@@ -648,7 +793,11 @@ test("every form's default box exists and box keys are unique", () => {
     const keys = form.boxes.map((b) => b.key);
     assert.equal(new Set(keys).size, keys.length, `${form.formType} has duplicate box keys`);
     assert.ok(keys.includes(form.defaultBox), `${form.formType} default box is not a real box`);
-    assert.equal(form.boxes.filter((b) => b.isWithholding).length, 1, `${form.formType} withholding box count`);
+    assert.equal(
+      form.boxes.filter((b) => b.isWithholding).length,
+      1,
+      `${form.formType} withholding box count`,
+    );
   }
 });
 
@@ -662,10 +811,10 @@ test("an unknown form is refused rather than defaulted", () => {
 function stubRunner(rowSets: Record<string, unknown>[][]) {
   const queue = [...rowSets];
   return {
-    execute: (async (_query: unknown, mode?: string) => Promise.resolve({ rows: queue.shift() ?? [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))) as unknown as Pick<
-      typeof db,
-      "execute"
-    >["execute"],
+    execute: (async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: queue.shift() ?? [] }).then(
+        <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+      )) as unknown as Pick<typeof db, "execute">["execute"],
   };
 }
 
@@ -680,7 +829,11 @@ test("a subsidiary filing resolves that subsidiary's functional currency", async
 
 test("a filing for an unknown subsidiary is refused, not root-scoped", async () => {
   await assert.rejects(
-    resolveInformationReturnCurrency({ orgId: "org-1", subsidiaryId: "sub-nope", runner: stubRunner([[]]) }),
+    resolveInformationReturnCurrency({
+      orgId: "org-1",
+      subsidiaryId: "sub-nope",
+      runner: stubRunner([[]]),
+    }),
     (error: unknown) => error instanceof InformationReturnError && error.status === 404,
   );
 });
@@ -783,7 +936,12 @@ test("the finalize refusal keeps the wording blocking exceptions have always car
 
 test("informational exceptions carry their own specifics into the message", () => {
   assert.equal(
-    filingExceptionGuidance(exception("unmapped_account", 'spend on "Office" has no box rule and fell to the default box')).message,
+    filingExceptionGuidance(
+      exception(
+        "unmapped_account",
+        'spend on "Office" has no box rule and fell to the default box',
+      ),
+    ).message,
     'vendor "Ace Framing": spend on "Office" has no box rule and fell to the default box',
   );
 });

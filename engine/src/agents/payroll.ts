@@ -1,20 +1,19 @@
 import { sql } from "drizzle-orm";
 import { add, cmp, neg, sum } from "../money/money.ts";
-import { addCalendarDays, addMonthsStart, businessToday, endOfMonth } from "../platform/business-date.ts";
+import {
+  addCalendarDays,
+  addMonthsStart,
+  businessToday,
+  endOfMonth,
+} from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
 } from "./continuous-close-config.ts";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "../payroll/error.ts";
-import {
-  installedPayrollCountries,
-  payrollStatutoryRateGaps,
-} from "../payroll/readiness.ts";
-import {
-  payrollRemittanceSummary,
-  remittanceGroupDueDate,
-} from "../payroll/remittance.ts";
+import { installedPayrollCountries, payrollStatutoryRateGaps } from "../payroll/readiness.ts";
+import { payrollRemittanceSummary, remittanceGroupDueDate } from "../payroll/remittance.ts";
 import { packWarnsOnMissingIdentifier, payrollTaxYearForDate } from "../payroll/packs.ts";
 import { classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
@@ -54,7 +53,11 @@ export async function payrollFindings(
     // slices that share a due date (a quarterly remitter's three monthly
     // slices collapse into the one quarterly bill it will actually raise).
     const months: { from: string; to: string }[] = [];
-    for (let cursor = `${from.slice(0, 7)}-01`; cursor <= today; cursor = addMonthsStart(cursor, 1)) {
+    for (
+      let cursor = `${from.slice(0, 7)}-01`;
+      cursor <= today;
+      cursor = addMonthsStart(cursor, 1)
+    ) {
       const end = endOfMonth(cursor);
       months.push({ from: cursor < from ? from : cursor, to: end > today ? today : end });
     }
@@ -129,7 +132,11 @@ export async function payrollFindings(
           slot.billed = add(slot.billed, billed);
           for (const bill of group.existingBills) {
             if (!slot.bills.some((seen) => seen.documentNumber === bill.documentNumber)) {
-              slot.bills.push({ documentNumber: bill.documentNumber, status: bill.status, total: bill.total });
+              slot.bills.push({
+                documentNumber: bill.documentNumber,
+                status: bill.status,
+                total: bill.total,
+              });
             }
           }
           for (const province of group.provinces) {
@@ -195,7 +202,11 @@ export async function payrollFindings(
         fingerprint: slot.fingerprint,
         severity: overdue
           ? "critical"
-          : classifyForensicItem({ materiality, threshold, criticalMaterialityMultiple: duePolicy.parameters.criticalMaterialityMultiple }),
+          : classifyForensicItem({
+              materiality,
+              threshold,
+              criticalMaterialityMultiple: duePolicy.parameters.criticalMaterialityMultiple,
+            }),
         confidence: "1.0000",
         materiality,
         subjectType: "remittance_group",
@@ -240,12 +251,13 @@ export async function payrollFindings(
 
   const unknownPolicy = byKey.get("payroll_unknown_accounts");
   if (unknownPolicy?.enabled) {
-    const runs = (await db.execute<{
-        run_id: string;
-        document_number: string | null;
-        unknown_filing_stubs: number;
-        unknown_liability_amount: string;
-      }>(sql`
+    const runs = await db.execute<{
+      run_id: string;
+      document_number: string | null;
+      unknown_filing_stubs: number;
+      unknown_liability_amount: string;
+    }>(
+      sql`
       select r.document_id as run_id, min(d.document_number) as document_number,
              count(distinct s.id) filter (where s.filing_account_source = 'unknown')::int as unknown_filing_stubs,
              coalesce(sum(l.amount) filter (
@@ -264,7 +276,9 @@ export async function payrollFindings(
                  and l.kind in ('deduction', 'employer_contribution', 'credit')
                  and l.amount <> 0), 0) <> 0
        order by min(s.pay_date) desc limit 25
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const run of runs) {
       findings.push({
         agentKey: "payroll",
@@ -299,16 +313,20 @@ export async function payrollFindings(
 
   const electionsPolicy = byKey.get("payroll_missing_elections");
   if (electionsPolicy?.enabled) {
-    const countries = (await db.execute<{ country: string; employees: number }>(sql`
+    const countries = await db.execute<{ country: string; employees: number }>(
+      sql`
       select prof.country, count(*)::int as employees
         from employee_payroll_profiles prof
        where prof.org_id = ${orgId} and prof.is_active
          and ((prof.country = 'CA' and (prof.federal_claim_code is null or prof.provincial_claim_code is null))
            or (prof.country = 'US' and prof.filing_status is null))
        group by prof.country
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const row of countries) {
-      const people = (await db.execute<{ id: string; name: string }>(sql`
+      const people = await db.execute<{ id: string; name: string }>(
+        sql`
         select p.id, p.display_name as name
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
@@ -316,7 +334,9 @@ export async function payrollFindings(
            and ((prof.country = 'CA' and (prof.federal_claim_code is null or prof.provincial_claim_code is null))
              or (prof.country = 'US' and prof.filing_status is null))
          order by p.display_name limit 10
-      `, "objects"));
+      `,
+        "objects",
+      );
       findings.push({
         agentKey: "payroll",
         findingType: "payroll_missing_elections",
@@ -342,9 +362,12 @@ export async function payrollFindings(
 
   const yearendPolicy = byKey.get("payroll_yearend_gaps");
   if (yearendPolicy?.enabled) {
-    const blob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
+    const blob = await db.execute<{ p: Record<string, unknown> | null }>(
+      sql`
       select settings->'payroll' as p from orgs where id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const installed = await installedPayrollCountries(orgId, blob[0]?.p ?? {});
     for (const country of installed) {
       const { taxYear } = payrollTaxYearForDate(country, today);
@@ -382,21 +405,27 @@ export async function payrollFindings(
       // a filing that needs it, so a pack with no filing to feed warns
       // about nothing while one that names one still warns.
       if (!packWarnsOnMissingIdentifier(country)) continue;
-      const noSin = (await db.execute<{ employees: number }>(sql`
+      const noSin = await db.execute<{ employees: number }>(
+        sql`
         select count(*)::int as employees
           from employee_payroll_profiles prof
          where prof.org_id = ${orgId} and prof.is_active and prof.country = ${country}
            and prof.sin_encrypted is null
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (Number(noSin[0]?.employees ?? 0) > 0) {
-        const people = (await db.execute<{ id: string; name: string }>(sql`
+        const people = await db.execute<{ id: string; name: string }>(
+          sql`
           select p.id, p.display_name as name
             from employee_payroll_profiles prof
             join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
            where prof.org_id = ${orgId} and prof.is_active and prof.country = ${country}
              and prof.sin_encrypted is null
            order by p.display_name limit 10
-        `, "objects"));
+        `,
+          "objects",
+        );
         findings.push({
           agentKey: "payroll",
           findingType: "payroll_yearend_gaps",

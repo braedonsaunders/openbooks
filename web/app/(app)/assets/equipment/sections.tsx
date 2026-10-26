@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from "next/link";
 
 /**
  * Equipment adapters retained for stored PageSpecs.
@@ -15,10 +15,10 @@ export function EquipmentHeaderLinks({
   documentationLabel,
   showFixedAssetsLinks,
 }: {
-  fixedAssetsLabel: string
-  taxDepreciationLabel: string
-  documentationLabel: string
-  showFixedAssetsLinks: boolean
+  fixedAssetsLabel: string;
+  taxDepreciationLabel: string;
+  documentationLabel: string;
+  showFixedAssetsLinks: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -35,10 +35,12 @@ export function EquipmentHeaderLinks({
           </Link>
         </>
       ) : null}
-      <Link href="/docs/item-rates" className="text-sm text-teal-700 hover:underline dark:text-teal-300">
+      <Link
+        href="/docs/item-rates"
+        className="text-sm text-teal-700 hover:underline dark:text-teal-300"
+      >
         {documentationLabel}
       </Link>
     </div>
-  )
+  );
 }
-

@@ -68,8 +68,19 @@ async function stampCollectible(world: SimOrg, invoiceId: string, today: string)
      where id = ${invoiceId} and org_id = ${world.orgId}`);
 }
 
-export async function autopilotSaas(profile: Profile, world: SimOrg, today: string): Promise<SaasResult> {
-  const res: SaasResult = { billed: 0, obligationsBuilt: 0, recognized: 0, dunned: 0, changed: 0, actions: 0 };
+export async function autopilotSaas(
+  profile: Profile,
+  world: SimOrg,
+  today: string,
+): Promise<SaasResult> {
+  const res: SaasResult = {
+    billed: 0,
+    obligationsBuilt: 0,
+    recognized: 0,
+    dunned: 0,
+    changed: 0,
+    actions: 0,
+  };
   if (world.subscriptions.length === 0) return res;
   const a = world.accounts;
 
@@ -81,7 +92,8 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
 
   // 2. Build recognition schedules for freshly-billed, posted, not-yet-obligated
   //    subscription invoices; make each collectible.
-  const fresh = (await db.execute<{ id: string }>(sql`
+  const fresh = await db.execute<{ id: string }>(
+    sql`
     select d.id from documents d
      where d.org_id = ${world.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
        and coalesce((d.custom->'sim'->>'obligated')::boolean, false) = false
@@ -90,12 +102,16 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
          join items item on item.org_id = line.org_id and item.id = line.item_id
          where line.org_id = d.org_id and line.document_id = d.id
            and item.recognition_rule_id is not null
-       )`, "objects"));
+       )`,
+    "objects",
+  );
   for (const inv of fresh) {
     try {
       const r = await createObligationsFromInvoice(inv.id, world.orgId, world.actors.controller);
       if (r.created > 0) res.obligationsBuilt += r.created;
-    } catch (e) { console.error(`[saas ${today}] obligations skipped: ${(e as Error).message}`); }
+    } catch (e) {
+      console.error(`[saas ${today}] obligations skipped: ${(e as Error).message}`);
+    }
     await stampCollectible(world, inv.id, today);
   }
 
@@ -104,7 +120,9 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
     try {
       const rec = await runRevenueRecognition(world.orgId, today, world.actors.controller);
       res.recognized = rec.posted;
-    } catch (e) { console.error(`[saas ${today}] recognition skipped: ${(e as Error).message}`); }
+    } catch (e) {
+      console.error(`[saas ${today}] recognition skipped: ${(e as Error).message}`);
+    }
 
     if (profile.meteredProducts?.length) await recomputeSaasUsageMetrics(world);
 
@@ -143,18 +161,23 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
       res.dunningCall = dunningCall;
       const d = await runDunningForOrg(dunningCall.orgId, dunningCall.asOf);
       res.dunned = d.scanned; // subscribers evaluated by the dunning policy this cycle
-    } catch (e) { console.error(`[saas ${today}] dunning skipped: ${(e as Error).message}`); }
+    } catch (e) {
+      console.error(`[saas ${today}] dunning skipped: ${(e as Error).message}`);
+    }
   }
 
   // 5. Expansion + churn: seat upgrades (prorated) and the occasional cancellation.
   if (dayOfMonth(today) === 18) {
     const seed = Number(today.slice(5, 7)); // month, for a deterministic pick
-    const active = (await db.execute<{ id: string; quantity: string; customerName: string }>(sql`
+    const active = await db.execute<{ id: string; quantity: string; customerName: string }>(
+      sql`
       select s.id, s.quantity::text as quantity, customer.display_name as "customerName"
         from subscriptions s
         join parties customer on customer.org_id = s.org_id and customer.id = s.customer_id
        where s.org_id = ${world.orgId} and s.status = 'active'
-       order by customer.display_name, s.id`, "objects"));
+       order by customer.display_name, s.id`,
+      "objects",
+    );
     if (active.length > 0) {
       // Expansion: bump seats on one subscription. Exact integer bump on the
       // 8dp quantity grid (same rendered text as the old float path for every
@@ -163,9 +186,18 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
       // the subscription validator instead.
       const up = active[seed % active.length]!;
       try {
-        await changeSubscription(world.orgId, up.id, { quantity: bumpQuantity(up.quantity, 1 + (seed % 3)) }, today, undefined, null);
+        await changeSubscription(
+          world.orgId,
+          up.id,
+          { quantity: bumpQuantity(up.quantity, 1 + (seed % 3)) },
+          today,
+          undefined,
+          null,
+        );
         res.changed++;
-      } catch (e) { console.error(`[saas ${today}] expansion skipped: ${(e as Error).message}`); }
+      } catch (e) {
+        console.error(`[saas ${today}] expansion skipped: ${(e as Error).message}`);
+      }
       // Churn: cancel one subscription a few times a year (when the date hashes to it).
       if (active.length > 8 && seed % 6 === 0) {
         const churn = active[(seed * 7) % active.length]!;

@@ -1,34 +1,38 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { benefitContributionLabels } from './benefit-contribution-labels'
-import { actorHasTeam, findTeamEmploymentIdsForParty } from '@openbooks/engine/hrm/self-service/team-read'
-import { getMyProfile,
+import { getTranslations } from "next-intl/server";
+import { benefitContributionLabels } from "./benefit-contribution-labels";
+import {
+  actorHasTeam,
+  findTeamEmploymentIdsForParty,
+} from "@openbooks/engine/hrm/self-service/team-read";
+import {
+  getMyProfile,
   getMyRequests,
   getMySteps,
   type MyRequest,
   type MyStep,
-} from '@openbooks/engine/hrm/self-service/self-read'
+} from "@openbooks/engine/hrm/self-service/self-read";
 import {
   getMyBenefitsWorkspace,
   getMyReviewWorkspace,
   loadManagerOwedReviews,
   selfWorkspaceCapabilities,
-} from '@openbooks/engine/hrm/self-service/my-work'
-import { getTeamView, type TeamView } from '@openbooks/engine/hrm/self-service/team-read'
-import { listOwnBankAccounts } from '@openbooks/engine/hrm/self-service/bank-changes'
-import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
-import { employmentChangeFlowsEnabled } from '@openbooks/engine/hrm/change-requests'
-import { SelfServiceError } from '@openbooks/engine/hrm/self-service/actor'
-import { can, type Authz } from '../authz'
-import type { DirectoryItem } from '../../components/module-home/ui'
-import type { ModuleHomeTab } from '../../components/module-home/ui'
-import { loadMyLeave, type MyLeaveBalance } from './leave'
-import { db } from '@openbooks/engine/platform/db'
-import { listQualifications } from '@openbooks/engine/hrm/qualifications/qualifications';
+} from "@openbooks/engine/hrm/self-service/my-work";
+import { getTeamView, type TeamView } from "@openbooks/engine/hrm/self-service/team-read";
+import { listOwnBankAccounts } from "@openbooks/engine/hrm/self-service/bank-changes";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { employmentChangeFlowsEnabled } from "@openbooks/engine/hrm/change-requests";
+import { SelfServiceError } from "@openbooks/engine/hrm/self-service/actor";
+import { can, type Authz } from "../authz";
+import type { DirectoryItem } from "../../components/module-home/ui";
+import type { ModuleHomeTab } from "../../components/module-home/ui";
+import { loadMyLeave, type MyLeaveBalance } from "./leave";
+import { db } from "@openbooks/engine/platform/db";
+import { listQualifications } from "@openbooks/engine/hrm/qualifications/qualifications";
 import { HrmQualificationError } from "@openbooks/engine/hrm/qualifications/errors";
 import { isFeatureEnabled } from "../features";
-import type { ExplainPayTrace } from '@openbooks/engine/hrm/ai/explain-pay'
+import type { ExplainPayTrace } from "@openbooks/engine/hrm/ai/explain-pay";
 
 /**
  * Me workspace loaders — the person's own view of their employment and the
@@ -45,37 +49,45 @@ import type { ExplainPayTrace } from '@openbooks/engine/hrm/ai/explain-pay'
  */
 
 export interface SelfServiceExtension {
-  href: string
+  href: string;
   /** hrm-namespace message key for the label. */
-  labelKey: string
-  iconKey: string
+  labelKey: string;
+  iconKey: string;
   /** Tab capability gating the rail entry: hidden is a fact, never a refusal. */
-  capability?: 'reviews' | 'benefits'
+  capability?: "reviews" | "benefits";
 }
 
 export const SELF_SERVICE_EXTENSIONS: SelfServiceExtension[] = [
-  { href: '/me/reviews', labelKey: 'me.tabs.reviews', iconKey: 'star', capability: 'reviews' },
-  { href: '/me/benefits', labelKey: 'me.tabs.benefits', iconKey: 'heart', capability: 'benefits' },
-]
+  { href: "/me/reviews", labelKey: "me.tabs.reviews", iconKey: "star", capability: "reviews" },
+  { href: "/me/benefits", labelKey: "me.tabs.benefits", iconKey: "heart", capability: "benefits" },
+];
 
-export type StatusVariant = 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+export type StatusVariant =
+  "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
 
 function statusVariant(status: string): StatusVariant {
-  if (status === 'active' || status === 'approved' || status === 'done') return 'success'
-  if (status === 'draft' || status === 'offered') return 'secondary'
-  if (status === 'submitted' || status === 'pending_approval' || status === 'on_leave') return 'warning'
-  if (status === 'rejected' || status === 'terminated') return 'destructive'
-  if (status === 'withdrawn' || status === 'cancelled' || status === 'applied' || status === 'suspended') return 'outline'
-  return 'default'
+  if (status === "active" || status === "approved" || status === "done") return "success";
+  if (status === "draft" || status === "offered") return "secondary";
+  if (status === "submitted" || status === "pending_approval" || status === "on_leave")
+    return "warning";
+  if (status === "rejected" || status === "terminated") return "destructive";
+  if (
+    status === "withdrawn" ||
+    status === "cancelled" ||
+    status === "applied" ||
+    status === "suspended"
+  )
+    return "outline";
+  return "default";
 }
 
 type Catalog = {
-  (key: string, params?: Record<string, string | number>): string
-  has: (key: string) => boolean
-}
+  (key: string, params?: Record<string, string | number>): string;
+  has: (key: string) => boolean;
+};
 
 function statusLabel(t: Catalog, prefix: string, status: string): string {
-  return t.has(`${prefix}.${status}`) ? t(`${prefix}.${status}`) : status
+  return t.has(`${prefix}.${status}`) ? t(`${prefix}.${status}`) : status;
 }
 
 /** The Me strip: Overview, Profile, Leave (the /hrm/my-leave inbox as its
@@ -83,58 +95,101 @@ function statusLabel(t: Catalog, prefix: string, status: string): string {
  * cycles / benefit plans at all, and Team only when the actor holds direct
  * reports. Hidden tabs are facts, never refusals. */
 export async function meTabs(authz: Authz, activeHref: string): Promise<ModuleHomeTab[]> {
-  const t = await getTranslations('hrm')
+  const t = await getTranslations("hrm");
   const [hasTeam, caps] = await Promise.all([
     actorHasTeam({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => false),
-    selfWorkspaceCapabilities(authz.user.orgId).catch(() => ({ hasReviewCycles: false, hasBenefitPlans: false })),
-  ])
+    selfWorkspaceCapabilities(authz.user.orgId).catch(() => ({
+      hasReviewCycles: false,
+      hasBenefitPlans: false,
+    })),
+  ]);
   const tabs: ModuleHomeTab[] = [
-    { href: '/me', label: t('me.tabs.overview'), active: activeHref === '/me' },
-    { href: '/me/profile', label: t('me.tabs.profile'), active: activeHref === '/me/profile' },
-    { href: '/hrm/my-leave', label: t('me.tabs.leave'), active: activeHref === '/hrm/my-leave' },
-    { href: '/me/checklists', label: t('me.tabs.checklists'), active: activeHref === '/me/checklists' },
-  ]
-  if (activeHref === '/me/schedule' || (await isFeatureEnabled(authz.user.orgId, 'hrmShiftPlanning'))) {
-    tabs.splice(3, 0, { href: '/me/schedule', label: (await getTranslations('scheduling'))('mine.tab'), active: activeHref === '/me/schedule' })
+    { href: "/me", label: t("me.tabs.overview"), active: activeHref === "/me" },
+    { href: "/me/profile", label: t("me.tabs.profile"), active: activeHref === "/me/profile" },
+    { href: "/hrm/my-leave", label: t("me.tabs.leave"), active: activeHref === "/hrm/my-leave" },
+    {
+      href: "/me/checklists",
+      label: t("me.tabs.checklists"),
+      active: activeHref === "/me/checklists",
+    },
+  ];
+  if (
+    activeHref === "/me/schedule" ||
+    (await isFeatureEnabled(authz.user.orgId, "hrmShiftPlanning"))
+  ) {
+    tabs.splice(3, 0, {
+      href: "/me/schedule",
+      label: (await getTranslations("scheduling"))("mine.tab"),
+      active: activeHref === "/me/schedule",
+    });
   }
-  if (await isFeatureEnabled(authz.user.orgId, 'hrmTraining')) tabs.push({ href: '/me/training', label: t('me.tabs.training'), active: activeHref === '/me/training' })
-  if (caps.hasReviewCycles || activeHref === '/me/reviews') {
-    tabs.push({ href: '/me/reviews', label: t('me.tabs.reviews'), active: activeHref === '/me/reviews' })
+  if (await isFeatureEnabled(authz.user.orgId, "hrmTraining"))
+    tabs.push({
+      href: "/me/training",
+      label: t("me.tabs.training"),
+      active: activeHref === "/me/training",
+    });
+  if (caps.hasReviewCycles || activeHref === "/me/reviews") {
+    tabs.push({
+      href: "/me/reviews",
+      label: t("me.tabs.reviews"),
+      active: activeHref === "/me/reviews",
+    });
   }
-  if (caps.hasBenefitPlans || activeHref === '/me/benefits') {
-    tabs.push({ href: '/me/benefits', label: t('me.tabs.benefits'), active: activeHref === '/me/benefits' })
+  if (caps.hasBenefitPlans || activeHref === "/me/benefits") {
+    tabs.push({
+      href: "/me/benefits",
+      label: t("me.tabs.benefits"),
+      active: activeHref === "/me/benefits",
+    });
   }
-  if (hasTeam || activeHref === '/me/team') {
-    tabs.push({ href: '/me/team', label: t('me.tabs.team'), active: activeHref === '/me/team' })
+  if (hasTeam || activeHref === "/me/team") {
+    tabs.push({ href: "/me/team", label: t("me.tabs.team"), active: activeHref === "/me/team" });
   }
   // The 1:1s tab shows only while Performance is on — the page itself
   // re-checks and 404s otherwise.
-  if (activeHref === '/me/one-on-ones' || (await mePerformanceOn(authz.user.orgId))) {
-    tabs.push({ href: '/me/one-on-ones', label: t('me.tabs.oneOnOnes'), active: activeHref === '/me/one-on-ones' })
+  if (activeHref === "/me/one-on-ones" || (await mePerformanceOn(authz.user.orgId))) {
+    tabs.push({
+      href: "/me/one-on-ones",
+      label: t("me.tabs.oneOnOnes"),
+      active: activeHref === "/me/one-on-ones",
+    });
   }
   // the Compensation tab shows only when the feature is on
   // and the person has something to see (a band or a statement) — the
   // page itself re-checks and 404s otherwise.
-  if (activeHref === '/me/compensation' || (await meHasCompensation(authz))) {
-    tabs.push({ href: '/me/compensation', label: t('me.tabs.compensation'), active: activeHref === '/me/compensation' })
+  if (activeHref === "/me/compensation" || (await meHasCompensation(authz))) {
+    tabs.push({
+      href: "/me/compensation",
+      label: t("me.tabs.compensation"),
+      active: activeHref === "/me/compensation",
+    });
   }
   // Documents and Open surveys tabs — feature-gated, and
   // shown only when the person has something to see (own documents /
   // open invitations). The pages re-check and 404 otherwise. Read
   // failures resolve to false (the tab hides) rather than denying the
   // whole Me strip.
-  if (activeHref === '/me/documents' || (await meHasDocuments(authz))) {
-    tabs.push({ href: '/me/documents', label: t('me.tabs.documents'), active: activeHref === '/me/documents' })
+  if (activeHref === "/me/documents" || (await meHasDocuments(authz))) {
+    tabs.push({
+      href: "/me/documents",
+      label: t("me.tabs.documents"),
+      active: activeHref === "/me/documents",
+    });
   }
-  if (activeHref === '/me/surveys' || (await meHasSurveys(authz))) {
-    tabs.push({ href: '/me/surveys', label: t('me.tabs.openSurveys'), active: activeHref === '/me/surveys' })
+  if (activeHref === "/me/surveys" || (await meHasSurveys(authz))) {
+    tabs.push({
+      href: "/me/surveys",
+      label: t("me.tabs.openSurveys"),
+      active: activeHref === "/me/surveys",
+    });
   }
-  return tabs
+  return tabs;
 }
 
 export interface MeRefusal {
-  title: string
-  message: string
+  title: string;
+  message: string;
 }
 
 // Me Compensation tab visibility — the person has a band
@@ -143,13 +198,13 @@ export interface MeRefusal {
 // whole Me strip.
 async function meHasCompensation(authz: Authz): Promise<boolean> {
   try {
-    const { isFeatureEnabled } = await import('../features')
-    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmCompensation'))) return false
-    const { loadMyCompensation } = await import('./compensation')
-    const data = await loadMyCompensation(authz)
-    return data?.hasContent === true
+    const { isFeatureEnabled } = await import("../features");
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCompensation"))) return false;
+    const { loadMyCompensation } = await import("./compensation");
+    const data = await loadMyCompensation(authz);
+    return data?.hasContent === true;
   } catch {
-    return false
+    return false;
   }
 }
 
@@ -159,33 +214,32 @@ async function meHasCompensation(authz: Authz): Promise<boolean> {
 // rather than denying the whole Me strip.
 async function meHasDocuments(authz: Authz): Promise<boolean> {
   try {
-    const { isFeatureEnabled } = await import('../features')
-    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmDocuments'))) return false
-    const { listOwnDocuments } = await import('@openbooks/engine/hrm/documents/documents')
-    const { listOwnExports } = await import('@openbooks/engine/hrm/documents/dsar')
+    const { isFeatureEnabled } = await import("../features");
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmDocuments"))) return false;
+    const { listOwnDocuments } = await import("@openbooks/engine/hrm/documents/documents");
+    const { listOwnExports } = await import("@openbooks/engine/hrm/documents/dsar");
     const [docs, exports] = await Promise.all([
       listOwnDocuments({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null),
       listOwnExports({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null),
-    ])
-    return (
-      (docs?.documents.length ?? 0) > 0 || (exports?.exports.length ?? 0) > 0
-    );
+    ]);
+    return (docs?.documents.length ?? 0) > 0 || (exports?.exports.length ?? 0) > 0;
   } catch {
-    return false
+    return false;
   }
 }
 
 async function meHasSurveys(authz: Authz): Promise<boolean> {
   try {
-    const { isFeatureEnabled } = await import('../features')
-    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmSurveys'))) return false
-    const { listOwnInvitations } = await import('@openbooks/engine/hrm/surveys/responses')
-    const invitations = await listOwnInvitations({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(
-      () => [],
-    )
-    return invitations.length > 0
+    const { isFeatureEnabled } = await import("../features");
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmSurveys"))) return false;
+    const { listOwnInvitations } = await import("@openbooks/engine/hrm/surveys/responses");
+    const invitations = await listOwnInvitations({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+    }).catch(() => []);
+    return invitations.length > 0;
   } catch {
-    return false
+    return false;
   }
 }
 
@@ -194,16 +248,16 @@ async function meHasSurveys(authz: Authz): Promise<boolean> {
 // (the surfaces hide) rather than denying the whole Me strip or team page.
 async function mePerformanceOn(orgId: string): Promise<boolean> {
   try {
-    const { isFeatureEnabled } = await import('../features')
-    return await isFeatureEnabled(orgId, 'hrmPerformance')
+    const { isFeatureEnabled } = await import("../features");
+    return await isFeatureEnabled(orgId, "hrmPerformance");
   } catch {
-    return false
+    return false;
   }
 }
 
 function toRefusal(t: Catalog, error: unknown): MeRefusal | null {
   if (error instanceof SelfServiceError || error instanceof HrmAuthorizationError) {
-    return { title: t('me.refusedTitle'), message: error.message }
+    return { title: t("me.refusedTitle"), message: error.message };
   }
   return null;
 }
@@ -212,17 +266,14 @@ function sectionRefusal(t: Catalog, error: unknown): MeRefusal {
   return (
     toRefusal(t, error) ?? {
       title: t("me.refusedTitle"),
-      message:
-        error instanceof HrmQualificationError
-          ? error.message
-          : t("me.readFailed"),
+      message: error instanceof HrmQualificationError ? error.message : t("me.readFailed"),
     }
   );
 }
 
 export interface MeFact {
-  label: string
-  value: string
+  label: string;
+  value: string;
 }
 
 /**
@@ -257,122 +308,138 @@ function bankEditOffer(
 }
 
 export interface MeStepRow extends MyStep {
-  statusLabel: string
-  statusVariant: StatusVariant
-  requiredLabel: string
-  completeLabel: string
-  overdueLabel: string | null
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  requiredLabel: string;
+  completeLabel: string;
+  overdueLabel: string | null;
 }
 
 export interface MeRequestRow extends MyRequest {
-  kindLabel: string
-  statusLabel: string
-  statusVariant: StatusVariant
-  submittedLabel: string | null
+  kindLabel: string;
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  submittedLabel: string | null;
 }
 
 export interface MeActionQueueRow {
-  id: string
-  title: string
-  kindLabel: string
-  href: string
-  dueLabel: string
-  statusLabel: string
-  statusVariant: StatusVariant
+  id: string;
+  title: string;
+  kindLabel: string;
+  href: string;
+  dueLabel: string;
+  statusLabel: string;
+  statusVariant: StatusVariant;
 }
 
 export interface MeEmploymentRow {
-  employmentId: string
-  employer: string
-  title: string
-  department: string
-  statusLabel: string
-  statusVariant: StatusVariant
-  manager: string
-  serviceStart: string
+  employmentId: string;
+  employer: string;
+  title: string;
+  department: string;
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  manager: string;
+  serviceStart: string;
 }
 
 export interface MeOverviewData {
-  title: string
-  description: string
-  tabs: ModuleHomeTab[]
-  refusal: MeRefusal | null
-  hasContent: boolean
-  hasTeam: boolean
-  displayName: string | null
-  notAvailableLabel?: string
-  latestNetPayLabel?: string
-  employments: MeEmploymentRow[]
-  employmentFacts?: MeFact[]
-  actionQueueRows?: MeActionQueueRow[]
-  openStepsCount?: number
-  pendingRequestsCount?: number
-  expiringQualificationsCount?: number
-  employmentsTitle: string
-  employmentsColumns: { employer: string; title: string; department: string; status: string; manager: string; serviceStart: string }
-  employmentsEmpty: string
-  employmentsEmptyDescription: string
-  stepsTitle: string
-  steps: MeStepRow[]
-  stepsEmpty: string
-  stepsEmptyDescription: string
-  stepsColumns: { title: string; process: string; due: string; status: string }
-  checklistsHref: string
-  viewChecklists: string
-  requestsTitle: string
-  requests: MeRequestRow[]
-  requestsEmpty: string
-  requestsEmptyDescription: string
-  requestsColumns: { kind: string; status: string; submitted: string }
-  balancesTitle: string
-  availableLeaveLabel?: string
-  balances: MyLeaveBalance[]
-  balancesEmpty: string
+  title: string;
+  description: string;
+  tabs: ModuleHomeTab[];
+  refusal: MeRefusal | null;
+  hasContent: boolean;
+  hasTeam: boolean;
+  displayName: string | null;
+  notAvailableLabel?: string;
+  latestNetPayLabel?: string;
+  employments: MeEmploymentRow[];
+  employmentFacts?: MeFact[];
+  actionQueueRows?: MeActionQueueRow[];
+  openStepsCount?: number;
+  pendingRequestsCount?: number;
+  expiringQualificationsCount?: number;
+  employmentsTitle: string;
+  employmentsColumns: {
+    employer: string;
+    title: string;
+    department: string;
+    status: string;
+    manager: string;
+    serviceStart: string;
+  };
+  employmentsEmpty: string;
+  employmentsEmptyDescription: string;
+  stepsTitle: string;
+  steps: MeStepRow[];
+  stepsEmpty: string;
+  stepsEmptyDescription: string;
+  stepsColumns: { title: string; process: string; due: string; status: string };
+  checklistsHref: string;
+  viewChecklists: string;
+  requestsTitle: string;
+  requests: MeRequestRow[];
+  requestsEmpty: string;
+  requestsEmptyDescription: string;
+  requestsColumns: { kind: string; status: string; submitted: string };
+  balancesTitle: string;
+  availableLeaveLabel?: string;
+  balances: MyLeaveBalance[];
+  balancesEmpty: string;
   // the viewer's own certifications needing action.
-  qualificationsTitle: string
+  qualificationsTitle: string;
   qualifications: MeQualificationRow[];
   qualificationsState: "loaded" | "disabled" | "unavailable";
-  qualificationsEmpty: string
-  qualificationsEmptyDescription: string
-  qualificationsColumns: { type: string; expires: string; status: string }
-  timeKindLabel: string
-  valueKindLabel: string
-  unlimitedLabel: string
-  serviceStartUnknownLabel: string
-  leaveHref: string
-  viewLeave: string
-  extensionsTitle: string
-  extensions: DirectoryItem[]
-  hasExtensions: boolean
-  profileHref: string
-  editProfile: string
+  qualificationsEmpty: string;
+  qualificationsEmptyDescription: string;
+  qualificationsColumns: { type: string; expires: string; status: string };
+  timeKindLabel: string;
+  valueKindLabel: string;
+  unlimitedLabel: string;
+  serviceStartUnknownLabel: string;
+  leaveHref: string;
+  viewLeave: string;
+  extensionsTitle: string;
+  extensions: DirectoryItem[];
+  hasExtensions: boolean;
+  profileHref: string;
+  editProfile: string;
   // own payslips with the Explain drawer. Optional so older
   // loaders keep compiling; the Me page fills it from the AI rails loader.
-  hasPay?: boolean
-  payTitle?: string
-  payStubs?: { id: string; payDate: string; gross: string; netPay: string; grossText: string; netPayText: string; explainLabel: string; explainHref: string }[]
-  payColumns?: { payDate: string; gross: string; netPay: string }
-  payEmpty?: string
+  hasPay?: boolean;
+  payTitle?: string;
+  payStubs?: {
+    id: string;
+    payDate: string;
+    gross: string;
+    netPay: string;
+    grossText: string;
+    netPayText: string;
+    explainLabel: string;
+    explainHref: string;
+  }[];
+  payColumns?: { payDate: string; gross: string; netPay: string };
+  payEmpty?: string;
   payExplain?: {
-    stubId: string
-    closeHref: string
-    title: string
-    missing: string | null
-    grossLabel: string
-    netLabel: string
-    employerCostLabel: string
-    earningsTitle: string
-    deductionsTitle: string
-    contributionsTitle: string
-    inputsTitle: string
-    diffTitle: string
-    sourcesTitle: string
-    ytdLabel: string
-    maximumLabel: string
-    remainingLabel: string
-    cappedNoteTemplate: string
-    trace: ExplainPayTrace | null
-  } | null
+    stubId: string;
+    closeHref: string;
+    title: string;
+    missing: string | null;
+    grossLabel: string;
+    netLabel: string;
+    employerCostLabel: string;
+    earningsTitle: string;
+    deductionsTitle: string;
+    contributionsTitle: string;
+    inputsTitle: string;
+    diffTitle: string;
+    sourcesTitle: string;
+    ytdLabel: string;
+    maximumLabel: string;
+    remainingLabel: string;
+    cappedNoteTemplate: string;
+    trace: ExplainPayTrace | null;
+  } | null;
 }
 
 function stepRows(t: Catalog, steps: MyStep[]): MeStepRow[] {
@@ -380,22 +447,22 @@ function stepRows(t: Catalog, steps: MyStep[]): MeStepRow[] {
     ...step,
     // The read selects pending steps on open processes only: status is a
     // display constant, never a second source of truth.
-    statusLabel: statusLabel(t, 'me.stepStatus', 'pending'),
-    statusVariant: statusVariant('pending'),
-    requiredLabel: step.required ? t('me.checklists.required') : t('me.checklists.optional'),
-    completeLabel: t('me.checklists.complete'),
-    overdueLabel: step.overdue ? t('me.checklists.overdue') : null,
-  }))
+    statusLabel: statusLabel(t, "me.stepStatus", "pending"),
+    statusVariant: statusVariant("pending"),
+    requiredLabel: step.required ? t("me.checklists.required") : t("me.checklists.optional"),
+    completeLabel: t("me.checklists.complete"),
+    overdueLabel: step.overdue ? t("me.checklists.overdue") : null,
+  }));
 }
 
 function requestRows(t: Catalog, requests: MyRequest[]): MeRequestRow[] {
   return requests.map((request) => ({
     ...request,
-    kindLabel: statusLabel(t, 'me.requestKinds', request.kind),
-    statusLabel: statusLabel(t, 'me.requestStatus', request.status),
+    kindLabel: statusLabel(t, "me.requestKinds", request.kind),
+    statusLabel: statusLabel(t, "me.requestStatus", request.status),
     statusVariant: statusVariant(request.status),
     submittedLabel: request.submittedAt,
-  }))
+  }));
 }
 
 // the viewer's own certifications needing action —
@@ -403,82 +470,82 @@ function requestRows(t: Catalog, requests: MyRequest[]): MeRequestRow[] {
 // first. Status labels resolve from the shared qualification catalog,
 // never inline English.
 export interface MeQualificationRow {
-  id: string
-  typeName: string
-  expiresOn: string | null
-  statusLabel: string
-  statusVariant: StatusVariant
+  id: string;
+  typeName: string;
+  expiresOn: string | null;
+  statusLabel: string;
+  statusVariant: StatusVariant;
 }
 
 function qualificationVariant(status: string): StatusVariant {
-  if (status === 'expired') return 'destructive'
-  return 'warning'
+  if (status === "expired") return "destructive";
+  return "warning";
 }
 
 /** The Me overview: employment summary, open steps, pending requests,
  * balances, and the extension rail. Leave details ride the shared
  * self-service inbox loader so the numbers always agree. */
 export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
-  const orgId = authz.user.orgId
-  const t = (await getTranslations('hrm')) as unknown as Catalog
-  const tabs = await meTabs(authz, '/me')
+  const orgId = authz.user.orgId;
+  const t = (await getTranslations("hrm")) as unknown as Catalog;
+  const tabs = await meTabs(authz, "/me");
   const base = {
-    title: t('me.overview.title'),
-    description: t('me.overview.description'),
-    notAvailableLabel: t('me.overview.notAvailable'),
-    latestNetPayLabel: t('me.pay.columns.netPay'),
+    title: t("me.overview.title"),
+    description: t("me.overview.description"),
+    notAvailableLabel: t("me.overview.notAvailable"),
+    latestNetPayLabel: t("me.pay.columns.netPay"),
     tabs,
-    stepsTitle: t('me.overview.stepsTitle'),
-    stepsEmpty: t('me.overview.stepsEmpty'),
-    stepsEmptyDescription: t('me.overview.stepsEmptyDescription'),
+    stepsTitle: t("me.overview.stepsTitle"),
+    stepsEmpty: t("me.overview.stepsEmpty"),
+    stepsEmptyDescription: t("me.overview.stepsEmptyDescription"),
     stepsColumns: {
-      title: t('me.checklists.columns.title'),
-      process: t('me.checklists.columns.process'),
-      due: t('me.checklists.columns.due'),
-      status: t('me.checklists.columns.status'),
+      title: t("me.checklists.columns.title"),
+      process: t("me.checklists.columns.process"),
+      due: t("me.checklists.columns.due"),
+      status: t("me.checklists.columns.status"),
     },
-    checklistsHref: '/me/checklists',
-    viewChecklists: t('me.overview.viewChecklists'),
-    requestsTitle: t('me.overview.requestsTitle'),
-    requestsEmpty: t('me.overview.requestsEmpty'),
-    requestsEmptyDescription: t('me.overview.requestsEmptyDescription'),
+    checklistsHref: "/me/checklists",
+    viewChecklists: t("me.overview.viewChecklists"),
+    requestsTitle: t("me.overview.requestsTitle"),
+    requestsEmpty: t("me.overview.requestsEmpty"),
+    requestsEmptyDescription: t("me.overview.requestsEmptyDescription"),
     requestsColumns: {
-      kind: t('me.requests.columns.kind'),
-      status: t('me.requests.columns.status'),
-      submitted: t('me.requests.columns.submitted'),
+      kind: t("me.requests.columns.kind"),
+      status: t("me.requests.columns.status"),
+      submitted: t("me.requests.columns.submitted"),
     },
-    balancesTitle: t('me.overview.balancesTitle'),
-    availableLeaveLabel: t('me.overview.availableLeaveLabel'),
-    balancesEmpty: t('me.overview.balancesEmpty'),
-    qualificationsTitle: t('me.overview.qualificationsTitle'),
-    qualificationsEmpty: t('me.overview.qualificationsEmpty'),
-    qualificationsEmptyDescription: t('me.overview.qualificationsEmptyDescription'),
+    balancesTitle: t("me.overview.balancesTitle"),
+    availableLeaveLabel: t("me.overview.availableLeaveLabel"),
+    balancesEmpty: t("me.overview.balancesEmpty"),
+    qualificationsTitle: t("me.overview.qualificationsTitle"),
+    qualificationsEmpty: t("me.overview.qualificationsEmpty"),
+    qualificationsEmptyDescription: t("me.overview.qualificationsEmptyDescription"),
     qualificationsColumns: {
-      type: t('me.qualifications.columns.type'),
-      expires: t('me.qualifications.columns.expires'),
-      status: t('me.qualifications.columns.status'),
+      type: t("me.qualifications.columns.type"),
+      expires: t("me.qualifications.columns.expires"),
+      status: t("me.qualifications.columns.status"),
     },
-    timeKindLabel: t('myLeave.timeKind'),
-    valueKindLabel: t('myLeave.valueKind'),
-    unlimitedLabel: t('myLeave.unlimited'),
-    serviceStartUnknownLabel: t('myLeave.serviceStartUnknown'),
-    leaveHref: '/hrm/my-leave',
-    viewLeave: t('me.overview.viewLeave'),
-    extensionsTitle: t('me.overview.extensionsTitle'),
-    profileHref: '/me/profile?edit=1',
-    editProfile: t('me.profile.edit'),
-    employmentsTitle: t('me.overview.employmentsTitle'),
+    timeKindLabel: t("myLeave.timeKind"),
+    valueKindLabel: t("myLeave.valueKind"),
+    unlimitedLabel: t("myLeave.unlimited"),
+    serviceStartUnknownLabel: t("myLeave.serviceStartUnknown"),
+    leaveHref: "/hrm/my-leave",
+    viewLeave: t("me.overview.viewLeave"),
+    extensionsTitle: t("me.overview.extensionsTitle"),
+    profileHref: "/me/profile?edit=1",
+    editProfile: t("me.profile.edit"),
+    employmentsTitle: t("me.overview.employmentsTitle"),
     employmentsColumns: {
-      employer: t('me.overview.employer'),
-      title: t('me.overview.jobTitle'),
-      department: t('me.overview.department'),
-      status: t('me.overview.status'),
-      manager: t('me.overview.manager'),
-      serviceStart: t('me.overview.serviceStart'),
+      employer: t("me.overview.employer"),
+      title: t("me.overview.jobTitle"),
+      department: t("me.overview.department"),
+      status: t("me.overview.status"),
+      manager: t("me.overview.manager"),
+      serviceStart: t("me.overview.serviceStart"),
     },
-    employmentsEmpty: t('me.overview.employmentsEmpty'),
-    employmentsEmptyDescription: t('me.overview.employmentsEmptyDescription'),
-  }
+    employmentsEmpty: t("me.overview.employmentsEmpty"),
+    employmentsEmptyDescription: t("me.overview.employmentsEmptyDescription"),
+  };
   try {
     const [profile, steps, requests, inbox, hasTeam, caps] = await Promise.all([
       getMyProfile({ orgId, actorId: authz.user.id }),
@@ -486,16 +553,19 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       getMyRequests({ orgId, actorId: authz.user.id }),
       loadMyLeave(authz, {}).catch(() => null),
       actorHasTeam({ orgId, actorId: authz.user.id }).catch(() => false),
-      selfWorkspaceCapabilities(orgId).catch(() => ({ hasReviewCycles: false, hasBenefitPlans: false })),
-    ])
+      selfWorkspaceCapabilities(orgId).catch(() => ({
+        hasReviewCycles: false,
+        hasBenefitPlans: false,
+      })),
+    ]);
     const reviewWorkspace = caps.hasReviewCycles
       ? await getMyReviewWorkspace({ orgId, actorId: authz.user.id })
-      : null
+      : null;
     const visible = SELF_SERVICE_EXTENSIONS.filter(
       (extension) =>
         extension.capability === undefined ||
-        (extension.capability === 'reviews' ? caps.hasReviewCycles : caps.hasBenefitPlans),
-    )
+        (extension.capability === "reviews" ? caps.hasReviewCycles : caps.hasBenefitPlans),
+    );
     const extensions: DirectoryItem[] = visible.map((extension) => ({
       href: extension.href,
       label: t.has(extension.labelKey) ? t(extension.labelKey) : extension.labelKey,
@@ -527,26 +597,52 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
     const employmentRows = profile.employments.map((summary) => ({
       employmentId: summary.employmentId,
       employer: summary.employerName,
-      title: summary.jobTitle ?? t('me.overview.notAvailable'),
-      department: summary.departmentName ?? t('me.overview.notAvailable'),
-      statusLabel: statusLabel(t, 'me.employmentStatus', summary.status),
+      title: summary.jobTitle ?? t("me.overview.notAvailable"),
+      department: summary.departmentName ?? t("me.overview.notAvailable"),
+      statusLabel: statusLabel(t, "me.employmentStatus", summary.status),
       statusVariant: statusVariant(summary.status),
-      manager: summary.managerNames.length > 0 ? summary.managerNames.join(', ') : t('me.overview.notAvailable'),
+      manager:
+        summary.managerNames.length > 0
+          ? summary.managerNames.join(", ")
+          : t("me.overview.notAvailable"),
       serviceStart: summary.serviceStart,
-    }))
-    const employmentFacts: MeFact[] = employmentRows.length === 0 ? [] : [
-      { label: base.employmentsColumns.employer, value: [...new Set(employmentRows.map((row) => row.employer))].join(' · ') },
-      { label: base.employmentsColumns.title, value: [...new Set(employmentRows.map((row) => row.title))].join(' · ') },
-      { label: base.employmentsColumns.department, value: [...new Set(employmentRows.map((row) => row.department))].join(' · ') },
-      { label: base.employmentsColumns.status, value: [...new Set(employmentRows.map((row) => row.statusLabel))].join(' · ') },
-    ]
-    const pendingRequests = requests.filter((row) => row.status === 'draft' || row.status === 'pending_approval')
-    const visibleSteps = stepRows(t, steps.slice(0, 5))
-    const visibleRequests = requestRows(t, pendingRequests.slice(0, 5))
-    const expiringQualifications = qualifications.filter((q) => q.status === 'expiring' || q.status === 'expired')
+    }));
+    const employmentFacts: MeFact[] =
+      employmentRows.length === 0
+        ? []
+        : [
+            {
+              label: base.employmentsColumns.employer,
+              value: [...new Set(employmentRows.map((row) => row.employer))].join(" · "),
+            },
+            {
+              label: base.employmentsColumns.title,
+              value: [...new Set(employmentRows.map((row) => row.title))].join(" · "),
+            },
+            {
+              label: base.employmentsColumns.department,
+              value: [...new Set(employmentRows.map((row) => row.department))].join(" · "),
+            },
+            {
+              label: base.employmentsColumns.status,
+              value: [...new Set(employmentRows.map((row) => row.statusLabel))].join(" · "),
+            },
+          ];
+    const pendingRequests = requests.filter(
+      (row) => row.status === "draft" || row.status === "pending_approval",
+    );
+    const visibleSteps = stepRows(t, steps.slice(0, 5));
+    const visibleRequests = requestRows(t, pendingRequests.slice(0, 5));
+    const expiringQualifications = qualifications.filter(
+      (q) => q.status === "expiring" || q.status === "expired",
+    );
     const qualificationRows = expiringQualifications
       .sort((a, b) =>
-        a.status === b.status ? (a.expiresOn ?? '').localeCompare(b.expiresOn ?? '') : a.status === 'expired' ? -1 : 1,
+        a.status === b.status
+          ? (a.expiresOn ?? "").localeCompare(b.expiresOn ?? "")
+          : a.status === "expired"
+            ? -1
+            : 1,
       )
       .slice(0, 5)
       .map((q) => ({
@@ -557,12 +653,12 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
           ? (t(`qualifications.statusNames.${q.status}`) as string)
           : q.status,
         statusVariant: qualificationVariant(q.status),
-      }))
+      }));
     const actionQueueRows: MeActionQueueRow[] = [
       ...visibleSteps.map((step) => ({
         id: `step:${step.id}`,
         title: step.title,
-        kindLabel: t('me.checklists.title'),
+        kindLabel: t("me.checklists.title"),
         href: `/me/checklists?step=${encodeURIComponent(step.id)}`,
         dueLabel: step.dueOn,
         statusLabel: step.statusLabel,
@@ -572,32 +668,38 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
         id: `request:${request.id}`,
         title: request.kindLabel,
         kindLabel: request.kindLabel,
-        href: '/me/profile',
-        dueLabel: request.submittedLabel ?? t('me.overview.notAvailable'),
+        href: "/me/profile",
+        dueLabel: request.submittedLabel ?? t("me.overview.notAvailable"),
         statusLabel: request.statusLabel,
         statusVariant: request.statusVariant,
       })),
       ...(reviewWorkspace?.cycles.flatMap((group) => [
-        ...(group.mySelf?.status === 'pending' ? [{
-          id: `review:${group.mySelf.id}`,
-          title: group.name,
-          kindLabel: t('me.reviews.selfTitle'),
-          href: group.mySelf.drawerHref,
-          dueLabel: group.mySelf.selfDueOn ?? t('me.overview.notAvailable'),
-          statusLabel: statusLabel(t, 'me.reviewStatus', group.mySelf.status),
-          statusVariant: statusVariant(group.mySelf.status),
-        }] : []),
-        ...group.sharedWithMe.filter((review) => review.status === 'shared').map((review) => ({
-          id: `review:${review.id}`,
-          title: group.name,
-          kindLabel: t('me.reviews.sharedTitle'),
-          href: '/me/reviews',
-          dueLabel: review.sharedAt ?? t('me.overview.notAvailable'),
-          statusLabel: statusLabel(t, 'me.reviewStatus', review.status),
-          statusVariant: statusVariant(review.status),
-        })),
+        ...(group.mySelf?.status === "pending"
+          ? [
+              {
+                id: `review:${group.mySelf.id}`,
+                title: group.name,
+                kindLabel: t("me.reviews.selfTitle"),
+                href: group.mySelf.drawerHref,
+                dueLabel: group.mySelf.selfDueOn ?? t("me.overview.notAvailable"),
+                statusLabel: statusLabel(t, "me.reviewStatus", group.mySelf.status),
+                statusVariant: statusVariant(group.mySelf.status),
+              },
+            ]
+          : []),
+        ...group.sharedWithMe
+          .filter((review) => review.status === "shared")
+          .map((review) => ({
+            id: `review:${review.id}`,
+            title: group.name,
+            kindLabel: t("me.reviews.sharedTitle"),
+            href: "/me/reviews",
+            dueLabel: review.sharedAt ?? t("me.overview.notAvailable"),
+            statusLabel: statusLabel(t, "me.reviewStatus", review.status),
+            statusVariant: statusVariant(review.status),
+          })),
       ]) ?? []),
-    ]
+    ];
     return {
       ...base,
       refusal: null,
@@ -623,7 +725,7 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       qualifications: qualificationRows,
       extensions,
       hasExtensions: extensions.length > 0,
-    }
+    };
   } catch (error) {
     const refusal = toRefusal(t, error);
     if (!refusal) throw error;
@@ -641,89 +743,89 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       qualifications: [],
       extensions: [],
       hasExtensions: false,
-    }
+    };
   }
 }
 
 export interface MeProfileData {
-  title: string
-  description: string
-  tabs: ModuleHomeTab[]
-  refusal: MeRefusal | null
-  hasContent: boolean
-  displayName: string
-  contactTitle: string
-  contactFacts: MeFact[]
-  addressTitle: string
-  addressFacts: MeFact[]
-  noAddress: string
-  emergencyTitle: string
-  emergencyFacts: MeFact[]
-  noEmergency: string
-  editButton: string
-  editHref: string
-  dialogOpen: boolean
-  dialogCloseHref: string
+  title: string;
+  description: string;
+  tabs: ModuleHomeTab[];
+  refusal: MeRefusal | null;
+  hasContent: boolean;
+  displayName: string;
+  contactTitle: string;
+  contactFacts: MeFact[];
+  addressTitle: string;
+  addressFacts: MeFact[];
+  noAddress: string;
+  emergencyTitle: string;
+  emergencyFacts: MeFact[];
+  noEmergency: string;
+  editButton: string;
+  editHref: string;
+  dialogOpen: boolean;
+  dialogCloseHref: string;
   dialog: {
-    title: string
-    description: string
-    employments: { value: string; label: string }[]
-    employmentLabel: string
-    phoneLabel: string
-    emailLabel: string
-    addressLabel: string
-    line1Label: string
-    line2Label: string
-    cityLabel: string
-    regionLabel: string
-    postalCodeLabel: string
-    countryLabel: string
-    emergencyLabel: string
-    emergencyNameLabel: string
-    emergencyRelationshipLabel: string
-    emergencyPhoneLabel: string
-    reasonLabel: string
-    reasonPlaceholder: string
-    clearHint: string
-    submitLabel: string
-    cancelLabel: string
-    submitFailed: string
-    noEmployment: string
-  } | null
-  bankTitle: string
-  bankFacts: MeFact[]
-  noBank: string
-  bankEditButton: string
-  bankEditHref: string | null
-  bankRefusal: string | null
-  bankDialogOpen: boolean
-  bankDialogCloseHref: string
+    title: string;
+    description: string;
+    employments: { value: string; label: string }[];
+    employmentLabel: string;
+    phoneLabel: string;
+    emailLabel: string;
+    addressLabel: string;
+    line1Label: string;
+    line2Label: string;
+    cityLabel: string;
+    regionLabel: string;
+    postalCodeLabel: string;
+    countryLabel: string;
+    emergencyLabel: string;
+    emergencyNameLabel: string;
+    emergencyRelationshipLabel: string;
+    emergencyPhoneLabel: string;
+    reasonLabel: string;
+    reasonPlaceholder: string;
+    clearHint: string;
+    submitLabel: string;
+    cancelLabel: string;
+    submitFailed: string;
+    noEmployment: string;
+  } | null;
+  bankTitle: string;
+  bankFacts: MeFact[];
+  noBank: string;
+  bankEditButton: string;
+  bankEditHref: string | null;
+  bankRefusal: string | null;
+  bankDialogOpen: boolean;
+  bankDialogCloseHref: string;
   bankDialog: {
-    title: string
-    description: string
-    employments: { value: string; label: string }[]
-    employmentLabel: string
-    bankNameLabel: string
-    accountLabel: string
-    accountHint: string
-    countryLabel: string
-    currencyLabel: string
-    routingLabel: string
-    routingHint: string
-    reasonLabel: string
-    reasonPlaceholder: string
-    submitLabel: string
-    cancelLabel: string
-    submitFailed: string
-    noEmployment: string
-  } | null
-  pendingTitle: string | null
-  pendingMessage: string | null
-  hasPending: boolean
+    title: string;
+    description: string;
+    employments: { value: string; label: string }[];
+    employmentLabel: string;
+    bankNameLabel: string;
+    accountLabel: string;
+    accountHint: string;
+    countryLabel: string;
+    currencyLabel: string;
+    routingLabel: string;
+    routingHint: string;
+    reasonLabel: string;
+    reasonPlaceholder: string;
+    submitLabel: string;
+    cancelLabel: string;
+    submitFailed: string;
+    noEmployment: string;
+  } | null;
+  pendingTitle: string | null;
+  pendingMessage: string | null;
+  hasPending: boolean;
 }
 
 function addressLine(t: Catalog, value: string | null): string {
-  return value ?? t('me.overview.notAvailable')
+  return value ?? t("me.overview.notAvailable");
 }
 
 /** The person's party fields in a read view; Edit opens a URL-drawer form
@@ -733,33 +835,33 @@ export async function loadMeProfile(
   authz: Authz,
   sp: Record<string, string | undefined> = {},
 ): Promise<MeProfileData> {
-  const orgId = authz.user.orgId
-  const t = (await getTranslations('hrm')) as unknown as Catalog
-  const tabs = await meTabs(authz, '/me/profile')
+  const orgId = authz.user.orgId;
+  const t = (await getTranslations("hrm")) as unknown as Catalog;
+  const tabs = await meTabs(authz, "/me/profile");
   const base = {
-    title: t('me.profile.title'),
-    description: t('me.profile.description'),
+    title: t("me.profile.title"),
+    description: t("me.profile.description"),
     tabs,
-    contactTitle: t('me.profile.contactTitle'),
-    addressTitle: t('me.profile.addressTitle'),
-    noAddress: t('me.profile.noAddress'),
-    emergencyTitle: t('me.profile.emergencyTitle'),
-    noEmergency: t('me.profile.noEmergency'),
-    editButton: t('me.profile.edit'),
-    editHref: '/me/profile?edit=1',
-    dialogCloseHref: '/me/profile',
-    bankTitle: t('me.bank.title'),
-    noBank: t('me.bank.noBank'),
-    bankEditButton: t('me.bank.edit'),
+    contactTitle: t("me.profile.contactTitle"),
+    addressTitle: t("me.profile.addressTitle"),
+    noAddress: t("me.profile.noAddress"),
+    emergencyTitle: t("me.profile.emergencyTitle"),
+    noEmergency: t("me.profile.noEmergency"),
+    editButton: t("me.profile.edit"),
+    editHref: "/me/profile?edit=1",
+    dialogCloseHref: "/me/profile",
+    bankTitle: t("me.bank.title"),
+    noBank: t("me.bank.noBank"),
+    bankEditButton: t("me.bank.edit"),
     bankEditHref: null,
     bankRefusal: null,
     bankDialogOpen: false,
-    bankDialogCloseHref: '/me/profile',
+    bankDialogCloseHref: "/me/profile",
     bankDialog: null,
     pendingTitle: null as string | null,
     pendingMessage: null as string | null,
     hasPending: false,
-  }
+  };
   try {
     const [profile, requests, bankAccounts, changesNeedApproval] = await Promise.all([
       getMyProfile({ orgId, actorId: authz.user.id }),
@@ -771,121 +873,144 @@ export async function loadMeProfile(
       // when an enabled Flow governs employment changes. An unreadable
       // answer keeps the cautious approval wording.
       employmentChangeFlowsEnabled(orgId).catch(() => true),
-    ])
-    const pending = requests.find((row) => row.kind === 'profile_change' && (row.status === 'draft' || row.status === 'pending_approval'))
-    const address = profile.address
+    ]);
+    const pending = requests.find(
+      (row) =>
+        row.kind === "profile_change" &&
+        (row.status === "draft" || row.status === "pending_approval"),
+    );
+    const address = profile.address;
     return {
       ...base,
       refusal: null,
       hasContent: true,
       displayName: profile.displayName,
       contactFacts: [
-        { label: t('me.profile.phone'), value: profile.phone ?? t('me.overview.notAvailable') },
-        { label: t('me.profile.email'), value: profile.email ?? t('me.overview.notAvailable') },
+        { label: t("me.profile.phone"), value: profile.phone ?? t("me.overview.notAvailable") },
+        { label: t("me.profile.email"), value: profile.email ?? t("me.overview.notAvailable") },
       ],
       addressFacts: address
         ? [
-            ...(address.label ? [{ label: t('me.profile.addressLabel'), value: address.label }] : []),
-            { label: t('me.profile.line1'), value: addressLine(t, address.line1) },
-            { label: t('me.profile.line2'), value: addressLine(t, address.line2) },
-            { label: t('me.profile.city'), value: addressLine(t, address.city) },
-            { label: t('me.profile.region'), value: addressLine(t, address.region) },
-            { label: t('me.profile.postalCode'), value: addressLine(t, address.postalCode) },
-            { label: t('me.profile.country'), value: addressLine(t, address.country) },
+            ...(address.label
+              ? [{ label: t("me.profile.addressLabel"), value: address.label }]
+              : []),
+            { label: t("me.profile.line1"), value: addressLine(t, address.line1) },
+            { label: t("me.profile.line2"), value: addressLine(t, address.line2) },
+            { label: t("me.profile.city"), value: addressLine(t, address.city) },
+            { label: t("me.profile.region"), value: addressLine(t, address.region) },
+            { label: t("me.profile.postalCode"), value: addressLine(t, address.postalCode) },
+            { label: t("me.profile.country"), value: addressLine(t, address.country) },
           ]
         : [],
       emergencyFacts: profile.emergencyContact
         ? [
-            { label: t('me.profile.emergencyName'), value: profile.emergencyContact.name ?? t('me.overview.notAvailable') },
             {
-              label: t('me.profile.emergencyRelationship'),
-              value: profile.emergencyContact.relationship ?? t('me.overview.notAvailable'),
+              label: t("me.profile.emergencyName"),
+              value: profile.emergencyContact.name ?? t("me.overview.notAvailable"),
             },
-            { label: t('me.profile.emergencyPhone'), value: profile.emergencyContact.phone ?? t('me.overview.notAvailable') },
+            {
+              label: t("me.profile.emergencyRelationship"),
+              value: profile.emergencyContact.relationship ?? t("me.overview.notAvailable"),
+            },
+            {
+              label: t("me.profile.emergencyPhone"),
+              value: profile.emergencyContact.phone ?? t("me.overview.notAvailable"),
+            },
           ]
         : [],
       // Masked only: the bank name plus the last four is the whole
       // account evidence this surface may carry.
-      bankFacts: bankAccounts === null
-        ? [{ label: t('me.bank.title'), value: t('me.bank.failed') }]
-        : bankAccounts.map((account) => ({
-            label: `${account.bankName ?? t('me.overview.notAvailable')} •••• ${account.lastFour ?? '····'}`,
-            value: account.isActive ? t('me.bank.statusActive') : t('me.bank.statusPending'),
-          })),
+      bankFacts:
+        bankAccounts === null
+          ? [{ label: t("me.bank.title"), value: t("me.bank.failed") }]
+          : bankAccounts.map((account) => ({
+              label: `${account.bankName ?? t("me.overview.notAvailable")} •••• ${account.lastFour ?? "····"}`,
+              value: account.isActive ? t("me.bank.statusActive") : t("me.bank.statusPending"),
+            })),
       // The panel offers the direct-deposit action only when the
       // employee may actually file it; otherwise the refusal reason
       // shows instead of an action the submit would reject.
       ...bankEditOffer(t, authz, profile.employments.length),
       bankDialogOpen: sp.bank !== undefined,
-      bankDialog: sp.bank !== undefined
-        ? {
-            title: t('me.bank.title'),
-            description: t(changesNeedApproval ? 'me.bank.description' : 'me.bank.descriptionDirect'),
-            employments: profile.employments.map((summary) => ({
-              value: summary.employmentId,
-              label: `${summary.employerName} — ${statusLabel(t, 'me.employmentStatus', summary.status)}`,
-            })),
-            employmentLabel: t('me.profile.employment'),
-            bankNameLabel: t('me.bank.bankNameLabel'),
-            accountLabel: t('me.bank.accountLabel'),
-            accountHint: t('me.bank.accountHint'),
-            countryLabel: t('me.bank.countryLabel'),
-            currencyLabel: t('me.bank.currencyLabel'),
-            routingLabel: t('me.bank.routingLabel'),
-            routingHint: t('me.bank.routingHint'),
-            reasonLabel: t('me.profile.reason'),
-            reasonPlaceholder: t('me.profile.reasonPlaceholder'),
-            submitLabel: t('me.bank.submit'),
-            cancelLabel: t('me.profile.cancel'),
-            submitFailed: t('me.bank.submitFailed'),
-            noEmployment: t('me.profile.noEmployment'),
-          }
-        : null,
+      bankDialog:
+        sp.bank !== undefined
+          ? {
+              title: t("me.bank.title"),
+              description: t(
+                changesNeedApproval ? "me.bank.description" : "me.bank.descriptionDirect",
+              ),
+              employments: profile.employments.map((summary) => ({
+                value: summary.employmentId,
+                label: `${summary.employerName} — ${statusLabel(t, "me.employmentStatus", summary.status)}`,
+              })),
+              employmentLabel: t("me.profile.employment"),
+              bankNameLabel: t("me.bank.bankNameLabel"),
+              accountLabel: t("me.bank.accountLabel"),
+              accountHint: t("me.bank.accountHint"),
+              countryLabel: t("me.bank.countryLabel"),
+              currencyLabel: t("me.bank.currencyLabel"),
+              routingLabel: t("me.bank.routingLabel"),
+              routingHint: t("me.bank.routingHint"),
+              reasonLabel: t("me.profile.reason"),
+              reasonPlaceholder: t("me.profile.reasonPlaceholder"),
+              submitLabel: t("me.bank.submit"),
+              cancelLabel: t("me.profile.cancel"),
+              submitFailed: t("me.bank.submitFailed"),
+              noEmployment: t("me.profile.noEmployment"),
+            }
+          : null,
       dialogOpen: sp.edit !== undefined,
-      dialog: sp.edit !== undefined
-        ? {
-            title: t('me.profile.dialogTitle'),
-            description: t(changesNeedApproval ? 'me.profile.dialogDescription' : 'me.profile.dialogDescriptionDirect'),
-            employments: profile.employments.map((summary) => ({
-              value: summary.employmentId,
-              label: `${summary.employerName} — ${statusLabel(t, 'me.employmentStatus', summary.status)}`,
-            })),
-            employmentLabel: t('me.profile.employment'),
-            phoneLabel: t('me.profile.phone'),
-            emailLabel: t('me.profile.email'),
-            addressLabel: t('me.profile.addressTitle'),
-            line1Label: t('me.profile.line1'),
-            line2Label: t('me.profile.line2'),
-            cityLabel: t('me.profile.city'),
-            regionLabel: t('me.profile.region'),
-            postalCodeLabel: t('me.profile.postalCode'),
-            countryLabel: t('me.profile.country'),
-            emergencyLabel: t('me.profile.emergencyTitle'),
-            emergencyNameLabel: t('me.profile.emergencyName'),
-            emergencyRelationshipLabel: t('me.profile.emergencyRelationship'),
-            emergencyPhoneLabel: t('me.profile.emergencyPhone'),
-            reasonLabel: t('me.profile.reason'),
-            reasonPlaceholder: t('me.profile.reasonPlaceholder'),
-            clearHint: t('me.profile.clearHint'),
-            submitLabel: t('me.profile.submit'),
-            cancelLabel: t('me.profile.cancel'),
-            submitFailed: t('me.profile.submitFailed'),
-            noEmployment: t('me.profile.noEmployment'),
-          }
-        : null,
-      pendingTitle: pending ? t('me.profile.pendingTitle') : null,
+      dialog:
+        sp.edit !== undefined
+          ? {
+              title: t("me.profile.dialogTitle"),
+              description: t(
+                changesNeedApproval
+                  ? "me.profile.dialogDescription"
+                  : "me.profile.dialogDescriptionDirect",
+              ),
+              employments: profile.employments.map((summary) => ({
+                value: summary.employmentId,
+                label: `${summary.employerName} — ${statusLabel(t, "me.employmentStatus", summary.status)}`,
+              })),
+              employmentLabel: t("me.profile.employment"),
+              phoneLabel: t("me.profile.phone"),
+              emailLabel: t("me.profile.email"),
+              addressLabel: t("me.profile.addressTitle"),
+              line1Label: t("me.profile.line1"),
+              line2Label: t("me.profile.line2"),
+              cityLabel: t("me.profile.city"),
+              regionLabel: t("me.profile.region"),
+              postalCodeLabel: t("me.profile.postalCode"),
+              countryLabel: t("me.profile.country"),
+              emergencyLabel: t("me.profile.emergencyTitle"),
+              emergencyNameLabel: t("me.profile.emergencyName"),
+              emergencyRelationshipLabel: t("me.profile.emergencyRelationship"),
+              emergencyPhoneLabel: t("me.profile.emergencyPhone"),
+              reasonLabel: t("me.profile.reason"),
+              reasonPlaceholder: t("me.profile.reasonPlaceholder"),
+              clearHint: t("me.profile.clearHint"),
+              submitLabel: t("me.profile.submit"),
+              cancelLabel: t("me.profile.cancel"),
+              submitFailed: t("me.profile.submitFailed"),
+              noEmployment: t("me.profile.noEmployment"),
+            }
+          : null,
+      pendingTitle: pending ? t("me.profile.pendingTitle") : null,
       pendingMessage: pending
-        ? t('me.profile.pendingMessage', { status: statusLabel(t, 'me.requestStatus', pending.status) })
+        ? t("me.profile.pendingMessage", {
+            status: statusLabel(t, "me.requestStatus", pending.status),
+          })
         : null,
       hasPending: pending !== undefined,
-    }
+    };
   } catch (error) {
-    const refusal = toRefusal(t, error)
+    const refusal = toRefusal(t, error);
     return {
       ...base,
       refusal,
       hasContent: refusal === null,
-      displayName: '',
+      displayName: "",
       contactFacts: [],
       addressFacts: [],
       emergencyFacts: [],
@@ -894,229 +1019,248 @@ export async function loadMeProfile(
       bankFacts: [],
       bankDialogOpen: false,
       bankDialog: null,
-    }
+    };
   }
 }
 
 export interface MeChecklistsData {
-  title: string
-  description: string
-  tabs: ModuleHomeTab[]
-  refusal: MeRefusal | null
-  hasContent: boolean
-  listTitle: string
-  columns: { title: string; process: string; due: string; required: string; evidence: string; status: string }
-  rows: (MeStepRow & { evidenceLabel: string })[]
-  emptyTitle: string
-  emptyDescription: string
-  completeFailed: string
+  title: string;
+  description: string;
+  tabs: ModuleHomeTab[];
+  refusal: MeRefusal | null;
+  hasContent: boolean;
+  listTitle: string;
+  columns: {
+    title: string;
+    process: string;
+    due: string;
+    required: string;
+    evidence: string;
+    status: string;
+  };
+  rows: (MeStepRow & { evidenceLabel: string })[];
+  emptyTitle: string;
+  emptyDescription: string;
+  completeFailed: string;
 }
 
 /** My process steps with the complete action (the existing step endpoint;
  * the evidence rules are unchanged). */
 export async function loadMeChecklists(authz: Authz): Promise<MeChecklistsData> {
-  const orgId = authz.user.orgId
-  const t = (await getTranslations('hrm')) as unknown as Catalog
+  const orgId = authz.user.orgId;
+  const t = (await getTranslations("hrm")) as unknown as Catalog;
   const base = {
-    title: t('me.checklists.title'),
-    description: t('me.checklists.description'),
-    tabs: await meTabs(authz, '/me/checklists'),
-    listTitle: t('me.checklists.listTitle'),
+    title: t("me.checklists.title"),
+    description: t("me.checklists.description"),
+    tabs: await meTabs(authz, "/me/checklists"),
+    listTitle: t("me.checklists.listTitle"),
     columns: {
-      title: t('me.checklists.columns.title'),
-      process: t('me.checklists.columns.process'),
-      due: t('me.checklists.columns.due'),
-      required: t('me.checklists.columns.required'),
-      evidence: t('me.checklists.columns.evidence'),
-      status: t('me.checklists.columns.status'),
+      title: t("me.checklists.columns.title"),
+      process: t("me.checklists.columns.process"),
+      due: t("me.checklists.columns.due"),
+      required: t("me.checklists.columns.required"),
+      evidence: t("me.checklists.columns.evidence"),
+      status: t("me.checklists.columns.status"),
     },
-    emptyTitle: t('me.checklists.emptyTitle'),
-    emptyDescription: t('me.checklists.emptyDescription'),
-    completeFailed: t('me.checklists.completeFailed'),
-  }
+    emptyTitle: t("me.checklists.emptyTitle"),
+    emptyDescription: t("me.checklists.emptyDescription"),
+    completeFailed: t("me.checklists.completeFailed"),
+  };
   try {
-    const steps = await getMySteps({ orgId, actorId: authz.user.id })
+    const steps = await getMySteps({ orgId, actorId: authz.user.id });
     return {
       ...base,
       refusal: null,
       hasContent: true,
       rows: stepRows(t, steps).map((row) => ({
         ...row,
-        evidenceLabel: statusLabel(t, 'me.evidenceKinds', row.evidenceKind),
+        evidenceLabel: statusLabel(t, "me.evidenceKinds", row.evidenceKind),
       })),
-    }
+    };
   } catch (error) {
-    const refusal = toRefusal(t, error)
-    return { ...base, refusal, hasContent: refusal === null, rows: [] }
+    const refusal = toRefusal(t, error);
+    return { ...base, refusal, hasContent: refusal === null, rows: [] };
   }
 }
 
 export interface MeTeamReportRow {
-  employmentId: string
-  workerName: string
-  workerHref: string | null
-  oneOnOneHref: string | null
-  oneOnOneLabel: string | null
+  employmentId: string;
+  workerName: string;
+  workerHref: string | null;
+  oneOnOneHref: string | null;
+  oneOnOneLabel: string | null;
   feedback: {
-    subjectEmploymentId: string
-    requestedFromPartyId: string
-    subjectLabel: string
-    kinds: { value: string; label: string }[]
-    kindLabel: string
-    visibilities: { value: string; label: string }[]
-    visibilityLabel: string
-    bodyLabel: string
-    bodyPlaceholder: string
-    submitLabel: string
-    cancelLabel: string
-    closeHref: string
-    failed: string
-    openLabel: string
-  } | null
-  title: string
-  department: string
-  employer: string
-  statusLabel: string
-  statusVariant: StatusVariant
-  serviceStart: string
+    subjectEmploymentId: string;
+    requestedFromPartyId: string;
+    subjectLabel: string;
+    kinds: { value: string; label: string }[];
+    kindLabel: string;
+    visibilities: { value: string; label: string }[];
+    visibilityLabel: string;
+    bodyLabel: string;
+    bodyPlaceholder: string;
+    submitLabel: string;
+    cancelLabel: string;
+    closeHref: string;
+    failed: string;
+    openLabel: string;
+  } | null;
+  title: string;
+  department: string;
+  employer: string;
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  serviceStart: string;
 }
 
 export interface MeTeamLeaveRow {
-  id: string
-  workerName: string
-  leaveTypeCode: string
-  rangeLabel: string
-  hours: string
-  decideLabel: string
-  decideHref: string
+  id: string;
+  workerName: string;
+  leaveTypeCode: string;
+  rangeLabel: string;
+  hours: string;
+  decideLabel: string;
+  decideHref: string;
 }
 
 export interface MeTeamChangeRow {
-  id: string
-  workerName: string
-  kindLabel: string
-  statusLabel: string
-  statusVariant: StatusVariant
-  decideLabel: string
-  decideHref: string
+  id: string;
+  workerName: string;
+  kindLabel: string;
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  decideLabel: string;
+  decideHref: string;
 }
 
 export interface MeTeamData {
-  title: string
-  description: string
-  tabs: ModuleHomeTab[]
-  refusal: MeRefusal | null
-  hasContent: boolean
-  asOf: string
-  rosterTitle: string
-  rosterColumns: { name: string; title: string; department: string; status: string; serviceStart: string; oneOnOne: string; feedback: string }
-  continuousOn: boolean
-  roster: MeTeamReportRow[]
-  rosterEmpty: string
-  stepsTitle: string
-  stepsColumns: { employee: string; title: string; due: string }
-  teamSteps: (TeamView['openSteps'][number] & { overdueLabel: string | null })[]
-  stepsEmpty: string
-  leaveTitle: string
-  leaveColumns: { employee: string; type: string; range: string; hours: string }
-  pendingLeave: MeTeamLeaveRow[]
-  leaveEmpty: string
-  approvalsHref: string
-  decideInApprovals: string
-  changesTitle: string
-  changesColumns: { employee: string; kind: string; status: string }
-  pendingChanges: MeTeamChangeRow[]
-  changesEmpty: string
-  owedTitle: string
-  owedColumns: { employee: string; cycle: string; status: string; due: string }
+  title: string;
+  description: string;
+  tabs: ModuleHomeTab[];
+  refusal: MeRefusal | null;
+  hasContent: boolean;
+  asOf: string;
+  rosterTitle: string;
+  rosterColumns: {
+    name: string;
+    title: string;
+    department: string;
+    status: string;
+    serviceStart: string;
+    oneOnOne: string;
+    feedback: string;
+  };
+  continuousOn: boolean;
+  roster: MeTeamReportRow[];
+  rosterEmpty: string;
+  stepsTitle: string;
+  stepsColumns: { employee: string; title: string; due: string };
+  teamSteps: (TeamView["openSteps"][number] & { overdueLabel: string | null })[];
+  stepsEmpty: string;
+  leaveTitle: string;
+  leaveColumns: { employee: string; type: string; range: string; hours: string };
+  pendingLeave: MeTeamLeaveRow[];
+  leaveEmpty: string;
+  approvalsHref: string;
+  decideInApprovals: string;
+  changesTitle: string;
+  changesColumns: { employee: string; kind: string; status: string };
+  pendingChanges: MeTeamChangeRow[];
+  changesEmpty: string;
+  owedTitle: string;
+  owedColumns: { employee: string; cycle: string; status: string; due: string };
   owedReviews: MeTeamOwedRow[];
   owedState: "loaded" | "unavailable";
   owedDescription: string;
-  owedEmpty: string
-  openReview: string
+  owedEmpty: string;
+  openReview: string;
 }
 
 /** The manager's team: roster, steps assigned to the manager, pending
  * leave, and pending change requests. Approve/decline rides native
  * Approvals — rows deep-link there and build no second decision path. */
 export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
-  const orgId = authz.user.orgId
-  const t = (await getTranslations('hrm')) as unknown as Catalog
-  const tabs = await meTabs(authz, '/me/team')
+  const orgId = authz.user.orgId;
+  const t = (await getTranslations("hrm")) as unknown as Catalog;
+  const tabs = await meTabs(authz, "/me/team");
   const base = {
-    title: t('me.team.title'),
-    description: t('me.team.description'),
+    title: t("me.team.title"),
+    description: t("me.team.description"),
     tabs,
-    rosterTitle: t('me.team.rosterTitle'),
+    rosterTitle: t("me.team.rosterTitle"),
     rosterColumns: {
-      name: t('me.team.columns.name'),
-      title: t('me.team.columns.title'),
-      department: t('me.team.columns.department'),
-      status: t('me.team.columns.status'),
-      serviceStart: t('me.team.columns.serviceStart'),
-      oneOnOne: t('me.team.columns.oneOnOne'),
-      feedback: t('me.team.columns.feedback'),
+      name: t("me.team.columns.name"),
+      title: t("me.team.columns.title"),
+      department: t("me.team.columns.department"),
+      status: t("me.team.columns.status"),
+      serviceStart: t("me.team.columns.serviceStart"),
+      oneOnOne: t("me.team.columns.oneOnOne"),
+      feedback: t("me.team.columns.feedback"),
     },
     // the roster's 1:1 column and per-report praise action
     // render only while their switches are on — rows never promise a
     // surface that 404s. Resolved beside the roster below.
     continuousOn: false,
-    rosterEmpty: t('me.team.rosterEmpty'),
-    stepsTitle: t('me.team.stepsTitle'),
+    rosterEmpty: t("me.team.rosterEmpty"),
+    stepsTitle: t("me.team.stepsTitle"),
     stepsColumns: {
-      employee: t('me.team.columns.name'),
-      title: t('me.checklists.columns.title'),
-      due: t('me.checklists.columns.due'),
+      employee: t("me.team.columns.name"),
+      title: t("me.checklists.columns.title"),
+      due: t("me.checklists.columns.due"),
     },
-    stepsEmpty: t('me.team.stepsEmpty'),
-    leaveTitle: t('me.team.leaveTitle'),
+    stepsEmpty: t("me.team.stepsEmpty"),
+    leaveTitle: t("me.team.leaveTitle"),
     leaveColumns: {
-      employee: t('me.team.columns.name'),
-      type: t('leave.columns.type'),
-      range: t('leave.columns.range'),
-      hours: t('leave.columns.hours'),
+      employee: t("me.team.columns.name"),
+      type: t("leave.columns.type"),
+      range: t("leave.columns.range"),
+      hours: t("leave.columns.hours"),
     },
-    leaveEmpty: t('me.team.leaveEmpty'),
-    approvalsHref: '/inbox',
-    decideInApprovals: t('me.team.decideInApprovals'),
-    changesTitle: t('me.team.changesTitle'),
+    leaveEmpty: t("me.team.leaveEmpty"),
+    approvalsHref: "/inbox",
+    decideInApprovals: t("me.team.decideInApprovals"),
+    changesTitle: t("me.team.changesTitle"),
     changesColumns: {
-      employee: t('me.team.columns.name'),
-      kind: t('me.requests.columns.kind'),
-      status: t('me.requests.columns.status'),
+      employee: t("me.team.columns.name"),
+      kind: t("me.requests.columns.kind"),
+      status: t("me.requests.columns.status"),
     },
-    changesEmpty: t('me.team.changesEmpty'),
-    owedTitle: t('me.team.owedTitle'),
+    changesEmpty: t("me.team.changesEmpty"),
+    owedTitle: t("me.team.owedTitle"),
     owedColumns: {
-      employee: t('me.team.columns.name'),
-      cycle: t('me.team.columns.cycle'),
-      status: t('me.team.columns.status'),
-      due: t('me.checklists.columns.due'),
+      employee: t("me.team.columns.name"),
+      cycle: t("me.team.columns.cycle"),
+      status: t("me.team.columns.status"),
+      due: t("me.checklists.columns.due"),
     },
-    owedEmpty: t('me.team.owedEmpty'),
+    owedEmpty: t("me.team.owedEmpty"),
     owedDescription: "",
-    openReview: t('me.team.openReview'),
-  }
+    openReview: t("me.team.openReview"),
+  };
   try {
     const [team, owedOutcome] = await Promise.all([
       getTeamView({ orgId, actorId: authz.user.id }),
-      loadManagerOwedReviews({ orgId, actorId: authz.user.id }).then((rows) => ({ rows, refusal: null }),
+      loadManagerOwedReviews({ orgId, actorId: authz.user.id }).then(
+        (rows) => ({ rows, refusal: null }),
         (error: unknown) => ({ rows: [], refusal: sectionRefusal(t, error) }),
       ),
-    ])
-    const canOpenDrawer = can(authz, 'parties.read')
-    const performanceOn = await mePerformanceOn(orgId)
+    ]);
+    const canOpenDrawer = can(authz, "parties.read");
+    const performanceOn = await mePerformanceOn(orgId);
     const feedbackKinds = [
-      { value: 'praise', label: t('performance.continuous.feedback.praise') },
-      { value: 'feedback', label: t('performance.continuous.feedback.feedbackKind') },
-      { value: 'request', label: t('performance.continuous.feedback.request') },
-    ]
+      { value: "praise", label: t("performance.continuous.feedback.praise") },
+      { value: "feedback", label: t("performance.continuous.feedback.feedbackKind") },
+      { value: "request", label: t("performance.continuous.feedback.request") },
+    ];
     const feedbackVisibilities = [
-      { value: 'public', label: t('performance.continuous.feedback.publicVis') },
-      { value: 'manager_and_subject', label: t('performance.continuous.feedback.managerAndSubject') },
-      { value: 'manager_only', label: t('performance.continuous.feedback.managerOnly') },
-      { value: 'subject_only', label: t('performance.continuous.feedback.subjectOnly') },
-    ]
+      { value: "public", label: t("performance.continuous.feedback.publicVis") },
+      {
+        value: "manager_and_subject",
+        label: t("performance.continuous.feedback.managerAndSubject"),
+      },
+      { value: "manager_only", label: t("performance.continuous.feedback.managerOnly") },
+      { value: "subject_only", label: t("performance.continuous.feedback.subjectOnly") },
+    ];
     return {
       ...base,
       refusal: null,
@@ -1129,23 +1273,23 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
         oneOnOneHref: performanceOn
           ? `/me/one-on-ones?report=${encodeURIComponent(report.employmentId)}`
           : null,
-        oneOnOneLabel: performanceOn ? t('me.team.oneOnOneLink') : null,
+        oneOnOneLabel: performanceOn ? t("me.team.oneOnOneLink") : null,
         feedback: performanceOn
           ? {
               subjectEmploymentId: report.employmentId,
               requestedFromPartyId: report.workerPartyId,
               subjectLabel: report.workerName,
               kinds: feedbackKinds,
-              kindLabel: t('performance.continuous.feedback.kindLabel'),
+              kindLabel: t("performance.continuous.feedback.kindLabel"),
               visibilities: feedbackVisibilities,
-              visibilityLabel: t('performance.continuous.feedback.visibilityLabel'),
-              bodyLabel: t('performance.continuous.feedback.bodyLabel'),
-              bodyPlaceholder: t('performance.continuous.feedback.bodyPlaceholder'),
-              submitLabel: t('performance.continuous.feedback.submitLabel'),
-              cancelLabel: t('performance.cancel'),
-              closeHref: '/me/team',
-              failed: t('performance.actionFailed'),
-              openLabel: t('performance.continuous.feedback.praiseAction'),
+              visibilityLabel: t("performance.continuous.feedback.visibilityLabel"),
+              bodyLabel: t("performance.continuous.feedback.bodyLabel"),
+              bodyPlaceholder: t("performance.continuous.feedback.bodyPlaceholder"),
+              submitLabel: t("performance.continuous.feedback.submitLabel"),
+              cancelLabel: t("performance.cancel"),
+              closeHref: "/me/team",
+              failed: t("performance.actionFailed"),
+              openLabel: t("performance.continuous.feedback.praiseAction"),
             }
           : null,
         // The employee drawer opens on the Employment tab only; a viewer
@@ -1153,16 +1297,16 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
         workerHref: canOpenDrawer
           ? `/entities/employees?party=${encodeURIComponent(report.workerPartyId)}&partyTab=employment`
           : null,
-        title: report.jobTitle ?? t('me.overview.notAvailable'),
-        department: report.departmentName ?? t('me.overview.notAvailable'),
+        title: report.jobTitle ?? t("me.overview.notAvailable"),
+        department: report.departmentName ?? t("me.overview.notAvailable"),
         employer: report.employerName,
-        statusLabel: statusLabel(t, 'me.employmentStatus', report.status),
+        statusLabel: statusLabel(t, "me.employmentStatus", report.status),
         statusVariant: statusVariant(report.status),
         serviceStart: report.serviceStart,
       })),
       teamSteps: team.openSteps.map((step) => ({
         ...step,
-        overdueLabel: step.dueOn < team.asOf ? t('me.checklists.overdue') : null,
+        overdueLabel: step.dueOn < team.asOf ? t("me.checklists.overdue") : null,
       })),
       pendingLeave: team.pendingLeave.map((request) => ({
         id: request.id,
@@ -1170,17 +1314,17 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
         leaveTypeCode: request.leaveTypeCode,
         rangeLabel: `${request.startsOn} → ${request.endsOn}`,
         hours: request.hours,
-        decideLabel: t('me.team.decideInApprovals'),
-        decideHref: '/inbox',
+        decideLabel: t("me.team.decideInApprovals"),
+        decideHref: "/inbox",
       })),
       pendingChanges: team.pendingChanges.map((request) => ({
         id: request.id,
         workerName: request.workerName,
-        kindLabel: statusLabel(t, 'me.requestKinds', request.kind),
-        statusLabel: statusLabel(t, 'me.requestStatus', request.status),
+        kindLabel: statusLabel(t, "me.requestKinds", request.kind),
+        statusLabel: statusLabel(t, "me.requestStatus", request.status),
         statusVariant: statusVariant(request.status),
-        decideLabel: t('me.team.decideInApprovals'),
-        decideHref: '/inbox',
+        decideLabel: t("me.team.decideInApprovals"),
+        decideHref: "/inbox",
       })),
       owedState: owedOutcome.refusal ? "unavailable" : "loaded",
       ...(owedOutcome.refusal
@@ -1193,13 +1337,13 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
         reviewId: row.reviewId,
         workerName: row.workerName,
         cycleName: row.cycleName,
-        statusLabel: statusLabel(t, 'me.reviewStatus', row.status),
+        statusLabel: statusLabel(t, "me.reviewStatus", row.status),
         statusVariant: statusVariant(row.status),
         dueOn: row.managerDueOn,
-        openLabel: t('me.team.openReview'),
+        openLabel: t("me.team.openReview"),
         openHref: row.drawerHref,
       })),
-    }
+    };
   } catch (error) {
     const refusal = toRefusal(t, error);
     if (!refusal) throw error;
@@ -1207,98 +1351,98 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       ...base,
       refusal,
       hasContent: refusal === null,
-      asOf: '',
+      asOf: "",
       roster: [],
       teamSteps: [],
       pendingLeave: [],
       pendingChanges: [],
       owedState: "unavailable",
       owedReviews: [],
-    }
+    };
   }
 }
 
 export interface MeTeamOwedRow {
-  reviewId: string
-  workerName: string
-  cycleName: string
-  statusLabel: string
-  statusVariant: StatusVariant
-  dueOn: string | null
-  openLabel: string
-  openHref: string
+  reviewId: string;
+  workerName: string;
+  cycleName: string;
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  dueOn: string | null;
+  openLabel: string;
+  openHref: string;
 }
 
 export interface MeReviewSelfRow {
-  reviewId: string
-  cycleName: string
-  periodLabel: string
-  dueOn: string | null
-  statusLabel: string
-  statusVariant: StatusVariant
-  openLabel: string
-  openHref: string
+  reviewId: string;
+  cycleName: string;
+  periodLabel: string;
+  dueOn: string | null;
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  openLabel: string;
+  openHref: string;
 }
 
 export interface MeReviewSharedRow {
-  reviewId: string
-  cycleName: string
-  statusLabel: string
-  statusVariant: StatusVariant
-  ratingLabel: string
-  sharedOn: string | null
-  canAcknowledge: boolean
-  acknowledgeLabel: string
+  reviewId: string;
+  cycleName: string;
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  ratingLabel: string;
+  sharedOn: string | null;
+  canAcknowledge: boolean;
+  acknowledgeLabel: string;
 }
 
 export interface MeGoalRowData {
-  id: string
-  title: string
-  dueOn: string | null
-  statusLabel: string
-  statusVariant: StatusVariant
-  progressPercent: number
-  progressLabel: string
-  updateLabel: string
-  updateHref: string
+  id: string;
+  title: string;
+  dueOn: string | null;
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  progressPercent: number;
+  progressLabel: string;
+  updateLabel: string;
+  updateHref: string;
 }
 
 export interface MeReviewsData {
-  title: string
-  description: string
-  tabs: ModuleHomeTab[]
-  refusal: MeRefusal | null
-  hasContent: boolean
-  selfTitle: string
-  selfColumns: { cycle: string; period: string; due: string; status: string }
-  selfRows: MeReviewSelfRow[]
-  selfEmpty: string
-  selfEmptyDescription: string
-  answerInDrawer: string
-  sharedTitle: string
-  sharedColumns: { cycle: string; status: string; rating: string; shared: string }
-  sharedRows: MeReviewSharedRow[]
-  sharedEmpty: string
-  sharedEmptyDescription: string
-  acknowledgeFailed: string
-  goalsTitle: string
-  goalsColumns: { title: string; due: string; status: string; progress: string }
-  goalRows: MeGoalRowData[]
-  goalsEmpty: string
-  goalsEmptyDescription: string
-  goalDialogOpen: boolean
-  goalDialogCloseHref: string
+  title: string;
+  description: string;
+  tabs: ModuleHomeTab[];
+  refusal: MeRefusal | null;
+  hasContent: boolean;
+  selfTitle: string;
+  selfColumns: { cycle: string; period: string; due: string; status: string };
+  selfRows: MeReviewSelfRow[];
+  selfEmpty: string;
+  selfEmptyDescription: string;
+  answerInDrawer: string;
+  sharedTitle: string;
+  sharedColumns: { cycle: string; status: string; rating: string; shared: string };
+  sharedRows: MeReviewSharedRow[];
+  sharedEmpty: string;
+  sharedEmptyDescription: string;
+  acknowledgeFailed: string;
+  goalsTitle: string;
+  goalsColumns: { title: string; due: string; status: string; progress: string };
+  goalRows: MeGoalRowData[];
+  goalsEmpty: string;
+  goalsEmptyDescription: string;
+  goalDialogOpen: boolean;
+  goalDialogCloseHref: string;
   goalDialog: {
-    goalId: string
-    title: string
-    description: string
-    percentLabel: string
-    noteLabel: string
-    notePlaceholder: string
-    submitLabel: string
-    cancelLabel: string
-    submitFailed: string
-  } | null
+    goalId: string;
+    title: string;
+    description: string;
+    percentLabel: string;
+    noteLabel: string;
+    notePlaceholder: string;
+    submitLabel: string;
+    cancelLabel: string;
+    submitFailed: string;
+  } | null;
 }
 
 /** The person's own review cycles: owed self-assessments, shared manager
@@ -1310,47 +1454,47 @@ export async function loadMeReviews(
   authz: Authz,
   sp: Record<string, string | undefined> = {},
 ): Promise<MeReviewsData> {
-  const orgId = authz.user.orgId
-  const t = (await getTranslations('hrm')) as unknown as Catalog
+  const orgId = authz.user.orgId;
+  const t = (await getTranslations("hrm")) as unknown as Catalog;
   const base = {
-    title: t('me.reviews.title'),
-    description: t('me.reviews.description'),
-    tabs: await meTabs(authz, '/me/reviews'),
-    selfTitle: t('me.reviews.selfTitle'),
+    title: t("me.reviews.title"),
+    description: t("me.reviews.description"),
+    tabs: await meTabs(authz, "/me/reviews"),
+    selfTitle: t("me.reviews.selfTitle"),
     selfColumns: {
-      cycle: t('me.reviews.columns.cycle'),
-      period: t('me.reviews.columns.period'),
-      due: t('me.checklists.columns.due'),
-      status: t('me.reviews.columns.status'),
+      cycle: t("me.reviews.columns.cycle"),
+      period: t("me.reviews.columns.period"),
+      due: t("me.checklists.columns.due"),
+      status: t("me.reviews.columns.status"),
     },
-    selfEmpty: t('me.reviews.selfEmpty'),
-    selfEmptyDescription: t('me.reviews.selfEmptyDescription'),
-    answerInDrawer: t('me.reviews.answerInDrawer'),
-    sharedTitle: t('me.reviews.sharedTitle'),
+    selfEmpty: t("me.reviews.selfEmpty"),
+    selfEmptyDescription: t("me.reviews.selfEmptyDescription"),
+    answerInDrawer: t("me.reviews.answerInDrawer"),
+    sharedTitle: t("me.reviews.sharedTitle"),
     sharedColumns: {
-      cycle: t('me.reviews.columns.cycle'),
-      status: t('me.reviews.columns.status'),
-      rating: t('me.reviews.columns.rating'),
-      shared: t('me.reviews.columns.shared'),
+      cycle: t("me.reviews.columns.cycle"),
+      status: t("me.reviews.columns.status"),
+      rating: t("me.reviews.columns.rating"),
+      shared: t("me.reviews.columns.shared"),
     },
-    sharedEmpty: t('me.reviews.sharedEmpty'),
-    sharedEmptyDescription: t('me.reviews.sharedEmptyDescription'),
-    acknowledgeFailed: t('me.reviews.acknowledgeFailed'),
-    goalsTitle: t('me.reviews.goalsTitle'),
+    sharedEmpty: t("me.reviews.sharedEmpty"),
+    sharedEmptyDescription: t("me.reviews.sharedEmptyDescription"),
+    acknowledgeFailed: t("me.reviews.acknowledgeFailed"),
+    goalsTitle: t("me.reviews.goalsTitle"),
     goalsColumns: {
-      title: t('me.reviews.columns.goal'),
-      due: t('me.checklists.columns.due'),
-      status: t('me.reviews.columns.status'),
-      progress: t('me.reviews.columns.progress'),
+      title: t("me.reviews.columns.goal"),
+      due: t("me.checklists.columns.due"),
+      status: t("me.reviews.columns.status"),
+      progress: t("me.reviews.columns.progress"),
     },
-    goalsEmpty: t('me.reviews.goalsEmpty'),
-    goalsEmptyDescription: t('me.reviews.goalsEmptyDescription'),
-    goalDialogCloseHref: '/me/reviews',
-  }
+    goalsEmpty: t("me.reviews.goalsEmpty"),
+    goalsEmptyDescription: t("me.reviews.goalsEmptyDescription"),
+    goalDialogCloseHref: "/me/reviews",
+  };
   try {
-    const workspace = await getMyReviewWorkspace({ orgId, actorId: authz.user.id })
-    const selfRows: MeReviewSelfRow[] = []
-    const sharedRows: MeReviewSharedRow[] = []
+    const workspace = await getMyReviewWorkspace({ orgId, actorId: authz.user.id });
+    const selfRows: MeReviewSelfRow[] = [];
+    const sharedRows: MeReviewSharedRow[] = [];
     for (const group of workspace.cycles) {
       if (group.mySelf) {
         selfRows.push({
@@ -1358,40 +1502,40 @@ export async function loadMeReviews(
           cycleName: group.name,
           periodLabel: `${group.periodStartOn} → ${group.periodEndOn}`,
           dueOn: group.mySelf.selfDueOn,
-          statusLabel: statusLabel(t, 'me.reviewStatus', group.mySelf.status),
+          statusLabel: statusLabel(t, "me.reviewStatus", group.mySelf.status),
           statusVariant: statusVariant(group.mySelf.status),
-          openLabel: t('me.reviews.answerInDrawer'),
+          openLabel: t("me.reviews.answerInDrawer"),
           openHref: group.mySelf.drawerHref,
-        })
+        });
       }
       for (const shared of group.sharedWithMe) {
         sharedRows.push({
           reviewId: shared.id,
           cycleName: group.name,
-          statusLabel: statusLabel(t, 'me.reviewStatus', shared.status),
+          statusLabel: statusLabel(t, "me.reviewStatus", shared.status),
           statusVariant: statusVariant(shared.status),
-          ratingLabel: shared.overallRating ?? t('me.overview.notAvailable'),
+          ratingLabel: shared.overallRating ?? t("me.overview.notAvailable"),
           sharedOn: shared.sharedAt,
-          canAcknowledge: shared.status === 'shared',
-          acknowledgeLabel: t('me.reviews.acknowledge'),
-        })
+          canAcknowledge: shared.status === "shared",
+          acknowledgeLabel: t("me.reviews.acknowledge"),
+        });
       }
     }
-    const goalId = typeof sp.goal === 'string' && sp.goal.length > 0 ? sp.goal : null
+    const goalId = typeof sp.goal === "string" && sp.goal.length > 0 ? sp.goal : null;
     const goalDialog =
       goalId && workspace.goals.some((goal) => goal.id === goalId)
         ? {
             goalId,
-            title: t('me.reviews.goalDialogTitle'),
-            description: t('me.reviews.goalDialogDescription'),
-            percentLabel: t('me.reviews.columns.progress'),
-            noteLabel: t('me.reviews.goalNoteLabel'),
-            notePlaceholder: t('me.reviews.goalNotePlaceholder'),
-            submitLabel: t('me.reviews.goalSubmit'),
-            cancelLabel: t('me.profile.cancel'),
-            submitFailed: t('me.reviews.goalFailed'),
+            title: t("me.reviews.goalDialogTitle"),
+            description: t("me.reviews.goalDialogDescription"),
+            percentLabel: t("me.reviews.columns.progress"),
+            noteLabel: t("me.reviews.goalNoteLabel"),
+            notePlaceholder: t("me.reviews.goalNotePlaceholder"),
+            submitLabel: t("me.reviews.goalSubmit"),
+            cancelLabel: t("me.profile.cancel"),
+            submitFailed: t("me.reviews.goalFailed"),
           }
-        : null
+        : null;
     return {
       ...base,
       refusal: null,
@@ -1402,18 +1546,18 @@ export async function loadMeReviews(
         id: goal.id,
         title: goal.title,
         dueOn: goal.dueOn,
-        statusLabel: statusLabel(t, 'me.goalStatus', goal.status),
+        statusLabel: statusLabel(t, "me.goalStatus", goal.status),
         statusVariant: statusVariant(goal.status),
         progressPercent: goal.progressPercent,
         progressLabel: `${goal.progressPercent}%`,
-        updateLabel: t('me.reviews.goalUpdate'),
+        updateLabel: t("me.reviews.goalUpdate"),
         updateHref: `/me/reviews?goal=${encodeURIComponent(goal.id)}`,
       })),
       goalDialogOpen: goalDialog !== null,
       goalDialog,
-    }
+    };
   } catch (error) {
-    const refusal = toRefusal(t, error)
+    const refusal = toRefusal(t, error);
     return {
       ...base,
       refusal,
@@ -1423,101 +1567,130 @@ export async function loadMeReviews(
       goalRows: [],
       goalDialogOpen: false,
       goalDialog: null,
-    }
+    };
   }
 }
 
 export interface MeElectionRow {
-  id: string
-  planCode: string
-  planName: string
-  coverageLabel: string | null
-  statusLabel: string
-  statusVariant: StatusVariant
-  effectiveLabel: string
-  employeeAmount: string | null
-  changeHref: string | null
-  changeLabel: string
+  id: string;
+  planCode: string;
+  planName: string;
+  coverageLabel: string | null;
+  statusLabel: string;
+  statusVariant: StatusVariant;
+  effectiveLabel: string;
+  employeeAmount: string | null;
+  changeHref: string | null;
+  changeLabel: string;
 }
 
 export interface MeWindowRow {
-  id: string
-  name: string
-  kindLabel: string
-  rangeLabel: string
+  id: string;
+  name: string;
+  kindLabel: string;
+  rangeLabel: string;
 }
 
 export interface MeDependentRow {
-  displayName: string
-  relationship: string
+  displayName: string;
+  relationship: string;
 }
 
 export interface MeBenefitPlanOption {
-  value: string
-  label: string
-  classes: { value: string; label: string }[]
-  contributionRules: { value: string; label: string; basis: string; rate: string; rateFormula: string; requiresMatchEligibility: boolean; effectiveFrom: string; effectiveTo: string | null }[]
+  value: string;
+  label: string;
+  classes: { value: string; label: string }[];
+  contributionRules: {
+    value: string;
+    label: string;
+    basis: string;
+    rate: string;
+    rateFormula: string;
+    requiresMatchEligibility: boolean;
+    effectiveFrom: string;
+    effectiveTo: string | null;
+  }[];
 }
 
 export interface MeBenefitsData {
-  title: string
-  description: string
-  tabs: ModuleHomeTab[]
-  refusal: MeRefusal | null
-  hasContent: boolean
-  electionsTitle: string
-  electionsColumns: { plan: string; coverage: string; status: string; effective: string; monthly: string }
-  elections: MeElectionRow[]
-  electionsEmpty: string
-  electionsEmptyDescription: string
-  monthlyHint: string
-  windowsTitle: string
-  windowsColumns: { name: string; kind: string; range: string }
-  windows: MeWindowRow[]
-  windowsEmpty: string
-  windowsEmptyDescription: string
-  dependentsTitle: string
-  dependentsColumns: { name: string; relationship: string }
-  dependents: MeDependentRow[]
-  dependentsEmpty: string
-  electLabel: string
-  electHref: string
-  dialogOpen: boolean
-  dialogCloseHref: string
+  title: string;
+  description: string;
+  tabs: ModuleHomeTab[];
+  refusal: MeRefusal | null;
+  hasContent: boolean;
+  electionsTitle: string;
+  electionsColumns: {
+    plan: string;
+    coverage: string;
+    status: string;
+    effective: string;
+    monthly: string;
+  };
+  elections: MeElectionRow[];
+  electionsEmpty: string;
+  electionsEmptyDescription: string;
+  monthlyHint: string;
+  windowsTitle: string;
+  windowsColumns: { name: string; kind: string; range: string };
+  windows: MeWindowRow[];
+  windowsEmpty: string;
+  windowsEmptyDescription: string;
+  dependentsTitle: string;
+  dependentsColumns: { name: string; relationship: string };
+  dependents: MeDependentRow[];
+  dependentsEmpty: string;
+  electLabel: string;
+  electHref: string;
+  dialogOpen: boolean;
+  dialogCloseHref: string;
   dialog: {
-    title: string
-    description: string
-    employmentLabel: string
-    employments: { value: string; label: string }[]
-    planLabel: string
-    plans: MeBenefitPlanOption[]
-    windowLabel: string
-    windows: { value: string; label: string }[]
-    fromLabel: string
-    lifeEventLabel: string
-    lifeEventPlaceholder: string
-    submitLabel: string
-    cancelLabel: string
-    submitFailed: string
-  } | null
-  changeDialogOpen: boolean
+    title: string;
+    description: string;
+    employmentLabel: string;
+    employments: { value: string; label: string }[];
+    planLabel: string;
+    plans: MeBenefitPlanOption[];
+    windowLabel: string;
+    windows: { value: string; label: string }[];
+    fromLabel: string;
+    lifeEventLabel: string;
+    lifeEventPlaceholder: string;
+    submitLabel: string;
+    cancelLabel: string;
+    submitFailed: string;
+  } | null;
+  changeDialogOpen: boolean;
   changeDialog: {
-    enrollmentId: string
-    planName: string
-    title: string
-    description: string
-    classKey: string | null
-    matchEligible: boolean | null
-    classes: { value: string; label: string }[]
-    contributionRules: { value: string; label: string; basis: string; rate: string; rateFormula: string; requiresMatchEligibility: boolean; effectiveFrom: string; effectiveTo: string | null }[]
-    contributionTerms: { ruleId: string; electionMode: 'fixed' | 'follows_policy'; electedRate: string | null; declaredPeriodsPerYear?: number | null }[]
-    dateLabel: string
-    reasonLabel: string
-    reasonPlaceholder: string
-    submitLabel: string
-    cancelLabel: string
-    submitFailed: string
-  } | null
+    enrollmentId: string;
+    planName: string;
+    title: string;
+    description: string;
+    classKey: string | null;
+    matchEligible: boolean | null;
+    classes: { value: string; label: string }[];
+    contributionRules: {
+      value: string;
+      label: string;
+      basis: string;
+      rate: string;
+      rateFormula: string;
+      requiresMatchEligibility: boolean;
+      effectiveFrom: string;
+      effectiveTo: string | null;
+    }[];
+    contributionTerms: {
+      ruleId: string;
+      electionMode: "fixed" | "follows_policy";
+      electedRate: string | null;
+      declaredPeriodsPerYear?: number | null;
+    }[];
+    dateLabel: string;
+    reasonLabel: string;
+    reasonPlaceholder: string;
+    submitLabel: string;
+    cancelLabel: string;
+    submitFailed: string;
+  } | null;
 }
 
 /** The person's benefits: current elections with the stored payroll
@@ -1528,54 +1701,56 @@ export async function loadMeBenefits(
   authz: Authz,
   sp: Record<string, string | undefined> = {},
 ): Promise<MeBenefitsData> {
-  const orgId = authz.user.orgId
-  const t = (await getTranslations('hrm')) as unknown as Catalog
-  const contributionText = await getTranslations('admin')
+  const orgId = authz.user.orgId;
+  const t = (await getTranslations("hrm")) as unknown as Catalog;
+  const contributionText = await getTranslations("admin");
   const base = {
-    title: t('me.benefits.title'),
-    description: t('me.benefits.description'),
-    tabs: await meTabs(authz, '/me/benefits'),
-    electionsTitle: t('me.benefits.electionsTitle'),
+    title: t("me.benefits.title"),
+    description: t("me.benefits.description"),
+    tabs: await meTabs(authz, "/me/benefits"),
+    electionsTitle: t("me.benefits.electionsTitle"),
     electionsColumns: {
-      plan: t('me.benefits.columns.plan'),
-      coverage: t('me.benefits.columns.coverage'),
-      status: t('me.benefits.columns.status'),
-      effective: t('me.benefits.columns.effective'),
-      monthly: t('me.benefits.columns.monthly'),
+      plan: t("me.benefits.columns.plan"),
+      coverage: t("me.benefits.columns.coverage"),
+      status: t("me.benefits.columns.status"),
+      effective: t("me.benefits.columns.effective"),
+      monthly: t("me.benefits.columns.monthly"),
     },
-    monthlyHint: t('me.benefits.monthlyHint'),
-    electionsEmpty: t('me.benefits.electionsEmpty'),
-    electionsEmptyDescription: t('me.benefits.electionsEmptyDescription'),
-    windowsTitle: t('me.benefits.windowsTitle'),
+    monthlyHint: t("me.benefits.monthlyHint"),
+    electionsEmpty: t("me.benefits.electionsEmpty"),
+    electionsEmptyDescription: t("me.benefits.electionsEmptyDescription"),
+    windowsTitle: t("me.benefits.windowsTitle"),
     windowsColumns: {
-      name: t('me.benefits.columns.window'),
-      kind: t('me.benefits.columns.kind'),
-      range: t('me.benefits.columns.range'),
+      name: t("me.benefits.columns.window"),
+      kind: t("me.benefits.columns.kind"),
+      range: t("me.benefits.columns.range"),
     },
-    windowsEmpty: t('me.benefits.windowsEmpty'),
-    windowsEmptyDescription: t('me.benefits.windowsEmptyDescription'),
-    dependentsTitle: t('me.benefits.dependentsTitle'),
+    windowsEmpty: t("me.benefits.windowsEmpty"),
+    windowsEmptyDescription: t("me.benefits.windowsEmptyDescription"),
+    dependentsTitle: t("me.benefits.dependentsTitle"),
     dependentsColumns: {
-      name: t('me.benefits.columns.dependent'),
-      relationship: t('me.benefits.columns.relationship'),
+      name: t("me.benefits.columns.dependent"),
+      relationship: t("me.benefits.columns.relationship"),
     },
-    dependentsEmpty: t('me.benefits.dependentsEmpty'),
-    electLabel: t('me.benefits.elect'),
-    electHref: '/me/benefits?elect=1',
-    dialogCloseHref: '/me/benefits',
-  }
+    dependentsEmpty: t("me.benefits.dependentsEmpty"),
+    electLabel: t("me.benefits.elect"),
+    electHref: "/me/benefits?elect=1",
+    dialogCloseHref: "/me/benefits",
+  };
   try {
     const [workspace, profile] = await Promise.all([
       getMyBenefitsWorkspace({ orgId, actorId: authz.user.id }),
       getMyProfile({ orgId, actorId: authz.user.id }),
-    ])
+    ]);
     const employments = profile.employments.map((summary) => ({
       value: summary.employmentId,
-      label: `${summary.employerName} — ${summary.jobTitle ?? t('me.overview.notAvailable')}`,
-    }))
-    const electOpen = sp.elect === '1'
-    const changeId = typeof sp.change === 'string' && sp.change.length > 0 ? sp.change : null
-    const changeTarget = changeId ? workspace.elections.find((row) => row.id === changeId) : undefined
+      label: `${summary.employerName} — ${summary.jobTitle ?? t("me.overview.notAvailable")}`,
+    }));
+    const electOpen = sp.elect === "1";
+    const changeId = typeof sp.change === "string" && sp.change.length > 0 ? sp.change : null;
+    const changeTarget = changeId
+      ? workspace.elections.find((row) => row.id === changeId)
+      : undefined;
     return {
       ...base,
       refusal: null,
@@ -1585,18 +1760,26 @@ export async function loadMeBenefits(
         planCode: row.planCode,
         planName: `${row.planCode} — ${row.planName}`,
         coverageLabel: row.coverageLabel,
-        statusLabel: statusLabel(t, 'me.enrollmentStatus', row.status),
+        statusLabel: statusLabel(t, "me.enrollmentStatus", row.status),
         statusVariant: statusVariant(row.status),
-        effectiveLabel: row.effectiveTo ? `${row.effectiveFrom} → ${row.effectiveTo}` : `${row.effectiveFrom} → …`,
+        effectiveLabel: row.effectiveTo
+          ? `${row.effectiveFrom} → ${row.effectiveTo}`
+          : `${row.effectiveFrom} → …`,
         employeeAmount:
-          benefitContributionLabels(row.contributions, row.currency, contributionText, 'employee') || null,
-        changeHref: row.status === 'active' ? `/me/benefits?change=${encodeURIComponent(row.id)}` : null,
-        changeLabel: t('me.benefits.change'),
+          benefitContributionLabels(
+            row.contributions,
+            row.currency,
+            contributionText,
+            "employee",
+          ) || null,
+        changeHref:
+          row.status === "active" ? `/me/benefits?change=${encodeURIComponent(row.id)}` : null,
+        changeLabel: t("me.benefits.change"),
       })),
       windows: workspace.openWindows.map((window) => ({
         id: window.id,
         name: window.name,
-        kindLabel: statusLabel(t, 'me.windowKinds', window.kind),
+        kindLabel: statusLabel(t, "me.windowKinds", window.kind),
         rangeLabel: `${window.opensOn} → ${window.closesOn}`,
       })),
       dependents: workspace.dependents.map((row) => ({
@@ -1606,28 +1789,28 @@ export async function loadMeBenefits(
       dialogOpen: electOpen,
       dialog: electOpen
         ? {
-            title: t('me.benefits.electTitle'),
-            description: t('me.benefits.electDescription'),
-            employmentLabel: t('me.profile.employment'),
+            title: t("me.benefits.electTitle"),
+            description: t("me.benefits.electDescription"),
+            employmentLabel: t("me.profile.employment"),
             employments,
-            planLabel: t('me.benefits.columns.plan'),
+            planLabel: t("me.benefits.columns.plan"),
             plans: workspace.plans.map((plan) => ({
               value: plan.id,
               label: `${plan.code} — ${plan.name} (${plan.currency})`,
               classes: plan.classes,
               contributionRules: plan.contributionRules,
             })),
-            windowLabel: t('me.benefits.columns.window'),
+            windowLabel: t("me.benefits.columns.window"),
             windows: workspace.openWindows.map((window) => ({
               value: window.id,
               label: `${window.name} (${window.opensOn} → ${window.closesOn})`,
             })),
-            fromLabel: t('me.benefits.fromLabel'),
-            lifeEventLabel: t('me.benefits.lifeEventLabel'),
-            lifeEventPlaceholder: t('me.benefits.lifeEventPlaceholder'),
-            submitLabel: t('me.benefits.electSubmit'),
-            cancelLabel: t('me.profile.cancel'),
-            submitFailed: t('me.benefits.electFailed'),
+            fromLabel: t("me.benefits.fromLabel"),
+            lifeEventLabel: t("me.benefits.lifeEventLabel"),
+            lifeEventPlaceholder: t("me.benefits.lifeEventPlaceholder"),
+            submitLabel: t("me.benefits.electSubmit"),
+            cancelLabel: t("me.profile.cancel"),
+            submitFailed: t("me.benefits.electFailed"),
           }
         : null,
       changeDialogOpen: changeTarget !== undefined,
@@ -1636,24 +1819,30 @@ export async function loadMeBenefits(
           ? {
               enrollmentId: changeTarget.id,
               planName: `${changeTarget.planCode} — ${changeTarget.planName}`,
-              title: t('me.benefits.changeTitle'),
-              description: t('me.benefits.changeDescription'),
+              title: t("me.benefits.changeTitle"),
+              description: t("me.benefits.changeDescription"),
               classKey: changeTarget.classKey,
               matchEligible: changeTarget.matchEligible,
-              classes: workspace.plans.find((plan) => plan.id === changeTarget.planId)?.classes ?? [],
-              contributionRules: workspace.plans.find((plan) => plan.id === changeTarget.planId)?.contributionRules ?? [],
-              contributionTerms: changeTarget.contributionTerms.map(term => ({ ...term, electedRate: term.electedRate ?? null })),
-              dateLabel: t('me.benefits.fromLabel'),
-              reasonLabel: t('me.profile.reason'),
-              reasonPlaceholder: t('me.benefits.changeReasonPlaceholder'),
-              submitLabel: t('me.benefits.changeSubmit'),
-              cancelLabel: t('me.profile.cancel'),
-              submitFailed: t('me.benefits.changeFailed'),
+              classes:
+                workspace.plans.find((plan) => plan.id === changeTarget.planId)?.classes ?? [],
+              contributionRules:
+                workspace.plans.find((plan) => plan.id === changeTarget.planId)
+                  ?.contributionRules ?? [],
+              contributionTerms: changeTarget.contributionTerms.map((term) => ({
+                ...term,
+                electedRate: term.electedRate ?? null,
+              })),
+              dateLabel: t("me.benefits.fromLabel"),
+              reasonLabel: t("me.profile.reason"),
+              reasonPlaceholder: t("me.benefits.changeReasonPlaceholder"),
+              submitLabel: t("me.benefits.changeSubmit"),
+              cancelLabel: t("me.profile.cancel"),
+              submitFailed: t("me.benefits.changeFailed"),
             }
           : null,
-    }
+    };
   } catch (error) {
-    const refusal = toRefusal(t, error)
+    const refusal = toRefusal(t, error);
     return {
       ...base,
       refusal,
@@ -1665,7 +1854,7 @@ export async function loadMeBenefits(
       dialog: null,
       changeDialogOpen: false,
       changeDialog: null,
-    }
+    };
   }
 }
 
@@ -1678,7 +1867,7 @@ export async function loadTeamEmploymentPayload(
   actorId: string,
   workerPartyId: string,
 ): Promise<{ employmentIds: string[]; canManageHrm: false } | null> {
-  const employmentIds = await findTeamEmploymentIdsForParty({ orgId, actorId, workerPartyId })
-  if (employmentIds.length === 0) return null
-  return { employmentIds, canManageHrm: false }
+  const employmentIds = await findTeamEmploymentIdsForParty({ orgId, actorId, workerPartyId });
+  if (employmentIds.length === 0) return null;
+  return { employmentIds, canManageHrm: false };
 }

@@ -4,10 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import {
-  issueSalesOrder,
-  SalesOrderIssueError,
-} from "./sales-orders.ts";
+import { issueSalesOrder, SalesOrderIssueError } from "./sales-orders.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -93,11 +90,16 @@ async function seedSalesOrder(
        where id = ${id} and org_id = ${org.orgId}
     `);
   }
-  const updated = (await db.execute<{ updated_at: string }>(sql`
+  const updated = (
+    await db.execute<{ updated_at: string }>(
+      sql`
     select (revision_seq)::text as updated_at
       from documents
      where id = ${id} and org_id = ${org.orgId}
-  `, "objects"))[0]!;
+  `,
+      "objects",
+    )
+  )[0]!;
   return { id, updatedAt: updated.updated_at };
 }
 
@@ -164,7 +166,11 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actorId = await createScratchUser(org.orgId, "Malformed revision issuer", "malformed_revision_issuer");
+      const actorId = await createScratchUser(
+        org.orgId,
+        "Malformed revision issuer",
+        "malformed_revision_issuer",
+      );
       const order = await seedSalesOrder(org, actorId, {
         number: "SO-REVISION-MALFORMED-1",
         total: "10",
@@ -195,7 +201,11 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actorId = await createScratchUser(org.orgId, "Credit boundary issuer", "credit_boundary_issuer");
+      const actorId = await createScratchUser(
+        org.orgId,
+        "Credit boundary issuer",
+        "credit_boundary_issuer",
+      );
       await grantRolePermissions(org.orgId, "credit_boundary_issuer", ["ar.create"]);
       await seedCustomerRole(org, actorId, { creditLimit: "310", currency: "CAD" });
       await seedPostedInvoice(org, actorId, "INV-CREDIT-OPEN-1", "70");
@@ -254,13 +264,16 @@ test(
       );
       assert.match(refusal.message, /310\.0100 CAD.*310\.0000 CAD/);
 
-      const states = await db.execute<{ document_number: string; status: string }>(sql`
+      const states = await db.execute<{ document_number: string; status: string }>(
+        sql`
         select document_number, status
           from documents
          where org_id = ${org.orgId}
            and id in (${below.id}, ${at.id}, ${over.id})
          order by document_number
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.deepEqual(states, [
         { document_number: "SO-CREDIT-AT-1", status: "approved" },
         { document_number: "SO-CREDIT-BELOW-1", status: "approved" },
@@ -278,11 +291,18 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actorId = await createScratchUser(org.orgId, "Concurrent credit issuer", "concurrent_credit_issuer");
+      const actorId = await createScratchUser(
+        org.orgId,
+        "Concurrent credit issuer",
+        "concurrent_credit_issuer",
+      );
       await grantRolePermissions(org.orgId, "concurrent_credit_issuer", ["ar.create"]);
       await seedCustomerRole(org, actorId, { creditLimit: "100" });
       const first = await seedSalesOrder(org, actorId, { number: "SO-CREDIT-RACE-1", total: "60" });
-      const second = await seedSalesOrder(org, actorId, { number: "SO-CREDIT-RACE-2", total: "60" });
+      const second = await seedSalesOrder(org, actorId, {
+        number: "SO-CREDIT-RACE-2",
+        total: "60",
+      });
 
       const settled = await Promise.allSettled([
         issueSalesOrder({
@@ -299,19 +319,26 @@ test(
         }),
       ]);
       assert.equal(settled.filter((result) => result.status === "fulfilled").length, 1);
-      assert.equal(settled.filter(
-        (result) => result.status === "rejected"
-          && result.reason instanceof SalesOrderIssueError
-          && result.reason.code === "CUSTOMER_CREDIT_LIMIT_EXCEEDED",
-      ).length, 1);
+      assert.equal(
+        settled.filter(
+          (result) =>
+            result.status === "rejected" &&
+            result.reason instanceof SalesOrderIssueError &&
+            result.reason.code === "CUSTOMER_CREDIT_LIMIT_EXCEEDED",
+        ).length,
+        1,
+      );
 
-      const states = await db.execute<{ status: string; count: number }>(sql`
+      const states = await db.execute<{ status: string; count: number }>(
+        sql`
         select status, count(*)::int as count
           from documents
          where org_id = ${org.orgId} and id in (${first.id}, ${second.id})
          group by status
          order by status
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.deepEqual(states, [
         { status: "approved", count: 1 },
         { status: "draft", count: 1 },
@@ -329,7 +356,11 @@ test(
     const org = await createScratchOrg();
     const otherOrg = await createScratchOrg();
     try {
-      const actorId = await createScratchUser(org.orgId, "Currency credit issuer", "currency_credit_issuer");
+      const actorId = await createScratchUser(
+        org.orgId,
+        "Currency credit issuer",
+        "currency_credit_issuer",
+      );
       await grantRolePermissions(org.orgId, "currency_credit_issuer", ["ar.create"]);
       await seedCustomerRole(org, actorId, { creditLimit: "100", currency: "CAD" });
       const usd = await seedSalesOrder(org, actorId, {
@@ -381,10 +412,21 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const issuerId = await createScratchUser(org.orgId, "Ordinary credit issuer", "ordinary_credit_issuer");
-      const approverId = await createScratchUser(org.orgId, "Credit override approver", "credit_override_approver");
+      const issuerId = await createScratchUser(
+        org.orgId,
+        "Ordinary credit issuer",
+        "ordinary_credit_issuer",
+      );
+      const approverId = await createScratchUser(
+        org.orgId,
+        "Credit override approver",
+        "credit_override_approver",
+      );
       await grantRolePermissions(org.orgId, "ordinary_credit_issuer", ["ar.create"]);
-      await grantRolePermissions(org.orgId, "credit_override_approver", ["ar.create", "ar.approve"]);
+      await grantRolePermissions(org.orgId, "credit_override_approver", [
+        "ar.create",
+        "ar.approve",
+      ]);
       await seedCustomerRole(org, issuerId, { creditLimit: "10" });
       const order = await seedSalesOrder(org, issuerId, {
         number: "SO-CREDIT-OVERRIDE-1",
@@ -412,14 +454,16 @@ test(
       });
       assert.equal(result.credit?.overridden, true);
 
-      const evidence = (await db.execute<{
-        id: string;
-        actor_id: string;
-        event: string;
-        reason: string;
-        resulting_exposure: string;
-        credit_limit: string;
-      }>(sql`
+      const evidence = (
+        await db.execute<{
+          id: string;
+          actor_id: string;
+          event: string;
+          reason: string;
+          resulting_exposure: string;
+          credit_limit: string;
+        }>(
+          sql`
         select id, actor_id, changes->>'event' as event,
                changes->>'reason' as reason,
                changes->>'resultingExposure' as resulting_exposure,
@@ -431,7 +475,10 @@ test(
            and action = 'approve'
          order by at desc
          limit 1
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(evidence, {
         id: evidence.id,
         actor_id: approverId,

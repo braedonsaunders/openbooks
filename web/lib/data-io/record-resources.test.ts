@@ -1,21 +1,21 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import ExcelJS from 'exceljs'
-import type { FormSection } from '@openbooks/forms-core'
-import { CELL_PROVENANCE_KEY } from './types.ts'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import ExcelJS from "exceljs";
+import type { FormSection } from "@openbooks/forms-core";
+import { CELL_PROVENANCE_KEY } from "./types.ts";
 
 interface RecordImportState {
-  searchData: Record<string, unknown> | null
+  searchData: Record<string, unknown> | null;
 }
 
-const stateKey = Symbol.for('openbooks.record-import-test')
-const importState: RecordImportState = { searchData: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
+const stateKey = Symbol.for("openbooks.record-import-test");
+const importState: RecordImportState = { searchData: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       export const ambientTenantOrgId = () => null
       export const currentRequestOrgResolver = () => null
@@ -33,7 +33,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:records',
+    "mock:records",
     `
       const state = globalThis[Symbol.for('openbooks.record-import-test')]
 
@@ -48,14 +48,14 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:resource-core',
+    "mock:resource-core",
     `
       // The pure cap/gate re-export the REAL ./export-cap.ts through this
       // double — never copied. Only impure surfaces are stubbed below.
-      export * from '${new URL('./export-cap.ts', import.meta.url).href}'
-      export { MAX_EXPORT_ROWS, enforceExportRowLimit } from '${new URL('./export-cap.ts', import.meta.url).href}'
-      export { duplicateImportRowIndexes, importRowAction } from '${new URL('./resource-core.ts', import.meta.url).href}'
-      export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from '${new URL('./subsidiary-scope.ts', import.meta.url).href}'
+      export * from '${new URL("./export-cap.ts", import.meta.url).href}'
+      export { MAX_EXPORT_ROWS, enforceExportRowLimit } from '${new URL("./export-cap.ts", import.meta.url).href}'
+      export { duplicateImportRowIndexes, importRowAction } from '${new URL("./resource-core.ts", import.meta.url).href}'
+      export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from '${new URL("./subsidiary-scope.ts", import.meta.url).href}'
 
       export async function orgFeatureEnabled() { return false }
 
@@ -70,109 +70,109 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mockUrl = new Map([
-      ['@openbooks/engine/platform/db', 'mock:db'],
-      ['../records', 'mock:records'],
-      ['./resource-core', 'mock:resource-core'],
-    ]).get(specifier)
-    if (mockUrl) return { url: mockUrl, shortCircuit: true }
-    return nextResolve(specifier, context)
+      ["@openbooks/engine/platform/db", "mock:db"],
+      ["../records", "mock:records"],
+      ["./resource-core", "mock:resource-core"],
+    ]).get(specifier);
+    if (mockUrl) return { url: mockUrl, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
+    const source = mockSources.get(url);
     if (source !== undefined) {
-      return { format: 'module', source, shortCircuit: true }
+      return { format: "module", source, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const resourceUrl = './record-resources.ts?xlsx-field-aware-import-test'
-const { recordResource } = await import(resourceUrl) as typeof import('./record-resources.ts')
-const parseUrl = './parse.ts?record-xlsx-field-aware-import-test'
-const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
-hooks.deregister()
+const resourceUrl = "./record-resources.ts?xlsx-field-aware-import-test";
+const { recordResource } = (await import(resourceUrl)) as typeof import("./record-resources.ts");
+const parseUrl = "./parse.ts?record-xlsx-field-aware-import-test";
+const { parseImportFile } = (await import(parseUrl)) as typeof import("./parse.ts");
+hooks.deregister();
 
 const sections: FormSection[] = [
   {
-    id: 'identity',
-    title: 'Identity',
+    id: "identity",
+    title: "Identity",
     fields: [
-      { id: 'external_id', label: 'External ID', type: 'text', required: true },
+      { id: "external_id", label: "External ID", type: "text", required: true },
       {
-        id: 'category',
-        label: 'Category',
-        type: 'select',
+        id: "category",
+        label: "Category",
+        type: "select",
         required: true,
-        validation: { options: [{ value: '101', label: 'Category 101' }] },
+        validation: { options: [{ value: "101", label: "Category 101" }] },
       },
       {
-        id: 'priority',
-        label: 'Priority',
-        type: 'radio',
+        id: "priority",
+        label: "Priority",
+        type: "radio",
         required: true,
-        validation: { options: [{ value: '202', label: 'Priority 202' }] },
+        validation: { options: [{ value: "202", label: "Priority 202" }] },
       },
-      { id: 'quantity', label: 'Quantity', type: 'number', required: true },
-      { id: 'amount', label: 'Amount', type: 'currency', required: true },
+      { id: "quantity", label: "Quantity", type: "number", required: true },
+      { id: "amount", label: "Amount", type: "currency", required: true },
     ],
   },
-]
+];
 
 async function parsedWorkbookRow(): Promise<Record<string, unknown>> {
-  const workbook = new ExcelJS.Workbook()
-  const sheet = workbook.addWorksheet('Custom records')
-  sheet.addRow(['external_id', 'category', 'priority', 'quantity', 'amount'])
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Custom records");
+  sheet.addRow(["external_id", "category", "priority", "quantity", "amount"]);
   sheet.addRow([
     123456,
     101,
-    { formula: '101+101', result: 202 },
+    { formula: "101+101", result: 202 },
     7.5,
     // Currency arrives as exact decimal text, never a float.
-    '42.25',
-  ])
-  const buffer = await workbook.xlsx.writeBuffer()
-  const parsed = await parseImportFile('xlsx', {
-    base64: Buffer.from(buffer as ArrayBuffer).toString('base64'),
-  })
-  const row = parsed.rows[0]
-  assert.ok(row)
-  return row
+    "42.25",
+  ]);
+  const buffer = await workbook.xlsx.writeBuffer();
+  const parsed = await parseImportFile("xlsx", {
+    base64: Buffer.from(buffer as ArrayBuffer).toString("base64"),
+  });
+  const row = parsed.rows[0];
+  assert.ok(row);
+  return row;
 }
 
-test('custom-record XLSX import coerces schema-owned text and choice fields to display strings', async () => {
-  importState.searchData = null
-  const row = await parsedWorkbookRow()
-  assert.equal(typeof row.external_id, 'number')
-  assert.equal(typeof row.category, 'number')
-  assert.equal(typeof row.priority, 'number')
-  assert.equal(typeof row.quantity, 'number')
-  assert.equal(typeof row.amount, 'string')
-  assert.deepEqual(row[CELL_PROVENANCE_KEY], { priority: 'formula' })
+test("custom-record XLSX import coerces schema-owned text and choice fields to display strings", async () => {
+  importState.searchData = null;
+  const row = await parsedWorkbookRow();
+  assert.equal(typeof row.external_id, "number");
+  assert.equal(typeof row.category, "number");
+  assert.equal(typeof row.priority, "number");
+  assert.equal(typeof row.quantity, "number");
+  assert.equal(typeof row.amount, "string");
+  assert.deepEqual(row[CELL_PROVENANCE_KEY], { priority: "formula" });
 
-  const outcome = await recordResource('org-1', 'inventory-tag', sections, 'Inventory tag').write(
+  const outcome = await recordResource("org-1", "inventory-tag", sections, "Inventory tag").write(
     [row],
-    'insert',
-    { orgId: 'org-1', actorId: 'actor-1', dryRun: true },
-  )
+    "insert",
+    { orgId: "org-1", actorId: "actor-1", dryRun: true },
+  );
 
-  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
-  const searchData = importState.searchData as Record<string, unknown> | null
-  assert.ok(searchData)
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] });
+  const searchData = importState.searchData as Record<string, unknown> | null;
+  assert.ok(searchData);
   assert.deepEqual(searchData, {
-    external_id: '123456',
-    category: '101',
-    priority: '202',
+    external_id: "123456",
+    category: "101",
+    priority: "202",
     quantity: 7.5,
-    amount: '42.25',
-  })
-  assert.equal(typeof searchData.external_id, 'string')
-  assert.equal(typeof searchData.category, 'string')
-  assert.equal(typeof searchData.priority, 'string')
-  assert.equal(typeof searchData.quantity, 'number')
-  assert.equal(typeof searchData.amount, 'string')
-})
+    amount: "42.25",
+  });
+  assert.equal(typeof searchData.external_id, "string");
+  assert.equal(typeof searchData.category, "string");
+  assert.equal(typeof searchData.priority, "string");
+  assert.equal(typeof searchData.quantity, "number");
+  assert.equal(typeof searchData.amount, "string");
+});

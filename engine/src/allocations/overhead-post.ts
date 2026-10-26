@@ -132,8 +132,13 @@ export interface OverheadApplyResult {
 
 export class OverheadPostingPeriodError extends Error {
   readonly status = 409;
-  constructor(readonly workedOn: string, readonly subsidiaryId: string | null) {
-    super(`No accounting period covers overhead for work dated ${workedOn}. Create the accounting period for that date in Close, then approve the time or run the overhead backfill again.`);
+  constructor(
+    readonly workedOn: string,
+    readonly subsidiaryId: string | null,
+  ) {
+    super(
+      `No accounting period covers overhead for work dated ${workedOn}. Create the accounting period for that date in Close, then approve the time or run the overhead backfill again.`,
+    );
     this.name = "OverheadPostingPeriodError";
   }
 }
@@ -199,16 +204,33 @@ async function ensureOverheadKernelRule(
  * tagged, not yet carried, whose project type doesn't opt out (overhead
  * method 'none'), and whose worked day has a published rate participate.
  */
-export async function applyOverheadForTime(orgId: string, actorId: string, timeEntryIds: string[]): Promise<OverheadApplyResult> {
-  const none: OverheadApplyResult = { entryId: null, entryIds: [], total: "0", entries: 0, projects: 0, dust: 0 };
+export async function applyOverheadForTime(
+  orgId: string,
+  actorId: string,
+  timeEntryIds: string[],
+): Promise<OverheadApplyResult> {
+  const none: OverheadApplyResult = {
+    entryId: null,
+    entryIds: [],
+    total: "0",
+    entries: 0,
+    projects: 0,
+    dust: 0,
+  };
   if (timeEntryIds.length === 0) return none;
   // Advisory pre-read: provision the kernel rule outside the posting
   // transaction (its sync owns its transactions) when the policy looks
   // active, so the hot path inside stays a pure read.
   const advisory = await overheadApplicationSettings(orgId);
-  const advisoryRule = advisory.mode === "net_zero_pair"
-    ? await ensureOverheadKernelRule(orgId, actorId, advisory.accountId, await businessToday(orgId))
-    : null;
+  const advisoryRule =
+    advisory.mode === "net_zero_pair"
+      ? await ensureOverheadKernelRule(
+          orgId,
+          actorId,
+          advisory.accountId,
+          await businessToday(orgId),
+        )
+      : null;
   return inDbTransaction(async (tx) => {
     // Lock the policy row through commit so a configuration change cannot
     // reinterpret half of one source claim.
@@ -221,9 +243,15 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     // may stack several rows for one scope (category rows), so the amount is
     // the SUM of every applicable row's term and each entry appears exactly
     // once — the journal stamp below claims each carried entry once.
-    const rows = (await tx.execute<{
-      id: string; project_id: string; worked_on: string; subsidiary_id: string | null; period_id: string | null; amount: string;
-    }>(sql`
+    const rows = await tx.execute<{
+      id: string;
+      project_id: string;
+      worked_on: string;
+      subsidiary_id: string | null;
+      period_id: string | null;
+      amount: string;
+    }>(
+      sql`
       with locked as (
         select te.id, te.org_id, te.project_id, te.worked_on, te.hours, te.department_id,
                coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id) as subsidiary_id
@@ -273,23 +301,28 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
         join overhead_rates r
           on r.rate_kind = 'per_hour'
          and ${overheadRateAppliesToDriver("r", {
-          orgId: sql`entry.org_id`,
-          workedOn: sql`entry.worked_on`,
-          departmentId: sql`entry.department_id`,
-        })}
+           orgId: sql`entry.org_id`,
+           workedOn: sql`entry.worked_on`,
+           departmentId: sql`entry.department_id`,
+         })}
        group by entry.id, entry.project_id, entry.worked_on, entry.subsidiary_id, covering.id
-       order by entry.subsidiary_id nulls first, covering.id nulls first, entry.worked_on, entry.id`, "objects"));
+       order by entry.subsidiary_id nulls first, covering.id nulls first, entry.worked_on, entry.id`,
+      "objects",
+    );
     if (rows.length === 0) return none;
 
-    const groups = new Map<string, {
-      subsidiaryId: string | null;
-      periodId: string;
-      postingDate: string;
-      byProject: Map<string, string>;
-      entriesByProject: Map<string, Array<{ id: string; amount: string }>>;
-      carried: string[];
-      total: string;
-    }>();
+    const groups = new Map<
+      string,
+      {
+        subsidiaryId: string | null;
+        periodId: string;
+        postingDate: string;
+        byProject: Map<string, string>;
+        entriesByProject: Map<string, Array<{ id: string; amount: string }>>;
+        carried: string[];
+        total: string;
+      }
+    >();
     const dust: string[] = [];
     for (const r of rows) {
       const amt = normalizeMoney(String(r.amount));
@@ -336,17 +369,27 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
       // The kernel owns each pair from here. Resolve a rule in force on this
       // group's posting date; the advisory read usually serves it, while a
       // different historical group may need a separate effective version.
-      const postingDate = group.postingDate || await businessToday(orgId);
+      const postingDate = group.postingDate || (await businessToday(orgId));
       let kernelRule = advisoryRule;
-      if (!kernelRule || kernelRule.version.effectiveFrom > postingDate ||
-          (kernelRule.version.effectiveTo != null && kernelRule.version.effectiveTo < postingDate)) {
-        kernelRule = await ensureOverheadKernelRule(orgId, actorId, settings.accountId, postingDate);
+      if (
+        !kernelRule ||
+        kernelRule.version.effectiveFrom > postingDate ||
+        (kernelRule.version.effectiveTo != null && kernelRule.version.effectiveTo < postingDate)
+      ) {
+        kernelRule = await ensureOverheadKernelRule(
+          orgId,
+          actorId,
+          settings.accountId,
+          postingDate,
+        );
       }
       if (!kernelRule) throw new Error("overhead kernel rule is not in force for the posting date");
-      const kernelAccount = kernelRule.version.accountScope.kind === "accounts"
-        ? kernelRule.version.accountScope.accountIds[0] ?? null
-        : null;
-      if (kernelAccount !== settings.accountId) throw new Error("overhead policy changed during posting; retry the approval");
+      const kernelAccount =
+        kernelRule.version.accountScope.kind === "accounts"
+          ? (kernelRule.version.accountScope.accountIds[0] ?? null)
+          : null;
+      if (kernelAccount !== settings.accountId)
+        throw new Error("overhead policy changed during posting; retry the approval");
       const built = buildNetZeroPairLines({
         rule: kernelRule,
         source: { accountId: settings.accountId!, subsidiaryId: group.subsidiaryId },
@@ -383,8 +426,12 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
           contributorRef: leg.line.contributorRef,
         })),
       });
-      if (!entryId) throw new Error("overhead journal group was not posted — no journal was written; retry the approval");
-      const stamped = (await tx.execute<{ id: string }>(sql`
+      if (!entryId)
+        throw new Error(
+          "overhead journal group was not posted — no journal was written; retry the approval",
+        );
+      const stamped = await tx.execute<{ id: string }>(
+        sql`
         update time_entries
            set overhead_journal_entry_id = ${entryId},
                updated_at = now(),
@@ -392,7 +439,9 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
          where org_id = ${orgId}
            and id = any(${`{${group.carried.join(",")}}`}::uuid[])
            and overhead_journal_entry_id is null
-         returning id`, "objects"));
+         returning id`,
+        "objects",
+      );
       if (stamped.length !== group.carried.length) {
         throw new Error("overhead posting source claim changed before journal stamping");
       }
@@ -403,10 +452,13 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
 
       // The offset leg is the deterministic mirror, so lineage belongs only
       // to the project legs. Lines post in order and map one-to-one.
-      const legLineIds = await tx.execute<{ id: string; line_number: number }>(sql`
+      const legLineIds = await tx.execute<{ id: string; line_number: number }>(
+        sql`
         select id, line_number from journal_lines
          where org_id = ${orgId} and entry_id = ${entryId}
-         order by line_number`, "objects");
+         order by line_number`,
+        "objects",
+      );
       for (let index = 0; index < built.length - 1; index += 1) {
         const leg = built[index]!;
         const journalLineId = legLineIds[index]?.id;
@@ -427,7 +479,14 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     // Dust in a mixed batch stamps alongside the carried entries, in the
     // same unit: a crash between the two would strand the backlog again.
     await stampOverheadDust(tx, orgId, actorId, dust);
-    return { entryId: entryIds[0] ?? null, entryIds, total, entries, projects: projects.size, dust: dust.length };
+    return {
+      entryId: entryIds[0] ?? null,
+      entryIds,
+      total,
+      entries,
+      projects: projects.size,
+      dust: dust.length,
+    };
   });
 }
 
@@ -517,24 +576,31 @@ export async function resolveStandardOverheadCardsInTx(
   // (`= null` never matches), so only org-wide rows survive for
   // department-less drivers — the shared kernel's own rule.
   const rows = await executor.execute<{
-      id: string;
-      department_id: string | null;
-      category: string | null;
-      rate_percent: string;
-      effective_from: string;
-      effective_to: string | null;
-    }>(sql`
+    id: string;
+    department_id: string | null;
+    category: string | null;
+    rate_percent: string;
+    effective_from: string;
+    effective_to: string | null;
+  }>(
+    sql`
     select r.id, r.department_id, r.category, r.rate_percent::text as rate_percent,
            r.effective_from::text as effective_from, r.effective_to::text as effective_to
       from overhead_rates r
      where r.rate_kind = ${rateKind}
-       and ${overheadRateAppliesToDriver("r", {
-         orgId: sql`${orgId}`,
-         workedOn: sql`${args.onDate}`,
-         departmentId: sql`${args.departmentId ?? null}`,
-       }, { method: "standard" })}
+       and ${overheadRateAppliesToDriver(
+         "r",
+         {
+           orgId: sql`${orgId}`,
+           workedOn: sql`${args.onDate}`,
+           departmentId: sql`${args.departmentId ?? null}`,
+         },
+         { method: "standard" },
+       )}
      order by case when r.department_id is null then 1 else 0 end,
-              r.effective_from, r.category asc nulls first, r.id asc`, "objects");
+              r.effective_from, r.category asc nulls first, r.id asc`,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     orgId,
@@ -595,8 +661,11 @@ export function calculateStandardOverheadAmounts(
  * workspace's backfill affordance). Counts only entries a backfill could
  * actually carry — a published rate must cover the worked day, and dust
  * stamped applied-with-zero is done (it carries no journal by design). */
-export async function countUnappliedOverheadTime(orgId: string): Promise<{ entries: number; hours: string }> {
-  const r = (await db.execute<{ entries: number; hours: string }>(sql`
+export async function countUnappliedOverheadTime(
+  orgId: string,
+): Promise<{ entries: number; hours: string }> {
+  const r = await db.execute<{ entries: number; hours: string }>(
+    sql`
     select count(*)::int as entries, coalesce(sum(te.hours), 0) as hours
       from time_entries te
       left join projects p on p.id = te.project_id and p.org_id = te.org_id
@@ -627,7 +696,9 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
              order by v.effective_from desc
              limit 1
           ) = 'none'
-       )`, "objects"));
+       )`,
+    "objects",
+  );
   return { entries: Number(r[0]?.entries ?? 0), hours: String(r[0]?.hours ?? "0") };
 }
 
@@ -636,7 +707,10 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
  * the mode being enabled (or arrived via import). Batched so a decade of
  * history doesn't build one giant journal.
  */
-export async function backfillOverhead(orgId: string, actorId: string): Promise<{ entries: number; total: string; journals: number; dust: number }> {
+export async function backfillOverhead(
+  orgId: string,
+  actorId: string,
+): Promise<{ entries: number; total: string; journals: number; dust: number }> {
   let entries = 0;
   let total = "0";
   let journals = 0;
@@ -644,7 +718,8 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
   // Loop until no eligible ids remain (each pass stamps what it carries —
   // journals for carried entries, the applied-with-zero marker for dust).
   for (let guard = 0; guard < 200; guard++) {
-    const ids = (await db.execute<{ id: string }>(sql`
+    const ids = await db.execute<{ id: string }>(
+      sql`
       select te.id
         from time_entries te
         left join projects p on p.id = te.project_id and p.org_id = te.org_id
@@ -677,9 +752,15 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
             ) = 'none'
          )
        order by te.worked_on
-       limit 2000`, "objects"));
+       limit 2000`,
+      "objects",
+    );
     if (ids.length === 0) break;
-    const res = await applyOverheadForTime(orgId, actorId, ids.map((r) => r.id));
+    const res = await applyOverheadForTime(
+      orgId,
+      actorId,
+      ids.map((r) => r.id),
+    );
     // An all-dust batch posts no journal but still stamps progress: only
     // stop when a batch neither carries nor stamps, while unstamped rows
     // remain the loop must continue past zero batches.
@@ -704,13 +785,16 @@ export async function reverseOverheadForTime(
   if (timeEntryIds.length === 0) return;
   await inDbTransaction(async (tx) => {
     const idArr = `{${timeEntryIds.join(",")}}`;
-    const linked = (await tx.execute<{ id: string; overhead_journal_entry_id: string }>(sql`
+    const linked = await tx.execute<{ id: string; overhead_journal_entry_id: string }>(
+      sql`
       select id, overhead_journal_entry_id
         from time_entries
        where org_id = ${orgId}
          and id = any(${idArr}::uuid[])
          and overhead_journal_entry_id is not null
-       order by id`, "objects"));
+       order by id`,
+      "objects",
+    );
     const entryIds = [...new Set(linked.map((row) => row.overhead_journal_entry_id))].sort();
     for (const entryId of entryIds) {
       // The journal is the group serialization point. Lock it before updating
@@ -754,13 +838,24 @@ export async function reverseOverheadForTime(
 
 /** List posted overhead applications (for the workspace history). */
 export async function listOverheadApplications(orgId: string, limit = 24) {
-  const r = (await db.execute<{ id: string; entry_number: string; posting_date: string; memo: string; status: string; applied_total: string; projects: number }>(sql`
+  const r = await db.execute<{
+    id: string;
+    entry_number: string;
+    posting_date: string;
+    memo: string;
+    status: string;
+    applied_total: string;
+    projects: number;
+  }>(
+    sql`
     select e.id, e.entry_number, e.posting_date::text as posting_date, e.memo, e.status,
            (select coalesce(sum(l.amount), 0) from journal_lines l where l.entry_id = e.id and l.org_id = e.org_id and l.project_id is not null) as applied_total,
            (select count(distinct l.project_id) from journal_lines l where l.entry_id = e.id and l.org_id = e.org_id and l.project_id is not null) as projects
       from journal_entries e
      where e.org_id = ${orgId} and e.origin = 'overhead_applied'
      order by e.posting_date desc, e.created_at desc
-     limit ${limit}`, "objects"));
+     limit ${limit}`,
+    "objects",
+  );
   return r;
 }

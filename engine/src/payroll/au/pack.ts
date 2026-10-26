@@ -16,11 +16,13 @@
  * non-standard pay frequencies — see AU_REFUSED_2027. `PayrollCountry` is the
  * registry's own keys, so `country: "AU"` typechecks directly.
  */
-import type {
-  PayrollCountryPack,
-  PayrollRegionCoverage,
-} from "../pack-types.ts";
-import { AU_CERTIFICATES, AU_KNOWN_REGIONS, AU_STATE_NAMES, AU_WITHHOLDING } from "./jurisdictions.ts";
+import type { PayrollCountryPack, PayrollRegionCoverage } from "../pack-types.ts";
+import {
+  AU_CERTIFICATES,
+  AU_KNOWN_REGIONS,
+  AU_STATE_NAMES,
+  AU_WITHHOLDING,
+} from "./jurisdictions.ts";
 import { AU_FACTOR_LABELS, computeAuStatutory } from "./compute-statutory.ts";
 import { applyAuEmployerLevies } from "./employer-levies.ts";
 import { auPackFilings } from "./filings.ts";
@@ -36,8 +38,7 @@ const AU_REGIONS: PayrollRegionCoverage = {
   // region is supported. No state publishes its own tables
   // (regionsWithOwnTables is [] in AU_TAX_YEARS).
   supported: [...AU_KNOWN_REGIONS],
-  unsupportedReason:
-    "PAYG withholding for {region} is not implemented by the AU payroll pack",
+  unsupportedReason: "PAYG withholding for {region} is not implemented by the AU payroll pack",
 };
 
 export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "AU" } = {
@@ -55,7 +56,8 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
     example: "123456782",
     requiredForPayroll: false,
     neededFor: null,
-    citation: "ATO: a TFN is 'a unique number (usually 9 digits)'; 'It is not an offence not to quote your TFN'",
+    citation:
+      "ATO: a TFN is 'a unique number (usually 9 digits)'; 'It is not an offence not to quote your TFN'",
     numericEntry: true,
   },
   installable: true,
@@ -118,7 +120,15 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
         // layer hands the engine income net of tagged lines
         // (`reducedBases.income`), so the line is re-derived by the
         // protection fixpoint like every income tax.
-        { code: "PAYG", name: "PAYG withholding", systemKey: "payg_withholding", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "PAYG",
+          name: "PAYG withholding",
+          systemKey: "payg_withholding",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -128,7 +138,15 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
         // earnings (12% from 1 July 2025). Paid to the employee's super
         // fund, never to the ATO — hence `external`, with the fund as the
         // per-component destination.
-        { code: "SG", name: "Superannuation guarantee", systemKey: "super_guarantee", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "SG",
+          name: "Superannuation guarantee",
+          systemKey: "super_guarantee",
+          kind: "employer_contribution",
+          sequence: 210,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -139,7 +157,15 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
         // AU_PACK_RATES), remitted to the state insurer. Consumed by
         // applyAuEmployerLevies (./employer-levies.ts), which prices the
         // stub's gross at the resolving regional fraction.
-        { code: "WCB", name: "Workers' compensation", systemKey: "wcb", kind: "employer_contribution", sequence: 260, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "WCB",
+          name: "Workers' compensation",
+          systemKey: "wcb",
+          kind: "employer_contribution",
+          sequence: 260,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
   ],

@@ -2,11 +2,7 @@ import { assertOwnedLocation } from "./stock-eligibility.ts";
 import { sql } from "drizzle-orm";
 import { add, cmp, neg } from "../money/money.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import {
-  InventoryError,
-  InventoryNotFoundError,
-  InventoryOwnershipError,
-} from "./contracts.ts";
+import { InventoryError, InventoryNotFoundError, InventoryOwnershipError } from "./contracts.ts";
 import type { Runner } from "./contracts.ts";
 import { assertStockLocationAdmitsSubsidiary } from "./profile-policy.ts";
 import type { SubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -23,8 +19,7 @@ import { periodForDate, persistReceiptMoney } from "./position.ts";
  * bare Error or a storage failure.
  */
 
-export type StockCountStatus =
-  "draft" | "counting" | "review" | "posted" | "cancelled";
+export type StockCountStatus = "draft" | "counting" | "review" | "posted" | "cancelled";
 
 const COUNT_TRANSITIONS: Record<StockCountStatus, StockCountStatus[]> = {
   draft: ["counting", "cancelled"],
@@ -39,8 +34,7 @@ const TRANSITION_REMEDY: Record<string, string> = {
     "start the count first (draft → counting), record every line, then submit for review",
   "draft:posted":
     "start the count first (draft → counting), record every line, submit for review, then post",
-  "counting:posted":
-    "submit the count for review first (counting → review), then post",
+  "counting:posted": "submit the count for review first (counting → review), then post",
   "counting:counting": "the count is already open for counting",
   "review:review": "the count is already awaiting review",
   "posted:posted":
@@ -60,10 +54,7 @@ const TRANSITION_REMEDY: Record<string, string> = {
  * not reachable from `from`. Pure so the unit partition can prove every
  * refusal fires without a database.
  */
-export function assertCountTransition(
-  from: StockCountStatus,
-  to: StockCountStatus,
-): void {
+export function assertCountTransition(from: StockCountStatus, to: StockCountStatus): void {
   if (from === to && (to === "posted" || to === "cancelled")) {
     // Posting twice / cancelling twice are the refusals operators hit most;
     // name them directly rather than falling through to the generic message.
@@ -77,11 +68,8 @@ export function assertCountTransition(
     );
   }
   if (COUNT_TRANSITIONS[from].includes(to)) return;
-  const remedy =
-    TRANSITION_REMEDY[`${from}:${to}`] ?? `move the count from ${from} first`;
-  throw new InventoryError(
-    `cannot move stock count from ${from} to ${to} — ${remedy}`,
-  );
+  const remedy = TRANSITION_REMEDY[`${from}:${to}`] ?? `move the count from ${from} first`;
+  throw new InventoryError(`cannot move stock count from ${from} to ${to} — ${remedy}`);
 }
 
 export function parseCountStatus(value: unknown): StockCountStatus {
@@ -121,10 +109,7 @@ export function assertCountedNonNegative(counted: string): void {
 }
 
 /** Variance is counted − expected, in exact decimal arithmetic (never floats). */
-export function countVariance(
-  countedQuantity: string,
-  expectedQuantity: string,
-): string {
+export function countVariance(countedQuantity: string, expectedQuantity: string): string {
   const counted = parseCountQuantity(countedQuantity, "counted quantity");
   assertCountedNonNegative(counted);
   const expected = parseCountQuantity(expectedQuantity, "expected quantity");
@@ -170,11 +155,16 @@ export async function assertCountWarehouses(
 ): Promise<void> {
   for (const stockLocationId of [...new Set(stockLocationIds)].sort()) {
     await assertOwnedLocation(tx, orgId, stockLocationId);
-    const row = (await tx.execute<{ code: string | null; is_active: boolean }>(sql`
+    const row = (
+      await tx.execute<{ code: string | null; is_active: boolean }>(
+        sql`
       select code, is_active
         from stock_locations
        where org_id = ${orgId} and id = ${stockLocationId}
-       for share`, "objects"))[0];
+       for share`,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new InventoryError(
         "count line stock location not found in this organization — choose an active stock location",
@@ -241,8 +231,11 @@ export async function loadCountHeader(
     counted_on: string;
     memo: string | null;
     blind: boolean;
-  }>(sql`select id, status, location_id, subsidiary_id, counted_on::text, memo, blind
-            from stock_counts where org_id = ${orgId} and id = ${countId}${lock}`, "objects");
+  }>(
+    sql`select id, status, location_id, subsidiary_id, counted_on::text, memo, blind
+            from stock_counts where org_id = ${orgId} and id = ${countId}${lock}`,
+    "objects",
+  );
   const row = r[0];
   if (!row) {
     // Under RLS an absent result is either a wrong id or another org's row;
@@ -274,11 +267,14 @@ export async function loadCountLines(
     expected_quantity: string;
     counted_quantity: string | null;
     adjustment_movement_id: string | null;
-  }>(sql`select id, item_id, stock_location_id, lot_id, serial_id,
+  }>(
+    sql`select id, item_id, stock_location_id, lot_id, serial_id,
                 expected_quantity::text, counted_quantity::text, adjustment_movement_id
            from stock_count_lines
           where org_id = ${orgId} and stock_count_id = ${countId}
-          order by item_id, stock_location_id, lot_id nulls first, id`, "objects");
+          order by item_id, stock_location_id, lot_id nulls first, id`,
+    "objects",
+  );
   return r.map((row) => ({
     id: row.id,
     itemId: row.item_id,
@@ -300,10 +296,13 @@ export async function transitionCount(
   to: StockCountStatus,
 ): Promise<void> {
   assertCountTransition(count.status, to);
-  const updated = await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(
+    sql`
     update stock_counts set status = ${to}, updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${count.id} and status = ${count.status}
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (updated.length === 0) {
     throw new InventoryError(
       `stock count ${count.id} changed while this action was in flight — reload the count and try again`,
@@ -318,16 +317,19 @@ export async function requireAllLinesCounted(
 ): Promise<CountLine[]> {
   const lines = await loadCountLines(runner, orgId, countId);
   if (lines.length === 0) {
-    throw new InventoryError(
-      "a stock count needs at least one line — add the items to count",
-    );
+    throw new InventoryError("a stock count needs at least one line — add the items to count");
   }
   const missing = lines.filter((l) => l.countedQuantity === null);
   if (missing.length > 0) {
     const first = missing[0]!;
-    const detail = (await runner.execute<{ code: string | null; loc: string | null }>(sql`
+    const detail = (
+      await runner.execute<{ code: string | null; loc: string | null }>(
+        sql`
       select (select code from items where org_id = ${orgId} and id = ${first.itemId}) as code,
-             (select code from stock_locations where org_id = ${orgId} and id = ${first.stockLocationId}) as loc`, "objects"))[0];
+             (select code from stock_locations where org_id = ${orgId} and id = ${first.stockLocationId}) as loc`,
+        "objects",
+      )
+    )[0];
     const where = `item ${detail?.code ?? first.itemId} at ${detail?.loc ?? first.stockLocationId}`;
     throw new InventoryError(
       missing.length === 1

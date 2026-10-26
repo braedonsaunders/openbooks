@@ -1,7 +1,7 @@
-import Link from 'next/link'
-import { ScanLine } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { NewDocumentButton } from '../../../components/new-document-button'
+import Link from "next/link";
+import { ScanLine } from "lucide-react";
+import { Button } from "@openbooks/ui";
+import { NewDocumentButton } from "../../../components/new-document-button";
 
 /**
  * The AP header's action pair.
@@ -23,12 +23,12 @@ export function ApHeaderActions({
   newBasePath,
   newTriggerLabel,
 }: {
-  captureHref: string
-  captureLabel: string
-  canCreate: boolean
-  newItems: { kind: string; label: string; href?: string }[]
-  newBasePath: string
-  newTriggerLabel: string
+  captureHref: string;
+  captureLabel: string;
+  canCreate: boolean;
+  newItems: { kind: string; label: string; href?: string }[];
+  newBasePath: string;
+  newTriggerLabel: string;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -39,12 +39,8 @@ export function ApHeaderActions({
         </Link>
       </Button>
       {canCreate ? (
-        <NewDocumentButton
-          items={newItems}
-          basePath={newBasePath}
-          triggerLabel={newTriggerLabel}
-        />
+        <NewDocumentButton items={newItems} basePath={newBasePath} triggerLabel={newTriggerLabel} />
       ) : undefined}
     </div>
-  )
+  );
 }

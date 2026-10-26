@@ -1,14 +1,14 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { executeIdempotentInventoryAction } from '@openbooks/engine/inventory/action-idempotency'
-import { putAwayStagedStock } from '@openbooks/engine/inventory/putaway'
-import { getWarehouse } from '@openbooks/engine/inventory/warehouses'
-import { exactMoney, isoDate, uuidId } from '@/lib/api/json'
-import { notFound } from '@/lib/api/responses'
-import { defineRoute } from '@/lib/api/route'
-import { guardSubsidiaryScope } from '@/lib/authz'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@openbooks/engine/platform/db";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { executeIdempotentInventoryAction } from "@openbooks/engine/inventory/action-idempotency";
+import { putAwayStagedStock } from "@openbooks/engine/inventory/putaway";
+import { getWarehouse } from "@openbooks/engine/inventory/warehouses";
+import { exactMoney, isoDate, uuidId } from "@/lib/api/json";
+import { notFound } from "@/lib/api/responses";
+import { defineRoute } from "@/lib/api/route";
+import { guardSubsidiaryScope } from "@/lib/authz";
 
 /**
  * Directed putaway: move staged stock of one legal entity to the location the
@@ -18,8 +18,8 @@ import { guardSubsidiaryScope } from '@/lib/authz'
  * instead of moving the stock twice.
  */
 export const POST = defineRoute({
-  permission: 'items.post',
-  feature: 'warehousing',
+  permission: "items.post",
+  feature: "warehousing",
   params: z.object({ id: uuidId }),
   body: z.object({
     stagingLocationId: uuidId,
@@ -32,11 +32,11 @@ export const POST = defineRoute({
     date: isoDate().optional(),
   }),
   handler: async ({ authz, params: { id }, body }) => {
-    const orgId = authz.user.orgId
-    const denied = guardSubsidiaryScope(authz, body.subsidiaryId)
-    if (denied) return denied
-    if (!(await getWarehouse(db, orgId, id))) return notFound('warehouse', id)
-    const date = body.date ?? await businessToday(orgId)
+    const orgId = authz.user.orgId;
+    const denied = guardSubsidiaryScope(authz, body.subsidiaryId);
+    if (denied) return denied;
+    if (!(await getWarehouse(db, orgId, id))) return notFound("warehouse", id);
+    const date = body.date ?? (await businessToday(orgId));
     const request = {
       warehouseId: id,
       stagingLocationId: body.stagingLocationId,
@@ -44,13 +44,13 @@ export const POST = defineRoute({
       subsidiaryId: body.subsidiaryId,
       quantity: body.quantity,
       date,
-    }
+    };
     const outcome = await executeIdempotentInventoryAction(orgId, authz.user.id, {
-      operation: 'warehouse.putaway',
+      operation: "warehouse.putaway",
       idempotencyKey: body.idempotencyKey,
       request,
       execute: () => db.transaction((tx) => putAwayStagedStock(tx, orgId, authz.user.id, request)),
-    })
-    return NextResponse.json({ ...outcome.value, replayed: outcome.replayed })
+    });
+    return NextResponse.json({ ...outcome.value, replayed: outcome.replayed });
   },
-})
+});

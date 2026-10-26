@@ -1,4 +1,4 @@
-import { resolveEngineSpecifier } from '../../../../testing/engine-resolve-hooks.ts'
+import { resolveEngineSpecifier } from "../../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -18,8 +18,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.close-posting-periods-route-test')]
@@ -32,10 +31,9 @@ const mockAuthz = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      (specifier === "../../../../lib/feature-gates"
-        && context.parentURL?.includes("close/posting-periods")) ||
-      (specifier === "@/lib/feature-gates"
-        && context.parentURL?.includes("/lib/api/route"))
+      (specifier === "../../../../lib/feature-gates" &&
+        context.parentURL?.includes("close/posting-periods")) ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -54,7 +52,8 @@ registerHooks({
     if (url === "mock:next-intl-server") {
       return {
         format: "module",
-        source: "export async function getLocale() { return 'en' }\nexport async function getTranslations() { return (key) => key }",
+        source:
+          "export async function getLocale() { return 'en' }\nexport async function getTranslations() { return (key) => key }",
         shortCircuit: true,
       };
     }
@@ -68,8 +67,11 @@ const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
 
-
-function authorize(orgId: string, actorId: string, allowedSubsidiaryIds: Set<string> | null = null): void {
+function authorize(
+  orgId: string,
+  actorId: string,
+  allowedSubsidiaryIds: Set<string> | null = null,
+): void {
   routeState.authz = {
     user: { orgId, id: actorId },
     allowedSubsidiaryIds,
@@ -94,7 +96,12 @@ test("posting-periods route previews then commits idempotently", async () => {
     );
     assert.equal(previewRes.status, 200);
     const preview = (await previewRes.json()) as {
-      rows: { documentId: string; periodId: string | null; periodName: string | null; blocked: boolean }[];
+      rows: {
+        documentId: string;
+        periodId: string | null;
+        periodName: string | null;
+        blocked: boolean;
+      }[];
     };
     assert.equal(preview.rows.length, 1);
     assert.equal(preview.rows[0]?.documentId, doc);
@@ -138,10 +145,15 @@ test("posting-periods route scopes preview and commit to the caller's subsidiari
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    const second = (await db.execute<{ id: string }>(sql`
+    const second = (
+      await db.execute<{ id: string }>(
+        sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-          from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, "objects"))[0]!.id;
+          from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`,
+        "objects",
+      )
+    )[0]!.id;
     const seed = async (subsidiaryId: string | null): Promise<string> => {
       const id = randomUUID();
       await db.execute(sql`
@@ -162,7 +174,10 @@ test("posting-periods route scopes preview and commit to the caller's subsidiari
     );
     assert.equal(previewRes.status, 200);
     const preview = (await previewRes.json()) as { rows: { documentId: string }[] };
-    assert.deepEqual(preview.rows.map((row) => row.documentId), [visible]);
+    assert.deepEqual(
+      preview.rows.map((row) => row.documentId),
+      [visible],
+    );
 
     const commitRes = await POST(
       new Request("http://openbooks.test/api/close/posting-periods", {
@@ -173,9 +188,15 @@ test("posting-periods route scopes preview and commit to the caller's subsidiari
     );
     assert.equal(commitRes.status, 200);
     const committed = (await commitRes.json()) as { assigned: { documentId: string }[] };
-    assert.deepEqual(committed.assigned.map((row) => row.documentId), [visible]);
-    const stored = await db.execute<{ id: string; posting_period_id: string | null }>(sql`
-      select id, posting_period_id from documents where org_id = ${org.orgId} and id in (${visible}, ${hidden}, ${unattributed})`, "objects");
+    assert.deepEqual(
+      committed.assigned.map((row) => row.documentId),
+      [visible],
+    );
+    const stored = await db.execute<{ id: string; posting_period_id: string | null }>(
+      sql`
+      select id, posting_period_id from documents where org_id = ${org.orgId} and id in (${visible}, ${hidden}, ${unattributed})`,
+      "objects",
+    );
     assert.equal(stored.find((row) => row.id === visible)?.posting_period_id, org.periodId);
     assert.equal(stored.find((row) => row.id === hidden)?.posting_period_id, null);
     assert.equal(stored.find((row) => row.id === unattributed)?.posting_period_id, null);

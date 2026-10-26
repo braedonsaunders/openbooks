@@ -43,7 +43,10 @@ export const assetCapitalizationRules = pgTable(
     uniqueIndex("asset_capitalization_rules_org_id_id_unique").on(t.orgId, t.id),
     index("asset_capitalization_rules_org_window").on(t.orgId, t.effectiveFrom),
     check("asset_capitalization_rules_minimum", sql`${t.minimumAmount} >= 0`),
-    check("asset_capitalization_rules_window", sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check(
+      "asset_capitalization_rules_window",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
   ],
 );
 
@@ -54,10 +57,14 @@ export const assetProposalAcceptances = pgTable(
     id: id(),
     orgId: orgRef(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
-    operation: text("operation", { enum: ["asset", "split", "merge", "component", "cip"] }).notNull(),
+    operation: text("operation", {
+      enum: ["asset", "split", "merge", "component", "cip"],
+    }).notNull(),
     acceptedOn: date("accepted_on").notNull(),
     reclassEntryId: uuid("reclass_entry_id"),
-    status: text("status", { enum: ["posted", "reversed"] }).notNull().default("posted"),
+    status: text("status", { enum: ["posted", "reversed"] })
+      .notNull()
+      .default("posted"),
     reason: text("reason"),
     idempotencyKey: text("idempotency_key").notNull(),
     requestHash: text("request_hash").notNull(),
@@ -81,7 +88,9 @@ export const assetProposals = pgTable(
     id: id(),
     orgId: orgRef(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
-    origin: text("origin", { enum: ["rule", "manual"] }).notNull().default("rule"),
+    origin: text("origin", { enum: ["rule", "manual"] })
+      .notNull()
+      .default("rule"),
     ruleId: uuid("rule_id"),
     sourceEntryId: uuid("source_entry_id").notNull(),
     sourceLineId: uuid("source_line_id").notNull(),
@@ -99,7 +108,9 @@ export const assetProposals = pgTable(
     currency: text("currency").notNull(),
     postingDate: date("posting_date").notNull(),
     suggestedCategoryId: uuid("suggested_category_id"),
-    status: text("status", { enum: ["pending", "accepted", "rejected", "voided"] }).notNull().default("pending"),
+    status: text("status", { enum: ["pending", "accepted", "rejected", "voided"] })
+      .notNull()
+      .default("pending"),
     acceptanceId: uuid("acceptance_id"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     resolvedBy: uuid("resolved_by"),
@@ -154,7 +165,9 @@ export const assetCipCosts = pgTable(
     amount: money("amount").notNull(),
     postingDate: date("posting_date").notNull(),
     memo: text("memo"),
-    status: text("status", { enum: ["linked", "unlinked"] }).notNull().default("linked"),
+    status: text("status", { enum: ["linked", "unlinked"] })
+      .notNull()
+      .default("linked"),
     linkedAt: timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),
     linkedBy: uuid("linked_by").notNull(),
     unlinkedAt: timestamp("unlinked_at", { withTimezone: true }),
@@ -163,7 +176,9 @@ export const assetCipCosts = pgTable(
   },
   (t) => [
     uniqueIndex("asset_cip_costs_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("asset_cip_costs_live_source_line").on(t.orgId, t.sourceLineId).where(sql`${t.status} = 'linked'`),
+    uniqueIndex("asset_cip_costs_live_source_line")
+      .on(t.orgId, t.sourceLineId)
+      .where(sql`${t.status} = 'linked'`),
     index("asset_cip_costs_cip").on(t.orgId, t.cipAssetId, t.status),
     check("asset_cip_costs_amount", sql`${t.amount} <> 0`),
   ],
@@ -184,7 +199,9 @@ export const assetCipCapitalizations = pgTable(
     reason: text("reason").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     requestHash: text("request_hash").notNull(),
-    status: text("status", { enum: ["posted", "reversed"] }).notNull().default("posted"),
+    status: text("status", { enum: ["posted", "reversed"] })
+      .notNull()
+      .default("posted"),
     reversalEntryId: uuid("reversal_entry_id"),
     reversedAt: timestamp("reversed_at", { withTimezone: true }),
     reversedBy: uuid("reversed_by"),
@@ -217,7 +234,11 @@ export const assetCipCapitalizationLines = pgTable(
   },
   (t) => [
     uniqueIndex("asset_cip_capitalization_lines_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("asset_cip_capitalization_lines_number").on(t.orgId, t.capitalizationId, t.lineNumber),
+    uniqueIndex("asset_cip_capitalization_lines_number").on(
+      t.orgId,
+      t.capitalizationId,
+      t.lineNumber,
+    ),
     check("asset_cip_capitalization_lines_amount", sql`${t.amount} > 0`),
   ],
 );

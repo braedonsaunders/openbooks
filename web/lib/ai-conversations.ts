@@ -35,13 +35,16 @@ export async function listConversations(
   scope: string,
   limit?: number,
 ): Promise<AiConversationSummary[]> {
-  const r = (await db.execute<AiConversationSummary>(sql`
+  const r = await db.execute<AiConversationSummary>(
+    sql`
     select id, title, updated_at as "updatedAt"
       from ai_conversations
      where org_id = ${authz.user.orgId} and user_id = ${authz.user.id} and scope = ${scope}
      order by updated_at desc, id desc
      ${limit === undefined ? sql`` : sql`limit ${limit}`}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r;
 }
 
@@ -51,11 +54,14 @@ export async function ownsConversation(
   conversationId: string,
   scope: string,
 ): Promise<boolean> {
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     select 1 from ai_conversations
      where id = ${conversationId} and org_id = ${authz.user.orgId}
        and user_id = ${authz.user.id} and scope = ${scope}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.length > 0;
 }
 
@@ -65,12 +71,15 @@ export async function createConversation(
   title: string,
 ): Promise<string> {
   const clean = title.trim().slice(0, AI_CONVERSATION_TITLE_MAX_CHARS) || "New chat";
-  const r = (await db.execute<{ id: string }>(sql`
+  const r = await db.execute<{ id: string }>(
+    sql`
     insert into ai_conversations (org_id, user_id, scope, title, created_by, updated_by)
     values (${authz.user.orgId}, ${authz.user.id}, ${scope}, ${clean},
             ${authz.user.id}, ${authz.user.id})
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]!.id;
 }
 
@@ -85,11 +94,14 @@ export async function appendMessage(
   },
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const owned = (await tx.execute(sql`
+    const owned = await tx.execute(
+      sql`
       select 1 from ai_conversations
        where id = ${args.conversationId} and org_id = ${authz.user.orgId}
          and user_id = ${authz.user.id}
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (owned.length === 0) throw new Error("conversation not owned");
     await tx.execute(sql`
       insert into ai_messages (org_id, conversation_id, role, content, data, created_by, updated_by)
@@ -117,16 +129,20 @@ export async function olderMessages(
   const safeLimit = Math.min(Math.max(Math.floor(limit) || AI_MESSAGE_PAGE, 1), AI_MESSAGE_PAGE);
   // Anchor the keyset on the cursor's own (created_at, id): a cursor from
   // another thread — or a stranger's guess — anchors nothing.
-  const anchor = await db.execute<{ created_at: string; id: string }>(sql`
+  const anchor = await db.execute<{ created_at: string; id: string }>(
+    sql`
     select m.created_at, m.id
       from ai_messages m
       join ai_conversations c on c.id = m.conversation_id
      where m.id = ${beforeId} and m.conversation_id = ${conversationId}
        and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
-  `, "objects");
+  `,
+    "objects",
+  );
   if (anchor.length === 0) return empty;
   const { created_at, id } = anchor[0]!;
-  const r = await db.execute<AiStoredMessage>(sql`
+  const r = await db.execute<AiStoredMessage>(
+    sql`
     select m.id, m.role, m.content, m.data, m.created_at as "createdAt"
       from ai_messages m
       join ai_conversations c on c.id = m.conversation_id
@@ -135,7 +151,9 @@ export async function olderMessages(
        and (m.created_at, m.id) < (${created_at}::timestamptz, ${id}::uuid)
      order by m.created_at desc, m.id desc
      limit ${safeLimit + 1}
-  `, "objects");
+  `,
+    "objects",
+  );
   return {
     messages: r.slice(0, safeLimit).reverse(),
     hasOlder: r.length > safeLimit,
@@ -148,7 +166,8 @@ export async function recentMessages(
   conversationId: string,
   limit = AI_MESSAGE_WINDOW,
 ): Promise<AiStoredMessage[]> {
-  const r = (await db.execute<AiStoredMessage>(sql`
+  const r = await db.execute<AiStoredMessage>(
+    sql`
     select m.id, m.role, m.content, m.data, m.created_at as "createdAt"
       from ai_messages m
       join ai_conversations c on c.id = m.conversation_id
@@ -156,7 +175,9 @@ export async function recentMessages(
        and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
      order by m.created_at desc, m.id desc
      limit ${limit}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.reverse();
 }
 
@@ -168,12 +189,15 @@ export async function renameConversation(
 ): Promise<boolean> {
   const clean = title.trim().slice(0, AI_CONVERSATION_TITLE_MAX_CHARS);
   if (!clean) return false;
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     update ai_conversations set title = ${clean}, updated_by = ${authz.user.id}
      where id = ${conversationId} and org_id = ${authz.user.orgId}
        and user_id = ${authz.user.id} and scope = ${scope}
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.length > 0;
 }
 
@@ -183,11 +207,14 @@ export async function deleteConversation(
   scope: string,
 ): Promise<boolean> {
   // ai_messages cascade via FK.
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     delete from ai_conversations
      where id = ${conversationId} and org_id = ${authz.user.orgId}
        and user_id = ${authz.user.id} and scope = ${scope}
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.length > 0;
 }

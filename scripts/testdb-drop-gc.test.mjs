@@ -32,9 +32,15 @@ async function harness({ existing = [], stamps = {} } = {}) {
   const bin = join(root, "bin");
   const log = join(root, "psql.log");
   await mkdir(bin);
-  await writeExecutable(join(bin, "docker"), `#!/bin/sh\ncase "$1" in info) exit 0 ;; inspect) printf 'true\\n' ;; *) exit 0 ;; esac\n`);
+  await writeExecutable(
+    join(bin, "docker"),
+    `#!/bin/sh\ncase "$1" in info) exit 0 ;; inspect) printf 'true\\n' ;; *) exit 0 ;; esac\n`,
+  );
   const stampLines = Object.entries(stamps)
-    .map(([db, { stamp, old }]) => `  *"-d ${db} "*"copied_at at time zone"*) printf '%s\\n' '${stamp}' ;;\n  *"-d ${db} "*"copied_at < now()"*) printf '%s\\n' '${old ? "true" : "false"}' ;;`)
+    .map(
+      ([db, { stamp, old }]) =>
+        `  *"-d ${db} "*"copied_at at time zone"*) printf '%s\\n' '${stamp}' ;;\n  *"-d ${db} "*"copied_at < now()"*) printf '%s\\n' '${old ? "true" : "false"}' ;;`,
+    )
     .join("\n");
   await writeExecutable(
     join(bin, "psql"),
@@ -62,7 +68,8 @@ esac
       return { code: error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? "" };
     }
   };
-  const statements = async () => (await readFile(log, "utf8").catch(() => "")).split("\n").filter(Boolean);
+  const statements = async () =>
+    (await readFile(log, "utf8").catch(() => "")).split("\n").filter(Boolean);
   const drops = async () => (await statements()).filter((line) => /drop database/i.test(line));
   return { run, statements, drops, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
@@ -72,16 +79,27 @@ test("drop resolves the caller's name exactly as new does, and a miss is an erro
   t.after(h.cleanup);
   const miss = await h.run("drop", "missing_db");
   assert.equal(miss.code, 1);
-  assert.match(miss.stderr, /ob_missing_db does not exist — nothing dropped \(asked for 'missing_db'\)/);
+  assert.match(
+    miss.stderr,
+    /ob_missing_db does not exist — nothing dropped \(asked for 'missing_db'\)/,
+  );
   assert.deepEqual(await h.drops(), [], "a miss issues no DROP");
   assert.doesNotMatch(miss.stderr, /dropped ob_/, "a miss never prints a drop");
 
   const hit = await h.run("drop", "alpha");
-  assert.equal(hit.code, 1, "the fake catalogue still lists ob_alpha after the drop, so the claim is refused");
+  assert.equal(
+    hit.code,
+    1,
+    "the fake catalogue still lists ob_alpha after the drop, so the claim is refused",
+  );
   assert.match(hit.stderr, /still exists after drop/);
   const issued = await h.drops();
   assert.equal(issued.length, 1);
-  assert.match(issued[0], /drop database ob_alpha with \(force\)/, "the prefixed name, not the raw argument");
+  assert.match(
+    issued[0],
+    /drop database ob_alpha with \(force\)/,
+    "the prefixed name, not the raw argument",
+  );
   assert.doesNotMatch(issued[0], /if exists/, "no IF EXISTS: a miss must be visible");
 });
 
@@ -93,7 +111,11 @@ test("drop accepts the ob_-prefixed form without doubling it and refuses non-tes
   assert.match(dry.stderr, /would drop ob_beta \(dry run; nothing dropped\)/);
   assert.deepEqual(await h.drops(), [], "dry run issues no DROP");
   const template = await h.run("drop", "openbooks_template");
-  assert.equal(template.code, 1, "the template can never be the target: names always resolve to ob_<name>");
+  assert.equal(
+    template.code,
+    1,
+    "the template can never be the target: names always resolve to ob_<name>",
+  );
   assert.match(template.stderr, /ob_openbooks_template does not exist/);
   assert.deepEqual(await h.drops(), []);
 });
@@ -110,7 +132,10 @@ test("gc ages from the copy stamp, protects unstamped copies, and its dry run dr
   t.after(h.cleanup);
   const dry = await h.run("gc", "--dry-run");
   assert.equal(dry.code, 0);
-  assert.match(dry.stderr, /would drop 1 database\(s\): ob_old \(1 recent kept, 1 unstamped skipped\); nothing dropped/);
+  assert.match(
+    dry.stderr,
+    /would drop 1 database\(s\): ob_old \(1 recent kept, 1 unstamped skipped\); nothing dropped/,
+  );
   assert.match(dry.stderr, /ob_nostamp — no copy stamp \(age unknown\); skipped/);
   assert.deepEqual(await h.drops(), [], "dry run issues no DROP");
   const plan = (await h.statements()).join("\n");

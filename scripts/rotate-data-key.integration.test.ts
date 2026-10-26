@@ -60,32 +60,45 @@ test("rotateOrgSettings re-seals AI keys under the active key", () => {
   useRing("k2");
   const { settings, changed } = rotateOrgSettings("org-1", { ai: { keyEncrypted: stale } }, "k2");
   assert.equal(changed, true);
-  assert.deepEqual(describeSealedBlob((settings.ai as { keyEncrypted: string }).keyEncrypted), { version: "v2", keyId: "k2" });
+  assert.deepEqual(describeSealedBlob((settings.ai as { keyEncrypted: string }).keyEncrypted), {
+    version: "v2",
+    keyId: "k2",
+  });
   useSingleKey(K1_HEX);
 });
 
-test("dry run probes every row and --apply re-seals under the active key", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    useSingleKey(K1_HEX);
-    const stale = sealSecret("conn-secret", { orgId: org.orgId, purpose: "connection.secrets" });
-    await db.execute(sql`
+test(
+  "dry run probes every row and --apply re-seals under the active key",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      useSingleKey(K1_HEX);
+      const stale = sealSecret("conn-secret", { orgId: org.orgId, purpose: "connection.secrets" });
+      await db.execute(sql`
       insert into connections (org_id, source, display_name, status, auth_kind, secrets)
       values (${org.orgId}, 'qbd', 'rotation probe', 'active', 'token', ${stale})`);
-    useRing("k2");
-    const probe = await rotateDataKey({ apply: false, org: org.orgId });
-    const connections = probe.find((r) => r.table === "connections")!;
-    assert.equal(connections.resealed, 1, "dry run must report the stale blob");
-    const stillStale = await db.execute<{ secrets: string }>(sql`
-      select secrets from connections where org_id = ${org.orgId}`, "objects");
-    assert.equal(stillStale[0]!.secrets, stale, "dry run writes nothing");
-    const applied = await rotateDataKey({ apply: true, org: org.orgId });
-    assert.equal(applied.find((r) => r.table === "connections")!.resealed, 1);
-    const after = await db.execute<{ secrets: string }>(sql`
-      select secrets from connections where org_id = ${org.orgId}`, "objects");
-    assert.deepEqual(describeSealedBlob(after[0]!.secrets), { version: "v2", keyId: "k2" });
-  } finally {
-    useSingleKey(K1_HEX);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      useRing("k2");
+      const probe = await rotateDataKey({ apply: false, org: org.orgId });
+      const connections = probe.find((r) => r.table === "connections")!;
+      assert.equal(connections.resealed, 1, "dry run must report the stale blob");
+      const stillStale = await db.execute<{ secrets: string }>(
+        sql`
+      select secrets from connections where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(stillStale[0]!.secrets, stale, "dry run writes nothing");
+      const applied = await rotateDataKey({ apply: true, org: org.orgId });
+      assert.equal(applied.find((r) => r.table === "connections")!.resealed, 1);
+      const after = await db.execute<{ secrets: string }>(
+        sql`
+      select secrets from connections where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.deepEqual(describeSealedBlob(after[0]!.secrets), { version: "v2", keyId: "k2" });
+    } finally {
+      useSingleKey(K1_HEX);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

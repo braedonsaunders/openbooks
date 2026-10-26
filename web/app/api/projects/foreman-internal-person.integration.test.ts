@@ -52,9 +52,8 @@ const postRouteUrl = "./route.ts?projects-foreman-integration";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors, seedActiveEmployment } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors, seedActiveEmployment } =
+  await import("@openbooks/engine/testing/fixtures");
 
 function postRequest(key: string, body: unknown): Request {
   return new Request("http://localhost/api/projects", {
@@ -96,12 +95,20 @@ test("projects POST accepts a non-employee internal person as foreman", async ()
   try {
     const { adminId } = await seedFlowActors(org.orgId);
     await enableProjects(org.orgId);
-    routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      allowedSubsidiaryIds: null,
+    };
 
     const partner = await seedParty(org.orgId, "person", "Dana Partner", org.subsidiaryId);
-    const created = await POST(postRequest(randomUUID(), { name: "Studio Loft", foremanId: partner }));
+    const created = await POST(
+      postRequest(randomUUID(), { name: "Studio Loft", foremanId: partner }),
+    );
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
-    const payload = (await created.json()) as { project: { foreman_id: string }; foremanName: string | null };
+    const payload = (await created.json()) as {
+      project: { foreman_id: string };
+      foremanName: string | null;
+    };
     assert.equal(payload.project.foreman_id, partner);
     assert.equal(payload.foremanName, "Dana Partner");
   } finally {
@@ -115,16 +122,27 @@ test("projects POST accepts an employed employee and refuses customers, vendors,
   try {
     const { adminId } = await seedFlowActors(org.orgId);
     await enableProjects(org.orgId);
-    routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      allowedSubsidiaryIds: null,
+    };
 
     const employee = await seedParty(org.orgId, "employee", "Erin Employee", org.subsidiaryId);
     await seedActiveEmployment(org.orgId, employee);
-    const employed = await POST(postRequest(randomUUID(), { name: "Employed Job", foremanId: employee }));
+    const employed = await POST(
+      postRequest(randomUUID(), { name: "Employed Job", foremanId: employee }),
+    );
     assert.equal(employed.status, 201, JSON.stringify(await employed.clone().json()));
 
-    for (const [kind, name] of [["customer", "Acme Customer"], ["vendor", "Vera Vendor"], ["company", "C-Corp"]] as const) {
+    for (const [kind, name] of [
+      ["customer", "Acme Customer"],
+      ["vendor", "Vera Vendor"],
+      ["company", "C-Corp"],
+    ] as const) {
       const outsider = await seedParty(org.orgId, kind, name, org.subsidiaryId);
-      const refused = await POST(postRequest(randomUUID(), { name: `Refused ${name}`, foremanId: outsider }));
+      const refused = await POST(
+        postRequest(randomUUID(), { name: `Refused ${name}`, foremanId: outsider }),
+      );
       assert.equal(refused.status, 422);
       const body = (await refused.json()) as { error: string; field?: string };
       assert.match(body.error, /must be an active employee or internal person/);
@@ -132,13 +150,20 @@ test("projects POST accepts an employed employee and refuses customers, vendors,
     }
 
     const unhired = await seedParty(org.orgId, "employee", "Uma Unhired", org.subsidiaryId);
-    const unhiredRefused = await POST(postRequest(randomUUID(), { name: "Unhired Job", foremanId: unhired }));
+    const unhiredRefused = await POST(
+      postRequest(randomUUID(), { name: "Unhired Job", foremanId: unhired }),
+    );
     assert.equal(unhiredRefused.status, 422);
     assert.equal(((await unhiredRefused.json()) as { field?: string }).field, "foremanId");
 
-    const stored = (await db.execute<{ n: number }>(sql`
+    const stored = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from projects where org_id = ${org.orgId} and foreman_id = ${unhired}
-    `, "objects"))[0]?.n;
+    `,
+        "objects",
+      )
+    )[0]?.n;
     assert.equal(stored, 0, "a refused foreman persists no project row");
   } finally {
     routeState.authz = null;
@@ -152,15 +177,22 @@ test("projects POST still refuses another org's person and an inactive person as
   try {
     const { adminId } = await seedFlowActors(org.orgId);
     await enableProjects(org.orgId);
-    routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      allowedSubsidiaryIds: null,
+    };
 
     const foreign = await seedParty(other.orgId, "person", "Farah Foreign", null);
-    const foreignRefused = await POST(postRequest(randomUUID(), { name: "Foreign Job", foremanId: foreign }));
+    const foreignRefused = await POST(
+      postRequest(randomUUID(), { name: "Foreign Job", foremanId: foreign }),
+    );
     assert.equal(foreignRefused.status, 422);
     assert.match(((await foreignRefused.json()) as { error: string }).error, /Foreman not found/);
 
     const inactive = await seedParty(org.orgId, "person", "Ina Inactive", org.subsidiaryId, false);
-    const inactiveRefused = await POST(postRequest(randomUUID(), { name: "Inactive Job", foremanId: inactive }));
+    const inactiveRefused = await POST(
+      postRequest(randomUUID(), { name: "Inactive Job", foremanId: inactive }),
+    );
     assert.equal(inactiveRefused.status, 422);
   } finally {
     routeState.authz = null;

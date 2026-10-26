@@ -20,7 +20,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.list-view-patch-bool-test')]
@@ -42,7 +42,8 @@ const hooks = registerHooks({
     // @/lib/authz alias at request time, so the hook must cover that alias
     // in addition to the route's relative import.
     if (
-      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("customization/list-views")) ||
+      (specifier === "../../../../../lib/authz" &&
+        context.parentURL?.includes("customization/list-views")) ||
       (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
@@ -61,9 +62,7 @@ const routeUrl = "./route.ts?list-view-patch-bool-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 const VIEW_ID = "00000000-0000-4000-8000-000000000021";
 
@@ -91,65 +90,56 @@ function patchRequest(body: unknown): Request {
 }
 
 async function storedFlags(orgId: string): Promise<{ isDefault: boolean; isActive: boolean }> {
-  const r = await db.execute<{ isDefault: boolean; isActive: boolean }>(sql`
+  const r = await db.execute<{ isDefault: boolean; isActive: boolean }>(
+    sql`
     select is_default as "isDefault", is_active as "isActive"
-      from list_views where id = ${VIEW_ID} and org_id = ${orgId}`, "objects");
+      from list_views where id = ${VIEW_ID} and org_id = ${orgId}`,
+    "objects",
+  );
   return r[0]!;
 }
 
-test(
-  "PATCH refuses a non-boolean isDefault with a 400, never a storage 500",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ isDefault: "sometimes" }), {
-      params: Promise.resolve({ id: VIEW_ID }),
-    });
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /isDefault/);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
-  },
-);
+test("PATCH refuses a non-boolean isDefault with a 400, never a storage 500", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ isDefault: "sometimes" }), {
+    params: Promise.resolve({ id: VIEW_ID }),
+  });
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /isDefault/);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
+});
 
-test(
-  "PATCH refuses a non-boolean isActive with a 400, never a storage 500",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ isActive: "eventually" }), {
-      params: Promise.resolve({ id: VIEW_ID }),
-    });
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /isActive/);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
-  },
-);
+test("PATCH refuses a non-boolean isActive with a 400, never a storage 500", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ isActive: "eventually" }), {
+    params: Promise.resolve({ id: VIEW_ID }),
+  });
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /isActive/);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
+});
 
-test(
-  "PATCH still accepts real booleans for both flags",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ isDefault: true, isActive: true }), {
-      params: Promise.resolve({ id: VIEW_ID }),
-    });
-    assert.equal(res.status, 200);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: true, isActive: true });
-  },
-);
+test("PATCH still accepts real booleans for both flags", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ isDefault: true, isActive: true }), {
+    params: Promise.resolve({ id: VIEW_ID }),
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: true, isActive: true });
+});
 
-test(
-  "PATCH refuses an inactive personal isDefault instead of storing a flag resolve cannot see",
-  async () => {
-    const f = await seed();
-    const res = await PATCH(patchRequest({ isDefault: true, isActive: false }), {
-      params: Promise.resolve({ id: VIEW_ID }),
-    });
-    assert.notEqual(res.status, 200, "an inactive personal default must not report success");
-    assert.equal(res.status, 400);
-    const body = await res.json();
-    assert.match(String(body.error), /inactive view cannot be the default/i);
-    assert.match(String(body.error), /activate it/i);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
-  },
-);
+test("PATCH refuses an inactive personal isDefault instead of storing a flag resolve cannot see", async () => {
+  const f = await seed();
+  const res = await PATCH(patchRequest({ isDefault: true, isActive: false }), {
+    params: Promise.resolve({ id: VIEW_ID }),
+  });
+  assert.notEqual(res.status, 200, "an inactive personal default must not report success");
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.match(String(body.error), /inactive view cannot be the default/i);
+  assert.match(String(body.error), /activate it/i);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
+});
 
 // Release the route doubles after every test in this file has run.
 // The factory's lazy session-gate import runs on every request, so the hook

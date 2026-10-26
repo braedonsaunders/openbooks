@@ -73,50 +73,177 @@ export function normalizeZenginAccount(value: string): string | null {
 export function toZenginKana(value: string): string | null {
   const KATA_OFFSET = 0x30a1 - 0x3041; // ァ..ン minus ぁ..ん
   const halfKatakana: Record<string, string> = {
-    "ァ": "ｧ", "ア": "ｱ", "ィ": "ｨ", "イ": "ｲ", "ゥ": "ｩ", "ウ": "ｳ",
-    "ェ": "ｪ", "エ": "ｴ", "ォ": "ｫ", "オ": "ｵ", "カ": "ｶ", "ガ": "ｶﾞ",
-    "キ": "ｷ", "ギ": "ｷﾞ", "ク": "ｸ", "グ": "ｸﾞ", "ケ": "ｹ", "ゲ": "ｹﾞ",
-    "コ": "ｺ", "ゴ": "ｺﾞ", "サ": "ｻ", "ザ": "ｻﾞ", "シ": "ｼ", "ジ": "ｼﾞ",
-    "ス": "ｽ", "ズ": "ｽﾞ", "セ": "ｾ", "ゼ": "ｾﾞ", "ソ": "ｿ", "ゾ": "ｿﾞ",
-    "タ": "ﾀ", "ダ": "ﾀﾞ", "チ": "ﾁ", "ヂ": "ﾁﾞ", "ッ": "ｯ", "ツ": "ﾂ",
-    "ヅ": "ﾂﾞ", "テ": "ﾃ", "デ": "ﾃﾞ", "ト": "ﾄ", "ド": "ﾄﾞ", "ナ": "ﾅ",
-    "ニ": "ﾆ", "ヌ": "ﾇ", "ネ": "ﾈ", "ノ": "ﾉ", "ハ": "ﾊ", "バ": "ﾊﾞ",
-    "パ": "ﾊﾟ", "ヒ": "ﾋ", "ビ": "ﾋﾞ", "ピ": "ﾋﾟ", "フ": "ﾌ", "ブ": "ﾌﾞ",
-    "プ": "ﾌﾟ", "ヘ": "ﾍ", "ベ": "ﾍﾞ", "ペ": "ﾍﾟ", "ホ": "ﾎ", "ボ": "ﾎﾞ",
-    "ポ": "ﾎﾟ", "マ": "ﾏ", "ミ": "ﾐ", "ム": "ﾑ", "メ": "ﾒ", "モ": "ﾓ",
-    "ャ": "ｬ", "ヤ": "ﾔ", "ュ": "ｭ", "ユ": "ﾕ", "ョ": "ｮ", "ヨ": "ﾖ",
-    "ラ": "ﾗ", "リ": "ﾘ", "ル": "ﾙ", "レ": "ﾚ", "ロ": "ﾛ", "ヮ": "ﾜ",
-    "ワ": "ﾜ", "ヰ": "ｲ", "ヱ": "ｴ", "ヲ": "ｦ", "ン": "ﾝ", "ヴ": "ｳﾞ",
-    "ー": "ｰ", "。": "｡", "、": "､", "・": "･", "「": "｢", "」": "｣",
+    ァ: "ｧ",
+    ア: "ｱ",
+    ィ: "ｨ",
+    イ: "ｲ",
+    ゥ: "ｩ",
+    ウ: "ｳ",
+    ェ: "ｪ",
+    エ: "ｴ",
+    ォ: "ｫ",
+    オ: "ｵ",
+    カ: "ｶ",
+    ガ: "ｶﾞ",
+    キ: "ｷ",
+    ギ: "ｷﾞ",
+    ク: "ｸ",
+    グ: "ｸﾞ",
+    ケ: "ｹ",
+    ゲ: "ｹﾞ",
+    コ: "ｺ",
+    ゴ: "ｺﾞ",
+    サ: "ｻ",
+    ザ: "ｻﾞ",
+    シ: "ｼ",
+    ジ: "ｼﾞ",
+    ス: "ｽ",
+    ズ: "ｽﾞ",
+    セ: "ｾ",
+    ゼ: "ｾﾞ",
+    ソ: "ｿ",
+    ゾ: "ｿﾞ",
+    タ: "ﾀ",
+    ダ: "ﾀﾞ",
+    チ: "ﾁ",
+    ヂ: "ﾁﾞ",
+    ッ: "ｯ",
+    ツ: "ﾂ",
+    ヅ: "ﾂﾞ",
+    テ: "ﾃ",
+    デ: "ﾃﾞ",
+    ト: "ﾄ",
+    ド: "ﾄﾞ",
+    ナ: "ﾅ",
+    ニ: "ﾆ",
+    ヌ: "ﾇ",
+    ネ: "ﾈ",
+    ノ: "ﾉ",
+    ハ: "ﾊ",
+    バ: "ﾊﾞ",
+    パ: "ﾊﾟ",
+    ヒ: "ﾋ",
+    ビ: "ﾋﾞ",
+    ピ: "ﾋﾟ",
+    フ: "ﾌ",
+    ブ: "ﾌﾞ",
+    プ: "ﾌﾟ",
+    ヘ: "ﾍ",
+    ベ: "ﾍﾞ",
+    ペ: "ﾍﾟ",
+    ホ: "ﾎ",
+    ボ: "ﾎﾞ",
+    ポ: "ﾎﾟ",
+    マ: "ﾏ",
+    ミ: "ﾐ",
+    ム: "ﾑ",
+    メ: "ﾒ",
+    モ: "ﾓ",
+    ャ: "ｬ",
+    ヤ: "ﾔ",
+    ュ: "ｭ",
+    ユ: "ﾕ",
+    ョ: "ｮ",
+    ヨ: "ﾖ",
+    ラ: "ﾗ",
+    リ: "ﾘ",
+    ル: "ﾙ",
+    レ: "ﾚ",
+    ロ: "ﾛ",
+    ヮ: "ﾜ",
+    ワ: "ﾜ",
+    ヰ: "ｲ",
+    ヱ: "ｴ",
+    ヲ: "ｦ",
+    ン: "ﾝ",
+    ヴ: "ｳﾞ",
+    ー: "ｰ",
+    "。": "｡",
+    "、": "､",
+    "・": "･",
+    "「": "｢",
+    "」": "｣",
   };
   const symbols: Record<string, string> = {
-    "－": "-", "／": "/", "．": ".", "，": ",", "（": "(", "）": ")",
-    "＆": "&", "＄": "$", "％": "%", "＋": "+", "；": ";", "＝": "=",
-    "＊": "*", "＠": "@", "　": " ",
+    "－": "-",
+    "／": "/",
+    "．": ".",
+    "，": ",",
+    "（": "(",
+    "）": ")",
+    "＆": "&",
+    "＄": "$",
+    "％": "%",
+    "＋": "+",
+    "；": ";",
+    "＝": "=",
+    "＊": "*",
+    "＠": "@",
+    "　": " ",
     // JIS X 0201 0x5C renders as the yen mark on Japanese systems; the
     // full-width yen sign folds there, never to a two-byte Shift_JIS form
     // that would shift every field after it.
-    "￥": "\\", "¥": "\\",
+    "￥": "\\",
+    "¥": "\\",
   };
-  const asciiPunct = new Set([" ", "-", "/", ".", ",", "(", ")", "&", "$", "%", "+", ";", "=", "*", "@", "\\"]);
+  const asciiPunct = new Set([
+    " ",
+    "-",
+    "/",
+    ".",
+    ",",
+    "(",
+    ")",
+    "&",
+    "$",
+    "%",
+    "+",
+    ";",
+    "=",
+    "*",
+    "@",
+    "\\",
+  ]);
   let out = "";
   for (const ch of value) {
     const code = ch.codePointAt(0)!;
-    if (ch >= "a" && ch <= "z") { out += ch.toUpperCase(); continue; }
-    if ((ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9")) { out += ch; continue; }
-    if (asciiPunct.has(ch)) { out += ch; continue; }
+    if (ch >= "a" && ch <= "z") {
+      out += ch.toUpperCase();
+      continue;
+    }
+    if ((ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9")) {
+      out += ch;
+      continue;
+    }
+    if (asciiPunct.has(ch)) {
+      out += ch;
+      continue;
+    }
     // Half-width katakana (U+FF61–FF9F) already on the channel.
-    if (code >= 0xff61 && code <= 0xff9f) { out += ch; continue; }
+    if (code >= 0xff61 && code <= 0xff9f) {
+      out += ch;
+      continue;
+    }
     // Full-width alphanumerics fold to half-width capitals.
-    if (code >= 0xff21 && code <= 0xff3a) { out += String.fromCodePoint(code - 0xff21 + 0x41); continue; }
-    if (code >= 0xff41 && code <= 0xff5a) { out += String.fromCodePoint(code - 0xff41 + 0x41); continue; }
-    if (code >= 0xff10 && code <= 0xff19) { out += String.fromCodePoint(code - 0xff10 + 0x30); continue; }
+    if (code >= 0xff21 && code <= 0xff3a) {
+      out += String.fromCodePoint(code - 0xff21 + 0x41);
+      continue;
+    }
+    if (code >= 0xff41 && code <= 0xff5a) {
+      out += String.fromCodePoint(code - 0xff41 + 0x41);
+      continue;
+    }
+    if (code >= 0xff10 && code <= 0xff19) {
+      out += String.fromCodePoint(code - 0xff10 + 0x30);
+      continue;
+    }
     // Hiragana folds through full katakana first (ぁ..ん → ァ..ン).
-    const kata = code >= 0x3041 && code <= 0x3096
-      ? String.fromCodePoint(code + KATA_OFFSET)
-      : ch;
+    const kata = code >= 0x3041 && code <= 0x3096 ? String.fromCodePoint(code + KATA_OFFSET) : ch;
     const half = halfKatakana[kata] ?? symbols[kata];
-    if (half !== undefined) { out += half; continue; }
+    if (half !== undefined) {
+      out += half;
+      continue;
+    }
     return null;
   }
   return out;
@@ -148,7 +275,12 @@ export interface ZenginSettings {
 }
 
 const ZENGIN_REQUIRED: (keyof ZenginSettings)[] = [
-  "clientCode", "clientName", "bankCode", "branchCode", "depositType", "accountNumber",
+  "clientCode",
+  "clientName",
+  "bankCode",
+  "branchCode",
+  "depositType",
+  "accountNumber",
 ];
 
 const kanaField = (value: string, len: number): string | null => {
@@ -163,7 +295,9 @@ const kanaField = (value: string, len: number): string | null => {
 const isBlankish = (value: unknown): boolean =>
   typeof value !== "string" || value.trim() === "" || value.includes("FILL-ME");
 
-export function validateZenginSettings(raw: Partial<ZenginSettings> | null): { ok: true; settings: ZenginSettings } | { ok: false; missing: string[] } {
+export function validateZenginSettings(
+  raw: Partial<ZenginSettings> | null,
+): { ok: true; settings: ZenginSettings } | { ok: false; missing: string[] } {
   const s = raw ?? {};
   const missing: string[] = ZENGIN_REQUIRED.filter((k) => {
     const v = s[k];
@@ -173,7 +307,9 @@ export function validateZenginSettings(raw: Partial<ZenginSettings> | null): { o
     missing.push("clientCode (10-digit client code assigned by your bank)");
   }
   if (!missing.includes("clientName") && kanaField(s.clientName!, 40) === null) {
-    missing.push("clientName (katakana originator name, max 40 half-width characters; kanji has no mechanical reading — register the kana name)");
+    missing.push(
+      "clientName (katakana originator name, max 40 half-width characters; kanji has no mechanical reading — register the kana name)",
+    );
   }
   if (!missing.includes("bankCode") && !isValidBankCode(s.bankCode!)) {
     missing.push("bankCode (4-digit originating bank code)");
@@ -183,7 +319,11 @@ export function validateZenginSettings(raw: Partial<ZenginSettings> | null): { o
   }
   // Every salary-transfer manual prices the originator 種目 as 1 (普通) or
   // 2 (当座) only; the 貯蓄/その他 values appear solely in 総合振込 tables.
-  if (!missing.includes("depositType") && s.depositType!.trim() !== "1" && s.depositType!.trim() !== "2") {
+  if (
+    !missing.includes("depositType") &&
+    s.depositType!.trim() !== "1" &&
+    s.depositType!.trim() !== "2"
+  ) {
     missing.push("depositType (1 = 普通, 2 = 当座)");
   }
   if (!missing.includes("accountNumber") && normalizeZenginAccount(s.accountNumber!) === null) {
@@ -193,7 +333,12 @@ export function validateZenginSettings(raw: Partial<ZenginSettings> | null): { o
     const v = s[key];
     // Optional on every manual (省略可): absent means all spaces. A supplied
     // name must still be kana-mappable and fit its 15-char field.
-    if (typeof v === "string" && v.trim() !== "" && !v.includes("FILL-ME") && kanaField(v, 15) === null) {
+    if (
+      typeof v === "string" &&
+      v.trim() !== "" &&
+      !v.includes("FILL-ME") &&
+      kanaField(v, 15) === null
+    ) {
       missing.push(`${key} (katakana, max 15 half-width characters, or blank)`);
     }
   }
@@ -363,7 +508,9 @@ export function buildZenginFile(run: ZenginRun): string {
     const digits = String(value);
     if (value <= 0n) throw new PaymentError("payment amounts must be positive");
     if (digits.length > len) {
-      throw new PaymentError(`Zengin ${what} ${digits} yen does not fit in ${len} digits — split the pay run`);
+      throw new PaymentError(
+        `Zengin ${what} ${digits} yen does not fit in ${len} digits — split the pay run`,
+      );
     }
     return digits.padStart(len, "0");
   };
@@ -431,7 +578,8 @@ export function buildZenginFile(run: ZenginRun): string {
     depositType(s.depositType, "originating deposit type") +
     account(s.accountNumber, "originating account number") +
     " ".repeat(17);
-  if (header.length !== 120) throw new PaymentError("internal error: Zengin header record is not 120 characters");
+  if (header.length !== 120)
+    throw new PaymentError("internal error: Zengin header record is not 120 characters");
 
   // -- 2: details (120 each) ------------------------------------------------
   // 2(1) + 被仕向銀行番号(2–5) + 被仕向銀行名(6–20) + 被仕向支店番号(21–23) +
@@ -474,7 +622,8 @@ export function buildZenginFile(run: ZenginRun): string {
       empRaw.slice(0, 10).padEnd(10, " ") +
       " ".repeat(10) + // 所属コード: no department code is carried
       " ".repeat(9); // ダミー: salary carries no EDI block
-    if (record.length !== 120) throw new PaymentError("internal error: Zengin data record is not 120 characters");
+    if (record.length !== 120)
+      throw new PaymentError("internal error: Zengin data record is not 120 characters");
     return record;
   });
 
@@ -486,11 +635,13 @@ export function buildZenginFile(run: ZenginRun): string {
     num(String(run.payments.length), 6, "detail count") +
     yen(total, 12, "trailer total") +
     " ".repeat(101);
-  if (trailer.length !== 120) throw new PaymentError("internal error: Zengin trailer record is not 120 characters");
+  if (trailer.length !== 120)
+    throw new PaymentError("internal error: Zengin trailer record is not 120 characters");
 
   // -- 9: end (120) ---------------------------------------------------------
   const end = "9" + " ".repeat(119);
-  if (end.length !== 120) throw new PaymentError("internal error: Zengin end record is not 120 characters");
+  if (end.length !== 120)
+    throw new PaymentError("internal error: Zengin end record is not 120 characters");
 
   return [header, ...details, trailer, end].join("\r\n") + "\r\n";
 }
@@ -509,13 +660,25 @@ export function encodeZenginFile(text: string): Buffer {
   const bytes: number[] = [];
   for (const ch of text) {
     const code = ch.codePointAt(0)!;
-    if (ch === "\r") { bytes.push(0x0d); continue; }
-    if (ch === "\n") { bytes.push(0x0a); continue; }
+    if (ch === "\r") {
+      bytes.push(0x0d);
+      continue;
+    }
+    if (ch === "\n") {
+      bytes.push(0x0a);
+      continue;
+    }
     // JIS X 0201 Roman: ASCII printable; 0x5C is the yen mark (¥) on
     // Japanese systems and the kana-channel backslash folds there.
-    if (code >= 0x20 && code <= 0x7e) { bytes.push(code); continue; }
+    if (code >= 0x20 && code <= 0x7e) {
+      bytes.push(code);
+      continue;
+    }
     // JIS X 0201 katakana: U+FF61–FF9F → 0xA1–0xDF.
-    if (code >= 0xff61 && code <= 0xff9f) { bytes.push(code - 0xff61 + 0xa1); continue; }
+    if (code >= 0xff61 && code <= 0xff9f) {
+      bytes.push(code - 0xff61 + 0xa1);
+      continue;
+    }
     throw new PaymentError(
       `Zengin file contains U+${code.toString(16).toUpperCase().padStart(4, "0")} "${ch}", which has no Shift_JIS single-byte form — names must be half-width katakana before encoding`,
     );

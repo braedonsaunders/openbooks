@@ -5,16 +5,13 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { canonicalDecimal, compareDecimal, divideDecimal, multiplyDecimal } from "../money/exact-decimal.ts";
 import {
-  add,
-  cmp,
-  isZero,
-  mulRate,
-  neg,
-  sum,
-  toUnits,
-} from "../money/money.ts";
+  canonicalDecimal,
+  compareDecimal,
+  divideDecimal,
+  multiplyDecimal,
+} from "../money/exact-decimal.ts";
+import { add, cmp, isZero, mulRate, neg, sum, toUnits } from "../money/money.ts";
 import { assertFinancialChangeAccess } from "../organization/financial-change-access.ts";
 import {
   loadSubsidiaryContext,
@@ -35,15 +32,9 @@ import {
 } from "../platform/financial-changes.ts";
 import { EQUITY_TYPES } from "../records/account-types.ts";
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
-import {
-  runOwnershipConsolidationIn,
-  withOwnershipSourceTransaction,
-} from "./consolidation.ts";
+import { runOwnershipConsolidationIn, withOwnershipSourceTransaction } from "./consolidation.ts";
 import { consolidateAssetTransfers } from "./asset-transfers.ts";
-import {
-  measureLossOfControl,
-  type LossOfControlBalance,
-} from "./loss-of-control-measurement.ts";
+import { measureLossOfControl, type LossOfControlBalance } from "./loss-of-control-measurement.ts";
 
 /** Ownership interests carry up to 10 percent decimals (numeric(19,10)), so
  * a group factor (product of ownership shares down the chain) is held at 18
@@ -144,9 +135,12 @@ export async function loadLossOfControlProposalData(
   interestId: string,
   allowedSubsidiaryIds: Set<string> | null,
 ): Promise<LossOfControlProposalData> {
-  const interest = (await runner.execute<LossOfControlProposalData["interest"]>(
-      sql`select subsidiary_id,parent_subsidiary_id,investment_account_id,equity_income_account_id from subsidiary_ownership_interests where org_id=${orgId} and id=${interestId}`, "objects",
-    ))[0];
+  const interest = (
+    await runner.execute<LossOfControlProposalData["interest"]>(
+      sql`select subsidiary_id,parent_subsidiary_id,investment_account_id,equity_income_account_id from subsidiary_ownership_interests where org_id=${orgId} and id=${interestId}`,
+      "objects",
+    )
+  )[0];
   if (
     !interest ||
     (allowedSubsidiaryIds &&
@@ -155,46 +149,38 @@ export async function loadLossOfControlProposalData(
   )
     throw new LossOfControlProposalError(404, "ownership interest not found");
   const subsidiaries = await runner.execute<LossOfControlProposalData["subsidiaries"][number]>(
-      sql`with recursive family as(select id,org_id,name,parent_id,base_currency,is_elimination from subsidiaries where org_id=${orgId} and id=${interest.subsidiary_id} union all select s.id,s.org_id,s.name,s.parent_id,s.base_currency,s.is_elimination from subsidiaries s join family f on f.org_id=s.org_id and s.parent_id=f.id where not s.is_elimination) select id,name,parent_id,base_currency,is_elimination from family order by name`, "objects",
-    );
-  if (
-    allowedSubsidiaryIds &&
-    subsidiaries.some((s) => !allowedSubsidiaryIds.has(s.id))
-  )
+    sql`with recursive family as(select id,org_id,name,parent_id,base_currency,is_elimination from subsidiaries where org_id=${orgId} and id=${interest.subsidiary_id} union all select s.id,s.org_id,s.name,s.parent_id,s.base_currency,s.is_elimination from subsidiaries s join family f on f.org_id=s.org_id and s.parent_id=f.id where not s.is_elimination) select id,name,parent_id,base_currency,is_elimination from family order by name`,
+    "objects",
+  );
+  if (allowedSubsidiaryIds && subsidiaries.some((s) => !allowedSubsidiaryIds.has(s.id)))
     throw new LossOfControlProposalError(
       403,
       "this disposal includes an entity outside your authorization",
     );
   const context = await loadSubsidiaryContext(runner, orgId);
-  const eliminations = (await runner.execute<LossOfControlProposalData["eliminations"][number]>(
-      sql`select id,name,base_currency from subsidiaries where org_id=${orgId} and is_active and is_elimination order by name`, "objects",
-    )).filter(
-    (s) => !allowedSubsidiaryIds || allowedSubsidiaryIds.has(s.id),
-  );
-  const postingTargets = [
-    interest.parent_subsidiary_id,
-    ...eliminations.map((s) => s.id),
-  ];
-  const accounts = (await runner.execute<
+  const eliminations = (
+    await runner.execute<LossOfControlProposalData["eliminations"][number]>(
+      sql`select id,name,base_currency from subsidiaries where org_id=${orgId} and is_active and is_elimination order by name`,
+      "objects",
+    )
+  ).filter((s) => !allowedSubsidiaryIds || allowedSubsidiaryIds.has(s.id));
+  const postingTargets = [interest.parent_subsidiary_id, ...eliminations.map((s) => s.id)];
+  const accounts = (
+    await runner.execute<
       LossOfControlProposalData["accounts"][number] & {
         subsidiary_id: string | null;
         subsidiary_include_children: boolean;
       }
     >(
-      sql`select id,number,name,type,subsidiary_id,subsidiary_include_children from accounts where org_id=${orgId} and is_active and not is_summary order by number`, "objects",
-    )).filter(
+      sql`select id,number,name,type,subsidiary_id,subsidiary_include_children from accounts where org_id=${orgId} and is_active and not is_summary order by number`,
+      "objects",
+    )
+  ).filter(
     (a) =>
       postingTargets.some((t) =>
-        restrictionAdmits(
-          context,
-          a.subsidiary_id,
-          a.subsidiary_include_children,
-          t,
-        ),
+        restrictionAdmits(context, a.subsidiary_id, a.subsidiary_include_children, t),
       ) &&
-      (!allowedSubsidiaryIds ||
-        !a.subsidiary_id ||
-        allowedSubsidiaryIds.has(a.subsidiary_id)),
+      (!allowedSubsidiaryIds || !a.subsidiary_id || allowedSubsidiaryIds.has(a.subsidiary_id)),
   );
   // Manual elimination journals carry no family lineage: the elimination
   // entity is shared by unrelated families, so a subsidiary-restricted caller
@@ -206,12 +192,13 @@ export async function loadLossOfControlProposalData(
   const adjustmentLines =
     allowedSubsidiaryIds || !eliminations.length
       ? []
-      : (await runner.execute<LossOfControlProposalData["adjustmentLines"][number]>(
-            // A reversal entry only cancels its original (an auto-elimination
-            // rerun posts ELIM-x-R and marks ELIM-x reversed), so it is never offered.
-            // Live entries only: a reversed adjustment is not outstanding evidence to offer.
-            sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status='posted' and e.reverses_entry_id is null and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`, "objects",
-          ));
+      : await runner.execute<LossOfControlProposalData["adjustmentLines"][number]>(
+          // A reversal entry only cancels its original (an auto-elimination
+          // rerun posts ELIM-x-R and marks ELIM-x reversed), so it is never offered.
+          // Live entries only: a reversed adjustment is not outstanding evidence to offer.
+          sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status='posted' and e.reverses_entry_id is null and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
+          "objects",
+        );
   return {
     interest,
     subsidiaries,
@@ -246,12 +233,32 @@ async function assertDisposalAccountsAdmissible(
 ) {
   const legs: { accountId: string; targetId: string; leg: string }[] = [
     { accountId: args.input.proceedsAccountId, targetId: args.parentId, leg: "disposal proceeds" },
-    { accountId: args.input.retainedAccountId, targetId: args.parentId, leg: "retained investment" },
-    { accountId: args.input.retainedAccountId, targetId: args.eliminationId, leg: "retained interest remeasurement" },
-    { accountId: args.input.parentGainLossAccountId, targetId: args.parentId, leg: "separate-book disposal gain or loss" },
+    {
+      accountId: args.input.retainedAccountId,
+      targetId: args.parentId,
+      leg: "retained investment",
+    },
+    {
+      accountId: args.input.retainedAccountId,
+      targetId: args.eliminationId,
+      leg: "retained interest remeasurement",
+    },
+    {
+      accountId: args.input.parentGainLossAccountId,
+      targetId: args.parentId,
+      leg: "separate-book disposal gain or loss",
+    },
     { accountId: args.investmentAccountId, targetId: args.parentId, leg: "controlling investment" },
-    { accountId: args.input.investmentTranslationAccountId, targetId: args.eliminationId, leg: "investment translation" },
-    { accountId: args.input.gainLossAccountId, targetId: args.eliminationId, leg: "consolidated disposal gain or loss" },
+    {
+      accountId: args.input.investmentTranslationAccountId,
+      targetId: args.eliminationId,
+      leg: "investment translation",
+    },
+    {
+      accountId: args.input.gainLossAccountId,
+      targetId: args.eliminationId,
+      leg: "consolidated disposal gain or loss",
+    },
     ...args.input.oci.flatMap((o) => [
       { accountId: o.accountId, targetId: args.eliminationId, leg: "OCI release" },
       { accountId: o.destinationAccountId, targetId: args.eliminationId, leg: "OCI destination" },
@@ -265,13 +272,14 @@ async function assertDisposalAccountsAdmissible(
     return true;
   });
   const accounts = await tx.execute<{
-      id: string;
-      name: string;
-      subsidiary_id: string | null;
-      subsidiary_include_children: boolean;
-    }>(
-      sql`select id,name,subsidiary_id,subsidiary_include_children from accounts where org_id=${orgId} and id=any(${uuidArray(wanted.map((l) => l.accountId))}::uuid[])`, "objects",
-    );
+    id: string;
+    name: string;
+    subsidiary_id: string | null;
+    subsidiary_include_children: boolean;
+  }>(
+    sql`select id,name,subsidiary_id,subsidiary_include_children from accounts where org_id=${orgId} and id=any(${uuidArray(wanted.map((l) => l.accountId))}::uuid[])`,
+    "objects",
+  );
   const byId = new Map(accounts.map((a) => [a.id, a]));
   for (const leg of wanted) {
     const account = byId.get(leg.accountId);
@@ -285,9 +293,10 @@ async function assertDisposalAccountsAdmissible(
       )
     ) {
       const restrictedTo = account.subsidiary_id
-        ? context.byId.get(account.subsidiary_id)?.name ?? "another subsidiary"
+        ? (context.byId.get(account.subsidiary_id)?.name ?? "another subsidiary")
         : null;
-      throw new LossOfControlProposalError(422,
+      throw new LossOfControlProposalError(
+        422,
         restrictedTo
           ? `account "${account.name}" is restricted to "${restrictedTo}" and cannot post the ${leg.leg} leg to "${context.byId.get(leg.targetId)?.name ?? leg.targetId}" in this disposal`
           : `account "${account.name}" cannot post the ${leg.leg} leg in this disposal`,
@@ -315,7 +324,8 @@ function validate(input: LossOfControlInput) {
     throw new LossOfControlProposalError(422, "control-loss date must be a calendar date");
   for (const name of ["assessment", "ociAssessment"] as const)
     if (input[name].trim().length < 8)
-      throw new LossOfControlProposalError(422,
+      throw new LossOfControlProposalError(
+        422,
         "document the control-loss and OCI assessments, including why any category has no balance",
       );
   for (const name of [
@@ -331,7 +341,8 @@ function validate(input: LossOfControlInput) {
       throw new LossOfControlProposalError(422, `${name} must be an exact non-negative decimal`);
   }
   if (compareDecimal(input.retainedPercent, "100") >= 0)
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "retained interest must be below 100 percent and the assessment must demonstrate that control has ceased",
     );
   if (
@@ -339,29 +350,26 @@ function validate(input: LossOfControlInput) {
     (compareDecimal(input.retainedPercent, "0") !== 0 ||
       [input.retainedFairValue, input.parentRetainedCarrying].some((v) => !isZero(v)))
   )
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "no retained interest requires zero percentage and zero carrying/fair values",
     );
   if (input.retainedMethod !== "none" && compareDecimal(input.retainedPercent, "0") === 0)
     throw new LossOfControlProposalError(422, "record the percentage of the retained interest");
-  for (const rate of [
-    input.parentToGroupRate,
-    ...input.rates.map((r) => r.rate),
-  ])
-    if (
-      canonicalDecimal(rate, 10) === null ||
-      BigInt(rate.replace(".", "")) <= 0n
-    )
-      throw new LossOfControlProposalError(422, "translation rates must be exact positive decimals");
-  if (
-    new Set(input.rates.map((r) => r.subsidiaryId)).size !== input.rates.length
-  )
+  for (const rate of [input.parentToGroupRate, ...input.rates.map((r) => r.rate)])
+    if (canonicalDecimal(rate, 10) === null || BigInt(rate.replace(".", "")) <= 0n)
+      throw new LossOfControlProposalError(
+        422,
+        "translation rates must be exact positive decimals",
+      );
+  if (new Set(input.rates.map((r) => r.subsidiaryId)).size !== input.rates.length)
     throw new LossOfControlProposalError(422, "supply one translation rate per subsidiary");
   if (
     new Set(input.additionalConsolidationLines.map((l) => l.lineId)).size !==
     input.additionalConsolidationLines.length
   )
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "a consolidation adjustment journal cannot be attributed twice",
     );
 }
@@ -372,58 +380,64 @@ async function scope(
   actorId: string,
   input: LossOfControlInput,
 ) {
-  const interest = (await tx.execute<Interest>(
-      sql`select *,effective_from::text,effective_to::text,acquisition_date::text from subsidiary_ownership_interests where org_id=${orgId} and id=${interestId} for update`, "objects",
-    ))[0];
+  const interest = (
+    await tx.execute<Interest>(
+      sql`select *,effective_from::text,effective_to::text,acquisition_date::text from subsidiary_ownership_interests where org_id=${orgId} and id=${interestId} for update`,
+      "objects",
+    )
+  )[0];
   if (!interest || interest.method !== "full")
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "select the full-consolidation ownership interest whose control has ceased",
     );
   if (
     input.effectiveOn < interest.effective_from ||
     (interest.effective_to && input.effectiveOn > interest.effective_to)
   )
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "the control-loss date must lie in the existing ownership window",
     );
   if (compareDecimal(input.retainedPercent, interest.ownership_percent) > 0)
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "retained ownership cannot exceed the disposed controlling interest",
     );
-  const prior = (await tx.execute(
-      sql`select id from consolidation_control_losses where org_id=${orgId} and interest_id=${interestId} and reversed_by_change_id is null`, "objects",
-    ))[0];
+  const prior = (
+    await tx.execute(
+      sql`select id from consolidation_control_losses where org_id=${orgId} and interest_id=${interestId} and reversed_by_change_id is null`,
+      "objects",
+    )
+  )[0];
   if (prior)
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "loss of control has already been recorded for this interest",
     );
-  await tx.execute(
-    sql`select id from subsidiaries where org_id=${orgId} order by id for share`,
-  );
+  await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
   const context = await loadSubsidiaryContext(tx, orgId),
     parent = context.byId.get(interest.parent_subsidiary_id),
     elimination = context.byId.get(input.eliminationSubsidiaryId);
   if (!parent?.isActive || !elimination?.isActive || !elimination.isElimination)
-    throw new LossOfControlProposalError(422, "the parent and group elimination entity must be active");
+    throw new LossOfControlProposalError(
+      422,
+      "the parent and group elimination entity must be active",
+    );
   if (
-    [...context.byId.values()].find((row) => row.isElimination && row.isActive)
-      ?.id !== elimination.id
+    [...context.byId.values()].find((row) => row.isElimination && row.isActive)?.id !==
+    elimination.id
   )
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "select the active ownership-consolidation elimination entity",
     );
   const family = [interest.subsidiary_id];
   for (let i = 0; i < family.length; i++)
     for (const child of context.byId.values())
-      if (
-        child.parentId === family[i] &&
-        !family.includes(child.id) &&
-        !child.isElimination
-      )
+      if (child.parentId === family[i] && !family.includes(child.id) && !child.isElimination)
         family.push(child.id);
-  const requiredSubsidiaryIds = [
-    ...new Set([parent.id, elimination.id, ...family]),
-  ];
+  const requiredSubsidiaryIds = [...new Set([parent.id, elimination.id, ...family])];
   await assertDisposalAccountsAdmissible(tx, orgId, context, {
     parentId: parent.id,
     eliminationId: elimination.id,
@@ -443,18 +457,14 @@ async function scope(
     // only an unrestricted group controller may select them explicitly (L2).
     const actorScope = await actorAllowedSubsidiaryIds(tx, orgId, actorId);
     if (actorScope)
-      throw new LossOfControlProposalError(422,
+      throw new LossOfControlProposalError(
+        422,
         "manual elimination lines carry no family attribution, so a subsidiary-restricted proposal cannot select them; have an unrestricted group controller include the lines explicitly",
       );
   }
   const periods = new Map<string, NonNullable<Awaited<ReturnType<typeof resolveCoveringPeriod>>>>();
   for (const subsidiaryId of requiredSubsidiaryIds) {
-    const period = await resolveCoveringPeriod(
-      tx,
-      orgId,
-      input.effectiveOn,
-      subsidiaryId,
-    );
+    const period = await resolveCoveringPeriod(tx, orgId, input.effectiveOn, subsidiaryId);
     if (!period)
       throw new LossOfControlProposalError(
         422,
@@ -465,10 +475,12 @@ async function scope(
   const period = periods.get(elimination.id)!;
   const parentPeriod = periods.get(parent.id)!;
   const book = await tx.execute<{ id: string }>(
-      sql`select id from accounting_books where org_id=${orgId} and is_primary and is_active and posts_gl for share`, "objects",
-    );
+    sql`select id from accounting_books where org_id=${orgId} and is_primary and is_active and posts_gl for share`,
+    "objects",
+  );
   if (book.length !== 1)
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "loss of control requires the active primary consolidation book",
     );
   for (const subsidiaryId of requiredSubsidiaryIds)
@@ -480,8 +492,9 @@ async function scope(
       modules: ["gl"],
     });
   const policies = await tx.execute<Interest>(
-      sql`select interest.*,interest.effective_from::text,interest.effective_to::text,interest.acquisition_date::text from subsidiary_ownership_interests interest where interest.org_id=${orgId} and interest.subsidiary_id=any(${uuidArray(family)}::uuid[]) and interest.is_active and interest.effective_from<=${input.effectiveOn} order by interest.subsidiary_id,interest.effective_from,interest.id for share`, "objects",
-    );
+    sql`select interest.*,interest.effective_from::text,interest.effective_to::text,interest.acquisition_date::text from subsidiary_ownership_interests interest where interest.org_id=${orgId} and interest.subsidiary_id=any(${uuidArray(family)}::uuid[]) and interest.is_active and interest.effective_from<=${input.effectiveOn} order by interest.subsidiary_id,interest.effective_from,interest.id for share`,
+    "objects",
+  );
   // A descendant accounted for by the equity method contributes its investment
   // in the parent, not its underlying assets. Joint operations carry their
   // proportionate share. The root was fully consolidated through the cutoff.
@@ -490,42 +503,51 @@ async function scope(
     const entity = context.byId.get(id)!;
     const policy = policies
       .filter(
-        (p) =>
-          p.subsidiary_id === id &&
-          (!p.effective_to || p.effective_to >= input.effectiveOn),
+        (p) => p.subsidiary_id === id && (!p.effective_to || p.effective_to >= input.effectiveOn),
       )
       .at(-1);
-    factors[id] = policy?.method === "equity"
-      ? "0"
-      : multiplyDecimal(
-        factors[entity.parentId!] ?? "0",
-        policy?.method === "proportionate"
-          ? divideDecimal(policy.ownership_percent, "100", OWNERSHIP_FACTOR_SCALE)
-          : "1",
-        OWNERSHIP_FACTOR_SCALE,
-      );
+    factors[id] =
+      policy?.method === "equity"
+        ? "0"
+        : multiplyDecimal(
+            factors[entity.parentId!] ?? "0",
+            policy?.method === "proportionate"
+              ? divideDecimal(policy.ownership_percent, "100", OWNERSHIP_FACTOR_SCALE)
+              : "1",
+            OWNERSHIP_FACTOR_SCALE,
+          );
   }
   const ownershipInterestIds = policies
     .filter((p) => !p.effective_to || p.effective_to >= period.starts_on)
     .map((p) => p.id);
-  const late = (await tx.execute(
+  const late = (
+    await tx.execute(
       // Live entries only: a reversed later generation no longer blocks the disposal date.
-      sql`select 1 from ownership_consolidation_entries c join subsidiary_ownership_interests p on p.org_id=c.org_id and p.id=c.interest_id join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and p.subsidiary_id=any(${uuidArray(family)}::uuid[]) and e.posting_date>${input.effectiveOn} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status='posted') limit 1`, "objects",
-    ))[0];
+      sql`select 1 from ownership_consolidation_entries c join subsidiary_ownership_interests p on p.org_id=c.org_id and p.id=c.interest_id join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and p.subsidiary_id=any(${uuidArray(family)}::uuid[]) and e.posting_date>${input.effectiveOn} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status='posted') limit 1`,
+      "objects",
+    )
+  )[0];
   if (late)
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "a later ownership close is already posted; reverse that later consolidation generation before recording an earlier loss of control",
     );
   for (const id of family) {
     const entity = context.byId.get(id)!,
       rate = input.rates.find((r) => r.subsidiaryId === id)?.rate;
     if (!rate)
-      throw new LossOfControlProposalError(422, `supply the closing translation rate for ${entity.name}`);
+      throw new LossOfControlProposalError(
+        422,
+        `supply the closing translation rate for ${entity.name}`,
+      );
     if (
       entity.baseCurrency === elimination.baseCurrency &&
       mulRate("1000000", rate) !== "1000000.0000"
     )
-      throw new LossOfControlProposalError(422, "same-currency subsidiary translation must be at one");
+      throw new LossOfControlProposalError(
+        422,
+        "same-currency subsidiary translation must be at one",
+      );
   }
   if (
     parent.baseCurrency === elimination.baseCurrency &&
@@ -533,17 +555,19 @@ async function scope(
   )
     throw new LossOfControlProposalError(422, "same-currency parent translation must be at one");
   const baseline = await tx.execute<{
-      subsidiary_id: string;
-      account_id: string;
-      amount: string;
-      line_count: string;
-      latest: string | null;
-    }>(
-      sql`select l.subsidiary_id,l.account_id,sum(l.amount)::text as amount,count(*)::text as line_count,max(e.created_at)::text as latest from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${book[0]!.id} and e.status in('posted','reversed') and ${excludePeriodEndJournals(sql`e.origin`)} and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(requiredSubsidiaryIds)}::uuid[]) group by l.subsidiary_id,l.account_id order by l.subsidiary_id,l.account_id`, "objects",
-    );
+    subsidiary_id: string;
+    account_id: string;
+    amount: string;
+    line_count: string;
+    latest: string | null;
+  }>(
+    sql`select l.subsidiary_id,l.account_id,sum(l.amount)::text as amount,count(*)::text as line_count,max(e.created_at)::text as latest from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${book[0]!.id} and e.status in('posted','reversed') and ${excludePeriodEndJournals(sql`e.origin`)} and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(requiredSubsidiaryIds)}::uuid[]) group by l.subsidiary_id,l.account_id order by l.subsidiary_id,l.account_id`,
+    "objects",
+  );
   const rates = await tx.execute(
-      sql`select period_id,from_currency,to_currency,current_rate::text,average_rate::text,historical_rate::text,source from consolidated_fx_rates where org_id=${orgId} and period_id=${period.id} order by from_currency,to_currency`, "objects",
-    );
+    sql`select period_id,from_currency,to_currency,current_rate::text,average_rate::text,historical_rate::text,source from consolidated_fx_rates where org_id=${orgId} and period_id=${period.id} order by from_currency,to_currency`,
+    "objects",
+  );
   return {
     interest,
     parent,
@@ -569,16 +593,10 @@ async function measure(
   s: Scope,
   currentChangeId: string | null,
 ) {
-  const ownershipRun = await runOwnershipConsolidationIn(
-    orgId,
-    s.period.id,
-    actorId,
-    tx,
-    {
-      asOf: input.effectiveOn,
-      interestIds: s.ownershipInterestIds,
-    },
-  );
+  const ownershipRun = await runOwnershipConsolidationIn(orgId, s.period.id, actorId, tx, {
+    asOf: input.effectiveOn,
+    interestIds: s.ownershipInterestIds,
+  });
   // Asset profit eliminations are part of the disposed group's carrying basis.
   // A mid-period close uses only charges actually accrued through the cutoff.
   const assetEntries = await consolidateAssetTransfers(
@@ -591,14 +609,15 @@ async function measure(
     s.bookId,
   );
   const balances = await tx.execute<{
-      subsidiary_id: string;
-      account_id: string;
-      type: string;
-      name: string;
-      amount: string;
-    }>(
-      sql`select l.subsidiary_id,l.account_id,a.type,a.name,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status in('posted','reversed') and ${excludePeriodEndJournals(sql`e.origin`)} and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and a.type not in('income','income_other','cogs','expense','expense_other','expense_deferred','equity') group by l.subsidiary_id,l.account_id,a.type,a.name order by l.subsidiary_id,l.account_id`, "objects",
-    );
+    subsidiary_id: string;
+    account_id: string;
+    type: string;
+    name: string;
+    amount: string;
+  }>(
+    sql`select l.subsidiary_id,l.account_id,a.type,a.name,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status in('posted','reversed') and ${excludePeriodEndJournals(sql`e.origin`)} and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and a.type not in('income','income_other','cogs','expense','expense_other','expense_deferred','equity') group by l.subsidiary_id,l.account_id,a.type,a.name order by l.subsidiary_id,l.account_id`,
+    "objects",
+  );
   const netAssetBalances: LossOfControlBalance[] = balances.map((l) => ({
     accountId: l.account_id,
     amount: mulRate(
@@ -607,7 +626,8 @@ async function measure(
     ),
     description: l.name,
   }));
-  const owned = (await tx.execute<{
+  const owned = (
+    await tx.execute<{
       interest_id: string | null;
       parent_subsidiary_id: string | null;
       account_id: string;
@@ -615,8 +635,10 @@ async function measure(
       name: string;
       amount: string;
     }>(
-      sql`${consolidationHistory(orgId)} select l.account_id,a.type,a.name,h.interest_id,h.parent_id as parent_subsidiary_id,sum(l.amount)::text as amount from history h join journal_entries e on e.org_id=${orgId} and e.id=h.id join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.book_id=${s.bookId} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and e.subsidiary_id=${s.elimination.id} and (h.subject_id=any(${uuidArray(s.family)}::uuid[]) or h.buyer_id=any(${uuidArray(s.family)}::uuid[])) group by l.account_id,a.type,a.name,h.interest_id,h.parent_id order by l.account_id,h.interest_id`, "objects",
-    )).map((l) => ({
+      sql`${consolidationHistory(orgId)} select l.account_id,a.type,a.name,h.interest_id,h.parent_id as parent_subsidiary_id,sum(l.amount)::text as amount from history h join journal_entries e on e.org_id=${orgId} and e.id=h.id join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.book_id=${s.bookId} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and e.subsidiary_id=${s.elimination.id} and (h.subject_id=any(${uuidArray(s.family)}::uuid[]) or h.buyer_id=any(${uuidArray(s.family)}::uuid[])) group by l.account_id,a.type,a.name,h.interest_id,h.parent_id order by l.account_id,h.interest_id`,
+      "objects",
+    )
+  ).map((l) => ({
     ...l,
     amount: applyOwnershipFactor(
       l.amount,
@@ -648,10 +670,12 @@ async function measure(
   );
   for (const inputLine of attributed) {
     if (canonicalDecimal(inputLine.amount, 4) === null)
-      throw new LossOfControlProposalError(422,
+      throw new LossOfControlProposalError(
+        422,
         "attributed consolidation amounts must be exact signed decimals",
       );
-    const line = (await tx.execute<{
+    const line = (
+      await tx.execute<{
         entry_id: string;
         entry_number: string;
         account_id: string;
@@ -660,10 +684,13 @@ async function measure(
         amount: string;
       }>(
         // Live entries only: a reversed line, or a reversal entry's line, cannot be attributed to a disposal.
-        sql`${consolidationHistory(orgId)} select e.id as entry_id,e.entry_number,l.account_id,a.type,a.name,l.amount::text from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id where l.org_id=${orgId} and l.id=${inputLine.lineId} and e.book_id=${s.bookId} and e.subsidiary_id=${s.elimination.id} and e.status='posted' and e.reverses_entry_id is null and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) and e.posting_date<=${input.effectiveOn} and not exists(select 1 from history h where h.id=e.id)`, "objects",
-      ))[0];
+        sql`${consolidationHistory(orgId)} select e.id as entry_id,e.entry_number,l.account_id,a.type,a.name,l.amount::text from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id where l.org_id=${orgId} and l.id=${inputLine.lineId} and e.book_id=${s.bookId} and e.subsidiary_id=${s.elimination.id} and e.status='posted' and e.reverses_entry_id is null and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) and e.posting_date<=${input.effectiveOn} and not exists(select 1 from history h where h.id=e.id)`,
+        "objects",
+      )
+    )[0];
     if (!line)
-      throw new LossOfControlProposalError(422,
+      throw new LossOfControlProposalError(
+        422,
         "select a posted, manually attributed elimination line; ownership and transferred-asset adjustments are already included automatically",
       );
     const source = toUnits(line.amount),
@@ -672,20 +699,25 @@ async function measure(
       source < 0n !== portion < 0n ||
       (source < 0n ? -source : source) < (portion < 0n ? -portion : portion)
     )
-      throw new LossOfControlProposalError(422,
+      throw new LossOfControlProposalError(
+        422,
         "the attributed portion must have the source line sign and cannot exceed its amount",
       );
     await tx.execute(
       sql`select id from journal_lines where org_id=${orgId} and id=${inputLine.lineId} for update`,
     );
-    const prior = (await tx.execute<{ used: string }>(
-        sql`with prior as(select abs((e->>'amount')::numeric) as amount from consolidation_control_losses c,jsonb_array_elements(c.measurement->'manualEvidence') e where c.org_id=${orgId} and c.reversed_by_change_id is null and e->>'lineId'=${inputLine.lineId} union all select abs((e->>'amount')::numeric) from financial_changes f,jsonb_array_elements(coalesce(f.payload->'additionalConsolidationLines','[]'::jsonb)) e where f.org_id=${orgId} and f.domain='consolidation' and f.operation='loss_of_control' and f.status in('pending','approved') and e->>'lineId'=${inputLine.lineId} and (${currentChangeId}::uuid is null or f.id!=${currentChangeId}::uuid)) select coalesce(sum(amount),0)::text as used from prior`, "objects",
-      ))[0]!.used;
+    const prior = (
+      await tx.execute<{ used: string }>(
+        sql`with prior as(select abs((e->>'amount')::numeric) as amount from consolidation_control_losses c,jsonb_array_elements(c.measurement->'manualEvidence') e where c.org_id=${orgId} and c.reversed_by_change_id is null and e->>'lineId'=${inputLine.lineId} union all select abs((e->>'amount')::numeric) from financial_changes f,jsonb_array_elements(coalesce(f.payload->'additionalConsolidationLines','[]'::jsonb)) e where f.org_id=${orgId} and f.domain='consolidation' and f.operation='loss_of_control' and f.status in('pending','approved') and e->>'lineId'=${inputLine.lineId} and (${currentChangeId}::uuid is null or f.id!=${currentChangeId}::uuid)) select coalesce(sum(amount),0)::text as used from prior`,
+        "objects",
+      )
+    )[0]!.used;
     const sourceAbs = source < 0n ? -source : source,
       portionAbs = portion < 0n ? -portion : portion,
       remaining = sourceAbs - toUnits(prior);
     if (portionAbs > remaining)
-      throw new LossOfControlProposalError(422,
+      throw new LossOfControlProposalError(
+        422,
         `elimination line "${line.name}" (entry ${line.entry_number}) already attributes ${prior} to other disposals against a ${line.amount} source; attribute at most the remaining balance`,
       );
     owned.push({
@@ -717,17 +749,22 @@ async function measure(
   for (const o of input.oci) {
     if (canonicalDecimal(o.balance, 4) === null)
       throw new LossOfControlProposalError(422, "OCI balances must be exact signed decimals");
-    const source = (await tx.execute<{ id: string; name: string; type: string }>(
-        sql`select id,name,type from accounts where org_id=${orgId} and id=${o.accountId}`, "objects",
-      ))[0];
+    const source = (
+      await tx.execute<{ id: string; name: string; type: string }>(
+        sql`select id,name,type from accounts where org_id=${orgId} and id=${o.accountId}`,
+        "objects",
+      )
+    )[0];
     if (!source || !EQUITY_TYPES.includes(source.type))
-      throw new LossOfControlProposalError(422,
+      throw new LossOfControlProposalError(
+        422,
         `OCI source "${source?.name ?? o.accountId}" must be an equity reserve account; label the reserve correctly instead of releasing an operating balance as OCI`,
       );
     let attributable = "0";
     const familyBooks = await tx.execute<{ subsidiary_id: string; amount: string }>(
-        sql`select l.subsidiary_id,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status in('posted','reversed') and ${excludePeriodEndJournals(sql`e.origin`)} and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and l.account_id=${o.accountId} group by l.subsidiary_id`, "objects",
-      );
+      sql`select l.subsidiary_id,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status in('posted','reversed') and ${excludePeriodEndJournals(sql`e.origin`)} and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and l.account_id=${o.accountId} group by l.subsidiary_id`,
+      "objects",
+    );
     for (const row of familyBooks)
       attributable = add(
         attributable,
@@ -738,9 +775,12 @@ async function measure(
       );
     for (const l of owned.filter((l) => l.account_id === o.accountId))
       attributable = add(attributable, l.amount);
-    const priorAttributed = (await tx.execute<{ used: string }>(
-        sql`with prior as(select abs((e->>'balance')::numeric) as amount from financial_changes f join consolidation_control_losses c on c.org_id=f.org_id and c.change_id=f.id,jsonb_array_elements(coalesce(f.payload->'oci','[]'::jsonb)) e where f.org_id=${orgId} and f.domain='consolidation' and f.operation='loss_of_control' and f.subject_id=${s.interest.id} and c.reversed_by_change_id is null and e->>'accountId'=${o.accountId} union all select abs((e->>'balance')::numeric) from financial_changes f,jsonb_array_elements(coalesce(f.payload->'oci','[]'::jsonb)) e where f.org_id=${orgId} and f.domain='consolidation' and f.operation='loss_of_control' and f.subject_id=${s.interest.id} and f.status in('pending','approved') and e->>'accountId'=${o.accountId} and (${currentChangeId}::uuid is null or f.id!=${currentChangeId}::uuid)) select coalesce(sum(amount),0)::text as used from prior`, "objects",
-      ))[0]!.used;
+    const priorAttributed = (
+      await tx.execute<{ used: string }>(
+        sql`with prior as(select abs((e->>'balance')::numeric) as amount from financial_changes f join consolidation_control_losses c on c.org_id=f.org_id and c.change_id=f.id,jsonb_array_elements(coalesce(f.payload->'oci','[]'::jsonb)) e where f.org_id=${orgId} and f.domain='consolidation' and f.operation='loss_of_control' and f.subject_id=${s.interest.id} and c.reversed_by_change_id is null and e->>'accountId'=${o.accountId} union all select abs((e->>'balance')::numeric) from financial_changes f,jsonb_array_elements(coalesce(f.payload->'oci','[]'::jsonb)) e where f.org_id=${orgId} and f.domain='consolidation' and f.operation='loss_of_control' and f.subject_id=${s.interest.id} and f.status in('pending','approved') and e->>'accountId'=${o.accountId} and (${currentChangeId}::uuid is null or f.id!=${currentChangeId}::uuid)) select coalesce(sum(amount),0)::text as used from prior`,
+        "objects",
+      )
+    )[0]!.used;
     ociEvidence.push({
       accountId: o.accountId,
       attributableBalance: attributable,
@@ -750,23 +790,19 @@ async function measure(
     const cap = toUnits(attributable),
       want = toUnits(o.balance),
       remaining = (cap < 0n ? -cap : cap) - toUnits(priorAttributed);
-    if (
-      cap === 0n ||
-      cap < 0n !== want < 0n ||
-      (want < 0n ? -want : want) > remaining
-    )
-      throw new LossOfControlProposalError(422,
+    if (cap === 0n || cap < 0n !== want < 0n || (want < 0n ? -want : want) > remaining)
+      throw new LossOfControlProposalError(
+        422,
         `OCI source "${source.name}" carries an attributable reserve balance of ${attributable} at ${input.effectiveOn} after ${priorAttributed} already released by other disposals; release at most the remaining reserve`,
       );
   }
   const nciIds = new Set(
-    s.policies
-      .map((p) => p.nci_equity_account_id)
-      .filter((id): id is string => !!id),
+    s.policies.map((p) => p.nci_equity_account_id).filter((id): id is string => !!id),
   );
   const upstreamNci = await tx.execute<{ account_id: string; amount: string }>(
-      sql`${consolidationHistory(orgId)} select l.account_id,sum(l.amount)::text as amount from history h join journal_entries e on e.org_id=${orgId} and e.id=h.id join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.book_id=${s.bookId} and h.seller_id=any(${uuidArray(s.family)}::uuid[]) and not(h.buyer_id=any(${uuidArray(s.family)}::uuid[])) and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and l.account_id=any(${uuidArray([...nciIds])}::uuid[]) group by l.account_id`, "objects",
-    );
+    sql`${consolidationHistory(orgId)} select l.account_id,sum(l.amount)::text as amount from history h join journal_entries e on e.org_id=${orgId} and e.id=h.id join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.book_id=${s.bookId} and h.seller_id=any(${uuidArray(s.family)}::uuid[]) and not(h.buyer_id=any(${uuidArray(s.family)}::uuid[])) and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and l.account_id=any(${uuidArray([...nciIds])}::uuid[]) group by l.account_id`,
+    "objects",
+  );
   for (const l of upstreamNci)
     owned.push({
       ...l,
@@ -786,17 +822,12 @@ async function measure(
   const nciTotal = sum(nciRows.map((l) => l.amount));
   const investment = owned
     .filter(
-      (l) =>
-        l.interest_id === s.interest.id &&
-        l.account_id === s.interest.investment_account_id,
+      (l) => l.interest_id === s.interest.id && l.account_id === s.interest.investment_account_id,
     )
     .reduce((a, l) => add(a, l.amount), "0");
   for (const l of owned)
     if (
-      !(
-        l.interest_id === s.interest.id &&
-        l.account_id === s.interest.investment_account_id
-      ) &&
+      !(l.interest_id === s.interest.id && l.account_id === s.interest.investment_account_id) &&
       !nciIds.has(l.account_id) &&
       ![
         "income",
@@ -828,14 +859,8 @@ async function measure(
       description: "Disposed investment",
     },
     parentProceeds: mulRate(input.proceeds, input.parentToGroupRate),
-    parentInvestmentCarrying: mulRate(
-      input.parentInvestmentCarrying,
-      input.parentToGroupRate,
-    ),
-    parentRetainedCarrying: mulRate(
-      input.parentRetainedCarrying,
-      input.parentToGroupRate,
-    ),
+    parentInvestmentCarrying: mulRate(input.parentInvestmentCarrying, input.parentToGroupRate),
+    parentRetainedCarrying: mulRate(input.parentRetainedCarrying, input.parentToGroupRate),
     investmentTranslationAccountId: input.investmentTranslationAccountId,
     retainedFairValue: input.retainedFairValue,
     retainedAccountId: input.retainedAccountId,
@@ -858,12 +883,11 @@ async function measure(
   }
   const parentBalance =
     s.baseline.find(
-      (l) =>
-        l.subsidiary_id === s.parent.id &&
-        l.account_id === s.interest.investment_account_id,
+      (l) => l.subsidiary_id === s.parent.id && l.account_id === s.interest.investment_account_id,
     )?.amount ?? "0";
   if (cmp(parentBalance, input.parentInvestmentCarrying) < 0)
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "the attributed investment carrying amount exceeds the parent investment account balance",
     );
   const accountIds = [
@@ -878,10 +902,12 @@ async function measure(
     ]),
   ];
   const accounts = await tx.execute<{ id: string; type: string }>(
-      sql`select id,type from accounts where org_id=${orgId} and id=any(${uuidArray(accountIds)}::uuid[]) and is_active and not is_summary for share`, "objects",
-    );
+    sql`select id,type from accounts where org_id=${orgId} and id=any(${uuidArray(accountIds)}::uuid[]) and is_active and not is_summary for share`,
+    "objects",
+  );
   if (accounts.length !== accountIds.length)
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "select active posting accounts for every disposal, retained interest and OCI leg",
     );
   for (const oci of input.oci) {
@@ -889,11 +915,10 @@ async function measure(
     if (
       oci.treatment === "retained_earnings"
         ? destination?.type !== "equity"
-        : !["income", "income_other", "expense", "expense_other"].includes(
-            destination?.type ?? "",
-          )
+        : !["income", "income_other", "expense", "expense_other"].includes(destination?.type ?? "")
     )
-      throw new LossOfControlProposalError(422,
+      throw new LossOfControlProposalError(
+        422,
         "OCI recycling must post to profit/loss; a direct reserve transfer must post to retained earnings",
       );
   }
@@ -916,17 +941,17 @@ async function measure(
     {
       accountId: input.parentGainLossAccountId,
       amount: neg(
-        add(
-          add(input.proceeds, input.parentRetainedCarrying),
-          neg(input.parentInvestmentCarrying),
-        ),
+        add(add(input.proceeds, input.parentRetainedCarrying), neg(input.parentInvestmentCarrying)),
       ),
       description: "Separate-book investment disposal gain or loss",
     },
   ].filter((l) => !isZero(l.amount));
-  const sourceEntryIds = (await tx.execute<{ id: string }>(
-      sql`${consolidationHistory(orgId)} select e.id from history h join journal_entries e on e.org_id=${orgId} and e.id=h.id where e.book_id=${s.bookId} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and (h.subject_id=any(${uuidArray(s.family)}::uuid[]) or h.buyer_id=any(${uuidArray(s.family)}::uuid[]) or h.seller_id=any(${uuidArray(s.family)}::uuid[])) order by e.id`, "objects",
-    )).map((e) => e.id);
+  const sourceEntryIds = (
+    await tx.execute<{ id: string }>(
+      sql`${consolidationHistory(orgId)} select e.id from history h join journal_entries e on e.org_id=${orgId} and e.id=h.id where e.book_id=${s.bookId} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and (h.subject_id=any(${uuidArray(s.family)}::uuid[]) or h.buyer_id=any(${uuidArray(s.family)}::uuid[]) or h.seller_id=any(${uuidArray(s.family)}::uuid[])) order by e.id`,
+      "objects",
+    )
+  ).map((e) => e.id);
   return {
     sourceEntryIds,
     manualEvidence,
@@ -955,17 +980,11 @@ async function preview(
   // journal, audit row, close generation or notification can commit here.
   try {
     await withTransactionSavepoint(tx, async () => {
-      throw new PreviewRollback(
-        await measure(tx, orgId, actorId, input, s, currentChangeId),
-      );
+      throw new PreviewRollback(await measure(tx, orgId, actorId, input, s, currentChangeId));
     });
   } catch (e) {
     if (e instanceof PreviewRollback) {
-      const {
-        generatedEntryIds,
-        sourceEntryIds,
-        ...stable
-      } = e.value;
+      const { generatedEntryIds, sourceEntryIds, ...stable } = e.value;
       // Preview must not return rolled-back journal ids. The bindings exist
       // only to drop those keys; they are not read.
       void generatedEntryIds;
@@ -984,13 +1003,16 @@ export async function proposeLossOfControl(
 ): Promise<string> {
   validate(input);
   return withOwnershipSourceTransaction(orgId, async (tx) => {
-    const replay = (await tx.execute<{
+    const replay = (
+      await tx.execute<{
         id: string;
         subsidiary_id: string;
         payload: Record<string, unknown>;
       }>(
-        sql`select id,subsidiary_id,payload from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey}`, "objects",
-      ))[0];
+        sql`select id,subsidiary_id,payload from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey}`,
+        "objects",
+      )
+    )[0];
     if (replay) {
       await assertFinancialChangeAccess(tx, {
         orgId,
@@ -1062,10 +1084,12 @@ async function post(
   });
   const accountIds = [...new Set(material.map((line) => line.accountId))];
   const accounts = await tx.execute<{ id: string }>(
-      sql`select id from accounts where org_id=${orgId} and id=any(${uuidArray(accountIds)}::uuid[]) and is_active and not is_summary for share`, "objects",
-    );
+    sql`select id from accounts where org_id=${orgId} and id=any(${uuidArray(accountIds)}::uuid[]) and is_active and not is_summary for share`,
+    "objects",
+  );
   if (accounts.length !== accountIds.length)
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "restore the active posting accounts required by this approved disposal journal",
     );
   assertFinalKernelBalance(scoped);
@@ -1091,7 +1115,10 @@ async function post(
     })),
   });
   if (postedEntry.entryId !== id)
-    throw new LossOfControlProposalError(422, "the loss-of-control journal could not be posted; review the active book and period configuration");
+    throw new LossOfControlProposalError(
+      422,
+      "the loss-of-control journal could not be posted; review the active book and period configuration",
+    );
   return id;
 }
 export async function applyLossOfControl(
@@ -1101,10 +1128,7 @@ export async function applyLossOfControl(
 ): Promise<Record<string, unknown>> {
   return withOwnershipSourceTransaction(orgId, async (tx) => {
     const change = await loadFinancialChange(tx, orgId, changeId);
-    if (
-      change.domain !== "consolidation" ||
-      change.operation !== "loss_of_control"
-    )
+    if (change.domain !== "consolidation" || change.operation !== "loss_of_control")
       throw new LossOfControlProposalError(422, "select a loss-of-control proposal");
     await assertFinancialChangeAccess(tx, {
       orgId,
@@ -1123,28 +1147,25 @@ export async function applyLossOfControl(
       subjectId: change.subject_id,
       beforeState: { ...s, ...calculated },
     });
-    const approverScope = await actorAllowedSubsidiaryIds(
-      tx,
-      orgId,
-      change.approved_by!,
-    );
-    if (
-      approverScope &&
-      s.requiredSubsidiaryIds.some((id) => !approverScope.has(id))
-    )
-      throw new LossOfControlProposalError(409,
+    const approverScope = await actorAllowedSubsidiaryIds(tx, orgId, change.approved_by!);
+    if (approverScope && s.requiredSubsidiaryIds.some((id) => !approverScope.has(id)))
+      throw new LossOfControlProposalError(
+        409,
         "the approver no longer covers every affected entity; obtain a new scoped approval",
       );
     const closed = await tx.execute(
-      sql`update subsidiary_ownership_interests set effective_to=${input.effectiveOn},last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${change.subject_id} returning id`, "objects",
+      sql`update subsidiary_ownership_interests set effective_to=${input.effectiveOn},last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${change.subject_id} returning id`,
+      "objects",
     );
     if (closed.length !== 1)
-      throw new LossOfControlProposalError(409, "the ownership window changed while applying this disposal; review the current ownership record and propose it again");
+      throw new LossOfControlProposalError(
+        409,
+        "the ownership window changed while applying this disposal; review the current ownership record and propose it again",
+      );
     const measured = await measure(tx, orgId, actorId, input, s, changeId);
     if (
       canonicalJson(measured.preview) !== canonicalJson(calculated.preview) ||
-      canonicalJson(measured.parentLines) !==
-        canonicalJson(calculated.parentLines)
+      canonicalJson(measured.parentLines) !== canonicalJson(calculated.parentLines)
     )
       throw new LossOfControlProposalError(
         409,
@@ -1178,9 +1199,7 @@ export async function applyLossOfControl(
     if (input.retainedMethod === "equity") {
       // IFRS 10.25: the consolidated fair value becomes the retained associate’s initial cost.
       retainedInterestId = randomUUID();
-      const next = new Date(
-        Date.parse(input.effectiveOn + "T00:00:00Z") + 86400000,
-      )
+      const next = new Date(Date.parse(input.effectiveOn + "T00:00:00Z") + 86400000)
         .toISOString()
         .slice(0, 10);
       await tx.execute(
@@ -1218,7 +1237,8 @@ async function reversalState(
     source.status !== "applied"
   )
     throw new LossOfControlProposalError(422, "select an applied loss-of-control change");
-  const loss = (await tx.execute<{
+  const loss = (
+    await tx.execute<{
       id: string;
       interest_id: string;
       retained_interest_id: string | null;
@@ -1230,12 +1250,13 @@ async function reversalState(
       parent_subsidiary_id: string;
       elimination_subsidiary_id: string;
     }>(
-      sql`select *,effective_on::text from consolidation_control_losses where org_id=${orgId} and change_id=${sourceChangeId} for update`, "objects",
-    ))[0];
+      sql`select *,effective_on::text from consolidation_control_losses where org_id=${orgId} and change_id=${sourceChangeId} for update`,
+      "objects",
+    )
+  )[0];
   if (!loss || loss.reversed_by_change_id)
     throw new LossOfControlProposalError(422, "this loss of control has already been corrected");
-  const requiredSubsidiaryIds = source.payload
-    .requiredSubsidiaryIds as string[];
+  const requiredSubsidiaryIds = source.payload.requiredSubsidiaryIds as string[];
   await assertFinancialChangeAccess(tx, {
     orgId,
     actorId,
@@ -1245,32 +1266,35 @@ async function reversalState(
   });
   if (
     loss.retained_interest_id &&
-    (await tx.execute(
+    (
+      await tx.execute(
         // Live entries only: reversed later history no longer blocks correcting this disposal.
-        sql`select 1 from ownership_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.interest_id=${loss.retained_interest_id} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`, "objects",
-      )).length
+        sql`select 1 from ownership_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.interest_id=${loss.retained_interest_id} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`,
+        "objects",
+      )
+    ).length
   )
-    throw new LossOfControlProposalError(422,
+    throw new LossOfControlProposalError(
+      422,
       "the retained interest has subsequent consolidation history; reverse its later consolidation entries before correcting this disposal",
     );
   const entries = (source.result?.entryIds ?? []) as string[];
   const journals = await tx.execute<{
-      id: string;
-      subsidiary_id: string;
-      book_id: string;
-      period_id: string;
-      status: string;
-      reverses_entry_id: string | null;
-      currency: string;
-      origin: string;
-    }>(
-      sql`select e.id,e.subsidiary_id,e.book_id,e.period_id,e.status,e.reverses_entry_id,e.origin,s.base_currency as currency from journal_entries e join subsidiaries s on s.org_id=e.org_id and s.id=e.subsidiary_id where e.org_id=${orgId} and e.id=any(${uuidArray(entries)}::uuid[]) order by e.id for update of e`, "objects",
-    );
-  if (
-    journals.length !== entries.length ||
-    journals.some((e) => e.status !== "posted")
-  )
-    throw new LossOfControlProposalError(422,
+    id: string;
+    subsidiary_id: string;
+    book_id: string;
+    period_id: string;
+    status: string;
+    reverses_entry_id: string | null;
+    currency: string;
+    origin: string;
+  }>(
+    sql`select e.id,e.subsidiary_id,e.book_id,e.period_id,e.status,e.reverses_entry_id,e.origin,s.base_currency as currency from journal_entries e join subsidiaries s on s.org_id=e.org_id and s.id=e.subsidiary_id where e.org_id=${orgId} and e.id=any(${uuidArray(entries)}::uuid[]) order by e.id for update of e`,
+    "objects",
+  );
+  if (journals.length !== entries.length || journals.some((e) => e.status !== "posted"))
+    throw new LossOfControlProposalError(
+      422,
       "a disposal journal has subsequent correction history; retain that evidence and reconcile it before proposing a new disposal correction",
     );
   const checkedPeriods = new Set<string>();
@@ -1287,16 +1311,18 @@ async function reversalState(
     checkedPeriods.add(key);
   }
   const lines = await tx.execute<{
-      entry_id: string;
-      account_id: string;
-      amount: string;
-      memo: string | null;
-    }>(
-      sql`select entry_id,account_id,amount::text,memo from journal_lines where org_id=${orgId} and entry_id=any(${uuidArray(entries)}::uuid[]) order by entry_id,line_number`, "objects",
-    );
+    entry_id: string;
+    account_id: string;
+    amount: string;
+    memo: string | null;
+  }>(
+    sql`select entry_id,account_id,amount::text,memo from journal_lines where org_id=${orgId} and entry_id=any(${uuidArray(entries)}::uuid[]) order by entry_id,line_number`,
+    "objects",
+  );
   const policies = await tx.execute(
-      sql`select * from subsidiary_ownership_interests where org_id=${orgId} and (id=${loss.interest_id} or id=${loss.retained_interest_id}) order by id for update`, "objects",
-    );
+    sql`select * from subsidiary_ownership_interests where org_id=${orgId} and (id=${loss.interest_id} or id=${loss.retained_interest_id}) order by id for update`,
+    "objects",
+  );
   return { source, loss, requiredSubsidiaryIds, journals, lines, policies };
 }
 export async function proposeLossOfControlReversal(
@@ -1358,43 +1384,47 @@ export async function applyLossOfControlReversal(
     if (change.status === "applied") return change.result!;
     if (change.domain !== "consolidation" || change.operation !== "reversal")
       throw new LossOfControlProposalError(422, "select a consolidation correction");
-    const state = await reversalState(
-      tx,
-      orgId,
-      actorId,
-      String(change.payload.sourceChangeId),
-    );
+    const state = await reversalState(tx, orgId, actorId, String(change.payload.sourceChangeId));
     assertFinancialChangeApproved(change, {
       domain: "consolidation",
       subjectId: state.source.subject_id,
       beforeState: state,
     });
-    const allowed = await actorAllowedSubsidiaryIds(
-      tx,
-      orgId,
-      change.approved_by!,
-    );
+    const allowed = await actorAllowedSubsidiaryIds(tx, orgId, change.approved_by!);
     if (allowed && state.requiredSubsidiaryIds.some((id) => !allowed.has(id)))
-      throw new LossOfControlProposalError(409,
+      throw new LossOfControlProposalError(
+        409,
         "the independent approver no longer covers every affected entity",
       );
     const marked = await tx.execute(
-      sql`update consolidation_control_losses set reversed_by_change_id=${changeId} where org_id=${orgId} and id=${state.loss.id} and reversed_by_change_id is null returning id`, "objects",
+      sql`update consolidation_control_losses set reversed_by_change_id=${changeId} where org_id=${orgId} and id=${state.loss.id} and reversed_by_change_id is null returning id`,
+      "objects",
     );
     if (marked.length !== 1)
-      throw new LossOfControlProposalError(409, "the disposal correction changed while applying; review the current correction history before retrying");
+      throw new LossOfControlProposalError(
+        409,
+        "the disposal correction changed while applying; review the current correction history before retrying",
+      );
     if (state.loss.retained_interest_id) {
       const retired = await tx.execute(
-        sql`update subsidiary_ownership_interests set is_active=false,last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${state.loss.retained_interest_id} and is_active returning id`, "objects",
+        sql`update subsidiary_ownership_interests set is_active=false,last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${state.loss.retained_interest_id} and is_active returning id`,
+        "objects",
       );
       if (retired.length !== 1)
-        throw new LossOfControlProposalError(409, "the retained interest changed while applying the correction; review its current status before retrying");
+        throw new LossOfControlProposalError(
+          409,
+          "the retained interest changed while applying the correction; review its current status before retrying",
+        );
     }
     const reopened = await tx.execute(
-      sql`update subsidiary_ownership_interests set effective_to=${state.loss.measurement.originalEffectiveTo},last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${state.loss.interest_id} returning id`, "objects",
+      sql`update subsidiary_ownership_interests set effective_to=${state.loss.measurement.originalEffectiveTo},last_change_id=${changeId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${state.loss.interest_id} returning id`,
+      "objects",
     );
     if (reopened.length !== 1)
-      throw new LossOfControlProposalError(409, "the original ownership window changed while applying the correction; review its current status before retrying");
+      throw new LossOfControlProposalError(
+        409,
+        "the original ownership window changed while applying the correction; review its current status before retrying",
+      );
     const entryIds: string[] = [];
     for (const entry of state.journals) {
       // Keep cancellation of an earlier consolidation generation intact. Its
@@ -1424,23 +1454,17 @@ export async function applyLossOfControlReversal(
       try {
         await markEntryReversed(tx, { orgId, entryId: entry.id, actorId });
       } catch {
-        throw new LossOfControlProposalError(409,
+        throw new LossOfControlProposalError(
+          409,
           "a disposal journal could not be linked to its correction",
         );
       }
     }
-    const restored = await runOwnershipConsolidationIn(
-      orgId,
-      state.loss.period_id,
-      actorId,
-      tx,
-      {
-        asOf: state.loss.effective_on,
-        interestIds: (
-          state.source.before_state as { ownershipInterestIds?: string[] }
-        ).ownershipInterestIds ?? [state.loss.interest_id],
-      },
-    );
+    const restored = await runOwnershipConsolidationIn(orgId, state.loss.period_id, actorId, tx, {
+      asOf: state.loss.effective_on,
+      interestIds: (state.source.before_state as { ownershipInterestIds?: string[] })
+        .ownershipInterestIds ?? [state.loss.interest_id],
+    });
     entryIds.push(...restored.entryIds);
     const result = {
       entryIds,

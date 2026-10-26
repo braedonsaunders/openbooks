@@ -15,15 +15,9 @@ export const benefitAwardSubjectProfile: FlowSubjectProfile = {
   supportsUngatedSubmission: true,
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
-  statuses: [
-    "draft",
-    "pending",
-    "approved",
-    "rejected",
-    "queued",
-    "delivered",
-    "voided",
-  ].map((value) => ({ value, label: value })),
+  statuses: ["draft", "pending", "approved", "rejected", "queued", "delivered", "voided"].map(
+    (value) => ({ value, label: value }),
+  ),
   fields: [
     { key: "programId", label: "Program", type: "text" },
     { key: "programCode", label: "Program code", type: "text" },
@@ -77,7 +71,8 @@ async function loadAward(id: string): Promise<AwardContext | null> {
   // Gate preflight resolves subject identity before entering its organization
   // transaction. RLS controls visibility there; the gate's table scope then
   // validates the employer entity before the decision transaction begins.
-  const rows = await db.execute<AwardContext>(sql`
+  const rows = await db.execute<AwardContext>(
+    sql`
     select a.id, a.org_id, a.program_id, a.employment_id, a.value::text,
       a.currency, a.status, a.period_from::text, a.period_to::text,
       a.created_by, a.submitted_by, a.flow_run_id, a.program_snapshot,
@@ -92,93 +87,98 @@ async function loadAward(id: string): Promise<AwardContext | null> {
       order by effective_from desc, id desc limit 1
     ) v on true
     where a.id = ${id}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
-export const benefitAwardsFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: BENEFIT_AWARD_SUBJECT_KIND,
-    permissions: {
-      read: "hrm.benefits.read",
-      edit: "hrm.benefits.manage",
-      approve: "hrm.benefits.manage",
-    },
-    scope: tableScope("employment", "hrm_benefit_awards", "employment_id"),
-    profile: benefitAwardSubjectProfile,
-    releaseViaHandler: true,
-    async loadContext(id) {
-      const award = await loadAward(id);
-      if (!award) return null;
-      const pinned = award.flow_run_id
-        ? (await db.execute<{ context: Record<string, unknown> }>(
-              sql`select context from flow_runs where org_id = ${award.org_id} and id = ${award.flow_run_id} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${id}`, "objects",
-            ))[0]?.context
-        : null;
-      if (award.flow_run_id && !pinned)
-        throw new Error(
-          "Benefits reward submission evidence is unavailable; review its workflow execution before deciding.",
-        );
-      return {
-        values: pinned
-          ? { ...pinned, status: award.status }
-          : {
-              id,
-              programId: award.program_id,
-              programCode: award.program_snapshot.code ?? null,
-              programName: award.program_snapshot.name ?? null,
-              family: award.program_snapshot.family ?? null,
-              value: award.value,
-              currency: award.currency,
-              employmentId: award.employment_id,
-              legalEntityId: award.legal_entity_id,
-              departmentId: award.department_id,
-              periodFrom: award.period_from,
-              periodTo: award.period_to,
-              status: award.status,
-              createdBy: award.created_by,
-            },
-        submitterUserId: award.submitted_by ?? award.created_by,
-        makerUserId: award.created_by,
-      };
-    },
-    label(id, values) {
-      return `${String(values.programName ?? "Benefits reward")} ${id.slice(0, 8)}`;
-    },
-    deepLink(id) {
-      return `/hrm/benefits?view=rewards&award=${id}`;
-    },
-    async getStatus(id) {
-      return (await loadAward(id))?.status ?? null;
-    },
-    async changeStatus() {
+export const benefitAwardsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: BENEFIT_AWARD_SUBJECT_KIND,
+  permissions: {
+    read: "hrm.benefits.read",
+    edit: "hrm.benefits.manage",
+    approve: "hrm.benefits.manage",
+  },
+  scope: tableScope("employment", "hrm_benefit_awards", "employment_id"),
+  profile: benefitAwardSubjectProfile,
+  releaseViaHandler: true,
+  async loadContext(id) {
+    const award = await loadAward(id);
+    if (!award) return null;
+    const pinned = award.flow_run_id
+      ? (
+          await db.execute<{ context: Record<string, unknown> }>(
+            sql`select context from flow_runs where org_id = ${award.org_id} and id = ${award.flow_run_id} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${id}`,
+            "objects",
+          )
+        )[0]?.context
+      : null;
+    if (award.flow_run_id && !pinned)
       throw new Error(
-        "Benefits reward status is controlled by submission and approval decisions; use its record actions.",
+        "Benefits reward submission evidence is unavailable; review its workflow execution before deciding.",
       );
-    },
-    async setField() {
-      throw new Error(
-        "Submitted Benefits reward evidence is immutable; create a correcting reward instead.",
-      );
-    },
-    async releaseApproval(subjectId, outcome, ctx, detail, run) {
-      await releaseFlowApproval({
-        subjectKind: BENEFIT_AWARD_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        ctx,
-        comment: detail?.comment,
-        approvalRunId: run?.id,
-      });
-    },
-    async findCandidateIds(limit) {
-      const orgId = ambientTenantOrgId();
-      if (!orgId)
-        throw new Error(
-          "Benefits reward candidates require an ambient organization context.",
-        );
-      return (await db.execute<{ id: string }>(
-          sql`select id from hrm_benefit_awards where org_id = ${orgId} and status in ('draft', 'pending') order by created_at desc, id limit ${limit}`, "objects",
-        )).map((row) => row.id);
-    },
-  });
+    return {
+      values: pinned
+        ? { ...pinned, status: award.status }
+        : {
+            id,
+            programId: award.program_id,
+            programCode: award.program_snapshot.code ?? null,
+            programName: award.program_snapshot.name ?? null,
+            family: award.program_snapshot.family ?? null,
+            value: award.value,
+            currency: award.currency,
+            employmentId: award.employment_id,
+            legalEntityId: award.legal_entity_id,
+            departmentId: award.department_id,
+            periodFrom: award.period_from,
+            periodTo: award.period_to,
+            status: award.status,
+            createdBy: award.created_by,
+          },
+      submitterUserId: award.submitted_by ?? award.created_by,
+      makerUserId: award.created_by,
+    };
+  },
+  label(id, values) {
+    return `${String(values.programName ?? "Benefits reward")} ${id.slice(0, 8)}`;
+  },
+  deepLink(id) {
+    return `/hrm/benefits?view=rewards&award=${id}`;
+  },
+  async getStatus(id) {
+    return (await loadAward(id))?.status ?? null;
+  },
+  async changeStatus() {
+    throw new Error(
+      "Benefits reward status is controlled by submission and approval decisions; use its record actions.",
+    );
+  },
+  async setField() {
+    throw new Error(
+      "Submitted Benefits reward evidence is immutable; create a correcting reward instead.",
+    );
+  },
+  async releaseApproval(subjectId, outcome, ctx, detail, run) {
+    await releaseFlowApproval({
+      subjectKind: BENEFIT_AWARD_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      ctx,
+      comment: detail?.comment,
+      approvalRunId: run?.id,
+    });
+  },
+  async findCandidateIds(limit) {
+    const orgId = ambientTenantOrgId();
+    if (!orgId)
+      throw new Error("Benefits reward candidates require an ambient organization context.");
+    return (
+      await db.execute<{ id: string }>(
+        sql`select id from hrm_benefit_awards where org_id = ${orgId} and status in ('draft', 'pending') order by created_at desc, id limit ${limit}`,
+        "objects",
+      )
+    ).map((row) => row.id);
+  },
+});

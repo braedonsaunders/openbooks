@@ -12,13 +12,10 @@ export const salesQuotaSubjectProfile: FlowSubjectProfile = {
   pinsSubmissionPolicy: true,
   triggers: ["on_submit"],
   actions: ["notify", "send_email"],
-  statuses: [
-    "draft",
-    "pending_approval",
-    "approved",
-    "superseded",
-    "closed",
-  ].map((value) => ({ value, label: value })),
+  statuses: ["draft", "pending_approval", "approved", "superseded", "closed"].map((value) => ({
+    value,
+    label: value,
+  })),
   fields: [
     { key: "name", label: "Quota", type: "text" },
     { key: "amount", label: "Target", type: "number" },
@@ -34,17 +31,22 @@ export const salesQuotaSubjectProfile: FlowSubjectProfile = {
 };
 async function load(id: string) {
   return (
-    (await db.execute<{
+    (
+      await db.execute<{
         createdBy: string | null;
         submittedBy: string | null;
         status: string;
         [key: string]: unknown;
-      }>(sql`
+      }>(
+        sql`
     select id,name,amount::text,currency,metric,lifecycle as status,revision,
       employee_id as "employeeId",sales_team_id as "salesTeamId",subsidiary_id as "subsidiaryId",
       period_start::text as "periodStart",period_end::text as "periodEnd",reason,
       created_by as "createdBy",submitted_by as "submittedBy"
-    from crm_sales_quotas where id=${id}`, "objects"))[0] ?? null
+    from crm_sales_quotas where id=${id}`,
+        "objects",
+      )
+    )[0] ?? null
   );
 }
 export const salesQuotasFlowAdapter = defineTableSubjectAdapter({

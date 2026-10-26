@@ -14,8 +14,14 @@ describe("seeded report catalog", () => {
       }
     }
     assert.deepEqual(invalid, [], `Invalid report plans: ${invalid.join("; ")}`);
-    const slugs = [...SEEDED_CATALOG_REPORTS, ...STANDARD_STATEMENT_DEFINITIONS].map(({ slug }) => slug);
+    const slugs = [...SEEDED_CATALOG_REPORTS, ...STANDARD_STATEMENT_DEFINITIONS].map(
+      ({ slug }) => slug,
+    );
     const duplicates = slugs.filter((slug, index) => slugs.indexOf(slug) !== index);
-    assert.deepEqual([...new Set(duplicates)], [], `Duplicate seeded report slugs: ${duplicates.join(", ")}`);
+    assert.deepEqual(
+      [...new Set(duplicates)],
+      [],
+      `Duplicate seeded report slugs: ${duplicates.join(", ")}`,
+    );
   });
 });

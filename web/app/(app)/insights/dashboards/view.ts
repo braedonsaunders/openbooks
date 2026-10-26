@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getFormatter, getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getFormatter, getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   pagination,
   badge,
@@ -19,10 +19,10 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { insightVisibilitySql } from '@/lib/insight-access'
-import { can, requirePermission } from '../../../../lib/authz'
-import { parseListParams, pickString } from '../../../../lib/list-params'
+} from "@braedonsaunders/appkit-viewspec";
+import { insightVisibilitySql } from "@/lib/insight-access";
+import { can, requirePermission } from "../../../../lib/authz";
+import { parseListParams, pickString } from "../../../../lib/list-params";
 
 /**
  * Insight dashboards, split into a loader and a spec.
@@ -38,142 +38,145 @@ import { parseListParams, pickString } from '../../../../lib/list-params'
 const SORT_COLUMNS = {
   name: sql`name`,
   updated: sql`updated_at`,
-} as const
+} as const;
 
 export interface DashboardRow {
-  id: string
-  name: string
-  href: string
-  description: string | null
-  cardCount: string
-  statusLabel: string
-  statusVariant: 'success' | 'outline'
-  updated: string
+  id: string;
+  name: string;
+  href: string;
+  description: string | null;
+  cardCount: string;
+  statusLabel: string;
+  statusVariant: "success" | "outline";
+  updated: string;
 }
 
 export interface DashboardsData {
-  title: string
-  description: string
-  searchPlaceholder: string
-  statusLabel: string
-  statusOptions: { value: string; label: string; count: number }[]
-  currentParams: Record<string, string | string[] | undefined>
-  emptyTitle: string
-  emptyDescription: string
-  filteredEmptyTitle: string
-  filteredEmptyDescription: string
-  isEmpty: boolean
-  isFilteredEmpty: boolean
-  hasRows: boolean
-  columnName: string
-  columnCards: string
-  columnStatus: string
-  columnUpdated: string
-  rows: DashboardRow[]
-  total: number
-  currentPage: number
-  perPage: number
-  sort: string
-  dir: string
-  canCreate: boolean
+  title: string;
+  description: string;
+  searchPlaceholder: string;
+  statusLabel: string;
+  statusOptions: { value: string; label: string; count: number }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  emptyTitle: string;
+  emptyDescription: string;
+  filteredEmptyTitle: string;
+  filteredEmptyDescription: string;
+  isEmpty: boolean;
+  isFilteredEmpty: boolean;
+  hasRows: boolean;
+  columnName: string;
+  columnCards: string;
+  columnStatus: string;
+  columnUpdated: string;
+  rows: DashboardRow[];
+  total: number;
+  currentPage: number;
+  perPage: number;
+  sort: string;
+  dir: string;
+  canCreate: boolean;
 }
 
 export async function loadDashboards(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<DashboardsData> {
   const [t, tCommon, format] = await Promise.all([
-    getTranslations('insights'),
-    getTranslations('common'),
+    getTranslations("insights"),
+    getTranslations("common"),
     getFormatter(),
-  ])
-  const authz = await requirePermission('insights.read')
-  const canCreate = can(authz, 'insights.create')
-  const orgId = authz.user.orgId
+  ]);
+  const authz = await requirePermission("insights.read");
+  const canCreate = can(authz, "insights.create");
+  const orgId = authz.user.orgId;
 
   const params = parseListParams(sp, {
-    sort: 'updated',
-    dir: 'desc',
+    sort: "updated",
+    dir: "desc",
     perPage: 25,
-    allowedSorts: ['name', 'updated'] as const,
-  })
-  const statusParam = pickString(sp.status)
-  const status =
-    statusParam === 'draft' || statusParam === 'published'
-      ? statusParam
-      : undefined
+    allowedSorts: ["name", "updated"] as const,
+  });
+  const statusParam = pickString(sp.status);
+  const status = statusParam === "draft" || statusParam === "published" ? statusParam : undefined;
 
-  const visibility = insightVisibilitySql(authz)
+  const visibility = insightVisibilitySql(authz);
   const where = sql`org_id = ${orgId} and ${visibility}
-    ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}
-    ${status ? sql` and status = ${status}` : sql``}`
+    ${params.q ? sql` and name ilike ${"%" + params.q + "%"}` : sql``}
+    ${status ? sql` and status = ${status}` : sql``}`;
 
   const [dashboards, counts] = await Promise.all([
-    db.execute(sql`
+    db.execute(
+      sql`
       select id, name, description, status, updated_at,
              jsonb_array_length(layout) as card_count
         from insight_dashboards
        where ${where}
-       order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
-    db.execute<{ total: string; drafts: string; published: string }>(sql`
+       order by ${SORT_COLUMNS[params.sort]} ${params.dir === "asc" ? sql`asc` : sql`desc`} nulls last
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`,
+      "objects",
+    ),
+    db.execute<{ total: string; drafts: string; published: string }>(
+      sql`
       select count(*) as total,
              count(*) filter (where status = 'draft') as drafts,
              count(*) filter (where status = 'published') as published
-        from insight_dashboards where org_id = ${orgId} and ${visibility}`, 'objects'),
-  ])
-  const c = counts[0]!
-  const total = Number(c.total)
+        from insight_dashboards where org_id = ${orgId} and ${visibility}`,
+      "objects",
+    ),
+  ]);
+  const c = counts[0]!;
+  const total = Number(c.total);
   const filteredTotal =
     params.q || status
       ? Number(
-          (await db.execute<{ n: string }>(
-              sql`select count(*) as n from insight_dashboards where ${where}`, 'objects',
-            ))[0]!.n,
+          (
+            await db.execute<{ n: string }>(
+              sql`select count(*) as n from insight_dashboards where ${where}`,
+              "objects",
+            )
+          )[0]!.n,
         )
-      : total
+      : total;
 
   return {
-    title: t('title'),
-    description: t('dashboards.description'),
-    searchPlaceholder: t('dashboards.searchPlaceholder'),
-    statusLabel: tCommon('labels.status'),
+    title: t("title"),
+    description: t("dashboards.description"),
+    searchPlaceholder: t("dashboards.searchPlaceholder"),
+    statusLabel: tCommon("labels.status"),
     statusOptions: [
       {
-        value: 'draft',
-        label: tCommon('status.draft'),
+        value: "draft",
+        label: tCommon("status.draft"),
         count: Number(c.drafts),
       },
       {
-        value: 'published',
-        label: t('status.published'),
+        value: "published",
+        label: t("status.published"),
         count: Number(c.published),
       },
     ],
     currentParams: sp,
-    emptyTitle: t('dashboards.emptyTitle'),
-    emptyDescription: t('dashboards.emptyDescription'),
-    filteredEmptyTitle: t('cards.filterEmptyTitle'),
-    filteredEmptyDescription: t('cards.filterEmptyDescription'),
+    emptyTitle: t("dashboards.emptyTitle"),
+    emptyDescription: t("dashboards.emptyDescription"),
+    filteredEmptyTitle: t("cards.filterEmptyTitle"),
+    filteredEmptyDescription: t("cards.filterEmptyDescription"),
     isEmpty: total === 0,
     isFilteredEmpty: total > 0 && filteredTotal === 0,
     hasRows: filteredTotal > 0,
-    columnName: tCommon('labels.name'),
-    columnCards: t('dashboards.cardsColumn'),
-    columnStatus: tCommon('labels.status'),
-    columnUpdated: tCommon('labels.updated'),
+    columnName: tCommon("labels.name"),
+    columnCards: t("dashboards.cardsColumn"),
+    columnStatus: tCommon("labels.status"),
+    columnUpdated: tCommon("labels.updated"),
     rows: dashboards.map((row) => ({
       id: String(row.id),
       name: String(row.name),
       href: `/insights/dashboards/${row.id}`,
       description: (row.description as string | null) ?? null,
       cardCount: String(Number(row.card_count)),
-      statusLabel:
-        row.status === 'published'
-          ? t('status.published')
-          : tCommon('status.draft'),
-      statusVariant: row.status === 'published' ? 'success' : 'outline',
+      statusLabel: row.status === "published" ? t("status.published") : tCommon("status.draft"),
+      statusVariant: row.status === "published" ? "success" : "outline",
       updated: format.dateTime(new Date(String(row.updated_at)), {
-        dateStyle: 'medium',
+        dateStyle: "medium",
       }),
     })),
     total: filteredTotal,
@@ -182,32 +185,32 @@ export async function loadDashboards(
     sort: params.sort,
     dir: params.dir,
     canCreate,
-  }
+  };
 }
 
-const f = ref<DashboardsData>()
-const item = field
-const rootF = rootRef<DashboardsData>()
+const f = ref<DashboardsData>();
+const item = field;
+const rootF = rootRef<DashboardsData>();
 
-const MUTED = 'text-slate-500 dark:text-slate-400'
+const MUTED = "text-slate-500 dark:text-slate-400";
 
 export function dashboardsSpec(data: DashboardsData): PageSpec {
   return page({
-    route: '/insights/dashboards',
-    layout: 'list',
+    route: "/insights/dashboards",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('new-dashboard', {}, f('canCreate'))],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("new-dashboard", {}, f("canCreate"))],
       }),
-      widgetBlock('insights-tabs', { active: 'dashboards' }),
-      grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-        widgetBlock('filter-chips', {
-          basePath: '/insights/dashboards',
+      widgetBlock("insights-tabs", { active: "dashboards" }),
+      grid("flex flex-wrap items-center gap-2", [
+        widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+        widgetBlock("filter-chips", {
+          basePath: "/insights/dashboards",
           currentParams: data.currentParams,
-          paramKey: 'status',
+          paramKey: "status",
           label: data.statusLabel,
           options: data.statusOptions,
         }),
@@ -215,65 +218,65 @@ export function dashboardsSpec(data: DashboardsData): PageSpec {
     ],
     body: [
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.emptyTitle,
           description: data.emptyDescription,
-          action: data.canCreate ? 'new-dashboard' : null,
+          action: data.canCreate ? "new-dashboard" : null,
         }),
-        when: f('isEmpty'),
+        when: f("isEmpty"),
       },
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.filteredEmptyTitle,
           description: data.filteredEmptyDescription,
           action: null,
         }),
-        when: f('isFilteredEmpty'),
+        when: f("isFilteredEmpty"),
       },
       {
-        ...registeredListTable('insights_dashboards', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
+        ...registeredListTable("insights_dashboards", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
           sorting: {
-            basePath: '/insights/dashboards',
-            sort: f('sort'),
-            dir: f('dir'),
+            basePath: "/insights/dashboards",
+            sort: f("sort"),
+            dir: f("dir"),
           },
           columns: [
             column(
-              rootF('columnName'),
-              widgetCell('dashboard-name-cell', {
-                name: item('name'),
-                href: item('href'),
-                description: item('description'),
+              rootF("columnName"),
+              widgetCell("dashboard-name-cell", {
+                name: item("name"),
+                href: item("href"),
+                description: item("description"),
               }),
-              { sort: 'name', className: 'font-semibold' },
+              { sort: "name", className: "font-semibold" },
             ),
-            column(rootF('columnCards'), text(item('cardCount')), {
+            column(rootF("columnCards"), text(item("cardCount")), {
               className: MUTED,
             }),
             column(
-              rootF('columnStatus'),
-              badge(item('statusLabel'), { variant: item('statusVariant') }),
+              rootF("columnStatus"),
+              badge(item("statusLabel"), { variant: item("statusVariant") }),
             ),
-            column(rootF('columnUpdated'), text(item('updated')), {
-              sort: 'updated',
+            column(rootF("columnUpdated"), text(item("updated")), {
+              sort: "updated",
               className: MUTED,
             }),
           ],
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
       {
         ...pagination({
-          basePath: '/insights/dashboards',
-          total: f('total'),
-          page: f('currentPage'),
-          perPage: f('perPage'),
+          basePath: "/insights/dashboards",
+          total: f("total"),
+          page: f("currentPage"),
+          perPage: f("perPage"),
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
     ],
-  })
+  });
 }

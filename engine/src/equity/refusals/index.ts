@@ -37,7 +37,11 @@ export const EQUITY_REFUSALS = {
 
 export type EquityRefusalKey = keyof typeof EQUITY_REFUSALS;
 
-type ParamsOf<K extends EquityRefusalKey> = (typeof EQUITY_REFUSALS)[K] extends { readonly params: infer P } ? P : Record<never, never>;
+type ParamsOf<K extends EquityRefusalKey> = (typeof EQUITY_REFUSALS)[K] extends {
+  readonly params: infer P;
+}
+  ? P
+  : Record<never, never>;
 
 /** The figures one refusal takes, each of the kind its entry declares. */
 export type EquityRefusalValues<K extends EquityRefusalKey> = {

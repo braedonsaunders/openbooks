@@ -67,10 +67,7 @@ export interface FlowSubjectPermissions {
  * closed); `custom` is a stored visibility predicate richer than one owner.
  */
 export type FlowSubjectScope =
-  | { via: "document" }
-  | { via: "none" }
-  | FlowSubjectTableScope
-  | FlowSubjectCustomScope;
+  { via: "document" } | { via: "none" } | FlowSubjectTableScope | FlowSubjectCustomScope;
 
 /**
  * `column`: the subject row carries its own subsidiary column. `party`,
@@ -107,12 +104,9 @@ export interface FlowSubjectAdapter {
   /** Grants for generic endpoints; null (fail closed) when no single grant exists. */
   permissions: FlowSubjectPermissions | null;
   /** Native subjects with several domains resolve the decision grant from the persisted record. */
-  decisionPermission?(
-    subjectId: string,
-    actorId: string,
-  ): Promise<string | null>;
+  decisionPermission?(subjectId: string, actorId: string): Promise<string | null>;
   /** Polymorphic subjects resolve their record's native read grant before disclosure. */
-  readPermission?(subjectId:string,actorId:string):Promise<string|null>;
+  readPermission?(subjectId: string, actorId: string): Promise<string | null>;
   /** Where this kind's legal entity lives (subsidiary scope and locking). */
   scope: FlowSubjectScope;
   /** The author-time vocabulary for this subject (triggers/actions/fields). */
@@ -183,12 +177,7 @@ export interface FlowSubjectAdapter {
    */
   markAwaitingApproval?(subjectId: string, ctx: FlowExecCtx): Promise<void>;
   /** set_field action — writableFields only, throws on violation. */
-  setField(
-    subjectId: string,
-    field: string,
-    value: unknown,
-    ctx: FlowExecCtx,
-  ): Promise<void>;
+  setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void>;
   /**
    * Recent candidate record ids for scheduled record fan-out (`scheduled`
    * triggers with a `select`). The scheduler loads each candidate's context

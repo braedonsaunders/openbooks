@@ -25,12 +25,21 @@ function prng(seed: number): () => number {
   };
 }
 
-function target(seq: number, fixedPercent: string | null, isRemainder = false, id?: string): AllocationRuleTarget {
+function target(
+  seq: number,
+  fixedPercent: string | null,
+  isRemainder = false,
+  id?: string,
+): AllocationRuleTarget {
   return { sequence: seq, fixedPercent, isRemainder, ...(id === undefined ? {} : { id }) };
 }
 
 test("apportion splits evenly with no lost cent", () => {
-  const r = apportionTargets("100.0000", [wt("a", "1"), wt("b", "1"), wt("c", "1")], "largest_share");
+  const r = apportionTargets(
+    "100.0000",
+    [wt("a", "1"), wt("b", "1"), wt("c", "1")],
+    "largest_share",
+  );
   assert.equal(sum(r.targets.map((t) => t.amount)), "100.0000");
   assert.equal(r.targets.length, 3);
   // 100/3 = 33.3333 x2 + 33.3334 to the largest-share (tie -> first) target.
@@ -50,7 +59,10 @@ test("apportion is exact across 1..1000 deterministic random weight sets", () =>
     for (let k = 0; k < n; k += 1) {
       // Random 4dp-scale weights, sometimes zero, sometimes tied.
       // The first weight is positive: an all-zero set is refused, not split.
-      const w = k > 0 && rand() < 0.15 ? weights[0]?.weight ?? "1" : String((k === 0 ? 1 : 0) + Math.floor(rand() * 1000000));
+      const w =
+        k > 0 && rand() < 0.15
+          ? (weights[0]?.weight ?? "1")
+          : String((k === 0 ? 1 : 0) + Math.floor(rand() * 1000000));
       weights.push(wt(`t${k}`, w));
     }
     const sign = rand() < 0.3 ? "-" : "";
@@ -58,11 +70,18 @@ test("apportion is exact across 1..1000 deterministic random weight sets", () =>
     const policies = ["largest_share", "first_target", "last_target"] as const;
     const policy = policies[Math.floor(rand() * policies.length)] ?? "largest_share";
     const r = apportionTargets(total, weights, policy);
-    assert.equal(sum(r.targets.map((t) => t.amount)), normalizeMoney(total), `case ${i} total ${total}`);
+    assert.equal(
+      sum(r.targets.map((t) => t.amount)),
+      normalizeMoney(total),
+      `case ${i} total ${total}`,
+    );
     // Exactly one target carries the (possibly zero) residual booking.
     const nonZero = r.targets.filter((t) => t.residual !== "0.0000");
     assert.ok(nonZero.length <= 1, `case ${i}: residual on >1 target`);
-    assert.ok(r.targets.some((t) => t.key === r.residualKey), `case ${i}: residualKey must name a target`);
+    assert.ok(
+      r.targets.some((t) => t.key === r.residualKey),
+      `case ${i}: residualKey must name a target`,
+    );
     for (const t of r.targets) {
       assert.match(t.share, /^\d+\.\d{10}$/, `case ${i}: share is 10dp`);
     }
@@ -82,7 +101,10 @@ test("apportion handles 4dp totals and zero total", () => {
   assert.equal(sum(tiny.targets.map((t) => t.amount)), "0.0001");
   assert.equal(tiny.residualKey, "b");
   const zero = apportionTargets("0.0000", [wt("a", "5"), wt("b", "7")], "largest_share");
-  assert.deepEqual(zero.targets.map((t) => t.amount), ["0.0000", "0.0000"]);
+  assert.deepEqual(
+    zero.targets.map((t) => t.amount),
+    ["0.0000", "0.0000"],
+  );
   assert.equal(sum(zero.targets.map((t) => t.amount)), "0.0000");
 });
 
@@ -95,8 +117,12 @@ test("apportion gives zero-weight targets zero and refuses an all-zero weight se
   // All-zero weights carry no basis: an equal split would invent attribution.
   assert.throws(
     () => apportionTargets("10.0000", [wt("a", "0"), wt("b", "0")], "last_target"),
-    (error: unknown) => error instanceof AllocationApportionError && error.code === "no_driver_weight"
-      && /every target weight is zero, so there is no basis to apportion 10\.0000 — record the driver values for the period being allocated/.test(error.message),
+    (error: unknown) =>
+      error instanceof AllocationApportionError &&
+      error.code === "no_driver_weight" &&
+      /every target weight is zero, so there is no basis to apportion 10\.0000 — record the driver values for the period being allocated/.test(
+        error.message,
+      ),
   );
 });
 
@@ -121,15 +147,30 @@ test("apportion sends the remainder to the is_remainder target for fixed_percent
 
 test("apportion rejects bad inputs instead of losing money", () => {
   assert.throws(() => apportionTargets("10.0000", [], "largest_share"), AllocationApportionError);
-  assert.throws(() => apportionTargets("10.0000", [wt("a", "-1")], "largest_share"), AllocationApportionError);
+  assert.throws(
+    () => apportionTargets("10.0000", [wt("a", "-1")], "largest_share"),
+    AllocationApportionError,
+  );
   assert.throws(
     () => apportionTargets("10.0000", [wt("a", "1", true), wt("b", "2", true)], "largest_share"),
     AllocationApportionError,
   );
-  assert.throws(() => apportionTargets("10.0000", [wt("a", "1")], "explicit_target"), AllocationApportionError);
-  assert.throws(() => apportionTargets("10.0000", [wt("a", "1")], "explicit_target", "zzz"), AllocationApportionError);
-  assert.throws(() => apportionTargets("10.0000", [wt("a", "1"), wt("a", "2")], "largest_share"), AllocationApportionError);
-  assert.throws(() => apportionTargets("10.0000", [wt("a", "abc")], "largest_share"), AllocationApportionError);
+  assert.throws(
+    () => apportionTargets("10.0000", [wt("a", "1")], "explicit_target"),
+    AllocationApportionError,
+  );
+  assert.throws(
+    () => apportionTargets("10.0000", [wt("a", "1")], "explicit_target", "zzz"),
+    AllocationApportionError,
+  );
+  assert.throws(
+    () => apportionTargets("10.0000", [wt("a", "1"), wt("a", "2")], "largest_share"),
+    AllocationApportionError,
+  );
+  assert.throws(
+    () => apportionTargets("10.0000", [wt("a", "abc")], "largest_share"),
+    AllocationApportionError,
+  );
   assert.throws(() => apportionTargets("10.00x0", [wt("a", "1")], "largest_share"), Error);
   // Zero total over no targets is the only valid empty apportionment.
   const empty = apportionTargets("0.0000", [], "largest_share");
@@ -138,10 +179,27 @@ test("apportion rejects bad inputs instead of losing money", () => {
 });
 
 test("fixedPercentWeights converts percents and derives the remainder", () => {
-  const weights = fixedPercentWeights([target(1, "50", false, "a"), target(2, "30", false, "b"), target(3, "20", false, "c")]);
-  assert.deepEqual(weights.map((x) => [x.key, x.weight]), [["a", "50.0000"], ["b", "30.0000"], ["c", "20.0000"]]);
+  const weights = fixedPercentWeights([
+    target(1, "50", false, "a"),
+    target(2, "30", false, "b"),
+    target(3, "20", false, "c"),
+  ]);
+  assert.deepEqual(
+    weights.map((x) => [x.key, x.weight]),
+    [
+      ["a", "50.0000"],
+      ["b", "30.0000"],
+      ["c", "20.0000"],
+    ],
+  );
   const withRem = fixedPercentWeights([target(1, "30", false, "a"), target(2, null, true, "r")]);
-  assert.deepEqual(withRem.map((x) => [x.key, x.weight]), [["a", "30.0000"], ["r", "70.0000"]]);
+  assert.deepEqual(
+    withRem.map((x) => [x.key, x.weight]),
+    [
+      ["a", "30.0000"],
+      ["r", "70.0000"],
+    ],
+  );
   // Remainder absorbs fractional dust: 1 cent at 33.3333% x3 + remainder.
   const dusty = fixedPercentWeights([
     target(1, "33.3333", false, "a"),
@@ -163,8 +221,14 @@ test("fixedPercentWeights refuses invalid percent grids", () => {
     () => fixedPercentWeights([target(1, "60", false, "a"), target(2, "50", false, "b")]),
     AllocationApportionError,
   );
-  assert.throws(() => fixedPercentWeights([target(1, "40", true, "a"), target(2, null, true, "b")]), AllocationApportionError);
-  assert.throws(() => fixedPercentWeights([target(1, "101", false, "a")]), AllocationApportionError);
+  assert.throws(
+    () => fixedPercentWeights([target(1, "40", true, "a"), target(2, null, true, "b")]),
+    AllocationApportionError,
+  );
+  assert.throws(
+    () => fixedPercentWeights([target(1, "101", false, "a")]),
+    AllocationApportionError,
+  );
   assert.throws(() => fixedPercentWeights([target(1, "0", false, "a")]), AllocationApportionError);
   assert.throws(() => fixedPercentWeights([target(1, null, false, "a")]), AllocationApportionError);
   // Keys fall back to sequence when ids are absent; hash stability relies on this.
@@ -173,30 +237,67 @@ test("fixedPercentWeights refuses invalid percent grids", () => {
 });
 
 test("steppedWeights slices the total into marginal tiers", () => {
-  const weights = steppedWeights("2500.0000", [{ upTo: "1000", targetKey: "a" }, { upTo: "2000", targetKey: "b" }, { upTo: null, targetKey: "c" }]);
-  assert.deepEqual(weights.map((x) => [x.key, x.weight]), [["a", "1000.0000"], ["b", "1000.0000"], ["c", "500.0000"]]);
+  const weights = steppedWeights("2500.0000", [
+    { upTo: "1000", targetKey: "a" },
+    { upTo: "2000", targetKey: "b" },
+    { upTo: null, targetKey: "c" },
+  ]);
+  assert.deepEqual(
+    weights.map((x) => [x.key, x.weight]),
+    [
+      ["a", "1000.0000"],
+      ["b", "1000.0000"],
+      ["c", "500.0000"],
+    ],
+  );
   const r = apportionTargets("2500.0000", weights, "largest_share");
   assert.equal(sum(r.targets.map((t) => t.amount)), "2500.0000");
   // Total below the first cap lands wholly in the first tier.
-  const small = steppedWeights("400.0000", [{ upTo: "1000", targetKey: "a" }, { upTo: null, targetKey: "b" }]);
-  assert.deepEqual(small.map((x) => x.weight), ["400.0000", "0.0000"]);
+  const small = steppedWeights("400.0000", [
+    { upTo: "1000", targetKey: "a" },
+    { upTo: null, targetKey: "b" },
+  ]);
+  assert.deepEqual(
+    small.map((x) => x.weight),
+    ["400.0000", "0.0000"],
+  );
   // Exact cap boundary.
-  const edge = steppedWeights("1000.0000", [{ upTo: "1000", targetKey: "a" }, { upTo: null, targetKey: "b" }]);
-  assert.deepEqual(edge.map((x) => x.weight), ["1000.0000", "0.0000"]);
+  const edge = steppedWeights("1000.0000", [
+    { upTo: "1000", targetKey: "a" },
+    { upTo: null, targetKey: "b" },
+  ]);
+  assert.deepEqual(
+    edge.map((x) => x.weight),
+    ["1000.0000", "0.0000"],
+  );
 });
 
 test("steppedWeights refuses tiers that cannot cover the total", () => {
-  assert.throws(() => steppedWeights("2500.0000", [{ upTo: "1000", targetKey: "a" }]), AllocationApportionError);
   assert.throws(
-    () => steppedWeights("100.0000", [{ upTo: "2000", targetKey: "a" }, { upTo: "1000", targetKey: "b" }]),
+    () => steppedWeights("2500.0000", [{ upTo: "1000", targetKey: "a" }]),
+    AllocationApportionError,
+  );
+  assert.throws(
+    () =>
+      steppedWeights("100.0000", [
+        { upTo: "2000", targetKey: "a" },
+        { upTo: "1000", targetKey: "b" },
+      ]),
     AllocationApportionError,
   );
   assert.throws(() => steppedWeights("100.0000", []), AllocationApportionError);
   assert.throws(
-    () => steppedWeights("100.0000", [{ upTo: null, targetKey: "a" }, { upTo: "5000", targetKey: "b" }]),
+    () =>
+      steppedWeights("100.0000", [
+        { upTo: null, targetKey: "a" },
+        { upTo: "5000", targetKey: "b" },
+      ]),
     AllocationApportionError,
   );
-  assert.throws(() => steppedWeights("100.0000", [{ upTo: "abc", targetKey: "a" }]), AllocationApportionError);
+  assert.throws(
+    () => steppedWeights("100.0000", [{ upTo: "abc", targetKey: "a" }]),
+    AllocationApportionError,
+  );
 });
 
 test("fractional weights keep ten-decimal precision and reported shares cross-foot", () => {
@@ -211,7 +312,11 @@ test("fractional weights keep ten-decimal precision and reported shares cross-fo
   assert.equal(r.weightTotal, "2");
   // Ten-decimal weights are representable: the precision guard only refuses
   // beyond ten places, and the weight total formats sub-unit sums exactly.
-  const fine = apportionTargets("10.0000", [wt("a", "0.1234567890"), wt("b", "0.8765432110")], "first_target");
+  const fine = apportionTargets(
+    "10.0000",
+    [wt("a", "0.1234567890"), wt("b", "0.8765432110")],
+    "first_target",
+  );
   assert.equal(fine.weightTotal, "1");
   assert.equal(sum(fine.targets.map((t) => t.amount)), "10.0000");
   assert.equal(apportionTargets("10.0000", [wt("a", "0.5")], "first_target").weightTotal, "0.5");
@@ -224,19 +329,28 @@ test("fractional weights keep ten-decimal precision and reported shares cross-fo
 
 test("a negative weight is refused as negative, even one unit below zero", () => {
   assert.throws(() => apportionTargets("10.0000", [wt("a", "-1")], "largest_share"), /negative/);
-  assert.throws(() => apportionTargets("10.0000", [wt("a", "-0.0000000001")], "largest_share"), /negative/);
+  assert.throws(
+    () => apportionTargets("10.0000", [wt("a", "-0.0000000001")], "largest_share"),
+    /negative/,
+  );
 });
 
 test("a bare decimal point is refused as malformed, never silently zero", () => {
   // The empty-fraction refusal only fires when the whole part is missing too:
   // "5." parses as five, but "." must not slip through as a zero weight.
-  assert.throws(() => apportionTargets("10.0000", [wt("a", ".")], "largest_share"), /not a decimal/);
+  assert.throws(
+    () => apportionTargets("10.0000", [wt("a", ".")], "largest_share"),
+    /not a decimal/,
+  );
   const dotted = apportionTargets("10.0000", [wt("a", "5."), wt("b", "5")], "first_target");
   assert.equal(sum(dotted.targets.map((t) => t.amount)), "10.0000");
 });
 
 test("a dust fixed percent inside (0, 100] is accepted and resolves the remainder", () => {
-  const weights = fixedPercentWeights([target(1, "0.0001", false, "t1"), target(2, null, true, "t2")]);
+  const weights = fixedPercentWeights([
+    target(1, "0.0001", false, "t1"),
+    target(2, null, true, "t2"),
+  ]);
   assert.equal(weights[0]!.weight, "0.0001");
   assert.equal(weights[1]!.weight, "99.9999");
 });
@@ -244,8 +358,14 @@ test("a dust fixed percent inside (0, 100] is accepted and resolves the remainde
 test("stepped tiers refuse an empty grid, honor sub-unit totals, and refuse negative bounds", () => {
   assert.throws(() => steppedWeights("0.0000", []), /at least one tier/);
   const neg = steppedWeights("-0.0001", [{ upTo: "1.0000", targetKey: "t1" }]);
-  assert.deepEqual(neg.map((x) => x.weight), ["0.0001"]);
-  assert.throws(() => steppedWeights("10.0000", [{ upTo: "-0.0001", targetKey: "t1" }]), /negative/);
+  assert.deepEqual(
+    neg.map((x) => x.weight),
+    ["0.0001"],
+  );
+  assert.throws(
+    () => steppedWeights("10.0000", [{ upTo: "-0.0001", targetKey: "t1" }]),
+    /negative/,
+  );
   // A zero bound is not negative — it fails the ascent check instead.
   assert.throws(() => steppedWeights("10.0000", [{ upTo: "0.0000", targetKey: "t1" }]), /ascend/);
 });

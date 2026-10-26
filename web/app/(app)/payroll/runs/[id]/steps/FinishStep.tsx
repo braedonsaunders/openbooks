@@ -1,23 +1,37 @@
-'use client'
+"use client";
 
 /** Split from RunWizard.tsx; moved without behavior changes. */
-import { type Funding, type RunHeader, type RemittanceRow } from '../run-wizard-model'
-import { FundingPanel } from '../FundingPanel'
-import { AttributeEntityControl, RecordPaymentControl, type ClearingDesignationOption, type RecordPaymentInput } from '../run-wizard-controls'
-import { useState } from 'react'
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { AlertTriangle, ArrowRight, Ban, BookOpenCheck, CheckCircle2, FileDown, Loader2, Send } from 'lucide-react'
-import { Badge, Button, TableCell, TableRow, cn } from '@openbooks/ui'
-import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
-import type { PayRunRefusalAcknowledgement } from '@openbooks/engine/payroll/run-calculation-evidence'
-import { readApiErrorMessage } from '../../../../../../lib/api-error'
-import { PagedTable, type PagedColumn } from '../../../../../../components/paged-table'
-import { SeparationIssuePanel } from '../../../_ui/filing-workspace'
-import { BankFilePanel } from '../BankFilePanel'
-import { decimalAbs } from '../../../../../../lib/statement-format'
-import { journalEntryDrawerHref } from '../../../../../../lib/cross-module-drawer-links'
+import { type Funding, type RunHeader, type RemittanceRow } from "../run-wizard-model";
+import { FundingPanel } from "../FundingPanel";
+import {
+  AttributeEntityControl,
+  RecordPaymentControl,
+  type ClearingDesignationOption,
+  type RecordPaymentInput,
+} from "../run-wizard-controls";
+import { useState } from "react";
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Ban,
+  BookOpenCheck,
+  CheckCircle2,
+  FileDown,
+  Loader2,
+  Send,
+} from "lucide-react";
+import { Badge, Button, TableCell, TableRow, cn } from "@openbooks/ui";
+import type { YearEndFilingSection } from "@openbooks/engine/payroll/yearend";
+import type { PayRunRefusalAcknowledgement } from "@openbooks/engine/payroll/run-calculation-evidence";
+import { readApiErrorMessage } from "../../../../../../lib/api-error";
+import { PagedTable, type PagedColumn } from "../../../../../../components/paged-table";
+import { SeparationIssuePanel } from "../../../_ui/filing-workspace";
+import { BankFilePanel } from "../BankFilePanel";
+import { decimalAbs } from "../../../../../../lib/statement-format";
+import { journalEntryDrawerHref } from "../../../../../../lib/cross-module-drawer-links";
 
 /* ------------------------------------------------------------------ */
 /* Step 5 — Post & finish                                              */
@@ -32,52 +46,58 @@ import { journalEntryDrawerHref } from '../../../../../../lib/cross-module-drawe
  * link does — reprinting is safe and returns the same numbers.
  */
 export async function fetchChequePdf(documentId: string, fallback: string): Promise<Blob> {
-  const res = await fetch(`/api/payroll/runs/${documentId}/cheques-pdf`, { method: 'POST' })
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback))
-  return res.blob()
+  const res = await fetch(`/api/payroll/runs/${documentId}/cheques-pdf`, { method: "POST" });
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback));
+  return res.blob();
 }
 
 function PrintChequesButton({ documentId, count }: { documentId: string; count: number }) {
-  const t = useTranslations('payroll')
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("payroll");
+  const [busy, setBusy] = useState(false);
   async function print() {
-    setBusy(true)
+    setBusy(true);
     // Reserve the print surface synchronously inside the click: a tab opened
     // after the POST awaits loses transient activation and is blocked
     // silently, after the server already allocated the cheque numbers.
-    const tab = window.open('about:blank', '_blank')
+    const tab = window.open("about:blank", "_blank");
     try {
-      const url = URL.createObjectURL(await fetchChequePdf(documentId, t('wizard.finish.chequesFailed')))
+      const url = URL.createObjectURL(
+        await fetchChequePdf(documentId, t("wizard.finish.chequesFailed")),
+      );
       if (tab && !tab.closed) {
-        tab.location.href = url
-        tab.opener = null
+        tab.location.href = url;
+        tab.opener = null;
       } else {
         // Popup blocked: fall back to an in-page download, which blockers
         // allow, and say so — the numbers are allocated either way.
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = `cheques-${documentId}.pdf`
-        document.body.appendChild(anchor)
-        anchor.click()
-        anchor.remove()
-        toast.warning(t('wizard.finish.chequesPopupBlocked'))
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `cheques-${documentId}.pdf`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        toast.warning(t("wizard.finish.chequesPopupBlocked"));
       }
       // Revoked late so the new tab has finished reading the blob.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
       // Never strand the reserved blank tab on a failed POST.
-      tab?.close()
-      toast.error((e as Error).message)
+      tab?.close();
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
   return (
     <Button size="sm" variant="outline" disabled={busy} onClick={() => void print()}>
-      {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <FileDown size={14} aria-hidden />}
-      {t('wizard.finish.printCheques', { count })}
+      {busy ? (
+        <Loader2 size={14} className="animate-spin" aria-hidden />
+      ) : (
+        <FileDown size={14} aria-hidden />
+      )}
+      {t("wizard.finish.printCheques", { count })}
     </Button>
-  )
+  );
 }
 
 export function FinishStep({
@@ -103,63 +123,67 @@ export function FinishStep({
   acknowledgement,
   fmt,
 }: {
-  run: RunHeader
-  separationSections: YearEndFilingSection[]
-  remittance: RemittanceRow[]
-  posted: boolean
-  committed: boolean
-  canPost: boolean
-  busy: boolean
-  onPost: () => void
-  onEmailStubs: () => void
-  onRecordPayment: (input: RecordPaymentInput) => void
-  onAttributeEntity: (subsidiaryId: string) => void
+  run: RunHeader;
+  separationSections: YearEndFilingSection[];
+  remittance: RemittanceRow[];
+  posted: boolean;
+  committed: boolean;
+  canPost: boolean;
+  busy: boolean;
+  onPost: () => void;
+  onEmailStubs: () => void;
+  onRecordPayment: (input: RecordPaymentInput) => void;
+  onAttributeEntity: (subsidiaryId: string) => void;
   /** Void the committed run: reverses its posting by the document void path. */
-  onVoid: () => void
-  registerReportId: string | null
-  bankAccounts: { id: string; label: string }[]
-  clearingDesignations: ClearingDesignationOption[]
-  entityOptions: { id: string; label: string }[]
-  canAttributeEntity: boolean
-  funding: Funding
-  canRun: boolean
-  acknowledgement: PayRunRefusalAcknowledgement | null
-  fmt: (v: string | number | null | undefined) => string
+  onVoid: () => void;
+  registerReportId: string | null;
+  bankAccounts: { id: string; label: string }[];
+  clearingDesignations: ClearingDesignationOption[];
+  entityOptions: { id: string; label: string }[];
+  canAttributeEntity: boolean;
+  funding: Funding;
+  canRun: boolean;
+  acknowledgement: PayRunRefusalAcknowledgement | null;
+  fmt: (v: string | number | null | undefined) => string;
 }) {
-  const t = useTranslations('payroll')
-  const chequeCount = funding.rails.find((rail) => rail.method === 'cheque')?.employees ?? 0
+  const t = useTranslations("payroll");
+  const chequeCount = funding.rails.find((rail) => rail.method === "cheque")?.employees ?? 0;
   if (!committed && !posted) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-        {t('wizard.finish.notCommitted')}
+        {t("wizard.finish.notCommitted")}
       </div>
-    )
+    );
   }
 
   return (
     <div className="space-y-4">
       <div
         className={cn(
-          'flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3.5',
+          "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3.5",
           posted
-            ? 'border-emerald-200/80 bg-emerald-50 dark:border-emerald-800/60 dark:bg-emerald-950/40'
-            : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
+            ? "border-emerald-200/80 bg-emerald-50 dark:border-emerald-800/60 dark:bg-emerald-950/40"
+            : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900",
         )}
       >
         <div className="flex items-center gap-3">
           {posted ? (
-            <CheckCircle2 size={20} className="text-emerald-600 dark:text-emerald-400" aria-hidden />
+            <CheckCircle2
+              size={20}
+              className="text-emerald-600 dark:text-emerald-400"
+              aria-hidden
+            />
           ) : (
             <Send size={18} className="text-slate-400" aria-hidden />
           )}
           <div>
             <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {posted ? t('wizard.finish.postedTitle') : t('wizard.finish.postTitle')}
+              {posted ? t("wizard.finish.postedTitle") : t("wizard.finish.postTitle")}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {posted
-                ? t('wizard.finish.postedHint', { number: run.document_number })
-                : t('wizard.finish.postHint')}
+                ? t("wizard.finish.postedHint", { number: run.document_number })
+                : t("wizard.finish.postHint")}
             </p>
           </div>
         </div>
@@ -168,17 +192,15 @@ export function FinishStep({
             <Button asChild size="sm" variant="outline">
               <Link href={journalEntryDrawerHref(run.posted_entry_id) as never}>
                 <BookOpenCheck size={14} aria-hidden />
-                {t('wizard.finish.viewJournal')}
+                {t("wizard.finish.viewJournal")}
               </Link>
             </Button>
           )}
-          {posted && run.paid_at && (
-            <Badge variant="success">{t('wizard.finish.paid')}</Badge>
-          )}
+          {posted && run.paid_at && <Badge variant="success">{t("wizard.finish.paid")}</Badge>}
           {posted && run.paid_entry_id && (
             <Button asChild size="sm" variant="ghost">
               <Link href={journalEntryDrawerHref(run.paid_entry_id) as never}>
-                {t('wizard.finish.viewPayment')}
+                {t("wizard.finish.viewPayment")}
               </Link>
             </Button>
           )}
@@ -194,9 +216,13 @@ export function FinishStep({
           {committed && (
             <>
               <Button asChild size="sm" variant="outline">
-                <a href={`/api/payroll/runs/${run.document_id}/stubs-pdf`} target="_blank" rel="noreferrer">
+                <a
+                  href={`/api/payroll/runs/${run.document_id}/stubs-pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   <FileDown size={14} aria-hidden />
-                  {t('wizard.finish.printStubs')}
+                  {t("wizard.finish.printStubs")}
                 </a>
               </Button>
               {canRun && chequeCount > 0 && (
@@ -205,14 +231,14 @@ export function FinishStep({
               {registerReportId && (
                 <Button asChild size="sm" variant="outline">
                   <Link href={`/reports/custom/run/${registerReportId}` as never}>
-                    {t('wizard.finish.register')}
+                    {t("wizard.finish.register")}
                   </Link>
                 </Button>
               )}
               {canRun && (
                 <Button size="sm" variant="outline" disabled={busy} onClick={onEmailStubs}>
                   <Send size={14} aria-hidden />
-                  {t('wizard.finish.emailStubs')}
+                  {t("wizard.finish.emailStubs")}
                 </Button>
               )}
               {/* Legacy entityless run: attributing it here is the remedy the
@@ -220,25 +246,38 @@ export function FinishStep({
                   carries no entity and only to callers the route serves
                   (scoped roles get a 404 there); a refresh after
                   attributing removes it. */}
-              {canRun && canAttributeEntity && run.subsidiary_id == null && entityOptions.length > 0 && (
-                <AttributeEntityControl
-                  entityOptions={entityOptions}
-                  busy={busy}
-                  onAttribute={onAttributeEntity}
-                />
-              )}
-              {canRun && run.document_status !== 'voided' && (
-                <Button size="sm" variant="outline" disabled={busy} onClick={onVoid} className="text-red-600 dark:text-red-400">
+              {canRun &&
+                canAttributeEntity &&
+                run.subsidiary_id == null &&
+                entityOptions.length > 0 && (
+                  <AttributeEntityControl
+                    entityOptions={entityOptions}
+                    busy={busy}
+                    onAttribute={onAttributeEntity}
+                  />
+                )}
+              {canRun && run.document_status !== "voided" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={onVoid}
+                  className="text-red-600 dark:text-red-400"
+                >
                   <Ban size={14} aria-hidden />
-                  {t('wizard.finish.voidRun')}
+                  {t("wizard.finish.voidRun")}
                 </Button>
               )}
             </>
           )}
           {!posted && canPost && (
             <Button onClick={onPost} disabled={busy}>
-              {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Send size={14} aria-hidden />}
-              {t('run.post')}
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden />
+              ) : (
+                <Send size={14} aria-hidden />
+              )}
+              {t("run.post")}
             </Button>
           )}
         </div>
@@ -252,7 +291,7 @@ export function FinishStep({
         <div className="rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
           <p className="mb-1 flex items-center gap-2 font-semibold">
             <AlertTriangle size={15} aria-hidden />
-            {t('wizard.finish.partialTitle', { count: acknowledgement.refusals.length })}
+            {t("wizard.finish.partialTitle", { count: acknowledgement.refusals.length })}
           </p>
           <ul className="ml-6 list-disc space-y-0.5">
             {acknowledgement.refusals.map((entry) => (
@@ -262,9 +301,11 @@ export function FinishStep({
             ))}
           </ul>
           <p className="mt-2 text-xs">
-            {t('wizard.finish.partialRecorded', { date: acknowledgement.acknowledgedAt.slice(0, 10) })}
+            {t("wizard.finish.partialRecorded", {
+              date: acknowledgement.acknowledgedAt.slice(0, 10),
+            })}
           </p>
-          <p className="mt-1 text-xs">{t('wizard.finish.partialRecovery')}</p>
+          <p className="mt-1 text-xs">{t("wizard.finish.partialRecovery")}</p>
         </div>
       )}
 
@@ -275,9 +316,7 @@ export function FinishStep({
           it are one decision, and reading them apart is how a payday goes out
           twice. Committed runs only — there is nothing to instruct off figures
           that can still change. */}
-      {committed && (
-        <BankFilePanel documentId={run.document_id} canRun={canRun} fmt={fmt} />
-      )}
+      {committed && <BankFilePanel documentId={run.document_id} canRun={canRun} fmt={fmt} />}
 
       {/* Termination runs: the pack-declared SEPARATION filings (the ROE) are
           due within days of the interruption of earnings, so they are issued
@@ -292,30 +331,41 @@ export function FinishStep({
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {t('wizard.finish.remittanceTitle')}
+              {t("wizard.finish.remittanceTitle")}
             </h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">{t('wizard.finish.remittanceHint')}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              {t("wizard.finish.remittanceHint")}
+            </p>
           </div>
-<div className="p-3">
+          <div className="p-3">
             <PagedTable
               rows={remittance}
-              columns={([
-                {
-                  key: 'account', header: t('wizard.gl.account'),
-                  search: (row) => row.account_label,
-                  cell: (row) => <span className="font-medium">{row.account_label}</span>,
-                },
-                {
-                  key: 'amount', header: t('wizard.finish.amount'), align: 'right',
-                  cell: (row) => fmt(decimalAbs(row.amount)),
-                },
-              ] as PagedColumn<RemittanceRow>[])}
+              columns={
+                [
+                  {
+                    key: "account",
+                    header: t("wizard.gl.account"),
+                    search: (row) => row.account_label,
+                    cell: (row) => <span className="font-medium">{row.account_label}</span>,
+                  },
+                  {
+                    key: "amount",
+                    header: t("wizard.finish.amount"),
+                    align: "right",
+                    cell: (row) => fmt(decimalAbs(row.amount)),
+                  },
+                ] as PagedColumn<RemittanceRow>[]
+              }
               pageSize={15}
-              empty={<p className="p-2 text-sm text-slate-500 dark:text-slate-400">{t('wizard.finish.remittanceHint')}</p>}
+              empty={
+                <p className="p-2 text-sm text-slate-500 dark:text-slate-400">
+                  {t("wizard.finish.remittanceHint")}
+                </p>
+              }
               rowKey={(row, index) => `${row.account_label}-${index}`}
               footer={
                 <TableRow className="border-t-2 border-slate-200 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-950/40">
-                  <TableCell>{t('wizard.finish.netPay')}</TableCell>
+                  <TableCell>{t("wizard.finish.netPay")}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmt(run.net_total)}</TableCell>
                 </TableRow>
               }
@@ -325,20 +375,28 @@ export function FinishStep({
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
           <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-            {t('wizard.finish.nextTitle')}
+            {t("wizard.finish.nextTitle")}
           </h3>
           <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
             <li className="flex items-start gap-2">
-              <ArrowRight size={14} aria-hidden className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
-              {t('wizard.finish.nextRemit')}
+              <ArrowRight
+                size={14}
+                aria-hidden
+                className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400"
+              />
+              {t("wizard.finish.nextRemit")}
             </li>
             <li className="flex items-start gap-2">
-              <ArrowRight size={14} aria-hidden className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
-              {t('wizard.finish.nextPay')}
+              <ArrowRight
+                size={14}
+                aria-hidden
+                className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400"
+              />
+              {t("wizard.finish.nextPay")}
             </li>
           </ul>
         </div>
       </div>
     </div>
-  )
+  );
 }

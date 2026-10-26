@@ -37,13 +37,19 @@ async function chargebeeGet(
   transport: ConnectorTransport = guardedFetch,
 ): Promise<unknown> {
   const query = new URLSearchParams(params);
-  const res = await fetchWithConnectorRetry(`${siteBase(site)}${path}?${query.toString()}`, {
-    method: "GET",
-    headers: { Authorization: authHeader(site), Accept: "application/json" },
-    redirect: "error",
-  }, { describe: "Chargebee", transport });
+  const res = await fetchWithConnectorRetry(
+    `${siteBase(site)}${path}?${query.toString()}`,
+    {
+      method: "GET",
+      headers: { Authorization: authHeader(site), Accept: "application/json" },
+      redirect: "error",
+    },
+    { describe: "Chargebee", transport },
+  );
   if (!res.ok) {
-    throw new Error(`Chargebee ${path} refused HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    throw new Error(
+      `Chargebee ${path} refused HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`,
+    );
   }
   return await res.json();
 }
@@ -56,10 +62,10 @@ export interface ChargebeePage<T> {
 
 function toPage<T>(payload: unknown, key: string): ChargebeePage<T> {
   const root = (payload ?? {}) as Record<string, unknown>;
-  const list = Array.isArray(root.list) ? root.list as Array<{ [k: string]: T }> : [];
+  const list = Array.isArray(root.list) ? (root.list as Array<{ [k: string]: T }>) : [];
   return {
     records: list.map((entry) => entry[key] as T).filter((record) => record !== undefined),
-    nextOffset: typeof root.next_offset === "string" ? root.next_offset as string : null,
+    nextOffset: typeof root.next_offset === "string" ? (root.next_offset as string) : null,
   };
 }
 
@@ -70,7 +76,10 @@ export async function listChargebee<T>(
   params: Record<string, string> = {},
   transport: ConnectorTransport = guardedFetch,
 ): Promise<ChargebeePage<T>> {
-  return toPage<T>(await chargebeeGet(site, `/${resource}`, { limit: "100", ...params }, transport), resource.replace(/s$/, ""));
+  return toPage<T>(
+    await chargebeeGet(site, `/${resource}`, { limit: "100", ...params }, transport),
+    resource.replace(/s$/, ""),
+  );
 }
 
 /** Pull every page of a Chargebee list, bounded by `maxPages` so a runaway cursor cannot loop forever. */
@@ -94,7 +103,9 @@ export async function listAllChargebee<T>(
     if (!result.nextOffset) return out;
     offset = result.nextOffset;
   }
-  throw new Error(`Chargebee ${resource} exceeded ${maxPages} pages — narrow the window and import incrementally.`);
+  throw new Error(
+    `Chargebee ${resource} exceeded ${maxPages} pages — narrow the window and import incrementally.`,
+  );
 }
 
 /** Chargebee events carry the change history subscriptions alone cannot state (created/changed/renewed/cancelled with snapshots). */
@@ -108,6 +119,7 @@ export async function listChargebeeEvents(
   eventTypes.forEach((type, index) => {
     params[`event_type[in][${index}]`] = type;
   });
-  if (updatedAfter) params["occurred_at[after]"] = String(Math.floor(new Date(updatedAfter).getTime() / 1000));
+  if (updatedAfter)
+    params["occurred_at[after]"] = String(Math.floor(new Date(updatedAfter).getTime() / 1000));
   return listAllChargebee<Record<string, unknown>>(site, "events", params, transport);
 }

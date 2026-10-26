@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  measureAssetTransferElimination,
-  type AssetTransferBasis,
-} from "./asset-transfers.ts";
+import { measureAssetTransferElimination, type AssetTransferBasis } from "./asset-transfers.ts";
 import { sum } from "../money/money.ts";
 const basis: AssetTransferBasis = {
   groupCost: "1000",

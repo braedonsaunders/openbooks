@@ -110,18 +110,15 @@ const IT_CONGUAGLIO_LABEL = "Conguaglio di fine anno";
 
 /** Every rule the settlement prices, to the document and section. */
 const IT_CONGUAGLIO_CITATION =
-  "art. 23 c. 3 DPR 29 settembre 1973, n. 600 (conguaglio entro il 28 febbraio "
-  + "dell'anno successivo; alla data di cessazione in caso di cessazione del rapporto); "
-  + "art. 11 TUIR scaglioni; artt. 12–13 TUIR detrazioni; L. 207/2024 art. 1 c. 4–7 "
-  + "(somma, ulteriore detrazione, verifica in sede di conguaglio, recupero indebiti in dieci rate); "
-  + "D.L. 3/2020 art. 1 trattamento integrativo; D.Lgs. 446/1997 addizionale regionale; "
-  + "D.Lgs. 360/1998 addizionale comunale";
+  "art. 23 c. 3 DPR 29 settembre 1973, n. 600 (conguaglio entro il 28 febbraio " +
+  "dell'anno successivo; alla data di cessazione in caso di cessazione del rapporto); " +
+  "art. 11 TUIR scaglioni; artt. 12–13 TUIR detrazioni; L. 207/2024 art. 1 c. 4–7 " +
+  "(somma, ulteriore detrazione, verifica in sede di conguaglio, recupero indebiti in dieci rate); " +
+  "D.L. 3/2020 art. 1 trattamento integrativo; D.Lgs. 446/1997 addizionale regionale; " +
+  "D.Lgs. 360/1998 addizionale comunale";
 
 /** Tenant-declared rate slots the settlement prices through — configuration. */
-const IT_CONGUAGLIO_TENANT_RATES = [
-  "it_addizionale_regionale",
-  "it_addizionale_comunale",
-] as const;
+const IT_CONGUAGLIO_TENANT_RATES = ["it_addizionale_regionale", "it_addizionale_comunale"] as const;
 
 /**
  * Credit-guard dust tolerance. Twelve monthly half-cent roundings (0,06)
@@ -197,9 +194,9 @@ function tablesFor(taxYear: number): ItYearTables {
   if (taxYear === 2025) return IT_2025_TABLES;
   if (taxYear === 2026) return IT_2026_TABLES;
   throw new ItPayrollRefusal(
-    `IT conguaglio has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed `
-    + "editions. This year is not yet supported by the IT pack; contact support before "
-    + `settling ${taxYear}.`,
+    `IT conguaglio has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed ` +
+      "editions. This year is not yet supported by the IT pack; contact support before " +
+      `settling ${taxYear}.`,
   );
 }
 
@@ -233,8 +230,8 @@ export function calculateItConguaglio(
   const tables = tablesFor(input.taxYear);
   if (input.rates == null || input.declaration == null || input.ytdBySystemKey == null) {
     throw new ItPayrollRefusal(
-      "IT conguaglio needs tenant rates, the worker's declaration answers, and committed YTD totals — "
-      + "a missing one refuses by name (it_addizionale_regionale / it_addizionale_comunale), never settles zero",
+      "IT conguaglio needs tenant rates, the worker's declaration answers, and committed YTD totals — " +
+        "a missing one refuses by name (it_addizionale_regionale / it_addizionale_comunale), never settles zero",
     );
   }
   const { declaration, rates } = input;
@@ -250,9 +247,10 @@ export function calculateItConguaglio(
       domicileBolzano: declaration.domicileBolzano,
       comuneCode: declaration.comuneCode,
       regionalRate: rates.regionalRate,
-      municipalSurtax: rates.municipalRate == null
-        ? null
-        : { rate: rates.municipalRate, exemption: rates.municipalExemption },
+      municipalSurtax:
+        rates.municipalRate == null
+          ? null
+          : { rate: rates.municipalRate, exemption: rates.municipalExemption },
       sommaBandBase: null,
       hasDetrazioniDeclaration: declaration.hasDetrazioniDeclaration,
       hasFamilyCharges: declaration.hasFamilyCharges,
@@ -280,13 +278,13 @@ export function calculateItConguaglio(
   const sommaPaid = paidOf(input.ytdBySystemKey, "somma_payout");
   if (!withinDust(tiAnnual, tiPaid) || !withinDust(sommaAnnual, sommaPaid)) {
     throw new ItPayrollRefusal(
-      `IT ${input.taxYear} conguaglio refuses: trattamento integrativo annuale ${tiAnnual} contro ${tiPaid} gia erogato, `
-      + `somma annuale ${sommaAnnual} contro ${sommaPaid} gia erogata — the year is not level in a way the v1 priors `
-      + "cannot rapportare al periodo di lavoro (D.L. 3/2020 art. 1 c. 1; L. 207/2024 art. 1 c. 5), and indebiti "
-      + "oltre 60 euro si recuperano in dieci rate (L. 207/2024 art. 1 c. 7), a timing no in-product mechanism "
-      + "prices (see IT_REFUSED_2025/IT_REFUSED_2026). Verify the rapportata spettanza and settle the residual "
-      + "through a pay-run adjustment; the IRPEF/addizionali conguaglio "
-      + "for this employee is left unsettled by this run.",
+      `IT ${input.taxYear} conguaglio refuses: trattamento integrativo annuale ${tiAnnual} contro ${tiPaid} gia erogato, ` +
+        `somma annuale ${sommaAnnual} contro ${sommaPaid} gia erogata — the year is not level in a way the v1 priors ` +
+        "cannot rapportare al periodo di lavoro (D.L. 3/2020 art. 1 c. 1; L. 207/2024 art. 1 c. 5), and indebiti " +
+        "oltre 60 euro si recuperano in dieci rate (L. 207/2024 art. 1 c. 7), a timing no in-product mechanism " +
+        "prices (see IT_REFUSED_2025/IT_REFUSED_2026). Verify the rapportata spettanza and settle the residual " +
+        "through a pay-run adjustment; the IRPEF/addizionali conguaglio " +
+        "for this employee is left unsettled by this run.",
     );
   }
 
@@ -325,19 +323,56 @@ export function calculateItConguaglio(
   // zero. Amounts stay positive; the contract's push refuses negatives.
   const lines = [
     { systemKey: "income_tax", label: "Conguaglio IRPEF", sequence: 110, signed: delta.incomeTax },
-    { systemKey: "regional_surtax", label: "Conguaglio addizionale regionale", sequence: 115, signed: delta.regionalSurtax },
-    { systemKey: "municipal_surtax", label: "Conguaglio addizionale comunale", sequence: 120, signed: delta.municipalSurtax },
-    { systemKey: "sostitutiva_rinnovi", label: "Conguaglio sostitutiva 5% rinnovi", sequence: 111, signed: substDelta.rinnovi },
-    { systemKey: "sostitutiva_turni", label: "Conguaglio sostitutiva 15% turni", sequence: 112, signed: substDelta.turni },
-    { systemKey: "sostitutiva_premi", label: "Conguaglio sostitutiva 1% premi", sequence: 113, signed: substDelta.premi },
+    {
+      systemKey: "regional_surtax",
+      label: "Conguaglio addizionale regionale",
+      sequence: 115,
+      signed: delta.regionalSurtax,
+    },
+    {
+      systemKey: "municipal_surtax",
+      label: "Conguaglio addizionale comunale",
+      sequence: 120,
+      signed: delta.municipalSurtax,
+    },
+    {
+      systemKey: "sostitutiva_rinnovi",
+      label: "Conguaglio sostitutiva 5% rinnovi",
+      sequence: 111,
+      signed: substDelta.rinnovi,
+    },
+    {
+      systemKey: "sostitutiva_turni",
+      label: "Conguaglio sostitutiva 15% turni",
+      sequence: 112,
+      signed: substDelta.turni,
+    },
+    {
+      systemKey: "sostitutiva_premi",
+      label: "Conguaglio sostitutiva 1% premi",
+      sequence: 113,
+      signed: substDelta.premi,
+    },
   ] as const;
   for (const line of lines) {
     const order = cmp(line.signed, "0");
     if (order === 0) continue;
     if (order > 0) {
-      pushSettlement(line.systemKey, "deduction", `${line.label} a debito — art. 23 c. 3 DPR 600/1973`, line.signed, line.sequence);
+      pushSettlement(
+        line.systemKey,
+        "deduction",
+        `${line.label} a debito — art. 23 c. 3 DPR 600/1973`,
+        line.signed,
+        line.sequence,
+      );
     } else {
-      pushSettlement(line.systemKey, "credit", `${line.label} a credito — art. 23 c. 3 DPR 600/1973`, neg(line.signed), line.sequence);
+      pushSettlement(
+        line.systemKey,
+        "credit",
+        `${line.label} a credito — art. 23 c. 3 DPR 600/1973`,
+        neg(line.signed),
+        line.sequence,
+      );
     }
   }
 
@@ -391,34 +426,39 @@ function readSettlementDeclaration(
   };
   return {
     hasDetrazioniDeclaration: cert !== null,
-    hasFamilyCharges: bool(answers["coniuge_a_carico"] ?? null)
-      || countOf("figli_a_carico") > 0
-      || countOf("altri_familiari_a_carico") > 0,
-    isFixedTerm: answers["tempo_determinato"] === "true"
-      ? true
-      : answers["tempo_determinato"] === "false"
-        ? false
-        : null,
+    hasFamilyCharges:
+      bool(answers["coniuge_a_carico"] ?? null) ||
+      countOf("figli_a_carico") > 0 ||
+      countOf("altri_familiari_a_carico") > 0,
+    isFixedTerm:
+      answers["tempo_determinato"] === "true"
+        ? true
+        : answers["tempo_determinato"] === "false"
+          ? false
+          : null,
     renewalIncrease: substAmount("importo_aumenti_rinnovo"),
     shiftAllowance: substAmount("importo_indennita_turni"),
     premiRisultato: substAmount("importo_premi_risultato"),
     priorYearEmploymentIncome: answers["reddito_lavoro_2025"] ?? null,
-    premiRisultatoEligible: answers["premi_risultato_ammissibili"] === "true"
-      ? true
-      : answers["premi_risultato_ammissibili"] === "false"
-        ? false
-        : null,
-    isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
-      ? undefined
-      : bool(answers["anzianita_post_1995"]),
+    premiRisultatoEligible:
+      answers["premi_risultato_ammissibili"] === "true"
+        ? true
+        : answers["premi_risultato_ammissibili"] === "false"
+          ? false
+          : null,
+    isPost1995:
+      answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
+        ? undefined
+        : bool(answers["anzianita_post_1995"]),
     isPensioner: bool(answers["titolare_pensione"] ?? null),
     presumedTotalIncome: presumed && presumed !== "0" ? presumed : null,
     comuneCode: (answers["domicilio_comune"] ?? null) as string | null,
-    domicileBolzano: answers["domicilio_bolzano"] === "true"
-      ? true
-      : answers["domicilio_bolzano"] === "false"
-        ? false
-        : null,
+    domicileBolzano:
+      answers["domicilio_bolzano"] === "true"
+        ? true
+        : answers["domicilio_bolzano"] === "false"
+          ? false
+          : null,
   };
 }
 
@@ -454,9 +494,9 @@ export function itAnnualSettlement(taxYear: number): PayrollAnnualSettlement | n
       const regionale = resolution.values("it_addizionale_regionale", { region: ctx.region });
       const comunale = declaration.comuneCode
         ? resolution.values("it_addizionale_comunale", {
-          region: ctx.region,
-          subRegion: declaration.comuneCode,
-        })
+            region: ctx.region,
+            subRegion: declaration.comuneCode,
+          })
         : null;
       const push = createSettlementPush(ctx.pushSettlement);
       try {

@@ -21,10 +21,12 @@ function featureOff(name: string): never {
 export async function listApplicationCurrencies(context: ApplicationContext) {
   const [currencies, org] = await Promise.all([
     db.execute<{ code: string; name: string; minor_units: number }>(
-      sql`select code, name, minor_units from currencies order by code`, "objects",
+      sql`select code, name, minor_units from currencies order by code`,
+      "objects",
     ),
     db.execute<{ base_currency: string }>(
-      sql`select base_currency from orgs where id = ${context.authz.user.orgId}`, "objects",
+      sql`select base_currency from orgs where id = ${context.authz.user.orgId}`,
+      "objects",
     ),
   ]);
   return {
@@ -41,7 +43,13 @@ export async function listApplicationCurrencies(context: ApplicationContext) {
 /** Dated FX rates for one pair — exact decimal strings, never floats. */
 export async function listApplicationFxRates(
   context: ApplicationContext,
-  input: { fromCurrency: string; toCurrency: string; asOf?: string; rateType?: string; limit?: number },
+  input: {
+    fromCurrency: string;
+    toCurrency: string;
+    asOf?: string;
+    rateType?: string;
+    limit?: number;
+  },
 ) {
   if (!can(context.authz, "gl.read") && !can(context.authz, "close.read")) {
     throw forbidden("gl.read");
@@ -67,12 +75,15 @@ export async function listApplicationFxRates(
     rate: string;
     source: string | null;
     imported_at: Date | null;
-  }>(sql`
+  }>(
+    sql`
     select from_currency, to_currency, as_of, rate_type, rate::text as rate, source, imported_at
       from fx_rates
      where ${where}
      order by as_of desc, created_at desc
-     limit ${limit}`, "objects");
+     limit ${limit}`,
+    "objects",
+  );
   return {
     fromCurrency: input.fromCurrency,
     toCurrency: input.toCurrency,

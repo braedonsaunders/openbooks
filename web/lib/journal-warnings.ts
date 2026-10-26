@@ -23,10 +23,17 @@ export interface PartylessControlLine {
  * The project-tracked retainage controls are exempt, exactly as the posting
  * policy exempts them. One row per leg, in line order.
  */
-export async function partylessControlLines(orgId: string, entryId: string): Promise<PartylessControlLine[]> {
+export async function partylessControlLines(
+  orgId: string,
+  entryId: string,
+): Promise<PartylessControlLine[]> {
   const r = await db.execute<{
-    account_id: string; account_number: string | null; account_name: string; amount: string;
-  }>(sql`
+    account_id: string;
+    account_number: string | null;
+    account_name: string;
+    amount: string;
+  }>(
+    sql`
     select a.id as account_id, a.number as account_number, a.name as account_name, l.amount::text as amount
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -37,7 +44,9 @@ export async function partylessControlLines(orgId: string, entryId: string): Pro
        and a.id::text is distinct from nullif(o.settings->'controlAccounts'->>'retainagePayable', '')
        and l.party_id is null
      order by a.number nulls last, l.line_number
-  `, "objects");
+  `,
+    "objects",
+  );
   return r.map((row) => ({
     accountId: row.account_id,
     accountNumber: row.account_number,

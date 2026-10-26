@@ -16,7 +16,11 @@
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
 import { validateSubmitActionReason } from "../../automations/action-reasons.ts";
-import { getChangeRequest, listChangeRequests, submitChangeRequest } from "../../hrm/change-requests.ts";
+import {
+  getChangeRequest,
+  listChangeRequests,
+  submitChangeRequest,
+} from "../../hrm/change-requests.ts";
 import { parseDelegationReason } from "../delegation.ts";
 import { actorPendingGates, hrmOn, toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
@@ -42,15 +46,21 @@ export const hrmChangeRequestAdapter: InboxAdapter = {
         waitingSince: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/hrm/change-requests",
-        actions: sodBlocked ? [] : [
-          { key: "approve", label: "Approve", style: "primary", needsReason: false },
-          { key: "reject", label: "Reject", style: "danger", needsReason: true },
-          { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },
-        ],
+        actions: sodBlocked
+          ? []
+          : [
+              { key: "approve", label: "Approve", style: "primary", needsReason: false },
+              { key: "reject", label: "Reject", style: "danger", needsReason: true },
+              { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },
+            ],
         source: { kind: "hrm_employment_change_request_gate", id: gate.id },
       });
     }
-    const drafts = await listChangeRequests({ orgId: ctx.orgId, actorId: ctx.actorId, status: "draft" });
+    const drafts = await listChangeRequests({
+      orgId: ctx.orgId,
+      actorId: ctx.actorId,
+      status: "draft",
+    });
     for (const draft of drafts) {
       if (draft.createdBy !== ctx.actorId) continue;
       out.push({
@@ -75,16 +85,34 @@ export const hrmChangeRequestAdapter: InboxAdapter = {
     if (sourceId.startsWith("gate:")) {
       const gateId = sourceId.slice("gate:".length);
       if (actionKey === "approve") {
-        await decideGate({ gateId, decision: "approved", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId,
+          decision: "approved",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "reject") {
-        await decideGate({ gateId, decision: "rejected", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId,
+          decision: "rejected",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "delegate") {
         const delegation = parseDelegationReason(reason);
-        await delegateGate(gateId, ctx.actorId, delegation.toUserId, allowedSubsidiaryIds, delegation.note);
+        await delegateGate(
+          gateId,
+          ctx.actorId,
+          delegation.toUserId,
+          allowedSubsidiaryIds,
+          delegation.note,
+        );
         return;
       }
     }

@@ -39,7 +39,8 @@ import type {
 /** Column 3 of a 941-X: corrected minus originally reported, exactly. */
 function difference(current: string | null, previous: string | null): string | null {
   if (current == null || previous == null) return null;
-  if (canonicalDecimal(current, Infinity) === null || canonicalDecimal(previous, Infinity) === null) return null;
+  if (canonicalDecimal(current, Infinity) === null || canonicalDecimal(previous, Infinity) === null)
+    return null;
   // Dollars and cents, like the columns either side of it — money.ts's
   // canonical four-decimal form beside two-decimal box amounts would read as
   // two different quantities on one line of a printed form.
@@ -88,14 +89,14 @@ export function buildW2c(row: PayrollFilingCorrectionRow, taxYear: number): Payr
   const boxes: PayrollSlipBox[] = [];
   const corrected = cancelling
     ? row.previously.fields
-      .filter((field) => field.code != null)
-      .map((field): PayrollFilingFieldChange => ({
-        code: field.code,
-        label: field.label,
-        previous: field.value,
-        current: canonicalDecimal(field.value, Infinity) !== null ? "0.00" : field.value,
-        redacted: false,
-      }))
+        .filter((field) => field.code != null)
+        .map((field): PayrollFilingFieldChange => ({
+          code: field.code,
+          label: field.label,
+          previous: field.value,
+          current: canonicalDecimal(field.value, Infinity) !== null ? "0.00" : field.value,
+          redacted: false,
+        }))
     : row.changes.filter((change) => change.code != null);
 
   for (const change of corrected) {
@@ -113,8 +114,8 @@ export function buildW2c(row: PayrollFilingCorrectionRow, taxYear: number): Payr
   }
   if (boxes.length === 0 && identity.length === 0) {
     throw new PayrollError(
-      "nothing on this W-2 changed — a Form W-2c with no corrected box would tell the SSA "
-      + "nothing and must not be filed",
+      "nothing on this W-2 changed — a Form W-2c with no corrected box would tell the SSA " +
+        "nothing and must not be filed",
     );
   }
 
@@ -133,31 +134,33 @@ export function buildW2c(row: PayrollFilingCorrectionRow, taxYear: number): Payr
         label: "Employee's name (h)",
         value: header.get("Employee's name") ?? row.label,
       },
-      ...(previousHeader.get("Employee's name") !== undefined
-        && previousHeader.get("Employee's name") !== header.get("Employee's name")
-        ? [{
-          label: "Employee's previously reported name (g)",
-          value: previousHeader.get("Employee's name")!,
-        }]
+      ...(previousHeader.get("Employee's name") !== undefined &&
+      previousHeader.get("Employee's name") !== header.get("Employee's name")
+        ? [
+            {
+              label: "Employee's previously reported name (g)",
+              value: previousHeader.get("Employee's name")!,
+            },
+          ]
         : []),
       ...identity,
     ],
     boxes,
     notes: [
-      "Only the boxes being corrected are completed, per the Form W-2c instructions; every "
-      + "other box on the original W-2 stands.",
-      "File Form W-3c, Transmittal of Corrected Wage and Tax Statements, with the W-2c set, "
-      + "and give the employee their copies.",
+      "Only the boxes being corrected are completed, per the Form W-2c instructions; every " +
+        "other box on the original W-2 stands.",
+      "File Form W-3c, Transmittal of Corrected Wage and Tax Statements, with the W-2c set, " +
+        "and give the employee their copies.",
       ...(cancelling
         ? [
-          "This W-2 is being CANCELLED: the Social Security Administration has no delete "
-          + "transaction for a filed W-2, so the correct amounts are nil. Confirm with the SSA "
-          + "before filing if the employee should never have been reported under this EIN.",
-        ]
+            "This W-2 is being CANCELLED: the Social Security Administration has no delete " +
+              "transaction for a filed W-2, so the correct amounts are nil. Confirm with the SSA " +
+              "before filing if the employee should never have been reported under this EIN.",
+          ]
         : []),
-      "The SSA EFW2C electronic correction file is not generated — the same gap the original "
-      + "W-2 declares for EFW2. Transmit corrections through SSA Business Services Online, or "
-      + "mail the printed W-2c/W-3c.",
+      "The SSA EFW2C electronic correction file is not generated — the same gap the original " +
+        "W-2 declares for EFW2. Transmit corrections through SSA Business Services Online, or " +
+        "mail the printed W-2c/W-3c.",
     ],
   };
 }
@@ -174,8 +177,8 @@ export function buildW2c(row: PayrollFilingCorrectionRow, taxYear: number): Payr
 export function build941X(row: PayrollFilingCorrectionRow, taxYear: number): PayrollFilingSlipData {
   if (row.revision === "cancelled") {
     throw new PayrollError(
-      "a Form 941 quarter cannot be cancelled — the IRS has no mechanism to withdraw a filed "
-      + "quarterly return. Correct it on Form 941-X, which reports the difference",
+      "a Form 941 quarter cannot be cancelled — the IRS has no mechanism to withdraw a filed " +
+        "quarterly return. Correct it on Form 941-X, which reports the difference",
     );
   }
   const header = new Map(
@@ -204,8 +207,8 @@ export function build941X(row: PayrollFilingCorrectionRow, taxYear: number): Pay
   }
   if (boxes.length === 0) {
     throw new PayrollError(
-      "nothing on this Form 941 quarter changed — a Form 941-X with no difference reports "
-      + "nothing and must not be filed",
+      "nothing on this Form 941 quarter changed — a Form 941-X with no difference reports " +
+        "nothing and must not be filed",
     );
   }
   return {
@@ -225,15 +228,15 @@ export function build941X(row: PayrollFilingCorrectionRow, taxYear: number): Pay
     ],
     boxes,
     notes: [
-      "Column 3 is column 1 minus column 2, computed in exact decimal arithmetic from the "
-      + "committed pay stubs — it is never keyed.",
-      "Form 941-X uses its own line numbering, which differs from Form 941's; the codes shown "
-      + "here are the Form 941 lines these amounts were computed from and must be transcribed "
-      + "onto the 941-X's corresponding lines.",
-      "Form 941-X also requires the correction date, the certification in Part 2 and an "
-      + "explanation in Part 4 — employer declarations no payroll data can supply.",
-      "No electronic 941-X is generated, the same gap the original Form 941 declares: file the "
-      + "adjusted return with the IRS directly.",
+      "Column 3 is column 1 minus column 2, computed in exact decimal arithmetic from the " +
+        "committed pay stubs — it is never keyed.",
+      "Form 941-X uses its own line numbering, which differs from Form 941's; the codes shown " +
+        "here are the Form 941 lines these amounts were computed from and must be transcribed " +
+        "onto the 941-X's corresponding lines.",
+      "Form 941-X also requires the correction date, the certification in Part 2 and an " +
+        "explanation in Part 4 — employer declarations no payroll data can supply.",
+      "No electronic 941-X is generated, the same gap the original Form 941 declares: file the " +
+        "adjusted return with the IRS directly.",
     ],
   };
 }

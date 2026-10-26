@@ -1,11 +1,11 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { getAuthz } from '@/lib/authz'
+import { getLocale, getTranslations } from "next-intl/server";
+import { frame, grid, page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { getAuthz } from "@/lib/authz";
 
-import { businessTimeZone } from '@openbooks/engine/platform/business-date/module'
-import { buildGreeting } from './dashboard/_greeting'
+import { businessTimeZone } from "@openbooks/engine/platform/business-date/module";
+import { buildGreeting } from "./dashboard/_greeting";
 
 /**
  * The root dashboard (`/`), split into a loader and a spec.
@@ -28,15 +28,15 @@ import { buildGreeting } from './dashboard/_greeting'
  */
 
 export interface RootDashboardData {
-  greeting: string
-  name: string | null
+  greeting: string;
+  name: string | null;
 }
 
 export async function loadRootDashboard(): Promise<RootDashboardData | null> {
-  const t = await getTranslations('dashboard')
-  const locale = await getLocale()
-  const authz = await getAuthz()
-  if (!authz) return null
+  const t = await getTranslations("dashboard");
+  const locale = await getLocale();
+  const authz = await getAuthz();
+  if (!authz) return null;
 
   // Layout resolution, the `canSeeWidget` filter and the stale-node prune all
   // live in the slot now — they need the session, and re-deriving them there
@@ -44,33 +44,39 @@ export async function loadRootDashboard(): Promise<RootDashboardData | null> {
 
   // The configured org zone is also installed in the request's NextIntl
   // context and remains authoritative after hydration.
-  const today = new Date()
+  const today = new Date();
   return {
-    greeting: buildGreeting(today, authz.user.name, {
-      morning: t('greeting.morning'),
-      afternoon: t('greeting.afternoon'),
-      evening: t('greeting.evening'),
-    }, await businessTimeZone(authz.user.orgId), locale),
+    greeting: buildGreeting(
+      today,
+      authz.user.name,
+      {
+        morning: t("greeting.morning"),
+        afternoon: t("greeting.afternoon"),
+        evening: t("greeting.evening"),
+      },
+      await businessTimeZone(authz.user.orgId),
+      locale,
+    ),
     name: authz.user.name,
-  }
+  };
 }
 
 export function rootDashboardSpec(data: RootDashboardData): PageSpec {
   return page({
-    route: '/',
+    route: "/",
     // The native page renders inside PageContainer (not the sticky
     // ListPageLayout chrome), so the spec is bare and places the container
     // itself through the `page-container` frame — the platform-hub precedent.
-    layout: 'bare',
+    layout: "bare",
     body: [
-      frame('page-container', [
+      frame("page-container", [
         // Exact wrapper from page.tsx: <div className="space-y-5">.
-        grid('space-y-5', [
-          widgetBlock('dashboard-header', { greeting: data.greeting, name: data.name }),
+        grid("space-y-5", [
+          widgetBlock("dashboard-header", { greeting: data.greeting, name: data.name }),
           // No props: the slot re-derives everything from the session.
-          widgetBlock('dashboard-grid'),
+          widgetBlock("dashboard-grid"),
         ]),
       ]),
     ],
-  })
+  });
 }

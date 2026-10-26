@@ -1,6 +1,6 @@
-import type { PayrollFilingSlipData } from '@openbooks/engine/payroll/filing-registry'
-import type { TaxReturnResult } from '@openbooks/engine/tax-returns/return'
-import { TAX_FORM_LAYOUTS, type TaxFormLayout } from './tax-form-facsimile-html'
+import type { PayrollFilingSlipData } from "@openbooks/engine/payroll/filing-registry";
+import type { TaxReturnResult } from "@openbooks/engine/tax-returns/return";
+import { TAX_FORM_LAYOUTS, type TaxFormLayout } from "./tax-form-facsimile-html";
 
 /**
  * Adapt a payroll filing's slip render (the registry's declared box data) to
@@ -18,24 +18,24 @@ export function payrollSlipFacsimile(
    *  their own, so every caller passes the real value, never a guess. */
   currency: string,
 ): { result: TaxReturnResult; layout: TaxFormLayout } {
-  const base = TAX_FORM_LAYOUTS[slip.formCode]
+  const base = TAX_FORM_LAYOUTS[slip.formCode];
   const layout: TaxFormLayout = {
     ...base,
-    agency: base?.agency ?? '',
+    agency: base?.agency ?? "",
     formNumber: slip.formNumber ?? base?.formNumber,
     // The slip's own identification values (employee, account, year) replace
     // the layout's static header labels.
     headerFields: slip.headerFields,
     footerNotes: [...(slip.notes ?? []), ...(base?.footerNotes ?? [])],
-  }
+  };
   return {
     result: {
       formCode: slip.formCode,
       formName: slip.formName,
       from: `${taxYear}-01-01`,
       to: `${taxYear}-12-31`,
-      submissionChannel: 'none',
-      watermark: 'Working copy — not for filing',
+      submissionChannel: "none",
+      watermark: "Working copy — not for filing",
       // Slips identify via the layout's per-slip header fields (employee,
       // account, year) — they carry no indirect-tax registration identity,
       // no subsidiary breakdown, and no translation (single payroll currency).
@@ -54,5 +54,5 @@ export function payrollSlipFacsimile(
       })),
     },
     layout,
-  }
+  };
 }

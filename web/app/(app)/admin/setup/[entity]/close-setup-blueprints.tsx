@@ -6,10 +6,32 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Badge, Button, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Select, Textarea, UrlDrawer } from "@openbooks/ui";
+import {
+  Badge,
+  Button,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Select,
+  Textarea,
+  UrlDrawer,
+} from "@openbooks/ui";
 import { ChevronRight, GitBranch, Plus, Trash2 } from "lucide-react";
 import { pickString } from "../../../../../lib/list-params";
-import { Check, ConfigListControls, EmptyList, Field, RowLink, SectionHeading, dataText, drawerHref, post } from "./close-setup-shared";
+import {
+  Check,
+  ConfigListControls,
+  EmptyList,
+  Field,
+  RowLink,
+  SectionHeading,
+  dataText,
+  drawerHref,
+  post,
+} from "./close-setup-shared";
 import type { BlueprintDraft, BlueprintRow, BlueprintStepDraft, Props } from "./close-setup-types";
 
 export function BlueprintsTab(props: Props) {
@@ -28,14 +50,7 @@ export function BlueprintsTab(props: Props) {
         description={t("blueprints.description")}
         action={
           <Button size="sm" asChild>
-            <Link
-              href={drawerHref(
-                props.currentParams,
-                "blueprints",
-                "blueprint",
-                "new",
-              )}
-            >
+            <Link href={drawerHref(props.currentParams, "blueprints", "blueprint", "new")}>
               <Plus size={14} />
               {t("actions.newBlueprint")}
             </Link>
@@ -52,34 +67,21 @@ export function BlueprintsTab(props: Props) {
         {props.blueprints.map((item) => (
           <RowLink
             key={item.id}
-            href={drawerHref(
-              props.currentParams,
-              "blueprints",
-              "blueprint",
-              item.id,
-            )}
+            href={drawerHref(props.currentParams, "blueprints", "blueprint", item.id)}
           >
             <CardHeader className="p-4">
               <div className="flex justify-between gap-2">
                 <CardTitle className="text-base">
                   {dataText(td, item.name)}{" "}
-                  <span className="text-xs font-normal text-slate-400">
-                    v{item.version}
-                  </span>
+                  <span className="text-xs font-normal text-slate-400">v{item.version}</span>
                 </CardTitle>
                 <div className="flex gap-1">
-                  {item.is_default ? (
-                    <Badge variant="success">{t("labels.default")}</Badge>
-                  ) : null}
-                  {!item.is_active ? (
-                    <Badge variant="outline">{t("labels.inactive")}</Badge>
-                  ) : null}
+                  {item.is_default ? <Badge variant="success">{t("labels.default")}</Badge> : null}
+                  {!item.is_active ? <Badge variant="outline">{t("labels.inactive")}</Badge> : null}
                   <ChevronRight size={16} className="text-slate-400" />
                 </div>
               </div>
-              <CardDescription>
-                {dataText(td, item.description)}
-              </CardDescription>
+              <CardDescription>{dataText(td, item.description)}</CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-4 text-xs text-slate-500">
               {t("blueprints.stepCount", { count: item.steps.length })} ·{" "}
@@ -88,16 +90,8 @@ export function BlueprintsTab(props: Props) {
           </RowLink>
         ))}
       </div>
-      {props.blueprints.length === 0 ? (
-        <EmptyList>{t("empty.blueprints")}</EmptyList>
-      ) : null}
-      {selected ? (
-        <BlueprintDrawer
-          key={selected}
-          row={row}
-          params={props.currentParams}
-        />
-      ) : null}
+      {props.blueprints.length === 0 ? <EmptyList>{t("empty.blueprints")}</EmptyList> : null}
+      {selected ? <BlueprintDrawer key={selected} row={row} params={props.currentParams} /> : null}
     </div>
   );
 }
@@ -148,11 +142,7 @@ export function BlueprintDrawer({
             dueOffsetBusinessDays: step.due_offset_business_days,
             evidenceRequired: step.evidence_required,
             defaultOwnerRoleKey: step.default_owner_role_key ?? "",
-            applicabilityText: JSON.stringify(
-              step.applicability ?? {},
-              null,
-              2,
-            ),
+            applicabilityText: JSON.stringify(step.applicability ?? {}, null, 2),
             dependsOn: step.depends_on ?? [],
           })),
         }
@@ -168,9 +158,7 @@ export function BlueprintDrawer({
   const updateStep = (index: number, changes: Partial<BlueprintStepDraft>) =>
     setDraft({
       ...draft,
-      steps: draft.steps.map((step, i: number) =>
-        i === index ? { ...step, ...changes } : step,
-      ),
+      steps: draft.steps.map((step, i: number) => (i === index ? { ...step, ...changes } : step)),
     });
   async function save() {
     setBusy(true);
@@ -211,10 +199,7 @@ export function BlueprintDrawer({
           <Button variant="outline" onClick={() => router.push(closeHref)}>
             {t("actions.cancel")}
           </Button>
-          <Button
-            disabled={busy || !draft.name || draft.steps.length === 0}
-            onClick={save}
-          >
+          <Button disabled={busy || !draft.name || draft.steps.length === 0} onClick={save}>
             {busy ? t("actions.saving") : t("actions.saveVersion")}
           </Button>
         </div>
@@ -231,26 +216,20 @@ export function BlueprintDrawer({
           <Field label={t("fields.periodType")}>
             <Select
               value={draft.periodType}
-              onChange={(e) =>
-                setDraft({ ...draft, periodType: e.target.value })
-              }
+              onChange={(e) => setDraft({ ...draft, periodType: e.target.value })}
             >
-              {["any", "month", "quarter", "year", "adjustment"].map(
-                (value) => (
-                  <option key={value} value={value}>
-                    {t(`periodTypes.${value}`)}
-                  </option>
-                ),
-              )}
+              {["any", "month", "quarter", "year", "adjustment"].map((value) => (
+                <option key={value} value={value}>
+                  {t(`periodTypes.${value}`)}
+                </option>
+              ))}
             </Select>
           </Field>
         </div>
         <Field label={t("fields.description")}>
           <Textarea
             value={draft.description}
-            onChange={(e) =>
-              setDraft({ ...draft, description: e.target.value })
-            }
+            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
           />
         </Field>
         <div className="flex items-center justify-between">
@@ -285,17 +264,13 @@ export function BlueprintDrawer({
                 <Field label={t("fields.stepTitle")}>
                   <Input
                     value={step.title}
-                    onChange={(e) =>
-                      updateStep(index, { title: e.target.value })
-                    }
+                    onChange={(e) => updateStep(index, { title: e.target.value })}
                   />
                 </Field>
                 <Field label={t("fields.workstream")}>
                   <Select
                     value={step.workstream}
-                    onChange={(e) =>
-                      updateStep(index, { workstream: e.target.value })
-                    }
+                    onChange={(e) => updateStep(index, { workstream: e.target.value })}
                   >
                     {[
                       "readiness",
@@ -319,9 +294,7 @@ export function BlueprintDrawer({
                 <Field label={t("fields.taskType")}>
                   <Select
                     value={step.taskType}
-                    onChange={(e) =>
-                      updateStep(index, { taskType: e.target.value })
-                    }
+                    onChange={(e) => updateStep(index, { taskType: e.target.value })}
                   >
                     {[
                       "check",
@@ -341,9 +314,7 @@ export function BlueprintDrawer({
                 <Field label={t("fields.gate")}>
                   <Select
                     value={step.gateType}
-                    onChange={(e) =>
-                      updateStep(index, { gateType: e.target.value })
-                    }
+                    onChange={(e) => updateStep(index, { gateType: e.target.value })}
                   >
                     {["none", "soft", "hard"].map((value) => (
                       <option key={value} value={value}>
@@ -355,9 +326,7 @@ export function BlueprintDrawer({
                 <Field label={t("fields.completion")}>
                   <Select
                     value={step.completionMode}
-                    onChange={(e) =>
-                      updateStep(index, { completionMode: e.target.value })
-                    }
+                    onChange={(e) => updateStep(index, { completionMode: e.target.value })}
                   >
                     {["manual", "computed", "automatic"].map((value) => (
                       <option key={value} value={value}>
@@ -393,9 +362,7 @@ export function BlueprintDrawer({
                 <Field label={t("fields.ownerRole")}>
                   <Input
                     value={step.defaultOwnerRoleKey}
-                    onChange={(e) =>
-                      updateStep(index, { defaultOwnerRoleKey: e.target.value })
-                    }
+                    onChange={(e) => updateStep(index, { defaultOwnerRoleKey: e.target.value })}
                   />
                 </Field>
                 <Field label={t("fields.applicability")}>
@@ -403,18 +370,14 @@ export function BlueprintDrawer({
                     className="font-mono text-xs"
                     rows={3}
                     value={step.applicabilityText}
-                    onChange={(e) =>
-                      updateStep(index, { applicabilityText: e.target.value })
-                    }
+                    onChange={(e) => updateStep(index, { applicabilityText: e.target.value })}
                   />
                 </Field>
               </div>
               <div className="mt-3 flex items-center justify-between">
                 <Check
                   checked={step.evidenceRequired}
-                  onChange={(value) =>
-                    updateStep(index, { evidenceRequired: value })
-                  }
+                  onChange={(value) => updateStep(index, { evidenceRequired: value })}
                 >
                   {t("fields.evidenceRequired")}
                 </Check>
@@ -424,9 +387,7 @@ export function BlueprintDrawer({
                   onClick={() =>
                     setDraft({
                       ...draft,
-                      steps: draft.steps.filter(
-                        (_: BlueprintStepDraft, i: number) => i !== index,
-                      ),
+                      steps: draft.steps.filter((_: BlueprintStepDraft, i: number) => i !== index),
                     })
                   }
                 >

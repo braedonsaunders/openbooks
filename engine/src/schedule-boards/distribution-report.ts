@@ -8,14 +8,22 @@ import {
 } from "@openbooks/pdf";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import type { SchedulePdfLayout } from "@openbooks/forms-core";
-import type {
+import type { ScheduleDistributionPreview, ScheduleRecipient } from "./distribution.ts";
+export type ScheduleReportPreview = Pick<
   ScheduleDistributionPreview,
-  ScheduleRecipient,
-} from "./distribution.ts";
-export type ScheduleReportPreview = Pick<ScheduleDistributionPreview, 'boardId' | 'boardName' | 'organizationName' | 'from' | 'through' | 'timeZone' | 'generatedAt' | 'version' | 'weekendDays'> & {
-  audience: Pick<ScheduleDistributionPreview['audience'], 'pdfLayout' | 'message' | 'visibility'>
+  | "boardId"
+  | "boardName"
+  | "organizationName"
+  | "from"
+  | "through"
+  | "timeZone"
+  | "generatedAt"
+  | "version"
+  | "weekendDays"
+> & {
+  audience: Pick<ScheduleDistributionPreview["audience"], "pdfLayout" | "message" | "visibility">;
 };
-export type ScheduleReportContent = Pick<ScheduleRecipient, 'lines'>;
+export type ScheduleReportContent = Pick<ScheduleRecipient, "lines">;
 /** Landscape sections preserve literal observations and independently identified people/resources. */
 export function schedulePdfInput(
   preview: ScheduleReportPreview,
@@ -35,11 +43,7 @@ export function schedulePdfInput(
     colorIntensity: 8,
   };
   const days: string[] = [];
-  for (
-    let day = preview.from;
-    day <= preview.through;
-    day = addCalendarDays(day, 1)
-  )
+  for (let day = preview.from; day <= preview.through; day = addCalendarDays(day, 1))
     days.push(day);
   const subjects = [
     ...new Map(
@@ -54,14 +58,23 @@ export function schedulePdfInput(
   for (const line of recipient.lines) {
     const id = line.subjectId ?? line.subject;
     let subjectDays = cells.get(id);
-    if (!subjectDays) cells.set(id, subjectDays = new Map());
-    const assignment = line.assignment + (line.status === "Source date observation" && layout.detail === "assignments" ? " *" : "");
-    const value = line.status === "No schedule evidence" ? "-"
-      : layout.detail === "assignments" ? assignment
-      : layout.detail === "hours" ? `${assignment}\n${line.hours}`
-      : `${assignment}\n${line.hours}\n${line.status}`;
+    if (!subjectDays) cells.set(id, (subjectDays = new Map()));
+    const assignment =
+      line.assignment +
+      (line.status === "Source date observation" && layout.detail === "assignments" ? " *" : "");
+    const value =
+      line.status === "No schedule evidence"
+        ? "-"
+        : layout.detail === "assignments"
+          ? assignment
+          : layout.detail === "hours"
+            ? `${assignment}\n${line.hours}`
+            : `${assignment}\n${line.hours}\n${line.status}`;
     const values = subjectDays.get(line.date) ?? [];
-    const color = line.status !== "No schedule evidence" && line.color && /^#[0-9a-f]{6}$/i.test(line.color) ? line.color : null;
+    const color =
+      line.status !== "No schedule evidence" && line.color && /^#[0-9a-f]{6}$/i.test(line.color)
+        ? line.color
+        : null;
     values.push({ text: value, ...(color ? { backgroundColor: color } : {}) });
     if (color && line.status !== "No schedule evidence") {
       const labels = legend.get(color) ?? new Set<string>();
@@ -70,16 +83,30 @@ export function schedulePdfInput(
     }
     subjectDays.set(line.date, values);
   }
-  const dateLabel = new Intl.DateTimeFormat("en", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+  const dateLabel = new Intl.DateTimeFormat("en", {
+    timeZone: "UTC",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
   const colorKeys = [...legend].sort(([a], [b]) => a.localeCompare(b));
   const legendItems = colorKeys.slice(0, 12).map(([color, labels]) => ({
     color,
-    label: labels.size === 1
-      ? [...labels][0]!
-      : `${labels.size} assignment label${labels.size === 1 ? '' : 's'}`,
+    label:
+      labels.size === 1
+        ? [...labels][0]!
+        : `${labels.size} assignment label${labels.size === 1 ? "" : "s"}`,
   }));
   const groups: PdfDocumentInput["groups"] = [];
-  if (preview.audience.message) groups.push({ kind: "results", title: "Message", columns: ["Message"], columnWeights: [1], rows: [[preview.audience.message]], overflow: "refuse" });
+  if (preview.audience.message)
+    groups.push({
+      kind: "results",
+      title: "Message",
+      columns: ["Message"],
+      columnWeights: [1],
+      rows: [[preview.audience.message]],
+      overflow: "refuse",
+    });
   for (let offset = 0; offset < days.length; offset += layout.daysPerSection) {
     const section = days.slice(offset, offset + layout.daysPerSection);
     groups.push({
@@ -87,24 +114,34 @@ export function schedulePdfInput(
       overflow: "refuse",
       title: `${section[0]} - ${section.at(-1)}`,
       subtitle: preview.timeZone,
-      columns: ["Person / resource", ...section.map(day => dateLabel.format(new Date(`${day}T12:00:00Z`)).replace(", ", "\n"))],
+      columns: [
+        "Person / resource",
+        ...section.map((day) => dateLabel.format(new Date(`${day}T12:00:00Z`)).replace(", ", "\n")),
+      ],
       columnWeights: [2.5, ...section.map(() => 1)],
       align: ["left", ...section.map(() => "center" as const)],
       columnStyles: [
-        { body: { bold: (layout.style ?? 'modern') !== 'modern', backgroundColor: (layout.style ?? 'modern') === 'modern' ? '#ffffff' : "#f1f5f9", textColor: "#0f172a" } },
-        ...section.map(date => (preview.weekendDays ?? [0, 6]).includes(new Date(`${date}T12:00:00Z`).getUTCDay()) && layout.shadeWeekends !== false
-          ? { header: { backgroundColor: "#e2e8f0" }, body: { backgroundColor: "#f1f5f9" } }
-          : {}),
+        {
+          body: {
+            bold: (layout.style ?? "modern") !== "modern",
+            backgroundColor: (layout.style ?? "modern") === "modern" ? "#ffffff" : "#f1f5f9",
+            textColor: "#0f172a",
+          },
+        },
+        ...section.map((date) =>
+          (preview.weekendDays ?? [0, 6]).includes(new Date(`${date}T12:00:00Z`).getUTCDay()) &&
+          layout.shadeWeekends !== false
+            ? { header: { backgroundColor: "#e2e8f0" }, body: { backgroundColor: "#f1f5f9" } }
+            : {},
+        ),
       ],
       rows: subjects.map((subject) => [
         subject.name,
         ...section.map((date): PdfTableCell => {
           const segments = cells.get(subject.id)?.get(date);
           if (!segments?.length) return "-";
-          const text = segments.map(segment => segment.text).join("\n\n");
-          return segments.length === 1
-            ? { text, ...segments[0] }
-            : { text, segments };
+          const text = segments.map((segment) => segment.text).join("\n\n");
+          return segments.length === 1 ? { text, ...segments[0] } : { text, segments };
         }),
       ]),
       isEmpty: subjects.length === 0,
@@ -114,27 +151,32 @@ export function schedulePdfInput(
     title: preview.boardName,
     dateRangeLabel: `${preview.from} - ${preview.through}`,
     generatedAt: new Date(preview.generatedAt),
-    branding: { orgName: preview.organizationName, ...(layout.accentColor ? { primaryColor: layout.accentColor } : {}) },
+    branding: {
+      orgName: preview.organizationName,
+      ...(layout.accentColor ? { primaryColor: layout.accentColor } : {}),
+    },
     design: layout.style ?? "modern",
     colorTreatment: layout.colorTreatment ?? "subtle",
     colorIntensity: layout.colorIntensity ?? 8,
-    ...(layout.showLegend !== false && legend.size ? { legend: {
-      title: `Assignment colors · board configuration${colorKeys.length > 12 ? ` · ${colorKeys.length - 12} additional colors shown in cells` : ''}`,
-      items: legendItems,
-    } } : {}),
+    ...(layout.showLegend !== false && legend.size
+      ? {
+          legend: {
+            title: `Assignment colors · board configuration${colorKeys.length > 12 ? ` · ${colorKeys.length - 12} additional colors shown in cells` : ""}`,
+            items: legendItems,
+          },
+        }
+      : {}),
     summary: [
       { label: "People / resources", value: String(subjects.length) },
       { label: "Days", value: String(days.length) },
       {
         label: "Sharing",
-        value:
-          preview.audience.visibility === "board" ? "Whole board" : "Personal",
+        value: preview.audience.visibility === "board" ? "Whole board" : "Personal",
       },
     ],
     groups,
     layout: resolvePdfPageSetup(layout),
-    footerLeft:
-      "* Source dates: hours unknown; blanks are not worked time.",
+    footerLeft: "* Source dates: hours unknown; blanks are not worked time.",
     footerRight: `Version ${preview.version.slice(0, 16)}`,
   };
 }

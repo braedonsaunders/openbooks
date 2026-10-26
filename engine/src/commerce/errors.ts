@@ -20,7 +20,8 @@ export type CommerceCode = string;
 export function pgCause(error: unknown): { code?: unknown; constraint?: unknown } {
   if (error && typeof error === "object" && "cause" in error) {
     const cause = (error as { cause?: unknown }).cause;
-    if (cause && typeof cause === "object") return cause as { code?: unknown; constraint?: unknown };
+    if (cause && typeof cause === "object")
+      return cause as { code?: unknown; constraint?: unknown };
   }
   return error as { code?: unknown; constraint?: unknown };
 }

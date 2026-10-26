@@ -5,7 +5,9 @@ import { ApplicationError } from "../../../../../../../lib/application/errors";
 import { readV1JsonObject, withV1Request } from "../../../../../../../lib/api/v1-request";
 import { discardExtensionDraft } from "../../../../../../../lib/application/extensions";
 
-const discardDraftBody = z.looseObject({ contentHash: z.string().min(1, "contentHash is required").optional() });
+const discardDraftBody = z.looseObject({
+  contentHash: z.string().min(1, "contentHash is required").optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -24,11 +26,18 @@ async function handleV1POST(
     if (typeof body.contentHash !== "string" || !body.contentHash) {
       throw new ApplicationError("invalid_input", "contentHash is required", 422);
     }
-    return { status: 200, body: { ok: true, ...(await discardExtensionDraft(context, { draftId: id, contentHash: body.contentHash })) } };
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        ...(await discardExtensionDraft(context, { draftId: id, contentHash: body.contentHash })),
+      },
+    };
   });
 }
 
 export const POST = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1POST(request, { params: Promise.resolve(params as never) } as never),
 });

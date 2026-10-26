@@ -1,4 +1,4 @@
-import { parseRoeEventRow, roeEventRow, selectRoeEvent } from './roe-event-source.ts';
+import { parseRoeEventRow, roeEventRow, selectRoeEvent } from "./roe-event-source.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { add } from "../../money/money.ts";
@@ -7,7 +7,14 @@ import { filingAccountRef, filingAccountsById } from "../filing.ts";
 import { buildRoeXml, type RoeIssueInput } from "./roexml.ts";
 import { buildT4Xml, t4SlipFromReported } from "./t4xml.ts";
 import { PayrollError } from "../error.ts";
-import { roeCandidates, roeRecord, t4Slips, t4Summary, ROE_REASON_CODES, type RoeReasonCode } from "../yearend.ts";
+import {
+  roeCandidates,
+  roeRecord,
+  t4Slips,
+  t4Summary,
+  ROE_REASON_CODES,
+  type RoeReasonCode,
+} from "../yearend.ts";
 import type {
   PayrollFilingCorrectionRow,
   PayrollFilingData,
@@ -52,7 +59,7 @@ export function parseT4RowId(rowId: string): PayrollFilingRowScope | null {
  * Owned here for the same reason as the T4's.
  */
 export function parseRoeRowId(rowId: string): PayrollFilingRowScope | null {
-  const selection=parseRoeEventRow(rowId);
+  const selection = parseRoeEventRow(rowId);
   if (!selection) return null;
   return { employees: [selection.employeePartyId], accounts: [] };
 }
@@ -75,10 +82,7 @@ const ROE_REASON_LABELS: Record<RoeReasonCode, string> = {
 };
 
 async function t4Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
-  const [slips, summary] = await Promise.all([
-    t4Slips(orgId, taxYear),
-    t4Summary(orgId, taxYear),
-  ]);
+  const [slips, summary] = await Promise.all([t4Slips(orgId, taxYear), t4Summary(orgId, taxYear)]);
   return {
     rowKey: "rowId",
     columns: [
@@ -111,10 +115,17 @@ async function t4Population(orgId: string, taxYear: number): Promise<PayrollFili
       { label: "Employment income", value: summary.employmentIncome, money: true },
       {
         label: "CPP (employee + employer)",
-        value: add(add(add(summary.employeeCpp, summary.employeeCpp2), summary.employerCpp), summary.employerCpp2),
+        value: add(
+          add(add(summary.employeeCpp, summary.employeeCpp2), summary.employerCpp),
+          summary.employerCpp2,
+        ),
         money: true,
       },
-      { label: "EI (employee + employer)", value: add(summary.employeeEi, summary.employerEi), money: true },
+      {
+        label: "EI (employee + employer)",
+        value: add(summary.employeeEi, summary.employerEi),
+        money: true,
+      },
       { label: "Income tax", value: summary.incomeTax, money: true },
       { label: "Remitted (posted bills)", value: summary.remitted, money: true },
     ],
@@ -126,7 +137,11 @@ async function t4Population(orgId: string, taxYear: number): Promise<PayrollFili
  * own box numbers and printed titles. Quebec employment reports QPP in boxes
  * 17/17A and PPIP in 55/56, exactly as the engine's slip model carries it.
  */
-async function t4Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function t4Slip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const slips = await t4Slips(orgId, taxYear);
   const slip = slips.find(
     (s) => `${s.employeePartyId}:${s.province}:${s.filingAccountId ?? ""}` === rowId,
@@ -174,7 +189,9 @@ async function t4Slip(orgId: string, taxYear: number, rowId: string): Promise<Pa
     notes: [
       "One T4 slip per province of employment, per payroll program account.",
       ...(quebec
-        ? ["Québec employment: QPP reports in boxes 17/17A and PPIP in boxes 55/56; the employee also receives an RL-1."]
+        ? [
+            "Québec employment: QPP reports in boxes 17/17A and PPIP in boxes 55/56; the employee also receives an RL-1.",
+          ]
         : []),
     ],
   };
@@ -185,9 +202,13 @@ async function t4Slip(orgId: string, taxYear: number, rowId: string): Promise<Pa
  * (reason for issue) is deliberately absent: it is the employer's declaration,
  * made when the ROE Web file is issued — never printed as a guess.
  */
-async function roeSlip(orgId: string, _taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
-  const selection=parseRoeEventRow(rowId);
-  if(!selection) throw new PayrollError('Choose the native employee and separation event');
+async function roeSlip(
+  orgId: string,
+  _taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
+  const selection = parseRoeEventRow(rowId);
+  if (!selection) throw new PayrollError("Choose the native employee and separation event");
   const record = await roeRecord(orgId, selection.employeePartyId, selection.eventId);
   if (!record) {
     throw new PayrollError(
@@ -212,8 +233,18 @@ async function roeSlip(orgId: string, _taxYear: number, rowId: string): Promise<
       { code: "10", label: "First day worked", value: record.firstDayWorked ?? "—" },
       { code: "11", label: "Last day for which paid", value: record.lastDayPaid ?? "—" },
       { code: "12", label: "Final pay period ending date", value: record.finalPayPeriodEnd ?? "—" },
-      { code: "15A", label: "Total insurable hours", value: record.totalInsurableHours, emphasis: true },
-      { code: "15B", label: "Total insurable earnings", value: record.totalInsurableEarnings, emphasis: true },
+      {
+        code: "15A",
+        label: "Total insurable hours",
+        value: record.totalInsurableHours,
+        emphasis: true,
+      },
+      {
+        code: "15B",
+        label: "Total insurable earnings",
+        value: record.totalInsurableEarnings,
+        emphasis: true,
+      },
       // Block 15C — insurable earnings by pay period, P1 = final period,
       // exactly the window Block 6's pay-period type declares.
       ...record.periods.map((period, index) => ({
@@ -225,8 +256,8 @@ async function roeSlip(orgId: string, _taxYear: number, rowId: string): Promise<
       { code: "17C", label: "Other monies (final period)", value: record.otherMoniesOnSeparation },
     ],
     notes: [
-      "Block 16 (reason for issuing this ROE) and any comment are the employer's declaration, "
-      + "made when the ROE Web file is issued — nothing in the payroll data can infer them.",
+      "Block 16 (reason for issuing this ROE) and any comment are the employer's declaration, " +
+        "made when the ROE Web file is issued — nothing in the payroll data can infer them.",
     ],
   };
 }
@@ -254,7 +285,8 @@ async function roePopulation(orgId: string, taxYear: number): Promise<PayrollFil
       lastDay: candidate.terminatedOn ?? candidate.lastPayDate,
       // Where the employee's ROE stands before it can be issued: no event yet
       // means the dates still need the employer's review in the drawer.
-      separationFacts: ROE_FACTS_STATUS_LABELS[candidate.factsStatus ?? "none"] ?? candidate.factsStatus,
+      separationFacts:
+        ROE_FACTS_STATUS_LABELS[candidate.factsStatus ?? "none"] ?? candidate.factsStatus,
     })),
   };
 }
@@ -268,9 +300,8 @@ export function parseRoeIssueParam(raw: string): RoeIssueInput[] {
   const issues: RoeIssueInput[] = [];
   for (const entry of raw.split(",").filter(Boolean)) {
     const [rowId, reasonCode, ...comment] = entry.split(":");
-    const selection=parseRoeEventRow(rowId ?? "");
-    if (!selection
-      || !(ROE_REASON_CODES as readonly string[]).includes(reasonCode ?? "")) {
+    const selection = parseRoeEventRow(rowId ?? "");
+    if (!selection || !(ROE_REASON_CODES as readonly string[]).includes(reasonCode ?? "")) {
       throw new PayrollError("invalid employee selection");
     }
     // The surface URI-encodes each comment; a hand-crafted body with a bare
@@ -285,7 +316,7 @@ export function parseRoeIssueParam(raw: string): RoeIssueInput[] {
     if (text.length > 160) throw new PayrollError("comment too long");
     issues.push({
       employeePartyId: selection.employeePartyId,
-      ...(selection.eventId?{eventId:selection.eventId}:{}),
+      ...(selection.eventId ? { eventId: selection.eventId } : {}),
       reasonCode: reasonCode as RoeReasonCode,
       comment: text || null,
     });
@@ -319,9 +350,9 @@ function t4Amendment(): NonNullable<PayrollYearEndFiling["amendment"]> {
     download: {
       label: "Download corrected T4 XML",
       note:
-        "The submission carries only the corrected slips, stamped with the CRA's report-type "
-        + "code (A amended, C cancelled) on the T619, every slip and the summary. Validate "
-        + "against the CRA schema for the filing year before transmitting.",
+        "The submission carries only the corrected slips, stamped with the CRA's report-type " +
+        "code (A amended, C cancelled) on the T619, every slip and the summary. Validate " +
+        "against the CRA schema for the filing year before transmitting.",
       build: async ({ orgId, taxYear, revision, rows }) => {
         if (revision === "amended") {
           const file = await buildT4Xml(orgId, taxYear, {
@@ -346,11 +377,18 @@ function t4Amendment(): NonNullable<PayrollYearEndFiling["amendment"]> {
       },
     },
     slip: { build: async (row) => t4CorrectionSlip(row) },
-    confidential: (orgId, _taxYear, rowId, previous) => t4ConfidentialFields(orgId, rowId, previous),
+    confidential: (orgId, _taxYear, rowId, previous) =>
+      t4ConfidentialFields(orgId, rowId, previous),
     privateFacts: async (orgId, taxYear, rowId) => {
-      const slip = (await t4Slips(orgId, taxYear)).find((candidate) =>
-        `${candidate.employeePartyId}:${candidate.province}:${candidate.filingAccountId ?? ""}` === rowId);
-      if (!slip) throw new PayrollError(`T4 slip ${rowId} is no longer available to snapshot employer contribution totals`);
+      const slip = (await t4Slips(orgId, taxYear)).find(
+        (candidate) =>
+          `${candidate.employeePartyId}:${candidate.province}:${candidate.filingAccountId ?? ""}` ===
+          rowId,
+      );
+      if (!slip)
+        throw new PayrollError(
+          `T4 slip ${rowId} is no longer available to snapshot employer contribution totals`,
+        );
       return {
         employerCpp: slip.employerCpp,
         employerCpp2: slip.employerCpp2,
@@ -371,19 +409,23 @@ async function t4CorrectionSlip(row: PayrollFilingCorrectionRow): Promise<Payrol
   const cancelled = row.revision === "cancelled";
   const boxes = cancelled
     ? row.previously.fields
-      .filter((field) => field.code != null)
-      .map((field) => ({ code: field.code!, label: field.label, value: field.value }))
+        .filter((field) => field.code != null)
+        .map((field) => ({ code: field.code!, label: field.label, value: field.value }))
     : row.changes
-      .filter((change) => change.code != null)
-      .flatMap((change) => [
-        { code: change.code!, label: `${change.label} — as filed`, value: change.previous ?? "—" },
-        {
-          code: change.code!,
-          label: `${change.label} — amended`,
-          value: change.current ?? "—",
-          emphasis: true,
-        },
-      ]);
+        .filter((change) => change.code != null)
+        .flatMap((change) => [
+          {
+            code: change.code!,
+            label: `${change.label} — as filed`,
+            value: change.previous ?? "—",
+          },
+          {
+            code: change.code!,
+            label: `${change.label} — amended`,
+            value: change.current ?? "—",
+            emphasis: true,
+          },
+        ]);
   const identity = row.changes
     .filter((change) => change.code == null)
     .map((change) => ({
@@ -392,8 +434,8 @@ async function t4CorrectionSlip(row: PayrollFilingCorrectionRow): Promise<Payrol
     }));
   if (boxes.length === 0 && identity.length === 0) {
     throw new PayrollError(
-      `nothing on ${row.label}'s T4 changed — an amended slip that restates the same figures `
-      + "tells the CRA nothing and must not be filed",
+      `nothing on ${row.label}'s T4 changed — an amended slip that restates the same figures ` +
+        "tells the CRA nothing and must not be filed",
     );
   }
   return {
@@ -410,17 +452,17 @@ async function t4CorrectionSlip(row: PayrollFilingCorrectionRow): Promise<Payrol
     boxes,
     notes: cancelled
       ? [
-        "A cancelled T4 reports the SAME information as the original slip, stamped with report "
-        + "type C — the CRA is being told this slip should never have existed, not that its "
-        + "figures moved.",
-        "Cancelling does not correct the payroll data. If the slip still has committed stubs "
-        + "behind it, void or adjust the run as well, or the next return will file it again.",
-      ]
+          "A cancelled T4 reports the SAME information as the original slip, stamped with report " +
+            "type C — the CRA is being told this slip should never have existed, not that its " +
+            "figures moved.",
+          "Cancelling does not correct the payroll data. If the slip still has committed stubs " +
+            "behind it, void or adjust the run as well, or the next return will file it again.",
+        ]
       : [
-        "Only the boxes that changed are restated; every other box on the original slip stands.",
-        "The amounts are recomputed from committed pay stubs and opening balances — an amended "
-        + "T4 can never disagree with the payroll subledger it summarizes.",
-      ],
+          "Only the boxes that changed are restated; every other box on the original slip stands.",
+          "The amounts are recomputed from committed pay stubs and opening balances — an amended " +
+            "T4 can never disagree with the payroll subledger it summarizes.",
+        ],
   };
 }
 
@@ -440,22 +482,28 @@ async function t4ConfidentialFields(
 ): Promise<{ label: string; fingerprint: string }[]> {
   const employeePartyId = rowId.split(":")[0] ?? "";
   if (!isUuid(employeePartyId)) return [];
-  const rows = (await db.execute<{ sin_encrypted: string | null }>(sql`
+  const rows = await db.execute<{ sin_encrypted: string | null }>(
+    sql`
     select sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const sealed = rows[0]?.sin_encrypted ?? null;
-  const sin = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
+  const sin =
+    sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
   const label = "Social insurance number";
   // Recompute under the STORED fingerprint's key id: after a rotation the
   // snapshot still names the old key, and only the old key proves the
   // current SIN is the reported one. A retired key the ring no longer holds
   // refuses by name (keep it configured, or re-fingerprint via rotation).
   const stored = previous?.find((entry) => entry.label === label)?.fingerprint;
-  return [{
-    label,
-    fingerprint: sin ? keyedFingerprintForComparison("ca.sin", sin, stored) : "",
-  }];
+  return [
+    {
+      label,
+      fingerprint: sin ? keyedFingerprintForComparison("ca.sin", sin, stored) : "",
+    },
+  ];
 }
 
 /**
@@ -475,116 +523,117 @@ export function caPackFilings(): PayrollPackFilings {
 
 function buildCaPackFilings(): PayrollPackFilings {
   return {
-  country: "CA",
-  programTypes: [
-    { key: "ca_rp", label: "CRA payroll program account (RP)" },
-  ],
-  // Block 17A/17C attribution: which seeded component system_keys are
-  // vacation pay vs other monies when paid on separation. Previously
-  // hardcoded in the ROE query; now the pack's own declaration.
-  separationPayments: {
-    vacationPay: ["vacation_payout"],
-    otherMonies: ["bonus"],
-  },
-  yearEnd: [
-    {
-      key: "t4",
-      label: "T4 slips (Canada)",
-      cadence: "annual",
-      description:
-        "Per-employee statement of remuneration paid. CPP shown includes CPP2 "
-        + "(boxes 16 + 16A); Quebec employees report QPP/QPIP in the corresponding boxes.",
-      emptyText: "No committed Canadian pay stubs for this year.",
-      population: (orgId, taxYear) => t4Population(orgId, taxYear),
-      parseRowId: parseT4RowId,
-      slip: { build: (orgId, taxYear, rowId) => t4Slip(orgId, taxYear, rowId) },
-      amendment: t4Amendment(),
-      download: {
-        label: "Download T4 XML",
-        note: "Validate against the CRA schema for the filing year before transmitting.",
-        build: async (orgId, taxYear) => {
-          const file = await buildT4Xml(orgId, taxYear);
-          return {
-            filename: file.filename,
-            contentType: "application/xml; charset=utf-8",
-            body: file.xml,
-          };
+    country: "CA",
+    programTypes: [{ key: "ca_rp", label: "CRA payroll program account (RP)" }],
+    // Block 17A/17C attribution: which seeded component system_keys are
+    // vacation pay vs other monies when paid on separation. Previously
+    // hardcoded in the ROE query; now the pack's own declaration.
+    separationPayments: {
+      vacationPay: ["vacation_payout"],
+      otherMonies: ["bonus"],
+    },
+    yearEnd: [
+      {
+        key: "t4",
+        label: "T4 slips (Canada)",
+        cadence: "annual",
+        description:
+          "Per-employee statement of remuneration paid. CPP shown includes CPP2 " +
+          "(boxes 16 + 16A); Quebec employees report QPP/QPIP in the corresponding boxes.",
+        emptyText: "No committed Canadian pay stubs for this year.",
+        population: (orgId, taxYear) => t4Population(orgId, taxYear),
+        parseRowId: parseT4RowId,
+        slip: { build: (orgId, taxYear, rowId) => t4Slip(orgId, taxYear, rowId) },
+        amendment: t4Amendment(),
+        download: {
+          label: "Download T4 XML",
+          note: "Validate against the CRA schema for the filing year before transmitting.",
+          build: async (orgId, taxYear) => {
+            const file = await buildT4Xml(orgId, taxYear);
+            return {
+              filename: file.filename,
+              contentType: "application/xml; charset=utf-8",
+              body: file.xml,
+            };
+          },
         },
       },
-    },
-    {
-      key: "roe",
-      additionalSelectedOriginals: true,
-      originalIssueRowIds: async (params,orgId) => Promise.all(parseRoeIssueParam(params.employees ?? "").map(async issue => {
-        const event=await selectRoeEvent(orgId,issue.employeePartyId,issue.eventId);
-        return roeEventRow(issue.employeePartyId,event.id);
-      })),
-      lockIssueSources: lockRoeIssueFacts,
-      recordIssueSources: recordRoeFactsIssued,
-      label: "Records of Employment",
-      // A SEPARATION document: due within days of an interruption of
-      // earnings, per employee event — never a year-end return. The cadence
-      // routes it to the Separations surface and the termination run's
-      // Finish step instead of the year-end page.
-      cadence: "separation",
-      description:
-        "Employees whose earnings were interrupted this year. Choose a reason "
-        + "for issue to include an employee in the ROE Web file.",
-      emptyText: "No employees with interrupted earnings this year.",
-      population: (orgId, taxYear) => roePopulation(orgId, taxYear),
-      parseRowId: parseRoeRowId,
-      slip: { build: (orgId, taxYear, rowId) => roeSlip(orgId, taxYear, rowId) },
-      // An ROE IS amendable at Service Canada — but only by quoting the SERIAL
-      // NUMBER Service Canada assigned to the original, which is issued on
-      // submission to ROE Web and is not returned to the bulk-upload file this
-      // pack produces. Nothing here holds it, so an "amended ROE" built from
-      // this data could not identify the record it claims to replace, and
-      // would be filed as a second original — a duplicate interruption of
-      // earnings against a claimant's file. Refused by name instead.
-      amendment: {
-        supported: false,
-        refusal:
-          "An amended Record of Employment must quote the serial number Service Canada "
-          + "assigned to the original, which is issued when the ROE is accepted by ROE Web and "
-          + "is not carried back into the bulk upload file. OpenBooks does not hold that "
-          + "serial number, so it cannot identify the record an amendment would replace — "
-          + "amend the ROE directly in ROE Web, where the original can be found by serial "
-          + "number. (Records of Employment are separation documents and live on the "
-          + "Separations surface, never on year-end.)",
-      },
-      issue: {
-        param: "employees",
-        idColumn: "roeRowId",
-        reasonCodes: ROE_REASON_CODES.map((code) => ({
-          code,
-          label: ROE_REASON_LABELS[code],
-          commentRequired: code === "K",
-        })),
-        commentMaxLength: 160,
-        maxSelection: 500,
-      },
-      download: {
-        label: "Download Service Canada ROE v2 XML",
-        note: "This Payroll Extract v2 file is validated against Service Canada's published XSD before download.",
-        build: async (orgId, _taxYear, params) => {
-          const issues = parseRoeIssueParam(params.employees ?? "");
-          const file = await buildRoeXml(orgId, issues);
-          return {
-            filename: file.filename,
-            contentType: "application/xml; charset=utf-8",
-            body: file.xml,
-          };
+      {
+        key: "roe",
+        additionalSelectedOriginals: true,
+        originalIssueRowIds: async (params, orgId) =>
+          Promise.all(
+            parseRoeIssueParam(params.employees ?? "").map(async (issue) => {
+              const event = await selectRoeEvent(orgId, issue.employeePartyId, issue.eventId);
+              return roeEventRow(issue.employeePartyId, event.id);
+            }),
+          ),
+        lockIssueSources: lockRoeIssueFacts,
+        recordIssueSources: recordRoeFactsIssued,
+        label: "Records of Employment",
+        // A SEPARATION document: due within days of an interruption of
+        // earnings, per employee event — never a year-end return. The cadence
+        // routes it to the Separations surface and the termination run's
+        // Finish step instead of the year-end page.
+        cadence: "separation",
+        description:
+          "Employees whose earnings were interrupted this year. Choose a reason " +
+          "for issue to include an employee in the ROE Web file.",
+        emptyText: "No employees with interrupted earnings this year.",
+        population: (orgId, taxYear) => roePopulation(orgId, taxYear),
+        parseRowId: parseRoeRowId,
+        slip: { build: (orgId, taxYear, rowId) => roeSlip(orgId, taxYear, rowId) },
+        // An ROE IS amendable at Service Canada — but only by quoting the SERIAL
+        // NUMBER Service Canada assigned to the original, which is issued on
+        // submission to ROE Web and is not returned to the bulk-upload file this
+        // pack produces. Nothing here holds it, so an "amended ROE" built from
+        // this data could not identify the record it claims to replace, and
+        // would be filed as a second original — a duplicate interruption of
+        // earnings against a claimant's file. Refused by name instead.
+        amendment: {
+          supported: false,
+          refusal:
+            "An amended Record of Employment must quote the serial number Service Canada " +
+            "assigned to the original, which is issued when the ROE is accepted by ROE Web and " +
+            "is not carried back into the bulk upload file. OpenBooks does not hold that " +
+            "serial number, so it cannot identify the record an amendment would replace — " +
+            "amend the ROE directly in ROE Web, where the original can be found by serial " +
+            "number. (Records of Employment are separation documents and live on the " +
+            "Separations surface, never on year-end.)",
+        },
+        issue: {
+          param: "employees",
+          idColumn: "roeRowId",
+          reasonCodes: ROE_REASON_CODES.map((code) => ({
+            code,
+            label: ROE_REASON_LABELS[code],
+            commentRequired: code === "K",
+          })),
+          commentMaxLength: 160,
+          maxSelection: 500,
+        },
+        download: {
+          label: "Download Service Canada ROE v2 XML",
+          note: "This Payroll Extract v2 file is validated against Service Canada's published XSD before download.",
+          build: async (orgId, _taxYear, params) => {
+            const issues = parseRoeIssueParam(params.employees ?? "");
+            const file = await buildRoeXml(orgId, issues);
+            return {
+              filename: file.filename,
+              contentType: "application/xml; charset=utf-8",
+              body: file.xml,
+            };
+          },
         },
       },
-    },
-    // The Quebec RL-1 (Revenu Québec) is authored under
-    // engine/src/payroll/canada/quebec and carried here declaration-side —
-    // the same memoized object `registerRl1Filing()` registers, so both
-    // paths are one declaration (registerYearEndFiling is idempotent on the
-    // identical object). Called only inside this lazy builder, never at
-    // module evaluation, for the same import-cycle reason as everything
-    // else here.
-    rl1Filing(),
-  ],
+      // The Quebec RL-1 (Revenu Québec) is authored under
+      // engine/src/payroll/canada/quebec and carried here declaration-side —
+      // the same memoized object `registerRl1Filing()` registers, so both
+      // paths are one declaration (registerYearEndFiling is idempotent on the
+      // identical object). Called only inside this lazy builder, never at
+      // module evaluation, for the same import-cycle reason as everything
+      // else here.
+      rl1Filing(),
+    ],
   };
 }

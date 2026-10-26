@@ -17,11 +17,36 @@ import { PaymentError } from "./payment-errors.ts";
  * spelling and is refused by name rather than blanked or replaced.
  */
 const LETTER_FOLDS: Readonly<Record<string, string>> = {
-  "ß": "ss", "ẞ": "SS", "Æ": "AE", "æ": "ae", "Œ": "OE", "œ": "oe",
-  "Ø": "O", "ø": "o", "Đ": "D", "đ": "d", "Ð": "D", "ð": "d",
-  "Ł": "L", "ł": "l", "Þ": "TH", "þ": "th", "ı": "i", "Ħ": "H", "ħ": "h",
-  "‘": "'", "’": "'", "‚": "'", "“": "\"", "”": "\"", "„": "\"",
-  "‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-",
+  ß: "ss",
+  ẞ: "SS",
+  Æ: "AE",
+  æ: "ae",
+  Œ: "OE",
+  œ: "oe",
+  Ø: "O",
+  ø: "o",
+  Đ: "D",
+  đ: "d",
+  Ð: "D",
+  ð: "d",
+  Ł: "L",
+  ł: "l",
+  Þ: "TH",
+  þ: "th",
+  ı: "i",
+  Ħ: "H",
+  ħ: "h",
+  "‘": "'",
+  "’": "'",
+  "‚": "'",
+  "“": '"',
+  "”": '"',
+  "„": '"',
+  "‐": "-",
+  "‑": "-",
+  "‒": "-",
+  "–": "-",
+  "—": "-",
 };
 
 const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
@@ -36,10 +61,13 @@ export function isPrintableAscii(value: string): boolean {
  * Fold `value` to printable ASCII, or report the first character (as typed)
  * that has no ASCII spelling.
  */
-export function foldToAscii(value: string): { ok: true; text: string } | { ok: false; character: string } {
+export function foldToAscii(
+  value: string,
+): { ok: true; text: string } | { ok: false; character: string } {
   let text = "";
   for (const character of value) {
-    const folded = LETTER_FOLDS[character] ?? character.normalize("NFKD").replace(COMBINING_MARKS, "");
+    const folded =
+      LETTER_FOLDS[character] ?? character.normalize("NFKD").replace(COMBINING_MARKS, "");
     if (!isPrintableAscii(folded)) return { ok: false, character };
     text += folded;
   }

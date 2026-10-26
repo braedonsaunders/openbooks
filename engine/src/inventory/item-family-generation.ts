@@ -46,13 +46,24 @@ export async function previewGenerateVariants(
   orgId: string,
   familyId: string,
   pattern: string | null = null,
-): Promise<{ familyId: string; familyCode: string; familyName: string; missing: MissingCombination[]; existing: number }> {
+): Promise<{
+  familyId: string;
+  familyCode: string;
+  familyName: string;
+  missing: MissingCombination[];
+  existing: number;
+}> {
   return db.transaction(async (tx) => {
     await assertItemVariantsReadable(tx, orgId);
-    const row = (await tx.execute<FamilyRow>(sql`
+    const row = (
+      await tx.execute<FamilyRow>(
+        sql`
       select id, code, name, description, category, kind, default_unit, default_rate, status
         from item_families
-       where org_id = ${orgId} and id = ${familyId}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${familyId}`,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new ItemFamilyError(
         "the product family is not in this organization",
@@ -62,12 +73,15 @@ export async function previewGenerateVariants(
       );
     }
     const options = await loadOptions(tx, orgId, familyId);
-    if (options.length === 0) return { familyId, familyCode: row.code, familyName: row.name, missing: [], existing: 0 };
+    if (options.length === 0)
+      return { familyId, familyCode: row.code, familyName: row.name, missing: [], existing: 0 };
     const codePattern = pattern ?? DEFAULT_VARIANT_CODE_PATTERN;
     const optionNames = options.map((option) => option.name);
     const existing = await loadVariants(tx, orgId, familyId);
     const existingKeys = new Set(
-      existing.map((variant) => combinationKey((variant.option_values ?? {}) as OptionCombination, optionNames)),
+      existing.map((variant) =>
+        combinationKey((variant.option_values ?? {}) as OptionCombination, optionNames),
+      ),
     );
     const missing = cartesianCombinations(options)
       .filter((combination) => !existingKeys.has(combinationKey(combination, optionNames)))
@@ -80,7 +94,13 @@ export async function previewGenerateVariants(
           exists: false,
         };
       });
-    return { familyId, familyCode: row.code, familyName: row.name, missing, existing: existing.length };
+    return {
+      familyId,
+      familyCode: row.code,
+      familyName: row.name,
+      missing,
+      existing: existing.length,
+    };
   });
 }
 
@@ -117,9 +137,10 @@ export async function generateFamilyVariants(
       );
     }
     const pattern = input.codePattern ?? DEFAULT_VARIANT_CODE_PATTERN;
-    const requested = input.only === undefined || input.only === null
-      ? cartesianCombinations(options)
-      : input.only.map((combination) => assertCombination(combination, options));
+    const requested =
+      input.only === undefined || input.only === null
+        ? cartesianCombinations(options)
+        : input.only.map((combination) => assertCombination(combination, options));
     if (requested.length === 0) {
       throw new ItemFamilyError(
         "no combinations were chosen",
@@ -155,16 +176,30 @@ export async function generateFamilyVariants(
     let created = 0;
     for (const combination of requested) {
       const key = combinationKey(combination, optionNames);
-      const already = existing.find((variant) => combinationKey((variant.option_values ?? {}) as OptionCombination, optionNames) === key);
+      const already = existing.find(
+        (variant) =>
+          combinationKey((variant.option_values ?? {}) as OptionCombination, optionNames) === key,
+      );
       const valuesInOrder = optionNames.map((name) => combination[name]!);
       const code = renderVariantCode(pattern, family.code, valuesInOrder);
       const name = variantDisplayName(family.name, valuesInOrder);
       if (already) {
-        results.push({ id: already.id, code: already.code ?? code, name: already.name, optionValues: combination, created: false });
+        results.push({
+          id: already.id,
+          code: already.code ?? code,
+          name: already.name,
+          optionValues: combination,
+          created: false,
+        });
         continue;
       }
-      const collision = (await tx.execute<{ id: string; name: string }>(sql`
-        select id, name from items where org_id = ${orgId} and code = ${code}`, "objects"))[0];
+      const collision = (
+        await tx.execute<{ id: string; name: string }>(
+          sql`
+        select id, name from items where org_id = ${orgId} and code = ${code}`,
+          "objects",
+        )
+      )[0];
       if (collision) {
         throw new ItemFamilyError(
           `variant code ${code} is already used by ${collision.name}`,
@@ -173,14 +208,19 @@ export async function generateFamilyVariants(
           409,
         );
       }
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = (
+        await tx.execute<{ id: string }>(
+          sql`
         insert into items
           (org_id, kind, code, name, category, unit, default_rate,
            family_id, option_values, is_active, created_by, updated_by)
         values
           (${orgId}, ${record.kind}, ${code}, ${name}, ${record.category}, ${record.defaultUnit}, ${record.defaultRate},
            ${familyId}, ${JSON.stringify(combination)}::jsonb, true, ${actorId}, ${actorId})
-        returning id`, "objects"))[0];
+        returning id`,
+          "objects",
+        )
+      )[0];
       if (!inserted) throw new InventoryError(`variant ${code} was not created`);
       await writeFamilyAudit(tx, orgId, actorId, "items", inserted.id, "insert", {
         event: "variant_generated",

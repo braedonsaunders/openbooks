@@ -19,10 +19,16 @@ function resetCapture() {
   captured.html = null;
 }
 Object.assign(globalThis, { __lienExecutedState: state, __lienExecutedHtml: captured });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -51,7 +57,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PATCH } = await import("./route.ts");
 const { GET } = await import("./pdf/route.ts");
 
@@ -64,18 +71,31 @@ async function fixture() {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true, "projects": true}}'::jsonb where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true, "projects": true}}'::jsonb where id = ${org.orgId}`,
+    ),
   );
   const partyId = randomUUID();
   const projectId = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-    values (${partyId},${org.orgId},'vendor',${VENDOR},${org.subsidiaryId},true,'{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
-    values (${projectId},${org.orgId},${org.subsidiaryId},'WAIVER',${PROJECT},${org.customerId},'active',true,'{}'::jsonb)`));
-  const waiverId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+  await withBypassContext(() =>
+    db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${partyId},${org.orgId},'vendor',${VENDOR},${org.subsidiaryId},true,'{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+    values (${projectId},${org.orgId},${org.subsidiaryId},'WAIVER',${PROJECT},${org.customerId},'active',true,'{}'::jsonb)`),
+  );
+  const waiverId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
     insert into lien_waivers (org_id, waiver_number, direction, party_id, project_id, waiver_type, through_date, amount, currency, created_by, updated_by)
     values (${org.orgId}, 'LW-EXEC-1', 'received', ${partyId}, ${projectId}, 'conditional_progress', '2026-03-31', '1000.00', 'CAD', ${actorId}, ${actorId})
-    returning id`, "objects")))[0]!.id;
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
   return { org, partyId, projectId, waiverId };
 }
 
@@ -85,7 +105,11 @@ const sign = (waiverId: string) =>
       new Request(`http://waiver.test/api/compliance/lien-waivers/${waiverId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "sign", signedByName: "Sam Signer", signedAt: "2026-04-01" }),
+        body: JSON.stringify({
+          action: "sign",
+          signedByName: "Sam Signer",
+          signedAt: "2026-04-01",
+        }),
       }),
       { params: Promise.resolve({ id: waiverId }) },
     ),
@@ -93,17 +117,18 @@ const sign = (waiverId: string) =>
 
 const print = (waiverId: string) =>
   withOrgContext(state.orgId, () =>
-    GET(
-      new Request(`http://waiver.test/api/compliance/lien-waivers/${waiverId}/pdf`),
-      { params: Promise.resolve({ id: waiverId }) },
-    ),
+    GET(new Request(`http://waiver.test/api/compliance/lien-waivers/${waiverId}/pdf`), {
+      params: Promise.resolve({ id: waiverId }),
+    }),
   );
 
 async function snapshotOf(waiverId: string) {
   const rows = await withBypassContext(() =>
     db.execute<{ snapshot: { data: Record<string, unknown> } | null }>(
-      sql`select executed_snapshot as snapshot from lien_waivers where id = ${waiverId}`, "objects",
-    ));
+      sql`select executed_snapshot as snapshot from lien_waivers where id = ${waiverId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.snapshot;
 }
 
@@ -118,10 +143,14 @@ test("signing freezes the print image, later renames do not rewrite it", async (
     assert.ok(String(frozen.data.projectName).includes(PROJECT));
 
     // Rename everything the release names, then print.
-    await withBypassContext(() => db.execute(sql`
-      update parties set display_name = 'Renamed Vendor Inc' where id = ${partyId}`));
-    await withBypassContext(() => db.execute(sql`
-      update projects set name = 'Renamed Project' where id = ${projectId}`));
+    await withBypassContext(() =>
+      db.execute(sql`
+      update parties set display_name = 'Renamed Vendor Inc' where id = ${partyId}`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
+      update projects set name = 'Renamed Project' where id = ${projectId}`),
+    );
     resetCapture();
     const printed = await print(waiverId);
     assert.equal(printed.status, 200, JSON.stringify(await printed.json().catch(() => null)));
@@ -129,7 +158,10 @@ test("signing freezes the print image, later renames do not rewrite it", async (
     assert.ok(html?.includes(VENDOR), "the print still names the vendor as executed");
     assert.ok(html?.includes(PROJECT), "the print still names the project as executed");
     assert.ok(!html?.includes("Renamed Vendor"), "the later rename does not rewrite the release");
-    assert.ok(!html?.includes("Renamed Project"), "the later rewording does not rewrite the release");
+    assert.ok(
+      !html?.includes("Renamed Project"),
+      "the later rewording does not rewrite the release",
+    );
     // The frozen image itself never moved.
     const still = await snapshotOf(waiverId);
     assert.deepEqual(still, frozen);
@@ -142,15 +174,21 @@ test("a waiver executed before the freeze prints bannered current records, never
   const { org, partyId, projectId, waiverId } = await fixture();
   try {
     // A legacy executed row: signed, but no frozen image was ever stamped.
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       update lien_waivers set status = 'signed', signed_by_name = 'Old Signer',
              signed_at = '2026-04-01T00:00:00Z'::timestamptz
-       where id = ${waiverId}`));
+       where id = ${waiverId}`),
+    );
     // Rename everything the release names after the upgrade, then print.
-    await withBypassContext(() => db.execute(sql`
-      update parties set display_name = 'Renamed Vendor Inc' where id = ${partyId}`));
-    await withBypassContext(() => db.execute(sql`
-      update projects set name = 'Renamed Project' where id = ${projectId}`));
+    await withBypassContext(() =>
+      db.execute(sql`
+      update parties set display_name = 'Renamed Vendor Inc' where id = ${partyId}`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
+      update projects set name = 'Renamed Project' where id = ${projectId}`),
+    );
     resetCapture();
     const printed = await print(waiverId);
     assert.equal(printed.status, 200, JSON.stringify(await printed.json().catch(() => null)));
@@ -194,7 +232,11 @@ test("a newly signed waiver still freezes its snapshot and prints clean", async 
     const printed = await print(waiverId);
     assert.equal(printed.status, 200, JSON.stringify(await printed.json().catch(() => null)));
     assert.ok(!captured.html?.includes("Legacy waiver"), "a frozen print carries no legacy banner");
-    assert.equal(printed.headers.get("x-lien-waiver-evidence"), null, "a frozen print carries no legacy header");
+    assert.equal(
+      printed.headers.get("x-lien-waiver-evidence"),
+      null,
+      "a frozen print carries no legacy header",
+    );
     assert.match(
       printed.headers.get("content-disposition") ?? "",
       /LW-EXEC-1\.pdf/,

@@ -3,12 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@openbooks/engine/platform/db";
 import { listRequirementSubjectOptions } from "@openbooks/engine/hrm/qualifications/requirements";
 import { qualificationErrorResponse } from "../../qualifications/_lib";
-const SUBJECT_KINDS = [
-  "project",
-  "equipment",
-  "position",
-  "classification",
-] as const;
+const SUBJECT_KINDS = ["project", "equipment", "position", "classification"] as const;
 const PAGE_SIZE = 20;
 /** Search bounded authoring options through the same subsidiary fence as requirement writes. */
 export const GET = defineRoute({
@@ -17,20 +12,16 @@ export const GET = defineRoute({
   handler: async ({ request: req, authz: gate }) => {
     const params = new URL(req.url).searchParams;
     const subjectKind = params.get("subjectKind");
-    if (
-      !SUBJECT_KINDS.includes(subjectKind as (typeof SUBJECT_KINDS)[number])
-    ) {
+    if (!SUBJECT_KINDS.includes(subjectKind as (typeof SUBJECT_KINDS)[number])) {
       return NextResponse.json(
         {
-          error:
-            "subjectKind must be one of project, equipment, position, classification",
+          error: "subjectKind must be one of project, equipment, position, classification",
         },
         { status: 400 },
       );
     }
     const query = (params.get("q") ?? "").trim();
-    if (query.length < 2)
-      return NextResponse.json({ options: [], hasMore: false });
+    if (query.length < 2) return NextResponse.json({ options: [], hasMore: false });
     try {
       const rows = await listRequirementSubjectOptions(db, {
         orgId: gate.user.orgId,

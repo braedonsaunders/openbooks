@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { seedAdoption, calculatedRun, seedCanadianFilingAccountForTest } from "./filing-test-fixtures.ts";
+import {
+  seedAdoption,
+  calculatedRun,
+  seedCanadianFilingAccountForTest,
+} from "./filing-test-fixtures.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
@@ -16,15 +20,29 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedPostedSource() {
   const fx = await seedAdoption();
   const filingAccountId = await seedCanadianFilingAccountForTest(fx.orgId, fx.actorId, {
-    subsidiaryId: fx.subsidiaryId, accountNumber: "123456789RP0001", name: "CRA payroll",
-    effectiveFrom: "2026-01-01", eiEmployerMultiplier: "1.4",
+    subsidiaryId: fx.subsidiaryId,
+    accountNumber: "123456789RP0001",
+    name: "CRA payroll",
+    effectiveFrom: "2026-01-01",
+    eiEmployerMultiplier: "1.4",
   });
-  assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-    where org_id=${fx.orgId} and employment_id=${fx.employmentId} returning id`, "objects")).length, 1);
+  assert.equal(
+    (
+      await db.execute(
+        sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+    where org_id=${fx.orgId} and employment_id=${fx.employmentId} returning id`,
+        "objects",
+      )
+    ).length,
+    1,
+  );
   const { input } = await calculatedRun(fx);
   await commitPayRun(input);
-  const accounts = await db.execute<{ id: string; type: string }>(sql`
-      select id, type from accounts where org_id = ${fx.orgId}`, "objects");
+  const accounts = await db.execute<{ id: string; type: string }>(
+    sql`
+      select id, type from accounts where org_id = ${fx.orgId}`,
+    "objects",
+  );
   const account = (type: string) => {
     const id = accounts.find((row) => row.type === type)?.id;
     assert.ok(id, `fixture account ${type}`);
@@ -77,17 +95,25 @@ async function seedSourceAndCommittedTopUp() {
     payDate: "2026-08-20",
     allowedSubsidiaryIds: null,
   });
-  assert.deepEqual((await calculatePayRun({
-    orgId: fx.orgId,
-    documentId: retro.documentId,
-    actorId: fx.actorId,
-  })).errors, []);
+  assert.deepEqual(
+    (
+      await calculatePayRun({
+        orgId: fx.orgId,
+        documentId: retro.documentId,
+        actorId: fx.actorId,
+      })
+    ).errors,
+    [],
+  );
   await commitPayRun({ orgId: fx.orgId, documentId: retro.documentId, actorId: fx.actorId });
   return { ...seeded, retro };
 }
 
 async function committedSettledTotal(orgId: string, sourceDocumentId: string) {
-  return (await db.execute<{ settled: string | null }>(sql`
+  return (
+    (
+      await db.execute<{ settled: string | null }>(
+        sql`
     select sum(a.amount)::text as settled
       from payroll_retro_allocations a
       join payroll_retro_settlements st on st.id = a.settlement_id and st.org_id = a.org_id
@@ -95,7 +121,11 @@ async function committedSettledTotal(orgId: string, sourceDocumentId: string) {
         and rr.org_id = st.org_id
      where st.org_id = ${orgId}
        and st.source_pay_run_document_id = ${sourceDocumentId}
-       and rr.run_status = 'committed'`, "objects"))[0]?.settled ?? null;
+       and rr.run_status = 'committed'`,
+        "objects",
+      )
+    )[0]?.settled ?? null
+  );
 }
 
 test(
@@ -104,12 +134,23 @@ test(
   async () => {
     const { fx, input, retro } = await seedSourceAndCommittedTopUp();
     try {
-      const retroNumber = (await db.execute<{ document_number: string }>(sql`
+      const retroNumber = (
+        await db.execute<{ document_number: string }>(
+          sql`
         select document_number from documents
-         where org_id = ${fx.orgId} and id = ${retro.documentId}`, "objects"))[0]!.document_number;
-      const orgCounts = async () => (await db.execute<{ entries: string; audit: string }>(sql`
+         where org_id = ${fx.orgId} and id = ${retro.documentId}`,
+          "objects",
+        )
+      )[0]!.document_number;
+      const orgCounts = async () =>
+        (
+          await db.execute<{ entries: string; audit: string }>(
+            sql`
         select (select count(*)::text from journal_entries where org_id = ${fx.orgId}) as entries,
-               (select count(*)::text from audit_log where org_id = ${fx.orgId}) as audit`, "objects"))[0]!;
+               (select count(*)::text from audit_log where org_id = ${fx.orgId}) as audit`,
+            "objects",
+          )
+        )[0]!;
       const before = await orgCounts();
       await assert.rejects(
         requestDocumentVoid({
@@ -121,16 +162,23 @@ test(
         }),
         (error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
-          return message.includes("settled by committed retro pay run")
-            && message.includes(retroNumber)
-            && message.includes("void the retro run first");
+          return (
+            message.includes("settled by committed retro pay run") &&
+            message.includes(retroNumber) &&
+            message.includes("void the retro run first")
+          );
         },
         "the refusal names the dependent retro run and its remedy",
       );
-      const state = (await db.execute<{
-        source_status: string; void_requested_at: string | null;
-        source_run: string; retro_run: string; settled: string | null;
-      }>(sql`
+      const state = (
+        await db.execute<{
+          source_status: string;
+          void_requested_at: string | null;
+          source_run: string;
+          retro_run: string;
+          settled: string | null;
+        }>(
+          sql`
         select (select status from documents
                  where org_id = ${fx.orgId} and id = ${input.documentId}) as source_status,
                (select void_requested_at::text from documents
@@ -145,8 +193,15 @@ test(
                     and rr.org_id = st.org_id
                  where st.org_id = ${fx.orgId}
                    and st.source_pay_run_document_id = ${input.documentId}
-                   and rr.run_status = 'committed') as settled`, "objects"))[0]!;
-      assert.deepEqual(await orgCounts(), before, "the refused void writes no journal or audit rows");
+                   and rr.run_status = 'committed') as settled`,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(
+        await orgCounts(),
+        before,
+        "the refused void writes no journal or audit rows",
+      );
       assert.equal(state.source_status, "posted", "the source stays posted");
       assert.equal(state.void_requested_at, null, "no void claim survives the refusal");
       assert.equal(state.source_run, "committed", "the source stays committed");
@@ -158,39 +213,40 @@ test(
   },
 );
 
-test(
-  "a draft retro settlement does not block the source void",
-  { skip: !DB },
-  async () => {
-    const { fx, input } = await seedPostedSource();
-    try {
-      await backdateRaise(fx);
-      const retro = await createRetroPayRun({
-        orgId: fx.orgId,
-        actorId: fx.actorId,
-        payScheduleId: fx.scheduleId,
-        payDate: "2026-08-20",
-        allowedSubsidiaryIds: null,
-      });
-      await requestDocumentVoid({
-        orgId: fx.orgId,
-        documentId: input.documentId,
-        actorId: fx.actorId,
-        reason: "reissue this period in the correct batch",
-        reversalDate: "2026-07-31",
-      });
-      const state = (await db.execute<{ source_run: string; retro_run: string }>(sql`
+test("a draft retro settlement does not block the source void", { skip: !DB }, async () => {
+  const { fx, input } = await seedPostedSource();
+  try {
+    await backdateRaise(fx);
+    const retro = await createRetroPayRun({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      payScheduleId: fx.scheduleId,
+      payDate: "2026-08-20",
+      allowedSubsidiaryIds: null,
+    });
+    await requestDocumentVoid({
+      orgId: fx.orgId,
+      documentId: input.documentId,
+      actorId: fx.actorId,
+      reason: "reissue this period in the correct batch",
+      reversalDate: "2026-07-31",
+    });
+    const state = (
+      await db.execute<{ source_run: string; retro_run: string }>(
+        sql`
         select (select run_status from pay_runs
                  where org_id = ${fx.orgId} and document_id = ${input.documentId}) as source_run,
                (select run_status from pay_runs
-                 where org_id = ${fx.orgId} and document_id = ${retro.documentId}) as retro_run`, "objects"))[0]!;
-      assert.equal(state.source_run, "voided", "the source voids");
-      assert.equal(state.retro_run, "draft", "the uncommitted retro is untouched");
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+                 where org_id = ${fx.orgId} and document_id = ${retro.documentId}) as retro_run`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(state.source_run, "voided", "the source voids");
+    assert.equal(state.retro_run, "draft", "the uncommitted retro is untouched");
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
   "a source void waits for an in-flight retro commit and then refuses",
@@ -211,11 +267,16 @@ test(
         payDate: "2026-08-20",
         allowedSubsidiaryIds: null,
       });
-      assert.deepEqual((await calculatePayRun({
-        orgId: fx.orgId,
-        documentId: retro.documentId,
-        actorId: fx.actorId,
-      })).errors, []);
+      assert.deepEqual(
+        (
+          await calculatePayRun({
+            orgId: fx.orgId,
+            documentId: retro.documentId,
+            actorId: fx.actorId,
+          })
+        ).errors,
+        [],
+      );
 
       // A real in-flight commitPayRun, held uncommitted in this outer
       // transaction: its effects are in and its opening pay_runs row lock is
@@ -232,12 +293,18 @@ test(
       });
       holder = withOrgTransaction(fx.orgId, async () => {
         try {
-          await commitPayRun({ orgId: fx.orgId, documentId: retro.documentId, actorId: fx.actorId });
+          await commitPayRun({
+            orgId: fx.orgId,
+            documentId: retro.documentId,
+            actorId: fx.actorId,
+          });
         } catch (error) {
           lockReject(error);
           throw error;
         }
-        holderPid = (await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
+        holderPid = (
+          await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects")
+        )[0]!.pid;
         lockResolve();
         await releaseGate;
       });
@@ -251,11 +318,16 @@ test(
       });
       // Observe the actual owning backend: native fences can block before the dependent-run query.
       for (let attempt = 0; ; attempt += 1) {
-        const blocked = (await db.execute<{ blocked: boolean }>(sql`
+        const blocked = (
+          await db.execute<{ blocked: boolean }>(
+            sql`
           select exists (
             select 1 from pg_stat_activity
              where datname=current_database() and ${holderPid}::int=any(pg_blocking_pids(pid))
-          ) as blocked`, "objects"))[0]?.blocked;
+          ) as blocked`,
+            "objects",
+          )
+        )[0]?.blocked;
         if (blocked) break;
         if (attempt >= 600) throw new Error("source void did not reach the retro guard");
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -269,11 +341,16 @@ test(
       );
       voidingAsserted = true;
       await holder;
-      const state = (await db.execute<{ source_status: string; source_run: string }>(sql`
+      const state = (
+        await db.execute<{ source_status: string; source_run: string }>(
+          sql`
         select (select status from documents
                  where org_id = ${fx.orgId} and id = ${input.documentId}) as source_status,
                (select run_status from pay_runs
-                 where org_id = ${fx.orgId} and document_id = ${input.documentId}) as source_run`, "objects"))[0]!;
+                 where org_id = ${fx.orgId} and document_id = ${input.documentId}) as source_run`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(state.source_status, "posted", "the source stays posted");
       assert.equal(state.source_run, "committed", "the source stays committed");
     } finally {
@@ -294,7 +371,10 @@ test(
         } else if (voiding) {
           // The commit premise broke, so the void's outcome asserts nothing;
           // consume it so teardown never leaves a dangling promise.
-          await voiding.then(() => undefined, () => undefined);
+          await voiding.then(
+            () => undefined,
+            () => undefined,
+          );
         }
       } finally {
         await dropScratchOrgReporting(fx.orgId);
@@ -320,9 +400,14 @@ test(
         reversalDate: "2026-07-31",
       });
       assert.equal(
-        (await db.execute<{ run_status: string }>(sql`
+        (
+          await db.execute<{ run_status: string }>(
+            sql`
           select run_status from pay_runs
-           where org_id = ${fx.orgId} and document_id = ${retro.documentId}`, "objects"))[0]!.run_status,
+           where org_id = ${fx.orgId} and document_id = ${retro.documentId}`,
+            "objects",
+          )
+        )[0]!.run_status,
         "voided",
         "the retro top-up is retired",
       );
@@ -353,15 +438,24 @@ test(
       });
       assert.deepEqual(calculated.errors, []);
       assert.equal(calculated.gross, "264.0000", "8 h x $33.00 full corrected base");
-      await commitPayRun({ orgId: fx.orgId, documentId: replacement.documentId, actorId: fx.actorId });
+      await commitPayRun({
+        orgId: fx.orgId,
+        documentId: replacement.documentId,
+        actorId: fx.actorId,
+      });
       await db.execute(sql`update documents set status = 'approved'
         where org_id = ${fx.orgId} and id = ${replacement.documentId}`);
       await postDocument(replacement.documentId, { control });
-      const paid = (await db.execute<{ total: string }>(sql`
+      const paid = (
+        await db.execute<{ total: string }>(
+          sql`
         select sum(s.gross)::text as total from pay_stubs s
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
          where s.org_id = ${fx.orgId} and s.employee_party_id = ${fx.employeeId}
-           and r.run_status = 'committed'`, "objects"))[0]!;
+           and r.run_status = 'committed'`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(paid.total, "264.0000", "$264.00 corrected base with no stranded top-up on top");
     } finally {
       await dropScratchOrgReporting(fx.orgId);

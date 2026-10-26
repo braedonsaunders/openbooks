@@ -1,36 +1,36 @@
-import { platformListSources } from '../../../../lib/list/platform-sources'
-import { clamp, isUuid, pickString } from '../../../../lib/list-params'
-import { platformUser } from '../../../../lib/platform-admin'
-import type { PlatformGrant, PlatformUser } from '../../../../lib/platform-admin'
-import { requireSuperAdmin } from '../../../../lib/super-admin'
-import { UsersList } from './sections'
+import { platformListSources } from "../../../../lib/list/platform-sources";
+import { clamp, isUuid, pickString } from "../../../../lib/list-params";
+import { platformUser } from "../../../../lib/platform-admin";
+import type { PlatformGrant, PlatformUser } from "../../../../lib/platform-admin";
+import { requireSuperAdmin } from "../../../../lib/super-admin";
+import { UsersList } from "./sections";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export default async function PlatformUsersPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const source = platformListSources.users
-  const { params, filter: status, result } = await source.read(sp)
-  const selectedUserId = pickString(sp.user)
+  const sp = await searchParams;
+  const source = platformListSources.users;
+  const { params, filter: status, result } = await source.read(sp);
+  const selectedUserId = pickString(sp.user);
   let detail: {
-    user: PlatformUser
-    grants: PlatformGrant[]
-    totalGrants: number
-    grantsPage: number
-    grantsPerPage: number
-    isSelf: boolean
-  } | null = null
+    user: PlatformUser;
+    grants: PlatformGrant[];
+    totalGrants: number;
+    grantsPage: number;
+    grantsPerPage: number;
+    isSelf: boolean;
+  } | null = null;
   if (selectedUserId && isUuid(selectedUserId)) {
-    const grantsPage = clamp(Number(pickString(sp.grantPage) ?? '1'), 1, 10_000)
-    const grantsPerPage = clamp(Number(pickString(sp.grantPerPage) ?? '25'), 5, 100)
+    const grantsPage = clamp(Number(pickString(sp.grantPage) ?? "1"), 1, 10_000);
+    const grantsPerPage = clamp(Number(pickString(sp.grantPerPage) ?? "25"), 5, 100);
     const [record, authz] = await Promise.all([
       platformUser(selectedUserId, { page: grantsPage, perPage: grantsPerPage }),
       requireSuperAdmin(),
-    ])
+    ]);
     if (record) {
       detail = {
         user: record.user,
@@ -39,7 +39,7 @@ export default async function PlatformUsersPage({
         grantsPage,
         grantsPerPage,
         isSelf: record.user.id === authz.user.homeUserId,
-      }
+      };
     }
   }
   return (
@@ -56,5 +56,5 @@ export default async function PlatformUsersPage({
       currentParams={sp}
       detail={detail}
     />
-  )
+  );
 }

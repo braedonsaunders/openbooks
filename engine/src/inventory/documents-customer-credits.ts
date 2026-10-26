@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, cmp, fromUnits, isZero, neg, roundDiv, toUnits } from "../money/money.ts";
-import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
@@ -78,24 +81,14 @@ export function parseCustomerCreditInventoryReturnSelection(
   const sourceIssueMovementId = evidence.sourceIssueMovementId;
   const lotId = evidence.lotId ?? null;
   const serialId = evidence.serialId ?? null;
-  if (
-    typeof sourceIssueMovementId !== "string" ||
-    !isUuid(sourceIssueMovementId)
-  ) {
-    throw new InventoryError(
-      `${lineLabel} requires a valid inventoryReturn.sourceIssueMovementId`,
-    );
+  if (typeof sourceIssueMovementId !== "string" || !isUuid(sourceIssueMovementId)) {
+    throw new InventoryError(`${lineLabel} requires a valid inventoryReturn.sourceIssueMovementId`);
   }
   if (lotId !== null && !isUuid(lotId)) {
     throw new InventoryError(`${lineLabel} inventoryReturn.lotId must be a UUID`);
   }
-  if (
-    serialId !== null &&
-    !isUuid(serialId)
-  ) {
-    throw new InventoryError(
-      `${lineLabel} inventoryReturn.serialId must be a UUID`,
-    );
+  if (serialId !== null && !isUuid(serialId)) {
+    throw new InventoryError(`${lineLabel} inventoryReturn.serialId must be a UUID`);
   }
   return { sourceIssueMovementId, lotId, serialId };
 }
@@ -107,10 +100,7 @@ interface CustomerCreditInventoryReturnLine extends DocumentInventoryLine {
 }
 
 /** Operator label for a credit line: line number plus the item's catalog code. */
-function customerCreditLineLabel(
-  line: DocumentInventoryLine,
-  labels: Map<string, string>,
-): string {
+function customerCreditLineLabel(line: DocumentInventoryLine, labels: Map<string, string>): string {
   return `Line ${line.lineNumber} (${labels.get(line.itemId) ?? line.itemId})`;
 }
 
@@ -122,7 +112,11 @@ async function loadCustomerCreditInventoryReturnLines(
 ): Promise<CustomerCreditInventoryReturnLine[]> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) return [];
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
-  const labels = await loadItemLabels(runner, orgId, lines.map((line) => line.itemId));
+  const labels = await loadItemLabels(
+    runner,
+    orgId,
+    lines.map((line) => line.itemId),
+  );
   const returns: CustomerCreditInventoryReturnLine[] = [];
   for (const line of lines) {
     const label = customerCreditLineLabel(line, labels);
@@ -155,10 +149,7 @@ async function loadCustomerCreditInventoryReturnLines(
     returns.push({
       ...line,
       kitItemId: null,
-      selection: parseCustomerCreditInventoryReturnSelection(
-        line.custom,
-        label,
-      ),
+      selection: parseCustomerCreditInventoryReturnSelection(line.custom, label),
     });
   }
   return returns;
@@ -182,8 +173,9 @@ async function expandKitCustomerCreditReturnLines(
   date: string,
 ): Promise<CustomerCreditInventoryReturnLine[]> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) return [];
-  const lines = (await loadDocumentInventoryLines(runner, orgId, documentId))
-    .filter((line) => line.itemKind === "kit");
+  const lines = (await loadDocumentInventoryLines(runner, orgId, documentId)).filter(
+    (line) => line.itemKind === "kit",
+  );
   const returns: CustomerCreditInventoryReturnLine[] = [];
   for (const line of lines) {
     const custom = isJsonRecord(line.custom) ? line.custom : null;
@@ -215,28 +207,41 @@ async function expandKitCustomerCreditReturnLines(
     const seenSources = new Set<string>();
     for (const source of sources) {
       if (seenSources.has(source.sourceIssueMovementId)) {
-        throw new InventoryError(`${lineLabel} names source shipment ${source.sourceIssueMovementId} twice`);
+        throw new InventoryError(
+          `${lineLabel} names source shipment ${source.sourceIssueMovementId} twice`,
+        );
       }
       seenSources.add(source.sourceIssueMovementId);
     }
     const quantities = new Map(
-      kitComponentQuantities(await kitLabel(runner, orgId, line.itemId), line.quantity, components)
-        .map((entry) => [entry.componentItemId, entry.quantity]),
+      kitComponentQuantities(
+        await kitLabel(runner, orgId, line.itemId),
+        line.quantity,
+        components,
+      ).map((entry) => [entry.componentItemId, entry.quantity]),
     );
-    const sourceByComponent = new Map<string, { sourceIssueMovementId: string; lotId: string | null; serialId: string | null }>();
+    const sourceByComponent = new Map<
+      string,
+      { sourceIssueMovementId: string; lotId: string | null; serialId: string | null }
+    >();
     const usedComponents = new Set<string>();
     for (const source of sources) {
       // The source must be a component issue of THIS kit's own sale: its
       // document line carries the kit item, so a standalone sale of the
       // same component can never price this kit's return.
-      const movement = (await runner.execute<{ item_id: string }>(sql`
+      const movement = (
+        await runner.execute<{ item_id: string }>(
+          sql`
         select movement.item_id
           from inventory_movements movement
           join document_lines source_line
             on source_line.id = movement.document_line_id
            and source_line.org_id = movement.org_id
          where movement.org_id = ${orgId} and movement.id = ${source.sourceIssueMovementId}
-           and source_line.item_id = ${line.itemId}`, "objects"))[0];
+           and source_line.item_id = ${line.itemId}`,
+          "objects",
+        )
+      )[0];
       if (!movement || !quantities.has(movement.item_id) || usedComponents.has(movement.item_id)) {
         throw new InventoryError(
           `${lineLabel} source shipment ${source.sourceIssueMovementId} is not an unclaimed component issue of this kit return`,
@@ -296,7 +301,7 @@ type SourceIssueEvidence = Record<string, unknown> & {
   source_document_kind: string | null;
   source_customer_id: string | null;
   is_reversed: boolean;
-}
+};
 
 async function validateCustomerReturnSource(
   runner: Runner,
@@ -306,7 +311,9 @@ async function validateCustomerReturnSource(
   line: CustomerCreditInventoryReturnLine,
   lock: boolean,
 ): Promise<{ source: SourceIssueEvidence; alreadyReturned: string }> {
-  const source = (await runner.execute<SourceIssueEvidence>(sql`
+  const source = (
+    await runner.execute<SourceIssueEvidence>(
+      sql`
     select movement.id, movement.subsidiary_id, movement.item_id,
            movement.stock_location_id, movement.lot_id, movement.serial_id,
            movement.quantity, movement.total_value, movement.kind, movement.status,
@@ -327,7 +334,10 @@ async function validateCustomerReturnSource(
      where movement.org_id = ${orgId}
        and movement.id = ${line.selection.sourceIssueMovementId}
      ${lock ? sql`for update of movement` : sql``}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const label = `document line ${line.lineNumber} (item ${line.itemId})`;
   if (!source || source.kind !== "issue" || source.status !== "posted") {
     throw new InventoryError(`${label} must reference a posted issue movement`);
@@ -339,16 +349,15 @@ async function validateCustomerReturnSource(
   }
   // A cross-subsidiary shipment left the fulfilling entity's stock on the
   // selling entity's order; its return is credited by the selling entity.
-  const crossShipment = source.subsidiary_id !== subsidiaryId
-    ? await crossSubsidiaryShipment(runner, orgId, source.id)
-    : null;
+  const crossShipment =
+    source.subsidiary_id !== subsidiaryId
+      ? await crossSubsidiaryShipment(runner, orgId, source.id)
+      : null;
   if (
     source.item_id !== line.itemId ||
     (source.subsidiary_id !== subsidiaryId && crossShipment?.sellingSubsidiaryId !== subsidiaryId)
   ) {
-    throw new InventoryError(
-      `${label} source shipment must match its item and legal entity`,
-    );
+    throw new InventoryError(`${label} source shipment must match its item and legal entity`);
   }
   // A shipment with no source document (manual adjustment) names no
   // customer: crediting one for it refunds a customer that never received
@@ -368,21 +377,22 @@ async function validateCustomerReturnSource(
     source.source_document_kind !== "cash_sale" &&
     source.source_document_kind !== SALES_FULFILLMENT_DOCUMENT_KIND
   ) {
-    throw new InventoryError(
-      `${label} source shipment is attached to a non-sales document`,
-    );
+    throw new InventoryError(`${label} source shipment is attached to a non-sales document`);
   }
   // A walk-in cash sale and its refund both name no customer, so both-null
   // matches; anything else must return to the customer that received the
   // goods. Refunding a named customer's goods to nobody (or to someone else)
   // stays refused.
   if (source.source_customer_id !== customerId) {
-    throw new InventoryError(
-      `${label} source shipment belongs to a different customer`,
-    );
+    throw new InventoryError(`${label} source shipment belongs to a different customer`);
   }
   if (line.tracking === "lot_serial") {
-    if (!line.selection.lotId || !line.selection.serialId || source.lot_id!==line.selection.lotId || source.serial_id!==line.selection.serialId)
+    if (
+      !line.selection.lotId ||
+      !line.selection.serialId ||
+      source.lot_id !== line.selection.lotId ||
+      source.serial_id !== line.selection.serialId
+    )
       throw new InventoryError(`${label} requires both identifiers matching its source shipment`);
   } else if (line.tracking === "lot") {
     if (!line.selection.lotId || line.selection.serialId) {
@@ -396,14 +406,10 @@ async function validateCustomerReturnSource(
       throw new InventoryError(`${label} requires exactly one selected serial`);
     }
     if (source.serial_id !== line.selection.serialId) {
-      throw new InventoryError(
-        `${label} selected serial does not match its shipment`,
-      );
+      throw new InventoryError(`${label} selected serial does not match its shipment`);
     }
   } else if (line.selection.lotId || line.selection.serialId) {
-    throw new InventoryError(
-      `${label} cannot select lot or serial evidence for an untracked item`,
-    );
+    throw new InventoryError(`${label} cannot select lot or serial evidence for an untracked item`);
   }
   // An issue movement stores a negative quantity; the shipped quantity is its
   // absolute value, and prior returns against it are positive receipts.
@@ -462,9 +468,14 @@ export async function assertCustomerCreditInventoryReturnsPostable(
   customerId: string | null,
   subsidiaryId: string,
 ): Promise<void> {
-  const document = (await runner.execute<{ document_date: string }>(sql`
+  const document = (
+    await runner.execute<{ document_date: string }>(
+      sql`
     select document_date::text as document_date from documents
-     where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${documentId}`,
+      "objects",
+    )
+  )[0];
   const lines = [
     ...(await loadCustomerCreditInventoryReturnLines(runner, orgId, documentId, false)),
     ...(document
@@ -472,14 +483,7 @@ export async function assertCustomerCreditInventoryReturnsPostable(
       : []),
   ];
   for (const line of lines) {
-    await validateCustomerReturnSource(
-      runner,
-      orgId,
-      customerId,
-      subsidiaryId,
-      line,
-      false,
-    );
+    await validateCustomerReturnSource(runner, orgId, customerId, subsidiaryId, line, false);
   }
 }
 
@@ -530,14 +534,11 @@ async function returnCustomerCreditInventoryLine(
     true,
   );
   const reversesMovementId =
-    profile.tracking === "serial" || profile.tracking === "lot_serial"
-      ? source.id
-      : null;
+    profile.tracking === "serial" || profile.tracking === "lot_serial" ? source.id : null;
   const reversalReason = reversesMovementId
     ? `Customer credit return of shipment ${reversesMovementId}`
     : null;
-  const movementActorId =
-    reversesMovementId && actorId === null ? SYSTEM_ACTOR_ID : actorId;
+  const movementActorId = reversesMovementId && actorId === null ? SYSTEM_ACTOR_ID : actorId;
   // Goods return to the entity that shipped them. For a cross-subsidiary
   // shipment that is the fulfilling entity, not the crediting one.
   const holderId = source.subsidiary_id;
@@ -551,12 +552,7 @@ async function returnCustomerCreditInventoryLine(
   // An issue records a negative value; the cost relieved is its absolute value.
   const shippedValue = fromUnits(-toUnits(source.total_value));
   const shippedQuantity = fromUnits(-toUnits(source.quantity));
-  const cost = restoredReturnCost(
-    shippedQuantity,
-    shippedValue,
-    alreadyReturned,
-    line.quantity,
-  );
+  const cost = restoredReturnCost(shippedQuantity, shippedValue, alreadyReturned, line.quantity);
   const quantity = persistReceiptMoney(line.quantity, "customer return quantity");
 
   // Under standard costing inventory must carry at the CURRENT standard, so a
@@ -595,16 +591,38 @@ async function returnCustomerCreditInventoryLine(
     projectId: crossSubsidiary ? null : line.projectId,
     // A return without an explicit line location arrives at the stock
     // location's business location, like the shipment it reverses.
-    locationId: await stockLocationDim(runner, orgId, line.stockLocationId, crossSubsidiary ? null : line.locationId),
+    locationId: await stockLocationDim(
+      runner,
+      orgId,
+      line.stockLocationId,
+      crossSubsidiary ? null : line.locationId,
+    ),
   };
   // DR inventory / CR cost of sales at the restored cost: the sale's COGS is
   // relieved by exactly what it recognized for these units.
   const journalLines: JournalLineInput[] = [
-    { accountId: profile.assetAccountId, amount: inventoryValue, ...dims, memo: "Customer return at original cost" },
-    { accountId: profile.cogsAccountId, amount: neg(cost), ...dims, memo: "Customer return at original cost" },
+    {
+      accountId: profile.assetAccountId,
+      amount: inventoryValue,
+      ...dims,
+      memo: "Customer return at original cost",
+    },
+    {
+      accountId: profile.cogsAccountId,
+      amount: neg(cost),
+      ...dims,
+      memo: "Customer return at original cost",
+    },
     ...(isZero(variance)
       ? []
-      : [{ accountId: profile.varianceAccountId!, amount: neg(variance), ...dims, memo: "Customer return standard-cost variance" }]),
+      : [
+          {
+            accountId: profile.varianceAccountId!,
+            amount: neg(variance),
+            ...dims,
+            memo: "Customer return standard-cost variance",
+          },
+        ]),
   ];
   await validateSubsidiaryRestrictions(runner, {
     orgId,
@@ -626,7 +644,9 @@ async function returnCustomerCreditInventoryLine(
   });
 
   const unitCost = fromUnits(roundDiv(toUnits(inventoryValue) * 10000n, toUnits(quantity)));
-  const movement = (await runner.execute<{ id: string }>(sql`
+  const movement = (
+    await runner.execute<{ id: string }>(
+      sql`
     insert into inventory_movements
       (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id,
        lot_id, serial_id, quantity, unit_cost, total_value, document_line_id,
@@ -641,7 +661,10 @@ async function returnCustomerCreditInventoryLine(
        ${`Customer return of shipment ${line.selection.sourceIssueMovementId}`},
        ${movementActorId}, ${movementActorId})
     returning id
-  `, "objects"))[0]!;
+  `,
+      "objects",
+    )
+  )[0]!;
   // The layer carries the EXACT restored value, never quantity × a rounded
   // unit cost: several partial returns of one shipment must put back exactly
   // what the shipment relieved, with no penny stranded in inventory.
@@ -662,9 +685,15 @@ async function returnCustomerCreditInventoryLine(
     // The selling entity's cost of sales at the transfer price unwinds with
     // the units, through the same intercompany cross-charge in reverse.
     const handler = crossSubsidiaryFulfillmentHandler();
-    if (!handler) throw new InventoryError("cross-subsidiary returns are not available in this installation");
-    const credit = (await runner.execute<{ document_id: string }>(sql`
-      select document_id from document_lines where org_id = ${orgId} and id = ${line.lineId}`, "objects"))[0];
+    if (!handler)
+      throw new InventoryError("cross-subsidiary returns are not available in this installation");
+    const credit = (
+      await runner.execute<{ document_id: string }>(
+        sql`
+      select document_id from document_lines where org_id = ${orgId} and id = ${line.lineId}`,
+        "objects",
+      )
+    )[0];
     await handler.returned(runner, {
       orgId,
       actorId,
@@ -677,7 +706,7 @@ async function returnCustomerCreditInventoryLine(
       sellingSubsidiaryId: subsidiaryId,
     });
   }
-  if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
+  if (profile.tracking === "serial" || profile.tracking === "lot_serial") {
     await runner.execute(sql`
       update serials
          set status = 'in_stock', current_stock_location_id = ${line.stockLocationId},
@@ -701,13 +730,18 @@ export async function applyCustomerCreditInventoryReturns(
   subsidiaryId: string,
 ): Promise<number> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) return 0;
-  const document = (await runner.execute<{
-    kind: string;
-    party_id: string | null;
-  }>(sql`
+  const document = (
+    await runner.execute<{
+      kind: string;
+      party_id: string | null;
+    }>(
+      sql`
     select kind, party_id from documents
      where org_id = ${orgId} and id = ${documentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!document || (document.kind !== "customer_credit" && document.kind !== "cash_refund")) {
     throw new InventoryError("inventory customer return requires a customer credit or cash refund");
   }
@@ -723,20 +757,21 @@ export async function applyCustomerCreditInventoryReturns(
     ...new Set(lines.map((line) => `${line.itemId}:${line.stockLocationId}`)),
   ].sort()) {
     const separator = key.indexOf(":");
-    await lockInventoryPosition(
-      runner,
-      key.slice(0, separator),
-      key.slice(separator + 1),
-    );
+    await lockInventoryPosition(runner, key.slice(0, separator), key.slice(separator + 1));
   }
   let count = 0;
   for (const line of lines) {
-    const seen = (await runner.execute(sql`
+    const seen = (
+      await runner.execute(
+        sql`
       select 1 from inventory_movements
        where org_id = ${orgId} and document_line_id = ${line.lineId}
          and item_id = ${line.itemId} and kind = 'receipt'
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (seen) continue;
     await returnCustomerCreditInventoryLine(
       runner,
@@ -761,13 +796,6 @@ export async function applyInventoryReturnsForCustomerCredit(
   subsidiaryId: string,
 ): Promise<number> {
   return db.transaction((tx) =>
-    applyCustomerCreditInventoryReturns(
-      tx,
-      orgId,
-      actorId,
-      documentId,
-      date,
-      subsidiaryId,
-    ),
+    applyCustomerCreditInventoryReturns(tx, orgId, actorId, documentId, date, subsidiaryId),
   );
 }

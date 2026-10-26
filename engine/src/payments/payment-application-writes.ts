@@ -39,33 +39,65 @@ export async function writePaymentApplications(input: {
   fxIdempotencyKey?: string;
   applications: SettlementApplication[];
 }): Promise<string[]> {
-  const fxAdjustment = sum(input.applications.map(application => application.controlAdjustment));
+  const fxAdjustment = sum(input.applications.map((application) => application.controlAdjustment));
   let fxEntryId: string | null = null;
   if (!isZero(fxAdjustment)) {
-    if (!input.gainLossAccountId) throw new PaymentError("realized FX gain/loss account is not configured");
+    if (!input.gainLossAccountId)
+      throw new PaymentError("realized FX gain/loss account is not configured");
     const postedFx = await postEntry(db, {
-      orgId: input.orgId, bookId: input.bookId, subsidiaryId: input.subsidiaryId,
-      entryNumber: `${input.documentNumber}-FX`, postingDate: input.postingDate, periodId: input.periodId,
-      memo: `Realized FX settlement — ${input.documentNumber}`, sourceDocumentId: input.sourceDocumentId,
-      origin: "fx_settlement", actorId: input.actorId, currency: input.functionalCurrency,
+      orgId: input.orgId,
+      bookId: input.bookId,
+      subsidiaryId: input.subsidiaryId,
+      entryNumber: `${input.documentNumber}-FX`,
+      postingDate: input.postingDate,
+      periodId: input.periodId,
+      memo: `Realized FX settlement — ${input.documentNumber}`,
+      sourceDocumentId: input.sourceDocumentId,
+      origin: "fx_settlement",
+      actorId: input.actorId,
+      currency: input.functionalCurrency,
       ...(input.fxIdempotencyKey ? { idempotencyKey: input.fxIdempotencyKey } : {}),
       lines: [
-        { accountId: input.controlAccountId, amount: fxAdjustment, partyId: input.partyId, memo: `Realized FX settlement — ${input.documentNumber}` },
-        { accountId: input.gainLossAccountId, amount: neg(fxAdjustment), memo: `Realized FX settlement — ${input.documentNumber}` },
+        {
+          accountId: input.controlAccountId,
+          amount: fxAdjustment,
+          partyId: input.partyId,
+          memo: `Realized FX settlement — ${input.documentNumber}`,
+        },
+        {
+          accountId: input.gainLossAccountId,
+          amount: neg(fxAdjustment),
+          memo: `Realized FX settlement — ${input.documentNumber}`,
+        },
       ],
     });
     fxEntryId = postedFx.entryId;
   }
   if (!input.applications.length) return [];
-  const rows = await db.insert(schema.applications).values(input.applications.map(application => ({
-    orgId: input.orgId, fromLineId: application.fromLineId, toLineId: application.toLineId,
-    amount: application.amount, sourceAmount: application.sourceAmount,
-    sourceTransactionAmount: application.sourceTransactionAmount, sourceTransactionCurrency: application.sourceTransactionCurrency,
-    targetTransactionAmount: application.targetTransactionAmount, targetTransactionCurrency: application.targetTransactionCurrency,
-    settlementRate: application.settlementRate, settlementRateSource: application.settlementRateSource,
-    settlementRateReference: application.settlementRateReference, settlementFxRateId: application.settlementFxRateId,
-    appliedOn: application.appliedOn, fxGainLossEntryId: fxEntryId, createdBy: input.actorId,
-  }))).returning({ id: schema.applications.id });
-  if (rows.length !== input.applications.length) throw new PaymentError("payment applications could not all be recorded");
-  return rows.map(row => row.id);
+  const rows = await db
+    .insert(schema.applications)
+    .values(
+      input.applications.map((application) => ({
+        orgId: input.orgId,
+        fromLineId: application.fromLineId,
+        toLineId: application.toLineId,
+        amount: application.amount,
+        sourceAmount: application.sourceAmount,
+        sourceTransactionAmount: application.sourceTransactionAmount,
+        sourceTransactionCurrency: application.sourceTransactionCurrency,
+        targetTransactionAmount: application.targetTransactionAmount,
+        targetTransactionCurrency: application.targetTransactionCurrency,
+        settlementRate: application.settlementRate,
+        settlementRateSource: application.settlementRateSource,
+        settlementRateReference: application.settlementRateReference,
+        settlementFxRateId: application.settlementFxRateId,
+        appliedOn: application.appliedOn,
+        fxGainLossEntryId: fxEntryId,
+        createdBy: input.actorId,
+      })),
+    )
+    .returning({ id: schema.applications.id });
+  if (rows.length !== input.applications.length)
+    throw new PaymentError("payment applications could not all be recorded");
+  return rows.map((row) => row.id);
 }

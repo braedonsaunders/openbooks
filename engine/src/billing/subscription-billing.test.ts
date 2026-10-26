@@ -36,10 +36,7 @@ test("advanceSubscription pins a stored anchor day instead of drifting", () => {
   assert.equal(advanceSubscription("2026-01-31", "quarterly", 1, 31), "2026-04-30");
   assert.equal(advanceSubscription("2028-02-29", "annually", 1, 29), "2029-02-28");
   for (const anchor of [0, 32, 1.5]) {
-    assert.throws(
-      () => advanceSubscription("2026-01-31", "monthly", 1, anchor),
-      /anchor day/,
-    );
+    assert.throws(() => advanceSubscription("2026-01-31", "monthly", 1, anchor), /anchor day/);
   }
 });
 
@@ -134,29 +131,50 @@ test("a first-period stub is its days over the FULL billing period it belongs to
   assert.equal(firstPeriodProration("70", "2026-07-31", "2026-08-03", "weekly"), "30.0000");
   // Quarterly on anchor 31 billing Feb 28: the period is Nov 30 → Feb 28
   // (90 days); the day-28 reading (92 days) would price it at 19.5652.
-  assert.equal(firstPeriodProration("300", "2026-02-22", "2026-02-28", "quarterly", 1, 31), "20.0000");
-  assert.equal(firstPeriodProration("300", "2026-02-22", "2026-02-28", "quarterly", 1, 28), "19.5652");
+  assert.equal(
+    firstPeriodProration("300", "2026-02-22", "2026-02-28", "quarterly", 1, 31),
+    "20.0000",
+  );
+  assert.equal(
+    firstPeriodProration("300", "2026-02-22", "2026-02-28", "quarterly", 1, 28),
+    "19.5652",
+  );
   // A stub spanning exactly one period is the full price.
   assert.equal(firstPeriodProration("300", "2026-07-01", "2026-08-01", "monthly"), "300.0000");
   assert.throws(
     () => firstPeriodProration("300", "2026-06-30", "2026-08-01", "monthly"),
-    (e: unknown) => e instanceof SubscriptionError &&
-      /longer than one billing period \(2026-07-01 → 2026-08-01\); choose a first bill date/.test(e.message),
+    (e: unknown) =>
+      e instanceof SubscriptionError &&
+      /longer than one billing period \(2026-07-01 → 2026-08-01\); choose a first bill date/.test(
+        e.message,
+      ),
   );
-  assert.throws(() => firstPeriodProration("300", "2026-08-01", "2026-08-01", "monthly"), /nothing to prorate/);
+  assert.throws(
+    () => firstPeriodProration("300", "2026-08-01", "2026-08-01", "monthly"),
+    /nothing to prorate/,
+  );
 });
 
 test("a mid-stub change is priced at the full period's daily rate from the later of change and service start", () => {
   // Three of the 31 days remain in a stub that started Jul 26.
-  assert.equal(remainingPeriodProration("300", "2026-07-26", "2026-08-01", "2026-07-29", "monthly"), "29.0323");
+  assert.equal(
+    remainingPeriodProration("300", "2026-07-26", "2026-08-01", "2026-07-29", "monthly"),
+    "29.0323",
+  );
   // A change dated before service started counts only the six served days.
-  assert.equal(remainingPeriodProration("300", "2026-07-26", "2026-08-01", "2026-07-20", "monthly"), "58.0645");
+  assert.equal(
+    remainingPeriodProration("300", "2026-07-26", "2026-08-01", "2026-07-20", "monthly"),
+    "58.0645",
+  );
   // A full period keeps the ordinary remaining-slice proration.
   assert.equal(
     remainingPeriodProration("310", "2026-01-01", "2026-02-01", "2026-01-16", "monthly"),
     prorate("310", "2026-01-01", "2026-02-01", "2026-01-16"),
   );
-  assert.equal(remainingPeriodProration("300", "2026-08-01", "2026-08-01", "2026-08-01", "monthly"), "0.0000");
+  assert.equal(
+    remainingPeriodProration("300", "2026-08-01", "2026-08-01", "2026-08-01", "monthly"),
+    "0.0000",
+  );
 });
 
 test("prorationDocument maps a signed adjustment to the native document it must become", () => {
@@ -187,14 +205,15 @@ test("a next bill date inside the billed window refuses by name", () => {
   // used to pass the only check (>= current_period_start) and double-bill
   // Mar 15 - Apr 1 under a different guard key.
   assert.throws(
-    () => resolveNextBillOnUpdate({
-      startOn: "2026-03-01",
-      currentPeriodStart: "2026-03-01",
-      currentNextBillOn: "2026-04-01",
-      guardedThrough: null,
-      billed: true,
-      newNextBillOn: "2026-03-15",
-    }),
+    () =>
+      resolveNextBillOnUpdate({
+        startOn: "2026-03-01",
+        currentPeriodStart: "2026-03-01",
+        currentNextBillOn: "2026-04-01",
+        guardedThrough: null,
+        billed: true,
+        newNextBillOn: "2026-03-15",
+      }),
     /already-billed service through 2026-04-01/,
   );
 });
@@ -272,10 +291,10 @@ test("bill-now guards past the cursor extend the boundary a cursor edit must hon
     /already-billed service through 2026-05-01/,
   );
   // Rewriting the current cursor is not a move — it introduces no new overlap.
-  assert.deepEqual(
-    resolveNextBillOnUpdate({ ...base, newNextBillOn: "2026-04-01" }),
-    { nextBillOn: "2026-04-01", skippedWindow: null },
-  );
+  assert.deepEqual(resolveNextBillOnUpdate({ ...base, newNextBillOn: "2026-04-01" }), {
+    nextBillOn: "2026-04-01",
+    skippedWindow: null,
+  });
 });
 
 test("unbilled subscriptions keep the legacy period check and cannot skip forward silently", () => {
@@ -331,17 +350,32 @@ test("pending subscription periods list exactly the missed starts through asOf",
 
 test("paid-through is the end of the invoiced service: the cursor when billed, the start when never invoiced", () => {
   assert.equal(
-    subscriptionPaidThrough({ startOn: "2026-03-01", nextBillOn: "2026-09-01", billed: true, guardedThrough: null }),
+    subscriptionPaidThrough({
+      startOn: "2026-03-01",
+      nextBillOn: "2026-09-01",
+      billed: true,
+      guardedThrough: null,
+    }),
     "2026-09-01",
   );
   // A bill-now invoice posts its period guard without moving the cursor, so the
   // later guarded end is the boundary.
   assert.equal(
-    subscriptionPaidThrough({ startOn: "2026-03-01", nextBillOn: "2026-09-01", billed: true, guardedThrough: "2026-10-01" }),
+    subscriptionPaidThrough({
+      startOn: "2026-03-01",
+      nextBillOn: "2026-09-01",
+      billed: true,
+      guardedThrough: "2026-10-01",
+    }),
     "2026-10-01",
   );
   assert.equal(
-    subscriptionPaidThrough({ startOn: "2026-03-01", nextBillOn: "2026-04-01", billed: false, guardedThrough: null }),
+    subscriptionPaidThrough({
+      startOn: "2026-03-01",
+      nextBillOn: "2026-04-01",
+      billed: false,
+      guardedThrough: null,
+    }),
     "2026-03-01",
   );
 });
@@ -352,7 +386,11 @@ test("a cancellation takes effect exactly on the paid-through date and defaults 
     "2026-09-01",
   );
   assert.equal(
-    resolveSubscriptionCancellation({ requestedOn: "2026-10-01", today: "2026-09-01", paidThrough: "2026-10-01" }),
+    resolveSubscriptionCancellation({
+      requestedOn: "2026-10-01",
+      today: "2026-09-01",
+      paidThrough: "2026-10-01",
+    }),
     "2026-10-01",
   );
 });
@@ -360,15 +398,21 @@ test("a cancellation takes effect exactly on the paid-through date and defaults 
 test("a cancellation before the paid-through date is refused with the paid-through remedy", () => {
   assert.throws(
     () => resolveSubscriptionCancellation({ today: "2026-08-26", paidThrough: "2026-09-01" }),
-    (error: unknown) => error instanceof SubscriptionError
-      && /precedes the paid-through date 2026-09-01/.test(error.message)
-      && /Cancel effective 2026-09-01/.test(error.message),
+    (error: unknown) =>
+      error instanceof SubscriptionError &&
+      /precedes the paid-through date 2026-09-01/.test(error.message) &&
+      /Cancel effective 2026-09-01/.test(error.message),
   );
 });
 
 test("a cancellation after the paid-through date is refused because the gap would never be invoiced", () => {
   assert.throws(
-    () => resolveSubscriptionCancellation({ requestedOn: "2026-10-15", today: "2026-08-26", paidThrough: "2026-09-01" }),
+    () =>
+      resolveSubscriptionCancellation({
+        requestedOn: "2026-10-15",
+        today: "2026-08-26",
+        paidThrough: "2026-09-01",
+      }),
     /service from 2026-09-01 to 2026-10-15 is not invoiced/,
   );
 });
@@ -414,8 +458,17 @@ test("recurring revenue stops at the cancellation date and never counts paused o
     intervalCount: 1,
     quantity: "1",
   };
-  assert.equal(subscriptionRecurringRevenue({ ...base, status: "paused", canceledOn: null }), "0.0000");
-  assert.equal(subscriptionRecurringRevenue({ ...base, status: "canceled", canceledOn: "2026-08-26" }), "0.0000");
+  assert.equal(
+    subscriptionRecurringRevenue({ ...base, status: "paused", canceledOn: null }),
+    "0.0000",
+  );
+  assert.equal(
+    subscriptionRecurringRevenue({ ...base, status: "canceled", canceledOn: "2026-08-26" }),
+    "0.0000",
+  );
   // Canceled effective later still bills and earns through that date.
-  assert.equal(subscriptionRecurringRevenue({ ...base, status: "canceled", canceledOn: "2026-09-01" }), "100.0000");
+  assert.equal(
+    subscriptionRecurringRevenue({ ...base, status: "canceled", canceledOn: "2026-09-01" }),
+    "100.0000",
+  );
 });

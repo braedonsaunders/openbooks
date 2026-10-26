@@ -71,10 +71,19 @@ test("itemWhere ANDs custom-field filters against i.custom", () => {
 });
 
 test("timesheetWeekWhere fails closed on custom-field filters (no custom jsonb)", () => {
-  const where = timesheetWeekWhere({ ...defaultListView("timesheet_week"), filters: cfEq }, {}, ORG, null);
+  const where = timesheetWeekWhere(
+    { ...defaultListView("timesheet_week"), filters: cfEq },
+    {},
+    ORG,
+    null,
+  );
   const text = sqlText(where as { queryChunks?: unknown[] });
   assert.match(text, /false/, "lists without a custom store must empty-match, not drop");
-  assert.doesNotMatch(text, /\btw\.custom->>/, "must not reference a nonexistent custom column on the week alias");
+  assert.doesNotMatch(
+    text,
+    /\btw\.custom->>/,
+    "must not reference a nonexistent custom column on the week alias",
+  );
   assert.doesNotMatch(text, /west/, "the custom value must not bind against the week list");
 });
 

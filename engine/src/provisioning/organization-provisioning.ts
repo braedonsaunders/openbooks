@@ -5,11 +5,7 @@ import { ensureCustomizationDefaults } from "./customization-defaults.ts";
 import { ensureBuiltInPaymentFormats } from "../payments/operations.ts";
 import { seedProjectTypes } from "../projects/seed-project-types.ts";
 
-export type ProvisionedFeature =
-  | "crm"
-  | "projects"
-  | "advancedClose"
-  | "customization";
+export type ProvisionedFeature = "crm" | "projects" | "advancedClose" | "customization";
 
 /**
  * Install the editable baseline records a company needs. This is an explicit

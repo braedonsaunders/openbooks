@@ -1,26 +1,35 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { businessToday, utcDateFromParts } from '@openbooks/engine/platform/business-date/module'
-import { getHeadcountOverviewAsOf } from '@openbooks/engine/hrm/employment-read'
-import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
-import { HrmChangeRequestError, listChangeRequestsWithTotal } from '@openbooks/engine/hrm/change-requests/operations'
-import { getVacancyAsOf } from '@openbooks/engine/hrm/positions-read'
-import { loadRecruitingOverview } from '@openbooks/engine/hrm/recruiting/recruiting-read'
-import { getOnboardingOverview } from '@openbooks/engine/hrm/processes-read'
-import { getLocale } from 'next-intl/server'
-import { can, type Authz } from '../authz'
-import { isFeatureEnabled } from '../features'
-import { isMultiSubsidiary, subsidiaryVisibleFilter } from '../subsidiaries'
-import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import type { DirectoryItem } from '../../components/module-home/ui'
-import { countLabel, formatPercent01, monthYearLabel, viewerDateTime, viewerNumber } from '../format'
-import { loadQueueLabels } from './change-requests'
-import { loadLeavePanel, type LeavePanelData } from './leave'
-import { loadBenefitsPanel, type BenefitsPanelData } from './benefits'
-import { loadQualificationAttention } from './qualifications'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { businessToday, utcDateFromParts } from "@openbooks/engine/platform/business-date/module";
+import { getHeadcountOverviewAsOf } from "@openbooks/engine/hrm/employment-read";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import {
+  HrmChangeRequestError,
+  listChangeRequestsWithTotal,
+} from "@openbooks/engine/hrm/change-requests/operations";
+import { getVacancyAsOf } from "@openbooks/engine/hrm/positions-read";
+import { loadRecruitingOverview } from "@openbooks/engine/hrm/recruiting/recruiting-read";
+import { getOnboardingOverview } from "@openbooks/engine/hrm/processes-read";
+import { getLocale } from "next-intl/server";
+import { can, type Authz } from "../authz";
+import { isFeatureEnabled } from "../features";
+import { isMultiSubsidiary, subsidiaryVisibleFilter } from "../subsidiaries";
+import { hrmGroupTabs } from "../../components/module-home/group-tabs";
+import type { DirectoryItem } from "../../components/module-home/ui";
+import {
+  countLabel,
+  formatPercent01,
+  monthYearLabel,
+  viewerDateTime,
+  viewerNumber,
+} from "../format";
+import { loadQueueLabels } from "./change-requests";
+import { loadLeavePanel, type LeavePanelData } from "./leave";
+import { loadBenefitsPanel, type BenefitsPanelData } from "./benefits";
+import { loadQualificationAttention } from "./qualifications";
 
 /**
  * Human Resources module home — one read for the workspace landing cockpit:
@@ -33,211 +42,211 @@ import { loadQualificationAttention } from './qualifications'
 
 export interface HrmHeadcountGroup {
   /** Stable row key for the shared table block; resolved by loaders that render one. */
-  id?: string
-  subsidiary: string
-  department: string | null
+  id?: string;
+  subsidiary: string;
+  department: string | null;
   /** Department display value with the unassigned fallback resolved. */
-  departmentLabel?: string
-  headcount: number
+  departmentLabel?: string;
+  headcount: number;
   /** Locale-formatted headcount; the table renders strings, never raw numbers. */
-  headcountLabel?: string
+  headcountLabel?: string;
   /** Employee-directory drill-through for the row (departments board). */
-  href?: string | null
+  href?: string | null;
   /** Fraction of today's headcount, 0..1 — drives the share bar width only. */
-  share?: number
+  share?: number;
   /** Locale-formatted share of today's headcount. */
-  shareLabel?: string
+  shareLabel?: string;
 }
 
 /** One figure of a cockpit pulse strip, already formatted for display. */
 export interface HrmPulseFigure {
-  label: string
-  value: string
-  tone?: 'neutral' | 'positive' | 'warning' | 'negative'
+  label: string;
+  value: string;
+  tone?: "neutral" | "positive" | "warning" | "negative";
 }
 
 export interface PendingRequestItem {
-  id: string
-  employeeName: string | null
-  partyId: string | null
-  kindLabel: string
-  statusLabel: string
-  effectiveLabel: string
+  id: string;
+  employeeName: string | null;
+  partyId: string | null;
+  kindLabel: string;
+  statusLabel: string;
+  effectiveLabel: string;
 }
 
 export interface UpcomingChangeItem {
-  name: string | null
-  partyId: string | null
-  detail: string
+  name: string | null;
+  partyId: string | null;
+  detail: string;
 }
 
 export interface RecentChangeItem {
-  name: string | null
-  partyId: string | null
-  kindLabel: string
-  reason: string
-  recordedAt: string
+  name: string | null;
+  partyId: string | null;
+  kindLabel: string;
+  reason: string;
+  recordedAt: string;
 }
 
 export interface HrmVacancyGroup {
   /** Stable row key: the employer/department pair the engine grouped by. */
-  id: string
-  department: string
-  employer: string
-  positions: number
-  plannedFte: string
-  fundedFte: string
-  filledFte: string
-  vacantFte: string
+  id: string;
+  department: string;
+  employer: string;
+  positions: number;
+  plannedFte: string;
+  fundedFte: string;
+  filledFte: string;
+  vacantFte: string;
 }
 
 export interface HrmPositionsSummary {
-  openPositionsLabel: string
-  openPositionsValue: string
-  openPositionsSub: string
+  openPositionsLabel: string;
+  openPositionsValue: string;
+  openPositionsSub: string;
   /** Filled FTE with no funding behind it; surfaces in the attention list, never as a tile. */
-  unfundedFteValue: string
-  vacancyTitle: string
-  departmentColumn: string
-  employerColumn: string
-  positionsColumn: string
-  plannedColumn: string
-  fundedColumn: string
-  filledColumn: string
-  vacantColumn: string
-  vacancyEmpty: string
-  totalLabel: string
-  unassignedDepartment: string
-  groups: HrmVacancyGroup[]
+  unfundedFteValue: string;
+  vacancyTitle: string;
+  departmentColumn: string;
+  employerColumn: string;
+  positionsColumn: string;
+  plannedColumn: string;
+  fundedColumn: string;
+  filledColumn: string;
+  vacantColumn: string;
+  vacancyEmpty: string;
+  totalLabel: string;
+  unassignedDepartment: string;
+  groups: HrmVacancyGroup[];
   totals: {
-    positions: number
-    plannedFte: string
-    fundedFte: string
-    filledFte: string
-    vacantFte: string
-  }
+    positions: number;
+    plannedFte: string;
+    fundedFte: string;
+    filledFte: string;
+    vacantFte: string;
+  };
 }
 
 export interface HrmOnboardingPanelData {
-  openCount: number
-  overdue: { worker: string; title: string; dueOn: string }[]
-  upcoming: { worker: string; title: string; dueOn: string }[]
-  panelTitle: string
-  openLabel: string
-  overdueLabel: string
-  upcomingLabel: string
-  empty: string
-  noDueSoon: string
-  viewAll: string
-  viewAllHref: string
+  openCount: number;
+  overdue: { worker: string; title: string; dueOn: string }[];
+  upcoming: { worker: string; title: string; dueOn: string }[];
+  panelTitle: string;
+  openLabel: string;
+  overdueLabel: string;
+  upcomingLabel: string;
+  empty: string;
+  noDueSoon: string;
+  viewAll: string;
+  viewAllHref: string;
 }
 
 export interface HrmRecruitingPanelData {
-  panelTitle: string
-  openLabel: string
-  openValue: string
-  awaitingLabel: string
-  awaitingValue: string
-  interviewsLabel: string
-  interviewsValue: string
-  viewAll: string
-  viewAllHref: string
+  panelTitle: string;
+  openLabel: string;
+  openValue: string;
+  awaitingLabel: string;
+  awaitingValue: string;
+  interviewsLabel: string;
+  interviewsValue: string;
+  viewAll: string;
+  viewAllHref: string;
 }
 
 export interface HrmHomeData {
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  canCreateEmployee: boolean
-  canProposeChange: boolean
-  canCreateProcess: boolean
-  newEmployee: { basePath: string; role: 'employee'; label: string }
-  newProcessLabel: string
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  canCreateEmployee: boolean;
+  canProposeChange: boolean;
+  canCreateProcess: boolean;
+  newEmployee: { basePath: string; role: "employee"; label: string };
+  newProcessLabel: string;
   /** The cockpit New menu's Hire entry — the first employment for a person
    * with no employment record. Shares the propose-change grant. */
-  hireLabel: string
+  hireLabel: string;
   /** Present exactly when the viewer holds hrm.process.read; otherwise the rail stays headcount-only. */
-  onboarding: HrmOnboardingPanelData | null
+  onboarding: HrmOnboardingPanelData | null;
   /** True while the module has anything to show. The cockpit quiets a
    *  fully quiet module (UX-14): the grant still owns the directory and tab
    *  entry points, so collapsing the empty panel hides no destination. */
-  onboardingHasActivity: boolean
-  leaveHasActivity: boolean
-  benefitsHasActivity: boolean
-  recruitingHasActivity: boolean
+  onboardingHasActivity: boolean;
+  leaveHasActivity: boolean;
+  benefitsHasActivity: boolean;
+  recruitingHasActivity: boolean;
   /** Whether the org runs more than one subsidiary; the subsidiary column
    *  and grouping render only then — a single-entity org sees departments. */
-  multiSubsidiary: boolean
-  headcountLabel: string
-  headcountValue: string
-  headcountSub: string
-  pendingLabel: string
-  pendingValue: string
-  pendingSub: string
-  pendingAccent: 'amber' | 'emerald'
+  multiSubsidiary: boolean;
+  headcountLabel: string;
+  headcountValue: string;
+  headcountSub: string;
+  pendingLabel: string;
+  pendingValue: string;
+  pendingSub: string;
+  pendingAccent: "amber" | "emerald";
   /** True while the change-request queue has something to decide or a
    *  refusal to deliver; a clear queue collapses like the other modules. */
-  pendingHasActivity: boolean
-  startingLabel: string
-  startingValue: string
-  startingSub: string
+  pendingHasActivity: boolean;
+  startingLabel: string;
+  startingValue: string;
+  startingSub: string;
   /** On leave today; null without the leave grant (the tile is omitted). */
-  onLeaveLabel: string | null
-  onLeaveValue: string
-  onLeaveSub: string
-  workforceTitle: string
+  onLeaveLabel: string | null;
+  onLeaveValue: string;
+  onLeaveSub: string;
+  workforceTitle: string;
   /** Today, the first month end of the series, and the net change between them. */
-  workforcePulse: HrmPulseFigure[]
-  mixTitle: string
-  trendHint: string
-  trendSeriesName: string
-  trendLabels: string[]
-  trendData: number[]
-  attentionTitle: string
-  attentionAllClear: string
-  attention: { tone: 'negative' | 'warning'; text: string; href: string }[]
-  groupsTitle: string
-  employerColumn: string
-  departmentColumn: string
-  headcountColumn: string
-  unassigned: string
-  groupsEmpty: string
-  totalLabel: string
-  groups: HrmHeadcountGroup[]
-  total: number
+  workforcePulse: HrmPulseFigure[];
+  mixTitle: string;
+  trendHint: string;
+  trendSeriesName: string;
+  trendLabels: string[];
+  trendData: number[];
+  attentionTitle: string;
+  attentionAllClear: string;
+  attention: { tone: "negative" | "warning"; text: string; href: string }[];
+  groupsTitle: string;
+  employerColumn: string;
+  departmentColumn: string;
+  headcountColumn: string;
+  unassigned: string;
+  groupsEmpty: string;
+  totalLabel: string;
+  groups: HrmHeadcountGroup[];
+  total: number;
   /** Locale-formatted total; the table renders strings, never raw numbers. */
-  totalValue: string
-  directoryTitle: string
-  directory: DirectoryItem[]
-  pendingTitle: string
-  pendingEmpty: string
-  pendingViewAll: string
-  pendingQueueHref: string
-  pendingRefusal: string | null
-  pending: PendingRequestItem[]
-  upcomingTitle: string
-  upcomingHint: string
-  startsTitle: string
-  startsEmpty: string
-  endsTitle: string
-  endsEmpty: string
-  upcomingTruncated: boolean
-  upcomingTruncatedNote: string
-  starts: UpcomingChangeItem[]
-  ends: UpcomingChangeItem[]
-  recentTitle: string
-  recentEmpty: string
-  recent: RecentChangeItem[]
-  queueNotAvailable: string
-  actionsTitle: string
-  actions: DirectoryItem[]
+  totalValue: string;
+  directoryTitle: string;
+  directory: DirectoryItem[];
+  pendingTitle: string;
+  pendingEmpty: string;
+  pendingViewAll: string;
+  pendingQueueHref: string;
+  pendingRefusal: string | null;
+  pending: PendingRequestItem[];
+  upcomingTitle: string;
+  upcomingHint: string;
+  startsTitle: string;
+  startsEmpty: string;
+  endsTitle: string;
+  endsEmpty: string;
+  upcomingTruncated: boolean;
+  upcomingTruncatedNote: string;
+  starts: UpcomingChangeItem[];
+  ends: UpcomingChangeItem[];
+  recentTitle: string;
+  recentEmpty: string;
+  recent: RecentChangeItem[];
+  queueNotAvailable: string;
+  actionsTitle: string;
+  actions: DirectoryItem[];
   /** Headcount-plan summary; null when the viewer lacks hrm.position.read. */
-  positions: HrmPositionsSummary | null
-  leavePanel: LeavePanelData | null
+  positions: HrmPositionsSummary | null;
+  leavePanel: LeavePanelData | null;
   /** Recruiting figures; null without hrm.recruiting.read. */
-  recruiting: HrmRecruitingPanelData | null
+  recruiting: HrmRecruitingPanelData | null;
   /** Open windows, pending approvals, months missing inputs; null without hrm.benefits.read. */
-  benefitsPanel: BenefitsPanelData | null
+  benefitsPanel: BenefitsPanelData | null;
 }
 
 /**
@@ -246,59 +255,73 @@ export interface HrmHomeData {
  * the upcoming window is capped defensively (a 30-day window is naturally
  * small).
  */
-const HOME_PENDING_SHOWN = 5
-const HOME_WINDOW_DAYS = 30
-const HOME_WINDOW_LIMIT = 100
-const HOME_RECENT_LIMIT = 10
+const HOME_PENDING_SHOWN = 5;
+const HOME_WINDOW_DAYS = 30;
+const HOME_WINDOW_LIMIT = 100;
+const HOME_RECENT_LIMIT = 10;
 
 /** The last civil day of each of the `count` months before the month of `date`, oldest first. */
 export function monthEndsBefore(date: string, count: number): string[] {
-  const [year, month] = date.split('-').map(Number) as [number, number, number]
-  const out: string[] = []
+  const [year, month] = date.split("-").map(Number) as [number, number, number];
+  const out: string[] = [];
   for (let back = count; back >= 1; back -= 1) {
     // Day 0 of month m is the last day of month m-1; utcDateFromParts keeps
     // literal years 0001-0099 that Date.UTC would remap onto 1900-1999.
-    const end = utcDateFromParts(year, month - 1 - back + 1, 0)
-    out.push(end.toISOString().slice(0, 10))
+    const end = utcDateFromParts(year, month - 1 - back + 1, 0);
+    out.push(end.toISOString().slice(0, 10));
   }
-  return out
+  return out;
 }
 
-function requestKindLabel(t: Awaited<ReturnType<typeof getTranslations<'hrm'>>>, kind: string): string {
-  if (kind === 'hire') return t('employment.changeRequests.kindHire')
-  if (kind === 'status_change') return t('employment.changeRequests.kindStatusChange')
-  if (kind === 'assignment_change') return t('employment.changeRequests.kindAssignmentChange')
-  if (kind === 'termination') return t('employment.changeRequests.kindTermination')
-  return kind
+function requestKindLabel(
+  t: Awaited<ReturnType<typeof getTranslations<"hrm">>>,
+  kind: string,
+): string {
+  if (kind === "hire") return t("employment.changeRequests.kindHire");
+  if (kind === "status_change") return t("employment.changeRequests.kindStatusChange");
+  if (kind === "assignment_change") return t("employment.changeRequests.kindAssignmentChange");
+  if (kind === "termination") return t("employment.changeRequests.kindTermination");
+  return kind;
 }
 
-function requestStatusLabel(t: Awaited<ReturnType<typeof getTranslations<'hrm'>>>, status: string): string {
-  return t.has(`employment.changeRequests.statusNames.${status}`) ? t(`employment.changeRequests.statusNames.${status}`) : status
+function requestStatusLabel(
+  t: Awaited<ReturnType<typeof getTranslations<"hrm">>>,
+  status: string,
+): string {
+  return t.has(`employment.changeRequests.statusNames.${status}`)
+    ? t(`employment.changeRequests.statusNames.${status}`)
+    : status;
 }
 
-function changeKindLabel(t: Awaited<ReturnType<typeof getTranslations<'hrm'>>>, kind: string): string {
-  return t.has(`overview.changes.kinds.${kind}`) ? t(`overview.changes.kinds.${kind}`) : kind
+function changeKindLabel(
+  t: Awaited<ReturnType<typeof getTranslations<"hrm">>>,
+  kind: string,
+): string {
+  return t.has(`overview.changes.kinds.${kind}`) ? t(`overview.changes.kinds.${kind}`) : kind;
 }
 
 export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // The caller (the /hrm view) owns the page gate — requirePermission plus
   // the hrm switch with a 404. This loader never re-checks either; it
   // resolves figures for the authorized session it is given.
-  const orgId = authz.user.orgId
+  const orgId = authz.user.orgId;
   const [t, tNav, effectiveDate, locale] = await Promise.all([
-    getTranslations('hrm'),
-    getTranslations('nav'),
+    getTranslations("hrm"),
+    getTranslations("nav"),
     businessToday(orgId),
     getLocale(),
-  ])
-  const knownAt = new Date().toISOString()
-  const trendDates = monthEndsBefore(effectiveDate, 11).concat([effectiveDate])
-  const historicalDates = trendDates.filter((date) => date !== effectiveDate)
-  const canReadPositions = can(authz, 'hrm.position.read')
-  const canReadProcesses = can(authz, 'hrm.process.read')
-  const canReadLeave = can(authz, 'hrm.leave.read')
-  const canManageHrm = can(authz, 'hrm.employment.manage')
-  const employmentScope = subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)
+  ]);
+  const knownAt = new Date().toISOString();
+  const trendDates = monthEndsBefore(effectiveDate, 11).concat([effectiveDate]);
+  const historicalDates = trendDates.filter((date) => date !== effectiveDate);
+  const canReadPositions = can(authz, "hrm.position.read");
+  const canReadProcesses = can(authz, "hrm.process.read");
+  const canReadLeave = can(authz, "hrm.leave.read");
+  const canManageHrm = can(authz, "hrm.employment.manage");
+  const employmentScope = subsidiaryVisibleFilter(
+    sql`w.employer_subsidiary_id`,
+    authz.allowedSubsidiaryIds,
+  );
 
   // Every cockpit panel is an independent read under the same authenticated
   // view. Start them together so a remote tenant database pays the slowest
@@ -319,7 +342,13 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     tabs,
     benefitsPanel,
   ] = await Promise.all([
-    getHeadcountOverviewAsOf({ orgId, actorId: authz.user.id, effectiveDate, effectiveDates: historicalDates, knownAt }),
+    getHeadcountOverviewAsOf({
+      orgId,
+      actorId: authz.user.id,
+      effectiveDate,
+      effectiveDates: historicalDates,
+      knownAt,
+    }),
     isMultiSubsidiary(orgId),
     canReadPositions
       ? getVacancyAsOf({ orgId, actorId: authz.user.id, effectiveDate, knownAt })
@@ -331,28 +360,32 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
         // newest mixed-status rows filled the fetch window. The five-row
         // preview is itself status-filtered so it always shows real work.
         const { rows, total: pendingTotal } = await listChangeRequestsWithTotal({
-          orgId, actorId: authz.user.id, status: 'pending_approval', limit: HOME_PENDING_SHOWN,
-        })
+          orgId,
+          actorId: authz.user.id,
+          status: "pending_approval",
+          limit: HOME_PENDING_SHOWN,
+        });
         return {
           rows,
           pendingTotal,
           refusal: null as string | null,
-        }
+        };
       } catch (error) {
         if (error instanceof HrmAuthorizationError || error instanceof HrmChangeRequestError) {
-          return { rows: [], pendingTotal: 0, refusal: (error as Error).message }
+          return { rows: [], pendingTotal: 0, refusal: (error as Error).message };
         }
-        throw error
+        throw error;
       }
     })(),
     db.execute<{
-      employmentId: string
-      name: string | null
-      partyId: string | null
-      status: string
-      from: string
-      to: string | null
-    }>(sql`
+      employmentId: string;
+      name: string | null;
+      partyId: string | null;
+      status: string;
+      from: string;
+      to: string | null;
+    }>(
+      sql`
       select w.id::text as "employmentId", p.display_name as name, p.id::text as "partyId",
              ev.status as status,
              ev.effective_from::text as "from", ev.effective_to::text as "to"
@@ -367,14 +400,17 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
            or (ev.effective_to > ${effectiveDate}::date
                and ev.effective_to <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}::int)))
        order by ev.effective_from
-       limit ${HOME_WINDOW_LIMIT}`, 'objects'),
+       limit ${HOME_WINDOW_LIMIT}`,
+      "objects",
+    ),
     db.execute<{
-      kind: string
-      reason: string
-      recordedAt: string
-      name: string | null
-      partyId: string | null
-    }>(sql`
+      kind: string;
+      reason: string;
+      recordedAt: string;
+      name: string | null;
+      partyId: string | null;
+    }>(
+      sql`
       select c.change_kind as kind, c.reason as reason,
              to_char(c.recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "recordedAt",
              p.display_name as name, p.id::text as "partyId"
@@ -384,8 +420,11 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
        where c.org_id = ${orgId}::uuid
          ${employmentScope}
        order by c.recorded_at desc
-       limit ${HOME_RECENT_LIMIT}`, 'objects'),
-    db.execute<{ n: unknown }>(sql`
+       limit ${HOME_RECENT_LIMIT}`,
+      "objects",
+    ),
+    db.execute<{ n: unknown }>(
+      sql`
       select count(*) as n
         from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
@@ -395,101 +434,118 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
            select 1 from worker_employments w
             where w.org_id = p.org_id and w.worker_party_id = p.id
               ${subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)}
-         )`, 'objects'),
+         )`,
+      "objects",
+    ),
     canReadProcesses
       ? getOnboardingOverview({ orgId, actorId: authz.user.id }).then((overview) => ({
           openCount: overview.openProcesses.length,
-          overdue: overview.overdueSteps.map((step) => ({ worker: step.workerName, title: step.title, dueOn: step.dueOn })),
-          upcoming: overview.dueNextSevenDays.map((step) => ({ worker: step.workerName, title: step.title, dueOn: step.dueOn })),
-          panelTitle: t('home.onboarding.title'),
-          openLabel: t('home.onboarding.openLabel'),
-          overdueLabel: t('home.onboarding.overdueLabel'),
-          upcomingLabel: t('home.onboarding.upcomingLabel'),
-          empty: t('home.onboarding.empty'),
-          noDueSoon: t('home.onboarding.noDueSoon'),
-          viewAll: t('home.onboarding.viewAll'),
-          viewAllHref: '/hrm/processes',
+          overdue: overview.overdueSteps.map((step) => ({
+            worker: step.workerName,
+            title: step.title,
+            dueOn: step.dueOn,
+          })),
+          upcoming: overview.dueNextSevenDays.map((step) => ({
+            worker: step.workerName,
+            title: step.title,
+            dueOn: step.dueOn,
+          })),
+          panelTitle: t("home.onboarding.title"),
+          openLabel: t("home.onboarding.openLabel"),
+          overdueLabel: t("home.onboarding.overdueLabel"),
+          upcomingLabel: t("home.onboarding.upcomingLabel"),
+          empty: t("home.onboarding.empty"),
+          noDueSoon: t("home.onboarding.noDueSoon"),
+          viewAll: t("home.onboarding.viewAll"),
+          viewAllHref: "/hrm/processes",
         }))
       : Promise.resolve(null),
     loadLeavePanel(authz),
     loadRecruitingPanel(authz),
     loadQualificationAttention(authz),
-    hrmGroupTabs(authz, '/hrm'),
+    hrmGroupTabs(authz, "/hrm"),
     loadBenefitsPanel(authz),
-  ])
+  ]);
 
-  const { headcount, totals: historicalHeadcount } = headcountOverview
+  const { headcount, totals: historicalHeadcount } = headcountOverview;
 
   // Twelve month-end headcounts through the same canonical temporal read,
   // ending on today. Historical points share one authorized census and one
   // known-at view, so latency stays constant as the chart grows and the
   // series still agrees with the grouped hero to the person.
-  const totalByDate = new Map(historicalHeadcount.points.map((point) => [point.effectiveDate, point.total]))
-  totalByDate.set(effectiveDate, headcount.total)
+  const totalByDate = new Map(
+    historicalHeadcount.points.map((point) => [point.effectiveDate, point.total]),
+  );
+  totalByDate.set(effectiveDate, headcount.total);
   const trendData = trendDates.map((date) => {
-    const total = totalByDate.get(date)
-    if (total === undefined) throw new Error(`Headcount series did not resolve ${date}; refusing to render a false zero`)
-    return total
-  })
+    const total = totalByDate.get(date);
+    if (total === undefined)
+      throw new Error(`Headcount series did not resolve ${date}; refusing to render a false zero`);
+    return total;
+  });
   const trendLabels = trendDates.map((date) =>
     new Date(`${date}T00:00:00Z`).toLocaleDateString(locale, {
-      month: 'short',
-      timeZone: 'UTC',
+      month: "short",
+      timeZone: "UTC",
     }),
-  )
+  );
   // The workforce pulse reads the same series the chart draws: today, the
   // first month end, and the signed difference between them. Growth tones
   // positive and decline tones as a warning — a smaller workforce is a fact
   // to notice, not an error.
-  const firstPoint = trendData[0] ?? headcount.total
-  const netChange = headcount.total - firstPoint
-  const signedChange = viewerNumber(netChange, locale, { signDisplay: 'exceptZero' })
-  const firstMonth = monthYearLabel(new Date(`${trendDates[0]}T00:00:00Z`), locale, 'numeric')
+  const firstPoint = trendData[0] ?? headcount.total;
+  const netChange = headcount.total - firstPoint;
+  const signedChange = viewerNumber(netChange, locale, { signDisplay: "exceptZero" });
+  const firstMonth = monthYearLabel(new Date(`${trendDates[0]}T00:00:00Z`), locale, "numeric");
   const workforcePulse: HrmPulseFigure[] = [
-    { label: t('home.workforce.today'), value: countLabel(headcount.total, locale) },
-    { label: t('home.workforce.since', { month: firstMonth }), value: countLabel(firstPoint, locale) },
+    { label: t("home.workforce.today"), value: countLabel(headcount.total, locale) },
     {
-      label: t('home.workforce.net'),
+      label: t("home.workforce.since", { month: firstMonth }),
+      value: countLabel(firstPoint, locale),
+    },
+    {
+      label: t("home.workforce.net"),
       value:
         firstPoint > 0
-          ? `${signedChange} (${viewerNumber(netChange / firstPoint, locale, { style: 'percent', maximumFractionDigits: 1, signDisplay: 'exceptZero' })})`
+          ? `${signedChange} (${viewerNumber(netChange / firstPoint, locale, { style: "percent", maximumFractionDigits: 1, signDisplay: "exceptZero" })})`
           : signedChange,
-      tone: netChange > 0 ? 'positive' : netChange < 0 ? 'warning' : 'neutral',
+      tone: netChange > 0 ? "positive" : netChange < 0 ? "warning" : "neutral",
     },
-  ]
+  ];
   // FTE is stored at four places (numeric(19,4)); the cockpit shows it as a
   // person-readable figure, at most two decimals in the viewer's locale.
-  const fte = (value: string): string => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value))
+  const fte = (value: string): string =>
+    new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value));
 
   // The headcount plan rides the same cockpit when the viewer holds the
   // position read grant: open establishments, unfunded filled FTE, and the
   // vacancy-by-department breakdown, all resolved through the canonical
   // position read service. Without the grant the cockpit shows no
   // positions section at all — never a gated link.
-  let positions: HrmPositionsSummary | null = null
+  let positions: HrmPositionsSummary | null = null;
   if (vacancy !== null) {
-    const openCount = vacancy.positions.filter((row) => row.version.status === 'open').length
-    const unassignedDepartment = t('home.vacancy.unassignedDepartment')
+    const openCount = vacancy.positions.filter((row) => row.version.status === "open").length;
+    const unassignedDepartment = t("home.vacancy.unassignedDepartment");
     positions = {
-      openPositionsLabel: t('home.vitals.openPositions'),
+      openPositionsLabel: t("home.vitals.openPositions"),
       openPositionsValue: String(openCount),
-      openPositionsSub: t('home.vitals.openPositionsSub', {
+      openPositionsSub: t("home.vitals.openPositionsSub", {
         fte: fte(vacancy.totals.vacantFte),
       }),
       unfundedFteValue: vacancy.totals.unfundedFilledFte,
-      vacancyTitle: t('home.vacancy.title'),
-      departmentColumn: t('home.vacancy.department'),
-      employerColumn: t('home.vacancy.employer'),
-      positionsColumn: t('home.vacancy.positions'),
-      plannedColumn: t('home.vacancy.planned'),
-      fundedColumn: t('home.vacancy.funded'),
-      filledColumn: t('home.vacancy.filled'),
-      vacantColumn: t('home.vacancy.vacant'),
-      vacancyEmpty: t('home.vacancy.empty', { date: vacancy.effectiveDate }),
-      totalLabel: t('home.vacancy.total'),
+      vacancyTitle: t("home.vacancy.title"),
+      departmentColumn: t("home.vacancy.department"),
+      employerColumn: t("home.vacancy.employer"),
+      positionsColumn: t("home.vacancy.positions"),
+      plannedColumn: t("home.vacancy.planned"),
+      fundedColumn: t("home.vacancy.funded"),
+      filledColumn: t("home.vacancy.filled"),
+      vacantColumn: t("home.vacancy.vacant"),
+      vacancyEmpty: t("home.vacancy.empty", { date: vacancy.effectiveDate }),
+      totalLabel: t("home.vacancy.total"),
       unassignedDepartment,
       groups: vacancy.byDepartment.map((group) => ({
-        id: `${group.employerSubsidiaryName} / ${group.departmentName ?? ''}`,
+        id: `${group.employerSubsidiaryName} / ${group.departmentName ?? ""}`,
         department: group.departmentName ?? unassignedDepartment,
         employer: group.employerSubsidiaryName,
         positions: group.positions,
@@ -505,7 +561,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
         filledFte: fte(vacancy.totals.filledFte),
         vacantFte: fte(vacancy.totals.vacantFte),
       },
-    }
+    };
   }
 
   // The home reflects the org's own surface: the directory names the native
@@ -519,35 +575,39 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // per-row scope inside). A mixed-scope actor is refused rather than
   // shown a partial queue: the refusal renders as data beside the hero,
   // never a 500 and never a silent subset.
-  const pendingRefusal = queueLoad.refusal
-  let pendingCount = 0
-  let pending: PendingRequestItem[] = []
+  const pendingRefusal = queueLoad.refusal;
+  let pendingCount = 0;
+  let pending: PendingRequestItem[] = [];
   if (pendingRefusal === null) {
     // Rows already arrive status-filtered (newest pending first); the tile
     // counts the independent scope-checked total, not the preview length.
-    pendingCount = queueLoad.pendingTotal
-    const shown = queueLoad.rows.slice(0, HOME_PENDING_SHOWN)
-    const { workerByEmployment } = await loadQueueLabels(orgId, [...new Set(shown.map((row) => row.employmentId))], [])
-    const present = t('employment.episodes.present')
+    pendingCount = queueLoad.pendingTotal;
+    const shown = queueLoad.rows.slice(0, HOME_PENDING_SHOWN);
+    const { workerByEmployment } = await loadQueueLabels(
+      orgId,
+      [...new Set(shown.map((row) => row.employmentId))],
+      [],
+    );
+    const present = t("employment.episodes.present");
     pending = shown.map((row) => {
-      const worker = workerByEmployment.get(row.employmentId)
-      const payload = row.payload as { kind: string } & Record<string, unknown>
+      const worker = workerByEmployment.get(row.employmentId);
+      const payload = row.payload as { kind: string } & Record<string, unknown>;
       const from =
-        typeof payload.effectiveFrom === 'string'
+        typeof payload.effectiveFrom === "string"
           ? payload.effectiveFrom
-          : typeof payload.effectiveDate === 'string'
+          : typeof payload.effectiveDate === "string"
             ? payload.effectiveDate
-            : null
-      const to = typeof payload.effectiveTo === 'string' ? payload.effectiveTo : null
+            : null;
+      const to = typeof payload.effectiveTo === "string" ? payload.effectiveTo : null;
       return {
         id: row.id,
         employeeName: worker?.name ?? null,
         partyId: worker?.partyId ?? null,
         kindLabel: requestKindLabel(t, payload.kind),
         statusLabel: requestStatusLabel(t, row.status),
-        effectiveLabel: from === null ? t('queue.notAvailable') : `${from} → ${to ?? present}`,
-      }
-    })
+        effectiveLabel: from === null ? t("queue.notAvailable") : `${from} → ${to ?? present}`,
+      };
+    });
   }
 
   // Starts and ends in the next 30 days from the live employment versions
@@ -561,23 +621,23 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // overview down in production on alpha.19.
   // Probation ends are not modeled (versions carry status and the
   // effective window only), and the panel says so instead of implying it.
-  const windowRows = windowResult
-  const upcomingTruncated = windowRows.length >= HOME_WINDOW_LIMIT
-  const starts: UpcomingChangeItem[] = []
-  const ends: UpcomingChangeItem[] = []
+  const windowRows = windowResult;
+  const upcomingTruncated = windowRows.length >= HOME_WINDOW_LIMIT;
+  const starts: UpcomingChangeItem[] = [];
+  const ends: UpcomingChangeItem[] = [];
   for (const row of windowRows) {
-    const fromInWindow = row.from > effectiveDate
+    const fromInWindow = row.from > effectiveDate;
     // An end is a version whose window closes in the period, or a
     // termination taking effect in it; anything else starting in the
     // period is a start. A row matching both lists once, as an end.
-    const isEnd = !fromInWindow || row.status === 'terminated'
+    const isEnd = !fromInWindow || row.status === "terminated";
     const item: UpcomingChangeItem = {
       name: row.name,
       partyId: row.partyId,
       detail: `${isEnd ? (row.to ?? row.from) : row.from} · ${requestStatusLabel(t, row.status)}`,
-    }
-    if (isEnd) ends.push(item)
-    else starts.push(item)
+    };
+    if (isEnd) ends.push(item);
+    else starts.push(item);
   }
 
   // Recent employment changes: the last recorded aggregate change events
@@ -586,21 +646,21 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // The recorded instant is UTC; it renders in the viewer's locale with the
   // zone named, so nobody reads a server timestamp as local time.
   const recordedOptions: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZoneName: 'short',
-  }
-  const changeRows = changeResult
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  };
+  const changeRows = changeResult;
   const recent: RecentChangeItem[] = changeRows.map((row) => ({
     name: row.name,
     partyId: row.partyId,
     kindLabel: changeKindLabel(t, row.kind),
     reason: row.reason,
-    recordedAt: viewerDateTime(row.recordedAt, locale, 'UTC', recordedOptions),
-  }))
+    recordedAt: viewerDateTime(row.recordedAt, locale, "UTC", recordedOptions),
+  }));
 
   // Readiness: active employee parties with no employment record at all.
   // No service exposes the unmigrated set, so one clearly-scoped query
@@ -608,229 +668,235 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // employer scope, so a restricted viewer never counts outside their
   // lens. The sentence names what the number means and headcount's
   // exclusion; the link opens the migration article.
-  const unmigratedRows = unmigratedResult
-  const unmigrated = Number(unmigratedRows[0]?.n ?? 0)
+  const unmigratedRows = unmigratedResult;
+  const unmigrated = Number(unmigratedRows[0]?.n ?? 0);
 
   // Quick actions, each gated by the permission its target enforces: the
   // New button in the header owns employee creation, this rail owns the
   // propose entry point, self-service leave, and the two surfaces that live
   // in other modules on purpose (departments in Company setup, workforce
   // reports in the Reports module — never a second page of either here).
-  const actions: DirectoryItem[] = []
+  const actions: DirectoryItem[] = [];
   if (canManageHrm) {
     actions.push({
-      href: '/hrm/change-requests',
-      label: t('overview.actions.proposeChange'),
-      iconKey: 'scroll',
-    })
+      href: "/hrm/change-requests",
+      label: t("overview.actions.proposeChange"),
+      iconKey: "scroll",
+    });
   }
-  if (can(authz, 'hrm.leave.request')) {
+  if (can(authz, "hrm.leave.request")) {
     actions.push({
-      href: '/hrm/my-leave',
-      label: t('home.tabs.myLeave'),
-      iconKey: 'timer',
-    })
+      href: "/hrm/my-leave",
+      label: t("home.tabs.myLeave"),
+      iconKey: "timer",
+    });
   }
   // Company setup lives behind the Setup workspace gate — readers without
   // admin.setup.manage get no link to a surface that would refuse them.
-  if (can(authz, 'admin.setup.manage')) {
+  if (can(authz, "admin.setup.manage")) {
     actions.push({
-      href: '/admin/setup/departments',
-      label: t('overview.actions.manageDepartments'),
-      iconKey: 'building',
-    })
+      href: "/admin/setup/departments",
+      label: t("overview.actions.manageDepartments"),
+      iconKey: "building",
+    });
   }
-  if (can(authz, 'reports.read')) {
+  if (can(authz, "reports.read")) {
     actions.push({
-      href: '/reports',
-      label: t('overview.actions.openReports'),
-      iconKey: 'file',
-    })
+      href: "/reports",
+      label: t("overview.actions.openReports"),
+      iconKey: "file",
+    });
   }
 
   // Independent onboarding, leave, recruiting, and qualification reads were
   // resolved in the concurrent cockpit reads above. Their null values still
   // mean the viewer lacks the corresponding grant or subordinate feature.
-  const leavePending = leavePanel?.pendingCount ?? 0
-  const overdueSteps = onboarding?.overdue.length ?? 0
-  const openPositions = positions ? Number(positions.openPositionsValue) : 0
-  const unfundedFte = positions ? Number(positions.unfundedFteValue) : 0
+  const leavePending = leavePanel?.pendingCount ?? 0;
+  const overdueSteps = onboarding?.overdue.length ?? 0;
+  const openPositions = positions ? Number(positions.openPositionsValue) : 0;
+  const unfundedFte = positions ? Number(positions.unfundedFteValue) : 0;
 
   // The live directory: the workspace's pages as a work queue, each badge a
   // figure the loader already resolved through the canonical reads.
-  const directory: DirectoryItem[] = []
-  if (can(authz, 'parties.read')) {
+  const directory: DirectoryItem[] = [];
+  if (can(authz, "parties.read")) {
     directory.push({
-      href: '/entities/employees',
-      label: tNav('modules.employees'),
-      iconKey: 'clipboard-check',
+      href: "/entities/employees",
+      label: tNav("modules.employees"),
+      iconKey: "clipboard-check",
       badge: {
         value: String(headcount.total),
-        hint: t('home.directory.employeesHint'),
-        tone: 'neutral',
+        hint: t("home.directory.employeesHint"),
+        tone: "neutral",
       },
-    })
+    });
   }
   if (canReadPositions) {
     directory.push({
-      href: '/hrm/positions',
-      label: t('home.tabs.positions'),
-      iconKey: 'layers',
+      href: "/hrm/positions",
+      label: t("home.tabs.positions"),
+      iconKey: "layers",
       badge: {
         value: String(openPositions),
-        hint: t('home.directory.positionsHint'),
-        tone: openPositions > 0 ? 'warning' : 'neutral',
+        hint: t("home.directory.positionsHint"),
+        tone: openPositions > 0 ? "warning" : "neutral",
       },
-    })
+    });
   }
   if (canReadProcesses) {
     directory.push({
-      href: '/hrm/processes',
-      label: t('home.tabs.processes'),
-      iconKey: 'list-checks',
+      href: "/hrm/processes",
+      label: t("home.tabs.processes"),
+      iconKey: "list-checks",
       badge: {
         value: String(onboarding?.openCount ?? 0),
-        hint: t('home.directory.processesHint', { count: overdueSteps }),
-        tone: overdueSteps > 0 ? 'negative' : 'neutral',
+        hint: t("home.directory.processesHint", { count: overdueSteps }),
+        tone: overdueSteps > 0 ? "negative" : "neutral",
       },
-    })
+    });
   }
   if (recruiting) {
     directory.push({
-      href: '/hrm/recruiting',
-      label: t('home.tabs.recruiting'),
-      iconKey: 'target',
+      href: "/hrm/recruiting",
+      label: t("home.tabs.recruiting"),
+      iconKey: "target",
       badge: {
         value: recruiting.openValue,
-        hint: t('home.directory.recruitingHint', {
+        hint: t("home.directory.recruitingHint", {
           count: Number(recruiting.awaitingValue),
         }),
-        tone: Number(recruiting.awaitingValue) > 0 ? 'warning' : 'neutral',
+        tone: Number(recruiting.awaitingValue) > 0 ? "warning" : "neutral",
       },
-    })
+    });
   }
   if (canReadLeave) {
     directory.push({
-      href: '/hrm/leave',
-      label: t('home.tabs.timeOff'),
-      iconKey: 'timer',
+      href: "/hrm/leave",
+      label: t("home.tabs.timeOff"),
+      iconKey: "timer",
       badge: {
         value: String(leavePanel?.onLeaveToday.length ?? 0),
-        hint: t('home.directory.leaveHint', { count: leavePending }),
-        tone: leavePending > 0 ? 'warning' : 'neutral',
+        hint: t("home.directory.leaveHint", { count: leavePending }),
+        tone: leavePending > 0 ? "warning" : "neutral",
       },
-    })
+    });
   }
   // The org chart rides Human resources, which this home already requires;
   // only its read grants decide the entry.
-  if (can(authz, 'hrm.employment.read') || can(authz, 'hrm.self.read')) {
+  if (can(authz, "hrm.employment.read") || can(authz, "hrm.self.read")) {
     directory.push({
-      href: '/hrm/org-chart',
-      label: t('home.tabs.orgChart'),
-      iconKey: 'workflow',
-    })
+      href: "/hrm/org-chart",
+      label: t("home.tabs.orgChart"),
+      iconKey: "workflow",
+    });
   }
   directory.push({
-    href: '/hrm/performance',
-    label: t('home.tabs.talent'),
-    iconKey: 'star',
-  })
-  if (can(authz, 'hrm.surveys.manage') && (await isFeatureEnabled(orgId, 'hrmSurveys'))) {
+    href: "/hrm/performance",
+    label: t("home.tabs.talent"),
+    iconKey: "star",
+  });
+  if (can(authz, "hrm.surveys.manage") && (await isFeatureEnabled(orgId, "hrmSurveys"))) {
     directory.push({
-      href: '/hrm/surveys',
-      label: t('home.tabs.surveys'),
-      iconKey: 'message',
-    })
+      href: "/hrm/surveys",
+      label: t("home.tabs.surveys"),
+      iconKey: "message",
+    });
   }
-  if (can(authz, 'hrm.compensation.read') && (await isFeatureEnabled(orgId, 'hrmCompensation'))) {
+  if (can(authz, "hrm.compensation.read") && (await isFeatureEnabled(orgId, "hrmCompensation"))) {
     directory.push({
-      href: '/hrm/compensation',
-      label: t('home.tabs.compensation'),
-      iconKey: 'wallet',
-    })
+      href: "/hrm/compensation",
+      label: t("home.tabs.compensation"),
+      iconKey: "wallet",
+    });
   }
-  if (can(authz, 'hrm.benefits.read')) {
+  if (can(authz, "hrm.benefits.read")) {
     directory.push({
-      href: '/hrm/benefits',
-      label: t('home.tabs.benefits'),
-      iconKey: 'heart-pulse',
-    })
+      href: "/hrm/benefits",
+      label: t("home.tabs.benefits"),
+      iconKey: "heart-pulse",
+    });
   }
-  if (can(authz, 'hrm.documents.read') && (await isFeatureEnabled(orgId, 'hrmDocuments'))) {
+  if (can(authz, "hrm.documents.read") && (await isFeatureEnabled(orgId, "hrmDocuments"))) {
     directory.push({
-      href: '/hrm/documents',
-      label: t('home.tabs.documents'),
-      iconKey: 'file',
-    })
+      href: "/hrm/documents",
+      label: t("home.tabs.documents"),
+      iconKey: "file",
+    });
   }
-  if (can(authz, 'hrm.certifications.read') && (await isFeatureEnabled(orgId, 'hrmCertifications'))) {
+  if (
+    can(authz, "hrm.certifications.read") &&
+    (await isFeatureEnabled(orgId, "hrmCertifications"))
+  ) {
     directory.push({
-      href: '/hrm/qualifications',
-      label: t('home.tabs.qualifications'),
-      iconKey: 'award',
-    })
+      href: "/hrm/qualifications",
+      label: t("home.tabs.qualifications"),
+      iconKey: "award",
+    });
   }
-  if (can(authz, 'hrm.construction.read') && (await isFeatureEnabled(orgId, 'hrmConstructionCompliance'))) {
+  if (
+    can(authz, "hrm.construction.read") &&
+    (await isFeatureEnabled(orgId, "hrmConstructionCompliance"))
+  ) {
     directory.push({
-      href: '/hrm/compliance',
-      label: t('home.tabs.compliance'),
-      iconKey: 'shield',
-    })
+      href: "/hrm/compliance",
+      label: t("home.tabs.compliance"),
+      iconKey: "shield",
+    });
   }
 
   // Needs attention: every figure that asks someone to act, with the page
   // that acts on it. Empty renders the all-clear sentence, never a blank.
-  const attention: HrmHomeData['attention'] = []
+  const attention: HrmHomeData["attention"] = [];
   if (pendingRefusal === null && pendingCount > 0) {
     attention.push({
-      tone: 'warning',
-      text: t('home.attention.pending', { count: pendingCount }),
-      href: '/hrm/change-requests?status=submitted',
-    })
+      tone: "warning",
+      text: t("home.attention.pending", { count: pendingCount }),
+      href: "/hrm/change-requests?status=submitted",
+    });
   }
   if (overdueSteps > 0) {
     attention.push({
-      tone: 'negative',
-      text: t('home.attention.overdueSteps', { count: overdueSteps }),
-      href: '/hrm/processes?segment=overdue',
-    })
+      tone: "negative",
+      text: t("home.attention.overdueSteps", { count: overdueSteps }),
+      href: "/hrm/processes?segment=overdue",
+    });
   }
   if (leavePending > 0) {
     attention.push({
-      tone: 'warning',
-      text: t('home.attention.leavePending', { count: leavePending }),
-      href: '/hrm/leave?segment=pending',
-    })
+      tone: "warning",
+      text: t("home.attention.leavePending", { count: leavePending }),
+      href: "/hrm/leave?segment=pending",
+    });
   }
   // HR-14 begin: lapsed certifications refuse dispatch, expiring ones
   // warn it — both link into the pre-filtered ledger segment.
   if (qualificationAttention && qualificationAttention.expired > 0) {
     attention.push({
-      tone: 'negative',
-      text: t('home.attention.expiredQualifications', {
+      tone: "negative",
+      text: t("home.attention.expiredQualifications", {
         count: qualificationAttention.expired,
       }),
-      href: '/hrm/qualifications?segment=expired',
-    })
+      href: "/hrm/qualifications?segment=expired",
+    });
   }
   if (qualificationAttention && qualificationAttention.expiring > 0) {
     attention.push({
-      tone: 'warning',
-      text: t('home.attention.expiringQualifications', {
+      tone: "warning",
+      text: t("home.attention.expiringQualifications", {
         count: qualificationAttention.expiring,
       }),
-      href: '/hrm/qualifications?segment=expiring',
-    })
+      href: "/hrm/qualifications?segment=expiring",
+    });
   }
   // HR-14 end
   if (positions && unfundedFte > 0) {
     attention.push({
-      tone: 'warning',
-      text: t('home.attention.unfunded', {
+      tone: "warning",
+      text: t("home.attention.unfunded", {
         fte: fte(positions.unfundedFteValue),
       }),
-      href: '/hrm/positions',
-    })
+      href: "/hrm/positions",
+    });
   }
   if (unmigrated > 0) {
     // Managers land directly on the Hire action for the unmigrated
@@ -838,114 +904,122 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     // article, which names the same remedy without opening a surface that
     // would refuse them.
     attention.push({
-      tone: 'warning',
-      text: t('overview.readiness.unmigrated', { count: unmigrated }),
-      href: canManageHrm ? '/hrm/change-requests?propose=1&hire=1' : '/docs/employment-migration',
-    })
+      tone: "warning",
+      text: t("overview.readiness.unmigrated", { count: unmigrated }),
+      href: canManageHrm ? "/hrm/change-requests?propose=1&hire=1" : "/docs/employment-migration",
+    });
   }
 
   return {
-    title: t('home.title'),
-    description: t('home.description'),
+    title: t("home.title"),
+    description: t("home.description"),
     tabs,
     multiSubsidiary,
-    canCreateEmployee: can(authz, 'parties.manage'),
+    canCreateEmployee: can(authz, "parties.manage"),
     canProposeChange: canManageHrm,
-    canCreateProcess: can(authz, 'hrm.process.manage') && canReadProcesses,
+    canCreateProcess: can(authz, "hrm.process.manage") && canReadProcesses,
     newEmployee: {
-      basePath: '/entities/employees',
-      role: 'employee',
-      label: t('overview.actions.newEmployee'),
+      basePath: "/entities/employees",
+      role: "employee",
+      label: t("overview.actions.newEmployee"),
     },
-    hireLabel: t('overview.actions.hireEmployee'),
-    newProcessLabel: t('processes.newChecklist'),
+    hireLabel: t("overview.actions.hireEmployee"),
+    newProcessLabel: t("processes.newChecklist"),
     onboarding,
     // UX-14: a subordinate feature panel renders only while its module has
     // something to say. A quiet module collapses so the pending request —
     // the hire and its owner at the top of the hero column — stays the task.
     onboardingHasActivity:
-      (onboarding?.openCount ?? 0) > 0 || (onboarding?.overdue.length ?? 0) > 0 || (onboarding?.upcoming.length ?? 0) > 0,
-    leaveHasActivity: (leavePanel?.onLeaveToday.length ?? 0) > 0 || (leavePanel?.pendingCount ?? 0) > 0,
+      (onboarding?.openCount ?? 0) > 0 ||
+      (onboarding?.overdue.length ?? 0) > 0 ||
+      (onboarding?.upcoming.length ?? 0) > 0,
+    leaveHasActivity:
+      (leavePanel?.onLeaveToday.length ?? 0) > 0 || (leavePanel?.pendingCount ?? 0) > 0,
     benefitsHasActivity:
       (benefitsPanel?.openWindows.length ?? 0) > 0 ||
       (benefitsPanel?.pendingCount ?? 0) > 0 ||
       (benefitsPanel?.missingCount ?? 0) > 0,
     recruitingHasActivity: recruiting
-      ? Number(recruiting.openValue) > 0 || Number(recruiting.awaitingValue) > 0 || Number(recruiting.interviewsValue) > 0
+      ? Number(recruiting.openValue) > 0 ||
+        Number(recruiting.awaitingValue) > 0 ||
+        Number(recruiting.interviewsValue) > 0
       : false,
-    headcountLabel: t('home.vitals.headcount'),
+    headcountLabel: t("home.vitals.headcount"),
     headcountValue: String(headcount.total),
-    headcountSub: t('home.vitals.headcountSub', {
+    headcountSub: t("home.vitals.headcountSub", {
       date: headcount.effectiveDate,
     }),
-    pendingLabel: t('overview.pending.label'),
-    pendingValue: pendingRefusal !== null ? '—' : String(pendingCount),
-    pendingSub: t('overview.pending.sub'),
-    pendingAccent: pendingCount > 0 ? 'amber' : 'emerald',
+    pendingLabel: t("overview.pending.label"),
+    pendingValue: pendingRefusal !== null ? "—" : String(pendingCount),
+    pendingSub: t("overview.pending.sub"),
+    pendingAccent: pendingCount > 0 ? "amber" : "emerald",
     pendingHasActivity: pendingRefusal !== null || pending.length > 0,
-    startingLabel: t('home.vitals.startingSoon'),
+    startingLabel: t("home.vitals.startingSoon"),
     startingValue: String(starts.length),
-    startingSub: t('home.vitals.startingSoonSub', { count: ends.length }),
-    onLeaveLabel: leavePanel ? t('home.vitals.onLeave') : null,
+    startingSub: t("home.vitals.startingSoonSub", { count: ends.length }),
+    onLeaveLabel: leavePanel ? t("home.vitals.onLeave") : null,
     onLeaveValue: String(leavePanel?.onLeaveToday.length ?? 0),
-    onLeaveSub: t('home.vitals.onLeaveSub', { count: leavePending }),
-    workforceTitle: t('home.workforce.title'),
+    onLeaveSub: t("home.vitals.onLeaveSub", { count: leavePending }),
+    workforceTitle: t("home.workforce.title"),
     workforcePulse,
-    mixTitle: t('home.workforce.mix'),
-    trendHint: t('home.trend.hint'),
-    trendSeriesName: t('home.trend.series'),
+    mixTitle: t("home.workforce.mix"),
+    trendHint: t("home.trend.hint"),
+    trendSeriesName: t("home.trend.series"),
     trendLabels,
     trendData,
-    attentionTitle: t('home.attention.title'),
-    attentionAllClear: t('home.attention.allClear'),
+    attentionTitle: t("home.attention.title"),
+    attentionAllClear: t("home.attention.allClear"),
     attention,
-    groupsTitle: t('home.groups.title'),
-    employerColumn: t('home.groups.employer'),
-    departmentColumn: t('home.groups.department'),
-    headcountColumn: t('home.groups.headcount'),
-    unassigned: t('home.groups.unassigned'),
-    groupsEmpty: t('home.groups.empty', { date: headcount.effectiveDate }),
-    totalLabel: t('home.groups.total'),
+    groupsTitle: t("home.groups.title"),
+    employerColumn: t("home.groups.employer"),
+    departmentColumn: t("home.groups.department"),
+    headcountColumn: t("home.groups.headcount"),
+    unassigned: t("home.groups.unassigned"),
+    groupsEmpty: t("home.groups.empty", { date: headcount.effectiveDate }),
+    totalLabel: t("home.groups.total"),
     // Largest department first, so the share bars read as a ranking.
     groups: [...headcount.groups]
       .sort((a, b) => b.headcount - a.headcount)
       .map((group) => ({
-        id: `${group.employerSubsidiaryName} / ${group.departmentName ?? ''}`,
+        id: `${group.employerSubsidiaryName} / ${group.departmentName ?? ""}`,
         subsidiary: group.employerSubsidiaryName,
         department: group.departmentName,
-        departmentLabel: group.departmentName ?? t('home.groups.unassigned'),
+        departmentLabel: group.departmentName ?? t("home.groups.unassigned"),
         headcount: group.headcount,
         headcountLabel: countLabel(group.headcount, locale),
         share: headcount.total > 0 ? group.headcount / headcount.total : 0,
-        shareLabel: formatPercent01(headcount.total > 0 ? group.headcount / headcount.total : 0, locale),
+        shareLabel: formatPercent01(
+          headcount.total > 0 ? group.headcount / headcount.total : 0,
+          locale,
+        ),
       })),
     total: headcount.total,
     totalValue: countLabel(headcount.total, locale),
-    directoryTitle: t('home.directory.title'),
+    directoryTitle: t("home.directory.title"),
     directory,
-    pendingTitle: t('overview.pending.title'),
-    pendingEmpty: t('overview.pending.empty'),
-    pendingViewAll: t('overview.pending.viewAll'),
-    pendingQueueHref: '/hrm/change-requests?status=submitted',
+    pendingTitle: t("overview.pending.title"),
+    pendingEmpty: t("overview.pending.empty"),
+    pendingViewAll: t("overview.pending.viewAll"),
+    pendingQueueHref: "/hrm/change-requests?status=submitted",
     pendingRefusal,
     pending,
-    upcomingTitle: t('overview.upcoming.title'),
-    upcomingHint: t('overview.upcoming.hint'),
-    startsTitle: t('overview.upcoming.startsTitle'),
-    startsEmpty: t('overview.upcoming.startsEmpty'),
-    endsTitle: t('overview.upcoming.endsTitle'),
-    endsEmpty: t('overview.upcoming.endsEmpty'),
+    upcomingTitle: t("overview.upcoming.title"),
+    upcomingHint: t("overview.upcoming.hint"),
+    startsTitle: t("overview.upcoming.startsTitle"),
+    startsEmpty: t("overview.upcoming.startsEmpty"),
+    endsTitle: t("overview.upcoming.endsTitle"),
+    endsEmpty: t("overview.upcoming.endsEmpty"),
     upcomingTruncated,
-    upcomingTruncatedNote: t('overview.upcoming.truncatedNote', {
+    upcomingTruncatedNote: t("overview.upcoming.truncatedNote", {
       limit: HOME_WINDOW_LIMIT,
     }),
     starts,
     ends,
-    recentTitle: t('overview.recent.title'),
-    recentEmpty: t('overview.recent.empty'),
+    recentTitle: t("overview.recent.title"),
+    recentEmpty: t("overview.recent.empty"),
     recent,
-    queueNotAvailable: t('queue.notAvailable'),
-    actionsTitle: t('overview.actions.title'),
+    queueNotAvailable: t("queue.notAvailable"),
+    actionsTitle: t("overview.actions.title"),
     actions,
     positions,
     // Leave panel: on leave today plus pending approvals, for viewers who
@@ -955,7 +1029,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     // Benefits panel: open windows, pending approvals, elections missing
     // inputs for the current month. Null without the benefits grant.
     benefitsPanel,
-  }
+  };
 }
 
 /**
@@ -965,22 +1039,22 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
  * link.
  */
 export async function loadRecruitingPanel(authz: Authz): Promise<HrmRecruitingPanelData | null> {
-  if (!can(authz, 'hrm.recruiting.read')) return null
-  const t = await getTranslations('hrm')
+  if (!can(authz, "hrm.recruiting.read")) return null;
+  const t = await getTranslations("hrm");
   const overview = await loadRecruitingOverview({
     orgId: authz.user.orgId,
     actorId: authz.user.id,
-  })
-  if (!overview) return null
+  });
+  if (!overview) return null;
   return {
-    panelTitle: t('home.recruiting.title'),
-    openLabel: t('home.recruiting.open'),
+    panelTitle: t("home.recruiting.title"),
+    openLabel: t("home.recruiting.open"),
     openValue: String(overview.openRequisitions),
-    awaitingLabel: t('home.recruiting.awaiting'),
+    awaitingLabel: t("home.recruiting.awaiting"),
     awaitingValue: String(overview.offersAwaitingResponse),
-    interviewsLabel: t('home.recruiting.interviews'),
+    interviewsLabel: t("home.recruiting.interviews"),
     interviewsValue: String(overview.interviewsThisWeek),
-    viewAll: t('home.recruiting.viewAll'),
-    viewAllHref: '/hrm/recruiting',
-  }
+    viewAll: t("home.recruiting.viewAll"),
+    viewAllHref: "/hrm/recruiting",
+  };
 }

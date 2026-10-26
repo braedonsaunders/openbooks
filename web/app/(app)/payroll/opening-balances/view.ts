@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { getTranslations } from "next-intl/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   OPENING_BALANCE_FIELDS,
   declaredAccountOpeningBaseFields,
@@ -9,12 +9,12 @@ import {
   declaredProgramBaseFields,
   employerLevyOpeningsForYear,
   type OpeningBalanceYear,
-} from '@openbooks/engine/payroll/opening-balances'
-import { US_STATES } from '@openbooks/engine/payroll/us/rates'
-import { listFilingAccounts } from '@openbooks/engine/payroll/filing'
-import type { EntitlementOpeningsResult } from '@openbooks/engine/payroll/entitlements-openings'
-import { itSurtaxSaldoCarryIns } from '@openbooks/engine/payroll/it/saldo-carryins'
-import { db } from '@openbooks/engine/platform/db'
+} from "@openbooks/engine/payroll/opening-balances";
+import { US_STATES } from "@openbooks/engine/payroll/us/rates";
+import { listFilingAccounts } from "@openbooks/engine/payroll/filing";
+import type { EntitlementOpeningsResult } from "@openbooks/engine/payroll/entitlements-openings";
+import { itSurtaxSaldoCarryIns } from "@openbooks/engine/payroll/it/saldo-carryins";
+import { db } from "@openbooks/engine/platform/db";
 import {
   page,
   pageHeader,
@@ -22,20 +22,20 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { pickString } from '../../../../lib/list-params'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { pickString } from "../../../../lib/list-params";
 import {
   scopedEntitlementOpenings,
   scopedOpeningBalances,
-} from '../../../../lib/payroll-scoped-views'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import type { OpeningBalancesView } from './OpeningBalancesView'
+} from "../../../../lib/payroll-scoped-views";
+import { groupTabs } from "../../../../components/module-home/group-tabs";
+import type { OpeningBalancesView } from "./OpeningBalancesView";
 
 /** The authorized loader serves three independent carry-in scopes to one workspace. */
 
-type BalancesProps = Parameters<typeof OpeningBalancesView>[0]
+type BalancesProps = Parameters<typeof OpeningBalancesView>[0];
 
 /**
  * The carry-in grid's two IT-only assessed-saldo columns (migration 0393):
@@ -46,118 +46,121 @@ type BalancesProps = Parameters<typeof OpeningBalancesView>[0]
  */
 const IT_SALDO_FIELDS = [
   {
-    key: 'itRegionaleSaldo',
-    label: 'Addizionale regionale a saldo (anno precedente)',
+    key: "itRegionaleSaldo",
+    label: "Addizionale regionale a saldo (anno precedente)",
     help: "Prior-year regionale assessment the year's installments withhold (D.Lgs. 446/1997 art. 50) — from the prior provider's final report or the year N-1 CU. Enter 0.00 when the worker had no prior-year Italian employment; the installment run refuses until this is recorded.",
-    packs: ['IT'],
+    packs: ["IT"],
   },
   {
-    key: 'itComunaleSaldo',
-    label: 'Addizionale comunale a saldo (anno precedente)',
+    key: "itComunaleSaldo",
+    label: "Addizionale comunale a saldo (anno precedente)",
     help: "Prior-year comunale assessment the year's installments withhold (D.Lgs. 360/1998 art. 1) — from the prior provider's final report or the year N-1 CU. Enter 0.00 when the worker had no prior-year Italian employment; the installment run refuses until this is recorded.",
-    packs: ['IT'],
+    packs: ["IT"],
   },
-] as const
+] as const;
 
 export interface PayrollOpeningBalancesData {
-  title: string
-  description: string
-  viewTabs: Awaited<ReturnType<typeof groupTabs>>
+  title: string;
+  description: string;
+  viewTabs: Awaited<ReturnType<typeof groupTabs>>;
   balances: {
-    year: BalancesProps['year']
-    currentYear: BalancesProps['currentYear']
-    initial: OpeningBalanceYear
-    fields: BalancesProps['fields']
-    programs: BalancesProps['programs']
-    suiStates: BalancesProps['suiStates']
-    accountPrograms: BalancesProps['accountPrograms']
-    components: BalancesProps['components']
-    canManage: boolean
-    canQualify: boolean
-  }
+    year: BalancesProps["year"];
+    currentYear: BalancesProps["currentYear"];
+    initial: OpeningBalanceYear;
+    fields: BalancesProps["fields"];
+    programs: BalancesProps["programs"];
+    suiStates: BalancesProps["suiStates"];
+    accountPrograms: BalancesProps["accountPrograms"];
+    components: BalancesProps["components"];
+    canManage: boolean;
+    canQualify: boolean;
+  };
   banks: {
-    initial: EntitlementOpeningsResult
-    canManage: boolean
-  }
+    initial: EntitlementOpeningsResult;
+    canManage: boolean;
+  };
   employerLevies: {
-    year: number
+    year: number;
     levies: {
-      country: string
-      levyKey: string
-      label: string
-      description: string
-      scope: string
-    }[]
+      country: string;
+      levyKey: string;
+      label: string;
+      description: string;
+      scope: string;
+    }[];
     rows: {
-      country: string
-      levyKey: string
-      region: string | null
-      baseYtd: string
-    }[]
-    canManage: boolean
-  }
+      country: string;
+      levyKey: string;
+      region: string | null;
+      baseYtd: string;
+    }[];
+    canManage: boolean;
+  };
 }
 
 export async function loadPayrollOpeningBalances(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PayrollOpeningBalancesData> {
-  const authz = await requirePermission('payroll.read')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'payroll')
+  const authz = await requirePermission("payroll.read");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "payroll");
 
-  const t = await getTranslations('payroll')
-  const currentYear = Number((await businessToday(orgId)).slice(0, 4))
-  const requested = Number(pickString(sp.year))
+  const t = await getTranslations("payroll");
+  const currentYear = Number((await businessToday(orgId)).slice(0, 4));
+  const requested = Number(pickString(sp.year));
   const year =
-    Number.isInteger(requested) && requested >= 2000 && requested <= 2100
-      ? requested
-      : currentYear
+    Number.isInteger(requested) && requested >= 2000 && requested <= 2100 ? requested : currentYear;
 
-  const [data, saldoRows, accountDeclarations, accounts, banks, tabs, programDeclarations, levies, levyRows] = await Promise.all([
+  const [
+    data,
+    saldoRows,
+    accountDeclarations,
+    accounts,
+    banks,
+    tabs,
+    programDeclarations,
+    levies,
+    levyRows,
+  ] = await Promise.all([
     scopedOpeningBalances(authz, year),
     itSurtaxSaldoCarryIns(db, orgId, year),
     declaredAccountOpeningBaseFields(),
-    listFilingAccounts(orgId, 'US'),
+    listFilingAccounts(orgId, "US"),
     // A bank has one lifetime carry-in; its read is independent of tax year.
     scopedEntitlementOpenings(authz),
-    groupTabs('payroll', '/payroll/opening-balances', { orgId }),
+    groupTabs("payroll", "/payroll/opening-balances", { orgId }),
     declaredProgramBaseFields(),
     declaredEmployerLevyFields(year),
     employerLevyOpeningsForYear(orgId, year),
-  ])
+  ]);
   // IT assessed-saldo carry-ins (migration 0393) ride the same grid as two
   // IT-only columns backed by their own table — the generic layer never names
   // it. Rows merge here; the save splits them back out before the generic
   // save, which would refuse the unknown keys.
-  const saldoByEmployee = new Map(
-    saldoRows.map((row) => [
-      row.employeePartyId,
-      row,
-    ]),
-  )
+  const saldoByEmployee = new Map(saldoRows.map((row) => [row.employeePartyId, row]));
   for (const row of data.rows) {
-    const saldo = saldoByEmployee.get(row.employeePartyId)
-    if (!saldo) continue
+    const saldo = saldoByEmployee.get(row.employeePartyId);
+    if (!saldo) continue;
     row.amounts = {
       ...(row.amounts ?? {}),
       [IT_SALDO_FIELDS[0].key]: saldo.regionaleSaldo,
       [IT_SALDO_FIELDS[1].key]: saldo.comunaleSaldo,
-    }
+    };
   }
   const filingAccounts = accounts.filter(
     (account) =>
       authz.allowedSubsidiaryIds === null ||
       account.subsidiaryId === null ||
       authz.allowedSubsidiaryIds.has(account.subsidiaryId),
-  )
+  );
   const text = (key: string, fallback: string) =>
-    t.has(key as never) ? t(key as never) : fallback
+    t.has(key as never) ? t(key as never) : fallback;
 
   return {
-    title: text('openingBalances.title', 'Opening balances'),
+    title: text("openingBalances.title", "Opening balances"),
     description: text(
-      'openingBalances.description',
-      'Everything each employee carries in from your previous payroll system: statutory year-to-date, the annual caps they have partly used, and their vacation and banked-time balances. Nothing else supplies these, so every ceiling and every bank restarts at zero without them.',
+      "openingBalances.description",
+      "Everything each employee carries in from your previous payroll system: statutory year-to-date, the annual caps they have partly used, and their vacation and banked-time balances. Nothing else supplies these, so every ceiling and every bank restarts at zero without them.",
     ),
     viewTabs: tabs,
     balances: {
@@ -192,8 +195,8 @@ export async function loadPayrollOpeningBalances(
       suiStates: [...US_STATES].map((code) => ({
         key: code,
         label: code,
-        help: 'Pre-adoption wages insurable for unemployment insurance in this state. Enter only wages the gaining state\u2019s transfer rule lets transfer (most states credit same-employer wages reported to another state toward the new state\u2019s base).',
-        packs: ['US'],
+        help: "Pre-adoption wages insurable for unemployment insurance in this state. Enter only wages the gaining state\u2019s transfer rule lets transfer (most states credit same-employer wages reported to another state toward the new state\u2019s base).",
+        packs: ["US"],
       })),
       accountPrograms: accountDeclarations.flatMap((program) =>
         filingAccounts
@@ -202,61 +205,57 @@ export async function loadPayrollOpeningBalances(
               account.country === program.country &&
               account.programType === program.filingProgramType,
           )
-          .filter(
-            (account) => !program.requiresRegion || account.stateCode !== null,
-          )
+          .filter((account) => !program.requiresRegion || account.stateCode !== null)
           .map((account) => {
-            const region = program.requiresRegion ? account.stateCode : null
+            const region = program.requiresRegion ? account.stateCode : null;
             return {
-              key: `${program.programKey}:${account.id}:${region ?? ''}`,
+              key: `${program.programKey}:${account.id}:${region ?? ""}`,
               programKey: program.programKey,
-              label: `${program.label} — ${account.name}${region ? ` (${region})` : ''}`,
+              label: `${program.label} — ${account.name}${region ? ` (${region})` : ""}`,
               help: `${program.help} Filing account: ${account.name} (${account.accountNumber}).`,
               country: program.country,
               filingAccountId: account.id,
               region,
               requiresRegion: program.requiresRegion,
-            }
+            };
           }),
       ),
       components: data.components,
-      canManage: can(authz, 'payroll.manage'),
-      canQualify: can(authz, 'payroll.run'),
+      canManage: can(authz, "payroll.manage"),
+      canQualify: can(authz, "payroll.run"),
     },
     banks: {
       initial: banks,
-      canManage: can(authz, 'payroll.manage'),
+      canManage: can(authz, "payroll.manage"),
     },
     employerLevies: {
       year,
       levies,
       rows: levyRows,
-      canManage: can(authz, 'payroll.manage'),
+      canManage: can(authz, "payroll.manage"),
     },
-  }
+  };
 }
 
-const f = ref<PayrollOpeningBalancesData>()
+const f = ref<PayrollOpeningBalancesData>();
 
-export function payrollOpeningBalancesSpec(
-  _data: PayrollOpeningBalancesData,
-): PageSpec {
+export function payrollOpeningBalancesSpec(_data: PayrollOpeningBalancesData): PageSpec {
   return page({
-    route: '/payroll/opening-balances',
-    layout: 'list',
+    route: "/payroll/opening-balances",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: _data.viewTabs })],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("module-home-tabs", { tabs: _data.viewTabs })],
       }),
     ],
     body: [
-      widgetBlock('opening-balances-workspace', {
-        balances: f('balances'),
-        banks: f('banks'),
-        employerLevies: f('employerLevies'),
+      widgetBlock("opening-balances-workspace", {
+        balances: f("balances"),
+        banks: f("banks"),
+        employerLevies: f("employerLevies"),
       }),
     ],
-  })
+  });
 }

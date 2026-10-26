@@ -5,4 +5,4 @@ export {
   listCanonicalTimeZones as timeZoneOptions,
   type LocalTime,
   type ZonedTimeChoice,
-} from '@openbooks/engine/platform/time-zone'
+} from "@openbooks/engine/platform/time-zone";

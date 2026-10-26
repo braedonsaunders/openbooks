@@ -23,7 +23,11 @@ export const createGoalBody = z.object({
 });
 
 export const patchGoalBody = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("progress"), progressPercent: z.number().int().min(0).max(100), note: note.nullable().optional() }),
+  z.object({
+    action: z.literal("progress"),
+    progressPercent: z.number().int().min(0).max(100),
+    note: note.nullable().optional(),
+  }),
   z.object({ action: z.literal("achieve") }),
   z.object({ action: z.literal("miss"), note }),
   z.object({ action: z.literal("cancel"), note }),

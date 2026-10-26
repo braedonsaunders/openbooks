@@ -87,7 +87,12 @@ export function pairMatchCandidates(
     list.push({ id: journal.journalLineId, date: journal.postingDate });
     byAmount.set(key, list);
   }
-  const pairs: { lineId: string; journalLineId: string; daysBetween: number; confidence: "0.90" | "0.70" }[] = [];
+  const pairs: {
+    lineId: string;
+    journalLineId: string;
+    daysBetween: number;
+    confidence: "0.90" | "0.70";
+  }[] = [];
   for (const line of lines) {
     const candidates = byAmount.get(toUnits(line.amount).toString());
     if (!candidates?.length) continue;
@@ -145,25 +150,43 @@ export type NeverReconciledRow = {
 export type ReconciliationLoaders = {
   /** Org business day (business-date.ts); injectable so unit tests stay DB-free. */
   today: (orgId: string) => Promise<string>;
-  candidateAccounts: (orgId: string, today: string, windowDays: number) => Promise<ReconAccountCandidates[]>;
+  candidateAccounts: (
+    orgId: string,
+    today: string,
+    windowDays: number,
+  ) => Promise<ReconAccountCandidates[]>;
   staleSessions: (orgId: string, cutoff: string) => Promise<StaleReconRow[]>;
   neverReconciled: (orgId: string, lookbackStart: string) => Promise<NeverReconciledRow[]>;
 };
 
-async function loadCandidateAccounts(orgId: string, today: string, windowDays: number): Promise<ReconAccountCandidates[]> {
-  const sessions = (await db.execute<{ account_id: string; reconciliation_id: string; through_date: string }>(sql`
+async function loadCandidateAccounts(
+  orgId: string,
+  today: string,
+  windowDays: number,
+): Promise<ReconAccountCandidates[]> {
+  const sessions = await db.execute<{
+    account_id: string;
+    reconciliation_id: string;
+    through_date: string;
+  }>(
+    sql`
     select account_id, id as reconciliation_id, through_date::text
       from reconciliations
      where org_id = ${orgId} and status = 'in_progress'
-  `, "objects"));
+  `,
+    "objects",
+  );
   const sessionByAccount = new Map(sessions.map((row) => [row.account_id, row]));
-  const accounts = (await db.execute<{ account_id: string; number: string | null; name: string }>(sql`
+  const accounts = await db.execute<{ account_id: string; number: string | null; name: string }>(
+    sql`
     select distinct s.account_id, a.number, a.name
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
       join accounts a on a.id = s.account_id and a.org_id = s.org_id
      where l.org_id = ${orgId} and l.match_status = 'unmatched' and l.posted_on <= ${today}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const out: ReconAccountCandidates[] = [];
   for (const account of accounts) {
     const session = sessionByAccount.get(account.account_id) ?? null;
@@ -176,7 +199,8 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
         description: string | null;
         counterparty_ref: string | null;
         currency: string;
-      }>(sql`
+      }>(
+        sql`
         select l.id as line_id, l.posted_on::text, l.amount::text, l.description,
                l.counterparty_ref, l.currency
           from bank_statement_lines l
@@ -185,8 +209,16 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
            and l.match_status = 'unmatched' and l.posted_on <= ${cutoff}
          order by abs(l.amount) desc, l.posted_on
          limit 100
-      `, "objects"),
-      db.execute<{ journal_line_id: string; posting_date: string; amount: string; currency: string }>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<{
+        journal_line_id: string;
+        posting_date: string;
+        amount: string;
+        currency: string;
+      }>(
+        sql`
         select jl.id as journal_line_id, je.posting_date::text, jl.txn_amount::text as amount, jl.currency
           from journal_lines jl
           -- Live entries only: like manual matching, a reversed original is never a match suggestion.
@@ -198,21 +230,35 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
            and ${excludePeriodEndJournals(sql`je.origin`)}
            and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
          limit 500
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const sameCurrencyJournals = (currency: string): ReconcilableJournalRow[] =>
       journals
         .filter((row) => row.currency === currency)
         // Signed amounts: autoMatch pairs exact signed values, never absolutes.
-        .map((row) => ({ journalLineId: row.journal_line_id, postingDate: String(row.posting_date), amount: String(row.amount) }));
+        .map((row) => ({
+          journalLineId: row.journal_line_id,
+          postingDate: String(row.posting_date),
+          amount: String(row.amount),
+        }));
     const lineById = new Map(lines.map((row) => [row.line_id, row]));
     const candidates: MatchCandidate[] = [];
     // Pair per currency partition: autoMatch only matches within one currency.
     for (const currency of new Set(lines.map((row) => row.currency))) {
       const currencyLines: UnmatchedLineRow[] = lines
         .filter((row) => row.currency === currency)
-        .map((row) => ({ lineId: row.line_id, postedOn: String(row.posted_on), amount: String(row.amount) }));
-      for (const pair of pairMatchCandidates(currencyLines, sameCurrencyJournals(currency), windowDays)) {
+        .map((row) => ({
+          lineId: row.line_id,
+          postedOn: String(row.posted_on),
+          amount: String(row.amount),
+        }));
+      for (const pair of pairMatchCandidates(
+        currencyLines,
+        sameCurrencyJournals(currency),
+        windowDays,
+      )) {
         const line = lineById.get(pair.lineId)!;
         candidates.push({
           lineId: pair.lineId,
@@ -221,14 +267,18 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
           description: line.description,
           counterpartyRef: line.counterparty_ref,
           journalLineId: pair.journalLineId,
-          journalDate: journals.find((row) => row.journal_line_id === pair.journalLineId)?.posting_date ?? "",
+          journalDate:
+            journals.find((row) => row.journal_line_id === pair.journalLineId)?.posting_date ?? "",
           daysBetween: pair.daysBetween,
           confidence: pair.confidence,
           confidencePercent: pair.confidence === "0.90" ? 90 : 70,
         });
       }
     }
-    candidates.sort((a, b) => b.confidencePercent - a.confidencePercent || Number(toUnits(b.amount) - toUnits(a.amount)));
+    candidates.sort(
+      (a, b) =>
+        b.confidencePercent - a.confidencePercent || Number(toUnits(b.amount) - toUnits(a.amount)),
+    );
     out.push({
       accountId: account.account_id,
       accountNumber: account.number,
@@ -243,7 +293,7 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
 }
 
 async function loadStaleSessions(orgId: string, cutoff: string): Promise<StaleReconRow[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     reconciliation_id: string;
     account_id: string;
     number: string | null;
@@ -251,7 +301,8 @@ async function loadStaleSessions(orgId: string, cutoff: string): Promise<StaleRe
     through_date: string;
     statement_balance: string;
     updated_at: string;
-  }>(sql`
+  }>(
+    sql`
     select r.id as reconciliation_id, r.account_id, a.number, a.name,
            r.through_date::text, r.statement_balance::text,
            r.updated_at::text as updated_at
@@ -261,10 +312,16 @@ async function loadStaleSessions(orgId: string, cutoff: string): Promise<StaleRe
        and r.updated_at <= ${cutoff}::timestamptz
      order by r.updated_at
      limit 50
-  `, "objects"));
+  `,
+    "objects",
+  );
   const out: StaleReconRow[] = [];
   for (const row of rows) {
-    const { difference } = await reconciliationTotals(row.reconciliation_id, { orgId, userId: SYSTEM_ACTOR_ID, allowedSubsidiaryIds: null });
+    const { difference } = await reconciliationTotals(row.reconciliation_id, {
+      orgId,
+      userId: SYSTEM_ACTOR_ID,
+      allowedSubsidiaryIds: null,
+    });
     out.push({
       reconciliationId: row.reconciliation_id,
       accountId: row.account_id,
@@ -279,15 +336,19 @@ async function loadStaleSessions(orgId: string, cutoff: string): Promise<StaleRe
   return out;
 }
 
-async function loadNeverReconciled(orgId: string, lookbackStart: string): Promise<NeverReconciledRow[]> {
-  const rows = (await db.execute<{
+async function loadNeverReconciled(
+  orgId: string,
+  lookbackStart: string,
+): Promise<NeverReconciledRow[]> {
+  const rows = await db.execute<{
     account_id: string;
     number: string | null;
     name: string;
     activity_count: number;
     activity_total: string;
     oldest_activity: string;
-  }>(sql`
+  }>(
+    sql`
     select s.account_id, a.number, a.name,
            count(*)::int as activity_count,
            sum(abs(l.amount))::text as activity_total,
@@ -299,7 +360,9 @@ async function loadNeverReconciled(orgId: string, lookbackStart: string): Promis
        and a.reconcilable
        and not exists (select 1 from reconciliations r where r.org_id = ${orgId} and r.account_id = s.account_id)
      group by s.account_id, a.number, a.name
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     accountId: row.account_id,
     accountNumber: row.number,
@@ -323,7 +386,13 @@ export async function reconciliationFindings(
   detectors: ContinuousCloseDetectorPolicy[],
   loaders: ReconciliationLoaders = productionReconciliationLoaders,
 ): Promise<AgentFinding[]> {
-  if (!detectors.some((detector) => detector.enabled && (RECONCILIATION_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey))) {
+  if (
+    !detectors.some(
+      (detector) =>
+        detector.enabled &&
+        (RECONCILIATION_DETECTOR_KEYS as readonly string[]).includes(detector.detectorKey),
+    )
+  ) {
     return [];
   }
   const today = await loaders.today(orgId);
@@ -337,9 +406,13 @@ export async function reconciliationFindings(
     const windowDays = candidatePolicy.parameters.matchWindowDays!;
     const accounts = await loaders.candidateAccounts(orgId, today, windowDays);
     for (const account of accounts) {
-      const qualified = account.candidates.filter((candidate) => candidate.confidencePercent >= minConfidence);
+      const qualified = account.candidates.filter(
+        (candidate) => candidate.confidencePercent >= minConfidence,
+      );
       if (qualified.length === 0) continue;
-      const materiality = fromUnits(qualified.reduce((sum, candidate) => sum + toUnits(candidate.amount), 0n));
+      const materiality = fromUnits(
+        qualified.reduce((sum, candidate) => sum + toUnits(candidate.amount), 0n),
+      );
       if (absoluteUnits(materiality) < absoluteUnits(threshold)) continue;
       const top = qualified[0]!;
       findings.push({
@@ -402,7 +475,7 @@ export async function reconciliationFindings(
   const stalePolicy = byKey.get("stale_reconciliation");
   if (stalePolicy?.enabled) {
     // No materiality floor: an abandoned session is a process failure at any balance.
-    const cutoff = `${addCalendarDays(today, -(stalePolicy.parameters.staleAfterDays!))}T00:00:00Z`;
+    const cutoff = `${addCalendarDays(today, -stalePolicy.parameters.staleAfterDays!)}T00:00:00Z`;
     const sessions = await loaders.staleSessions(orgId, cutoff);
     for (const session of sessions) {
       const balanced = toUnits(session.difference) === 0n;
@@ -454,7 +527,7 @@ export async function reconciliationFindings(
   const neverPolicy = byKey.get("never_reconciled_account");
   if (neverPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(neverPolicy, agentThreshold);
-    const lookbackStart = addCalendarDays(today, -(neverPolicy.parameters.lookbackDays!));
+    const lookbackStart = addCalendarDays(today, -neverPolicy.parameters.lookbackDays!);
     const accounts = await loaders.neverReconciled(orgId, lookbackStart);
     for (const account of accounts) {
       if (absoluteUnits(account.activityTotal) < absoluteUnits(threshold)) continue;
@@ -472,7 +545,8 @@ export async function reconciliationFindings(
           accountName: account.accountName,
           activityCount: account.activityCount,
           oldestActivity: account.oldestActivity,
-          review: "Start the first reconciliation session for this account; the statement balance comes from the bank.",
+          review:
+            "Start the first reconciliation session for this account; the statement balance comes from the bank.",
           href: `/banking/${account.accountId}`,
         },
         evidence: [

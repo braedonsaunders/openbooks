@@ -1,3 +1,3 @@
-import 'server-only'
+import "server-only";
 
-export { directSubcontractOpenCommitment } from '@openbooks/engine/projects/subcontract-commitments'
+export { directSubcontractOpenCommitment } from "@openbooks/engine/projects/subcontract-commitments";

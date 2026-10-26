@@ -1,10 +1,13 @@
-import { navContributionSchema } from '@openbooks/engine/extensions/contribution-schemas'
+import { navContributionSchema } from "@openbooks/engine/extensions/contribution-schemas";
 /** The installer and manifest use this same registry-validated schema. */
-export { navContributionSchema }
+export { navContributionSchema };
 
 export function parseNavContribution(raw: unknown) {
-  const result = navContributionSchema.safeParse(raw)
+  const result = navContributionSchema.safeParse(raw);
   return result.success
     ? { ok: true as const, contribution: result.data }
-    : { ok: false as const, errors: result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`) }
+    : {
+        ok: false as const,
+        errors: result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+      };
 }

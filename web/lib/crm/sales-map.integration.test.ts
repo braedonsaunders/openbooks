@@ -23,19 +23,28 @@ test(
         createScratchUser(org.orgId, "Map reviewer", "admin"),
       );
       await withOrg(org.orgId, async () => {
-        const department = (await db.execute<{ id: string }>(
-            sql`insert into departments(org_id,name,subsidiary_id) values(${org.orgId},'Enterprise sales',${org.subsidiaryId}) returning id`, "objects",
-          ))[0]!.id;
-        const rep = (await db.execute<{ id: string }>(
-            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Map sales representative',${org.subsidiaryId}) returning id`, "objects",
-          ))[0]!.id;
+        const department = (
+          await db.execute<{ id: string }>(
+            sql`insert into departments(org_id,name,subsidiary_id) values(${org.orgId},'Enterprise sales',${org.subsidiaryId}) returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        const rep = (
+          await db.execute<{ id: string }>(
+            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Map sales representative',${org.subsidiaryId}) returning id`,
+            "objects",
+          )
+        )[0]!.id;
         await db.execute(
           sql`insert into employee_roles(org_id,party_id,is_sales_rep,department_id) values(${org.orgId},${rep},true,${department})`,
         );
         for (const verified of [true, false]) {
-          const customer = (await db.execute<{ id: string }>(
-              sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'company',${verified ? "Verified customer" : "Unverified customer"},${org.subsidiaryId}) returning id`, "objects",
-            ))[0]!.id;
+          const customer = (
+            await db.execute<{ id: string }>(
+              sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'company',${verified ? "Verified customer" : "Unverified customer"},${org.subsidiaryId}) returning id`,
+              "objects",
+            )
+          )[0]!.id;
           await db.execute(
             sql`insert into customer_roles(org_id,party_id,sales_rep_id) values(${org.orgId},${customer},${rep})`,
           );

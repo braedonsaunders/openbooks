@@ -38,18 +38,20 @@ interface RecognitionAccounts {
   projectRevenue?: string;
 }
 
-
 async function recognitionAccountsFrom(
   executor: ProjectGlExecutor,
   orgId: string,
   lock = false,
 ): Promise<RecognitionAccounts> {
-  const r = (await executor.execute<{ c: Record<string, string> | null }>(sql`
+  const r = await executor.execute<{ c: Record<string, string> | null }>(
+    sql`
     select settings->'controlAccounts' as c
       from orgs
      where id = ${orgId}
      ${lock ? sql`for share` : sql``}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const c = r[0]?.c ?? {};
   return {
     laborWip: c.laborWip,
@@ -65,7 +67,6 @@ export async function recognitionAccounts(
 ): Promise<RecognitionAccounts> {
   return recognitionAccountsFrom(runner, orgId);
 }
-
 
 /* ------------------------------------------------------------------ */
 /* Labor cost → WIP at approval                                        */
@@ -108,7 +109,17 @@ export interface LaborPostingGroup {
  * worked day.
  */
 export function groupLaborPostings(rows: LaborPostingSourceRow[]): LaborPostingGroup[] {
-  const groups = new Map<string, { subsidiaryId: string | null; currency: string; periodId: string; postingDate: string; timeEntryIds: string[]; byProject: Map<string, string> }>();
+  const groups = new Map<
+    string,
+    {
+      subsidiaryId: string | null;
+      currency: string;
+      periodId: string;
+      postingDate: string;
+      timeEntryIds: string[];
+      byProject: Map<string, string>;
+    }
+  >();
   for (const row of rows) {
     // hours and cost_rate are both money (numeric 19,4), so this is ordinary
     // money multiplication; an entry with no wage rate costs nothing.
@@ -118,7 +129,14 @@ export function groupLaborPostings(rows: LaborPostingSourceRow[]): LaborPostingG
       throw new LaborPostingPeriodError(row.worked_on);
     }
     const key = `${row.subsidiary_id ?? "__default__"}|${row.cost_rate_currency}|${row.period_id}`;
-    const group = groups.get(key) ?? { subsidiaryId: row.subsidiary_id, currency: row.cost_rate_currency, periodId: row.period_id, postingDate: "", timeEntryIds: [], byProject: new Map<string, string>() };
+    const group = groups.get(key) ?? {
+      subsidiaryId: row.subsidiary_id,
+      currency: row.cost_rate_currency,
+      periodId: row.period_id,
+      postingDate: "",
+      timeEntryIds: [],
+      byProject: new Map<string, string>(),
+    };
     group.byProject.set(row.project_id, add(group.byProject.get(row.project_id) ?? "0", cost));
     group.timeEntryIds.push(row.id);
     if (row.worked_on > group.postingDate) group.postingDate = row.worked_on;
@@ -142,7 +160,9 @@ export function groupLaborPostings(rows: LaborPostingSourceRow[]): LaborPostingG
 export class LaborPostingPeriodError extends Error {
   readonly status = 409;
   constructor(readonly workedOn: string) {
-    super(`No accounting period covers labor worked on ${workedOn}. Create the accounting period for that date in Close, then approve or post the time again.`);
+    super(
+      `No accounting period covers labor worked on ${workedOn}. Create the accounting period for that date in Close, then approve or post the time again.`,
+    );
     this.name = "LaborPostingPeriodError";
   }
 }
@@ -166,12 +186,20 @@ export function laborPostingLines(
       memo: "Labor cost",
     }));
   if (!isZero(group.total)) {
-    lines.push({ accountId: accounts.laborClearing, amount: neg(group.total), memo: "Labor clearing" });
+    lines.push({
+      accountId: accounts.laborClearing,
+      amount: neg(group.total),
+      memo: "Labor clearing",
+    });
   }
   return lines;
 }
 
-export async function postProjectLaborCost(orgId: string, actorId: string, timeEntryIds: string[]): Promise<string[]> {
+export async function postProjectLaborCost(
+  orgId: string,
+  actorId: string,
+  timeEntryIds: string[],
+): Promise<string[]> {
   if (timeEntryIds.length === 0) return [];
   return inDbTransaction(async (tx) => {
     // Hold the settings row through commit so an account remap cannot split
@@ -180,7 +208,8 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
     if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) return [];
     if (!accts.laborWip || !accts.laborClearing) return []; // inert until mapped
     const idArr = `{${timeEntryIds.join(",")}}`;
-    const rows = (await tx.execute<LaborPostingSourceRow>(sql`
+    const rows = await tx.execute<LaborPostingSourceRow>(
+      sql`
       select te.id, te.project_id, te.hours, te.cost_rate, te.worked_on::text as worked_on,
              coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id) as subsidiary_id,
              coalesce(te.cost_rate_currency, s.base_currency, o.base_currency) as cost_rate_currency,
@@ -208,14 +237,19 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
          -- labor cost, so internal time alone moves no company ledger.
          and coalesce(p.is_internal, false) = false
        order by te.id
-       for update of te`, "objects"));
+       for update of te`,
+      "objects",
+    );
     if (rows.length === 0) return [];
 
     const entryIds: string[] = [];
     for (const group of groupLaborPostings(rows)) {
-      const lines = laborPostingLines(group, { laborWip: accts.laborWip!, laborClearing: accts.laborClearing });
+      const lines = laborPostingLines(group, {
+        laborWip: accts.laborWip!,
+        laborClearing: accts.laborClearing,
+      });
       if (lines.length === 0) continue;
-      const postingDate = group.postingDate || await businessToday(orgId);
+      const postingDate = group.postingDate || (await businessToday(orgId));
       // A released group (reverseProjectLaborCost) can be re-posted with the
       // same date and first member, so the entry number must be unique per
       // physical journal under journal_entries_org_number.
@@ -231,7 +265,8 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
         lines,
       });
       if (!entryId) continue;
-      const stamped = (await tx.execute<{ id: string }>(sql`
+      const stamped = await tx.execute<{ id: string }>(
+        sql`
         update time_entries
            set cost_journal_entry_id = ${entryId},
                updated_at = now(),
@@ -239,7 +274,9 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
          where org_id = ${orgId}
            and id = any(${`{${group.timeEntryIds.join(",")}}`}::uuid[])
            and cost_journal_entry_id is null
-         returning id`, "objects"));
+         returning id`,
+        "objects",
+      );
       if (stamped.length !== group.timeEntryIds.length) {
         throw new Error("labor posting source claim changed before journal stamping");
       }
@@ -260,13 +297,16 @@ export async function reverseProjectLaborCost(
   if (timeEntryIds.length === 0) return;
   await inDbTransaction(async (tx) => {
     const idArr = `{${timeEntryIds.join(",")}}`;
-    const linked = (await tx.execute<{ id: string; cost_journal_entry_id: string }>(sql`
+    const linked = await tx.execute<{ id: string; cost_journal_entry_id: string }>(
+      sql`
       select id, cost_journal_entry_id
         from time_entries
        where org_id = ${orgId}
          and id = any(${idArr}::uuid[])
          and cost_journal_entry_id is not null
-       order by id`, "objects"));
+       order by id`,
+      "objects",
+    );
     const entryIds = [...new Set(linked.map((row) => row.cost_journal_entry_id))].sort();
     for (const entryId of entryIds) {
       // Lock the journal before any member rows. Two callers may request

@@ -12,8 +12,11 @@ import { sql, type SQL } from "drizzle-orm";
 // the database are real.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz" || specifier.endsWith("/lib/authz") ||
-      (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))) {
+    if (
+      specifier === "../../../../lib/authz" ||
+      specifier.endsWith("/lib/authz") ||
+      (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))
+    ) {
       return { shortCircuit: true, url: "mock:name-gate" };
     }
     return nextResolve(specifier, context);
@@ -49,12 +52,8 @@ const engineScopeUrl = new URL(
   "../../../engine/src/organization/subsidiary-scope.ts",
   import.meta.url,
 ).href;
-const { withBypassContext: withBypass } = await import(
-  "@openbooks/engine/platform/db"
-);
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { withBypassContext: withBypass } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 const routes = [
   { file: "../../app/api/accounts/[id]/route.ts", method: "PATCH", params: true },
@@ -69,8 +68,14 @@ const routes = [
 
 const handlers = new Map<string, (req: Request, ctx?: never) => Promise<Response>>();
 for (const route of routes) {
-  const module = (await import(route.file)) as Record<string, (req: Request, ctx: unknown) => Promise<Response>>;
-  handlers.set(route.file, module[route.method] as (req: Request, ctx?: never) => Promise<Response>);
+  const module = (await import(route.file)) as Record<
+    string,
+    (req: Request, ctx: unknown) => Promise<Response>
+  >;
+  handlers.set(
+    route.file,
+    module[route.method] as (req: Request, ctx?: never) => Promise<Response>,
+  );
 }
 
 function call(
@@ -81,12 +86,22 @@ function call(
   id: string = randomUUID(),
 ): Promise<Response> {
   const handler = handlers.get(file)!;
-  const payload = file === "../../app/api/insights/dashboards/[id]/route.ts"
-    ? { ...(body as Record<string, unknown>), expectedUpdatedAt: "2026-07-15T00:00:00.000000Z" }
-    : file === "../../app/api/labor-rate-cards/[id]/route.ts"
-      ? { ...(body as Record<string, unknown>), code: "BOUNDARY", effective_from: "2026-07-15",
-          status: "draft", derivation_policy: "explicit", scopes: [], lines: [], adjustments: [], terms: [] }
-    : body;
+  const payload =
+    file === "../../app/api/insights/dashboards/[id]/route.ts"
+      ? { ...(body as Record<string, unknown>), expectedUpdatedAt: "2026-07-15T00:00:00.000000Z" }
+      : file === "../../app/api/labor-rate-cards/[id]/route.ts"
+        ? {
+            ...(body as Record<string, unknown>),
+            code: "BOUNDARY",
+            effective_from: "2026-07-15",
+            status: "draft",
+            derivation_policy: "explicit",
+            scopes: [],
+            lines: [],
+            adjustments: [],
+            terms: [],
+          }
+        : body;
   const req = new Request(`http://openbooks.test/${file}`, {
     method,
     headers: { "content-type": "application/json" },
@@ -97,7 +112,11 @@ function call(
 }
 
 test("name-bearing routes refuse a non-string name with the field path", async () => {
-  assert.equal(routes.length, 8, "every name-bearing route faces the boundary; an empty registry would vacate the loop");
+  assert.equal(
+    routes.length,
+    8,
+    "every name-bearing route faces the boundary; an empty registry would vacate the loop",
+  );
   const scratch = await withBypass(() => createScratchOrg());
   try {
     (globalThis as typeof globalThis & Record<symbol, unknown>)[gateKey] = {
@@ -180,7 +199,11 @@ test("name-bearing routes refuse a non-string name with the field path", async (
 });
 
 test("name-bearing routes pass a valid name through the shared boundary", async () => {
-  assert.equal(routes.length, 8, "every name-bearing route faces the boundary; an empty registry would vacate the loop");
+  assert.equal(
+    routes.length,
+    8,
+    "every name-bearing route faces the boundary; an empty registry would vacate the loop",
+  );
   const scratch = await withBypass(() => createScratchOrg());
   try {
     (globalThis as typeof globalThis & Record<symbol, unknown>)[gateKey] = {

@@ -1,10 +1,15 @@
-import { sql } from 'drizzle-orm'
-import { db } from '../platform/db.ts'
-import type { AdjustmentCalculation, AdjustmentCategory, AdjustmentPresentation, AdjustmentTarget, ResolvedAdjustment } from './rate-adjustment-pricing.ts'
-import { versionScopePredicate } from './rate-version-scope.ts'
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
+import type {
+  AdjustmentCalculation,
+  AdjustmentCategory,
+  AdjustmentPresentation,
+  AdjustmentTarget,
+  ResolvedAdjustment,
+} from "./rate-adjustment-pricing.ts";
+import { versionScopePredicate } from "./rate-version-scope.ts";
 
-export * from './rate-adjustment-pricing.ts'
-
+export * from "./rate-adjustment-pricing.ts";
 
 /**
  * Commercial adjustments carried by a rate card — fuel and shift surcharges,
@@ -25,38 +30,48 @@ export * from './rate-adjustment-pricing.ts'
  */
 /** Where-and-when an adjustment lookup applies. */
 export interface RateAdjustmentScope {
-  orgId: string
-  projectId: string
-  onDate: string
+  orgId: string;
+  projectId: string;
+  onDate: string;
   /** Dimensions of the work being priced. They live on the line, not the
    * project, so the same job can carry different agreements per department. */
-  departmentId?: string | null
-  locationId?: string | null
-  classId?: string | null
+  departmentId?: string | null;
+  locationId?: string | null;
+  classId?: string | null;
 }
 
 /** The card version behind a lookup, so callers can split work by the
  * effective window each slice priced under. */
 export interface RateAdjustmentWindow {
-  versionId: string | null
-  effectiveFrom: string | null
-  effectiveTo: string | null
-  adjustments: ResolvedAdjustment[]
+  versionId: string | null;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  adjustments: ResolvedAdjustment[];
 }
 
-export async function resolveRateAdjustmentWindow(input: RateAdjustmentScope): Promise<RateAdjustmentWindow> {
-  const context = (await db.execute<{ customer_id: string | null; starts_on: string | null; subsidiary_id: string | null }>(sql`
+export async function resolveRateAdjustmentWindow(
+  input: RateAdjustmentScope,
+): Promise<RateAdjustmentWindow> {
+  const context = await db.execute<{
+    customer_id: string | null;
+    starts_on: string | null;
+    subsidiary_id: string | null;
+  }>(
+    sql`
     select p.customer_id, p.starts_on, p.subsidiary_id
       from projects p where p.id = ${input.projectId} and p.org_id = ${input.orgId}
-  `, 'objects'))
-  const ctx = context[0]
-  if (!ctx) return { versionId: null, effectiveFrom: null, effectiveTo: null, adjustments: [] }
-  const projectStart = ctx.starts_on ?? input.onDate
+  `,
+    "objects",
+  );
+  const ctx = context[0];
+  if (!ctx) return { versionId: null, effectiveFrom: null, effectiveTo: null, adjustments: [] };
+  const projectStart = ctx.starts_on ?? input.onDate;
 
   // The first candidate card that actually carries adjustments wins. A card
   // with none falls through, so a customer override of prices alone does not
   // silently drop the surcharges configured on the default card.
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     with scoped as (
       select a.rate_book_id, a.rate_version_id,
              case when a.project_id is not null then 1
@@ -130,7 +145,9 @@ export async function resolveRateAdjustmentWindow(input: RateAdjustmentScope): P
       join item_rate_versions v on v.id = r.version_id and v.org_id = ${input.orgId}
      where a.org_id = ${input.orgId} and a.is_active
      order by a.sort_order, a.code
-  `, 'objects'))
+  `,
+    "objects",
+  );
 
   const adjustments = rows.map((r) => ({
     id: String(r.id),
@@ -148,18 +165,20 @@ export async function resolveRateAdjustmentWindow(input: RateAdjustmentScope): P
     appliesDoubleTime: r.applies_double_time !== false,
     sortOrder: Number(r.sort_order ?? 0),
     targets: (r.targets as AdjustmentTarget[]) ?? [],
-  }))
-  const first = rows[0]
+  }));
+  const first = rows[0];
   return {
     versionId: first ? String(first.version_id) : null,
     effectiveFrom: (first?.version_from as string | null) ?? null,
     effectiveTo: (first?.version_to as string | null) ?? null,
     adjustments,
-  }
+  };
 }
 
-export async function resolveRateAdjustments(input: RateAdjustmentScope): Promise<ResolvedAdjustment[]> {
-  return (await resolveRateAdjustmentWindow(input)).adjustments
+export async function resolveRateAdjustments(
+  input: RateAdjustmentScope,
+): Promise<ResolvedAdjustment[]> {
+  return (await resolveRateAdjustmentWindow(input)).adjustments;
 }
 /**
  * A customer that HOLDS rate cards covering this work but has none in effect on
@@ -172,8 +191,11 @@ export async function resolveRateAdjustments(input: RateAdjustmentScope): Promis
  * says nothing about whether their mechanical card has run out, and a
  * location-A card running out lapses A's work, never the unscoped work.
  */
-export async function findLapsedRateCard(input: RateAdjustmentScope): Promise<{ customerId: string; lastEffectiveTo: string | null } | null> {
-  const r = (await db.execute<{ customer_id: string; last_effective_to: string | null }>(sql`
+export async function findLapsedRateCard(
+  input: RateAdjustmentScope,
+): Promise<{ customerId: string; lastEffectiveTo: string | null } | null> {
+  const r = await db.execute<{ customer_id: string; last_effective_to: string | null }>(
+    sql`
     with context as (
       select p.id as project_id, p.customer_id, p.starts_on, p.subsidiary_id
         from projects p
@@ -304,7 +326,9 @@ export async function findLapsedRateCard(input: RateAdjustmentScope): Promise<{ 
       from context c cross join coverage
      where exists (select 1 from selected)
        and coverage.covering_versions = 0
-  `, 'objects'))
-  const row = r[0]
-  return row ? { customerId: row.customer_id, lastEffectiveTo: row.last_effective_to } : null
+  `,
+    "objects",
+  );
+  const row = r[0];
+  return row ? { customerId: row.customer_id, lastEffectiveTo: row.last_effective_to } : null;
 }

@@ -1,33 +1,33 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const migrateWithAConnector: DocArticle = {
-  slug: 'migrate-with-a-connector',
-  title: 'Migrate with a Connector',
-  category: 'integrations',
+  slug: "migrate-with-a-connector",
+  title: "Migrate with a Connector",
+  category: "integrations",
   order: 0,
   summary:
-    'Connect an existing accounting system, migrate its history, and mirror daily activity for parallel validation before cutover.',
-  updated: '2026-09-16',
+    "Connect an existing accounting system, migrate its history, and mirror daily activity for parallel validation before cutover.",
+  updated: "2026-09-16",
   keywords: [
-    'migration',
-    'connector',
-    'sync',
-    'mirror',
-    'parallel run',
-    'initial migration',
-    'NetSuite',
-    'QuickBooks',
-    'Xero',
-    'Odoo',
-    'ERPNext',
-    'Dynamics 365 Business Central',
-    'cutover',
+    "migration",
+    "connector",
+    "sync",
+    "mirror",
+    "parallel run",
+    "initial migration",
+    "NetSuite",
+    "QuickBooks",
+    "Xero",
+    "Odoo",
+    "ERPNext",
+    "Dynamics 365 Business Central",
+    "cutover",
   ],
   related: [
-    'migration-and-cutover',
-    'reconciliation-before-cutover',
-    'netsuite-extraction-bridge',
-    'quickbooks-desktop-connector',
+    "migration-and-cutover",
+    "reconciliation-before-cutover",
+    "netsuite-extraction-bridge",
+    "quickbooks-desktop-connector",
   ],
   body: `# Migrate with a Connector
 
@@ -150,4 +150,4 @@ When all reconciliation gates pass:
 Deleting a connection removes only the link; migrated data is retained. Keep the
 connection until no further source deltas are required.
 `,
-}
+};

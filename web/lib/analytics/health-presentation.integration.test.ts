@@ -1,87 +1,101 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 registerHooks({
   resolve(specifier, _context, next) {
     // No request scope here: the money formatter resolves its locale through
     // request cookies, so serve an empty jar (anonymous caller, default locale).
-    if (specifier === 'next/headers') return { shortCircuit: true, url: 'data:text/javascript,export function cookies() { return { get() { return undefined } } }' }
-    return next(specifier)
+    if (specifier === "next/headers")
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export function cookies() { return { get() { return undefined } } }",
+      };
+    return next(specifier);
   },
-})
+});
 
-const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { approveBudgetScenarioFixture } = await import('@openbooks/engine/testing/budgets')
-const { healthData } = await import('./health-data')
+const { sql } = await import("drizzle-orm");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { approveBudgetScenarioFixture } = await import("@openbooks/engine/testing/budgets");
+const { healthData } = await import("./health-data");
 // health-data pulls in web/lib/auth, whose request-org module registers its
 // Next request-store RLS resolver at import time — after the runner's trusted
 // test bypass. Outside a request that resolver denies everything, so scratch
 // reads come back empty. Re-assert the bypass here, after every import.
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
-installTrustedTestDatabaseBypass()
+const { installTrustedTestDatabaseBypass } =
+  await import("@openbooks/engine/testing/database-bypass");
+installTrustedTestDatabaseBypass();
 
-const D = '2026-07-14'
-const JULY = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
+const D = "2026-07-14";
+const JULY = { from: "2026-07-01", to: "2026-07-31", label: "July 2026" };
 
 async function seedTwoCurrencyHealth() {
-  const org = await withBypass(() => createScratchOrg())
-  const usSub = randomUUID()
-  const dept = randomUUID()
-  const scenario = randomUUID()
+  const org = await withBypass(() => createScratchOrg());
+  const usSub = randomUUID();
+  const dept = randomUUID();
+  const scenario = randomUUID();
   await withBypass(async () => {
     await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-      values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
+      values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`);
     await db.execute(sql`insert into departments (id, org_id, name, is_active, custom)
-      values (${dept}, ${org.orgId}, 'Ops', true, '{}'::jsonb)`)
-    await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`)
+      values (${dept}, ${org.orgId}, 'Ops', true, '{}'::jsonb)`);
+    await db.execute(
+      sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`,
+    );
     await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
-      values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual')`)
+      values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual')`);
     await db.execute(sql`insert into consolidated_fx_rates (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate)
-      values (${org.orgId}, ${org.periodId}, 'USD', 'CAD', 1.35, 1.35, 1.3)`)
+      values (${org.orgId}, ${org.periodId}, 'USD', 'CAD', 1.35, 1.35, 1.3)`);
     // The prior-year comparison window translates through its own period's
     // set, so it needs one too (same rule as the formal statements).
-    const calRow = await db.execute(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, 'objects')
-    const calRow0 = calRow[0]
-    if (!calRow0) throw new Error('scratch period has no fiscal calendar')
-    const priorPeriod = randomUUID()
+    const calRow = await db.execute(
+      sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`,
+      "objects",
+    );
+    const calRow0 = calRow[0];
+    if (!calRow0) throw new Error("scratch period has no fiscal calendar");
+    const priorPeriod = randomUUID();
     await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-      values (${priorPeriod}, ${org.orgId}, 2025, 7, '2025-07', '2025-07-01', '2025-07-31', false, ${String(calRow0.fiscal_calendar_id)})`)
+      values (${priorPeriod}, ${org.orgId}, 2025, 7, '2025-07', '2025-07-01', '2025-07-31', false, ${String(calRow0.fiscal_calendar_id)})`);
     await db.execute(sql`insert into consolidated_fx_rates (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate)
-      values (${org.orgId}, ${priorPeriod}, 'USD', 'CAD', 1.3, 1.3, 1.3)`)
+      values (${org.orgId}, ${priorPeriod}, 'USD', 'CAD', 1.3, 1.3, 1.3)`);
     // Revenue: CAD 200 (Main) + USD 100 (US Co). Expense: CAD 100 (Main) +
     // USD 100 (US Co), tagged to Ops so the segment path is exercised.
     const postings = [
-      ['REV-CAD', org.subsidiaryId, org.accounts.revenue, '200', null],
-      ['REV-USD', usSub, org.accounts.revenue, '100', null],
-      ['EXP-CAD', org.subsidiaryId, org.accounts.cogs, '100', dept],
-      ['EXP-USD', usSub, org.accounts.cogs, '100', dept],
-    ] as const
+      ["REV-CAD", org.subsidiaryId, org.accounts.revenue, "200", null],
+      ["REV-USD", usSub, org.accounts.revenue, "100", null],
+      ["EXP-CAD", org.subsidiaryId, org.accounts.cogs, "100", dept],
+      ["EXP-USD", usSub, org.accounts.cogs, "100", dept],
+    ] as const;
     for (const [num, sub, account, amt, department] of postings) {
-      const entry = randomUUID()
-      const isRevenue = account === org.accounts.revenue
-      const leg = isRevenue ? '-' + amt : amt
-      const contra = isRevenue ? amt : '-' + amt
-      const cur = sub === usSub ? 'USD' : 'CAD'
+      const entry = randomUUID();
+      const isRevenue = account === org.accounts.revenue;
+      const leg = isRevenue ? "-" + amt : amt;
+      const contra = isRevenue ? amt : "-" + amt;
+      const cur = sub === usSub ? "USD" : "CAD";
       await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${entry}, ${org.orgId}, ${org.bookId}, ${sub}, ${num}, ${D}, ${org.periodId}, 'draft', 'manual')`)
+        values (${entry}, ${org.orgId}, ${org.bookId}, ${sub}, ${num}, ${D}, ${org.periodId}, 'draft', 'manual')`);
       await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, amount, currency, txn_amount, fx_rate)
         values (${org.orgId}, ${entry}, 1, ${account}, ${sub}, ${department}, ${leg}, ${cur}, ${leg}, '1'),
-               (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${sub}, ${department}, ${contra}, ${cur}, ${contra}, '1')`)
-      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
+               (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${sub}, ${department}, ${contra}, ${cur}, ${contra}, '1')`);
+      await db.execute(
+        sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`,
+      );
     }
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}', coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`)
+    await db.execute(
+      sql`update orgs set settings=jsonb_set(settings,'{features}', coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`,
+    );
     await db.execute(sql`insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, status)
-      values (${scenario}, ${org.orgId}, ${org.bookId}, 2026, 'W2 health', 'draft')`)
+      values (${scenario}, ${org.orgId}, ${org.bookId}, 2026, 'W2 health', 'draft')`);
     await db.execute(sql`insert into budget_lines (id, org_id, scenario_id, account_id, period_id, subsidiary_id, amount)
       values (${randomUUID()}, ${org.orgId}, ${scenario}, ${org.accounts.cogs}, ${org.periodId}, ${org.subsidiaryId}, '1000'),
-             (${randomUUID()}, ${org.orgId}, ${scenario}, ${org.accounts.cogs}, ${org.periodId}, ${usSub}, '1000')`)
-  })
-  await withOrgContext(org.orgId, () => approveBudgetScenarioFixture(org.orgId, scenario))
-  return org
+             (${randomUUID()}, ${org.orgId}, ${scenario}, ${org.accounts.cogs}, ${org.periodId}, ${usSub}, '1000')`);
+  });
+  await withOrgContext(org.orgId, () => approveBudgetScenarioFixture(org.orgId, scenario));
+  return org;
 }
 
 /**
@@ -89,81 +103,124 @@ async function seedTwoCurrencyHealth() {
  * are 135 CAD everywhere — the monthly series, the segment split, the
  * account drivers, the item analysis and the budget tab — never 100 fused.
  */
-test('health dashboard translates every reader to presentation', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await seedTwoCurrencyHealth()
-  try {
-    await withOrgContext(org.orgId, async () => {
-      const data = await healthData(JULY, org.orgId, null)
-      assert.equal(data.pnlSummary.find(line => line.key === 'revenue')?.prior, data.priorFigures.revenue)
-      assert.equal(data.pnlSummary.find(line => line.key === 'operatingIncome')?.prior, data.priorFigures.operatingIncome)
-      const july = data.monthly.find((m) => m.month === '2026-07')!
-      assert.equal(july.revenue, '335.0000')
-      // The scratch "cogs" account carries type 'expense', so the legs land
-      // in the opex bucket — the translated bucket is what matters here.
-      assert.equal(july.opex, '235.0000')
+test(
+  "health dashboard translates every reader to presentation",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await seedTwoCurrencyHealth();
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const data = await healthData(JULY, org.orgId, null);
+        assert.equal(
+          data.pnlSummary.find((line) => line.key === "revenue")?.prior,
+          data.priorFigures.revenue,
+        );
+        assert.equal(
+          data.pnlSummary.find((line) => line.key === "operatingIncome")?.prior,
+          data.priorFigures.operatingIncome,
+        );
+        const july = data.monthly.find((m) => m.month === "2026-07")!;
+        assert.equal(july.revenue, "335.0000");
+        // The scratch "cogs" account carries type 'expense', so the legs land
+        // in the opex bucket — the translated bucket is what matters here.
+        assert.equal(july.opex, "235.0000");
 
-      const ops = data.segments.department.find((s) => s.name === 'Ops')!
-      assert.ok(ops, 'Ops segment present')
-      assert.equal(ops.operatingIncome, '-235.0000')
+        const ops = data.segments.department.find((s) => s.name === "Ops")!;
+        assert.ok(ops, "Ops segment present");
+        assert.equal(ops.operatingIncome, "-235.0000");
 
-      const cogsDriver = data.drivers.cost.find((d) => d.id === org.accounts.cogs)!
-      assert.ok(cogsDriver, 'cogs driver present')
-      assert.equal(cogsDriver.current, '235.0000')
+        const cogsDriver = data.drivers.cost.find((d) => d.id === org.accounts.cogs)!;
+        assert.ok(cogsDriver, "cogs driver present");
+        assert.equal(cogsDriver.current, "235.0000");
 
-      const revenueItem = data.items.rows.find((r) => r.id === org.accounts.revenue)!
-      assert.ok(revenueItem, 'revenue item present')
-      assert.equal(revenueItem.current, '335.0000')
+        const revenueItem = data.items.rows.find((r) => r.id === org.accounts.revenue)!;
+        assert.ok(revenueItem, "revenue item present");
+        assert.equal(revenueItem.current, "335.0000");
 
-      // Totals sum every row (revenue included, pre-existing shape); the
-      // per-row figures prove each side translates.
-      const cogsBudget = data.budget.rows.find((r) => r.accountId === org.accounts.cogs)!
-      assert.equal(cogsBudget.actual, '235.0000')
-      assert.equal(cogsBudget.budget, '2350.0000')
-      const revenueBudget = data.budget.rows.find((r) => r.accountId === org.accounts.revenue)!
-      assert.equal(revenueBudget.actual, '335.0000')
-      assert.equal(data.budget.totals.actual, '570.0000')
-      assert.equal(data.budget.totals.budget, '2350.0000')
-    })
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+        // Totals sum every row (revenue included, pre-existing shape); the
+        // per-row figures prove each side translates.
+        const cogsBudget = data.budget.rows.find((r) => r.accountId === org.accounts.cogs)!;
+        assert.equal(cogsBudget.actual, "235.0000");
+        assert.equal(cogsBudget.budget, "2350.0000");
+        const revenueBudget = data.budget.rows.find((r) => r.accountId === org.accounts.revenue)!;
+        assert.equal(revenueBudget.actual, "335.0000");
+        assert.equal(data.budget.totals.actual, "570.0000");
+        assert.equal(data.budget.totals.budget, "2350.0000");
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test('health dashboard fails closed when a functional has no spot coverage', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await seedTwoCurrencyHealth()
-  try {
-    await withBypass(async () => {
-      await db.execute(sql`delete from fx_rates where org_id = ${org.orgId}`)
-    })
-    await withOrgContext(org.orgId, async () => {
-      await assert.rejects(healthData(JULY, org.orgId, null), /no spot rate for USD/)
-    })
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "health dashboard fails closed when a functional has no spot coverage",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await seedTwoCurrencyHealth();
+    try {
+      await withBypass(async () => {
+        await db.execute(sql`delete from fx_rates where org_id = ${org.orgId}`);
+      });
+      await withOrgContext(org.orgId, async () => {
+        await assert.rejects(healthData(JULY, org.orgId, null), /no spot rate for USD/);
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test('the landing card and selected tab share one canonical scorecard without repeating statement reads', { skip: !env.OPENBOOKS_DB_URL }, async t => {
-  const { financialHealth } = await import('./financial-health')
-  const { withAnalyticsRead } = await import('./read-context')
-  const org = await seedTwoCurrencyHealth()
-  const execute = db.execute
-  let calls = 0
-  db.execute = ((...args: Parameters<typeof execute>) => { calls++; return Reflect.apply(execute, db, args) }) as typeof execute
-  t.after(() => { db.execute = execute })
-  try {
-    await withOrgContext(org.orgId, async () => {
-      const authz = { user: { orgId: org.orgId, id: randomUUID() }, permissions: new Set(['*']), allowedSubsidiaryIds: null } as unknown as import('../authz').Authz
-      const read = <T>(projection: 'summary' | 'tab', work: () => Promise<T>) => withAnalyticsRead({ authz, slug: 'financial-health', tab: projection === 'tab' ? 'overview' : '', projection, locale: 'en', revision: 'scorecard-sharing', observedAt: Date.now() }, work)
-      const card = await read('summary', () => financialHealth(JULY, org.orgId, null))
-      const afterCard = calls
-      assert.ok(afterCard > 0, 'the first scorecard must actually read its sources')
-      const tab = await read('tab', () => financialHealth(JULY, org.orgId, null))
-      assert.equal(calls, afterCard, 'the tab must reuse the card scorecard, including underlying statement reads')
-      assert.deepEqual(tab, card)
-    })
-  } finally {
-    db.execute = execute
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "the landing card and selected tab share one canonical scorecard without repeating statement reads",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async (t) => {
+    const { financialHealth } = await import("./financial-health");
+    const { withAnalyticsRead } = await import("./read-context");
+    const org = await seedTwoCurrencyHealth();
+    const execute = db.execute;
+    let calls = 0;
+    db.execute = ((...args: Parameters<typeof execute>) => {
+      calls++;
+      return Reflect.apply(execute, db, args);
+    }) as typeof execute;
+    t.after(() => {
+      db.execute = execute;
+    });
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const authz = {
+          user: { orgId: org.orgId, id: randomUUID() },
+          permissions: new Set(["*"]),
+          allowedSubsidiaryIds: null,
+        } as unknown as import("../authz").Authz;
+        const read = <T>(projection: "summary" | "tab", work: () => Promise<T>) =>
+          withAnalyticsRead(
+            {
+              authz,
+              slug: "financial-health",
+              tab: projection === "tab" ? "overview" : "",
+              projection,
+              locale: "en",
+              revision: "scorecard-sharing",
+              observedAt: Date.now(),
+            },
+            work,
+          );
+        const card = await read("summary", () => financialHealth(JULY, org.orgId, null));
+        const afterCard = calls;
+        assert.ok(afterCard > 0, "the first scorecard must actually read its sources");
+        const tab = await read("tab", () => financialHealth(JULY, org.orgId, null));
+        assert.equal(
+          calls,
+          afterCard,
+          "the tab must reuse the card scorecard, including underlying statement reads",
+        );
+        assert.deepEqual(tab, card);
+      });
+    } finally {
+      db.execute = execute;
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

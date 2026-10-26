@@ -55,15 +55,28 @@ interface SftpSchedule {
   accountName: string | null;
   expectedExternalAccountId: string | null;
 }
-interface Account { id: string; label: string }
-interface Daemon { enabled: boolean; port: number; host: string; fingerprint: string }
+interface Account {
+  id: string;
+  label: string;
+}
+interface Daemon {
+  enabled: boolean;
+  port: number;
+  host: string;
+  fingerprint: string;
+}
 
 const API_PROVIDERS = new Set<FeedProvider>(["plaid", "gocardless", "truelayer"]);
 
 // --- little visual atoms -----------------------------------------------------
 
 function initials(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
 }
 
 function BankAvatar({ name, color, size = 40 }: { name: string; color: string; size?: number }) {
@@ -98,10 +111,7 @@ const PROVIDER_COLOR: Record<string, string> = {
 };
 
 /** How each method works, shown as an explainer at the top of the configure step. */
-const METHOD_HELP: Record<
-  string,
-  { kind: "live" | "fileDrop" | "manual"; docsUrl?: string }
-> = {
+const METHOD_HELP: Record<string, { kind: "live" | "fileDrop" | "manual"; docsUrl?: string }> = {
   plaid: { kind: "live", docsUrl: "https://dashboard.plaid.com/developers/keys" },
   gocardless: {
     kind: "live",
@@ -136,7 +146,8 @@ export function BankFeedsClient({
 
   const schedulesByServer = useMemo(() => {
     const m = new Map<string, SftpSchedule[]>();
-    for (const s of sftpSchedules) (m.get(s.sftpServerId) ?? m.set(s.sftpServerId, []).get(s.sftpServerId)!).push(s);
+    for (const s of sftpSchedules)
+      (m.get(s.sftpServerId) ?? m.set(s.sftpServerId, []).get(s.sftpServerId)!).push(s);
     return m;
   }, [sftpSchedules]);
 
@@ -148,35 +159,42 @@ export function BankFeedsClient({
     setMsg(null);
     const fallbackMessage = t("feedMessages.unknownError");
     await execute(
-      () => fetchAction<{
-        ok?: unknown;
-        detail?: unknown;
-        error?: unknown;
-        imported?: unknown;
-        duplicates?: unknown;
-      }>(`/api/banking/bank-feeds/${id}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action }),
-      }),
+      () =>
+        fetchAction<{
+          ok?: unknown;
+          detail?: unknown;
+          error?: unknown;
+          imported?: unknown;
+          duplicates?: unknown;
+        }>(`/api/banking/bank-feeds/${id}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action }),
+        }),
       {
         fallbackMessage,
         onOk: (body) => {
           if (action === "test") {
-            setMsg(body.ok
-              ? t("feedMessages.verified")
-              : t("feedMessages.testFailed", {
-                detail: typeof body.detail === "string" && body.detail.trim()
-                  ? body.detail.trim()
-                  : t("feedMessages.unknownError"),
-              }));
+            setMsg(
+              body.ok
+                ? t("feedMessages.verified")
+                : t("feedMessages.testFailed", {
+                    detail:
+                      typeof body.detail === "string" && body.detail.trim()
+                        ? body.detail.trim()
+                        : t("feedMessages.unknownError"),
+                  }),
+            );
           } else if (typeof body.error === "string" && body.error.trim()) {
             // The refusal reads through the shared helper so message, remedy
             // and code render instead of the bare `error` field.
-            const refusal = refusalMessageFromBody(body, { fallback: body.error.trim() }) ?? body.error.trim();
+            const refusal =
+              refusalMessageFromBody(body, { fallback: body.error.trim() }) ?? body.error.trim();
             setMsg(t("feedMessages.syncFailed", { error: refusal }));
           } else if (typeof body.imported === "number" && typeof body.duplicates === "number") {
-            setMsg(t("feedMessages.imported", { imported: body.imported, duplicates: body.duplicates }));
+            setMsg(
+              t("feedMessages.imported", { imported: body.imported, duplicates: body.duplicates }),
+            );
           } else {
             const message = t("feedMessages.requestFailed", { status: 200 });
             setMsg(t("feedMessages.syncFailed", { error: message }));
@@ -185,9 +203,11 @@ export function BankFeedsClient({
         },
         onRefused: (error) => {
           const detail = error.displayMessage(fallbackMessage);
-          setMsg(action === "test"
-            ? t("feedMessages.testFailed", { detail })
-            : t("feedMessages.syncFailed", { error: detail }));
+          setMsg(
+            action === "test"
+              ? t("feedMessages.testFailed", { detail })
+              : t("feedMessages.syncFailed", { error: detail }),
+          );
         },
       },
     );
@@ -197,26 +217,33 @@ export function BankFeedsClient({
   const toggleFeed = async (connection: Connection) => {
     const fallbackMessage = t("feedMessages.unknownError");
     setMsg(null);
-    await execute(() => fetchAction(`/api/banking/bank-feeds/${connection.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ isActive: !connection.isActive }),
-    }), {
-      fallbackMessage,
-      onOk: refresh,
-      onRefused: (error) => setMsg(error.displayMessage(fallbackMessage)),
-    });
+    await execute(
+      () =>
+        fetchAction(`/api/banking/bank-feeds/${connection.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ isActive: !connection.isActive }),
+        }),
+      {
+        fallbackMessage,
+        onOk: refresh,
+        onRefused: (error) => setMsg(error.displayMessage(fallbackMessage)),
+      },
+    );
   };
 
   const removeFeed = async (connection: Connection) => {
     if (!(await confirmDialog(t("connection.removeConfirm")))) return;
     const fallbackMessage = t("feedMessages.unknownError");
     setMsg(null);
-    await execute(() => fetchAction(`/api/banking/bank-feeds/${connection.id}`, { method: "DELETE" }), {
-      fallbackMessage,
-      onOk: refresh,
-      onRefused: (error) => setMsg(error.displayMessage(fallbackMessage)),
-    });
+    await execute(
+      () => fetchAction(`/api/banking/bank-feeds/${connection.id}`, { method: "DELETE" }),
+      {
+        fallbackMessage,
+        onOk: refresh,
+        onRefused: (error) => setMsg(error.displayMessage(fallbackMessage)),
+      },
+    );
   };
 
   return (
@@ -229,7 +256,15 @@ export function BankFeedsClient({
           </p>
         </div>
         {!adding && (
-          <Button onClick={() => { setAdding(true); setMsg(null); }} className="shrink-0">{t("addConnection")}</Button>
+          <Button
+            onClick={() => {
+              setAdding(true);
+              setMsg(null);
+            }}
+            className="shrink-0"
+          >
+            {t("addConnection")}
+          </Button>
         )}
       </div>
 
@@ -244,7 +279,11 @@ export function BankFeedsClient({
           accounts={accounts}
           daemon={daemon}
           onClose={() => setAdding(false)}
-          onDone={(m) => { setAdding(false); setMsg(m); refresh(); }}
+          onDone={(m) => {
+            setAdding(false);
+            setMsg(m);
+            refresh();
+          }}
         />
       )}
 
@@ -263,9 +302,15 @@ export function BankFeedsClient({
                 <BankAvatar name={c.name} color={dirColor} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-slate-900 dark:text-slate-100">{c.name}</span>
-                    <Badge variant="secondary">{PROVIDER_LABEL[c.provider as FeedProvider] ?? c.provider}</Badge>
-                    {!c.isActive && <span className="text-xs text-slate-400">{t("connection.paused")}</span>}
+                    <span className="truncate font-medium text-slate-900 dark:text-slate-100">
+                      {c.name}
+                    </span>
+                    <Badge variant="secondary">
+                      {PROVIDER_LABEL[c.provider as FeedProvider] ?? c.provider}
+                    </Badge>
+                    {!c.isActive && (
+                      <span className="text-xs text-slate-400">{t("connection.paused")}</span>
+                    )}
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                     <StatusDot status={c.status} />
@@ -273,22 +318,66 @@ export function BankFeedsClient({
                     <span>·</span>
                     <span className="font-mono">{c.accountNumber}</span>
                     <span className="truncate">{c.accountName}</span>
-                    {c.lastSyncAt && <><span>·</span><span>{t("connection.synced", { date: date(new Date(c.lastSyncAt)) })}</span></>}
-                    {c.lastError && c.lastAttemptAt && <><span>·</span><span>{t("connection.attempted", { date: date(new Date(c.lastAttemptAt)) })}</span></>}
+                    {c.lastSyncAt && (
+                      <>
+                        <span>·</span>
+                        <span>
+                          {t("connection.synced", { date: date(new Date(c.lastSyncAt)) })}
+                        </span>
+                      </>
+                    )}
+                    {c.lastError && c.lastAttemptAt && (
+                      <>
+                        <span>·</span>
+                        <span>
+                          {t("connection.attempted", { date: date(new Date(c.lastAttemptAt)) })}
+                        </span>
+                      </>
+                    )}
                   </div>
-                  {c.lastError && <div className="mt-1 truncate text-xs text-red-600" title={c.lastError}>⚠ {c.lastError}</div>}
+                  {c.lastError && (
+                    <div className="mt-1 truncate text-xs text-red-600" title={c.lastError}>
+                      ⚠ {c.lastError}
+                    </div>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {API_PROVIDERS.has(c.provider as FeedProvider) && (
                     <>
-                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => feedAction(c.id, "test")}>{t("connection.test")}</Button>
-                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => feedAction(c.id, "sync")}>{t("connection.sync")}</Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => feedAction(c.id, "test")}
+                      >
+                        {t("connection.test")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => feedAction(c.id, "sync")}
+                      >
+                        {t("connection.sync")}
+                      </Button>
                     </>
                   )}
-                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void toggleFeed(c)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void toggleFeed(c)}
+                  >
                     {c.isActive ? t("connection.pause") : t("connection.resume")}
                   </Button>
-                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void removeFeed(c)}>{t("connection.remove")}</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void removeFeed(c)}
+                  >
+                    {t("connection.remove")}
+                  </Button>
                 </div>
               </Card>
             );
@@ -329,7 +418,10 @@ function ScheduleBinding({ sc, onChange }: { sc: SftpSchedule; onChange: () => v
       <button
         type="button"
         title={t("sftpCard.bindingEdit")}
-        onClick={() => { setValue(sc.expectedExternalAccountId ?? ""); setEditing(true); }}
+        onClick={() => {
+          setValue(sc.expectedExternalAccountId ?? "");
+          setEditing(true);
+        }}
         className="font-mono text-xs text-slate-500 underline decoration-dotted underline-offset-2 dark:text-slate-400"
       >
         {sc.expectedExternalAccountId ?? t("sftpCard.bindingUnset")}
@@ -338,24 +430,41 @@ function ScheduleBinding({ sc, onChange }: { sc: SftpSchedule; onChange: () => v
   }
   return (
     <span className="flex items-center gap-1">
-      <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={t("sftpCard.bindingPlaceholder")} className="h-7 w-36" />
+      <Input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={t("sftpCard.bindingPlaceholder")}
+        className="h-7 w-36"
+      />
       <Button
         size="sm"
         variant="ghost"
         disabled={busy}
         onClick={() => {
           const fallbackMessage = t("feedMessages.unknownError");
-          void execute(() => fetchAction(`/api/banking/sftp/schedules/${sc.id}`, {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ expectedExternalAccountId: value.trim() === "" ? null : value }),
-          }), {
-            fallbackMessage,
-            onOk: () => { setSaveError(null); setEditing(false); onChange(); },
-            onRefused: (error) => setSaveError(error.displayMessage(fallbackMessage)),
-          });
+          void execute(
+            () =>
+              fetchAction(`/api/banking/sftp/schedules/${sc.id}`, {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  expectedExternalAccountId: value.trim() === "" ? null : value,
+                }),
+              }),
+            {
+              fallbackMessage,
+              onOk: () => {
+                setSaveError(null);
+                setEditing(false);
+                onChange();
+              },
+              onRefused: (error) => setSaveError(error.displayMessage(fallbackMessage)),
+            },
+          );
         }}
-      >{t("sftpCard.bindingSave")}</Button>
+      >
+        {t("sftpCard.bindingSave")}
+      </Button>
       {saveError && <span className="text-xs text-red-600">{saveError}</span>}
     </span>
   );
@@ -407,28 +516,43 @@ function SftpConnectionCard({
     if (!(await confirmDialog(t("sftpCard.removeScheduleConfirm")))) return;
     const fallbackMessage = t("feedMessages.unknownError");
     setRouteError(null);
-    void execute(() => fetchAction(`/api/banking/sftp/schedules/${schedule.id}`, { method: "DELETE" }), {
-      fallbackMessage,
-      onOk: onChange,
-      onRefused: (error) => setRouteError(error.displayMessage(fallbackMessage)),
-    });
+    void execute(
+      () => fetchAction(`/api/banking/sftp/schedules/${schedule.id}`, { method: "DELETE" }),
+      {
+        fallbackMessage,
+        onOk: onChange,
+        onRefused: (error) => setRouteError(error.displayMessage(fallbackMessage)),
+      },
+    );
   };
   const addRoute = () => {
     const fallbackMessage = t("feedMessages.unknownError");
     setRouteError(null);
-    void execute(() => fetchAction("/api/banking/sftp/schedules", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sftpServerId: server.id, accountId, folder, format: "auto", expectedExternalAccountId: expectedAccount.trim() === "" ? null : expectedAccount }),
-    }), {
-      fallbackMessage,
-      onOk: onChange,
-      onRefused: (error) => setRouteError(error.displayMessage(fallbackMessage)),
-    });
+    void execute(
+      () =>
+        fetchAction("/api/banking/sftp/schedules", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sftpServerId: server.id,
+            accountId,
+            folder,
+            format: "auto",
+            expectedExternalAccountId: expectedAccount.trim() === "" ? null : expectedAccount,
+          }),
+        }),
+      {
+        fallbackMessage,
+        onOk: onChange,
+        onRefused: (error) => setRouteError(error.displayMessage(fallbackMessage)),
+      },
+    );
   };
   useEffect(() => {
     if (!highlightedScheduleId) return;
-    document.getElementById(`sftp-schedule-${highlightedScheduleId}`)?.scrollIntoView?.({ block: "nearest" });
+    document
+      .getElementById(`sftp-schedule-${highlightedScheduleId}`)
+      ?.scrollIntoView?.({ block: "nearest" });
   }, [highlightedScheduleId]);
 
   return (
@@ -437,9 +561,13 @@ function SftpConnectionCard({
         <BankAvatar name={server.name} color={PROVIDER_COLOR.sftp ?? "#64748B"} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate font-medium text-slate-900 dark:text-slate-100">{server.name}</span>
+            <span className="truncate font-medium text-slate-900 dark:text-slate-100">
+              {server.name}
+            </span>
             <Badge variant="secondary">{t("sftpCard.badge")}</Badge>
-            {!server.isActive && <span className="text-xs text-slate-400">{t("connection.paused")}</span>}
+            {!server.isActive && (
+              <span className="text-xs text-slate-400">{t("connection.paused")}</span>
+            )}
           </div>
           <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             {t("sftpCard.login")} <span className="font-mono">{server.username}</span>
@@ -447,15 +575,25 @@ function SftpConnectionCard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setRouting(!routing)}>{routing ? t("sftpCard.done") : t("sftpCard.routing")}</Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={removeServer}>{t("sftpCard.remove")}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setRouting(!routing)}>
+            {routing ? t("sftpCard.done") : t("sftpCard.routing")}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={removeServer}>
+            {t("sftpCard.remove")}
+          </Button>
         </div>
       </div>
-      {routeError && <p className="mt-2 text-xs text-red-600" role="alert">{routeError}</p>}
+      {routeError && (
+        <p className="mt-2 text-xs text-red-600" role="alert">
+          {routeError}
+        </p>
+      )}
 
       {(routing || schedules.length > 0) && (
         <div className="mt-3 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-          <div className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">{t("sftpCard.routingTitle")}</div>
+          <div className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+            {t("sftpCard.routingTitle")}
+          </div>
           <ul className="space-y-1 text-sm">
             {schedules.map((sc) => (
               // An unbound route for an identifying format refuses every
@@ -482,19 +620,49 @@ function SftpConnectionCard({
                   </span>
                 )}
                 <ScheduleBinding sc={sc} onChange={onChange} />
-                <Button size="sm" variant="ghost" className="ml-auto" disabled={busy} onClick={() => removeSchedule(sc)}>{t("sftpCard.remove")}</Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto"
+                  disabled={busy}
+                  onClick={() => removeSchedule(sc)}
+                >
+                  {t("sftpCard.remove")}
+                </Button>
               </li>
             ))}
-            {schedules.length === 0 && <li className="text-xs text-slate-400">{t("sftpCard.noRouting")}</li>}
+            {schedules.length === 0 && (
+              <li className="text-xs text-slate-400">{t("sftpCard.noRouting")}</li>
+            )}
           </ul>
           {routing && (
             <div className="mt-2 flex flex-wrap items-end gap-2">
-              <Input value={folder} onChange={(e) => setFolder(e.target.value)} placeholder={t("sftpCard.folderPlaceholder")} className="h-8 w-28" />
-              <Select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="h-8 max-w-xs">
-                {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+              <Input
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+                placeholder={t("sftpCard.folderPlaceholder")}
+                className="h-8 w-28"
+              />
+              <Select
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="h-8 max-w-xs"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                  </option>
+                ))}
               </Select>
-              <Input value={expectedAccount} onChange={(e) => setExpectedAccount(e.target.value)} placeholder={t("sftpCard.bindingPlaceholder")} className="h-8 w-36" />
-              <Button size="sm" disabled={!accountId || busy} onClick={addRoute}>{t("sftpCard.addRoute")}</Button>
+              <Input
+                value={expectedAccount}
+                onChange={(e) => setExpectedAccount(e.target.value)}
+                placeholder={t("sftpCard.bindingPlaceholder")}
+                className="h-8 w-36"
+              />
+              <Button size="sm" disabled={!accountId || busy} onClick={addRoute}>
+                {t("sftpCard.addRoute")}
+              </Button>
               {routeError && <p className="mt-1 w-full text-xs text-red-600">{routeError}</p>}
             </div>
           )}
@@ -511,10 +679,20 @@ function SftpEndpointCard({ daemon }: { daemon: Daemon }) {
       <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{t("title")}</div>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t("description")}</p>
       <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-        <dt className="text-slate-400">{t("host")}</dt><dd className="font-mono">{daemon.host}</dd>
-        <dt className="text-slate-400">{t("port")}</dt><dd className="font-mono">{daemon.port}</dd>
-        <dt className="text-slate-400">{t("status")}</dt><dd>{daemon.enabled ? <span className="text-emerald-600">{t("enabled")}</span> : <span className="text-slate-400">{t("disabled")}</span>}</dd>
-        <dt className="text-slate-400">{t("hostKey")}</dt><dd className="truncate font-mono text-xs">{daemon.fingerprint}</dd>
+        <dt className="text-slate-400">{t("host")}</dt>
+        <dd className="font-mono">{daemon.host}</dd>
+        <dt className="text-slate-400">{t("port")}</dt>
+        <dd className="font-mono">{daemon.port}</dd>
+        <dt className="text-slate-400">{t("status")}</dt>
+        <dd>
+          {daemon.enabled ? (
+            <span className="text-emerald-600">{t("enabled")}</span>
+          ) : (
+            <span className="text-slate-400">{t("disabled")}</span>
+          )}
+        </dd>
+        <dt className="text-slate-400">{t("hostKey")}</dt>
+        <dd className="truncate font-mono text-xs">{daemon.fingerprint}</dd>
       </dl>
     </Card>
   );
@@ -568,13 +746,28 @@ function AddConnectionFlow({
     <Card className="p-5">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{t("title")}</h3>
-        <Button size="sm" variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+        <Button size="sm" variant="ghost" onClick={onClose}>
+          {t("cancel")}
+        </Button>
       </div>
       <div className="mb-4 flex flex-wrap gap-2">
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("searchPlaceholder")} className="max-w-xs" />
-        <Select value={country} onChange={(e) => setCountry(e.target.value)} className="max-w-[12rem]">
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("searchPlaceholder")}
+          className="max-w-xs"
+        />
+        <Select
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+          className="max-w-[12rem]"
+        >
           <option value="">{t("allCountries")}</option>
-          {BANK_COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+          {BANK_COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.name}
+            </option>
+          ))}
         </Select>
       </div>
 
@@ -597,18 +790,41 @@ function AddConnectionFlow({
       <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
         <div className="mb-2 text-xs font-medium text-slate-400">{t("notListed")}</div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <FallbackTile label={t("otherBank")} hint={t("otherBankHint")} onClick={() => setSelected({ kind: "other" })} />
-          <FallbackTile label={t("sftpDrop")} hint={t("sftpDropHint")} onClick={() => setSelected({ kind: "sftp" })} />
-          <FallbackTile label={t("manualUpload")} hint={t("manualUploadHint")} onClick={() => setSelected({ kind: "manual" })} />
+          <FallbackTile
+            label={t("otherBank")}
+            hint={t("otherBankHint")}
+            onClick={() => setSelected({ kind: "other" })}
+          />
+          <FallbackTile
+            label={t("sftpDrop")}
+            hint={t("sftpDropHint")}
+            onClick={() => setSelected({ kind: "sftp" })}
+          />
+          <FallbackTile
+            label={t("manualUpload")}
+            hint={t("manualUploadHint")}
+            onClick={() => setSelected({ kind: "manual" })}
+          />
         </div>
       </div>
     </Card>
   );
 }
 
-function FallbackTile({ label, hint, onClick }: { label: string; hint: string; onClick: () => void }) {
+function FallbackTile({
+  label,
+  hint,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  onClick: () => void;
+}) {
   return (
-    <button onClick={onClick} className="rounded-lg border border-slate-200 p-3 text-left transition hover:border-teal-400 hover:bg-teal-50/40 dark:border-slate-800 dark:hover:border-teal-600 dark:hover:bg-teal-950/30">
+    <button
+      onClick={onClick}
+      className="rounded-lg border border-slate-200 p-3 text-left transition hover:border-teal-400 hover:bg-teal-50/40 dark:border-slate-800 dark:hover:border-teal-600 dark:hover:bg-teal-950/30"
+    >
       <div className="text-sm font-medium">{label}</div>
       <div className="text-xs text-slate-400">{hint}</div>
     </button>
@@ -623,7 +839,11 @@ function ConfigureConnection({
   onCancel,
   onDone,
 }: {
-  selection: { kind: "bank"; bank: BankDirectoryEntry } | { kind: "sftp" } | { kind: "manual" } | { kind: "other" };
+  selection:
+    | { kind: "bank"; bank: BankDirectoryEntry }
+    | { kind: "sftp" }
+    | { kind: "manual" }
+    | { kind: "other" };
   accounts: Account[];
   daemon: Daemon;
   onBack: () => void;
@@ -632,9 +852,12 @@ function ConfigureConnection({
 }) {
   const bank = selection.kind === "bank" ? selection.bank : null;
   const [provider, setProvider] = useState<FeedProvider>(
-    selection.kind === "bank" ? selection.bank.provider
-      : selection.kind === "sftp" ? "sftp"
-        : selection.kind === "manual" ? "manual"
+    selection.kind === "bank"
+      ? selection.bank.provider
+      : selection.kind === "sftp"
+        ? "sftp"
+        : selection.kind === "manual"
+          ? "manual"
           : "gocardless",
   );
   const [name, setName] = useState(bank?.name ?? "");
@@ -663,7 +886,11 @@ function ConfigureConnection({
           body: JSON.stringify({ name: name || "SFTP feed" }),
         });
         const b = await r.json().catch(() => ({}));
-        if (!r.ok) { setError(b.error ?? t("errors.couldNotCreateSftp")); setBusy(false); return; }
+        if (!r.ok) {
+          setError(b.error ?? t("errors.couldNotCreateSftp"));
+          setBusy(false);
+          return;
+        }
         // Optionally route to the chosen account immediately. The login was
         // created even when this follow-up fails, so the failure rides the
         // secret display (F4T2-13) — never a silent success.
@@ -672,7 +899,12 @@ function ConfigureConnection({
           const routeRes = await fetch("/api/banking/sftp/schedules", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ sftpServerId: b.id, accountId, folder: "inbound", format: "auto" }),
+            body: JSON.stringify({
+              sftpServerId: b.id,
+              accountId,
+              folder: "inbound",
+              format: "auto",
+            }),
           });
           if (!routeRes.ok) setSftpRouteFailed(true);
         }
@@ -694,7 +926,10 @@ function ConfigureConnection({
       });
       const b = await r.json().catch(() => ({}));
       setBusy(false);
-      if (!r.ok) { setError(b.error ?? t("errors.couldNotCreateConnection")); return; }
+      if (!r.ok) {
+        setError(b.error ?? t("errors.couldNotCreateConnection"));
+        return;
+      }
       onDone(t("sftpSecret.addedToast", { name: name || bank?.name || "Connection" }));
     } catch (e) {
       setBusy(false);
@@ -706,17 +941,33 @@ function ConfigureConnection({
     return (
       <Card className="p-5">
         <h3 className="text-sm font-semibold">{t("sftpSecret.title")}</h3>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("sftpSecret.description")}</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          {t("sftpSecret.description")}
+        </p>
         <div className="mt-3 space-y-1 rounded-lg bg-slate-50 p-3 font-mono text-sm dark:bg-slate-900">
-          <div>{t("sftpSecret.hostLabel")} {daemon.host}</div>
-          <div>{t("sftpSecret.portLabel")} {daemon.port}</div>
-          <div>{t("sftpSecret.usernameLabel")} {sftpSecret.username}</div>
-          <div>{t("sftpSecret.passwordLabel")} {sftpSecret.password}</div>
+          <div>
+            {t("sftpSecret.hostLabel")} {daemon.host}
+          </div>
+          <div>
+            {t("sftpSecret.portLabel")} {daemon.port}
+          </div>
+          <div>
+            {t("sftpSecret.usernameLabel")} {sftpSecret.username}
+          </div>
+          <div>
+            {t("sftpSecret.passwordLabel")} {sftpSecret.password}
+          </div>
         </div>
         {sftpRouteFailed && (
-          <p className="mt-3 text-sm text-red-600 dark:text-red-400">{t("sftpSecret.routeFailed")}</p>
+          <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+            {t("sftpSecret.routeFailed")}
+          </p>
         )}
-        <div className="mt-4"><Button onClick={() => onDone(t("sftpSecret.createdToast"))}>{t("sftpSecret.done")}</Button></div>
+        <div className="mt-4">
+          <Button onClick={() => onDone(t("sftpSecret.createdToast"))}>
+            {t("sftpSecret.done")}
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -726,12 +977,22 @@ function ConfigureConnection({
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-center gap-3">
-        <Button size="sm" variant="ghost" onClick={onBack}>{t("configure.back")}</Button>
+        <Button size="sm" variant="ghost" onClick={onBack}>
+          {t("configure.back")}
+        </Button>
         <BankAvatar name={name || "Bank"} color={color} size={32} />
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{bank?.name ?? t("configure.newConnection")}</div>
+          <div className="truncate text-sm font-semibold">
+            {bank?.name ?? t("configure.newConnection")}
+          </div>
           <div className="text-xs text-slate-400">
-            {help?.kind === "live" ? t("configure.kindLive") : help?.kind === "fileDrop" ? t("configure.kindFileDrop") : help?.kind === "manual" ? t("configure.kindManual") : null}
+            {help?.kind === "live"
+              ? t("configure.kindLive")
+              : help?.kind === "fileDrop"
+                ? t("configure.kindFileDrop")
+                : help?.kind === "manual"
+                  ? t("configure.kindManual")
+                  : null}
             {" · "}
             {PROVIDER_LABEL[provider]}
           </div>
@@ -742,7 +1003,11 @@ function ConfigureConnection({
       {selection.kind === "other" && (
         <div className="mb-4">
           <Label>{t("configure.providerQuestion")}</Label>
-          <Select value={provider} onChange={(e) => setProvider(e.target.value as FeedProvider)} className="max-w-xs">
+          <Select
+            value={provider}
+            onChange={(e) => setProvider(e.target.value as FeedProvider)}
+            className="max-w-xs"
+          >
             <option value="gocardless">{t("configure.providerGocardless")}</option>
             <option value="plaid">{t("configure.providerPlaid")}</option>
             <option value="truelayer">{t("configure.providerTruelayer")}</option>
@@ -765,7 +1030,12 @@ function ConfigureConnection({
           </div>
           <p>{t(`method.${provider}.blurb`)}</p>
           {help.docsUrl && (
-            <a href={help.docsUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-teal-700 hover:underline dark:text-teal-300">
+            <a
+              href={help.docsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-block text-teal-700 hover:underline dark:text-teal-300"
+            >
               {t(`method.${provider}.docsLabel`)} ↗
             </a>
           )}
@@ -774,16 +1044,26 @@ function ConfigureConnection({
 
       {/* Step 1 — what it feeds. Common to every method. */}
       <div className="space-y-1">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("configure.stepAccount")}</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          {t("configure.stepAccount")}
+        </div>
         <div className="grid gap-3 pt-1 sm:grid-cols-2">
           <div>
             <Label>{t("configure.connectionName")}</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("configure.connectionNamePlaceholder")} />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("configure.connectionNamePlaceholder")}
+            />
           </div>
           <div>
             <Label>{t("configure.bankGlAccount")}</Label>
             <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
             </Select>
             {accounts.length === 0 && (
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -800,17 +1080,28 @@ function ConfigureConnection({
       {/* Step 2 — method-specific configuration. */}
       {isApi && (
         <div className="mt-5 space-y-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("configure.credentialsStep", { provider: PROVIDER_LABEL[provider] })}</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {t("configure.credentialsStep", { provider: PROVIDER_LABEL[provider] })}
+          </div>
           <div className="grid gap-3 pt-1 sm:grid-cols-2">
             {(PROVIDER_CREDENTIALS[provider] ?? []).map((f) => (
               <div key={f.key}>
                 <Label>{f.label}</Label>
-                <Input type={f.secret ? "password" : "text"} value={creds[f.key] ?? ""} onChange={(e) => setCreds({ ...creds, [f.key]: e.target.value })} />
+                <Input
+                  type={f.secret ? "password" : "text"}
+                  value={creds[f.key] ?? ""}
+                  onChange={(e) => setCreds({ ...creds, [f.key]: e.target.value })}
+                />
               </div>
             ))}
             <div>
               <Label>{t("configure.providerAccountId")}</Label>
-              <Input required={requiresExternalAccountId} value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} placeholder={t("configure.providerAccountIdPlaceholder")} />
+              <Input
+                required={requiresExternalAccountId}
+                value={externalAccountId}
+                onChange={(e) => setExternalAccountId(e.target.value)}
+                placeholder={t("configure.providerAccountIdPlaceholder")}
+              />
             </div>
             <div>
               <Label>{t("configure.importHowOften")}</Label>
@@ -826,7 +1117,9 @@ function ConfigureConnection({
 
       {provider === "sftp" && (
         <div className="mt-5 space-y-1">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t("configure.sftpStepTitle")}</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {t("configure.sftpStepTitle")}
+          </div>
           <p className="pt-1 text-xs text-slate-500 dark:text-slate-400">
             {t.rich("configure.sftpStepHelp", {
               inbound: (chunks) => <span className="font-mono">{chunks}</span>,
@@ -837,10 +1130,20 @@ function ConfigureConnection({
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
       <div className="mt-5 flex gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-        <Button onClick={save} disabled={busy || !accountId || (!name && !bank) || (requiresExternalAccountId && !externalAccountId.trim())}>
+        <Button
+          onClick={save}
+          disabled={
+            busy ||
+            !accountId ||
+            (!name && !bank) ||
+            (requiresExternalAccountId && !externalAccountId.trim())
+          }
+        >
           {provider === "sftp" ? t("configure.createSftpLogin") : t("configure.addConnection")}
         </Button>
-        <Button variant="ghost" onClick={onCancel}>{t("configure.cancel")}</Button>
+        <Button variant="ghost" onClick={onCancel}>
+          {t("configure.cancel")}
+        </Button>
       </div>
     </Card>
   );

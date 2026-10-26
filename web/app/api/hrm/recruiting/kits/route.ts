@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  createKit,
-  listKits,
-} from "@openbooks/engine/hrm/recruiting/kits";
+import { createKit, listKits } from "@openbooks/engine/hrm/recruiting/kits";
 
 import { recruitingErrorResponse } from "../_lib";
 import { createKitBody } from "./bodies";
@@ -20,8 +17,7 @@ export const GET = defineRoute({
   feature: "hrmRecruiting",
   handler: async ({ request: req, authz: gate }) => {
     try {
-      const includeInactive =
-        new URL(req.url).searchParams.get("includeInactive") === "1";
+      const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
       const kits = await listKits({
         orgId: gate.user.orgId,
         actorId: gate.user.id,

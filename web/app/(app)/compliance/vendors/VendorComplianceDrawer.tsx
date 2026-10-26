@@ -1,11 +1,11 @@
-'use client'
-import { ApprovalActions } from '@/components/approval-actions'
+"use client";
+import { ApprovalActions } from "@/components/approval-actions";
 
-import { RecordTabs } from '@/components/module-home/record-tabs'
+import { RecordTabs } from "@/components/module-home/record-tabs";
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   Badge,
   Button,
@@ -15,66 +15,58 @@ import {
   TabContent,
   Textarea,
   UrlDrawer,
-} from '@openbooks/ui'
-import type { RequirementPolicy } from '@openbooks/engine/compliance/compliance'
-import { useBusinessToday } from '../../../../components/business-date-provider'
-import { AttachmentPanel } from '../../../../components/attachment-panel'
-import { promptDialog } from '../../../../lib/prompt'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+} from "@openbooks/ui";
+import type { RequirementPolicy } from "@openbooks/engine/compliance/compliance";
+import { useBusinessToday } from "../../../../components/business-date-provider";
+import { AttachmentPanel } from "../../../../components/attachment-panel";
+import { promptDialog } from "../../../../lib/prompt";
+import { readApiErrorMessage } from "../../../../lib/api-error";
 import type {
   CertificateRow,
   ComplianceClassRow,
   ExceptionRow,
   MatrixRow,
-} from '../../../../lib/compliance'
-import { DateField } from '@/components/date-field'
+} from "../../../../lib/compliance";
+import { DateField } from "@/components/date-field";
 
 export interface VendorDrawerData {
   vendor: {
-    id: string
-    name: string
-    legalName: string | null
-    complianceClassId: string | null
-    informationReturnForm: string | null
-    informationReturnBox: string | null
-    taxClassification: string | null
-    tinLast4: string | null
-    tinType: string | null
-    backupWithholding: boolean
-    reportable: boolean
-  }
-  certificates: CertificateRow[]
-  exceptions: ExceptionRow[]
-  policies: RequirementPolicy[]
-  classes: ComplianceClassRow[]
-  projects: { id: string; label: string }[]
-  status: MatrixRow | null
+    id: string;
+    name: string;
+    legalName: string | null;
+    complianceClassId: string | null;
+    informationReturnForm: string | null;
+    informationReturnBox: string | null;
+    taxClassification: string | null;
+    tinLast4: string | null;
+    tinType: string | null;
+    backupWithholding: boolean;
+    reportable: boolean;
+  };
+  certificates: CertificateRow[];
+  exceptions: ExceptionRow[];
+  policies: RequirementPolicy[];
+  classes: ComplianceClassRow[];
+  projects: { id: string; label: string }[];
+  status: MatrixRow | null;
 }
 
-type Tab = 'certificates' | 'identification' | 'exceptions'
+type Tab = "certificates" | "identification" | "exceptions";
 
 const TAX_CLASSIFICATIONS = [
-  'individual',
-  'sole_proprietor',
-  'partnership',
-  'c_corp',
-  's_corp',
-  'llc',
-  'trust_estate',
-  'government',
-  'nonprofit',
-  'other',
-] as const
+  "individual",
+  "sole_proprietor",
+  "partnership",
+  "c_corp",
+  "s_corp",
+  "llc",
+  "trust_estate",
+  "government",
+  "nonprofit",
+  "other",
+] as const;
 
-const TIN_TYPES = [
-  'ein',
-  'ssn',
-  'itin',
-  'atin',
-  'sin',
-  'bn',
-  'unknown',
-] as const
+const TIN_TYPES = ["ein", "ssn", "itin", "atin", "sin", "bn", "unknown"] as const;
 
 /**
  * One subcontractor's compliance file: the certificates on file, the taxpayer
@@ -92,89 +84,82 @@ export function VendorComplianceDrawer({
   canVerify,
   canWaive,
 }: {
-  data: VendorDrawerData
-  closeHref: string
-  formTypes: string[]
-  canManage: boolean
-  canVerify: boolean
-  canWaive: boolean
+  data: VendorDrawerData;
+  closeHref: string;
+  formTypes: string[];
+  canManage: boolean;
+  canVerify: boolean;
+  canWaive: boolean;
 }) {
-  const t = useTranslations('compliance')
-  const router = useRouter()
-  const today = useBusinessToday()
-  const [tab, setTab] = useState<Tab>('certificates')
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
+  const t = useTranslations("compliance");
+  const router = useRouter();
+  const today = useBusinessToday();
+  const [tab, setTab] = useState<Tab>("certificates");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
   const [newCert, setNewCert] = useState({
-    requirementId: '',
-    projectId: '',
-    issuerName: '',
-    policyNumber: '',
+    requirementId: "",
+    projectId: "",
+    issuerName: "",
+    policyNumber: "",
     effectiveFrom: today,
-    expiresOn: '',
-    coverageAmount: '',
-    aggregateAmount: '',
-    coverageCurrency: '',
+    expiresOn: "",
+    coverageAmount: "",
+    aggregateAmount: "",
+    coverageCurrency: "",
     additionalInsured: false,
     waiverOfSubrogation: false,
     primaryNoncontributory: false,
-    notes: '',
-    supersedesId: '',
-  })
+    notes: "",
+    supersedesId: "",
+  });
   const [identity, setIdentity] = useState({
-    complianceClassId: data.vendor.complianceClassId ?? '',
+    complianceClassId: data.vendor.complianceClassId ?? "",
     reportable: data.vendor.reportable,
-    informationReturnForm: data.vendor.informationReturnForm ?? '',
-    informationReturnBox: data.vendor.informationReturnBox ?? '',
-    taxClassification: data.vendor.taxClassification ?? '',
-    tinType: data.vendor.tinType ?? '',
-    tin: '',
+    informationReturnForm: data.vendor.informationReturnForm ?? "",
+    informationReturnBox: data.vendor.informationReturnBox ?? "",
+    taxClassification: data.vendor.taxClassification ?? "",
+    tinType: data.vendor.tinType ?? "",
+    tin: "",
     backupWithholding: data.vendor.backupWithholding,
-  })
+  });
   const [exception, setException] = useState({
-    requirementId: '',
-    projectId: '',
-    reason: '',
-    expiresOn: '',
-  })
+    requirementId: "",
+    projectId: "",
+    reason: "",
+    expiresOn: "",
+  });
 
-  async function call(
-    url: string,
-    method: string,
-    body: unknown,
-  ): Promise<boolean> {
-    setError(null)
-    setNotice(null)
+  async function call(url: string, method: string, body: unknown): Promise<boolean> {
+    setError(null);
+    setNotice(null);
     const res = await fetch(url, {
       method,
-      headers: { 'content-type': 'application/json' },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    })
+    });
     // The refusal reads through the shared helper so message, remedy and
     // code render instead of a bare fallback.
     if (!res.ok) {
-      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
-      return false
+      setError(await readApiErrorMessage(res, t("errors.saveFailed")));
+      return false;
     }
-    startTransition(() => router.refresh())
-    return true
+    startTransition(() => router.refresh());
+    return true;
   }
 
   const applicable = data.policies.filter(
-    (policy) =>
-      policy.classId === null || policy.classId === identity.complianceClassId,
-  )
-  const selectedPolicy = applicable.find(
-    (policy) => policy.id === newCert.requirementId,
-  )
+    (policy) => policy.classId === null || policy.classId === identity.complianceClassId,
+  );
+  const selectedPolicy = applicable.find((policy) => policy.id === newCert.requirementId);
 
   async function recordCertificate() {
     if (!newCert.requirementId) {
-      setError(t('errors.pickRequirement'))
-      return
+      setError(t("errors.pickRequirement"));
+      return;
     }
-    const ok = await call('/api/compliance/records', 'POST', {
+    const ok = await call("/api/compliance/records", "POST", {
       partyId: data.vendor.id,
       requirementId: newCert.requirementId,
       projectId: newCert.projectId || null,
@@ -190,77 +175,77 @@ export function VendorComplianceDrawer({
       primaryNoncontributory: newCert.primaryNoncontributory,
       notes: newCert.notes || null,
       supersedesId: newCert.supersedesId || null,
-    })
+    });
     if (ok)
       setNewCert({
         ...newCert,
-        requirementId: '',
-        policyNumber: '',
-        expiresOn: '',
-        notes: '',
-        supersedesId: '',
-      })
+        requirementId: "",
+        policyNumber: "",
+        expiresOn: "",
+        notes: "",
+        supersedesId: "",
+      });
   }
 
   async function verify(id: string) {
-    const cert = data.certificates.find((row) => row.id === id)
-    if (!cert) return
-    await call(`/api/compliance/records/${id}`, 'PATCH', {
-      action: 'verify',
+    const cert = data.certificates.find((row) => row.id === id);
+    if (!cert) return;
+    await call(`/api/compliance/records/${id}`, "PATCH", {
+      action: "verify",
       revision: cert.revision,
-    })
+    });
   }
 
   async function reject(id: string) {
     const reason = await promptDialog({
-      title: t('certificates.rejectTitle'),
-      label: t('certificates.rejectReason'),
-    })
-    if (!reason) return
-    const cert = data.certificates.find((row) => row.id === id)
-    if (!cert) return
-    await call(`/api/compliance/records/${id}`, 'PATCH', {
-      action: 'reject',
+      title: t("certificates.rejectTitle"),
+      label: t("certificates.rejectReason"),
+    });
+    if (!reason) return;
+    const cert = data.certificates.find((row) => row.id === id);
+    if (!cert) return;
+    await call(`/api/compliance/records/${id}`, "PATCH", {
+      action: "reject",
       reason,
       revision: cert.revision,
-    })
+    });
   }
 
   async function grantException() {
     if (!exception.requirementId || !exception.expiresOn) {
-      setError(t('errors.exceptionIncomplete'))
-      return
+      setError(t("errors.exceptionIncomplete"));
+      return;
     }
-    const ok = await call('/api/compliance/waivers', 'POST', {
+    const ok = await call("/api/compliance/waivers", "POST", {
       partyId: data.vendor.id,
       requirementId: exception.requirementId,
       projectId: exception.projectId || null,
       reason: exception.reason,
       expiresOn: exception.expiresOn,
-    })
+    });
     if (ok) {
       setException({
-        requirementId: '',
-        projectId: '',
-        reason: '',
-        expiresOn: '',
-      })
+        requirementId: "",
+        projectId: "",
+        reason: "",
+        expiresOn: "",
+      });
       // The retained status identifies immediate release or outstanding gates.
-      setNotice(t('exceptions.requestFiled'))
+      setNotice(t("exceptions.requestFiled"));
     }
   }
 
   async function revokeException(id: string) {
     const reason = await promptDialog({
-      title: t('exceptions.revokeTitle'),
-      label: t('exceptions.revokeReason'),
-    })
-    if (!reason) return
-    await call(`/api/compliance/waivers/${id}`, 'DELETE', { reason })
+      title: t("exceptions.revokeTitle"),
+      label: t("exceptions.revokeReason"),
+    });
+    if (!reason) return;
+    await call(`/api/compliance/waivers/${id}`, "DELETE", { reason });
   }
 
   async function saveIdentity() {
-    await call(`/api/compliance/vendors/${data.vendor.id}`, 'PATCH', {
+    await call(`/api/compliance/vendors/${data.vendor.id}`, "PATCH", {
       complianceClassId: identity.complianceClassId || null,
       reportable: identity.reportable,
       informationReturnForm: identity.informationReturnForm || null,
@@ -271,23 +256,23 @@ export function VendorComplianceDrawer({
       // "leave the sealed value alone", never "erase it".
       ...(identity.tin ? { tin: identity.tin } : {}),
       backupWithholding: identity.backupWithholding,
-    })
-    setIdentity({ ...identity, tin: '' })
+    });
+    setIdentity({ ...identity, tin: "" });
   }
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     {
-      key: 'certificates',
-      label: t('drawer.tabs.certificates'),
+      key: "certificates",
+      label: t("drawer.tabs.certificates"),
       count: data.certificates.length,
     },
-    { key: 'identification', label: t('drawer.tabs.identification') },
+    { key: "identification", label: t("drawer.tabs.identification") },
     {
-      key: 'exceptions',
-      label: t('drawer.tabs.exceptions'),
+      key: "exceptions",
+      label: t("drawer.tabs.exceptions"),
       count: data.exceptions.length,
     },
-  ]
+  ];
 
   return (
     <UrlDrawer
@@ -301,10 +286,10 @@ export function VendorComplianceDrawer({
           <Badge
             variant={
               data.status.blocksPayment
-                ? 'destructive'
-                : data.status.overall === 'compliant'
-                  ? 'success'
-                  : 'warning'
+                ? "destructive"
+                : data.status.overall === "compliant"
+                  ? "success"
+                  : "warning"
             }
           >
             {t(`states.${data.status.overall}`)}
@@ -318,19 +303,14 @@ export function VendorComplianceDrawer({
         </p>
       ) : null}
 
-      <RecordTabs
-        label={t('drawer.tabs.aria')}
-        tabs={tabs}
-        active={tab}
-        onChange={setTab}
-      />
+      <RecordTabs label={t("drawer.tabs.aria")} tabs={tabs} active={tab} onChange={setTab} />
 
       <TabContent tabKey={tab}>
-        {tab === 'certificates' ? (
+        {tab === "certificates" ? (
           <div className="space-y-5">
             {data.certificates.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {t('certificates.empty')}
+                {t("certificates.empty")}
               </p>
             ) : (
               <ul className="space-y-3">
@@ -349,27 +329,27 @@ export function VendorComplianceDrawer({
                             cert.issuerName,
                             cert.policyNumber,
                             cert.projectName,
-                            `${cert.effectiveFrom} → ${cert.expiresOn ?? t('certificates.noExpiry')}`,
+                            `${cert.effectiveFrom} → ${cert.expiresOn ?? t("certificates.noExpiry")}`,
                           ]
                             .filter(Boolean)
-                            .join(' · ')}
+                            .join(" · ")}
                         </p>
                         {cert.coverageAmount ? (
                           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                            {t('certificates.limits', {
+                            {t("certificates.limits", {
                               occurrence:
-                                `${cert.coverageCurrency ?? ''} ${cert.coverageAmount}`.trim(),
-                              aggregate: cert.aggregateAmount ?? '—',
+                                `${cert.coverageCurrency ?? ""} ${cert.coverageAmount}`.trim(),
+                              aggregate: cert.aggregateAmount ?? "—",
                             })}
                             {cert.additionalInsured
-                              ? ` · ${t('certificates.additionalInsured')}`
-                              : ''}
+                              ? ` · ${t("certificates.additionalInsured")}`
+                              : ""}
                             {cert.waiverOfSubrogation
-                              ? ` · ${t('certificates.waiverOfSubrogation')}`
-                              : ''}
+                              ? ` · ${t("certificates.waiverOfSubrogation")}`
+                              : ""}
                             {cert.primaryNoncontributory
-                              ? ` · ${t('certificates.primaryNoncontributory')}`
-                              : ''}
+                              ? ` · ${t("certificates.primaryNoncontributory")}`
+                              : ""}
                           </p>
                         ) : null}
                         {cert.rejectedReason ? (
@@ -379,8 +359,8 @@ export function VendorComplianceDrawer({
                         ) : null}
                         {cert.verifiedAt ? (
                           <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                            {t('certificates.verifiedBy', {
-                              who: cert.verifiedByName ?? '—',
+                            {t("certificates.verifiedBy", {
+                              who: cert.verifiedByName ?? "—",
                               when: cert.verifiedAt.slice(0, 10),
                             })}
                           </p>
@@ -389,16 +369,16 @@ export function VendorComplianceDrawer({
                       <div className="flex shrink-0 items-center gap-2">
                         <Badge
                           variant={
-                            cert.status === 'active'
-                              ? 'success'
-                              : cert.status === 'rejected'
-                                ? 'destructive'
-                                : 'warning'
+                            cert.status === "active"
+                              ? "success"
+                              : cert.status === "rejected"
+                                ? "destructive"
+                                : "warning"
                           }
                         >
                           {t(`certificateStatus.${cert.status}`)}
                         </Badge>
-                        {canVerify && cert.status === 'pending_review' ? (
+                        {canVerify && cert.status === "pending_review" ? (
                           <>
                             <Button
                               size="sm"
@@ -406,7 +386,7 @@ export function VendorComplianceDrawer({
 
                               onClick={() => verify(cert.id)}
                             >
-                              {t('certificates.verify')}
+                              {t("certificates.verify")}
                             </Button>
                             <ApprovalActions
                               subjectKind="compliance_certificate"
@@ -418,7 +398,7 @@ export function VendorComplianceDrawer({
                               disabled={pending}
                               onClick={() => reject(cert.id)}
                             >
-                              {t('certificates.reject')}
+                              {t("certificates.reject")}
                             </Button>
                           </>
                         ) : null}
@@ -439,16 +419,16 @@ export function VendorComplianceDrawer({
             {canManage ? (
               <section className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                 <h4 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {t('certificates.recordTitle')}
+                  {t("certificates.recordTitle")}
                 </h4>
                 {applicable.length === 0 ? (
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {t('certificates.noPolicies')}
+                    {t("certificates.noPolicies")}
                   </p>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="sm:col-span-2">
-                      <Label>{t('fields.requirement')}</Label>
+                      <Label>{t("fields.requirement")}</Label>
                       <Select
                         value={newCert.requirementId}
                         onChange={(event) =>
@@ -458,7 +438,7 @@ export function VendorComplianceDrawer({
                           })
                         }
                       >
-                        <option value="">{t('fields.select')}</option>
+                        <option value="">{t("fields.select")}</option>
                         {applicable.map((policy) => (
                           <option key={policy.id} value={policy.id}>
                             {policy.code} · {policy.name}
@@ -467,7 +447,7 @@ export function VendorComplianceDrawer({
                       </Select>
                     </div>
                     <div>
-                      <Label>{t('fields.issuer')}</Label>
+                      <Label>{t("fields.issuer")}</Label>
                       <Input
                         value={newCert.issuerName}
                         onChange={(event) =>
@@ -479,7 +459,7 @@ export function VendorComplianceDrawer({
                       />
                     </div>
                     <div>
-                      <Label>{t('fields.policyNumber')}</Label>
+                      <Label>{t("fields.policyNumber")}</Label>
                       <Input
                         value={newCert.policyNumber}
                         onChange={(event) =>
@@ -491,32 +471,28 @@ export function VendorComplianceDrawer({
                       />
                     </div>
                     <div>
-                      <Label>{t('fields.effectiveFrom')}</Label>
+                      <Label>{t("fields.effectiveFrom")}</Label>
                       <DateField
                         value={newCert.effectiveFrom}
-                        onChange={(value) =>
-                          setNewCert({ ...newCert, effectiveFrom: value })
-                        }
+                        onChange={(value) => setNewCert({ ...newCert, effectiveFrom: value })}
                       />
                     </div>
                     <div>
-                      <Label>{t('fields.expiresOn')}</Label>
+                      <Label>{t("fields.expiresOn")}</Label>
                       <DateField
                         value={newCert.expiresOn}
-                        onChange={(value) =>
-                          setNewCert({ ...newCert, expiresOn: value })
-                        }
+                        onChange={(value) => setNewCert({ ...newCert, expiresOn: value })}
                       />
                       {selectedPolicy?.requiresExpiry ? (
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          {t('fields.expiryRequired')}
+                          {t("fields.expiryRequired")}
                         </p>
                       ) : null}
                     </div>
                     {selectedPolicy?.minCoverageAmount ? (
                       <>
                         <div>
-                          <Label>{t('fields.coverageAmount')}</Label>
+                          <Label>{t("fields.coverageAmount")}</Label>
                           <Input
                             inputMode="decimal"
                             className="text-right tabular-nums"
@@ -531,13 +507,11 @@ export function VendorComplianceDrawer({
                           />
                         </div>
                         <div>
-                          <Label>{t('fields.aggregateAmount')}</Label>
+                          <Label>{t("fields.aggregateAmount")}</Label>
                           <Input
                             inputMode="decimal"
                             className="text-right tabular-nums"
-                            placeholder={
-                              selectedPolicy.minAggregateAmount ?? ''
-                            }
+                            placeholder={selectedPolicy.minAggregateAmount ?? ""}
                             value={newCert.aggregateAmount}
                             onChange={(event) =>
                               setNewCert({
@@ -548,29 +522,28 @@ export function VendorComplianceDrawer({
                           />
                         </div>
                         <div>
-                          <Label>{t('fields.coverageCurrency')}</Label>
+                          <Label>{t("fields.coverageCurrency")}</Label>
                           <Input
                             maxLength={3}
-                            placeholder={selectedPolicy.coverageCurrency ?? ''}
+                            placeholder={selectedPolicy.coverageCurrency ?? ""}
                             value={newCert.coverageCurrency}
                             onChange={(event) =>
                               setNewCert({
                                 ...newCert,
-                                coverageCurrency:
-                                  event.target.value.toUpperCase(),
+                                coverageCurrency: event.target.value.toUpperCase(),
                               })
                             }
                           />
                           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            {t('fields.coverageCurrencyHint', {
-                              currency: selectedPolicy.coverageCurrency ?? '',
+                            {t("fields.coverageCurrencyHint", {
+                              currency: selectedPolicy.coverageCurrency ?? "",
                             })}
                           </p>
                         </div>
                       </>
                     ) : null}
                     <div>
-                      <Label>{t('fields.project')}</Label>
+                      <Label>{t("fields.project")}</Label>
                       <Select
                         value={newCert.projectId}
                         onChange={(event) =>
@@ -580,7 +553,7 @@ export function VendorComplianceDrawer({
                           })
                         }
                       >
-                        <option value="">{t('fields.allProjects')}</option>
+                        <option value="">{t("fields.allProjects")}</option>
                         {data.projects.map((project) => (
                           <option key={project.id} value={project.id}>
                             {project.label}
@@ -589,7 +562,7 @@ export function VendorComplianceDrawer({
                       </Select>
                     </div>
                     <div>
-                      <Label>{t('fields.supersedes')}</Label>
+                      <Label>{t("fields.supersedes")}</Label>
                       <Select
                         value={newCert.supersedesId}
                         onChange={(event) =>
@@ -599,17 +572,16 @@ export function VendorComplianceDrawer({
                           })
                         }
                       >
-                        <option value="">{t('fields.none')}</option>
+                        <option value="">{t("fields.none")}</option>
                         {data.certificates
                           .filter(
                             (cert) =>
                               cert.requirementId === newCert.requirementId &&
-                              cert.status !== 'superseded',
+                              cert.status !== "superseded",
                           )
                           .map((cert) => (
                             <option key={cert.id} value={cert.id}>
-                              {cert.policyNumber ?? cert.effectiveFrom} →{' '}
-                              {cert.expiresOn ?? '—'}
+                              {cert.policyNumber ?? cert.effectiveFrom} → {cert.expiresOn ?? "—"}
                             </option>
                           ))}
                       </Select>
@@ -617,24 +589,12 @@ export function VendorComplianceDrawer({
                     <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
                       {(
                         [
-                          [
-                            'additionalInsured',
-                            t('certificates.additionalInsured'),
-                          ],
-                          [
-                            'waiverOfSubrogation',
-                            t('certificates.waiverOfSubrogation'),
-                          ],
-                          [
-                            'primaryNoncontributory',
-                            t('certificates.primaryNoncontributory'),
-                          ],
+                          ["additionalInsured", t("certificates.additionalInsured")],
+                          ["waiverOfSubrogation", t("certificates.waiverOfSubrogation")],
+                          ["primaryNoncontributory", t("certificates.primaryNoncontributory")],
                         ] as const
                       ).map(([key, label]) => (
-                        <label
-                          key={key}
-                          className="flex items-center gap-2 text-sm"
-                        >
+                        <label key={key} className="flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
                             checked={newCert[key]}
@@ -650,21 +610,19 @@ export function VendorComplianceDrawer({
                       ))}
                     </div>
                     <div className="sm:col-span-2">
-                      <Label>{t('fields.notes')}</Label>
+                      <Label>{t("fields.notes")}</Label>
                       <Textarea
                         rows={2}
                         value={newCert.notes}
-                        onChange={(event) =>
-                          setNewCert({ ...newCert, notes: event.target.value })
-                        }
+                        onChange={(event) => setNewCert({ ...newCert, notes: event.target.value })}
                       />
                     </div>
                     <div className="sm:col-span-2">
                       <Button disabled={pending} onClick={recordCertificate}>
-                        {t('certificates.record')}
+                        {t("certificates.record")}
                       </Button>
                       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                        {t('certificates.recordHint')}
+                        {t("certificates.recordHint")}
                       </p>
                     </div>
                   </div>
@@ -674,10 +632,10 @@ export function VendorComplianceDrawer({
           </div>
         ) : null}
 
-        {tab === 'identification' ? (
+        {tab === "identification" ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label>{t('fields.complianceClass')}</Label>
+              <Label>{t("fields.complianceClass")}</Label>
               <Select
                 value={identity.complianceClassId}
                 disabled={!canManage}
@@ -688,7 +646,7 @@ export function VendorComplianceDrawer({
                   })
                 }
               >
-                <option value="">{t('fields.notTracked')}</option>
+                <option value="">{t("fields.notTracked")}</option>
                 {data.classes.map((cls) => (
                   <option key={cls.id} value={cls.id}>
                     {cls.name}
@@ -696,11 +654,11 @@ export function VendorComplianceDrawer({
                 ))}
               </Select>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {t('fields.complianceClassHint')}
+                {t("fields.complianceClassHint")}
               </p>
             </div>
             <div>
-              <Label>{t('fields.taxClassification')}</Label>
+              <Label>{t("fields.taxClassification")}</Label>
               <Select
                 value={identity.taxClassification}
                 disabled={!canManage}
@@ -711,7 +669,7 @@ export function VendorComplianceDrawer({
                   })
                 }
               >
-                <option value="">{t('fields.unknown')}</option>
+                <option value="">{t("fields.unknown")}</option>
                 {TAX_CLASSIFICATIONS.map((value) => (
                   <option key={value} value={value}>
                     {t(`taxClassification.${value}`)}
@@ -724,14 +682,12 @@ export function VendorComplianceDrawer({
                 type="checkbox"
                 checked={identity.reportable}
                 disabled={!canManage}
-                onChange={(event) =>
-                  setIdentity({ ...identity, reportable: event.target.checked })
-                }
+                onChange={(event) => setIdentity({ ...identity, reportable: event.target.checked })}
               />
-              <span className="text-sm">{t('fields.reportable')}</span>
+              <span className="text-sm">{t("fields.reportable")}</span>
             </div>
             <div>
-              <Label>{t('fields.informationReturnForm')}</Label>
+              <Label>{t("fields.informationReturnForm")}</Label>
               <Select
                 value={identity.informationReturnForm}
                 disabled={!canManage || !identity.reportable}
@@ -742,8 +698,8 @@ export function VendorComplianceDrawer({
                   })
                 }
               >
-                <option value="">{t('fields.inheritClass')}</option>
-                <option value="none">{t('fields.notReportable')}</option>
+                <option value="">{t("fields.inheritClass")}</option>
+                <option value="none">{t("fields.notReportable")}</option>
                 {formTypes.map((form) => (
                   <option key={form} value={form}>
                     {form}
@@ -752,15 +708,13 @@ export function VendorComplianceDrawer({
               </Select>
             </div>
             <div>
-              <Label>{t('fields.tinType')}</Label>
+              <Label>{t("fields.tinType")}</Label>
               <Select
                 value={identity.tinType}
                 disabled={!canManage}
-                onChange={(event) =>
-                  setIdentity({ ...identity, tinType: event.target.value })
-                }
+                onChange={(event) => setIdentity({ ...identity, tinType: event.target.value })}
               >
-                <option value="">{t('fields.select')}</option>
+                <option value="">{t("fields.select")}</option>
                 {TIN_TYPES.map((value) => (
                   <option key={value} value={value}>
                     {t(`tinType.${value}`)}
@@ -769,22 +723,18 @@ export function VendorComplianceDrawer({
               </Select>
             </div>
             <div>
-              <Label>{t('fields.tin')}</Label>
+              <Label>{t("fields.tin")}</Label>
               <Input
                 value={identity.tin}
                 disabled={!canManage}
                 inputMode="numeric"
                 placeholder={
-                  data.vendor.tinLast4
-                    ? `•••••${data.vendor.tinLast4}`
-                    : t('fields.tinPlaceholder')
+                  data.vendor.tinLast4 ? `•••••${data.vendor.tinLast4}` : t("fields.tinPlaceholder")
                 }
-                onChange={(event) =>
-                  setIdentity({ ...identity, tin: event.target.value })
-                }
+                onChange={(event) => setIdentity({ ...identity, tin: event.target.value })}
               />
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {t('fields.tinHint')}
+                {t("fields.tinHint")}
               </p>
             </div>
             <div className="flex items-center gap-2 pt-6">
@@ -799,14 +749,14 @@ export function VendorComplianceDrawer({
                   })
                 }
               />
-              <span className="text-sm">{t('fields.backupWithholding')}</span>
+              <span className="text-sm">{t("fields.backupWithholding")}</span>
             </div>
             <div>
-              <Label>{t('fields.informationReturnBox')}</Label>
+              <Label>{t("fields.informationReturnBox")}</Label>
               <Input
                 value={identity.informationReturnBox}
                 disabled={!canManage}
-                placeholder={t('fields.defaultBox')}
+                placeholder={t("fields.defaultBox")}
                 onChange={(event) =>
                   setIdentity({
                     ...identity,
@@ -818,26 +768,22 @@ export function VendorComplianceDrawer({
             {canManage ? (
               <div className="sm:col-span-2">
                 <Button disabled={pending} onClick={saveIdentity}>
-                  {t('fields.save')}
+                  {t("fields.save")}
                 </Button>
               </div>
             ) : null}
           </div>
         ) : null}
 
-        {tab === 'exceptions' ? (
+        {tab === "exceptions" ? (
           <div className="space-y-5">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {t('exceptions.intro')}
-            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t("exceptions.intro")}</p>
             {data.exceptions.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {t('exceptions.empty')}
-              </p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t("exceptions.empty")}</p>
             ) : (
               <ul className="space-y-2">
                 {data.exceptions.map((row) => {
-                  const isPending = row.status === 'pending_approval'
+                  const isPending = row.status === "pending_approval";
                   return (
                     <li
                       key={row.id}
@@ -847,21 +793,19 @@ export function VendorComplianceDrawer({
                         <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-100">
                           {row.requirementCode} · {row.requirementName}
                           {isPending ? (
-                            <Badge variant="warning">
-                              {t('exceptions.pendingApproval')}
-                            </Badge>
+                            <Badge variant="warning">{t("exceptions.pendingApproval")}</Badge>
                           ) : null}
                         </p>
                         <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
                           {row.reason}
                         </p>
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          {t('exceptions.window', {
+                          {t("exceptions.window", {
                             from: row.effectiveFrom,
                             to: row.expiresOn,
                           })}
-                          {row.projectName ? ` · ${row.projectName}` : ''}
-                          {row.approvedByName ? ` · ${row.approvedByName}` : ''}
+                          {row.projectName ? ` · ${row.projectName}` : ""}
+                          {row.approvedByName ? ` · ${row.approvedByName}` : ""}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
@@ -869,10 +813,12 @@ export function VendorComplianceDrawer({
                           <ApprovalActions
                             subjectKind="compliance_waiver"
                             subjectId={row.id}
-                            submitApprovalHref={canWaive ? `/api/compliance/waivers/${row.id}` : undefined}
+                            submitApprovalHref={
+                              canWaive ? `/api/compliance/waivers/${row.id}` : undefined
+                            }
                             submitApprovalMethod="PATCH"
-                            submitApprovalBody={{ action: 'approve' }}
-                            submissionStatuses={['pending_approval']}
+                            submitApprovalBody={{ action: "approve" }}
+                            submissionStatuses={["pending_approval"]}
                           />
                         ) : null}
                         {canWaive ? (
@@ -882,12 +828,12 @@ export function VendorComplianceDrawer({
                             disabled={pending}
                             onClick={() => revokeException(row.id)}
                           >
-                            {t('exceptions.revoke')}
+                            {t("exceptions.revoke")}
                           </Button>
                         ) : null}
                       </div>
                     </li>
-                  )
+                  );
                 })}
               </ul>
             )}
@@ -895,11 +841,11 @@ export function VendorComplianceDrawer({
             {canWaive ? (
               <section className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                 <h4 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {t('exceptions.grantTitle')}
+                  {t("exceptions.grantTitle")}
                 </h4>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="sm:col-span-2">
-                    <Label>{t('fields.requirement')}</Label>
+                    <Label>{t("fields.requirement")}</Label>
                     <Select
                       value={exception.requirementId}
                       onChange={(event) =>
@@ -909,7 +855,7 @@ export function VendorComplianceDrawer({
                         })
                       }
                     >
-                      <option value="">{t('fields.select')}</option>
+                      <option value="">{t("fields.select")}</option>
                       {applicable.map((policy) => (
                         <option key={policy.id} value={policy.id}>
                           {policy.code} · {policy.name}
@@ -918,7 +864,7 @@ export function VendorComplianceDrawer({
                     </Select>
                   </div>
                   <div>
-                    <Label>{t('fields.project')}</Label>
+                    <Label>{t("fields.project")}</Label>
                     <Select
                       value={exception.projectId}
                       onChange={(event) =>
@@ -928,7 +874,7 @@ export function VendorComplianceDrawer({
                         })
                       }
                     >
-                      <option value="">{t('fields.allProjects')}</option>
+                      <option value="">{t("fields.allProjects")}</option>
                       {data.projects.map((project) => (
                         <option key={project.id} value={project.id}>
                           {project.label}
@@ -937,16 +883,14 @@ export function VendorComplianceDrawer({
                     </Select>
                   </div>
                   <div>
-                    <Label>{t('fields.expiresOn')}</Label>
+                    <Label>{t("fields.expiresOn")}</Label>
                     <DateField
                       value={exception.expiresOn}
-                      onChange={(value) =>
-                        setException({ ...exception, expiresOn: value })
-                      }
+                      onChange={(value) => setException({ ...exception, expiresOn: value })}
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <Label>{t('fields.reason')}</Label>
+                    <Label>{t("fields.reason")}</Label>
                     <Textarea
                       rows={2}
                       value={exception.reason}
@@ -960,7 +904,7 @@ export function VendorComplianceDrawer({
                   </div>
                   <div className="sm:col-span-2">
                     <Button disabled={pending} onClick={grantException}>
-                      {t('exceptions.grant')}
+                      {t("exceptions.grant")}
                     </Button>
                     {notice ? (
                       <p
@@ -971,7 +915,7 @@ export function VendorComplianceDrawer({
                       </p>
                     ) : null}
                     <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                      {t('exceptions.grantHint')} {t('exceptions.requestHint')}
+                      {t("exceptions.grantHint")} {t("exceptions.requestHint")}
                     </p>
                   </div>
                 </div>
@@ -981,5 +925,5 @@ export function VendorComplianceDrawer({
         ) : null}
       </TabContent>
     </UrlDrawer>
-  )
+  );
 }

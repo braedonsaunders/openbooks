@@ -24,16 +24,19 @@ export async function assertCloseScope(
           sql`, `,
         )}))`
     : sql`0`;
-  const scope = (await executor.execute<{
-      period_ok: boolean;
-      book_ok: boolean;
-      subsidiaries_found: number;
-    }>(sql`
+  const scope = await executor.execute<{
+    period_ok: boolean;
+    book_ok: boolean;
+    subsidiaries_found: number;
+  }>(
+    sql`
     select
       exists(select 1 from accounting_periods where id = ${args.periodId} and org_id = ${args.orgId}) as period_ok,
       exists(select 1 from accounting_books where id = ${args.bookId} and org_id = ${args.orgId} and is_active) as book_ok,
       ${subsidiaryCount} as subsidiaries_found
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = scope[0];
   if (!row?.period_ok) throw new CloseError("period not found");
   if (!row.book_ok) throw new CloseError("active accounting book not found");
@@ -48,36 +51,68 @@ export async function assertCloseScope(
 
 /** A journal is not fully reconciled while its durable downstream work is incomplete.
  * The caller holds the period/book posting fence through the lock transition. */
-export async function incompletePostingEffectsCount(executor: SqlExecutor, args: {
-  orgId: string; periodId: string; bookId: string; subsidiaryIds?: string[];
-}): Promise<number> {
+export async function incompletePostingEffectsCount(
+  executor: SqlExecutor,
+  args: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryIds?: string[];
+  },
+): Promise<number> {
   const entities = args.subsidiaryIds ?? [];
-  const inScope = (column: import("drizzle-orm").SQL) => sql`${column} in (${sql.join(entities.map(id => sql`${id}::uuid`), sql`, `)})`;
-  const result = await executor.execute<{ count: string }>(sql`
+  const inScope = (column: import("drizzle-orm").SQL) =>
+    sql`${column} in (${sql.join(
+      entities.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    )})`;
+  const result = await executor.execute<{ count: string }>(
+    sql`
     select count(*)::text as count
       from posting_effects pe
       join journal_entries e on e.id = pe.entry_id and e.org_id = pe.org_id
       join documents d on d.id = pe.document_id and d.org_id = pe.org_id
      where pe.org_id = ${args.orgId} and e.period_id = ${args.periodId}
        and e.book_id = ${args.bookId} and pe.status <> 'succeeded'
-       and ${entities.length
-         ? sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)}
+       and ${
+         entities.length
+           ? sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)}
              or exists (select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id and ${inScope(sql`l.subsidiary_id`)}))`
-         : sql`true`}
-  `, "objects");
+           : sql`true`
+       }
+  `,
+    "objects",
+  );
   const count = result[0]?.count;
-  if (typeof count !== "string" || !/^\d+$/.test(count) || BigInt(count) > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new CloseError("posting-effect reconciliation could not be read; refresh the close run and retry");
+  if (
+    typeof count !== "string" ||
+    !/^\d+$/.test(count) ||
+    BigInt(count) > BigInt(Number.MAX_SAFE_INTEGER)
+  ) {
+    throw new CloseError(
+      "posting-effect reconciliation could not be read; refresh the close run and retry",
+    );
   }
   return Number(count);
 }
 
-export async function assertPostingEffectsSettled(executor: SqlExecutor, args: {
-  orgId: string; periodId: string; bookId: string; subsidiaryId?: string;
-}): Promise<void> {
-  const count = await incompletePostingEffectsCount(executor, { ...args, subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [] });
+export async function assertPostingEffectsSettled(
+  executor: SqlExecutor,
+  args: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryId?: string;
+  },
+): Promise<void> {
+  const count = await incompletePostingEffectsCount(executor, {
+    ...args,
+    subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [],
+  });
   if (count !== 0) {
-    throw new CloseError(`${count} posting effects remain incomplete in this close scope; inspect the posted documents, resolve failures, retry terminal failures with a review reason, and wait for completion before closing GL`);
+    throw new CloseError(
+      `${count} posting effects remain incomplete in this close scope; inspect the posted documents, resolve failures, retry terminal failures with a review reason, and wait for completion before closing GL`,
+    );
   }
 }
 
@@ -100,7 +135,7 @@ export async function upsertLock(args: {
   // Snapshot the current lock first: an upsert overwrites the only record of
   // who locked this scope and why, so every transition is mirrored into the
   // audit trail (in the same transaction) with before/after period state.
-  const prior = (await args.tx.execute<{
+  const prior = await args.tx.execute<{
     id: string;
     state: string;
     locked_at: Date | null;
@@ -108,21 +143,25 @@ export async function upsertLock(args: {
     reason: string | null;
     reopen_expires_at: Date | null;
     version: number;
-  }>(sql`
+  }>(
+    sql`
     select id, state, locked_at, locked_by, reason, reopen_expires_at, version
       from period_locks
      where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}
        and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
        and module = ${args.module}
-     for update`, "objects"));
-  const after = (await args.tx.execute<{
+     for update`,
+    "objects",
+  );
+  const after = await args.tx.execute<{
     id: string;
     state: string;
     locked_at: Date | null;
     locked_by: string | null;
     reason: string | null;
     reopen_expires_at: Date | null;
-  }>(sql`
+  }>(
+    sql`
     insert into period_locks
       (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by,
        reason, reopen_expires_at, created_by, updated_by)
@@ -135,7 +174,9 @@ export async function upsertLock(args: {
       reason = excluded.reason, reopen_expires_at = excluded.reopen_expires_at,
       version = period_locks.version + 1, updated_at = now(), updated_by = excluded.updated_by
     where period_locks.org_id = ${args.orgId}
-    returning id, state, locked_at, locked_by, reason, reopen_expires_at`, "objects"));
+    returning id, state, locked_at, locked_by, reason, reopen_expires_at`,
+    "objects",
+  );
   const row = requireLockWriteRow(after[0]);
   const periodState = {
     periodId: args.periodId,
@@ -168,7 +209,14 @@ export async function upsertLock(args: {
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${args.orgId}, 'period_locks', ${row.id}, 'update',
             ${JSON.stringify({
-              before: { ...periodState, state: existing.state, lockedAt: existing.locked_at, lockedBy: existing.locked_by, reason: existing.reason, reopenExpiresAt: existing.reopen_expires_at },
+              before: {
+                ...periodState,
+                state: existing.state,
+                lockedAt: existing.locked_at,
+                lockedBy: existing.locked_by,
+                reason: existing.reason,
+                reopenExpiresAt: existing.reopen_expires_at,
+              },
               after: periodState,
             })}::jsonb, ${args.actorId ?? null})
   `);
@@ -196,12 +244,15 @@ export async function tightenNarrowerLocks(args: {
   reason: string;
 }): Promise<void> {
   const looser = args.state === "closed" ? sql`state <> 'closed'` : sql`state = 'open'`;
-  const children = (await args.tx.execute<{ subsidiary_id: string }>(sql`
+  const children = await args.tx.execute<{ subsidiary_id: string }>(
+    sql`
     select subsidiary_id from period_locks
      where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}
        and module = ${args.module} and subsidiary_id is not null and ${looser}
      order by subsidiary_id
-     for update`, "objects"));
+     for update`,
+    "objects",
+  );
   for (const child of children) {
     await upsertLock({
       tx: args.tx,
@@ -226,7 +277,12 @@ export async function tightenNarrowerLocks(args: {
  * check (period_posting_fence, migration 0022) and holds it to commit, so an
  * in-flight journal posting either commits before a close's final refresh or
  * is rejected by the trigger after the locks flip to 'closed'. */
-export function periodScopeAdvisoryLock(executor: SqlExecutor, orgId: string, periodId: string, bookId: string): Promise<unknown> {
+export function periodScopeAdvisoryLock(
+  executor: SqlExecutor,
+  orgId: string,
+  periodId: string,
+  bookId: string,
+): Promise<unknown> {
   return executor.execute(sql`
     select pg_advisory_xact_lock(
       hashtextextended(${`period-lock:${orgId}:${periodId}:${bookId}`}, 0)
@@ -255,28 +311,33 @@ export async function setPeriodLockState(args: {
   actorId: string;
   reason: string;
 }): Promise<void> {
-  if (!args.reason.trim())
-    throw new CloseError("a lock-state reason is required");
+  if (!args.reason.trim()) throw new CloseError("a lock-state reason is required");
   await db.transaction(async (tx) => {
     await periodScopeAdvisoryLock(tx, args.orgId, args.periodId, args.bookId);
     await assertCloseScope(tx, {
       ...args,
       subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [],
     });
-    const current = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+    const current = await tx.execute<{ state: string; reopen_expires_at: Date | null }>(
+      sql`
       select state, reopen_expires_at from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
         and book_id = ${args.bookId} and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
-        and module = ${args.module} for update`, "objects"));
+        and module = ${args.module} for update`,
+      "objects",
+    );
     // Storage evaluates the exact row before the org-wide fallback row, so a
     // relaxation here shadows any stronger lock above it. Refuse whenever the
     // effective governing lock (this exact row, else the org-wide row for the
     // same module) currently forbids writes, or when the targeted row carries
     // an active approved reopen window whose expiry a rewrite would erase.
-    const governing = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+    const governing = await tx.execute<{ state: string; reopen_expires_at: Date | null }>(
+      sql`
       select state, reopen_expires_at from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
         and book_id = ${args.bookId} and module = ${args.module}
         and (${args.subsidiaryId ? sql`subsidiary_id = ${args.subsidiaryId} or ` : sql``}subsidiary_id is null)
-      order by (subsidiary_id is not null) desc limit 1`, "objects"));
+      order by (subsidiary_id is not null) desc limit 1`,
+      "objects",
+    );
     if (
       args.state !== "closed" &&
       periodLockRequiresApprovedReopen(
@@ -287,9 +348,7 @@ export async function setPeriodLockState(args: {
         },
       )
     ) {
-      throw new CloseError(
-        "closed periods must be reopened through an approved reopen request",
-      );
+      throw new CloseError("closed periods must be reopened through an approved reopen request");
     }
     if (
       args.state !== "closed" &&
@@ -302,11 +361,14 @@ export async function setPeriodLockState(args: {
       );
     }
     if (args.module === "gl" && args.state === "closed") {
-      const openSubledgers = (await tx.execute<{ module: string }>(sql`
+      const openSubledgers = await tx.execute<{ module: string }>(
+        sql`
         select module from period_locks
          where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}
            and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
-           and module <> 'gl' and state <> 'closed'`, "objects"));
+           and module <> 'gl' and state <> 'closed'`,
+        "objects",
+      );
       if (openSubledgers.length > 0) {
         throw new CloseError(
           `close ${openSubledgers.map((row) => row.module.toUpperCase()).join(", ")} before GL`,
@@ -314,11 +376,14 @@ export async function setPeriodLockState(args: {
       }
     }
     if (args.module !== "gl" && args.state !== "closed") {
-      const gl = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+      const gl = await tx.execute<{ state: string; reopen_expires_at: Date | null }>(
+        sql`
         select state, reopen_expires_at from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
           and book_id = ${args.bookId} and module = 'gl'
           and (${args.subsidiaryId ? sql`subsidiary_id = ${args.subsidiaryId} or ` : sql``}subsidiary_id is null)
-        order by (subsidiary_id is not null) desc limit 1`, "objects"));
+        order by (subsidiary_id is not null) desc limit 1`,
+        "objects",
+      );
       const glLock = gl[0] && {
         state: gl[0].state,
         reopenExpiresAt: gl[0].reopen_expires_at,
@@ -331,9 +396,7 @@ export async function setPeriodLockState(args: {
         (args.state === "open" && periodLockBlocksPosting(glLock, false)) ||
         (args.state === "soft_closed" && periodLockRequiresApprovedReopen(glLock))
       )
-        throw new CloseError(
-          "GL must be reopened before a subledger can be opened",
-        );
+        throw new CloseError("GL must be reopened before a subledger can be opened");
     }
     await upsertLock({ ...args, tx, reason: args.reason.trim() });
     if (!args.subsidiaryId && args.state !== "open") {

@@ -1,35 +1,43 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __payrollProfileState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __payrollProfileState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/feature-gates' ||
-        (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
+    if (
+      specifier === "../../../../lib/feature-gates" ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
+    )
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__payrollProfileState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { PAYROLL_COUNTRY_PACKS } = await import('@openbooks/engine/payroll/packs')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { GET, POST } = await import('./route')
+});
+const { db, pool, withBypassContext, withOrgContext } =
+  await import("@openbooks/engine/platform/db");
+const { PAYROLL_COUNTRY_PACKS } = await import("@openbooks/engine/payroll/packs");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { GET, POST } = await import("./route");
 
 /**
  * The countries the profile editor may offer, snapshotted once before any
  * test runs so a pack registered mid-file could never inflate it. (Nothing
  * in this file registers packs; the snapshot makes the derivation explicit.)
  */
-const EXPECTED_COUNTRIES: readonly string[] = Object.keys(PAYROLL_COUNTRY_PACKS)
+const EXPECTED_COUNTRIES: readonly string[] = Object.keys(PAYROLL_COUNTRY_PACKS);
 
 async function fixture() {
   // Scratch seeding runs under an explicit bypass boundary: importing the
@@ -37,441 +45,670 @@ async function fixture() {
   // Next request store, so ambient setup would hit RLS (and reads would
   // silently return zero rows).
   return withBypassContext(async () => {
-    const org = await createScratchOrg()
-    state.orgId = org.orgId
-    state.actorId = await createScratchUser(org.orgId, 'Payroll clerk', 'admin')
-    const employeeId = randomUUID()
-    const scheduleId = randomUUID()
+    const org = await createScratchOrg();
+    state.orgId = org.orgId;
+    state.actorId = await createScratchUser(org.orgId, "Payroll clerk", "admin");
+    const employeeId = randomUUID();
+    const scheduleId = randomUUID();
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${employeeId}, ${org.orgId}, 'person', 'Sloppy Hire', true, '{}'::jsonb)`)
+      values (${employeeId}, ${org.orgId}, 'person', 'Sloppy Hire', true, '{}'::jsonb)`);
     await db.execute(sql`
       insert into employee_roles (id, org_id, party_id, terminated_on)
-      values (${randomUUID()}, ${org.orgId}, ${employeeId}, null)`)
+      values (${randomUUID()}, ${org.orgId}, ${employeeId}, null)`);
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active, created_by, updated_by)
       values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-              ${state.actorId}, ${state.actorId})`)
-    return { org, employeeId, scheduleId }
-  })
+              ${state.actorId}, ${state.actorId})`);
+    return { org, employeeId, scheduleId };
+  });
 }
 
 const post = (body: unknown) =>
-  withOrgContext(state.orgId, () => POST(new Request('http://payroll.test', { method: 'POST', body: JSON.stringify(body) })))
-const get = (query = '') =>
-  withOrgContext(state.orgId, () => GET(new Request(`http://payroll.test${query}`)))
+  withOrgContext(state.orgId, () =>
+    POST(new Request("http://payroll.test", { method: "POST", body: JSON.stringify(body) })),
+  );
+const get = (query = "") =>
+  withOrgContext(state.orgId, () => GET(new Request(`http://payroll.test${query}`)));
 
-test('profile POST refuses money fields wider than their columns', async () => {
+test("profile POST refuses money fields wider than their columns", async () => {
   // Claim amounts are numeric(19,4): pasted
   // figures wider than that cleared the exact-decimal check and died in the
   // upsert with a storage error. Fail closed with the named 422 instead.
-  const { org, employeeId, scheduleId } = await fixture()
+  const { org, employeeId, scheduleId } = await fixture();
   try {
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly', sin: '046454286' }
+    const base = {
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+      sin: "046454286",
+    };
     // Each refusal names WHICH of the three causes fired and what was
     // supplied. One message covering all three is what made a pasted
     // twenty-digit figure undiagnosable, so assert the cause, not the field.
     for (const [label, patch, message] of [
-      ['claim amount too wide', { federalClaimAmount: '99999999999999999999' }, /federalClaimAmount is limited to 15 digits before the decimal point — got 20/],
-      ['claim amount not a number', { federalClaimAmount: 'abc' }, /federalClaimAmount must be an amount — "abc" is not a number/],
-      ['claim amount negative', { federalClaimAmount: '-1' }, /federalClaimAmount cannot be negative — got -1/],
+      [
+        "claim amount too wide",
+        { federalClaimAmount: "99999999999999999999" },
+        /federalClaimAmount is limited to 15 digits before the decimal point — got 20/,
+      ],
+      [
+        "claim amount not a number",
+        { federalClaimAmount: "abc" },
+        /federalClaimAmount must be an amount — "abc" is not a number/,
+      ],
+      [
+        "claim amount negative",
+        { federalClaimAmount: "-1" },
+        /federalClaimAmount cannot be negative — got -1/,
+      ],
       // The unreadable-value branch is itself split: an over-scale figure, a
       // spreadsheet thousands separator, a currency symbol, and scientific
       // notation are all refused as "not a number" by the strict gate but need
       // four different remedies, so each names its cause.
-      ['claim amount scale', { federalClaimAmount: '1234.56789' }, /federalClaimAmount allows at most 4 decimal places — got 5 in "1234.56789"/],
-      ['claim amount separator', { federalClaimAmount: '1,234.56' }, /federalClaimAmount must not contain a thousands separator — remove , from "1,234.56"/],
+      [
+        "claim amount scale",
+        { federalClaimAmount: "1234.56789" },
+        /federalClaimAmount allows at most 4 decimal places — got 5 in "1234.56789"/,
+      ],
+      [
+        "claim amount separator",
+        { federalClaimAmount: "1,234.56" },
+        /federalClaimAmount must not contain a thousands separator — remove , from "1,234.56"/,
+      ],
       // A decimal comma is not a thousands separator: "remove the comma"
       // would bank 1234 for 12.34. Name the decimal point, and the rewrite.
-      ['claim amount decimal comma', { federalClaimAmount: '12,34' }, /federalClaimAmount must use "\." as the decimal point — write "12,34" as "12\.34"/],
+      [
+        "claim amount decimal comma",
+        { federalClaimAmount: "12,34" },
+        /federalClaimAmount must use "\." as the decimal point — write "12,34" as "12\.34"/,
+      ],
       // A decimal comma with its own grouping ("1 234,56") reads the same
       // way: without this the grouping message composes into wrong money in
       // two steps (drop the comma, then the space banks 123456).
-      ['claim amount grouped decimal comma', { federalClaimAmount: '1 234,56' }, /write "1 234,56" as "1234\.56"/],
+      [
+        "claim amount grouped decimal comma",
+        { federalClaimAmount: "1 234,56" },
+        /write "1 234,56" as "1234\.56"/,
+      ],
       // A single comma with any other tail is genuinely ambiguous: name both
       // readings rather than picking one.
-      ['claim amount ambiguous comma', { federalClaimAmount: '1,234' }, /federalClaimAmount is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/],
+      [
+        "claim amount ambiguous comma",
+        { federalClaimAmount: "1,234" },
+        /federalClaimAmount is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/,
+      ],
       // Dot-grouping with a decimal comma ("1.234,56") reads by the same
       // rule every locale shares: the last separator is the decimal point.
       // The dot-last mirror ("1,234.56") must keep its grouping message —
       // that is the regression risk.
-      ['claim amount dot grouping', { federalClaimAmount: '1.234,56' }, /federalClaimAmount must use "\." as the decimal point — write "1\.234,56" as "1234\.56"/],
-      ['claim amount comma grouping unchanged', { federalClaimAmount: '1,234.56' }, /federalClaimAmount must not contain a thousands separator — remove , from "1,234\.56"/],
-      ['claim amount currency', { federalClaimAmount: '$1200' }, /federalClaimAmount must not contain a currency symbol — remove \$ from "\$1200"/],
-      ['claim amount scientific', { federalClaimAmount: '1.5E+05' }, /federalClaimAmount must be written out in full, not in scientific notation/],
+      [
+        "claim amount dot grouping",
+        { federalClaimAmount: "1.234,56" },
+        /federalClaimAmount must use "\." as the decimal point — write "1\.234,56" as "1234\.56"/,
+      ],
+      [
+        "claim amount comma grouping unchanged",
+        { federalClaimAmount: "1,234.56" },
+        /federalClaimAmount must not contain a thousands separator — remove , from "1,234\.56"/,
+      ],
+      [
+        "claim amount currency",
+        { federalClaimAmount: "$1200" },
+        /federalClaimAmount must not contain a currency symbol — remove \$ from "\$1200"/,
+      ],
+      [
+        "claim amount scientific",
+        { federalClaimAmount: "1.5E+05" },
+        /federalClaimAmount must be written out in full, not in scientific notation/,
+      ],
       // The echo is bounded: the body is arbitrary JSON, so an object must not
       // come back as "[object Object]" and a long paste must not come back
       // whole. Name the type, cap the string.
-      ['claim amount object', { federalClaimAmount: { a: 1 } }, /federalClaimAmount must be an amount — "a object" is not a number/],
-      ['claim amount long paste', { federalClaimAmount: 'x'.repeat(500) }, /is not a number/],
+      [
+        "claim amount object",
+        { federalClaimAmount: { a: 1 } },
+        /federalClaimAmount must be an amount — "a object" is not a number/,
+      ],
+      ["claim amount long paste", { federalClaimAmount: "x".repeat(500) }, /is not a number/],
     ] as const) {
-      const response = await post({ ...base, ...patch })
-      assert.equal(response.status, 422, `${label}: ${await response.clone().text()}`)
-      assert.match(((await response.json()) as { error: string }).error, message)
+      const response = await post({ ...base, ...patch });
+      assert.equal(response.status, 422, `${label}: ${await response.clone().text()}`);
+      assert.match(((await response.json()) as { error: string }).error, message);
     }
     // The boundary itself, both sides. numeric(19,4) is fifteen whole digits:
     // fifteen must SAVE and sixteen must refuse, or the limit in the message
     // is a number nobody has checked.
-    const sixteen = await post({ ...base, federalClaimAmount: '1234567890123456' })
-    assert.equal(sixteen.status, 422, await sixteen.clone().text())
-    assert.match(((await sixteen.json()) as { error: string }).error, /limited to 15 digits before the decimal point — got 16/)
+    const sixteen = await post({ ...base, federalClaimAmount: "1234567890123456" });
+    assert.equal(sixteen.status, 422, await sixteen.clone().text());
+    assert.match(
+      ((await sixteen.json()) as { error: string }).error,
+      /limited to 15 digits before the decimal point — got 16/,
+    );
 
-    const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`, 'objects'))
-    assert.equal(rows[0]!.count, '0')
+    const rows = await withOrgContext(org.orgId, () =>
+      db.execute<{ count: string }>(
+        sql`
+      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`,
+        "objects",
+      ),
+    );
+    assert.equal(rows[0]!.count, "0");
     // The widened scale, both sides: the money columns are numeric(19,4), so a
     // three-decimal figure the old 2dp gate refused as malformed must SAVE
     // exactly, while five decimals still refuse naming the four-place limit.
-    const threeDp = await post({ ...base, federalClaimAmount: '1234.567' })
-    assert.equal(threeDp.status, 200, await threeDp.clone().text())
-    const threeDpSaved = await withOrgContext(org.orgId, () => db.execute<{ federal_claim_amount: string }>(sql`
+    const threeDp = await post({ ...base, federalClaimAmount: "1234.567" });
+    assert.equal(threeDp.status, 200, await threeDp.clone().text());
+    const threeDpSaved = await withOrgContext(org.orgId, () =>
+      db.execute<{ federal_claim_amount: string }>(
+        sql`
       select federal_claim_amount::text from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
-    assert.deepEqual(threeDpSaved[0], { federal_claim_amount: '1234.5670' })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(threeDpSaved[0], { federal_claim_amount: "1234.5670" });
     // In-range values, including the column maximums at the route's 4dp
     // contract, still save.
-    const ok = await post({ ...base, federalClaimAmount: '999999999999999.99' })
-    assert.equal(ok.status, 200, await ok.clone().text())
-    const saved = await withOrgContext(org.orgId, () => db.execute<{ federal_claim_amount: string }>(sql`
+    const ok = await post({ ...base, federalClaimAmount: "999999999999999.99" });
+    assert.equal(ok.status, 200, await ok.clone().text());
+    const saved = await withOrgContext(org.orgId, () =>
+      db.execute<{ federal_claim_amount: string }>(
+        sql`
       select federal_claim_amount::text from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
-    assert.deepEqual(saved[0], { federal_claim_amount: '999999999999999.9900' })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(saved[0], { federal_claim_amount: "999999999999999.9900" });
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile GET serves the packs declared subdivisions and withholding shapes', async () => {
+test("profile GET serves the packs declared subdivisions and withholding shapes", async () => {
   // The editor renders whatever the installed packs declare: countries from
   // the registry, subdivision lists and labels from each pack's regions
   // coverage, withholding fields from its column-mapped certificates.
-  const { org } = await fixture()
+  const { org } = await fixture();
   try {
-    const response = await get()
-    assert.equal(response.status, 200, await response.clone().text())
+    const response = await get();
+    assert.equal(response.status, 200, await response.clone().text());
     const body = (await response.json()) as {
-      countries: string[]
-      packProfiles: Record<string, {
-        countryName: string
-        subdivisionLabel: string
-        subdivisions: string[]
-        subdivisionNames: Record<string, string>
-        supportedSubdivisions: string[]
-        certificates: { key: string; form: string; scope: { level: string; region?: string } }[]
-        exemptionFlags: { column: string }[]
-      }>
-    }
+      countries: string[];
+      packProfiles: Record<
+        string,
+        {
+          countryName: string;
+          subdivisionLabel: string;
+          subdivisions: string[];
+          subdivisionNames: Record<string, string>;
+          supportedSubdivisions: string[];
+          certificates: { key: string; form: string; scope: { level: string; region?: string } }[];
+          exemptionFlags: { column: string }[];
+        }
+      >;
+    };
     // The contract is that the editor renders whatever the installed packs
     // declare — the registry's keys, in registry order — not a CA/US union.
     // This pinned ['CA', 'US'] and went red the day the registry opened past
     // two countries: a stale pin, not a regression. Derive it; the GET is the
     // runtime registration assertion, so every registered pack must also
     // declare its profile shape below.
-    assert.deepEqual(body.countries, EXPECTED_COUNTRIES)
-    assert.deepEqual(Object.keys(body.packProfiles), EXPECTED_COUNTRIES)
+    assert.deepEqual(body.countries, EXPECTED_COUNTRIES);
+    assert.deepEqual(Object.keys(body.packProfiles), EXPECTED_COUNTRIES);
     for (const [country, profile] of Object.entries(body.packProfiles)) {
       // The pickers show names, never bare codes: the pack's own name for
       // the country, its regionNames for every known subdivision.
-      assert.equal(profile.countryName, PAYROLL_COUNTRY_PACKS[country]!.name, `${country} serves its pack name`)
+      assert.equal(
+        profile.countryName,
+        PAYROLL_COUNTRY_PACKS[country]!.name,
+        `${country} serves its pack name`,
+      );
       for (const code of profile.subdivisions) {
         assert.equal(
           profile.subdivisionNames[code],
           PAYROLL_COUNTRY_PACKS[country]!.regions.regionNames[code],
           `${country}/${code} serves its declared region name`,
-        )
+        );
       }
-      assert.equal(typeof profile.subdivisionLabel, 'string', `${country} declares a subdivision label`)
-      assert.ok(profile.subdivisionLabel.length > 0, `${country} subdivision label is non-empty`)
-      assert.ok(Array.isArray(profile.subdivisions), `${country} declares subdivisions`)
+      assert.equal(
+        typeof profile.subdivisionLabel,
+        "string",
+        `${country} declares a subdivision label`,
+      );
+      assert.ok(profile.subdivisionLabel.length > 0, `${country} subdivision label is non-empty`);
+      assert.ok(Array.isArray(profile.subdivisions), `${country} declares subdivisions`);
       // Anchor the loop: an installable pack that supports no subdivision
       // would make every assertion below vacuous. installable-region-coverage
       // pins the same fact at the pack level; this pins it at the wire.
       assert.ok(
         profile.supportedSubdivisions.length > 0,
         `${country} serves at least one supported subdivision`,
-      )
+      );
       for (const code of profile.supportedSubdivisions) {
-        assert.ok(profile.subdivisions.includes(code), `${country} supports only a known subdivision: ${code}`)
+        assert.ok(
+          profile.subdivisions.includes(code),
+          `${country} supports only a known subdivision: ${code}`,
+        );
       }
-      assert.ok(Array.isArray(profile.certificates), `${country} declares certificates`)
-      assert.ok(Array.isArray(profile.exemptionFlags), `${country} declares exemption flags`)
+      assert.ok(Array.isArray(profile.certificates), `${country} declares certificates`);
+      assert.ok(Array.isArray(profile.exemptionFlags), `${country} declares exemption flags`);
     }
-    const ca = body.packProfiles['CA']!
-    assert.equal(ca.subdivisionLabel, 'province')
-    assert.ok(ca.subdivisions.includes('ON') && ca.subdivisions.includes('ZZ'))
-    assert.deepEqual(ca.supportedSubdivisions, ca.subdivisions)
-    assert.ok(ca.certificates.some((c) => c.key === 'ca_td1' && c.scope.level === 'country'))
-    assert.ok(ca.certificates.some((c) => c.key === 'ca_td1_ON' && c.scope.region === 'ON'))
+    const ca = body.packProfiles["CA"]!;
+    assert.equal(ca.subdivisionLabel, "province");
+    assert.ok(ca.subdivisions.includes("ON") && ca.subdivisions.includes("ZZ"));
+    assert.deepEqual(ca.supportedSubdivisions, ca.subdivisions);
+    assert.ok(ca.certificates.some((c) => c.key === "ca_td1" && c.scope.level === "country"));
+    assert.ok(ca.certificates.some((c) => c.key === "ca_td1_ON" && c.scope.region === "ON"));
     // Canada's only profile-level exclusion is the workers-compensation one:
     // CPP/EI/income-tax exemptions stay TD1 flag fields on the certificates.
-    assert.deepEqual(ca.exemptionFlags.map((f) => f.column), ['wcb_exempt'])
-    const us = body.packProfiles['US']!
-    assert.equal(us.subdivisionLabel, 'state')
-    assert.ok(us.subdivisions.includes('CA') && us.subdivisions.includes('NY'))
-    assert.ok(us.subdivisions.includes('DC'), 'DC is a declared US subdivision')
+    assert.deepEqual(
+      ca.exemptionFlags.map((f) => f.column),
+      ["wcb_exempt"],
+    );
+    const us = body.packProfiles["US"]!;
+    assert.equal(us.subdivisionLabel, "state");
+    assert.ok(us.subdivisions.includes("CA") && us.subdivisions.includes("NY"));
+    assert.ok(us.subdivisions.includes("DC"), "DC is a declared US subdivision");
     // Coverage is complete: every declared US subdivision is supported.
     // DC was the last wage-tax gap; it left unimplementedUsStates() by
     // gaining an engine, not by the supported list being weakened. The
     // previous `<` asserted that absence; it is no longer a fact. Pin
     // the equality the same way Canada is pinned — do not reopen a gap
     // to satisfy a stale comparison.
-    assert.deepEqual(us.supportedSubdivisions, us.subdivisions)
-    assert.ok(us.certificates.some((c) => c.key === 'us_w4'))
-    assert.deepEqual(us.exemptionFlags.map((f) => f.column).sort(), ['fica_exempt', 'futa_exempt', 'sui_exempt'])
+    assert.deepEqual(us.supportedSubdivisions, us.subdivisions);
+    assert.ok(us.certificates.some((c) => c.key === "us_w4"));
+    assert.deepEqual(us.exemptionFlags.map((f) => f.column).sort(), [
+      "fica_exempt",
+      "futa_exempt",
+      "sui_exempt",
+    ]);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile POST validates withholding answers against the pack declaration', async () => {
+test("profile POST validates withholding answers against the pack declaration", async () => {
   // Choice sets and count bands come from the pack's declared certificate
   // fields: the W-4's statuses and 0–99 allowances, the TD1's 0–10 codes.
   // An answer for a column the pack does not declare is refused.
-  const { org, employeeId, scheduleId } = await fixture()
+  const { org, employeeId, scheduleId } = await fixture();
   try {
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly' }
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: "hourly" };
     const list = (await (await get()).json()) as {
-      packProfiles: Record<string, { supportedSubdivisions: string[] }>
-    }
-    const usState = list.packProfiles['US']!.supportedSubdivisions[0]!
+      packProfiles: Record<string, { supportedSubdivisions: string[] }>;
+    };
+    const usState = list.packProfiles["US"]!.supportedSubdivisions[0]!;
     for (const [label, patch, status, message] of [
-      ['US filing status', { country: 'US', province: usState, filingStatus: 'single', sin: '123-45-6789' }, 200, null],
-      ['unknown status', { country: 'US', province: usState, filingStatus: 'separate', sin: '123-45-6789' }, 422, /invalid filingStatus/],
-      ['CA filing status', { country: 'CA', province: 'ON', filingStatus: 'single', sin: '046454286' }, 422, /invalid filingStatus/],
-      ['CA claim code', { country: 'CA', province: 'ON', federalClaimCode: 5, sin: '046454286' }, 200, null],
-      ['CA claim code band', { country: 'CA', province: 'ON', federalClaimCode: 11, sin: '046454286' }, 422, /claim code must be 0–10/],
+      [
+        "US filing status",
+        { country: "US", province: usState, filingStatus: "single", sin: "123-45-6789" },
+        200,
+        null,
+      ],
+      [
+        "unknown status",
+        { country: "US", province: usState, filingStatus: "separate", sin: "123-45-6789" },
+        422,
+        /invalid filingStatus/,
+      ],
+      [
+        "CA filing status",
+        { country: "CA", province: "ON", filingStatus: "single", sin: "046454286" },
+        422,
+        /invalid filingStatus/,
+      ],
+      [
+        "CA claim code",
+        { country: "CA", province: "ON", federalClaimCode: 5, sin: "046454286" },
+        200,
+        null,
+      ],
+      [
+        "CA claim code band",
+        { country: "CA", province: "ON", federalClaimCode: 11, sin: "046454286" },
+        422,
+        /claim code must be 0–10/,
+      ],
       // A code province accepts a provincial claim code; Québec, whose pack
       // declares claimIdentity 'amount', refuses it by name and names its form.
-      ['CA provincial claim code', { country: 'CA', province: 'ON', provincialClaimCode: 2, sin: '046454286' }, 200, null],
-      ['QC claim code refused', { country: 'CA', province: 'QC', provincialClaimCode: 1, sin: '046454286' }, 422, /TP-1015\.3-V identifies the claim by an amount/],
-      ['QC claim amount accepted', { country: 'CA', province: 'QC', provincialClaimAmount: '15000', sin: '046454286' }, 200, null],
-      ['US claim code', { country: 'US', province: usState, federalClaimCode: 1, sin: '123-45-6789' }, 422, /not declared/],
-      ['US allowances', { country: 'US', province: usState, w4Allowances: 5, sin: '123-45-6789' }, 200, null],
-      ['US allowances band', { country: 'US', province: usState, w4Allowances: 100, sin: '123-45-6789' }, 422, /invalid w4Allowances/],
-      ['CA allowances', { country: 'CA', province: 'ON', w4Allowances: 1, sin: '046454286' }, 422, /invalid w4Allowances/],
+      [
+        "CA provincial claim code",
+        { country: "CA", province: "ON", provincialClaimCode: 2, sin: "046454286" },
+        200,
+        null,
+      ],
+      [
+        "QC claim code refused",
+        { country: "CA", province: "QC", provincialClaimCode: 1, sin: "046454286" },
+        422,
+        /TP-1015\.3-V identifies the claim by an amount/,
+      ],
+      [
+        "QC claim amount accepted",
+        { country: "CA", province: "QC", provincialClaimAmount: "15000", sin: "046454286" },
+        200,
+        null,
+      ],
+      [
+        "US claim code",
+        { country: "US", province: usState, federalClaimCode: 1, sin: "123-45-6789" },
+        422,
+        /not declared/,
+      ],
+      [
+        "US allowances",
+        { country: "US", province: usState, w4Allowances: 5, sin: "123-45-6789" },
+        200,
+        null,
+      ],
+      [
+        "US allowances band",
+        { country: "US", province: usState, w4Allowances: 100, sin: "123-45-6789" },
+        422,
+        /invalid w4Allowances/,
+      ],
+      [
+        "CA allowances",
+        { country: "CA", province: "ON", w4Allowances: 1, sin: "046454286" },
+        422,
+        /invalid w4Allowances/,
+      ],
     ] as const) {
-      const response = await post({ ...base, ...patch })
-      assert.equal(response.status, status, `${label}: ${await response.clone().text()}`)
-      if (message) assert.match(((await response.json()) as { error: string }).error, message)
+      const response = await post({ ...base, ...patch });
+      assert.equal(response.status, status, `${label}: ${await response.clone().text()}`);
+      if (message) assert.match(((await response.json()) as { error: string }).error, message);
     }
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('US FUTA and SUI exemption facts save independently', async () => {
-  const { org, employeeId, scheduleId } = await fixture()
+test("US FUTA and SUI exemption facts save independently", async () => {
+  const { org, employeeId, scheduleId } = await fixture();
   try {
     const response = await post({
       employeePartyId: employeeId,
       payScheduleId: scheduleId,
-      country: 'US',
-      province: 'CA',
-      payBasis: 'hourly',
+      country: "US",
+      province: "CA",
+      payBasis: "hourly",
       ficaExempt: false,
       futaExempt: true,
       suiExempt: false,
-      sin: '123-45-6789',
-    })
-    assert.equal(response.status, 200, await response.clone().text())
-    const stored = await withOrgContext(org.orgId, () => db.execute<{
-      futa_exempt: boolean; sui_exempt: boolean;
-    }>(sql`
+      sin: "123-45-6789",
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    const stored = await withOrgContext(org.orgId, () =>
+      db.execute<{
+        futa_exempt: boolean;
+        sui_exempt: boolean;
+      }>(
+        sql`
       select futa_exempt, sui_exempt from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
-    assert.deepEqual(stored[0], { futa_exempt: true, sui_exempt: false })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(stored[0], { futa_exempt: true, sui_exempt: false });
 
     const reverse = await post({
       employeePartyId: employeeId,
       payScheduleId: scheduleId,
-      country: 'US',
-      province: 'CA',
-      payBasis: 'hourly',
+      country: "US",
+      province: "CA",
+      payBasis: "hourly",
       ficaExempt: false,
       futaExempt: false,
       suiExempt: true,
-      sin: '123-45-6789',
-    })
-    assert.equal(reverse.status, 200, await reverse.clone().text())
-    const updated = await withOrgContext(org.orgId, () => db.execute<{
-      futa_exempt: boolean; sui_exempt: boolean;
-    }>(sql`
+      sin: "123-45-6789",
+    });
+    assert.equal(reverse.status, 200, await reverse.clone().text());
+    const updated = await withOrgContext(org.orgId, () =>
+      db.execute<{
+        futa_exempt: boolean;
+        sui_exempt: boolean;
+      }>(
+        sql`
       select futa_exempt, sui_exempt from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
-    assert.deepEqual(updated[0], { futa_exempt: false, sui_exempt: true })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(updated[0], { futa_exempt: false, sui_exempt: true });
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile POST validates the sealed identifier against the pack declaration', async () => {
+test("profile POST validates the sealed identifier against the pack declaration", async () => {
   // The old validator stripped non-digits and demanded nine: every
   // alphanumeric identifier was mangled and every non-9-digit one refused.
   // The pack's own pattern judges the value as given; refusals name the
   // pack's own label and shape, so the 422 is worth showing.
-  const { org, employeeId, scheduleId } = await fixture()
+  const { org, employeeId, scheduleId } = await fixture();
   try {
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly' }
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: "hourly" };
     const list = (await (await get()).json()) as {
-      packProfiles: Record<string, { supportedSubdivisions: string[] }>
-    }
-    const usState = list.packProfiles['US']!.supportedSubdivisions[0]!
+      packProfiles: Record<string, { supportedSubdivisions: string[] }>;
+    };
+    const usState = list.packProfiles["US"]!.supportedSubdivisions[0]!;
     for (const [label, patch, status, message] of [
-      ['GB NINO', { country: 'GB', province: 'ENG', sin: 'QQ123456C' }, 200, null],
-      ['GB spaced NINO', { country: 'GB', province: 'ENG', sin: 'QQ 12 34 56 C' }, 200, null],
-      ['FR Corsican NIR', { country: 'FR', province: 'FR', sin: '254022A03300522' }, 200, null],
-      ['NL BSN failing 11-proef', { country: 'NL', province: 'NL', sin: '123456789' }, 422, /BSN.*11-proef/i],
-      ['US hyphenated SSN', { country: 'US', province: usState, sin: '123-45-6789' }, 200, null],
-      ['stripped NINO digits', { country: 'GB', province: 'ENG', sin: '123456' }, 422, /National Insurance number/],
-      ['stripped Corsican NIR', { country: 'FR', province: 'FR', sin: '25402203300522' }, 422, /numéro de sécurité sociale/],
-      ['spaced US SSN', { country: 'US', province: usState, sin: '12345 6789' }, 422, /SSN/],
-      ['dashed CA SIN', { country: 'CA', province: 'ON', sin: '046-454-286' }, 422, /SIN/],
+      ["GB NINO", { country: "GB", province: "ENG", sin: "QQ123456C" }, 200, null],
+      ["GB spaced NINO", { country: "GB", province: "ENG", sin: "QQ 12 34 56 C" }, 200, null],
+      ["FR Corsican NIR", { country: "FR", province: "FR", sin: "254022A03300522" }, 200, null],
+      [
+        "NL BSN failing 11-proef",
+        { country: "NL", province: "NL", sin: "123456789" },
+        422,
+        /BSN.*11-proef/i,
+      ],
+      ["US hyphenated SSN", { country: "US", province: usState, sin: "123-45-6789" }, 200, null],
+      [
+        "stripped NINO digits",
+        { country: "GB", province: "ENG", sin: "123456" },
+        422,
+        /National Insurance number/,
+      ],
+      [
+        "stripped Corsican NIR",
+        { country: "FR", province: "FR", sin: "25402203300522" },
+        422,
+        /numéro de sécurité sociale/,
+      ],
+      ["spaced US SSN", { country: "US", province: usState, sin: "12345 6789" }, 422, /SSN/],
+      ["dashed CA SIN", { country: "CA", province: "ON", sin: "046-454-286" }, 422, /SIN/],
       // Saves never refuse for a missing identifier — required-ness is the
       // readiness warnings' job — so an omitted key keeps the sealed value.
-      ['missing CA SIN keeps', { country: 'CA', province: 'ON' }, 200, null],
+      ["missing CA SIN keeps", { country: "CA", province: "ON" }, 200, null],
     ] as const) {
-      const response = await post({ ...base, ...patch })
-      assert.equal(response.status, status, `${label}: ${await response.clone().text()}`)
-      if (message) assert.match(((await response.json()) as { error: string }).error, message)
+      const response = await post({ ...base, ...patch });
+      assert.equal(response.status, status, `${label}: ${await response.clone().text()}`);
+      if (message) assert.match(((await response.json()) as { error: string }).error, message);
     }
     // Nothing was persisted by the refusals: the last accepted value (the
     // hyphenated SSN) is what the row holds, sealed.
-    const stored = await withOrgContext(org.orgId, () => db.execute<{ present: boolean; last3: string | null }>(sql`
+    const stored = await withOrgContext(org.orgId, () =>
+      db.execute<{ present: boolean; last3: string | null }>(
+        sql`
       select (sin_encrypted is not null) as present, sin_last3 as "last3"
         from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
-    assert.equal(stored[0]!.present, true)
-    assert.equal(stored[0]!.last3, '789')
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+        "objects",
+      ),
+    );
+    assert.equal(stored[0]!.present, true);
+    assert.equal(stored[0]!.last3, "789");
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile POST saves an identifier-less employee where the pack does not require one', async () => {
+test("profile POST saves an identifier-less employee where the pack does not require one", async () => {
   // Quoting a TFN is voluntary, so the AU pack declares its identifier not
   // required: the save succeeds and clears the sealed value.
-  const { org, employeeId, scheduleId } = await fixture()
+  const { org, employeeId, scheduleId } = await fixture();
   try {
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly' }
-    const seeded = await post({ ...base, country: 'AU', province: 'NSW', sin: '123456782' })
-    assert.equal(seeded.status, 200, await seeded.clone().text())
-    const cleared = await post({ ...base, country: 'AU', province: 'NSW', sin: '' })
-    assert.equal(cleared.status, 200, await cleared.clone().text())
-    const stored = await withOrgContext(org.orgId, () => db.execute<{ present: boolean; last3: string | null }>(sql`
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: "hourly" };
+    const seeded = await post({ ...base, country: "AU", province: "NSW", sin: "123456782" });
+    assert.equal(seeded.status, 200, await seeded.clone().text());
+    const cleared = await post({ ...base, country: "AU", province: "NSW", sin: "" });
+    assert.equal(cleared.status, 200, await cleared.clone().text());
+    const stored = await withOrgContext(org.orgId, () =>
+      db.execute<{ present: boolean; last3: string | null }>(
+        sql`
       select (sin_encrypted is not null) as present, sin_last3 as "last3"
         from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
-    assert.equal(stored[0]!.present, false)
-    assert.equal(stored[0]!.last3, null)
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+        "objects",
+      ),
+    );
+    assert.equal(stored[0]!.present, false);
+    assert.equal(stored[0]!.last3, null);
     // Omitting the key entirely keeps the cleared state and still saves.
-    const omitted = await post({ ...base, country: 'AU', province: 'NSW' })
-    assert.equal(omitted.status, 200, await omitted.clone().text())
+    const omitted = await post({ ...base, country: "AU", province: "NSW" });
+    assert.equal(omitted.status, 200, await omitted.clone().text());
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile GET never echoes the sealed identifier, only its last three', async () => {
-  const { org, employeeId, scheduleId } = await fixture()
+test("profile GET never echoes the sealed identifier, only its last three", async () => {
+  const { org, employeeId, scheduleId } = await fixture();
   try {
     const saved = await post({
-      employeePartyId: employeeId, payScheduleId: scheduleId,
-      country: 'GB', province: 'ENG', payBasis: 'hourly', sin: 'QQ123456C',
-    })
-    assert.equal(saved.status, 200, await saved.clone().text())
-    const response = await get(`?employee=${employeeId}`)
-    assert.equal(response.status, 200, await response.clone().text())
-    const body = (await response.json()) as { profile: Record<string, unknown> }
-    assert.equal(body.profile['sin_last3'], '56C')
-    assert.ok(!('sin' in body.profile), 'the sealed value is never echoed')
-    assert.ok(!('sin_encrypted' in body.profile), 'the ciphertext is never echoed')
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: "GB",
+      province: "ENG",
+      payBasis: "hourly",
+      sin: "QQ123456C",
+    });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    const response = await get(`?employee=${employeeId}`);
+    assert.equal(response.status, 200, await response.clone().text());
+    const body = (await response.json()) as { profile: Record<string, unknown> };
+    assert.equal(body.profile["sin_last3"], "56C");
+    assert.ok(!("sin" in body.profile), "the sealed value is never echoed");
+    assert.ok(!("sin_encrypted" in body.profile), "the ciphertext is never echoed");
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile GET serves every pack identifier declaration', async () => {
+test("profile GET serves every pack identifier declaration", async () => {
   // The editor labels the sealed field from the pack — NINO, PPSN, NIR —
   // never a hardcoded "SIN / SSN".
-  const { org } = await fixture()
+  const { org } = await fixture();
   try {
     const body = (await (await get()).json()) as {
-      packProfiles: Record<string, {
-        identifier: {
-          label: string; formatHelp: string; example: string;
-          required: boolean; neededFor: string | null; numericEntry: boolean;
+      packProfiles: Record<
+        string,
+        {
+          identifier: {
+            label: string;
+            formatHelp: string;
+            example: string;
+            required: boolean;
+            neededFor: string | null;
+            numericEntry: boolean;
+          };
         }
-      }>
-    }
-    assert.deepEqual(Object.keys(body.packProfiles), EXPECTED_COUNTRIES)
+      >;
+    };
+    assert.deepEqual(Object.keys(body.packProfiles), EXPECTED_COUNTRIES);
     for (const [country, profile] of Object.entries(body.packProfiles)) {
-      assert.ok(profile.identifier.label.length > 0, `${country} declares an identifier label`)
-      assert.ok(profile.identifier.formatHelp.length > 0, `${country} declares an identifier shape`)
-      assert.ok(profile.identifier.example.length > 0, `${country} declares an identifier example`)
+      assert.ok(profile.identifier.label.length > 0, `${country} declares an identifier label`);
+      assert.ok(
+        profile.identifier.formatHelp.length > 0,
+        `${country} declares an identifier shape`,
+      );
+      assert.ok(profile.identifier.example.length > 0, `${country} declares an identifier example`);
     }
-    assert.equal(body.packProfiles['GB']!.identifier.label, 'National Insurance number')
-    assert.equal(body.packProfiles['IE']!.identifier.label, 'PPSN')
-    assert.equal(body.packProfiles['IE']!.identifier.neededFor, null)
-    assert.equal(body.packProfiles['AU']!.identifier.required, false)
-    assert.equal(body.packProfiles['CA']!.identifier.required, true)
+    assert.equal(body.packProfiles["GB"]!.identifier.label, "National Insurance number");
+    assert.equal(body.packProfiles["IE"]!.identifier.label, "PPSN");
+    assert.equal(body.packProfiles["IE"]!.identifier.neededFor, null);
+    assert.equal(body.packProfiles["AU"]!.identifier.required, false);
+    assert.equal(body.packProfiles["CA"]!.identifier.required, true);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile POST saves the same valid US profile concurrently without a 422', async () => {
+test("profile POST saves the same valid US profile concurrently without a 422", async () => {
   // The reported defect: an intermittent 422 saving a valid US profile. Drive
   // it the way it was reported — many concurrent saves of the same employee,
   // then many concurrent saves across employees — and require every one to
   // succeed. A regression that refuses committed-looking rows under
   // concurrency turns any of these red with the 422 body attached.
-  const { org, employeeId, scheduleId } = await fixture()
+  const { org, employeeId, scheduleId } = await fixture();
   try {
     const list = (await (await get()).json()) as {
-      packProfiles: Record<string, { supportedSubdivisions: string[] }>
-    }
-    const usState = list.packProfiles['US']!.supportedSubdivisions[0]!
+      packProfiles: Record<string, { supportedSubdivisions: string[] }>;
+    };
+    const usState = list.packProfiles["US"]!.supportedSubdivisions[0]!;
     const body = (id: string, allowances: number) => ({
-      employeePartyId: id, payScheduleId: scheduleId,
-      country: 'US', province: usState, payBasis: 'hourly',
-      sin: '123-45-6789', w4Allowances: allowances,
-    })
+      employeePartyId: id,
+      payScheduleId: scheduleId,
+      country: "US",
+      province: usState,
+      payBasis: "hourly",
+      sin: "123-45-6789",
+      w4Allowances: allowances,
+    });
     const sameEmployee = await Promise.all(
       Array.from({ length: 40 }, (_, i) => post(body(employeeId, i % 100))),
-    )
+    );
     for (const [i, response] of sameEmployee.entries()) {
-      assert.equal(response.status, 200, `same-employee save ${i}: ${await response.clone().text()}`)
+      assert.equal(
+        response.status,
+        200,
+        `same-employee save ${i}: ${await response.clone().text()}`,
+      );
     }
-    const others: string[] = []
+    const others: string[] = [];
     await withBypassContext(async () => {
       for (let i = 0; i < 5; i++) {
-        const id = randomUUID()
+        const id = randomUUID();
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, is_active, custom)
-          values (${id}, ${org.orgId}, 'person', ${`Load Hire ${i}`}, true, '{}'::jsonb)`)
+          values (${id}, ${org.orgId}, 'person', ${`Load Hire ${i}`}, true, '{}'::jsonb)`);
         await db.execute(sql`
           insert into employee_roles (id, org_id, party_id, terminated_on)
-          values (${randomUUID()}, ${org.orgId}, ${id}, null)`)
-        others.push(id)
+          values (${randomUUID()}, ${org.orgId}, ${id}, null)`);
+        others.push(id);
       }
-    })
+    });
     const acrossEmployees = await Promise.all(
       others.flatMap((id, ei) =>
-        Array.from({ length: 8 }, (_, i) => post(body(id, (ei * 8 + i) % 100)))),
-    )
+        Array.from({ length: 8 }, (_, i) => post(body(id, (ei * 8 + i) % 100))),
+      ),
+    );
     for (const [i, response] of acrossEmployees.entries()) {
-      assert.equal(response.status, 200, `cross-employee save ${i}: ${await response.clone().text()}`)
+      assert.equal(
+        response.status,
+        200,
+        `cross-employee save ${i}: ${await response.clone().text()}`,
+      );
     }
-    const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`, 'objects'))
-    assert.equal(rows[0]!.count, String(1 + others.length))
+    const rows = await withOrgContext(org.orgId, () =>
+      db.execute<{ count: string }>(
+        sql`
+      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`,
+        "objects",
+      ),
+    );
+    assert.equal(rows[0]!.count, String(1 + others.length));
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile POST holds the employee row lock across the scope check and upsert', async () => {
+test("profile POST holds the employee row lock across the scope check and upsert", async () => {
   // The scope comment promises a re-home racing the save cannot slip between
   // the subsidiary check and the write. That holds only while the locking
   // reads and the upsert share one transaction: hold an uncommitted re-home
@@ -479,329 +716,683 @@ test('profile POST holds the employee row lock across the scope check and upsert
   // block on the employee lock rather than sailing through on released locks.
   // It then proceeds to 200 once the contender rolls back — the write is
   // refused-or-validated, never stale.
-  const { org, employeeId, scheduleId } = await fixture()
-  const holder = await withBypassContext(() => pool.connect())
-  assert.ok(holder, 'a second database connection is required to stage the racing re-home')
+  const { org, employeeId, scheduleId } = await fixture();
+  const holder = await withBypassContext(() => pool.connect());
+  assert.ok(holder, "a second database connection is required to stage the racing re-home");
   try {
     const list = (await (await get()).json()) as {
-      packProfiles: Record<string, { supportedSubdivisions: string[] }>
-    }
-    const usState = list.packProfiles['US']!.supportedSubdivisions[0]!
+      packProfiles: Record<string, { supportedSubdivisions: string[] }>;
+    };
+    const usState = list.packProfiles["US"]!.supportedSubdivisions[0]!;
     // The holder connection carries bypass GUCs from its acquisition above,
     // so this block states the scope the raw queries already run under.
     await withBypassContext(async () => {
-      await holder.query('begin')
-      await holder.query('update parties set display_name = $1 where id = $2', ['Re-homed Rival', employeeId])
-    })
-    let settled = false
+      await holder.query("begin");
+      await holder.query("update parties set display_name = $1 where id = $2", [
+        "Re-homed Rival",
+        employeeId,
+      ]);
+    });
+    let settled = false;
     const pending = post({
-      employeePartyId: employeeId, payScheduleId: scheduleId,
-      country: 'US', province: usState, payBasis: 'hourly', sin: '123-45-6789',
-    }).finally(() => { settled = true })
-    await new Promise((resolve) => setTimeout(resolve, 750))
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: "US",
+      province: usState,
+      payBasis: "hourly",
+      sin: "123-45-6789",
+    }).finally(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 750));
     assert.equal(
-      settled, false,
-      'the save must block on the in-flight re-home: its reads hold the employee row to commit',
-    )
-    await holder.query('rollback')
-    const response = await pending
-    assert.equal(response.status, 200, await response.clone().text())
-    const saved = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
+      settled,
+      false,
+      "the save must block on the in-flight re-home: its reads hold the employee row to commit",
+    );
+    await holder.query("rollback");
+    const response = await pending;
+    assert.equal(response.status, 200, await response.clone().text());
+    const saved = await withOrgContext(org.orgId, () =>
+      db.execute<{ count: string }>(
+        sql`
       select count(*) as count from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
-    assert.equal(saved[0]!.count, '1')
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+        "objects",
+      ),
+    );
+    assert.equal(saved[0]!.count, "1");
   } finally {
-    try { await holder.query('rollback') } catch { /* already settled above */ }
-    holder.release()
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    try {
+      await holder.query("rollback");
+    } catch {
+      /* already settled above */
+    }
+    holder.release();
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile POST validates pack-declared employee facts against the declaration', async () => {
+test("profile POST validates pack-declared employee facts against the declaration", async () => {
   // 0191 facts: every band and closed set comes from the pack's own
   // certificate declaration, and every refusal names the fact's
   // operator-facing label — never the engine key. An answer for a column
   // the pack does not declare is refused rather than stored where no
   // engine reads it.
-  const { org, employeeId, scheduleId } = await fixture()
+  const { org, employeeId, scheduleId } = await fixture();
   try {
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly' }
+    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: "hourly" };
     for (const [label, patch, status, message] of [
-      ['PL birth year', { country: 'PL', province: 'PL', plRokUrodzenia: 1990 }, 200, null],
-      ['PL birth year band', { country: 'PL', province: 'PL', plRokUrodzenia: 1850 }, 422, /Birth year \(rok urodzenia\) must be 1900–2026/],
-      ['PL birth year unreadable', { country: 'PL', province: 'PL', plRokUrodzenia: 'sometime' }, 422, /Birth year \(rok urodzenia\) must be a whole number — "sometime" is not a number/],
-      ['ES trio', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1990, esContratoTemporal: 'false' }, 200, null],
-      ['ES contrato closed', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1990, esContratoTemporal: 'yes' }, 422, /Contrato temporal must be answered "true" or "false"/],
-      ['ES grupo band', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 12, esAnoNacimiento: 1990 }, 422, /Grupo de cotización \(1–11\) must be 1–11/],
-      ['ES grupo zero', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 0, esAnoNacimiento: 1990 }, 422, /Grupo de cotización \(1–11\) must be 1–11/],
-      ['ES situacion closed', { country: 'ES', province: 'MD', esSituacionLaboral: 'casado', esGrupoCotizacion: 3, esAnoNacimiento: 1990 }, 422, /Situación laboral \(SITUPER\) must be one of activo, pensionista, desempleado/],
-      ['ES ano band', { country: 'ES', province: 'MD', esSituacionLaboral: 'activo', esGrupoCotizacion: 3, esAnoNacimiento: 1850 }, 422, /Año de nacimiento must be 1906–2026/],
-      ['ES grupo on a PL profile', { country: 'PL', province: 'PL', plRokUrodzenia: 1990, esGrupoCotizacion: 3 }, 422, /Grupo de cotización \(1–11\) is not declared by the PL payroll pack/],
-      ['JP grade and status', { country: 'JP', province: '13', jpHyojunHoshu: 360000, jpKaigoDainigou: 'false' }, 200, null],
-      ['JP grade whole yen', { country: 'JP', province: '13', jpHyojunHoshu: -5, jpKaigoDainigou: 'false' }, 422, /must be a whole number at least 0/],
-      ['JP kaigo closed', { country: 'JP', province: '13', jpHyojunHoshu: 360000, jpKaigoDainigou: 'yes' }, 422, /must be answered "true" or "false"/],
-      ['JP grade thousands separator', { country: 'JP', province: '13', jpHyojunHoshu: '300,000', jpKaigoDainigou: 'false' }, 422, /is ambiguous — "300,000" could mean 300000/],
-      ['JP grade cleared', { country: 'JP', province: '13', jpHyojunHoshu: null, jpKaigoDainigou: 'false' }, 422, /is required and is on file as 360000; this save would clear it/],
-      ['BR dependentes and pensao', { country: 'BR', province: 'BR', brDependentes: 2, brPensaoMensal: '1500.00' }, 200, null],
-      ['BR dependentes floor', { country: 'BR', province: 'BR', brDependentes: -1 }, 422, /Dependentes \(eSocial cadastro\) must be a whole number at least 0/],
-      ['BR pensao unreadable', { country: 'BR', province: 'BR', brDependentes: 0, brPensaoMensal: 'abc' }, 422, /Pensão alimentícia mensal \(court-ordered\) must be an amount — "abc" is not a number/],
-      ['BR pensao negative', { country: 'BR', province: 'BR', brDependentes: 0, brPensaoMensal: '-5' }, 422, /Pensão alimentícia mensal \(court-ordered\) cannot be negative — got -5/],
+      ["PL birth year", { country: "PL", province: "PL", plRokUrodzenia: 1990 }, 200, null],
+      [
+        "PL birth year band",
+        { country: "PL", province: "PL", plRokUrodzenia: 1850 },
+        422,
+        /Birth year \(rok urodzenia\) must be 1900–2026/,
+      ],
+      [
+        "PL birth year unreadable",
+        { country: "PL", province: "PL", plRokUrodzenia: "sometime" },
+        422,
+        /Birth year \(rok urodzenia\) must be a whole number — "sometime" is not a number/,
+      ],
+      [
+        "ES trio",
+        {
+          country: "ES",
+          province: "MD",
+          esSituacionLaboral: "activo",
+          esGrupoCotizacion: 3,
+          esAnoNacimiento: 1990,
+          esContratoTemporal: "false",
+        },
+        200,
+        null,
+      ],
+      [
+        "ES contrato closed",
+        {
+          country: "ES",
+          province: "MD",
+          esSituacionLaboral: "activo",
+          esGrupoCotizacion: 3,
+          esAnoNacimiento: 1990,
+          esContratoTemporal: "yes",
+        },
+        422,
+        /Contrato temporal must be answered "true" or "false"/,
+      ],
+      [
+        "ES grupo band",
+        {
+          country: "ES",
+          province: "MD",
+          esSituacionLaboral: "activo",
+          esGrupoCotizacion: 12,
+          esAnoNacimiento: 1990,
+        },
+        422,
+        /Grupo de cotización \(1–11\) must be 1–11/,
+      ],
+      [
+        "ES grupo zero",
+        {
+          country: "ES",
+          province: "MD",
+          esSituacionLaboral: "activo",
+          esGrupoCotizacion: 0,
+          esAnoNacimiento: 1990,
+        },
+        422,
+        /Grupo de cotización \(1–11\) must be 1–11/,
+      ],
+      [
+        "ES situacion closed",
+        {
+          country: "ES",
+          province: "MD",
+          esSituacionLaboral: "casado",
+          esGrupoCotizacion: 3,
+          esAnoNacimiento: 1990,
+        },
+        422,
+        /Situación laboral \(SITUPER\) must be one of activo, pensionista, desempleado/,
+      ],
+      [
+        "ES ano band",
+        {
+          country: "ES",
+          province: "MD",
+          esSituacionLaboral: "activo",
+          esGrupoCotizacion: 3,
+          esAnoNacimiento: 1850,
+        },
+        422,
+        /Año de nacimiento must be 1906–2026/,
+      ],
+      [
+        "ES grupo on a PL profile",
+        { country: "PL", province: "PL", plRokUrodzenia: 1990, esGrupoCotizacion: 3 },
+        422,
+        /Grupo de cotización \(1–11\) is not declared by the PL payroll pack/,
+      ],
+      [
+        "JP grade and status",
+        { country: "JP", province: "13", jpHyojunHoshu: 360000, jpKaigoDainigou: "false" },
+        200,
+        null,
+      ],
+      [
+        "JP grade whole yen",
+        { country: "JP", province: "13", jpHyojunHoshu: -5, jpKaigoDainigou: "false" },
+        422,
+        /must be a whole number at least 0/,
+      ],
+      [
+        "JP kaigo closed",
+        { country: "JP", province: "13", jpHyojunHoshu: 360000, jpKaigoDainigou: "yes" },
+        422,
+        /must be answered "true" or "false"/,
+      ],
+      [
+        "JP grade thousands separator",
+        { country: "JP", province: "13", jpHyojunHoshu: "300,000", jpKaigoDainigou: "false" },
+        422,
+        /is ambiguous — "300,000" could mean 300000/,
+      ],
+      [
+        "JP grade cleared",
+        { country: "JP", province: "13", jpHyojunHoshu: null, jpKaigoDainigou: "false" },
+        422,
+        /is required and is on file as 360000; this save would clear it/,
+      ],
+      [
+        "BR dependentes and pensao",
+        { country: "BR", province: "BR", brDependentes: 2, brPensaoMensal: "1500.00" },
+        200,
+        null,
+      ],
+      [
+        "BR dependentes floor",
+        { country: "BR", province: "BR", brDependentes: -1 },
+        422,
+        /Dependentes \(eSocial cadastro\) must be a whole number at least 0/,
+      ],
+      [
+        "BR pensao unreadable",
+        { country: "BR", province: "BR", brDependentes: 0, brPensaoMensal: "abc" },
+        422,
+        /Pensão alimentícia mensal \(court-ordered\) must be an amount — "abc" is not a number/,
+      ],
+      [
+        "BR pensao negative",
+        { country: "BR", province: "BR", brDependentes: 0, brPensaoMensal: "-5" },
+        422,
+        /Pensão alimentícia mensal \(court-ordered\) cannot be negative — got -5/,
+      ],
     ] as const) {
-      const response = await post({ ...base, ...patch })
-      assert.equal(response.status, status, `${label}: ${await response.clone().text()}`)
+      const response = await post({ ...base, ...patch });
+      assert.equal(response.status, status, `${label}: ${await response.clone().text()}`);
       if (message) {
-        const error = ((await response.json()) as { error: string }).error
-        assert.match(error, message)
-        assert.doesNotMatch(error, /pl_rok_urodzenia|es_grupo_cotizacion|es_situacion_laboral|es_ano_nacimiento|es_contrato_temporal|jp_hyojun_hoshu|jp_kaigo_dainigou|br_dependentes|br_pensao_mensal/, `${label} names an engine key`)
+        const error = ((await response.json()) as { error: string }).error;
+        assert.match(error, message);
+        assert.doesNotMatch(
+          error,
+          /pl_rok_urodzenia|es_grupo_cotizacion|es_situacion_laboral|es_ano_nacimiento|es_contrato_temporal|jp_hyojun_hoshu|jp_kaigo_dainigou|br_dependentes|br_pensao_mensal/,
+          `${label} names an engine key`,
+        );
       }
     }
     // The last accepted save (BR dependentes 0, pensão refused) leaves the
     // row BR with dependentes 0 — the accepted zero, not a default — and a
     // null pensão. A separate valid BR save proves both columns persist.
-    const saved = await post({ ...base, country: 'BR', province: 'BR', brDependentes: 2, brPensaoMensal: '1500.00' })
-    assert.equal(saved.status, 200, await saved.clone().text())
-    const stored = await withOrgContext(org.orgId, () => db.execute<{ dependentes: number; pensao: string }>(sql`
+    const saved = await post({
+      ...base,
+      country: "BR",
+      province: "BR",
+      brDependentes: 2,
+      brPensaoMensal: "1500.00",
+    });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    const stored = await withOrgContext(org.orgId, () =>
+      db.execute<{ dependentes: number; pensao: string }>(
+        sql`
       select br_dependentes as dependentes, br_pensao_mensal::text as pensao
         from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
-    assert.deepEqual(stored[0], { dependentes: 2, pensao: '1500.0000' })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(stored[0], { dependentes: 2, pensao: "1500.0000" });
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile POST derives the PL birth year from the PESEL and refuses contradictions', async () => {
+test("profile POST derives the PL birth year from the PESEL and refuses contradictions", async () => {
   // Decided, not re-decided: a declared field, the PESEL deriving and
   // prefilling it, a contradicting saved value refusing naming both — and
   // no PESEL leaving the declared field to stand
   // alone. The pack's example PESEL 44051401359 encodes 1944.
-  const { org, employeeId, scheduleId } = await fixture()
+  const { org, employeeId, scheduleId } = await fixture();
   try {
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly', country: 'PL', province: 'PL' }
-    const storedYear = () => withOrgContext(org.orgId, () => db.execute<{ rok: number | null }>(sql`
+    const base = {
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      payBasis: "hourly",
+      country: "PL",
+      province: "PL",
+    };
+    const storedYear = () =>
+      withOrgContext(org.orgId, () =>
+        db.execute<{ rok: number | null }>(
+          sql`
       select pl_rok_urodzenia as rok from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects')).then((rows) => rows[0]?.rok ?? null)
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+          "objects",
+        ),
+      ).then((rows) => rows[0]?.rok ?? null);
     // A bare PESEL prefills the blank field at write: 1944, derived.
-    const prefilled = await post({ ...base, sin: '44051401359' })
-    assert.equal(prefilled.status, 200, await prefilled.clone().text())
-    assert.equal(await storedYear(), 1944)
+    const prefilled = await post({ ...base, sin: "44051401359" });
+    assert.equal(prefilled.status, 200, await prefilled.clone().text());
+    assert.equal(await storedYear(), 1944);
     // The editor sees the derivation before saving: the GET hint carries
     // the value, while the sealed PESEL itself is never echoed.
     const hinted = (await (await get(`?employee=${employeeId}`)).json()) as {
-      profile: Record<string, unknown>; derivedProfileColumns?: Record<string, string>;
-    }
-    assert.equal(hinted.derivedProfileColumns?.['pl_rok_urodzenia'], '1944')
-    assert.equal(hinted.profile['pl_rok_urodzenia'], 1944)
-    assert.ok(!('sin' in hinted.profile), 'the sealed value is never echoed')
-    assert.ok(!('sin_encrypted' in hinted.profile), 'the ciphertext is never echoed')
+      profile: Record<string, unknown>;
+      derivedProfileColumns?: Record<string, string>;
+    };
+    assert.equal(hinted.derivedProfileColumns?.["pl_rok_urodzenia"], "1944");
+    assert.equal(hinted.profile["pl_rok_urodzenia"], 1944);
+    assert.ok(!("sin" in hinted.profile), "the sealed value is never echoed");
+    assert.ok(!("sin_encrypted" in hinted.profile), "the ciphertext is never echoed");
     // A contradicting year refuses naming both values and both sources.
-    const clash = await post({ ...base, sin: '44051401359', plRokUrodzenia: 1990 })
-    assert.equal(clash.status, 422, await clash.clone().text())
-    const clashError = ((await clash.json()) as { error: string }).error
-    assert.match(clashError, /Birth year \(rok urodzenia\) 1990 does not match the PESEL on file, which gives 1944/)
-    assert.equal(await storedYear(), 1944)
+    const clash = await post({ ...base, sin: "44051401359", plRokUrodzenia: 1990 });
+    assert.equal(clash.status, 422, await clash.clone().text());
+    const clashError = ((await clash.json()) as { error: string }).error;
+    assert.match(
+      clashError,
+      /Birth year \(rok urodzenia\) 1990 does not match the PESEL on file, which gives 1944/,
+    );
+    assert.equal(await storedYear(), 1944);
     // The stored PESEL answers too: omitting the key does not drop the
     // cross-check — the contradiction is against what the save leaves
     // behind, not only what it carries.
-    const stale = await post({ ...base, plRokUrodzenia: 1990 })
-    assert.equal(stale.status, 422, await stale.clone().text())
-    assert.match(((await stale.json()) as { error: string }).error, /which gives 1944/)
-    assert.equal(await storedYear(), 1944)
+    const stale = await post({ ...base, plRokUrodzenia: 1990 });
+    assert.equal(stale.status, 422, await stale.clone().text());
+    assert.match(((await stale.json()) as { error: string }).error, /which gives 1944/);
+    assert.equal(await storedYear(), 1944);
     // An agreeing year saves.
-    const agreed = await post({ ...base, sin: '44051401359', plRokUrodzenia: 1944 })
-    assert.equal(agreed.status, 200, await agreed.clone().text())
+    const agreed = await post({ ...base, sin: "44051401359", plRokUrodzenia: 1944 });
+    assert.equal(agreed.status, 200, await agreed.clone().text());
     // Invalid date/check-digit input is refused before it can overwrite the
     // sealed identifier or change the derived birth year.
-    const invalid = await post({ ...base, sin: '44051401350', plRokUrodzenia: 1990 })
-    assert.equal(invalid.status, 422, await invalid.clone().text())
-    assert.match(((await invalid.json()) as { error: string }).error, /PESEL.*control digit/i)
-    assert.equal(await storedYear(), 1944)
+    const invalid = await post({ ...base, sin: "44051401350", plRokUrodzenia: 1990 });
+    assert.equal(invalid.status, 422, await invalid.clone().text());
+    assert.match(((await invalid.json()) as { error: string }).error, /PESEL.*control digit/i);
+    assert.equal(await storedYear(), 1944);
     // Clearing the identifier leaves the declared field to stand alone.
-    const cleared = await post({ ...base, sin: '', plRokUrodzenia: 1990 })
-    assert.equal(cleared.status, 200, await cleared.clone().text())
-    assert.equal(await storedYear(), 1990)
+    const cleared = await post({ ...base, sin: "", plRokUrodzenia: 1990 });
+    assert.equal(cleared.status, 200, await cleared.clone().text());
+    assert.equal(await storedYear(), 1990);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('profile save retains its native employment link and audits automatic linking of the single matching employment', async () => {
-  const { org, employeeId, scheduleId } = await fixture()
+test("profile save retains its native employment link and audits automatic linking of the single matching employment", async () => {
+  const { org, employeeId, scheduleId } = await fixture();
   try {
-    const employmentId = randomUUID()
+    const employmentId = randomUUID();
     await withBypassContext(async () => {
-      await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${employeeId}`)
+      await db.execute(
+        sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${employeeId}`,
+      );
       await db.execute(sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id)
-        values (${employmentId},${org.orgId},${employeeId},${org.subsidiaryId})`)
-    })
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly' }
-    for (const additionalTaxPerPeriod of ['0', '10']) {
-      const saved = await post({ ...base, additionalTaxPerPeriod })
-      assert.equal(saved.status, 200, await saved.clone().text())
+        values (${employmentId},${org.orgId},${employeeId},${org.subsidiaryId})`);
+    });
+    const base = {
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+    };
+    for (const additionalTaxPerPeriod of ["0", "10"]) {
+      const saved = await post({ ...base, additionalTaxPerPeriod });
+      assert.equal(saved.status, 200, await saved.clone().text());
       await withBypassContext(async () => {
-        const row = (await db.execute<{ employment_id: string }>(sql`select employment_id from employee_payroll_profiles where org_id=${org.orgId}`, 'objects'))[0]!
-        assert.equal(row.employment_id, employmentId)
-        const audit = (await db.execute<{ changes: { after: { employment_id: string } } }>(sql`select changes from audit_log
-          where org_id=${org.orgId} and table_name='employee_payroll_profiles' order by at desc limit 1`, 'objects'))[0]!
-        assert.equal(audit.changes.after.employment_id, employmentId)
-      })
+        const row = (
+          await db.execute<{ employment_id: string }>(
+            sql`select employment_id from employee_payroll_profiles where org_id=${org.orgId}`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(row.employment_id, employmentId);
+        const audit = (
+          await db.execute<{ changes: { after: { employment_id: string } } }>(
+            sql`select changes from audit_log
+          where org_id=${org.orgId} and table_name='employee_payroll_profiles' order by at desc limit 1`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(audit.changes.after.employment_id, employmentId);
+      });
     }
-  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
-})
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
 
-test('profile save returns the employment identity refusal without altering a conflicting profile', async () => {
-  const { org, employeeId, scheduleId } = await fixture()
+test("profile save returns the employment identity refusal without altering a conflicting profile", async () => {
+  const { org, employeeId, scheduleId } = await fixture();
   try {
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly', additionalTaxPerPeriod: '0' }
-    assert.equal((await post(base)).status, 200)
+    const base = {
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+      additionalTaxPerPeriod: "0",
+    };
+    assert.equal((await post(base)).status, 200);
     await withBypassContext(async () => {
-      const otherEmployer = randomUUID(), wrongEmployment = randomUUID()
-      await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${employeeId}`)
+      const otherEmployer = randomUUID(),
+        wrongEmployment = randomUUID();
+      await db.execute(
+        sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${employeeId}`,
+      );
       await db.execute(sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id)
-        values (${wrongEmployment},${org.orgId},${employeeId},${org.subsidiaryId})`)
-      await db.execute(sql`update employee_payroll_profiles set employment_id=${wrongEmployment} where org_id=${org.orgId}`)
+        values (${wrongEmployment},${org.orgId},${employeeId},${org.subsidiaryId})`);
+      await db.execute(
+        sql`update employee_payroll_profiles set employment_id=${wrongEmployment} where org_id=${org.orgId}`,
+      );
       await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-        values (${otherEmployer},${org.orgId},${org.subsidiaryId},'Another employer','CAD','CA')`)
-      await db.execute(sql`update parties set subsidiary_id=${otherEmployer} where org_id=${org.orgId} and id=${employeeId}`)
-    })
-    const response = await post({ ...base, additionalTaxPerPeriod: '99' })
-    assert.equal(response.status, 422)
-    assert.match((await response.json()).error, /does not belong to this employee and legal employer.*review/)
+        values (${otherEmployer},${org.orgId},${org.subsidiaryId},'Another employer','CAD','CA')`);
+      await db.execute(
+        sql`update parties set subsidiary_id=${otherEmployer} where org_id=${org.orgId} and id=${employeeId}`,
+      );
+    });
+    const response = await post({ ...base, additionalTaxPerPeriod: "99" });
+    assert.equal(response.status, 422);
+    assert.match(
+      (await response.json()).error,
+      /does not belong to this employee and legal employer.*review/,
+    );
     await withBypassContext(async () => {
-      assert.equal((await db.execute<{ amount: string }>(sql`select additional_tax_per_period::text as amount from employee_payroll_profiles where org_id=${org.orgId}`, 'objects'))[0]!.amount, '0.0000')
-    })
-  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
-})
+      assert.equal(
+        (
+          await db.execute<{ amount: string }>(
+            sql`select additional_tax_per_period::text as amount from employee_payroll_profiles where org_id=${org.orgId}`,
+            "objects",
+          )
+        )[0]!.amount,
+        "0.0000",
+      );
+    });
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
 
-test('dated former employees can configure historical payroll without reactivating their party or role', async () => {
-  const { org, employeeId, scheduleId } = await fixture()
+test("dated former employees can configure historical payroll without reactivating their party or role", async () => {
+  const { org, employeeId, scheduleId } = await fixture();
   try {
     await withBypassContext(async () => {
-      await db.execute(sql`update parties set is_active=false where org_id=${org.orgId} and id=${employeeId}`)
-      await db.execute(sql`update employee_roles set is_active=false,terminated_on='2026-05-08' where org_id=${org.orgId} and party_id=${employeeId}`)
-    })
-    const saved = await post({ employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly' })
-    assert.equal(saved.status, 200, await saved.clone().text())
+      await db.execute(
+        sql`update parties set is_active=false where org_id=${org.orgId} and id=${employeeId}`,
+      );
+      await db.execute(
+        sql`update employee_roles set is_active=false,terminated_on='2026-05-08' where org_id=${org.orgId} and party_id=${employeeId}`,
+      );
+    });
+    const saved = await post({
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+    });
+    assert.equal(saved.status, 200, await saved.clone().text());
     await withBypassContext(async () => {
-      const flags = (await db.execute<{ party_active: boolean; role_active: boolean; terminated_on: string }>(sql`
+      const flags = (
+        await db.execute<{ party_active: boolean; role_active: boolean; terminated_on: string }>(
+          sql`
         select p.is_active as party_active,e.is_active as role_active,e.terminated_on::text
         from parties p join employee_roles e on e.party_id=p.id and e.org_id=p.org_id
-        where p.org_id=${org.orgId} and p.id=${employeeId}`, 'objects'))[0]!
-      assert.deepEqual(flags, { party_active: false, role_active: false, terminated_on: '2026-05-08' })
-    })
-  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
-})
+        where p.org_id=${org.orgId} and p.id=${employeeId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(flags, {
+        party_active: false,
+        role_active: false,
+        terminated_on: "2026-05-08",
+      });
+    });
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
 
-test('profile POST saves WCB coverage: rate class through the audited writer, exemption with a reason', async () => {
+test("profile POST saves WCB coverage: rate class through the audited writer, exemption with a reason", async () => {
   // The payroll tab decides coverage in one save: the rate class rides the
   // audited classification writer (optimistic check plus audit row), the
   // exemption rides the profile columns. Both read back on GET.
-  const { org, employeeId, scheduleId } = await fixture()
+  const { org, employeeId, scheduleId } = await fixture();
   try {
     await withBypassContext(async () => {
-      await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`)
-      await db.execute(sql`update orgs set settings=settings || '{"features":{"payroll":true}}'::jsonb where id=${org.orgId}`)
-    })
-    const groupId = randomUUID()
+      await db.execute(
+        sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`,
+      );
+      await db.execute(
+        sql`update orgs set settings=settings || '{"features":{"payroll":true}}'::jsonb where id=${org.orgId}`,
+      );
+    });
+    const groupId = randomUUID();
     await withBypassContext(async () => {
       await db.execute(sql`
         insert into worker_comp_groups (id, org_id, code, name, rate_percent, max_assessable, is_active)
-        values (${groupId}, ${org.orgId}, 'OFFICE', 'Office', '1.84', '100000', true)`)
-    })
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly', sin: '046454286' }
-    const saved = await post({ ...base, workerCompGroupId: groupId, expectedWorkerCompGroupId: null })
-    assert.equal(saved.status, 200, await saved.clone().text())
-    const reread = await get(`?employee=${employeeId}`)
-    assert.equal(reread.status, 200, await reread.clone().text())
-    const profile = ((await reread.json()) as { profile: Record<string, unknown> }).profile
-    assert.equal(profile['worker_comp_group_id'], groupId)
-    assert.equal(profile['wcb_exempt'], false)
+        values (${groupId}, ${org.orgId}, 'OFFICE', 'Office', '1.84', '100000', true)`);
+    });
+    const base = {
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+      sin: "046454286",
+    };
+    const saved = await post({
+      ...base,
+      workerCompGroupId: groupId,
+      expectedWorkerCompGroupId: null,
+    });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    const reread = await get(`?employee=${employeeId}`);
+    assert.equal(reread.status, 200, await reread.clone().text());
+    const profile = ((await reread.json()) as { profile: Record<string, unknown> }).profile;
+    assert.equal(profile["worker_comp_group_id"], groupId);
+    assert.equal(profile["wcb_exempt"], false);
     // The response body above is consumed: fetch the groups list served
     // beside the row with a second GET.
-    const rereadGroups = await get(`?employee=${employeeId}`)
-    const served = ((await rereadGroups.json()) as { workerCompGroups: { id: string; code: string }[] }).workerCompGroups
-    assert.ok(served.some((group) => group.id === groupId && group.code === 'OFFICE'))
+    const rereadGroups = await get(`?employee=${employeeId}`);
+    const served = (
+      (await rereadGroups.json()) as { workerCompGroups: { id: string; code: string }[] }
+    ).workerCompGroups;
+    assert.ok(served.some((group) => group.id === groupId && group.code === "OFFICE"));
     await withOrgContext(org.orgId, async () => {
-      const role = (await db.execute<{ worker_comp_group_id: string }>(sql`
+      const role = (
+        await db.execute<{ worker_comp_group_id: string }>(
+          sql`
         select worker_comp_group_id::text from employee_roles
-         where org_id = ${org.orgId} and party_id = ${employeeId}`, 'objects'))[0]!
-      assert.equal(role.worker_comp_group_id, groupId)
-      const audit = (await db.execute<{ changes: unknown }>(sql`
+         where org_id = ${org.orgId} and party_id = ${employeeId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(role.worker_comp_group_id, groupId);
+      const audit = (
+        await db.execute<{ changes: unknown }>(
+          sql`
         select changes from audit_log where org_id = ${org.orgId} and table_name = 'employee_roles'
-         order by at desc limit 1`, 'objects'))[0]!
-      assert.match(JSON.stringify(audit.changes), /employee payroll tab/)
-    })
+         order by at desc limit 1`,
+          "objects",
+        )
+      )[0]!;
+      assert.match(JSON.stringify(audit.changes), /employee payroll tab/);
+    });
     // Clearing the class returns the employee to undecided; recording the
     // exemption with a reason decides it the other way.
-    const cleared = await post({ ...base, workerCompGroupId: null, expectedWorkerCompGroupId: groupId })
-    assert.equal(cleared.status, 200, await cleared.clone().text())
-    const exempted = await post({ ...base, wcbExempt: true, wcbExemptReason: 'owner not covered by the employer account' })
-    assert.equal(exempted.status, 200, await exempted.clone().text())
+    const cleared = await post({
+      ...base,
+      workerCompGroupId: null,
+      expectedWorkerCompGroupId: groupId,
+    });
+    assert.equal(cleared.status, 200, await cleared.clone().text());
+    const exempted = await post({
+      ...base,
+      wcbExempt: true,
+      wcbExemptReason: "owner not covered by the employer account",
+    });
+    assert.equal(exempted.status, 200, await exempted.clone().text());
     await withOrgContext(org.orgId, async () => {
-      const row = (await db.execute<{ wcb_exempt: boolean; wcb_exempt_reason: string; worker_comp_group_id: string | null }>(sql`
+      const row = (
+        await db.execute<{
+          wcb_exempt: boolean;
+          wcb_exempt_reason: string;
+          worker_comp_group_id: string | null;
+        }>(
+          sql`
         select wcb_exempt, wcb_exempt_reason,
                (select worker_comp_group_id::text from employee_roles where org_id = ${org.orgId} and party_id = ${employeeId}) as worker_comp_group_id
-          from employee_payroll_profiles where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))[0]!
-      assert.equal(row.wcb_exempt, true)
-      assert.equal(row.wcb_exempt_reason, 'owner not covered by the employer account')
-      assert.equal(row.worker_comp_group_id, null)
-    })
-  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
-})
+          from employee_payroll_profiles where org_id = ${org.orgId} and employee_party_id = ${employeeId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(row.wcb_exempt, true);
+      assert.equal(row.wcb_exempt_reason, "owner not covered by the employer account");
+      assert.equal(row.worker_comp_group_id, null);
+    });
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
 
-test('profile POST refuses a reasonless WCB exemption', async () => {
+test("profile POST refuses a reasonless WCB exemption", async () => {
   // An exemption without a reason is an uncovered employee the run cannot
   // tell from an excluded one: refused by name like the table CHECK, with
   // nothing written.
-  const { org, employeeId, scheduleId } = await fixture()
+  const { org, employeeId, scheduleId } = await fixture();
   try {
-    const base = { employeePartyId: employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly', sin: '046454286' }
-    for (const reason of [undefined, null, '   ']) {
-      const response = await post({ ...base, wcbExempt: true, wcbExemptReason: reason })
-      assert.equal(response.status, 422, await response.clone().text())
-      assert.match(((await response.json()) as { error: string }).error, /exemption needs a reason/)
+    const base = {
+      employeePartyId: employeeId,
+      payScheduleId: scheduleId,
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+      sin: "046454286",
+    };
+    for (const reason of [undefined, null, "   "]) {
+      const response = await post({ ...base, wcbExempt: true, wcbExemptReason: reason });
+      assert.equal(response.status, 422, await response.clone().text());
+      assert.match(
+        ((await response.json()) as { error: string }).error,
+        /exemption needs a reason/,
+      );
     }
-    const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`, 'objects'))
-    assert.equal(rows[0]!.count, '0')
-  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
-})
+    const rows = await withOrgContext(org.orgId, () =>
+      db.execute<{ count: string }>(
+        sql`
+      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`,
+        "objects",
+      ),
+    );
+    assert.equal(rows[0]!.count, "0");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
 
-test.after(async () => { await pool.end() })
+test.after(async () => {
+  await pool.end();
+});
 
-test('profile deactivation retains an explicit audit reason without altering exemption evidence', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, scheduleId } = await fixture()
-  try {
-    const { seedHiredEmployee } = await import('@openbooks/engine/testing/payroll/filing-test-fixtures')
-    const employee = await withBypassContext(() => seedHiredEmployee(org.orgId, state.actorId, {
-      scheduleId, subsidiaryId: org.subsidiaryId, partySubsidiaryId: org.subsidiaryId,
-      name: 'Profile recipient', country: 'CA', province: 'ON', payBasis: 'hourly', currency: 'CAD', rate: '30', rateBasis: 'hour',
-      wcbExempt: true, wcbExemptReason: 'Original employment coverage exclusion',
-    }))
-    const body = { employeePartyId: employee.employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly',
-      isActive: false, wcbExempt: true, wcbExemptReason: 'Original employment coverage exclusion',
-      auditReason: '  Retire the unused payroll profile  ' }
-    for (const auditReason of [null, 12, {}, '', '  ', 'x'.repeat(2001)]) {
-      const refused = await post({ ...body, auditReason })
-      assert.equal(refused.status, 400)
-    }
-    const saved = await post(body)
-    assert.equal(saved.status, 200, await saved.clone().text())
-    const stored = (await withBypassContext(() => db.execute<{ id: string; is_active: boolean; wcb_exempt_reason: string }>(sql`
+test(
+  "profile deactivation retains an explicit audit reason without altering exemption evidence",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, scheduleId } = await fixture();
+    try {
+      const { seedHiredEmployee } =
+        await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+      const employee = await withBypassContext(() =>
+        seedHiredEmployee(org.orgId, state.actorId, {
+          scheduleId,
+          subsidiaryId: org.subsidiaryId,
+          partySubsidiaryId: org.subsidiaryId,
+          name: "Profile recipient",
+          country: "CA",
+          province: "ON",
+          payBasis: "hourly",
+          currency: "CAD",
+          rate: "30",
+          rateBasis: "hour",
+          wcbExempt: true,
+          wcbExemptReason: "Original employment coverage exclusion",
+        }),
+      );
+      const body = {
+        employeePartyId: employee.employeeId,
+        payScheduleId: scheduleId,
+        country: "CA",
+        province: "ON",
+        payBasis: "hourly",
+        isActive: false,
+        wcbExempt: true,
+        wcbExemptReason: "Original employment coverage exclusion",
+        auditReason: "  Retire the unused payroll profile  ",
+      };
+      for (const auditReason of [null, 12, {}, "", "  ", "x".repeat(2001)]) {
+        const refused = await post({ ...body, auditReason });
+        assert.equal(refused.status, 400);
+      }
+      const saved = await post(body);
+      assert.equal(saved.status, 200, await saved.clone().text());
+      const stored = (
+        await withBypassContext(() =>
+          db.execute<{ id: string; is_active: boolean; wcb_exempt_reason: string }>(
+            sql`
       select id,is_active,wcb_exempt_reason from employee_payroll_profiles where org_id=${org.orgId} and employee_party_id=${employee.employeeId}
-    `, 'objects')))[0]!
-    assert.equal(stored.is_active, false)
-    assert.equal(stored.wcb_exempt_reason, body.wcbExemptReason)
-    const audit = await withBypassContext(() => db.execute<{ actor_id: string; changes: { reason: string; before: { is_active: boolean }; after: { is_active: boolean; wcb_exempt_reason: string } } }>(sql`
+    `,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.equal(stored.is_active, false);
+      assert.equal(stored.wcb_exempt_reason, body.wcbExemptReason);
+      const audit = await withBypassContext(() =>
+        db.execute<{
+          actor_id: string;
+          changes: {
+            reason: string;
+            before: { is_active: boolean };
+            after: { is_active: boolean; wcb_exempt_reason: string };
+          };
+        }>(
+          sql`
       select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='employee_payroll_profiles'
         and row_id=${stored.id} and changes->>'reason'=${body.auditReason.trim()}
-    `, 'objects'))
-    assert.equal(audit.length, 1)
-    assert.equal(audit[0]!.actor_id, state.actorId)
-    assert.equal(audit[0]!.changes.before.is_active, true)
-    assert.equal(audit[0]!.changes.after.is_active, false)
-    assert.equal(audit[0]!.changes.after.wcb_exempt_reason, body.wcbExemptReason)
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
+    `,
+          "objects",
+        ),
+      );
+      assert.equal(audit.length, 1);
+      assert.equal(audit[0]!.actor_id, state.actorId);
+      assert.equal(audit[0]!.changes.before.is_active, true);
+      assert.equal(audit[0]!.changes.after.is_active, false);
+      assert.equal(audit[0]!.changes.after.wcb_exempt_reason, body.wcbExemptReason);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

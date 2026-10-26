@@ -6,7 +6,12 @@ import { db } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
 import { payRunFunding } from "./readiness.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 /**
  * Pay-run funding balances must read the ledger like every other surface.
@@ -59,7 +64,8 @@ async function postFundingJournal(
 
 /** The ledger's own bank balance: posted + reversed, primary book. */
 async function ledgerBankBalance(org: ScratchOrg): Promise<string> {
-  const rows = await db.execute<{ balance: string }>(sql`
+  const rows = await db.execute<{ balance: string }>(
+    sql`
     select coalesce(sum(jl.amount), 0)::text as balance
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
@@ -67,7 +73,9 @@ async function ledgerBankBalance(org: ScratchOrg): Promise<string> {
        and je.book_id = (select b.id from accounting_books b
                           where b.org_id = ${org.orgId} and b.is_primary
                           order by b.created_at limit 1)
-     where jl.org_id = ${org.orgId} and jl.account_id = ${org.accounts.bank}`, "objects");
+     where jl.org_id = ${org.orgId} and jl.account_id = ${org.accounts.bank}`,
+    "objects",
+  );
   return rows[0]!.balance;
 }
 
@@ -87,8 +95,11 @@ async function fundingRun(org: ScratchOrg, actorId: string): Promise<string> {
     values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
             ${actorId}, ${actorId})`);
   const run = await createPayRun({
-    orgId: org.orgId, actorId, payScheduleId: scheduleId,
-    periodStart: "2026-07-05", periodEnd: "2026-07-18",
+    orgId: org.orgId,
+    actorId,
+    payScheduleId: scheduleId,
+    periodStart: "2026-07-05",
+    periodEnd: "2026-07-18",
   });
   return run.documentId;
 }
@@ -100,37 +111,49 @@ async function fundingBankBalance(org: ScratchOrg, documentId: string): Promise<
   return account.balance;
 }
 
-test("funding nets a voided transfer instead of counting only its reversal", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Payroll controller", "admin");
-    const original = await postFundingJournal(org, actor, "5000", "transfer");
-    // 0166/0168 require a posted mirror in the same book before the original
-    // may flip to reversed. Post the void first, then retire the original.
-    await postFundingJournal(org, actor, "-5000", "transfer-void", undefined, original);
-    await db.execute(sql`update journal_entries set status = 'reversed' where id = ${original} and org_id = ${org.orgId}`);
+test(
+  "funding nets a voided transfer instead of counting only its reversal",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Payroll controller", "admin");
+      const original = await postFundingJournal(org, actor, "5000", "transfer");
+      // 0166/0168 require a posted mirror in the same book before the original
+      // may flip to reversed. Post the void first, then retire the original.
+      await postFundingJournal(org, actor, "-5000", "transfer-void", undefined, original);
+      await db.execute(
+        sql`update journal_entries set status = 'reversed' where id = ${original} and org_id = ${org.orgId}`,
+      );
 
-    // The ledger nets the void pair to zero; funding must read the same.
-    const documentId = await fundingRun(org, actor);
-    assert.equal(cmp(await ledgerBankBalance(org), "0"), 0);
-    assert.equal(cmp(await fundingBankBalance(org, documentId), "0"), 0);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      // The ledger nets the void pair to zero; funding must read the same.
+      const documentId = await fundingRun(org, actor);
+      assert.equal(cmp(await ledgerBankBalance(org), "0"), 0);
+      assert.equal(cmp(await fundingBankBalance(org, documentId), "0"), 0);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("funding excludes secondary-book postings like the banking roster", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Payroll controller", "admin");
-    const secondary = randomUUID();
-    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${secondary},${org.orgId},'TAX','Tax',false,true,true)`);
-    await postFundingJournal(org, actor, "2000", "tax-book", secondary);
+test(
+  "funding excludes secondary-book postings like the banking roster",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Payroll controller", "admin");
+      const secondary = randomUUID();
+      await db.execute(
+        sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${secondary},${org.orgId},'TAX','Tax',false,true,true)`,
+      );
+      await postFundingJournal(org, actor, "2000", "tax-book", secondary);
 
-    const documentId = await fundingRun(org, actor);
-    assert.equal(cmp(await ledgerBankBalance(org), "0"), 0);
-    assert.equal(cmp(await fundingBankBalance(org, documentId), "0"), 0);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      const documentId = await fundingRun(org, actor);
+      assert.equal(cmp(await ledgerBankBalance(org), "0"), 0);
+      assert.equal(cmp(await fundingBankBalance(org, documentId), "0"), 0);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

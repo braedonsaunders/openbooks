@@ -17,13 +17,21 @@ export const POST = defineRoute({
   handler: async ({ authz, params: { changeId } }) => {
     if (!can(authz, "gl.post")) {
       return NextResponse.json(
-        { error: "Applying an account merge posts reclass journal entries.", code: "forbidden", remedy: "Ask a user who can post journal entries to apply the merge." },
+        {
+          error: "Applying an account merge posts reclass journal entries.",
+          code: "forbidden",
+          remedy: "Ask a user who can post journal entries to apply the merge.",
+        },
         { status: 403 },
       );
     }
     try {
       return NextResponse.json(
-        await applyApprovedAccountMerge(authz.user.orgId, { changeId, actorId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }),
+        await applyApprovedAccountMerge(authz.user.orgId, {
+          changeId,
+          actorId: authz.user.id,
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        }),
       );
     } catch (error) {
       return apiErrorResponse(error);

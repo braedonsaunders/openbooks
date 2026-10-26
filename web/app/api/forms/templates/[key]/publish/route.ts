@@ -32,8 +32,7 @@ export const POST = defineRoute({
     const { key } = await params;
 
     const template = await getTemplateByKey(user.orgId, key);
-    if (!template)
-      return notFound("record");
+    if (!template) return notFound("record");
 
     const body = routeBody;
     const changelog = body.changelog || null;
@@ -42,31 +41,36 @@ export const POST = defineRoute({
       // Lock the parent first so concurrent publishers cannot both observe the
       // same draft and stamp it published. The row is re-read inside the
       // transaction because the preflight lookup above is not authoritative.
-      const lockedTemplate = await tx.execute<{ id: string }>(sql`
+      const lockedTemplate = await tx.execute<{ id: string }>(
+        sql`
       select id
         from form_templates
        where id = ${template.id} and org_id = ${user.orgId}
        for update
-    `, "objects");
-      if (lockedTemplate.length === 0)
-        return { kind: "not-found" as const };
+    `,
+        "objects",
+      );
+      if (lockedTemplate.length === 0) return { kind: "not-found" as const };
 
       // Lock and recheck the latest version after taking the parent lock. A
       // published version is immutable; only the still-draft latest row may be
       // validated and transitioned by this request.
       const lockedLatest = await tx.execute<{
-          id: string;
-          version: number;
-          schema: unknown;
-          published_at: string | null;
-        }>(sql`
+        id: string;
+        version: number;
+        schema: unknown;
+        published_at: string | null;
+      }>(
+        sql`
       select id, version, schema, published_at
         from form_template_versions
        where org_id = ${user.orgId} and template_id = ${template.id}
        order by version desc
        limit 1
        for update
-    `, "objects");
+    `,
+        "objects",
+      );
       const latest = lockedLatest[0];
       if (!latest) return { kind: "no-draft" as const };
       if (latest.published_at)
@@ -81,14 +85,17 @@ export const POST = defineRoute({
       const hasField = parsed.data.sections.some((s) => s.fields.length > 0);
       if (!hasField) return { kind: "no-fields" as const };
 
-      const stamped = await tx.execute(sql`
+      const stamped = await tx.execute(
+        sql`
       update form_template_versions
          set published_at = now(), published_by = ${user.id},
              changelog = ${changelog},
              updated_at = now(), updated_by = ${user.id}
        where id = ${latest.id} and org_id = ${user.orgId} and published_at is null
        returning id
-    `, "objects");
+    `,
+        "objects",
+      );
       // A write that matches zero rows is a failure, not a success: the draft
       // was published (or removed) after the lock was taken.
       if (stamped.length === 0)
@@ -101,9 +108,7 @@ export const POST = defineRoute({
 
       // The publication is the immutable evidence: who, when (row timestamps),
       // the status transition, and a hash of the exact schema that froze.
-      const schemaHash = createHash("sha256")
-        .update(JSON.stringify(parsed.data))
-        .digest("hex");
+      const schemaHash = createHash("sha256").update(JSON.stringify(parsed.data)).digest("hex");
       await auditSetupChange(
         {
           orgId: user.orgId,
@@ -139,13 +144,9 @@ export const POST = defineRoute({
       return { kind: "published" as const, version: latest.version };
     });
 
-    if (outcome.kind === "not-found")
-      return notFound("record");
+    if (outcome.kind === "not-found") return notFound("record");
     if (outcome.kind === "no-draft")
-      return NextResponse.json(
-        { error: "template has no draft" },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: "template has no draft" }, { status: 409 });
     if (outcome.kind === "already-published") {
       return NextResponse.json(
         {

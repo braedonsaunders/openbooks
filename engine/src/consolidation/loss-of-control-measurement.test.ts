@@ -62,10 +62,7 @@ test("retained interest starts at fair value and OCI recycling remains distinct 
   assert.equal(r.totalGroupGain, "115.0000");
   assert.equal(r.recycledOci, "25.0000");
   assert.equal(r.transferredOci, "40.0000");
-  assert.equal(
-    r.lines.find((l) => l.accountId === "retained")?.amount,
-    "90.0000",
-  );
+  assert.equal(r.lines.find((l) => l.accountId === "retained")?.amount, "90.0000");
   assert.equal(sum(r.lines.map((l) => l.amount)), "0.0000");
 });
 test("a disposal loss remains signed and exact", () => {
@@ -78,10 +75,16 @@ test("unreconciled investment and unreadable amounts refuse rather than plug a f
     () => measureLossOfControl({ ...base, parentInvestmentCarrying: "700" }),
     /reconcile/,
   );
-  assert.throws(
-    () => measureLossOfControl({ ...base, retainedFairValue: "12,34" }),
-    /exact/,
-  );
+  assert.throws(() => measureLossOfControl({ ...base, retainedFairValue: "12,34" }), /exact/);
 });
 
-test('historical investment translation is released through OCI, never plugged into disposal profit',()=>{const r=measureLossOfControl({...base,parentInvestmentCarrying:'750',investmentTranslationAccountId:'investment_cta'});assert.equal(r.groupGain,'130.0000');assert.equal(r.lines.find(l=>l.accountId==='investment_cta')?.amount,'30.0000');assert.equal(sum(r.lines.map(l=>l.amount)),'0.0000');});
+test("historical investment translation is released through OCI, never plugged into disposal profit", () => {
+  const r = measureLossOfControl({
+    ...base,
+    parentInvestmentCarrying: "750",
+    investmentTranslationAccountId: "investment_cta",
+  });
+  assert.equal(r.groupGain, "130.0000");
+  assert.equal(r.lines.find((l) => l.accountId === "investment_cta")?.amount, "30.0000");
+  assert.equal(sum(r.lines.map((l) => l.amount)), "0.0000");
+});

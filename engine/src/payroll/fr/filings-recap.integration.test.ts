@@ -4,7 +4,11 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { setPackSlotAccount } from "../packs.ts";
-import { seedFrRecapEmployerFixture, seedFullTimeWorkScheduleFixture, seedHiredEmployee } from "../filing-test-fixtures.ts";
+import {
+  seedFrRecapEmployerFixture,
+  seedFullTimeWorkScheduleFixture,
+  seedHiredEmployee,
+} from "../filing-test-fixtures.ts";
 import { yearEndFiling } from "../filing-registry.ts";
 import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
@@ -12,7 +16,11 @@ import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
 import { upsertStatutoryRate } from "../statutory-rates.ts";
 import { FR_PACK_RATES } from "./statutory-rates.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+} from "../../testing/fixtures.ts";
 import { add } from "../../money/money.ts";
 import { parseFrRecapRowId } from "./filings.ts";
 
@@ -92,9 +100,18 @@ async function frPayrollOrg(): Promise<Fixture> {
       'French establishment',true,${actorId},${actorId})`);
   // The declared ten-person establishment is below the eleven-person
   // mobility threshold; record its explicit zero on its own SIRET account.
-  await upsertStatutoryRate({ orgId: org.orgId, actorId, rates: FR_PACK_RATES,
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
-    rateKey: 'fr_versement_mobilite', region: 'FR', filingAccountId, taxYear: 2026, values: { taux: '0' } });
+  await upsertStatutoryRate({
+    orgId: org.orgId,
+    actorId,
+    rates: FR_PACK_RATES,
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
+    rateKey: "fr_versement_mobilite",
+    region: "FR",
+    filingAccountId,
+    taxYear: 2026,
+    values: { taux: "0" },
+  });
   // AGIRC-ARRCO/CEG/CET are declared `external`: the org names its own
   // caisse on the components (the QC/Revenu-Québec precedent).
   const caisseId = randomUUID();
@@ -117,8 +134,15 @@ async function frPayrollOrg(): Promise<Fixture> {
 
   const employee = async (name: string, annualSalary: string): Promise<string> => {
     const { employeeId: id } = await seedHiredEmployee(org.orgId, actorId, {
-      scheduleId, subsidiaryId: org.subsidiaryId, name, country: "FR", province: "FR",
-      payBasis: "salary", currency: "EUR", rate: annualSalary, rateBasis: "year",
+      scheduleId,
+      subsidiaryId: org.subsidiaryId,
+      name,
+      country: "FR",
+      province: "FR",
+      payBasis: "salary",
+      currency: "EUR",
+      rate: annualSalary,
+      rateBasis: "year",
       hiredOn: "2020-01-01",
     });
     // Métropole domicile, no transmitted rate: the statutory default grille
@@ -133,19 +157,42 @@ async function frPayrollOrg(): Promise<Fixture> {
     // employee, or the run refuses by name (CSS D.241-7 IV).
     await seedFullTimeWorkScheduleFixture(org.orgId, actorId, id);
     // APEC cadre classification: the run refuses by name without the attestation.
-    await db.execute(sql`insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key, answers, effective_from) values (${org.orgId}, ${id}, 'FR', 'fr_apec_status', '{"apec_eligibility": "covered"}'::jsonb, '2026-01-01')`);
+    await db.execute(
+      sql`insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key, answers, effective_from) values (${org.orgId}, ${id}, 'FR', 'fr_apec_status', '{"apec_eligibility": "covered"}'::jsonb, '2026-01-01')`,
+    );
     return id;
   };
   const camille = await employee("Camille Martin", "24000");
   const idriss = await employee("Idriss Bernard", "36000");
-  return { orgId: org.orgId, actorId, scheduleId, camille, idriss, filingAccountId, filingAccountNumber };
+  return {
+    orgId: org.orgId,
+    actorId,
+    scheduleId,
+    camille,
+    idriss,
+    filingAccountId,
+    filingAccountNumber,
+  };
 }
 
 async function runAndCommit(fx: Fixture, periodStart: string, periodEnd: string): Promise<string> {
-  const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart, periodEnd });
-  assert.deepEqual((await calculatePayRun({
-    orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
-  })).errors, []);
+  const run = await createPayRun({
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    payScheduleId: fx.scheduleId,
+    periodStart,
+    periodEnd,
+  });
+  assert.deepEqual(
+    (
+      await calculatePayRun({
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
+      })
+    ).errors,
+    [],
+  );
   await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
   return run.documentId;
 }
@@ -153,12 +200,22 @@ async function runAndCommit(fx: Fixture, periodStart: string, periodEnd: string)
 /** A calculated-but-never-committed run: the filing must not see it. */
 async function runDraft(fx: Fixture, periodStart: string, periodEnd: string): Promise<string> {
   const run = await createPayRun({
-    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-    periodStart, periodEnd,
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    payScheduleId: fx.scheduleId,
+    periodStart,
+    periodEnd,
   });
-  assert.deepEqual((await calculatePayRun({
-    orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
-  })).errors, []);
+  assert.deepEqual(
+    (
+      await calculatePayRun({
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
+      })
+    ).errors,
+    [],
+  );
   return run.documentId;
 }
 
@@ -169,8 +226,13 @@ async function runDraft(fx: Fixture, periodStart: string, periodEnd: string): Pr
  */
 async function independentTieout(fx: Fixture) {
   return await db.execute<{
-    employee_party_id: string; month: string; gross: string; net: string; pas: string;
-  }>(sql`
+    employee_party_id: string;
+    month: string;
+    gross: string;
+    net: string;
+    pas: string;
+  }>(
+    sql`
     select s.employee_party_id, to_char(s.pay_date, 'YYYY-MM') as month,
            sum(s.gross)::text as gross, sum(s.net_pay)::text as net,
            sum(pas.amount)::text as pas
@@ -187,7 +249,9 @@ async function independentTieout(fx: Fixture) {
            and l.kind = 'deduction' and pc.system_key = 'pas'
       ) pas on true
      where s.org_id = ${fx.orgId} and s.tax_year = 2026 and s.country = 'FR'
-     group by s.employee_party_id, to_char(s.pay_date, 'YYYY-MM')`, "objects");
+     group by s.employee_party_id, to_char(s.pay_date, 'YYYY-MM')`,
+    "objects",
+  );
 }
 
 test(
@@ -199,8 +263,13 @@ test(
       await runAndCommit(fx, "2026-03-01", "2026-03-27");
       await runAndCommit(fx, "2026-06-01", "2026-06-26");
       const draftId = await runDraft(fx, "2026-07-01", "2026-07-25");
-      const draftStubs = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${draftId}`, "objects"))[0]!.n;
+      const draftStubs = (
+        await db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${draftId}`,
+          "objects",
+        )
+      )[0]!.n;
       assert.ok(draftStubs > 0, "the draft run really calculated stubs that must be excluded");
 
       const filing = yearEndFiling("FR", "recapitulatif-annuel");
@@ -226,7 +295,10 @@ test(
       // The engine really withheld: without these the tie-out below would
       // pass vacuously over zeros.
       for (const row of population.rows) {
-        assert.ok(Number(row.pas) > 0, `${String(row.employee)} ${String(row.month)} withholds PAS`);
+        assert.ok(
+          Number(row.pas) > 0,
+          `${String(row.employee)} ${String(row.month)} withholds PAS`,
+        );
         assert.ok(Number(row.brut) > 0, "brut is posted");
         assert.ok(Number(row.netImposable) > 0, "net imposable is derived");
       }
@@ -269,7 +341,9 @@ test(
       assert.equal(box("PAS"), camilleMarch!.pas);
       assert.equal(box("NET_PAYE"), camilleMarch!.netPaye);
       assert.ok(
-        slip.headerFields.some((h) => h.label === "SIRET (établissement)" && h.value === fx.filingAccountNumber),
+        slip.headerFields.some(
+          (h) => h.label === "SIRET (établissement)" && h.value === fx.filingAccountNumber,
+        ),
         "the slip names the SIRET establishment the versements filed under",
       );
       assert.ok(slip.notes!.some((n) => n.includes("DSN")));
@@ -291,7 +365,10 @@ test(
         () => filing.population(fx.orgId, 2025),
         /no published FR statutory tables for tax year 2025/,
       );
-      await assert.rejects(() => filing.slip!.build(fx.orgId, 2026, "not-a-row"), /not one of this filing/);
+      await assert.rejects(
+        () => filing.slip!.build(fx.orgId, 2026, "not-a-row"),
+        /not one of this filing/,
+      );
       assert.equal(filing.amendment.supported, false);
       assert.match(
         filing.amendment.supported === false ? filing.amendment.refusal : "",

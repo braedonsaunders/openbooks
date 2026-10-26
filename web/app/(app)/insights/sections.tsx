@@ -1,5 +1,5 @@
-import Link from 'next/link'
-import { VIZ_META } from './viz-meta'
+import Link from "next/link";
+import { VIZ_META } from "./viz-meta";
 
 /**
  * The two composite cells in the insight-cards list.
@@ -16,9 +16,9 @@ export function CardNameCell({
   href,
   description,
 }: {
-  name: string
-  href: string
-  description: string | null
+  name: string;
+  href: string;
+  description: string | null;
 }) {
   return (
     <>
@@ -29,16 +29,16 @@ export function CardNameCell({
         <div className="text-xs font-normal text-slate-500 dark:text-slate-400">{description}</div>
       ) : null}
     </>
-  )
+  );
 }
 
 /** Visualization icon beside its localized label. */
 export function VizCell({ vizType, label }: { vizType: string; label: string }) {
-  const viz = VIZ_META.find((v) => v.value === vizType)
+  const viz = VIZ_META.find((v) => v.value === vizType);
   return (
     <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
       {viz ? <viz.Icon size={15} /> : null}
       {label}
     </span>
-  )
+  );
 }

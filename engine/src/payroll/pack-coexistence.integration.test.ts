@@ -5,7 +5,11 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { setPackSlotAccount } from "./packs.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -28,13 +32,30 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * components) stay unconstrained, as under the old index.
  */
 
-async function componentRows(orgId: string): Promise<{ code: string; country: string | null; system_key: string | null; kind: string }[]> {
-  return (await withBypassContext(async () => await db.execute<{ code: string; country: string | null; system_key: string | null; kind: string }>(sql`
-    select code, country, system_key, kind from pay_components where org_id = ${orgId}`, "objects")));
+async function componentRows(
+  orgId: string,
+): Promise<{ code: string; country: string | null; system_key: string | null; kind: string }[]> {
+  return await withBypassContext(
+    async () =>
+      await db.execute<{
+        code: string;
+        country: string | null;
+        system_key: string | null;
+        kind: string;
+      }>(
+        sql`
+    select code, country, system_key, kind from pay_components where org_id = ${orgId}`,
+        "objects",
+      ),
+  );
 }
 
 async function insertRaw(
-  orgId: string, code: string, kind: string, systemKey: string | null, country: string | null,
+  orgId: string,
+  code: string,
+  kind: string,
+  systemKey: string | null,
+  country: string | null,
 ): Promise<void> {
   await withBypassContext(async () => {
     await db.execute(sql`insert into pay_components(id, org_id, code, name, kind, system_key, country)
@@ -60,15 +81,23 @@ test(
       });
 
       const rows = await componentRows(org.orgId);
-      const incomeTax = rows.filter((row) => row.system_key === "income_tax" && row.kind === "deduction");
+      const incomeTax = rows.filter(
+        (row) => row.system_key === "income_tax" && row.kind === "deduction",
+      );
       assert.equal(incomeTax.length, 2, "CA and JP must each own an income_tax deduction");
       assert.deepEqual(
         incomeTax.map((row) => row.country).sort(),
         ["CA", "JP"],
         "the two income_tax rows must be country-scoped, not absorbed into one",
       );
-      assert.ok(incomeTax.some((row) => row.code === "TAX"), "CA TAX must persist");
-      assert.ok(incomeTax.some((row) => row.code === "GENSEN"), "JP GENSEN must persist");
+      assert.ok(
+        incomeTax.some((row) => row.code === "TAX"),
+        "CA TAX must persist",
+      );
+      assert.ok(
+        incomeTax.some((row) => row.code === "GENSEN"),
+        "JP GENSEN must persist",
+      );
 
       // Reinstalling either pack is absorbed on identity, never an error, and
       // changes nothing.
@@ -78,7 +107,8 @@ test(
         await seedPayrollComponents(org.orgId, null, "JP");
       });
       assert.equal(
-        (await componentRows(org.orgId)).length, before,
+        (await componentRows(org.orgId)).length,
+        before,
         "reinstalling an installed pack must change nothing",
       );
 
@@ -90,7 +120,10 @@ test(
       await assert.rejects(
         insertRaw(org.orgId, "SHARED-B", "earning", "shared_key", null),
         (error: unknown) => {
-          assert.ok(isIdentityViolation(error), `expected pay_components_org_system violation, got: ${String(error)}`);
+          assert.ok(
+            isIdentityViolation(error),
+            `expected pay_components_org_system violation, got: ${String(error)}`,
+          );
           return true;
         },
         "duplicate NULL-country (org, system_key, kind) must still be refused",
@@ -112,7 +145,8 @@ test(
       await insertRaw(org.orgId, "CUSTOM-B", "deduction", null, null);
       const customs = (await componentRows(org.orgId)).filter((row) => row.system_key == null);
       assert.ok(
-        customs.some((row) => row.code === "CUSTOM-A") && customs.some((row) => row.code === "CUSTOM-B"),
+        customs.some((row) => row.code === "CUSTOM-A") &&
+          customs.some((row) => row.code === "CUSTOM-B"),
         "NULL-key user rows must both persist",
       );
     } finally {
@@ -149,8 +183,14 @@ test(
         await seedPayrollComponents(org.orgId, null, "AU");
       });
 
-      const wcb = (await withBypassContext(async () => await db.execute<{ country: string | null }>(sql`
-        select country from pay_components where org_id = ${org.orgId} and code = 'WCB'`, "objects")));
+      const wcb = await withBypassContext(
+        async () =>
+          await db.execute<{ country: string | null }>(
+            sql`
+        select country from pay_components where org_id = ${org.orgId} and code = 'WCB'`,
+            "objects",
+          ),
+      );
       assert.deepEqual(
         wcb.map((row) => row.country).sort(),
         ["AU", "CA"],
@@ -161,7 +201,10 @@ test(
       await assert.rejects(
         insertRaw(org.orgId, "WCB", "employer_contribution", "dup_wcb_key", "CA"),
         (error: unknown) => {
-          assert.ok(isCodeViolation(error), `expected pay_components_org_country_code violation, got: ${String(error)}`);
+          assert.ok(
+            isCodeViolation(error),
+            `expected pay_components_org_country_code violation, got: ${String(error)}`,
+          );
           return true;
         },
         "duplicate (org, country, code) must be refused",
@@ -180,13 +223,27 @@ test(
       await withBypassContext(async () => {
         await setPackSlotAccount(org.orgId, userId, "AU", "wcb", org.accounts.ap);
       });
-      const after = (await withBypassContext(async () => await db.execute<{ country: string | null; liability_account_id: string | null }>(sql`
+      const after = await withBypassContext(
+        async () =>
+          await db.execute<{ country: string | null; liability_account_id: string | null }>(
+            sql`
         select country, liability_account_id from pay_components
-         where org_id = ${org.orgId} and code = 'WCB'`, "objects")));
+         where org_id = ${org.orgId} and code = 'WCB'`,
+            "objects",
+          ),
+      );
       const au = after.find((row) => row.country === "AU");
       const ca = after.find((row) => row.country === "CA");
-      assert.equal(au?.liability_account_id, org.accounts.ap, "the AU WCB slot must take the mapped account");
-      assert.equal(ca?.liability_account_id, null, "the CA WCB slot must be untouched by an AU slot write");
+      assert.equal(
+        au?.liability_account_id,
+        org.accounts.ap,
+        "the AU WCB slot must take the mapped account",
+      );
+      assert.equal(
+        ca?.liability_account_id,
+        null,
+        "the CA WCB slot must be untouched by an AU slot write",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button, UrlDrawer } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { useBusinessToday } from '../../../../components/business-date-provider'
-import type { AnomalyChecksData } from '../../../../lib/hrm/ai-rails'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button, UrlDrawer } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { useBusinessToday } from "../../../../components/business-date-provider";
+import type { AnomalyChecksData } from "../../../../lib/hrm/ai-rails";
 
 /**
  * Payroll checks client islands (HR-21). Every string arrives
@@ -21,40 +21,40 @@ export function AnomalyScanButton({
   scanBusyLabel,
   scanFailedLabel,
 }: {
-  currentParams: Record<string, string>
-  scanLabel: string
-  scanBusyLabel: string
-  scanFailedLabel: string
+  currentParams: Record<string, string>;
+  scanLabel: string;
+  scanBusyLabel: string;
+  scanFailedLabel: string;
 }) {
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   // Both scan bounds default to the org's business day from the server — a
   // local `from` paired with a UTC `to` could invert the range in the
   // evening for the Americas.
-  const today = useBusinessToday()
+  const today = useBusinessToday();
   const scan = async (): Promise<void> => {
-    setBusy(true)
-    setStatus(null)
+    setBusy(true);
+    setStatus(null);
     try {
-      const from = currentParams.from ?? `${today.slice(0, 7)}-01`
-      const to = currentParams.to ?? today
-      const res = await fetch('/api/payroll/anomalies', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'scan', periodFrom: from, periodTo: to }),
-      })
+      const from = currentParams.from ?? `${today.slice(0, 7)}-01`;
+      const to = currentParams.to ?? today;
+      const res = await fetch("/api/payroll/anomalies", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "scan", periodFrom: from, periodTo: to }),
+      });
       if (!res.ok) {
-        setStatus(await readApiErrorMessage(res, scanFailedLabel))
-        return
+        setStatus(await readApiErrorMessage(res, scanFailedLabel));
+        return;
       }
-      router.refresh()
+      router.refresh();
     } catch {
-      setStatus(scanFailedLabel)
+      setStatus(scanFailedLabel);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
   return (
     <span className="inline-flex flex-col items-start gap-1">
       <Button size="sm" disabled={busy} onClick={scan}>
@@ -62,56 +62,60 @@ export function AnomalyScanButton({
       </Button>
       {status ? <span className="text-xs text-red-600 dark:text-red-400">{status}</span> : null}
     </span>
-  )
+  );
 }
 
-type TransitionLabels = NonNullable<AnomalyChecksData['dialogFlag']>['transitionLabels']
+type TransitionLabels = NonNullable<AnomalyChecksData["dialogFlag"]>["transitionLabels"];
 
 /** Acknowledge, resolve, or mark false-positive with the audit reason. */
 export function AnomalyTransitionForm({
   flagId,
   labels,
 }: {
-  flagId: string
-  labels: TransitionLabels
+  flagId: string;
+  labels: TransitionLabels;
 }) {
-  const router = useRouter()
-  const [to, setTo] = useState<'acknowledged' | 'resolved' | 'false_positive'>('acknowledged')
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
+  const router = useRouter();
+  const [to, setTo] = useState<"acknowledged" | "resolved" | "false_positive">("acknowledged");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const submit = async (): Promise<void> => {
-    setBusy(true)
-    setStatus(null)
+    setBusy(true);
+    setStatus(null);
     try {
       const res = await fetch(`/api/payroll/anomalies/${flagId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ to, reason }),
-      })
+      });
       if (!res.ok) {
-        setStatus(await readApiErrorMessage(res, labels.failedLabel))
-        return
+        setStatus(await readApiErrorMessage(res, labels.failedLabel));
+        return;
       }
-      router.refresh()
+      router.refresh();
     } catch {
-      setStatus(labels.failedLabel)
+      setStatus(labels.failedLabel);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        {(['acknowledged', 'resolved', 'false_positive'] as const).map((value) => (
+        {(["acknowledged", "resolved", "false_positive"] as const).map((value) => (
           <Button
             key={value}
             size="sm"
-            variant={to === value ? undefined : 'outline'}
+            variant={to === value ? undefined : "outline"}
             disabled={busy}
             onClick={() => setTo(value)}
           >
-            {value === 'acknowledged' ? labels.acknowledge : value === 'resolved' ? labels.resolve : labels.falsePositive}
+            {value === "acknowledged"
+              ? labels.acknowledge
+              : value === "resolved"
+                ? labels.resolve
+                : labels.falsePositive}
           </Button>
         ))}
       </div>
@@ -130,7 +134,7 @@ export function AnomalyTransitionForm({
       </Button>
       {status ? <p className="text-xs text-red-600 dark:text-red-400">{status}</p> : null}
     </div>
-  )
+  );
 }
 
 /** Flag drawer: the explanation, the numbers, the linked records, actions. */
@@ -138,8 +142,8 @@ export function AnomalyDrawer({
   flag,
   closeHref,
 }: {
-  flag: NonNullable<AnomalyChecksData['dialogFlag']>
-  closeHref: string
+  flag: NonNullable<AnomalyChecksData["dialogFlag"]>;
+  closeHref: string;
 }) {
   // Every fact sits under its own heading: the severity value under
   // Severity, the status value under Status — never the kind under one and
@@ -149,7 +153,7 @@ export function AnomalyDrawer({
     [flag.kindTerm, flag.kindLabel],
     [flag.employmentTerm, flag.employmentLabel],
     [flag.statusTerm, flag.statusLabel],
-  ]
+  ];
   return (
     <UrlDrawer open closeHref={closeHref} title={`${flag.kindLabel} · ${flag.periodLabel}`}>
       <div className="space-y-3">
@@ -162,9 +166,11 @@ export function AnomalyDrawer({
             </div>
           ))}
         </dl>
-        {flag.reason ? <p className="text-xs text-slate-500 dark:text-slate-400">{flag.reason}</p> : null}
+        {flag.reason ? (
+          <p className="text-xs text-slate-500 dark:text-slate-400">{flag.reason}</p>
+        ) : null}
         <AnomalyTransitionForm flagId={flag.id} labels={flag.transitionLabels} />
       </div>
     </UrlDrawer>
-  )
+  );
 }

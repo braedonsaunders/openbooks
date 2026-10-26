@@ -1,15 +1,22 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const appAssistantTools: DocArticle = {
-  slug: 'app-assistant-tools',
-  title: 'Apps can declare assistant tools',
-  category: 'apps',
+  slug: "app-assistant-tools",
+  title: "Apps can declare assistant tools",
+  category: "apps",
   order: 4,
   summary:
-    'Installed apps may expose their own governed assistant and MCP tools, served by their backend endpoints under the same budget, permissions, and evidence as every other app action.',
-  updated: '2026-09-16',
-  related: ['apps', 'app-builder', 'app-api-reference', 'mcp-control'],
-  keywords: ['apps', 'assistant tools', 'manifest tools', 'backend endpoints', 'confirmation', 'capabilities'],
+    "Installed apps may expose their own governed assistant and MCP tools, served by their backend endpoints under the same budget, permissions, and evidence as every other app action.",
+  updated: "2026-09-16",
+  related: ["apps", "app-builder", "app-api-reference", "mcp-control"],
+  keywords: [
+    "apps",
+    "assistant tools",
+    "manifest tools",
+    "backend endpoints",
+    "confirmation",
+    "capabilities",
+  ],
   body: `# Apps can declare assistant tools
 
 An installed app may expose its own capabilities to the assistant and to MCP
@@ -54,4 +61,4 @@ over app-private stores for data the organization already owns elsewhere.
 The New-app starter ships with one sample read tool; replace it with a real
 capability or remove it before publishing.
 `,
-}
+};

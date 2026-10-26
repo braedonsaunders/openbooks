@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button, Input, Label } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button, Input, Label } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
 
 /**
  * Review lifecycle actions beside the answer form: share with the subject,
@@ -26,62 +26,68 @@ export function ReviewActions({
   reopenLabel,
   failed,
 }: {
-  reviewId: string
-  cycleId: string
-  canShare: boolean
-  canAcknowledge: boolean
-  canCalibrate: boolean
-  canReopen: boolean
-  shareLabel: string
-  acknowledgeLabel: string
-  calibrateLabel: string
-  reasonLabel: string
-  reopenLabel: string
-  failed: string
+  reviewId: string;
+  cycleId: string;
+  canShare: boolean;
+  canAcknowledge: boolean;
+  canCalibrate: boolean;
+  canReopen: boolean;
+  shareLabel: string;
+  acknowledgeLabel: string;
+  calibrateLabel: string;
+  reasonLabel: string;
+  reopenLabel: string;
+  failed: string;
 }) {
-  const router = useRouter()
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter();
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function act(body: Record<string, unknown>) {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
       const res = await fetch(`/api/hrm/reviews/${reviewId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-      })
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, failed));
+        setBusy(false);
+        return;
       }
-      router.push(`/hrm/performance?cycle=${cycleId}&review=${reviewId}`)
-      setBusy(false)
-      router.refresh()
+      router.push(`/hrm/performance?cycle=${cycleId}&review=${reviewId}`);
+      setBusy(false);
+      router.refresh();
     } catch {
-      setError(failed)
-      setBusy(false)
+      setError(failed);
+      setBusy(false);
     }
   }
 
-  if (!canShare && !canAcknowledge && !canCalibrate && !canReopen) return null
+  if (!canShare && !canAcknowledge && !canCalibrate && !canReopen) return null;
   return (
     <div className="space-y-3">
       {canShare ? (
-        <Button type="button" disabled={busy} onClick={() => act({ action: 'share' })}>
+        <Button type="button" disabled={busy} onClick={() => act({ action: "share" })}>
           {shareLabel}
         </Button>
       ) : null}
       {canAcknowledge ? (
-        <Button type="button" disabled={busy} onClick={() => act({ action: 'acknowledge' })}>
+        <Button type="button" disabled={busy} onClick={() => act({ action: "acknowledge" })}>
           {acknowledgeLabel}
         </Button>
       ) : null}
       {canCalibrate ? (
-        <Button type="button" variant="outline" onClick={() => router.push(`/hrm/performance?tab=calibration&cycle=${encodeURIComponent(cycleId)}`)}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() =>
+            router.push(`/hrm/performance?tab=calibration&cycle=${encodeURIComponent(cycleId)}`)
+          }
+        >
           {calibrateLabel}
         </Button>
       ) : null}
@@ -95,7 +101,7 @@ export function ReviewActions({
             type="button"
             variant="outline"
             disabled={busy || reason.trim().length === 0}
-            onClick={() => act({ action: 'reopen', reason: reason.trim() })}
+            onClick={() => act({ action: "reopen", reason: reason.trim() })}
           >
             {reopenLabel}
           </Button>
@@ -107,5 +113,5 @@ export function ReviewActions({
         </p>
       ) : null}
     </div>
-  )
+  );
 }

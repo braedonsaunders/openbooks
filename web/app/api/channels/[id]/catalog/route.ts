@@ -21,7 +21,8 @@ const querySchema = z.object({
 });
 
 function notFoundWhenMissing(error: unknown) {
-  if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+  if (error instanceof CommerceError && error.code === "channel_not_found")
+    return notFound("channel");
   throw error;
 }
 
@@ -66,7 +67,9 @@ export const POST = defineRoute({
     const outOfScope = await guardChannelScope(gate, id);
     if (outOfScope) return outOfScope;
     try {
-      const result = await importShopifyCatalog(gate.user.orgId, gate.user.id, id, { mode: body.mode });
+      const result = await importShopifyCatalog(gate.user.orgId, gate.user.id, id, {
+        mode: body.mode,
+      });
       const counts = await catalogQueueCounts(gate.user.orgId, id);
       return NextResponse.json({ ...result, counts });
     } catch (error) {

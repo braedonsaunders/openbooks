@@ -13,7 +13,11 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
-import { seedCntSubjectEmployerFixture, seedHiredEmployee, seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
+import {
+  seedCntSubjectEmployerFixture,
+  seedHiredEmployee,
+  seedOntarioEhtFixture,
+} from "./filing-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -71,16 +75,31 @@ test(
         wagesTo: "expense",
         craRemittancePartyId: org.vendorId,
         rqRemittancePartyId: rqVendorId,
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } }
+        slotAccounts: {
+          CA: {
+            cpp: craPayable,
+            ei: craPayable,
+            qpip: craPayable,
+            income_tax: craPayable,
+            vacation: vacationPayable,
+          },
+        },
       });
       const filingAccountId = randomUUID();
       await db.execute(sql`insert into payroll_filing_accounts
         (id, org_id, country, program_type, account_number, name, remitter_type, is_default, created_by, updated_by)
         values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'CRA payroll', 'regular', true, ${actorId}, ${actorId})`);
 
-      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId, country: "CA",
-        factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01", value: "1.4",
-        changeReason: "Standard employer EI multiple for the declared CRA account" });
+      await upsertPayrollEmployerFact({
+        orgId: org.orgId,
+        actorId,
+        filingAccountId,
+        country: "CA",
+        factKey: "ei_employer_multiplier",
+        effectiveFrom: "2026-01-01",
+        value: "1.4",
+        changeReason: "Standard employer EI multiple for the declared CRA account",
+      });
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await setPackSlotAccount(org.orgId, actorId, "CA", "qc_income_tax", qcPayable);
       await setPackSlotAccount(org.orgId, actorId, "CA", "hsf", hsfPayable);
@@ -108,12 +127,23 @@ test(
       await seedOntarioEhtFixture(org.orgId, actorId);
       const seedEmployee = async (name: string, province: string) => {
         const { employeeId } = await seedHiredEmployee(org.orgId, actorId, {
-          scheduleId, subsidiaryId: org.subsidiaryId, name, country: "CA", province,
-          payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
-          federalClaimCode: 1, vacationPercent: "0", vacationMethod: "accrue",
-          wcbExempt: true, wcbExemptReason: 'hsf fixture: workers-compensation coverage out of scope',
-          timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]
-            .map((workedOn) => ({ workedOn })),
+          scheduleId,
+          subsidiaryId: org.subsidiaryId,
+          name,
+          country: "CA",
+          province,
+          payBasis: "hourly",
+          currency: "CAD",
+          rate: "30",
+          rateBasis: "hour",
+          federalClaimCode: 1,
+          vacationPercent: "0",
+          vacationMethod: "accrue",
+          wcbExempt: true,
+          wcbExemptReason: "hsf fixture: workers-compensation coverage out of scope",
+          timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"].map((workedOn) => ({
+            workedOn,
+          })),
         });
         return employeeId;
       };
@@ -121,17 +151,30 @@ test(
       const onEmployeeId = await seedEmployee("Casey Siteworker", "ON");
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 2);
 
-      const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
+      const stubs = await db.execute<{
+        employee_party_id: string;
+        factors: Record<string, string>;
+      }>(
+        sql`
         select employee_party_id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(stubs.length, 2);
       const stubFor = (employeeId: string) =>
         stubs.find((row) => row.employee_party_id === employeeId)!;
@@ -142,14 +185,23 @@ test(
       assert.equal(qcFactors.HSF_EARN, "2400.0000");
       assert.equal(qcFactors.HSF, "39.6000");
 
-      const qcLines = (await db.execute<{ system_key: string | null; kind: string; description: string; amount: string; sequence: number }>(sql`
+      const qcLines = await db.execute<{
+        system_key: string | null;
+        kind: string;
+        description: string;
+        amount: string;
+        sequence: number;
+      }>(
+        sql`
         select c.system_key, l.kind, l.description, l.amount, l.sequence
           from pay_stub_lines l
           join pay_components c on c.id = l.component_id
           join pay_stubs s on s.id = l.stub_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
            and s.employee_party_id = ${qcEmployeeId} and c.system_key = 'hsf'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(qcLines.length, 1);
       assert.deepEqual(
         [qcLines[0]!.sequence, qcLines[0]!.kind, qcLines[0]!.description],
@@ -161,28 +213,37 @@ test(
       const onFactors = stubFor(onEmployeeId).factors;
       assert.equal(onFactors.HSF ?? "0", "0");
       assert.equal(onFactors.HSF_EARN, "0", "the HSF basis is explicitly zero outside QC");
-      const onHsfLines = (await db.execute<{ amount: string }>(sql`
+      const onHsfLines = await db.execute<{ amount: string }>(
+        sql`
         select l.amount
           from pay_stub_lines l
           join pay_components c on c.id = l.component_id
           join pay_stubs s on s.id = l.stub_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
            and s.employee_party_id = ${onEmployeeId} and c.system_key = 'hsf'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(onHsfLines.length, 0);
 
       // Remittance: the pack's regional declaration sends the QC stub's HSF
       // to the Revenu Québec vendor; the CRA vendor never sees it.
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const glLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, amount from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
       const hsfLeg = glLines.filter((row) => row.account_id === hsfPayable);
       assert.equal(sum(hsfLeg.map((row) => row.amount)), neg("39.6000"));
 
-      const groups = await payrollRemittanceSummary(org.orgId, { from: "2026-07-01", to: "2026-07-31" });
+      const groups = await payrollRemittanceSummary(org.orgId, {
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
       const rqGroup = groups.find((group) => group.partyId === rqVendorId);
       const craGroup = groups.find((group) => group.partyId === org.vendorId);
       assert.ok(rqGroup, "a Revenu Québec remittance group exists");

@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadResourcing, resourcingSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadResourcing, resourcingSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('resourcing.cockpit')
-  return { title: t('title') }
+  const t = await getTranslations("resourcing.cockpit");
+  return { title: t("title") };
 }
 
 /**
@@ -19,9 +19,9 @@ export async function generateMetadata() {
 export default async function ResourcingHomePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const spec = await searchParams
-  const data = await loadResourcing(spec)
-  return <ModuleView spec={resourcingSpec(data)} data={data} searchParams={spec} trusted />
+  const spec = await searchParams;
+  const data = await loadResourcing(spec);
+  return <ModuleView spec={resourcingSpec(data)} data={data} searchParams={spec} trusted />;
 }

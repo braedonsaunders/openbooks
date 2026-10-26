@@ -31,7 +31,9 @@ export function dimWhere(dims: DimFilter | undefined, alias = sql`l`) {
   if (dims?.projectId) w = sql`${w} and ${alias}.project_id = ${dims.projectId}`;
   if (dims?.locationId) w = sql`${w} and ${alias}.location_id = ${dims.locationId}`;
   if (dims?.classId) w = sql`${w} and ${alias}.class_id = ${dims.classId}`;
-  for (const [key, value] of Object.entries(dims?.segments ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [key, value] of Object.entries(dims?.segments ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
     w = sql`${w} and ${alias}.extra_dims ->> ${key} = ${value}`;
   }
   if (dims?.subsidiaryIds) {
@@ -80,9 +82,9 @@ export function dimensionOptionsScope(
   resolvedReportScope: readonly string[] | undefined,
   allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
 ): DimensionScope {
-  if (resolvedReportScope !== undefined) return resolvedReportScope
-  if (allowedSubsidiaryIds === null) return undefined
-  return allowedSubsidiaryIds ?? []
+  if (resolvedReportScope !== undefined) return resolvedReportScope;
+  if (allowedSubsidiaryIds === null) return undefined;
+  return allowedSubsidiaryIds ?? [];
 }
 
 function dimensionSubsidiaryFilter(column: SQL, scope: DimensionScope): SQL {
@@ -92,15 +94,23 @@ function dimensionSubsidiaryFilter(column: SQL, scope: DimensionScope): SQL {
   return sql` and (${column} is null or ${column} = any(${`{${ids.join(",")}}`}::uuid[]))`;
 }
 
-export async function dimensionOptions(orgId?: string, selectedProjectId?: string, allowedSubsidiaryIds?: DimensionScope) {
+export async function dimensionOptions(
+  orgId?: string,
+  selectedProjectId?: string,
+  allowedSubsidiaryIds?: DimensionScope,
+) {
   const resolvedOrgId = await resolveOrgId(orgId);
   const deptScope = dimensionSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds);
   const projectScope = dimensionSubsidiaryFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds);
   const locationScope = dimensionSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds);
   const classScope = dimensionSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds);
   const [depts, projects, locations, classes, registry] = await Promise.all([
-    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active${deptScope} order by name`, "objects"),
-    db.execute(sql`
+    db.execute(
+      sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active${deptScope} order by name`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       with listed as (
         select p.id, p.name
           from projects p
@@ -115,9 +125,17 @@ export async function dimensionOptions(orgId?: string, selectedProjectId?: strin
         from projects p
        where p.org_id = ${resolvedOrgId}${projectScope}
          and p.id = ${selectedProjectId ?? null}::uuid
-      order by name`, "objects"),
-    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active${locationScope} order by name`, "objects"),
-    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active${classScope} order by name`, "objects"),
+      order by name`,
+      "objects",
+    ),
+    db.execute(
+      sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active${locationScope} order by name`,
+      "objects",
+    ),
+    db.execute(
+      sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active${classScope} order by name`,
+      "objects",
+    ),
     segmentRegistry(resolvedOrgId, allowedSubsidiaryIds),
   ]);
   return {
@@ -125,7 +143,7 @@ export async function dimensionOptions(orgId?: string, selectedProjectId?: strin
     projects: projects as { id: string; name: string }[],
     locations: locations as { id: string; name: string }[],
     classes: classes as { id: string; name: string }[],
-    segments: registry.filter((segment) => segment.sourceKind === 'custom'),
-    builtinSegments: registry.filter((segment) => segment.sourceKind === 'builtin'),
+    segments: registry.filter((segment) => segment.sourceKind === "custom"),
+    builtinSegments: registry.filter((segment) => segment.sourceKind === "builtin"),
   };
 }

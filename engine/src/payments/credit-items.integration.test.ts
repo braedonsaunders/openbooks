@@ -55,20 +55,24 @@ test("creditItemsForParty is empty before the credit posts", { skip: !DB }, asyn
   }
 });
 
-test("creditItemsForParty lists the posted credit line with its open balance", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit reader", "admin"));
-    const id = await draftAndPostCredit(org, userId, "CM-READ-1");
-    const found = await withBypass(() => creditItemsForParty(org.customerId, "ar", org.orgId));
-    assert.equal(found.length, 1);
-    assert.equal(found[0]!.documentId, id);
-    assert.equal(found[0]!.documentNumber, "CM-READ-1");
-    assert.equal(found[0]!.documentKind, "customer_credit");
-    assert.equal(found[0]!.amount, "210.0000");
-    assert.equal(found[0]!.open, "210.0000");
-    assert.equal(found[0]!.currency, "CAD");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "creditItemsForParty lists the posted credit line with its open balance",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const userId = await withBypass(() => createScratchUser(org.orgId, "Credit reader", "admin"));
+      const id = await draftAndPostCredit(org, userId, "CM-READ-1");
+      const found = await withBypass(() => creditItemsForParty(org.customerId, "ar", org.orgId));
+      assert.equal(found.length, 1);
+      assert.equal(found[0]!.documentId, id);
+      assert.equal(found[0]!.documentNumber, "CM-READ-1");
+      assert.equal(found[0]!.documentKind, "customer_credit");
+      assert.equal(found[0]!.amount, "210.0000");
+      assert.equal(found[0]!.open, "210.0000");
+      assert.equal(found[0]!.currency, "CAD");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

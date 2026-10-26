@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // Actions > Send on a payable invoice silently failed — the dialog
 // closed with no toast on the 422 (email delivery not configured). The send
@@ -77,7 +77,10 @@ test("a failed invoice send keeps the dialog open and toasts the error", async (
     const toInput = document.querySelector("#send-to") as HTMLInputElement | null;
     assert.ok(toInput, "the recipient field must render");
     await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )!.set!;
       setter.call(toInput, "billing@t02f7.example");
       toInput.dispatchEvent(new window.Event("input", { bubbles: true }));
       await tick();
@@ -98,10 +101,7 @@ test("a failed invoice send keeps the dialog open and toasts the error", async (
       toasts.some((t) => t.kind === "error"),
       `a failed send must toast an error, got ${JSON.stringify(toasts)}`,
     );
-    assert.ok(
-      buttonsNamed("Send email").length >= 1,
-      "the send dialog must stay open on failure",
-    );
+    assert.ok(buttonsNamed("Send email").length >= 1, "the send dialog must stay open on failure");
     // The failure must also persist inside the dialog: a 4s toast alone is
     // what the tester missed. RED half.
     const alert = document.querySelector('[role="alert"]');

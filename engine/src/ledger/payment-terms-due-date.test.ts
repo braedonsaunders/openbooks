@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { paymentTermsDueDate, PaymentTermsDueDateError, paymentTermsDueRuleRefusal } from "./payment-terms-due-date.ts";
+import {
+  paymentTermsDueDate,
+  PaymentTermsDueDateError,
+  paymentTermsDueRuleRefusal,
+} from "./payment-terms-due-date.ts";
 
 const net = (netDays: number) => ({ netDays, dueDayOfMonth: null });
 const onDay = (dueDayOfMonth: number, netDays = 0) => ({ netDays, dueDayOfMonth });
@@ -65,14 +69,28 @@ test("December documents fall due in the new year", () => {
 });
 
 test("terms the calculator cannot apply refuse with the setup remedy", () => {
-  for (const rule of [net(-1), net(1.5), net(Number.NaN), onDay(0), onDay(32), onDay(1.5), onDay(15, -2)]) {
+  for (const rule of [
+    net(-1),
+    net(1.5),
+    net(Number.NaN),
+    onDay(0),
+    onDay(32),
+    onDay(1.5),
+    onDay(15, -2),
+  ]) {
     assert.match(paymentTermsDueRuleRefusal(rule) ?? "", /Setup → Payment terms/);
-    assert.throws(() => paymentTermsDueDate("2026-07-20", rule), (error: unknown) =>
-      error instanceof PaymentTermsDueDateError && /Setup → Payment terms/.test(error.message));
+    assert.throws(
+      () => paymentTermsDueDate("2026-07-20", rule),
+      (error: unknown) =>
+        error instanceof PaymentTermsDueDateError && /Setup → Payment terms/.test(error.message),
+    );
   }
   assert.equal(paymentTermsDueRuleRefusal({ netDays: "30", dueDayOfMonth: null }) !== null, true);
   assert.equal(paymentTermsDueRuleRefusal(onDay(31, 30)), null);
   assert.throws(() => paymentTermsDueDate("2026-02-30", net(15)), PaymentTermsDueDateError);
-  assert.throws(() => paymentTermsDueDate("9999-12-20", onDay(1)), (error: unknown) =>
-    error instanceof PaymentTermsDueDateError && /supported calendar/.test(error.message));
+  assert.throws(
+    () => paymentTermsDueDate("9999-12-20", onDay(1)),
+    (error: unknown) =>
+      error instanceof PaymentTermsDueDateError && /supported calendar/.test(error.message),
+  );
 });

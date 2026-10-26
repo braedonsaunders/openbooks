@@ -35,9 +35,7 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
-import {
-  certificateAmount, certificateCount, certificateFlag,
-} from "../../certificates.ts";
+import { certificateAmount, certificateCount, certificateFlag } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
   type UsStateWithholdingEngine,
@@ -45,7 +43,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/il.ts";
 
 export interface IlYearRates {
@@ -94,16 +96,18 @@ const IL_EDITIONS_BY_YEAR: Record<number, IlYearRates> = {
   [IL_RATES_2026.year]: IL_RATES_2026,
 };
 
-export const IL_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Booklet IL-700-T (R-12/25)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Illinois Department of Revenue, Booklet IL-700-T (R-12/25), 2026 Illinois Withholding Tax "
-    + "Tables, automated payroll method (p. 4); Informational Bulletin FY 2026-15",
-  status: "published",
-  region: "IL",
-}];
+export const IL_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Booklet IL-700-T (R-12/25)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Illinois Department of Revenue, Booklet IL-700-T (R-12/25), 2026 Illinois Withholding Tax " +
+      "Tables, automated payroll method (p. 4); Informational Bulletin FY 2026-15",
+    status: "published",
+    region: "IL",
+  },
+];
 
 function compute(
   input: UsStateWithholdingInput,
@@ -124,8 +128,8 @@ function compute(
   // Pub 130 (R-02/26), pp. 7–8: an IL-W-4 total-exemption claim is honored only
   // when the employee also claims total exemption on federal Form W-4. Without
   // that federal claim, disregard the IL-W-4 and withhold with no allowances.
-  const disregardCertificate = certificateFlag(input.certificate, "exempt")
-    && input.federalWithholdingExempt !== true;
+  const disregardCertificate =
+    certificateFlag(input.certificate, "exempt") && input.federalWithholdingExempt !== true;
   if (!disregardCertificate) {
     const exempt = context.exemptResult({ factorKey: "IL_EXEMPT", factorFormat: "decimal" });
     if (exempt) return exempt;
@@ -139,11 +143,15 @@ function compute(
   // restates it as "withhold … with no allowances". So the DEFAULT is zero, not
   // one — and it is the certificate's declared default, not an assumption made
   // here.
-  const line1 = disregardCertificate ? 0 : certificateCount(input.certificate, "line1_allowances") ?? 0;
-  const line2 = disregardCertificate ? 0 : certificateCount(input.certificate, "line2_allowances") ?? 0;
+  const line1 = disregardCertificate
+    ? 0
+    : (certificateCount(input.certificate, "line1_allowances") ?? 0);
+  const line2 = disregardCertificate
+    ? 0
+    : (certificateCount(input.certificate, "line2_allowances") ?? 0);
 
-  const annualExemption = U(rates.line1Allowance) * BigInt(line1)
-    + U(rates.line2Allowance) * BigInt(line2);
+  const annualExemption =
+    U(rates.line1Allowance) * BigInt(line1) + U(rates.line2Allowance) * BigInt(line2);
   trace("IL_ANNUAL_EXEMPTION", annualExemption);
 
   // Step 2d — divide by the pay periods in the year. Example B rounds the

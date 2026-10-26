@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  listProcesses,
-  type ProcessSegment,
-} from "@openbooks/engine/hrm/processes-read";
+import { listProcesses, type ProcessSegment } from "@openbooks/engine/hrm/processes-read";
 import { openProcess } from "@openbooks/engine/hrm/processes/operations";
 
 import { isUuid } from "../../../../lib/list-params";
@@ -35,10 +32,7 @@ export const GET = defineRoute({
     }
     const employmentId = url.searchParams.get("employment");
     if (employmentId !== null && !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employment must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employment must be a uuid" }, { status: 400 });
     }
     try {
       const processes = await listProcesses({
@@ -71,9 +65,7 @@ export const POST = defineRoute({
         employmentId: body.employmentId,
         kind: body.kind,
         effectiveDate: body.effectiveDate,
-        ...(body.templateId === undefined
-          ? {}
-          : { templateId: body.templateId }),
+        ...(body.templateId === undefined ? {} : { templateId: body.templateId }),
       });
       return NextResponse.json({ process }, { status: 201 });
     } catch (e) {

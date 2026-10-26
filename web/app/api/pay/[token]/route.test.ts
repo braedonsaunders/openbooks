@@ -33,13 +33,12 @@ registerHooks({
           ),
       };
     }
-    if (
-      specifier.endsWith("/lib/features") &&
-      context.parentURL?.includes("/api/pay/")
-    ) {
+    if (specifier.endsWith("/lib/features") && context.parentURL?.includes("/api/pay/")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent("export async function isFeatureEnabled(){return true}"),
+        url:
+          "data:text/javascript," +
+          encodeURIComponent("export async function isFeatureEnabled(){return true}"),
       };
     }
     return next(specifier, context);
@@ -66,7 +65,9 @@ test("anonymous checkout 500s hide engine internals behind a request id", async 
     assert.equal(body.error, "failed to create checkout session");
     assert.ok(isUuid(body.requestId ?? ""), "a request id to quote back");
     assert.ok(!JSON.stringify(body).includes("db://internal"), "no internals in the body");
-    const detail = logged.find((args) => typeof args[0] === "string" && args[0].includes(body.requestId!));
+    const detail = logged.find(
+      (args) => typeof args[0] === "string" && args[0].includes(body.requestId!),
+    );
     assert.ok(detail, "the detail is logged against the request id");
     assert.ok(
       detail.some((arg) => arg instanceof Error && arg.message.includes("db://internal")),

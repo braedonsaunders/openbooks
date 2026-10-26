@@ -66,46 +66,74 @@ async function ensureRecordFolder(
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtext(${"hrm-attach-record:" + orgId + ":" + recordTable + ":" + recordId}))`,
   );
-  const existing = (await tx.execute<{ id: string }>(sql`
+  const existing = (
+    await tx.execute<{ id: string }>(
+      sql`
     select id from folders
      where org_id = ${orgId} and record_table = ${recordTable} and record_id = ${recordId}
        and record_id is not null
        for share
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (existing) return existing.id;
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtext(${"hrm-attachments-root:" + orgId}))`,
-  );
-  const root = (await tx.execute<{ id: string }>(sql`
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"hrm-attachments-root:" + orgId}))`);
+  const root = (
+    await tx.execute<{ id: string }>(
+      sql`
     select id from folders where org_id = ${orgId} and system_kind = 'attachments'
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const rootId =
     root?.id ??
-    (await tx.execute<{ id: string }>(sql`
+    (
+      await tx.execute<{ id: string }>(
+        sql`
       insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
       values (${orgId}, 'Attachments', true, 'attachments', now(), now())
       returning id
-    `, "objects"))[0]!.id;
+    `,
+        "objects",
+      )
+    )[0]!.id;
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtext(${"hrm-attach-group:" + orgId + ":" + groupLabel}))`,
   );
-  const group = (await tx.execute<{ id: string }>(sql`
+  const group = (
+    await tx.execute<{ id: string }>(
+      sql`
     select id from folders
      where org_id = ${orgId} and parent_folder_id = ${rootId}
        and record_id is null and name = ${groupLabel}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const groupId =
     group?.id ??
-    (await tx.execute<{ id: string }>(sql`
+    (
+      await tx.execute<{ id: string }>(
+        sql`
       insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
       values (${orgId}, ${rootId}, ${groupLabel}, true, ${recordTable}, now(), now())
       returning id
-    `, "objects"))[0]!.id;
-  const leaf = (await tx.execute<{ id: string }>(sql`
+    `,
+        "objects",
+      )
+    )[0]!.id;
+  const leaf = (
+    await tx.execute<{ id: string }>(
+      sql`
     insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
     values (${orgId}, ${groupId}, ${recordTable + " / " + recordId.slice(0, 8)}, true, ${recordTable}, ${recordId}, now(), now())
     returning id
-  `, "objects"))[0]!.id;
+  `,
+      "objects",
+    )
+  )[0]!.id;
   return leaf;
 }
 
@@ -122,7 +150,9 @@ export async function storeCabinetFile(
     input.groupLabel,
   );
   const contentHash = createHash("sha256").update(input.bytes).digest("hex");
-  const fileId = (await tx.execute<{ id: string }>(sql`
+  const fileId = (
+    await tx.execute<{ id: string }>(
+      sql`
     insert into files (org_id, folder_id, name, extension, file_type, content_type,
                        size_bytes, storage_kind, content_hash, created_by, updated_by,
                        created_at, updated_at)
@@ -130,14 +160,22 @@ export async function storeCabinetFile(
             ${fileTypeOf(input.contentType)}, ${input.contentType}, ${input.bytes.length},
             'db', ${contentHash}, ${input.createdBy}, ${input.createdBy}, now(), now())
     returning id
-  `, "objects"))[0]!.id;
-  const versionId = (await tx.execute<{ id: string }>(sql`
+  `,
+      "objects",
+    )
+  )[0]!.id;
+  const versionId = (
+    await tx.execute<{ id: string }>(
+      sql`
     insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
                                content_hash, created_by, created_at)
     values (${fileId}, 1, ${input.bytes.length}, ${input.contentType}, 'db',
             ${contentHash}, ${input.createdBy}, now())
     returning id
-  `, "objects"))[0]!.id;
+  `,
+      "objects",
+    )
+  )[0]!.id;
   await tx.execute(sql`
     update files set current_version_id = ${versionId}
      where id = ${fileId} and org_id = ${input.orgId}
@@ -181,24 +219,36 @@ export async function appendCabinetVersion(
   bytes: Buffer,
   createdBy: string | null,
 ): Promise<string> {
-  const file = (await tx.execute<{ id: string; maxv: number }>(sql`
+  const file = (
+    await tx.execute<{ id: string; maxv: number }>(
+      sql`
     select f.id, coalesce(max(v.version_number), 0) as maxv
       from files f left join file_versions v on v.file_id = f.id
      where f.id = ${fileId} and f.org_id = ${orgId}
      group by f.id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   // A write matching zero rows is a failure: the file is gone or foreign.
   if (!file) {
-    throw new Error("the signed PDF has no cabinet file in this organization — regenerate the document instead of signing a ghost");
+    throw new Error(
+      "the signed PDF has no cabinet file in this organization — regenerate the document instead of signing a ghost",
+    );
   }
   const contentHash = createHash("sha256").update(bytes).digest("hex");
-  const versionId = (await tx.execute<{ id: string }>(sql`
+  const versionId = (
+    await tx.execute<{ id: string }>(
+      sql`
     insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
                                content_hash, created_by, created_at)
     values (${fileId}, ${file.maxv + 1}, ${bytes.length}, ${contentType}, 'db',
             ${contentHash}, ${createdBy}, now())
     returning id
-  `, "objects"))[0]!.id;
+  `,
+      "objects",
+    )
+  )[0]!.id;
   await tx.execute(sql`
     update files
        set current_version_id = ${versionId}, size_bytes = ${bytes.length},
@@ -218,11 +268,18 @@ export async function purgeCabinetBytes(
   orgId: string,
   fileId: string,
 ): Promise<void> {
-  const file = (await tx.execute<{ id: string }>(sql`
+  const file = (
+    await tx.execute<{ id: string }>(
+      sql`
     select id from files where id = ${fileId} and org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!file) {
-    throw new Error("the retention delete matched no cabinet file in this organization — the delete is refused, never a silent success");
+    throw new Error(
+      "the retention delete matched no cabinet file in this organization — the delete is refused, never a silent success",
+    );
   }
   await tx.execute(sql`
     delete from file_blobs

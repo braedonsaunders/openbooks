@@ -1,59 +1,73 @@
-import { expect, test } from '@playwright/test'
-import { authedContext, dismissSetupWizard } from './auth'
+import { expect, test } from "@playwright/test";
+import { authedContext, dismissSetupWizard } from "./auth";
 
 for (const { route, kind } of [
-  { route: '/ar/invoices', kind: 'customer_invoice' },
-  { route: '/ap/bills', kind: 'vendor_bill' },
-  { route: '/banking/transactions', kind: 'check' },
+  { route: "/ar/invoices", kind: "customer_invoice" },
+  { route: "/ap/bills", kind: "vendor_bill" },
+  { route: "/banking/transactions", kind: "check" },
 ]) {
-test(`${route} drawer discards the reviewed draft with a JSON revision token`, async ({ browser, baseURL }) => {
-  const { context, page } = await authedContext(browser, baseURL)
-  let id: string | undefined
-  try {
-    await page.goto(route)
-    const created = await page.evaluate(async (kind) => {
-      const response = await fetch('/api/documents/draft', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }),
-      })
-      return { status: response.status, body: await response.json() }
-    }, kind)
-    expect(created.status, JSON.stringify(created.body)).toBe(200)
-    id = created.body.id
-    expect(id).toBeTruthy()
-    await page.goto(`${route}?doc=${id}`)
-    const wizard = page.getByTestId('setup-wizard')
-    if (await wizard.isVisible()) {
-      await dismissSetupWizard(page)
-      await page.waitForURL('**/dashboard')
-      await page.goto(`${route}?doc=${id}`)
-    }
-    await page.getByRole('button', { name: 'Actions', exact: true }).last().click()
-    await page.getByRole('menuitem', { name: 'Delete', exact: true }).click()
-    const deleted = page.waitForResponse((r) => r.url().endsWith(`/api/documents/${id}`) && r.request().method() === 'DELETE')
-    await page.getByRole('dialog').filter({ hasText: 'This permanently deletes the draft' }).getByRole('button', { name: 'Delete', exact: true }).click()
-    const response = await deleted
-    expect(response.status(), await response.text()).toBe(200)
-    // Documents compare on revision_seq (migration 0167). The drawer must
-    // send that counter as expectedUpdatedAt; a leftover timestamp assertion
-    // would treat a correct "0" token as a product defect.
-    expect(response.request().postDataJSON().expectedUpdatedAt).toMatch(/^\d{1,20}$/)
-    id = undefined
-    await expect(page).toHaveURL(new URL(route, baseURL).href)
-  } finally {
+  test(`${route} drawer discards the reviewed draft with a JSON revision token`, async ({
+    browser,
+    baseURL,
+  }) => {
+    const { context, page } = await authedContext(browser, baseURL);
+    let id: string | undefined;
     try {
-      if (id) {
-        await page.evaluate(async (id) => {
-          const response = await fetch(`/api/documents/${id}`)
-          if (!response.ok) return
-          const current = await response.json()
-          const removed = await fetch(`/api/documents/${id}`, {
-            method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ expectedUpdatedAt: current.doc.updated_at }),
-          })
-          if (!removed.ok) throw new Error(`Draft cleanup failed: ${removed.status}`)
-        }, id)
+      await page.goto(route);
+      const created = await page.evaluate(async (kind) => {
+        const response = await fetch("/api/documents/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind }),
+        });
+        return { status: response.status, body: await response.json() };
+      }, kind);
+      expect(created.status, JSON.stringify(created.body)).toBe(200);
+      id = created.body.id;
+      expect(id).toBeTruthy();
+      await page.goto(`${route}?doc=${id}`);
+      const wizard = page.getByTestId("setup-wizard");
+      if (await wizard.isVisible()) {
+        await dismissSetupWizard(page);
+        await page.waitForURL("**/dashboard");
+        await page.goto(`${route}?doc=${id}`);
       }
-    } finally { await context.close() }
-  }
-})
+      await page.getByRole("button", { name: "Actions", exact: true }).last().click();
+      await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+      const deleted = page.waitForResponse(
+        (r) => r.url().endsWith(`/api/documents/${id}`) && r.request().method() === "DELETE",
+      );
+      await page
+        .getByRole("dialog")
+        .filter({ hasText: "This permanently deletes the draft" })
+        .getByRole("button", { name: "Delete", exact: true })
+        .click();
+      const response = await deleted;
+      expect(response.status(), await response.text()).toBe(200);
+      // Documents compare on revision_seq (migration 0167). The drawer must
+      // send that counter as expectedUpdatedAt; a leftover timestamp assertion
+      // would treat a correct "0" token as a product defect.
+      expect(response.request().postDataJSON().expectedUpdatedAt).toMatch(/^\d{1,20}$/);
+      id = undefined;
+      await expect(page).toHaveURL(new URL(route, baseURL).href);
+    } finally {
+      try {
+        if (id) {
+          await page.evaluate(async (id) => {
+            const response = await fetch(`/api/documents/${id}`);
+            if (!response.ok) return;
+            const current = await response.json();
+            const removed = await fetch(`/api/documents/${id}`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ expectedUpdatedAt: current.doc.updated_at }),
+            });
+            if (!removed.ok) throw new Error(`Draft cleanup failed: ${removed.status}`);
+          }, id);
+        }
+      } finally {
+        await context.close();
+      }
+    }
+  });
 }

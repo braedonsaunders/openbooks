@@ -19,8 +19,7 @@ interface RouteState {
   calls: TaxReturnCall[];
 }
 const routeState: RouteState = { calls: [] };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 stubModules({
   navigation: false,
@@ -67,10 +66,9 @@ stubModules({
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
 
 function get(query: string): Promise<Response> {
-  return GET(
-    new Request(`http://openbooks.test/api/tax/returns/CA_GST34${query}`),
-    { params: Promise.resolve({ code: "CA_GST34" }) },
-  ) as Promise<Response>;
+  return GET(new Request(`http://openbooks.test/api/tax/returns/CA_GST34${query}`), {
+    params: Promise.resolve({ code: "CA_GST34" }),
+  }) as Promise<Response>;
 }
 
 test("GET keeps the org-wide denial for restricted callers without a scope", async () => {
@@ -85,9 +83,7 @@ test("GET keeps the org-wide denial for restricted callers without a scope", asy
 test("GET scopes an in-scope subsidiary to the filing entity", async () => {
   routeState.calls.length = 0;
 
-  const response = await get(
-    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed",
-  );
+  const response = await get("?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed");
 
   assert.equal(response.status, 200);
   assert.equal(routeState.calls.length, 1);
@@ -100,9 +96,7 @@ test("GET scopes an in-scope subsidiary to the filing entity", async () => {
 test("GET refuses an out-of-scope subsidiary without reaching the engine", async () => {
   routeState.calls.length = 0;
 
-  const response = await get(
-    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-nope",
-  );
+  const response = await get("?from=2026-07-01&to=2026-07-31&subsidiary=sub-nope");
 
   assert.equal(response.status, 404);
   assert.equal(routeState.calls.length, 0);
@@ -132,9 +126,7 @@ test("GET passes the declared translation policy and registration pin", async ()
 test("GET refuses a decimal-comma adjustment by name instead of computing it as zero", async () => {
   routeState.calls.length = 0;
 
-  const response = await get(
-    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_109=12,34",
-  );
+  const response = await get("?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_109=12,34");
 
   assert.equal(response.status, 400);
   const body = (await response.json()) as { error: string };
@@ -147,9 +139,7 @@ test("GET refuses a decimal-comma adjustment by name instead of computing it as 
 test("GET refuses a non-numeric adjustment by name", async () => {
   routeState.calls.length = 0;
 
-  const response = await get(
-    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_109=abc",
-  );
+  const response = await get("?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_109=abc");
 
   assert.equal(response.status, 400);
   const body = (await response.json()) as { error: string };
@@ -160,9 +150,7 @@ test("GET refuses a non-numeric adjustment by name", async () => {
 test("GET passes a well-formed adjustment to the engine verbatim", async () => {
   routeState.calls.length = 0;
 
-  const response = await get(
-    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_109=12.34",
-  );
+  const response = await get("?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_109=12.34");
 
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.calls[0]!.adjustments, { 109: "12.34" });
@@ -180,10 +168,11 @@ test("GET fails closed on an explicitly empty subsidiary filter", async () => {
   assert.equal(routeState.calls.length, 0);
 });
 
-
 test("GET sums repeated adjustment entries exactly", async () => {
   routeState.calls.length = 0;
-  const response = await get("?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_104=1000.00&adj_104=2018.84");
+  const response = await get(
+    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_104=1000.00&adj_104=2018.84",
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.calls[0]!.adjustments, { "104": "3018.8400" });
 });
@@ -191,17 +180,20 @@ test("GET sums repeated adjustment entries exactly", async () => {
 test("GET refuses adjustment precision or magnitude it cannot record", async () => {
   for (const amount of ["0.00001", "1000000000000000"]) {
     routeState.calls.length = 0;
-    const response = await get(`?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_104=${amount}`);
+    const response = await get(
+      `?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj_104=${amount}`,
+    );
     assert.equal(response.status, 400);
     assert.match(JSON.stringify(await response.json()), /adjustment 104/);
     assert.equal(routeState.calls.length, 0);
   }
 });
 
-
 test("GET treats special property names as named adjustment lines without inherited values", async () => {
   routeState.calls.length = 0;
-  const response = await get("?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj___proto__=0.10&adj___proto__=0.20");
+  const response = await get(
+    "?from=2026-07-01&to=2026-07-31&subsidiary=sub-allowed&adj___proto__=0.10&adj___proto__=0.20",
+  );
   assert.equal(response.status, 200);
   const amounts = routeState.calls[0]!.adjustments;
   assert.equal(Object.getPrototypeOf(amounts), Object.prototype);

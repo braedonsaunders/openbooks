@@ -1,5 +1,9 @@
-import { isUuid } from '../../platform/uuid.ts';
-import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs,requireStatutoryHistoryFactors } from '../statutory-history-scope.ts';
+import { isUuid } from "../../platform/uuid.ts";
+import {
+  resolveStatutoryHistoryScope,
+  employerScopedStatutoryStubs,
+  requireStatutoryHistoryFactors,
+} from "../statutory-history-scope.ts";
 /**
  * Ireland payroll country pack — 2026 TRANSCRIBED, `installable: true`.
  *
@@ -43,15 +47,9 @@ import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculateIeStatutory, ieWeekNumber } from "./compute.ts";
 import { iePayeReconciliationFiling } from "./filings.ts";
 import { IE_EMPLOYEE_FACTS } from "./employee-facts.ts";
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
-import type {
-  PayrollEditionScaffold,
-  PayrollTaxYearSupport,
-} from "../tax-years.ts";
+import type { PayrollEditionScaffold, PayrollTaxYearSupport } from "../tax-years.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
 import type { PayrollPackFilings } from "../filing-registry.ts";
 import { utcDateFromParts } from "../../platform/civil-date.ts";
@@ -82,7 +80,15 @@ const IE_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
       // the second pack installed never seeds its row and its runs push
       // onto the first pack's component — Irish PAYE posting to the GB
       // row's liability account. The CA pack's QCTAX precedent, same shape.
-      { code: "IEPAYE", name: "PAYE income tax", systemKey: "ie_paye", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+      {
+        code: "IEPAYE",
+        name: "PAYE income tax",
+        systemKey: "ie_paye",
+        kind: "deduction",
+        sequence: 110,
+        assessedOn: "taxable_income",
+        remittance: "tax_authority",
+      },
     ],
   },
   {
@@ -92,8 +98,24 @@ const IE_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
       // Class A (full-rate employees): employee share on reckonable pay above
       // the weekly threshold, employer share on all reckonable pay. No
       // deduction enters either formula.
-      { code: "PRSI", name: "PRSI (employee)", systemKey: "prsi", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "PRSI-ER", name: "PRSI (employer)", systemKey: "prsi", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
+      {
+        code: "PRSI",
+        name: "PRSI (employee)",
+        systemKey: "prsi",
+        kind: "deduction",
+        sequence: 120,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "PRSI-ER",
+        name: "PRSI (employer)",
+        systemKey: "prsi",
+        kind: "employer_contribution",
+        sequence: 210,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
     ],
   },
   {
@@ -102,7 +124,15 @@ const IE_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
     components: [
       // USC on gross pay at the RPN's cutoff points. Rate × pay, no pre-tax
       // deduction in the formula.
-      { code: "USC", name: "Universal Social Charge", systemKey: "usc", kind: "deduction", sequence: 130, assessedOn: "earnings", remittance: "tax_authority" },
+      {
+        code: "USC",
+        name: "Universal Social Charge",
+        systemKey: "usc",
+        kind: "deduction",
+        sequence: 130,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
     ],
   },
 ];
@@ -119,67 +149,109 @@ const IE_RPN: PayrollCertificate = {
   label: "Revenue Payroll Notification",
   scope: { level: "country" },
   purpose: "withholding",
-  citation: "Revenue TDM Part 42-04-35A (Employer's Guide to PAYE); "
-    + "Revenue TDM Part 18D-00-02 (USC Regulations 2018); revenue.ie PAYE Services",
-  summary: "Requested from Revenue for each employment before the first pay in the tax year "
-    + "(and whenever credits change). It states the employee's total tax credits, standard rate "
-    + "band, USC cutoff points or USC exemption, and the basis — cumulative or week 1/month 1. "
-    + "With no RPN the employer must withhold on the emergency basis.",
+  citation:
+    "Revenue TDM Part 42-04-35A (Employer's Guide to PAYE); " +
+    "Revenue TDM Part 18D-00-02 (USC Regulations 2018); revenue.ie PAYE Services",
+  summary:
+    "Requested from Revenue for each employment before the first pay in the tax year " +
+    "(and whenever credits change). It states the employee's total tax credits, standard rate " +
+    "band, USC cutoff points or USC exemption, and the basis — cumulative or week 1/month 1. " +
+    "With no RPN the employer must withhold on the emergency basis.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "tax_credits_total", label: "Total tax credits (annual)",
-      kind: "amount", decimals: 2, min: "0", required: true,
-      help: "The RPN's total annual tax credits (personal, PAYE, and any others Revenue holds). "
-        + "Applied cumulatively from 1 January, or week-1/month-1 when the RPN says so.",
+      key: "tax_credits_total",
+      label: "Total tax credits (annual)",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      required: true,
+      help:
+        "The RPN's total annual tax credits (personal, PAYE, and any others Revenue holds). " +
+        "Applied cumulatively from 1 January, or week-1/month-1 when the RPN says so.",
     },
     {
-      key: "rate_band_total", label: "Standard rate band (annual)",
-      kind: "amount", decimals: 2, min: "0", required: true,
-      help: "The RPN's standard-rate cutoff: pay within it is taxed at the standard rate, "
-        + "pay above it at the higher rate. Unused band carries forward only on the cumulative basis.",
+      key: "rate_band_total",
+      label: "Standard rate band (annual)",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      required: true,
+      help:
+        "The RPN's standard-rate cutoff: pay within it is taxed at the standard rate, " +
+        "pay above it at the higher rate. Unused band carries forward only on the cumulative basis.",
     },
     {
-      key: "pay_basis", label: "PAYE basis",
-      kind: "choice", default: "cumulative", required: true,
+      key: "pay_basis",
+      label: "PAYE basis",
+      kind: "choice",
+      default: "cumulative",
+      required: true,
       choices: [
-        { value: "cumulative", label: "Cumulative basis", help: "Unused credits and band carry forward from 1 January. Revenue's preferred basis." },
-        { value: "week1", label: "Week 1 / Month 1 basis", help: "Each pay period stands alone: no carry-forward of unused credits or band." },
+        {
+          value: "cumulative",
+          label: "Cumulative basis",
+          help: "Unused credits and band carry forward from 1 January. Revenue's preferred basis.",
+        },
+        {
+          value: "week1",
+          label: "Week 1 / Month 1 basis",
+          help: "Each pay period stands alone: no carry-forward of unused credits or band.",
+        },
       ],
-      help: "The basis the RPN states. Week 1/Month 1 is temporary (e.g. unresolved credits); "
-        + "emergency basis, when there is no RPN at all, is not this certificate.",
+      help:
+        "The basis the RPN states. Week 1/Month 1 is temporary (e.g. unresolved credits); " +
+        "emergency basis, when there is no RPN at all, is not this certificate.",
     },
     {
-      key: "usc_cutoff_total", label: "USC cutoff points (annual)",
-      kind: "amount", decimals: 2, min: "0", required: true,
-      help: "The RPN's USC rate cutoff points for THIS employment (€70,044 standard total; "
-        + "Revenue allocates a reduced total to a concurrent second employment). The published "
-        + "USC bands scale pro-rata to this total. Required whenever an RPN is on file — an "
-        + "unrecorded total must not silently price as the full standard bands.",
+      key: "usc_cutoff_total",
+      label: "USC cutoff points (annual)",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      required: true,
+      help:
+        "The RPN's USC rate cutoff points for THIS employment (€70,044 standard total; " +
+        "Revenue allocates a reduced total to a concurrent second employment). The published " +
+        "USC bands scale pro-rata to this total. Required whenever an RPN is on file — an " +
+        "unrecorded total must not silently price as the full standard bands.",
     },
     {
-      key: "usc_exempt", label: "Exempt from USC",
+      key: "usc_exempt",
+      label: "Exempt from USC",
       kind: "flag",
-      help: "The RPN states the employee is exempt from USC (e.g. income at or below the €13,000 "
-        + "annual exemption for 2026, or a qualifying exemption). USC only: PAYE and PRSI still apply.",
+      help:
+        "The RPN states the employee is exempt from USC (e.g. income at or below the €13,000 " +
+        "annual exemption for 2026, or a qualifying exemption). USC only: PAYE and PRSI still apply.",
     },
     {
-      key: "prior_cumulative_pay", label: "Cumulative pay from previous employment (year)",
-      kind: "amount", decimals: 2, min: "0",
-      help: "Cumulative taxable pay with a previous employer this year, as the RPN reports it. "
-        + "Sets the starting position of the cumulative calculation for a mid-year joiner.",
+      key: "prior_cumulative_pay",
+      label: "Cumulative pay from previous employment (year)",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      help:
+        "Cumulative taxable pay with a previous employer this year, as the RPN reports it. " +
+        "Sets the starting position of the cumulative calculation for a mid-year joiner.",
     },
     {
-      key: "prior_cumulative_usc", label: "Cumulative USC from previous employment (year)",
-      kind: "amount", decimals: 2, min: "0",
+      key: "prior_cumulative_usc",
+      label: "Cumulative USC from previous employment (year)",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
       help: "Cumulative USC paid with a previous employer this year, as the RPN reports it.",
     },
     {
-      key: "prior_cumulative_tax", label: "Cumulative Income Tax from previous employment (year)",
-      kind: "amount", decimals: 2, min: "0",
-      help: "Cumulative Income Tax paid with a previous employer this year, as the RPN reports it. "
-        + "The RPN shows previous income along with the tax and USC paid on that employment; "
-        + "all three set the cumulative starting position for a mid-year joiner.",
+      key: "prior_cumulative_tax",
+      label: "Cumulative Income Tax from previous employment (year)",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      help:
+        "Cumulative Income Tax paid with a previous employer this year, as the RPN reports it. " +
+        "The RPN shows previous income along with the tax and USC paid on that employment; " +
+        "all three set the cumulative starting position for a mid-year joiner.",
     },
   ],
 };
@@ -203,57 +275,66 @@ const IE_FORTNIGHT_WEEKS: PayrollCertificate = {
   citation:
     "DSP PRSI Employer Guide 2026 (fortnightly PRSI is calculated on the pay for each week worked)",
   summary:
-    "Employer-recorded reckonable pay for week 1 and week 2 of a fortnightly pay period, "
-    + "for per-week PRSI subclass/rate/credit application.",
+    "Employer-recorded reckonable pay for week 1 and week 2 of a fortnightly pay period, " +
+    "for per-week PRSI subclass/rate/credit application.",
   storage: "certificate_rows",
-  fields: [{
-    key: "week_1",
-    label: "Week 1 reckonable pay",
-    kind: "amount",
-    decimals: 2,
-    min: "0",
-    required: true,
-    help:
-      "Reckonable pay attributable to the first week worked in the fortnight. "
-      + "Week 1 + week 2 must equal the fortnight's reckonable pay exactly.",
-  }, {
-    key: "week_2",
-    label: "Week 2 reckonable pay",
-    kind: "amount",
-    decimals: 2,
-    min: "0",
-    required: true,
-    help:
-      "Reckonable pay attributable to the second week worked in the fortnight. "
-      + "Week 1 + week 2 must equal the fortnight's reckonable pay exactly.",
-  }],
+  fields: [
+    {
+      key: "week_1",
+      label: "Week 1 reckonable pay",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      required: true,
+      help:
+        "Reckonable pay attributable to the first week worked in the fortnight. " +
+        "Week 1 + week 2 must equal the fortnight's reckonable pay exactly.",
+    },
+    {
+      key: "week_2",
+      label: "Week 2 reckonable pay",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      required: true,
+      help:
+        "Reckonable pay attributable to the second week worked in the fortnight. " +
+        "Week 1 + week 2 must equal the fortnight's reckonable pay exactly.",
+    },
+  ],
 };
 
 const IE_CERTIFICATES: PayrollPackCertificates = {
   country: "IE",
-  certificates: [IE_RPN, IE_FORTNIGHT_WEEKS, {
-    key: "ie_prsi_class",
-    form: "Employer PRSI class record",
-    label: "PRSI class",
-    scope: { level: "country" },
-    purpose: "withholding",
-    citation:
-      "DSP PRSI Class A rates (https://www.gov.ie/en/department-of-social-protection/publications/prsi-class-a-rates/); "
-      + "DSP PRSI Class M rates (https://www.gov.ie/en/department-of-social-protection/publications/prsi-class-m-rates/)",
-    summary:
-      "Employer-recorded PRSI class determined from the employee's circumstances and DSP rules. "
-      + "Class A and Class M are supported; other classes refuse by name.",
-    storage: "certificate_rows",
-    fields: [{
-      key: "prsi_class",
-      label: "PRSI class letter",
-      kind: "code",
-      required: true,
-      help:
-        "Enter the class established by the employer under DSP rules. Class M has no contribution; "
-        + "unhandled classes refuse rather than falling through to Class A.",
-    }],
-  }],
+  certificates: [
+    IE_RPN,
+    IE_FORTNIGHT_WEEKS,
+    {
+      key: "ie_prsi_class",
+      form: "Employer PRSI class record",
+      label: "PRSI class",
+      scope: { level: "country" },
+      purpose: "withholding",
+      citation:
+        "DSP PRSI Class A rates (https://www.gov.ie/en/department-of-social-protection/publications/prsi-class-a-rates/); " +
+        "DSP PRSI Class M rates (https://www.gov.ie/en/department-of-social-protection/publications/prsi-class-m-rates/)",
+      summary:
+        "Employer-recorded PRSI class determined from the employee's circumstances and DSP rules. " +
+        "Class A and Class M are supported; other classes refuse by name.",
+      storage: "certificate_rows",
+      fields: [
+        {
+          key: "prsi_class",
+          label: "PRSI class letter",
+          kind: "code",
+          required: true,
+          help:
+            "Enter the class established by the employer under DSP rules. Class M has no contribution; " +
+            "unhandled classes refuse rather than falling through to Class A.",
+        },
+      ],
+    },
+  ],
 };
 
 const IE_WITHHOLDING = {
@@ -275,8 +356,8 @@ const IE_WITHHOLDING = {
       // No county or city levies an income tax on wages.
       subRegions: [],
       subRegionConflictRule: "work_only",
-      citation: "Revenue TDM Part 42-04-35A (Employer's Guide to PAYE); "
-        + "Taxes Consolidation Act 1997",
+      citation:
+        "Revenue TDM Part 42-04-35A (Employer's Guide to PAYE); " + "Taxes Consolidation Act 1997",
     },
   ],
 } satisfies PayrollPackWithholding;
@@ -299,16 +380,67 @@ const IE_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     scope: "employment",
     citation: "Organisation of Working Time Act 1997, s.21; S.I. No. 475/1997",
     holidays: [
-      { key: "new_years", name: "New Year's Day", rule: { kind: "fixed", month: 1, day: 1 }, observance: "none" },
-      { key: "st_brigids", name: "St Brigid's Day", rule: { kind: "nth_weekday", month: 2, weekday: 1, nth: 1 }, observance: "none", from: 2023 },
-      { key: "st_patricks", name: "St Patrick's Day", rule: { kind: "fixed", month: 3, day: 17 }, observance: "none" },
-      { key: "easter_monday", name: "Easter Monday", rule: { kind: "easter_offset", days: 1 }, observance: "none" },
-      { key: "may_day", name: "May Day", rule: { kind: "nth_weekday", month: 5, weekday: 1, nth: 1 }, observance: "none" },
-      { key: "june_holiday", name: "June public holiday", rule: { kind: "nth_weekday", month: 6, weekday: 1, nth: 1 }, observance: "none" },
-      { key: "august_holiday", name: "August public holiday", rule: { kind: "nth_weekday", month: 8, weekday: 1, nth: 1 }, observance: "none" },
-      { key: "october_holiday", name: "October public holiday", rule: { kind: "nth_weekday", month: 10, weekday: 1, nth: -1 }, observance: "none" },
-      { key: "christmas", name: "Christmas Day", rule: { kind: "fixed", month: 12, day: 25 }, observance: "none" },
-      { key: "st_stephens", name: "St Stephen's Day", rule: { kind: "fixed", month: 12, day: 26 }, observance: "none" },
+      {
+        key: "new_years",
+        name: "New Year's Day",
+        rule: { kind: "fixed", month: 1, day: 1 },
+        observance: "none",
+      },
+      {
+        key: "st_brigids",
+        name: "St Brigid's Day",
+        rule: { kind: "nth_weekday", month: 2, weekday: 1, nth: 1 },
+        observance: "none",
+        from: 2023,
+      },
+      {
+        key: "st_patricks",
+        name: "St Patrick's Day",
+        rule: { kind: "fixed", month: 3, day: 17 },
+        observance: "none",
+      },
+      {
+        key: "easter_monday",
+        name: "Easter Monday",
+        rule: { kind: "easter_offset", days: 1 },
+        observance: "none",
+      },
+      {
+        key: "may_day",
+        name: "May Day",
+        rule: { kind: "nth_weekday", month: 5, weekday: 1, nth: 1 },
+        observance: "none",
+      },
+      {
+        key: "june_holiday",
+        name: "June public holiday",
+        rule: { kind: "nth_weekday", month: 6, weekday: 1, nth: 1 },
+        observance: "none",
+      },
+      {
+        key: "august_holiday",
+        name: "August public holiday",
+        rule: { kind: "nth_weekday", month: 8, weekday: 1, nth: 1 },
+        observance: "none",
+      },
+      {
+        key: "october_holiday",
+        name: "October public holiday",
+        rule: { kind: "nth_weekday", month: 10, weekday: 1, nth: -1 },
+        observance: "none",
+      },
+      {
+        key: "christmas",
+        name: "Christmas Day",
+        rule: { kind: "fixed", month: 12, day: 25 },
+        observance: "none",
+      },
+      {
+        key: "st_stephens",
+        name: "St Stephen's Day",
+        rule: { kind: "fixed", month: 12, day: 26 },
+        observance: "none",
+      },
     ],
     // s.21 as the type can hold it: a normal day's wages, with the published
     // "one-fifth of weekly pay" fallback for employees with no normal day.
@@ -323,8 +455,9 @@ const IE_JURISDICTIONS: readonly PayrollJurisdiction[] = [
         effectiveFrom: null,
         effectiveTo: null,
         rule: {
-          citation: "Organisation of Working Time Act 1997, s.21 (benefit form elected by the "
-            + "employer; part-time test 40 hours in the 5 weeks before the holiday — see pack notes)",
+          citation:
+            "Organisation of Working Time Act 1997, s.21 (benefit form elected by the " +
+            "employer; part-time test 40 hours in the 5 weeks before the holiday — see pack notes)",
           basis: {
             kind: "normal_day",
             whenIrregular: { kind: "fixed_divisor", divisor: 5, lookbackWeeks: 1 },
@@ -343,23 +476,24 @@ const IE_EDITION_SCAFFOLD: PayrollEditionScaffold = {
   files: [
     {
       path: "engine/src/payroll/ie/rates-{year}.ts",
-      purpose: "the year's PAYE credits and bands, PRSI class rates and USC bands — every figure placeheld",
+      purpose:
+        "the year's PAYE credits and bands, PRSI class rates and USC bands — every figure placeheld",
       template: `/** {year} Irish statutory tables — TRANSCRIBE, do not invent.\n * PAYE: Revenue Tax and Duty Manual Part 42-04-35A (Employer's Guide to PAYE).\n * USC: revenue.ie Standard rates and thresholds of USC ({year}).\n * PRSI: Department of Social Protection SW14 Contribution Rates and User Guide ({year}).\n */\nexport const IE_RATES_{year} = { year: {year}, status: "draft" as const };\n`,
     },
   ],
   barrels: [],
   steps: [
-    "Fetch the USC standard rates and thresholds page for the year from revenue.ie, "
-    + "the Employer's Guide to PAYE (TDM Part 42-04-35A), and the SW14 PRSI Contribution Rates guide.",
+    "Fetch the USC standard rates and thresholds page for the year from revenue.ie, " +
+      "the Employer's Guide to PAYE (TDM Part 42-04-35A), and the SW14 PRSI Contribution Rates guide.",
     "Replace every placeholder in rates-{year}.ts and record each publication's edition or version.",
-    "Cross-verify: the USC band arithmetic against Revenue's worked examples, and the PRSI "
-    + "class A thresholds against SW14.",
-    "Add citation-backed GOLDENS to engine/src/payroll/ie/conformance.test.ts. Paste independently worked Revenue examples into GOLDENS, for example:\n"
-    + "  { year: {year}, label: \"PAYE worked example\", citation: \"Revenue Employer's Guide to PAYE, {year} edition\", input: { pay: \"...\" }, expected: { paye: \"...\" } },",
-    "Add applicable refusal cases to REFUSALS in engine/src/payroll/ie/conformance.test.ts using its row shape: "
-    + "{ label: \"...\", input: { pay: \"...\", payDate: \"...\" }, refusal: /remedy/ }.",
-    "Flip the edition to \"published\", then run the payroll suite: the {year} GOLDENS "
-    + "must pass and the existing IE goldens must not move.",
+    "Cross-verify: the USC band arithmetic against Revenue's worked examples, and the PRSI " +
+      "class A thresholds against SW14.",
+    "Add citation-backed GOLDENS to engine/src/payroll/ie/conformance.test.ts. Paste independently worked Revenue examples into GOLDENS, for example:\n" +
+      '  { year: {year}, label: "PAYE worked example", citation: "Revenue Employer\'s Guide to PAYE, {year} edition", input: { pay: "..." }, expected: { paye: "..." } },',
+    "Add applicable refusal cases to REFUSALS in engine/src/payroll/ie/conformance.test.ts using its row shape: " +
+      '{ label: "...", input: { pay: "...", payDate: "..." }, refusal: /remedy/ }.',
+    'Flip the edition to "published", then run the payroll suite: the {year} GOLDENS ' +
+      "must pass and the existing IE goldens must not move.",
   ],
 };
 
@@ -370,17 +504,19 @@ const IE_TAX_YEARS: PayrollTaxYearSupport = {
       year: 2026,
       label: "2026 PAYE/USC tables and PRSI Class A rates (January edition)",
       effectiveFrom: "2026-01-01",
-      citation: "Revenue Tax rates, bands and reliefs chart (published 01 January 2026); "
-        + "Revenue USC standard rates and thresholds (published 01 January 2026); "
-        + "DSP SW14 January 2026; DSP Advance Notice 2026",
+      citation:
+        "Revenue Tax rates, bands and reliefs chart (published 01 January 2026); " +
+        "Revenue USC standard rates and thresholds (published 01 January 2026); " +
+        "DSP SW14 January 2026; DSP Advance Notice 2026",
       status: "published",
     },
     {
       year: 2026,
       label: "2026 PRSI Roadmap step (October edition: employee 4.35%, employer 9.15%/11.40%)",
       effectiveFrom: "2026-10-01",
-      citation: "DSP Advance Notice effective from 1 October 2026 (PRSI Roadmap, not a Budget measure); "
-        + "DSP PRSI Class A Rates (updated 10 June 2026)",
+      citation:
+        "DSP Advance Notice effective from 1 October 2026 (PRSI Roadmap, not a Budget measure); " +
+        "DSP PRSI Class A Rates (updated 10 June 2026)",
       status: "published",
     },
   ],
@@ -436,20 +572,33 @@ export async function ieEmployeeYtd(
     "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId" | "employmentId"
   >,
 ): Promise<IeYtdRow> {
-  const { tx,employeePartyId } = ctx;
-  if(!isUuid(ctx.employmentId))throw new PayrollPackError('IE cumulative payroll needs the exact current RPN employment — qualify the original employment identity before calculating');
-  const employmentId=ctx.employmentId;
-  const scope=await resolveStatutoryHistoryScope(tx,{...ctx,employmentId,country:'IE'});
-  await requireStatutoryHistoryFactors(tx,scope,{employeePartyId,employmentId},['IE_PAYE','IE_USC','IE_TAXBASE']);
-  const r = await tx.execute<IeYtdRow>(sql`
+  const { tx, employeePartyId } = ctx;
+  if (!isUuid(ctx.employmentId))
+    throw new PayrollPackError(
+      "IE cumulative payroll needs the exact current RPN employment — qualify the original employment identity before calculating",
+    );
+  const employmentId = ctx.employmentId;
+  const scope = await resolveStatutoryHistoryScope(tx, { ...ctx, employmentId, country: "IE" });
+  await requireStatutoryHistoryFactors(tx, scope, { employeePartyId, employmentId }, [
+    "IE_PAYE",
+    "IE_USC",
+    "IE_TAXBASE",
+  ]);
+  const r = await tx.execute<IeYtdRow>(
+    sql`
     select
       coalesce(sum((s.factors->>'IE_PAYE')::numeric), 0) as tax,
       coalesce(sum((s.factors->>'IE_USC')::numeric), 0) as usc,
       coalesce(sum((s.factors->>'IE_TAXBASE')::numeric), 0) as taxbase,
       coalesce(sum(s.pensionable_earnings), 0) as gross
-    from ${employerScopedStatutoryStubs(scope,{employeePartyId,employmentId})} s
-  `, "objects");
-  if(r.length!==1)throw new PayrollPackError('IE committed statutory history did not return its required prior totals');
+    from ${employerScopedStatutoryStubs(scope, { employeePartyId, employmentId })} s
+  `,
+    "objects",
+  );
+  if (r.length !== 1)
+    throw new PayrollPackError(
+      "IE committed statutory history did not return its required prior totals",
+    );
   return r[0]!;
 }
 
@@ -517,14 +666,15 @@ export function requiredIeRpnAmount(
 ): string {
   const value = answers[key]?.trim();
   if (value == null || value === "") {
-    const label = key === "tax_credits_total"
-      ? "tax-credit total"
-      : key === "rate_band_total"
-        ? "standard-rate band"
-        : "USC cutoff total";
+    const label =
+      key === "tax_credits_total"
+        ? "tax-credit total"
+        : key === "rate_band_total"
+          ? "standard-rate band"
+          : "USC cutoff total";
     throw new PayrollPackError(
       `IE payroll cannot calculate PAYE: the Revenue Payroll Notification is missing its ${label}; ` +
-      "obtain and file a complete RPN, entering an explicit 0 only when Revenue states the amount is zero.",
+        "obtain and file a complete RPN, entering an explicit 0 only when Revenue states the amount is zero.",
     );
   }
   return value;
@@ -535,9 +685,16 @@ export async function computeIeStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    region, run,
-    periodsPerYear: P, income, nonPeriodic, pensionable,
-    deduction, pushStatutory, certificateFor, assertRegionSupported,
+    region,
+    run,
+    periodsPerYear: P,
+    income,
+    nonPeriodic,
+    pensionable,
+    deduction,
+    pushStatutory,
+    certificateFor,
+    assertRegionSupported,
   } = ctx;
   assertRegionSupported(region);
   const payDate = run.pay_date;
@@ -548,14 +705,18 @@ export async function computeIeStatutory(
   const hasRpn = rpn !== null && rpn.onFile;
   const answer = (key: string): string | null => (hasRpn ? (rpn!.answers[key] ?? null) : null);
   const prsiClassCertificate = certificateFor("ie_prsi_class");
-  const prsiClassRaw = empFact("IE", {
-    ie_prsi_class: prsiClassCertificate?.answers.prsi_class ?? null,
-  }, "ie_prsi_class");
+  const prsiClassRaw = empFact(
+    "IE",
+    {
+      ie_prsi_class: prsiClassCertificate?.answers.prsi_class ?? null,
+    },
+    "ie_prsi_class",
+  );
   // Preserve the no-RPN emergency refusal; the unused class placeholder is
   // checked only once a Revenue notice makes the calculation operable.
   const prsiClass = hasRpn
     ? resolveEmployeeFact("IE", "ie_prsi_class", prsiClassRaw)
-    : prsiClassRaw ?? "";
+    : (prsiClassRaw ?? "");
   const ytd = await ieEmployeeYtd(ctx);
 
   // Taxable pay is gross less ordinary employee pension contributions
@@ -615,7 +776,7 @@ export async function computeIeStatutory(
     reckonablePayWeeks: fortnightWeeks(),
     grossPayYtd: isolated ? "0" : add(ytd.gross, rpnNum("prior_cumulative_pay")),
     uscPaidYtd: isolated ? "0" : add(ytd.usc, rpnNum("prior_cumulative_usc")),
-    uscExempt: hasRpn && (answer("usc_exempt") === "true"),
+    uscExempt: hasRpn && answer("usc_exempt") === "true",
     uscReducedEligible: false,
     prsiClass: prsiClass ?? "",
     elapsedPeriods: isolated ? 1 : elapsed,
@@ -652,7 +813,8 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
     example: "1234567T",
     requiredForPayroll: true,
     neededFor: null,
-    citation: "Revenue: 'PPS numbers contain 7 digits followed by either one or two letters, for example, 1234567D'",
+    citation:
+      "Revenue: 'PPS numbers contain 7 digits followed by either one or two letters, for example, 1234567D'",
     numericEntry: false,
   },
   installable: true,
@@ -668,8 +830,9 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
     // pack's own name, stated explicitly so the coverage test holds it.
     regionNames: { IE: "Ireland" },
     supported: ["IE"],
-    unsupportedReason: "PAYE/PRSI/USC withholding for {region} is not implemented by the IE payroll "
-      + "pack — Ireland has a single national payroll region (IE)",
+    unsupportedReason:
+      "PAYE/PRSI/USC withholding for {region} is not implemented by the IE payroll " +
+      "pack — Ireland has a single national payroll region (IE)",
   },
   jurisdictions: IE_JURISDICTIONS,
   statutorySlots: IE_STATUTORY_SLOTS,

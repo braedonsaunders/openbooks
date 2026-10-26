@@ -22,7 +22,9 @@ export function collectTestFiles(root = ROOT) {
   for (const sub of ["engine/src", "web", "packages", "schema", "e2e", "scripts"]) {
     try {
       if (statSync(join(root, sub)).isDirectory()) walk(join(root, sub));
-    } catch { /* optional tree absent */ }
+    } catch {
+      /* optional tree absent */
+    }
   }
   return out;
 }
@@ -60,7 +62,8 @@ const TSKIP_ALLOW = [
 // time-bomb shape that once parked four payroll suites silently. Strip every
 // known infra token plus boolean/negation/grouping syntax; anything left is
 // a second, non-infra condition riding on the infra gate.
-const DB_GATE = /OPENBOOKS_DB_URL|RUNTIME_DB|OPENBOOKS_TEST_DB_MARKER|databaseUrl|(^|[^A-Za-z0-9_$])DB([^A-Za-z0-9_$]|$)/;
+const DB_GATE =
+  /OPENBOOKS_DB_URL|RUNTIME_DB|OPENBOOKS_TEST_DB_MARKER|databaseUrl|(^|[^A-Za-z0-9_$])DB([^A-Za-z0-9_$]|$)/;
 const INFRA_STRIP = [
   // Whole variable names first: stripping a fragment such as RUNTIME_DB would
   // leave the URL suffix behind and read it as a second, non-infra condition.
@@ -106,14 +109,21 @@ export function scanFile(path, root = ROOT) {
     // decides and the reason names it, so judge the condition and report
     // the reason. Without this branch the 120-char value cap below misses
     // long ternaries entirely — the December-2026 time bombs were invisible.
-    const ternary = options.match(/skip\s*:\s*([^?][^?]{0,300}?)\?\s*(['"`])((?:\\\2|(?!\2).){0,200})\2\s*:\s*false\s*(,|}|$)/);
+    const ternary = options.match(
+      /skip\s*:\s*([^?][^?]{0,300}?)\?\s*(['"`])((?:\\\2|(?!\2).){0,200})\2\s*:\s*false\s*(,|}|$)/,
+    );
     if (ternary) {
       const condition = ternary[1].trim();
       const reason = ternary[3].slice(0, 80);
       if (!SKIP_VALUE_ALLOW.some((allowed) => allowed.test(condition))) {
         findings.push({ file: rel, line: lineOf(index), kind: "skip-option", value: reason });
       } else if (combinesInfraWithOther(condition)) {
-        findings.push({ file: rel, line: lineOf(index), kind: "skip-combined", value: `${condition} ? "${reason}"` });
+        findings.push({
+          file: rel,
+          line: lineOf(index),
+          kind: "skip-combined",
+          value: `${condition} ? "${reason}"`,
+        });
       }
       return;
     }
@@ -126,7 +136,9 @@ export function scanFile(path, root = ROOT) {
       findings.push({ file: rel, line: lineOf(index), kind: "skip-combined", value });
     }
   };
-  for (const match of src.matchAll(/(?:test|it)\s*\(\s*(['"`])((?:\\\1|(?!\1).){1,200})\1\s*,\s*\{([^{}]*)\}/g)) {
+  for (const match of src.matchAll(
+    /(?:test|it)\s*\(\s*(['"`])((?:\\\1|(?!\1).){1,200})\1\s*,\s*\{([^{}]*)\}/g,
+  )) {
     checkOptions(match.index, match[3]);
   }
   for (const match of src.matchAll(/(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*\{([^{}]*)\}/g)) {
@@ -134,11 +146,21 @@ export function scanFile(path, root = ROOT) {
   }
   for (const match of src.matchAll(/\bt\.skip\(\s*(['"`])((?:\\\1|(?!\1).){0,200})\1\s*\)/g)) {
     if (!TSKIP_ALLOW.includes(match[2])) {
-      findings.push({ file: rel, line: lineOf(match.index), kind: "t.skip", value: match[2].slice(0, 80) });
+      findings.push({
+        file: rel,
+        line: lineOf(match.index),
+        kind: "t.skip",
+        value: match[2].slice(0, 80),
+      });
     }
   }
   for (const match of src.matchAll(/\b(?:test|it|describe)\s*\.\s*(skip|todo)\s*\(/g)) {
-    findings.push({ file: rel, line: lineOf(match.index), kind: `${match[1]}-method`, value: match[0] });
+    findings.push({
+      file: rel,
+      line: lineOf(match.index),
+      kind: `${match[1]}-method`,
+      value: match[0],
+    });
   }
   return findings;
 }
@@ -159,7 +181,9 @@ if (invoked) {
     console.log(`${finding.file}:${finding.line} [${finding.kind}] ${finding.value}`);
   }
   if (findings.some((finding) => finding.kind === "skip-combined")) {
-    console.log("skip-combined: a DB gate must gate on infrastructure only — split the extra condition into its own declared skip, or pin the clock so the test runs now instead of on a date.");
+    console.log(
+      "skip-combined: a DB gate must gate on infrastructure only — split the extra condition into its own declared skip, or pin the clock so the test runs now instead of on a date.",
+    );
   }
   console.log(`checked test skips; violations=${findings.length}`);
   process.exit(findings.length > 0 ? 1 : 0);

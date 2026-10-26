@@ -1,15 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const orgChartAndDirectory: DocArticle = {
-  slug: 'org-chart-and-directory',
-  title: 'Org Chart and Directory',
-  category: 'administration',
+  slug: "org-chart-and-directory",
+  title: "Org Chart and Directory",
+  category: "administration",
   order: 15,
   summary:
-    'The reporting tree with vacancies as of any date, the searchable people directory, and the cockpit widget — names, titles, departments, and managers only.',
-  updated: '2026-09-27',
-  keywords: ['org chart', 'directory', 'reporting', 'manager', 'vacancy', 'span of control', 'as-of', 'tree'],
-  related: ['positions-and-headcount', 'engagement-surveys'],
+    "The reporting tree with vacancies as of any date, the searchable people directory, and the cockpit widget — names, titles, departments, and managers only.",
+  updated: "2026-09-27",
+  keywords: [
+    "org chart",
+    "directory",
+    "reporting",
+    "manager",
+    "vacancy",
+    "span of control",
+    "as-of",
+    "tree",
+  ],
+  related: ["positions-and-headcount", "engagement-surveys"],
   body: `# Org Chart and Directory
 
 The org chart answers one question: who reports to whom, today or on any past date. The tree resolves from live employments with their line-manager edges, open headcount requisitions render as dashed vacancy nodes, and every node carries span of control and layer depth. The directory answers the companion question — who is everyone — as a searchable register over the same read.
@@ -30,4 +39,4 @@ The tree and the directory carry names, titles, departments, and managers only �
 
 The Org chart also reads as a report: one row per in-service employment at the report as-of date with name, title, department, and manager. The as-of join is bounded one-sided (versions effective on or before the as-of day, currently-known revisions only) with the in-service status predicate excluding the departed. The cockpit widget embeds the same tree on the HR home.
 `,
-}
+};

@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { mergeHref } from '../../../lib/list-params'
+import { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { mergeHref } from "../../../lib/list-params";
 
 /**
  * Handles `?<param>=new` deep links with zero writes: swaps the URL to the
@@ -16,26 +16,26 @@ export function NewOrderRedirect({
   param,
   createParam,
 }: {
-  apiPath?: string
-  base: string
-  param: string
-  createParam?: string
-  createFailedMessage?: string
+  apiPath?: string;
+  base: string;
+  param: string;
+  createParam?: string;
+  createFailedMessage?: string;
 }) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     // A missing createParam is a miswired widget, not a state to navigate
     // through: replacing ?<param>=new with a markerless URL would strand
     // the drawer closed with no error, so refuse to navigate instead.
     if (!createParam) {
-      console.error(`NewOrderRedirect: missing createParam for ${base}`)
-      return
+      console.error(`NewOrderRedirect: missing createParam for ${base}`);
+      return;
     }
-    const current = Object.fromEntries(searchParams.entries())
-    router.replace(mergeHref(base, current, { [param]: undefined, [createParam]: '1' }) as never)
-  }, [router, searchParams, base, param, createParam])
+    const current = Object.fromEntries(searchParams.entries());
+    router.replace(mergeHref(base, current, { [param]: undefined, [createParam]: "1" }) as never);
+  }, [router, searchParams, base, param, createParam]);
 
-  return null
+  return null;
 }

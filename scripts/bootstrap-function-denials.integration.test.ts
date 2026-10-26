@@ -65,15 +65,18 @@ test(
     // PUBLIC revoked, migration owner retained — then ownership moves to the
     // runtime role (ALTER rewrites the old owner's grant entry to the new
     // owner). The foreign function is owned by someone else entirely.
-    await as(builder, `create function ${schema}.${owned}() returns integer language plpgsql as $x$ begin return 1; end $x$`);
+    await as(
+      builder,
+      `create function ${schema}.${owned}() returns integer language plpgsql as $x$ begin return 1; end $x$`,
+    );
     await as(builder, `revoke execute on function ${schema}.${owned}() from public`);
-    await as(other, `create function ${schema}.${foreign}() returns integer language plpgsql as $x$ begin return 1; end $x$`);
+    await as(
+      other,
+      `create function ${schema}.${foreign}() returns integer language plpgsql as $x$ begin return 1; end $x$`,
+    );
     await as(other, `revoke execute on function ${schema}.${foreign}() from public`);
     await admin.query(`alter function ${schema}.${owned}() owner to ${runtime}`);
-    const shaped = await admin.query(
-      "select proacl from pg_proc where proname = $1",
-      [`${owned}`],
-    );
+    const shaped = await admin.query("select proacl from pg_proc where proname = $1", [`${owned}`]);
     assert.equal(
       shaped.rows[0].proacl,
       `{${runtime}=X/${runtime}}`,

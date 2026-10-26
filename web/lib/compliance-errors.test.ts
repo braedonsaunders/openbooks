@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { complianceWriteFailure } from './compliance-errors.ts'
-import { CertificateApprovalError } from '@openbooks/engine/compliance/certificate-verification'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { complianceWriteFailure } from "./compliance-errors.ts";
+import { CertificateApprovalError } from "@openbooks/engine/compliance/certificate-verification";
 
 /**
  * C-39: compliance write verbs surfaced raw Postgres driver text —
@@ -12,79 +12,99 @@ import { CertificateApprovalError } from '@openbooks/engine/compliance/certifica
  * OPERATOR sees: a status they can act on, and never driver internals.
  */
 function pgError(code: string, message: string): Error {
-  return Object.assign(new Error(message), { code })
+  return Object.assign(new Error(message), { code });
 }
 
-async function bodyText(result: Response | Promise<Response>): Promise<{ status: number; json: Record<string, unknown> }> {
-  const res = await result
-  const json = (await res.json()) as Record<string, unknown>
-  return { status: res.status, json }
+async function bodyText(
+  result: Response | Promise<Response>,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const res = await result;
+  const json = (await res.json()) as Record<string, unknown>;
+  return { status: res.status, json };
 }
 
-test('a stale certificate revision preserves its native conflict and reload remedy', async () => {
-  const message = 'This certificate changed. Reload and submit the current revision.'
-  const { status, json } = await bodyText(complianceWriteFailure(new CertificateApprovalError(message, 409)))
-  assert.equal(status, 409)
-  assert.deepEqual(json, { error: message })
-})
+test("a stale certificate revision preserves its native conflict and reload remedy", async () => {
+  const message = "This certificate changed. Reload and submit the current revision.";
+  const { status, json } = await bodyText(
+    complianceWriteFailure(new CertificateApprovalError(message, 409)),
+  );
+  assert.equal(status, 409);
+  assert.deepEqual(json, { error: message });
+});
 
-test('an unsupported certificate transition remains an actionable business refusal', async () => {
-  const message = 'This certificate is retained history. Verify its current replacement.'
-  const { status, json } = await bodyText(complianceWriteFailure(new CertificateApprovalError(message)))
-  assert.equal(status, 422)
-  assert.deepEqual(json, { error: message })
-})
+test("an unsupported certificate transition remains an actionable business refusal", async () => {
+  const message = "This certificate is retained history. Verify its current replacement.";
+  const { status, json } = await bodyText(
+    complianceWriteFailure(new CertificateApprovalError(message)),
+  );
+  assert.equal(status, 422);
+  assert.deepEqual(json, { error: message });
+});
 
-test('a unique violation refuses as 409 without driver internals', async () => {
+test("a unique violation refuses as 409 without driver internals", async () => {
   const { status, json } = await bodyText(
     complianceWriteFailure(
-      pgError('23505', 'duplicate key value violates unique constraint "compliance_waivers_party_requirement"'),
+      pgError(
+        "23505",
+        'duplicate key value violates unique constraint "compliance_waivers_party_requirement"',
+      ),
     ),
-  )
-  assert.equal(status, 409)
-  assert.match(String(json.error), /existing record/i)
-  assert.ok(!String(json.error).includes('compliance_waivers'), 'table name leaked into the refusal')
-})
+  );
+  assert.equal(status, 409);
+  assert.match(String(json.error), /existing record/i);
+  assert.ok(
+    !String(json.error).includes("compliance_waivers"),
+    "table name leaked into the refusal",
+  );
+});
 
-test('a foreign-key violation refuses as 422 without driver internals', async () => {
+test("a foreign-key violation refuses as 422 without driver internals", async () => {
   const { status, json } = await bodyText(
     complianceWriteFailure(
-      pgError('23503', 'insert or update on table "lien_waivers" violates foreign key constraint "fk_project"'),
+      pgError(
+        "23503",
+        'insert or update on table "lien_waivers" violates foreign key constraint "fk_project"',
+      ),
     ),
-  )
-  assert.equal(status, 422)
-  assert.match(String(json.error), /no longer exists|reread/i)
-  assert.ok(!String(json.error).includes('lien_waivers'), 'table name leaked into the refusal')
-})
+  );
+  assert.equal(status, 422);
+  assert.match(String(json.error), /no longer exists|reread/i);
+  assert.ok(!String(json.error).includes("lien_waivers"), "table name leaked into the refusal");
+});
 
-for (const code of ['22P02', '22001']) {
+for (const code of ["22P02", "22001"]) {
   test(`a data-shape violation (${code}) refuses as 400 without driver internals`, async () => {
     const { status, json } = await bodyText(
-      complianceWriteFailure(pgError(code, `invalid input syntax for type uuid: "not-a-uuid" (${code})`)),
-    )
-    assert.equal(status, 400)
-    assert.match(String(json.error), /invalid shape/i)
-    assert.ok(!String(json.error).includes('not-a-uuid'), 'the offending value leaked into the refusal')
-  })
+      complianceWriteFailure(
+        pgError(code, `invalid input syntax for type uuid: "not-a-uuid" (${code})`),
+      ),
+    );
+    assert.equal(status, 400);
+    assert.match(String(json.error), /invalid shape/i);
+    assert.ok(
+      !String(json.error).includes("not-a-uuid"),
+      "the offending value leaked into the refusal",
+    );
+  });
 }
 
-test('an unclassified driver failure is a generic 500 with a correlation id', async () => {
+test("an unclassified driver failure is a generic 500 with a correlation id", async () => {
   // No `code`: even a realistic connection message must not reach the body.
   const { status, json } = await bodyText(
-    complianceWriteFailure(new Error('remaining connection slots are reserved for superusers')),
-  )
-  assert.equal(status, 500)
-  assert.equal(json.error, 'save failed')
+    complianceWriteFailure(new Error("remaining connection slots are reserved for superusers")),
+  );
+  assert.equal(status, 500);
+  assert.equal(json.error, "save failed");
   assert.match(
     String(json.correlationId),
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    'expected a uuid correlation id',
-  )
-})
+    "expected a uuid correlation id",
+  );
+});
 
-test('a non-Error throw is a generic 500 with a correlation id', async () => {
-  const { status, json } = await bodyText(complianceWriteFailure('bang'))
-  assert.equal(status, 500)
-  assert.equal(json.error, 'save failed')
-  assert.ok(typeof json.correlationId === 'string' && json.correlationId.length > 0)
-})
+test("a non-Error throw is a generic 500 with a correlation id", async () => {
+  const { status, json } = await bodyText(complianceWriteFailure("bang"));
+  assert.equal(status, 500);
+  assert.equal(json.error, "save failed");
+  assert.ok(typeof json.correlationId === "string" && json.correlationId.length > 0);
+});

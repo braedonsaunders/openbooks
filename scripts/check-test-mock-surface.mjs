@@ -21,7 +21,9 @@ export function collectTestFiles(root = ROOT) {
   for (const sub of ["engine/src", "web", "packages", "schema", "e2e", "scripts"]) {
     try {
       if (statSync(join(root, sub)).isDirectory()) walk(join(root, sub));
-    } catch { /* optional tree absent */ }
+    } catch {
+      /* optional tree absent */
+    }
   }
   return out;
 }
@@ -53,10 +55,21 @@ export function clearCaches() {
 }
 
 function existingTs(path) {
-  for (const candidate of [path, `${path}.ts`, `${path}.tsx`, `${path}.mts`, `${path}.js`, `${path}.mjs`, join(path, "index.ts"), join(path, "index.tsx")]) {
+  for (const candidate of [
+    path,
+    `${path}.ts`,
+    `${path}.tsx`,
+    `${path}.mts`,
+    `${path}.js`,
+    `${path}.mjs`,
+    join(path, "index.ts"),
+    join(path, "index.tsx"),
+  ]) {
     try {
       if (statSync(candidate).isFile()) return candidate;
-    } catch { /* try next */ }
+    } catch {
+      /* try next */
+    }
   }
   return null;
 }
@@ -67,9 +80,12 @@ export function webRootFor(fromFile, root = ROOT) {
     try {
       if (statSync(join(dir, "package.json")).isFile()) {
         const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-        if (pkg.name === "web" || (pkg.name === "openbooks" && dir === root)) return dir === root ? join(root, "web") : dir;
+        if (pkg.name === "web" || (pkg.name === "openbooks" && dir === root))
+          return dir === root ? join(root, "web") : dir;
       }
-    } catch { /* keep climbing */ }
+    } catch {
+      /* keep climbing */
+    }
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -78,7 +94,14 @@ export function webRootFor(fromFile, root = ROOT) {
 }
 
 export function resolveReal(spec, fromFile, root = ROOT) {
-  if (!spec || spec === "server-only" || spec.startsWith("node:") || spec.startsWith("data:") || spec.startsWith("mock:")) return null;
+  if (
+    !spec ||
+    spec === "server-only" ||
+    spec.startsWith("node:") ||
+    spec.startsWith("data:") ||
+    spec.startsWith("mock:")
+  )
+    return null;
   if (spec.startsWith("@openbooks/engine/")) {
     const packageFile = join(root, "engine/package.json");
     if (!existsSync(packageFile)) return null;
@@ -139,8 +162,17 @@ export function codeOnly(src) {
     i++;
     while (i < n) {
       const char = src[i];
-      if (char === "\\") { push(char); push(src[i + 1] ?? ""); i += 2; continue; }
-      if (char === "`") { out.push("`"); i++; return; }
+      if (char === "\\") {
+        push(char);
+        push(src[i + 1] ?? "");
+        i += 2;
+        continue;
+      }
+      if (char === "`") {
+        out.push("`");
+        i++;
+        return;
+      }
       if (char === "$" && src[i + 1] === "{") {
         out.push("${");
         i += 2;
@@ -155,22 +187,42 @@ export function codeOnly(src) {
     let depth = 1;
     while (i < n && depth > 0) {
       const char = src[i];
-      if (char === "'" || char === '"') { copyString(char); continue; }
-      if (char === "`") { skipTemplate(); continue; }
+      if (char === "'" || char === '"') {
+        copyString(char);
+        continue;
+      }
+      if (char === "`") {
+        skipTemplate();
+        continue;
+      }
       if (char === "/" && src[i + 1] === "/") {
-        while (i < n && src[i] !== "\n") { push(src[i]); i++; }
+        while (i < n && src[i] !== "\n") {
+          push(src[i]);
+          i++;
+        }
         continue;
       }
       if (char === "/" && src[i + 1] === "*") {
-        push("/"); push("*"); i += 2;
-        while (i < n && !(src[i] === "*" && src[i + 1] === "/")) { push(src[i]); i++; }
-        push("*"); push("/"); i += 2;
+        push("/");
+        push("*");
+        i += 2;
+        while (i < n && !(src[i] === "*" && src[i + 1] === "/")) {
+          push(src[i]);
+          i++;
+        }
+        push("*");
+        push("/");
+        i += 2;
         continue;
       }
       if (char === "{") depth++;
       if (char === "}") {
         depth--;
-        if (depth === 0) { out.push("}"); i++; return; }
+        if (depth === 0) {
+          out.push("}");
+          i++;
+          return;
+        }
       }
       out.push(char);
       i++;
@@ -178,16 +230,34 @@ export function codeOnly(src) {
   };
   while (i < n) {
     const char = src[i];
-    if (char === "'" || char === '"') { copyString(char); continue; }
-    if (char === "`") { skipTemplate(); continue; }
+    if (char === "'" || char === '"') {
+      copyString(char);
+      continue;
+    }
+    if (char === "`") {
+      skipTemplate();
+      continue;
+    }
     if (char === "/" && src[i + 1] === "/") {
-      while (i < n && src[i] !== "\n") { push(src[i]); i++; }
+      while (i < n && src[i] !== "\n") {
+        push(src[i]);
+        i++;
+      }
       continue;
     }
     if (char === "/" && src[i + 1] === "*") {
-      push("/"); push("*"); i += 2;
-      while (i < n && !(src[i] === "*" && src[i + 1] === "/")) { push(src[i]); i++; }
-      if (i < n) { push("*"); push("/"); i += 2; }
+      push("/");
+      push("*");
+      i += 2;
+      while (i < n && !(src[i] === "*" && src[i + 1] === "/")) {
+        push(src[i]);
+        i++;
+      }
+      if (i < n) {
+        push("*");
+        push("/");
+        i += 2;
+      }
       continue;
     }
     out.push(char);
@@ -202,7 +272,9 @@ export function codeOnly(src) {
 // keep only the static prefix before the first ${}.
 export function stringBindings(code) {
   const bindings = new Map();
-  for (const match of code.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(`((?:\\\`|(?!\`).)*?)`|(['"])((?:\\\4|(?!\4).)*?)\4)/g)) {
+  for (const match of code.matchAll(
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(`((?:\\\`|(?!\`).)*?)`|(['"])((?:\\\4|(?!\4).)*?)\4)/g,
+  )) {
     const raw = match[3] !== undefined ? match[3] : match[5];
     const prefix = raw.split("${")[0].replace(/\\(['"`\\])/g, "$1");
     if (prefix) bindings.set(match[1], prefix);
@@ -258,9 +330,11 @@ export function staticImports(src) {
   // template shape, resolved to nothing, and the entire imported subtree became
   // invisible to this guard. That is how a loader stub missing an export went
   // unreported: the file importing it was never walked.
-  const dynamicCall = /import\s*\(\s*(?:(['"`])((?:\\.|(?!\1)[^\\])*)\1|([A-Za-z_$][\w$]*))\s*(?:,[\s\S]*?)?\)/g;
+  const dynamicCall =
+    /import\s*\(\s*(?:(['"`])((?:\\.|(?!\1)[^\\])*)\1|([A-Za-z_$][\w$]*))\s*(?:,[\s\S]*?)?\)/g;
   for (const match of clean.matchAll(dynamicCall)) {
-    const inner = match[2] !== undefined ? `${match[1]}${match[2]}${match[1]}` : (match[3] ?? "").trim();
+    const inner =
+      match[2] !== undefined ? `${match[1]}${match[2]}${match[1]}` : (match[3] ?? "").trim();
     const literal = inner.match(/^(['"])((?:\\\1|(?!\1).)+)\1$/);
     const template = inner.match(/^`((?:\\\`|(?!\`).)*)`$/);
     let spec = null;
@@ -273,7 +347,9 @@ export function staticImports(src) {
     const alwaysRuns = spec.includes("?") || depthAt(match.index) === 0;
     out.push({ spec, names: new Set(), dynamic: !alwaysRuns, reexport: false, star: false });
   }
-  for (const match of clean.matchAll(/import\s+(?!\s*type\b)((?:[^{}'"]|\{[^}]*\})*?\s+from\s+)?(['"])((?:\\\2|(?!\2).)+)\2/g)) {
+  for (const match of clean.matchAll(
+    /import\s+(?!\s*type\b)((?:[^{}'"]|\{[^}]*\})*?\s+from\s+)?(['"])((?:\\\2|(?!\2).)+)\2/g,
+  )) {
     const clause = (match[1] ?? "").trim();
     if (/^\s*type[\s{]/.test(clause)) continue;
     const names = new Set();
@@ -292,7 +368,9 @@ export function staticImports(src) {
     }
     out.push({ spec: match[3], names, dynamic: false, reexport: false, star });
   }
-  for (const match of clean.matchAll(/export\s+(?:\{[^}]*\}|\*[^;]*?)\s+from\s+(['"])((?:\\\1|(?!\1).)+)\1/g)) {
+  for (const match of clean.matchAll(
+    /export\s+(?:\{[^}]*\}|\*[^;]*?)\s+from\s+(['"])((?:\\\1|(?!\1).)+)\1/g,
+  )) {
     const statement = match[0];
     if (/^\s*export\s+type\s/.test(statement)) continue;
     const names = new Set();
@@ -319,8 +397,12 @@ export function staticImports(src) {
 export function moduleExports(src) {
   const names = new Set();
   const clean = stripComments(src);
-  for (const match of clean.matchAll(/export\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)/g)) names.add(match[1]);
-  for (const match of clean.matchAll(/export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)) names.add(match[1]);
+  for (const match of clean.matchAll(
+    /export\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)/g,
+  ))
+    names.add(match[1]);
+  for (const match of clean.matchAll(/export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g))
+    names.add(match[1]);
   for (const match of clean.matchAll(/export\s*\{([^}]*)\}/g)) {
     for (const part of match[1].split(",")) {
       const trimmed = part.trim().replace(/^type\s+/, "");
@@ -357,11 +439,15 @@ export function starReexports(body, fromFile, root = ROOT) {
     if (bindings === null) {
       bindings = new Map();
       const testSrc = readCached(fromFile) ?? "";
-      for (const m of testSrc.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+URL\(\s*(['"`])([^'"`]+)\2\s*,\s*import\.meta\.url\s*\)\.href/g)) {
+      for (const m of testSrc.matchAll(
+        /const\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+URL\(\s*(['"`])([^'"`]+)\2\s*,\s*import\.meta\.url\s*\)\.href/g,
+      )) {
         const target = cachedResolve(m[3], fromFile, root);
         if (target) bindings.set(m[1], target);
       }
-      for (const m of testSrc.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*import\.meta\.resolve\(\s*(['"`])([^'"`]+)\2\s*\)/g)) {
+      for (const m of testSrc.matchAll(
+        /const\s+([A-Za-z_$][\w$]*)\s*=\s*import\.meta\.resolve\(\s*(['"`])([^'"`]+)\2\s*\)/g,
+      )) {
         const target = cachedResolve(m[3], fromFile, root);
         if (target) bindings.set(m[1], target);
       }
@@ -520,12 +606,19 @@ function consequence(src, from) {
   while (i < src.length) {
     const char = src[i];
     if (quote) {
-      if (char === "\\") { i += 2; continue; }
+      if (char === "\\") {
+        i += 2;
+        continue;
+      }
       if (char === quote) quote = null;
       i++;
       continue;
     }
-    if (char === "'" || char === '"') { quote = char; i++; continue; }
+    if (char === "'" || char === '"') {
+      quote = char;
+      i++;
+      continue;
+    }
     if (char === "{") depth++;
     if (char === "}") {
       depth--;
@@ -544,7 +637,9 @@ function shimHelpers(src) {
   const helpers = new Set();
   const returnsStub = (body) =>
     /shortCircuit\s*:\s*true/.test(body) && /url\s*:\s*['"`]data:/.test(body);
-  for (const match of src.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\(?\s*\{/g)) {
+  for (const match of src.matchAll(
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\(?\s*\{/g,
+  )) {
     const open = match.index + match[0].length - 1;
     let depth = 0;
     let end = open;
@@ -593,7 +688,10 @@ function outerParentGuards(src) {
       if (src[end] === "(") depth++;
       else if (src[end] === ")") {
         depth--;
-        if (depth === 0) { closed = true; break; }
+        if (depth === 0) {
+          closed = true;
+          break;
+        }
       }
     }
     if (!closed) continue;
@@ -617,11 +715,23 @@ export function parseWiring(src) {
   const helpers = shimHelpers(src);
   const guards = outerParentGuards(src);
   // Literal [real, mock:X] pairs (Map literals, arrays) and .set('real','mock:X').
-  for (const match of src.matchAll(/\[\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]mock:([^'"`]+)['"`]\s*\]/g)) {
-    rules.push({ spec: { kind: "exact", value: match[1] }, parent: { kind: "any" }, mock: match[2] });
+  for (const match of src.matchAll(
+    /\[\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]mock:([^'"`]+)['"`]\s*\]/g,
+  )) {
+    rules.push({
+      spec: { kind: "exact", value: match[1] },
+      parent: { kind: "any" },
+      mock: match[2],
+    });
   }
-  for (const match of src.matchAll(/\.set\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]mock:([^'"`]+)['"`]\s*\)/g)) {
-    rules.push({ spec: { kind: "exact", value: match[1] }, parent: { kind: "any" }, mock: match[2] });
+  for (const match of src.matchAll(
+    /\.set\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]mock:([^'"`]+)['"`]\s*\)/g,
+  )) {
+    rules.push({
+      spec: { kind: "exact", value: match[1] },
+      parent: { kind: "any" },
+      mock: match[2],
+    });
   }
   // Specs a same-file `if` explicitly passes through to the real module
   // (`return nextResolve(...)` with no mock in the consequence): parent-scoped
@@ -638,35 +748,56 @@ export function parseWiring(src) {
       if (src[end] === "(") depth++;
       else if (src[end] === ")") {
         depth--;
-        if (depth === 0) { closed = true; break; }
+        if (depth === 0) {
+          closed = true;
+          break;
+        }
       }
     }
     if (!closed) continue;
     const block = consequence(src, end + 1);
     if (!block || !block.includes("nextResolve") || block.includes("mock:")) continue;
-    for (const test of src.slice(match.index, end + 1).matchAll(/specifier\s*===\s*['"`]([^'"`]+)['"`]/g)) {
+    for (const test of src
+      .slice(match.index, end + 1)
+      .matchAll(/specifier\s*===\s*['"`]([^'"`]+)['"`]/g)) {
       passthroughSpecs.add(test[1]);
     }
   }
   // Ternary wiring: `specifier === 'X' ? 'mock:Y' : ...` chains hold no `if`,
   // so the condition scanner never sees them. Each alternative maps one real
   // specifier to its double unconditionally, exactly like a literal pair.
-  for (const match of src.matchAll(/specifier\s*===\s*(['"`])([^'"`]+)\1\s*\?\s*(['"`])mock:([^'"`]+)\3/g)) {
+  for (const match of src.matchAll(
+    /specifier\s*===\s*(['"`])([^'"`]+)\1\s*\?\s*(['"`])mock:([^'"`]+)\3/g,
+  )) {
     if (!passthroughSpecs.has(match[2])) {
-      rules.push({ spec: { kind: "exact", value: match[2] }, parent: { kind: "any" }, mock: match[4] });
+      rules.push({
+        spec: { kind: "exact", value: match[2] },
+        parent: { kind: "any" },
+        mock: match[4],
+      });
     }
   }
   // Helper indirection: `['real', mockUrl('name')]` resolves to a computed
   // self-URL whose query the load hook maps back to `mock:name`, so the net
   // effect is the same real → double edge a literal pair declares.
-  for (const match of src.matchAll(/\[\s*(['"`])([^'"`]+)\1\s*,\s*mockUrl\(\s*(['"`])([^'"`]+)\3\s*\)/g)) {
+  for (const match of src.matchAll(
+    /\[\s*(['"`])([^'"`]+)\1\s*,\s*mockUrl\(\s*(['"`])([^'"`]+)\3\s*\)/g,
+  )) {
     if (!passthroughSpecs.has(match[2])) {
-      rules.push({ spec: { kind: "exact", value: match[2] }, parent: { kind: "any" }, mock: match[4] });
+      rules.push({
+        spec: { kind: "exact", value: match[2] },
+        parent: { kind: "any" },
+        mock: match[4],
+      });
     }
   }
   // Object-literal wiring: const mocks = { 'real': 'mock:X', ... }; mocks[specifier].
   for (const match of src.matchAll(/['"`]([^'"`]+)['"`]\s*:\s*['"`]mock:([^'"`]+)['"`]/g)) {
-    rules.push({ spec: { kind: "exact", value: match[1] }, parent: { kind: "any" }, mock: match[2] });
+    rules.push({
+      spec: { kind: "exact", value: match[1] },
+      parent: { kind: "any" },
+      mock: match[2],
+    });
   }
   // Conditional specifier tests: every `specifier === 'X'` /
   // endsWith / startsWith / includes / match('X') test inside an `if`
@@ -677,7 +808,8 @@ export function parseWiring(src) {
   // and parentURL-first wirings (`if (parentURL... && specifier...)`, where
   // no rule used to exist at all and data-shimmed subtrees stayed falsely
   // load-bearing).
-  const specTest = /specifier\s*\.?\s*(===|!==|endsWith|startsWith|includes|match)\s*(\(\s*['"`]([^'"`]+)['"`]\s*\)|['"`]([^'"`]+)['"`])/g;
+  const specTest =
+    /specifier\s*\.?\s*(===|!==|endsWith|startsWith|includes|match)\s*(\(\s*['"`]([^'"`]+)['"`]\s*\)|['"`]([^'"`]+)['"`])/g;
   for (const match of src.matchAll(/if\s*\(/g)) {
     const open = match.index + match[0].length - 1;
     let depth = 0;
@@ -687,7 +819,10 @@ export function parseWiring(src) {
       if (src[end] === "(") depth++;
       else if (src[end] === ")") {
         depth--;
-        if (depth === 0) { closed = true; break; }
+        if (depth === 0) {
+          closed = true;
+          break;
+        }
       }
     }
     if (!closed) continue;
@@ -714,7 +849,8 @@ export function parseWiring(src) {
     let shim = /url:\s*['"`](data:|https?:)/.test(block) || /url:\s*`/.test(block);
     if (!shim && helpers.size > 0) {
       // `return virtual('export {}')`: the stub factory hides the data: URL.
-      const call = block.match(/return\s+([A-Za-z_$][\w$]*)\s*[(`'"]/) ??
+      const call =
+        block.match(/return\s+([A-Za-z_$][\w$]*)\s*[(`'"]/) ??
         src.slice(end + 1, end + 201).match(/return\s+([A-Za-z_$][\w$]*)\s*[(`'"]/);
       if (call && helpers.has(call[1])) shim = true;
     }
@@ -734,8 +870,10 @@ export function parseWiring(src) {
             innerStart = guard.start;
             parents = [];
           }
-          if (guard.start === innerStart &&
-            !parents.some((seen) => JSON.stringify(seen) === JSON.stringify(guard.parent))) {
+          if (
+            guard.start === innerStart &&
+            !parents.some((seen) => JSON.stringify(seen) === JSON.stringify(guard.parent))
+          ) {
             parents.push(guard.parent);
           }
         }
@@ -746,11 +884,12 @@ export function parseWiring(src) {
       const method = test[1];
       if (method === "!==") continue;
       const literal = test[3] ?? test[4] ?? "";
-      const spec = method === "==="
-        ? { kind: "exact", value: literal }
-        : method === "match"
-          ? { kind: "unparseable-regex", value: literal }
-          : specMatcher(null, method, literal);
+      const spec =
+        method === "==="
+          ? { kind: "exact", value: literal }
+          : method === "match"
+            ? { kind: "unparseable-regex", value: literal }
+            : specMatcher(null, method, literal);
       for (const parent of parents) {
         rules.push({
           spec,
@@ -762,7 +901,7 @@ export function parseWiring(src) {
           // ('data:text/javascript,' + encodeURIComponent(src)) is not
           // readable here, and bucketing those under one empty body made
           // every name look missing — 46 false gaps on the first attempt.
-          mock: mock ? mock[1] : (comparableInline ? inlineShimKey(inline[1]) : null),
+          mock: mock ? mock[1] : comparableInline ? inlineShimKey(inline[1]) : null,
           shimmed: !mock,
         });
       }
@@ -803,25 +942,72 @@ export function unescapeTemplate(body) {
   };
   while (i < body.length) {
     const char = body[i];
-    if (char !== "\\") { out += char; i++; continue; }
+    if (char !== "\\") {
+      out += char;
+      i++;
+      continue;
+    }
     const next = body[i + 1];
-    if (next === undefined) { out += "\\"; i++; continue; }
-    if (next === "n") { out += "\n"; i += 2; continue; }
-    if (next === "r") { out += "\r"; i += 2; continue; }
-    if (next === "t") { out += "\t"; i += 2; continue; }
-    if (next === "b") { out += "\b"; i += 2; continue; }
-    if (next === "f") { out += "\f"; i += 2; continue; }
-    if (next === "v") { out += "\v"; i += 2; continue; }
-    if (next === "\n") { i += 2; continue; }
-    if (next === "0" && !/[0-9]/.test(body[i + 2] ?? "")) { out += "\0"; i += 2; continue; }
+    if (next === undefined) {
+      out += "\\";
+      i++;
+      continue;
+    }
+    if (next === "n") {
+      out += "\n";
+      i += 2;
+      continue;
+    }
+    if (next === "r") {
+      out += "\r";
+      i += 2;
+      continue;
+    }
+    if (next === "t") {
+      out += "\t";
+      i += 2;
+      continue;
+    }
+    if (next === "b") {
+      out += "\b";
+      i += 2;
+      continue;
+    }
+    if (next === "f") {
+      out += "\f";
+      i += 2;
+      continue;
+    }
+    if (next === "v") {
+      out += "\v";
+      i += 2;
+      continue;
+    }
+    if (next === "\n") {
+      i += 2;
+      continue;
+    }
+    if (next === "0" && !/[0-9]/.test(body[i + 2] ?? "")) {
+      out += "\0";
+      i += 2;
+      continue;
+    }
     if (next === "x" && /^[0-9a-fA-F]{2}$/.test(body.slice(i + 2, i + 4))) {
-      out += hex(body.slice(i + 2, i + 4)); i += 4; continue;
+      out += hex(body.slice(i + 2, i + 4));
+      i += 4;
+      continue;
     }
     if (next === "u") {
       const braced = body.slice(i + 2).match(/^\{([0-9a-fA-F]+)\}/);
-      if (braced) { out += String.fromCodePoint(parseInt(braced[1], 16)); i += 3 + braced[1].length; continue; }
+      if (braced) {
+        out += String.fromCodePoint(parseInt(braced[1], 16));
+        i += 3 + braced[1].length;
+        continue;
+      }
       if (/^[0-9a-fA-F]{4}$/.test(body.slice(i + 2, i + 6))) {
-        out += hex(body.slice(i + 2, i + 6)); i += 6; continue;
+        out += hex(body.slice(i + 2, i + 6));
+        i += 6;
+        continue;
       }
     }
     out += next;
@@ -844,22 +1030,37 @@ export function mockBlocks(src, raw) {
     let depth = 0;
     while (i < source.length) {
       const char = source[i];
-      if (char === "\\") { i += 2; continue; }
+      if (char === "\\") {
+        i += 2;
+        continue;
+      }
       if (char === "`" && depth === 0) break;
-      if (char === "$" && source[i + 1] === "{") { depth++; i += 2; continue; }
-      if (char === "}" && depth > 0) { depth--; i++; continue; }
+      if (char === "$" && source[i + 1] === "{") {
+        depth++;
+        i += 2;
+        continue;
+      }
+      if (char === "}" && depth > 0) {
+        depth--;
+        i++;
+        continue;
+      }
       i++;
     }
     return source.slice(start, i);
   };
   for (const match of src.matchAll(/\[\s*['"`]mock:([^'"`]+)['"`]\s*,\s*`/g)) {
-    if (!blocks.has(match[1])) blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
+    if (!blocks.has(match[1]))
+      blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
   }
-  for (const match of src.matchAll(/\[\s*['"`]mock:([^'"`]+)['"`]\s*,\s*(['"])((?:\\\2|(?!\2).)*)\2\s*\]/g)) {
+  for (const match of src.matchAll(
+    /\[\s*['"`]mock:([^'"`]+)['"`]\s*,\s*(['"])((?:\\\2|(?!\2).)*)\2\s*\]/g,
+  )) {
     if (!blocks.has(match[1])) blocks.set(match[1], match[3].replace(/\\(['"`\\])/g, "$1"));
   }
   for (const match of src.matchAll(/\.set\(\s*['"`]mock:([^'"`]+)['"`]\s*,\s*`/g)) {
-    if (!blocks.has(match[1])) blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
+    if (!blocks.has(match[1]))
+      blocks.set(match[1], unescapeTemplate(takeTemplate(match.index + match[0].length)));
   }
   // INLINE data-URL stubs are mock bodies too, and used to be invisible here.
   // A loader hook may answer `url: 'data:text/javascript,export function a(){}'`
@@ -1044,7 +1245,10 @@ export function checkFile(path, root = ROOT) {
       if (rule.mock) for (const name of imp.names) note(rule.mock, name, path, imp.dynamic);
       continue;
     }
-    enqueue(cachedResolve(imp.spec, path, root), imp.dynamic, { importer: path.replace(root + "/", ""), spec: imp.spec });
+    enqueue(cachedResolve(imp.spec, path, root), imp.dynamic, {
+      importer: path.replace(root + "/", ""),
+      spec: imp.spec,
+    });
   }
   let guard = 0;
   while (queue.length > 0) {
@@ -1059,22 +1263,23 @@ export function checkFile(path, root = ROOT) {
           for (const name of imp.names) note(rule.mock, name, current, lazy);
           if (imp.star) {
             const target = cachedResolve(imp.spec, current, root);
-            if (target) for (const name of cachedExports(target)) note(rule.mock, name, current, lazy);
+            if (target)
+              for (const name of cachedExports(target)) note(rule.mock, name, current, lazy);
           }
         }
         continue;
       }
-      enqueue(cachedResolve(imp.spec, current, root), lazy, { importer: current.replace(root + "/", ""), spec: imp.spec });
+      enqueue(cachedResolve(imp.spec, current, root), lazy, {
+        importer: current.replace(root + "/", ""),
+        spec: imp.spec,
+      });
     }
   }
   const gaps = [];
   for (const [mockKey, names] of needs) {
     const body = blocks.get(mockKey);
     if (body === undefined) continue;
-    const have = new Set([
-      ...moduleExports(codeOnly(body)),
-      ...starReexports(body, path, root),
-    ]);
+    const have = new Set([...moduleExports(codeOnly(body)), ...starReexports(body, path, root)]);
     const missing = [...names.keys()].filter((name) => !have.has(name));
     if (missing.length > 0) {
       gaps.push({
@@ -1090,7 +1295,9 @@ export function checkFile(path, root = ROOT) {
     const body = blocks.get(mockKey);
     if (body === undefined) continue;
     const have = moduleExports(codeOnly(body));
-    const missing = [...names.keys()].filter((name) => !have.has(name) && !gapNames.has(`${mockKey}::${name}`));
+    const missing = [...names.keys()].filter(
+      (name) => !have.has(name) && !gapNames.has(`${mockKey}::${name}`),
+    );
     if (missing.length > 0) lazy.push({ spec: mockKey, names: missing.sort() });
   }
   return { gaps, lazy, unmodeled: false, deadMocks: [], doubles };
@@ -1098,13 +1305,23 @@ export function checkFile(path, root = ROOT) {
 
 export function checkTree(root = ROOT, allowlist = PROTECTED_DOUBLE_ALLOWLIST) {
   const files = collectTestFiles(root);
-  const report = { files: files.length, gaps: [], lazy: [], unmodeled: [], checked: 0, doubles: [], allowedDoubles: [], staleDoubles: [] };
+  const report = {
+    files: files.length,
+    gaps: [],
+    lazy: [],
+    unmodeled: [],
+    checked: 0,
+    doubles: [],
+    allowedDoubles: [],
+    staleDoubles: [],
+  };
   for (const file of files) {
     const result = checkFile(file, root);
     if (result.unmodeled) report.unmodeled.push(file.replace(root + "/", ""));
     if (result.gaps.length > 0 || result.lazy.length > 0) report.checked++;
     for (const gap of result.gaps) report.gaps.push({ file: file.replace(root + "/", ""), ...gap });
-    for (const entry of result.lazy) report.lazy.push({ file: file.replace(root + "/", ""), ...entry });
+    for (const entry of result.lazy)
+      report.lazy.push({ file: file.replace(root + "/", ""), ...entry });
     const rel = file.replace(root + "/", "");
     for (const double of result.doubles) {
       const entry = allowlist.get(rel);
@@ -1118,7 +1335,9 @@ export function checkTree(root = ROOT, allowlist = PROTECTED_DOUBLE_ALLOWLIST) {
   // Bidirectional ratchet: an allow-list entry nothing matches any more is
   // stale and fails, so deleting a double must strike its entry in the same
   // commit — the list can only shrink.
-  const live = new Set([...report.doubles, ...report.allowedDoubles].map((entry) => `${entry.file}::${entry.spec}`));
+  const live = new Set(
+    [...report.doubles, ...report.allowedDoubles].map((entry) => `${entry.file}::${entry.spec}`),
+  );
   for (const [file, specs] of allowlist) {
     for (const spec of Object.keys(specs)) {
       if (!live.has(`${file}::${spec}`)) report.staleDoubles.push({ file, spec });
@@ -1127,7 +1346,10 @@ export function checkTree(root = ROOT, allowlist = PROTECTED_DOUBLE_ALLOWLIST) {
   return report;
 }
 
-const invoked = process.argv[1] ? fileURLToPath(import.meta.url) === join(process.cwd(), process.argv[1]) || process.argv[1].endsWith("check-test-mock-surface.mjs") : false;
+const invoked = process.argv[1]
+  ? fileURLToPath(import.meta.url) === join(process.cwd(), process.argv[1]) ||
+    process.argv[1].endsWith("check-test-mock-surface.mjs")
+  : false;
 if (invoked) {
   const root = process.argv[2] ?? ROOT;
   const report = checkTree(root);
@@ -1136,24 +1358,43 @@ if (invoked) {
     for (const name of gap.names) console.log(`    ${name} required by ${gap.via[name]}`);
   }
   for (const file of report.unmodeled) {
-    console.log(`${file}: mock wiring not modelable; extend parseWiring or model the file explicitly`);
+    console.log(
+      `${file}: mock wiring not modelable; extend parseWiring or model the file explicitly`,
+    );
   }
   for (const double of report.doubles) {
     const surface = double.target ?? "protected export names";
-    console.log(`${double.file} [mock:${double.spec}] hand double of protected surface ${surface}${double.names.length > 0 ? ` (${double.names.join(", ")})` : ""}; convert to the real module or re-export it, then strike the allow-list entry`);
+    console.log(
+      `${double.file} [mock:${double.spec}] hand double of protected surface ${surface}${double.names.length > 0 ? ` (${double.names.join(", ")})` : ""}; convert to the real module or re-export it, then strike the allow-list entry`,
+    );
   }
   for (const stale of report.staleDoubles) {
-    console.log(`${stale.file} [mock:${stale.spec}] allow-list entry matches no live double; strike it in the commit that removed the double`);
+    console.log(
+      `${stale.file} [mock:${stale.spec}] allow-list entry matches no live double; strike it in the commit that removed the double`,
+    );
   }
   if (report.allowedDoubles.length > 0) {
-    console.log(`allow-listed protected doubles (conversion queue): ${report.allowedDoubles.length}`);
+    console.log(
+      `allow-listed protected doubles (conversion queue): ${report.allowedDoubles.length}`,
+    );
   }
   if (report.lazy.length > 0) {
-    console.error(`lazy notes (reachable only through dynamic import; warnings, not failures): ${report.lazy.length}`);
+    console.error(
+      `lazy notes (reachable only through dynamic import; warnings, not failures): ${report.lazy.length}`,
+    );
     for (const entry of report.lazy.slice(0, 20)) {
       console.error(`  ${entry.file} [mock:${entry.spec}] lazy-missing: ${entry.names.join(", ")}`);
     }
   }
-  console.log(`checked ${report.files} test files; gaps=${report.gaps.length} unmodeled=${report.unmodeled.length} doubles=${report.doubles.length} staleDoubles=${report.staleDoubles.length}`);
-  process.exit(report.gaps.length > 0 || report.unmodeled.length > 0 || report.doubles.length > 0 || report.staleDoubles.length > 0 ? 1 : 0);
+  console.log(
+    `checked ${report.files} test files; gaps=${report.gaps.length} unmodeled=${report.unmodeled.length} doubles=${report.doubles.length} staleDoubles=${report.staleDoubles.length}`,
+  );
+  process.exit(
+    report.gaps.length > 0 ||
+      report.unmodeled.length > 0 ||
+      report.doubles.length > 0 ||
+      report.staleDoubles.length > 0
+      ? 1
+      : 0,
+  );
 }

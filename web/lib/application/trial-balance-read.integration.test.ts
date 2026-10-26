@@ -23,7 +23,9 @@ test("application trial balance returns exact ledger amounts through the report 
           (id, org_id, entry_id, line_number, account_id, amount, txn_amount, currency, subsidiary_id, posting_date)
         values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, '1234.5678', '1234.5678', 'CAD', ${org.subsidiaryId}, ${org.date}),
                (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, '-1234.5678', '-1234.5678', 'CAD', ${org.subsidiaryId}, ${org.date})`);
-      await db.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+      await db.execute(
+        sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`,
+      );
     });
     const context: ApplicationContext = {
       authz: {
@@ -36,10 +38,21 @@ test("application trial balance returns exact ledger amounts through the report 
       apiKeyId: null,
     };
 
-    const result = await withOrgContext(org.orgId, () => listApplicationTrialBalance(context, { asOf: org.date }));
-    const bank = (await withOrgContext(org.orgId, () => db.execute<{ number: string | null; name: string; type: string }>(sql`
-      select number, name, type from accounts where id = ${org.accounts.bank} and org_id = ${org.orgId}`, "objects")))[0]!;
-    const bankRow = result.accounts.find((row) => row.number === bank.number && row.name === bank.name);
+    const result = await withOrgContext(org.orgId, () =>
+      listApplicationTrialBalance(context, { asOf: org.date }),
+    );
+    const bank = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ number: string | null; name: string; type: string }>(
+          sql`
+      select number, name, type from accounts where id = ${org.accounts.bank} and org_id = ${org.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!;
+    const bankRow = result.accounts.find(
+      (row) => row.number === bank.number && row.name === bank.name,
+    );
 
     assert.ok(bankRow, "the posted bank ledger activity is visible in the trial balance");
     assert.deepEqual(bankRow, {

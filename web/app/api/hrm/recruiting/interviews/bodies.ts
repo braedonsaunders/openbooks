@@ -8,10 +8,11 @@ const uuid = z.string().refine(isUuid, "must be a valid id");
 export const scheduleInterviewBody = z.object({
   applicationId: uuid,
   kind: z.enum(["phone", "video", "onsite", "panel", "assessment"]),
-  scheduledAt: z.string().trim().max(40).refine(
-    isIsoInstantWithOffset,
-    "must be an ISO instant with Z or an explicit UTC offset",
-  ),
+  scheduledAt: z
+    .string()
+    .trim()
+    .max(40)
+    .refine(isIsoInstantWithOffset, "must be an ISO instant with Z or an explicit UTC offset"),
   durationMinutes: z.number().int().positive().nullable().optional(),
   location: z.string().trim().min(1).max(240).nullable().optional(),
   panelPartyIds: z.array(uuid).max(20).nullable().optional(),

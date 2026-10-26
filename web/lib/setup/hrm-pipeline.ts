@@ -9,13 +9,13 @@
  * validateEntityIntegrity refuses them by field name.
  */
 
-const TERMINAL_KINDS = new Set(['hired', 'rejected']);
+const TERMINAL_KINDS = new Set(["hired", "rejected"]);
 
 export function normalizeHrmPipelineStageInput(
   entityKey: string,
   body: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (entityKey !== 'hrm-pipeline-stages') return body;
+  if (entityKey !== "hrm-pipeline-stages") return body;
   if (body.kind === undefined) return body;
   return { ...body, isTerminal: TERMINAL_KINDS.has(String(body.kind)) };
 }

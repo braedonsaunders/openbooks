@@ -1,111 +1,118 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMoney } from '@/components/money-provider'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { editableMoneyDecimal, sameMoneyDecimal } from '@/lib/exact-decimal'
-import { fromUnits, toUnits } from '@openbooks/engine/money/money'
-import { useId, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { FileUp, Upload } from 'lucide-react'
-import { toast } from 'sonner'
-import { Badge, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
-import { DateField } from '@/components/date-field'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { editableMoneyDecimal, sameMoneyDecimal } from "@/lib/exact-decimal";
+import { fromUnits, toUnits } from "@openbooks/engine/money/money";
+import { useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { FileUp, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { Badge, Button, Drawer, Input, Label, Select, Textarea } from "@openbooks/ui";
+import { DateField } from "@/components/date-field";
 interface PreviewLine {
-  postedOn: string
-  amount: string
-  description: string | null
-  counterpartyRef?: string | null
-  possibleDuplicateOf?: string | null
+  postedOn: string;
+  amount: string;
+  description: string | null;
+  counterpartyRef?: string | null;
+  possibleDuplicateOf?: string | null;
 }
 
 interface SkippedRow {
-  line: number
-  code: string
-  dateCell: string
-  amount?: string | null
-  balanceRole?: 'opening' | 'closing' | null
+  line: number;
+  code: string;
+  dateCell: string;
+  amount?: string | null;
+  balanceRole?: "opening" | "closing" | null;
 }
 
 interface BalanceCandidate {
-  postedOn: string
-  amount: string
-  description: string | null
-  role: 'opening' | 'closing'
+  postedOn: string;
+  amount: string;
+  description: string | null;
+  role: "opening" | "closing";
 }
 
 interface DialogAccount {
-  id: string
-  label: string
-  currency: string | null
-  type: string
+  id: string;
+  label: string;
+  currency: string | null;
+  type: string;
 }
 
 interface SuggestedOpening {
-  balance: string
-  sourceStatementId: string
-  sourceStatementDate: string
+  balance: string;
+  sourceStatementId: string;
+  sourceStatementDate: string;
 }
 
 interface OpeningMismatch {
-  expected: string
-  supplied: string
+  expected: string;
+  supplied: string;
 }
 
 interface StatementPreview {
-  lines: PreviewLine[]
-  imported: number
-  duplicates: number
-  possibleDuplicates: number
+  lines: PreviewLine[];
+  imported: number;
+  duplicates: number;
+  possibleDuplicates: number;
   /** Candidates held out of the import (or listed for opt-in), each naming the line it duplicates. */
-  possibleDuplicateLines: PreviewLine[]
+  possibleDuplicateLines: PreviewLine[];
   /** The choice this preview was computed with; the import commits exactly this choice. */
-  includePossibleDuplicates: boolean
-  skipped: SkippedRow[]
-  balanceCandidates: BalanceCandidate[]
-  suggestedOpening: SuggestedOpening | null
-  openingMismatch: OpeningMismatch | null
+  includePossibleDuplicates: boolean;
+  skipped: SkippedRow[];
+  balanceCandidates: BalanceCandidate[];
+  suggestedOpening: SuggestedOpening | null;
+  openingMismatch: OpeningMismatch | null;
   /** Net of every transaction line in the file: opening plus this is the closing. */
-  statementLinesTotal: string | null
-  currency: string | null
-  sourceRevision: number
-  accountId: string
+  statementLinesTotal: string | null;
+  currency: string | null;
+  sourceRevision: number;
+  accountId: string;
 }
 
 interface Mapping {
-  date: string
-  amount: string
-  debitAmount: string
-  description: string
-  counterpartyRef: string
-  bankTransactionId: string
+  date: string;
+  amount: string;
+  debitAmount: string;
+  description: string;
+  counterpartyRef: string;
+  bankTransactionId: string;
 }
 
-type StatementTextSource = 'ofx' | 'csv' | 'camt053' | 'bai2' | 'mt940'
+type StatementTextSource = "ofx" | "csv" | "camt053" | "bai2" | "mt940";
 
 interface BrowserUploadEvidence {
-  bytesBase64: string
-  filename: string
-  contentType: string | null
+  bytesBase64: string;
+  filename: string;
+  contentType: string | null;
 }
 
 const EMPTY_MAPPING: Mapping = {
-  date: '',
-  amount: '',
-  debitAmount: '',
-  description: '',
-  counterpartyRef: '',
-  bankTransactionId: '',
-}
+  date: "",
+  amount: "",
+  debitAmount: "",
+  description: "",
+  counterpartyRef: "",
+  bankTransactionId: "",
+};
 
 /** Guess a CSV column index whose header matches one of the patterns. */
 function guessColumn(header: string[], patterns: RegExp[]): string {
   for (const p of patterns) {
-    const i = header.findIndex((h) => p.test(h.trim()))
-    if (i >= 0) return String(i)
+    const i = header.findIndex((h) => p.test(h.trim()));
+    if (i >= 0) return String(i);
   }
-  return ''
+  return "";
 }
 
 function toEngineMapping(m: Mapping) {
@@ -113,68 +120,74 @@ function toEngineMapping(m: Mapping) {
     date: Number(m.date),
     amount: Number(m.amount),
     description: Number(m.description),
-    ...(m.debitAmount !== '' ? { debitAmount: Number(m.debitAmount) } : {}),
-    ...(m.counterpartyRef !== '' ? { counterpartyRef: Number(m.counterpartyRef) } : {}),
-    ...(m.bankTransactionId !== '' ? { bankTransactionId: Number(m.bankTransactionId) } : {}),
-  }
+    ...(m.debitAmount !== "" ? { debitAmount: Number(m.debitAmount) } : {}),
+    ...(m.counterpartyRef !== "" ? { counterpartyRef: Number(m.counterpartyRef) } : {}),
+    ...(m.bankTransactionId !== "" ? { bankTransactionId: Number(m.bankTransactionId) } : {}),
+  };
 }
 
 function statementSourceForFilename(filename: string): StatementTextSource | null {
-  const lower = filename.toLowerCase()
-  if (lower.endsWith('.csv')) return 'csv'
-  if (lower.endsWith('.ofx') || lower.endsWith('.qfx')) return 'ofx'
-  if (lower.endsWith('.xml')) return 'camt053'
-  if (lower.endsWith('.bai') || lower.endsWith('.bai2')) return 'bai2'
-  if (lower.endsWith('.sta') || lower.endsWith('.mt940')) return 'mt940'
-  return null
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".csv")) return "csv";
+  if (lower.endsWith(".ofx") || lower.endsWith(".qfx")) return "ofx";
+  if (lower.endsWith(".xml")) return "camt053";
+  if (lower.endsWith(".bai") || lower.endsWith(".bai2")) return "bai2";
+  if (lower.endsWith(".sta") || lower.endsWith(".mt940")) return "mt940";
+  return null;
 }
 
-const BROWSER_BASE64_CHUNK_BYTES = 0x8000
+const BROWSER_BASE64_CHUNK_BYTES = 0x8000;
 
 function browserBase64FromBytes(bytes: Uint8Array): string {
-  const chunks: string[] = []
+  const chunks: string[] = [];
   for (let offset = 0; offset < bytes.length; offset += BROWSER_BASE64_CHUNK_BYTES) {
-    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + BROWSER_BASE64_CHUNK_BYTES)))
+    chunks.push(
+      String.fromCharCode(...bytes.subarray(offset, offset + BROWSER_BASE64_CHUNK_BYTES)),
+    );
   }
-  return btoa(chunks.join(''))
+  return btoa(chunks.join(""));
 }
 
 /** Build exact upload evidence from one browser file read; only the engine decodes it. */
 async function prepareBrowserStatementUpload(
-  file: Pick<File, 'arrayBuffer' | 'name' | 'type'>,
+  file: Pick<File, "arrayBuffer" | "name" | "type">,
   fallbackSource: StatementTextSource,
 ) {
-  const source = statementSourceForFilename(file.name) ?? fallbackSource
-  const bytes = new Uint8Array(await file.arrayBuffer())
+  const source = statementSourceForFilename(file.name) ?? fallbackSource;
+  const bytes = new Uint8Array(await file.arrayBuffer());
   return {
     source,
     evidence: {
       bytesBase64: browserBase64FromBytes(bytes),
       filename: file.name,
-      contentType: file.type.split(';')[0]?.trim() || null,
+      contentType: file.type.split(";")[0]?.trim() || null,
     } satisfies BrowserUploadEvidence,
-  }
+  };
 }
 
-const PREVIEW_CAP = 100
+const PREVIEW_CAP = 100;
 
-const FORMAT_MEMORY_PREFIX = 'openbooks.statementImport.format.'
+const FORMAT_MEMORY_PREFIX = "openbooks.statementImport.format.";
 
 /** Last used statement format for an account, or the fallback when none was remembered. */
 function rememberedFormat(accountId: string, fallback: StatementTextSource): StatementTextSource {
   try {
-    const saved = window.localStorage.getItem(FORMAT_MEMORY_PREFIX + accountId)
-    return saved === 'ofx' || saved === 'csv' || saved === 'camt053' || saved === 'bai2' || saved === 'mt940'
+    const saved = window.localStorage.getItem(FORMAT_MEMORY_PREFIX + accountId);
+    return saved === "ofx" ||
+      saved === "csv" ||
+      saved === "camt053" ||
+      saved === "bai2" ||
+      saved === "mt940"
       ? saved
-      : fallback
+      : fallback;
   } catch {
-    return fallback
+    return fallback;
   }
 }
 
 function rememberFormat(accountId: string, source: StatementTextSource) {
   try {
-    window.localStorage.setItem(FORMAT_MEMORY_PREFIX + accountId, source)
+    window.localStorage.setItem(FORMAT_MEMORY_PREFIX + accountId, source);
   } catch {
     // Private mode and locked-down browsers: the memory just doesn't stick.
   }
@@ -187,141 +200,148 @@ function rememberFormat(accountId: string, source: StatementTextSource) {
  * Map CSV columns, preview parsed + deduped lines, then import.
  */
 export function ImportStatementButton({ accountId }: { accountId: string }) {
-  const t = useTranslations('banking.import')
-  const tBanking = useTranslations('banking')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const fieldId = useId()
-  const fileReadVersion = useRef(0)
-  const sourceRevision = useRef(0)
-  const [sourceRevisionView, setSourceRevisionView] = useState(0)
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [source, setSource] = useState<StatementTextSource>(() => rememberedFormat(accountId, 'ofx'))
-  const [dialogAccounts, setDialogAccounts] = useState<DialogAccount[] | null>(null)
-  const [accountsFailed, setAccountsFailed] = useState(false)
-  const [selectedAccountId, setSelectedAccountId] = useState(accountId)
-  const [text, setText] = useState('')
-  const [uploadEvidence, setUploadEvidence] = useState<BrowserUploadEvidence | null>(null)
-  const [header, setHeader] = useState<string[] | null>(null)
-  const [mapping, setMapping] = useState<Mapping>(EMPTY_MAPPING)
-  const [preview, setPreview] = useState<StatementPreview | null>(null)
+  const t = useTranslations("banking.import");
+  const tBanking = useTranslations("banking");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const fieldId = useId();
+  const fileReadVersion = useRef(0);
+  const sourceRevision = useRef(0);
+  const [sourceRevisionView, setSourceRevisionView] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [source, setSource] = useState<StatementTextSource>(() =>
+    rememberedFormat(accountId, "ofx"),
+  );
+  const [dialogAccounts, setDialogAccounts] = useState<DialogAccount[] | null>(null);
+  const [accountsFailed, setAccountsFailed] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState(accountId);
+  const [text, setText] = useState("");
+  const [uploadEvidence, setUploadEvidence] = useState<BrowserUploadEvidence | null>(null);
+  const [header, setHeader] = useState<string[] | null>(null);
+  const [mapping, setMapping] = useState<Mapping>(EMPTY_MAPPING);
+  const [preview, setPreview] = useState<StatementPreview | null>(null);
   // A refused preview/import that only fires a transient toast reads as
   // "nothing happened" once it dismisses: the typed refusal also
   // persists as a dialog-level alert, cleared on the next edit.
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [statementDate, setStatementDate] = useState('')
-  const [openingBalance, setOpeningBalance] = useState('')
-  const [closingBalance, setClosingBalance] = useState('')
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [statementDate, setStatementDate] = useState("");
+  const [openingBalance, setOpeningBalance] = useState("");
+  const [closingBalance, setClosingBalance] = useState("");
   // The reviewer's choice to import possible duplicates. Off by default: they
   // are listed in the preview and held out of the import until opted in.
-  const [includePossibleDuplicates, setIncludePossibleDuplicates] = useState(false)
+  const [includePossibleDuplicates, setIncludePossibleDuplicates] = useState(false);
 
   function reviseInputs() {
-    const revision = ++sourceRevision.current
-    setSourceRevisionView(revision)
-    return revision
+    const revision = ++sourceRevision.current;
+    setSourceRevisionView(revision);
+    return revision;
   }
 
   function clearDerivedStatementValues() {
-    setStatementDate('')
-    setOpeningBalance('')
-    setClosingBalance('')
+    setStatementDate("");
+    setOpeningBalance("");
+    setClosingBalance("");
   }
 
   function reset() {
-    fileReadVersion.current += 1
-    reviseInputs()
-    setActionError(null)
-    setText('')
-    setUploadEvidence(null)
-    setHeader(null)
-    setMapping(EMPTY_MAPPING)
-    setPreview(null)
-    setIncludePossibleDuplicates(false)
-    clearDerivedStatementValues()
+    fileReadVersion.current += 1;
+    reviseInputs();
+    setActionError(null);
+    setText("");
+    setUploadEvidence(null);
+    setHeader(null);
+    setMapping(EMPTY_MAPPING);
+    setPreview(null);
+    setIncludePossibleDuplicates(false);
+    clearDerivedStatementValues();
   }
 
   function onTextChanged(next: string) {
-    fileReadVersion.current += 1
-    reviseInputs()
-    setActionError(null)
-    setText(next)
-    setUploadEvidence(null)
-    setHeader(null)
-    setPreview(null)
-    clearDerivedStatementValues()
+    fileReadVersion.current += 1;
+    reviseInputs();
+    setActionError(null);
+    setText(next);
+    setUploadEvidence(null);
+    setHeader(null);
+    setPreview(null);
+    clearDerivedStatementValues();
   }
 
   async function readFile(file: File) {
-    const readVersion = ++fileReadVersion.current
-    const readSourceRevision = reviseInputs()
-    setText('')
-    setUploadEvidence(null)
-    setHeader(null)
-    setPreview(null)
-    clearDerivedStatementValues()
+    const readVersion = ++fileReadVersion.current;
+    const readSourceRevision = reviseInputs();
+    setText("");
+    setUploadEvidence(null);
+    setHeader(null);
+    setPreview(null);
+    clearDerivedStatementValues();
 
     try {
-      const upload = await prepareBrowserStatementUpload(file, source)
-      const decoded = await post({
+      const upload = await prepareBrowserStatementUpload(file, source);
+      const decoded = (await post({
         source: upload.source,
         sourceBytesBase64: upload.evidence.bytesBase64,
-        mode: 'decode',
-      }) as { text?: unknown }
-      if (readVersion !== fileReadVersion.current || readSourceRevision !== sourceRevision.current) return
-      if (typeof decoded.text !== 'string') throw new Error()
+        mode: "decode",
+      })) as { text?: unknown };
+      if (readVersion !== fileReadVersion.current || readSourceRevision !== sourceRevision.current)
+        return;
+      if (typeof decoded.text !== "string") throw new Error();
 
-      setText(decoded.text)
-      setUploadEvidence(upload.evidence)
-      setSource(upload.source)
+      setText(decoded.text);
+      setUploadEvidence(upload.evidence);
+      setSource(upload.source);
     } catch {
-      if (readVersion !== fileReadVersion.current || readSourceRevision !== sourceRevision.current) return
-      toast.error(tBanking('errors.fileReadFailed', { name: file.name }))
+      if (readVersion !== fileReadVersion.current || readSourceRevision !== sourceRevision.current)
+        return;
+      toast.error(tBanking("errors.fileReadFailed", { name: file.name }));
     }
   }
 
   /** Surface a refusal persistently (dialog alert) and transiently (toast). */
   function fail(message: string) {
-    setActionError(message)
-    toast.error(message)
+    setActionError(message);
+    toast.error(message);
   }
 
   interface ImportResponse {
-    header?: string[]
-    text?: unknown
-    lines?: PreviewLine[]
-    imported?: number
-    duplicates?: number
-    possibleDuplicates?: number
-    possibleDuplicateLines?: PreviewLine[]
-    skipped?: SkippedRow[]
-    balanceCandidates?: BalanceCandidate[]
-    suggestedOpening?: SuggestedOpening | null
-    openingMismatch?: OpeningMismatch | null
-    statementDate?: string
-    closingBalance?: string
-    currency?: string
-    statementLinesTotal?: string | null
-    accounts?: DialogAccount[]
+    header?: string[];
+    text?: unknown;
+    lines?: PreviewLine[];
+    imported?: number;
+    duplicates?: number;
+    possibleDuplicates?: number;
+    possibleDuplicateLines?: PreviewLine[];
+    skipped?: SkippedRow[];
+    balanceCandidates?: BalanceCandidate[];
+    suggestedOpening?: SuggestedOpening | null;
+    openingMismatch?: OpeningMismatch | null;
+    statementDate?: string;
+    closingBalance?: string;
+    currency?: string;
+    statementLinesTotal?: string | null;
+    accounts?: DialogAccount[];
   }
 
   async function post(body: Record<string, unknown>): Promise<ImportResponse> {
-    const res = await fetch('/api/banking/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch("/api/banking/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    })
+    });
     // The error body may not be JSON (proxy 5xx pages): never let the read
     // itself throw, or the failure surfaces a SyntaxError instead of the
     // typed reason. The body parses from a clone so the refusal can read
     // through the shared helper while the success path keeps the response.
-    const data = (await res.clone().json().catch(() => null)) as (ImportResponse & { error?: unknown }) | null
+    const data = (await res
+      .clone()
+      .json()
+      .catch(() => null)) as (ImportResponse & { error?: unknown }) | null;
     if (!res.ok) {
-      throw new Error(await readApiErrorMessage(res, tBanking('errors.requestFailed')))
+      throw new Error(await readApiErrorMessage(res, tBanking("errors.requestFailed")));
     }
-    return data ?? {}
+    return data ?? {};
   }
 
   const sourcePayload = uploadEvidence
@@ -330,54 +350,62 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         filename: uploadEvidence.filename,
         contentType: uploadEvidence.contentType,
       }
-    : { text }
-  const hasSource = uploadEvidence !== null || text.trim() !== ''
-  const visiblePreview = preview?.accountId === selectedAccountId ? preview : null
-  const previewStale = preview !== null && (visiblePreview === null || preview.sourceRevision !== sourceRevisionView)
-  const selectedAccount = dialogAccounts?.find((a) => a.id === selectedAccountId) ?? null
-  const { money } = useMoney(visiblePreview?.currency ?? selectedAccount?.currency ?? undefined)
-  const closingMismatch = statementClosingMismatch(openingBalance, closingBalance, visiblePreview?.statementLinesTotal ?? null, selectedAccount?.type ?? null)
-  const statementCurrency = visiblePreview?.currency ?? null
-  const currencyMismatch = statementCurrency !== null
-    && selectedAccount?.currency != null
-    && statementCurrency !== selectedAccount.currency
+    : { text };
+  const hasSource = uploadEvidence !== null || text.trim() !== "";
+  const visiblePreview = preview?.accountId === selectedAccountId ? preview : null;
+  const previewStale =
+    preview !== null && (visiblePreview === null || preview.sourceRevision !== sourceRevisionView);
+  const selectedAccount = dialogAccounts?.find((a) => a.id === selectedAccountId) ?? null;
+  const { money } = useMoney(visiblePreview?.currency ?? selectedAccount?.currency ?? undefined);
+  const closingMismatch = statementClosingMismatch(
+    openingBalance,
+    closingBalance,
+    visiblePreview?.statementLinesTotal ?? null,
+    selectedAccount?.type ?? null,
+  );
+  const statementCurrency = visiblePreview?.currency ?? null;
+  const currencyMismatch =
+    statementCurrency !== null &&
+    selectedAccount?.currency != null &&
+    statementCurrency !== selectedAccount.currency;
   // Required roles still unmapped — or two guessed onto the same column, in
   // which case Preview would parse nonsense. Either way the dialog names
   // the missing roles instead of leaving Preview silently disabled.
-  const requiredMappingKeys = ['date', 'amount', 'description'] as const
-  const requiredMappingValues = requiredMappingKeys.map((key) => mapping[key])
+  const requiredMappingKeys = ["date", "amount", "description"] as const;
+  const requiredMappingValues = requiredMappingKeys.map((key) => mapping[key]);
   const missingMapping = [
     ...new Set([
-      ...requiredMappingKeys.filter((key) => mapping[key] === ''),
+      ...requiredMappingKeys.filter((key) => mapping[key] === ""),
       ...requiredMappingKeys.filter(
-        (key, index) => mapping[key] !== '' && requiredMappingValues.indexOf(mapping[key]) !== index,
+        (key, index) =>
+          mapping[key] !== "" && requiredMappingValues.indexOf(mapping[key]) !== index,
       ),
     ]),
-  ]
+  ];
   const mappingRoleLabel = (key: (typeof requiredMappingKeys)[number]) =>
-    key === 'date'
-      ? tCommon('labels.date')
-      : key === 'amount'
-        ? tCommon('labels.amount')
-        : tCommon('labels.description')
-  const csvReady = source !== 'csv' || missingMapping.length === 0
-  const missingMappingColumns = missingMapping.map(mappingRoleLabel).join(', ')
+    key === "date"
+      ? tCommon("labels.date")
+      : key === "amount"
+        ? tCommon("labels.amount")
+        : tCommon("labels.description");
+  const csvReady = source !== "csv" || missingMapping.length === 0;
+  const missingMappingColumns = missingMapping.map(mappingRoleLabel).join(", ");
   const nextStep = !hasSource
-    ? t('nextStepSource')
-    : source === 'csv' && header === null
-      ? t('nextStepDetect')
-      : source === 'csv' && missingMapping.length > 0
-        ? t('mappingMissing', { columns: missingMappingColumns })
+    ? t("nextStepSource")
+    : source === "csv" && header === null
+      ? t("nextStepDetect")
+      : source === "csv" && missingMapping.length > 0
+        ? t("mappingMissing", { columns: missingMappingColumns })
         : visiblePreview === null || previewStale
-          ? t('nextStepPreview')
-          : t('nextStepImport')
+          ? t("nextStepPreview")
+          : t("nextStepImport");
 
   function openDialog() {
-    setSelectedAccountId(accountId)
-    setSource((current) => rememberedFormat(accountId, current))
-    setAccountsFailed(false)
-    setOpen(true)
-    void loadDialogAccounts()
+    setSelectedAccountId(accountId);
+    setSource((current) => rememberedFormat(accountId, current));
+    setAccountsFailed(false);
+    setOpen(true);
+    void loadDialogAccounts();
   }
 
   async function loadDialogAccounts() {
@@ -385,47 +413,49 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     // lines can never land in whatever account a filter happens to name.
     // A failed list falls back to the page account — the engine gates it.
     try {
-      const res = await fetch('/api/banking/accounts')
-      const data = (await res.json().catch(() => null)) as ImportResponse | null
+      const res = await fetch("/api/banking/accounts");
+      const data = (await res.json().catch(() => null)) as ImportResponse | null;
       if (!res.ok || !Array.isArray(data?.accounts)) {
-        setAccountsFailed(true)
-        return
+        setAccountsFailed(true);
+        return;
       }
-      setDialogAccounts(data.accounts ?? [])
+      setDialogAccounts(data.accounts ?? []);
     } catch {
-      setAccountsFailed(true)
+      setAccountsFailed(true);
     }
   }
 
   function pickAccount(id: string) {
-    reviseInputs()
-    setActionError(null)
-    setSelectedAccountId(id)
-    setPreview(null)
+    reviseInputs();
+    setActionError(null);
+    setSelectedAccountId(id);
+    setPreview(null);
     // Every account remembers its own last used format.
-    setSource((current) => rememberedFormat(id, current))
+    setSource((current) => rememberedFormat(id, current));
   }
 
-  function applyCandidateAsBalance(amount: string, field: 'openingBalance' | 'closingBalance') {
+  function applyCandidateAsBalance(amount: string, field: "openingBalance" | "closingBalance") {
     // A balance change needs a fresh preview, exactly like an edited
     // statement date: the notice below says so and Import stays disabled.
-    reviseInputs()
-    setActionError(null)
-    const shown = editableMoneyDecimal(amount)
-    if (field === 'openingBalance') setOpeningBalance(shown)
-    else setClosingBalance(shown)
+    reviseInputs();
+    setActionError(null);
+    const shown = editableMoneyDecimal(amount);
+    if (field === "openingBalance") setOpeningBalance(shown);
+    else setClosingBalance(shown);
   }
 
   async function detectColumns() {
-    const requestRevision = sourceRevision.current
-    setBusy(true)
-    setActionError(null)
+    const requestRevision = sourceRevision.current;
+    setBusy(true);
+    setActionError(null);
     try {
-      const data = (await post({ source: 'csv', ...sourcePayload, mode: 'columns' })) as { header: string[] }
-      if (requestRevision !== sourceRevision.current) return
-      reviseInputs()
-      setHeader(data.header)
-      setPreview(null)
+      const data = (await post({ source: "csv", ...sourcePayload, mode: "columns" })) as {
+        header: string[];
+      };
+      if (requestRevision !== sourceRevision.current) return;
+      reviseInputs();
+      setHeader(data.header);
+      setPreview(null);
       setMapping({
         date: guessColumn(data.header, [/^date$/i, /date/i]),
         // Card exports name the same money columns differently (Charges /
@@ -442,36 +472,39 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           /^debit$/i,
           /debit|charge|withdraw|outgoing|outflow|paid.?out|money.?out/i,
         ]),
-        description: guessColumn(data.header, [/^desc/i, /desc|memo|merchant|vendor|narrat|detail|payee/i]),
+        description: guessColumn(data.header, [
+          /^desc/i,
+          /desc|memo|merchant|vendor|narrat|detail|payee/i,
+        ]),
         counterpartyRef: guessColumn(data.header, [/ref|cheque|check ?no|auth|approval/i]),
         bankTransactionId: guessColumn(data.header, [/transaction ?id|fitid/i]),
-      })
+      });
     } catch (e) {
-      if (requestRevision === sourceRevision.current) fail((e as Error).message)
+      if (requestRevision === sourceRevision.current) fail((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function runPreview(include: boolean = includePossibleDuplicates) {
-    const requestRevision = sourceRevision.current
-    const requestAccountId = selectedAccountId
-    setBusy(true)
-    setActionError(null)
+    const requestRevision = sourceRevision.current;
+    const requestAccountId = selectedAccountId;
+    setBusy(true);
+    setActionError(null);
     try {
       const data = await post({
         accountId: requestAccountId,
         source,
         ...sourcePayload,
-        mode: 'preview',
+        mode: "preview",
         // Balances already typed by the operator feed the same dedupe
         // partition as the import, so the preview agrees with what import writes.
         openingBalance: openingBalance || null,
         closingBalance: closingBalance || null,
         includePossibleDuplicates: include,
-        ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
-      })
-      if (requestRevision !== sourceRevision.current) return
+        ...(source === "csv" ? { mapping: toEngineMapping(mapping) } : {}),
+      });
+      if (requestRevision !== sourceRevision.current) return;
       setPreview({
         lines: data.lines ?? [],
         imported: data.imported ?? 0,
@@ -487,57 +520,69 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         currency: data.currency ?? null,
         sourceRevision: requestRevision,
         accountId: requestAccountId,
-      })
-      const { statementDate: previewStatementDate, closingBalance: previewClosingBalance } = data
-      if (previewStatementDate) setStatementDate((current) => current || previewStatementDate)
-      if (previewClosingBalance) setClosingBalance((current) => current || editableMoneyDecimal(previewClosingBalance))
+      });
+      const { statementDate: previewStatementDate, closingBalance: previewClosingBalance } = data;
+      if (previewStatementDate) setStatementDate((current) => current || previewStatementDate);
+      if (previewClosingBalance)
+        setClosingBalance((current) => current || editableMoneyDecimal(previewClosingBalance));
       // Chain the opening from the prior signed-off closing when the
       // operator left it empty — still editable, and a mismatch they typed
       // stays flagged below instead of silently replacing their figure.
-      const suggested = data.suggestedOpening ?? null
-      if (suggested) setOpeningBalance((current) => current || editableMoneyDecimal(suggested.balance))
+      const suggested = data.suggestedOpening ?? null;
+      if (suggested)
+        setOpeningBalance((current) => current || editableMoneyDecimal(suggested.balance));
     } catch (e) {
       if (requestRevision === sourceRevision.current) {
-        setPreview(null)
-        fail((e as Error).message)
+        setPreview(null);
+        fail((e as Error).message);
       }
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function runImport() {
-    if (!preview || preview.sourceRevision !== sourceRevision.current || preview.accountId !== selectedAccountId) {
-      setPreview(null)
-      return
+    if (
+      !preview ||
+      preview.sourceRevision !== sourceRevision.current ||
+      preview.accountId !== selectedAccountId
+    ) {
+      setPreview(null);
+      return;
     }
-    setBusy(true)
-    setActionError(null)
+    setBusy(true);
+    setActionError(null);
     try {
       const data = await post({
         accountId: selectedAccountId,
         source,
         ...sourcePayload,
-        mode: 'import',
+        mode: "import",
         statementDate: statementDate || null,
         openingBalance: openingBalance || null,
         closingBalance: closingBalance || null,
         includePossibleDuplicates: preview.includePossibleDuplicates,
-        ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
-      })
-      rememberFormat(selectedAccountId, source)
-      toast.success(t('importedToast', { imported: data.imported ?? 0, duplicates: data.duplicates ?? 0, possibleDuplicates: data.possibleDuplicates ?? 0 }))
-      setOpen(false)
-      reset()
-      router.refresh()
+        ...(source === "csv" ? { mapping: toEngineMapping(mapping) } : {}),
+      });
+      rememberFormat(selectedAccountId, source);
+      toast.success(
+        t("importedToast", {
+          imported: data.imported ?? 0,
+          duplicates: data.duplicates ?? 0,
+          possibleDuplicates: data.possibleDuplicates ?? 0,
+        }),
+      );
+      setOpen(false);
+      reset();
+      router.refresh();
     } catch (e) {
-      fail((e as Error).message)
+      fail((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
-  const field = 'space-y-1.5'
+  const field = "space-y-1.5";
   const mappingSelect = (key: keyof Mapping, label: string, required: boolean) =>
     header ? (
       <div className={field}>
@@ -550,44 +595,60 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           disabled={busy}
           value={mapping[key]}
           onChange={(e) => {
-            reviseInputs()
-            setActionError(null)
-            setMapping((m) => ({ ...m, [key]: e.target.value }))
-            setPreview(null)
+            reviseInputs();
+            setActionError(null);
+            setMapping((m) => ({ ...m, [key]: e.target.value }));
+            setPreview(null);
           }}
         >
-          <option value="">{required ? t('selectColumn') : '—'}</option>
+          <option value="">{required ? t("selectColumn") : "—"}</option>
           {header.map((h, i) => (
             <option key={i} value={String(i)}>
-              {h.trim() || t('columnN', { n: i + 1 })}
+              {h.trim() || t("columnN", { n: i + 1 })}
             </option>
           ))}
         </Select>
       </div>
-    ) : null
+    ) : null;
 
   return (
     <>
       <Button variant="outline" onClick={openDialog}>
-        <FileUp size={15} /> {t('button')}
+        <FileUp size={15} /> {t("button")}
       </Button>
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
         size="lg"
-        title={t('title')}
-        description={t('description')}
+        title={t("title")}
+        description={t("description")}
         headerActions={
           <>
-            <Button variant="outline" disabled={busy || !hasSource || !csvReady} onClick={() => runPreview()}>
-              {t('preview')}
+            <Button
+              variant="outline"
+              disabled={busy || !hasSource || !csvReady}
+              onClick={() => runPreview()}
+            >
+              {t("preview")}
             </Button>
             {!visiblePreview || visiblePreview.sourceRevision !== sourceRevisionView ? (
-              <span className="text-xs text-slate-500 dark:text-slate-400">{t('previewRequired')}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {t("previewRequired")}
+              </span>
             ) : null}
-            <Button disabled={busy || !visiblePreview || visiblePreview.sourceRevision !== sourceRevisionView || visiblePreview.imported === 0} onClick={runImport}>
-              <Upload size={15} />{' '}
-              {visiblePreview && visiblePreview.imported > 0 ? t('importCount', { count: visiblePreview.imported }) : t('importAction')}
+            <Button
+              disabled={
+                busy ||
+                !visiblePreview ||
+                visiblePreview.sourceRevision !== sourceRevisionView ||
+                visiblePreview.imported === 0
+              }
+              onClick={runImport}
+            >
+              <Upload size={15} />{" "}
+              {visiblePreview && visiblePreview.imported > 0
+                ? t("importCount", { count: visiblePreview.imported })
+                : t("importAction")}
             </Button>
           </>
         }
@@ -595,20 +656,27 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           <div className="flex w-full items-center gap-3">
             {visiblePreview ? (
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {t('previewSummary', { imported: visiblePreview.imported, duplicates: visiblePreview.duplicates, possibleDuplicates: visiblePreview.possibleDuplicates })}
+                {t("previewSummary", {
+                  imported: visiblePreview.imported,
+                  duplicates: visiblePreview.duplicates,
+                  possibleDuplicates: visiblePreview.possibleDuplicates,
+                })}
               </span>
             ) : null}
-            {visiblePreview?.suggestedOpening && sameMoneyDecimal(openingBalance, visiblePreview.suggestedOpening.balance) ? (
+            {visiblePreview?.suggestedOpening &&
+            sameMoneyDecimal(openingBalance, visiblePreview.suggestedOpening.balance) ? (
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {t('suggestedOpeningFrom', { date: visiblePreview.suggestedOpening.sourceStatementDate })}
+                {t("suggestedOpeningFrom", {
+                  date: visiblePreview.suggestedOpening.sourceStatementDate,
+                })}
               </span>
             ) : null}
             {visiblePreview?.openingMismatch ? (
               <span role="note" className="text-xs text-amber-700 dark:text-amber-300">
-                {t('openingMismatch', {
+                {t("openingMismatch", {
                   supplied: visiblePreview.openingMismatch.supplied,
                   expected: visiblePreview.openingMismatch.expected,
-                  date: visiblePreview.suggestedOpening?.sourceStatementDate ?? '',
+                  date: visiblePreview.suggestedOpening?.sourceStatementDate ?? "",
                 })}
               </span>
             ) : null}
@@ -626,7 +694,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
             </p>
           ) : null}
           <div className={field}>
-            <Label htmlFor={`${fieldId}-account`}>{t('importAccount')}</Label>
+            <Label htmlFor={`${fieldId}-account`}>{t("importAccount")}</Label>
             {dialogAccounts !== null && dialogAccounts.length > 0 ? (
               <>
                 <Select
@@ -643,14 +711,19 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 </Select>
                 {selectedAccount ? (
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {tBanking(`types.${selectedAccount.type}` as 'types.asset_bank')} · {selectedAccount.currency ?? t('unknownCurrency')}
+                    {tBanking(`types.${selectedAccount.type}` as "types.asset_bank")} ·{" "}
+                    {selectedAccount.currency ?? t("unknownCurrency")}
                   </p>
                 ) : null}
               </>
             ) : accountsFailed || dialogAccounts !== null ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">{t('singleAccountFallback')}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t("singleAccountFallback")}
+              </p>
             ) : (
-              <p className="text-sm text-slate-500 dark:text-slate-400">{tCommon('labels.loading')}…</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {tCommon("labels.loading")}…
+              </p>
             )}
           </div>
           {currencyMismatch && selectedAccount ? (
@@ -658,37 +731,40 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               role="alert"
               className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
             >
-              {t('currencyMismatchWarning', { statement: statementCurrency, account: selectedAccount.currency ?? '—' })}
+              {t("currencyMismatchWarning", {
+                statement: statementCurrency,
+                account: selectedAccount.currency ?? "—",
+              })}
             </p>
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}>
-              <Label htmlFor={`${fieldId}-format`}>{t('format')}</Label>
+              <Label htmlFor={`${fieldId}-format`}>{t("format")}</Label>
               <Select
                 id={`${fieldId}-format`}
                 disabled={busy}
                 value={source}
                 onChange={(e) => {
-                  fileReadVersion.current += 1
-                  reviseInputs()
-                  setActionError(null)
-                  const next = e.target.value as StatementTextSource
-                  setSource(next)
-                  rememberFormat(selectedAccountId, next)
-                  setHeader(null)
-                  setPreview(null)
-                  clearDerivedStatementValues()
+                  fileReadVersion.current += 1;
+                  reviseInputs();
+                  setActionError(null);
+                  const next = e.target.value as StatementTextSource;
+                  setSource(next);
+                  rememberFormat(selectedAccountId, next);
+                  setHeader(null);
+                  setPreview(null);
+                  clearDerivedStatementValues();
                 }}
               >
-                <option value="ofx">{t('formatOfx')}</option>
-                <option value="csv">{t('formatCsv')}</option>
-                <option value="camt053">{t('formatCamt053')}</option>
-                <option value="bai2">{t('formatBai2')}</option>
-                <option value="mt940">{t('formatMt940')}</option>
+                <option value="ofx">{t("formatOfx")}</option>
+                <option value="csv">{t("formatCsv")}</option>
+                <option value="camt053">{t("formatCamt053")}</option>
+                <option value="bai2">{t("formatBai2")}</option>
+                <option value="mt940">{t("formatMt940")}</option>
               </Select>
             </div>
             <div className={field}>
-              <Label htmlFor={`${fieldId}-file`}>{t('file')}</Label>
+              <Label htmlFor={`${fieldId}-file`}>{t("file")}</Label>
               <div className="flex items-center gap-2">
                 <input
                   id={`${fieldId}-file`}
@@ -698,23 +774,23 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   className="hidden"
                   disabled={busy}
                   onChange={(e) => {
-                    const f = e.target.files?.[0]
-                    if (f) void readFile(f)
-                    e.target.value = ''
+                    const f = e.target.files?.[0];
+                    if (f) void readFile(f);
+                    e.target.value = "";
                   }}
                 />
                 <Button variant="outline" disabled={busy} onClick={() => fileRef.current?.click()}>
-                  {t('chooseFile')}
+                  {t("chooseFile")}
                 </Button>
                 <span className="truncate text-sm text-slate-500 dark:text-slate-400">
-                  {uploadEvidence?.filename ?? t('orPasteBelow')}
+                  {uploadEvidence?.filename ?? t("orPasteBelow")}
                 </span>
               </div>
             </div>
           </div>
 
           <div className={field}>
-            <Label htmlFor={`${fieldId}-text`}>{t('statementText')}</Label>
+            <Label htmlFor={`${fieldId}-text`}>{t("statementText")}</Label>
             <Textarea
               id={`${fieldId}-text`}
               disabled={busy}
@@ -723,7 +799,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               rows={8}
               spellCheck={false}
               className="font-mono text-xs"
-              placeholder={source === 'csv' ? t('pastePlaceholderCsv') : t('pastePlaceholderOfx')}
+              placeholder={source === "csv" ? t("pastePlaceholderCsv") : t("pastePlaceholderOfx")}
             />
             <p className="text-xs text-slate-500 dark:text-slate-400">{nextStep}</p>
           </div>
@@ -732,36 +808,38 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               role="note"
               className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
             >
-              {t('repreviewNotice')}
+              {t("repreviewNotice")}
             </p>
           ) : null}
 
-          {source === 'csv' ? (
+          {source === "csv" ? (
             header ? (
               <div className="space-y-3">
-                <h3 className="text-sm font-medium">{t('columnMapping')}</h3>
+                <h3 className="text-sm font-medium">{t("columnMapping")}</h3>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  {mappingSelect('date', tCommon('labels.date'), true)}
-                  {mappingSelect('amount', tCommon('labels.amount'), true)}
-                  {mappingSelect('description', tCommon('labels.description'), true)}
-                  {mappingSelect('debitAmount', t('debitColumn'), false)}
-                  {mappingSelect('counterpartyRef', tCommon('labels.reference'), false)}
-                  {mappingSelect('bankTransactionId', t('bankTransactionId'), false)}
+                  {mappingSelect("date", tCommon("labels.date"), true)}
+                  {mappingSelect("amount", tCommon("labels.amount"), true)}
+                  {mappingSelect("description", tCommon("labels.description"), true)}
+                  {mappingSelect("debitAmount", t("debitColumn"), false)}
+                  {mappingSelect("counterpartyRef", tCommon("labels.reference"), false)}
+                  {mappingSelect("bankTransactionId", t("bankTransactionId"), false)}
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mappingHelp')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t("mappingHelp")}</p>
                 {missingMapping.length > 0 ? (
                   <p role="note" className="text-xs text-slate-500 dark:text-slate-400">
-                    {t('mappingMissing', { columns: missingMappingColumns })}
+                    {t("mappingMissing", { columns: missingMappingColumns })}
                   </p>
                 ) : null}
               </div>
             ) : (
               <div className="space-y-1.5">
                 <Button variant="outline" disabled={busy || !hasSource} onClick={detectColumns}>
-                  {t('detectColumns')}
+                  {t("detectColumns")}
                 </Button>
                 {hasSource ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('detectColumnsHint')}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t("detectColumnsHint")}
+                  </p>
                 ) : null}
               </div>
             )
@@ -774,30 +852,30 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   role="note"
                   className="space-y-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
                 >
-                  <p>{t('balanceCandidatesTitle')}</p>
+                  <p>{t("balanceCandidatesTitle")}</p>
                   <ul className="space-y-1.5">
                     {visiblePreview.balanceCandidates.map((c, i) => (
                       <li key={i} className="flex flex-wrap items-center gap-2">
                         <span>
-                          {c.description ?? '—'} · {money(c.amount)} ·{' '}
-                          {c.role === 'opening' ? t('balanceRoleOpening') : t('balanceRoleClosing')}
+                          {c.description ?? "—"} · {money(c.amount)} ·{" "}
+                          {c.role === "opening" ? t("balanceRoleOpening") : t("balanceRoleClosing")}
                         </span>
                         <span className="flex gap-1">
                           <Button
                             variant="outline"
                             size="sm"
                             disabled={busy}
-                            onClick={() => applyCandidateAsBalance(c.amount, 'openingBalance')}
+                            onClick={() => applyCandidateAsBalance(c.amount, "openingBalance")}
                           >
-                            {t('useAsOpening')}
+                            {t("useAsOpening")}
                           </Button>
                           <Button
                             variant="outline"
                             size="sm"
                             disabled={busy}
-                            onClick={() => applyCandidateAsBalance(c.amount, 'closingBalance')}
+                            onClick={() => applyCandidateAsBalance(c.amount, "closingBalance")}
                           >
-                            {t('useAsClosing')}
+                            {t("useAsClosing")}
                           </Button>
                         </span>
                       </li>
@@ -807,35 +885,50 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               ) : null}
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className={field}>
-                  <Label htmlFor={`${fieldId}-statement-date`}>{tBanking('labels.statementDate')}</Label>
+                  <Label htmlFor={`${fieldId}-statement-date`}>
+                    {tBanking("labels.statementDate")}
+                  </Label>
                   <DateField
                     id={`${fieldId}-statement-date`}
                     disabled={busy}
                     value={statementDate}
-                    onChange={(value) => { reviseInputs(); setStatementDate(value) }}
+                    onChange={(value) => {
+                      reviseInputs();
+                      setStatementDate(value);
+                    }}
                   />
                 </div>
                 <div className={field}>
-                  <Label htmlFor={`${fieldId}-opening-balance`}>{tBanking('labels.openingBalance')}</Label>
+                  <Label htmlFor={`${fieldId}-opening-balance`}>
+                    {tBanking("labels.openingBalance")}
+                  </Label>
                   <Input
                     id={`${fieldId}-opening-balance`}
                     disabled={busy}
                     inputMode="decimal"
                     value={openingBalance}
-                    onChange={(e) => { reviseInputs(); setOpeningBalance(e.target.value) }}
-                    placeholder={t('optionalPlaceholder')}
+                    onChange={(e) => {
+                      reviseInputs();
+                      setOpeningBalance(e.target.value);
+                    }}
+                    placeholder={t("optionalPlaceholder")}
                     className="text-right tabular-nums"
                   />
                 </div>
                 <div className={field}>
-                  <Label htmlFor={`${fieldId}-closing-balance`}>{tBanking('labels.closingBalance')}</Label>
+                  <Label htmlFor={`${fieldId}-closing-balance`}>
+                    {tBanking("labels.closingBalance")}
+                  </Label>
                   <Input
                     id={`${fieldId}-closing-balance`}
                     disabled={busy}
                     inputMode="decimal"
                     value={closingBalance}
-                    onChange={(e) => { reviseInputs(); setClosingBalance(e.target.value) }}
-                    placeholder={t('optionalPlaceholder')}
+                    onChange={(e) => {
+                      reviseInputs();
+                      setClosingBalance(e.target.value);
+                    }}
+                    placeholder={t("optionalPlaceholder")}
                     className="text-right tabular-nums"
                   />
                 </div>
@@ -843,7 +936,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
 
               {closingMismatch ? (
                 <p role="note" className="text-xs text-amber-700 dark:text-amber-300">
-                  {t('closingMismatch', closingMismatch)}
+                  {t("closingMismatch", closingMismatch)}
                 </p>
               ) : null}
 
@@ -852,18 +945,21 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   role="note"
                   className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
                 >
-                  <p>{t('skippedNotice', { count: visiblePreview.skipped.length })}</p>
+                  <p>{t("skippedNotice", { count: visiblePreview.skipped.length })}</p>
                   <ul className="mt-1 list-disc space-y-1.5 pl-5">
                     {visiblePreview.skipped.map((row) => (
                       <li key={row.line}>
-                        {row.code === 'csv_balance_row' && row.amount ? (
+                        {row.code === "csv_balance_row" && row.amount ? (
                           <span className="flex flex-wrap items-center gap-2">
                             <span>
-                              {t('skippedBalanceRow', {
+                              {t("skippedBalanceRow", {
                                 line: row.line,
                                 dateCell: row.dateCell,
                                 amount: money(row.amount),
-                                role: row.balanceRole === 'opening' ? t('balanceRoleOpening') : t('balanceRoleClosing'),
+                                role:
+                                  row.balanceRole === "opening"
+                                    ? t("balanceRoleOpening")
+                                    : t("balanceRoleClosing"),
                               })}
                             </span>
                             <Button
@@ -873,65 +969,86 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                               onClick={() =>
                                 applyCandidateAsBalance(
                                   row.amount as string,
-                                  row.balanceRole === 'opening' ? 'openingBalance' : 'closingBalance',
+                                  row.balanceRole === "opening"
+                                    ? "openingBalance"
+                                    : "closingBalance",
                                 )
                               }
                             >
-                              {row.balanceRole === 'opening' ? t('useAsOpening') : t('useAsClosing')}
+                              {row.balanceRole === "opening"
+                                ? t("useAsOpening")
+                                : t("useAsClosing")}
                             </Button>
                           </span>
                         ) : (
-                          t('skippedRow', { line: row.line, dateCell: row.dateCell })
+                          t("skippedRow", { line: row.line, dateCell: row.dateCell })
                         )}
                       </li>
                     ))}
                   </ul>
                 </div>
               ) : null}
-              {visiblePreview.lines.length === 0 && visiblePreview.possibleDuplicateLines.length === 0 ? (
+              {visiblePreview.lines.length === 0 &&
+              visiblePreview.possibleDuplicateLines.length === 0 ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
-                  {t('previewEmpty')}
+                  {t("previewEmpty")}
                 </p>
               ) : visiblePreview.lines.length === 0 ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
-                  {t('onlyPossibleDuplicates')}
+                  {t("onlyPossibleDuplicates")}
                 </p>
               ) : visiblePreview.imported === 0 ? (
                 <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
-                  {t('nothingNew')}
+                  {t("nothingNew")}
                 </p>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
                   <SharedTable className="w-full text-sm">
                     <SharedTableHeader className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                       <SharedTableRow>
-                        <SharedTableHead className="px-3 py-2">{tCommon('labels.date')}</SharedTableHead>
-                        <SharedTableHead className="px-3 py-2">{tCommon('labels.description')}</SharedTableHead>
-                        <SharedTableHead className="px-3 py-2">{tBanking('labels.ref')}</SharedTableHead>
-                        <SharedTableHead className="px-3 py-2 text-right">{tCommon('labels.amount')}</SharedTableHead>
+                        <SharedTableHead className="px-3 py-2">
+                          {tCommon("labels.date")}
+                        </SharedTableHead>
+                        <SharedTableHead className="px-3 py-2">
+                          {tCommon("labels.description")}
+                        </SharedTableHead>
+                        <SharedTableHead className="px-3 py-2">
+                          {tBanking("labels.ref")}
+                        </SharedTableHead>
+                        <SharedTableHead className="px-3 py-2 text-right">
+                          {tCommon("labels.amount")}
+                        </SharedTableHead>
                       </SharedTableRow>
                     </SharedTableHeader>
                     <SharedTableBody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {visiblePreview.lines.slice(0, PREVIEW_CAP).map((l, i) => (
                         <SharedTableRow key={i}>
-                          <SharedTableCell className="px-3 py-1.5 whitespace-nowrap">{l.postedOn}</SharedTableCell>
+                          <SharedTableCell className="px-3 py-1.5 whitespace-nowrap">
+                            {l.postedOn}
+                          </SharedTableCell>
                           <SharedTableCell className="max-w-[18rem] truncate px-3 py-1.5">
-                            {l.description ?? '—'}
+                            {l.description ?? "—"}
                             {l.possibleDuplicateOf ? (
-                              <Badge variant="warning" className="ml-2">{t('possibleDuplicateBadge')}</Badge>
+                              <Badge variant="warning" className="ml-2">
+                                {t("possibleDuplicateBadge")}
+                              </Badge>
                             ) : null}
                           </SharedTableCell>
-                          <SharedTableCell className="px-3 py-1.5 text-slate-500 dark:text-slate-400">{l.counterpartyRef ?? ''}</SharedTableCell>
-                          <SharedTableCell className="px-3 py-1.5 text-right tabular-nums">{money(l.amount)}</SharedTableCell>
+                          <SharedTableCell className="px-3 py-1.5 text-slate-500 dark:text-slate-400">
+                            {l.counterpartyRef ?? ""}
+                          </SharedTableCell>
+                          <SharedTableCell className="px-3 py-1.5 text-right tabular-nums">
+                            {money(l.amount)}
+                          </SharedTableCell>
                         </SharedTableRow>
                       ))}
                     </SharedTableBody>
                   </SharedTable>
                   {visiblePreview.lines.length > PREVIEW_CAP ? (
                     <div className="border-t border-slate-200 px-3 py-1.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                      {t('moreLines', { count: visiblePreview.lines.length - PREVIEW_CAP })}
+                      {t("moreLines", { count: visiblePreview.lines.length - PREVIEW_CAP })}
                       <Badge variant="secondary" className="ml-2">
-                        {t('totalBadge', { count: visiblePreview.lines.length })}
+                        {t("totalBadge", { count: visiblePreview.lines.length })}
                       </Badge>
                     </div>
                   ) : null}
@@ -940,9 +1057,11 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               {visiblePreview.possibleDuplicateLines.length > 0 ? (
                 <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-800/60 dark:bg-amber-950/30">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="warning">{t('possibleDuplicateBadge')}</Badge>
+                    <Badge variant="warning">{t("possibleDuplicateBadge")}</Badge>
                     <p className="text-sm text-slate-700 dark:text-slate-300">
-                      {t('possibleDuplicatesNotice', { count: visiblePreview.possibleDuplicateLines.length })}
+                      {t("possibleDuplicatesNotice", {
+                        count: visiblePreview.possibleDuplicateLines.length,
+                      })}
                     </p>
                   </div>
                   <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
@@ -952,20 +1071,26 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                       checked={visiblePreview.includePossibleDuplicates}
                       disabled={busy || previewStale}
                       onChange={(event) => {
-                        const next = event.target.checked
-                        setIncludePossibleDuplicates(next)
-                        void runPreview(next)
+                        const next = event.target.checked;
+                        setIncludePossibleDuplicates(next);
+                        void runPreview(next);
                       }}
                     />
-                    {t('includePossibleDuplicates', { count: visiblePreview.possibleDuplicateLines.length })}
+                    {t("includePossibleDuplicates", {
+                      count: visiblePreview.possibleDuplicateLines.length,
+                    })}
                   </label>
                   <ul className="divide-y divide-amber-200/70 text-sm dark:divide-amber-900/60">
                     {visiblePreview.possibleDuplicateLines.slice(0, PREVIEW_CAP).map((l, i) => (
                       <li key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5">
                         <span className="whitespace-nowrap tabular-nums">{l.postedOn}</span>
-                        <span className="min-w-0 flex-1 truncate">{l.description ?? '—'}</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">{t('possibleDuplicateMatch')}</span>
-                        <span className="whitespace-nowrap text-right tabular-nums">{money(l.amount)}</span>
+                        <span className="min-w-0 flex-1 truncate">{l.description ?? "—"}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          {t("possibleDuplicateMatch")}
+                        </span>
+                        <span className="whitespace-nowrap text-right tabular-nums">
+                          {money(l.amount)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -976,7 +1101,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         </div>
       </Drawer>
     </>
-  )
+  );
 }
 
 /**
@@ -990,22 +1115,22 @@ export function statementClosingMismatch(
   linesTotal: string | null,
   accountType: string | null,
 ): { opening: string; lines: string; expected: string; closing: string } | null {
-  if (linesTotal === null || opening.trim() === '' || closing.trim() === '') return null
-  let openingUnits: bigint, closingUnits: bigint, linesUnits: bigint
+  if (linesTotal === null || opening.trim() === "" || closing.trim() === "") return null;
+  let openingUnits: bigint, closingUnits: bigint, linesUnits: bigint;
   try {
-    openingUnits = toUnits(opening)
-    closingUnits = toUnits(closing)
-    linesUnits = toUnits(linesTotal)
+    openingUnits = toUnits(opening);
+    closingUnits = toUnits(closing);
+    linesUnits = toUnits(linesTotal);
   } catch {
-    return null
+    return null;
   }
-  const movement = closingUnits - openingUnits
-  if (movement === linesUnits) return null
-  if (accountType?.startsWith('liability') && movement === -linesUnits) return null
+  const movement = closingUnits - openingUnits;
+  if (movement === linesUnits) return null;
+  if (accountType?.startsWith("liability") && movement === -linesUnits) return null;
   return {
     opening: editableMoneyDecimal(fromUnits(openingUnits)),
     lines: editableMoneyDecimal(fromUnits(linesUnits)),
     expected: editableMoneyDecimal(fromUnits(openingUnits + linesUnits)),
     closing: editableMoneyDecimal(fromUnits(closingUnits)),
-  }
+  };
 }

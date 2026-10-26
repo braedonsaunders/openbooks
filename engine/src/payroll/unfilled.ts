@@ -24,11 +24,14 @@ export const UNFILLED = "__FILL_IN__";
 export function unfilledPaths(value: unknown, path = ""): string[] {
   if (value === UNFILLED) return [path || "(root)"];
   if (Array.isArray(value)) {
-    return value.flatMap((entry, index) => unfilledPaths(entry, path ? `${path}.${index}` : String(index)));
+    return value.flatMap((entry, index) =>
+      unfilledPaths(entry, path ? `${path}.${index}` : String(index)),
+    );
   }
   if (value && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
-      .flatMap(([key, entry]) => unfilledPaths(entry, path ? `${path}.${key}` : key));
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) =>
+      unfilledPaths(entry, path ? `${path}.${key}` : key),
+    );
   }
   return [];
 }

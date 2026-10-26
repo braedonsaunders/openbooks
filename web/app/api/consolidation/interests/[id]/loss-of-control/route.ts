@@ -1,5 +1,5 @@
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
@@ -56,59 +56,42 @@ const lossOfControlSchema = z.object({
     .max(100),
 });
 export const GET = defineRoute({
-  permission: 'close.run',
-  feature: 'multiSubsidiary',
+  permission: "close.run",
+  feature: "multiSubsidiary",
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { id } = await params;
     if (!isUuid(id))
-        return NextResponse.json(
-          { error: "invalid ownership interest" },
-          { status: 422 },
-        );
+      return NextResponse.json({ error: "invalid ownership interest" }, { status: 422 });
     const orgId = gate.user.orgId;
     try {
-        return NextResponse.json(
-          await loadLossOfControlProposalData(
-            db,
-            orgId,
-            id,
-            gate.allowedSubsidiaryIds,
-          ),
-        );
-      } catch (e) {
-        if (e instanceof LossOfControlProposalError)
-          return apiErrorResponse(e);
-        throw e;
-      }
+      return NextResponse.json(
+        await loadLossOfControlProposalData(db, orgId, id, gate.allowedSubsidiaryIds),
+      );
+    } catch (e) {
+      if (e instanceof LossOfControlProposalError) return apiErrorResponse(e);
+      throw e;
+    }
   },
 });
 export const POST = defineRoute({
-  permission: 'close.run',
-  feature: 'multiSubsidiary',
+  permission: "close.run",
+  feature: "multiSubsidiary",
   handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { id } = await params;
     if (!isUuid(id))
-        return NextResponse.json(
-          { error: "invalid ownership interest" },
-          { status: 422 },
-        );
+      return NextResponse.json({ error: "invalid ownership interest" }, { status: 422 });
     const body = await parseJsonBody(req, lossOfControlSchema, { status: 422 });
     if (!body.ok) return body.response;
     try {
-        return NextResponse.json({
-          changeId: await proposeLossOfControl(
-            gate.user.orgId,
-            id,
-            gate.user.id,
-            body.data,
-          ),
-        });
-      } catch (e) {
-        return apiErrorResponse(e);
-      }
+      return NextResponse.json({
+        changeId: await proposeLossOfControl(gate.user.orgId, id, gate.user.id, body.data),
+      });
+    } catch (e) {
+      return apiErrorResponse(e);
+    }
   },
 });

@@ -38,10 +38,12 @@ export async function committedFrPlafondYearToDate(input: {
   const employmentFilter = input.employmentId
     ? sql`and s.employment_id = ${input.employmentId}::uuid`
     : sql``;
-  const row = (await input.tx.execute<{
-    remuneration: string | null;
-    stubs: number | null;
-  }>(sql`
+  const row = (
+    await input.tx.execute<{
+      remuneration: string | null;
+      stubs: number | null;
+    }>(
+      sql`
     select round(coalesce(sum(s.gross), 0), 4)::numeric(24, 4)::text as remuneration,
            count(*)::int as stubs
       from pay_stubs s
@@ -57,7 +59,10 @@ export async function committedFrPlafondYearToDate(input: {
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and d.subsidiary_id = ${input.subsidiaryId}::uuid
        ${employmentFilter}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return {
     ytdGross: typeof row?.remuneration === "string" ? row.remuneration : "0",
     priorStubCount: typeof row?.stubs === "number" ? row.stubs : 0,
@@ -83,9 +88,9 @@ export function frCeilingThirtieths(input: {
   const hiredOn = input.hiredOn ? String(input.hiredOn).slice(0, 10) : "";
   if (hiredOn === "") {
     throw new PayrollPackError(
-      "FR plafond refuses: the employee's hire date is not recorded, and the monthly social-security "
-      + "ceiling accrues only from the month of hire (Urssaf régularisation progressive du plafond). "
-      + "Record the hire date on the employee record before calculating.",
+      "FR plafond refuses: the employee's hire date is not recorded, and the monthly social-security " +
+        "ceiling accrues only from the month of hire (Urssaf régularisation progressive du plafond). " +
+        "Record the hire date on the employee record before calculating.",
     );
   }
   parseIsoDate(hiredOn);
@@ -93,7 +98,9 @@ export function frCeilingThirtieths(input: {
   if (terminatedOn !== "") parseIsoDate(terminatedOn);
   const payMonth = Number(input.payDate.slice(5, 7));
   if (input.payDate.slice(0, 4) !== String(input.taxYear) || payMonth < 1 || payMonth > 12) {
-    throw new PayrollPackError(`FR plafond needs a ${input.taxYear} pay date, got "${input.payDate}"`);
+    throw new PayrollPackError(
+      `FR plafond needs a ${input.taxYear} pay date, got "${input.payDate}"`,
+    );
   }
   const monthThirtieths = (month: number): number => {
     const first = civilDateFromParts(input.taxYear, month, 1);
@@ -109,9 +116,9 @@ export function frCeilingThirtieths(input: {
   const through = before + monthThirtieths(payMonth);
   if (through === 0) {
     throw new PayrollPackError(
-      `FR plafond refuses: the employee is not employed on or before ${input.payDate} this year `
-      + `(hired ${hiredOn}${terminatedOn !== "" ? `, left ${terminatedOn}` : ""}). Correct the hire `
-      + "date on the employee record, or pay the employee in a run dated within the employment.",
+      `FR plafond refuses: the employee is not employed on or before ${input.payDate} this year ` +
+        `(hired ${hiredOn}${terminatedOn !== "" ? `, left ${terminatedOn}` : ""}). Correct the hire ` +
+        "date on the employee record, or pay the employee in a run dated within the employment.",
     );
   }
   return { before, through };

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config";
 
 // Behaviour contract for the compensation page (/me/compensation). The
 // spec builder runs over hand-built data: a refused read renders its
@@ -28,20 +28,29 @@ function baseData(): Record<string, unknown> {
 
 test("a refused compensation read renders the remedy", () => {
   const data = baseData();
-  data.refusal = { title: "No compensation", message: "ask an administrator for a linked employment" };
+  data.refusal = {
+    title: "No compensation",
+    message: "ask an administrator for a linked employment",
+  };
   const json = specJson(data);
-  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes('"empty-state"'), "the refusal renders through the empty-state block");
   assert.ok(json.includes("No compensation"), "the refusal title reaches the page");
-  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
+  assert.ok(
+    json.includes("ask an administrator for a linked employment"),
+    "the refusal remedy reaches the page",
+  );
 });
 
 test("the empty state carries its next step with content gated on its resolver", () => {
   const json = specJson(baseData());
   assert.ok(json.includes("No compensation on file"), "the empty state names the situation");
   assert.ok(json.includes("Ask HR to place you in a band"), "the empty state names the next step");
-  assert.ok(json.includes("\"hasContent\""), "the placement panel gates on the content resolver");
-  assert.ok(json.includes("\"hrm-placement-summary\""), "the placement widget renders");
-  assert.ok(json.includes("\"hrm-pay-info-request\""), "the pay-information request renders as the next step");
+  assert.ok(json.includes('"hasContent"'), "the placement panel gates on the content resolver");
+  assert.ok(json.includes('"hrm-placement-summary"'), "the placement widget renders");
+  assert.ok(
+    json.includes('"hrm-pay-info-request"'),
+    "the pay-information request renders as the next step",
+  );
 });
 
 // The no-link refusal is one remedy shared with the engine: the catalog
@@ -61,35 +70,61 @@ function catalogAt(catalog: Record<string, unknown>, path: string): unknown {
 }
 
 test("every locale carries the empty and refusal copy translated", () => {
-  const en = JSON.parse(readFileSync(new URL("../../../../../web/messages/en/hrm.json", import.meta.url), "utf8")) as Record<string, unknown>;
+  const en = JSON.parse(
+    readFileSync(new URL("../../../../../web/messages/en/hrm.json", import.meta.url), "utf8"),
+  ) as Record<string, unknown>;
   for (const locale of LOCALES) {
     const catalog = JSON.parse(
-      readFileSync(new URL(`../../../../../web/messages/${locale}/hrm.json`, import.meta.url), "utf8"),
+      readFileSync(
+        new URL(`../../../../../web/messages/${locale}/hrm.json`, import.meta.url),
+        "utf8",
+      ),
     ) as Record<string, unknown>;
     for (const key of REFUSAL_KEYS) {
       const value = catalogAt(catalog, key);
-      assert.equal(typeof value, "string", `${locale} hrm.json lacks "${key}" — /me/compensation renders the key path`);
-      assert.ok((value as string).trim().length > 0, `${locale} hrm.json "${key}" is blank — /me/compensation renders nothing`);
+      assert.equal(
+        typeof value,
+        "string",
+        `${locale} hrm.json lacks "${key}" — /me/compensation renders the key path`,
+      );
+      assert.ok(
+        (value as string).trim().length > 0,
+        `${locale} hrm.json "${key}" is blank — /me/compensation renders nothing`,
+      );
       if (locale !== "en") {
-        assert.notEqual(value, catalogAt(en, key), `${locale} hrm.json "${key}" copies English — translate it`);
+        assert.notEqual(
+          value,
+          catalogAt(en, key),
+          `${locale} hrm.json "${key}" copies English — translate it`,
+        );
       }
     }
   }
 });
 
 test("the English no-link remedy matches the engine refusal word for word", async () => {
-  const { actorPartyOf, SelfServiceError } = await import("@openbooks/engine/hrm/self-service/actor");
+  const { actorPartyOf, SelfServiceError } =
+    await import("@openbooks/engine/hrm/self-service/actor");
   type Executor = Pick<import("@openbooks/engine/platform/db").SqlExecutor, "execute">;
   const exec = {
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] as { partyId: string | null }[] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: [] as { partyId: string | null }[] }).then(
+        <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+      ),
   } as unknown as Executor;
   const thrown: unknown = await actorPartyOf(exec, "org-1", "user-1").then(
     () => null,
     (error: unknown) => error,
   );
   assert.ok(thrown instanceof SelfServiceError, "an unlinked login must throw SelfServiceError");
-  assert.equal((thrown as { code: string }).code, "NO_LINK", "the refusal carries the NO_LINK code");
-  const en = JSON.parse(readFileSync(new URL("../../../../../web/messages/en/hrm.json", import.meta.url), "utf8")) as Record<string, unknown>;
+  assert.equal(
+    (thrown as { code: string }).code,
+    "NO_LINK",
+    "the refusal carries the NO_LINK code",
+  );
+  const en = JSON.parse(
+    readFileSync(new URL("../../../../../web/messages/en/hrm.json", import.meta.url), "utf8"),
+  ) as Record<string, unknown>;
   assert.equal(
     catalogAt(en, "myComp.notLinked"),
     (thrown as Error).message,

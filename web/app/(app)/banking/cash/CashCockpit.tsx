@@ -1,11 +1,16 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMoney } from '@/components/money-provider'
-import Link from 'next/link'
-import { useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
+import {
+  Table as SharedTable,
+  TableBody as SharedTableBody,
+  TableRow as SharedTableRow,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Landmark,
   Wallet,
@@ -20,30 +25,30 @@ import {
   CalendarRange,
   Building2,
   SlidersHorizontal,
-} from 'lucide-react'
-import { Button, cn } from '@openbooks/ui'
-import { cmp as compareMoney } from '@openbooks/engine/money/money'
-import type { PageLayoutPrefs } from '@openbooks/schema'
-import type { CashPosition } from '../../../../lib/cash/cash-position'
-import { CASH_HORIZON_PRESETS } from '../../../../lib/cash/horizon'
-import { LayoutMenu } from '../../../../components/page-layout/LayoutMenu'
-import { LayoutSaveStatus } from '../../../../components/page-layout/LayoutSaveStatus'
-import { usePageLayout } from '../../../../components/page-layout/use-page-layout'
-import { StatTile, CockpitPanel } from '../../../../components/cockpit/ui'
-import { CashTimeline } from '../../analytics/_ui/CashTimeline'
-import { Chart, cashBridgeOption, cashForecastOption } from '../../analytics/_ui/charts'
-import { formatExactRatio } from '../../analytics/_ui/format'
-import { Vital } from '../../analytics/_ui/Vital'
-import { CashForecastConfigDrawer } from './CashForecastConfigDrawer'
+} from "lucide-react";
+import { Button, cn } from "@openbooks/ui";
+import { cmp as compareMoney } from "@openbooks/engine/money/money";
+import type { PageLayoutPrefs } from "@openbooks/schema";
+import type { CashPosition } from "../../../../lib/cash/cash-position";
+import { CASH_HORIZON_PRESETS } from "../../../../lib/cash/horizon";
+import { LayoutMenu } from "../../../../components/page-layout/LayoutMenu";
+import { LayoutSaveStatus } from "../../../../components/page-layout/LayoutSaveStatus";
+import { usePageLayout } from "../../../../components/page-layout/use-page-layout";
+import { StatTile, CockpitPanel } from "../../../../components/cockpit/ui";
+import { CashTimeline } from "../../analytics/_ui/CashTimeline";
+import { Chart, cashBridgeOption, cashForecastOption } from "../../analytics/_ui/charts";
+import { formatExactRatio } from "../../analytics/_ui/format";
+import { Vital } from "../../analytics/_ui/Vital";
+import { CashForecastConfigDrawer } from "./CashForecastConfigDrawer";
 
-const HORIZONS = CASH_HORIZON_PRESETS
+const HORIZONS = CASH_HORIZON_PRESETS;
 
 /** Orderable panels; the FIRST visible one renders as the hero (⅔ width). */
-const PANEL_KEYS = ['timeline', 'forecast', 'bridge', 'health', 'accounts'] as const
-type PanelKey = (typeof PANEL_KEYS)[number]
+const PANEL_KEYS = ["timeline", "forecast", "bridge", "health", "accounts"] as const;
+type PanelKey = (typeof PANEL_KEYS)[number];
 /** Toggle-only pseudo-panel: the StatTile vitals strip. */
-const STATS_KEY = 'stats'
-const PAGE_KEY = 'banking-cash'
+const STATS_KEY = "stats";
+const PAGE_KEY = "banking-cash";
 
 /**
  * Cash control center — whole-company liquidity. The panel set is per-user
@@ -61,82 +66,120 @@ export function CashCockpit({
   canPayRun,
   canCollectionRun,
 }: {
-  data: CashPosition
-  selectedSubsidiaryIds?: string[]
-  layoutPrefs: PageLayoutPrefs
-  canConfigure: boolean
-  canPayRun: boolean
-  canCollectionRun: boolean
+  data: CashPosition;
+  selectedSubsidiaryIds?: string[];
+  layoutPrefs: PageLayoutPrefs;
+  canConfigure: boolean;
+  canPayRun: boolean;
+  canCollectionRun: boolean;
 }) {
-  const { money, moneyCompact } = useMoney()
-  const t = useTranslations('banking.cash')
-  const tCharts = useTranslations('analytics.charts')
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [showConfig, setShowConfig] = useState(false)
+  const { money, moneyCompact } = useMoney();
+  const t = useTranslations("banking.cash");
+  const tCharts = useTranslations("analytics.charts");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [showConfig, setShowConfig] = useState(false);
   const pushHorizon = (h: number) => {
     // Merge into the current query so the subsidiary view (?sub=) survives.
-    const next = new URLSearchParams(searchParams?.toString())
-    next.set('horizon', String(h))
-    router.push(`/banking/cash?${next.toString()}` as never)
-  }
+    const next = new URLSearchParams(searchParams?.toString());
+    next.set("horizon", String(h));
+    router.push(`/banking/cash?${next.toString()}` as never);
+  };
 
   // -- per-user layout (shared kit) -----------------------------------------
-  const layout = usePageLayout(PAGE_KEY, layoutPrefs, PANEL_KEYS)
-  const { hidden, toggle, move, reset } = layout
-  const order = layout.order as PanelKey[]
-  const visible = layout.visible as PanelKey[]
-  const heroKey = visible[0]
-  const railKeys = visible.slice(1)
-  const statsHidden = hidden.has(STATS_KEY)
+  const layout = usePageLayout(PAGE_KEY, layoutPrefs, PANEL_KEYS);
+  const { hidden, toggle, move, reset } = layout;
+  const order = layout.order as PanelKey[];
+  const visible = layout.visible as PanelKey[];
+  const heroKey = visible[0];
+  const railKeys = visible.slice(1);
+  const statsHidden = hidden.has(STATS_KEY);
 
-  const locale = useLocale()
-  const lowestDate = new Date(data.lowestWeek + 'T00:00:00Z').toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' })
-  const scheduling = compareMoney(data.apSettings.weeklyCap, '0.0000') > 0 || data.apSettings.restrictToSafe
-  const runwayTone = data.runwayStatus === 'critical' ? 'negative' : data.runwayStatus === 'caution' ? 'warning' : 'positive'
-  const bridgeLabels = useMemo(() => ({
-    start: tCharts('bridge.start'),
-    inflows: tCharts('bridge.inflows'),
-    outflows: tCharts('bridge.outflows'),
-    projectedEnd: tCharts('bridge.projectedEnd'),
-  }), [tCharts])
-  const forecastLabels = useMemo(() => ({
-    endingCash: tCharts('weekly.endingCash'),
-    lowest: tCharts('weekly.lowest'),
-    in: tCharts('weekly.in'),
-    out: tCharts('weekly.out'),
-    net: tCharts('weekly.net'),
-    ending: tCharts('weekly.ending'),
-  }), [tCharts])
+  const locale = useLocale();
+  const lowestDate = new Date(data.lowestWeek + "T00:00:00Z").toLocaleDateString(locale, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const scheduling =
+    compareMoney(data.apSettings.weeklyCap, "0.0000") > 0 || data.apSettings.restrictToSafe;
+  const runwayTone =
+    data.runwayStatus === "critical"
+      ? "negative"
+      : data.runwayStatus === "caution"
+        ? "warning"
+        : "positive";
+  const bridgeLabels = useMemo(
+    () => ({
+      start: tCharts("bridge.start"),
+      inflows: tCharts("bridge.inflows"),
+      outflows: tCharts("bridge.outflows"),
+      projectedEnd: tCharts("bridge.projectedEnd"),
+    }),
+    [tCharts],
+  );
+  const forecastLabels = useMemo(
+    () => ({
+      endingCash: tCharts("weekly.endingCash"),
+      lowest: tCharts("weekly.lowest"),
+      in: tCharts("weekly.in"),
+      out: tCharts("weekly.out"),
+      net: tCharts("weekly.net"),
+      ending: tCharts("weekly.ending"),
+    }),
+    [tCharts],
+  );
   const bridge = useMemo(
-    () => cashBridgeOption(data.startingCash, data.totalInflows, data.totalOutflows, data.projectedEnd, moneyCompact, bridgeLabels),
-    [data.startingCash, data.totalInflows, data.totalOutflows, data.projectedEnd, moneyCompact, bridgeLabels],
-  )
-  const forecast = useMemo(() => cashForecastOption(data.weeks, moneyCompact, forecastLabels), [data.weeks, moneyCompact, forecastLabels])
+    () =>
+      cashBridgeOption(
+        data.startingCash,
+        data.totalInflows,
+        data.totalOutflows,
+        data.projectedEnd,
+        moneyCompact,
+        bridgeLabels,
+      ),
+    [
+      data.startingCash,
+      data.totalInflows,
+      data.totalOutflows,
+      data.projectedEnd,
+      moneyCompact,
+      bridgeLabels,
+    ],
+  );
+  const forecast = useMemo(
+    () => cashForecastOption(data.weeks, moneyCompact, forecastLabels),
+    [data.weeks, moneyCompact, forecastLabels],
+  );
 
   // Distinct menu labels — the timeline table and forecast chart share a
   // panel title on the page, which would be ambiguous in the layout list.
   const panelLabel = (key: string) =>
-    key === STATS_KEY || key === 'health' || key === 'timeline' || key === 'forecast'
+    key === STATS_KEY || key === "health" || key === "timeline" || key === "forecast"
       ? t(`layout.${key}`)
-      : t(`panels.${key}`)
+      : t(`panels.${key}`);
 
   // -- panel renderers (hero = ⅔ zone at full height, rail = stacked) -------
   const renderPanel = (key: PanelKey, hero: boolean) => {
-    const chartHeight = hero ? 320 : 180
-    const panelCls = hero ? 'min-h-[24rem] lg:col-span-2' : 'shrink-0'
+    const chartHeight = hero ? 320 : 180;
+    const panelCls = hero ? "min-h-[24rem] lg:col-span-2" : "shrink-0";
     switch (key) {
-      case 'timeline':
+      case "timeline":
         return (
           <CockpitPanel
             key={key}
-            title={t('panels.timeline')}
+            title={t("panels.timeline")}
             icon={CalendarRange}
-            hint={scheduling ? t('panels.timelineHintScheduled') : t('panels.timelineHint', { weeks: data.horizonWeeks })}
-            bodyClassName={hero ? 'min-h-0 overflow-hidden p-0' : 'p-0'}
+            hint={
+              scheduling
+                ? t("panels.timelineHintScheduled")
+                : t("panels.timelineHint", { weeks: data.horizonWeeks })
+            }
+            bodyClassName={hero ? "min-h-0 overflow-hidden p-0" : "p-0"}
             className={panelCls}
           >
-            <div className={hero ? 'h-full overflow-y-auto' : 'max-h-80 overflow-y-auto'}>
+            <div className={hero ? "h-full overflow-y-auto" : "max-h-80 overflow-y-auto"}>
               <CashTimeline
                 weeks={data.weeks}
                 selectedSubsidiaryIds={selectedSubsidiaryIds}
@@ -150,65 +193,131 @@ export function CashCockpit({
               />
             </div>
           </CockpitPanel>
-        )
-      case 'forecast':
+        );
+      case "forecast":
         return (
-          <CockpitPanel key={key} title={t('panels.forecast')} icon={AreaChart} hint={t('panels.forecastHint')} className={panelCls}>
+          <CockpitPanel
+            key={key}
+            title={t("panels.forecast")}
+            icon={AreaChart}
+            hint={t("panels.forecastHint")}
+            className={panelCls}
+          >
             <Chart option={forecast} height={chartHeight} />
           </CockpitPanel>
-        )
-      case 'bridge':
+        );
+      case "bridge":
         return (
-          <CockpitPanel key={key} title={t('panels.bridge')} icon={Waypoints} className={panelCls}>
+          <CockpitPanel key={key} title={t("panels.bridge")} icon={Waypoints} className={panelCls}>
             <Chart option={bridge} height={chartHeight} />
           </CockpitPanel>
-        )
-      case 'health':
+        );
+      case "health":
         return (
-          <div key={key} className={cn('grid grid-cols-1 gap-3', hero ? 'content-start lg:col-span-2' : 'shrink-0')}>
-            <Vital icon={Flame} ring="from-violet-500 to-fuchsia-500" label={t('vitals.burnRate')} value={moneyCompact(data.burnRate)} hint={t('vitals.burnRateHint')} badge={t('vitals.weekly')} />
-            <Vital icon={ShieldCheck} ring="from-sky-500 to-blue-500" label={t('vitals.arCoverage')} value={data.arCoverage === null ? '—' : `${formatExactRatio(data.arCoverage)}×`} hint={t('vitals.arCoverageHint')} />
-            <Vital icon={RefreshCw} ring="from-teal-500 to-emerald-500" label={t('vitals.cashCycle')} value={`${data.dso ?? t('vitals.noHistory')} / ${data.dpo ?? t('vitals.noHistory')}`} hint={t('vitals.cashCycleHint')} split />
+          <div
+            key={key}
+            className={cn(
+              "grid grid-cols-1 gap-3",
+              hero ? "content-start lg:col-span-2" : "shrink-0",
+            )}
+          >
+            <Vital
+              icon={Flame}
+              ring="from-violet-500 to-fuchsia-500"
+              label={t("vitals.burnRate")}
+              value={moneyCompact(data.burnRate)}
+              hint={t("vitals.burnRateHint")}
+              badge={t("vitals.weekly")}
+            />
+            <Vital
+              icon={ShieldCheck}
+              ring="from-sky-500 to-blue-500"
+              label={t("vitals.arCoverage")}
+              value={data.arCoverage === null ? "—" : `${formatExactRatio(data.arCoverage)}×`}
+              hint={t("vitals.arCoverageHint")}
+            />
+            <Vital
+              icon={RefreshCw}
+              ring="from-teal-500 to-emerald-500"
+              label={t("vitals.cashCycle")}
+              value={`${data.dso ?? t("vitals.noHistory")} / ${data.dpo ?? t("vitals.noHistory")}`}
+              hint={t("vitals.cashCycleHint")}
+              split
+            />
           </div>
-        )
-      case 'accounts':
+        );
+      case "accounts":
         return (
-          <CockpitPanel key={key} title={t('panels.accounts')} icon={Building2} bodyClassName="p-0" className={panelCls}>
+          <CockpitPanel
+            key={key}
+            title={t("panels.accounts")}
+            icon={Building2}
+            bodyClassName="p-0"
+            className={panelCls}
+          >
             {data.bankAccounts.length === 0 ? (
               <div className="px-4 py-10 text-center">
-                <p className="text-sm text-slate-400 dark:text-slate-500">{t('noAccounts')}</p>
+                <p className="text-sm text-slate-400 dark:text-slate-500">{t("noAccounts")}</p>
                 <Link
                   href="/banking"
                   className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-teal-700 hover:bg-slate-50 dark:border-slate-700 dark:text-teal-300 dark:hover:bg-slate-800"
                 >
-                  {t('noAccountsAction')}
+                  {t("noAccountsAction")}
                 </Link>
               </div>
             ) : (
               <SharedTable className="w-full text-sm">
                 <SharedTableBody>
                   {data.bankAccounts.map((b) => (
-                    <SharedTableRow key={b.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                    <SharedTableRow
+                      key={b.id}
+                      className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                    >
                       <SharedTableCell className="px-4 py-2.5">
-                        <Link href={(`/banking/${b.id}`)} className="font-medium text-slate-700 hover:text-teal-700 dark:text-slate-300 dark:hover:text-teal-300">
+                        <Link
+                          href={`/banking/${b.id}`}
+                          className="font-medium text-slate-700 hover:text-teal-700 dark:text-slate-300 dark:hover:text-teal-300"
+                        >
                           {b.name}
                         </Link>
-                        {b.number ? <span className="ml-2 text-xs text-slate-400">{b.number}</span> : null}
+                        {b.number ? (
+                          <span className="ml-2 text-xs text-slate-400">{b.number}</span>
+                        ) : null}
                       </SharedTableCell>
-                      <SharedTableCell className={cn('px-4 py-2.5 text-right font-medium tabular-nums', compareMoney(b.balance, '0.0000') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(b.balance)}</SharedTableCell>
+                      <SharedTableCell
+                        className={cn(
+                          "px-4 py-2.5 text-right font-medium tabular-nums",
+                          compareMoney(b.balance, "0.0000") < 0
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-slate-800 dark:text-slate-200",
+                        )}
+                      >
+                        {money(b.balance)}
+                      </SharedTableCell>
                     </SharedTableRow>
                   ))}
                   <SharedTableRow className="border-t border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/30">
-                    <SharedTableCell className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-100">{t('totalCash')}</SharedTableCell>
-                    <SharedTableCell className={cn('px-4 py-2.5 text-right font-bold tabular-nums', compareMoney(data.startingCash, '0.0000') < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-slate-100')}>{money(data.startingCash)}</SharedTableCell>
+                    <SharedTableCell className="px-4 py-2.5 font-semibold text-slate-800 dark:text-slate-100">
+                      {t("totalCash")}
+                    </SharedTableCell>
+                    <SharedTableCell
+                      className={cn(
+                        "px-4 py-2.5 text-right font-bold tabular-nums",
+                        compareMoney(data.startingCash, "0.0000") < 0
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-slate-900 dark:text-slate-100",
+                      )}
+                    >
+                      {money(data.startingCash)}
+                    </SharedTableCell>
                   </SharedTableRow>
                 </SharedTableBody>
               </SharedTable>
             )}
           </CockpitPanel>
-        )
+        );
     }
-  }
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -220,20 +329,34 @@ export function CashCockpit({
               key={h}
               type="button"
               onClick={() => pushHorizon(h)}
-              className={cn('rounded-md px-3 py-1 text-sm font-medium transition-colors', h === data.horizonWeeks ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100')}
+              className={cn(
+                "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                h === data.horizonWeeks
+                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100",
+              )}
             >
-              {t('weeks', { n: h })}
+              {t("weeks", { n: h })}
             </button>
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <LayoutSaveStatus saveState={layout.saveState} saveError={layout.saveError} onRetry={layout.retry} />
+          <LayoutSaveStatus
+            saveState={layout.saveState}
+            saveError={layout.saveError}
+            onRetry={layout.retry}
+          />
           <LayoutMenu
-            title={t('layout.title')}
-            triggerLabel={t('layout.customize')}
-            resetLabel={t('layout.reset')}
+            title={t("layout.title")}
+            triggerLabel={t("layout.customize")}
+            resetLabel={t("layout.reset")}
             rows={[
-              { key: STATS_KEY, label: panelLabel(STATS_KEY), hidden: statsHidden, orderable: false },
+              {
+                key: STATS_KEY,
+                label: panelLabel(STATS_KEY),
+                hidden: statsHidden,
+                orderable: false,
+              },
               ...order.map((key) => ({ key, label: panelLabel(key), hidden: hidden.has(key) })),
             ]}
             onToggle={toggle}
@@ -243,7 +366,7 @@ export function CashCockpit({
           {canConfigure ? (
             <Button variant="outline" size="sm" onClick={() => setShowConfig(true)}>
               <SlidersHorizontal size={14} />
-              {t('configure')}
+              {t("configure")}
             </Button>
           ) : null}
         </div>
@@ -252,30 +375,83 @@ export function CashCockpit({
       {/* Vitals */}
       {!statsHidden ? (
         <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <StatTile icon={Landmark} accent="indigo" label={t('stats.currentCash')} value={moneyCompact(data.startingCash)} tone={compareMoney(data.startingCash, '0.0000') < 0 ? 'negative' : 'neutral'} />
-          <StatTile icon={Wallet} accent="sky" label={t('stats.projectedEnd')} value={moneyCompact(data.projectedEnd)} sub={t('stats.netSub', { amount: moneyCompact(data.netChange) })} tone={compareMoney(data.netChange, '0.0000') >= 0 ? 'positive' : 'negative'} />
-          <StatTile icon={Route} accent="violet" label={t('stats.runway')} value={data.runwayWeeks === null ? '∞' : t('weeks', { n: formatExactRatio(data.runwayWeeks, 1) })} sub={t(`status.${data.runwayStatus}`)} tone={runwayTone} />
-          <StatTile icon={TriangleAlert} accent={compareMoney(data.lowestCash, '0.0000') < 0 ? 'red' : 'amber'} label={t('stats.lowest')} value={moneyCompact(data.lowestCash)} sub={t('stats.lowestSub', { date: lowestDate })} tone={compareMoney(data.lowestCash, '0.0000') < 0 ? 'negative' : 'neutral'} />
-          <StatTile icon={ArrowLeftRight} accent={compareMoney(data.netChange, '0.0000') >= 0 ? 'emerald' : 'red'} label={t('stats.netFlow')} value={moneyCompact(data.netChange)} tone={compareMoney(data.netChange, '0.0000') >= 0 ? 'positive' : 'negative'} />
+          <StatTile
+            icon={Landmark}
+            accent="indigo"
+            label={t("stats.currentCash")}
+            value={moneyCompact(data.startingCash)}
+            tone={compareMoney(data.startingCash, "0.0000") < 0 ? "negative" : "neutral"}
+          />
+          <StatTile
+            icon={Wallet}
+            accent="sky"
+            label={t("stats.projectedEnd")}
+            value={moneyCompact(data.projectedEnd)}
+            sub={t("stats.netSub", { amount: moneyCompact(data.netChange) })}
+            tone={compareMoney(data.netChange, "0.0000") >= 0 ? "positive" : "negative"}
+          />
+          <StatTile
+            icon={Route}
+            accent="violet"
+            label={t("stats.runway")}
+            value={
+              data.runwayWeeks === null
+                ? "∞"
+                : t("weeks", { n: formatExactRatio(data.runwayWeeks, 1) })
+            }
+            sub={t(`status.${data.runwayStatus}`)}
+            tone={runwayTone}
+          />
+          <StatTile
+            icon={TriangleAlert}
+            accent={compareMoney(data.lowestCash, "0.0000") < 0 ? "red" : "amber"}
+            label={t("stats.lowest")}
+            value={moneyCompact(data.lowestCash)}
+            sub={t("stats.lowestSub", { date: lowestDate })}
+            tone={compareMoney(data.lowestCash, "0.0000") < 0 ? "negative" : "neutral"}
+          />
+          <StatTile
+            icon={ArrowLeftRight}
+            accent={compareMoney(data.netChange, "0.0000") >= 0 ? "emerald" : "red"}
+            label={t("stats.netFlow")}
+            value={moneyCompact(data.netChange)}
+            tone={compareMoney(data.netChange, "0.0000") >= 0 ? "positive" : "negative"}
+          />
         </div>
       ) : null}
 
       {data.unavailableCategories.length > 0 ? (
         <p className="flex shrink-0 items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
           <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-          <span>{t('refusedAlert', { names: data.unavailableCategories.map((r) => r.name).join(', ') })}</span>
+          <span>
+            {t("refusedAlert", { names: data.unavailableCategories.map((r) => r.name).join(", ") })}
+          </span>
         </p>
       ) : null}
 
-      {compareMoney(data.lowestCash, '0.0000') < 0 ? (
+      {compareMoney(data.lowestCash, "0.0000") < 0 ? (
         <p className="flex shrink-0 items-start gap-2 rounded-lg bg-red-50 p-3 text-xs leading-relaxed text-red-800 dark:bg-red-950/30 dark:text-red-300">
           <TriangleAlert size={14} className="mt-0.5 shrink-0" />
           <span>
-            {t.rich('negativeAlert', {
+            {t.rich("negativeAlert", {
               amount: money(data.lowestCash),
               date: lowestDate,
-              ap: (chunks) => <Link href={('/ap')} className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200">{chunks}</Link>,
-              ar: (chunks) => <Link href={('/ar')} className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200">{chunks}</Link>,
+              ap: (chunks) => (
+                <Link
+                  href={"/ap"}
+                  className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200"
+                >
+                  {chunks}
+                </Link>
+              ),
+              ar: (chunks) => (
+                <Link
+                  href={"/ar"}
+                  className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200"
+                >
+                  {chunks}
+                </Link>
+              ),
             })}
           </span>
         </p>
@@ -283,12 +459,16 @@ export function CashCockpit({
 
       {/* first visible panel = hero (⅔, full height) + supporting rail */}
       {visible.length === 0 ? (
-        <p className="flex flex-1 items-center justify-center text-sm text-slate-400 dark:text-slate-500">{t('layout.empty')}</p>
+        <p className="flex flex-1 items-center justify-center text-sm text-slate-400 dark:text-slate-500">
+          {t("layout.empty")}
+        </p>
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3">
           {heroKey ? renderPanel(heroKey, true) : null}
           {railKeys.length > 0 ? (
-            <div className="flex min-h-0 flex-col gap-5 overflow-y-auto">{railKeys.map((k) => renderPanel(k, false))}</div>
+            <div className="flex min-h-0 flex-col gap-5 overflow-y-auto">
+              {railKeys.map((k) => renderPanel(k, false))}
+            </div>
           ) : null}
         </div>
       )}
@@ -296,8 +476,8 @@ export function CashCockpit({
       {showConfig ? (
         <CashForecastConfigDrawer
           onClose={() => setShowConfig(false)}
-          title={t('configTitle')}
-          description={t('configDescription')}
+          title={t("configTitle")}
+          description={t("configDescription")}
           asOf={data.asOf}
           horizonWeeks={data.horizonWeeks}
           dso={data.dso}
@@ -307,9 +487,14 @@ export function CashCockpit({
           vendorOptions={data.vendorOptions}
           accountOptions={data.accountOptions}
           subsidiaryOptions={data.subsidiaryOptions}
-          initialCategories={data.categories.map((c) => ({ id: c.id, name: c.name, direction: c.direction, method: c.method }))}
+          initialCategories={data.categories.map((c) => ({
+            id: c.id,
+            name: c.name,
+            direction: c.direction,
+            method: c.method,
+          }))}
         />
       ) : null}
     </div>
-  )
+  );
 }

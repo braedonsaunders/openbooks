@@ -5,7 +5,11 @@ import test from "node:test";
 
 // Needs a DOM: the propose form is submitted, not just rendered.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/hrm/compensation/cycles/cycle-1", scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/hrm/compensation/cycles/cycle-1",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const React = await import("react");
 // The shared @openbooks/ui Select compiles against a global React.
@@ -16,7 +20,8 @@ const { NextIntlClientProvider } = await import("next-intl");
 // next-intl, so the islands render inside the same provider the app
 // always supplies — backed by the real en catalogs, never stubbed.
 const messages = (await import("../../../../messages/en")).default;
-const { LineDecideButtons, CycleMoveButtons, CompensationSettingsForm, LineProposeForm } = await import("./islands.tsx");
+const { LineDecideButtons, CycleMoveButtons, CompensationSettingsForm, LineProposeForm } =
+  await import("./islands.tsx");
 const { CompLineDrawer } = await import("./sections.tsx");
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
@@ -54,7 +59,11 @@ test("the decide reason is labelled with its own label, never Submit", () => {
       reopenLabel="Reopen"
     />,
   );
-  assert.equal(labelFor(html, "comp-line-decide-reason"), "Decision reason", "the reason textarea carries its own label");
+  assert.equal(
+    labelFor(html, "comp-line-decide-reason"),
+    "Decision reason",
+    "the reason textarea carries its own label",
+  );
   const labels = [...html.matchAll(/<label[^>]*>([^<]*)</g)].map((m) => m[1]);
   assert.ok(labels.length > 0, "the buttons render their labels");
   assert.ok(!labels.includes("Save"), "no control is labelled with the Submit string");
@@ -74,16 +83,33 @@ test("cycle cancel asks for a reason instead of posting English audit copy", () 
       cancelReasonRequired="Cancelling needs a reason"
     />,
   );
-  assert.equal(labelFor(html, "comp-cycle-cancel-reason"), "Cancellation reason", "the cancel reason field is labelled");
-  assert.match(html, /<textarea[^>]*id="comp-cycle-cancel-reason"/, "the reason is an entered field, not a constant");
-  assert.ok(!html.includes("cancelled from the cycle page"), "no hard-coded English audit reason renders");
+  assert.equal(
+    labelFor(html, "comp-cycle-cancel-reason"),
+    "Cancellation reason",
+    "the cancel reason field is labelled",
+  );
+  assert.match(
+    html,
+    /<textarea[^>]*id="comp-cycle-cancel-reason"/,
+    "the reason is an entered field, not a constant",
+  );
+  assert.ok(
+    !html.includes("cancelled from the cycle page"),
+    "no hard-coded English audit reason renders",
+  );
 });
 
 test("the FTE-rounding select shows translated labels, never raw codes", () => {
   const html = renderWithIntl(
     <CompensationSettingsForm
       labels={LABELS}
-      initial={{ comparisonAttributeKey: "", gapThresholdPct: "", responseDays: "", fteRounding: "up_to_whole", burdenRate: "" }}
+      initial={{
+        comparisonAttributeKey: "",
+        gapThresholdPct: "",
+        responseDays: "",
+        fteRounding: "up_to_whole",
+        burdenRate: "",
+      }}
       attributeLabel="Attribute"
       thresholdLabel="Threshold"
       responseDaysLabel="Response days"
@@ -114,7 +140,13 @@ test("compensation settings sends the gap threshold as exact decimal text", asyn
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <CompensationSettingsForm
           labels={LABELS}
-          initial={{ comparisonAttributeKey: "group", gapThresholdPct: "5", responseDays: "10", fteRounding: "up_to_whole", burdenRate: "" }}
+          initial={{
+            comparisonAttributeKey: "group",
+            gapThresholdPct: "5",
+            responseDays: "10",
+            fteRounding: "up_to_whole",
+            burdenRate: "",
+          }}
           attributeLabel="Attribute"
           thresholdLabel="Threshold"
           responseDaysLabel="Response days"
@@ -133,7 +165,9 @@ test("compensation settings sends the gap threshold as exact decimal text", asyn
     input.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
   await act(async () => {
-    host.querySelector("form")!.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+    host
+      .querySelector("form")!
+      .dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
     await tick();
     await tick();
   });
@@ -156,14 +190,30 @@ const posted: { url: string; body: string }[] = [];
 
 function stubFetch(): void {
   posted.length = 0;
-  (globalThis as Record<string, unknown>).fetch = (async (input: unknown, init?: { body?: unknown }) => {
-    if(String(input).startsWith('/api/flows/record-state'))return Response.json({approvalState:{status:'pending',pendingWith:[{name:'Assigned reviewer',since:'2026-07-14T00:00:00.000Z'}],myActions:{gateId:'gate-1',signatureRequired:false},awaitingAnotherApprover:false},history:[],failedRun:null,canRetry:false});
+  (globalThis as Record<string, unknown>).fetch = (async (
+    input: unknown,
+    init?: { body?: unknown },
+  ) => {
+    if (String(input).startsWith("/api/flows/record-state"))
+      return Response.json({
+        approvalState: {
+          status: "pending",
+          pendingWith: [{ name: "Assigned reviewer", since: "2026-07-14T00:00:00.000Z" }],
+          myActions: { gateId: "gate-1", signatureRequired: false },
+          awaitingAnotherApprover: false,
+        },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+      });
     posted.push({ url: String(input), body: String(init?.body ?? "") });
     return Response.json({ id: "line-1" });
   }) as typeof fetch;
 }
 
-async function submitPct(pctValue: string): Promise<{ postedCount: number; body: string; text: string }> {
+async function submitPct(
+  pctValue: string,
+): Promise<{ postedCount: number; body: string; text: string }> {
   stubFetch();
   const host = document.createElement("div");
   document.body.append(host);
@@ -200,7 +250,11 @@ async function submitPct(pctValue: string): Promise<{ postedCount: number; body:
     await tick();
     await tick();
   });
-  const result = { postedCount: posted.length, body: posted[0]?.body ?? "", text: host.textContent ?? "" };
+  const result = {
+    postedCount: posted.length,
+    body: posted[0]?.body ?? "",
+    text: host.textContent ?? "",
+  };
   await act(async () => {
     root.unmount();
   });
@@ -212,7 +266,10 @@ for (const input of ["abc", "-2"]) {
   test(`an unpostable percent (${input}) is refused by name and never posted`, async () => {
     const refused = await submitPct(input);
     assert.equal(refused.postedCount, 0, "bad input never reaches the route");
-    assert.ok(refused.text.includes(PROPOSE_LABELS.pctInvalid), "the named refusal renders beside the form");
+    assert.ok(
+      refused.text.includes(PROPOSE_LABELS.pctInvalid),
+      "the named refusal renders beside the form",
+    );
   });
 }
 
@@ -220,7 +277,11 @@ test("a valid percent posts the canonical decimal string", async () => {
   const sent = await submitPct("3.50");
   assert.equal(sent.postedCount, 1, "one proposal posts");
   const body = JSON.parse(sent.body) as { proposedPct: unknown };
-  assert.equal(body.proposedPct, "3.5", "the wire carries the canonical decimal string, never a float");
+  assert.equal(
+    body.proposedPct,
+    "3.5",
+    "the wire carries the canonical decimal string, never a float",
+  );
   assert.ok(!sent.text.includes(PROPOSE_LABELS.pctInvalid), "no refusal renders for valid input");
 });
 

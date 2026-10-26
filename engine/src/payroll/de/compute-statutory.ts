@@ -45,10 +45,7 @@ import { inclusiveCalendarDays, parseIsoDate } from "../../platform/civil-date.t
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
-import {
-  computePapLaufend2026,
-  dePapSonstigeBezuegeRefusal,
-} from "./pap.ts";
+import { computePapLaufend2026, dePapSonstigeBezuegeRefusal } from "./pap.ts";
 import { DE_2026_CEILINGS, DE_2026_RATES, DE_PACK_RATES } from "./rates.ts";
 
 export class DePayrollRefusal extends PayrollPackError {}
@@ -59,10 +56,12 @@ function deEmployerLevyRefusal(): string | null {
   // and the BG assessment depends on the employer's risk class (SGB VII §150).
   // Until their effective employer-specific bases/rates are carried, refusing
   // the whole run is safer than presenting a partial employer cost as complete.
-  return "DE 2026 statutory payroll refuses because employer levies are not priced: U1 (AAG §7), "
-    + "U2 (AAG §7), U3 (SGB III §358), and Berufsgenossenschaft accident insurance (SGB VII §150). "
-    + "Do not post this run as complete; have a qualified German payroll provider price these "
-    + "employer charges before posting until the pack can resolve their effective employer-specific rates and bases.";
+  return (
+    "DE 2026 statutory payroll refuses because employer levies are not priced: U1 (AAG §7), " +
+    "U2 (AAG §7), U3 (SGB III §358), and Berufsgenossenschaft accident insurance (SGB VII §150). " +
+    "Do not post this run as complete; have a qualified German payroll provider price these " +
+    "employer charges before posting until the pack can resolve their effective employer-specific rates and bases."
+  );
 }
 
 /**
@@ -88,7 +87,12 @@ export const DE_FACTOR_LABELS: Readonly<Record<string, string>> = {
 
 /** ELStAM Steuerklasse I–VI to PAP STKL 1–6 (shared with the settlement). */
 export const STKL_BY_ROMAN: Record<string, 1 | 2 | 3 | 4 | 5 | 6> = {
-  I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6,
+  I: 1,
+  II: 2,
+  III: 3,
+  IV: 4,
+  V: 5,
+  VI: 6,
 };
 
 /** Cents (integer) of a "1234.56" euro string. Sub-cent dust truncates. */
@@ -126,17 +130,17 @@ export function deSvTage(input: {
   const { periodStart, periodEnd } = input;
   if (!periodStart || !periodEnd) {
     throw new DePayrollRefusal(
-      "DE 2026 engine needs the pay period's start and end dates to count the SV-Tage that prorate "
-      + "the contribution ceilings — the run carries none.",
+      "DE 2026 engine needs the pay period's start and end dates to count the SV-Tage that prorate " +
+        "the contribution ceilings — the run carries none.",
     );
   }
   const hiredOn = input.hiredOn ? String(input.hiredOn).slice(0, 10) : "";
   if (hiredOn === "") {
     throw new DePayrollRefusal(
-      "DE 2026 engine needs the employee's hire date: a part month's contribution ceilings are "
-      + "prorated by the days employed (SV-Tage), and an unknown start would assess a mid-month "
-      + "hire against the full monthly ceiling. Record the hire date on the employee record before "
-      + "calculating.",
+      "DE 2026 engine needs the employee's hire date: a part month's contribution ceilings are " +
+        "prorated by the days employed (SV-Tage), and an unknown start would assess a mid-month " +
+        "hire against the full monthly ceiling. Record the hire date on the employee record before " +
+        "calculating.",
     );
   }
   parseIsoDate(hiredOn);
@@ -147,9 +151,9 @@ export function deSvTage(input: {
   if (start === periodStart && end === periodEnd) return 30;
   if (end < start) {
     throw new DePayrollRefusal(
-      `DE 2026 engine: the employee was not employed in the pay period ${periodStart} to ${periodEnd} `
-      + `(hired ${hiredOn}${terminatedOn !== "" ? `, left ${terminatedOn}` : ""}) — correct the employment `
-      + "dates or remove the employee from this run.",
+      `DE 2026 engine: the employee was not employed in the pay period ${periodStart} to ${periodEnd} ` +
+        `(hired ${hiredOn}${terminatedOn !== "" ? `, left ${terminatedOn}` : ""}) — correct the employment ` +
+        "dates or remove the employee from this run.",
     );
   }
   return Math.min(30, inclusiveCalendarDays(start, end));
@@ -172,15 +176,20 @@ export async function computeDeStatutory(
 ): Promise<Record<string, string>> {
   if (ctx.taxYear !== 2026) {
     throw new DePayrollRefusal(
-      `DE payroll pack has no transcribed tables for tax year ${ctx.taxYear}: 2026 is the only `
-      + "transcribed edition (BMF Programmablaufplan für den Lohnsteuerabzug 2026, Stand 12.11.2025, "
-      + "plus SVRV 2026). This year is not yet supported by the DE pack; contact support.",
+      `DE payroll pack has no transcribed tables for tax year ${ctx.taxYear}: 2026 is the only ` +
+        "transcribed edition (BMF Programmablaufplan für den Lohnsteuerabzug 2026, Stand 12.11.2025, " +
+        "plus SVRV 2026). This year is not yet supported by the DE pack; contact support.",
     );
   }
   const levyRefusal = deEmployerLevyRefusal();
   if (levyRefusal !== null) throw new DePayrollRefusal(levyRefusal);
 
-  const resolution = await resolveStatutoryRates(ctx.orgId, DE_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
+  const resolution = await resolveStatutoryRates(
+    ctx.orgId,
+    DE_PACK_RATES,
+    ctx.taxYear,
+    ctx.run.pay_date,
+  );
   const kvzRaw = resolution.values("de_kvz")?.rate ?? null;
   const kvz = kvzRaw == null ? null : Number(kvzRaw);
   return computeDeStatutoryWithRates(ctx, {
@@ -200,37 +209,37 @@ export function computeDeStatutoryWithRates(
 
   if (ctx.periodsPerYear !== 12) {
     throw new DePayrollRefusal(
-      `DE 2026 engine runs monthly payroll only (periodsPerYear 12): the SV `
-      + `Beitragsbemessungsgrenzen are monthly figures and no other frequency is modelled — got ${ctx.periodsPerYear}.`,
+      `DE 2026 engine runs monthly payroll only (periodsPerYear 12): the SV ` +
+        `Beitragsbemessungsgrenzen are monthly figures and no other frequency is modelled — got ${ctx.periodsPerYear}.`,
     );
   }
   if (ctx.region == null || ctx.region === "") {
     throw new DePayrollRefusal(
-      "DE 2026 engine needs the Beschäftigungsland (ctx.region) for the Kirchenlohnsteuer "
-      + "rate and the Sachsen PV rule — got none.",
+      "DE 2026 engine needs the Beschäftigungsland (ctx.region) for the Kirchenlohnsteuer " +
+        "rate and the Sachsen PV rule — got none.",
     );
   }
   ctx.assertRegionSupported(ctx.region);
   if (rates.kvz == null) {
     throw new DePayrollRefusal(
-      "DE 2026 engine cannot run without the Krankenkasse's own Zusatzbeitragssatz: no de_kvz "
-      + "statutory rate is configured for this employer in 2026 — refusing rather than defaulting "
-      + "to zero or to the BMG national average.",
+      "DE 2026 engine cannot run without the Krankenkasse's own Zusatzbeitragssatz: no de_kvz " +
+        "statutory rate is configured for this employer in 2026 — refusing rather than defaulting " +
+        "to zero or to the BMG national average.",
     );
   }
 
   const elstam = certificateFor("de_elstam");
   if (elstam == null || !elstam.onFile) {
     throw new DePayrollRefusal(
-      "DE 2026 engine needs retrieved ELStAM (EStG §§39a, 39e): no de_elstam certificate is on "
-      + "file for this employee — Lohnsteuer cannot be computed without the Finanzamt's Merkmale.",
+      "DE 2026 engine needs retrieved ELStAM (EStG §§39a, 39e): no de_elstam certificate is on " +
+        "file for this employee — Lohnsteuer cannot be computed without the Finanzamt's Merkmale.",
     );
   }
   const stklRaw = elstam.answers["steuerklasse"] ?? null;
   if (stklRaw == null || stklRaw === "") {
     throw new DePayrollRefusal(
-      "DE 2026 engine has no Steuerklasse on this employee's ELStAM declaration — refusing rather "
-      + "than assuming Steuerklasse I.",
+      "DE 2026 engine has no Steuerklasse on this employee's ELStAM declaration — refusing rather " +
+        "than assuming Steuerklasse I.",
     );
   }
   const stkl = STKL_BY_ROMAN[stklRaw];
@@ -250,8 +259,8 @@ export function computeDeStatutoryWithRates(
   const af = (stkl === 4 && faktor !== 1 ? 1 : 0) as 0 | 1;
   if (af === 0 && faktor !== 1 && stkl !== 4) {
     throw new DePayrollRefusal(
-      `DE 2026 engine: Faktorverfahren (Faktor ${faktorRaw}) exists only in Steuerklasse IV `
-      + `(EStG §39f) — got Steuerklasse ${stklRaw}.`,
+      `DE 2026 engine: Faktorverfahren (Faktor ${faktorRaw}) exists only in Steuerklasse IV ` +
+        `(EStG §39f) — got Steuerklasse ${stklRaw}.`,
     );
   }
   if (af === 1 && freibetragAnnual !== 0n) {
@@ -263,11 +272,18 @@ export function computeDeStatutoryWithRates(
   const pvCert = certificateFor("de_pv_nachweis");
   const pvzRaw = pvCert?.answers["kinderlosenzuschlag"] ?? null;
   const pvaRaw = pvCert?.answers["abschlag_kinder"] ?? null;
-  if (pvCert == null || !pvCert.onFile || pvzRaw == null || pvzRaw === "" || pvaRaw == null || pvaRaw === "") {
+  if (
+    pvCert == null ||
+    !pvCert.onFile ||
+    pvzRaw == null ||
+    pvzRaw === "" ||
+    pvaRaw == null ||
+    pvaRaw === ""
+  ) {
     throw new DePayrollRefusal(
-      "DE 2026 engine needs the employee's Pflegeversicherung child facts (PUEG Kindernachweis): "
-      + "no complete de_pv_nachweis certificate is on file — refusing rather than silently assuming "
-      + "a childless employee.",
+      "DE 2026 engine needs the employee's Pflegeversicherung child facts (PUEG Kindernachweis): " +
+        "no complete de_pv_nachweis certificate is on file — refusing rather than silently assuming " +
+        "a childless employee.",
     );
   }
   const pvz = bool(pvzRaw) ? 1 : 0;
@@ -333,12 +349,14 @@ export function computeDeStatutoryWithRates(
   const avHalfMilli = BigInt(Math.round((DE_2026_RATES.av / 2) * 1000));
   const avW = shareHalfUp(avBase, avHalfMilli);
   const pvBase = kvBase;
-  const pvEmployeeMilli = BigInt(Math.round(DE_2026_RATES.pv / 2 * 1000))
-    + (ctx.region === "SN" ? BigInt(Math.round(DE_2026_RATES.pvSachsenDifferential * 1000)) : 0n)
-    + (pvz === 1 ? BigInt(Math.round(DE_2026_RATES.pvKinderlosenzuschlag * 1000)) : 0n)
-    - BigInt(Math.round(DE_2026_RATES.pvKindAbschlag * 1000)) * BigInt(pva);
-  const pvEmployerMilli = BigInt(Math.round(DE_2026_RATES.pv / 2 * 1000))
-    - (ctx.region === "SN" ? BigInt(Math.round(DE_2026_RATES.pvSachsenDifferential * 1000)) : 0n);
+  const pvEmployeeMilli =
+    BigInt(Math.round((DE_2026_RATES.pv / 2) * 1000)) +
+    (ctx.region === "SN" ? BigInt(Math.round(DE_2026_RATES.pvSachsenDifferential * 1000)) : 0n) +
+    (pvz === 1 ? BigInt(Math.round(DE_2026_RATES.pvKinderlosenzuschlag * 1000)) : 0n) -
+    BigInt(Math.round(DE_2026_RATES.pvKindAbschlag * 1000)) * BigInt(pva);
+  const pvEmployerMilli =
+    BigInt(Math.round((DE_2026_RATES.pv / 2) * 1000)) -
+    (ctx.region === "SN" ? BigInt(Math.round(DE_2026_RATES.pvSachsenDifferential * 1000)) : 0n);
   const pvW = shareHalfUp(pvBase, pvEmployeeMilli);
   const pvEr = shareHalfUp(pvBase, pvEmployerMilli);
 
@@ -349,16 +367,52 @@ export function computeDeStatutoryWithRates(
   const kist = pap.bk === 0n ? 0n : (pap.bk * BigInt(kistRate)) / 100n;
 
   pushStatutory("lohnsteuer", "deduction", "Lohnsteuer", eurosOf(pap.lstlzz), 110);
-  pushStatutory("solidaritaetszuschlag", "deduction", "Solidaritätszuschlag", eurosOf(pap.solzlzz), 115);
+  pushStatutory(
+    "solidaritaetszuschlag",
+    "deduction",
+    "Solidaritätszuschlag",
+    eurosOf(pap.solzlzz),
+    115,
+  );
   pushStatutory("kirchenlohnsteuer", "deduction", "Kirchenlohnsteuer", eurosOf(kist), 117);
   pushStatutory("kv", "deduction", "Krankenversicherung — Arbeitnehmeranteil", eurosOf(kvW), 120);
   pushStatutory("rv", "deduction", "Rentenversicherung — Arbeitnehmeranteil", eurosOf(rvW), 130);
-  pushStatutory("av", "deduction", "Arbeitslosenversicherung — Arbeitnehmeranteil", eurosOf(avW), 140);
+  pushStatutory(
+    "av",
+    "deduction",
+    "Arbeitslosenversicherung — Arbeitnehmeranteil",
+    eurosOf(avW),
+    140,
+  );
   pushStatutory("pv", "deduction", "Pflegeversicherung — Arbeitnehmeranteil", eurosOf(pvW), 150);
-  pushStatutory("kv", "employer_contribution", "Krankenversicherung — Arbeitgeberanteil", eurosOf(kvW), 210);
-  pushStatutory("rv", "employer_contribution", "Rentenversicherung — Arbeitgeberanteil", eurosOf(rvW), 215);
-  pushStatutory("av", "employer_contribution", "Arbeitslosenversicherung — Arbeitgeberanteil", eurosOf(avW), 220);
-  pushStatutory("pv", "employer_contribution", "Pflegeversicherung — Arbeitgeberanteil", eurosOf(pvEr), 225);
+  pushStatutory(
+    "kv",
+    "employer_contribution",
+    "Krankenversicherung — Arbeitgeberanteil",
+    eurosOf(kvW),
+    210,
+  );
+  pushStatutory(
+    "rv",
+    "employer_contribution",
+    "Rentenversicherung — Arbeitgeberanteil",
+    eurosOf(rvW),
+    215,
+  );
+  pushStatutory(
+    "av",
+    "employer_contribution",
+    "Arbeitslosenversicherung — Arbeitgeberanteil",
+    eurosOf(avW),
+    220,
+  );
+  pushStatutory(
+    "pv",
+    "employer_contribution",
+    "Pflegeversicherung — Arbeitgeberanteil",
+    eurosOf(pvEr),
+    225,
+  );
 
   return {
     LST: eurosOf(pap.lstlzz),

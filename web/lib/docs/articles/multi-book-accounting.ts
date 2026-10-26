@@ -1,15 +1,26 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const multiBookAccounting: DocArticle = {
-  slug: 'multi-book-accounting',
-  title: 'Multi-Book Accounting',
-  category: 'accounting',
+  slug: "multi-book-accounting",
+  title: "Multi-Book Accounting",
+  category: "accounting",
   order: 7,
   summary:
-    'Keep secondary accounting books in their own currency per subsidiary, map accounts per book, replicate every transaction into full books, post book-specific journals and compare books.',
-  updated: '2026-10-11',
-  keywords: ['multi-book', 'secondary book', 'accounting book', 'replication', 'book-specific journal', 'IFRS', 'GAAP', 'tax book', 'book currency', 'account mapping'],
-  related: ['allocations', 'period-close', 'fixed-assets-depreciation'],
+    "Keep secondary accounting books in their own currency per subsidiary, map accounts per book, replicate every transaction into full books, post book-specific journals and compare books.",
+  updated: "2026-10-11",
+  keywords: [
+    "multi-book",
+    "secondary book",
+    "accounting book",
+    "replication",
+    "book-specific journal",
+    "IFRS",
+    "GAAP",
+    "tax book",
+    "book currency",
+    "account mapping",
+  ],
+  related: ["allocations", "period-close", "fixed-assets-depreciation"],
   body: `# Multi-Book Accounting
 
 Every journal entry belongs to exactly one accounting book. The **primary
@@ -174,4 +185,4 @@ primary book beside a secondary book as of a date, with the difference.
 When the two books state the view in different currencies, both balances
 show with their currency and no difference is computed.
 `,
-}
+};

@@ -63,7 +63,9 @@ function scratchPeriod(org: ScratchOrg, startsOn = "2026-07-01"): SimPeriod {
 
 async function setup(): Promise<{ org: ScratchOrg; adminId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
-  const adminId = await withBypassContext(() => createScratchUser(org.orgId, "Probe Admin", "admin"));
+  const adminId = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Probe Admin", "admin"),
+  );
   return { org, adminId };
 }
 
@@ -148,9 +150,12 @@ test(
       assert.equal(result.pass, true, JSON.stringify(result.failures));
       // The probe cleans up after itself: no probe bill left behind.
       const leftovers = await withBypassContext(() =>
-        db.execute<{ n: string }>(sql`
+        db.execute<{ n: string }>(
+          sql`
           select count(*)::text as n from documents
-           where org_id = ${org.orgId} and document_number like 'PROBE-%'`, "objects"),
+           where org_id = ${org.orgId} and document_number like 'PROBE-%'`,
+          "objects",
+        ),
       );
       assert.equal(leftovers[0]!.n, "0");
     } finally {

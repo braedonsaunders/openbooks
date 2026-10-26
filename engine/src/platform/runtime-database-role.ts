@@ -12,9 +12,7 @@
 
 /** Explicitly local runtimes: development or test. Anything else — including
  * unset or empty — is an unknown environment and fails closed. */
-export function isExplicitLocalEnvironment(
-  nodeEnv: string | undefined,
-): boolean {
+export function isExplicitLocalEnvironment(nodeEnv: string | undefined): boolean {
   return nodeEnv === "development" || nodeEnv === "test";
 }
 
@@ -25,8 +23,6 @@ export function readsLocalEnvFile(nodeEnv: string | undefined): boolean {
   return nodeEnv === "development";
 }
 
-export function runtimeDatabaseRoleCheckRequired(
-  nodeEnv: string | undefined,
-): boolean {
+export function runtimeDatabaseRoleCheckRequired(nodeEnv: string | undefined): boolean {
   return !isExplicitLocalEnvironment(nodeEnv);
 }

@@ -13,32 +13,32 @@
  */
 
 /** Stable record-type key: a document kind or an entity key. e.g. 'vendor_bill'. */
-export type RecordTypeKey = string
+export type RecordTypeKey = string;
 
 /** A built-in field key (snake_case, matches the data model) or `cf_<customKey>`. */
-export type FieldKey = string
+export type FieldKey = string;
 
 /** Where a field lives on a transaction form. */
-export type FieldLevel = 'header' | 'line'
+export type FieldLevel = "header" | "line";
 
 /**
  * The structural kind of a field — drives the input the renderer draws, the
  * LineGrid column type, and the operators a list filter supports.
  */
 export type FieldKind =
-  | 'text'
-  | 'long_text'
-  | 'number'
-  | 'currency'
-  | 'date'
-  | 'boolean'
-  | 'select'
-  | 'multi_select'
-  | 'entity_ref'
-  | 'dimension'
-  | 'amount'
-  | 'tax'
-  | 'status'
+  | "text"
+  | "long_text"
+  | "number"
+  | "currency"
+  | "date"
+  | "boolean"
+  | "select"
+  | "multi_select"
+  | "entity_ref"
+  | "dimension"
+  | "amount"
+  | "tax"
+  | "status";
 
 /* ------------------------------------------------------------------ */
 /* Form layout (transaction form customization)                       */
@@ -47,50 +47,50 @@ export type FieldKind =
 /** Placement of one field in a form layout. */
 export interface HeaderFieldPlacement {
   /** Built-in field key or `cf_<customKey>`. */
-  key: FieldKey
+  key: FieldKey;
   /** Hidden when false. Default true. */
-  visible: boolean
+  visible: boolean;
   /** Override the default label (null/undefined = use the registry default). */
-  labelOverride?: string | null
+  labelOverride?: string | null;
   /**
    * Force-required on this form. Only honoured when the registry marks the
    * field `requiredOverridable`. System-required fields are always required
    * regardless of this flag.
    */
-  required?: boolean | null
+  required?: boolean | null;
   /**
    * Width in a 4-column header grid (1–4). null/undefined = 1. Lets a form
    * layout control each field's width and position.
    */
-  colSpan?: number | null
+  colSpan?: number | null;
 }
 
 /** An ordered, optionally-labelled group of header fields. */
 export interface HeaderGroup {
   /** Stable id within this layout. */
-  id: string
+  id: string;
   /** Optional group label; empty = unlabeled group. */
-  label?: string | null
+  label?: string | null;
   /** Optional fields may be disclosed progressively by the shared renderer. */
-  collapsible?: boolean
-  fields: HeaderFieldPlacement[]
+  collapsible?: boolean;
+  fields: HeaderFieldPlacement[];
 }
 
 /** Placement of one line column. */
 export interface LineColumnPlacement {
-  key: FieldKey
-  visible: boolean
+  key: FieldKey;
+  visible: boolean;
   /** Empty optional columns can stay behind the shared grid's Details control. */
-  secondary?: boolean
+  secondary?: boolean;
   /** CSS grid track (e.g. 'minmax(200px,2fr)', '120px'). null = kind default. */
-  width?: string | null
-  labelOverride?: string | null
+  width?: string | null;
+  labelOverride?: string | null;
 }
 
 /** A lifecycle or utility action rendered in a transaction flyout header. */
 export interface FormActionPlacement {
-  key: string
-  visible: boolean
+  key: string;
+  visible: boolean;
 }
 
 /**
@@ -109,45 +109,45 @@ export interface FormActionPlacement {
  */
 export interface FormTabPlacement {
   /** Registered built-in tab key, or `tab_<slug>` for an author-created tab. */
-  key: string
+  key: string;
   /** Hidden when false. Default true. */
-  visible: boolean
+  visible: boolean;
   /** Override the default label (null/undefined = registry default). */
-  labelOverride?: string | null
+  labelOverride?: string | null;
   /**
    * Header group ids rendered on this tab. Only meaningful for custom tabs;
    * built-in tabs render their product panel.
    */
-  groupIds?: string[]
+  groupIds?: string[];
   /**
    * Ordered built-in subtabs owned by this product panel. Subtabs use the same
    * visibility and label controls as top-level tabs, but cannot host custom
    * field groups or author-created tabs.
    */
-  subtabs?: FormTabPlacement[]
+  subtabs?: FormTabPlacement[];
 }
 
 /** Prefix that marks an author-created tab. */
-const CUSTOM_TAB_PREFIX = 'tab_'
+const CUSTOM_TAB_PREFIX = "tab_";
 
 export function isCustomTabKey(key: string) {
-  return key.startsWith(CUSTOM_TAB_PREFIX)
+  return key.startsWith(CUSTOM_TAB_PREFIX);
 }
 
 export interface FormLayoutConfig {
-  schemaVersion: 1
-  recordType: RecordTypeKey
-  header: { groups: HeaderGroup[] }
-  lines: { columns: LineColumnPlacement[] }
+  schemaVersion: 1;
+  recordType: RecordTypeKey;
+  header: { groups: HeaderGroup[] };
+  lines: { columns: LineColumnPlacement[] };
   /** Ordered flyout actions. Runtime permissions/status still decide whether
    * an enabled action is currently available. */
-  actions: FormActionPlacement[]
+  actions: FormActionPlacement[];
   /**
    * Ordered flyout tabs. Absent on record types without a tabbed cockpit, and
    * on layouts saved before tabs became customizable — the renderer falls back
    * to the registry order in both cases.
    */
-  tabs?: FormTabPlacement[]
+  tabs?: FormTabPlacement[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -155,42 +155,33 @@ export interface FormLayoutConfig {
 /* ------------------------------------------------------------------ */
 
 export type FilterOperator =
-  | 'eq'
-  | 'ne'
-  | 'in'
-  | 'not_in'
-  | 'gte'
-  | 'lte'
-  | 'between'
-  | 'contains'
-  | 'is_set'
-  | 'is_not_set'
+  "eq" | "ne" | "in" | "not_in" | "gte" | "lte" | "between" | "contains" | "is_set" | "is_not_set";
 
 /** One structured filter clause in a saved view. */
 export interface FilterClause {
-  key: FieldKey
-  operator: FilterOperator
+  key: FieldKey;
+  operator: FilterOperator;
   /** Single value (eq/ne/gte/lte/contains/entity_ref) or array (in/not_in). */
-  value?: string | string[] | null
+  value?: string | string[] | null;
   /** Upper bound for `between`. */
-  to?: string | null
+  to?: string | null;
 }
 
 export interface ListColumnPlacement {
-  key: FieldKey
-  visible: boolean
-  width?: number | null
-  labelOverride?: string | null
+  key: FieldKey;
+  visible: boolean;
+  width?: number | null;
+  labelOverride?: string | null;
 }
 
 export interface ListViewConfig {
-  schemaVersion: 1
-  recordType: RecordTypeKey
-  presentation?: 'list' | 'board' | null
-  columns: ListColumnPlacement[]
-  filters: FilterClause[]
-  sort?: { column: string; dir: 'asc' | 'desc' } | null
-  perPage?: number | null
+  schemaVersion: 1;
+  recordType: RecordTypeKey;
+  presentation?: "list" | "board" | null;
+  columns: ListColumnPlacement[];
+  filters: FilterClause[];
+  sort?: { column: string; dir: "asc" | "desc" } | null;
+  perPage?: number | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -198,94 +189,85 @@ export interface ListViewConfig {
 /* ------------------------------------------------------------------ */
 
 export interface FieldMeta {
-  key: FieldKey
+  key: FieldKey;
   /** next-intl message key (relative to root) for the default label. */
-  labelKey: string
-  level: FieldLevel
-  kind: FieldKind
+  labelKey: string;
+  level: FieldLevel;
+  kind: FieldKind;
   /** System-required (cannot be turned off). */
-  required?: boolean
+  required?: boolean;
   /** Cannot be hidden, reordered, or renamed (e.g. the record id column). */
-  locked?: boolean
+  locked?: boolean;
   /** The form designer may toggle `required` for this field. */
-  requiredOverridable?: boolean
+  requiredOverridable?: boolean;
   /** Available in the form designer but off the default form until shown. */
-  defaultHidden?: boolean
+  defaultHidden?: boolean;
 }
 
 export type ListColumnKind =
-  | 'text'
-  | 'amount'
-  | 'date'
-  | 'status'
-  | 'reference'
-  | 'custom'
-  | 'actions'
+  "text" | "amount" | "date" | "status" | "reference" | "custom" | "actions";
 
 export interface ListColumnMeta {
-  key: FieldKey
-  labelKey: string
-  kind: ListColumnKind
-  sortable?: boolean
+  key: FieldKey;
+  labelKey: string;
+  kind: ListColumnKind;
+  sortable?: boolean;
   /** Sort key the web query builder maps to a whitelisted SQL fragment. */
-  sortKey?: string
-  locked?: boolean
+  sortKey?: string;
+  locked?: boolean;
   /** Hidden in the seeded default view (still available to add in the designer). */
-  defaultHidden?: boolean
+  defaultHidden?: boolean;
   /**
    * The column shows the record's legal entity. An organization that runs a
    * single entity has nothing to read in it, so the default view hides it
    * while Multi-subsidiary is off; it stays available in the view designer.
    */
-  legalEntity?: boolean
+  legalEntity?: boolean;
   /**
    * The column shows the record's accounting book. An organization without
    * Multi-book accounting keeps one book, so the default view hides it while
    * that module is off; it stays available in the view designer.
    */
-  accountingBook?: boolean
+  accountingBook?: boolean;
   /** Default column width (px) when the view doesn't specify one. */
-  defaultWidth?: number
+  defaultWidth?: number;
 }
 
 /** Organization facts a default list view depends on. */
 export interface ListViewContext {
   /** Whether Multi-subsidiary is on; unknown keeps every column's static default. */
-  multiSubsidiary?: boolean
+  multiSubsidiary?: boolean;
   /** Whether Multi-book accounting is on; unknown keeps every column's static default. */
-  multiBook?: boolean
+  multiBook?: boolean;
 }
 
 /** Whether a column is visible in the default view for this organization. */
-export function columnVisibleByDefault(column: Pick<ListColumnMeta, 'defaultHidden' | 'legalEntity' | 'accountingBook'>, context: ListViewContext = {}): boolean {
-  if (column.defaultHidden) return false
-  if (column.accountingBook && context.multiBook === false) return false
-  return !(column.legalEntity && context.multiSubsidiary === false)
+export function columnVisibleByDefault(
+  column: Pick<ListColumnMeta, "defaultHidden" | "legalEntity" | "accountingBook">,
+  context: ListViewContext = {},
+): boolean {
+  if (column.defaultHidden) return false;
+  if (column.accountingBook && context.multiBook === false) return false;
+  return !(column.legalEntity && context.multiSubsidiary === false);
 }
 
-export type ListFilterKind =
-  | 'select'
-  | 'multi_select'
-  | 'entity_ref'
-  | 'date'
-  | 'boolean'
-  | 'text'
+export type ListFilterKind = "select" | "multi_select" | "entity_ref" | "date" | "boolean" | "text";
 
 export interface ListFilterOption {
-  value: string
+  value: string;
   /** i18n key for the label (relative to root). Omit → render `value`. */
-  labelKey?: string
+  labelKey?: string;
 }
 
 export interface ListFilterMeta {
-  key: FieldKey
-  labelKey: string
-  kind: ListFilterKind
-  operators: readonly FilterOperator[]
+  key: FieldKey;
+  labelKey: string;
+  kind: ListFilterKind;
+  operators: readonly FilterOperator[];
   /** For select/multi_select: the static option set. */
-  options?: ListFilterOption[]
+  options?: ListFilterOption[];
   /** For entity_ref: which picker source (resolved by web). */
-  entitySource?: string
+  entitySource?: string;
 }
 
 /**
@@ -295,38 +277,38 @@ export interface ListFilterMeta {
  * turn a gated capability back on.
  */
 export interface FormTabMeta {
-  key: string
-  labelKey: string
+  key: string;
+  labelKey: string;
   /** Cannot be hidden or reordered away (the record's primary tab). */
-  locked?: boolean
+  locked?: boolean;
   /** Feature gate this tab belongs to, if any. */
-  featureKey?: string
+  featureKey?: string;
   /** Product-owned panels grouped beneath this top-level tab. */
-  subtabs?: FormTabMeta[]
+  subtabs?: FormTabMeta[];
 }
 
 export interface RecordTypeMeta {
-  key: RecordTypeKey
-  labelKey: string
+  key: RecordTypeKey;
+  labelKey: string;
   /** 'transaction' forms have header + lines; 'entity' forms have header only. */
-  category: 'transaction' | 'entity'
-  headerFields: FieldMeta[]
-  lineFields: FieldMeta[]
-  listColumns: ListColumnMeta[]
-  listFilters: ListFilterMeta[]
+  category: "transaction" | "entity";
+  headerFields: FieldMeta[];
+  lineFields: FieldMeta[];
+  listColumns: ListColumnMeta[];
+  listFilters: ListFilterMeta[];
   /**
    * Sort applied when neither the URL nor a saved view names one. Defaults to
    * the first sortable column, ascending — right for name-ordered directories,
    * wrong for dated ledgers where the newest record is the one you want.
    */
-  defaultSort?: { sortKey: string; dir: 'asc' | 'desc' }
+  defaultSort?: { sortKey: string; dir: "asc" | "desc" };
   /**
    * Whether this record type has a customizable transaction FORM (header/line
    * layout). Defaults to true. Set false for record types whose list views are
    * customizable but whose editor is a bespoke flyout (e.g. payments), so the
    * customization admin shows only the list-view designer.
    */
-  supportsForms?: boolean
+  supportsForms?: boolean;
   /**
    * The table whose `custom` jsonb + custom_field_defs back this record type's
    * custom fields. Transactions default to 'documents'; an entity record type
@@ -334,25 +316,25 @@ export interface RecordTypeMeta {
    * fields at all — it never falls back to documents. Custom-field defs for entity
    * tables use a null `target_kind`; documents defs use the record type as kind.
    */
-  customFieldTable?: string
+  customFieldTable?: string;
   /**
    * The table backing LINE custom fields, or null for header-only record types
    * (all 'entity' types, plus payments/transfer). Transactions default to
    * 'document_lines'; entity types default to null.
    */
-  customFieldLineTable?: string | null
+  customFieldLineTable?: string | null;
   /**
    * Tabs this record's flyout draws, in default order. Record types without a
    * tabbed cockpit omit this.
    */
-  tabs?: FormTabMeta[]
+  tabs?: FormTabMeta[];
   /**
    * Optional-feature gate (Company Settings → Features). When the feature is
    * off the type disappears from the customization catalog and every
    * list-view / form-layout write path refuses it — same contract as
    * setup-registry and report-entity `featureKey`. Historical layouts stay.
    */
-  featureKey?: string
+  featureKey?: string;
 }
 
-export const DEFAULT_PER_PAGE = 25
+export const DEFAULT_PER_PAGE = 25;

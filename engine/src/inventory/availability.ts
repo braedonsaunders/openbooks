@@ -117,11 +117,15 @@ export async function stockedItems(
   orgId: string,
   itemIds: readonly string[] | null,
 ): Promise<Map<string, StockedItem>> {
-  const itemFilter = itemIds === null
-    ? sql``
-    : itemIds.length === 0
-      ? sql`and false`
-      : sql`and p.item_id in (${sql.join(itemIds.map((id) => sql`${id}::uuid`), sql`, `)})`;
+  const itemFilter =
+    itemIds === null
+      ? sql``
+      : itemIds.length === 0
+        ? sql`and false`
+        : sql`and p.item_id in (${sql.join(
+            itemIds.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`;
   const rows = await runner.execute<{
     item_id: string;
     label: string;
@@ -131,14 +135,17 @@ export async function stockedItems(
     unit_conversions: unknown;
     reorder_point: string | null;
     preferred_stock_level: string | null;
-  }>(sql`
+  }>(
+    sql`
     select p.item_id, coalesce(nullif(i.code, ''), i.name) as label, i.kind, i.is_active, p.base_unit,
            p.unit_conversions, p.reorder_point::text as reorder_point,
            p.preferred_stock_level::text as preferred_stock_level
       from item_inventory_profiles p
       join items i on i.id = p.item_id and i.org_id = p.org_id
      where p.org_id = ${orgId} ${itemFilter}
-     order by 2, 1`, "objects");
+     order by 2, 1`,
+    "objects",
+  );
   const out = new Map<string, StockedItem>();
   for (const row of rows) {
     const conversions = row.unit_conversions ?? {};
@@ -158,7 +165,8 @@ export async function stockedItems(
       baseUnit: row.base_unit,
       conversions: conversions as Record<string, number>,
       reorderPoint: row.reorder_point === null ? null : normalizeDecimal(row.reorder_point, 4),
-      preferredStockLevel: row.preferred_stock_level === null ? null : normalizeDecimal(row.preferred_stock_level, 4),
+      preferredStockLevel:
+        row.preferred_stock_level === null ? null : normalizeDecimal(row.preferred_stock_level, 4),
     });
   }
   return out;
@@ -208,8 +216,13 @@ export async function warehouseLocationSet(
   orgId: string,
   warehouseId: string,
 ): Promise<Set<string>> {
-  const warehouse = (await runner.execute(sql`
-    select 1 from warehouses where org_id = ${orgId} and stock_location_id = ${warehouseId}`, "objects"))[0];
+  const warehouse = (
+    await runner.execute(
+      sql`
+    select 1 from warehouses where org_id = ${orgId} and stock_location_id = ${warehouseId}`,
+      "objects",
+    )
+  )[0];
   if (!warehouse) {
     throw new AvailabilityRefusal(
       "warehouse not found in this organization",
@@ -234,8 +247,12 @@ async function stockPositions(
   itemIds: readonly string[],
 ): Promise<Array<{ itemId: string; stockLocationId: string }>> {
   if (itemIds.length === 0) return [];
-  const items = sql.join(itemIds.map((id) => sql`${id}::uuid`), sql`, `);
-  return await runner.execute<{ itemId: string; stockLocationId: string }>(sql`
+  const items = sql.join(
+    itemIds.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  );
+  return await runner.execute<{ itemId: string; stockLocationId: string }>(
+    sql`
     select distinct p.item_id as "itemId", p.stock_location_id as "stockLocationId"
       from (
         select item_id, stock_location_id from cost_layers
@@ -248,7 +265,9 @@ async function stockPositions(
          where pc.org_id = ${orgId} and mv.subsidiary_id = ${subsidiaryId}
            and pc.remaining_quantity <> 0 and pc.item_id in (${items})
       ) p
-     order by 1, 2`, "objects");
+     order by 1, 2`,
+    "objects",
+  );
 }
 
 /** On-hand quantity per item over the locations in scope (null = every location). */
@@ -262,7 +281,10 @@ export async function onHandByItem(
   const onHand = new Map(itemIds.map((id) => [id, "0.0000"]));
   for (const position of await stockPositions(runner, orgId, subsidiaryId, itemIds)) {
     if (locations && !locations.has(position.stockLocationId)) continue;
-    const held = await getOnHandWith(runner, orgId, position.itemId, position.stockLocationId, { subsidiaryId, saleableOnly: true });
+    const held = await getOnHandWith(runner, orgId, position.itemId, position.stockLocationId, {
+      subsidiaryId,
+      saleableOnly: true,
+    });
     onHand.set(position.itemId, add(onHand.get(position.itemId)!, held.quantity));
   }
   return onHand;
@@ -294,7 +316,10 @@ export async function demandTermsByItem(
   const itemIds = [...scope.items.keys()];
   const onHand = await onHandByItem(runner, orgId, scope.subsidiaryId, itemIds, scope.locations);
   const terms = new Map<string, DemandTerms>(
-    itemIds.map((id) => [id, { onHand: onHand.get(id)!, committed: "0.0000", reserved: "0.0000", unallocated: "0.0000" }]),
+    itemIds.map((id) => [
+      id,
+      { onHand: onHand.get(id)!, committed: "0.0000", reserved: "0.0000", unallocated: "0.0000" },
+    ]),
   );
   const lines = await salesOrderLineRemainders(runner as SqlExecutor, orgId, {
     openOnly: true,
@@ -313,14 +338,21 @@ export async function demandTermsByItem(
     const entry = terms.get(line.itemId)!;
     const label = `${line.documentNumber} line ${line.lineNumber}`;
     if (line.stockLocationId === null) {
-      entry.unallocated = add(entry.unallocated, openBaseQuantity(line.open, line.unit, item, label));
+      entry.unallocated = add(
+        entry.unallocated,
+        openBaseQuantity(line.open, line.unit, item, label),
+      );
     } else if (!scope.locations || scope.locations.has(line.stockLocationId)) {
       entry.committed = add(entry.committed, openBaseQuantity(line.open, line.unit, item, label));
       for (const reservation of held) {
         // Kit component picks reserve the component, never the kit: only a
         // reservation of the line's own item counts toward its reserved share.
-        if (reservation.salesOrderLineId !== line.lineId || reservation.itemId !== line.itemId) continue;
-        entry.reserved = add(entry.reserved, openBaseQuantity(reservation.reserved, line.unit, item, label));
+        if (reservation.salesOrderLineId !== line.lineId || reservation.itemId !== line.itemId)
+          continue;
+        entry.reserved = add(
+          entry.reserved,
+          openBaseQuantity(reservation.reserved, line.unit, item, label),
+        );
       }
     }
   }
@@ -331,7 +363,8 @@ export async function demandTermsByItem(
   // its available is derived separately below.
   for (const line of lines) {
     const item = scope.items.get(line.itemId);
-    if (!item || item.kind !== "kit" || (line.subsidiaryId ?? scope.rootId) !== scope.subsidiaryId) continue;
+    if (!item || item.kind !== "kit" || (line.subsidiaryId ?? scope.rootId) !== scope.subsidiaryId)
+      continue;
     if (line.stockLocationId === null) continue;
     if (scope.locations && !scope.locations.has(line.stockLocationId)) continue;
     const label = `${line.documentNumber} line ${line.lineNumber}`;
@@ -361,15 +394,21 @@ async function kitBomForDemand(
   kitItemId: string,
   date: string,
 ): Promise<{ componentItemId: string; quantityPer: string }[]> {
-  const rows = await runner.execute<{ component_item_id: string; quantity_per: string }>(sql`
+  const rows = await runner.execute<{ component_item_id: string; quantity_per: string }>(
+    sql`
     select component_item_id, quantity_per::text as quantity_per
       from bom_components
      where org_id = ${orgId} and assembly_item_id = ${kitItemId}
        and operation_seq is null and is_byproduct = false
        and (effective_from is null or effective_from <= ${date}::date)
        and (effective_to is null or ${date}::date < effective_to)
-     order by sort_order, component_item_id`, "objects");
-  return rows.map((row) => ({ componentItemId: row.component_item_id, quantityPer: row.quantity_per }));
+     order by sort_order, component_item_id`,
+    "objects",
+  );
+  return rows.map((row) => ({
+    componentItemId: row.component_item_id,
+    quantityPer: row.quantity_per,
+  }));
 }
 
 export interface AvailableToPromise {
@@ -422,16 +461,23 @@ export async function listAvailableToPromise(
       422,
     );
   }
-  const locations = explicit ? new Set(explicit) : warehouseId ? await warehouseLocationSet(runner, orgId, warehouseId) : null;
+  const locations = explicit
+    ? new Set(explicit)
+    : warehouseId
+      ? await warehouseLocationSet(runner, orgId, warehouseId)
+      : null;
   const items = await stockedItems(runner, orgId, query.itemIds ?? null);
   if (items.size === 0) return [];
   // Kit derivation needs its components' terms even when the caller asked
   // for the kit alone: union them in so a filtered query still divides by
   // real component availability.
-  const kitIds = [...items.values()].filter((item) => item.kind === "kit").map((item) => item.itemId);
-  const today = kitIds.length > 0
-    ? query.asOfDate ?? await businessTodayInTx(runner as SqlExecutor, orgId)
-    : null;
+  const kitIds = [...items.values()]
+    .filter((item) => item.kind === "kit")
+    .map((item) => item.itemId);
+  const today =
+    kitIds.length > 0
+      ? (query.asOfDate ?? (await businessTodayInTx(runner as SqlExecutor, orgId)))
+      : null;
   if (kitIds.length > 0) {
     if (!today || !isIsoCalendarDate(today)) {
       throw new InventoryError("cannot determine a valid business date for kit availability");
@@ -455,7 +501,16 @@ export async function listAvailableToPromise(
     if (item.kind === "kit") {
       // Unioned components serve derivation only: list exactly what was asked.
       if (query.itemIds != null && !query.itemIds.includes(item.itemId)) continue;
-      rows.push(await kitAvailableToPromise(runner, orgId, { ...entity, locations, warehouseId }, item, terms, today!));
+      rows.push(
+        await kitAvailableToPromise(
+          runner,
+          orgId,
+          { ...entity, locations, warehouseId },
+          item,
+          terms,
+          today!,
+        ),
+      );
       continue;
     }
     if (query.itemIds != null && !query.itemIds.includes(item.itemId)) continue;
@@ -486,7 +541,11 @@ export async function listAvailableToPromise(
 async function kitAvailableToPromise(
   runner: Runner,
   orgId: string,
-  scope: { subsidiaryId: string; locations: ReadonlySet<string> | null; warehouseId: string | null },
+  scope: {
+    subsidiaryId: string;
+    locations: ReadonlySet<string> | null;
+    warehouseId: string | null;
+  },
   item: StockedItem,
   terms: Map<string, DemandTerms>,
   today: string,
@@ -536,7 +595,10 @@ export async function getAvailableToPromise(
   orgId: string,
   query: AvailabilityQuery & { itemId: string },
 ): Promise<AvailableToPromise> {
-  const [result] = await listAvailableToPromise(runner, orgId, { ...query, itemIds: [query.itemId] });
+  const [result] = await listAvailableToPromise(runner, orgId, {
+    ...query,
+    itemIds: [query.itemId],
+  });
   if (!result) {
     throw new AvailabilityRefusal(
       "this item carries no stock: it has no inventory costing profile",
@@ -595,26 +657,40 @@ export async function releasableBackorders(
   const warehouseId = query.warehouseId ?? null;
   if (warehouseId) await warehouseLocationSet(runner, orgId, warehouseId);
 
-  const lines = (await salesOrderLineRemainders(runner as SqlExecutor, orgId, { openOnly: true }))
-    .filter((line) => line.stockLocationId !== null && (line.subsidiaryId ?? entity.rootId) === entity.subsidiaryId);
+  const lines = (
+    await salesOrderLineRemainders(runner as SqlExecutor, orgId, { openOnly: true })
+  ).filter(
+    (line) =>
+      line.stockLocationId !== null && (line.subsidiaryId ?? entity.rootId) === entity.subsidiaryId,
+  );
   const items = await stockedItems(runner, orgId, [...new Set(lines.map((line) => line.itemId))]);
 
   // Each location's scope: its warehouse's whole tree, or the location alone.
-  const scopeOf = new Map<string, { key: string; warehouseId: string | null; locations: ReadonlySet<string> }>();
+  const scopeOf = new Map<
+    string,
+    { key: string; warehouseId: string | null; locations: ReadonlySet<string> }
+  >();
   const treeOf = new Map<string, ReadonlySet<string>>();
   for (const line of lines) {
     const location = line.stockLocationId!;
     if (scopeOf.has(location)) continue;
     const warehouse = await warehouseOf(runner, orgId, location);
     if (warehouse) {
-      if (!treeOf.has(warehouse.id)) treeOf.set(warehouse.id, await warehouseLocationSet(runner, orgId, warehouse.id));
-      scopeOf.set(location, { key: warehouse.id, warehouseId: warehouse.id, locations: treeOf.get(warehouse.id)! });
+      if (!treeOf.has(warehouse.id))
+        treeOf.set(warehouse.id, await warehouseLocationSet(runner, orgId, warehouse.id));
+      scopeOf.set(location, {
+        key: warehouse.id,
+        warehouseId: warehouse.id,
+        locations: treeOf.get(warehouse.id)!,
+      });
     } else {
       scopeOf.set(location, { key: location, warehouseId: null, locations: new Set([location]) });
     }
   }
 
-  const inScope = lines.filter((line) => !warehouseId || scopeOf.get(line.stockLocationId!)!.warehouseId === warehouseId);
+  const inScope = lines.filter(
+    (line) => !warehouseId || scopeOf.get(line.stockLocationId!)!.warehouseId === warehouseId,
+  );
   const remaining = new Map<string, string>();
   const releasable: Array<Omit<ReleasableBackorder, "customerName">> = [];
   for (const line of inScope) {
@@ -622,11 +698,22 @@ export async function releasableBackorders(
     const scope = scopeOf.get(line.stockLocationId!)!;
     const key = `${scope.key}:${line.itemId}`;
     if (!remaining.has(key)) {
-      const onHand = await onHandByItem(runner, orgId, entity.subsidiaryId, [line.itemId], scope.locations);
+      const onHand = await onHandByItem(
+        runner,
+        orgId,
+        entity.subsidiaryId,
+        [line.itemId],
+        scope.locations,
+      );
       remaining.set(key, onHand.get(line.itemId)!);
     }
     const supply = remaining.get(key)!;
-    const openBase = openBaseQuantity(line.open, line.unit, item, `${line.documentNumber} line ${line.lineNumber}`);
+    const openBase = openBaseQuantity(
+      line.open,
+      line.unit,
+      item,
+      `${line.documentNumber} line ${line.lineNumber}`,
+    );
     if (cmp(supply, "0") <= 0) continue;
     const covered = cmp(openBase, supply) <= 0 ? openBase : supply;
     remaining.set(key, add(supply, neg(covered)));
@@ -649,12 +736,27 @@ export async function releasableBackorders(
     });
   }
 
-  const customerIds = [...new Set(releasable.map((line) => line.customerId).filter((id): id is string => id !== null))];
-  const names = customerIds.length === 0
-    ? new Map<string, string>()
-    : new Map((await runner.execute<{ id: string; name: string }>(sql`
+  const customerIds = [
+    ...new Set(releasable.map((line) => line.customerId).filter((id): id is string => id !== null)),
+  ];
+  const names =
+    customerIds.length === 0
+      ? new Map<string, string>()
+      : new Map(
+          (
+            await runner.execute<{ id: string; name: string }>(
+              sql`
         select id, display_name as name from parties
-         where org_id = ${orgId} and id in (${sql.join(customerIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects"))
-        .map((row) => [row.id, row.name]));
-  return releasable.map((line) => ({ ...line, customerName: line.customerId ? names.get(line.customerId) ?? null : null }));
+         where org_id = ${orgId} and id in (${sql.join(
+           customerIds.map((id) => sql`${id}::uuid`),
+           sql`, `,
+         )})`,
+              "objects",
+            )
+          ).map((row) => [row.id, row.name]),
+        );
+  return releasable.map((line) => ({
+    ...line,
+    customerName: line.customerId ? (names.get(line.customerId) ?? null) : null,
+  }));
 }

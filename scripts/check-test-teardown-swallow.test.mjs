@@ -37,7 +37,10 @@ test("message", async () => { assert.match(error, /dropScratchOrg.*\\.catch/); }
     const findings = scanFile(join(root, "web/lib/bad.integration.test.ts"), root);
     assert.equal(findings.length, 4);
     assert.ok(findings.every((finding) => finding.kind === "teardown-swallow"));
-    assert.deepEqual(findings.map((finding) => finding.line), [2, 3, 4, 6]);
+    assert.deepEqual(
+      findings.map((finding) => finding.line),
+      [2, 3, 4, 6],
+    );
     const tree = scanTree(root);
     assert.equal(tree.length, 4);
   } finally {
@@ -56,5 +59,9 @@ test("allow-list entries carry an explicit reason", () => {
 
 test("the live repository has no swallowed teardown drops", () => {
   const findings = scanTree();
-  assert.deepEqual(findings, [], `${findings.length} teardown-swallow violations:\n${findings.map((finding) => `${finding.file}:${finding.line} [${finding.kind}] ${finding.value}`).join("\n")}`);
+  assert.deepEqual(
+    findings,
+    [],
+    `${findings.length} teardown-swallow violations:\n${findings.map((finding) => `${finding.file}:${finding.line} [${finding.kind}] ${finding.value}`).join("\n")}`,
+  );
 });

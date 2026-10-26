@@ -104,7 +104,9 @@ export interface SgYearTables {
     readonly maxEmployeeOw: string;
   };
   /** Effective-dated age/status rates; absent only for years not transcribed. */
-  readonly cpfByStatusAge?: Partial<Record<SgCpfStatus, Partial<Record<SgAgeBand, SgCpfBandRates>>>>;
+  readonly cpfByStatusAge?: Partial<
+    Record<SgCpfStatus, Partial<Record<SgAgeBand, SgCpfBandRates>>>
+  >;
   /** SDL rate/floor/cap — frozen across the transcribed window (see each year module). */
   readonly sdl: {
     readonly ratePct: string;
@@ -163,9 +165,20 @@ export const SG_CPF_2026_LE55 = {
  * Each entry transcribes the table's total/employee OW rates, dollar phase
  * and OW maxima. SPR full-employer rows are distinct from graduated rows.
  */
-const cpfBand = (phaseTotalPct: string, phaseSlope: string, totalPct: string, employeePct: string,
-  maxTotalOw: string, maxEmployeeOw: string): SgCpfBandRates => ({
-  phaseTotalPct, phaseSlope, totalPct, employeePct, maxTotalOw, maxEmployeeOw,
+const cpfBand = (
+  phaseTotalPct: string,
+  phaseSlope: string,
+  totalPct: string,
+  employeePct: string,
+  maxTotalOw: string,
+  maxEmployeeOw: string,
+): SgCpfBandRates => ({
+  phaseTotalPct,
+  phaseSlope,
+  totalPct,
+  employeePct,
+  maxTotalOw,
+  maxEmployeeOw,
 });
 const cpfTable1 = {
   le55: SG_CPF_2026_LE55,
@@ -203,9 +216,12 @@ const cpfSpr2Fg = {
   gt70: cpfBand("7.5", "0.15", "12.5", "5", "1000.00", "400.00"),
 } satisfies Record<SgAgeBand, SgCpfBandRates>;
 export const SG_CPF_2026_BY_STATUS_AGE: NonNullable<SgYearTables["cpfByStatusAge"]> = {
-  citizen: cpfTable1, spr_3rd_year: cpfTable1,
-  spr_1st_year: cpfSpr1Gg, spr_2nd_year: cpfSpr2Gg,
-  spr_1st_year_full_employer: cpfSpr1Fg, spr_2nd_year_full_employer: cpfSpr2Fg,
+  citizen: cpfTable1,
+  spr_3rd_year: cpfTable1,
+  spr_1st_year: cpfSpr1Gg,
+  spr_2nd_year: cpfSpr2Gg,
+  spr_1st_year_full_employer: cpfSpr1Fg,
+  spr_2nd_year_full_employer: cpfSpr2Fg,
 };
 
 /**
@@ -320,10 +336,10 @@ export const SG_EDITION_SCAFFOLD: PayrollEditionScaffold = {
     "Confirm the OW ceiling and the $102,000 AW-ceiling formula for the year against the Board's AW ceiling examples, and establish whether the step took effect on 1 January or mid-year (a mid-year change needs two editions).",
     "Confirm the SDL rate, floor and cap against the CPF Board's Skills Development Levy page (frozen since 1 Oct 2008 — if it moved, diverge here).",
     "Add a published edition to SG_TAX_YEARS in engine/src/payroll/sg/rates.ts with the edition label and citation, and wire the year's tables into SG_TABLES_BY_YEAR in engine/src/payroll/sg/cpf.ts.",
-    "Add citation-backed GOLDENS to engine/src/payroll/sg/cpf.test.ts, extending its year type. Include ceiling-binding, below-ceiling, SDL, and cross-year discrimination cases; paste independently worked rows into GOLDENS, for example:\n"
-    + "  { year: {year}, label: \"OW at the ceiling\", input: { ordinaryWages: \"...\" }, expected: { totalCents: 0n, employeeCents: 0n, employerCents: 0n }, citation: \"CPF Board, {year} CPF Contribution Rate Table, Table 1\" },",
-    "Add applicable refusal cases to REFUSALS in engine/src/payroll/sg/cpf.test.ts using its row shape: "
-    + "{ label: \"...\", input: { taxYear: {year}, cpfStatus: \"citizen\", ageBand: \"le55\", ordinaryWages: \"...\" }, refusal: /remedy/ }.",
+    "Add citation-backed GOLDENS to engine/src/payroll/sg/cpf.test.ts, extending its year type. Include ceiling-binding, below-ceiling, SDL, and cross-year discrimination cases; paste independently worked rows into GOLDENS, for example:\n" +
+      '  { year: {year}, label: "OW at the ceiling", input: { ordinaryWages: "..." }, expected: { totalCents: 0n, employeeCents: 0n, employerCents: 0n }, citation: "CPF Board, {year} CPF Contribution Rate Table, Table 1" },',
+    "Add applicable refusal cases to REFUSALS in engine/src/payroll/sg/cpf.test.ts using its row shape: " +
+      '{ label: "...", input: { taxYear: {year}, cpfStatus: "citizen", ageBand: "le55", ordinaryWages: "..." }, refusal: /remedy/ }.',
   ],
 };
 
@@ -335,10 +351,10 @@ export const SG_TAX_YEARS: PayrollTaxYearSupport = {
       label: "CPF Contribution Rate Table from 1 January 2024 (Table 1) + SDL",
       effectiveFrom: "2024-01-01",
       citation:
-        "CPF Board, CPF Contribution Rate Table from 1 January 2024 for Singapore Citizens "
-        + "or Singapore Permanent Residents (3rd year onwards), Table 1; CPF Board, Examples for "
-        + "computation of Additional Wage (AW) Ceiling (2024 edition); CPF Board, Skills "
-        + "Development Levy; CPF Board, Who should receive CPF contributions",
+        "CPF Board, CPF Contribution Rate Table from 1 January 2024 for Singapore Citizens " +
+        "or Singapore Permanent Residents (3rd year onwards), Table 1; CPF Board, Examples for " +
+        "computation of Additional Wage (AW) Ceiling (2024 edition); CPF Board, Skills " +
+        "Development Levy; CPF Board, Who should receive CPF contributions",
       status: "published",
     },
     {
@@ -346,11 +362,11 @@ export const SG_TAX_YEARS: PayrollTaxYearSupport = {
       label: "CPF Contribution Rate Table from 1 January 2025 (Table 1) + SDL",
       effectiveFrom: "2025-01-01",
       citation:
-        "CPF Board, CPF Contribution Rate Table from 1 January 2025 for Singapore Citizens "
-        + "or Singapore Permanent Residents (3rd year onwards), Table 1; IRAS, Central Provident "
-        + "Fund (CPF) Relief for employees (2025 OW/AW ceiling arithmetic: $102,000 − $88,800 = "
-        + "$13,200); CPF Board, Skills Development Levy; CPF Board, Who should receive CPF "
-        + "contributions",
+        "CPF Board, CPF Contribution Rate Table from 1 January 2025 for Singapore Citizens " +
+        "or Singapore Permanent Residents (3rd year onwards), Table 1; IRAS, Central Provident " +
+        "Fund (CPF) Relief for employees (2025 OW/AW ceiling arithmetic: $102,000 − $88,800 = " +
+        "$13,200); CPF Board, Skills Development Levy; CPF Board, Who should receive CPF " +
+        "contributions",
       status: "published",
     },
     {
@@ -358,10 +374,10 @@ export const SG_TAX_YEARS: PayrollTaxYearSupport = {
       label: "CPF Contribution Rate Table from 1 January 2026 (Table 1) + SDL",
       effectiveFrom: "2026-01-01",
       citation:
-        "CPF Board, CPF Contribution Rate Table from 1 January 2026 for Singapore Citizens "
-        + "or Singapore Permanent Residents (3rd year onwards), Table 1; CPF Board, Examples for "
-        + "computation of Additional Wage (AW) Ceiling; CPF Board, Skills Development Levy; "
-        + "CPF Board, Who should receive CPF contributions",
+        "CPF Board, CPF Contribution Rate Table from 1 January 2026 for Singapore Citizens " +
+        "or Singapore Permanent Residents (3rd year onwards), Table 1; CPF Board, Examples for " +
+        "computation of Additional Wage (AW) Ceiling; CPF Board, Skills Development Levy; " +
+        "CPF Board, Who should receive CPF contributions",
       status: "published",
     },
   ],

@@ -22,9 +22,14 @@ const REPO_ROOT = new URL("../../../..", import.meta.url).pathname.replace(/\/$/
 
 function runMoneyTests(dir: string): { pass: number; fail: number; status: number | null } {
   const args = [
-    ...(process.platform === "darwin" ? ["--no-concurrent-sparkplug", "--no-concurrent-recompilation"] : []),
-    "--import", "tsx",
-    "--test", "--test-force-exit", "--test-reporter=tap",
+    ...(process.platform === "darwin"
+      ? ["--no-concurrent-sparkplug", "--no-concurrent-recompilation"]
+      : []),
+    "--import",
+    "tsx",
+    "--test",
+    "--test-force-exit",
+    "--test-reporter=tap",
     "money.test.ts",
   ];
   // Scrub the outer test-runner context: without this, node:test detects a
@@ -61,8 +66,14 @@ test("a deliberately planted money.ts mutant is reported as killed", async () =>
   try {
     const nodeModules = join(REPO_ROOT, "node_modules");
     if (existsSync(nodeModules)) symlinkSync(nodeModules, join(fixtureDir, "node_modules"));
-    copyFileSync(join(REPO_ROOT, "engine", "src", "money", "money.ts"), join(fixtureDir, "money.ts"));
-    copyFileSync(join(REPO_ROOT, "engine", "src", "money", "money.test.ts"), join(fixtureDir, "money.test.ts"));
+    copyFileSync(
+      join(REPO_ROOT, "engine", "src", "money", "money.ts"),
+      join(fixtureDir, "money.ts"),
+    );
+    copyFileSync(
+      join(REPO_ROOT, "engine", "src", "money", "money.test.ts"),
+      join(fixtureDir, "money.test.ts"),
+    );
     const pristine = await readFile(join(fixtureDir, "money.ts"), "utf8");
     const suite = await readFile(join(fixtureDir, "money.test.ts"), "utf8");
 
@@ -70,7 +81,10 @@ test("a deliberately planted money.ts mutant is reported as killed", async () =>
     writeFileSync(join(fixtureDir, "money.ts"), pristine);
     writeFileSync(join(fixtureDir, "money.test.ts"), suite);
     const baseline = runMoneyTests(fixtureDir);
-    assert.ok(baseline.pass > 0, `pristine money.test.ts must pass in temp (status ${baseline.status})`);
+    assert.ok(
+      baseline.pass > 0,
+      `pristine money.test.ts must pass in temp (status ${baseline.status})`,
+    );
     assert.equal(baseline.fail, 0);
 
     // The planted mutant: the exact default-pipeline operator output the

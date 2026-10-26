@@ -3,12 +3,21 @@ import test from "node:test";
 
 // jsdom first: the button reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/budgets", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/budgets",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__newBudgetTestRouter}export function usePathname(){return '/budgets'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__newBudgetTestRouter}export function usePathname(){return '/budgets'}export function useSearchParams(){return new URLSearchParams()}",
+});
 
 declare global {
-  var __newBudgetTestRouter: { pushes: string[]; push(href: string): void; refresh(): void } | undefined;
+  var __newBudgetTestRouter:
+    { pushes: string[]; push(href: string): void; refresh(): void } | undefined;
 }
 
 const React = await import("react");
@@ -69,7 +78,11 @@ test("New opens the unsaved drawer without persisting anything", async (t) => {
   });
   await tick();
 
-  assert.deepEqual(fetches, [], "opening New must issue zero requests — no draft row may exist yet");
+  assert.deepEqual(
+    fetches,
+    [],
+    "opening New must issue zero requests — no draft row may exist yet",
+  );
   assert.equal(globalThis.__newBudgetTestRouter?.pushes.length, 1);
   assert.match(
     globalThis.__newBudgetTestRouter?.pushes[0] ?? "",

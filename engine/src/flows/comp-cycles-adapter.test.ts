@@ -1,9 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  hrmCompCycleFlowAdapter,
-  hrmCompCycleSubjectProfile,
-} from "./comp-cycles-adapter.ts";
+import { hrmCompCycleFlowAdapter, hrmCompCycleSubjectProfile } from "./comp-cycles-adapter.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
@@ -19,14 +16,8 @@ installEngineSeams();
  */
 describe("comp-cycle flow adapter", () => {
   test("subject kind and profile identify the cycle", () => {
-    assert.equal(
-      hrmCompCycleFlowAdapter.subjectKind,
-      HRM_COMP_CYCLE_SUBJECT_KIND,
-    );
-    assert.equal(
-      hrmCompCycleSubjectProfile.subjectKind,
-      HRM_COMP_CYCLE_SUBJECT_KIND,
-    );
+    assert.equal(hrmCompCycleFlowAdapter.subjectKind, HRM_COMP_CYCLE_SUBJECT_KIND);
+    assert.equal(hrmCompCycleSubjectProfile.subjectKind, HRM_COMP_CYCLE_SUBJECT_KIND);
     assert.deepEqual(hrmCompCycleFlowAdapter.writableFields, new Set<string>());
   });
 
@@ -49,9 +40,6 @@ describe("comp-cycle flow adapter", () => {
   });
 
   test("candidate search fails closed without an ambient tenant", async () => {
-    await assert.rejects(
-      hrmCompCycleFlowAdapter.findCandidateIds!(10),
-      /ambient tenant context/,
-    );
+    await assert.rejects(hrmCompCycleFlowAdapter.findCandidateIds!(10), /ambient tenant context/);
   });
 });

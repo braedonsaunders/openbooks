@@ -7,29 +7,45 @@ import ExcelJS from "exceljs";
 import { createTranslator } from "next-intl";
 import messages from "../messages/en/index.ts";
 import { resolveAppModule } from "./test-module-hooks";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules } from "../testing/stub-modules.ts";
 
 const root = pathToFileURL(process.cwd() + "/").href;
 const state: { user: import("./auth").SessionUser | null } = { user: null };
-Object.assign(globalThis, { __pagedExportStreamState: state, __pagedExportIntl: { createTranslator, messages } });
-stubModules({ navigation: false, intl: 'export async function getTranslations(input){const {createTranslator,messages}=globalThis.__pagedExportIntl;const options=typeof input==="object"?input:{namespace:input};return createTranslator({locale:"en",messages,...options});};export async function getLocale(){return "en"}', authz: false, features: false });
+Object.assign(globalThis, {
+  __pagedExportStreamState: state,
+  __pagedExportIntl: { createTranslator, messages },
+});
+stubModules({
+  navigation: false,
+  intl: 'export async function getTranslations(input){const {createTranslator,messages}=globalThis.__pagedExportIntl;const options=typeof input==="object"?input:{namespace:input};return createTranslator({locale:"en",messages,...options});};export async function getLocale(){return "en"}',
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(s, c, next) {
-    if ((s === "./auth" || s.endsWith("/lib/auth")) && c.parentURL?.includes("/web/") && !c.parentURL.includes("/web/lib/auth.ts")) {
+    if (
+      (s === "./auth" || s.endsWith("/lib/auth")) &&
+      c.parentURL?.includes("/web/") &&
+      !c.parentURL.includes("/web/lib/auth.ts")
+    ) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(
-          `export * from ${JSON.stringify(root + "web/lib/auth.ts")};export async function currentUser(){return globalThis.__pagedExportStreamState.user;}`,
-        ),
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export * from ${JSON.stringify(root + "web/lib/auth.ts")};export async function currentUser(){return globalThis.__pagedExportStreamState.user;}`,
+          ),
       };
     }
     if (s.endsWith("/lib/authz") && c.parentURL?.includes("/api/reports/definitions/")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(
-          "export async function guardPermission(){return {user:globalThis.__pagedExportStreamState.user,permissions:new Set(['reports.read'])}}",
-        ),
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export async function guardPermission(){return {user:globalThis.__pagedExportStreamState.user,permissions:new Set(['reports.read'])}}",
+          ),
       };
     }
     const app = resolveAppModule(s, c, next, root);
@@ -38,26 +54,39 @@ registerHooks({
   },
 });
 
-const { db, withBypassContext, withOrgContext, withOrgTransaction } = await import(
-  "@openbooks/engine/platform/db"
-);
+const { db, withBypassContext, withOrgContext, withOrgTransaction } =
+  await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { withReportAuthz } = await import("./report-execution-context");
-const { executeReportAllPages, streamPagedReportCsv, streamPagedReportXlsx } = await import("./custom-reports");
+const { executeReportAllPages, streamPagedReportCsv, streamPagedReportXlsx } =
+  await import("./custom-reports");
 const { exportDataToCsv, exportDataToXlsx, runResultToExportData } = await import("./report-pdf");
 const { readSheet } = await import("@openbooks/office");
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 const GENERATED_AT = new Date("2026-03-01T00:00:00Z");
 const MONEY = { currency: "CAD", minorUnits: { CAD: 2, USD: 2 } };
-const COLUMNS = ["lot_number", "expires_on", "item_code", "item_name", "kind", "moved_at", "quantity", "memo"];
+const COLUMNS = [
+  "lot_number",
+  "expires_on",
+  "item_code",
+  "item_name",
+  "kind",
+  "moved_at",
+  "quantity",
+  "memo",
+];
 const plan = (groupBy: string | null = null, lotFilter: string | null = null) => ({
   entity: "inventory_lot_movements",
   mode: "rows" as const,
   columns: COLUMNS,
   filters: lotFilter
-    ? { combinator: "and" as const, rules: [{ field: "lot_number", op: "contains" as const, value: lotFilter }] }
+    ? {
+        combinator: "and" as const,
+        rules: [{ field: "lot_number", op: "contains" as const, value: lotFilter }],
+      }
     : null,
   groupBy,
   sorts: [
@@ -73,8 +102,12 @@ async function fixture(rows: number) {
   try {
     const uid = await withBypassContext(async () => {
       const id = await createScratchUser(org.orgId, "Recall exporter", "recall_exporter");
-      await db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='recall_exporter'`);
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
+      await db.execute(
+        sql`update app_roles set permissions='["reports.read"]'::jsonb where org_id=${org.orgId} and key='recall_exporter'`,
+      );
+      await db.execute(
+        sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`,
+      );
       await db.execute(sql`
         update item_inventory_profiles set tracking = 'lot', updated_at = now()
          where org_id = ${org.orgId} and item_id = ${org.items.fifo}`);
@@ -96,9 +129,23 @@ async function fixture(rows: number) {
           on lot.rn = (g % 40) + 1`);
       return id;
     });
-    state.user = { id: uid, orgId: org.orgId, isSuperAdmin: false, name: "Recall exporter", email: "recall@example.test",
-      roles: [], envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: uid };
-    const authz = { user: state.user, permissions: new Set(["reports.read"]), allowedSubsidiaryIds: null } as import("./authz").Authz;
+    state.user = {
+      id: uid,
+      orgId: org.orgId,
+      isSuperAdmin: false,
+      name: "Recall exporter",
+      email: "recall@example.test",
+      roles: [],
+      envKind: "production",
+      productionOrgId: org.orgId,
+      homeOrgId: org.orgId,
+      homeUserId: uid,
+    };
+    const authz = {
+      user: state.user,
+      permissions: new Set(["reports.read"]),
+      allowedSubsidiaryIds: null,
+    } as import("./authz").Authz;
     return { org, authz };
   } catch (err) {
     state.user = null;
@@ -112,15 +159,26 @@ async function release(fx: Awaited<ReturnType<typeof fixture>>) {
   await dropScratchOrg(fx.org.orgId);
 }
 
-async function oldOutputs(fx: Awaited<ReturnType<typeof fixture>>, groupBy: string | null = null, lotFilter: string | null = null) {
-  return withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, async () => {
-    const result = await executeReportAllPages(fx.org.orgId, plan(groupBy, lotFilter));
-    const data = runResultToExportData(result, { title: "Recall", dateRangeLabel: "" });
-    return {
-      csv: exportDataToCsv(data, { sectionHeader: "Section" }),
-      xlsx: await exportDataToXlsx(data, { reportName: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY }),
-    };
-  }));
+async function oldOutputs(
+  fx: Awaited<ReturnType<typeof fixture>>,
+  groupBy: string | null = null,
+  lotFilter: string | null = null,
+) {
+  return withOrgTransaction(fx.org.orgId, () =>
+    withReportAuthz(fx.authz, async () => {
+      const result = await executeReportAllPages(fx.org.orgId, plan(groupBy, lotFilter));
+      const data = runResultToExportData(result, { title: "Recall", dateRangeLabel: "" });
+      return {
+        csv: exportDataToCsv(data, { sectionHeader: "Section" }),
+        xlsx: await exportDataToXlsx(data, {
+          reportName: "Recall",
+          dateRangeLabel: "",
+          generatedAt: GENERATED_AT,
+          money: MONEY,
+        }),
+      };
+    }),
+  );
 }
 
 // ExcelJS's streaming writer omits truly-empty cells where the document
@@ -137,7 +195,10 @@ async function assertWorkbooksMatch(actual: Buffer, expected: Buffer) {
     return wb;
   };
   const [newWb, oldWb] = [await load(actual), await load(expected)];
-  assert.deepEqual(newWb.worksheets.map((w) => w.name), oldWb.worksheets.map((w) => w.name));
+  assert.deepEqual(
+    newWb.worksheets.map((w) => w.name),
+    oldWb.worksheets.map((w) => w.name),
+  );
   assert.equal(newWb.worksheets.length, oldWb.worksheets.length);
   for (let s = 0; s < oldWb.worksheets.length; s++) {
     const oldWs = oldWb.worksheets[s]!;
@@ -160,133 +221,239 @@ async function assertWorkbooksMatch(actual: Buffer, expected: Buffer) {
   }
 }
 
-test("streamed CSV is byte-identical to the buffered export on a three-page recall", enabled, async () => {
-  const fx = await fixture(1200);
-  try {
-    const old = await oldOutputs(fx);
-    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan(), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY })));
-    assert.equal(streamed.csv, old.csv);
-    assert.equal(streamed.rowCount, 1200);
-    assert.equal(streamed.totalRows, 1200);
-    assert.equal(streamed.truncated, false);
-  } finally { await release(fx); }
-});
+test(
+  "streamed CSV is byte-identical to the buffered export on a three-page recall",
+  enabled,
+  async () => {
+    const fx = await fixture(1200);
+    try {
+      const old = await oldOutputs(fx);
+      const streamed = await withOrgTransaction(fx.org.orgId, () =>
+        withReportAuthz(fx.authz, () =>
+          streamPagedReportCsv(fx.org.orgId, plan(), {
+            title: "Recall",
+            sectionHeader: "Section",
+            generatedAt: GENERATED_AT,
+            money: MONEY,
+          }),
+        ),
+      );
+      assert.equal(streamed.csv, old.csv);
+      assert.equal(streamed.rowCount, 1200);
+      assert.equal(streamed.totalRows, 1200);
+      assert.equal(streamed.truncated, false);
+    } finally {
+      await release(fx);
+    }
+  },
+);
 
 test("streamed CSV matches on sections spanning page boundaries", enabled, async () => {
   const fx = await fixture(1200);
   try {
     const old = await oldOutputs(fx, "kind");
-    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan("kind"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY })));
+    const streamed = await withOrgTransaction(fx.org.orgId, () =>
+      withReportAuthz(fx.authz, () =>
+        streamPagedReportCsv(fx.org.orgId, plan("kind"), {
+          title: "Recall",
+          sectionHeader: "Section",
+          generatedAt: GENERATED_AT,
+          money: MONEY,
+        }),
+      ),
+    );
     assert.equal(streamed.csv, old.csv);
     assert.ok(streamed.csv.startsWith("Section,"));
     assert.equal(streamed.rowCount, 1200);
-  } finally { await release(fx); }
+  } finally {
+    await release(fx);
+  }
 });
 
-test("streamed XLSX carries the same sheets and values as the buffered export", enabled, async () => {
-  const fx = await fixture(1200);
-  try {
-    const old = await oldOutputs(fx);
-    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportXlsx(fx.org.orgId, plan(), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY })));
-    assert.equal(streamed.rowCount, 1200);
-    assert.equal(streamed.truncated, false);
-    await assertWorkbooksMatch(streamed.xlsx, old.xlsx);
-    // The repo's own sheet reader sees the same content.
-    const back = await readSheet(streamed.xlsx);
-    assert.equal(back.headers[0], "Recall");
-    assert.ok(back.rows.length >= 1200);
-  } finally { await release(fx); }
-});
+test(
+  "streamed XLSX carries the same sheets and values as the buffered export",
+  enabled,
+  async () => {
+    const fx = await fixture(1200);
+    try {
+      const old = await oldOutputs(fx);
+      const streamed = await withOrgTransaction(fx.org.orgId, () =>
+        withReportAuthz(fx.authz, () =>
+          streamPagedReportXlsx(fx.org.orgId, plan(), {
+            title: "Recall",
+            dateRangeLabel: "",
+            generatedAt: GENERATED_AT,
+            money: MONEY,
+          }),
+        ),
+      );
+      assert.equal(streamed.rowCount, 1200);
+      assert.equal(streamed.truncated, false);
+      await assertWorkbooksMatch(streamed.xlsx, old.xlsx);
+      // The repo's own sheet reader sees the same content.
+      const back = await readSheet(streamed.xlsx);
+      assert.equal(back.headers[0], "Recall");
+      assert.ok(back.rows.length >= 1200);
+    } finally {
+      await release(fx);
+    }
+  },
+);
 
 test("streamed XLSX matches on sections spanning page boundaries", enabled, async () => {
   const fx = await fixture(1200);
   try {
     const old = await oldOutputs(fx, "kind");
-    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportXlsx(fx.org.orgId, plan("kind"), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY })));
+    const streamed = await withOrgTransaction(fx.org.orgId, () =>
+      withReportAuthz(fx.authz, () =>
+        streamPagedReportXlsx(fx.org.orgId, plan("kind"), {
+          title: "Recall",
+          dateRangeLabel: "",
+          generatedAt: GENERATED_AT,
+          money: MONEY,
+        }),
+      ),
+    );
     await assertWorkbooksMatch(streamed.xlsx, old.xlsx);
-  } finally { await release(fx); }
+  } finally {
+    await release(fx);
+  }
 });
 
 test("streamed CSV covers the empty recall exactly", enabled, async () => {
   const fx = await fixture(10);
   try {
     const old = await oldOutputs(fx, null, "NOPE-NO-LOT");
-    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan(null, "NOPE-NO-LOT"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY })));
+    const streamed = await withOrgTransaction(fx.org.orgId, () =>
+      withReportAuthz(fx.authz, () =>
+        streamPagedReportCsv(fx.org.orgId, plan(null, "NOPE-NO-LOT"), {
+          title: "Recall",
+          sectionHeader: "Section",
+          generatedAt: GENERATED_AT,
+          money: MONEY,
+        }),
+      ),
+    );
     assert.equal(streamed.csv, old.csv);
     assert.equal(streamed.rowCount, 0);
-  } finally { await release(fx); }
+  } finally {
+    await release(fx);
+  }
 });
 
-test("the row cap truncates with a disclosed footer instead of materialising everything", enabled, async () => {
-  const fx = await fixture(1200);
-  try {
-    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan(), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY, rowCap: 700 })));
-    assert.equal(streamed.rowCount, 700);
-    assert.equal(streamed.totalRows, 1200);
-    assert.equal(streamed.truncated, true);
-    const lines = streamed.csv.split("\r\n").filter((line) => line !== "");
-    assert.equal(lines.length, 1 + 700 + 3);
-    const last = lines[lines.length - 1] ?? "";
-    assert.ok(last.includes("Showing the first"), last);
-    const streamedX = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportXlsx(fx.org.orgId, plan(), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY, rowCap: 700 })));
-    assert.equal(streamedX.rowCount, 700);
-    assert.equal(streamedX.truncated, true);
-    const back = await readSheet(streamedX.xlsx);
-    assert.ok(back.rows.some((row) => JSON.stringify(row).includes("Showing the first")));
-  } finally { await release(fx); }
-});
+test(
+  "the row cap truncates with a disclosed footer instead of materialising everything",
+  enabled,
+  async () => {
+    const fx = await fixture(1200);
+    try {
+      const streamed = await withOrgTransaction(fx.org.orgId, () =>
+        withReportAuthz(fx.authz, () =>
+          streamPagedReportCsv(fx.org.orgId, plan(), {
+            title: "Recall",
+            sectionHeader: "Section",
+            generatedAt: GENERATED_AT,
+            money: MONEY,
+            rowCap: 700,
+          }),
+        ),
+      );
+      assert.equal(streamed.rowCount, 700);
+      assert.equal(streamed.totalRows, 1200);
+      assert.equal(streamed.truncated, true);
+      const lines = streamed.csv.split("\r\n").filter((line) => line !== "");
+      assert.equal(lines.length, 1 + 700 + 3);
+      const last = lines[lines.length - 1] ?? "";
+      assert.ok(last.includes("Showing the first"), last);
+      const streamedX = await withOrgTransaction(fx.org.orgId, () =>
+        withReportAuthz(fx.authz, () =>
+          streamPagedReportXlsx(fx.org.orgId, plan(), {
+            title: "Recall",
+            dateRangeLabel: "",
+            generatedAt: GENERATED_AT,
+            money: MONEY,
+            rowCap: 700,
+          }),
+        ),
+      );
+      assert.equal(streamedX.rowCount, 700);
+      assert.equal(streamedX.truncated, true);
+      const back = await readSheet(streamedX.xlsx);
+      assert.ok(back.rows.some((row) => JSON.stringify(row).includes("Showing the first")));
+    } finally {
+      await release(fx);
+    }
+  },
+);
 
-test("a row cap that cuts whole trailing sections still attributes the header and footer", enabled, async () => {
-  const fx = await fixture(1200);
-  try {
-    // Grouped by kind (receipts sort first), the buffered export holds two
-    // sections. Ten rows cannot reach the second one: without a trailing
-    // declaration the stream would drop it — the header would lose its
-    // section column and the footer would ride on the surviving prefix
-    // instead of the report's last section.
-    // (The suite stubs translations to identity, so both section titles read
-    // `run.section`: sections are told apart by their kind values, and every
-    // expectation below is read off the buffered export, never a literal.)
-    const old = await oldOutputs(fx, "kind");
-    const oldLines = old.csv.split("\r\n").filter((l) => l !== "");
-    const width = oldLines[0]!.split(",").length;
-    // Data lines are full-width; the trailing footer rows are single-cell.
-    const oldData = oldLines.slice(1).filter((l) => l.split(",").length === width);
-    assert.equal(oldData.length, 1200);
-    const oldKinds = [...new Set(oldData.map((l) => l.split(",")[5]))].sort();
-    assert.deepEqual(oldKinds, ["issue", "receipt"]);
-    const lastSectionTitle = oldLines.at(-1)!.split(",")[0]!;
-    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportCsv(fx.org.orgId, plan("kind"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY, rowCap: 10 })));
-    assert.equal(streamed.truncated, true);
-    assert.equal(streamed.rowCount, 10);
-    const lines = streamed.csv.split("\r\n").filter((line) => line !== "");
-    // The section column survives (a dropped trailing group would collapse
-    // the file to a single section and lose it), and the emitted prefix is
-    // the buffered file's own first ten data lines.
-    assert.ok(lines[0]!.startsWith("Section,"), lines[0] ?? "Missing export header");
-    assert.deepEqual(lines.slice(1, 11), oldLines.slice(1, 11));
-    // The footer rides on the report's last section with the truncation
-    // notice disclosed — never on the surviving prefix, never silent.
-    const last = lines[lines.length - 1]!;
-    assert.ok(last.startsWith(`${lastSectionTitle},`), last);
-    assert.ok(last.includes("Showing the first"), last);
-  } finally { await release(fx); }
-});
+test(
+  "a row cap that cuts whole trailing sections still attributes the header and footer",
+  enabled,
+  async () => {
+    const fx = await fixture(1200);
+    try {
+      // Grouped by kind (receipts sort first), the buffered export holds two
+      // sections. Ten rows cannot reach the second one: without a trailing
+      // declaration the stream would drop it — the header would lose its
+      // section column and the footer would ride on the surviving prefix
+      // instead of the report's last section.
+      // (The suite stubs translations to identity, so both section titles read
+      // `run.section`: sections are told apart by their kind values, and every
+      // expectation below is read off the buffered export, never a literal.)
+      const old = await oldOutputs(fx, "kind");
+      const oldLines = old.csv.split("\r\n").filter((l) => l !== "");
+      const width = oldLines[0]!.split(",").length;
+      // Data lines are full-width; the trailing footer rows are single-cell.
+      const oldData = oldLines.slice(1).filter((l) => l.split(",").length === width);
+      assert.equal(oldData.length, 1200);
+      const oldKinds = [...new Set(oldData.map((l) => l.split(",")[5]))].sort();
+      assert.deepEqual(oldKinds, ["issue", "receipt"]);
+      const lastSectionTitle = oldLines.at(-1)!.split(",")[0]!;
+      const streamed = await withOrgTransaction(fx.org.orgId, () =>
+        withReportAuthz(fx.authz, () =>
+          streamPagedReportCsv(fx.org.orgId, plan("kind"), {
+            title: "Recall",
+            sectionHeader: "Section",
+            generatedAt: GENERATED_AT,
+            money: MONEY,
+            rowCap: 10,
+          }),
+        ),
+      );
+      assert.equal(streamed.truncated, true);
+      assert.equal(streamed.rowCount, 10);
+      const lines = streamed.csv.split("\r\n").filter((line) => line !== "");
+      // The section column survives (a dropped trailing group would collapse
+      // the file to a single section and lose it), and the emitted prefix is
+      // the buffered file's own first ten data lines.
+      assert.ok(lines[0]!.startsWith("Section,"), lines[0] ?? "Missing export header");
+      assert.deepEqual(lines.slice(1, 11), oldLines.slice(1, 11));
+      // The footer rides on the report's last section with the truncation
+      // notice disclosed — never on the surviving prefix, never silent.
+      const last = lines[lines.length - 1]!;
+      assert.ok(last.startsWith(`${lastSectionTitle},`), last);
+      assert.ok(last.includes("Showing the first"), last);
+    } finally {
+      await release(fx);
+    }
+  },
+);
 
 test("a row cap that cuts whole trailing sections still emits every sheet", enabled, async () => {
   const fx = await fixture(1200);
   try {
     const old = await oldOutputs(fx, "kind");
-    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
-      streamPagedReportXlsx(fx.org.orgId, plan("kind"), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY, rowCap: 10 })));
+    const streamed = await withOrgTransaction(fx.org.orgId, () =>
+      withReportAuthz(fx.authz, () =>
+        streamPagedReportXlsx(fx.org.orgId, plan("kind"), {
+          title: "Recall",
+          dateRangeLabel: "",
+          generatedAt: GENERATED_AT,
+          money: MONEY,
+          rowCap: 10,
+        }),
+      ),
+    );
     assert.equal(streamed.truncated, true);
     assert.equal(streamed.rowCount, 10);
     const load = async (buf: Buffer) => {
@@ -298,51 +465,86 @@ test("a row cap that cuts whole trailing sections still emits every sheet", enab
     // Both sheets exist with the buffered names (a dropped trailing group
     // would leave one), the first carries the ten-row prefix, and the
     // truncation notice lands on the report's last sheet.
-    assert.deepEqual(newWb.worksheets.map((w) => w.name), oldWb.worksheets.map((w) => w.name));
+    assert.deepEqual(
+      newWb.worksheets.map((w) => w.name),
+      oldWb.worksheets.map((w) => w.name),
+    );
     assert.equal(newWb.worksheets.length, 2);
     const first = newWb.worksheets[0]!;
     assert.equal(first.rowCount, 4 + 10);
     const lastSheet = newWb.worksheets[1]!;
     const lastText = JSON.stringify(lastSheet.getCell(lastSheet.rowCount, 1).value);
     assert.ok(lastText.includes("Showing the first"), lastText);
-  } finally { await release(fx); }
+  } finally {
+    await release(fx);
+  }
 });
 
-test("the definitions export route streams paged CSV/XLSX and keeps PDF buffered", enabled, async () => {
-  const fx = await fixture(1200);
-  try {
-    const { GET } = await import("../app/api/reports/definitions/[id]/export/route");
-    const inserted = await withOrgContext(fx.org.orgId, () => db.execute<{ id: string }>(sql`
+test(
+  "the definitions export route streams paged CSV/XLSX and keeps PDF buffered",
+  enabled,
+  async () => {
+    const fx = await fixture(1200);
+    try {
+      const { GET } = await import("../app/api/reports/definitions/[id]/export/route");
+      const inserted = await withOrgContext(fx.org.orgId, () =>
+        db.execute<{ id: string }>(
+          sql`
       insert into report_definitions (org_id, slug, name, query)
       values (${fx.org.orgId}, 'recall-stream', 'Recall', ${JSON.stringify(plan())}::jsonb)
-      returning id`, "objects"));
-    const defId = inserted[0]!.id;
-    const params = { params: Promise.resolve({ id: defId }) };
-    const run = <T>(action: () => Promise<T>): Promise<T> =>
-      withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, action));
-    const csv = await run(() => GET(new Request(`http://test.local/api/reports/definitions/${defId}/export?format=csv`), params));
-    assert.equal(csv.status, 200);
-    assert.match(csv.headers.get("content-type") ?? "", /text\/csv/);
-    assert.match(csv.headers.get("content-disposition") ?? "", /attachment/);
-    const body = await csv.text();
-    assert.equal(body.split("\r\n").filter((line) => line !== "").length, 1 + 1200 + 2);
-    const xlsx = await run(() => GET(new Request(`http://test.local/api/reports/definitions/${defId}/export?format=xlsx`), params));
-    assert.equal(xlsx.status, 200);
-    assert.match(xlsx.headers.get("content-type") ?? "", /spreadsheetml/);
-    const back = await readSheet(Buffer.from(await xlsx.arrayBuffer()));
-    assert.equal(back.headers[0], "Recall");
-    assert.ok(back.rows.length >= 1200);
-    await withOrgContext(fx.org.orgId, () => db.execute(sql`update report_definitions
+      returning id`,
+          "objects",
+        ),
+      );
+      const defId = inserted[0]!.id;
+      const params = { params: Promise.resolve({ id: defId }) };
+      const run = <T>(action: () => Promise<T>): Promise<T> =>
+        withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, action));
+      const csv = await run(() =>
+        GET(
+          new Request(`http://test.local/api/reports/definitions/${defId}/export?format=csv`),
+          params,
+        ),
+      );
+      assert.equal(csv.status, 200);
+      assert.match(csv.headers.get("content-type") ?? "", /text\/csv/);
+      assert.match(csv.headers.get("content-disposition") ?? "", /attachment/);
+      const body = await csv.text();
+      assert.equal(body.split("\r\n").filter((line) => line !== "").length, 1 + 1200 + 2);
+      const xlsx = await run(() =>
+        GET(
+          new Request(`http://test.local/api/reports/definitions/${defId}/export?format=xlsx`),
+          params,
+        ),
+      );
+      assert.equal(xlsx.status, 200);
+      assert.match(xlsx.headers.get("content-type") ?? "", /spreadsheetml/);
+      const back = await readSheet(Buffer.from(await xlsx.arrayBuffer()));
+      assert.equal(back.headers[0], "Recall");
+      assert.ok(back.rows.length >= 1200);
+      await withOrgContext(fx.org.orgId, () =>
+        db.execute(sql`update report_definitions
       set layout='{"paperSize":"tabloid","orientation":"landscape","density":"compact","marginMm":5}'::jsonb
-      where org_id=${fx.org.orgId} and id=${defId}`));
-    const pdf = await run(() => GET(new Request(`http://test.local/api/reports/definitions/${defId}/export?format=pdf`), params));
-    assert.equal(pdf.status, 200,pdf.status===200?undefined:await pdf.clone().text());
-    assert.match(pdf.headers.get("content-type") ?? "", /application\/pdf/);
-  } finally { await release(fx); }
-});
+      where org_id=${fx.org.orgId} and id=${defId}`),
+      );
+      const pdf = await run(() =>
+        GET(
+          new Request(`http://test.local/api/reports/definitions/${defId}/export?format=pdf`),
+          params,
+        ),
+      );
+      assert.equal(pdf.status, 200, pdf.status === 200 ? undefined : await pdf.clone().text());
+      assert.match(pdf.headers.get("content-type") ?? "", /application\/pdf/);
+    } finally {
+      await release(fx);
+    }
+  },
+);
 
 test("the truncation notice names the shown and total rows", () => {
-  const en = JSON.parse(readFileSync(new URL("../messages/en/reports.json", import.meta.url), "utf8")) as {
+  const en = JSON.parse(
+    readFileSync(new URL("../messages/en/reports.json", import.meta.url), "utf8"),
+  ) as {
     run: { exportTruncated: string };
   };
   assert.match(en.run.exportTruncated, /\{shown\}/);

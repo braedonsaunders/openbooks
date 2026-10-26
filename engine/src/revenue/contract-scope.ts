@@ -43,12 +43,20 @@ export async function contractCreationMode(
   runner: Pick<typeof db, "execute">,
   orgId: string,
 ): Promise<"first_billing" | "booking"> {
-  const row = (await (runner as SqlExecutor).execute<{ mode: string | null }>(sql`
-    select settings->'revenue'->>'contractCreation' as mode from orgs where id = ${orgId}`, "objects"))[0];
+  const row = (
+    await (runner as SqlExecutor).execute<{ mode: string | null }>(
+      sql`
+    select settings->'revenue'->>'contractCreation' as mode from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   return row?.mode === "booking" ? "booking" : "first_billing";
 }
 
-export function revenueScopedContractPostingEffectKey(scope: ContractScope, sourceId: string): string {
+export function revenueScopedContractPostingEffectKey(
+  scope: ContractScope,
+  sourceId: string,
+): string {
   return `posting-effect:revenue-contract:${scope}:${sourceId}`;
 }
 
@@ -64,21 +72,27 @@ export async function resolveBillingSource(
   orgId: string,
   invoiceId: string,
 ): Promise<BillingSource | null> {
-  const orders = await runner.execute<{ id: string; document_number: string }>(sql`
+  const orders = await runner.execute<{ id: string; document_number: string }>(
+    sql`
     select source.id, source.document_number
       from document_links link
       join documents source
         on source.id = link.from_document_id and source.org_id = link.org_id
      where link.org_id = ${orgId} and link.to_document_id = ${invoiceId}
        and link.link_type = 'bills' and source.kind = 'sales_order'
-     order by source.document_number`, "objects");
-  const subscriptions = await runner.execute<{ id: string; number: string }>(sql`
+     order by source.document_number`,
+    "objects",
+  );
+  const subscriptions = await runner.execute<{ id: string; number: string }>(
+    sql`
     select s.id,
            coalesce((select p.name from subscription_plans p where p.id = s.plan_id and p.org_id = s.org_id), s.id::text) as number
       from subscription_period_invoices spi
       join subscriptions s on s.id = spi.subscription_id and s.org_id = spi.org_id
      where spi.org_id = ${orgId} and spi.invoice_id = ${invoiceId}
-     order by spi.period_starts_on`, "objects");
+     order by spi.period_starts_on`,
+    "objects",
+  );
   if (orders.length > 1) {
     throw new RevenueRecognitionError(
       `Invoice bills ${orders.length} sales orders (${orders.map((o) => o.document_number).join(", ")}); bill each order on its own invoice so each contract holds one agreement`,
@@ -89,13 +103,15 @@ export async function resolveBillingSource(
       `Invoice bills sales order ${orders[0]!.document_number} and a subscription; bill the order and the subscription on separate invoices so each contract holds one agreement`,
     );
   }
-  if (orders.length === 1) return { kind: "order", id: orders[0]!.id, number: orders[0]!.document_number };
+  if (orders.length === 1)
+    return { kind: "order", id: orders[0]!.id, number: orders[0]!.document_number };
   if (subscriptions.length > 1) {
     throw new RevenueRecognitionError(
       "Invoice bills several subscriptions; bill each subscription on its own invoice so each contract holds one agreement",
     );
   }
-  if (subscriptions.length === 1) return { kind: "subscription", id: subscriptions[0]!.id, number: subscriptions[0]!.number };
+  if (subscriptions.length === 1)
+    return { kind: "subscription", id: subscriptions[0]!.id, number: subscriptions[0]!.number };
   return null;
 }
 
@@ -116,12 +132,20 @@ async function scopedSubject(
   source: BillingSource,
 ): Promise<ScopedSubject> {
   if (source.kind === "order") {
-    const row = (await runner.execute<{
-      party_id: string | null; subsidiary_id: string | null; currency: string | null;
-      document_number: string; document_date: string;
-    }>(sql`
+    const row = (
+      await runner.execute<{
+        party_id: string | null;
+        subsidiary_id: string | null;
+        currency: string | null;
+        document_number: string;
+        document_date: string;
+      }>(
+        sql`
       select party_id, subsidiary_id, currency, document_number, document_date::text as document_date
-        from documents where id = ${source.id} and org_id = ${orgId} and kind = 'sales_order'`, "objects"))[0];
+        from documents where id = ${source.id} and org_id = ${orgId} and kind = 'sales_order'`,
+        "objects",
+      )
+    )[0];
     if (!row || !row.party_id) {
       throw new RevenueRecognitionError(
         `Sales order ${source.number} names no customer; assign the order's customer before billing it to a contract`,
@@ -137,13 +161,20 @@ async function scopedSubject(
       idempotencyKey: revenueScopedContractPostingEffectKey("order", source.id),
     };
   }
-  const row = (await runner.execute<{
-    customer_id: string; start_on: string; currency: string | null;
-  }>(sql`
+  const row = (
+    await runner.execute<{
+      customer_id: string;
+      start_on: string;
+      currency: string | null;
+    }>(
+      sql`
     select s.customer_id, s.start_on::text as start_on, p.currency_code as currency
       from subscriptions s
       left join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
-     where s.id = ${source.id} and s.org_id = ${orgId}`, "objects"))[0];
+     where s.id = ${source.id} and s.org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new RevenueRecognitionError(
       "The billed subscription no longer exists; rebill from the live subscription",
@@ -187,7 +218,9 @@ export async function ensureScopedContract(
       `This agreement bills in ${subject.currency}; bill in ${subject.currency} or open a separate contract for the other currency`,
     );
   }
-  const inserted = (await runner.execute<{ id: string }>(sql`
+  const inserted = (
+    await runner.execute<{ id: string }>(
+      sql`
     insert into revenue_contracts
       (org_id, subsidiary_id, customer_id, contract_number, idempotency_key, status, starts_on,
        currency, total_transaction_price, total_consideration, scope,
@@ -200,15 +233,27 @@ export async function ensureScopedContract(
             ${actorId}, ${actorId})
     -- An idempotent source reuses the existing contract and verifies its identity below.
     on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
-    returning id`, "objects"))[0];
+    returning id`,
+      "objects",
+    )
+  )[0];
   if (inserted) return { id: inserted.id, created: true };
-  const existing = (await runner.execute<{
-    id: string; customer_id: string; currency: string | null; scope: string;
-    source_document_id: string | null; subscription_id: string | null;
-  }>(sql`
+  const existing = (
+    await runner.execute<{
+      id: string;
+      customer_id: string;
+      currency: string | null;
+      scope: string;
+      source_document_id: string | null;
+      subscription_id: string | null;
+    }>(
+      sql`
     select id, customer_id, currency, scope, source_document_id, subscription_id
       from revenue_contracts
-     where org_id = ${orgId} and idempotency_key = ${subject.idempotencyKey}`, "objects"))[0];
+     where org_id = ${orgId} and idempotency_key = ${subject.idempotencyKey}`,
+      "objects",
+    )
+  )[0];
   if (!existing) throw new Error("revenue contract idempotency winner was not visible");
   if (existing.scope !== subject.scope) {
     throw new RevenueRecognitionError(
@@ -221,7 +266,11 @@ export async function ensureScopedContract(
     );
   }
   const existingCurrency = existing.currency ?? "";
-  if ((documentCurrency ?? "") !== "" && existingCurrency !== "" && existingCurrency !== documentCurrency) {
+  if (
+    (documentCurrency ?? "") !== "" &&
+    existingCurrency !== "" &&
+    existingCurrency !== documentCurrency
+  ) {
     throw new RevenueRecognitionError(
       `This contract bills in ${existingCurrency}; bill in ${existingCurrency} or open a separate contract for the other currency`,
     );
@@ -241,20 +290,32 @@ export async function ensureBookingContract(
 ): Promise<string | null> {
   if (!(await revenueContractsEnabled(db, orgId))) return null;
   if ((await contractCreationMode(db, orgId)) !== "booking") return null;
-  const order = (await db.execute<{ document_number: string; party_id: string | null }>(sql`
+  const order = (
+    await db.execute<{ document_number: string; party_id: string | null }>(
+      sql`
     select document_number, party_id from documents
-     where id = ${salesOrderId} and org_id = ${orgId} and kind = 'sales_order'`, "objects"))[0];
-  if (!order) throw new Error("sales order disappeared while its revenue contract was being booked");
+     where id = ${salesOrderId} and org_id = ${orgId} and kind = 'sales_order'`,
+      "objects",
+    )
+  )[0];
+  if (!order)
+    throw new Error("sales order disappeared while its revenue contract was being booked");
   if (!order.party_id) {
     throw new RevenueRecognitionError(
       `Sales order ${order.document_number} names no customer; assign the order's customer before issuing it to a contract`,
     );
   }
-  return (await ensureScopedContract(
-    db, orgId,
-    { kind: "order", id: salesOrderId, number: order.document_number },
-    order.party_id, null, actorId, true,
-  )).id;
+  return (
+    await ensureScopedContract(
+      db,
+      orgId,
+      { kind: "order", id: salesOrderId, number: order.document_number },
+      order.party_id,
+      null,
+      actorId,
+      true,
+    )
+  ).id;
 }
 
 /**
@@ -272,19 +333,29 @@ export async function recordContractBilling(
   billedOn: string,
   actorId: string | null,
 ): Promise<{ billed: boolean }> {
-  const inserted = (await runner.execute<{ id: string }>(sql`
+  const inserted = (
+    await runner.execute<{ id: string }>(
+      sql`
     insert into revenue_contract_billings
       (org_id, contract_id, document_id, amount, billed_on, created_by, updated_by)
     values (${orgId}, ${contractId}, ${documentId}, ${amount}, ${billedOn}, ${actorId}, ${actorId})
     -- A replay reuses the prior billing only when its amount and contract agree below.
     on conflict (org_id, document_id) do nothing
-    returning id`, "objects"))[0];
+    returning id`,
+      "objects",
+    )
+  )[0];
   // The conflict above is expected and benign: a posted billing replays to
   // the row its first attempt wrote, and consideration must not grow twice.
   if (!inserted) {
-    const prior = (await runner.execute<{ amount: string; contract_id: string }>(sql`
+    const prior = (
+      await runner.execute<{ amount: string; contract_id: string }>(
+        sql`
       select amount, contract_id from revenue_contract_billings
-       where org_id = ${orgId} and document_id = ${documentId}`, "objects"))[0];
+       where org_id = ${orgId} and document_id = ${documentId}`,
+        "objects",
+      )
+    )[0];
     if (!prior || prior.contract_id !== contractId || cmp(prior.amount, amount) !== 0) {
       throw new RevenueRecognitionError(
         "This billing was already recorded against a different contract or amount; reconcile the contract before retrying",
@@ -292,7 +363,8 @@ export async function recordContractBilling(
     }
     return { billed: false };
   }
-  const updated = await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(
+    sql`
     update revenue_contracts
        set total_consideration = total_consideration + ${amount},
            total_transaction_price = case when scope = 'invoice'
@@ -301,7 +373,9 @@ export async function recordContractBilling(
            status = 'active',
            updated_by = ${actorId}, updated_at = now()
      where id = ${contractId} and org_id = ${orgId}
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   // Under row-level security an unscoped write silently matches nothing, so
   // a zero-row accumulation is raised, never reported as billed.
   if (updated.length !== 1) throw new Error("revenue contract consideration was not accumulated");
@@ -331,7 +405,9 @@ export async function contractPosition(
   orgId: string,
   contractId: string,
 ): Promise<ContractPosition> {
-  const billedRes = (await runner.execute<{ billed: string; consideration: string }>(sql`
+  const billedRes = (
+    await runner.execute<{ billed: string; consideration: string }>(
+      sql`
     select coalesce((select sum(billing.amount)
                        from revenue_contract_billings billing
                        join documents document
@@ -339,11 +415,17 @@ export async function contractPosition(
                       where billing.org_id = ${orgId} and billing.contract_id = ${contractId}
                         and document.status = 'posted'), 0)::text as billed,
            coalesce((select total_consideration from revenue_contracts
-                      where id = ${contractId} and org_id = ${orgId}), 0)::text as consideration`, "objects"))[0];
-  const billed = cmp(billedRes?.billed ?? "0", "0") !== 0
-    ? billedRes!.billed
-    : (billedRes?.consideration ?? "0");
-  const scheduleRes = (await runner.execute<{ recognized: string; planned: string }>(sql`
+                      where id = ${contractId} and org_id = ${orgId}), 0)::text as consideration`,
+      "objects",
+    )
+  )[0];
+  const billed =
+    cmp(billedRes?.billed ?? "0", "0") !== 0
+      ? billedRes!.billed
+      : (billedRes?.consideration ?? "0");
+  const scheduleRes = (
+    await runner.execute<{ recognized: string; planned: string }>(
+      sql`
     select coalesce(sum(l.recognized_amount) filter (
              where l.journal_entry_id is not null and l.reversal_journal_entry_id is null), 0)::text as recognized,
            coalesce(sum(case
@@ -355,7 +437,10 @@ export async function contractPosition(
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_primary
       join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where o.contract_id = ${contractId} and o.org_id = ${orgId}
-       and o.status <> 'cancelled'`, "objects"))[0];
+       and o.status <> 'cancelled'`,
+      "objects",
+    )
+  )[0];
   const recognized = scheduleRes?.recognized ?? "0";
   const planned = scheduleRes?.planned ?? "0";
   const netPosition = add(billed, neg(recognized));

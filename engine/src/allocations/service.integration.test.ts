@@ -112,7 +112,9 @@ async function setupReportRule(): Promise<ReportSetup> {
 }
 
 function sortedVector(entries: Array<{ key: string; value: string }>): Array<[string, string]> {
-  return entries.map((e) => [e.key, e.value] as [string, string]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  return entries
+    .map((e) => [e.key, e.value] as [string, string])
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1));
 }
 
 test("period runs resolve report drivers with no injected deps (production default)", async () => {
@@ -137,11 +139,16 @@ test("period runs resolve report drivers with no injected deps (production defau
       { mode: "balance_as_of", from: null, to: "2026-07-31", field: null },
     );
     const vector = sortedVector(preview.computation.driver?.vector ?? []);
-    assert.deepEqual(vector, sortedVector([
-      { key: s.adjustment, value: "1000.0000" },
-      { key: s.bank, value: "0.0000" },
-    ]));
-    const amounts = new Map(preview.computation.targets.map((t) => [t.coordinate.extraDims?.["account"], t.amount]));
+    assert.deepEqual(
+      vector,
+      sortedVector([
+        { key: s.adjustment, value: "1000.0000" },
+        { key: s.bank, value: "0.0000" },
+      ]),
+    );
+    const amounts = new Map(
+      preview.computation.targets.map((t) => [t.coordinate.extraDims?.["account"], t.amount]),
+    );
     assert.equal(amounts.get(s.adjustment), "1000.0000");
     assert.equal(amounts.get(s.bank), "0.0000");
   } finally {
@@ -154,13 +161,22 @@ test("the allocation service factory resolves report drivers for preview callers
   try {
     // The same composition the drivers preview route and the assistant use.
     const preview = await previewDriverVector(
-      { orgId: s.org.orgId, driverId: s.driverId, asOf: { periodId: s.org.periodId }, actorId: s.actor, allowedSubsidiaryIds: null },
+      {
+        orgId: s.org.orgId,
+        driverId: s.driverId,
+        asOf: { periodId: s.org.periodId },
+        actorId: s.actor,
+        allowedSubsidiaryIds: null,
+      },
       allocationServiceDeps(),
     );
-    assert.deepEqual(sortedVector(preview.vector), sortedVector([
-      { key: s.adjustment, value: "1000.0000" },
-      { key: s.bank, value: "0.0000" },
-    ]));
+    assert.deepEqual(
+      sortedVector(preview.vector),
+      sortedVector([
+        { key: s.adjustment, value: "1000.0000" },
+        { key: s.bank, value: "0.0000" },
+      ]),
+    );
     assert.equal(preview.total, "1000.0000");
   } finally {
     await dropScratchOrgReporting(s.org.orgId);

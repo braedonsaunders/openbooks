@@ -12,28 +12,39 @@
  * Pure (no imports): safe for unit tests and both server and client bundles.
  */
 
-export type GatedReportFeature = 'projects' | 'projectProgress' | 'hrmAttendance' | 'budgets' | 'orders' | 'inventory' | 'warehousing' | 'resourcing' | 'payroll' | 'multiSubsidiary' | 'multiBookAccounting'
+export type GatedReportFeature =
+  | "projects"
+  | "projectProgress"
+  | "hrmAttendance"
+  | "budgets"
+  | "orders"
+  | "inventory"
+  | "warehousing"
+  | "resourcing"
+  | "payroll"
+  | "multiSubsidiary"
+  | "multiBookAccounting";
 
 export const REPORT_PATH_FEATURE_GATES: ReadonlyArray<{
-  prefix: string
-  feature: GatedReportFeature
+  prefix: string;
+  feature: GatedReportFeature;
 }> = [
   // lib/projects-gate requireProjectsFeature
-  { prefix: '/reports/project-profitability', feature: 'projects' },
-  { prefix: '/reports/project-budget-vs-actual', feature: 'projects' },
-  { prefix: '/reports/true-cost', feature: 'projects' },
-  { prefix: '/reports/earned-value', feature: 'projectProgress' },
-  { prefix: '/reports/payroll-support', feature: 'payroll' },
+  { prefix: "/reports/project-profitability", feature: "projects" },
+  { prefix: "/reports/project-budget-vs-actual", feature: "projects" },
+  { prefix: "/reports/true-cost", feature: "projects" },
+  { prefix: "/reports/earned-value", feature: "projectProgress" },
+  { prefix: "/reports/payroll-support", feature: "payroll" },
   // lib/feature-gates requireFeatureEnabled
-  { prefix: '/reports/attendance-exceptions', feature: 'hrmAttendance' },
-  { prefix: '/reports/budget', feature: 'budgets' },
-  { prefix: '/reports/orders', feature: 'orders' },
-  { prefix: '/reports/availability', feature: 'warehousing' },
-  { prefix: '/reports/replenishment', feature: 'warehousing' },
-  { prefix: '/reports/resourcing', feature: 'resourcing' },
-  { prefix: '/reports/intercompany-reconciliation', feature: 'multiSubsidiary' },
-  { prefix: '/reports/book-differences', feature: 'multiBookAccounting' },
-]
+  { prefix: "/reports/attendance-exceptions", feature: "hrmAttendance" },
+  { prefix: "/reports/budget", feature: "budgets" },
+  { prefix: "/reports/orders", feature: "orders" },
+  { prefix: "/reports/availability", feature: "warehousing" },
+  { prefix: "/reports/replenishment", feature: "warehousing" },
+  { prefix: "/reports/resourcing", feature: "resourcing" },
+  { prefix: "/reports/intercompany-reconciliation", feature: "multiSubsidiary" },
+  { prefix: "/reports/book-differences", feature: "multiBookAccounting" },
+];
 
 /**
  * A saved view stays on the hub only while every gate covering its path is
@@ -46,8 +57,8 @@ export function savedReportPathVisible(
 ): boolean {
   for (const { prefix, feature } of REPORT_PATH_FEATURE_GATES) {
     if (path === prefix || path.startsWith(`${prefix}/`)) {
-      if (!enabled[feature]) return false
+      if (!enabled[feature]) return false;
     }
   }
-  return true
+  return true;
 }

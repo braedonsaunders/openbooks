@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 
 /**
  * The last-resort branch of a route's error boundary.
@@ -14,9 +14,9 @@ import { NextResponse } from 'next/server'
  * log identifies the fault without the response naming it.
  */
 export function unexpectedServerError(scope: string, error: unknown): NextResponse {
-  console.error(`[${scope}] unexpected failure`, error)
+  console.error(`[${scope}] unexpected failure`, error);
   return NextResponse.json(
-    { error: 'request failed; retry, and contact support if it persists' },
+    { error: "request failed; retry, and contact support if it persists" },
     { status: 500 },
-  )
+  );
 }

@@ -1,8 +1,8 @@
-import type { ComponentProps } from 'react'
-import Link from 'next/link'
-import { cn } from '@openbooks/ui'
-import { LiveDirectory, type DirectoryItem } from '../../../components/module-home/ui'
-import { CommitmentsTable } from './CommitmentsTable'
+import type { ComponentProps } from "react";
+import Link from "next/link";
+import { cn } from "@openbooks/ui";
+import { LiveDirectory, type DirectoryItem } from "../../../components/module-home/ui";
+import { CommitmentsTable } from "./CommitmentsTable";
 
 /**
  * The purchasing cockpit's bespoke rail sections, extracted from the page.
@@ -37,12 +37,12 @@ export function CommitmentsSection({
   empty,
   emptyAction,
 }: {
-  rows: ComponentProps<typeof CommitmentsTable>['rows']
-  showPurchaseOrders: boolean
-  empty: string
+  rows: ComponentProps<typeof CommitmentsTable>["rows"];
+  showPurchaseOrders: boolean;
+  empty: string;
   /** Optional next step when there is nothing to commit: a link the caller
    *  may already take (never offered without its grant). */
-  emptyAction?: { href: string; label: string } | null
+  emptyAction?: { href: string; label: string } | null;
 }) {
   if (rows.length === 0) {
     return (
@@ -57,9 +57,9 @@ export function CommitmentsSection({
           </Link>
         ) : null}
       </div>
-    )
+    );
   }
-  return <CommitmentsTable rows={rows} showPurchaseOrders={showPurchaseOrders} />
+  return <CommitmentsTable rows={rows} showPurchaseOrders={showPurchaseOrders} />;
 }
 
 export function ApPulse({
@@ -70,34 +70,46 @@ export function ApPulse({
   labels,
   href,
 }: {
-  outstanding: string
-  overdue: string
-  dueNext7: string
-  overdueIsNegative: boolean
-  labels: { open: string; overdue: string; due7: string; cta: string }
-  href: string
+  outstanding: string;
+  overdue: string;
+  dueNext7: string;
+  overdueIsNegative: boolean;
+  labels: { open: string; overdue: string; due7: string; cta: string };
+  href: string;
 }) {
   return (
     <>
       <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-800">
         <div className="px-3 py-2.5 text-center">
-          <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{outstanding}</p>
-          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{labels.open}</p>
+          <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">
+            {outstanding}
+          </p>
+          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            {labels.open}
+          </p>
         </div>
         <div className="px-3 py-2.5 text-center">
           <p
             className={cn(
-              'text-sm font-bold tabular-nums',
-              overdueIsNegative ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100',
+              "text-sm font-bold tabular-nums",
+              overdueIsNegative
+                ? "text-red-600 dark:text-red-400"
+                : "text-slate-800 dark:text-slate-100",
             )}
           >
             {overdue}
           </p>
-          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{labels.overdue}</p>
+          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            {labels.overdue}
+          </p>
         </div>
         <div className="px-3 py-2.5 text-center">
-          <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">{dueNext7}</p>
-          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{labels.due7}</p>
+          <p className="text-sm font-bold tabular-nums text-slate-800 dark:text-slate-100">
+            {dueNext7}
+          </p>
+          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            {labels.due7}
+          </p>
         </div>
       </div>
       <Link
@@ -107,14 +119,16 @@ export function ApPulse({
         {labels.cta} →
       </Link>
     </>
-  )
+  );
 }
 
-export type AttentionItem = { tone: 'negative' | 'warning'; text: string; href: string }
+export type AttentionItem = { tone: "negative" | "warning"; text: string; href: string };
 
 export function AttentionList({ items, allClear }: { items: AttentionItem[]; allClear: string }) {
   if (items.length === 0) {
-    return <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">{allClear}</p>
+    return (
+      <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">{allClear}</p>
+    );
   }
   return (
     <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
@@ -126,8 +140,8 @@ export function AttentionList({ items, allClear }: { items: AttentionItem[]; all
           >
             <span
               className={cn(
-                'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-                item.tone === 'negative' ? 'bg-red-500' : 'bg-amber-500',
+                "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                item.tone === "negative" ? "bg-red-500" : "bg-amber-500",
               )}
             />
             <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-300">{item.text}</span>
@@ -135,15 +149,17 @@ export function AttentionList({ items, allClear }: { items: AttentionItem[]; all
         </li>
       ))}
     </ul>
-  )
+  );
 }
 
 export function DirectorySection({ items, title }: { items: DirectoryItem[]; title: string }) {
-  if (items.length === 0) return null
+  if (items.length === 0) return null;
   return (
     <div className="shrink-0">
-      <h3 className="mb-2 px-1 text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
+      <h3 className="mb-2 px-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
+        {title}
+      </h3>
       <LiveDirectory items={items} />
     </div>
-  )
+  );
 }

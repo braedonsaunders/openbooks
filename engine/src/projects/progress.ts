@@ -106,17 +106,26 @@ export async function lockProgressTask(
   taskId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ProgressTask> {
-  const row = (await executor.execute<{
-    id: string; project_id: string; code: string | null; name: string;
-    budget_quantity: string | null; budget_unit: string | null;
-  }>(sql`
+  const row = (
+    await executor.execute<{
+      id: string;
+      project_id: string;
+      code: string | null;
+      name: string;
+      budget_quantity: string | null;
+      budget_unit: string | null;
+    }>(
+      sql`
     select t.id, t.project_id, t.code, t.name, t.budget_quantity::text as budget_quantity, t.budget_unit
       from project_tasks t
       join projects p on p.id = t.project_id and p.org_id = t.org_id
      where t.org_id = ${orgId} and t.id = ${taskId} and t.project_id = ${projectId}
        ${scopeFilter(allowedSubsidiaryIds)}
      for share of t, p
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) throw new ProjectProgressError("Task not found on this project", 404, "not-found");
   return {
     id: row.id,
@@ -128,7 +137,8 @@ export async function lockProgressTask(
   };
 }
 
-const taskLabel = (task: Pick<ProgressTask, "code" | "name">) => (task.code ? `${task.code} ${task.name}` : task.name);
+const taskLabel = (task: Pick<ProgressTask, "code" | "name">) =>
+  task.code ? `${task.code} ${task.name}` : task.name;
 
 /**
  * The task must measure progress in units, and the quantity must be in that
@@ -180,20 +190,31 @@ async function insertEntry(
   orgId: string,
   actorId: string | null,
   entry: {
-    projectId: string; taskId: string; entryDate: string; quantity: string; unit: string;
-    source: "manual" | "field_ticket"; sourceDocumentId: string | null; reversesEntryId: string | null;
+    projectId: string;
+    taskId: string;
+    entryDate: string;
+    quantity: string;
+    unit: string;
+    source: "manual" | "field_ticket";
+    sourceDocumentId: string | null;
+    reversesEntryId: string | null;
     note: string | null;
   },
   audit: Record<string, unknown>,
 ): Promise<string> {
-  const inserted = (await executor.execute<{ id: string }>(sql`
+  const inserted = (
+    await executor.execute<{ id: string }>(
+      sql`
     insert into project_progress_entries
       (org_id, project_id, project_task_id, entry_date, quantity, unit, source,
        source_document_id, reverses_entry_id, note, created_by)
     values (${orgId}, ${entry.projectId}, ${entry.taskId}, ${entry.entryDate}, ${entry.quantity}, ${entry.unit},
             ${entry.source}, ${entry.sourceDocumentId}, ${entry.reversesEntryId}, ${entry.note}, ${actorId})
     returning id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!inserted) throw new Error("progress entry insert returned no row");
   await executor.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -226,7 +247,13 @@ export async function recordProgress(input: {
   const note = cleanNote(input.note);
   return withOrgTransaction(input.orgId, async () => {
     await assertProgressEnabled(db, input.orgId);
-    const task = await lockProgressTask(db, input.orgId, input.projectId, input.taskId, input.allowedSubsidiaryIds);
+    const task = await lockProgressTask(
+      db,
+      input.orgId,
+      input.projectId,
+      input.taskId,
+      input.allowedSubsidiaryIds,
+    );
     assertQuantityMatchesBudget(task, input.unit);
     const today = await businessTodayInTx(db, input.orgId);
     if (input.entryDate > today) {
@@ -237,17 +264,23 @@ export async function recordProgress(input: {
         "record the work on or before today's date",
       );
     }
-    const id = await insertEntry(db, input.orgId, input.actorId, {
-      projectId: task.projectId,
-      taskId: task.id,
-      entryDate: input.entryDate,
-      quantity,
-      unit: task.budgetUnit!,
-      source: "manual",
-      sourceDocumentId: null,
-      reversesEntryId: null,
-      note,
-    }, { event: "progress_recorded" });
+    const id = await insertEntry(
+      db,
+      input.orgId,
+      input.actorId,
+      {
+        projectId: task.projectId,
+        taskId: task.id,
+        entryDate: input.entryDate,
+        quantity,
+        unit: task.budgetUnit!,
+        source: "manual",
+        sourceDocumentId: null,
+        reversesEntryId: null,
+        note,
+      },
+      { event: "progress_recorded" },
+    );
     return (await readEntries(db, input.orgId, sql`and e.id = ${id}`))[0]!;
   });
 }
@@ -272,11 +305,19 @@ export async function reverseProgress(input: {
   }
   return withOrgTransaction(input.orgId, async () => {
     await assertProgressEnabled(db, input.orgId);
-    const original = (await db.execute<{
-      id: string; project_id: string; project_task_id: string; entry_date: string; quantity: string;
-      unit: string; source: "manual" | "field_ticket"; source_document_id: string | null;
-      reverses_entry_id: string | null;
-    }>(sql`
+    const original = (
+      await db.execute<{
+        id: string;
+        project_id: string;
+        project_task_id: string;
+        entry_date: string;
+        quantity: string;
+        unit: string;
+        source: "manual" | "field_ticket";
+        source_document_id: string | null;
+        reverses_entry_id: string | null;
+      }>(
+        sql`
       select e.id, e.project_id, e.project_task_id, e.entry_date::text as entry_date, e.quantity::text as quantity,
              e.unit, e.source, e.source_document_id, e.reverses_entry_id
         from project_progress_entries e
@@ -284,7 +325,10 @@ export async function reverseProgress(input: {
        where e.org_id = ${input.orgId} and e.id = ${input.entryId} and e.project_id = ${input.projectId}
          ${scopeFilter(input.allowedSubsidiaryIds)}
        for update of e
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!original) throw new ProjectProgressError("Progress entry not found", 404, "not-found");
     if (original.reverses_entry_id) {
       throw new ProjectProgressError(
@@ -302,26 +346,41 @@ export async function reverseProgress(input: {
         "void the field ticket to reverse its production",
       );
     }
-    const prior = (await db.execute<{ id: string }>(sql`
+    const prior = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from project_progress_entries
        where org_id = ${input.orgId} and reverses_entry_id = ${original.id}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (prior) {
-      throw new ProjectProgressError("This entry has already been reversed", 409, "already-reversed");
+      throw new ProjectProgressError(
+        "This entry has already been reversed",
+        409,
+        "already-reversed",
+      );
     }
     const today = await businessTodayInTx(db, input.orgId);
     const entryDate = today > original.entry_date ? today : original.entry_date;
-    const id = await insertEntry(db, input.orgId, input.actorId, {
-      projectId: original.project_id,
-      taskId: original.project_task_id,
-      entryDate,
-      quantity: negate(original.quantity),
-      unit: original.unit,
-      source: original.source,
-      sourceDocumentId: original.source_document_id,
-      reversesEntryId: original.id,
-      note: reason,
-    }, { event: "progress_reversed", reason });
+    const id = await insertEntry(
+      db,
+      input.orgId,
+      input.actorId,
+      {
+        projectId: original.project_id,
+        taskId: original.project_task_id,
+        entryDate,
+        quantity: negate(original.quantity),
+        unit: original.unit,
+        source: original.source,
+        sourceDocumentId: original.source_document_id,
+        reversesEntryId: original.id,
+        note: reason,
+      },
+      { event: "progress_reversed", reason },
+    );
     return (await readEntries(db, input.orgId, sql`and e.id = ${id}`))[0]!;
   });
 }
@@ -330,14 +389,30 @@ function negate(value: string): string {
   return value.startsWith("-") ? value.slice(1) : `-${value}`;
 }
 
-async function readEntries(executor: SqlExecutor, orgId: string, filter: SQL): Promise<ProgressEntry[]> {
+async function readEntries(
+  executor: SqlExecutor,
+  orgId: string,
+  filter: SQL,
+): Promise<ProgressEntry[]> {
   const rows = await executor.execute<{
-    id: string; project_id: string; task_id: string; task_code: string | null; task_name: string;
-    entry_date: string; quantity: string; unit: string; source: "manual" | "field_ticket";
-    source_document_id: string | null; source_document_number: string | null;
-    reverses_entry_id: string | null; reversed_by_entry_id: string | null; note: string | null;
-    created_at: string; created_by_name: string | null;
-  }>(sql`
+    id: string;
+    project_id: string;
+    task_id: string;
+    task_code: string | null;
+    task_name: string;
+    entry_date: string;
+    quantity: string;
+    unit: string;
+    source: "manual" | "field_ticket";
+    source_document_id: string | null;
+    source_document_number: string | null;
+    reverses_entry_id: string | null;
+    reversed_by_entry_id: string | null;
+    note: string | null;
+    created_at: string;
+    created_by_name: string | null;
+  }>(
+    sql`
     select e.id, e.project_id, e.project_task_id as task_id, t.code as task_code, t.name as task_name,
            e.entry_date::text as entry_date, e.quantity::text as quantity, e.unit, e.source,
            e.source_document_id, d.document_number as source_document_number,
@@ -351,7 +426,9 @@ async function readEntries(executor: SqlExecutor, orgId: string, filter: SQL): P
       left join users u on u.id = e.created_by
      where e.org_id = ${orgId} ${filter}
      order by e.entry_date desc, e.created_at desc, e.id desc
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     projectId: row.project_id,
@@ -379,12 +456,20 @@ export async function listProgress(input: {
   taskId?: string | null;
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<ProgressEntry[]> {
-  return withOrgTransaction(input.orgId, () =>
-    readEntries(db, input.orgId, sql`
+  return withOrgTransaction(
+    input.orgId,
+    () =>
+      readEntries(
+        db,
+        input.orgId,
+        sql`
       and e.project_id = ${input.projectId}
       ${input.taskId ? sql`and e.project_task_id = ${input.taskId}` : sql``}
       ${scopeFilter(input.allowedSubsidiaryIds)}
-    `), { readOnly: true });
+    `,
+      ),
+    { readOnly: true },
+  );
 }
 
 /**
@@ -397,16 +482,29 @@ export async function listProgress(input: {
  */
 export async function recordFieldTicketProgressInTransaction(
   executor: SqlExecutor,
-  input: { orgId: string; actorId: string; ticketId: string; projectId: string | null; entryDate: string },
+  input: {
+    orgId: string;
+    actorId: string;
+    ticketId: string;
+    projectId: string | null;
+    entryDate: string;
+  },
 ): Promise<{ recorded: number; alreadyRecorded: boolean }> {
   const lines = await executor.execute<{
-    id: string; project_task_id: string; quantity: string; unit: string; note: string | null;
-  }>(sql`
+    id: string;
+    project_task_id: string;
+    quantity: string;
+    unit: string;
+    note: string | null;
+  }>(
+    sql`
     select id, project_task_id, quantity::text as quantity, unit, note
       from field_ticket_quantities
      where org_id = ${input.orgId} and field_ticket_id = ${input.ticketId}
      order by created_at, id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (lines.length === 0) return { recorded: 0, alreadyRecorded: false };
   await assertProgressEnabled(executor, input.orgId);
   if (!input.projectId) {
@@ -417,7 +515,9 @@ export async function recordFieldTicketProgressInTransaction(
       "choose the ticket's project, or remove its production lines",
     );
   }
-  const live = (await executor.execute<{ count: string }>(sql`
+  const live = (
+    await executor.execute<{ count: string }>(
+      sql`
     select count(*)::text as count
       from project_progress_entries e
      where e.org_id = ${input.orgId} and e.source = 'field_ticket'
@@ -425,23 +525,38 @@ export async function recordFieldTicketProgressInTransaction(
        and not exists (
          select 1 from project_progress_entries r
           where r.org_id = e.org_id and r.reverses_entry_id = e.id)
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (Number(live?.count ?? "0") > 0) return { recorded: 0, alreadyRecorded: true };
 
   for (const line of lines) {
-    const task = await lockProgressTask(executor, input.orgId, input.projectId, line.project_task_id, null);
+    const task = await lockProgressTask(
+      executor,
+      input.orgId,
+      input.projectId,
+      line.project_task_id,
+      null,
+    );
     assertQuantityMatchesBudget(task, line.unit);
-    await insertEntry(executor, input.orgId, input.actorId, {
-      projectId: input.projectId,
-      taskId: task.id,
-      entryDate: input.entryDate,
-      quantity: line.quantity,
-      unit: line.unit,
-      source: "field_ticket",
-      sourceDocumentId: input.ticketId,
-      reversesEntryId: null,
-      note: line.note,
-    }, { event: "field_ticket_production_recorded", fieldTicketQuantityId: line.id });
+    await insertEntry(
+      executor,
+      input.orgId,
+      input.actorId,
+      {
+        projectId: input.projectId,
+        taskId: task.id,
+        entryDate: input.entryDate,
+        quantity: line.quantity,
+        unit: line.unit,
+        source: "field_ticket",
+        sourceDocumentId: input.ticketId,
+        reversesEntryId: null,
+        note: line.note,
+      },
+      { event: "field_ticket_production_recorded", fieldTicketQuantityId: line.id },
+    );
   }
   return { recorded: lines.length, alreadyRecorded: false };
 }
@@ -455,11 +570,23 @@ export async function recordFieldTicketProgressInTransaction(
  */
 export async function reverseFieldTicketProgressInTransaction(
   executor: SqlExecutor,
-  input: { orgId: string; actorId: string | null; ticketId: string; entryDate: string; reason: string },
+  input: {
+    orgId: string;
+    actorId: string | null;
+    ticketId: string;
+    entryDate: string;
+    reason: string;
+  },
 ): Promise<number> {
   const live = await executor.execute<{
-    id: string; project_id: string; project_task_id: string; entry_date: string; quantity: string; unit: string;
-  }>(sql`
+    id: string;
+    project_id: string;
+    project_task_id: string;
+    entry_date: string;
+    quantity: string;
+    unit: string;
+  }>(
+    sql`
     select e.id, e.project_id, e.project_task_id, e.entry_date::text as entry_date,
            e.quantity::text as quantity, e.unit
       from project_progress_entries e
@@ -470,19 +597,27 @@ export async function reverseFieldTicketProgressInTransaction(
           where r.org_id = e.org_id and r.reverses_entry_id = e.id)
      order by e.created_at, e.id
      for update of e
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const entry of live) {
-    await insertEntry(executor, input.orgId, input.actorId, {
-      projectId: entry.project_id,
-      taskId: entry.project_task_id,
-      entryDate: input.entryDate > entry.entry_date ? input.entryDate : entry.entry_date,
-      quantity: negate(entry.quantity),
-      unit: entry.unit,
-      source: "field_ticket",
-      sourceDocumentId: input.ticketId,
-      reversesEntryId: entry.id,
-      note: input.reason.slice(0, NOTE_MAX),
-    }, { event: "field_ticket_production_reversed", reason: input.reason });
+    await insertEntry(
+      executor,
+      input.orgId,
+      input.actorId,
+      {
+        projectId: entry.project_id,
+        taskId: entry.project_task_id,
+        entryDate: input.entryDate > entry.entry_date ? input.entryDate : entry.entry_date,
+        quantity: negate(entry.quantity),
+        unit: entry.unit,
+        source: "field_ticket",
+        sourceDocumentId: input.ticketId,
+        reversesEntryId: entry.id,
+        note: input.reason.slice(0, NOTE_MAX),
+      },
+      { event: "field_ticket_production_reversed", reason: input.reason },
+    );
   }
   return live.length;
 }

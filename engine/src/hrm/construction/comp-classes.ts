@@ -38,44 +38,58 @@ export interface CompClass {
   readonly ratePer100: string | null;
 }
 
-export async function listCompClasses(exec: SqlExecutor, orgId: string, actorId: string): Promise<readonly CompClass[]> {
+export async function listCompClasses(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<readonly CompClass[]> {
   await assertConstructionFeature(exec, orgId, "Comp classes");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
   const rows = await exec.execute<{
-      id: string;
-      code: string;
-      name: string;
-      jurisdictionCode: string | null;
-      ratePer100: string | null;
-    }>(sql`
+    id: string;
+    code: string;
+    name: string;
+    jurisdictionCode: string | null;
+    ratePer100: string | null;
+  }>(
+    sql`
       select id::text as id, code, name,
              jurisdiction_code as "jurisdictionCode",
              rate_per_100::text as "ratePer100"
         from hrm_comp_classes
        where org_id = ${orgId}::uuid
        order by code
-    `, "objects");
+    `,
+    "objects",
+  );
   return rows;
 }
 
 export async function createCompClass(
   exec: SqlExecutor,
   input: {
-  orgId: string;
-  actorId: string;
-  code: string;
-  name: string;
-  jurisdictionCode?: string | null;
-  ratePer100?: string | null;
-  effectiveFrom: string;
-}): Promise<CompClass> {
+    orgId: string;
+    actorId: string;
+    code: string;
+    name: string;
+    jurisdictionCode?: string | null;
+    ratePer100?: string | null;
+    effectiveFrom: string;
+  },
+): Promise<CompClass> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const code = requireText(input.code, "code");
   const name = requireText(input.name, "name");
-  if (input.ratePer100 !== undefined && input.ratePer100 !== null && canonicalNonNegativeDecimal(input.ratePer100, 4) === null) {
-    throw new HrmConstructionError(`ratePer100 must be a non-negative decimal with at most 4 places — got ${input.ratePer100}.`);
+  if (
+    input.ratePer100 !== undefined &&
+    input.ratePer100 !== null &&
+    canonicalNonNegativeDecimal(input.ratePer100, 4) === null
+  ) {
+    throw new HrmConstructionError(
+      `ratePer100 must be a non-negative decimal with at most 4 places — got ${input.ratePer100}.`,
+    );
   }
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
   return withOrgTransaction(orgId, async () => {
@@ -85,18 +99,27 @@ export async function createCompClass(
     await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
     await requireUnrestrictedHrmScope(exec, orgId, actorId);
     try {
-      const created = (await exec.execute<{ id: string }>(sql`
+      const created = (
+        await exec.execute<{ id: string }>(
+          sql`
           insert into hrm_comp_classes
             (org_id, code, name, jurisdiction_code, rate_per_100, effective_from, created_by, updated_by)
           values (${orgId}::uuid, ${code}, ${name}, ${input.jurisdictionCode ?? null},
                   ${input.ratePer100 ?? null}, ${effectiveFrom}::date,
                   ${actorId}::uuid, ${actorId}::uuid)
           returning id::text as id
-        `, "objects"))[0];
-      if (!created) throw new HrmConstructionError(`Comp class ${code} was not created — no row was written.`);
+        `,
+          "objects",
+        )
+      )[0];
+      if (!created)
+        throw new HrmConstructionError(`Comp class ${code} was not created — no row was written.`);
       const rows = await listCompClasses(exec, orgId, actorId);
       const found = rows.find((row) => row.id === created.id);
-      if (!found) throw new HrmConstructionError(`Comp class ${code} was not created — it cannot be read back.`);
+      if (!found)
+        throw new HrmConstructionError(
+          `Comp class ${code} was not created — it cannot be read back.`,
+        );
       return found;
     } catch (error) {
       if (error instanceof HrmConstructionError) throw error;
@@ -128,12 +151,13 @@ export async function listCompRules(
 export async function createCompRule(
   exec: SqlExecutor,
   input: {
-  orgId: string;
-  actorId: string;
-  priority: number;
-  match: CompMatch;
-  compClassId: string;
-}): Promise<CompRule> {
+    orgId: string;
+    actorId: string;
+    priority: number;
+    match: CompMatch;
+    compClassId: string;
+  },
+): Promise<CompRule> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   if (!Number.isInteger(input.priority) || input.priority < 0) {
@@ -154,21 +178,32 @@ export async function createCompRule(
     } else {
       await requireUnrestrictedHrmScope(exec, orgId, actorId);
     }
-    const compClass = (await exec.execute<{ id: string }>(sql`
+    const compClass = (
+      await exec.execute<{ id: string }>(
+        sql`
         select id from hrm_comp_classes where org_id = ${orgId}::uuid and id = ${compClassId}::uuid
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!compClass) {
       throw new HrmConstructionError(
         `Comp class ${compClassId} does not exist in this organization — point the rule at a declared class.`,
       );
     }
-    const created = (await exec.execute<{ id: string }>(sql`
+    const created = (
+      await exec.execute<{ id: string }>(
+        sql`
         insert into hrm_comp_class_rules (org_id, priority, match, comp_class_id, created_by, updated_by)
         values (${orgId}::uuid, ${input.priority}, ${JSON.stringify(input.match)}::jsonb,
                 ${compClassId}::uuid, ${actorId}::uuid, ${actorId}::uuid)
         returning id::text as id
-      `, "objects"))[0];
-    if (!created) throw new HrmConstructionError("The comp-class rule was not written — no row was created.");
+      `,
+        "objects",
+      )
+    )[0];
+    if (!created)
+      throw new HrmConstructionError("The comp-class rule was not written — no row was created.");
     return { id: String(created.id), priority: input.priority, match: input.match, compClassId };
   });
 }
@@ -177,7 +212,13 @@ function assertCompMatch(match: CompMatch): void {
   if (typeof match !== "object" || match === null || Array.isArray(match)) {
     throw new HrmConstructionError("Rule match must be a JSON object.");
   }
-  const allowed = ["project_id", "cost_code_id", "department_id", "classification_id", "state_code"];
+  const allowed = [
+    "project_id",
+    "cost_code_id",
+    "department_id",
+    "classification_id",
+    "state_code",
+  ];
   for (const key of Object.keys(match)) {
     if (!allowed.includes(key)) {
       throw new HrmConstructionError(
@@ -196,11 +237,19 @@ async function activeRules(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<ReadonlyArray<{ id: string; priority: number; match: CompMatch; compClassId: string }>> {
-  const rows = await exec.execute<{ id: string; priority: number; match: CompMatch; compClassId: string }>(sql`
+  const rows = await exec.execute<{
+    id: string;
+    priority: number;
+    match: CompMatch;
+    compClassId: string;
+  }>(
+    sql`
       select id::text as id, priority, match, comp_class_id::text as "compClassId"
         from hrm_comp_class_rules
        where org_id = ${orgId}::uuid and is_active
-    `, "objects");
+    `,
+    "objects",
+  );
   return rows;
 }
 
@@ -258,18 +307,23 @@ export async function classify(
       "No comp-class rule matches this hour — declare a rule covering it before costing. The unresolved hour was flagged on the Compliance page.",
     );
   }
-  const compClass = (await exec.execute<{
+  const compClass = (
+    await exec.execute<{
       id: string;
       code: string;
       name: string;
       jurisdictionCode: string | null;
       ratePer100: string | null;
-    }>(sql`
+    }>(
+      sql`
       select id::text as id, code, name,
              jurisdiction_code as "jurisdictionCode", rate_per_100::text as "ratePer100"
         from hrm_comp_classes
        where org_id = ${orgId}::uuid and id = ${hit.compClassId}::uuid
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!compClass) {
     throw new HrmConstructionError(
       `Comp class ${hit.compClassId} no longer exists — point the matching rule at a declared class.`,
@@ -282,7 +336,9 @@ export async function classify(
 export async function dailySplit(
   exec: SqlExecutor,
   input: { orgId: string; actorId: string; projectId: string; workedOn: string },
-): Promise<readonly { employmentId: string; compClassId: string; compCode: string; hours: string }[]> {
+): Promise<
+  readonly { employmentId: string; compClassId: string; compCode: string; hours: string }[]
+> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const projectId = requireId(input.projectId, "projectId");
@@ -293,21 +349,28 @@ export async function dailySplit(
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
   await assertProjectInScope(exec, orgId, projectId, allowed);
   const hours = await exec.execute<{
-      partyId: string;
-      departmentId: string | null;
-      hours: string;
-    }>(sql`
+    partyId: string;
+    departmentId: string | null;
+    hours: string;
+  }>(
+    sql`
       select te.employee_party_id::text as "partyId",
              te.department_id::text as "departmentId", sum(te.hours)::text as hours
         from time_entries te
        where te.org_id = ${orgId}::uuid and te.project_id = ${projectId}::uuid
          and te.worked_on = ${workedOn}::date and te.status = 'approved'
        group by te.employee_party_id, te.department_id
-    `, "objects");
-  const out: Array<{ employmentId: string; compClassId: string; compCode: string; hours: string }> = [];
+    `,
+    "objects",
+  );
+  const out: Array<{ employmentId: string; compClassId: string; compCode: string; hours: string }> =
+    [];
   for (const row of hours) {
     const employment = await resolveEffectiveEmployment(exec, {
-      orgId, partyId: row.partyId, workedOn, projectId,
+      orgId,
+      partyId: row.partyId,
+      workedOn,
+      projectId,
     });
     if (!employment) {
       throw new HrmConstructionError(

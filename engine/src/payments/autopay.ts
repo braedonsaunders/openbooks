@@ -3,7 +3,17 @@ import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { AutopayError, type ChargeFn, resolveAutopayPolicy } from "./autopay-policy.ts";
-import { adapterCharge, type AutopayRunResult, emptyRunResult, type CollectionCandidate, errorMessage, mergeRunResult, committed, candidateFailed, refuseInsideTransaction } from "./autopay-collection-state.ts";
+import {
+  adapterCharge,
+  type AutopayRunResult,
+  emptyRunResult,
+  type CollectionCandidate,
+  errorMessage,
+  mergeRunResult,
+  committed,
+  candidateFailed,
+  refuseInsideTransaction,
+} from "./autopay-collection-state.ts";
 import { collectCandidate, resumeInterruptedAttempts } from "./autopay-attempts.ts";
 
 /**
@@ -31,24 +41,27 @@ import { collectCandidate, resumeInterruptedAttempts } from "./autopay-attempts.
  * off means hidden and refused, never charged.
  */
 export async function runAutopayCollection(asOf?: string): Promise<AutopayRunResult> {
-  const orgRows = (
+  const orgRows =
     // bypass: scheduler-tick — the unscoped run lists every production organization with a live autopay enrollment.
-    await withBypass(async () => {
-      return (await db.execute<{ orgId: string }>(sql`
+    (
+      await withBypass(async () => {
+        return await db.execute<{ orgId: string }>(sql`
         select distinct enrollment.org_id as "orgId"
           from autopay_enrollments enrollment
           join orgs organization on organization.id = enrollment.org_id
          where enrollment.status = 'active' and organization.env_kind = 'production'
-      `));
-    })
-  ).rows;
+      `);
+      })
+    ).rows;
   const result = emptyRunResult();
   for (const { orgId } of orgRows) {
-    const one = await runAutopayCollectionForOrg(orgId, asOf ? { asOf } : undefined).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[autopay] org ${orgId} collection failed: ${message}`);
-      return { ...emptyRunResult(), orgErrors: [{ orgId, error: message.slice(0, 1000) }] };
-    });
+    const one = await runAutopayCollectionForOrg(orgId, asOf ? { asOf } : undefined).catch(
+      (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[autopay] org ${orgId} collection failed: ${message}`);
+        return { ...emptyRunResult(), orgErrors: [{ orgId, error: message.slice(0, 1000) }] };
+      },
+    );
     mergeRunResult(result, one);
   }
   return result;
@@ -82,7 +95,8 @@ export async function runAutopayCollectionForOrg(
 
     // Initial charges: due invoices (or issued ones for charge-on-issue
     // enrollments) with a live enrollment and method, and no attempt yet.
-    const initials = await db.execute<CollectionCandidate>(sql`
+    const initials = await db.execute<CollectionCandidate>(
+      sql`
       select d.id as "invoiceId", d.document_number as "documentNumber",
              d.open_balance as "openBalance", d.currency,
              d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
@@ -109,11 +123,14 @@ export async function runAutopayCollectionForOrg(
             where a.org_id = d.org_id and a.invoice_id = d.id and a.retry_position = 0
          )
        order by d.id
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const candidate of initials) {
       result.scanned += 1;
-      await collectCandidate(orgId, candidate, 0, today, policy, charge, result)
-        .catch(candidateFailed(result, candidate.invoiceId));
+      await collectCandidate(orgId, candidate, 0, today, policy, charge, result).catch(
+        candidateFailed(result, candidate.invoiceId),
+      );
     }
 
     // Consolidated invoices: the header names the payer, so a payer-level
@@ -123,7 +140,8 @@ export async function runAutopayCollectionForOrg(
     // the header payer, on the enrollment's method when it belongs to the
     // payer, else the payer's default method. Invoices an above enrollment
     // already covers stay out, so one invoice never collects twice.
-    const consolidated = await db.execute<CollectionCandidate>(sql`
+    const consolidated = await db.execute<CollectionCandidate>(
+      sql`
       select d.id as "invoiceId", d.document_number as "documentNumber",
              d.open_balance as "openBalance", d.currency,
              d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
@@ -163,17 +181,25 @@ export async function runAutopayCollectionForOrg(
                         and dd.status = 'active' and dd.is_default limit 1)) is not null
          )
        order by d.id
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const candidate of consolidated) {
       result.scanned += 1;
-      await collectCandidate(orgId, candidate, 0, today, policy, charge, result)
-        .catch(candidateFailed(result, candidate.invoiceId));
+      await collectCandidate(orgId, candidate, 0, today, policy, charge, result).catch(
+        candidateFailed(result, candidate.invoiceId),
+      );
     }
 
     // Enrolled consolidated invoices with no usable payer method stay
     // uncollected by name: the operator adds a payment method for the payer
     // instead of discovering the gap from an unpaid invoice.
-    const methodless = await db.execute<{ invoiceId: string; documentNumber: string; payerId: string }>(sql`
+    const methodless = await db.execute<{
+      invoiceId: string;
+      documentNumber: string;
+      payerId: string;
+    }>(
+      sql`
       select d.id as "invoiceId", d.document_number as "documentNumber", d.party_id as "payerId"
         from documents d
        where d.org_id = ${orgId} and d.kind = 'customer_invoice'
@@ -196,20 +222,22 @@ export async function runAutopayCollectionForOrg(
             where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active'
          )
        order by d.id
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of methodless) {
       result.skipped += 1;
       result.notices.push({
         invoiceId: row.invoiceId,
         attemptId: null,
         status: "skipped",
-        detail:
-          `consolidated invoice ${row.documentNumber} has an enrolled subscription but its payer has no active payment method; add one for the payer before autopay can collect`,
+        detail: `consolidated invoice ${row.documentNumber} has an enrolled subscription but its payer has no active payment method; add one for the payer before autopay can collect`,
       });
     }
 
     // Retries: soft-declined attempts whose next retry day arrived.
-    const retries = await db.execute<CollectionCandidate>(sql`
+    const retries = await db.execute<CollectionCandidate>(
+      sql`
       select d.id as "invoiceId", d.document_number as "documentNumber",
              d.open_balance as "openBalance", d.currency,
              d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
@@ -230,12 +258,15 @@ export async function runAutopayCollectionForOrg(
               and later.retry_position = a.retry_position + 1
          )
        order by a.invoice_id
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const candidate of retries) {
       result.scanned += 1;
       const position = (candidate.failedPosition ?? 0) + 1;
-      await collectCandidate(orgId, candidate, position, today, policy, charge, result)
-        .catch(candidateFailed(result, candidate.invoiceId));
+      await collectCandidate(orgId, candidate, position, today, policy, charge, result).catch(
+        candidateFailed(result, candidate.invoiceId),
+      );
     }
     return result;
   });
@@ -246,19 +277,27 @@ export async function runAutopayCollectionForOrg(
  * since (approval flow posts later) closes its attempt and reactivates.
  */
 async function reconcileProcessingAttempts(orgId: string, result: AutopayRunResult): Promise<void> {
-  const rows = await db.execute<{ id: string; invoice_id: string }>(sql`
+  const rows = await db.execute<{ id: string; invoice_id: string }>(
+    sql`
     select a.id, a.invoice_id
       from collection_attempts a
       join documents payment on payment.id = a.receipt_document_id and payment.org_id = a.org_id
      where a.org_id = ${orgId} and a.status = 'processing'
        and a.receipt_document_id is not null and payment.status = 'posted'
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const row of rows) {
     await db.execute(sql`
       update collection_attempts set status = 'succeeded', updated_at = now()
        where id = ${row.id} and org_id = ${orgId} and status = 'processing'
     `);
     result.succeeded += 1;
-    result.notices.push({ invoiceId: row.invoice_id, attemptId: row.id, status: "succeeded", detail: "approved receipt posted; collection closed" });
+    result.notices.push({
+      invoiceId: row.invoice_id,
+      attemptId: row.id,
+      status: "succeeded",
+      detail: "approved receipt posted; collection closed",
+    });
   }
 }

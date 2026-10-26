@@ -31,7 +31,13 @@ export const USAGE_BAND_KINDS = [
 ] as const;
 export const USAGE_PACKAGE_ROUNDINGS = ["up", "down"] as const;
 export const USAGE_COMMIT_PERIODS = ["monthly", "annual"] as const;
-export const STRIPE_BILLING_LINK_TYPES = ["meter", "price", "customer", "subscription", "subscription_item"] as const;
+export const STRIPE_BILLING_LINK_TYPES = [
+  "meter",
+  "price",
+  "customer",
+  "subscription",
+  "subscription_item",
+] as const;
 export const USAGE_RATING_CADENCES = ["billing_period", "monthly", "paused"] as const;
 export const USAGE_RATING_MODES = ["draft", "auto_commit"] as const;
 export const STRIPE_IMPORT_CADENCES = ["off", "hourly", "daily"] as const;
@@ -94,8 +100,14 @@ export const usageRecords = pgTable(
   },
   (t) => [
     uniqueIndex("usage_records_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("usage_records_org_meter_idempotency_unique").on(t.orgId, t.meterId, t.idempotencyKey),
-    uniqueIndex("usage_records_one_reversal").on(t.orgId, t.reversesId).where(sql`${t.reversesId} is not null`),
+    uniqueIndex("usage_records_org_meter_idempotency_unique").on(
+      t.orgId,
+      t.meterId,
+      t.idempotencyKey,
+    ),
+    uniqueIndex("usage_records_one_reversal")
+      .on(t.orgId, t.reversesId)
+      .where(sql`${t.reversesId} is not null`),
     index("usage_records_window").on(t.orgId, t.meterId, t.customerId, t.occurredOn, t.id),
     check(
       "usage_records_source_valid",
@@ -140,7 +152,9 @@ export const usageRatingPlans = pgTable(
     orgId: orgRef(),
     name: text("name").notNull(),
     currency: currencyCode(),
-    status: text("status", { enum: ["active", "retired"] }).notNull().default("active"),
+    status: text("status", { enum: ["active", "retired"] })
+      .notNull()
+      .default("active"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -153,7 +167,11 @@ export const usageRatingPlans = pgTable(
     check("usage_rating_plans_name_nonblank", sql`length(btrim(${t.name})) > 0`),
     check("usage_rating_plans_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("usage_rating_plans_status_valid", sql`${t.status} in ('active', 'retired')`),
-    foreignKey({ name: "usage_rating_plans_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "usage_rating_plans_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
   ],
 );
 
@@ -164,7 +182,9 @@ export const usageRatingPlanVersions = pgTable(
     orgId: orgRef(),
     planId: uuid("plan_id").notNull(),
     versionNo: integer("version_no").notNull(),
-    status: text("status", { enum: ["draft", "published"] }).notNull().default("draft"),
+    status: text("status", { enum: ["draft", "published"] })
+      .notNull()
+      .default("draft"),
     effectiveFrom: date("effective_from").notNull(),
     specHash: text("spec_hash"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -174,7 +194,11 @@ export const usageRatingPlanVersions = pgTable(
   },
   (t) => [
     uniqueIndex("usage_rating_plan_versions_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("usage_rating_plan_versions_plan_version_unique").on(t.orgId, t.planId, t.versionNo),
+    uniqueIndex("usage_rating_plan_versions_plan_version_unique").on(
+      t.orgId,
+      t.planId,
+      t.versionNo,
+    ),
     index("usage_rating_plan_versions_org_plan_status").on(t.orgId, t.planId, t.status),
     check("usage_rating_plan_versions_number_positive", sql`${t.versionNo} > 0`),
     check("usage_rating_plan_versions_status_valid", sql`${t.status} in ('draft', 'published')`),
@@ -182,7 +206,11 @@ export const usageRatingPlanVersions = pgTable(
       "usage_rating_plan_versions_publication_shape",
       sql`(${t.status} = 'draft' and ${t.specHash} is null) or (${t.status} = 'published' and ${t.specHash} is not null and ${t.specHash} ~ '^[0-9a-f]{64}$')`,
     ),
-    foreignKey({ name: "usage_rating_plan_versions_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "usage_rating_plan_versions_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
     foreignKey({
       name: "usage_rating_plan_versions_plan_org_fk",
       columns: [t.orgId, t.planId],
@@ -213,7 +241,12 @@ export const usageRatingBands = pgTable(
   },
   (t) => [
     uniqueIndex("usage_rating_bands_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("usage_rating_bands_version_meter_seq_unique").on(t.orgId, t.planVersionId, t.meterId, t.seq),
+    uniqueIndex("usage_rating_bands_version_meter_seq_unique").on(
+      t.orgId,
+      t.planVersionId,
+      t.meterId,
+      t.seq,
+    ),
     index("usage_rating_bands_meter").on(t.orgId, t.meterId, t.planVersionId),
     check("usage_rating_bands_seq_positive", sql`${t.seq} > 0`),
     check(
@@ -224,7 +257,10 @@ export const usageRatingBands = pgTable(
       "usage_rating_bands_package_rounding_valid",
       sql`${t.packageRounding} is null or ${t.packageRounding} in ('up', 'down')`,
     ),
-    check("usage_rating_bands_upper_bound_nonnegative", sql`${t.upToQty} is null or ${t.upToQty} >= 0`),
+    check(
+      "usage_rating_bands_upper_bound_nonnegative",
+      sql`${t.upToQty} is null or ${t.upToQty} >= 0`,
+    ),
     check("usage_rating_bands_unit_price_nonnegative", sql`${t.unitPrice} >= 0`),
     check("usage_rating_bands_flat_amount_nonnegative", sql`${t.flatAmount} >= 0`),
     check("usage_rating_bands_included_qty_nonnegative", sql`${t.includedQty} >= 0`),
@@ -232,7 +268,11 @@ export const usageRatingBands = pgTable(
       "usage_rating_bands_package_shape",
       sql`(${t.kind} = 'package' and ${t.packageSize} is not null and ${t.packageSize} > 0 and ${t.packageRounding} is not null and ${t.packageRounding} in ('up', 'down')) or (${t.kind} <> 'package' and ${t.packageSize} is null and ${t.packageRounding} is null)`,
     ),
-    foreignKey({ name: "usage_rating_bands_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "usage_rating_bands_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
     foreignKey({
       name: "usage_rating_bands_version_org_fk",
       columns: [t.orgId, t.planVersionId],
@@ -267,9 +307,17 @@ export const subscriptionUsageLinks = pgTable(
   },
   (t) => [
     uniqueIndex("subscription_usage_links_org_id_id_unique").on(t.orgId, t.id),
-    index("subscription_usage_links_subscription_window").on(t.orgId, t.subscriptionId, t.effectiveFrom, t.effectiveTo),
+    index("subscription_usage_links_subscription_window").on(
+      t.orgId,
+      t.subscriptionId,
+      t.effectiveFrom,
+      t.effectiveTo,
+    ),
     check("subscription_usage_links_meter_set_nonempty", sql`cardinality(${t.meterIds}) > 0`),
-    check("subscription_usage_links_window_valid", sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check(
+      "subscription_usage_links_window_valid",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
     check(
       "subscription_usage_links_commit_pair",
       sql`(${t.commitAmount} is null and ${t.commitPeriod} is null) or (${t.commitAmount} is not null and ${t.commitAmount} > 0 and ${t.commitPeriod} is not null and ${t.commitPeriod} in ('monthly', 'annual'))`,
@@ -278,7 +326,11 @@ export const subscriptionUsageLinks = pgTable(
       "subscription_usage_links_commit_period_valid",
       sql`${t.commitPeriod} is null or ${t.commitPeriod} in ('monthly', 'annual')`,
     ),
-    foreignKey({ name: "subscription_usage_links_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "subscription_usage_links_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
     foreignKey({
       name: "subscription_usage_links_subscription_org_fk",
       columns: [t.orgId, t.subscriptionId],
@@ -308,7 +360,9 @@ export const usageRatingRuns = pgTable(
     periodEnd: date("period_end").notNull(),
     inputHash: text("input_hash").notNull(),
     outputHash: text("output_hash").notNull(),
-    status: text("status", { enum: ["active", "superseded"] }).notNull().default("active"),
+    status: text("status", { enum: ["active", "superseded"] })
+      .notNull()
+      .default("active"),
     supersedesRunId: uuid("supersedes_run_id"),
     invoiceId: uuid("invoice_id"),
     createdBy: uuid("created_by"),
@@ -321,9 +375,15 @@ export const usageRatingRuns = pgTable(
       .where(sql`${t.status} = 'active'`),
     index("usage_rating_runs_invoice").on(t.orgId, t.invoiceId),
     check("usage_rating_runs_period_valid", sql`${t.periodStart} <= ${t.periodEnd}`),
-    check("usage_rating_runs_hashes_valid", sql`${t.inputHash} ~ '^[0-9a-f]{64}$' and ${t.outputHash} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "usage_rating_runs_hashes_valid",
+      sql`${t.inputHash} ~ '^[0-9a-f]{64}$' and ${t.outputHash} ~ '^[0-9a-f]{64}$'`,
+    ),
     check("usage_rating_runs_status_valid", sql`${t.status} in ('active', 'superseded')`),
-    check("usage_rating_runs_not_self_superseding", sql`${t.supersedesRunId} is null or ${t.supersedesRunId} <> ${t.id}`),
+    check(
+      "usage_rating_runs_not_self_superseding",
+      sql`${t.supersedesRunId} is null or ${t.supersedesRunId} <> ${t.id}`,
+    ),
     foreignKey({ name: "usage_rating_runs_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
     foreignKey({
       name: "usage_rating_runs_link_org_fk",
@@ -367,7 +427,11 @@ export const usagePrepaidGrants = pgTable(
     index("usage_prepaid_grants_source_line").on(t.orgId, t.sourceDocumentLineId),
     check("usage_prepaid_grants_amount_positive", sql`${t.amount} > 0`),
     check("usage_prepaid_grants_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    foreignKey({ name: "usage_prepaid_grants_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "usage_prepaid_grants_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
     foreignKey({
       name: "usage_prepaid_grants_customer_org_fk",
       columns: [t.orgId, t.customerId],
@@ -407,7 +471,11 @@ export const usagePrepaidDraws = pgTable(
       sql`(${t.reversesDrawId} is null and ${t.amount} > 0) or (${t.reversesDrawId} is not null and ${t.amount} < 0)`,
     ),
     check("usage_prepaid_draws_period_month_first", sql`extract(day from ${t.periodMonth}) = 1`),
-    foreignKey({ name: "usage_prepaid_draws_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "usage_prepaid_draws_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
     foreignKey({
       name: "usage_prepaid_draws_reverses_org_fk",
       columns: [t.orgId, t.reversesDrawId],
@@ -449,16 +517,30 @@ export const usageRatingSettings = pgTable(
   },
   (t) => [
     uniqueIndex("usage_rating_settings_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("usage_rating_settings_org_default_unique").on(t.orgId).where(sql`${t.linkId} is null`),
-    uniqueIndex("usage_rating_settings_org_link_unique").on(t.orgId, t.linkId).where(sql`${t.linkId} is not null`),
+    uniqueIndex("usage_rating_settings_org_default_unique")
+      .on(t.orgId)
+      .where(sql`${t.linkId} is null`),
+    uniqueIndex("usage_rating_settings_org_link_unique")
+      .on(t.orgId, t.linkId)
+      .where(sql`${t.linkId} is not null`),
     check(
       "usage_rating_settings_cadence_valid",
       sql`${t.cadence} in ('billing_period', 'monthly', 'paused')`,
     ),
-    check("usage_rating_settings_grace_days_valid", sql`${t.graceDays} >= 0 and ${t.graceDays} <= 30`),
+    check(
+      "usage_rating_settings_grace_days_valid",
+      sql`${t.graceDays} >= 0 and ${t.graceDays} <= 30`,
+    ),
     check("usage_rating_settings_mode_valid", sql`${t.mode} in ('draft', 'auto_commit')`),
-    check("usage_rating_settings_watermark_valid", sql`${t.lastRatedPeriodEnd} is null or ${t.linkId} is not null`),
-    foreignKey({ name: "usage_rating_settings_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    check(
+      "usage_rating_settings_watermark_valid",
+      sql`${t.lastRatedPeriodEnd} is null or ${t.linkId} is not null`,
+    ),
+    foreignKey({
+      name: "usage_rating_settings_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
     foreignKey({
       name: "usage_rating_settings_link_org_fk",
       columns: [t.orgId, t.linkId],
@@ -483,8 +565,15 @@ export const stripeBillingImportSchedules = pgTable(
   (t) => [
     uniqueIndex("stripe_billing_import_schedules_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("stripe_billing_import_schedules_org_singleton_unique").on(t.orgId),
-    check("stripe_billing_import_schedules_cadence_valid", sql`${t.cadence} in ('off', 'hourly', 'daily')`),
-    foreignKey({ name: "stripe_billing_import_schedules_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    check(
+      "stripe_billing_import_schedules_cadence_valid",
+      sql`${t.cadence} in ('off', 'hourly', 'daily')`,
+    ),
+    foreignKey({
+      name: "stripe_billing_import_schedules_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
   ],
 );
 
@@ -505,11 +594,23 @@ export const stripeBillingLinkSkips = pgTable(
   },
   (t) => [
     uniqueIndex("stripe_billing_link_skips_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("stripe_billing_link_skips_object_unique").on(t.orgId, t.stripeAccount, t.objectType, t.stripeId),
-    check("stripe_billing_link_skips_type_valid", sql`${t.objectType} in ('customer', 'subscription')`),
+    uniqueIndex("stripe_billing_link_skips_object_unique").on(
+      t.orgId,
+      t.stripeAccount,
+      t.objectType,
+      t.stripeId,
+    ),
+    check(
+      "stripe_billing_link_skips_type_valid",
+      sql`${t.objectType} in ('customer', 'subscription')`,
+    ),
     check("stripe_billing_link_skips_stripe_id_nonblank", sql`length(btrim(${t.stripeId})) > 0`),
     check("stripe_billing_link_skips_account_nonblank", sql`length(btrim(${t.stripeAccount})) > 0`),
-    foreignKey({ name: "stripe_billing_link_skips_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "stripe_billing_link_skips_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
   ],
 );
 

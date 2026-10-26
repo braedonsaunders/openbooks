@@ -1,17 +1,17 @@
-import { isFeatureEnabled } from '../../lib/features'
-import { requireFeatureEnabled } from '../../lib/feature-gates'
-import { requirePermission } from '../../lib/authz'
-import 'server-only'
+import { isFeatureEnabled } from "../../lib/features";
+import { requireFeatureEnabled } from "../../lib/feature-gates";
+import { requirePermission } from "../../lib/authz";
+import "server-only";
 
-import type { ReactNode } from 'react'
-import { sql } from 'drizzle-orm'
-import { ownTimeOnly, timeCommandGrants } from '../../lib/time-workspace'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
-import { can, getAuthz } from '../../lib/authz'
-import { summarizeGroup, type ConditionGroup, type FieldDef } from '../../lib/conditions'
-import { EntityListView } from '../entity-list-view'
-import { Sparkline } from '../module-home/ui'
+import type { ReactNode } from "react";
+import { sql } from "drizzle-orm";
+import { ownTimeOnly, timeCommandGrants } from "../../lib/time-workspace";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
+import { can, getAuthz } from "../../lib/authz";
+import { summarizeGroup, type ConditionGroup, type FieldDef } from "../../lib/conditions";
+import { EntityListView } from "../entity-list-view";
+import { Sparkline } from "../module-home/ui";
 
 /**
  * Weekly demand behind one planning suggestion, drawn from the list's own
@@ -21,19 +21,21 @@ import { Sparkline } from '../module-home/ui'
  */
 function demandTrendFormatValue(): (_row: unknown, columnKey: string, value: unknown) => ReactNode {
   function DemandTrendCell(_row: unknown, columnKey: string, value: unknown) {
-    if (columnKey !== 'trend') return undefined
-    const raw = Array.isArray(value) ? value : []
+    if (columnKey !== "trend") return undefined;
+    const raw = Array.isArray(value) ? value : [];
     const points = raw
-      .map((point) => (typeof point === 'number' ? point : typeof point === 'string' ? Number(point) : NaN))
-      .filter((point) => Number.isFinite(point))
-    if (points.length < 2) return <span className="text-slate-400">—</span>
-    return <Sparkline points={points} width={96} height={24} />
+      .map((point) =>
+        typeof point === "number" ? point : typeof point === "string" ? Number(point) : NaN,
+      )
+      .filter((point) => Number.isFinite(point));
+    if (points.length < 2) return <span className="text-slate-400">—</span>;
+    return <Sparkline points={points} width={96} height={24} />;
   }
-  return DemandTrendCell
+  return DemandTrendCell;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -48,69 +50,88 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * the "+n more" split are part of the byte contract.
  */
 async function bankRuleFormatValue(orgId: string) {
-  const t = await getTranslations('banking')
-  const accounts = await db.execute<{ id: string; number: string | null; name: string }>(sql`
+  const t = await getTranslations("banking");
+  const accounts = await db.execute<{ id: string; number: string | null; name: string }>(
+    sql`
     select id, number, name from accounts
      where org_id = ${orgId} and is_active and not is_summary
-     order by number nulls last, name`, 'objects')
+     order by number nulls last, name`,
+    "objects",
+  );
   const accountLabel = new Map(
     accounts.map((account) => [
       account.id,
-      [account.number, account.name].filter(Boolean).join(' · '),
+      [account.number, account.name].filter(Boolean).join(" · "),
     ]),
-  )
+  );
   const summaryCatalog: FieldDef[] = [
-    { key: 'description', label: t('rules.fields.description'), kind: 'text' },
-    { key: 'payee', label: t('rules.fields.payee'), kind: 'text' },
-    { key: 'anyText', label: t('rules.fields.anyText'), kind: 'text' },
-    { key: 'reference', label: t('rules.fields.reference'), kind: 'text' },
-    { key: 'amount', label: t('rules.fields.amount'), kind: 'number' },
+    { key: "description", label: t("rules.fields.description"), kind: "text" },
+    { key: "payee", label: t("rules.fields.payee"), kind: "text" },
+    { key: "anyText", label: t("rules.fields.anyText"), kind: "text" },
+    { key: "reference", label: t("rules.fields.reference"), kind: "text" },
+    { key: "amount", label: t("rules.fields.amount"), kind: "number" },
     {
-      key: 'flow',
-      label: t('rules.fields.flow'),
-      kind: 'flow',
+      key: "flow",
+      label: t("rules.fields.flow"),
+      kind: "flow",
       options: [
-        { value: 'in', label: t('rules.signIn') },
-        { value: 'out', label: t('rules.signOut') },
+        { value: "in", label: t("rules.signIn") },
+        { value: "out", label: t("rules.signOut") },
       ],
     },
-    { key: 'date', label: t('rules.fields.date'), kind: 'date' },
-  ]
+    { key: "date", label: t("rules.fields.date"), kind: "date" },
+  ];
   const operatorLabels = Object.fromEntries(
     [
-      'contains', 'notContains', 'equals', 'startsWith', 'endsWith', 'isBlank',
-      'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'between', 'is', 'on', 'before',
-      'after', 'withinDays',
+      "contains",
+      "notContains",
+      "equals",
+      "startsWith",
+      "endsWith",
+      "isBlank",
+      "eq",
+      "ne",
+      "gt",
+      "gte",
+      "lt",
+      "lte",
+      "between",
+      "is",
+      "on",
+      "before",
+      "after",
+      "withinDays",
     ].map((key) => [key, t(`rules.ops.${key}`)]),
-  )
+  );
   return (_row: unknown, columnKey: string, value: unknown): ReactNode => {
-    if (columnKey === 'criteria_summary') {
+    if (columnKey === "criteria_summary") {
       if (!isRecord(value) || !isRecord(value.match) || !Array.isArray(value.match.rules)) {
-        return t('rules.summary.anyLine')
+        return t("rules.summary.anyLine");
       }
       return (
         summarizeGroup(value.match as unknown as ConditionGroup, summaryCatalog, {
-          and: t('rules.summary.and'),
-          or: t('rules.summary.or'),
+          and: t("rules.summary.and"),
+          or: t("rules.summary.or"),
           operatorLabels,
-        }) || t('rules.summary.anyLine')
-      )
+        }) || t("rules.summary.anyLine")
+      );
     }
-    if (columnKey === 'outcome_summary') {
-      if (!isRecord(value)) return '—'
-      if (value.action === 'exclude') return t('rules.summary.exclude')
-      if (value.action !== 'categorize') return '—'
-      const lines = Array.isArray(value.lines) ? value.lines : []
-      const firstLine = isRecord(lines[0]) ? lines[0] : null
+    if (columnKey === "outcome_summary") {
+      if (!isRecord(value)) return "—";
+      if (value.action === "exclude") return t("rules.summary.exclude");
+      if (value.action !== "categorize") return "—";
+      const lines = Array.isArray(value.lines) ? value.lines : [];
+      const firstLine = isRecord(lines[0]) ? lines[0] : null;
       const first =
-        accountLabel.get(typeof firstLine?.accountId === 'string' ? firstLine.accountId : '') ?? '—'
-      const extra = Math.max(0, lines.length - 1)
+        accountLabel.get(typeof firstLine?.accountId === "string" ? firstLine.accountId : "") ??
+        "—";
+      const extra = Math.max(0, lines.length - 1);
       return extra > 0
-        ? t('rules.summary.categorizeSplit', { account: first, count: extra })
-        : t('rules.summary.categorize', { account: first })
+        ? t("rules.summary.categorizeSplit", { account: first, count: extra })
+        : t("rules.summary.categorize", { account: first });
     }
-    return undefined
-  }
+    return undefined;
+  };
 }
 
 /**
@@ -136,62 +157,75 @@ export async function EntityListSlot({
   emptyTitle,
   emptyDescription,
 }: {
-  recordType: string
-  timeWorkFamily?: string
-  defaultPresentation?: string
-  sp: Record<string, string | string[] | undefined>
-  drawer?: ReactNode
-  emptyAction?: ReactNode
-  emptyTitle?: string
-  emptyDescription?: string
+  recordType: string;
+  timeWorkFamily?: string;
+  defaultPresentation?: string;
+  sp: Record<string, string | string[] | undefined>;
+  drawer?: ReactNode;
+  emptyAction?: ReactNode;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }) {
-  const authz = await getAuthz()
-  if (!authz) return null
-  let timeScope: ReturnType<typeof sql> | undefined
-  let timeBasePath: string | undefined
-  let governingFeature: string | undefined
-  if (recordType === 'timesheet_week') {
+  const authz = await getAuthz();
+  if (!authz) return null;
+  let timeScope: ReturnType<typeof sql> | undefined;
+  let timeBasePath: string | undefined;
+  let governingFeature: string | undefined;
+  if (recordType === "timesheet_week") {
     // Supervisors list everyone's weeks with time.read; a self-service caller
     // holding only time.self lists the weeks of the employee linked to their
     // own login and nobody else's.
     // Own-scope grants (time.self, time.clock) and supervisory ones
     // (time.read, time.manage) resolve from the declared implications.
-    const selfOnly = ownTimeOnly(authz, 'time.read')
-    const readGrants = timeCommandGrants('time.read')
-    const timeAuthz = await requirePermission((selfOnly ? readGrants.own : readGrants.all).find((grant) => can(authz, grant)) ?? 'time.read')
-    const production = timeWorkFamily === 'production'
+    const selfOnly = ownTimeOnly(authz, "time.read");
+    const readGrants = timeCommandGrants("time.read");
+    const timeAuthz = await requirePermission(
+      (selfOnly ? readGrants.own : readGrants.all).find((grant) => can(authz, grant)) ??
+        "time.read",
+    );
+    const production = timeWorkFamily === "production";
     // Production time is Manufacturing's workspace: it follows the
     // Manufacturing switch, and weeks carrying project time stay hidden by
     // the scope below while Time tracking is off.
-    governingFeature = production ? 'manufacturing' : 'timeTracking'
-    await requireFeatureEnabled(timeAuthz.user.orgId, governingFeature)
-    if (production) await requirePermission('manufacturing.read')
-    timeBasePath = production ? '/manufacturing/time' : '/timesheets'
+    governingFeature = production ? "manufacturing" : "timeTracking";
+    await requireFeatureEnabled(timeAuthz.user.orgId, governingFeature);
+    if (production) await requirePermission("manufacturing.read");
+    timeBasePath = production ? "/manufacturing/time" : "/timesheets";
     // A person's own weeks show the project time they booked without the
     // project-read grant; other people's project time still needs it.
-    const projectVisible = (can(authz,'projects.read') || selfOnly) && await isFeatureEnabled(authz.user.orgId,'timeTracking')
-    const productionVisible = can(authz,'manufacturing.read') && await isFeatureEnabled(authz.user.orgId,'manufacturing')
+    const projectVisible =
+      (can(authz, "projects.read") || selfOnly) &&
+      (await isFeatureEnabled(authz.user.orgId, "timeTracking"));
+    const productionVisible =
+      can(authz, "manufacturing.read") &&
+      (await isFeatureEnabled(authz.user.orgId, "manufacturing"));
     const ownEmployee = selfOnly
-      ? (await db.execute<{ partyId: string | null }>(sql`
-          select party_id as "partyId" from users where id = ${authz.user.id} and org_id = ${authz.user.orgId}`, 'objects'))[0]?.partyId ?? null
-      : null
-    const ownWeeks = selfOnly ? sql`tw.employee_party_id = ${ownEmployee} and ` : sql``
+      ? ((
+          await db.execute<{ partyId: string | null }>(
+            sql`
+          select party_id as "partyId" from users where id = ${authz.user.id} and org_id = ${authz.user.orgId}`,
+            "objects",
+          )
+        )[0]?.partyId ?? null)
+      : null;
+    const ownWeeks = selfOnly ? sql`tw.employee_party_id = ${ownEmployee} and ` : sql``;
     timeScope = sql`${ownWeeks}not exists(select 1 from time_entries entry where entry.org_id=tw.org_id and entry.employee_party_id=tw.employee_party_id
       and entry.worked_on>=tw.week_start and entry.worked_on<tw.week_start+7
-      and ((${!projectVisible} and entry.project_id is not null) or (${!productionVisible} and entry.work_order_id is not null)))`
+      and ((${!projectVisible} and entry.project_id is not null) or (${!productionVisible} and entry.work_order_id is not null)))`;
   }
-  const formatValue = recordType === 'bank_rule'
-    ? await bankRuleFormatValue(authz.user.orgId)
-    : recordType === 'demand_suggestion'
-      ? demandTrendFormatValue()
-      : undefined
+  const formatValue =
+    recordType === "bank_rule"
+      ? await bankRuleFormatValue(authz.user.orgId)
+      : recordType === "demand_suggestion"
+        ? demandTrendFormatValue()
+        : undefined;
   // Change sets are PRODUCTION configuration, read from a sandbox-aware
   // session: the native page lists them against `productionOrgId`, not the
   // current org, and hardcodes `canManage`. Decided here rather than passed,
   // for the same reason the org id itself is — a spec that could name either
   // is a spec that could name the wrong one. Keyed on the record type, the
   // way `bank_rule` above already is.
-  const productionConfig = recordType === 'change_set'
+  const productionConfig = recordType === "change_set";
   return (
     <EntityListView
       defaultPresentation={defaultPresentation}
@@ -202,22 +236,25 @@ export async function EntityListSlot({
       recordType={recordType}
       orgId={productionConfig ? authz.user.productionOrgId : authz.user.orgId}
       userId={authz.user.id}
-      canManage={productionConfig || (recordType === 'lease_agreement'
-        ? can(authz, 'assets.manage')
-        : can(authz, 'admin.customization.manage'))}
+      canManage={
+        productionConfig ||
+        (recordType === "lease_agreement"
+          ? can(authz, "assets.manage")
+          : can(authz, "admin.customization.manage"))
+      }
       // Decided here for the same reason the org id is: the customer list
       // spans the relationship lifecycle only for a viewer holding
       // crm.accounts.read, and a capability that travelled through the spec
       // is a capability a spec could assert for someone who lacks it. The
       // employee list's employment filters and columns likewise require
       // hrm.employment.read — parties.read alone never shows them.
-      crmAccountsVisible={can(authz, 'crm.accounts.read')}
-      hrmEmploymentVisible={can(authz, 'hrm.employment.read')}
+      crmAccountsVisible={can(authz, "crm.accounts.read")}
+      hrmEmploymentVisible={can(authz, "hrm.employment.read")}
       sp={sp}
       drawer={drawer}
       emptyAction={emptyAction}
       emptyTitle={emptyTitle}
       emptyDescription={emptyDescription}
     />
-  )
+  );
 }

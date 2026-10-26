@@ -1,15 +1,29 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const certificationsLicensesDispatch: DocArticle = {
-  slug: 'certifications-licenses-dispatch',
-  title: 'Certifications, Licenses, and Dispatch Gating',
-  category: 'administration',
+  slug: "certifications-licenses-dispatch",
+  title: "Certifications, Licenses, and Dispatch Gating",
+  category: "administration",
   order: 12,
   summary:
-    'Which certifications and licenses each worker holds, when they lapse, what each job demands, and whether that person can be on that job today — with renewals as new rows and expiry projected at read, never stored.',
-  updated: '2026-09-27',
-  keywords: ['certification', 'license', 'qualification', 'dispatch', 'gating', 'renewal', 'expiry', 'equipment', 'scheduling'],
-  related: ['positions-and-headcount', 'certified-payroll-prevailing-wage-per-diem', 'field-tickets'],
+    "Which certifications and licenses each worker holds, when they lapse, what each job demands, and whether that person can be on that job today — with renewals as new rows and expiry projected at read, never stored.",
+  updated: "2026-09-27",
+  keywords: [
+    "certification",
+    "license",
+    "qualification",
+    "dispatch",
+    "gating",
+    "renewal",
+    "expiry",
+    "equipment",
+    "scheduling",
+  ],
+  related: [
+    "positions-and-headcount",
+    "certified-payroll-prevailing-wage-per-diem",
+    "field-tickets",
+  ],
   body: `# Certifications, Licenses, and Dispatch Gating
 
 Certifications and licenses answer one question: can this person be on that job today. The register records what each worker holds, requirements declare what each project, equipment, position, or classification demands, and the dispatch gate compares the two on the assignment date. A block-severity gap refuses the assignment; a warn-severity gap records the override and lets it through.
@@ -44,4 +58,4 @@ The daily scan reads each type's renewal lead time and writes one alert row per 
 
 The Qualifications register lists every held certification and license with holder, employer, type, issuance, expiry, and stored status; the Qualification alerts queue lists every alert with its due day and sent state. Both clamp to the reader's employer subsidiary and require the certifications read grant.
 `,
-}
+};

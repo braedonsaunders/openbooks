@@ -1,4 +1,4 @@
-import { documentRevisionSql } from '@openbooks/engine/records/revision';
+import { documentRevisionSql } from "@openbooks/engine/records/revision";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -16,7 +16,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.asset-route-test')]
@@ -51,10 +51,8 @@ const { PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts"
 const { db } = await import("@openbooks/engine/platform/db");
 const { buildSchedule, runDepreciation } = await import("@openbooks/engine/assets/depreciation");
 const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/assets/asset-lifecycle");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures",
-);
-
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -87,13 +85,16 @@ async function seedAsset(): Promise<Fixture> {
             '2000.0000', 'straight_line', 12, '{}'::jsonb)`);
 
   await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-  const line = await db.execute<{ id: string }>(sql`
+  const line = await db.execute<{ id: string }>(
+    sql`
     select l.id
       from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
      where l.org_id = ${org.orgId} and s.asset_id = ${assetId}
      order by l.sequence
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   assert.ok(line[0], "the fixture must have a schedule line to post");
   return { orgId: org.orgId, actorId, assetId, scheduleLineId: line[0]!.id };
 }
@@ -107,10 +108,10 @@ async function openAssetHolder(fixture: Fixture): Promise<Client> {
     "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
     [fixture.orgId],
   );
-  await client.query(
-    "select id from fixed_assets where org_id = $1 and id = $2 for update",
-    [fixture.orgId, fixture.assetId],
-  );
+  await client.query("select id from fixed_assets where org_id = $1 and id = $2 for update", [
+    fixture.orgId,
+    fixture.assetId,
+  ]);
   return client;
 }
 
@@ -122,140 +123,185 @@ async function patchRequest(fixture: Fixture, body: Record<string, unknown>): Pr
   return new Request(`http://openbooks.test/api/assets/${fixture.assetId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ...body, expectedUpdatedAt: (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${fixture.assetId}`, "objects"))[0]!.revision }),
+    body: JSON.stringify({
+      ...body,
+      expectedUpdatedAt: (
+        await db.execute<{ revision: string }>(
+          sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${fixture.assetId}`,
+          "objects",
+        )
+      )[0]!.revision,
+    }),
   });
 }
 
 async function waitForAssetLock(settled: () => boolean): Promise<void> {
   for (let waited = 0; waited < 15_000; waited += 25) {
     if (settled()) assert.fail("the PATCH completed before the asset lock was observed");
-    const blocked = await db.execute<{ n: number }>(sql`
+    const blocked = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n
         from pg_stat_activity
        where datname = current_database()
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
          and query ilike '%from fixed_assets%'
-         and query ilike '%for update%'`, "objects");
+         and query ilike '%for update%'`,
+      "objects",
+    );
     if ((blocked[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   assert.fail("timed out waiting for the asset PATCH to park on fixed_assets");
 }
 
-test(
-  "asset basis PATCH rechecks posted depreciation after waiting for the asset lock",
-  async () => {
-    const fixture = await seedAsset();
-    let holder: Client | null = null;
-    try {
-      holder = await openAssetHolder(fixture);
-      let settled = false;
-      const pending = PATCH(await patchRequest(fixture, { acquisitionCost: "13000" }), {
-        params: Promise.resolve({ id: fixture.assetId }),
-      }).then(async (response) => {
-        settled = true;
-        return { status: response.status, body: (await response.json()) as { error?: string } };
-      });
+test("asset basis PATCH rechecks posted depreciation after waiting for the asset lock", async () => {
+  const fixture = await seedAsset();
+  let holder: Client | null = null;
+  try {
+    holder = await openAssetHolder(fixture);
+    let settled = false;
+    const pending = PATCH(await patchRequest(fixture, { acquisitionCost: "13000" }), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    }).then(async (response) => {
+      settled = true;
+      return { status: response.status, body: (await response.json()) as { error?: string } };
+    });
 
-      await waitForAssetLock(() => settled);
+    await waitForAssetLock(() => settled);
 
-      // A runner-shaped transaction posts the line while the PATCH is queued
-      // behind the authoritative fixed_assets row lock. Imported is used only
-      // to satisfy the schedule-line posting-evidence constraint without
-      // manufacturing a journal entry; the route guard treats every posted
-      // line as immutable history regardless of source.
-      await holder.query(
-        `update depreciation_schedule_lines
+    // A runner-shaped transaction posts the line while the PATCH is queued
+    // behind the authoritative fixed_assets row lock. Imported is used only
+    // to satisfy the schedule-line posting-evidence constraint without
+    // manufacturing a journal entry; the route guard treats every posted
+    // line as immutable history regardless of source.
+    await holder.query(
+      `update depreciation_schedule_lines
             set source = 'imported', posted_amount = '100.0000'
           where org_id = $1 and id = $2`,
-        [fixture.orgId, fixture.scheduleLineId],
-      );
-      await holder.query("commit");
-      await holder.end();
-      holder = null;
+      [fixture.orgId, fixture.scheduleLineId],
+    );
+    await holder.query("commit");
+    await holder.end();
+    holder = null;
 
-      const result = await pending;
-      assert.equal(result.status, 409);
-      assert.match(result.body.error ?? "", /depreciation basis.*fixed/i);
+    const result = await pending;
+    assert.equal(result.status, 409);
+    assert.match(result.body.error ?? "", /depreciation basis.*fixed/i);
 
-      const state = await db.execute<{ acquisition_cost: string; audits: number }>(sql`
+    const state = await db.execute<{ acquisition_cost: string; audits: number }>(
+      sql`
         select a.acquisition_cost::text,
                (select count(*)::int from audit_log l
                  where l.org_id = a.org_id and l.table_name = 'fixed_assets' and l.row_id = a.id) as audits
           from fixed_assets a
-         where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`, "objects");
-      assert.equal(state[0]?.acquisition_cost, "12000.0000");
-      assert.equal(state[0]?.audits, 0, "the refused stale save must leave no audit row");
-    } finally {
-      if (holder) {
-        await holder.query("rollback").catch(() => undefined);
-        await holder.end().catch(() => undefined);
-      }
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
+         where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`,
+      "objects",
+    );
+    assert.equal(state[0]?.acquisition_cost, "12000.0000");
+    assert.equal(state[0]?.audits, 0, "the refused stale save must leave no audit row");
+  } finally {
+    if (holder) {
+      await holder.query("rollback").catch(() => undefined);
+      await holder.end().catch(() => undefined);
     }
-  },
-);
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
-test(
-  "asset basis PATCH still commits and audits before depreciation posts",
-  async () => {
-    const fixture = await seedAsset();
-    try {
-      const response = await PATCH(await patchRequest(fixture, { acquisitionCost: "13000" }), {
-        params: Promise.resolve({ id: fixture.assetId }),
-      });
-      assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
+test("asset basis PATCH still commits and audits before depreciation posts", async () => {
+  const fixture = await seedAsset();
+  try {
+    const response = await PATCH(await patchRequest(fixture, { acquisitionCost: "13000" }), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
 
-      const state = await db.execute<{ acquisition_cost: string; audits: number }>(sql`
+    const state = await db.execute<{ acquisition_cost: string; audits: number }>(
+      sql`
         select a.acquisition_cost::text,
                (select count(*)::int from audit_log l
                  where l.org_id = a.org_id and l.table_name = 'fixed_assets' and l.row_id = a.id) as audits
           from fixed_assets a
-         where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`, "objects");
-      assert.equal(state[0]?.acquisition_cost, "13000.0000");
-      assert.equal(state[0]?.audits, 1);
+         where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`,
+      "objects",
+    );
+    assert.equal(state[0]?.acquisition_cost, "13000.0000");
+    assert.equal(state[0]?.audits, 1);
 
-      const sourceSubsidiary = (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects"))[0]!.subsidiary_id
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${randomUUID()},${fixture.orgId},${sourceSubsidiary},'Other entity','CAD','CA')`)
-      const target = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${fixture.orgId} and name = 'Other entity'`, "objects"))[0]!.id
-      await db.execute(sql`insert into equipment_units(org_id,subsidiary_id,name,unit_number,status,purchase_price,fixed_asset_id) values (${fixture.orgId},${sourceSubsidiary},'Linked unit','LINK-ASSET','draft','100.0000',${fixture.assetId})`)
-      const refused = await PATCH(await patchRequest(fixture, { subsidiaryId: target }), { params: Promise.resolve({ id: fixture.assetId }) })
-      assert.deepEqual([refused.status, (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects"))[0]?.subsidiary_id], [409, sourceSubsidiary])
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
-    }
-  },
-);
+    const sourceSubsidiary = (
+      await db.execute<{ subsidiary_id: string }>(
+        sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`,
+        "objects",
+      )
+    )[0]!.subsidiary_id;
+    await db.execute(
+      sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${randomUUID()},${fixture.orgId},${sourceSubsidiary},'Other entity','CAD','CA')`,
+    );
+    const target = (
+      await db.execute<{ id: string }>(
+        sql`select id from subsidiaries where org_id = ${fixture.orgId} and name = 'Other entity'`,
+        "objects",
+      )
+    )[0]!.id;
+    await db.execute(
+      sql`insert into equipment_units(org_id,subsidiary_id,name,unit_number,status,purchase_price,fixed_asset_id) values (${fixture.orgId},${sourceSubsidiary},'Linked unit','LINK-ASSET','draft','100.0000',${fixture.assetId})`,
+    );
+    const refused = await PATCH(await patchRequest(fixture, { subsidiaryId: target }), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    assert.deepEqual(
+      [
+        refused.status,
+        (
+          await db.execute<{ subsidiary_id: string }>(
+            sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`,
+            "objects",
+          )
+        )[0]?.subsidiary_id,
+      ],
+      [409, sourceSubsidiary],
+    );
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
-test(
-  "asset PATCH preserves omitted required custom fields on a partial edit",
-  async () => {
-    const fixture = await seedAsset();
-    try {
-      await db.execute(sql`
+test("asset PATCH preserves omitted required custom fields on a partial edit", async () => {
+  const fixture = await seedAsset();
+  try {
+    await db.execute(sql`
         insert into custom_field_defs
           (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
         values
           (${randomUUID()}, ${fixture.orgId}, 'fixed_assets', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${fixture.actorId}, ${fixture.actorId}),
           (${randomUUID()}, ${fixture.orgId}, 'fixed_assets', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${fixture.actorId}, ${fixture.actorId})
       `);
-      await db.execute(sql`update fixed_assets set custom = '{"required_code":"R-1"}'::jsonb where id = ${fixture.assetId} and org_id = ${fixture.orgId}`);
+    await db.execute(
+      sql`update fixed_assets set custom = '{"required_code":"R-1"}'::jsonb where id = ${fixture.assetId} and org_id = ${fixture.orgId}`,
+    );
 
-      const response = await PATCH(await patchRequest(fixture, { custom: { optional_note: "updated" } }), {
+    const response = await PATCH(
+      await patchRequest(fixture, { custom: { optional_note: "updated" } }),
+      {
         params: Promise.resolve({ id: fixture.assetId }),
-      });
-      assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from fixed_assets where id = ${fixture.assetId} and org_id = ${fixture.orgId}`, "objects"))[0]?.custom;
-      assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
-    }
-  },
-);
+      },
+    );
+    assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
+    const stored = (
+      await db.execute<{ custom: Record<string, unknown> }>(
+        sql`select custom from fixed_assets where id = ${fixture.assetId} and org_id = ${fixture.orgId}`,
+        "objects",
+      )
+    )[0]?.custom;
+    assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
 interface LifecycleFixture {
   orgId: string;
@@ -301,17 +347,20 @@ function deleteRequest(fixture: LifecycleFixture): Request {
   return new Request(`http://openbooks.test/api/assets/${fixture.assetId}`, { method: "DELETE" });
 }
 
-test(
-  "asset DELETE refuses an impaired asset and keeps its posted journals",
-  async () => {
-    const fixture = await seedAssetWithGainLossCategory("IMPAIRED-ASSET");
-    try {
-      await remeasureAsset(fixture.orgId, fixture.assetId, {
-        newCarryingValue: "9000.0000",
-        date: fixture.date,
-        actorId: fixture.actorId,
-      });
-      const before = await db.execute<{ events: number; postedJournals: number; postedLines: number }>(sql`
+test("asset DELETE refuses an impaired asset and keeps its posted journals", async () => {
+  const fixture = await seedAssetWithGainLossCategory("IMPAIRED-ASSET");
+  try {
+    await remeasureAsset(fixture.orgId, fixture.assetId, {
+      newCarryingValue: "9000.0000",
+      date: fixture.date,
+      actorId: fixture.actorId,
+    });
+    const before = await db.execute<{
+      events: number;
+      postedJournals: number;
+      postedLines: number;
+    }>(
+      sql`
         select (select count(*)::int from asset_events
                  where org_id = ${fixture.orgId} and asset_id = ${fixture.assetId}) as events,
                (select count(*)::int from journal_entries je
@@ -321,17 +370,28 @@ test(
                (select count(*)::int from depreciation_schedule_lines l
                   join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
                  where l.org_id = ${fixture.orgId} and s.asset_id = ${fixture.assetId}
-                   and l.posted_amount is not null) as "postedLines"`, "objects");
-      assert.equal(before[0]?.events, 1, "the fixture must carry an impairment event");
-      assert.equal(before[0]?.postedJournals, 1, "the fixture must carry a posted impairment journal");
-      assert.equal(before[0]?.postedLines, 0, "the fixture must have no posted depreciation lines");
+                   and l.posted_amount is not null) as "postedLines"`,
+      "objects",
+    );
+    assert.equal(before[0]?.events, 1, "the fixture must carry an impairment event");
+    assert.equal(
+      before[0]?.postedJournals,
+      1,
+      "the fixture must carry a posted impairment journal",
+    );
+    assert.equal(before[0]?.postedLines, 0, "the fixture must have no posted depreciation lines");
 
-      const response = await DELETE(deleteRequest(fixture), {
-        params: Promise.resolve({ id: fixture.assetId }),
-      });
-      assert.equal(response.status, 409, `impaired asset delete must be refused: ${JSON.stringify(await response.json())}`);
+    const response = await DELETE(deleteRequest(fixture), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    assert.equal(
+      response.status,
+      409,
+      `impaired asset delete must be refused: ${JSON.stringify(await response.json())}`,
+    );
 
-      const after = await db.execute<{ assets: number; events: number; postedJournals: number }>(sql`
+    const after = await db.execute<{ assets: number; events: number; postedJournals: number }>(
+      sql`
         select (select count(*)::int from fixed_assets
                  where org_id = ${fixture.orgId} and id = ${fixture.assetId}) as assets,
                (select count(*)::int from asset_events
@@ -339,37 +399,45 @@ test(
                (select count(*)::int from journal_entries je
                   join asset_events e on e.journal_entry_id = je.id and e.org_id = je.org_id
                  where e.org_id = ${fixture.orgId} and e.asset_id = ${fixture.assetId}
-                   and je.status = 'posted') as "postedJournals"`, "objects");
-      assert.equal(after[0]?.assets, 1, "the refused delete must keep the asset");
-      assert.equal(after[0]?.events, 1, "the refused delete must keep the impairment event");
-      assert.equal(after[0]?.postedJournals, 1, "the refused delete must keep the posted journal linked");
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
-    }
-  },
-);
+                   and je.status = 'posted') as "postedJournals"`,
+      "objects",
+    );
+    assert.equal(after[0]?.assets, 1, "the refused delete must keep the asset");
+    assert.equal(after[0]?.events, 1, "the refused delete must keep the impairment event");
+    assert.equal(
+      after[0]?.postedJournals,
+      1,
+      "the refused delete must keep the posted journal linked",
+    );
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
-test(
-  "asset DELETE refuses a disposed asset and keeps its disposal evidence",
-  async () => {
-    const fixture = await seedAssetWithGainLossCategory("DISPOSED-ASSET");
-    try {
-      // A full disposal refuses while a held period is unposted; post the
-      // scratch org's July period first so the disposal ties to the schedule.
-      await runDepreciation(fixture.orgId, "2026-07-31", fixture.actorId, fixture.assetId);
-      await disposeAsset(fixture.orgId, fixture.assetId, {
-        date: "2026-07-31",
-        actorId: fixture.actorId,
-        writeOff: true,
-      });
+test("asset DELETE refuses a disposed asset and keeps its disposal evidence", async () => {
+  const fixture = await seedAssetWithGainLossCategory("DISPOSED-ASSET");
+  try {
+    // A full disposal refuses while a held period is unposted; post the
+    // scratch org's July period first so the disposal ties to the schedule.
+    await runDepreciation(fixture.orgId, "2026-07-31", fixture.actorId, fixture.assetId);
+    await disposeAsset(fixture.orgId, fixture.assetId, {
+      date: "2026-07-31",
+      actorId: fixture.actorId,
+      writeOff: true,
+    });
 
-      const response = await DELETE(deleteRequest(fixture), {
-        params: Promise.resolve({ id: fixture.assetId }),
-      });
-      assert.equal(response.status, 409, `disposed asset delete must be refused: ${JSON.stringify(await response.json())}`);
+    const response = await DELETE(deleteRequest(fixture), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    assert.equal(
+      response.status,
+      409,
+      `disposed asset delete must be refused: ${JSON.stringify(await response.json())}`,
+    );
 
-      const after = await db.execute<{ status: string; events: number; postedJournals: number }>(sql`
+    const after = await db.execute<{ status: string; events: number; postedJournals: number }>(
+      sql`
         select (select status from fixed_assets
                  where org_id = ${fixture.orgId} and id = ${fixture.assetId}) as status,
                (select count(*)::int from asset_events
@@ -377,48 +445,90 @@ test(
                (select count(*)::int from journal_entries je
                   join asset_events e on e.journal_entry_id = je.id and e.org_id = je.org_id
                  where e.org_id = ${fixture.orgId} and e.asset_id = ${fixture.assetId}
-                   and je.status = 'posted') as "postedJournals"`, "objects");
-      assert.equal(after[0]?.status, "written_off");
-      assert.equal(after[0]?.events, 1, "the refused delete must keep the disposal event");
-      assert.equal(after[0]?.postedJournals, 1, "the refused delete must keep the posted disposal journal linked");
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
-    }
-  },
-);
+                   and je.status = 'posted') as "postedJournals"`,
+      "objects",
+    );
+    assert.equal(after[0]?.status, "written_off");
+    assert.equal(after[0]?.events, 1, "the refused delete must keep the disposal event");
+    assert.equal(
+      after[0]?.postedJournals,
+      1,
+      "the refused delete must keep the posted disposal journal linked",
+    );
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
-test(
-  "asset PATCH refuses a foreign reference custom value instead of storing it",
-  async () => {
-    const fixture = await seedAsset();
-    const foreign = await createScratchOrg();
-    try {
-      await db.execute(sql`
+test("asset PATCH refuses a foreign reference custom value instead of storing it", async () => {
+  const fixture = await seedAsset();
+  const foreign = await createScratchOrg();
+  try {
+    await db.execute(sql`
         insert into custom_field_defs
           (id, org_id, target_table, target_kind, key, label, field_type, config, is_required, is_active, created_by, updated_by)
         values
           (${randomUUID()}, ${fixture.orgId}, 'fixed_assets', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${fixture.actorId}, ${fixture.actorId})
       `);
-      const foreignParty = (await db.execute<{ id: string }>(sql`select id from parties where org_id = ${foreign.orgId} limit 1`, "objects"))[0]!.id;
-      const ownParty = (await db.execute<{ id: string }>(sql`select id from parties where org_id = ${fixture.orgId} limit 1`, "objects"))[0]!.id;
-      const refused = await PATCH(await patchRequest(fixture, { custom: { ref_party: foreignParty } }), {
+    const foreignParty = (
+      await db.execute<{ id: string }>(
+        sql`select id from parties where org_id = ${foreign.orgId} limit 1`,
+        "objects",
+      )
+    )[0]!.id;
+    const ownParty = (
+      await db.execute<{ id: string }>(
+        sql`select id from parties where org_id = ${fixture.orgId} limit 1`,
+        "objects",
+      )
+    )[0]!.id;
+    const refused = await PATCH(
+      await patchRequest(fixture, { custom: { ref_party: foreignParty } }),
+      {
         params: Promise.resolve({ id: fixture.assetId }),
-      });
-      assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(await refused.clone().json().catch(() => null))}`);
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from fixed_assets where id = ${fixture.assetId}`, "objects"))[0]?.custom;
-      assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, "refused references store nothing");
-      const saved = await PATCH(await patchRequest(fixture, { custom: { ref_party: ownParty } }), {
-        params: Promise.resolve({ id: fixture.assetId }),
-      });
-      assert.equal(saved.status, 200, `own-org reference must stay green: ${JSON.stringify(await saved.clone().json().catch(() => null))}`);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
-      await dropScratchOrgReporting(foreign.orgId);
-    }
-  },
-);
+      },
+    );
+    assert.equal(
+      refused.status,
+      422,
+      `expected 422, got ${refused.status}: ${JSON.stringify(
+        await refused
+          .clone()
+          .json()
+          .catch(() => null),
+      )}`,
+    );
+    const stored = (
+      await db.execute<{ custom: Record<string, unknown> }>(
+        sql`select custom from fixed_assets where id = ${fixture.assetId}`,
+        "objects",
+      )
+    )[0]?.custom;
+    assert.equal(
+      (stored as Record<string, unknown> | undefined)?.ref_party,
+      undefined,
+      "refused references store nothing",
+    );
+    const saved = await PATCH(await patchRequest(fixture, { custom: { ref_party: ownParty } }), {
+      params: Promise.resolve({ id: fixture.assetId }),
+    });
+    assert.equal(
+      saved.status,
+      200,
+      `own-org reference must stay green: ${JSON.stringify(
+        await saved
+          .clone()
+          .json()
+          .catch(() => null),
+      )}`,
+    );
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+    await dropScratchOrgReporting(foreign.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

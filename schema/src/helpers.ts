@@ -3,7 +3,9 @@ import { numeric, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /** uuidv7 primary key — time-ordered, index-friendly. */
 export const id = () =>
-  uuid("id").primaryKey().default(sql`uuid_generate_v7()`);
+  uuid("id")
+    .primaryKey()
+    .default(sql`uuid_generate_v7()`);
 
 /** Every row belongs to an org; RLS policies key off this. */
 export const orgRef = () => uuid("org_id").notNull();

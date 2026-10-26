@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import type { PageLayoutSaveState } from './use-page-layout'
+import { useTranslations } from "next-intl";
+import type { PageLayoutSaveState } from "./use-page-layout";
 
 /**
  * Saved/unsaved indicator for the per-user page-layout hook. Saving reads
@@ -14,32 +14,35 @@ export function LayoutSaveStatus({
   saveError,
   onRetry,
 }: {
-  saveState: PageLayoutSaveState
-  saveError: string | null
-  onRetry: () => void
+  saveState: PageLayoutSaveState;
+  saveError: string | null;
+  onRetry: () => void;
 }) {
-  const t = useTranslations('common')
-  if (saveState === 'saved') return null
-  if (saveState === 'saving') {
+  const t = useTranslations("common");
+  if (saveState === "saved") return null;
+  if (saveState === "saving") {
     return (
       <span aria-live="polite" className="text-xs text-slate-400 dark:text-slate-500">
-        {t('actions.saving')}
+        {t("actions.saving")}
       </span>
-    )
+    );
   }
   return (
-    <span role="alert" className="inline-flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+    <span
+      role="alert"
+      className="inline-flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400"
+    >
       <span>
-        {t('feedback.saveFailed')}
-        {saveError ? `: ${saveError}` : ''}
+        {t("feedback.saveFailed")}
+        {saveError ? `: ${saveError}` : ""}
       </span>
       <button
         type="button"
         onClick={onRetry}
         className="font-semibold underline underline-offset-2 hover:text-red-700 dark:hover:text-red-300"
       >
-        {t('actions.retry')}
+        {t("actions.retry")}
       </button>
     </span>
-  )
+  );
 }

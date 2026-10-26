@@ -9,8 +9,11 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  * the live assertion runs in a child with React's server condition (the same
  * shape as sales-fulfillment.integration.test.ts).
  */
-test("a sales-order line conserves quantity across fulfil, cancel and a voided shipment", { skip: !DB }, () => {
-  const source = `
+test(
+  "a sales-order line conserves quantity across fulfil, cancel and a voided shipment",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -156,11 +159,21 @@ test("a sales-order line conserves quantity across fulfil, cancel and a voided s
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    ["--conditions=react-server", "--import", "tsx", "--import", "./engine/src/testing/database-bypass.ts", "--input-type=module", "-e", source],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /BACKORDER-CONSERVATION/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /BACKORDER-CONSERVATION/);
+  },
+);

@@ -1,89 +1,114 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Equipment PATCH validates some references (fixedAssetId/rateBookId get an
 // isUuid check) but binds subsidiaryId and chargeItemId straight into their
 // existence probes, so a malformed value escapes as a raw Postgres uuid
 // throw (HTTP 500) instead of the same 422 the unknown-id path returns.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __equipmentPatchRefState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __equipmentPatchRefState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../../lib/feature-gates' || (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
+    if (
+      specifier === "../../../../lib/feature-gates" ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
+    )
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__equipmentPatchRefState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withOrgContext, withBypass} = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { PATCH } = await import('./route.ts')
+});
+const { db, withOrgContext, withBypass } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { PATCH } = await import("./route.ts");
 
 interface Fixture {
-  org: Awaited<ReturnType<typeof createScratchOrg>>
-  unitId: string
+  org: Awaited<ReturnType<typeof createScratchOrg>>;
+  unitId: string;
 }
 
 async function fixture(): Promise<Fixture> {
-  const org = await withBypass(() => createScratchOrg())
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
-  const unitId = (await db.execute<{ id: string }>(sql`
+  const org = await withBypass(() => createScratchOrg());
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
+  const unitId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into equipment_units (org_id, name, unit_number, status, subsidiary_id, purchase_price)
     values (${org.orgId}, 'Test Unit', 'TEST-001', 'draft', ${org.subsidiaryId}, '100.0000')
-    returning id`, 'objects'))[0]!.id
-  return { org, unitId }
+    returning id`,
+      "objects",
+    )
+  )[0]!.id;
+  return { org, unitId };
 }
 
 async function patch(id: string, body: unknown): Promise<{ status: number; json: unknown }> {
   try {
-    const response = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://equipment.test/api/equipment/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
+    const response = await withOrgContext(state.orgId, () =>
+      PATCH(
+        new Request(`http://equipment.test/api/equipment/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id }) },
+      ),
+    );
+    return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
-test('PATCH rejects a malformed subsidiaryId instead of throwing', async () => {
-  const { org, unitId } = await fixture()
+test("PATCH rejects a malformed subsidiaryId instead of throwing", async () => {
+  const { org, unitId } = await fixture();
   try {
-    const result = await patch(unitId, { subsidiaryId: 'not-a-uuid', revision: 0 })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
+    const result = await patch(unitId, { subsidiaryId: "not-a-uuid", revision: 0 });
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH rejects a malformed chargeItemId instead of throwing', async () => {
-  const { org, unitId } = await fixture()
+test("PATCH rejects a malformed chargeItemId instead of throwing", async () => {
+  const { org, unitId } = await fixture();
   try {
-    const result = await patch(unitId, { chargeItemId: 'not-a-uuid', revision: 0 })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
+    const result = await patch(unitId, { chargeItemId: "not-a-uuid", revision: 0 });
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH still renames a unit with valid references', async () => {
-  const { org, unitId } = await fixture()
+test("PATCH still renames a unit with valid references", async () => {
+  const { org, unitId } = await fixture();
   try {
-    const result = await patch(unitId, { name: 'Renamed Unit', revision: 0 })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
+    const result = await patch(unitId, { name: "Renamed Unit", revision: 0 });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

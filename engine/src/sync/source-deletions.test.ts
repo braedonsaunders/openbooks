@@ -4,11 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { resolveSourceDeletion } from "./source-deletions.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -22,14 +18,8 @@ test(
     const functionName = `openbooks_test_fail_source_delete_${suffix}`;
     const triggerName = `openbooks_test_fail_source_delete_${suffix}`;
     const removeFailure = async (): Promise<void> => {
-      await db.execute(
-        sql.raw(
-          `drop trigger if exists ${triggerName} on public.audit_log`,
-        ),
-      );
-      await db.execute(
-        sql.raw(`drop function if exists public.${functionName}()`),
-      );
+      await db.execute(sql.raw(`drop trigger if exists ${triggerName} on public.audit_log`));
+      await db.execute(sql.raw(`drop function if exists public.${functionName}()`));
     };
 
     try {
@@ -112,14 +102,15 @@ test(
             action: "void",
             actorId,
             note: "Force rollback after reversal and audit work",
-        }),
+          }),
         (error: unknown) =>
           /forced source-deletion resolution audit failure/.test(
             `${String((error as Error)?.message ?? error)} ${String((error as Error & { cause?: unknown })?.cause ?? "")}`,
           ),
       );
 
-      const afterFailure = (await db.execute<{
+      const afterFailure = (
+        await db.execute<{
           document_status: string;
           document_reversal_entry_id: string | null;
           original_status: string;
@@ -128,7 +119,8 @@ test(
           resolution_count: number;
           document_audit_count: number;
           resolution_audit_count: number;
-        }>(sql`
+        }>(
+          sql`
           select d.status as document_status,
                  d.reversal_entry_id as document_reversal_entry_id,
                  original.status as original_status,
@@ -179,7 +171,10 @@ test(
             join journal_entries original
               on original.id = d.posted_entry_id and original.org_id = d.org_id
            where d.id = ${documentId} and d.org_id = ${org.orgId}
-        `, "objects"))[0];
+        `,
+          "objects",
+        )
+      )[0];
       assert.deepEqual(afterFailure, {
         document_status: "posted",
         document_reversal_entry_id: null,
@@ -204,14 +199,16 @@ test(
       assert.equal(retry.action, "void");
       assert.ok(retry.reversalEntryId);
 
-      const afterRetry = (await db.execute<{
+      const afterRetry = (
+        await db.execute<{
           document_status: string;
           original_status: string;
           reversal_count: number;
           resolution_count: number;
           document_audit_count: number;
           resolution_audit_count: number;
-        }>(sql`
+        }>(
+          sql`
           select d.status as document_status,
                  original.status as original_status,
                  (
@@ -246,7 +243,10 @@ test(
             join journal_entries original
               on original.id = d.posted_entry_id and original.org_id = d.org_id
            where d.id = ${documentId} and d.org_id = ${org.orgId}
-        `, "objects"))[0];
+        `,
+          "objects",
+        )
+      )[0];
       assert.deepEqual(afterRetry, {
         document_status: "voided",
         original_status: "reversed",

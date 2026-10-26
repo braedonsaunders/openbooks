@@ -18,7 +18,9 @@ const additionalWorkers = new Set<DrainableWorker>();
 /** Composition roots register process workers before shared dependencies close. */
 export function registerProcessWorker(worker: DrainableWorker): () => void {
   additionalWorkers.add(worker);
-  return () => { additionalWorkers.delete(worker); };
+  return () => {
+    additionalWorkers.delete(worker);
+  };
 }
 
 /**
@@ -32,7 +34,9 @@ export async function shutdownWorkerProcess(
   closeJobConnections: () => Promise<unknown>,
   stopTelemetry: () => Promise<unknown>,
 ): Promise<void> {
-  const workerResults = await Promise.allSettled([...workers, ...additionalWorkers].map((w) => w.close()));
+  const workerResults = await Promise.allSettled(
+    [...workers, ...additionalWorkers].map((w) => w.close()),
+  );
   // Connections close only after EVERY worker drained: a job finishing its
   // completion mark during another worker's slow drain still has Redis.
   await closeJobConnections();

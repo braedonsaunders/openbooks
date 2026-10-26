@@ -50,7 +50,13 @@ export interface UpdateChannelInput {
   settings?: Record<string, unknown>;
 }
 
-function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
+function refuse(
+  code: string,
+  message: string,
+  remedy: string,
+  field: string | null = null,
+  status: 422 | 409 = 422,
+): never {
   throw new CommerceError(code, message, remedy, { field, status });
 }
 
@@ -121,9 +127,14 @@ function toRow(row: ChannelDbRow): ChannelRow {
 const CHANNEL_COLUMNS = sql`id, kind, name, status, subsidiary_id, currency, external_account, settings, health, last_sync_at`;
 
 async function loadChannel(orgId: string, channelId: string): Promise<ChannelDbRow> {
-  const row = (await db.execute<ChannelDbRow>(sql`
+  const row = (
+    await db.execute<ChannelDbRow>(
+      sql`
     select ${CHANNEL_COLUMNS} from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${channelId}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     refuse(
       "channel_not_found",
@@ -170,7 +181,13 @@ export async function createChannel(
   input: CreateChannelInput,
 ): Promise<{ channel: ChannelRow; webhookSecret: string | null }> {
   const kind = cleanText(input.kind)?.toLowerCase();
-  if (!kind) refuse("channel_kind_missing", "A sales channel needs its storefront kind.", "Choose a registered storefront kind for the channel.", "kind");
+  if (!kind)
+    refuse(
+      "channel_kind_missing",
+      "A sales channel needs its storefront kind.",
+      "Choose a registered storefront kind for the channel.",
+      "kind",
+    );
   // Connectors register on demand per process, never at import time: ensure
   // them before the kind check, or a fresh process refuses a known kind with
   // an install remedy for a connector that is already installed.
@@ -178,19 +195,42 @@ export async function createChannel(
   // Unknown kinds refuse by name through the adapter registry, naming every installed connector.
   channelAdapter(kind);
   const name = cleanText(input.name);
-  if (!name) refuse("channel_name_missing", "A sales channel needs a name.", "Name the channel after the storefront it connects.", "name");
+  if (!name)
+    refuse(
+      "channel_name_missing",
+      "A sales channel needs a name.",
+      "Name the channel after the storefront it connects.",
+      "name",
+    );
   const currency = cleanText(input.currency)?.toUpperCase() ?? "";
   checkCurrency(currency);
   const externalAccount = cleanText(input.externalAccount);
   if (!externalAccount) {
-    refuse("channel_account_missing", "A sales channel needs its storefront account.", "Enter the shop domain or provider account the channel connects.", "externalAccount");
+    refuse(
+      "channel_account_missing",
+      "A sales channel needs its storefront account.",
+      "Enter the shop domain or provider account the channel connects.",
+      "externalAccount",
+    );
   }
   const settings = checkSettings(kind, input.settings ?? {});
   if (input.subsidiaryId) {
-    const subsidiary = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`, "objects")))[0];
+    const subsidiary = (
+      await withOrgContext(orgId, () =>
+        db.execute<{ id: string }>(
+          sql`
+      select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`,
+          "objects",
+        ),
+      )
+    )[0];
     if (!subsidiary) {
-      refuse("channel_subsidiary_unavailable", "The subsidiary does not belong to this organization.", "Choose a subsidiary in this organization.", "subsidiaryId");
+      refuse(
+        "channel_subsidiary_unavailable",
+        "The subsidiary does not belong to this organization.",
+        "Choose a subsidiary in this organization.",
+        "subsidiaryId",
+      );
     }
   }
   const webhookSecret = cleanText(input.webhookSecret) ?? randomBytes(32).toString("hex");
@@ -201,7 +241,8 @@ export async function createChannel(
     await requireFeature(orgId);
     let id: string;
     try {
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into sales_channels
           (org_id, kind, name, status, subsidiary_id, currency, external_account,
            secrets, webhook_secret, settings, created_by, updated_by)
@@ -210,13 +251,18 @@ export async function createChannel(
           ${input.secrets ? sealJson(input.secrets, { orgId, purpose: "sales_channel.secrets" }) : null},
           ${sealJson({ secret: webhookSecret }, { orgId, purpose: "sales_channel.webhook_secret" })},
           ${JSON.stringify(settings)}::jsonb, ${actor}, ${actor})
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       if (inserted.length !== 1) throw new Error("Channel insert returned an unexpected row count");
       id = inserted[0]!.id;
     } catch (error) {
       if (error instanceof CommerceError) throw error;
       const candidate = pgCause(error);
-      if (candidate.code === "23505" && candidate.constraint === "sales_channels_kind_account_unique") {
+      if (
+        candidate.code === "23505" &&
+        candidate.constraint === "sales_channels_kind_account_unique"
+      ) {
         refuse(
           "channel_account_in_use",
           `This organization already connects ${kind} account "${externalAccount}".`,
@@ -247,18 +293,39 @@ export async function updateChannel(
     // the kind's adapter, and a fresh process must not refuse it as unknown.
     ensureShopifyAdapterRegistered();
     const before = toRow(await loadChannel(orgId, channelId));
-    const patch: { name?: string; subsidiaryId?: string | null; currency?: string; settings?: Record<string, unknown> } = {};
+    const patch: {
+      name?: string;
+      subsidiaryId?: string | null;
+      currency?: string;
+      settings?: Record<string, unknown>;
+    } = {};
     if (input.name !== undefined) {
       const name = cleanText(input.name);
-      if (!name) refuse("channel_name_missing", "A sales channel needs a name.", "Name the channel after the storefront it connects.", "name");
+      if (!name)
+        refuse(
+          "channel_name_missing",
+          "A sales channel needs a name.",
+          "Name the channel after the storefront it connects.",
+          "name",
+        );
       patch.name = name;
     }
     if (input.subsidiaryId !== undefined) {
       if (input.subsidiaryId) {
-        const subsidiary = (await db.execute<{ id: string }>(sql`
-          select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`, "objects"))[0];
+        const subsidiary = (
+          await db.execute<{ id: string }>(
+            sql`
+          select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`,
+            "objects",
+          )
+        )[0];
         if (!subsidiary) {
-          refuse("channel_subsidiary_unavailable", "The subsidiary does not belong to this organization.", "Choose a subsidiary in this organization.", "subsidiaryId");
+          refuse(
+            "channel_subsidiary_unavailable",
+            "The subsidiary does not belong to this organization.",
+            "Choose a subsidiary in this organization.",
+            "subsidiaryId",
+          );
         }
       }
       patch.subsidiaryId = input.subsidiaryId;
@@ -282,9 +349,13 @@ export async function updateChannel(
       ? sealJson(input.secrets, { orgId, purpose: "sales_channel.secrets" })
       : null;
     const webhookValue = cleanText(input.webhookSecret)
-      ? sealJson({ secret: cleanText(input.webhookSecret)! }, { orgId, purpose: "sales_channel.webhook_secret" })
+      ? sealJson(
+          { secret: cleanText(input.webhookSecret)! },
+          { orgId, purpose: "sales_channel.webhook_secret" },
+        )
       : null;
-    const updated = await db.execute<ChannelDbRow>(sql`
+    const updated = await db.execute<ChannelDbRow>(
+      sql`
       update sales_channels
          set name = ${patch.name ?? before.name},
              subsidiary_id = ${(patch.subsidiaryId !== undefined ? patch.subsidiaryId : before.subsidiaryId) as string | null},
@@ -294,9 +365,13 @@ export async function updateChannel(
              settings = ${patch.settings !== undefined ? JSON.stringify(patch.settings) : JSON.stringify(before.settings)}::jsonb,
              updated_by = ${actor}, updated_at = now()
        where org_id = ${orgId} and id = ${channelId}
-       returning ${CHANNEL_COLUMNS}`, "objects");
+       returning ${CHANNEL_COLUMNS}`,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new Error("Channel update matched no row; the channel is no longer in this organization");
+      throw new Error(
+        "Channel update matched no row; the channel is no longer in this organization",
+      );
     }
     const after = toRow(updated[0]!);
     await writeAudit(orgId, channelId, "update", actor, before, after, null);
@@ -337,13 +412,18 @@ async function transitionChannel(
         "status",
       );
     }
-    const updated = await db.execute<ChannelDbRow>(sql`
+    const updated = await db.execute<ChannelDbRow>(
+      sql`
       update sales_channels
          set status = ${target}, updated_by = ${actor}, updated_at = now()
        where org_id = ${orgId} and id = ${channelId}
-       returning ${CHANNEL_COLUMNS}`, "objects");
+       returning ${CHANNEL_COLUMNS}`,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new Error("Channel transition matched no row; the channel is no longer in this organization");
+      throw new Error(
+        "Channel transition matched no row; the channel is no longer in this organization",
+      );
     }
     const after = toRow(updated[0]!);
     await writeAudit(orgId, channelId, "update", actor, before, after, why);
@@ -351,23 +431,47 @@ async function transitionChannel(
   });
 }
 
-export async function pauseChannel(orgId: string, actor: string, channelId: string, reason: unknown): Promise<ChannelRow> {
+export async function pauseChannel(
+  orgId: string,
+  actor: string,
+  channelId: string,
+  reason: unknown,
+): Promise<ChannelRow> {
   return transitionChannel(orgId, actor, channelId, "paused", reason);
 }
 
-export async function resumeChannel(orgId: string, actor: string, channelId: string, reason: unknown): Promise<ChannelRow> {
+export async function resumeChannel(
+  orgId: string,
+  actor: string,
+  channelId: string,
+  reason: unknown,
+): Promise<ChannelRow> {
   return transitionChannel(orgId, actor, channelId, "active", reason);
 }
 
-export async function disconnectChannel(orgId: string, actor: string, channelId: string, reason: unknown): Promise<ChannelRow> {
+export async function disconnectChannel(
+  orgId: string,
+  actor: string,
+  channelId: string,
+  reason: unknown,
+): Promise<ChannelRow> {
   return transitionChannel(orgId, actor, channelId, "disconnected", reason);
 }
 
-export async function retryChannel(orgId: string, actor: string, channelId: string, reason: unknown): Promise<ChannelRow> {
+export async function retryChannel(
+  orgId: string,
+  actor: string,
+  channelId: string,
+  reason: unknown,
+): Promise<ChannelRow> {
   return transitionChannel(orgId, actor, channelId, "connecting", reason);
 }
 
-export async function markChannelActive(orgId: string, actor: string, channelId: string): Promise<ChannelRow> {
+export async function markChannelActive(
+  orgId: string,
+  actor: string,
+  channelId: string,
+): Promise<ChannelRow> {
   return withOrg(orgId, async () => {
     await acquireOrgFeatureGateLock(db, orgId);
     await requireFeature(orgId);
@@ -380,13 +484,18 @@ export async function markChannelActive(orgId: string, actor: string, channelId:
         "status",
       );
     }
-    const updated = await db.execute<ChannelDbRow>(sql`
+    const updated = await db.execute<ChannelDbRow>(
+      sql`
       update sales_channels
          set status = 'active', updated_by = ${actor}, updated_at = now()
        where org_id = ${orgId} and id = ${channelId}
-       returning ${CHANNEL_COLUMNS}`, "objects");
+       returning ${CHANNEL_COLUMNS}`,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new Error("Channel activation matched no row; the channel is no longer in this organization");
+      throw new Error(
+        "Channel activation matched no row; the channel is no longer in this organization",
+      );
     }
     const after = toRow(updated[0]!);
     await writeAudit(orgId, channelId, "update", actor, before, after, "Connection verified");
@@ -418,13 +527,18 @@ export async function disconnectChannelByProvider(
         "status",
       );
     }
-    const updated = await db.execute<ChannelDbRow>(sql`
+    const updated = await db.execute<ChannelDbRow>(
+      sql`
       update sales_channels
          set status = 'disconnected', updated_at = now()
        where org_id = ${orgId} and id = ${channelId}
-       returning ${CHANNEL_COLUMNS}`, "objects");
+       returning ${CHANNEL_COLUMNS}`,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new Error("Channel provider disconnect matched no row; the channel is no longer in this organization");
+      throw new Error(
+        "Channel provider disconnect matched no row; the channel is no longer in this organization",
+      );
     }
     const after = toRow(updated[0]!);
     await writeAudit(orgId, channelId, "update", null, before, after, detail);
@@ -433,9 +547,14 @@ export async function disconnectChannelByProvider(
 }
 
 export async function listChannels(orgId: string): Promise<ChannelRow[]> {
-  const rows = await withOrgContext(orgId, () => db.execute<ChannelDbRow>(sql`
+  const rows = await withOrgContext(orgId, () =>
+    db.execute<ChannelDbRow>(
+      sql`
     select ${CHANNEL_COLUMNS} from sales_channels
-     where org_id = ${orgId} order by name`, "objects"));
+     where org_id = ${orgId} order by name`,
+      "objects",
+    ),
+  );
   return rows.map(toRow);
 }
 
@@ -446,14 +565,21 @@ export async function countChannelOrdersForBusinessDay(
   timeZone: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<string> {
-  const row = (await withOrgContext(orgId, () => db.execute<{ count: string }>(sql`
+  const row = (
+    await withOrgContext(orgId, () =>
+      db.execute<{ count: string }>(
+        sql`
     select count(*)::text as count
       from channel_orders o
       join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
      where o.org_id = ${orgId}
        and o.ordered_at >= (${businessDay}::date::timestamp at time zone ${timeZone})
        and o.ordered_at < ((${businessDay}::date + 1)::timestamp at time zone ${timeZone})
-       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}`, "objects")))[0];
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}`,
+        "objects",
+      ),
+    )
+  )[0];
   return row?.count ?? "0";
 }
 

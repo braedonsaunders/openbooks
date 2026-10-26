@@ -46,10 +46,12 @@ routeState.NextResponse = (await import("next/server")).NextResponse;
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts"))
-      || (specifier.endsWith("/lib/authz") && String(context.parentURL ?? "").includes("/api/allocations/drivers/"))
-      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
-      || (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))
+      (specifier === "./authz" &&
+        String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) ||
+      (specifier.endsWith("/lib/authz") &&
+        String(context.parentURL ?? "").includes("/api/allocations/drivers/")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts")) ||
+      (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -71,12 +73,15 @@ const itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
 const previewRoute = (await import(previewUrl)) as typeof import("./preview/route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
-
-function authenticate(orgId: string, actorId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null = null): void {
+function authenticate(
+  orgId: string,
+  actorId: string,
+  permissions: string[],
+  allowedSubsidiaryIds: Set<string> | null = null,
+): void {
   routeState.authz = {
     user: { orgId, id: actorId },
     permissions: new Set(permissions),
@@ -116,7 +121,14 @@ test("drivers API is gated: 401 without session, 403 without permission, 404 wit
     await enableAllocations(org.orgId);
     assert.equal((await listRoute.GET(jsonRequest("/api/allocations/drivers", "GET"))).status, 200);
     // Writes need manage.
-    const denied = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", { key: "x", name: "X", dimension: "department", sourceKind: "manual" }));
+    const denied = await listRoute.POST(
+      jsonRequest("/api/allocations/drivers", "POST", {
+        key: "x",
+        name: "X",
+        dimension: "department",
+        sourceKind: "manual",
+      }),
+    );
     assert.equal(denied.status, 403);
   } finally {
     routeState.authz = null;
@@ -131,27 +143,35 @@ test("drivers CRUD round trip with revision token", async () => {
     await enableAllocations(org.orgId);
     authenticate(org.orgId, actorId, [...READ, ...MANAGE]);
 
-    const created = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
-      key: "route-driver",
-      name: "Route driver",
-      dimension: "department",
-      sourceKind: "manual",
-    }));
+    const created = await listRoute.POST(
+      jsonRequest("/api/allocations/drivers", "POST", {
+        key: "route-driver",
+        name: "Route driver",
+        dimension: "department",
+        sourceKind: "manual",
+      }),
+    );
     assert.equal(created.status, 201);
-    const createdBody = (await created.json()) as { driver: { id: string; key: string; updatedAt: string } };
+    const createdBody = (await created.json()) as {
+      driver: { id: string; key: string; updatedAt: string };
+    };
     const id = createdBody.driver.id;
 
-    const bad = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
-      key: "BAD KEY",
-      name: "Bad",
-      dimension: "department",
-      sourceKind: "manual",
-    }));
+    const bad = await listRoute.POST(
+      jsonRequest("/api/allocations/drivers", "POST", {
+        key: "BAD KEY",
+        name: "Bad",
+        dimension: "department",
+        sourceKind: "manual",
+      }),
+    );
     assert.equal(bad.status, 400);
 
     const listed = await listRoute.GET(jsonRequest("/api/allocations/drivers", "GET"));
     assert.equal(listed.status, 200);
-    assert.ok(((await listed.json()) as { drivers: { id: string }[] }).drivers.some((d) => d.id === id));
+    assert.ok(
+      ((await listed.json()) as { drivers: { id: string }[] }).drivers.some((d) => d.id === id),
+    );
 
     const got = await itemRoute.GET(jsonRequest(`/api/allocations/drivers/${id}`, "GET"), {
       params: Promise.resolve({ id }),
@@ -182,9 +202,12 @@ test("drivers CRUD round trip with revision token", async () => {
     );
     assert.equal(stale.status, 412);
 
-    const deleted = await itemRoute.DELETE(jsonRequest(`/api/allocations/drivers/${id}`, "DELETE"), {
-      params: Promise.resolve({ id }),
-    });
+    const deleted = await itemRoute.DELETE(
+      jsonRequest(`/api/allocations/drivers/${id}`, "DELETE"),
+      {
+        params: Promise.resolve({ id }),
+      },
+    );
     assert.equal(deleted.status, 200);
     const gone = await itemRoute.GET(jsonRequest(`/api/allocations/drivers/${id}`, "GET"), {
       params: Promise.resolve({ id }),
@@ -203,13 +226,16 @@ test("driver preview returns exact shares; empty drivers report why", async () =
     await enableAllocations(org.orgId);
     authenticate(org.orgId, actorId, [...READ, ...MANAGE]);
 
-    const created = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
-      key: "preview-driver",
-      name: "Preview driver",
-      dimension: "subsidiary",
-      sourceKind: "manual",
-    }));
-    const driverId = ((await created.json()) as { driver: { id: string } }).driver.id; const otherSubsidiaryId = randomUUID();
+    const created = await listRoute.POST(
+      jsonRequest("/api/allocations/drivers", "POST", {
+        key: "preview-driver",
+        name: "Preview driver",
+        dimension: "subsidiary",
+        sourceKind: "manual",
+      }),
+    );
+    const driverId = ((await created.json()) as { driver: { id: string } }).driver.id;
+    const otherSubsidiaryId = randomUUID();
     await db.execute(sql`
       with other_subsidiary as (
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
@@ -219,56 +245,71 @@ test("driver preview returns exact shares; empty drivers report why", async () =
       values (${org.orgId}, ${driverId}, ${org.subsidiaryId}, '2026-01-01', '3.0000', ${actorId}, ${actorId}),
         (${org.orgId}, ${driverId}, (select id from other_subsidiary), '2026-01-01', '77.0000', ${actorId}, ${actorId})`);
 
-    const preview = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
-      driverId,
-      date: "2026-05-01",
-    }));
+    const preview = await previewRoute.POST(
+      jsonRequest("/api/allocations/drivers/preview", "POST", {
+        driverId,
+        date: "2026-05-01",
+      }),
+    );
     assert.equal(preview.status, 200);
     const body = (await preview.json()) as {
       date: string;
       rows: { id: string; label: string; value: string; share: string }[];
     };
     assert.equal(body.date, "2026-05-01");
-    assert.deepEqual(body.rows.map((row) => [row.value, row.share]).sort(), [["3.0000", "0.0375"], ["77.0000", "0.9625"]]);
+    assert.deepEqual(body.rows.map((row) => [row.value, row.share]).sort(), [
+      ["3.0000", "0.0375"],
+      ["77.0000", "0.9625"],
+    ]);
     assert.ok(body.rows.every((row) => (row.label ?? "").length > 0));
-    const both = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
-      driverId,
-      date: "2026-05-01",
-      periodId: org.periodId,
-    }));
+    const both = await previewRoute.POST(
+      jsonRequest("/api/allocations/drivers/preview", "POST", {
+        driverId,
+        date: "2026-05-01",
+        periodId: org.periodId,
+      }),
+    );
     assert.equal(both.status, 400);
 
-    const gl = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
-      key: "preview-gl",
-      name: "Preview GL",
-      dimension: "department",
-      sourceKind: "gl_activity",
-      config: { accountScope: { kind: "any" } },
-    }));
+    const gl = await listRoute.POST(
+      jsonRequest("/api/allocations/drivers", "POST", {
+        key: "preview-gl",
+        name: "Preview GL",
+        dimension: "department",
+        sourceKind: "gl_activity",
+        config: { accountScope: { kind: "any" } },
+      }),
+    );
     const glId = ((await gl.json()) as { driver: { id: string } }).driver.id;
     // A2 resolves for real now. A date as-of with no posted lines yields
     // an empty vector (nothing to weight — shown as "no weights", never
     // zeros); the period fast path reports why it cannot compute.
-    const empty = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
-      driverId: glId,
-      date: "2026-05-01",
-    }));
+    const empty = await previewRoute.POST(
+      jsonRequest("/api/allocations/drivers/preview", "POST", {
+        driverId: glId,
+        date: "2026-05-01",
+      }),
+    );
     assert.equal(empty.status, 200);
     assert.deepEqual(((await empty.json()) as { rows: unknown[] }).rows, []);
     // A native measure with no data source for the dimension explains
     // itself — 422 with the reason, never a guessed vector.
-    const native = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
-      key: "preview-native",
-      name: "Preview native",
-      dimension: "class",
-      sourceKind: "native_measure",
-      config: { measure: "headcount" },
-    }));
+    const native = await listRoute.POST(
+      jsonRequest("/api/allocations/drivers", "POST", {
+        key: "preview-native",
+        name: "Preview native",
+        dimension: "class",
+        sourceKind: "native_measure",
+        config: { measure: "headcount" },
+      }),
+    );
     const nativeId = ((await native.json()) as { driver: { id: string } }).driver.id;
-    const unavailable = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
-      driverId: nativeId,
-      date: "2026-05-01",
-    }));
+    const unavailable = await previewRoute.POST(
+      jsonRequest("/api/allocations/drivers/preview", "POST", {
+        driverId: nativeId,
+        date: "2026-05-01",
+      }),
+    );
     assert.equal(unavailable.status, 422);
     assert.match(((await unavailable.json()) as { error: string }).error, /no data source/);
   } finally {
@@ -296,22 +337,30 @@ test("report_definition preview runs under the actor via the engine runner", asy
           columns: ["account_id", "amount"],
           filters: { combinator: "and", rules: [] },
         })}::jsonb)`);
-    const created = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
-      key: "preview-report",
-      name: "Preview report",
-      dimension: "department",
-      sourceKind: "report_definition",
-      config: { reportDefinitionId: definitionId, dimensionColumn: "account_id", valueColumn: "amount" },
-    }));
+    const created = await listRoute.POST(
+      jsonRequest("/api/allocations/drivers", "POST", {
+        key: "preview-report",
+        name: "Preview report",
+        dimension: "department",
+        sourceKind: "report_definition",
+        config: {
+          reportDefinitionId: definitionId,
+          dimensionColumn: "account_id",
+          valueColumn: "amount",
+        },
+      }),
+    );
     assert.equal(created.status, 201);
     const driverId = ((await created.json()) as { driver: { id: string } }).driver.id;
 
     // The scratch actor carries no report permission: the engine runner
     // refuses under that identity instead of measuring.
-    const denied = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
-      driverId,
-      date: "2026-05-01",
-    }));
+    const denied = await previewRoute.POST(
+      jsonRequest("/api/allocations/drivers/preview", "POST", {
+        driverId,
+        date: "2026-05-01",
+      }),
+    );
     assert.equal(denied.status, 422);
 
     // With reports.read granted, the definition runs under the actor (an
@@ -319,10 +368,12 @@ test("report_definition preview runs under the actor via the engine runner", asy
     await db.execute(sql`
       insert into user_permission_overrides (org_id, user_id, permission, effect)
       values (${org.orgId}, ${actorId}, 'reports.read', 'grant')`);
-    const ok = await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", {
-      driverId,
-      date: "2026-05-01",
-    }));
+    const ok = await previewRoute.POST(
+      jsonRequest("/api/allocations/drivers/preview", "POST", {
+        driverId,
+        date: "2026-05-01",
+      }),
+    );
     assert.equal(ok.status, 200);
     const okBody = (await ok.json()) as { rows: unknown[]; temporal: unknown };
     assert.deepEqual(okBody.rows, []);
@@ -344,50 +395,103 @@ test("restricted allocations managers cannot mutate org-wide drivers", async () 
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await enableAllocations(org.orgId);
     authenticate(org.orgId, actorId, [...READ, ...MANAGE]);
-    const created = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
-      key: "scope-driver",
-      name: "Scope driver",
-      dimension: "department",
-      sourceKind: "manual",
-    }));
+    const created = await listRoute.POST(
+      jsonRequest("/api/allocations/drivers", "POST", {
+        key: "scope-driver",
+        name: "Scope driver",
+        dimension: "department",
+        sourceKind: "manual",
+      }),
+    );
     assert.equal(created.status, 201);
     const driver = ((await created.json()) as { driver: { id: string; updatedAt: string } }).driver;
-    const beforeAudits = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`, "objects"))[0]!.n;
+    const beforeAudits = (
+      await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`,
+        "objects",
+      )
+    )[0]!.n;
     authenticate(org.orgId, actorId, [...READ, ...MANAGE], new Set([org.subsidiaryId]));
-    assert.equal((await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", { driverId: driver.id, date: "2026-07-31" }))).status, 403);
+    assert.equal(
+      (
+        await previewRoute.POST(
+          jsonRequest("/api/allocations/drivers/preview", "POST", {
+            driverId: driver.id,
+            date: "2026-07-31",
+          }),
+        )
+      ).status,
+      403,
+    );
 
-    const createdDenied = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
-      key: "restricted-driver",
-      name: "Restricted driver",
-      dimension: "department",
-      sourceKind: "manual",
-    }));
+    const createdDenied = await listRoute.POST(
+      jsonRequest("/api/allocations/drivers", "POST", {
+        key: "restricted-driver",
+        name: "Restricted driver",
+        dimension: "department",
+        sourceKind: "manual",
+      }),
+    );
     assert.equal(createdDenied.status, 403);
-    assert.deepEqual(await createdDenied.json(), { error: "requires unrestricted subsidiary access" });
+    assert.deepEqual(await createdDenied.json(), {
+      error: "requires unrestricted subsidiary access",
+    });
 
-    const updatedDenied = await itemRoute.PATCH(jsonRequest(`/api/allocations/drivers/${driver.id}`, "PATCH", {
-      name: "Must not change",
-      expectedUpdatedAt: driver.updatedAt,
-    }), { params: Promise.resolve({ id: driver.id }) });
+    const updatedDenied = await itemRoute.PATCH(
+      jsonRequest(`/api/allocations/drivers/${driver.id}`, "PATCH", {
+        name: "Must not change",
+        expectedUpdatedAt: driver.updatedAt,
+      }),
+      { params: Promise.resolve({ id: driver.id }) },
+    );
     assert.equal(updatedDenied.status, 403);
-    assert.deepEqual(await updatedDenied.json(), { error: "requires unrestricted subsidiary access" });
-
-    const deletedDenied = await itemRoute.DELETE(jsonRequest(`/api/allocations/drivers/${driver.id}`, "DELETE"), {
-      params: Promise.resolve({ id: driver.id }),
+    assert.deepEqual(await updatedDenied.json(), {
+      error: "requires unrestricted subsidiary access",
     });
+
+    const deletedDenied = await itemRoute.DELETE(
+      jsonRequest(`/api/allocations/drivers/${driver.id}`, "DELETE"),
+      {
+        params: Promise.resolve({ id: driver.id }),
+      },
+    );
     assert.equal(deletedDenied.status, 403);
-    assert.deepEqual(await deletedDenied.json(), { error: "requires unrestricted subsidiary access" });
-
-    const stored = await itemRoute.GET(jsonRequest(`/api/allocations/drivers/${driver.id}`, "GET"), {
-      params: Promise.resolve({ id: driver.id }),
+    assert.deepEqual(await deletedDenied.json(), {
+      error: "requires unrestricted subsidiary access",
     });
+
+    const stored = await itemRoute.GET(
+      jsonRequest(`/api/allocations/drivers/${driver.id}`, "GET"),
+      {
+        params: Promise.resolve({ id: driver.id }),
+      },
+    );
     assert.equal(stored.status, 200);
-    assert.equal(((await stored.json()) as { driver: { name: string } }).driver.name, "Scope driver");
-    assert.equal((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from allocation_drivers where org_id = ${org.orgId}`, "objects"))[0]!.n, 1);
-    assert.equal((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`, "objects"))[0]!.n, beforeAudits);
+    assert.equal(
+      ((await stored.json()) as { driver: { name: string } }).driver.name,
+      "Scope driver",
+    );
+    assert.equal(
+      (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from allocation_drivers where org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n,
+      1,
+    );
+    assert.equal(
+      (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`,
+          "objects",
+        )
+      )[0]!.n,
+      beforeAudits,
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);

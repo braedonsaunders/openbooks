@@ -19,7 +19,10 @@ function isCatchAllArbitrationConflict(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
     const candidate = current as { code?: string; constraint?: string; cause?: unknown };
-    if (candidate.code === "23505" && candidate.constraint === "account_groups_one_active_catch_all") {
+    if (
+      candidate.code === "23505" &&
+      candidate.constraint === "account_groups_one_active_catch_all"
+    ) {
       return true;
     }
     current = candidate.cause;
@@ -54,11 +57,16 @@ export async function ensureAccountGroupDefaults(
   executor: SqlExecutor = db,
 ): Promise<AccountGroupDefaultsReport> {
   const authoritative = new Set(
-    (await executor.execute<{ dimension: string }>(sql`
+    (
+      await executor.execute<{ dimension: string }>(
+        sql`
         select distinct dimension
           from account_groups
          where org_id = ${orgId} and is_catch_all and is_active
-      `, "objects")).map((row) => row.dimension),
+      `,
+        "objects",
+      )
+    ).map((row) => row.dimension),
   );
   const skippedCatchAllDimensions: string[] = [];
   for (const group of DEFAULT_ACCOUNT_GROUPS) {

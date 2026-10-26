@@ -54,9 +54,7 @@ test("impossible component measurements and unreadable money refuse", () => {
     portion: { percent: "25" },
   };
   for (const percent of ["0", "-1", "100.0001", "1e2", "12,34"])
-    assert.throws(() =>
-      measurePartialDisposal({ ...input, portion: { percent } }),
-    );
+    assert.throws(() => measurePartialDisposal({ ...input, portion: { percent } }));
   assert.throws(() =>
     measurePartialDisposal({
       ...input,

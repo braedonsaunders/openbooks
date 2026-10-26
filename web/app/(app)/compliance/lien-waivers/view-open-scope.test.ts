@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // The open waiver was looked up inside the FILTERED list, so a
 // filter-excluded id opened nothing — a deep link with a direction/status
@@ -10,54 +10,54 @@ import test from 'node:test'
 // nothing. Loader-proved with a scope-enforcing mock of loadLienWaivers.
 
 const W_RECEIVED = {
-  id: 'aaaaaaaa-1111-4111-8111-111111111111',
-  orgId: 'org-1',
-  waiverNumber: 'W-1',
-  direction: 'received',
-  partyId: '11111111-1111-4111-8111-111111111111',
-  partyName: 'Vendor A',
-  projectId: '22222222-2222-4222-8222-222222222222',
-  projectName: 'Project A',
-  projectSubsidiaryId: 'sub-1',
-  waiverType: 'final',
-  status: 'requested',
+  id: "aaaaaaaa-1111-4111-8111-111111111111",
+  orgId: "org-1",
+  waiverNumber: "W-1",
+  direction: "received",
+  partyId: "11111111-1111-4111-8111-111111111111",
+  partyName: "Vendor A",
+  projectId: "22222222-2222-4222-8222-222222222222",
+  projectName: "Project A",
+  projectSubsidiaryId: "sub-1",
+  waiverType: "final",
+  status: "requested",
   hasExecutedSnapshot: false,
-  throughDate: '2026-01-01',
-  amount: '100',
-  currency: 'USD',
+  throughDate: "2026-01-01",
+  amount: "100",
+  currency: "USD",
   signedAt: null,
-}
+};
 const W_ISSUED = {
   ...W_RECEIVED,
-  id: 'bbbbbbbb-2222-4222-8222-222222222222',
-  waiverNumber: 'W-2',
-  direction: 'issued',
-  status: 'signed',
-}
+  id: "bbbbbbbb-2222-4222-8222-222222222222",
+  waiverNumber: "W-2",
+  direction: "issued",
+  status: "signed",
+};
 const W_FOREIGN = {
   ...W_RECEIVED,
-  id: 'cccccccc-3333-4333-8333-333333333333',
-  waiverNumber: 'W-9',
-  orgId: 'org-2',
-}
+  id: "cccccccc-3333-4333-8333-333333333333",
+  waiverNumber: "W-9",
+  orgId: "org-2",
+};
 const W_RESTRICTED = {
   ...W_RECEIVED,
-  id: 'dddddddd-4444-4444-8444-444444444444',
-  waiverNumber: 'W-3',
-  projectSubsidiaryId: 'sub-9',
-}
+  id: "dddddddd-4444-4444-8444-444444444444",
+  waiverNumber: "W-3",
+  projectSubsidiaryId: "sub-9",
+};
 
-const stateKey = Symbol.for('openbooks.lien-waiver-open-scope-test')
+const stateKey = Symbol.for("openbooks.lien-waiver-open-scope-test");
 interface ScopeState {
-  scope: Set<string> | null
-  calls: { id: string | null; direction: string | null; status: string | null }[]
+  scope: Set<string> | null;
+  calls: { id: string | null; direction: string | null; status: string | null }[];
 }
-const scopeState: ScopeState = { scope: null, calls: [] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = scopeState
+const scopeState: ScopeState = { scope: null, calls: [] };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = scopeState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.lien-waiver-open-scope-test')]
       export async function requirePermission() {
@@ -66,14 +66,14 @@ const mockSources = new Map<string, string>([
       export function can() { return false }
     `,
   ],
+  ["mock:intl", `export async function getTranslations() { return (key) => key }`],
   [
-    'mock:intl',
-    `export async function getTranslations() { return (key) => key }`,
+    "mock:db",
+    `export const db = { async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: [] }) } }`,
   ],
-  ['mock:db', `export const db = { async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: [] }) } }`],
-  ['mock:gates', `export async function requireFeatureEnabled() {}`],
+  ["mock:gates", `export async function requireFeatureEnabled() {}`],
   [
-    'mock:compliance',
+    "mock:compliance",
     `
       const state = globalThis[Symbol.for('openbooks.lien-waiver-open-scope-test')]
       const WAIVERS = [${JSON.stringify(W_RECEIVED)}, ${JSON.stringify(W_ISSUED)}, ${JSON.stringify(W_FOREIGN)}, ${JSON.stringify(W_RESTRICTED)}]
@@ -96,13 +96,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:money',
+    "mock:money",
     `export async function getMoneyFormatter() { return { money: (value) => String(value) } }`,
   ],
-  ['mock:tabs', `export async function complianceTabs() { return [] }`],
-  ['mock:features', `export async function isFeatureEnabled() { return true }`],
+  ["mock:tabs", `export async function complianceTabs() { return [] }`],
+  ["mock:features", `export async function isFeatureEnabled() { return true }`],
   [
-    'mock:viewspec',
+    "mock:viewspec",
     `
       export function badge(label) { return label }
       export function column() { return {} }
@@ -118,88 +118,87 @@ const mockSources = new Map<string, string>([
       export function widgetCell(kind, props) { return { kind, ...props } }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['../../../../lib/authz', 'mock:authz'],
-  ['next-intl/server', 'mock:intl'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../../lib/feature-gates', 'mock:gates'],
-  ['../../../../lib/features', 'mock:features'],
-  ['../../../../lib/compliance', 'mock:compliance'],
-  ['@/lib/money-server', 'mock:money'],
-  ['../tabs', 'mock:tabs'],
-])
+  ["../../../../lib/authz", "mock:authz"],
+  ["next-intl/server", "mock:intl"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../../lib/feature-gates", "mock:gates"],
+  ["../../../../lib/features", "mock:features"],
+  ["../../../../lib/compliance", "mock:compliance"],
+  ["@/lib/money-server", "mock:money"],
+  ["../tabs", "mock:tabs"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const viewUrl = './view.ts?lien-waiver-open-scope'
-const { loadLienWaiversPage } = (await import(viewUrl)) as typeof import('./view.ts')
-hooks.deregister()
+const viewUrl = "./view.ts?lien-waiver-open-scope";
+const { loadLienWaiversPage } = (await import(viewUrl)) as typeof import("./view.ts");
+hooks.deregister();
 
 function reset(scope: Set<string> | null): void {
-  scopeState.scope = scope
-  scopeState.calls = []
+  scopeState.scope = scope;
+  scopeState.calls = [];
 }
 
 function targetedCalls(): { id: string | null; direction: string | null; status: string | null }[] {
-  return scopeState.calls.filter((call) => call.id !== null)
+  return scopeState.calls.filter((call) => call.id !== null);
 }
 
-test('a direction-excluded waiver still opens from its deep link', async () => {
-  reset(null)
-  const data = await loadLienWaiversPage({ direction: 'received', waiver: W_ISSUED.id })
-  assert.equal(data.drawerOpen, true)
-  assert.equal((data.drawerProps?.waiver as { id: string } | undefined)?.id, W_ISSUED.id)
-  const targeted = targetedCalls()
-  assert.equal(targeted.length, 1, 'the open id must load independently of the list filters')
-  assert.deepEqual(targeted[0], { id: W_ISSUED.id, direction: null, status: null })
-})
+test("a direction-excluded waiver still opens from its deep link", async () => {
+  reset(null);
+  const data = await loadLienWaiversPage({ direction: "received", waiver: W_ISSUED.id });
+  assert.equal(data.drawerOpen, true);
+  assert.equal((data.drawerProps?.waiver as { id: string } | undefined)?.id, W_ISSUED.id);
+  const targeted = targetedCalls();
+  assert.equal(targeted.length, 1, "the open id must load independently of the list filters");
+  assert.deepEqual(targeted[0], { id: W_ISSUED.id, direction: null, status: null });
+});
 
-test('a status-excluded waiver still opens from its deep link', async () => {
-  reset(null)
-  const data = await loadLienWaiversPage({ status: 'requested', waiver: W_ISSUED.id })
-  assert.equal(data.drawerOpen, true)
-  assert.equal((data.drawerProps?.waiver as { id: string } | undefined)?.id, W_ISSUED.id)
-})
+test("a status-excluded waiver still opens from its deep link", async () => {
+  reset(null);
+  const data = await loadLienWaiversPage({ status: "requested", waiver: W_ISSUED.id });
+  assert.equal(data.drawerOpen, true);
+  assert.equal((data.drawerProps?.waiver as { id: string } | undefined)?.id, W_ISSUED.id);
+});
 
-test('a waiver from another org opens nothing', async () => {
-  reset(null)
-  const data = await loadLienWaiversPage({ waiver: W_FOREIGN.id })
-  assert.equal(data.drawerOpen, false)
-  assert.equal(data.drawerProps, null)
-})
+test("a waiver from another org opens nothing", async () => {
+  reset(null);
+  const data = await loadLienWaiversPage({ waiver: W_FOREIGN.id });
+  assert.equal(data.drawerOpen, false);
+  assert.equal(data.drawerProps, null);
+});
 
-test('a waiver outside the subsidiary scope opens nothing', async () => {
-  reset(new Set(['sub-1']))
-  const data = await loadLienWaiversPage({ waiver: W_RESTRICTED.id })
-  assert.equal(data.drawerOpen, false)
-  assert.equal(data.drawerProps, null)
-})
+test("a waiver outside the subsidiary scope opens nothing", async () => {
+  reset(new Set(["sub-1"]));
+  const data = await loadLienWaiversPage({ waiver: W_RESTRICTED.id });
+  assert.equal(data.drawerOpen, false);
+  assert.equal(data.drawerProps, null);
+});
 
-test('a scope-excluded waiver still opens when its subsidiary is allowed', async () => {
-  reset(new Set(['sub-1']))
-  const data = await loadLienWaiversPage({ direction: 'received', waiver: W_ISSUED.id })
-  assert.equal(data.drawerOpen, true)
-  assert.equal((data.drawerProps?.waiver as { id: string } | undefined)?.id, W_ISSUED.id)
-})
+test("a scope-excluded waiver still opens when its subsidiary is allowed", async () => {
+  reset(new Set(["sub-1"]));
+  const data = await loadLienWaiversPage({ direction: "received", waiver: W_ISSUED.id });
+  assert.equal(data.drawerOpen, true);
+  assert.equal((data.drawerProps?.waiver as { id: string } | undefined)?.id, W_ISSUED.id);
+});
 
-test('a malformed waiver id opens nothing instead of failing', async () => {
-  reset(null)
-  const data = await loadLienWaiversPage({ waiver: 'not-a-uuid' })
-  assert.equal(data.drawerOpen, false)
-  assert.equal(data.drawerProps, null)
-  assert.deepEqual(targetedCalls(), [], 'a malformed id must never reach the query')
-})
+test("a malformed waiver id opens nothing instead of failing", async () => {
+  reset(null);
+  const data = await loadLienWaiversPage({ waiver: "not-a-uuid" });
+  assert.equal(data.drawerOpen, false);
+  assert.equal(data.drawerProps, null);
+  assert.deepEqual(targetedCalls(), [], "a malformed id must never reach the query");
+});

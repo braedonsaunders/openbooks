@@ -2,20 +2,12 @@
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  Button,
-  Drawer,
-  Input,
-  Label,
-  SearchSelect,
-  Select,
-  Textarea,
-} from "@openbooks/ui";
+import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useDirtyClose } from "@/lib/use-dirty-close";
 import { useTranslations } from "next-intl";
-import { DateField } from '../../../../components/date-field';
-import { initialLossOfControlFormState } from '../../../../lib/loss-of-control-form-state';
+import { DateField } from "../../../../components/date-field";
+import { initialLossOfControlFormState } from "../../../../lib/loss-of-control-form-state";
 type Setup = {
   interest: { investment_account_id: string; equity_income_account_id: string };
   subsidiaries: { id: string; name: string; base_currency: string }[];
@@ -49,14 +41,12 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     [setup, setSetup] = useState<Setup | null>(null),
-    [values, setValues] = useState<Record<string, string>>(() =>
-      initialLossOfControlFormState(today, null, "").values,
+    [values, setValues] = useState<Record<string, string>>(
+      () => initialLossOfControlFormState(today, null, "").values,
     ),
     [rates, setRates] = useState<Record<string, string>>({}),
     [oci, setOci] = useState<Oci[]>([]),
-    [adjustments, setAdjustments] = useState<
-      { lineId: string; amount: string }[]
-    >([]),
+    [adjustments, setAdjustments] = useState<{ lineId: string; amount: string }[]>([]),
     [dirty, setDirty] = useState(false),
     [key, setKey] = useState(() => crypto.randomUUID());
   const changed = () => {
@@ -65,11 +55,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
     setError(null);
   };
   const resetForm = (defaults: Setup["interest"] | null) => {
-    const state = initialLossOfControlFormState(
-      today,
-      defaults,
-      crypto.randomUUID(),
-    );
+    const state = initialLossOfControlFormState(today, defaults, crypto.randomUUID());
     setValues(state.values);
     setRates(state.rates);
     setOci(state.oci);
@@ -84,8 +70,11 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
     resetForm(null);
   };
   const closeGuard = useDirtyClose({
-    dirty, busy, onClose: closeDrawer,
-    message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+    dirty,
+    busy,
+    onClose: closeDrawer,
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
   });
   const set = (name: string, value: string) => {
     setValues((v) => ({ ...v, [name]: value }));
@@ -94,9 +83,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
   async function show() {
     setBusy(true);
     try {
-      const r = await fetch(
-        `/api/consolidation/interests/${interestId}/loss-of-control`,
-      );
+      const r = await fetch(`/api/consolidation/interests/${interestId}/loss-of-control`);
       if (!r.ok) {
         // The route refuses by name in an `{error}` body (invalid interest,
         // unmet proposal preconditions): surface the refusal, not a generic
@@ -168,26 +155,22 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await fetch(
-        `/api/consolidation/interests/${interestId}/loss-of-control`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...values,
-            idempotencyKey: key,
-            distributionAccountId: values.distributionAccountId || null,
-            distributionIncomeAccountId:
-              values.distributionIncomeAccountId || null,
-            rates: setup!.subsidiaries.map((s) => ({
-              subsidiaryId: s.id,
-              rate: rates[s.id] ?? "",
-            })),
-            oci,
-            additionalConsolidationLines: adjustments,
-          }),
-        },
-      );
+      const r = await fetch(`/api/consolidation/interests/${interestId}/loss-of-control`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...values,
+          idempotencyKey: key,
+          distributionAccountId: values.distributionAccountId || null,
+          distributionIncomeAccountId: values.distributionIncomeAccountId || null,
+          rates: setup!.subsidiaries.map((s) => ({
+            subsidiaryId: s.id,
+            rate: rates[s.id] ?? "",
+          })),
+          oci,
+          additionalConsolidationLines: adjustments,
+        }),
+      });
       if (!r.ok) {
         // The POST refuses by name in an `{error}` body (engine refusal):
         // surface the refusal instead of discarding it for prepareFailed.
@@ -259,10 +242,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
               {account("proceedsAccountId", t("proceedsAccount"))}
               {account("parentGainLossAccountId", t("gainLossAccount"))}
               {account("gainLossAccountId", t("groupGainLossAccount"))}
-              {account(
-                "investmentTranslationAccountId",
-                t("translationReserveAccount"),
-              )}
+              {account("investmentTranslationAccountId", t("translationReserveAccount"))}
             </div>
           </section>
           <section className="space-y-3">
@@ -301,14 +281,8 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                 {values.retainedMethod === "equity" ? (
                   <>
                     {account("equityIncomeAccountId", t("equityIncomeAccount"))}
-                    {account(
-                      "distributionAccountId",
-                      t("distributionsAccount"),
-                    )}
-                    {account(
-                      "distributionIncomeAccountId",
-                      t("distributionIncomeAccount"),
-                    )}
+                    {account("distributionAccountId", t("distributionsAccount"))}
+                    {account("distributionIncomeAccountId", t("distributionIncomeAccount"))}
                   </>
                 ) : null}
               </div>
@@ -349,9 +323,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                         n === i
                           ? {
                               lineId: id,
-                              amount:
-                                setup?.adjustmentLines.find((l) => l.id === id)
-                                  ?.amount ?? "",
+                              amount: setup?.adjustmentLines.find((l) => l.id === id)?.amount ?? "",
                             }
                           : r,
                       ),
@@ -371,9 +343,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                   value={line.amount}
                   onChange={(e) => {
                     setAdjustments((rows) =>
-                      rows.map((r, n) =>
-                        n === i ? { ...r, amount: e.target.value } : r,
-                      ),
+                      rows.map((r, n) => (n === i ? { ...r, amount: e.target.value } : r)),
                     );
                     changed();
                   }}
@@ -407,9 +377,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
             <p className="text-sm text-slate-500">{t("ociHelp")}</p>
             {oci.map((line, i) => {
               const update = (patch: Partial<Oci>) => {
-                setOci((rows) =>
-                  rows.map((r, n) => (n === i ? { ...r, ...patch } : r)),
-                );
+                setOci((rows) => rows.map((r, n) => (n === i ? { ...r, ...patch } : r)));
                 changed();
               };
               return (
@@ -438,9 +406,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                     aria-label={t("reserveTreatment")}
                     disabled={busy}
                     value={line.treatment}
-                    onChange={(e) =>
-                      update({ treatment: e.target.value as Oci["treatment"] })
-                    }
+                    onChange={(e) => update({ treatment: e.target.value as Oci["treatment"] })}
                   >
                     {[
                       {
@@ -461,9 +427,7 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
                     ariaLabel={t("destinationAccount")}
                     disabled={busy}
                     value={line.destinationAccountId}
-                    onChange={(destinationAccountId) =>
-                      update({ destinationAccountId })
-                    }
+                    onChange={(destinationAccountId) => update({ destinationAccountId })}
                     options={accountOptions}
                     placeholder={t("destinationAccount")}
                   />

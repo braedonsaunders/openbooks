@@ -1,15 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const busySeasonCapacity: DocArticle = {
-  slug: 'busy-season-capacity',
-  title: 'Busy-Season Capacity',
-  category: 'projects',
+  slug: "busy-season-capacity",
+  title: "Busy-Season Capacity",
+  category: "projects",
   order: 3,
   summary:
-    'Read department demand curves for the busy season from stored asks and the staffing plan, compare them with net capacity, and turn a gap into a draft resource request.',
-  updated: '2026-09-28',
-  keywords: ['busy season', 'capacity', 'demand curve', 'staffing plan', 'resource request', 'practice', 'peak', 'gap'],
-  related: ['project-types', 'labor-costing'],
+    "Read department demand curves for the busy season from stored asks and the staffing plan, compare them with net capacity, and turn a gap into a draft resource request.",
+  updated: "2026-09-28",
+  keywords: [
+    "busy season",
+    "capacity",
+    "demand curve",
+    "staffing plan",
+    "resource request",
+    "practice",
+    "peak",
+    "gap",
+  ],
+  related: ["project-types", "labor-costing"],
   body: `# Busy-Season Capacity
 
 Accounting firms live the same year twice: a quiet summer and a spring where
@@ -95,4 +104,4 @@ panel does not rank candidates or fill roles automatically. Tenant custom
 reports over the computed capacity facts remain a later extension; planned
 hours stay reportable through the registered assignment source today.
 `,
-}
+};

@@ -46,7 +46,7 @@ export async function loadTaxComponentConfig(
   dateIso: string,
   runner: Runner = db,
 ): Promise<TaxComponentConfig[]> {
-  const r = (await runner.execute<{
+  const r = await runner.execute<{
     id: string;
     code: string;
     effective_rate: string | null;
@@ -58,7 +58,8 @@ export async function loadTaxComponentConfig(
     collected_account_id: string | null;
     paid_account_id: string | null;
     withholding_account_id: string | null;
-  }>(sql`
+  }>(
+    sql`
     select tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent, tc.calculation_type,
            tc.price_includes_tax, tc.compound_on_previous, tc.rounding_scale,
@@ -70,7 +71,9 @@ export async function loadTaxComponentConfig(
            and (effective_to is null or effective_to >= ${dateIso})
          order by effective_from desc limit 1) tr on true
      where tc.id = ${taxCodeId} and tc.org_id = ${orgId} and tc.is_active
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = r[0];
   if (!row) return [];
   return [
@@ -101,29 +104,43 @@ export async function loadTaxProfileConfig(
   dateIso: string,
   runner: Runner = db,
 ): Promise<TaxComponentConfig[]> {
-  if (profile.taxCodeId && profile.taxGroupId) throw new TaxCalculationError("select either a tax code or a tax group");
+  if (profile.taxCodeId && profile.taxGroupId)
+    throw new TaxCalculationError("select either a tax code or a tax group");
   if (profile.taxCodeId) {
     const configs = await loadTaxComponentConfig(orgId, profile.taxCodeId, dateIso, runner);
     if (!configs.length) throw new TaxCalculationError("selected tax code is inactive or missing");
     return configs;
   }
   if (!profile.taxGroupId) return [];
-  const group = (await runner.execute<{ inclusive: boolean }>(sql`
+  const group = (
+    await runner.execute<{ inclusive: boolean }>(
+      sql`
     select price_includes_tax as inclusive from tax_groups
      where id = ${profile.taxGroupId} and org_id = ${orgId} and is_active
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!group) throw new TaxCalculationError("selected tax group is inactive or missing");
-  const members = await runner.execute<{ taxCodeId: string; sequence: number }>(sql`
+  const members = await runner.execute<{ taxCodeId: string; sequence: number }>(
+    sql`
     select m.tax_code_id as "taxCodeId", m.sequence from tax_group_members m
       join tax_groups g on g.id = m.tax_group_id
      where g.id = ${profile.taxGroupId} and g.org_id = ${orgId} order by m.sequence
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!members.length) throw new TaxCalculationError("selected tax group has no components");
   const configs: TaxComponentConfig[] = [];
   for (const member of members) {
     const component = await loadTaxComponentConfig(orgId, member.taxCodeId, dateIso, runner);
-    if (!component.length) throw new TaxCalculationError("selected tax group contains an inactive or missing code");
-    configs.push({ ...component[0]!, sequence: member.sequence, priceIncludesTax: group.inclusive });
+    if (!component.length)
+      throw new TaxCalculationError("selected tax group contains an inactive or missing code");
+    configs.push({
+      ...component[0]!,
+      sequence: member.sequence,
+      priceIncludesTax: group.inclusive,
+    });
   }
   return configs;
 }
@@ -141,8 +158,7 @@ export function computeImportedLineTaxEvidence(
   configs: TaxComponentConfig[],
 ): ComputedTaxComponent[] {
   const calculated = computeLineTaxes(amount, configs);
-  if (cmp(calculated.taxTotal, sourceTaxAmount) === 0)
-    return calculated.components;
+  if (cmp(calculated.taxTotal, sourceTaxAmount) === 0) return calculated.components;
   return computeLineTaxes(amount, configs, {
     overridden: true,
     taxAmount: sourceTaxAmount,
@@ -160,10 +176,15 @@ export async function persistLineTaxComponents(
   // The marketplace flag lives on the document line — recalculation rebuilds
   // these rows, so reading it here keeps every writer consistent instead of
   // trusting each caller to pass the flag through.
-  const line = (await runner.execute<{ marketplaceFacilitator: string | null }>(sql`
+  const line = (
+    await runner.execute<{ marketplaceFacilitator: string | null }>(
+      sql`
     select marketplace_facilitator as "marketplaceFacilitator"
       from document_lines where org_id = ${orgId} and id = ${documentLineId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!line) {
     throw new TaxCalculationError(
       "cannot persist tax evidence for an unknown document line — save the line before calculating its tax",

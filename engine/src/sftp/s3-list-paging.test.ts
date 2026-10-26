@@ -27,15 +27,24 @@ test("an S3 listing past 1,000 keys follows every page for files and prefixes", 
     // continuation every key past it would stay unimported forever.
     for (let i = 0; i < 2500; i++) {
       const name = `f-${String(i).padStart(4, "0")}.ofx`;
-      fake.objects.set(`${ROOT}/inbound/${name}`, { bytes: Buffer.from("statement"), lastModified: new Date() });
+      fake.objects.set(`${ROOT}/inbound/${name}`, {
+        bytes: Buffer.from("statement"),
+        lastModified: new Date(),
+      });
     }
     for (let i = 0; i < 1200; i++) {
       const dir = `shard-${String(i).padStart(4, "0")}`;
-      fake.objects.set(`${ROOT}/${dir}/stmt.ofx`, { bytes: Buffer.from("statement"), lastModified: new Date() });
+      fake.objects.set(`${ROOT}/${dir}/stmt.ofx`, {
+        bytes: Buffer.from("statement"),
+        lastModified: new Date(),
+      });
     }
     // Outside the tenant prefix: never visible to this backend, whatever page
     // they would fall on.
-    fake.objects.set("sftp/other-org/evil.ofx", { bytes: Buffer.from("x"), lastModified: new Date() });
+    fake.objects.set("sftp/other-org/evil.ofx", {
+      bytes: Buffer.from("x"),
+      lastModified: new Date(),
+    });
     fake.objects.set("elsewhere/y.ofx", { bytes: Buffer.from("x"), lastModified: new Date() });
 
     const backend = s3Backend(BUCKET, ROOT, ORG);
@@ -54,10 +63,18 @@ test("an S3 listing past 1,000 keys follows every page for files and prefixes", 
 
     const root = await backend.list("/");
     const dirs = root.filter((entry) => entry.isDir).map((entry) => entry.name);
-    assert.equal(dirs.length, 1201, "inbound plus all 1,200 shard prefixes must be visible across pages");
-    assert.ok(dirs.includes("inbound") && dirs.includes("shard-0000") && dirs.includes("shard-1199"));
+    assert.equal(
+      dirs.length,
+      1201,
+      "inbound plus all 1,200 shard prefixes must be visible across pages",
+    );
+    assert.ok(
+      dirs.includes("inbound") && dirs.includes("shard-0000") && dirs.includes("shard-1199"),
+    );
 
-    const stray = [...names, ...dirs].filter((name) => name.includes("evil") || name.includes("elsewhere"));
+    const stray = [...names, ...dirs].filter(
+      (name) => name.includes("evil") || name.includes("elsewhere"),
+    );
     assert.deepEqual(stray, [], "keys outside the tenant prefix must never surface");
   } finally {
     setSftpS3ClientForTests(null);

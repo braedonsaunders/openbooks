@@ -39,35 +39,55 @@ import { addMemberBody, benefitProgramPatchBody } from "../bodies";
 export const runtime = "nodejs";
 
 const uuid = z.string().refine(isUuid, "must be a valid id");
-const jsonPointer = z.string().max(1024).refine((value) => value === "" || value.startsWith("/"), "must be a JSON Pointer");
-const sourceFieldPointers = z.object({
-  sourceRowRefPointer: jsonPointer.optional(),
-  amountPointer: jsonPointer.optional(),
-  currencyPointer: jsonPointer.optional(),
-  periodFromPointer: jsonPointer.optional(),
-  periodToPointer: jsonPointer.optional(),
-  sourceIssueDatePointer: jsonPointer.optional(),
-  sourcePaidDatePointer: jsonPointer.optional(),
-}).strict();
+const jsonPointer = z
+  .string()
+  .max(1024)
+  .refine((value) => value === "" || value.startsWith("/"), "must be a JSON Pointer");
+const sourceFieldPointers = z
+  .object({
+    sourceRowRefPointer: jsonPointer.optional(),
+    amountPointer: jsonPointer.optional(),
+    currencyPointer: jsonPointer.optional(),
+    periodFromPointer: jsonPointer.optional(),
+    periodToPointer: jsonPointer.optional(),
+    sourceIssueDatePointer: jsonPointer.optional(),
+    sourcePaidDatePointer: jsonPointer.optional(),
+  })
+  .strict();
 const pdfFieldSelection = z.strictObject({
-  quote: z.string().min(1).max(4000), value: z.string().min(1).max(300),
-  format: z.enum(["text", "decimal", "grouped-decimal", "iso-date", "us-date", "iso-timestamp-date"]),
+  quote: z.string().min(1).max(4000),
+  value: z.string().min(1).max(300),
+  format: z.enum([
+    "text",
+    "decimal",
+    "grouped-decimal",
+    "iso-date",
+    "us-date",
+    "iso-timestamp-date",
+  ]),
 });
 const pdfSelection = z.strictObject({
-  page: z.number().int().min(1).max(2000), anchor: z.string().min(1).max(4000),
+  page: z.number().int().min(1).max(2000),
+  anchor: z.string().min(1).max(4000),
   fields: z.strictObject({
-    sourceRowRef: pdfFieldSelection.optional(), value: pdfFieldSelection.optional(), currency: pdfFieldSelection.optional(),
-    periodFrom: pdfFieldSelection.optional(), periodTo: pdfFieldSelection.optional(),
-    sourceIssueDate: pdfFieldSelection.optional(), sourcePaidDate: pdfFieldSelection.optional(),
+    sourceRowRef: pdfFieldSelection.optional(),
+    value: pdfFieldSelection.optional(),
+    currency: pdfFieldSelection.optional(),
+    periodFrom: pdfFieldSelection.optional(),
+    periodTo: pdfFieldSelection.optional(),
+    sourceIssueDate: pdfFieldSelection.optional(),
+    sourcePaidDate: pdfFieldSelection.optional(),
   }),
 });
-const retainedSourceArtifactInput = z.object({
-  fileId: uuid,
-  versionId: uuid,
-  rowPointer: jsonPointer,
-  sourceFields: sourceFieldPointers.optional(),
-  pdfSelection: pdfSelection.optional(),
-}).strict();
+const retainedSourceArtifactInput = z
+  .object({
+    fileId: uuid,
+    versionId: uuid,
+    rowPointer: jsonPointer,
+    sourceFields: sourceFieldPointers.optional(),
+    pdfSelection: pdfSelection.optional(),
+  })
+  .strict();
 const sourceEvidenceAction = z.object({
   expectedProgramRevision: z.number().int().positive(),
   employmentId: uuid,
@@ -76,22 +96,33 @@ const sourceEvidenceAction = z.object({
   asOf: civilDateInput(),
   sourceEvidenceClass: z.enum(["missing-source-identity", "source-paid-above-native-measure"]),
   sourceArtifacts: z.array(retainedSourceArtifactInput).min(1).max(5),
-  nativeCurrencyBasis: z.strictObject({ confirmed: z.literal(true), reason: z.string().trim().min(8).max(2000) }).optional(),
+  nativeCurrencyBasis: z
+    .strictObject({ confirmed: z.literal(true), reason: z.string().trim().min(8).max(2000) })
+    .optional(),
   requestKey: uuid.optional(),
-  expectedNativePreviewDigest: z.string().regex(/^[0-9a-f]{64}$/i).optional(),
-  governingDecisionAttestation: z.object({
-    basis: z.string().trim().min(8).max(2000),
-    reason: z.string().trim().min(8).max(2000),
-    confirmed: z.literal(true),
-  }).optional(),
-  mappingAttestation: z.object({
-    basis: z.string().trim().min(8).max(2000),
-    reason: z.string().trim().min(8).max(2000),
-    confirmed: z.literal(true),
-  }).optional(),
+  expectedNativePreviewDigest: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i)
+    .optional(),
+  governingDecisionAttestation: z
+    .object({
+      basis: z.string().trim().min(8).max(2000),
+      reason: z.string().trim().min(8).max(2000),
+      confirmed: z.literal(true),
+    })
+    .optional(),
+  mappingAttestation: z
+    .object({
+      basis: z.string().trim().min(8).max(2000),
+      reason: z.string().trim().min(8).max(2000),
+      confirmed: z.literal(true),
+    })
+    .optional(),
   reason: z.string().trim().min(8).max(2000).optional(),
 });
-const previewSourceEvidenceAction = sourceEvidenceAction.extend({ action: z.literal("previewSourceEvidence") });
+const previewSourceEvidenceAction = sourceEvidenceAction.extend({
+  action: z.literal("previewSourceEvidence"),
+});
 const recordSourceEvidenceFirstAction = sourceEvidenceAction.extend({
   action: z.literal("recordSourceEvidenceFirst"),
   requestKey: uuid,
@@ -130,11 +161,12 @@ type PreviewProjectMargin = {
 };
 
 function previewProjectMargin(snapshot: Record<string, unknown>): PreviewProjectMargin | null {
-  const candidate = snapshot.kind === "incentive-measure"
-    ? snapshot.projectMargin
-    : snapshot.kind === "incentive-native-measure-without-award"
-      ? snapshot.measuredSource
-      : undefined;
+  const candidate =
+    snapshot.kind === "incentive-measure"
+      ? snapshot.projectMargin
+      : snapshot.kind === "incentive-native-measure-without-award"
+        ? snapshot.measuredSource
+        : undefined;
   if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) return null;
   const margin = candidate as PreviewProjectMargin & { metric?: unknown };
   if (margin.metric !== "project_margin" || !Array.isArray(margin.projects)) return null;
@@ -151,23 +183,53 @@ async function loadRetainedSourceArtifacts(
   authz: Authz,
   inputs: readonly RetainedSourceArtifactInput[],
   nativeCurrency?: string,
-): Promise<{ artifacts: VerifiedSourceArtifact[]; claims: { sourceRowRef: string; value: string; currency: string; periodFrom: string; periodTo: string; sourceIssueDate: string; sourcePaidDate?: string } }> {
+): Promise<{
+  artifacts: VerifiedSourceArtifact[];
+  claims: {
+    sourceRowRef: string;
+    value: string;
+    currency: string;
+    periodFrom: string;
+    periodTo: string;
+    sourceIssueDate: string;
+    sourcePaidDate?: string;
+  };
+}> {
   const artifacts: VerifiedSourceArtifact[] = [];
   const parsedRows: Awaited<ReturnType<typeof parseRetainedSourceArtifact>>[] = [];
   const viewer = fileViewer(authz);
   for (const input of inputs) {
     const file = await getFile(authz.user.orgId, input.fileId.toLowerCase(), viewer);
-    if (!file || file.isInactive) throw new BenefitsError("NOT_FOUND", "selected retained source file is unavailable or outside your Cabinet access");
+    if (!file || file.isInactive)
+      throw new BenefitsError(
+        "NOT_FOUND",
+        "selected retained source file is unavailable or outside your Cabinet access",
+      );
     const versionId = input.versionId.toLowerCase();
     const version = file.versions.find((entry) => entry.id.toLowerCase() === versionId);
     if (!version || !version.contentHash || !/^[0-9a-f]{64}$/i.test(version.contentHash)) {
-      throw new BenefitsError("REFUSED", "selected Cabinet version is not retained with a verifiable content hash");
+      throw new BenefitsError(
+        "REFUSED",
+        "selected Cabinet version is not retained with a verifiable content hash",
+      );
     }
     const blob = await getFileBlob(authz.user.orgId, file.id, viewer, versionId);
-    if (!blob || blob.versionId.toLowerCase() !== versionId || blob.bytes.length !== version.sizeBytes || sha256(blob.bytes) !== version.contentHash.toLowerCase()) {
-      throw new BenefitsError("REFUSED", "selected Cabinet version bytes do not match the retained version hash and size");
+    if (
+      !blob ||
+      blob.versionId.toLowerCase() !== versionId ||
+      blob.bytes.length !== version.sizeBytes ||
+      sha256(blob.bytes) !== version.contentHash.toLowerCase()
+    ) {
+      throw new BenefitsError(
+        "REFUSED",
+        "selected Cabinet version bytes do not match the retained version hash and size",
+      );
     }
-    if (blob.bytes.length > 10_000_000) throw new BenefitsError("REFUSED", "selected source file exceeds the supported retained evidence size");
+    if (blob.bytes.length > 10_000_000)
+      throw new BenefitsError(
+        "REFUSED",
+        "selected source file exceeds the supported retained evidence size",
+      );
     const parsed = await parseRetainedSourceArtifact(blob.bytes, blob.contentType, input);
     parsedRows.push(parsed);
     const rowObject = parsed.row;
@@ -196,11 +258,20 @@ export const GET = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ authz: gate, params: routeParams }) => {
     const { id } = routeParams;
-    if (!isUuid(id)) return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
+    if (!isUuid(id))
+      return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
     try {
       const program = await getBenefitProgram(db, gate.user.orgId, gate.user.id, id);
-      const members = await listProgramMemberships({ orgId: gate.user.orgId, actorId: gate.user.id, programId: id });
-      const approvalPolicies = await listBenefitApprovalPolicies({ orgId: gate.user.orgId, actorId: gate.user.id, programId: id });
+      const members = await listProgramMemberships({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        programId: id,
+      });
+      const approvalPolicies = await listBenefitApprovalPolicies({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        programId: id,
+      });
       return NextResponse.json({ program, members, approvalPolicies });
     } catch (e) {
       return benefitsErrorResponse(e);
@@ -215,7 +286,8 @@ export const PATCH = defineRoute({
   body: benefitProgramPatchBody,
   handler: async ({ authz: gate, params: routeParams, body }) => {
     const { id } = routeParams;
-    if (!isUuid(id)) return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
+    if (!isUuid(id))
+      return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
     const base = { orgId: gate.user.orgId, actorId: gate.user.id, programId: id };
     try {
       switch (body.action) {
@@ -271,7 +343,8 @@ export const POST = defineRoute({
   ]),
   handler: async ({ authz: gate, params: routeParams, body }) => {
     const { id } = routeParams;
-    if (!isUuid(id)) return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
+    if (!isUuid(id))
+      return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
     const base = { orgId: gate.user.orgId, actorId: gate.user.id, programId: id };
     try {
       if (body.action === "settle") {
@@ -285,23 +358,57 @@ export const POST = defineRoute({
         return NextResponse.json({ settled });
       }
       if (body.action === "previewSourceEvidence" || body.action === "recordSourceEvidenceFirst") {
-        const isAboveNativeMeasure = body.sourceEvidenceClass === "source-paid-above-native-measure";
-        if (isAboveNativeMeasure && !body.sourceArtifacts.some(artifact => artifact.sourceFields?.sourcePaidDatePointer !== undefined || artifact.pdfSelection?.fields.sourcePaidDate !== undefined)) {
-          throw new BenefitsError("INVALID_INPUT", "select the issued row's source paid date field for a source-paid-above-native-measure obligation");
+        const isAboveNativeMeasure =
+          body.sourceEvidenceClass === "source-paid-above-native-measure";
+        if (
+          isAboveNativeMeasure &&
+          !body.sourceArtifacts.some(
+            (artifact) =>
+              artifact.sourceFields?.sourcePaidDatePointer !== undefined ||
+              artifact.pdfSelection?.fields.sourcePaidDate !== undefined,
+          )
+        ) {
+          throw new BenefitsError(
+            "INVALID_INPUT",
+            "select the issued row's source paid date field for a source-paid-above-native-measure obligation",
+          );
         }
-        if (isAboveNativeMeasure && body.action === "recordSourceEvidenceFirst" && !body.governingDecisionAttestation) {
-          throw new BenefitsError("INVALID_INPUT", "attest the governing decision with its basis and reason before recording a source payment above the native measure");
+        if (
+          isAboveNativeMeasure &&
+          body.action === "recordSourceEvidenceFirst" &&
+          !body.governingDecisionAttestation
+        ) {
+          throw new BenefitsError(
+            "INVALID_INPUT",
+            "attest the governing decision with its basis and reason before recording a source payment above the native measure",
+          );
         }
         const currentProgram = await getBenefitProgram(db, gate.user.orgId, gate.user.id, id);
         if (currentProgram.revision !== body.expectedProgramRevision) {
-          throw new BenefitsError("REFUSED", `program revision changed from ${body.expectedProgramRevision} to ${currentProgram.revision} — refresh the native preview and review the retained source rows again`);
+          throw new BenefitsError(
+            "REFUSED",
+            `program revision changed from ${body.expectedProgramRevision} to ${currentProgram.revision} — refresh the native preview and review the retained source rows again`,
+          );
         }
-        const retained = await loadRetainedSourceArtifacts(gate, body.sourceArtifacts, body.nativeCurrencyBasis ? currentProgram.currency : undefined);
-        if (retained.claims.periodFrom !== body.periodFrom || retained.claims.periodTo !== body.periodTo) {
-          throw new BenefitsError("REFUSED", "selected source row earning dates differ from the requested program period");
+        const retained = await loadRetainedSourceArtifacts(
+          gate,
+          body.sourceArtifacts,
+          body.nativeCurrencyBasis ? currentProgram.currency : undefined,
+        );
+        if (
+          retained.claims.periodFrom !== body.periodFrom ||
+          retained.claims.periodTo !== body.periodTo
+        ) {
+          throw new BenefitsError(
+            "REFUSED",
+            "selected source row earning dates differ from the requested program period",
+          );
         }
         if (isAboveNativeMeasure && !retained.claims.sourcePaidDate) {
-          throw new BenefitsError("INVALID_INPUT", "select the issued row's source paid date field for a source-paid-above-native-measure obligation");
+          throw new BenefitsError(
+            "INVALID_INPUT",
+            "select the issued row's source paid date field for a source-paid-above-native-measure obligation",
+          );
         }
         const native = await reconcileIncentivePeriod({
           orgId: gate.user.orgId,
@@ -311,60 +418,100 @@ export const POST = defineRoute({
           periodTo: body.periodTo,
           asOf: body.asOf,
         });
-        const nativeSnapshot = native.preview?.sourceSnapshot ?? native.nativeMeasureOnly?.sourceSnapshot;
-        if (!nativeSnapshot) throw new BenefitsError("REFUSED", "native period preview has no retained measurement to compare with the source row");
+        const nativeSnapshot =
+          native.preview?.sourceSnapshot ?? native.nativeMeasureOnly?.sourceSnapshot;
+        if (!nativeSnapshot)
+          throw new BenefitsError(
+            "REFUSED",
+            "native period preview has no retained measurement to compare with the source row",
+          );
         const measuredFact = nativeSnapshot.measured;
-        const nativeMeasuredValue = native.preview?.computation.measuredValue ??
-          (measuredFact !== null && typeof measuredFact === "object" && !Array.isArray(measuredFact) && typeof (measuredFact as Record<string, unknown>).value === "string"
-            ? (measuredFact as Record<string, unknown>).value as string : null);
-        if (nativeMeasuredValue === null) throw new BenefitsError("REFUSED", "the retained native snapshot has no exact measured value; refresh the native period measurement");
-        const target = native.preview?.visibleRecipients.find((recipient) => recipient.employmentId === body.employmentId) ?? null;
+        const nativeMeasuredValue =
+          native.preview?.computation.measuredValue ??
+          (measuredFact !== null &&
+          typeof measuredFact === "object" &&
+          !Array.isArray(measuredFact) &&
+          typeof (measuredFact as Record<string, unknown>).value === "string"
+            ? ((measuredFact as Record<string, unknown>).value as string)
+            : null);
+        if (nativeMeasuredValue === null)
+          throw new BenefitsError(
+            "REFUSED",
+            "the retained native snapshot has no exact measured value; refresh the native period measurement",
+          );
+        const target =
+          native.preview?.visibleRecipients.find(
+            (recipient) => recipient.employmentId === body.employmentId,
+          ) ?? null;
         const margin = previewProjectMargin(nativeSnapshot);
         const targetCarryForward = margin?.carryForward?.[body.employmentId] ?? null;
-        const affected = margin === null
-          ? []
-          : margin.projects.filter((project) => project.shares.some((share) => share.employmentId === body.employmentId));
+        const affected =
+          margin === null
+            ? []
+            : margin.projects.filter((project) =>
+                project.shares.some((share) => share.employmentId === body.employmentId),
+              );
         const targetShareTotal = affected.reduce(
-          (sum, project) => sum + project.shares
-            .filter((share) => share.employmentId === body.employmentId)
-            .reduce((projectSum, share) => projectSum + (units4(share.value) ?? 0n), 0n),
+          (sum, project) =>
+            sum +
+            project.shares
+              .filter((share) => share.employmentId === body.employmentId)
+              .reduce((projectSum, share) => projectSum + (units4(share.value) ?? 0n), 0n),
           0n,
         );
-        const canRecordAboveNativeMeasure = margin !== null &&
+        const canRecordAboveNativeMeasure =
+          margin !== null &&
           (target === null || !isPositiveAmount(target.value)) &&
-          targetCarryForward !== null && (units4(targetCarryForward) ?? 0n) < 0n &&
-          affected.length > 0 && affected.every((project) => project.shares.length === 1) &&
+          targetCarryForward !== null &&
+          (units4(targetCarryForward) ?? 0n) < 0n &&
+          affected.length > 0 &&
+          affected.every((project) => project.shares.length === 1) &&
           targetShareTotal < 0n;
         const nativePreview = {
           currentProgramRevision: currentProgram.revision,
-          effectivePolicyRevision: native.preview?.programRevision ?? native.nativeMeasureOnly!.programRevision,
+          effectivePolicyRevision:
+            native.preview?.programRevision ?? native.nativeMeasureOnly!.programRevision,
           digest: sourceEvidenceNativePreviewDigest({
             periodFrom: body.periodFrom,
             periodTo: body.periodTo,
             asOf: body.asOf,
             nativeSnapshot,
           }),
-          targetRecipient: target ? { value: target.value, capped: target.capped, explanation: target.explanation } : null,
+          targetRecipient: target
+            ? { value: target.value, capped: target.capped, explanation: target.explanation }
+            : null,
           measuredValue: nativeMeasuredValue,
-          nativePoolAvailable: native.preview !== null && isPositiveAmount(native.preview.computation.totalAwarded),
+          nativePoolAvailable:
+            native.preview !== null && isPositiveAmount(native.preview.computation.totalAwarded),
           targetCarryForward,
           canRecordFirstObligation: isAboveNativeMeasure
             ? canRecordAboveNativeMeasure
-            : native.preview !== null && isPositiveAmount(native.preview.computation.totalAwarded) &&
+            : native.preview !== null &&
+              isPositiveAmount(native.preview.computation.totalAwarded) &&
               (target === null || !isPositiveAmount(target.value)),
         };
         const sourceEvidencePreview = {
           sourceRowRef: retained.claims.sourceRowRef,
           sourceRow: retained.artifacts[0]!.row,
           sourceIssueDate: retained.claims.sourceIssueDate,
-          ...(retained.claims.sourcePaidDate ? { sourcePaidDate: retained.claims.sourcePaidDate } : {}),
+          ...(retained.claims.sourcePaidDate
+            ? { sourcePaidDate: retained.claims.sourcePaidDate }
+            : {}),
           periodFrom: retained.claims.periodFrom,
           periodTo: retained.claims.periodTo,
           ...(body.asOf ? { asOf: body.asOf } : {}),
           value: retained.claims.value,
           currency: retained.claims.currency,
           sourceEvidenceClass: body.sourceEvidenceClass,
-          ...(body.nativeCurrencyBasis ? { currencyEvidence: { kind: "reviewed-native-program-payroll-currency", currency: currentProgram.currency, reason: body.nativeCurrencyBasis.reason } } : {}),
+          ...(body.nativeCurrencyBasis
+            ? {
+                currencyEvidence: {
+                  kind: "reviewed-native-program-payroll-currency",
+                  currency: currentProgram.currency,
+                  reason: body.nativeCurrencyBasis.reason,
+                },
+              }
+            : {}),
           nativeMeasurementAsOf: body.asOf,
           artifacts: retained.artifacts.map((artifact) => ({
             fileId: artifact.fileId,
@@ -397,13 +544,15 @@ export const POST = defineRoute({
           sourceIssueDate: retained.claims.sourceIssueDate,
           sourceSystem: "cabinet-retained",
           sourceRowRef: retained.claims.sourceRowRef,
-          sourceArtifacts: body.sourceArtifacts.map((artifact): RetainedSourceArtifactSelection => ({
-            fileId: artifact.fileId.toLowerCase(),
-            versionId: artifact.versionId.toLowerCase(),
-            rowPointer: artifact.rowPointer,
-            ...(artifact.sourceFields ? { sourceFields: artifact.sourceFields } : {}),
-            ...(artifact.pdfSelection ? { pdfSelection: artifact.pdfSelection } : {}),
-          })),
+          sourceArtifacts: body.sourceArtifacts.map(
+            (artifact): RetainedSourceArtifactSelection => ({
+              fileId: artifact.fileId.toLowerCase(),
+              versionId: artifact.versionId.toLowerCase(),
+              rowPointer: artifact.rowPointer,
+              ...(artifact.sourceFields ? { sourceFields: artifact.sourceFields } : {}),
+              ...(artifact.pdfSelection ? { pdfSelection: artifact.pdfSelection } : {}),
+            }),
+          ),
           expectedNativePreviewDigest: body.expectedNativePreviewDigest,
           mappingAttestation: {
             employmentId: body.employmentId,

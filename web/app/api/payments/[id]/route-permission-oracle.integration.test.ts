@@ -47,9 +47,8 @@ registerHooks({
 
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors, seedDraftDocument } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors, seedDraftDocument } =
+  await import("@openbooks/engine/testing/fixtures");
 const { GET } = await import("./route.ts");
 
 test("payment-document oracle: no pay permission sees existing and missing ids identically", async () => {
@@ -61,8 +60,10 @@ test("payment-document oracle: no pay permission sees existing and missing ids i
     const documentId = await withBypassContext(() =>
       seedDraftDocument(org.orgId, { kind: "vendor_payment", createdBy: adminId }),
     );
-    await withBypassContext(
-      () => db.execute(sql`update documents set subsidiary_id = ${org.subsidiaryId} where id = ${documentId}`),
+    await withBypassContext(() =>
+      db.execute(
+        sql`update documents set subsidiary_id = ${org.subsidiaryId} where id = ${documentId}`,
+      ),
     );
 
     // Caller with neither direction permission: uniform 404 both ways.

@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { frame, page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
 
 /**
  * The data export workbench, split into a loader and a spec.
@@ -27,25 +27,25 @@ import { requirePermission } from '../../../../lib/authz'
  */
 
 /** No server-rendered content: the loader runs the gate and binds nothing. */
-export type DataExportData = Record<string, unknown>
+export type DataExportData = Record<string, unknown>;
 
 export async function loadDataExport(): Promise<DataExportData> {
   // page.tsx gate, verbatim.
-  await requirePermission('data.export')
-  return {}
+  await requirePermission("data.export");
+  return {};
 }
 
 export function dataExportSpec(): PageSpec {
   return page({
-    route: '/data/export',
+    route: "/data/export",
     // Bare with the `page-container` frame: the native page wraps the
     // workbench in `<PageContainer>` (scroll wrapper + centered container
     // + fade-in), which the grid vocabulary cannot name. `list`/`detail`
     // would nest a second ListPageLayout (sticky header chrome + padded
     // body) around it and break parity — the same arrangement as the
     // reports hub.
-    layout: 'bare',
+    layout: "bare",
     header: [],
-    body: [frame('page-container', [widgetBlock('data-export')])],
-  })
+    body: [frame("page-container", [widgetBlock("data-export")])],
+  });
 }

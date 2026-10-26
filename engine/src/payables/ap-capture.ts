@@ -81,21 +81,39 @@ export function validatePurchaseOrderQuantities(input: {
   billedQuantity: string;
   fulfilledQuantity: string;
   requiresReceipt: boolean;
-}): Array<{ code: "po_quantity_exceeded" | "receipt_quantity_shortfall"; expected: string; actual: string }> {
+}): Array<{
+  code: "po_quantity_exceeded" | "receipt_quantity_shortfall";
+  expected: string;
+  actual: string;
+}> {
   const invoiceUnits = toQuantityUnits(input.invoiceQuantity);
-  const billableUnits = toQuantityUnits(input.orderedQuantity)
-    - toQuantityUnits(input.cancelledQuantity)
-    - toQuantityUnits(input.billedQuantity);
+  const billableUnits =
+    toQuantityUnits(input.orderedQuantity) -
+    toQuantityUnits(input.cancelledQuantity) -
+    toQuantityUnits(input.billedQuantity);
   const billable = fromQuantityUnits(billableUnits > 0n ? billableUnits : 0n);
-  const issues: Array<{ code: "po_quantity_exceeded" | "receipt_quantity_shortfall"; expected: string; actual: string }> = [];
+  const issues: Array<{
+    code: "po_quantity_exceeded" | "receipt_quantity_shortfall";
+    expected: string;
+    actual: string;
+  }> = [];
   if (invoiceUnits > billableUnits) {
-    issues.push({ code: "po_quantity_exceeded", expected: billable, actual: fromQuantityUnits(invoiceUnits) });
+    issues.push({
+      code: "po_quantity_exceeded",
+      expected: billable,
+      actual: fromQuantityUnits(invoiceUnits),
+    });
   }
   if (input.requiresReceipt) {
-    const receivedUnits = toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity);
+    const receivedUnits =
+      toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity);
     const received = fromQuantityUnits(receivedUnits > 0n ? receivedUnits : 0n);
     if (invoiceUnits > receivedUnits) {
-      issues.push({ code: "receipt_quantity_shortfall", expected: received, actual: fromQuantityUnits(invoiceUnits) });
+      issues.push({
+        code: "receipt_quantity_shortfall",
+        expected: received,
+        actual: fromQuantityUnits(invoiceUnits),
+      });
     }
   }
   return issues;
@@ -109,7 +127,11 @@ function exactProduct(quantity: string, price: string): string {
   return fromUnits(negative ? -rounded : rounded);
 }
 
-function normalizeLine(item: AzureField, index: number, evidence: CaptureEvidence[]): CaptureLine | null {
+function normalizeLine(
+  item: AzureField,
+  index: number,
+  evidence: CaptureEvidence[],
+): CaptureLine | null {
   const fields = item.valueObject ?? {};
   const description = textValue(fields.Description) ?? textValue(fields.ItemDescription) ?? "";
   const productCode = textValue(fields.ProductCode);
@@ -125,11 +147,18 @@ function normalizeLine(item: AzureField, index: number, evidence: CaptureEvidenc
   // Absent quantity keeps the legacy "1.0000" derivation input; refused text
   // derives nothing.
   const quantityForMath = quantity.canonical ?? (quantity.supplied === null ? "1.0000" : null);
-  const amountValue = extractedAmount.canonical ?? extractedAmount.supplied
-    ?? (unitPrice.canonical && quantityForMath ? exactProduct(quantityForMath, unitPrice.canonical) : null);
+  const amountValue =
+    extractedAmount.canonical ??
+    extractedAmount.supplied ??
+    (unitPrice.canonical && quantityForMath
+      ? exactProduct(quantityForMath, unitPrice.canonical)
+      : null);
   if (!description && !productCode && amountValue === null) return null;
-  const canonicalPrice = unitPriceValue
-    ?? (quantityForMath !== null && cmp(quantityForMath, "0") === 0 ? "0.0000" : amountValue ?? "0.0000");
+  const canonicalPrice =
+    unitPriceValue ??
+    (quantityForMath !== null && cmp(quantityForMath, "0") === 0
+      ? "0.0000"
+      : (amountValue ?? "0.0000"));
   const taxValue = tax.canonical ?? tax.supplied ?? "0.0000";
 
   const mapped: Array<[string, AzureField | undefined, unknown]> = [
@@ -141,9 +170,12 @@ function normalizeLine(item: AzureField, index: number, evidence: CaptureEvidenc
     ["lines.amount", fields.Amount, amountValue ?? "0.0000"],
     ["lines.taxAmount", fields.Tax, taxValue],
   ];
-  for (const [key, field, value] of mapped) if (field) evidence.push(evidenceFor(key, field, value, index));
+  for (const [key, field, value] of mapped)
+    if (field) evidence.push(evidenceFor(key, field, value, index));
 
-  const confidences = Object.values(fields).map(confidence).filter((v): v is string => v !== null);
+  const confidences = Object.values(fields)
+    .map(confidence)
+    .filter((v): v is string => v !== null);
   const average = confidences.length
     ? (confidences.reduce((n, v) => n + Number(v), 0) / confidences.length).toFixed(4)
     : confidence(item);
@@ -199,9 +231,10 @@ export function normalizeAzureInvoice(raw: AzureAnalyzeResponse): {
     if (field) evidence.push(evidenceFor(key, field, value, null));
   }
   if (!header.currency) {
-    header.currency = fields.InvoiceTotal?.valueCurrency?.currencyCode
-      ?? fields.SubTotal?.valueCurrency?.currencyCode
-      ?? null;
+    header.currency =
+      fields.InvoiceTotal?.valueCurrency?.currencyCode ??
+      fields.SubTotal?.valueCurrency?.currencyCode ??
+      null;
   }
   const itemField = fields.Items ?? fields.LineItems;
   const lines = (itemField?.valueArray ?? [])
@@ -247,22 +280,34 @@ export function validateNormalizedCapture(
   }
   // Refused OCR text is preserved verbatim in the capture, so validation must
   // name it as a blocking refusal — never throw on it and never read it as math.
-  for (const [field, value] of [["subtotal", capture.subtotal], ["taxTotal", capture.taxTotal], ["total", capture.total]] as const) {
+  for (const [field, value] of [
+    ["subtotal", capture.subtotal],
+    ["taxTotal", capture.taxTotal],
+    ["total", capture.total],
+  ] as const) {
     if (!value) continue;
-    if (!isCanonicalMoney(value)) issues.push(invalidMoneyIssue(field, "an amount", value, { field }));
-    else if (!numeric19_4(value)) issues.push({ code: "amount_out_of_range", severity: "blocking", field });
+    if (!isCanonicalMoney(value))
+      issues.push(invalidMoneyIssue(field, "an amount", value, { field }));
+    else if (!numeric19_4(value))
+      issues.push({ code: "amount_out_of_range", severity: "blocking", field });
   }
-  if (capture.lines.length === 0) issues.push({ code: "missing_lines", severity: "blocking", field: "lines" });
+  if (capture.lines.length === 0)
+    issues.push({ code: "missing_lines", severity: "blocking", field: "lines" });
   capture.lines.forEach((line, lineIndex) => {
     if (!line.description && !line.productCode) {
       issues.push({ code: "missing_line_description", severity: "warning", lineIndex });
     }
     const quantityValid = canonicalDecimal(line.quantity, 8) !== null;
     if (!quantityValid) {
-      issues.push(invalidMoneyIssue(
-        `line ${lineIndex + 1} quantity`, "a quantity", line.quantity,
-        { field: "quantity", lineIndex }, 8,
-      ));
+      issues.push(
+        invalidMoneyIssue(
+          `line ${lineIndex + 1} quantity`,
+          "a quantity",
+          line.quantity,
+          { field: "quantity", lineIndex },
+          8,
+        ),
+      );
     }
     const entries = [
       ["unitPrice", line.unitPrice, "an amount"],
@@ -272,7 +317,9 @@ export function validateNormalizedCapture(
     let lineMoneyValid = true;
     for (const [key, value, noun] of entries) {
       if (!isCanonicalMoney(value)) {
-        issues.push(invalidMoneyIssue(`line ${lineIndex + 1} ${key}`, noun, value, { field: key, lineIndex }));
+        issues.push(
+          invalidMoneyIssue(`line ${lineIndex + 1} ${key}`, noun, value, { field: key, lineIndex }),
+        );
         lineMoneyValid = false;
       } else if (!numeric19_4(value)) {
         issues.push({ code: "amount_out_of_range", severity: "blocking", lineIndex });
@@ -281,7 +328,13 @@ export function validateNormalizedCapture(
     if (quantityValid && lineMoneyValid) {
       const expected = exactProduct(line.quantity, line.unitPrice);
       if (cmp(expected, line.amount) !== 0) {
-        issues.push({ code: "line_math_mismatch", severity: "blocking", lineIndex, expected, actual: line.amount });
+        issues.push({
+          code: "line_math_mismatch",
+          severity: "blocking",
+          lineIndex,
+          expected,
+          actual: line.amount,
+        });
       }
     }
     if (line.confidence && cmp(line.confidence, confidenceThreshold) < 0) {
@@ -294,20 +347,44 @@ export function validateNormalizedCapture(
   const taxesCanonical = capture.lines.every((line) => isCanonicalMoney(line.taxAmount));
   const lineSubtotal = amountsCanonical ? sum(capture.lines.map((line) => line.amount)) : null;
   const lineTax = taxesCanonical ? sum(capture.lines.map((line) => line.taxAmount)) : null;
-  if (capture.subtotal && isCanonicalMoney(capture.subtotal) && lineSubtotal !== null
-    && cmp(capture.subtotal, lineSubtotal) !== 0) {
-    issues.push({ code: "subtotal_mismatch", severity: "blocking", expected: lineSubtotal, actual: capture.subtotal });
+  if (
+    capture.subtotal &&
+    isCanonicalMoney(capture.subtotal) &&
+    lineSubtotal !== null &&
+    cmp(capture.subtotal, lineSubtotal) !== 0
+  ) {
+    issues.push({
+      code: "subtotal_mismatch",
+      severity: "blocking",
+      expected: lineSubtotal,
+      actual: capture.subtotal,
+    });
   }
-  const subtotal = capture.subtotal && isCanonicalMoney(capture.subtotal) ? capture.subtotal : lineSubtotal;
+  const subtotal =
+    capture.subtotal && isCanonicalMoney(capture.subtotal) ? capture.subtotal : lineSubtotal;
   const tax = capture.taxTotal && isCanonicalMoney(capture.taxTotal) ? capture.taxTotal : lineTax;
-  if (capture.taxTotal && isCanonicalMoney(capture.taxTotal) && lineTax !== null
-    && cmp(capture.taxTotal, lineTax) !== 0) {
-    issues.push({ code: "line_tax_mismatch", severity: "blocking", expected: lineTax, actual: capture.taxTotal });
+  if (
+    capture.taxTotal &&
+    isCanonicalMoney(capture.taxTotal) &&
+    lineTax !== null &&
+    cmp(capture.taxTotal, lineTax) !== 0
+  ) {
+    issues.push({
+      code: "line_tax_mismatch",
+      severity: "blocking",
+      expected: lineTax,
+      actual: capture.taxTotal,
+    });
   }
   if (capture.total && isCanonicalMoney(capture.total) && subtotal !== null && tax !== null) {
     const expected = add(subtotal, tax);
     if (cmp(expected, capture.total) !== 0) {
-      issues.push({ code: "total_mismatch", severity: "blocking", expected, actual: capture.total });
+      issues.push({
+        code: "total_mismatch",
+        severity: "blocking",
+        expected,
+        actual: capture.total,
+      });
     }
   }
   return issues;
@@ -319,7 +396,7 @@ export function validateNormalizedCapture(
  */
 export const INVOICE_LLM_PROMPT = [
   "You read one vendor invoice or bill. Answer with ONLY a JSON object: no prose, no code fences.",
-  "Every header field is an object {\"value\": ..., \"confidence\": number from 0 to 1} giving your confidence that the value is exactly what the document prints.",
+  'Every header field is an object {"value": ..., "confidence": number from 0 to 1} giving your confidence that the value is exactly what the document prints.',
   "Use null for any value that is not visible or not legible. Never guess, infer, compute or default a value.",
   "Use exactly these keys:",
   "{",
@@ -342,8 +419,17 @@ export const INVOICE_LLM_PROMPT = [
 ].join("\n");
 
 const LLM_HEADER_FIELDS = [
-  "vendorName", "vendorTaxId", "invoiceNumber", "invoiceDate", "dueDate", "purchaseOrderNumber",
-  "currency", "subtotal", "taxTotal", "total", "memo",
+  "vendorName",
+  "vendorTaxId",
+  "invoiceNumber",
+  "invoiceDate",
+  "dueDate",
+  "purchaseOrderNumber",
+  "currency",
+  "subtotal",
+  "taxTotal",
+  "total",
+  "memo",
 ] as const satisfies readonly (keyof Omit<NormalizedCapture, "lines">)[];
 const LLM_MONEY_FIELDS = new Set<string>(["subtotal", "taxTotal", "total"]);
 
@@ -353,7 +439,10 @@ const LLM_MONEY_FIELDS = new Set<string>(["subtotal", "taxTotal", "total"]);
  * blank (its reading kept as evidence) and is flagged, so required fields
  * block until a reviewer confirms them; nothing is filled from a guess.
  */
-export function normalizeLlmInvoice(answer: Record<string, unknown>, confidenceThreshold: string): {
+export function normalizeLlmInvoice(
+  answer: Record<string, unknown>,
+  confidenceThreshold: string,
+): {
   normalized: NormalizedCapture;
   evidence: CaptureEvidence[];
   overallConfidence: string | null;
@@ -375,17 +464,27 @@ export function normalizeLlmInvoice(answer: Record<string, unknown>, confidenceT
     if (field.value !== null) evidence.push(llmEvidence(key, field, value));
     const confident = field.confidence !== null && cmp(field.confidence, confidenceThreshold) >= 0;
     if (value !== null && !confident) {
-      issues.push({ code: "low_confidence", severity: "warning", field: key, ...(field.confidence !== null ? { actual: field.confidence } : {}), expected: confidenceThreshold });
+      issues.push({
+        code: "low_confidence",
+        severity: "warning",
+        field: key,
+        ...(field.confidence !== null ? { actual: field.confidence } : {}),
+        expected: confidenceThreshold,
+      });
       value = null;
     }
     header[key] = value;
   }
   const lines: CaptureLine[] = [];
   for (const entry of (Array.isArray(answer.lines) ? answer.lines : []).slice(0, 200)) {
-    const line = entry && typeof entry === "object" && !Array.isArray(entry) ? entry as Record<string, unknown> : {};
+    const line =
+      entry && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : {};
     const index = lines.length;
     const confidence = readLlmField({ value: null, confidence: line.confidence }).confidence;
-    const text = (key: string) => typeof line[key] === "string" ? (line[key] as string).trim() || null : null;
+    const text = (key: string) =>
+      typeof line[key] === "string" ? (line[key] as string).trim() || null : null;
     const money = (key: string) => {
       const field = readLlmField({ value: line[key], confidence: line.confidence });
       const reading = llmMoney(field);
@@ -400,13 +499,24 @@ export function normalizeLlmInvoice(answer: Record<string, unknown>, confidenceT
     const amount = money("amount");
     const tax = money("taxAmount");
     if (!description && !productCode && amount.value === null) continue;
-    if (description) evidence.push(llmEvidence("lines.description", { value: description, confidence, raw: description }, description, index));
+    if (description)
+      evidence.push(
+        llmEvidence(
+          "lines.description",
+          { value: description, confidence, raw: description },
+          description,
+          index,
+        ),
+      );
     // An absent quantity reads as one unit and an absent tax as none, exactly
     // as for any provider; refused text is preserved for the reviewer.
     const quantityValue = quantity.value ?? "1.0000";
     const quantityForMath = quantity.canonical ?? (quantity.value === null ? "1.0000" : null);
-    const amountValue = amount.value
-      ?? (unitPrice.canonical && quantityForMath ? exactProduct(quantityForMath, unitPrice.canonical) : null);
+    const amountValue =
+      amount.value ??
+      (unitPrice.canonical && quantityForMath
+        ? exactProduct(quantityForMath, unitPrice.canonical)
+        : null);
     lines.push({
       description,
       productCode,
@@ -421,7 +531,11 @@ export function normalizeLlmInvoice(answer: Record<string, unknown>, confidenceT
   return {
     normalized: { ...(header as Omit<NormalizedCapture, "lines">), lines },
     evidence,
-    overallConfidence: llmOverallConfidence([fields.vendorName!, fields.invoiceNumber!, fields.total!]),
+    overallConfidence: llmOverallConfidence([
+      fields.vendorName!,
+      fields.invoiceNumber!,
+      fields.total!,
+    ]),
     issues,
   };
 }
@@ -434,10 +548,17 @@ export async function extractLlmInvoice(input: {
   bytes: Uint8Array;
   fetchImpl?: typeof fetch;
   lookup?: AddressLookup;
-}): Promise<{ raw: { answer: string }; normalized: NormalizedCapture; evidence: CaptureEvidence[]; overallConfidence: string | null; issues: CaptureIssue[] }> {
+}): Promise<{
+  raw: { answer: string };
+  normalized: NormalizedCapture;
+  evidence: CaptureEvidence[];
+  overallConfidence: string | null;
+  issues: CaptureIssue[];
+}> {
   const answer = await requestLlmVision({ ...input, prompt: INVOICE_LLM_PROMPT });
   const parsed = extractJsonObject(answer);
-  if (!parsed) throw new Error("The AI model did not answer with an invoice reading — retry the capture");
+  if (!parsed)
+    throw new Error("The AI model did not answer with an invoice reading — retry the capture");
   return { raw: { answer }, ...normalizeLlmInvoice(parsed, input.confidenceThreshold) };
 }
 
@@ -450,7 +571,15 @@ export async function extractAzureInvoice(input: {
   bytes: Uint8Array;
   fetchImpl?: typeof fetch;
   lookup?: AddressLookup;
-}): Promise<{ raw: AzureAnalyzeResponse; normalized: NormalizedCapture; evidence: CaptureEvidence[]; overallConfidence: string | null }> {
-  const raw = await analyzeAzureDocument({ ...input, model: input.model?.trim() || DEFAULT_INVOICE_MODEL });
+}): Promise<{
+  raw: AzureAnalyzeResponse;
+  normalized: NormalizedCapture;
+  evidence: CaptureEvidence[];
+  overallConfidence: string | null;
+}> {
+  const raw = await analyzeAzureDocument({
+    ...input,
+    model: input.model?.trim() || DEFAULT_INVOICE_MODEL,
+  });
   return { raw, ...normalizeAzureInvoice(raw) };
 }

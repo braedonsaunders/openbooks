@@ -39,13 +39,18 @@ export async function subsidiaryOptions(
   // role used by dev/test bypasses RLS, so an omitted context cannot fall
   // back to an all-tenant read.
   if (!tenant) return [];
-  const r = (await db.execute<Omit<SubsidiaryOption, "depth">>(sql`
+  const r = await db.execute<Omit<SubsidiaryOption, "depth">>(
+    sql`
     select id, parent_id as "parentId", name, base_currency as "baseCurrency",
            country, is_elimination as "isElimination", is_active as "isActive"
       from subsidiaries
      where org_id = ${tenant}
-     order by name`, "objects"));
-  const rows = r.filter((s) => (includeInactive || s.isActive) && (includeElimination || !s.isElimination));
+     order by name`,
+    "objects",
+  );
+  const rows = r.filter(
+    (s) => (includeInactive || s.isActive) && (includeElimination || !s.isElimination),
+  );
   const byParent = new Map<string | null, typeof rows>();
   for (const s of rows) {
     const list = byParent.get(s.parentId) ?? [];
@@ -91,14 +96,20 @@ export async function rootSubsidiaryId(orgId: string): Promise<string> {
  * show its NAME — never the raw id as a label.
  */
 export async function rootSubsidiary(orgId: string): Promise<{ id: string; name: string }> {
-  const r = (await db.execute<{ id: string; name: string }>(sql`
-    select id, name from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`, "objects"));
+  const r = await db.execute<{ id: string; name: string }>(
+    sql`
+    select id, name from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`,
+    "objects",
+  );
   if (!r[0]) throw new Error("org has no root subsidiary");
   return r[0];
 }
 
 /** `subId`'s subtree (inclusive) over a preloaded option list. */
-export function subtreeIds(all: Pick<SubsidiaryOption, "id" | "parentId">[], subId: string): Set<string> {
+export function subtreeIds(
+  all: Pick<SubsidiaryOption, "id" | "parentId">[],
+  subId: string,
+): Set<string> {
   const out = new Set([subId]);
   let grew = true;
   while (grew) {
@@ -117,7 +128,10 @@ export function subtreeIds(all: Pick<SubsidiaryOption, "id" | "parentId">[], sub
  * The list/report WHERE predicate lives in the canonical engine scope module
  * (shapes 1 and 3); re-exported here so existing importers keep working.
  */
-export { subsidiaryVisibleFilter, UNRESTRICTED_SCOPE_REQUIRED } from "@openbooks/engine/organization/scope";
+export {
+  subsidiaryVisibleFilter,
+  UNRESTRICTED_SCOPE_REQUIRED,
+} from "@openbooks/engine/organization/scope";
 
 /**
  * The subsidiaries this user may SEE, from the union of their roles'
@@ -125,6 +139,10 @@ export { subsidiaryVisibleFilter, UNRESTRICTED_SCOPE_REQUIRED } from "@openbooks
  * A user without a role receives an empty set. Feed the result to list/report WHERE clauses:
  * `and subsidiary_id = any(...)` only when non-null.
  */
-export async function allowedSubsidiaryIds(userId: string, orgId: string, runner: SqlExecutor = db): Promise<Set<string> | null> {
+export async function allowedSubsidiaryIds(
+  userId: string,
+  orgId: string,
+  runner: SqlExecutor = db,
+): Promise<Set<string> | null> {
   return actorAllowedSubsidiaryIds(runner, orgId, userId);
 }

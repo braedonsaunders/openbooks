@@ -101,7 +101,8 @@ export function planReseal(
     );
   }
   const described = describeSealedBlob(stored);
-  if (described?.version === "v2" && described.keyId === activeId) return { sealed: stored, changed: false };
+  if (described?.version === "v2" && described.keyId === activeId)
+    return { sealed: stored, changed: false };
   return { sealed: sealSecret(plain, scope), changed: true };
 }
 
@@ -110,8 +111,15 @@ type TextTarget = {
   column: string;
   purpose: string;
   /** SELECT rows: id, org_id, value (+ user_id when userScoped). */
-  select: (org: string | null) => Promise<Array<{ id: string; orgId: string; userId?: string; value: string | null }>>;
-  update: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0], id: string, oldValue: string, newValue: string) => Promise<number>;
+  select: (
+    org: string | null,
+  ) => Promise<Array<{ id: string; orgId: string; userId?: string; value: string | null }>>;
+  update: (
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    id: string,
+    oldValue: string,
+    newValue: string,
+  ) => Promise<number>;
 };
 
 async function selectTextColumn(
@@ -125,13 +133,19 @@ async function selectTextColumn(
   // argv — so identifier interpolation here cannot carry operator input.
   const userSelect = userColumn ? `, t.${userColumn} as "userId"` : "";
   const orgFilter = org ? ` and t.${orgColumn} = '${org.replace(/'/g, "''")}'` : "";
-  const r = await db.execute<{ id: string; orgId: string; userId?: string; value: string | null }>(sql.raw(
-    `select t.id::text as id, t.${orgColumn}::text as "orgId"${userSelect}, t.${column} as value from ${table} t where t.${column} is not null${orgFilter} order by t.id`,
-  ), "objects");
+  const r = await db.execute<{ id: string; orgId: string; userId?: string; value: string | null }>(
+    sql.raw(
+      `select t.id::text as id, t.${orgColumn}::text as "orgId"${userSelect}, t.${column} as value from ${table} t where t.${column} is not null${orgFilter} order by t.id`,
+    ),
+    "objects",
+  );
   return r;
 }
 
-export async function rotateDataKey(options: { apply: boolean; org?: string | null }): Promise<ResealReport[]> {
+export async function rotateDataKey(options: {
+  apply: boolean;
+  org?: string | null;
+}): Promise<ResealReport[]> {
   const ring = loadDataKeyRing();
   const activeId = ring.activeId;
   const reports: ResealReport[] = [];
@@ -159,7 +173,9 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       update: async (tx, id, oldValue, newValue) => {
         const r = (await tx.execute(sql`
           update bank_feed_connections set credentials = ${newValue}, updated_at = now()
-           where id = ${id} and credentials = ${oldValue}`)) as unknown as { rowCount?: number | null };
+           where id = ${id} and credentials = ${oldValue}`)) as unknown as {
+          rowCount?: number | null;
+        };
         return r.rowCount ?? 0;
       },
     },
@@ -179,7 +195,8 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       table: "payment_bank_profiles",
       column: "originator_secrets_encrypted",
       purpose: "payment.originator.secrets",
-      select: (o) => selectTextColumn("payment_bank_profiles", "originator_secrets_encrypted", "org_id", o),
+      select: (o) =>
+        selectTextColumn("payment_bank_profiles", "originator_secrets_encrypted", "org_id", o),
       update: async (tx, id, oldValue, newValue) => {
         const r = (await tx.execute(sql`
           update payment_bank_profiles set originator_secrets_encrypted = ${newValue}, updated_at = now()
@@ -209,7 +226,9 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       update: async (tx, id, oldValue, newValue) => {
         const r = (await tx.execute(sql`
           update payment_links set token_sealed = ${newValue}
-           where id = ${id} and token_sealed = ${oldValue}`)) as unknown as { rowCount?: number | null };
+           where id = ${id} and token_sealed = ${oldValue}`)) as unknown as {
+          rowCount?: number | null;
+        };
         return r.rowCount ?? 0;
       },
     },
@@ -221,7 +240,9 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       update: async (tx, id, oldValue, newValue) => {
         const r = (await tx.execute(sql`
           update employee_payroll_profiles set sin_encrypted = ${newValue}, updated_at = now()
-           where id = ${id} and sin_encrypted = ${oldValue}`)) as unknown as { rowCount?: number | null };
+           where id = ${id} and sin_encrypted = ${oldValue}`)) as unknown as {
+          rowCount?: number | null;
+        };
         return r.rowCount ?? 0;
       },
     },
@@ -229,7 +250,8 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       table: "party_bank_accounts",
       column: "account_number_encrypted",
       purpose: "payment.counterparty.account",
-      select: (o) => selectTextColumn("party_bank_accounts", "account_number_encrypted", "org_id", o),
+      select: (o) =>
+        selectTextColumn("party_bank_accounts", "account_number_encrypted", "org_id", o),
       update: async (tx, id, oldValue, newValue) => {
         const r = (await tx.execute(sql`
           update party_bank_accounts set account_number_encrypted = ${newValue}, updated_at = now()
@@ -247,7 +269,9 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       update: async (tx, id, oldValue, newValue) => {
         const r = (await tx.execute(sql`
           update sftp_servers set password_encrypted = ${newValue}, updated_at = now()
-           where id = ${id} and password_encrypted = ${oldValue}`)) as unknown as { rowCount?: number | null };
+           where id = ${id} and password_encrypted = ${oldValue}`)) as unknown as {
+          rowCount?: number | null;
+        };
         return r.rowCount ?? 0;
       },
     },
@@ -272,7 +296,9 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
         // vendor_roles is keyed by party, not by a surrogate id.
         const r = (await tx.execute(sql`
           update vendor_roles set tin_encrypted = ${newValue}
-           where party_id = ${id} and tin_encrypted = ${oldValue}`)) as unknown as { rowCount?: number | null };
+           where party_id = ${id} and tin_encrypted = ${oldValue}`)) as unknown as {
+          rowCount?: number | null;
+        };
         return r.rowCount ?? 0;
       },
     },
@@ -313,18 +339,27 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
           }
         });
       }
-      reports.push({ table: target.table, column: target.column, rows: rows.length, alreadyCurrent, resealed });
+      reports.push({
+        table: target.table,
+        column: target.column,
+        rows: rows.length,
+        alreadyCurrent,
+        resealed,
+      });
     }
 
     // MFA factors are user-level: the seal scope carries the user id, and an
     // --org run covers the org's users through the users join.
     {
       const orgFilter = org ? ` and user_row.org_id = '${org.replace(/'/g, "''")}'` : "";
-      const factors = await db.execute<{ id: string; userId: string; value: string | null }>(sql.raw(
-        `select factor.user_id::text as "userId", factor.user_id::text as id, factor.secret_encrypted as value
+      const factors = await db.execute<{ id: string; userId: string; value: string | null }>(
+        sql.raw(
+          `select factor.user_id::text as "userId", factor.user_id::text as id, factor.secret_encrypted as value
            from auth_mfa_factors factor join users user_row on user_row.id = factor.user_id
           where 1 = 1${orgFilter} order by factor.user_id`,
-      ), "objects");
+        ),
+        "objects",
+      );
       let alreadyCurrent = 0;
       const writes: Array<{ userId: string; oldValue: string; newValue: string }> = [];
       for (const row of factors) {
@@ -335,7 +370,8 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
           `auth_mfa_factors.secret_encrypted user ${row.userId}`,
         );
         if (!planned) continue;
-        if (planned.changed) writes.push({ userId: row.userId, oldValue: row.value!, newValue: planned.sealed });
+        if (planned.changed)
+          writes.push({ userId: row.userId, oldValue: row.value!, newValue: planned.sealed });
         else alreadyCurrent += 1;
       }
       if (applyRun && writes.length > 0) {
@@ -369,19 +405,26 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
     // SESSION_SECRET keyCiphertext/keyNonce, which migrates here too).
     {
       const orgFilter = org ? ` where id = '${org.replace(/'/g, "''")}'` : "";
-      const orgs = await db.execute<{ id: string; settings: unknown }>(sql.raw(
-        `select id::text as id, settings from orgs${orgFilter} order by id`,
-      ), "objects");
+      const orgs = await db.execute<{ id: string; settings: unknown }>(
+        sql.raw(`select id::text as id, settings from orgs${orgFilter} order by id`),
+        "objects",
+      );
       let checked = 0;
       let resealed = 0;
       const writes: Array<{ id: string; oldSettings: string; newSettings: string }> = [];
       for (const row of orgs) {
-        const settings = (row.settings && typeof row.settings === "object" ? row.settings : {}) as Record<string, unknown>;
+        const settings = (
+          row.settings && typeof row.settings === "object" ? row.settings : {}
+        ) as Record<string, unknown>;
         const next = rotateOrgSettings(row.id, settings, activeId);
         checked += 1;
         if (next.changed) {
           resealed += 1;
-          writes.push({ id: row.id, oldSettings: JSON.stringify(row.settings ?? {}), newSettings: JSON.stringify(next.settings) });
+          writes.push({
+            id: row.id,
+            oldSettings: JSON.stringify(row.settings ?? {}),
+            newSettings: JSON.stringify(next.settings),
+          });
         }
       }
       if (applyRun && writes.length > 0) {
@@ -400,7 +443,13 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
           }
         });
       }
-      reports.push({ table: "orgs", column: "settings", rows: checked, alreadyCurrent: checked - resealed, resealed });
+      reports.push({
+        table: "orgs",
+        column: "settings",
+        rows: checked,
+        alreadyCurrent: checked - resealed,
+        resealed,
+      });
     }
 
     // Filing snapshots carry keyed fingerprints, not sealed blobs: each
@@ -418,19 +467,21 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
         taxYear: number;
         rowId: string;
         reported: unknown;
-      }>(sql.raw(
-        `select sl.id::text as id, s.org_id::text as "orgId", s.country as country,`
-        + ` s.filing_key as "filingKey", s.tax_year as "taxYear", sl.row_id as "rowId", sl.reported as reported`
-        + ` from payroll_filing_submission_slips sl`
-        + ` join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id`
-        + ` where 1 = 1${orgFilter} order by sl.id`,
-      ), "objects");
+      }>(
+        sql.raw(
+          `select sl.id::text as id, s.org_id::text as "orgId", s.country as country,` +
+            ` s.filing_key as "filingKey", s.tax_year as "taxYear", sl.row_id as "rowId", sl.reported as reported` +
+            ` from payroll_filing_submission_slips sl` +
+            ` join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id` +
+            ` where 1 = 1${orgFilter} order by sl.id`,
+        ),
+        "objects",
+      );
       let alreadyCurrent = 0;
       let skipped = 0;
       const writes: Array<{ id: string; where: string; oldValue: string; newValue: string }> = [];
       for (const slip of slips) {
-        const where =
-          `payroll_filing_submission_slips.reported row ${slip.id} (${slip.country} ${slip.filingKey} ${slip.taxYear} row ${slip.rowId})`;
+        const where = `payroll_filing_submission_slips.reported row ${slip.id} (${slip.country} ${slip.filingKey} ${slip.taxYear} row ${slip.rowId})`;
         const raw = slip.reported as Partial<PayrollFilingReported> | null;
         if (!raw || typeof raw !== "object" || !Array.isArray(raw.confidential)) {
           throw new Error(`${where} holds no filing snapshot; restore it from backup and re-run`);
@@ -438,7 +489,12 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
         let plan: Awaited<ReturnType<typeof planFingerprintReseal>>;
         try {
           plan = await planFingerprintReseal(
-            slip.orgId, slip.country, slip.filingKey, Number(slip.taxYear), slip.rowId, raw as PayrollFilingReported,
+            slip.orgId,
+            slip.country,
+            slip.filingKey,
+            Number(slip.taxYear),
+            slip.rowId,
+            raw as PayrollFilingReported,
           );
         } catch (error) {
           if (error instanceof KeyedFingerprintError) {
@@ -447,7 +503,12 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
           throw error;
         }
         if (plan.status === "rewritten") {
-          writes.push({ id: slip.id, where, oldValue: JSON.stringify(slip.reported), newValue: JSON.stringify(plan.reported) });
+          writes.push({
+            id: slip.id,
+            where,
+            oldValue: JSON.stringify(slip.reported),
+            newValue: JSON.stringify(plan.reported),
+          });
         } else if (plan.status === "drifted") {
           skipped += 1;
         } else {
@@ -484,14 +545,17 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
     // The feedback token lives on the org-less platform_settings singleton;
     // an --org run skips it (nothing tenant-scoped to bind the write to).
     if (!org) {
-      const single = await db.execute<{ settings: unknown }>(sql`
-        select settings from platform_settings where id = 'platform'`, "objects");
-      const settings = (single[0]?.settings && typeof single[0]?.settings === "object"
-        ? single[0]!.settings
-        : {}) as Record<string, unknown>;
-      const feedback = (settings.feedback && typeof settings.feedback === "object"
-        ? settings.feedback
-        : {}) as Record<string, unknown>;
+      const single = await db.execute<{ settings: unknown }>(
+        sql`
+        select settings from platform_settings where id = 'platform'`,
+        "objects",
+      );
+      const settings = (
+        single[0]?.settings && typeof single[0]?.settings === "object" ? single[0]!.settings : {}
+      ) as Record<string, unknown>;
+      const feedback = (
+        settings.feedback && typeof settings.feedback === "object" ? settings.feedback : {}
+      ) as Record<string, unknown>;
       const stored = typeof feedback.token === "string" ? feedback.token : null;
       const planned = planReseal(
         stored,
@@ -507,7 +571,8 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
            where id = 'platform' and settings = ${JSON.stringify(settings)}::jsonb`)) as unknown as {
           rowCount?: number | null;
         };
-        if ((r.rowCount ?? 0) !== 1) throw new Error("platform_settings changed during rotation — re-run");
+        if ((r.rowCount ?? 0) !== 1)
+          throw new Error("platform_settings changed during rotation — re-run");
         resealed = 1;
       } else if (planned?.changed) {
         resealed = 1;
@@ -532,18 +597,25 @@ export function rotateOrgSettings(
 ): { settings: Record<string, unknown>; changed: boolean } {
   let changed = false;
   const next: Record<string, unknown> = { ...settings };
-  const ai = (next.ai && typeof next.ai === "object" ? { ...(next.ai as Record<string, unknown>) } : null);
+  const ai =
+    next.ai && typeof next.ai === "object" ? { ...(next.ai as Record<string, unknown>) } : null;
   if (ai) {
     if (typeof ai.keyEncrypted === "string" && ai.keyEncrypted) {
-      const planned = planReseal(ai.keyEncrypted, { orgId, purpose: "assistant.ai.key" }, activeId, `orgs.settings org ${orgId} ai.keyEncrypted`);
+      const planned = planReseal(
+        ai.keyEncrypted,
+        { orgId, purpose: "assistant.ai.key" },
+        activeId,
+        `orgs.settings org ${orgId} ai.keyEncrypted`,
+      );
       if (planned?.changed) {
         ai.keyEncrypted = planned.sealed;
         changed = true;
       }
     }
-    const capture = (ai.documentCapture && typeof ai.documentCapture === "object"
-      ? { ...(ai.documentCapture as Record<string, unknown>) }
-      : null);
+    const capture =
+      ai.documentCapture && typeof ai.documentCapture === "object"
+        ? { ...(ai.documentCapture as Record<string, unknown>) }
+        : null;
     if (capture && typeof capture.keyEncrypted === "string" && capture.keyEncrypted) {
       const planned = planReseal(
         capture.keyEncrypted,
@@ -559,7 +631,10 @@ export function rotateOrgSettings(
     if (capture) ai.documentCapture = capture;
     next.ai = ai;
   }
-  const email = (next.email && typeof next.email === "object" ? { ...(next.email as Record<string, unknown>) } : null);
+  const email =
+    next.email && typeof next.email === "object"
+      ? { ...(next.email as Record<string, unknown>) }
+      : null;
   if (email) {
     if (typeof email.keySealed === "string" && email.keySealed) {
       const planned = planReseal(
@@ -603,8 +678,10 @@ async function main(): Promise<number> {
   const reports = await rotateDataKey({ apply, org: onlyOrg });
   for (const r of reports) {
     console.log(
-      `[rotate-data-key] ${r.table}.${r.column}: ${r.rows} row(s), ${r.alreadyCurrent} current, ${r.resealed} to re-seal`
-      + (r.skipped ? `, ${r.skipped} left on their old key (identifier moved since issue — keep the retired key configured)` : ``),
+      `[rotate-data-key] ${r.table}.${r.column}: ${r.rows} row(s), ${r.alreadyCurrent} current, ${r.resealed} to re-seal` +
+        (r.skipped
+          ? `, ${r.skipped} left on their old key (identifier moved since issue — keep the retired key configured)`
+          : ``),
     );
   }
   const total = reports.reduce((n, r) => n + r.resealed, 0);

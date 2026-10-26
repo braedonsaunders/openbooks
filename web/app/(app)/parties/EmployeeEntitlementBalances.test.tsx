@@ -3,7 +3,10 @@ import test from "node:test";
 import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
-await bootJsdomEnvironment({ url: "http://localhost:4800/entities/employees", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/entities/employees",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: false,
@@ -26,28 +29,33 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 test("money entitlement balances retain exact decimal cents in localized currency output", async (t) => {
   const previousFetch = globalThis.fetch;
-  globalThis.fetch = (async () => Response.json({
-    currency: "USD",
-    balances: [{
-      planId: "plan-1",
-      planCode: "VAC",
-      planName: "Vacation bank",
-      unit: "money",
-      direction: "accrue",
-      balance: "12345678901234.1255",
-      balanceMoney: null,
-      balanceHours: null,
-      wage: null,
-      maxBalance: null,
-      notifyBalance: null,
-      limitScope: null,
-      overLimit: false,
-      nearLimit: false,
-      lastMovementDate: null,
-    }],
-    movements: [],
-  })) as typeof fetch;
-  t.after(() => { globalThis.fetch = previousFetch; });
+  globalThis.fetch = (async () =>
+    Response.json({
+      currency: "USD",
+      balances: [
+        {
+          planId: "plan-1",
+          planCode: "VAC",
+          planName: "Vacation bank",
+          unit: "money",
+          direction: "accrue",
+          balance: "12345678901234.1255",
+          balanceMoney: null,
+          balanceHours: null,
+          wage: null,
+          maxBalance: null,
+          notifyBalance: null,
+          limitScope: null,
+          overLimit: false,
+          nearLimit: false,
+          lastMovementDate: null,
+        },
+      ],
+      movements: [],
+    })) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = previousFetch;
+  });
 
   const host = document.createElement("div");
   document.body.appendChild(host);

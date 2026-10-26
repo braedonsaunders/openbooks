@@ -1,46 +1,105 @@
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { notFound } from '@/lib/api/responses';
-import { buildSource, getConnection } from '@openbooks/engine/sync/connection';
-import { connectionEntityMappingMetadata, EntityMappingError, mappingReferenceChoices } from '@openbooks/engine/sync/entity-mappings';
-import { connectionConfigUrlRefusal } from '../../_connector-guard';
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { notFound } from "@/lib/api/responses";
+import { buildSource, getConnection } from "@openbooks/engine/sync/connection";
+import {
+  connectionEntityMappingMetadata,
+  EntityMappingError,
+  mappingReferenceChoices,
+} from "@openbooks/engine/sync/entity-mappings";
+import { connectionConfigUrlRefusal } from "../../_connector-guard";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 export const maxDuration = 60;
-const query = z.object({ entity: z.string().max(120).optional(), target: z.string().max(240).optional(), sourceField: z.string().max(240).optional(), q: z.string().trim().max(120).optional(), selected: z.string().max(240).optional() }).strict();
+const query = z
+  .object({
+    entity: z.string().max(120).optional(),
+    target: z.string().max(240).optional(),
+    sourceField: z.string().max(240).optional(),
+    q: z.string().trim().max(120).optional(),
+    selected: z.string().max(240).optional(),
+  })
+  .strict();
 
 export const GET = defineRoute({
-  permission: 'admin.setup.manage', scope: 'unrestricted',
-  feature: { none: 'Connection mappings belong to organization setup and retain native feature enforcement during sync.' },
+  permission: "admin.setup.manage",
+  scope: "unrestricted",
+  feature: {
+    none: "Connection mappings belong to organization setup and retain native feature enforcement during sync.",
+  },
   params: z.object({ id: uuidString() }),
   handler: async ({ request, params: { id }, authz }) => {
     const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams));
-    if (!parsed.success || ((parsed.data.target || parsed.data.sourceField) && !parsed.data.entity) || (parsed.data.target && parsed.data.sourceField) || ((parsed.data.q || parsed.data.selected) && !parsed.data.target && !parsed.data.sourceField)) return NextResponse.json({ error: 'Choose a supported entity and mapping field' }, { status: 422 });
+    if (
+      !parsed.success ||
+      ((parsed.data.target || parsed.data.sourceField) && !parsed.data.entity) ||
+      (parsed.data.target && parsed.data.sourceField) ||
+      ((parsed.data.q || parsed.data.selected) && !parsed.data.target && !parsed.data.sourceField)
+    )
+      return NextResponse.json(
+        { error: "Choose a supported entity and mapping field" },
+        { status: 422 },
+      );
     const connection = await getConnection(authz.user.orgId, id);
-    if (!connection) return notFound('record');
+    if (!connection) return notFound("record");
     const urlError = await connectionConfigUrlRefusal(connection.config);
     if (urlError) return NextResponse.json({ error: urlError }, { status: 422 });
     try {
       const source = buildSource(connection);
-      const entities = await connectionEntityMappingMetadata(source, authz.user.orgId, parsed.data.entity);
+      const entities = await connectionEntityMappingMetadata(
+        source,
+        authz.user.orgId,
+        parsed.data.entity,
+      );
       if (!parsed.data.entity) return NextResponse.json({ entities });
-      const entity = entities.find(entity => entity.key === parsed.data.entity);
-      if (!entity) return NextResponse.json({ error: 'This connector does not sync the selected entity' }, { status: 422 });
+      const entity = entities.find((entity) => entity.key === parsed.data.entity);
+      if (!entity)
+        return NextResponse.json(
+          { error: "This connector does not sync the selected entity" },
+          { status: 422 },
+        );
       if (parsed.data.target || parsed.data.sourceField) {
-        const field = (parsed.data.sourceField ? entity.sourceFields : entity.nativeFields).find(field => field.key === (parsed.data.target ?? parsed.data.sourceField));
-        if (!field) return NextResponse.json({ error: 'The native field is no longer available' }, { status: 422 });
-        return NextResponse.json({ options: await mappingReferenceChoices(authz.user.orgId, field, source, Boolean(parsed.data.sourceField), parsed.data.q, parsed.data.selected) });
+        const field = (parsed.data.sourceField ? entity.sourceFields : entity.nativeFields).find(
+          (field) => field.key === (parsed.data.target ?? parsed.data.sourceField),
+        );
+        if (!field)
+          return NextResponse.json(
+            { error: "The native field is no longer available" },
+            { status: 422 },
+          );
+        return NextResponse.json({
+          options: await mappingReferenceChoices(
+            authz.user.orgId,
+            field,
+            source,
+            Boolean(parsed.data.sourceField),
+            parsed.data.q,
+            parsed.data.selected,
+          ),
+        });
       }
-      return NextResponse.json({ entity: { ...entity, sourceFields: [...entity.sourceFields, ...(await source.mappingSourceFields?.(entity.key) ?? [])] } });
+      return NextResponse.json({
+        entity: {
+          ...entity,
+          sourceFields: [
+            ...entity.sourceFields,
+            ...((await source.mappingSourceFields?.(entity.key)) ?? []),
+          ],
+        },
+      });
     } catch (cause) {
       // Reference pickers refuse typed 422 at their origin; connector
       // adapters and driver failures are untrusted, so they answer the
       // static fallback while the cause stays in the server log.
-      if (cause instanceof EntityMappingError) return NextResponse.json({ error: cause.message }, { status: 422 });
-      console.error('[platform/connections] mapping catalog failed', cause);
-      return NextResponse.json({ error: 'Mapping metadata is unavailable; check source read access and retry' }, { status: 422 });
+      if (cause instanceof EntityMappingError)
+        return NextResponse.json({ error: cause.message }, { status: 422 });
+      console.error("[platform/connections] mapping catalog failed", cause);
+      return NextResponse.json(
+        { error: "Mapping metadata is unavailable; check source read access and retry" },
+        { status: 422 },
+      );
     }
   },
 });

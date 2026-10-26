@@ -20,9 +20,7 @@ import { posRefusal } from "./errors.ts";
  * with the posted sale.
  */
 
-export type PosDiscount =
-  | { kind: "percent"; value: string }
-  | { kind: "amount"; value: string };
+export type PosDiscount = { kind: "percent"; value: string } | { kind: "amount"; value: string };
 
 export interface PosCartLineInput {
   quantity: string;
@@ -72,7 +70,10 @@ function invalid(message: string, remedy: string): never {
 export function parsePosQuantity(raw: string, label: string): string {
   const value = String(raw ?? "").trim();
   if (!QUANTITY_RE.test(value) || toUnits(value) <= 0n) {
-    invalid(`${label} quantity ${JSON.stringify(raw)} is not a positive quantity.`, "Enter a quantity greater than zero with at most four decimal places.");
+    invalid(
+      `${label} quantity ${JSON.stringify(raw)} is not a positive quantity.`,
+      "Enter a quantity greater than zero with at most four decimal places.",
+    );
   }
   return fromUnits(toUnits(value));
 }
@@ -84,11 +85,17 @@ export function parsePosQuantity(raw: string, label: string): string {
 export function parsePosAmount(raw: string, label: string, decimals: number): bigint {
   const value = String(raw ?? "").trim();
   if (!AMOUNT_RE.test(value)) {
-    invalid(`${label} ${JSON.stringify(raw)} is not an amount.`, "Enter the amount as a decimal number, for example 12.50.");
+    invalid(
+      `${label} ${JSON.stringify(raw)} is not an amount.`,
+      "Enter the amount as a decimal number, for example 12.50.",
+    );
   }
   const units = toUnits(value);
   if (units % minorStep(decimals) !== 0n) {
-    invalid(`${label} ${value} has more decimal places than the currency allows.`, `Enter the amount with at most ${decimals} decimal places.`);
+    invalid(
+      `${label} ${value} has more decimal places than the currency allows.`,
+      `Enter the amount with at most ${decimals} decimal places.`,
+    );
   }
   return units;
 }
@@ -97,28 +104,46 @@ export function parsePosAmount(raw: string, label: string, decimals: number): bi
 export function parsePosUnitPrice(raw: string, label: string): string {
   const value = String(raw ?? "").trim();
   if (!AMOUNT_RE.test(value)) {
-    invalid(`${label} unit price ${JSON.stringify(raw)} is not a price.`, "Enter the unit price as a decimal number with at most four decimal places.");
+    invalid(
+      `${label} unit price ${JSON.stringify(raw)} is not a price.`,
+      "Enter the unit price as a decimal number with at most four decimal places.",
+    );
   }
   return fromUnits(toUnits(value));
 }
 
-function discountUnits(baseUnits: bigint, discount: PosDiscount | null | undefined, decimals: number, label: string): bigint {
+function discountUnits(
+  baseUnits: bigint,
+  discount: PosDiscount | null | undefined,
+  decimals: number,
+  label: string,
+): bigint {
   if (!discount) return 0n;
   if (baseUnits <= 0n) return 0n;
   if (discount.kind === "percent") {
     const value = String(discount.value ?? "").trim();
     if (!PERCENT_RE.test(value) || toUnits(value) <= 0n || toUnits(value) > toUnits("100")) {
-      invalid(`${label} discount ${JSON.stringify(discount.value)}% is not a percentage between 0 and 100.`, "Enter a discount percentage greater than 0 and at most 100.");
+      invalid(
+        `${label} discount ${JSON.stringify(discount.value)}% is not a percentage between 0 and 100.`,
+        "Enter a discount percentage greater than 0 and at most 100.",
+      );
     }
     const units = toUnits(mulPercent(fromUnits(baseUnits), value, decimals));
     return units > baseUnits ? baseUnits : units;
   }
   if (discount.kind === "amount") {
     const units = parsePosAmount(discount.value, `${label} discount`, decimals);
-    if (units <= 0n) invalid(`${label} discount must be greater than zero.`, "Enter a discount amount greater than zero, or remove the discount.");
+    if (units <= 0n)
+      invalid(
+        `${label} discount must be greater than zero.`,
+        "Enter a discount amount greater than zero, or remove the discount.",
+      );
     return units > baseUnits ? baseUnits : units;
   }
-  return invalid(`${label} discount kind is not recognised.`, "Choose a percentage or an amount discount.");
+  return invalid(
+    `${label} discount kind is not recognised.`,
+    "Choose a percentage or an amount discount.",
+  );
 }
 
 /** Price a cart: gross, line discounts, prorated order discount and net per line. */
@@ -132,17 +157,29 @@ export function priceCart(
     const label = `Line ${index + 1}`;
     const quantity = parsePosQuantity(line.quantity, label);
     const unitPrice = parsePosUnitPrice(line.unitPrice, label);
-    const grossUnits = toUnits(mulDecimalFactors(unitPrice, [quantity], { decimalPlaces: decimals }));
+    const grossUnits = toUnits(
+      mulDecimalFactors(unitPrice, [quantity], { decimalPlaces: decimals }),
+    );
     const lineDiscountUnits = discountUnits(grossUnits, line.discount, decimals, label);
-    return { quantity, unitPrice, grossUnits, lineDiscountUnits, net: grossUnits - lineDiscountUnits };
+    return {
+      quantity,
+      unitPrice,
+      grossUnits,
+      lineDiscountUnits,
+      net: grossUnits - lineDiscountUnits,
+    };
   });
   const discountedUnits = priced.reduce((total, line) => total + line.net, 0n);
   const orderDiscountUnits = discountUnits(discountedUnits, orderDiscount, decimals, "Order");
   // Prorate whole minor units so every share is itself an amount the till
   // can hand over; the weights are each line's discounted amount.
-  const shares = orderDiscountUnits === 0n
-    ? priced.map(() => 0n)
-    : apportion(orderDiscountUnits / step, priced.map((line) => line.net / step)).map((share) => share * step);
+  const shares =
+    orderDiscountUnits === 0n
+      ? priced.map(() => 0n)
+      : apportion(
+          orderDiscountUnits / step,
+          priced.map((line) => line.net / step),
+        ).map((share) => share * step);
   const out: PosPricedLine[] = priced.map((line, index) => ({
     quantity: line.quantity,
     unitPrice: line.unitPrice,
@@ -206,7 +243,12 @@ export function totalDenominationCount(
     const label = `Count row ${index + 1}`;
     const units = parsePosAmount(row.value, `${label} denomination`, decimals);
     if (units <= 0n) {
-      throw posRefusal(`${label} denomination must be greater than zero.`, "count_invalid", 422, "Count each note and coin denomination once.");
+      throw posRefusal(
+        `${label} denomination must be greater than zero.`,
+        "count_invalid",
+        422,
+        "Count each note and coin denomination once.",
+      );
     }
     const key = units.toString();
     if (allowedUnits.size > 0 && !allowedUnits.has(key)) {
@@ -218,11 +260,21 @@ export function totalDenominationCount(
       );
     }
     if (seen.has(key)) {
-      throw posRefusal(`${label} repeats denomination ${fromUnits(units)}.`, "count_invalid", 422, "Count each denomination once.");
+      throw posRefusal(
+        `${label} repeats denomination ${fromUnits(units)}.`,
+        "count_invalid",
+        422,
+        "Count each denomination once.",
+      );
     }
     seen.add(key);
     if (!Number.isSafeInteger(row.count) || row.count < 0) {
-      throw posRefusal(`${label} count must be a whole number of zero or more.`, "count_invalid", 422, "Enter how many of each note or coin are in the drawer.");
+      throw posRefusal(
+        `${label} count must be a whole number of zero or more.`,
+        "count_invalid",
+        422,
+        "Enter how many of each note or coin are in the drawer.",
+      );
     }
     totalUnits += units * BigInt(row.count);
     canonical.push({ value: fromUnits(units), count: row.count });
@@ -240,7 +292,13 @@ export interface SessionCashFacts {
 
 /** Cash the drawer should hold: float + cash sales − cash refunds + pay-ins − pay-outs. */
 export function expectedDrawerCash(facts: SessionCashFacts): bigint {
-  return facts.openingFloatUnits + facts.saleCashUnits - facts.refundCashUnits + facts.payInUnits - facts.payOutUnits;
+  return (
+    facts.openingFloatUnits +
+    facts.saleCashUnits -
+    facts.refundCashUnits +
+    facts.payInUnits -
+    facts.payOutUnits
+  );
 }
 
 /**

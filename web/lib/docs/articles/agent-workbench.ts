@@ -1,24 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const agentWorkbench: DocArticle = {
-  slug: 'agent-workbench',
-  title: 'Agent Workbench',
-  category: 'reporting',
+  slug: "agent-workbench",
+  title: "Agent Workbench",
+  category: "reporting",
   order: 3,
   summary:
-    'Triage background-agent findings in one ranked inbox, apply governed proposals, assign follow-ups, and start the day with a briefing.',
-  updated: '2026-09-21',
+    "Triage background-agent findings in one ranked inbox, apply governed proposals, assign follow-ups, and start the day with a briefing.",
+  updated: "2026-09-21",
   keywords: [
-    'agents',
-    'agent inbox',
-    'findings',
-    'proposals',
-    'briefing',
-    'assign',
-    'continuous close',
-    'dashboard tile',
+    "agents",
+    "agent inbox",
+    "findings",
+    "proposals",
+    "briefing",
+    "assign",
+    "continuous close",
+    "dashboard tile",
   ],
-  related: ['financial-reports', 'analytics-and-saved-views', 'period-close'],
+  related: ["financial-reports", "analytics-and-saved-views", "period-close"],
   body: `# Agent Workbench
 
 The **Agents** page is one ranked inbox across every background-agent pack
@@ -87,4 +87,4 @@ packs, how many carry proposals, and the last detection across those packs.
 It links straight to the workbench. Like the inbox, it hides entirely
 without the assistant permission.
 `,
-}
+};

@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 import {
   evaluateGroup,
   lineMatchesRule,
@@ -10,191 +10,234 @@ import {
   type RuleConditionGroup,
   type RuleOp,
   type RuleSplitLine,
-} from './banking-rules-core.ts'
+} from "./banking-rules-core.ts";
 
 const line = (over: Partial<BankLine> = {}): BankLine => ({
-  id: 'l1',
-  posted_on: '2026-07-10',
-  amount: '1204.55',
-  description: 'STRIPE TRANSFER ST-A4F2',
-  counterparty_ref: 'stripe.com',
-  currency: 'USD',
-  source: 'ofx',
+  id: "l1",
+  posted_on: "2026-07-10",
+  amount: "1204.55",
+  description: "STRIPE TRANSFER ST-A4F2",
+  counterparty_ref: "stripe.com",
+  currency: "USD",
+  source: "ofx",
   ...over,
-})
+});
 
-const FIXED_NOW = Date.parse('2026-07-20T00:00:00Z')
+const FIXED_NOW = Date.parse("2026-07-20T00:00:00Z");
 
-test('text operators match description and payee', () => {
+test("text operators match description and payee", () => {
   const g: RuleConditionGroup = {
-    combinator: 'and',
+    combinator: "and",
     rules: [
-      { field: 'description', op: 'startsWith', value: 'STRIPE' },
-      { field: 'payee', op: 'contains', value: 'stripe.com' },
+      { field: "description", op: "startsWith", value: "STRIPE" },
+      { field: "payee", op: "contains", value: "stripe.com" },
     ],
-  }
-  assert.equal(evaluateGroup(line(), g, FIXED_NOW), true)
-  assert.equal(evaluateGroup(line({ description: 'ACH DEBIT' }), g, FIXED_NOW), false)
-})
+  };
+  assert.equal(evaluateGroup(line(), g, FIXED_NOW), true);
+  assert.equal(evaluateGroup(line({ description: "ACH DEBIT" }), g, FIXED_NOW), false);
+});
 
-test('anyText spans description and counterparty', () => {
-  const g: RuleConditionGroup = { combinator: 'and', rules: [{ field: 'anyText', op: 'contains', value: 'stripe.com' }] }
-  assert.equal(evaluateGroup(line({ description: 'PAYOUT' }), g, FIXED_NOW), true)
-})
-
-test('and vs or grouping', () => {
+test("anyText spans description and counterparty", () => {
   const g: RuleConditionGroup = {
-    combinator: 'or',
+    combinator: "and",
+    rules: [{ field: "anyText", op: "contains", value: "stripe.com" }],
+  };
+  assert.equal(evaluateGroup(line({ description: "PAYOUT" }), g, FIXED_NOW), true);
+});
+
+test("and vs or grouping", () => {
+  const g: RuleConditionGroup = {
+    combinator: "or",
     rules: [
-      { field: 'description', op: 'contains', value: 'nope' },
-      { field: 'flow', op: 'is', value: 'in' },
+      { field: "description", op: "contains", value: "nope" },
+      { field: "flow", op: "is", value: "in" },
     ],
-  }
-  assert.equal(evaluateGroup(line(), g, FIXED_NOW), true) // money-in wins the OR
-  const gAnd: RuleConditionGroup = { ...g, combinator: 'and' }
-  assert.equal(evaluateGroup(line(), gAnd, FIXED_NOW), false)
-})
+  };
+  assert.equal(evaluateGroup(line(), g, FIXED_NOW), true); // money-in wins the OR
+  const gAnd: RuleConditionGroup = { ...g, combinator: "and" };
+  assert.equal(evaluateGroup(line(), gAnd, FIXED_NOW), false);
+});
 
-test('nested groups: (A and B) or C', () => {
+test("nested groups: (A and B) or C", () => {
   const g: RuleConditionGroup = {
-    combinator: 'or',
+    combinator: "or",
     rules: [
       {
-        combinator: 'and',
+        combinator: "and",
         rules: [
-          { field: 'flow', op: 'is', value: 'out' },
-          { field: 'amount', op: 'gt', value: 500 },
+          { field: "flow", op: "is", value: "out" },
+          { field: "amount", op: "gt", value: 500 },
         ],
       },
-      { field: 'description', op: 'contains', value: 'stripe' },
+      { field: "description", op: "contains", value: "stripe" },
     ],
-  }
-  assert.equal(evaluateGroup(line(), g, FIXED_NOW), true) // matches "stripe" branch
-  assert.equal(evaluateGroup(line({ description: 'WIRE', amount: '-800' }), g, FIXED_NOW), true) // matches out+>500
-  assert.equal(evaluateGroup(line({ description: 'WIRE', amount: '-100' }), g, FIXED_NOW), false)
-})
+  };
+  assert.equal(evaluateGroup(line(), g, FIXED_NOW), true); // matches "stripe" branch
+  assert.equal(evaluateGroup(line({ description: "WIRE", amount: "-800" }), g, FIXED_NOW), true); // matches out+>500
+  assert.equal(evaluateGroup(line({ description: "WIRE", amount: "-100" }), g, FIXED_NOW), false);
+});
 
-test('amount uses absolute value; between and comparisons', () => {
-  const g = (op: RuleOp, value: RuleCondition['value']): RuleConditionGroup => ({ combinator: 'and', rules: [{ field: 'amount', op, value }] })
-  assert.equal(evaluateGroup(line({ amount: '-250' }), g('between', [100, 300]), FIXED_NOW), true)
-  assert.equal(evaluateGroup(line({ amount: '-250' }), g('gt', 300), FIXED_NOW), false)
-  assert.equal(evaluateGroup(line({ amount: '-250' }), g('lte', 250), FIXED_NOW), true)
-})
+test("amount uses absolute value; between and comparisons", () => {
+  const g = (op: RuleOp, value: RuleCondition["value"]): RuleConditionGroup => ({
+    combinator: "and",
+    rules: [{ field: "amount", op, value }],
+  });
+  assert.equal(evaluateGroup(line({ amount: "-250" }), g("between", [100, 300]), FIXED_NOW), true);
+  assert.equal(evaluateGroup(line({ amount: "-250" }), g("gt", 300), FIXED_NOW), false);
+  assert.equal(evaluateGroup(line({ amount: "-250" }), g("lte", 250), FIXED_NOW), true);
+});
 
-test('date withinDays honours the injected clock', () => {
-  const g: RuleConditionGroup = { combinator: 'and', rules: [{ field: 'date', op: 'withinDays', value: 15 }] }
-  assert.equal(evaluateGroup(line({ posted_on: '2026-07-10' }), g, FIXED_NOW), true) // 10 days ago
-  assert.equal(evaluateGroup(line({ posted_on: '2026-06-01' }), g, FIXED_NOW), false) // 49 days ago
-})
+test("date withinDays honours the injected clock", () => {
+  const g: RuleConditionGroup = {
+    combinator: "and",
+    rules: [{ field: "date", op: "withinDays", value: 15 }],
+  };
+  assert.equal(evaluateGroup(line({ posted_on: "2026-07-10" }), g, FIXED_NOW), true); // 10 days ago
+  assert.equal(evaluateGroup(line({ posted_on: "2026-06-01" }), g, FIXED_NOW), false); // 49 days ago
+});
 
-test('date withinDays never matches lines dated after the clock', () => {
-  const g: RuleConditionGroup = { combinator: 'and', rules: [{ field: 'date', op: 'withinDays', value: 15 }] }
-  assert.equal(evaluateGroup(line({ posted_on: '2026-08-01' }), g, FIXED_NOW), false) // 12 days in the future
-  assert.equal(evaluateGroup(line({ posted_on: '2030-01-01' }), g, FIXED_NOW), false)
-  assert.equal(evaluateGroup(line({ posted_on: '2026-07-20' }), g, FIXED_NOW), true) // today still matches
-})
+test("date withinDays never matches lines dated after the clock", () => {
+  const g: RuleConditionGroup = {
+    combinator: "and",
+    rules: [{ field: "date", op: "withinDays", value: 15 }],
+  };
+  assert.equal(evaluateGroup(line({ posted_on: "2026-08-01" }), g, FIXED_NOW), false); // 12 days in the future
+  assert.equal(evaluateGroup(line({ posted_on: "2030-01-01" }), g, FIXED_NOW), false);
+  assert.equal(evaluateGroup(line({ posted_on: "2026-07-20" }), g, FIXED_NOW), true); // today still matches
+});
 
-test('lineMatchesRule evaluates the condition tree', () => {
-  assert.equal(lineMatchesRule(line(), { version: 2, match: { combinator: 'and', rules: [{ field: 'flow', op: 'is', value: 'in' }] } }, FIXED_NOW), true)
-})
+test("lineMatchesRule evaluates the condition tree", () => {
+  assert.equal(
+    lineMatchesRule(
+      line(),
+      {
+        version: 2,
+        match: { combinator: "and", rules: [{ field: "flow", op: "is", value: "in" }] },
+      },
+      FIXED_NOW,
+    ),
+    true,
+  );
+});
 
-test('accountScope gates rules', () => {
-  assert.equal(ruleAppliesToAccount({ version: 2, match: { combinator: 'and', rules: [] }, accountScope: ['acc-1'] }, 'acc-1'), true)
-  assert.equal(ruleAppliesToAccount({ version: 2, match: { combinator: 'and', rules: [] }, accountScope: ['acc-1'] }, 'acc-2'), false)
-  assert.equal(ruleAppliesToAccount({ version: 2, match: { combinator: 'and', rules: [] } }, 'acc-2'), true) // no scope = all
-})
+test("accountScope gates rules", () => {
+  assert.equal(
+    ruleAppliesToAccount(
+      { version: 2, match: { combinator: "and", rules: [] }, accountScope: ["acc-1"] },
+      "acc-1",
+    ),
+    true,
+  );
+  assert.equal(
+    ruleAppliesToAccount(
+      { version: 2, match: { combinator: "and", rules: [] }, accountScope: ["acc-1"] },
+      "acc-2",
+    ),
+    false,
+  );
+  assert.equal(
+    ruleAppliesToAccount({ version: 2, match: { combinator: "and", rules: [] } }, "acc-2"),
+    true,
+  ); // no scope = all
+});
 
-test('split: single remainder line equals the negated bank amount', () => {
-  const lines: RuleSplitLine[] = [{ accountId: 'a', portion: { kind: 'remainder' } }]
-  const r = resolveSplitAmounts('1204.55', lines)
+test("split: single remainder line equals the negated bank amount", () => {
+  const lines: RuleSplitLine[] = [{ accountId: "a", portion: { kind: "remainder" } }];
+  const r = resolveSplitAmounts("1204.55", lines);
   // Splits resolve at the ledger's numeric(19,4) scale, so amounts are 4dp.
-  assert.equal(r[0]!.amount, '-1204.5500')
-})
+  assert.equal(r[0]!.amount, "-1204.5500");
+});
 
-test('split: percent + remainder balances exactly at ledger scale (deposit)', () => {
+test("split: percent + remainder balances exactly at ledger scale (deposit)", () => {
   const lines: RuleSplitLine[] = [
-    { accountId: 'revenue', portion: { kind: 'remainder' } },
-    { accountId: 'fees', portion: { kind: 'percent', value: 2.9 } },
-  ]
-  const r = resolveSplitAmounts('1204.55', lines)
-  const fee = r.find((x) => x.line.accountId === 'fees')!.amount
-  const rev = r.find((x) => x.line.accountId === 'revenue')!.amount
+    { accountId: "revenue", portion: { kind: "remainder" } },
+    { accountId: "fees", portion: { kind: "percent", value: 2.9 } },
+  ];
+  const r = resolveSplitAmounts("1204.55", lines);
+  const fee = r.find((x) => x.line.accountId === "fees")!.amount;
+  const rev = r.find((x) => x.line.accountId === "revenue")!.amount;
   // 1204.55 × 2.9% = 34.93195 → 34.9320 at the 4dp ledger scale (was clamped
   // to 2dp); the remainder line absorbs the rest exactly, no stranded delta.
-  assert.equal(fee, '-34.9320')
-  assert.equal(rev, '-1169.6180')
-  const sum = r.reduce((a, x) => a + Number(x.amount), 0)
-  assert.equal(Math.round(sum * 100) / 100, -1204.55) // offsets negate the bank line exactly
-})
+  assert.equal(fee, "-34.9320");
+  assert.equal(rev, "-1169.6180");
+  const sum = r.reduce((a, x) => a + Number(x.amount), 0);
+  assert.equal(Math.round(sum * 100) / 100, -1204.55); // offsets negate the bank line exactly
+});
 
-test('split: fixed + remainder on a withdrawal keeps offsets positive', () => {
+test("split: fixed + remainder on a withdrawal keeps offsets positive", () => {
   const lines: RuleSplitLine[] = [
-    { accountId: 'principal', portion: { kind: 'remainder' } },
-    { accountId: 'wireFee', portion: { kind: 'fixed', value: 15 } },
-  ]
-  const r = resolveSplitAmounts('-500', lines) // money out: bank credited (negative)
-  const total = r.reduce((a, x) => a + Number(x.amount), 0)
-  assert.equal(Math.round(total * 100) / 100, 500) // offsets are positive debits summing to +500
-  assert.equal(r.find((x) => x.line.accountId === 'wireFee')!.amount, '15.0000')
-  assert.equal(r.find((x) => x.line.accountId === 'principal')!.amount, '485.0000')
-})
+    { accountId: "principal", portion: { kind: "remainder" } },
+    { accountId: "wireFee", portion: { kind: "fixed", value: 15 } },
+  ];
+  const r = resolveSplitAmounts("-500", lines); // money out: bank credited (negative)
+  const total = r.reduce((a, x) => a + Number(x.amount), 0);
+  assert.equal(Math.round(total * 100) / 100, 500); // offsets are positive debits summing to +500
+  assert.equal(r.find((x) => x.line.accountId === "wireFee")!.amount, "15.0000");
+  assert.equal(r.find((x) => x.line.accountId === "principal")!.amount, "485.0000");
+});
 
-test('split: no remainder folds rounding into the last line', () => {
+test("split: no remainder folds rounding into the last line", () => {
   const lines: RuleSplitLine[] = [
-    { accountId: 'a', portion: { kind: 'percent', value: 33.333 } },
-    { accountId: 'b', portion: { kind: 'percent', value: 66.667 } },
-  ]
-  const r = resolveSplitAmounts('100', lines)
+    { accountId: "a", portion: { kind: "percent", value: 33.333 } },
+    { accountId: "b", portion: { kind: "percent", value: 66.667 } },
+  ];
+  const r = resolveSplitAmounts("100", lines);
   // Exact at 4dp — the fold branch leaves both lines untouched here.
-  assert.equal(r[0]!.amount, '-33.3330')
-  assert.equal(r[1]!.amount, '-66.6670')
-  const sum = r.reduce((a, x) => a + Number(x.amount), 0)
-  assert.equal(Math.round(sum * 100) / 100, -100) // still balances despite rounding
-})
+  assert.equal(r[0]!.amount, "-33.3330");
+  assert.equal(r[1]!.amount, "-66.6670");
+  const sum = r.reduce((a, x) => a + Number(x.amount), 0);
+  assert.equal(Math.round(sum * 100) / 100, -100); // still balances despite rounding
+});
 
-test('split: an under-allocated split without a remainder line refuses instead of loading the last line', () => {
+test("split: an under-allocated split without a remainder line refuses instead of loading the last line", () => {
   const lines: RuleSplitLine[] = [
-    { accountId: 'meals', portion: { kind: 'percent', value: 50 } },
-    { accountId: 'travel', portion: { kind: 'percent', value: 30 } },
-  ]
-  assert.throws(() => resolveSplitAmounts('100', lines), /allocates only 80\.0000 of the line total of 100\.0000 and has no remainder line — make the portions total 100% or add a remainder line/)
-  const fixedShort: RuleSplitLine[] = [{ accountId: 'a', portion: { kind: 'fixed', value: 40 } }]
-  assert.throws(() => resolveSplitAmounts('100', fixedShort), /has no remainder line/)
+    { accountId: "meals", portion: { kind: "percent", value: 50 } },
+    { accountId: "travel", portion: { kind: "percent", value: 30 } },
+  ];
+  assert.throws(
+    () => resolveSplitAmounts("100", lines),
+    /allocates only 80\.0000 of the line total of 100\.0000 and has no remainder line — make the portions total 100% or add a remainder line/,
+  );
+  const fixedShort: RuleSplitLine[] = [{ accountId: "a", portion: { kind: "fixed", value: 40 } }];
+  assert.throws(() => resolveSplitAmounts("100", fixedShort), /has no remainder line/);
   // Rounding dust from exact-100 percent splits still folds into the last line.
   const thirds: RuleSplitLine[] = [
-    { accountId: 'a', portion: { kind: 'percent', value: '33.33' } },
-    { accountId: 'b', portion: { kind: 'percent', value: '33.33' } },
-    { accountId: 'c', portion: { kind: 'percent', value: '33.34' } },
-  ]
-  assert.deepEqual(resolveSplitAmounts('0.0007', thirds).map((r) => r.amount), ['-0.0002', '-0.0002', '-0.0003'])
-})
+    { accountId: "a", portion: { kind: "percent", value: "33.33" } },
+    { accountId: "b", portion: { kind: "percent", value: "33.33" } },
+    { accountId: "c", portion: { kind: "percent", value: "33.34" } },
+  ];
+  assert.deepEqual(
+    resolveSplitAmounts("0.0007", thirds).map((r) => r.amount),
+    ["-0.0002", "-0.0002", "-0.0003"],
+  );
+});
 
-test('split: over-allocated percents refuse instead of flipping the remainder', () => {
+test("split: over-allocated percents refuse instead of flipping the remainder", () => {
   const lines: RuleSplitLine[] = [
-    { accountId: 'a', portion: { kind: 'percent', value: 60 } },
-    { accountId: 'b', portion: { kind: 'percent', value: 60 } },
-    { accountId: 'c', portion: { kind: 'remainder' } },
-  ]
+    { accountId: "a", portion: { kind: "percent", value: 60 } },
+    { accountId: "b", portion: { kind: "percent", value: 60 } },
+    { accountId: "c", portion: { kind: "remainder" } },
+  ];
   // 60 + 60 + remainder on a 100 line would book +20 with the bank's own sign.
-  assert.throws(() => resolveSplitAmounts('100.0000', lines), /over-allocates the line total/)
-})
+  assert.throws(() => resolveSplitAmounts("100.0000", lines), /over-allocates the line total/);
+});
 
-test('split: fixed portions beyond the line total refuse before posting', () => {
+test("split: fixed portions beyond the line total refuse before posting", () => {
   const lines: RuleSplitLine[] = [
-    { accountId: 'a', portion: { kind: 'fixed', value: 500 } },
-    { accountId: 'b', portion: { kind: 'remainder' } },
-  ]
-  assert.throws(() => resolveSplitAmounts('100.0000', lines), /over-allocates the line total/)
-})
+    { accountId: "a", portion: { kind: "fixed", value: 500 } },
+    { accountId: "b", portion: { kind: "remainder" } },
+  ];
+  assert.throws(() => resolveSplitAmounts("100.0000", lines), /over-allocates the line total/);
+});
 
-test('split: even dust-scale overruns refuse rather than flip sign', () => {
+test("split: even dust-scale overruns refuse rather than flip sign", () => {
   // Each 50% share of 0.0001 rounds half-up to 0.0001, so the computed
   // remainder is -0.0001. Dust or not, a wrong-sign remainder never posts —
   // controlled refusal replaces the flipped line.
   const lines: RuleSplitLine[] = [
-    { accountId: 'a', portion: { kind: 'percent', value: 50 } },
-    { accountId: 'b', portion: { kind: 'percent', value: 50 } },
-    { accountId: 'c', portion: { kind: 'remainder' } },
-  ]
-  assert.throws(() => resolveSplitAmounts('0.0001', lines), /over-allocates the line total/)
-})
+    { accountId: "a", portion: { kind: "percent", value: 50 } },
+    { accountId: "b", portion: { kind: "percent", value: 50 } },
+    { accountId: "c", portion: { kind: "remainder" } },
+  ];
+  assert.throws(() => resolveSplitAmounts("0.0001", lines), /over-allocates the line total/);
+});

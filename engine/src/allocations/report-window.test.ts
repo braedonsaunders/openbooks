@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { REPORT_ENTITY_MAP } from "@openbooks/reports";
-import {
-  applyReportPeriodWindow,
-  resolveReportPeriodField,
-} from "./report-window.ts";
+import { applyReportPeriodWindow, resolveReportPeriodField } from "./report-window.ts";
 import type { ReportCustomQuery, ReportRule, ReportRuleGroup } from "@openbooks/reports";
 
 const ledger = REPORT_ENTITY_MAP["ledger_lines"]!;
@@ -63,7 +60,10 @@ test("the window replaces stored bounds on the field and keeps every other filte
   collect(out.filters?.rules);
   assert.deepEqual(
     leaves.filter((l) => l.field === "posting_date").map((l) => [l.op, l.value]),
-    [["gte", "2026-07-01"], ["lte", "2026-07-31"]],
+    [
+      ["gte", "2026-07-01"],
+      ["lte", "2026-07-31"],
+    ],
   );
   assert.ok(leaves.some((l) => l.field === "account_id" && l.value === "abc"));
 });

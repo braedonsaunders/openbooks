@@ -1,35 +1,44 @@
-import assert from 'node:assert/strict'
-import { stubModules, withAuthzTestSurface, withPlatformDbTestSurface } from '../../../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import {
+  stubModules,
+  withAuthzTestSurface,
+  withPlatformDbTestSurface,
+} from "../../../../testing/stub-modules";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.project-detail-route-test')
-type Scope = Set<string> | null
+const stateKey = Symbol.for("openbooks.project-detail-route-test");
+type Scope = Set<string> | null;
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string; roles: { key: string }[] }
-    permissions: Set<string>
-    allowedSubsidiaryIds: Scope
-  }
-  payload: { project: Record<string, unknown> }
-  existing: { name: string; is_active: boolean; custom: Record<string, unknown>; subsidiary_id: string | null }
-  locked: { subsidiary_id: string | null } | null
-  executeCalls: number
-  writes: number
+    user: { orgId: string; id: string; roles: { key: string }[] };
+    permissions: Set<string>;
+    allowedSubsidiaryIds: Scope;
+  };
+  payload: { project: Record<string, unknown> };
+  existing: {
+    name: string;
+    is_active: boolean;
+    custom: Record<string, unknown>;
+    subsidiary_id: string | null;
+  };
+  locked: { subsidiary_id: string | null } | null;
+  executeCalls: number;
+  writes: number;
 }
 
 const routeState: RouteState = {
   authz: {
-    user: { orgId: 'org-1', id: 'user-1', roles: [] },
-    permissions: new Set(['*']),
-    allowedSubsidiaryIds: new Set(['sub-allowed']),
+    user: { orgId: "org-1", id: "user-1", roles: [] },
+    permissions: new Set(["*"]),
+    allowedSubsidiaryIds: new Set(["sub-allowed"]),
   },
-  payload: { project: { id: 'project-1', subsidiary_id: 'sub-allowed' } },
-  existing: { name: 'Project', is_active: true, custom: {}, subsidiary_id: 'sub-allowed' },
-  locked: { subsidiary_id: 'sub-allowed' },
+  payload: { project: { id: "project-1", subsidiary_id: "sub-allowed" } },
+  existing: { name: "Project", is_active: true, custom: {}, subsidiary_id: "sub-allowed" },
+  locked: { subsidiary_id: "sub-allowed" },
   executeCalls: 0,
   writes: 0,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 // Neither '@/lib/api/json', the money kernel, nor the decimal classifier is
 // mocked: hand doubles cannot produce the refusals the real modules enforce.
@@ -85,7 +94,7 @@ stubModules({
     "../../../../lib/custom-fields": `
       export async function loadFieldDefs() { return [] }
       export { validateCustomValues, customFieldViewerFor, visibleCustomFieldDefs, hiddenCustomFieldRefusal }
-        from '${new URL('../../../../lib/custom-fields.ts', import.meta.url).href}'
+        from '${new URL("../../../../lib/custom-fields.ts", import.meta.url).href}'
       export async function findUnownedCustomReferences() { return [] }
     `,
     "../../../../lib/projects-gate": `
@@ -103,59 +112,67 @@ stubModules({
       }
     `,
   },
-})
+});
 
-const routeUrl = new URL('./route.ts?project-detail-scope-test', import.meta.url).href
-const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = new URL("./route.ts?project-detail-scope-test", import.meta.url).href;
+const { GET, PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const PROJECT_ID = '00000000-0000-4000-8000-000000000001'
+const PROJECT_ID = "00000000-0000-4000-8000-000000000001";
 
 function reset(): void {
-  routeState.authz.allowedSubsidiaryIds = new Set(['sub-allowed'])
-  routeState.payload = { project: { id: PROJECT_ID, subsidiary_id: 'sub-allowed' } }
-  routeState.existing = { name: 'Project', is_active: true, custom: {}, subsidiary_id: 'sub-allowed' }
-  routeState.locked = { subsidiary_id: 'sub-allowed' }
-  routeState.executeCalls = 0
-  routeState.writes = 0
+  routeState.authz.allowedSubsidiaryIds = new Set(["sub-allowed"]);
+  routeState.payload = { project: { id: PROJECT_ID, subsidiary_id: "sub-allowed" } };
+  routeState.existing = {
+    name: "Project",
+    is_active: true,
+    custom: {},
+    subsidiary_id: "sub-allowed",
+  };
+  routeState.locked = { subsidiary_id: "sub-allowed" };
+  routeState.executeCalls = 0;
+  routeState.writes = 0;
 }
 
 function params() {
-  return { params: Promise.resolve({ id: PROJECT_ID }) }
+  return { params: Promise.resolve({ id: PROJECT_ID }) };
 }
 
 function patchRequest(body: unknown): Request {
   return new Request(`http://openbooks.test/api/projects/${PROJECT_ID}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-  })
+  });
 }
 
-test('GET hides a project outside the caller subsidiary scope', async () => {
-  reset()
-  routeState.payload = { project: { id: PROJECT_ID, subsidiary_id: 'sub-other' } }
+test("GET hides a project outside the caller subsidiary scope", async () => {
+  reset();
+  routeState.payload = { project: { id: PROJECT_ID, subsidiary_id: "sub-other" } };
 
-  const response = await GET(new Request('http://openbooks.test'), params())
+  const response = await GET(new Request("http://openbooks.test"), params());
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not_found' })
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+});
 
-test('PATCH rejects moving a project into an out-of-scope subsidiary without writing', async () => {
-  reset()
+test("PATCH rejects moving a project into an out-of-scope subsidiary without writing", async () => {
+  reset();
 
-  const response = await PATCH(patchRequest({ subsidiaryId: '00000000-0000-4000-8000-000000000002' }), params())
+  const response = await PATCH(
+    patchRequest({ subsidiaryId: "00000000-0000-4000-8000-000000000002" }),
+    params(),
+  );
 
-  assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: 'Subsidiary not found' })
-  assert.equal(routeState.writes, 0)
-})
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: "Subsidiary not found" });
+  assert.equal(routeState.writes, 0);
+});
 
-test('PATCH updates a project that is inside the caller subsidiary scope', async () => {
-  reset()
+test("PATCH updates a project that is inside the caller subsidiary scope", async () => {
+  reset();
 
-  const response = await PATCH(patchRequest({ name: 'Renamed project' }), params())
+  const response = await PATCH(patchRequest({ name: "Renamed project" }), params());
 
-  assert.equal(response.status, 200)
-  assert.equal(routeState.writes, 1)
-})
+  assert.equal(response.status, 200);
+  assert.equal(routeState.writes, 1);
+});

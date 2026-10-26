@@ -59,11 +59,7 @@ export const EMAIL_DELIVERY_WORKER_IDENTITY = "email-delivery-worker";
 export const POSTING_EFFECTS_WORKER_IDENTITY = "posting-effects-worker";
 
 export type TerminalFailureLogFields = {
-  surface:
-    | "scheduler_outbox"
-    | "report_runs"
-    | "report_delivery_outbox"
-    | "posting_effects";
+  surface: "scheduler_outbox" | "report_runs" | "report_delivery_outbox" | "posting_effects";
   /** Outbox discriminator: dunning / subscription_billing / fx_providers / … */
   kind?: string;
   id: string;

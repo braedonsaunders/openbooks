@@ -1,20 +1,20 @@
-'use client'
+"use client";
 
-import { useEffect, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import type { InsightQuery, QueryResult, VizSettings, VizType } from '@openbooks/analytics'
-import { InsightResultView } from '@openbooks/analytics/viz'
-import { Skeleton } from '@openbooks/ui'
+import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { readApiErrorMessage } from "../../../lib/api-error";
+import type { InsightQuery, QueryResult, VizSettings, VizType } from "@openbooks/analytics";
+import { InsightResultView } from "@openbooks/analytics/viz";
+import { Skeleton } from "@openbooks/ui";
 
 export type CardTileData = {
-  id: string
-  name: string
-  description?: string | null
-  query: InsightQuery
-  vizType: VizType
-  vizSettings: VizSettings
-}
+  id: string;
+  name: string;
+  description?: string | null;
+  query: InsightQuery;
+  vizType: VizType;
+  vizSettings: VizSettings;
+};
 
 /**
  * A self-fetching insight card — runs its own query against POST
@@ -26,30 +26,30 @@ export function CardTile({
   header,
   className,
 }: {
-  card: CardTileData
+  card: CardTileData;
   /** Optional actions rendered in the tile header (e.g. remove-from-dashboard). */
-  header?: React.ReactNode
-  className?: string
+  header?: React.ReactNode;
+  className?: string;
 }) {
-  const t = useTranslations('insights')
-  const [result, setResult] = useState<QueryResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const seq = useRef(0)
+  const t = useTranslations("insights");
+  const [result, setResult] = useState<QueryResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const seq = useRef(0);
 
   // Clear the previous query's result while reloading, during render (same
   // committed values, no extra render).
-  const [prevQuery, setPrevQuery] = useState(card.query)
+  const [prevQuery, setPrevQuery] = useState(card.query);
   if (prevQuery !== card.query) {
-    setPrevQuery(card.query)
-    setResult(null)
-    setError(null)
+    setPrevQuery(card.query);
+    setResult(null);
+    setError(null);
   }
 
   useEffect(() => {
-    const mySeq = ++seq.current
-    fetch('/api/insights/query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const mySeq = ++seq.current;
+    fetch("/api/insights/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: card.query }),
     })
       .then(async (res) => {
@@ -57,34 +57,38 @@ export function CardTile({
         // body must fail the tile with the named refusal, never a SyntaxError
         // escaping the effect.
         if (!res.ok) {
-          const message = await readApiErrorMessage(res, t('errors.queryFailed'))
-          if (mySeq !== seq.current) return
-          setError(message)
-          return
+          const message = await readApiErrorMessage(res, t("errors.queryFailed"));
+          if (mySeq !== seq.current) return;
+          setError(message);
+          return;
         }
-        const data = (await res.json().catch(() => null)) as QueryResult | null
-        if (mySeq !== seq.current) return
-        if (!data || !Array.isArray(data.rows)) setError(t('cardTile.loadFailed'))
-        else setResult(data)
+        const data = (await res.json().catch(() => null)) as QueryResult | null;
+        if (mySeq !== seq.current) return;
+        if (!data || !Array.isArray(data.rows)) setError(t("cardTile.loadFailed"));
+        else setResult(data);
       })
       .catch(() => {
-        if (mySeq === seq.current) setError(t('cardTile.loadFailed'))
-      })
+        if (mySeq === seq.current) setError(t("cardTile.loadFailed"));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card.query])
+  }, [card.query]);
 
   return (
     <div
       className={
-        'flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 ' +
-        (className ?? '')
+        "flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 " +
+        (className ?? "")
       }
     >
       <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-3.5 py-2.5 dark:border-slate-800/70">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{card.name}</h3>
+          <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {card.name}
+          </h3>
           {card.description ? (
-            <p className="truncate text-xs text-slate-500 dark:text-slate-400">{card.description}</p>
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+              {card.description}
+            </p>
           ) : null}
         </div>
         {header ? <div className="shrink-0">{header}</div> : null}
@@ -106,5 +110,5 @@ export function CardTile({
         )}
       </div>
     </div>
-  )
+  );
 }

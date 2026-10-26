@@ -1,30 +1,30 @@
-import 'server-only'
-import type { SqlExecutor } from '@openbooks/engine/platform/db'
-import { NextResponse } from 'next/server'
+import "server-only";
+import type { SqlExecutor } from "@openbooks/engine/platform/db";
+import { NextResponse } from "next/server";
 import {
   RECORD_TYPE_BY_KEY,
   CUSTOM_FIELD_TARGETS,
   customFieldTargetFor,
   RECORD_TYPES,
   recordTypeFeatureKey,
-} from '@openbooks/customization'
-import { featureEnabled, isFeatureEnabled, orgFeatureState } from '../features'
+} from "@openbooks/customization";
+import { featureEnabled, isFeatureEnabled, orgFeatureState } from "../features";
 import { notFound } from "@/lib/api/responses";
 
 /** False when this record type belongs to a Features switch that is off. */
 
 export async function isRecordTypeEnabled(orgId: string, recordType: string): Promise<boolean> {
-  const feature = recordTypeFeatureKey(recordType)
-  if (!feature) return true
-  return isFeatureEnabled(orgId, feature)
+  const feature = recordTypeFeatureKey(recordType);
+  if (!feature) return true;
+  return isFeatureEnabled(orgId, feature);
 }
 
 /** Optional-module record types whose Features switch is off. Historical rows stay. */
 export async function disabledRecordTypes(orgId: string): Promise<string[]> {
-  const state = await orgFeatureState(orgId)
+  const state = await orgFeatureState(orgId);
   return RECORD_TYPES.flatMap((rt) =>
     rt.featureKey && !featureEnabled(state, rt.featureKey) ? [rt.key] : [],
-  )
+  );
 }
 
 /**
@@ -34,21 +34,19 @@ export async function disabledRecordTypes(orgId: string): Promise<string[]> {
  * `crm_account_profiles` is CRM-only and is not a RECORD_TYPES customFieldTable.
  */
 export function customFieldTargetFeatureKey(table: string, kind?: string | null): string | null {
-  if (kind) return recordTypeFeatureKey(kind)
+  if (kind) return recordTypeFeatureKey(kind);
   const keys = new Set(
-    RECORD_TYPES
-      .filter((rt) => {
-        const target = customFieldTargetFor(rt.key)
-        return target.table === table || target.lineTable === table
-      })
-      .map((rt) => rt.featureKey ?? null),
-  )
+    RECORD_TYPES.filter((rt) => {
+      const target = customFieldTargetFor(rt.key);
+      return target.table === table || target.lineTable === table;
+    }).map((rt) => rt.featureKey ?? null),
+  );
   if (keys.size === 1) {
-    const [only] = keys
-    return only!
+    const [only] = keys;
+    return only!;
   }
-  if (table === 'crm_account_profiles') return 'crm'
-  return null
+  if (table === "crm_account_profiles") return "crm";
+  return null;
 }
 
 export async function isCustomFieldTargetEnabled(
@@ -57,23 +55,25 @@ export async function isCustomFieldTargetEnabled(
   kind?: string | null,
   executor?: SqlExecutor,
 ): Promise<boolean> {
-  const feature = customFieldTargetFeatureKey(table, kind)
-  if (!feature) return true
-  return isFeatureEnabled(orgId, feature, executor)
+  const feature = customFieldTargetFeatureKey(table, kind);
+  if (!feature) return true;
+  return isFeatureEnabled(orgId, feature, executor);
 }
 
 /** Tables / kinds whose Features switch is off. Historical defs stay. */
-export async function disabledCustomFieldTargets(orgId: string): Promise<{ kinds: string[]; tables: string[] }> {
-  const state = await orgFeatureState(orgId)
+export async function disabledCustomFieldTargets(
+  orgId: string,
+): Promise<{ kinds: string[]; tables: string[] }> {
+  const state = await orgFeatureState(orgId);
   return {
     kinds: RECORD_TYPES.flatMap((rt) =>
       rt.featureKey && !featureEnabled(state, rt.featureKey) ? [rt.key] : [],
     ),
     tables: CUSTOM_FIELD_TARGETS.map((target) => target.table).filter((table) => {
-      const key = customFieldTargetFeatureKey(table)
-      return Boolean(key && !featureEnabled(state, key))
+      const key = customFieldTargetFeatureKey(table);
+      return Boolean(key && !featureEnabled(state, key));
     }),
-  }
+  };
 }
 
 /** 404 when the kind belongs to a Features switch that is off. */
@@ -81,9 +81,9 @@ export async function refuseDisabledRecordType(
   orgId: string,
   recordType: string,
 ): Promise<NextResponse | null> {
-  if (!RECORD_TYPE_BY_KEY[recordType]) return null
+  if (!RECORD_TYPE_BY_KEY[recordType]) return null;
   if (!(await isRecordTypeEnabled(orgId, recordType))) {
-    return notFound("record")
+    return notFound("record");
   }
-  return null
+  return null;
 }

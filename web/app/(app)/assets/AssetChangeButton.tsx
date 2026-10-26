@@ -4,19 +4,11 @@ import type { GroupComponentInput } from "@openbooks/engine/assets/group-compone
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  Button,
-  Drawer,
-  Input,
-  Label,
-  SearchSelect,
-  Select,
-  Textarea,
-} from "@openbooks/ui";
+import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useDirtyClose } from "@/lib/use-dirty-close";
 import { useTranslations } from "next-intl";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 type Option = { value: string; label: string };
 type Setup = {
   subsidiaries: {
@@ -69,9 +61,7 @@ export function AssetChangeButton({
       }
     >
   >({});
-  const [plans, setPlans] = useState<
-    Record<string, { date: string; amount: string }[]>
-  >({});
+  const [plans, setPlans] = useState<Record<string, { date: string; amount: string }[]>>({});
   const [key, setKey] = useState(() => crypto.randomUUID());
   const [initialKey, setInitialKey] = useState(key);
   const set = (name: string, value: string) => {
@@ -82,7 +72,16 @@ export function AssetChangeButton({
     setOpen(false);
     setOperation("partial_disposal");
     setMode("percent");
-    setValues({ effectiveOn: today, percent: "", proceeds: "", buyerAmount: "", buyerSalvage: "", sellerToGroupRate: "", buyerToGroupRate: "", taxRatePercent: "" });
+    setValues({
+      effectiveOn: today,
+      percent: "",
+      proceeds: "",
+      buyerAmount: "",
+      buyerSalvage: "",
+      sellerToGroupRate: "",
+      buyerToGroupRate: "",
+      taxRatePercent: "",
+    });
     setComponents({});
     setPlans({});
     const freshKey = crypto.randomUUID();
@@ -90,8 +89,11 @@ export function AssetChangeButton({
     setKey(freshKey);
   };
   const closeGuard = useDirtyClose({
-    dirty: key !== initialKey, busy, onClose: closeDrawer,
-    message: tCommon("feedback.unsavedChanges"), confirmLabel: tCommon("confirm.discardChanges"),
+    dirty: key !== initialKey,
+    busy,
+    onClose: closeDrawer,
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
   });
   async function show() {
     setBusy(true);
@@ -173,8 +175,7 @@ export function AssetChangeButton({
                 books: setup!.books.map((b) => ({
                   bookId: b.id,
                   ...components[b.id],
-                  remainingProductionUnits:
-                    components[b.id]?.remainingProductionUnits || undefined,
+                  remainingProductionUnits: components[b.id]?.remainingProductionUnits || undefined,
                 })),
               },
         ...(operation === "intercompany_transfer"
@@ -206,9 +207,7 @@ export function AssetChangeButton({
                     "groupAssessment",
                   ].map((k) => [
                     k,
-                    k === "buyerProductionUnits" && !values[k]
-                      ? undefined
-                      : values[k],
+                    k === "buyerProductionUnits" && !values[k] ? undefined : values[k],
                   ]),
                 ),
                 lifeMonths: Number(values.lifeMonths),
@@ -268,9 +267,7 @@ export function AssetChangeButton({
                 }}
               >
                 <option value="partial_disposal">{t("partialDisposal")}</option>
-                <option value="intercompany_transfer">
-                  {t("intercompanyTransfer")}
-                </option>
+                <option value="intercompany_transfer">{t("intercompanyTransfer")}</option>
               </Select>
             </div>
             {field("effectiveOn", t("effectiveDate"), "date")}
@@ -333,10 +330,7 @@ export function AssetChangeButton({
                   {setup.groupBooks?.find((g) => g.book_id === b.id) ? (
                     <GroupComponentFields
                       value={components[b.id]?.group}
-                      currency={
-                        setup.groupBooks.find((g) => g.book_id === b.id)!
-                          .group_currency
-                      }
+                      currency={setup.groupBooks.find((g) => g.book_id === b.id)!.group_currency}
                       onward={operation === "intercompany_transfer"}
                       onChange={(group) => {
                         setComponents((v) => ({
@@ -361,9 +355,7 @@ export function AssetChangeButton({
             {field("proceeds", t("proceeds"))}
             {choice(
               "proceedsAccountId",
-              operation === "intercompany_transfer"
-                ? t("sellerDueFrom")
-                : t("proceedsAccount"),
+              operation === "intercompany_transfer" ? t("sellerDueFrom") : t("proceedsAccount"),
               accounts,
             )}
           </div>
@@ -411,32 +403,12 @@ export function AssetChangeButton({
                 {field("sellerToBuyerRate", t("sellerToBuyer"))}
                 {choice("ctaAccountId", t("ctaAccount"), accounts)}
                 {choice("groupAssetAccountId", t("groupAsset"), accounts)}
-                {choice(
-                  "groupAccumulatedAccountId",
-                  t("groupAccumulated"),
-                  accounts,
-                )}
-                {choice(
-                  "groupDepreciationAccountId",
-                  t("groupDepreciation"),
-                  accounts,
-                )}
-                {choice(
-                  "groupGainLossAccountId",
-                  t("groupGainLoss"),
-                  accounts,
-                )}
+                {choice("groupAccumulatedAccountId", t("groupAccumulated"), accounts)}
+                {choice("groupDepreciationAccountId", t("groupDepreciation"), accounts)}
+                {choice("groupGainLossAccountId", t("groupGainLoss"), accounts)}
                 {field("taxRatePercent", t("taxRate"))}
-                {choice(
-                  "deferredTaxAccountId",
-                  t("deferredTax"),
-                  accounts,
-                )}
-                {choice(
-                  "taxExpenseAccountId",
-                  t("taxExpense"),
-                  accounts,
-                )}
+                {choice("deferredTaxAccountId", t("deferredTax"), accounts)}
+                {choice("taxExpenseAccountId", t("taxExpense"), accounts)}
               </div>
               {memo("exchangeRateEvidence", t("fxEvidence"))}
               {memo("groupAssessment", t("groupAssessment"))}
@@ -454,9 +426,7 @@ export function AssetChangeButton({
                           onChange={(value) => {
                             setPlans((p) => ({
                               ...p,
-                              [b.id]: p[b.id]!.map((l, j) =>
-                                j === i ? { ...l, date: value } : l,
-                              ),
+                              [b.id]: p[b.id]!.map((l, j) => (j === i ? { ...l, date: value } : l)),
                             }));
                             setKey(crypto.randomUUID());
                           }}
@@ -493,10 +463,7 @@ export function AssetChangeButton({
                       onClick={() => {
                         setPlans((p) => ({
                           ...p,
-                          [b.id]: [
-                            ...(p[b.id] ?? []),
-                            { date: "", amount: "" },
-                          ],
+                          [b.id]: [...(p[b.id] ?? []), { date: "", amount: "" }],
                         }));
                         setKey(crypto.randomUUID());
                       }}

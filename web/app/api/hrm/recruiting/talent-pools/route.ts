@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  createTalentPool,
-  listTalentPools,
-} from "@openbooks/engine/hrm/recruiting/pools";
+import { createTalentPool, listTalentPools } from "@openbooks/engine/hrm/recruiting/pools";
 
 import { recruitingErrorResponse } from "../_lib";
 import { createTalentPoolBody } from "./bodies";

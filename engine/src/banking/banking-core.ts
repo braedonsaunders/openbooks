@@ -1,5 +1,5 @@
 /** Banking core: errors, statement types, context, scope SQL, actor helpers, and the two types shared parsers and import both point at. Split from banking.ts (pure moves only). */
-import { sql } from "drizzle-orm"
+import { sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -87,10 +87,7 @@ export function statementTotalsAgree(
   accountType: string,
 ): boolean {
   if (statementTotalUnits === journalTotalUnits) return true;
-  return (
-    statementComparisonSign(accountType) === -1
-    && statementTotalUnits === -journalTotalUnits
-  );
+  return statementComparisonSign(accountType) === -1 && statementTotalUnits === -journalTotalUnits;
 }
 
 export interface ParsedStatement {
@@ -131,7 +128,10 @@ export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "mt940" | "fe
 export const BANK_STATEMENT_PARSER_VERSION = "2026.10.1";
 
 export type StatementSourceContent = string | Uint8Array;
-export type StatementTextSource = Extract<StatementSource, "ofx" | "csv" | "camt053" | "bai2" | "mt940">;
+export type StatementTextSource = Extract<
+  StatementSource,
+  "ofx" | "csv" | "camt053" | "bai2" | "mt940"
+>;
 
 /** Exact source and transformation evidence retained for later audit. */
 export interface StatementSourceEvidence {

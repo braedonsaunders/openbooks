@@ -119,15 +119,70 @@ export function confidenceFromScore(score: number): string {
  * Sharing one says nothing about who was paid.
  */
 const CHANNEL_WORDS: ReadonlySet<string> = new Set([
-  "ach", "and", "atm", "auth", "bank", "bill", "card", "chq", "cheque", "check", "com", "corp", "credit",
-  "debit", "dep", "deposit", "direct", "eft", "etransfer", "fee", "fees", "for", "from", "inc", "int",
-  "interac", "llc", "ltd", "mastercard", "online", "payment", "pmt", "pos", "preauthorized", "purchase",
-  "pymt", "rec", "ref", "the", "transfer", "trf", "txn", "visa", "web", "wire", "withdrawal", "www",
-  "batch", "client", "customer", "invoice", "partial", "receipt", "receipts", "refund", "supplier", "vendor",
+  "ach",
+  "and",
+  "atm",
+  "auth",
+  "bank",
+  "bill",
+  "card",
+  "chq",
+  "cheque",
+  "check",
+  "com",
+  "corp",
+  "credit",
+  "debit",
+  "dep",
+  "deposit",
+  "direct",
+  "eft",
+  "etransfer",
+  "fee",
+  "fees",
+  "for",
+  "from",
+  "inc",
+  "int",
+  "interac",
+  "llc",
+  "ltd",
+  "mastercard",
+  "online",
+  "payment",
+  "pmt",
+  "pos",
+  "preauthorized",
+  "purchase",
+  "pymt",
+  "rec",
+  "ref",
+  "the",
+  "transfer",
+  "trf",
+  "txn",
+  "visa",
+  "web",
+  "wire",
+  "withdrawal",
+  "www",
+  "batch",
+  "client",
+  "customer",
+  "invoice",
+  "partial",
+  "receipt",
+  "receipts",
+  "refund",
+  "supplier",
+  "vendor",
 ]);
 
 function fold(text: string): string {
-  return text.normalize("NFKD").replace(/\p{M}+/gu, "").toLowerCase();
+  return text
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase();
 }
 
 /**
@@ -215,9 +270,15 @@ export function sharedReference(
   return null;
 }
 
-function counterpartyPoints(count: number, points: { counterpartyFirst: number; counterpartyEach: number; counterpartyMax: number }): number {
+function counterpartyPoints(
+  count: number,
+  points: { counterpartyFirst: number; counterpartyEach: number; counterpartyMax: number },
+): number {
   if (count === 0) return 0;
-  return Math.min(points.counterpartyMax, points.counterpartyFirst + points.counterpartyEach * (count - 1));
+  return Math.min(
+    points.counterpartyMax,
+    points.counterpartyFirst + points.counterpartyEach * (count - 1),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +310,8 @@ export interface PriorPayee {
 
 /** Date points: full marks on the same day, gently less per lagging day, steeply less per leading day. */
 export function datePoints(lagDays: number): number {
-  if (lagDays >= 0) return Math.max(0, LEDGER_POINTS.sameDay - LEDGER_POINTS.perLaggingDay * lagDays);
+  if (lagDays >= 0)
+    return Math.max(0, LEDGER_POINTS.sameDay - LEDGER_POINTS.perLaggingDay * lagDays);
   return Math.max(0, LEDGER_POINTS.sameDay - LEDGER_POINTS.perLeadingDay * -lagDays);
 }
 
@@ -279,8 +341,10 @@ export function scoreLedgerCandidate(
     reasons.push({ code: "shared_counterparty", tokens: shared });
   }
   if (
-    candidate.partyId
-    && priorPayees.some((prior) => prior.partyId === candidate.partyId && payeeTokensMatch(lineTokens, prior.tokens))
+    candidate.partyId &&
+    priorPayees.some(
+      (prior) => prior.partyId === candidate.partyId && payeeTokensMatch(lineTokens, prior.tokens),
+    )
   ) {
     score += LEDGER_POINTS.priorParty;
     reasons.push({ code: "prior_party" });
@@ -302,14 +366,16 @@ export interface PairProposal {
 
 /** The deterministic ranking used for one-to-one assignment. */
 export function comparePairProposals(a: PairProposal, b: PairProposal): number {
-  return b.score - a.score
-    || Number(b.preferred) - Number(a.preferred)
-    || Math.abs(a.lagDays) - Math.abs(b.lagDays)
-    || Number(b.lagDays >= 0) - Number(a.lagDays >= 0)
-    || a.lineOrder - b.lineOrder
-    || a.candidateOrder - b.candidateOrder
-    || (a.lineId < b.lineId ? -1 : a.lineId > b.lineId ? 1 : 0)
-    || (a.candidateId < b.candidateId ? -1 : a.candidateId > b.candidateId ? 1 : 0);
+  return (
+    b.score - a.score ||
+    Number(b.preferred) - Number(a.preferred) ||
+    Math.abs(a.lagDays) - Math.abs(b.lagDays) ||
+    Number(b.lagDays >= 0) - Number(a.lagDays >= 0) ||
+    a.lineOrder - b.lineOrder ||
+    a.candidateOrder - b.candidateOrder ||
+    (a.lineId < b.lineId ? -1 : a.lineId > b.lineId ? 1 : 0) ||
+    (a.candidateId < b.candidateId ? -1 : a.candidateId > b.candidateId ? 1 : 0)
+  );
 }
 
 /**
@@ -386,29 +452,50 @@ export interface OpenDocumentProposal {
   reasons: MatchReason[];
 }
 
-function dueDateReason(postedOn: string, dueDate: string | null): { points: number; reason: MatchReason | null; distance: number } {
+function dueDateReason(
+  postedOn: string,
+  dueDate: string | null,
+): { points: number; reason: MatchReason | null; distance: number } {
   if (!dueDate) return { points: 0, reason: null, distance: Number.MAX_SAFE_INTEGER };
   const days = calendarDaysBetween(dueDate, postedOn);
   const distance = Math.abs(days);
-  const points = distance <= 7 ? DOCUMENT_POINTS.dueWithinWeek : distance <= 30 ? DOCUMENT_POINTS.dueWithinMonth : 0;
+  const points =
+    distance <= 7
+      ? DOCUMENT_POINTS.dueWithinWeek
+      : distance <= 30
+        ? DOCUMENT_POINTS.dueWithinMonth
+        : 0;
   return { points, reason: points > 0 ? { code: "due_date", days } : null, distance };
 }
 
 function documentEvidence(line: SettlementLineFacts, doc: OpenDocumentFacts) {
-  const reference = sharedReference([line.description, line.counterpartyRef], [doc.documentNumber, doc.referenceNumber]);
-  const shared = sharedTokens(counterpartyTokens(line.description, line.counterpartyRef), counterpartyTokens(doc.partyName));
+  const reference = sharedReference(
+    [line.description, line.counterpartyRef],
+    [doc.documentNumber, doc.referenceNumber],
+  );
+  const shared = sharedTokens(
+    counterpartyTokens(line.description, line.counterpartyRef),
+    counterpartyTokens(doc.partyName),
+  );
   return { reference, shared, due: dueDateReason(line.postedOn, doc.dueDate) };
 }
 
 function compareDocuments(a: RankedOpenDocument, b: RankedOpenDocument): number {
-  return b.score - a.score
-    || (a.dueDate ?? "9999-12-31").localeCompare(b.dueDate ?? "9999-12-31")
-    || (a.documentNumber ?? a.entryNumber).localeCompare(b.documentNumber ?? b.entryNumber)
-    || (a.openLineId < b.openLineId ? -1 : a.openLineId > b.openLineId ? 1 : 0);
+  return (
+    b.score - a.score ||
+    (a.dueDate ?? "9999-12-31").localeCompare(b.dueDate ?? "9999-12-31") ||
+    (a.documentNumber ?? a.entryNumber).localeCompare(b.documentNumber ?? b.entryNumber) ||
+    (a.openLineId < b.openLineId ? -1 : a.openLineId > b.openLineId ? 1 : 0)
+  );
 }
 
 /** Exact-sum subsets of 2..maxSize items, bounded by a node budget so a large party never stalls the request. */
-function exactSubsets(items: readonly RankedOpenDocument[], target: bigint, maxSize: number, limit: number): RankedOpenDocument[][] {
+function exactSubsets(
+  items: readonly RankedOpenDocument[],
+  target: bigint,
+  maxSize: number,
+  limit: number,
+): RankedOpenDocument[][] {
   const sorted = [...items].sort((a, b) => {
     const delta = toUnits(b.transactionOpen) - toUnits(a.transactionOpen);
     return delta > 0n ? 1 : delta < 0n ? -1 : compareDocuments(a, b);
@@ -448,7 +535,12 @@ function exactSubsets(items: readonly RankedOpenDocument[], target: bigint, maxS
 export function rankOpenDocuments(
   line: SettlementLineFacts,
   candidates: readonly OpenDocumentFacts[],
-  options: { maxCombinationSize?: number; maxGroupItems?: number; maxProposals?: number; maxDocuments?: number } = {},
+  options: {
+    maxCombinationSize?: number;
+    maxGroupItems?: number;
+    maxProposals?: number;
+    maxDocuments?: number;
+  } = {},
 ): { proposals: OpenDocumentProposal[]; documents: RankedOpenDocument[] } {
   const maxCombinationSize = options.maxCombinationSize ?? 4;
   const maxGroupItems = options.maxGroupItems ?? 24;
@@ -528,7 +620,10 @@ export function rankOpenDocuments(
         applied: { [doc.openLineId]: fromUnits(target) },
         onAccount: fromUnits(0n),
         score: DOCUMENT_POINTS.partialOpenBalance + evidencePoints,
-        reasons: [{ code: "partial_open_balance", remaining: fromUnits(open - target) }, ...evidenceReasons],
+        reasons: [
+          { code: "partial_open_balance", remaining: fromUnits(open - target) },
+          ...evidenceReasons,
+        ],
       });
     } else if (open < target && reference && target - open <= open) {
       proposals.push({
@@ -540,7 +635,10 @@ export function rankOpenDocuments(
         applied: { [doc.openLineId]: fromUnits(open) },
         onAccount: fromUnits(target - open),
         score: DOCUMENT_POINTS.onAccountRemainder + evidencePoints,
-        reasons: [{ code: "on_account_remainder", remainder: fromUnits(target - open) }, ...evidenceReasons],
+        reasons: [
+          { code: "on_account_remainder", remainder: fromUnits(target - open) },
+          ...evidenceReasons,
+        ],
       });
     }
   }
@@ -558,7 +656,9 @@ export function rankOpenDocuments(
     for (const subset of exactSubsets(group, target, maxCombinationSize, 3)) {
       const reasons: MatchReason[] = [{ code: "combined_open_balance", count: subset.length }];
       let score = DOCUMENT_POINTS.combinedOpenBalance;
-      const withReference = subset.map((doc) => evidence.get(doc.openLineId)!.reference).find((value) => value !== null);
+      const withReference = subset
+        .map((doc) => evidence.get(doc.openLineId)!.reference)
+        .find((value) => value !== null);
       if (withReference) {
         score += DOCUMENT_POINTS.reference;
         reasons.push({ code: "shared_reference", reference: withReference });
@@ -583,7 +683,9 @@ export function rankOpenDocuments(
         partyName: ordered[0]!.partyName,
         total: fromUnits(target),
         settlement: "exact",
-        applied: Object.fromEntries(ordered.map((doc) => [doc.openLineId, fromUnits(toUnits(doc.transactionOpen))])),
+        applied: Object.fromEntries(
+          ordered.map((doc) => [doc.openLineId, fromUnits(toUnits(doc.transactionOpen))]),
+        ),
         onAccount: fromUnits(0n),
         score,
         reasons,
@@ -591,16 +693,20 @@ export function rankOpenDocuments(
     }
   }
 
-  const firstDue = (proposal: OpenDocumentProposal) => proposal.openLineIds
-    .map((id) => documents.find((doc) => doc.openLineId === id)?.dueDate ?? "9999-12-31")
-    .sort()[0]!;
+  const firstDue = (proposal: OpenDocumentProposal) =>
+    proposal.openLineIds
+      .map((id) => documents.find((doc) => doc.openLineId === id)?.dueDate ?? "9999-12-31")
+      .sort()[0]!;
   // An exact settlement always ranks above a part payment or overpayment.
   const exactFirst = (proposal: OpenDocumentProposal) => (proposal.settlement === "exact" ? 0 : 1);
-  proposals.sort((a, b) => exactFirst(a) - exactFirst(b)
-    || b.score - a.score
-    || a.openLineIds.length - b.openLineIds.length
-    || firstDue(a).localeCompare(firstDue(b))
-    || a.openLineIds.join(",").localeCompare(b.openLineIds.join(",")));
+  proposals.sort(
+    (a, b) =>
+      exactFirst(a) - exactFirst(b) ||
+      b.score - a.score ||
+      a.openLineIds.length - b.openLineIds.length ||
+      firstDue(a).localeCompare(firstDue(b)) ||
+      a.openLineIds.join(",").localeCompare(b.openLineIds.join(",")),
+  );
   const shownProposals = proposals.slice(0, options.maxProposals ?? 10);
   // Every document a shown proposal settles stays listed, so the reviewer
   // always sees (and the caller can quote) each balance being settled.
@@ -640,7 +746,13 @@ export function suggestOffsetFromHistory(
     if (!payeeTokensMatch(lineTokens, entryTokens)) continue;
     return {
       offsetAccountId: entry.offsetAccountId,
-      reasons: [{ code: "history_payee", tokens: sharedTokens(lineTokens, entryTokens), matchedOn: entry.matchedOn }],
+      reasons: [
+        {
+          code: "history_payee",
+          tokens: sharedTokens(lineTokens, entryTokens),
+          matchedOn: entry.matchedOn,
+        },
+      ],
     };
   }
   return null;
@@ -654,7 +766,11 @@ export function suggestOffsetFromHistory(
 export function parseStoredMatchReasons(value: unknown): MatchReason[] {
   if (!Array.isArray(value)) return [];
   const known = new Set<string>(MATCH_REASON_CODES);
-  return value.filter((entry): entry is MatchReason =>
-    entry !== null && typeof entry === "object" && typeof (entry as { code?: unknown }).code === "string"
-    && known.has((entry as { code: string }).code));
+  return value.filter(
+    (entry): entry is MatchReason =>
+      entry !== null &&
+      typeof entry === "object" &&
+      typeof (entry as { code?: unknown }).code === "string" &&
+      known.has((entry as { code: string }).code),
+  );
 }

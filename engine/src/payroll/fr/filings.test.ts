@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PayrollError } from "../error.ts";
-import {
-  assertFrFilingYearSupported,
-  parseFrRecapRowId,
-} from "./filings.ts";
+import { assertFrFilingYearSupported, parseFrRecapRowId } from "./filings.ts";
 
 /**
  * France year-end filing — row grammar and year coverage (no database).

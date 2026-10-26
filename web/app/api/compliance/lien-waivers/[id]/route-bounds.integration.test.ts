@@ -13,10 +13,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __lienWaiverPatchBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -30,7 +36,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PATCH } = await import("./route.ts");
 
 async function fixture(): Promise<{ orgId: string; waiverId: string }> {
@@ -39,18 +46,31 @@ async function fixture(): Promise<{ orgId: string; waiverId: string }> {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true, "projects": true}}'::jsonb where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true, "projects": true}}'::jsonb where id = ${org.orgId}`,
+    ),
   );
   const partyId = randomUUID();
   const projectId = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-    values (${partyId},${org.orgId},'vendor','Waiver vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
-    values (${projectId},${org.orgId},${org.subsidiaryId},'WAIVER','Waiver project',${org.customerId},'active',true,'{}'::jsonb)`));
-  const waiverId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+  await withBypassContext(() =>
+    db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${partyId},${org.orgId},'vendor','Waiver vendor',${org.subsidiaryId},true,'{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+    values (${projectId},${org.orgId},${org.subsidiaryId},'WAIVER','Waiver project',${org.customerId},'active',true,'{}'::jsonb)`),
+  );
+  const waiverId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
     insert into lien_waivers (org_id, waiver_number, direction, party_id, project_id, waiver_type, through_date, amount, currency, created_by, updated_by)
     values (${org.orgId}, 'W-1', 'received', ${partyId}, ${projectId}, 'conditional_progress', '2026-03-31', '1000.00', 'CAD', ${actorId}, ${actorId})
-    returning id`, "objects")))[0]!.id;
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
   return { orgId: org.orgId, waiverId };
 }
 
@@ -69,8 +89,10 @@ const patch = (waiverId: string, body: unknown) =>
 async function waiverOf(orgId: string, waiverId: string) {
   const rows = await withBypassContext(() =>
     db.execute<{ through_date: string; amount: string; status: string }>(
-      sql`select through_date::text as through_date, amount::text as amount, status from lien_waivers where org_id = ${orgId} and id = ${waiverId}`, "objects",
-    ));
+      sql`select through_date::text as through_date, amount::text as amount, status from lien_waivers where org_id = ${orgId} and id = ${waiverId}`,
+      "objects",
+    ),
+  );
   return rows[0]!;
 }
 
@@ -79,7 +101,11 @@ test("waiver update refuses a non-calendar through date without writing", async 
   try {
     const response = await patch(waiverId, { action: "update", throughDate: "2026-09-31" });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      400,
+      `expected 400, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal((await waiverOf(orgId, waiverId)).through_date, "2026-03-31");
   } finally {
@@ -92,7 +118,11 @@ test("waiver update refuses an amount wider than numeric(19,4) without writing",
   try {
     const response = await patch(waiverId, { action: "update", amount: "99999999999999999999.99" });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /numeric field overflow|Failed query/i);
     assert.equal(Number((await waiverOf(orgId, waiverId)).amount), 1000);
   } finally {
@@ -103,9 +133,17 @@ test("waiver update refuses an amount wider than numeric(19,4) without writing",
 test("waiver sign refuses a non-calendar signed date without writing", async () => {
   const { orgId, waiverId } = await fixture();
   try {
-    const response = await patch(waiverId, { action: "sign", signedByName: "Jane Doe", signedAt: "not-a-date" });
+    const response = await patch(waiverId, {
+      action: "sign",
+      signedByName: "Jane Doe",
+      signedAt: "not-a-date",
+    });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      400,
+      `expected 400, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal((await waiverOf(orgId, waiverId)).status, "draft");
   } finally {

@@ -41,7 +41,10 @@ async function seedTenant(client) {
      values ($1, 'List view tenant', 'CAD', 'CA', '{}'::jsonb, 'production')`,
     [orgId],
   );
-  for (const [id, name] of [[ownerId, "Owner"], [otherOwnerId, "Other owner"]]) {
+  for (const [id, name] of [
+    [ownerId, "Owner"],
+    [otherOwnerId, "Other owner"],
+  ]) {
     await client.query(
       `insert into users (id, org_id, email, name, password_hash, is_active)
        values ($1, $2, $3, $4, 'x', true)`,
@@ -62,7 +65,8 @@ async function insertListView(client, { orgId, name, scope, ownerId, isDefault, 
   return id;
 }
 
-test("a second live personal list-view default for the same owner and record type is refused",
+test(
+  "a second live personal list-view default for the same owner and record type is refused",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });
@@ -82,13 +86,36 @@ test("a second live personal list-view default for the same owner and record typ
 
       const tenant = await seedTenant(client);
       const firstId = await insertListView(client, {
-        orgId: tenant.orgId, name: "My invoices", scope: "user", ownerId: tenant.ownerId, isDefault: true, isActive: true,
+        orgId: tenant.orgId,
+        name: "My invoices",
+        scope: "user",
+        ownerId: tenant.ownerId,
+        isDefault: true,
+        isActive: true,
       });
       for (const admitted of [
-        { name: "Other owner invoices", scope: "user", ownerId: tenant.otherOwnerId, isDefault: true, isActive: true },
+        {
+          name: "Other owner invoices",
+          scope: "user",
+          ownerId: tenant.otherOwnerId,
+          isDefault: true,
+          isActive: true,
+        },
         { name: "Shared invoices", scope: "org", ownerId: null, isDefault: true, isActive: true },
-        { name: "Inactive personal", scope: "user", ownerId: tenant.ownerId, isDefault: true, isActive: false },
-        { name: "Non-default personal", scope: "user", ownerId: tenant.ownerId, isDefault: false, isActive: true },
+        {
+          name: "Inactive personal",
+          scope: "user",
+          ownerId: tenant.ownerId,
+          isDefault: true,
+          isActive: false,
+        },
+        {
+          name: "Non-default personal",
+          scope: "user",
+          ownerId: tenant.ownerId,
+          isDefault: false,
+          isActive: true,
+        },
       ]) {
         await insertListView(client, { orgId: tenant.orgId, ...admitted });
       }
@@ -96,7 +123,12 @@ test("a second live personal list-view default for the same owner and record typ
       await client.query("savepoint before_second_live_default");
       await assert.rejects(
         insertListView(client, {
-          orgId: tenant.orgId, name: "Second default", scope: "user", ownerId: tenant.ownerId, isDefault: true, isActive: true,
+          orgId: tenant.orgId,
+          name: "Second default",
+          scope: "user",
+          ownerId: tenant.ownerId,
+          isDefault: true,
+          isActive: true,
         }),
         (error) => {
           assert.equal(postgresCode(error), "23505");
@@ -111,7 +143,10 @@ test("a second live personal list-view default for the same owner and record typ
             and scope = 'user' and is_default and is_active`,
         [tenant.orgId, tenant.ownerId],
       );
-      assert.deepEqual(stored.rows.map((row) => row.id), [firstId]);
+      assert.deepEqual(
+        stored.rows.map((row) => row.id),
+        [firstId],
+      );
     } finally {
       await client.query("rollback").catch(() => undefined);
       await client.end();

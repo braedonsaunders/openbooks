@@ -71,8 +71,12 @@ function waiver(over: Partial<WaiverRecord> = {}): WaiverRecord {
   };
 }
 
-const evaluate = (p: RequirementPolicy, records: EvidenceRecord[], waivers: WaiverRecord[] = [], projectId: string | null = null) =>
-  evaluateRequirement({ policy: p, records, waivers, asOf: ASOF, projectId });
+const evaluate = (
+  p: RequirementPolicy,
+  records: EvidenceRecord[],
+  waivers: WaiverRecord[] = [],
+  projectId: string | null = null,
+) => evaluateRequirement({ policy: p, records, waivers, asOf: ASOF, projectId });
 
 // --- basic states ----------------------------------------------------------
 
@@ -118,7 +122,9 @@ test("unverified evidence does not count while the policy requires verification"
 });
 
 test("pending_review evidence never counts, even when verification is optional", () => {
-  const f = evaluate(policy({ requiresVerification: false }), [evidence({ status: "pending_review", verifiedAt: null })]);
+  const f = evaluate(policy({ requiresVerification: false }), [
+    evidence({ status: "pending_review", verifiedAt: null }),
+  ]);
   assert.equal(f.state, "awaiting_verification");
 });
 
@@ -135,7 +141,9 @@ test("superseded evidence answers for nothing", () => {
 });
 
 test("evidence dated in the future is not yet in force", () => {
-  const f = evaluate(policy(), [evidence({ effectiveFrom: "2026-09-01", expiresOn: "2027-09-01" })]);
+  const f = evaluate(policy(), [
+    evidence({ effectiveFrom: "2026-09-01", expiresOn: "2027-09-01" }),
+  ]);
   assert.equal(f.state, "insufficient");
   assert.ok(f.reasons.includes("not_yet_effective"));
 });
@@ -145,7 +153,12 @@ test("a policy that requires an expiry rejects evidence without one", () => {
   assert.equal(f.state, "insufficient");
   assert.ok(f.reasons.includes("expired"));
   // A W-9 has no expiry, and its policy says so.
-  assert.equal(evaluate(policy({ requiresExpiry: false, category: "tax_form" }), [evidence({ expiresOn: null })]).state, "compliant");
+  assert.equal(
+    evaluate(policy({ requiresExpiry: false, category: "tax_form" }), [
+      evidence({ expiresOn: null }),
+    ]).state,
+    "compliant",
+  );
 });
 
 // --- limits and endorsements ----------------------------------------------
@@ -157,12 +170,21 @@ test("coverage below the configured minimum is insufficient", () => {
   assert.deepEqual(short.reasons, ["coverage_below_minimum"]);
   assert.equal(short.blocksPayment, true);
   // Exactly at the limit satisfies it.
-  assert.equal(evaluate(p, [evidence({ coverageAmount: "2000000", coverageCurrency: "USD" })]).state, "compliant");
+  assert.equal(
+    evaluate(p, [evidence({ coverageAmount: "2000000", coverageCurrency: "USD" })]).state,
+    "compliant",
+  );
 });
 
 test("aggregate minimum is checked independently of per-occurrence", () => {
-  const p = policy({ minCoverageAmount: "1000000", minAggregateAmount: "2000000", coverageCurrency: "USD" });
-  const f = evaluate(p, [evidence({ coverageAmount: "1000000", aggregateAmount: "1000000", coverageCurrency: "USD" })]);
+  const p = policy({
+    minCoverageAmount: "1000000",
+    minAggregateAmount: "2000000",
+    coverageCurrency: "USD",
+  });
+  const f = evaluate(p, [
+    evidence({ coverageAmount: "1000000", aggregateAmount: "1000000", coverageCurrency: "USD" }),
+  ]);
   assert.deepEqual(f.reasons, ["aggregate_below_minimum"]);
 });
 
@@ -227,7 +249,10 @@ test("among equally compliant certificates the furthest expiry is reported", () 
 });
 
 test("a compliant certificate outranks a rejected one", () => {
-  const f = evaluate(policy(), [evidence({ id: "bad", status: "rejected" }), evidence({ id: "good" })]);
+  const f = evaluate(policy(), [
+    evidence({ id: "bad", status: "rejected" }),
+    evidence({ id: "good" }),
+  ]);
   assert.equal(f.state, "compliant");
   assert.equal(f.recordId, "good");
 });
@@ -253,8 +278,15 @@ test("an unexpired waiver suppresses the block but not the fact", () => {
 
 test("expired and revoked waivers do not suppress anything", () => {
   assert.equal(evaluate(policy(), [], [waiver({ expiresOn: "2026-06-01" })]).blocksPayment, true);
-  assert.equal(evaluate(policy(), [], [waiver({ effectiveFrom: "2026-08-01", expiresOn: "2026-09-01" })]).blocksPayment, true);
-  assert.equal(evaluate(policy(), [], [waiver({ revokedAt: "2026-06-15T00:00:00Z" })]).blocksPayment, true);
+  assert.equal(
+    evaluate(policy(), [], [waiver({ effectiveFrom: "2026-08-01", expiresOn: "2026-09-01" })])
+      .blocksPayment,
+    true,
+  );
+  assert.equal(
+    evaluate(policy(), [], [waiver({ revokedAt: "2026-06-15T00:00:00Z" })]).blocksPayment,
+    true,
+  );
 });
 
 test("a requested but unapproved exception covers nothing", () => {
@@ -320,7 +352,8 @@ test("a waiver never upgrades a passing state", () => {
 // --- enforcement levels --------------------------------------------------
 
 test("enforcement decides what a failure does", () => {
-  const missing = (enforcement: RequirementPolicy["enforcement"]) => evaluate(policy({ enforcement }), []);
+  const missing = (enforcement: RequirementPolicy["enforcement"]) =>
+    evaluate(policy({ enforcement }), []);
   assert.deepEqual(
     ["advisory", "warn", "block_payment", "block_bill"].map((e) => {
       const f = missing(e as RequirementPolicy["enforcement"]);
@@ -366,7 +399,10 @@ test("only policies for the vendor's class (or unscoped) apply", () => {
     waivers: [],
     asOf: ASOF,
   });
-  assert.deepEqual(status.findings.map((f) => f.code), ["GL", "W9"]);
+  assert.deepEqual(
+    status.findings.map((f) => f.code),
+    ["GL", "W9"],
+  );
   assert.deepEqual(status.blockingCodes, ["GL", "W9"]);
 });
 
@@ -456,7 +492,12 @@ test("a waiver in another currency is not a measurable release", () => {
 test("a waiver linked to the bill governs, even when a larger unlinked one exists", () => {
   const c = coverage({
     waivers: [
-      lien({ id: "linked", waiverNumber: "LW-LINK", billDocumentId: "bill-1", amount: "10000.0000" }),
+      lien({
+        id: "linked",
+        waiverNumber: "LW-LINK",
+        billDocumentId: "bill-1",
+        amount: "10000.0000",
+      }),
       lien({ id: "other", waiverNumber: "LW-OTHER", amount: "900000.0000" }),
     ],
   });
@@ -492,7 +533,10 @@ test("an unlinked project waiver still covers a bill with no linked waiver", () 
 
 test("the tightest sufficient waiver is the one reported", () => {
   const c = coverage({
-    waivers: [lien({ id: "big", waiverNumber: "LW-BIG", amount: "500000.0000" }), lien({ id: "fit", waiverNumber: "LW-FIT", amount: "50000.0000" })],
+    waivers: [
+      lien({ id: "big", waiverNumber: "LW-BIG", amount: "500000.0000" }),
+      lien({ id: "fit", waiverNumber: "LW-FIT", amount: "50000.0000" }),
+    ],
   });
   assert.equal(c.waiverNumber, "LW-FIT");
 });
@@ -572,7 +616,13 @@ test("bill release combines insurance and lien-waiver control", () => {
   const noWaiver = evaluateBillRelease({
     bill,
     policies: [policy()],
-    inputs: { classId: "class-trade", lienWaiverEnforcement: "block", records: [evidence()], waivers: [], lienWaivers: [] },
+    inputs: {
+      classId: "class-trade",
+      lienWaiverEnforcement: "block",
+      records: [evidence()],
+      waivers: [],
+      lienWaivers: [],
+    },
     asOf: ASOF,
   });
   assert.equal(noWaiver.decision, "blocked");
@@ -581,7 +631,13 @@ test("bill release combines insurance and lien-waiver control", () => {
   const wrongState = evaluateBillRelease({
     bill,
     policies: [policy()],
-    inputs: { classId: "class-trade", lienWaiverEnforcement: "block", records: [evidence()], waivers: [], lienWaivers: [lien({ jurisdiction: "US-NY" })] },
+    inputs: {
+      classId: "class-trade",
+      lienWaiverEnforcement: "block",
+      records: [evidence()],
+      waivers: [],
+      lienWaivers: [lien({ jurisdiction: "US-NY" })],
+    },
     asOf: ASOF,
     projectSiteJurisdiction: "US-CA",
   });
@@ -591,7 +647,13 @@ test("bill release combines insurance and lien-waiver control", () => {
   const lapsed = evaluateBillRelease({
     bill,
     policies: [policy()],
-    inputs: { classId: "class-trade", lienWaiverEnforcement: "none", records: [], waivers: [], lienWaivers: [] },
+    inputs: {
+      classId: "class-trade",
+      lienWaiverEnforcement: "none",
+      records: [],
+      waivers: [],
+      lienWaivers: [],
+    },
     asOf: ASOF,
   });
   assert.equal(lapsed.decision, "blocked");
@@ -612,7 +674,13 @@ test("a non-blocking failure warns instead of blocking, and advisory stays silen
   const warned = evaluateBillRelease({
     bill,
     policies: [policy({ enforcement: "warn" })],
-    inputs: { classId: "class-trade", lienWaiverEnforcement: "none", records: [], waivers: [], lienWaivers: [] },
+    inputs: {
+      classId: "class-trade",
+      lienWaiverEnforcement: "none",
+      records: [],
+      waivers: [],
+      lienWaivers: [],
+    },
     asOf: ASOF,
   });
   assert.equal(warned.decision, "warned");
@@ -621,7 +689,13 @@ test("a non-blocking failure warns instead of blocking, and advisory stays silen
   const advisory = evaluateBillRelease({
     bill,
     policies: [policy({ enforcement: "advisory" })],
-    inputs: { classId: "class-trade", lienWaiverEnforcement: "none", records: [], waivers: [], lienWaivers: [] },
+    inputs: {
+      classId: "class-trade",
+      lienWaiverEnforcement: "none",
+      records: [],
+      waivers: [],
+      lienWaivers: [],
+    },
     asOf: ASOF,
   });
   assert.equal(advisory.decision, "cleared");
@@ -641,7 +715,13 @@ test("an untracked vendor's lien-waiver enforcement is not applied", () => {
     },
     policies: [policy()],
     // A stale class-level setting must not survive un-classifying the vendor.
-    inputs: { classId: null, lienWaiverEnforcement: "block", records: [], waivers: [], lienWaivers: [] },
+    inputs: {
+      classId: null,
+      lienWaiverEnforcement: "block",
+      records: [],
+      waivers: [],
+      lienWaivers: [],
+    },
     asOf: ASOF,
   });
   assert.equal(decision.decision, "cleared");

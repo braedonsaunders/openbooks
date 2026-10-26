@@ -62,7 +62,10 @@ esac
     ["env_alpha", "env_bravo"].map(async (identity) => {
       const worktree = join(root, identity, "openbooks");
       await mkdir(join(worktree, "schema", "migrations", "generated"), { recursive: true });
-      await writeFile(join(worktree, "schema", "migrations", "generated", "0001_fixture.sql"), fixtureContents);
+      await writeFile(
+        join(worktree, "schema", "migrations", "generated", "0001_fixture.sql"),
+        fixtureContents,
+      );
       return { identity, worktree, tmp: await mkdtemp(join(root, `${identity}-tmp-`)) };
     }),
   );

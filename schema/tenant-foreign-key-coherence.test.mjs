@@ -95,12 +95,9 @@ test("every release-schema anchor edge is enumerated with one justified exceptio
     graph.filter(
       (foreignKey) =>
         /\borg_id\b/.test(tables.get(foreignKey.childTable) ?? "") &&
-        !/\borg_id\s+uuid[^\n,]*NOT NULL/i.test(
-          tables.get(foreignKey.childTable) ?? "",
-        ),
+        !/\borg_id\s+uuid[^\n,]*NOT NULL/i.test(tables.get(foreignKey.childTable) ?? ""),
     ).length,
     0,
     "every non-exception child must have a required organization key",
   );
-
 });

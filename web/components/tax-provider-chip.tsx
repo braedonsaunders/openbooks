@@ -1,30 +1,32 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Badge, Button } from '@openbooks/ui'
-import { confirmDialog } from '@/lib/confirm'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Badge, Button } from "@openbooks/ui";
+import { confirmDialog } from "@/lib/confirm";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 export interface TaxProviderChipRow {
-  id: string
-  status: string
-  lastError: string | null
+  id: string;
+  status: string;
+  lastError: string | null;
 }
 
 /** Badge vocabulary for commit rows, shared with the activity drawer. */
-export function providerCommitStatusVariant(status: string): 'success' | 'secondary' | 'warning' | 'outline' {
-  if (status === 'committed') return 'success'
-  if (status === 'failed') return 'warning'
-  if (status === 'pending') return 'secondary'
-  return 'outline'
+export function providerCommitStatusVariant(
+  status: string,
+): "success" | "secondary" | "warning" | "outline" {
+  if (status === "committed") return "success";
+  if (status === "failed") return "warning";
+  if (status === "pending") return "secondary";
+  return "outline";
 }
 
 /** A failed row retries; anything else is informational. */
 export function providerCommitRetryable(canRetry: boolean, status: string): boolean {
-  return canRetry && status === 'failed'
+  return canRetry && status === "failed";
 }
 
 /**
@@ -39,56 +41,56 @@ export function TaxProviderStatusChip({
   rows,
   canRetry,
 }: {
-  documentNumber: string
-  provider: string
-  rows: TaxProviderChipRow[]
-  canRetry: boolean
+  documentNumber: string;
+  provider: string;
+  rows: TaxProviderChipRow[];
+  canRetry: boolean;
 }) {
-  const t = useTranslations('tax.activity')
-  const tc = useTranslations('common')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  if (rows.length === 0) return null
-  const row = rows.find((candidate) => candidate.status === 'failed') ?? rows[0]!
-  const retryable = providerCommitRetryable(canRetry, row.status)
+  const t = useTranslations("tax.activity");
+  const tc = useTranslations("common");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (rows.length === 0) return null;
+  const row = rows.find((candidate) => candidate.status === "failed") ?? rows[0]!;
+  const retryable = providerCommitRetryable(canRetry, row.status);
 
   const retryNow = async () => {
     const confirmed = await confirmDialog({
-      title: t('retryConfirmTitle'),
-      message: t('retryConfirmDescription', { document: documentNumber, provider }),
-      confirmLabel: t('retryNow'),
-      cancelLabel: tc('actions.cancel'),
-    })
-    if (!confirmed) return
-    setBusy(true)
-    setError(null)
+      title: t("retryConfirmTitle"),
+      message: t("retryConfirmDescription", { document: documentNumber, provider }),
+      confirmLabel: t("retryNow"),
+      cancelLabel: tc("actions.cancel"),
+    });
+    if (!confirmed) return;
+    setBusy(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/tax/provider-transactions/${row.id}/retry`, { method: 'POST' })
+      const res = await fetch(`/api/tax/provider-transactions/${row.id}/retry`, { method: "POST" });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback.
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, t('retryFailed')))
-        return
+        setError(await readApiErrorMessage(res, t("retryFailed")));
+        return;
       }
-      toast.success(t('retryStarted'))
-      router.refresh()
+      toast.success(t("retryStarted"));
+      router.refresh();
     } catch {
-      setError(t('retryFailed'))
+      setError(t("retryFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Badge variant={providerCommitStatusVariant(row.status)}>{t(`status.${row.status}`)}</Badge>
-      {row.status === 'failed' && row.lastError && (
+      {row.status === "failed" && row.lastError && (
         <span className="text-sm text-muted-foreground">{row.lastError}</span>
       )}
       {retryable && (
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void retryNow()}>
-          {busy ? tc('actions.saving') : t('retryNow')}
+          {busy ? tc("actions.saving") : t("retryNow")}
         </Button>
       )}
       {error && (
@@ -97,5 +99,5 @@ export function TaxProviderStatusChip({
         </p>
       )}
     </div>
-  )
+  );
 }

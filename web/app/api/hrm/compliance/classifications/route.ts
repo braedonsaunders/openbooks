@@ -13,11 +13,7 @@ export const GET = defineRoute({
   feature: "hrmConstructionCompliance",
   handler: async ({ authz: gate }) => {
     try {
-      const classifications = await listClassifications(
-        db,
-        gate.user.orgId,
-        gate.user.id,
-      );
+      const classifications = await listClassifications(db, gate.user.orgId, gate.user.id);
       return NextResponse.json({ classifications });
     } catch (e) {
       return constructionErrorResponse(e);

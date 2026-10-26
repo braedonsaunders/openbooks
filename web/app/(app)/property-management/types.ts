@@ -49,7 +49,13 @@ export type DepositRow = SecurityDepositRow;
 export type CamPool = CamPoolRow;
 export type CamAllocation = CamAllocationRow;
 export type Money = (value: string | number, options?: { currency?: string }) => string;
-export type WorkspaceOption = { id: string; name: string; currency?: string; partyId?: string; openBalance?: string };
+export type WorkspaceOption = {
+  id: string;
+  name: string;
+  currency?: string;
+  partyId?: string;
+  openBalance?: string;
+};
 export type WorkspaceOptions = {
   subsidiaries: WorkspaceOption[];
   locations: WorkspaceOption[];

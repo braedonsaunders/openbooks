@@ -50,17 +50,25 @@ const searchItems: AssistantToolDef = {
       const like = `%${a.query}%`;
       where = sql`${where} and (i.code ilike ${like} or i.name ilike ${like})`;
     }
-    const rows = (await db.execute(sql`
+    const rows = await db.execute(
+      sql`
       select i.id, i.code, i.name, i.kind, i.category, i.unit,
              i.default_rate as "defaultRate", i.is_active as "isActive"
         from items i
        where ${where}
        order by i.name
        limit ${limit}
-    `, "objects"));
-    const total = (await db.execute<{ n: string }>(sql`
+    `,
+      "objects",
+    );
+    const total = (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*) as n from items i where ${where}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const count = Number(total?.n ?? 0);
     return {
       ok: true,
@@ -70,8 +78,10 @@ const searchItems: AssistantToolDef = {
         truncated: count > rows.length,
         items: rows.map((r) => ({
           ...(r as Record<string, unknown>),
-          defaultRate: (r as Record<string, unknown>).defaultRate === null
-            ? null : money((r as Record<string, unknown>).defaultRate),
+          defaultRate:
+            (r as Record<string, unknown>).defaultRate === null
+              ? null
+              : money((r as Record<string, unknown>).defaultRate),
         })),
         href: "/items",
       },
@@ -90,7 +100,9 @@ const getItem: AssistantToolDef = {
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { id: string };
-    const payload = await loadItem(a.id, authz.user.orgId, { customFieldViewer: customFieldViewerFor(authz) });
+    const payload = await loadItem(a.id, authz.user.orgId, {
+      customFieldViewer: customFieldViewerFor(authz),
+    });
     if (!payload) return { ok: false, error: "not_found" };
     const item = payload.item as Record<string, unknown>;
     return {
@@ -99,7 +111,8 @@ const getItem: AssistantToolDef = {
         ...item,
         default_rate: item.default_rate === null ? null : money(item.default_rate),
         default_cost: item.default_cost === null ? null : money(item.default_cost),
-        standalone_selling_price: item.standalone_selling_price === null ? null : money(item.standalone_selling_price),
+        standalone_selling_price:
+          item.standalone_selling_price === null ? null : money(item.standalone_selling_price),
         incomeAccountName: payload.incomeAccountName,
         expenseAccountName: payload.expenseAccountName,
         taxCodeName: payload.taxCodeName,
@@ -131,7 +144,8 @@ const inventoryLevels: AssistantToolDef = {
     let where = sql`m.org_id = ${authz.user.orgId} and m.status = 'posted' ${scope}`;
     if (a.itemId) where = sql`${where} and m.item_id = ${a.itemId}`;
     if (a.stockLocationId) where = sql`${where} and m.stock_location_id = ${a.stockLocationId}`;
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select i.id as item_id, i.code as item_code, i.name as item_name,
              sl.id as stock_location_id, sl.code as stock_location_code,
              coalesce(sum(m.quantity), 0) as quantity,
@@ -144,8 +158,12 @@ const inventoryLevels: AssistantToolDef = {
       having coalesce(sum(m.quantity), 0) <> 0
        order by i.name, sl.code
        limit ${limit + 1}
-    `, "objects");
-    const totals = (await db.execute<{ lines: string; quantity: string; value: string }>(sql`
+    `,
+      "objects",
+    );
+    const totals = (
+      await db.execute<{ lines: string; quantity: string; value: string }>(
+        sql`
       select count(*)::int as lines, coalesce(sum(sub.quantity), 0) as quantity,
              coalesce(sum(sub.value), 0) as value
         from (
@@ -155,7 +173,10 @@ const inventoryLevels: AssistantToolDef = {
            group by m.item_id, m.stock_location_id
           having coalesce(sum(m.quantity), 0) <> 0
         ) sub
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const page = assistantListPage(rows, limit, Number(totals?.lines ?? 0));
     return {
       ok: true,
@@ -183,7 +204,11 @@ const inventoryMovements: AssistantToolDef = {
   inputSchema: z.object({
     itemId: uuidInput.optional(),
     stockLocationId: uuidInput.optional(),
-    kind: z.string().max(40).optional().describe("Movement kind, e.g. receipt, issue, adjustment, transfer_in"),
+    kind: z
+      .string()
+      .max(40)
+      .optional()
+      .describe("Movement kind, e.g. receipt, issue, adjustment, transfer_in"),
     fromDate: dateInput.optional(),
     toDate: dateInput.optional(),
     limit: z.number().int().min(1).max(100).optional().describe("Default 25"),
@@ -208,7 +233,8 @@ const inventoryMovements: AssistantToolDef = {
     if (a.kind) where = sql`${where} and m.kind = ${a.kind}`;
     if (a.fromDate) where = sql`${where} and m.moved_at >= ${a.fromDate}::timestamptz`;
     if (a.toDate) where = sql`${where} and m.moved_at <= (${a.toDate}::date + interval '1 day')`;
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select m.id, m.kind, m.moved_at as "movedAt", m.quantity, m.unit_cost as "unitCost",
              m.total_value as "totalValue", m.status, m.memo,
              m.reversal_reason as "reversalReason",
@@ -220,13 +246,20 @@ const inventoryMovements: AssistantToolDef = {
        where ${where}
        order by m.moved_at desc, m.created_at desc
        limit ${limit}
-    `, "objects");
-    const totals = (await db.execute<{ n: string; quantity: string; value: string }>(sql`
+    `,
+      "objects",
+    );
+    const totals = (
+      await db.execute<{ n: string; quantity: string; value: string }>(
+        sql`
       select count(*) as n, coalesce(sum(m.quantity), 0) as quantity,
              coalesce(sum(m.total_value), 0) as value
         from inventory_movements m
        where ${where}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const total = Number(totals?.n ?? 0);
     return {
       ok: true,
@@ -280,7 +313,8 @@ const inventoryWritedowns: AssistantToolDef = {
     if (a.stockLocationId) where = sql`${where} and w.stock_location_id = ${a.stockLocationId}`;
     if (a.fromDate) where = sql`${where} and w.date >= ${a.fromDate}`;
     if (a.toDate) where = sql`${where} and w.date <= ${a.toDate}`;
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select w.id, w.date, w.kind, w.framework, w.quantity, w.previous_value as "previousValue",
              w.new_value as "newValue", w.amount, w.reversed_amount as "reversedAmount", w.memo,
              i.code as "itemCode", i.name as "itemName",
@@ -291,12 +325,19 @@ const inventoryWritedowns: AssistantToolDef = {
        where ${where}
        order by w.date desc, w.created_at desc
        limit ${limit}
-    `, "objects");
-    const totals = (await db.execute<{ n: string; amount: string }>(sql`
+    `,
+      "objects",
+    );
+    const totals = (
+      await db.execute<{ n: string; amount: string }>(
+        sql`
       select count(*) as n, coalesce(sum(w.amount), 0) as amount
         from inventory_writedowns w
        where ${where}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const total = Number(totals?.n ?? 0);
     return {
       ok: true,
@@ -321,12 +362,15 @@ const inventoryWritedowns: AssistantToolDef = {
 
 const resolveScanValue: AssistantToolDef = {
   name: "resolve_scan_value",
-  description: "Resolve one exact item, bin, lot, or serial scan value inside the current organization. Refuses ambiguous and unknown values. Read-only.",
+  description:
+    "Resolve one exact item, bin, lot, or serial scan value inside the current organization. Refuses ambiguous and unknown values. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["items.read"] },
   feature: "barcodeScanning",
   inputSchema: z.object({
-    field: z.enum(["item", "bin", "lot", "serial"]).describe("Which identifier the scan value is: item, bin, lot, or serial"),
+    field: z
+      .enum(["item", "bin", "lot", "serial"])
+      .describe("Which identifier the scan value is: item, bin, lot, or serial"),
     value: z.string().max(200).describe("The exact scanned value to resolve"),
     customerId: uuidInput.optional(),
     itemId: uuidInput.optional(),
@@ -349,7 +393,12 @@ const customerItemNumbers: AssistantToolDef = {
   inputSchema: z.object({ customerId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => ({
     ok: true,
-    data: await listCustomerItemRefs(db, authz.user.orgId, (raw as { customerId: string }).customerId, authz.allowedSubsidiaryIds),
+    data: await listCustomerItemRefs(
+      db,
+      authz.user.orgId,
+      (raw as { customerId: string }).customerId,
+      authz.allowedSubsidiaryIds,
+    ),
   }),
 };
 

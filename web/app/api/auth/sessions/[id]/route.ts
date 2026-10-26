@@ -2,19 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
-import {
-  currentUser,
-  revokeUserSession,
-  SESSION_COOKIE,
-} from "../../../../../lib/auth";
+import { currentUser, revokeUserSession, SESSION_COOKIE } from "../../../../../lib/auth";
 import { hasExpectedOrigin, secureCookiesEnabled } from "../../../../../lib/auth-policy";
-
 
 export const DELETE = defineRoute({
   public: "session",
   params: z.object({ id: z.string().regex(UUID_RE, "invalid session") }),
   handler: async ({ request, params }) => {
-    if (!hasExpectedOrigin(request)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    if (!hasExpectedOrigin(request))
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
     const user = await currentUser();
     if (!user?.sessionId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { id } = params;

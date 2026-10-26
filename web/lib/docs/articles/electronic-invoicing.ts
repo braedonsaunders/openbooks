@@ -1,14 +1,41 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const electronicInvoicing: DocArticle = {
-  slug: 'electronic-invoicing',
-  title: 'Electronic Invoicing',
-  category: 'transactions',
+  slug: "electronic-invoicing",
+  title: "Electronic Invoicing",
+  category: "transactions",
   order: 21,
-  summary: 'Enable electronic invoicing, configure sellers and recipients, validate and archive invoice XML or Factur-X PDFs, and review structured supplier invoices.',
-  updated: '2026-10-09',
-  keywords: ['e-invoice', 'einvoice', 'EN 16931', 'CII', 'UBL', 'XRechnung', 'eRechnung', 'Factur-X', 'ZUGFeRD', 'Peppol', 'PINT', 'NLCIUS', 'EHF', 'Germany', 'Australia', 'New Zealand', 'Singapore', 'XML', 'supplier invoice'],
-  related: ['sales-workflow', 'purchasing-workflow', 'tax-configuration', 'setup-billing-group', 'file-cabinet'],
+  summary:
+    "Enable electronic invoicing, configure sellers and recipients, validate and archive invoice XML or Factur-X PDFs, and review structured supplier invoices.",
+  updated: "2026-10-09",
+  keywords: [
+    "e-invoice",
+    "einvoice",
+    "EN 16931",
+    "CII",
+    "UBL",
+    "XRechnung",
+    "eRechnung",
+    "Factur-X",
+    "ZUGFeRD",
+    "Peppol",
+    "PINT",
+    "NLCIUS",
+    "EHF",
+    "Germany",
+    "Australia",
+    "New Zealand",
+    "Singapore",
+    "XML",
+    "supplier invoice",
+  ],
+  related: [
+    "sales-workflow",
+    "purchasing-workflow",
+    "tax-configuration",
+    "setup-billing-group",
+    "file-cabinet",
+  ],
   body: `# Electronic Invoicing
 
 Electronic invoicing prepares a structured invoice from an existing posted
@@ -94,4 +121,4 @@ Factur-X output includes the structured attachment and PDF/A-related metadata
 and preflight checks. Full PDF/A conformance requires independent validation of
 the completed file. The visible PDF and XML must describe the same transaction.
 `,
-}
+};

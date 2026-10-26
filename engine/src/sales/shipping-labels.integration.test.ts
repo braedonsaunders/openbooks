@@ -8,7 +8,11 @@ import { withSimClock } from "../platform/clock.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { createPickList, createShipment, releasePickList } from "./fulfillment.ts";
-import { createWarehouseOperator, confirmFixturePick, packFixtureShipment } from "../testing/warehouse-execution.ts";
+import {
+  createWarehouseOperator,
+  confirmFixturePick,
+  packFixtureShipment,
+} from "../testing/warehouse-execution.ts";
 import { moveHandlingUnit } from "./handling-units.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { reverseProjectGlEntryWithinTransaction } from "../journal/origin-entry.ts";
@@ -46,7 +50,8 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -72,9 +77,33 @@ function fakeEasyPost(labelPdf: Buffer): Server {
         json({
           id: SHIPMENT_ID,
           rates: [
-            { id: RATE_GROUND, carrier: "UPS", service: "Ground", rate: "9.87", currency: "CAD", delivery_days: 4, delivery_date: "2026-10-09T20:00:00Z" },
-            { id: RATE_PRIORITY, carrier: "USPS", service: "Priority", rate: "12.34", currency: "CAD", delivery_days: 2, delivery_date: "2026-10-07T20:00:00Z" },
-            { id: RATE_EXPRESS, carrier: "FedEx", service: "Overnight", rate: "38.00", currency: "CAD", delivery_days: 1, delivery_date: "2026-10-06T20:00:00Z" },
+            {
+              id: RATE_GROUND,
+              carrier: "UPS",
+              service: "Ground",
+              rate: "9.87",
+              currency: "CAD",
+              delivery_days: 4,
+              delivery_date: "2026-10-09T20:00:00Z",
+            },
+            {
+              id: RATE_PRIORITY,
+              carrier: "USPS",
+              service: "Priority",
+              rate: "12.34",
+              currency: "CAD",
+              delivery_days: 2,
+              delivery_date: "2026-10-07T20:00:00Z",
+            },
+            {
+              id: RATE_EXPRESS,
+              carrier: "FedEx",
+              service: "Overnight",
+              rate: "38.00",
+              currency: "CAD",
+              delivery_days: 1,
+              delivery_date: "2026-10-06T20:00:00Z",
+            },
           ],
         });
         return;
@@ -113,7 +142,9 @@ function fakeEasyPost(labelPdf: Buffer): Server {
       }
       const refreshTracker = req.method === "POST" && req.url === "/v2/trackers";
       if (refreshTracker) {
-        const tracker = (JSON.parse(body) as { tracker?: { tracking_code?: string; carrier?: string } }).tracker;
+        const tracker = (
+          JSON.parse(body) as { tracker?: { tracking_code?: string; carrier?: string } }
+        ).tracker;
         if (tracker?.tracking_code !== TRACKING || tracker.carrier !== "UPS") {
           res.statusCode = 422;
           json({ error: { message: "unknown carrier tracking reference" } });
@@ -128,7 +159,11 @@ function fakeEasyPost(labelPdf: Buffer): Server {
           shipment_id: SHIPMENT_ID,
           status: "delivered",
           tracking_details: [
-            { status: "in_transit", message: "Departed facility", datetime: "2026-10-04T10:00:00Z" },
+            {
+              status: "in_transit",
+              message: "Departed facility",
+              datetime: "2026-10-04T10:00:00Z",
+            },
             { status: "delivered", message: "Delivered", datetime: "2026-10-05T11:00:00Z" },
           ],
         });
@@ -141,10 +176,12 @@ function fakeEasyPost(labelPdf: Buffer): Server {
 }
 
 async function enableShipping(orgId: string): Promise<void> {
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
            || '{"orders": true, "warehousing": true, "fulfillment": true, "shippingHub": true}'::jsonb)
-     where id = ${orgId}`));
+     where id = ${orgId}`),
+  );
 }
 
 async function seedAccount(org: ScratchOrg, relaySecret: string | null): Promise<string> {
@@ -152,45 +189,69 @@ async function seedAccount(org: ScratchOrg, relaySecret: string | null): Promise
   const sealed = sealAccountSecrets(org.orgId, "test-key");
   // Seal the KNOWN test secret (not a fresh mint) so the test can sign with it.
   const webhookSealed = relaySecret ? sealRelayForTest(org.orgId, relaySecret) : null;
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into shipping_accounts (id, org_id, name, provider, mode, status, is_default, secrets, webhook_secret)
-    values (${accountId}, ${org.orgId}, 'Test aggregator', 'easypost', 'test', 'active', true, ${sealed}, ${webhookSealed})`));
-  await withBypassContext(() => db.execute(sql`
+    values (${accountId}, ${org.orgId}, 'Test aggregator', 'easypost', 'test', 'active', true, ${sealed}, ${webhookSealed})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into shipping_settings (org_id, shipping_expense_account_id, carrier_payable_account_id, default_account_id)
     values (${org.orgId}, ${org.accounts.freight}, ${org.accounts.ap}, ${accountId})
     on conflict (org_id) do update set shipping_expense_account_id = excluded.shipping_expense_account_id,
-      carrier_payable_account_id = excluded.carrier_payable_account_id, default_account_id = excluded.default_account_id`));
+      carrier_payable_account_id = excluded.carrier_payable_account_id, default_account_id = excluded.default_account_id`),
+  );
   return accountId;
 }
 
-test("reconnecting a carrier account preserves its default unless the operator changes it", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    await enableShipping(org.orgId);
-    const actorId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Carrier administrator"));
-    const accountId = await seedAccount(org, null);
-    const reconnect = (makeDefault?: boolean) => withOrg(org.orgId, () => db.transaction((tx) =>
-      connectShippingAccount(tx, org.orgId, actorId, {
-        accountId,
-        name: "Updated carrier",
-        provider: "easypost",
-        mode: "test",
-        ...(makeDefault === undefined ? {} : { makeDefault }),
-      })));
+test(
+  "reconnecting a carrier account preserves its default unless the operator changes it",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await enableShipping(org.orgId);
+      const actorId = await withBypassContext(() =>
+        createWarehouseOperator(org.orgId, "Carrier administrator"),
+      );
+      const accountId = await seedAccount(org, null);
+      const reconnect = (makeDefault?: boolean) =>
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            connectShippingAccount(tx, org.orgId, actorId, {
+              accountId,
+              name: "Updated carrier",
+              provider: "easypost",
+              mode: "test",
+              ...(makeDefault === undefined ? {} : { makeDefault }),
+            }),
+          ),
+        );
 
-    await reconnect();
-    const keptDefault = await withBypassContext(() => db.execute<{ is_default: boolean }>(sql`
-      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`, "objects"));
-    assert.equal(keptDefault[0]?.is_default, true);
+      await reconnect();
+      const keptDefault = await withBypassContext(() =>
+        db.execute<{ is_default: boolean }>(
+          sql`
+      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`,
+          "objects",
+        ),
+      );
+      assert.equal(keptDefault[0]?.is_default, true);
 
-    await reconnect(false);
-    const clearedDefault = await withBypassContext(() => db.execute<{ is_default: boolean }>(sql`
-      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`, "objects"));
-    assert.equal(clearedDefault[0]?.is_default, false);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+      await reconnect(false);
+      const clearedDefault = await withBypassContext(() =>
+        db.execute<{ is_default: boolean }>(
+          sql`
+      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`,
+          "objects",
+        ),
+      );
+      assert.equal(clearedDefault[0]?.is_default, false);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 function sealRelayForTest(orgId: string, plain: string): string {
   return sealJson({ relaySecret: plain }, { orgId, purpose: "shipping.account.secrets" });
@@ -218,18 +279,35 @@ async function issuedOrder(org: ScratchOrg, userId: string, number: string, item
   return { orderId, lineId };
 }
 
-async function draftShipment(org: ScratchOrg, userId: string, number: string, itemId: string): Promise<string> {
+async function draftShipment(
+  org: ScratchOrg,
+  userId: string,
+  number: string,
+  itemId: string,
+): Promise<string> {
   const { orderId, lineId } = await issuedOrder(org, userId, number, itemId);
   const bin = org.stockLocationId;
-  const pick = await withOrg(org.orgId, () => db.transaction((tx) => createPickList(tx, org.orgId, userId, {
-    salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: bin, quantity: "2" }], allowedSubsidiaryIds: null,
-  })));
+  const pick = await withOrg(org.orgId, () =>
+    db.transaction((tx) =>
+      createPickList(tx, org.orgId, userId, {
+        salesOrderId: orderId,
+        lines: [{ salesOrderLineId: lineId, binId: bin, quantity: "2" }],
+        allowedSubsidiaryIds: null,
+      }),
+    ),
+  );
   await releasePickList(org.orgId, userId, { pickListId: pick.id, allowedSubsidiaryIds: null });
   await confirmFixturePick(org.orgId, userId, pick.id);
-  const shipment = await withOrg(org.orgId, () => db.transaction((tx) => createShipment(tx, org.orgId, userId, {
-    pickListId: pick.id, allowedSubsidiaryIds: null,
-  })));
-  await withBypassContext(() => db.execute(sql`
+  const shipment = await withOrg(org.orgId, () =>
+    db.transaction((tx) =>
+      createShipment(tx, org.orgId, userId, {
+        pickListId: pick.id,
+        allowedSubsidiaryIds: null,
+      }),
+    ),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     update fulfillment_documents set ship_to_address = ${JSON.stringify({
       label: "Customer",
       line1: "417 Montgomery St",
@@ -238,116 +316,225 @@ async function draftShipment(org: ScratchOrg, userId: string, number: string, it
       region: "CA",
       postalCode: "94104",
       country: "US",
-    })}::jsonb where org_id = ${org.orgId} and document_id = ${shipment.id}`));
-  await withBypassContext(() => db.execute(sql`
+    })}::jsonb where org_id = ${org.orgId} and document_id = ${shipment.id}`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     update warehouses set address_line1 = '228 Park Ave S', city = 'New York',
       region = 'NY', postal_code = '10003', country = 'US'
-     where org_id = ${org.orgId}`));
-  shipmentUnits.set(shipment.id,await packFixtureShipment(org.orgId,userId,shipment.id,bin));
+     where org_id = ${org.orgId}`),
+  );
+  shipmentUnits.set(shipment.id, await packFixtureShipment(org.orgId, userId, shipment.id, bin));
   return shipment.id;
 }
 
-const shipmentUnits = new Map<string,string>();
-const callOpts = (baseUrl: string,shipmentId?:string) => ({ allowedSubsidiaryIds: null, transport: fetch, baseUrl,
-  ...(shipmentId?{handlingUnitId:shipmentUnits.get(shipmentId)!}:{}) });
-
-test("rate shopping ranks live rates and buying is idempotent with a balanced cost journal", { skip: !DB }, async () => {
-  const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
-  const baseUrl = await listen(server);
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    await enableShipping(org.orgId);
-    const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
-    await withBypassContext(() => receiveInventory(org.orgId, userId, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
-      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-    }));
-    await withBypassContext(() => db.execute(sql`
-      update items set weight = '0.5', weight_unit = 'kg' where org_id = ${org.orgId} and id = ${org.items.fifo}`));
-    const accountId = await seedAccount(org, null);
-    const shipmentId = await draftShipment(org, userId, "SO-SHIP-1", org.items.fifo);
-
-    const quote = await withOrg(org.orgId, () => db.transaction((tx) =>
-      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl,shipmentId) })));
-    assert.equal(quote.cached, false);
-    assert.equal(quote.rates.length, 3);
-    const [ground, priority, express] = quote.rates as unknown as [
-      { providerRateId: string; badges: string[] },
-      { providerRateId: string; badges: string[] },
-      { providerRateId: string; badges: string[] },
-    ];
-    assert.deepEqual(
-      [ground!.providerRateId, priority!.providerRateId, express!.providerRateId],
-      [RATE_GROUND, RATE_PRIORITY, RATE_EXPRESS],
-    );
-    assert.deepEqual(ground!.badges, ["cheapest"]);
-    assert.deepEqual(priority!.badges, ["best_value"]);
-    assert.deepEqual(express!.badges, ["fastest"]);
-    const repeat = await withOrg(org.orgId, () => db.transaction((tx) =>
-      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl,shipmentId) })));
-    assert.equal(repeat.cached, true);
-
-    const dock = randomUUID();
-    await withBypassContext(() => db.execute(sql`
-      insert into stock_locations(id,org_id,location_id,parent_id,code,kind,is_active)
-      values(${dock},${org.orgId},${org.locationId},${org.stockLocationId},'LABEL-DOCK','bin',true)`));
-    const unitId = shipmentUnits.get(shipmentId)!;
-    await moveHandlingUnit(org.orgId,userId,{unitId,toBinId:dock,date:org.date,
-      reason:'Move packed carton to dispatch dock',commandKey:randomUUID()});
-    let purchases = 0;
-    const transport:typeof fetch = async (...args) => { purchases++; return fetch(...args); };
-    await assert.rejects(withOrg(org.orgId,()=>db.transaction(tx=>buyShipmentLabel(tx,org.orgId,userId,{
-      shipmentId,providerRateId:RATE_GROUND,accountId,...callOpts(baseUrl,shipmentId),transport,
-    }))), (error:unknown) => error instanceof ShippingRefusal && error.code==='quote_expired');
-    assert.equal(purchases,0,'a changed handling-unit version cannot reach the carrier with an old quote');
-    const untouched = await withBypassContext(()=>db.execute(sql`
-      select id from shipment_labels where org_id=${org.orgId}`, "objects"));
-    assert.equal(untouched.length,0);
-    const refreshed = await withOrg(org.orgId,()=>db.transaction(tx=>getShipmentRates(tx,org.orgId,userId,{
-      shipmentId,accountId,...callOpts(baseUrl,shipmentId),
-    })));
-    assert.equal(refreshed.cached,false);
-
-    const buy = () => withOrg(org.orgId, () => db.transaction((tx) =>
-      buyShipmentLabel(tx, org.orgId, userId, { shipmentId, providerRateId: RATE_GROUND, accountId, ...callOpts(baseUrl,shipmentId) })));
-    const bought = await withSimClock(org.date, buy);
-    assert.equal(bought.duplicate, false);
-    assert.equal(bought.trackingNumber, TRACKING);
-    assert.equal(bought.amountMinor, 987n);
-    assert.ok(bought.costEntryId);
-
-    const again = await withSimClock(org.date, buy);
-    assert.equal(again.duplicate, true);
-    assert.equal(again.id, bought.id);
-    await assert.rejects(moveHandlingUnit(org.orgId,userId,{
-      unitId,toBinId:org.stockLocationId,date:org.date,reason:'Return carton to packing bin',commandKey:randomUUID(),
-    }), /Void.*label/i);
-    const physical = await withBypassContext(()=>db.execute<{current_stock_location_id:string}>(sql`
-      select current_stock_location_id from handling_units where org_id=${org.orgId} and id=${unitId}`, "objects"));
-    assert.equal(physical[0]!.current_stock_location_id,dock);
-
-    // One balanced cost journal: DR freight 9.87, CR payables 9.87.
-    const entries = await withBypassContext(() => db.execute<{ id: string; status: string }>(sql`
-      select id, status from journal_entries
-       where org_id = ${org.orgId} and origin = 'shipping_label'`, "objects"));
-    assert.equal(entries.length, 1);
-    const lines = await withBypassContext(() => db.execute<{ account_id: string; amount: string }>(sql`
-      select account_id, amount::text as amount from journal_lines
-       where org_id = ${org.orgId} and entry_id = ${entries[0]!.id} order by amount desc`, "objects"));
-    assert.deepEqual(
-      lines.map((line) => [line.account_id, line.amount]),
-      [[org.accounts.freight, "9.8700"], [org.accounts.ap, "-9.8700"]],
-    );
-    // The label PDF landed in the file cabinet.
-    const files = await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select f.id from files f join file_attachments fa on fa.file_id = f.id
-       where fa.org_id = ${org.orgId} and fa.target_table = 'shipment_labels'`, "objects"));
-    assert.equal(files.length, 1);
-  } finally {
-    await close(server);
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
+const shipmentUnits = new Map<string, string>();
+const callOpts = (baseUrl: string, shipmentId?: string) => ({
+  allowedSubsidiaryIds: null,
+  transport: fetch,
+  baseUrl,
+  ...(shipmentId ? { handlingUnitId: shipmentUnits.get(shipmentId)! } : {}),
 });
+
+test(
+  "rate shopping ranks live rates and buying is idempotent with a balanced cost journal",
+  { skip: !DB },
+  async () => {
+    const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
+    const baseUrl = await listen(server);
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await enableShipping(org.orgId);
+      const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
+      await withBypassContext(() =>
+        receiveInventory(org.orgId, userId, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          quantity: "10",
+          unitCost: "2",
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.clearing,
+          date: org.date,
+        }),
+      );
+      await withBypassContext(() =>
+        db.execute(sql`
+      update items set weight = '0.5', weight_unit = 'kg' where org_id = ${org.orgId} and id = ${org.items.fifo}`),
+      );
+      const accountId = await seedAccount(org, null);
+      const shipmentId = await draftShipment(org, userId, "SO-SHIP-1", org.items.fifo);
+
+      const quote = await withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          getShipmentRates(tx, org.orgId, userId, {
+            shipmentId,
+            accountId,
+            ...callOpts(baseUrl, shipmentId),
+          }),
+        ),
+      );
+      assert.equal(quote.cached, false);
+      assert.equal(quote.rates.length, 3);
+      const [ground, priority, express] = quote.rates as unknown as [
+        { providerRateId: string; badges: string[] },
+        { providerRateId: string; badges: string[] },
+        { providerRateId: string; badges: string[] },
+      ];
+      assert.deepEqual(
+        [ground!.providerRateId, priority!.providerRateId, express!.providerRateId],
+        [RATE_GROUND, RATE_PRIORITY, RATE_EXPRESS],
+      );
+      assert.deepEqual(ground!.badges, ["cheapest"]);
+      assert.deepEqual(priority!.badges, ["best_value"]);
+      assert.deepEqual(express!.badges, ["fastest"]);
+      const repeat = await withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          getShipmentRates(tx, org.orgId, userId, {
+            shipmentId,
+            accountId,
+            ...callOpts(baseUrl, shipmentId),
+          }),
+        ),
+      );
+      assert.equal(repeat.cached, true);
+
+      const dock = randomUUID();
+      await withBypassContext(() =>
+        db.execute(sql`
+      insert into stock_locations(id,org_id,location_id,parent_id,code,kind,is_active)
+      values(${dock},${org.orgId},${org.locationId},${org.stockLocationId},'LABEL-DOCK','bin',true)`),
+      );
+      const unitId = shipmentUnits.get(shipmentId)!;
+      await moveHandlingUnit(org.orgId, userId, {
+        unitId,
+        toBinId: dock,
+        date: org.date,
+        reason: "Move packed carton to dispatch dock",
+        commandKey: randomUUID(),
+      });
+      let purchases = 0;
+      const transport: typeof fetch = async (...args) => {
+        purchases++;
+        return fetch(...args);
+      };
+      await assert.rejects(
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            buyShipmentLabel(tx, org.orgId, userId, {
+              shipmentId,
+              providerRateId: RATE_GROUND,
+              accountId,
+              ...callOpts(baseUrl, shipmentId),
+              transport,
+            }),
+          ),
+        ),
+        (error: unknown) => error instanceof ShippingRefusal && error.code === "quote_expired",
+      );
+      assert.equal(
+        purchases,
+        0,
+        "a changed handling-unit version cannot reach the carrier with an old quote",
+      );
+      const untouched = await withBypassContext(() =>
+        db.execute(
+          sql`
+      select id from shipment_labels where org_id=${org.orgId}`,
+          "objects",
+        ),
+      );
+      assert.equal(untouched.length, 0);
+      const refreshed = await withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          getShipmentRates(tx, org.orgId, userId, {
+            shipmentId,
+            accountId,
+            ...callOpts(baseUrl, shipmentId),
+          }),
+        ),
+      );
+      assert.equal(refreshed.cached, false);
+
+      const buy = () =>
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            buyShipmentLabel(tx, org.orgId, userId, {
+              shipmentId,
+              providerRateId: RATE_GROUND,
+              accountId,
+              ...callOpts(baseUrl, shipmentId),
+            }),
+          ),
+        );
+      const bought = await withSimClock(org.date, buy);
+      assert.equal(bought.duplicate, false);
+      assert.equal(bought.trackingNumber, TRACKING);
+      assert.equal(bought.amountMinor, 987n);
+      assert.ok(bought.costEntryId);
+
+      const again = await withSimClock(org.date, buy);
+      assert.equal(again.duplicate, true);
+      assert.equal(again.id, bought.id);
+      await assert.rejects(
+        moveHandlingUnit(org.orgId, userId, {
+          unitId,
+          toBinId: org.stockLocationId,
+          date: org.date,
+          reason: "Return carton to packing bin",
+          commandKey: randomUUID(),
+        }),
+        /Void.*label/i,
+      );
+      const physical = await withBypassContext(() =>
+        db.execute<{ current_stock_location_id: string }>(
+          sql`
+      select current_stock_location_id from handling_units where org_id=${org.orgId} and id=${unitId}`,
+          "objects",
+        ),
+      );
+      assert.equal(physical[0]!.current_stock_location_id, dock);
+
+      // One balanced cost journal: DR freight 9.87, CR payables 9.87.
+      const entries = await withBypassContext(() =>
+        db.execute<{ id: string; status: string }>(
+          sql`
+      select id, status from journal_entries
+       where org_id = ${org.orgId} and origin = 'shipping_label'`,
+          "objects",
+        ),
+      );
+      assert.equal(entries.length, 1);
+      const lines = await withBypassContext(() =>
+        db.execute<{ account_id: string; amount: string }>(
+          sql`
+      select account_id, amount::text as amount from journal_lines
+       where org_id = ${org.orgId} and entry_id = ${entries[0]!.id} order by amount desc`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(
+        lines.map((line) => [line.account_id, line.amount]),
+        [
+          [org.accounts.freight, "9.8700"],
+          [org.accounts.ap, "-9.8700"],
+        ],
+      );
+      // The label PDF landed in the file cabinet.
+      const files = await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
+      select f.id from files f join file_attachments fa on fa.file_id = f.id
+       where fa.org_id = ${org.orgId} and fa.target_table = 'shipment_labels'`,
+          "objects",
+        ),
+      );
+      assert.equal(files.length, 1);
+    } finally {
+      await close(server);
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("voiding a label reverses its cost journal", { skip: !DB }, async () => {
   const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
@@ -356,184 +543,362 @@ test("voiding a label reverses its cost journal", { skip: !DB }, async () => {
   try {
     await enableShipping(org.orgId);
     const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
-    await withBypassContext(() => receiveInventory(org.orgId, userId, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
-      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-    }));
-    await withBypassContext(() => db.execute(sql`
-      update items set weight = '0.5', weight_unit = 'kg' where org_id = ${org.orgId} and id = ${org.items.fifo}`));
+    await withBypassContext(() =>
+      receiveInventory(org.orgId, userId, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "2",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      }),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
+      update items set weight = '0.5', weight_unit = 'kg' where org_id = ${org.orgId} and id = ${org.items.fifo}`),
+    );
     const accountId = await seedAccount(org, null);
     const shipmentId = await draftShipment(org, userId, "SO-SHIP-2", org.items.fifo);
-    await withOrg(org.orgId, () => db.transaction((tx) =>
-      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl,shipmentId) })));
-    const buy = () => withOrg(org.orgId, () => db.transaction((tx) =>
-      buyShipmentLabel(tx, org.orgId, userId, { shipmentId, providerRateId: RATE_GROUND, accountId, ...callOpts(baseUrl,shipmentId) })));
+    await withOrg(org.orgId, () =>
+      db.transaction((tx) =>
+        getShipmentRates(tx, org.orgId, userId, {
+          shipmentId,
+          accountId,
+          ...callOpts(baseUrl, shipmentId),
+        }),
+      ),
+    );
+    const buy = () =>
+      withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          buyShipmentLabel(tx, org.orgId, userId, {
+            shipmentId,
+            providerRateId: RATE_GROUND,
+            accountId,
+            ...callOpts(baseUrl, shipmentId),
+          }),
+        ),
+      );
     const bought = await withSimClock(org.date, buy);
 
-    const voided = await withSimClock(org.date, () => withOrg(org.orgId, () => db.transaction((tx) =>
-      voidShipmentLabel(tx, org.orgId, userId, { labelId: bought.id, reason: "customer cancelled the order", ...callOpts(baseUrl) }))));
+    const voided = await withSimClock(org.date, () =>
+      withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          voidShipmentLabel(tx, org.orgId, userId, {
+            labelId: bought.id,
+            reason: "customer cancelled the order",
+            ...callOpts(baseUrl),
+          }),
+        ),
+      ),
+    );
     assert.ok(voided.reversalEntryId);
 
-    const entries = await withBypassContext(() => db.execute<{ entry_number: string; status: string }>(sql`
+    const entries = await withBypassContext(() =>
+      db.execute<{ entry_number: string; status: string }>(
+        sql`
       select entry_number, status from journal_entries
-       where org_id = ${org.orgId} and origin = 'shipping_label' order by created_at`, "objects"));
-    assert.deepEqual(entries.map((row) => row.status), ["reversed", "posted"]);
-  } finally {
-    await close(server);
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
-
-test("label access and carrier adjustments honor shipment subsidiary scope", { skip: !DB }, async () => {
-  const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
-  const baseUrl = await listen(server);
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    await enableShipping(org.orgId);
-    const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
-    await withBypassContext(() => receiveInventory(org.orgId, userId, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
-      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-    }));
-    await withBypassContext(() => db.execute(sql`
-      update items set weight = '0.5', weight_unit = 'kg' where org_id = ${org.orgId} and id = ${org.items.fifo}`));
-    const accountId = await seedAccount(org, null);
-    const shipmentId = await draftShipment(org, userId, "SO-SHIP-SCOPE", org.items.fifo);
-    await withOrg(org.orgId, () => db.transaction((tx) =>
-      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl, shipmentId) })));
-    const bought = await withSimClock(org.date, () => withOrg(org.orgId, () => db.transaction((tx) =>
-      buyShipmentLabel(tx, org.orgId, userId, {
-        shipmentId,
-        providerRateId: RATE_GROUND,
-        accountId,
-        ...callOpts(baseUrl, shipmentId),
-      }))));
-    const deniedScope = new Set<string>();
-    const notFound = (error: unknown) => error instanceof ShippingRefusal && error.code === "not_found";
-
-    await assert.rejects(withOrg(org.orgId, () => readLabelFile(db, org.orgId, bought.id, deniedScope)), notFound);
-    await assert.rejects(withOrg(org.orgId, () => db.transaction((tx) => refreshLabelTracking(
-      tx,
-      org.orgId,
-      userId,
-      { labelId: bought.id, allowedSubsidiaryIds: deniedScope, baseUrl },
-    ))), notFound);
-
-    const adjustment = {
-      providerAdjustmentId: "adjustment-scope-1",
-      providerShipmentId: SHIPMENT_ID,
-      kind: "fuel",
-      amount: "2.50",
-      currency: "CAD",
-      occurredAt: org.date,
-    };
-    await assert.rejects(withOrg(org.orgId, () => db.transaction((tx) => importBillingAdjustments(
-      tx, org.orgId, userId, accountId, [adjustment], deniedScope,
-    ))), (error: unknown) => error instanceof ShippingRefusal && error.code === "adjustment_unknown");
-    const imported = await withOrg(org.orgId, () => db.transaction((tx) =>
-      importBillingAdjustments(tx, org.orgId, userId, accountId, [adjustment], null)));
-    assert.deepEqual(imported, { imported: 1, skipped: 0 });
-    const adjustmentId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select id from shipping_adjustments where org_id = ${org.orgId}
-       and provider_adjustment_id = ${adjustment.providerAdjustmentId}`, "objects")))[0]!.id;
-    await assert.rejects(withOrg(org.orgId, () => db.transaction((tx) =>
-      postBillingAdjustment(tx, org.orgId, userId, adjustmentId, deniedScope))), notFound);
-
-    const posted = await withSimClock(org.date, () => withOrg(org.orgId, () => db.transaction((tx) =>
-      postBillingAdjustment(tx, org.orgId, userId, adjustmentId, null))));
-    const reversed = await withOrg(org.orgId, () => db.transaction((tx) =>
-      reverseProjectGlEntryWithinTransaction(tx, org.orgId, userId, posted.entryId, "Correct carrier charge", org.date)));
-    assert.equal(reversed.status, "reversed");
-    const report = await withOrg(org.orgId, () => listAdjustmentsByCarrier(db, org.orgId, { from: org.date, to: org.date }));
-    assert.deepEqual(report, []);
-  } finally {
-    await close(server);
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
-
-test("a tracker delivery with a bad signature is refused and changes nothing", { skip: !DB }, async () => {
-  const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
-  const baseUrl = await listen(server);
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    await enableShipping(org.orgId);
-    const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
-    await withBypassContext(() => receiveInventory(org.orgId, userId, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
-      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-    }));
-    await withBypassContext(() => db.execute(sql`
-      update items set weight = '0.5', weight_unit = 'kg' where org_id = ${org.orgId} and id = ${org.items.fifo}`));
-    const relaySecret = "test-relay-secret";
-    const accountId = await seedAccount(org, relaySecret);
-    const shipmentId = await draftShipment(org, userId, "SO-SHIP-3", org.items.fifo);
-    await withOrg(org.orgId, () => db.transaction((tx) =>
-      getShipmentRates(tx, org.orgId, userId, { shipmentId, accountId, ...callOpts(baseUrl,shipmentId) })));
-    const buy = () => withOrg(org.orgId, () => db.transaction((tx) =>
-      buyShipmentLabel(tx, org.orgId, userId, { shipmentId, providerRateId: RATE_GROUND, accountId, ...callOpts(baseUrl,shipmentId) })));
-    const bought = await withSimClock(org.date, buy);
-
-    const rawBody = JSON.stringify({
-      id: "evt_attacker",
-      object: "Event",
-      description: "tracker.updated",
-      result: { id: "trk_test123", carrier: "UPS", tracking_code: TRACKING, status: "delivered", shipment_id: SHIPMENT_ID },
-    });
-    const t = String(Math.floor(Date.now() / 1000));
-    const badSignature = `t=${t},v1=${createHmac("sha256", "wrong-secret").update(`${t}.${rawBody}`, "utf8").digest("hex")}`;
-    await assert.rejects(
-      withOrg(org.orgId, () => db.transaction((tx) =>
-        handleTrackerDelivery(tx, org.orgId, userId, {
-          provider: "easypost",
-          headers: { "openbooks-signature": badSignature },
-          rawBody,
-          ...callOpts(baseUrl),
-        }))),
-      (error: unknown) => {
-        assert.ok(error instanceof ShippingRefusal);
-        assert.equal(error.code, "signature_invalid");
-        assert.equal(error.status, 401);
-        return true;
-      },
+       where org_id = ${org.orgId} and origin = 'shipping_label' order by created_at`,
+        "objects",
+      ),
     );
-    const untouched = await withBypassContext(() => db.execute<{ tracking_status: string }>(sql`
-      select tracking_status from shipment_labels where org_id = ${org.orgId} and id = ${bought.id}`, "objects"));
-    assert.equal(untouched[0]!.tracking_status, "pre_transit");
-
-    const goodSignature = `t=${t},v1=${createHmac("sha256", relaySecret).update(`${t}.${rawBody}`, "utf8").digest("hex")}`;
-    const delivered = await withOrg(org.orgId, () => db.transaction((tx) =>
-      handleTrackerDelivery(tx, org.orgId, userId, {
-        provider: "easypost",
-        headers: { "openbooks-signature": goodSignature },
-        rawBody,
-        ...callOpts(baseUrl),
-      })));
-    assert.equal(delivered.status, "ok");
-    if (delivered.status === "ok") assert.equal(delivered.trackingStatus, "delivered");
-
-    // Rotation retires the old secret at once; the new one verifies.
-    const rotated = await withOrg(org.orgId, () => db.transaction((tx) =>
-      rotateShippingRelaySecret(tx, org.orgId, userId, accountId)));
-    assert.notEqual(rotated.relaySecret, relaySecret);
-    const deliver = (headers: Record<string, string>) => withOrg(org.orgId, () => db.transaction((tx) =>
-      handleTrackerDelivery(tx, org.orgId, userId, { provider: "easypost", headers, rawBody, ...callOpts(baseUrl) })));
-    await assert.rejects(deliver({ "openbooks-signature": goodSignature }), (error: unknown) =>
-      error instanceof ShippingRefusal && error.code === "signature_invalid");
-    const rotatedSignature = `t=${t},v1=${createHmac("sha256", rotated.relaySecret).update(`${t}.${rawBody}`, "utf8").digest("hex")}`;
-    assert.equal((await deliver({ "openbooks-signature": rotatedSignature })).status, "ok");
-
-    // An account with no relay secret refuses every delivery, signed or not.
-    await withBypassContext(() => db.execute(sql`
-      update shipping_accounts set webhook_secret = null where org_id = ${org.orgId} and id = ${accountId}`));
-    await assert.rejects(deliver({}), (error: unknown) =>
-      error instanceof ShippingRefusal && error.code === "signature_required" && error.status === 401
-        && /Generate a relay secret/.test(error.remedy ?? ""));
+    assert.deepEqual(
+      entries.map((row) => row.status),
+      ["reversed", "posted"],
+    );
   } finally {
     await close(server);
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test(
+  "label access and carrier adjustments honor shipment subsidiary scope",
+  { skip: !DB },
+  async () => {
+    const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
+    const baseUrl = await listen(server);
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await enableShipping(org.orgId);
+      const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
+      await withBypassContext(() =>
+        receiveInventory(org.orgId, userId, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          quantity: "10",
+          unitCost: "2",
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.clearing,
+          date: org.date,
+        }),
+      );
+      await withBypassContext(() =>
+        db.execute(sql`
+      update items set weight = '0.5', weight_unit = 'kg' where org_id = ${org.orgId} and id = ${org.items.fifo}`),
+      );
+      const accountId = await seedAccount(org, null);
+      const shipmentId = await draftShipment(org, userId, "SO-SHIP-SCOPE", org.items.fifo);
+      await withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          getShipmentRates(tx, org.orgId, userId, {
+            shipmentId,
+            accountId,
+            ...callOpts(baseUrl, shipmentId),
+          }),
+        ),
+      );
+      const bought = await withSimClock(org.date, () =>
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            buyShipmentLabel(tx, org.orgId, userId, {
+              shipmentId,
+              providerRateId: RATE_GROUND,
+              accountId,
+              ...callOpts(baseUrl, shipmentId),
+            }),
+          ),
+        ),
+      );
+      const deniedScope = new Set<string>();
+      const notFound = (error: unknown) =>
+        error instanceof ShippingRefusal && error.code === "not_found";
+
+      await assert.rejects(
+        withOrg(org.orgId, () => readLabelFile(db, org.orgId, bought.id, deniedScope)),
+        notFound,
+      );
+      await assert.rejects(
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            refreshLabelTracking(tx, org.orgId, userId, {
+              labelId: bought.id,
+              allowedSubsidiaryIds: deniedScope,
+              baseUrl,
+            }),
+          ),
+        ),
+        notFound,
+      );
+
+      const adjustment = {
+        providerAdjustmentId: "adjustment-scope-1",
+        providerShipmentId: SHIPMENT_ID,
+        kind: "fuel",
+        amount: "2.50",
+        currency: "CAD",
+        occurredAt: org.date,
+      };
+      await assert.rejects(
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            importBillingAdjustments(tx, org.orgId, userId, accountId, [adjustment], deniedScope),
+          ),
+        ),
+        (error: unknown) => error instanceof ShippingRefusal && error.code === "adjustment_unknown",
+      );
+      const imported = await withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          importBillingAdjustments(tx, org.orgId, userId, accountId, [adjustment], null),
+        ),
+      );
+      assert.deepEqual(imported, { imported: 1, skipped: 0 });
+      const adjustmentId = (
+        await withBypassContext(() =>
+          db.execute<{ id: string }>(
+            sql`
+      select id from shipping_adjustments where org_id = ${org.orgId}
+       and provider_adjustment_id = ${adjustment.providerAdjustmentId}`,
+            "objects",
+          ),
+        )
+      )[0]!.id;
+      await assert.rejects(
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            postBillingAdjustment(tx, org.orgId, userId, adjustmentId, deniedScope),
+          ),
+        ),
+        notFound,
+      );
+
+      const posted = await withSimClock(org.date, () =>
+        withOrg(org.orgId, () =>
+          db.transaction((tx) => postBillingAdjustment(tx, org.orgId, userId, adjustmentId, null)),
+        ),
+      );
+      const reversed = await withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          reverseProjectGlEntryWithinTransaction(
+            tx,
+            org.orgId,
+            userId,
+            posted.entryId,
+            "Correct carrier charge",
+            org.date,
+          ),
+        ),
+      );
+      assert.equal(reversed.status, "reversed");
+      const report = await withOrg(org.orgId, () =>
+        listAdjustmentsByCarrier(db, org.orgId, { from: org.date, to: org.date }),
+      );
+      assert.deepEqual(report, []);
+    } finally {
+      await close(server);
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a tracker delivery with a bad signature is refused and changes nothing",
+  { skip: !DB },
+  async () => {
+    const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
+    const baseUrl = await listen(server);
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await enableShipping(org.orgId);
+      const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
+      await withBypassContext(() =>
+        receiveInventory(org.orgId, userId, {
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          quantity: "10",
+          unitCost: "2",
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.clearing,
+          date: org.date,
+        }),
+      );
+      await withBypassContext(() =>
+        db.execute(sql`
+      update items set weight = '0.5', weight_unit = 'kg' where org_id = ${org.orgId} and id = ${org.items.fifo}`),
+      );
+      const relaySecret = "test-relay-secret";
+      const accountId = await seedAccount(org, relaySecret);
+      const shipmentId = await draftShipment(org, userId, "SO-SHIP-3", org.items.fifo);
+      await withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          getShipmentRates(tx, org.orgId, userId, {
+            shipmentId,
+            accountId,
+            ...callOpts(baseUrl, shipmentId),
+          }),
+        ),
+      );
+      const buy = () =>
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            buyShipmentLabel(tx, org.orgId, userId, {
+              shipmentId,
+              providerRateId: RATE_GROUND,
+              accountId,
+              ...callOpts(baseUrl, shipmentId),
+            }),
+          ),
+        );
+      const bought = await withSimClock(org.date, buy);
+
+      const rawBody = JSON.stringify({
+        id: "evt_attacker",
+        object: "Event",
+        description: "tracker.updated",
+        result: {
+          id: "trk_test123",
+          carrier: "UPS",
+          tracking_code: TRACKING,
+          status: "delivered",
+          shipment_id: SHIPMENT_ID,
+        },
+      });
+      const t = String(Math.floor(Date.now() / 1000));
+      const badSignature = `t=${t},v1=${createHmac("sha256", "wrong-secret").update(`${t}.${rawBody}`, "utf8").digest("hex")}`;
+      await assert.rejects(
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            handleTrackerDelivery(tx, org.orgId, userId, {
+              provider: "easypost",
+              headers: { "openbooks-signature": badSignature },
+              rawBody,
+              ...callOpts(baseUrl),
+            }),
+          ),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof ShippingRefusal);
+          assert.equal(error.code, "signature_invalid");
+          assert.equal(error.status, 401);
+          return true;
+        },
+      );
+      const untouched = await withBypassContext(() =>
+        db.execute<{ tracking_status: string }>(
+          sql`
+      select tracking_status from shipment_labels where org_id = ${org.orgId} and id = ${bought.id}`,
+          "objects",
+        ),
+      );
+      assert.equal(untouched[0]!.tracking_status, "pre_transit");
+
+      const goodSignature = `t=${t},v1=${createHmac("sha256", relaySecret).update(`${t}.${rawBody}`, "utf8").digest("hex")}`;
+      const delivered = await withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          handleTrackerDelivery(tx, org.orgId, userId, {
+            provider: "easypost",
+            headers: { "openbooks-signature": goodSignature },
+            rawBody,
+            ...callOpts(baseUrl),
+          }),
+        ),
+      );
+      assert.equal(delivered.status, "ok");
+      if (delivered.status === "ok") assert.equal(delivered.trackingStatus, "delivered");
+
+      // Rotation retires the old secret at once; the new one verifies.
+      const rotated = await withOrg(org.orgId, () =>
+        db.transaction((tx) => rotateShippingRelaySecret(tx, org.orgId, userId, accountId)),
+      );
+      assert.notEqual(rotated.relaySecret, relaySecret);
+      const deliver = (headers: Record<string, string>) =>
+        withOrg(org.orgId, () =>
+          db.transaction((tx) =>
+            handleTrackerDelivery(tx, org.orgId, userId, {
+              provider: "easypost",
+              headers,
+              rawBody,
+              ...callOpts(baseUrl),
+            }),
+          ),
+        );
+      await assert.rejects(
+        deliver({ "openbooks-signature": goodSignature }),
+        (error: unknown) => error instanceof ShippingRefusal && error.code === "signature_invalid",
+      );
+      const rotatedSignature = `t=${t},v1=${createHmac("sha256", rotated.relaySecret).update(`${t}.${rawBody}`, "utf8").digest("hex")}`;
+      assert.equal((await deliver({ "openbooks-signature": rotatedSignature })).status, "ok");
+
+      // An account with no relay secret refuses every delivery, signed or not.
+      await withBypassContext(() =>
+        db.execute(sql`
+      update shipping_accounts set webhook_secret = null where org_id = ${org.orgId} and id = ${accountId}`),
+      );
+      await assert.rejects(
+        deliver({}),
+        (error: unknown) =>
+          error instanceof ShippingRefusal &&
+          error.code === "signature_required" &&
+          error.status === 401 &&
+          /Generate a relay secret/.test(error.remedy ?? ""),
+      );
+    } finally {
+      await close(server);
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("rating refuses by name when an item has no weight", { skip: !DB }, async () => {
   const server = fakeEasyPost(Buffer.from("%PDF-1.4 test label", "utf8"));
@@ -543,19 +908,30 @@ test("rating refuses by name when an item has no weight", { skip: !DB }, async (
     await enableShipping(org.orgId);
     const userId = await withBypassContext(() => createWarehouseOperator(org.orgId, "Shipper"));
     const lightItem = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into items (id, org_id, kind, code, name, income_account_id, created_by)
-      values (${lightItem}, ${org.orgId}, 'inventory', 'WIDGET-LIGHT', 'Feather widget', ${org.accounts.revenue}, ${userId})`));
-    await withBypassContext(() => db.execute(sql`
+      values (${lightItem}, ${org.orgId}, 'inventory', 'WIDGET-LIGHT', 'Feather widget', ${org.accounts.revenue}, ${userId})`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into item_inventory_profiles
         (id, org_id, item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
          variance_account_id, received_not_billed_account_id, base_unit, unit_conversions)
       values (${randomUUID()}, ${org.orgId}, ${lightItem}, 'fifo', 'none', ${org.accounts.invAsset}, ${org.accounts.cogs},
-              ${org.accounts.adjustment}, ${org.accounts.adjustment}, ${org.accounts.clearing}, 'ea', '{}'::jsonb)`));
-    await withBypassContext(() => receiveInventory(org.orgId, userId, {
-      itemId: lightItem, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
-      subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-    }));
+              ${org.accounts.adjustment}, ${org.accounts.adjustment}, ${org.accounts.clearing}, 'ea', '{}'::jsonb)`),
+    );
+    await withBypassContext(() =>
+      receiveInventory(org.orgId, userId, {
+        itemId: lightItem,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "2",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      }),
+    );
     const accountId = await seedAccount(org, null);
     // The weightless item ships through a non-stock line on its own order.
     const orderId = randomUUID();
@@ -575,33 +951,65 @@ test("rating refuses by name when an item has no weight", { skip: !DB }, async (
         update documents set status = 'approved', subtotal = '20', total = '20'
          where id = ${orderId} and org_id = ${org.orgId}`);
     });
-    const pick = await withOrg(org.orgId, () => db.transaction((tx) => createPickList(tx, org.orgId, userId, {
-      salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: org.stockLocationId, quantity: "1" }],
-      allowedSubsidiaryIds: null,
-    })));
+    const pick = await withOrg(org.orgId, () =>
+      db.transaction((tx) =>
+        createPickList(tx, org.orgId, userId, {
+          salesOrderId: orderId,
+          lines: [{ salesOrderLineId: lineId, binId: org.stockLocationId, quantity: "1" }],
+          allowedSubsidiaryIds: null,
+        }),
+      ),
+    );
     await releasePickList(org.orgId, userId, { pickListId: pick.id, allowedSubsidiaryIds: null });
     await confirmFixturePick(org.orgId, userId, pick.id);
-    const shipment = await withOrg(org.orgId, () => db.transaction((tx) => createShipment(tx, org.orgId, userId, {
-      pickListId: pick.id, allowedSubsidiaryIds: null,
-    })));
-    await withBypassContext(() => db.execute(sql`
+    const shipment = await withOrg(org.orgId, () =>
+      db.transaction((tx) =>
+        createShipment(tx, org.orgId, userId, {
+          pickListId: pick.id,
+          allowedSubsidiaryIds: null,
+        }),
+      ),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       update fulfillment_documents set ship_to_address = ${JSON.stringify({
-        label: "Customer", line1: "417 Montgomery St", line2: null, city: "San Francisco",
-        region: "CA", postalCode: "94104", country: "US",
-      })}::jsonb where org_id = ${org.orgId} and document_id = ${shipment.id}`));
-    await withBypassContext(() => db.execute(sql`
+        label: "Customer",
+        line1: "417 Montgomery St",
+        line2: null,
+        city: "San Francisco",
+        region: "CA",
+        postalCode: "94104",
+        country: "US",
+      })}::jsonb where org_id = ${org.orgId} and document_id = ${shipment.id}`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       update warehouses set address_line1 = '228 Park Ave S', city = 'New York',
-        region = 'NY', postal_code = '10003', country = 'US' where org_id = ${org.orgId}`));
+        region = 'NY', postal_code = '10003', country = 'US' where org_id = ${org.orgId}`),
+    );
 
-    shipmentUnits.set(shipment.id,await packFixtureShipment(org.orgId,userId,shipment.id,org.stockLocationId));
+    shipmentUnits.set(
+      shipment.id,
+      await packFixtureShipment(org.orgId, userId, shipment.id, org.stockLocationId),
+    );
 
     await assert.rejects(
-      withOrg(org.orgId, () => db.transaction((tx) =>
-        getShipmentRates(tx, org.orgId, userId, { shipmentId: shipment.id, accountId, ...callOpts(baseUrl,shipment.id) }))),
+      withOrg(org.orgId, () =>
+        db.transaction((tx) =>
+          getShipmentRates(tx, org.orgId, userId, {
+            shipmentId: shipment.id,
+            accountId,
+            ...callOpts(baseUrl, shipment.id),
+          }),
+        ),
+      ),
       (error: unknown) => {
         assert.ok(error instanceof ShippingRefusal);
         assert.equal(error.code, "weight_missing");
-        assert.match(error.message, /Set a weight on item WIDGET-LIGHT \(Feather widget\) or choose a package preset/);
+        assert.match(
+          error.message,
+          /Set a weight on item WIDGET-LIGHT \(Feather widget\) or choose a package preset/,
+        );
         assert.match(error.remedy ?? "", /Enter the weight on WIDGET-LIGHT/);
         return true;
       },

@@ -22,7 +22,9 @@ const HOME_USER = "00000000-0000-4000-8000-00000000d002";
 const SANDBOX_ORG = "00000000-0000-4000-8000-00000000d003";
 
 const mocks = new Map<string, string>([
-  ["mock:headers", `
+  [
+    "mock:headers",
+    `
     const state = globalThis[Symbol.for('openbooks.active-workspace-test')]
     export async function cookies() {
       return {
@@ -30,19 +32,26 @@ const mocks = new Map<string, string>([
         delete(name) { state.cookieDeletes.push(name) },
       }
     }
-  `],
-  ["mock:auth", `
+  `,
+  ],
+  [
+    "mock:auth",
+    `
     export const ACTIVE_ENV_COOKIE_NAME = 'ob_active_env'
     export const SESSION_TTL_S = 1209600
     export function makeEnvToken(orgId) { return 'signed:' + orgId }
-  `],
-  ["mock:org-access", `
+  `,
+  ],
+  [
+    "mock:org-access",
+    `
     const state = globalThis[Symbol.for('openbooks.active-workspace-test')]
     export async function resolveActiveEnv(home, orgId) {
       state.resolveCalls.push(orgId)
       return state.resolved
     }
-  `],
+  `,
+  ],
 ]);
 const mockUrls = new Map<string, string>([
   ["next/headers", "mock:headers"],
@@ -53,7 +62,8 @@ const mockUrls = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier);
-    if (mocked && context.parentURL?.includes("/active-workspace.ts")) return { url: mocked, shortCircuit: true };
+    if (mocked && context.parentURL?.includes("/active-workspace.ts"))
+      return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -63,10 +73,14 @@ const hooks = registerHooks({
   },
 });
 const moduleUrl = "./active-workspace.ts?active-workspace-test";
-const { switchActiveWorkspace } = (await import(moduleUrl)) as typeof import("./active-workspace.ts");
+const { switchActiveWorkspace } = (await import(
+  moduleUrl
+)) as typeof import("./active-workspace.ts");
 hooks.deregister();
 
-const authz = { user: { homeUserId: HOME_USER, homeOrgId: HOME_ORG, isSuperAdmin: false } } as Parameters<typeof switchActiveWorkspace>[0];
+const authz = {
+  user: { homeUserId: HOME_USER, homeOrgId: HOME_ORG, isSuperAdmin: false },
+} as Parameters<typeof switchActiveWorkspace>[0];
 
 function reset(): void {
   state.resolveCalls = [];
@@ -78,7 +92,11 @@ function reset(): void {
 test("a malformed workspace id is refused before the resolver sees it", async () => {
   reset();
   for (const bad of ["not-a-uuid", "", `${SANDBOX_ORG}'--`, "../etc", null, 42]) {
-    assert.deepEqual(await switchActiveWorkspace(authz, bad), { ok: false, reason: "invalid" }, `orgId ${JSON.stringify(bad)}`);
+    assert.deepEqual(
+      await switchActiveWorkspace(authz, bad),
+      { ok: false, reason: "invalid" },
+      `orgId ${JSON.stringify(bad)}`,
+    );
   }
   assert.deepEqual(state.resolveCalls, [], "the resolver never received an unvalidated id");
   assert.deepEqual(state.cookieSets, []);
@@ -87,7 +105,10 @@ test("a malformed workspace id is refused before the resolver sees it", async ()
 
 test("a workspace the resolver does not admit is refused and the cookie is untouched", async () => {
   reset();
-  assert.deepEqual(await switchActiveWorkspace(authz, SANDBOX_ORG), { ok: false, reason: "no-access" });
+  assert.deepEqual(await switchActiveWorkspace(authz, SANDBOX_ORG), {
+    ok: false,
+    reason: "no-access",
+  });
   assert.deepEqual(state.resolveCalls, [SANDBOX_ORG]);
   assert.deepEqual(state.cookieSets, []);
   assert.deepEqual(state.cookieDeletes, []);
@@ -99,7 +120,10 @@ test("entering another workspace sets the signed cookie under the shared secure-
   const previous = process.env.OPENBOOKS_COOKIE_SECURE;
   process.env.OPENBOOKS_COOKIE_SECURE = "1";
   try {
-    assert.deepEqual(await switchActiveWorkspace(authz, SANDBOX_ORG), { ok: true, orgId: SANDBOX_ORG });
+    assert.deepEqual(await switchActiveWorkspace(authz, SANDBOX_ORG), {
+      ok: true,
+      orgId: SANDBOX_ORG,
+    });
   } finally {
     if (previous === undefined) delete process.env.OPENBOOKS_COOKIE_SECURE;
     else process.env.OPENBOOKS_COOKIE_SECURE = previous;
@@ -111,7 +135,11 @@ test("entering another workspace sets the signed cookie under the shared secure-
   assert.equal(cookie!.options.httpOnly, true);
   assert.equal(cookie!.options.sameSite, "lax");
   assert.equal(cookie!.options.path, "/");
-  assert.equal(cookie!.options.secure, true, "OPENBOOKS_COOKIE_SECURE=1 must produce a Secure cookie outside production");
+  assert.equal(
+    cookie!.options.secure,
+    true,
+    "OPENBOOKS_COOKIE_SECURE=1 must produce a Secure cookie outside production",
+  );
 });
 
 test("returning to the home organization clears the cookie", async () => {

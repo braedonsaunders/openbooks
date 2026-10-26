@@ -41,7 +41,8 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../messages/en")).default;
 const { PartyRelationshipSection } = await import("./PartyRelationshipSection");
-const { RecordSaveContext, useRecordSaveRegistry } = await import("../../../components/record-save-participants");
+const { RecordSaveContext, useRecordSaveRegistry } =
+  await import("../../../components/record-save-participants");
 
 type Registry = ReturnType<typeof useRecordSaveRegistry>;
 let recordSave: Registry | null = null;
@@ -49,8 +50,12 @@ let recordSave: Registry | null = null;
 /** The record drawer's side of the contract: one registry, one Save. */
 function RecordHost({ children }: { children: React.ReactNode }) {
   const registry = useRecordSaveRegistry(true);
-  React.useLayoutEffect(() => { recordSave = registry; }, [registry]);
-  return <RecordSaveContext.Provider value={registry.context}>{children}</RecordSaveContext.Provider>;
+  React.useLayoutEffect(() => {
+    recordSave = registry;
+  }, [registry]);
+  return (
+    <RecordSaveContext.Provider value={registry.context}>{children}</RecordSaveContext.Provider>
+  );
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -80,10 +85,14 @@ const PROFILE = {
   updated_at: "2026-09-17T12:00:00.000000Z",
 };
 
-function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
+function scriptFetch(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null,
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -178,7 +187,11 @@ test("after a successful start the profile renders and Start tracking is gone", 
 
   assert.equal(posts, 1, "the re-read after success is a GET, never a second POST");
   assert.ok(gets >= 2, "the section re-read its own state after the POST");
-  assert.equal(buttonsNamed("Start tracking").length, 0, "Start tracking is gone once the profile renders");
+  assert.equal(
+    buttonsNamed("Start tracking").length,
+    0,
+    "Start tracking is gone once the profile renders",
+  );
   assert.ok(
     document.body.textContent?.includes("Relationship profile"),
     "the profile renders in place without a drawer remount",
@@ -233,28 +246,44 @@ test("a relationship save carries the read revision as its concurrency token", a
   assert.equal(body.industry, "Software");
 });
 
-const PROFILE_RESPONSE = () => Response.json({ account: { profile: PROFILE, opportunities: [] }, options: OPTIONS });
+const PROFILE_RESPONSE = () =>
+  Response.json({ account: { profile: PROFILE, opportunities: [] }, options: OPTIONS });
 
 test("outside edit mode the relationship reads as values with no controls and no Save", async (t) => {
-  const restoreFetch = scriptFetch((url) => (url === `/api/crm/accounts/${PARTY_ID}` ? PROFILE_RESPONSE() : null));
+  const restoreFetch = scriptFetch((url) =>
+    url === `/api/crm/accounts/${PARTY_ID}` ? PROFILE_RESPONSE() : null,
+  );
   t.after(restoreFetch);
   const { unmount } = await mountSection(false);
   t.after(unmount);
-  const section = [...document.querySelectorAll("section")].find((element) => element.textContent?.includes("Relationship profile"));
+  const section = [...document.querySelectorAll("section")].find((element) =>
+    element.textContent?.includes("Relationship profile"),
+  );
   assert.ok(section, "the profile renders");
-  assert.equal(section.querySelectorAll("input, select, textarea").length, 0, "view mode renders no editable controls");
+  assert.equal(
+    section.querySelectorAll("input, select, textarea").length,
+    0,
+    "view mode renders no editable controls",
+  );
   assert.ok(section.querySelector("[data-relationship-read-only]"), "values render read-only");
   assert.ok(section.textContent?.includes("New"), "the stored status reads as a value");
   assert.equal(buttonsNamed("Save").length, 0, "the section never carries its own Save");
 });
 
 test("in edit mode the relationship edits through the record and still has no Save of its own", async (t) => {
-  const restoreFetch = scriptFetch((url) => (url === `/api/crm/accounts/${PARTY_ID}` ? PROFILE_RESPONSE() : null));
+  const restoreFetch = scriptFetch((url) =>
+    url === `/api/crm/accounts/${PARTY_ID}` ? PROFILE_RESPONSE() : null,
+  );
   t.after(restoreFetch);
   const { unmount } = await mountSection(true);
   t.after(unmount);
-  const section = [...document.querySelectorAll("section")].find((element) => element.textContent?.includes("Relationship profile"));
-  assert.ok(section && section.querySelectorAll("select").length > 0, "edit mode offers the controls");
+  const section = [...document.querySelectorAll("section")].find((element) =>
+    element.textContent?.includes("Relationship profile"),
+  );
+  assert.ok(
+    section && section.querySelectorAll("select").length > 0,
+    "edit mode offers the controls",
+  );
   assert.equal(buttonsNamed("Save").length, 0, "the record's single Save persists the section");
   assert.equal(recordSave?.dirty, false, "untouched fields leave the record clean");
 });

@@ -22,7 +22,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = (realUrl: string): string => `
   const state = globalThis[Symbol.for('openbooks.payment-providers-route-test')]
@@ -36,7 +36,8 @@ const mockAuthz = (realUrl: string): string => `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/payment-providers")) ||
+      (specifier === "../../../../../lib/authz" &&
+        context.parentURL?.includes("setup/payment-providers")) ||
       // The route factory resolves its session gate through the "@/lib/authz"
       // spelling at request time; it must see the same test session as the
       // route file's relative import. Both spellings resolve to the same real
@@ -64,9 +65,8 @@ registerHooks({
 const routeUrl = "./route.ts?payment-providers-boundary-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -85,7 +85,12 @@ async function seed(): Promise<Fixture> {
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
       coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ onlinePayments: true })}::jsonb)
      where id = ${org.orgId}`);
-  return { orgId: org.orgId, actorId, revenueAccount: org.accounts.revenue, bankAccount: org.accounts.bank };
+  return {
+    orgId: org.orgId,
+    actorId,
+    revenueAccount: org.accounts.revenue,
+    bankAccount: org.accounts.bank,
+  };
 }
 
 function postRequest(body: unknown): Request {
@@ -112,7 +117,10 @@ function authorizeScope(f: Fixture, scope: Set<string> | null): void {
 }
 
 /** A second entity with its own bank and income accounts, invisible to A-only callers. */
-async function seedForeignEntity(orgId: string, parentSubsidiaryId: string): Promise<{
+async function seedForeignEntity(
+  orgId: string,
+  parentSubsidiaryId: string,
+): Promise<{
   subsidiaryId: string;
   bankAccountId: string;
   incomeAccountId: string;
@@ -141,27 +149,36 @@ async function seedForeignEntity(orgId: string, parentSubsidiaryId: string): Pro
 
 /** The scratch org's own (Main Co) subsidiary: the A-only caller's scope. */
 async function ownSubsidiaryId(orgId: string): Promise<string> {
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from subsidiaries where org_id = ${orgId} order by created_at limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0]!.id;
 }
 
 /** How much trace exists in this org: stored rules and audit rows. */
 async function trace(orgId: string): Promise<{ rules: number; audits: number }> {
-  const rows = await db.execute<{ rules: number; audits: number }>(sql`
+  const rows = await db.execute<{ rules: number; audits: number }>(
+    sql`
     select (select count(*)::int from payment_surcharge_rules where org_id = ${orgId}) as rules,
-           (select count(*)::int from audit_log where org_id = ${orgId} and table_name = 'payment_surcharge_rules') as audits`, "objects");
+           (select count(*)::int from audit_log where org_id = ${orgId} and table_name = 'payment_surcharge_rules') as audits`,
+    "objects",
+  );
   return rows[0]!;
 }
 
 async function storedRules(orgId: string): Promise<Record<string, unknown>[]> {
-  const rows = await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select id, name, calculation, percent::text as percent, fixed_amount::text as "fixedAmount",
            cap_amount::text as "capAmount", fee_income_account_id as "feeIncomeAccountId",
            provider, payment_method as "paymentMethod", effective_from::text as "effectiveFrom",
            effective_to::text as "effectiveTo", is_active as "isActive"
-      from payment_surcharge_rules where org_id = ${orgId} order by name`, "objects");
+      from payment_surcharge_rules where org_id = ${orgId} order by name`,
+    "objects",
+  );
   return rows;
 }
 
@@ -172,10 +189,13 @@ type AuditRow = {
 };
 
 async function audits(orgId: string): Promise<AuditRow[]> {
-  const rows = await db.execute<AuditRow>(sql`
+  const rows = await db.execute<AuditRow>(
+    sql`
     select action, actor_id, changes from audit_log
      where org_id = ${orgId} and table_name = 'payment_surcharge_rules'
-     order by at, id`, "objects");
+     order by at, id`,
+    "objects",
+  );
   return rows;
 }
 
@@ -206,30 +226,39 @@ test("provider acceptance configuration rejects invalid references before persis
   const f = await seed();
   try {
     authorize(f);
-    const malformed = await POST(postRequest({
-      provider: "stripe",
-      acceptanceEnabled: true,
-      defaultBankAccountId: "not-a-uuid",
-    }));
+    const malformed = await POST(
+      postRequest({
+        provider: "stripe",
+        acceptanceEnabled: true,
+        defaultBankAccountId: "not-a-uuid",
+      }),
+    );
     assert.equal(malformed.status, 400);
 
-    const wrongClass = await POST(postRequest({
-      provider: "stripe",
-      acceptanceEnabled: true,
-      defaultBankAccountId: f.revenueAccount,
-    }));
+    const wrongClass = await POST(
+      postRequest({
+        provider: "stripe",
+        acceptanceEnabled: true,
+        defaultBankAccountId: f.revenueAccount,
+      }),
+    );
     assert.equal(wrongClass.status, 422);
 
-    const valid = await POST(postRequest({
-      provider: "stripe",
-      acceptanceEnabled: true,
-      defaultBankAccountId: f.bankAccount,
-    }));
+    const valid = await POST(
+      postRequest({
+        provider: "stripe",
+        acceptanceEnabled: true,
+        defaultBankAccountId: f.bankAccount,
+      }),
+    );
     assert.equal(valid.status, 200);
-    const stored = await db.execute<{ bank_account_id: string; acceptance_enabled: boolean }>(sql`
+    const stored = await db.execute<{ bank_account_id: string; acceptance_enabled: boolean }>(
+      sql`
       select default_bank_account_id as bank_account_id, acceptance_enabled
         from psp_provider_configs where org_id = ${f.orgId} and provider = 'stripe'
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.deepEqual(stored[0], { bank_account_id: f.bankAccount, acceptance_enabled: true });
   } finally {
     routeState.authz = null;
@@ -241,7 +270,9 @@ test("a valid surcharge rule persists with actual stored-row insert evidence", a
   const f = await seed();
   try {
     authorize(f);
-    const res = await POST(postRequest(baseRule({ feeIncomeAccountId: f.revenueAccount, capAmount: "10" })));
+    const res = await POST(
+      postRequest(baseRule({ feeIncomeAccountId: f.revenueAccount, capAmount: "10" })),
+    );
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { ok: true });
 
@@ -289,12 +320,42 @@ test("silent zero-fee and misleading policies reject whole and persist nothing",
       baseRule({ calculation: "percent", percent: null, feeIncomeAccountId: f.revenueAccount }),
       baseRule({ calculation: "percent", percent: "0", feeIncomeAccountId: f.revenueAccount }),
       baseRule({ calculation: "percent", percent: "-2", feeIncomeAccountId: f.revenueAccount }),
-      baseRule({ calculation: "fixed", percent: null, fixedAmount: null, feeIncomeAccountId: f.revenueAccount }),
-      baseRule({ calculation: "fixed", percent: null, fixedAmount: "0", feeIncomeAccountId: f.revenueAccount }),
-      baseRule({ calculation: "percent_plus_fixed", percent: null, fixedAmount: null, feeIncomeAccountId: f.revenueAccount }),
-      baseRule({ calculation: "percent_plus_fixed", percent: "0", fixedAmount: "0.0000", feeIncomeAccountId: f.revenueAccount }),
-      baseRule({ calculation: "percent", percent: "2.5", fixedAmount: "3", feeIncomeAccountId: f.revenueAccount }),
-      baseRule({ calculation: "fixed", percent: "2", fixedAmount: "3", feeIncomeAccountId: f.revenueAccount }),
+      baseRule({
+        calculation: "fixed",
+        percent: null,
+        fixedAmount: null,
+        feeIncomeAccountId: f.revenueAccount,
+      }),
+      baseRule({
+        calculation: "fixed",
+        percent: null,
+        fixedAmount: "0",
+        feeIncomeAccountId: f.revenueAccount,
+      }),
+      baseRule({
+        calculation: "percent_plus_fixed",
+        percent: null,
+        fixedAmount: null,
+        feeIncomeAccountId: f.revenueAccount,
+      }),
+      baseRule({
+        calculation: "percent_plus_fixed",
+        percent: "0",
+        fixedAmount: "0.0000",
+        feeIncomeAccountId: f.revenueAccount,
+      }),
+      baseRule({
+        calculation: "percent",
+        percent: "2.5",
+        fixedAmount: "3",
+        feeIncomeAccountId: f.revenueAccount,
+      }),
+      baseRule({
+        calculation: "fixed",
+        percent: "2",
+        fixedAmount: "3",
+        feeIncomeAccountId: f.revenueAccount,
+      }),
       baseRule({ percent: "2.5", capAmount: "0", feeIncomeAccountId: f.revenueAccount }),
     ];
     for (const body of rejects) {
@@ -315,16 +376,33 @@ test("effective dating accepts only real calendar days in start-to-end order", a
   const f = await seed();
   try {
     authorize(f);
-    const badFrom = ["2026-02-30", "2026-13-01", "2026-00-10", "01/02/2026", "2026-1-1", "not-a-date"];
+    const badFrom = [
+      "2026-02-30",
+      "2026-13-01",
+      "2026-00-10",
+      "01/02/2026",
+      "2026-1-1",
+      "not-a-date",
+    ];
     for (const effectiveFrom of badFrom) {
-      const res = await POST(postRequest(baseRule({ effectiveFrom, feeIncomeAccountId: f.revenueAccount })));
+      const res = await POST(
+        postRequest(baseRule({ effectiveFrom, feeIncomeAccountId: f.revenueAccount })),
+      );
       const body = (await res.json()) as { error?: string; issues?: { path: string }[] };
       if (/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
         // Well-shaped but not a real calendar day: the handler refuses by name.
-        assert.equal(res.status, 422, `expected 422 for effectiveFrom ${effectiveFrom}: ${JSON.stringify(body)}`);
+        assert.equal(
+          res.status,
+          422,
+          `expected 422 for effectiveFrom ${effectiveFrom}: ${JSON.stringify(body)}`,
+        );
       } else {
         // Wrong shape: the boundary refuses at the exact field.
-        assert.equal(res.status, 400, `expected 400 for effectiveFrom ${effectiveFrom}: ${JSON.stringify(body)}`);
+        assert.equal(
+          res.status,
+          400,
+          `expected 400 for effectiveFrom ${effectiveFrom}: ${JSON.stringify(body)}`,
+        );
         assert.ok(
           body.issues?.some((issue) => issue.path.includes("effectiveFrom")),
           `the refusal names the field: ${JSON.stringify(body)}`,
@@ -336,7 +414,9 @@ test("effective dating accepts only real calendar days in start-to-end order", a
       ["2026-01-01", "2025-12-31"], // ends before it starts
     ];
     for (const [effectiveFrom, effectiveTo] of badTo) {
-      const res = await POST(postRequest(baseRule({ effectiveFrom, effectiveTo, feeIncomeAccountId: f.revenueAccount })));
+      const res = await POST(
+        postRequest(baseRule({ effectiveFrom, effectiveTo, feeIncomeAccountId: f.revenueAccount })),
+      );
       assert.equal(res.status, 422, `expected 422 for range ${effectiveFrom}→${effectiveTo}`);
     }
     let t = await trace(f.orgId);
@@ -344,11 +424,15 @@ test("effective dating accepts only real calendar days in start-to-end order", a
     assert.equal(t.audits, 0);
 
     // Same-day inclusive range is legal.
-    const ok = await POST(postRequest(baseRule({
-      effectiveFrom: "2026-03-01",
-      effectiveTo: "2026-03-01",
-      feeIncomeAccountId: f.revenueAccount,
-    })));
+    const ok = await POST(
+      postRequest(
+        baseRule({
+          effectiveFrom: "2026-03-01",
+          effectiveTo: "2026-03-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(ok.status, 200);
     t = await trace(f.orgId);
     assert.equal(t.rules, 1);
@@ -372,14 +456,13 @@ test("fee-income references must be real active non-summary income accounts", as
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${inactiveIncome}, ${f.orgId}, '4988', 'Closed Income', 'income', false, false, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
 
-    const rejects: string[] = [
-      randomUUID(),
-      summaryIncome,
-      inactiveIncome,
-    ];
+    const rejects: string[] = [randomUUID(), summaryIncome, inactiveIncome];
     // The fixture's bank account is real but is not an income account.
-    const banks = await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${f.orgId} and type = 'asset_bank' limit 1`, "objects");
+    const banks = await db.execute<{ id: string }>(
+      sql`
+      select id from accounts where org_id = ${f.orgId} and type = 'asset_bank' limit 1`,
+      "objects",
+    );
     rejects.push(banks[0]!.id);
 
     for (const feeIncomeAccountId of rejects) {
@@ -400,16 +483,31 @@ test("same-start same-scope saves conflict; distinct scopes coexist deterministi
   const f = await seed();
   try {
     authorize(f);
-    const first = await POST(postRequest(baseRule({
-      name: "Stripe card", provider: "stripe", effectiveFrom: "2026-01-01", effectiveTo: "2026-01-31", feeIncomeAccountId: f.revenueAccount,
-    })));
+    const first = await POST(
+      postRequest(
+        baseRule({
+          name: "Stripe card",
+          provider: "stripe",
+          effectiveFrom: "2026-01-01",
+          effectiveTo: "2026-01-31",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(first.status, 200);
 
     // A second active rule with identical scope and start date would make
     // resolveSurcharge's tie-break arbitrary — refused outright.
-    const clash = await POST(postRequest(baseRule({
-      name: "Stripe card again", provider: "stripe", effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount,
-    })));
+    const clash = await POST(
+      postRequest(
+        baseRule({
+          name: "Stripe card again",
+          provider: "stripe",
+          effectiveFrom: "2026-01-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(clash.status, 409);
     let t = await trace(f.orgId);
     assert.equal(t.rules, 1);
@@ -417,30 +515,66 @@ test("same-start same-scope saves conflict; distinct scopes coexist deterministi
 
     // Different provider scope on the same day resolves deterministically
     // (provider-specific beats all-provider), so both may coexist.
-    for (const [name, provider] of [["Adyen card", "adyen"], ["All providers", null]] as const) {
-      const res = await POST(postRequest(baseRule({ name, provider, effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount })));
+    for (const [name, provider] of [
+      ["Adyen card", "adyen"],
+      ["All providers", null],
+    ] as const) {
+      const res = await POST(
+        postRequest(
+          baseRule({
+            name,
+            provider,
+            effectiveFrom: "2026-01-01",
+            feeIncomeAccountId: f.revenueAccount,
+          }),
+        ),
+      );
       assert.equal(res.status, 200, `expected ${name} to save`);
     }
 
     // A different start date under the same scope is ordinary effective dating.
-    const later = await POST(postRequest(baseRule({
-      name: "Stripe card Feb", provider: "stripe", effectiveFrom: "2026-02-01", feeIncomeAccountId: f.revenueAccount,
-    })));
+    const later = await POST(
+      postRequest(
+        baseRule({
+          name: "Stripe card Feb",
+          provider: "stripe",
+          effectiveFrom: "2026-02-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(later.status, 200);
 
     // Card-only and bank-debit-only rules never serve the same checkout, so
     // they may share a start date; any overlapping method coverage ("all")
     // still conflicts with both.
-    const debit = await POST(postRequest(baseRule({
-      name: "Stripe debit", provider: "stripe", paymentMethod: "bank_debit",
-      effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount,
-    })));
+    const debit = await POST(
+      postRequest(
+        baseRule({
+          name: "Stripe debit",
+          provider: "stripe",
+          paymentMethod: "bank_debit",
+          effectiveFrom: "2026-01-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(debit.status, 200);
-    for (const [name, method] of [["Stripe all methods", "all"], ["Stripe card shadow", "card"]] as const) {
-      const clash2 = await POST(postRequest(baseRule({
-        name, provider: "stripe", paymentMethod: method,
-        effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount,
-      })));
+    for (const [name, method] of [
+      ["Stripe all methods", "all"],
+      ["Stripe card shadow", "card"],
+    ] as const) {
+      const clash2 = await POST(
+        postRequest(
+          baseRule({
+            name,
+            provider: "stripe",
+            paymentMethod: method,
+            effectiveFrom: "2026-01-01",
+            feeIncomeAccountId: f.revenueAccount,
+          }),
+        ),
+      );
       assert.equal(clash2.status, 409, `expected ${name} to conflict`);
     }
 
@@ -457,18 +591,33 @@ test("updates record the actual previous row and refuse phantom or conflicting t
   const f = await seed();
   try {
     authorize(f);
-    const created = await POST(postRequest(baseRule({
-      name: "Original", percent: "2.5", effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount,
-    })));
+    const created = await POST(
+      postRequest(
+        baseRule({
+          name: "Original",
+          percent: "2.5",
+          effectiveFrom: "2026-01-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(created.status, 200);
     const beforeRules = await storedRules(f.orgId);
     const ruleId = beforeRules[0]!.id as string;
 
     // Re-saving the same id keeps its date (self-excluded) and revises fields;
     // the audit row must carry the REAL prior row as its before side.
-    const revised = await POST(postRequest(baseRule({
-      id: ruleId, name: "Revised", percent: "3", effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount,
-    })));
+    const revised = await POST(
+      postRequest(
+        baseRule({
+          id: ruleId,
+          name: "Revised",
+          percent: "3",
+          effectiveFrom: "2026-01-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(revised.status, 200);
 
     const trail = await audits(f.orgId);
@@ -479,26 +628,53 @@ test("updates record the actual previous row and refuse phantom or conflicting t
     const afterRules = await storedRules(f.orgId);
     assert.equal(afterRules.length, 1);
     assert.deepEqual(after, withoutId(afterRules[0]!));
-    assert.notEqual((before as Record<string, unknown>).percent, (after as Record<string, unknown>).percent);
+    assert.notEqual(
+      (before as Record<string, unknown>).percent,
+      (after as Record<string, unknown>).percent,
+    );
 
     // Updating onto another active rule's scope+start conflicts and leaves the
     // target row exactly as it was.
-    await POST(postRequest(baseRule({
-      name: "GoCardless", provider: "gocardless", effectiveFrom: "2026-03-01", feeIncomeAccountId: f.revenueAccount,
-    })));
+    await POST(
+      postRequest(
+        baseRule({
+          name: "GoCardless",
+          provider: "gocardless",
+          effectiveFrom: "2026-03-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     const gcBefore = (await storedRules(f.orgId)).find((r) => r.name === "GoCardless");
-    const conflicted = await POST(postRequest(baseRule({
-      id: gcBefore!.id as string, name: "GoCardless moved", provider: "stripe",
-      effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount,
-    })));
+    const conflicted = await POST(
+      postRequest(
+        baseRule({
+          id: gcBefore!.id as string,
+          name: "GoCardless moved",
+          provider: "stripe",
+          effectiveFrom: "2026-01-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(conflicted.status, 409);
-    assert.deepEqual((await storedRules(f.orgId)).find((r) => r.name === "GoCardless"), gcBefore);
+    assert.deepEqual(
+      (await storedRules(f.orgId)).find((r) => r.name === "GoCardless"),
+      gcBefore,
+    );
 
     // Phantom ids are affected-row misses: 404, and never fabricated audit
     // evidence claiming an update happened.
-    const phantom = await POST(postRequest(baseRule({
-      id: randomUUID(), name: "Ghost", effectiveFrom: "2026-04-01", feeIncomeAccountId: f.revenueAccount,
-    })));
+    const phantom = await POST(
+      postRequest(
+        baseRule({
+          id: randomUUID(),
+          name: "Ghost",
+          effectiveFrom: "2026-04-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(phantom.status, 404);
 
     // Another org's rule id is equally invisible here.
@@ -508,9 +684,16 @@ test("updates record the actual previous row and refuse phantom or conflicting t
       insert into payment_surcharge_rules
         (id, org_id, name, calculation, percent, fee_income_account_id, payment_method, effective_from, created_by, updated_by)
       values (${foreignId}, ${other.orgId}, 'Foreign', 'fixed', '1', ${other.accounts.revenue}, 'all', '2026-01-01', null, null)`);
-    const crossOrg = await POST(postRequest(baseRule({
-      id: foreignId, name: "Hijack", effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount,
-    })));
+    const crossOrg = await POST(
+      postRequest(
+        baseRule({
+          id: foreignId,
+          name: "Hijack",
+          effectiveFrom: "2026-01-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(crossOrg.status, 404);
     await dropScratchOrgReporting(other.orgId);
 
@@ -529,7 +712,16 @@ test("deletion stores the real deactivated row and refuses phantom or repeat del
   const f = await seed();
   try {
     authorize(f);
-    await POST(postRequest(baseRule({ name: "Doomed", percent: "1.5", effectiveFrom: "2026-01-01", feeIncomeAccountId: f.revenueAccount })));
+    await POST(
+      postRequest(
+        baseRule({
+          name: "Doomed",
+          percent: "1.5",
+          effectiveFrom: "2026-01-01",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     const ruleId = (await storedRules(f.orgId))[0]!.id as string;
 
     const del = await POST(postRequest({ action: "deleteRule", id: ruleId }));
@@ -569,7 +761,10 @@ test("a restricted caller lists only shared and in-scope accounts, never another
     const own = await ownSubsidiaryId(f.orgId);
     const foreign = await seedForeignEntity(f.orgId, own);
     authorize(f);
-    assert.equal((await POST(postRequest(baseRule({ feeIncomeAccountId: foreign.incomeAccountId })))).status, 200);
+    assert.equal(
+      (await POST(postRequest(baseRule({ feeIncomeAccountId: foreign.incomeAccountId })))).status,
+      200,
+    );
     authorizeScope(f, new Set([own]));
     const res = await GET();
     assert.equal(res.status, 200);
@@ -580,11 +775,21 @@ test("a restricted caller lists only shared and in-scope accounts, never another
     };
     const bankIds = body.bankAccounts.map((a) => a.id);
     const incomeIds = body.incomeAccounts.map((a) => a.id);
-    assert.ok(!bankIds.includes(foreign.bankAccountId), "Entity B's settlement bank must not enumerate");
-    assert.ok(!incomeIds.includes(foreign.incomeAccountId), "Entity B's fee income account must not enumerate");
+    assert.ok(
+      !bankIds.includes(foreign.bankAccountId),
+      "Entity B's settlement bank must not enumerate",
+    );
+    assert.ok(
+      !incomeIds.includes(foreign.incomeAccountId),
+      "Entity B's fee income account must not enumerate",
+    );
     assert.ok(bankIds.includes(f.bankAccount), "shared-chart bank accounts stay visible");
     assert.ok(incomeIds.includes(f.revenueAccount), "shared-chart income accounts stay visible");
-    assert.equal(body.surchargeRules[0]?.feeIncomeAccountId, null, "foreign fee account references stay masked");
+    assert.equal(
+      body.surchargeRules[0]?.feeIncomeAccountId,
+      null,
+      "foreign fee account references stay masked",
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);
@@ -598,25 +803,32 @@ test("a restricted caller cannot save org-wide provider config, and nothing pers
     await seedForeignEntity(f.orgId, own);
     // Baseline saved by an unrestricted caller.
     authorize(f);
-    const baseline = await POST(postRequest({
-      provider: "stripe",
-      acceptanceEnabled: true,
-      defaultBankAccountId: f.bankAccount,
-    }));
+    const baseline = await POST(
+      postRequest({
+        provider: "stripe",
+        acceptanceEnabled: true,
+        defaultBankAccountId: f.bankAccount,
+      }),
+    );
     assert.equal(baseline.status, 200);
     // A restricted caller naming even an in-scope bank is refused by name.
     authorizeScope(f, new Set([own]));
-    const refused = await POST(postRequest({
-      provider: "stripe",
-      acceptanceEnabled: true,
-      defaultBankAccountId: f.bankAccount,
-    }));
+    const refused = await POST(
+      postRequest({
+        provider: "stripe",
+        acceptanceEnabled: true,
+        defaultBankAccountId: f.bankAccount,
+      }),
+    );
     assert.equal(refused.status, 403);
     assert.deepEqual(await refused.json(), { error: "requires unrestricted subsidiary access" });
-    const stored = await db.execute<{ bank_account_id: string | null }>(sql`
+    const stored = await db.execute<{ bank_account_id: string | null }>(
+      sql`
       select default_bank_account_id as bank_account_id
         from psp_provider_configs where org_id = ${f.orgId} and provider = 'stripe'
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.equal(stored[0]!.bank_account_id, f.bankAccount);
   } finally {
     routeState.authz = null;
@@ -645,26 +857,38 @@ test("surcharge rule save and delete require unrestricted subsidiary scope", asy
   try {
     const own = await ownSubsidiaryId(f.orgId);
     authorize(f);
-    const created = await POST(postRequest(baseRule({
-      name: "Org-wide card fee",
-      feeIncomeAccountId: f.revenueAccount,
-    })));
+    const created = await POST(
+      postRequest(
+        baseRule({
+          name: "Org-wide card fee",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(created.status, 200);
     const [before] = await storedRules(f.orgId);
     assert.ok(before);
 
     authorizeScope(f, new Set([own]));
-    const refusedSave = await POST(postRequest(baseRule({
-      id: before.id,
-      name: "Restricted edit",
-      feeIncomeAccountId: f.revenueAccount,
-    })));
+    const refusedSave = await POST(
+      postRequest(
+        baseRule({
+          id: before.id,
+          name: "Restricted edit",
+          feeIncomeAccountId: f.revenueAccount,
+        }),
+      ),
+    );
     assert.equal(refusedSave.status, 403);
-    assert.deepEqual(await refusedSave.json(), { error: "requires unrestricted subsidiary access" });
+    assert.deepEqual(await refusedSave.json(), {
+      error: "requires unrestricted subsidiary access",
+    });
 
     const refusedDelete = await POST(postRequest({ action: "deleteRule", id: before.id }));
     assert.equal(refusedDelete.status, 403);
-    assert.deepEqual(await refusedDelete.json(), { error: "requires unrestricted subsidiary access" });
+    assert.deepEqual(await refusedDelete.json(), {
+      error: "requires unrestricted subsidiary access",
+    });
 
     const after = await storedRules(f.orgId);
     assert.equal(after.length, 1);

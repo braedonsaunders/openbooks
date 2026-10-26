@@ -1,15 +1,25 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const distributionAvailability: DocArticle = {
-  slug: 'distribution-availability',
-  title: 'Availability and replenishment',
-  category: 'transactions',
+  slug: "distribution-availability",
+  title: "Availability and replenishment",
+  category: "transactions",
   order: 6,
   summary:
-    'See how much of each item is on hand, committed to sales orders and available to promise, which backorders stock could ship now, and what to reorder.',
-  updated: '2026-09-27',
-  keywords: ['availability', 'available to promise', 'ATP', 'committed', 'replenishment', 'reorder point', 'preferred stock level', 'purchase order', 'backorder'],
-  related: ['distribution-warehouses', 'distribution-backorders', 'purchasing-workflow'],
+    "See how much of each item is on hand, committed to sales orders and available to promise, which backorders stock could ship now, and what to reorder.",
+  updated: "2026-09-27",
+  keywords: [
+    "availability",
+    "available to promise",
+    "ATP",
+    "committed",
+    "replenishment",
+    "reorder point",
+    "preferred stock level",
+    "purchase order",
+    "backorder",
+  ],
+  related: ["distribution-warehouses", "distribution-backorders", "purchasing-workflow"],
   body: `# Availability and replenishment
 
 Availability answers "how much can we still promise?" for each stocked item,
@@ -92,4 +102,4 @@ so deselect it and create its purchase order on Purchase orders. If a vendor's
 order is refused, the orders already created are kept, and creating again with
 the same selection, before you leave the page, creates only the rest.
 `,
-}
+};

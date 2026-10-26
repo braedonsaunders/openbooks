@@ -22,8 +22,11 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 // Existing accounting behaviour tests intentionally run as the explicit
 // unrestricted fixture actor; scope-specific cases pass a restricted set.
-const applyStandaloneCredits = (orgId: string, userId: string | null, input: Parameters<typeof applyStandaloneCreditsScoped>[2]) =>
-  applyStandaloneCreditsScoped(orgId, userId, input, null);
+const applyStandaloneCredits = (
+  orgId: string,
+  userId: string | null,
+  input: Parameters<typeof applyStandaloneCreditsScoped>[2],
+) => applyStandaloneCreditsScoped(orgId, userId, input, null);
 const creditSettlementState = (orgId: string, documentId: string) =>
   creditSettlementStateScoped(orgId, documentId, null);
 const unapplyCreditSettlement = (orgId: string, userId: string | null, applicationId: string) =>
@@ -95,107 +98,186 @@ async function postDoc(
 
 /** The posted open-item control line a settlement endpoint names. */
 async function openLineId(orgId: string, documentId: string): Promise<string> {
-  const row = await withBypass(async () =>
-    (await db.execute<{ id: string }>(sql`
+  const row = await withBypass(
+    async () =>
+      (
+        await db.execute<{ id: string }>(
+          sql`
       select jl.id
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${orgId} and je.source_document_id = ${documentId}
          and jl.is_open_item
-       limit 1`, "objects"))[0],
+       limit 1`,
+          "objects",
+        )
+      )[0],
   );
   assert.ok(row, `document ${documentId} has no open-item line`);
   return row.id;
 }
 
 async function openBalance(orgId: string, lineId: string): Promise<string> {
-  const row = await withBypass(async () =>
-    (await db.execute<{ open: string }>(sql`
+  const row = await withBypass(
+    async () =>
+      (
+        await db.execute<{ open: string }>(
+          sql`
       select (abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0))::text as open
         from journal_lines jl
         left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
        where jl.org_id = ${orgId} and jl.id = ${lineId}
-       group by jl.id`, "objects"))[0],
+       group by jl.id`,
+          "objects",
+        )
+      )[0],
   );
   return row!.open;
 }
 
 async function sourceOpenBalance(orgId: string, lineId: string): Promise<string> {
-  const row = await withBypass(async () =>
-    (await db.execute<{ open: string }>(sql`
+  const row = await withBypass(
+    async () =>
+      (
+        await db.execute<{ open: string }>(
+          sql`
       select (abs(jl.amount) - coalesce(sum(a.source_amount) filter (where a.unapplied_at is null), 0))::text as open
         from journal_lines jl
         left join applications a on a.from_line_id = jl.id and a.org_id = jl.org_id
        where jl.org_id = ${orgId} and jl.id = ${lineId}
-       group by jl.id`, "objects"))[0],
+       group by jl.id`,
+          "objects",
+        )
+      )[0],
   );
   return row!.open;
 }
 
 async function entryCount(orgId: string): Promise<number> {
-  const row = await withBypass(async () =>
-    (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from journal_entries where org_id = ${orgId}`, "objects"))[0],
+  const row = await withBypass(
+    async () =>
+      (
+        await db.execute<{ n: string }>(
+          sql`
+      select count(*)::text as n from journal_entries where org_id = ${orgId}`,
+          "objects",
+        )
+      )[0],
   );
   return Number(row!.n);
 }
 
-test("a full credit settles an invoice with no cash and posts no journal entry", { skip: !DB }, () =>
-  withCreditOrg("Credit settler", async (org, userId) => {
-    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-1", "210");
-    const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-1", "210");
-    const invoiceLine = await openLineId(org.orgId, invoiceId);
-    const creditLine = await openLineId(org.orgId, creditId);
-    assert.equal(await openBalance(org.orgId, invoiceLine), "210.0000");
+test(
+  "a full credit settles an invoice with no cash and posts no journal entry",
+  { skip: !DB },
+  () =>
+    withCreditOrg("Credit settler", async (org, userId) => {
+      const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STANDALONE-1", "210");
+      const creditId = await postDoc(org, userId, "customer_credit", "CM-STANDALONE-1", "210");
+      const invoiceLine = await openLineId(org.orgId, invoiceId);
+      const creditLine = await openLineId(org.orgId, creditId);
+      assert.equal(await openBalance(org.orgId, invoiceLine), "210.0000");
 
-    await assert.rejects(
-      () => withBypass(() => applyStandaloneCreditsScoped(org.orgId, userId, {
-        idempotencyKey: randomUUID(), partyId: org.customerId, side: "ar", appliedOn: org.date,
-        credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "210", sourceDocumentId: creditId }],
-      }, new Set())),
-      ScopeNotFoundError,
-    );
-    assert.equal(await openBalance(org.orgId, invoiceLine), "210.0000", "out-of-scope apply records no settlement");
+      await assert.rejects(
+        () =>
+          withBypass(() =>
+            applyStandaloneCreditsScoped(
+              org.orgId,
+              userId,
+              {
+                idempotencyKey: randomUUID(),
+                partyId: org.customerId,
+                side: "ar",
+                appliedOn: org.date,
+                credits: [
+                  {
+                    fromLineId: creditLine,
+                    toLineId: invoiceLine,
+                    amount: "210",
+                    sourceDocumentId: creditId,
+                  },
+                ],
+              },
+              new Set(),
+            ),
+          ),
+        ScopeNotFoundError,
+      );
+      assert.equal(
+        await openBalance(org.orgId, invoiceLine),
+        "210.0000",
+        "out-of-scope apply records no settlement",
+      );
 
-    // A settlement cannot predate the credit and invoice it settles.
-    const dayBefore = new Date(Date.parse(`${org.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-    await assert.rejects(
-      () => withBypass(() => applyStandaloneCredits(org.orgId, userId, {
-        idempotencyKey: randomUUID(), partyId: org.customerId, side: "ar", appliedOn: dayBefore,
-        credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "210", sourceDocumentId: creditId }],
-      })),
-      new RegExp(`posted on ${org.date}; apply this credit on or after that date`),
-    );
-    assert.equal(await openBalance(org.orgId, invoiceLine), "210.0000", "a backdated apply records no settlement");
+      // A settlement cannot predate the credit and invoice it settles.
+      const dayBefore = new Date(Date.parse(`${org.date}T00:00:00Z`) - 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      await assert.rejects(
+        () =>
+          withBypass(() =>
+            applyStandaloneCredits(org.orgId, userId, {
+              idempotencyKey: randomUUID(),
+              partyId: org.customerId,
+              side: "ar",
+              appliedOn: dayBefore,
+              credits: [
+                {
+                  fromLineId: creditLine,
+                  toLineId: invoiceLine,
+                  amount: "210",
+                  sourceDocumentId: creditId,
+                },
+              ],
+            }),
+          ),
+        new RegExp(`posted on ${org.date}; apply this credit on or after that date`),
+      );
+      assert.equal(
+        await openBalance(org.orgId, invoiceLine),
+        "210.0000",
+        "a backdated apply records no settlement",
+      );
 
-    const entriesBefore = await entryCount(org.orgId);
-    const result = await withBypass(() =>
-      applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
-        partyId: org.customerId,
-        side: "ar",
-        appliedOn: org.date,
-        credits: [
-          { fromLineId: creditLine, toLineId: invoiceLine, amount: "210", sourceDocumentId: creditId },
-        ],
-      }),
-    );
+      const entriesBefore = await entryCount(org.orgId);
+      const result = await withBypass(() =>
+        applyStandaloneCredits(org.orgId, userId, {
+          idempotencyKey: randomUUID(),
+          partyId: org.customerId,
+          side: "ar",
+          appliedOn: org.date,
+          credits: [
+            {
+              fromLineId: creditLine,
+              toLineId: invoiceLine,
+              amount: "210",
+              sourceDocumentId: creditId,
+            },
+          ],
+        }),
+      );
 
-    assert.equal(result.applicationIds.length, 1);
-    assert.equal(result.amount, "210.0000");
-    // The whole point: settling a credit against an invoice moves no money.
-    assert.equal(await entryCount(org.orgId), entriesBefore);
-    assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
-    assert.equal(await sourceOpenBalance(org.orgId, creditLine), "0.0000");
+      assert.equal(result.applicationIds.length, 1);
+      assert.equal(result.amount, "210.0000");
+      // The whole point: settling a credit against an invoice moves no money.
+      assert.equal(await entryCount(org.orgId), entriesBefore);
+      assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
+      assert.equal(await sourceOpenBalance(org.orgId, creditLine), "0.0000");
 
-    const audit = await withBypass(async () =>
-      (await db.execute<{ n: string }>(sql`
+      const audit = await withBypass(
+        async () =>
+          (
+            await db.execute<{ n: string }>(
+              sql`
         select count(*)::text as n from audit_log
          where org_id = ${org.orgId} and table_name = 'applications'
-           and row_id = ${result.applicationIds[0]!} and action = 'insert'`, "objects"))[0],
-    );
-    assert.equal(Number(audit!.n), 1);
-  }),
+           and row_id = ${result.applicationIds[0]!} and action = 'insert'`,
+              "objects",
+            )
+          )[0],
+      );
+      assert.equal(Number(audit!.n), 1);
+    }),
 );
 
 test("a partial credit leaves the remainder open on both sides", { skip: !DB }, () =>
@@ -207,12 +289,17 @@ test("a partial credit leaves the remainder open on both sides", { skip: !DB }, 
 
     await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
+        idempotencyKey: randomUUID(),
         partyId: org.customerId,
         side: "ar",
         appliedOn: org.date,
         credits: [
-          { fromLineId: creditLine, toLineId: invoiceLine, amount: "120", sourceDocumentId: creditId },
+          {
+            fromLineId: creditLine,
+            toLineId: invoiceLine,
+            amount: "120",
+            sourceDocumentId: creditId,
+          },
         ],
       }),
     );
@@ -232,12 +319,17 @@ test("applying more than the credit's open balance is refused", { skip: !DB }, (
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
+            idempotencyKey: randomUUID(),
             partyId: org.customerId,
             side: "ar",
             appliedOn: org.date,
             credits: [
-              { fromLineId: creditLine, toLineId: invoiceLine, amount: "201", sourceDocumentId: creditId },
+              {
+                fromLineId: creditLine,
+                toLineId: invoiceLine,
+                amount: "201",
+                sourceDocumentId: creditId,
+              },
             ],
           }),
         ),
@@ -253,7 +345,7 @@ test("a settlement with no credits is refused rather than reporting success", { 
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
+            idempotencyKey: randomUUID(),
             partyId: org.customerId,
             side: "ar",
             appliedOn: org.date,
@@ -282,12 +374,17 @@ test("a settlement dated into a closed AR period is refused", { skip: !DB }, () 
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
+            idempotencyKey: randomUUID(),
             partyId: org.customerId,
             side: "ar",
             appliedOn: org.date,
             credits: [
-              { fromLineId: creditLine, toLineId: invoiceLine, amount: "90", sourceDocumentId: creditId },
+              {
+                fromLineId: creditLine,
+                toLineId: invoiceLine,
+                amount: "90",
+                sourceDocumentId: creditId,
+              },
             ],
           }),
         ),
@@ -306,22 +403,34 @@ test("releasing a credit settlement reopens both balances exactly once", { skip:
 
     const applied = await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
+        idempotencyKey: randomUUID(),
         partyId: org.customerId,
         side: "ar",
         appliedOn: org.date,
         credits: [
-          { fromLineId: creditLine, toLineId: invoiceLine, amount: "310", sourceDocumentId: creditId },
+          {
+            fromLineId: creditLine,
+            toLineId: invoiceLine,
+            amount: "310",
+            sourceDocumentId: creditId,
+          },
         ],
       }),
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
 
     await assert.rejects(
-      () => withBypass(() => unapplyCreditSettlementScoped(org.orgId, userId, applied.applicationIds[0]!, new Set())),
+      () =>
+        withBypass(() =>
+          unapplyCreditSettlementScoped(org.orgId, userId, applied.applicationIds[0]!, new Set()),
+        ),
       ScopeNotFoundError,
     );
-    assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000", "out-of-scope release leaves the live settlement intact");
+    assert.equal(
+      await openBalance(org.orgId, invoiceLine),
+      "0.0000",
+      "out-of-scope release leaves the live settlement intact",
+    );
 
     const released = await withBypass(() =>
       unapplyCreditSettlement(org.orgId, userId, applied.applicationIds[0]!),
@@ -332,7 +441,8 @@ test("releasing a credit settlement reopens both balances exactly once", { skip:
 
     // Releasing twice must refuse, not silently report a second release.
     await assert.rejects(
-      () => withBypass(() => unapplyCreditSettlement(org.orgId, userId, applied.applicationIds[0]!)),
+      () =>
+        withBypass(() => unapplyCreditSettlement(org.orgId, userId, applied.applicationIds[0]!)),
       /not live/i,
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "310.0000");
@@ -351,15 +461,21 @@ test("the released credit can be applied again", { skip: !DB }, () =>
 
     const first = await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
-        partyId: org.customerId, side: "ar", appliedOn: org.date, credits,
+        idempotencyKey: randomUUID(),
+        partyId: org.customerId,
+        side: "ar",
+        appliedOn: org.date,
+        credits,
       }),
     );
     await withBypass(() => unapplyCreditSettlement(org.orgId, userId, first.applicationIds[0]!));
     await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
-        partyId: org.customerId, side: "ar", appliedOn: org.date, credits,
+        idempotencyKey: randomUUID(),
+        partyId: org.customerId,
+        side: "ar",
+        appliedOn: org.date,
+        credits,
       }),
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
@@ -384,12 +500,17 @@ test("a credit the wrong party owns cannot settle this party's invoice", { skip:
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
+            idempotencyKey: randomUUID(),
             partyId: otherParty,
             side: "ar",
             appliedOn: org.date,
             credits: [
-              { fromLineId: creditLine, toLineId: invoiceLine, amount: "60", sourceDocumentId: creditId },
+              {
+                fromLineId: creditLine,
+                toLineId: invoiceLine,
+                amount: "60",
+                sourceDocumentId: creditId,
+              },
             ],
           }),
         ),
@@ -410,13 +531,18 @@ test("a credit naming the wrong source document is refused", { skip: !DB }, () =
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
+            idempotencyKey: randomUUID(),
             partyId: org.customerId,
             side: "ar",
             appliedOn: org.date,
             credits: [
               // Names the invoice as the credit's own source document.
-              { fromLineId: creditLine, toLineId: invoiceLine, amount: "45", sourceDocumentId: invoiceId },
+              {
+                fromLineId: creditLine,
+                toLineId: invoiceLine,
+                amount: "45",
+                sourceDocumentId: invoiceId,
+              },
             ],
           }),
         ),
@@ -443,12 +569,17 @@ test("the panel's state reports what a credit settled and what is left", { skip:
 
     const applied = await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(),
+        idempotencyKey: randomUUID(),
         partyId: org.customerId,
         side: "ar",
         appliedOn: org.date,
         credits: [
-          { fromLineId: creditLine, toLineId: invoiceLine, amount: "150", sourceDocumentId: creditId },
+          {
+            fromLineId: creditLine,
+            toLineId: invoiceLine,
+            amount: "150",
+            sourceDocumentId: creditId,
+          },
         ],
       }),
     );
@@ -493,79 +624,117 @@ test("an unposted credit has no settlement state to show", { skip: !DB }, () =>
 // The retry fence: one idempotency key, one settlement.
 // ---------------------------------------------------------------------------
 
-test("a retried apply with the same key replays the settlement it already wrote", { skip: !DB }, () =>
-  withCreditOrg("Credit retrier", async (org, userId) => {
-    // A PARTIAL application is the duplication case: app_check_open only stops
-    // a retry that overdraws the credit, so before the fence a resubmit wrote a
-    // second applications row beside the first and the operator saw success
-    // twice. The retry now replays the first result byte-for-byte.
-    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-RETRY-1", "210");
-    const creditId = await postDoc(org, userId, "customer_credit", "CM-RETRY-1", "210");
-    const invoiceLine = await openLineId(org.orgId, invoiceId);
-    const creditLine = await openLineId(org.orgId, creditId);
-    const input = {
-      idempotencyKey: randomUUID(),
-      partyId: org.customerId,
-      side: "ar" as const,
-      appliedOn: org.date,
-      credits: [
-        { fromLineId: creditLine, toLineId: invoiceLine, amount: "40", sourceDocumentId: creditId },
-      ],
-    };
-    const first = await withBypass(() => applyStandaloneCredits(org.orgId, userId, input));
-    assert.equal(first.amount, "40.0000");
-    const retry = await withBypass(() => applyStandaloneCredits(org.orgId, userId, input));
-    assert.deepEqual(retry, first, "the retry must return the settlement it already wrote");
-    assert.equal(retry.applicationIds[0], input.idempotencyKey, "the first row's id IS the key");
-    const rows = await withBypass(async () =>
-      (await db.execute<{ n: string }>(sql`
+test(
+  "a retried apply with the same key replays the settlement it already wrote",
+  { skip: !DB },
+  () =>
+    withCreditOrg("Credit retrier", async (org, userId) => {
+      // A PARTIAL application is the duplication case: app_check_open only stops
+      // a retry that overdraws the credit, so before the fence a resubmit wrote a
+      // second applications row beside the first and the operator saw success
+      // twice. The retry now replays the first result byte-for-byte.
+      const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-RETRY-1", "210");
+      const creditId = await postDoc(org, userId, "customer_credit", "CM-RETRY-1", "210");
+      const invoiceLine = await openLineId(org.orgId, invoiceId);
+      const creditLine = await openLineId(org.orgId, creditId);
+      const input = {
+        idempotencyKey: randomUUID(),
+        partyId: org.customerId,
+        side: "ar" as const,
+        appliedOn: org.date,
+        credits: [
+          {
+            fromLineId: creditLine,
+            toLineId: invoiceLine,
+            amount: "40",
+            sourceDocumentId: creditId,
+          },
+        ],
+      };
+      const first = await withBypass(() => applyStandaloneCredits(org.orgId, userId, input));
+      assert.equal(first.amount, "40.0000");
+      const retry = await withBypass(() => applyStandaloneCredits(org.orgId, userId, input));
+      assert.deepEqual(retry, first, "the retry must return the settlement it already wrote");
+      assert.equal(retry.applicationIds[0], input.idempotencyKey, "the first row's id IS the key");
+      const rows = await withBypass(
+        async () =>
+          (
+            await db.execute<{ n: string }>(
+              sql`
         select count(*)::text as n from applications
-         where org_id = ${org.orgId} and from_line_id = ${creditLine}`, "objects"))[0],
-    );
-    assert.equal(Number(rows!.n), 1, "a retried submit must not write a second settlement");
-    assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
-    assert.equal(await sourceOpenBalance(org.orgId, creditLine), "170.0000");
-  }),
+         where org_id = ${org.orgId} and from_line_id = ${creditLine}`,
+              "objects",
+            )
+          )[0],
+      );
+      assert.equal(Number(rows!.n), 1, "a retried submit must not write a second settlement");
+      assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
+      assert.equal(await sourceOpenBalance(org.orgId, creditLine), "170.0000");
+    }),
 );
 
-test("the same key with a different payload is a named conflict, never a second settlement", { skip: !DB }, () =>
-  withCreditOrg("Credit conflict", async (org, userId) => {
-    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-CONFLICT-1", "210");
-    const creditId = await postDoc(org, userId, "customer_credit", "CM-CONFLICT-1", "210");
-    const invoiceLine = await openLineId(org.orgId, invoiceId);
-    const creditLine = await openLineId(org.orgId, creditId);
-    const key = randomUUID();
-    const input = {
-      idempotencyKey: key,
-      partyId: org.customerId,
-      side: "ar" as const,
-      appliedOn: org.date,
-      credits: [
-        { fromLineId: creditLine, toLineId: invoiceLine, amount: "40", sourceDocumentId: creditId },
-      ],
-    };
-    await withBypass(() => applyStandaloneCredits(org.orgId, userId, input));
-    await assert.rejects(
-      () =>
-        withBypass(() =>
-          applyStandaloneCredits(org.orgId, userId, {
-            ...input,
-            credits: [
-              { fromLineId: creditLine, toLineId: invoiceLine, amount: "50", sourceDocumentId: creditId },
-            ],
-          }),
-        ),
-      (e: unknown) =>
-        e instanceof CreditApplicationConflictError && /already saved with different details/.test(e.message),
-    );
-    const rows = await withBypass(async () =>
-      (await db.execute<{ n: string }>(sql`
+test(
+  "the same key with a different payload is a named conflict, never a second settlement",
+  { skip: !DB },
+  () =>
+    withCreditOrg("Credit conflict", async (org, userId) => {
+      const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-CONFLICT-1", "210");
+      const creditId = await postDoc(org, userId, "customer_credit", "CM-CONFLICT-1", "210");
+      const invoiceLine = await openLineId(org.orgId, invoiceId);
+      const creditLine = await openLineId(org.orgId, creditId);
+      const key = randomUUID();
+      const input = {
+        idempotencyKey: key,
+        partyId: org.customerId,
+        side: "ar" as const,
+        appliedOn: org.date,
+        credits: [
+          {
+            fromLineId: creditLine,
+            toLineId: invoiceLine,
+            amount: "40",
+            sourceDocumentId: creditId,
+          },
+        ],
+      };
+      await withBypass(() => applyStandaloneCredits(org.orgId, userId, input));
+      await assert.rejects(
+        () =>
+          withBypass(() =>
+            applyStandaloneCredits(org.orgId, userId, {
+              ...input,
+              credits: [
+                {
+                  fromLineId: creditLine,
+                  toLineId: invoiceLine,
+                  amount: "50",
+                  sourceDocumentId: creditId,
+                },
+              ],
+            }),
+          ),
+        (e: unknown) =>
+          e instanceof CreditApplicationConflictError &&
+          /already saved with different details/.test(e.message),
+      );
+      const rows = await withBypass(
+        async () =>
+          (
+            await db.execute<{ n: string }>(
+              sql`
         select count(*)::text as n from applications
-         where org_id = ${org.orgId} and from_line_id = ${creditLine}`, "objects"))[0],
-    );
-    assert.equal(Number(rows!.n), 1, "a conflicting payload must not write beside the keyed settlement");
-    assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
-  }),
+         where org_id = ${org.orgId} and from_line_id = ${creditLine}`,
+              "objects",
+            )
+          )[0],
+      );
+      assert.equal(
+        Number(rows!.n),
+        1,
+        "a conflicting payload must not write beside the keyed settlement",
+      );
+      assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
+    }),
 );
 
 test("a key owned by another organization fails closed as a foreign key", { skip: !DB }, () =>
@@ -584,12 +753,19 @@ test("a key owned by another organization fails closed as a foreign key", { skip
           side: "ar",
           appliedOn: org.date,
           credits: [
-            { fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId },
+            {
+              fromLineId: creditLine,
+              toLineId: invoiceLine,
+              amount: "100",
+              sourceDocumentId: creditId,
+            },
           ],
         }),
       );
       // The other org has its own posted pair; only the reused KEY is foreign.
-      const otherUser = await withBypass(() => createScratchUser(other.orgId, "Foreign retry", "admin"));
+      const otherUser = await withBypass(() =>
+        createScratchUser(other.orgId, "Foreign retry", "admin"),
+      );
       const otherInvoice = await postDoc(other, otherUser, "customer_invoice", "INV-FK-2", "100");
       const otherCredit = await postDoc(other, otherUser, "customer_credit", "CM-FK-2", "100");
       const otherInvoiceLine = await openLineId(other.orgId, otherInvoice);
@@ -603,17 +779,29 @@ test("a key owned by another organization fails closed as a foreign key", { skip
               side: "ar",
               appliedOn: other.date,
               credits: [
-                { fromLineId: otherCreditLine, toLineId: otherInvoiceLine, amount: "100", sourceDocumentId: otherCredit },
+                {
+                  fromLineId: otherCreditLine,
+                  toLineId: otherInvoiceLine,
+                  amount: "100",
+                  sourceDocumentId: otherCredit,
+                },
               ],
             }),
           ),
         (e: unknown) =>
-          e instanceof CreditApplicationConflictError && /already in use by another organization/.test(e.message),
+          e instanceof CreditApplicationConflictError &&
+          /already in use by another organization/.test(e.message),
         "a cross-org key collision must fail closed, not read as a fresh claim",
       );
-      const otherRows = await withBypass(async () =>
-        (await db.execute<{ n: string }>(sql`
-          select count(*)::text as n from applications where org_id = ${other.orgId}`, "objects"))[0],
+      const otherRows = await withBypass(
+        async () =>
+          (
+            await db.execute<{ n: string }>(
+              sql`
+          select count(*)::text as n from applications where org_id = ${other.orgId}`,
+              "objects",
+            )
+          )[0],
       );
       assert.equal(Number(otherRows!.n), 0, "the foreign-key refusal must write nothing");
     } finally {
@@ -622,42 +810,56 @@ test("a key owned by another organization fails closed as a foreign key", { skip
   }),
 );
 
-test("an invoice line cannot masquerade as the credit, even naming its own source document", { skip: !DB }, () =>
-  withCreditOrg("Credit kind guard", async (org, userId) => {
-    // Every check except the kind passes for this input: the from-line is a
-    // posted open item of the right sign on the right control account, and its
-    // entry's source document matches the named one — it is just an INVOICE
-    // line, not a credit memo. Before the kind check, the engine stamped
-    // 'credit applied without cash' settlement evidence on a receivable, and
-    // the unapply refusal then pointed at the destructive void.
-    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-KIND-1", "210");
-    const targetId = await postDoc(org, userId, "customer_invoice", "INV-KIND-2", "210");
-    const invoiceLine = await openLineId(org.orgId, invoiceId);
-    const targetLine = await openLineId(org.orgId, targetId);
-    await assert.rejects(
-      () =>
-        withBypass(() =>
-          applyStandaloneCredits(org.orgId, userId, {
-            idempotencyKey: randomUUID(),
-            partyId: org.customerId,
-            side: "ar",
-            appliedOn: org.date,
-            credits: [
-              { fromLineId: invoiceLine, toLineId: targetLine, amount: "40", sourceDocumentId: invoiceId },
-            ],
-          }),
-        ),
-      (e: unknown) =>
-        e instanceof PaymentError && /must be a posted customer_credit line/.test(e.message),
-      "the from line must be a credit memo, not any posted open item of the right sign",
-    );
-    const rows = await withBypass(async () =>
-      (await db.execute<{ n: string }>(sql`
+test(
+  "an invoice line cannot masquerade as the credit, even naming its own source document",
+  { skip: !DB },
+  () =>
+    withCreditOrg("Credit kind guard", async (org, userId) => {
+      // Every check except the kind passes for this input: the from-line is a
+      // posted open item of the right sign on the right control account, and its
+      // entry's source document matches the named one — it is just an INVOICE
+      // line, not a credit memo. Before the kind check, the engine stamped
+      // 'credit applied without cash' settlement evidence on a receivable, and
+      // the unapply refusal then pointed at the destructive void.
+      const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-KIND-1", "210");
+      const targetId = await postDoc(org, userId, "customer_invoice", "INV-KIND-2", "210");
+      const invoiceLine = await openLineId(org.orgId, invoiceId);
+      const targetLine = await openLineId(org.orgId, targetId);
+      await assert.rejects(
+        () =>
+          withBypass(() =>
+            applyStandaloneCredits(org.orgId, userId, {
+              idempotencyKey: randomUUID(),
+              partyId: org.customerId,
+              side: "ar",
+              appliedOn: org.date,
+              credits: [
+                {
+                  fromLineId: invoiceLine,
+                  toLineId: targetLine,
+                  amount: "40",
+                  sourceDocumentId: invoiceId,
+                },
+              ],
+            }),
+          ),
+        (e: unknown) =>
+          e instanceof PaymentError && /must be a posted customer_credit line/.test(e.message),
+        "the from line must be a credit memo, not any posted open item of the right sign",
+      );
+      const rows = await withBypass(
+        async () =>
+          (
+            await db.execute<{ n: string }>(
+              sql`
         select count(*)::text as n from applications
-         where org_id = ${org.orgId} and (from_line_id = ${invoiceLine} or to_line_id = ${targetLine})`, "objects"))[0],
-    );
-    assert.equal(Number(rows!.n), 0, "the refused masquerade must write nothing");
-  }),
+         where org_id = ${org.orgId} and (from_line_id = ${invoiceLine} or to_line_id = ${targetLine})`,
+              "objects",
+            )
+          )[0],
+      );
+      assert.equal(Number(rows!.n), 0, "the refused masquerade must write nothing");
+    }),
 );
 
 test("concurrent identical submits share one settlement through the key fence", { skip: !DB }, () =>
@@ -681,74 +883,153 @@ test("concurrent identical submits share one settlement through the key fence", 
       withBypass(() => applyStandaloneCredits(org.orgId, userId, input)),
     ]);
     assert.deepEqual(a, b);
-    const rows = await withBypass(async () =>
-      (await db.execute<{ n: string }>(sql`
+    const rows = await withBypass(
+      async () =>
+        (
+          await db.execute<{ n: string }>(
+            sql`
         select count(*)::text as n from applications
-         where org_id = ${org.orgId} and from_line_id = ${creditLine}`, "objects"))[0],
+         where org_id = ${org.orgId} and from_line_id = ${creditLine}`,
+            "objects",
+          )
+        )[0],
     );
     assert.equal(Number(rows!.n), 1, "both concurrent submits resolve to one settlement");
     assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
   }),
 );
 
-test("voiding a payment releases the credits it applied, and only then may they be released", { skip: !DB }, () =>
-  withCreditOrg("Carried credit voider", async (org, userId) => {
-    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-CARRIED-1", "300");
-    const creditId = await postDoc(org, userId, "customer_credit", "CM-CARRIED-1", "100");
-    const invoiceLine = await openLineId(org.orgId, invoiceId);
-    const creditLine = await openLineId(org.orgId, creditId);
-    const paymentId = await withBypass(async () => {
-      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-        orgId: org.orgId, kind: "customer_payment", createdBy: userId, partyId: org.customerId,
-        bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date,
-        currency: "CAD", fxRate: "1",
+test(
+  "voiding a payment releases the credits it applied, and only then may they be released",
+  { skip: !DB },
+  () =>
+    withCreditOrg("Carried credit voider", async (org, userId) => {
+      const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-CARRIED-1", "300");
+      const creditId = await postDoc(org, userId, "customer_credit", "CM-CARRIED-1", "100");
+      const invoiceLine = await openLineId(org.orgId, invoiceId);
+      const creditLine = await openLineId(org.orgId, creditId);
+      const paymentId = await withBypass(async () => {
+        const payment = await createPaymentDocument({
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          kind: "customer_payment",
+          createdBy: userId,
+          partyId: org.customerId,
+          bankAccountId: org.accounts.bank,
+          subsidiaryId: org.subsidiaryId,
+          documentDate: org.date,
+          currency: "CAD",
+          fxRate: "1",
+        });
+        await updateDraftPayment(
+          payment.id,
+          {
+            partyId: org.customerId,
+            bankAccountId: org.accounts.bank,
+            allocations: [sameCurrencyAllocation(invoiceLine, "200")],
+            creditAllocations: [
+              {
+                fromLineId: creditLine,
+                toLineId: invoiceLine,
+                amount: "100",
+                sourceDocumentId: creditId,
+              },
+            ],
+          },
+          userId,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        );
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`,
+        );
+        await postPaymentWithApplications(payment.id, undefined, userId);
+        return payment.id;
       });
-      await updateDraftPayment(payment.id, {
-        partyId: org.customerId, bankAccountId: org.accounts.bank,
-        allocations: [sameCurrencyAllocation(invoiceLine, "200")],
-        creditAllocations: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId }],
-      }, userId, org.orgId,
-  { allowedSubsidiaryIds: null },
-);
-      await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
-      await postPaymentWithApplications(payment.id, undefined, userId);
-      return payment.id;
-    });
-    const carried = await withBypass(async () => await db.execute<{ id: string }>(sql`
+      const carried = await withBypass(
+        async () =>
+          await db.execute<{ id: string }>(
+            sql`
       select id from applications
        where org_id = ${org.orgId} and from_line_id = ${creditLine} and to_line_id = ${invoiceLine} and unapplied_at is null
-    `, "objects"));
-    assert.equal(carried.length, 1);
-    assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
-    // While the payment stands, its credit is released only by voiding it.
-    const payment = await withBypass(async () => (await db.execute<{ document_number: string }>(sql`
-      select document_number from documents where id = ${paymentId} and org_id = ${org.orgId}`, "objects"))[0]!);
-    await assert.rejects(
-      () => withBypass(() => unapplyCreditSettlement(org.orgId, userId, carried[0]!.id)),
-      (error: unknown) => error instanceof PaymentError
-        && error.message === `this credit was applied by payment ${payment.document_number}; void that payment to release it`,
-    );
+    `,
+            "objects",
+          ),
+      );
+      assert.equal(carried.length, 1);
+      assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
+      // While the payment stands, its credit is released only by voiding it.
+      const payment = await withBypass(
+        async () =>
+          (
+            await db.execute<{ document_number: string }>(
+              sql`
+      select document_number from documents where id = ${paymentId} and org_id = ${org.orgId}`,
+              "objects",
+            )
+          )[0]!,
+      );
+      await assert.rejects(
+        () => withBypass(() => unapplyCreditSettlement(org.orgId, userId, carried[0]!.id)),
+        (error: unknown) =>
+          error instanceof PaymentError &&
+          error.message ===
+            `this credit was applied by payment ${payment.document_number}; void that payment to release it`,
+      );
 
-    const voided = await withBypass(() => requestDocumentVoid({
-      documentId: paymentId, orgId: org.orgId, actorId: userId,
-      reason: "Receipt recorded against the wrong deposit", reversalDate: org.date, source: "api",
-    }));
-    assert.equal(voided.status, "voided");
-    assert.equal(await openBalance(org.orgId, invoiceLine), "300.0000");
-    assert.equal(await sourceOpenBalance(org.orgId, creditLine), "100.0000");
-    const evidence = await withBypass(async () => await db.execute<{ changes: { mode: string; released: Array<{ applicationId: string; amount: string }>; notLive: unknown[] } }>(sql`
+      const voided = await withBypass(() =>
+        requestDocumentVoid({
+          documentId: paymentId,
+          orgId: org.orgId,
+          actorId: userId,
+          reason: "Receipt recorded against the wrong deposit",
+          reversalDate: org.date,
+          source: "api",
+        }),
+      );
+      assert.equal(voided.status, "voided");
+      assert.equal(await openBalance(org.orgId, invoiceLine), "300.0000");
+      assert.equal(await sourceOpenBalance(org.orgId, creditLine), "100.0000");
+      const evidence = await withBypass(
+        async () =>
+          await db.execute<{
+            changes: {
+              mode: string;
+              released: Array<{ applicationId: string; amount: string }>;
+              notLive: unknown[];
+            };
+          }>(
+            sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${paymentId}
-         and changes ->> 'mode' = 'void_release_carried_credits'`, "objects"));
-    assert.deepEqual(evidence.map((row) => row.changes.released.map((r) => [r.applicationId, r.amount])), [[[carried[0]!.id, "100"]]]);
-    assert.deepEqual(evidence[0]!.changes.notLive, []);
-    // The voided payment no longer claims the credit, which can be applied again.
-    await withBypass(() => applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(), partyId: org.customerId, side: "ar", appliedOn: org.date,
-      credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId }],
-    }));
-    assert.equal(await openBalance(org.orgId, invoiceLine), "200.0000");
-  }),
+         and changes ->> 'mode' = 'void_release_carried_credits'`,
+            "objects",
+          ),
+      );
+      assert.deepEqual(
+        evidence.map((row) => row.changes.released.map((r) => [r.applicationId, r.amount])),
+        [[[carried[0]!.id, "100"]]],
+      );
+      assert.deepEqual(evidence[0]!.changes.notLive, []);
+      // The voided payment no longer claims the credit, which can be applied again.
+      await withBypass(() =>
+        applyStandaloneCredits(org.orgId, userId, {
+          idempotencyKey: randomUUID(),
+          partyId: org.customerId,
+          side: "ar",
+          appliedOn: org.date,
+          credits: [
+            {
+              fromLineId: creditLine,
+              toLineId: invoiceLine,
+              amount: "100",
+              sourceDocumentId: creditId,
+            },
+          ],
+        }),
+      );
+      assert.equal(await openBalance(org.orgId, invoiceLine), "200.0000");
+    }),
 );
 
 /**
@@ -789,98 +1070,221 @@ async function postVendorDoc(
   return id;
 }
 
-test("a posted vendor credit settles an open vendor bill of the same vendor with no cash", { skip: !DB }, () =>
-  withCreditOrg("Vendor credit settler", async (org, userId) => {
-    const billId = await postVendorDoc(org, userId, "vendor_bill", "VB-STANDALONE-1", "210");
-    const creditId = await postVendorDoc(org, userId, "vendor_credit", "VCRED-STANDALONE-1", "210");
-    const billLine = await openLineId(org.orgId, billId);
-    const creditLine = await openLineId(org.orgId, creditId);
-    assert.equal(await openBalance(org.orgId, billLine), "210.0000");
+test(
+  "a posted vendor credit settles an open vendor bill of the same vendor with no cash",
+  { skip: !DB },
+  () =>
+    withCreditOrg("Vendor credit settler", async (org, userId) => {
+      const billId = await postVendorDoc(org, userId, "vendor_bill", "VB-STANDALONE-1", "210");
+      const creditId = await postVendorDoc(
+        org,
+        userId,
+        "vendor_credit",
+        "VCRED-STANDALONE-1",
+        "210",
+      );
+      const billLine = await openLineId(org.orgId, billId);
+      const creditLine = await openLineId(org.orgId, creditId);
+      assert.equal(await openBalance(org.orgId, billLine), "210.0000");
 
-    const state = await creditSettlementState(org.orgId, creditId);
-    assert.equal(state?.lineId, creditLine);
-    assert.equal(state?.open, "210.0000");
+      const state = await creditSettlementState(org.orgId, creditId);
+      assert.equal(state?.lineId, creditLine);
+      assert.equal(state?.open, "210.0000");
 
-    const entriesBefore = await entryCount(org.orgId);
-    const result = await withBypass(() =>
-      applyStandaloneCredits(org.orgId, userId, {
-        idempotencyKey: randomUUID(),
-        partyId: org.vendorId,
-        side: "ap",
-        appliedOn: org.date,
-        credits: [
-          { fromLineId: creditLine, toLineId: billLine, amount: "210", sourceDocumentId: creditId },
-        ],
-      }),
-    );
+      const entriesBefore = await entryCount(org.orgId);
+      const result = await withBypass(() =>
+        applyStandaloneCredits(org.orgId, userId, {
+          idempotencyKey: randomUUID(),
+          partyId: org.vendorId,
+          side: "ap",
+          appliedOn: org.date,
+          credits: [
+            {
+              fromLineId: creditLine,
+              toLineId: billLine,
+              amount: "210",
+              sourceDocumentId: creditId,
+            },
+          ],
+        }),
+      );
 
-    assert.equal(result.applicationIds.length, 1);
-    assert.equal(result.amount, "210.0000");
-    assert.equal(await entryCount(org.orgId), entriesBefore);
-    assert.equal(await openBalance(org.orgId, billLine), "0.0000");
-    assert.equal(await sourceOpenBalance(org.orgId, creditLine), "0.0000");
-  }),
+      assert.equal(result.applicationIds.length, 1);
+      assert.equal(result.amount, "210.0000");
+      assert.equal(await entryCount(org.orgId), entriesBefore);
+      assert.equal(await openBalance(org.orgId, billLine), "0.0000");
+      assert.equal(await sourceOpenBalance(org.orgId, creditLine), "0.0000");
+    }),
 );
 
-test("a foreign-currency credit settles its currency's invoice at carrying amounts and realizes the FX", { skip: !DB }, () =>
-  withCreditOrg("Foreign credit settler", async (org, userId) => {
-    // USD 100 invoiced at 1.30 carries CAD 130; the USD 100 credit at 1.40
-    // carries CAD 140. Applying one to the other closes both in USD and
-    // relieves each at its own carrying amount, so the CAD 10 left on the
-    // receivable control is realized FX, and releasing the settlement
-    // reverses exactly that entry.
-    await withBypass(() => db.execute(sql`
+test(
+  "a foreign-currency credit settles its currency's invoice at carrying amounts and realizes the FX",
+  { skip: !DB },
+  () =>
+    withCreditOrg("Foreign credit settler", async (org, userId) => {
+      // USD 100 invoiced at 1.30 carries CAD 130; the USD 100 credit at 1.40
+      // carries CAD 140. Applying one to the other closes both in USD and
+      // relieves each at its own carrying amount, so the CAD 10 left on the
+      // receivable control is realized FX, and releasing the settlement
+      // reverses exactly that entry.
+      await withBypass(() =>
+        db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{controlAccounts,fxRealizedGainLoss}', to_jsonb(${org.accounts.fxGainLoss}::text), true)
-       where id = ${org.orgId}`));
-    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-USD-1", "100", "USD", "1.30");
-    const creditId = await postDoc(org, userId, "customer_credit", "CM-USD-1", "100", "USD", "1.40");
-    const invoiceLine = await openLineId(org.orgId, invoiceId);
-    const creditLine = await openLineId(org.orgId, creditId);
+       where id = ${org.orgId}`),
+      );
+      const invoiceId = await postDoc(
+        org,
+        userId,
+        "customer_invoice",
+        "INV-USD-1",
+        "100",
+        "USD",
+        "1.30",
+      );
+      const creditId = await postDoc(
+        org,
+        userId,
+        "customer_credit",
+        "CM-USD-1",
+        "100",
+        "USD",
+        "1.40",
+      );
+      const invoiceLine = await openLineId(org.orgId, invoiceId);
+      const creditLine = await openLineId(org.orgId, creditId);
 
-    const result = await withBypass(() => applyStandaloneCredits(org.orgId, userId, {
-      idempotencyKey: randomUUID(), partyId: org.customerId, side: "ar", appliedOn: org.date,
-      credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId }],
-    }));
-    const application = (await withBypass(async () => (await db.execute<{
-      amount: string; source_amount: string; source_transaction_amount: string; target_transaction_amount: string; fx_gain_loss_entry_id: string | null;
-    }>(sql`select amount::text, source_amount::text, source_transaction_amount::text, target_transaction_amount::text, fx_gain_loss_entry_id
-             from applications where org_id = ${org.orgId} and id = ${result.applicationIds[0]!}`, "objects"))[0]))!;
-    assert.deepEqual([
-      application.amount,
-      application.source_amount,
-      application.source_transaction_amount,
-      application.target_transaction_amount,
-    ], ["130.0000", "140.0000", "100.0000", "100.0000"]);
-    assert.ok(application.fx_gain_loss_entry_id, "the carrying difference is realized");
-    const fxLines = new Map((await withBypass(async () => await db.execute<{ account_id: string; amount: string }>(sql`
+      const result = await withBypass(() =>
+        applyStandaloneCredits(org.orgId, userId, {
+          idempotencyKey: randomUUID(),
+          partyId: org.customerId,
+          side: "ar",
+          appliedOn: org.date,
+          credits: [
+            {
+              fromLineId: creditLine,
+              toLineId: invoiceLine,
+              amount: "100",
+              sourceDocumentId: creditId,
+            },
+          ],
+        }),
+      );
+      const application = (await withBypass(
+        async () =>
+          (
+            await db.execute<{
+              amount: string;
+              source_amount: string;
+              source_transaction_amount: string;
+              target_transaction_amount: string;
+              fx_gain_loss_entry_id: string | null;
+            }>(
+              sql`select amount::text, source_amount::text, source_transaction_amount::text, target_transaction_amount::text, fx_gain_loss_entry_id
+             from applications where org_id = ${org.orgId} and id = ${result.applicationIds[0]!}`,
+              "objects",
+            )
+          )[0],
+      ))!;
+      assert.deepEqual(
+        [
+          application.amount,
+          application.source_amount,
+          application.source_transaction_amount,
+          application.target_transaction_amount,
+        ],
+        ["130.0000", "140.0000", "100.0000", "100.0000"],
+      );
+      assert.ok(application.fx_gain_loss_entry_id, "the carrying difference is realized");
+      const fxLines = new Map(
+        (
+          await withBypass(
+            async () =>
+              await db.execute<{ account_id: string; amount: string }>(
+                sql`
       select account_id, amount::text from journal_lines
-       where org_id = ${org.orgId} and entry_id = ${application.fx_gain_loss_entry_id}`, "objects"))).map((row) => [row.account_id, row.amount]));
-    assert.deepEqual(fxLines, new Map([[org.accounts.ar, "10.0000"], [org.accounts.fxGainLoss, "-10.0000"]]));
-    const arBalance = async () => (await withBypass(async () => (await db.execute<{ total: string }>(sql`
+       where org_id = ${org.orgId} and entry_id = ${application.fx_gain_loss_entry_id}`,
+                "objects",
+              ),
+          )
+        ).map((row) => [row.account_id, row.amount]),
+      );
+      assert.deepEqual(
+        fxLines,
+        new Map([
+          [org.accounts.ar, "10.0000"],
+          [org.accounts.fxGainLoss, "-10.0000"],
+        ]),
+      );
+      const arBalance = async () =>
+        (await withBypass(
+          async () =>
+            (
+              await db.execute<{ total: string }>(
+                sql`
       select coalesce(sum(l.amount), 0)::text as total from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-       where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ar} and e.status in ('posted', 'reversed')`, "objects"))[0]))!.total;
-    assert.equal(await arBalance(), "0.0000", "both items closed leaves nothing on the receivable control");
+       where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ar} and e.status in ('posted', 'reversed')`,
+                "objects",
+              )
+            )[0],
+        ))!.total;
+      assert.equal(
+        await arBalance(),
+        "0.0000",
+        "both items closed leaves nothing on the receivable control",
+      );
 
-    const released = await withBypass(() => unapplyCreditSettlement(org.orgId, userId, result.applicationIds[0]!));
-    assert.equal(released.amount, "100.0000", "release returns the source transaction amount");
-    const audit = (await withBypass(async () => (await db.execute<{ changes: { before: {
-      amount: string; appliedOn: string; creditDocument: string; fromLineId: string;
-      targetCarryingAmount: string; settledDocument: string; toLineId: string;
-    } } }>(sql`
+      const released = await withBypass(() =>
+        unapplyCreditSettlement(org.orgId, userId, result.applicationIds[0]!),
+      );
+      assert.equal(released.amount, "100.0000", "release returns the source transaction amount");
+      const audit = (await withBypass(
+        async () =>
+          (
+            await db.execute<{
+              changes: {
+                before: {
+                  amount: string;
+                  appliedOn: string;
+                  creditDocument: string;
+                  fromLineId: string;
+                  targetCarryingAmount: string;
+                  settledDocument: string;
+                  toLineId: string;
+                };
+              };
+            }>(
+              sql`
       select changes from audit_log where org_id = ${org.orgId} and row_id = ${result.applicationIds[0]!}
-        and action = 'delete' order by at desc, id desc limit 1`, "objects"))[0]))!;
-    assert.deepEqual(audit.changes.before, {
-      amount: "100.0000",
-      appliedOn: org.date,
-      creditDocument: "CM-USD-1",
-      fromLineId: creditLine,
-      targetCarryingAmount: "130.0000",
-      settledDocument: "INV-USD-1",
-      toLineId: invoiceLine,
-    });
-    const fxStatus = (await withBypass(async () => (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where org_id = ${org.orgId} and id = ${application.fx_gain_loss_entry_id}`, "objects"))[0]))!.status;
-    assert.equal(fxStatus, "reversed");
-    assert.equal(await arBalance(), "-10.0000", "the released items carry their original amounts again");
-  }));
+        and action = 'delete' order by at desc, id desc limit 1`,
+              "objects",
+            )
+          )[0],
+      ))!;
+      assert.deepEqual(audit.changes.before, {
+        amount: "100.0000",
+        appliedOn: org.date,
+        creditDocument: "CM-USD-1",
+        fromLineId: creditLine,
+        targetCarryingAmount: "130.0000",
+        settledDocument: "INV-USD-1",
+        toLineId: invoiceLine,
+      });
+      const fxStatus = (await withBypass(
+        async () =>
+          (
+            await db.execute<{ status: string }>(
+              sql`
+      select status from journal_entries where org_id = ${org.orgId} and id = ${application.fx_gain_loss_entry_id}`,
+              "objects",
+            )
+          )[0],
+      ))!.status;
+      assert.equal(fxStatus, "reversed");
+      assert.equal(
+        await arBalance(),
+        "-10.0000",
+        "the released items carry their original amounts again",
+      );
+    }),
+);

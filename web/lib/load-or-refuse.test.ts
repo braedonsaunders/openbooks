@@ -6,9 +6,8 @@ import test from "node:test";
 
 const { FieldTimeError } = await import("@openbooks/engine/hrm/field-time/errors");
 const { SelfServiceError } = await import("@openbooks/engine/hrm/self-service/actor");
-const { HrmDocumentsError, HrmSurveysError } = await import(
-  "@openbooks/engine/hrm/documents/errors"
-);
+const { HrmDocumentsError, HrmSurveysError } =
+  await import("@openbooks/engine/hrm/documents/errors");
 const { loadOrRefuse } = await import("./load-or-refuse.ts");
 
 /**
@@ -133,20 +132,36 @@ test("a refusal's remedy link rides into page state only when declared", async (
   const notConfigured = () =>
     loadOrRefuse(
       async () => {
-        throw new FieldTimeError("field_time_not_configured", "Field time is not configured — declare the rules in Timesheets setup");
+        throw new FieldTimeError(
+          "field_time_not_configured",
+          "Field time is not configured — declare the rules in Timesheets setup",
+        );
       },
       {
-        refusals: [{ error: FieldTimeError, code: "field_time_not_configured", action: { href: "/time/setup", label: "Open setup" } }],
+        refusals: [
+          {
+            error: FieldTimeError,
+            code: "field_time_not_configured",
+            action: { href: "/time/setup", label: "Open setup" },
+          },
+        ],
         title: "Field clock",
       },
     );
   const withLink = await notConfigured();
-  assert.deepEqual(withLink.ok ? null : withLink.refusal.action, { href: "/time/setup", label: "Open setup" });
+  assert.deepEqual(withLink.ok ? null : withLink.refusal.action, {
+    href: "/time/setup",
+    label: "Open setup",
+  });
   const plain = await loadOrRefuse(
     async () => {
       throw new FieldTimeError("no_employee_link", "No employee record is linked to this login");
     },
     { refusals: [NO_EMPLOYEE], title: "Field clock" },
   );
-  assert.equal(plain.ok ? "loaded" : "action" in plain.refusal, false, "no action key when none is declared");
+  assert.equal(
+    plain.ok ? "loaded" : "action" in plain.refusal,
+    false,
+    "no action key when none is declared",
+  );
 });

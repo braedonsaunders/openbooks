@@ -1,41 +1,40 @@
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
 import { PostingError } from "@openbooks/engine/journal/contracts";
-import { isUuid } from '../../../../../lib/list-params'
-import { applyRulesToAccount, JournalPostingDeniedError } from '../../../../../lib/banking-rules'
+import { isUuid } from "../../../../../lib/list-params";
+import { applyRulesToAccount, JournalPostingDeniedError } from "../../../../../lib/banking-rules";
 const POSTBodySchema1 = z.object({ accountId: uuidString() });
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /** Run active reconciliation rules against an account's unmatched bank lines. */
 export const POST = defineRoute({
-  permission: 'banking.reconcile',
-  feature: 'banking',
+  permission: "banking.reconcile",
+  feature: "banking",
   body: POSTBodySchema1,
   handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
-    const { user } = gate
+    const { user } = gate;
 
-    const body = (routeBody) as { accountId?: string }
+    const body = routeBody as { accountId?: string };
     if (!body.accountId || !isUuid(body.accountId)) {
-        return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
-      }
+      return NextResponse.json({ error: "accountId is required" }, { status: 400 });
+    }
     try {
-        const result = await applyRulesToAccount(
-          user.orgId,
-          user.id,
-          body.accountId,
-          gate.allowedSubsidiaryIds,
-        )
-        return NextResponse.json(result)
-      } catch (e) {
-        if (e instanceof PostingError) return apiErrorResponse(e, { safeStatus: 422 })
-        if (e instanceof JournalPostingDeniedError) return apiErrorResponse(e)
-        return apiErrorResponse(e)
-      }
+      const result = await applyRulesToAccount(
+        user.orgId,
+        user.id,
+        body.accountId,
+        gate.allowedSubsidiaryIds,
+      );
+      return NextResponse.json(result);
+    } catch (e) {
+      if (e instanceof PostingError) return apiErrorResponse(e, { safeStatus: 422 });
+      if (e instanceof JournalPostingDeniedError) return apiErrorResponse(e);
+      return apiErrorResponse(e);
+    }
   },
 });

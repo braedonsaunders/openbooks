@@ -51,53 +51,51 @@ import { PayrollPackError } from "../payroll-error.ts";
 /** A PAYE code the GB engine can operate. Amounts are decimal strings. */
 export type GbTaxCode =
   | {
-    kind: "suffix";
-    /**
-     * The code's number (1257 for 1257L, 0 for 0T). Free pay derives from
-     * it per the software spec §4.3.1: week/month n takes n × the
-     * Week1/Month1 value, Week1 = ceiling(((number × 10) + 9)/52) to the
-     * penny (Month1: /12), with the >500 quotient/remainder decomposition —
-     * so 1257L's month-1 free pay is £1,048.26, not £12,570/12. The engine
-     * never pro-rates an annual figure.
-     */
-    number: bigint;
-    /** Welsh C-prefix alias: identical rUK arithmetic, Welsh taxpayer. */
-    welsh: boolean;
-    /** Scottish S-prefix: prices through GB_SCT_BANDS, never the rUK bands. */
-    scottish: boolean;
-    /** W1 / M1 / X marker: current pay period only, no year to date. */
-    nonCumulative: boolean;
-  }
+      kind: "suffix";
+      /**
+       * The code's number (1257 for 1257L, 0 for 0T). Free pay derives from
+       * it per the software spec §4.3.1: week/month n takes n × the
+       * Week1/Month1 value, Week1 = ceiling(((number × 10) + 9)/52) to the
+       * penny (Month1: /12), with the >500 quotient/remainder decomposition —
+       * so 1257L's month-1 free pay is £1,048.26, not £12,570/12. The engine
+       * never pro-rates an annual figure.
+       */
+      number: bigint;
+      /** Welsh C-prefix alias: identical rUK arithmetic, Welsh taxpayer. */
+      welsh: boolean;
+      /** Scottish S-prefix: prices through GB_SCT_BANDS, never the rUK bands. */
+      scottish: boolean;
+      /** W1 / M1 / X marker: current pay period only, no year to date. */
+      nonCumulative: boolean;
+    }
   | {
-    kind: "flat";
-    /** Whole-pay rate (rUK "0.20" | "0.40" | "0.45"; SCT adds the 19–48% set). */
-    rate: string;
-    welsh: boolean;
-    /** Scottish S-prefix flat code (SBR, SD0–SD3): rate already Scottish. */
-    scottish: boolean;
-  }
+      kind: "flat";
+      /** Whole-pay rate (rUK "0.20" | "0.40" | "0.45"; SCT adds the 19–48% set). */
+      rate: string;
+      welsh: boolean;
+      /** Scottish S-prefix flat code (SBR, SD0–SD3): rate already Scottish. */
+      scottish: boolean;
+    }
   | { kind: "none" }
   | {
-    kind: "k";
-    /**
-     * The code's number (475 for K475). Additional pay derives from it per
-     * §4.3.1c: the same Week1/Month1 construction as free pay but with NO
-     * +9 top-up (the code note: each K unit is £10 of additional pay), so
-     * K475's month-1 addition is ceiling(4,750/12) = £395.84.
-     */
-    number: bigint;
-    welsh: boolean;
-    /** K codes are never Scottish: SK-numbers are refused by name. */
-    scottish: false;
-    nonCumulative: boolean;
-  };
+      kind: "k";
+      /**
+       * The code's number (475 for K475). Additional pay derives from it per
+       * §4.3.1c: the same Week1/Month1 construction as free pay but with NO
+       * +9 top-up (the code note: each K unit is £10 of additional pay), so
+       * K475's month-1 addition is ceiling(4,750/12) = £395.84.
+       */
+      number: bigint;
+      welsh: boolean;
+      /** K codes are never Scottish: SK-numbers are refused by name. */
+      scottish: false;
+      nonCumulative: boolean;
+    };
 
 const STANDARD_ALLOWANCE_NUMBER = 1257n;
 
 function refuse(code: string, reason: string): never {
-  throw new PayrollPackError(
-    `GB payroll pack cannot operate tax code "${code}": ${reason}`,
-  );
+  throw new PayrollPackError(`GB payroll pack cannot operate tax code "${code}": ${reason}`);
 }
 
 /**
@@ -108,7 +106,8 @@ function refuse(code: string, reason: string): never {
  */
 export function parseGbTaxCode(raw: string): GbTaxCode {
   const normalized = raw.trim().toUpperCase().replace(/\s+/g, " ");
-  if (!normalized) refuse(raw, "the code is blank — operate the code HMRC issued on the P6/P9 coding notice");
+  if (!normalized)
+    refuse(raw, "the code is blank — operate the code HMRC issued on the P6/P9 coding notice");
   const marker = normalized.match(/ ?(W1|M1|X)$/);
   const nonCumulative = marker != null;
   const body = marker ? normalized.slice(0, marker.index).trimEnd() : normalized;
@@ -125,13 +124,20 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
     rest = rest.slice(1);
   }
   if (scottish && welsh) {
-    refuse(raw, "HMRC never combines the Scottish S prefix with the Welsh C prefix — "
-      + "refused by name as a malformed code, never priced against either table");
+    refuse(
+      raw,
+      "HMRC never combines the Scottish S prefix with the Welsh C prefix — " +
+        "refused by name as a malformed code, never priced against either table",
+    );
   }
   if (scottish) return parseScottishCode(raw, rest, nonCumulative);
 
   if (rest === "BR" || rest === "D0" || rest === "D1") {
-    if (nonCumulative) refuse(raw, "flat-rate codes price the whole period already — HMRC never issues them with a W1/M1/X marker");
+    if (nonCumulative)
+      refuse(
+        raw,
+        "flat-rate codes price the whole period already — HMRC never issues them with a W1/M1/X marker",
+      );
     if (rest === "BR") return { kind: "flat", rate: "0.20", welsh, scottish: false };
     if (rest === "D0") return { kind: "flat", rate: "0.40", welsh, scottish: false };
     return { kind: "flat", rate: "0.45", welsh, scottish: false };
@@ -159,19 +165,28 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
     const number = BigInt(suffix[1]!);
     const letter = suffix[2];
     if (letter === "M" || letter === "N") {
-      refuse(raw, "marriage-allowance transfer codes adjust the allowance by an amount this pack "
-        + "has not transcribed — refused by name");
+      refuse(
+        raw,
+        "marriage-allowance transfer codes adjust the allowance by an amount this pack " +
+          "has not transcribed — refused by name",
+      );
     }
     if (number !== STANDARD_ALLOWANCE_NUMBER) {
-      refuse(raw, `only the standard ${STANDARD_ALLOWANCE_NUMBER}L (and 0T) suffix codes are `
-        + "operated — any other numeric code is refused until its Tables-A free pay carries "
-        + "its own golden in this pack");
+      refuse(
+        raw,
+        `only the standard ${STANDARD_ALLOWANCE_NUMBER}L (and 0T) suffix codes are ` +
+          "operated — any other numeric code is refused until its Tables-A free pay carries " +
+          "its own golden in this pack",
+      );
     }
     return { kind: "suffix", number, welsh, scottish: false, nonCumulative };
   }
 
-  return refuse(raw, "unrecognised code shape — operate only codes HMRC documents at "
-    + "https://www.gov.uk/employee-tax-codes/letters");
+  return refuse(
+    raw,
+    "unrecognised code shape — operate only codes HMRC documents at " +
+      "https://www.gov.uk/employee-tax-codes/letters",
+  );
 }
 
 /**
@@ -183,52 +198,86 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
  */
 function parseScottishCode(raw: string, rest: string, nonCumulative: boolean): GbTaxCode {
   if (!rest || rest === "S") {
-    refuse(raw, "a bare S is not a code — operate the full S-prefix code HMRC issued "
-      + "(S1257L, SBR, SD0, SD1, SD2, SD3)");
+    refuse(
+      raw,
+      "a bare S is not a code — operate the full S-prefix code HMRC issued " +
+        "(S1257L, SBR, SD0, SD1, SD2, SD3)",
+    );
   }
   // Tables-B flat codes: Tax Tables B-D 2026/27 PDF p.2 quotes each rate.
-  const flatRate = rest === "BR" ? "0.20"
-    : rest === "D0" ? "0.21"
-    : rest === "D1" ? "0.42"
-    : rest === "D2" ? "0.45"
-    : rest === "D3" ? "0.48"
-    : null;
+  const flatRate =
+    rest === "BR"
+      ? "0.20"
+      : rest === "D0"
+        ? "0.21"
+        : rest === "D1"
+          ? "0.42"
+          : rest === "D2"
+            ? "0.45"
+            : rest === "D3"
+              ? "0.48"
+              : null;
   if (flatRate != null) {
-    if (nonCumulative) refuse(raw, "flat-rate codes price the whole period already — HMRC never issues them with a W1/M1/X marker");
+    if (nonCumulative)
+      refuse(
+        raw,
+        "flat-rate codes price the whole period already — HMRC never issues them with a W1/M1/X marker",
+      );
     return { kind: "flat", rate: flatRate, welsh: false, scottish: true };
   }
   if (rest === "0T") {
-    refuse(raw, "S0T is refused by name — the transcribed Scottish set is S1257L, SBR, SD0, "
-      + "SD1, SD2 and SD3 (Tax Tables B-D 2026/27 pp.2–3); S0T is not attested there");
+    refuse(
+      raw,
+      "S0T is refused by name — the transcribed Scottish set is S1257L, SBR, SD0, " +
+        "SD1, SD2 and SD3 (Tax Tables B-D 2026/27 pp.2–3); S0T is not attested there",
+    );
   }
   if (rest === "NT") {
-    refuse(raw, "SNT is refused by name — the transcribed Scottish set is S1257L, SBR, SD0, "
-      + "SD1, SD2 and SD3; SNT is not attested on the transcribed sources");
+    refuse(
+      raw,
+      "SNT is refused by name — the transcribed Scottish set is S1257L, SBR, SD0, " +
+        "SD1, SD2 and SD3; SNT is not attested on the transcribed sources",
+    );
   }
   if (rest === "T") {
-    refuse(raw, "ST codes are under HMRC review with the employee — there is no operable allowance");
+    refuse(
+      raw,
+      "ST codes are under HMRC review with the employee — there is no operable allowance",
+    );
   }
   const k = rest.match(/^K(\d+)$/);
   if (k) {
-    refuse(raw, "SK-numbers are refused by name — K-code added pay through the Scottish bands "
-      + "is not attested on the transcribed sources (Tax Tables B-D 2026/27 pp.2–3)");
+    refuse(
+      raw,
+      "SK-numbers are refused by name — K-code added pay through the Scottish bands " +
+        "is not attested on the transcribed sources (Tax Tables B-D 2026/27 pp.2–3)",
+    );
   }
   const suffix = rest.match(/^(\d+)([LMN])$/);
   if (suffix) {
     const number = BigInt(suffix[1]!);
     const letter = suffix[2];
     if (letter === "M" || letter === "N") {
-      refuse(raw, "Scottish marriage-allowance transfer codes adjust the allowance by an amount "
-        + "this pack has not transcribed — refused by name");
+      refuse(
+        raw,
+        "Scottish marriage-allowance transfer codes adjust the allowance by an amount " +
+          "this pack has not transcribed — refused by name",
+      );
     }
     if (number !== STANDARD_ALLOWANCE_NUMBER) {
-      refuse(raw, `only the standard S${STANDARD_ALLOWANCE_NUMBER}L suffix code is operated — `
-        + "any other Scottish numeric code is refused until its Tables-A free pay carries "
-        + "its own golden in this pack");
+      refuse(
+        raw,
+        `only the standard S${STANDARD_ALLOWANCE_NUMBER}L suffix code is operated — ` +
+          "any other Scottish numeric code is refused until its Tables-A free pay carries " +
+          "its own golden in this pack",
+      );
     }
     return { kind: "suffix", number, welsh: false, scottish: true, nonCumulative };
   }
-  return refuse(raw, "unrecognised Scottish code shape — the transcribed S-prefix set is S1257L "
-    + "(with optional W1/M1/X), SBR, SD0, SD1, SD2 and SD3 "
-    + "(https://www.gov.uk/employee-tax-codes/letters)");
+  return refuse(
+    raw,
+    "unrecognised Scottish code shape — the transcribed S-prefix set is S1257L " +
+      "(with optional W1/M1/X), SBR, SD0, SD1, SD2 and SD3 " +
+      "(https://www.gov.uk/employee-tax-codes/letters)",
+  );
 }

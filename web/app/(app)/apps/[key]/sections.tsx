@@ -1,6 +1,6 @@
-import Link from 'next/link'
-import { PageHeader } from '@openbooks/ui'
-import { AppFrame } from './AppFrame'
+import Link from "next/link";
+import { PageHeader } from "@openbooks/ui";
+import { AppFrame } from "./AppFrame";
 
 /**
  * The three bodies this route can render, moved out of `page.tsx` so both
@@ -22,10 +22,10 @@ export function AppNotice({
   backHref,
   backLabel,
 }: {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
 }) {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -34,7 +34,7 @@ export function AppNotice({
         {backLabel}
       </Link>
     </div>
-  )
+  );
 }
 
 /**
@@ -52,11 +52,11 @@ export function AppRuntimeChrome({
   appsLabel,
   context,
 }: {
-  appKey: string
-  appName: string
-  appsHref: string
-  appsLabel: string
-  context: Parameters<typeof AppFrame>[0]['context']
+  appKey: string;
+  appName: string;
+  appsHref: string;
+  appsLabel: string;
+  context: Parameters<typeof AppFrame>[0]["context"];
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -71,5 +71,5 @@ export function AppRuntimeChrome({
         <AppFrame appKey={appKey} context={context} />
       </div>
     </div>
-  )
+  );
 }

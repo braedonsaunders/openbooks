@@ -32,30 +32,20 @@
  * `full_month` (the whole in-service month counts) is meaningful here and the
  * date-dependent MACRS conventions are not.
  */
-export const BOOK_DEPRECIATION_CONVENTIONS = [
-  "full_month",
-  "mid_month",
-  "half_year",
-] as const;
+export const BOOK_DEPRECIATION_CONVENTIONS = ["full_month", "mid_month", "half_year"] as const;
 
 /**
  * Conventions the tax engine can express. MACRS adds `mid_quarter`, which the
  * book engine has no representation for; there is deliberately no `full_month`,
  * because a tax year is not a month.
  */
-export const TAX_DEPRECIATION_CONVENTIONS = [
-  "half_year",
-  "mid_quarter",
-  "mid_month",
-] as const;
+export const TAX_DEPRECIATION_CONVENTIONS = ["half_year", "mid_quarter", "mid_month"] as const;
 
 export type BookDepreciationConvention = (typeof BOOK_DEPRECIATION_CONVENTIONS)[number];
 export type TaxDepreciationConvention = (typeof TAX_DEPRECIATION_CONVENTIONS)[number];
 
 /** Every convention either engine can express. */
-export type DepreciationConvention =
-  | BookDepreciationConvention
-  | TaxDepreciationConvention;
+export type DepreciationConvention = BookDepreciationConvention | TaxDepreciationConvention;
 
 /**
  * Conventions whose first-year share is fixed by the rule itself rather than by

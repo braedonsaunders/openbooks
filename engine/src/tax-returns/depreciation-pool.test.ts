@@ -14,10 +14,13 @@ const run = (over: Partial<PoolYearInput>): ReturnType<typeof computePoolYear> =
   computePoolYear({ openingBalance: "0", additions: "0", dispositions: "0", rate: "0.2", ...over });
 
 test("ships multiple pooled regimes (not just Canada), all resolvable", () => {
-  assert.deepEqual(
-    Object.keys(TAX_DEPRECIATION_REGIMES).sort(),
-    ["au_pool", "ca_cca", "nz_pool", "uk_wda", "us_macrs"],
-  );
+  assert.deepEqual(Object.keys(TAX_DEPRECIATION_REGIMES).sort(), [
+    "au_pool",
+    "ca_cca",
+    "nz_pool",
+    "uk_wda",
+    "us_macrs",
+  ]);
   // UK main pool 18% full-year; AU small-business pool 30% at half in year one.
   assert.equal(resolvePoolClass("uk_wda", "main")?.rate, "0.18");
   assert.equal(resolvePoolClass("uk_wda", "main")?.firstYearFraction, "1");
@@ -41,24 +44,43 @@ test("Canadian vehicle cost caps resolve from acquisition-date statutory tiers",
 });
 
 test("U.S. MACRS 5-year 200% DB half-year schedule switches to straight line", () => {
-  const amounts = [2025, 2026, 2027, 2028, 2029, 2030].map((taxYear) =>
-    computeMacrsYear({
-      basis: "10000", placedInServiceOn: "2025-08-11", taxYear,
-      recoveryPeriodYears: "5", method: "200_db", convention: "half_year",
-    }).allowance,
+  const amounts = [2025, 2026, 2027, 2028, 2029, 2030].map(
+    (taxYear) =>
+      computeMacrsYear({
+        basis: "10000",
+        placedInServiceOn: "2025-08-11",
+        taxYear,
+        recoveryPeriodYears: "5",
+        method: "200_db",
+        convention: "half_year",
+      }).allowance,
   );
   assert.deepEqual(amounts, ["2000.00", "3200.00", "1920.00", "1152.00", "1152.00", "576.00"]);
 });
 
 test("U.S. MACRS supports mid-quarter and mid-month conventions", () => {
-  assert.equal(computeMacrsYear({
-    basis: "10000", placedInServiceOn: "2025-11-15", taxYear: 2025,
-    recoveryPeriodYears: "5", method: "200_db", convention: "mid_quarter",
-  }).allowance, "500.00");
-  assert.equal(computeMacrsYear({
-    basis: "10000", placedInServiceOn: "2025-01-10", taxYear: 2025,
-    recoveryPeriodYears: "27.5", method: "straight_line", convention: "mid_month",
-  }).allowance, "348.48");
+  assert.equal(
+    computeMacrsYear({
+      basis: "10000",
+      placedInServiceOn: "2025-11-15",
+      taxYear: 2025,
+      recoveryPeriodYears: "5",
+      method: "200_db",
+      convention: "mid_quarter",
+    }).allowance,
+    "500.00",
+  );
+  assert.equal(
+    computeMacrsYear({
+      basis: "10000",
+      placedInServiceOn: "2025-01-10",
+      taxYear: 2025,
+      recoveryPeriodYears: "27.5",
+      method: "straight_line",
+      convention: "mid_month",
+    }).allowance,
+    "348.48",
+  );
 });
 
 test("MACRS mid-quarter 40% test uses basis after Section 179 and business-use elections", () => {
@@ -67,24 +89,44 @@ test("MACRS mid-quarter 40% test uses basis after Section 179 and business-use e
   // https://www.irs.gov/publications/p946
   // Gross Q4 cost is 6,000 / 11,000 (>40%), but eligible Q4 basis is
   // 1,000 / 6,000 (<40%) after 50% business use and 2,000 Section 179.
-  assert.equal(macrsVintageUsesMidQuarter([
-    {
-      basis: "6000", placedInServiceOn: "2026-10-15",
-      section179: "2000", businessUsePercent: "50",
-    },
-    { basis: "5000", placedInServiceOn: "2026-07-01", businessUsePercent: "100" },
-  ], 2026), false);
-  assert.equal(macrsVintageUsesMidQuarter([
-    { basis: "6000", placedInServiceOn: "2026-10-15", businessUsePercent: "100" },
-    { basis: "5000", placedInServiceOn: "2026-07-01", businessUsePercent: "100" },
-  ], 2026), true);
+  assert.equal(
+    macrsVintageUsesMidQuarter(
+      [
+        {
+          basis: "6000",
+          placedInServiceOn: "2026-10-15",
+          section179: "2000",
+          businessUsePercent: "50",
+        },
+        { basis: "5000", placedInServiceOn: "2026-07-01", businessUsePercent: "100" },
+      ],
+      2026,
+    ),
+    false,
+  );
+  assert.equal(
+    macrsVintageUsesMidQuarter(
+      [
+        { basis: "6000", placedInServiceOn: "2026-10-15", businessUsePercent: "100" },
+        { basis: "5000", placedInServiceOn: "2026-07-01", businessUsePercent: "100" },
+      ],
+      2026,
+    ),
+    true,
+  );
 });
 
 test("U.S. MACRS applies configured section 179, bonus, and business-use elections", () => {
   const result = computeMacrsYear({
-    basis: "10000", placedInServiceOn: "2025-04-01", taxYear: 2025,
-    recoveryPeriodYears: "5", method: "200_db", convention: "half_year",
-    businessUsePercent: "80", section179: "1000", bonusPercent: "40",
+    basis: "10000",
+    placedInServiceOn: "2025-04-01",
+    taxYear: 2025,
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    businessUsePercent: "80",
+    section179: "1000",
+    bonusPercent: "40",
   });
   assert.equal(result.section179, "1000.00");
   assert.equal(result.bonus, "2800.00");
@@ -95,9 +137,15 @@ test("U.S. MACRS applies configured section 179, bonus, and business-use electio
 
 test("U.S. MACRS remains exact above Number.MAX_SAFE_INTEGER with fractional elections", () => {
   const result = computeMacrsYear({
-    basis: "9007199254740993.1234", placedInServiceOn: "2025-04-01", taxYear: 2025,
-    recoveryPeriodYears: "5", method: "200_db", convention: "half_year",
-    businessUsePercent: "33.3333", section179: "0.0001", bonusPercent: "12.3456",
+    basis: "9007199254740993.1234",
+    placedInServiceOn: "2025-04-01",
+    taxYear: 2025,
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    businessUsePercent: "33.3333",
+    section179: "0.0001",
+    bonusPercent: "12.3456",
   });
   assert.deepEqual(result, {
     section179: "0.00",
@@ -123,7 +171,11 @@ test("year 2 depreciates the full opening balance", () => {
 });
 
 test("enhanced first-year multiplier (Canada AII) suspends the fraction and boosts the base", () => {
-  const r = run({ additions: "10000", firstYearFraction: "0.5", enhancedFirstYearMultiplier: "1.5" });
+  const r = run({
+    additions: "10000",
+    firstYearFraction: "0.5",
+    enhancedFirstYearMultiplier: "1.5",
+  });
   assert.equal(r.base, "15000.00");
   assert.equal(r.allowance, "3000.00");
 });
@@ -190,17 +242,30 @@ test("out-of-domain scaling knobs fail closed instead of misstating the allowanc
 
 test("U.S. MACRS bonus and business-use percents fail closed outside 0..100", () => {
   const base = {
-    basis: "10000", placedInServiceOn: "2025-04-01", taxYear: 2025,
-    recoveryPeriodYears: "5" as const, method: "200_db" as const, convention: "half_year" as const,
+    basis: "10000",
+    placedInServiceOn: "2025-04-01",
+    taxYear: 2025,
+    recoveryPeriodYears: "5" as const,
+    method: "200_db" as const,
+    convention: "half_year" as const,
   };
   // A 200% bonus used to deduct twice the basis ($20,000 on $10,000).
   assert.throws(() => computeMacrsYear({ ...base, bonusPercent: "200" }), /bonus percent/);
   assert.throws(() => computeMacrsYear({ ...base, bonusPercent: "-10" }), /bonus percent/);
-  assert.throws(() => computeMacrsYear({ ...base, businessUsePercent: "150" }), /business use percent/);
-  assert.throws(() => computeMacrsYear({ ...base, businessUsePercent: "-5" }), /business use percent/);
+  assert.throws(
+    () => computeMacrsYear({ ...base, businessUsePercent: "150" }),
+    /business use percent/,
+  );
+  assert.throws(
+    () => computeMacrsYear({ ...base, businessUsePercent: "-5" }),
+    /business use percent/,
+  );
   // Elections are validated ahead of the date early-returns: a 200% bonus on
   // a pre-placement year used to return zero without refusing the election.
-  assert.throws(() => computeMacrsYear({ ...base, taxYear: 2024, bonusPercent: "200" }), /bonus percent/);
+  assert.throws(
+    () => computeMacrsYear({ ...base, taxYear: 2024, bonusPercent: "200" }),
+    /bonus percent/,
+  );
   // Boundaries stay legal: full bonus deducts the whole basis, zero business
   // use deducts nothing.
   assert.equal(computeMacrsYear({ ...base, bonusPercent: "100" }).allowance, "10000.00");
@@ -214,7 +279,12 @@ test("regimes that disallow recapture (Canada Class 10.1) just zero the pool", (
 });
 
 test("immediate expensing fully deducts before the rate", () => {
-  const r = run({ additions: "100000", immediateExpense: "100000", rate: "0.55", firstYearFraction: "0.5" });
+  const r = run({
+    additions: "100000",
+    immediateExpense: "100000",
+    rate: "0.55",
+    firstYearFraction: "0.5",
+  });
   assert.equal(r.immediateExpense, "100000.00");
   assert.equal(r.allowance, "0.00");
   assert.equal(r.closingBalance, "0.00");
@@ -231,8 +301,11 @@ test("Canada CCA is a configured regime, not hardcoded logic", () => {
 
   // Run a real Class 8 year straight from the regime config.
   const r = computePoolYear({
-    openingBalance: "0", additions: "10000", dispositions: "0",
-    rate: c8.rate, firstYearFraction: c8.firstYearFraction,
+    openingBalance: "0",
+    additions: "10000",
+    dispositions: "0",
+    rate: c8.rate,
+    firstYearFraction: c8.firstYearFraction,
   });
   assert.equal(r.allowance, "1000.00");
 });

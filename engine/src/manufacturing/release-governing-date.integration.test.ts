@@ -20,7 +20,9 @@ function run<T>(orgId: string, work: (tx: SqlExecutor) => Promise<T>): Promise<T
 async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmentId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
+    const actorId = await withBypassContext(() =>
+      createManufacturingOperator(org.orgId, "Shop lead"),
+    );
     const wipId = randomUUID();
     await withBypassContext(async () => {
       await db.execute(sql`insert into accounts
@@ -34,7 +36,14 @@ async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmen
         where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly} and component_item_id = ${org.items.component}`);
     });
     const departmentId = String(
-      (await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`, "objects")))[0]!.id,
+      (
+        await withBypassContext(() =>
+          db.execute(
+            sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`,
+            "objects",
+          ),
+        )
+      )[0]!.id,
     );
     return { org, actorId, departmentId };
   } catch (error) {
@@ -43,10 +52,24 @@ async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmen
   }
 }
 
-async function rate(f: { org: ScratchOrg; actorId: string; departmentId: string }, from: string, to: string | null, value: string): Promise<string> {
-  return String((await withBypassContext(() => db.execute(sql`insert into labor_cost_rates
+async function rate(
+  f: { org: ScratchOrg; actorId: string; departmentId: string },
+  from: string,
+  to: string | null,
+  value: string,
+): Promise<string> {
+  return String(
+    (
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into labor_cost_rates
     (org_id, department_id, currency, rate, basis, annual_hours, effective_from, effective_to, is_active, created_by, updated_by)
-    values (${f.org.orgId}, ${f.departmentId}, 'CAD', ${value}, 'hour', '2080', ${from}, ${to}, true, ${f.actorId}, ${f.actorId}) returning id`, "objects")))[0]!.id);
+    values (${f.org.orgId}, ${f.departmentId}, 'CAD', ${value}, 'hour', '2080', ${from}, ${to}, true, ${f.actorId}, ${f.actorId}) returning id`,
+          "objects",
+        ),
+      )
+    )[0]!.id,
+  );
 }
 
 async function routeWithBareCenter(
@@ -54,56 +77,124 @@ async function routeWithBareCenter(
   effectiveFrom: string,
   effectiveTo: string | null,
 ): Promise<void> {
-  const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
-    code: `WC-${randomUUID()}`, name: "Backdated center", kind: "machine",
-    capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false,
-  }));
-  const routing = await run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
-    producedItemId: f.org.items.assembly, code: `RT-${randomUUID()}`, name: "Backdated route",
-    effectiveFrom, effectiveTo,
-    defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units",
-  }));
-  await run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String((routing as Record<string, unknown>).id), {
-    sequence: 10, name: "Assemble", workCenterId: String((center as Record<string, unknown>).id), setupMinutes: "0", runMinutesPerUnit: "1",
-  }));
-  await approveFixtureRouting(f.org.orgId, f.actorId, String((routing as Record<string, unknown>).id));
+  const center = await run(f.org.orgId, (tx) =>
+    createWorkCenter(tx, f.org.orgId, f.actorId, {
+      code: `WC-${randomUUID()}`,
+      name: "Backdated center",
+      kind: "machine",
+      capacityHoursPerDay: "8",
+      efficiencyPct: "100",
+      absorbsOverhead: false,
+    }),
+  );
+  const routing = await run(f.org.orgId, (tx) =>
+    createRouting(tx, f.org.orgId, f.actorId, {
+      producedItemId: f.org.items.assembly,
+      code: `RT-${randomUUID()}`,
+      name: "Backdated route",
+      effectiveFrom,
+      effectiveTo,
+      defaultIssueLocationId: f.org.stockLocationId,
+      defaultReceiptLocationId: f.org.stockLocationId2,
+      overheadBasis: "units",
+    }),
+  );
+  await run(f.org.orgId, (tx) =>
+    createRoutingOperation(
+      tx,
+      f.org.orgId,
+      f.actorId,
+      String((routing as Record<string, unknown>).id),
+      {
+        sequence: 10,
+        name: "Assemble",
+        workCenterId: String((center as Record<string, unknown>).id),
+        setupMinutes: "0",
+        runMinutesPerUnit: "1",
+      },
+    ),
+  );
+  await approveFixtureRouting(
+    f.org.orgId,
+    f.actorId,
+    String((routing as Record<string, unknown>).id),
+  );
 }
 
-test("back-dated release resolves the rates and routing effective on the order date", { skip: !DB }, async () => {
-  const f = await setupOrg();
-  try {
-    const oldRateId = await rate(f, "2025-01-01", "2025-12-31", "25");
-    await routeWithBareCenter(f, "2025-01-01", "2025-12-31");
-    const draft = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
-      producedItemId: f.org.items.assembly, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
-      issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: "2025-10-27",
-    }));
-    const released = await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
-    assert.equal(released.status, "released");
-    const operation = (await withBypassContext(async () => await db.execute<{ wageId: string; wageFrom: string }>(sql`
+test(
+  "back-dated release resolves the rates and routing effective on the order date",
+  { skip: !DB },
+  async () => {
+    const f = await setupOrg();
+    try {
+      const oldRateId = await rate(f, "2025-01-01", "2025-12-31", "25");
+      await routeWithBareCenter(f, "2025-01-01", "2025-12-31");
+      const draft = await run(f.org.orgId, (tx) =>
+        createWorkOrder(tx, f.org.orgId, f.actorId, {
+          producedItemId: f.org.items.assembly,
+          quantityOrdered: "1",
+          subsidiaryId: f.org.subsidiaryId,
+          issueLocationId: f.org.stockLocationId,
+          receiptLocationId: f.org.stockLocationId2,
+          plannedStart: "2025-10-27",
+        }),
+      );
+      const released = await run(f.org.orgId, (tx) =>
+        releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id),
+      );
+      assert.equal(released.status, "released");
+      const operation = (
+        await withBypassContext(
+          async () =>
+            await db.execute<{ wageId: string; wageFrom: string }>(
+              sql`
       select standard_labor_wage_id as "wageId", standard_labor_effective_from::text as "wageFrom"
-        from mfg_wo_operations where org_id = ${f.org.orgId} and work_order_id = ${draft.id}`, "objects")))[0]!;
-    assert.equal(operation.wageId, oldRateId, "the frozen snapshot must carry the then-effective rate");
-    assert.equal(operation.wageFrom, "2025-01-01");
-  } finally {
-    await withBypassContext(() => dropScratchOrg(f.org.orgId));
-  }
-});
+        from mfg_wo_operations where org_id = ${f.org.orgId} and work_order_id = ${draft.id}`,
+              "objects",
+            ),
+        )
+      )[0]!;
+      assert.equal(
+        operation.wageId,
+        oldRateId,
+        "the frozen snapshot must carry the then-effective rate",
+      );
+      assert.equal(operation.wageFrom, "2025-01-01");
+    } finally {
+      await withBypassContext(() => dropScratchOrg(f.org.orgId));
+    }
+  },
+);
 
 test("back-dated release names the order date when no rate covers it", { skip: !DB }, async () => {
   const f = await setupOrg();
   try {
     await rate(f, "2026-01-01", null, "30");
     await routeWithBareCenter(f, "2025-01-01", null);
-    const draft = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
-      producedItemId: f.org.items.assembly, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
-      issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: "2025-10-27",
-    }));
-    await assert.rejects(run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), (error: unknown) => {
-      assert.ok(error instanceof ManufacturingError && error.code === "standard_labor_rate_missing");
-      assert.match(error.message, /2025-10-27/, "the refusal must name the order date, never today");
-      return true;
-    });
+    const draft = await run(f.org.orgId, (tx) =>
+      createWorkOrder(tx, f.org.orgId, f.actorId, {
+        producedItemId: f.org.items.assembly,
+        quantityOrdered: "1",
+        subsidiaryId: f.org.subsidiaryId,
+        issueLocationId: f.org.stockLocationId,
+        receiptLocationId: f.org.stockLocationId2,
+        plannedStart: "2025-10-27",
+      }),
+    );
+    await assert.rejects(
+      run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)),
+      (error: unknown) => {
+        assert.ok(
+          error instanceof ManufacturingError && error.code === "standard_labor_rate_missing",
+        );
+        assert.match(
+          error.message,
+          /2025-10-27/,
+          "the refusal must name the order date, never today",
+        );
+        return true;
+      },
+    );
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }

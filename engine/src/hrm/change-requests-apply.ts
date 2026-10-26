@@ -3,10 +3,7 @@ import { type SqlExecutor } from "../platform/db.ts";
 import { type ProfileChangePayload } from "./self-service/profile-schema.ts";
 import { type BankChangePayload } from "./self-service/bank-schema.ts";
 import { loadMyAddress } from "./self-service/self-read.ts";
-import {
-  HrmChangeRequestError,
-  type ChangeRequestPayload,
-} from "./change-requests-payload.ts";
+import { HrmChangeRequestError, type ChangeRequestPayload } from "./change-requests-payload.ts";
 import {
   type RequestRow,
   assertEmploymentStatusPayrollWindow,
@@ -53,17 +50,26 @@ export async function applyApprovedRequest(
   if (payload.kind === "status_change" && payload.historicalObservation) {
     await assertHistoricalStatusWindow(exec, orgId, request.employment_id, payload);
   } else if (payload.kind === "status_change" || payload.kind === "termination") {
-    await assertEmploymentStatusPayrollWindow(exec, orgId, request.employment_id,
+    await assertEmploymentStatusPayrollWindow(
+      exec,
+      orgId,
+      request.employment_id,
       payload.kind === "termination" ? payload.effectiveDate : payload.effectiveFrom,
-      payload.kind === "termination" ? null : payload.effectiveTo);
+      payload.kind === "termination" ? null : payload.effectiveTo,
+    );
   }
 
   // (1) Re-read the aggregate under lock and refuse a stale proposal: the
   // live revision must still equal the authored expectation.
-  const aggregate = (await exec.execute<{ revision: number }>(sql`
+  const aggregate = (
+    await exec.execute<{ revision: number }>(
+      sql`
     select revision from worker_employments
      where org_id = ${orgId} and id = ${request.employment_id} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!aggregate) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -84,14 +90,22 @@ export async function applyApprovedRequest(
   await bumpGraphRevision(exec, orgId);
   // One clock for the handoff: every recorded_until closed here equals the
   // recorded_at of its successor (seamless, no gap or overlap).
-  const nowRow = (await exec.execute<{ now: DbInstant; now_iso: string }>(sql`
+  const nowRow = (
+    await exec.execute<{ now: DbInstant; now_iso: string }>(
+      sql`
     select now() as now,
            to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as now_iso
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const recordedAt = nowRow?.now;
   const recordedAtIso = nowRow?.now_iso;
   if (!recordedAt || typeof recordedAtIso !== "string" || recordedAtIso.length === 0) {
-    throw new HrmChangeRequestError("REFUSED", "the database clock is unreadable — retry the decision");
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "the database clock is unreadable — retry the decision",
+    );
   }
 
   // (1) is the aggregate re-read above; (2) the version writes with their
@@ -99,19 +113,64 @@ export async function applyApprovedRequest(
   // evidence link (single-fire: only a still-approved row moves) land inside
   // each branch below — all in this one transaction.
   if (payload.kind === "hire") {
-    await applyHire(exec, { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso });
+    await applyHire(exec, {
+      orgId,
+      actorId,
+      request,
+      payload,
+      newRevision,
+      recordedAt,
+      recordedAtIso,
+    });
   } else if (payload.kind === "status_change" && payload.historicalObservation) {
-    await applyHistoricalStatusObservation(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
+    await applyHistoricalStatusObservation(exec, {
+      orgId,
+      actorId,
+      request,
+      payload,
+      newRevision,
+      recordedAt,
+    });
   } else if (payload.kind === "status_change" || payload.kind === "termination") {
-    await applyEmploymentVersionChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
+    await applyEmploymentVersionChange(exec, {
+      orgId,
+      actorId,
+      request,
+      payload,
+      newRevision,
+      recordedAt,
+    });
   } else if (payload.kind === "position_assignment") {
-    await applyPositionAssignment(exec, { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso });
+    await applyPositionAssignment(exec, {
+      orgId,
+      actorId,
+      request,
+      payload,
+      newRevision,
+      recordedAt,
+      recordedAtIso,
+    });
   } else if (payload.kind === "profile_change") {
     await applyProfileChange(exec, { orgId, actorId, request, payload, newRevision });
   } else if (payload.kind === "bank_change") {
-    await applyBankChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso });
+    await applyBankChange(exec, {
+      orgId,
+      actorId,
+      request,
+      payload,
+      newRevision,
+      recordedAt,
+      recordedAtIso,
+    });
   } else {
-    await applyAssignmentChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
+    await applyAssignmentChange(exec, {
+      orgId,
+      actorId,
+      request,
+      payload,
+      newRevision,
+      recordedAt,
+    });
   }
 }
 
@@ -139,10 +198,15 @@ async function applyProfileChange(
   },
 ): Promise<void> {
   const { orgId, actorId, request, payload, newRevision } = args;
-  const aggregate = (await exec.execute<{ revision: number; worker_party_id: string }>(sql`
+  const aggregate = (
+    await exec.execute<{ revision: number; worker_party_id: string }>(
+      sql`
     select revision, worker_party_id from worker_employments
      where org_id = ${orgId} and id = ${request.employment_id} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!aggregate) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -150,14 +214,19 @@ async function applyProfileChange(
     );
   }
   const partyId = aggregate.worker_party_id;
-  const before = (await exec.execute<{
-    phone: string | null;
-    email: string | null;
-    emergency_contact: unknown;
-  }>(sql`
+  const before = (
+    await exec.execute<{
+      phone: string | null;
+      email: string | null;
+      emergency_contact: unknown;
+    }>(
+      sql`
     select phone, email, emergency_contact as "emergency_contact"
       from parties where org_id = ${orgId} and id = ${partyId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!before) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -187,8 +256,10 @@ async function applyProfileChange(
           };
   const contactChanged =
     nextContact !== undefined && normContact(before.emergency_contact) !== normContact(nextContact);
-  const phoneChanged = payload.phone !== undefined && (before.phone ?? null) !== (payload.phone ?? null);
-  const emailChanged = payload.email !== undefined && (before.email ?? null) !== (payload.email ?? null);
+  const phoneChanged =
+    payload.phone !== undefined && (before.phone ?? null) !== (payload.phone ?? null);
+  const emailChanged =
+    payload.email !== undefined && (before.email ?? null) !== (payload.email ?? null);
   const addressChanged =
     payload.address !== undefined &&
     (beforeAddress === null ||
@@ -216,7 +287,8 @@ async function applyProfileChange(
         : nextContact === null
           ? sql`null`
           : sql`${JSON.stringify(nextContact)}::jsonb`;
-    const updated = await exec.execute(sql`
+    const updated = await exec.execute(
+      sql`
       update parties
          set phone = ${nextPhone},
              email = ${nextEmail},
@@ -224,7 +296,9 @@ async function applyProfileChange(
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${partyId}
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -234,7 +308,8 @@ async function applyProfileChange(
   }
   if (addressChanged && payload.address !== undefined) {
     if (beforeAddress === null) {
-      const inserted = await exec.execute(sql`
+      const inserted = await exec.execute(
+        sql`
         insert into addresses
           (org_id, party_id, line1, line2, city, region, postal_code, country,
            is_default_billing, created_by, updated_by)
@@ -243,7 +318,9 @@ async function applyProfileChange(
                 ${payload.address.postalCode}, ${payload.address.country},
                 true, ${actorId}, ${actorId})
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (inserted.length !== 1) {
         throw new HrmChangeRequestError(
           "REFUSED",
@@ -251,7 +328,8 @@ async function applyProfileChange(
         );
       }
     } else {
-      const updated = await exec.execute(sql`
+      const updated = await exec.execute(
+        sql`
         update addresses
            set line1 = ${payload.address.line1}, line2 = ${payload.address.line2},
                city = ${payload.address.city}, region = ${payload.address.region},
@@ -259,7 +337,9 @@ async function applyProfileChange(
                updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${beforeAddress.id}
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (updated.length !== 1) {
         throw new HrmChangeRequestError(
           "REFUSED",
@@ -275,7 +355,11 @@ async function applyProfileChange(
     revision: newRevision,
     changeKind: "profile_changed",
     priorSnapshot: {
-      party: { phone: before.phone, email: before.email, emergencyContact: before.emergency_contact },
+      party: {
+        phone: before.phone,
+        email: before.email,
+        emergencyContact: before.emergency_contact,
+      },
       address: beforeAddress,
     },
     closedVersions: [],
@@ -285,7 +369,13 @@ async function applyProfileChange(
     actorId,
   });
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+  await bumpAggregateRevision(exec, {
+    orgId,
+    actorId,
+    request,
+    expected: newRevision - 1,
+    next: newRevision,
+  });
 }
 
 /**
@@ -315,10 +405,15 @@ async function applyBankChange(
   },
 ): Promise<void> {
   const { orgId, actorId, request, payload, newRevision, recordedAtIso } = args;
-  const aggregate = (await exec.execute<{ revision: number; worker_party_id: string }>(sql`
+  const aggregate = (
+    await exec.execute<{ revision: number; worker_party_id: string }>(
+      sql`
     select revision, worker_party_id from worker_employments
      where org_id = ${orgId} and id = ${request.employment_id} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!aggregate) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -329,20 +424,36 @@ async function applyBankChange(
   // Live prior rows retire onto this event; rows behind in-flight payment
   // instructions refuse first — approved money keeps paying exactly what
   // its file generation locked.
-  const priors = await exec.execute<{ id: string; bank_name: string | null; lastFour: string | null }>(sql`
+  const priors = await exec.execute<{
+    id: string;
+    bank_name: string | null;
+    lastFour: string | null;
+  }>(
+    sql`
     select id, bank_name, account_last_four as "lastFour"
       from party_bank_accounts
      where org_id = ${orgId} and party_id = ${partyId}
        and is_active and retired_at is null
      order by created_at, id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (priors.length > 0) {
-    const inFlight = (await exec.execute<{ n: number }>(sql`
+    const inFlight =
+      (
+        await exec.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from payment_instructions instruction
        where instruction.org_id = ${orgId}
-         and instruction.payee_bank_account_id in (${sql.join(priors.map((row) => sql`${row.id}::uuid`), sql`, `)})
+         and instruction.payee_bank_account_id in (${sql.join(
+           priors.map((row) => sql`${row.id}::uuid`),
+           sql`, `,
+         )})
          and instruction.status in ('pending', 'approved', 'generated', 'sent')
-    `, "objects"))[0]?.n ?? 0;
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
     if (inFlight > 0) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -350,7 +461,9 @@ async function applyBankChange(
       );
     }
   }
-  const inserted = (await exec.execute<{ id: string }>(sql`
+  const inserted = (
+    await exec.execute<{ id: string }>(
+      sql`
     insert into party_bank_accounts
       (org_id, party_id, source_change_request_id, bank_name, country, currency, routing,
        account_number_encrypted, account_last_four,
@@ -363,7 +476,10 @@ async function applyBankChange(
             ${request.submitted_by}, ${request.submitted_at},
             ${actorId}, ${actorId})
     returning id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!inserted) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -372,7 +488,8 @@ async function applyBankChange(
   }
   const retired: Array<{ rowId: string; bankName: string | null; lastFour: string | null }> = [];
   for (const prior of priors) {
-    const done = await exec.execute(sql`
+    const done = await exec.execute(
+      sql`
       update party_bank_accounts
          set is_active = false, retired_at = now(), retired_by = ${actorId},
              retirement_reason = ${request.reason ?? ""},
@@ -380,7 +497,9 @@ async function applyBankChange(
        where org_id = ${orgId} and id = ${prior.id} and party_id = ${partyId}
          and is_active and retired_at is null
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (done.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -410,7 +529,8 @@ async function applyBankChange(
     reasonCode: request.reason_code ?? null,
     actorId,
   });
-  const audited = await exec.execute(sql`
+  const audited = await exec.execute(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'party_bank_accounts', ${inserted.id}, 'insert',
             ${JSON.stringify({
@@ -427,7 +547,9 @@ async function applyBankChange(
               requestId: request.id,
             })}::jsonb, ${actorId})
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (audited.length !== 1) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -435,7 +557,13 @@ async function applyBankChange(
     );
   }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+  await bumpAggregateRevision(exec, {
+    orgId,
+    actorId,
+    request,
+    expected: newRevision - 1,
+    next: newRevision,
+  });
 }
 
 /**

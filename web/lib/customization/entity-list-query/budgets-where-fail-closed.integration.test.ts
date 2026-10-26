@@ -21,8 +21,11 @@ async function budgetCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from budget_scenarios bs
-      where ${budgetWhere({ ...defaultListView("budget_scenario"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from budget_scenarios bs
+      where ${budgetWhere({ ...defaultListView("budget_scenario"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 

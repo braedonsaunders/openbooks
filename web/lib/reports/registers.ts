@@ -1,11 +1,17 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
+import {
+  PAYROLL_RESTRICTED_PARTY_LABEL,
+  collapseRestrictedPayrollLines,
+} from "../payroll-confidentiality";
 // Never ../authz here: that module pulls next/navigation, which breaks
 // plain-node consumers of the ledger readers (spawned test children
 // without the react-server condition) — same rule as payroll-confidentiality.
-import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
+import {
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+} from "@openbooks/engine/organization/scope";
 import { functionalReportReader } from "./currency-basis";
 import { statementBookIdsExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
@@ -65,23 +71,30 @@ export async function accountRegister(
   // payroll lines collapse into one restricted line per entry per account.
   canSeePayroll?: boolean,
 ) {
-  const acct = (await db.execute<AccountRegisterAccount & { subsidiary_id: string | null }>(sql`
+  const acct = await db.execute<AccountRegisterAccount & { subsidiary_id: string | null }>(
+    sql`
     select id, number, name, type, is_summary, subsidiary_id from accounts
      where id = ${accountId} and org_id = ${orgId}
-  `, "objects"));
-  if (!acct[0]) return { account: undefined, lines: [], total: 0, balance: '0' };
+  `,
+    "objects",
+  );
+  if (!acct[0]) return { account: undefined, lines: [], total: 0, balance: "0" };
   // The header carries the account's number, name and balance: an
   // out-of-scope account is indistinguishable from a missing one, even when
   // the line filter below would already return zero rows. The shared chart
   // (null subsidiary) reads for every caller.
-  if (!subsidiaryScopeAllows(allowedSubsidiaryIds ?? null, acct[0].subsidiary_id, { orgWideNull: true })) {
-    return { account: undefined, lines: [], total: 0, balance: '0' };
+  if (
+    !subsidiaryScopeAllows(allowedSubsidiaryIds ?? null, acct[0].subsidiary_id, {
+      orgWideNull: true,
+    })
+  ) {
+    return { account: undefined, lines: [], total: 0, balance: "0" };
   }
   const dateFilter =
     period?.from || period?.to
-      ? sql` and e.posting_date >= ${period?.from ?? '0001-01-01'} and e.posting_date <= ${period?.to ?? '9999-12-31'}`
+      ? sql` and e.posting_date >= ${period?.from ?? "0001-01-01"} and e.posting_date <= ${period?.to ?? "9999-12-31"}`
       : sql``;
-  const search = period?.search?.trim().slice(0, 200) ?? '';
+  const search = period?.search?.trim().slice(0, 200) ?? "";
   const like = `%${search.replace(/[%_\\]/g, (character) => `\\${character}`)}%`;
   const searchFilter = search
     ? sql` and (
@@ -93,25 +106,31 @@ export async function accountRegister(
         or replace(coalesce(d.kind, 'journal'), '_', ' ') ilike ${like}
       )`
     : sql``;
-  const sourceDocumentScope = allowedSubsidiaryIds === undefined
-    ? sql``
-    : subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)
+  const sourceDocumentScope =
+    allowedSubsidiaryIds === undefined
+      ? sql``
+      : subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null);
   const subsidiaryFilter = allowedSubsidiaryIds
     ? allowedSubsidiaryIds.size > 0
-      // Intercompany entries carry the origin subsidiary on the header while
-      // each legal-entity leg is stamped on its journal line. Filtering the
-      // header as well hides every child leg of an otherwise visible entry.
-      ? sql` and l.subsidiary_id in ${[...allowedSubsidiaryIds]}`
+      ? // Intercompany entries carry the origin subsidiary on the header while
+        // each legal-entity leg is stamped on its journal line. Filtering the
+        // header as well hides every child leg of an otherwise visible entry.
+        sql` and l.subsidiary_id in ${[...allowedSubsidiaryIds]}`
       : sql` and false`
     : sql``;
   const bookFilter = sql` and e.book_id in ${statementBookIdsExpr(orgId, bookId)}`;
-  const reportDb = functionalReportReader(orgId, sql`l.account_id in (
+  const reportDb = functionalReportReader(
+    orgId,
+    sql`l.account_id in (
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union select child.id from accounts child join account_scope parent on (child.parent_id = parent.id or child.merged_into_id = parent.id) where child.org_id = ${orgId}
     ) select id from account_scope
-  ) ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}`);
-  const r = (await reportDb.execute<AccountRegisterSelectRow>(canSeePayroll === true ? sql`
+  ) ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}`,
+  );
+  const r = await reportDb.execute<AccountRegisterSelectRow>(
+    canSeePayroll === true
+      ? sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
@@ -131,7 +150,8 @@ export async function accountRegister(
        and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
      order by e.posting_date desc, e.entry_number desc, l.line_number
      limit ${limit} offset ${offset}
-  ` : sql`
+  `
+      : sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
@@ -161,7 +181,8 @@ export async function accountRegister(
     )
     select * from visible_lines order by posting_date desc, entry_number desc, entry_id, line_number
      limit ${limit} offset ${offset}
-  `));
+  `,
+  );
   // Confidentiality collapses BEFORE shaping below; the balance above is over
   // the same posted set, so it still ties out. Without payroll.read the
   // collapsed line keeps the account and the summed amount but names no
@@ -171,17 +192,24 @@ export async function accountRegister(
     entryId: x.entry_id,
     accountId: x.account_id,
     partyId: x.party_id,
-    payrollOrigin: x.doc_kind === 'pay_run' || x.entry_origin === 'payroll',
-  }))
-  const collapsed = canSeePayroll === true ? mapped : collapseRestrictedPayrollLines(
-    mapped,
-    // party_id is nulled on the collapsed line: the row object is serialized
-    // to API responses, and keeping the first grouped employee's id would
-    // defeat the collapse. Untouched rows keep their true party.
-    (first, total) => ({
-      ...first, party: PAYROLL_RESTRICTED_PARTY_LABEL, party_id: null, memo: null, amount: total,
-    }),
-  )
+    payrollOrigin: x.doc_kind === "pay_run" || x.entry_origin === "payroll",
+  }));
+  const collapsed =
+    canSeePayroll === true
+      ? mapped
+      : collapseRestrictedPayrollLines(
+          mapped,
+          // party_id is nulled on the collapsed line: the row object is serialized
+          // to API responses, and keeping the first grouped employee's id would
+          // defeat the collapse. Untouched rows keep their true party.
+          (first, total) => ({
+            ...first,
+            party: PAYROLL_RESTRICTED_PARTY_LABEL,
+            party_id: null,
+            memo: null,
+            amount: total,
+          }),
+        );
   // Strip every collapse input/output key so rows keep their original shape:
   // no helper uuids (the mapped partyId would otherwise carry a real employee
   // id past the collapse) and no origin markers reach callers.
@@ -189,13 +217,18 @@ export async function accountRegister(
     // party_id never appeared in this output before: strip it alongside every
     // collapse input/output key so rows keep their original shape.
     const {
-      account_id: _accountId, party_id: _partyId, entry_origin: _entryOrigin,
-      entryId: _entryId, accountId: _accountUuid, partyId: _partyUuid, payrollOrigin: _payrollOrigin,
+      account_id: _accountId,
+      party_id: _partyId,
+      entry_origin: _entryOrigin,
+      entryId: _entryId,
+      accountId: _accountUuid,
+      partyId: _partyUuid,
+      payrollOrigin: _payrollOrigin,
       ...rest
-    } = row
-    return rest
-  })
-  const c = (await reportDb.execute<{ n: string; bal: string }>(sql`
+    } = row;
+    return rest;
+  });
+  const c = await reportDb.execute<{ n: string; bal: string }>(sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
@@ -211,7 +244,7 @@ export async function accountRegister(
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
      where l.account_id in (select id from account_scope)
        and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter} ${bookFilter}
-  `));
+  `);
   const totals = c.rows[0] ?? { n: "0", bal: "0" };
   // `total` counts raw posted lines (the pagination/truncation basis);
   // `lines` may be shorter after a confidentiality collapse, while `balance`
@@ -224,31 +257,31 @@ export async function accountRegister(
 // ---------------------------------------------------------------------------
 
 export interface RegisterLine {
-  entryId: string
-  entryNumber: string | null
-  date: string
-  memo: string | null
-  debit: ExactDecimal
-  credit: ExactDecimal
-  balance: ExactDecimal
-  docKind: string | null
-  docId: string | null
+  entryId: string;
+  entryNumber: string | null;
+  date: string;
+  memo: string | null;
+  debit: ExactDecimal;
+  credit: ExactDecimal;
+  balance: ExactDecimal;
+  docKind: string | null;
+  docId: string | null;
 }
 export interface RegisterParty {
-  partyId: string | null
-  partyName: string | null
-  opening: ExactDecimal
-  closing: ExactDecimal
-  lines: RegisterLine[]
+  partyId: string | null;
+  partyName: string | null;
+  opening: ExactDecimal;
+  closing: ExactDecimal;
+  lines: RegisterLine[];
 }
 export interface RegisterResult {
-  parties: RegisterParty[]
-  from: string
-  to: string
-  side: AgingSide
-  truncated: boolean
+  parties: RegisterParty[];
+  from: string;
+  to: string;
+  side: AgingSide;
+  truncated: boolean;
   /** Set when the caller asked for one page of whole party sections. */
-  paging?: { page: number; pageSize: number; partyCount: number } | null
+  paging?: { page: number; pageSize: number; partyCount: number } | null;
 }
 
 /**
@@ -268,7 +301,13 @@ export interface RegisterResult {
 export async function partyRegister(
   side: AgingSide,
   opts: {
-    from: string; to: string; partyId?: string; orgId?: string; dims?: DimFilter; maxLines?: number; bookId?: string | null;
+    from: string;
+    to: string;
+    partyId?: string;
+    orgId?: string;
+    dims?: DimFilter;
+    maxLines?: number;
+    bookId?: string | null;
     /**
      * True when the reader holds payroll.read and may see per-employee pay
      * detail. Defaults to false (fail closed): without it, party-tagged
@@ -281,34 +320,37 @@ export async function partyRegister(
     pageSize?: number;
   },
 ): Promise<RegisterResult> {
-  const resolvedOrgId = await resolveOrgId(opts.orgId)
-  const acctType = side === "ap" ? "liability_payable" : "asset_receivable"
-  const maxLines = opts.maxLines ?? 4000
-  const partyFilter = opts.partyId ? sql` and l.party_id = ${opts.partyId}` : sql``
+  const resolvedOrgId = await resolveOrgId(opts.orgId);
+  const acctType = side === "ap" ? "liability_payable" : "asset_receivable";
+  const maxLines = opts.maxLines ?? 4000;
+  const partyFilter = opts.partyId ? sql` and l.party_id = ${opts.partyId}` : sql``;
   // One accounting book per read (primary when omitted) — without this a
   // parallel book's mirror entries fuse into the register while the sibling
   // statement readers stay primary-only.
-  const bookFilter = sql` and e.book_id in ${statementBookIdsExpr(resolvedOrgId, opts.bookId)}`
+  const bookFilter = sql` and e.book_id in ${statementBookIdsExpr(resolvedOrgId, opts.bookId)}`;
   // Source documents mask exactly where the lines do.
-  const sourceDocumentScope = documentSubsidiaryScope(opts.dims)
-  const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${opts.to} and a.type = ${acctType} and ${dimWhere(opts.dims)} ${partyFilter} ${bookFilter}`)
+  const sourceDocumentScope = documentSubsidiaryScope(opts.dims);
+  const reportDb = functionalReportReader(
+    resolvedOrgId,
+    sql`e.posting_date <= ${opts.to} and a.type = ${acctType} and ${dimWhere(opts.dims)} ${partyFilter} ${bookFilter}`,
+  );
   // Party attribution with the confidentiality remap folded in: restricted
   // readers see payroll-party lines under NULL (the unassigned section) in
   // every read below, so openings, activity, and detail agree by
   // construction. Full-detail readers group by the true party.
-  const masked = opts.canSeePayroll === true
-  const payrollParty = sql`(d.kind = 'pay_run' or e.origin = 'payroll') and l.party_id is not null`
+  const masked = opts.canSeePayroll === true;
+  const payrollParty = sql`(d.kind = 'pay_run' or e.origin = 'payroll') and l.party_id is not null`;
   const partyIdExpr = masked
     ? sql`l.party_id`
-    : sql`case when ${payrollParty} then null else l.party_id end`
+    : sql`case when ${payrollParty} then null else l.party_id end`;
   const partyNameExpr = masked
     ? sql`pt.display_name`
-    : sql`case when ${payrollParty} then null else pt.display_name end`
+    : sql`case when ${payrollParty} then null else pt.display_name end`;
   const lineMemoExpr = masked
     ? sql`l.memo`
-    : sql`case when ${payrollParty} then null else l.memo end`
+    : sql`case when ${payrollParty} then null else l.memo end`;
 
-  const opening = (await reportDb.execute<{ party_id: string | null; bal: string }>(sql`
+  const opening = await reportDb.execute<{ party_id: string | null; bal: string }>(sql`
     select ${reportDb.censusColumn}, ${partyIdExpr} as party_id, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -317,12 +359,12 @@ export async function partyRegister(
      where a.type = ${acctType} and e.posting_date < ${opts.from}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      group by ${partyIdExpr}
-  `))
-  const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]))
+  `);
+  const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]));
 
   // Keep the detail cap presentation-only. Closing balances must include all
   // posted activity in the report window, including lines omitted by `limit`.
-  const periodActivity = (await reportDb.execute<{ party_id: string | null; activity: string }>(sql`
+  const periodActivity = await reportDb.execute<{ party_id: string | null; activity: string }>(sql`
     select ${reportDb.censusColumn}, ${partyIdExpr} as party_id, coalesce(sum(l.amount), 0) as activity
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -332,40 +374,51 @@ export async function partyRegister(
        and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
      group by ${partyIdExpr}
-  `))
-  const activityByParty = new Map(periodActivity.rows.map((r) => [r.party_id, r.activity]))
+  `);
+  const activityByParty = new Map(periodActivity.rows.map((r) => [r.party_id, r.activity]));
 
   // Paged reads choose their party sections first, in display order, and
   // read only those parties' lines: each section is whole on its page, so its
   // running balance starts at its own opening exactly as unpaged.
-  const pageSize = opts.page !== undefined ? Math.max(1, Math.floor(opts.pageSize ?? 50)) : null
-  let page = pageSize !== null ? Math.max(1, Math.floor(opts.page ?? 1)) : null
-  let pageParties: (string | null)[] | null = null
-  let partyCount = 0
+  const pageSize = opts.page !== undefined ? Math.max(1, Math.floor(opts.pageSize ?? 50)) : null;
+  let page = pageSize !== null ? Math.max(1, Math.floor(opts.page ?? 1)) : null;
+  let pageParties: (string | null)[] | null = null;
+  let partyCount = 0;
   if (pageSize !== null && page !== null) {
-    const ids = [...new Set<string | null>([...openingByParty.keys(), ...activityByParty.keys()])]
+    const ids = [...new Set<string | null>([...openingByParty.keys(), ...activityByParty.keys()])];
     const named = ids.some((id) => id !== null)
-      ? (await reportDb.execute<{ id: string; display_name: string | null }>(sql`
+      ? (
+          await reportDb.execute<{ id: string; display_name: string | null }>(sql`
           select ${reportDb.censusColumn}, p.id, p.display_name
             from parties p
            where p.org_id = ${resolvedOrgId} and p.id = any(${`{${ids.filter((id) => id !== null).join(",")}}`}::uuid[])
-        `)).rows
-      : []
-    const nameOf = new Map<string | null, string | null>(named.map((n) => [n.id, n.display_name]))
-    const ordered = ids.sort((a, b) => compareRegisterParty(nameOf.get(a) ?? null, a, nameOf.get(b) ?? null, b))
-    partyCount = ordered.length
-    if (page > 1 && (page - 1) * pageSize >= partyCount) page = 1
-    pageParties = ordered.slice((page - 1) * pageSize, page * pageSize)
+        `)
+        ).rows
+      : [];
+    const nameOf = new Map<string | null, string | null>(named.map((n) => [n.id, n.display_name]));
+    const ordered = ids.sort((a, b) =>
+      compareRegisterParty(nameOf.get(a) ?? null, a, nameOf.get(b) ?? null, b),
+    );
+    partyCount = ordered.length;
+    if (page > 1 && (page - 1) * pageSize >= partyCount) page = 1;
+    pageParties = ordered.slice((page - 1) * pageSize, page * pageSize);
   }
-  const pageIds = pageParties?.filter((id): id is string => id !== null) ?? []
-  const pagePartyFilter = pageParties === null
-    ? sql``
-    : sql` and (${partyIdExpr} = any(${`{${pageIds.join(",")}}`}::uuid[])${pageParties.includes(null) ? sql` or ${partyIdExpr} is null` : sql``})`
-  const lines = (await reportDb.execute<{
-      party_id: string | null; party_name: string | null
-      entry_id: string; entry_number: string | null; date: string; memo: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null
-    }>(sql`
+  const pageIds = pageParties?.filter((id): id is string => id !== null) ?? [];
+  const pagePartyFilter =
+    pageParties === null
+      ? sql``
+      : sql` and (${partyIdExpr} = any(${`{${pageIds.join(",")}}`}::uuid[])${pageParties.includes(null) ? sql` or ${partyIdExpr} is null` : sql``})`;
+  const lines = await reportDb.execute<{
+    party_id: string | null;
+    party_name: string | null;
+    entry_id: string;
+    entry_number: string | null;
+    date: string;
+    memo: string | null;
+    amount: string;
+    doc_kind: string | null;
+    doc_id: string | null;
+  }>(sql`
     select ${reportDb.censusColumn}, ${partyIdExpr} as party_id, ${partyNameExpr} as party_name,
            e.id as entry_id, e.entry_number, e.posting_date::text as date, ${lineMemoExpr} as memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
@@ -379,9 +432,9 @@ export async function partyRegister(
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}${pagePartyFilter}
      order by ${partyNameExpr} nulls last, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
-  `))
-  const truncated = lines.rows.length > maxLines
-  const rows = truncated ? lines.rows.slice(0, maxLines) : lines.rows
+  `);
+  const truncated = lines.rows.length > maxLines;
+  const rows = truncated ? lines.rows.slice(0, maxLines) : lines.rows;
 
   // Sections come from the union of the opening and activity populations,
   // never from the capped detail rows alone: the line cap is
@@ -389,43 +442,45 @@ export async function partyRegister(
   // window lines at all) still gets its section with the exact closing
   // (capped-out vendors lost their sections and the closings
   // summed CA$293,617.43 short of the AP control).
-  const lineGroups = new Map<string | null, typeof rows>()
+  const lineGroups = new Map<string | null, typeof rows>();
   for (const x of rows) {
-    const group = lineGroups.get(x.party_id) ?? []
-    group.push(x)
-    lineGroups.set(x.party_id, group)
+    const group = lineGroups.get(x.party_id) ?? [];
+    group.push(x);
+    lineGroups.set(x.party_id, group);
   }
-  const partyIds = new Set<string | null>(pageParties ?? [
-    ...openingByParty.keys(),
-    ...activityByParty.keys(),
-    ...lineGroups.keys(),
-  ])
-  const knownNames = new Map<string | null, string | null>(rows.map((x) => [x.party_id, x.party_name]))
-  const unnamed = [...partyIds].filter((id): id is string => id !== null && !knownNames.has(id))
+  const partyIds = new Set<string | null>(
+    pageParties ?? [...openingByParty.keys(), ...activityByParty.keys(), ...lineGroups.keys()],
+  );
+  const knownNames = new Map<string | null, string | null>(
+    rows.map((x) => [x.party_id, x.party_name]),
+  );
+  const unnamed = [...partyIds].filter((id): id is string => id !== null && !knownNames.has(id));
   if (unnamed.length > 0) {
-    const named = (await reportDb.execute<{ id: string; display_name: string | null }>(sql`
+    const named = (
+      await reportDb.execute<{ id: string; display_name: string | null }>(sql`
       select ${reportDb.censusColumn}, p.id, p.display_name
         from parties p
        where p.org_id = ${resolvedOrgId} and p.id = any(${`{${unnamed.join(",")}}`}::uuid[])
-    `)).rows
-    for (const n of named) knownNames.set(n.id, n.display_name)
-    for (const id of unnamed) if (!knownNames.has(id)) knownNames.set(id, null)
+    `)
+    ).rows;
+    for (const n of named) knownNames.set(n.id, n.display_name);
+    for (const id of unnamed) if (!knownNames.has(id)) knownNames.set(id, null);
   }
-  const parties: RegisterParty[] = []
+  const parties: RegisterParty[] = [];
   for (const partyId of partyIds) {
-    const opening = openingByParty.get(partyId) ?? ZERO
-    const activity = activityByParty.get(partyId) ?? ZERO
+    const opening = openingByParty.get(partyId) ?? ZERO;
+    const activity = activityByParty.get(partyId) ?? ZERO;
     const current: RegisterParty = {
       partyId,
       partyName: partyId === null ? null : (knownNames.get(partyId) ?? null),
       opening,
       closing: decimalAdd(opening, activity),
       lines: [],
-    }
-    let running = opening
+    };
+    let running = opening;
     for (const x of lineGroups.get(partyId) ?? []) {
-      if (current.partyName === null) current.partyName = x.party_name
-      running = decimalAdd(running, x.amount)
+      if (current.partyName === null) current.partyName = x.party_name;
+      running = decimalAdd(running, x.amount);
       current.lines.push({
         entryId: x.entry_id,
         entryNumber: x.entry_number,
@@ -436,25 +491,35 @@ export async function partyRegister(
         balance: running,
         docKind: x.doc_kind,
         docId: x.doc_id,
-      })
+      });
     }
-    parties.push(current)
+    parties.push(current);
   }
   // Display-name order with unassigned last, matching the old detail order.
-  parties.sort((a, b) => compareRegisterParty(a.partyName, a.partyId, b.partyName, b.partyId))
+  parties.sort((a, b) => compareRegisterParty(a.partyName, a.partyId, b.partyName, b.partyId));
   return {
-    parties, from: opts.from, to: opts.to, side, truncated,
+    parties,
+    from: opts.from,
+    to: opts.to,
+    side,
+    truncated,
     paging: pageSize !== null && page !== null ? { page, pageSize, partyCount } : null,
-  }
+  };
 }
 
 /** Display-name order with unassigned last; party id breaks ties so pages are stable. */
-function compareRegisterParty(aName: string | null, aId: string | null, bName: string | null, bId: string | null): number {
-  if (aName === null && bName === null) return aId === bId ? 0 : aId === null ? 1 : bId === null ? -1 : aId < bId ? -1 : 1
-  if (aName === null) return 1
-  if (bName === null) return -1
-  if (aName !== bName) return aName < bName ? -1 : 1
-  return aId === bId ? 0 : aId === null ? 1 : bId === null ? -1 : aId < bId ? -1 : 1
+function compareRegisterParty(
+  aName: string | null,
+  aId: string | null,
+  bName: string | null,
+  bId: string | null,
+): number {
+  if (aName === null && bName === null)
+    return aId === bId ? 0 : aId === null ? 1 : bId === null ? -1 : aId < bId ? -1 : 1;
+  if (aName === null) return 1;
+  if (bName === null) return -1;
+  if (aName !== bName) return aName < bName ? -1 : 1;
+  return aId === bId ? 0 : aId === null ? 1 : bId === null ? -1 : aId < bId ? -1 : 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -462,15 +527,15 @@ function compareRegisterParty(aName: string | null, aId: string | null, bName: s
 // ---------------------------------------------------------------------------
 
 export interface PartnerStatementResult {
-  party: { id: string; name: string | null }
-  side: AgingSide
-  from: string
-  to: string
-  opening: ExactDecimal
-  closing: ExactDecimal
-  lines: RegisterLine[]
-  aging: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal }
-  truncated: boolean
+  party: { id: string; name: string | null };
+  side: AgingSide;
+  from: string;
+  to: string;
+  opening: ExactDecimal;
+  closing: ExactDecimal;
+  lines: RegisterLine[];
+  aging: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal };
+  truncated: boolean;
 }
 
 /** Account statement for a single party: opening balance on the control
@@ -480,7 +545,11 @@ export async function partnerStatement(
   partyId: string,
   orgId: string,
   opts: {
-    from: string; to: string; side: AgingSide; dims?: DimFilter; bookId?: string | null;
+    from: string;
+    to: string;
+    side: AgingSide;
+    dims?: DimFilter;
+    bookId?: string | null;
     /**
      * True when the reader holds payroll.read and may see per-employee pay
      * detail. Defaults to false (fail closed): without it, party-tagged
@@ -491,29 +560,50 @@ export async function partnerStatement(
   },
 ): Promise<PartnerStatementResult> {
   const reg = await partyRegister(opts.side, {
-    from: opts.from, to: opts.to, partyId, orgId, dims: opts.dims, bookId: opts.bookId,
+    from: opts.from,
+    to: opts.to,
+    partyId,
+    orgId,
+    dims: opts.dims,
+    bookId: opts.bookId,
     canSeePayroll: opts.canSeePayroll,
-  })
+  });
   // The addressed party's own section — never parties[0]: under the
   // confidentiality remap a party whose only lines are masked payroll has no
   // section of its own, and the unassigned section's amounts must not stand
   // in as its opening or closing.
-  const p = reg.parties.find((section) => section.partyId === partyId)
+  const p = reg.parties.find((section) => section.partyId === partyId);
   const partySubsidiaryFilter = opts.dims?.subsidiaryIds
     ? opts.dims.subsidiaryIds.length > 0
       ? sql` and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(",")}}`}::uuid[]))`
       : sql` and false`
-    : sql``
-  const nameRow = (await db.execute<{ display_name: string | null }>(sql`
+    : sql``;
+  const nameRow = await db.execute<{ display_name: string | null }>(
+    sql`
     select p.display_name
       from parties p
      where p.id = ${partyId} and p.org_id = ${orgId}${partySubsidiaryFilter}
-  `, "objects"))
-  const aging = await agingDetail(opts.side, opts.to, opts.dims, orgId, { bookId: opts.bookId, partyId })
+  `,
+    "objects",
+  );
+  const aging = await agingDetail(opts.side, opts.to, opts.dims, orgId, {
+    bookId: opts.bookId,
+    partyId,
+  });
   // The register only surfaces parties with window lines, but a statement is
   // addressed to one party: with no window activity the opening (= closing)
   // is still the pre-window control balance, never zero.
-  const opening = p?.opening ?? (await preWindowBalance(opts.side, opts.from, partyId, orgId, opts.dims, opts.bookId, opts.canSeePayroll))
+  const opening =
+    p?.opening ??
+    (await preWindowBalance(
+      opts.side,
+      opts.from,
+      partyId,
+      orgId,
+      opts.dims,
+      opts.bookId,
+      opts.canSeePayroll,
+    ));
   return {
     party: { id: partyId, name: nameRow[0]?.display_name ?? p?.partyName ?? null },
     side: opts.side,
@@ -524,7 +614,7 @@ export async function partnerStatement(
     lines: p?.lines ?? [],
     aging: aging.totals,
     truncated: reg.truncated,
-  }
+  };
 }
 
 /** Pre-window control-account balance for one party — the same posted set the
@@ -538,14 +628,16 @@ async function preWindowBalance(
   bookId?: string | null,
   canSeePayroll?: boolean,
 ): Promise<ExactDecimal> {
-  const acctType = side === 'ap' ? 'liability_payable' : 'asset_receivable'
+  const acctType = side === "ap" ? "liability_payable" : "asset_receivable";
   // Restricted readers remap payroll-party lines to the unassigned section in
   // the register, so the same lines must not count toward this party's
   // fallback opening either — or the remap would leak through the balance.
-  const payrollExclusion = canSeePayroll === true
-    ? sql``
-    : sql`and not ((d.kind = 'pay_run' or e.origin = 'payroll') and l.party_id is not null)`
-  const rows = (await db.execute<{ balance: string }>(sql`
+  const payrollExclusion =
+    canSeePayroll === true
+      ? sql``
+      : sql`and not ((d.kind = 'pay_run' or e.origin = 'payroll') and l.party_id is not null)`;
+  const rows = await db.execute<{ balance: string }>(
+    sql`
     select coalesce(sum(l.amount), 0) as balance
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
@@ -558,6 +650,8 @@ async function preWindowBalance(
        and l.party_id = ${partyId}
        ${payrollExclusion}
        and ${dimWhere(dims, sql`l`)}
-  `, "objects"))
-  return (rows[0]?.balance ?? '0') as ExactDecimal
+  `,
+    "objects",
+  );
+  return (rows[0]?.balance ?? "0") as ExactDecimal;
 }

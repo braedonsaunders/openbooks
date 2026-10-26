@@ -69,7 +69,14 @@ test("unified sync actions and run summaries resolve in every shipped locale", a
   ] as const;
   for (const locale of LOCALE_CODES) {
     const catalog = (await import(`../../../messages/${locale}/index.ts`)).default;
-    const t = createTranslator({ locale, messages: catalog, namespace: "sync", onError: (error) => { throw error; } });
+    const t = createTranslator({
+      locale,
+      messages: catalog,
+      namespace: "sync",
+      onError: (error) => {
+        throw error;
+      },
+    });
     for (const [key, values] of labels) {
       const label = t(key, values);
       assert.ok(label.trim(), `${locale}: ${key}`);
@@ -81,10 +88,14 @@ test("unified sync actions and run summaries resolve in every shipped locale", a
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
+function scriptFetch(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null,
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -173,7 +184,12 @@ for (const [name, respondTest, match, matchMessage, checkParseLeak] of [
     globalThis.__platformToasts = [];
     const restoreFetch = scriptFetch((url, init) => {
       if (url === "/api/platform/connections" && (!init?.method || init.method === "GET")) {
-        return Response.json({ connections: [CONNECTION], runs: [], sourceTypes: [], currencies: [] });
+        return Response.json({
+          connections: [CONNECTION],
+          runs: [],
+          sourceTypes: [],
+          currencies: [],
+        });
       }
       if (url === "/api/platform/connections/c1/test" && init?.method === "POST") {
         return respondTest();
@@ -203,17 +219,30 @@ for (const [name, respondTest, match, matchMessage, checkParseLeak] of [
       );
       await click(document.querySelector('button[aria-label="More actions for Manual import"]')!);
       const testAgain = buttonsNamed("Test")[0];
-      assert.ok(testAgain && !testAgain.disabled, "the Test button must release so the operator can retry");
+      assert.ok(
+        testAgain && !testAgain.disabled,
+        "the Test button must release so the operator can retry",
+      );
     }
   });
 }
-
 
 test("source deletions offer one mirror retry without individual accounting decisions", async (t) => {
   const calls: { url: string; body: unknown }[] = [];
   const restoreFetch = scriptFetch((url, init) => {
     if (url === "/api/platform/connections" && (!init?.method || init.method === "GET")) {
-      return Response.json({ connections: [{ ...CONNECTION, unresolvedSourceDeletions: Array.from({ length: 2000 }, (_, i) => String(i)) }], runs: [], sourceTypes: [], currencies: [], canManage: true });
+      return Response.json({
+        connections: [
+          {
+            ...CONNECTION,
+            unresolvedSourceDeletions: Array.from({ length: 2000 }, (_, i) => String(i)),
+          },
+        ],
+        runs: [],
+        sourceTypes: [],
+        currencies: [],
+        canManage: true,
+      });
     }
     if (init?.method === "POST") {
       calls.push({ url, body: JSON.parse(String(init.body)) });
@@ -224,7 +253,10 @@ test("source deletions offer one mirror retry without individual accounting deci
   t.after(restoreFetch);
   const { unmount } = await renderClient();
   t.after(unmount);
-  assert.match(document.body.textContent ?? "", /2000 transactions pending automatic reconciliation/);
+  assert.match(
+    document.body.textContent ?? "",
+    /2000 transactions pending automatic reconciliation/,
+  );
   assert.equal(buttonsNamed("Retain with evidence").length, 0);
   assert.equal(buttonsNamed("Reverse and void").length, 0);
   const retry = buttonsNamed("Retry mirror");
@@ -233,11 +265,19 @@ test("source deletions offer one mirror retry without individual accounting deci
   assert.deepEqual(calls, [{ url: "/api/platform/connections/c1/run", body: { mode: "mirror" } }]);
 });
 
-
 test("Connections and History replace the active body and preserve URL navigation", async (t) => {
   window.history.replaceState({}, "", "/sync?connect=netsuite");
-  const restoreFetch = scriptFetch((url) => url === "/api/platform/connections"
-    ? Response.json({ connections: [{ ...CONNECTION, source: "netsuite" }], runs: [], sourceTypes: [], currencies: [], canManage: false }) : null);
+  const restoreFetch = scriptFetch((url) =>
+    url === "/api/platform/connections"
+      ? Response.json({
+          connections: [{ ...CONNECTION, source: "netsuite" }],
+          runs: [],
+          sourceTypes: [],
+          currencies: [],
+          canManage: false,
+        })
+      : null,
+  );
   t.after(restoreFetch);
   const { unmount } = await renderClient();
   t.after(unmount);

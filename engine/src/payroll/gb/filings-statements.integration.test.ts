@@ -67,9 +67,18 @@ async function makeEmployee(
   nation: string,
 ): Promise<string> {
   const { employeeId } = await seedHiredEmployee(orgId, actorId, {
-    scheduleId, subsidiaryId, name, country: "GB", province: nation, payBasis: "salary",
-    currency: "GBP", rate: "36000", rateBasis: "year", annualHours: "2080",
-    partySubsidiaryId: subsidiaryId, employeeNumber: `GB-${name}`,
+    scheduleId,
+    subsidiaryId,
+    name,
+    country: "GB",
+    province: nation,
+    payBasis: "salary",
+    currency: "GBP",
+    rate: "36000",
+    rateBasis: "year",
+    annualHours: "2080",
+    partySubsidiaryId: subsidiaryId,
+    employeeNumber: `GB-${name}`,
   });
   return employeeId;
 }
@@ -97,7 +106,13 @@ async function payMonth(
   periodEnd: string,
   commit: boolean,
 ): Promise<string> {
-  const run = await createPayRun({ orgId, actorId, payScheduleId: scheduleId, periodStart, periodEnd });
+  const run = await createPayRun({
+    orgId,
+    actorId,
+    payScheduleId: scheduleId,
+    periodStart,
+    periodEnd,
+  });
   const calc = await calculatePayRun({ orgId, actorId, documentId: run.documentId });
   assert.deepEqual(calc.errors, []);
   if (commit) await commitPayRun({ orgId, documentId: run.documentId, actorId });
@@ -105,10 +120,17 @@ async function payMonth(
 }
 
 /** Independent tie-out legs: gross columns for pay, component lines for tax/NIC. */
-async function independentTotals(orgId: string, employeeId: string): Promise<{
-  pay: string; tax: string; nic: string;
+async function independentTotals(
+  orgId: string,
+  employeeId: string,
+): Promise<{
+  pay: string;
+  tax: string;
+  nic: string;
 }> {
-  const rows = (await db.execute<{ pay: string; tax: string; nic: string }>(sql`
+  const rows = (
+    await db.execute<{ pay: string; tax: string; nic: string }>(
+      sql`
     select sum(s.gross)::text as pay,
            (select coalesce(sum(l.amount), 0)::text from pay_stub_lines l
              join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
@@ -131,7 +153,10 @@ async function independentTotals(orgId: string, employeeId: string): Promise<{
          and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.employee_party_id = ${employeeId}
        and s.tax_year = ${YEAR} and s.country = 'GB'
-  `, "objects"))[0]!;
+  `,
+      "objects",
+    )
+  )[0]!;
   return { pay: rows.pay, tax: rows.tax, nic: rows.nic };
 }
 
@@ -142,9 +167,21 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const deductionsId = await makeAccount(org.orgId, actorId, "2110", "Payroll Deductions", "liability_current_other");
+      const deductionsId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2110",
+        "Payroll Deductions",
+        "liability_current_other",
+      );
       const wageId = await makeAccount(org.orgId, actorId, "6000", "Wages & Salaries", "expense");
-      const netId = await makeAccount(org.orgId, actorId, "2300", "Employee Payable", "liability_current_other");
+      const netId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2300",
+        "Employee Payable",
+        "liability_current_other",
+      );
       await db.execute(sql`
         update orgs
            set settings = jsonb_set(
@@ -180,34 +217,75 @@ test(
            subsidiary_id, is_active, created_by, updated_by)
         values (${scheduleId}, ${org.orgId}, 'GB monthly', 'monthly', 12, '2026-04-01', 0,
                 ${org.subsidiaryId}, true, ${actorId}, ${actorId})`);
-      const amy = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Stayer", "ENG");
-      const hamish = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Hamish Stayer", "SCT");
-      const larry = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Larry Leaver", "ENG");
-      await fileCertificate(org.orgId, amy, actorId, "gb_nic_category", { category_letter: "A", director_status: "not_director" });
-      await fileCertificate(org.orgId, hamish, actorId, "gb_nic_category", { category_letter: "A", director_status: "not_director" });
+      const amy = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Amy Stayer",
+        "ENG",
+      );
+      const hamish = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Hamish Stayer",
+        "SCT",
+      );
+      const larry = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        scheduleId,
+        "Larry Leaver",
+        "ENG",
+      );
+      await fileCertificate(org.orgId, amy, actorId, "gb_nic_category", {
+        category_letter: "A",
+        director_status: "not_director",
+      });
+      await fileCertificate(org.orgId, hamish, actorId, "gb_nic_category", {
+        category_letter: "A",
+        director_status: "not_director",
+      });
       // Outside automatic enrolment: no pension contributions price here (the
       // duties assessment below attests each worker non-eligible, not enrolled).
-      await fileCertificate(org.orgId, larry, actorId, "gb_nic_category", { category_letter: "A", director_status: "not_director" });
+      await fileCertificate(org.orgId, larry, actorId, "gb_nic_category", {
+        category_letter: "A",
+        director_status: "not_director",
+      });
       await fileCertificate(org.orgId, amy, actorId, "gb_tax_code_notice", { tax_code: "1257L" });
       await fileCertificate(org.orgId, amy, actorId, "gb_starter_checklist", {
-        starter_declaration: "A", student_loan_plan: "plan_2", student_loan_postgraduate: "true",
+        starter_declaration: "A",
+        student_loan_plan: "plan_2",
+        student_loan_postgraduate: "true",
       });
-      await fileCertificate(org.orgId, hamish, actorId, "gb_tax_code_notice", { tax_code: "S1257L" });
+      await fileCertificate(org.orgId, hamish, actorId, "gb_tax_code_notice", {
+        tax_code: "S1257L",
+      });
       await fileCertificate(org.orgId, hamish, actorId, "gb_starter_checklist", {
-        starter_declaration: "A", student_loan_plan: "none", student_loan_postgraduate: "false",
+        starter_declaration: "A",
+        student_loan_plan: "none",
+        student_loan_postgraduate: "false",
       });
       await fileCertificate(org.orgId, larry, actorId, "gb_tax_code_notice", { tax_code: "1257L" });
       await fileCertificate(org.orgId, larry, actorId, "gb_starter_checklist", {
-        starter_declaration: "A", student_loan_plan: "plan_4", student_loan_postgraduate: "false",
+        starter_declaration: "A",
+        student_loan_plan: "plan_4",
+        student_loan_postgraduate: "false",
       });
       for (const person of [amy, hamish, larry]) {
         await fileCertificate(org.orgId, person, actorId, "gb_workplace_pension", {
-          age_band: "22_to_state_pension_age", worker_status: "noneligible_jobholder",
+          age_band: "22_to_state_pension_age",
+          worker_status: "noneligible_jobholder",
           enrolment_status: "not_enrolled",
         });
         await fileCertificate(org.orgId, person, actorId, "gb_workplace_pension_assessment", {
-          age_band: "22_to_state_pension_age", membership_status: "not_eligible",
-          scheme_basis: "not_applicable", deduction_method: "not_applicable",
+          age_band: "22_to_state_pension_age",
+          membership_status: "not_eligible",
+          scheme_basis: "not_applicable",
+          deduction_method: "not_applicable",
         });
       }
 
@@ -223,13 +301,28 @@ test(
       // The P60 names the two stayers, not the leaver — one row per
       // employment, not one row per run.
       const slips = await gbP60Slips(org.orgId, YEAR);
-      assert.deepEqual(slips.map((slip) => slip.employeeName), ["Amy Stayer", "Hamish Stayer"]);
+      assert.deepEqual(
+        slips.map((slip) => slip.employeeName),
+        ["Amy Stayer", "Hamish Stayer"],
+      );
       for (const slip of slips) {
         // Two committed £3,000 months; the July draft is excluded.
         const expected = await independentTotals(org.orgId, slip.employeePartyId);
-        assert.equal(cmp(slip.payInEmployment, expected.pay), 0, `${slip.employeeName} pay ties to gross`);
-        assert.equal(cmp(slip.taxDeducted, expected.tax), 0, `${slip.employeeName} tax ties to PAYE lines`);
-        assert.equal(cmp(slip.nicEmployee, expected.nic), 0, `${slip.employeeName} NIC ties to NIC lines`);
+        assert.equal(
+          cmp(slip.payInEmployment, expected.pay),
+          0,
+          `${slip.employeeName} pay ties to gross`,
+        );
+        assert.equal(
+          cmp(slip.taxDeducted, expected.tax),
+          0,
+          `${slip.employeeName} tax ties to PAYE lines`,
+        );
+        assert.equal(
+          cmp(slip.nicEmployee, expected.nic),
+          0,
+          `${slip.employeeName} NIC ties to NIC lines`,
+        );
         assert.equal(
           cmp(slip.studentLoanDeducted, slip.employeeName === "Amy Stayer" ? "98" : "0"),
           0,
@@ -260,13 +353,17 @@ test(
       }
       assert.equal(p60.parseRowId("not-a-gb-row"), null);
       assert.equal(
-        p60.parseRowId("11111111-1111-4111-8111-111111111111:ON:22222222-2222-4222-8222-222222222222"),
+        p60.parseRowId(
+          "11111111-1111-4111-8111-111111111111:ON:22222222-2222-4222-8222-222222222222",
+        ),
         null,
       );
 
       // The population totals tie to org-wide independent sums — the
       // employer-side reconciliation (total PAYE, both NIC shares).
-      const orgWide = (await db.execute<{ pay: string; tax: string; nicEe: string; nicEr: string }>(sql`
+      const orgWide = (
+        await db.execute<{ pay: string; tax: string; nicEe: string; nicEr: string }>(
+          sql`
         select sum(s.gross)::text as pay,
                (select coalesce(sum(l.amount), 0)::text from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
@@ -301,8 +398,12 @@ test(
           join employee_roles er on er.party_id = s.employee_party_id and er.org_id = s.org_id
          where s.org_id = ${org.orgId} and s.tax_year = ${YEAR} and s.country = 'GB'
            and (er.terminated_on is null or er.terminated_on::date > ${gbTaxYearBounds(YEAR).end})
-      `, "objects"))[0]!;
-      const totalOf = (label: string) => String(population.totals!.find((t) => t.label === label)!.value);
+      `,
+          "objects",
+        )
+      )[0]!;
+      const totalOf = (label: string) =>
+        String(population.totals!.find((t) => t.label === label)!.value);
       // The leaver's stubs are excluded from the P60 totals by the same
       // eligibility rule as the rows — the org-wide query above applies it.
       assert.equal(cmp(totalOf("Total pay in employments"), orgWide.pay), 0);
@@ -314,10 +415,13 @@ test(
 
       // The slip ties to the population, heads the PAYE reference, and
       // reports the Scottish code as Scottish tax.
-      const amyRow = String(population.rows.find((row) => row.employee === "Amy Stayer")![population.rowKey]);
+      const amyRow = String(
+        population.rows.find((row) => row.employee === "Amy Stayer")![population.rowKey],
+      );
       const amySlip = await p60.slip!.build(org.orgId, YEAR, amyRow);
       assert.equal(amySlip.formNumber, "P60");
-      const box = (code: string) => amySlip.boxes.find((candidate) => candidate.code === code)!.value;
+      const box = (code: string) =>
+        amySlip.boxes.find((candidate) => candidate.code === code)!.value;
       const amyStatement = slips.find((slip) => slip.employeeName === "Amy Stayer")!;
       assert.equal(cmp(box("this-pay"), amyStatement.payInEmployment), 0);
       assert.equal(cmp(box("this-tax"), amyStatement.taxDeducted), 0);
@@ -325,7 +429,9 @@ test(
       assert.equal(cmp(box("student-loan"), "98"), 0);
       assert.equal(cmp(box("postgrad-loan"), "150"), 0);
       assert.ok(amySlip.headerFields.some((field) => field.value === "123/AB45678"));
-      const hamishRow = String(population.rows.find((row) => row.employee === "Hamish Stayer")![population.rowKey]);
+      const hamishRow = String(
+        population.rows.find((row) => row.employee === "Hamish Stayer")![population.rowKey],
+      );
       const hamishFacsimile = await p60.slip!.build(org.orgId, YEAR, hamishRow);
       assert.match(
         hamishFacsimile.boxes.find((candidate) => candidate.code === "final-tax-code")!.value,
@@ -363,7 +469,10 @@ test(
         "P45 continues the recorded active Plan 4 repayment",
       );
       assert.equal(
-        cmp(larrySlip.boxes.find((candidate) => candidate.code === "pay-to-date")!.value, larryExpected.pay),
+        cmp(
+          larrySlip.boxes.find((candidate) => candidate.code === "pay-to-date")!.value,
+          larryExpected.pay,
+        ),
         0,
       );
       assert.match(p45.downloadRefusal!, /Part 1.*Full Payment Submission/);
@@ -392,8 +501,14 @@ test(
       // 2025/26 tables, so that year no longer refuses for a missing edition
       // and falls through to the committed-runs refusal instead. Use a year
       // the pack genuinely does not cover.
-      await assert.rejects(gbP60Slips(org.orgId, 2023), /2023 statutory tables are not loaded for GB/);
-      await assert.rejects(gbP45Leavers(org.orgId, 2023), /2023 statutory tables are not loaded for GB/);
+      await assert.rejects(
+        gbP60Slips(org.orgId, 2023),
+        /2023 statutory tables are not loaded for GB/,
+      );
+      await assert.rejects(
+        gbP45Leavers(org.orgId, 2023),
+        /2023 statutory tables are not loaded for GB/,
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

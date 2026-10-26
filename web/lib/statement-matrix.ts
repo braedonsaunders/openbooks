@@ -1,18 +1,39 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { historicalTranslationAmounts } from '@openbooks/engine/consolidation/historical-translation-reader'
-import { HistoricalTranslationEvidenceError } from '@openbooks/engine/journal/historical-translation-evidence'
-import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from '@openbooks/engine/platform/business-date/module'
-import { declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
-import { resolveOrgId } from './org-scope'
-import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
-import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookIdsExpr, type ActivityBoundary } from './gl-summary'
-import { MissingRatesError } from './consolidation'
-import { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES } from './account-types'
-import { localizeAccountRows, type AccountLabels } from './reports/accounting-context'
-import { fiscalStartMonth, defaultFiscalCalendarPeriods, fiscalYearStartOnDate, priorFiscalYearEndOnDate } from './fiscal'
-import { fiscalPeriodLabel } from './fiscal-period-label'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { historicalTranslationAmounts } from "@openbooks/engine/consolidation/historical-translation-reader";
+import { HistoricalTranslationEvidenceError } from "@openbooks/engine/journal/historical-translation-evidence";
+import {
+  addCalendarDays,
+  addMonthsClamped,
+  calendarDaysBetween,
+} from "@openbooks/engine/platform/business-date/module";
+import {
+  declaredPeriodColumns,
+  declaredPeriodsCover,
+  declaredQuarterColumns,
+  fiscalMonthsBetween,
+  fiscalQuartersBetween,
+} from "@openbooks/reports";
+import { resolveOrgId } from "./org-scope";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
+import {
+  glActivityBuckets,
+  glSummaryEligibleDims,
+  bucketSubsidiaryFilter,
+  statementBookIdsExpr,
+  type ActivityBoundary,
+} from "./gl-summary";
+import { MissingRatesError } from "./consolidation";
+import { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES } from "./account-types";
+import { localizeAccountRows, type AccountLabels } from "./reports/accounting-context";
+import {
+  fiscalStartMonth,
+  defaultFiscalCalendarPeriods,
+  fiscalYearStartOnDate,
+  priorFiscalYearEndOnDate,
+} from "./fiscal";
+import { fiscalPeriodLabel } from "./fiscal-period-label";
 import {
   decimalAdd,
   decimalIsMaterial,
@@ -20,7 +41,7 @@ import {
   decimalPercentChange,
   type ExactDecimal,
   type StatementValue,
-} from './statement-format'
+} from "./statement-format";
 
 /**
  * Multi-column statement engine. Where the scalar report surface returns a
@@ -39,32 +60,32 @@ import {
  */
 
 export type StatementBreakout =
-  | 'none'
-  | 'department'
-  | 'project'
-  | 'location'
-  | 'class'
-  | 'month'
-  | 'quarter'
-  | `segment:${string}`
-export type StatementCompare = 'none' | 'prior_period' | 'prior_year'
-export type StatementBasis = 'accrual' | 'cash'
-export type StatementMode = 'flow' | 'balance'
+  | "none"
+  | "department"
+  | "project"
+  | "location"
+  | "class"
+  | "month"
+  | "quarter"
+  | `segment:${string}`;
+export type StatementCompare = "none" | "prior_period" | "prior_year";
+export type StatementBasis = "accrual" | "cash";
+export type StatementMode = "flow" | "balance";
 
 export type StatementDimFilter = {
-  departmentId?: string
-  projectId?: string
-  locationId?: string
-  classId?: string
-  segments?: Record<string, string>
+  departmentId?: string;
+  projectId?: string;
+  locationId?: string;
+  classId?: string;
+  segments?: Record<string, string>;
   /**
    * The view's resolved entity set (a leaf, or a consolidated subtree plus
    * its elimination subsidiaries). Drill targets carry it so the supporting
    * detail reads the cell's exact population; the drill route re-validates
    * every id against the caller's allowlist before use.
    */
-  subsidiaryIds?: string[]
-}
+  subsidiaryIds?: string[];
+};
 
 /**
  * One subsidiary's consolidated translation rates for ONE accounting period.
@@ -73,16 +94,16 @@ export type StatementDimFilter = {
  * never a single set borrowed from the report date.
  */
 export type StatementSubsidiaryRateSet = {
-  subsidiaryId: string
+  subsidiaryId: string;
   /** Functional currency being translated from (target = the view currency). */
-  currency: string
+  currency: string;
   /** Inclusive posting-date window (the accounting period) the set covers. */
-  periodFrom: string
-  periodTo: string
-  averageRate: string
-  currentRate: string
-  historicalRate: string
-}
+  periodFrom: string;
+  periodTo: string;
+  averageRate: string;
+  currentRate: string;
+  historicalRate: string;
+};
 
 /**
  * Subsidiary context for a statement. `ids` = the journal-line subsidiaries in
@@ -120,109 +141,115 @@ export type StatementSubsidiaryContext = {
   includeNullSubsidiary?: boolean;
 };
 
-export type StatementColumnKind = 'amount' | 'variance_abs' | 'variance_pct'
+export type StatementColumnKind = "amount" | "variance_abs" | "variance_pct";
 export type StatementColumn = {
-  key: string
-  label: string
-  kind: StatementColumnKind
+  key: string;
+  label: string;
+  kind: StatementColumnKind;
   /** Inclusive window the column covers (for headers/drill-through). */
-  from?: string | null
-  to?: string
+  from?: string | null;
+  to?: string;
   /** Breakout dimension this column slices on (drill-through carries it). */
-  dimField?: 'department' | 'project' | 'location' | 'class'
+  dimField?: "department" | "project" | "location" | "class";
   /** The dimension value id for this column (null = the "Unassigned" bucket). */
-  dimValue?: string | null
+  dimValue?: string | null;
   /** Custom registry segment used by this breakout column. */
-  segmentKey?: string
+  segmentKey?: string;
   /** Spanning header group (e.g. the department name) when breakout is combined
    *  with a compare — columns sharing a group render under one merged heading. */
-  group?: string
-}
+  group?: string;
+};
 
 export type MatrixRow = {
-  id: string
-  number: string | null
-  name: string
-  type: string
-  depth: number
-  isSummary: boolean
+  id: string;
+  number: string | null;
+  name: string;
+  type: string;
+  depth: number;
+  isSummary: boolean;
   /** Reader-signed exact decimal values aligned to `columns`. */
-  values: StatementValue[]
-}
+  values: StatementValue[];
+};
 
 export type StatementMatrix = {
-  columns: StatementColumn[]
-  rows: MatrixRow[]
+  columns: StatementColumn[];
+  rows: MatrixRow[];
   /** True when breakout produced more dimension columns than the cap. */
-  truncated: boolean
-}
+  truncated: boolean;
+};
 
-export const MAX_MATRIX_COLUMNS = 24
+export const MAX_MATRIX_COLUMNS = 24;
 
 const CREDIT_NORMAL = new Set([
-  'income',
-  'income_other',
-  'liability_payable',
-  'liability_card',
-  'liability_current_other',
-  'liability_long_term',
-  'equity',
-])
+  "income",
+  "income_other",
+  "liability_payable",
+  "liability_card",
+  "liability_current_other",
+  "liability_long_term",
+  "equity",
+]);
 
 const DIM_COLUMN: Record<string, string> = {
-  department: 'department_id',
-  project: 'project_id',
-  location: 'location_id',
-  class: 'class_id',
-}
+  department: "department_id",
+  project: "project_id",
+  location: "location_id",
+  class: "class_id",
+};
 const DIM_TABLE: Record<string, string> = {
-  department: 'departments',
-  project: 'projects',
-  location: 'locations',
-  class: 'classes',
-}
+  department: "departments",
+  project: "projects",
+  location: "locations",
+  class: "classes",
+};
 
 /** An amount column: a labelled date window with an optional dimension slice. */
 type AmountColumn = {
-  key: string
-  label: string
-  from: string | null
-  to: string
-  dimCol?: string
-  dimVal?: string | null // null = the "Unassigned" bucket
+  key: string;
+  label: string;
+  from: string | null;
+  to: string;
+  dimCol?: string;
+  dimVal?: string | null; // null = the "Unassigned" bucket
   /** Breakout dimension (drill-through metadata surfaced on StatementColumn). */
-  dimField?: 'department' | 'project' | 'location' | 'class'
-  segmentKey?: string
+  dimField?: "department" | "project" | "location" | "class";
+  segmentKey?: string;
   /** Spanning header group (breakout value name) when combined with compare. */
-  group?: string
-}
+  group?: string;
+};
 
 /** Report-level dimension filter as a SQL fragment (AND-combined). */
-function dimFilterSql(dims: StatementDimFilter | undefined, subsidiary?: StatementSubsidiaryContext): SQL {
-  let w = sql`true`
-  if (dims?.departmentId) w = sql`${w} and l.department_id = ${dims.departmentId}`
-  if (dims?.projectId) w = sql`${w} and l.project_id = ${dims.projectId}`
-  if (dims?.locationId) w = sql`${w} and l.location_id = ${dims.locationId}`
-  if (dims?.classId) w = sql`${w} and l.class_id = ${dims.classId}`
-  for (const [key, value] of Object.entries(dims?.segments ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
-    w = sql`${w} and l.extra_dims ->> ${key} = ${value}`
+function dimFilterSql(
+  dims: StatementDimFilter | undefined,
+  subsidiary?: StatementSubsidiaryContext,
+): SQL {
+  let w = sql`true`;
+  if (dims?.departmentId) w = sql`${w} and l.department_id = ${dims.departmentId}`;
+  if (dims?.projectId) w = sql`${w} and l.project_id = ${dims.projectId}`;
+  if (dims?.locationId) w = sql`${w} and l.location_id = ${dims.locationId}`;
+  if (dims?.classId) w = sql`${w} and l.class_id = ${dims.classId}`;
+  for (const [key, value] of Object.entries(dims?.segments ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    w = sql`${w} and l.extra_dims ->> ${key} = ${value}`;
   }
   // One pg-array param — drizzle expands raw JS arrays into value lists.
-  if (subsidiary) w = sql`${w} and l.subsidiary_id = any(${`{${subsidiary.ids.join(',')}}`}::uuid[])`
-  return w
+  if (subsidiary)
+    w = sql`${w} and l.subsidiary_id = any(${`{${subsidiary.ids.join(",")}}`}::uuid[])`;
+  return w;
 }
 
 /** Rate sets grouped per translated subsidiary id (insertion-ordered). */
 function rateSetsBySubsidiary(
-  rates: NonNullable<StatementSubsidiaryContext['rates']>,
+  rates: NonNullable<StatementSubsidiaryContext["rates"]>,
 ): Map<string, StatementSubsidiaryRateSet[]> {
-  const bySub = new Map<string, StatementSubsidiaryRateSet[]>()
+  const bySub = new Map<string, StatementSubsidiaryRateSet[]>();
   for (const set of rates) {
-    const existing = bySub.get(set.subsidiaryId)
-    if (existing) existing.push(set)
-    else bySub.set(set.subsidiaryId, [set])
+    const existing = bySub.get(set.subsidiaryId);
+    if (existing) existing.push(set);
+    else bySub.set(set.subsidiaryId, [set]);
   }
-  return bySub
+  return bySub;
 }
 
 /**
@@ -240,9 +267,7 @@ export function assertRateCoverage(
 ): void {
   for (const [subsidiaryId, sets] of rateSetsBySubsidiary(subsidiary.rates!)) {
     const sorted = [...sets].sort(
-      (a, b) =>
-        a.periodFrom.localeCompare(b.periodFrom) ||
-        a.periodTo.localeCompare(b.periodTo),
+      (a, b) => a.periodFrom.localeCompare(b.periodFrom) || a.periodTo.localeCompare(b.periodTo),
     );
     const merged: { from: string; to: string }[] = [];
     let previous: StatementSubsidiaryRateSet | undefined;
@@ -276,8 +301,7 @@ export function assertRateCoverage(
       if (mode === "flow" && cutoff && window.from > cutoff) continue;
       const need = cutoff
         ? {
-            from:
-              mode === "balance" && window.from > cutoff ? cutoff : window.from,
+            from: mode === "balance" && window.from > cutoff ? cutoff : window.from,
             to: window.to > cutoff ? cutoff : window.to,
           }
         : window;
@@ -303,17 +327,22 @@ async function assertNoUntranslatedHistory(
   types: string[],
 ): Promise<void> {
   const ids = [...rateSetsBySubsidiary(subsidiary.rates!).keys()];
-  const earliest = [...subsidiary.rates!].reduce((a, b) => (b.periodFrom < a.periodFrom ? b : a)).periodFrom;
-  const oldest = (await db.execute<{ d: string | null }>(sql`
+  const earliest = [...subsidiary.rates!].reduce((a, b) =>
+    b.periodFrom < a.periodFrom ? b : a,
+  ).periodFrom;
+  const oldest = await db.execute<{ d: string | null }>(
+    sql`
     select min(e.posting_date)::text as d
       from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.org_id=l.org_id and a.id=l.account_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
-       and l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])
+       and l.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])
        and e.book_id in ${statementBookIdsExpr(orgId, bookId)}
        and a.type in ${types}
-       and not (a.type='equity' and (${statementTranslationMethod('flow', sql`e.posting_date`)})='historical')
-       and e.posting_date < ${earliest}`, 'objects'));
+       and not (a.type='equity' and (${statementTranslationMethod("flow", sql`e.posting_date`)})='historical')
+       and e.posting_date < ${earliest}`,
+    "objects",
+  );
   const date = oldest[0]?.d;
   if (date) {
     throw new MissingRatesError(
@@ -345,16 +374,17 @@ export function translationMultiplier(
   if (rates?.length) {
     // The reference date selects the window: the line's own posting date for
     // flows, the column's as-of date for balances.
-    const reference =
-      mode === "flow" ? sql`e.posting_date` : sql`${asOf!}::date`;
-    const method = statementTranslationMethod(mode, statementPolicyReference(mode, reference, subsidiary), cashFlow);
+    const reference = mode === "flow" ? sql`e.posting_date` : sql`${asOf!}::date`;
+    const method = statementTranslationMethod(
+      mode,
+      statementPolicyReference(mode, reference, subsidiary),
+      cashFlow,
+    );
     const pick = sql`case when a.type='equity' and (${method})='historical' then null::numeric else
       case ${method} when 'average' then w.average_rate when 'historical' then w.historical_rate else w.current_rate end end`;
     rateExpr = sql`case l.subsidiary_id`;
     for (const [subsidiaryId, sets] of rateSetsBySubsidiary(rates)) {
-      const loss = subsidiary?.controlLosses?.find(
-        (value) => value.subsidiaryId === subsidiaryId,
-      );
+      const loss = subsidiary?.controlLosses?.find((value) => value.subsidiaryId === subsidiaryId);
       const entityReference =
         mode === "balance" && loss && asOf! >= loss.through
           ? sql`${loss.through}::date`
@@ -399,12 +429,19 @@ export function translationMultiplier(
 }
 
 function statementTranslationMethod(mode: StatementMode, reference: SQL, cashFlow = false): SQL {
-  const fallback = mode === 'flow' ? sql`'average'` : sql`case when a.type='equity' then 'historical' else 'current' end`;
+  const fallback =
+    mode === "flow"
+      ? sql`'average'`
+      : sql`case when a.type='equity' then 'historical' else 'current' end`;
   return sql`coalesce(public.account_translation_rate_type(a.org_id,a.id,${reference},${cashFlow}),${fallback})`;
 }
 
-function statementPolicyReference(mode: StatementMode, reference: SQL, subsidiary?: StatementSubsidiaryContext): SQL {
-  if (mode !== 'balance' || !subsidiary?.controlLosses?.length) return reference;
+function statementPolicyReference(
+  mode: StatementMode,
+  reference: SQL,
+  subsidiary?: StatementSubsidiaryContext,
+): SQL {
+  if (mode !== "balance" || !subsidiary?.controlLosses?.length) return reference;
   let result = sql`case`;
   for (const loss of subsidiary.controlLosses)
     result = sql`${result} when l.subsidiary_id=${loss.subsidiaryId}::uuid and (${reference})>=${loss.through}::date then ${loss.through}::date`;
@@ -413,12 +450,27 @@ function statementPolicyReference(mode: StatementMode, reference: SQL, subsidiar
 
 /** Every historical-policy equity source is inspected, including sources in
  * entities whose current currency happens to match the presentation target. */
-export async function statementHistoricalAmounts(orgId: string, subsidiary: StatementSubsidiaryContext | undefined,
-  mode: StatementMode, reference: SQL, predicate: SQL, cashFlow = false,
-  sourceCtes: SQL = sql``, sourceJoins: SQL = sql``): Promise<SQL> {
-  if (!subsidiary || !(subsidiary.presentationCurrency || subsidiary.rates?.length)) return sql`null::numeric`;
-  const method = statementTranslationMethod(mode, statementPolicyReference(mode, reference, subsidiary), cashFlow);
-  return historicalTranslationAmounts(db, { orgId, presentationCurrency: subsidiary.presentationCurrency, sources: sql`
+export async function statementHistoricalAmounts(
+  orgId: string,
+  subsidiary: StatementSubsidiaryContext | undefined,
+  mode: StatementMode,
+  reference: SQL,
+  predicate: SQL,
+  cashFlow = false,
+  sourceCtes: SQL = sql``,
+  sourceJoins: SQL = sql``,
+): Promise<SQL> {
+  if (!subsidiary || !(subsidiary.presentationCurrency || subsidiary.rates?.length))
+    return sql`null::numeric`;
+  const method = statementTranslationMethod(
+    mode,
+    statementPolicyReference(mode, reference, subsidiary),
+    cashFlow,
+  );
+  return historicalTranslationAmounts(db, {
+    orgId,
+    presentationCurrency: subsidiary.presentationCurrency,
+    sources: sql`
     with historical_scope as (select 1) ${sourceCtes}
     select l.id as "sourceLineId" from journal_lines l
     join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
@@ -426,18 +478,30 @@ export async function statementHistoricalAmounts(orgId: string, subsidiary: Stat
     ${sourceJoins}
     where l.org_id=${orgId} and e.status in ('posted','reversed') and a.type='equity'
       and l.amount<>0 and (${method})='historical'
-      and l.subsidiary_id=any(${`{${subsidiary.ids.join(',')}}`}::uuid[])
+      and l.subsidiary_id=any(${`{${subsidiary.ids.join(",")}}`}::uuid[])
       and ${excludePeriodEndJournals(sql`e.origin`)} and (${predicate})
       and (${translationMultiplier(mode, subsidiary, undefined, cashFlow, true)})<>0
-  ` });
+  `,
+  });
 }
 
-export function statementTranslatedAmount(mode: StatementMode, subsidiary: StatementSubsidiaryContext | undefined,
-  historicalAmount: SQL, asOf?: string, cashFlow = false, cashShare: SQL = sql`1::numeric`): SQL {
+export function statementTranslatedAmount(
+  mode: StatementMode,
+  subsidiary: StatementSubsidiaryContext | undefined,
+  historicalAmount: SQL,
+  asOf?: string,
+  cashFlow = false,
+  cashShare: SQL = sql`1::numeric`,
+): SQL {
   const ordinary = sql`l.amount * (${cashShare}) * (${translationMultiplier(mode, subsidiary, asOf, cashFlow)})`;
-  if (!subsidiary || !(subsidiary.presentationCurrency || subsidiary.rates?.length)) return ordinary;
-  const reference = mode === 'flow' ? sql`e.posting_date` : sql`${asOf!}::date`;
-  const method = statementTranslationMethod(mode, statementPolicyReference(mode, reference, subsidiary), cashFlow);
+  if (!subsidiary || !(subsidiary.presentationCurrency || subsidiary.rates?.length))
+    return ordinary;
+  const reference = mode === "flow" ? sql`e.posting_date` : sql`${asOf!}::date`;
+  const method = statementTranslationMethod(
+    mode,
+    statementPolicyReference(mode, reference, subsidiary),
+    cashFlow,
+  );
   return sql`case when l.amount=0 then 0::numeric when a.type='equity' and (${method})='historical' then
     case when (${translationMultiplier(mode, subsidiary, asOf, cashFlow, true)})=0 or (${cashShare})=0 then 0::numeric
       else (${historicalAmount}) * (${cashShare}) * (${translationMultiplier(mode, subsidiary, asOf, cashFlow, true)}) end
@@ -447,19 +511,19 @@ export function statementTranslatedAmount(mode: StatementMode, subsidiary: State
 /** One column's FILTER predicate: its date window + optional dimension slice. */
 function columnPredicate(col: AmountColumn, mode: StatementMode): SQL {
   const date =
-    mode === 'balance'
+    mode === "balance"
       ? sql`e.posting_date <= ${col.to}`
-      : sql`e.posting_date >= ${col.from} and e.posting_date <= ${col.to}`
-  if (!col.dimCol) return date
+      : sql`e.posting_date >= ${col.from} and e.posting_date <= ${col.to}`;
+  if (!col.dimCol) return date;
   if (col.segmentKey) {
     return col.dimVal === null
       ? sql`${date} and not (l.extra_dims ? ${col.segmentKey})`
-      : sql`${date} and l.extra_dims ->> ${col.segmentKey} = ${col.dimVal}`
+      : sql`${date} and l.extra_dims ->> ${col.segmentKey} = ${col.dimVal}`;
   }
-  const dimCol = sql.raw(`l.${col.dimCol}`)
+  const dimCol = sql.raw(`l.${col.dimCol}`);
   return col.dimVal === null
     ? sql`${date} and ${dimCol} is null`
-    : sql`${date} and ${dimCol} = ${col.dimVal}`
+    : sql`${date} and ${dimCol} = ${col.dimVal}`;
 }
 
 /**
@@ -469,23 +533,23 @@ function columnPredicate(col: AmountColumn, mode: StatementMode): SQL {
  * comparative amount.
  */
 async function buildAmountColumns(opts: {
-  orgId: string
-  mode: StatementMode
-  period: { from: string; to: string }
-  breakout: StatementBreakout
-  compare: StatementCompare
-  dims: StatementDimFilter | undefined
-  subsidiary: StatementSubsidiaryContext | undefined
-  periodLabel: string
+  orgId: string;
+  mode: StatementMode;
+  period: { from: string; to: string };
+  breakout: StatementBreakout;
+  compare: StatementCompare;
+  dims: StatementDimFilter | undefined;
+  subsidiary: StatementSubsidiaryContext | undefined;
+  periodLabel: string;
   /** Which accounting book the columns answer for (primary when omitted). */
-  bookId?: string | null
+  bookId?: string | null;
   /** Viewer locale for declared-period column titles; locale-free labels when absent. */
-  locale?: string
+  locale?: string;
 }): Promise<{ cols: AmountColumn[]; truncated: boolean }> {
-  const { orgId, mode, period, breakout, compare, dims, subsidiary, periodLabel } = opts
-  const bookProbe = sql`and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`
+  const { orgId, mode, period, breakout, compare, dims, subsidiary, periodLabel } = opts;
+  const bookProbe = sql`and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`;
 
-  if (breakout === 'month' || breakout === 'quarter') {
+  if (breakout === "month" || breakout === "quarter") {
     // Retail/custom calendars declare week-based periods whose boundaries
     // never align to month ends: columns come from the default calendar's
     // declared periods (a 5-week period is one column titled with its period
@@ -494,48 +558,59 @@ async function buildAmountColumns(opts: {
     // orgs — and any window the declared periods do not fully cover, so no
     // activity outside generated periods can silently drop out of the
     // matrix — keep the calendar math below byte-identical.
-    const fiscal = await defaultFiscalCalendarPeriods(orgId)
+    const fiscal = await defaultFiscalCalendarPeriods(orgId);
     const declared =
-      fiscal && fiscal.cadence !== 'monthly' && declaredPeriodsCover(fiscal.periods, period.from, period.to)
-        ? breakout === 'month'
+      fiscal &&
+      fiscal.cadence !== "monthly" &&
+      declaredPeriodsCover(fiscal.periods, period.from, period.to)
+        ? breakout === "month"
           ? declaredPeriodColumns(fiscal.periods, period.from, period.to)
           : declaredQuarterColumns(fiscal.periods, period.from, period.to)
-        : null
+        : null;
     // Quarter columns follow the org's fiscal calendar (orgs.settings.
     // fiscalYearStartMonth) like every other fiscal-aware surface — never a
     // hardcoded January start. Month columns are calendar months either way
     // (for monthly-cadence orgs; retail calendars take the declared path).
     const ranges =
       declared ??
-      (breakout === 'month'
+      (breakout === "month"
         ? fiscalMonthsBetween(period.from, period.to)
-        : fiscalQuartersBetween(period.from, period.to, await fiscalStartMonth(orgId)))
-    const capped = ranges.slice(0, MAX_MATRIX_COLUMNS)
+        : fiscalQuartersBetween(period.from, period.to, await fiscalStartMonth(orgId)));
+    const capped = ranges.slice(0, MAX_MATRIX_COLUMNS);
     return {
       cols: capped.map((r) => ({
         key: r.label,
-        label: r.fiscalPeriod && opts.locale ? fiscalPeriodLabel(r.fiscalPeriod, opts.locale) : r.label,
+        label:
+          r.fiscalPeriod && opts.locale ? fiscalPeriodLabel(r.fiscalPeriod, opts.locale) : r.label,
         from: r.from,
         to: r.to,
       })),
       truncated: ranges.length > capped.length,
-    }
+    };
   }
 
-  if (breakout.startsWith('segment:')) {
-    const segmentKey = breakout.slice('segment:'.length)
-    const definition = (await db.execute<{ id: string }>(sql`
+  if (breakout.startsWith("segment:")) {
+    const segmentKey = breakout.slice("segment:".length);
+    const definition = await db.execute<{ id: string }>(
+      sql`
       select id from segment_definitions
        where org_id = ${orgId} and key = ${segmentKey} and source_kind = 'custom' and is_active and show_in_reports
        limit 1
-    `, 'objects'))
+    `,
+      "objects",
+    );
     if (!definition[0]) {
-      return { cols: [{ key: 'current', label: periodLabel, from: period.from, to: period.to }], truncated: false }
+      return {
+        cols: [{ key: "current", label: periodLabel, from: period.from, to: period.to }],
+        truncated: false,
+      };
     }
-    const periodWhere = mode === 'balance'
-      ? sql`e.posting_date <= ${period.to}`
-      : sql`e.posting_date >= ${period.from} and e.posting_date <= ${period.to}`
-    const values = (await db.execute<{ id: string; name: string }>(sql`
+    const periodWhere =
+      mode === "balance"
+        ? sql`e.posting_date <= ${period.to}`
+        : sql`e.posting_date >= ${period.from} and e.posting_date <= ${period.to}`;
+    const values = await db.execute<{ id: string; name: string }>(
+      sql`
       select sv.id, sv.name from segment_values sv
        where sv.org_id = ${orgId} and sv.segment_id = ${definition[0].id} and sv.is_active
          and exists (
@@ -545,18 +620,27 @@ async function buildAmountColumns(opts: {
               and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
          )
        order by sv.name
-    `, 'objects'))
-    const unassigned = (await db.execute(sql`
+    `,
+      "objects",
+    );
+    const unassigned = await db.execute(
+      sql`
       select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
          and not (l.extra_dims ? ${segmentKey}) and ${periodWhere} ${bookProbe}
          and ${dimFilterSql(dims, subsidiary)} limit 1
-    `, 'objects'))
-    const groups = values.map((value) => ({ key: value.id, name: value.name, dimVal: value.id as string | null }))
-    if (unassigned.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
-    const periods = await comparePeriods(orgId, period, compare, periodLabel)
-    const grouped = periods.length > 1
-    const cols: AmountColumn[] = []
+    `,
+      "objects",
+    );
+    const groups = values.map((value) => ({
+      key: value.id,
+      name: value.name,
+      dimVal: value.id as string | null,
+    }));
+    if (unassigned.length) groups.push({ key: "unassigned", name: "Unassigned", dimVal: null });
+    const periods = await comparePeriods(orgId, period, compare, periodLabel);
+    const grouped = periods.length > 1;
+    const cols: AmountColumn[] = [];
     for (const group of groups) {
       for (const comparison of periods) {
         cols.push({
@@ -565,24 +649,25 @@ async function buildAmountColumns(opts: {
           group: grouped ? group.name : undefined,
           from: comparison.from,
           to: comparison.to,
-          dimCol: 'extra_dims',
+          dimCol: "extra_dims",
           dimVal: group.dimVal,
           segmentKey,
-        })
+        });
       }
     }
-    const capped = cols.slice(0, MAX_MATRIX_COLUMNS)
-    return { cols: capped, truncated: cols.length > capped.length }
+    const capped = cols.slice(0, MAX_MATRIX_COLUMNS);
+    return { cols: capped, truncated: cols.length > capped.length };
   }
 
-  if (breakout !== 'none') {
-    const table = DIM_TABLE[breakout]!
-    const dimCol = DIM_COLUMN[breakout]!
+  if (breakout !== "none") {
+    const table = DIM_TABLE[breakout]!;
+    const dimCol = DIM_COLUMN[breakout]!;
     const periodWhere =
-      mode === 'balance'
+      mode === "balance"
         ? sql`e.posting_date <= ${period.to}`
-        : sql`e.posting_date >= ${period.from} and e.posting_date <= ${period.to}`
-    const rows = (await db.execute<{ id: string; name: string }>(sql`
+        : sql`e.posting_date >= ${period.from} and e.posting_date <= ${period.to}`;
+    const rows = await db.execute<{ id: string; name: string }>(
+      sql`
       select d.id, d.name
         from ${sql.raw(table)} d
        where d.org_id = ${orgId}
@@ -592,22 +677,27 @@ async function buildAmountColumns(opts: {
           where l.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
        )
        order by d.name
-    `, 'objects'))
-    const unassigned = (await db.execute(sql`
+    `,
+      "objects",
+    );
+    const unassigned = await db.execute(
+      sql`
       select 1 from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
        limit 1
-    `, 'objects'))
-    const dimField = breakout as 'department' | 'project' | 'location' | 'class'
-    const groups = rows.map((r) => ({ key: r.id, name: r.name, dimVal: r.id as string | null }))
-    if (unassigned.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
+    `,
+      "objects",
+    );
+    const dimField = breakout as "department" | "project" | "location" | "class";
+    const groups = rows.map((r) => ({ key: r.id, name: r.name, dimVal: r.id as string | null }));
+    if (unassigned.length) groups.push({ key: "unassigned", name: "Unassigned", dimVal: null });
 
     // Compose breakout WITH compare: each breakout value gets one column per
     // period (Current + Prior). With no compare it stays one column per value.
-    const periods = await comparePeriods(orgId, period, compare, periodLabel)
-    const grouped = periods.length > 1
-    const cols: AmountColumn[] = []
+    const periods = await comparePeriods(orgId, period, compare, periodLabel);
+    const grouped = periods.length > 1;
+    const cols: AmountColumn[] = [];
     for (const g of groups) {
       for (const p of periods) {
         cols.push({
@@ -619,16 +709,19 @@ async function buildAmountColumns(opts: {
           dimCol,
           dimVal: g.dimVal,
           dimField,
-        })
+        });
       }
     }
-    const capped = cols.slice(0, MAX_MATRIX_COLUMNS)
-    return { cols: capped, truncated: cols.length > capped.length }
+    const capped = cols.slice(0, MAX_MATRIX_COLUMNS);
+    return { cols: capped, truncated: cols.length > capped.length };
   }
 
   // breakout === 'none' — base column, plus comparison.
-  const periods = await comparePeriods(orgId, period, compare, periodLabel)
-  return { cols: periods.map((p) => ({ key: p.key, label: p.label, from: p.from, to: p.to })), truncated: false }
+  const periods = await comparePeriods(orgId, period, compare, periodLabel);
+  return {
+    cols: periods.map((p) => ({ key: p.key, label: p.label, from: p.from, to: p.to })),
+    truncated: false,
+  };
 }
 
 /**
@@ -646,31 +739,40 @@ export async function priorAccountingWindow(
   orgId: string,
   period: { from: string; to: string },
 ): Promise<{ from: string; to: string; aligned: boolean }> {
-  const periods = await db.execute<{ starts_on: string; ends_on: string }>(sql`
+  const periods = await db.execute<{ starts_on: string; ends_on: string }>(
+    sql`
     select p.starts_on::text as starts_on, p.ends_on::text as ends_on
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
      where p.org_id = ${orgId} and fc.is_default and fc.is_active and not p.is_adjustment
      order by p.starts_on, p.ends_on
-  `, 'objects')
-  const abuts = (i: number) => periods[i + 1]?.starts_on === addCalendarDays(periods[i]!.ends_on, 1)
-  const first = periods.findIndex((p) => p.starts_on === period.from)
+  `,
+    "objects",
+  );
+  const abuts = (i: number) =>
+    periods[i + 1]?.starts_on === addCalendarDays(periods[i]!.ends_on, 1);
+  const first = periods.findIndex((p) => p.starts_on === period.from);
   if (first >= 0) {
     // Walk forward through abutting periods until one ends on `period.to`.
-    let last = first
-    while (periods[last]!.ends_on < period.to && abuts(last)) last += 1
+    let last = first;
+    while (periods[last]!.ends_on < period.to && abuts(last)) last += 1;
     if (periods[last]!.ends_on === period.to) {
-      const count = last - first + 1
-      const priorFirst = first - count
+      const count = last - first + 1;
+      const priorFirst = first - count;
       // The prior run must itself be contiguous and abut the current window.
-      let contiguous = priorFirst >= 0
-      for (let i = priorFirst; contiguous && i < first; i += 1) contiguous = abuts(i)
-      if (contiguous) return { from: periods[priorFirst]!.starts_on, to: periods[first - 1]!.ends_on, aligned: true }
+      let contiguous = priorFirst >= 0;
+      for (let i = priorFirst; contiguous && i < first; i += 1) contiguous = abuts(i);
+      if (contiguous)
+        return {
+          from: periods[priorFirst]!.starts_on,
+          to: periods[first - 1]!.ends_on,
+          aligned: true,
+        };
     }
   }
-  const priorTo = addCalendarDays(period.from, -1)
-  const priorFrom = addCalendarDays(priorTo, -calendarDaysBetween(period.from, period.to))
-  return { from: priorFrom, to: priorTo, aligned: false }
+  const priorTo = addCalendarDays(period.from, -1);
+  const priorFrom = addCalendarDays(priorTo, -calendarDaysBetween(period.from, period.to));
+  return { from: priorFrom, to: priorTo, aligned: false };
 }
 
 /** The period columns implied by a compare setting: just the base window when
@@ -683,13 +785,34 @@ async function comparePeriods(
   compare: StatementCompare,
   periodLabel: string,
 ): Promise<{ key: string; label: string; from: string; to: string }[]> {
-  const current = { key: 'current', label: compare === 'none' ? periodLabel : 'Current', from: period.from, to: period.to }
-  if (compare === 'none') return [current]
-  if (compare === 'prior_year') {
-    return [current, { key: 'prior', label: 'Prior year', from: addMonthsClamped(period.from, -12), to: addMonthsClamped(period.to, -12) }]
+  const current = {
+    key: "current",
+    label: compare === "none" ? periodLabel : "Current",
+    from: period.from,
+    to: period.to,
+  };
+  if (compare === "none") return [current];
+  if (compare === "prior_year") {
+    return [
+      current,
+      {
+        key: "prior",
+        label: "Prior year",
+        from: addMonthsClamped(period.from, -12),
+        to: addMonthsClamped(period.to, -12),
+      },
+    ];
   }
-  const prior = await priorAccountingWindow(orgId, period)
-  return [current, { key: 'prior', label: prior.aligned ? 'Prior period' : 'Prior period (equal length)', from: prior.from, to: prior.to }]
+  const prior = await priorAccountingWindow(orgId, period);
+  return [
+    current,
+    {
+      key: "prior",
+      label: prior.aligned ? "Prior period" : "Prior period (equal length)",
+      from: prior.from,
+      to: prior.to,
+    },
+  ];
 }
 
 /** Gross presentation over the account tree: every account line
@@ -701,54 +824,54 @@ async function comparePeriods(
  * over a value vector. */
 function treeifyMatrix(
   rows: {
-    id: string
-    parent_id: string | null
-    number: string | null
-    name: string
-    type: string
-    is_summary: boolean
-    vals: ExactDecimal[]
+    id: string;
+    parent_id: string | null;
+    number: string | null;
+    name: string;
+    type: string;
+    is_summary: boolean;
+    vals: ExactDecimal[];
   }[],
   types: string[],
   showZero: boolean,
 ): MatrixRow[] {
-  const byId = new Map(rows.map((r) => [r.id, r]))
+  const byId = new Map(rows.map((r) => [r.id, r]));
   const ownMaterial = new Map(
-    rows.map((r) => [r.id, r.vals.some((v) => decimalIsMaterial(v ?? '0.0000'))]),
-  )
-  const children = new Map<string | null, typeof rows>()
+    rows.map((r) => [r.id, r.vals.some((v) => decimalIsMaterial(v ?? "0.0000"))]),
+  );
+  const children = new Map<string | null, typeof rows>();
   for (const r of rows) {
-    if (!children.has(r.parent_id)) children.set(r.parent_id, [])
-    children.get(r.parent_id)!.push(r)
+    if (!children.has(r.parent_id)) children.set(r.parent_id, []);
+    children.get(r.parent_id)!.push(r);
   }
   // A row prints when it is self-visible (material own balance, summary, or
   // showZero) or when a type-matching descendant prints, so group headers
   // survive their children and the tree keeps its shape. A malformed
   // imported cycle must terminate, not hang the report: the path guard
   // refuses re-entry (same tolerate-and-show policy as the old rollup).
-  const emitsMemo = new Map<string, boolean>()
-  const visiting = new Set<string>()
+  const emitsMemo = new Map<string, boolean>();
+  const visiting = new Set<string>();
   const emits = (id: string): boolean => {
-    const hit = emitsMemo.get(id)
-    if (hit !== undefined) return hit
-    const r = byId.get(id)
-    if (!r || visiting.has(id)) return false
-    visiting.add(id)
-    let kid = false
-    for (const k of children.get(id) ?? []) kid = emits(k.id) || kid
+    const hit = emitsMemo.get(id);
+    if (hit !== undefined) return hit;
+    const r = byId.get(id);
+    if (!r || visiting.has(id)) return false;
+    visiting.add(id);
+    let kid = false;
+    for (const k of children.get(id) ?? []) kid = emits(k.id) || kid;
     const out =
       (types.includes(r.type) && (ownMaterial.get(id) === true || r.is_summary || showZero)) ||
-      (types.includes(r.type) && kid)
-    visiting.delete(id)
-    emitsMemo.set(id, out)
-    return out
-  }
-  const out: MatrixRow[] = []
+      (types.includes(r.type) && kid);
+    visiting.delete(id);
+    emitsMemo.set(id, out);
+    return out;
+  };
+  const out: MatrixRow[] = [];
   const walk = (parent: string | null, depth: number) => {
     for (const r of children.get(parent) ?? []) {
       if (emits(r.id)) {
-        const flip = CREDIT_NORMAL.has(r.type)
-        const values = r.vals.map((v) => (flip ? decimalNeg(v) : v))
+        const flip = CREDIT_NORMAL.has(r.type);
+        const values = r.vals.map((v) => (flip ? decimalNeg(v) : v));
         out.push({
           id: r.id,
           number: r.number,
@@ -757,20 +880,20 @@ function treeifyMatrix(
           depth,
           isSummary: r.is_summary,
           values,
-        })
+        });
       }
-      walk(r.id, depth + 1)
+      walk(r.id, depth + 1);
     }
-  }
-  walk(null, 0)
+  };
+  walk(null, 0);
   // Prune immaterial group headers with no visible descendants (unless
   // showing zeros). Material own-balance rows always print.
-  if (showZero) return out
+  if (showZero) return out;
   return out.filter((r, i) => {
-    if (ownMaterial.get(r.id)) return true
-    const next = out[i + 1]
-    return next !== undefined && next.depth > r.depth
-  })
+    if (ownMaterial.get(r.id)) return true;
+    const next = out[i + 1];
+    return next !== undefined && next.depth > r.depth;
+  });
 }
 
 /**
@@ -848,9 +971,7 @@ export async function statementMatrix(opts: {
 
   // Overall window spanning every column, used to bound the base join.
   const froms = cols.map((c) => c.from).filter((x): x is string => !!x);
-  const overallFrom = froms.length
-    ? froms.reduce((a, b) => (a < b ? a : b))
-    : opts.period.from;
+  const overallFrom = froms.length ? froms.reduce((a, b) => (a < b ? a : b)) : opts.period.from;
   const overallTo = cols.length
     ? cols.map((c) => c.to).reduce((a, b) => (a > b ? a : b))
     : opts.period.to;
@@ -946,8 +1067,7 @@ export async function statementMatrix(opts: {
     const boundaries: ActivityBoundary[] = [];
     for (const c of cols) {
       boundaries.push({ date: c.to, kind: "end" });
-      if (opts.mode !== "balance" && c.from)
-        boundaries.push({ date: c.from, kind: "start" });
+      if (opts.mode !== "balance" && c.from) boundaries.push({ date: c.from, kind: "start" });
     }
     const buckets = glActivityBuckets(orgId, {
       minDate: opts.mode === "balance" ? null : overallFrom,
@@ -958,18 +1078,13 @@ export async function statementMatrix(opts: {
     const bucketCols = sql.join(
       cols.map((c, i) => {
         const pred =
-          opts.mode === "balance"
-            ? sql`b.d <= ${c.to}`
-            : sql`b.d >= ${c.from} and b.d <= ${c.to}`;
+          opts.mode === "balance" ? sql`b.d <= ${c.to}` : sql`b.d >= ${c.from} and b.d <= ${c.to}`;
         return sql`coalesce(sum(b.amount) filter (where ${pred}), 0) as ${sql.raw(`c${i}`)}`;
       }),
       sql`, `,
     );
     const outCols = sql.join(
-      cols.map(
-        (_, i) =>
-          sql`coalesce(s.${sql.raw(`c${i}`)}, 0) as ${sql.raw(`c${i}`)}`,
-      ),
+      cols.map((_, i) => sql`coalesce(s.${sql.raw(`c${i}`)}, 0) as ${sql.raw(`c${i}`)}`),
       sql`, `,
     );
     // Aggregate the buckets first, then join accounts to the tiny per-account
@@ -1007,12 +1122,7 @@ export async function statementMatrix(opts: {
           );
         }
         if (opts.mode === "balance")
-          await assertNoUntranslatedHistory(
-            orgId,
-            opts.bookId,
-            opts.subsidiary,
-            opts.types,
-          );
+          await assertNoUntranslatedHistory(orgId, opts.bookId, opts.subsidiary, opts.types);
       } else {
         assertRateCoverage(
           opts.subsidiary,
@@ -1035,16 +1145,36 @@ export async function statementMatrix(opts: {
         : sql`1::numeric`;
     const amountByAsOf = new Map<string, SQL>();
     for (const col of cols) {
-      const key = translationKind === 'balance' ? col.to : '*';
+      const key = translationKind === "balance" ? col.to : "*";
       if (amountByAsOf.has(key)) continue;
-      const selectedColumns = translationKind === 'balance' ? cols.filter(value => value.to === col.to) : cols;
-      const predicates = sql.join(selectedColumns.map(value => sql`(${columnPredicate(value, opts.mode)})`), sql` or `);
-      const historical = await statementHistoricalAmounts(orgId, opts.subsidiary, translationKind,
-        translationKind === 'flow' ? sql`e.posting_date` : sql`${col.to}::date`,
+      const selectedColumns =
+        translationKind === "balance" ? cols.filter((value) => value.to === col.to) : cols;
+      const predicates = sql.join(
+        selectedColumns.map((value) => sql`(${columnPredicate(value, opts.mode)})`),
+        sql` or `,
+      );
+      const historical = await statementHistoricalAmounts(
+        orgId,
+        opts.subsidiary,
+        translationKind,
+        translationKind === "flow" ? sql`e.posting_date` : sql`${col.to}::date`,
         sql`${baseDate} ${baseBook} and ${dimFilterSql(opts.dims, opts.subsidiary)} and (${predicates})
-          and a.type in ${opts.types} and (${cashShare})<>0`, false, cashCtes, cashJoins);
-      amountByAsOf.set(key, statementTranslatedAmount(translationKind, opts.subsidiary, historical,
-        translationKind === 'balance' ? col.to : undefined, false, cashShare));
+          and a.type in ${opts.types} and (${cashShare})<>0`,
+        false,
+        cashCtes,
+        cashJoins,
+      );
+      amountByAsOf.set(
+        key,
+        statementTranslatedAmount(
+          translationKind,
+          opts.subsidiary,
+          historical,
+          translationKind === "balance" ? col.to : undefined,
+          false,
+          cashShare,
+        ),
+      );
     }
     const amountFor = (col: AmountColumn): SQL => {
       const key = translationKind === "balance" ? col.to : "*";
@@ -1083,8 +1213,16 @@ export async function statementMatrix(opts: {
        group by a.id
        order by a.number nulls last, a.name
     `);
-    if (res.rows.some(row => opts.types.includes(row.type as string) && cols.some((_, i) => row[`missing_c${i}`] === true)))
-      throw new HistoricalTranslationEvidenceError("A required statement translation source is unavailable. Reload the report; for historical equity, open the Journal entry → Historical translation tab, obtain Accounting event approval for its retained source and genuine layers, then Apply. For period rates, derive the missing consolidated rate set from Period Close.");
+    if (
+      res.rows.some(
+        (row) =>
+          opts.types.includes(row.type as string) &&
+          cols.some((_, i) => row[`missing_c${i}`] === true),
+      )
+    )
+      throw new HistoricalTranslationEvidenceError(
+        "A required statement translation source is unavailable. Reload the report; for historical equity, open the Journal entry → Historical translation tab, obtain Accounting event approval for its retained source and genuine layers, then Apply. For period rates, derive the missing consolidated rate set from Period Close.",
+      );
   }
 
   const parsed = res.rows.map((r) => ({
@@ -1112,20 +1250,13 @@ export async function statementMatrix(opts: {
     ...(c.segmentKey ? { dimValue: c.dimVal } : {}),
     group: c.group,
   }));
-  const wantVariance =
-    (opts.variance ?? true) && compare !== "none" && cols.length === 2;
+  const wantVariance = (opts.variance ?? true) && compare !== "none" && cols.length === 2;
   if (wantVariance) {
     columns.push({ key: "var_abs", label: "Variance", kind: "variance_abs" });
     columns.push({ key: "var_pct", label: "Variance %", kind: "variance_pct" });
     for (const row of rows) {
-      const [cur, prior] = [
-        row.values[0] ?? "0.0000",
-        row.values[1] ?? "0.0000",
-      ];
-      row.values.push(
-        decimalAdd(cur, decimalNeg(prior)),
-        decimalPercentChange(cur, prior),
-      );
+      const [cur, prior] = [row.values[0] ?? "0.0000", row.values[1] ?? "0.0000"];
+      row.values.push(decimalAdd(cur, decimalNeg(prior)), decimalPercentChange(cur, prior));
     }
   }
 
@@ -1135,16 +1266,21 @@ export async function statementMatrix(opts: {
 /** Recompute the variance columns of a values vector from its first two amount
  *  columns. Percentages are non-linear, so any derived/combined total must run
  *  through this rather than summing the variance cells directly. */
-export function recomputeVariance(matrix: StatementMatrix, values: StatementValue[]): StatementValue[] {
-  const amountIdx = matrix.columns.map((c, i) => (c.kind === 'amount' ? i : -1)).filter((i) => i >= 0)
-  const varAbs = matrix.columns.findIndex((c) => c.kind === 'variance_abs')
-  const varPct = matrix.columns.findIndex((c) => c.kind === 'variance_pct')
-  if (varAbs < 0 || amountIdx.length < 2) return values
-  const cur = values[amountIdx[0]!] ?? '0.0000'
-  const prior = values[amountIdx[1]!] ?? '0.0000'
-  values[varAbs] = decimalAdd(cur, decimalNeg(prior))
-  if (varPct >= 0) values[varPct] = decimalPercentChange(cur, prior)
-  return values
+export function recomputeVariance(
+  matrix: StatementMatrix,
+  values: StatementValue[],
+): StatementValue[] {
+  const amountIdx = matrix.columns
+    .map((c, i) => (c.kind === "amount" ? i : -1))
+    .filter((i) => i >= 0);
+  const varAbs = matrix.columns.findIndex((c) => c.kind === "variance_abs");
+  const varPct = matrix.columns.findIndex((c) => c.kind === "variance_pct");
+  if (varAbs < 0 || amountIdx.length < 2) return values;
+  const cur = values[amountIdx[0]!] ?? "0.0000";
+  const prior = values[amountIdx[1]!] ?? "0.0000";
+  values[varAbs] = decimalAdd(cur, decimalNeg(prior));
+  if (varPct >= 0) values[varPct] = decimalPercentChange(cur, prior);
+  return values;
 }
 
 /** Per-column totals over every row of the given types (section total). Each
@@ -1152,27 +1288,32 @@ export function recomputeVariance(matrix: StatementMatrix, values: StatementValu
  * the total is the sum over all rows — depth-0-only summing was correct
  * only when parents carried rolled balances. */
 export function sumSection(matrix: StatementMatrix, types: string[]): StatementValue[] {
-  const totals: StatementValue[] = matrix.columns.map(() => '0.0000')
+  const totals: StatementValue[] = matrix.columns.map(() => "0.0000");
   for (const row of matrix.rows) {
-    if (!types.includes(row.type)) continue
-    for (let i = 0; i < totals.length; i++) totals[i] = decimalAdd(totals[i] ?? '0.0000', row.values[i] ?? '0.0000')
+    if (!types.includes(row.type)) continue;
+    for (let i = 0; i < totals.length; i++)
+      totals[i] = decimalAdd(totals[i] ?? "0.0000", row.values[i] ?? "0.0000");
   }
-  return recomputeVariance(matrix, totals)
+  return recomputeVariance(matrix, totals);
 }
 
 /** Element-wise signed combine of total vectors (e.g. revenue − cogs −
  *  expenses), then re-derive variance columns from the combined amounts. */
-export function combineTotals(matrix: StatementMatrix, vectors: StatementValue[][], signs: number[]): StatementValue[] {
-  const width = matrix.columns.length
-  const out: StatementValue[] = new Array(width).fill('0.0000')
+export function combineTotals(
+  matrix: StatementMatrix,
+  vectors: StatementValue[][],
+  signs: number[],
+): StatementValue[] {
+  const width = matrix.columns.length;
+  const out: StatementValue[] = new Array(width).fill("0.0000");
   vectors.forEach((v, k) => {
-    const sign = signs[k] ?? 1
+    const sign = signs[k] ?? 1;
     for (let i = 0; i < width; i++) {
-      const value = v[i] ?? '0.0000'
-      out[i] = decimalAdd(out[i] ?? '0.0000', sign < 0 ? decimalNeg(value) : value)
+      const value = v[i] ?? "0.0000";
+      out[i] = decimalAdd(out[i] ?? "0.0000", sign < 0 ? decimalNeg(value) : value);
     }
-  })
-  return recomputeVariance(matrix, out)
+  });
+  return recomputeVariance(matrix, out);
 }
 
 // ---------------------------------------------------------------------------
@@ -1184,71 +1325,71 @@ export function combineTotals(matrix: StatementMatrix, vectors: StatementValue[]
 export { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES };
 
 export type StatementViewLine = {
-  kind: 'section' | 'account' | 'subtotal' | 'total'
-  label: string
-  number?: string | null
-  accountId?: string
-  depth: number
+  kind: "section" | "account" | "subtotal" | "total";
+  label: string;
+  number?: string | null;
+  accountId?: string;
+  depth: number;
   /** Bold grand-total emphasis (net income, total assets, …). */
-  emphasis?: boolean
+  emphasis?: boolean;
   /** Absent on section headers; reader-signed exact decimals, column-aligned. */
-  values?: StatementValue[]
+  values?: StatementValue[];
   /** Account types this row aggregates — drill-through for subtotal/total rows
    *  (and computed earnings rows) that have no single accountId. */
-  drillTypes?: string[]
+  drillTypes?: string[];
   /** Per-column drill window when it differs from the statement column
    *  (prior-year RE vs current-year earnings on the same balance sheet). */
-  drillWindows?: Array<{ from?: string | null; to?: string; mode?: StatementMode } | null>
-}
+  drillWindows?: Array<{ from?: string | null; to?: string; mode?: StatementMode } | null>;
+};
 
 export type StatementView = {
-  columns: StatementColumn[]
-  lines: StatementViewLine[]
-  truncated: boolean
+  columns: StatementColumn[];
+  lines: StatementViewLine[];
+  truncated: boolean;
   /** Whether any comparison/variance columns are present. */
-  hasVariance: boolean
+  hasVariance: boolean;
   /** 'flow' = period range, 'balance' = cumulative as-of — drives drill-through. */
-  mode: StatementMode
-}
+  mode: StatementMode;
+};
 
 type MatrixOpts = {
-  orgId?: string
-  breakout?: StatementBreakout
-  compare?: StatementCompare
-  basis?: StatementBasis
-  dims?: StatementDimFilter
-  subsidiary?: StatementSubsidiaryContext
-  showZero?: boolean
+  orgId?: string;
+  breakout?: StatementBreakout;
+  compare?: StatementCompare;
+  basis?: StatementBasis;
+  dims?: StatementDimFilter;
+  subsidiary?: StatementSubsidiaryContext;
+  showZero?: boolean;
   /** Which accounting book to report (the org's primary book when omitted). */
-  bookId?: string | null
+  bookId?: string | null;
   /** Accounting-context labels for the account rows. */
-  accountLabels?: AccountLabels | null
+  accountLabels?: AccountLabels | null;
   /** Viewer locale for declared-period column titles. */
-  locale?: string
-}
+  locale?: string;
+};
 
 function accountLines(matrix: StatementMatrix, types: string[]): StatementViewLine[] {
   return matrix.rows
     .filter((r) => types.includes(r.type))
     .map((r) => ({
-      kind: 'account' as const,
+      kind: "account" as const,
       label: r.name,
       number: r.number,
       accountId: r.id,
       depth: r.depth,
       emphasis: r.isSummary,
       values: r.values,
-    }))
+    }));
 }
 
 export type PnlLabels = {
-  revenue: string
-  costOfGoodsSold: string
-  grossProfit: string
-  expenses: string
-  netIncome: string
-  totalOf: (section: string) => string
-}
+  revenue: string;
+  costOfGoodsSold: string;
+  grossProfit: string;
+  expenses: string;
+  netIncome: string;
+  totalOf: (section: string) => string;
+};
 
 /** Profit & Loss as a multi-column statement view. */
 export async function profitAndLossView(
@@ -1257,74 +1398,108 @@ export async function profitAndLossView(
   labels: PnlLabels,
   opts: MatrixOpts = {},
 ): Promise<StatementView> {
-  const matrix = await statementMatrix({ types: PNL_TYPES, mode: 'flow', period, periodLabel, ...opts })
-  const revenueTypes = ['income', 'income_other']
-  const cogsTypes = ['cogs']
-  const expenseTypes = ['expense', 'expense_other', 'expense_deferred']
-  const revenue = sumSection(matrix, revenueTypes)
-  const cogs = sumSection(matrix, cogsTypes)
-  const expenses = sumSection(matrix, expenseTypes)
-  const grossProfit = combineTotals(matrix, [revenue, cogs], [1, -1])
-  const netIncome = combineTotals(matrix, [revenue, cogs, expenses], [1, -1, -1])
+  const matrix = await statementMatrix({
+    types: PNL_TYPES,
+    mode: "flow",
+    period,
+    periodLabel,
+    ...opts,
+  });
+  const revenueTypes = ["income", "income_other"];
+  const cogsTypes = ["cogs"];
+  const expenseTypes = ["expense", "expense_other", "expense_deferred"];
+  const revenue = sumSection(matrix, revenueTypes);
+  const cogs = sumSection(matrix, cogsTypes);
+  const expenses = sumSection(matrix, expenseTypes);
+  const grossProfit = combineTotals(matrix, [revenue, cogs], [1, -1]);
+  const netIncome = combineTotals(matrix, [revenue, cogs, expenses], [1, -1, -1]);
 
-  const lines: StatementViewLine[] = []
+  const lines: StatementViewLine[] = [];
   const section = (title: string, types: string[], total: StatementValue[]) => {
-    lines.push({ kind: 'section', label: title, depth: 0 })
-    lines.push(...accountLines(matrix, types))
-    lines.push({ kind: 'subtotal', label: labels.totalOf(title), depth: 0, values: total, drillTypes: types })
-  }
-  section(labels.revenue, revenueTypes, revenue)
-  section(labels.costOfGoodsSold, cogsTypes, cogs)
-  lines.push({ kind: 'subtotal', label: labels.grossProfit, depth: 0, emphasis: true, values: grossProfit, drillTypes: [...revenueTypes, ...cogsTypes] })
-  section(labels.expenses, expenseTypes, expenses)
-  lines.push({ kind: 'total', label: labels.netIncome, depth: 0, emphasis: true, values: netIncome, drillTypes: PNL_TYPES })
+    lines.push({ kind: "section", label: title, depth: 0 });
+    lines.push(...accountLines(matrix, types));
+    lines.push({
+      kind: "subtotal",
+      label: labels.totalOf(title),
+      depth: 0,
+      values: total,
+      drillTypes: types,
+    });
+  };
+  section(labels.revenue, revenueTypes, revenue);
+  section(labels.costOfGoodsSold, cogsTypes, cogs);
+  lines.push({
+    kind: "subtotal",
+    label: labels.grossProfit,
+    depth: 0,
+    emphasis: true,
+    values: grossProfit,
+    drillTypes: [...revenueTypes, ...cogsTypes],
+  });
+  section(labels.expenses, expenseTypes, expenses);
+  lines.push({
+    kind: "total",
+    label: labels.netIncome,
+    depth: 0,
+    emphasis: true,
+    values: netIncome,
+    drillTypes: PNL_TYPES,
+  });
 
-  return { columns: matrix.columns, lines, truncated: matrix.truncated, hasVariance: matrix.columns.some((c) => c.kind !== 'amount'), mode: 'flow' }
+  return {
+    columns: matrix.columns,
+    lines,
+    truncated: matrix.truncated,
+    hasVariance: matrix.columns.some((c) => c.kind !== "amount"),
+    mode: "flow",
+  };
 }
 
 export type BalanceSheetLabels = {
-  assets: string
-  liabilities: string
-  equity: string
-  totalAssets: string
-  totalLiabilities: string
-  totalEquity: string
-  retainedEarningsPrior: string
-  currentYearEarnings: string
-  liabilitiesAndEquity: string
+  assets: string;
+  liabilities: string;
+  equity: string;
+  totalAssets: string;
+  totalLiabilities: string;
+  totalEquity: string;
+  retainedEarningsPrior: string;
+  currentYearEarnings: string;
+  liabilitiesAndEquity: string;
   /** Shown only on translated consolidated views. */
-  translationAdjustment: string
-  totalOf: (section: string) => string
-}
+  translationAdjustment: string;
+  totalOf: (section: string) => string;
+};
 
 /** Signed P&L total (revenue − COGS − expenses) across every matrix column. */
 function pnlNetIncome(matrix: StatementMatrix): StatementValue[] {
   return combineTotals(
     matrix,
     [
-      sumSection(matrix, ['income', 'income_other']),
-      sumSection(matrix, ['cogs']),
-      sumSection(matrix, ['expense', 'expense_other', 'expense_deferred']),
+      sumSection(matrix, ["income", "income_other"]),
+      sumSection(matrix, ["cogs"]),
+      sumSection(matrix, ["expense", "expense_other", "expense_deferred"]),
     ],
     [1, -1, -1],
-  )
+  );
 }
 
 async function earningsDrillWindows(
   columns: StatementColumn[],
   orgId: string,
-  kind: 'prior' | 'current',
-): Promise<StatementViewLine['drillWindows']> {
+  kind: "prior" | "current",
+): Promise<StatementViewLine["drillWindows"]> {
   // Drill windows agree with the computed split: declared-calendar
   // boundaries, so drilling current-year earnings on a 4-4-5 org opens the
   // real fiscal year, not the month-math one.
-  return Promise.all(columns.map(async (column) => {
-    if (column.kind !== 'amount' || !column.to) return null
-    if (kind === 'current') {
-      return { from: await fiscalYearStartOnDate(column.to, orgId), to: column.to, mode: 'flow' }
-    }
-    return { from: null, to: await priorFiscalYearEndOnDate(column.to, orgId), mode: 'balance' }
-  }))
+  return Promise.all(
+    columns.map(async (column) => {
+      if (column.kind !== "amount" || !column.to) return null;
+      if (kind === "current") {
+        return { from: await fiscalYearStartOnDate(column.to, orgId), to: column.to, mode: "flow" };
+      }
+      return { from: null, to: await priorFiscalYearEndOnDate(column.to, orgId), mode: "balance" };
+    }),
+  );
 }
 
 /** Balance Sheet as a multi-column statement view. Income accounts stay
@@ -1337,15 +1512,15 @@ export async function balanceSheetView(
   labels: BalanceSheetLabels,
   opts: MatrixOpts = {},
 ): Promise<StatementView> {
-  const orgId = opts.orgId ?? (await resolveOrgId())
+  const orgId = opts.orgId ?? (await resolveOrgId());
   const matrix = await statementMatrix({
     types: [...ASSET_TYPES, ...LIABILITY_TYPES, ...EQUITY_TYPES],
-    mode: 'balance',
+    mode: "balance",
     period,
     periodLabel,
     ...opts,
     orgId,
-  })
+  });
   // Lifetime P&L through each column's as-of, then the same matrix cut at
   // the prior fiscal year-end. Current-year earnings = lifetime − prior.
   // Net income is revenue − cogs − expenses — summing all P&L types would
@@ -1353,8 +1528,8 @@ export async function balanceSheetView(
   const [pnl, priorPnl] = await Promise.all([
     statementMatrix({
       types: PNL_TYPES,
-      mode: 'balance',
-      translationMode: 'flow',
+      mode: "balance",
+      translationMode: "flow",
       period,
       periodLabel,
       ...opts,
@@ -1362,81 +1537,119 @@ export async function balanceSheetView(
     }),
     statementMatrix({
       types: PNL_TYPES,
-      mode: 'balance',
-      translationMode: 'flow',
+      mode: "balance",
+      translationMode: "flow",
       period,
       periodLabel,
       ...opts,
       orgId,
-      asOfKind: 'prior_fiscal_year_end',
+      asOfKind: "prior_fiscal_year_end",
     }),
-  ])
-  const lifetime = pnlNetIncome(pnl)
-  const prior = pnlNetIncome(priorPnl)
-  const current = combineTotals(matrix, [lifetime, prior], [1, -1])
+  ]);
+  const lifetime = pnlNetIncome(pnl);
+  const prior = pnlNetIncome(priorPnl);
+  const current = combineTotals(matrix, [lifetime, prior], [1, -1]);
 
-  const assets = sumSection(matrix, ASSET_TYPES)
-  const liabilities = sumSection(matrix, LIABILITY_TYPES)
-  const equityPosted = sumSection(matrix, EQUITY_TYPES)
+  const assets = sumSection(matrix, ASSET_TYPES);
+  const liabilities = sumSection(matrix, LIABILITY_TYPES);
+  const equityPosted = sumSection(matrix, EQUITY_TYPES);
 
   // Translated consolidation: assets/liabilities at current rate, equity at
   // historical, earnings at average — the rate differences leave a residual,
   // which IS the cumulative translation adjustment. Plugging it into equity
   // (the standard CTA treatment) rebalances the sheet by construction.
-  const translated = Boolean(opts.subsidiary?.presentationCurrency || opts.subsidiary?.rates?.length)
+  const translated = Boolean(
+    opts.subsidiary?.presentationCurrency || opts.subsidiary?.rates?.length,
+  );
   const cta = translated
-    ? combineTotals(matrix, [assets, liabilities, equityPosted, prior, current], [1, -1, -1, -1, -1])
-    : undefined
+    ? combineTotals(
+        matrix,
+        [assets, liabilities, equityPosted, prior, current],
+        [1, -1, -1, -1, -1],
+      )
+    : undefined;
   const equityTotal = combineTotals(
     matrix,
     cta ? [equityPosted, prior, current, cta] : [equityPosted, prior, current],
     [1, 1, 1, 1],
-  )
-  const liabAndEquity = combineTotals(matrix, [liabilities, equityTotal], [1, 1])
+  );
+  const liabAndEquity = combineTotals(matrix, [liabilities, equityTotal], [1, 1]);
   const [priorDrills, currentDrills] = await Promise.all([
-    earningsDrillWindows(matrix.columns, orgId, 'prior'),
-    earningsDrillWindows(matrix.columns, orgId, 'current'),
-  ])
+    earningsDrillWindows(matrix.columns, orgId, "prior"),
+    earningsDrillWindows(matrix.columns, orgId, "current"),
+  ]);
 
-  const lines: StatementViewLine[] = []
-  lines.push({ kind: 'section', label: labels.assets, depth: 0 })
-  lines.push(...accountLines(matrix, ASSET_TYPES))
-  lines.push({ kind: 'subtotal', label: labels.totalAssets, depth: 0, emphasis: true, values: assets, drillTypes: ASSET_TYPES })
-
-  lines.push({ kind: 'section', label: labels.liabilities, depth: 0 })
-  lines.push(...accountLines(matrix, LIABILITY_TYPES))
-  lines.push({ kind: 'subtotal', label: labels.totalLiabilities, depth: 0, values: liabilities, drillTypes: LIABILITY_TYPES })
-
-  lines.push({ kind: 'section', label: labels.equity, depth: 0 })
-  lines.push(...accountLines(matrix, EQUITY_TYPES))
+  const lines: StatementViewLine[] = [];
+  lines.push({ kind: "section", label: labels.assets, depth: 0 });
+  lines.push(...accountLines(matrix, ASSET_TYPES));
   lines.push({
-    kind: 'account',
+    kind: "subtotal",
+    label: labels.totalAssets,
+    depth: 0,
+    emphasis: true,
+    values: assets,
+    drillTypes: ASSET_TYPES,
+  });
+
+  lines.push({ kind: "section", label: labels.liabilities, depth: 0 });
+  lines.push(...accountLines(matrix, LIABILITY_TYPES));
+  lines.push({
+    kind: "subtotal",
+    label: labels.totalLiabilities,
+    depth: 0,
+    values: liabilities,
+    drillTypes: LIABILITY_TYPES,
+  });
+
+  lines.push({ kind: "section", label: labels.equity, depth: 0 });
+  lines.push(...accountLines(matrix, EQUITY_TYPES));
+  lines.push({
+    kind: "account",
     label: labels.retainedEarningsPrior,
     depth: 1,
     values: prior,
     drillTypes: PNL_TYPES,
     drillWindows: priorDrills,
-  })
+  });
   lines.push({
-    kind: 'account',
+    kind: "account",
     label: labels.currentYearEarnings,
     depth: 1,
     values: current,
     drillTypes: PNL_TYPES,
     drillWindows: currentDrills,
-  })
+  });
   if (cta) {
     lines.push({
-      kind: 'account',
+      kind: "account",
       label: labels.translationAdjustment,
       depth: 1,
       values: cta,
       drillTypes: [...ASSET_TYPES, ...LIABILITY_TYPES, ...EQUITY_TYPES, ...PNL_TYPES],
-    })
+    });
   }
-  lines.push({ kind: 'subtotal', label: labels.totalEquity, depth: 0, values: equityTotal, drillTypes: [...EQUITY_TYPES, ...PNL_TYPES] })
+  lines.push({
+    kind: "subtotal",
+    label: labels.totalEquity,
+    depth: 0,
+    values: equityTotal,
+    drillTypes: [...EQUITY_TYPES, ...PNL_TYPES],
+  });
 
-  lines.push({ kind: 'total', label: labels.liabilitiesAndEquity, depth: 0, emphasis: true, values: liabAndEquity, drillTypes: [...LIABILITY_TYPES, ...EQUITY_TYPES, ...PNL_TYPES] })
+  lines.push({
+    kind: "total",
+    label: labels.liabilitiesAndEquity,
+    depth: 0,
+    emphasis: true,
+    values: liabAndEquity,
+    drillTypes: [...LIABILITY_TYPES, ...EQUITY_TYPES, ...PNL_TYPES],
+  });
 
-  return { columns: matrix.columns, lines, truncated: matrix.truncated, hasVariance: matrix.columns.some((c) => c.kind !== 'amount'), mode: 'balance' }
+  return {
+    columns: matrix.columns,
+    lines,
+    truncated: matrix.truncated,
+    hasVariance: matrix.columns.some((c) => c.kind !== "amount"),
+    mode: "balance",
+  };
 }

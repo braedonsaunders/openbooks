@@ -1,19 +1,10 @@
-import {
-  request,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from "@playwright/test";
+import { request, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 export const E2E_EMAIL = process.env.E2E_EMAIL ?? "e2e@openbooks.test";
 export const E2E_PASSWORD = process.env.E2E_PASSWORD ?? "e2e-test-password-123";
 
 /** Interactive login through the real login form. */
-export async function loginViaForm(
-  page: Page,
-  email = E2E_EMAIL,
-  password = E2E_PASSWORD,
-) {
+export async function loginViaForm(page: Page, email = E2E_EMAIL, password = E2E_PASSWORD) {
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(password);
@@ -39,9 +30,7 @@ export async function authedContext(
       headers: { Origin: origin },
     });
     if (!res.ok()) {
-      throw new Error(
-        `e2e login failed: ${res.status()} ${await res.text()}`,
-      );
+      throw new Error(`e2e login failed: ${res.status()} ${await res.text()}`);
     }
     const state = await api.storageState();
     const context = await browser.newContext({ baseURL, storageState: state, ignoreHTTPSErrors });

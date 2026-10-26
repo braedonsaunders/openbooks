@@ -34,7 +34,9 @@ async function reachesApprovalsUnion(ctx: InboxListContext): Promise<boolean> {
 async function equityGates(ctx: InboxListContext): Promise<WorklistGate[]> {
   if (!(await orgFeatureOn(ctx, EQUITY_FEATURE))) return [];
   if (await reachesApprovalsUnion(ctx)) return [];
-  return (await actorPendingGates(ctx)).filter((gate) => gate.subjectKind === EQUITY_ACTION_SUBJECT_KIND);
+  return (await actorPendingGates(ctx)).filter(
+    (gate) => gate.subjectKind === EQUITY_ACTION_SUBJECT_KIND,
+  );
 }
 
 async function toItem(gate: WorklistGate, ctx: InboxListContext): Promise<InboxItem> {
@@ -89,13 +91,28 @@ export const equityActionAdapter: InboxAdapter = {
     // by id refuses an out-of-scope gate rather than only hiding it.
     const allowedSubsidiaryIds = toWorklistScope(ctx).allowedSubsidiaryIds;
     if (actionKey === "approve") {
-      await decideGate({ gateId, decision: "approved", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+      await decideGate({
+        gateId,
+        decision: "approved",
+        userId: ctx.actorId,
+        comment: reason,
+        allowedSubsidiaryIds,
+      });
       return;
     }
     if (actionKey === "reject") {
-      await decideGate({ gateId, decision: "rejected", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+      await decideGate({
+        gateId,
+        decision: "rejected",
+        userId: ctx.actorId,
+        comment: reason,
+        allowedSubsidiaryIds,
+      });
       return;
     }
-    throw new InboxError("UNKNOWN_ACTION", `action ${JSON.stringify(actionKey)} is not available on an equity action`);
+    throw new InboxError(
+      "UNKNOWN_ACTION",
+      `action ${JSON.stringify(actionKey)} is not available on an equity action`,
+    );
   },
 };

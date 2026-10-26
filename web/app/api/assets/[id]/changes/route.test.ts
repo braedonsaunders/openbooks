@@ -12,9 +12,8 @@ const state = {
   transactionReads: 0,
   groupScope: null as string | null,
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[
-  Symbol.for("asset-change-route")
-] = state;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("asset-change-route")] =
+  state;
 const _hooks = registerHooks({
   resolve(specifier, context, next) {
     // Resolve framework imports against this real file, not the virtual auth URL.
@@ -35,15 +34,9 @@ const _hooks = registerHooks({
         url: "mock:asset-change-route-db",
       };
     if (specifier === "@/lib/api/json")
-      return next(
-        new URL("../../../../../lib/api/json.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../../../lib/api/json.ts", import.meta.url).href, context);
     if (specifier === "@/lib/list-params")
-      return next(
-        new URL("../../../../../lib/list-params.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../../../lib/list-params.ts", import.meta.url).href, context);
     return next(specifier, context);
   },
   load(url, context, next) {

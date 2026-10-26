@@ -1,11 +1,20 @@
-import 'server-only'
+import "server-only";
 
-import { redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { getAuthz, can } from '../../../../lib/authz'
-import { accessDeniedHref } from '../../../../lib/gate-targets'
-import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
-import { grid, heading, page, pageHeader, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { getAuthz, can } from "../../../../lib/authz";
+import { accessDeniedHref } from "../../../../lib/gate-targets";
+import { featureEnabled, resolvedFeatureState } from "../../../../lib/features";
+import {
+  grid,
+  heading,
+  page,
+  pageHeader,
+  ref,
+  repeat,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
 
 /**
  * The Build hub — every authoring tool, mirroring the Platform hub's shell.
@@ -21,137 +30,150 @@ import { grid, heading, page, pageHeader, ref, repeat, widgetBlock, type PageSpe
  */
 
 type Card = {
-  href: string
-  iconKey: string
-  cardKey: string
-  permission: string
-  featureKey?: string
-}
-type Group = { key: string; labelKey: string; accent: 'teal' | 'violet' | 'amber' | 'sky'; cards: Card[] }
+  href: string;
+  iconKey: string;
+  cardKey: string;
+  permission: string;
+  featureKey?: string;
+};
+type Group = {
+  key: string;
+  labelKey: string;
+  accent: "teal" | "violet" | "amber" | "sky";
+  cards: Card[];
+};
 
 const GROUPS: Group[] = [
   {
-    key: 'model',
-    labelKey: 'buildHub.groups.model',
-    accent: 'violet',
+    key: "model",
+    labelKey: "buildHub.groups.model",
+    accent: "violet",
     cards: [
-      { href: '/records/types', iconKey: 'boxes', cardKey: 'records', permission: 'records.manage_types' },
       {
-        href: '/admin/custom-fields',
-        iconKey: 'tag',
-        cardKey: 'customFields',
-        permission: 'admin.custom_fields.manage',
+        href: "/records/types",
+        iconKey: "boxes",
+        cardKey: "records",
+        permission: "records.manage_types",
+      },
+      {
+        href: "/admin/custom-fields",
+        iconKey: "tag",
+        cardKey: "customFields",
+        permission: "admin.custom_fields.manage",
       },
     ],
   },
   {
-    key: 'experience',
-    labelKey: 'buildHub.groups.experience',
-    accent: 'teal',
+    key: "experience",
+    labelKey: "buildHub.groups.experience",
+    accent: "teal",
     cards: [
       {
-        href: '/admin/customization',
-        iconKey: 'sliders-horizontal',
-        cardKey: 'customization',
-        permission: 'admin.customization.manage',
+        href: "/admin/customization",
+        iconKey: "sliders-horizontal",
+        cardKey: "customization",
+        permission: "admin.customization.manage",
       },
       {
-        href: '/admin/pdf-templates',
-        iconKey: 'scroll-text',
-        cardKey: 'pdfTemplates',
-        permission: 'admin.customization.manage',
+        href: "/admin/pdf-templates",
+        iconKey: "scroll-text",
+        cardKey: "pdfTemplates",
+        permission: "admin.customization.manage",
       },
     ],
   },
   {
-    key: 'automation',
-    labelKey: 'buildHub.groups.automation',
-    accent: 'amber',
+    key: "automation",
+    labelKey: "buildHub.groups.automation",
+    accent: "amber",
     cards: [
       {
-        href: '/admin/scripts',
-        iconKey: 'workflow',
-        cardKey: 'scripts',
-        permission: 'scripts.manage',
-        featureKey: 'scripts',
+        href: "/admin/scripts",
+        iconKey: "workflow",
+        cardKey: "scripts",
+        permission: "scripts.manage",
+        featureKey: "scripts",
       },
       {
-        href: '/admin/apps',
-        iconKey: 'blocks',
-        cardKey: 'apps',
-        permission: 'apps.manage',
-        featureKey: 'apps',
+        href: "/admin/apps",
+        iconKey: "blocks",
+        cardKey: "apps",
+        permission: "apps.manage",
+        featureKey: "apps",
       },
     ],
   },
   {
-    key: 'api',
-    labelKey: 'buildHub.groups.api',
-    accent: 'sky',
+    key: "api",
+    labelKey: "buildHub.groups.api",
+    accent: "sky",
     cards: [
       {
-        href: '/admin/api-keys',
-        iconKey: 'key-round',
-        cardKey: 'apiKeys',
-        permission: 'api.keys.manage',
-        featureKey: 'apiAccess',
+        href: "/admin/api-keys",
+        iconKey: "key-round",
+        cardKey: "apiKeys",
+        permission: "api.keys.manage",
+        featureKey: "apiAccess",
       },
       {
-        href: '/api-docs',
-        iconKey: 'code',
-        cardKey: 'apiDocs',
-        permission: 'api.keys.manage',
-        featureKey: 'apiAccess',
+        href: "/api-docs",
+        iconKey: "code",
+        cardKey: "apiDocs",
+        permission: "api.keys.manage",
+        featureKey: "apiAccess",
       },
     ],
   },
-]
+];
 
 export interface BuildHubCard {
-  href: string
-  iconKey: string
-  title: string
-  description: string
-  accent: 'teal' | 'violet' | 'amber' | 'sky'
+  href: string;
+  iconKey: string;
+  title: string;
+  description: string;
+  accent: "teal" | "violet" | "amber" | "sky";
 }
 
 export interface BuildHubGroup {
-  key: string
-  label: string
-  cards: BuildHubCard[]
+  key: string;
+  label: string;
+  cards: BuildHubCard[];
 }
 
 export interface BuildHubData {
-  title: string
-  description: string
-  groups: BuildHubGroup[]
+  title: string;
+  description: string;
+  groups: BuildHubGroup[];
 }
 
 export async function loadBuildHub(): Promise<BuildHubData> {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  const t = await getTranslations('admin')
-  const featureState = await resolvedFeatureState(authz.user.orgId)
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
+  const t = await getTranslations("admin");
+  const featureState = await resolvedFeatureState(authz.user.orgId);
 
   const groups = GROUPS.map((g) => ({
     ...g,
     cards: g.cards.filter(
-      (c) => can(authz, c.permission) && (!c.featureKey || featureEnabled(featureState, c.featureKey)),
+      (c) =>
+        can(authz, c.permission) && (!c.featureKey || featureEnabled(featureState, c.featureKey)),
     ),
-  })).filter((g) => g.cards.length > 0)
+  })).filter((g) => g.cards.length > 0);
 
   // No build-ish permission at all → the house refusal, not a silent bounce
   // home (F1T-10). An OR-denial: the hub names itself and the full key set
   // any one of which admits, DERIVED from the same GROUPS source the hub
   // uses to decide visibility — never a hand list.
   if (groups.length === 0) {
-    const required = [...new Set(GROUPS.flatMap((g) => g.cards.map((c) => c.permission)))]
-    redirect(accessDeniedHref({ permission: `${t('buildHub.title')} (any of: ${required.join(', ')})` }))
+    const required = [...new Set(GROUPS.flatMap((g) => g.cards.map((c) => c.permission)))];
+    redirect(
+      accessDeniedHref({ permission: `${t("buildHub.title")} (any of: ${required.join(", ")})` }),
+    );
   }
 
   return {
-    title: t('buildHub.title'),
-    description: t('buildHub.subtitle'),
+    title: t("buildHub.title"),
+    description: t("buildHub.subtitle"),
     groups: groups.map((g) => ({
       key: g.key,
       label: t(g.labelKey),
@@ -163,56 +185,60 @@ export async function loadBuildHub(): Promise<BuildHubData> {
         accent: g.accent,
       })),
     })),
-  }
+  };
 }
 
-const f = ref<BuildHubData>()
+const f = ref<BuildHubData>();
 
 export function buildHubSpec(data: BuildHubData): PageSpec {
-  void data
+  void data;
   return page({
-    route: '/admin/build',
+    route: "/admin/build",
     // The hub owns its own full-height shell — ListPageLayout's centered
     // container would nest the chrome, so header and body concatenate.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      grid('flex h-full min-h-0 flex-col', [
+      grid("flex h-full min-h-0 flex-col", [
         // Fixed header — mirrors the Platform hub shell.
         grid(
-          'shrink-0 border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-900',
-          [pageHeader({ title: f('title'), description: f('description') })],
+          "shrink-0 border-b border-slate-200 bg-white px-3 py-3 sm:px-6 dark:border-slate-800 dark:bg-slate-900",
+          [pageHeader({ title: f("title"), description: f("description") })],
         ),
         // Body scrolls internally, not the whole page.
-        grid('app-scroll min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950', [
-          grid('mx-auto w-full max-w-screen-2xl space-y-8 p-4 sm:p-6', [
+        grid("app-scroll min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950", [
+          grid("mx-auto w-full max-w-screen-2xl space-y-8 p-4 sm:p-6", [
             repeat({
-              items: f('groups'),
-              itemKey: { $: 'key' },
+              items: f("groups"),
+              itemKey: { $: "key" },
               unwrapped: true,
               blocks: [
                 grid(
-                  'space-y-3',
+                  "space-y-3",
                   [
-                    heading(2, { $: 'label' }, 'px-0.5 text-xs font-semibold tracking-wider text-slate-600 uppercase dark:text-slate-400'),
-                    grid('grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4', [
+                    heading(
+                      2,
+                      { $: "label" },
+                      "px-0.5 text-xs font-semibold tracking-wider text-slate-600 uppercase dark:text-slate-400",
+                    ),
+                    grid("grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4", [
                       repeat({
-                        items: { $: 'cards' },
-                        itemKey: { $: 'href' },
+                        items: { $: "cards" },
+                        itemKey: { $: "href" },
                         unwrapped: true,
                         blocks: [
-                          widgetBlock('build-hub-card', {
-                            href: { $: 'href' },
-                            iconKey: { $: 'iconKey' },
-                            title: { $: 'title' },
-                            description: { $: 'description' },
-                            accent: { $: 'accent' },
+                          widgetBlock("build-hub-card", {
+                            href: { $: "href" },
+                            iconKey: { $: "iconKey" },
+                            title: { $: "title" },
+                            description: { $: "description" },
+                            accent: { $: "accent" },
                           }),
                         ],
                       }),
                     ]),
                   ],
-                  { as: 'section' },
+                  { as: "section" },
                 ),
               ],
             }),
@@ -220,5 +246,5 @@ export function buildHubSpec(data: BuildHubData): PageSpec {
         ]),
       ]),
     ],
-  })
+  });
 }

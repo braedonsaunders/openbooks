@@ -61,10 +61,10 @@ test("every installable pack supports at least one known region", () => {
     if (!pack.installable) continue;
     assert.ok(
       pack.regions.supported.length > 0,
-      `${country} is installable but regions.supported is empty — provisioning would `
-      + "succeed and then every employee would fail the generic region gate with "
-      + `"${pack.regions.unsupportedReason}". Either support a region or make the pack `
-      + "not installable.",
+      `${country} is installable but regions.supported is empty — provisioning would ` +
+        "succeed and then every employee would fail the generic region gate with " +
+        `"${pack.regions.unsupportedReason}". Either support a region or make the pack ` +
+        "not installable.",
     );
   }
 });
@@ -99,8 +99,8 @@ test("an installable pack can resolve an employee in at least one region", () =>
     });
     assert.ok(
       resolvable.length > 0,
-      `${country} is installable but no known region resolves an employee — every employee `
-      + "would throw PayrollJurisdictionError at Link 4 before any statutory line is computed.",
+      `${country} is installable but no known region resolves an employee — every employee ` +
+        "would throw PayrollJurisdictionError at Link 4 before any statutory line is computed.",
     );
   }
 });
@@ -124,9 +124,9 @@ test("withholding implemented flags agree with regions.supported", () => {
       assert.equal(
         entry.implemented,
         supported,
-        `${country}/${entry.region}: withholding declares implemented=${entry.implemented} but `
-        + `regions.supported ${supported ? "includes" : "does not include"} it. These are the same `
-        + "fact; one of them is stale.",
+        `${country}/${entry.region}: withholding declares implemented=${entry.implemented} but ` +
+          `regions.supported ${supported ? "includes" : "does not include"} it. These are the same ` +
+          "fact; one of them is stale.",
       );
     }
   }

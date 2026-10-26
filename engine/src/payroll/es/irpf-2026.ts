@@ -176,8 +176,8 @@ export function calculateEsIrpf2026(input: EsIrpfInput): EsIrpfResult {
   const zona: EsZonaExcepcional = input.zona ?? "ninguna";
   if (zona === "la-palma" && !edition.laPalmaExcepcional) {
     fail(
-      "La Palma exceptional regime (D.A. 57ª) is not in force before 2026-09-10 "
-      + "(RD-Ley 23/2026, effects 10 September) — refusing, never backdating",
+      "La Palma exceptional regime (D.A. 57ª) is not in force before 2026-09-10 " +
+        "(RD-Ley 23/2026, effects 10 September) — refusing, never backdating",
     );
   }
   const retrib = amount(input.retribuciones, "", "RETRIB");
@@ -242,9 +242,10 @@ export function calculateEsIrpf2026(input: EsIrpfInput): EsIrpfResult {
       incrementoDisc = U(ES_GASTOS_2026.discapacidadMedia);
     }
   }
-  let otros = U(ES_GASTOS_2026.general)
-    + (input.movilidadGeografica === true ? U(ES_GASTOS_2026.movilidad) : 0n)
-    + incrementoDisc;
+  let otros =
+    U(ES_GASTOS_2026.general) +
+    (input.movilidadGeografica === true ? U(ES_GASTOS_2026.movilidad) : 0n) +
+    incrementoDisc;
   const retribMenosCotiz = retrib - cotiz;
   if (retribMenosCotiz < 0n) otros = 0n;
   else if (otros > retribMenosCotiz) otros = retribMenosCotiz;
@@ -269,9 +270,10 @@ export function calculateEsIrpf2026(input: EsIrpfInput): EsIrpfResult {
 
   // D. Mínimo personal y familiar.
   const age = 2026 - input.birthYear;
-  const mincon = U(ES_MINIMO_CONTRIBUYENTE_2026.general)
-    + (age > 64 ? U(ES_MINIMO_CONTRIBUYENTE_2026.mayor65) : 0n)
-    + (age > 74 ? U(ES_MINIMO_CONTRIBUYENTE_2026.mayor75) : 0n);
+  const mincon =
+    U(ES_MINIMO_CONTRIBUYENTE_2026.general) +
+    (age > 64 ? U(ES_MINIMO_CONTRIBUYENTE_2026.mayor65) : 0n) +
+    (age > 74 ? U(ES_MINIMO_CONTRIBUYENTE_2026.mayor75) : 0n);
   const ordenados = [...descendientes].sort((a, b) => a.birthYear - b.birthYear);
   const MD = ES_MINIMO_DESCENDIENTES_2026;
   const tramosDesc = [MD.primero, MD.segundo, MD.tercero];
@@ -280,8 +282,9 @@ export function calculateEsIrpf2026(input: EsIrpfInput): EsIrpfResult {
   ordenados.forEach((d, index) => {
     const tramo = index < 3 ? U(tramosDesc[index]!) : U(MD.cuartoOMas);
     mindesg += shareCents(tramo / 100n, d.entero, 1);
-    const menor3 = d.birthYear > 2023
-      || (d.adopcionYear != null && d.adopcionYear >= d.birthYear && d.adopcionYear > 2023);
+    const menor3 =
+      d.birthYear > 2023 ||
+      (d.adopcionYear != null && d.adopcionYear >= d.birthYear && d.adopcionYear > 2023);
     if (menor3) mindes3 += shareCents(U(MD.menorDeTres) / 100n, d.entero, 1);
   });
   mindesg = R1(mindesg * 100n);
@@ -291,7 +294,8 @@ export function calculateEsIrpf2026(input: EsIrpfInput): EsIrpfResult {
   let as75 = 0n;
   for (const a of ascendientes) {
     as65 += shareCents(U(ES_MINIMO_ASCENDIENTES_2026.mayor65) / 100n, 1, a.convivencia);
-    if (a.mayor75) as75 += shareCents(U(ES_MINIMO_ASCENDIENTES_2026.mayor75) / 100n, 1, a.convivencia);
+    if (a.mayor75)
+      as75 += shareCents(U(ES_MINIMO_ASCENDIENTES_2026.mayor75) / 100n, 1, a.convivencia);
   }
   as65 = R1(as65 * 100n);
   as75 = R1(as75 * 100n);
@@ -349,9 +353,8 @@ export function calculateEsIrpf2026(input: EsIrpfInput): EsIrpfResult {
   const ceumeli = zona !== "ninguna" && input.rendimientosZona === true;
   // "MINOPAGO = 2,00% * RETRIB" then "MINOPAGO = TRUNCAR (MINOPAGO)":
   // floor to the cent (2% of a 2dp amount can carry a sub-cent tail).
-  const minopago = input.presVivienda === true
-    ? ((retrib * U(ES_PRESVIV_FACTOR)) / 10000n / 100n) * 100n
-    : 0n;
+  const minopago =
+    input.presVivienda === true ? ((retrib * U(ES_PRESVIV_FACTOR)) / 10000n / 100n) * 100n : 0n;
   // "DIFERENCIA POSITIVA = (CUOTA * 0,40) - MINOPAGO" with CEUMELI, else "CUOTA - MINOPAGO".
   // The 1e4-unit scale floors sub-0,0001 € remainders of the 0,40 product;
   // every other step of the chain is exact at this scale.
@@ -363,8 +366,16 @@ export function calculateEsIrpf2026(input: EsIrpfInput): EsIrpfResult {
   const contrato: EsContrato = input.contrato ?? "general";
   const T = ES_TIPO_MINIMO_2026;
   const floorPct = ceumeli
-    ? contrato === "especial" ? U(T.especialCeutaMelilla) : contrato === "inferiorAno" ? U(T.inferiorAnoCeutaMelilla) : 0n
-    : contrato === "especial" ? U(T.especial) : contrato === "inferiorAno" ? U(T.inferiorAno) : 0n;
+    ? contrato === "especial"
+      ? U(T.especialCeutaMelilla)
+      : contrato === "inferiorAno"
+        ? U(T.inferiorAnoCeutaMelilla)
+        : 0n
+    : contrato === "especial"
+      ? U(T.especial)
+      : contrato === "inferiorAno"
+        ? U(T.inferiorAno)
+        : 0n;
   const floorHundredths = floorPct / 100n;
   if (hundredths < floorHundredths) hundredths = floorHundredths;
   const tipo = `${hundredths / 100n}.${String(hundredths % 100n).padStart(2, "0")}`;

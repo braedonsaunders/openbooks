@@ -20,7 +20,11 @@ export const POST = defineRoute({
   invalidBodyStatus: 422,
   handler: async ({ authz: gate, params, body: input }) => {
     const { id: assetId } = await params;
-    const created = await recordUsageReading(gate.user.orgId, { assetId, ...input, memo: input.memo ?? null }, { actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) });
+    const created = await recordUsageReading(
+      gate.user.orgId,
+      { assetId, ...input, memo: input.memo ?? null },
+      { actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) },
+    );
     return NextResponse.json(created, { status: 201 });
   },
 });

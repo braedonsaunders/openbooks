@@ -18,8 +18,7 @@ Object.assign(globalThis, { __payPartialAuth: state });
 registerHooks({
   resolve(specifier, context, next) {
     if (
-      (specifier.endsWith("/lib/authz") &&
-        context.parentURL?.includes("/api/payments/")) ||
+      (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/payments/")) ||
       specifier === "@/lib/authz"
     ) {
       return {
@@ -60,13 +59,22 @@ async function seedOpenBill(
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', ${amount}, ${amount}, '0', null)`);
-  await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`);
-  await postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-  const openLineId = (await db.execute<{ id: string }>(sql`
+  await db.execute(
+    sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`,
+  );
+  await postDocument(billId, {
+    control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+  });
+  const openLineId = (
+    await db.execute<{ id: string }>(
+      sql`
     select jl.id from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
      where je.source_document_id = ${billId} and je.status = 'posted' and jl.is_open_item
-  `, "objects"))[0]!.id;
+  `,
+      "objects",
+    )
+  )[0]!.id;
   return { billId, openLineId };
 }
 
@@ -122,16 +130,25 @@ test("a partial vendor payment posts and leaves the remainder open", { skip: !DB
     )) as unknown as Response;
     assert.equal(posted.status, 200, await posted.clone().text());
 
-    const payment = (await db.execute<{ total: string; status: string }>(sql`
+    const payment = (
+      await db.execute<{ total: string; status: string }>(
+        sql`
       select total::text as total, status from documents where id = ${draft.doc.id} and org_id = ${org.orgId}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(toUnits(payment.total), toUnits("3500"), "the payment carries the partial amount");
     assert.equal(payment.status, "posted", "the partial payment posts");
 
     const items = await openItemsForParty(org.vendorId, "ap", org.orgId);
     const bill = items.find((item) => item.lineId === openLineId);
     assert.ok(bill, "the bill is still open after a partial payment");
-    assert.equal(toUnits(bill.transactionOpen), toUnits("5314.00"), "the remainder stays open to pay");
+    assert.equal(
+      toUnits(bill.transactionOpen),
+      toUnits("5314.00"),
+      "the remainder stays open to pay",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

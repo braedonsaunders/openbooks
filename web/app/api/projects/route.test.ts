@@ -43,16 +43,12 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      return (chunk as { queryChunks?: unknown[] })?.queryChunks
-        ? sqlText(chunk)
-        : "";
+      return (chunk as { queryChunks?: unknown[] })?.queryChunks ? sqlText(chunk) : "";
     })
     .join("");
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksProjectsSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksProjectsSqlText = sqlText;
 
 // '@/lib/api/json' is not mocked: never double the validation boundary.
 
@@ -228,10 +224,7 @@ test("creation without an idempotency key is refused before any write", async ()
   );
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "invalid_idempotency_key" });
-  assert.ok(
-    noInsertRecorded(),
-    "no project row may be written without a key",
-  );
+  assert.ok(noInsertRecorded(), "no project row may be written without a key");
 });
 
 test("a nameless project and the draft sentinel are refused before any write", async () => {
@@ -240,10 +233,7 @@ test("a nameless project and the draft sentinel are refused before any write", a
     const response = await post("00000000-0000-4000-8000-00000000c006", { name });
     assert.equal(response.status, 422, JSON.stringify(name));
     assert.deepEqual(await response.json(), { error: "name_required", field: "name" });
-    assert.ok(
-      noInsertRecorded(),
-      `no project row may be written for ${JSON.stringify(name)}`,
-    );
+    assert.ok(noInsertRecorded(), `no project row may be written for ${JSON.stringify(name)}`);
   }
 });
 
@@ -254,21 +244,17 @@ test("task payloads are refused: WBS tasks keep their own endpoint", async () =>
     tasks: [{ name: "Excavation" }],
   });
   assert.equal(response.status, 422);
-  assert.ok(
-    noInsertRecorded(),
-    "no project row may be written with an embedded task payload",
-  );
+  assert.ok(noInsertRecorded(), "no project row may be written with an embedded task payload");
 });
 
 test("a disabled projects feature refuses the create", async () => {
   reset();
   state.projectGate = false;
-  const response = await post("00000000-0000-4000-8000-00000000c008", { name: "Harbourview Tower" });
+  const response = await post("00000000-0000-4000-8000-00000000c008", {
+    name: "Harbourview Tower",
+  });
   assert.equal(response.status, 404);
-  assert.ok(
-    noInsertRecorded(),
-    "no project row may be written while the feature is off",
-  );
+  assert.ok(noInsertRecorded(), "no project row may be written while the feature is off");
 });
 
 test("a customer outside the caller subsidiary scope is refused before any write", async () => {
@@ -283,10 +269,7 @@ test("a customer outside the caller subsidiary scope is refused before any write
     error: `project customer "${outsider}" is not visible in your subsidiary scope`,
     field: "customerId",
   });
-  assert.ok(
-    noInsertRecorded(),
-    "no project row may be written with an out-of-scope customer",
-  );
+  assert.ok(noInsertRecorded(), "no project row may be written with an out-of-scope customer");
 });
 
 test("the create writes one audited insert carrying actor and request", async () => {

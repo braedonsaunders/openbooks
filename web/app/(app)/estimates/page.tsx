@@ -1,8 +1,7 @@
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadEstimates, estimatesSpec } from './view'
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadEstimates, estimatesSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
-
+export const dynamic = "force-dynamic";
 
 /**
  * Estimates (quotes). The list is the universal RecordListView; this page owns
@@ -12,9 +11,9 @@ export const dynamic = 'force-dynamic'
 export default async function Estimates({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadEstimates(sp)
-  return <ModuleView spec={estimatesSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadEstimates(sp);
+  return <ModuleView spec={estimatesSpec(data)} data={data} searchParams={sp} trusted />;
 }

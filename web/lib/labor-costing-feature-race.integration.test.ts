@@ -5,8 +5,15 @@ import { registerHooks } from "node:module";
 import type { Authz } from "./authz";
 import { sql } from "drizzle-orm";
 import { db, pool, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
-import { laborClearingReconciliation, postPayrollVariance } from "@openbooks/engine/projects/labor-costing/operations";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
+import {
+  laborClearingReconciliation,
+  postPayrollVariance,
+} from "@openbooks/engine/projects/labor-costing/operations";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
 import { createWorkOperator } from "@openbooks/engine/testing/manufacturing";
 
 const enabled = !!process.env.OPENBOOKS_DB_URL;
@@ -27,8 +34,14 @@ async function configure(org: ScratchOrg) {
   return actorId;
 }
 
-async function postFixtureJournal(org: ScratchOrg, actorId: string, bookId: string,
-  origin: string, clearingAmount: string, projectId: string | null = null) {
+async function postFixtureJournal(
+  org: ScratchOrg,
+  actorId: string,
+  bookId: string,
+  origin: string,
+  clearingAmount: string,
+  projectId: string | null = null,
+) {
   return db.transaction(async (tx) => {
     const id = randomUUID();
     await tx.execute(sql`insert into journal_entries
@@ -63,11 +76,12 @@ async function seedBooks(org: ScratchOrg, actorId: string) {
   return { taxBookId, projectId };
 }
 
-
 // Only the authenticated identity is substituted. Feature reads, request parsing,
 // authorization helpers, tenant transactions, and financial services are native.
 const state: { gate: Authz | null } = { gate: null };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.labor-feature-race")] = state;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[
+  Symbol.for("openbooks.labor-feature-race")
+] = state;
 // One mock module serves both spellings so the route and the factory share
 // a single test session: the relative edge covers the route file, and the
 // alias edge covers the factory, which authenticates (and enforces the
@@ -76,32 +90,56 @@ const state: { gate: Authz | null } = { gate: null };
 // check keeps reading both edges as shims.
 const raceAuthzSource = `export * from ${JSON.stringify(new URL("./authz.ts", import.meta.url).href)};
    export async function guardPermission(){return globalThis[Symbol.for('openbooks.labor-feature-race')].gate}`;
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "../../../../../lib/authz" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/admin/setup/labor-costing/route.ts")) {
-    return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(raceAuthzSource) };
-  }
-  if (specifier === "@/lib/authz" && decodeURIComponent(context.parentURL ?? "").endsWith("/web/lib/api/route.ts")) {
-    return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(raceAuthzSource) };
-  }
-  return next(specifier, context);
-} });
+registerHooks({
+  resolve(specifier, context, next) {
+    if (
+      specifier === "../../../../../lib/authz" &&
+      decodeURIComponent(context.parentURL ?? "").endsWith(
+        "/api/admin/setup/labor-costing/route.ts",
+      )
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript," + encodeURIComponent(raceAuthzSource),
+      };
+    }
+    if (
+      specifier === "@/lib/authz" &&
+      decodeURIComponent(context.parentURL ?? "").endsWith("/web/lib/api/route.ts")
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript," + encodeURIComponent(raceAuthzSource),
+      };
+    }
+    return next(specifier, context);
+  },
+});
 const { PUT, POST } = await import("../app/api/admin/setup/labor-costing/route");
 
 // File-local seed helper: always a fixture write, so it carries its own
 // bypass rather than depending on the ambient test-process scope.
 async function setProjects(orgId: string, projects: boolean) {
-  await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-    coalesce(settings->'features','{}'::jsonb)||${JSON.stringify({ projects })}::jsonb) where id=${orgId}`));
+  await withBypassContext(() =>
+    db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||${JSON.stringify({ projects })}::jsonb) where id=${orgId}`),
+  );
 }
 
 // File-local verification read: always proves visibility under enforcement.
 async function snapshot(orgId: string) {
   return withOrgContext(orgId, async () => {
     const result: Record<string, unknown> = {};
-    result.org = await db.execute(sql`select settings,updated_at,updated_by from orgs where id=${orgId}`, "objects");
+    result.org = await db.execute(
+      sql`select settings,updated_at,updated_by from orgs where id=${orgId}`,
+      "objects",
+    );
     for (const table of ["labor_cost_rates", "journal_entries", "journal_lines", "audit_log"]) {
-      result[table] = await db.execute(sql`select to_jsonb(t) as row from ${sql.identifier(table)} t
-        where org_id=${orgId} order by to_jsonb(t)::text`, "objects");
+      result[table] = await db.execute(
+        sql`select to_jsonb(t) as row from ${sql.identifier(table)} t
+        where org_id=${orgId} order by to_jsonb(t)::text`,
+        "objects",
+      );
     }
     return result;
   });
@@ -109,7 +147,9 @@ async function snapshot(orgId: string) {
 
 function request(method: string, body: Record<string, unknown>) {
   return new Request("https://openbooks.test/api/admin/setup/labor-costing", {
-    method, headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 
@@ -117,154 +157,299 @@ async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => configure(org));
   await withBypassContext(() => seedBooks(org, actorId));
-  state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["*"]), allowedSubsidiaryIds: null } as Authz;
+  state.gate = {
+    user: { orgId: org.orgId, id: actorId },
+    permissions: new Set(["*"]),
+    allowedSubsidiaryIds: null,
+  } as Authz;
   return { org, actorId };
 }
 
-test("disabled Projects refuses labor reconciliation and variance before configuration or journal changes", { skip: !enabled }, async () => {
-  const { org, actorId } = await fixture();
-  try {
-    const opts = { orgId: org.orgId, actorId, periodStart, periodEnd, subsidiaryId: org.subsidiaryId };
-    await setProjects(org.orgId, false);
-    const unposted = await snapshot(org.orgId);
-    await assert.rejects(() => withOrgContext(org.orgId, () => postPayrollVariance(opts)), /projects feature is disabled/);
-    assert.deepEqual(await snapshot(org.orgId), unposted, "disabled initial variance must not create a journal");
-    await setProjects(org.orgId, true);
-    const first = await withOrgContext(org.orgId, () => postPayrollVariance(opts));
-    assert.equal(first.variance, "20.0000");
-    await setProjects(org.orgId, false);
-    const before = await snapshot(org.orgId);
-    await assert.rejects(() => withOrgContext(org.orgId, () => laborClearingReconciliation(org.orgId, periodStart, periodEnd, org.subsidiaryId)), /projects feature is disabled/);
-    await assert.rejects(() => withOrgContext(org.orgId, () => postPayrollVariance(opts)), /projects feature is disabled/);
-    assert.deepEqual(await snapshot(org.orgId), before, "disabled reruns must not reverse the retained variance or add audit evidence");
-    await setProjects(org.orgId, true);
-    const recovered = await withOrgContext(org.orgId, () => postPayrollVariance(opts));
-    assert.equal(recovered.variance, "20.0000");
-    assert.ok(recovered.entryId);
-    assert.notEqual(recovered.entryId, first.entryId);
-    assert.equal((await withOrgContext(org.orgId, () => laborClearingReconciliation(org.orgId, periodStart, periodEnd, org.subsidiaryId)))?.openBalance, "0.0000");
-  } finally { state.gate = null; await dropScratchOrg(org.orgId); }
-});
-
-for (const action of ["settings", "save-rate", "end-rate", "delete-rate", "reconcile", "post-variance"]) {
-  test(`${action} rejects a Projects disable committed during request parsing without changing retained data`, { skip: !enabled }, async () => {
-    const { org } = await fixture();
+test(
+  "disabled Projects refuses labor reconciliation and variance before configuration or journal changes",
+  { skip: !enabled },
+  async () => {
+    const { org, actorId } = await fixture();
     try {
-      // Route calls run under the org scope the middleware provides; the
-      // mocked gate carries authz but no connection scope.
-      const call = (method: string, handler: (req: Request) => Promise<Response>, body: Record<string, unknown>) =>
-        withOrgContext(org.orgId, () => handler(request(method, body)));
-      const seeded = await withOrgContext(org.orgId, () => POST(request("POST", { action: "save-rate", currency: "CAD", rate: "30", effectiveFrom: periodStart })));
-      assert.equal(seeded.status, 200);
-      const rate = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`select id from labor_cost_rates where org_id=${org.orgId}`, "objects")))[0]!;
-      const method = action === "settings" ? "PUT" : "POST";
-      const handler = action === "settings" ? PUT : POST;
-      const body: Record<string, unknown> = action === "settings"
-        ? { settings: { mode: "post", hoursPerDay: "7.5" }, laborClearing: org.accounts.clearing }
-        : { action, id: rate.id, currency: "CAD", rate: "35", effectiveFrom: "2026-07-10", effectiveTo: periodEnd,
-            periodStart, periodEnd, subsidiaryId: action === "save-rate" ? undefined : org.subsidiaryId };
-      const req = request(method, body);
-      // The route parses through the shared JSON boundary, which streams
-      // req.body directly and never calls req.json() — so the mid-parse
-      // disable rides the stream's first read, strictly after the route's
-      // native initial feature guard. The replacement bytes are the exact
-      // payload the helper serialized; the original stream is never consumed.
-      //
-      // highWaterMark 0 is load-bearing, not tuning: a default stream fires
-      // pull spontaneously on construction, so the disable would commit
-      // before the entry guard runs and the test would pin the entry refusal
-      // instead of the in-transaction recheck (and flake on whether the
-      // snapshot finishes before the assertion). With a zero watermark pull
-      // fires only on the parse read, and the read awaits the disable plus
-      // the snapshot — so `before` is always set and the disable always
-      // lands between the entry guard and the locked recheck.
-      const rawBytes = new TextEncoder().encode(JSON.stringify(body));
-      let before: Awaited<ReturnType<typeof snapshot>> | undefined;
-      let armed = true;
-      Object.defineProperty(req, "body", {
-        configurable: true,
-        value: new ReadableStream(
-          {
-            async pull(controller) {
-              if (armed) {
-                armed = false;
-                // This executes only after the route's native initial feature guard.
-                await setProjects(org.orgId, false);
-                before = await snapshot(org.orgId);
-              }
-              controller.enqueue(rawBytes);
-              controller.close();
-            },
-          },
-          { highWaterMark: 0 },
-        ),
-      });
-      const denied = await withOrgContext(org.orgId, () => handler(req));
-      assert.ok(before, "request must pass the enabled feature guard before disabling Projects");
-      assert.equal(denied.status, 404, JSON.stringify(await denied.json()));
-      assert.deepEqual(await snapshot(org.orgId), before, "no policy, rates, GL, or audit writes after disable");
-      assert.equal((await call(method, handler, body)).status, 404, "already disabled requests also fail closed");
+      const opts = {
+        orgId: org.orgId,
+        actorId,
+        periodStart,
+        periodEnd,
+        subsidiaryId: org.subsidiaryId,
+      };
+      await setProjects(org.orgId, false);
+      const unposted = await snapshot(org.orgId);
+      await assert.rejects(
+        () => withOrgContext(org.orgId, () => postPayrollVariance(opts)),
+        /projects feature is disabled/,
+      );
+      assert.deepEqual(
+        await snapshot(org.orgId),
+        unposted,
+        "disabled initial variance must not create a journal",
+      );
       await setProjects(org.orgId, true);
-      const recovered = await call(method, handler, body);
-      assert.equal(recovered.status, 200, JSON.stringify(await recovered.json()));
-    } finally { state.gate = null; await dropScratchOrg(org.orgId); }
-  });
+      const first = await withOrgContext(org.orgId, () => postPayrollVariance(opts));
+      assert.equal(first.variance, "20.0000");
+      await setProjects(org.orgId, false);
+      const before = await snapshot(org.orgId);
+      await assert.rejects(
+        () =>
+          withOrgContext(org.orgId, () =>
+            laborClearingReconciliation(org.orgId, periodStart, periodEnd, org.subsidiaryId),
+          ),
+        /projects feature is disabled/,
+      );
+      await assert.rejects(
+        () => withOrgContext(org.orgId, () => postPayrollVariance(opts)),
+        /projects feature is disabled/,
+      );
+      assert.deepEqual(
+        await snapshot(org.orgId),
+        before,
+        "disabled reruns must not reverse the retained variance or add audit evidence",
+      );
+      await setProjects(org.orgId, true);
+      const recovered = await withOrgContext(org.orgId, () => postPayrollVariance(opts));
+      assert.equal(recovered.variance, "20.0000");
+      assert.ok(recovered.entryId);
+      assert.notEqual(recovered.entryId, first.entryId);
+      assert.equal(
+        (
+          await withOrgContext(org.orgId, () =>
+            laborClearingReconciliation(org.orgId, periodStart, periodEnd, org.subsidiaryId),
+          )
+        )?.openBalance,
+        "0.0000",
+      );
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+for (const action of [
+  "settings",
+  "save-rate",
+  "end-rate",
+  "delete-rate",
+  "reconcile",
+  "post-variance",
+]) {
+  test(
+    `${action} rejects a Projects disable committed during request parsing without changing retained data`,
+    { skip: !enabled },
+    async () => {
+      const { org } = await fixture();
+      try {
+        // Route calls run under the org scope the middleware provides; the
+        // mocked gate carries authz but no connection scope.
+        const call = (
+          method: string,
+          handler: (req: Request) => Promise<Response>,
+          body: Record<string, unknown>,
+        ) => withOrgContext(org.orgId, () => handler(request(method, body)));
+        const seeded = await withOrgContext(org.orgId, () =>
+          POST(
+            request("POST", {
+              action: "save-rate",
+              currency: "CAD",
+              rate: "30",
+              effectiveFrom: periodStart,
+            }),
+          ),
+        );
+        assert.equal(seeded.status, 200);
+        const rate = (
+          await withOrgContext(org.orgId, () =>
+            db.execute<{ id: string }>(
+              sql`select id from labor_cost_rates where org_id=${org.orgId}`,
+              "objects",
+            ),
+          )
+        )[0]!;
+        const method = action === "settings" ? "PUT" : "POST";
+        const handler = action === "settings" ? PUT : POST;
+        const body: Record<string, unknown> =
+          action === "settings"
+            ? {
+                settings: { mode: "post", hoursPerDay: "7.5" },
+                laborClearing: org.accounts.clearing,
+              }
+            : {
+                action,
+                id: rate.id,
+                currency: "CAD",
+                rate: "35",
+                effectiveFrom: "2026-07-10",
+                effectiveTo: periodEnd,
+                periodStart,
+                periodEnd,
+                subsidiaryId: action === "save-rate" ? undefined : org.subsidiaryId,
+              };
+        const req = request(method, body);
+        // The route parses through the shared JSON boundary, which streams
+        // req.body directly and never calls req.json() — so the mid-parse
+        // disable rides the stream's first read, strictly after the route's
+        // native initial feature guard. The replacement bytes are the exact
+        // payload the helper serialized; the original stream is never consumed.
+        //
+        // highWaterMark 0 is load-bearing, not tuning: a default stream fires
+        // pull spontaneously on construction, so the disable would commit
+        // before the entry guard runs and the test would pin the entry refusal
+        // instead of the in-transaction recheck (and flake on whether the
+        // snapshot finishes before the assertion). With a zero watermark pull
+        // fires only on the parse read, and the read awaits the disable plus
+        // the snapshot — so `before` is always set and the disable always
+        // lands between the entry guard and the locked recheck.
+        const rawBytes = new TextEncoder().encode(JSON.stringify(body));
+        let before: Awaited<ReturnType<typeof snapshot>> | undefined;
+        let armed = true;
+        Object.defineProperty(req, "body", {
+          configurable: true,
+          value: new ReadableStream(
+            {
+              async pull(controller) {
+                if (armed) {
+                  armed = false;
+                  // This executes only after the route's native initial feature guard.
+                  await setProjects(org.orgId, false);
+                  before = await snapshot(org.orgId);
+                }
+                controller.enqueue(rawBytes);
+                controller.close();
+              },
+            },
+            { highWaterMark: 0 },
+          ),
+        });
+        const denied = await withOrgContext(org.orgId, () => handler(req));
+        assert.ok(before, "request must pass the enabled feature guard before disabling Projects");
+        assert.equal(denied.status, 404, JSON.stringify(await denied.json()));
+        assert.deepEqual(
+          await snapshot(org.orgId),
+          before,
+          "no policy, rates, GL, or audit writes after disable",
+        );
+        assert.equal(
+          (await call(method, handler, body)).status,
+          404,
+          "already disabled requests also fail closed",
+        );
+        await setProjects(org.orgId, true);
+        const recovered = await call(method, handler, body);
+        assert.equal(recovered.status, 200, JSON.stringify(await recovered.json()));
+      } finally {
+        state.gate = null;
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }
 
 async function waitForBlocker(pid: number) {
   for (let attempt = 0; attempt < 400; attempt++) {
-    const row = (await pool.query<{ blocked: boolean }>(
-      "select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked", [pid],
-    )).rows[0]!;
+    const row = (
+      await pool.query<{ blocked: boolean }>(
+        "select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked",
+        [pid],
+      )
+    ).rows[0]!;
     if (row.blocked) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   assert.fail("request must reach the transaction's row lock before the concurrent change commits");
 }
 
-test("labor settings refuse an account deactivation committed while the account validation waits", { skip: !enabled }, async () => {
-  const { org } = await fixture();
-  const writer = await pool.connect();
-  let pending: Promise<Response> | undefined;
-  try {
-    const before = await snapshot(org.orgId);
-    await writer.query("begin");
-    await writer.query("select set_config('app.bypass_rls','on',true)");
-    const deactivated = await writer.query("update accounts set is_active=false where org_id=$1 and id=$2", [org.orgId, org.accounts.freight]);
-    assert.equal(deactivated.rowCount, 1, "concurrent writer must hold the variance account row");
-    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
-    pending = withOrgContext(org.orgId, () => PUT(request("PUT", { settings: { mode: "post" }, payrollVariance: org.accounts.freight })));
-    void pending.catch(() => {});
-    await waitForBlocker(pid);
-    await writer.query("commit");
-    const denied = await pending;
-    assert.equal(denied.status, 422, JSON.stringify(await denied.json()));
-    assert.deepEqual(await snapshot(org.orgId), before, "invalid account must not change configuration or audit evidence");
-  } finally {
-    await writer.query("rollback");
-    writer.release();
-    await pending?.catch(() => {});
-    state.gate = null;
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "labor settings refuse an account deactivation committed while the account validation waits",
+  { skip: !enabled },
+  async () => {
+    const { org } = await fixture();
+    const writer = await pool.connect();
+    let pending: Promise<Response> | undefined;
+    try {
+      const before = await snapshot(org.orgId);
+      await writer.query("begin");
+      await writer.query("select set_config('app.bypass_rls','on',true)");
+      const deactivated = await writer.query(
+        "update accounts set is_active=false where org_id=$1 and id=$2",
+        [org.orgId, org.accounts.freight],
+      );
+      assert.equal(deactivated.rowCount, 1, "concurrent writer must hold the variance account row");
+      const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+        .pid;
+      pending = withOrgContext(org.orgId, () =>
+        PUT(request("PUT", { settings: { mode: "post" }, payrollVariance: org.accounts.freight })),
+      );
+      void pending.catch(() => {});
+      await waitForBlocker(pid);
+      await writer.query("commit");
+      const denied = await pending;
+      assert.equal(denied.status, 422, JSON.stringify(await denied.json()));
+      assert.deepEqual(
+        await snapshot(org.orgId),
+        before,
+        "invalid account must not change configuration or audit evidence",
+      );
+    } finally {
+      await writer.query("rollback");
+      writer.release();
+      await pending?.catch(() => {});
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("concurrent labor settings saves serialize their before/after audit images", { skip: !enabled, timeout: 10_000 }, async () => {
-  const { org } = await fixture();
-  try {
-    const responses = await Promise.all(["7", "9"].map((hoursPerDay) =>
-      withOrgContext(org.orgId, () => PUT(request("PUT", { settings: { mode: "post", hoursPerDay } }))),
-    ));
-    assert.deepEqual(responses.map((response) => response.status), [200, 200]);
-    const images = await withOrgContext(org.orgId, () => db.execute<{ before: { hoursPerDay: string } | null; after: { hoursPerDay: string } }>(sql`
+test(
+  "concurrent labor settings saves serialize their before/after audit images",
+  { skip: !enabled, timeout: 10_000 },
+  async () => {
+    const { org } = await fixture();
+    try {
+      const responses = await Promise.all(
+        ["7", "9"].map((hoursPerDay) =>
+          withOrgContext(org.orgId, () =>
+            PUT(request("PUT", { settings: { mode: "post", hoursPerDay } })),
+          ),
+        ),
+      );
+      assert.deepEqual(
+        responses.map((response) => response.status),
+        [200, 200],
+      );
+      const images = await withOrgContext(org.orgId, () =>
+        db.execute<{ before: { hoursPerDay: string } | null; after: { hoursPerDay: string } }>(
+          sql`
       select changes->'laborCosting'->0 as before, changes->'laborCosting'->1 as after
-        from audit_log where org_id=${org.orgId} and table_name='orgs'`, "objects"));
-    assert.equal(images.length, 2);
-    const first = images.find((row) => row.before === null)!;
-    assert.ok(first, "exactly one settings save observes the original absent policy");
-    const second = images.find((row) => row.before !== null)!;
-    assert.deepEqual(second.before, first.after, "later save's before image must include the committed first save");
-    const persisted = (await withOrgContext(org.orgId, () => db.execute<{ policy: unknown }>(sql`select settings->'laborCosting' as policy from orgs where id=${org.orgId}`, "objects")))[0]!;
-    assert.deepEqual(persisted.policy, second.after);
-  } finally { state.gate = null; await dropScratchOrg(org.orgId); }
-});
+        from audit_log where org_id=${org.orgId} and table_name='orgs'`,
+          "objects",
+        ),
+      );
+      assert.equal(images.length, 2);
+      const first = images.find((row) => row.before === null)!;
+      assert.ok(first, "exactly one settings save observes the original absent policy");
+      const second = images.find((row) => row.before !== null)!;
+      assert.deepEqual(
+        second.before,
+        first.after,
+        "later save's before image must include the committed first save",
+      );
+      const persisted = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ policy: unknown }>(
+            sql`select settings->'laborCosting' as policy from orgs where id=${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.deepEqual(persisted.policy, second.after);
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

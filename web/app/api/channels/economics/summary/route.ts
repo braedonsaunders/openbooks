@@ -26,7 +26,10 @@ export const GET = defineRoute({
     // the governed tenant definition id for the order-margin-by-channel
     // built-in, never a guessed slug URL. The contract ensures the catalog
     // first; null only when no such built-in exists, and the hub link stays.
-    const definitionId = await builtInReportDefinitionId(gate.user.orgId, "order-margin-by-channel");
+    const definitionId = await builtInReportDefinitionId(
+      gate.user.orgId,
+      "order-margin-by-channel",
+    );
     const marginReportHref = definitionId ? `/reports/custom/run/${definitionId}` : "/reports";
     return NextResponse.json({
       marginReportHref,

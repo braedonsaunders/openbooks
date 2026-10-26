@@ -11,10 +11,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __lienWaiverJurisdictionState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -29,7 +35,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
 
@@ -39,29 +46,41 @@ async function fixture() {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true, "projects": true}}'::jsonb where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true, "projects": true}}'::jsonb where id = ${org.orgId}`,
+    ),
   );
   const partyId = randomUUID();
   const projectId = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-    values (${partyId},${org.orgId},'vendor','Waiver vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
-    values (${projectId},${org.orgId},${org.subsidiaryId},'WAIVER','Waiver project',${org.customerId},'active',true,'{}'::jsonb)`));
+  await withBypassContext(() =>
+    db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${partyId},${org.orgId},'vendor','Waiver vendor',${org.subsidiaryId},true,'{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+    values (${projectId},${org.orgId},${org.subsidiaryId},'WAIVER','Waiver project',${org.customerId},'active',true,'{}'::jsonb)`),
+  );
   return { org, partyId, projectId };
 }
 
 const base = (partyId: string, projectId: string) => ({
-  partyId, projectId, waiverType: "conditional_progress",
-  throughDate: "2026-03-31", amount: "1000.00", currency: "CAD",
+  partyId,
+  projectId,
+  waiverType: "conditional_progress",
+  throughDate: "2026-03-31",
+  amount: "1000.00",
+  currency: "CAD",
 });
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new Request("http://waiver.test/api/compliance/lien-waivers", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new Request("http://waiver.test/api/compliance/lien-waivers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 const patch = (id: string, body: unknown) =>
@@ -77,8 +96,13 @@ const patch = (id: string, body: unknown) =>
   );
 
 async function waiverJurisdiction(waiverId: string): Promise<string | null> {
-  const rows = await withBypassContext(() => db.execute<{ jurisdiction: string | null }>(sql`
-    select jurisdiction from lien_waivers where id = ${waiverId}`, "objects"));
+  const rows = await withBypassContext(() =>
+    db.execute<{ jurisdiction: string | null }>(
+      sql`
+    select jurisdiction from lien_waivers where id = ${waiverId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.jurisdiction;
 }
 
@@ -87,11 +111,29 @@ test("waiver creation refuses an unknown jurisdiction without writing", async ()
   try {
     const response = await post({ ...base(partyId, projectId), jurisdiction: "Atlantis" });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.match(json?.error ?? "", /unknown jurisdiction/, `expected a named refusal, got: ${JSON.stringify(json)}`);
-    assert.match(json?.error ?? "", /ISO 3166-2/, `expected the remedy, got: ${JSON.stringify(json)}`);
-    const count = (await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from lien_waivers where org_id = ${org.orgId}`, "objects")))[0]!.n;
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
+    assert.match(
+      json?.error ?? "",
+      /unknown jurisdiction/,
+      `expected a named refusal, got: ${JSON.stringify(json)}`,
+    );
+    assert.match(
+      json?.error ?? "",
+      /ISO 3166-2/,
+      `expected the remedy, got: ${JSON.stringify(json)}`,
+    );
+    const count = (
+      await withBypassContext(() =>
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from lien_waivers where org_id = ${org.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(count, 0);
   } finally {
     await dropScratchOrg(org.orgId);

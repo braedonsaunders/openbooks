@@ -42,7 +42,14 @@ export const GERMAN_LINES: EInvoiceLine[] = [
 ];
 
 export const GERMAN_ALLOWANCES: EInvoiceAllowanceCharge[] = [
-  { isCharge: false, amount: "50.00", reason: "Loyalty discount", reasonCode: "95", vatCategory: "S", vatRate: "19" },
+  {
+    isCharge: false,
+    amount: "50.00",
+    reason: "Loyalty discount",
+    reasonCode: "95",
+    vatCategory: "S",
+    vatRate: "19",
+  },
 ];
 
 /** A complete XRechnung invoice; overrides replace top-level fields, amounts are recomputed from `amounts`. */
@@ -52,7 +59,12 @@ export function germanInvoice(
 ): EInvoice {
   const lines = amounts.lines ?? GERMAN_LINES;
   const allowanceCharges = amounts.allowanceCharges ?? GERMAN_ALLOWANCES;
-  const { vatBreakdown, totals } = computeEInvoiceAmounts({ ...amounts, lines, allowanceCharges, currencyDecimals: 2 });
+  const { vatBreakdown, totals } = computeEInvoiceAmounts({
+    ...amounts,
+    lines,
+    allowanceCharges,
+    currencyDecimals: 2,
+  });
   return {
     profile: "xrechnung-cii",
     number: "RE-2026-0042",
@@ -72,7 +84,11 @@ export function germanInvoice(
       taxRegistrationId: "12/345/67890",
       legalRegistration: { id: "HRB 12345" },
       electronicAddress: { id: "rechnung@musterbau.de", schemeId: "EM" },
-      contact: { name: "Anna Schmidt", phone: "+49 30 1234567", email: "anna.schmidt@musterbau.de" },
+      contact: {
+        name: "Anna Schmidt",
+        phone: "+49 30 1234567",
+        email: "anna.schmidt@musterbau.de",
+      },
     },
     buyer: {
       name: "Stadt Musterstadt Bauamt",
@@ -83,7 +99,11 @@ export function germanInvoice(
     payment: {
       meansCode: "58",
       remittanceInformation: "RE-2026-0042",
-      creditTransfer: { accountId: "DE89 3704 0044 0532 0130 00", accountName: "Muster Bau GmbH", providerId: "COBADEFFXXX" },
+      creditTransfer: {
+        accountId: "DE89 3704 0044 0532 0130 00",
+        accountName: "Muster Bau GmbH",
+        providerId: "COBADEFFXXX",
+      },
       terms: "Payable within 30 days without deduction.",
     },
     lines,

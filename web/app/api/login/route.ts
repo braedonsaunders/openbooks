@@ -17,10 +17,13 @@ import {
 } from "../../../lib/auth-policy";
 
 const requestBodySchema = z.union([
-  z.object({ email: z.string().trim().min(1).max(320), password: z.string().min(1).max(1024), mfaCode: z.string().optional() }),
+  z.object({
+    email: z.string().trim().min(1).max(320),
+    password: z.string().min(1).max(1024),
+    mfaCode: z.string().optional(),
+  }),
   z.object({ mfaCode: z.string().trim().min(1).max(32) }),
 ]);
-
 
 export const runtime = "nodejs";
 
@@ -29,10 +32,9 @@ function nowMs(): number {
   return Date.now();
 }
 
-
-
 async function legacyDELETE(req: Request) {
-  const rawToken = req.headers.get("cookie")
+  const rawToken = req.headers
+    .get("cookie")
     ?.split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${SESSION_COOKIE}=`))
@@ -40,7 +42,12 @@ async function legacyDELETE(req: Request) {
   await revokeSessionToken(rawToken ? decodeURIComponent(rawToken) : undefined);
   const res = NextResponse.json({ ok: true });
   for (const name of [SESSION_COOKIE, LOGIN_CHALLENGE_COOKIE, "ob_active_env"]) {
-    res.cookies.set(name, "", { httpOnly: true, secure: secureCookiesEnabled(), maxAge: 0, path: "/" });
+    res.cookies.set(name, "", {
+      httpOnly: true,
+      secure: secureCookiesEnabled(),
+      maxAge: 0,
+      path: "/",
+    });
   }
   res.headers.set("Cache-Control", "no-store");
   return res;
@@ -50,21 +57,25 @@ export const POST = defineRoute({
   public: "token",
   body: requestBodySchema,
   handler: async ({ request, body }) => {
-
     const startedAt = nowMs();
 
-
     const context = authRequestContext(request);
-    const challengeToken = request.headers.get("cookie")
+    const challengeToken = request.headers
+      .get("cookie")
       ?.split(";")
       .map((part) => part.trim())
       .find((part) => part.startsWith(`${LOGIN_CHALLENGE_COOKIE}=`))
       ?.slice(LOGIN_CHALLENGE_COOKIE.length + 1);
-    const result = typeof body.mfaCode === "string"
-      ? await completeMfaLogin(challengeToken ? decodeURIComponent(challengeToken) : undefined, body.mfaCode, context)
-      : "email" in body && typeof body.email === "string" && typeof body.password === "string"
-        ? await login(body.email, body.password, context)
-        : null;
+    const result =
+      typeof body.mfaCode === "string"
+        ? await completeMfaLogin(
+            challengeToken ? decodeURIComponent(challengeToken) : undefined,
+            body.mfaCode,
+            context,
+          )
+        : "email" in body && typeof body.email === "string" && typeof body.password === "string"
+          ? await login(body.email, body.password, context)
+          : null;
     if (!result) return NextResponse.json({ error: "missing credentials" }, { status: 400 });
 
     // Equalize primary-auth and MFA failure responses without an unconditional
@@ -74,16 +85,13 @@ export const POST = defineRoute({
 
     if (result.kind === "rate_limited" || result.kind === "invalid") {
       const failure = publicLoginFailure(result);
-      return NextResponse.json(
-        failure.body,
-        {
-          status: failure.status,
-          headers: {
-            ...(failure.retryAfterHeader ? { "Retry-After": failure.retryAfterHeader } : {}),
-            "Cache-Control": "no-store",
-          },
+      return NextResponse.json(failure.body, {
+        status: failure.status,
+        headers: {
+          ...(failure.retryAfterHeader ? { "Retry-After": failure.retryAfterHeader } : {}),
+          "Cache-Control": "no-store",
         },
-      );
+      });
     }
     if (result.kind === "mfa_required") {
       const response = NextResponse.json({ ok: false, mfaRequired: true }, { status: 202 });
@@ -106,7 +114,12 @@ export const POST = defineRoute({
       maxAge: SESSION_TTL_S,
       path: "/",
     });
-    res.cookies.set(LOGIN_CHALLENGE_COOKIE, "", { httpOnly: true, secure: secureCookiesEnabled(), maxAge: 0, path: "/" });
+    res.cookies.set(LOGIN_CHALLENGE_COOKIE, "", {
+      httpOnly: true,
+      secure: secureCookiesEnabled(),
+      maxAge: 0,
+      path: "/",
+    });
     res.headers.set("Cache-Control", "no-store");
     return res;
   },

@@ -16,7 +16,11 @@ import { db, withBypassContext, withOrgContext, withOrgTransaction } from "../pl
 import { toUnits } from "../money/money.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { beforePostCustomControlsChanged, beforePostCustomMutationError, runScript } from "./scripting.ts";
+import {
+  beforePostCustomControlsChanged,
+  beforePostCustomMutationError,
+  runScript,
+} from "./scripting.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -144,8 +148,11 @@ async function seedCustomGlScript(
 }
 
 async function accountNumber(accountId: string): Promise<string> {
-  const r = await db.execute<{ number: string }>(sql`
-    select number from accounts where id = ${accountId}`, "objects");
+  const r = await db.execute<{ number: string }>(
+    sql`
+    select number from accounts where id = ${accountId}`,
+    "objects",
+  );
   return r[0]!.number;
 }
 
@@ -192,66 +199,84 @@ async function postJournal(
     });
   });
   const r = await withOrgContext(org.orgId, () =>
-    db.execute<{ entry_id: string }>(sql`
-      select posted_entry_id as "entry_id" from documents where id = ${documentId}`, "objects"),
+    db.execute<{ entry_id: string }>(
+      sql`
+      select posted_entry_id as "entry_id" from documents where id = ${documentId}`,
+      "objects",
+    ),
   );
   return r[0]!.entry_id;
 }
 
-test("custom_gl_lines land on the same journal entry with script stamps", { skip: !DB }, async () => {
-  const { org, actorId } = await newPosterOrg();
-  try {
-    const creditCode = await withOrgContext(org.orgId, () => accountNumber(org.accounts.clearing));
-    const scriptId = await withOrgContext(org.orgId, () =>
-      seedCustomGlScript(org.orgId, balancedSource(org.accounts.freight, creditCode)),
-    );
-    const documentId = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-CGL-OK", actorId),
-    );
-    const entryId = await postJournal(org, documentId, actorId);
+test(
+  "custom_gl_lines land on the same journal entry with script stamps",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await newPosterOrg();
+    try {
+      const creditCode = await withOrgContext(org.orgId, () =>
+        accountNumber(org.accounts.clearing),
+      );
+      const scriptId = await withOrgContext(org.orgId, () =>
+        seedCustomGlScript(org.orgId, balancedSource(org.accounts.freight, creditCode)),
+      );
+      const documentId = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-CGL-OK", actorId),
+      );
+      const entryId = await postJournal(org, documentId, actorId);
 
-    const lines = await withOrgContext(org.orgId, () =>
-      db.execute<{
-        account_id: string;
-        amount: string;
-        contributor_kind: string | null;
-        contributor_ref: string | null;
-      }>(sql`
+      const lines = await withOrgContext(org.orgId, () =>
+        db.execute<{
+          account_id: string;
+          amount: string;
+          contributor_kind: string | null;
+          contributor_ref: string | null;
+        }>(
+          sql`
         select account_id, amount::text, contributor_kind, contributor_ref
           from journal_lines
          where org_id = ${org.orgId} and entry_id = ${entryId}
-         order by line_number`, "objects"),
-    );
-    assert.equal(lines.length, 4, "kernel (2) + script (2) lines on one entry");
-    const kernel = lines.filter((l) => l.contributor_kind === null);
-    const scripted = lines.filter((l) => l.contributor_kind === "script");
-    assert.equal(kernel.length, 2);
-    assert.equal(scripted.length, 2);
-    for (const l of scripted) assert.equal(l.contributor_ref, scriptId);
-    assert.deepEqual(
-      scripted.map((l) => l.account_id).sort(),
-      [org.accounts.freight, org.accounts.clearing].sort(),
-    );
-    // The union still balances exactly.
-    const total = await withOrgContext(org.orgId, () =>
-      db.execute<{ total: string }>(sql`
+         order by line_number`,
+          "objects",
+        ),
+      );
+      assert.equal(lines.length, 4, "kernel (2) + script (2) lines on one entry");
+      const kernel = lines.filter((l) => l.contributor_kind === null);
+      const scripted = lines.filter((l) => l.contributor_kind === "script");
+      assert.equal(kernel.length, 2);
+      assert.equal(scripted.length, 2);
+      for (const l of scripted) assert.equal(l.contributor_ref, scriptId);
+      assert.deepEqual(
+        scripted.map((l) => l.account_id).sort(),
+        [org.accounts.freight, org.accounts.clearing].sort(),
+      );
+      // The union still balances exactly.
+      const total = await withOrgContext(org.orgId, () =>
+        db.execute<{ total: string }>(
+          sql`
         select sum(amount)::text as total from journal_lines
-         where org_id = ${org.orgId} and entry_id = ${entryId}`, "objects"),
-    );
-    assert.equal(toUnits(total[0]!.total), 0n);
+         where org_id = ${org.orgId} and entry_id = ${entryId}`,
+          "objects",
+        ),
+      );
+      assert.equal(toUnits(total[0]!.total), 0n);
 
-    const runs = await withOrgContext(org.orgId, () =>
-      db.execute<{ status: string; logs: unknown }>(sql`
+      const runs = await withOrgContext(org.orgId, () =>
+        db.execute<{ status: string; logs: unknown }>(
+          sql`
         select status, logs from script_runs
-         where org_id = ${org.orgId} and script_id = ${scriptId} and target_id = ${documentId}`, "objects"),
-    );
-    assert.equal(runs.length, 1, "script_runs evidence recorded");
-    assert.equal(runs[0]!.status, "ok");
-    assert.match(JSON.stringify(runs[0]!.logs), /kernel lines seen/);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+         where org_id = ${org.orgId} and script_id = ${scriptId} and target_id = ${documentId}`,
+          "objects",
+        ),
+      );
+      assert.equal(runs.length, 1, "script_runs evidence recorded");
+      assert.equal(runs[0]!.status, "ok");
+      assert.match(JSON.stringify(runs[0]!.logs), /kernel lines seen/);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("unbalanced script lines refuse posting with no journal write", { skip: !DB }, async () => {
   const { org, actorId } = await newPosterOrg();
@@ -283,11 +308,14 @@ test("unbalanced script lines refuse posting with no journal write", { skip: !DB
       /do not balance/,
     );
     const after = await withOrgContext(org.orgId, () =>
-      db.execute<{ status: string; entries: number; runs: number; run_status: string }>(sql`
+      db.execute<{ status: string; entries: number; runs: number; run_status: string }>(
+        sql`
         select (select status from documents where id = ${documentId}) as status,
                (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
                (select count(*)::int from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as runs,
-               (select status from script_runs where org_id = ${org.orgId} and target_id = ${documentId} limit 1) as run_status`, "objects"),
+               (select status from script_runs where org_id = ${org.orgId} and target_id = ${documentId} limit 1) as run_status`,
+        "objects",
+      ),
     );
     assert.deepEqual(after[0], {
       status: "approved",
@@ -321,12 +349,18 @@ test("ledger-scale script lines share the journal bound", { skip: !DB }, async (
     );
     const entryId = await postJournal(org, documentId, actorId);
     const posted = await withOrgContext(org.orgId, () =>
-      db.execute<{ amount: string }>(sql`
+      db.execute<{ amount: string }>(
+        sql`
         select amount::text as amount from journal_lines
          where org_id = ${org.orgId} and entry_id = ${entryId} and contributor_kind = 'script'
-         order by line_number`, "objects"),
+         order by line_number`,
+        "objects",
+      ),
     );
-    assert.deepEqual(posted.map((l) => l.amount), ["20000000000000.0000", "-20000000000000.0000"]);
+    assert.deepEqual(
+      posted.map((l) => l.amount),
+      ["20000000000000.0000", "-20000000000000.0000"],
+    );
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -360,8 +394,11 @@ test("oversize script lines are refused with the shared bound message", { skip: 
       /at most 15 whole digits fit the ledger/,
     );
     const entries = await withOrgContext(org.orgId, () =>
-      db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"),
+      db.execute<{ n: number }>(
+        sql`
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`,
+        "objects",
+      ),
     );
     assert.equal(entries[0]!.n, 0);
   } finally {
@@ -369,47 +406,54 @@ test("oversize script lines are refused with the shared bound message", { skip: 
   }
 });
 
-test("balanced script lines whose sides overflow the ledger are refused by name", { skip: !DB }, async () => {
-  // Every line fits numeric(19,4), the set balances, but each side sums to
-  // sixteen whole digits: the side totals refuse with the shared bound
-  // message instead of dying in Postgres at posting, and nothing posts.
-  const { org, actorId } = await newPosterOrg();
-  try {
-    await withOrgContext(org.orgId, () =>
-      seedCustomGlScript(
-        org.orgId,
-        `function main(ctx) { return { lines: [
+test(
+  "balanced script lines whose sides overflow the ledger are refused by name",
+  { skip: !DB },
+  async () => {
+    // Every line fits numeric(19,4), the set balances, but each side sums to
+    // sixteen whole digits: the side totals refuse with the shared bound
+    // message instead of dying in Postgres at posting, and nothing posts.
+    const { org, actorId } = await newPosterOrg();
+    try {
+      await withOrgContext(org.orgId, () =>
+        seedCustomGlScript(
+          org.orgId,
+          `function main(ctx) { return { lines: [
           { accountId: ${JSON.stringify(org.accounts.freight)}, amount: "900000000000000" },
           { accountId: ${JSON.stringify(org.accounts.freight)}, amount: "900000000000000" },
           { accountId: ${JSON.stringify(org.accounts.clearing)}, amount: "-900000000000000" },
           { accountId: ${JSON.stringify(org.accounts.clearing)}, amount: "-900000000000000" },
         ] }; }`,
-      ),
-    );
-    const documentId = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-CGL-WIDE", actorId),
-    );
-    await withOrgContext(org.orgId, () =>
-      submitAndReleaseIfUngated("journal", documentId, actorId),
-    );
-    await assert.rejects(
-      withOrgContext(org.orgId, () =>
-        postDocument(documentId, postingControlDeps(org), {
-          deferEffects: true,
-          audit: { actorId, source: "test" },
-        }),
-      ),
-      /debit total is out of range — at most 15 whole digits fit the ledger/,
-    );
-    const entries = await withOrgContext(org.orgId, () =>
-      db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"),
-    );
-    assert.equal(entries[0]!.n, 0);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+        ),
+      );
+      const documentId = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-CGL-WIDE", actorId),
+      );
+      await withOrgContext(org.orgId, () =>
+        submitAndReleaseIfUngated("journal", documentId, actorId),
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          postDocument(documentId, postingControlDeps(org), {
+            deferEffects: true,
+            audit: { actorId, source: "test" },
+          }),
+        ),
+        /debit total is out of range — at most 15 whole digits fit the ledger/,
+      );
+      const entries = await withOrgContext(org.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`,
+          "objects",
+        ),
+      );
+      assert.equal(entries[0]!.n, 0);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("unknown accountCode is refused with no write", { skip: !DB }, async () => {
   const { org, actorId } = await newPosterOrg();
@@ -439,8 +483,11 @@ test("unknown accountCode is refused with no write", { skip: !DB }, async () => 
       /unknown, inactive, or summary account code/,
     );
     const entries = await withOrgContext(org.orgId, () =>
-      db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"),
+      db.execute<{ n: number }>(
+        sql`
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`,
+        "objects",
+      ),
     );
     assert.equal(entries[0]!.n, 0);
   } finally {
@@ -477,8 +524,11 @@ test("a script that mutates kernelLines fails and halts posting", { skip: !DB },
       /custom_gl_lines script/,
     );
     const entries = await withOrgContext(org.orgId, () =>
-      db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"),
+      db.execute<{ n: number }>(
+        sql`
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`,
+        "objects",
+      ),
     );
     assert.equal(entries[0]!.n, 0, "the mutating script halted posting with no write");
   } finally {
@@ -486,61 +536,72 @@ test("a script that mutates kernelLines fails and halts posting", { skip: !DB },
   }
 });
 
-test("gates off: scripts run nowhere when any gate in the chain is disabled", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Poster", "poster"));
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`
+test(
+  "gates off: scripts run nowhere when any gate in the chain is disabled",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actorId = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Poster", "poster"),
+      );
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
         update app_roles set permissions = '["gl.post"]'::jsonb
          where org_id = ${org.orgId} and key = 'poster'`);
-      await seedCustomGlScript(
-        org.orgId,
-        `function main(ctx) { throw new Error("must never run while gated off"); }`,
+        await seedCustomGlScript(
+          org.orgId,
+          `function main(ctx) { throw new Error("must never run while gated off"); }`,
+        );
+      });
+      // scripts feature off, allocations parent + child on: nothing fires.
+      await withOrgContext(org.orgId, () =>
+        setFeatures(org.orgId, { allocations: true, allocationsAtPosting: true }),
       );
-    });
-    // scripts feature off, allocations parent + child on: nothing fires.
-    await withOrgContext(org.orgId, () =>
-      setFeatures(org.orgId, { allocations: true, allocationsAtPosting: true }),
-    );
-    const first = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-CGL-GATE1", actorId),
-    );
-    await postJournal(org, first, actorId);
-    // allocations parent off, scripts + child on: the child cannot resolve
-    // enabled while its parent is off — nothing fires either.
-    await withOrgContext(org.orgId, () =>
-      setFeatures(org.orgId, { scripts: true, allocations: false, allocationsAtPosting: true }),
-    );
-    const second = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-CGL-GATE2", actorId),
-    );
-    await postJournal(org, second, actorId);
-    // allocationsAtPosting child off, scripts + parent on: nothing fires.
-    await withOrgContext(org.orgId, () =>
-      setFeatures(org.orgId, { scripts: true, allocations: true, allocationsAtPosting: false }),
-    );
-    const third = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-CGL-GATE3", actorId),
-    );
-    await postJournal(org, third, actorId);
+      const first = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-CGL-GATE1", actorId),
+      );
+      await postJournal(org, first, actorId);
+      // allocations parent off, scripts + child on: the child cannot resolve
+      // enabled while its parent is off — nothing fires either.
+      await withOrgContext(org.orgId, () =>
+        setFeatures(org.orgId, { scripts: true, allocations: false, allocationsAtPosting: true }),
+      );
+      const second = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-CGL-GATE2", actorId),
+      );
+      await postJournal(org, second, actorId);
+      // allocationsAtPosting child off, scripts + parent on: nothing fires.
+      await withOrgContext(org.orgId, () =>
+        setFeatures(org.orgId, { scripts: true, allocations: true, allocationsAtPosting: false }),
+      );
+      const third = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-CGL-GATE3", actorId),
+      );
+      await postJournal(org, third, actorId);
 
-    const check = await withOrgContext(org.orgId, () =>
-      db.execute<{ lines: number; runs: number }>(sql`
+      const check = await withOrgContext(org.orgId, () =>
+        db.execute<{ lines: number; runs: number }>(
+          sql`
         select (select count(*)::int from journal_lines where org_id = ${org.orgId}) as lines,
-               (select count(*)::int from script_runs where org_id = ${org.orgId}) as runs`, "objects"),
-    );
-    assert.deepEqual(check[0], { lines: 6, runs: 0 }, "kernel lines only, no script evidence");
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+               (select count(*)::int from script_runs where org_id = ${org.orgId}) as runs`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(check[0], { lines: 6, runs: 0 }, "kernel lines only, no script evidence");
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const clerkId = await withBypassContext(() => createScratchUser(org.orgId, "Clerk", "clerk"));
-    const posterId = await withBypassContext(() => createScratchUser(org.orgId, "Poster", "poster"));
+    const posterId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Poster", "poster"),
+    );
     await withOrgContext(org.orgId, async () => {
       await enableAllocScripting(org.orgId);
       await db.execute(sql`
@@ -554,9 +615,7 @@ test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !
     const refused = await withOrgContext(org.orgId, () =>
       seedBalancedDraftJournal(org, "JE-CGL-NOPERM", clerkId),
     );
-    await withOrgContext(org.orgId, () =>
-      submitAndReleaseIfUngated("journal", refused, posterId),
-    );
+    await withOrgContext(org.orgId, () => submitAndReleaseIfUngated("journal", refused, posterId));
     await assert.rejects(
       withOrgContext(org.orgId, () =>
         postDocument(refused, postingControlDeps(org), {
@@ -571,9 +630,12 @@ test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !
     );
     await postJournal(org, ok, posterId);
     const lines = await withOrgContext(org.orgId, () =>
-      db.execute<{ n: number }>(sql`
+      db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from journal_lines
-         where org_id = ${org.orgId} and contributor_kind = 'script'`, "objects"),
+         where org_id = ${org.orgId} and contributor_kind = 'script'`,
+        "objects",
+      ),
     );
     assert.equal(lines[0]!.n, 2, "the gl.post holder's contributions land");
 
@@ -585,13 +647,18 @@ test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !
       postJournal(org, system, null, posterId),
       /custom_gl_lines script "custom gl": this run has no signed-in user and the script has no run-as user; save the script again as a user who holds gl\.post/,
     );
-    await withOrgContext(org.orgId, () => db.execute(sql`
-      update user_scripts set run_as_user_id = ${posterId} where org_id = ${org.orgId}`));
+    await withOrgContext(org.orgId, () =>
+      db.execute(sql`
+      update user_scripts set run_as_user_id = ${posterId} where org_id = ${org.orgId}`),
+    );
     await postJournal(org, system, null, posterId);
     const afterSystem = await withOrgContext(org.orgId, () =>
-      db.execute<{ n: number }>(sql`
+      db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from journal_lines
-         where org_id = ${org.orgId} and contributor_kind = 'script'`, "objects"),
+         where org_id = ${org.orgId} and contributor_kind = 'script'`,
+        "objects",
+      ),
     );
     assert.equal(afterSystem[0]!.n, 4, "the run-as user's authority covers the system posting");
   } finally {
@@ -673,29 +740,36 @@ test("more than 200 contributed lines are refused", { skip: !DB }, async () => {
   }
 });
 
-test("documentKind narrowing: a vendor_bill script does not fire on a journal", { skip: !DB }, async () => {
-  const { org, actorId } = await newPosterOrg();
-  try {
-    await withOrgContext(org.orgId, () =>
-      seedCustomGlScript(
-        org.orgId,
-        `function main(ctx) { throw new Error("wrong kind fired"); }`,
-        { documentKind: "vendor_bill" },
-      ),
-    );
-    const documentId = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-CGL-KIND", actorId),
-    );
-    await postJournal(org, documentId, actorId);
-    const runs = await withOrgContext(org.orgId, () =>
-      db.execute<{ n: number }>(sql`
-        select count(*)::int as n from script_runs where org_id = ${org.orgId}`, "objects"),
-    );
-    assert.equal(runs[0]!.n, 0);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "documentKind narrowing: a vendor_bill script does not fire on a journal",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await newPosterOrg();
+    try {
+      await withOrgContext(org.orgId, () =>
+        seedCustomGlScript(
+          org.orgId,
+          `function main(ctx) { throw new Error("wrong kind fired"); }`,
+          { documentKind: "vendor_bill" },
+        ),
+      );
+      const documentId = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-CGL-KIND", actorId),
+      );
+      await postJournal(org, documentId, actorId);
+      const runs = await withOrgContext(org.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`
+        select count(*)::int as n from script_runs where org_id = ${org.orgId}`,
+          "objects",
+        ),
+      );
+      assert.equal(runs[0]!.n, 0);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("the trigger is deterministic: clock access fails the run", { skip: !DB }, async () => {
   const { org, actorId } = await newPosterOrg();
@@ -734,10 +808,14 @@ test("the first error halts the chain: later scripts never run", { skip: !DB }, 
   try {
     let secondId = "";
     await withOrgContext(org.orgId, async () => {
-      await seedCustomGlScript(org.orgId, `function main(ctx) { throw new Error("first fails"); }`, {
-        name: "first",
-        sortOrder: 100,
-      });
+      await seedCustomGlScript(
+        org.orgId,
+        `function main(ctx) { throw new Error("first fails"); }`,
+        {
+          name: "first",
+          sortOrder: 100,
+        },
+      );
       secondId = await seedCustomGlScript(
         org.orgId,
         `function main(ctx) { ob.log("second ran"); return { lines: [] }; }`,
@@ -760,9 +838,12 @@ test("the first error halts the chain: later scripts never run", { skip: !DB }, 
       /first fails/,
     );
     const runs = await withOrgContext(org.orgId, () =>
-      db.execute<{ script_id: string; status: string }>(sql`
+      db.execute<{ script_id: string; status: string }>(
+        sql`
         select script_id, status from script_runs
-         where org_id = ${org.orgId} and target_id = ${documentId}`, "objects"),
+         where org_id = ${org.orgId} and target_id = ${documentId}`,
+        "objects",
+      ),
     );
     assert.equal(runs.length, 1, "only the first script ran");
     assert.notEqual(runs[0]!.script_id, secondId);
@@ -771,147 +852,198 @@ test("the first error halts the chain: later scripts never run", { skip: !DB }, 
   }
 });
 
-test("an attributed custom_gl_lines run cannot stamp a subsidiary outside the actor allowlist", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Poster", "poster"));
-    const childId = randomUUID();
-    await withOrgContext(org.orgId, async () => {
-      await enableAllocScripting(org.orgId);
-      await db.execute(sql`
+test(
+  "an attributed custom_gl_lines run cannot stamp a subsidiary outside the actor allowlist",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actorId = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Poster", "poster"),
+      );
+      const childId = randomUUID();
+      await withOrgContext(org.orgId, async () => {
+        await enableAllocScripting(org.orgId);
+        await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         select ${childId}, ${org.orgId}, ${org.subsidiaryId}, 'Child entity', base_currency, country
           from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
-      await db.execute(sql`
+        await db.execute(sql`
         update app_roles
            set permissions = '["gl.post"]'::jsonb,
                subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [childId] })}::jsonb
          where org_id = ${org.orgId} and key = 'poster'`);
-      const creditCode = await accountNumber(org.accounts.clearing);
-      await seedCustomGlScript(
-        org.orgId,
-        `function main(ctx) {
+        const creditCode = await accountNumber(org.accounts.clearing);
+        await seedCustomGlScript(
+          org.orgId,
+          `function main(ctx) {
           return { lines: [
             { accountId: ${JSON.stringify(org.accounts.freight)}, amount: "7.50", subsidiaryId: ${JSON.stringify(org.subsidiaryId)} },
             { accountCode: ${JSON.stringify(creditCode)}, amount: "-7.50", subsidiaryId: ${JSON.stringify(org.subsidiaryId)} },
           ] };
         }`,
+        );
+      });
+      const documentId = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-CGL-SCOPE", actorId, childId),
       );
-    });
-    const documentId = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-CGL-SCOPE", actorId, childId),
-    );
-    await withOrgContext(org.orgId, () =>
-      submitAndReleaseIfUngated("journal", documentId, actorId),
-    );
-    await assert.rejects(
-      withOrgContext(org.orgId, () =>
-        postDocument(documentId, postingControlDeps(org), {
-          deferEffects: true,
-          audit: { actorId, source: "test" },
-        }),
-      ),
-      /subsidiary is outside the script owner's allowed scope/,
-    );
-    const after = await withOrgContext(org.orgId, () =>
-      db.execute<{ entries: number; scripted: number }>(sql`
+      await withOrgContext(org.orgId, () =>
+        submitAndReleaseIfUngated("journal", documentId, actorId),
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          postDocument(documentId, postingControlDeps(org), {
+            deferEffects: true,
+            audit: { actorId, source: "test" },
+          }),
+        ),
+        /subsidiary is outside the script owner's allowed scope/,
+      );
+      const after = await withOrgContext(org.orgId, () =>
+        db.execute<{ entries: number; scripted: number }>(
+          sql`
         select (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
-               (select count(*)::int from journal_lines where org_id = ${org.orgId} and contributor_kind = 'script') as scripted`, "objects"),
-    );
-    assert.deepEqual(after[0], { entries: 0, scripted: 0 });
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+               (select count(*)::int from journal_lines where org_id = ${org.orgId} and contributor_kind = 'script') as scripted`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(after[0], { entries: 0, scripted: 0 });
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a refused attempt keeps its error evidence and a fixed retry posts once with no duplicate rows", { skip: !DB }, async () => {
-  const { org, actorId } = await newPosterOrg();
-  try {
-    await withOrgContext(org.orgId, () =>
-      seedCustomGlScript(
-        org.orgId,
-        `function main(ctx) { ob.log("about to fail"); throw new Error("retry-probe-boom"); }`,
-        { name: "flaky" },
-      ),
-    );
-    const documentId = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-CGL-RETRY", actorId),
-    );
-    await withOrgContext(org.orgId, () =>
-      submitAndReleaseIfUngated("journal", documentId, actorId),
-    );
-    // No outer transaction: the refusal rolls the posting unit back, and the
-    // coordinator must re-record the failed run out-of-band.
-    await assert.rejects(
-      withOrgContext(org.orgId, () =>
-        postDocument(documentId, postingControlDeps(org), {
-          deferEffects: true,
-          audit: { actorId, source: "test" },
-        }),
-      ),
-      /retry-probe-boom/,
-    );
-    const failed = await withOrgContext(org.orgId, () =>
-      db.execute<{ status: string; error_message: string | null; logs: unknown; entries: number }>(sql`
+test(
+  "a refused attempt keeps its error evidence and a fixed retry posts once with no duplicate rows",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await newPosterOrg();
+    try {
+      await withOrgContext(org.orgId, () =>
+        seedCustomGlScript(
+          org.orgId,
+          `function main(ctx) { ob.log("about to fail"); throw new Error("retry-probe-boom"); }`,
+          { name: "flaky" },
+        ),
+      );
+      const documentId = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-CGL-RETRY", actorId),
+      );
+      await withOrgContext(org.orgId, () =>
+        submitAndReleaseIfUngated("journal", documentId, actorId),
+      );
+      // No outer transaction: the refusal rolls the posting unit back, and the
+      // coordinator must re-record the failed run out-of-band.
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          postDocument(documentId, postingControlDeps(org), {
+            deferEffects: true,
+            audit: { actorId, source: "test" },
+          }),
+        ),
+        /retry-probe-boom/,
+      );
+      const failed = await withOrgContext(org.orgId, () =>
+        db.execute<{
+          status: string;
+          error_message: string | null;
+          logs: unknown;
+          entries: number;
+        }>(
+          sql`
         select (select status from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as status,
                (select error_message from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as error_message,
                (select logs from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as logs,
-               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`, "objects"),
-    );
-    assert.equal(failed[0]!.entries, 0, "the refused post wrote no journal");
-    assert.equal(failed[0]!.status, "error");
-    assert.match(failed[0]!.error_message ?? "", /retry-probe-boom/);
-    assert.match(JSON.stringify(failed[0]!.logs), /about to fail/);
+               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`,
+          "objects",
+        ),
+      );
+      assert.equal(failed[0]!.entries, 0, "the refused post wrote no journal");
+      assert.equal(failed[0]!.status, "error");
+      assert.match(failed[0]!.error_message ?? "", /retry-probe-boom/);
+      assert.match(JSON.stringify(failed[0]!.logs), /about to fail/);
 
-    // Fix the script and retry the same approved document: the post commits
-    // with exactly one new ok row — the re-recorded error row is not
-    // duplicated and the success path writes nothing extra.
-    await withOrgContext(org.orgId, () =>
-      db.execute(sql`
+      // Fix the script and retry the same approved document: the post commits
+      // with exactly one new ok row — the re-recorded error row is not
+      // duplicated and the success path writes nothing extra.
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
         update user_scripts set source = 'function main(ctx) { return { lines: [] }; }'
          where org_id = ${org.orgId} and trigger_point = 'custom_gl_lines'`),
-    );
-    await withOrgContext(org.orgId, () =>
-      postDocument(documentId, postingControlDeps(org), {
-        deferEffects: true,
-        audit: { actorId, source: "test" },
-      }),
-    );
-    const retried = await withOrgContext(org.orgId, () =>
-      db.execute<{ statuses: string[]; entries: number }>(sql`
+      );
+      await withOrgContext(org.orgId, () =>
+        postDocument(documentId, postingControlDeps(org), {
+          deferEffects: true,
+          audit: { actorId, source: "test" },
+        }),
+      );
+      const retried = await withOrgContext(org.orgId, () =>
+        db.execute<{ statuses: string[]; entries: number }>(
+          sql`
         select (select array_agg(status order by at) from script_runs
                  where org_id = ${org.orgId} and target_id = ${documentId}) as statuses,
-               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`, "objects"),
-    );
-    assert.deepEqual(retried[0]!.statuses, ["error", "ok"]);
-    assert.equal(retried[0]!.entries, 1);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
-
+               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(retried[0]!.statuses, ["error", "ok"]);
+      assert.equal(retried[0]!.entries, 1);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("script top-level APIs are installed before source, and source cannot disable context freezing", async () => {
-  const context = { trigger: "custom_gl_lines", document: { kind: "journal", memo: "original" }, org: { id: "org", name: "Example", baseCurrency: "CAD" } };
-  const read = await runScript(`const currency = ob.runtime.org.baseCurrency;
-    function main(ctx) { return { currency, memo: ctx.document.memo }; }`, context, 2000, { strict: true });
+  const context = {
+    trigger: "custom_gl_lines",
+    document: { kind: "journal", memo: "original" },
+    org: { id: "org", name: "Example", baseCurrency: "CAD" },
+  };
+  const read = await runScript(
+    `const currency = ob.runtime.org.baseCurrency;
+    function main(ctx) { return { currency, memo: ctx.document.memo }; }`,
+    context,
+    2000,
+    { strict: true },
+  );
   assert.equal(read.status, "ok");
   assert.deepEqual(read.returned, { currency: "CAD", memo: "original" });
-  const mutation = await runScript(`Object.freeze = value => value; Object.values = () => [];
-    function main(ctx) { ctx.document.memo = "changed"; return ctx.document.memo; }`, context, 2000, { strict: true });
+  const mutation = await runScript(
+    `Object.freeze = value => value; Object.values = () => [];
+    function main(ctx) { ctx.document.memo = "changed"; return ctx.document.memo; }`,
+    context,
+    2000,
+    { strict: true },
+  );
   assert.equal(mutation.status, "error");
   assert.match(mutation.abortReason ?? "", /read[- ]only|cannot assign/i);
   assert.equal(context.document.memo, "original");
 });
 
-
 test("posting controls cannot be replaced or added through before-post automation", () => {
-  for (const key of ["closeout", "storeCreditProgramId", "marketplace", "marketplaceClearingAccountId", "marketplaceTax"]) {
+  for (const key of [
+    "closeout",
+    "storeCreditProgramId",
+    "marketplace",
+    "marketplaceClearingAccountId",
+    "marketplaceTax",
+  ]) {
     assert.match(beforePostCustomMutationError({ [key]: {} })!, /protected posting/);
     assert.match(beforePostCustomControlsChanged({}, { [key]: {} })!, /protected posting/);
     assert.match(beforePostCustomControlsChanged({ [key]: {} }, {})!, /protected posting/);
-    assert.match(beforePostCustomControlsChanged({ [key]: { amount: "1" } }, { [key]: { amount: "2" } })!, /protected posting/);
-    assert.equal(beforePostCustomControlsChanged({ [key]: { a: 1, b: 2 } }, { [key]: { b: 2, a: 1 } }), null);
+    assert.match(
+      beforePostCustomControlsChanged({ [key]: { amount: "1" } }, { [key]: { amount: "2" } })!,
+      /protected posting/,
+    );
+    assert.equal(
+      beforePostCustomControlsChanged({ [key]: { a: 1, b: 2 } }, { [key]: { b: 2, a: 1 } }),
+      null,
+    );
   }
-  assert.equal(beforePostCustomControlsChanged({ operationalNote: "before" }, { operationalNote: "after" }), null);
+  assert.equal(
+    beforePostCustomControlsChanged({ operationalNote: "before" }, { operationalNote: "after" }),
+    null,
+  );
 });

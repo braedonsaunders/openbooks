@@ -1,5 +1,14 @@
-import { renderRefusal, type CatalogRefusal, type RefusalValue, type RefusalValues } from "../platform/catalog-refusal.ts";
-import { EQUITY_REFUSALS, type EquityRefusalKey, type EquityRefusalValues } from "./refusals/index.ts";
+import {
+  renderRefusal,
+  type CatalogRefusal,
+  type RefusalValue,
+  type RefusalValues,
+} from "../platform/catalog-refusal.ts";
+import {
+  EQUITY_REFUSALS,
+  type EquityRefusalKey,
+  type EquityRefusalValues,
+} from "./refusals/index.ts";
 import { EQUITY_TERMS, type EquityTermName } from "./refusals/terms.ts";
 
 export { formatRefusalDate, type RefusalValue } from "../platform/catalog-refusal.ts";
@@ -26,14 +35,22 @@ export class EquityError extends Error implements CatalogRefusal {
   /** The figures the message and remedy name. */
   readonly values: RefusalValues;
 
-  constructor(key: EquityRefusalKey, options: { values?: RefusalValues; status?: EquityErrorStatus; field?: string; cause?: unknown } = {}) {
+  constructor(
+    key: EquityRefusalKey,
+    options: {
+      values?: RefusalValues;
+      status?: EquityErrorStatus;
+      field?: string;
+      cause?: unknown;
+    } = {},
+  ) {
     const spec = EQUITY_REFUSALS[key];
     const values = options.values ?? {};
     super(renderRefusal(spec.message, values), { cause: options.cause });
     this.key = key;
     this.catalogKey = `equity.${key}`;
     this.code = spec.code;
-    this.status = options.status ?? ("status" in spec ? spec.status as EquityErrorStatus : 422);
+    this.status = options.status ?? ("status" in spec ? (spec.status as EquityErrorStatus) : 422);
     this.remedy = renderRefusal(spec.remedy, values);
     this.values = values;
     if (options.field !== undefined) this.field = options.field;
@@ -49,7 +66,9 @@ type RefusalOptions = { status?: EquityErrorStatus; field?: string; cause?: unkn
  */
 export function equityError<K extends EquityRefusalKey>(
   key: K,
-  ...args: keyof EquityRefusalValues<K> extends never ? [values?: Record<string, never>, options?: RefusalOptions] : [values: EquityRefusalValues<K>, options?: RefusalOptions]
+  ...args: keyof EquityRefusalValues<K> extends never
+    ? [values?: Record<string, never>, options?: RefusalOptions]
+    : [values: EquityRefusalValues<K>, options?: RefusalOptions]
 ): EquityError {
   const [values, options] = args;
   return new EquityError(key, { ...options, values: values as RefusalValues | undefined });
@@ -62,12 +81,20 @@ export const fig = {
   shares: (value: bigint | string): Figure<"shares"> => ({ kind: "shares", value }),
   count: (value: bigint | number): Figure<"count"> => ({ kind: "count", value }),
   money: (value: string, currency: string): Figure<"money"> => ({ kind: "money", value, currency }),
-  price: (value: string, currency: string | null = null): Figure<"price"> => ({ kind: "price", value, currency }),
+  price: (value: string, currency: string | null = null): Figure<"price"> => ({
+    kind: "price",
+    value,
+    currency,
+  }),
   decimal: (value: string): Figure<"decimal"> => ({ kind: "decimal", value }),
   multiple: (value: string): Figure<"multiple"> => ({ kind: "multiple", value }),
   percent: (value: string): Figure<"percent"> => ({ kind: "percent", value }),
   date: (value: string): Figure<"date"> => ({ kind: "date", value }),
-  period: (label: string, startsOn: string | null = null, endsOn: string | null = null): Figure<"period"> => ({ kind: "period", label, startsOn, endsOn }),
+  period: (
+    label: string,
+    startsOn: string | null = null,
+    endsOn: string | null = null,
+  ): Figure<"period"> => ({ kind: "period", label, startsOn, endsOn }),
   text: (value: string): Figure<"text"> => ({ kind: "text", value }),
   list: (value: readonly string[]): Figure<"list"> => ({ kind: "list", value }),
   choice: (value: string): Figure<"choice"> => ({ kind: "choice", value }),

@@ -1,30 +1,30 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction, type SqlExecutor } from "@openbooks/engine/platform/db";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
 import {
   lockProjectForScope,
   ScopeNotFoundError,
   withScopeSnapshot,
-} from '@openbooks/engine/organization/scope'
-import { normalizeMoney } from '@openbooks/engine/money/money'
+} from "@openbooks/engine/organization/scope";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import type {
   ScheduleData,
   ScheduleDependency,
   ScheduleTask,
   ScheduleTaskPatchInput,
-} from '@braedonsaunders/appkit-scheduling'
-import { wouldCreateDependencyCycle } from '@braedonsaunders/appkit-scheduling'
-import { canonicalDecimal, compareDecimal, isPositiveDecimal } from './exact-decimal'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { isUuid } from './list-params'
-import { acquireFeatureGateLock, isFeatureEnabled } from './features'
-import { HrmQualificationError } from '@openbooks/engine/hrm/qualifications/errors'
+} from "@braedonsaunders/appkit-scheduling";
+import { wouldCreateDependencyCycle } from "@braedonsaunders/appkit-scheduling";
+import { canonicalDecimal, compareDecimal, isPositiveDecimal } from "./exact-decimal";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { isUuid } from "./list-params";
+import { acquireFeatureGateLock, isFeatureEnabled } from "./features";
+import { HrmQualificationError } from "@openbooks/engine/hrm/qualifications/errors";
 import {
   gateScheduleAssignment,
   noteWarnedDispatch,
   refuseBlockedDispatch,
-} from '@openbooks/engine/hrm/qualifications/gating'
+} from "@openbooks/engine/hrm/qualifications/gating";
 
 /**
  * Project schedule persistence.
@@ -38,19 +38,22 @@ import {
  * Nothing here posts to the ledger. A schedule is planning data.
  */
 
-type Row = Record<string, unknown>
-type ScheduleTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type Row = Record<string, unknown>;
+type ScheduleTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function assertProjectSchedulingEnabled(orgId: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, 'projectScheduling'))) {
-    throw new ScheduleError('project scheduling feature is disabled', 404)
+  if (!(await isFeatureEnabled(orgId, "projectScheduling"))) {
+    throw new ScheduleError("project scheduling feature is disabled", 404);
   }
 }
 
-async function assertProjectSchedulingEnabledTx(tx: ScheduleTransaction, orgId: string): Promise<void> {
-  await acquireFeatureGateLock(orgId, tx)
-  if (!(await lockAndCheckOrgFeature(tx, orgId, 'projectScheduling'))) {
-    throw new ScheduleError('project scheduling feature is disabled', 404)
+async function assertProjectSchedulingEnabledTx(
+  tx: ScheduleTransaction,
+  orgId: string,
+): Promise<void> {
+  await acquireFeatureGateLock(orgId, tx);
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "projectScheduling"))) {
+    throw new ScheduleError("project scheduling feature is disabled", 404);
   }
 }
 
@@ -67,18 +70,18 @@ async function assertProjectScopeInTx(
   orgId: string,
   projectId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  mode: 'update' | 'share' = 'update',
+  mode: "update" | "share" = "update",
 ): Promise<void> {
   try {
-    await lockProjectForScope(tx, orgId, projectId, allowedSubsidiaryIds, mode)
+    await lockProjectForScope(tx, orgId, projectId, allowedSubsidiaryIds, mode);
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) throw new ScheduleError('not found', 404)
-    throw error
+    if (error instanceof ScopeNotFoundError) throw new ScheduleError("not found", 404);
+    throw error;
   }
 }
 
-const str = (value: unknown) => (value == null ? null : String(value))
-const num = (value: unknown) => (value == null ? 0 : Number(value))
+const str = (value: unknown) => (value == null ? null : String(value));
+const num = (value: unknown) => (value == null ? 0 : Number(value));
 
 function toTask(row: Row): ScheduleTask {
   return {
@@ -87,17 +90,17 @@ function toTask(row: Row): ScheduleTask {
     calendarId: str(row.schedule_calendar_id),
     parentTaskId: str(row.parent_id),
     outlineLevel: num(row.schedule_outline_level),
-    name: String(row.name ?? ''),
-    description: String(row.description ?? ''),
-    taskType: (row.schedule_task_type as ScheduleTask['taskType']) ?? 'task',
-    status: (row.schedule_status as ScheduleTask['status']) ?? 'not_started',
+    name: String(row.name ?? ""),
+    description: String(row.description ?? ""),
+    taskType: (row.schedule_task_type as ScheduleTask["taskType"]) ?? "task",
+    status: (row.schedule_status as ScheduleTask["status"]) ?? "not_started",
     startDate: str(row.schedule_start),
     endDate: str(row.schedule_end),
     duration: num(row.schedule_duration),
     progress: num(row.schedule_progress),
-    assignee: String(row.schedule_assignee ?? ''),
+    assignee: String(row.schedule_assignee ?? ""),
     order: num(row.schedule_order),
-    constraintType: (row.schedule_constraint_type as ScheduleTask['constraintType']) ?? 'asap',
+    constraintType: (row.schedule_constraint_type as ScheduleTask["constraintType"]) ?? "asap",
     constraintDate: str(row.schedule_constraint_date),
     deadlineDate: str(row.schedule_deadline_date),
     actualStart: str(row.schedule_actual_start),
@@ -106,7 +109,7 @@ function toTask(row: Row): ScheduleTask {
     // the same task row can be measured against any captured baseline.
     baselineStart: null,
     baselineEnd: null,
-  }
+  };
 }
 
 /**
@@ -120,52 +123,76 @@ export async function loadProjectSchedule(
   projectId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ScheduleData> {
-  await assertProjectSchedulingEnabled(orgId)
+  await assertProjectSchedulingEnabled(orgId);
   return withScopeSnapshot(orgId, async () => {
-    await assertProjectScopeInTx(db, orgId, projectId, allowedSubsidiaryIds, 'share')
-    return loadProjectScheduleSnapshot(orgId, projectId)
-  })
+    await assertProjectScopeInTx(db, orgId, projectId, allowedSubsidiaryIds, "share");
+    return loadProjectScheduleSnapshot(orgId, projectId);
+  });
 }
 
 /** The seven plan reads, pinned to the snapshot the wrapper opened. */
-async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Promise<ScheduleData> {
+async function loadProjectScheduleSnapshot(
+  orgId: string,
+  projectId: string,
+): Promise<ScheduleData> {
   const [tasks, dependencies, calendars, resources, assignments, baselines, baselineTasks] =
     await Promise.all([
-      db.execute<Row>(sql`
+      db.execute<Row>(
+        sql`
         select * from project_tasks
          where org_id = ${orgId} and project_id = ${projectId}
-         order by schedule_order, name`, 'objects'),
-      db.execute<Row>(sql`
+         order by schedule_order, name`,
+        "objects",
+      ),
+      db.execute<Row>(
+        sql`
         select id, predecessor_id, successor_id, type, lag_days
           from schedule_dependencies
-         where org_id = ${orgId} and project_id = ${projectId}`, 'objects'),
-      db.execute<Row>(sql`
+         where org_id = ${orgId} and project_id = ${projectId}`,
+        "objects",
+      ),
+      db.execute<Row>(
+        sql`
         select * from schedule_calendars
          where org_id = ${orgId} and (project_id = ${projectId} or project_id is null)
-         order by is_default desc, name`, 'objects'),
-      db.execute<Row>(sql`
+         order by is_default desc, name`,
+        "objects",
+      ),
+      db.execute<Row>(
+        sql`
         select * from schedule_resources
          where org_id = ${orgId} and (project_id = ${projectId} or project_id is null)
            and is_active
-         order by name`, 'objects'),
-      db.execute<Row>(sql`
+         order by name`,
+        "objects",
+      ),
+      db.execute<Row>(
+        sql`
         select a.* from schedule_task_assignments a
           join project_tasks t on t.id = a.task_id
-         where a.org_id = ${orgId} and t.project_id = ${projectId}`, 'objects'),
-      db.execute<Row>(sql`
+         where a.org_id = ${orgId} and t.project_id = ${projectId}`,
+        "objects",
+      ),
+      db.execute<Row>(
+        sql`
         select * from schedule_baselines
          where org_id = ${orgId} and project_id = ${projectId}
-         order by is_primary desc, created_at desc`, 'objects'),
-      db.execute<Row>(sql`
+         order by is_primary desc, created_at desc`,
+        "objects",
+      ),
+      db.execute<Row>(
+        sql`
         select bt.* from schedule_baseline_tasks bt
           join schedule_baselines b on b.id = bt.baseline_id
-         where bt.org_id = ${orgId} and b.project_id = ${projectId}`, 'objects'),
-    ])
+         where bt.org_id = ${orgId} and b.project_id = ${projectId}`,
+        "objects",
+      ),
+    ]);
 
-  const taskRows = tasks
+  const taskRows = tasks;
   const phaseNames = [
     ...new Set(taskRows.map((row) => str(row.schedule_phase)).filter((v): v is string => !!v)),
-  ].sort()
+  ].sort();
 
   return {
     tasks: taskRows.map(toTask),
@@ -173,7 +200,7 @@ async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Pr
       id: String(row.id),
       predecessorId: String(row.predecessor_id),
       successorId: String(row.successor_id),
-      type: (row.type as ScheduleDependency['type']) ?? 'FS',
+      type: (row.type as ScheduleDependency["type"]) ?? "FS",
       lagDays: num(row.lag_days),
     })),
     // Phases are a free-text grouping band on the task, so the phase list is
@@ -181,8 +208,8 @@ async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Pr
     phases: phaseNames.map((name, index) => ({ id: name, name, order: index + 1 })),
     calendars: calendars.map((row) => ({
       id: String(row.id),
-      name: String(row.name ?? ''),
-      description: String(row.description ?? ''),
+      name: String(row.name ?? ""),
+      description: String(row.description ?? ""),
       isDefault: row.is_default === true,
       workingDays: (row.working_days as Record<string, boolean>) ?? {},
       holidays: (row.holidays as string[]) ?? [],
@@ -191,9 +218,9 @@ async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Pr
     })),
     resources: resources.map((row) => ({
       id: String(row.id),
-      name: String(row.name ?? ''),
-      role: String(row.role ?? ''),
-      kind: (row.kind as 'labor' | 'crew' | 'equipment' | 'subcontractor') ?? 'crew',
+      name: String(row.name ?? ""),
+      role: String(row.role ?? ""),
+      kind: (row.kind as "labor" | "crew" | "equipment" | "subcontractor") ?? "crew",
       calendarId: str(row.calendar_id),
       color: str(row.color),
       defaultUnits: num(row.default_units) || 1,
@@ -205,13 +232,14 @@ async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Pr
       taskId: String(row.task_id),
       resourceId: String(row.resource_id),
       units: num(row.units) || 1,
-      role: String(row.role ?? ''),
+      role: String(row.role ?? ""),
     })),
     baselines: baselines.map((row) => ({
       id: String(row.id),
-      name: String(row.name ?? ''),
-      description: String(row.description ?? ''),
-      kind: (row.kind as 'primary' | 'secondary' | 'tertiary' | 'snapshot' | 'custom') ?? 'snapshot',
+      name: String(row.name ?? ""),
+      description: String(row.description ?? ""),
+      kind:
+        (row.kind as "primary" | "secondary" | "tertiary" | "snapshot" | "custom") ?? "snapshot",
       isPrimary: row.is_primary === true,
       capturedAt: str(row.created_at) ?? undefined,
     })),
@@ -219,12 +247,12 @@ async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Pr
       id: String(row.id),
       baselineId: String(row.baseline_id),
       taskId: String(row.task_id),
-      taskName: String(row.task_name ?? ''),
+      taskName: String(row.task_name ?? ""),
       startDate: str(row.start_date),
       endDate: str(row.end_date),
       duration: num(row.duration),
     })),
-  }
+  };
 }
 
 export class ScheduleError extends Error {
@@ -232,18 +260,26 @@ export class ScheduleError extends Error {
     message: string,
     readonly status = 400,
   ) {
-    super(message)
+    super(message);
   }
 }
 
-type Executor = Pick<typeof db, 'execute'>
+type Executor = Pick<typeof db, "execute">;
 
 /** Confirm a task belongs to this org AND this project before touching it. */
-async function assertTaskInProject(orgId: string, projectId: string, taskId: string, exec: Executor = db) {
-  const r = (await exec.execute<Row>(sql`
+async function assertTaskInProject(
+  orgId: string,
+  projectId: string,
+  taskId: string,
+  exec: Executor = db,
+) {
+  const r = await exec.execute<Row>(
+    sql`
     select 1 from project_tasks
-     where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`, 'objects'))
-  if (!r[0]) throw new ScheduleError('task not found', 404)
+     where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`,
+    "objects",
+  );
+  if (!r[0]) throw new ScheduleError("task not found", 404);
 }
 
 /**
@@ -252,68 +288,74 @@ async function assertTaskInProject(orgId: string, projectId: string, taskId: str
  * costing columns (estimates, code, status) that job costing depends on.
  */
 const TASK_COLUMNS: Record<string, string> = {
-  name: 'name',
-  description: 'description',
-  taskType: 'schedule_task_type',
-  status: 'schedule_status',
-  startDate: 'schedule_start',
-  endDate: 'schedule_end',
-  duration: 'schedule_duration',
-  progress: 'schedule_progress',
-  assignee: 'schedule_assignee',
-  order: 'schedule_order',
-  outlineLevel: 'schedule_outline_level',
-  parentTaskId: 'parent_id',
-  calendarId: 'schedule_calendar_id',
-  phaseId: 'schedule_phase',
-  constraintType: 'schedule_constraint_type',
-  constraintDate: 'schedule_constraint_date',
-  deadlineDate: 'schedule_deadline_date',
-  actualStart: 'schedule_actual_start',
-  actualEnd: 'schedule_actual_end',
-}
+  name: "name",
+  description: "description",
+  taskType: "schedule_task_type",
+  status: "schedule_status",
+  startDate: "schedule_start",
+  endDate: "schedule_end",
+  duration: "schedule_duration",
+  progress: "schedule_progress",
+  assignee: "schedule_assignee",
+  order: "schedule_order",
+  outlineLevel: "schedule_outline_level",
+  parentTaskId: "parent_id",
+  calendarId: "schedule_calendar_id",
+  phaseId: "schedule_phase",
+  constraintType: "schedule_constraint_type",
+  constraintDate: "schedule_constraint_date",
+  deadlineDate: "schedule_deadline_date",
+  actualStart: "schedule_actual_start",
+  actualEnd: "schedule_actual_end",
+};
 
 /** Patch keys that write DATE columns (actual* do not end in "Date"). */
 const DATE_KEYS = new Set([
-  'startDate', 'endDate', 'constraintDate', 'deadlineDate', 'actualStart', 'actualEnd',
-])
+  "startDate",
+  "endDate",
+  "constraintDate",
+  "deadlineDate",
+  "actualStart",
+  "actualEnd",
+]);
 
 function patchValue(key: string, value: unknown) {
-  if (value === '' && (DATE_KEYS.has(key) || key === 'parentTaskId' || key === 'calendarId')) return null
+  if (value === "" && (DATE_KEYS.has(key) || key === "parentTaskId" || key === "calendarId"))
+    return null;
   // Strict calendar boundary: a shape-valid non-day such as February 30
   // would otherwise reach the DATE columns and surface as a 500 from
   // PostgreSQL instead of failing closed here.
-  if (DATE_KEYS.has(key) && value != null && value !== '') {
-    if (!isIsoCalendarDate(value)) throw new ScheduleError(`${key} must be a valid date`, 422)
+  if (DATE_KEYS.has(key) && value != null && value !== "") {
+    if (!isIsoCalendarDate(value)) throw new ScheduleError(`${key} must be a valid date`, 422);
   }
   // Reference columns are uuid-typed: a malformed id would likewise escape
   // as a cast error instead of failing closed.
-  if ((key === 'parentTaskId' || key === 'calendarId') && value != null && value !== '') {
-    if (!isUuid(String(value))) throw new ScheduleError(`${key} must be a valid id`, 422)
+  if ((key === "parentTaskId" || key === "calendarId") && value != null && value !== "") {
+    if (!isUuid(String(value))) throw new ScheduleError(`${key} must be a valid id`, 422);
   }
-  if (value === '' && key.endsWith('Date')) return null
-  if (key === 'progress') {
-    const fraction = Number(value)
-    if (!Number.isFinite(fraction)) return 0
+  if (value === "" && key.endsWith("Date")) return null;
+  if (key === "progress") {
+    const fraction = Number(value);
+    if (!Number.isFinite(fraction)) return 0;
     // Accept 0–1 or 0–100 and clamp: the column constraint is a fraction.
-    return Math.max(0, Math.min(1, fraction > 1 ? fraction / 100 : fraction))
+    return Math.max(0, Math.min(1, fraction > 1 ? fraction / 100 : fraction));
   }
-  if (key === 'duration' || key === 'order' || key === 'outlineLevel') {
-    const n = Number(value)
-    return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0
+  if (key === "duration" || key === "order" || key === "outlineLevel") {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
   }
-  return value === undefined ? null : value
+  return value === undefined ? null : value;
 }
 
 /** Persist schedule assignment units through exact decimal then ledger money. Fail closed. */
-function persistScheduleAssignmentUnits(value: unknown): string | 'invalid' {
-  const exact = canonicalDecimal(value ?? 1, 4)
-  if (exact === null || !isPositiveDecimal(exact)) return 'invalid'
+function persistScheduleAssignmentUnits(value: unknown): string | "invalid" {
+  const exact = canonicalDecimal(value ?? 1, 4);
+  if (exact === null || !isPositiveDecimal(exact)) return "invalid";
   try {
-    const canonical = normalizeMoney(exact)
-    return compareDecimal(canonical, '0.0001') < 0 ? normalizeMoney('0.0001') : canonical
+    const canonical = normalizeMoney(exact);
+    return compareDecimal(canonical, "0.0001") < 0 ? normalizeMoney("0.0001") : canonical;
   } catch {
-    return 'invalid'
+    return "invalid";
   }
 }
 
@@ -325,13 +367,17 @@ async function assertParentInProjectTree(
   parentId: string,
   exec: Executor,
 ) {
-  if (parentId === taskId) throw new ScheduleError('a task cannot be its own parent', 422)
-  if (!isUuid(parentId)) throw new ScheduleError('parentTaskId must be a valid id', 422)
-  const parent = (await exec.execute<{ id: string }>(sql`
+  if (parentId === taskId) throw new ScheduleError("a task cannot be its own parent", 422);
+  if (!isUuid(parentId)) throw new ScheduleError("parentTaskId must be a valid id", 422);
+  const parent = await exec.execute<{ id: string }>(
+    sql`
     select id from project_tasks
-     where id = ${parentId} and org_id = ${orgId} and project_id = ${projectId}`, 'objects'))
-  if (!parent[0]) throw new ScheduleError('parent task not found in this project', 404)
-  const cycle = (await exec.execute<{ loop: boolean }>(sql`
+     where id = ${parentId} and org_id = ${orgId} and project_id = ${projectId}`,
+    "objects",
+  );
+  if (!parent[0]) throw new ScheduleError("parent task not found in this project", 404);
+  const cycle = await exec.execute<{ loop: boolean }>(
+    sql`
     select exists (
       with recursive chain(id, depth) as (
         select ${parentId}::uuid, 0
@@ -344,9 +390,11 @@ async function assertParentInProjectTree(
            and task.parent_id is not null
       )
       select 1 from chain where id = ${taskId}::uuid and depth > 0
-    ) as loop`, 'objects'))
+    ) as loop`,
+    "objects",
+  );
   if (cycle[0]?.loop) {
-    throw new ScheduleError('a task cannot be parented under its own descendant', 422)
+    throw new ScheduleError("a task cannot be parented under its own descendant", 422);
   }
 }
 
@@ -361,48 +409,67 @@ async function applyTaskPatch(
 ) {
   const entries = Object.entries(patch).filter(
     ([key, value]) => key in TASK_COLUMNS && value !== undefined,
-  )
+  );
 
   // The outline is a project-bounded tree: a parent pin must name a task in
   // this project, never the task itself, and never a descendant — otherwise
   // the plan silently corrupts (cross-project ghosts, self loops, ancestor
   // cycles) while every other write here is project-scoped.
-  const parentEntry = entries.find(([key]) => key === 'parentTaskId')
-  if (parentEntry && parentEntry[1] != null && parentEntry[1] !== '') {
-    await assertParentInProjectTree(orgId, projectId, taskId, String(parentEntry[1]), exec)
+  const parentEntry = entries.find(([key]) => key === "parentTaskId");
+  if (parentEntry && parentEntry[1] != null && parentEntry[1] !== "") {
+    await assertParentInProjectTree(orgId, projectId, taskId, String(parentEntry[1]), exec);
   }
 
   if (entries.length > 0) {
     const assignments = entries.map(
       ([key, value]) =>
         sql`${sql.raw(`"${TASK_COLUMNS[key]}"`)} = ${patchValue(key, value) as never}`,
-    )
-    const updated = await exec.execute(sql`
+    );
+    const updated = await exec.execute(
+      sql`
       update project_tasks
          set ${sql.join(assignments, sql`, `)},
              updated_at = now(),
              updated_by = ${userId}
        where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`, 'objects')
-    if (updated.length !== 1) throw new ScheduleError('The task is no longer available in this project; reload the schedule.', 409)
+       returning id`,
+      "objects",
+    );
+    if (updated.length !== 1)
+      throw new ScheduleError(
+        "The task is no longer available in this project; reload the schedule.",
+        409,
+      );
   }
 
   // Resource assignments are replaced wholesale — the editor sends the complete
   // set, and a diff would leave orphans when a row is removed.
   if (patch.resourceAssignments) {
     await exec.execute(sql`
-      delete from schedule_task_assignments where org_id = ${orgId} and task_id = ${taskId}`)
+      delete from schedule_task_assignments where org_id = ${orgId} and task_id = ${taskId}`);
     for (const assignment of patch.resourceAssignments) {
-      if (!assignment.resourceId) continue
+      if (!assignment.resourceId) continue;
       if (!isUuid(String(assignment.resourceId))) {
-        throw new ScheduleError('assignment resource must be a valid resource', 422)
+        throw new ScheduleError("assignment resource must be a valid resource", 422);
       }
-      const resource = (await exec.execute<{ id: string }>(sql`select id from schedule_resources
-        where org_id = ${orgId} and project_id = ${projectId} and id = ${assignment.resourceId} for share`, 'objects'))[0]
-      if (!resource) throw new ScheduleError('Choose a resource belonging to this project in Schedule → Manage schedule.', 422)
-      const units = persistScheduleAssignmentUnits(assignment.units)
-      if (units === 'invalid') {
-        throw new ScheduleError('assignment units must be a number with no more than four decimal places', 422)
+      const resource = (
+        await exec.execute<{ id: string }>(
+          sql`select id from schedule_resources
+        where org_id = ${orgId} and project_id = ${projectId} and id = ${assignment.resourceId} for share`,
+          "objects",
+        )
+      )[0];
+      if (!resource)
+        throw new ScheduleError(
+          "Choose a resource belonging to this project in Schedule → Manage schedule.",
+          422,
+        );
+      const units = persistScheduleAssignmentUnits(assignment.units);
+      if (units === "invalid") {
+        throw new ScheduleError(
+          "assignment units must be a number with no more than four decimal places",
+          422,
+        );
       }
       // Dispatch gating: while Certifications and licenses is on, a block
       // requirement refuses the assignment BY NAME and a warn requirement
@@ -420,36 +487,43 @@ async function applyTaskPatch(
             resourceId: String(assignment.resourceId),
             taskId,
             trusted: true,
-          })
+          });
           if (gated.gated) {
             // Block throws by name (mapped to 422 below); warn continues
             // to the insert with its event recorded beside it.
-            refuseBlockedDispatch(gated.verdict, gated.resourceName)
+            refuseBlockedDispatch(gated.verdict, gated.resourceName);
             if (gated.verdict.warnings.length > 0) {
               await noteWarnedDispatch(exec, {
                 orgId,
                 actorId: userId,
                 warnings: gated.verdict.warnings,
-                context: 'schedule assignment',
-              })
+                context: "schedule assignment",
+              });
             }
           }
         } catch (error) {
           // The refusal message names the missing types and the remedy;
           // it must reach the dispatcher intact as a 422, never a 500.
-          if (error instanceof HrmQualificationError) throw new ScheduleError(error.message, 422)
-          throw error
+          if (error instanceof HrmQualificationError) throw new ScheduleError(error.message, 422);
+          throw error;
         }
       }
-      const saved = await exec.execute(sql`
+      const saved = await exec.execute(
+        sql`
         insert into schedule_task_assignments (org_id, task_id, resource_id, units, role, created_by, updated_by)
         values (${orgId}, ${taskId}, ${assignment.resourceId},
-                ${units}, ${assignment.role ?? ''},
+                ${units}, ${assignment.role ?? ""},
                 ${userId}, ${userId})
         on conflict (task_id, resource_id)
           do update set units = excluded.units, role = excluded.role, updated_at = now(), updated_by = ${userId}
-          where schedule_task_assignments.org_id = ${orgId} returning id`, 'objects')
-      if (saved.length !== 1) throw new ScheduleError('The task resource assignment was not saved; reload the schedule and try again.', 409)
+          where schedule_task_assignments.org_id = ${orgId} returning id`,
+        "objects",
+      );
+      if (saved.length !== 1)
+        throw new ScheduleError(
+          "The task resource assignment was not saved; reload the schedule and try again.",
+          409,
+        );
     }
   }
 }
@@ -462,12 +536,14 @@ export async function updateScheduleTask(
   userId: string | null,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    await assertTaskInProject(orgId, projectId, taskId, tx)
-    await applyTaskPatch(orgId, projectId, taskId, patch, userId, tx)
-  }))
+  return withOrgTransaction(orgId, () =>
+    db.transaction(async (tx) => {
+      await assertProjectSchedulingEnabledTx(tx, orgId);
+      await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+      await assertTaskInProject(orgId, projectId, taskId, tx);
+      await applyTaskPatch(orgId, projectId, taskId, patch, userId, tx);
+    }),
+  );
 }
 
 /**
@@ -481,15 +557,15 @@ export async function batchUpdateScheduleTasks(
   userId: string | null,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  await assertProjectSchedulingEnabled(orgId)
+  await assertProjectSchedulingEnabled(orgId);
   await db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    for (const update of updates) await assertTaskInProject(orgId, projectId, update.id, tx)
+    await assertProjectSchedulingEnabledTx(tx, orgId);
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+    for (const update of updates) await assertTaskInProject(orgId, projectId, update.id, tx);
     for (const { id, ...patch } of updates) {
-      await applyTaskPatch(orgId, projectId, id, patch, userId, tx)
+      await applyTaskPatch(orgId, projectId, id, patch, userId, tx);
     }
-  })
+  });
 }
 
 export async function createScheduleTask(
@@ -499,33 +575,41 @@ export async function createScheduleTask(
   userId: string | null,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    // A crafted display order reaches an integer column: fail closed instead
-    // of escaping as a cast error.
-    let order: number | null = null
-    if (input.order !== undefined && input.order !== null) {
-      const n = Number(input.order)
-      order = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : null
-      if (order === null) throw new ScheduleError('task order must be a number', 422)
-    }
-    const next = (await tx.execute<{ n: number }>(sql`
+  return withOrgTransaction(orgId, () =>
+    db.transaction(async (tx) => {
+      await assertProjectSchedulingEnabledTx(tx, orgId);
+      await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+      // A crafted display order reaches an integer column: fail closed instead
+      // of escaping as a cast error.
+      let order: number | null = null;
+      if (input.order !== undefined && input.order !== null) {
+        const n = Number(input.order);
+        order = Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : null;
+        if (order === null) throw new ScheduleError("task order must be a number", 422);
+      }
+      const next = await tx.execute<{ n: number }>(
+        sql`
       select coalesce(max(schedule_order), 0) + 1 as n from project_tasks
-       where org_id = ${orgId} and project_id = ${projectId}`, 'objects'))
-    const created = (await tx.execute<{ id: string }>(sql`
+       where org_id = ${orgId} and project_id = ${projectId}`,
+        "objects",
+      );
+      const created = await tx.execute<{ id: string }>(
+        sql`
       insert into project_tasks (org_id, project_id, name, schedule_order, created_by, updated_by)
-      values (${orgId}, ${projectId}, ${input.name || 'New task'},
+      values (${orgId}, ${projectId}, ${input.name || "New task"},
               ${order ?? next[0]?.n ?? 1}, ${userId}, ${userId})
-      returning id`, 'objects'))
-    const id = created[0]?.id
-    if (!id) throw new ScheduleError('could not create task', 500)
-    const rest: ScheduleTaskPatchInput = { ...input }
-    delete rest.name
-    delete rest.order
-    await applyTaskPatch(orgId, projectId, id, rest, userId, tx)
-    return id
-  }))
+      returning id`,
+        "objects",
+      );
+      const id = created[0]?.id;
+      if (!id) throw new ScheduleError("could not create task", 500);
+      const rest: ScheduleTaskPatchInput = { ...input };
+      delete rest.name;
+      delete rest.order;
+      await applyTaskPatch(orgId, projectId, id, rest, userId, tx);
+      return id;
+    }),
+  );
 }
 
 export async function deleteScheduleTask(
@@ -534,31 +618,34 @@ export async function deleteScheduleTask(
   taskId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  await assertProjectSchedulingEnabled(orgId)
+  await assertProjectSchedulingEnabled(orgId);
   await db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    await assertTaskInProject(orgId, projectId, taskId, tx)
+    await assertProjectSchedulingEnabledTx(tx, orgId);
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+    await assertTaskInProject(orgId, projectId, taskId, tx);
     // A task with posted time is job-costing history; refuse rather than orphan it.
-    const timeEntries = (await tx.execute<{ n: number }>(sql`
+    const timeEntries = await tx.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from time_entries
-       where org_id = ${orgId} and project_task_id = ${taskId}`, 'objects'))
+       where org_id = ${orgId} and project_task_id = ${taskId}`,
+      "objects",
+    );
     if ((timeEntries[0]?.n ?? 0) > 0) {
-      throw new ScheduleError('task has time entries and cannot be deleted', 409)
+      throw new ScheduleError("task has time entries and cannot be deleted", 409);
     }
     await tx.execute(sql`
       delete from schedule_dependencies
-       where org_id = ${orgId} and (predecessor_id = ${taskId} or successor_id = ${taskId})`)
+       where org_id = ${orgId} and (predecessor_id = ${taskId} or successor_id = ${taskId})`);
     await tx.execute(sql`
-      delete from schedule_task_assignments where org_id = ${orgId} and task_id = ${taskId}`)
+      delete from schedule_task_assignments where org_id = ${orgId} and task_id = ${taskId}`);
     // Children are lifted to the top of the outline, never deleted with the parent.
     await tx.execute(sql`
       update project_tasks set parent_id = null, schedule_outline_level = 0
-       where org_id = ${orgId} and parent_id = ${taskId}`)
+       where org_id = ${orgId} and parent_id = ${taskId}`);
     await tx.execute(sql`
       delete from project_tasks
-       where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`)
-  })
+       where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`);
+  });
 }
 
 export async function createScheduleDependency(
@@ -568,19 +655,19 @@ export async function createScheduleDependency(
   userId: string | null,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  await assertProjectSchedulingEnabled(orgId)
+  await assertProjectSchedulingEnabled(orgId);
   // The storage CHECK only knows FS/SS/FF/SF and an integer lag: reject
   // anything else here so a crafted value fails closed instead of escaping
   // as a PostgreSQL error (a 500).
-  const type = input.type ?? 'FS'
-  if (!['FS', 'SS', 'FF', 'SF'].includes(type)) {
-    throw new ScheduleError('dependency type must be FS, SS, FF, or SF', 422)
+  const type = input.type ?? "FS";
+  if (!["FS", "SS", "FF", "SF"].includes(type)) {
+    throw new ScheduleError("dependency type must be FS, SS, FF, or SF", 422);
   }
-  const rawLag = Number(input.lagDays ?? 0)
-  if (!Number.isFinite(rawLag)) throw new ScheduleError('lag days must be a finite number', 422)
-  const lagDays = Math.trunc(rawLag) || 0
+  const rawLag = Number(input.lagDays ?? 0);
+  if (!Number.isFinite(rawLag)) throw new ScheduleError("lag days must be a finite number", 422);
+  const lagDays = Math.trunc(rawLag) || 0;
   if (lagDays < -2147483648 || lagDays > 2147483647) {
-    throw new ScheduleError('lag days are out of range', 422)
+    throw new ScheduleError("lag days are out of range", 422);
   }
 
   // Refuse loops at the boundary: a cycle makes the critical path undefined for
@@ -592,22 +679,25 @@ export async function createScheduleDependency(
   // latest type/lag wins) — a conflict that is expected, never a dropped
   // write.
   await db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    await assertTaskInProject(orgId, projectId, input.predecessorId, tx)
-    await assertTaskInProject(orgId, projectId, input.successorId, tx)
-    const existing = (await tx.execute<Row>(sql`
+    await assertProjectSchedulingEnabledTx(tx, orgId);
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+    await assertTaskInProject(orgId, projectId, input.predecessorId, tx);
+    await assertTaskInProject(orgId, projectId, input.successorId, tx);
+    const existing = await tx.execute<Row>(
+      sql`
       select id, predecessor_id, successor_id, type, lag_days from schedule_dependencies
-       where org_id = ${orgId} and project_id = ${projectId}`, 'objects'))
+       where org_id = ${orgId} and project_id = ${projectId}`,
+      "objects",
+    );
     const dependencies: ScheduleDependency[] = existing.map((row) => ({
       id: String(row.id),
       predecessorId: String(row.predecessor_id),
       successorId: String(row.successor_id),
-      type: (row.type as ScheduleDependency['type']) ?? 'FS',
+      type: (row.type as ScheduleDependency["type"]) ?? "FS",
       lagDays: num(row.lag_days),
-    }))
+    }));
     if (wouldCreateDependencyCycle(dependencies, input.predecessorId, input.successorId)) {
-      throw new ScheduleError('that dependency would create a loop in the schedule', 409)
+      throw new ScheduleError("that dependency would create a loop in the schedule", 409);
     }
     await tx.execute(sql`
       insert into schedule_dependencies (org_id, project_id, predecessor_id, successor_id, type, lag_days, created_by, updated_by)
@@ -615,8 +705,8 @@ export async function createScheduleDependency(
               ${type}, ${lagDays}, ${userId}, ${userId})
       on conflict (predecessor_id, successor_id)
         do update set type = excluded.type, lag_days = excluded.lag_days, updated_at = now(), updated_by = ${userId}
-        where schedule_dependencies.org_id = ${orgId}`)
-  })
+        where schedule_dependencies.org_id = ${orgId}`);
+  });
 }
 
 export async function deleteScheduleDependency(
@@ -625,16 +715,19 @@ export async function deleteScheduleDependency(
   id: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  await assertProjectSchedulingEnabled(orgId)
+  await assertProjectSchedulingEnabled(orgId);
   await db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    const deleted = await tx.execute<{ id: string }>(sql`
+    await assertProjectSchedulingEnabledTx(tx, orgId);
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+    const deleted = await tx.execute<{ id: string }>(
+      sql`
       delete from schedule_dependencies
        where id = ${id} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`, 'objects')
-    if (!deleted[0]) throw new ScheduleError('dependency not found', 404)
-  })
+       returning id`,
+      "objects",
+    );
+    if (!deleted[0]) throw new ScheduleError("dependency not found", 404);
+  });
 }
 
 /** Capture the current plan as a baseline. */
@@ -646,28 +739,31 @@ export async function createScheduleBaseline(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   await db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
+    await assertProjectSchedulingEnabledTx(tx, orgId);
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
     if (input.isPrimary) {
       await tx.execute(sql`
         update schedule_baselines set is_primary = false, updated_at = now(), updated_by = ${userId}
-         where org_id = ${orgId} and project_id = ${projectId} and is_primary`)
+         where org_id = ${orgId} and project_id = ${projectId} and is_primary`);
     }
-    const created = (await tx.execute<{ id: string }>(sql`
+    const created = await tx.execute<{ id: string }>(
+      sql`
       insert into schedule_baselines (org_id, project_id, name, description, kind, is_primary, created_by, updated_by)
       values (${orgId}, ${projectId}, ${input.name}, ${input.description ?? null},
-              ${input.kind ?? (input.isPrimary ? 'primary' : 'snapshot')}, ${input.isPrimary === true},
+              ${input.kind ?? (input.isPrimary ? "primary" : "snapshot")}, ${input.isPrimary === true},
               ${userId}, ${userId})
-      returning id`, 'objects'))
-    const baselineId = created[0]?.id
-    if (!baselineId) throw new ScheduleError('could not create baseline', 500)
+      returning id`,
+      "objects",
+    );
+    const baselineId = created[0]?.id;
+    if (!baselineId) throw new ScheduleError("could not create baseline", 500);
     await tx.execute(sql`
       insert into schedule_baseline_tasks
         (org_id, baseline_id, task_id, task_name, start_date, end_date, duration, created_by, updated_by)
       select ${orgId}, ${baselineId}, id, name, schedule_start, schedule_end, schedule_duration, ${userId}, ${userId}
         from project_tasks
-       where org_id = ${orgId} and project_id = ${projectId}`)
-  })
+       where org_id = ${orgId} and project_id = ${projectId}`);
+  });
 }
 
 export async function deleteScheduleBaseline(
@@ -677,59 +773,70 @@ export async function deleteScheduleBaseline(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   await db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
+    await assertProjectSchedulingEnabledTx(tx, orgId);
+    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
 
     // Resolve and lock the parent before touching its child snapshot rows.
     // Otherwise a caller can pair an in-scope project with another project's
     // baseline id and erase that baseline's task history before the parent
     // delete discovers the mismatch.
-    const parent = await tx.execute<{ id: string }>(sql`
+    const parent = await tx.execute<{ id: string }>(
+      sql`
       select id from schedule_baselines
        where id = ${baselineId} and org_id = ${orgId} and project_id = ${projectId}
-       for update`, 'objects')
-    if (!parent[0]) throw new ScheduleError('baseline not found', 404)
+       for update`,
+      "objects",
+    );
+    if (!parent[0]) throw new ScheduleError("baseline not found", 404);
     await tx.execute(sql`
       delete from schedule_baseline_tasks
-       where org_id = ${orgId} and baseline_id = ${baselineId}`)
-    const deleted = await tx.execute<{ id: string }>(sql`
+       where org_id = ${orgId} and baseline_id = ${baselineId}`);
+    const deleted = await tx.execute<{ id: string }>(
+      sql`
       delete from schedule_baselines
        where id = ${baselineId} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`, 'objects')
-    if (!deleted[0]) throw new ScheduleError('baseline not found', 404)
-  })
+       returning id`,
+      "objects",
+    );
+    if (!deleted[0]) throw new ScheduleError("baseline not found", 404);
+  });
 }
 
 export async function upsertScheduleCalendar(
   orgId: string,
   projectId: string,
   input: {
-    id?: string
-    name?: string
-    description?: string
-    workingDays?: Record<string, boolean>
-    holidays?: string[]
-    isDefault?: boolean
+    id?: string;
+    name?: string;
+    description?: string;
+    workingDays?: Record<string, boolean>;
+    holidays?: string[];
+    isDefault?: boolean;
   },
   userId: string | null,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    if (input.id) {
-      const existing = await tx.execute(sql`
+  return withOrgTransaction(orgId, () =>
+    db.transaction(async (tx) => {
+      await assertProjectSchedulingEnabledTx(tx, orgId);
+      await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+      if (input.id) {
+        const existing = await tx.execute(
+          sql`
         select 1 from schedule_calendars
-         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`, 'objects')
-      if (!existing[0]) throw new ScheduleError('calendar not found', 404)
-    }
-    if (input.isDefault) {
-      await tx.execute(sql`
+         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`,
+          "objects",
+        );
+        if (!existing[0]) throw new ScheduleError("calendar not found", 404);
+      }
+      if (input.isDefault) {
+        await tx.execute(sql`
         update schedule_calendars set is_default = false, updated_at = now(), updated_by = ${userId}
-         where org_id = ${orgId} and project_id = ${projectId} and is_default`)
-    }
-    if (input.id) {
-      const updated = await tx.execute<{ id: string }>(sql`
+         where org_id = ${orgId} and project_id = ${projectId} and is_default`);
+      }
+      if (input.id) {
+        const updated = await tx.execute<{ id: string }>(
+          sql`
         update schedule_calendars
            set name = coalesce(${input.name ?? null}, name),
                description = coalesce(${input.description ?? null}, description),
@@ -738,20 +845,26 @@ export async function upsertScheduleCalendar(
                is_default = coalesce(${input.isDefault ?? null}, is_default),
                updated_at = now(), updated_by = ${userId}
          where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}
-         returning id`, 'objects')
-      if (!updated[0]) throw new ScheduleError('calendar not found', 404)
-      return updated[0].id
-    }
-    const created = (await tx.execute<{ id: string }>(sql`
+         returning id`,
+          "objects",
+        );
+        if (!updated[0]) throw new ScheduleError("calendar not found", 404);
+        return updated[0].id;
+      }
+      const created = await tx.execute<{ id: string }>(
+        sql`
       insert into schedule_calendars (org_id, project_id, name, description, working_days, holidays, is_default, created_by, updated_by)
-      values (${orgId}, ${projectId}, ${input.name ?? 'Calendar'}, ${input.description ?? null},
+      values (${orgId}, ${projectId}, ${input.name ?? "Calendar"}, ${input.description ?? null},
               coalesce(${input.workingDays ? JSON.stringify(input.workingDays) : null}::jsonb,
                        '{"0":false,"1":true,"2":true,"3":true,"4":true,"5":true,"6":false}'::jsonb),
               coalesce(${input.holidays ? JSON.stringify(input.holidays) : null}::jsonb, '[]'::jsonb),
               ${input.isDefault === true}, ${userId}, ${userId})
-      returning id`, 'objects'))
-    return created[0]?.id ?? null
-  }))
+      returning id`,
+        "objects",
+      );
+      return created[0]?.id ?? null;
+    }),
+  );
 }
 
 export async function deleteScheduleCalendar(
@@ -760,69 +873,83 @@ export async function deleteScheduleCalendar(
   calendarId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    const existing = await tx.execute(sql`
+  await withOrgTransaction(orgId, () =>
+    db.transaction(async (tx) => {
+      await assertProjectSchedulingEnabledTx(tx, orgId);
+      await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+      const existing = await tx.execute(
+        sql`
       select 1 from schedule_calendars
-       where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}`, 'objects')
-    if (!existing[0]) throw new ScheduleError('calendar not found', 404)
+       where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}`,
+        "objects",
+      );
+      if (!existing[0]) throw new ScheduleError("calendar not found", 404);
 
-    // Tasks and resources fall back to the default calendar rather than
-    // pointing at a calendar that no longer exists.
-    await tx.execute(sql`
+      // Tasks and resources fall back to the default calendar rather than
+      // pointing at a calendar that no longer exists.
+      await tx.execute(sql`
       update project_tasks set schedule_calendar_id = null
-       where org_id = ${orgId} and project_id = ${projectId} and schedule_calendar_id = ${calendarId}`)
-    await tx.execute(sql`
+       where org_id = ${orgId} and project_id = ${projectId} and schedule_calendar_id = ${calendarId}`);
+      await tx.execute(sql`
       update schedule_resources set calendar_id = null
-       where org_id = ${orgId} and project_id = ${projectId} and calendar_id = ${calendarId}`)
-    const deleted = await tx.execute<{ id: string }>(sql`
+       where org_id = ${orgId} and project_id = ${projectId} and calendar_id = ${calendarId}`);
+      const deleted = await tx.execute<{ id: string }>(
+        sql`
       delete from schedule_calendars
        where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`, 'objects')
-    if (!deleted[0]) throw new ScheduleError('calendar not found', 404)
-  }))
+       returning id`,
+        "objects",
+      );
+      if (!deleted[0]) throw new ScheduleError("calendar not found", 404);
+    }),
+  );
 }
 
-function optionalCostRate(value: unknown): string | null | 'invalid' {
-  if (value == null || value === '') return null
-  const exact = canonicalDecimal(value, 4)
-  if (exact === null) return 'invalid'
-  return normalizeMoney(exact)
+function optionalCostRate(value: unknown): string | null | "invalid" {
+  if (value == null || value === "") return null;
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) return "invalid";
+  return normalizeMoney(exact);
 }
 
 export async function upsertScheduleResource(
   orgId: string,
   projectId: string,
   input: {
-    id?: string
-    name?: string
-    role?: string
-    kind?: string
-    calendarId?: string | null
-    defaultUnits?: number
-    capacityPerDay?: number
-    costRate?: string | number | null
+    id?: string;
+    name?: string;
+    role?: string;
+    kind?: string;
+    calendarId?: string | null;
+    defaultUnits?: number;
+    capacityPerDay?: number;
+    costRate?: string | number | null;
   },
   userId: string | null,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  const costRate = input.costRate === undefined
-    ? undefined
-    : optionalCostRate(input.costRate)
-  if (costRate === 'invalid') {
-    throw new ScheduleError('cost rate must be a number with no more than four decimal places', 422)
+  const costRate = input.costRate === undefined ? undefined : optionalCostRate(input.costRate);
+  if (costRate === "invalid") {
+    throw new ScheduleError(
+      "cost rate must be a number with no more than four decimal places",
+      422,
+    );
   }
-  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    if (input.id) {
-      const existing = await tx.execute(sql`
+  return withOrgTransaction(orgId, () =>
+    db.transaction(async (tx) => {
+      await assertProjectSchedulingEnabledTx(tx, orgId);
+      await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+      if (input.id) {
+        const existing = await tx.execute(
+          sql`
         select 1 from schedule_resources
-         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`, 'objects')
-      if (!existing[0]) throw new ScheduleError('resource not found', 404)
+         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`,
+          "objects",
+        );
+        if (!existing[0]) throw new ScheduleError("resource not found", 404);
 
-      const updated = await tx.execute<{ id: string }>(sql`
+        const updated = await tx.execute<{ id: string }>(
+          sql`
         update schedule_resources
            set name = coalesce(${input.name ?? null}, name),
                role = coalesce(${input.role ?? null}, role),
@@ -833,21 +960,27 @@ export async function upsertScheduleResource(
                cost_rate = ${costRate === undefined ? sql`cost_rate` : sql`${costRate}`},
                updated_at = now(), updated_by = ${userId}
          where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}
-         returning id`, 'objects')
-      if (!updated[0]) throw new ScheduleError('resource not found', 404)
-      return updated[0].id
-    }
-    const created = (await tx.execute<{ id: string }>(sql`
+         returning id`,
+          "objects",
+        );
+        if (!updated[0]) throw new ScheduleError("resource not found", 404);
+        return updated[0].id;
+      }
+      const created = await tx.execute<{ id: string }>(
+        sql`
       insert into schedule_resources
         (org_id, project_id, calendar_id, name, role, kind, default_units, capacity_per_day, cost_rate, created_by, updated_by)
-      values (${orgId}, ${projectId}, ${input.calendarId ?? null}, ${input.name ?? 'Resource'},
-              ${input.role ?? null}, ${input.kind ?? 'crew'},
+      values (${orgId}, ${projectId}, ${input.calendarId ?? null}, ${input.name ?? "Resource"},
+              ${input.role ?? null}, ${input.kind ?? "crew"},
               ${Math.max(0.0001, Number(input.defaultUnits ?? 1) || 1)},
               ${Math.max(0.0001, Number(input.capacityPerDay ?? 1) || 1)},
               ${costRate ?? null}, ${userId}, ${userId})
-      returning id`, 'objects'))
-    return created[0]?.id ?? null
-  }))
+      returning id`,
+        "objects",
+      );
+      return created[0]?.id ?? null;
+    }),
+  );
 }
 
 export async function deleteScheduleResource(
@@ -856,25 +989,33 @@ export async function deleteScheduleResource(
   resourceId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
-    await assertProjectSchedulingEnabledTx(tx, orgId)
-    await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
-    const existing = await tx.execute(sql`
+  await withOrgTransaction(orgId, () =>
+    db.transaction(async (tx) => {
+      await assertProjectSchedulingEnabledTx(tx, orgId);
+      await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds);
+      const existing = await tx.execute(
+        sql`
       select 1 from schedule_resources
-       where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}`, 'objects')
-    if (!existing[0]) throw new ScheduleError('resource not found', 404)
+       where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}`,
+        "objects",
+      );
+      if (!existing[0]) throw new ScheduleError("resource not found", 404);
 
-    await tx.execute(sql`
+      await tx.execute(sql`
       delete from schedule_task_assignments
        where org_id = ${orgId} and resource_id = ${resourceId}
          and task_id in (
            select id from project_tasks
             where org_id = ${orgId} and project_id = ${projectId}
-         )`)
-    const deleted = await tx.execute<{ id: string }>(sql`
+         )`);
+      const deleted = await tx.execute<{ id: string }>(
+        sql`
       delete from schedule_resources
        where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`, 'objects')
-    if (!deleted[0]) throw new ScheduleError('resource not found', 404)
-  }))
+       returning id`,
+        "objects",
+      );
+      if (!deleted[0]) throw new ScheduleError("resource not found", 404);
+    }),
+  );
 }

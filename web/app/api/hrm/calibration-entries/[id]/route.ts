@@ -24,11 +24,7 @@ export const PATCH = defineRoute({
   public: "session",
   params: z.object({ id: z.string().min(1) }),
   body: patchCalibrationEntryBody,
-  handler: async ({
-    authz: authz,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: authz, params: routeParams, body: body }) => {
     if (
       !(await isFeatureEnabled(authz.user.orgId, "hrm")) ||
       !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))

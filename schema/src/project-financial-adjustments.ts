@@ -1,14 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  date,
-  index,
-  jsonb,
-  pgTable,
-  text,
-  uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { check, date, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
@@ -50,10 +41,7 @@ export const projectFinancialAdjustments = pgTable(
       "project_financial_adjustments_measure",
       sql`${t.measure} in ('actual_cost','invoiced_to_date','billable_value','total_price','could_be_invoiced','gross_profit')`,
     ),
-    check(
-      "project_financial_adjustments_reason",
-      sql`length(btrim(${t.reason})) >= 8`,
-    ),
+    check("project_financial_adjustments_reason", sql`length(btrim(${t.reason})) >= 8`),
     check(
       "project_financial_adjustments_not_self_reversing",
       sql`${t.reversesAdjustmentId} is null or ${t.reversesAdjustmentId} <> ${t.id}`,
@@ -68,10 +56,6 @@ export const projectFinancialAdjustments = pgTable(
     uniqueIndex("project_financial_adjustments_one_reversal")
       .on(t.reversesAdjustmentId)
       .where(sql`${t.reversesAdjustmentId} is not null`),
-    index("project_financial_adjustments_project_date").on(
-      t.orgId,
-      t.projectId,
-      t.adjustmentDate,
-    ),
+    index("project_financial_adjustments_project_date").on(t.orgId, t.projectId, t.adjustmentDate),
   ],
 );

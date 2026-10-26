@@ -40,9 +40,8 @@ registerHooks({
 
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { guardPaymentRunPermission } = await import("./lib.ts");
 import { NextResponse } from "next/server";
 
@@ -53,8 +52,8 @@ test("payment-run oracle: no pay permission sees existing and missing ids identi
     state.user = { orgId: org.orgId, id: adminId };
     state.allowed = null;
     const runId = randomUUID();
-    await withBypassContext(
-      () => db.execute(sql`insert into payment_runs(id,org_id,run_number,bank_account_id,subsidiary_id,method,direction,currency,created_by)
+    await withBypassContext(() =>
+      db.execute(sql`insert into payment_runs(id,org_id,run_number,bank_account_id,subsidiary_id,method,direction,currency,created_by)
         values (${runId},${org.orgId},'ORACLE-RUN',${org.accounts.bank},${org.subsidiaryId},'wire','outbound','USD',${adminId})`),
     );
     // Caller with neither direction permission: uniform 404 both ways.
@@ -77,8 +76,8 @@ test("payment-run oracle: no pay permission sees existing and missing ids identi
     // Wrong-direction callers learn nothing: an ap.pay-only caller sees an
     // existing inbound run exactly like a missing id (uniform 404).
     const inboundId = randomUUID();
-    await withBypassContext(
-      () => db.execute(sql`insert into payment_runs(id,org_id,run_number,bank_account_id,subsidiary_id,method,direction,purpose,currency,created_by)
+    await withBypassContext(() =>
+      db.execute(sql`insert into payment_runs(id,org_id,run_number,bank_account_id,subsidiary_id,method,direction,purpose,currency,created_by)
         values (${inboundId},${org.orgId},'ORACLE-IN',${org.accounts.bank},${org.subsidiaryId},'direct_debit','inbound','customer_collections','USD',${adminId})`),
     );
     const wrongDir = await guardPaymentRunPermission(inboundId);

@@ -8,7 +8,11 @@ import test from "node:test";
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/hrm/leave", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/hrm/leave",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 let promptAnswer: string | null = null;
 
@@ -17,7 +21,6 @@ const { stubModules } = await import("../../../../testing/stub-modules");
 stubModules({ navigation: "export function useRouter(){return {refresh(){},push(){}}}" });
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -49,7 +52,9 @@ const REQUEST_ID = "00000000-0000-4000-8000-000000000031";
 function installFetch(posts: string[]): () => void {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === `/api/hrm/leave-requests/${REQUEST_ID}` && (init?.method ?? "GET") === "GET") {
       return Response.json({
         request: {
@@ -83,10 +88,15 @@ function installFetch(posts: string[]): () => void {
 function buttonByText(text: string): HTMLButtonElement | null {
   // The Drawer portals to document.body, so search the whole document.
   const buttons = Array.from(document.querySelectorAll("button"));
-  return (buttons.find((b) => b.textContent?.trim() === text) as HTMLButtonElement | undefined) ?? null;
+  return (
+    (buttons.find((b) => b.textContent?.trim() === text) as HTMLButtonElement | undefined) ?? null
+  );
 }
 
-async function mountDetail(canWithdrawCancel: boolean, posts: string[]): Promise<{ host: HTMLElement; unmount: () => Promise<void> }> {
+async function mountDetail(
+  canWithdrawCancel: boolean,
+  posts: string[],
+): Promise<{ host: HTMLElement; unmount: () => Promise<void> }> {
   const restore = installFetch(posts);
   (globalThis as Record<string, unknown>).__leavePromptAnswer = promptAnswer;
   const host = document.createElement("div");
@@ -95,7 +105,11 @@ async function mountDetail(canWithdrawCancel: boolean, posts: string[]): Promise
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <LeaveDrawer requestId={REQUEST_ID} canWithdrawCancel={canWithdrawCancel} onClose={() => {}} />
+        <LeaveDrawer
+          requestId={REQUEST_ID}
+          canWithdrawCancel={canWithdrawCancel}
+          onClose={() => {}}
+        />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -118,7 +132,11 @@ test("a read-only viewer sees no Withdraw button on a submitted request", async 
   const posts: string[] = [];
   const m = await mountDetail(false, posts);
   try {
-    assert.equal(buttonByText("Withdraw") === null, true, "Withdraw must hide without hrm.leave.request");
+    assert.equal(
+      buttonByText("Withdraw") === null,
+      true,
+      "Withdraw must hide without hrm.leave.request",
+    );
   } finally {
     await m.unmount();
   }

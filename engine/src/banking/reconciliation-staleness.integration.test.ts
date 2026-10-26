@@ -89,7 +89,10 @@ async function signOffJulySession(
   org: ScratchOrg,
   actorId: string,
   label: string,
-): Promise<{ reconId: string; ctx: { orgId: string; userId: string; allowedSubsidiaryIds: null } }> {
+): Promise<{
+  reconId: string;
+  ctx: { orgId: string; userId: string; allowedSubsidiaryIds: null };
+}> {
   installEngineSeams();
   const ctx = { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null };
   await db.execute(sql`
@@ -117,19 +120,31 @@ async function signOffJulySession(
     },
     ctx,
   );
-  const statementLineId = (await db.execute<{ id: string }>(sql`
+  const statementLineId = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from bank_statement_lines
      where org_id = ${org.orgId} and bank_transaction_id = ${`stale-${label}-deposit`}
-  `, "objects"))[0]!.id;
+  `,
+      "objects",
+    )
+  )[0]!.id;
   const recon = await startReconciliation(
     { accountId: org.accounts.bank, throughDate: "2026-07-15", statementBalance: "100" },
     ctx,
   );
   await createMatch(
-    { reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: period.lineIds },
+    {
+      reconciliationId: recon.id,
+      statementLineIds: [statementLineId],
+      journalLineIds: period.lineIds,
+    },
     ctx,
   );
-  assert.deepEqual(await markReconciled(recon.id, ctx), { journalLinesReconciled: 1, status: "signed_off" });
+  assert.deepEqual(await markReconciled(recon.id, ctx), {
+    journalLinesReconciled: 1,
+    status: "signed_off",
+  });
   return { reconId: recon.id, ctx };
 }
 
@@ -149,10 +164,13 @@ test(
       assert.equal(staleness.stale, true);
       // Arrival order is wall-clock order: the earliest late posting dates
       // the staleness, read back from the ledger rather than the clock.
-      const arrival = await db.execute<{ entry_number: string; day: string }>(sql`
+      const arrival = await db.execute<{ entry_number: string; day: string }>(
+        sql`
         select entry_number, posted_at::date::text as day from journal_entries
          where org_id = ${org.orgId} and id in (${receipt.entryId}, ${payment.entryId})
-      `, "objects");
+      `,
+        "objects",
+      );
       const firstDay = arrival.map((row) => row.day).sort()[0]!;
       assert.equal(staleness.staleSince, firstDay);
       assert.equal(staleness.clearedEffect, "-920.0000");
@@ -170,7 +188,9 @@ test(
 
       // The late lines surface as outstanding ledger lines for the next
       // session: unreconciled, unmatched, and dated within its scope.
-      const outstanding = (await db.execute<{ n: number }>(sql`
+      const outstanding = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
@@ -180,7 +200,10 @@ test(
            and not exists (select 1 from reconciliation_matches m
                             where m.journal_line_id = jl.id and m.org_id = jl.org_id)
            and jl.id = any(${sql.param([...receipt.lineIds, ...payment.lineIds])}::uuid[])
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(outstanding, 2);
 
       // February's session explains its opening difference from November's
@@ -204,14 +227,19 @@ test(
       const actor = await createScratchUser(org.orgId, "Bank reviewer", "admin");
       const { reconId, ctx } = await signOffJulySession(org, actor, "reversed");
 
-      const matched = (await db.execute<{ entry_id: string; entry_number: string }>(sql`
+      const matched = (
+        await db.execute<{ entry_id: string; entry_number: string }>(
+          sql`
         select je.id as entry_id, je.entry_number
           from reconciliation_matches m
           join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where m.org_id = ${org.orgId} and m.reconciliation_id = ${reconId}
          limit 1
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       const mirrorId = randomUUID();
       const mirrorNumber = `STALE-reversal-${mirrorId.slice(0, 8)}`;
       await db.transaction(async (tx) => {
@@ -228,11 +256,20 @@ test(
              'Reversal of matched July deposit', 'draft', 'manual',
              ${matched.entry_id}, ${actor}, ${actor})
         `);
-        const lines = await tx.execute<{ account_id: string; subsidiary_id: string; amount: string; currency: string; txn_amount: string }>(sql`
+        const lines = await tx.execute<{
+          account_id: string;
+          subsidiary_id: string;
+          amount: string;
+          currency: string;
+          txn_amount: string;
+        }>(
+          sql`
           select account_id, subsidiary_id, amount, currency, txn_amount
             from journal_lines where entry_id = ${matched.entry_id} and org_id = ${org.orgId}
            order by line_number
-        `, "objects");
+        `,
+          "objects",
+        );
         let lineNumber = 0;
         for (const line of lines) {
           lineNumber += 1;
@@ -264,10 +301,15 @@ test(
       assert.equal(staleness.stale, true);
       // The mirror posts after the sign-off, so the reversal dates the
       // staleness — read back from the ledger, not the clock.
-      const mirrorDay = (await db.execute<{ day: string }>(sql`
+      const mirrorDay = (
+        await db.execute<{ day: string }>(
+          sql`
         select posted_at::date::text as day from journal_entries
          where id = ${mirrorId} and org_id = ${org.orgId}
-      `, "objects"))[0]!.day;
+      `,
+          "objects",
+        )
+      )[0]!.day;
       assert.equal(staleness.staleSince, mirrorDay);
       assert.deepEqual(staleness.lateEntries, []);
       assert.equal(staleness.reversedMatches.length, 1);

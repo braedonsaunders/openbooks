@@ -29,7 +29,10 @@ export interface PayrollEmployerFact {
 
 const FACTS = new Map<string, readonly PayrollEmployerFact[]>();
 
-export function registerEmployerFacts(country: string, facts: readonly PayrollEmployerFact[]): void {
+export function registerEmployerFacts(
+  country: string,
+  facts: readonly PayrollEmployerFact[],
+): void {
   FACTS.set(country, facts);
 }
 
@@ -50,10 +53,14 @@ export function employerFact(country: string, key: string): PayrollEmployerFact 
     );
   }
   if ((fact.scope ?? "legal_employer") === "filing_account" && !fact.filingProgramType) {
-    throw new PayrollPackError(`${country} employer fact ${fact.key} must declare its filing program type`);
+    throw new PayrollPackError(
+      `${country} employer fact ${fact.key} must declare its filing program type`,
+    );
   }
   if ((fact.scope ?? "legal_employer") === "legal_employer" && fact.filingProgramType) {
-    throw new PayrollPackError(`${country} legal-employer fact ${fact.key} cannot declare a filing program type`);
+    throw new PayrollPackError(
+      `${country} legal-employer fact ${fact.key} cannot declare a filing program type`,
+    );
   }
   return fact;
 }
@@ -74,8 +81,8 @@ export function resolveEmployerFact(
   if (raw == null || raw.trim() === "") {
     if (!fact.required) return null;
     throw new PayrollPackError(
-      `${country} payroll cannot calculate without ${fact.label} (${fact.key}): `
-      + `${fact.refusalReason} Supply this value in Payroll Setup → Employer facts.`,
+      `${country} payroll cannot calculate without ${fact.label} (${fact.key}): ` +
+        `${fact.refusalReason} Supply this value in Payroll Setup → Employer facts.`,
     );
   }
   const value = raw.trim();
@@ -85,12 +92,15 @@ export function resolveEmployerFact(
     if (value !== "true" && value !== "false") invalid = 'must be "true" or "false"';
   } else if (fact.kind === "choice") {
     const choices = fact.choices?.map((choice) => choice.value) ?? [];
-    if (!choices.includes(value)) invalid = `must be one of ${choices.join(", ") || "the declared choices"}`;
+    if (!choices.includes(value))
+      invalid = `must be one of ${choices.join(", ") || "the declared choices"}`;
   } else if (fact.kind === "integer") {
     if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
       invalid = "must be a whole safe integer";
-    } else if (fact.min !== undefined && BigInt(value) < BigInt(fact.min)
-      || fact.max !== undefined && BigInt(value) > BigInt(fact.max)) {
+    } else if (
+      (fact.min !== undefined && BigInt(value) < BigInt(fact.min)) ||
+      (fact.max !== undefined && BigInt(value) > BigInt(fact.max))
+    ) {
       invalid = `must be between ${fact.min ?? "−∞"} and ${fact.max ?? "∞"}`;
     } else {
       canonical = BigInt(value).toString();
@@ -98,12 +108,18 @@ export function resolveEmployerFact(
   } else {
     const scale = fact.scale;
     if (!Number.isInteger(scale) || scale! < 0 || scale! > 10) {
-      throw new PayrollPackError(`${country} employer fact ${fact.key} declares an invalid decimal scale`);
+      throw new PayrollPackError(
+        `${country} employer fact ${fact.key} declares an invalid decimal scale`,
+      );
     }
     try {
       canonical = normalizeDecimal(value, scale);
-      if (fact.min !== undefined && compareDecimals(canonical, normalizeDecimal(fact.min, scale)) < 0
-        || fact.max !== undefined && compareDecimals(canonical, normalizeDecimal(fact.max, scale)) > 0) {
+      if (
+        (fact.min !== undefined &&
+          compareDecimals(canonical, normalizeDecimal(fact.min, scale)) < 0) ||
+        (fact.max !== undefined &&
+          compareDecimals(canonical, normalizeDecimal(fact.max, scale)) > 0)
+      ) {
         invalid = `must be between ${fact.min ?? "−∞"} and ${fact.max ?? "∞"}`;
       }
     } catch {
@@ -112,8 +128,8 @@ export function resolveEmployerFact(
   }
   if (invalid) {
     throw new PayrollPackError(
-      `${country} payroll cannot use ${fact.label} (${fact.key}) value "${value}": ${invalid}. `
-      + `${fact.refusalReason} Correct it in Payroll Setup → Employer facts.`,
+      `${country} payroll cannot use ${fact.label} (${fact.key}) value "${value}": ${invalid}. ` +
+        `${fact.refusalReason} Correct it in Payroll Setup → Employer facts.`,
     );
   }
   return canonical;

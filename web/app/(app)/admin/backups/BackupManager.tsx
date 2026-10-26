@@ -6,7 +6,17 @@ import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Button,
+  Card,
+  Input,
+  Label,
+  Select,
+} from "@openbooks/ui";
 import { confirmDialog } from "@/lib/confirm";
 
 export interface BackupPolicyRow {
@@ -36,7 +46,10 @@ export interface BackupRunRow {
   completedAt: string | null;
 }
 
-const STATUS_VARIANT: Record<string, "default" | "warning" | "destructive" | "success" | "secondary"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "warning" | "destructive" | "success" | "secondary"
+> = {
   queued: "warning",
   running: "warning",
   completed: "success",
@@ -68,15 +81,16 @@ export function BackupManager({
 }: BackupManagerProps) {
   const locale = useLocale();
   const { dateTime, number } = useViewerFormat();
-  const formatWhen = (iso: string | null) => iso ? dateTime(new Date(iso)) : "—";
+  const formatWhen = (iso: string | null) => (iso ? dateTime(new Date(iso)) : "—");
   const router = useRouter();
   const t = useTranslations("admin.backupsManager");
-  const formatUtcHour = (hour: number) => new Intl.DateTimeFormat(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(2000, 0, 1, hour)));
+  const formatUtcHour = (hour: number) =>
+    new Intl.DateTimeFormat(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: "UTC",
+    }).format(new Date(Date.UTC(2000, 0, 1, hour)));
   const [pending, start] = useTransition();
 
   const [enabled, setEnabled] = useState(policy?.enabled ?? false);
@@ -123,7 +137,11 @@ export function BackupManager({
 
   const deleteRun = (run: BackupRunRow) => {
     start(async () => {
-      if (!(await confirmDialog(t("deleteConfirm", { fileName: run.fileName ? ` “${run.fileName}”` : "" })))) {
+      if (
+        !(await confirmDialog(
+          t("deleteConfirm", { fileName: run.fileName ? ` “${run.fileName}”` : "" }),
+        ))
+      ) {
         return;
       }
       const res = await fetch(`/api/admin/backups/${run.id}`, { method: "DELETE" });
@@ -141,23 +159,25 @@ export function BackupManager({
   // The schedule editor above and the run-now/delete mutations stay as-is.
   const backupColumns: PagedColumn<BackupRunRow>[] = [
     {
-      key: 'created',
+      key: "created",
       header: t("table.created"),
       cell: (run) => <span className="whitespace-nowrap">{formatWhen(run.createdAt)}</span>,
-      search: (run) => `${run.fileName ?? ''} ${formatWhen(run.createdAt)}`,
+      search: (run) => `${run.fileName ?? ""} ${formatWhen(run.createdAt)}`,
     },
     {
-      key: 'kind',
+      key: "kind",
       header: t("table.kind"),
       cell: (run) => <Badge variant="outline">{t(`table.kinds.${run.kind}`)}</Badge>,
       search: (run) => run.kind,
     },
     {
-      key: 'status',
+      key: "status",
       header: t("table.status"),
       cell: (run) => (
         <>
-          <Badge variant={STATUS_VARIANT[run.status] ?? "secondary"}>{t(`table.statuses.${run.status}`)}</Badge>
+          <Badge variant={STATUS_VARIANT[run.status] ?? "secondary"}>
+            {t(`table.statuses.${run.status}`)}
+          </Badge>
           {run.error && (
             <div className="mt-1 max-w-64 text-xs break-words text-red-600 dark:text-red-400">
               {run.error}
@@ -165,15 +185,15 @@ export function BackupManager({
           )}
         </>
       ),
-      search: (run) => `${run.status} ${run.error ?? ''}`,
+      search: (run) => `${run.status} ${run.error ?? ""}`,
     },
     {
-      key: 'size',
+      key: "size",
       header: t("table.size"),
       cell: (run) => <span className="whitespace-nowrap">{formatBytes(run.byteSize)}</span>,
     },
     {
-      key: 'contents',
+      key: "contents",
       header: t("table.contents"),
       cell: (run) => (
         <span className="whitespace-nowrap">
@@ -184,32 +204,34 @@ export function BackupManager({
       ),
     },
     {
-      key: 'sha256',
+      key: "sha256",
       header: t("table.sha256"),
       cell: (run) => (
         <span className="block max-w-72 font-mono text-xs break-all text-slate-500 dark:text-slate-400">
           {run.sha256 ?? "—"}
         </span>
       ),
-      search: (run) => run.sha256 ?? '',
+      search: (run) => run.sha256 ?? "",
     },
     {
-      key: 'retention',
+      key: "retention",
       header: t("table.retention"),
-      cell: (run) => (
+      cell: (run) =>
         run.purgedAt ? (
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {t("table.purged", { reason: run.purgeReason ? t(`table.reasons.${run.purgeReason}`) : "", when: formatWhen(run.purgedAt) })}
+            {t("table.purged", {
+              reason: run.purgeReason ? t(`table.reasons.${run.purgeReason}`) : "",
+              when: formatWhen(run.purgedAt),
+            })}
           </span>
         ) : (
           <span className="text-xs text-slate-500 dark:text-slate-400">{t("table.kept")}</span>
-        )
-      ),
+        ),
     },
     {
-      key: 'actions',
+      key: "actions",
       header: <span className="sr-only">{t("table.actionsSr")}</span>,
-      className: 'text-right whitespace-nowrap',
+      className: "text-right whitespace-nowrap",
       cell: (run) => {
         const active = run.status === "queued" || run.status === "running";
         const downloadable = run.status === "completed" && !run.purgedAt;
@@ -261,14 +283,14 @@ export function BackupManager({
       {s3Enabled && !workerOnline && (
         <Alert variant="warning">
           <AlertTitle>{t("alerts.workerOfflineTitle")}</AlertTitle>
-          <AlertDescription>
-            {t("alerts.workerOfflineBody")}
-          </AlertDescription>
+          <AlertDescription>{t("alerts.workerOfflineBody")}</AlertDescription>
         </Alert>
       )}
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("exportsCard.title")}</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t("exportsCard.title")}
+        </h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {t.rich("exportsCard.body", {
             archive: (chunks) => <strong>{chunks}</strong>,
@@ -278,7 +300,9 @@ export function BackupManager({
       </Card>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("autoCard.title")}</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t("autoCard.title")}
+        </h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {t.rich("autoCard.body", {
             keep: (chunks) => <strong>{chunks}</strong>,
@@ -380,7 +404,9 @@ export function BackupManager({
             {policy.enabled && policy.nextRunAt
               ? t("autoCard.nextRun", { when: formatWhen(policy.nextRunAt) })
               : t("autoCard.off")}
-            {policy.lastRunAt ? t("autoCard.lastSuccess", { when: formatWhen(policy.lastRunAt) }) : ""}
+            {policy.lastRunAt
+              ? t("autoCard.lastSuccess", { when: formatWhen(policy.lastRunAt) })
+              : ""}
           </p>
         )}
       </Card>
@@ -388,7 +414,9 @@ export function BackupManager({
       <Card className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("storedCard.title")}</h2>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("storedCard.title")}
+            </h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {t("storedCard.body", { count: policy?.maxKeep ?? maxKeep })}
             </p>
@@ -396,7 +424,11 @@ export function BackupManager({
               {t("storedCard.runCount", { shown: runs.length, total: totalRuns })}
             </p>
           </div>
-          <Button variant="default" disabled={pending || !s3Enabled || hasActiveRun} onClick={runNow}>
+          <Button
+            variant="default"
+            disabled={pending || !s3Enabled || hasActiveRun}
+            onClick={runNow}
+          >
             {t("storedCard.backUpNow")}
           </Button>
         </div>
@@ -408,7 +440,11 @@ export function BackupManager({
             rowKey={(run) => run.id}
             searchable
             emptyAsRow
-            empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t("storedCard.noneYet")}</p>}
+            empty={
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t("storedCard.noneYet")}
+              </p>
+            }
             columns={backupColumns}
           />
         </div>

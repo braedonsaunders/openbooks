@@ -91,10 +91,7 @@ export async function createExecutionSuggestion(
   input: ExecutionSuggestion,
 ) {
   await admitExecution(tx, orgId, actorId, input.stage, input.subsidiaryId);
-  const quantity = persistReceiptMoney(
-    input.quantity,
-    "suggested base quantity",
-  );
+  const quantity = persistReceiptMoney(input.quantity, "suggested base quantity");
   if (
     cmp(quantity, "0") < 0 ||
     (!["count", "pick"].includes(input.stage) && cmp(quantity, "0") === 0)
@@ -109,9 +106,14 @@ export async function createExecutionSuggestion(
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`warehouse-suggest:${orgId}:${input.commandKey}`},0))`,
   );
-  const prior = (await tx.execute<ExecutionTask>(sql`select *,posting_date::text as posting_date,
+  const prior = (
+    await tx.execute<ExecutionTask>(
+      sql`select *,posting_date::text as posting_date,
     basis=${JSON.stringify(input.basis)}::jsonb as basis_matches from warehouse_execution_tasks
-    where org_id=${orgId} and command_key=${input.commandKey}`, "objects"))[0];
+    where org_id=${orgId} and command_key=${input.commandKey}`,
+      "objects",
+    )
+  )[0];
   if (prior) {
     if (
       prior.stage !== input.stage ||
@@ -134,15 +136,19 @@ export async function createExecutionSuggestion(
       );
     return prior;
   }
-  const inserted = (await tx.execute<ExecutionTask>(sql`insert into warehouse_execution_tasks
+  const inserted = (
+    await tx.execute<ExecutionTask>(
+      sql`insert into warehouse_execution_tasks
     (org_id,subsidiary_id,stage,document_line_id,count_line_id,item_id,lot_id,serial_id,
      from_stock_location_id,to_stock_location_id,quantity,document_quantity,document_unit,posting_date,basis,command_key,created_by,updated_by)
     values(${orgId},${input.subsidiaryId},${input.stage},${input.documentLineId ?? null},${input.countLineId ?? null},
       ${input.itemId},${input.lotId ?? null},${input.serialId ?? null},${input.fromStockLocationId},${input.toStockLocationId},
       ${quantity},${input.documentQuantity},${input.documentUnit},${input.postingDate},${JSON.stringify(input.basis)}::jsonb,
-      ${input.commandKey},${actorId},${actorId}) returning *,posting_date::text as posting_date`, "objects"))[0];
-  if (!inserted)
-    throw new InventoryError("Warehouse suggestion was not recorded");
+      ${input.commandKey},${actorId},${actorId}) returning *,posting_date::text as posting_date`,
+      "objects",
+    )
+  )[0];
+  if (!inserted) throw new InventoryError("Warehouse suggestion was not recorded");
   return inserted;
 }
 
@@ -199,10 +205,7 @@ async function scanMismatch(
       profile.unitConversions ?? {},
       profile.baseUnit,
     );
-    if (
-      cmp(quantity, task.quantity) !== 0 ||
-      compareDecimal(observedExact, expectedExact) !== 0
-    )
+    if (cmp(quantity, task.quantity) !== 0 || compareDecimal(observedExact, expectedExact) !== 0)
       return "Quantity does not match the suggestion. Record a short pick or refresh the counted quantity instead of changing the suggestion.";
     for (const field of ["lot", "serial"] as const) {
       const expected = field === "lot" ? task.lot_id : task.serial_id;
@@ -240,35 +243,31 @@ export async function confirmExecutionTask(
   orgId: string,
   actorId: string,
   input: { taskId: string; scan?: ExecutionScan },
-  execute: (
-    tx: SqlExecutor,
-    task: ExecutionTask,
-  ) => Promise<Record<string, unknown>>,
+  execute: (tx: SqlExecutor, task: ExecutionTask) => Promise<Record<string, unknown>>,
 ): Promise<ExecutionOutcome> {
   return withOrgTransaction(orgId, async () => {
-    const observed = (await db.execute<ExecutionTask>(sql`select *,posting_date::text as posting_date from warehouse_execution_tasks
-      where org_id=${orgId} and id=${input.taskId}`, "objects"))[0];
+    const observed = (
+      await db.execute<ExecutionTask>(
+        sql`select *,posting_date::text as posting_date from warehouse_execution_tasks
+      where org_id=${orgId} and id=${input.taskId}`,
+        "objects",
+      )
+    )[0];
     if (!observed) throw new InventoryError("Warehouse work was not found");
     for (const bin of [
-      ...new Set([
-        observed.from_stock_location_id,
-        observed.to_stock_location_id,
-      ]),
+      ...new Set([observed.from_stock_location_id, observed.to_stock_location_id]),
     ].sort())
       await lockInventoryPosition(db, observed.item_id, bin);
-    const scope = await admitExecution(
-      db,
-      orgId,
-      actorId,
-      observed.stage,
-      observed.subsidiary_id,
-    );
-    const task = (await db.execute<ExecutionTask>(sql`select *,posting_date::text as posting_date from warehouse_execution_tasks
-      where org_id=${orgId} and id=${input.taskId} for update`, "objects"))[0]!;
+    const scope = await admitExecution(db, orgId, actorId, observed.stage, observed.subsidiary_id);
+    const task = (
+      await db.execute<ExecutionTask>(
+        sql`select *,posting_date::text as posting_date from warehouse_execution_tasks
+      where org_id=${orgId} and id=${input.taskId} for update`,
+        "objects",
+      )
+    )[0]!;
     if (task.status === "cancelled")
-      throw new InventoryError(
-        "This suggestion was cancelled; create fresh warehouse work",
-      );
+      throw new InventoryError("This suggestion was cancelled; create fresh warehouse work");
     const scanning = await lockAndCheckOrgFeature(db, orgId, "barcodeScanning");
     const mismatch = scanning
       ? input.scan
@@ -276,11 +275,12 @@ export async function confirmExecutionTask(
         : "Scan the suggested bin, item and quantity to confirm this warehouse work."
       : null;
     if (mismatch) {
-      const written =
-        await db.execute(sql`insert into warehouse_scan_events(org_id,task_id,outcome,observed,reason,created_by)
-        values(${orgId},${task.id},'exception',${JSON.stringify(input.scan ?? {})}::jsonb,${mismatch},${actorId}) returning id`, "objects");
-      if (written.length !== 1)
-        throw new InventoryError("Scan exception was not recorded");
+      const written = await db.execute(
+        sql`insert into warehouse_scan_events(org_id,task_id,outcome,observed,reason,created_by)
+        values(${orgId},${task.id},'exception',${JSON.stringify(input.scan ?? {})}::jsonb,${mismatch},${actorId}) returning id`,
+        "objects",
+      );
+      if (written.length !== 1) throw new InventoryError("Scan exception was not recorded");
       return { status: "exception", taskId: task.id, reason: mismatch };
     }
     if (task.status === "done")
@@ -290,19 +290,20 @@ export async function confirmExecutionTask(
         result: task.result ?? {},
         replayed: true,
       };
-    const written =
-      await db.execute(sql`insert into warehouse_scan_events(org_id,task_id,outcome,observed,created_by)
-      values(${orgId},${task.id},'confirmed',${JSON.stringify(input.scan ?? { mode: "manual" })}::jsonb,${actorId}) returning id`, "objects");
-    if (written.length !== 1)
-      throw new InventoryError("Warehouse confirmation was not recorded");
+    const written = await db.execute(
+      sql`insert into warehouse_scan_events(org_id,task_id,outcome,observed,created_by)
+      values(${orgId},${task.id},'confirmed',${JSON.stringify(input.scan ?? { mode: "manual" })}::jsonb,${actorId}) returning id`,
+      "objects",
+    );
+    if (written.length !== 1) throw new InventoryError("Warehouse confirmation was not recorded");
     const result = await execute(db, task);
-    const done =
-      await db.execute(sql`update warehouse_execution_tasks set status='done',result=${JSON.stringify(result)}::jsonb,
-      updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${task.id} and status='open' returning id`, "objects");
+    const done = await db.execute(
+      sql`update warehouse_execution_tasks set status='done',result=${JSON.stringify(result)}::jsonb,
+      updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${task.id} and status='open' returning id`,
+      "objects",
+    );
     if (done.length !== 1)
-      throw new InventoryError(
-        "Warehouse work changed during confirmation; reload the suggestion",
-      );
+      throw new InventoryError("Warehouse work changed during confirmation; reload the suggestion");
     return { status: "done", taskId: task.id, result, replayed: false };
   });
 }
@@ -313,30 +314,34 @@ export async function executionTaskView(
   actorId: string,
   taskId: string,
 ) {
-  const task = (await tx.execute<ExecutionTask>(sql`select *,posting_date::text as posting_date from warehouse_execution_tasks
-    where org_id=${orgId} and id=${taskId}`, "objects"))[0];
+  const task = (
+    await tx.execute<ExecutionTask>(
+      sql`select *,posting_date::text as posting_date from warehouse_execution_tasks
+    where org_id=${orgId} and id=${taskId}`,
+      "objects",
+    )
+  )[0];
   if (!task) throw new InventoryError("Warehouse work was not found");
   await admitExecution(tx, orgId, actorId, task.stage, task.subsidiary_id);
-  const labels = (await tx.execute<{
+  const labels = (
+    await tx.execute<{
       item_label: string;
       bin_code: string;
       lot_number: string | null;
       serial_number: string | null;
-    }>(sql`
+    }>(
+      sql`
     select coalesce(nullif(item.code,''),item.name) as item_label,bin.code as bin_code,lot.lot_number,serial.serial_number
     from items item join stock_locations bin on bin.org_id=item.org_id and bin.id=${task.to_stock_location_id}
     left join lots lot on lot.org_id=item.org_id and lot.id=${task.lot_id}
     left join serials serial on serial.org_id=item.org_id and serial.id=${task.serial_id}
-    where item.org_id=${orgId} and item.id=${task.item_id}`, "objects"))[0];
+    where item.org_id=${orgId} and item.id=${task.item_id}`,
+      "objects",
+    )
+  )[0];
   if (!labels)
-    throw new InventoryError(
-      "Suggested item or bin is unavailable; refresh warehouse work",
-    );
-  const barcodeScanning = await lockAndCheckOrgFeature(
-    tx,
-    orgId,
-    "barcodeScanning",
-  );
+    throw new InventoryError("Suggested item or bin is unavailable; refresh warehouse work");
+  const barcodeScanning = await lockAndCheckOrgFeature(tx, orgId, "barcodeScanning");
   return {
     id: task.id,
     stage: task.stage,

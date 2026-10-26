@@ -50,22 +50,26 @@ hooks.deregister();
 
 test("GET /api/v1/{typeKey} lists through the aliased records helper", async () => {
   routeState.lists.length = 0;
-  const response = await GET(
-    new Request("http://openbooks.test/api/v1/invoices"),
-    { params: Promise.resolve({ typeKey: "invoices" }) },
-  );
+  const response = await GET(new Request("http://openbooks.test/api/v1/invoices"), {
+    params: Promise.resolve({ typeKey: "invoices" }),
+  });
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { records: [], total: 0, page: 1, perPage: 25, typeKey: "invoices" });
+  assert.deepEqual(await response.json(), {
+    records: [],
+    total: 0,
+    page: 1,
+    perPage: 25,
+    typeKey: "invoices",
+  });
   assert.deepEqual(routeState.lists, ["invoices"]);
 });
 
 test("GET /api/v1/{typeKey} keeps reserved static folders off the records catalog", async () => {
   routeState.lists.length = 0;
   routeState.reserved.length = 0;
-  const response = await GET(
-    new Request("http://openbooks.test/api/v1/close"),
-    { params: Promise.resolve({ typeKey: "close" }) },
-  );
+  const response = await GET(new Request("http://openbooks.test/api/v1/close"), {
+    params: Promise.resolve({ typeKey: "close" }),
+  });
   assert.equal(response.status, 404);
   assert.deepEqual(routeState.reserved, ["close"]);
 });

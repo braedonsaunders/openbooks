@@ -6,7 +6,7 @@
  * verbatim shows the wrong word.
  */
 export function statusMessageKey(status: string): string {
-  return status.replace(/_([a-z0-9])/g, (_, next: string) => next.toUpperCase())
+  return status.replace(/_([a-z0-9])/g, (_, next: string) => next.toUpperCase());
 }
 
 /**
@@ -18,6 +18,6 @@ export function statusLabel(
   translate: (key: string) => string,
   has: (key: string) => boolean,
 ): string {
-  const key = `status.${statusMessageKey(status)}`
-  return has(key) ? translate(key) : status.replace(/_/g, ' ')
+  const key = `status.${statusMessageKey(status)}`;
+  return has(key) ? translate(key) : status.replace(/_/g, " ");
 }

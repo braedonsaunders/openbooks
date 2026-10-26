@@ -6,10 +6,7 @@ import {
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
-import {
-  benefitAwardsFlowAdapter,
-  benefitAwardSubjectProfile,
-} from "./benefit-awards-adapter.ts";
+import { benefitAwardsFlowAdapter, benefitAwardSubjectProfile } from "./benefit-awards-adapter.ts";
 import {
   getFlowAdapter,
   listFlowSubjectProfiles,
@@ -20,10 +17,7 @@ import { installEngineSeams } from "../composition/install.ts";
 
 installEngineSeams();
 test("Benefits is authorable with explicit direct processing and conditional routing fields", () => {
-  assert.equal(
-    getFlowAdapter(BENEFIT_AWARD_SUBJECT_KIND),
-    benefitAwardsFlowAdapter,
-  );
+  assert.equal(getFlowAdapter(BENEFIT_AWARD_SUBJECT_KIND), benefitAwardsFlowAdapter);
   assert.equal(
     listFlowSubjectProfiles().filter(
       (profile) => profile.subjectKind === BENEFIT_AWARD_SUBJECT_KIND,
@@ -32,17 +26,8 @@ test("Benefits is authorable with explicit direct processing and conditional rou
   );
   assert.equal(benefitAwardSubjectProfile.supportsUngatedSubmission, true);
   assert.deepEqual(benefitAwardSubjectProfile.triggers, ["on_submit"]);
-  for (const key of [
-    "programId",
-    "family",
-    "value",
-    "currency",
-    "legalEntityId",
-    "departmentId",
-  ])
-    assert.ok(
-      benefitAwardSubjectProfile.fields.some((field) => field.key === key),
-    );
+  for (const key of ["programId", "family", "value", "currency", "legalEntityId", "departmentId"])
+    assert.ok(benefitAwardSubjectProfile.fields.some((field) => field.key === key));
 });
 test("Benefits release is installed for every process using the composition root", () => {
   assert.ok(handlerReleasedSubjectKinds().includes(BENEFIT_AWARD_SUBJECT_KIND));
@@ -77,21 +62,14 @@ test("invalid record IDs return no workflow context without querying the databas
 });
 
 test("Enrollment decisions use scoped native gates with configurable human independence", async () => {
+  assert.equal(getFlowAdapter(BENEFIT_ENROLLMENT_SUBJECT_KIND), benefitEnrollmentsFlowAdapter);
   assert.equal(
-    getFlowAdapter(BENEFIT_ENROLLMENT_SUBJECT_KIND),
-    benefitEnrollmentsFlowAdapter,
-  );
-  assert.equal(
-    listFlowSubjectProfiles().filter(
-      (p) => p.subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND,
-    ).length,
+    listFlowSubjectProfiles().filter((p) => p.subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND)
+      .length,
     1,
   );
   assert.equal(benefitEnrollmentSubjectProfile.supportsUngatedSubmission, true);
-  assert.equal(
-    hasFlowApprovalReleaseHandler(BENEFIT_ENROLLMENT_SUBJECT_KIND),
-    true,
-  );
+  assert.equal(hasFlowApprovalReleaseHandler(BENEFIT_ENROLLMENT_SUBJECT_KIND), true);
   assert.equal(benefitEnrollmentsFlowAdapter.scope.via, "employment");
   await assert.rejects(
     benefitEnrollmentsFlowAdapter.changeStatus("election", "active", {
@@ -105,12 +83,6 @@ test("Enrollment decisions use scoped native gates with configurable human indep
     }),
     /immutable/,
   );
-  await assert.rejects(
-    benefitEnrollmentsFlowAdapter.findCandidateIds!(10),
-    /ambient organization/,
-  );
-  assert.equal(
-    await benefitEnrollmentsFlowAdapter.loadContext("not-an-id"),
-    null,
-  );
+  await assert.rejects(benefitEnrollmentsFlowAdapter.findCandidateIds!(10), /ambient organization/);
+  assert.equal(await benefitEnrollmentsFlowAdapter.loadContext("not-an-id"), null);
 });

@@ -106,7 +106,11 @@ function baseInput(
   overrides: Partial<ComparePriorPayrollInput> = {},
 ): ComparePriorPayrollInput {
   return {
-    prior: { label: "Prior provider — Jul 14 2026", employees: priorEmployees, unmappedColumns: [] },
+    prior: {
+      label: "Prior provider — Jul 14 2026",
+      employees: priorEmployees,
+      unmappedColumns: [],
+    },
     ours: { label: "PAY-00001", employees: ourEmployees },
     ...overrides,
   };
@@ -120,9 +124,7 @@ function findingFor(
 ): ParallelFinding {
   const found = comparison.findings.find(
     (finding) =>
-      finding.employeePartyId === employeePartyId &&
-      finding.kind === kind &&
-      finding.slot === slot,
+      finding.employeePartyId === employeePartyId && finding.kind === kind && finding.slot === slot,
   );
   assert.ok(found, `no finding for ${employeePartyId} ${kind}/${slot}`);
   return found;
@@ -130,11 +132,7 @@ function findingFor(
 
 /** Every result this suite calls trustworthy must survive the self-check. */
 function assertSelfConsistent(comparison: ParallelComparison): void {
-  assert.deepEqual(
-    auditComparison(comparison),
-    [],
-    "the comparison failed its own audit",
-  );
+  assert.deepEqual(auditComparison(comparison), [], "the comparison failed its own audit");
 }
 
 /* ------------------------------------------------------------------ */
@@ -190,7 +188,11 @@ test("an exact period reconciles to zero differences, and says how much it compa
   // Populations are stated, not implied. This is the difference between "we
   // agree about two people" and "we agree about nothing".
   assert.deepEqual(comparison.populations, {
-    prior: 2, ours: 2, compared: 2, priorOnly: 0, ourOnly: 0,
+    prior: 2,
+    ours: 2,
+    compared: 2,
+    priorOnly: 0,
+    ourOnly: 0,
   });
   // 7 components + 3 stated totals, twice over.
   assert.equal(comparison.counts.match, 20);
@@ -259,7 +261,9 @@ test("a one-cent difference on one component surfaces, classified and attributed
   assert.equal(comparison.totals.gross.difference, "0.0000");
   assert.equal(comparison.totals.gross.unattributed, "0.0000");
 
-  const taxTotal = comparison.slotTotals.find((t) => t.slot === "income_tax" && t.kind === "deduction");
+  const taxTotal = comparison.slotTotals.find(
+    (t) => t.slot === "income_tax" && t.kind === "deduction",
+  );
   assert.ok(taxTotal);
   assert.equal(taxTotal.difference, "0.0100");
   assert.equal(taxTotal.unresolvedEmployees, 1);
@@ -283,8 +287,18 @@ test("a configured tolerance is applied, disclosed, and cannot be reached by def
   const tolerated = comparePriorPayrollPeriod(
     baseInput([prior], [derekOurs()], {
       tolerances: [
-        { kind: "deduction", slot: "income_tax", tolerance: "0.01", reason: "prior provider rounds the tax table per period" },
-        { kind: "total", slot: "net_pay", tolerance: "0.01", reason: "consequence of the tax rounding above" },
+        {
+          kind: "deduction",
+          slot: "income_tax",
+          tolerance: "0.01",
+          reason: "prior provider rounds the tax table per period",
+        },
+        {
+          kind: "total",
+          slot: "net_pay",
+          tolerance: "0.01",
+          reason: "consequence of the tax rounding above",
+        },
       ],
     }),
   );
@@ -368,7 +382,11 @@ test("an employee present in only one side is a prominent finding, never dropped
 
   assert.equal(comparison.status, "differences");
   assert.deepEqual(comparison.populations, {
-    prior: 1, ours: 2, compared: 1, priorOnly: 0, ourOnly: 1,
+    prior: 1,
+    ours: 2,
+    compared: 1,
+    priorOnly: 0,
+    ourOnly: 1,
   });
   assert.equal(comparison.counts.employee_our_only, 5); // 2 components + 3 totals
   assert.equal(comparison.counts.employee_prior_only, 0);
@@ -394,15 +412,15 @@ test("an employee present in only one side is a prominent finding, never dropped
 
   // The mirror case: somebody the old system paid whom we did not.
   const mirrored = comparePriorPayrollPeriod(
-    baseInput(
-      [asPriorRegister(derekOurs()), asPriorRegister(graceOurs())],
-      [derekOurs()],
-    ),
+    baseInput([asPriorRegister(derekOurs()), asPriorRegister(graceOurs())], [derekOurs()]),
   );
   assert.equal(mirrored.status, "differences");
   assert.equal(mirrored.populations.priorOnly, 1);
   assert.equal(mirrored.counts.employee_prior_only, 10); // 7 components + 3 totals
-  assert.equal(findingFor(mirrored, GRACE, "earning", "base_pay").classification, "employee_prior_only");
+  assert.equal(
+    findingFor(mirrored, GRACE, "earning", "base_pay").classification,
+    "employee_prior_only",
+  );
   assertSelfConsistent(mirrored);
 });
 
@@ -474,7 +492,12 @@ test("an unmapped prior-system column is reported, and its money shows up as una
           ...prior,
           amounts: [
             ...prior.amounts,
-            { kind: "deduction", slot: "code:RRSP-EE", amount: "50.00", sourceColumn: "RRSP Employee" },
+            {
+              kind: "deduction",
+              slot: "code:RRSP-EE",
+              amount: "50.00",
+              sourceColumn: "RRSP Employee",
+            },
           ],
         },
       ],
@@ -542,10 +565,7 @@ test("net attributes against the stated gross, so one-sided earnings do not smea
   assert.equal(comparison.status, "differences");
   assert.equal(comparison.totals.netPay.difference, "-0.0100");
   assert.equal(comparison.totals.netPay.unattributed, "-0.0100");
-  assert.equal(
-    findingFor(comparison, null, "total", "unattributed:net_pay").difference,
-    "-0.0100",
-  );
+  assert.equal(findingFor(comparison, null, "total", "unattributed:net_pay").difference, "-0.0100");
   // The one-sided detail stays visible as its own findings — explained there,
   // not laundered away.
   assert.equal(findingFor(comparison, DEREK, "earning", "base_pay").classification, "our_only");
@@ -571,9 +591,7 @@ test("a job-costed component split across projects is compared as one amount", (
     { kind: "employer_contribution", slot: "ei", amount: "60.12" },
     { kind: "employer_contribution", slot: "vacation_accrual", amount: "105.38" },
   ];
-  const comparison = comparePriorPayrollPeriod(
-    baseInput([asPriorRegister(derekOurs())], [split]),
-  );
+  const comparison = comparePriorPayrollPeriod(baseInput([asPriorRegister(derekOurs())], [split]));
   assert.equal(comparison.status, "clean");
   assert.equal(findingFor(comparison, DEREK, "earning", "base_pay").ourAmount, "2634.6200");
   assertSelfConsistent(comparison);
@@ -594,9 +612,7 @@ test("the same employee twice on one side is refused, not silently halved", () =
 /* ------------------------------------------------------------------ */
 
 test("an empty import against a real run reports no comparable data, never zero differences", () => {
-  const comparison = comparePriorPayrollPeriod(
-    baseInput([], [derekOurs(), graceOurs()]),
-  );
+  const comparison = comparePriorPayrollPeriod(baseInput([], [derekOurs(), graceOurs()]));
 
   // This is the whole point of the module. A failed or empty import must not be
   // readable as agreement.
@@ -660,36 +676,34 @@ test("every way the comparison can be empty is named, and none of them is a pass
 test("the self-check refuses a fabricated clean result", () => {
   // The audit exists so a corrupted or hand-edited comparison cannot be filed
   // as evidence. Prove it actually catches each fabrication.
-  const good = comparePriorPayrollPeriod(
-    baseInput([asPriorRegister(derekOurs())], [derekOurs()]),
-  );
+  const good = comparePriorPayrollPeriod(baseInput([asPriorRegister(derekOurs())], [derekOurs()]));
   assert.deepEqual(auditComparison(good), []);
 
   const noPopulation: ParallelComparison = {
     ...good,
     populations: { ...good.populations, compared: 0 },
   };
-  assert.ok(
-    auditComparison(noPopulation).some((f) => f.invariant === "clean-compared-somebody"),
-  );
+  assert.ok(auditComparison(noPopulation).some((f) => f.invariant === "clean-compared-somebody"));
 
-  const noFindings: ParallelComparison = { ...good, findings: [], counts: { ...good.counts, match: 0 } };
-  assert.ok(
-    auditComparison(noFindings).some((f) => f.invariant === "clean-compared-something"),
-  );
+  const noFindings: ParallelComparison = {
+    ...good,
+    findings: [],
+    counts: { ...good.counts, match: 0 },
+  };
+  assert.ok(auditComparison(noFindings).some((f) => f.invariant === "clean-compared-something"));
 
   const hiddenColumn: ParallelComparison = {
     ...good,
     unmappedColumns: [{ column: "Union Dues", valuedRows: 4 }],
   };
-  assert.ok(
-    auditComparison(hiddenColumn).some((f) => f.invariant === "clean-mapped-every-column"),
-  );
+  assert.ok(auditComparison(hiddenColumn).some((f) => f.invariant === "clean-mapped-every-column"));
 
   const lyingMatch: ParallelComparison = {
     ...good,
     findings: good.findings.map((finding) =>
-      finding.slot === "base_pay" ? { ...finding, ourAmount: "1.0000", difference: "0.0000" } : finding,
+      finding.slot === "base_pay"
+        ? { ...finding, ourAmount: "1.0000", difference: "0.0000" }
+        : finding,
     ),
   };
   const lyingFailures = auditComparison(lyingMatch);
@@ -710,9 +724,7 @@ test("the self-check refuses a fabricated clean result", () => {
     status: "clean",
     totals: { ...good.totals, gross: { ...good.totals.gross, unattributed: "-50.0000" } },
   };
-  assert.ok(
-    auditComparison(laundered).some((f) => f.invariant === "clean-attributes-every-total"),
-  );
+  assert.ok(auditComparison(laundered).some((f) => f.invariant === "clean-attributes-every-total"));
 
   const blockedButClean: ParallelComparison = { ...good, blockedReason: "nothing to compare" };
   assert.ok(auditComparison(blockedButClean).some((f) => f.invariant === "clean-is-not-blocked"));

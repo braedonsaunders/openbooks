@@ -9,32 +9,32 @@
  */
 
 export type SegmentNameRef = {
-  key: string
-  name: string
-  pluralName: string
-}
+  key: string;
+  name: string;
+  pluralName: string;
+};
 
 /** Seed (un-renamed) names of the reportable built-in segments. */
 export const BUILTIN_SEGMENT_SEED: Record<string, { name: string; pluralName: string }> = {
-  department: { name: 'Department', pluralName: 'Departments' },
-  project: { name: 'Project', pluralName: 'Projects' },
-  location: { name: 'Location', pluralName: 'Locations' },
-  class: { name: 'Class', pluralName: 'Classes' },
-}
+  department: { name: "Department", pluralName: "Departments" },
+  project: { name: "Project", pluralName: "Projects" },
+  location: { name: "Location", pluralName: "Locations" },
+  class: { name: "Class", pluralName: "Classes" },
+};
 
-export type BuiltinSegmentKey = 'department' | 'project' | 'location' | 'class'
+export type BuiltinSegmentKey = "department" | "project" | "location" | "class";
 
 /** Fully-translated `filterBar` key for the "All X" option of each default segment. */
 export const DEFAULT_SEGMENT_ALL_KEY: Record<BuiltinSegmentKey, string> = {
-  department: 'allDepartments',
-  project: 'allProjects',
-  location: 'allLocations',
-  class: 'allClasses',
-}
+  department: "allDepartments",
+  project: "allProjects",
+  location: "allLocations",
+  class: "allClasses",
+};
 
 /** True when the segment still carries its seed names — safe to translate. */
 export function isDefaultSegmentName(seg: SegmentNameRef | null | undefined): boolean {
-  if (!seg) return false
-  const seed = BUILTIN_SEGMENT_SEED[seg.key]
-  return !!seed && seg.name === seed.name && seg.pluralName === seed.pluralName
+  if (!seg) return false;
+  const seed = BUILTIN_SEGMENT_SEED[seg.key];
+  return !!seed && seg.name === seed.name && seg.pluralName === seed.pluralName;
 }

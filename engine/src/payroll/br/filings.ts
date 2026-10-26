@@ -34,18 +34,18 @@ export function brPackFilings(): PayrollPackFilings {
         label: "Comprovante de Rendimentos Pagos e de Imposto sobre a Renda Retido na Fonte",
         cadence: "annual",
         description:
-          "Annual income statement for BR-pack employees (IN RFB nº 2.060/2021): taxable income, "
-          + "Previdência Oficial contributions, IRRF withheld and the dependent count, straight off "
-          + "committed pay runs. Exempt, exclusive-source and RRA amounts the engine does not price "
-          + "are named on the slip, never zeroed.",
+          "Annual income statement for BR-pack employees (IN RFB nº 2.060/2021): taxable income, " +
+          "Previdência Oficial contributions, IRRF withheld and the dependent count, straight off " +
+          "committed pay runs. Exempt, exclusive-source and RRA amounts the engine does not price " +
+          "are named on the slip, never zeroed.",
         population: (orgId, taxYear) => brInformePopulation(orgId, taxYear),
         parseRowId: parseBrInformeRowId,
         slip: { build: (orgId, taxYear, rowId) => brInformeSlip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "the BR pack produces no electronic submission file — for 2024 the channel is the DIRF "
-          + "(PGD DIRF, IN RFB nº 1.990/2020) alongside monthly eSocial and EFD-Reinf; for 2025+ "
-          + "the channels are eSocial (S-1200 remuneração, S-1210 pagamentos), EFD-Reinf (R-4000 "
-          + "series) and DCTFWeb — transmit through those channels directly",
+          "the BR pack produces no electronic submission file — for 2024 the channel is the DIRF " +
+          "(PGD DIRF, IN RFB nº 1.990/2020) alongside monthly eSocial and EFD-Reinf; for 2025+ " +
+          "the channels are eSocial (S-1200 remuneração, S-1210 pagamentos), EFD-Reinf (R-4000 " +
+          "series) and DCTFWeb — transmit through those channels directly",
         // A wrong Comprovante is corrected by RE-ISSUING it: the same form,
         // restated from the corrected committed runs (reversals/adjusting
         // entries — posted history is never edited). There is no separate
@@ -57,10 +57,10 @@ export function brPackFilings(): PayrollPackFilings {
           revisions: ["amended"],
           vehicle: "same_form",
           downloadRefusal:
-            "a corrected Comprovante re-renders from the corrected committed runs, but no "
-            + "correction file is produced — for 2024 retify via DIRF retificadora (PGD DIRF); "
-            + "for 2025+ retify the eSocial (S-1210) and EFD-Reinf (R-4000) events that replaced "
-            + "the DIRF, then re-issue the Comprovante; DCTFWeb follows the retified events",
+            "a corrected Comprovante re-renders from the corrected committed runs, but no " +
+            "correction file is produced — for 2024 retify via DIRF retificadora (PGD DIRF); " +
+            "for 2025+ retify the eSocial (S-1210) and EFD-Reinf (R-4000) events that replaced " +
+            "the DIRF, then re-issue the Comprovante; DCTFWeb follows the retified events",
         },
       },
     ],

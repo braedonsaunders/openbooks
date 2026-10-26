@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { loadTaxSetup, taxSetupSpec } from './view'
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { loadTaxSetup, taxSetupSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Tax Setup — the top-level guided workspace for standing up indirect-tax
@@ -13,9 +13,9 @@ export const dynamic = 'force-dynamic'
 export default async function TaxSetupPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadTaxSetup(sp)
-  return <ModuleView spec={taxSetupSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadTaxSetup(sp);
+  return <ModuleView spec={taxSetupSpec(data)} data={data} searchParams={sp} trusted />;
 }

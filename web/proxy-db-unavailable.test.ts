@@ -24,7 +24,11 @@ async function mintSessionCookie(): Promise<string> {
     false,
     ["sign"],
   );
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(sessionSigningInput(payload)));
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(sessionSigningInput(payload)),
+  );
   const signature = btoa(String.fromCharCode(...new Uint8Array(mac)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -48,7 +52,9 @@ test("every proxy denial carries the per-request id", async () => {
 test("an unverifiable session fails closed per request, never as a bare proxy throw", async () => {
   const cookie = await mintSessionCookie();
   const api = await proxy(
-    new NextRequest("http://localhost:4780/api/nope-xyz", { headers: { cookie: `ob_session=${cookie}` } }),
+    new NextRequest("http://localhost:4780/api/nope-xyz", {
+      headers: { cookie: `ob_session=${cookie}` },
+    }),
   );
   assert.equal(api.status, 503);
   const apiId = api.headers.get("x-request-id");
@@ -83,12 +89,16 @@ test("503 page retry works without inline handlers under the nonce-only CSP", as
     "503 page must retry via a same-document link that replays the current navigation as a GET",
   );
   assert.ok(!/<script[\s>]/i.test(body), "503 page must not depend on any script tag");
-  assert.ok(!/\son[a-z]+\s*=/i.test(body), "503 page must not use inline event handlers blocked by CSP");
+  assert.ok(
+    !/\son[a-z]+\s*=/i.test(body),
+    "503 page must not use inline event handlers blocked by CSP",
+  );
   const csp = page.headers.get("content-security-policy") ?? "";
-  const scriptSrc = csp
-    .split(";")
-    .map((directive) => directive.trim())
-    .find((directive) => directive.startsWith("script-src")) ?? "";
+  const scriptSrc =
+    csp
+      .split(";")
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith("script-src")) ?? "";
   assert.ok(scriptSrc.length > 0, "503 response must carry a script-src policy");
   assert.ok(
     !scriptSrc.includes("'unsafe-inline'"),

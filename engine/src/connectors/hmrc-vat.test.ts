@@ -39,7 +39,10 @@ describe("checkHmrcVatId", () => {
       called = true;
       return transportFor({})(...args);
     }) as typeof fetch;
-    await assert.rejects(() => checkHmrcVatId({ value: "GB123456789" }, counting), VatValidationError);
+    await assert.rejects(
+      () => checkHmrcVatId({ value: "GB123456789" }, counting),
+      VatValidationError,
+    );
     assert.equal(called, false);
   });
 

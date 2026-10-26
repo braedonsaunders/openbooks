@@ -8,8 +8,18 @@
  */
 import type { SqlExecutor } from "../platform/db.ts";
 import { applyBookAccountMaps, type AppliedBookAccountMap } from "./book-account-maps.ts";
-import { resolveBookBases, resolveBookRates, type BookProfile, type BookRateEvidence } from "./book-basis.ts";
-import { isIdentityBasis, translateLinesIntoBook, type BookSubsidiaryBasis, type TranslatableLine } from "./book-translation.ts";
+import {
+  resolveBookBases,
+  resolveBookRates,
+  type BookProfile,
+  type BookRateEvidence,
+} from "./book-basis.ts";
+import {
+  isIdentityBasis,
+  translateLinesIntoBook,
+  type BookSubsidiaryBasis,
+  type TranslatableLine,
+} from "./book-translation.ts";
 
 /**
  * How a caller states its amounts. `functional`: amounts are in each line's
@@ -30,7 +40,9 @@ export interface BookPostingEvidence {
   currencyDifferences: { subsidiaryId: string; amount: string }[];
 }
 
-export async function applyBookPostingPolicy<T extends TranslatableLine & { lineNumber: number; fxStated: boolean }>(
+export async function applyBookPostingPolicy<
+  T extends TranslatableLine & { lineNumber: number; fxStated: boolean },
+>(
   runner: SqlExecutor,
   args: {
     orgId: string;
@@ -42,7 +54,11 @@ export async function applyBookPostingPolicy<T extends TranslatableLine & { line
     lines: readonly T[];
     nextLineNumber: () => number;
   },
-): Promise<{ lines: T[]; bases: Map<string, BookSubsidiaryBasis>; evidence: BookPostingEvidence | null }> {
+): Promise<{
+  lines: T[];
+  bases: Map<string, BookSubsidiaryBasis>;
+  evidence: BookPostingEvidence | null;
+}> {
   const bases = await resolveBookBases(runner, {
     orgId: args.orgId,
     book: args.book,
@@ -50,22 +66,34 @@ export async function applyBookPostingPolicy<T extends TranslatableLine & { line
     postingDate: args.postingDate,
   });
   if (args.book.isPrimary) return { lines: [...args.lines], bases, evidence: null };
-  const mapped = args.accountBasis === "book" ? { lines: [...args.lines], applied: [] as AppliedBookAccountMap[] } : await applyBookAccountMaps(runner, {
-    orgId: args.orgId,
-    bookId: args.book.id,
-    bookLabel: args.book.code,
-    postingDate: args.postingDate,
-    entryLabel: args.entryLabel,
-    lines: args.lines,
-  });
-  const translating = args.amountBasis === "functional" && [...bases.values()].some((basis) => !isIdentityBasis(basis));
+  const mapped =
+    args.accountBasis === "book"
+      ? { lines: [...args.lines], applied: [] as AppliedBookAccountMap[] }
+      : await applyBookAccountMaps(runner, {
+          orgId: args.orgId,
+          bookId: args.book.id,
+          bookLabel: args.book.code,
+          postingDate: args.postingDate,
+          entryLabel: args.entryLabel,
+          lines: args.lines,
+        });
+  const translating =
+    args.amountBasis === "functional" &&
+    [...bases.values()].some((basis) => !isIdentityBasis(basis));
   if (!translating) {
     return {
       lines: mapped.lines,
       bases,
-      evidence: mapped.applied.length === 0 ? null : {
-        bookId: args.book.id, accountMaps: mapped.applied, rates: [], absorbedRounding: [], currencyDifferences: [],
-      },
+      evidence:
+        mapped.applied.length === 0
+          ? null
+          : {
+              bookId: args.book.id,
+              accountMaps: mapped.applied,
+              rates: [],
+              absorbedRounding: [],
+              currencyDifferences: [],
+            },
     };
   }
   const { rates, evidence: rateEvidence } = await resolveBookRates(runner, {
@@ -80,19 +108,20 @@ export async function applyBookPostingPolicy<T extends TranslatableLine & { line
     mapped.lines,
     bases,
     rates,
-    ({ subsidiaryId, bookCurrency, amount }) => differenceAccountId
-      ? ({
-          accountId: differenceAccountId,
-          subsidiaryId,
-          amount,
-          currency: bookCurrency,
-          txnAmount: amount,
-          fxRate: "1",
-          memo: `Book ${args.book.code} currency difference`,
-          lineNumber: args.nextLineNumber(),
-          fxStated: true,
-        } as unknown as T)
-      : null,
+    ({ subsidiaryId, bookCurrency, amount }) =>
+      differenceAccountId
+        ? ({
+            accountId: differenceAccountId,
+            subsidiaryId,
+            amount,
+            currency: bookCurrency,
+            txnAmount: amount,
+            fxRate: "1",
+            memo: `Book ${args.book.code} currency difference`,
+            lineNumber: args.nextLineNumber(),
+            fxStated: true,
+          } as unknown as T)
+        : null,
     { bookLabel: args.book.code, entryLabel: args.entryLabel },
   );
   return {

@@ -61,7 +61,10 @@ function toStageDTO(row: {
   isTerminal: boolean;
 }): PipelineStageDTO {
   if (!(PIPELINE_STAGE_KINDS as readonly string[]).includes(row.kind)) {
-    throw new RecruitingError("REFUSED", `pipeline stage ${row.id} carries unknown kind ${row.kind} — refusing a funnel the service cannot resolve`);
+    throw new RecruitingError(
+      "REFUSED",
+      `pipeline stage ${row.id} carries unknown kind ${row.kind} — refusing a funnel the service cannot resolve`,
+    );
   }
   return {
     id: row.id,
@@ -87,13 +90,16 @@ async function loadTemplateStages(
     name: string;
     kind: string;
     isTerminal: boolean;
-  }>(sql`
+  }>(
+    sql`
     select id, template_id as "templateId", position, key, name, kind,
            is_terminal as "isTerminal"
       from hrm_pipeline_stages
      where org_id = ${orgId} and template_id = ${templateId}
      order by position
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map(toStageDTO);
 }
 
@@ -102,16 +108,21 @@ export async function loadPipelineTemplate(
   orgId: string,
   templateId: string,
 ): Promise<PipelineTemplateDTO | null> {
-  const row = (await exec.execute<{
-    id: string;
-    name: string;
-    isDefault: boolean;
-    isActive: boolean;
-  }>(sql`
+  const row = (
+    await exec.execute<{
+      id: string;
+      name: string;
+      isDefault: boolean;
+      isActive: boolean;
+    }>(
+      sql`
     select id, name, is_default as "isDefault", is_active as "isActive"
       from hrm_pipeline_templates
      where org_id = ${orgId} and id = ${templateId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return { ...row, stages: await loadTemplateStages(exec, orgId, templateId) };
 }
@@ -120,11 +131,16 @@ async function loadDefaultPipelineTemplate(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<PipelineTemplateDTO | null> {
-  const row = (await exec.execute<{ id: string }>(sql`
+  const row = (
+    await exec.execute<{ id: string }>(
+      sql`
     select id from hrm_pipeline_templates
      where org_id = ${orgId} and is_default and is_active
      order by created_at limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return loadPipelineTemplate(exec, orgId, row.id);
 }
@@ -175,10 +191,15 @@ export async function ensureDefaultPipelineTemplate(
     -- Concurrent default provisioning reuses the template selected below.
     on conflict on constraint hrm_pipeline_templates_org_name do nothing
   `);
-  const id = (await exec.execute<{ id: string }>(sql`
+  const id = (
+    await exec.execute<{ id: string }>(
+      sql`
     select id from hrm_pipeline_templates
      where org_id = ${orgId} and name = ${DEFAULT_TEMPLATE_NAME} limit 1
-  `, "objects"))[0]?.id;
+  `,
+      "objects",
+    )
+  )[0]?.id;
   if (!id) {
     throw new RecruitingError(
       "REFUSED",
@@ -242,46 +263,71 @@ export interface CreatePipelineTemplateQuery {
 }
 
 /** Author a funnel through the service (the Setup registry path writes here). */
-export async function createPipelineTemplate(query: CreatePipelineTemplateQuery): Promise<PipelineTemplateDTO> {
+export async function createPipelineTemplate(
+  query: CreatePipelineTemplateQuery,
+): Promise<PipelineTemplateDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   if (typeof query.name !== "string" || query.name.trim().length === 0) {
     throw new RecruitingError("INVALID_INPUT", "template name must be non-blank");
   }
   if (query.stages.length === 0) {
-    throw new RecruitingError("INVALID_INPUT", "a pipeline template holds at least one stage — add the funnel steps");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "a pipeline template holds at least one stage — add the funnel steps",
+    );
   }
   const seenKeys = new Set<string>();
   for (const stage of query.stages) {
     if (typeof stage.key !== "string" || stage.key.trim().length === 0) {
-      throw new RecruitingError("INVALID_INPUT", "every pipeline stage carries a non-blank stable key");
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        "every pipeline stage carries a non-blank stable key",
+      );
     }
     if (typeof stage.name !== "string" || stage.name.trim().length === 0) {
       throw new RecruitingError("INVALID_INPUT", "every pipeline stage carries a non-blank name");
     }
-    if (typeof stage.kind !== "string" || !(PIPELINE_STAGE_KINDS as readonly string[]).includes(stage.kind)) {
+    if (
+      typeof stage.kind !== "string" ||
+      !(PIPELINE_STAGE_KINDS as readonly string[]).includes(stage.kind)
+    ) {
       throw new RecruitingError(
         "INVALID_INPUT",
         `pipeline stage kind must be one of ${PIPELINE_STAGE_KINDS.join(", ")} — check the stage kind`,
       );
     }
     if (seenKeys.has(stage.key)) {
-      throw new RecruitingError("INVALID_INPUT", `pipeline stage key ${JSON.stringify(stage.key)} repeats — keys are unique per template`);
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        `pipeline stage key ${JSON.stringify(stage.key)} repeats — keys are unique per template`,
+      );
     }
     seenKeys.add(stage.key);
   }
   if (!query.stages.some((stage) => stage.kind === "hired")) {
-    throw new RecruitingError("INVALID_INPUT", "a pipeline template holds a hired stage — the funnel ends in hired or rejected, never in a step");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "a pipeline template holds a hired stage — the funnel ends in hired or rejected, never in a step",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into hrm_pipeline_templates (org_id, name, is_default, is_active, created_by, updated_by)
       values (${orgId}, ${query.name as string}, false, true, ${actorId}, ${actorId})
       returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!inserted) {
-      throw new RecruitingError("REFUSED", "the pipeline template was not stored — no row was written; retry the request");
+      throw new RecruitingError(
+        "REFUSED",
+        "the pipeline template was not stored — no row was written; retry the request",
+      );
     }
     let position = 0;
     for (const stage of query.stages) {

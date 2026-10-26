@@ -44,7 +44,10 @@ export const projectBudgetBaselines = pgTable(
   },
   (t) => [
     uniqueIndex("project_budget_baselines_sequence").on(t.orgId, t.projectId, t.sequence),
-    check("project_budget_baselines_original_first", sql`(${t.kind} = 'original') = (${t.sequence} = 1)`),
+    check(
+      "project_budget_baselines_original_first",
+      sql`(${t.kind} = 'original') = (${t.sequence} = 1)`,
+    ),
   ],
 );
 
@@ -92,9 +95,7 @@ export const projectForecasts = pgTable(
     note: text("note"),
     ...createdColumns,
   },
-  (t) => [
-    index("project_forecasts_project").on(t.orgId, t.projectId, t.asOfDate),
-  ],
+  (t) => [index("project_forecasts_project").on(t.orgId, t.projectId, t.asOfDate)],
 );
 
 /** Append-only installed quantities; corrections append a reversing row. */
@@ -136,7 +137,11 @@ export const fieldTicketQuantities = pgTable(
   (t) => [index("field_ticket_quantities_ticket").on(t.orgId, t.fieldTicketId)],
 );
 
-export const INTERNAL_BILLING_METHODS = ["revenue_credit", "cost_transfer", "intercompany_sale"] as const;
+export const INTERNAL_BILLING_METHODS = [
+  "revenue_credit",
+  "cost_transfer",
+  "intercompany_sale",
+] as const;
 export type InternalBillingMethod = (typeof INTERNAL_BILLING_METHODS)[number];
 
 /**

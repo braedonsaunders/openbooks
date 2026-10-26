@@ -1,15 +1,15 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.form-template-post-test')
+const stateKey = Symbol.for("openbooks.form-template-post-test");
 interface RouteState {
-  calls: string[]
-  audits: Array<{ table: string; action: string }>
-  transactionStarts: number
-  dupe: boolean
-  failVersionWrite: boolean
-  raceInsert: boolean
+  calls: string[];
+  audits: Array<{ table: string; action: string }>;
+  transactionStarts: number;
+  dupe: boolean;
+  failVersionWrite: boolean;
+  raceInsert: boolean;
 }
 const routeState: RouteState = {
   calls: [],
@@ -18,27 +18,27 @@ const routeState: RouteState = {
   dupe: false,
   failVersionWrite: false,
   raceInsert: false,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksPostSqlText = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksPostSqlText = sqlText;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       export async function guardPermission() {
         return { user: { orgId: 'org-1', id: 'user-1' } }
@@ -46,7 +46,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:audit',
+    "mock:audit",
     `
       const state = globalThis[Symbol.for('openbooks.form-template-post-test')]
       export async function auditSetupChange(args, runner) {
@@ -56,7 +56,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.form-template-post-test')]
       const sqlText = globalThis.openbooksPostSqlText
@@ -97,103 +97,103 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-  ['../../../../lib/setup/audit', 'mock:audit'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["../../../../lib/setup/audit", "mock:audit"],
+]);
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?form-template-post-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?form-template-post-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  routeState.calls.length = 0
-  routeState.audits.length = 0
-  routeState.transactionStarts = 0
-  routeState.dupe = false
-  routeState.failVersionWrite = false
-  routeState.raceInsert = false
+  routeState.calls.length = 0;
+  routeState.audits.length = 0;
+  routeState.transactionStarts = 0;
+  routeState.dupe = false;
+  routeState.failVersionWrite = false;
+  routeState.raceInsert = false;
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/forms/templates', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/forms/templates", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
-test('create commits parent, version 1, and audit in one transaction', async () => {
-  reset()
+test("create commits parent, version 1, and audit in one transaction", async () => {
+  reset();
 
-  const response = await post({ key: 'intake', name: 'Intake' })
+  const response = await post({ key: "intake", name: "Intake" });
 
-  assert.equal(response.status, 201)
-  assert.deepEqual(await response.json(), { id: 'template-1', key: 'intake' })
-  assert.equal(routeState.transactionStarts, 1)
-  assert.ok(routeState.calls.some((text) => text.includes('select 1 from form_templates')))
-  assert.ok(routeState.calls.some((text) => text.includes('insert into form_templates')))
-  assert.ok(routeState.calls.some((text) => text.includes('insert into form_template_versions')))
-  assert.ok(routeState.calls.some((text) => text.includes('insert into audit_log')))
-  assert.deepEqual(routeState.audits, [{ table: 'form_templates', action: 'insert' }])
-})
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { id: "template-1", key: "intake" });
+  assert.equal(routeState.transactionStarts, 1);
+  assert.ok(routeState.calls.some((text) => text.includes("select 1 from form_templates")));
+  assert.ok(routeState.calls.some((text) => text.includes("insert into form_templates")));
+  assert.ok(routeState.calls.some((text) => text.includes("insert into form_template_versions")));
+  assert.ok(routeState.calls.some((text) => text.includes("insert into audit_log")));
+  assert.deepEqual(routeState.audits, [{ table: "form_templates", action: "insert" }]);
+});
 
-test('a taken key is a 409 with no writes', async () => {
-  reset()
-  routeState.dupe = true
+test("a taken key is a 409 with no writes", async () => {
+  reset();
+  routeState.dupe = true;
 
-  const response = await post({ key: 'intake', name: 'Intake' })
+  const response = await post({ key: "intake", name: "Intake" });
 
-  assert.equal(response.status, 409)
-  assert.ok(!routeState.calls.some((text) => text.includes('insert into')))
-})
+  assert.equal(response.status, 409);
+  assert.ok(!routeState.calls.some((text) => text.includes("insert into")));
+});
 
-test('a version-write failure rolls the template insert back with it', async () => {
-  reset()
-  routeState.failVersionWrite = true
+test("a version-write failure rolls the template insert back with it", async () => {
+  reset();
+  routeState.failVersionWrite = true;
 
-  await assert.rejects(() => post({ key: 'intake', name: 'Intake' }), /version write failed/)
-  assert.equal(routeState.transactionStarts, 1)
-})
+  await assert.rejects(() => post({ key: "intake", name: "Intake" }), /version write failed/);
+  assert.equal(routeState.transactionStarts, 1);
+});
 
-test('a concurrent creator racing the dupe check is a 409, not a 500', async () => {
-  reset()
-  routeState.raceInsert = true
+test("a concurrent creator racing the dupe check is a 409, not a 500", async () => {
+  reset();
+  routeState.raceInsert = true;
 
-  const response = await post({ key: 'intake', name: 'Intake' })
+  const response = await post({ key: "intake", name: "Intake" });
 
-  assert.equal(response.status, 409)
-  assert.match(((await response.json()) as { error: string }).error, /already exists/)
-})
+  assert.equal(response.status, 409);
+  assert.match(((await response.json()) as { error: string }).error, /already exists/);
+});
 
-test('mistyped scalars are 400s, never a 500', async () => {
+test("mistyped scalars are 400s, never a 500", async () => {
   for (const body of [
-    { key: 'intake', name: 5 },
-    { key: 7, name: 'Intake' },
-    { key: 'intake', name: 'Intake', category: 3 },
-    { key: 'intake', name: 'Intake', kind: 9 },
+    { key: "intake", name: 5 },
+    { key: 7, name: "Intake" },
+    { key: "intake", name: "Intake", category: 3 },
+    { key: "intake", name: "Intake", kind: 9 },
   ]) {
-    reset()
-    const response = await post(body as Record<string, unknown>)
-    assert.equal(response.status, 400)
-    assert.equal(routeState.transactionStarts, 0)
+    reset();
+    const response = await post(body as Record<string, unknown>);
+    assert.equal(response.status, 400);
+    assert.equal(routeState.transactionStarts, 0);
   }
-})
+});

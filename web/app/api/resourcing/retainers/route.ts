@@ -7,21 +7,32 @@ import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { created, unprocessable } from "@/lib/api/responses";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentResourcingCreate } from "../_idempotent";
-import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
+import {
+  findUnownedCustomReferences,
+  loadFieldDefs,
+  unknownCustomFieldKey,
+  validateCustomValues,
+} from "@/lib/custom-fields";
 
-const Body = z.object({
-  projectId: uuidString(),
-  customerPartyId: uuidString(),
-  kind: z.enum(["hours", "fees"]),
-  currency: z.string().length(3).transform((value) => value.toUpperCase()).optional(),
-  totalAmount: z.string().optional(),
-  totalHours: z.string().optional(),
-  unitRate: z.string().optional(),
-  startsOn: z.string(),
-  endsOn: z.string(),
-  retainerItemId: uuidString(),
-  custom: z.record(z.string(), z.json()).optional(),
-}).strict();
+const Body = z
+  .object({
+    projectId: uuidString(),
+    customerPartyId: uuidString(),
+    kind: z.enum(["hours", "fees"]),
+    currency: z
+      .string()
+      .length(3)
+      .transform((value) => value.toUpperCase())
+      .optional(),
+    totalAmount: z.string().optional(),
+    totalHours: z.string().optional(),
+    unitRate: z.string().optional(),
+    startsOn: z.string(),
+    endsOn: z.string(),
+    retainerItemId: uuidString(),
+    custom: z.record(z.string(), z.json()).optional(),
+  })
+  .strict();
 const Params = z.object({}).strict();
 
 export const POST = defineRoute({
@@ -42,10 +53,16 @@ export const POST = defineRoute({
     if (!validated.ok) {
       return unprocessable("invalid_custom_fields", {
         field: "custom",
-        fieldErrors: Object.fromEntries(Object.entries(validated.errors).map(([key, message]) => [key, [message]])),
+        fieldErrors: Object.fromEntries(
+          Object.entries(validated.errors).map(([key, message]) => [key, [message]]),
+        ),
       });
     }
-    const unowned = await findUnownedCustomReferences(authz.user.orgId, defs, routeBody.custom ?? {});
+    const unowned = await findUnownedCustomReferences(
+      authz.user.orgId,
+      defs,
+      routeBody.custom ?? {},
+    );
     if (unowned.length > 0) return unprocessable("unknown_custom_reference", { field: "custom" });
     const body = { ...routeBody, custom: validated.cleaned };
     return withOrgTransaction(authz.user.orgId, async () => {
@@ -55,16 +72,29 @@ export const POST = defineRoute({
         request,
         table: "res_retainers",
         match,
-        create: (id, requestId, savedMatch) => createRetainer({
-          ...body,
-          orgId: authz.user.orgId,
-          actorId: authz.user.id,
-          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-        }, { id, requestId, match: savedMatch }),
-        load: async () => (await db.select().from(resRetainers).where(and(
-          eq(resRetainers.orgId, authz.user.orgId),
-          eq(resRetainers.id, request.headers.get("Idempotency-Key")!.trim()),
-        )).limit(1))[0] ?? null,
+        create: (id, requestId, savedMatch) =>
+          createRetainer(
+            {
+              ...body,
+              orgId: authz.user.orgId,
+              actorId: authz.user.id,
+              allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+            },
+            { id, requestId, match: savedMatch },
+          ),
+        load: async () =>
+          (
+            await db
+              .select()
+              .from(resRetainers)
+              .where(
+                and(
+                  eq(resRetainers.orgId, authz.user.orgId),
+                  eq(resRetainers.id, request.headers.get("Idempotency-Key")!.trim()),
+                ),
+              )
+              .limit(1)
+          )[0] ?? null,
       });
       return created(row);
     });

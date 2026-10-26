@@ -14,16 +14,28 @@ import { parseGbTaxCode } from "./tax-codes.ts";
 
 test("1257L parses cumulative carrying its number for the Tables-A schedule", () => {
   assert.deepEqual(parseGbTaxCode("1257L"), {
-    kind: "suffix", number: 1257n, welsh: false, scottish: false, nonCumulative: false,
+    kind: "suffix",
+    number: 1257n,
+    welsh: false,
+    scottish: false,
+    nonCumulative: false,
   });
   assert.deepEqual(parseGbTaxCode(" 1257l "), {
-    kind: "suffix", number: 1257n, welsh: false, scottish: false, nonCumulative: false,
+    kind: "suffix",
+    number: 1257n,
+    welsh: false,
+    scottish: false,
+    nonCumulative: false,
   });
 });
 
 test("S1257L parses Scottish cumulative carrying its number", () => {
   assert.deepEqual(parseGbTaxCode("S1257L"), {
-    kind: "suffix", number: 1257n, welsh: false, scottish: true, nonCumulative: false,
+    kind: "suffix",
+    number: 1257n,
+    welsh: false,
+    scottish: true,
+    nonCumulative: false,
   });
   for (const code of ["S1257L W1", "S1257L M1", "S1257L X", "S1257LW1"]) {
     const parsed = parseGbTaxCode(code);
@@ -34,11 +46,36 @@ test("S1257L parses Scottish cumulative carrying its number", () => {
 });
 
 test("Scottish flat codes carry their Tables-B rates", () => {
-  assert.deepEqual(parseGbTaxCode("SBR"), { kind: "flat", rate: "0.20", welsh: false, scottish: true });
-  assert.deepEqual(parseGbTaxCode("SD0"), { kind: "flat", rate: "0.21", welsh: false, scottish: true });
-  assert.deepEqual(parseGbTaxCode("SD1"), { kind: "flat", rate: "0.42", welsh: false, scottish: true });
-  assert.deepEqual(parseGbTaxCode("SD2"), { kind: "flat", rate: "0.45", welsh: false, scottish: true });
-  assert.deepEqual(parseGbTaxCode("SD3"), { kind: "flat", rate: "0.48", welsh: false, scottish: true });
+  assert.deepEqual(parseGbTaxCode("SBR"), {
+    kind: "flat",
+    rate: "0.20",
+    welsh: false,
+    scottish: true,
+  });
+  assert.deepEqual(parseGbTaxCode("SD0"), {
+    kind: "flat",
+    rate: "0.21",
+    welsh: false,
+    scottish: true,
+  });
+  assert.deepEqual(parseGbTaxCode("SD1"), {
+    kind: "flat",
+    rate: "0.42",
+    welsh: false,
+    scottish: true,
+  });
+  assert.deepEqual(parseGbTaxCode("SD2"), {
+    kind: "flat",
+    rate: "0.45",
+    welsh: false,
+    scottish: true,
+  });
+  assert.deepEqual(parseGbTaxCode("SD3"), {
+    kind: "flat",
+    rate: "0.48",
+    welsh: false,
+    scottish: true,
+  });
 });
 
 test("W1/M1/X suffixes parse non-cumulative", () => {
@@ -50,38 +87,102 @@ test("W1/M1/X suffixes parse non-cumulative", () => {
 });
 
 test("flat codes price whole pay at their HMRC rate", () => {
-  assert.deepEqual(parseGbTaxCode("BR"), { kind: "flat", rate: "0.20", welsh: false, scottish: false });
-  assert.deepEqual(parseGbTaxCode("D0"), { kind: "flat", rate: "0.40", welsh: false, scottish: false });
-  assert.deepEqual(parseGbTaxCode("D1"), { kind: "flat", rate: "0.45", welsh: false, scottish: false });
+  assert.deepEqual(parseGbTaxCode("BR"), {
+    kind: "flat",
+    rate: "0.20",
+    welsh: false,
+    scottish: false,
+  });
+  assert.deepEqual(parseGbTaxCode("D0"), {
+    kind: "flat",
+    rate: "0.40",
+    welsh: false,
+    scottish: false,
+  });
+  assert.deepEqual(parseGbTaxCode("D1"), {
+    kind: "flat",
+    rate: "0.45",
+    welsh: false,
+    scottish: false,
+  });
 });
 
 test("Welsh C-prefix codes alias the identical rUK arithmetic", () => {
   assert.deepEqual(parseGbTaxCode("C1257L"), {
-    kind: "suffix", number: 1257n, welsh: true, scottish: false, nonCumulative: false,
+    kind: "suffix",
+    number: 1257n,
+    welsh: true,
+    scottish: false,
+    nonCumulative: false,
   });
-  assert.deepEqual(parseGbTaxCode("CBR"), { kind: "flat", rate: "0.20", welsh: true, scottish: false });
-  assert.deepEqual(parseGbTaxCode("CD0"), { kind: "flat", rate: "0.40", welsh: true, scottish: false });
-  assert.deepEqual(parseGbTaxCode("CD1"), { kind: "flat", rate: "0.45", welsh: true, scottish: false });
+  assert.deepEqual(parseGbTaxCode("CBR"), {
+    kind: "flat",
+    rate: "0.20",
+    welsh: true,
+    scottish: false,
+  });
+  assert.deepEqual(parseGbTaxCode("CD0"), {
+    kind: "flat",
+    rate: "0.40",
+    welsh: true,
+    scottish: false,
+  });
+  assert.deepEqual(parseGbTaxCode("CD1"), {
+    kind: "flat",
+    rate: "0.45",
+    welsh: true,
+    scottish: false,
+  });
   assert.deepEqual(parseGbTaxCode("C0T"), {
-    kind: "suffix", number: 0n, welsh: true, scottish: false, nonCumulative: false,
+    kind: "suffix",
+    number: 0n,
+    welsh: true,
+    scottish: false,
+    nonCumulative: false,
   });
 });
 
 test("0T, NT and K codes parse", () => {
   assert.deepEqual(parseGbTaxCode("0T"), {
-    kind: "suffix", number: 0n, welsh: false, scottish: false, nonCumulative: false,
+    kind: "suffix",
+    number: 0n,
+    welsh: false,
+    scottish: false,
+    nonCumulative: false,
   });
   assert.deepEqual(parseGbTaxCode("NT"), { kind: "none" });
   assert.deepEqual(parseGbTaxCode("K475"), {
-    kind: "k", number: 475n, welsh: false, scottish: false, nonCumulative: false,
+    kind: "k",
+    number: 475n,
+    welsh: false,
+    scottish: false,
+    nonCumulative: false,
   });
   assert.deepEqual(parseGbTaxCode("CK9007199254740993"), {
-    kind: "k", number: 9007199254740993n, welsh: true, scottish: false, nonCumulative: false,
+    kind: "k",
+    number: 9007199254740993n,
+    welsh: true,
+    scottish: false,
+    nonCumulative: false,
   });
 });
 
 test("untranscribed S-prefix codes are refused by name, never fallen through", () => {
-  for (const code of ["S0T", "SNT", "SK500", "SK1", "ST", "S1100L", "S1257M", "S1257N", "S", "SC1257L", "CS1257L", "SBR W1", "SD3 M1"]) {
+  for (const code of [
+    "S0T",
+    "SNT",
+    "SK500",
+    "SK1",
+    "ST",
+    "S1100L",
+    "S1257M",
+    "S1257N",
+    "S",
+    "SC1257L",
+    "CS1257L",
+    "SBR W1",
+    "SD3 M1",
+  ]) {
     assert.throws(() => parseGbTaxCode(code), PayrollPackError, code);
   }
   assert.throws(() => parseGbTaxCode("S0T"), /S0T is refused by name/);

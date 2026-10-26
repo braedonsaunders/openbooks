@@ -13,10 +13,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __billingRequestBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     // The route factory checks permission and the Projects gate together
     // through @/lib/feature-gates at request time.
     if (specifier === "@/lib/feature-gates")
@@ -31,7 +37,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 async function fixture() {
@@ -40,24 +47,32 @@ async function fixture() {
   state.orgId = org.orgId;
   state.actorId = actorId;
   const projectId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active)
-    values (${projectId},${org.orgId},${org.subsidiaryId},'BILLBOUND','Bound billing',${org.customerId},'active',true)`));
+    values (${projectId},${org.orgId},${org.subsidiaryId},'BILLBOUND','Bound billing',${org.customerId},'active',true)`),
+  );
   return { org, projectId };
 }
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new Request("http://billing.test/api/billing-requests", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new Request("http://billing.test/api/billing-requests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 async function requestCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from billing_requests where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from billing_requests where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -65,11 +80,21 @@ test("billing-request creation refuses a draw wider than numeric(19,4) without w
   const { org, projectId } = await fixture();
   try {
     const response = await post({
-      projectId, basis: "draw_amount", drawAmount: "99999999999999999999.99", cutoffDate: "2026-08-15",
+      projectId,
+      basis: "draw_amount",
+      drawAmount: "99999999999999999999.99",
+      cutoffDate: "2026-08-15",
     });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.doesNotMatch(json?.error ?? "", /Failed query|invalid input syntax|numeric field overflow/i);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
+    assert.doesNotMatch(
+      json?.error ?? "",
+      /Failed query|invalid input syntax|numeric field overflow/i,
+    );
     assert.equal(await requestCount(org.orgId), 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -80,10 +105,17 @@ test("billing-request creation refuses a non-calendar cutoff date without writin
   const { org, projectId } = await fixture();
   try {
     const response = await post({
-      projectId, basis: "draw_amount", drawAmount: "100", cutoffDate: "2026-09-31",
+      projectId,
+      basis: "draw_amount",
+      drawAmount: "100",
+      cutoffDate: "2026-09-31",
     });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /Failed query|invalid input syntax/i);
     assert.equal(await requestCount(org.orgId), 0);
   } finally {
@@ -99,16 +131,26 @@ test("billing-request creation refuses a decimal-comma draw with the dotted rewr
   const { org, projectId } = await fixture();
   try {
     const refused = await post({
-      projectId, basis: "draw_amount", drawAmount: "12,34", cutoffDate: "2026-08-15",
+      projectId,
+      basis: "draw_amount",
+      drawAmount: "12,34",
+      cutoffDate: "2026-08-15",
     });
     const refusedJson = (await refused.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refusedJson)}`);
+    assert.equal(
+      refused.status,
+      422,
+      `expected 422, got ${refused.status}: ${JSON.stringify(refusedJson)}`,
+    );
     assert.match(refusedJson?.error ?? "", /must use "\." as the decimal point/);
     assert.match(refusedJson?.error ?? "", /write "12,34" as "12\.34"/);
     assert.equal(await requestCount(org.orgId), 0);
 
     const filed = await post({
-      projectId, basis: "draw_amount", drawAmount: "12.34", cutoffDate: "2026-08-15",
+      projectId,
+      basis: "draw_amount",
+      drawAmount: "12.34",
+      cutoffDate: "2026-08-15",
     });
     assert.equal(filed.status, 200, JSON.stringify(await filed.json().catch(() => null)));
     assert.equal(await requestCount(org.orgId), 1);
@@ -121,7 +163,10 @@ test("billing-request creation still files an ordinary draw request", async () =
   const { org, projectId } = await fixture();
   try {
     const response = await post({
-      projectId, basis: "draw_amount", drawAmount: "100", cutoffDate: "2026-08-15",
+      projectId,
+      basis: "draw_amount",
+      drawAmount: "100",
+      cutoffDate: "2026-08-15",
     });
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(await requestCount(org.orgId), 1);

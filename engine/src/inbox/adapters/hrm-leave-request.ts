@@ -42,13 +42,15 @@ export const hrmLeaveRequestAdapter: InboxAdapter = {
         waitingSince: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/hrm/leave",
-        actions: sodBlocked ? [] : [
-          // The leave release requires a non-blank reason even to approve
-          // (staffing evidence) — the source names it, so the inbox collects it.
-          { key: "approve", label: "Approve", style: "primary", needsReason: true },
-          { key: "reject", label: "Reject", style: "danger", needsReason: true },
-          { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },
-        ],
+        actions: sodBlocked
+          ? []
+          : [
+              // The leave release requires a non-blank reason even to approve
+              // (staffing evidence) — the source names it, so the inbox collects it.
+              { key: "approve", label: "Approve", style: "primary", needsReason: true },
+              { key: "reject", label: "Reject", style: "danger", needsReason: true },
+              { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },
+            ],
         source: { kind: "hrm_leave_request_gate", id: gate.id },
       });
     }
@@ -89,22 +91,44 @@ export const hrmLeaveRequestAdapter: InboxAdapter = {
     if (sourceId.startsWith("gate:")) {
       const gateId = sourceId.slice("gate:".length);
       if (actionKey === "approve") {
-        await decideGate({ gateId, decision: "approved", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId,
+          decision: "approved",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "reject") {
-        await decideGate({ gateId, decision: "rejected", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId,
+          decision: "rejected",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "delegate") {
         const delegation = parseDelegationReason(reason);
-        await delegateGate(gateId, ctx.actorId, delegation.toUserId, allowedSubsidiaryIds, delegation.note);
+        await delegateGate(
+          gateId,
+          ctx.actorId,
+          delegation.toUserId,
+          allowedSubsidiaryIds,
+          delegation.note,
+        );
         return;
       }
     }
     if (sourceId.startsWith("own:")) {
       if (actionKey === "submit") {
-        await submitLeaveRequest({ orgId: ctx.orgId, actorId: ctx.actorId, requestId: sourceId.slice("own:".length) });
+        await submitLeaveRequest({
+          orgId: ctx.orgId,
+          actorId: ctx.actorId,
+          requestId: sourceId.slice("own:".length),
+        });
         return;
       }
     }

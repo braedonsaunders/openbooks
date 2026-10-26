@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadMeOneOnOnesPage, meOneOnOnesSpec, meOneOnOnesTitle } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadMeOneOnOnesPage, meOneOnOnesSpec, meOneOnOnesTitle } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await meOneOnOnesTitle() }
+  return { title: await meOneOnOnesTitle() };
 }
 
 /**
@@ -15,9 +15,9 @@ export async function generateMetadata() {
 export default async function MeOneOnOnesPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadMeOneOnOnesPage(sp)
-  return <ModuleView spec={meOneOnOnesSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadMeOneOnOnesPage(sp);
+  return <ModuleView spec={meOneOnOnesSpec(data)} data={data} searchParams={sp} trusted />;
 }

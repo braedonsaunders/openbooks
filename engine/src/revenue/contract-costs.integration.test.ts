@@ -28,32 +28,36 @@ import type { FlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("contract-cost attention respects the caller's subsidiary visibility", { skip: !DB }, async () => {
-  const world = await setupCostWorld();
-  try {
-    const asset = await capitalizeContractCost({
-      orgId: world.org.orgId,
-      actorId: world.managerId,
-      revenueContractId: null,
-      repPartyId: world.repPartyId,
-      customerPartyId: world.org.customerId,
-      costType: "commission",
-      amountMinor: 10000n,
-      currency: "CAD",
-      capitalizedOn: world.org.date,
-      method: "straight_line",
-      originalExpenseAccountId: world.commissionExpenseAccountId,
-      source: { kind: "import" },
-    });
+test(
+  "contract-cost attention respects the caller's subsidiary visibility",
+  { skip: !DB },
+  async () => {
+    const world = await setupCostWorld();
+    try {
+      const asset = await capitalizeContractCost({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        revenueContractId: null,
+        repPartyId: world.repPartyId,
+        customerPartyId: world.org.customerId,
+        costType: "commission",
+        amountMinor: 10000n,
+        currency: "CAD",
+        capitalizedOn: world.org.date,
+        method: "straight_line",
+        originalExpenseAccountId: world.commissionExpenseAccountId,
+        source: { kind: "import" },
+      });
 
-    const unrestricted = await contractCostAttentionItems(db, world.org.orgId);
-    const restricted = await contractCostAttentionItems(db, world.org.orgId, new Set());
-    assert.ok(unrestricted.some((item) => item.assetId === asset.assetId));
-    assert.ok(!restricted.some((item) => item.assetId === asset.assetId));
-  } finally {
-    await dropScratchOrgReporting(world.org.orgId);
-  }
-});
+      const unrestricted = await contractCostAttentionItems(db, world.org.orgId);
+      const restricted = await contractCostAttentionItems(db, world.org.orgId, new Set());
+      assert.ok(unrestricted.some((item) => item.assetId === asset.assetId));
+      assert.ok(!restricted.some((item) => item.assetId === asset.assetId));
+    } finally {
+      await dropScratchOrgReporting(world.org.orgId);
+    }
+  },
+);
 
 interface CostWorld {
   org: ScratchOrg;
@@ -77,13 +81,22 @@ async function setupCostWorld(options: { expedient?: boolean } = {}): Promise<Co
        set settings = jsonb_set(settings, '{features,contractCosts}', 'true'::jsonb, true)
      where id = ${org.orgId}`);
   const assetAccountId = await seedPostingAccount(
-    org.orgId, "1400", "Capitalized Contract Costs", "asset_current_other",
+    org.orgId,
+    "1400",
+    "Capitalized Contract Costs",
+    "asset_current_other",
   );
   const expenseAccountId = await seedPostingAccount(
-    org.orgId, "6100", "Commission Amortization", "expense",
+    org.orgId,
+    "6100",
+    "Commission Amortization",
+    "expense",
   );
   const commissionExpenseAccountId = await seedPostingAccount(
-    org.orgId, "6110", "Commission Expense", "expense",
+    org.orgId,
+    "6110",
+    "Commission Expense",
+    "expense",
   );
   await db.execute(sql`
     insert into contract_cost_policies
@@ -111,7 +124,16 @@ async function setupCostWorld(options: { expedient?: boolean } = {}): Promise<Co
     update app_roles
        set permissions = '["contract_costs.read", "contract_costs.approve"]'::jsonb
      where org_id = ${org.orgId} and key = 'cc_approver'`);
-  return { org, actors, managerId, approverId, assetAccountId, expenseAccountId, commissionExpenseAccountId, repPartyId };
+  return {
+    org,
+    actors,
+    managerId,
+    approverId,
+    assetAccountId,
+    expenseAccountId,
+    commissionExpenseAccountId,
+    repPartyId,
+  };
 }
 
 async function seedContract(
@@ -131,8 +153,13 @@ async function seedContract(
 
 /** Seed one open monthly period per given month start (scratch ships July only). */
 async function seedPeriods(orgId: string, monthStarts: string[]): Promise<Map<string, string>> {
-  const cal = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${orgId} and is_default`, "objects"))[0];
+  const cal = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from fiscal_calendars where org_id = ${orgId} and is_default`,
+      "objects",
+    )
+  )[0];
   assert.ok(cal, "scratch org ships a default fiscal calendar");
   const ids = new Map<string, string>();
   assert.ok(monthStarts.length > 0, "at least one fiscal period is requested");
@@ -148,8 +175,13 @@ async function seedPeriods(orgId: string, monthStarts: string[]): Promise<Map<st
       values (${id}, ${orgId}, ${year}, ${mon}, ${name},
         ${`${name}-01`}, ${`${name}-${String(lastDay).padStart(2, "0")}`}, false, ${cal.id})
       on conflict do nothing`);
-    const row = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${orgId} and name = ${name}`, "objects"))[0];
+    const row = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from accounting_periods where org_id = ${orgId} and name = ${name}`,
+        "objects",
+      )
+    )[0];
     assert.ok(row, `period ${name} exists after seeding`);
     ids.set(name, row.id);
   }
@@ -157,88 +189,107 @@ async function seedPeriods(orgId: string, monthStarts: string[]): Promise<Map<st
 }
 
 async function entryBalance(entryId: string): Promise<{ lines: number; balanced: boolean }> {
-  const rows = (await db.execute<{ lines: string; balanced: boolean }>(sql`
+  const rows = (
+    await db.execute<{ lines: string; balanced: boolean }>(
+      sql`
     select count(*)::text as lines, coalesce(sum(jl.amount), 0) = 0 as balanced
       from journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
      where jl.entry_id = ${entryId}
-       and je.status in ('posted', 'reversed')`, "objects"))[0]!;
+       and je.status in ('posted', 'reversed')`,
+      "objects",
+    )
+  )[0]!;
   return { lines: Number(rows.lines), balanced: rows.balanced };
 }
 
-test("contract-cost capitalization and amortization authorize and post in the contract subsidiary", { skip: !DB }, async () => {
-  const world = await setupCostWorld();
-  try {
-    const subsidiaryId = randomUUID();
-    await db.execute(sql`
+test(
+  "contract-cost capitalization and amortization authorize and post in the contract subsidiary",
+  { skip: !DB },
+  async () => {
+    const world = await setupCostWorld();
+    try {
+      const subsidiaryId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${subsidiaryId}, ${world.org.orgId}, ${world.org.subsidiaryId}, 'Contract Cost Branch', 'CAD', 'CA')
     `);
-    const contractId = await seedContract(world, {
-      number: "C-ENTITY-COST",
-      startsOn: "2026-07-01",
-      endsOn: "2026-09-30",
-    });
-    await db.execute(sql`
+      const contractId = await seedContract(world, {
+        number: "C-ENTITY-COST",
+        startsOn: "2026-07-01",
+        endsOn: "2026-09-30",
+      });
+      await db.execute(sql`
       update revenue_contracts set subsidiary_id = ${subsidiaryId}
        where org_id = ${world.org.orgId} and id = ${contractId}
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       update app_roles
          set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [world.org.subsidiaryId] })}::jsonb
        where org_id = ${world.org.orgId} and key = 'cc_manager'
     `);
 
-    const input = {
-      orgId: world.org.orgId,
-      actorId: world.managerId,
-      revenueContractId: contractId,
-      repPartyId: world.repPartyId,
-      customerPartyId: world.org.customerId,
-      costType: "commission" as const,
-      amountMinor: 90000n,
-      currency: "CAD",
-      capitalizedOn: "2026-07-15",
-      method: "straight_line" as const,
-      originalExpenseAccountId: world.commissionExpenseAccountId,
-      source: { kind: "manual" as const },
-    };
-    await assert.rejects(capitalizeContractCost(input), (error: unknown) => {
-      assert.ok(error instanceof ContractCostError);
-      assert.equal(error.status, 403);
-      assert.equal(error.code, "contract_cost_forbidden");
-      return true;
-    });
+      const input = {
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        revenueContractId: contractId,
+        repPartyId: world.repPartyId,
+        customerPartyId: world.org.customerId,
+        costType: "commission" as const,
+        amountMinor: 90000n,
+        currency: "CAD",
+        capitalizedOn: "2026-07-15",
+        method: "straight_line" as const,
+        originalExpenseAccountId: world.commissionExpenseAccountId,
+        source: { kind: "manual" as const },
+      };
+      await assert.rejects(capitalizeContractCost(input), (error: unknown) => {
+        assert.ok(error instanceof ContractCostError);
+        assert.equal(error.status, 403);
+        assert.equal(error.code, "contract_cost_forbidden");
+        return true;
+      });
 
-    await db.execute(sql`
+      await db.execute(sql`
       update app_roles
          set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [subsidiaryId] })}::jsonb
        where org_id = ${world.org.orgId} and key = 'cc_manager'
     `);
-    const capitalized = await capitalizeContractCost(input);
-    assert.ok(capitalized.capitalizeEntryId);
-    const capitalization = (await db.execute<{ subsidiary_id: string }>(sql`
+      const capitalized = await capitalizeContractCost(input);
+      assert.ok(capitalized.capitalizeEntryId);
+      const capitalization = (
+        await db.execute<{ subsidiary_id: string }>(
+          sql`
       select subsidiary_id from journal_entries where org_id = ${world.org.orgId} and id = ${capitalized.capitalizeEntryId}
-    `, "objects"))[0];
-    assert.equal(capitalization?.subsidiary_id, subsidiaryId);
+    `,
+          "objects",
+        )
+      )[0];
+      assert.equal(capitalization?.subsidiary_id, subsidiaryId);
 
-    const periods = await seedPeriods(world.org.orgId, ["2026-07"]);
-    const amortization = await runContractCostAmortization({
-      orgId: world.org.orgId,
-      actorId: world.managerId,
-      periodId: periods.get("2026-07")!,
-    });
-    assert.equal(amortization.posted, 1);
-    const posted = (await db.execute<{ subsidiary_id: string }>(sql`
+      const periods = await seedPeriods(world.org.orgId, ["2026-07"]);
+      const amortization = await runContractCostAmortization({
+        orgId: world.org.orgId,
+        actorId: world.managerId,
+        periodId: periods.get("2026-07")!,
+      });
+      assert.equal(amortization.posted, 1);
+      const posted = (
+        await db.execute<{ subsidiary_id: string }>(
+          sql`
       select subsidiary_id
         from journal_entries
        where org_id = ${world.org.orgId} and id = ${amortization.entries[0]!.entryId}
-    `, "objects"))[0];
-    assert.equal(posted?.subsidiary_id, subsidiaryId);
-  } finally {
-    await dropScratchOrgReporting(world.org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0];
+      assert.equal(posted?.subsidiary_id, subsidiaryId);
+    } finally {
+      await dropScratchOrgReporting(world.org.orgId);
+    }
+  },
+);
 
 test(
   "contract cost carrying uses the primary book and unlinked assets retain their source amount",
@@ -287,12 +338,17 @@ test(
       const primaryCarrying = await assetCarryingMinor(db, world.org.orgId, capitalized.assetId);
       assert.equal(primaryCarrying, 100000n);
 
-      const secondaryBookId = (await db.execute<{ id: string }>(sql`
+      const secondaryBookId = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into accounting_books
           (org_id, code, name, is_primary, is_active, posts_gl, created_by, updated_by)
         values (${world.org.orgId}, 'CC-SECONDARY', 'Contract cost secondary', false, true, true,
           ${world.actors.adminId}, ${world.actors.adminId})
-        returning id`, "objects"))[0]?.id;
+        returning id`,
+          "objects",
+        )
+      )[0]?.id;
       assert.ok(secondaryBookId);
       const secondaryEntryId = randomUUID();
       await db.execute(sql`
@@ -367,9 +423,7 @@ test(
 
       const periods = await seedPeriods(world.org.orgId, ["2026-08-01", "2026-09-01"]);
       for (const name of ["2026-07", "2026-08", "2026-09"] as const) {
-        const periodId = name === "2026-07"
-          ? world.org.periodId
-          : periods.get(name);
+        const periodId = name === "2026-07" ? world.org.periodId : periods.get(name);
         assert.ok(periodId, `period ${name} is seeded`);
         const run = await runContractCostAmortization({
           orgId: world.org.orgId,
@@ -383,14 +437,24 @@ test(
         assert.equal(balance.lines, 2);
         assert.equal(balance.balanced, true, `period ${name} amortization entry balances`);
       }
-      const posted = (await db.execute<{ total: string }>(sql`
+      const posted = (
+        await db.execute<{ total: string }>(
+          sql`
         select coalesce(sum(amount_minor), 0)::text as total
-          from contract_cost_amortization where org_id = ${world.org.orgId}`, "objects"))[0]!;
+          from contract_cost_amortization where org_id = ${world.org.orgId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(posted.total, "100000");
       assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 0n);
-      const status = (await db.execute<{ status: string }>(sql`
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
         select status from contract_cost_assets
-         where org_id = ${world.org.orgId} and id = ${cap.assetId}`, "objects"))[0]!;
+         where org_id = ${world.org.orgId} and id = ${cap.assetId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(status.status, "fully_amortized");
     } finally {
       await dropScratchOrgReporting(world.org.orgId);
@@ -508,9 +572,14 @@ test(
       });
       assert.equal(cap.status, "expensed");
       assert.equal(cap.capitalizeEntryId, null);
-      const journals = (await db.execute<{ n: string }>(sql`
+      const journals = (
+        await db.execute<{ n: string }>(
+          sql`
         select count(*)::text as n from journal_entries
-         where org_id = ${world.org.orgId} and origin like 'contract_cost%'`, "objects"))[0]!;
+         where org_id = ${world.org.orgId} and origin like 'contract_cost%'`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(journals.n, "0");
     } finally {
       await dropScratchOrgReporting(world.org.orgId);
@@ -518,91 +587,92 @@ test(
   },
 );
 
-test(
-  "impairment refuses without approval and posts with it",
-  { skip: !DB },
-  async () => {
-    const world = await setupCostWorld();
-    try {
-      const contractId = await seedContract(world, {
-        number: "C-IMPAIR",
-        startsOn: "2026-07-01",
-        endsOn: "2028-06-30",
-      });
-      const periods = await seedPeriods(world.org.orgId, ["2026-08-01"]);
-      const cap = await capitalizeContractCost({
+test("impairment refuses without approval and posts with it", { skip: !DB }, async () => {
+  const world = await setupCostWorld();
+  try {
+    const contractId = await seedContract(world, {
+      number: "C-IMPAIR",
+      startsOn: "2026-07-01",
+      endsOn: "2028-06-30",
+    });
+    const periods = await seedPeriods(world.org.orgId, ["2026-08-01"]);
+    const cap = await capitalizeContractCost({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      revenueContractId: contractId,
+      repPartyId: world.repPartyId,
+      customerPartyId: world.org.customerId,
+      costType: "commission",
+      amountMinor: 240000n,
+      currency: "CAD",
+      capitalizedOn: "2026-07-15",
+      method: "straight_line",
+      originalExpenseAccountId: world.commissionExpenseAccountId,
+      source: { kind: "manual" },
+    });
+    await runContractCostAmortization({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      periodId: world.org.periodId,
+    });
+    assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 230000n);
+
+    await assert.rejects(
+      recognizeContractCostImpairment({
         orgId: world.org.orgId,
         actorId: world.managerId,
-        revenueContractId: contractId,
-        repPartyId: world.repPartyId,
-        customerPartyId: world.org.customerId,
-        costType: "commission",
-        amountMinor: 240000n,
-        currency: "CAD",
-        capitalizedOn: "2026-07-15",
-        method: "straight_line",
-        originalExpenseAccountId: world.commissionExpenseAccountId,
-        source: { kind: "manual" },
-      });
-      await runContractCostAmortization({
-        orgId: world.org.orgId,
-        actorId: world.managerId,
-        periodId: world.org.periodId,
-      });
-      assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 230000n);
-
-      await assert.rejects(
-        recognizeContractCostImpairment({
-          orgId: world.org.orgId,
-          actorId: world.managerId,
-          assetId: cap.assetId,
-          remainingConsiderationMinor: 100000n,
-          costsNotYetRecognizedMinor: 0n,
-          reason: "Customer churned after month one",
-          assessedOn: "2026-07-20",
-        }),
-        /approve/im,
-        "impairment without approval names the approval remedy",
-      );
-
-      const result = await recognizeContractCostImpairment({
-        orgId: world.org.orgId,
-        actorId: world.approverId,
         assetId: cap.assetId,
         remainingConsiderationMinor: 100000n,
         costsNotYetRecognizedMinor: 0n,
         reason: "Customer churned after month one",
         assessedOn: "2026-07-20",
-      });
-      assert.equal(result.posted, true);
-      assert.equal(result.impairmentMinor, "130000");
-      assert.ok(result.entryId, "a posted impairment carries its journal entry");
-      const balance = await entryBalance(result.entryId);
-      assert.equal(balance.balanced, true, "the impairment entry balances");
-      assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 100000n);
-      const status = (await db.execute<{ status: string }>(sql`
+      }),
+      /approve/im,
+      "impairment without approval names the approval remedy",
+    );
+
+    const result = await recognizeContractCostImpairment({
+      orgId: world.org.orgId,
+      actorId: world.approverId,
+      assetId: cap.assetId,
+      remainingConsiderationMinor: 100000n,
+      costsNotYetRecognizedMinor: 0n,
+      reason: "Customer churned after month one",
+      assessedOn: "2026-07-20",
+    });
+    assert.equal(result.posted, true);
+    assert.equal(result.impairmentMinor, "130000");
+    assert.ok(result.entryId, "a posted impairment carries its journal entry");
+    const balance = await entryBalance(result.entryId);
+    assert.equal(balance.balanced, true, "the impairment entry balances");
+    assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 100000n);
+    const status = (
+      await db.execute<{ status: string }>(
+        sql`
         select status from contract_cost_assets
-         where org_id = ${world.org.orgId} and id = ${cap.assetId}`, "objects"))[0]!;
-      assert.equal(status.status, "active", "a remaining carrying balance stays amortizable");
-      const schedule = await scheduleForAsset(db, world.org.orgId, cap.assetId);
-      assert.equal(
-        schedule.find((line) => line.month === "2026-08")?.amountMinor,
-        4348n,
-        "the recoverable balance is re-spread over the remaining unposted months",
-      );
-      const nextMonth = await runContractCostAmortization({
-        orgId: world.org.orgId,
-        actorId: world.managerId,
-        periodId: periods.get("2026-08")!,
-      });
-      assert.equal(nextMonth.posted, 1);
-      assert.equal(nextMonth.entries[0]?.amountMinor, "4348");
-      assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 95652n);
-    } finally {
-      await dropScratchOrgReporting(world.org.orgId);
-    }
-  },
-);
+         where org_id = ${world.org.orgId} and id = ${cap.assetId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(status.status, "active", "a remaining carrying balance stays amortizable");
+    const schedule = await scheduleForAsset(db, world.org.orgId, cap.assetId);
+    assert.equal(
+      schedule.find((line) => line.month === "2026-08")?.amountMinor,
+      4348n,
+      "the recoverable balance is re-spread over the remaining unposted months",
+    );
+    const nextMonth = await runContractCostAmortization({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      periodId: periods.get("2026-08")!,
+    });
+    assert.equal(nextMonth.posted, 1);
+    assert.equal(nextMonth.entries[0]?.amountMinor, "4348");
+    assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 95652n);
+  } finally {
+    await dropScratchOrgReporting(world.org.orgId);
+  }
+});
 
 test(
   "late links honor cost capitalization policy and the one-year expedient",
@@ -638,9 +708,14 @@ test(
         assetId: excluded.assetId,
         revenueContractId: longContract,
       });
-      const excludedRow = (await db.execute<{ status: string; revenue_contract_id: string | null }>(sql`
+      const excludedRow = (
+        await db.execute<{ status: string; revenue_contract_id: string | null }>(
+          sql`
         select status, revenue_contract_id from contract_cost_assets
-         where org_id = ${world.org.orgId} and id = ${excluded.assetId}`, "objects"))[0]!;
+         where org_id = ${world.org.orgId} and id = ${excluded.assetId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(excludedRow.status, "expensed");
       assert.equal(excludedRow.revenue_contract_id, longContract);
 
@@ -673,14 +748,28 @@ test(
         assetId: expedientAsset.assetId,
         revenueContractId: shortContract,
       });
-      const expedientRow = (await db.execute<{ status: string }>(sql`
+      const expedientRow = (
+        await db.execute<{ status: string }>(
+          sql`
         select status from contract_cost_assets
-         where org_id = ${world.org.orgId} and id = ${expedientAsset.assetId}`, "objects"))[0]!;
+         where org_id = ${world.org.orgId} and id = ${expedientAsset.assetId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(expedientRow.status, "expensed");
-      const journals = (await db.execute<{ count: string }>(sql`
+      const journals = (
+        await db.execute<{ count: string }>(
+          sql`
         select count(*)::text as count from journal_entries
-         where org_id = ${world.org.orgId} and origin = 'contract_cost_capitalize'`, "objects"))[0]!;
-      assert.equal(journals.count, "0", "policy and expedient refusals do not post capitalization journals");
+         where org_id = ${world.org.orgId} and origin = 'contract_cost_capitalize'`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(
+        journals.count,
+        "0",
+        "policy and expedient refusals do not post capitalization journals",
+      );
     } finally {
       await dropScratchOrgReporting(world.org.orgId);
     }
@@ -724,106 +813,117 @@ test(
       });
       assert.equal(result[0]?.ok, false);
       assert.equal(result[1]?.ok, true);
-      const assets = (await db.execute<{ count: string }>(sql`
+      const assets = (
+        await db.execute<{ count: string }>(
+          sql`
         select count(*)::text as count from contract_cost_assets
-         where org_id = ${world.org.orgId} and revenue_contract_id = ${contractId}`, "objects"))[0]!;
-      assert.equal(assets.count, "1", "the failed row leaves no asset and the valid sibling commits");
+         where org_id = ${world.org.orgId} and revenue_contract_id = ${contractId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(
+        assets.count,
+        "1",
+        "the failed row leaves no asset and the valid sibling commits",
+      );
     } finally {
       await dropScratchOrgReporting(world.org.orgId);
     }
   },
 );
 
-test(
-  "ledger carrying uses the currency minor-unit exponent",
-  { skip: !DB },
-  async () => {
-    const world = await setupCostWorld();
-    try {
-      await db.execute(sql`
+test("ledger carrying uses the currency minor-unit exponent", { skip: !DB }, async () => {
+  const world = await setupCostWorld();
+  try {
+    await db.execute(sql`
         insert into currencies (code, name, minor_units)
         values ('JPY', 'Japanese Yen', 0) on conflict (code) do nothing`);
-      await db.execute(sql`update orgs set base_currency = 'JPY' where id = ${world.org.orgId}`);
-      await db.execute(sql`update subsidiaries set base_currency = 'JPY' where org_id = ${world.org.orgId}`);
-      const contractId = await seedContract(world, {
-        number: "C-JPY-CARRYING",
-        startsOn: "2026-07-01",
-        endsOn: "2028-06-30",
-      });
-      await db.execute(sql`
+    await db.execute(sql`update orgs set base_currency = 'JPY' where id = ${world.org.orgId}`);
+    await db.execute(
+      sql`update subsidiaries set base_currency = 'JPY' where org_id = ${world.org.orgId}`,
+    );
+    const contractId = await seedContract(world, {
+      number: "C-JPY-CARRYING",
+      startsOn: "2026-07-01",
+      endsOn: "2028-06-30",
+    });
+    await db.execute(sql`
         update revenue_contracts set currency = 'JPY'
          where org_id = ${world.org.orgId} and id = ${contractId}`);
-      const cap = await capitalizeContractCost({
-        orgId: world.org.orgId,
-        actorId: world.managerId,
-        revenueContractId: contractId,
-        repPartyId: world.repPartyId,
-        customerPartyId: world.org.customerId,
-        costType: "commission",
-        amountMinor: 100000n,
-        currency: "JPY",
-        capitalizedOn: "2026-07-15",
-        method: "straight_line",
-        originalExpenseAccountId: world.commissionExpenseAccountId,
-        source: { kind: "manual" },
-      });
-      assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 100000n);
-    } finally {
-      await dropScratchOrgReporting(world.org.orgId);
-    }
-  },
-);
+    const cap = await capitalizeContractCost({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      revenueContractId: contractId,
+      repPartyId: world.repPartyId,
+      customerPartyId: world.org.customerId,
+      costType: "commission",
+      amountMinor: 100000n,
+      currency: "JPY",
+      capitalizedOn: "2026-07-15",
+      method: "straight_line",
+      originalExpenseAccountId: world.commissionExpenseAccountId,
+      source: { kind: "manual" },
+    });
+    assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 100000n);
+  } finally {
+    await dropScratchOrgReporting(world.org.orgId);
+  }
+});
 
-test(
-  "an amortization run is idempotent per asset and period",
-  { skip: !DB },
-  async () => {
-    const world = await setupCostWorld();
-    try {
-      const contractId = await seedContract(world, {
-        number: "C-IDEMPOTENT",
-        startsOn: "2026-07-01",
-        endsOn: "2028-06-30",
-      });
-      await capitalizeContractCost({
-        orgId: world.org.orgId,
-        actorId: world.managerId,
-        revenueContractId: contractId,
-        repPartyId: world.repPartyId,
-        customerPartyId: world.org.customerId,
-        costType: "commission",
-        amountMinor: 240000n,
-        currency: "CAD",
-        capitalizedOn: "2026-07-15",
-        method: "straight_line",
-        originalExpenseAccountId: world.commissionExpenseAccountId,
-        source: { kind: "manual" },
-      });
-      const first = await runContractCostAmortization({
-        orgId: world.org.orgId,
-        actorId: world.managerId,
-        periodId: world.org.periodId,
-      });
-      assert.equal(first.posted, 1);
-      const second = await runContractCostAmortization({
-        orgId: world.org.orgId,
-        actorId: world.managerId,
-        periodId: world.org.periodId,
-      });
-      assert.equal(second.posted, 0);
-      assert.equal(second.skipped, 1);
-      const rows = (await db.execute<{ n: string }>(sql`
+test("an amortization run is idempotent per asset and period", { skip: !DB }, async () => {
+  const world = await setupCostWorld();
+  try {
+    const contractId = await seedContract(world, {
+      number: "C-IDEMPOTENT",
+      startsOn: "2026-07-01",
+      endsOn: "2028-06-30",
+    });
+    await capitalizeContractCost({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      revenueContractId: contractId,
+      repPartyId: world.repPartyId,
+      customerPartyId: world.org.customerId,
+      costType: "commission",
+      amountMinor: 240000n,
+      currency: "CAD",
+      capitalizedOn: "2026-07-15",
+      method: "straight_line",
+      originalExpenseAccountId: world.commissionExpenseAccountId,
+      source: { kind: "manual" },
+    });
+    const first = await runContractCostAmortization({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      periodId: world.org.periodId,
+    });
+    assert.equal(first.posted, 1);
+    const second = await runContractCostAmortization({
+      orgId: world.org.orgId,
+      actorId: world.managerId,
+      periodId: world.org.periodId,
+    });
+    assert.equal(second.posted, 0);
+    assert.equal(second.skipped, 1);
+    const rows = (
+      await db.execute<{ n: string }>(
+        sql`
         select count(*)::text as n from contract_cost_amortization
-         where org_id = ${world.org.orgId}`, "objects"))[0]!;
-      assert.equal(rows.n, "1");
-    } finally {
-      await dropScratchOrgReporting(world.org.orgId);
-    }
-  },
-);
+         where org_id = ${world.org.orgId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(rows.n, "1");
+  } finally {
+    await dropScratchOrgReporting(world.org.orgId);
+  }
+});
 
 test("the projected schedule sums exactly to the capitalized cost", () => {
   const schedule = projectAmortizationSchedule(100000n, 3);
   assert.deepEqual(schedule, [33334n, 33333n, 33333n]);
-  assert.equal(schedule.reduce((acc, m) => acc + m, 0n), 100000n);
+  assert.equal(
+    schedule.reduce((acc, m) => acc + m, 0n),
+    100000n,
+  );
 });

@@ -1,9 +1,9 @@
 /** Helpers shared by two or more statement parsers. Split from banking.ts (pure moves only). */
-import { BankingError, type StatementBalanceRole } from "../banking-core"
-import { assertLedgerRange } from "./bai2"
-import { utcDateFromParts } from "../../platform/business-date.ts"
-import { fromUnits, toUnits } from "../../money/money.ts"
-import { decimalNullRefusal } from "../../money/decimal-refusal.ts"
+import { BankingError, type StatementBalanceRole } from "../banking-core";
+import { assertLedgerRange } from "./bai2";
+import { utcDateFromParts } from "../../platform/business-date.ts";
+import { fromUnits, toUnits } from "../../money/money.ts";
+import { decimalNullRefusal } from "../../money/decimal-refusal.ts";
 
 // ---------------------------------------------------------------------------
 // OFX parsing (1.x SGML and 2.x XML)
@@ -20,15 +20,13 @@ export function decodeOfxEntities(v: string): string {
 }
 
 export function assertRealDate(y: string, mo: string, d: string, label: string): string {
-  const year = Number(y), month = Number(mo), day = Number(d);
+  const year = Number(y),
+    month = Number(mo),
+    day = Number(d);
   // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
   // onto 1900-1999 (an 0096 OFX date used to fail validation as "not real").
   const dt = utcDateFromParts(year, month - 1, day);
-  if (
-    dt.getUTCFullYear() !== year ||
-    dt.getUTCMonth() !== month - 1 ||
-    dt.getUTCDate() !== day
-  ) {
+  if (dt.getUTCFullYear() !== year || dt.getUTCMonth() !== month - 1 || dt.getUTCDate() !== day) {
     throw new BankingError(`${label} is not a real calendar date`);
   }
   return `${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -63,7 +61,11 @@ export function expandTwoDigitYear(yy: string): string {
  * every grouping one. There the ambiguous shape is refused with both
  * readings named, through the one shared decimal classifier.
  */
-export function normalizeAmount(raw: string, label: string, commaMode: "swift-decimal" | "human" = "human"): string {
+export function normalizeAmount(
+  raw: string,
+  label: string,
+  commaMode: "swift-decimal" | "human" = "human",
+): string {
   let s = raw.trim().replace(/[$€£\s]/g, "");
   if (!s) throw new BankingError(`${label}: empty amount`);
   let negative = false;
@@ -174,10 +176,8 @@ export function isBalanceSummaryRow(description: string | null | undefined): boo
   if (!OPENING_LEAD.test(text) && !CLOSING_LEAD.test(text)) return false;
   const rest = text.replace(OPENING_LEAD.test(text) ? OPENING_LEAD : CLOSING_LEAD, "").trim();
   if (!rest) return true;
-  return rest
-    .split(" ")
-    .every((token) => {
-      const clean = token.replace(/^[^\p{L}\p{N}/]+|[^\p{L}\p{N}/]+$/gu, "");
-      return AMOUNT_TOKEN.test(clean) || BALANCE_FILLER_WORD.test(clean);
-    });
+  return rest.split(" ").every((token) => {
+    const clean = token.replace(/^[^\p{L}\p{N}/]+|[^\p{L}\p{N}/]+$/gu, "");
+    return AMOUNT_TOKEN.test(clean) || BALANCE_FILLER_WORD.test(clean);
+  });
 }

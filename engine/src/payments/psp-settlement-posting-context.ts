@@ -33,11 +33,14 @@ export async function validateSettlementPostingAccounts(
       `settlement account ${malformed} is not a valid account reference`,
     );
   }
-  const rows = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const rows = await db.execute<{ id: string; subsidiary_id: string | null }>(
+    sql`
     select id, subsidiary_id from accounts
      where org_id = ${orgId} and is_active and not is_summary
        and id = any(${`{${ids.join(",")}}`}::uuid[])
-  `, "objects"));
+  `,
+    "objects",
+  );
   const found = new Map(rows.map((r) => [r.id.toLowerCase(), r.subsidiary_id]));
   const missing = ids.find((id) => !found.has(id.toLowerCase()));
   if (missing) {
@@ -61,10 +64,13 @@ export async function validateSettlementPostingAccounts(
 }
 
 export async function primaryBookId(orgId: string): Promise<string> {
-  const r = (await db.execute<{ id: string }>(sql`
+  const r = await db.execute<{ id: string }>(
+    sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
      limit 1 for share
-  `, "objects"));
+  `,
+    "objects",
+  );
   const id = r[0]?.id;
   if (!id) throw new PspSettlementError("no active primary posting book");
   return id;

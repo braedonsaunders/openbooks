@@ -23,10 +23,20 @@ import type {
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
-import { AL_A4_MS_CERTIFICATE, AL_CERTIFICATE, AL_REGION, AL_SEVERANCE_APPROVAL_CERTIFICATE } from "./states/al.ts";
+import {
+  AL_A4_MS_CERTIFICATE,
+  AL_CERTIFICATE,
+  AL_REGION,
+  AL_SEVERANCE_APPROVAL_CERTIFICATE,
+} from "./states/al.ts";
 import { AR_CERTIFICATE, AR_REGION } from "./states/ar.ts";
 import { AZ_CERTIFICATE, AZ_REGION } from "./states/az.ts";
-import { CO_AIR_CARRIER_CERTIFICATE, CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CO_REGION } from "./states/co.ts";
+import {
+  CO_AIR_CARRIER_CERTIFICATE,
+  CO_CERTIFICATE,
+  CO_DR1059_CERTIFICATE,
+  CO_REGION,
+} from "./states/co.ts";
 import { CT_CERTIFICATE, CT_REGION, CT_W4NA_CERTIFICATE } from "./states/ct.ts";
 import { DC_CERTIFICATE, DC_NONRESIDENT_CERTIFICATE, DC_REGION } from "./states/dc.ts";
 import { DE_CERTIFICATE, DE_REGION, DE_W4NR_CERTIFICATE } from "./states/de.ts";
@@ -37,16 +47,35 @@ import { LA_CERTIFICATE, LA_REGION } from "./states/la.ts";
 import { MO_CERTIFICATE, MO_REGION } from "./states/mo.ts";
 import { MS_CERTIFICATE, MS_REGION } from "./states/ms.ts";
 import { MT_CERTIFICATE, MT_REGION } from "./states/mt.ts";
-import { ND_CERTIFICATE, ND_MOBILE_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_NDWR_CERTIFICATE, ND_REGION, ND_TRIBAL_CERTIFICATE, ND_WAGE_EXCLUSION_CERTIFICATE } from "./states/nd.ts";
+import {
+  ND_CERTIFICATE,
+  ND_MOBILE_CERTIFICATE,
+  ND_NDWM_CERTIFICATE,
+  ND_NDWR_CERTIFICATE,
+  ND_REGION,
+  ND_TRIBAL_CERTIFICATE,
+  ND_WAGE_EXCLUSION_CERTIFICATE,
+} from "./states/nd.ts";
 import { NE_9N_CERTIFICATE, NE_CERTIFICATE, NE_REGION } from "./states/ne.ts";
 import { NM_CERTIFICATE, NM_REGION } from "./states/nm.ts";
-import { OK_CERTIFICATE, OK_OW9MSE_CERTIFICATE, OK_REGION, OK_SERVICE_CLASS_CERTIFICATE } from "./states/ok.ts";
+import {
+  OK_CERTIFICATE,
+  OK_OW9MSE_CERTIFICATE,
+  OK_REGION,
+  OK_SERVICE_CLASS_CERTIFICATE,
+} from "./states/ok.ts";
 import { SC_CERTIFICATE, SC_REGION } from "./states/sc.ts";
 import { IA_44016, IA_CERTIFICATE, IA_REGION } from "./states/ia.ts";
 import { IN_CERTIFICATE, IN_REGION } from "./states/in.ts";
 import { KY_CERTIFICATE, KY_LOCALITY_RECORD, KY_REGION } from "./states/ky.ts";
 import { ME_CERTIFICATE, ME_REGION } from "./states/me.ts";
-import { MD_CERTIFICATE, MD_MW507M, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION } from "./states/md.ts";
+import {
+  MD_CERTIFICATE,
+  MD_MW507M,
+  MD_MW507_NR,
+  MD_RECIPROCITY_AGREEMENTS,
+  MD_REGION,
+} from "./states/md.ts";
 import { OR_CERTIFICATE, OR_REGION, OR_TRANSIT_RECORD } from "./states/or.ts";
 import { RI_CERTIFICATE, RI_REGION } from "./states/ri.ts";
 import { VT_CERTIFICATE, VT_REGION } from "./states/vt.ts";
@@ -57,7 +86,13 @@ import { OH_SCHOOL_DISTRICTS_2026 } from "./states/oh.ts";
 import { UT_CERTIFICATE, UT_REGION } from "./states/ut.ts";
 import { VA_CERTIFICATE, VA_REGION } from "./states/va.ts";
 import { WI_CERTIFICATE, WI_REGION, WI_W220, WI_W221, WI_WT4A } from "./states/wi.ts";
-import { WV_CERTIFICATE, WV_IT104NR_CERTIFICATE, WV_MILITARY_PAY_CERTIFICATE, WV_MOBILE_CERTIFICATE, WV_REGION } from "./states/wv.ts";
+import {
+  WV_CERTIFICATE,
+  WV_IT104NR_CERTIFICATE,
+  WV_MILITARY_PAY_CERTIFICATE,
+  WV_MOBILE_CERTIFICATE,
+  WV_REGION,
+} from "./states/wv.ts";
 
 // ===========================================================================
 // Certificates
@@ -87,69 +122,99 @@ const W4: PayrollCertificate = {
   purpose: "withholding",
   citation: "IRS Form W-4 and Publication 15-T, Worksheet 1A",
   summary:
-    "Filed with the employer to set federal income tax withholding. An employee with no W-4 on "
-    + "file is withheld as single with no adjustments.",
+    "Filed with the employer to set federal income tax withholding. An employee with no W-4 on " +
+    "file is withheld as single with no adjustments.",
   storage: "profile_columns",
   fields: [
     {
-      key: "filing_status", label: "Step 1(c) — Filing status", kind: "choice",
+      key: "filing_status",
+      label: "Step 1(c) — Filing status",
+      kind: "choice",
       choices: [
         { value: "single", label: "Single or married filing separately" },
         { value: "married_joint", label: "Married filing jointly or qualifying surviving spouse" },
         { value: "head_household", label: "Head of household" },
       ],
-      default: "single", required: true,
-      help: "As checked in Step 1(c) of the employee's Form W-4. With no W-4 on file, withhold as "
-        + "single.",
+      default: "single",
+      required: true,
+      help:
+        "As checked in Step 1(c) of the employee's Form W-4. With no W-4 on file, withhold as " +
+        "single.",
       storage: { kind: "column", column: "filing_status" },
     },
     {
-      key: "multiple_jobs", label: "Step 2 — Multiple jobs or spouse works", kind: "flag",
-      help: "Checked when the employee holds more than one job, or is married filing jointly and "
-        + "their spouse also works. It selects the higher Step 2 Checkbox schedule.",
+      key: "multiple_jobs",
+      label: "Step 2 — Multiple jobs or spouse works",
+      kind: "flag",
+      help:
+        "Checked when the employee holds more than one job, or is married filing jointly and " +
+        "their spouse also works. It selects the higher Step 2 Checkbox schedule.",
       storage: { kind: "column", column: "multiple_jobs" },
     },
     {
-      key: "dependent_credits", label: "Step 3 — Dependents and other credits", kind: "amount",
-      decimals: 4, min: "0",
-      help: "The ANNUAL total from Step 3. It reduces the tax computed for the period, not the "
-        + "wages.",
+      key: "dependent_credits",
+      label: "Step 3 — Dependents and other credits",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      help:
+        "The ANNUAL total from Step 3. It reduces the tax computed for the period, not the " +
+        "wages.",
       storage: { kind: "column", column: "dependent_credits" },
     },
     {
-      key: "other_income_annual", label: "Step 4(a) — Other income", kind: "amount",
-      decimals: 4, min: "0",
-      help: "Annual income the employee expects that is not from a job and has no withholding — "
-        + "interest, dividends, retirement.",
+      key: "other_income_annual",
+      label: "Step 4(a) — Other income",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      help:
+        "Annual income the employee expects that is not from a job and has no withholding — " +
+        "interest, dividends, retirement.",
       storage: { kind: "column", column: "other_income_annual" },
     },
     {
-      key: "deductions_annual", label: "Step 4(b) — Deductions", kind: "amount",
-      decimals: 4, min: "0",
+      key: "deductions_annual",
+      label: "Step 4(b) — Deductions",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Annual deductions the employee expects BEYOND the standard deduction.",
       storage: { kind: "column", column: "deductions_annual" },
     },
     {
-      key: "additional_per_period", label: "Step 4(c) — Extra withholding", kind: "amount",
-      decimals: 4, min: "0",
+      key: "additional_per_period",
+      label: "Step 4(c) — Extra withholding",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "An extra amount to withhold from EACH pay period, on top of the computed tax.",
       storage: { kind: "column", column: "additional_tax_per_period" },
     },
     {
-      key: "exempt", label: "Exempt from federal withholding", kind: "flag",
-      help: "The employee wrote \"Exempt\" below Step 4(c). No federal income tax is withheld; "
-        + "Social Security and Medicare still are.",
+      key: "exempt",
+      label: "Exempt from federal withholding",
+      kind: "flag",
+      help:
+        'The employee wrote "Exempt" below Step 4(c). No federal income tax is withheld; ' +
+        "Social Security and Medicare still are.",
       storage: { kind: "column", column: "tax_exempt" },
     },
     {
-      key: "pre_2020", label: "2019-or-earlier W-4 on file", kind: "flag",
-      help: "The employee has never filed a redesigned W-4. Withholding uses allowances instead "
-        + "of Steps 2-4.",
+      key: "pre_2020",
+      label: "2019-or-earlier W-4 on file",
+      kind: "flag",
+      help:
+        "The employee has never filed a redesigned W-4. Withholding uses allowances instead " +
+        "of Steps 2-4.",
       storage: { kind: "column", column: "w4_pre_2020" },
     },
     {
-      key: "allowances", label: "Withholding allowances (2019-or-earlier W-4)", kind: "count",
-      min: "0", max: "99",
+      key: "allowances",
+      label: "Withholding allowances (2019-or-earlier W-4)",
+      kind: "count",
+      min: "0",
+      max: "99",
       help: "Line 5 of a 2019-or-earlier Form W-4. Only read when that box is set.",
       storage: { kind: "column", column: "w4_allowances" },
     },
@@ -167,19 +232,25 @@ const US_TAX_RESIDENCY: PayrollCertificate = {
   label: "Federal withholding tax residency status",
   scope: { level: "country" },
   purpose: "withholding",
-  citation: "IRS Publication 15-T (2026), Electronic Form W-4 requirements and Nonresident alien employees, https://www.irs.gov/publications/p15t",
+  citation:
+    "IRS Publication 15-T (2026), Electronic Form W-4 requirements and Nonresident alien employees, https://www.irs.gov/publications/p15t",
   summary:
-    "Records whether the employee is a nonresident alien for federal wage withholding. "
-    + "The federal calculation refuses nonresident-alien payroll until the Pub. 15-T adjustment and exceptions are supported.",
+    "Records whether the employee is a nonresident alien for federal wage withholding. " +
+    "The federal calculation refuses nonresident-alien payroll until the Pub. 15-T adjustment and exceptions are supported.",
   storage: "certificate_rows",
-  fields: [{
-    key: "alien_status", label: "Federal tax-residency status", kind: "choice", required: true,
-    choices: [
-      { value: "us_person_or_resident_alien", label: "U.S. person or resident alien" },
-      { value: "nonresident_alien", label: "Nonresident alien" },
-    ],
-    help: "Use the employee's documented U.S. federal tax status. Pub. 15-T requires a nonresident-alien status field in an electronic W-4 system.",
-  }],
+  fields: [
+    {
+      key: "alien_status",
+      label: "Federal tax-residency status",
+      kind: "choice",
+      required: true,
+      choices: [
+        { value: "us_person_or_resident_alien", label: "U.S. person or resident alien" },
+        { value: "nonresident_alien", label: "Nonresident alien" },
+      ],
+      help: "Use the employee's documented U.S. federal tax status. Pub. 15-T requires a nonresident-alien status field in an electronic W-4 system.",
+    },
+  ],
 };
 
 /** California Form DE 4 — EDD, Rev. 56 (1-26). */
@@ -191,70 +262,97 @@ const CA_DE4: PayrollCertificate = {
   purpose: "withholding",
   // EDD Form DE 4 requires a new exempt claim by February 15 each year.
   validity: {
-    kind: "following_year_date", monthDay: "02-15",
+    kind: "following_year_date",
+    monthDay: "02-15",
     appliesWhen: { field: "exempt", values: ["true"] },
   },
-  citation: "California EDD Form DE 4, Rev. 56 (1-26), https://edd.ca.gov/siteassets/files/pdf_pub_ctr/de4.pdf; "
-    + "California Employer's Guide DE 44 (2026)",
+  citation:
+    "California EDD Form DE 4, Rev. 56 (1-26), https://edd.ca.gov/siteassets/files/pdf_pub_ctr/de4.pdf; " +
+    "California Employer's Guide DE 44 (2026)",
   summary:
-    "Since 2020 the federal W-4 sets federal withholding only — California requires its own DE 4. "
-    + "With no DE 4 on file the employer must withhold at single with zero allowances.",
+    "Since 2020 the federal W-4 sets federal withholding only — California requires its own DE 4. " +
+    "With no DE 4 on file the employer must withhold at single with zero allowances.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "filing_status", label: "Filing status", kind: "choice",
+      key: "filing_status",
+      label: "Filing status",
+      kind: "choice",
       choices: [
         { value: "single_or_dual", label: "Single, or married with two or more incomes" },
         { value: "married_one_income", label: "Married (one income)" },
         { value: "head_household", label: "Head of household" },
       ],
-      default: "single_or_dual", required: true,
-      help: "The three checkboxes on the DE 4. \"Single or Married (with two or more incomes)\" is "
-        + "the default the EDD requires when no DE 4 has been filed.",
+      default: "single_or_dual",
+      required: true,
+      help:
+        'The three checkboxes on the DE 4. "Single or Married (with two or more incomes)" is ' +
+        "the default the EDD requires when no DE 4 has been filed.",
     },
     {
-      key: "regular_allowances", label: "Line 1a — Regular withholding allowances", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "From Worksheet A. These give a per-period tax CREDIT (Method B, Table 4) — they do "
-        + "not reduce wages.",
+      key: "regular_allowances",
+      label: "Line 1a — Regular withholding allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "From Worksheet A. These give a per-period tax CREDIT (Method B, Table 4) — they do " +
+        "not reduce wages.",
     },
     {
       key: "estimated_deduction_allowances",
-      label: "Line 1b — Estimated deduction allowances", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "From Worksheet B: one allowance per $1,000 of deductions above the standard "
-        + "deduction. These reduce WAGES (Method B, Table 2) and must not be counted again in the "
-        + "Table 4 credit.",
+      label: "Line 1b — Estimated deduction allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "From Worksheet B: one allowance per $1,000 of deductions above the standard " +
+        "deduction. These reduce WAGES (Method B, Table 2) and must not be counted again in the " +
+        "Table 4 credit.",
     },
     {
-      key: "additional_per_period", label: "Line 2 — Additional amount per pay period",
-      kind: "amount", decimals: 4, min: "0",
+      key: "additional_per_period",
+      label: "Line 2 — Additional amount per pay period",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "From Worksheet C. Withheld on top of the computed tax, if the employer agrees.",
     },
     {
-      key: "exempt", label: "Line 3 — Exempt for the year", kind: "flag",
-      help: "The employee owed no federal or California income tax last year and expects to owe "
-        + "none this year. A new exempt DE 4 is due by 15 February each year.",
+      key: "exempt",
+      label: "Line 3 — Exempt for the year",
+      kind: "flag",
+      help:
+        "The employee owed no federal or California income tax last year and expects to owe " +
+        "none this year. A new exempt DE 4 is due by 15 February each year.",
     },
     {
-      key: "military_spouse_exempt", label: "Line 4 — Military spouse (MSRRA)", kind: "flag",
-      help: "The employee certifies they are not subject to California withholding under the "
-        + "Servicemembers Civil Relief Act as amended by the Military Spouses Residency Relief Act.",
+      key: "military_spouse_exempt",
+      label: "Line 4 — Military spouse (MSRRA)",
+      kind: "flag",
+      help:
+        "The employee certifies they are not subject to California withholding under the " +
+        "Servicemembers Civil Relief Act as amended by the Military Spouses Residency Relief Act.",
     },
     {
       key: "servicemember_is_armed_forces_member",
       label: "Spouse is a member of the Armed Forces present in California under military orders",
-      kind: "flag", help: "DE 4 Rev. 56, MSRRA exemption condition (i).",
+      kind: "flag",
+      help: "DE 4 Rev. 56, MSRRA exemption condition (i).",
     },
     {
       key: "spouse_present_solely_to_accompany",
       label: "Employee is present in California solely to be with the spouse",
-      kind: "flag", help: "DE 4 Rev. 56, MSRRA exemption condition (ii).",
+      kind: "flag",
+      help: "DE 4 Rev. 56, MSRRA exemption condition (ii).",
     },
     {
       key: "spouse_domiciled_outside_ca",
       label: "Employee maintains domicile in another state",
-      kind: "flag", help: "DE 4 Rev. 56, MSRRA exemption condition (iii).",
+      kind: "flag",
+      help: "DE 4 Rev. 56, MSRRA exemption condition (iii).",
     },
   ],
 };
@@ -268,8 +366,8 @@ const NY_IT2104: PayrollCertificate = {
   purpose: "withholding",
   citation: "NYS Form IT-2104 (2026) and IT-2104-I (2026); NYS-50-T-NYS/NYC/Y (1/26)",
   summary:
-    "One certificate covering New York State, New York City and Yonkers. It carries TWO allowance "
-    + "counts (state-and-Yonkers, and city) and THREE additional-amount fields.",
+    "One certificate covering New York State, New York City and Yonkers. It carries TWO allowance " +
+    "counts (state-and-Yonkers, and city) and THREE additional-amount fields.",
   storage: "certificate_rows",
   fields: [
     // The two questions the form asks ABOVE the allowance lines, in the
@@ -279,59 +377,88 @@ const NY_IT2104: PayrollCertificate = {
     // takes from its caller. New York City reaches RESIDENTS ONLY, so without
     // this answer a city resident's city tax is silently zero.
     {
-      key: "nyc_resident", label: "Are you a resident of New York City?", kind: "flag",
+      key: "nyc_resident",
+      label: "Are you a resident of New York City?",
+      kind: "flag",
       subRegion: { side: "residence", code: "NYC" },
-      help: "The New York City resident income tax reaches residents only, and it reaches all "
-        + "their wages \"even though the services may have been performed outside New York City\". "
-        + "A commuter INTO the city owes it nothing — there has been no city nonresident earnings "
-        + "tax since 1999.",
+      help:
+        "The New York City resident income tax reaches residents only, and it reaches all " +
+        'their wages "even though the services may have been performed outside New York City". ' +
+        "A commuter INTO the city owes it nothing — there has been no city nonresident earnings " +
+        "tax since 1999.",
     },
     {
-      key: "yonkers_resident", label: "Are you a resident of Yonkers?", kind: "flag",
+      key: "yonkers_resident",
+      label: "Are you a resident of Yonkers?",
+      kind: "flag",
       subRegion: { side: "residence", code: "YONKERS" },
-      help: "A Yonkers RESIDENT is withheld a surcharge of 16.75% of the New York State tax. A "
-        + "nonresident who WORKS in Yonkers is withheld the separate 0.50% earnings tax instead — "
-        + "that one follows the work location, which this answer does not record.",
+      help:
+        "A Yonkers RESIDENT is withheld a surcharge of 16.75% of the New York State tax. A " +
+        "nonresident who WORKS in Yonkers is withheld the separate 0.50% earnings tax instead — " +
+        "that one follows the work location, which this answer does not record.",
     },
     {
-      key: "filing_status", label: "Filing status", kind: "choice",
+      key: "filing_status",
+      label: "Filing status",
+      kind: "choice",
       choices: [
         { value: "single_or_hoh", label: "Single or head of household" },
         { value: "married", label: "Married" },
         {
-          value: "married_higher_single", label: "Married, but withhold at higher single rate",
+          value: "married_higher_single",
+          label: "Married, but withhold at higher single rate",
           help: "Withheld from the Single schedule.",
         },
       ],
-      default: "single_or_hoh", required: true,
+      default: "single_or_hoh",
+      required: true,
       help: "If married but legally separated, choose Single or head of household.",
     },
     {
-      key: "nys_allowances", label: "Line 1 — New York State and Yonkers allowances",
-      kind: "count", min: "0", max: "99", default: "0",
-      help: "One number serves BOTH the state and Yonkers — the Yonkers tax is a percentage of the "
-        + "state tax, so it inherits the state's allowances. With no IT-2104 on file and a 2020-"
-        + "or-later federal W-4, use zero.",
+      key: "nys_allowances",
+      label: "Line 1 — New York State and Yonkers allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "One number serves BOTH the state and Yonkers — the Yonkers tax is a percentage of the " +
+        "state tax, so it inherits the state's allowances. With no IT-2104 on file and a 2020-" +
+        "or-later federal W-4, use zero.",
     },
     {
-      key: "nyc_allowances", label: "Line 2 — New York City allowances",
-      kind: "count", min: "0", max: "99", default: "0",
-      help: "A SEPARATE count from line 1: the city worksheet excludes several state-only credits. "
-        + "Only used if the employee is a New York City resident.",
+      key: "nyc_allowances",
+      label: "Line 2 — New York City allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "A SEPARATE count from line 1: the city worksheet excludes several state-only credits. " +
+        "Only used if the employee is a New York City resident.",
     },
     {
-      key: "nys_additional", label: "Line 3 — Additional New York State amount",
-      kind: "amount", decimals: 4, min: "0",
+      key: "nys_additional",
+      label: "Line 3 — Additional New York State amount",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Extra state tax per pay period, by arrangement with the employer.",
     },
     {
-      key: "nyc_additional", label: "Line 4 — Additional New York City amount",
-      kind: "amount", decimals: 4, min: "0",
+      key: "nyc_additional",
+      label: "Line 4 — Additional New York City amount",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Extra city tax per pay period.",
     },
     {
-      key: "yonkers_additional", label: "Line 5 — Additional Yonkers amount",
-      kind: "amount", decimals: 4, min: "0",
+      key: "yonkers_additional",
+      label: "Line 5 — Additional Yonkers amount",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Extra Yonkers tax per pay period.",
     },
   ],
@@ -346,34 +473,51 @@ const NY_IT2104_1: PayrollCertificate = {
   purpose: "non_residence",
   citation: "NYS Form IT-2104.1 (12/24); Publication NYS-50 (12/23) part K",
   summary:
-    "Certifies the employee is not a resident of New York State, New York City or Yonkers, and "
-    + "estimates the percentage of services performed in New York. It does NOT relieve New York "
-    + "tax on New York-source wages — New York has no reciprocity — it allocates them.",
+    "Certifies the employee is not a resident of New York State, New York City or Yonkers, and " +
+    "estimates the percentage of services performed in New York. It does NOT relieve New York " +
+    "tax on New York-source wages — New York has no reciprocity — it allocates them.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "not_nys_resident", label: "Part 1 — Not a New York State resident", kind: "flag",
+      key: "not_nys_resident",
+      label: "Part 1 — Not a New York State resident",
+      kind: "flag",
       help: "The employee certifies their residence is outside New York State.",
     },
     {
-      key: "nys_service_percent", label: "Part 1 — Percent of services in New York State",
-      kind: "amount", decimals: 4, min: "0", max: "100",
-      help: "The employer may not accept a zero percent allocation if ANY part of the employee's "
-        + "compensation is for services performed in New York State.",
+      key: "nys_service_percent",
+      label: "Part 1 — Percent of services in New York State",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      max: "100",
+      help:
+        "The employer may not accept a zero percent allocation if ANY part of the employee's " +
+        "compensation is for services performed in New York State.",
     },
     {
-      key: "not_nyc_resident", label: "Part 2 — Not a New York City resident", kind: "flag",
-      help: "New York City taxes residents only, so this is the whole of Part 2 — there is no "
-        + "percentage, because a nonresident owes no city tax at all.",
+      key: "not_nyc_resident",
+      label: "Part 2 — Not a New York City resident",
+      kind: "flag",
+      help:
+        "New York City taxes residents only, so this is the whole of Part 2 — there is no " +
+        "percentage, because a nonresident owes no city tax at all.",
     },
     {
-      key: "not_yonkers_resident", label: "Part 3 — Not a Yonkers resident", kind: "flag",
-      help: "A Yonkers nonresident still owes the Yonkers NONRESIDENT earnings tax on "
-        + "Yonkers-source wages.",
+      key: "not_yonkers_resident",
+      label: "Part 3 — Not a Yonkers resident",
+      kind: "flag",
+      help:
+        "A Yonkers nonresident still owes the Yonkers NONRESIDENT earnings tax on " +
+        "Yonkers-source wages.",
     },
     {
-      key: "yonkers_service_percent", label: "Part 3 — Percent of services in Yonkers",
-      kind: "amount", decimals: 4, min: "0", max: "100",
+      key: "yonkers_service_percent",
+      label: "Part 3 — Percent of services in Yonkers",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      max: "100",
       help: "Drives the Yonkers nonresident earnings tax base.",
     },
   ],
@@ -388,33 +532,50 @@ const IL_W4: PayrollCertificate = {
   purpose: "withholding",
   citation: "Illinois Form IL-W-4 (R-07/23); Booklet IL-700-T (R-12/25); Publication 130 (R-02/26)",
   summary:
-    "Sets Illinois withholding allowances. If no completed IL-W-4 is on file — or it is unsigned, "
-    + "incomplete or altered — the employer must withhold on the entire compensation with NO "
-    + "allowances.",
+    "Sets Illinois withholding allowances. If no completed IL-W-4 is on file — or it is unsigned, " +
+    "incomplete or altered — the employer must withhold on the entire compensation with NO " +
+    "allowances.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "line1_allowances", label: "Line 1 — Basic allowances", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "Worth $2,925 a year each in 2026. Default zero: Publication 130 requires withholding "
-        + "with no allowances when no valid certificate is on file.",
+      key: "line1_allowances",
+      label: "Line 1 — Basic allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "Worth $2,925 a year each in 2026. Default zero: Publication 130 requires withholding " +
+        "with no allowances when no valid certificate is on file.",
     },
     {
-      key: "line2_allowances", label: "Line 2 — Additional allowances", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "Worth $1,000 a year each. Claimed for age 65 or over and blindness, AND for each "
-        + "$1,000 of expected deductions.",
+      key: "line2_allowances",
+      label: "Line 2 — Additional allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "Worth $1,000 a year each. Claimed for age 65 or over and blindness, AND for each " +
+        "$1,000 of expected deductions.",
     },
     {
-      key: "additional_per_period", label: "Line 3 — Additional amount per pay",
-      kind: "amount", decimals: 4, min: "0",
-      help: "Added AFTER the rate is applied — it is a flat dollar amount, not a taxable "
-        + "adjustment.",
+      key: "additional_per_period",
+      label: "Line 3 — Additional amount per pay",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      help:
+        "Added AFTER the rate is applied — it is a flat dollar amount, not a taxable " +
+        "adjustment.",
     },
     {
-      key: "exempt", label: "Exempt from Illinois withholding", kind: "flag",
-      help: "Only valid where the employee is also exempt from federal withholding. Lines 1-3 are "
-        + "left blank when this is claimed.",
+      key: "exempt",
+      label: "Exempt from Illinois withholding",
+      kind: "flag",
+      help:
+        "Only valid where the employee is also exempt from federal withholding. Lines 1-3 are " +
+        "left blank when this is claimed.",
     },
   ],
 };
@@ -428,13 +589,15 @@ const IL_W5NR: PayrollCertificate = {
   purpose: "non_residence",
   citation: "Illinois Form IL-W-5-NR (R-12/10); Publication 130 (R-02/26) p. 7",
   summary:
-    "Claims exemption from Illinois withholding under a reciprocal agreement. Residence in Iowa, "
-    + "Kentucky, Michigan or Wisconsin is NOT enough on its own: \"If your employee does not "
-    + "complete this form, you must withhold Illinois Income Tax.\"",
+    "Claims exemption from Illinois withholding under a reciprocal agreement. Residence in Iowa, " +
+    'Kentucky, Michigan or Wisconsin is NOT enough on its own: "If your employee does not ' +
+    'complete this form, you must withhold Illinois Income Tax."',
   storage: "certificate_rows",
   fields: [
     {
-      key: "resident_state", label: "State of residence", kind: "choice",
+      key: "resident_state",
+      label: "State of residence",
+      kind: "choice",
       choices: [
         { value: "IA", label: "Iowa" },
         { value: "KY", label: "Kentucky" },
@@ -442,13 +605,17 @@ const IL_W5NR: PayrollCertificate = {
         { value: "WI", label: "Wisconsin" },
       ],
       required: true,
-      help: "The reciprocal state the employee resides in. The employee must notify the employer "
-        + "within ten days of moving.",
+      help:
+        "The reciprocal state the employee resides in. The employee must notify the employer " +
+        "within ten days of moving.",
     },
     {
-      key: "military_spouse", label: "Military spouse (MSRRA)", kind: "flag",
-      help: "Claimed instead of a reciprocal state where the employee is in Illinois only because "
-        + "their spouse is stationed here.",
+      key: "military_spouse",
+      label: "Military spouse (MSRRA)",
+      kind: "flag",
+      help:
+        "Claimed instead of a reciprocal state where the employee is in Illinois only because " +
+        "their spouse is stationed here.",
     },
   ],
 };
@@ -461,16 +628,18 @@ const PA_REV419: PayrollCertificate = {
   scope: { level: "region", region: "PA" },
   purpose: "non_residence",
   citation:
-    "PA Form REV-419 (EX) 09-20; REV-415 Employer Withholding Information Guide p. 10; "
-    + "PA PIT Guide (DSM-12, 12-2023) p. 3",
+    "PA Form REV-419 (EX) 09-20; REV-415 Employer Withholding Information Guide p. 10; " +
+    "PA PIT Guide (DSM-12, 12-2023) p. 3",
   summary:
-    "The only certificate Pennsylvania takes from an employee. It switches withholding OFF for a "
-    + "resident of a reciprocal state — it never adjusts an amount, because the rate is flat and "
-    + "there is nothing to elect. Without it, the full 3.07% is withheld.",
+    "The only certificate Pennsylvania takes from an employee. It switches withholding OFF for a " +
+    "resident of a reciprocal state — it never adjusts an amount, because the rate is flat and " +
+    "there is nothing to elect. Without it, the full 3.07% is withheld.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "resident_state", label: "Reciprocal state of residence", kind: "choice",
+      key: "resident_state",
+      label: "Reciprocal state of residence",
+      kind: "choice",
       choices: [
         { value: "IN", label: "Indiana" },
         { value: "MD", label: "Maryland" },
@@ -479,19 +648,26 @@ const PA_REV419: PayrollCertificate = {
         { value: "VA", label: "Virginia" },
         { value: "WV", label: "West Virginia" },
       ],
-      help: "Box b. The employer must then withhold the employee's HOME state's tax instead — "
-        + "reciprocity is conditional on that actually happening, not just on the form.",
+      help:
+        "Box b. The employer must then withhold the employee's HOME state's tax instead — " +
+        "reciprocity is conditional on that actually happening, not just on the form.",
     },
     {
-      key: "tax_forgiveness", label: "Box a — Qualifies for Tax Forgiveness", kind: "flag",
-      help: "A different claim from reciprocity: the employee expects a full refund of all PA tax "
-        + "withheld. The employer must notify the Department if quarterly PA compensation exceeds "
-        + "$1,625.",
+      key: "tax_forgiveness",
+      label: "Box a — Qualifies for Tax Forgiveness",
+      kind: "flag",
+      help:
+        "A different claim from reciprocity: the employee expects a full refund of all PA tax " +
+        "withheld. The employer must notify the Department if quarterly PA compensation exceeds " +
+        "$1,625.",
     },
     {
-      key: "military_spouse", label: "Box c — Military spouse (SCRA)", kind: "flag",
-      help: "Legal resident of another state, not subject to PA withholding under the "
-        + "Servicemembers Civil Relief Act.",
+      key: "military_spouse",
+      label: "Box c — Military spouse (SCRA)",
+      kind: "flag",
+      help:
+        "Legal resident of another state, not subject to PA withholding under the " +
+        "Servicemembers Civil Relief Act.",
     },
   ],
 };
@@ -505,22 +681,28 @@ const PA_CLGS32_6: PayrollCertificate = {
   purpose: "withholding",
   citation: "PA DCED Form CLGS-32-6 (05/17); Act 32 of 2008",
   summary:
-    "Identifies the employee's home and work political subdivisions by PSD code, so the Act 32 "
-    + "higher-of comparison can be made. Required on hire and on any address change.",
+    "Identifies the employee's home and work political subdivisions by PSD code, so the Act 32 " +
+    "higher-of comparison can be made. Required on hire and on any address change.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "resident_psd_code", label: "Resident PSD code", kind: "code",
+      key: "resident_psd_code",
+      label: "Resident PSD code",
+      kind: "code",
       subRegion: { side: "residence" },
-      help: "The six-digit political subdivision code for where the employee LIVES. The first two "
-        + "digits are the tax collection district, the first four the school district. An "
-        + "out-of-state residence is 880000, with a 0% resident rate.",
+      help:
+        "The six-digit political subdivision code for where the employee LIVES. The first two " +
+        "digits are the tax collection district, the first four the school district. An " +
+        "out-of-state residence is 880000, with a 0% resident rate.",
     },
     {
-      key: "work_psd_code", label: "Work location PSD code", kind: "code",
+      key: "work_psd_code",
+      label: "Work location PSD code",
+      kind: "code",
       subRegion: { side: "work" },
-      help: "The six-digit code for the address the employee reports to work at. Look both codes "
-        + "up with DCED's address search — do not guess them from a municipality name.",
+      help:
+        "The six-digit code for the address the employee reports to work at. Look both codes " +
+        "up with DCED's address search — do not guess them from a municipality name.",
     },
   ],
 };
@@ -545,23 +727,28 @@ const PA_LST_RECORD: PayrollCertificate = {
   purpose: "withholding",
   citation: "PA DCED, Local Services Tax (exemptions and priority)",
   summary:
-    "The employee's LST exemption position for Pennsylvania worksites: the upfront low-income "
-    + "exemption certificate, and whether a principal employer withholds this worksite's LST "
-    + "in full. Either flag zeroes the assessment with the reason on the stub trace.",
+    "The employee's LST exemption position for Pennsylvania worksites: the upfront low-income " +
+    "exemption certificate, and whether a principal employer withholds this worksite's LST " +
+    "in full. Either flag zeroes the assessment with the reason on the stub trace.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "exempt_low_income", label: "LST low-income exemption certificate on file", kind: "flag",
-      help: "The employee filed the upfront LST exemption certificate (expected income under the "
-        + "jurisdiction's threshold) with the employer and the political subdivision. Withholding "
-        + "from an exempt employee over-withholds every pay.",
+      key: "exempt_low_income",
+      label: "LST low-income exemption certificate on file",
+      kind: "flag",
+      help:
+        "The employee filed the upfront LST exemption certificate (expected income under the " +
+        "jurisdiction's threshold) with the employer and the political subdivision. Withholding " +
+        "from an exempt employee over-withholds every pay.",
     },
     {
-      key: "principal_employer_withholds", label: "Principal employer withholds this LST in full",
+      key: "principal_employer_withholds",
+      label: "Principal employer withholds this LST in full",
       kind: "flag",
-      help: "A concurrent (principal) employer withholds this worksite jurisdiction's full annual "
-        + "LST for this employee, so this employment withholds nothing for it. DCED priority: the "
-        + "secondary employer must not double-withhold what the principal already collects.",
+      help:
+        "A concurrent (principal) employer withholds this worksite jurisdiction's full annual " +
+        "LST for this employee, so this employment withholds nothing for it. DCED priority: the " +
+        "secondary employer must not double-withhold what the principal already collects.",
     },
   ],
 };
@@ -575,12 +762,14 @@ const NJ_W4: PayrollCertificate = {
   purpose: "withholding",
   citation: "NJ Form NJ-W4 (1-21); NJ-WT (September 2025) pp. 9–11 and 24",
   summary:
-    "Sets New Jersey withholding. NJ-WT: \"Do not use the federal W-4 to calculate New Jersey "
-    + "withholdings because employees cannot claim personal exemptions on the federal form.\"",
+    'Sets New Jersey withholding. NJ-WT: "Do not use the federal W-4 to calculate New Jersey ' +
+    'withholdings because employees cannot claim personal exemptions on the federal form."',
   storage: "certificate_rows",
   fields: [
     {
-      key: "filing_status", label: "Line 2 — Filing status", kind: "choice",
+      key: "filing_status",
+      label: "Line 2 — Filing status",
+      kind: "choice",
       choices: [
         { value: "single", label: "Single" },
         { value: "married_joint", label: "Married/Civil Union Couple Joint" },
@@ -588,12 +777,16 @@ const NJ_W4: PayrollCertificate = {
         { value: "head_household", label: "Head of Household" },
         { value: "surviving_spouse", label: "Qualifying Widow(er)/Surviving Civil Union Partner" },
       ],
-      default: "single", required: true,
-      help: "Boxes 1 and 3 are withheld at Rate A; boxes 2, 4 and 5 at Rate B unless the employee "
-        + "selects a rate on line 3.",
+      default: "single",
+      required: true,
+      help:
+        "Boxes 1 and 3 are withheld at Rate A; boxes 2, 4 and 5 at Rate B unless the employee " +
+        "selects a rate on line 3.",
     },
     {
-      key: "rate_table", label: "Line 3 — Rate table selected from the Wage Chart", kind: "choice",
+      key: "rate_table",
+      label: "Line 3 — Rate table selected from the Wage Chart",
+      kind: "choice",
       choices: [
         { value: "A", label: "Rate A" },
         { value: "B", label: "Rate B" },
@@ -601,28 +794,40 @@ const NJ_W4: PayrollCertificate = {
         { value: "D", label: "Rate D" },
         { value: "E", label: "Rate E" },
       ],
-      help: "Only for a married/civil union couple filing jointly, head of household or surviving "
-        + "partner whose household has more than one income: the Wage Chart on the NJ-W4 raises "
-        + "the rate table so the combined income is not under-withheld. Blank means the filing "
-        + "status decides.",
+      help:
+        "Only for a married/civil union couple filing jointly, head of household or surviving " +
+        "partner whose household has more than one income: the Wage Chart on the NJ-W4 raises " +
+        "the rate table so the combined income is not under-withheld. Blank means the filing " +
+        "status decides.",
     },
     {
-      key: "allowances", label: "Line 4 — Total withholding allowances", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "Each one is worth $19.20 a week, $1,000 a year. NJ-WT states no rule for an employee "
-        + "with no NJ-W4 on file at all, so the default here is zero — the answer that "
-        + "over-withholds rather than under-withholds.",
+      key: "allowances",
+      label: "Line 4 — Total withholding allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "Each one is worth $19.20 a week, $1,000 a year. NJ-WT states no rule for an employee " +
+        "with no NJ-W4 on file at all, so the default here is zero — the answer that " +
+        "over-withholds rather than under-withholds.",
     },
     {
-      key: "additional_per_period", label: "Line 5 — Additional amount per pay",
-      kind: "amount", decimals: 4, min: "0",
+      key: "additional_per_period",
+      label: "Line 5 — Additional amount per pay",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Deducted from each pay on top of the amount the rate table produces.",
     },
     {
-      key: "exempt", label: "Line 6 — EXEMPT", kind: "flag",
-      help: "Claimed where the employee expects wages plus taxable non-wage income of $10,000 or "
-        + "less ($20,000 for a joint filer, head of household or surviving partner). Good for ONE "
-        + "year: a new form is due each year.",
+      key: "exempt",
+      label: "Line 6 — EXEMPT",
+      kind: "flag",
+      help:
+        "Claimed where the employee expects wages plus taxable non-wage income of $10,000 or " +
+        "less ($20,000 for a joint filer, head of household or surviving partner). Good for ONE " +
+        "year: a new form is due each year.",
     },
   ],
 };
@@ -636,25 +841,31 @@ const NJ_165: PayrollCertificate = {
   purpose: "non_residence",
   citation: "NJ Form NJ-165; NJ-WT (September 2025) p. 8",
   summary:
-    "The Pennsylvania half of the PA/NJ reciprocal agreement. \"You are not required to withhold "
-    + "on compensation paid to Pennsylvania residents working in New Jersey if they file an "
-    + "Employee's Certificate of Nonresidence in New Jersey (Form NJ-165). … You must withhold "
-    + "New Jersey tax if your employee does not complete the certificate.\"",
+    'The Pennsylvania half of the PA/NJ reciprocal agreement. "You are not required to withhold ' +
+    "on compensation paid to Pennsylvania residents working in New Jersey if they file an " +
+    "Employee's Certificate of Nonresidence in New Jersey (Form NJ-165). … You must withhold " +
+    'New Jersey tax if your employee does not complete the certificate."',
   storage: "certificate_rows",
   fields: [
     {
-      key: "resident_state", label: "State of residence", kind: "choice",
+      key: "resident_state",
+      label: "State of residence",
+      kind: "choice",
       choices: [{ value: "PA", label: "Pennsylvania" }],
       required: true,
-      help: "Pennsylvania is the ONLY state New Jersey has a reciprocal agreement with. New York "
-        + "is not one: a New York resident working in New Jersey is withheld New Jersey tax in "
-        + "full.",
+      help:
+        "Pennsylvania is the ONLY state New Jersey has a reciprocal agreement with. New York " +
+        "is not one: a New York resident working in New Jersey is withheld New Jersey tax in " +
+        "full.",
     },
     {
-      key: "military_spouse", label: "Military spouse (MSRRA)", kind: "flag",
-      help: "Filed with a copy of the spousal military identification card, instead of a "
-        + "reciprocal-state claim, where the employee is in New Jersey only because their spouse "
-        + "is stationed here.",
+      key: "military_spouse",
+      label: "Military spouse (MSRRA)",
+      kind: "flag",
+      help:
+        "Filed with a copy of the spousal military identification card, instead of a " +
+        "reciprocal-state claim, where the employee is in New Jersey only because their spouse " +
+        "is stationed here.",
     },
   ],
 };
@@ -668,47 +879,75 @@ const OH_IT4: PayrollCertificate = {
   purpose: "withholding",
   citation: "Ohio Form IT 4 (Rev. 01/24); Ohio Employer Withholding Tables (2026)",
   summary:
-    "Sets Ohio and school district withholding, and carries the reciprocity waiver. As of 7 "
-    + "December 2020 it replaces the separate IT 4NR, IT 4 MIL and IT MIL SP.",
+    "Sets Ohio and school district withholding, and carries the reciprocity waiver. As of 7 " +
+    "December 2020 it replaces the separate IT 4NR, IT 4 MIL and IT MIL SP.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "school_district", label: "School district of residence (number)", kind: "code",
+      key: "school_district",
+      label: "School district of residence (number)",
+      kind: "code",
       subRegion: { side: "residence" },
-      help: "The FOUR-DIGIT district number from The Finder at tax.ohio.gov — the employee's "
-        + "district of RESIDENCE, not of work. A district that levies no income tax still has a "
-        + "number; only 214 of them tax.",
+      help:
+        "The FOUR-DIGIT district number from The Finder at tax.ohio.gov — the employee's " +
+        "district of RESIDENCE, not of work. A district that levies no income tax still has a " +
+        "number; only 214 of them tax.",
     },
     {
-      key: "line1_self", label: "Line 1 — Self", kind: "count", min: "0", max: "1", default: "0",
-      help: "\"Enter 0 if you are a dependent on another individual's Ohio return; otherwise "
-        + "enter 1.\"",
-    },
-    {
-      key: "line2_spouse", label: "Line 2 — Spouse", kind: "count", min: "0", max: "1",
+      key: "line1_self",
+      label: "Line 1 — Self",
+      kind: "count",
+      min: "0",
+      max: "1",
       default: "0",
-      help: "\"Enter 0 if single or if your spouse files a separate Ohio return; otherwise "
-        + "enter 1.\"",
+      help:
+        "\"Enter 0 if you are a dependent on another individual's Ohio return; otherwise " +
+        'enter 1."',
     },
     {
-      key: "line3_dependents", label: "Line 3 — Dependents", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "The number of dependents claimed. Ohio grants no additional exemption for age or "
-        + "blindness on the IT 4 — those are credits on the annual return.",
+      key: "line2_spouse",
+      label: "Line 2 — Spouse",
+      kind: "count",
+      min: "0",
+      max: "1",
+      default: "0",
+      help:
+        '"Enter 0 if single or if your spouse files a separate Ohio return; otherwise ' +
+        'enter 1."',
     },
     {
-      key: "total_exemptions", label: "Line 4 — Total withholding exemptions", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "The sum of lines 1, 2 and 3. Worth $650 a year each, deducted from annualized wages "
-        + "before the rate is applied. With no IT 4 on file the total is zero.",
+      key: "line3_dependents",
+      label: "Line 3 — Dependents",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "The number of dependents claimed. Ohio grants no additional exemption for age or " +
+        "blindness on the IT 4 — those are credits on the annual return.",
     },
     {
-      key: "additional_per_period", label: "Line 5 — Additional Ohio withholding per pay period",
-      kind: "amount", decimals: 4, min: "0",
+      key: "total_exemptions",
+      label: "Line 4 — Total withholding exemptions",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "The sum of lines 1, 2 and 3. Worth $650 a year each, deducted from annualized wages " +
+        "before the rate is applied. With no IT 4 on file the total is zero.",
+    },
+    {
+      key: "additional_per_period",
+      label: "Line 5 — Additional Ohio withholding per pay period",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "In whole dollars on the form. Added after the tables, not taxed by them.",
     },
     {
-      key: "reciprocity_state", label: "Section III — Full-year resident of a reciprocal state",
+      key: "reciprocity_state",
+      label: "Section III — Full-year resident of a reciprocal state",
       kind: "choice",
       choices: [
         { value: "IN", label: "Indiana" },
@@ -717,16 +956,19 @@ const OH_IT4: PayrollCertificate = {
         { value: "PA", label: "Pennsylvania" },
         { value: "WV", label: "West Virginia" },
       ],
-      help: "\"I am not subject to Ohio or school district income tax withholding because I am a "
-        + "full-year resident of Indiana, Kentucky, Michigan, Pennsylvania, or West Virginia.\" "
-        + "It waives the STATE and SCHOOL DISTRICT tax and says nothing about municipal income "
-        + "tax — a Kentucky resident working in an Ohio city still pays the city.",
+      help:
+        '"I am not subject to Ohio or school district income tax withholding because I am a ' +
+        'full-year resident of Indiana, Kentucky, Michigan, Pennsylvania, or West Virginia." ' +
+        "It waives the STATE and SCHOOL DISTRICT tax and says nothing about municipal income " +
+        "tax — a Kentucky resident working in an Ohio city still pays the city.",
     },
     {
-      key: "military_waiver", label: "Section III — Military or military spouse waiver",
+      key: "military_waiver",
+      label: "Section III — Military or military spouse waiver",
       kind: "flag",
-      help: "A resident servicemember stationed outside Ohio, a nonresident servicemember "
-        + "stationed in Ohio, or a nonresident civilian spouse present solely on those orders.",
+      help:
+        "A resident servicemember stationed outside Ohio, a nonresident servicemember " +
+        "stationed in Ohio, or a nonresident civilian spouse present solely on those orders.",
     },
   ],
 };
@@ -758,38 +1000,49 @@ const OH_MUNICIPAL_RECORD: PayrollCertificate = {
   purpose: "withholding",
   citation: "Ohio Rev. Code 718.03 and 718.011; Ohio Department of Taxation, The Finder",
   summary:
-    "The municipality the employee's work is performed in, which the employer determines from the "
-    + "work address. Ohio publishes no employee form for it and several hundred municipalities "
-    + "levy, so the code is the pack's own convention: the municipality's name in capitals.",
+    "The municipality the employee's work is performed in, which the employer determines from the " +
+    "work address. Ohio publishes no employee form for it and several hundred municipalities " +
+    "levy, so the code is the pack's own convention: the municipality's name in capitals.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "work_municipality", label: "Municipality the work is performed in", kind: "code",
+      key: "work_municipality",
+      label: "Municipality the work is performed in",
+      kind: "code",
       subRegion: { side: "work" },
-      help: "The municipality's name in CAPITALS, underscores for spaces (COLUMBUS, UPPER_ARLINGTON) "
-        + "— look the work address up in The Finder at tax.ohio.gov. Leave it blank if the work "
-        + "address is in no taxing municipality. Its RATE is entered separately against the "
-        + "jurisdiction, because Ohio publishes no municipal rate table a payroll release could "
-        + "carry: a municipality with no rate on file refuses the run rather than withholding zero.",
+      help:
+        "The municipality's name in CAPITALS, underscores for spaces (COLUMBUS, UPPER_ARLINGTON) " +
+        "— look the work address up in The Finder at tax.ohio.gov. Leave it blank if the work " +
+        "address is in no taxing municipality. Its RATE is entered separately against the " +
+        "jurisdiction, because Ohio publishes no municipal rate table a payroll release could " +
+        "carry: a municipality with no rate on file refuses the run rather than withholding zero.",
     },
     {
-      key: "annual_days_in_municipality", label: "Days performing services in this municipality this year",
-      kind: "count", min: "0", max: "366",
-      help: "Calendar-day count for R.C. 718.011's 20-day occasional-entrant threshold. "
-        + "Leave blank when the count is not tracked: withholding then prices normally and the "
-        + "threshold cannot be applied.",
+      key: "annual_days_in_municipality",
+      label: "Days performing services in this municipality this year",
+      kind: "count",
+      min: "0",
+      max: "366",
+      help:
+        "Calendar-day count for R.C. 718.011's 20-day occasional-entrant threshold. " +
+        "Leave blank when the count is not tracked: withholding then prices normally and the " +
+        "threshold cannot be applied.",
     },
     {
-      key: "principal_work_outside_municipality", label: "Principal place of work is outside this municipality",
+      key: "principal_work_outside_municipality",
+      label: "Principal place of work is outside this municipality",
       kind: "flag",
-      help: "R.C. 718.011(B)(1) excuses the occasional entrant only when the principal place of "
-        + "work is outside the municipality.",
+      help:
+        "R.C. 718.011(B)(1) excuses the occasional entrant only when the principal place of " +
+        "work is outside the municipality.",
     },
     {
-      key: "non_small_employer_qualifying_wages", label: "Employer is not small and pays qualifying wages",
+      key: "non_small_employer_qualifying_wages",
+      label: "Employer is not small and pays qualifying wages",
       kind: "flag",
-      help: "R.C. 718.011(B)(1) excuses the occasional entrant only for qualifying wages paid by "
-        + "an employer that is not a small employer under that section.",
+      help:
+        "R.C. 718.011(B)(1) excuses the occasional entrant only for qualifying wages paid by " +
+        "an employer that is not a small employer under that section.",
     },
   ],
 };
@@ -803,27 +1056,38 @@ const MI_W4: PayrollCertificate = {
   purpose: "withholding",
   citation: "Michigan Form MI-W4 (Rev. 12-20); Form 446 (Rev. 02-26) p. 4",
   summary:
-    "Every Michigan employer must obtain one. \"The federal W-4 cannot be used in place of the "
-    + "MI-W4.\" Any writing on the certificate other than the entries required makes it invalid.",
+    'Every Michigan employer must obtain one. "The federal W-4 cannot be used in place of the ' +
+    'MI-W4." Any writing on the certificate other than the entries required makes it invalid.',
   storage: "certificate_rows",
   fields: [
     {
-      key: "exemptions", label: "Line 6 — Personal and dependency exemptions", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "Worth $5,900 a year each in 2026. \"If you fail or refuse to file the form, your "
-        + "employer must withhold Michigan income tax from your wages without allowance for any "
-        + "exemptions\" — which is why the default is zero.",
+      key: "exemptions",
+      label: "Line 6 — Personal and dependency exemptions",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        'Worth $5,900 a year each in 2026. "If you fail or refuse to file the form, your ' +
+        "employer must withhold Michigan income tax from your wages without allowance for any " +
+        'exemptions" — which is why the default is zero.',
     },
     {
-      key: "additional_per_period", label: "Line 7 — Additional amount per pay",
-      kind: "amount", decimals: 4, min: "0",
+      key: "additional_per_period",
+      label: "Line 7 — Additional amount per pay",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Only if the employer agrees. A flat amount, added after the rate.",
     },
     {
-      key: "exempt", label: "Line 8 — Claiming exemption from withholding", kind: "flag",
-      help: "Line 8a (no Michigan liability expected), 8b (wages exempt — including residence in "
-        + "a reciprocal state or a tribal agreement area) or 8c (domicile in a Renaissance Zone). "
-        + "An employer must send Treasury any MI-W4 claiming exemption or ten or more exemptions.",
+      key: "exempt",
+      label: "Line 8 — Claiming exemption from withholding",
+      kind: "flag",
+      help:
+        "Line 8a (no Michigan liability expected), 8b (wages exempt — including residence in " +
+        "a reciprocal state or a tribal agreement area) or 8c (domicile in a Renaissance Zone). " +
+        "An employer must send Treasury any MI-W4 claiming exemption or ten or more exemptions.",
     },
   ],
 };
@@ -851,15 +1115,17 @@ const MI_NONRESIDENCY: PayrollCertificate = {
   label: "Statement of Nonresidence in Michigan (employer's own form or a letter)",
   scope: { level: "region", region: "MI" },
   purpose: "non_residence",
-  citation: "Michigan Form 446 (Rev. 02-26) p. 4, \"Certificate of Nonresidency\"",
+  citation: 'Michigan Form 446 (Rev. 02-26) p. 4, "Certificate of Nonresidency"',
   summary:
-    "Michigan publishes no nonresidency certificate. The employer develops a form or takes a "
-    + "signed letter and keeps it as its authority not to withhold Michigan tax from a resident "
-    + "of a reciprocal state.",
+    "Michigan publishes no nonresidency certificate. The employer develops a form or takes a " +
+    "signed letter and keeps it as its authority not to withhold Michigan tax from a resident " +
+    "of a reciprocal state.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "resident_state", label: "State of legal residence", kind: "choice",
+      key: "resident_state",
+      label: "State of legal residence",
+      kind: "choice",
       choices: [
         { value: "IL", label: "Illinois" },
         { value: "IN", label: "Indiana" },
@@ -869,14 +1135,18 @@ const MI_NONRESIDENCY: PayrollCertificate = {
         { value: "WI", label: "Wisconsin" },
       ],
       required: true,
-      help: "Michigan has reciprocal agreements with exactly these six states. Their employers "
-        + "likewise do not withhold their own tax from Michigan residents, though they may "
-        + "register with Treasury to withhold Michigan's voluntarily.",
+      help:
+        "Michigan has reciprocal agreements with exactly these six states. Their employers " +
+        "likewise do not withhold their own tax from Michigan residents, though they may " +
+        "register with Treasury to withhold Michigan's voluntarily.",
     },
     {
-      key: "signed_on", label: "Date the employee signed the statement", kind: "code",
-      help: "The statement must be signed and dated by the employee. Keep it — it is the "
-        + "employer's only authority for not withholding.",
+      key: "signed_on",
+      label: "Date the employee signed the statement",
+      kind: "code",
+      help:
+        "The statement must be signed and dated by the employee. Keep it — it is the " +
+        "employer's only authority for not withholding.",
     },
   ],
 };
@@ -888,22 +1158,29 @@ const MI_5527: PayrollCertificate = {
   label: "City of Detroit Withholding Exemption Certificate",
   scope: { level: "sub_region", region: "MI", subRegion: "DETROIT" },
   purpose: "withholding",
-  citation: "Michigan Department of Treasury Form 5469 (Rev. 05-25), 2026 City of Detroit Income "
-    + "Tax Withholding Guide",
+  citation:
+    "Michigan Department of Treasury Form 5469 (Rev. 05-25), 2026 City of Detroit Income " +
+    "Tax Withholding Guide",
   summary:
-    "Sets the exemption count and the share of work performed in Detroit. \"Do not mail Form 5527 "
-    + "to the city or the Michigan Department of Treasury; these are for the employer's use and "
-    + "must be retained in the employer's files.\"",
+    'Sets the exemption count and the share of work performed in Detroit. "Do not mail Form 5527 ' +
+    "to the city or the Michigan Department of Treasury; these are for the employer's use and " +
+    "must be retained in the employer's files.\"",
   storage: "certificate_rows",
   fields: [
     {
-      key: "exemptions", label: "Number of exemptions", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "Worth $600 a year each — $11.54 a week. Detroit allows additional exemptions where "
-        + "the employee or spouse is 65 or over, or blind, which the federal rules do not.",
+      key: "exemptions",
+      label: "Number of exemptions",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "Worth $600 a year each — $11.54 a week. Detroit allows additional exemptions where " +
+        "the employee or spouse is 65 or over, or blind, which the federal rules do not.",
     },
     {
-      key: "detroit_work_percent", label: "Percentage of work performed in Detroit",
+      key: "detroit_work_percent",
+      label: "Percentage of work performed in Detroit",
       kind: "choice",
       choices: [
         { value: "0_25", label: "0%–25%" },
@@ -912,8 +1189,9 @@ const MI_5527: PayrollCertificate = {
         { value: "76_80", label: "76%–80%" },
         { value: "81_100", label: "81%–100%" },
       ],
-      help: "A NONRESIDENT is withheld on that share of gross pay: at 60%, $200 of pay is $120 of "
-        + "Detroit wages. A resident is withheld on all of it, wherever the work is done.",
+      help:
+        "A NONRESIDENT is withheld on that share of gross pay: at 60%, $200 of pay is $120 of " +
+        "Detroit wages. A resident is withheld on all of it, wherever the work is done.",
     },
   ],
 };
@@ -927,41 +1205,58 @@ const MA_M4: PayrollCertificate = {
   purpose: "withholding",
   citation: "Massachusetts Form M-4; Circular M (Rev. 12/25) p. 12",
   summary:
-    "\"If you do not file a certificate, your employer must withhold on the basis of no "
-    + "exemptions.\" A claimed spouse counts as FOUR exemptions, not one.",
+    '"If you do not file a certificate, your employer must withhold on the basis of no ' +
+    'exemptions." A claimed spouse counts as FOUR exemptions, not one.',
   storage: "certificate_rows",
   fields: [
     {
-      key: "total_exemptions", label: "Line 4 — Total withholding exemptions", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "Lines 1 to 3 added: self (1, or 2 if 65 or over), spouse (4, or 5 if the spouse is "
-        + "65 or over) and dependents. \"Entering 4 makes a withholding system adjustment for the "
-        + "$4,400 exemption for a spouse\" — it is a scale, not a headcount.",
+      key: "total_exemptions",
+      label: "Line 4 — Total withholding exemptions",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "Lines 1 to 3 added: self (1, or 2 if 65 or over), spouse (4, or 5 if the spouse is " +
+        '65 or over) and dependents. "Entering 4 makes a withholding system adjustment for the ' +
+        '$4,400 exemption for a spouse" — it is a scale, not a headcount.',
     },
     {
-      key: "additional_per_period", label: "Line 5 — Additional withholding per pay period",
-      kind: "amount", decimals: 4, min: "0",
+      key: "additional_per_period",
+      label: "Line 5 — Additional withholding per pay period",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Under agreement with the employer.",
     },
     {
-      key: "head_of_household", label: "Box A — Will file as head of household", kind: "flag",
-      help: "Subtracts a fixed amount from the computed TAX — $2.31 a week, $120 a year — not "
-        + "from the wages.",
+      key: "head_of_household",
+      label: "Box A — Will file as head of household",
+      kind: "flag",
+      help:
+        "Subtracts a fixed amount from the computed TAX — $2.31 a week, $120 a year — not " +
+        "from the wages.",
     },
     {
-      key: "blind", label: "Box B — Employee is blind", kind: "flag",
+      key: "blind",
+      label: "Box B — Employee is blind",
+      kind: "flag",
       help: "Subtracts $2.12 a week, $110 a year, from the computed tax.",
     },
     {
-      key: "spouse_blind", label: "Box C — Spouse is blind and not subject to withholding",
+      key: "spouse_blind",
+      label: "Box C — Spouse is blind and not subject to withholding",
       kind: "flag",
       help: "A second blindness adjustment, on the same terms as the employee's.",
     },
     {
-      key: "student_exempt", label: "Box D — Full-time student under $8,000", kind: "flag",
-      help: "A full-time student in seasonal, part-time or temporary work whose annual income "
-        + "will not exceed $8,000. Circular M is explicit: \"Employer: Do not withhold if D is "
-        + "filled in.\"",
+      key: "student_exempt",
+      label: "Box D — Full-time student under $8,000",
+      kind: "flag",
+      help:
+        "A full-time student in seasonal, part-time or temporary work whose annual income " +
+        'will not exceed $8,000. Circular M is explicit: "Employer: Do not withhold if D is ' +
+        'filled in."',
     },
   ],
 };
@@ -970,57 +1265,80 @@ const MA_M4: PayrollCertificate = {
 const MA_M4_MS: PayrollCertificate = {
   key: "us_ma_m4_ms",
   form: "M-4-MS",
-  label: "Massachusetts Annual Withholding Tax Exemption Certificate for Nonresident Military Spouse",
+  label:
+    "Massachusetts Annual Withholding Tax Exemption Certificate for Nonresident Military Spouse",
   scope: { level: "region", region: "MA" },
   purpose: "withholding",
   validity: { kind: "calendar_year_end" },
   citation:
-    "Massachusetts Department of Revenue, Form M-4-MS (Rev. 5/20), Annual Withholding Tax Exemption Certificate; "
-    + "MA Tax Information for Military Personnel and Their Spouses",
+    "Massachusetts Department of Revenue, Form M-4-MS (Rev. 5/20), Annual Withholding Tax Exemption Certificate; " +
+    "MA Tax Information for Military Personnel and Their Spouses",
   summary:
     "A separate annual certificate for an eligible nonresident military spouse. The employee must revalidate each year and provide the required military identification, DD Form 2058, current Leave and Earnings Statement, and current military orders.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "claim_status", label: "M-4-MS claim", kind: "choice",
+      key: "claim_status",
+      label: "M-4-MS claim",
+      kind: "choice",
       choices: [
         { value: "qualified_domicile", label: "I qualify under my own domicile state" },
-        { value: "elect_servicemember_residence", label: "I elect the servicemember's state of residence for tax purposes" },
+        {
+          value: "elect_servicemember_residence",
+          label: "I elect the servicemember's state of residence for tax purposes",
+        },
         { value: "no_longer_qualified", label: "I no longer qualify for the exemption" },
       ],
       help: "Use the current year's M-4-MS and select the claim that matches the signed certificate. Selecting no longer qualified resumes ordinary M-4 withholding.",
     },
     {
-      key: "active_duty_servicemember_spouse", label: "Spouse is an active-duty servicemember",
-      kind: "flag", help: "M-4-MS applies to the civilian spouse of a member of the armed forces.",
+      key: "active_duty_servicemember_spouse",
+      label: "Spouse is an active-duty servicemember",
+      kind: "flag",
+      help: "M-4-MS applies to the civilian spouse of a member of the armed forces.",
     },
     {
-      key: "servicemember_orders_assign_ma", label: "Current military orders assign the servicemember to Massachusetts",
-      kind: "flag", help: "Retain the servicemember's current orders assigning them to a post of duty in Massachusetts.",
+      key: "servicemember_orders_assign_ma",
+      label: "Current military orders assign the servicemember to Massachusetts",
+      kind: "flag",
+      help: "Retain the servicemember's current orders assigning them to a post of duty in Massachusetts.",
     },
     {
-      key: "spouse_present_to_accompany", label: "Spouse is in Massachusetts solely to be with the servicemember",
-      kind: "flag", help: "Required for the M-4-MS exemption whether the spouse relies on their own domicile or makes the federal residence election.",
+      key: "spouse_present_to_accompany",
+      label: "Spouse is in Massachusetts solely to be with the servicemember",
+      kind: "flag",
+      help: "Required for the M-4-MS exemption whether the spouse relies on their own domicile or makes the federal residence election.",
     },
     {
-      key: "same_non_ma_domicile", label: "Spouse and servicemember share a domicile outside Massachusetts, or the spouse makes the federal residence election",
-      kind: "flag", help: "Records the non-Massachusetts shared domicile or the election under 50 U.S.C. § 4001(a)(2)(B), as selected on M-4-MS.",
+      key: "same_non_ma_domicile",
+      label:
+        "Spouse and servicemember share a domicile outside Massachusetts, or the spouse makes the federal residence election",
+      kind: "flag",
+      help: "Records the non-Massachusetts shared domicile or the election under 50 U.S.C. § 4001(a)(2)(B), as selected on M-4-MS.",
     },
     {
-      key: "military_spouse_id_on_file", label: "Current military spouse identification is on file",
-      kind: "flag", help: "Massachusetts DOR requires a Military Spouse ID card with M-4-MS.",
+      key: "military_spouse_id_on_file",
+      label: "Current military spouse identification is on file",
+      kind: "flag",
+      help: "Massachusetts DOR requires a Military Spouse ID card with M-4-MS.",
     },
     {
-      key: "dd2058_on_file", label: "DD Form 2058 is on file",
-      kind: "flag", help: "Massachusetts DOR requires the servicemember's State of Legal Residence Certificate (DD Form 2058).",
+      key: "dd2058_on_file",
+      label: "DD Form 2058 is on file",
+      kind: "flag",
+      help: "Massachusetts DOR requires the servicemember's State of Legal Residence Certificate (DD Form 2058).",
     },
     {
-      key: "servicemember_les_on_file", label: "Current Leave and Earnings Statement is on file",
-      kind: "flag", help: "Massachusetts DOR requires the servicemember's Leave and Earnings Statement.",
+      key: "servicemember_les_on_file",
+      label: "Current Leave and Earnings Statement is on file",
+      kind: "flag",
+      help: "Massachusetts DOR requires the servicemember's Leave and Earnings Statement.",
     },
     {
-      key: "current_military_orders_on_file", label: "Current Massachusetts military orders are on file",
-      kind: "flag", help: "Massachusetts DOR requires current orders assigning the servicemember to a post of duty in Massachusetts.",
+      key: "current_military_orders_on_file",
+      label: "Current Massachusetts military orders are on file",
+      kind: "flag",
+      help: "Massachusetts DOR requires current orders assigning the servicemember to a post of duty in Massachusetts.",
     },
   ],
 };
@@ -1037,50 +1355,71 @@ const GA_G4: PayrollCertificate = {
   citation:
     "Georgia Form G-4 (Rev. 06/03/26); Employer's Withholding Tax Guide 2026 (revised June 2026)",
   summary:
-    "Georgia claims no personal allowance for the employee or spouse — the standard deduction "
-    + "does that work, and the letter on line 7 chooses which one. \"Failure to submit a properly "
-    + "completed Form G-4 results in the employer withholding as though the employee is single "
-    + "with zero allowances.\"",
+    "Georgia claims no personal allowance for the employee or spouse — the standard deduction " +
+    'does that work, and the letter on line 7 chooses which one. "Failure to submit a properly ' +
+    "completed Form G-4 results in the employer withholding as though the employee is single " +
+    'with zero allowances."',
   storage: "certificate_rows",
   fields: [
     {
-      key: "marital_status", label: "Line 3 / Line 7 — Marital status letter", kind: "choice",
+      key: "marital_status",
+      label: "Line 3 / Line 7 — Marital status letter",
+      kind: "choice",
       choices: [
         { value: "A", label: "A — Single" },
         {
-          value: "B", label: "B — Married filing separate, or married filing joint both working",
-          help: "Takes the MARRIED FILING SEPARATE standard deduction, which is the single "
-            + "figure: a two-earner couple would otherwise be given the joint deduction twice.",
+          value: "B",
+          label: "B — Married filing separate, or married filing joint both working",
+          help:
+            "Takes the MARRIED FILING SEPARATE standard deduction, which is the single " +
+            "figure: a two-earner couple would otherwise be given the joint deduction twice.",
         },
         { value: "C", label: "C — Married filing joint, one spouse working" },
         { value: "D", label: "D — Head of household" },
       ],
-      default: "A", required: true,
-      help: "The letter the employer uses to pick the standard-deduction column in the "
-        + "Employer's Tax Guide.",
+      default: "A",
+      required: true,
+      help:
+        "The letter the employer uses to pick the standard-deduction column in the " +
+        "Employer's Tax Guide.",
     },
     {
-      key: "dependent_allowances", label: "Line 4 — Dependent allowances", kind: "count",
-      min: "0", max: "99", default: "0",
+      key: "dependent_allowances",
+      label: "Line 4 — Dependent allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
       help: "Worth $5,000 a year each from 11 May 2026 (HB 463), $4,000 before it.",
     },
     {
-      key: "adjustment_allowances", label: "Line 5 — Georgia adjustments allowances", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "From the G-4's own worksheet (Rev. 06/03/26): divide the Line G amount by "
-        + "$5,000, rounding up only when the remainder is over $2,500. Line 7 totals lines "
-        + "4 and 5, and the employer uses the total.",
+      key: "adjustment_allowances",
+      label: "Line 5 — Georgia adjustments allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "From the G-4's own worksheet (Rev. 06/03/26): divide the Line G amount by " +
+        "$5,000, rounding up only when the remainder is over $2,500. Line 7 totals lines " +
+        "4 and 5, and the employer uses the total.",
     },
     {
-      key: "additional_per_period", label: "Line 6 — Additional withholding",
-      kind: "amount", decimals: 4, min: "0",
+      key: "additional_per_period",
+      label: "Line 6 — Additional withholding",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Per pay period, authorised by the employee's signature on the form.",
     },
     {
-      key: "exempt", label: "Line 8 — Exempt from Georgia withholding", kind: "flag",
-      help: "No Georgia liability last year and none expected this year (8a), or the "
-        + "Servicemembers Civil Relief Act (8b). An employer must mail Georgia any G-4 claiming "
-        + "exempt or more than 14 allowances.",
+      key: "exempt",
+      label: "Line 8 — Exempt from Georgia withholding",
+      kind: "flag",
+      help:
+        "No Georgia liability last year and none expected this year (8a), or the " +
+        "Servicemembers Civil Relief Act (8b). An employer must mail Georgia any G-4 claiming " +
+        "exempt or more than 14 allowances.",
     },
   ],
 };
@@ -1094,36 +1433,49 @@ const NC_NC4: PayrollCertificate = {
   purpose: "withholding",
   citation: "NC Form NC-4 (Web 11-24); NC-30 (2026) sections 13 and 27; NC-4 NRA",
   summary:
-    "\"If you do not submit Form NC-4 to your employer, your employer must withhold as if your "
-    + "filing status is 'Single' with no allowances.\" Form NC-4 EZ and Form NC-4 NRA are the "
-    + "same certificate for simpler cases and for nonresident aliens.",
+    '"If you do not submit Form NC-4 to your employer, your employer must withhold as if your ' +
+    "filing status is 'Single' with no allowances.\" Form NC-4 EZ and Form NC-4 NRA are the " +
+    "same certificate for simpler cases and for nonresident aliens.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "filing_status", label: "Filing status", kind: "choice",
+      key: "filing_status",
+      label: "Filing status",
+      kind: "choice",
       choices: [
         { value: "single_or_separate", label: "Single or Married Filing Separately" },
         { value: "head_household", label: "Head of Household" },
         { value: "joint_or_surviving", label: "Married Filing Jointly or Surviving Spouse" },
       ],
-      default: "single_or_separate", required: true,
-      help: "NC-30 prints only TWO schedules — \"Single Person, Married Person, or Surviving "
-        + "Spouse\" and \"Head of Household\" — so every status except head of household uses "
-        + "the same table.",
+      default: "single_or_separate",
+      required: true,
+      help:
+        'NC-30 prints only TWO schedules — "Single Person, Married Person, or Surviving ' +
+        'Spouse" and "Head of Household" — so every status except head of household uses ' +
+        "the same table.",
     },
     {
-      key: "allowances", label: "Line 1 — Total withholding allowances", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "From line 17 of the NC-4 Allowance Worksheet. Worth $2,500 a year each. An employer "
-        + "must send the Department any NC-4 claiming more than 10.",
+      key: "allowances",
+      label: "Line 1 — Total withholding allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "From line 17 of the NC-4 Allowance Worksheet. Worth $2,500 a year each. An employer " +
+        "must send the Department any NC-4 claiming more than 10.",
     },
     {
-      key: "additional_per_period", label: "Line 2 — Additional amount per pay period",
-      kind: "amount", decimals: 0, min: "0",
+      key: "additional_per_period",
+      label: "Line 2 — Additional amount per pay period",
+      kind: "amount",
+      decimals: 0,
+      min: "0",
       help: "Enter whole dollars, as Form NC-4 Line 2 requires.",
     },
     {
-      key: "nonresident_alien", label: "This is a nonresident alien withholding certificate (NC-4 NRA)",
+      key: "nonresident_alien",
+      label: "This is a nonresident alien withholding certificate (NC-4 NRA)",
       kind: "flag",
       help: "For NC-4 NRA, North Carolina requires the Single schedule regardless of marital status and a completed Line 2 additional withholding amount.",
     },
@@ -1134,11 +1486,14 @@ const NC_NC4: PayrollCertificate = {
       help: "Required when NC-4 NRA is selected. NC-30 §13 directs these employees to enter $0 on Line 2.",
     },
     {
-      key: "exempt", label: "NC-4 EZ line 3 or 4 — Exempt", kind: "flag",
-      help: "No North Carolina liability last year and none expected this year, or the "
-        + "Servicemembers Civil Relief Act military-spouse exemption. A new NC-4 EZ is due each "
-        + "year: \"On February 16, begin withholding for each employee who previously claimed "
-        + "exemption but has not given you a new Form NC-4 EZ.\"",
+      key: "exempt",
+      label: "NC-4 EZ line 3 or 4 — Exempt",
+      kind: "flag",
+      help:
+        "No North Carolina liability last year and none expected this year, or the " +
+        "Servicemembers Civil Relief Act military-spouse exemption. A new NC-4 EZ is due each " +
+        'year: "On February 16, begin withholding for each employee who previously claimed ' +
+        'exemption but has not given you a new Form NC-4 EZ."',
     },
   ],
 };
@@ -1146,18 +1501,87 @@ const NC_NC4: PayrollCertificate = {
 const US_CERTIFICATES: PayrollPackCertificates = {
   country: "US",
   certificates: [
-    W4, US_TAX_RESIDENCY, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
+    W4,
+    US_TAX_RESIDENCY,
+    CA_DE4,
+    NY_IT2104,
+    NY_IT2104_1,
+    IL_W4,
+    IL_W5NR,
+    PA_REV419,
+    PA_CLGS32_6,
     PA_LST_RECORD,
-    NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
-    MA_M4, MA_M4_MS, GA_G4, NC_NC4, CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CO_AIR_CARRIER_CERTIFICATE, CT_CERTIFICATE, CT_W4NA_CERTIFICATE, DC_CERTIFICATE,
+    NJ_W4,
+    NJ_165,
+    OH_IT4,
+    OH_MUNICIPAL_RECORD,
+    MI_W4,
+    MI_NONRESIDENCY,
+    MI_5527,
+    MA_M4,
+    MA_M4_MS,
+    GA_G4,
+    NC_NC4,
+    CO_CERTIFICATE,
+    CO_DR1059_CERTIFICATE,
+    CO_AIR_CARRIER_CERTIFICATE,
+    CT_CERTIFICATE,
+    CT_W4NA_CERTIFICATE,
+    DC_CERTIFICATE,
     DC_NONRESIDENT_CERTIFICATE,
-    MD_CERTIFICATE, MD_MW507M, MD_MW507_NR, OR_CERTIFICATE, OR_TRANSIT_RECORD, DE_CERTIFICATE, DE_W4NR_CERTIFICATE,
-    AL_CERTIFICATE, AL_A4_MS_CERTIFICATE, AL_SEVERANCE_APPROVAL_CERTIFICATE, SC_CERTIFICATE, AR_CERTIFICATE, ME_CERTIFICATE,
-    RI_CERTIFICATE, VT_CERTIFICATE, HI_CERTIFICATE,
-    ID_CERTIFICATE, KS_CERTIFICATE, KS_K4C_CERTIFICATE, LA_CERTIFICATE,
-    MO_CERTIFICATE, MS_CERTIFICATE, MT_CERTIFICATE, ND_CERTIFICATE, ND_MOBILE_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_NDWR_CERTIFICATE, ND_TRIBAL_CERTIFICATE, ND_WAGE_EXCLUSION_CERTIFICATE, NE_CERTIFICATE, NE_9N_CERTIFICATE, NM_CERTIFICATE, OK_CERTIFICATE, OK_OW9MSE_CERTIFICATE, OK_SERVICE_CLASS_CERTIFICATE,
-    AZ_CERTIFICATE, IN_CERTIFICATE, KY_CERTIFICATE, KY_LOCALITY_RECORD, VA_CERTIFICATE, WV_CERTIFICATE, WV_IT104NR_CERTIFICATE, WV_MILITARY_PAY_CERTIFICATE, WV_MOBILE_CERTIFICATE,
-    UT_CERTIFICATE, MN_CERTIFICATE, MN_MWR, WI_CERTIFICATE, WI_W220, WI_W221, WI_WT4A, IA_CERTIFICATE, IA_44016,
+    MD_CERTIFICATE,
+    MD_MW507M,
+    MD_MW507_NR,
+    OR_CERTIFICATE,
+    OR_TRANSIT_RECORD,
+    DE_CERTIFICATE,
+    DE_W4NR_CERTIFICATE,
+    AL_CERTIFICATE,
+    AL_A4_MS_CERTIFICATE,
+    AL_SEVERANCE_APPROVAL_CERTIFICATE,
+    SC_CERTIFICATE,
+    AR_CERTIFICATE,
+    ME_CERTIFICATE,
+    RI_CERTIFICATE,
+    VT_CERTIFICATE,
+    HI_CERTIFICATE,
+    ID_CERTIFICATE,
+    KS_CERTIFICATE,
+    KS_K4C_CERTIFICATE,
+    LA_CERTIFICATE,
+    MO_CERTIFICATE,
+    MS_CERTIFICATE,
+    MT_CERTIFICATE,
+    ND_CERTIFICATE,
+    ND_MOBILE_CERTIFICATE,
+    ND_NDWM_CERTIFICATE,
+    ND_NDWR_CERTIFICATE,
+    ND_TRIBAL_CERTIFICATE,
+    ND_WAGE_EXCLUSION_CERTIFICATE,
+    NE_CERTIFICATE,
+    NE_9N_CERTIFICATE,
+    NM_CERTIFICATE,
+    OK_CERTIFICATE,
+    OK_OW9MSE_CERTIFICATE,
+    OK_SERVICE_CLASS_CERTIFICATE,
+    AZ_CERTIFICATE,
+    IN_CERTIFICATE,
+    KY_CERTIFICATE,
+    KY_LOCALITY_RECORD,
+    VA_CERTIFICATE,
+    WV_CERTIFICATE,
+    WV_IT104NR_CERTIFICATE,
+    WV_MILITARY_PAY_CERTIFICATE,
+    WV_MOBILE_CERTIFICATE,
+    UT_CERTIFICATE,
+    MN_CERTIFICATE,
+    MN_MWR,
+    WI_CERTIFICATE,
+    WI_W220,
+    WI_W221,
+    WI_WT4A,
+    IA_CERTIFICATE,
+    IA_44016,
   ],
 };
 
@@ -1352,10 +1776,10 @@ const OH_SCHOOL_DISTRICT_LEVIES = OH_SCHOOL_DISTRICTS_2026.map((district) => ({
   rateSource: { kind: "pack" } as const,
   certificateKey: "us_oh_it4",
   citation:
-    "Ohio Rev. Code 5748.01; Ohio Department of Taxation, School Districts With an Income Tax as "
-    + `of January 2026 (December 30, 2025) — ${district.base === "earned_income"
-      ? "earned income only base"
-      : "traditional base"}`,
+    "Ohio Rev. Code 5748.01; Ohio Department of Taxation, School Districts With an Income Tax as " +
+    `of January 2026 (December 30, 2025) — ${
+      district.base === "earned_income" ? "earned income only base" : "traditional base"
+    }`,
   implemented: true,
 }));
 
@@ -1368,8 +1792,18 @@ const OH_SCHOOL_DISTRICT_LEVIES = OH_SCHOOL_DISTRICTS_2026.map((district) => ({
  * registry below on the same terms.
  */
 const OH_NAMED_MUNICIPALITIES = [
-  "AKRON", "CANTON", "CINCINNATI", "CLEVELAND", "COLUMBUS", "DAYTON", "HAMILTON",
-  "LORAIN", "PARMA", "SPRINGFIELD", "TOLEDO", "YOUNGSTOWN",
+  "AKRON",
+  "CANTON",
+  "CINCINNATI",
+  "CLEVELAND",
+  "COLUMBUS",
+  "DAYTON",
+  "HAMILTON",
+  "LORAIN",
+  "PARMA",
+  "SPRINGFIELD",
+  "TOLEDO",
+  "YOUNGSTOWN",
 ].map((code) => ({
   code,
   label: `${code.charAt(0)}${code.slice(1).toLowerCase()} municipal income tax`,
@@ -1417,8 +1851,8 @@ const OH_REGION: PayrollRegionWithholding = {
   // return, not a withholding offset.
   subRegionConflictRule: "both",
   citation:
-    "Ohio Employer Withholding Tables and Optional Computer Formula, effective October 1, 2025 "
-    + "and August 1, 2026; Ohio Rev. Code Chapters 5747, 5748 and 718",
+    "Ohio Employer Withholding Tables and Optional Computer Formula, effective October 1, 2025 " +
+    "and August 1, 2026; Ohio Rev. Code Chapters 5747, 5748 and 718",
 };
 
 /**
@@ -1431,22 +1865,27 @@ const OH_REGION: PayrollRegionWithholding = {
  */
 const MI_CITY_LEVIES = MI_TAXING_CITIES.map((code) => ({
   code,
-  label: code === "DETROIT"
-    ? "City of Detroit income tax"
-    : `${code.split("_").map((word) => word.charAt(0) + word.slice(1).toLowerCase()).join(" ")} `
-      + "city income tax",
+  label:
+    code === "DETROIT"
+      ? "City of Detroit income tax"
+      : `${code
+          .split("_")
+          .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+          .join(" ")} ` + "city income tax",
   kind: "city",
   // Residents on all their compensation, nonresidents on the part earned in the
   // city. Two different rates, the nonresident one at half the resident one.
   reaches: ["resident", "nonresident"] as const,
-  rateSource: code === "DETROIT"
-    ? { kind: "pack" } as const
-    : { kind: "tenant", rateKey: "us_mi_city" } as const,
+  rateSource:
+    code === "DETROIT"
+      ? ({ kind: "pack" } as const)
+      : ({ kind: "tenant", rateKey: "us_mi_city" } as const),
   ...(code === "DETROIT" ? { certificateKey: "us_mi_5527" } : {}),
-  citation: code === "DETROIT"
-    ? "Michigan Department of Treasury Form 5469 (Rev. 05-25), 2026 City of Detroit Income Tax "
-      + "Withholding Guide"
-    : "Michigan City Income Tax Act, MCL 141.501 et seq.; the city's own income tax ordinance",
+  citation:
+    code === "DETROIT"
+      ? "Michigan Department of Treasury Form 5469 (Rev. 05-25), 2026 City of Detroit Income Tax " +
+        "Withholding Guide"
+      : "Michigan City Income Tax Act, MCL 141.501 et seq.; the city's own income tax ordinance",
   implemented: true,
 }));
 
@@ -1482,8 +1921,8 @@ const MI_REGION: PayrollRegionWithholding = {
   // `miResidentCityRate` applies instead. See states/mi.ts.
   subRegionConflictRule: "both",
   citation:
-    "Michigan Form 446 (Rev. 02-26), 2026 Michigan Income Tax Withholding Guide; Michigan City "
-    + "Income Tax Act, MCL 141.501 et seq.",
+    "Michigan Form 446 (Rev. 02-26), 2026 Michigan Income Tax Withholding Guide; Michigan City " +
+    "Income Tax Act, MCL 141.501 et seq.",
 };
 
 const MA_REGION: PayrollRegionWithholding = {
@@ -1499,8 +1938,8 @@ const MA_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Massachusetts Circular M: Income Tax Withholding Tables at 5.0%, effective January 1, 2026 "
-    + "(Rev. 12/25)",
+    "Massachusetts Circular M: Income Tax Withholding Tables at 5.0%, effective January 1, 2026 " +
+    "(Rev. 12/25)",
 };
 
 const GA_REGION: PayrollRegionWithholding = {
@@ -1516,8 +1955,7 @@ const GA_REGION: PayrollRegionWithholding = {
   // Georgia permits no local income tax on wages.
   subRegions: [],
   subRegionConflictRule: "both",
-  citation:
-    "Georgia Employer's Withholding Tax Guide 2026 (revised June 2026); House Bill 463",
+  citation: "Georgia Employer's Withholding Tax Guide 2026 (revised June 2026); House Bill 463",
 };
 
 const NC_REGION: PayrollRegionWithholding = {
@@ -1549,14 +1987,47 @@ const NC_REGION: PayrollRegionWithholding = {
 };
 
 const IMPLEMENTED: Readonly<Record<string, PayrollRegionWithholding>> = {
-  CA: CA_REGION, CO: CO_REGION, CT: CT_REGION, NY: NY_REGION, PA: PA_REGION, IL: IL_REGION,
-  NJ: NJ_REGION, OH: OH_REGION, MI: MI_REGION, MA: MA_REGION, GA: GA_REGION, NC: NC_REGION,
-  AZ: AZ_REGION, IN: IN_REGION, KY: KY_REGION, VA: VA_REGION, WV: WV_REGION,
-  IA: IA_REGION, MN: MN_REGION, WI: WI_REGION, UT: UT_REGION,
-  MD: MD_REGION, OR: OR_REGION, DE: DE_REGION, AL: AL_REGION, SC: SC_REGION,
-  AR: AR_REGION, ME: ME_REGION, RI: RI_REGION, VT: VT_REGION, HI: HI_REGION,
-  ID: ID_REGION, KS: KS_REGION, LA: LA_REGION,
-  MO: MO_REGION, MS: MS_REGION, MT: MT_REGION, ND: ND_REGION, NE: NE_REGION, NM: NM_REGION, OK: OK_REGION,
+  CA: CA_REGION,
+  CO: CO_REGION,
+  CT: CT_REGION,
+  NY: NY_REGION,
+  PA: PA_REGION,
+  IL: IL_REGION,
+  NJ: NJ_REGION,
+  OH: OH_REGION,
+  MI: MI_REGION,
+  MA: MA_REGION,
+  GA: GA_REGION,
+  NC: NC_REGION,
+  AZ: AZ_REGION,
+  IN: IN_REGION,
+  KY: KY_REGION,
+  VA: VA_REGION,
+  WV: WV_REGION,
+  IA: IA_REGION,
+  MN: MN_REGION,
+  WI: WI_REGION,
+  UT: UT_REGION,
+  MD: MD_REGION,
+  OR: OR_REGION,
+  DE: DE_REGION,
+  AL: AL_REGION,
+  SC: SC_REGION,
+  AR: AR_REGION,
+  ME: ME_REGION,
+  RI: RI_REGION,
+  VT: VT_REGION,
+  HI: HI_REGION,
+  ID: ID_REGION,
+  KS: KS_REGION,
+  LA: LA_REGION,
+  MO: MO_REGION,
+  MS: MS_REGION,
+  MT: MT_REGION,
+  ND: ND_REGION,
+  NE: NE_REGION,
+  NM: NM_REGION,
+  OK: OK_REGION,
   DC: DC_REGION,
 };
 
@@ -1594,8 +2065,8 @@ function everyUsRegion(): PayrollRegionWithholding[] {
     }
     if (implemented.has(state)) {
       throw new PayrollError(
-        `${state} has a withholding engine but no jurisdiction declaration — `
-        + "this pack needs a correction; contact support.",
+        `${state} has a withholding engine but no jurisdiction declaration — ` +
+          "this pack needs a correction; contact support.",
       );
     }
     const publication = usStatePublication(state);
@@ -1604,9 +2075,9 @@ function everyUsRegion(): PayrollRegionWithholding[] {
       label: `${state} income tax`,
       implemented: false,
       unimplementedReason:
-        `${state} levies a wage income tax and the US pack has not transcribed its tables. `
-        + (publication ? `They are published in ${publication}. ` : "")
-        + `This state is not yet supported by the US pack; contact support.`,
+        `${state} levies a wage income tax and the US pack has not transcribed its tables. ` +
+        (publication ? `They are published in ${publication}. ` : "") +
+        `This state is not yet supported by the US pack; contact support.`,
       taxesNonresidentWages: true,
       residentWithholding: "unknown",
       residentWithholdingImplemented: false,
@@ -1645,8 +2116,8 @@ const US_WITHHOLDING: PayrollPackWithholding = {
 const US_RECIPROCITY: PayrollPackReciprocity = {
   country: "US",
   crossCountryNote:
-    "Canada/US treaty relief is not modelled: an employee runs on exactly one country pack, so a "
-    + "cross-border agreement has no pair of regions to relate.",
+    "Canada/US treaty relief is not modelled: an employee runs on exactly one country pack, so a " +
+    "cross-border agreement has no pair of regions to relate.",
   agreements: [
     // --- Pennsylvania: six states, all on Form REV-419 -------------------
     ...(["IN", "MD", "NJ", "OH", "VA", "WV"] as const).map((residence) => ({
@@ -1665,8 +2136,8 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       // cities, towns, or other localities in Pennsylvania."
       relievesSubRegionLevies: false,
       citation:
-        "PA PIT Guide (DSM-12, 12-2023) p. 3; REV-415 p. 10; Form REV-419 (EX) 09-20"
-        + (residence === "NJ"
+        "PA PIT Guide (DSM-12, 12-2023) p. 3; REV-415 p. 10; Form REV-419 (EX) 09-20" +
+        (residence === "NJ"
           ? "; NJ-WT (September 2025) p. 8 and nj.gov PA/NJ Reciprocal Income Tax Agreement"
           : ""),
     })),
@@ -1682,8 +2153,7 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       // Illinois has no local income taxes, so the question is moot — declared
       // false because that is the fact, not because it is the safe default.
       relievesSubRegionLevies: false,
-      citation:
-        "Illinois Publication 130 (R-02/26) p. 7 and p. 12; Form IL-W-5-NR (R-12/10)",
+      citation: "Illinois Publication 130 (R-02/26) p. 7 and p. 12; Form IL-W-5-NR (R-12/10)",
     })),
     // --- New Jersey: ONE state, on Form NJ-165 ---------------------------
     // The other half of the PA/NJ pair. Pennsylvania's side (a New Jersey
@@ -1706,8 +2176,8 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       // fact, not as a default.
       relievesSubRegionLevies: false,
       citation:
-        "NJ-WT (September 2025) p. 8, \"New Jersey and Pennsylvania Reciprocal Agreement\"; "
-        + "Form NJ-165",
+        'NJ-WT (September 2025) p. 8, "New Jersey and Pennsylvania Reciprocal Agreement"; ' +
+        "Form NJ-165",
     },
     // --- Ohio: five states, on Form IT 4 Section III ----------------------
     ...(["IN", "KY", "MI", "PA", "WV"] as const).map((residence) => ({
@@ -1726,8 +2196,8 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       // working in Cincinnati pays Cincinnati in full.
       relievesSubRegionLevies: false,
       citation:
-        "Ohio Form IT 4 (Rev. 01/24) Section III, Withholding Waiver; Ohio Rev. Code 5747.05(A)"
-        + (residence === "PA" ? "; PA Form REV-419, the reciprocal direction" : ""),
+        "Ohio Form IT 4 (Rev. 01/24) Section III, Withholding Waiver; Ohio Rev. Code 5747.05(A)" +
+        (residence === "PA" ? "; PA Form REV-419, the reciprocal direction" : ""),
     })),
     // --- Michigan: six states, on an employer-kept statement --------------
     // Michigan's agreements are with Illinois, Indiana, Kentucky, Minnesota,
@@ -1752,8 +2222,8 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       // nonresident tax.
       relievesSubRegionLevies: false,
       citation:
-        "Michigan Form 446 (Rev. 02-26) p. 4, \"Reciprocal Agreements\" and \"Certificate of "
-        + "Nonresidency\"; Form MI-W4 (Rev. 12-20) line 8b",
+        'Michigan Form 446 (Rev. 02-26) p. 4, "Reciprocal Agreements" and "Certificate of ' +
+        'Nonresidency"; Form MI-W4 (Rev. 12-20) line 8b',
     })),
     // --- Iowa: ONE state, on Form 44-016 --------------------------------
     {
@@ -1764,8 +2234,8 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       withoutCertificate: "work_region" as const,
       relievesSubRegionLevies: false,
       citation:
-        "Iowa Form 44-016 (10/3/2024); Iowa Department of Revenue, Iowa–Illinois Reciprocal "
-        + "Agreement",
+        "Iowa Form 44-016 (10/3/2024); Iowa Department of Revenue, Iowa–Illinois Reciprocal " +
+        "Agreement",
     },
     // --- Wisconsin: four states, on Form W-220 --------------------------
     ...(["IL", "IN", "KY", "MI"] as const).map((residence) => ({
@@ -1776,8 +2246,8 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       withoutCertificate: "work_region" as const,
       relievesSubRegionLevies: false,
       citation:
-        "Wisconsin Form W-220 (R. 7-20); Publication W-166 (January 2026) p. 8; "
-        + "Publication 121 Reciprocity (January 2026)",
+        "Wisconsin Form W-220 (R. 7-20); Publication W-166 (January 2026) p. 8; " +
+        "Publication 121 Reciprocity (January 2026)",
     })),
     // --- Minnesota: Michigan and North Dakota, on Form MWR --------------
     ...(["MI", "ND"] as const).map((residence) => ({
@@ -1788,8 +2258,8 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       withoutCertificate: "work_region" as const,
       relievesSubRegionLevies: false,
       citation:
-        "Minnesota Form MWR for Tax Year 2026; 2026 Minnesota Withholding Tax Instructions "
-        + "and Tables p. 4",
+        "Minnesota Form MWR for Tax Year 2026; 2026 Minnesota Withholding Tax Instructions " +
+        "and Tables p. 4",
     })),
     // --- North Dakota: Minnesota and Montana, on Form NDW-R -------------
     ...(["MN", "MT"] as const).map((residence) => ({
@@ -1800,8 +2270,8 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       withoutCertificate: "work_region" as const,
       relievesSubRegionLevies: false,
       citation:
-        "N.D.C.C. § 57-38-60; North Dakota Form NDW-R (SFN 28729, 2023); "
-        + "North Dakota Income Tax Withholding page (accessed 2026)",
+        "N.D.C.C. § 57-38-60; North Dakota Form NDW-R (SFN 28729, 2023); " +
+        "North Dakota Income Tax Withholding page (accessed 2026)",
     })),
     // --- Kentucky: unambiguous partners on the K-4 exemption ------------
     // The K-4 also names Virginia (daily commute) and Ohio (unless a
@@ -1815,8 +2285,7 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       certificateKey: "us_ky_k4",
       withoutCertificate: "work_region" as const,
       relievesSubRegionLevies: false,
-      citation:
-        "Kentucky Form 42A804 (K-4) (2026), boxes 1–4; 42A003 (TCF)(10-2025)",
+      citation: "Kentucky Form 42A804 (K-4) (2026), boxes 1–4; 42A003 (TCF)(10-2025)",
     })),
     // --- Virginia: MD / PA / WV domiciliaries on VA-4 line 3 ------------
     // Daily commuters from Kentucky or the District of Columbia are a
@@ -1828,8 +2297,7 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       certificateKey: "us_va_va4",
       withoutCertificate: "work_region" as const,
       relievesSubRegionLevies: false,
-      citation:
-        "Virginia Form VA-4 line 3; Income Tax Withholding Guide for Employers, Rev. 05/25",
+      citation: "Virginia Form VA-4 line 3; Income Tax Withholding Guide for Employers, Rev. 05/25",
     })),
     // --- West Virginia: five states on IT-104NR -------------------------
     ...(["KY", "MD", "OH", "PA", "VA"] as const).map((residence) => ({

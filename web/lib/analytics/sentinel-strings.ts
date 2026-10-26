@@ -14,7 +14,8 @@ import type { CatalogMessageFn } from "./catalog-strings";
 import { viewerNumber } from "../format";
 import { formatDecimal } from "../money-format";
 
-export type ConformityCode = "excellent" | "acceptable" | "marginal" | "nonConforming" | "insufficient";
+export type ConformityCode =
+  "excellent" | "acceptable" | "marginal" | "nonConforming" | "insufficient";
 
 export interface SentinelRiskArea {
   area: string;
@@ -53,7 +54,14 @@ export interface SentinelStrings {
   rsfReason(multiple: number, vendor: string, currency: string): string;
   /** `z` is |z| and renders with two fraction digits in the request locale; `vendor`/`currency` are data. */
   zscoreReason(z: number, vendor: string, currency: string, baseline: number): string;
-  sequentialReason(count: number, first: string, last: string, days: number, high: boolean, currency: string): string;
+  sequentialReason(
+    count: number,
+    first: string,
+    last: string,
+    days: number,
+    high: boolean,
+    currency: string,
+  ): string;
   ghostBoth(vendor: string, employee: string): string;
   ghostAddress(vendor: string, employee: string): string;
   ghostName(vendor: string, employee: string): string;
@@ -121,7 +129,13 @@ export function auditEventArgs(
 ): AuditEventArgs {
   const lower = (action ?? "").toLowerCase();
   const verb: AuditVerb =
-    lower === "insert" ? "created" : lower === "update" ? "updated" : lower === "delete" ? "deleted" : "other";
+    lower === "insert"
+      ? "created"
+      : lower === "update"
+        ? "updated"
+        : lower === "delete"
+          ? "deleted"
+          : "other";
   let fields = "";
   try {
     const parsed: unknown = JSON.parse(changesText ?? "");
@@ -145,8 +159,11 @@ export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelSt
   return {
     locale,
     displayPartyName: (name) =>
-      name === null || name === "" || name === "Unknown" ? t("sentinel.forensics.unknownParty") : name,
-    benfordInsufficient: (total, minimum) => t("sentinel.forensics.benfordInsufficient", { total, minimum }),
+      name === null || name === "" || name === "Unknown"
+        ? t("sentinel.forensics.unknownParty")
+        : name,
+    benfordInsufficient: (total, minimum) =>
+      t("sentinel.forensics.benfordInsufficient", { total, minimum }),
     trapUnavailable: t("sentinel.forensics.trapUnavailable"),
     duplicateFloorUnset: t("sentinel.forensics.duplicateFloorUnset"),
     rsfFloorUnset: t("sentinel.forensics.rsfFloorUnset"),
@@ -161,10 +178,14 @@ export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelSt
     benfordSomeDeviation: t("sentinel.forensics.benfordSomeDeviation"),
     benfordSignificant: t("sentinel.forensics.benfordSignificant"),
     trapReason: (trap) => t("sentinel.forensics.trap", { trap }),
-    weekendReason: (sunday) => t(sunday ? "sentinel.forensics.weekendSunday" : "sentinel.forensics.weekendSaturday"),
+    weekendReason: (sunday) =>
+      t(sunday ? "sentinel.forensics.weekendSunday" : "sentinel.forensics.weekendSaturday"),
     rsfReason: (multiple, vendor, currency) =>
       t("sentinel.forensics.rsf", {
-        multiple: viewerNumber(multiple, locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+        multiple: viewerNumber(multiple, locale, {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 1,
+        }),
         vendor,
         currency,
       }),

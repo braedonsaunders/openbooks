@@ -38,7 +38,9 @@ export async function assertNoFieldTimeSourceCollision(
   // Visit labor is recorded per visit; several visits on one day are one
   // source, so only clock and crew time collide with it.
   const visitTimeCollides = input.source !== "service_visit";
-  const collision = (await exec.execute<{ source: FieldTimeSource; sourceId: string }>(sql`
+  const collision = (
+    await exec.execute<{ source: FieldTimeSource; sourceId: string }>(
+      sql`
     select case when te.clock_pair_id is not null then 'clock_pair' when te.crew_batch_line_id is not null then 'crew_batch' else 'service_visit' end as source,
            coalesce(te.clock_pair_id::text, batch_lines.batch_id::text, te.service_visit_id::text) as "sourceId"
       from time_entries te
@@ -52,9 +54,17 @@ export async function assertNoFieldTimeSourceCollision(
          or (${visitTimeCollides} and te.service_visit_id is not null and te.status <> 'rejected'))
      order by te.id
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (collision) {
-    const sourceName = collision.source === "clock_pair" ? "clock pairing" : collision.source === "crew_batch" ? "crew batch" : "service visit labor";
+    const sourceName =
+      collision.source === "clock_pair"
+        ? "clock pairing"
+        : collision.source === "crew_batch"
+          ? "crew batch"
+          : "service visit labor";
     throw new FieldTimeError(
       "source_collision",
       `Worker ${input.employeePartyId} already has ${sourceName} time for ${input.workedOn} — reconcile the existing source in Timesheets before posting this day from another field-time source`,

@@ -30,10 +30,7 @@ test("the shared book resolver tracks the live primary", async () => {
     assert.equal(await activePostingPrimaryBookId(org.orgId), org.bookId);
 
     // Unknown orgs resolve like the Features page: defaults, not a throw.
-    assert.equal(
-      await activePostingPrimaryBookId("00000000-0000-4000-8000-000000000000"),
-      null,
-    );
+    assert.equal(await activePostingPrimaryBookId("00000000-0000-4000-8000-000000000000"), null);
   } finally {
     await dropScratchOrg(org.orgId);
   }

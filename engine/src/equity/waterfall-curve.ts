@@ -12,7 +12,15 @@
  * straight lines draws each payout exactly, to within the resolution, and
  * within the payouts' own minor-unit rounding (`tolerance`).
  */
-import { addRational, compareRational, divideRational, multiplyRational, rational, subtractRational, type Rational } from "./quantities.ts";
+import {
+  addRational,
+  compareRational,
+  divideRational,
+  multiplyRational,
+  rational,
+  subtractRational,
+  type Rational,
+} from "./quantities.ts";
 
 export interface CurvePoint<T> {
   exit: Rational;
@@ -39,23 +47,33 @@ export interface PiecewiseCurveInput<T> {
 const ZERO = rational(0n);
 const TWO = rational(2n);
 
-const absolute = (value: Rational): Rational => (compareRational(value, ZERO) < 0 ? subtractRational(ZERO, value) : value);
+const absolute = (value: Rational): Rational =>
+  compareRational(value, ZERO) < 0 ? subtractRational(ZERO, value) : value;
 
 /** Whether every series at `middle` lies on the straight line from `left` to `right`, within the tolerance. */
-function straight<T>(left: CurvePoint<T>, middle: CurvePoint<T>, right: CurvePoint<T>, input: PiecewiseCurveInput<T>): boolean {
+function straight<T>(
+  left: CurvePoint<T>,
+  middle: CurvePoint<T>,
+  right: CurvePoint<T>,
+  input: PiecewiseCurveInput<T>,
+): boolean {
   const span = subtractRational(right.exit, left.exit);
   if (compareRational(span, ZERO) === 0) return true;
   const weight = divideRational(subtractRational(middle.exit, left.exit), span);
   const a = input.measures(left.result);
   const m = input.measures(middle.result);
   const b = input.measures(right.result);
-  const allowance = [input.tolerance(left.result), input.tolerance(middle.result), input.tolerance(right.result)]
-    .reduce((max, value) => (compareRational(value, max) > 0 ? value : max), ZERO);
+  const allowance = [
+    input.tolerance(left.result),
+    input.tolerance(middle.result),
+    input.tolerance(right.result),
+  ].reduce((max, value) => (compareRational(value, max) > 0 ? value : max), ZERO);
   for (const key of new Set([...a.keys(), ...m.keys(), ...b.keys()])) {
     const start = a.get(key) ?? ZERO;
     const end = b.get(key) ?? ZERO;
     const expected = addRational(start, multiplyRational(subtractRational(end, start), weight));
-    if (compareRational(absolute(subtractRational(m.get(key) ?? ZERO, expected)), allowance) > 0) return false;
+    if (compareRational(absolute(subtractRational(m.get(key) ?? ZERO, expected)), allowance) > 0)
+      return false;
   }
   return true;
 }
@@ -69,14 +87,21 @@ export function piecewiseCurve<T>(input: PiecewiseCurveInput<T>): CurvePoint<T>[
   const width = subtractRational(input.to, input.from);
   const base: CurvePoint<T>[] = [];
   for (let step = 0; step <= steps; step += 1) {
-    const exit = addRational(input.from, multiplyRational(width, rational(BigInt(step), BigInt(steps))));
+    const exit = addRational(
+      input.from,
+      multiplyRational(width, rational(BigInt(step), BigInt(steps))),
+    );
     base.push({ exit, result: input.evaluate(exit) });
   }
   if (compareRational(width, ZERO) <= 0) return base.slice(0, 1);
   let budget = input.maxEvaluations ?? 400;
   const refined: CurvePoint<T>[] = [];
   const refine = (left: CurvePoint<T>, right: CurvePoint<T>) => {
-    if (budget <= 0 || compareRational(subtractRational(right.exit, left.exit), input.resolution) <= 0) return;
+    if (
+      budget <= 0 ||
+      compareRational(subtractRational(right.exit, left.exit), input.resolution) <= 0
+    )
+      return;
     const exit = divideRational(addRational(left.exit, right.exit), TWO);
     budget -= 1;
     const middle = { exit, result: input.evaluate(exit) };

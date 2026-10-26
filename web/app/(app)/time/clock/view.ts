@@ -1,10 +1,10 @@
 import { fieldClockOwnerKey } from "../../../../lib/field-clock-owner";
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
 import {
   badge,
   column,
@@ -16,15 +16,15 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { timeCommandGrants } from '../../../../lib/time-workspace'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { loadOrRefuse, type PageRefusal } from '../../../../lib/load-or-refuse'
-import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
-import { myClockDay, resolveOwnParty } from '@openbooks/engine/hrm/field-time/reads'
-import { loadFieldTimeSettings } from '@openbooks/engine/hrm/field-time/settings'
-import { ensureClockPhotoFolder } from '@openbooks/engine/hrm/field-time/photos'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { timeCommandGrants } from "../../../../lib/time-workspace";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { loadOrRefuse, type PageRefusal } from "../../../../lib/load-or-refuse";
+import { FieldTimeError } from "@openbooks/engine/hrm/field-time/errors";
+import { myClockDay, resolveOwnParty } from "@openbooks/engine/hrm/field-time/reads";
+import { loadFieldTimeSettings } from "@openbooks/engine/hrm/field-time/settings";
+import { ensureClockPhotoFolder } from "@openbooks/engine/hrm/field-time/photos";
 
 /**
  * The field clock page — the phone is the primary device. One state
@@ -36,54 +36,57 @@ import { ensureClockPhotoFolder } from '@openbooks/engine/hrm/field-time/photos'
  */
 
 export interface ClockPageData {
-  title: string
-  description: string
+  title: string;
+  description: string;
   tabs: { href: string; label: string; active: boolean }[];
   ownerKey: string | null;
   clock: {
-    clockedIn: boolean
-    since: string | null
-    projectId: string | null
-    projectName: string | null
-    costCodeRef: string | null
-    onBreak: boolean
-  }
-  projects: { id: string; name: string; code: string | null }[]
-  tasks: { id: string; name: string }[]
-  photoRequired: boolean
-  photoFolderId: string | null
-  geoHint: string
-  clockOutLabel: string
-  pairsTitle: string
-  emptyPairs: string
-  inLabel: string
-  outLabel: string
-  projectLabel: string
-  hoursLabel: string
-  geoLabel: string
-  rows: Record<string, unknown>[]
+    clockedIn: boolean;
+    since: string | null;
+    projectId: string | null;
+    projectName: string | null;
+    costCodeRef: string | null;
+    onBreak: boolean;
+  };
+  projects: { id: string; name: string; code: string | null }[];
+  tasks: { id: string; name: string }[];
+  photoRequired: boolean;
+  photoFolderId: string | null;
+  geoHint: string;
+  clockOutLabel: string;
+  pairsTitle: string;
+  emptyPairs: string;
+  inLabel: string;
+  outLabel: string;
+  projectLabel: string;
+  hoursLabel: string;
+  geoLabel: string;
+  rows: Record<string, unknown>[];
   /**
    * Set when the login carries no linked employee party: the page renders
    * the house empty-state block with the refusal and its remedy instead of
    * throwing out of render (which production shows as generic copy).
    */
-  refusal: PageRefusal | null
+  refusal: PageRefusal | null;
 }
 
-const f = ref<ClockPageData>()
+const f = ref<ClockPageData>();
 
-type ClockText = (key: string) => string
+type ClockText = (key: string) => string;
 
 export async function loadClockPage(): Promise<ClockPageData> {
-  const authz = await requirePermission('time.clock')
-  await requireFeatureEnabled(authz.user.orgId, 'fieldTime')
-  const t = await getTranslations('timesheets')
+  const authz = await requirePermission("time.clock");
+  await requireFeatureEnabled(authz.user.orgId, "fieldTime");
+  const t = await getTranslations("timesheets");
   return loadClockPageData(authz.user.orgId, authz.user.id, t as unknown as ClockText, {
-    canManageSetup: can(authz, 'time.manage'),
+    canManageSetup: can(authz, "time.manage"),
     // Clocking in confers reading one's own timesheets (PERMISSION_IMPLICATIONS).
-    canReadTimesheets: [...timeCommandGrants('time.read').all, ...timeCommandGrants('time.read').own].some((grant) => can(authz, grant)),
-    canEnterCrew: can(authz, 'time.read') || can(authz, 'time.crew.enter'),
-  })
+    canReadTimesheets: [
+      ...timeCommandGrants("time.read").all,
+      ...timeCommandGrants("time.read").own,
+    ].some((grant) => can(authz, grant)),
+    canEnterCrew: can(authz, "time.read") || can(authz, "time.crew.enter"),
+  });
 }
 
 /**
@@ -103,35 +106,41 @@ export async function loadClockPageData(
   // A worker who may only clock sees no tab into pages that would refuse
   // them; the sibling tabs follow the same grants as their own pages.
   const tabs = [
-    ...(opts.canReadTimesheets ? [{ href: '/timesheets', label: t('field.timesheetsTab'), active: false }] : []),
-    { href: '/time/clock', label: t('field.clockTab'), active: true },
-    ...(opts.canEnterCrew ? [{ href: '/time/crew', label: t('field.crewTab'), active: false }] : []),
-  ]
+    ...(opts.canReadTimesheets
+      ? [{ href: "/timesheets", label: t("field.timesheetsTab"), active: false }]
+      : []),
+    { href: "/time/clock", label: t("field.clockTab"), active: true },
+    ...(opts.canEnterCrew
+      ? [{ href: "/time/crew", label: t("field.crewTab"), active: false }]
+      : []),
+  ];
   const base = {
-    title: t('field.title'),
-    description: t('field.description'),
+    title: t("field.title"),
+    description: t("field.description"),
     tabs,
-  }
+  };
   const outcome = await loadOrRefuse(() => clockBody(orgId, userId, t), {
     refusals: [
-      { error: FieldTimeError, code: 'no_employee_link' },
+      { error: FieldTimeError, code: "no_employee_link" },
       // Field time switched on before its rules were declared: the engine
       // names the setup remedy, and a caller who may configure it gets the
       // link (time.manage, the setup page's own permission).
       {
         error: FieldTimeError,
-        code: 'field_time_not_configured',
-        ...(opts.canManageSetup ? { action: { href: '/time/setup', label: t('field.openSetup') } } : {}),
+        code: "field_time_not_configured",
+        ...(opts.canManageSetup
+          ? { action: { href: "/time/setup", label: t("field.openSetup") } }
+          : {}),
       },
       // The photo folder helper names its own remedy (open the File
       // Cabinet once); the message already says where to go, so no
       // action link is needed.
-      { error: FieldTimeError, code: 'clock_photo_unavailable' },
+      { error: FieldTimeError, code: "clock_photo_unavailable" },
     ],
-    title: t('field.title'),
-  })
-  if (outcome.ok) return { ...base, ...outcome.data, refusal: null }
-  return { ...base, ...emptyClockBody(t), refusal: outcome.refusal }
+    title: t("field.title"),
+  });
+  if (outcome.ok) return { ...base, ...outcome.data, refusal: null };
+  return { ...base, ...emptyClockBody(t), refusal: outcome.refusal };
 }
 
 function emptyClockBody(t: ClockText) {
@@ -149,47 +158,57 @@ function emptyClockBody(t: ClockText) {
     tasks: [],
     photoRequired: false,
     photoFolderId: null,
-    geoHint: t('field.geoHint'),
-    clockOutLabel: t('field.clockOut'),
-    pairsTitle: t('field.todayTitle'),
-    emptyPairs: t('field.noPairs'),
-    inLabel: t('field.inLabel'),
-    outLabel: t('field.outLabel'),
-    projectLabel: t('field.projectLabel'),
-    hoursLabel: t('field.hoursLabel'),
-    geoLabel: t('field.geoLabel'),
+    geoHint: t("field.geoHint"),
+    clockOutLabel: t("field.clockOut"),
+    pairsTitle: t("field.todayTitle"),
+    emptyPairs: t("field.noPairs"),
+    inLabel: t("field.inLabel"),
+    outLabel: t("field.outLabel"),
+    projectLabel: t("field.projectLabel"),
+    hoursLabel: t("field.hoursLabel"),
+    geoLabel: t("field.geoLabel"),
     rows: [],
-  }
+  };
 }
 
 async function clockBody(orgId: string, userId: string, t: ClockText) {
-  const partyId = await resolveOwnParty(orgId, userId)
-  const day = await myClockDay(orgId, userId)
+  const partyId = await resolveOwnParty(orgId, userId);
+  const day = await myClockDay(orgId, userId);
   // The org-wide photo rule is declared in Timesheets setup.
-  const { photoRequired } = await loadFieldTimeSettings(orgId)
-  let photoFolderId: string | null = null
+  const { photoRequired } = await loadFieldTimeSettings(orgId);
+  let photoFolderId: string | null = null;
   if (photoRequired) {
     try {
-      photoFolderId = await ensureClockPhotoFolder(orgId, userId)
+      photoFolderId = await ensureClockPhotoFolder(orgId, userId);
     } catch (e) {
       // A missing File Cabinet root never heals by reopening the clock
       // page: the helper's own remedy ("open the File Cabinet once")
       // refuses here instead of nulling the folder into guidance that
       // cannot work.
-      throw new FieldTimeError('clock_photo_unavailable', e instanceof Error ? e.message : String(e))
+      throw new FieldTimeError(
+        "clock_photo_unavailable",
+        e instanceof Error ? e.message : String(e),
+      );
     }
   }
   // Legal-entity isolation, mirroring the weekly timesheet PUT: the picker
   // lists only the projects this worker may clock onto — the worker's own
   // subsidiary's projects plus org-wide (unscoped) ones. An unscoped worker
   // keeps the existing org-wide list, matching the API's attribution rule.
-  const employeeSub = (await db.execute<{ subsidiary_id: string | null }>(sql`
+  const employeeSub =
+    (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`
     select subsidiary_id::text as subsidiary_id from parties
-     where org_id = ${orgId} and id = ${partyId}`, 'objects'))[0]?.subsidiary_id ?? null
+     where org_id = ${orgId} and id = ${partyId}`,
+        "objects",
+      )
+    )[0]?.subsidiary_id ?? null;
   const entityArm = employeeSub
     ? sql`and (p.subsidiary_id is null or p.subsidiary_id = ${employeeSub})`
-    : sql``
-  const projects = await db.execute<{ id: string; name: string; code: string | null }>(sql`
+    : sql``;
+  const projects = await db.execute<{ id: string; name: string; code: string | null }>(
+    sql`
     select p.id::text as id, p.name, p.code
       from projects p
      where p.org_id = ${orgId} and p.is_active ${entityArm}
@@ -197,13 +216,18 @@ async function clockBody(orgId: string, userId: string, t: ClockText) {
                 where te.org_id = p.org_id and te.project_id = p.id
                   and te.employee_party_id = ${partyId}) desc nulls last,
               p.name
-     limit 200`, 'objects')
-  const tasks = await db.execute<{ id: string; name: string }>(sql`
+     limit 200`,
+    "objects",
+  );
+  const tasks = await db.execute<{ id: string; name: string }>(
+    sql`
     select t.id::text as id, t.name from project_tasks t
       join projects p on p.id = t.project_id and p.org_id = t.org_id
      where t.org_id = ${orgId} and p.is_active ${entityArm}
-     order by t.name limit 500`, 'objects')
-  const projectNames = new Map(projects.map((project) => [project.id, project.name]))
+     order by t.name limit 500`,
+    "objects",
+  );
+  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
   return {
     ownerKey: fieldClockOwnerKey(orgId, userId, partyId),
     clock: {
@@ -218,91 +242,94 @@ async function clockBody(orgId: string, userId: string, t: ClockText) {
     tasks,
     photoRequired,
     photoFolderId,
-    geoHint: t('field.geoHint'),
-    clockOutLabel: t('field.clockOut'),
-    pairsTitle: t('field.todayTitle'),
-    emptyPairs: t('field.noPairs'),
-    inLabel: t('field.inLabel'),
-    outLabel: t('field.outLabel'),
-    projectLabel: t('field.projectLabel'),
-    hoursLabel: t('field.hoursLabel'),
-    geoLabel: t('field.geoLabel'),
+    geoHint: t("field.geoHint"),
+    clockOutLabel: t("field.clockOut"),
+    pairsTitle: t("field.todayTitle"),
+    emptyPairs: t("field.noPairs"),
+    inLabel: t("field.inLabel"),
+    outLabel: t("field.outLabel"),
+    projectLabel: t("field.projectLabel"),
+    hoursLabel: t("field.hoursLabel"),
+    geoLabel: t("field.geoLabel"),
     rows: day.pairs.map((pair) => ({
       id: pair.pairId,
       clockIn: pair.clockInAt,
-      clockOut: pair.clockOutAt ?? t('field.open'),
-      project: pair.projectName ?? t('field.noProject'),
-      costCode: pair.costCodeRef ?? '—',
-      hours: pair.entryHours ?? '—',
+      clockOut: pair.clockOutAt ?? t("field.open"),
+      project: pair.projectName ?? t("field.noProject"),
+      costCode: pair.costCodeRef ?? "—",
+      hours: pair.entryHours ?? "—",
       geo: pair.geoCheck,
       autoClosed: pair.autoClosed,
     })),
-  }
+  };
 }
 
 export function clockSpec(data: ClockPageData): PageSpec {
   return page({
-    route: '/time/clock',
-    layout: 'list',
-    bodyClassName: 'mx-auto w-full max-w-xl',
+    route: "/time/clock",
+    layout: "list",
+    bodyClassName: "mx-auto w-full max-w-xl",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("module-home-tabs", { tabs: data.tabs })],
       }),
     ],
     body: [
       // No linked employee party: the loader carries the refusal with its
       // remedy (the same house block /me renders for its own NO_LINK).
       widgetBlock(
-        'empty-state',
+        "empty-state",
         {
-          title: data.refusal?.title ?? '',
+          title: data.refusal?.title ?? "",
           description: data.refusal?.message,
           ...(data.refusal?.action
-            ? { action: 'link-button', actionProps: { href: data.refusal.action.href, label: data.refusal.action.label } }
+            ? {
+                action: "link-button",
+                actionProps: { href: data.refusal.action.href, label: data.refusal.action.label },
+              }
             : {}),
         },
-        f('refusal'),
+        f("refusal"),
       ),
       ...(data.ownerKey
         ? [
-            widgetBlock('hrm-clock-controls', {
+            widgetBlock("hrm-clock-controls", {
               ownerKey: data.ownerKey,
               initial: data.clock,
-        projects: data.projects,
-        tasks: data.tasks,
-        photoRequired: data.photoRequired,
-        photoFolderId: data.photoFolderId,
-        geoHint: data.geoHint,
-        clockOutLabel: data.clockOutLabel,
-      }),
+              projects: data.projects,
+              tasks: data.tasks,
+              photoRequired: data.photoRequired,
+              photoFolderId: data.photoFolderId,
+              geoHint: data.geoHint,
+              clockOutLabel: data.clockOutLabel,
+            }),
           ]
         : []),
       // Today's pairs render as the shared registered list directly — no
       // duplicate titled panel around a table carrying the same title.
-      registeredListTable('time_clock_pairs', {
-        variant: 'app',
-        rows: f('rows'),
-        rowKey: item('id'),
+      registeredListTable("time_clock_pairs", {
+        variant: "app",
+        rows: f("rows"),
+        rowKey: item("id"),
         columns: [
-          column(f('inLabel'), text(item('clockIn'))),
-          column(f('outLabel'), text(item('clockOut'))),
-          column(f('projectLabel'), text(item('project'))),
-          column(f('hoursLabel'), text(item('hours')), {
-            align: 'right',
-            className: 'tabular-nums',
+          column(f("inLabel"), text(item("clockIn"))),
+          column(f("outLabel"), text(item("clockOut"))),
+          column(f("projectLabel"), text(item("project"))),
+          column(f("hoursLabel"), text(item("hours")), {
+            align: "right",
+            className: "tabular-nums",
           }),
-          column(f('geoLabel'), badge(item('geo'), { variant: 'secondary' })),
+          column(f("geoLabel"), badge(item("geo"), { variant: "secondary" })),
         ],
-        empty: { title: f('pairsTitle'), description: f('emptyPairs') },
+        empty: { title: f("pairsTitle"), description: f("emptyPairs") },
       }),
     ],
-  })
+  });
 }
 
 export async function clockTitle(): Promise<string> {
-  const t = await getTranslations('timesheets')
-  return t('field.title')
+  const t = await getTranslations("timesheets");
+  return t("field.title");
 }

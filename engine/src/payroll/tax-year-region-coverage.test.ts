@@ -45,8 +45,7 @@ import {
 /** Regions a pack claims to support, from its own declaration. */
 function claimedRegions(country: string): readonly string[] {
   const pack = PAYROLL_COUNTRY_PACKS[country as keyof typeof PAYROLL_COUNTRY_PACKS] as
-    | { regions?: { supported?: readonly string[] } }
-    | undefined;
+    { regions?: { supported?: readonly string[] } } | undefined;
   return pack?.regions?.supported ?? [];
 }
 
@@ -59,8 +58,7 @@ function currentYearRegionGaps(today: string): string[] {
   const gaps: string[] = [];
   for (const declared of declaredPayrollTaxYears()) {
     const pack = PAYROLL_COUNTRY_PACKS[declared.country as keyof typeof PAYROLL_COUNTRY_PACKS] as
-      | { installable?: boolean }
-      | undefined;
+      { installable?: boolean } | undefined;
     if (pack?.installable !== true) continue;
     const ownTables = declared.regionsWithOwnTables ?? [];
     if (ownTables.length === 0) continue;
@@ -74,8 +72,8 @@ function currentYearRegionGaps(today: string): string[] {
       const problem = payrollTaxYearProblem(declared.country, current, region);
       if (problem !== null) {
         gaps.push(
-          `${declared.country}-${region} publishes its own statutory tables and does not support `
-          + `the current tax year ${current} (${problem.kind}) — see ${declared.ratesModule}`,
+          `${declared.country}-${region} publishes its own statutory tables and does not support ` +
+            `the current tax year ${current} (${problem.kind}) — see ${declared.ratesModule}`,
         );
       }
     }
@@ -98,7 +96,8 @@ test("the instrument names a region whose own tables lapse, and ignores an uncla
   const claimedWithOwnTables = declaredPayrollTaxYears().flatMap((declared) =>
     (declared.regionsWithOwnTables ?? [])
       .filter((region) => claimedRegions(declared.country).includes(region))
-      .map((region) => ({ country: declared.country, region })));
+      .map((region) => ({ country: declared.country, region })),
+  );
   assert.ok(
     claimedWithOwnTables.length > 0,
     "no pack claims a region with its own tables — this guard would be vacuous",
@@ -108,8 +107,8 @@ test("the instrument names a region whose own tables lapse, and ignores an uncla
     const problem = payrollTaxYearProblem(country, unloaded, region);
     assert.ok(
       problem !== null,
-      `${country}-${region} reports no problem for tax year ${unloaded}, which nobody has `
-      + "transcribed — the region scope is not being consulted at all",
+      `${country}-${region} reports no problem for tax year ${unloaded}, which nobody has ` +
+        "transcribed — the region scope is not being consulted at all",
     );
   }
 
@@ -119,20 +118,21 @@ test("the instrument names a region whose own tables lapse, and ignores an uncla
   // to the claimed list too.
   const es = declaredPayrollTaxYears().find((declared) => declared.country === "ES");
   assert.ok(es, "the ES pack no longer declares tax years");
-  const foral = (es.regionsWithOwnTables ?? []).filter((region) =>
-    !claimedRegions("ES").includes(region));
+  const foral = (es.regionsWithOwnTables ?? []).filter(
+    (region) => !claimedRegions("ES").includes(region),
+  );
   assert.deepEqual(
     [...foral].sort(),
     ["NC", "PV"],
-    "Spain's unclaimed own-table regions changed: the foral IRPF communities are NC and PV, and a "
-    + "change here means either a transcription landed (add it to the claimed list) or coverage "
-    + "silently narrowed",
+    "Spain's unclaimed own-table regions changed: the foral IRPF communities are NC and PV, and a " +
+      "change here means either a transcription landed (add it to the claimed list) or coverage " +
+      "silently narrowed",
   );
   for (const region of foral) {
     assert.ok(
       payrollTaxYearProblem("ES", payrollTaxYearForDate("ES", today).taxYear, region) !== null,
-      `ES-${region} now reports a loaded current year while still unclaimed — a region cannot be `
-      + "loaded and unsupported at once",
+      `ES-${region} now reports a loaded current year while still unclaimed — a region cannot be ` +
+        "loaded and unsupported at once",
     );
   }
 });

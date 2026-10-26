@@ -1,6 +1,6 @@
-import Link from 'next/link'
-import { ReportDrillLink } from '../ReportDrillLink'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
+import Link from "next/link";
+import { ReportDrillLink } from "../ReportDrillLink";
+import type { ReportDrillTarget } from "../../../../lib/report-drill";
 
 /**
  * The per-party heading above each register table: the party's name (linked to
@@ -18,24 +18,27 @@ export function PartyHeading({
   closing,
   closingDrill,
 }: {
-  partyId: string | null
-  partyName: string
-  statementHref: string
-  closingLabel: string
-  closing: string
-  closingDrill: ReportDrillTarget
+  partyId: string | null;
+  partyName: string;
+  statementHref: string;
+  closingLabel: string;
+  closing: string;
+  closingDrill: ReportDrillTarget;
 }) {
   return (
     <h3 className="mb-1 flex items-baseline gap-3 text-sm font-semibold">
       {partyId ? (
-        <Link href={statementHref as never} className="hover:text-teal-700 dark:hover:text-teal-300">
+        <Link
+          href={statementHref as never}
+          className="hover:text-teal-700 dark:hover:text-teal-300"
+        >
           {partyName}
         </Link>
       ) : (
         <span className="text-slate-400 italic">{partyName}</span>
       )}
       <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
-        {closingLabel}:{' '}
+        {closingLabel}:{" "}
         <ReportDrillLink
           target={closingDrill}
           className="hover:text-teal-700 hover:underline dark:hover:text-teal-300"
@@ -44,5 +47,5 @@ export function PartyHeading({
         </ReportDrillLink>
       </span>
     </h3>
-  )
+  );
 }

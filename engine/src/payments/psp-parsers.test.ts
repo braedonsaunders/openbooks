@@ -9,10 +9,21 @@ import {
   summarizeSettlement,
 } from "./psp-settlement.ts";
 
-const shopifyPayout = { id: "gid://shopify/ShopifyPaymentsPayout/1", currency: "USD", issuedAt: "2026-07-10" };
+const shopifyPayout = {
+  id: "gid://shopify/ShopifyPaymentsPayout/1",
+  currency: "USD",
+  issuedAt: "2026-07-10",
+};
 
 const shopifyTransactions = [
-  { id: "bt_charge_1", type: "charge", amount: "100.00", fee: "2.90", currency: "USD", sourceOrderId: "1001" },
+  {
+    id: "bt_charge_1",
+    type: "charge",
+    amount: "100.00",
+    fee: "2.90",
+    currency: "USD",
+    sourceOrderId: "1001",
+  },
   { id: "bt_refund_1", type: "refund", amount: "25.00", currency: "USD", sourceOrderId: "1002" },
   { id: "bt_dispute_1", type: "dispute", amount: "40.00", currency: "USD", sourceOrderId: "1003" },
   { id: "bt_reserve_1", type: "reserve", amount: "5.00", currency: "USD" },
@@ -55,9 +66,7 @@ test("Shopify Payments unknown balance type refuses by name", () => {
       parseShopifyPaymentsPayout(shopifyPayout, [
         { id: "bt_x", type: "mystery_hold", amount: "10.00", currency: "USD" },
       ]),
-    (error) =>
-      error instanceof PspSettlementError &&
-      error.message.includes('"mystery_hold"'),
+    (error) => error instanceof PspSettlementError && error.message.includes('"mystery_hold"'),
   );
 });
 
@@ -67,16 +76,22 @@ test("Shopify Payments over-precise amount refuses naming the row", () => {
       parseShopifyPaymentsPayout(shopifyPayout, [
         { id: "bt_x", type: "charge", amount: "10.00001", currency: "USD" },
       ]),
-    (error) =>
-      error instanceof PspSettlementError &&
-      error.message.includes("row 1"),
+    (error) => error instanceof PspSettlementError && error.message.includes("row 1"),
   );
 });
 
 test("Shopify Payments per-transaction exchange rate rides the line meta", () => {
   const parsed = parseShopifyPaymentsPayout(
     { id: "po_fx", currency: "EUR" },
-    [{ id: "bt_fx", type: "charge", amount: "100.00", currency: "EUR", exchange_rate: "1.0864000000" }],
+    [
+      {
+        id: "bt_fx",
+        type: "charge",
+        amount: "100.00",
+        currency: "EUR",
+        exchange_rate: "1.0864000000",
+      },
+    ],
     "2026-07-10",
   );
   assert.equal(parsed.lines[0]!.meta?.exchangeRate, "1.0864000000");
@@ -149,9 +164,7 @@ test("PayPal unknown event code refuses naming the code", () => {
           },
         ],
       }),
-    (error) =>
-      error instanceof PspSettlementError &&
-      error.message.includes('"T9900"'),
+    (error) => error instanceof PspSettlementError && error.message.includes('"T9900"'),
   );
 });
 
@@ -180,8 +193,7 @@ test("PayPal settlement CSV without the amount column refuses naming it", () => 
   assert.throws(
     () => parsePaypalSettlementCsv("Transaction ID,Transaction Event Code\r\n1,T0000\r\n", "STL-X"),
     (error) =>
-      error instanceof PspSettlementError &&
-      error.message.includes("Gross Transaction Amount"),
+      error instanceof PspSettlementError && error.message.includes("Gross Transaction Amount"),
   );
 });
 
@@ -353,8 +365,7 @@ test("Square payout total that the entries do not net to refuses naming the payo
   assert.throws(
     () => parseSquarePayout({ ...squarePayout, amount_money: squareMoney(10400) }, squareEntries),
     (error) =>
-      error instanceof PspSettlementError &&
-      error.message.includes("po_2Y8kq3 does not reconcile"),
+      error instanceof PspSettlementError && error.message.includes("po_2Y8kq3 does not reconcile"),
   );
 });
 
@@ -365,8 +376,7 @@ test("Square entry that does not foot refuses naming the entry", () => {
         { ...squareEntries[0]!, net_amount_money: squareMoney(9700) },
       ]),
     (error) =>
-      error instanceof PspSettlementError &&
-      error.message.includes("pe_charge_1 does not foot"),
+      error instanceof PspSettlementError && error.message.includes("pe_charge_1 does not foot"),
   );
 });
 
@@ -399,9 +409,7 @@ test("Square unknown entry type refuses by name", () => {
           net_amount_money: squareMoney(-900),
         },
       ]),
-    (error) =>
-      error instanceof PspSettlementError &&
-      error.message.includes('"RESERVE_HOLD"'),
+    (error) => error instanceof PspSettlementError && error.message.includes('"RESERVE_HOLD"'),
   );
 });
 
@@ -417,8 +425,7 @@ test("Square dispute with the wrong direction refuses naming the entry type", ()
         },
       ]),
     (error) =>
-      error instanceof PspSettlementError &&
-      error.message.includes("Square OPEN_DISPUTE entry"),
+      error instanceof PspSettlementError && error.message.includes("Square OPEN_DISPUTE entry"),
   );
 });
 
@@ -450,13 +457,9 @@ test("Square entries in another currency refuse as a mixed-currency batch", () =
 
 test("Square entry that belongs to another payout refuses", () => {
   assert.throws(
-    () =>
-      parseSquarePayout(squarePayout, [
-        { ...squareEntries[0]!, payout_id: "po_other" },
-      ]),
+    () => parseSquarePayout(squarePayout, [{ ...squareEntries[0]!, payout_id: "po_other" }]),
     (error) =>
-      error instanceof PspSettlementError &&
-      error.message.includes("belongs to payout po_other"),
+      error instanceof PspSettlementError && error.message.includes("belongs to payout po_other"),
   );
 });
 
@@ -481,10 +484,7 @@ test("Square money refuses decimal and non-safe-integer amounts", () => {
 
 test("Square entry without an id refuses rather than booking an unidentified line", () => {
   assert.throws(
-    () =>
-      parseSquarePayout(squarePayout, [
-        { ...squareEntries[0]!, id: null },
-      ]),
+    () => parseSquarePayout(squarePayout, [{ ...squareEntries[0]!, id: null }]),
     (error) =>
       error instanceof PspSettlementError &&
       error.message.includes("Square payout entry id is required"),

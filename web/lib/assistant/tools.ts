@@ -2,7 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { abs as absMoney, add as addMoney, cmp as compareMoney } from "@openbooks/engine/money/money";
+import {
+  abs as absMoney,
+  add as addMoney,
+  cmp as compareMoney,
+} from "@openbooks/engine/money/money";
 import { db } from "@openbooks/engine/platform/db";
 import { canonicalPeriodLabel } from "@openbooks/engine/periods/period-policy";
 import { can, type Authz } from "../authz";
@@ -20,10 +24,22 @@ import {
 import { openItems } from "../cash/open-items";
 import { normalizeMoneyValue } from "../cash/core";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
-import { dateInput, num, orgToday, rangeInputFields, resolveToolRange, uuidInput, type RangeArgs } from "./tools-shared";
+import {
+  dateInput,
+  num,
+  orgToday,
+  rangeInputFields,
+  resolveToolRange,
+  uuidInput,
+  type RangeArgs,
+} from "./tools-shared";
 import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/agents/continuous-close-config";
 import { loadWorkItemAccess, readableContinuousCloseAgents } from "../continuous-close";
-import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectInScope, workItemSubjectScopePredicate } from "../agents/work-item-subsidiary-scope";
+import {
+  WORK_ITEM_SUBJECT_JOIN,
+  workItemSubjectInScope,
+  workItemSubjectScopePredicate,
+} from "../agents/work-item-subsidiary-scope";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
@@ -127,9 +143,10 @@ const whoami: AssistantToolDef = {
   gate: { mode: "public" },
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
-    const org = (await db.execute<{ name: string; base_currency: string }>(
-      sql`select name, base_currency from orgs where id = ${authz.user.orgId}`, "objects",
-    ));
+    const org = await db.execute<{ name: string; base_currency: string }>(
+      sql`select name, base_currency from orgs where id = ${authz.user.orgId}`,
+      "objects",
+    );
     return {
       ok: true,
       data: {
@@ -160,8 +177,17 @@ const findAccounts: AssistantToolDef = {
     query: z.string().max(100).optional().describe("Match against account number or name"),
     type: z.string().max(40).optional().describe("Account type, e.g. asset_bank, expense, income"),
     asOf: dateInput.optional().describe("Statement date; defaults to today"),
-    includeInactive: z.boolean().optional().describe("Include archived accounts; default active only"),
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum accounts to return (default 25)"),
+    includeInactive: z
+      .boolean()
+      .optional()
+      .describe("Include archived accounts; default active only"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum accounts to return (default 25)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as {
@@ -177,7 +203,7 @@ const findAccounts: AssistantToolDef = {
     const matches = all.filter((r) => {
       if (!a.includeInactive && !r.is_active) return false;
       if (a.type && r.type !== a.type) return false;
-      if (q && !(`${r.number ?? ""} ${r.name}`.toLowerCase().includes(q))) return false;
+      if (q && !`${r.number ?? ""} ${r.name}`.toLowerCase().includes(q)) return false;
       return true;
     });
     return {
@@ -209,12 +235,27 @@ const accountRegisterTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["gl.read"] },
   inputSchema: z.object({
     accountId: uuidInput,
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum register lines to return (default 25)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum register lines to return (default 25)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { accountId: string; limit?: number };
     const limit = Math.min(a.limit ?? 25, 50);
-    const r = await accountRegister(authz.user.orgId, a.accountId, limit, 0, undefined, authz.allowedSubsidiaryIds, undefined, can(authz, "payroll.read"));
+    const r = await accountRegister(
+      authz.user.orgId,
+      a.accountId,
+      limit,
+      0,
+      undefined,
+      authz.allowedSubsidiaryIds,
+      undefined,
+      can(authz, "payroll.read"),
+    );
     if (!r.account) return { ok: false, error: "account_not_found" };
     return {
       ok: true,
@@ -254,7 +295,13 @@ const findJournalEntries: AssistantToolDef = {
     origin: z.string().max(40).optional().describe("Filter by the entry's origin code"),
     fromDate: dateInput.optional(),
     toDate: dateInput.optional(),
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum entries to return (default 20)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum entries to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as {
@@ -283,7 +330,8 @@ const findJournalEntries: AssistantToolDef = {
     if (a.origin) where = sql`${where} and e.origin = ${a.origin}`;
     if (a.fromDate) where = sql`${where} and e.posting_date >= ${a.fromDate}`;
     if (a.toDate) where = sql`${where} and e.posting_date <= ${a.toDate}`;
-    const rows = (await db.execute<JournalEntrySummaryRow>(sql`
+    const rows = await db.execute<JournalEntrySummaryRow>(
+      sql`
       select e.id, e.entry_number, e.posting_date, e.memo, e.status, e.origin,
              e.source_document_id,
              count(l.id) as line_count,
@@ -294,18 +342,23 @@ const findJournalEntries: AssistantToolDef = {
        group by e.id
        order by e.posting_date desc, e.entry_number desc
        limit ${limit}
-    `, "objects"));
+    `,
+      "objects",
+    );
     // The count must agree with the listing above it (and the UI journal
     // list): an entry with no visible line is listed nowhere, so it is
     // counted nowhere. Counting entry-scoped would inflate the total with
     // entries these very rows can never return.
-    const c = (await db.execute<{ n: string; sum_debits: string }>(sql`
+    const c = await db.execute<{ n: string; sum_debits: string }>(
+      sql`
       select count(distinct e.id) as n,
              coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as sum_debits
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id${lineSubsidiaryFilter}
        where ${where}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const total = Number(c[0]?.n ?? 0);
     return {
       ok: true,
@@ -340,7 +393,12 @@ const getJournalEntry: AssistantToolDef = {
   inputSchema: z.object({ entryId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { entryId: string };
-    const r = await entryDetail(authz.user.orgId, a.entryId, authz.allowedSubsidiaryIds, can(authz, "payroll.read"));
+    const r = await entryDetail(
+      authz.user.orgId,
+      a.entryId,
+      authz.allowedSubsidiaryIds,
+      can(authz, "payroll.read"),
+    );
     if (!r.entry) return { ok: false, error: "entry_not_found" };
     const e = r.entry;
     return {
@@ -398,13 +456,13 @@ const KIND_PERM: Record<string, string> = {
 };
 
 async function allowedKinds(authz: Authz): Promise<string[]> {
-  const kinds: string[] = []
+  const kinds: string[] = [];
   for (const kind of Object.keys(KIND_PERM)) {
-    if (!can(authz, KIND_PERM[kind]!)) continue
-    if (!(await isDocKindEnabled(authz.user.orgId, kind))) continue
-    kinds.push(kind)
+    if (!can(authz, KIND_PERM[kind]!)) continue;
+    if (!(await isDocKindEnabled(authz.user.orgId, kind))) continue;
+    kinds.push(kind);
   }
-  return kinds
+  return kinds;
 }
 
 const findDocuments: AssistantToolDef = {
@@ -415,17 +473,37 @@ const findDocuments: AssistantToolDef = {
   category: "search",
   gate: {
     mode: "anyOf",
-    perms: ["ap.read", "ar.read", "cash_sales.read", "gl.read", "expenses.read", "payroll.read", "projects.read"],
+    perms: [
+      "ap.read",
+      "ar.read",
+      "cash_sales.read",
+      "gl.read",
+      "expenses.read",
+      "payroll.read",
+      "projects.read",
+    ],
   },
   inputSchema: z.object({
-    kind: z.string().max(40).optional()
+    kind: z
+      .string()
+      .max(40)
+      .optional()
       .describe("e.g. vendor_bill, customer_invoice, expense_report, vendor_payment, journal"),
-    status: z.enum(["draft", "pending_approval", "approved", "posted", "voided"]).optional().describe("Filter by document status"),
+    status: z
+      .enum(["draft", "pending_approval", "approved", "posted", "voided"])
+      .optional()
+      .describe("Filter by document status"),
     query: z.string().max(100).optional().describe("Match document number, reference, or memo"),
     partyQuery: z.string().max(100).optional().describe("Match the party (vendor/customer) name"),
     fromDate: dateInput.optional(),
     toDate: dateInput.optional(),
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum documents to return (default 20)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum documents to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as {
@@ -460,7 +538,8 @@ const findDocuments: AssistantToolDef = {
     if (a.partyQuery) where = sql`${where} and p.display_name ilike ${`%${a.partyQuery}%`}`;
     if (a.fromDate) where = sql`${where} and d.document_date >= ${a.fromDate}`;
     if (a.toDate) where = sql`${where} and d.document_date <= ${a.toDate}`;
-    const rows = (await db.execute<DocumentSummaryRow>(sql`
+    const rows = await db.execute<DocumentSummaryRow>(
+      sql`
       select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
              d.due_date, d.status, d.currency, d.total, d.memo, d.posted_entry_id,
              ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as "documentRevision",
@@ -470,15 +549,20 @@ const findDocuments: AssistantToolDef = {
        where ${where}
        order by d.document_date desc, d.document_number desc
        limit ${limit}
-    `, "objects"));
-    const c = (await db.execute<{ n: string; sum_total: string; sum_open: string }>(sql`
+    `,
+      "objects",
+    );
+    const c = await db.execute<{ n: string; sum_total: string; sum_open: string }>(
+      sql`
       select count(*) as n,
              coalesce(sum(d.total), 0) as sum_total,
              coalesce(sum(d.open_balance), 0) as sum_open
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where ${where}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const total = Number(c[0]?.n ?? 0);
     return {
       ok: true,
@@ -524,20 +608,25 @@ const getDocument: AssistantToolDef = {
     const a = raw as { documentId: string };
     // A document outside the caller's legal-entity scope reads as missing —
     // the same indistinguishability the UI single-record routes give.
-    const doc = (await db.execute<DocumentDetailRow>(sql`
+    const doc = await db.execute<DocumentDetailRow>(
+      sql`
       select d.*, ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as "documentRevision",
              p.display_name as party
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where d.id = ${a.documentId} and d.org_id = ${authz.user.orgId}
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const d = doc[0];
     if (!d) return { ok: false, error: "document_not_found" };
-    if (!(await isDocKindEnabled(authz.user.orgId, d.kind))) return { ok: false, error: "document_not_found" };
+    if (!(await isDocKindEnabled(authz.user.orgId, d.kind)))
+      return { ok: false, error: "document_not_found" };
     const perm = KIND_PERM[d.kind];
     if (!perm || !can(authz, perm)) return { ok: false, error: "forbidden" };
-    const lines = (await db.execute<DocumentLineRow>(sql`
+    const lines = await db.execute<DocumentLineRow>(
+      sql`
       select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount,
              l.tax_amount, a.number as account_number, a.name as account_name,
              i.name as item_name
@@ -546,7 +635,9 @@ const getDocument: AssistantToolDef = {
        left join items i on i.id = l.item_id and i.org_id = l.org_id
        where l.document_id = ${a.documentId} and l.org_id = ${authz.user.orgId}
        order by l.line_number
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: {
@@ -596,8 +687,17 @@ const findParties: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["parties.read"] },
   inputSchema: z.object({
     query: z.string().max(100).optional().describe("Match party name, short code, or email"),
-    includeInactive: z.boolean().optional().describe("Include archived parties; default active only"),
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum parties to return (default 20)"),
+    includeInactive: z
+      .boolean()
+      .optional()
+      .describe("Include archived parties; default active only"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum parties to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { query?: string; includeInactive?: boolean; limit?: number };
@@ -613,15 +713,19 @@ const findParties: AssistantToolDef = {
       const like = `%${a.query}%`;
       where = sql`${where} and (display_name ilike ${like} or short_code ilike ${like} or email ilike ${like})`;
     }
-    const rows = (await db.execute<PartyDirectoryRow>(sql`
+    const rows = await db.execute<PartyDirectoryRow>(
+      sql`
       select id, kind, display_name, short_code, email, phone, is_active
         from parties where ${where}
        order by display_name
        limit ${limit}
-    `, "objects"));
-    const c = (await db.execute<{ n: string }>(
-      sql`select count(*) as n from parties where ${where}`, "objects",
-    ));
+    `,
+      "objects",
+    );
+    const c = await db.execute<{ n: string }>(
+      sql`select count(*) as n from parties where ${where}`,
+      "objects",
+    );
     const total = Number(c[0]?.n ?? 0);
     return {
       ok: true,
@@ -675,11 +779,16 @@ const profitAndLossTool: AssistantToolDef = {
     const range = await resolveToolRange(authz.user.orgId, a);
     if ("error" in range) return { ok: false, error: range.error };
     const dims = reportDims(authz);
-    const r = await profitAndLoss(range.from, range.to, {
-      ...dims,
-      departmentId: a.departmentId,
-      projectId: a.projectId,
-    }, authz.user.orgId);
+    const r = await profitAndLoss(
+      range.from,
+      range.to,
+      {
+        ...dims,
+        departmentId: a.departmentId,
+        projectId: a.projectId,
+      },
+      authz.user.orgId,
+    );
     const { items, truncated } = capItems(
       r.items.map((i) => ({
         number: i.number,
@@ -785,9 +894,28 @@ const agingTool: AssistantToolDef = {
   inputSchema: z.object({
     side: z.enum(["ar", "ap"]).describe("Which ledger side: ar ranks customers, ap ranks vendors"),
     asOf: dateInput.optional().describe("Aging date; defaults to today"),
-    bucket: z.enum(["current", "days1to30", "days31to60", "days61to90", "over90", "over30", "over60", "overdue"]).optional()
-      .describe("Rank by this slice instead of total: over30 = 31+ days, over60 = 61+ days, overdue = all past due"),
-    limit: z.number().int().min(1).max(100).optional().describe("Maximum parties to return (default 30)"),
+    bucket: z
+      .enum([
+        "current",
+        "days1to30",
+        "days31to60",
+        "days61to90",
+        "over90",
+        "over30",
+        "over60",
+        "overdue",
+      ])
+      .optional()
+      .describe(
+        "Rank by this slice instead of total: over30 = 31+ days, over60 = 61+ days, overdue = all past due",
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe("Maximum parties to return (default 30)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { side: "ar" | "ap"; asOf?: string; bucket?: string; limit?: number };
@@ -799,21 +927,39 @@ const agingTool: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 30, 100);
     const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
     const r = await agingByParty(a.side, asOf, reportDims(authz), authz.user.orgId);
-    const sliceOf = (row: { current: string; b1: string; b2: string; b3: string; b4: string; total: string }): string => {
+    const sliceOf = (row: {
+      current: string;
+      b1: string;
+      b2: string;
+      b3: string;
+      b4: string;
+      total: string;
+    }): string => {
       switch (a.bucket) {
-        case "current": return row.current;
-        case "days1to30": return row.b1;
-        case "days31to60": return row.b2;
-        case "days61to90": return row.b3;
-        case "over90": return row.b4;
-        case "over30": return addMoney(addMoney(row.b2, row.b3), row.b4);
-        case "over60": return addMoney(row.b3, row.b4);
-        case "overdue": return addMoney(addMoney(row.b1, row.b2), addMoney(row.b3, row.b4));
-        default: return row.total;
+        case "current":
+          return row.current;
+        case "days1to30":
+          return row.b1;
+        case "days31to60":
+          return row.b2;
+        case "days61to90":
+          return row.b3;
+        case "over90":
+          return row.b4;
+        case "over30":
+          return addMoney(addMoney(row.b2, row.b3), row.b4);
+        case "over60":
+          return addMoney(row.b3, row.b4);
+        case "overdue":
+          return addMoney(addMoney(row.b1, row.b2), addMoney(row.b3, row.b4));
+        default:
+          return row.total;
       }
     };
     const ranked = a.bucket
-      ? r.rows.filter((row) => compareMoney(sliceOf(row), "0") !== 0).sort((x, y) => compareMoney(absMoney(sliceOf(y)), absMoney(sliceOf(x))))
+      ? r.rows
+          .filter((row) => compareMoney(sliceOf(row), "0") !== 0)
+          .sort((x, y) => compareMoney(absMoney(sliceOf(y)), absMoney(sliceOf(x))))
       : r.rows;
     const bucketTotal = a.bucket
       ? ranked.reduce((acc, row) => addMoney(acc, sliceOf(row)), "0.0000")
@@ -824,7 +970,9 @@ const agingTool: AssistantToolDef = {
         side: a.side,
         asOf: r.asOf,
         totals: r.totals,
-        ...(a.bucket ? { bucket: a.bucket, bucketTotal: bucketTotal!, partiesInBucket: ranked.length } : {}),
+        ...(a.bucket
+          ? { bucket: a.bucket, bucketTotal: bucketTotal!, partiesInBucket: ranked.length }
+          : {}),
         parties: r.rows.length,
         returned: Math.min(ranked.length, limit),
         truncated: ranked.length > limit,
@@ -893,13 +1041,20 @@ const financialPeriods: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read", "close.read"] },
   inputSchema: z.object({
     completedOnly: z.boolean().optional().describe("Only periods that already ended; default true"),
-    limit: z.number().int().min(1).max(24).optional().describe("Maximum periods to return (default 15)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(24)
+      .optional()
+      .describe("Maximum periods to return (default 15)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { completedOnly?: boolean; limit?: number };
     const limit = Math.min(a.limit ?? 15, 24);
     const today = await businessToday(authz.user.orgId);
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select p.id, p.name, p.fiscal_year, p.period_number,
              p.starts_on::text, p.ends_on::text, p.is_adjustment,
              r.status as close_status, r.readiness_score,
@@ -915,7 +1070,9 @@ const financialPeriods: AssistantToolDef = {
        group by p.id, r.id
        order by p.ends_on desc, p.period_number desc
        limit ${limit}
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: {
@@ -952,7 +1109,13 @@ const financialTrends: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
-    limit: z.number().int().min(2).max(15).optional().describe("How many completed periods to return (default 15)"),
+    limit: z
+      .number()
+      .int()
+      .min(2)
+      .max(15)
+      .optional()
+      .describe("How many completed periods to return (default 15)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const denied = reportScopeDenied(authz);
@@ -961,7 +1124,11 @@ const financialTrends: AssistantToolDef = {
     return {
       ok: true,
       data: {
-        periods: await financialTrendRows(authz.user.orgId, limit, reportDims(authz)?.subsidiaryIds),
+        periods: await financialTrendRows(
+          authz.user.orgId,
+          limit,
+          reportDims(authz)?.subsidiaryIds,
+        ),
         href: "/reports/pnl",
       },
     };
@@ -984,27 +1151,50 @@ const budgetVsActualTool: AssistantToolDef = {
     if (!(await isFeatureEnabled(authz.user.orgId, "budgets"))) {
       return { ok: false, error: "budgets_feature_disabled" };
     }
-    const { scenarioId, departmentId, projectId } = raw as { scenarioId?: string; departmentId?: string; projectId?: string };
+    const { scenarioId, departmentId, projectId } = raw as {
+      scenarioId?: string;
+      departmentId?: string;
+      projectId?: string;
+    };
     if (!scenarioId) {
       if (authz.allowedSubsidiaryIds?.size === 0) return { ok: false, error: "forbidden" };
-      return { ok: true, data: { scenarios: await budgetScenarioOptions(authz.user.orgId, authz.allowedSubsidiaryIds), href: "/budgets" } };
+      return {
+        ok: true,
+        data: {
+          scenarios: await budgetScenarioOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
+          href: "/budgets",
+        },
+      };
     }
     const denied = reportScopeDenied(authz);
     if (denied) return denied;
-    const view = await budgetVsActualView(scenarioId, authz.user.orgId, {
-      actual: "Actual",
-      budget: "Budget",
-      variance: "Variance",
-      variancePct: "Variance %",
-      revenue: "Revenue",
-      costOfGoodsSold: "Cost of goods sold",
-      grossProfit: "Gross profit",
-      expenses: "Expenses",
-      netIncome: "Net income",
-      totalOf: (section) => `Total ${section}`,
-    }, { departmentId, projectId }, reportDims(authz)?.subsidiaryIds);
+    const view = await budgetVsActualView(
+      scenarioId,
+      authz.user.orgId,
+      {
+        actual: "Actual",
+        budget: "Budget",
+        variance: "Variance",
+        variancePct: "Variance %",
+        revenue: "Revenue",
+        costOfGoodsSold: "Cost of goods sold",
+        grossProfit: "Gross profit",
+        expenses: "Expenses",
+        netIncome: "Net income",
+        totalOf: (section) => `Total ${section}`,
+      },
+      { departmentId, projectId },
+      reportDims(authz)?.subsidiaryIds,
+    );
     if (!view) return { ok: false, error: "budget_not_found" };
-    const window = (await db.execute<{ fiscal_year: number; name: string; from: string | null; to: string | null }>(sql`
+    const window = (
+      await db.execute<{
+        fiscal_year: number;
+        name: string;
+        from: string | null;
+        to: string | null;
+      }>(
+        sql`
       select s.fiscal_year, s.name,
              (select min(p.starts_on)::text from accounting_periods p
                where p.org_id = s.org_id and p.fiscal_year = s.fiscal_year and not p.is_adjustment) as "from",
@@ -1012,14 +1202,25 @@ const budgetVsActualTool: AssistantToolDef = {
                where p.org_id = s.org_id and p.fiscal_year = s.fiscal_year and not p.is_adjustment) as "to"
         from budget_scenarios s
        where s.id = ${scenarioId} and s.org_id = ${authz.user.orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     return {
       ok: true,
       note: window
         ? `Actuals and budget cover the full fiscal year ${window.fiscal_year} (${window.from} – ${window.to}), including any postings dated after today.`
         : undefined,
       data: {
-        scenario: window ? { id: scenarioId, name: window.name, fiscalYear: window.fiscal_year, from: window.from, to: window.to } : { id: scenarioId },
+        scenario: window
+          ? {
+              id: scenarioId,
+              name: window.name,
+              fiscalYear: window.fiscal_year,
+              from: window.from,
+              to: window.to,
+            }
+          : { id: scenarioId },
         ...(departmentId ? { departmentId } : {}),
         ...(projectId ? { projectId } : {}),
         columns: view.columns.map((column) => ({ key: column.key, label: column.label })),
@@ -1046,7 +1247,13 @@ const partyConcentration: AssistantToolDef = {
   inputSchema: z.object({
     side: z.enum(["customer", "vendor"]).describe("Rank customers by revenue or vendors by spend"),
     ...rangeInputFields,
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum parties to return (default 20)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum parties to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as RangeArgs & { side: "customer" | "vendor"; limit?: number };
@@ -1055,24 +1262,32 @@ const partyConcentration: AssistantToolDef = {
     }
     const range = await resolveToolRange(authz.user.orgId, a);
     if ("error" in range) return { ok: false, error: range.error };
-    const kinds = a.side === "customer"
-      ? ["customer_invoice", "customer_credit", "cash_sale", "cash_refund"]
-      : ["vendor_bill", "vendor_credit"];
+    const kinds =
+      a.side === "customer"
+        ? ["customer_invoice", "customer_credit", "cash_sale", "cash_refund"]
+        : ["vendor_bill", "vendor_credit"];
     const limit = Math.min(a.limit ?? 20, 50);
     // Concentration ranks posted documents: scope them to the caller's
     // visible legal entities like every other document surface, or
     // hidden-subsidiary revenue and party names leak into the ranking.
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       with document_events as (
         select d.id as document_id, d.document_date::date as event_date, 1::int as direction
           from documents d
-         where d.org_id = ${authz.user.orgId} and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+         where d.org_id = ${authz.user.orgId} and d.kind in (${sql.join(
+           kinds.map((kind) => sql`${kind}`),
+           sql`, `,
+         )})
            and d.status in ('posted', 'voided')
         union all
         select d.id as document_id, coalesce(reversal_entry.posting_date::date, d.voided_at::date) as event_date, -1::int as direction
           from documents d
           left join journal_entries reversal_entry on reversal_entry.id = d.reversal_entry_id and reversal_entry.org_id = d.org_id
-         where d.org_id = ${authz.user.orgId} and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+         where d.org_id = ${authz.user.orgId} and d.kind in (${sql.join(
+           kinds.map((kind) => sql`${kind}`),
+           sql`, `,
+         )})
            and d.status = 'voided' and d.voided_at is not null
       ), ranked as (
         select p.id, p.display_name,
@@ -1082,7 +1297,10 @@ const partyConcentration: AssistantToolDef = {
           join document_events events on events.document_id = d.id
           join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${authz.user.orgId}
-           and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+           and d.kind in (${sql.join(
+             kinds.map((kind) => sql`${kind}`),
+             sql`, `,
+           )})
            and events.event_date between ${range.from}::date and ${range.to}::date
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
          group by p.id, p.display_name
@@ -1091,8 +1309,20 @@ const partyConcentration: AssistantToolDef = {
              case when t.total = 0 then 0 else round((r.amount / t.total) * 100, 2) end::text as share_percent
         from ranked r cross join totals t
        order by r.amount desc limit ${limit}
-    `, "objects"));
-    return { ok: true, data: { side: a.side, periodLabel: range.label, fromDate: range.from, toDate: range.to, rows, href: a.side === "customer" ? "/ar" : "/ap" } };
+    `,
+      "objects",
+    );
+    return {
+      ok: true,
+      data: {
+        side: a.side,
+        periodLabel: range.label,
+        fromDate: range.from,
+        toDate: range.to,
+        rows,
+        href: a.side === "customer" ? "/ar" : "/ap",
+      },
+    };
   },
 };
 
@@ -1106,24 +1336,46 @@ const projectProfitability: AssistantToolDef = {
   feature: "projects",
   inputSchema: z.object({
     projectId: uuidInput.optional(),
-    query: z.string().max(100).optional().describe("Match project or customer name (name-search mode only)"),
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum projects to return in name-search mode (default 20)"),
+    query: z
+      .string()
+      .max(100)
+      .optional()
+      .describe("Match project or customer name (name-search mode only)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum projects to return in name-search mode (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) return { ok: false, error: "projects_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "projects")))
+      return { ok: false, error: "projects_feature_disabled" };
     const a = raw as { projectId?: string; query?: string; limit?: number };
     if (a.projectId) {
-      const exists = (await db.execute<{ id: string; name: string; status: string }>(sql`
+      const exists = await db.execute<{ id: string; name: string; status: string }>(
+        sql`
         select id, name, status from projects
          where id = ${a.projectId} and org_id = ${authz.user.orgId}
            ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (!exists[0]) return { ok: false, error: "project_not_found" };
-      return { ok: true, data: { project: exists[0], ...(await projectCostSummary(authz.user.orgId, a.projectId, authz.allowedSubsidiaryIds)), href: `/projects?project=${a.projectId}` } };
+      return {
+        ok: true,
+        data: {
+          project: exists[0],
+          ...(await projectCostSummary(authz.user.orgId, a.projectId, authz.allowedSubsidiaryIds)),
+          href: `/projects?project=${a.projectId}`,
+        },
+      };
     }
     const limit = Math.min(a.limit ?? 20, 50);
     const like = a.query ? `%${a.query}%` : null;
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select p.id, p.name, p.status, p.starts_on, p.ends_on, c.display_name as customer
        from projects p left join parties c on c.id = p.customer_id and c.org_id = p.org_id
        where p.org_id = ${authz.user.orgId}
@@ -1131,21 +1383,33 @@ const projectProfitability: AssistantToolDef = {
          ${like ? sql`and (p.name ilike ${like} or c.display_name ilike ${like})` : sql``}
        order by case p.status when 'active' then 0 when 'awarded' then 1 else 2 end, p.name
        limit ${limit}
-    `, "objects"));
-    const count = (await db.execute<{ n: string }>(sql`
+    `,
+      "objects",
+    );
+    const count = await db.execute<{ n: string }>(
+      sql`
       select count(*) as n
        from projects p left join parties c on c.id = p.customer_id and c.org_id = p.org_id
        where p.org_id = ${authz.user.orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
          ${like ? sql`and (p.name ilike ${like} or c.display_name ilike ${like})` : sql``}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const total = Number(count[0]?.n ?? 0);
     return {
       ok: true,
-      note: total > rows.length
-        ? `${total} projects match; only ${rows.length} listed. Use rank_projects for the full portfolio with margins, totals, and paging.`
-        : undefined,
-      data: { total, returned: rows.length, truncated: total > rows.length, projects: rows, href: "/projects" },
+      note:
+        total > rows.length
+          ? `${total} projects match; only ${rows.length} listed. Use rank_projects for the full portfolio with margins, totals, and paging.`
+          : undefined,
+      data: {
+        total,
+        returned: rows.length,
+        truncated: total > rows.length,
+        projects: rows,
+        href: "/projects",
+      },
     };
   },
 };
@@ -1163,14 +1427,44 @@ const continuousCloseFindings: AssistantToolDef = {
   // ../continuous-close.ts): execute narrows to the caller's readable packs,
   // so pack readers the workbench admits (payroll/projects/expenses/reconcile)
   // keep their doorway here too.
-  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read", "ap.read", "ar.read", "banking.reconcile", "expenses.read", "payroll.read", "projects.read"] },
+  gate: {
+    mode: "anyOf",
+    perms: [
+      "banking.read",
+      "gl.read",
+      "close.read",
+      "reports.read",
+      "budgets.read",
+      "ap.read",
+      "ar.read",
+      "banking.reconcile",
+      "expenses.read",
+      "payroll.read",
+      "projects.read",
+    ],
+  },
   feature: "continuousClose",
   inputSchema: z.object({
-    agent: z.enum(CONTINUOUS_CLOSE_AGENT_KEYS).optional().describe("Only findings from this agent pack"),
-    status: z.enum(["open", "in_review", "resolved", "dismissed"]).optional().describe("Only findings in this status (default open and in_review)"),
-    severity: z.enum(["info", "warning", "critical"]).optional().describe("Only findings at this severity"),
+    agent: z
+      .enum(CONTINUOUS_CLOSE_AGENT_KEYS)
+      .optional()
+      .describe("Only findings from this agent pack"),
+    status: z
+      .enum(["open", "in_review", "resolved", "dismissed"])
+      .optional()
+      .describe("Only findings in this status (default open and in_review)"),
+    severity: z
+      .enum(["info", "warning", "critical"])
+      .optional()
+      .describe("Only findings at this severity"),
     query: z.string().max(100).optional().describe("Match finding type or summary"),
-    limit: z.number().int().min(1).max(50).optional().describe("Maximum findings to return (default 20)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum findings to return (default 20)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "continuousClose"))) {
@@ -1190,7 +1484,8 @@ const continuousCloseFindings: AssistantToolDef = {
     const statuses = a.status ? [a.status] : ["open", "in_review"];
     const limit = Math.min(a.limit ?? 20, 50);
     const q = a.query?.trim();
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select w.id, w.agent_key, w.finding_type, w.severity, w.status,
              w.confidence::text, w.materiality::text, w.summary,
              w.last_detected_at,
@@ -1201,14 +1496,22 @@ const continuousCloseFindings: AssistantToolDef = {
           on subject_account.id = w.subject_id and w.subject_type = 'account' and subject_account.org_id = w.org_id
        where w.org_id = ${authz.user.orgId}
          ${subsidiaryVisibleFilter(sql`subject_account.subsidiary_id`, authz.allowedSubsidiaryIds)}
-         and w.agent_key in (${sql.join(agents.map((agent) => sql`${agent}`), sql`, `)})
-         and w.status in (${sql.join(statuses.map((status) => sql`${status}`), sql`, `)})
+         and w.agent_key in (${sql.join(
+           agents.map((agent) => sql`${agent}`),
+           sql`, `,
+         )})
+         and w.status in (${sql.join(
+           statuses.map((status) => sql`${status}`),
+           sql`, `,
+         )})
          ${a.severity ? sql`and w.severity = ${a.severity}` : sql``}
          ${q ? sql`and (w.finding_type ilike ${`%${q}%`} or w.summary::text ilike ${`%${q}%`})` : sql``}
        order by case w.severity when 'critical' then 3 when 'warning' then 2 else 1 end desc,
                 w.materiality desc, w.last_detected_at desc
        limit ${limit}
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: {
@@ -1239,7 +1542,22 @@ const getContinuousCloseFinding: AssistantToolDef = {
   category: "read",
   // Same union doorway as continuous_close_findings above: the row's pack is
   // checked against the caller's readable packs inside execute.
-  gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read", "ap.read", "ar.read", "banking.reconcile", "expenses.read", "payroll.read", "projects.read"] },
+  gate: {
+    mode: "anyOf",
+    perms: [
+      "banking.read",
+      "gl.read",
+      "close.read",
+      "reports.read",
+      "budgets.read",
+      "ap.read",
+      "ar.read",
+      "banking.reconcile",
+      "expenses.read",
+      "payroll.read",
+      "projects.read",
+    ],
+  },
   feature: "continuousClose",
   inputSchema: z.object({ findingId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
@@ -1247,7 +1565,8 @@ const getContinuousCloseFinding: AssistantToolDef = {
       return { ok: false, error: "continuous_close_feature_disabled" };
     }
     const findingId = (raw as { findingId: string }).findingId;
-    const item = (await db.execute<Record<string, unknown>>(sql`
+    const item = await db.execute<Record<string, unknown>>(
+      sql`
       select w.id, w.agent_key, w.finding_type, w.detector_version, w.severity, w.status,
              w.confidence::text, w.materiality::text, w.subject_type, w.subject_id,
              w.summary, w.first_detected_at, w.last_detected_at
@@ -1255,27 +1574,46 @@ const getContinuousCloseFinding: AssistantToolDef = {
         ${WORK_ITEM_SUBJECT_JOIN}
        where w.id = ${findingId} and w.org_id = ${authz.user.orgId}
          ${workItemSubjectScopePredicate(authz.user.orgId, authz.allowedSubsidiaryIds)}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const row = item[0];
     if (!row) return { ok: false, error: "finding_not_found" };
-    if (typeof row.agent_key !== "string" || !(readableContinuousCloseAgents(authz) as readonly string[]).includes(row.agent_key)) {
+    if (
+      typeof row.agent_key !== "string" ||
+      !(readableContinuousCloseAgents(authz) as readonly string[]).includes(row.agent_key)
+    ) {
       return { ok: false, error: "forbidden" };
     }
     // Subject-subsidiary scope, mirroring the workbench item route: a
     // restricted caller shares the uniform not-found for findings whose
     // subject sits outside their allowlist, instead of reading another
     // subsidiary's evidence packet through the pack grant alone.
-    const access = await loadWorkItemAccess(authz.user.orgId, findingId, authz.allowedSubsidiaryIds);
-    if (!access || !workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)) {
+    const access = await loadWorkItemAccess(
+      authz.user.orgId,
+      findingId,
+      authz.allowedSubsidiaryIds,
+    );
+    if (
+      !access ||
+      !workItemSubjectInScope(
+        authz.allowedSubsidiaryIds,
+        access.subjectType ?? "",
+        access.subjectSubsidiaryId,
+      )
+    ) {
       return { ok: false, error: "finding_not_found" };
     }
-    const evidence = (await db.execute<Record<string, unknown>>(sql`
+    const evidence = await db.execute<Record<string, unknown>>(
+      sql`
       select id, kind, source_type, source_id, data, created_at
         from ai_work_item_evidence
        where org_id = ${authz.user.orgId} and work_item_id = ${findingId}
        order by created_at, id
        limit 100
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: {
@@ -1300,10 +1638,18 @@ const listOpenItems: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   inputSchema: z.object({
-    side: z.enum(["ar", "ap"]).describe("Which open items: ar = customer receivables, ap = vendor payables"),
+    side: z
+      .enum(["ar", "ap"])
+      .describe("Which open items: ar = customer receivables, ap = vendor payables"),
     asOf: dateInput.optional().describe("Open-item date; defaults to today"),
     partyId: uuidInput.optional(),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum items to return (default 100)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum items to return (default 100)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { side: "ar" | "ap"; asOf?: string; partyId?: string; limit?: number };
@@ -1315,8 +1661,9 @@ const listOpenItems: AssistantToolDef = {
     // (undefined), a Set = its ids, and an empty Set yields no rows.
     const all = await openItems(authz.user.orgId, a.side, asOf, reportDims(authz)?.subsidiaryIds);
     const scoped = a.partyId ? all.filter((item) => item.partyId === a.partyId) : all;
-    scoped.sort((x, y) =>
-      (x.dueDate ?? x.tranDate).getTime() - (y.dueDate ?? y.tranDate).getTime());
+    scoped.sort(
+      (x, y) => (x.dueDate ?? x.tranDate).getTime() - (y.dueDate ?? y.tranDate).getTime(),
+    );
     const items = scoped.slice(0, a.limit ?? 100).map((item) => ({
       openLineId: item.id,
       documentId: item.docId,

@@ -1,45 +1,46 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
-import { NextResponse } from 'next/server'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
+import { NextResponse } from "next/server";
 
 interface RouteState {
-  allowedSubsidiaryIds: Set<string> | null
-  scheduleSubsidiaryId: string | null
-  createCalls: Record<string, unknown>[]
-  queries: string[]
+  allowedSubsidiaryIds: Set<string> | null;
+  scheduleSubsidiaryId: string | null;
+  createCalls: Record<string, unknown>[];
+  queries: string[];
 }
 
-const stateKey = Symbol.for('openbooks.payroll-runs-route-test')
+const stateKey = Symbol.for("openbooks.payroll-runs-route-test");
 const routeState: RouteState = {
-  allowedSubsidiaryIds: new Set(['sub-visible']),
-  scheduleSubsidiaryId: 'sub-visible',
+  allowedSubsidiaryIds: new Set(["sub-visible"]),
+  scheduleSubsidiaryId: "sub-visible",
   createCalls: [],
   queries: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksPayrollRunsNextResponse = NextResponse
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksPayrollRunsSqlText = sqlText
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksPayrollRunsNextResponse =
+  NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksPayrollRunsSqlText = sqlText;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
-      export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
+      export * from '${import.meta.resolve("@openbooks/engine/platform/db")}'
       export const ambientTenantOrgId = () => null
       export const currentRequestOrgResolver = () => null
       export const registerRequestOrgResolver = () => {}
@@ -67,7 +68,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:feature-gates',
+    "mock:feature-gates",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-runs-route-test')]
       export async function guardFeaturePermission() {
@@ -79,7 +80,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-runs-route-test')]
       const NextResponse = globalThis.openbooksPayrollRunsNextResponse
@@ -97,13 +98,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:subsidiaries',
+    "mock:subsidiaries",
     `
       export function subsidiaryVisibleFilter() { return '' }
     `,
   ],
   [
-    'mock:payroll-run',
+    "mock:payroll-run",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-runs-route-test')]
       export class PayrollError extends Error {}
@@ -113,104 +114,106 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', new URL('../../../../lib/api/json.ts', import.meta.url).href],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@openbooks/engine/payroll/error', 'mock:payroll-run'],
-  ['@openbooks/engine/payroll/run-lifecycle', 'mock:payroll-run'],
-  ['../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['@/lib/feature-gates', 'mock:feature-gates'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['../../../../lib/subsidiaries', 'mock:subsidiaries'],
-])
+  ["@/lib/api/json", new URL("../../../../lib/api/json.ts", import.meta.url).href],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/payroll/error", "mock:payroll-run"],
+  ["@openbooks/engine/payroll/run-lifecycle", "mock:payroll-run"],
+  ["../../../../lib/feature-gates", "mock:feature-gates"],
+  ["@/lib/feature-gates", "mock:feature-gates"],
+  ["../../../../lib/authz", "mock:authz"],
+  ["../../../../lib/subsidiaries", "mock:subsidiaries"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?payroll-runs-subsidiary-scope-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-after(() => hooks.deregister())
+const routeUrl = "./route.ts?payroll-runs-subsidiary-scope-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
+after(() => hooks.deregister());
 
-const SCHEDULE_ID = '00000000-0000-4000-8000-000000000001'
+const SCHEDULE_ID = "00000000-0000-4000-8000-000000000001";
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
-  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds
-  routeState.scheduleSubsidiaryId = 'sub-visible'
-  routeState.createCalls = []
-  routeState.queries = []
+  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
+  routeState.scheduleSubsidiaryId = "sub-visible";
+  routeState.createCalls = [];
+  routeState.queries = [];
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/payroll/runs', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/payroll/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
-test('POST forwards a restricted caller scope into the atomic engine guard', async () => {
-  reset(new Set(['sub-visible']))
+test("POST forwards a restricted caller scope into the atomic engine guard", async () => {
+  reset(new Set(["sub-visible"]));
 
-  const response = await post({ payScheduleId: SCHEDULE_ID })
+  const response = await post({ payScheduleId: SCHEDULE_ID });
 
-  assert.equal(response.status, 200)
-  assert.equal(routeState.createCalls.length, 1)
-  assert.deepEqual(routeState.createCalls[0]!.allowedSubsidiaryIds, new Set(['sub-visible']))
-  assert.ok(routeState.queries.some((query) => query.includes('from pay_schedules')))
-})
+  assert.equal(response.status, 200);
+  assert.equal(routeState.createCalls.length, 1);
+  assert.deepEqual(routeState.createCalls[0]!.allowedSubsidiaryIds, new Set(["sub-visible"]));
+  assert.ok(routeState.queries.some((query) => query.includes("from pay_schedules")));
+});
 
-test('POST keeps unrestricted callers unrestricted', async () => {
-  reset(null)
+test("POST keeps unrestricted callers unrestricted", async () => {
+  reset(null);
 
-  const response = await post({ payScheduleId: SCHEDULE_ID })
+  const response = await post({ payScheduleId: SCHEDULE_ID });
 
-  assert.equal(response.status, 200)
-  assert.equal(routeState.createCalls[0]!.allowedSubsidiaryIds, null)
-  assert.deepEqual(routeState.queries, [])
-})
+  assert.equal(response.status, 200);
+  assert.equal(routeState.createCalls[0]!.allowedSubsidiaryIds, null);
+  assert.deepEqual(routeState.queries, []);
+});
 
-test('POST passes native rebased schedule and employee identities into the scoped command', async () => {
-  reset(new Set(['sub-visible']))
-  const scheduleId = 'db76ccd6-d8a3-ead7-42d2-6279dd4ea029'
-  const employeeId = '17ead58a-01df-a411-0031-43714689801a'
-  const response = await post({ payScheduleId: scheduleId, employeePartyIds: [employeeId] })
-  assert.equal(response.status, 200)
-  assert.equal(routeState.createCalls.length, 1)
-  assert.equal(routeState.createCalls[0]!.payScheduleId, scheduleId)
-  assert.deepEqual(routeState.createCalls[0]!.employeePartyIds, [employeeId])
-  assert.deepEqual(routeState.createCalls[0]!.allowedSubsidiaryIds, new Set(['sub-visible']))
-})
+test("POST passes native rebased schedule and employee identities into the scoped command", async () => {
+  reset(new Set(["sub-visible"]));
+  const scheduleId = "db76ccd6-d8a3-ead7-42d2-6279dd4ea029";
+  const employeeId = "17ead58a-01df-a411-0031-43714689801a";
+  const response = await post({ payScheduleId: scheduleId, employeePartyIds: [employeeId] });
+  assert.equal(response.status, 200);
+  assert.equal(routeState.createCalls.length, 1);
+  assert.equal(routeState.createCalls[0]!.payScheduleId, scheduleId);
+  assert.deepEqual(routeState.createCalls[0]!.employeePartyIds, [employeeId]);
+  assert.deepEqual(routeState.createCalls[0]!.allowedSubsidiaryIds, new Set(["sub-visible"]));
+});
 
-test('POST refuses malformed dates and employee selections before entering payroll', async () => {
-  const malformedBody = await POST(new Request('http://openbooks.test/api/payroll/runs', { method: 'POST', body: 'null' }))
-  assert.equal(malformedBody.status, 400)
-  assert.equal((await malformedBody.json()).error, 'invalid request body')
+test("POST refuses malformed dates and employee selections before entering payroll", async () => {
+  const malformedBody = await POST(
+    new Request("http://openbooks.test/api/payroll/runs", { method: "POST", body: "null" }),
+  );
+  assert.equal(malformedBody.status, 400);
+  assert.equal((await malformedBody.json()).error, "invalid request body");
   for (const fields of [
-    { periodStart: '2026-02-30', periodEnd: '2026-03-07' },
-    { payDate: '2026-02-30' },
+    { periodStart: "2026-02-30", periodEnd: "2026-03-07" },
+    { payDate: "2026-02-30" },
     { employeePartyIds: SCHEDULE_ID },
     { employeePartyIds: {} },
-    { payScheduleId: 'not-an-id' },
-    { employeePartyIds: ['not-an-id'] },
+    { payScheduleId: "not-an-id" },
+    { employeePartyIds: ["not-an-id"] },
   ]) {
-    reset(null)
-    const response = await post({ payScheduleId: SCHEDULE_ID, ...fields })
-    assert.equal(response.status, 422, JSON.stringify(fields))
-    assert.equal(routeState.createCalls.length, 0)
-    assert.deepEqual(routeState.queries, [])
+    reset(null);
+    const response = await post({ payScheduleId: SCHEDULE_ID, ...fields });
+    assert.equal(response.status, 422, JSON.stringify(fields));
+    assert.equal(routeState.createCalls.length, 0);
+    assert.deepEqual(routeState.queries, []);
   }
-})
+});

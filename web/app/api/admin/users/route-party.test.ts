@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Audited native Admin Users -> linked person (POST set-party + GET search).
 // Covers the audited link contract: attestation + reason required,
@@ -10,58 +10,93 @@ import test from 'node:test'
 // expected 409 with no mutation, exact before/after audit with kind/role
 // signals, concurrent writers only one wins, audit failure rolls back, and
 // per-query bounded search that stays selectable beyond the first page.
-const stateKey = Symbol.for('openbooks.admin-users-party-test')
+const stateKey = Symbol.for("openbooks.admin-users-party-test");
 
-const ORG_ID = '00000000-0000-4000-8000-00000000b001'
-const OTHER_ORG_ID = '00000000-0000-4000-8000-00000000b099'
-const ACTOR_ID = '00000000-0000-4000-8000-00000000b002'
-const TARGET_ID = '00000000-0000-4000-8000-00000000b003'
-const OTHER_USER_ID = '00000000-0000-4000-8000-00000000b098'
-const PARTY_A = '00000000-0000-4000-8000-00000000b011'
-const PARTY_B = '00000000-0000-4000-8000-00000000b012'
-const PARTY_INACTIVE = '00000000-0000-4000-8000-00000000b013'
-const OTHER_ORG_PARTY = '00000000-0000-4000-8000-00000000b097'
-const SUB_A = '00000000-0000-4000-8000-00000000b00a'
-const SUB_B = '00000000-0000-4000-8000-00000000b00b'
-const PARTY_SHARED = '00000000-0000-4000-8000-00000000b014'
+const ORG_ID = "00000000-0000-4000-8000-00000000b001";
+const OTHER_ORG_ID = "00000000-0000-4000-8000-00000000b099";
+const ACTOR_ID = "00000000-0000-4000-8000-00000000b002";
+const TARGET_ID = "00000000-0000-4000-8000-00000000b003";
+const OTHER_USER_ID = "00000000-0000-4000-8000-00000000b098";
+const PARTY_A = "00000000-0000-4000-8000-00000000b011";
+const PARTY_B = "00000000-0000-4000-8000-00000000b012";
+const PARTY_INACTIVE = "00000000-0000-4000-8000-00000000b013";
+const OTHER_ORG_PARTY = "00000000-0000-4000-8000-00000000b097";
+const SUB_A = "00000000-0000-4000-8000-00000000b00a";
+const SUB_B = "00000000-0000-4000-8000-00000000b00b";
+const PARTY_SHARED = "00000000-0000-4000-8000-00000000b014";
 
 interface PartyRow {
-  kind: string
-  displayName: string
-  isActive: boolean
-  roles: string[]
-  orgId: string
-  subsidiaryId: string | null
+  kind: string;
+  displayName: string;
+  isActive: boolean;
+  roles: string[];
+  orgId: string;
+  subsidiaryId: string | null;
 }
 
 interface PartyState {
-  executed: string[]
-  committed: string[]
-  pending: string[]
-  inTx: boolean
-  transactionCalls: number
-  failOnText?: string
-  currentPartyId: string | null
+  executed: string[];
+  committed: string[];
+  pending: string[];
+  inTx: boolean;
+  transactionCalls: number;
+  failOnText?: string;
+  currentPartyId: string | null;
   /** Successive answers to the other-active-administrator count (last repeats). */
-  otherAdministrators: number[]
+  otherAdministrators: number[];
   authz: {
-    user: { orgId: string; id: string; isSuperAdmin: boolean }
-    permissions: Set<string>
-    allowedSubsidiaryIds?: Set<string> | null
-  } | null
-  parties: Record<string, PartyRow>
+    user: { orgId: string; id: string; isSuperAdmin: boolean };
+    permissions: Set<string>;
+    allowedSubsidiaryIds?: Set<string> | null;
+  } | null;
+  parties: Record<string, PartyRow>;
 }
 
 function baseParties(): Record<string, PartyRow> {
   return {
-    [PARTY_A]: { kind: 'person', displayName: 'Ada Person', isActive: true, roles: [], orgId: ORG_ID, subsidiaryId: SUB_A },
+    [PARTY_A]: {
+      kind: "person",
+      displayName: "Ada Person",
+      isActive: true,
+      roles: [],
+      orgId: ORG_ID,
+      subsidiaryId: SUB_A,
+    },
     // kind=company carrying an employee role: kind is not proof, roles are signals.
-    [PARTY_B]: { kind: 'company', displayName: 'Beta Corp', isActive: true, roles: ['employee'], orgId: ORG_ID, subsidiaryId: SUB_B },
-    [PARTY_INACTIVE]: { kind: 'person', displayName: 'Inactive Person', isActive: false, roles: [], orgId: ORG_ID, subsidiaryId: SUB_A },
-    [OTHER_ORG_PARTY]: { kind: 'person', displayName: 'Other Org Person', isActive: true, roles: [], orgId: OTHER_ORG_ID, subsidiaryId: null },
+    [PARTY_B]: {
+      kind: "company",
+      displayName: "Beta Corp",
+      isActive: true,
+      roles: ["employee"],
+      orgId: ORG_ID,
+      subsidiaryId: SUB_B,
+    },
+    [PARTY_INACTIVE]: {
+      kind: "person",
+      displayName: "Inactive Person",
+      isActive: false,
+      roles: [],
+      orgId: ORG_ID,
+      subsidiaryId: SUB_A,
+    },
+    [OTHER_ORG_PARTY]: {
+      kind: "person",
+      displayName: "Other Org Person",
+      isActive: true,
+      roles: [],
+      orgId: OTHER_ORG_ID,
+      subsidiaryId: null,
+    },
     // Null-subsidiary parties are org-wide shared: visible to every admin lens.
-    [PARTY_SHARED]: { kind: 'person', displayName: 'Shared Person', isActive: true, roles: [], orgId: ORG_ID, subsidiaryId: null },
-  }
+    [PARTY_SHARED]: {
+      kind: "person",
+      displayName: "Shared Person",
+      isActive: true,
+      roles: [],
+      orgId: ORG_ID,
+      subsidiaryId: null,
+    },
+  };
 }
 
 const state: PartyState = {
@@ -74,42 +109,43 @@ const state: PartyState = {
   otherAdministrators: [1],
   authz: {
     user: { orgId: ORG_ID, id: ACTOR_ID, isSuperAdmin: false },
-    permissions: new Set(['admin.users.manage']),
+    permissions: new Set(["admin.users.manage"]),
   },
   parties: baseParties(),
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
       // Scalar bound params (uuids, the subsidiary allow-list) render
       // inline so the fake database can honour the predicates the route
       // sends; without them an allow-list reads as empty.
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        return String(value)
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        return String(value);
       }
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       // A bound null (the unlink case) must render as the literal the fake
       // database keys on; an empty string silently turned unlink into a 409.
-      if (chunk === null) return 'null'
-      return ''
+      if (chunk === null) return "null";
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & { openbooksSqlTextAdminUsersParty: typeof sqlText }).openbooksSqlTextAdminUsersParty = sqlText
+(
+  globalThis as typeof globalThis & { openbooksSqlTextAdminUsersParty: typeof sqlText }
+).openbooksSqlTextAdminUsersParty = sqlText;
 
-const KNOWN_PARTIES = [PARTY_A, PARTY_B, PARTY_INACTIVE, OTHER_ORG_PARTY, PARTY_SHARED]
-
+const KNOWN_PARTIES = [PARTY_A, PARTY_B, PARTY_INACTIVE, OTHER_ORG_PARTY, PARTY_SHARED];
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.admin-users-party-test')]
       const sqlText = globalThis.openbooksSqlTextAdminUsersParty
@@ -276,7 +312,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       import { NextResponse } from 'next/server'
       const state = globalThis[Symbol.for('openbooks.admin-users-party-test')]
@@ -300,373 +336,445 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
     // Mock modules live at synthetic `mock:` URLs; bare imports from inside
     // them (next/server) must resolve from this test file, not from `mock:`.
-    if (context.parentURL?.startsWith('mock:')) {
-      return nextResolve(specifier, { ...context, parentURL: import.meta.url })
+    if (context.parentURL?.startsWith("mock:")) {
+      return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?admin-users-party-test'
-const { POST, GET } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?admin-users-party-test";
+const { POST, GET } = (await import(routeUrl)) as typeof import("./route.ts");
 function reset(): void {
-  state.executed = []
-  state.committed = []
-  state.pending = []
-  state.inTx = false
-  state.transactionCalls = 0
-  state.failOnText = undefined
-  state.currentPartyId = null
-  state.otherAdministrators = [1]
+  state.executed = [];
+  state.committed = [];
+  state.pending = [];
+  state.inTx = false;
+  state.transactionCalls = 0;
+  state.failOnText = undefined;
+  state.currentPartyId = null;
+  state.otherAdministrators = [1];
   state.authz = {
     user: { orgId: ORG_ID, id: ACTOR_ID, isSuperAdmin: false },
-    permissions: new Set(['admin.users.manage']),
-  }
-  state.parties = baseParties()
+    permissions: new Set(["admin.users.manage"]),
+  };
+  state.parties = baseParties();
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/admin/users', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/admin/users", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
 function get(path: string): Promise<Response> {
-  return GET(new Request(`http://openbooks.test${path}`, { method: 'GET' }))
+  return GET(new Request(`http://openbooks.test${path}`, { method: "GET" }));
 }
 
 const validLink = (overrides: Record<string, unknown> = {}) => ({
-  action: 'set-party',
+  action: "set-party",
   userId: TARGET_ID,
   partyId: PARTY_A,
   expectedPartyId: null,
-  reason: 'HR approver needs a linked person',
+  reason: "HR approver needs a linked person",
   attestation: true,
   ...overrides,
-})
+});
 
-test('unauthorized callers cannot change links', async () => {
-  reset()
-  state.authz = null
-  const unauthenticated = await post(validLink())
-  assert.equal(unauthenticated.status, 401)
+test("unauthorized callers cannot change links", async () => {
+  reset();
+  state.authz = null;
+  const unauthenticated = await post(validLink());
+  assert.equal(unauthenticated.status, 401);
 
-  reset()
+  reset();
   state.authz = {
     user: { orgId: ORG_ID, id: ACTOR_ID, isSuperAdmin: false },
-    permissions: new Set(['gl.read']),
-  }
-  const forbidden = await post(validLink())
-  assert.equal(forbidden.status, 403)
-  assert.equal(state.currentPartyId, null)
-  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
-  assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
+    permissions: new Set(["gl.read"]),
+  };
+  const forbidden = await post(validLink());
+  assert.equal(forbidden.status, 403);
+  assert.equal(state.currentPartyId, null);
+  assert.equal(
+    state.committed.some((t) => t.includes("update users set party_id")),
+    false,
+  );
+  assert.equal(
+    state.committed.some((t) => t.includes("insert into audit_log")),
+    false,
+  );
 
-  const searchDenied = await get('/api/admin/users?q=ada')
-  assert.equal(searchDenied.status, 403)
-})
+  const searchDenied = await get("/api/admin/users?q=ada");
+  assert.equal(searchDenied.status, 403);
+});
 
-test('changing your own link is refused while another active administrator exists, even as superadmin, including unlink', async () => {
+test("changing your own link is refused while another active administrator exists, even as superadmin, including unlink", async () => {
   for (const isSuperAdmin of [false, true]) {
-    reset()
+    reset();
     state.authz = {
       user: { orgId: ORG_ID, id: ACTOR_ID, isSuperAdmin },
-      permissions: new Set(['admin.users.manage', '*']),
-    }
-    const link = await post(validLink({ userId: ACTOR_ID }))
-    assert.equal(link.status, 403)
-    assert.match(((await link.json()) as { error: string }).error, /own linked person/i)
+      permissions: new Set(["admin.users.manage", "*"]),
+    };
+    const link = await post(validLink({ userId: ACTOR_ID }));
+    assert.equal(link.status, 403);
+    assert.match(((await link.json()) as { error: string }).error, /own linked person/i);
 
-    const unlink = await post(validLink({ userId: ACTOR_ID, partyId: null, expectedPartyId: null }))
-    assert.equal(unlink.status, 403)
-    assert.equal(state.currentPartyId, null)
-    assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
-    assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
+    const unlink = await post(
+      validLink({ userId: ACTOR_ID, partyId: null, expectedPartyId: null }),
+    );
+    assert.equal(unlink.status, 403);
+    assert.equal(state.currentPartyId, null);
+    assert.equal(
+      state.committed.some((t) => t.includes("update users set party_id")),
+      false,
+    );
+    assert.equal(
+      state.committed.some((t) => t.includes("insert into audit_log")),
+      false,
+    );
   }
-})
+});
 
-test('the sole active administrator may link their own login with reason, attestation and a self-link audit', async () => {
-  reset()
-  state.otherAdministrators = [0]
-  const link = await post(validLink({ userId: ACTOR_ID }))
-  assert.equal(link.status, 200)
-  assert.equal(state.currentPartyId, PARTY_A.toLowerCase())
-  const audit = state.committed.find((t) => t.includes('insert into audit_log'))
-  assert.ok(audit, 'the self-link is audited')
-  assert.match(audit!, /selfLink/)
-  assert.match(audit!, /soleActiveAdministrator/)
+test("the sole active administrator may link their own login with reason, attestation and a self-link audit", async () => {
+  reset();
+  state.otherAdministrators = [0];
+  const link = await post(validLink({ userId: ACTOR_ID }));
+  assert.equal(link.status, 200);
+  assert.equal(state.currentPartyId, PARTY_A.toLowerCase());
+  const audit = state.committed.find((t) => t.includes("insert into audit_log"));
+  assert.ok(audit, "the self-link is audited");
+  assert.match(audit!, /selfLink/);
+  assert.match(audit!, /soleActiveAdministrator/);
 
-  reset()
-  state.otherAdministrators = [0]
-  const unattested = await post(validLink({ userId: ACTOR_ID, attestation: false }))
-  assert.equal(unattested.status, 422, 'the self-link keeps the attestation requirement')
-  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
-})
+  reset();
+  state.otherAdministrators = [0];
+  const unattested = await post(validLink({ userId: ACTOR_ID, attestation: false }));
+  assert.equal(unattested.status, 422, "the self-link keeps the attestation requirement");
+  assert.equal(
+    state.committed.some((t) => t.includes("update users set party_id")),
+    false,
+  );
+});
 
-test('a second administrator appearing before the write re-applies the refusal with no mutation', async () => {
-  reset()
-  state.otherAdministrators = [0, 1]
-  const link = await post(validLink({ userId: ACTOR_ID }))
-  assert.equal(link.status, 403)
-  assert.match(((await link.json()) as { error: string }).error, /own linked person/i)
-  assert.equal(state.currentPartyId, null)
-  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
-  assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
-})
+test("a second administrator appearing before the write re-applies the refusal with no mutation", async () => {
+  reset();
+  state.otherAdministrators = [0, 1];
+  const link = await post(validLink({ userId: ACTOR_ID }));
+  assert.equal(link.status, 403);
+  assert.match(((await link.json()) as { error: string }).error, /own linked person/i);
+  assert.equal(state.currentPartyId, null);
+  assert.equal(
+    state.committed.some((t) => t.includes("update users set party_id")),
+    false,
+  );
+  assert.equal(
+    state.committed.some((t) => t.includes("insert into audit_log")),
+    false,
+  );
+});
 
-test('attestation absent or false is refused without mutation', async () => {
-  reset()
-  const without: Record<string, unknown> = { ...validLink() }
-  delete without.attestation
-  const missing = await post(without)
-  assert.equal(missing.status, 422)
-  assert.match(((await missing.json()) as { error: string }).error, /attestation/i)
+test("attestation absent or false is refused without mutation", async () => {
+  reset();
+  const without: Record<string, unknown> = { ...validLink() };
+  delete without.attestation;
+  const missing = await post(without);
+  assert.equal(missing.status, 422);
+  assert.match(((await missing.json()) as { error: string }).error, /attestation/i);
 
-  const falseAtt = await post(validLink({ attestation: false }))
-  assert.equal(falseAtt.status, 422)
-  assert.equal(state.currentPartyId, null)
-  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
-})
+  const falseAtt = await post(validLink({ attestation: false }));
+  assert.equal(falseAtt.status, 422);
+  assert.equal(state.currentPartyId, null);
+  assert.equal(
+    state.committed.some((t) => t.includes("update users set party_id")),
+    false,
+  );
+});
 
-test('blank and overlong reasons are refused', async () => {
-  reset()
-  const blank = await post(validLink({ reason: '   ' }))
-  assert.equal(blank.status, 422)
-  const long = await post(validLink({ reason: 'x'.repeat(501) }))
-  assert.equal(long.status, 422)
-  assert.equal(state.currentPartyId, null)
-})
+test("blank and overlong reasons are refused", async () => {
+  reset();
+  const blank = await post(validLink({ reason: "   " }));
+  assert.equal(blank.status, 422);
+  const long = await post(validLink({ reason: "x".repeat(501) }));
+  assert.equal(long.status, 422);
+  assert.equal(state.currentPartyId, null);
+});
 
-test('wrong-org user and wrong-org party fail without leak or mutation', async () => {
-  reset()
-  const wrongUser = await post(validLink({ userId: OTHER_USER_ID }))
-  assert.equal(wrongUser.status, 404)
-  assert.equal(((await wrongUser.json()) as { error: string }).error, 'user not found')
+test("wrong-org user and wrong-org party fail without leak or mutation", async () => {
+  reset();
+  const wrongUser = await post(validLink({ userId: OTHER_USER_ID }));
+  assert.equal(wrongUser.status, 404);
+  assert.equal(((await wrongUser.json()) as { error: string }).error, "user not found");
 
-  const crossOrg = await post(validLink({ partyId: OTHER_ORG_PARTY }))
-  assert.equal(crossOrg.status, 404)
-  assert.equal(((await crossOrg.json()) as { error: string }).error, 'party not found')
-  assert.equal(state.currentPartyId, null)
-  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
-  assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
-})
+  const crossOrg = await post(validLink({ partyId: OTHER_ORG_PARTY }));
+  assert.equal(crossOrg.status, 404);
+  assert.equal(((await crossOrg.json()) as { error: string }).error, "party not found");
+  assert.equal(state.currentPartyId, null);
+  assert.equal(
+    state.committed.some((t) => t.includes("update users set party_id")),
+    false,
+  );
+  assert.equal(
+    state.committed.some((t) => t.includes("insert into audit_log")),
+    false,
+  );
+});
 
-test('inactive parties fail closed and never link drafts', async () => {
-  reset()
-  const inactive = await post(validLink({ partyId: PARTY_INACTIVE }))
-  assert.equal(inactive.status, 422)
-  assert.match(((await inactive.json()) as { error: string }).error, /not active/i)
-  assert.equal(state.currentPartyId, null)
-  assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
-})
+test("inactive parties fail closed and never link drafts", async () => {
+  reset();
+  const inactive = await post(validLink({ partyId: PARTY_INACTIVE }));
+  assert.equal(inactive.status, 422);
+  assert.match(((await inactive.json()) as { error: string }).error, /not active/i);
+  assert.equal(state.currentPartyId, null);
+  assert.equal(
+    state.committed.some((t) => t.includes("insert into audit_log")),
+    false,
+  );
+});
 
-test('stale expected link reports 409 with no mutation or audit', async () => {
-  reset()
-  state.currentPartyId = PARTY_A
-  const stale = await post(validLink({ partyId: PARTY_B, expectedPartyId: null }))
-  assert.equal(stale.status, 409)
-  assert.equal(state.currentPartyId, PARTY_A)
-  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
-  assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
-})
+test("stale expected link reports 409 with no mutation or audit", async () => {
+  reset();
+  state.currentPartyId = PARTY_A;
+  const stale = await post(validLink({ partyId: PARTY_B, expectedPartyId: null }));
+  assert.equal(stale.status, 409);
+  assert.equal(state.currentPartyId, PARTY_A);
+  assert.equal(
+    state.committed.some((t) => t.includes("update users set party_id")),
+    false,
+  );
+  assert.equal(
+    state.committed.some((t) => t.includes("insert into audit_log")),
+    false,
+  );
+});
 
-test('valid link audits exact before/after, reason, attestation, and kind/role signals', async () => {
-  reset()
-  const response = await post(validLink({ partyId: PARTY_B, expectedPartyId: null, reason: 'Link Beta as approver' }))
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { ok: true, userId: TARGET_ID, partyId: PARTY_B.toLowerCase() })
-  assert.ok(state.currentPartyId === PARTY_B.toLowerCase() && state.executed.findIndex((query) => query.includes('for share')) < state.executed.findIndex((query) => query.includes('select id, party_id from users')))
-  const audit = state.committed.find((t) => t.includes('insert into audit_log'))
-  assert.ok(audit, 'link audit committed')
+test("valid link audits exact before/after, reason, attestation, and kind/role signals", async () => {
+  reset();
+  const response = await post(
+    validLink({ partyId: PARTY_B, expectedPartyId: null, reason: "Link Beta as approver" }),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    userId: TARGET_ID,
+    partyId: PARTY_B.toLowerCase(),
+  });
+  assert.ok(
+    state.currentPartyId === PARTY_B.toLowerCase() &&
+      state.executed.findIndex((query) => query.includes("for share")) <
+        state.executed.findIndex((query) => query.includes("select id, party_id from users")),
+  );
+  const audit = state.committed.find((t) => t.includes("insert into audit_log"));
+  assert.ok(audit, "link audit committed");
   // Exact before/after pair, reason, attestation, and signals (kind=company
   // with employee role proves kind is recorded, never used as proof).
-  assert.match(audit, /user-party-linked/)
-  assert.match(audit, new RegExp(PARTY_B.toLowerCase()))
-  assert.match(audit, /Link Beta as approver/)
-  assert.match(audit, /attestation/)
-  assert.match(audit, /Beta Corp/)
-  assert.match(audit, /employee/)
-  assert.match(audit, new RegExp(ACTOR_ID.toLowerCase()))
-})
+  assert.match(audit, /user-party-linked/);
+  assert.match(audit, new RegExp(PARTY_B.toLowerCase()));
+  assert.match(audit, /Link Beta as approver/);
+  assert.match(audit, /attestation/);
+  assert.match(audit, /Beta Corp/);
+  assert.match(audit, /employee/);
+  assert.match(audit, new RegExp(ACTOR_ID.toLowerCase()));
+});
 
-test('valid unlink and change audit with precise row counts', async () => {
-  reset()
-  state.currentPartyId = PARTY_A
-  const unlink = await post(validLink({ partyId: null, expectedPartyId: PARTY_A, reason: 'Left the org' }))
-  assert.equal(unlink.status, 200)
-  assert.deepEqual(await unlink.json(), { ok: true, userId: TARGET_ID, partyId: null })
-  assert.equal(state.currentPartyId, null)
-  const unlinkAudit = state.committed.find((t) => t.includes('insert into audit_log'))
-  assert.ok(unlinkAudit)
-  assert.match(unlinkAudit, /user-party-unlinked/)
-  assert.match(unlinkAudit, /Left the org/)
+test("valid unlink and change audit with precise row counts", async () => {
+  reset();
+  state.currentPartyId = PARTY_A;
+  const unlink = await post(
+    validLink({ partyId: null, expectedPartyId: PARTY_A, reason: "Left the org" }),
+  );
+  assert.equal(unlink.status, 200);
+  assert.deepEqual(await unlink.json(), { ok: true, userId: TARGET_ID, partyId: null });
+  assert.equal(state.currentPartyId, null);
+  const unlinkAudit = state.committed.find((t) => t.includes("insert into audit_log"));
+  assert.ok(unlinkAudit);
+  assert.match(unlinkAudit, /user-party-unlinked/);
+  assert.match(unlinkAudit, /Left the org/);
 
-  state.committed = []
-  state.executed = []
-  state.currentPartyId = PARTY_A
+  state.committed = [];
+  state.executed = [];
+  state.currentPartyId = PARTY_A;
   const change = await post(
-    validLink({ partyId: PARTY_B, expectedPartyId: PARTY_A, reason: 'Corrected identity' }),
-  )
-  assert.equal(change.status, 200)
-  assert.equal(state.currentPartyId, PARTY_B.toLowerCase())
-  const changeAudit = state.committed.find((t) => t.includes('insert into audit_log'))
-  assert.ok(changeAudit)
-  assert.match(changeAudit, /user-party-changed/)
-})
+    validLink({ partyId: PARTY_B, expectedPartyId: PARTY_A, reason: "Corrected identity" }),
+  );
+  assert.equal(change.status, 200);
+  assert.equal(state.currentPartyId, PARTY_B.toLowerCase());
+  const changeAudit = state.committed.find((t) => t.includes("insert into audit_log"));
+  assert.ok(changeAudit);
+  assert.match(changeAudit, /user-party-changed/);
+});
 
-test('concurrent writers from the same snapshot: only one succeeds', async () => {
-  reset()
-  const first = await post(validLink({ partyId: PARTY_A, expectedPartyId: null, reason: 'First writer' }))
-  assert.equal(first.status, 200)
-  const second = await post(validLink({ partyId: PARTY_B, expectedPartyId: null, reason: 'Second writer' }))
-  assert.equal(second.status, 409)
-  assert.equal(state.currentPartyId, PARTY_A.toLowerCase())
+test("concurrent writers from the same snapshot: only one succeeds", async () => {
+  reset();
+  const first = await post(
+    validLink({ partyId: PARTY_A, expectedPartyId: null, reason: "First writer" }),
+  );
+  assert.equal(first.status, 200);
+  const second = await post(
+    validLink({ partyId: PARTY_B, expectedPartyId: null, reason: "Second writer" }),
+  );
+  assert.equal(second.status, 409);
+  assert.equal(state.currentPartyId, PARTY_A.toLowerCase());
   assert.equal(
-    state.committed.filter((t) => t.includes('update users set party_id')).length,
+    state.committed.filter((t) => t.includes("update users set party_id")).length,
     1,
-    'exactly one link update committed',
-  )
+    "exactly one link update committed",
+  );
   assert.equal(
-    state.committed.filter((t) => t.includes('insert into audit_log')).length,
+    state.committed.filter((t) => t.includes("insert into audit_log")).length,
     1,
-    'exactly one link audit committed',
-  )
-})
+    "exactly one link audit committed",
+  );
+});
 
-test('a failed link audit rolls back the party update', async () => {
-  reset()
-  state.failOnText = 'insert into audit_log'
-  await assert.rejects(() => post(validLink()), /forced storage failure/)
-  assert.equal(state.currentPartyId, null, 'the link did not survive a failed audit')
+test("a failed link audit rolls back the party update", async () => {
+  reset();
+  state.failOnText = "insert into audit_log";
+  await assert.rejects(() => post(validLink()), /forced storage failure/);
+  assert.equal(state.currentPartyId, null, "the link did not survive a failed audit");
   assert.equal(
-    state.committed.some((t) => t.includes('update users set party_id')),
+    state.committed.some((t) => t.includes("update users set party_id")),
     false,
-  )
+  );
   assert.equal(
-    state.committed.some((t) => t.includes('insert into audit_log')),
+    state.committed.some((t) => t.includes("insert into audit_log")),
     false,
-  )
-})
+  );
+});
 
-test('person search is per-query bounded and finds people beyond the first page', async () => {
-  reset()
+test("person search is per-query bounded and finds people beyond the first page", async () => {
+  reset();
   // Seed 30 active people beyond any fixed first-N window; a bounded
   // per-query page with a selective q must still find the later person.
   for (let i = 0; i < 30; i += 1) {
-    const id = `00000000-0000-4000-8000-00000000c${String(i).padStart(3, '0')}`.slice(0, 36)
+    const id = `00000000-0000-4000-8000-00000000c${String(i).padStart(3, "0")}`.slice(0, 36);
     state.parties[id] = {
-      kind: 'person',
-      displayName: `Person ${String(i).padStart(2, '0')} Zed`,
+      kind: "person",
+      displayName: `Person ${String(i).padStart(2, "0")} Zed`,
       isActive: true,
       roles: [],
       orgId: ORG_ID,
       subsidiaryId: null,
-    }
+    };
   }
-  state.parties['00000000-0000-4000-8000-00000000c999'] = {
-    kind: 'person',
-    displayName: 'Zelda Zulu',
+  state.parties["00000000-0000-4000-8000-00000000c999"] = {
+    kind: "person",
+    displayName: "Zelda Zulu",
     isActive: true,
     roles: [],
     orgId: ORG_ID,
     subsidiaryId: null,
-  }
-  const response = await get('/api/admin/users?q=zelda&limit=5')
-  assert.equal(response.status, 200)
+  };
+  const response = await get("/api/admin/users?q=zelda&limit=5");
+  assert.equal(response.status, 200);
   const payload = (await response.json()) as {
-    options: { value: string; label: string }[]
-    selected: unknown
-  }
-  assert.ok(payload.options.some((o) => o.label === 'Zelda Zulu'), 'selective query finds the later person')
-  assert.ok(payload.options.length <= 5, 'per-query page stays bounded')
-  const asked = state.executed.find((t) => t.includes('from parties p'))
-  assert.ok(asked && /ilike/i.test(asked) && /limit/i.test(asked), 'search filters per query with a bounded limit')
-})
+    options: { value: string; label: string }[];
+    selected: unknown;
+  };
+  assert.ok(
+    payload.options.some((o) => o.label === "Zelda Zulu"),
+    "selective query finds the later person",
+  );
+  assert.ok(payload.options.length <= 5, "per-query page stays bounded");
+  const asked = state.executed.find((t) => t.includes("from parties p"));
+  assert.ok(
+    asked && /ilike/i.test(asked) && /limit/i.test(asked),
+    "search filters per query with a bounded limit",
+  );
+});
 
-test('person search preserves the selected option across queries', async () => {
-  reset()
-  const response = await get(`/api/admin/users?q=zzz-no-match&limit=5&include=${PARTY_A}`)
-  assert.equal(response.status, 200)
+test("person search preserves the selected option across queries", async () => {
+  reset();
+  const response = await get(`/api/admin/users?q=zzz-no-match&limit=5&include=${PARTY_A}`);
+  assert.equal(response.status, 200);
   const payload = (await response.json()) as {
-    options: unknown[]
-    selected: { value: string; label: string } | null
-  }
-  assert.equal(payload.options.length, 0)
-  assert.ok(payload.selected, 'selected option is preserved when the page does not contain it')
-  assert.equal(payload.selected?.value, PARTY_A.toLowerCase())
+    options: unknown[];
+    selected: { value: string; label: string } | null;
+  };
+  assert.equal(payload.options.length, 0);
+  assert.ok(payload.selected, "selected option is preserved when the page does not contain it");
+  assert.equal(payload.selected?.value, PARTY_A.toLowerCase());
 
-  const crossOrg = await get(`/api/admin/users?q=&limit=5&include=${OTHER_ORG_PARTY}`)
-  assert.equal(crossOrg.status, 200)
-  const crossPayload = (await crossOrg.json()) as { selected: unknown }
-  assert.equal(crossPayload.selected, null, 'cross-org include discloses nothing')
-})
+  const crossOrg = await get(`/api/admin/users?q=&limit=5&include=${OTHER_ORG_PARTY}`);
+  assert.equal(crossOrg.status, 200);
+  const crossPayload = (await crossOrg.json()) as { selected: unknown };
+  assert.equal(crossPayload.selected, null, "cross-org include discloses nothing");
+});
 
 function scopedAuthz(): void {
   state.authz = {
     user: { orgId: ORG_ID, id: ACTOR_ID, isSuperAdmin: false },
-    permissions: new Set(['admin.users.manage']),
+    permissions: new Set(["admin.users.manage"]),
     allowedSubsidiaryIds: new Set([SUB_A]),
-  }
+  };
 }
 
-test('a subsidiary-scoped admin enumerates only their lens and shared parties', async () => {
-  reset()
-  scopedAuthz()
-  const response = await get('/api/admin/users?q=&limit=50')
-  assert.equal(response.status, 200)
-  const payload = (await response.json()) as { options: { value: string; label: string }[] }
-  const labels = payload.options.map((o) => o.label)
-  assert.ok(labels.includes('Ada Person'), 'in-scope party is enumerated')
-  assert.ok(labels.includes('Shared Person'), 'org-wide shared party stays visible')
-  assert.ok(!labels.includes('Beta Corp'), 'out-of-scope party is not enumerated')
-})
+test("a subsidiary-scoped admin enumerates only their lens and shared parties", async () => {
+  reset();
+  scopedAuthz();
+  const response = await get("/api/admin/users?q=&limit=50");
+  assert.equal(response.status, 200);
+  const payload = (await response.json()) as { options: { value: string; label: string }[] };
+  const labels = payload.options.map((o) => o.label);
+  assert.ok(labels.includes("Ada Person"), "in-scope party is enumerated");
+  assert.ok(labels.includes("Shared Person"), "org-wide shared party stays visible");
+  assert.ok(!labels.includes("Beta Corp"), "out-of-scope party is not enumerated");
+});
 
-test('a subsidiary-scoped include exposes an out-of-scope identity as nothing', async () => {
-  reset()
-  scopedAuthz()
-  const denied = await get(`/api/admin/users?q=zzz-no-match&limit=5&include=${PARTY_B}`)
-  assert.equal(denied.status, 200)
-  assert.equal((await denied.json() as { selected: unknown }).selected, null)
+test("a subsidiary-scoped include exposes an out-of-scope identity as nothing", async () => {
+  reset();
+  scopedAuthz();
+  const denied = await get(`/api/admin/users?q=zzz-no-match&limit=5&include=${PARTY_B}`);
+  assert.equal(denied.status, 200);
+  assert.equal(((await denied.json()) as { selected: unknown }).selected, null);
 
-  const allowed = await get(`/api/admin/users?q=zzz-no-match&limit=5&include=${PARTY_A}`)
-  assert.equal(allowed.status, 200)
-  assert.equal((await allowed.json() as { selected: { value: string } | null }).selected?.value, PARTY_A.toLowerCase())
-})
+  const allowed = await get(`/api/admin/users?q=zzz-no-match&limit=5&include=${PARTY_A}`);
+  assert.equal(allowed.status, 200);
+  assert.equal(
+    ((await allowed.json()) as { selected: { value: string } | null }).selected?.value,
+    PARTY_A.toLowerCase(),
+  );
+});
 
-test('linking an out-of-scope party answers exactly like a missing one', async () => {
-  reset()
-  scopedAuthz()
-  const denied = await post(validLink({ partyId: PARTY_B }))
-  assert.equal(denied.status, 404)
-  assert.deepEqual(await denied.json(), { error: 'party not found' })
-  assert.equal(state.currentPartyId, null)
-  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
-  assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
+test("linking an out-of-scope party answers exactly like a missing one", async () => {
+  reset();
+  scopedAuthz();
+  const denied = await post(validLink({ partyId: PARTY_B }));
+  assert.equal(denied.status, 404);
+  assert.deepEqual(await denied.json(), { error: "party not found" });
+  assert.equal(state.currentPartyId, null);
+  assert.equal(
+    state.committed.some((t) => t.includes("update users set party_id")),
+    false,
+  );
+  assert.equal(
+    state.committed.some((t) => t.includes("insert into audit_log")),
+    false,
+  );
 
-  const allowed = await post(validLink({ partyId: PARTY_A }))
-  assert.equal(allowed.status, 200)
-  assert.equal(state.currentPartyId, PARTY_A.toLowerCase())
-})
+  const allowed = await post(validLink({ partyId: PARTY_A }));
+  assert.equal(allowed.status, 200);
+  assert.equal(state.currentPartyId, PARTY_A.toLowerCase());
+});

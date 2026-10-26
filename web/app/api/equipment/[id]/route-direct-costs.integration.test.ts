@@ -1,72 +1,93 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __equipmentConcurrencyState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __equipmentConcurrencyState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
     // The route factory resolves the gate by @/ alias at request time; serve
     // the same intended session for its literal as for the relative import.
-    if (specifier === '../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
+    if (specifier === "../../../../lib/feature-gates" || specifier === "@/lib/feature-gates")
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__equipmentConcurrencyState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { GET, PATCH } = await import('./route.ts')
+});
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { GET, PATCH } = await import("./route.ts");
 
-async function fixture(status = 'draft') {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
-  const unitId = (await db.execute<{ id: string }>(sql`
+async function fixture(status = "draft") {
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
+  const unitId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into equipment_units (org_id, name, unit_number, status, subsidiary_id, purchase_price)
     values (${org.orgId}, 'Test Unit', 'TEST-001', ${status}, ${org.subsidiaryId}, '100.0000')
-    returning id`, 'objects'))[0]!.id
-  return { org, unitId }
+    returning id`,
+      "objects",
+    )
+  )[0]!.id;
+  return { org, unitId };
 }
 
-test('reversed direct costs net to zero instead of hiding behind a positive filter', async () => {
-  const { org, unitId } = await fixture()
+test("reversed direct costs net to zero instead of hiding behind a positive filter", async () => {
+  const { org, unitId } = await fixture();
   try {
     for (const [entryId, costAmount] of [
-      [randomUUID(), '100.0000'],
-      [randomUUID(), '-100.0000'],
+      [randomUUID(), "100.0000"],
+      [randomUUID(), "-100.0000"],
     ] as const) {
-      const entryNumber = `EQ-DIRECT-${costAmount.startsWith('-') ? 'REV' : 'EXP'}`
+      const entryNumber = `EQ-DIRECT-${costAmount.startsWith("-") ? "REV" : "EXP"}`;
       await db.execute(sql`insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
-        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entryNumber}, ${org.date}, ${org.periodId}, 'direct cost', 'draft', 'manual')`)
-      const contra = costAmount.startsWith('-') ? '100.0000' : '-100.0000'
+        values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entryNumber}, ${org.date}, ${org.periodId}, 'direct cost', 'draft', 'manual')`);
+      const contra = costAmount.startsWith("-") ? "100.0000" : "-100.0000";
       await db.execute(sql`insert into journal_lines
         (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, equipment_unit_id)
         values (${org.orgId}, ${entryId}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${costAmount}, 'CAD', ${costAmount}, ${unitId}),
-               (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing}, ${org.subsidiaryId}, ${contra}, 'CAD', ${contra}, null)`)
-      await db.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`)
+               (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing}, ${org.subsidiaryId}, ${contra}, 'CAD', ${contra}, null)`);
+      await db.execute(
+        sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`,
+      );
     }
     const response = await withOrgContext(state.orgId, () =>
-      GET(new Request(`http://equipment.test/api/equipment/${unitId}`), { params: Promise.resolve({ id: unitId }) }),
-    )
-    assert.equal(response.status, 200)
-    const body = (await response.json()) as { metrics: { direct_costs: string } }
-    assert.equal(body.metrics.direct_costs, '0.0000')
-    const destinationId = randomUUID()
-    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${destinationId},${org.orgId},${org.subsidiaryId},'Destination','CAD','CA')`)
-    const moved = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://equipment.test/api/equipment/${unitId}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subsidiaryId: destinationId, revision: 0 }) }),
-      { params: Promise.resolve({ id: unitId }) },
-    ))
-    assert.equal(moved.status, 422)
+      GET(new Request(`http://equipment.test/api/equipment/${unitId}`), {
+        params: Promise.resolve({ id: unitId }),
+      }),
+    );
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { metrics: { direct_costs: string } };
+    assert.equal(body.metrics.direct_costs, "0.0000");
+    const destinationId = randomUUID();
+    await db.execute(
+      sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${destinationId},${org.orgId},${org.subsidiaryId},'Destination','CAD','CA')`,
+    );
+    const moved = await withOrgContext(state.orgId, () =>
+      PATCH(
+        new Request(`http://equipment.test/api/equipment/${unitId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ subsidiaryId: destinationId, revision: 0 }),
+        }),
+        { params: Promise.resolve({ id: unitId }) },
+      ),
+    );
+    assert.equal(moved.status, 422);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

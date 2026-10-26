@@ -3,11 +3,7 @@
  * with its remedy in the message — never swallowed, never a bare status.
  */
 export type RecruitingErrorCode =
-  | "INVALID_INPUT"
-  | "NOT_FOUND"
-  | "BAD_STATE"
-  | "STALE_REVISION"
-  | "REFUSED";
+  "INVALID_INPUT" | "NOT_FOUND" | "BAD_STATE" | "STALE_REVISION" | "REFUSED";
 
 export class RecruitingError extends Error {
   readonly code: RecruitingErrorCode;

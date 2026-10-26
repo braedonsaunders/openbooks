@@ -1,8 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  requireHrmCertificationsManage,
-  requireHrmCertificationsRead,
-} from "../authorization.ts";
+import { requireHrmCertificationsManage, requireHrmCertificationsRead } from "../authorization.ts";
 import { HrmQualificationError } from "./errors.ts";
 import {
   assertQualificationsFeature,
@@ -78,11 +75,17 @@ function toType(row: TypeRow): QualificationType {
 
 const TYPE_COLS = sql`id, code, name, category, issuing_body, validity_months, renewal_lead_days, requires_evidence, is_active`;
 
-export async function loadSettings(exec: SqlExecutor, orgId: string): Promise<QualificationSettings> {
-  const rows = await exec.execute<{ extra_categories: string[]; alert_lead_days: number[] }>(sql`
+export async function loadSettings(
+  exec: SqlExecutor,
+  orgId: string,
+): Promise<QualificationSettings> {
+  const rows = await exec.execute<{ extra_categories: string[]; alert_lead_days: number[] }>(
+    sql`
     select extra_categories, alert_lead_days from hrm_qualification_settings
      where org_id = ${orgId}::uuid
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = rows[0];
   if (!row) return { extraCategories: [], alertLeadDays: [...DEFAULT_ALERT_LEAD_DAYS] };
   return {
@@ -113,12 +116,15 @@ export async function listQualificationTypes(
   requireId(input.actorId, "actorId");
   await requireHrmCertificationsRead(exec, orgId, input.actorId);
   await assertQualificationsFeature(exec, orgId, "Qualification types");
-  const rows = await exec.execute<TypeRow>(sql`
+  const rows = await exec.execute<TypeRow>(
+    sql`
     select ${TYPE_COLS} from hrm_qualification_types
      where org_id = ${orgId}::uuid
        and (${input.includeInactive === true}::boolean or is_active)
      order by code
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map(toType);
 }
 
@@ -155,10 +161,13 @@ export async function createQualificationType(
     }
     const renewalLeadDays = input.renewalLeadDays ?? 30;
     if (!Number.isInteger(renewalLeadDays) || renewalLeadDays < 0) {
-      throw new HrmQualificationError("renewal_lead_days must be a non-negative whole number of days.");
+      throw new HrmQualificationError(
+        "renewal_lead_days must be a non-negative whole number of days.",
+      );
     }
     try {
-      const rows = await tx.execute<TypeRow>(sql`
+      const rows = await tx.execute<TypeRow>(
+        sql`
         insert into hrm_qualification_types
           (org_id, code, name, category, issuing_body, validity_months,
            renewal_lead_days, requires_evidence, created_by, updated_by)
@@ -167,9 +176,14 @@ export async function createQualificationType(
                 ${renewalLeadDays}, ${input.requiresEvidence ?? false}::boolean,
                 ${actorId}::uuid, ${actorId}::uuid)
         returning ${TYPE_COLS}
-      `, "objects");
+      `,
+        "objects",
+      );
       const created = rows[0];
-      if (!created) throw new HrmQualificationError("The qualification type was not stored — no row was written; retry the action.");
+      if (!created)
+        throw new HrmQualificationError(
+          "The qualification type was not stored — no row was written; retry the action.",
+        );
       return toType(created);
     } catch (error) {
       if (error instanceof Error && /duplicate key|unique/i.test(error.message)) {
@@ -211,7 +225,8 @@ export async function updateQualificationType(
     await requireHrmCertificationsManage(tx, orgId, actorId);
     await assertQualificationsFeature(tx, orgId, "Qualification types");
     const name = input.name === undefined ? undefined : requireText(input.name, "name");
-    const category = input.category === undefined ? undefined : requireText(input.category, "category");
+    const category =
+      input.category === undefined ? undefined : requireText(input.category, "category");
     if (category !== undefined) await assertCategoryDeclared(tx, orgId, category);
     if (input.validityMonths !== undefined) {
       const v = input.validityMonths;
@@ -224,10 +239,13 @@ export async function updateQualificationType(
     if (input.renewalLeadDays !== undefined) {
       const l = input.renewalLeadDays;
       if (!Number.isInteger(l) || l < 0) {
-        throw new HrmQualificationError("renewal_lead_days must be a non-negative whole number of days.");
+        throw new HrmQualificationError(
+          "renewal_lead_days must be a non-negative whole number of days.",
+        );
       }
     }
-    const rows = await tx.execute<TypeRow>(sql`
+    const rows = await tx.execute<TypeRow>(
+      sql`
       update hrm_qualification_types set
         name = coalesce(${name ?? null}, name),
         category = coalesce(${category ?? null}, category),
@@ -243,7 +261,9 @@ export async function updateQualificationType(
         updated_by = ${actorId}::uuid, updated_at = now()
        where org_id = ${orgId}::uuid and id = ${typeId}::uuid
        returning ${TYPE_COLS}
-    `, "objects");
+    `,
+      "objects",
+    );
     const updated = rows[0];
     // A write that matches zero rows is a failure, not a success: under
     // RLS an unscoped update silently matches nothing and reports success.
@@ -310,11 +330,15 @@ export async function setAlertSchedule(
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   if (input.leadDays.length === 0) {
-    throw new HrmQualificationError("The alert schedule needs at least one lead day — expiry alerts with no schedule would silently never fire.");
+    throw new HrmQualificationError(
+      "The alert schedule needs at least one lead day — expiry alerts with no schedule would silently never fire.",
+    );
   }
   for (const d of input.leadDays) {
     if (!Number.isInteger(d) || d <= 0) {
-      throw new HrmQualificationError("Every alert lead day must be a positive whole number of days before expiry.");
+      throw new HrmQualificationError(
+        "Every alert lead day must be a positive whole number of days before expiry.",
+      );
     }
   }
   const schedule = [...new Set(input.leadDays)].sort((a, b) => b - a);

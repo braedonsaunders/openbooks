@@ -3,7 +3,12 @@ import test from "node:test";
 
 // jsdom first: the workspace reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/shipping?tab=adjustments", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/shipping?tab=adjustments",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 registerHooks({
@@ -31,12 +36,17 @@ function tick(): Promise<void> {
 }
 
 function setTextarea(textarea: HTMLTextAreaElement, value: string): void {
-  const native = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+  const native = Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype,
+    "value",
+  )?.set;
   native?.call(textarea, value);
   textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
 
-async function mount(calls: { url: string; body?: unknown }[]): Promise<{ host: HTMLDivElement; root: ReturnType<typeof createRoot>; restore: () => void }> {
+async function mount(
+  calls: { url: string; body?: unknown }[],
+): Promise<{ host: HTMLDivElement; root: ReturnType<typeof createRoot>; restore: () => void }> {
   const prior = globalThis.fetch;
   const restore = () => {
     globalThis.fetch = prior;
@@ -52,7 +62,16 @@ async function mount(calls: { url: string; body?: unknown }[]): Promise<{ host: 
     calls.push({ url, body });
     if (url.endsWith("/api/shipping/accounts")) {
       return Response.json(
-        { accounts: [{ id: "a0000000-0000-0000-0000-000000000001", provider: "easypost", displayName: "Main", status: "active" }] },
+        {
+          accounts: [
+            {
+              id: "a0000000-0000-0000-0000-000000000001",
+              provider: "easypost",
+              displayName: "Main",
+              status: "active",
+            },
+          ],
+        },
         { status: 200 },
       );
     }
@@ -72,7 +91,9 @@ async function mount(calls: { url: string; body?: unknown }[]): Promise<{ host: 
     );
     await tick();
   });
-  await act(async () => { await tick(); });
+  await act(async () => {
+    await tick();
+  });
   return {
     host,
     root,
@@ -80,7 +101,11 @@ async function mount(calls: { url: string; body?: unknown }[]): Promise<{ host: 
   };
 }
 
-async function unmount(host: HTMLDivElement, root: ReturnType<typeof createRoot>, restore: () => void): Promise<void> {
+async function unmount(
+  host: HTMLDivElement,
+  root: ReturnType<typeof createRoot>,
+  restore: () => void,
+): Promise<void> {
   await act(async () => {
     root.unmount();
   });
@@ -97,12 +122,30 @@ test("a pasted export previews its rows and imports them against the account", a
   const textarea = host.querySelector("textarea") as HTMLTextAreaElement;
   assert.ok(textarea, "the paste box renders once accounts load");
   await act(async () => {
-    setTextarea(textarea, JSON.stringify([
-      { providerAdjustmentId: "adj_1", providerShipmentId: "shp_1", kind: "weight_correction", amount: "2.50", currency: "USD", reason: "reweigh" },
-      { providerAdjustmentId: "adj_2", providerShipmentId: "shp_2", kind: "fuel", amount: "1.10", currency: "USD" },
-    ]));
+    setTextarea(
+      textarea,
+      JSON.stringify([
+        {
+          providerAdjustmentId: "adj_1",
+          providerShipmentId: "shp_1",
+          kind: "weight_correction",
+          amount: "2.50",
+          currency: "USD",
+          reason: "reweigh",
+        },
+        {
+          providerAdjustmentId: "adj_2",
+          providerShipmentId: "shp_2",
+          kind: "fuel",
+          amount: "1.10",
+          currency: "USD",
+        },
+      ]),
+    );
   });
-  const previewButton = [...host.querySelectorAll("button")].find((b) => b.textContent === "Preview");
+  const previewButton = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent === "Preview",
+  );
   assert.ok(previewButton, "the preview action is offered");
   await act(async () => {
     previewButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -111,7 +154,9 @@ test("a pasted export previews its rows and imports them against the account", a
   const body = host.textContent ?? "";
   assert.ok(body.includes("adj_1"), "parsed rows preview with their provider ids");
   assert.ok(body.includes("Weight correction"), "kinds render with their labels");
-  const importButton = [...host.querySelectorAll("button")].find((b) => (b.textContent ?? "").startsWith("Import 2"));
+  const importButton = [...host.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").startsWith("Import 2"),
+  );
   assert.ok(importButton, "the import action names its row count");
   await act(async () => {
     importButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -122,11 +167,31 @@ test("a pasted export previews its rows and imports them against the account", a
   assert.deepEqual(posted?.body, {
     accountId: "a0000000-0000-0000-0000-000000000001",
     items: [
-      { providerAdjustmentId: "adj_1", providerShipmentId: "shp_1", kind: "weight_correction", amount: "2.50", currency: "USD", reason: "reweigh", occurredAt: null },
-      { providerAdjustmentId: "adj_2", providerShipmentId: "shp_2", kind: "fuel", amount: "1.10", currency: "USD", reason: null, occurredAt: null },
+      {
+        providerAdjustmentId: "adj_1",
+        providerShipmentId: "shp_1",
+        kind: "weight_correction",
+        amount: "2.50",
+        currency: "USD",
+        reason: "reweigh",
+        occurredAt: null,
+      },
+      {
+        providerAdjustmentId: "adj_2",
+        providerShipmentId: "shp_2",
+        kind: "fuel",
+        amount: "1.10",
+        currency: "USD",
+        reason: null,
+        occurredAt: null,
+      },
     ],
   });
-  assert.match(host.textContent ?? "", /Imported 2.*skipped 1/i, "the result names imported and skipped rows");
+  assert.match(
+    host.textContent ?? "",
+    /Imported 2.*skipped 1/i,
+    "the result names imported and skipped rows",
+  );
 });
 
 test("an unusable paste refuses by name before anything posts", async (t) => {
@@ -139,12 +204,17 @@ test("an unusable paste refuses by name before anything posts", async (t) => {
   await act(async () => {
     setTextarea(textarea, "not json at all");
   });
-  const previewButton = [...host.querySelectorAll("button")].find((b) => b.textContent === "Preview");
+  const previewButton = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent === "Preview",
+  );
   assert.ok(previewButton);
   await act(async () => {
     previewButton.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   });
   await tick();
   assert.match(host.textContent ?? "", /not valid JSON/, "the paste error names the fix");
-  assert.ok(!calls.some((call) => call.url.endsWith("/api/shipping/adjustments")), "nothing posts on a refused paste");
+  assert.ok(
+    !calls.some((call) => call.url.endsWith("/api/shipping/adjustments")),
+    "nothing posts on a refused paste",
+  );
 });

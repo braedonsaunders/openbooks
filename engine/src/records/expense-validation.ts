@@ -27,23 +27,33 @@ export async function assertExpenseSettlement(
   document: { kind: string; orgId: string; id: string; paymentCardId: string | null },
 ): Promise<void> {
   if (document.kind !== "expense_report") return;
-  const funded = await runner.execute<{ one: number }>(sql`
+  const funded = await runner.execute<{ one: number }>(
+    sql`
     select 1 as one from document_lines
      where org_id = ${document.orgId} and document_id = ${document.id}
        and settlement_type in ('company_paid', 'personal')
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   if (!funded[0]) return;
   if (!document.paymentCardId) {
-    throw new ExpenseValidationError("company-paid and personal expense lines require a corporate card on the report");
+    throw new ExpenseValidationError(
+      "company-paid and personal expense lines require a corporate card on the report",
+    );
   }
   // No is_active gate: deactivating a card must not brick an in-flight report
   // (data entry already restricts the picker to active cards; the cardRule
   // posting path likewise books the liability without an active check).
-  const card = await runner.execute<{ id: string }>(sql`
+  const card = await runner.execute<{ id: string }>(
+    sql`
     select id from payment_cards
-     where org_id = ${document.orgId} and id = ${document.paymentCardId}`, "objects");
+     where org_id = ${document.orgId} and id = ${document.paymentCardId}`,
+    "objects",
+  );
   if (!card[0]) {
-    throw new ExpenseValidationError("the report's corporate card was not found in this organization");
+    throw new ExpenseValidationError(
+      "the report's corporate card was not found in this organization",
+    );
   }
 }
 
@@ -56,16 +66,24 @@ export async function assertExpenseEmployee(
   document: { kind: string; orgId: string; partyId: string | null },
 ): Promise<void> {
   if (document.kind !== "expense_report") return;
-  if (!document.partyId) throw new ExpenseValidationError("an expense report requires an employee before submission or posting");
-  const employee = await runner.execute<{ id: string }>(sql`
+  if (!document.partyId)
+    throw new ExpenseValidationError(
+      "an expense report requires an employee before submission or posting",
+    );
+  const employee = await runner.execute<{ id: string }>(
+    sql`
     select p.id from parties p
      where p.org_id = ${document.orgId} and p.id = ${document.partyId}
        and exists (
          select 1 from employee_roles er
           where er.org_id = p.org_id and er.party_id = p.id
        )
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!employee[0]) {
-    throw new ExpenseValidationError("an expense report requires an employee in this organization before submission or posting");
+    throw new ExpenseValidationError(
+      "an expense report requires an employee in this organization before submission or posting",
+    );
   }
 }

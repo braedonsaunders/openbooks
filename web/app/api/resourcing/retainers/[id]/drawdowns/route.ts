@@ -22,9 +22,10 @@ export const POST = defineRoute({
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       retainerId: params.id,
     };
-    const result = "amount" in body
-      ? await draftFeeDrawdown({ ...input, sunday: body.sunday, rawAmount: body.amount })
-      : await draftHoursDrawdown({ ...input, sunday: body.sunday });
+    const result =
+      "amount" in body
+        ? await draftFeeDrawdown({ ...input, sunday: body.sunday, rawAmount: body.amount })
+        : await draftHoursDrawdown({ ...input, sunday: body.sunday });
     return created({ ...result });
   },
 });

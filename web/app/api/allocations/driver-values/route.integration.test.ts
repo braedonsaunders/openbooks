@@ -42,9 +42,11 @@ const hooks = registerHooks({
       return { url: "mock:values-authz", shortCircuit: true };
     }
     if (
-      (specifier.includes("lib/authz") && String(context.parentURL ?? "").includes("/api/allocations/driver-values/")) ||
+      (specifier.includes("lib/authz") &&
+        String(context.parentURL ?? "").includes("/api/allocations/driver-values/")) ||
       (specifier === "@/lib/authz" && String(context.parentURL ?? "").includes("/lib/api/route"))
-    ) return { url: "mock:values-authz", shortCircuit: true };
+    )
+      return { url: "mock:values-authz", shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -61,12 +63,15 @@ const collectionRoute = (await import(collectionUrl)) as typeof import("./route.
 const itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
-
-function authenticate(orgId: string, actorId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null = null): void {
+function authenticate(
+  orgId: string,
+  actorId: string,
+  permissions: string[],
+  allowedSubsidiaryIds: Set<string> | null = null,
+): void {
   routeState.authz = {
     user: { orgId, id: actorId },
     permissions: new Set(permissions),
@@ -118,32 +123,51 @@ test("values grid: add, overlap refused, end-date, onDate read, delete", async (
     const valueId = ((await created.json()) as { value: { id: string; value: string } }).value.id;
 
     const overlap = await collectionRoute.POST(
-      jsonRequest("/api/allocations/driver-values", "POST", { ...base, effectiveFrom: "2026-03-01", value: "1" }),
+      jsonRequest("/api/allocations/driver-values", "POST", {
+        ...base,
+        effectiveFrom: "2026-03-01",
+        value: "1",
+      }),
     );
     assert.equal(overlap.status, 409);
 
     const badDecimal = await collectionRoute.POST(
-      jsonRequest("/api/allocations/driver-values", "POST", { ...base, effectiveFrom: "2027-01-01", value: "1.23456" }),
+      jsonRequest("/api/allocations/driver-values", "POST", {
+        ...base,
+        effectiveFrom: "2027-01-01",
+        value: "1.23456",
+      }),
     );
     assert.equal(badDecimal.status, 400);
 
     const ended = await itemRoute.PATCH(
-      jsonRequest(`/api/allocations/driver-values/${valueId}`, "PATCH", { effectiveTo: "2026-06-30" }),
+      jsonRequest(`/api/allocations/driver-values/${valueId}`, "PATCH", {
+        effectiveTo: "2026-06-30",
+      }),
       { params: Promise.resolve({ id: valueId }) },
     );
     assert.equal(ended.status, 200);
 
     const corrected = await itemRoute.PATCH(
-      jsonRequest(`/api/allocations/driver-values/${valueId}`, "PATCH", { value: "2.75", note: "recount" }),
+      jsonRequest(`/api/allocations/driver-values/${valueId}`, "PATCH", {
+        value: "2.75",
+        note: "recount",
+      }),
       { params: Promise.resolve({ id: valueId }) },
     );
     assert.equal(corrected.status, 200);
-    const correctedBody = (await corrected.json()) as { value: { value: string; note: string | null } };
+    const correctedBody = (await corrected.json()) as {
+      value: { value: string; note: string | null };
+    };
     assert.equal(correctedBody.value.value, "2.7500");
     assert.equal(correctedBody.value.note, "recount");
 
     const second = await collectionRoute.POST(
-      jsonRequest("/api/allocations/driver-values", "POST", { ...base, effectiveFrom: "2026-07-01", value: "4" }),
+      jsonRequest("/api/allocations/driver-values", "POST", {
+        ...base,
+        effectiveFrom: "2026-07-01",
+        value: "4",
+      }),
     );
     assert.equal(second.status, 201);
 
@@ -162,16 +186,30 @@ test("values grid: add, overlap refused, end-date, onDate read, delete", async (
       ((await autumn.json()) as { values: { value: string }[] }).values.map((v) => v.value),
       ["4.0000"],
     );
-    const malformed = await itemRoute.DELETE(jsonRequest("/api/allocations/driver-values/nope", "DELETE"), {
-      params: Promise.resolve({ id: "nope" }),
-    });
+    const malformed = await itemRoute.DELETE(
+      jsonRequest("/api/allocations/driver-values/nope", "DELETE"),
+      {
+        params: Promise.resolve({ id: "nope" }),
+      },
+    );
     assert.equal(malformed.status, 404);
 
-    const deleted = await itemRoute.DELETE(jsonRequest(`/api/allocations/driver-values/${valueId}`, "DELETE"), {
-      params: Promise.resolve({ id: valueId }),
-    });
+    const deleted = await itemRoute.DELETE(
+      jsonRequest(`/api/allocations/driver-values/${valueId}`, "DELETE"),
+      {
+        params: Promise.resolve({ id: valueId }),
+      },
+    );
     assert.equal(deleted.status, 200);
-    authenticate(s.orgId, "restricted-actor", ["allocations.read"], new Set([s.subsidiaryId])); assert.equal((await collectionRoute.GET(jsonRequest(`/api/allocations/driver-values?driverId=${s.driverId}`, "GET"))).status, 403);
+    authenticate(s.orgId, "restricted-actor", ["allocations.read"], new Set([s.subsidiaryId]));
+    assert.equal(
+      (
+        await collectionRoute.GET(
+          jsonRequest(`/api/allocations/driver-values?driverId=${s.driverId}`, "GET"),
+        )
+      ).status,
+      403,
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrg(s.orgId);
@@ -183,7 +221,9 @@ test("values writes need manage; reads 404 with feature off", async () => {
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     authenticate(org.orgId, actorId, ["allocations.read"]);
-    const denied = await collectionRoute.POST(jsonRequest("/api/allocations/driver-values", "POST", {}));
+    const denied = await collectionRoute.POST(
+      jsonRequest("/api/allocations/driver-values", "POST", {}),
+    );
     assert.equal(denied.status, 403);
     const missing = await collectionRoute.GET(
       jsonRequest(`/api/allocations/driver-values?driverId=${randomUUID()}`, "GET"),

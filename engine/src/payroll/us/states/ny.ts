@@ -59,12 +59,14 @@
  */
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
-import {
-  certificateAmount, certificateChoice, certificateCount,
-} from "../../certificates.ts";
+import { certificateAmount, certificateChoice, certificateCount } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 import {
   requireUsWageAllocation,
   type UsStatePayPeriod,
@@ -83,7 +85,12 @@ type NyMarital = "single" | "married";
 type NyPeriod = "daily" | "weekly" | "biweekly" | "semimonthly" | "monthly" | "annual";
 
 const NY_PERIODS: readonly UsStatePayPeriod[] = [
-  "daily", "weekly", "biweekly", "semimonthly", "monthly", "annual",
+  "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "annual",
 ];
 
 /**
@@ -145,9 +152,16 @@ export interface NyYearRates {
     /** The nonresident earnings tax rate on Yonkers-source gross wages. */
     nonresidentRate: string;
     /** Method VII: per-period gross-wage bands and their exclusions. */
-    nonresidentBands: Readonly<Record<NyPeriod, readonly {
-      atLeast: string; butLessThan: string | null; exclusion: string | null;
-    }[]>>;
+    nonresidentBands: Readonly<
+      Record<
+        NyPeriod,
+        readonly {
+          atLeast: string;
+          butLessThan: string | null;
+          exclusion: string | null;
+        }[]
+      >
+    >;
     supplementalResidentRate: string;
     supplementalNonresidentRate: string;
   };
@@ -159,28 +173,172 @@ export interface NyYearRates {
 const NYS_ALLOWANCES: NyAllowanceTables = {
   combined: {
     daily: {
-      single: ["28.45", "32.30", "36.15", "40.00", "43.85", "47.70", "51.55", "55.40", "59.25", "63.10", "66.95"],
-      married: ["30.60", "34.45", "38.30", "42.15", "46.00", "49.85", "53.70", "57.55", "61.40", "65.25", "69.10"],
+      single: [
+        "28.45",
+        "32.30",
+        "36.15",
+        "40.00",
+        "43.85",
+        "47.70",
+        "51.55",
+        "55.40",
+        "59.25",
+        "63.10",
+        "66.95",
+      ],
+      married: [
+        "30.60",
+        "34.45",
+        "38.30",
+        "42.15",
+        "46.00",
+        "49.85",
+        "53.70",
+        "57.55",
+        "61.40",
+        "65.25",
+        "69.10",
+      ],
     },
     weekly: {
-      single: ["142.30", "161.55", "180.80", "200.05", "219.30", "238.55", "257.80", "277.05", "296.30", "315.55", "334.80"],
-      married: ["152.90", "172.15", "191.40", "210.65", "229.90", "249.15", "268.40", "287.65", "306.90", "326.15", "345.40"],
+      single: [
+        "142.30",
+        "161.55",
+        "180.80",
+        "200.05",
+        "219.30",
+        "238.55",
+        "257.80",
+        "277.05",
+        "296.30",
+        "315.55",
+        "334.80",
+      ],
+      married: [
+        "152.90",
+        "172.15",
+        "191.40",
+        "210.65",
+        "229.90",
+        "249.15",
+        "268.40",
+        "287.65",
+        "306.90",
+        "326.15",
+        "345.40",
+      ],
     },
     biweekly: {
-      single: ["284.60", "323.10", "361.60", "400.10", "438.60", "477.10", "515.60", "554.10", "592.60", "631.10", "669.60"],
-      married: ["305.80", "344.30", "382.80", "421.30", "459.80", "498.30", "536.80", "575.30", "613.80", "652.30", "690.80"],
+      single: [
+        "284.60",
+        "323.10",
+        "361.60",
+        "400.10",
+        "438.60",
+        "477.10",
+        "515.60",
+        "554.10",
+        "592.60",
+        "631.10",
+        "669.60",
+      ],
+      married: [
+        "305.80",
+        "344.30",
+        "382.80",
+        "421.30",
+        "459.80",
+        "498.30",
+        "536.80",
+        "575.30",
+        "613.80",
+        "652.30",
+        "690.80",
+      ],
     },
     semimonthly: {
-      single: ["308.35", "350.00", "391.65", "433.30", "474.95", "516.60", "558.25", "599.90", "641.55", "683.20", "724.85"],
-      married: ["331.25", "372.90", "414.55", "456.20", "497.85", "539.50", "581.15", "622.80", "664.45", "706.10", "747.75"],
+      single: [
+        "308.35",
+        "350.00",
+        "391.65",
+        "433.30",
+        "474.95",
+        "516.60",
+        "558.25",
+        "599.90",
+        "641.55",
+        "683.20",
+        "724.85",
+      ],
+      married: [
+        "331.25",
+        "372.90",
+        "414.55",
+        "456.20",
+        "497.85",
+        "539.50",
+        "581.15",
+        "622.80",
+        "664.45",
+        "706.10",
+        "747.75",
+      ],
     },
     monthly: {
-      single: ["616.70", "700.00", "783.30", "866.60", "949.90", "1033.20", "1116.50", "1199.80", "1283.10", "1366.40", "1449.70"],
-      married: ["662.50", "745.80", "829.10", "912.40", "995.70", "1079.00", "1162.30", "1245.60", "1328.90", "1412.20", "1495.50"],
+      single: [
+        "616.70",
+        "700.00",
+        "783.30",
+        "866.60",
+        "949.90",
+        "1033.20",
+        "1116.50",
+        "1199.80",
+        "1283.10",
+        "1366.40",
+        "1449.70",
+      ],
+      married: [
+        "662.50",
+        "745.80",
+        "829.10",
+        "912.40",
+        "995.70",
+        "1079.00",
+        "1162.30",
+        "1245.60",
+        "1328.90",
+        "1412.20",
+        "1495.50",
+      ],
     },
     annual: {
-      single: ["7400", "8400", "9400", "10400", "11400", "12400", "13400", "14400", "15400", "16400", "17400"],
-      married: ["7950", "8950", "9950", "10950", "11950", "12950", "13950", "14950", "15950", "16950", "17950"],
+      single: [
+        "7400",
+        "8400",
+        "9400",
+        "10400",
+        "11400",
+        "12400",
+        "13400",
+        "14400",
+        "15400",
+        "16400",
+        "17400",
+      ],
+      married: [
+        "7950",
+        "8950",
+        "9950",
+        "10950",
+        "11950",
+        "12950",
+        "13950",
+        "14950",
+        "15950",
+        "16950",
+        "17950",
+      ],
     },
   },
   deduction: {
@@ -192,8 +350,12 @@ const NYS_ALLOWANCES: NyAllowanceTables = {
     annual: { single: "7400", married: "7950" },
   },
   exemption: {
-    daily: "3.85", weekly: "19.25", biweekly: "38.50",
-    semimonthly: "41.65", monthly: "83.30", annual: "1000",
+    daily: "3.85",
+    weekly: "19.25",
+    biweekly: "38.50",
+    semimonthly: "41.65",
+    monthly: "83.30",
+    annual: "1000",
   },
 };
 
@@ -201,8 +363,13 @@ const NYS_ALLOWANCES: NyAllowanceTables = {
 function nyRows(
   lines: readonly (readonly [string, string | null, string, string, string])[],
 ): readonly NyRow[] {
-  return lines.map(([atLeast, butLessThan, subtract, rate, add]) =>
-    ({ atLeast, butLessThan, subtract, rate, add }));
+  return lines.map(([atLeast, butLessThan, subtract, rate, add]) => ({
+    atLeast,
+    butLessThan,
+    subtract,
+    rate,
+    add,
+  }));
 }
 
 // NYS-50-T-NYS (1/26) p. 17 — SINGLE.
@@ -375,28 +542,172 @@ const NYS_MARRIED: Readonly<Record<NyPeriod, readonly NyRow[]>> = {
 const NYC_ALLOWANCES: NyAllowanceTables = {
   combined: {
     daily: {
-      single: ["19.25", "23.10", "26.95", "30.80", "34.65", "38.50", "42.35", "46.20", "50.05", "53.90", "57.75"],
-      married: ["21.15", "25.00", "28.85", "32.70", "36.55", "40.40", "44.25", "48.10", "51.95", "55.80", "59.65"],
+      single: [
+        "19.25",
+        "23.10",
+        "26.95",
+        "30.80",
+        "34.65",
+        "38.50",
+        "42.35",
+        "46.20",
+        "50.05",
+        "53.90",
+        "57.75",
+      ],
+      married: [
+        "21.15",
+        "25.00",
+        "28.85",
+        "32.70",
+        "36.55",
+        "40.40",
+        "44.25",
+        "48.10",
+        "51.95",
+        "55.80",
+        "59.65",
+      ],
     },
     weekly: {
-      single: ["96.15", "115.40", "134.65", "153.90", "173.15", "192.40", "211.65", "230.90", "250.15", "269.40", "288.65"],
-      married: ["105.75", "125.00", "144.25", "163.50", "182.75", "202.00", "221.25", "240.50", "259.75", "279.00", "298.25"],
+      single: [
+        "96.15",
+        "115.40",
+        "134.65",
+        "153.90",
+        "173.15",
+        "192.40",
+        "211.65",
+        "230.90",
+        "250.15",
+        "269.40",
+        "288.65",
+      ],
+      married: [
+        "105.75",
+        "125.00",
+        "144.25",
+        "163.50",
+        "182.75",
+        "202.00",
+        "221.25",
+        "240.50",
+        "259.75",
+        "279.00",
+        "298.25",
+      ],
     },
     biweekly: {
-      single: ["192.30", "230.80", "269.30", "307.80", "346.30", "384.80", "423.30", "461.80", "500.30", "538.80", "577.30"],
-      married: ["211.50", "250.00", "288.50", "327.00", "365.50", "404.00", "442.50", "481.00", "519.50", "558.00", "596.50"],
+      single: [
+        "192.30",
+        "230.80",
+        "269.30",
+        "307.80",
+        "346.30",
+        "384.80",
+        "423.30",
+        "461.80",
+        "500.30",
+        "538.80",
+        "577.30",
+      ],
+      married: [
+        "211.50",
+        "250.00",
+        "288.50",
+        "327.00",
+        "365.50",
+        "404.00",
+        "442.50",
+        "481.00",
+        "519.50",
+        "558.00",
+        "596.50",
+      ],
     },
     semimonthly: {
-      single: ["208.35", "250.00", "291.65", "333.30", "374.95", "416.60", "458.25", "499.90", "541.55", "583.20", "624.85"],
-      married: ["229.15", "270.80", "312.45", "354.10", "395.75", "437.40", "479.05", "520.70", "562.35", "604.00", "645.65"],
+      single: [
+        "208.35",
+        "250.00",
+        "291.65",
+        "333.30",
+        "374.95",
+        "416.60",
+        "458.25",
+        "499.90",
+        "541.55",
+        "583.20",
+        "624.85",
+      ],
+      married: [
+        "229.15",
+        "270.80",
+        "312.45",
+        "354.10",
+        "395.75",
+        "437.40",
+        "479.05",
+        "520.70",
+        "562.35",
+        "604.00",
+        "645.65",
+      ],
     },
     monthly: {
-      single: ["416.70", "500.00", "583.30", "666.60", "749.90", "833.20", "916.50", "999.80", "1083.10", "1166.40", "1249.70"],
-      married: ["458.30", "541.60", "624.90", "708.20", "791.50", "874.80", "958.10", "1041.40", "1124.70", "1208.00", "1291.30"],
+      single: [
+        "416.70",
+        "500.00",
+        "583.30",
+        "666.60",
+        "749.90",
+        "833.20",
+        "916.50",
+        "999.80",
+        "1083.10",
+        "1166.40",
+        "1249.70",
+      ],
+      married: [
+        "458.30",
+        "541.60",
+        "624.90",
+        "708.20",
+        "791.50",
+        "874.80",
+        "958.10",
+        "1041.40",
+        "1124.70",
+        "1208.00",
+        "1291.30",
+      ],
     },
     annual: {
-      single: ["5000", "6000", "7000", "8000", "9000", "10000", "11000", "12000", "13000", "14000", "15000"],
-      married: ["5500", "6500", "7500", "8500", "9500", "10500", "11500", "12500", "13500", "14500", "15500"],
+      single: [
+        "5000",
+        "6000",
+        "7000",
+        "8000",
+        "9000",
+        "10000",
+        "11000",
+        "12000",
+        "13000",
+        "14000",
+        "15000",
+      ],
+      married: [
+        "5500",
+        "6500",
+        "7500",
+        "8500",
+        "9500",
+        "10500",
+        "11500",
+        "12500",
+        "13500",
+        "14500",
+        "15500",
+      ],
     },
   },
   deduction: {
@@ -408,8 +719,12 @@ const NYC_ALLOWANCES: NyAllowanceTables = {
     annual: { single: "5000", married: "5500" },
   },
   exemption: {
-    daily: "3.85", weekly: "19.25", biweekly: "38.50",
-    semimonthly: "41.65", monthly: "83.30", annual: "1000",
+    daily: "3.85",
+    weekly: "19.25",
+    biweekly: "38.50",
+    semimonthly: "41.65",
+    monthly: "83.30",
+    annual: "1000",
   },
 };
 
@@ -567,16 +882,18 @@ const NY_EDITIONS_BY_YEAR: Record<number, NyYearRates> = {
   [NY_RATES_2026.year]: NY_RATES_2026,
 };
 
-export const NY_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "NYS-50-T-NYS / NYS-50-T-NYC / NYS-50-T-Y (1/26)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "NYS Department of Taxation and Finance, NYS-50-T-NYS (1/26) Method II and Method III; "
-    + "NYS-50-T-NYC (1/26) Method II; NYS-50-T-Y (1/26) resident surcharge and Methods VII–VIII",
-  status: "published",
-  region: "NY",
-}];
+export const NY_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "NYS-50-T-NYS / NYS-50-T-NYC / NYS-50-T-Y (1/26)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "NYS Department of Taxation and Finance, NYS-50-T-NYS (1/26) Method II and Method III; " +
+      "NYS-50-T-NYC (1/26) Method II; NYS-50-T-Y (1/26) resident surcharge and Methods VII–VIII",
+    status: "published",
+    region: "NY",
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Shared mechanics
@@ -641,21 +958,27 @@ function applyRow(row: NyRow, net: bigint): bigint {
  * because the Yonkers resident levy is 16.75% OF THIS NUMBER, and recomputing
  * it inside the Yonkers engine would be a second copy of New York's schedules.
  */
-export function nysWithholding(input: {
-  payDate: string;
-  periodsPerYear: number;
-  wages: string;
-  marital: NyMarital;
-  exemptions: number;
-}, ratesOverride?: NyYearRates, context?: StateEngineContext<NyYearRates>): { tax: bigint; factors: Record<string, string> } {
+export function nysWithholding(
+  input: {
+    payDate: string;
+    periodsPerYear: number;
+    wages: string;
+    marital: NyMarital;
+    exemptions: number;
+  },
+  ratesOverride?: NyYearRates,
+  context?: StateEngineContext<NyYearRates>,
+): { tax: bigint; factors: Record<string, string> } {
   const rates = ratesOverride ?? NY_STATE_ENGINE.ratesForPayDate(input.payDate);
   const period = nyPeriodFor(input.periodsPerYear);
   const factors = context?.factors ?? {};
-  const trace = context?.trace ?? ((key: string, value: bigint) => { factors[key] = D(value); });
+  const trace =
+    context?.trace ??
+    ((key: string, value: bigint) => {
+      factors[key] = D(value);
+    });
 
-  const allowance = allowanceAmount(
-    rates.nys.allowances, period, input.marital, input.exemptions,
-  );
+  const allowance = allowanceAmount(rates.nys.allowances, period, input.marital, input.exemptions);
   trace("NYS_ALLOWANCE", allowance);
 
   // Step 1 — net wages. Floored at zero: an allowance larger than the wages
@@ -670,9 +993,8 @@ export function nysWithholding(input: {
   const threshold = U(rates.nys.methodIIIThreshold[input.marital]);
   const table = rates.nys.tables[period][input.marital];
   const terminalMethodII = table[table.length - 1]!;
-  const printedMethodIIIBoundary = terminalMethodII.butLessThan == null
-    ? null
-    : U(terminalMethodII.butLessThan);
+  const printedMethodIIIBoundary =
+    terminalMethodII.butLessThan == null ? null : U(terminalMethodII.butLessThan);
 
   // The publications' per-period tables hand off at a rounded whole-dollar
   // boundary (for example, "$20,722 & over" on the weekly single table),
@@ -682,8 +1004,8 @@ export function nysWithholding(input: {
   // the last Method II line and Method III. The annualized comparison remains
   // necessary for tables whose rounded boundary is above the exact threshold.
   if (
-    annualizedNet >= threshold
-    || (printedMethodIIIBoundary != null && net >= printedMethodIIIBoundary)
+    annualizedNet >= threshold ||
+    (printedMethodIIIBoundary != null && net >= printedMethodIIIBoundary)
   ) {
     // Method III applies the flat rate to the WHOLE annualized wage, not to an
     // excess over the band floor. NYS-50-T-NYS (1/26) p. 22.
@@ -705,8 +1027,8 @@ export function nysWithholding(input: {
     // holes, which the conformance test proves. Refusing rather than defaulting
     // to zero keeps a future transcription gap loud.
     throw new PayrollError(
-      `no New York State Method II line covers net wages of ${D(net)} for a `
-      + `${input.marital} ${period} payroll — refused by name; contact support`,
+      `no New York State Method II line covers net wages of ${D(net)} for a ` +
+        `${input.marital} ${period} payroll — refused by name; contact support`,
     );
   }
   const tax = applyRow(row, net);
@@ -732,14 +1054,15 @@ function nyNonresidentShare(
     const percentage = certificateAmount(it21041, percentKey);
     if (percentage == null || U(percentage) > U("100")) {
       throw new PayrollError(
-        `New York Form IT-2104.1 needs a ${levy} service percentage from 0 through 100; `
-        + "correct the filed allocation before calculating — refused by name",
+        `New York Form IT-2104.1 needs a ${levy} service percentage from 0 through 100; ` +
+          "correct the filed allocation before calculating — refused by name",
       );
     }
     return pctToRate(percentage);
   }
-  const allocation = (input.wageAllocations ?? []).find((item) =>
-    item.region === region && item.subRegion === subRegion);
+  const allocation = (input.wageAllocations ?? []).find(
+    (item) => item.region === region && item.subRegion === subRegion,
+  );
   if (!allocation) return null;
   return requireUsWageAllocation(input.wageAllocations, region, subRegion).workShare;
 }
@@ -767,13 +1090,17 @@ function computeNys(
     }
   }
 
-  const { tax, factors: tableFactors } = nysWithholding({
-    payDate: input.payDate,
-    periodsPerYear: input.periodsPerYear,
-    wages: D(wages),
-    marital,
-    exemptions,
-  }, rates, context);
+  const { tax, factors: tableFactors } = nysWithholding(
+    {
+      payDate: input.payDate,
+      periodsPerYear: input.periodsPerYear,
+      wages: D(wages),
+      marital,
+      exemptions,
+    },
+    rates,
+    context,
+  );
   const factors = { ...allocationFactors, ...tableFactors };
 
   const extra = U(certificateAmount(input.certificate, "nys_additional") ?? "0");
@@ -871,8 +1198,8 @@ function computeNyc(
   const row = rowFor(rates.nyc.tables[period], net);
   if (!row) {
     throw new PayrollError(
-      `no New York City Method II line covers net wages of ${D(net)} for a ${period} payroll `
-      + "— refused by name; contact support",
+      `no New York City Method II line covers net wages of ${D(net)} for a ${period} payroll ` +
+        "— refused by name; contact support",
     );
   }
   const tax = applyRow(row, net);
@@ -889,7 +1216,11 @@ function computeNyc(
 }
 
 const NYC_STATE_ENGINE = defineStateEngine({
-  state: { state: "NY-NYC", label: "New York City resident income tax", printedPeriods: NY_PERIODS },
+  state: {
+    state: "NY-NYC",
+    label: "New York City resident income tax",
+    printedPeriods: NY_PERIODS,
+  },
   editions: pairStateRateEditions(Object.values(NY_EDITIONS_BY_YEAR), NY_TAX_YEAR_EDITIONS),
   compute: computeNyc,
 });
@@ -936,9 +1267,9 @@ function computeYonkers(
   if (input.basis === "resident") {
     if (input.regionTax == null) {
       throw new PayrollError(
-        "the Yonkers resident tax is a surcharge of 16.75% of the New York State withholding "
-        + "(NYS-50-T-Y (1/26), Method II step 5), so the state tax must be computed first and "
-        + "passed in. Nothing here recomputes New York's schedules.",
+        "the Yonkers resident tax is a surcharge of 16.75% of the New York State withholding " +
+          "(NYS-50-T-Y (1/26), Method II step 5), so the state tax must be computed first and " +
+          "passed in. Nothing here recomputes New York's schedules.",
       );
     }
     // NYS-50-T-Y Method VII recomputes the surcharge base from the state
@@ -953,8 +1284,11 @@ function computeYonkers(
     factors.YONKERS_BASE = D(base);
     factors.YONKERS_TAX = D(surcharge);
     return {
-      state: "NY-YONKERS", year: rates.year,
-      tax: D(surcharge + extra), taxSupplemental: D(0n), factors,
+      state: "NY-YONKERS",
+      year: rates.year,
+      tax: D(surcharge + extra),
+      taxSupplemental: D(0n),
+      factors,
     };
   }
 
@@ -964,21 +1298,32 @@ function computeYonkers(
   // percentage (or the verified Yonkers work share) allocates the base first.
   const bands = rates.yonkers.nonresidentBands[period];
   let base = wages;
-  const yonkersShare = nyNonresidentShare(input, "yonkers_service_percent", "NY", "YONKERS", "Yonkers");
+  const yonkersShare = nyNonresidentShare(
+    input,
+    "yonkers_service_percent",
+    "NY",
+    "YONKERS",
+    "Yonkers",
+  );
   if (yonkersShare != null) {
     base = mulRateCents(wages, yonkersShare);
     factors.YONKERS_NONRESIDENT_ALLOCATION = yonkersShare;
     factors.YONKERS_NONRESIDENT_WAGES = D(base);
   }
-  const band = bands.find((candidate) =>
-    base >= U(candidate.atLeast)
-    && (candidate.butLessThan == null || base < U(candidate.butLessThan)));
+  const band = bands.find(
+    (candidate) =>
+      base >= U(candidate.atLeast) &&
+      (candidate.butLessThan == null || base < U(candidate.butLessThan)),
+  );
   if (!band || band.exclusion == null) {
     // Line 1 of every Method VII table is "No tax withheld".
     factors.YONKERS_TAX = D(0n);
     return {
-      state: "NY-YONKERS", year: rates.year,
-      tax: D(extra), taxSupplemental: D(0n), factors,
+      state: "NY-YONKERS",
+      year: rates.year,
+      tax: D(extra),
+      taxSupplemental: D(0n),
+      factors,
     };
   }
   factors.YONKERS_EXCLUSION = band.exclusion;
@@ -986,8 +1331,11 @@ function computeYonkers(
   const tax = mulRateCents(taxable, rates.yonkers.nonresidentRate);
   factors.YONKERS_TAX = D(tax);
   return {
-    state: "NY-YONKERS", year: rates.year,
-    tax: D(tax + extra), taxSupplemental: D(0n), factors,
+    state: "NY-YONKERS",
+    year: rates.year,
+    tax: D(tax + extra),
+    taxSupplemental: D(0n),
+    factors,
   };
 }
 
@@ -1025,10 +1373,15 @@ export function yonkersNonresidentAnnualized(input: {
   const rates = NY_STATE_ENGINE.ratesForPayDate(input.payDate);
   const annualized = U(input.wages) * BigInt(input.periodsPerYear);
   const bands = rates.yonkers.nonresidentBands.annual;
-  const band = bands.find((candidate) =>
-    annualized > U(candidate.atLeast)
-    && (candidate.butLessThan == null || annualized <= U(candidate.butLessThan)));
+  const band = bands.find(
+    (candidate) =>
+      annualized > U(candidate.atLeast) &&
+      (candidate.butLessThan == null || annualized <= U(candidate.butLessThan)),
+  );
   if (!band || band.exclusion == null) return D(0n);
-  const annualTax = mulRateCents(max0(annualized - U(band.exclusion)), rates.yonkers.nonresidentRate);
+  const annualTax = mulRateCents(
+    max0(annualized - U(band.exclusion)),
+    rates.yonkers.nonresidentRate,
+  );
   return D(divIntCents(annualTax, input.periodsPerYear));
 }

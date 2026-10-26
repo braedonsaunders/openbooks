@@ -1,6 +1,20 @@
 import { accounts } from "./coa";
 import { sql } from "drizzle-orm";
-import { bigint, boolean, check, foreignKey, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  check,
+  foreignKey,
+  date,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, orgRef } from "./helpers";
 
 /**
@@ -13,17 +27,41 @@ export const BOOK_REPLICATION_MODES = ["adjustment_only", "full"] as const;
 export type BookReplicationMode = (typeof BOOK_REPLICATION_MODES)[number];
 
 /** The physical posting book and its retained replication basis. */
-export const accountingBooks=pgTable("accounting_books",{
- id:id(),orgId:orgRef(),code:text("code").notNull(),name:text("name").notNull(),
- isPrimary:boolean("is_primary").notNull().default(false),isActive:boolean("is_active").notNull().default(true),postsGl:boolean("posts_gl").notNull().default(true),
- replicationMode:text("replication_mode",{enum:BOOK_REPLICATION_MODES}).notNull().default("adjustment_only"),
- replicationFrom:date("replication_from"),currencyDifferenceAccountId:uuid("currency_difference_account_id"),...auditColumns,
-},t=>[uniqueIndex("accounting_books_org_id_id_unique").on(t.orgId,t.id),uniqueIndex("books_org_code").on(t.orgId,t.code),
- foreignKey({columns:[t.orgId,t.currencyDifferenceAccountId],foreignColumns:[accounts.orgId,accounts.id]})]);
+export const accountingBooks = pgTable(
+  "accounting_books",
+  {
+    id: id(),
+    orgId: orgRef(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    postsGl: boolean("posts_gl").notNull().default(true),
+    replicationMode: text("replication_mode", { enum: BOOK_REPLICATION_MODES })
+      .notNull()
+      .default("adjustment_only"),
+    replicationFrom: date("replication_from"),
+    currencyDifferenceAccountId: uuid("currency_difference_account_id"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("accounting_books_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("books_org_code").on(t.orgId, t.code),
+    foreignKey({
+      columns: [t.orgId, t.currencyDifferenceAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+  ],
+);
 
 export const BOOK_OPENING_STRATEGIES = ["full_history", "opening_balances"] as const;
 export type BookOpeningStrategy = (typeof BOOK_OPENING_STRATEGIES)[number];
-export const BOOK_REPLICATION_RUN_KINDS = ["activation", "catch_up", "deactivation", "settings"] as const;
+export const BOOK_REPLICATION_RUN_KINDS = [
+  "activation",
+  "catch_up",
+  "deactivation",
+  "settings",
+] as const;
 export type BookReplicationRunKind = (typeof BOOK_REPLICATION_RUN_KINDS)[number];
 export const BOOK_CURRENCY_RATE_TYPES = ["spot", "month_average"] as const;
 
@@ -44,7 +82,10 @@ export const accountingBookCurrencies = pgTable(
   },
   (t) => [
     uniqueIndex("accounting_book_currencies_org_id_id_key").on(t.orgId, t.id),
-    check("accounting_book_currencies_window_check", sql`${t.effectiveTo} IS NULL OR ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check(
+      "accounting_book_currencies_window_check",
+      sql`${t.effectiveTo} IS NULL OR ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
   ],
 );
 
@@ -65,8 +106,16 @@ export const accountingBookAccountMaps = pgTable(
   },
   (t) => [
     uniqueIndex("accounting_book_account_maps_org_id_id_key").on(t.orgId, t.id),
-    index("accounting_book_account_maps_lookup").on(t.orgId, t.bookId, t.sourceAccountId, t.effectiveFrom),
-    check("accounting_book_account_maps_distinct", sql`${t.sourceAccountId} <> ${t.targetAccountId}`),
+    index("accounting_book_account_maps_lookup").on(
+      t.orgId,
+      t.bookId,
+      t.sourceAccountId,
+      t.effectiveFrom,
+    ),
+    check(
+      "accounting_book_account_maps_distinct",
+      sql`${t.sourceAccountId} <> ${t.targetAccountId}`,
+    ),
   ],
 );
 
@@ -82,14 +131,19 @@ export const accountingBookReplicationRuns = pgTable(
     modeAfter: text("mode_after", { enum: BOOK_REPLICATION_MODES }).notNull(),
     replicationFrom: date("replication_from"),
     openingStrategy: text("opening_strategy", { enum: BOOK_OPENING_STRATEGIES }),
-    openingEntryIds: uuid("opening_entry_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    openingEntryIds: uuid("opening_entry_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
     replicatedCount: integer("replicated_count").notNull().default(0),
     excludedCount: integer("excluded_count").notNull().default(0),
     settings: jsonb("settings").notNull().default({}),
     reason: text("reason").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").notNull(),
-    createdTxid: bigint("created_txid", { mode: "number" }).notNull().default(sql`txid_current()`),
+    createdTxid: bigint("created_txid", { mode: "number" })
+      .notNull()
+      .default(sql`txid_current()`),
   },
   (t) => [
     uniqueIndex("accounting_book_replication_runs_org_id_id_key").on(t.orgId, t.id),
@@ -116,6 +170,9 @@ export const bookEntryReplications = pgTable(
     uniqueIndex("book_entry_replications_org_id_id_key").on(t.orgId, t.id),
     uniqueIndex("book_entry_replications_once").on(t.orgId, t.bookId, t.sourceEntryId),
     index("book_entry_replications_source").on(t.orgId, t.sourceEntryId),
-    check("book_entry_replications_outcome_replica", sql`(${t.outcome} = 'replicated') = (${t.replicaEntryId} IS NOT NULL)`),
+    check(
+      "book_entry_replications_outcome_replica",
+      sql`(${t.outcome} = 'replicated') = (${t.replicaEntryId} IS NOT NULL)`,
+    ),
   ],
 );

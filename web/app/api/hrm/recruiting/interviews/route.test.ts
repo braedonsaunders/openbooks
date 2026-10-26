@@ -79,8 +79,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmRecruitingInterviewsNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmRecruitingInterviewsNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -94,24 +95,27 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const collectionUrl = "./route.ts?hrm-recruiting-interviews-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(collectionUrl)) as typeof import("./route.ts");
-  const itemUrl = "./[id]/route.ts?hrm-recruiting-interviews-item";
-  const itemRoute: typeof import("./[id]/route.ts") | undefined = (await import(itemUrl)) as typeof import("./[id]/route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const collectionUrl = "./route.ts?hrm-recruiting-interviews-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  collectionUrl
+)) as typeof import("./route.ts");
+const itemUrl = "./[id]/route.ts?hrm-recruiting-interviews-item";
+const itemRoute: typeof import("./[id]/route.ts") | undefined = (await import(
+  itemUrl
+)) as typeof import("./[id]/route.ts");
+test.after(() => hooks.deregister());
 
 const APPLICATION_ID = "00000000-0000-4000-8000-000000000021";
 const INTERVIEW_ID = "00000000-0000-4000-8000-000000000022";
@@ -159,14 +163,29 @@ test("schedule validates the body through the real parser before the service run
   reset();
   const url = "http://openbooks.test/api/hrm/recruiting/interviews";
   assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
-  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "coffee" }))).status, 400);
   assert.equal(
-    (await collectionRoute!.POST(jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "video" }))).status,
+    (
+      await collectionRoute!.POST(
+        jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "coffee" }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "video" }),
+      )
+    ).status,
     400,
   );
   assert.deepEqual(routeState.calls, []);
   const response = await collectionRoute!.POST(
-    jsonRequest(url, "POST", { applicationId: APPLICATION_ID, kind: "video", scheduledAt: "2026-09-25T14:00:00Z" }),
+    jsonRequest(url, "POST", {
+      applicationId: APPLICATION_ID,
+      kind: "video",
+      scheduledAt: "2026-09-25T14:00:00Z",
+    }),
   );
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { interview: { id: "interview-1" } });
@@ -175,20 +194,46 @@ test("schedule validates the body through the real parser before the service run
 test("item PATCH validates the action union through the real parser", async () => {
   reset();
   const params = { params: Promise.resolve({ id: INTERVIEW_ID }) };
-  assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete" }), params)).status, 400);
   assert.equal(
-    (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete", outcome: "maybe" }), params)).status,
+    (
+      await itemRoute!.PATCH(
+        jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete" }),
+        params,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await itemRoute!.PATCH(
+        jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete", outcome: "maybe" }),
+        params,
+      )
+    ).status,
     400,
   );
   assert.deepEqual(routeState.calls, []);
   assert.equal(
-    (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete", outcome: "advance" }), params)).status,
+    (
+      await itemRoute!.PATCH(
+        jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete", outcome: "advance" }),
+        params,
+      )
+    ).status,
     200,
   );
   const seenComplete = firstCallFn();
   assert.equal(seenComplete, "complete");
   routeState.calls = [] as RouteState["calls"];
-  assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "cancel" }), params)).status, 200);
+  assert.equal(
+    (
+      await itemRoute!.PATCH(
+        jsonRequest("http://openbooks.test/x", "PATCH", { action: "cancel" }),
+        params,
+      )
+    ).status,
+    200,
+  );
   assert.equal(firstCallFn(), "cancel");
 });
 

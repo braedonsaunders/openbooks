@@ -1,197 +1,360 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
-import { withBypassContext, db  } from '@openbooks/engine/platform/db'
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/testing/fixtures'
-import type { Authz } from '../../../../lib/authz'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { withBypassContext, db } from "@openbooks/engine/platform/db";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "@openbooks/engine/testing/fixtures";
+import type { Authz } from "../../../../lib/authz";
 
 // Bank-feed write paths must validate what they store. POST requires a
 // non-empty name and allowlists the provider, but PATCH stored any name —
 // including '' — and BOTH paths stored an arbitrary syncCadence string, which
 // only fails later as an unhandled CHECK-violation 500. Only identity is
 // substituted; feature checks, routes, domain services and SQL are native.
-const enabled = !!process.env.OPENBOOKS_DB_URL
-const identity: { gate: Authz | null } = { gate: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for('openbooks.bank-feed-validation')] = identity
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === '@/lib/api/json') return next(new URL('../../../../lib/api/json.ts', import.meta.url).href, context)
-  if (specifier === './authz' && (context.parentURL ?? '').endsWith('/lib/feature-gates.ts')) {
-    return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(
-      "export async function guardPermission(){return globalThis[Symbol.for('openbooks.bank-feed-validation')].gate}") }
-  }
-  return next(specifier, context)
-} })
-const { POST } = await import('./route')
-const { PATCH, DELETE } = await import('./[id]/route')
+const enabled = !!process.env.OPENBOOKS_DB_URL;
+const identity: { gate: Authz | null } = { gate: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[
+  Symbol.for("openbooks.bank-feed-validation")
+] = identity;
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "@/lib/api/json")
+      return next(new URL("../../../../lib/api/json.ts", import.meta.url).href, context);
+    if (specifier === "./authz" && (context.parentURL ?? "").endsWith("/lib/feature-gates.ts")) {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export async function guardPermission(){return globalThis[Symbol.for('openbooks.bank-feed-validation')].gate}",
+          ),
+      };
+    }
+    return next(specifier, context);
+  },
+});
+const { POST } = await import("./route");
+const { PATCH, DELETE } = await import("./[id]/route");
 
 async function fixture() {
-  const org = await withBypassContext(() => (createScratchOrg()))
-  const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId
-  await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-    coalesce(settings->'features','{}'::jsonb)||'{"bankFeeds":true}'::jsonb) where id=${org.orgId}`)))
-  await withBypassContext(() => (db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
-    where org_id=${org.orgId} and id=${org.accounts.bank}`)))
-  identity.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null } as Authz
-  return { ...org, actorId }
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+  await withBypassContext(() =>
+    db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"bankFeeds":true}'::jsonb) where id=${org.orgId}`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
+    where org_id=${org.orgId} and id=${org.accounts.bank}`),
+  );
+  identity.gate = {
+    user: { orgId: org.orgId, id: actorId },
+    permissions: new Set(["*"]),
+    allowedSubsidiaryIds: null,
+  } as Authz;
+  return { ...org, actorId };
 }
 
 const post = (body: Record<string, unknown>) =>
-  POST(new Request('https://openbooks.test/api/banking/bank-feeds', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  }))
+  POST(
+    new Request("https://openbooks.test/api/banking/bank-feeds", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
 const patch = (id: string, body: Record<string, unknown>) =>
-  PATCH(new Request(`https://openbooks.test/api/banking/bank-feeds/${id}`, {
-    method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  }), { params: Promise.resolve({ id }) })
+  PATCH(
+    new Request(`https://openbooks.test/api/banking/bank-feeds/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ id }) },
+  );
 const remove = (id: string) =>
-  DELETE(new Request(`https://openbooks.test/api/banking/bank-feeds/${id}`, { method: 'DELETE' }), {
+  DELETE(new Request(`https://openbooks.test/api/banking/bank-feeds/${id}`, { method: "DELETE" }), {
     params: Promise.resolve({ id }),
-  })
+  });
 
 async function feedRow(orgId: string, id: string) {
-  return (await db.execute<{ name: string; sync_cadence: string }>(sql`
-    select name, sync_cadence from bank_feed_connections where org_id=${orgId} and id=${id}`, 'objects'))[0]!
+  return (
+    await db.execute<{ name: string; sync_cadence: string }>(
+      sql`
+    select name, sync_cadence from bank_feed_connections where org_id=${orgId} and id=${id}`,
+      "objects",
+    )
+  )[0]!;
 }
 
-test('bank-feed PATCH rejects an empty name that POST refuses', { skip: !enabled }, async () => {
-  const org = await fixture()
+test("bank-feed PATCH rejects an empty name that POST refuses", { skip: !enabled }, async () => {
+  const org = await fixture();
   try {
-    const refused = await post({ name: '  ', provider: 'manual', accountId: org.accounts.bank })
-    assert.equal(refused.status, 400)
-    const created = await post({ name: 'Operating feed', provider: 'manual', accountId: org.accounts.bank })
-    assert.equal(created.status, 201, JSON.stringify(await created.clone().json()))
-    const { id } = (await created.json()) as { id: string }
-    const patched = await patch(id, { name: '' })
-    assert.equal(patched.status, 400, 'PATCH must enforce the same non-empty name as POST')
-    assert.equal((await feedRow(org.orgId, id)).name, 'Operating feed')
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
-
-test('bank-feed POST rejects a non-string name instead of throwing', { skip: !enabled }, async () => {
-  const org = await fixture()
-  try {
-    const refused = await post({ name: 123, provider: 'manual', accountId: org.accounts.bank })
-    assert.equal(refused.status, 400)
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
-
-test('bank-feed POST rejects a syncCadence outside the stored check constraint', { skip: !enabled }, async () => {
-  const org = await fixture()
-  try {
-    const refused = await post({
-      name: 'API feed',
-      provider: 'plaid',
+    const refused = await post({ name: "  ", provider: "manual", accountId: org.accounts.bank });
+    assert.equal(refused.status, 400);
+    const created = await post({
+      name: "Operating feed",
+      provider: "manual",
       accountId: org.accounts.bank,
-      externalAccountId: 'plaid-acct-1',
-      syncCadence: 'weekly',
-      credentials: { accessToken: 'test-token' },
-    })
-    assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
+    });
+    assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
+    const { id } = (await created.json()) as { id: string };
+    const patched = await patch(id, { name: "" });
+    assert.equal(patched.status, 400, "PATCH must enforce the same non-empty name as POST");
+    assert.equal((await feedRow(org.orgId, id)).name, "Operating feed");
+  } finally {
+    identity.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test('bank-feed routes reject malformed ids as client errors', { skip: !enabled }, async () => {
-  const org = await fixture()
+test(
+  "bank-feed POST rejects a non-string name instead of throwing",
+  { skip: !enabled },
+  async () => {
+    const org = await fixture();
+    try {
+      const refused = await post({ name: 123, provider: "manual", accountId: org.accounts.bank });
+      assert.equal(refused.status, 400);
+    } finally {
+      identity.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "bank-feed POST rejects a syncCadence outside the stored check constraint",
+  { skip: !enabled },
+  async () => {
+    const org = await fixture();
+    try {
+      const refused = await post({
+        name: "API feed",
+        provider: "plaid",
+        accountId: org.accounts.bank,
+        externalAccountId: "plaid-acct-1",
+        syncCadence: "weekly",
+        credentials: { accessToken: "test-token" },
+      });
+      assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()));
+    } finally {
+      identity.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test("bank-feed routes reject malformed ids as client errors", { skip: !enabled }, async () => {
+  const org = await fixture();
   try {
-    for (const id of ['not-a-uuid', 'new']) {
-      assert.equal((await patch(id, { name: 'Renamed' })).status, 404, `PATCH ${id}`);
+    for (const id of ["not-a-uuid", "new"]) {
+      assert.equal((await patch(id, { name: "Renamed" })).status, 404, `PATCH ${id}`);
       assert.equal((await remove(id)).status, 404, `DELETE ${id}`);
     }
-    const refused = await post({ name: 'Bad account feed', provider: 'manual', accountId: 'not-a-uuid' })
-    assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
+    const refused = await post({
+      name: "Bad account feed",
+      provider: "manual",
+      accountId: "not-a-uuid",
+    });
+    assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()));
+  } finally {
+    identity.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 // Feed creation uses the same active, statement-capable account policy as the picker.
-test('bank-feed POST refuses a reconcilable account that cannot carry statements', { skip: !enabled }, async () => {
-  const org = await fixture()
-  try {
-    await withBypassContext(() => (db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
-      where org_id=${org.orgId} and id=${org.accounts.cogs}`)))
-    const refused = await post({ name: 'Expense feed', provider: 'manual', accountId: org.accounts.cogs })
-    assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
-    assert.deepEqual(await refused.json(), { error: 'not a reconcilable account' })
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
-
-test('bank-feed POST accepts a reconcilable liability account with bank statements', { skip: !enabled }, async () => {
-  const org = await fixture()
-  try {
-    await withBypassContext(() => db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
-      where org_id=${org.orgId} and id=${org.accounts.clearing}`))
-    const created = await post({ name: 'Liability statement feed', provider: 'manual', accountId: org.accounts.clearing })
-    assert.equal(created.status, 201, JSON.stringify(await created.clone().json()))
-    const { id } = await created.json() as { id: string }
-    assert.equal((await feedRow(org.orgId, id)).name, 'Liability statement feed')
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
-
-test('bank-feed POST refuses an inactive reconcilable bank account', { skip: !enabled }, async () => {
-  const org = await fixture()
-  try {
-    await withBypassContext(() => (db.execute(sql`update accounts set is_active=false where org_id=${org.orgId} and id=${org.accounts.bank}`)))
-    const refused = await post({ name: 'Dead feed', provider: 'manual', accountId: org.accounts.bank })
-    assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
-    assert.deepEqual(await refused.json(), { error: 'not a reconcilable account' })
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
-
-test('bank-feed writes reject a syncCadence outside the stored check constraint', { skip: !enabled }, async () => {
-  const org = await fixture()
-  try {
-    const created = await post({ name: 'Operating feed', provider: 'manual', accountId: org.accounts.bank })
-    assert.equal(created.status, 201, JSON.stringify(await created.clone().json()))
-    const { id } = (await created.json()) as { id: string }
-    // 'weekly' violates bank_feed_connections_cadence (manual/hourly/daily).
-    // It must be a 4xx, never an unhandled CHECK-violation 500.
-    const patched = await patch(id, { syncCadence: 'weekly' })
-    assert.equal(patched.status, 400, JSON.stringify(await patched.clone().json()))
-    assert.equal((await feedRow(org.orgId, id)).sync_cadence, 'manual')
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
-
-test('bank-feed writes validate syncOverlapDays and store a custom overlap', { skip: !enabled }, async () => {
-  const org = await fixture()
-  try {
-    const overlapOf = async (id: string) =>
-      (await db.execute<{ overlap: number | null }>(sql`
-        select sync_overlap_days as overlap from bank_feed_connections where org_id=${org.orgId} and id=${id}`, 'objects'))[0]!.overlap
-    // Unusable overlaps are 400s that create nothing: fractions, negatives,
-    // past the 90-day ceiling, and non-numbers.
-    for (const syncOverlapDays of [-1, 91, 1.5, '30', true]) {
-      const refused = await post({ name: 'Overlap feed', provider: 'manual', accountId: org.accounts.bank, syncOverlapDays })
-      assert.equal(refused.status, 400, `POST syncOverlapDays ${JSON.stringify(syncOverlapDays)}`)
-      assert.equal(((await refused.json()) as { error: string }).error, 'syncOverlapDays must be a whole number of days from 0 to 90')
+test(
+  "bank-feed POST refuses a reconcilable account that cannot carry statements",
+  { skip: !enabled },
+  async () => {
+    const org = await fixture();
+    try {
+      await withBypassContext(() =>
+        db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
+      where org_id=${org.orgId} and id=${org.accounts.cogs}`),
+      );
+      const refused = await post({
+        name: "Expense feed",
+        provider: "manual",
+        accountId: org.accounts.cogs,
+      });
+      assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()));
+      assert.deepEqual(await refused.json(), { error: "not a reconcilable account" });
+    } finally {
+      identity.gate = null;
+      await dropScratchOrg(org.orgId);
     }
-    // A valid custom overlap stores; omission stores null (the sync default).
-    const created = await post({ name: 'Wide feed', provider: 'manual', accountId: org.accounts.bank, syncOverlapDays: 30 })
-    assert.equal(created.status, 201, JSON.stringify(await created.clone().json()))
-    const { id } = (await created.json()) as { id: string }
-    assert.equal(await overlapOf(id), 30)
-    // PATCH enforces the same contract, and null clears back to the default.
-    for (const syncOverlapDays of ['wide', 2.5, 200]) {
-      const refused = await patch(id, { syncOverlapDays })
-      assert.equal(refused.status, 400, `PATCH syncOverlapDays ${JSON.stringify(syncOverlapDays)}`)
-    }
-    assert.equal(await overlapOf(id), 30, 'a refused patch must not change the row')
-    const cleared = await patch(id, { syncOverlapDays: null })
-    assert.equal(cleared.status, 200, JSON.stringify(await cleared.clone().json()))
-    assert.equal(await overlapOf(id), null)
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
+  },
+);
 
-test('bank-feed PATCH refuses non-boolean isActive values', { skip: !enabled }, async () => {
-  const org = await fixture()
-  try {
-    const created = await post({ name: 'Flag feed', provider: 'manual', accountId: org.accounts.bank })
-    const { id } = (await created.json()) as { id: string }
-    for (const isActive of ['false', 1, null]) {
-      const refused = await patch(id, { isActive })
-      assert.equal(refused.status, 400)
-      assert.equal(((await refused.json()) as { error: string }).error, 'isActive must be a boolean')
+test(
+  "bank-feed POST accepts a reconcilable liability account with bank statements",
+  { skip: !enabled },
+  async () => {
+    const org = await fixture();
+    try {
+      await withBypassContext(() =>
+        db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
+      where org_id=${org.orgId} and id=${org.accounts.clearing}`),
+      );
+      const created = await post({
+        name: "Liability statement feed",
+        provider: "manual",
+        accountId: org.accounts.clearing,
+      });
+      assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
+      const { id } = (await created.json()) as { id: string };
+      assert.equal((await feedRow(org.orgId, id)).name, "Liability statement feed");
+    } finally {
+      identity.gate = null;
+      await dropScratchOrg(org.orgId);
     }
-    const row = await db.execute<{ is_active: boolean }>(sql`select is_active from bank_feed_connections where id=${id}`, 'objects')
-    assert.equal(row[0]!.is_active, true)
-  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
-})
+  },
+);
+
+test(
+  "bank-feed POST refuses an inactive reconcilable bank account",
+  { skip: !enabled },
+  async () => {
+    const org = await fixture();
+    try {
+      await withBypassContext(() =>
+        db.execute(
+          sql`update accounts set is_active=false where org_id=${org.orgId} and id=${org.accounts.bank}`,
+        ),
+      );
+      const refused = await post({
+        name: "Dead feed",
+        provider: "manual",
+        accountId: org.accounts.bank,
+      });
+      assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()));
+      assert.deepEqual(await refused.json(), { error: "not a reconcilable account" });
+    } finally {
+      identity.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "bank-feed writes reject a syncCadence outside the stored check constraint",
+  { skip: !enabled },
+  async () => {
+    const org = await fixture();
+    try {
+      const created = await post({
+        name: "Operating feed",
+        provider: "manual",
+        accountId: org.accounts.bank,
+      });
+      assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
+      const { id } = (await created.json()) as { id: string };
+      // 'weekly' violates bank_feed_connections_cadence (manual/hourly/daily).
+      // It must be a 4xx, never an unhandled CHECK-violation 500.
+      const patched = await patch(id, { syncCadence: "weekly" });
+      assert.equal(patched.status, 400, JSON.stringify(await patched.clone().json()));
+      assert.equal((await feedRow(org.orgId, id)).sync_cadence, "manual");
+    } finally {
+      identity.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "bank-feed writes validate syncOverlapDays and store a custom overlap",
+  { skip: !enabled },
+  async () => {
+    const org = await fixture();
+    try {
+      const overlapOf = async (id: string) =>
+        (
+          await db.execute<{ overlap: number | null }>(
+            sql`
+        select sync_overlap_days as overlap from bank_feed_connections where org_id=${org.orgId} and id=${id}`,
+            "objects",
+          )
+        )[0]!.overlap;
+      // Unusable overlaps are 400s that create nothing: fractions, negatives,
+      // past the 90-day ceiling, and non-numbers.
+      for (const syncOverlapDays of [-1, 91, 1.5, "30", true]) {
+        const refused = await post({
+          name: "Overlap feed",
+          provider: "manual",
+          accountId: org.accounts.bank,
+          syncOverlapDays,
+        });
+        assert.equal(
+          refused.status,
+          400,
+          `POST syncOverlapDays ${JSON.stringify(syncOverlapDays)}`,
+        );
+        assert.equal(
+          ((await refused.json()) as { error: string }).error,
+          "syncOverlapDays must be a whole number of days from 0 to 90",
+        );
+      }
+      // A valid custom overlap stores; omission stores null (the sync default).
+      const created = await post({
+        name: "Wide feed",
+        provider: "manual",
+        accountId: org.accounts.bank,
+        syncOverlapDays: 30,
+      });
+      assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
+      const { id } = (await created.json()) as { id: string };
+      assert.equal(await overlapOf(id), 30);
+      // PATCH enforces the same contract, and null clears back to the default.
+      for (const syncOverlapDays of ["wide", 2.5, 200]) {
+        const refused = await patch(id, { syncOverlapDays });
+        assert.equal(
+          refused.status,
+          400,
+          `PATCH syncOverlapDays ${JSON.stringify(syncOverlapDays)}`,
+        );
+      }
+      assert.equal(await overlapOf(id), 30, "a refused patch must not change the row");
+      const cleared = await patch(id, { syncOverlapDays: null });
+      assert.equal(cleared.status, 200, JSON.stringify(await cleared.clone().json()));
+      assert.equal(await overlapOf(id), null);
+    } finally {
+      identity.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test("bank-feed PATCH refuses non-boolean isActive values", { skip: !enabled }, async () => {
+  const org = await fixture();
+  try {
+    const created = await post({
+      name: "Flag feed",
+      provider: "manual",
+      accountId: org.accounts.bank,
+    });
+    const { id } = (await created.json()) as { id: string };
+    for (const isActive of ["false", 1, null]) {
+      const refused = await patch(id, { isActive });
+      assert.equal(refused.status, 400);
+      assert.equal(
+        ((await refused.json()) as { error: string }).error,
+        "isActive must be a boolean",
+      );
+    }
+    const row = await db.execute<{ is_active: boolean }>(
+      sql`select is_active from bank_feed_connections where id=${id}`,
+      "objects",
+    );
+    assert.equal(row[0]!.is_active, true);
+  } finally {
+    identity.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
+});

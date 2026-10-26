@@ -24,8 +24,8 @@ import { inclusiveCalendarDays } from "../platform/civil-date.ts";
  * remedy.
  */
 
-const { requireOrgId, requireActorId, requireId } = inputGuards((message, kind) =>
-  new LeaveError(kind === "scope" ? "REFUSED" : "INVALID_INPUT", message),
+const { requireOrgId, requireActorId, requireId } = inputGuards(
+  (message, kind) => new LeaveError(kind === "scope" ? "REFUSED" : "INVALID_INPUT", message),
 );
 
 export interface RecordAbsenceQuery {
@@ -53,19 +53,28 @@ export interface AbsenceDay {
 
 function requireCivilDate(value: unknown, field = "on_date"): string {
   if (typeof value !== "string") {
-    throw new LeaveError("INVALID_INPUT", `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`);
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`,
+    );
   }
   try {
     parseCivilDate(value);
     return value;
   } catch {
-    throw new LeaveError("INVALID_INPUT", `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`);
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999`,
+    );
   }
 }
 
 function requirePositiveHours(value: unknown): string {
   if (typeof value !== "string") {
-    throw new LeaveError("INVALID_INPUT", "hours must be an exact decimal with at most 2 fraction digits");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "hours must be an exact decimal with at most 2 fraction digits",
+    );
   }
   try {
     const cents = parseHoursToCents(value);
@@ -73,13 +82,19 @@ function requirePositiveHours(value: unknown): string {
     return formatCents(cents);
   } catch (error) {
     if (error instanceof LeaveError) throw error;
-    throw new LeaveError("INVALID_INPUT", "hours must be an exact decimal with at most 2 fraction digits");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "hours must be an exact decimal with at most 2 fraction digits",
+    );
   }
 }
 
 function requireRecordReason(reason: unknown): string {
   if (typeof reason !== "string" || reason.trim().length === 0) {
-    throw new LeaveError("INVALID_INPUT", "a recorded absence carries its basis — record why (for example the verbal approval)");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "a recorded absence carries its basis — record why (for example the verbal approval)",
+    );
   }
   return reason.trim();
 }
@@ -108,7 +123,9 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
     const today = await businessToday(orgId);
     const own = await loadOwnEmploymentIds(db, orgId, actorId);
     const reason =
-      query.reason === undefined || query.reason === null ? null : requireRecordReason(query.reason);
+      query.reason === undefined || query.reason === null
+        ? null
+        : requireRecordReason(query.reason);
     if (reason === null && onDate < today) {
       throw new LeaveError(
         "INVALID_INPUT",
@@ -121,17 +138,36 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
         "recording for another worker carries the basis — record why (for example the verbal approval) in the reason",
       );
     }
-    const type = (await db.execute<{ id: string; code: string; is_active: boolean; value_crossing: string }>(sql`
+    const type = (
+      await db.execute<{ id: string; code: string; is_active: boolean; value_crossing: string }>(
+        sql`
       select id, code, is_active, value_crossing from hrm_leave_types
        where org_id = ${orgId} and id = ${query.leaveTypeId}
-    `, "objects"))[0];
-    if (!type) throw new LeaveError("NOT_FOUND", "leave type not found in this organization — check the type id");
-    if (!type.is_active) throw new LeaveError("REFUSED", `leave type ${type.code} is inactive — reactivate it before recording`);
-    const existing = (await db.execute<{ n: number }>(sql`
+    `,
+        "objects",
+      )
+    )[0];
+    if (!type)
+      throw new LeaveError(
+        "NOT_FOUND",
+        "leave type not found in this organization — check the type id",
+      );
+    if (!type.is_active)
+      throw new LeaveError(
+        "REFUSED",
+        `leave type ${type.code} is inactive — reactivate it before recording`,
+      );
+    const existing =
+      (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from hrm_absences
        where org_id = ${orgId} and employment_id = ${query.employmentId} and on_date = ${onDate}
          and reversal_of is null
-    `, "objects"))[0]?.n ?? 0;
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
     if (existing > 0) {
       throw new LeaveError(
         "REFUSED",
@@ -150,13 +186,18 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
     // refusal, never a raw 23505.
     let inserted: { id: string } | undefined;
     try {
-      inserted = (await db.execute<{ id: string }>(sql`
+      inserted = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into hrm_absences (org_id, leave_request_id, employment_id, on_date, hours,
           leave_type_id, source, reason, created_by, updated_by)
         values (${orgId}, null, ${query.employmentId}, ${onDate}, ${hours},
           ${query.leaveTypeId}, 'recorded', ${reason}, ${actorId}, ${actorId})
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new LeaveError(
@@ -166,18 +207,39 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
       }
       throw error;
     }
-    if (!inserted) throw new LeaveError("REFUSED", "the absence was not stored — no row was written; retry the request");
+    if (!inserted)
+      throw new LeaveError(
+        "REFUSED",
+        "the absence was not stored — no row was written; retry the request",
+      );
     // The recording's audit entry carries the same basis the row does, in
     // the same transaction — the row without its event rolls back together.
-    const audited = (await db.execute<{ id: string }>(sql`
+    const audited = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'hrm_absences', ${inserted.id}, 'absence_recorded',
         ${JSON.stringify({ event: "absence_recorded", before: null, after: { employmentId: query.employmentId, onDate, hours, leaveTypeCode: type.code, source: "recorded", reason } })}::jsonb,
         ${actorId})
       returning id
-    `, "objects"))[0];
-    if (!audited) throw new LeaveError("REFUSED", "the absence was stored without its audit event — no event was written; retry the request");
-    return { id: inserted.id, employmentId: query.employmentId, onDate, hours, leaveTypeCode: type.code, source: "recorded" as const, reason };
+    `,
+        "objects",
+      )
+    )[0];
+    if (!audited)
+      throw new LeaveError(
+        "REFUSED",
+        "the absence was stored without its audit event — no event was written; retry the request",
+      );
+    return {
+      id: inserted.id,
+      employmentId: query.employmentId,
+      onDate,
+      hours,
+      leaveTypeCode: type.code,
+      source: "recorded" as const,
+      reason,
+    };
   });
 }
 
@@ -198,18 +260,32 @@ export interface AbsenceDetail extends AbsenceDay {
 }
 
 /** One absence day, gated on its employment — never by a caller-supplied party. */
-export async function getAbsence(query: { orgId: string; actorId: string; absenceId: string }): Promise<AbsenceDetail> {
+export async function getAbsence(query: {
+  orgId: string;
+  actorId: string;
+  absenceId: string;
+}): Promise<AbsenceDetail> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   requireId(query.absenceId, "absenceId");
   return withOrgTransaction(orgId, async () => {
-    const row = (await db.execute<{
-      id: string; employment_id: string; on_date: string; hours: string;
-      source: "request" | "recorded"; reason: string | null;
-      leave_request_id: string | null; leave_type_id: string;
-      created_by: string | null; created_at: string;
-      code: string; type_name: string; worker_name: string;
-    }>(sql`
+    const row = (
+      await db.execute<{
+        id: string;
+        employment_id: string;
+        on_date: string;
+        hours: string;
+        source: "request" | "recorded";
+        reason: string | null;
+        leave_request_id: string | null;
+        leave_type_id: string;
+        created_by: string | null;
+        created_at: string;
+        code: string;
+        type_name: string;
+        worker_name: string;
+      }>(
+        sql`
       select a.id, a.employment_id, a.on_date::text as on_date, a.hours::text as hours,
              a.source, a.reason, a.leave_request_id, a.leave_type_id,
              a.created_by::text as created_by, a.created_at::text as created_at,
@@ -219,11 +295,18 @@ export async function getAbsence(query: { orgId: string; actorId: string; absenc
         join worker_employments e on e.id = a.employment_id and e.org_id = a.org_id
         join parties p on p.id = e.worker_party_id and p.org_id = a.org_id
        where a.org_id = ${orgId} and a.id = ${query.absenceId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     // Zero rows is a failure: unknown id, or an id from another
     // organization — never report which, so existence cannot be probed
     // across tenants.
-    if (!row) throw new LeaveError("NOT_FOUND", "absence not found in this organization — check the absence id");
+    if (!row)
+      throw new LeaveError(
+        "NOT_FOUND",
+        "absence not found in this organization — check the absence id",
+      );
     await requireHrmLeaveRead(db, orgId, actorId, row.employment_id);
     return {
       id: row.id,
@@ -263,16 +346,32 @@ export async function absenceCalendarForDepartment(
   if (departmentId !== null) requireId(departmentId, "departmentId");
   requireCivilDate(from, "calendar start");
   requireCivilDate(to, "calendar end");
-  if (to < from) throw new LeaveError("INVALID_INPUT", `calendar end ${to} must not precede start ${from} — choose an end on or after the start`);
+  if (to < from)
+    throw new LeaveError(
+      "INVALID_INPUT",
+      `calendar end ${to} must not precede start ${from} — choose an end on or after the start`,
+    );
   if (inclusiveCalendarDays(from, to) > 366) {
-    throw new LeaveError("INVALID_INPUT", "the calendar window must not exceed 366 days — choose a shorter date range");
+    throw new LeaveError(
+      "INVALID_INPUT",
+      "the calendar window must not exceed 366 days — choose a shorter date range",
+    );
   }
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed !== null && allowed.size === 0) return [];
-  const scope = allowed === null ? sql`` : sql`and e.employer_subsidiary_id in (${sql.join(
-    [...allowed].map((id) => sql`${id}::uuid`), sql`, `,
-  )})`;
-  const members = await exec.execute<{ employment_id: string; employer_subsidiary_id: string; worker_name: string }>(sql`
+  const scope =
+    allowed === null
+      ? sql``
+      : sql`and e.employer_subsidiary_id in (${sql.join(
+          [...allowed].map((id) => sql`${id}::uuid`),
+          sql`, `,
+        )})`;
+  const members = await exec.execute<{
+    employment_id: string;
+    employer_subsidiary_id: string;
+    worker_name: string;
+  }>(
+    sql`
     select e.id as employment_id, e.employer_subsidiary_id, p.display_name as worker_name
       from worker_employments e
       join parties p on p.id = e.worker_party_id and p.org_id = e.org_id
@@ -283,12 +382,19 @@ export async function absenceCalendarForDepartment(
             and a.on_date >= ${from} and a.on_date <= ${to}
        )
      order by p.display_name, e.id
-  `, "objects");
-  const visible = members.filter((member) => allowed === null || allowed.has(member.employer_subsidiary_id));
+  `,
+    "objects",
+  );
+  const visible = members.filter(
+    (member) => allowed === null || allowed.has(member.employer_subsidiary_id),
+  );
   const days: DepartmentAbsenceDay[] = [];
   for (const member of visible) {
     await requireHrmLeaveRead(exec, orgId, actorId, member.employment_id);
-    const department = departmentId === null ? sql`` : sql`and exists (
+    const department =
+      departmentId === null
+        ? sql``
+        : sql`and exists (
       select 1 from employment_assignment_versions v
        where v.org_id = a.org_id and v.employment_id = a.employment_id
          and v.is_primary and v.recorded_until is null
@@ -297,19 +403,38 @@ export async function absenceCalendarForDepartment(
          and (v.effective_to is null or v.effective_to > a.on_date)
     )`;
     const rows = await exec.execute<{
-      id: string; on_date: string; hours: string; code: string; source: "request" | "recorded";
-      leave_request_id: string | null; reason: string | null;
-    }>(sql`
+      id: string;
+      on_date: string;
+      hours: string;
+      code: string;
+      source: "request" | "recorded";
+      leave_request_id: string | null;
+      reason: string | null;
+    }>(
+      sql`
       select a.id, a.on_date::text as on_date, a.hours::text as hours, t.code, a.source,
              a.leave_request_id, a.reason
         from hrm_absences a join hrm_leave_types t on t.id = a.leave_type_id and t.org_id = a.org_id
        where a.org_id = ${orgId} and a.employment_id = ${member.employment_id}
          and a.on_date >= ${from} and a.on_date <= ${to} ${department}
        order by a.on_date, t.code, a.id
-    `, "objects");
+    `,
+      "objects",
+    );
     // Net each leave type independently: a cancelled vacation and a new
     // sick day on the same date must not inherit each other's type or hours.
-    const net = new Map<string, { onDate: string; hours: string; code: string; source: "request" | "recorded"; id: string; leaveRequestId: string | null; reason: string | null }>();
+    const net = new Map<
+      string,
+      {
+        onDate: string;
+        hours: string;
+        code: string;
+        source: "request" | "recorded";
+        id: string;
+        leaveRequestId: string | null;
+        reason: string | null;
+      }
+    >();
     for (const row of rows) {
       const onDate = String(row.on_date).slice(0, 10);
       const key = `${onDate}:${row.code}`;
@@ -339,7 +464,13 @@ export async function absenceCalendarForDepartment(
       });
     }
   }
-  days.sort((a, b) => a.onDate.localeCompare(b.onDate) || a.workerName.localeCompare(b.workerName) || a.employmentId.localeCompare(b.employmentId) || a.leaveTypeCode.localeCompare(b.leaveTypeCode));
+  days.sort(
+    (a, b) =>
+      a.onDate.localeCompare(b.onDate) ||
+      a.workerName.localeCompare(b.workerName) ||
+      a.employmentId.localeCompare(b.employmentId) ||
+      a.leaveTypeCode.localeCompare(b.leaveTypeCode),
+  );
   return days;
 }
 
@@ -363,8 +494,12 @@ export async function employmentsOnLeave(
           sql`, `,
         )})`;
   const rows = await exec.execute<{
-    employment_id: string; worker_name: string; code: string; hours: string;
-  }>(sql`
+    employment_id: string;
+    worker_name: string;
+    code: string;
+    hours: string;
+  }>(
+    sql`
     select a.employment_id, p.display_name as worker_name, t.code,
            sum(a.hours)::text as hours
       from hrm_absences a
@@ -376,7 +511,9 @@ export async function employmentsOnLeave(
      group by a.employment_id, p.display_name, t.code
     having sum(a.hours) <> 0
      order by p.display_name
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     employmentId: row.employment_id,
     workerName: row.worker_name,

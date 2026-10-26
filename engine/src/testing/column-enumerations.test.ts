@@ -5,7 +5,15 @@ import test from "node:test";
 import { COLUMN_ENUMERATIONS, STANCES, type Stance } from "./column-enumerations.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..");
-const SCAN_ROOTS = ["engine/src", "web/lib", "web/app", "web/components", "packages", "scripts", "deploy"];
+const SCAN_ROOTS = [
+  "engine/src",
+  "web/lib",
+  "web/app",
+  "web/components",
+  "packages",
+  "scripts",
+  "deploy",
+];
 const SKIP_DIRS = new Set(["node_modules", ".next", "dist", "build", "coverage", "vendor"]);
 const SOURCE_RE = /\.(?:ts|tsx|mjs|js)$/;
 const TEST_RE = /\.test\.(?:ts|tsx|mjs|js)$/;
@@ -29,12 +37,16 @@ function isCommentLine(line: string): boolean {
   return trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*");
 }
 
-interface FoundSite { line: number; text: string }
+interface FoundSite {
+  line: number;
+  text: string;
+}
 
 function enumerationSites(lines: readonly string[]): FoundSite[] {
   const sites: FoundSite[] = [];
   lines.forEach((text, index) => {
-    if (!isCommentLine(text) && ENUMERATION_RE.test(text)) sites.push({ line: index + 1, text: text.trim() });
+    if (!isCommentLine(text) && ENUMERATION_RE.test(text))
+      sites.push({ line: index + 1, text: text.trim() });
   });
   return sites;
 }
@@ -43,7 +55,12 @@ function scan(): Map<string, { lines: string[]; sites: FoundSite[] }> {
   const found = new Map<string, { lines: string[]; sites: FoundSite[] }>();
   for (const root of SCAN_ROOTS) {
     let absolute: string;
-    try { absolute = join(ROOT, root); statSync(absolute); } catch { continue; }
+    try {
+      absolute = join(ROOT, root);
+      statSync(absolute);
+    } catch {
+      continue;
+    }
     for (const file of sourceFiles(absolute)) {
       const lines = readFileSync(file, "utf8").split("\n");
       const sites = enumerationSites(lines);
@@ -54,12 +71,18 @@ function scan(): Map<string, { lines: string[]; sites: FoundSite[] }> {
 }
 
 function stanceMenu(): string {
-  return (Object.keys(STANCES) as Stance[]).map((stance) => `  - ${stance}: ${STANCES[stance]}`).join("\n");
+  return (Object.keys(STANCES) as Stance[])
+    .map((stance) => `  - ${stance}: ${STANCES[stance]}`)
+    .join("\n");
 }
 
 test("the registry declares every catalog column enumeration exactly once, in source order", () => {
   const registered = new Map(COLUMN_ENUMERATIONS.map((entry) => [entry.file, entry]));
-  assert.equal(registered.size, COLUMN_ENUMERATIONS.length, "a file is registered twice; merge its sites into one entry in source order");
+  assert.equal(
+    registered.size,
+    COLUMN_ENUMERATIONS.length,
+    "a file is registered twice; merge its sites into one entry in source order",
+  );
 
   const found = scan();
   const problems: string[] = [];
@@ -69,20 +92,22 @@ test("the registry declares every catalog column enumeration exactly once, in so
     if (!entry) {
       problems.push(
         `${file} enumerates table columns from the PostgreSQL catalog at ${sites.length} site(s) but is not registered:\n${where}\n` +
-        `    Register it in engine/src/testing/column-enumerations.ts and declare, per site, what it does about GENERATED ALWAYS columns:\n${stanceMenu()}`,
+          `    Register it in engine/src/testing/column-enumerations.ts and declare, per site, what it does about GENERATED ALWAYS columns:\n${stanceMenu()}`,
       );
       continue;
     }
     if (entry.sites.length !== sites.length) {
       problems.push(
         `${file} has ${sites.length} catalog enumeration site(s) but the registry declares ${entry.sites.length}:\n${where}\n` +
-        `    Every site declares its own stance, in source order. Stances:\n${stanceMenu()}`,
+          `    Every site declares its own stance, in source order. Stances:\n${stanceMenu()}`,
       );
     }
   }
   for (const entry of COLUMN_ENUMERATIONS) {
     if (!found.has(entry.file)) {
-      problems.push(`${entry.file} is registered but no longer enumerates catalog columns (or the file is gone); remove its registration`);
+      problems.push(
+        `${entry.file} is registered but no longer enumerates catalog columns (or the file is gone); remove its registration`,
+      );
     }
   }
   assert.equal(problems.length, 0, `\n${problems.join("\n\n")}\n`);
@@ -103,7 +128,7 @@ test("every feeds-a-write enumeration visibly excludes generated columns", () =>
       if (!GENERATED_FILTER_RE.test(window)) {
         problems.push(
           `${entry.file} line ${site.line} is declared feeds-a-write but nothing within ${FILTER_WINDOW.before} lines above / ` +
-          `${FILTER_WINDOW.after} below mentions is_generated or attgenerated. ${STANCES["feeds-a-write"]}.`,
+            `${FILTER_WINDOW.after} below mentions is_generated or attgenerated. ${STANCES["feeds-a-write"]}.`,
         );
       }
     });

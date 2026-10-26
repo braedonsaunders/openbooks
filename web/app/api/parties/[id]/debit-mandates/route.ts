@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { isUuid } from '@/lib/list-params'
-import { loadPartyDebitMandates } from '@/lib/party-debit-mandates'
-import { notFound } from '@/lib/api/responses'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { isUuid } from "@/lib/list-params";
+import { loadPartyDebitMandates } from "@/lib/party-debit-mandates";
+import { notFound } from "@/lib/api/responses";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Debit mandates for one counterparty, plus the bank accounts a new mandate
@@ -17,14 +17,20 @@ export const runtime = 'nodejs'
  * route's own refusal for any other account.
  */
 export const GET = defineRoute({
-  permission: 'admin.setup.manage',
-  feature: { none: 'Debit mandates are payment-operations configuration with no feature switch of their own; the write routes are ungated the same way.' },
+  permission: "admin.setup.manage",
+  feature: {
+    none: "Debit mandates are payment-operations configuration with no feature switch of their own; the write routes are ungated the same way.",
+  },
   params: z.object({ id: z.string() }),
   handler: async ({ authz, params }) => {
-    const { id: partyId } = params
-    if (!isUuid(partyId)) return notFound('record')
-    const result = await loadPartyDebitMandates(authz.user.orgId, partyId, authz.allowedSubsidiaryIds)
-    if (!result) return notFound('record')
-    return NextResponse.json(result)
+    const { id: partyId } = params;
+    if (!isUuid(partyId)) return notFound("record");
+    const result = await loadPartyDebitMandates(
+      authz.user.orgId,
+      partyId,
+      authz.allowedSubsidiaryIds,
+    );
+    if (!result) return notFound("record");
+    return NextResponse.json(result);
   },
-})
+});

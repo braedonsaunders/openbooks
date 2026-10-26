@@ -1,21 +1,36 @@
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import {
-  lockApprovalSubject,
-  requestNativeCommandApproval,
-} from "../platform/approval-routing.ts";
+import { lockApprovalSubject, requestNativeCommandApproval } from "../platform/approval-routing.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 /** Reconciliation lifecycle. Split from banking.ts (pure moves only). */
-import { BankingError, statementComparisonSign, statementTotalsAgree, type BankingContext, subsidiaryScopeSql } from "./banking-core"
-import { loadReconcilableAccount, requireSessionRowInScope, validateReconciliationDate, lockReconciliationAccount, requireCutoffAfterSignedHistory, type BankingSqlExecutor } from "./reconcilable-account"
-import { normalizeAmount } from "./statement-parsers/shared"
+import {
+  BankingError,
+  statementComparisonSign,
+  statementTotalsAgree,
+  type BankingContext,
+  subsidiaryScopeSql,
+} from "./banking-core";
+import {
+  loadReconcilableAccount,
+  requireSessionRowInScope,
+  validateReconciliationDate,
+  lockReconciliationAccount,
+  requireCutoffAfterSignedHistory,
+  type BankingSqlExecutor,
+} from "./reconcilable-account";
+import { normalizeAmount } from "./statement-parsers/shared";
 import { sql } from "drizzle-orm";
-import { db, schema, type SqlExecutor, withOrgTransaction } from "../platform/db.ts"
-import { fromUnits, isZero, toUnits } from "../money/money.ts"
-import { excludePeriodEndJournals } from "../records/period-end-origins.ts"
-import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts"
-import { canonicalPeriodLabel } from "../periods/period-policy.ts"
-import { resolveCoveringPeriod } from "../periods/period-resolution.ts"
-import { applicableSignOffRevalidation, originalSignOffProofAgrees, reconciliationReviewProof, type SignOffRevalidationCertificate } from './reconciliation-review-proof.ts'
+import { db, schema, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
+import { fromUnits, isZero, toUnits } from "../money/money.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { canonicalPeriodLabel } from "../periods/period-policy.ts";
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
+import {
+  applicableSignOffRevalidation,
+  originalSignOffProofAgrees,
+  reconciliationReviewProof,
+  type SignOffRevalidationCertificate,
+} from "./reconciliation-review-proof.ts";
 
 export type ReconciliationRow = {
   id: string;
@@ -31,14 +46,17 @@ async function loadReconciliation(
   reconciliationId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<ReconciliationRow> {
-  const r = await db.execute<ReconciliationRow>(sql`
+  const r = await db.execute<ReconciliationRow>(
+    sql`
     select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status
       from reconciliations r
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
      where r.id = ${reconciliationId} and r.org_id = ${orgId}
        ${subsidiaryScopeSql(scope, sql`a.subsidiary_id`)}
      for share of a
-  `, "objects");
+  `,
+    "objects",
+  );
   const recon = r[0];
   // Missing and out-of-scope sessions refuse identically (uniform not-found).
   if (!recon) throw new ScopeNotFoundError();
@@ -56,7 +74,11 @@ export async function startReconciliation(
   opts: { accountId: string; throughDate: string; statementBalance: string },
   ctx: BankingContext,
 ): Promise<{ id: string }> {
-  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds);
+  const account = await loadReconcilableAccount(
+    ctx.orgId,
+    opts.accountId,
+    ctx.allowedSubsidiaryIds,
+  );
   validateReconciliationDate(opts.throughDate);
   const statementBalance = normalizeAmount(opts.statementBalance, "Statement balance");
   return db.transaction(async (tx) => {
@@ -65,12 +87,21 @@ export async function startReconciliation(
     // The unlocked lookup above is only a preflight. The account can be
     // rehomed while this request waits for the reconciliation fence, so lock
     // and revalidate its current owner before creating account-owned state.
-    const lockedAccount = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds, tx, true);
-    const open = await tx.execute<{ id: string }>(sql`
+    const lockedAccount = await loadReconcilableAccount(
+      ctx.orgId,
+      opts.accountId,
+      ctx.allowedSubsidiaryIds,
+      tx,
+      true,
+    );
+    const open = await tx.execute<{ id: string }>(
+      sql`
       select id from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${lockedAccount.id} and status <> 'signed_off'
        limit 1
-    `, "objects");
+    `,
+      "objects",
+    );
     if (open[0]) {
       throw new BankingError(
         "This account already has an open reconciliation — finish or discard it first",
@@ -110,7 +141,9 @@ async function readStatementCoverage(
   recon: ReconciliationRow,
   ctx: BankingContext,
 ): Promise<StatementCoverage | null> {
-  const coverage = (await executor.execute<{ opening_balance: string | null; start_date: string }>(sql`
+  const coverage = (
+    await executor.execute<{ opening_balance: string | null; start_date: string }>(
+      sql`
     with coverage as (
       select s.opening_balance,
              min(l.posted_on)::text as start_date,
@@ -130,7 +163,10 @@ async function readStatementCoverage(
       from coverage
      order by statement_date asc, start_date asc, id asc
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!coverage) return null;
   return { openingBalance: coverage.opening_balance, startDate: coverage.start_date };
 }
@@ -141,9 +177,14 @@ async function readAccountType(
   ctx: BankingContext,
 ): Promise<string> {
   return (
-    (await executor.execute<{ type: string }>(sql`
+    (
+      await executor.execute<{ type: string }>(
+        sql`
     select type from accounts where id = ${recon.account_id} and org_id = ${ctx.orgId}
-  `, "objects"))[0]?.type ?? ""
+  `,
+        "objects",
+      )
+    )[0]?.type ?? ""
   );
 }
 
@@ -163,7 +204,9 @@ async function readPreCoverageHistory(
 ): Promise<{ carry: string; matchedOld: string }> {
   // Opening balances include immutable originals and their dated reversals.
   // Match eligibility is narrower than the ledger history proving this carry.
-  const history = (await executor.execute<{ carry: string; matched_old: string }>(sql`
+  const history = (
+    await executor.execute<{ carry: string; matched_old: string }>(
+      sql`
     select
       coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is null), 0) as carry,
       coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is not null), 0) as matched_old
@@ -187,7 +230,10 @@ async function readPreCoverageHistory(
           where other.journal_line_id = jl.id and other.org_id = jl.org_id
             and other.reconciliation_id <> ${recon.id}
        )
-  `, "objects"))[0]!;
+  `,
+      "objects",
+    )
+  )[0]!;
   return { carry: history.carry, matchedOld: history.matched_old };
 }
 
@@ -197,7 +243,11 @@ async function readPreCoverageHistory(
  * accept either pairing (owing-positive CSV vs GL-signed OFX). Null proves
  * nothing and must stay a refusal, never an invented opening.
  */
-function pairOpeningToGlTerms(openingAmount: string, historyTotal: string, accountType: string): string | null {
+function pairOpeningToGlTerms(
+  openingAmount: string,
+  historyTotal: string,
+  accountType: string,
+): string | null {
   const openingUnits = toUnits(openingAmount);
   const historyUnits = toUnits(historyTotal);
   if (openingUnits === historyUnits) return fromUnits(openingUnits);
@@ -222,11 +272,13 @@ async function readLatestConfirmation(
   recon: ReconciliationRow,
   ctx: BankingContext,
 ): Promise<OpeningConfirmation | null> {
-  const row = (await executor.execute<{
-    changes: { openingBalance?: unknown; openingBalanceStartDate?: unknown; reason?: unknown };
-    confirmed_at: string;
-    confirmed_by_name: string | null;
-  }>(sql`
+  const row = (
+    await executor.execute<{
+      changes: { openingBalance?: unknown; openingBalanceStartDate?: unknown; reason?: unknown };
+      confirmed_at: string;
+      confirmed_by_name: string | null;
+    }>(
+      sql`
     select al.changes, al.at::text as confirmed_at, u.name as confirmed_by_name
       from audit_log al
       left join users u on u.id = al.actor_id and u.org_id = al.org_id
@@ -235,10 +287,16 @@ async function readLatestConfirmation(
        and al.changes->>'operation' = 'confirm_opening'
      order by al.at desc, al.id desc
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   const amount = typeof row.changes.openingBalance === "string" ? row.changes.openingBalance : null;
-  const startDate = typeof row.changes.openingBalanceStartDate === "string" ? row.changes.openingBalanceStartDate : null;
+  const startDate =
+    typeof row.changes.openingBalanceStartDate === "string"
+      ? row.changes.openingBalanceStartDate
+      : null;
   const reason = typeof row.changes.reason === "string" ? row.changes.reason : null;
   if (!amount || !startDate || !reason) return null;
   return {
@@ -267,22 +325,36 @@ export async function firstReconciliationCarry(
   ctx: BankingContext,
   bookId: string,
 ): Promise<FirstReconciliationCarry | null> {
-  const earliestSigned = (await executor.execute<{ id: string }>(sql`
+  const earliestSigned = (
+    await executor.execute<{ id: string }>(
+      sql`
     select id from reconciliations
      where org_id = ${ctx.orgId} and account_id = ${recon.account_id}
        and status = 'signed_off' and id <> ${recon.id}
      order by through_date asc, created_at asc, id asc
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (earliestSigned) {
-    const approval = (await executor.execute<{ changes: { openingCarriedForward?: unknown; openingCarryStartDate?: unknown } }>(sql`
+    const approval = (
+      await executor.execute<{
+        changes: { openingCarriedForward?: unknown; openingCarryStartDate?: unknown };
+      }>(
+        sql`
       select changes from audit_log
        where org_id = ${ctx.orgId} and table_name = 'reconciliations'
          and row_id = ${earliestSigned.id} and action = 'approve'
        order by at asc limit 1
-    `, "objects"))[0]?.changes;
-    const amount = typeof approval?.openingCarriedForward === "string" ? approval.openingCarriedForward : null;
-    const startDate = typeof approval?.openingCarryStartDate === "string" ? approval.openingCarryStartDate : null;
+    `,
+        "objects",
+      )
+    )[0]?.changes;
+    const amount =
+      typeof approval?.openingCarriedForward === "string" ? approval.openingCarriedForward : null;
+    const startDate =
+      typeof approval?.openingCarryStartDate === "string" ? approval.openingCarryStartDate : null;
     if (!amount || !startDate || isZero(amount)) return null;
     return { startDate, amount: fromUnits(toUnits(amount)) };
   }
@@ -322,14 +394,19 @@ async function readPriorSignedOff(
   recon: ReconciliationRow,
   ctx: BankingContext,
 ): Promise<{ id: string; throughDate: string } | null> {
-  const row = (await executor.execute<{ id: string; through_date: string }>(sql`
+  const row = (
+    await executor.execute<{ id: string; through_date: string }>(
+      sql`
     select id, through_date
       from reconciliations
      where org_id = ${ctx.orgId} and account_id = ${recon.account_id}
        and status = 'signed_off' and id <> ${recon.id}
      order by through_date asc, created_at asc, id asc
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return { id: row.id, throughDate: row.through_date };
 }
@@ -364,9 +441,10 @@ export async function openingPosition(
       ? await readPreCoverageHistory(db, recon, ctx, bookId, coverage.startDate)
       : { carry: "0", matchedOld: "0" };
     const historyTotal = fromUnits(toUnits(history.carry) + toUnits(history.matchedOld));
-    const statementOpening = coverage?.openingBalance === null || coverage?.openingBalance === undefined
-      ? null
-      : fromUnits(toUnits(coverage.openingBalance));
+    const statementOpening =
+      coverage?.openingBalance === null || coverage?.openingBalance === undefined
+        ? null
+        : fromUnits(toUnits(coverage.openingBalance));
     const confirmation = await readLatestConfirmation(db, recon, ctx);
     const carry = await firstReconciliationCarry(db, recon, ctx, bookId);
     return {
@@ -409,21 +487,30 @@ export async function confirmOpeningBalance(
     );
   }
   return db.transaction(async (tx) => {
-    const account = (await tx.execute<{ account_id: string }>(sql`
+    const account = (
+      await tx.execute<{ account_id: string }>(
+        sql`
       select account_id from reconciliations where id = ${reconciliationId} and org_id = ${ctx.orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!account) throw new ScopeNotFoundError();
     await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
-    const reconResult = await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+    const reconResult = await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(
+      sql`
       select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId} and r.account_id = ${account.account_id}
        for update of r
-    `, "objects");
+    `,
+      "objects",
+    );
     const recon = reconResult[0];
     requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
-    if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
+    if (recon.status === "signed_off")
+      throw new BankingError("Reconciliation is already signed off");
     const bookId = await reconciliationBookId(tx, ctx.orgId);
 
     const prior = await readPriorSignedOff(tx, recon, ctx);
@@ -509,8 +596,7 @@ function footSessionBalance(
 ): { clearedBalance: string; difference: string } {
   const statementUnits = toUnits(statementBalance);
   const clearedGlUnits = (carryAmount ? toUnits(carryAmount) : 0n) + toUnits(cleared);
-  const owingPositive =
-    statementComparisonSign(accountType) === -1 && statementUnits >= 0n;
+  const owingPositive = statementComparisonSign(accountType) === -1 && statementUnits >= 0n;
   const clearedTerms = owingPositive ? -clearedGlUnits : clearedGlUnits;
   return {
     clearedBalance: fromUnits(clearedTerms),
@@ -524,10 +610,15 @@ function footSessionBalance(
  * Share setup's fence so starting the first session and changing the primary
  * book cannot pass each other's checks. Writes hold both locks to commit. */
 export async function reconciliationBookId(executor: SqlExecutor, orgId: string): Promise<string> {
-  await executor.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${`accounting-books:${orgId}`}, 0))`);
-  const books = await executor.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+  await executor.execute(
+    sql`select pg_advisory_xact_lock_shared(hashtextextended(${`accounting-books:${orgId}`}, 0))`,
+  );
+  const books = await executor.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(
+    sql`
     select id,is_active,posts_gl from accounting_books
-     where org_id=${orgId} and is_primary order by id for share`, "objects");
+     where org_id=${orgId} and is_primary order by id for share`,
+    "objects",
+  );
   if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl) {
     throw new BankingError("Bank reconciliation requires exactly one active primary posting book");
   }
@@ -542,10 +633,22 @@ async function reconciliationTotalsUsing(
   const bookId = await reconciliationBookId(executor, ctx.orgId);
   const carry = await firstReconciliationCarry(executor, recon, ctx, bookId);
   const carryStart = carry?.startDate ?? null;
-  const accountType = (await executor.execute<{ type: string }>(sql`
+  const accountType =
+    (
+      await executor.execute<{ type: string }>(
+        sql`
     select type from accounts where id = ${recon.account_id} and org_id = ${ctx.orgId}
-  `, "objects"))[0]?.type ?? "";
-  const r = await executor.execute<{ cleared: string; matched_journal: string; matched_stmt: string; unmatched_stmt: string }>(sql`
+  `,
+        "objects",
+      )
+    )[0]?.type ?? "";
+  const r = await executor.execute<{
+    cleared: string;
+    matched_journal: string;
+    matched_stmt: string;
+    unmatched_stmt: string;
+  }>(
+    sql`
     select
       coalesce((
         select sum(jl.txn_amount)
@@ -569,7 +672,9 @@ async function reconciliationTotalsUsing(
          from bank_statement_lines l
         where l.account_id = ${recon.account_id} and l.org_id = ${ctx.orgId}
           and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}) as unmatched_stmt
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = r[0]!;
   const { clearedBalance, difference } = footSessionBalance(
     recon.statement_balance,
@@ -612,7 +717,8 @@ export async function listSignOffBlockers(
 ): Promise<{ lines: SignOffBlocker[]; total: number }> {
   return withOrgTransaction(ctx.orgId, async () => {
     const recon = await loadReconciliation(ctx.orgId, reconciliationId, ctx.allowedSubsidiaryIds);
-    const lines = await db.execute<SignOffBlocker>(sql`
+    const lines = await db.execute<SignOffBlocker>(
+      sql`
       select l.id, l.posted_on as "postedOn", l.amount::text as amount, l.description,
              l.possible_duplicate_of as "possibleDuplicateOf",
              dup.posted_on::text as "possibleDuplicateOfPostedOn",
@@ -627,8 +733,12 @@ export async function listSignOffBlockers(
          and l.match_status = 'unmatched'
        order by l.posted_on, l.line_number
        limit ${limit}
-    `, "objects");
-    const total = (await db.execute<{ count: number }>(sql`
+    `,
+      "objects",
+    );
+    const total = (
+      await db.execute<{ count: number }>(
+        sql`
       select count(*)::int as count
         from bank_statement_lines l
        where l.org_id = ${ctx.orgId}
@@ -636,7 +746,10 @@ export async function listSignOffBlockers(
          and l.currency = ${recon.currency}
          and l.posted_on <= ${recon.through_date}
          and l.match_status = 'unmatched'
-    `, "objects"))[0]!.count;
+    `,
+        "objects",
+      )
+    )[0]!.count;
     return { lines, total };
   });
 }
@@ -677,23 +790,34 @@ export async function adjustReconciliation(
   ctx: BankingContext,
 ): Promise<ReconciliationTotals | null> {
   if (opts.throughDate !== undefined) validateReconciliationDate(opts.throughDate);
-  const statementBalance = opts.statementBalance === undefined
-    ? undefined
-    : normalizeAmount(opts.statementBalance, "Statement balance");
+  const statementBalance =
+    opts.statementBalance === undefined
+      ? undefined
+      : normalizeAmount(opts.statementBalance, "Statement balance");
   return db.transaction(async (tx) => {
     await reconciliationBookId(tx, ctx.orgId);
-    const account = (await tx.execute<{ account_id: string }>(sql`
+    const account = (
+      await tx.execute<{ account_id: string }>(
+        sql`
       select account_id from reconciliations where id = ${reconciliationId} and org_id = ${ctx.orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!account) return null;
     await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
-    const before = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+    const before = (
+      await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(
+        sql`
       select r.id, r.org_id, r.through_date, r.statement_balance, r.account_id, r.currency, r.status, a.subsidiary_id
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId} and r.status <> 'signed_off'
        for update of r
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!before) return null;
     // A missing session stays a null (the route's 404); an out-of-scope one
     // refuses the same uniform not-found as every other session verb.
@@ -702,7 +826,9 @@ export async function adjustReconciliation(
     }
     const throughDate = opts.throughDate ?? before.through_date;
     await requireCutoffAfterSignedHistory(tx, ctx.orgId, before.account_id, throughDate);
-    const stranded = (await tx.execute<{ id: string }>(sql`
+    const stranded = (
+      await tx.execute<{ id: string }>(
+        sql`
       select m.id from reconciliation_matches m
       join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
       join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
@@ -710,27 +836,44 @@ export async function adjustReconciliation(
        where m.reconciliation_id = ${reconciliationId} and m.org_id = ${ctx.orgId}
          and (l.posted_on > ${throughDate} or je.posting_date > ${throughDate})
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (stranded) {
-      throw new BankingError("Through date cannot exclude matched statement or journal lines; unmatch them first");
+      throw new BankingError(
+        "Through date cannot exclude matched statement or journal lines; unmatch them first",
+      );
     }
-    const after = (await tx.execute<ReconciliationRow>(sql`
+    const after = (
+      await tx.execute<ReconciliationRow>(
+        sql`
       update reconciliations
          set through_date = ${throughDate},
              statement_balance = ${statementBalance ?? before.statement_balance},
              updated_at = now(), updated_by = ${ctx.userId}
        where id = ${reconciliationId} and org_id = ${ctx.orgId}
        returning id, account_id, through_date, currency, statement_balance, status
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     const totals = await refreshStatus(after, ctx, tx);
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${ctx.orgId}, 'reconciliations', ${reconciliationId}, 'update',
         ${JSON.stringify({
           mode: "session_adjustment",
-          before: { throughDate: before.through_date, statementBalance: before.statement_balance, status: before.status },
-          after: { throughDate: after.through_date, statementBalance: after.statement_balance,
-            status: isZero(totals.difference) ? "balanced" : "in_progress" },
+          before: {
+            throughDate: before.through_date,
+            statementBalance: before.statement_balance,
+            status: before.status,
+          },
+          after: {
+            throughDate: after.through_date,
+            statementBalance: after.statement_balance,
+            status: isZero(totals.difference) ? "balanced" : "in_progress",
+          },
         })}::jsonb, ${ctx.userId})
     `);
     return totals;
@@ -746,23 +889,29 @@ export async function discardReconciliation(
   ctx: BankingContext,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const reconResult = await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+    const reconResult = await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(
+      sql`
       select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
        for update of r
-    `, "objects");
+    `,
+      "objects",
+    );
     const recon = reconResult[0];
     requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
     if (recon.status === "signed_off") {
       throw new BankingError("Signed-off reconciliations cannot be discarded");
     }
-    const released = await tx.execute<{ statement_line_id: string }>(sql`
+    const released = await tx.execute<{ statement_line_id: string }>(
+      sql`
       delete from reconciliation_matches
        where reconciliation_id = ${recon.id} and org_id = ${ctx.orgId}
       returning statement_line_id
-    `, "objects");
+    `,
+      "objects",
+    );
     const stmtIds = [...new Set(released.map((r) => r.statement_line_id))];
     if (stmtIds.length > 0) {
       await tx.execute(sql`
@@ -823,17 +972,28 @@ export async function withdrawReconciliationSignOff(
     throw new BankingError("Withdrawing a sign-off requires a 10-500 character reason");
   }
   return db.transaction(async (tx) => {
-    const head = (await tx.execute<{ account_id: string; subsidiary_id: string | null }>(sql`
+    const head = (
+      await tx.execute<{ account_id: string; subsidiary_id: string | null }>(
+        sql`
       select r.account_id, a.subsidiary_id
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     requireSessionRowInScope(head, ctx.allowedSubsidiaryIds);
     await lockReconciliationAccount(tx, ctx.orgId, head.account_id);
-    const recon = (await tx.execute<ReconciliationRow & {
-      subsidiary_id: string | null; signed_off_by: string | null; signed_off_at: string | null;
-    }>(sql`
+    const recon = (
+      await tx.execute<
+        ReconciliationRow & {
+          subsidiary_id: string | null;
+          signed_off_by: string | null;
+          signed_off_at: string | null;
+        }
+      >(
+        sql`
       select r.id, r.account_id, r.through_date::text as through_date, r.currency,
              r.statement_balance::text as statement_balance, r.status, a.subsidiary_id,
              r.signed_off_by, r.signed_off_at::text as signed_off_at
@@ -841,71 +1001,100 @@ export async function withdrawReconciliationSignOff(
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
        for update of r
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
     if (recon.status !== "signed_off") {
       throw new BankingError("Only a signed-off reconciliation can be withdrawn");
     }
-    const later = (await tx.execute<{ through_date: string }>(sql`
+    const later = (
+      await tx.execute<{ through_date: string }>(
+        sql`
       select through_date::text as through_date from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${recon.account_id}
          and status = 'signed_off' and id <> ${recon.id}
          and through_date >= ${recon.through_date}::date
        order by through_date desc limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (later) {
       throw new BankingError(
         `Withdraw the later sign-off through ${later.through_date} first — sign-offs are withdrawn newest first`,
       );
     }
-    const open = (await tx.execute<{ through_date: string }>(sql`
+    const open = (
+      await tx.execute<{ through_date: string }>(
+        sql`
       select through_date::text as through_date from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${recon.account_id} and status <> 'signed_off'
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (open) {
       throw new BankingError(
         `Discard the open reconciliation through ${open.through_date} first — it continues from this sign-off`,
       );
     }
-    const period = await resolveCoveringPeriod(tx, ctx.orgId, recon.through_date, recon.subsidiary_id);
+    const period = await resolveCoveringPeriod(
+      tx,
+      ctx.orgId,
+      recon.through_date,
+      recon.subsidiary_id,
+    );
     if (period) {
       const bookId = await reconciliationBookId(tx, ctx.orgId);
-      const blocked = (await tx.execute<{ blocked: boolean }>(sql`
+      const blocked = (
+        await tx.execute<{ blocked: boolean }>(
+          sql`
         select period_module_blocks_write(
           ${ctx.orgId}, ${period.id}, ${bookId}, ${recon.subsidiary_id}, 'banking', false
         ) as blocked
-      `, "objects"))[0]?.blocked;
+      `,
+          "objects",
+        )
+      )[0]?.blocked;
       if (blocked) {
         throw new BankingError(
           `Banking is closed for ${canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false })} — request a controlled reopen of Banking for that period, then withdraw the sign-off`,
         );
       }
     }
-    const withdrawn = await tx.execute<{ id: string }>(sql`
+    const withdrawn = await tx.execute<{ id: string }>(
+      sql`
       update reconciliations
          set status = 'in_progress', signed_off_by = null, signed_off_at = null,
              updated_at = now(), updated_by = ${ctx.userId}
        where id = ${recon.id} and org_id = ${ctx.orgId} and status = 'signed_off'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (withdrawn.length !== 1) {
-      throw new BankingError("The sign-off changed while it was being withdrawn — reload and retry");
+      throw new BankingError(
+        "The sign-off changed while it was being withdrawn — reload and retry",
+      );
     }
     // The journal-line guard admits clearing exactly this reconciliation's
     // stamp while the marker names it, for this transaction only.
     await tx.execute(sql`select set_config('app.reconciliation_withdrawal', ${recon.id}, true)`);
-    const released = await tx.execute<{ id: string }>(sql`
+    const released = await tx.execute<{ id: string }>(
+      sql`
       update journal_lines
          set reconciled_at = null, reconciliation_id = null
        where org_id = ${ctx.orgId} and reconciliation_id = ${recon.id}
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     await tx.execute(sql`select set_config('app.reconciliation_withdrawal', '', true)`);
     const totals = await refreshStatus({ ...recon, status: "in_progress" }, ctx, tx);
-    const status = isZero(totals.difference)
-      ? ("balanced" as const)
-      : ("in_progress" as const);
+    const status = isZero(totals.difference) ? ("balanced" as const) : ("in_progress" as const);
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${ctx.orgId}, 'reconciliations', ${recon.id}, 'update',
@@ -942,24 +1131,28 @@ export async function markReconciled(
   ctx: BankingContext,
   approvalRunId?: string,
 ): Promise<
-  | { status: "signed_off"; journalLinesReconciled: number }
-  | { status: "pending_approval" }
+  { status: "signed_off"; journalLinesReconciled: number } | { status: "pending_approval" }
 > {
   return withOrgTransaction(ctx.orgId, async () => {
     const tx = db;
-    await lockApprovalSubject(
-      ctx.orgId,
-      "bank_reconciliation_sign_off",
-      reconciliationId,
-    );
-    if (!(await lockAndCheckOrgFeature(db, ctx.orgId, "banking")))
-      throw new ScopeNotFoundError();
-    const account = (await tx.execute<{ account_id: string; status: string; subsidiary_id: string | null; account_type: string }>(sql`
+    await lockApprovalSubject(ctx.orgId, "bank_reconciliation_sign_off", reconciliationId);
+    if (!(await lockAndCheckOrgFeature(db, ctx.orgId, "banking"))) throw new ScopeNotFoundError();
+    const account = (
+      await tx.execute<{
+        account_id: string;
+        status: string;
+        subsidiary_id: string | null;
+        account_type: string;
+      }>(
+        sql`
       select r.account_id, r.status, a.subsidiary_id, a.type as account_type
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!account) throw new ScopeNotFoundError();
     const actualScope = await lockActorCommandAuthority(
       tx,
@@ -976,10 +1169,15 @@ export async function markReconciled(
     // A completed sign-off is immutable evidence. Retrying it does not create
     // a new accounting action or require today's book configuration to remain active.
     if (account.status === "signed_off") {
-      const existing = (await tx.execute<{ count: number }>(sql`
+      const existing = (
+        await tx.execute<{ count: number }>(
+          sql`
         select count(*)::int as count from journal_lines
          where org_id = ${ctx.orgId} and reconciliation_id = ${reconciliationId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       return {
         status: "signed_off" as const,
         journalLinesReconciled: existing.count,
@@ -987,21 +1185,29 @@ export async function markReconciled(
     }
     const bookId = await reconciliationBookId(tx, ctx.orgId);
     await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
-    const r = await tx.execute<ReconciliationRow & { subsidiary_id: string | null; account_type: string }>(sql`
+    const r = await tx.execute<
+      ReconciliationRow & { subsidiary_id: string | null; account_type: string }
+    >(
+      sql`
       select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id, a.type as account_type
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
        for update of r
-    `, "objects");
+    `,
+      "objects",
+    );
     const recon = r[0];
     requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
     if (recon.status === "signed_off") {
-      const existing = await tx.execute<{ count: number }>(sql`
+      const existing = await tx.execute<{ count: number }>(
+        sql`
         select count(*)::int as count
           from journal_lines
          where org_id = ${ctx.orgId} and reconciliation_id = ${recon.id}
-      `, "objects");
+      `,
+        "objects",
+      );
       return {
         status: "signed_off" as const,
         journalLinesReconciled: existing[0]!.count,
@@ -1009,14 +1215,17 @@ export async function markReconciled(
     }
     await requireCutoffAfterSignedHistory(tx, ctx.orgId, recon.account_id, recon.through_date);
 
-    const statementEvidence = await tx.execute<{ count: number }>(sql`
+    const statementEvidence = await tx.execute<{ count: number }>(
+      sql`
       select count(*)::int as count
         from bank_statement_lines
        where org_id = ${ctx.orgId}
          and account_id = ${recon.account_id}
          and currency = ${recon.currency}
          and posted_on <= ${recon.through_date}
-    `, "objects");
+    `,
+      "objects",
+    );
     if (statementEvidence[0]!.count === 0) {
       throw new BankingError(
         "Cannot sign off without imported statement evidence through the reconciliation date",
@@ -1028,26 +1237,36 @@ export async function markReconciled(
     // When a statement on the cutoff date carries a closing balance, the two
     // must agree — otherwise the operator balanced the GL against a number
     // the bank never reported.
-    const cutoffStatements = await tx.execute<{ closing_balance: string }>(sql`
+    const cutoffStatements = await tx.execute<{ closing_balance: string }>(
+      sql`
       select closing_balance::text as closing_balance
         from bank_statements
        where org_id = ${ctx.orgId}
          and account_id = ${recon.account_id}
          and statement_date = ${recon.through_date}::date
          and closing_balance is not null
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const stmt of cutoffStatements) {
       // Card statements disagree on sign (OFX carries the GL-signed balance,
       // the session holds it owing-positive), so a liability account
       // compares under its statement sign convention, like the matches.
-      if (!statementTotalsAgree(toUnits(stmt.closing_balance), toUnits(recon.statement_balance), recon.account_type)) {
+      if (
+        !statementTotalsAgree(
+          toUnits(stmt.closing_balance),
+          toUnits(recon.statement_balance),
+          recon.account_type,
+        )
+      ) {
         throw new BankingError(
           `Cannot sign off: the imported statement closing balance ${fromUnits(toUnits(stmt.closing_balance))} for ${recon.through_date} does not match the session statement balance ${fromUnits(toUnits(recon.statement_balance))} — adjust the session balance to the imported closing balance`,
         );
       }
     }
 
-    const unmatched = await tx.execute<{ count: number }>(sql`
+    const unmatched = await tx.execute<{ count: number }>(
+      sql`
       select count(*)::int as count
         from bank_statement_lines
        where org_id = ${ctx.orgId}
@@ -1055,7 +1274,9 @@ export async function markReconciled(
          and currency = ${recon.currency}
          and posted_on <= ${recon.through_date}
          and match_status = 'unmatched'
-    `, "objects");
+    `,
+      "objects",
+    );
     if (unmatched[0]!.count > 0) {
       throw new BankingError(
         `Cannot sign off: ${unmatched[0]!.count} statement line(s) through the cutoff remain unmatched`,
@@ -1084,7 +1305,8 @@ export async function markReconciled(
       entry_book: string;
       entry_status: string;
       entry_posting_date: string;
-    }>(sql`
+    }>(
+      sql`
       select m.group_id,
              l.id as stmt_id, l.amount::text as stmt_amount, l.account_id as stmt_account,
              l.currency as stmt_currency, l.posted_on::text as stmt_posted_on, l.match_status as stmt_status,
@@ -1106,7 +1328,9 @@ export async function markReconciled(
          and je.org_id = jl.org_id
        where m.reconciliation_id = ${recon.id}
          and m.org_id = ${ctx.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const groups = new Map<string, typeof groupRows>();
     for (const row of groupRows) {
       const list = groups.get(row.group_id) ?? [];
@@ -1118,23 +1342,24 @@ export async function markReconciled(
         // GL-only clearing rows carry no statement side; only the journal
         // side is footed for them.
         if (
-          row.stmt_id !== null
-          && (row.stmt_account !== recon.account_id
-            || row.stmt_currency !== recon.currency
-            || (row.stmt_posted_on ?? "") > recon.through_date
-            || row.stmt_status !== "matched")
+          row.stmt_id !== null &&
+          (row.stmt_account !== recon.account_id ||
+            row.stmt_currency !== recon.currency ||
+            (row.stmt_posted_on ?? "") > recon.through_date ||
+            row.stmt_status !== "matched")
         ) {
           return "one or more matches fail book, account, currency, cutoff, or availability";
         }
         if (
-          row.journal_account !== recon.account_id
-          || row.journal_currency !== recon.currency
-          || row.entry_book !== bookId
+          row.journal_account !== recon.account_id ||
+          row.journal_currency !== recon.currency ||
+          row.entry_book !== bookId ||
           // Live entries only: a match whose entry has since been reversed is stale.
-          || row.entry_status !== "posted"
-          || row.entry_posting_date > recon.through_date
-          || row.journal_reconciled_at !== null
-          || (ctx.allowedSubsidiaryIds !== null && !subsidiaryScopeAllows(ctx.allowedSubsidiaryIds, row.journal_subsidiary))
+          row.entry_status !== "posted" ||
+          row.entry_posting_date > recon.through_date ||
+          row.journal_reconciled_at !== null ||
+          (ctx.allowedSubsidiaryIds !== null &&
+            !subsidiaryScopeAllows(ctx.allowedSubsidiaryIds, row.journal_subsidiary))
         ) {
           return "one or more matches fail book, account, currency, cutoff, or availability";
         }
@@ -1144,10 +1369,16 @@ export async function markReconciled(
       // GL-only groups sum an empty statement side against a zero journal
       // sum. Liability accounts foot under the statement sign convention
       // (see statementTotalsAgree): card feeds disagree on charge signs.
-      const stmtTotal = [...new Map(rows.filter((row) => row.stmt_id !== null).map((row) => [row.stmt_id, row.stmt_amount as string])).values()]
-        .reduce((total, amount) => total + toUnits(amount), 0n);
-      const journalTotal = [...new Map(rows.map((row) => [row.journal_id, row.journal_amount])).values()]
-        .reduce((total, amount) => total + toUnits(amount), 0n);
+      const stmtTotal = [
+        ...new Map(
+          rows
+            .filter((row) => row.stmt_id !== null)
+            .map((row) => [row.stmt_id, row.stmt_amount as string]),
+        ).values(),
+      ].reduce((total, amount) => total + toUnits(amount), 0n);
+      const journalTotal = [
+        ...new Map(rows.map((row) => [row.journal_id, row.journal_amount])).values(),
+      ].reduce((total, amount) => total + toUnits(amount), 0n);
       if (!statementTotalsAgree(stmtTotal, journalTotal, recon.account_type)) {
         return `group total ${fromUnits(stmtTotal)} does not foot to ${fromUnits(journalTotal)}`;
       }
@@ -1162,7 +1393,8 @@ export async function markReconciled(
 
     const carry = await firstReconciliationCarry(tx, recon, ctx, bookId);
     const carryStart = carry?.startDate ?? null;
-    const bal = await tx.execute<{ cleared: string }>(sql`
+    const bal = await tx.execute<{ cleared: string }>(
+      sql`
       select coalesce(sum(jl.txn_amount), 0) as cleared
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
@@ -1175,7 +1407,9 @@ export async function markReconciled(
               or jl.id in (select journal_line_id from reconciliation_matches rm
                             where rm.reconciliation_id = ${recon.id}
                               and rm.org_id = ${ctx.orgId}))
-    `, "objects");
+    `,
+      "objects",
+    );
     const { difference } = footSessionBalance(
       recon.statement_balance,
       carry?.amount ?? null,
@@ -1202,7 +1436,8 @@ export async function markReconciled(
     // journal_lines carries no row-level audit columns. The reconciliation
     // stamp is its own evidence; transaction amendments are preserved through
     // immutable document + GL snapshots in audit_log.
-    const stamped = await tx.execute<{ id: string }>(sql`
+    const stamped = await tx.execute<{ id: string }>(
+      sql`
       update journal_lines jl
          set reconciled_at = now(), reconciliation_id = ${recon.id}
        where jl.org_id = ${ctx.orgId} and jl.reconciled_at is null
@@ -1210,19 +1445,24 @@ export async function markReconciled(
                         where reconciliation_id = ${recon.id}
                           and org_id = ${ctx.orgId})
       returning jl.id
-    `, "objects");
+    `,
+      "objects",
+    );
 
     // Stamp matched lines while their locked session is unsigned, then seal
     // the session under the same native Flow decision and transaction.
-    const signed =
-      await tx.execute(sql`update reconciliations set status='signed_off',signed_off_by=${ctx.userId},signed_off_at=now(),updated_at=now(),updated_by=${ctx.userId}
-      where org_id=${ctx.orgId} and id=${recon.id} and status in('in_progress','balanced') returning id`, "objects");
+    const signed = await tx.execute(
+      sql`update reconciliations set status='signed_off',signed_off_by=${ctx.userId},signed_off_at=now(),updated_at=now(),updated_by=${ctx.userId}
+      where org_id=${ctx.orgId} and id=${recon.id} and status in('in_progress','balanced') returning id`,
+      "objects",
+    );
     if (signed.length !== 1)
       throw new BankingError(
         "The reconciliation changed before sign-off was recorded. Reload its current state.",
       );
 
-    const excluded = await tx.execute<{ count: number }>(sql`
+    const excluded = await tx.execute<{ count: number }>(
+      sql`
       select count(*)::int as count
         from bank_statement_lines
        where org_id = ${ctx.orgId}
@@ -1230,7 +1470,9 @@ export async function markReconciled(
          and currency = ${recon.currency}
          and posted_on <= ${recon.through_date}
          and match_status = 'excluded'
-    `, "objects");
+    `,
+      "objects",
+    );
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
@@ -1312,12 +1554,17 @@ async function loadSignedSession(
   // The scope gate reads exactly like every other session verb: a restricted
   // caller cannot distinguish another entity's session from a missing one.
   const recon = await loadReconciliation(ctx.orgId, reconciliationId, ctx.allowedSubsidiaryIds);
-  const row = (await executor.execute<StalenessSession>(sql`
+  const row = (
+    await executor.execute<StalenessSession>(
+      sql`
     select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status,
            r.signed_off_at::text as signed_off_at
       from reconciliations r
      where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
-  `, "objects"))[0]!;
+  `,
+      "objects",
+    )
+  )[0]!;
   return { ...recon, signed_off_at: row.signed_off_at };
 }
 
@@ -1336,7 +1583,8 @@ export async function reconciliationStaleness(
     const recon = await loadSignedSession(db, reconciliationId, ctx);
     if (recon.status !== "signed_off" || !recon.signed_off_at) return { ...CLEAN_STALENESS };
     const bookId = await reconciliationBookId(db, ctx.orgId);
-    const lateEntries = await db.execute<StaleJournalEntry & { posted_at: string }>(sql`
+    const lateEntries = await db.execute<StaleJournalEntry & { posted_at: string }>(
+      sql`
       select je.entry_number as "entryNumber", je.posting_date::text as "postingDate",
              coalesce(sum(jl.txn_amount), 0)::text as amount,
              max(u.name) as "postedBy", min(je.posted_at)::text as posted_at
@@ -1351,8 +1599,13 @@ export async function reconciliationStaleness(
          and je.posted_at > ${recon.signed_off_at}::timestamptz
        group by je.id, je.entry_number, je.posting_date
        order by je.posting_date, je.entry_number
-    `, "objects");
-    const reversedMatches = await db.execute<ReversedMatchEntry & { posted_at: string; updated_at: string }>(sql`
+    `,
+      "objects",
+    );
+    const reversedMatches = await db.execute<
+      ReversedMatchEntry & { posted_at: string; updated_at: string }
+    >(
+      sql`
       select je.entry_number as "entryNumber", je.posting_date::text as "postingDate",
              coalesce(sum(jl.txn_amount), 0)::text as amount,
              max(u.name) as "postedBy", min(je.posted_at)::text as posted_at,
@@ -1370,57 +1623,82 @@ export async function reconciliationStaleness(
          and coalesce(rev.posted_at, je.updated_at) > ${recon.signed_off_at}::timestamptz
        group by je.id, je.entry_number, je.posting_date
        order by je.posting_date, je.entry_number
-    `, "objects");
+    `,
+      "objects",
+    );
     const late = lateEntries.map(({ posted_at: _postedAt, ...entry }) => ({
       ...entry,
       amount: fromUnits(toUnits(entry.amount)),
       postedAt: _postedAt,
     }));
-    const reversed = reversedMatches.map(({ posted_at: _postedAt, updated_at: _updatedAt, ...entry }) => ({
-      ...entry,
-      amount: fromUnits(toUnits(entry.amount)),
-      postedAt: _postedAt,
-      reversedAt: entry.reversedAt,
-    }));
+    const reversed = reversedMatches.map(
+      ({ posted_at: _postedAt, updated_at: _updatedAt, ...entry }) => ({
+        ...entry,
+        amount: fromUnits(toUnits(entry.amount)),
+        postedAt: _postedAt,
+        reversedAt: entry.reversedAt,
+      }),
+    );
     // The sign-off footed posted lines only, so a reversal never restates the
     // cleared balance the way a late posting does: the effect is the late
     // postings' net, and the reversed matches stand apart as void evidence.
     const clearedEffect = fromUnits(
       late.reduce((total, entry) => total + toUnits(entry.amount), 0n),
     );
-    const since = [...late.map((entry) => entry.postedAt), ...reversed.map((entry) => entry.reversedAt)]
-      .filter((value): value is string => value !== null)
-      .map((value) => value.slice(0, 10))
-      .sort()[0] ?? null;
+    const since =
+      [...late.map((entry) => entry.postedAt), ...reversed.map((entry) => entry.reversedAt)]
+        .filter((value): value is string => value !== null)
+        .map((value) => value.slice(0, 10))
+        .sort()[0] ?? null;
     let revalidation: SignOffRevalidationCertificate | null = null;
     if (late.length > 0 && reversed.length === 0) {
       // Healthy unreviewed sessions retain the ordinary lightweight read.
       // A retained certificate requires full keyed evidence comparison;
       // its timestamp alone never suppresses a later financial event.
-      const recorded = (await db.execute(sql`
+      const recorded = (
+        await db.execute(
+          sql`
         select al.id from audit_log al join reconciliations r on r.org_id=al.org_id and r.id=al.row_id
           where al.org_id=${ctx.orgId} and al.table_name='reconciliations'
           and r.account_id=${recon.account_id} and r.currency=${recon.currency}
           and r.through_date<=${recon.through_date}::date and r.status='signed_off'
           and al.action='update' and al.changes->>'operation'='revalidate_sign_off'
         limit 1
-      `, "objects"))[0];
-      const signer = recorded ? (await db.execute<{id:string;signed_off_by:string|null;evidence_kind:string}>(sql`
+      `,
+          "objects",
+        )
+      )[0];
+      const signer = recorded
+        ? (
+            await db.execute<{ id: string; signed_off_by: string | null; evidence_kind: string }>(
+              sql`
         select id,signed_off_by,evidence_kind from reconciliations where org_id=${ctx.orgId} and id=${recon.id}
-      `, "objects"))[0] : null;
-      if (signer?.signed_off_by && signer.evidence_kind==='statement') {
-        const subject = {orgId:ctx.orgId,id:recon.id,accountId:recon.account_id,bookId,
-          currency:recon.currency,throughDate:recon.through_date,signedOffAt:recon.signed_off_at,
-          statementBalance:fromUnits(toUnits(recon.statement_balance)),signedOffBy:signer.signed_off_by};
-        const proof = await reconciliationReviewProof(db,subject);
-        const totals = await reconciliationTotals(recon.id,ctx);
+      `,
+              "objects",
+            )
+          )[0]
+        : null;
+      if (signer?.signed_off_by && signer.evidence_kind === "statement") {
+        const subject = {
+          orgId: ctx.orgId,
+          id: recon.id,
+          accountId: recon.account_id,
+          bookId,
+          currency: recon.currency,
+          throughDate: recon.through_date,
+          signedOffAt: recon.signed_off_at,
+          statementBalance: fromUnits(toUnits(recon.statement_balance)),
+          signedOffBy: signer.signed_off_by,
+        };
+        const proof = await reconciliationReviewProof(db, subject);
+        const totals = await reconciliationTotals(recon.id, ctx);
         if (
-          (await originalSignOffProofAgrees(db,subject,proof)) &&
+          (await originalSignOffProofAgrees(db, subject, proof)) &&
           totals.unmatchedStatementLines === 0 &&
           isZero(totals.difference) &&
-          toUnits(totals.statementBalance)===toUnits(subject.statementBalance)
+          toUnits(totals.statementBalance) === toUnits(subject.statementBalance)
         ) {
-          revalidation = await applicableSignOffRevalidation(db,subject,proof);
+          revalidation = await applicableSignOffRevalidation(db, subject, proof);
         }
       }
     }
@@ -1430,7 +1708,7 @@ export async function reconciliationStaleness(
       lateEntries: late,
       reversedMatches: reversed,
       clearedEffect,
-      ...(revalidation ? {revalidation} : {}),
+      ...(revalidation ? { revalidation } : {}),
     };
   });
 }
@@ -1455,11 +1733,18 @@ export async function reconciliationStalenessSummaries(
   return withOrgTransaction(ctx.orgId, async () => {
     // The account read already gated the caller; confirm every id belongs to
     // it so a mixed list cannot leak another account's sessions.
-    const owned = new Set((await db.execute<{ id: string }>(sql`
+    const owned = new Set(
+      (
+        await db.execute<{ id: string }>(
+          sql`
       select id from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${accountId}
          and id = any(${sql.param([...reconciliationIds])}::uuid[])
-    `, "objects")).map((row) => row.id));
+    `,
+          "objects",
+        )
+      ).map((row) => row.id),
+    );
     const summaries: Record<string, ReconciliationStalenessSummary> = {};
     for (const id of reconciliationIds) {
       if (!owned.has(id)) continue;
@@ -1493,7 +1778,8 @@ export async function priorPeriodLateEffect(
 ): Promise<PriorPeriodLateEffect[]> {
   return withOrgTransaction(ctx.orgId, async () => {
     const bookId = await reconciliationBookId(db, ctx.orgId);
-    const rows = await db.execute<{ through_date: string; amount: string }>(sql`
+    const rows = await db.execute<{ through_date: string; amount: string }>(
+      sql`
       select r.through_date::text as through_date, coalesce(sum(jl.txn_amount), 0)::text as amount
         from reconciliations r
         join journal_lines jl
@@ -1509,7 +1795,9 @@ export async function priorPeriodLateEffect(
        group by r.id, r.through_date
       having coalesce(sum(jl.txn_amount), 0) <> 0
        order by r.through_date
-    `, "objects");
+    `,
+      "objects",
+    );
     const byPeriod = new Map<string, bigint>();
     for (const row of rows) {
       byPeriod.set(row.through_date, (byPeriod.get(row.through_date) ?? 0n) + toUnits(row.amount));

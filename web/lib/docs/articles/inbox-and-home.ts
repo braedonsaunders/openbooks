@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const inboxAndHome: DocArticle = {
-  slug: 'inbox-and-home',
-  title: 'Your Inbox and Home',
-  category: 'administration',
+  slug: "inbox-and-home",
+  title: "Your Inbox and Home",
+  category: "administration",
   order: 12,
   summary:
-    'One inbox where approvals, checklist steps, requests, and notices complete in place, and a home dashboard composed for employees, managers, and admins.',
-  updated: '2026-09-30',
-  keywords: ['inbox', 'my tasks', 'approvals', 'home', 'dashboard', 'notices', 'persona'],
-  related: ['self-service', 'hrm-processes'],
+    "One inbox where approvals, checklist steps, requests, and notices complete in place, and a home dashboard composed for employees, managers, and admins.",
+  updated: "2026-09-30",
+  keywords: ["inbox", "my tasks", "approvals", "home", "dashboard", "notices", "persona"],
+  related: ["self-service", "hrm-processes"],
   body: `# Your Inbox and Home
 
 The inbox is where work waiting on you completes. Approvals, checklist steps, leave and change requests, reviews, enrollment windows, signatures, timesheets, expenses, and notices each render as one row with the actions its own surface allows — approve, reject, submit, complete, acknowledge, mark read — and every action runs through that surface's service, so the inbox and the native page can never disagree. A refusal names its remedy: a rejection without a reason, a delegation without a colleague, or an item someone else already decided.
@@ -28,4 +28,4 @@ A dashboard you customized stays yours. Announcements are authored under Setup �
 
 The inbox_items assistant tool reads the caller's own items through the same adapters as the page, so its answers always agree with the screen. Authoring stays human-attested: filing, submitting, and deciding happen in the product, never through the assistant.
 `,
-}
+};

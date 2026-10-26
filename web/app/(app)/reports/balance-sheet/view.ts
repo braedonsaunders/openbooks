@@ -1,29 +1,40 @@
-import 'server-only'
+import "server-only";
 
-import { getMoneyFormatter } from '@/lib/money-server'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams, reportPeriodLabel } from '../../../../lib/format'
+import { getMoneyFormatter } from "@/lib/money-server";
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams, reportPeriodLabel } from "../../../../lib/format";
+import { ref, textBlock, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { dimensionOptions } from "../../../../lib/reports";
+import { orgInfo } from "../../../../lib/data";
+import { resolveOrgId } from "../../../../lib/org-scope";
+import { reportBookSelection } from "../../../../lib/report-books";
 import {
-  ref,
-  textBlock,
-  widgetBlock,
-  type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { dimensionOptions } from '../../../../lib/reports'
-import { orgInfo } from '../../../../lib/data'
-import { resolveOrgId } from '../../../../lib/org-scope'
-import { reportBookSelection } from '../../../../lib/report-books'
-import { MissingRatesError, reportSubsidiaryView, historicalTranslationBlockedNotice, statementTranslationBlockedAction, type StatementTranslationBlockedNotice } from '../../../../lib/consolidation'
-import { balanceSheetView } from '../../../../lib/statement-matrix'
-import { decimalAbs, decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-format'
-import { AS_OF_DEFAULT_PERIOD_PRESET } from '@openbooks/reports'
-import { resolvePeriod, type ResolvedPeriod } from '../../../../lib/periods'
-import { IncompleteReportPeriodError, parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { getAuthz } from '@/lib/authz'
-import { dimensionOptionsScope } from '../../../../lib/reports/filters'
-import { statementReportSpec } from '@/lib/reports/statement-report-spec'
-import { AccountingContextError, accountingContextFilter, accountingContextLegend, reportAccountingContext, type ReportAccountingContext } from '../../../../lib/reports/accounting-context'
+  MissingRatesError,
+  reportSubsidiaryView,
+  historicalTranslationBlockedNotice,
+  statementTranslationBlockedAction,
+  type StatementTranslationBlockedNotice,
+} from "../../../../lib/consolidation";
+import { balanceSheetView } from "../../../../lib/statement-matrix";
+import { decimalAbs, decimalAdd, decimalCmp, decimalNeg } from "../../../../lib/statement-format";
+import { AS_OF_DEFAULT_PERIOD_PRESET } from "@openbooks/reports";
+import { resolvePeriod, type ResolvedPeriod } from "../../../../lib/periods";
+import {
+  IncompleteReportPeriodError,
+  parseReportQuery,
+  scaleFactor,
+} from "../../../../lib/report-filters";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
+import { getAuthz } from "@/lib/authz";
+import { dimensionOptionsScope } from "../../../../lib/reports/filters";
+import { statementReportSpec } from "@/lib/reports/statement-report-spec";
+import {
+  AccountingContextError,
+  accountingContextFilter,
+  accountingContextLegend,
+  reportAccountingContext,
+  type ReportAccountingContext,
+} from "../../../../lib/reports/accounting-context";
 
 /**
  * The balance sheet, split into a loader and a spec — the same statement
@@ -38,131 +49,143 @@ import { AccountingContextError, accountingContextFilter, accountingContextLegen
  */
 
 export interface BalanceSheetData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  dimensions: unknown
-  subsidiaries: unknown
-  primaryFilter: unknown
-  scheduleDefId: string | null
-  scheduleParams: Record<string, string | undefined>
-  exportParams: Record<string, string | undefined>
-  equationLabel: string
-  balanced: boolean
-  balanceLabel: string
-  company: string
-  periodPhrase: string
-  note: string
-  wide: boolean
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  dimensions: unknown;
+  subsidiaries: unknown;
+  primaryFilter: unknown;
+  scheduleDefId: string | null;
+  scheduleParams: Record<string, string | undefined>;
+  exportParams: Record<string, string | undefined>;
+  equationLabel: string;
+  balanced: boolean;
+  balanceLabel: string;
+  company: string;
+  periodPhrase: string;
+  note: string;
+  wide: boolean;
   /** Set when translation prerequisites block the statement:
    * the native banner directs the operator to rates or retained source evidence. */
-  ratesBlocked: StatementTranslationBlockedNotice | null
+  ratesBlocked: StatementTranslationBlockedNotice | null;
   /** An incomplete custom window keeps its filters and hides the statement. */
-  periodRefusal: string | null
-  filterPeriodLabel: string
+  periodRefusal: string | null;
+  filterPeriodLabel: string;
   /** Set when the requested accounting context cannot label the accounts. */
-  contextBlocked: { title: string; description: string } | null
+  contextBlocked: { title: string; description: string } | null;
   /** False while rates, accounting context or the period cannot resolve. */
-  ratesReady: boolean
+  ratesReady: boolean;
   /** Never rendered while report prerequisites are refused. */
-  view: unknown
+  view: unknown;
   /** True when the breakout produced more dimension columns than
    * MAX_MATRIX_COLUMNS and the matrix was capped. */
-  truncated: boolean
-  truncatedLabel: string
-  scale: unknown
-  currency: string | undefined
-  drill: unknown
+  truncated: boolean;
+  truncatedLabel: string;
+  scale: unknown;
+  currency: string | undefined;
+  drill: unknown;
 }
 
 export async function loadBalanceSheet(
   sp: Record<string, string | undefined>,
 ): Promise<BalanceSheetData> {
-  const { money } = await getMoneyFormatter()
-  const t = await getTranslations('reports')
-  const locale = await getLocale()
-  const tb = await getTranslations('budgets')
-  const scheduleDefId = await reportScheduleAnchor('balance-sheet')
+  const { money } = await getMoneyFormatter();
+  const t = await getTranslations("reports");
+  const locale = await getLocale();
+  const tb = await getTranslations("budgets");
+  const scheduleDefId = await reportScheduleAnchor("balance-sheet");
   // Point-in-time: an unfiltered statement is dated today, never at a
   // fiscal year end that has not happened yet.
-  const q = parseReportQuery(sp, { defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET })
-  let period: ResolvedPeriod | null = null
-  let periodRefusal: string | null = null
+  const q = parseReportQuery(sp, { defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET });
+  let period: ResolvedPeriod | null = null;
+  let periodRefusal: string | null = null;
   try {
-    period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+    period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
   } catch (error) {
-    if (!(error instanceof IncompleteReportPeriodError)) throw error
-    periodRefusal = error.message
+    if (!(error instanceof IncompleteReportPeriodError)) throw error;
+    periodRefusal = error.message;
   }
-  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
+  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book);
 
-  const secTotal = (section: string) => t('statement.sectionTotal', { section })
+  const secTotal = (section: string) => t("statement.sectionTotal", { section });
   const labels = {
-    assets: t('balanceSheet.assets'),
-    liabilities: t('balanceSheet.liabilities'),
-    equity: t('balanceSheet.equity'),
-    totalAssets: secTotal(t('balanceSheet.assets')),
-    totalLiabilities: secTotal(t('balanceSheet.liabilities')),
-    totalEquity: secTotal(t('balanceSheet.equity')),
-    retainedEarningsPrior: t('statement.retainedEarningsPrior'),
-    currentYearEarnings: t('statement.currentYearEarnings'),
-    translationAdjustment: t('statement.translationAdjustment'),
-    liabilitiesAndEquity: t('balanceSheet.liabilitiesAndEquity'),
+    assets: t("balanceSheet.assets"),
+    liabilities: t("balanceSheet.liabilities"),
+    equity: t("balanceSheet.equity"),
+    totalAssets: secTotal(t("balanceSheet.assets")),
+    totalLiabilities: secTotal(t("balanceSheet.liabilities")),
+    totalEquity: secTotal(t("balanceSheet.equity")),
+    retainedEarningsPrior: t("statement.retainedEarningsPrior"),
+    currentYearEarnings: t("statement.currentYearEarnings"),
+    translationAdjustment: t("statement.translationAdjustment"),
+    liabilitiesAndEquity: t("balanceSheet.liabilitiesAndEquity"),
     totalOf: secTotal,
-  }
+  };
 
   // Translation prerequisites render a supported remedy in the native banner;
   // the statement remains hidden until its exact basis is available.
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let view: Awaited<ReturnType<typeof balanceSheetView>> | null = null
-  let ratesBlocked: StatementTranslationBlockedNotice | null = null
-  let accountingContext: ReportAccountingContext | null = null
-  let contextBlocked: { title: string; description: string } | null = null
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let view: Awaited<ReturnType<typeof balanceSheetView>> | null = null;
+  let ratesBlocked: StatementTranslationBlockedNotice | null = null;
+  let accountingContext: ReportAccountingContext | null = null;
+  let contextBlocked: { title: string; description: string } | null = null;
   if (period) {
     try {
-      accountingContext = await reportAccountingContext(await resolveOrgId(), sp.ctx, { asOf: period.to, subsidiaryId: q.subsidiaryId ?? null })
+      accountingContext = await reportAccountingContext(await resolveOrgId(), sp.ctx, {
+        asOf: period.to,
+        subsidiaryId: q.subsidiaryId ?? null,
+      });
     } catch (e) {
-      if (!(e instanceof AccountingContextError)) throw e
-      contextBlocked = { title: t('accountingContext.blockedTitle'), description: `${e.message} ${e.remedy}` }
+      if (!(e instanceof AccountingContextError)) throw e;
+      contextBlocked = {
+        title: t("accountingContext.blockedTitle"),
+        description: `${e.message} ${e.remedy}`,
+      };
     }
     try {
-      subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
-      if (!contextBlocked) view = await balanceSheetView({ from: period.from, to: period.to }, reportPeriodLabel(period, locale), labels, {
-        accountLabels: accountingContext?.labels ?? null,
-        locale,
-        breakout: q.breakout,
-        compare: q.compare,
-        basis: q.basis,
-        dims: q.dims,
-        subsidiary: subView.subsidiary,
-        showZero: q.showZero,
-        bookId: selectedBook.id,
-      })
+      subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id);
+      if (!contextBlocked)
+        view = await balanceSheetView(
+          { from: period.from, to: period.to },
+          reportPeriodLabel(period, locale),
+          labels,
+          {
+            accountLabels: accountingContext?.labels ?? null,
+            locale,
+            breakout: q.breakout,
+            compare: q.compare,
+            basis: q.basis,
+            dims: q.dims,
+            subsidiary: subView.subsidiary,
+            showZero: q.showZero,
+            bookId: selectedBook.id,
+          },
+        );
     } catch (e) {
       const historicalNotice = historicalTranslationBlockedNotice(e, {
-        title: t('statement.historicalEvidenceBlockedTitle'),
-        actionLabel: t('statement.historicalEvidenceBlockedAction'),
-      })
-      if (historicalNotice) ratesBlocked = historicalNotice
+        title: t("statement.historicalEvidenceBlockedTitle"),
+        actionLabel: t("statement.historicalEvidenceBlockedAction"),
+      });
+      if (historicalNotice) ratesBlocked = historicalNotice;
       else {
-        if (!(e instanceof MissingRatesError)) throw e
+        if (!(e instanceof MissingRatesError)) throw e;
         ratesBlocked = {
-          code: 'rates-not-derived',
-          title: t('statement.ratesBlockedTitle'),
+          code: "rates-not-derived",
+          title: t("statement.ratesBlockedTitle"),
           description: (e as Error).message,
-          deriveLabel: t('statement.ratesBlockedAction'),
-          deriveHref: '/close',
-        }
+          deriveLabel: t("statement.ratesBlockedAction"),
+          deriveHref: "/close",
+        };
       }
     }
   }
-  const authz = await getAuthz()
-  const optionScope = dimensionOptionsScope(subView?.subsidiary?.ids, authz?.allowedSubsidiaryIds)
+  const authz = await getAuthz();
+  const optionScope = dimensionOptionsScope(subView?.subsidiary?.ids, authz?.allowedSubsidiaryIds);
   const [opts, org] = await Promise.all([
     dimensionOptions(undefined, undefined, optionScope),
     orgInfo(),
-  ])
+  ]);
 
   // The badge checks every amount column, not just the first: with a
   // breakout there is no total column, so reading values[0] alone reports a
@@ -170,63 +193,79 @@ export async function loadBalanceSheet(
   // balanceable figures, and stay out of the check. The reported gap is the
   // largest-magnitude column gap.
   const amountIndexes = (view?.columns ?? [])
-    .map((c, i) => (c.kind === 'amount' ? i : -1))
-    .filter((i) => i >= 0)
+    .map((c, i) => (c.kind === "amount" ? i : -1))
+    .filter((i) => i >= 0);
   const columnValue = (label: string, i: number) =>
-    view?.lines.find((l) => l.label === label)?.values?.[i] ?? '0.0000'
+    view?.lines.find((l) => l.label === label)?.values?.[i] ?? "0.0000";
   const gaps = amountIndexes.map((i) => {
-    const assets = columnValue(labels.totalAssets, i)
-    const claims = decimalAdd(columnValue(labels.totalLiabilities, i), columnValue(labels.totalEquity, i))
-    return decimalAdd(assets, decimalNeg(claims))
-  })
+    const assets = columnValue(labels.totalAssets, i);
+    const claims = decimalAdd(
+      columnValue(labels.totalLiabilities, i),
+      columnValue(labels.totalEquity, i),
+    );
+    return decimalAdd(assets, decimalNeg(claims));
+  });
   const difference = gaps.reduce(
     (worst, gap) => (decimalCmp(decimalAbs(gap), decimalAbs(worst)) > 0 ? gap : worst),
-    '0.0000',
-  )
-  const balanced = view !== null && gaps.every((gap) => decimalCmp(gap, '-0.0100') > 0 && decimalCmp(gap, '0.0100') < 0)
-
+    "0.0000",
+  );
+  const balanced =
+    view !== null &&
+    gaps.every((gap) => decimalCmp(gap, "-0.0100") > 0 && decimalCmp(gap, "0.0100") < 0);
 
   return {
-    title: t('balanceSheet.title'),
-    description: [selectedBook.name, subView?.label, period ? t('balanceSheet.asOf', civilDateParams({ date: period.to }, locale)) : null].filter(Boolean).join(' · '),
-    backHref: '/reports',
-    backLabel: t('hub.title'),
+    title: t("balanceSheet.title"),
+    description: [
+      selectedBook.name,
+      subView?.label,
+      period ? t("balanceSheet.asOf", civilDateParams({ date: period.to }, locale)) : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    backHref: "/reports",
+    backLabel: t("hub.title"),
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
     primaryFilter: (() => {
       const filters = [
         books.length > 1
           ? {
-              paramKey: 'book',
-              label: tb('list.bookFilter'),
+              paramKey: "book",
+              label: tb("list.bookFilter"),
               value: selectedBook.id,
               options: books.map((book) => ({ value: book.id, label: book.name })),
             }
           : null,
         accountingContext ? accountingContextFilter(accountingContext, t) : null,
-      ].filter((filter) => filter !== null)
-      return filters.length > 0 ? filters : undefined
+      ].filter((filter) => filter !== null);
+      return filters.length > 0 ? filters : undefined;
     })(),
     scheduleDefId,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
-    equationLabel: t('balanceSheet.equation'),
+    equationLabel: t("balanceSheet.equation"),
     balanced,
     balanceLabel: balanced
-      ? t('balanceSheet.balanced')
-      : t('balanceSheet.offBy', { amount: money(difference) }),
-    company: org?.name ?? '',
-    periodPhrase: [selectedBook.name, period ? t('balanceSheet.asOf', civilDateParams({ date: period.to }, locale)) : null, accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
-    note: scaleFactor(q.scale).note || '',
+      ? t("balanceSheet.balanced")
+      : t("balanceSheet.offBy", { amount: money(difference) }),
+    company: org?.name ?? "",
+    periodPhrase: [
+      selectedBook.name,
+      period ? t("balanceSheet.asOf", civilDateParams({ date: period.to }, locale)) : null,
+      accountingContext ? accountingContextLegend(accountingContext, t) : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    note: scaleFactor(q.scale).note || "",
     wide: view ? view.columns.length > 4 : false,
     ratesBlocked,
     periodRefusal,
-    filterPeriodLabel: t('filterBar.period'),
+    filterPeriodLabel: t("filterBar.period"),
     ratesReady: ratesBlocked === null && contextBlocked === null && periodRefusal === null,
     contextBlocked,
     view,
     truncated: view?.truncated ?? false,
-    truncatedLabel: t('filterBar.truncated'),
+    truncatedLabel: t("filterBar.truncated"),
     scale: q.scale,
     currency: subView?.currency ?? org?.base_currency,
     drill: {
@@ -237,21 +276,22 @@ export async function loadBalanceSheet(
       subsidiaryId: q.subsidiaryId,
       bookId: selectedBook.id,
     },
-  }
+  };
 }
 
-const f = ref<BalanceSheetData>()
+const f = ref<BalanceSheetData>();
 
 export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
   return statementReportSpec({
-    route: '/reports/balance-sheet',
+    route: "/reports/balance-sheet",
     header: {
-        title: f('title'),
-        description: f('description'),
-        back: { href: f('backHref'), label: f('backLabel') },
+      title: f("title"),
+      description: f("description"),
+      back: { href: f("backHref"), label: f("backLabel") },
     },
-    filters: [{
-      controls: {
+    filters: [
+      {
+        controls: {
           period: true,
           asOf: true,
           breakout: true,
@@ -262,80 +302,83 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
           showZero: true,
           scale: true,
           sections: true,
-      },
-      options: {
-          dimensions: f('dimensions'),
-          subsidiaries: f('subsidiaries'),
-          primaryFilter: f('primaryFilter'),
+        },
+        options: {
+          dimensions: f("dimensions"),
+          subsidiaries: f("subsidiaries"),
+          primaryFilter: f("primaryFilter"),
           defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET,
+        },
       },
-    }],
+    ],
     schedule: {
-      definitionId: data.scheduleDefId ?? '',
+      definitionId: data.scheduleDefId ?? "",
       statementParams: data.scheduleParams,
-      when: f('scheduleDefId'),
+      when: f("scheduleDefId"),
     },
-    exportMenu: { kind: 'balance-sheet', params: data.exportParams },
+    exportMenu: { kind: "balance-sheet", params: data.exportParams },
     headerAfterFilters: [
       // The matrix caps breakout columns at MAX_MATRIX_COLUMNS: warn when it
       // did, exactly like the P&L, so a narrowed-looking sheet is legible as
       // truncated rather than complete.
-      textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
+      textBlock(f("truncatedLabel"), { tone: "warning", when: f("truncated") }),
       {
-        ...widgetBlock('balance-check', {
+        ...widgetBlock("balance-check", {
           equation: data.equationLabel,
           balanced: data.balanced,
           label: data.balanceLabel,
         }),
         // No equation to check while rates block the statement.
-        when: f('ratesReady'),
+        when: f("ratesReady"),
       },
     ],
     bodyBeforePaper: [
       {
-        ...widgetBlock('empty-state', {
-          title: data.ratesBlocked?.title ?? '',
+        ...widgetBlock("empty-state", {
+          title: data.ratesBlocked?.title ?? "",
           description: data.ratesBlocked?.description,
-          action: 'link-button',
+          action: "link-button",
           actionProps: {
             href: statementTranslationBlockedAction(data.ratesBlocked).href,
             label: statementTranslationBlockedAction(data.ratesBlocked).label,
           },
         }),
-        when: f('ratesBlocked'),
+        when: f("ratesBlocked"),
       },
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.filterPeriodLabel,
-          description: data.periodRefusal ?? '',
+          description: data.periodRefusal ?? "",
         }),
-        when: f('periodRefusal'),
+        when: f("periodRefusal"),
       },
       ...(data.contextBlocked
-        ? [{
-            ...widgetBlock('empty-state', {
-              title: data.contextBlocked.title,
-              description: data.contextBlocked.description,
-            }),
-            when: f('contextBlocked'),
-          }]
+        ? [
+            {
+              ...widgetBlock("empty-state", {
+                title: data.contextBlocked.title,
+                description: data.contextBlocked.description,
+              }),
+              when: f("contextBlocked"),
+            },
+          ]
         : []),
     ],
     paper: {
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('periodPhrase'),
-        note: f('note'),
-        wide: f('wide'),
-        when: f('ratesReady'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
+      note: f("note"),
+      wide: f("wide"),
+      when: f("ratesReady"),
     },
     blocks: [
-          widgetBlock('statement-matrix', {
-            view: data.view,
-            scale: data.scale,
-            currency: data.currency,
-            drill: data.drill,
-          }),
+      widgetBlock("statement-matrix", {
+        view: data.view,
+        scale: data.scale,
+        currency: data.currency,
+        drill: data.drill,
+      }),
     ],
-  })
+  });
 }

@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -16,11 +16,11 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { loadMyLeave, type MyLeaveData } from '../../../../lib/hrm/leave'
-import { meTabs } from '../../../../lib/hrm/self-service'
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { loadMyLeave, type MyLeaveData } from "../../../../lib/hrm/leave";
+import { meTabs } from "../../../../lib/hrm/self-service";
 
 /**
  * My leave — the employee self-service inbox. Own requests and balances
@@ -33,45 +33,45 @@ import { meTabs } from '../../../../lib/hrm/self-service'
  * hrm.leave.request — the view 404s otherwise.
  */
 
-const f = ref<MyLeaveData>()
+const f = ref<MyLeaveData>();
 
 export function myLeaveSpec(data: MyLeaveData): PageSpec {
   return page({
-    route: '/hrm/my-leave',
-    layout: 'list',
-    bodyClassName: 'space-y-4',
+    route: "/hrm/my-leave",
+    layout: "list",
+    bodyClassName: "space-y-4",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
-          widget('link-button', {
-            href: f('fileHref'),
-            label: f('fileButton'),
-            iconKey: 'plus',
+          widget("link-button", {
+            href: f("fileHref"),
+            label: f("fileButton"),
+            iconKey: "plus",
           }),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
       widgetBlock(
-        'empty-state',
+        "empty-state",
         {
-          title: data.refusal?.title ?? '',
+          title: data.refusal?.title ?? "",
           description: data.refusal?.message,
         },
-        f('refusal'),
+        f("refusal"),
       ),
       {
-        ...grid('space-y-4', [
+        ...grid("space-y-4", [
           panel({
-            title: f('balancesTitle'),
-            iconKey: 'gauge',
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
+            title: f("balancesTitle"),
+            iconKey: "gauge",
+            bodyClassName: "min-h-0 overflow-y-auto p-0",
             blocks: [
-              widgetBlock('hrm-leave-balances', {
+              widgetBlock("hrm-leave-balances", {
                 balances: data.balances,
                 timeKindLabel: data.timeKindLabel,
                 valueKindLabel: data.valueKindLabel,
@@ -85,53 +85,47 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
               }),
             ],
           }),
-          grid('space-y-3', [
-            registeredListTable('hrm_my_leave', {
-              variant: 'app',
-              rows: f('requests'),
-              rowKey: item('id'),
+          grid("space-y-3", [
+            registeredListTable("hrm_my_leave", {
+              variant: "app",
+              rows: f("requests"),
+              rowKey: item("id"),
               columns: [
-                column(
-                  f('columns.employee'),
-                  link(item('employeeLabel'), item('employeeHref')),
-                ),
-                column(f('columns.type'), text(item('leaveTypeCode'))),
-                column(
-                  f('columns.range'),
-                  text(item('rangeLabel'), { className: 'tabular-nums' }),
-                ),
-                column(f('columns.hours'), text(item('hours')), {
-                  align: 'right',
-                  className: 'tabular-nums',
+                column(f("columns.employee"), link(item("employeeLabel"), item("employeeHref"))),
+                column(f("columns.type"), text(item("leaveTypeCode"))),
+                column(f("columns.range"), text(item("rangeLabel"), { className: "tabular-nums" })),
+                column(f("columns.hours"), text(item("hours")), {
+                  align: "right",
+                  className: "tabular-nums",
                 }),
                 column(
-                  f('columns.status'),
-                  badge(item('statusLabel'), {
-                    variant: item('statusVariant'),
+                  f("columns.status"),
+                  badge(item("statusLabel"), {
+                    variant: item("statusVariant"),
                   }),
                 ),
-                column('', link(item('openLabel'), item('requestHref'))),
+                column("", link(item("openLabel"), item("requestHref"))),
               ],
               empty: {
-                title: f('emptyTitle'),
-                description: f('emptyDescription'),
+                title: f("emptyTitle"),
+                description: f("emptyDescription"),
               },
             }),
             widgetBlock(
-              'hrm-leave-dialog',
+              "hrm-leave-dialog",
               {
-                requestId: f('dialogRequestId'),
-                closeHref: f('dialogCloseHref'),
-                canWithdrawCancel: f('canWithdrawCancel'),
+                requestId: f("dialogRequestId"),
+                closeHref: f("dialogCloseHref"),
+                canWithdrawCancel: f("canWithdrawCancel"),
               },
-              f('dialogOpen'),
+              f("dialogOpen"),
             ),
           ]),
         ]),
-        when: f('hasContent'),
+        when: f("hasContent"),
       },
     ],
-  })
+  });
 }
 
 export async function loadMyLeavePage(
@@ -139,13 +133,13 @@ export async function loadMyLeavePage(
 ): Promise<MyLeaveData> {
   // Self-service gate: hrm.leave.request. Managers land on /hrm/leave; this
   // page never lists another worker's rows.
-  const authz = await requirePermission('hrm.leave.request')
-  await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  const data = await loadMyLeave(authz, sp)
-  return { ...data, tabs: await meTabs(authz, '/hrm/my-leave') }
+  const authz = await requirePermission("hrm.leave.request");
+  await requireFeatureEnabled(authz.user.orgId, "hrm");
+  const data = await loadMyLeave(authz, sp);
+  return { ...data, tabs: await meTabs(authz, "/hrm/my-leave") };
 }
 
 export async function myLeaveTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('myLeave.title')
+  const t = await getTranslations("hrm");
+  return t("myLeave.title");
 }

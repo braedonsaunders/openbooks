@@ -63,28 +63,42 @@ test("document and direct postings both append provider legs", { skip: !DB }, as
         control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
       });
     });
-    const direct = await withOrgContext(org.orgId, () => postEntry(db, {
-      orgId: org.orgId,
-      bookId: org.bookId,
-      subsidiaryId: org.subsidiaryId,
-      entryNumber: `LEGS-${randomUUID().slice(0, 8)}`,
-      postingDate: org.date,
-      periodId: org.periodId,
-      origin: "manual",
-      currency: "CAD",
-      lines: [
-        { accountId: org.accounts.bank, amount: "5" },
-        { accountId: org.accounts.cogs, amount: "-5" },
-      ],
-    }));
+    const direct = await withOrgContext(org.orgId, () =>
+      postEntry(db, {
+        orgId: org.orgId,
+        bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId,
+        entryNumber: `LEGS-${randomUUID().slice(0, 8)}`,
+        postingDate: org.date,
+        periodId: org.periodId,
+        origin: "manual",
+        currency: "CAD",
+        lines: [
+          { accountId: org.accounts.bank, amount: "5" },
+          { accountId: org.accounts.cogs, amount: "-5" },
+        ],
+      }),
+    );
 
-    assert.ok(seen.length >= 2 && seen.every((n) => n === 2), `each writer hands the provider its two caller lines: ${seen}`);
-    assert.equal(direct.lines.length, 4, "postEntry returns the appended legs with their line numbers");
-    const rows = await withOrgContext(org.orgId, () => db.execute<{ legs: number; total: string }>(sql`
+    assert.ok(
+      seen.length >= 2 && seen.every((n) => n === 2),
+      `each writer hands the provider its two caller lines: ${seen}`,
+    );
+    assert.equal(
+      direct.lines.length,
+      4,
+      "postEntry returns the appended legs with their line numbers",
+    );
+    const rows = await withOrgContext(org.orgId, () =>
+      db.execute<{ legs: number; total: string }>(
+        sql`
       select count(*) filter (where l.memo = ${MEMO})::int as legs, sum(l.amount)::text as total
         from journal_lines l join journal_entries e on e.id = l.entry_id
        where e.org_id = ${org.orgId} and e.book_id = ${org.bookId}
-         and (e.source_document_id = ${documentId} or e.id = ${direct.entryId})`, "objects"));
+         and (e.source_document_id = ${documentId} or e.id = ${direct.entryId})`,
+        "objects",
+      ),
+    );
     assert.deepEqual(rows, [{ legs: 4, total: "0.0000" }]);
   } finally {
     clearBalancingLegProviders();

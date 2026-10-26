@@ -7,9 +7,7 @@ import { MIGRATION_LEDGER_TABLES } from "./migration-baseline-catalog.mjs";
 const [, , actualPath, referencePath] = process.argv;
 
 if (!actualPath || !referencePath) {
-  console.error(
-    "usage: node scripts/compare-schema-catalogs.mjs <actual.json> <reference.json>",
-  );
+  console.error("usage: node scripts/compare-schema-catalogs.mjs <actual.json> <reference.json>");
   process.exit(2);
 }
 
@@ -59,36 +57,21 @@ function equal(left, right) {
 function compareNamed(section, keyOf, ignoredFields = []) {
   const ignored = new Set(ignoredFields);
   const withoutIgnored = (row) =>
-    Object.fromEntries(
-      Object.entries(row).filter(([key]) => !ignored.has(key)),
-    );
+    Object.fromEntries(Object.entries(row).filter(([key]) => !ignored.has(key)));
   const actualRows = new Map(actual[section].map((row) => [keyOf(row), row]));
-  const referenceRows = new Map(
-    reference[section].map((row) => [keyOf(row), row]),
-  );
-  const missing = [...referenceRows.keys()].filter(
-    (key) => !actualRows.has(key),
-  );
-  const extra = [...actualRows.keys()].filter(
-    (key) => !referenceRows.has(key),
-  );
+  const referenceRows = new Map(reference[section].map((row) => [keyOf(row), row]));
+  const missing = [...referenceRows.keys()].filter((key) => !actualRows.has(key));
+  const extra = [...actualRows.keys()].filter((key) => !referenceRows.has(key));
   const changed = [...referenceRows.keys()]
     .filter(
       (key) =>
         actualRows.has(key) &&
-        !equal(
-          withoutIgnored(actualRows.get(key)),
-          withoutIgnored(referenceRows.get(key)),
-        ),
+        !equal(withoutIgnored(actualRows.get(key)), withoutIgnored(referenceRows.get(key))),
     )
     .map((key) => ({
       key,
-      actualDigest: digest(
-        JSON.stringify(stable(withoutIgnored(actualRows.get(key)))),
-      ),
-      referenceDigest: digest(
-        JSON.stringify(stable(withoutIgnored(referenceRows.get(key)))),
-      ),
+      actualDigest: digest(JSON.stringify(stable(withoutIgnored(actualRows.get(key))))),
+      referenceDigest: digest(JSON.stringify(stable(withoutIgnored(referenceRows.get(key))))),
     }));
   return {
     actualCount: actualRows.size,
@@ -116,14 +99,8 @@ function countsBy(rows, keyOf) {
   return counts;
 }
 
-const actualConstraintCounts = countsBy(
-  actual.constraints,
-  constraintSignature,
-);
-const referenceConstraintCounts = countsBy(
-  reference.constraints,
-  constraintSignature,
-);
+const actualConstraintCounts = countsBy(actual.constraints, constraintSignature);
+const referenceConstraintCounts = countsBy(reference.constraints, constraintSignature);
 const constraintSignatures = new Set([
   ...actualConstraintCounts.keys(),
   ...referenceConstraintCounts.keys(),
@@ -132,17 +109,11 @@ const constraintSignatures = new Set([
 const constraintSemantic = {
   actualSignatureCount: actualConstraintCounts.size,
   referenceSignatureCount: referenceConstraintCounts.size,
-  missing: [...constraintSignatures].filter(
-    (key) => !actualConstraintCounts.has(key),
-  ),
-  extra: [...constraintSignatures].filter(
-    (key) => !referenceConstraintCounts.has(key),
-  ),
+  missing: [...constraintSignatures].filter((key) => !actualConstraintCounts.has(key)),
+  extra: [...constraintSignatures].filter((key) => !referenceConstraintCounts.has(key)),
   multiplicityDifferences: [...constraintSignatures]
     .filter(
-      (key) =>
-        (actualConstraintCounts.get(key) ?? 0) !==
-        (referenceConstraintCounts.get(key) ?? 0),
+      (key) => (actualConstraintCounts.get(key) ?? 0) !== (referenceConstraintCounts.get(key) ?? 0),
     )
     .map((key) => ({
       signature: key,
@@ -152,16 +123,10 @@ const constraintSemantic = {
 };
 
 const actualConstraintsByName = new Map(
-  actual.constraints.map((row) => [
-    `${row.relation}|${row.constraint}`,
-    row,
-  ]),
+  actual.constraints.map((row) => [`${row.relation}|${row.constraint}`, row]),
 );
 const referenceConstraintsByName = new Map(
-  reference.constraints.map((row) => [
-    `${row.relation}|${row.constraint}`,
-    row,
-  ]),
+  reference.constraints.map((row) => [`${row.relation}|${row.constraint}`, row]),
 );
 const validationDifferences = [...referenceConstraintsByName]
   .filter(
@@ -179,31 +144,15 @@ const report = {
   actualPath,
   referencePath,
   relations: compareNamed("relations", (row) => row.relation),
-  columns: compareNamed(
-    "columns",
-    (row) => `${row.relation}|${row.column}`,
-    ["position"],
-  ),
+  columns: compareNamed("columns", (row) => `${row.relation}|${row.column}`, ["position"]),
   constraints: {
     semantic: constraintSemantic,
     validationDifferences,
   },
-  indexes: compareNamed(
-    "indexes",
-    (row) => `${row.table_name}|${row.index}`,
-  ),
-  triggers: compareNamed(
-    "triggers",
-    (row) => `${row.relation}|${row.trigger}`,
-  ),
-  functions: compareNamed(
-    "functions",
-    (row) => `${row.function}|${row.arguments}`,
-  ),
-  policies: compareNamed(
-    "policies",
-    (row) => `${row.tablename}|${row.policyname}`,
-  ),
+  indexes: compareNamed("indexes", (row) => `${row.table_name}|${row.index}`),
+  triggers: compareNamed("triggers", (row) => `${row.relation}|${row.trigger}`),
+  functions: compareNamed("functions", (row) => `${row.function}|${row.arguments}`),
+  policies: compareNamed("policies", (row) => `${row.tablename}|${row.policyname}`),
 };
 
 report.equivalent =

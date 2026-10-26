@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from "zod";
 
 /**
  * The house record-identifier shape: 8-4-4-4-12 hex. Every id the database
@@ -17,16 +17,16 @@ import { z } from 'zod'
  * lowest layer that both the engine and the shared form schemas depend on.
  */
 export const UUID_RE =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID_RE.test(value)
+  return typeof value === "string" && UUID_RE.test(value);
 }
 
-export const UUID_MESSAGE = 'must be a valid id'
+export const UUID_MESSAGE = "must be a valid id";
 
 /** A refusal message, or zod's message/error parameter object. */
-export type UuidStringParams = string | { error?: string; message?: string }
+export type UuidStringParams = string | { error?: string; message?: string };
 
 /**
  * The one zod schema for a record identifier. The optional message applies to
@@ -34,5 +34,5 @@ export type UuidStringParams = string | { error?: string; message?: string }
  * reaches the operator either way.
  */
 export function uuidString(params?: UuidStringParams) {
-  return z.string(params).regex(UUID_RE, params ?? UUID_MESSAGE)
+  return z.string(params).regex(UUID_RE, params ?? UUID_MESSAGE);
 }

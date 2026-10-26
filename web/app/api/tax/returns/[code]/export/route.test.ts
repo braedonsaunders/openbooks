@@ -23,7 +23,9 @@ async function acroFormPdf(fieldNames: string[]): Promise<Uint8Array> {
   const page = doc.addPage();
   const form = doc.getForm();
   fieldNames.forEach((name, index) => {
-    form.createTextField(name).addToPage(page, { x: 50, y: 700 - index * 40, width: 200, height: 20 });
+    form
+      .createTextField(name)
+      .addToPage(page, { x: 50, y: 700 - index * 40, width: 200, height: 20 });
   });
   return doc.save();
 }
@@ -49,8 +51,7 @@ interface RouteState {
   calls: ExportCall[];
 }
 const routeState: RouteState = { calls: [] };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 stubModules({
   navigation: false,
@@ -127,7 +128,7 @@ stubModules({
       export function ambientTenantOrgId() { return null }
     `,
     "@openbooks/engine/platform/business-date/module": `
-      export * from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
+      export * from '${import.meta.resolve("@openbooks/engine/platform/business-date/module")}'
       export async function businessToday() { return '2026-07-31' }
       export function civilDateFromParts() { throw new Error('unexpected civil date') }
     `,
@@ -155,10 +156,9 @@ stubModules({
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
 
 function get(query: string): Promise<Response> {
-  return GET(
-    new Request(`http://openbooks.test/api/tax/returns/CA_GST34/export${query}`),
-    { params: Promise.resolve({ code: "CA_GST34" }) },
-  ) as Promise<Response>;
+  return GET(new Request(`http://openbooks.test/api/tax/returns/CA_GST34/export${query}`), {
+    params: Promise.resolve({ code: "CA_GST34" }),
+  }) as Promise<Response>;
 }
 
 test("GET forwards a scoped and translated preview's scope to the engine", async () => {
@@ -184,9 +184,7 @@ test("GET forwards a scoped and translated preview's scope to the engine", async
 test("GET refuses an out-of-scope subsidiary without reaching the engine", async () => {
   routeState.calls.length = 0;
 
-  const response = await get(
-    "?from=2026-07-01&to=2026-07-31&format=json&subsidiary=sub-nope",
-  );
+  const response = await get("?from=2026-07-01&to=2026-07-31&format=json&subsidiary=sub-nope");
 
   assert.equal(response.status, 404);
   assert.equal(routeState.calls.length, 0);
@@ -194,11 +192,20 @@ test("GET refuses an out-of-scope subsidiary without reaching the engine", async
 
 test("GET official refuses by name when a non-zero box is unmatched", async () => {
   globalThis.__exportBoxes = [
-    { lineCode: "109", label: "Net tax", value: "20.0000", computed: false, editable: false, pdfField: "FIELD_109" },
+    {
+      lineCode: "109",
+      label: "Net tax",
+      value: "20.0000",
+      computed: false,
+      editable: false,
+      pdfField: "FIELD_109",
+    },
   ];
   globalThis.__exportPdfBytes = await acroFormPdf(["WRONG_FIELD"]);
   try {
-    const response = await get("?from=2026-07-01&to=2026-07-31&format=official&subsidiary=sub-allowed");
+    const response = await get(
+      "?from=2026-07-01&to=2026-07-31&format=official&subsidiary=sub-allowed",
+    );
 
     assert.equal(response.status, 422);
     const body = (await response.json()) as { error: string };
@@ -212,11 +219,20 @@ test("GET official refuses by name when a non-zero box is unmatched", async () =
 
 test("GET official downloads when every mapped field matches", async () => {
   globalThis.__exportBoxes = [
-    { lineCode: "109", label: "Net tax", value: "20.0000", computed: false, editable: false, pdfField: "FIELD_109" },
+    {
+      lineCode: "109",
+      label: "Net tax",
+      value: "20.0000",
+      computed: false,
+      editable: false,
+      pdfField: "FIELD_109",
+    },
   ];
   globalThis.__exportPdfBytes = await acroFormPdf(["FIELD_109"]);
   try {
-    const response = await get("?from=2026-07-01&to=2026-07-31&format=official&subsidiary=sub-allowed");
+    const response = await get(
+      "?from=2026-07-01&to=2026-07-31&format=official&subsidiary=sub-allowed",
+    );
 
     assert.equal(response.status, 200);
     assert.ok(
@@ -231,11 +247,20 @@ test("GET official downloads when every mapped field matches", async () => {
 
 test("GET official downloads when only zero boxes are unmatched", async () => {
   globalThis.__exportBoxes = [
-    { lineCode: "109", label: "Net tax", value: "0.0000", computed: false, editable: false, pdfField: "FIELD_109" },
+    {
+      lineCode: "109",
+      label: "Net tax",
+      value: "0.0000",
+      computed: false,
+      editable: false,
+      pdfField: "FIELD_109",
+    },
   ];
   globalThis.__exportPdfBytes = await acroFormPdf(["WRONG_FIELD"]);
   try {
-    const response = await get("?from=2026-07-01&to=2026-07-31&format=official&subsidiary=sub-allowed");
+    const response = await get(
+      "?from=2026-07-01&to=2026-07-31&format=official&subsidiary=sub-allowed",
+    );
 
     assert.equal(response.status, 200);
   } finally {

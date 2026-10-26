@@ -33,7 +33,8 @@ const locationsBodySchema = z.discriminatedUnion("action", [
 ]);
 
 function notFoundWhenMissing(error: unknown) {
-  if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+  if (error instanceof CommerceError && error.code === "channel_not_found")
+    return notFound("channel");
   throw error;
 }
 
@@ -67,7 +68,13 @@ export const POST = defineRoute({
     if (outOfScope) return outOfScope;
     try {
       if (body.action === "unlink") {
-        await unlinkChannelLocation(gate.user.orgId, gate.user.id, id, body.externalLocationId, body.reason);
+        await unlinkChannelLocation(
+          gate.user.orgId,
+          gate.user.id,
+          id,
+          body.externalLocationId,
+          body.reason,
+        );
         return NextResponse.json({ unlinked: true });
       }
       const location = await upsertChannelLocation(gate.user.orgId, gate.user.id, {

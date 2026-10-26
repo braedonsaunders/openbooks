@@ -59,54 +59,63 @@ registerHooks({
 const createRouteUrl = "./route.ts?journal-create-accountless-test";
 const { POST } = (await import(createRouteUrl)) as typeof import("./route.ts");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
-
-test(
-  "journals POST refuses an account-less contentful leg with its line number and writes nothing",
-  async () => {
-    const org = await withBypassContext(() => createScratchOrg());
-    try {
-      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-      routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
-        permissions: new Set(),
-        allowedSubsidiaryIds: null,
-      };
-      const before = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
+test("journals POST refuses an account-less contentful leg with its line number and writes nothing", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    const before = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from documents where kind = 'journal' and org_id = ${org.orgId}
-      `, "objects")))[0]!.n;
-      const res = await withOrgContext(
-        org.orgId,
-        () =>
-          POST(
-            new Request("http://localhost/api/journals", {
-              method: "POST",
-              headers: { "content-type": "application/json", "Idempotency-Key": randomUUID() },
-              body: JSON.stringify({
-                lines: [
-                  { accountId: org.accounts.cogs, amount: "100", description: "leg one" },
-                  { accountId: "", amount: "50", description: "mystery leg" },
-                  { accountId: org.accounts.bank, amount: "-150", description: "leg three" },
-                ],
-              }),
-            }),
-          ),
-      );
-      assert.equal(res.status, 422, `expected 422, got ${res.status}`);
-      const body = (await res.json()) as { error?: unknown };
-      assert.match(
-        String(body.error ?? ""),
-        /Line 2: an account is required/,
-        "the refusal must name the offending leg and the remedy",
-      );
-      const after = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
+      `,
+          "objects",
+        ),
+      )
+    )[0]!.n;
+    const res = await withOrgContext(org.orgId, () =>
+      POST(
+        new Request("http://localhost/api/journals", {
+          method: "POST",
+          headers: { "content-type": "application/json", "Idempotency-Key": randomUUID() },
+          body: JSON.stringify({
+            lines: [
+              { accountId: org.accounts.cogs, amount: "100", description: "leg one" },
+              { accountId: "", amount: "50", description: "mystery leg" },
+              { accountId: org.accounts.bank, amount: "-150", description: "leg three" },
+            ],
+          }),
+        }),
+      ),
+    );
+    assert.equal(res.status, 422, `expected 422, got ${res.status}`);
+    const body = (await res.json()) as { error?: unknown };
+    assert.match(
+      String(body.error ?? ""),
+      /Line 2: an account is required/,
+      "the refusal must name the offending leg and the remedy",
+    );
+    const after = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from documents where kind = 'journal' and org_id = ${org.orgId}
-      `, "objects")))[0]!.n;
-      assert.equal(after, before, "a refused create must store no journal");
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      `,
+          "objects",
+        ),
+      )
+    )[0]!.n;
+    assert.equal(after, before, "a refused create must store no journal");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});

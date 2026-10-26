@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  db,
-  env,
-  withBypass,
-  withOrgContext,
-} from "../platform/db.ts";
+import { db, env, withBypass, withOrgContext } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import {
   deriveAppInvocationKey,
@@ -61,11 +56,18 @@ async function makeFixture(): Promise<Fixture> {
  * against the app's active version: publish and activate it, or the call
  * is refused. Versions are real app_versions rows (the FK requires it);
  * the label is the shared release line, the row id the per-app install. */
-async function activateVersion(orgId: string, appId: string, versionId: string, label: string): Promise<void> {
+async function activateVersion(
+  orgId: string,
+  appId: string,
+  versionId: string,
+  label: string,
+): Promise<void> {
   await withBypass(async () => {
     await db.execute(sql`insert into app_versions (id, org_id, app_id, version, manifest, status)
       values (${versionId}, ${orgId}, ${appId}, ${label}, '{}'::jsonb, 'active')`);
-    await db.execute(sql`update apps set active_version_id = ${versionId} where org_id = ${orgId} and id = ${appId}`);
+    await db.execute(
+      sql`update apps set active_version_id = ${versionId} where org_id = ${orgId} and id = ${appId}`,
+    );
   });
 }
 
@@ -94,24 +96,39 @@ function auditingAgainst(fx: Fixture, sink: AppInvocationAuditRow[]) {
 /** Committed-state row counts: verification escapes any ambient tx scope. */
 const committedEffects = async (orgId: string): Promise<number> =>
   Number(
-    (await withOrgContext(orgId, () =>
-        db.execute<{ n: string }>(sql`select count(*) as n from documents where org_id = ${orgId}`, "objects"),
-      ))[0]!.n,
+    (
+      await withOrgContext(orgId, () =>
+        db.execute<{ n: string }>(
+          sql`select count(*) as n from documents where org_id = ${orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!.n,
   );
 
 const claimCount = async (orgId: string): Promise<number> =>
   Number(
-    (await withOrgContext(orgId, () =>
-        db.execute<{ n: string }>(sql`
+    (
+      await withOrgContext(orgId, () =>
+        db.execute<{ n: string }>(
+          sql`
           select count(*) as n from application_idempotency_keys
-           where org_id = ${orgId} and source = 'app'`, "objects"),
-      ))[0]!.n,
+           where org_id = ${orgId} and source = 'app'`,
+          "objects",
+        ),
+      )
+    )[0]!.n,
   );
 
 const runStatuses = async (orgId: string): Promise<string[]> =>
-  (await withOrgContext(orgId, () =>
-      db.execute<{ status: string }>(sql`select status from app_runs where org_id = ${orgId} order by at`, "objects"),
-    )).map((r) => r.status);
+  (
+    await withOrgContext(orgId, () =>
+      db.execute<{ status: string }>(
+        sql`select status from app_runs where org_id = ${orgId} order by at`,
+        "objects",
+      ),
+    )
+  ).map((r) => r.status);
 
 test(
   "an invocation rechecks installed state after a concurrent disable gets the shared lock",
@@ -120,11 +137,19 @@ test(
     const fx = await makeFixture();
     let releaseDisable!: () => void;
     let announceLocked!: () => void;
-    const disabledLockHeld = new Promise<void>((resolve) => { announceLocked = resolve; });
-    const finishDisable = new Promise<void>((resolve) => { releaseDisable = resolve; });
+    const disabledLockHeld = new Promise<void>((resolve) => {
+      announceLocked = resolve;
+    });
+    const finishDisable = new Promise<void>((resolve) => {
+      releaseDisable = resolve;
+    });
     const disabling = withOrgContext(fx.orgId, async () => {
-      await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${fx.orgId}`}, 0))`);
-      await db.execute(sql`update apps set status = 'disabled' where org_id = ${fx.orgId} and id = ${fx.appId}`);
+      await db.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${fx.orgId}`}, 0))`,
+      );
+      await db.execute(
+        sql`update apps set status = 'disabled' where org_id = ${fx.orgId} and id = ${fx.appId}`,
+      );
       announceLocked();
       await finishDisable;
     });
@@ -180,21 +205,33 @@ test(
         run: async (): Promise<AppInvocationAttempt> => {
           executions++;
           stagedEffect = await stageEffect(fx.orgId, fx.actorId);
-          return { status: "ok", response: { effect: stagedEffect }, logs: ["ran"], units: 7, durationMs: 3 };
+          return {
+            status: "ok",
+            response: { effect: stagedEffect },
+            logs: ["ran"],
+            units: 7,
+            durationMs: 3,
+          };
         },
         audit: auditingAgainst(fx, audits),
       });
 
       assert.equal(outcome.replayed, false);
       assert.equal(executions, 1);
-      assert.deepEqual(audits.map((a) => [a.endpoint, a.status]), [["do", "ok"]]);
+      assert.deepEqual(
+        audits.map((a) => [a.endpoint, a.status]),
+        [["do", "ok"]],
+      );
 
       // The stored response is durable exactly as returned, ready for replay.
       const claim = await withOrgContext(fx.orgId, () =>
-        db.execute<{ response: unknown }>(sql`
+        db.execute<{ response: unknown }>(
+          sql`
           select response from application_idempotency_keys
            where org_id = ${fx.orgId} and source = 'app'
-             and operation = 'apps.call_backend.do'`, "objects"),
+             and operation = 'apps.call_backend.do'`,
+          "objects",
+        ),
       );
       assert.deepEqual(claim[0]?.response ?? null, { effect: stagedEffect });
       assert.equal(await committedEffects(fx.orgId), 1);
@@ -205,8 +242,17 @@ test(
 );
 
 for (const refusal of [
-  { label: "throwing handler", attempt: (): AppInvocationAttempt => ({ status: "error", error: "handler threw after staging" }) },
-  { label: "timed-out handler", attempt: (): AppInvocationAttempt => ({ status: "timeout", error: "execution timed out" }) },
+  {
+    label: "throwing handler",
+    attempt: (): AppInvocationAttempt => ({
+      status: "error",
+      error: "handler threw after staging",
+    }),
+  },
+  {
+    label: "timed-out handler",
+    attempt: (): AppInvocationAttempt => ({ status: "timeout", error: "execution timed out" }),
+  },
 ]) {
   test(
     `a ${refusal.label} failing after staging leaves zero effects, releases the claim, keeps one audit row`,
@@ -238,9 +284,12 @@ for (const refusal of [
         // …the failed attempt persists exactly one UNCOMPLETED claim (append-
         // only evidence proving zero durable effects)…
         const failedClaim = await withOrgContext(fx.orgId, () =>
-          db.execute<{ completedAt: Date | null }>(sql`
+          db.execute<{ completedAt: Date | null }>(
+            sql`
             select completed_at as "completedAt" from application_idempotency_keys
-             where org_id = ${fx.orgId} and source = 'app'`, "objects"),
+             where org_id = ${fx.orgId} and source = 'app'`,
+            "objects",
+          ),
         );
         assert.equal(failedClaim.length, 1);
         assert.equal(failedClaim[0]!.completedAt, null);
@@ -267,9 +316,12 @@ for (const refusal of [
         // The recovering attempt CAN commit material effects for real.
         assert.equal(await committedEffects(fx.orgId), 1);
         const recoveredClaims = await withOrgContext(fx.orgId, () =>
-          db.execute<{ completedAt: Date | null }>(sql`
+          db.execute<{ completedAt: Date | null }>(
+            sql`
             select completed_at as "completedAt" from application_idempotency_keys
-             where org_id = ${fx.orgId} and source = 'app'`, "objects"),
+             where org_id = ${fx.orgId} and source = 'app'`,
+            "objects",
+          ),
         );
         assert.equal(recoveredClaims.length, 1);
         assert.ok(recoveredClaims[0]!.completedAt != null);
@@ -314,7 +366,10 @@ test(
 
       // Same key, different input fails closed instead of replaying.
       await assert.rejects(
-        executeAppInvocation({ ...envelopeArgs(), requestHash: deriveAppInvocationKey({ tampered: true }) }),
+        executeAppInvocation({
+          ...envelopeArgs(),
+          requestHash: deriveAppInvocationKey({ tampered: true }),
+        }),
         AppInvocationRequestMismatchError,
       );
     } finally {
@@ -323,50 +378,48 @@ test(
   },
 );
 
-test(
-  "concurrent duplicates of one key execute the work exactly once",
-  { skip: !DB },
-  async () => {
-    const fx = await makeFixture();
-    try {
-      let executions = 0;
-      const args = () => ({
-        ...invocationAuthority(fx),
-        endpoint: "parallel",
-        operation: "apps.call_backend.parallel",
-        idempotencyKey: deriveAppInvocationKey({ endpoint: "parallel" }),
-        requestHash: deriveAppInvocationKey({ requestHashOf: "parallel" }),
-        run: async (): Promise<AppInvocationAttempt> => {
-          executions++;
-          await stageEffect(fx.orgId, fx.actorId);
-          return { status: "ok" as const, response: { once: true } };
-        },
-        audit: () => Promise.resolve(),
-      });
+test("concurrent duplicates of one key execute the work exactly once", { skip: !DB }, async () => {
+  const fx = await makeFixture();
+  try {
+    let executions = 0;
+    const args = () => ({
+      ...invocationAuthority(fx),
+      endpoint: "parallel",
+      operation: "apps.call_backend.parallel",
+      idempotencyKey: deriveAppInvocationKey({ endpoint: "parallel" }),
+      requestHash: deriveAppInvocationKey({ requestHashOf: "parallel" }),
+      run: async (): Promise<AppInvocationAttempt> => {
+        executions++;
+        await stageEffect(fx.orgId, fx.actorId);
+        return { status: "ok" as const, response: { once: true } };
+      },
+      audit: () => Promise.resolve(),
+    });
 
-      const outcomes = await Promise.all([
-        executeAppInvocation(args()).catch((e) => e),
-        executeAppInvocation(args()).catch((e) => e),
-        executeAppInvocation(args()).catch((e) => e),
-      ]);
+    const outcomes = await Promise.all([
+      executeAppInvocation(args()).catch((e) => e),
+      executeAppInvocation(args()).catch((e) => e),
+      executeAppInvocation(args()).catch((e) => e),
+    ]);
 
-      // Exactly one attempt executed; rivals either failed closed (refused
-      // while in-flight) or served the completed claim as a replay — they
-      // NEVER ran the work themselves.
-      assert.equal(outcomes.filter((o) => o?.attempt?.status === "ok").length >= 1, true);
-      assert.equal(executions, 1);
-      assert.equal(await committedEffects(fx.orgId), 1);
-      for (const o of outcomes.slice(1)) {
-        const isReplay = o?.replayed === true;
-        const isInFlightRefusal =
-          o instanceof Error && /already in progress/.test(String(o.message));
-        assert.ok(isReplay || isInFlightRefusal, `unexpected duplicate outcome: ${JSON.stringify(o)}`);
-      }
-    } finally {
-      await dropScratchOrg(fx.orgId);
+    // Exactly one attempt executed; rivals either failed closed (refused
+    // while in-flight) or served the completed claim as a replay — they
+    // NEVER ran the work themselves.
+    assert.equal(outcomes.filter((o) => o?.attempt?.status === "ok").length >= 1, true);
+    assert.equal(executions, 1);
+    assert.equal(await committedEffects(fx.orgId), 1);
+    for (const o of outcomes.slice(1)) {
+      const isReplay = o?.replayed === true;
+      const isInFlightRefusal = o instanceof Error && /already in progress/.test(String(o.message));
+      assert.ok(
+        isReplay || isInFlightRefusal,
+        `unexpected duplicate outcome: ${JSON.stringify(o)}`,
+      );
     }
-  },
-);
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
 
 test(
   "an audit-write failure rolls back staged effects and the claim instead of publishing unaudited results",
@@ -417,7 +470,9 @@ test(
         assert.equal(await claimCount(fx.orgId), 0);
         assert.deepEqual(await runStatuses(fx.orgId), []);
       } finally {
-        await withBypass(() => db.execute(sql`drop trigger if exists ${sql.raw(triggerName)} on app_runs`));
+        await withBypass(() =>
+          db.execute(sql`drop trigger if exists ${sql.raw(triggerName)} on app_runs`),
+        );
       }
     } finally {
       await dropScratchOrg(fx.orgId);

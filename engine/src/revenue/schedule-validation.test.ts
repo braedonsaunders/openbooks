@@ -1,39 +1,91 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
-import { computeRecognitionSchedule, shiftRecognitionDate, MAX_RECOGNITION_TERM_MONTHS, RevenueRecognitionError, type RecognitionInput } from './recognition.ts';
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  computeRecognitionSchedule,
+  shiftRecognitionDate,
+  MAX_RECOGNITION_TERM_MONTHS,
+  RevenueRecognitionError,
+  type RecognitionInput,
+} from "./recognition.ts";
 
-const base: RecognitionInput = { total: '1200', method: 'straight_line_even', startOn: '2026-01-01', termPeriods: 12 };
+const base: RecognitionInput = {
+  total: "1200",
+  method: "straight_line_even",
+  startOn: "2026-01-01",
+  termPeriods: 12,
+};
 
-test('recognition schedules reject invalid financial dates, intervals and method instead of coercing them', () => {
-  for (const value of ['2026-02-30', '2026-13-01', '0000-01-01', '2026-1-1', 'invalid', '']) {
-    assert.throws(() => computeRecognitionSchedule({ ...base, startOn: value }), RevenueRecognitionError);
-    assert.throws(() => computeRecognitionSchedule({ ...base, endOn: value }), RevenueRecognitionError);
+test("recognition schedules reject invalid financial dates, intervals and method instead of coercing them", () => {
+  for (const value of ["2026-02-30", "2026-13-01", "0000-01-01", "2026-1-1", "invalid", ""]) {
+    assert.throws(
+      () => computeRecognitionSchedule({ ...base, startOn: value }),
+      RevenueRecognitionError,
+    );
+    assert.throws(
+      () => computeRecognitionSchedule({ ...base, endOn: value }),
+      RevenueRecognitionError,
+    );
   }
   for (const value of [NaN, Infinity, 1.5, -1]) {
-    assert.throws(() => computeRecognitionSchedule({ ...base, termPeriods: value }), RevenueRecognitionError);
-    assert.throws(() => computeRecognitionSchedule({ ...base, periodOffset: value }), RevenueRecognitionError);
+    assert.throws(
+      () => computeRecognitionSchedule({ ...base, termPeriods: value }),
+      RevenueRecognitionError,
+    );
+    assert.throws(
+      () => computeRecognitionSchedule({ ...base, periodOffset: value }),
+      RevenueRecognitionError,
+    );
   }
-  assert.throws(() => computeRecognitionSchedule({ ...base, termPeriods: 0 }), RevenueRecognitionError);
-  assert.throws(() => computeRecognitionSchedule({ ...base, method: 'unknown' as RecognitionInput['method'] }), RevenueRecognitionError);
-  assert.throws(() => computeRecognitionSchedule({ ...base, startOffsetDays: 0.5 }), RevenueRecognitionError);
-  assert.throws(() => computeRecognitionSchedule({ ...base, startOn: '9999-12-01', termPeriods: 2 }), RevenueRecognitionError);
-  assert.throws(() => shiftRecognitionDate('0001-01-01', -1), RevenueRecognitionError);
+  assert.throws(
+    () => computeRecognitionSchedule({ ...base, termPeriods: 0 }),
+    RevenueRecognitionError,
+  );
+  assert.throws(
+    () => computeRecognitionSchedule({ ...base, method: "unknown" as RecognitionInput["method"] }),
+    RevenueRecognitionError,
+  );
+  assert.throws(
+    () => computeRecognitionSchedule({ ...base, startOffsetDays: 0.5 }),
+    RevenueRecognitionError,
+  );
+  assert.throws(
+    () => computeRecognitionSchedule({ ...base, startOn: "9999-12-01", termPeriods: 2 }),
+    RevenueRecognitionError,
+  );
+  assert.throws(() => shiftRecognitionDate("0001-01-01", -1), RevenueRecognitionError);
 });
 
-test('recognition preserves early Gregorian leap years and exact negative day offsets', () => {
-  assert.equal(shiftRecognitionDate('0096-02-28', 1), '0096-02-29');
-  assert.equal(shiftRecognitionDate('2026-03-01', -1), '2026-02-28');
-  const plan = computeRecognitionSchedule({ ...base, method: 'straight_line_daily', startOn: '0096-02-01', endOn: '0096-03-01', total: '3000' });
-  assert.deepEqual(plan.map(row => row.planned), ['2900.0000', '100.0000']);
+test("recognition preserves early Gregorian leap years and exact negative day offsets", () => {
+  assert.equal(shiftRecognitionDate("0096-02-28", 1), "0096-02-29");
+  assert.equal(shiftRecognitionDate("2026-03-01", -1), "2026-02-28");
+  const plan = computeRecognitionSchedule({
+    ...base,
+    method: "straight_line_daily",
+    startOn: "0096-02-01",
+    endOn: "0096-03-01",
+    total: "3000",
+  });
+  assert.deepEqual(
+    plan.map((row) => row.planned),
+    ["2900.0000", "100.0000"],
+  );
 });
 
-test('recognition events require real calendar month starts', () => {
-  for (const periodMonth of ['2026-02-30', '2026-02-15', 'invalid', '0000-01-01']) {
-    assert.throws(() => computeRecognitionSchedule({ ...base, method: 'usage', events: [{ periodMonth, amount: '100' }] }), RevenueRecognitionError);
+test("recognition events require real calendar month starts", () => {
+  for (const periodMonth of ["2026-02-30", "2026-02-15", "invalid", "0000-01-01"]) {
+    assert.throws(
+      () =>
+        computeRecognitionSchedule({
+          ...base,
+          method: "usage",
+          events: [{ periodMonth, amount: "100" }],
+        }),
+      RevenueRecognitionError,
+    );
   }
 });
 
-test('recognition schedules refuse terms beyond the supported horizon instead of building unbounded month arrays', () => {
+test("recognition schedules refuse terms beyond the supported horizon instead of building unbounded month arrays", () => {
   assert.equal(MAX_RECOGNITION_TERM_MONTHS, 1200);
   // Large finite terms are refused before any per-month array is allocated.
   for (const termPeriods of [1201, 100000, 2147483647]) {
@@ -45,7 +97,7 @@ test('recognition schedules refuse terms beyond the supported horizon instead of
   }
   // An explicit endOn spanning more than the horizon is refused the same way.
   assert.throws(
-    () => computeRecognitionSchedule({ ...base, termPeriods: undefined, endOn: '2206-01-01' }),
+    () => computeRecognitionSchedule({ ...base, termPeriods: undefined, endOn: "2206-01-01" }),
     RevenueRecognitionError,
   );
   // Far-future period offsets are refused before the schedule is shifted.
@@ -56,12 +108,23 @@ test('recognition schedules refuse terms beyond the supported horizon instead of
   // The boundary itself is inclusive and exact: 1200 months summing to total.
   const century = computeRecognitionSchedule({ ...base, termPeriods: MAX_RECOGNITION_TERM_MONTHS });
   assert.equal(century.length, MAX_RECOGNITION_TERM_MONTHS);
-  assert.equal(century[century.length - 1]!.cumulative, '1200.0000');
+  assert.equal(century[century.length - 1]!.cumulative, "1200.0000");
 });
 
-test('recognition percentages refuse out-of-range values instead of clamping financial instructions', () => {
-  for (const percent of ['-1', '101', 'invalid']) {
-    assert.throws(() => computeRecognitionSchedule({ ...base, initialAmountPercent: percent }), RevenueRecognitionError);
-    assert.throws(() => computeRecognitionSchedule({ ...base, method: 'percent_complete', percentComplete: percent }), RevenueRecognitionError);
+test("recognition percentages refuse out-of-range values instead of clamping financial instructions", () => {
+  for (const percent of ["-1", "101", "invalid"]) {
+    assert.throws(
+      () => computeRecognitionSchedule({ ...base, initialAmountPercent: percent }),
+      RevenueRecognitionError,
+    );
+    assert.throws(
+      () =>
+        computeRecognitionSchedule({
+          ...base,
+          method: "percent_complete",
+          percentComplete: percent,
+        }),
+      RevenueRecognitionError,
+    );
   }
 });

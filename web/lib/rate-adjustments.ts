@@ -1,3 +1,3 @@
-import 'server-only'
+import "server-only";
 
-export * from '@openbooks/engine/projects/rate-adjustments'
+export * from "@openbooks/engine/projects/rate-adjustments";

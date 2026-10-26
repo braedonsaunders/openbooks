@@ -1,20 +1,45 @@
-import { sql } from 'drizzle-orm';
-import type { SqlExecutor } from '../platform/db.ts';
-import type { payComponents } from '@openbooks/schema';
-import { PayrollError } from './error.ts';
+import { sql } from "drizzle-orm";
+import type { SqlExecutor } from "../platform/db.ts";
+import type { payComponents } from "@openbooks/schema";
+import { PayrollError } from "./error.ts";
 
 /** Native flags, limits and accounting destinations accompany the approved formula. */
-export type CompensationPackageComponentSource = Pick<typeof payComponents.$inferSelect,
-  'id' | 'orgId' | 'code' | 'name' | 'kind' | 'country' | 'systemKey' | 'basis' | 'value' |
-  'paymentKind' | 'nonCashAccountId' | 'taxable' | 'pensionable' | 'insurable' |
-  'nonPeriodic' | 'taxTreatment' | 'protectionBase' | 'protectionMaxPercent' |
-  'protectionPriority' | 'protectionClass' | 'includeInDisposableEarnings' | 'basisCapHoursPerPeriod' |
-  'basisCapAmountPerPeriod' | 'basisCapAmountPerYear' | 'expenseAccountId' | 'liabilityAccountId' |
-  'remittancePartyId' | 'sequence' | 'isActive'> & {
-    supplementalWageCategory: string | null;
-    statutoryReportingCategory: string | null;
-    statutoryExemptionCategory: string | null;
-  };
+export type CompensationPackageComponentSource = Pick<
+  typeof payComponents.$inferSelect,
+  | "id"
+  | "orgId"
+  | "code"
+  | "name"
+  | "kind"
+  | "country"
+  | "systemKey"
+  | "basis"
+  | "value"
+  | "paymentKind"
+  | "nonCashAccountId"
+  | "taxable"
+  | "pensionable"
+  | "insurable"
+  | "nonPeriodic"
+  | "taxTreatment"
+  | "protectionBase"
+  | "protectionMaxPercent"
+  | "protectionPriority"
+  | "protectionClass"
+  | "includeInDisposableEarnings"
+  | "basisCapHoursPerPeriod"
+  | "basisCapAmountPerPeriod"
+  | "basisCapAmountPerYear"
+  | "expenseAccountId"
+  | "liabilityAccountId"
+  | "remittancePartyId"
+  | "sequence"
+  | "isActive"
+> & {
+  supplementalWageCategory: string | null;
+  statutoryReportingCategory: string | null;
+  statutoryExemptionCategory: string | null;
+};
 
 export const COMPENSATION_PACKAGE_COMPONENT_SOURCE = sql`jsonb_build_object(
   'id',c.id,'orgId',c.org_id,'code',c.code,'name',c.name,'kind',c.kind,'country',c.country,
@@ -35,22 +60,48 @@ export const COMPENSATION_PACKAGE_COMPONENT_SOURCE = sql`jsonb_build_object(
   'statutoryExemptionCategory',ec.statutory_exemption_category)`;
 
 /** Exact native metadata shared by authoring, preview and calculation. */
-export async function compensationPackageComponentSources(tx: SqlExecutor, orgId: string, ids: readonly string[]): Promise<CompensationPackageComponentSource[]> {
+export async function compensationPackageComponentSources(
+  tx: SqlExecutor,
+  orgId: string,
+  ids: readonly string[],
+): Promise<CompensationPackageComponentSource[]> {
   if (!ids.length) return [];
-  const sources = (await tx.execute<{ source: CompensationPackageComponentSource }>(sql`select ${COMPENSATION_PACKAGE_COMPONENT_SOURCE} as source
+  const sources = (
+    await tx.execute<{ source: CompensationPackageComponentSource }>(
+      sql`select ${COMPENSATION_PACKAGE_COMPONENT_SOURCE} as source
     from pay_components c left join pay_component_earning_classifications ec on ec.org_id=c.org_id and ec.pay_component_id=c.id
-    where c.org_id=${orgId} and c.id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)}) order by c.id for share of c`, 'objects')).map(row => row.source);
+    where c.org_id=${orgId} and c.id in (${sql.join(
+      ids.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    )}) order by c.id for share of c`,
+      "objects",
+    )
+  ).map((row) => row.source);
   return sources;
 }
 
 /** Lock parents before classification rows, including the parent FK fence for a newly inserted classification. */
-export async function lockCompensationPackageComponents(tx: SqlExecutor, orgId: string,
-  sources: readonly { readonly components: readonly CompensationPackageComponentSource[] }[]): Promise<void> {
-  const ids = [...new Set(sources.flatMap(source => source.components.map(component => component.id)))].sort();
+export async function lockCompensationPackageComponents(
+  tx: SqlExecutor,
+  orgId: string,
+  sources: readonly { readonly components: readonly CompensationPackageComponentSource[] }[],
+): Promise<void> {
+  const ids = [
+    ...new Set(sources.flatMap((source) => source.components.map((component) => component.id))),
+  ].sort();
   if (!ids.length) return;
-  const list = sql.join(ids.map(id => sql`${id}::uuid`), sql`, `);
-  const locked = await tx.execute(sql`select id from pay_components where org_id=${orgId} and id in (${list}) order by id for update`, 'objects');
-  if (locked.length !== ids.length) throw new PayrollError('A compensation payroll component is no longer available — reload the package and choose its current native components before recalculating.');
+  const list = sql.join(
+    ids.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  );
+  const locked = await tx.execute(
+    sql`select id from pay_components where org_id=${orgId} and id in (${list}) order by id for update`,
+    "objects",
+  );
+  if (locked.length !== ids.length)
+    throw new PayrollError(
+      "A compensation payroll component is no longer available — reload the package and choose its current native components before recalculating.",
+    );
   await tx.execute(sql`select pay_component_id from pay_component_earning_classifications
     where org_id=${orgId} and pay_component_id in (${list}) order by pay_component_id for update`);
 }

@@ -35,11 +35,19 @@ function unavailable(permission: string): Unavailable {
 async function cashSection(context: ApplicationContext) {
   if (!can(context.authz, "banking.read")) return unavailable("banking.read");
   const cfg = await analyticsConfig(context.authz.user.orgId, "cashflow");
-  const position = await cashPosition(context.authz.user.orgId, cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks, {
-    weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
-    restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
-    runwayCautionWeeks: cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
-  }, undefined, undefined, context.authz.allowedSubsidiaryIds);
+  const position = await cashPosition(
+    context.authz.user.orgId,
+    cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
+    {
+      weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
+      restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
+      runwayCautionWeeks:
+        cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
+    },
+    undefined,
+    undefined,
+    context.authz.allowedSubsidiaryIds,
+  );
   return {
     available: true as const,
     asOf: position.asOf,
@@ -62,8 +70,10 @@ async function cashSection(context: ApplicationContext) {
 async function agingSection(context: ApplicationContext, side: "ar" | "ap", asOf: string) {
   const permission = side === "ar" ? "ar.read" : "ap.read";
   if (!can(context.authz, permission)) return unavailable(permission);
-  const dims = context.authz.allowedSubsidiaryIds === null ? undefined
-    : { subsidiaryIds: [...context.authz.allowedSubsidiaryIds] };
+  const dims =
+    context.authz.allowedSubsidiaryIds === null
+      ? undefined
+      : { subsidiaryIds: [...context.authz.allowedSubsidiaryIds] };
   const result = await agingByParty(side, asOf, dims, context.authz.user.orgId);
   return {
     available: true as const,
@@ -91,14 +101,14 @@ async function closeSection(context: ApplicationContext) {
       recentRuns: runs.length,
       latest: latest
         ? {
-          runId: latest.id,
-          // Locale-free: the payload serves API and assistant callers alike.
-          period: canonicalPeriodLabel(latest.periodRef),
-          book: latest.bookCode,
-          status: latest.status,
-          currentStage: latest.currentStage,
-          targetCloseDate: latest.targetCloseDate,
-        }
+            runId: latest.id,
+            // Locale-free: the payload serves API and assistant callers alike.
+            period: canonicalPeriodLabel(latest.periodRef),
+            book: latest.bookCode,
+            status: latest.status,
+            currentStage: latest.currentStage,
+            targetCloseDate: latest.targetCloseDate,
+          }
         : null,
     };
   } catch (error) {

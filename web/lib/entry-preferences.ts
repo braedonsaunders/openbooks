@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from "zod";
 
 /**
  * Personal data-entry preferences. They change how the keyboard behaves for
@@ -17,26 +17,28 @@ import { z } from 'zod'
  *    offers ("suggest"), applies ("apply") or ignores ("off") the lines of
  *    their most recent document of the same kind.
  */
-export const ENTRY_PREFERENCES_SCHEMA = z.object({
-  enterMovesToNextField: z.boolean(),
-  autoDecimal: z.boolean(),
-  keepDateOnNew: z.boolean(),
-  keepPartyOnNew: z.boolean(),
-  recallLastDocument: z.enum(['off', 'suggest', 'apply']),
-}).strict()
+export const ENTRY_PREFERENCES_SCHEMA = z
+  .object({
+    enterMovesToNextField: z.boolean(),
+    autoDecimal: z.boolean(),
+    keepDateOnNew: z.boolean(),
+    keepPartyOnNew: z.boolean(),
+    recallLastDocument: z.enum(["off", "suggest", "apply"]),
+  })
+  .strict();
 
-export type EntryPreferences = z.infer<typeof ENTRY_PREFERENCES_SCHEMA>
+export type EntryPreferences = z.infer<typeof ENTRY_PREFERENCES_SCHEMA>;
 
 export const DEFAULT_ENTRY_PREFERENCES: EntryPreferences = {
   enterMovesToNextField: false,
   autoDecimal: false,
   keepDateOnNew: true,
   keepPartyOnNew: false,
-  recallLastDocument: 'suggest',
-}
+  recallLastDocument: "suggest",
+};
 
 /** A partial update: only the named preferences change. */
-export const ENTRY_PREFERENCES_PATCH_SCHEMA = ENTRY_PREFERENCES_SCHEMA.partial().strict()
+export const ENTRY_PREFERENCES_PATCH_SCHEMA = ENTRY_PREFERENCES_SCHEMA.partial().strict();
 
 /**
  * Stored preferences merged over the defaults. Unknown or malformed stored
@@ -44,12 +46,12 @@ export const ENTRY_PREFERENCES_PATCH_SCHEMA = ENTRY_PREFERENCES_SCHEMA.partial()
  * the rest of a person's choices.
  */
 export function resolveEntryPreferences(stored: unknown): EntryPreferences {
-  const resolved: EntryPreferences = { ...DEFAULT_ENTRY_PREFERENCES }
-  if (!stored || typeof stored !== 'object') return resolved
-  const shape = ENTRY_PREFERENCES_SCHEMA.shape
+  const resolved: EntryPreferences = { ...DEFAULT_ENTRY_PREFERENCES };
+  if (!stored || typeof stored !== "object") return resolved;
+  const shape = ENTRY_PREFERENCES_SCHEMA.shape;
   for (const key of Object.keys(shape) as (keyof EntryPreferences)[]) {
-    const parsed = shape[key].safeParse((stored as Record<string, unknown>)[key])
-    if (parsed.success) (resolved as Record<string, unknown>)[key] = parsed.data
+    const parsed = shape[key].safeParse((stored as Record<string, unknown>)[key]);
+    if (parsed.success) (resolved as Record<string, unknown>)[key] = parsed.data;
   }
-  return resolved
+  return resolved;
 }

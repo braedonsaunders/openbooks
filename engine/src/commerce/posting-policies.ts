@@ -39,7 +39,13 @@ export interface SetPostingPolicyInput {
   effectiveFrom: string;
 }
 
-function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
+function refuse(
+  code: string,
+  message: string,
+  remedy: string,
+  field: string | null = null,
+  status: 422 | 409 = 422,
+): never {
   throw new CommerceError(code, message, remedy, { field, status });
 }
 
@@ -124,14 +130,24 @@ export async function getPostingPolicy(
   date: string,
 ): Promise<ChannelPostingPolicy> {
   checkEffectiveDate(date);
-  const row = (await db.execute<PolicyDbRow>(sql`
+  const row = (
+    await db.execute<PolicyDbRow>(
+      sql`
     select ${POLICY_COLUMNS} from sales_channel_posting_policies
      where org_id = ${orgId} and channel_id = ${channelId}
        and effective_from <= ${date}
-       and (effective_to is null or effective_to >= ${date})`, "objects"))[0];
+       and (effective_to is null or effective_to >= ${date})`,
+      "objects",
+    )
+  )[0];
   if (!row) {
-    const channel = (await db.execute<{ name: string }>(sql`
-      select name from sales_channels where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
+    const channel = (
+      await db.execute<{ name: string }>(
+        sql`
+      select name from sales_channels where org_id = ${orgId} and id = ${channelId}`,
+        "objects",
+      )
+    )[0];
     refuse(
       "channel_policy_missing",
       channel
@@ -157,15 +173,24 @@ export async function setPostingPolicy(
   const mode = checkMode(input.mode);
   checkEffectiveDate(input.effectiveFrom);
   const cutoffTz = checkTimezone(input.cutoffTz ?? "UTC");
-  const excludedTags = (input.excludedTags ?? []).map((tag) => tag.trim()).filter((tag) => tag !== "");
-  const excludedSources = (input.excludedSources ?? []).map((source) => source.trim()).filter((source) => source !== "");
+  const excludedTags = (input.excludedTags ?? [])
+    .map((tag) => tag.trim())
+    .filter((tag) => tag !== "");
+  const excludedSources = (input.excludedSources ?? [])
+    .map((source) => source.trim())
+    .filter((source) => source !== "");
   return withOrg(orgId, async () => {
     await acquireOrgFeatureGateLock(db, orgId);
     if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
       refuse("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
     }
-    const channel = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
-      select id, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${input.channelId} for share`, "objects"))[0];
+    const channel = (
+      await db.execute<{ id: string; subsidiary_id: string | null }>(
+        sql`
+      select id, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${input.channelId} for share`,
+        "objects",
+      )
+    )[0];
     if (!channel) {
       refuse(
         "channel_not_found",
@@ -174,8 +199,10 @@ export async function setPostingPolicy(
         "channelId",
       );
     }
-    if (input.allowedSubsidiaryIds !== undefined
-        && !subsidiaryScopeAllows(input.allowedSubsidiaryIds, channel.subsidiary_id)) {
+    if (
+      input.allowedSubsidiaryIds !== undefined &&
+      !subsidiaryScopeAllows(input.allowedSubsidiaryIds, channel.subsidiary_id)
+    ) {
       refuse(
         "channel_not_found",
         "The sales channel does not belong to a subsidiary available to this role.",
@@ -184,15 +211,25 @@ export async function setPostingPolicy(
       );
     }
     if (input.guestCustomerPartyId) {
-      const guest = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      const guest = (
+        await db.execute<{ id: string; subsidiary_id: string | null }>(
+          sql`
         select p.id, p.subsidiary_id from parties p
          where p.org_id = ${orgId} and p.id = ${input.guestCustomerPartyId} and p.is_active
            and exists (select 1 from customer_roles cr
              where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
-         for share`, "objects"))[0];
-      const sameChannelEntity = guest && (guest.subsidiary_id === null || guest.subsidiary_id === channel.subsidiary_id);
-      const inCallerScope = guest && (input.allowedSubsidiaryIds === undefined
-        || subsidiaryScopeAllows(input.allowedSubsidiaryIds, guest.subsidiary_id, { orgWideNull: true }));
+         for share`,
+          "objects",
+        )
+      )[0];
+      const sameChannelEntity =
+        guest && (guest.subsidiary_id === null || guest.subsidiary_id === channel.subsidiary_id);
+      const inCallerScope =
+        guest &&
+        (input.allowedSubsidiaryIds === undefined ||
+          subsidiaryScopeAllows(input.allowedSubsidiaryIds, guest.subsidiary_id, {
+            orgWideNull: true,
+          }));
       if (!guest || !sameChannelEntity || !inCallerScope) {
         refuse(
           "channel_policy_guest_unavailable",
@@ -214,11 +251,14 @@ export async function setPostingPolicy(
         "cutoffTz",
       );
     }
-    const open = await db.execute<PolicyDbRow>(sql`
+    const open = await db.execute<PolicyDbRow>(
+      sql`
       select ${POLICY_COLUMNS} from sales_channel_posting_policies
        where org_id = ${orgId} and channel_id = ${input.channelId}
          and effective_to is null
-       for update`, "objects");
+       for update`,
+      "objects",
+    );
     if (open.length > 1) {
       throw new Error(
         `Overlapping open posting policies for channel ${input.channelId}; storage must hold exactly one open row`,
@@ -249,7 +289,8 @@ export async function setPostingPolicy(
     }
     let id: string;
     try {
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into sales_channel_posting_policies
           (org_id, channel_id, mode, unpaid_creates_sales_order, guest_customer_party_id,
            create_promotion_on_match_miss, cutoff_tz, excluded_tags, excluded_sources,
@@ -258,13 +299,17 @@ export async function setPostingPolicy(
           ${input.guestCustomerPartyId ?? null}, ${input.createPromotionOnMatchMiss ?? false},
           ${cutoffTz}, ${toTextArrayLiteral(excludedTags)}::text[], ${toTextArrayLiteral(excludedSources)}::text[],
           ${input.effectiveFrom}, ${actor}, ${actor})
-        returning id`, "objects");
-      if (inserted.length !== 1) throw new Error("Posting policy insert returned an unexpected row count");
+        returning id`,
+        "objects",
+      );
+      if (inserted.length !== 1)
+        throw new Error("Posting policy insert returned an unexpected row count");
       id = inserted[0]!.id;
     } catch (error) {
       if (error instanceof CommerceError) throw error;
       const candidate = error as { code?: unknown; constraint?: unknown };
-      const cause = (candidate as { cause?: unknown }).cause as { code?: unknown; constraint?: unknown } | undefined;
+      const cause = (candidate as { cause?: unknown }).cause as
+        { code?: unknown; constraint?: unknown } | undefined;
       if (
         candidate.code === "23P01" ||
         candidate.constraint === "sales_channel_posting_policies_no_overlap" ||
@@ -280,9 +325,14 @@ export async function setPostingPolicy(
       }
       throw error;
     }
-    const row = (await db.execute<PolicyDbRow>(sql`
+    const row = (
+      await db.execute<PolicyDbRow>(
+        sql`
       select ${POLICY_COLUMNS} from sales_channel_posting_policies
-       where org_id = ${orgId} and id = ${id}`, "objects"))[0]!;
+       where org_id = ${orgId} and id = ${id}`,
+        "objects",
+      )
+    )[0]!;
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'sales_channel_posting_policies', ${id}, 'insert',
@@ -292,10 +342,16 @@ export async function setPostingPolicy(
 }
 
 /** Every policy window for a channel, oldest first, for the Settings history. */
-export async function listPostingPolicies(orgId: string, channelId: string): Promise<ChannelPostingPolicy[]> {
-  const rows = await db.execute<PolicyDbRow>(sql`
+export async function listPostingPolicies(
+  orgId: string,
+  channelId: string,
+): Promise<ChannelPostingPolicy[]> {
+  const rows = await db.execute<PolicyDbRow>(
+    sql`
     select ${POLICY_COLUMNS} from sales_channel_posting_policies
      where org_id = ${orgId} and channel_id = ${channelId}
-     order by effective_from`, "objects");
+     order by effective_from`,
+    "objects",
+  );
   return rows.map(toPolicy);
 }

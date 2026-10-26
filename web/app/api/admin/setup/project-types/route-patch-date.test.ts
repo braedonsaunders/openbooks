@@ -11,7 +11,7 @@ interface RouteState {
   publishInputs: { effectiveFrom: string }[];
 }
 const state: RouteState = { publishInputs: [] };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
@@ -26,7 +26,7 @@ function sqlText(query: unknown): string {
     })
     .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextProjectDate = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextProjectDate = sqlText;
 
 // '@/lib/api/json' is not mocked here: never double the validation boundary.
 // The resolve hook's @/ forwarder already maps it to the real module.
@@ -70,7 +70,8 @@ stubModules({
         return { id: 'version-1', effectiveFrom: input.effectiveFrom, effectiveTo: null }
       }
     `,
-    "@openbooks/engine/platform/business-date/module": "export async function businessToday() { return '2026-08-31' }",
+    "@openbooks/engine/platform/business-date/module":
+      "export async function businessToday() { return '2026-08-31' }",
     "../../../../../lib/authz": `
       export async function guardPermission() {
         return {
@@ -91,7 +92,8 @@ stubModules({
       }
       export function guardUnrestrictedScope() { return null; }
     `,
-    "../../../../../lib/projects-gate": "export async function guardProjectsFeature() { return null }",
+    "../../../../../lib/projects-gate":
+      "export async function guardProjectsFeature() { return null }",
     "../../../../../lib/features": "export async function isFeatureEnabled() { return true }",
   },
 });

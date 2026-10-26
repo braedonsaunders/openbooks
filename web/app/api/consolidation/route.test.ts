@@ -24,20 +24,13 @@ registerHooks({
   resolve(specifier, context, next) {
     // Session/feature boundary only: every other module (validation, the
     // consolidation engine, storage) loads for real.
-    if (specifier === "@/lib/authz")
-      return { shortCircuit: true, url: "mock:consolidation-authz" };
+    if (specifier === "@/lib/authz") return { shortCircuit: true, url: "mock:consolidation-authz" };
     if (specifier === "../../../lib/feature-gates" || specifier === "@/lib/feature-gates")
       return { shortCircuit: true, url: "mock:consolidation-gates" };
     if (specifier === "@/lib/api/json")
-      return next(
-        new URL("../../../lib/api/json.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../lib/api/json.ts", import.meta.url).href, context);
     if (specifier === "../../../lib/list-params")
-      return next(
-        new URL("../../../lib/list-params.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../lib/list-params.ts", import.meta.url).href, context);
     return next(specifier, context);
   },
   load(url, context, next) {
@@ -66,12 +59,8 @@ registerHooks({
 const routeUrl = "./route.ts?consolidation-route";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db } = await import(
-  "@openbooks/engine/platform/db"
-);
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
 
@@ -120,7 +109,9 @@ async function seedGapFixture(org: ScratchOrg): Promise<void> {
       values
         (${org.orgId},${entry},1,${org.accounts.bank},${childId},${revenue},'CAD',${revenue},'1'),
         (${org.orgId},${entry},2,${org.accounts.revenue},${childId},${`-${revenue}`},'CAD',${`-${revenue}`},'1')`);
-    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
+    await db.execute(
+      sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`,
+    );
   };
   const capId = randomUUID();
   await db.execute(sql`
@@ -133,10 +124,13 @@ async function seedGapFixture(org: ScratchOrg): Promise<void> {
       values
         (${org.orgId},${capId},1,${org.accounts.bank},${childId},'1000','CAD','1000','1'),
         (${org.orgId},${capId},2,${accounts.get("childEquity")!},${childId},'-1000','CAD','-1000','1')`);
-  await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${capId}`);
+  await db.execute(
+    sql`update journal_entries set status='posted', posted_at=now() where id=${capId}`,
+  );
   await postEntry("OWN-PROFIT-COVERED", "2026-07-15", "100");
   await postEntry("OWN-PROFIT-GAP", "2026-07-30", "100");
-  const policy = (id: string, from: string, to: string | null): Promise<unknown> => db.execute(sql`
+  const policy = (id: string, from: string, to: string | null): Promise<unknown> =>
+    db.execute(sql`
       insert into subsidiary_ownership_interests
         (id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,effective_to,ownership_percent,method,
          acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,
@@ -167,9 +161,7 @@ test(
       await seedGapFixture(org);
       state.user = { id: randomUUID(), orgId: org.orgId };
 
-      const response = await POST(
-        postRequest({ action: "ownership", periodId: org.periodId }),
-      );
+      const response = await POST(postRequest({ action: "ownership", periodId: org.periodId }));
 
       assert.equal(response.status, 422);
       const body = (await response.json()) as { error?: string; code?: string };
@@ -190,12 +182,13 @@ test("an unknown action is a 400 through the real body validation", { skip: !DB 
   try {
     state.user = { id: randomUUID(), orgId: org.orgId };
 
-    const response = await POST(
-      postRequest({ action: "OWN EVERYTHING", periodId: org.periodId }),
-    );
+    const response = await POST(postRequest({ action: "OWN EVERYTHING", periodId: org.periodId }));
 
     assert.equal(response.status, 400);
-    const body = await response.json() as { error: string; issues: Array<{ path: string; message: string }> };
+    const body = (await response.json()) as {
+      error: string;
+      issues: Array<{ path: string; message: string }>;
+    };
     assert.match(body.error, /derive-rates.*ownership.*eliminate.*consolidate/);
     assert.deepEqual(body.issues, [{ path: "action", message: body.error }]);
   } finally {

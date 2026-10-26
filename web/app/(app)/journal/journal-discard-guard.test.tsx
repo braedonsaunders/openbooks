@@ -11,7 +11,10 @@ import { stubModules } from "../../../testing/stub-modules";
 // jsdom first: the drawer reads browser globals at render.
 // The drawer URL differs from the close href (as in production), so the
 // close navigation has somewhere to go.
-await bootJsdomEnvironment({ url: "http://localhost:4800/journal?entryNew=1&mode=edit", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/journal?entryNew=1&mode=edit",
+  matchMediaMatches: false,
+});
 
 const script = { confirmResult: true, confirmCalls: 0 };
 Object.assign(globalThis, {
@@ -72,8 +75,28 @@ const { JournalDrawer } = await import("./JournalDrawer");
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const BALANCED_LINES = [
-  { account_id: "a1", amount: "100.00", description: "leg one", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
-  { account_id: "a2", amount: "-100.00", description: "leg two", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
+  {
+    account_id: "a1",
+    amount: "100.00",
+    description: "leg one",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
+  {
+    account_id: "a2",
+    amount: "-100.00",
+    description: "leg two",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
 ];
 
 async function mount() {
@@ -81,7 +104,9 @@ async function mount() {
   script.confirmCalls = 0;
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.includes("/api/flows/record-state")) {
       return Response.json({
         approvalState: { status: "none", pendingWith: [], myActions: null },
@@ -101,20 +126,22 @@ async function mount() {
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <JournalDrawer
-            journal={{
-              doc: {
-                id: "",
-                kind: "journal",
-                status: "draft",
-                document_number: null,
-                currency: "USD",
-                updated_at: "",
-                document_date: "2026-09-17",
-                memo: "",
-                total: "0.00",
-              },
-              lines: BALANCED_LINES,
-            } as never}
+            journal={
+              {
+                doc: {
+                  id: "",
+                  kind: "journal",
+                  status: "draft",
+                  document_number: null,
+                  currency: "USD",
+                  updated_at: "",
+                  document_date: "2026-09-17",
+                  memo: "",
+                  total: "0.00",
+                },
+                lines: BALANCED_LINES,
+              } as never
+            }
             parties={[]}
             accounts={[]}
             departments={[]}
@@ -150,7 +177,8 @@ async function typeIntoForm() {
     const inputs = [...document.querySelectorAll("input")] as HTMLInputElement[];
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     for (const input of inputs) {
-      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox") continue;
+      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox")
+        continue;
       setter?.call(input, `${input.value}x`);
       input.dispatchEvent(new window.Event("input", { bubbles: true }));
     }
@@ -160,7 +188,7 @@ async function typeIntoForm() {
 }
 
 function closeButton(): HTMLButtonElement {
-  const button = [...document.querySelectorAll('button[aria-label]')].find((b) =>
+  const button = [...document.querySelectorAll("button[aria-label]")].find((b) =>
     /close/i.test(b.getAttribute("aria-label") ?? ""),
   ) as HTMLButtonElement | undefined;
   assert.ok(button, "the drawer must offer a labelled close button");

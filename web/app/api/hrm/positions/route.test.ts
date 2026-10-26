@@ -82,7 +82,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmPositionsRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmPositionsRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
@@ -92,21 +93,28 @@ const mockUrls = new Map<string, string>([
   ["./_lib", "mock:lib"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-positions-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "@/lib/authz" || specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "./features"
+          ? "mock:features"
+          : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-positions-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
 
 const SUBSIDIARY_ID = "00000000-0000-4000-8000-000000000021";
 
@@ -129,9 +137,7 @@ function postRequest(body: unknown): Request {
 test("a missing feature flag 404s before the service runs", async () => {
   reset();
   routeState.featureOn = false;
-  const get = await collectionRoute!.GET(
-    new Request("http://openbooks.test/api/hrm/positions"),
-  );
+  const get = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/positions"));
   assert.equal(get.status, 404);
   assert.deepEqual(routeState.calls, []);
   const post = await collectionRoute!.POST(postRequest({ positionCode: "X" }));
@@ -182,7 +188,9 @@ test("create forwards org, actor, and body, then 201s", async () => {
   };
   const response = await collectionRoute!.POST(postRequest(body));
   assert.equal(response.status, 201);
-  assert.deepEqual(await response.json(), { position: { id: "position-1", positionCode: "ENG-1042" } });
+  assert.deepEqual(await response.json(), {
+    position: { id: "position-1", positionCode: "ENG-1042" },
+  });
   assert.deepEqual(routeState.calls, [
     {
       fn: "create",
@@ -226,7 +234,11 @@ test("a service refusal delegates to the shared mapping with the error intact", 
 test("vacancy rejects bad dates and unknown statuses before the service runs", async () => {
   reset();
   assert.equal(
-    (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/positions?effectiveDate=nope"))).status,
+    (
+      await collectionRoute!.GET(
+        new Request("http://openbooks.test/api/hrm/positions?effectiveDate=nope"),
+      )
+    ).status,
     400,
   );
   const impossibleDate = await collectionRoute!.GET(
@@ -235,7 +247,13 @@ test("vacancy rejects bad dates and unknown statuses before the service runs", a
   assert.equal(impossibleDate.status, 400);
   assert.match((await impossibleDate.json()).error, /real.*calendar date/);
   assert.equal(
-    (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/positions?effectiveDate=2026-07-15&status=draft"))).status,
+    (
+      await collectionRoute!.GET(
+        new Request(
+          "http://openbooks.test/api/hrm/positions?effectiveDate=2026-07-15&status=draft",
+        ),
+      )
+    ).status,
     400,
   );
   assert.deepEqual(routeState.calls, []);

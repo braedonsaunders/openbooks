@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
-import { UrlDrawer } from '@openbooks/ui'
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { UrlDrawer } from "@openbooks/ui";
 
 export interface ReceivablePurchaseOrder {
-  id: string
-  number: string | null
-  vendor: string | null
-  openLines: number
+  id: string;
+  number: string | null;
+  vendor: string | null;
+  openLines: number;
 }
 
 /**
@@ -22,14 +22,14 @@ export function ReceiveAgainstPoDrawer({
   orders,
   closeHref,
 }: {
-  orders: ReceivablePurchaseOrder[]
-  closeHref: string
+  orders: ReceivablePurchaseOrder[];
+  closeHref: string;
 }) {
-  const t = useTranslations('inventory')
+  const t = useTranslations("inventory");
   return (
-    <UrlDrawer open closeHref={closeHref} title={t('receive.title')}>
+    <UrlDrawer open closeHref={closeHref} title={t("receive.title")}>
       {orders.length === 0 ? (
-        <p className="px-1 py-6 text-sm text-muted-foreground">{t('receive.empty')}</p>
+        <p className="px-1 py-6 text-sm text-muted-foreground">{t("receive.empty")}</p>
       ) : (
         <ul className="divide-y divide-border">
           {orders.map((order) => (
@@ -40,10 +40,12 @@ export function ReceiveAgainstPoDrawer({
               >
                 <span className="font-medium">
                   {order.number ?? order.id}
-                  {order.vendor ? <span className="ml-2 font-normal text-muted-foreground">{order.vendor}</span> : null}
+                  {order.vendor ? (
+                    <span className="ml-2 font-normal text-muted-foreground">{order.vendor}</span>
+                  ) : null}
                 </span>
                 <span className="shrink-0 text-sm text-muted-foreground">
-                  {t('receive.openLines', { count: order.openLines })}
+                  {t("receive.openLines", { count: order.openLines })}
                 </span>
               </Link>
             </li>
@@ -51,5 +53,5 @@ export function ReceiveAgainstPoDrawer({
         </ul>
       )}
     </UrlDrawer>
-  )
+  );
 }

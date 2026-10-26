@@ -12,12 +12,25 @@ test("duties register, list, and run in order", async () => {
   clearWorkerDuties();
   try {
     const order: string[] = [];
-    registerWorkerDuty({ key: "a", run: async () => { order.push("a"); } });
-    registerWorkerDuty({ key: "b", run: async () => { order.push("b"); } });
+    registerWorkerDuty({
+      key: "a",
+      run: async () => {
+        order.push("a");
+      },
+    });
+    registerWorkerDuty({
+      key: "b",
+      run: async () => {
+        order.push("b");
+      },
+    });
     assert.deepEqual(listWorkerDuties(), ["a", "b"]);
     const summary = await runWorkerDuties(new Date("2026-09-20T12:00:00Z"));
     assert.deepEqual(order, ["a", "b"]);
-    assert.deepEqual(summary, [{ key: "a", ok: true }, { key: "b", ok: true }]);
+    assert.deepEqual(summary, [
+      { key: "a", ok: true },
+      { key: "b", ok: true },
+    ]);
   } finally {
     clearWorkerDuties();
   }
@@ -29,7 +42,8 @@ test("duplicate keys refuse instead of double-firing", () => {
     registerWorkerDuty({ key: "solo", run: async () => {} });
     assert.throws(
       () => registerWorkerDuty({ key: "solo", run: async () => {} }),
-      (e: unknown) => e instanceof WorkerDutyError && /already registered/.test((e as Error).message),
+      (e: unknown) =>
+        e instanceof WorkerDutyError && /already registered/.test((e as Error).message),
     );
   } finally {
     clearWorkerDuties();
@@ -40,8 +54,18 @@ test("a throwing duty is recorded, never propagated to the rest", async () => {
   clearWorkerDuties();
   try {
     let second = false;
-    registerWorkerDuty({ key: "bad", run: async () => { throw new Error("boom"); } });
-    registerWorkerDuty({ key: "good", run: async () => { second = true; } });
+    registerWorkerDuty({
+      key: "bad",
+      run: async () => {
+        throw new Error("boom");
+      },
+    });
+    registerWorkerDuty({
+      key: "good",
+      run: async () => {
+        second = true;
+      },
+    });
     const summary = await runWorkerDuties();
     assert.equal(second, true);
     assert.equal(summary[0]!.ok, false);
@@ -71,8 +95,15 @@ test("the worker composition entry registers the automation tick without booting
       "the worker registry must carry the qualification-alerts scan after booting the composition entry",
     );
     // HR-14 end
-    for (const key of ["asset-maintenance-alerts", "asset-insurance-renewals", "asset-proposal-scan"]) {
-      assert.ok(listWorkerDuties().includes(key), `the worker registry must carry the ${key} sweep`);
+    for (const key of [
+      "asset-maintenance-alerts",
+      "asset-insurance-renewals",
+      "asset-proposal-scan",
+    ]) {
+      assert.ok(
+        listWorkerDuties().includes(key),
+        `the worker registry must carry the ${key} sweep`,
+      );
     }
   } finally {
     clearWorkerDuties();

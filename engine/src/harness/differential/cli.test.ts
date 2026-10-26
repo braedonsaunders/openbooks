@@ -41,11 +41,10 @@ function runCheck(published: string): { status: number | null; output: string } 
   writeFileSync(corpusPath, `${JSON.stringify(CORPUS)}\n`);
   writeFileSync(expectedPath, published);
   try {
-    const result = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI, "check", corpusPath],
-      { cwd: REPO_ROOT, encoding: "utf8" },
-    );
+    const result = spawnSync(process.execPath, ["--import", "tsx", CLI, "check", corpusPath], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+    });
     return { status: result.status, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -57,7 +56,7 @@ test("differential check rejects corrupt expected evidence", () => {
   assert.equal(valid.status, 0, valid.output);
   assert.match(valid.output, /published expected file matches recomputation/);
 
-  const truncated = runCheck("{\"schemaVersion\":1");
+  const truncated = runCheck('{"schemaVersion":1');
   assert.equal(truncated.status, 1, truncated.output);
   assert.match(truncated.output, /invalid published expected file/);
 
@@ -65,10 +64,12 @@ test("differential check rejects corrupt expected evidence", () => {
   assert.equal(wrongShape.status, 1, wrongShape.output);
   assert.match(wrongShape.output, /trialBalance must be an object/);
 
-  const wrongBalance = runCheck(JSON.stringify({
-    ...VALID_EXPECTED,
-    openBalances: { orphan: { ar: "1.00" } },
-  }));
+  const wrongBalance = runCheck(
+    JSON.stringify({
+      ...VALID_EXPECTED,
+      openBalances: { orphan: { ar: "1.00" } },
+    }),
+  );
   assert.equal(wrongBalance.status, 1, wrongBalance.output);
   assert.match(wrongBalance.output, /published expected open balances vs recomputed/);
 });

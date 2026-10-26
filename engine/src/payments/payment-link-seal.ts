@@ -65,7 +65,8 @@ export function planPaymentLinkSeal(
     unseal: (sealed: string, scope: { orgId: string }) => string | null;
     hash: (plain: string) => string;
   } = {
-    seal: (plain, scope) => sealSecret(plain, { orgId: scope.orgId, purpose: "payment.link.token" }),
+    seal: (plain, scope) =>
+      sealSecret(plain, { orgId: scope.orgId, purpose: "payment.link.token" }),
     unseal: (sealed, scope) => {
       try {
         return unsealSecret(sealed, { orgId: scope.orgId, purpose: "payment.link.token" });
@@ -77,8 +78,10 @@ export function planPaymentLinkSeal(
   },
 ): PaymentLinkSealPlan {
   const scope = { orgId: row.orgId };
-  const plain = row.token ?? (row.token_sealed === null ? null : crypto.unseal(row.token_sealed, scope));
-  if (plain === null || plain.length === 0) return { id: row.id, unrecoverable: true, reason: "missing-secret" };
+  const plain =
+    row.token ?? (row.token_sealed === null ? null : crypto.unseal(row.token_sealed, scope));
+  if (plain === null || plain.length === 0)
+    return { id: row.id, unrecoverable: true, reason: "missing-secret" };
   const tokenHash = crypto.hash(plain);
   if (row.token_hash !== null && row.token_hash !== tokenHash) {
     return { id: row.id, unrecoverable: true, reason: "hash-mismatch" };
@@ -103,11 +106,14 @@ export async function sealLegacyPaymentLinkTokens(): Promise<void> {
     // 0251 backfilled the hash but left the plaintext, so "hash present" is
     // NOT "finished": any row still holding plaintext — or missing hash or
     // seal — needs this step.
-    const pending = await db.execute<PaymentLinkSealRow>(sql`
+    const pending = await db.execute<PaymentLinkSealRow>(
+      sql`
       select id, org_id as "orgId", token, token_sealed, token_hash from payment_links
        where token_hash is null or token is not null or token_sealed is null
        order by id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (pending.length > 0) {
       console.log(`[bootstrap] sealing ${pending.length} payment link token(s) at rest`);
     }
@@ -134,7 +140,10 @@ export async function sealLegacyPaymentLinkTokens(): Promise<void> {
       }
     }
     if (unrecoverable.length > 0) {
-      const ids = unrecoverable.slice(0, 5).map((u) => `${u.id} (${u.reason})`).join(", ");
+      const ids = unrecoverable
+        .slice(0, 5)
+        .map((u) => `${u.id} (${u.reason})`)
+        .join(", ");
       throw new Error(
         `[bootstrap] ${unrecoverable.length} payment link(s) cannot be sealed at rest ` +
           `(missing secret, or a stored hash that does not match the recovered secret): ` +
@@ -146,10 +155,13 @@ export async function sealLegacyPaymentLinkTokens(): Promise<void> {
     // resolve by hash (the engine's only lookup) and display through the
     // seal. Anything less is an unresolvable or undisplayable link — refuse
     // to serve past that state.
-    const broken = await db.execute<{ n: string }>(sql`
+    const broken = await db.execute<{ n: string }>(
+      sql`
       select count(*)::text as n from payment_links
        where token is not null or token_hash is null or token_sealed is null
-    `, "objects");
+    `,
+      "objects",
+    );
     if (Number(broken[0]?.n ?? 0) > 0) {
       throw new Error(
         "[bootstrap] payment_links has rows holding plaintext or missing their hash or seal; refusing to continue",

@@ -12,7 +12,10 @@ const shell = (messages.shell ?? {}) as Record<string, Record<string, string>>;
 const common = (messages.common ?? {}) as Record<string, Record<string, string>>;
 
 function render(digest: string | undefined): string {
-  const error = Object.assign(new Error("database timeout"), digest === undefined ? {} : { digest });
+  const error = Object.assign(
+    new Error("database timeout"),
+    digest === undefined ? {} : { digest },
+  );
   return renderToStaticMarkup(
     <NextIntlClientProvider locale="en" messages={messages}>
       <AppError error={error} reset={() => {}} />
@@ -43,6 +46,9 @@ test("a tab from an earlier deployment is offered a reload, not a retry of the s
     );
     assert.ok(html.includes(shell.routeState!.updatedTitle!), name);
     assert.ok(html.includes(shell.routeState!.reload!), name);
-    assert.ok(!html.includes(common.actions!.retry!), `${name}: retry would re-render the stale page`);
+    assert.ok(
+      !html.includes(common.actions!.retry!),
+      `${name}: retry would re-render the stale page`,
+    );
   }
 });

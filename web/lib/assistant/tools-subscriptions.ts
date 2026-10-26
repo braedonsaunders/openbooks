@@ -40,10 +40,15 @@ async function featureOff(orgId: string): Promise<boolean> {
 }
 
 async function orgCurrency(orgId: string): Promise<string | null> {
-  const org = await db.execute<{ baseCurrency: string }>(sql`
+  const org = await db.execute<{ baseCurrency: string }>(
+    sql`
     select base_currency as "baseCurrency" from orgs where id = ${orgId}
-  `, "objects");
-  const code = String(org[0]?.baseCurrency ?? "").trim().toUpperCase();
+  `,
+    "objects",
+  );
+  const code = String(org[0]?.baseCurrency ?? "")
+    .trim()
+    .toUpperCase();
   return code || null;
 }
 
@@ -108,14 +113,17 @@ async function mrrInOrgCurrency(
     // Nothing earned today needs no rate: a foreign plan with no spot rate
     // must not refuse the rollup for revenue that is not there.
     if (toUnits(amount) === 0n) continue;
-    const sourceCurrency = String(row.planCurrency ?? orgCode).trim().toUpperCase();
+    const sourceCurrency = String(row.planCurrency ?? orgCode)
+      .trim()
+      .toUpperCase();
     if (sourceCurrency === orgCode) {
       total = add(total, amount);
       continue;
     }
     let rate = rates.get(sourceCurrency);
     if (!rate) {
-      const candidates = await db.execute<{ rate: string }>(sql`
+      const candidates = await db.execute<{ rate: string }>(
+        sql`
         select rate::text from (
           select rate, as_of, 0 as priority
             from fx_rates
@@ -131,7 +139,9 @@ async function mrrInOrgCurrency(
         ) candidates
         order by as_of desc, priority asc
         limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       rate = candidates[0]?.rate;
       if (!rate) {
         throw new Error(
@@ -197,19 +207,25 @@ const listSubscriptionPlans: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["ar.read"] },
   feature: "subscriptionBilling",
   inputSchema: z.object({
-    activeOnly: z.boolean().optional().describe("True = active plans only (default false = every plan)"),
+    activeOnly: z
+      .boolean()
+      .optional()
+      .describe("True = active plans only (default false = every plan)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (await featureOff(authz.user.orgId)) return { ok: false, error: FEATURE_ERROR };
     const a = raw as { activeOnly?: boolean };
-    const plans = await db.execute<Record<string, unknown>>(sql`
+    const plans = await db.execute<Record<string, unknown>>(
+      sql`
       select id, name, description, amount, currency_code as "currency", interval,
              interval_count as "intervalCount", is_active as "isActive"
         from subscription_plans
        where org_id = ${authz.user.orgId}
          ${a.activeOnly ? sql` and is_active` : sql``}
        order by name
-    `, "objects");
+    `,
+      "objects",
+    );
     const capped = capList(
       plans.map((p) => ({
         planId: p.id,
@@ -237,10 +253,23 @@ const listSubscriptionPlans: AssistantToolDef = {
 
 const listSubscriptionsSchema = z.object({
   query: z.string().max(100).optional().describe("Substring over the customer name"),
-  status: z.enum(["active", "paused", "canceled"]).optional().describe("Subscription status; omit for every status"),
+  status: z
+    .enum(["active", "paused", "canceled"])
+    .optional()
+    .describe("Subscription status; omit for every status"),
   planId: uuidInput.optional().describe("Plan id; omit for every plan"),
-  dunningState: z.string().max(40).optional().describe("Dunning state (e.g. current, overdue); omit for every state"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); aggregates always cover ALL matches"),
+  dunningState: z
+    .string()
+    .max(40)
+    .optional()
+    .describe("Dunning state (e.g. current, overdue); omit for every state"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); aggregates always cover ALL matches"),
 });
 
 const listSubscriptions: AssistantToolDef = {
@@ -267,22 +296,31 @@ const listSubscriptions: AssistantToolDef = {
     );
     // Same customer boundary as GET /api/subscriptions: an unassigned
     // customer is org-wide; a restricted caller only sees their subsidiaries.
-    const scope = subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true });
+    const scope = subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, {
+      orgWideNull: true,
+    });
     const [page, byStatus, mrrRows] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         ${SUBSCRIPTION_SELECT}
          where s.org_id = ${authz.user.orgId}${filters}${scope}
          order by s.created_at desc
          limit ${limit}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select s.status, count(*)::int as count
           from subscriptions s
           left join parties c on c.id = s.customer_id and c.org_id = s.org_id
          where s.org_id = ${authz.user.orgId}${filters}${scope}
          group by s.status order by s.status
-      `, "objects"),
-      db.execute<MrrSource & Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<MrrSource & Record<string, unknown>>(
+        sql`
         select s.id, s.status, s.canceled_on::text as "canceledOn", s.price_override as "priceOverride", p.amount as "planAmount",
                p.interval, p.interval_count as "intervalCount", s.quantity,
                p.currency_code as "planCurrency"
@@ -290,7 +328,9 @@ const listSubscriptions: AssistantToolDef = {
           join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
           left join parties c on c.id = s.customer_id and c.org_id = s.org_id
          where s.org_id = ${authz.user.orgId}${filters}${scope}
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const ctx = await mrrContext(authz.user.orgId);
     const capped = capList(page.map((row) => subscriptionRow(row, ctx)));
@@ -298,7 +338,10 @@ const listSubscriptions: AssistantToolDef = {
     for (const row of mrrRows) {
       const amount = rowMrr(row, ctx);
       if (toUnits(amount) === 0n) continue;
-      const code = String(row.planCurrency ?? "").trim().toUpperCase() || "UNKNOWN";
+      const code =
+        String(row.planCurrency ?? "")
+          .trim()
+          .toUpperCase() || "UNKNOWN";
       mrrByCurrency.set(code, add(mrrByCurrency.get(code) ?? "0.0000", amount));
     }
     const currency = await orgCurrency(authz.user.orgId);
@@ -321,7 +364,10 @@ const listSubscriptions: AssistantToolDef = {
         truncated: capped.truncated,
         subscriptions: capped.items,
         byStatus: byStatus.map((r) => ({ status: r.status, count: Number(r.count ?? 0) })),
-        mrrByCurrency: [...mrrByCurrency].map(([code, amount]) => ({ currency: code, mrr: decimalText(amount) })),
+        mrrByCurrency: [...mrrByCurrency].map(([code, amount]) => ({
+          currency: code,
+          mrr: decimalText(amount),
+        })),
         ...(currency ? { orgCurrency: currency, mrrOrgTotal } : {}),
         ...(mrrNote ? { mrrNote } : {}),
         href: "/collections",
@@ -337,28 +383,44 @@ const getSubscription: AssistantToolDef = {
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read"] },
   feature: "subscriptionBilling",
-  inputSchema: z.object({ subscriptionId: uuidInput.describe("Subscription id from list_subscriptions") }),
+  inputSchema: z.object({
+    subscriptionId: uuidInput.describe("Subscription id from list_subscriptions"),
+  }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (await featureOff(authz.user.orgId)) return { ok: false, error: FEATURE_ERROR };
     const a = raw as { subscriptionId: string };
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       ${SUBSCRIPTION_SELECT}
        where s.id = ${a.subscriptionId} and s.org_id = ${authz.user.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const head = rows[0];
     // A subscription of a customer outside the caller's subsidiary scope is
     // indistinguishable from a missing one — the answer the route gives.
-    if (!head || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, head.customerSubsidiaryId as string | null, { orgWideNull: true })) {
+    if (
+      !head ||
+      !subsidiaryScopeAllows(
+        authz.allowedSubsidiaryIds,
+        head.customerSubsidiaryId as string | null,
+        { orgWideNull: true },
+      )
+    ) {
       return { ok: false, error: "subscription_not_found" };
     }
     const [events, invoices, dunning, lifecycle] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select kind, occurred_on::text as occurred_on, payload, invoice_id as "invoiceId"
           from subscription_events
          where org_id = ${authz.user.orgId} and subscription_id = ${a.subscriptionId}
          order by occurred_on desc, created_at desc limit 20
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select pi.period_starts_on::text as "periodStartsOn", pi.period_ends_on::text as "periodEndsOn",
                pi.contract_revision as "contractRevision", pi.invoice_id as "invoiceId",
                d.document_number as "invoiceNumber", d.status as "invoiceStatus",
@@ -367,8 +429,11 @@ const getSubscription: AssistantToolDef = {
           join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
          where pi.org_id = ${authz.user.orgId} and pi.subscription_id = ${a.subscriptionId}
          order by pi.period_starts_on desc limit 20
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select dl.sent_at, dl.channel, dl.status, dl.amount_due as "amountDue", dl.currency_code as currency,
                dl.to_email as "toEmail", dl.detail, st.name as "stageName", dl.document_id as "documentId"
           from dunning_log dl
@@ -382,11 +447,14 @@ const getSubscription: AssistantToolDef = {
          -- claims: NULLS LAST keeps real sends first (bare DESC would sort
          -- unsent rows first and present them as the latest letters).
          order by dl.sent_at desc nulls last, dl.created_at desc limit 10
-      `, "objects"),
+      `,
+        "objects",
+      ),
       // soft-feature: the advanced term section only exists while the
       // advancedSubscriptions switch is on; otherwise it is omitted.
       (await isFeatureEnabled(authz.user.orgId, "advancedSubscriptions"))
-        ? db.execute<Record<string, unknown>>(sql`
+        ? db.execute<Record<string, unknown>>(
+            sql`
           select l.term_starts_on::text as "termStartsOn", l.term_ends_on::text as "termEndsOn",
                  l.trial_ends_on::text as "trialEndsOn", l.billing_timing as "billingTiming",
                  l.renewal_policy as "renewalPolicy", l.renewal_term_months as "renewalTermMonths",
@@ -397,7 +465,9 @@ const getSubscription: AssistantToolDef = {
                    where am.org_id = l.org_id and am.subscription_id = l.subscription_id) as amendments
             from subscription_lifecycles l
            where l.org_id = ${authz.user.orgId} and l.subscription_id = ${a.subscriptionId}
-        `, "objects")
+        `,
+            "objects",
+          )
         : Promise.resolve([] as Record<string, unknown>[]),
     ]);
     // The child reads above resolve by org + subscription id after the
@@ -405,14 +475,22 @@ const getSubscription: AssistantToolDef = {
     // leak the new subsidiary's payload, so re-resolve the customer
     // subsidiary on a fresh read and discard the whole result when it left
     // the caller's scope (or the subscription vanished).
-    const scopeRecheck = await db.execute<{ customerSubsidiaryId: string | null }>(sql`
+    const scopeRecheck = await db.execute<{ customerSubsidiaryId: string | null }>(
+      sql`
       select c.subsidiary_id as "customerSubsidiaryId"
         from subscriptions s
         left join parties c on c.id = s.customer_id and c.org_id = s.org_id
        where s.id = ${a.subscriptionId} and s.org_id = ${authz.user.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const fresh = scopeRecheck[0];
-    if (!fresh || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, fresh.customerSubsidiaryId, { orgWideNull: true })) {
+    if (
+      !fresh ||
+      !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, fresh.customerSubsidiaryId, {
+        orgWideNull: true,
+      })
+    ) {
       return { ok: false, error: "subscription_not_found" };
     }
     const ctx = await mrrContext(authz.user.orgId);
@@ -442,10 +520,13 @@ const subscriptionMrr: AssistantToolDef = {
     if (await featureOff(authz.user.orgId)) return { ok: false, error: FEATURE_ERROR };
     const today = await businessToday(authz.user.orgId);
     const churnSince = addCalendarDays(today, -30);
-    const scope = subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true });
+    const scope = subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, {
+      orgWideNull: true,
+    });
     const ctx = await mrrContext(authz.user.orgId);
     const [mrrRows, byPlan, byDunning, churn] = await Promise.all([
-      db.execute<MrrSource & Record<string, unknown>>(sql`
+      db.execute<MrrSource & Record<string, unknown>>(
+        sql`
         select s.id, s.status, s.canceled_on::text as "canceledOn", s.price_override as "priceOverride", p.amount as "planAmount",
                p.interval, p.interval_count as "intervalCount", s.quantity,
                p.currency_code as "planCurrency"
@@ -453,8 +534,11 @@ const subscriptionMrr: AssistantToolDef = {
           join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
           left join parties c on c.id = s.customer_id and c.org_id = s.org_id
          where s.org_id = ${authz.user.orgId}${scope}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select s.id, p.name as "planName", p.currency_code as currency,
                s.status, s.price_override as "priceOverride", p.amount as "planAmount",
                p.interval, p.interval_count as "intervalCount", s.quantity
@@ -463,15 +547,21 @@ const subscriptionMrr: AssistantToolDef = {
           left join parties c on c.id = s.customer_id and c.org_id = s.org_id
          where s.org_id = ${authz.user.orgId}${scope}
          order by p.name
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select s.dunning_state as "dunningState", count(*)::int as count
           from subscriptions s
           left join parties c on c.id = s.customer_id and c.org_id = s.org_id
          where s.org_id = ${authz.user.orgId} and s.status = 'active'${scope}
          group by s.dunning_state order by s.dunning_state
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select s.id, s.status, s.canceled_on::text as "canceledOn", s.price_override as "priceOverride", p.amount as "planAmount",
                p.interval, p.interval_count as "intervalCount", s.quantity,
                p.currency_code as "planCurrency",
@@ -482,7 +572,9 @@ const subscriptionMrr: AssistantToolDef = {
           join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
           left join parties c on c.id = s.customer_id and c.org_id = s.org_id
          where s.org_id = ${authz.user.orgId}${scope}
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const activeRows = mrrRows.filter((r) => r.status === "active");
     const currency = await orgCurrency(authz.user.orgId);
@@ -500,7 +592,11 @@ const subscriptionMrr: AssistantToolDef = {
       const amount = rowMrr(row as unknown as MrrSource, ctx);
       if (toUnits(amount) === 0n) continue;
       const key = `${String(row.planName)}||${String(row.currency ?? "")}`;
-      const prev = mrrByPlan.get(key) ?? { currency: String(row.currency ?? ""), mrr: "0.0000", count: 0 };
+      const prev = mrrByPlan.get(key) ?? {
+        currency: String(row.currency ?? ""),
+        mrr: "0.0000",
+        count: 0,
+      };
       prev.mrr = add(prev.mrr, amount);
       prev.count += 1;
       mrrByPlan.set(key, prev);
@@ -513,8 +609,14 @@ const subscriptionMrr: AssistantToolDef = {
       if (row.isNew) newCount += 1;
       if (row.canceledRecent) {
         canceledCount += 1;
-        const code = String(row.planCurrency ?? "").trim().toUpperCase() || "UNKNOWN";
-        lostByCurrency.set(code, add(lostByCurrency.get(code) ?? "0.0000", rowPricedMrr(row as unknown as MrrSource, ctx)));
+        const code =
+          String(row.planCurrency ?? "")
+            .trim()
+            .toUpperCase() || "UNKNOWN";
+        lostByCurrency.set(
+          code,
+          add(lostByCurrency.get(code) ?? "0.0000", rowPricedMrr(row as unknown as MrrSource, ctx)),
+        );
       }
       if (row.pausedRecent) pausedCount += 1;
     }
@@ -531,12 +633,18 @@ const subscriptionMrr: AssistantToolDef = {
           mrr: decimalText(v.mrr),
           activeCount: v.count,
         })),
-        byDunningState: byDunning.map((r) => ({ dunningState: r.dunningState, count: Number(r.count ?? 0) })),
+        byDunningState: byDunning.map((r) => ({
+          dunningState: r.dunningState,
+          count: Number(r.count ?? 0),
+        })),
         churnTrailing30Days: {
           newCount,
           canceledCount,
           pausedCount,
-          lostMrrByCurrency: [...lostByCurrency].map(([code, amount]) => ({ currency: code, mrr: decimalText(amount) })),
+          lostMrrByCurrency: [...lostByCurrency].map(([code, amount]) => ({
+            currency: code,
+            mrr: decimalText(amount),
+          })),
         },
         href: "/collections",
       },
@@ -545,8 +653,20 @@ const subscriptionMrr: AssistantToolDef = {
 };
 
 const subscriptionUpcomingInvoicesSchema = z.object({
-  withinDays: z.number().int().min(1).max(365).optional().describe("Billing window in days from today (default 30)"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); totals always cover ALL matches"),
+  withinDays: z
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .optional()
+    .describe("Billing window in days from today (default 30)"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); totals always cover ALL matches"),
 });
 
 const subscriptionUpcomingInvoices: AssistantToolDef = {
@@ -564,9 +684,12 @@ const subscriptionUpcomingInvoices: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 50, 200);
     const today = await businessToday(authz.user.orgId);
     const through = addCalendarDays(today, withinDays);
-    const scope = subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true });
+    const scope = subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, {
+      orgWideNull: true,
+    });
     const [page, totals] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select s.id, s.next_bill_on::text as "nextBillOn", c.display_name as "customerName",
                p.name as "planName", s.quantity, s.price_override as "priceOverride",
                p.amount as "planAmount", p.currency_code as currency, s.last_error as "lastError"
@@ -577,8 +700,11 @@ const subscriptionUpcomingInvoices: AssistantToolDef = {
            and s.next_bill_on <= ${through}::date${scope}
          order by s.next_bill_on, c.display_name
          limit ${limit}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select p.currency_code as currency, count(*)::int as count,
                coalesce(sum(s.quantity * coalesce(s.price_override, p.amount)), 0)::text as expected
           from subscriptions s
@@ -587,7 +713,9 @@ const subscriptionUpcomingInvoices: AssistantToolDef = {
          where s.org_id = ${authz.user.orgId} and s.status = 'active'
            and s.next_bill_on <= ${through}::date${scope}
          group by p.currency_code order by p.currency_code
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const capped = capList(
       page.map((r) => ({
@@ -597,7 +725,9 @@ const subscriptionUpcomingInvoices: AssistantToolDef = {
         planName: r.planName,
         quantity: numberValue(r.quantity),
         currency: r.currency,
-        expectedAmount: decimalText(mulDecimal(String(r.priceOverride ?? r.planAmount ?? 0), String(r.quantity ?? 1))),
+        expectedAmount: decimalText(
+          mulDecimal(String(r.priceOverride ?? r.planAmount ?? 0), String(r.quantity ?? 1)),
+        ),
         lastError: r.lastError == null ? null : truncateText(String(r.lastError), 200),
       })),
     );
@@ -622,7 +752,10 @@ const subscriptionUpcomingInvoices: AssistantToolDef = {
 };
 
 const listRecurringSchedulesSchema = z.object({
-  activeOnly: z.boolean().optional().describe("True = active schedules only (default false = every schedule)"),
+  activeOnly: z
+    .boolean()
+    .optional()
+    .describe("True = active schedules only (default false = every schedule)"),
   limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50)"),
 });
 
@@ -637,7 +770,8 @@ const listRecurringSchedules: AssistantToolDef = {
     const a = raw as z.infer<typeof listRecurringSchedulesSchema>;
     const limit = Math.min(a.limit ?? 50, 200);
     const hidden = new Set(await disabledDocKinds(authz.user.orgId));
-    const rows = await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select rs.id, rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
              rs.auto_post as "autoPost", rs.is_active as "isActive", rs.run_count as "runCount",
              rs.last_run_at as "lastRunAt", rs.last_document_id as "lastDocumentId", rs.last_error as "lastError",
@@ -652,7 +786,9 @@ const listRecurringSchedules: AssistantToolDef = {
          ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by rs.is_active desc, rs.next_run_on
        limit ${limit + 1}
-    `, "objects");
+    `,
+      "objects",
+    );
     // Keep the screen's disabled-kind filter before pagination, so hidden
     // templates cannot push visible schedules off this page.
     const visible = rows.filter((row) => !hidden.has(String(row.templateKind)));

@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm'
+import { sql, type SQL } from "drizzle-orm";
 
 /**
  * SQL predicate shared by resource adapters whose source table carries a
@@ -10,10 +10,10 @@ export function subsidiaryReadFilter(
   column: SQL,
   allowed: ReadonlySet<string> | null | undefined,
 ): SQL {
-  if (allowed === null || allowed === undefined) return sql``
-  const ids = [...allowed]
-  if (ids.length === 0) return sql` and false`
-  return sql` and ${column} = any(${`{${ids.join(',')}}`}::uuid[])`
+  if (allowed === null || allowed === undefined) return sql``;
+  const ids = [...allowed];
+  if (ids.length === 0) return sql` and false`;
+  return sql` and ${column} = any(${`{${ids.join(",")}}`}::uuid[])`;
 }
 
 /**
@@ -33,8 +33,8 @@ export function subsidiaryReadFilterWithUnassigned(
   column: SQL,
   allowed: ReadonlySet<string> | null | undefined,
 ): SQL {
-  if (allowed === null || allowed === undefined) return sql``
-  const ids = [...allowed]
-  if (ids.length === 0) return sql` and false`
-  return sql` and (${column} is null or ${column} = any(${`{${ids.join(',')}}`}::uuid[]))`
+  if (allowed === null || allowed === undefined) return sql``;
+  const ids = [...allowed];
+  if (ids.length === 0) return sql` and false`;
+  return sql` and (${column} is null or ${column} = any(${`{${ids.join(",")}}`}::uuid[]))`;
 }

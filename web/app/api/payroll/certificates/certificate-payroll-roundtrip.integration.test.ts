@@ -1,31 +1,40 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __gbRoundtripState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __gbRoundtripState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
     // The route factory resolves the gate by @/ alias at request time; serve
     // the same intended session for its literal as for the relative import.
-    if (specifier === '../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
+    if (specifier === "../../../../lib/feature-gates" || specifier === "@/lib/feature-gates")
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__gbRoundtripState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { setPackSlotAccount } = await import('@openbooks/engine/payroll/packs')
-const { upsertPayrollEmployerFact } = await import('@openbooks/engine/payroll/employer-fact-store')
-const { calculatePayRun } = await import("@openbooks/engine/payroll/run-calculation"), { commitPayRun } = await import("@openbooks/engine/payroll/run-commit"), { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle"), { seedPayrollComponents } = await import("@openbooks/engine/payroll/run-setup");
-const { createScratchOrg, createScratchUser, dropScratchOrg, seedWorkerEmployment } = await import('@openbooks/engine/testing/fixtures')
-const { POST } = await import('./route')
+});
+const { db, pool, withBypassContext, withOrgContext } =
+  await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { setPackSlotAccount } = await import("@openbooks/engine/payroll/packs");
+const { upsertPayrollEmployerFact } = await import("@openbooks/engine/payroll/employer-fact-store");
+const { calculatePayRun } = await import("@openbooks/engine/payroll/run-calculation"),
+  { commitPayRun } = await import("@openbooks/engine/payroll/run-commit"),
+  { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle"),
+  { seedPayrollComponents } = await import("@openbooks/engine/payroll/run-setup");
+const { createScratchOrg, createScratchUser, dropScratchOrg, seedWorkerEmployment } =
+  await import("@openbooks/engine/testing/fixtures");
+const { POST } = await import("./route");
 
 /**
  * THE hole, closed end to end: a GB employee with no P6/P9 coding notice is
@@ -40,187 +49,285 @@ const { POST } = await import('./route')
  * above the monthly allowance, so a computed run prices a positive PAYE line.
  */
 
-const FIRST_START = '2026-04-01'
-const FIRST_END = '2026-04-30'
-const FIRST_PAY = '2026-05-05'
+const FIRST_START = "2026-04-01";
+const FIRST_END = "2026-04-30";
+const FIRST_PAY = "2026-05-05";
 // A second period needs its own run document: May also proves the cumulative
 // path (starter declaration A on file, prior month unpaid), not just month 1.
-const SECOND_START = '2026-05-01'
-const SECOND_END = '2026-05-31'
-const SECOND_PAY = '2026-06-05'
+const SECOND_START = "2026-05-01";
+const SECOND_END = "2026-05-31";
+const SECOND_PAY = "2026-06-05";
 
 async function gbPayrollOrg() {
   return withBypassContext(async () => {
-    const org = await createScratchOrg()
-    state.orgId = org.orgId
-    state.actorId = await createScratchUser(org.orgId, 'Payroll clerk', 'admin')
+    const org = await createScratchOrg();
+    state.orgId = org.orgId;
+    state.actorId = await createScratchUser(org.orgId, "Payroll clerk", "admin");
     // The certificates route locks command authority inside its write
     // transaction, so the fixture grants the permission it exercises.
-    await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${state.actorId},'payroll.manage','grant')`)
+    await db.execute(
+      sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${state.actorId},'payroll.manage','grant')`,
+    );
     const account = async (number: string, name: string, type: string) => {
-      const id = randomUUID()
+      const id = randomUUID();
       await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
                               reconcilable, required_dimensions, custom, subsidiary_include_children)
         values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
-                '[]'::jsonb, '{}'::jsonb, true)`)
-      return id
-    }
-    const wageExpense = await account('6000', 'Wages expense', 'expense')
-    const burdenExpense = await account('6010', 'Payroll burden', 'expense')
-    const netPayable = await account('2300', 'Wages payable', 'liability_current')
-    const hmrcPayable = await account('2330', 'HMRC PAYE/NIC payable', 'liability_current')
+                '[]'::jsonb, '{}'::jsonb, true)`);
+      return id;
+    };
+    const wageExpense = await account("6000", "Wages expense", "expense");
+    const burdenExpense = await account("6010", "Payroll burden", "expense");
+    const netPayable = await account("2300", "Wages payable", "liability_current");
+    const hmrcPayable = await account("2330", "HMRC PAYE/NIC payable", "liability_current");
     await db.execute(sql`
       update orgs set settings = settings || ${JSON.stringify({
         payroll: {
           wageExpenseAccountId: wageExpense,
           burdenExpenseAccountId: burdenExpense,
           netPayAccountId: netPayable,
-          wagesTo: 'expense',
-          countries: ['GB'],
+          wagesTo: "expense",
+          countries: ["GB"],
         },
-      })}::jsonb where id = ${org.orgId}`)
-    await seedPayrollComponents(org.orgId, state.actorId, 'GB')
-    await setPackSlotAccount(org.orgId, state.actorId, 'GB', 'paye', hmrcPayable)
-    await setPackSlotAccount(org.orgId, state.actorId, 'GB', 'nic', hmrcPayable)
-    const subsidiaryId = randomUUID()
+      })}::jsonb where id = ${org.orgId}`);
+    await seedPayrollComponents(org.orgId, state.actorId, "GB");
+    await setPackSlotAccount(org.orgId, state.actorId, "GB", "paye", hmrcPayable);
+    await setPackSlotAccount(org.orgId, state.actorId, "GB", "nic", hmrcPayable);
+    const subsidiaryId = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
                                 is_elimination, is_active, custom)
       values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'GB Entity', 'GBP', 'GB',
-              '{}'::jsonb, false, true, '{}'::jsonb)`)
-    await upsertPayrollEmployerFact({ orgId: org.orgId, actorId: state.actorId, subsidiaryId,
-      country: "GB", factKey: "gb_apprenticeship_levy_allowance", effectiveFrom: "2026-04-06",
-      value: "15000.00", changeReason: "standalone employer holds the full annual allowance" });
-    const scheduleId = randomUUID()
+              '{}'::jsonb, false, true, '{}'::jsonb)`);
+    await upsertPayrollEmployerFact({
+      orgId: org.orgId,
+      actorId: state.actorId,
+      subsidiaryId,
+      country: "GB",
+      factKey: "gb_apprenticeship_levy_allowance",
+      effectiveFrom: "2026-04-06",
+      value: "15000.00",
+      changeReason: "standalone employer holds the full annual allowance",
+    });
+    const scheduleId = randomUUID();
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, subsidiary_id, is_active,
                                  created_by, updated_by)
       values (${scheduleId}, ${org.orgId}, 'Monthly GB', 'monthly', 12, ${FIRST_END}, 5,
-              ${subsidiaryId}, true, ${state.actorId}, ${state.actorId})`)
-    const employeeId = randomUUID()
+              ${subsidiaryId}, true, ${state.actorId}, ${state.actorId})`);
+    const employeeId = randomUUID();
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${employeeId}, ${org.orgId}, 'person', 'London Hire', ${subsidiaryId}, true, '{}'::jsonb)`)
+      values (${employeeId}, ${org.orgId}, 'person', 'London Hire', ${subsidiaryId}, true, '{}'::jsonb)`);
     await db.execute(sql`
-      insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employeeId})`)
+      insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employeeId})`);
     await db.execute(sql`
       insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                     effective_from, is_active, created_by, updated_by)
       values (${org.orgId}, ${employeeId}, 'GBP', '36000', 'year', 2080, '2026-04-01', true,
-              ${state.actorId}, ${state.actorId})`)
+              ${state.actorId}, ${state.actorId})`);
     // Stub calculation resolves the employment through the payroll profile.
-    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, subsidiaryId)
+    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, subsidiaryId);
     await db.execute(sql`
       insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                              country, province, pay_basis, is_active, created_by, updated_by)
       values (${org.orgId}, ${employeeId}, ${employmentId}, ${scheduleId}, 'GB', 'ENG', 'salary', true,
-              ${state.actorId}, ${state.actorId})`)
+              ${state.actorId}, ${state.actorId})`);
     // The pension assessment is a second prerequisite gate ahead of the tax
     // code check: an entitled worker with no enrolment passes it, and the
     // scheme-terms record attests non-eligibility, keeping the tax code the
     // only missing input by design.
     const pension = await fileCertificate(
-      employeeId, 'gb_workplace_pension',
-      { age_band: '22_to_state_pension_age', worker_status: 'entitled_worker', enrolment_status: 'not_enrolled' },
-      '2026-04-01',
-    )
-    assert.equal(pension.status, 200, await pension.clone().text())
-    const assessment = await fileCertificate(employeeId, 'gb_workplace_pension_assessment',
-      { age_band: '22_to_state_pension_age', membership_status: 'not_eligible', scheme_basis: 'not_applicable', deduction_method: 'not_applicable' }, '2026-04-06')
-    assert.equal(assessment.status, 200, await assessment.clone().text())
+      employeeId,
+      "gb_workplace_pension",
+      {
+        age_band: "22_to_state_pension_age",
+        worker_status: "entitled_worker",
+        enrolment_status: "not_enrolled",
+      },
+      "2026-04-01",
+    );
+    assert.equal(pension.status, 200, await pension.clone().text());
+    const assessment = await fileCertificate(
+      employeeId,
+      "gb_workplace_pension_assessment",
+      {
+        age_band: "22_to_state_pension_age",
+        membership_status: "not_eligible",
+        scheme_basis: "not_applicable",
+        deduction_method: "not_applicable",
+      },
+      "2026-04-06",
+    );
+    assert.equal(assessment.status, 200, await assessment.clone().text());
     // The NIC letter is a third prerequisite gate ahead of the tax code
     // check: category A, not a director.
-    const nic = await fileCertificate(employeeId, 'gb_nic_category', { category_letter: 'A', director_status: 'not_director' }, '2026-04-01')
-    assert.equal(nic.status, 200, await nic.clone().text())
+    const nic = await fileCertificate(
+      employeeId,
+      "gb_nic_category",
+      { category_letter: "A", director_status: "not_director" },
+      "2026-04-01",
+    );
+    assert.equal(nic.status, 200, await nic.clone().text());
     // The student-loan plan rides the starter checklist; the tax-code notice
     // stays the only missing input. (The test files the same checklist
     // again below — a second save supersedes.)
     const checklist = await fileCertificate(
-      employeeId, 'gb_starter_checklist',
-      { starter_declaration: 'A', student_loan_plan: 'none', student_loan_postgraduate: 'false' },
-      '2026-04-01',
-    )
-    assert.equal(checklist.status, 200, await checklist.clone().text())
-    return { org, scheduleId, employeeId }
-  })
+      employeeId,
+      "gb_starter_checklist",
+      { starter_declaration: "A", student_loan_plan: "none", student_loan_postgraduate: "false" },
+      "2026-04-01",
+    );
+    assert.equal(checklist.status, 200, await checklist.clone().text());
+    return { org, scheduleId, employeeId };
+  });
 }
 
-async function runOnce(orgId: string, scheduleId: string, periodStart: string, periodEnd: string, payDate: string) {
+async function runOnce(
+  orgId: string,
+  scheduleId: string,
+  periodStart: string,
+  periodEnd: string,
+  payDate: string,
+) {
   return withBypassContext(async () => {
     const run = await createPayRun({
-      orgId, actorId: state.actorId, payScheduleId: scheduleId, periodStart, periodEnd, payDate,
-    })
-    const result = await calculatePayRun({ orgId, documentId: run.documentId, actorId: state.actorId })
-    return { run, result }
-  })
+      orgId,
+      actorId: state.actorId,
+      payScheduleId: scheduleId,
+      periodStart,
+      periodEnd,
+      payDate,
+    });
+    const result = await calculatePayRun({
+      orgId,
+      documentId: run.documentId,
+      actorId: state.actorId,
+    });
+    return { run, result };
+  });
 }
 
 const fileCertificate = (
-  employeePartyId: string, certificateKey: string, answers: Record<string, string>, effectiveFrom: string,
+  employeePartyId: string,
+  certificateKey: string,
+  answers: Record<string, string>,
+  effectiveFrom: string,
 ) =>
-  withOrgContext(state.orgId, () => POST(new Request('http://payroll.test', {
-    method: 'POST',
-    body: JSON.stringify({
-      employeePartyId, country: 'GB', certificateKey, answers, effectiveFrom,
-    }),
-  })))
+  withOrgContext(state.orgId, () =>
+    POST(
+      new Request("http://payroll.test", {
+        method: "POST",
+        body: JSON.stringify({
+          employeePartyId,
+          country: "GB",
+          certificateKey,
+          answers,
+          effectiveFrom,
+        }),
+      }),
+    ),
+  );
 
-test('a GB employee refused for a missing P6/P9 code calculates after it is filed', async () => {
-  const { org, scheduleId, employeeId } = await gbPayrollOrg()
+test("a GB employee refused for a missing P6/P9 code calculates after it is filed", async () => {
+  const { org, scheduleId, employeeId } = await gbPayrollOrg();
   try {
     // BEFORE: the pack's named refusal — the exact sentence the engine has
     // always produced, now reachable through the product. No stub is paid.
-    const before = await runOnce(org.orgId, scheduleId, FIRST_START, FIRST_END, FIRST_PAY)
-    assert.equal(before.result.errors.length, 1)
+    const before = await runOnce(org.orgId, scheduleId, FIRST_START, FIRST_END, FIRST_PAY);
+    assert.equal(before.result.errors.length, 1);
     assert.match(
       before.result.errors[0]!.message,
       /GB PAYE needs the employee's tax code from the P6\/P9 coding notice \(gb_tax_code_notice\): no notice is on file and this pack operates no emergency default/,
-    )
-    const noStub = await withBypassContext(async () => (await db.execute<{ count: string }>(sql`
+    );
+    const noStub = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ count: string }>(
+            sql`
       select count(*) as count from pay_stubs
-       where org_id = ${org.orgId} and pay_run_document_id = ${before.run.documentId}`, 'objects'))[0]!.count)
-    assert.equal(noStub, '0')
+       where org_id = ${org.orgId} and pay_run_document_id = ${before.run.documentId}`,
+            "objects",
+          )
+        )[0]!.count,
+    );
+    assert.equal(noStub, "0");
 
     // THE FILINGS, through the new API — the moment five personas are blocked
     // on. The P6/P9 notice carries the code; the starter checklist carries
     // declaration A so the cumulative path past month 1 has its record.
-    const filed = await fileCertificate(employeeId, 'gb_tax_code_notice', { tax_code: '1257L' }, '2026-04-06')
-    assert.equal(filed.status, 200, await filed.clone().text())
+    const filed = await fileCertificate(
+      employeeId,
+      "gb_tax_code_notice",
+      { tax_code: "1257L" },
+      "2026-04-06",
+    );
+    assert.equal(filed.status, 200, await filed.clone().text());
     const starter = await fileCertificate(
-      employeeId, 'gb_starter_checklist',
-      { starter_declaration: 'A', student_loan_plan: 'none', student_loan_postgraduate: 'false' }, '2026-04-01',
-    )
-    assert.equal(starter.status, 200, await starter.clone().text())
+      employeeId,
+      "gb_starter_checklist",
+      { starter_declaration: "A", student_loan_plan: "none", student_loan_postgraduate: "false" },
+      "2026-04-01",
+    );
+    assert.equal(starter.status, 200, await starter.clone().text());
 
     // AFTER: the same employee computes. A PAYE deduction line prices above
     // zero and both NIC shares are present — gross-to-net through the product.
-    const after = await runOnce(org.orgId, scheduleId, SECOND_START, SECOND_END, SECOND_PAY)
-    assert.deepEqual(after.result.errors, [])
-    const stub = await withBypassContext(async () => (await db.execute<{ id: string; gross: string }>(sql`
+    const after = await runOnce(org.orgId, scheduleId, SECOND_START, SECOND_END, SECOND_PAY);
+    assert.deepEqual(after.result.errors, []);
+    const stub = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ id: string; gross: string }>(
+            sql`
       select id, gross::text as gross from pay_stubs
        where org_id = ${org.orgId} and pay_run_document_id = ${after.run.documentId}
-         and employee_party_id = ${employeeId}`, 'objects'))[0])
-    assert.ok(stub, 'the employee was paid')
-    assert.equal(stub!.gross, '3000.0000')
-    const lines = await withBypassContext(async () => await db.execute<{
-      system_key: string; description: string; amount: string;
-    }>(sql`
+         and employee_party_id = ${employeeId}`,
+            "objects",
+          )
+        )[0],
+    );
+    assert.ok(stub, "the employee was paid");
+    assert.equal(stub!.gross, "3000.0000");
+    const lines = await withBypassContext(
+      async () =>
+        await db.execute<{
+          system_key: string;
+          description: string;
+          amount: string;
+        }>(
+          sql`
       select c.system_key, l.description, l.amount::text as amount
         from pay_stub_lines l join pay_components c on c.id = l.component_id
        where l.org_id = ${org.orgId} and l.stub_id = ${stub!.id} and l.kind = 'deduction'
-       order by l.sequence`, 'objects'))
-    const paye = lines.find((line) => line.system_key === 'paye')
-    assert.ok(paye, `a PAYE line exists among: ${lines.map((line) => line.description).join(', ')}`)
-    assert.ok(Number(paye!.amount) > 0, `PAYE prices above zero, got ${paye!.amount}`)
-    assert.ok(lines.some((line) => line.system_key === 'nic'), 'employee NIC prices alongside PAYE')
+       order by l.sequence`,
+          "objects",
+        ),
+    );
+    const paye = lines.find((line) => line.system_key === "paye");
+    assert.ok(
+      paye,
+      `a PAYE line exists among: ${lines.map((line) => line.description).join(", ")}`,
+    );
+    assert.ok(Number(paye!.amount) > 0, `PAYE prices above zero, got ${paye!.amount}`);
+    assert.ok(
+      lines.some((line) => line.system_key === "nic"),
+      "employee NIC prices alongside PAYE",
+    );
     await withBypassContext(async () => {
-      await commitPayRun({ orgId: org.orgId, documentId: after.run.documentId, actorId: state.actorId })
-    })
+      await commitPayRun({
+        orgId: org.orgId,
+        documentId: after.run.documentId,
+        actorId: state.actorId,
+      });
+    });
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test.after(async () => { await pool.end() })
+test.after(async () => {
+  await pool.end();
+});

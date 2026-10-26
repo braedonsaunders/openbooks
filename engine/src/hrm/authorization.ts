@@ -1,8 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  actorHasPermission,
-  actorIdentity,
-} from "../organization/actor-permissions.ts";
+import { actorHasPermission, actorIdentity } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { featureEnabled } from "../organization/feature-registry.ts";
 import {
@@ -92,10 +89,7 @@ type HrmDomain = keyof typeof HRM_PERMISSION_MAP;
 type HrmPermission<D extends HrmDomain> = keyof (typeof HRM_PERMISSION_MAP)[D];
 type HrmDomainEntry<D extends HrmDomain> =
   (typeof HRM_PERMISSION_MAP)[D][keyof (typeof HRM_PERMISSION_MAP)[D]];
-type PermissionName<T> = T extends readonly [
-  infer Permission extends string,
-  string,
-]
+type PermissionName<T> = T extends readonly [infer Permission extends string, string]
   ? Permission
   : never;
 type HrmPermissionName<D extends HrmDomain> = PermissionName<HrmDomainEntry<D>>;
@@ -105,10 +99,7 @@ export function requireHrm<D extends HrmDomain, P extends HrmPermission<D>>(
   domain: D,
   perm: P,
 ): (exec: SqlExecutor, orgId: string, actorId: string) => Promise<void> {
-  const [permission, label] = HRM_PERMISSION_MAP[domain][perm] as readonly [
-    string,
-    string,
-  ];
+  const [permission, label] = HRM_PERMISSION_MAP[domain][perm] as readonly [string, string];
   return async (exec, orgId, actorId) => {
     if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
       throw new HrmAuthorizationError(
@@ -128,18 +119,11 @@ function requireMappedHrmPermission(
   const entry = Object.entries(HRM_PERMISSION_MAP[domain]).find(
     ([, policy]) => policy[0] === permission,
   );
-  if (!entry)
-    throw new Error(`unmapped HRM permission "${permission}" for ${domain}`);
-  return requireHrm(domain, entry[0] as HrmPermission<typeof domain>)(
-    exec,
-    orgId,
-    actorId,
-  );
+  if (!entry) throw new Error(`unmapped HRM permission "${permission}" for ${domain}`);
+  return requireHrm(domain, entry[0] as HrmPermission<typeof domain>)(exec, orgId, actorId);
 }
 
-function permissionValues<D extends HrmDomain>(
-  domain: D,
-): readonly HrmPermissionName<D>[] {
+function permissionValues<D extends HrmDomain>(domain: D): readonly HrmPermissionName<D>[] {
   return Object.freeze(
     Object.values(HRM_PERMISSION_MAP[domain]).map(([permission]) => permission),
   ) as readonly HrmPermissionName<D>[];
@@ -164,16 +148,10 @@ export type HrmCompensationPermission = HrmPermissionName<"compensation">;
 export const requireHrmCompensationRead = requireHrm("compensation", "read");
 
 /** Run cycles, push rates, author plans and compute snapshots. */
-export const requireHrmCompensationManage = requireHrm(
-  "compensation",
-  "manage",
-);
+export const requireHrmCompensationManage = requireHrm("compensation", "manage");
 
 /** Decide cycle lines through the Flows approval run. */
-export const requireHrmCompensationApprove = requireHrm(
-  "compensation",
-  "approve",
-);
+export const requireHrmCompensationApprove = requireHrm("compensation", "approve");
 
 /**
  * Aggregate compensation read for list-shaped reads that name no single
@@ -259,13 +237,7 @@ async function requireHrmCompensationAccessOnEmployment(
   employmentId: string,
   permission: HrmCompensationPermission,
 ): Promise<TrustedEmploymentSubject> {
-  await requireMappedHrmPermission(
-    exec,
-    orgId,
-    actorId,
-    "compensation",
-    permission,
-  );
+  await requireMappedHrmPermission(exec, orgId, actorId, "compensation", permission);
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
@@ -330,13 +302,15 @@ export async function requireHrmCompensationManageOnEmployment(
  * registry's full dependency chain, so Recruiting can never survive a
  * disabled HRM parent.
  */
-export async function requireRecruitingFeature(
-  exec: SqlExecutor,
-  orgId: string,
-): Promise<void> {
-  const row = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
+export async function requireRecruitingFeature(exec: SqlExecutor, orgId: string): Promise<void> {
+  const row = (
+    await exec.execute<{ features: Record<string, boolean> | null }>(
+      sql`
     select settings->'features' as features from orgs where id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!featureEnabled(row?.features ?? {}, "hrmRecruiting")) {
     throw new HrmAuthorizationError(
       "Recruiting is off — turn it on in Company Settings → Features before using this surface; nothing was written",
@@ -399,13 +373,15 @@ async function loadTrustedEmploymentSubject(
   employmentId: string,
   forUpdate = false,
 ): Promise<TrustedEmploymentSubject> {
-  const rows = (await exec.execute<{
+  const rows = (
+    await exec.execute<{
       id: string;
       orgId: string;
       workerPartyId: string;
       employerSubsidiaryId: string | null;
       revision: number;
-    }>(sql`
+    }>(
+      sql`
     select id,
            org_id as "orgId",
            worker_party_id as "workerPartyId",
@@ -414,7 +390,10 @@ async function loadTrustedEmploymentSubject(
       from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
      ${forUpdate ? sql`for update` : sql``}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
   if (!rows) {
@@ -451,11 +430,7 @@ export async function lockEmploymentsForScope(
 ): Promise<TrustedEmploymentSubject[]> {
   const orderedIds = [...new Set(ids)].sort();
   if (orderedIds.length === 0) return [];
-  const allowed = await actorAllowedSubsidiaryIds(
-    exec,
-    scope.orgId,
-    scope.actorId,
-  );
+  const allowed = await actorAllowedSubsidiaryIds(exec, scope.orgId, scope.actorId);
   try {
     const rows = await lockEmploymentScopeRows(
       exec,
@@ -510,13 +485,7 @@ async function requireHrmEmploymentAccess(
   // established cross-org super-admin as missing. Unknown and inactive
   // principals still fail closed here.
   try {
-    await requireMappedHrmPermission(
-      exec,
-      orgId,
-      actorId,
-      "employment",
-      permission,
-    );
+    await requireMappedHrmPermission(exec, orgId, actorId, "employment", permission);
   } catch (error) {
     if (!(error instanceof HrmAuthorizationError)) throw error;
     const identity = await actorIdentity(exec, orgId, actorId);
@@ -555,13 +524,7 @@ export async function requireHrmProcessRead(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmProcessAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.process.read",
-  );
+  return requireHrmProcessAccess(exec, orgId, actorId, employmentId, "hrm.process.read");
 }
 
 /**
@@ -577,13 +540,7 @@ export async function requireHrmProcessManage(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmProcessAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.process.manage",
-  );
+  return requireHrmProcessAccess(exec, orgId, actorId, employmentId, "hrm.process.manage");
 }
 
 /**
@@ -601,13 +558,7 @@ export async function requireHrmEmploymentRead(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmEmploymentAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.employment.read",
-  );
+  return requireHrmEmploymentAccess(exec, orgId, actorId, employmentId, "hrm.employment.read");
 }
 
 /**
@@ -620,13 +571,7 @@ export async function requireHrmEmploymentManage(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmEmploymentAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.employment.manage",
-  );
+  return requireHrmEmploymentAccess(exec, orgId, actorId, employmentId, "hrm.employment.manage");
 }
 
 /**
@@ -642,13 +587,7 @@ export async function requireHrmEmploymentApprove(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmEmploymentAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.employment.approve",
-  );
+  return requireHrmEmploymentAccess(exec, orgId, actorId, employmentId, "hrm.employment.approve");
 }
 
 /** Resolved person identity behind a user login, for the SoD invariant. */
@@ -664,9 +603,14 @@ export async function loadApprovalPerson(
   orgId: string,
   userId: string,
 ): Promise<ApprovalPerson> {
-  const row = (await exec.execute<{ id: string; partyId: string | null }>(sql`
+  const row = (
+    await exec.execute<{ id: string; partyId: string | null }>(
+      sql`
     select id, party_id as "partyId" from users where org_id = ${orgId} and id = ${userId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new HrmAuthorizationError(
       "Employment approval refused: the identity behind this action is not established in this organization.",
@@ -698,13 +642,15 @@ async function loadTrustedPositionSubject(
   orgId: string,
   positionId: string,
 ): Promise<TrustedPositionSubject> {
-  const rows = (await exec.execute<{
+  const rows = (
+    await exec.execute<{
       id: string;
       orgId: string;
       positionCode: string;
       employerSubsidiaryId: string | null;
       revision: number;
-    }>(sql`
+    }>(
+      sql`
     select p.id,
            p.org_id as "orgId",
            p.position_code as "positionCode",
@@ -717,7 +663,10 @@ async function loadTrustedPositionSubject(
            p.revision
       from positions p
      where p.org_id = ${orgId} and p.id = ${positionId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
   if (!rows) {
@@ -747,13 +696,7 @@ async function requireHrmPositionAccess(
   positionId: string,
   permission: HrmPositionPermission,
 ): Promise<TrustedPositionSubject> {
-  await requireMappedHrmPermission(
-    exec,
-    orgId,
-    actorId,
-    "position",
-    permission,
-  );
+  await requireMappedHrmPermission(exec, orgId, actorId, "position", permission);
   const subject = await loadTrustedPositionSubject(exec, orgId, positionId);
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
@@ -771,13 +714,7 @@ export async function requireHrmPositionRead(
   actorId: string,
   positionId: string,
 ): Promise<TrustedPositionSubject> {
-  return requireHrmPositionAccess(
-    exec,
-    orgId,
-    actorId,
-    positionId,
-    "hrm.position.read",
-  );
+  return requireHrmPositionAccess(exec, orgId, actorId, positionId, "hrm.position.read");
 }
 
 /**
@@ -790,13 +727,7 @@ export async function requireHrmPositionManage(
   actorId: string,
   positionId: string,
 ): Promise<TrustedPositionSubject> {
-  return requireHrmPositionAccess(
-    exec,
-    orgId,
-    actorId,
-    positionId,
-    "hrm.position.manage",
-  );
+  return requireHrmPositionAccess(exec, orgId, actorId, positionId, "hrm.position.manage");
 }
 
 /**
@@ -900,9 +831,14 @@ export async function loadActorPartyId(
   orgId: string,
   actorId: string,
 ): Promise<string | null> {
-  const row = (await exec.execute<{ partyId: string | null }>(sql`
+  const row = (
+    await exec.execute<{ partyId: string | null }>(
+      sql`
     select party_id as "partyId" from users where org_id = ${orgId} and id = ${actorId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.partyId ?? null;
 }
 
@@ -917,10 +853,8 @@ export async function requireOrgChartRead(
   orgId: string,
   actorId: string,
 ): Promise<void> {
-  if (await actorHasPermission(exec, orgId, actorId, "hrm.org_chart.read"))
-    return;
-  if (await actorHasPermission(exec, orgId, actorId, "hrm.employment.read"))
-    return;
+  if (await actorHasPermission(exec, orgId, actorId, "hrm.org_chart.read")) return;
+  if (await actorHasPermission(exec, orgId, actorId, "hrm.employment.read")) return;
   if (await actorHasPermission(exec, orgId, actorId, "hrm.self.read")) return;
   throw new HrmAuthorizationError(
     "Org chart access requires hrm.org_chart.read, hrm.employment.read or hrm.self.read — ask an administrator to grant it in /admin/roles.",
@@ -947,12 +881,15 @@ export async function loadPartyEmployerSubsidiaries(
   orgId: string,
   partyId: string,
 ): Promise<string[]> {
-  const rows = await exec.execute<{ employerSubsidiaryId: string }>(sql`
+  const rows = await exec.execute<{ employerSubsidiaryId: string }>(
+    sql`
     select distinct employer_subsidiary_id as "employerSubsidiaryId"
       from worker_employments
      where org_id = ${orgId} and worker_party_id = ${partyId}
        and employer_subsidiary_id is not null
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.employerSubsidiaryId);
 }
 
@@ -1005,11 +942,16 @@ export async function requireEmploymentRowInScope(
 ): Promise<void> {
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed === null) return;
-  const row = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+  const row = (
+    await exec.execute<{ employerSubsidiaryId: string | null }>(
+      sql`
     select employer_subsidiary_id as "employerSubsidiaryId"
       from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!subsidiaryScopeAllows(allowed, row?.employerSubsidiaryId)) {
     throw new HrmAuthorizationError(
       "Employment is not visible in this organization and legal-entity scope.",
@@ -1030,12 +972,7 @@ export async function requireRowSubjectInScope(
   subject: { employmentId: string | null; partyId: string | null },
 ): Promise<void> {
   if (subject.employmentId !== null) {
-    await requireEmploymentRowInScope(
-      exec,
-      orgId,
-      actorId,
-      subject.employmentId,
-    );
+    await requireEmploymentRowInScope(exec, orgId, actorId, subject.employmentId);
     return;
   }
   await requirePartyInScope(exec, orgId, actorId, subject.partyId);
@@ -1054,9 +991,7 @@ export async function requireUnrestrictedHrmScope(
   orgId: string,
   actorId: string,
 ): Promise<void> {
-  assertUnrestrictedScope(
-    await actorAllowedSubsidiaryIds(exec, orgId, actorId),
-  );
+  assertUnrestrictedScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId));
 }
 // H-lens end
 
@@ -1111,10 +1046,7 @@ export function checkApprovalIdentitySeparation(args: {
       "Employment approval refused: the affected worker cannot approve their own employment change — route it to an independent approver.",
     );
   }
-  if (
-    args.submitter.partyId !== null &&
-    args.approver.partyId === args.submitter.partyId
-  ) {
+  if (args.submitter.partyId !== null && args.approver.partyId === args.submitter.partyId) {
     throw new HrmAuthorizationError(
       "Employment approval refused: the submitter cannot approve their own change — route it to an independent approver.",
     );
@@ -1147,13 +1079,7 @@ export async function requireHrmLeaveRead(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmLeaveAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.leave.read",
-  );
+  return requireHrmLeaveAccess(exec, orgId, actorId, employmentId, "hrm.leave.read");
 }
 
 /** File a leave request against an employment. */
@@ -1163,13 +1089,7 @@ async function requireHrmLeaveRequest(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmLeaveAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.leave.request",
-  );
+  return requireHrmLeaveAccess(exec, orgId, actorId, employmentId, "hrm.leave.request");
 }
 
 /** Permission/scope half of leave approval; identity half is the shared SoD invariant. */
@@ -1179,13 +1099,7 @@ export async function requireHrmLeaveApprove(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmLeaveAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.leave.approve",
-  );
+  return requireHrmLeaveAccess(exec, orgId, actorId, employmentId, "hrm.leave.approve");
 }
 
 /**
@@ -1207,10 +1121,13 @@ export async function loadOwnEmploymentIds(
 ): Promise<string[]> {
   const person = await loadApprovalPerson(exec, orgId, actorId);
   if (!person.partyId) return [];
-  const rows = await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(
+    sql`
     select id from worker_employments
      where org_id = ${orgId} and worker_party_id = ${person.partyId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.id);
 }
 
@@ -1260,12 +1177,7 @@ export async function requireOwnEmploymentForRequest(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  const subject = await requireHrmLeaveRequest(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-  );
+  const subject = await requireHrmLeaveRequest(exec, orgId, actorId, employmentId);
   const own = await loadOwnEmploymentIds(exec, orgId, actorId);
   if (!own.includes(employmentId)) {
     throw new HrmAuthorizationError(
@@ -1300,7 +1212,8 @@ async function loadTrustedRequisitionSubject(
   orgId: string,
   requisitionId: string,
 ): Promise<TrustedRequisitionSubject> {
-  const rows = (await exec.execute<{
+  const rows = (
+    await exec.execute<{
       id: string;
       orgId: string;
       requisitionNumber: string;
@@ -1308,7 +1221,8 @@ async function loadTrustedRequisitionSubject(
       status: string;
       hiringManagerPartyId: string | null;
       revision: number;
-    }>(sql`
+    }>(
+      sql`
     select id,
            org_id as "orgId",
            requisition_number as "requisitionNumber",
@@ -1318,7 +1232,10 @@ async function loadTrustedRequisitionSubject(
            revision
       from hrm_requisitions
      where org_id = ${orgId} and id = ${requisitionId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
   if (!rows) {
@@ -1353,18 +1270,8 @@ async function requireHrmRecruitingAccess(
   await requireRecruitingFeature(exec, orgId);
   // The live grant set decides, then the trusted subject plus the employer
   // scope. No caller-supplied parties, booleans, or scope at any boundary.
-  await requireMappedHrmPermission(
-    exec,
-    orgId,
-    actorId,
-    "recruiting",
-    permission,
-  );
-  const subject = await loadTrustedRequisitionSubject(
-    exec,
-    orgId,
-    requisitionId,
-  );
+  await requireMappedHrmPermission(exec, orgId, actorId, "recruiting", permission);
+  const subject = await loadTrustedRequisitionSubject(exec, orgId, requisitionId);
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
     throw new HrmAuthorizationError(
@@ -1381,13 +1288,7 @@ export async function requireHrmRecruitingRead(
   actorId: string,
   requisitionId: string,
 ): Promise<TrustedRequisitionSubject> {
-  return requireHrmRecruitingAccess(
-    exec,
-    orgId,
-    actorId,
-    requisitionId,
-    "hrm.recruiting.read",
-  );
+  return requireHrmRecruitingAccess(exec, orgId, actorId, requisitionId, "hrm.recruiting.read");
 }
 
 /**
@@ -1400,13 +1301,7 @@ export async function requireHrmRecruitingManage(
   actorId: string,
   requisitionId: string,
 ): Promise<TrustedRequisitionSubject> {
-  return requireHrmRecruitingAccess(
-    exec,
-    orgId,
-    actorId,
-    requisitionId,
-    "hrm.recruiting.manage",
-  );
+  return requireHrmRecruitingAccess(exec, orgId, actorId, requisitionId, "hrm.recruiting.manage");
 }
 
 /**
@@ -1482,11 +1377,7 @@ export async function requireOwnRequisitionForHiringManager(
   requisitionId: string,
 ): Promise<TrustedRequisitionSubject> {
   await requireRecruitingFeature(exec, orgId);
-  const subject = await loadTrustedRequisitionSubject(
-    exec,
-    orgId,
-    requisitionId,
-  );
+  const subject = await loadTrustedRequisitionSubject(exec, orgId, requisitionId);
   const person = await loadApprovalPerson(exec, orgId, actorId);
   if (
     !person.partyId ||
@@ -1520,14 +1411,17 @@ export async function actorOnInterviewPanel(
 ): Promise<boolean> {
   const person = await loadApprovalPerson(exec, orgId, actorId);
   if (!person.partyId) return false;
-  const rows = await exec.execute<{ one: number }>(sql`
+  const rows = await exec.execute<{ one: number }>(
+    sql`
     select 1 as one
       from hrm_interview_panel p
       join hrm_interviews i on i.org_id = p.org_id and i.id = p.interview_id
      where p.org_id = ${orgId} and p.interview_id = ${interviewId}
        and p.party_id = ${person.partyId}
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.length > 0;
 }
 
@@ -1579,13 +1473,7 @@ async function requireHrmPerformanceGrant(
   // caller-supplied boolean. Cycles and reviews name no single employment,
   // so there is no trusted subject here — the aggregate subsidiary scope
   // below is what list-shaped callers filter by.
-  await requireMappedHrmPermission(
-    exec,
-    orgId,
-    actorId,
-    "performance",
-    permission,
-  );
+  await requireMappedHrmPermission(exec, orgId, actorId, "performance", permission);
 }
 
 /**
@@ -1598,12 +1486,7 @@ export async function requireAggregatePerformanceRead(
   orgId: string,
   actorId: string,
 ): Promise<Set<string> | null> {
-  await requireHrmPerformanceGrant(
-    exec,
-    orgId,
-    actorId,
-    "hrm.performance.read",
-  );
+  await requireHrmPerformanceGrant(exec, orgId, actorId, "hrm.performance.read");
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -1616,12 +1499,7 @@ export async function requireAggregatePerformanceManage(
   orgId: string,
   actorId: string,
 ): Promise<Set<string> | null> {
-  await requireHrmPerformanceGrant(
-    exec,
-    orgId,
-    actorId,
-    "hrm.performance.manage",
-  );
+  await requireHrmPerformanceGrant(exec, orgId, actorId, "hrm.performance.manage");
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -1674,15 +1552,21 @@ export async function loadManagedEmploymentIds(
 ): Promise<string[]> {
   const person = await loadApprovalPerson(exec, orgId, actorId);
   if (!person.partyId) return [];
-  const own = (await exec.execute<{ id: string }>(sql`
+  const own = (
+    await exec.execute<{ id: string }>(
+      sql`
     select id from worker_employments
      where org_id = ${orgId} and worker_party_id = ${person.partyId}
-  `, "objects")).map((row) => row.id);
+  `,
+      "objects",
+    )
+  ).map((row) => row.id);
   if (own.length === 0) return [];
   // One parameter per id: bare JS arrays must never be interpolated into
   // ANY() (they bind as row constructors, not PostgreSQL arrays).
   const ids = own.map((id) => sql`${id}::uuid`);
-  const rows = await exec.execute<{ employmentId: string }>(sql`
+  const rows = await exec.execute<{ employmentId: string }>(
+    sql`
     select distinct r.employment_id as "employmentId"
       from reporting_relationships r
      where r.org_id = ${orgId}
@@ -1691,7 +1575,9 @@ export async function loadManagedEmploymentIds(
        and r.recorded_until is null
        and r.effective_from <= ${asOf}::date
        and (r.effective_to is null or r.effective_to > ${asOf}::date)
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.employmentId);
 }
 
@@ -1708,13 +1594,7 @@ async function requireHrmBenefitsAccess(
 ): Promise<TrustedEmploymentSubject> {
   // Same hardwiring as employment and leave: live grant set, subject loaded
   // from worker_employments on the trusted runner, employer scope enforced.
-  await requireMappedHrmPermission(
-    exec,
-    orgId,
-    actorId,
-    "benefits",
-    permission,
-  );
+  await requireMappedHrmPermission(exec, orgId, actorId, "benefits", permission);
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
@@ -1727,13 +1607,7 @@ export async function requireHrmBenefitsRead(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmBenefitsAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.benefits.read",
-  );
+  return requireHrmBenefitsAccess(exec, orgId, actorId, employmentId, "hrm.benefits.read");
 }
 
 /**
@@ -1746,13 +1620,7 @@ export async function requireHrmBenefitsManageOnEmployment(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  return requireHrmBenefitsAccess(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-    "hrm.benefits.manage",
-  );
+  return requireHrmBenefitsAccess(exec, orgId, actorId, employmentId, "hrm.benefits.manage");
 }
 
 /**
@@ -1761,10 +1629,7 @@ export async function requireHrmBenefitsManageOnEmployment(
  * configuration, and scoping it by one employer would let two managers
  * decide the same election differently.
  */
-export const requireHrmBenefitsManage = requireHrm(
-  "benefitsConfiguration",
-  "manage",
-);
+export const requireHrmBenefitsManage = requireHrm("benefitsConfiguration", "manage");
 
 /**
  * Aggregate benefits manage authority for employment-spanning writes
@@ -1795,12 +1660,7 @@ export async function requireOwnEmploymentForBenefits(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  const subject = await requireHrmBenefitsRead(
-    exec,
-    orgId,
-    actorId,
-    employmentId,
-  );
+  const subject = await requireHrmBenefitsRead(exec, orgId, actorId, employmentId);
   const own = await loadOwnEmploymentIds(exec, orgId, actorId);
   if (!own.includes(employmentId)) {
     throw new HrmAuthorizationError(
@@ -1898,13 +1758,7 @@ export async function requireOwnEmploymentSubject(
   employmentId: string,
   permission: HrmSelfPermission,
 ): Promise<TrustedEmploymentSubject> {
-  await requireMappedHrmPermission(
-    exec,
-    orgId,
-    actorId,
-    "selfService",
-    permission,
-  );
+  await requireMappedHrmPermission(exec, orgId, actorId, "selfService", permission);
   const own = await loadOwnEmploymentIds(exec, orgId, actorId);
   if (!own.includes(employmentId)) {
     throw new HrmAuthorizationError(
@@ -1933,7 +1787,8 @@ export async function loadTeamEmploymentIdsForManager(
   today: string,
 ): Promise<string[]> {
   if (managerEmploymentIds.length === 0) return [];
-  const rows = await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(
+    sql`
     select distinct r.employment_id::text as id
       from reporting_relationships r
      where r.org_id = ${orgId}
@@ -1943,7 +1798,9 @@ export async function loadTeamEmploymentIdsForManager(
        and r.effective_from <= ${today}::date
        and (r.effective_to is null or r.effective_to > ${today}::date)
      order by id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.id);
 }
 
@@ -1971,25 +1828,15 @@ export async function requireEmploymentOrTeamSubject(
     if (!(error instanceof HrmAuthorizationError)) throw error;
     const original = error;
     try {
-      if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.read")))
-        throw original;
+      if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.read"))) throw original;
       const person = await loadApprovalPerson(exec, orgId, actorId);
       if (!person.partyId) throw original;
       const own = await loadOwnEmploymentIds(exec, orgId, actorId);
       if (own.length === 0) throw original;
       const today = await businessToday(orgId);
-      const team = await loadTeamEmploymentIdsForManager(
-        exec,
-        orgId,
-        own,
-        today,
-      );
+      const team = await loadTeamEmploymentIdsForManager(exec, orgId, own, today);
       if (!team.includes(employmentId)) throw original;
-      const subject = await loadTrustedEmploymentSubject(
-        exec,
-        orgId,
-        employmentId,
-      );
+      const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
       await assertEmployerScope(exec, orgId, actorId, subject);
       return subject;
     } catch (fallback) {
@@ -2054,16 +1901,10 @@ export const HRM_QUALIFICATION_PERMISSIONS = permissionValues("certifications");
 export type HrmQualificationPermission = HrmPermissionName<"certifications">;
 
 /** See qualification types, held qualifications, requirements and alerts. */
-export const requireHrmCertificationsRead = requireHrm(
-  "certifications",
-  "read",
-);
+export const requireHrmCertificationsRead = requireHrm("certifications", "read");
 
 /** Record, verify, renew and revoke qualifications and author requirements. */
-export const requireHrmCertificationsManage = requireHrm(
-  "certifications",
-  "manage",
-);
+export const requireHrmCertificationsManage = requireHrm("certifications", "manage");
 
 /**
  * The aggregate half of certification authority for list-shaped reads and

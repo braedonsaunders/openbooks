@@ -75,7 +75,11 @@ async function stpPopulation(orgId: string, taxYear: number): Promise<PayrollFil
  * you have paid"). Box codes are the STP field names: STP has no printed
  * box numbers, so each label names the STP amount it feeds.
  */
-async function stpSlip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function stpSlip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const rows = await auStpFinalisationRows(orgId, taxYear);
   const row = rows.find((candidate) => candidate.employeePartyId === rowId);
   if (!row) {
@@ -100,8 +104,16 @@ async function stpSlip(orgId: string, taxYear: number, rowId: string): Promise<P
       { code: "OT", label: "Overtime", value: row.overtime },
       { code: "BONUS", label: "Bonuses and commissions", value: row.bonusesCommissions },
       { code: "LEAVE", label: "Paid leave", value: row.paidLeave },
-      { code: "ALLOW", label: "Allowances — STP Phase 2 separately-itemised", value: row.allowances },
-      { code: "PAYG", label: "PAYG withholding (income tax + Medicare + STSL)", value: row.paygWithheld },
+      {
+        code: "ALLOW",
+        label: "Allowances — STP Phase 2 separately-itemised",
+        value: row.allowances,
+      },
+      {
+        code: "PAYG",
+        label: "PAYG withholding (income tax + Medicare + STSL)",
+        value: row.paygWithheld,
+      },
       {
         code: "SG",
         label: "Superannuation guarantee — employer liability accrued (not cash paid)",
@@ -116,24 +128,24 @@ async function stpSlip(orgId: string, taxYear: number, rowId: string): Promise<P
       },
     ],
     notes: [
-      "This declaration states the figures above are fully and correctly reported for the financial year "
-      + "and is due to the Commissioner of Taxation by 14 July (ATO STP employer reporting guidelines). "
-      + "It is what flips the employee's ATO income statement to tax-ready in myGov.",
-      "PAYG withholding is the one withholding collecting income tax, the Medicare levy and STSL "
-      + "repayments (F2026L00716 Schedule 1, transcribed in ./schedule1-2027.ts).",
-      "The SG liability is what STP carries — at a minimum the SG liability or OTE (ATO STP Phase 2 "
-      + "employer reporting guidelines). Cash contributions actually paid to the fund are never "
-      + "STP-reported. Priced at 12% of ordinary time earnings (SGAA 1992 s17A(2)).",
-      "Allowances posted through the Allowance component are itemised above and excluded from "
-      + "STP-reportable gross. An allowance paid through any other component sits in gross "
-      + "unclassified: re-post it through the Allowance component before finalising — amounts "
-      + "left in gross are lodged as gross, not as allowances. Directors' fees, employment "
-      + "termination payments and lump sums are NOT separately itemised: the subledger carries "
-      + "no classification for them, so any such amounts paid through custom components sit in "
-      + "gross — itemise them in STP-enabled software.",
-      "The employee's tax file number is deliberately absent: it is the STP matching key the employer "
-      + "holds on the TFN declaration and enters in STP-enabled software, never a value this "
-      + "reconciliation persists or prints.",
+      "This declaration states the figures above are fully and correctly reported for the financial year " +
+        "and is due to the Commissioner of Taxation by 14 July (ATO STP employer reporting guidelines). " +
+        "It is what flips the employee's ATO income statement to tax-ready in myGov.",
+      "PAYG withholding is the one withholding collecting income tax, the Medicare levy and STSL " +
+        "repayments (F2026L00716 Schedule 1, transcribed in ./schedule1-2027.ts).",
+      "The SG liability is what STP carries — at a minimum the SG liability or OTE (ATO STP Phase 2 " +
+        "employer reporting guidelines). Cash contributions actually paid to the fund are never " +
+        "STP-reported. Priced at 12% of ordinary time earnings (SGAA 1992 s17A(2)).",
+      "Allowances posted through the Allowance component are itemised above and excluded from " +
+        "STP-reportable gross. An allowance paid through any other component sits in gross " +
+        "unclassified: re-post it through the Allowance component before finalising — amounts " +
+        "left in gross are lodged as gross, not as allowances. Directors' fees, employment " +
+        "termination payments and lump sums are NOT separately itemised: the subledger carries " +
+        "no classification for them, so any such amounts paid through custom components sit in " +
+        "gross — itemise them in STP-enabled software.",
+      "The employee's tax file number is deliberately absent: it is the STP matching key the employer " +
+        "holds on the TFN declaration and enters in STP-enabled software, never a value this " +
+        "reconciliation persists or prints.",
     ],
   };
 }
@@ -153,32 +165,32 @@ export function auPackFilings(): PayrollPackFilings {
         label: "STP finalisation declaration",
         cadence: "annual",
         description:
-          "The employer's declaration that STP year-to-date figures for the "
-          + "financial year are complete and final (due 14 July). Reported "
-          + "through STP-enabled software — "
-          + "https://www.ato.gov.au/businesses-and-organisations/"
-          + "hiring-and-paying-your-workers/single-touch-payroll",
+          "The employer's declaration that STP year-to-date figures for the " +
+          "financial year are complete and final (due 14 July). Reported " +
+          "through STP-enabled software — " +
+          "https://www.ato.gov.au/businesses-and-organisations/" +
+          "hiring-and-paying-your-workers/single-touch-payroll",
         emptyText: "No committed AU pay stubs for this year.",
         population: (orgId, taxYear) => stpPopulation(orgId, taxYear),
         parseRowId: (rowId: string): PayrollFilingRowScope | null =>
           parseStpFinalisationRowId(rowId),
         slip: { build: (orgId, taxYear, rowId) => stpSlip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "There is no ATO file this product builds: STP pay events, update "
-          + "events and the finalisation indicator are transmitted by "
-          + "STP-enabled payroll software over the ATO's STP channel, not as "
-          + "a downloadable return — the reconciliation above is the source "
-          + "data to lodge, complete only for amounts posted through classified "
-          + "components (allowances must travel on the Allowance component)",
+          "There is no ATO file this product builds: STP pay events, update " +
+          "events and the finalisation indicator are transmitted by " +
+          "STP-enabled payroll software over the ATO's STP channel, not as " +
+          "a downloadable return — the reconciliation above is the source " +
+          "data to lodge, complete only for amounts posted through classified " +
+          "components (allowances must travel on the Allowance component)",
         amendment: {
           supported: false,
           refusal:
-            "A finalised employee's figures are corrected with an STP update "
-            + "event correcting the year-to-date amounts and, where the "
-            + "finalisation indicator already went, an amended finalisation — "
-            + "lodged through STP-enabled payroll software, which updates the "
-            + "employee's myGov income statement. This pack builds no STP "
-            + "events, so corrections cannot be made in-product",
+            "A finalised employee's figures are corrected with an STP update " +
+            "event correcting the year-to-date amounts and, where the " +
+            "finalisation indicator already went, an amended finalisation — " +
+            "lodged through STP-enabled payroll software, which updates the " +
+            "employee's myGov income statement. This pack builds no STP " +
+            "events, so corrections cannot be made in-product",
         },
       },
     ],

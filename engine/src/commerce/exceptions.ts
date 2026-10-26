@@ -42,7 +42,9 @@ export async function listChannelExceptions(
   channelId: string | null = null,
   code: string | null = null,
 ): Promise<ChannelExceptionRow[]> {
-  const rows = await withOrgContext(orgId, () => db.execute<ExceptionDbRow>(sql`
+  const rows = await withOrgContext(orgId, () =>
+    db.execute<ExceptionDbRow>(
+      sql`
     select o.id as order_id, o.channel_id, c.name as channel_name, o.external_number,
            o.shop_currency, o.total_minor, o.ordered_at,
            o.exception_code as code, o.exception_reason as reason, o.exception_remedy as remedy
@@ -51,14 +53,20 @@ export async function listChannelExceptions(
      where o.org_id = ${orgId} and o.posting_status = 'exception'
        and (${channelId}::uuid is null or o.channel_id = ${channelId})
        and (${code}::text is null or o.exception_code = ${code})
-     order by o.ordered_at`, "objects"));
+     order by o.ordered_at`,
+      "objects",
+    ),
+  );
   return rows.map((row) => ({
     orderId: row.order_id,
     channelId: row.channel_id,
     channelName: row.channel_name,
     externalNumber: row.external_number,
     shopCurrency: row.shop_currency,
-    totalMinor: typeof row.total_minor === "bigint" ? row.total_minor : BigInt(row.total_minor as unknown as string),
+    totalMinor:
+      typeof row.total_minor === "bigint"
+        ? row.total_minor
+        : BigInt(row.total_minor as unknown as string),
     orderedAt: row.ordered_at,
     code: row.code,
     reason: row.reason,
@@ -146,7 +154,9 @@ export async function listChannelEventExceptions(
   code: string | null = null,
   kind: string | null = null,
 ): Promise<ChannelEventExceptionRow[]> {
-  const rows = await withOrgContext(orgId, () => db.execute<EventExceptionDbRow>(sql`
+  const rows = await withOrgContext(orgId, () =>
+    db.execute<EventExceptionDbRow>(
+      sql`
     select e.id as event_id, e.order_id, e.channel_id, c.name as channel_name, o.external_number,
            e.kind, e.external_id, e.occurred_at,
            e.exception_code as code, e.exception_reason as reason, e.exception_remedy as remedy
@@ -157,7 +167,10 @@ export async function listChannelEventExceptions(
        and (${channelId}::uuid is null or e.channel_id = ${channelId})
        and (${code}::text is null or e.exception_code = ${code})
        and (${kind}::text is null or e.kind = ${kind})
-     order by e.occurred_at`, "objects"));
+     order by e.occurred_at`,
+      "objects",
+    ),
+  );
   return rows.map((row) => ({
     eventId: row.event_id,
     orderId: row.order_id,
@@ -204,11 +217,12 @@ export async function replayChannelEventExceptions(
          where org_id = ${orgId} and id = ${row.eventId} and posting_status = 'exception'`);
       if (reset.rowCount !== 1) continue;
       replayed += 1;
-      const outcome = live.kind === "refund"
-        ? await postChannelRefund(orgId, actor, row.eventId)
-        : live.kind === "cancellation"
-          ? await postChannelCancellation(orgId, actor, row.eventId)
-          : await postChannelFulfilment(orgId, actor, row.eventId);
+      const outcome =
+        live.kind === "refund"
+          ? await postChannelRefund(orgId, actor, row.eventId)
+          : live.kind === "cancellation"
+            ? await postChannelCancellation(orgId, actor, row.eventId)
+            : await postChannelFulfilment(orgId, actor, row.eventId);
       if (outcome.status === "posted") posted += 1;
       else if (outcome.status === "exception") parked += 1;
       else waiting += 1;

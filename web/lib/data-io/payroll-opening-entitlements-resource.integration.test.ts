@@ -5,17 +5,13 @@ import test from "node:test";
 // The resource imports the `server-only` marker, which the shared test
 // preset stubs. Same dynamic-import pattern as the data-io
 // fixed-asset-resources suite.
-const { payrollOpeningEntitlementsResource } = (await import(
-  "./payroll-opening-balances-resource.ts"
-)) as typeof import("./payroll-opening-balances-resource.ts");
+const { payrollOpeningEntitlementsResource } =
+  (await import("./payroll-opening-balances-resource.ts")) as typeof import("./payroll-opening-balances-resource.ts");
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-const {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  seedFlowActors,
-} = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 /**
  * PAYROLL-1, import-resource half: the bank carry-in resource parsed the
@@ -43,7 +39,12 @@ async function seedPlan(orgId: string, actorId: string): Promise<void> {
   });
 }
 
-async function seedEmployee(orgId: string, actorId: string, name: string, subsidiaryId?: string): Promise<string> {
+async function seedEmployee(
+  orgId: string,
+  actorId: string,
+  name: string,
+  subsidiaryId?: string,
+): Promise<string> {
   return withBypassContext(async () => {
     const id = randomUUID();
     await db.execute(sql`
@@ -58,8 +59,11 @@ async function seedEmployee(orgId: string, actorId: string, name: string, subsid
 }
 
 async function ledgerCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from entitlement_ledger where org_id = ${orgId}`, "objects"));
+  const rows = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from entitlement_ledger where org_id = ${orgId}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -77,7 +81,10 @@ test(
     await seedEmployee(org.orgId, actorId, "Aldo Rossi");
     const resource = payrollOpeningEntitlementsResource(org.orgId);
     const ctx = {
-      orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      actorId,
+      dryRun: true,
+      allowedSubsidiaryIds: null,
     };
     try {
       // Dry run: decimal-comma, ambiguous, and grouped amounts all refuse
@@ -97,22 +104,20 @@ test(
       }
 
       // Commit: the same refusal, and nothing lands in the ledger.
-      const refused = await resource.write(
-        [row("Aldo Rossi", "12,34")],
-        "insert",
-        { ...ctx, dryRun: false },
-      );
+      const refused = await resource.write([row("Aldo Rossi", "12,34")], "insert", {
+        ...ctx,
+        dryRun: false,
+      });
       assert.equal(refused.failed, 1);
       assert.equal(refused.created, 0);
       assert.match(refused.errors[0]!.message, /must use "\." as the decimal point/);
       assert.equal(await ledgerCount(org.orgId), 0);
 
       // Plain decimals still succeed through the same path.
-      const ok = await resource.write(
-        [row("Aldo Rossi", "1234.56")],
-        "insert",
-        { ...ctx, dryRun: false },
-      );
+      const ok = await resource.write([row("Aldo Rossi", "1234.56")], "insert", {
+        ...ctx,
+        dryRun: false,
+      });
       assert.deepEqual(ok.errors, []);
       assert.equal(ok.created, 1);
       assert.equal(await ledgerCount(org.orgId), 1);
@@ -142,25 +147,46 @@ test(
     let finishRehome!: Promise<void>;
     try {
       const otherSubsidiaryId = randomUUID();
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Carry In Entity', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
+        values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Carry In Entity', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`),
+      );
 
       let signalReady!: () => void;
-      const ready = new Promise<void>((resolve) => { signalReady = resolve });
-      finishRehome = withBypassContext(() => db.transaction(async (tx) => {
-        rehomePid = Number((await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid);
-        await tx.execute(sql`update parties set subsidiary_id = ${otherSubsidiaryId} where id = ${employeeId} and org_id = ${org.orgId}`);
-        signalReady();
-        await new Promise<void>((resolve) => { releaseRehome = resolve });
-      }));
+      const ready = new Promise<void>((resolve) => {
+        signalReady = resolve;
+      });
+      finishRehome = withBypassContext(() =>
+        db.transaction(async (tx) => {
+          rehomePid = Number(
+            (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!
+              .pid,
+          );
+          await tx.execute(
+            sql`update parties set subsidiary_id = ${otherSubsidiaryId} where id = ${employeeId} and org_id = ${org.orgId}`,
+          );
+          signalReady();
+          await new Promise<void>((resolve) => {
+            releaseRehome = resolve;
+          });
+        }),
+      );
       await ready;
       const importing = resource.write([row("Rehomed Carry In", "250.00")], "insert", ctx);
       let blocked = false;
       for (let attempt = 0; attempt < 100; attempt += 1) {
-        const waiting = await withBypassContext(() => db.execute(sql`
-          select 1 from pg_stat_activity where ${rehomePid} = any(pg_blocking_pids(pid)) limit 1`, "objects"));
-        if (waiting.length) { blocked = true; break; }
+        const waiting = await withBypassContext(() =>
+          db.execute(
+            sql`
+          select 1 from pg_stat_activity where ${rehomePid} = any(pg_blocking_pids(pid)) limit 1`,
+            "objects",
+          ),
+        );
+        if (waiting.length) {
+          blocked = true;
+          break;
+        }
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       assert.equal(blocked, true, "the import save must wait for the concurrent employee rehome");

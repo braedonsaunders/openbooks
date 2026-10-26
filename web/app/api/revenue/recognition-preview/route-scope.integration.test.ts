@@ -66,10 +66,15 @@ registerHooks({
     }
     // The route labels periods in the request locale; outside a request the
     // viewer reads English.
-    if (specifier === "next-intl/server" && context.parentURL?.includes("/revenue/recognition-preview/")) {
+    if (
+      specifier === "next-intl/server" &&
+      context.parentURL?.includes("/revenue/recognition-preview/")
+    ) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(`export async function getLocale(){ return 'en' }`),
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(`export async function getLocale(){ return 'en' }`),
       };
     }
     return next(specifier, context);
@@ -78,34 +83,38 @@ registerHooks({
 
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 async function previewFixture() {
   const org = await withBypassContext(() => createScratchOrg());
   const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   const subB = randomUUID();
-  await withBypassContext(
-    () => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`),
   );
-  const ids = { obligationA: randomUUID(), obligationB: randomUUID(), contractA: randomUUID(), contractB: randomUUID() };
+  const ids = {
+    obligationA: randomUUID(),
+    obligationB: randomUUID(),
+    contractA: randomUUID(),
+    contractB: randomUUID(),
+  };
   for (const [oKey, cKey, sub] of [
     ["obligationA", "contractA", org.subsidiaryId],
     ["obligationB", "contractB", subB],
   ] as const) {
-    await withBypassContext(
-      () => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into revenue_contracts
           (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, subsidiary_id, created_by, updated_by)
         values (${ids[cKey]}, ${org.orgId}, ${org.customerId}, ${`PREVIEW-SCOPE-${cKey}`}, 'active', '2026-01-01',
                 'CAD', '12000', ${sub}, ${adminId}, ${adminId})`),
     );
-    await withBypassContext(
-      () => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into performance_obligations
           (id, org_id, contract_id, description, recognition_rule_id,
            booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
@@ -134,19 +143,31 @@ test("recognition-preview oracle: out-of-scope ids answer exactly like missing i
 
     const foreignObligation = await post({ obligationId: ids.obligationB });
     assert.equal(foreignObligation.status, 422);
-    assert.deepEqual(await foreignObligation.json(), { error: "obligation_not_found", field: "obligationId" });
+    assert.deepEqual(await foreignObligation.json(), {
+      error: "obligation_not_found",
+      field: "obligationId",
+    });
 
     const missingObligation = await post({ obligationId: randomUUID() });
     assert.equal(missingObligation.status, 422);
-    assert.deepEqual(await missingObligation.json(), { error: "obligation_not_found", field: "obligationId" });
+    assert.deepEqual(await missingObligation.json(), {
+      error: "obligation_not_found",
+      field: "obligationId",
+    });
 
     const foreignContract = await post({ contractId: ids.contractB });
     assert.equal(foreignContract.status, 422);
-    assert.deepEqual(await foreignContract.json(), { error: "contract_not_found", field: "contractId" });
+    assert.deepEqual(await foreignContract.json(), {
+      error: "contract_not_found",
+      field: "contractId",
+    });
 
     const missingContract = await post({ contractId: randomUUID() });
     assert.equal(missingContract.status, 422);
-    assert.deepEqual(await missingContract.json(), { error: "contract_not_found", field: "contractId" });
+    assert.deepEqual(await missingContract.json(), {
+      error: "contract_not_found",
+      field: "contractId",
+    });
 
     const own = await post({ obligationId: ids.obligationA });
     assert.equal(own.status, 200);

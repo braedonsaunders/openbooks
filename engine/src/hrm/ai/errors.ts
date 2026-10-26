@@ -39,7 +39,11 @@ export function nlDefinitionRefused(reason: string): AiRailsError {
 }
 
 /** The pay-run commit gate found open blocking flags. */
-export function finalizeBlockedRefusal(open: number, periodFrom: string, periodTo: string): AiRailsError {
+export function finalizeBlockedRefusal(
+  open: number,
+  periodFrom: string,
+  periodTo: string,
+): AiRailsError {
   return new AiRailsError(
     "ai_finalize_blocked",
     `pay run cannot be finalized — ${open} blocking payroll check(s) are open for ${periodFrom} to ${periodTo}; resolve or acknowledge them on /payroll/anomalies first`,

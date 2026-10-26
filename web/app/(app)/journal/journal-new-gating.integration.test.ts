@@ -11,14 +11,14 @@
  * without gl.post, then drives the real spec builder and resolves its
  * `when` conditions through the viewspec package's own resolver.
  */
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { stubModules } from '../../../testing/stub-modules'
-import { sql } from 'drizzle-orm'
-import type { SessionUser } from '../../../lib/auth'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { stubModules } from "../../../testing/stub-modules";
+import { sql } from "drizzle-orm";
+import type { SessionUser } from "../../../lib/auth";
 
-const session: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __journalGating: session })
+const session: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __journalGating: session });
 stubModules({
   navigation: {
     source:
@@ -28,132 +28,147 @@ stubModules({
   intl: "export async function getTranslations(namespace){return (key,vars)=>vars&&typeof vars.count==='number'?`${key}:${vars.count}`:key};export async function getLocale(){return 'en'}",
   authz: false,
   features: false,
-})
+});
 
 // The session double stays conditioned: it answers only the authz module's
 // own `./auth` import, which no shared stub shape matches.
-const { registerHooks: registerSessionHook } = await import('node:module')
+const { registerHooks: registerSessionHook } = await import("node:module");
 registerSessionHook({
   resolve(specifier, context, next) {
-    if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__journalGating.user}' }
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__journalGating.user}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
-const { loadJournal, journalSpec } = await import('./view')
-const { isFieldRef, resolveValue } = await import('@braedonsaunders/appkit-viewspec')
+const { withBypassContext, db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { loadJournal, journalSpec } = await import("./view");
+const { isFieldRef, resolveValue } = await import("@braedonsaunders/appkit-viewspec");
 
 function asUser(id: string, orgId: string): SessionUser {
   return {
     id,
     orgId,
-    name: 'Journal gating probe',
+    name: "Journal gating probe",
     email: `probe-${id.slice(0, 8)}@scratch.test`,
     roles: [],
     isSuperAdmin: false,
-    envKind: 'production',
+    envKind: "production",
     productionOrgId: orgId,
     homeOrgId: orgId,
     homeUserId: id,
-  } as SessionUser
+  } as SessionUser;
 }
 
-function collectWidgets(node: unknown, out: { widget: string; props?: Record<string, unknown>; when?: unknown }[] = []): {
-  widget: string
-  props?: Record<string, unknown>
-  when?: unknown
+function collectWidgets(
+  node: unknown,
+  out: { widget: string; props?: Record<string, unknown>; when?: unknown }[] = [],
+): {
+  widget: string;
+  props?: Record<string, unknown>;
+  when?: unknown;
 }[] {
   if (Array.isArray(node)) {
-    for (const item of node) collectWidgets(item, out)
-  } else if (node !== null && typeof node === 'object') {
-    const record = node as Record<string, unknown>
-    if (typeof record.widget === 'string') {
+    for (const item of node) collectWidgets(item, out);
+  } else if (node !== null && typeof node === "object") {
+    const record = node as Record<string, unknown>;
+    if (typeof record.widget === "string") {
       out.push({
         widget: record.widget,
         props: (record.props ?? {}) as Record<string, unknown>,
         when: (record as { when?: unknown }).when,
-      })
+      });
     }
-    for (const value of Object.values(record)) collectWidgets(value, out)
+    for (const value of Object.values(record)) collectWidgets(value, out);
   }
-  return out
+  return out;
 }
 
 async function fixture() {
-  const org = await withBypassContext(() => (createScratchOrg()))
-  const reader = await withBypassContext(() => (createScratchUser(org.orgId, 'Reader', 'journal_reader')))
-  const poster = await withBypassContext(() => (createScratchUser(org.orgId, 'Poster', 'journal_poster')))
-  await withBypassContext(() => (db.execute(sql`
+  const org = await withBypassContext(() => createScratchOrg());
+  const reader = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Reader", "journal_reader"),
+  );
+  const poster = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Poster", "journal_poster"),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     update app_roles set permissions = '["gl.read"]'::jsonb
-     where org_id = ${org.orgId} and key = 'journal_reader'`)))
-  await withBypassContext(() => (db.execute(sql`
+     where org_id = ${org.orgId} and key = 'journal_reader'`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     update app_roles set permissions = '["gl.read", "gl.post"]'::jsonb
-     where org_id = ${org.orgId} and key = 'journal_poster'`)))
+     where org_id = ${org.orgId} and key = 'journal_poster'`),
+  );
   const load = (userId: string, sp: Record<string, string | string[] | undefined>) => {
-    session.user = asUser(userId, org.orgId)
-    return withOrgContext(org.orgId, () => loadJournal(sp))
-  }
+    session.user = asUser(userId, org.orgId);
+    return withOrgContext(org.orgId, () => loadJournal(sp));
+  };
   const close = async () => {
-    session.user = null
-    await dropScratchOrg(org.orgId)
-  }
-  return { org, reader, poster, load, close }
+    session.user = null;
+    await dropScratchOrg(org.orgId);
+  };
+  return { org, reader, poster, load, close };
 }
 
-test('journal New hides without gl.post and shows with it', async () => {
-  const f = await fixture()
+test("journal New hides without gl.post and shows with it", async () => {
+  const f = await fixture();
   try {
-    const readerPage = await f.load(f.reader, {})
-    assert.strictEqual(readerPage.canPost, false)
+    const readerPage = await f.load(f.reader, {});
+    assert.strictEqual(readerPage.canPost, false);
 
-    const widgets = collectWidgets(journalSpec(readerPage))
-    const headerNew = widgets.find((w) => w.widget === 'new-journal')
-    assert.ok(headerNew, 'the built spec carries the New action shape')
-    assert.ok(isFieldRef(headerNew.when), 'New visibility is a loader-resolved flag')
+    const widgets = collectWidgets(journalSpec(readerPage));
+    const headerNew = widgets.find((w) => w.widget === "new-journal");
+    assert.ok(headerNew, "the built spec carries the New action shape");
+    assert.ok(isFieldRef(headerNew.when), "New visibility is a loader-resolved flag");
     assert.strictEqual(
       resolveValue(headerNew.when as never, readerPage as never),
       false,
-      'a gl.read-only reader is shown no New button',
-    )
-    const emptyAction = (journalSpec(readerPage) as unknown as {
-      body?: { props?: { emptyAction?: unknown } }[]
-    }).body?.flatMap((b) => (b?.props ? [b.props] : []))
+      "a gl.read-only reader is shown no New button",
+    );
+    const emptyAction = (
+      journalSpec(readerPage) as unknown as {
+        body?: { props?: { emptyAction?: unknown } }[];
+      }
+    ).body?.flatMap((b) => (b?.props ? [b.props] : []));
     assert.ok(
       emptyAction?.every((props) => props.emptyAction == null),
-      'the empty state offers no New action without gl.post',
-    )
+      "the empty state offers no New action without gl.post",
+    );
 
-    const posterPage = await f.load(f.poster, {})
-    assert.strictEqual(posterPage.canPost, true)
-    const posterWidgets = collectWidgets(journalSpec(posterPage))
-    const posterNew = posterWidgets.find((w) => w.widget === 'new-journal')
-    assert.ok(posterNew)
+    const posterPage = await f.load(f.poster, {});
+    assert.strictEqual(posterPage.canPost, true);
+    const posterWidgets = collectWidgets(journalSpec(posterPage));
+    const posterNew = posterWidgets.find((w) => w.widget === "new-journal");
+    assert.ok(posterNew);
     assert.notStrictEqual(
       resolveValue(posterNew.when as never, posterPage as never),
       false,
-      'a gl.post holder is shown the New button',
-    )
+      "a gl.post holder is shown the New button",
+    );
   } finally {
-    await f.close()
+    await f.close();
   }
-})
+});
 
-test('New journal navigation uses the explicit drawer flag and requires gl.post', async () => {
-  const f = await fixture()
+test("New journal navigation uses the explicit drawer flag and requires gl.post", async () => {
+  const f = await fixture();
   try {
-    const readerPage = await f.load(f.reader, { entryNew: '1', mode: 'edit' })
-    assert.strictEqual(readerPage.drawerOpen, false)
-    assert.strictEqual(readerPage.drawer, null)
-    const obsoleteSelection = await f.load(f.poster, { entry: 'new' })
-    assert.strictEqual(obsoleteSelection.drawerOpen, false)
-    assert.strictEqual(obsoleteSelection.drawer, null)
+    const readerPage = await f.load(f.reader, { entryNew: "1", mode: "edit" });
+    assert.strictEqual(readerPage.drawerOpen, false);
+    assert.strictEqual(readerPage.drawer, null);
+    const obsoleteSelection = await f.load(f.poster, { entry: "new" });
+    assert.strictEqual(obsoleteSelection.drawerOpen, false);
+    assert.strictEqual(obsoleteSelection.drawer, null);
   } finally {
-    await f.close()
+    await f.close();
   }
-})
+});

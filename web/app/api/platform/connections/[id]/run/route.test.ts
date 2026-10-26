@@ -39,9 +39,7 @@ const routeState: RouteState = {
   queuedData: [],
   authorityScope: null,
 };
-(
-  globalThis as typeof globalThis & Record<symbol, unknown>
-)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
@@ -204,10 +202,12 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mock = specifier === "@openbooks/engine/organization/actor-command-authority" ? "mock:command-authority" :
-      specifier === "next/server"
-        ? "mock:next-server"
-        : specifier === "@/lib/authz"
+    const mock =
+      specifier === "@openbooks/engine/organization/actor-command-authority"
+        ? "mock:command-authority"
+        : specifier === "next/server"
+          ? "mock:next-server"
+          : specifier === "@/lib/authz"
             ? "mock:authz"
             : specifier === "@openbooks/engine/sync/connection"
               ? "mock:connection"
@@ -215,7 +215,8 @@ const hooks = registerHooks({
                 ? "mock:connection"
                 : specifier === "@openbooks/jobs"
                   ? "mock:jobs"
-                  : specifier === "@openbooks/engine/platform/db" || specifier === "@openbooks/engine/platform/database"
+                  : specifier === "@openbooks/engine/platform/db" ||
+                      specifier === "@openbooks/engine/platform/database"
                     ? "mock:db"
                     : specifier === "drizzle-orm"
                       ? "mock:drizzle"
@@ -231,7 +232,7 @@ const hooks = registerHooks({
 });
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 
 function reset(): void {
   routeState.jobs.clear();
@@ -250,11 +251,14 @@ function reset(): void {
 }
 
 function request(mode: string, sourceRefs?: unknown): Request {
-  return new Request("http://openbooks.test/api/platform/connections/00000000-0000-4000-8000-000000000001/run", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ mode, ...(sourceRefs === undefined ? {} : { sourceRefs }) }),
-  });
+  return new Request(
+    "http://openbooks.test/api/platform/connections/00000000-0000-4000-8000-000000000001/run",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode, ...(sourceRefs === undefined ? {} : { sourceRefs }) }),
+    },
+  );
 }
 
 test("concurrent requests serialize the check and queue claim", async () => {
@@ -296,27 +300,44 @@ test("targeted repair queues only the reviewed source set and leaves the connect
     params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
   });
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.queuedData, [{ orgId: "org-1", connectionId: "00000000-0000-4000-8000-000000000001",
-    mode: "targeted_repair", triggeredBy: "user-1", sourceRefs: refs }]);
+  assert.deepEqual(routeState.queuedData, [
+    {
+      orgId: "org-1",
+      connectionId: "00000000-0000-4000-8000-000000000001",
+      mode: "targeted_repair",
+      triggeredBy: "user-1",
+      sourceRefs: refs,
+    },
+  ]);
   const repeated = await POST(request("targeted_repair", ["724487"]), {
     params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
   });
   assert.equal(repeated.status, 409);
-  assert.equal(routeState.enqueueAttempts, 1, "an active repair cannot be replaced with a different target set");
+  assert.equal(
+    routeState.enqueueAttempts,
+    1,
+    "an active repair cannot be replaced with a different target set",
+  );
 });
 
 test("targeted repair refuses malformed targets and a restricted actor before queueing", async () => {
   for (const refs of [["1", "1"], [" 1"], ["1.0"]]) {
     reset();
-    const response = await POST(request("targeted_repair", refs), { params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }) });
+    const response = await POST(request("targeted_repair", refs), {
+      params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
+    });
     assert.equal(response.status, 422);
     assert.equal(routeState.enqueueAttempts, 0);
   }
   reset();
-  const missing = await POST(request("targeted_repair"), { params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }) });
+  const missing = await POST(request("targeted_repair"), {
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
+  });
   assert.equal(missing.status, 400);
   routeState.authorityScope = new Set(["00000000-0000-4000-8000-000000000009"]);
-  const restricted = await POST(request("targeted_repair", ["1"]), { params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }) });
+  const restricted = await POST(request("targeted_repair", ["1"]), {
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
+  });
   assert.equal(restricted.status, 403);
   assert.equal(routeState.enqueueAttempts, 0);
 });
@@ -377,7 +398,6 @@ for (const [name, config] of refusedConnectorUrls) {
     assert.equal(routeState.createdJobIds.length, 0);
   });
 }
-
 
 test("run does not enqueue after a concurrent connection change", async () => {
   reset();

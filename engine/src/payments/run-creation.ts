@@ -2,10 +2,17 @@ import { eq, sql } from "drizzle-orm";
 import { db, orgContext, schema, withOrgTransaction } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
-import { readDocumentPaymentTermsSnapshot, PaymentTermsEvidenceError } from "../ledger/payment-terms-snapshot.ts";
+import {
+  readDocumentPaymentTermsSnapshot,
+  PaymentTermsEvidenceError,
+} from "../ledger/payment-terms-snapshot.ts";
 import { roundCurrencyMoney } from "../fx/currencies.ts";
 import { add, cmp, divRate, fromUnits, isZero, sum, toUnits } from "../money/money.ts";
-import { evaluateBillsForRelease, recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
+import {
+  evaluateBillsForRelease,
+  recordReleaseCheck,
+  type BillReleaseDecision,
+} from "../compliance/compliance.ts";
 import { assertSubcontractPaymentCleared } from "../projects/subcontracts.ts";
 import {
   lockScopeRows,
@@ -79,7 +86,11 @@ async function recordPaymentRunCreationChecks(
       documentId: decision.documentId,
       stage: "run_created",
       decision: decision.decision,
-      snapshot: { compliance: decision.compliance, lienWaiver: decision.lienWaiver, reasons: decision.reasons },
+      snapshot: {
+        compliance: decision.compliance,
+        lienWaiver: decision.lienWaiver,
+        reasons: decision.reasons,
+      },
       checkedBy: opts.createdBy,
     });
   }
@@ -91,7 +102,9 @@ async function recordPaymentRunCreationChecks(
  * one payment_instruction per vendor. Nothing posts until the explicit
  * post step; the CPA-005 file is generated from the instructions.
  */
-export async function createPaymentRun(opts: CreatePaymentRunOptions): Promise<{ id: string; runNumber: string }> {
+export async function createPaymentRun(
+  opts: CreatePaymentRunOptions,
+): Promise<{ id: string; runNumber: string }> {
   // This command deliberately owns its transaction: on a rejected selection,
   // the draft artifacts roll back before compliance evidence is committed in
   // a separate transaction. Nesting would either erase that evidence with the
@@ -106,7 +119,8 @@ export async function createPaymentRun(opts: CreatePaymentRunOptions): Promise<{
       createPaymentRunWithinTransaction(opts, (decisions) => {
         releaseEvaluationCompleted = true;
         evaluatedReleaseDecisions = decisions;
-      }));
+      }),
+    );
   } catch (error) {
     // Compliance checks are evidence that the control ran, including when the
     // selection is blocked or a concurrent run wins the reservation. The run
@@ -114,7 +128,8 @@ export async function createPaymentRun(opts: CreatePaymentRunOptions): Promise<{
     // in a fresh tenant transaction before returning the creation failure.
     if (releaseEvaluationCompleted) {
       await withOrgTransaction(opts.orgId, () =>
-        recordPaymentRunCreationChecks(opts, evaluatedReleaseDecisions));
+        recordPaymentRunCreationChecks(opts, evaluatedReleaseDecisions),
+      );
     }
     if (isPaymentRunSourceClaimConflict(error)) {
       throw new PaymentError(
@@ -140,15 +155,19 @@ async function createPaymentRunWithinTransaction(
   // every concurrent reservation of the same bills — including behind a
   // creation parked on the sequence or the profile row, where a racing
   // reservation's source FK check could not proceed past this transaction.
-  const sourceParties = await db.execute<{ id: string; party_id: string | null }>(sql`
+  const sourceParties = await db.execute<{ id: string; party_id: string | null }>(
+    sql`
     select id, party_id from documents
      where org_id = ${opts.orgId} and id in ${opts.billDocumentIds}
      order by id
-  `, "objects");
+  `,
+    "objects",
+  );
   await lockScopeRows(
     db,
     opts.orgId,
-    sourceParties.filter((row): row is { id: string; party_id: string } => row.party_id !== null)
+    sourceParties
+      .filter((row): row is { id: string; party_id: string } => row.party_id !== null)
       .map((row) => ({ kind: "party" as const, id: row.party_id })),
     opts.allowedSubsidiaryIds,
     "update",
@@ -162,34 +181,48 @@ async function createPaymentRunWithinTransaction(
   // winner aborted, so this insert wins) or adopts the winner's committed run.
   let occurrenceId: string | null = null;
   if (opts.sourceOccurrence) {
-    const claim = (await db.execute<{ id: string }>(sql`
+    const claim = await db.execute<{ id: string }>(
+      sql`
       insert into payment_schedule_occurrences (org_id, schedule_id, occurrence_at, status)
       values (${opts.orgId}, ${opts.sourceOccurrence.scheduleId}, ${opts.sourceOccurrence.occurrenceAt}, ${opts.sourceOccurrence.status})
       -- A repeated schedule occurrence adopts the committed payment run selected below.
       on conflict (org_id, schedule_id, occurrence_at) do nothing
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     const claimedRow = claim[0];
     if (claimedRow) {
       occurrenceId = claimedRow.id;
     } else {
-      const existing = (await db.execute<{ id: string; paymentRunId: string | null }>(sql`
+      const existing = (
+        await db.execute<{ id: string; paymentRunId: string | null }>(
+          sql`
         select id::text as id, payment_run_id::text as "paymentRunId"
           from payment_schedule_occurrences
          where org_id = ${opts.orgId} and schedule_id = ${opts.sourceOccurrence.scheduleId}
            and occurrence_at = ${opts.sourceOccurrence.occurrenceAt}
          for update
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!existing) {
         throw new PaymentError("payment schedule occurrence disappeared while being claimed");
       }
       if (existing.paymentRunId) {
-        const prior = (await db.execute<{ id: string; runNumber: string }>(sql`
+        const prior = (
+          await db.execute<{ id: string; runNumber: string }>(
+            sql`
           select id::text as id, run_number as "runNumber"
             from payment_runs
            where id = ${existing.paymentRunId} and org_id = ${opts.orgId}
-        `, "objects"))[0];
-        if (!prior) throw new PaymentError("a claimed payment schedule occurrence names a missing run");
+        `,
+            "objects",
+          )
+        )[0];
+        if (!prior)
+          throw new PaymentError("a claimed payment schedule occurrence names a missing run");
         return prior;
       }
       // An unlinked occurrence (for example a raced empty tick): this
@@ -203,16 +236,18 @@ async function createPaymentRunWithinTransaction(
   // concurrent run touching this profile (the claim-fence proof parks there
   // deliberately). The authoritative locked re-read after numbering
   // revalidates the selection fields before the run insert.
-  const prefilter = (await db.execute<{
-    id: string;
-    bank_account_id: string;
-    bank_subsidiary_id: string | null;
-    subsidiary_id: string | null;
-    currency: string;
-    settings: Record<string, unknown>;
-    rail: string;
-    direction: string;
-  }>(sql`
+  const prefilter = (
+    await db.execute<{
+      id: string;
+      bank_account_id: string;
+      bank_subsidiary_id: string | null;
+      subsidiary_id: string | null;
+      currency: string;
+      settings: Record<string, unknown>;
+      rail: string;
+      direction: string;
+    }>(
+      sql`
     select p.id, p.bank_account_id, p.subsidiary_id, a.subsidiary_id as bank_subsidiary_id,
            p.currency, p.settings,
            f.rail, f.direction
@@ -221,14 +256,34 @@ async function createPaymentRunWithinTransaction(
       join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
                         and a.type = 'asset_bank' and a.is_active and not a.is_summary
      where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!prefilter) throw new PaymentError("payment bank profile was not found or is inactive");
 
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
   if (!org) throw new PaymentError("org not found");
 
   // Selected bills → their open AP lines with current open balances.
-  const bills = (await db.execute<{ document_id: string; document_number: string; document_kind: string; document_date: string; party_id: string; vendor: string; project_id: string | null; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; payment_terms_snapshot: unknown }>(sql`
+  const bills = await db.execute<{
+    document_id: string;
+    document_number: string;
+    document_kind: string;
+    document_date: string;
+    party_id: string;
+    vendor: string;
+    project_id: string | null;
+    currency: string;
+    fx_rate: string;
+    subsidiary_id: string | null;
+    control_account_id: string;
+    open_line_id: string;
+    open_base: string;
+    open: string;
+    payment_terms_snapshot: unknown;
+  }>(
+    sql`
     select d.id as document_id, d.document_number, d.kind as document_kind, d.document_date, d.party_id, p.display_name as vendor,
            d.project_id, d.currency, d.fx_rate, d.subsidiary_id, jl.account_id as control_account_id,
            jl.id as open_line_id, abs(jl.amount) - coalesce(ap.applied, 0) as open_base,
@@ -258,7 +313,9 @@ async function createPaymentRunWithinTransaction(
      -- Oldest first: credits are allocated in this order, so the same
      -- selection always composes the same payments.
      order by d.document_date, d.document_number, jl.id
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   const found = new Set(bills.map((b) => b.document_id));
   const missing = opts.billDocumentIds.filter((id) => !found.has(id));
@@ -266,21 +323,26 @@ async function createPaymentRunWithinTransaction(
     // Name the bills held by another live run (bill + holding run number)
     // instead of failing the whole selection behind the generic guard,
     // so the operator can see exactly which selection to drop.
-    const reserved = await db.execute<{ billId: string; billNumber: string; runNumber: string }>(sql`
+    const reserved = await db.execute<{ billId: string; billNumber: string; runNumber: string }>(
+      sql`
       select distinct i.source_document_id as "billId", d.document_number as "billNumber", r.run_number as "runNumber"
         from payment_run_items i
         join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
         join documents d on d.id = i.source_document_id and d.org_id = i.org_id
        where i.org_id = ${opts.orgId}
-         and i.source_document_id = any(${`{${missing.join(',')}}`}::uuid[])
+         and i.source_document_id = any(${`{${missing.join(",")}}`}::uuid[])
          and i.status = 'selected'
-    `, "objects");
+    `,
+      "objects",
+    );
     if (reserved.length > 0) {
       const pairs = reserved.map((row) => `${row.billNumber} (${row.runNumber})`);
       const rest = missing.length - new Set(reserved.map((row) => row.billId)).size;
       throw new PaymentError(
         `${pairs.join(", ")} ${pairs.length === 1 ? "is" : "are"} already selected in another live payment run` +
-        (rest > 0 ? "; other selected bills are held, closed, or do not match the profile currency and subsidiary" : ""),
+          (rest > 0
+            ? "; other selected bills are held, closed, or do not match the profile currency and subsidiary"
+            : ""),
       );
     }
     throw new PaymentError(
@@ -292,7 +354,9 @@ async function createPaymentRunWithinTransaction(
   if (opts.maximumRunAmount != null) {
     const liveTotal = payable.reduce((total, bill) => total + toUnits(bill.open), 0n);
     if (liveTotal > toUnits(opts.maximumRunAmount)) {
-      throw new PaymentError("live bill balances exceed the scheduled maximum run amount; review the schedule selection and retry");
+      throw new PaymentError(
+        "live bill balances exceed the scheduled maximum run amount; review the schedule selection and retry",
+      );
     }
   }
 
@@ -352,7 +416,7 @@ async function createPaymentRunWithinTransaction(
   // using them. This sits after numbering so a creation parked on the
   // sequence holds no profile row lock. Refuse when the selection fields
   // moved under the filter — bills were matched on the prefilter read.
-  const profiles = (await db.execute<{
+  const profiles = await db.execute<{
     id: string;
     bank_account_id: string;
     bank_subsidiary_id: string | null;
@@ -361,7 +425,8 @@ async function createPaymentRunWithinTransaction(
     settings: Record<string, unknown>;
     rail: string;
     direction: string;
-  }>(sql`
+  }>(
+    sql`
     select p.id, p.bank_account_id, p.subsidiary_id, a.subsidiary_id as bank_subsidiary_id,
            p.currency, p.settings,
            f.rail, f.direction
@@ -371,17 +436,25 @@ async function createPaymentRunWithinTransaction(
                         and a.type = 'asset_bank' and a.is_active and not a.is_summary
      where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
      for update of p, a
-  `, "objects"));
+  `,
+    "objects",
+  );
   const profile = profiles[0];
   if (!profile) throw new PaymentError("payment bank profile was not found or is inactive");
-  if (profile.currency !== prefilter.currency || profile.subsidiary_id !== prefilter.subsidiary_id) {
+  if (
+    profile.currency !== prefilter.currency ||
+    profile.subsidiary_id !== prefilter.subsidiary_id
+  ) {
     throw new PaymentError("payment bank profile changed while the run was being created — retry");
   }
-  if (!subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.subsidiary_id)
-    || !subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.bank_subsidiary_id)) {
+  if (
+    !subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.subsidiary_id) ||
+    !subsidiaryScopeAllows(opts.allowedSubsidiaryIds, profile.bank_subsidiary_id)
+  ) {
     throw new ScopeNotFoundError();
   }
-  if (profile.direction === "debit") throw new PaymentError("a debit-only bank profile cannot pay vendor bills");
+  if (profile.direction === "debit")
+    throw new PaymentError("a debit-only bank profile cannot pay vendor bills");
 
   // Source-document locks, taken at the serialization point instead of
   // creation head (see above). lockScopeRows re-verifies bill scope here, so
@@ -395,33 +468,41 @@ async function createPaymentRunWithinTransaction(
     opts.billDocumentIds.map((id) => ({ kind: "document" as const, id })),
     opts.allowedSubsidiaryIds,
   );
-  const method = ["cpa005_credit", "rbc_std152_credit"].includes(profile.rail) ? "eft"
-    : profile.rail === "nacha_credit" ? "ach"
-    : profile.rail === "sepa_credit" ? "sepa"
-    : profile.rail === "positive_pay" ? "positive_pay"
-    : profile.rail === "custom" ? "custom"
-    : profile.rail === "cheque" ? "cheque"
-    : "wire";
+  const method = ["cpa005_credit", "rbc_std152_credit"].includes(profile.rail)
+    ? "eft"
+    : profile.rail === "nacha_credit"
+      ? "ach"
+      : profile.rail === "sepa_credit"
+        ? "sepa"
+        : profile.rail === "positive_pay"
+          ? "positive_pay"
+          : profile.rail === "custom"
+            ? "custom"
+            : profile.rail === "cheque"
+              ? "cheque"
+              : "wire";
 
-  const run = (await db
-    .insert(schema.paymentRuns)
-    .values({
-      orgId: opts.orgId,
-      runNumber,
-      bankAccountId: profile.bank_account_id,
-      paymentBankProfileId: profile.id,
-      subsidiaryId: profile.subsidiary_id,
-      sourceScheduleId: opts.sourceScheduleId ?? null,
-      method: method as "eft" | "ach" | "sepa" | "wire" | "cheque" | "positive_pay" | "custom",
-      direction: "outbound",
-      purpose: "vendor_payments",
-      currency: profile.currency,
-      selectionCriteria: opts.selectionCriteria ?? {},
-      status: "draft",
-      scheduledFor: opts.scheduledFor ?? null,
-      createdBy: opts.createdBy,
-    })
-    .returning({ id: schema.paymentRuns.id, runNumber: schema.paymentRuns.runNumber }))[0]!;
+  const run = (
+    await db
+      .insert(schema.paymentRuns)
+      .values({
+        orgId: opts.orgId,
+        runNumber,
+        bankAccountId: profile.bank_account_id,
+        paymentBankProfileId: profile.id,
+        subsidiaryId: profile.subsidiary_id,
+        sourceScheduleId: opts.sourceScheduleId ?? null,
+        method: method as "eft" | "ach" | "sepa" | "wire" | "cheque" | "positive_pay" | "custom",
+        direction: "outbound",
+        purpose: "vendor_payments",
+        currency: profile.currency,
+        selectionCriteria: opts.selectionCriteria ?? {},
+        status: "draft",
+        scheduledFor: opts.scheduledFor ?? null,
+        createdBy: opts.createdBy,
+      })
+      .returning({ id: schema.paymentRuns.id, runNumber: schema.paymentRuns.runNumber })
+  )[0]!;
 
   if (occurrenceId) {
     // Link the run to its occurrence inside the same transaction: the claim
@@ -437,22 +518,31 @@ async function createPaymentRunWithinTransaction(
 
   const criteria = opts.selectionCriteria ?? {};
   const captureDiscounts = criteria.captureDiscounts !== false;
-  const retainedTerms = new Map<string, ReturnType<typeof readDocumentPaymentTermsSnapshot> | null>(bills.map((bill) => {
-    if (!captureDiscounts) return [bill.document_id, null] as const;
-    try {
-      return [bill.document_id, readDocumentPaymentTermsSnapshot(bill.payment_terms_snapshot, {
-        kind: bill.document_kind, partyId: bill.party_id, documentDate: bill.document_date,
-      })] as const;
-    } catch (error) {
-      if (error instanceof PaymentTermsEvidenceError) throw new PaymentError(`${bill.document_number}: ${error.message}`, { cause: error });
-      throw error;
-    }
-  }));
+  const retainedTerms = new Map<string, ReturnType<typeof readDocumentPaymentTermsSnapshot> | null>(
+    bills.map((bill) => {
+      if (!captureDiscounts) return [bill.document_id, null] as const;
+      try {
+        return [
+          bill.document_id,
+          readDocumentPaymentTermsSnapshot(bill.payment_terms_snapshot, {
+            kind: bill.document_kind,
+            partyId: bill.party_id,
+            documentDate: bill.document_date,
+          }),
+        ] as const;
+      } catch (error) {
+        if (error instanceof PaymentTermsEvidenceError)
+          throw new PaymentError(`${bill.document_number}: ${error.message}`, { cause: error });
+        throw error;
+      }
+    }),
+  );
   const applyCredits = criteria.applyCredits !== false;
-  const discountAccountId = typeof profile.settings?.discountAccountId === "string"
-    ? profile.settings.discountAccountId
-    : null;
-  const paymentDate = opts.scheduledFor ?? await businessToday(opts.orgId);
+  const discountAccountId =
+    typeof profile.settings?.discountAccountId === "string"
+      ? profile.settings.discountAccountId
+      : null;
+  const paymentDate = opts.scheduledFor ?? (await businessToday(opts.orgId));
   // Discount legs are currency money: round them to the bill currency's own
   // minor units (whole yen, whole fils), never whole cents by default — the
   // same roundCurrencyMoney project billing already applies. Resolved from
@@ -462,8 +552,13 @@ async function createPaymentRunWithinTransaction(
   const minorUnitsFor = async (currency: string): Promise<number> => {
     const cached = minorUnitsByCurrency.get(currency);
     if (cached !== undefined) return cached;
-    const row = (await db.execute<{ minor_units: number }>(sql`
-      select minor_units from currencies where code = ${currency}`, "objects"))[0];
+    const row = (
+      await db.execute<{ minor_units: number }>(
+        sql`
+      select minor_units from currencies where code = ${currency}`,
+        "objects",
+      )
+    )[0];
     const minorUnits = row?.minor_units;
     if (minorUnits == null || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
       throw new PaymentError(`the ${currency} currency has unsupported minor-unit precision`);
@@ -475,7 +570,9 @@ async function createPaymentRunWithinTransaction(
   for (const vendorBills of byVendor.values()) {
     const first = vendorBills[0]!;
     const partyId = first.party_id;
-    const availableCredits = applyCredits ? (await db.execute<{ document_id: string; open_line_id: string; open_base: string }>(sql`
+    const availableCredits = applyCredits
+      ? await db.execute<{ document_id: string; open_line_id: string; open_base: string }>(
+          sql`
       select d.id as document_id, jl.id as open_line_id,
              abs(jl.amount) - coalesce(ap.applied, 0) as open_base
         from documents d
@@ -501,7 +598,10 @@ async function createPaymentRunWithinTransaction(
               and selected.status = 'selected'
          )
        order by d.document_date, d.document_number
-    `, "objects")) : [];
+    `,
+          "objects",
+        )
+      : [];
     const groupBase = vendorBills.reduce((n, b) => n + toUnits(b.open_base), 0n);
     const creditBase = availableCredits.reduce((n, c) => n + toUnits(c.open_base), 0n);
     // A bank run must still move cash. If credits cover the entire group they
@@ -509,7 +609,14 @@ async function createPaymentRunWithinTransaction(
     const credits = creditBase > 0n && creditBase < groupBase ? availableCredits : [];
     const creditRemaining = new Map(credits.map((c) => [c.open_line_id, toUnits(c.open_base)]));
     const creditAllocations: CreditAllocationInput[] = [];
-    const billComposition: Array<{ bill: (typeof vendorBills)[number]; allocation: AllocationInput; creditAmount: string; discountAmount: string; withholdingAmount: string; paymentAmount: string }> = [];
+    const billComposition: Array<{
+      bill: (typeof vendorBills)[number];
+      allocation: AllocationInput;
+      creditAmount: string;
+      discountAmount: string;
+      withholdingAmount: string;
+      paymentAmount: string;
+    }> = [];
     // Bills the run settles entirely with credits move no cash but are still
     // part of the run: they are reserved like every other bill, or a second
     // run could pay them in cash while this run's credit application waits to
@@ -548,18 +655,28 @@ async function createPaymentRunWithinTransaction(
         if (paymentDate <= deadline) {
           const numerator = toUnits(remainingTxn) * toUnits(policy.terms!.discountPercent!);
           const rawDiscount = (numerator + 500_000n) / 1_000_000n;
-          discountTxn = roundCurrencyMoney(fromUnits(rawDiscount), await minorUnitsFor(bill.currency));
+          discountTxn = roundCurrencyMoney(
+            fromUnits(rawDiscount),
+            await minorUnitsFor(bill.currency),
+          );
           if (!isZero(discountTxn) && !discountAccountId) {
-            throw new PaymentError("an early-payment discount is available but the bank profile has no discount account");
+            throw new PaymentError(
+              "an early-payment discount is available but the bank profile has no discount account",
+            );
           }
         }
       }
       const paymentAmount = fromUnits(toUnits(remainingTxn) - toUnits(discountTxn));
-      if (cmp(paymentAmount, "0") <= 0) throw new PaymentError("discount leaves a non-positive payment amount");
+      if (cmp(paymentAmount, "0") <= 0)
+        throw new PaymentError("discount leaves a non-positive payment amount");
       discountTotal += toUnits(discountTxn);
       billComposition.push({
         bill,
-        allocation: sameCurrencyAllocation(bill.open_line_id, remainingTxn, fromUnits(remainingBase)),
+        allocation: sameCurrencyAllocation(
+          bill.open_line_id,
+          remainingTxn,
+          fromUnits(remainingBase),
+        ),
         creditAmount: divRate(fromUnits(toUnits(bill.open_base) - remainingBase), bill.fx_rate),
         discountAmount: discountTxn,
         withholdingAmount: "0",
@@ -568,7 +685,9 @@ async function createPaymentRunWithinTransaction(
     }
     const allocations = billComposition.map((c) => c.allocation);
     if (allocations.length === 0) continue;
-    const total = fromUnits(allocations.reduce((n, a) => n + toUnits(a.sourceTransactionAmount), 0n) - discountTotal);
+    const total = fromUnits(
+      allocations.reduce((n, a) => n + toUnits(a.sourceTransactionAmount), 0n) - discountTotal,
+    );
 
     const payment = await createPaymentDocument({
       orgId: opts.orgId,
@@ -609,11 +728,19 @@ async function createPaymentRunWithinTransaction(
     // Contractor withholding computed by the draft save is part of the
     // approved plan: each item records its deduction, and the bank
     // instruction carries only the cash that leaves after it.
-    const planned = (await db.execute<{ custom: Record<string, unknown> | null; total: string }>(sql`
-      select custom, total::text as total from documents where id = ${payment.id} and org_id = ${opts.orgId}`, "objects"))[0];
+    const planned = (
+      await db.execute<{ custom: Record<string, unknown> | null; total: string }>(
+        sql`
+      select custom, total::text as total from documents where id = ${payment.id} and org_id = ${opts.orgId}`,
+        "objects",
+      )
+    )[0];
     const withholdingByLine = new Map<string, string>();
     for (const row of storedPaymentWithholdings(planned?.custom)) {
-      withholdingByLine.set(row.openLineId, add(withholdingByLine.get(row.openLineId) ?? "0", row.deducted));
+      withholdingByLine.set(
+        row.openLineId,
+        add(withholdingByLine.get(row.openLineId) ?? "0", row.deducted),
+      );
     }
     for (const item of billComposition) {
       const withheld = withholdingByLine.get(item.bill.open_line_id) ?? "0";
@@ -621,83 +748,119 @@ async function createPaymentRunWithinTransaction(
       item.paymentAmount = fromUnits(toUnits(item.paymentAmount) - toUnits(withheld));
     }
     const cashTotal = planned?.total ?? total;
-    if (isZero(cashTotal)) throw new PaymentError("This payment is fully settled by statutory deductions; post it individually as a noncash vendor settlement instead of exporting a bank transfer.");
-    if (cmp(cashTotal, fromUnits(toUnits(total) - toUnits(sum([...withholdingByLine.values()])))) !== 0) {
-      throw new PaymentError("the run payment's cash does not equal its applications less discount and withholding");
+    if (isZero(cashTotal))
+      throw new PaymentError(
+        "This payment is fully settled by statutory deductions; post it individually as a noncash vendor settlement instead of exporting a bank transfer.",
+      );
+    if (
+      cmp(cashTotal, fromUnits(toUnits(total) - toUnits(sum([...withholdingByLine.values()])))) !==
+      0
+    ) {
+      throw new PaymentError(
+        "the run payment's cash does not equal its applications less discount and withholding",
+      );
     }
 
     // Latest payable bank account for the payee (may be none — the file
     // export blocks on it with a clear error, never silently). Same
     // eligibility the run builder's bank-details column reports.
-    const payeeBank = (await db.execute<{ id: string }>(sql`
+    const payeeBank = await db.execute<{ id: string }>(
+      sql`
       select b.id from party_bank_accounts b
        where b.party_id = ${partyId} and b.org_id = ${opts.orgId} and ${payablePayeeBankAccountSql("b")}
        order by b.approved_at desc, b.created_at desc limit 1
        for share
-    `, "objects"));
+    `,
+      "objects",
+    );
 
-    const instruction = (await db.insert(schema.paymentInstructions).values({
-      orgId: opts.orgId,
-      paymentRunId: run.id,
-      payeePartyId: partyId,
-      payeeBankAccountId: payeeBank[0]?.id ?? null,
-      amount: cashTotal,
-      currency: profile.currency,
-      paymentDocumentId: payment.id,
-      status: "pending",
-      createdBy: opts.createdBy,
-    }).returning({ id: schema.paymentInstructions.id }))[0]!;
+    const instruction = (
+      await db
+        .insert(schema.paymentInstructions)
+        .values({
+          orgId: opts.orgId,
+          paymentRunId: run.id,
+          payeePartyId: partyId,
+          payeeBankAccountId: payeeBank[0]?.id ?? null,
+          amount: cashTotal,
+          currency: profile.currency,
+          paymentDocumentId: payment.id,
+          status: "pending",
+          createdBy: opts.createdBy,
+        })
+        .returning({ id: schema.paymentInstructions.id })
+    )[0]!;
 
     const billItems = [
       ...billComposition,
-      ...creditSettledBills.map((bill) => ({ bill, creditAmount: bill.open, discountAmount: "0", withholdingAmount: "0", paymentAmount: "0" })),
+      ...creditSettledBills.map((bill) => ({
+        bill,
+        creditAmount: bill.open,
+        discountAmount: "0",
+        withholdingAmount: "0",
+        paymentAmount: "0",
+      })),
     ];
-    await db.insert(schema.paymentRunItems).values(billItems.map(({ bill, creditAmount, discountAmount, withholdingAmount, paymentAmount }) => ({
-      orgId: opts.orgId,
-      paymentRunId: run.id,
-      paymentInstructionId: instruction.id,
-      sourceDocumentId: bill.document_id,
-      sourceOpenLineId: bill.open_line_id,
-      kind: (bill.document_kind === "expense_report" ? "expense" : "bill") as "expense" | "bill",
-      grossAmount: bill.open,
-      discountAmount,
-      withholdingAmount,
-      creditAmount,
-      paymentAmount,
-      currency: bill.currency,
-      fxRate: bill.fx_rate,
-      status: "selected" as const,
-      createdBy: opts.createdBy,
-    })));
-    const creditsUsed = new Map<string, { sourceDocumentId: string; amount: bigint; targets: Array<{ toLineId: string; amount: string }> }>();
+    await db.insert(schema.paymentRunItems).values(
+      billItems.map(({ bill, creditAmount, discountAmount, withholdingAmount, paymentAmount }) => ({
+        orgId: opts.orgId,
+        paymentRunId: run.id,
+        paymentInstructionId: instruction.id,
+        sourceDocumentId: bill.document_id,
+        sourceOpenLineId: bill.open_line_id,
+        kind: (bill.document_kind === "expense_report" ? "expense" : "bill") as "expense" | "bill",
+        grossAmount: bill.open,
+        discountAmount,
+        withholdingAmount,
+        creditAmount,
+        paymentAmount,
+        currency: bill.currency,
+        fxRate: bill.fx_rate,
+        status: "selected" as const,
+        createdBy: opts.createdBy,
+      })),
+    );
+    const creditsUsed = new Map<
+      string,
+      {
+        sourceDocumentId: string;
+        amount: bigint;
+        targets: Array<{ toLineId: string; amount: string }>;
+      }
+    >();
     for (const credit of creditAllocations) {
       const current = creditsUsed.get(credit.fromLineId);
       creditsUsed.set(credit.fromLineId, {
         sourceDocumentId: credit.sourceDocumentId,
         amount: (current?.amount ?? 0n) + toUnits(credit.amount),
-        targets: [...(current?.targets ?? []), { toLineId: credit.toLineId, amount: credit.amount }],
+        targets: [
+          ...(current?.targets ?? []),
+          { toLineId: credit.toLineId, amount: credit.amount },
+        ],
       });
     }
     if (creditsUsed.size > 0) {
-      await db.insert(schema.paymentRunItems).values([...creditsUsed].map(([sourceOpenLineId, used]) => ({
-        orgId: opts.orgId,
-        paymentRunId: run.id,
-        paymentInstructionId: instruction.id,
-        sourceDocumentId: used.sourceDocumentId,
-        sourceOpenLineId,
-        kind: "credit" as const,
-        // Credits apply only between functional-currency open items, so
-        // their transaction amount is their carrying amount.
-        grossAmount: fromUnits(used.amount),
-        discountAmount: "0",
-        creditAmount: fromUnits(used.amount),
-        creditTargetAllocations: used.targets,
-        paymentAmount: "0",
-        currency: profile.currency,
-        fxRate: "1",
-        status: "selected" as const,
-        createdBy: opts.createdBy,
-      })));
+      await db.insert(schema.paymentRunItems).values(
+        [...creditsUsed].map(([sourceOpenLineId, used]) => ({
+          orgId: opts.orgId,
+          paymentRunId: run.id,
+          paymentInstructionId: instruction.id,
+          sourceDocumentId: used.sourceDocumentId,
+          sourceOpenLineId,
+          kind: "credit" as const,
+          // Credits apply only between functional-currency open items, so
+          // their transaction amount is their carrying amount.
+          grossAmount: fromUnits(used.amount),
+          discountAmount: "0",
+          creditAmount: fromUnits(used.amount),
+          creditTargetAllocations: used.targets,
+          paymentAmount: "0",
+          currency: profile.currency,
+          fxRate: "1",
+          status: "selected" as const,
+          createdBy: opts.createdBy,
+        })),
+      );
     }
   }
 

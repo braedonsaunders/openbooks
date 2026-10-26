@@ -10,20 +10,29 @@ import type { EntityAdhoc } from "./adhoc";
 /* ------------------------------------------------------------------ */
 
 function selectPredicate(column: SQL, clause: FilterClause): SQL | null {
-  const value = Array.isArray(clause.value) ? String(clause.value[0] ?? "") : String(clause.value ?? "");
+  const value = Array.isArray(clause.value)
+    ? String(clause.value[0] ?? "")
+    : String(clause.value ?? "");
   if (clause.operator === "eq") return sql`${column} = ${value}`;
   if (clause.operator === "ne") return sql`${column} <> ${value}`;
   if (clause.operator === "in" || clause.operator === "not_in") {
-    const values = (Array.isArray(clause.value) ? clause.value : [value]).map(String).filter(Boolean);
+    const values = (Array.isArray(clause.value) ? clause.value : [value])
+      .map(String)
+      .filter(Boolean);
     if (!values.length) return clause.operator === "in" ? sql`false` : sql`true`;
-    const list = sql.join(values.map((item) => sql`${item}`), sql`, `);
+    const list = sql.join(
+      values.map((item) => sql`${item}`),
+      sql`, `,
+    );
     return clause.operator === "in" ? sql`${column} in (${list})` : sql`${column} not in (${list})`;
   }
   return null;
 }
 
 function textPredicate(column: SQL, clause: FilterClause): SQL | null {
-  const value = String(Array.isArray(clause.value) ? clause.value[0] ?? "" : clause.value ?? "");
+  const value = String(
+    Array.isArray(clause.value) ? (clause.value[0] ?? "") : (clause.value ?? ""),
+  );
   if (clause.operator === "eq") return sql`${column} = ${value}`;
   if (clause.operator === "contains") return sql`${column} ilike ${`%${value}%`}`;
   if (clause.operator === "is_set") return sql`coalesce(${column}, '') <> ''`;
@@ -31,7 +40,11 @@ function textPredicate(column: SQL, clause: FilterClause): SQL | null {
   return null;
 }
 
-function finishWhere(parts: SQL[], view: ListViewConfig, predicate: (clause: FilterClause) => SQL | null): SQL {
+function finishWhere(
+  parts: SQL[],
+  view: ListViewConfig,
+  predicate: (clause: FilterClause) => SQL | null,
+): SQL {
   for (const filter of view.filters) {
     if (pushCustomFieldFilter(parts, filter, null)) continue;
     const clause = predicate(filter);
@@ -40,8 +53,10 @@ function finishWhere(parts: SQL[], view: ListViewConfig, predicate: (clause: Fil
   return sql.join(parts, sql` `);
 }
 
-const customerName = (t: SQL) => sql`(select display_name from parties p where p.org_id = ${t}.org_id and p.id = ${t}.customer_party_id)`;
-const location = (t: SQL) => sql`(select nullif(concat_ws(', ', a.line1, a.city, a.region), '') from addresses a where a.org_id = ${t}.org_id and a.id = ${t}.service_address_id)`;
+const customerName = (t: SQL) =>
+  sql`(select display_name from parties p where p.org_id = ${t}.org_id and p.id = ${t}.customer_party_id)`;
+const location = (t: SQL) =>
+  sql`(select nullif(concat_ws(', ', a.line1, a.city, a.region), '') from addresses a where a.org_id = ${t}.org_id and a.id = ${t}.service_address_id)`;
 
 export const SERVICE_REQUEST_BUILT_IN_EXPR: Record<string, SQL> = {
   number: sql`sr.request_number`,
@@ -64,20 +79,38 @@ export const SERVICE_REQUEST_SORTS: Record<string, SQL> = {
   created_at: sql`sr.created_at`,
 };
 
-export function serviceRequestWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowed?: ReadonlySet<string> | null): SQL {
-  const parts: SQL[] = [sql`sr.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`sr.subsidiary_id`, allowed ?? null)];
+export function serviceRequestWhere(
+  view: ListViewConfig,
+  adhoc: EntityAdhoc,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+): SQL {
+  const parts: SQL[] = [
+    sql`sr.org_id = ${orgId}`,
+    subsidiaryVisibleFilter(sql`sr.subsidiary_id`, allowed ?? null),
+  ];
   const savedViewOwnsStatus = view.filters.some((filter) => filter.key === "status");
-  if (!adhoc.showInactive && !savedViewOwnsStatus && !adhoc.filters?.status) parts.push(sql`and sr.status not in ('converted','declined','cancelled')`);
+  if (!adhoc.showInactive && !savedViewOwnsStatus && !adhoc.filters?.status)
+    parts.push(sql`and sr.status not in ('converted','declined','cancelled')`);
   if (adhoc.filters?.status) parts.push(sql`and sr.status = ${adhoc.filters.status}`);
   if (adhoc.filters?.priority) parts.push(sql`and sr.priority = ${adhoc.filters.priority}`);
   if (adhoc.q) {
     const query = `%${adhoc.q}%`;
-    parts.push(sql`and (sr.request_number ilike ${query} or sr.title ilike ${query} or ${customerName(sql`sr`)} ilike ${query})`);
+    parts.push(
+      sql`and (sr.request_number ilike ${query} or sr.title ilike ${query} or ${customerName(sql`sr`)} ilike ${query})`,
+    );
   }
-  return finishWhere(parts, view, (clause) => clause.key === "status" ? selectPredicate(sql`sr.status`, clause)
-    : clause.key === "priority" ? selectPredicate(sql`sr.priority`, clause)
-      : clause.key === "source" ? selectPredicate(sql`sr.source`, clause)
-        : clause.key === "title" ? textPredicate(sql`sr.title`, clause) : null);
+  return finishWhere(parts, view, (clause) =>
+    clause.key === "status"
+      ? selectPredicate(sql`sr.status`, clause)
+      : clause.key === "priority"
+        ? selectPredicate(sql`sr.priority`, clause)
+        : clause.key === "source"
+          ? selectPredicate(sql`sr.source`, clause)
+          : clause.key === "title"
+            ? textPredicate(sql`sr.title`, clause)
+            : null,
+  );
 }
 
 const JOB_STAGE = sql`case
@@ -114,21 +147,40 @@ export const SERVICE_JOB_SORTS: Record<string, SQL> = {
   created_at: sql`sj.created_at`,
 };
 
-export function serviceJobWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowed?: ReadonlySet<string> | null): SQL {
-  const parts: SQL[] = [sql`sj.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`sj.subsidiary_id`, allowed ?? null)];
+export function serviceJobWhere(
+  view: ListViewConfig,
+  adhoc: EntityAdhoc,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+): SQL {
+  const parts: SQL[] = [
+    sql`sj.org_id = ${orgId}`,
+    subsidiaryVisibleFilter(sql`sj.subsidiary_id`, allowed ?? null),
+  ];
   const savedViewOwnsStatus = view.filters.some((filter) => filter.key === "status");
-  if (!adhoc.showInactive && !savedViewOwnsStatus && !adhoc.filters?.status) parts.push(sql`and sj.status = 'open'`);
+  if (!adhoc.showInactive && !savedViewOwnsStatus && !adhoc.filters?.status)
+    parts.push(sql`and sj.status = 'open'`);
   if (adhoc.filters?.status) parts.push(sql`and sj.status = ${adhoc.filters.status}`);
   if (adhoc.filters?.priority) parts.push(sql`and sj.priority = ${adhoc.filters.priority}`);
   if (adhoc.q) {
     const query = `%${adhoc.q}%`;
-    parts.push(sql`and (sj.job_number ilike ${query} or sj.title ilike ${query} or ${customerName(sql`sj`)} ilike ${query})`);
+    parts.push(
+      sql`and (sj.job_number ilike ${query} or sj.title ilike ${query} or ${customerName(sql`sj`)} ilike ${query})`,
+    );
   }
-  return finishWhere(parts, view, (clause) => clause.key === "status" ? selectPredicate(sql`sj.status`, clause)
-    : clause.key === "priority" ? selectPredicate(sql`sj.priority`, clause)
-      : clause.key === "billing_mode" ? selectPredicate(sql`sj.billing_mode`, clause)
-        : clause.key === "stage" ? selectPredicate(JOB_STAGE, clause)
-          : clause.key === "title" ? textPredicate(sql`sj.title`, clause) : null);
+  return finishWhere(parts, view, (clause) =>
+    clause.key === "status"
+      ? selectPredicate(sql`sj.status`, clause)
+      : clause.key === "priority"
+        ? selectPredicate(sql`sj.priority`, clause)
+        : clause.key === "billing_mode"
+          ? selectPredicate(sql`sj.billing_mode`, clause)
+          : clause.key === "stage"
+            ? selectPredicate(JOB_STAGE, clause)
+            : clause.key === "title"
+              ? textPredicate(sql`sj.title`, clause)
+              : null,
+  );
 }
 
 const VISIT_PARENT = sql`left join service_jobs vj on vj.org_id = sv.org_id and vj.id = sv.job_id
@@ -159,20 +211,38 @@ export const SERVICE_VISIT_SORTS: Record<string, SQL> = {
   status: sql`sv.status`,
 };
 
-export function serviceVisitWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowed?: ReadonlySet<string> | null): SQL {
-  const parts: SQL[] = [sql`sv.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`sv.subsidiary_id`, allowed ?? null)];
+export function serviceVisitWhere(
+  view: ListViewConfig,
+  adhoc: EntityAdhoc,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+): SQL {
+  const parts: SQL[] = [
+    sql`sv.org_id = ${orgId}`,
+    subsidiaryVisibleFilter(sql`sv.subsidiary_id`, allowed ?? null),
+  ];
   const savedViewOwnsStatus = view.filters.some((filter) => filter.key === "status");
-  if (!adhoc.showInactive && !savedViewOwnsStatus && !adhoc.filters?.status) parts.push(sql`and sv.status not in ('completed','unable_to_complete','cancelled')`);
+  if (!adhoc.showInactive && !savedViewOwnsStatus && !adhoc.filters?.status)
+    parts.push(sql`and sv.status not in ('completed','unable_to_complete','cancelled')`);
   if (adhoc.filters?.status) parts.push(sql`and sv.status = ${adhoc.filters.status}`);
   if (adhoc.filters?.priority) parts.push(sql`and sv.priority = ${adhoc.filters.priority}`);
   if (adhoc.q) {
     const query = `%${adhoc.q}%`;
-    parts.push(sql`and (coalesce(vj.job_number, vr.request_number) ilike ${query} or coalesce(vj.title, vr.title) ilike ${query})`);
+    parts.push(
+      sql`and (coalesce(vj.job_number, vr.request_number) ilike ${query} or coalesce(vj.title, vr.title) ilike ${query})`,
+    );
   }
-  return finishWhere(parts, view, (clause) => clause.key === "status" ? selectPredicate(sql`sv.status`, clause)
-    : clause.key === "priority" ? selectPredicate(sql`sv.priority`, clause)
-      : clause.key === "kind" ? selectPredicate(sql`sv.kind`, clause)
-        : clause.key === "review_status" ? selectPredicate(sql`sv.review_status`, clause) : null);
+  return finishWhere(parts, view, (clause) =>
+    clause.key === "status"
+      ? selectPredicate(sql`sv.status`, clause)
+      : clause.key === "priority"
+        ? selectPredicate(sql`sv.priority`, clause)
+        : clause.key === "kind"
+          ? selectPredicate(sql`sv.kind`, clause)
+          : clause.key === "review_status"
+            ? selectPredicate(sql`sv.review_status`, clause)
+            : null,
+  );
 }
 
 export const SERVICE_AGREEMENT_BUILT_IN_EXPR: Record<string, SQL> = {
@@ -193,15 +263,31 @@ export const SERVICE_AGREEMENT_SORTS: Record<string, SQL> = {
   status: sql`sa.status`,
 };
 
-export function serviceAgreementWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowed?: ReadonlySet<string> | null): SQL {
-  const parts: SQL[] = [sql`sa.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`sa.subsidiary_id`, allowed ?? null)];
+export function serviceAgreementWhere(
+  view: ListViewConfig,
+  adhoc: EntityAdhoc,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+): SQL {
+  const parts: SQL[] = [
+    sql`sa.org_id = ${orgId}`,
+    subsidiaryVisibleFilter(sql`sa.subsidiary_id`, allowed ?? null),
+  ];
   const savedViewOwnsStatus = view.filters.some((filter) => filter.key === "status");
-  if (!adhoc.showInactive && !savedViewOwnsStatus && !adhoc.filters?.status) parts.push(sql`and sa.status = 'active'`);
+  if (!adhoc.showInactive && !savedViewOwnsStatus && !adhoc.filters?.status)
+    parts.push(sql`and sa.status = 'active'`);
   if (adhoc.filters?.status) parts.push(sql`and sa.status = ${adhoc.filters.status}`);
   if (adhoc.q) {
     const query = `%${adhoc.q}%`;
-    parts.push(sql`and (sa.agreement_number ilike ${query} or sa.title ilike ${query} or ${customerName(sql`sa`)} ilike ${query})`);
+    parts.push(
+      sql`and (sa.agreement_number ilike ${query} or sa.title ilike ${query} or ${customerName(sql`sa`)} ilike ${query})`,
+    );
   }
-  return finishWhere(parts, view, (clause) => clause.key === "status" ? selectPredicate(sql`sa.status`, clause)
-    : clause.key === "title" ? textPredicate(sql`sa.title`, clause) : null);
+  return finishWhere(parts, view, (clause) =>
+    clause.key === "status"
+      ? selectPredicate(sql`sa.status`, clause)
+      : clause.key === "title"
+        ? textPredicate(sql`sa.title`, clause)
+        : null,
+  );
 }

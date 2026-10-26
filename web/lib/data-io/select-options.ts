@@ -12,13 +12,13 @@
  */
 
 export interface SelectMatchOption {
-  value: string
-  label: string
+  value: string;
+  label: string;
 }
 
 /** Collapse case and separators so "One time", "one_time" and "ONE-TIME" meet. */
 function matchKey(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return text.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 /**
@@ -34,26 +34,24 @@ export function matchSelectOption(
   options: readonly SelectMatchOption[],
   raw: unknown,
 ): string | null {
-  const text = String(raw ?? '').trim()
-  if (!text) return null
-  const exact = options.find((o) => o.value === text)
-  if (exact) return exact.value
-  const folded = text.toLowerCase()
-  const byValue = options.find((o) => o.value.toLowerCase() === folded)
-  if (byValue) return byValue.value
-  const byLabel = options.find((o) => o.label.toLowerCase() === folded)
-  if (byLabel) return byLabel.value
-  const key = matchKey(text)
-  if (!key) return null
-  const tolerant = options.filter(
-    (o) => matchKey(o.value) === key || matchKey(o.label) === key,
-  )
-  return tolerant.length === 1 ? tolerant[0]!.value : null
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  const exact = options.find((o) => o.value === text);
+  if (exact) return exact.value;
+  const folded = text.toLowerCase();
+  const byValue = options.find((o) => o.value.toLowerCase() === folded);
+  if (byValue) return byValue.value;
+  const byLabel = options.find((o) => o.label.toLowerCase() === folded);
+  if (byLabel) return byLabel.value;
+  const key = matchKey(text);
+  if (!key) return null;
+  const tolerant = options.filter((o) => matchKey(o.value) === key || matchKey(o.label) === key);
+  return tolerant.length === 1 ? tolerant[0]!.value : null;
 }
 
 /** Canonical stored values, in option order, for refusal and template text. */
 export function selectAllowedValues(options: readonly SelectMatchOption[]): string[] {
-  return options.map((o) => o.value)
+  return options.map((o) => o.value);
 }
 
 /**
@@ -66,5 +64,5 @@ export function selectRefusal(
   raw: unknown,
   options: readonly SelectMatchOption[],
 ): string {
-  return `${fieldKey}: invalid value "${String(raw)}" — use one of: ${selectAllowedValues(options).join(', ')}`
+  return `${fieldKey}: invalid value "${String(raw)}" — use one of: ${selectAllowedValues(options).join(", ")}`;
 }

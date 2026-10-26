@@ -15,12 +15,21 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __deprInputBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
     // The recorded input's period is labelled in the viewer's locale.
-    if (specifier === "next-intl/server") return virtual("export async function getLocale() { return 'en' }; export async function getTranslations() { return (key) => key }");
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next-intl/server")
+      return virtual(
+        "export async function getLocale() { return 'en' }; export async function getTranslations() { return (key) => key }",
+      );
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
         export async function guardFeaturePermission() {
@@ -33,7 +42,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { buildSchedule } = await import("@openbooks/engine/assets/depreciation");
 const { POST } = await import("./route.ts");
 
@@ -50,25 +60,31 @@ async function fixture(): Promise<Fx> {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fixedAssets}', 'true'::jsonb, true) where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = jsonb_set(settings, '{features,fixedAssets}', 'true'::jsonb, true) where id = ${org.orgId}`,
+    ),
   );
   const categoryId = randomUUID();
   const assetId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into asset_categories
       (id, org_id, name, asset_account_id, accumulated_depreciation_account_id,
        depreciation_expense_account_id, default_method, default_life_months, default_convention,
        tax_attributes, is_active)
     values (${categoryId}, ${org.orgId}, 'Equipment', ${org.accounts.invAsset}, ${org.accounts.clearing},
-            ${org.accounts.adjustment}, 'manual', null, 'full_month', '{}'::jsonb, true)`));
-  await withBypassContext(() => db.execute(sql`
+            ${org.accounts.adjustment}, 'manual', null, 'full_month', '{}'::jsonb, true)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into fixed_assets
       (id, org_id, subsidiary_id, category_id, asset_number, name, status,
        acquired_on, in_service_on, acquisition_cost, salvage_value,
        depreciation_method, depreciation_units_total, custom)
     values (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId}, 'ASSET-manual',
             'manual', 'in_service', ${org.date}, ${org.date}, '12000.0000', '2000.0000',
-            'manual', null, '{}'::jsonb)`));
+            'manual', null, '{}'::jsonb)`),
+  );
   await withBypassContext(() => buildSchedule(assetId, org.orgId, actorId, org.bookId));
   const folderId = randomUUID();
   const evidenceFileId = await withBypassContext(() =>
@@ -76,9 +92,14 @@ async function fixture(): Promise<Fx> {
       await tx.execute(sql`
         insert into folders (id, org_id, name, record_table, record_id, created_by, updated_by)
         values (${folderId}, ${org.orgId}, 'Asset evidence', 'fixed_assets', ${assetId}, ${actorId}, ${actorId})`);
-      const fileId = (await tx.execute<{ id: string }>(sql`
+      const fileId = (
+        await tx.execute<{ id: string }>(
+          sql`
         insert into files (org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
-        values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`, "objects"))[0]!.id;
+        values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`,
+          "objects",
+        )
+      )[0]!.id;
       await tx.execute(sql`
         insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
         values (${org.orgId}, ${fileId}, 'fixed_assets', ${assetId}, ${actorId})`);
@@ -108,7 +129,11 @@ const post = (fx: Fx, effectiveDate: string, value: string) =>
 
 async function inputCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from depreciation_inputs where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from depreciation_inputs where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -117,7 +142,11 @@ test("depreciation evidence refuses a non-calendar effective date without writin
   try {
     const response = await post(fx, "2026-09-31", "100.00");
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal(await inputCount(fx.orgId), 0);
   } finally {
@@ -130,7 +159,11 @@ test("depreciation evidence refuses a value wider than numeric(19,4) without wri
   try {
     const response = await post(fx, fx.date, "99999999999999999999.99");
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /numeric field overflow|Failed query/i);
     assert.equal(await inputCount(fx.orgId), 0);
   } finally {

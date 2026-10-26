@@ -8,10 +8,7 @@ export interface LossOfControlBalance {
 }
 function money(value: string, label: string) {
   const n = canonicalDecimal(value, 4);
-  if (
-    n === null ||
-    n.replace(/^-/, "").split(".")[0]!.replace(/^0+/, "").length > 15
-  )
+  if (n === null || n.replace(/^-/, "").split(".")[0]!.replace(/^0+/, "").length > 15)
     throw new Error(`${label} must be an exact ledger amount`);
   return fromUnits(toUnits(n));
 }
@@ -38,36 +35,22 @@ export function measureLossOfControl(args: {
   }[];
 }) {
   const proceeds = money(args.parentProceeds, "proceeds"),
-    carrying = money(
-      args.parentInvestmentCarrying,
-      "investment carrying amount",
-    ),
-    retained = money(
-      args.parentRetainedCarrying,
-      "parent retained carrying value",
-    ),
+    carrying = money(args.parentInvestmentCarrying, "investment carrying amount"),
+    retained = money(args.parentRetainedCarrying, "parent retained carrying value"),
     fairValue = money(args.retainedFairValue, "retained interest fair value");
   if ([proceeds, carrying, retained, fairValue].some((v) => toUnits(v) < 0n))
     throw new Error(
       "proceeds, investment carrying value and retained interest measurements cannot be negative",
     );
   const netAssets = sum(
-    args.netAssetBalances.map((l) =>
-      money(l.amount, "consolidated asset/liability balance"),
-    ),
+    args.netAssetBalances.map((l) => money(l.amount, "consolidated asset/liability balance")),
   );
   const nci = args.nciBalance
     ? neg(money(args.nciBalance.amount, "non-controlling interest balance"))
     : "0.0000";
-  const investment = money(
-    args.eliminatedInvestmentBalance.amount,
-    "eliminated investment",
-  );
+  const investment = money(args.eliminatedInvestmentBalance.amount, "eliminated investment");
   const investmentTranslation = add(investment, carrying);
-  if (
-    toUnits(investmentTranslation) !== 0n &&
-    !args.investmentTranslationAccountId
-  )
+  if (toUnits(investmentTranslation) !== 0n && !args.investmentTranslationAccountId)
     throw new Error(
       "reconcile the parent investment and its attributed consolidation elimination before recording loss of control",
     );
@@ -84,8 +67,7 @@ export function measureLossOfControl(args: {
       amount: neg(investment),
       description: "Release the disposed investment elimination",
     },
-    ...(args.investmentTranslationAccountId &&
-    !isZeroAmount(investmentTranslation)
+    ...(args.investmentTranslationAccountId && !isZeroAmount(investmentTranslation)
       ? [
           {
             accountId: args.investmentTranslationAccountId,
@@ -137,8 +119,7 @@ export function measureLossOfControl(args: {
             : "Transfer OCI directly to retained earnings",
       },
     );
-    if (oci.treatment === "profit_loss")
-      recycledOci = add(recycledOci, neg(balance));
+    if (oci.treatment === "profit_loss") recycledOci = add(recycledOci, neg(balance));
     else transferredOci = add(transferredOci, neg(balance));
   }
   const nonzero = lines.filter((l) => toUnits(l.amount) !== 0n);

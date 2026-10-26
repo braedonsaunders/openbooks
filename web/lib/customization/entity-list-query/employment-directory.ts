@@ -155,7 +155,10 @@ function departmentMatch(values: string[]): SQL | null {
   }
   const parts: SQL[] = [];
   if (uuids.length > 0) {
-    const list = sql.join(uuids.map((uuid) => sql`${uuid}`), sql`, `);
+    const list = sql.join(
+      uuids.map((uuid) => sql`${uuid}`),
+      sql`, `,
+    );
     parts.push(sql`emp.department_id in (${list})`);
   }
   if (unassigned) {
@@ -176,7 +179,10 @@ function employmentStatusMatch(values: string[]): SQL | null {
   }
   const parts: SQL[] = [];
   if (statuses.length > 0) {
-    const list = sql.join(statuses.map((status) => sql`${status}`), sql`, `);
+    const list = sql.join(
+      statuses.map((status) => sql`${status}`),
+      sql`, `,
+    );
     parts.push(sql`emp.employment_status in (${list})`);
   }
   if (noEmployment) parts.push(sql`emp.employment_status is null`);
@@ -190,17 +196,16 @@ function employerMatch(values: string[]): SQL | null {
     if (refused) return refused;
   }
   if (values.length === 0) return null;
-  const list = sql.join(values.map((value) => sql`${value}`), sql`, `);
+  const list = sql.join(
+    values.map((value) => sql`${value}`),
+    sql`, `,
+  );
   return sql`emp.employer_subsidiary_id in (${list})`;
 }
 
 function employeeDirectoryFilterPredicate(clause: FilterClause, hrmOn: boolean): SQL | null {
   const { key, operator } = clause;
-  if (
-    key !== "department" &&
-    key !== "employment_status" &&
-    key !== "employer"
-  ) {
+  if (key !== "department" && key !== "employment_status" && key !== "employer") {
     return null;
   }
   // A stale saved view can still name a directory filter after the switch
@@ -249,9 +254,7 @@ export function employeeWhere(
   const selected = adhoc.filters ?? {};
   if (selected.department) {
     parts.push(
-      hrmOn
-        ? sql`and ${departmentMatch([selected.department]) ?? sql`false`}`
-        : sql`and false`,
+      hrmOn ? sql`and ${departmentMatch([selected.department]) ?? sql`false`}` : sql`and false`,
     );
   }
   if (selected.employment_status) {
@@ -263,9 +266,7 @@ export function employeeWhere(
   }
   if (selected.employer) {
     parts.push(
-      hrmOn
-        ? sql`and ${employerMatch([selected.employer]) ?? sql`false`}`
-        : sql`and false`,
+      hrmOn ? sql`and ${employerMatch([selected.employer]) ?? sql`false`}` : sql`and false`,
     );
   }
   return sql.join(parts, sql` `);

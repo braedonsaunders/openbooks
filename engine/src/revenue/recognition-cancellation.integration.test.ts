@@ -52,9 +52,13 @@ test(
         update documents set status = 'approved', updated_at = now()
          where id = ${documentId} and org_id = ${org.orgId}
       `);
-      await postDocument(documentId, {
-        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-      }, { audit: { actorId: actors.adminId, source: "test" } });
+      await postDocument(
+        documentId,
+        {
+          control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+        },
+        { audit: { actorId: actors.adminId, source: "test" } },
+      );
       const recognized = await runRevenueRecognition(org.orgId, "2026-07-31", actors.adminId);
       assert.equal(recognized.posted, 1);
 
@@ -87,7 +91,8 @@ test(
         obligation_status: string;
         cancellation_evidence: number;
         gate_status: string;
-      }>(sql`
+      }>(
+        sql`
         select document.status, document.void_requested_at is not null as is_requested,
                obligation.status as obligation_status,
                (select count(*)::int from audit_log audit
@@ -101,14 +106,18 @@ test(
           join performance_obligations obligation on obligation.document_line_id = line.id and obligation.org_id = line.org_id
           join flow_gates gate on gate.run_id = ${first.runId} and gate.org_id = document.org_id
          where document.id = ${documentId} and document.org_id = ${org.orgId}
-      `, "objects");
-      assert.deepEqual(state, [{
-        status: "posted",
-        is_requested: true,
-        obligation_status: "cancelled",
-        cancellation_evidence: 1,
-        gate_status: "pending",
-      }]);
+      `,
+        "objects",
+      );
+      assert.deepEqual(state, [
+        {
+          status: "posted",
+          is_requested: true,
+          obligation_status: "cancelled",
+          cancellation_evidence: 1,
+          gate_status: "pending",
+        },
+      ]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -119,11 +128,14 @@ test(
 async function seedRecognitionTermPeriods(
   org: Awaited<ReturnType<typeof createScratchOrg>>,
 ): Promise<void> {
-  const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
+  const calendar = await db.execute<{ fiscal_calendar_id: string }>(
+    sql`
     select fiscal_calendar_id
       from accounting_periods
      where id = ${org.periodId} and org_id = ${org.orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
@@ -210,15 +222,12 @@ test(
         { audit: { actorId: actors.adminId, source: "test" } },
       );
 
-      const recognized = await runRevenueRecognition(
-        org.orgId,
-        "2026-07-31",
-        actors.adminId,
-      );
+      const recognized = await runRevenueRecognition(org.orgId, "2026-07-31", actors.adminId);
       assert.equal(recognized.posted, 1);
       assert.equal(recognized.totalAmount, "100.0000");
       const sourceRecognitionId = recognized.entries[0]!.entryId;
-      const sourceLines = await db.execute(sql`
+      const sourceLines = await db.execute(
+        sql`
         select line_number, account_id, amount::text, currency,
                txn_amount::text, fx_rate::text, subsidiary_id,
                department_id, project_id, location_id, class_id,
@@ -226,7 +235,9 @@ test(
           from journal_lines
          where entry_id = ${sourceRecognitionId}
          order by line_number
-      `, "objects");
+      `,
+        "objects",
+      );
 
       const request = {
         documentId,
@@ -262,15 +273,11 @@ test(
            ${actors.adminId}, ${actors.adminId})
       `);
 
-      await assert.rejects(
-        cancelRevenueRecognitionForInvoice(request),
-        (error) =>
-          errorChainMatches(
-            error,
-            /this transaction feeds REV-CANCEL-DOWNSTREAM/,
-          ),
+      await assert.rejects(cancelRevenueRecognitionForInvoice(request), (error) =>
+        errorChainMatches(error, /this transaction feeds REV-CANCEL-DOWNSTREAM/),
       );
-      const rolledBack = await db.execute(sql`
+      const rolledBack = await db.execute(
+        sql`
         select document.status as document_status,
                document.void_requested_at,
                obligation.status as obligation_status,
@@ -289,7 +296,9 @@ test(
           join journal_entries source
             on source.id = schedule_line.journal_entry_id
          where document.id = ${documentId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.deepEqual(rolledBack, [
         {
           document_status: "posted",
@@ -320,30 +329,25 @@ test(
         ["cancelled", "cancelled"],
       );
       assert.equal(
-        new Set(
-          concurrent.flatMap((result) => result.recognitionReversalEntryIds),
-        ).size,
+        new Set(concurrent.flatMap((result) => result.recognitionReversalEntryIds)).size,
         1,
       );
-      assert.equal(
-        new Set(concurrent.map((result) => result.invoiceReversalEntryId)).size,
-        1,
-      );
-      const recognitionReversalId =
-        concurrent[0]!.recognitionReversalEntryIds[0]!;
+      assert.equal(new Set(concurrent.map((result) => result.invoiceReversalEntryId)).size, 1);
+      const recognitionReversalId = concurrent[0]!.recognitionReversalEntryIds[0]!;
 
-      const lineage = (await db.execute<{
-          document_status: string;
-          invoice_reversal_id: string;
-          obligation_status: string;
-          cancellation_reason: string;
-          schedule_status: string;
-          journal_entry_id: string;
-          reversal_journal_entry_id: string;
-          source_status: string;
-          reversal_status: string;
-          reverses_entry_id: string;
-        }>(sql`
+      const lineage = await db.execute<{
+        document_status: string;
+        invoice_reversal_id: string;
+        obligation_status: string;
+        cancellation_reason: string;
+        schedule_status: string;
+        journal_entry_id: string;
+        reversal_journal_entry_id: string;
+        source_status: string;
+        reversal_status: string;
+        reverses_entry_id: string;
+      }>(
+        sql`
         select document.status as document_status,
                document.reversal_entry_id as invoice_reversal_id,
                obligation.status as obligation_status,
@@ -369,7 +373,9 @@ test(
           join journal_entries reversal
             on reversal.id = schedule_line.reversal_journal_entry_id
          where document.id = ${documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(lineage.length, 1);
       assert.deepEqual(lineage[0], {
         document_status: "voided",
@@ -384,7 +390,8 @@ test(
         reverses_entry_id: sourceRecognitionId,
       });
 
-      const reversalLines = await db.execute(sql`
+      const reversalLines = await db.execute(
+        sql`
         select line_number, account_id, (-amount)::text as amount, currency,
                (-txn_amount)::text as txn_amount, fx_rate::text, subsidiary_id,
                department_id, project_id, location_id, class_id,
@@ -392,10 +399,13 @@ test(
           from journal_lines
          where entry_id = ${recognitionReversalId}
          order by line_number
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.deepEqual(reversalLines, sourceLines);
 
-      const net = (await db.execute<{ amount: string }>(sql`
+      const net = await db.execute<{ amount: string }>(
+        sql`
         select coalesce(sum(line.amount), 0)::text as amount
           from journal_lines line
           join journal_entries entry on entry.id = line.entry_id
@@ -412,24 +422,16 @@ test(
              from recognition_schedule_lines
             where journal_entry_id = ${sourceRecognitionId}
          )
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(net[0]!.amount, "0.0000");
 
-      const rerun = await runRevenueRecognition(
-        org.orgId,
-        "2026-12-31",
-        actors.adminId,
-      );
+      const rerun = await runRevenueRecognition(org.orgId, "2026-12-31", actors.adminId);
       assert.equal(rerun.posted, 0);
       const retry = await cancelRevenueRecognitionForInvoice(request);
-      assert.equal(
-        retry.recognitionReversalEntryIds[0],
-        recognitionReversalId,
-      );
-      assert.equal(
-        retry.invoiceReversalEntryId,
-        concurrent[0]!.invoiceReversalEntryId,
-      );
+      assert.equal(retry.recognitionReversalEntryIds[0], recognitionReversalId);
+      assert.equal(retry.invoiceReversalEntryId, concurrent[0]!.invoiceReversalEntryId);
 
       await assert.rejects(
         db.execute(sql`
@@ -437,7 +439,11 @@ test(
              set planned_amount = planned_amount + 1
            where journal_entry_id = ${sourceRecognitionId}
         `),
-        (error) => errorChainMatches(error, /posted revenue measurements are immutable; append an adjustment/),
+        (error) =>
+          errorChainMatches(
+            error,
+            /posted revenue measurements are immutable; append an adjustment/,
+          ),
       );
     } finally {
       await dropScratchOrg(org.orgId);

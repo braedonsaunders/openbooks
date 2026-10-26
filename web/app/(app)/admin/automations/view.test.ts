@@ -1,9 +1,9 @@
-import assert from 'node:assert/strict'
+import assert from "node:assert/strict";
 
-import test from 'node:test'
+import test from "node:test";
 
-const { automationsSpec } = await import('./view')
-import type { AutomationsData } from './view'
+const { automationsSpec } = await import("./view");
+import type { AutomationsData } from "./view";
 
 // the automations page repeated its empty state — the empty-state
 // card AND the table's own empty copy rendered together. The spec gives the
@@ -12,23 +12,23 @@ import type { AutomationsData } from './view'
 function specFor(isEmpty: boolean, hasRows: boolean) {
   return automationsSpec({
     currentParams: {},
-    statusLabel: 'Status',
+    statusLabel: "Status",
     statusOptions: [],
     isEmpty,
     hasRows,
-  } as unknown as AutomationsData)
+  } as unknown as AutomationsData);
 }
 
-test('an empty page shows the single empty card and hides the table', () => {
-  const spec = specFor(true, false) as unknown as { body: Array<{ when?: unknown }> }
+test("an empty page shows the single empty card and hides the table", () => {
+  const spec = specFor(true, false) as unknown as { body: Array<{ when?: unknown }> };
   assert.deepEqual(
     spec.body[0]?.when,
-    { $: 'isEmpty' },
-    'the empty-state card must own the empty page',
-  )
+    { $: "isEmpty" },
+    "the empty-state card must own the empty page",
+  );
   assert.deepEqual(
     spec.body[1]?.when,
-    { $: 'hasRows' },
-    'the table must hide while nothing exists instead of repeating the empty card',
-  )
-})
+    { $: "hasRows" },
+    "the table must hide while nothing exists instead of repeating the empty card",
+  );
+});

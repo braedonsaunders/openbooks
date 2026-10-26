@@ -9,14 +9,18 @@ import test, { type TestContext } from "node:test";
 // today and count the overdue badges.
 
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/crm/opportunities?view=board", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/crm/opportunities?view=board",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({ navigation: { pathname: "/crm/opportunities" } });
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
@@ -51,7 +55,11 @@ const STATUS = {
   isWon: false,
 };
 
-function opp(id: string, expectedCloseDate: string | null, overrides?: Partial<KanbanOpportunity>): KanbanOpportunity {
+function opp(
+  id: string,
+  expectedCloseDate: string | null,
+  overrides?: Partial<KanbanOpportunity>,
+): KanbanOpportunity {
   return {
     id,
     opportunityNumber: `OPP-${id}`,
@@ -115,11 +123,19 @@ async function renderBoard(
 }
 
 test("a deal due on the business day is not flagged overdue; yesterday is", async (t) => {
-  const host = await renderBoard(t, [opp("today", "2026-09-17"), opp("past", "2026-09-16"), opp("future", "2026-09-18")]);
+  const host = await renderBoard(t, [
+    opp("today", "2026-09-17"),
+    opp("past", "2026-09-16"),
+    opp("future", "2026-09-18"),
+  ]);
   const overdue = [...host.querySelectorAll(".text-rose-600")].filter((el) =>
     el.textContent?.includes("2026-09"),
   );
-  assert.equal(overdue.length, 1, `exactly the past-due deal flags overdue, got ${overdue.map((el) => el.textContent)}`);
+  assert.equal(
+    overdue.length,
+    1,
+    `exactly the past-due deal flags overdue, got ${overdue.map((el) => el.textContent)}`,
+  );
   assert.match(overdue[0]!.textContent ?? "", /2026-09-16/);
 });
 
@@ -187,7 +203,10 @@ test("the win/loss reason dialog uses translated copy", async (t) => {
   assert.match(host.textContent ?? "", /Begründung für Gewinn oder Verlust erforderlich/);
   assert.match(host.textContent ?? "", /Begründung/);
   assert.match(host.textContent ?? "", /Phasenänderung bestätigen/);
-  assert.equal(host.querySelector("textarea")?.placeholder, "z. B. wegen des Preises an einen Wettbewerber verloren; Budget gestrichen; Umfang reduziert …");
+  assert.equal(
+    host.querySelector("textarea")?.placeholder,
+    "z. B. wegen des Preises an einen Wettbewerber verloren; Budget gestrichen; Umfang reduziert …",
+  );
   t.after(async () => {
     await act(async () => root.unmount());
     host.remove();
@@ -218,7 +237,10 @@ test("deal amounts keep their cents", async (t) => {
   const host = await renderBoard(t, [
     opp("cents", "2026-09-20", { projectedAmount: "1234.5600", weightedAmount: "0.0000" }),
   ]);
-  assert.ok(host.textContent?.includes("$1,234.56"), `exact cents must render, got ${host.textContent}`);
+  assert.ok(
+    host.textContent?.includes("$1,234.56"),
+    `exact cents must render, got ${host.textContent}`,
+  );
 });
 
 // Binary floats smeared 0.10 + 0.20 into 0.30000000000000004. The
@@ -228,15 +250,26 @@ test("column totals sum exactly", async (t) => {
     opp("a", "2026-09-20", { projectedAmount: "0.1000", weightedAmount: "0.0000" }),
     opp("b", "2026-09-20", { projectedAmount: "0.2000", weightedAmount: "0.0000" }),
   ]);
-  assert.ok(host.textContent?.includes("$0.30"), `total must be exactly $0.30, got ${host.textContent}`);
+  assert.ok(
+    host.textContent?.includes("$0.30"),
+    `total must be exactly $0.30, got ${host.textContent}`,
+  );
 });
 
 // A mixed-currency column totals per currency. The old total priced
 // every row in the first row's currency, so USD 1000 + EUR 2000 read $3,000.00.
 test("mixed-currency columns total per currency", async (t) => {
   const host = await renderBoard(t, [
-    opp("usd", "2026-09-20", { currency: "USD", projectedAmount: "1000.0000", weightedAmount: "0.0000" }),
-    opp("eur", "2026-09-20", { currency: "EUR", projectedAmount: "2000.0000", weightedAmount: "0.0000" }),
+    opp("usd", "2026-09-20", {
+      currency: "USD",
+      projectedAmount: "1000.0000",
+      weightedAmount: "0.0000",
+    }),
+    opp("eur", "2026-09-20", {
+      currency: "EUR",
+      projectedAmount: "2000.0000",
+      weightedAmount: "0.0000",
+    }),
   ]);
   const text = host.textContent ?? "";
   assert.ok(text.includes("$1,000.00"), `USD total must render, got ${text}`);
@@ -247,11 +280,22 @@ test("mixed-currency columns total per currency", async (t) => {
 // Totals sort by currency code so row order
 // cannot move the figures. EUR sorts before USD in either input order.
 test("mixed-currency totals sort by code regardless of row order", async (t) => {
-  const eur = opp("eur", "2026-09-20", { currency: "EUR", projectedAmount: "2000.0000", weightedAmount: "0.0000" });
-  const usd = opp("usd", "2026-09-20", { currency: "USD", projectedAmount: "1000.0000", weightedAmount: "0.0000" });
+  const eur = opp("eur", "2026-09-20", {
+    currency: "EUR",
+    projectedAmount: "2000.0000",
+    weightedAmount: "0.0000",
+  });
+  const usd = opp("usd", "2026-09-20", {
+    currency: "USD",
+    projectedAmount: "1000.0000",
+    weightedAmount: "0.0000",
+  });
   const forward = await renderBoard(t, [eur, usd]);
   const fwd = forward.textContent ?? "";
-  assert.ok(fwd.indexOf("€2,000.00") < fwd.indexOf("$1,000.00"), `sorted EUR before USD, got ${fwd}`);
+  assert.ok(
+    fwd.indexOf("€2,000.00") < fwd.indexOf("$1,000.00"),
+    `sorted EUR before USD, got ${fwd}`,
+  );
   // Second render in reversed row order must keep the same sorted order.
   const host2 = document.createElement("div");
   document.body.appendChild(host2);
@@ -262,7 +306,11 @@ test("mixed-currency totals sort by code regardless of row order", async (t) => 
       root2.render(
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           <BusinessDateProvider today="2026-09-17">
-            <OpportunityKanbanBoard statuses={[STATUS]} opportunities={[usd, eur]} canManage={false} />
+            <OpportunityKanbanBoard
+              statuses={[STATUS]}
+              opportunities={[usd, eur]}
+              canManage={false}
+            />
           </BusinessDateProvider>
         </NextIntlClientProvider>,
       );
@@ -270,7 +318,10 @@ test("mixed-currency totals sort by code regardless of row order", async (t) => 
     });
     await tick();
     const rev = host2.textContent ?? "";
-    assert.ok(rev.indexOf("€2,000.00") < rev.indexOf("$1,000.00"), `reversed rows keep sorted order, got ${rev}`);
+    assert.ok(
+      rev.indexOf("€2,000.00") < rev.indexOf("$1,000.00"),
+      `reversed rows keep sorted order, got ${rev}`,
+    );
   } finally {
     await act(async () => {
       root2.unmount();
@@ -282,7 +333,10 @@ test("mixed-currency totals sort by code regardless of row order", async (t) => 
 // Above-2^53 amounts sum exactly, never through float.
 test("column totals stay exact above 2^53", async (t) => {
   const host = await renderBoard(t, [
-    opp("big-a", "2026-09-20", { projectedAmount: "9007199254740993.0000", weightedAmount: "0.0000" }),
+    opp("big-a", "2026-09-20", {
+      projectedAmount: "9007199254740993.0000",
+      weightedAmount: "0.0000",
+    }),
     opp("big-b", "2026-09-20", { projectedAmount: "1.0000", weightedAmount: "0.0000" }),
     opp("frac-a", "2026-09-20", { projectedAmount: "0.1000", weightedAmount: "0.0000" }),
     opp("frac-b", "2026-09-20", { projectedAmount: "0.2000", weightedAmount: "0.0000" }),

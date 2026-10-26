@@ -39,7 +39,8 @@ export async function listApplicationOpportunities(
   );
   const scope = crmOpportunityScope(context.authz.allowedSubsidiaryIds);
   const [page, totals] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select o.id, o.opportunity_number, o.title, o.expected_close_date::text as expected_close_date,
              o.forecast_category, o.probability, o.currency,
              o.projected_amount::text as projected_amount,
@@ -53,8 +54,11 @@ export async function listApplicationOpportunities(
        where o.org_id = ${context.authz.user.orgId}${filters}${scope}
        order by s.is_closed, o.expected_close_date nulls last, o.created_at desc
        limit ${limit}
-    `, "objects"),
-    db.execute<Record<string, unknown>>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<Record<string, unknown>>(
+      sql`
       select count(*)::int as count, o.currency,
              coalesce(sum(o.projected_amount), 0)::text as projected,
              coalesce(sum(o.weighted_amount), 0)::text as weighted
@@ -63,7 +67,9 @@ export async function listApplicationOpportunities(
         left join parties p on p.id = o.party_id and p.org_id = o.org_id
        where o.org_id = ${context.authz.user.orgId}${filters}${scope}
        group by o.currency order by o.currency
-    `, "objects"),
+    `,
+      "objects",
+    ),
   ]);
   return {
     total: totals.reduce((n, row) => n + Number(row.count ?? 0), 0),
@@ -106,7 +112,10 @@ function money(value: unknown): string {
 }
 
 /** One opportunity — same `loadOpportunity` loader as the opportunity drawer. */
-export async function getApplicationOpportunity(context: ApplicationContext, opportunityId: string) {
+export async function getApplicationOpportunity(
+  context: ApplicationContext,
+  opportunityId: string,
+) {
   assertApplicationPermission(context, "crm.opportunities.read");
   if (!(await isFeatureEnabled(context.authz.user.orgId, "crm"))) crmOff();
   if (!isUuid(opportunityId)) throw invalidInput("opportunity id must be a UUID");
@@ -192,7 +201,12 @@ export async function listApplicationCrmAccounts(
 ) {
   assertApplicationPermission(context, "crm.accounts.read");
   if (!(await isFeatureEnabled(context.authz.user.orgId, "crm"))) crmOff();
-  if (input.stage && input.stage !== "lead" && input.stage !== "prospect" && input.stage !== "customer") {
+  if (
+    input.stage &&
+    input.stage !== "lead" &&
+    input.stage !== "prospect" &&
+    input.stage !== "customer"
+  ) {
     throw invalidInput("stage must be lead, prospect, or customer");
   }
   const limit = clamp(input.limit ?? 50, 1, 200);
@@ -206,7 +220,8 @@ export async function listApplicationCrmAccounts(
   );
   const scope = crmSharedScope(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds);
   const [page, stages] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select cp.party_id, p.display_name, cp.lifecycle_stage,
              s.name as status_name, s.is_qualified,
              u.name as owner_name, t.name as territory_name, ls.name as lead_source_name,
@@ -220,14 +235,19 @@ export async function listApplicationCrmAccounts(
        where cp.org_id = ${context.authz.user.orgId}${filters}${scope}
        order by p.display_name
        limit ${limit}
-    `, "objects"),
-    db.execute<Record<string, unknown>>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<Record<string, unknown>>(
+      sql`
       select cp.lifecycle_stage, count(*)::int as count
         from crm_account_profiles cp
         join parties p on p.id = cp.party_id and p.org_id = cp.org_id
        where cp.org_id = ${context.authz.user.orgId}${filters}${scope}
        group by cp.lifecycle_stage order by cp.lifecycle_stage
-    `, "objects"),
+    `,
+      "objects",
+    ),
   ]);
   return {
     total: stages.reduce((n, row) => n + Number(row.count ?? 0), 0),
@@ -257,7 +277,11 @@ export async function getApplicationCrmAccount(context: ApplicationContext, part
   assertApplicationPermission(context, "crm.accounts.read");
   if (!(await isFeatureEnabled(context.authz.user.orgId, "crm"))) crmOff();
   if (!isUuid(partyId)) throw invalidInput("party id must be a UUID");
-  const loaded = await loadCrmAccount(partyId, context.authz.user.orgId, context.authz.allowedSubsidiaryIds);
+  const loaded = await loadCrmAccount(
+    partyId,
+    context.authz.user.orgId,
+    context.authz.allowedSubsidiaryIds,
+  );
   if (!loaded) throw notFound("crm account");
   const profile = loaded.profile as Record<string, unknown>;
   return {

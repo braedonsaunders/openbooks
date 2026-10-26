@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import { UnsavedCreateButton } from '@/components/unsaved-create-button'
+import { useTranslations } from "next-intl";
+import { UnsavedCreateButton } from "@/components/unsaved-create-button";
 
 /**
  * Unsaved-create: opens a URL-controlled unsaved drawer (`?budgetNew=1`).
@@ -12,26 +12,26 @@ import { UnsavedCreateButton } from '@/components/unsaved-create-button'
 export function NewBudgetButton({
   currentParams,
 }: {
-  currentParams: Record<string, string | string[] | undefined>
+  currentParams: Record<string, string | string[] | undefined>;
 }) {
-  const t = useTranslations('budgets')
+  const t = useTranslations("budgets");
   return (
     <UnsavedCreateButton
       base="/budgets"
       param="budgetNew"
       clear={[
-        'budget',
-        'budgetQ',
-        'budgetPage',
-        'budgetDepartment',
-        'budgetProject',
-        'budgetLocation',
-        'budgetClass',
-        'budgetImport',
-        'budgetView',
+        "budget",
+        "budgetQ",
+        "budgetPage",
+        "budgetDepartment",
+        "budgetProject",
+        "budgetLocation",
+        "budgetClass",
+        "budgetImport",
+        "budgetView",
       ]}
-      label={t('list.new')}
+      label={t("list.new")}
       currentParams={currentParams}
     />
-  )
+  );
 }

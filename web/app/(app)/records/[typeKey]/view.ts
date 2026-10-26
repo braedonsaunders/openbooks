@@ -1,12 +1,12 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
-import type { FormField } from '@openbooks/forms-core'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
+import { notFound } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import type { FieldValueMap, FormSection } from "@openbooks/forms-core";
+import type { FormField } from "@openbooks/forms-core";
 import {
   pagination,
   badge,
@@ -22,16 +22,16 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
+} from "@braedonsaunders/appkit-viewspec";
 import {
   buildListDrawerHref,
   isUuid,
   parseListParams,
   pickString,
-} from '../../../../lib/list-params'
-import { dateTime } from '../../../../lib/format'
-import { pgTextArrayLiteral } from '../../../../lib/pg-array'
-import { can, requirePermission } from '../../../../lib/authz'
+} from "../../../../lib/list-params";
+import { dateTime } from "../../../../lib/format";
+import { pgTextArrayLiteral } from "../../../../lib/pg-array";
+import { can, requirePermission } from "../../../../lib/authz";
 import {
   hasSubsidiaryField,
   inTypeAudience,
@@ -39,7 +39,7 @@ import {
   loadRecordTypeByKey,
   recordVisibleInSubsidiaryFence,
   resolveEntityLabels,
-} from '../../../../lib/records'
+} from "../../../../lib/records";
 import {
   RECORD_STATUSES,
   formatFieldValue,
@@ -47,8 +47,8 @@ import {
   lintRecordFields,
   listableFields,
   type RecordStatus,
-} from '../../../../lib/record-schema'
-import { getMoneyFormatter } from '../../../../lib/money-server'
+} from "../../../../lib/record-schema";
+import { getMoneyFormatter } from "../../../../lib/money-server";
 
 /**
  * The auto-generated module for one published record type, split into a loader
@@ -68,107 +68,107 @@ import { getMoneyFormatter } from '../../../../lib/money-server'
  * header's actions wrapper div, which the native page does not render.
  */
 
-const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
-  active: 'success',
-  draft: 'secondary',
-  inactive: 'outline',
-}
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline"> = {
+  active: "success",
+  draft: "secondary",
+  inactive: "outline",
+};
 
-const LINK = 'text-teal-700 hover:underline dark:text-teal-300'
-const NUMBER_CELL = 'font-mono text-[13px] font-semibold'
-const MUTED = 'text-slate-500 dark:text-slate-400'
-const NUMERIC_CELL = 'tabular-nums'
+const LINK = "text-teal-700 hover:underline dark:text-teal-300";
+const NUMBER_CELL = "font-mono text-[13px] font-semibold";
+const MUTED = "text-slate-500 dark:text-slate-400";
+const NUMERIC_CELL = "tabular-nums";
 
 /** A `custom_records` list row: `data` is the JSONB document (object by
  *  convention — every writer stores a map), narrowed at each use site. */
 type CustomRecordRow = {
-  id: string
-  record_number: string
-  data: unknown
-  status: string
-  created_at: Date
-}
-const DASH_CLASS = 'text-slate-400 dark:text-slate-500'
+  id: string;
+  record_number: string;
+  data: unknown;
+  status: string;
+  created_at: Date;
+};
+const DASH_CLASS = "text-slate-400 dark:text-slate-500";
 
 export interface RecordModuleColumn {
-  id: string
-  label: string
-  align: 'left' | 'right'
-  cellClassName?: string
+  id: string;
+  label: string;
+  align: "left" | "right";
+  cellClassName?: string;
 }
 
 export interface RecordModuleRow {
-  id: string
-  number: string
-  numberHref: string
-  cells: Record<string, string>
-  statusLabel: string
-  statusVariant: 'success' | 'secondary' | 'outline'
-  created: string
+  id: string;
+  number: string;
+  numberHref: string;
+  cells: Record<string, string>;
+  statusLabel: string;
+  statusVariant: "success" | "secondary" | "outline";
+  created: string;
 }
 
 export interface RecordModuleData {
-  basePath: string
-  typeKey: string
-  typeName: string
+  basePath: string;
+  typeKey: string;
+  typeName: string;
   newRecordProps: {
-    typeKey: string
-    typeName: string
-    basePath: string
-    currentParams: Record<string, string | string[] | undefined>
-  }
-  title: string
-  description: string
-  canCreate: boolean
-  previewNewLabel?: string
-  previewNewHref?: string
-  searchPlaceholder: string
-  statusLabel: string
-  statusOptions: { value: string; label: string; count: number }[]
+    typeKey: string;
+    typeName: string;
+    basePath: string;
+    currentParams: Record<string, string | string[] | undefined>;
+  };
+  title: string;
+  description: string;
+  canCreate: boolean;
+  previewNewLabel?: string;
+  previewNewHref?: string;
+  searchPlaceholder: string;
+  statusLabel: string;
+  statusOptions: { value: string; label: string; count: number }[];
   filterChips: {
-    paramKey: string
-    label: string
-    options: { value: string; label: string; count: number }[]
-  }[]
-  currentParams: Record<string, string | string[] | undefined>
-  emptyTitle: string
-  emptyDescription: string
-  isEmpty: boolean
-  hasRows: boolean
-  columns: RecordModuleColumn[]
-  columnStatus: string
-  columnCreated: string
-  rows: RecordModuleRow[]
-  filteredTotal: number
-  currentPage: number
-  perPage: number
-  sort: string
-  dir: string
-  drawerOpen: boolean
+    paramKey: string;
+    label: string;
+    options: { value: string; label: string; count: number }[];
+  }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  emptyTitle: string;
+  emptyDescription: string;
+  isEmpty: boolean;
+  hasRows: boolean;
+  columns: RecordModuleColumn[];
+  columnStatus: string;
+  columnCreated: string;
+  rows: RecordModuleRow[];
+  filteredTotal: number;
+  currentPage: number;
+  perPage: number;
+  sort: string;
+  dir: string;
+  drawerOpen: boolean;
   drawerProps:
     | ({
-        typeKey: string
-        typeName: string
-        sections: FormSection[]
+        typeKey: string;
+        typeName: string;
+        sections: FormSection[];
         record: {
-          id: string
-          recordNumber: string
-          data: FieldValueMap
-          status: RecordStatus
-          updatedAt: string
-        }
-        canEdit: boolean
-        preview?: boolean
-        closeHref: string
+          id: string;
+          recordNumber: string;
+          data: FieldValueMap;
+          status: RecordStatus;
+          updatedAt: string;
+        };
+        canEdit: boolean;
+        preview?: boolean;
+        closeHref: string;
       } & { remountKey: string })
-    | null
+    | null;
 }
 
 export async function loadRecordModule(
   sp: Record<string, string | string[] | undefined>,
   typeKey: string,
 ): Promise<RecordModuleData> {
-  return loadRecordWorkspace(sp, typeKey)
+  return loadRecordWorkspace(sp, typeKey);
 }
 
 /** The same governed loader can render inside an extension without losing its route. */
@@ -177,141 +177,143 @@ export async function loadRecordWorkspace(
   typeKey: string,
   workspacePath?: string,
 ): Promise<RecordModuleData> {
-  const authz = await requirePermission('records.read')
-  const display = await getMoneyFormatter(authz.user.orgId)
-  const t = await getTranslations('records')
-  const tc = await getTranslations('common')
+  const authz = await requirePermission("records.read");
+  const display = await getMoneyFormatter(authz.user.orgId);
+  const t = await getTranslations("records");
+  const tc = await getTranslations("common");
 
-  const type = await loadRecordTypeByKey(authz.user.orgId, typeKey)
+  const type = await loadRecordTypeByKey(authz.user.orgId, typeKey);
   if (
     !type ||
-    type.status !== 'published' ||
+    type.status !== "published" ||
     !inTypeAudience(
       authz.user.roles.map(({ key }) => key),
       type.allowed_roles,
     )
   ) {
-    notFound()
+    notFound();
   }
-  const lint = lintRecordFields(type.fields, type.name)
+  const lint = lintRecordFields(type.fields, type.name);
   if (!lint.success) {
-    notFound()
+    notFound();
   }
-  const sections = lint.sections
-  const canCreate = can(authz, 'records.create')
+  const sections = lint.sections;
+  const canCreate = can(authz, "records.create");
 
-  const basePath = workspacePath ?? `/records/${typeKey}`
-  const columns = listableFields(sections).slice(0, 5)
+  const basePath = workspacePath ?? `/records/${typeKey}`;
+  const columns = listableFields(sections).slice(0, 5);
   const filterFields = columns
     .filter(
       (f) =>
-        (f.type === 'select' || f.type === 'radio') &&
-        (f.validation?.options?.length ?? 0) > 0,
+        (f.type === "select" || f.type === "radio") && (f.validation?.options?.length ?? 0) > 0,
     )
-    .slice(0, 3)
+    .slice(0, 3);
 
   const listParams = parseListParams(sp, {
-    sort: 'created',
-    dir: 'desc',
+    sort: "created",
+    dir: "desc",
     perPage: 25,
-    allowedSorts: ['number', 'created', ...columns.map((f) => f.id)],
-  })
-  const status = pickString(sp.status)
-  const showInactive = pickString(sp.showInactive) === 'true'
+    allowedSorts: ["number", "created", ...columns.map((f) => f.id)],
+  });
+  const status = pickString(sp.status);
+  const showInactive = pickString(sp.showInactive) === "true";
   // A malformed ?rec= must resolve like an unknown id (no drawer), never
   // reach the loader to 500 on the uuid cast.
-  const recId =
-    typeof sp.rec === 'string' && isUuid(sp.rec) ? sp.rec : undefined
+  const recId = typeof sp.rec === "string" && isUuid(sp.rec) ? sp.rec : undefined;
 
   const activeFieldFilters = filterFields
     .map((f) => ({ field: f, value: pickString(sp[`f_${f.id}`]) }))
-    .filter((x): x is { field: FormField; value: string } => Boolean(x.value))
+    .filter((x): x is { field: FormField; value: string } => Boolean(x.value));
 
-  const fence = authz.allowedSubsidiaryIds
+  const fence = authz.allowedSubsidiaryIds;
   const subsidiaryScope =
     fence === null
       ? sql``
       : sql` and (
-          r.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[])
-          ${hasSubsidiaryField(sections) ? sql`` : sql` or r.data ->> ${'subsidiary_id'} is null`}
-        )`
-  const scope = sql`r.org_id = ${authz.user.orgId} and r.type_key = ${typeKey}${subsidiaryScope}`
+          r.data ->> ${"subsidiary_id"} = any(${pgTextArrayLiteral([...fence])}::text[])
+          ${hasSubsidiaryField(sections) ? sql`` : sql` or r.data ->> ${"subsidiary_id"} is null`}
+        )`;
+  const scope = sql`r.org_id = ${authz.user.orgId} and r.type_key = ${typeKey}${subsidiaryScope}`;
   let where = sql`${scope}
-    ${showInactive || status === 'inactive' ? sql`` : sql` and r.status <> 'inactive'`}
+    ${showInactive || status === "inactive" ? sql`` : sql` and r.status <> 'inactive'`}
     ${status ? sql` and r.status = ${status}` : sql``}
-    ${listParams.q ? sql` and (r.search_text ilike ${'%' + listParams.q.toLowerCase() + '%'} or r.record_number ilike ${'%' + listParams.q + '%'})` : sql``}`
+    ${listParams.q ? sql` and (r.search_text ilike ${"%" + listParams.q.toLowerCase() + "%"} or r.record_number ilike ${"%" + listParams.q + "%"})` : sql``}`;
   for (const { field, value } of activeFieldFilters) {
-    where = sql`${where} and r.data->>${field.id} = ${value}`
+    where = sql`${where} and r.data->>${field.id} = ${value}`;
   }
 
   const sortColumn =
-    listParams.sort === 'number'
+    listParams.sort === "number"
       ? sql`r.record_number`
-      : listParams.sort === 'created'
+      : listParams.sort === "created"
         ? sql`r.created_at`
         : (() => {
-            const f = columns.find((c) => c.id === listParams.sort)!
+            const f = columns.find((c) => c.id === listParams.sort)!;
             return isNumericField(f)
               ? sql`nullif(r.data->>${f.id}, '')::numeric`
-              : sql`r.data->>${f.id}`
-          })()
+              : sql`r.data->>${f.id}`;
+          })();
 
   const [rows, statusCounts, filterCounts] = await Promise.all([
-    db.execute<CustomRecordRow>(sql`
+    db.execute<CustomRecordRow>(
+      sql`
       select r.id, r.record_number, r.data, r.status, r.created_at
         from custom_records r
        where ${where}
-       order by ${sortColumn} ${listParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.created_at desc
+       order by ${sortColumn} ${listParams.dir === "asc" ? sql`asc` : sql`desc`} nulls last, r.created_at desc
        limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}
-    `, 'objects'),
-    db.execute<{ status: string; n: string }>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<{ status: string; n: string }>(
+      sql`
       select r.status, count(*) as n from custom_records r
-       where ${scope} ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
+       where ${scope} ${showInactive || status === "inactive" ? sql`` : sql`and r.status <> 'inactive'`}
        group by r.status
-    `, 'objects'),
+    `,
+      "objects",
+    ),
     Promise.all(
       filterFields.map((f) =>
-        db.execute(sql`
+        db.execute(
+          sql`
             select r.data->>${f.id} as v, count(*) as n
              from custom_records r
              where ${scope}
-               ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
+               ${showInactive || status === "inactive" ? sql`` : sql`and r.status <> 'inactive'`}
                and r.data->>${f.id} is not null
              group by 1
-          `, 'objects'),
+          `,
+          "objects",
+        ),
       ),
     ),
-  ])
-  const total = statusCounts.reduce((a: number, r) => a + Number(r.n), 0)
-  const filtered = Boolean(
-    status || listParams.q || activeFieldFilters.length > 0,
-  )
+  ]);
+  const total = statusCounts.reduce((a: number, r) => a + Number(r.n), 0);
+  const filtered = Boolean(status || listParams.q || activeFieldFilters.length > 0);
   const filteredTotal = filtered
     ? Number(
-        (await db.execute<{ n: string }>(
-            sql`select count(*) as n from custom_records r where ${where}`, 'objects',
-          ))[0]?.n ?? 0,
+        (
+          await db.execute<{ n: string }>(
+            sql`select count(*) as n from custom_records r where ${where}`,
+            "objects",
+          )
+        )[0]?.n ?? 0,
       )
-    : total
+    : total;
 
   const labels = await resolveEntityLabels(
     authz.user.orgId,
     sections,
     rows.map((r) => (r.data ?? {}) as Record<string, unknown>),
-  )
+  );
 
-  const loadedOpenRecord = recId
-    ? await loadRecord(authz.user.orgId, typeKey, recId)
-    : null
+  const loadedOpenRecord = recId ? await loadRecord(authz.user.orgId, typeKey, recId) : null;
   const openRecord =
     loadedOpenRecord &&
-    recordVisibleInSubsidiaryFence(
-      sections,
-      loadedOpenRecord.data,
-      authz.allowedSubsidiaryIds,
-    )
+    recordVisibleInSubsidiaryFence(sections, loadedOpenRecord.data, authz.allowedSubsidiaryIds)
       ? loadedOpenRecord
-      : null
+      : null;
 
   const statusOptions = statusCounts.map((r) => ({
     value: r.status,
@@ -319,7 +321,7 @@ export async function loadRecordWorkspace(
       ? tc(`status.${r.status}`)
       : String(r.status),
     count: Number(r.n),
-  }))
+  }));
 
   return {
     basePath,
@@ -333,21 +335,17 @@ export async function loadRecordWorkspace(
     },
     title: type.plural_name,
     description:
-      type.description ??
-      t('module.defaultDescription', { pluralName: type.plural_name }),
+      type.description ?? t("module.defaultDescription", { pluralName: type.plural_name }),
     canCreate,
-    searchPlaceholder: t('module.searchPlaceholder', {
+    searchPlaceholder: t("module.searchPlaceholder", {
       pluralName: type.plural_name.toLowerCase(),
     }),
-    statusLabel: tc('labels.status'),
+    statusLabel: tc("labels.status"),
     statusOptions,
     filterChips: filterFields.map((f) => {
       const counts = new Map<string, number>(
-        (filterCounts[filterFields.indexOf(f)] ?? []).map((r) => [
-          String(r.v),
-          Number(r.n),
-        ]),
-      )
+        (filterCounts[filterFields.indexOf(f)] ?? []).map((r) => [String(r.v), Number(r.n)]),
+      );
       return {
         paramKey: `f_${f.id}`,
         label: f.label,
@@ -356,41 +354,40 @@ export async function loadRecordWorkspace(
           label: o.label,
           count: counts.get(o.value) ?? 0,
         })),
-      }
+      };
     }),
     currentParams: sp,
-    emptyTitle: t('module.emptyTitle', {
+    emptyTitle: t("module.emptyTitle", {
       pluralName: type.plural_name.toLowerCase(),
     }),
     emptyDescription: canCreate
-      ? t('module.emptyCreate', { typeName: type.name.toLowerCase() })
-      : t('module.emptyNoAccess'),
+      ? t("module.emptyCreate", { typeName: type.name.toLowerCase() })
+      : t("module.emptyNoAccess"),
     isEmpty: total === 0,
     hasRows: total > 0,
     columns: columns.map((f) => ({
       id: f.id,
       label: f.label,
-      align: isNumericField(f) ? 'right' : 'left',
+      align: isNumericField(f) ? "right" : "left",
       cellClassName: isNumericField(f) ? NUMERIC_CELL : undefined,
     })),
-    columnStatus: tc('labels.status'),
-    columnCreated: tc('labels.created'),
+    columnStatus: tc("labels.status"),
+    columnCreated: tc("labels.created"),
     rows: rows.map((r) => {
-      const data = (r.data ?? {}) as Record<string, unknown>
-      const cells: Record<string, string> = {}
-      for (const f of columns)
-        cells[f.id] = formatFieldValue(f, data[f.id], labels, display)
+      const data = (r.data ?? {}) as Record<string, unknown>;
+      const cells: Record<string, string> = {};
+      for (const f of columns) cells[f.id] = formatFieldValue(f, data[f.id], labels, display);
       return {
         id: String(r.id),
         number: String(r.record_number),
-        numberHref: buildListDrawerHref(basePath, sp, 'rec', String(r.id)),
+        numberHref: buildListDrawerHref(basePath, sp, "rec", String(r.id)),
         cells,
         statusLabel: (RECORD_STATUSES as readonly string[]).includes(r.status)
           ? tc(`status.${r.status}`)
           : String(r.status),
-        statusVariant: STATUS_VARIANT[r.status] ?? 'secondary',
+        statusVariant: STATUS_VARIANT[r.status] ?? "secondary",
         created: dateTime(r.created_at),
-      }
+      };
     }),
     filteredTotal,
     currentPage: listParams.page,
@@ -417,48 +414,48 @@ export async function loadRecordWorkspace(
           closeHref: basePath,
         }
       : null,
-  }
+  };
 }
 
-const f = ref<RecordModuleData>()
-const item = field
-const rootF = rootRef<RecordModuleData>()
+const f = ref<RecordModuleData>();
+const item = field;
+const rootF = rootRef<RecordModuleData>();
 
 export function recordModuleSpec(data: RecordModuleData): PageSpec {
   return page({
-    route: '/records/[typeKey]',
-    layout: 'list',
+    route: "/records/[typeKey]",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         // WidgetSlot renders a bare Fragment, so a `when`-off widget leaves no
         // wrapper div behind — matching the native header with no actions.
         actions: data.previewNewHref
           ? [
-              widget('link-button', {
+              widget("link-button", {
                 href: data.previewNewHref,
                 label: data.previewNewLabel ?? data.typeName,
-                iconKey: 'plus',
+                iconKey: "plus",
               }),
             ]
-          : [widget('new-record', data.newRecordProps, f('canCreate'))],
+          : [widget("new-record", data.newRecordProps, f("canCreate"))],
       }),
-      grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-        widgetBlock('filter-chips', {
+      grid("flex flex-wrap items-center gap-2", [
+        widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+        widgetBlock("filter-chips", {
           basePath: data.basePath,
           currentParams: data.currentParams,
-          paramKey: 'status',
+          paramKey: "status",
           label: data.statusLabel,
           options: data.statusOptions,
         }),
-        widgetBlock('show-inactives-toggle', {
+        widgetBlock("show-inactives-toggle", {
           basePath: data.basePath,
           currentParams: data.currentParams,
         }),
         ...data.filterChips.map((fc) =>
-          widgetBlock('filter-chips', {
+          widgetBlock("filter-chips", {
             basePath: data.basePath,
             currentParams: data.currentParams,
             paramKey: fc.paramKey,
@@ -470,30 +467,30 @@ export function recordModuleSpec(data: RecordModuleData): PageSpec {
     ],
     body: [
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.emptyTitle,
           description: data.emptyDescription,
-          action: data.canCreate ? 'new-record' : null,
+          action: data.canCreate ? "new-record" : null,
           actionProps: data.newRecordProps,
         }),
-        when: f('isEmpty'),
+        when: f("isEmpty"),
       },
       {
-        ...registeredListTable('records_type_key', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
-          sorting: { basePath: f('basePath'), sort: f('sort'), dir: f('dir') },
+        ...registeredListTable("records_type_key", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
+          sorting: { basePath: f("basePath"), sort: f("sort"), dir: f("dir") },
           columns: [
-            column('#', link(item('number'), item('numberHref'), LINK), {
-              sort: 'number',
+            column("#", link(item("number"), item("numberHref"), LINK), {
+              sort: "number",
               className: NUMBER_CELL,
             }),
             ...data.columns.map((c) =>
               column(
                 c.label,
                 text(item(`cells.${c.id}`), {
-                  fallback: '—',
+                  fallback: "—",
                   fallbackClassName: DASH_CLASS,
                 }),
                 {
@@ -504,31 +501,27 @@ export function recordModuleSpec(data: RecordModuleData): PageSpec {
               ),
             ),
             column(
-              rootF('columnStatus'),
-              badge(item('statusLabel'), { variant: item('statusVariant') }),
+              rootF("columnStatus"),
+              badge(item("statusLabel"), { variant: item("statusVariant") }),
             ),
-            column(rootF('columnCreated'), text(item('created')), {
-              sort: 'created',
+            column(rootF("columnCreated"), text(item("created")), {
+              sort: "created",
               className: MUTED,
             }),
           ],
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
       {
         ...pagination({
-          basePath: f('basePath'),
-          total: f('filteredTotal'),
-          page: f('currentPage'),
-          perPage: f('perPage'),
+          basePath: f("basePath"),
+          total: f("filteredTotal"),
+          page: f("currentPage"),
+          perPage: f("perPage"),
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
-      widgetBlock(
-        'record-drawer',
-        { drawer: data.drawerProps },
-        f('drawerOpen'),
-      ),
+      widgetBlock("record-drawer", { drawer: data.drawerProps }, f("drawerOpen")),
     ],
-  })
+  });
 }

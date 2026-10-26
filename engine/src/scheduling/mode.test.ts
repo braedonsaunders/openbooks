@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveWebSchedulerMode } from "./mode.ts";
 
-
 test("web scheduler is off by default — the worker owns scheduled ticks", () => {
   for (const env of [
     {},
@@ -20,14 +19,20 @@ test("web scheduler is off by default — the worker owns scheduled ticks", () =
 });
 
 test("OPENBOOKS_RUN_SCHEDULER=1 opts a production web replica into single-process mode", () => {
-  const decision = resolveWebSchedulerMode({ NODE_ENV: "production", OPENBOOKS_RUN_SCHEDULER: "1" });
+  const decision = resolveWebSchedulerMode({
+    NODE_ENV: "production",
+    OPENBOOKS_RUN_SCHEDULER: "1",
+  });
   assert.equal(decision.enabled, true);
   assert.equal(decision.mode, "web-opt-in");
   assert.match(decision.logLine, /ENABLED/);
 });
 
 test("next dev never schedules: OPENBOOKS_RUN_SCHEDULER=1 is refused in development", () => {
-  const decision = resolveWebSchedulerMode({ NODE_ENV: "development", OPENBOOKS_RUN_SCHEDULER: "1" });
+  const decision = resolveWebSchedulerMode({
+    NODE_ENV: "development",
+    OPENBOOKS_RUN_SCHEDULER: "1",
+  });
   assert.equal(decision.enabled, false);
   assert.equal(decision.mode, "web-refused-dev");
   assert.match(decision.logLine, /REFUSED/);
@@ -35,10 +40,16 @@ test("next dev never schedules: OPENBOOKS_RUN_SCHEDULER=1 is refused in developm
 });
 
 test("OPENBOOKS_RUN_SCHEDULER=force is the only development override", () => {
-  const dev = resolveWebSchedulerMode({ NODE_ENV: "development", OPENBOOKS_RUN_SCHEDULER: "force" });
+  const dev = resolveWebSchedulerMode({
+    NODE_ENV: "development",
+    OPENBOOKS_RUN_SCHEDULER: "force",
+  });
   assert.equal(dev.enabled, true);
   assert.equal(dev.mode, "web-forced-dev");
-  const prod = resolveWebSchedulerMode({ NODE_ENV: "production", OPENBOOKS_RUN_SCHEDULER: "force" });
+  const prod = resolveWebSchedulerMode({
+    NODE_ENV: "production",
+    OPENBOOKS_RUN_SCHEDULER: "force",
+  });
   assert.equal(prod.enabled, true);
   assert.equal(prod.mode, "web-opt-in");
 });

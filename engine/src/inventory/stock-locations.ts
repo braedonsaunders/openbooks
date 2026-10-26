@@ -1,7 +1,6 @@
-
-import { sql } from 'drizzle-orm'
-import { db } from '../platform/db.ts'
-import { isUuid } from '../platform/uuid.ts'
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Line-level warehouse resolution shared by the order draft writer and the
@@ -13,8 +12,8 @@ import { isUuid } from '../platform/uuid.ts'
  */
 
 export interface StockLocationOption {
-  id: string
-  code: string | null
+  id: string;
+  code: string | null;
 }
 
 /**
@@ -25,28 +24,34 @@ export interface StockLocationOption {
  * single-warehouse defaults.
  */
 export async function activeStockLocations(orgId: string): Promise<StockLocationOption[]> {
-  return await db.execute<{ id: string; code: string | null }>(sql`
+  return await db.execute<{ id: string; code: string | null }>(
+    sql`
       select id, code from stock_locations
        where org_id = ${orgId} and is_active and kind = 'warehouse'
-       order by code`, 'objects')
+       order by code`,
+    "objects",
+  );
 }
 
 /** Items carrying a costing profile — the only lines a warehouse applies to. */
 export async function profiledItemIds(orgId: string, itemIds: string[]): Promise<Set<string>> {
-  const ids = [...new Set(itemIds.filter((id) => isUuid(id)))]
-  if (ids.length === 0) return new Set()
-  const rows = await db.execute<{ item_id: string }>(sql`
+  const ids = [...new Set(itemIds.filter((id) => isUuid(id)))];
+  if (ids.length === 0) return new Set();
+  const rows = await db.execute<{ item_id: string }>(
+    sql`
       select item_id from item_inventory_profiles
-       where org_id = ${orgId} and item_id = any(${`{${ids.join(',')}}`}::uuid[])`, 'objects')
-  return new Set(rows.map((row) => row.item_id))
+       where org_id = ${orgId} and item_id = any(${`{${ids.join(",")}}`}::uuid[])`,
+    "objects",
+  );
+  return new Set(rows.map((row) => row.item_id));
 }
 
 export interface LineStockLocationScope {
-  active: StockLocationOption[]
-  profiled: Set<string>
+  active: StockLocationOption[];
+  profiled: Set<string>;
 }
 
-export type LineStockLocationResolution = { locationId: string | null } | { error: string }
+export type LineStockLocationResolution = { locationId: string | null } | { error: string };
 
 /**
  * Resolve the warehouse a document line stores. An explicit choice must name
@@ -62,17 +67,18 @@ export function resolveLineStockLocation(
   stockLocationId: string | null | undefined,
   scope: LineStockLocationScope,
 ): LineStockLocationResolution {
-  const label = `Line ${lineNumber}`
-  if (stockLocationId !== undefined && stockLocationId !== null && stockLocationId !== '') {
-    if (!isUuid(stockLocationId)) return { error: `${label}: invalid stock location` }
-    const found = scope.active.find((location) => location.id === stockLocationId)
+  const label = `Line ${lineNumber}`;
+  if (stockLocationId !== undefined && stockLocationId !== null && stockLocationId !== "") {
+    if (!isUuid(stockLocationId)) return { error: `${label}: invalid stock location` };
+    const found = scope.active.find((location) => location.id === stockLocationId);
     // Foreign and inactive warehouses share one answer: neither can relieve
     // stock for this line, and the distinction is not the operator's problem.
-    if (!found) return { error: `${label}: stock location is not an active warehouse in this organization` }
-    return { locationId: stockLocationId }
+    if (!found)
+      return { error: `${label}: stock location is not an active warehouse in this organization` };
+    return { locationId: stockLocationId };
   }
   if (itemId && scope.profiled.has(itemId) && scope.active.length === 1) {
-    return { locationId: scope.active[0]!.id }
+    return { locationId: scope.active[0]!.id };
   }
-  return { locationId: null }
+  return { locationId: null };
 }

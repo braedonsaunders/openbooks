@@ -19,23 +19,13 @@ import test from "node:test";
 // route-level tests do (same seam as subsidiary-scope.test.ts).
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  seedFlowActors,
-  seedApprovalFlow,
-} = await import("@openbooks/engine/testing/fixtures");
-const {
-  buildRecognitionSchedule,
-  runRevenueRecognition,
-} = await import("@openbooks/engine/revenue/recognition");
-const {
-  proposeRevenueModification,
-  applyRevenueModification,
-} = await import("@openbooks/engine/revenue/contract-modifications");
-const { submitFinancialChange } = await import(
-  "@openbooks/engine/flows/financial-changes-adapter"
-);
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedApprovalFlow } =
+  await import("@openbooks/engine/testing/fixtures");
+const { buildRecognitionSchedule, runRevenueRecognition } =
+  await import("@openbooks/engine/revenue/recognition");
+const { proposeRevenueModification, applyRevenueModification } =
+  await import("@openbooks/engine/revenue/contract-modifications");
+const { submitFinancialChange } = await import("@openbooks/engine/flows/financial-changes-adapter");
 const { decideGate } = await import("@openbooks/engine/testing/flows/gates");
 const { toUnits } = await import("@openbooks/engine/money/money");
 const { createSetupRecord, updateSetupRecord } = await import("./write.ts");
@@ -64,9 +54,12 @@ async function fixture(): Promise<Fixture> {
     sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`,
   );
   const actor = { orgId: org.orgId, id: actors.submitterId, permissions: [] as string[] };
-  const calendar = (await db.execute<{ id: string }>(
-      sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, "objects",
-    ))[0]!.id;
+  const calendar = (
+    await db.execute<{ id: string }>(
+      sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`,
+      "objects",
+    )
+  )[0]!.id;
   for (const [month, last] of [
     ["08", "31"],
     ["09", "30"],
@@ -89,16 +82,22 @@ async function fixture(): Promise<Fixture> {
                        income_account_id, recognition_rule_id, deferred_account_id)
     values (${itemId}, ${org.orgId}, 'service', 'Quarterly service', false, true, '{}'::jsonb, 'billing', 'normal',
             ${org.accounts.revenue}, ${ruleId}, ${org.accounts.deferred})`);
-  const contractId = randomUUID(), obligationId = randomUUID();
+  const contractId = randomUUID(),
+    obligationId = randomUUID();
   await db.execute(sql`insert into revenue_contracts(id,org_id,subsidiary_id,customer_id,contract_number,status,starts_on,ends_on,currency,total_transaction_price,created_by,updated_by)
    values(${contractId},${org.orgId},${org.subsidiaryId},${org.customerId},${`VER-${contractId}`},'active','2026-07-01','2026-09-30','CAD',3000,${actors.submitterId},${actors.submitterId})`);
   await db.execute(sql`insert into performance_obligations(id,org_id,contract_id,description,recognition_rule_id,allocated_price,standalone_selling_price,recognition_starts_on,recognition_ends_on,deferred_account_id,recognized_account_id,status,created_by,updated_by)
    values(${obligationId},${org.orgId},${contractId},'Quarterly service',${ruleId},3000,3000,'2026-07-01','2026-09-30',${org.accounts.deferred},${org.accounts.recognized},'open',${actors.submitterId},${actors.submitterId})`);
   await buildRecognitionSchedule(obligationId, org.orgId, actors.submitterId, org.bookId);
-  const posted = await runRevenueRecognition(org.orgId, "2026-07-31", actors.submitterId, obligationId);
+  const posted = await runRevenueRecognition(
+    org.orgId,
+    "2026-07-31",
+    actors.submitterId,
+    obligationId,
+  );
   assert.equal(posted.posted, 1);
   await grantDecisionDuties(org.orgId, actors.approver1Id, ["ar.post"]);
-    await seedApprovalFlow(org.orgId, {
+  await seedApprovalFlow(org.orgId, {
     subjectKind: "financial_change",
     assignees: [{ type: "user", userId: actors.approver1Id }],
     mode: "any",
@@ -132,17 +131,21 @@ async function editRule(f: Fixture, patch: Record<string, unknown>) {
 
 async function planLines(f: Fixture, obligationId: string) {
   return await db.execute<{ planned: string; posted: boolean }>(
-      sql`select l.planned_amount::text as planned, (l.journal_entry_id is not null) as posted
+    sql`select l.planned_amount::text as planned, (l.journal_entry_id is not null) as posted
         from recognition_schedule_lines l join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
        where s.org_id = ${f.orgId} and s.obligation_id = ${obligationId} and l.superseded_by_change_id is null
-       order by l.sequence`, "objects",
-    );
+       order by l.sequence`,
+    "objects",
+  );
 }
 
 async function earned(f: Fixture) {
-  const row = (await db.execute<{ amount: string }>(
-      sql`select coalesce(-sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${f.orgId} and l.account_id=${f.recognized} and e.status in('posted','reversed')`, "objects",
-    ))[0]!;
+  const row = (
+    await db.execute<{ amount: string }>(
+      sql`select coalesce(-sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${f.orgId} and l.account_id=${f.recognized} and e.status in('posted','reversed')`,
+      "objects",
+    )
+  )[0]!;
   return toUnits(row.amount);
 }
 
@@ -157,29 +160,46 @@ test(
       const successorId = String((res.body as { id: string }).id);
       assert.notEqual(successorId, f.ruleId);
 
-      const oldRow = (await db.execute<{ version: number; superseded_by: string | null; is_active: boolean; method: string }>(
-          sql`select version, superseded_by, is_active, method from recognition_rules where org_id=${f.orgId} and id=${f.ruleId}`, "objects",
-        ))[0]!;
+      const oldRow = (
+        await db.execute<{
+          version: number;
+          superseded_by: string | null;
+          is_active: boolean;
+          method: string;
+        }>(
+          sql`select version, superseded_by, is_active, method from recognition_rules where org_id=${f.orgId} and id=${f.ruleId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(oldRow.version, 1);
       assert.equal(oldRow.superseded_by, successorId);
       assert.equal(oldRow.is_active, false);
       assert.equal(oldRow.method, "straight_line_even");
 
-      const newRow = (await db.execute<{ version: number; code: string; method: string; is_active: boolean }>(
-          sql`select version, code, method, is_active from recognition_rules where org_id=${f.orgId} and id=${successorId}`, "objects",
-        ))[0]!;
+      const newRow = (
+        await db.execute<{ version: number; code: string; method: string; is_active: boolean }>(
+          sql`select version, code, method, is_active from recognition_rules where org_id=${f.orgId} and id=${successorId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(newRow.version, 2);
       assert.equal(newRow.method, "point_in_time");
       assert.equal(newRow.is_active, true);
 
       // Items repoint at the successor; the obligation keeps its pinned row.
-      const itemRule = (await db.execute<{ rule: string }>(
-          sql`select recognition_rule_id as rule from items where org_id=${f.orgId} and id=${f.itemId}`, "objects",
-        ))[0]!.rule;
+      const itemRule = (
+        await db.execute<{ rule: string }>(
+          sql`select recognition_rule_id as rule from items where org_id=${f.orgId} and id=${f.itemId}`,
+          "objects",
+        )
+      )[0]!.rule;
       assert.equal(itemRule, successorId);
-      const obligationRule = (await db.execute<{ rule: string }>(
-          sql`select recognition_rule_id as rule from performance_obligations where org_id=${f.orgId} and id=${f.obligationId}`, "objects",
-        ))[0]!.rule;
+      const obligationRule = (
+        await db.execute<{ rule: string }>(
+          sql`select recognition_rule_id as rule from performance_obligations where org_id=${f.orgId} and id=${f.obligationId}`,
+          "objects",
+        )
+      )[0]!.rule;
       assert.equal(obligationRule, f.ruleId);
 
       // The old obligation's future plan is unchanged: July posted, August
@@ -261,9 +281,12 @@ test(
         ],
       });
       await submitFinancialChange(f.orgId, changeId, f.actorId);
-      const gate = (await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${f.orgId} and subject_id=${changeId} and status='pending'`, "objects",
-        ))[0];
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${f.orgId} and subject_id=${changeId} and status='pending'`,
+          "objects",
+        )
+      )[0];
       assert.ok(gate);
       await decideGate({ gateId: gate.id, userId: f.approverId, decision: "approved" });
       await applyRevenueModification(f.orgId, changeId, f.actorId);
@@ -289,9 +312,12 @@ test(
       assert.equal(String((renamed.body as { id: string }).id), f.ruleId);
       // No successor was created: the edited row is still the only row
       // carrying its code.
-      const count = (await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from recognition_rules where org_id=${f.orgId} and code=(select code from recognition_rules where org_id=${f.orgId} and id=${f.ruleId})`, "objects",
-        ))[0]!.n;
+      const count = (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from recognition_rules where org_id=${f.orgId} and code=(select code from recognition_rules where org_id=${f.orgId} and id=${f.ruleId})`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(count, 1);
 
       const actor = { orgId: f.orgId, id: f.actorId, permissions: [] as string[] };
@@ -311,9 +337,12 @@ test(
       });
       assert.equal(edited.status, 200);
       assert.equal(String((edited.body as { id: string }).id), freshId);
-      const method = (await db.execute<{ method: string }>(
-          sql`select method from recognition_rules where org_id=${f.orgId} and id=${freshId}`, "objects",
-        ))[0]!.method;
+      const method = (
+        await db.execute<{ method: string }>(
+          sql`select method from recognition_rules where org_id=${f.orgId} and id=${freshId}`,
+          "objects",
+        )
+      )[0]!.method;
       assert.equal(method, "point_in_time");
     } finally {
       await dropScratchOrgReporting(f.orgId);

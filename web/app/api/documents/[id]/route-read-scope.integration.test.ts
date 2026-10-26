@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import type { SessionUser } from '../../../../lib/auth'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import type { SessionUser } from "../../../../lib/auth";
 
 /**
  * Generic document endpoints answer a caller who lacks the kind's READ
@@ -12,134 +12,195 @@ import type { SessionUser } from '../../../../lib/auth'
  * GET, PATCH, actions, correct, void and DELETE. Only the session is
  * stubbed; handler, permission resolution and storage are real.
  */
-const state: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __documentReadScopeUser: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __documentReadScopeUser: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
-      return virtual('export async function currentUser(){return globalThis.__documentReadScopeUser.user}')
+    if (
+      (specifier === "./auth" || specifier.endsWith("/lib/auth")) &&
+      context.parentURL?.endsWith("/web/lib/authz.ts")
+    ) {
+      return virtual(
+        "export async function currentUser(){return globalThis.__documentReadScopeUser.user}",
+      );
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import('@openbooks/engine/testing/fixtures')
-const { GET, PATCH, DELETE } = await import('./route')
-const { POST: act } = await import('../actions/route')
-const { POST: correct } = await import('./correct/route')
-const { POST: voidDoc } = await import('./void/route')
+  await import("@openbooks/engine/testing/fixtures");
+const { GET, PATCH, DELETE } = await import("./route");
+const { POST: act } = await import("../actions/route");
+const { POST: correct } = await import("./correct/route");
+const { POST: voidDoc } = await import("./void/route");
 
 function sessionUser(id: string, orgId: string): SessionUser {
   return {
-    id, orgId, name: 'tester', email: `tester-${id.slice(0, 8)}@scratch.test`, roles: [],
-    isSuperAdmin: false, envKind: 'production', productionOrgId: orgId,
-    homeOrgId: orgId, homeUserId: id,
-  }
+    id,
+    orgId,
+    name: "tester",
+    email: `tester-${id.slice(0, 8)}@scratch.test`,
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: id,
+  };
 }
 
 async function makeDraftBill(orgId: string, subsidiaryId: string): Promise<string> {
-  const id = randomUUID()
-  await withBypassContext(() => db.execute(sql`
+  const id = randomUUID();
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
-    values (${id}, ${orgId}, 'vendor_bill', 'draft', ${'BILL-' + id.slice(0, 8)}, '2026-07-15', ${subsidiaryId}, 'CAD', '0', '0', '0', '{}'::jsonb)`))
-  return id
+    values (${id}, ${orgId}, 'vendor_bill', 'draft', ${"BILL-" + id.slice(0, 8)}, '2026-07-15', ${subsidiaryId}, 'CAD', '0', '0', '0', '{}'::jsonb)`),
+  );
+  return id;
 }
 
 /** A non-superadmin user whose role carries exactly the given grants. */
 async function seedUser(orgId: string, key: string, permissions: string[]): Promise<void> {
-  const userId = await withBypassContext(() => createScratchUser(orgId, key, key))
-  await withBypassContext(() => db.execute(sql`
+  const userId = await withBypassContext(() => createScratchUser(orgId, key, key));
+  await withBypassContext(() =>
+    db.execute(sql`
     update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb
-     where org_id = ${orgId} and key = ${key}`))
-  state.user = sessionUser(userId, orgId)
+     where org_id = ${orgId} and key = ${key}`),
+  );
+  state.user = sessionUser(userId, orgId);
 }
 
 async function getJson(orgId: string, id: string) {
   const response = await withOrgContext(orgId, () =>
-    GET(new Request(`http://documents.test/api/documents/${id}`), { params: Promise.resolve({ id }) }))
-  return { status: response.status, json: await response.json() as Record<string, unknown> }
+    GET(new Request(`http://documents.test/api/documents/${id}`), {
+      params: Promise.resolve({ id }),
+    }),
+  );
+  return { status: response.status, json: (await response.json()) as Record<string, unknown> };
 }
 
-test('GET hides an unreadable bill as missing, symmetrically', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test("GET hides an unreadable bill as missing, symmetrically", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const bill = await makeDraftBill(org.orgId, org.subsidiaryId)
-    await seedUser(org.orgId, 'ar_only', ['ar.read'])
+    const bill = await makeDraftBill(org.orgId, org.subsidiaryId);
+    await seedUser(org.orgId, "ar_only", ["ar.read"]);
 
-    const existing = await getJson(org.orgId, bill)
-    assert.equal(existing.status, 404, 'an existing unreadable bill is 404')
-    assert.deepEqual(existing.json, { error: 'not_found' })
+    const existing = await getJson(org.orgId, bill);
+    assert.equal(existing.status, 404, "an existing unreadable bill is 404");
+    assert.deepEqual(existing.json, { error: "not_found" });
 
-    const missing = await getJson(org.orgId, randomUUID())
-    assert.equal(missing.status, 404)
-    assert.deepEqual(existing.json, missing.json, 'existing and missing read identically')
+    const missing = await getJson(org.orgId, randomUUID());
+    assert.equal(missing.status, 404);
+    assert.deepEqual(existing.json, missing.json, "existing and missing read identically");
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('a reader still opens the bill', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test("a reader still opens the bill", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const bill = await makeDraftBill(org.orgId, org.subsidiaryId)
-    await seedUser(org.orgId, 'ap_reader', ['ap.read'])
+    const bill = await makeDraftBill(org.orgId, org.subsidiaryId);
+    await seedUser(org.orgId, "ap_reader", ["ap.read"]);
 
-    const found = await getJson(org.orgId, bill)
-    assert.equal(found.status, 200)
+    const found = await getJson(org.orgId, bill);
+    assert.equal(found.status, 200);
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('mutations hide unreadable bills as missing; readers keep the edit 403', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test("mutations hide unreadable bills as missing; readers keep the edit 403", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const bill = await makeDraftBill(org.orgId, org.subsidiaryId)
-    const params = { params: Promise.resolve({ id: bill }) }
-    const submit = { action: 'submit', documentId: bill }
+    const bill = await makeDraftBill(org.orgId, org.subsidiaryId);
+    const params = { params: Promise.resolve({ id: bill }) };
+    const submit = { action: "submit", documentId: bill };
 
-    await seedUser(org.orgId, 'ar_only', ['ar.read'])
+    await seedUser(org.orgId, "ar_only", ["ar.read"]);
     const patchDenied = await withOrgContext(org.orgId, () =>
-      PATCH(new Request(`http://documents.test/api/documents/${bill}`, { method: 'PATCH' }), params))
-    assert.equal(patchDenied.status, 404, 'PATCH without read is 404')
+      PATCH(
+        new Request(`http://documents.test/api/documents/${bill}`, { method: "PATCH" }),
+        params,
+      ),
+    );
+    assert.equal(patchDenied.status, 404, "PATCH without read is 404");
     const actionsDenied = await withOrgContext(org.orgId, () =>
-      act(new Request('http://documents.test/api/documents/actions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(submit),
-      })))
-    assert.equal(actionsDenied.status, 404, 'actions without read is 404')
+      act(
+        new Request("http://documents.test/api/documents/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submit),
+        }),
+      ),
+    );
+    assert.equal(actionsDenied.status, 404, "actions without read is 404");
     // Correction and void bodies carry required concurrency and reason fields,
     // so the probes send a schema-valid body and the read gate answers.
-    const jsonPost = (path: string, body: unknown) => new Request(`http://documents.test/api/documents/${bill}${path}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    })
+    const jsonPost = (path: string, body: unknown) =>
+      new Request(`http://documents.test/api/documents/${bill}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
     const correctDenied = await withOrgContext(org.orgId, () =>
-      correct(jsonPost('/correct', { expectedUpdatedAt: 'probe', amendmentReason: 'Probe for read scope' }), params))
-    assert.equal(correctDenied.status, 404, 'correct without read is 404')
+      correct(
+        jsonPost("/correct", {
+          expectedUpdatedAt: "probe",
+          amendmentReason: "Probe for read scope",
+        }),
+        params,
+      ),
+    );
+    assert.equal(correctDenied.status, 404, "correct without read is 404");
     const voidDenied = await withOrgContext(org.orgId, () =>
-      voidDoc(jsonPost('/void', { expectedUpdatedAt: 'probe' }), params))
-    assert.equal(voidDenied.status, 404, 'void without read is 404')
+      voidDoc(jsonPost("/void", { expectedUpdatedAt: "probe" }), params),
+    );
+    assert.equal(voidDenied.status, 404, "void without read is 404");
     const deleteDenied = await withOrgContext(org.orgId, () =>
-      DELETE(new Request(`http://documents.test/api/documents/${bill}`, { method: 'DELETE' }), params))
-    assert.equal(deleteDenied.status, 404, 'DELETE without read is 404')
+      DELETE(
+        new Request(`http://documents.test/api/documents/${bill}`, { method: "DELETE" }),
+        params,
+      ),
+    );
+    assert.equal(deleteDenied.status, 404, "DELETE without read is 404");
 
-    await seedUser(org.orgId, 'ap_reader', ['ap.read'])
+    await seedUser(org.orgId, "ap_reader", ["ap.read"]);
     const patchForbidden = await withOrgContext(org.orgId, () =>
-      PATCH(new Request(`http://documents.test/api/documents/${bill}`, { method: 'PATCH' }), params))
-    assert.equal(patchForbidden.status, 403, 'a reader keeps the actionable edit refusal')
-    assert.match(String((await patchForbidden.json() as { error?: string }).error ?? ''), /ap\.create/)
+      PATCH(
+        new Request(`http://documents.test/api/documents/${bill}`, { method: "PATCH" }),
+        params,
+      ),
+    );
+    assert.equal(patchForbidden.status, 403, "a reader keeps the actionable edit refusal");
+    assert.match(
+      String(((await patchForbidden.json()) as { error?: string }).error ?? ""),
+      /ap\.create/,
+    );
     const actionsForbidden = await withOrgContext(org.orgId, () =>
-      act(new Request('http://documents.test/api/documents/actions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(submit),
-      })))
-    assert.equal(actionsForbidden.status, 403, 'submit keeps the actionable create refusal')
-    assert.match(String((await actionsForbidden.json() as { error?: string }).error ?? ''), /ap\.create/)
+      act(
+        new Request("http://documents.test/api/documents/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submit),
+        }),
+      ),
+    );
+    assert.equal(actionsForbidden.status, 403, "submit keeps the actionable create refusal");
+    assert.match(
+      String(((await actionsForbidden.json()) as { error?: string }).error ?? ""),
+      /ap\.create/,
+    );
   } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});

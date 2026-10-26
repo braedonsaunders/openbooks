@@ -52,7 +52,8 @@ const profileEmergencyContactSchema = z
     if (contact.name === null && contact.relationship === null && contact.phone === null) {
       ctx.addIssue({
         code: "custom",
-        message: "emergencyContact names nothing — give at least one of name, relationship, or phone, or clear it with null",
+        message:
+          "emergencyContact names nothing — give at least one of name, relationship, or phone, or clear it with null",
       });
     }
   });
@@ -82,7 +83,10 @@ export const profileChangePayloadSchema = z
     if (typeof payload.email === "string") {
       const email = payload.email.trim();
       if (email.length === 0 || !email.includes("@") || email.includes(" ")) {
-        ctx.addIssue({ code: "custom", message: "email must be a deliverable address with an @ sign" });
+        ctx.addIssue({
+          code: "custom",
+          message: "email must be a deliverable address with an @ sign",
+        });
       }
     }
   });

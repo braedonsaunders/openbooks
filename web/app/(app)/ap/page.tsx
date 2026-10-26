@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadApCockpit, apCockpitSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadApCockpit, apCockpitSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('ap')
-  return { title: t('cockpit.title') }
+  const t = await getTranslations("ap");
+  return { title: t("cockpit.title") };
 }
 
 /**
@@ -19,9 +19,9 @@ export async function generateMetadata() {
 export default async function AP({
   searchParams = Promise.resolve({}),
 }: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadApCockpit()
-  return <ModuleView spec={apCockpitSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadApCockpit();
+  return <ModuleView spec={apCockpitSpec(data)} data={data} searchParams={sp} trusted />;
 }

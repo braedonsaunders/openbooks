@@ -8,7 +8,11 @@ import { createPaymentDocument, updateDraftPayment } from "../payments/payment-d
 import { postPaymentWithApplications } from "../payments/payment-posting.ts";
 import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import { add } from "../money/money.ts";
-import { collectibleOpenItems, createAndPostDocument, releaseDraftIfUngated } from "./activities/documents.ts";
+import {
+  collectibleOpenItems,
+  createAndPostDocument,
+  releaseDraftIfUngated,
+} from "./activities/documents.ts";
 import type { SimOrg, SimPeriod } from "./world.ts";
 import type { InvariantResult } from "./invariants/index.ts";
 
@@ -63,7 +67,10 @@ export async function closedPeriodJournalProbe(
     delete from documents where org_id = ${world.orgId} and reference_number = ${ref} and status = 'draft'`);
   return rejected
     ? ok()
-    : fail("adversarial-closed-journal", `journal dated ${closedPeriod.startsOn} posted into CLOSED period ${closedPeriod.name}`);
+    : fail(
+        "adversarial-closed-journal",
+        `journal dated ${closedPeriod.startsOn} posted into CLOSED period ${closedPeriod.name}`,
+      );
 }
 
 /**
@@ -72,11 +79,14 @@ export async function closedPeriodJournalProbe(
  * byte-identical afterwards.
  */
 export async function postedEditProbe(world: SimOrg): Promise<InvariantResult> {
-  const r = (await db.execute<{ id: string; total: string }>(sql`
+  const r = await db.execute<{ id: string; total: string }>(
+    sql`
     select id, total::text as total from documents
      where org_id = ${world.orgId} and status = 'posted'
        and kind in ('customer_invoice', 'vendor_bill')
-     order by created_at desc limit 1`, "objects"));
+     order by created_at desc limit 1`,
+    "objects",
+  );
   const doc = r[0];
   if (!doc) return ok(); // nothing posted yet — probe is inert today
 
@@ -87,8 +97,11 @@ export async function postedEditProbe(world: SimOrg): Promise<InvariantResult> {
   } catch {
     rejected = true;
   }
-  const after = (await db.execute<{ total: string }>(sql`
-    select total::text as total from documents where id = ${doc.id} and org_id = ${world.orgId}`, "objects"));
+  const after = await db.execute<{ total: string }>(
+    sql`
+    select total::text as total from documents where id = ${doc.id} and org_id = ${world.orgId}`,
+    "objects",
+  );
   const unchanged = after[0]?.total === doc.total;
   if (!unchanged) {
     // The mutation landed — that is the defect being reported, but the probe
@@ -112,7 +125,10 @@ export async function postedEditProbe(world: SimOrg): Promise<InvariantResult> {
  * Applying more than an item's open balance must be refused by the payment
  * engine, and the failed attempt must leave no ledger trace.
  */
-export async function overApplicationProbe(world: SimOrg, simDate: string): Promise<InvariantResult> {
+export async function overApplicationProbe(
+  world: SimOrg,
+  simDate: string,
+): Promise<InvariantResult> {
   for (const customer of world.customers) {
     const items = (await collectibleOpenItems(world.orgId, customer.id, "ar")).filter(
       (i) => i.kind === "customer_invoice" && Number(i.open) > 1,
@@ -137,7 +153,10 @@ export async function overApplicationProbe(world: SimOrg, simDate: string): Prom
     try {
       await updateDraftPayment(
         payment.id,
-        { allocations: [sameCurrencyAllocation(item.lineId, add(item.open, "0.01"))], bankAccountId: world.accounts.bank },
+        {
+          allocations: [sameCurrencyAllocation(item.lineId, add(item.open, "0.01"))],
+          bankAccountId: world.accounts.bank,
+        },
         world.actors.arClerk,
         world.orgId,
         { allowedSubsidiaryIds: null },
@@ -149,17 +168,27 @@ export async function overApplicationProbe(world: SimOrg, simDate: string): Prom
       rejected = true;
     }
     // Remove the probe draft (it must not have posted).
-    const posted = (await db.execute<{ posted_entry_id: string | null }>(sql`
-      select posted_entry_id from documents where id = ${payment.id} and org_id = ${world.orgId}`, "objects"));
+    const posted = await db.execute<{ posted_entry_id: string | null }>(
+      sql`
+      select posted_entry_id from documents where id = ${payment.id} and org_id = ${world.orgId}`,
+      "objects",
+    );
     if (rejected && !posted[0]?.posted_entry_id) {
       // Best-effort cleanup; an approval-flow row may pin the draft, which is
       // harmless — an unposted probe draft has no ledger effect.
       try {
-        await db.execute(sql`delete from documents where id = ${payment.id} and org_id = ${world.orgId}`);
-      } catch { /* pinned by flow evidence — leave the unposted draft */ }
+        await db.execute(
+          sql`delete from documents where id = ${payment.id} and org_id = ${world.orgId}`,
+        );
+      } catch {
+        /* pinned by flow evidence — leave the unposted draft */
+      }
       return ok();
     }
-    return fail("adversarial-over-application", detail || `over-application was rejected but the payment still posted (${payment.id})`);
+    return fail(
+      "adversarial-over-application",
+      detail || `over-application was rejected but the payment still posted (${payment.id})`,
+    );
   }
   return ok(); // no open items today — inert
 }
@@ -168,7 +197,10 @@ export async function overApplicationProbe(world: SimOrg, simDate: string): Prom
  * Reversal symmetry: post a journal, reverse it, and assert the pair nets to
  * exactly zero on every account it touched.
  */
-export async function reversalSymmetryProbe(world: SimOrg, simDate: string): Promise<InvariantResult> {
+export async function reversalSymmetryProbe(
+  world: SimOrg,
+  simDate: string,
+): Promise<InvariantResult> {
   const res = await createScriptJournal(
     world.orgId,
     world.actors.controller,
@@ -184,16 +216,28 @@ export async function reversalSymmetryProbe(world: SimOrg, simDate: string): Pro
     { post: true },
   );
   if (!res.entryId) return fail("adversarial-reversal", "probe journal did not post");
-  const reversalId = await reverseProjectGlEntry(world.orgId, world.actors.controller, res.entryId, "reversal symmetry probe");
-  if (!reversalId) return fail("adversarial-reversal", `entry ${res.entryId} could not be reversed`);
-  const net = (await db.execute<{ n: string }>(sql`
+  const reversalId = await reverseProjectGlEntry(
+    world.orgId,
+    world.actors.controller,
+    res.entryId,
+    "reversal symmetry probe",
+  );
+  if (!reversalId)
+    return fail("adversarial-reversal", `entry ${res.entryId} could not be reversed`);
+  const net = await db.execute<{ n: string }>(
+    sql`
     select count(*) as n from (
       select account_id from journal_lines
        where org_id = ${world.orgId} and entry_id in (${res.entryId}, ${reversalId})
-       group by account_id having abs(sum(amount)) >= 0.005) x`, "objects"));
+       group by account_id having abs(sum(amount)) >= 0.005) x`,
+    "objects",
+  );
   return Number(net[0]?.n ?? "1") === 0
     ? ok()
-    : fail("adversarial-reversal", `journal ${res.entryId} + reversal ${reversalId} do not net to zero per account`);
+    : fail(
+        "adversarial-reversal",
+        `journal ${res.entryId} + reversal ${reversalId} do not net to zero per account`,
+      );
 }
 
 /**
@@ -232,13 +276,16 @@ export async function voidRecreateProbe(world: SimOrg, simDate: string): Promise
     );
   }
 
-  const residue = (await db.execute<{ unbalanced: string; status: string }>(sql`
+  const residue = await db.execute<{ unbalanced: string; status: string }>(
+    sql`
     select
       (select count(*) from (
         select account_id from journal_lines
          where org_id = ${world.orgId} and entry_id in (${first.entryId}, ${voided.reversalEntryId})
          group by account_id having abs(sum(amount)) >= 0.005) x) as unbalanced,
-      (select status from documents where org_id = ${world.orgId} and id = ${first.documentId}) as status`, "objects"));
+      (select status from documents where org_id = ${world.orgId} and id = ${first.documentId}) as status`,
+    "objects",
+  );
   if (Number(residue[0]?.unbalanced) !== 0 || residue[0]?.status !== "voided") {
     return fail(
       "adversarial-void",
@@ -256,7 +303,9 @@ export async function voidRecreateProbe(world: SimOrg, simDate: string): Promise
     currency: world.currency,
     memo: "adversarial: void/recreate probe (recreated)",
     custom: { sim: { adversarial: "void_recreate" } },
-    lines: [{ accountId: world.accounts.office, description: "void probe recreated", amount: "222.22" }],
+    lines: [
+      { accountId: world.accounts.office, description: "void probe recreated", amount: "222.22" },
+    ],
   });
   return ok();
 }

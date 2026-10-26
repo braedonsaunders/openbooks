@@ -53,11 +53,21 @@ export const equityShareClasses = pgTable(
     initialConversionPrice: sharePrice("initial_conversion_price"),
     liquidationMultiple: numeric("liquidation_multiple", { precision: 10, scale: 4 }),
     /** What a preferred class's preference is measured on: the amount paid for each certificate, or the original issue price. */
-    liquidationPreferenceBasis: text("liquidation_preference_basis", { enum: ["original_issue_price", "amount_paid"] }).notNull().default("amount_paid"),
-    participation: text("participation", { enum: ["none", "full", "capped"] }).notNull().default("none"),
+    liquidationPreferenceBasis: text("liquidation_preference_basis", {
+      enum: ["original_issue_price", "amount_paid"],
+    })
+      .notNull()
+      .default("amount_paid"),
+    participation: text("participation", { enum: ["none", "full", "capped"] })
+      .notNull()
+      .default("none"),
     participationCapMultiple: numeric("participation_cap_multiple", { precision: 10, scale: 4 }),
     seniority: integer("seniority").notNull().default(0),
-    antiDilution: text("anti_dilution", { enum: ["none", "broad_based", "narrow_based", "full_ratchet"] }).notNull().default("none"),
+    antiDilution: text("anti_dilution", {
+      enum: ["none", "broad_based", "narrow_based", "full_ratchet"],
+    })
+      .notNull()
+      .default("none"),
     /** The common class a preferred class converts into. */
     conversionShareClassId: uuid("conversion_share_class_id"),
     /** Whether the conversion price adjusts for splits of the conversion class. */
@@ -68,7 +78,11 @@ export const equityShareClasses = pgTable(
     uniqueIndex("equity_share_classes_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("equity_share_classes_entity_id_unique").on(t.orgId, t.subsidiaryId, t.id),
     uniqueIndex("equity_share_classes_code_unique").on(t.orgId, t.subsidiaryId, t.code),
-    foreignKey({ name: "equity_share_classes_subsidiary_fkey", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }),
+    foreignKey({
+      name: "equity_share_classes_subsidiary_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }),
     foreignKey({
       name: "equity_share_classes_conversion_class_fkey",
       columns: [t.orgId, t.subsidiaryId, t.conversionShareClassId],
@@ -84,7 +98,9 @@ export const equityClassAmendments = pgTable(
     orgId: orgRef(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
     shareClassId: uuid("share_class_id").notNull(),
-    kind: text("kind", { enum: ["authorized_shares", "conversion_price", "conversion_class"] }).notNull(),
+    kind: text("kind", {
+      enum: ["authorized_shares", "conversion_price", "conversion_class"],
+    }).notNull(),
     effectiveOn: date("effective_on").notNull(),
     authorizedShares: bigint("authorized_shares", { mode: "bigint" }),
     conversionPrice: sharePrice("conversion_price"),
@@ -98,12 +114,20 @@ export const equityClassAmendments = pgTable(
     foreignKey({
       name: "equity_class_amendments_class_fkey",
       columns: [t.orgId, t.subsidiaryId, t.shareClassId],
-      foreignColumns: [equityShareClasses.orgId, equityShareClasses.subsidiaryId, equityShareClasses.id],
+      foreignColumns: [
+        equityShareClasses.orgId,
+        equityShareClasses.subsidiaryId,
+        equityShareClasses.id,
+      ],
     }),
     foreignKey({
       name: "equity_class_amendments_conversion_class_fkey",
       columns: [t.orgId, t.subsidiaryId, t.conversionShareClassId],
-      foreignColumns: [equityShareClasses.orgId, equityShareClasses.subsidiaryId, equityShareClasses.id],
+      foreignColumns: [
+        equityShareClasses.orgId,
+        equityShareClasses.subsidiaryId,
+        equityShareClasses.id,
+      ],
     }),
   ],
 );
@@ -131,7 +155,11 @@ export const equityPlans = pgTable(
     foreignKey({
       name: "equity_plans_class_fkey",
       columns: [t.orgId, t.subsidiaryId, t.shareClassId],
-      foreignColumns: [equityShareClasses.orgId, equityShareClasses.subsidiaryId, equityShareClasses.id],
+      foreignColumns: [
+        equityShareClasses.orgId,
+        equityShareClasses.subsidiaryId,
+        equityShareClasses.id,
+      ],
     }),
   ],
 );
@@ -182,7 +210,11 @@ export const equityFinancingRounds = pgTable(
     foreignKey({
       name: "equity_financing_rounds_class_fkey",
       columns: [t.orgId, t.subsidiaryId, t.shareClassId],
-      foreignColumns: [equityShareClasses.orgId, equityShareClasses.subsidiaryId, equityShareClasses.id],
+      foreignColumns: [
+        equityShareClasses.orgId,
+        equityShareClasses.subsidiaryId,
+        equityShareClasses.id,
+      ],
     }),
   ],
 );
@@ -212,7 +244,9 @@ export const equitySecurities = pgTable(
     vestingFrequency: text("vesting_frequency", { enum: ["monthly", "quarterly", "annual"] }),
     /** Custom schedule: [{ "date": "YYYY-MM-DD", "quantity": "<whole shares>" }]. */
     vestingTranches: jsonb("vesting_tranches"),
-    acceleration: text("acceleration", { enum: ["none", "single", "double"] }).notNull().default("none"),
+    acceleration: text("acceleration", { enum: ["none", "single", "double"] })
+      .notNull()
+      .default("none"),
     accelerationPercent: numeric("acceleration_percent", { precision: 9, scale: 4 }),
     expirationDate: date("expiration_date"),
     optionType: text("option_type", { enum: ["iso", "nso"] }),
@@ -221,13 +255,25 @@ export const equitySecurities = pgTable(
     valuationCap: money("valuation_cap"),
     discountPercent: numeric("discount_percent", { precision: 9, scale: 4 }),
     interestRatePercent: numeric("interest_rate_percent", { precision: 9, scale: 4 }),
-    interestBasis: text("interest_basis", { enum: ["simple", "compound_annual", "compound_semiannual", "compound_quarterly", "compound_monthly"] }),
-    interestDayCount: text("interest_day_count", { enum: ["actual_365", "actual_360", "thirty_360", "actual_actual"] }),
+    interestBasis: text("interest_basis", {
+      enum: [
+        "simple",
+        "compound_annual",
+        "compound_semiannual",
+        "compound_quarterly",
+        "compound_monthly",
+      ],
+    }),
+    interestDayCount: text("interest_day_count", {
+      enum: ["actual_365", "actual_360", "thirty_360", "actual_actual"],
+    }),
     maturityDate: date("maturity_date"),
     /** A SAFE whose holder may adopt a later instrument's better terms. */
     mfn: boolean("mfn").notNull().default(false),
     /** Price at which unvested early-exercised shares are repurchased. */
-    unvestedRepurchaseBasis: text("unvested_repurchase_basis", { enum: ["cost", "lower_of_cost_or_fmv"] }),
+    unvestedRepurchaseBasis: text("unvested_repurchase_basis", {
+      enum: ["cost", "lower_of_cost_or_fmv"],
+    }),
     /** Functional-currency units per unit of the security's currency on its issue date. */
     fxRate: numeric("fx_rate", { precision: 19, scale: 10 }).notNull().default("1"),
     valuationMethod: text("valuation_method", { enum: ["black_scholes", "share_price"] }),
@@ -251,14 +297,30 @@ export const equitySecurities = pgTable(
     index("equity_securities_entity_kind").on(t.orgId, t.subsidiaryId, t.kind, t.issueDate),
     index("equity_securities_holder").on(t.orgId, t.holderPartyId),
     index("equity_securities_class").on(t.orgId, t.shareClassId),
-    index("equity_securities_plan").on(t.orgId, t.planId).where(sql`${t.planId} IS NOT NULL`),
-    index("equity_securities_source").on(t.orgId, t.sourceSecurityId).where(sql`${t.sourceSecurityId} IS NOT NULL`),
-    foreignKey({ name: "equity_securities_subsidiary_fkey", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }),
-    foreignKey({ name: "equity_securities_holder_fkey", columns: [t.orgId, t.holderPartyId], foreignColumns: [parties.orgId, parties.id] }),
+    index("equity_securities_plan")
+      .on(t.orgId, t.planId)
+      .where(sql`${t.planId} IS NOT NULL`),
+    index("equity_securities_source")
+      .on(t.orgId, t.sourceSecurityId)
+      .where(sql`${t.sourceSecurityId} IS NOT NULL`),
+    foreignKey({
+      name: "equity_securities_subsidiary_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }),
+    foreignKey({
+      name: "equity_securities_holder_fkey",
+      columns: [t.orgId, t.holderPartyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
     foreignKey({
       name: "equity_securities_class_fkey",
       columns: [t.orgId, t.subsidiaryId, t.shareClassId],
-      foreignColumns: [equityShareClasses.orgId, equityShareClasses.subsidiaryId, equityShareClasses.id],
+      foreignColumns: [
+        equityShareClasses.orgId,
+        equityShareClasses.subsidiaryId,
+        equityShareClasses.id,
+      ],
     }),
     foreignKey({
       name: "equity_securities_plan_fkey",
@@ -268,15 +330,27 @@ export const equitySecurities = pgTable(
     foreignKey({
       name: "equity_securities_round_fkey",
       columns: [t.orgId, t.subsidiaryId, t.roundId],
-      foreignColumns: [equityFinancingRounds.orgId, equityFinancingRounds.subsidiaryId, equityFinancingRounds.id],
+      foreignColumns: [
+        equityFinancingRounds.orgId,
+        equityFinancingRounds.subsidiaryId,
+        equityFinancingRounds.id,
+      ],
     }),
     foreignKey({
       name: "equity_securities_source_fkey",
       columns: [t.orgId, t.subsidiaryId, t.sourceSecurityId],
       foreignColumns: [t.orgId, t.subsidiaryId, t.id],
     }),
-    foreignKey({ name: "equity_securities_consideration_account_fkey", columns: [t.orgId, t.considerationAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_securities_journal_entry_fkey", columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id] }),
+    foreignKey({
+      name: "equity_securities_consideration_account_fkey",
+      columns: [t.orgId, t.considerationAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_securities_journal_entry_fkey",
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
   ],
 );
 
@@ -287,7 +361,22 @@ export const equitySecurityEvents = pgTable(
     orgId: orgRef(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
     securityId: uuid("security_id").notNull(),
-    kind: text("kind", { enum: ["exercise", "settle", "forfeit", "expire", "cancel", "repurchase", "transfer", "convert", "void", "repay", "reverse", "election_83b"] }).notNull(),
+    kind: text("kind", {
+      enum: [
+        "exercise",
+        "settle",
+        "forfeit",
+        "expire",
+        "cancel",
+        "repurchase",
+        "transfer",
+        "convert",
+        "void",
+        "repay",
+        "reverse",
+        "election_83b",
+      ],
+    }).notNull(),
     effectiveOn: date("effective_on").notNull(),
     quantity: bigint("quantity", { mode: "bigint" }),
     pricePerShare: sharePrice("price_per_share"),
@@ -317,8 +406,12 @@ export const equitySecurityEvents = pgTable(
   (t) => [
     uniqueIndex("equity_security_events_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("equity_security_events_idempotency_unique").on(t.orgId, t.idempotencyKey),
-    uniqueIndex("equity_security_events_one_void").on(t.orgId, t.securityId).where(sql`${t.kind} = 'void'`),
-    uniqueIndex("equity_security_events_one_reversal").on(t.orgId, t.reversesEventId).where(sql`${t.reversesEventId} IS NOT NULL`),
+    uniqueIndex("equity_security_events_one_void")
+      .on(t.orgId, t.securityId)
+      .where(sql`${t.kind} = 'void'`),
+    uniqueIndex("equity_security_events_one_reversal")
+      .on(t.orgId, t.reversesEventId)
+      .where(sql`${t.reversesEventId} IS NOT NULL`),
     index("equity_security_events_security").on(t.orgId, t.securityId, t.effectiveOn),
     index("equity_security_events_entity").on(t.orgId, t.subsidiaryId, t.effectiveOn),
     foreignKey({
@@ -334,13 +427,37 @@ export const equitySecurityEvents = pgTable(
     foreignKey({
       name: "equity_security_events_round_fkey",
       columns: [t.orgId, t.subsidiaryId, t.roundId],
-      foreignColumns: [equityFinancingRounds.orgId, equityFinancingRounds.subsidiaryId, equityFinancingRounds.id],
+      foreignColumns: [
+        equityFinancingRounds.orgId,
+        equityFinancingRounds.subsidiaryId,
+        equityFinancingRounds.id,
+      ],
     }),
-    foreignKey({ name: "equity_security_events_consideration_account_fkey", columns: [t.orgId, t.considerationAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_security_events_journal_entry_fkey", columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id] }),
-    foreignKey({ name: "equity_security_events_reversal_entry_fkey", columns: [t.orgId, t.reversalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id] }),
-    foreignKey({ name: "equity_security_events_reverses_fkey", columns: [t.orgId, t.reversesEventId], foreignColumns: [t.orgId, t.id] }),
-    foreignKey({ name: "equity_security_events_accrual_entry_fkey", columns: [t.orgId, t.interestAccrualEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id] }),
+    foreignKey({
+      name: "equity_security_events_consideration_account_fkey",
+      columns: [t.orgId, t.considerationAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_security_events_journal_entry_fkey",
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
+    foreignKey({
+      name: "equity_security_events_reversal_entry_fkey",
+      columns: [t.orgId, t.reversalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
+    foreignKey({
+      name: "equity_security_events_reverses_fkey",
+      columns: [t.orgId, t.reversesEventId],
+      foreignColumns: [t.orgId, t.id],
+    }),
+    foreignKey({
+      name: "equity_security_events_accrual_entry_fkey",
+      columns: [t.orgId, t.interestAccrualEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
   ],
 );
 
@@ -363,7 +480,11 @@ export const equitySplits = pgTable(
     foreignKey({
       name: "equity_splits_class_fkey",
       columns: [t.orgId, t.subsidiaryId, t.shareClassId],
-      foreignColumns: [equityShareClasses.orgId, equityShareClasses.subsidiaryId, equityShareClasses.id],
+      foreignColumns: [
+        equityShareClasses.orgId,
+        equityShareClasses.subsidiaryId,
+        equityShareClasses.id,
+      ],
     }),
   ],
 );
@@ -390,18 +511,66 @@ export const equityAccountPolicies = pgTable(
   },
   (t) => [
     uniqueIndex("equity_account_policies_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("equity_account_policies_version_unique").on(t.orgId, t.subsidiaryId, t.effectiveFrom),
-    foreignKey({ name: "equity_account_policies_subsidiary_fkey", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }),
-    foreignKey({ name: "equity_account_policies_common_fkey", columns: [t.orgId, t.commonStockAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_account_policies_preferred_fkey", columns: [t.orgId, t.preferredStockAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_account_policies_apic_fkey", columns: [t.orgId, t.apicAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_account_policies_apic_share_based_fkey", columns: [t.orgId, t.apicShareBasedAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_account_policies_expense_fkey", columns: [t.orgId, t.compensationExpenseAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_account_policies_treasury_fkey", columns: [t.orgId, t.treasuryStockAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_account_policies_convertible_fkey", columns: [t.orgId, t.convertibleInstrumentsAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_account_policies_interest_expense_fkey", columns: [t.orgId, t.interestExpenseAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_account_policies_accrued_interest_fkey", columns: [t.orgId, t.accruedInterestAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
-    foreignKey({ name: "equity_account_policies_deposit_fkey", columns: [t.orgId, t.earlyExerciseDepositAccountId], foreignColumns: [accounts.orgId, accounts.id] }),
+    uniqueIndex("equity_account_policies_version_unique").on(
+      t.orgId,
+      t.subsidiaryId,
+      t.effectiveFrom,
+    ),
+    foreignKey({
+      name: "equity_account_policies_subsidiary_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_common_fkey",
+      columns: [t.orgId, t.commonStockAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_preferred_fkey",
+      columns: [t.orgId, t.preferredStockAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_apic_fkey",
+      columns: [t.orgId, t.apicAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_apic_share_based_fkey",
+      columns: [t.orgId, t.apicShareBasedAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_expense_fkey",
+      columns: [t.orgId, t.compensationExpenseAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_treasury_fkey",
+      columns: [t.orgId, t.treasuryStockAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_convertible_fkey",
+      columns: [t.orgId, t.convertibleInstrumentsAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_interest_expense_fkey",
+      columns: [t.orgId, t.interestExpenseAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_accrued_interest_fkey",
+      columns: [t.orgId, t.accruedInterestAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "equity_account_policies_deposit_fkey",
+      columns: [t.orgId, t.earlyExerciseDepositAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
   ],
 );
 
@@ -423,10 +592,26 @@ export const equityCompensationRuns = pgTable(
   (t) => [
     uniqueIndex("equity_compensation_runs_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("equity_compensation_runs_entity_id_unique").on(t.orgId, t.subsidiaryId, t.id),
-    uniqueIndex("equity_compensation_runs_through_unique").on(t.orgId, t.subsidiaryId, t.throughDate),
-    foreignKey({ name: "equity_compensation_runs_subsidiary_fkey", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }),
-    foreignKey({ name: "equity_compensation_runs_journal_entry_fkey", columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id] }),
-    foreignKey({ name: "equity_compensation_runs_release_entry_fkey", columns: [t.orgId, t.releaseJournalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id] }),
+    uniqueIndex("equity_compensation_runs_through_unique").on(
+      t.orgId,
+      t.subsidiaryId,
+      t.throughDate,
+    ),
+    foreignKey({
+      name: "equity_compensation_runs_subsidiary_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }),
+    foreignKey({
+      name: "equity_compensation_runs_journal_entry_fkey",
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
+    foreignKey({
+      name: "equity_compensation_runs_release_entry_fkey",
+      columns: [t.orgId, t.releaseJournalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
   ],
 );
 
@@ -449,7 +634,11 @@ export const equityCompensationRunLines = pgTable(
     foreignKey({
       name: "equity_compensation_run_lines_run_fkey",
       columns: [t.orgId, t.subsidiaryId, t.runId],
-      foreignColumns: [equityCompensationRuns.orgId, equityCompensationRuns.subsidiaryId, equityCompensationRuns.id],
+      foreignColumns: [
+        equityCompensationRuns.orgId,
+        equityCompensationRuns.subsidiaryId,
+        equityCompensationRuns.id,
+      ],
     }),
     foreignKey({
       name: "equity_compensation_run_lines_security_fkey",
@@ -479,12 +668,20 @@ export const equityCompensationRunReleases = pgTable(
   },
   (t) => [
     uniqueIndex("equity_compensation_run_releases_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("equity_compensation_run_releases_security_unique").on(t.orgId, t.runId, t.securityId),
+    uniqueIndex("equity_compensation_run_releases_security_unique").on(
+      t.orgId,
+      t.runId,
+      t.securityId,
+    ),
     index("equity_compensation_run_releases_security").on(t.orgId, t.securityId),
     foreignKey({
       name: "equity_compensation_run_releases_run_fkey",
       columns: [t.orgId, t.subsidiaryId, t.runId],
-      foreignColumns: [equityCompensationRuns.orgId, equityCompensationRuns.subsidiaryId, equityCompensationRuns.id],
+      foreignColumns: [
+        equityCompensationRuns.orgId,
+        equityCompensationRuns.subsidiaryId,
+        equityCompensationRuns.id,
+      ],
     }),
     foreignKey({
       name: "equity_compensation_run_releases_security_fkey",
@@ -516,8 +713,14 @@ export const equitySecurityAmendments = pgTable(
   },
   (t) => [
     uniqueIndex("equity_security_amendments_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("equity_security_amendments_one_reversal").on(t.orgId, t.reversesAmendmentId).where(sql`reverses_amendment_id IS NOT NULL`),
-    foreignKey({ name: "equity_security_amendments_reverses_fkey", columns: [t.orgId, t.reversesAmendmentId], foreignColumns: [t.orgId, t.id] }),
+    uniqueIndex("equity_security_amendments_one_reversal")
+      .on(t.orgId, t.reversesAmendmentId)
+      .where(sql`reverses_amendment_id IS NOT NULL`),
+    foreignKey({
+      name: "equity_security_amendments_reverses_fkey",
+      columns: [t.orgId, t.reversesAmendmentId],
+      foreignColumns: [t.orgId, t.id],
+    }),
     uniqueIndex("equity_security_amendments_idempotency_unique").on(t.orgId, t.idempotencyKey),
     index("equity_security_amendments_security").on(t.orgId, t.securityId, t.effectiveOn),
     foreignKey({
@@ -550,8 +753,16 @@ export const equityInterestRuns = pgTable(
     uniqueIndex("equity_interest_runs_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("equity_interest_runs_entity_id_unique").on(t.orgId, t.subsidiaryId, t.id),
     uniqueIndex("equity_interest_runs_through_unique").on(t.orgId, t.subsidiaryId, t.throughDate),
-    foreignKey({ name: "equity_interest_runs_subsidiary_fkey", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }),
-    foreignKey({ name: "equity_interest_runs_journal_entry_fkey", columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id] }),
+    foreignKey({
+      name: "equity_interest_runs_subsidiary_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }),
+    foreignKey({
+      name: "equity_interest_runs_journal_entry_fkey",
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
   ],
 );
 
@@ -578,7 +789,11 @@ export const equityInterestRunLines = pgTable(
     foreignKey({
       name: "equity_interest_run_lines_run_fkey",
       columns: [t.orgId, t.subsidiaryId, t.runId],
-      foreignColumns: [equityInterestRuns.orgId, equityInterestRuns.subsidiaryId, equityInterestRuns.id],
+      foreignColumns: [
+        equityInterestRuns.orgId,
+        equityInterestRuns.subsidiaryId,
+        equityInterestRuns.id,
+      ],
     }),
     foreignKey({
       name: "equity_interest_run_lines_security_fkey",
@@ -605,7 +820,9 @@ export const equityActionRequests = pgTable(
     effectiveOn: date("effective_on").notNull(),
     reason: text("reason"),
     payload: jsonb("payload").notNull(),
-    summary: jsonb("summary").notNull().default(sql`'{}'::jsonb`),
+    summary: jsonb("summary")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     status: text("status").notNull(),
     releasedWithoutApproval: boolean("released_without_approval").notNull().default(false),
     requestedBy: uuid("requested_by").notNull(),
@@ -621,8 +838,14 @@ export const equityActionRequests = pgTable(
     uniqueIndex("equity_action_requests_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("equity_action_requests_idempotency_unique").on(t.orgId, t.idempotencyKey),
     index("equity_action_requests_pending").on(t.orgId, t.subsidiaryId, t.status, t.createdAt),
-    index("equity_action_requests_subject").on(t.orgId, t.subjectId).where(sql`subject_id IS NOT NULL`),
-    foreignKey({ name: "equity_action_requests_subsidiary_fkey", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }),
+    index("equity_action_requests_subject")
+      .on(t.orgId, t.subjectId)
+      .where(sql`subject_id IS NOT NULL`),
+    foreignKey({
+      name: "equity_action_requests_subsidiary_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }),
   ],
 );
 
@@ -649,9 +872,17 @@ export const equityPositionMovements = pgTable(
   (t) => [
     uniqueIndex("equity_position_movements_org_id_id_unique").on(t.orgId, t.id),
     index("equity_position_movements_entity").on(t.orgId, t.subsidiaryId, t.effectiveOn),
-    index("equity_position_movements_security").on(t.orgId, t.securityId).where(sql`security_id IS NOT NULL`),
-    index("equity_position_movements_plan").on(t.orgId, t.planId).where(sql`plan_id IS NOT NULL`),
-    foreignKey({ name: "equity_position_movements_subsidiary_fkey", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }),
+    index("equity_position_movements_security")
+      .on(t.orgId, t.securityId)
+      .where(sql`security_id IS NOT NULL`),
+    index("equity_position_movements_plan")
+      .on(t.orgId, t.planId)
+      .where(sql`plan_id IS NOT NULL`),
+    foreignKey({
+      name: "equity_position_movements_subsidiary_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }),
     foreignKey({
       name: "equity_position_movements_security_fkey",
       columns: [t.orgId, t.subsidiaryId, t.securityId],
@@ -687,11 +918,17 @@ export const equityRoundAmendments = pgTable(
     uniqueIndex("equity_round_amendments_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("equity_round_amendments_idempotency_unique").on(t.orgId, t.idempotencyKey),
     index("equity_round_amendments_round").on(t.orgId, t.roundId, t.createdAt),
-    uniqueIndex("equity_round_amendments_one_void").on(t.orgId, t.roundId).where(sql`kind = 'void'`),
+    uniqueIndex("equity_round_amendments_one_void")
+      .on(t.orgId, t.roundId)
+      .where(sql`kind = 'void'`),
     foreignKey({
       name: "equity_round_amendments_round_fkey",
       columns: [t.orgId, t.subsidiaryId, t.roundId],
-      foreignColumns: [equityFinancingRounds.orgId, equityFinancingRounds.subsidiaryId, equityFinancingRounds.id],
+      foreignColumns: [
+        equityFinancingRounds.orgId,
+        equityFinancingRounds.subsidiaryId,
+        equityFinancingRounds.id,
+      ],
     }),
   ],
 );
@@ -720,8 +957,16 @@ export const equityInstrumentLineAttributions = pgTable(
     uniqueIndex("equity_instrument_line_attributions_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("equity_instrument_line_attributions_line_unique").on(t.orgId, t.journalLineId),
     index("equity_instrument_line_attributions_security").on(t.orgId, t.securityId, t.role),
-    foreignKey({ name: "equity_instrument_line_attributions_entry_fkey", columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id] }),
-    foreignKey({ name: "equity_instrument_line_attributions_line_fkey", columns: [t.orgId, t.journalLineId], foreignColumns: [journalLines.orgId, journalLines.id] }),
+    foreignKey({
+      name: "equity_instrument_line_attributions_entry_fkey",
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
+    foreignKey({
+      name: "equity_instrument_line_attributions_line_fkey",
+      columns: [t.orgId, t.journalLineId],
+      foreignColumns: [journalLines.orgId, journalLines.id],
+    }),
     foreignKey({
       name: "equity_instrument_line_attributions_security_fkey",
       columns: [t.orgId, t.subsidiaryId, t.securityId],

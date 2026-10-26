@@ -1,8 +1,8 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { REPORT_ENTITY_MAP } from '@openbooks/reports'
-import { insightQueryReferencesBook, type InsightQuery } from '@openbooks/analytics'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { REPORT_ENTITY_MAP } from "@openbooks/reports";
+import { insightQueryReferencesBook, type InsightQuery } from "@openbooks/analytics";
 
 /** The card's accounting basis is ambiguous (zero or several active primary
  *  books) and no first-row fallback may silently pick one. The route surfaces
@@ -11,9 +11,9 @@ import { insightQueryReferencesBook, type InsightQuery } from '@openbooks/analyt
 export class InsightBookScopeError extends Error {
   constructor() {
     super(
-      'This card needs exactly one active primary accounting book. Choose a book filter to run it against a specific book instead.',
-    )
-    this.name = 'InsightBookScopeError'
+      "This card needs exactly one active primary accounting book. Choose a book filter to run it against a specific book instead.",
+    );
+    this.name = "InsightBookScopeError";
   }
 }
 
@@ -38,15 +38,18 @@ export async function resolveInsightBookScope(
   orgId: string,
   query: InsightQuery,
 ): Promise<readonly string[] | null | undefined> {
-  const entity = REPORT_ENTITY_MAP[query.source]
-  if (!entity?.bookScope) return undefined
-  if (insightQueryReferencesBook(query)) return null
-  const rows = await db.execute<{ id: string }>(sql`
+  const entity = REPORT_ENTITY_MAP[query.source];
+  if (!entity?.bookScope) return undefined;
+  if (insightQueryReferencesBook(query)) return null;
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active
-  `, 'objects')
+  `,
+    "objects",
+  );
   if (rows.length !== 1) {
-    throw new InsightBookScopeError()
+    throw new InsightBookScopeError();
   }
-  return [rows[0]!.id]
+  return [rows[0]!.id];
 }

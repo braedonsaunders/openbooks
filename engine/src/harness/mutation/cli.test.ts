@@ -70,10 +70,7 @@ const FLOORS: RatifiedFloors["floors"] = {
 
 test("full valid run publishes: measured above floors, new targets need no floor", () => {
   const report = fresh([MONEY, COMMIT], {
-    targets: [
-      target(MONEY, { ratio: 0.5217391304347826 }),
-      target(COMMIT, { ratio: 0.4 }),
-    ],
+    targets: [target(MONEY, { ratio: 0.5217391304347826 }), target(COMMIT, { ratio: 0.4 })],
   });
   const refusals = checkedInPublishRefusals(
     report,
@@ -95,11 +92,7 @@ test("partial run refuses: missing configured targets, nothing carried forward",
 });
 
 test("unconfigured extra in the run refuses", () => {
-  const refusals = checkedInPublishRefusals(
-    fresh([MONEY, COMMIT]),
-    [configured(MONEY)],
-    FLOORS,
-  );
+  const refusals = checkedInPublishRefusals(fresh([MONEY, COMMIT]), [configured(MONEY)], FLOORS);
   assert.equal(refusals.length, 1);
   assert.ok(refusals[0]!.includes(COMMIT));
   assert.ok(refusals[0]!.includes("mutation.config.json"));
@@ -151,7 +144,9 @@ test("unmeasured non-DB entry refuses; honest needsDb skip in unit mode is allow
 
   // Non-DB target measuring nothing: refused.
   const refusedUnit = checkedInPublishRefusals(
-    fresh([MONEY], { targets: [target(MONEY, { status: "baseline-skipped", measured: 0, ratio: null })] }),
+    fresh([MONEY], {
+      targets: [target(MONEY, { status: "baseline-skipped", measured: 0, ratio: null })],
+    }),
     [configured(MONEY)],
     FLOORS,
   );
@@ -169,7 +164,10 @@ test("measured score below the RATIFIED floor refuses and names the remedy", () 
   assert.ok(refusal.includes(MONEY), "refusal names the target");
   assert.ok(refusal.includes("ratified floor"), "refusal cites the floor, not a prior score");
   assert.ok(refusal.includes(`--target ${MONEY}`), "refusal names the re-run remedy");
-  assert.ok(refusal.includes("mutation-floor.json is raise-only"), "refusal cannot suggest lowering a floor");
+  assert.ok(
+    refusal.includes("mutation-floor.json is raise-only"),
+    "refusal cannot suggest lowering a floor",
+  );
 });
 
 test("score at the floor (within tolerance) publishes; dip below refuses", () => {
@@ -230,30 +228,39 @@ test("toCheckedInReport compacts without inventing ratios", () => {
   const compact = toCheckedInReport(mutation);
   assert.equal(compact.targets.length, 2);
   assert.equal(compact.targets[0]?.ratio, 0.5217391304347826);
-  assert.equal(compact.targets[1]?.ratio, null, "unit-run skip stays null — never a manufactured zero");
+  assert.equal(
+    compact.targets[1]?.ratio,
+    null,
+    "unit-run skip stays null — never a manufactured zero",
+  );
   assert.equal(compact.targets[1]?.measured, 0);
 });
-
 
 test("invalid measured ratios cannot evade the floor", () => {
   for (const ratio of [NaN, Infinity, -0.1, 1.1]) {
     const refusals = checkedInPublishRefusals(
       fresh([MONEY], { targets: [target(MONEY, { ratio })] }),
-      [configured(MONEY)], FLOORS,
+      [configured(MONEY)],
+      FLOORS,
     );
     assert.equal(refusals.length, 1);
     assert.ok(refusals[0]!.includes("invalid ratio"));
   }
 });
 
-
 test("ratified floor input refuses missing, malformed and out-of-range values", () => {
   const dir = mkdtempSync(join(tmpdir(), "mutation-floor-input-"));
   const file = join(dir, "floor.json");
   try {
     assert.throws(() => readRatifiedFloors(file), /refusing publish/);
-    for (const raw of ["{", JSON.stringify({ version: 1, floors: { [MONEY]: { ratio: -1, measured: 23, mode: "unit" } } }),
-      JSON.stringify({ version: 1, floors: { [MONEY]: { ratio: 0.4 } } })]) {
+    for (const raw of [
+      "{",
+      JSON.stringify({
+        version: 1,
+        floors: { [MONEY]: { ratio: -1, measured: 23, mode: "unit" } },
+      }),
+      JSON.stringify({ version: 1, floors: { [MONEY]: { ratio: 0.4 } } }),
+    ]) {
       writeFileSync(file, raw);
       assert.throws(() => readRatifiedFloors(file), /refusing publish/);
     }

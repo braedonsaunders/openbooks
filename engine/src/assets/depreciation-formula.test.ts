@@ -11,8 +11,21 @@ import {
 import { toUnits } from "../money/money.ts";
 
 const ctx = (over: Partial<DepContext> = {}): DepContext => ({
-  OC: 10000, CC: 10000, NB: 10000, RV: 0, AL: 5, CP: 1, TD: 0, LD: 0,
-  CU: 0, LU: 0, DH: 1, DP: 1, FY: 12, PB: 0, ...over,
+  OC: 10000,
+  CC: 10000,
+  NB: 10000,
+  RV: 0,
+  AL: 5,
+  CP: 1,
+  TD: 0,
+  LD: 0,
+  CU: 0,
+  LU: 0,
+  DH: 1,
+  DP: 1,
+  FY: 12,
+  PB: 0,
+  ...over,
 });
 
 // --- evaluator --------------------------------------------------------------
@@ -27,7 +40,10 @@ test("evaluates variables and arithmetic with correct precedence", () => {
 
 test("'~' takes the greater operand (DB↔SL crossover primitive)", () => {
   assert.equal(evalDepFormula("100~250", ctx()), "250");
-  assert.equal(evalDepFormula("(NB-RV)*(2/AL)~(NB-RV)/(AL-CP+1)", ctx({ NB: 2160, AL: 5, CP: 4 })), "1080");
+  assert.equal(
+    evalDepFormula("(NB-RV)*(2/AL)~(NB-RV)/(AL-CP+1)", ctx({ NB: 2160, AL: 5, CP: 4 })),
+    "1080",
+  );
 });
 
 test("IF/THEN/ELSE and ROUND", () => {
@@ -38,7 +54,10 @@ test("IF/THEN/ELSE and ROUND", () => {
 });
 
 test("rate-table variables R1..Rn", () => {
-  assert.equal(evalDepFormula("OC*R2", ctx({ OC: 1000, R: ["0.2", "0.32", "0.192"] }) as DepContext), "320");
+  assert.equal(
+    evalDepFormula("OC*R2", ctx({ OC: 1000, R: ["0.2", "0.32", "0.192"] }) as DepContext),
+    "320",
+  );
 });
 
 test("rejects unknown variables and injection attempts", () => {
@@ -51,16 +70,29 @@ test("rejects unknown variables and injection attempts", () => {
 test("rejects division by zero instead of silently producing a zero charge", () => {
   const formula = "(OC-RV)/0";
   assert.throws(() => evalDepFormula(formula, ctx()), /formula denominator cannot be zero/);
-  assert.throws(() => computeScheduleByFormula({
-    cost: "100.0000", salvage: "0", lifePeriods: 2, formula, endOfLife: "retain_balance",
-  }), /formula denominator cannot be zero/);
+  assert.throws(
+    () =>
+      computeScheduleByFormula({
+        cost: "100.0000",
+        salvage: "0",
+        lifePeriods: 2,
+        formula,
+        endOfLife: "retain_balance",
+      }),
+    /formula denominator cannot be zero/,
+  );
 });
 
 // --- formula-driven schedule ------------------------------------------------
 
-const money = (lines: { planned: string }[]) => lines.reduce((total, line) => total + toUnits(line.planned), 0n);
+const money = (lines: { planned: string }[]) =>
+  lines.reduce((total, line) => total + toUnits(line.planned), 0n);
 const sl = (over: Partial<FormulaScheduleInput>): FormulaScheduleInput => ({
-  cost: "12000", salvage: "0", lifePeriods: 12, formula: BUILTIN_FORMULAS.straight_line, ...over,
+  cost: "12000",
+  salvage: "0",
+  lifePeriods: 12,
+  formula: BUILTIN_FORMULAS.straight_line,
+  ...over,
 });
 
 test("straight-line matches an even split and totals exactly", () => {
@@ -74,7 +106,10 @@ test("straight-line matches an even split and totals exactly", () => {
 test("sum-of-years-digits front-loads and totals to cost − salvage", () => {
   // AL=5, base 9000: P1 = 9000*5/15 = 3000; P5 = 9000*1/15 = 600.
   const lines = computeScheduleByFormula({
-    cost: "10000", salvage: "1000", lifePeriods: 5, formula: BUILTIN_FORMULAS.sum_of_years_digits,
+    cost: "10000",
+    salvage: "1000",
+    lifePeriods: 5,
+    formula: BUILTIN_FORMULAS.sum_of_years_digits,
   });
   assert.equal(lines[0]!.planned, "3000.0000");
   assert.equal(lines[4]!.netBookValue, "1000.0000"); // lands on salvage
@@ -84,7 +119,10 @@ test("sum-of-years-digits front-loads and totals to cost − salvage", () => {
 test("double-declining crosses over to straight-line and finishes cleanly", () => {
   // cost 10000, salvage 0, life 5, 40%/period declining vs SL-remaining.
   const lines = computeScheduleByFormula({
-    cost: "10000", salvage: "0", lifePeriods: 5, formula: BUILTIN_FORMULAS.double_declining,
+    cost: "10000",
+    salvage: "0",
+    lifePeriods: 5,
+    formula: BUILTIN_FORMULAS.double_declining,
   });
   assert.equal(lines[0]!.planned, "4000.0000"); // 40% of 10000
   assert.equal(lines[1]!.planned, "2400.0000"); // 40% of 6000
@@ -96,20 +134,30 @@ test("double-declining crosses over to straight-line and finishes cleanly", () =
 
 test("units-of-production charges by usage and retains balance (no plug)", () => {
   const lines = computeScheduleByFormula({
-    cost: "11000", salvage: "1000", lifePeriods: 3, formula: BUILTIN_FORMULAS.units_of_production,
-    usage: [2000, 3000, 5000], lifetimeUsage: 10000, endOfLife: "retain_balance",
+    cost: "11000",
+    salvage: "1000",
+    lifePeriods: 3,
+    formula: BUILTIN_FORMULAS.units_of_production,
+    usage: [2000, 3000, 5000],
+    lifetimeUsage: 10000,
+    endOfLife: "retain_balance",
   });
-  assert.deepEqual(lines.map((l) => l.planned), ["2000.0000", "3000.0000", "5000.0000"]);
+  assert.deepEqual(
+    lines.map((l) => l.planned),
+    ["2000.0000", "3000.0000", "5000.0000"],
+  );
   assert.equal(lines[2]!.netBookValue, "1000.0000"); // 10000 usage → fully used, lands on salvage
 });
 
 test("first-period extension is an integer ratio, not a JS float of the withheld fraction", () => {
   // 1/3 withheld across 12 leading periods is exactly 4. A float of
   // (1e12 − fraction) / 1e12 can land on 3 or 5 and add or drop a whole period.
-  const lines = computeScheduleByFormula(sl({
-    firstPeriodFraction: "0.666666666667",
-    firstFractionPeriods: 12,
-  }));
+  const lines = computeScheduleByFormula(
+    sl({
+      firstPeriodFraction: "0.666666666667",
+      firstFractionPeriods: 12,
+    }),
+  );
   assert.equal(lines.length, 12 + 4);
   assert.equal(money(lines), toUnits("12000"));
 });
@@ -130,21 +178,43 @@ test("half-year double-declining spends the withheld half-year in the year after
   // half lands in months 61-66. The straight-line crossover divides by the
   // remaining life INCLUDING those months, so none of them plans zero.
   const lines = computeScheduleByFormula({
-    cost: "12000", salvage: "0", lifePeriods: 60, formula: BUILTIN_FORMULAS.double_declining,
-    firstPeriodFraction: "0.5", firstFractionPeriods: 12,
+    cost: "12000",
+    salvage: "0",
+    lifePeriods: 60,
+    formula: BUILTIN_FORMULAS.double_declining,
+    firstPeriodFraction: "0.5",
+    firstFractionPeriods: 12,
   });
   assert.equal(lines.length, 66);
   assert.equal(lines[0]!.planned, "200.0000"); // 12,000 x 2/60 x 1/2
   const years: bigint[] = [];
-  lines.forEach((line, i) => { years[Math.floor(i / 12)] = (years[Math.floor(i / 12)] ?? 0n) + toUnits(line.planned); });
-  assert.deepEqual(years, ["2191.7758", "3278.2525", "2182.5454", "1738.9704", "1738.9704", "869.4855"].map(toUnits));
-  assert.deepEqual(lines.slice(60).map((l) => l.planned), ["144.9143", "144.9142", "144.9143", "144.9142", "144.9143", "144.9142"]);
+  lines.forEach((line, i) => {
+    years[Math.floor(i / 12)] = (years[Math.floor(i / 12)] ?? 0n) + toUnits(line.planned);
+  });
+  assert.deepEqual(
+    years,
+    ["2191.7758", "3278.2525", "2182.5454", "1738.9704", "1738.9704", "869.4855"].map(toUnits),
+  );
+  assert.deepEqual(
+    lines.slice(60).map((l) => l.planned),
+    ["144.9143", "144.9142", "144.9143", "144.9142", "144.9143", "144.9142"],
+  );
   assert.equal(lines.at(-1)!.netBookValue, "0.0000");
 });
 
 test("INVARIANT: fully_depreciate methods total exactly cost − salvage, NBV = salvage", () => {
-  for (const formula of [BUILTIN_FORMULAS.straight_line, BUILTIN_FORMULAS.declining_150, BUILTIN_FORMULAS.double_declining, BUILTIN_FORMULAS.sum_of_years_digits]) {
-    const lines = computeScheduleByFormula({ cost: "8000", salvage: "500", lifePeriods: 36, formula });
+  for (const formula of [
+    BUILTIN_FORMULAS.straight_line,
+    BUILTIN_FORMULAS.declining_150,
+    BUILTIN_FORMULAS.double_declining,
+    BUILTIN_FORMULAS.sum_of_years_digits,
+  ]) {
+    const lines = computeScheduleByFormula({
+      cost: "8000",
+      salvage: "500",
+      lifePeriods: 36,
+      formula,
+    });
     assert.equal(money(lines), toUnits("7500"), formula);
     assert.equal(lines[lines.length - 1]!.netBookValue, "500.0000", formula);
   }

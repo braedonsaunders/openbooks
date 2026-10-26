@@ -1,33 +1,31 @@
-import type { ComponentProps } from 'react'
-import {
-  NewHrmButton,
-  ProcessCreateDrawer,
-  ProcessNewMenu,
-} from './native-widgets.client'
-import { str, type WidgetRenderer } from './widget-props'
+import type { ComponentProps } from "react";
+import { NewHrmButton, ProcessCreateDrawer, ProcessNewMenu } from "./native-widgets.client";
+import { str, type WidgetRenderer } from "./widget-props";
 
 /** HRM process authoring entry points, isolated so registry families stay bounded. */
 export const HRM_PROCESS_WIDGETS = {
-  'hrm-new-menu': (props) => (
+  "hrm-new-menu": (props) => (
     <NewHrmButton
       canCreateEmployee={props.canCreateEmployee === true}
       canProposeChange={props.canProposeChange === true}
       canCreateProcess={props.canCreateProcess === true}
-      employeeLabel={str(props, 'employeeLabel') ?? ''}
-      changeLabel={str(props, 'changeLabel') ?? ''}
-      processLabel={str(props, 'processLabel') ?? ''}
-      hireLabel={str(props, 'hireLabel')}
+      employeeLabel={str(props, "employeeLabel") ?? ""}
+      changeLabel={str(props, "changeLabel") ?? ""}
+      processLabel={str(props, "processLabel") ?? ""}
+      hireLabel={str(props, "hireLabel")}
     />
   ),
-  'hrm-process-create': (props) => (
-    <ProcessCreateDrawer create={(props.create as ComponentProps<typeof ProcessCreateDrawer>['create']) ?? null} />
+  "hrm-process-create": (props) => (
+    <ProcessCreateDrawer
+      create={(props.create as ComponentProps<typeof ProcessCreateDrawer>["create"]) ?? null}
+    />
   ),
-  'hrm-process-new-menu': (props) => (
+  "hrm-process-new-menu": (props) => (
     <ProcessNewMenu
-      newLabel={str(props, 'newLabel') ?? ''}
-      busyLabel={str(props, 'busyLabel') ?? ''}
-      checklistLabel={str(props, 'checklistLabel') ?? ''}
-      templateLabel={str(props, 'templateLabel') ?? ''}
+      newLabel={str(props, "newLabel") ?? ""}
+      busyLabel={str(props, "busyLabel") ?? ""}
+      checklistLabel={str(props, "checklistLabel") ?? ""}
+      templateLabel={str(props, "templateLabel") ?? ""}
     />
   ),
-} satisfies Record<string, WidgetRenderer>
+} satisfies Record<string, WidgetRenderer>;

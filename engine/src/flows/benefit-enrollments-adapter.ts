@@ -15,14 +15,9 @@ export const benefitEnrollmentSubjectProfile: FlowSubjectProfile = {
   supportsUngatedSubmission: true,
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
-  statuses: [
-    "elected",
-    "pending_approval",
-    "active",
-    "waived",
-    "ended",
-    "cancelled",
-  ].map((value) => ({ value, label: value })),
+  statuses: ["elected", "pending_approval", "active", "waived", "ended", "cancelled"].map(
+    (value) => ({ value, label: value }),
+  ),
   fields: [
     { key: "planId", label: "Program", type: "text" },
     { key: "planCode", label: "Program code", type: "text" },
@@ -64,80 +59,90 @@ type EnrollmentContext = {
 };
 async function loadEnrollment(id: string): Promise<EnrollmentContext | null> {
   if (!isUuid(id)) return null;
-  const rows = await db.execute<EnrollmentContext>(sql`
+  const rows = await db.execute<EnrollmentContext>(
+    sql`
     select id,org_id,status,created_by,submitted_by,flow_run_id,submission_snapshot
-      from hrm_benefit_enrollments where id=${id}`, "objects");
+      from hrm_benefit_enrollments where id=${id}`,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
 /** Native gates decide pinned election evidence; they never edit current contributions. */
-export const benefitEnrollmentsFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: BENEFIT_ENROLLMENT_SUBJECT_KIND,
-    permissions: {
-      read: "hrm.benefits.read",
-      edit: "hrm.benefits.manage",
-      approve: "hrm.benefits.manage",
-    },
-    scope: tableScope("employment", "hrm_benefit_enrollments", "employment_id"),
-    profile: benefitEnrollmentSubjectProfile,
-    releaseViaHandler: true,
-    async loadContext(id) {
-      const enrollment = await loadEnrollment(id);
-      if (!enrollment) return null;
-      const pinned = enrollment.flow_run_id
-        ? (await db.execute<{ context: Record<string, unknown> }>(sql`
+export const benefitEnrollmentsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: BENEFIT_ENROLLMENT_SUBJECT_KIND,
+  permissions: {
+    read: "hrm.benefits.read",
+    edit: "hrm.benefits.manage",
+    approve: "hrm.benefits.manage",
+  },
+  scope: tableScope("employment", "hrm_benefit_enrollments", "employment_id"),
+  profile: benefitEnrollmentSubjectProfile,
+  releaseViaHandler: true,
+  async loadContext(id) {
+    const enrollment = await loadEnrollment(id);
+    if (!enrollment) return null;
+    const pinned = enrollment.flow_run_id
+      ? (
+          await db.execute<{ context: Record<string, unknown> }>(
+            sql`
           select context from flow_runs where org_id=${enrollment.org_id} and id=${enrollment.flow_run_id}
-            and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${id}`, "objects"))[0]?.context
-        : enrollment.submission_snapshot;
-      if (!pinned)
-        throw new Error(
-          "Enrollment submission evidence is unavailable; reopen the election and submit its complete contribution terms.",
-        );
-      return {
-        values: { ...pinned, id, status: enrollment.status },
-        submitterUserId: enrollment.submitted_by ?? enrollment.created_by,
-        makerUserId: enrollment.created_by,
-      };
-    },
-    label(id, values) {
-      return `${String(values.planName ?? "Benefits enrollment")} ${id.slice(0, 8)}`;
-    },
-    deepLink(id) {
-      return `/hrm/benefits?view=enrolments&enrollmentConfig=${id}`;
-    },
-    async getStatus(id) {
-      return (await loadEnrollment(id))?.status ?? null;
-    },
-    async changeStatus() {
+            and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${id}`,
+            "objects",
+          )
+        )[0]?.context
+      : enrollment.submission_snapshot;
+    if (!pinned)
       throw new Error(
-        "Enrollment status is controlled by submission and approval decisions; use its record actions.",
+        "Enrollment submission evidence is unavailable; reopen the election and submit its complete contribution terms.",
       );
-    },
-    async setField() {
-      throw new Error(
-        "Submitted enrollment evidence is immutable; create an effective-dated election change instead.",
-      );
-    },
-    async releaseApproval(subjectId, outcome, ctx, detail, run) {
-      await releaseFlowApproval({
-        subjectKind: BENEFIT_ENROLLMENT_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        ctx,
-        comment: detail?.comment,
-        approvalRunId: run?.id,
-      });
-    },
-    async findCandidateIds(limit) {
-      const orgId = ambientTenantOrgId();
-      if (!orgId)
-        throw new Error(
-          "Benefits enrollment candidates require an ambient organization context.",
-        );
-      return (await db.execute<{
-          id: string;
-        }>(sql`select id from hrm_benefit_enrollments where org_id=${orgId}
-      and status in ('elected','pending_approval') order by created_at desc,id limit ${limit}`, "objects")).map((row) => row.id);
-    },
-  });
+    return {
+      values: { ...pinned, id, status: enrollment.status },
+      submitterUserId: enrollment.submitted_by ?? enrollment.created_by,
+      makerUserId: enrollment.created_by,
+    };
+  },
+  label(id, values) {
+    return `${String(values.planName ?? "Benefits enrollment")} ${id.slice(0, 8)}`;
+  },
+  deepLink(id) {
+    return `/hrm/benefits?view=enrolments&enrollmentConfig=${id}`;
+  },
+  async getStatus(id) {
+    return (await loadEnrollment(id))?.status ?? null;
+  },
+  async changeStatus() {
+    throw new Error(
+      "Enrollment status is controlled by submission and approval decisions; use its record actions.",
+    );
+  },
+  async setField() {
+    throw new Error(
+      "Submitted enrollment evidence is immutable; create an effective-dated election change instead.",
+    );
+  },
+  async releaseApproval(subjectId, outcome, ctx, detail, run) {
+    await releaseFlowApproval({
+      subjectKind: BENEFIT_ENROLLMENT_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      ctx,
+      comment: detail?.comment,
+      approvalRunId: run?.id,
+    });
+  },
+  async findCandidateIds(limit) {
+    const orgId = ambientTenantOrgId();
+    if (!orgId)
+      throw new Error("Benefits enrollment candidates require an ambient organization context.");
+    return (
+      await db.execute<{
+        id: string;
+      }>(
+        sql`select id from hrm_benefit_enrollments where org_id=${orgId}
+      and status in ('elected','pending_approval') order by created_at desc,id limit ${limit}`,
+        "objects",
+      )
+    ).map((row) => row.id);
+  },
+});

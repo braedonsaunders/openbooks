@@ -1,5 +1,5 @@
-import { sql } from 'drizzle-orm'
-import type { SqlExecutor } from '@openbooks/engine/platform/db'
+import { sql } from "drizzle-orm";
+import type { SqlExecutor } from "@openbooks/engine/platform/db";
 
 /**
  * Account row a schedule binds to, read under the account row lock.
@@ -29,11 +29,18 @@ export async function lockScheduleAccount(
   orgId: string,
   accountId: string,
 ): Promise<LockedScheduleAccount | null> {
-  return (await tx.execute<LockedScheduleAccount & Record<string, unknown>>(sql`
+  return (
+    (
+      await tx.execute<LockedScheduleAccount & Record<string, unknown>>(
+        sql`
     select subsidiary_id, reconcilable, is_active, is_summary,
            currency_restriction as currency
       from accounts
      where id = ${accountId} and org_id = ${orgId}
      for update
-  `, 'objects'))[0] ?? null
+  `,
+        "objects",
+      )
+    )[0] ?? null
+  );
 }

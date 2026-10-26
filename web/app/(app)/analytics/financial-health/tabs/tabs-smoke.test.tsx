@@ -7,11 +7,19 @@ import test from "node:test";
 // of an operator). Charts are stubbed; panels and cards run for real.
 
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/analytics/financial-health", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/analytics/financial-health",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__smRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__smRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier.endsWith("/_ui/charts")) {
@@ -95,17 +103,66 @@ const bands = {
 
 test("overview renders its translated chrome and exact margins", async () => {
   const text = await mount(
-    <OverviewTab data={{
-      figures, ratios, bands,
-      monthly: [{ month: "2026-01", label: "Jan", revenue: "1000000.0000", cogs: "600000.0000", grossProfit: "400000.0000", grossMarginPct: 0.4, opex: "250000.0000", operatingIncome: "150000.0000", operatingMarginPct: 0.15, netIncome: "140000.0000" }],
-      pnlSummary: [{ key: "revenue", label: "Revenue", current: "1000000.0000", prior: "900000.0000", change: "100000.0000", changePct: "0.1111", favorable: true, strong: true }],
-      marginFlow: [{ key: "revenue", label: "Revenue", amount: "1000000.0000", pctOfRevenue: "1.0000", kind: "start" }],
-      segments: { department: [], class: [], location: [] },
-      drivers: { revenue: [], cost: [] },
-      items: { rows: [], gainers: [], decliners: [], totalCurrent: "0.0000", totalChange: "0.0000" },
-      insights: [],
-      budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
-    } as never} />,
+    <OverviewTab
+      data={
+        {
+          figures,
+          ratios,
+          bands,
+          monthly: [
+            {
+              month: "2026-01",
+              label: "Jan",
+              revenue: "1000000.0000",
+              cogs: "600000.0000",
+              grossProfit: "400000.0000",
+              grossMarginPct: 0.4,
+              opex: "250000.0000",
+              operatingIncome: "150000.0000",
+              operatingMarginPct: 0.15,
+              netIncome: "140000.0000",
+            },
+          ],
+          pnlSummary: [
+            {
+              key: "revenue",
+              label: "Revenue",
+              current: "1000000.0000",
+              prior: "900000.0000",
+              change: "100000.0000",
+              changePct: "0.1111",
+              favorable: true,
+              strong: true,
+            },
+          ],
+          marginFlow: [
+            {
+              key: "revenue",
+              label: "Revenue",
+              amount: "1000000.0000",
+              pctOfRevenue: "1.0000",
+              kind: "start",
+            },
+          ],
+          segments: { department: [], class: [], location: [] },
+          drivers: { revenue: [], cost: [] },
+          items: {
+            rows: [],
+            gainers: [],
+            decliners: [],
+            totalCurrent: "0.0000",
+            totalChange: "0.0000",
+          },
+          insights: [],
+          budget: {
+            scenario: null,
+            rows: [],
+            totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" },
+            tolerance: { onTrack: 10, watch: 25 },
+          },
+        } as never
+      }
+    />,
   );
   assert.match(text, /Revenue Trend/);
   assert.match(text, /P&L Summary/);
@@ -115,19 +172,53 @@ test("overview renders its translated chrome and exact margins", async () => {
 
 test("segments read configured HHI bands and translate every band", async () => {
   const seg = (id: string, revenue: string) => ({
-    id, name: id, revenue, cogs: "0.0000", grossProfit: revenue, grossMarginPct: 0.5,
-    opex: "0.0000", operatingIncome: revenue, operatingMarginPct: 0.5, priorRevenue: "0.0000", yoyPct: null, health: "good" as const, sharePct: 0.2,
+    id,
+    name: id,
+    revenue,
+    cogs: "0.0000",
+    grossProfit: revenue,
+    grossMarginPct: 0.5,
+    opex: "0.0000",
+    operatingIncome: revenue,
+    operatingMarginPct: 0.5,
+    priorRevenue: "0.0000",
+    yoyPct: null,
+    health: "good" as const,
+    sharePct: 0.2,
   });
   const text = await mount(
-    <SegmentsTab data={{
-      figures, ratios, bands,
-      monthly: [], pnlSummary: [], marginFlow: [],
-      segments: { department: ["a", "b", "c", "d", "e"].map((id) => seg(id, "200000.0000")), class: [], location: [] },
-      drivers: { revenue: [], cost: [] },
-      items: { rows: [], gainers: [], decliners: [], totalCurrent: "0.0000", totalChange: "0.0000" },
-      insights: [],
-      budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
-    } as never} />,
+    <SegmentsTab
+      data={
+        {
+          figures,
+          ratios,
+          bands,
+          monthly: [],
+          pnlSummary: [],
+          marginFlow: [],
+          segments: {
+            department: ["a", "b", "c", "d", "e"].map((id) => seg(id, "200000.0000")),
+            class: [],
+            location: [],
+          },
+          drivers: { revenue: [], cost: [] },
+          items: {
+            rows: [],
+            gainers: [],
+            decliners: [],
+            totalCurrent: "0.0000",
+            totalChange: "0.0000",
+          },
+          insights: [],
+          budget: {
+            scenario: null,
+            rows: [],
+            totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" },
+            tolerance: { onTrack: 10, watch: 25 },
+          },
+        } as never
+      }
+    />,
   );
   // Five equal shares price HHI 2000: below the configured 2100 warning
   // level, so unconcentrated — the starting 1500/2500 bands would read
@@ -150,15 +241,34 @@ test("segments with no revenue show no concentration verdict", async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <SegmentsTab data={{
-            figures, ratios, bands,
-            monthly: [], pnlSummary: [], marginFlow: [],
-            segments: { department: [], class: [], location: [] },
-            drivers: { revenue: [], cost: [] },
-            items: { rows: [], gainers: [], decliners: [], totalCurrent: "0.0000", totalChange: "0.0000" },
-            insights: [],
-            budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
-          } as never} />
+          <SegmentsTab
+            data={
+              {
+                figures,
+                ratios,
+                bands,
+                monthly: [],
+                pnlSummary: [],
+                marginFlow: [],
+                segments: { department: [], class: [], location: [] },
+                drivers: { revenue: [], cost: [] },
+                items: {
+                  rows: [],
+                  gainers: [],
+                  decliners: [],
+                  totalCurrent: "0.0000",
+                  totalChange: "0.0000",
+                },
+                insights: [],
+                budget: {
+                  scenario: null,
+                  rows: [],
+                  totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" },
+                  tolerance: { onTrack: 10, watch: 25 },
+                },
+              } as never
+            }
+          />
         </MoneyProvider>
       </NextIntlClientProvider>,
     );
@@ -167,7 +277,9 @@ test("segments with no revenue show no concentration verdict", async () => {
   await tick();
   const text = host.textContent ?? "";
   assert.ok(!text.includes("Unconcentrated"), "no green verdict on no data");
-  const card = [...host.querySelectorAll("p")].find((p) => p.textContent === "Concentration")?.parentElement;
+  const card = [...host.querySelectorAll("p")].find(
+    (p) => p.textContent === "Concentration",
+  )?.parentElement;
   const values = [...(card?.querySelectorAll("p") ?? [])].map((p) => p.textContent);
   assert.ok(values.includes("—"), "the concentration card shows a dash");
   assert.ok(!host.innerHTML.includes("text-emerald-600"), "nothing reads good on no data");
@@ -178,17 +290,44 @@ test("segments with no revenue show no concentration verdict", async () => {
 });
 
 test("drivers render both tables in the reader's language", async () => {
-  const row = (name: string) => ({ id: `a-${name}`, name, current: "100000.0000", change: "10000.0000", changePct: 0.1, contribution: 0.5 });
+  const row = (name: string) => ({
+    id: `a-${name}`,
+    name,
+    current: "100000.0000",
+    change: "10000.0000",
+    changePct: 0.1,
+    contribution: 0.5,
+  });
   const text = await mount(
-    <DriversTab onDrill={() => {}} data={{
-      figures, ratios, bands,
-      monthly: [], pnlSummary: [], marginFlow: [],
-      segments: { department: [], class: [], location: [] },
-      drivers: { revenue: [row("Services")], cost: [row("Salaries")] },
-      items: { rows: [], gainers: [], decliners: [], totalCurrent: "0.0000", totalChange: "0.0000" },
-      insights: [],
-      budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
-    } as never} />,
+    <DriversTab
+      onDrill={() => {}}
+      data={
+        {
+          figures,
+          ratios,
+          bands,
+          monthly: [],
+          pnlSummary: [],
+          marginFlow: [],
+          segments: { department: [], class: [], location: [] },
+          drivers: { revenue: [row("Services")], cost: [row("Salaries")] },
+          items: {
+            rows: [],
+            gainers: [],
+            decliners: [],
+            totalCurrent: "0.0000",
+            totalChange: "0.0000",
+          },
+          insights: [],
+          budget: {
+            scenario: null,
+            rows: [],
+            totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" },
+            tolerance: { onTrack: 10, watch: 25 },
+          },
+        } as never
+      }
+    />,
   );
   assert.match(text, /Revenue Drivers/);
   assert.match(text, /Cost Drivers/);
@@ -204,8 +343,26 @@ test("driver verdicts follow sign times favourability, never the column", async 
   // bad and the saving reads good. Table name cells are <td>, so the <p>
   // lookup below only sees the KPI sub-lines carrying the verdict.
   const drivers = {
-    revenue: [{ id: "a-services", name: "Services", current: "90000.0000", change: "-10000.0000", changePct: -0.1, contribution: 0.5 }],
-    cost: [{ id: "a-salaries", name: "Salaries", current: "92000.0000", change: "-8000.0000", changePct: -0.08, contribution: 0.5 }],
+    revenue: [
+      {
+        id: "a-services",
+        name: "Services",
+        current: "90000.0000",
+        change: "-10000.0000",
+        changePct: -0.1,
+        contribution: 0.5,
+      },
+    ],
+    cost: [
+      {
+        id: "a-salaries",
+        name: "Salaries",
+        current: "92000.0000",
+        change: "-8000.0000",
+        changePct: -0.08,
+        contribution: 0.5,
+      },
+    ],
   };
   globalThis.__smRouter = { push() {}, refresh() {} };
   const host = document.createElement("div");
@@ -215,22 +372,43 @@ test("driver verdicts follow sign times favourability, never the column", async 
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <DriversTab onDrill={() => {}} data={{
-            figures, ratios, bands,
-            monthly: [], pnlSummary: [], marginFlow: [],
-            segments: { department: [], class: [], location: [] },
-            drivers,
-            items: { rows: [], gainers: [], decliners: [], totalCurrent: "0.0000", totalChange: "0.0000" },
-            insights: [],
-            budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
-          } as never} />
+          <DriversTab
+            onDrill={() => {}}
+            data={
+              {
+                figures,
+                ratios,
+                bands,
+                monthly: [],
+                pnlSummary: [],
+                marginFlow: [],
+                segments: { department: [], class: [], location: [] },
+                drivers,
+                items: {
+                  rows: [],
+                  gainers: [],
+                  decliners: [],
+                  totalCurrent: "0.0000",
+                  totalChange: "0.0000",
+                },
+                insights: [],
+                budget: {
+                  scenario: null,
+                  rows: [],
+                  totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" },
+                  tolerance: { onTrack: 10, watch: 25 },
+                },
+              } as never
+            }
+          />
         </MoneyProvider>
       </NextIntlClientProvider>,
     );
     await tick();
   });
   await tick();
-  const sub = (name: string) => [...host.querySelectorAll("p")].find((p) => (p.textContent ?? "").includes(name));
+  const sub = (name: string) =>
+    [...host.querySelectorAll("p")].find((p) => (p.textContent ?? "").includes(name));
   assert.match(sub("Services")?.className ?? "", /text-red-600/, "a revenue decline reads bad");
   assert.match(sub("Salaries")?.className ?? "", /text-emerald-600/, "a cost saving reads good");
   await act(async () => {
@@ -240,17 +418,44 @@ test("driver verdicts follow sign times favourability, never the column", async 
 });
 
 test("items render the detail table in the reader's language", async () => {
-  const row = (id: string) => ({ id, name: id, current: "50000.0000", change: "5000.0000", changePct: 0.1, contribution: 0.25 });
+  const row = (id: string) => ({
+    id,
+    name: id,
+    current: "50000.0000",
+    change: "5000.0000",
+    changePct: 0.1,
+    contribution: 0.25,
+  });
   const text = await mount(
-    <ItemsTab onDrill={() => {}} data={{
-      figures, ratios, bands,
-      monthly: [], pnlSummary: [], marginFlow: [],
-      segments: { department: [], class: [], location: [] },
-      drivers: { revenue: [], cost: [] },
-      items: { rows: [row("Sales")], gainers: [row("Sales")], decliners: [], totalCurrent: "50000.0000", totalChange: "5000.0000" },
-      insights: [],
-      budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
-    } as never} />,
+    <ItemsTab
+      onDrill={() => {}}
+      data={
+        {
+          figures,
+          ratios,
+          bands,
+          monthly: [],
+          pnlSummary: [],
+          marginFlow: [],
+          segments: { department: [], class: [], location: [] },
+          drivers: { revenue: [], cost: [] },
+          items: {
+            rows: [row("Sales")],
+            gainers: [row("Sales")],
+            decliners: [],
+            totalCurrent: "50000.0000",
+            totalChange: "5000.0000",
+          },
+          insights: [],
+          budget: {
+            scenario: null,
+            rows: [],
+            totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" },
+            tolerance: { onTrack: 10, watch: 25 },
+          },
+        } as never
+      }
+    />,
   );
   assert.match(text, /Account Detail/);
   assert.match(text, /Largest Gainer/);
@@ -275,25 +480,56 @@ test("clicking a driver row drills into its account", async () => {
       root.render(
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           <MoneyProvider currency="USD">
-            <DriversTab onDrill={(id, name) => seen.push({ id, name })} data={{
-              figures, ratios, bands,
-              monthly: [], pnlSummary: [], marginFlow: [],
-              segments: { department: [], class: [], location: [] },
-              drivers: {
-                revenue: [{ id: "a-services", name: "Services", current: "100000.0000", change: "10000.0000", changePct: 0.1, contribution: 0.5 }],
-                cost: [],
-              },
-              items: { rows: [], gainers: [], decliners: [], totalCurrent: "0.0000", totalChange: "0.0000" },
-              insights: [],
-              budget: { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: { onTrack: 10, watch: 25 } },
-            } as never} />
+            <DriversTab
+              onDrill={(id, name) => seen.push({ id, name })}
+              data={
+                {
+                  figures,
+                  ratios,
+                  bands,
+                  monthly: [],
+                  pnlSummary: [],
+                  marginFlow: [],
+                  segments: { department: [], class: [], location: [] },
+                  drivers: {
+                    revenue: [
+                      {
+                        id: "a-services",
+                        name: "Services",
+                        current: "100000.0000",
+                        change: "10000.0000",
+                        changePct: 0.1,
+                        contribution: 0.5,
+                      },
+                    ],
+                    cost: [],
+                  },
+                  items: {
+                    rows: [],
+                    gainers: [],
+                    decliners: [],
+                    totalCurrent: "0.0000",
+                    totalChange: "0.0000",
+                  },
+                  insights: [],
+                  budget: {
+                    scenario: null,
+                    rows: [],
+                    totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" },
+                    tolerance: { onTrack: 10, watch: 25 },
+                  },
+                } as never
+              }
+            />
           </MoneyProvider>
         </NextIntlClientProvider>,
       );
       await tick();
     });
     await tick();
-    const row = [...host.querySelectorAll("tbody tr")].find((tr) => tr.textContent?.includes("Services"));
+    const row = [...host.querySelectorAll("tbody tr")].find((tr) =>
+      tr.textContent?.includes("Services"),
+    );
     assert.ok(row, "the driver row renders");
     await act(async () => {
       row.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));

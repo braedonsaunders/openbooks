@@ -19,9 +19,14 @@ export async function applyViaPostingForOrg(query: {
 }): Promise<{ applicationId: string; candidateId: string }> {
   // bypass: public-token-lookup — the public posting id resolves one organization row before org-scoped application work.
   const row = await withBypassContext(async () => {
-    const found = (await db.execute<{ orgId: string }>(sql`
+    const found = (
+      await db.execute<{ orgId: string }>(
+        sql`
       select org_id as "orgId" from hrm_job_postings where id = ${query.postingId} limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     return found ?? null;
   });
   if (!row) {

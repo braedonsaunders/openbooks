@@ -17,7 +17,14 @@ import { payablesFindings } from "./payables.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-async function seedPostedEntry(org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; date: string; accounts: Record<string, string> }): Promise<string> {
+async function seedPostedEntry(org: {
+  orgId: string;
+  bookId: string;
+  subsidiaryId: string;
+  periodId: string;
+  date: string;
+  accounts: Record<string, string>;
+}): Promise<string> {
   const id = randomUUID();
   await withBypassContext(() =>
     db.transaction(async (tx) => {
@@ -28,14 +35,22 @@ async function seedPostedEntry(org: { orgId: string; bookId: string; subsidiaryI
         (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
         values (${org.orgId}, ${id}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, '1', 'CAD', '1', 1),
                (${org.orgId}, ${id}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-1', 'CAD', '-1', 1)`);
-      await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${id}`);
+      await tx.execute(
+        sql`update journal_entries set status = 'posted', posted_at = now() where id = ${id}`,
+      );
     }),
   );
   return id;
 }
 
 async function seedBill(
-  org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; accounts: Record<string, string> },
+  org: {
+    orgId: string;
+    bookId: string;
+    subsidiaryId: string;
+    periodId: string;
+    accounts: Record<string, string>;
+  },
   entryId: string,
   partyId: string,
   number: string,
@@ -55,17 +70,25 @@ async function seedBill(
   if (status === "posted" && open === total) {
     billEntryId = randomUUID();
     const neg = total.startsWith("-") ? total.slice(1) : `-${total}`;
-    await withBypassContext(() => db.execute(sql`insert into journal_entries
+    await withBypassContext(() =>
+      db.execute(sql`insert into journal_entries
       (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-      values (${billEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${billEntryId}, ${docDate}, ${org.periodId}, 'draft', 'manual')`));
-    await withBypassContext(() => db.execute(sql`insert into journal_lines
+      values (${billEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${billEntryId}, ${docDate}, ${org.periodId}, 'draft', 'manual')`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`insert into journal_lines
       (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, party_id, is_open_item)
       values (${org.orgId}, ${billEntryId}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${total}, 'CAD', ${total}, 1, ${partyId}, true),
-             (${org.orgId}, ${billEntryId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${neg}, 'CAD', ${neg}, 1, null, false)`));
-    await withBypassContext(() => db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${billEntryId}`));
+             (${org.orgId}, ${billEntryId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, ${neg}, 'CAD', ${neg}, 1, null, false)`),
+    );
+    await withBypassContext(() =>
+      db.execute(
+        sql`update journal_entries set status = 'posted', posted_at = now() where id = ${billEntryId}`,
+      ),
+    );
   }
-  await withBypassContext(
-    () => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, document_date, due_date,
          currency, subtotal, tax_total, total, open_balance, party_id,
@@ -87,43 +110,143 @@ test(
       const today = await withBypassContext(() => businessToday(org.orgId));
       const entry = await seedPostedEntry(org);
       const vendor = await withBypassContext(() =>
-        db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${org.orgId}, 'vendor', 'Vendor One') returning id`, "objects"),
+        db.execute(
+          sql`insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${org.orgId}, 'vendor', 'Vendor One') returning id`,
+          "objects",
+        ),
       ).then((rows) => (rows[0] as { id: string }).id);
 
       // Open/open duplicate: same vendor, kind, amount, 4 days apart.
-      await seedBill(org, entry, vendor, "BILL-D1", addCalendarDays(today, -30), addCalendarDays(today, 60), "1200.00");
-      await seedBill(org, entry, vendor, "BILL-D1B", addCalendarDays(today, -26), addCalendarDays(today, 60), "1200.00");
+      await seedBill(
+        org,
+        entry,
+        vendor,
+        "BILL-D1",
+        addCalendarDays(today, -30),
+        addCalendarDays(today, 60),
+        "1200.00",
+      );
+      await seedBill(
+        org,
+        entry,
+        vendor,
+        "BILL-D1B",
+        addCalendarDays(today, -26),
+        addCalendarDays(today, 60),
+        "1200.00",
+      );
       // Open/paid duplicate: the paid leg stays as evidence of double payment.
-      await seedBill(org, entry, vendor, "BILL-D2", addCalendarDays(today, -20), addCalendarDays(today, 60), "1500.00");
-      await seedBill(org, entry, vendor, "BILL-D2B", addCalendarDays(today, -18), addCalendarDays(today, -5), "1500.00", { open: "0" });
+      await seedBill(
+        org,
+        entry,
+        vendor,
+        "BILL-D2",
+        addCalendarDays(today, -20),
+        addCalendarDays(today, 60),
+        "1500.00",
+      );
+      await seedBill(
+        org,
+        entry,
+        vendor,
+        "BILL-D2B",
+        addCalendarDays(today, -18),
+        addCalendarDays(today, -5),
+        "1500.00",
+        { open: "0" },
+      );
       // Same amount but a credit memo: never a duplicate.
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into documents (id, org_id, kind, status, document_number, document_date, due_date,
           currency, subtotal, tax_total, total, open_balance, party_id, posted_entry_id, posting_period_id)
         values (${randomUUID()}, ${org.orgId}, 'vendor_credit', 'posted', 'BILL-C1', ${addCalendarDays(today, -28)}, ${addCalendarDays(today, 60)},
-          'CAD', '1200.00', '0', '1200.00', '1200.00', ${vendor}, ${entry}, ${org.periodId})`));
+          'CAD', '1200.00', '0', '1200.00', '1200.00', ${vendor}, ${entry}, ${org.periodId})`),
+      );
 
       // Pay-run horizon (7 days): two due, one far out.
-      await seedBill(org, entry, vendor, "BILL-P1", addCalendarDays(today, -2), addCalendarDays(today, 3), "700.00");
-      await seedBill(org, entry, vendor, "BILL-P2", addCalendarDays(today, -1), addCalendarDays(today, 1), "300.00");
-      await seedBill(org, entry, vendor, "BILL-P3", addCalendarDays(today, -1), addCalendarDays(today, 60), "400.00");
+      await seedBill(
+        org,
+        entry,
+        vendor,
+        "BILL-P1",
+        addCalendarDays(today, -2),
+        addCalendarDays(today, 3),
+        "700.00",
+      );
+      await seedBill(
+        org,
+        entry,
+        vendor,
+        "BILL-P2",
+        addCalendarDays(today, -1),
+        addCalendarDays(today, 1),
+        "300.00",
+      );
+      await seedBill(
+        org,
+        entry,
+        vendor,
+        "BILL-P3",
+        addCalendarDays(today, -1),
+        addCalendarDays(today, 60),
+        "400.00",
+      );
 
       // Discount window open: 2/10 terms, invoiced 2 days ago.
-      await withBypassContext(() => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
         insert into payment_terms (id, org_id, name, net_days, discount_days, discount_percent, is_active)
-        values (${randomUUID()}, ${org.orgId}, '2/10 net 30', 30, 10, '2.0000', true)`));
-      await seedBill(org, entry, vendor, "BILL-T1", addCalendarDays(today, -2), addCalendarDays(today, 40), "50000.00");
+        values (${randomUUID()}, ${org.orgId}, '2/10 net 30', 30, 10, '2.0000', true)`),
+      );
+      await seedBill(
+        org,
+        entry,
+        vendor,
+        "BILL-T1",
+        addCalendarDays(today, -2),
+        addCalendarDays(today, 40),
+        "50000.00",
+      );
 
       // Stalled approval: draft from 10 days ago.
-      await seedBill(org, entry, vendor, "BILL-S1", addCalendarDays(today, -10), addCalendarDays(today, 20), "4000.00", { status: "draft", open: "0" });
+      await seedBill(
+        org,
+        entry,
+        vendor,
+        "BILL-S1",
+        addCalendarDays(today, -10),
+        addCalendarDays(today, 20),
+        "4000.00",
+        { status: "draft", open: "0" },
+      );
 
       // Another tenant with its own duplicate pair: must not leak in.
       const otherEntry = await seedPostedEntry(other);
       const otherVendor = await withBypassContext(() =>
-        db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${other.orgId}, 'vendor', 'Foreign Vendor') returning id`, "objects"),
+        db.execute(
+          sql`insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${other.orgId}, 'vendor', 'Foreign Vendor') returning id`,
+          "objects",
+        ),
       ).then((rows) => (rows[0] as { id: string }).id);
-      await seedBill(other, otherEntry, otherVendor, "BILL-F1", addCalendarDays(today, -9), addCalendarDays(today, 60), "80000.00");
-      await seedBill(other, otherEntry, otherVendor, "BILL-F1B", addCalendarDays(today, -8), addCalendarDays(today, 60), "80000.00");
+      await seedBill(
+        other,
+        otherEntry,
+        otherVendor,
+        "BILL-F1",
+        addCalendarDays(today, -9),
+        addCalendarDays(today, 60),
+        "80000.00",
+      );
+      await seedBill(
+        other,
+        otherEntry,
+        otherVendor,
+        "BILL-F1B",
+        addCalendarDays(today, -8),
+        addCalendarDays(today, 60),
+        "80000.00",
+      );
 
       const findings = await withBypassContext(() =>
         payablesFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("payables")),
@@ -132,7 +255,11 @@ test(
 
       const dups = byType("duplicate_bills");
       assert.equal(dups.length, 1);
-      assert.equal(dups[0]!.summary.pairCount, 2, "open/open once, open/paid once, credit excluded, foreign excluded");
+      assert.equal(
+        dups[0]!.summary.pairCount,
+        2,
+        "open/open once, open/paid once, credit excluded, foreign excluded",
+      );
       assert.equal(dups[0]!.materiality, "3900.0000", "open legs only: 1200 + 1200 + 1500");
       assert.equal(dups[0]!.severity, "warning");
 
@@ -140,7 +267,11 @@ test(
       assert.equal(runs.length, 1);
       assert.equal(runs[0]!.materiality, "1000.0000");
       assert.equal(runs[0]!.summary.dueCount, 2);
-      assert.equal(runs[0]!.summary.beyondHorizonCount, 5, "D1, D1B, D2, T1, P3 defer past the horizon");
+      assert.equal(
+        runs[0]!.summary.beyondHorizonCount,
+        5,
+        "D1, D1B, D2, T1, P3 defer past the horizon",
+      );
       const recommended = runs[0]!.summary.recommended as { documentNumber: string }[];
       assert.deepEqual(
         recommended.map((bill) => bill.documentNumber),

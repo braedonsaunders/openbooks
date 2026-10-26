@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
+import { stubModules } from "../../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../../testing/jsdom-env.ts";
 
 // jsdom first: the workbench reads browser globals at render.
 declare global {
@@ -11,7 +11,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/assistant" });
 
-stubModules({ navigation: { source: 'export function useRouter(){return{push(u){globalThis.__newChatPushes.push(u)},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return \'/assistant\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return{push(u){globalThis.__newChatPushes.push(u)},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/assistant'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -124,11 +132,7 @@ test("AI providers link navigates to setup in the same tab", async () => {
   try {
     const link = host.querySelector('a[href="/admin/ai"]');
     assert.ok(link, "AI providers setup link must render for admins");
-    assert.equal(
-      link.getAttribute("target"),
-      null,
-      "setup link must not open a new tab",
-    );
+    assert.equal(link.getAttribute("target"), null, "setup link must not open a new tab");
   } finally {
     await unmount();
   }

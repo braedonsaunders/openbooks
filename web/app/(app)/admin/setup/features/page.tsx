@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { featuresSpec, loadFeatures } from './view'
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { featuresSpec, loadFeatures } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Features — the on/off switchboard for optional modules. Not every company
@@ -11,9 +11,9 @@ export const dynamic = 'force-dynamic'
 export default async function FeaturesSetup({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadFeatures()
-  return <ModuleView spec={featuresSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadFeatures();
+  return <ModuleView spec={featuresSpec(data)} data={data} searchParams={sp} trusted />;
 }

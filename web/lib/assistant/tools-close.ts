@@ -1,11 +1,11 @@
-import 'server-only'
-import { z } from 'zod'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { canonicalPeriodLabelSql } from '@openbooks/engine/periods/period-policy'
-import type { Authz } from '../authz'
-import type { AssistantToolDef, ToolResult } from './types'
-import { assistantListPage, capList, uuidInput } from './tools-shared'
+import "server-only";
+import { z } from "zod";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { canonicalPeriodLabelSql } from "@openbooks/engine/periods/period-policy";
+import type { Authz } from "../authz";
+import type { AssistantToolDef, ToolResult } from "./types";
+import { assistantListPage, capList, uuidInput } from "./tools-shared";
 
 /**
  * Period-close read tools for the agentic assistant. They mirror the close
@@ -22,27 +22,26 @@ import { assistantListPage, capList, uuidInput } from './tools-shared'
 // authorize them (guardCloseScope). Fail closed like the page does. Shared
 // with the FX consolidation view, which is the same org-wide surface.
 export function closeScopeDenied(authz: Authz): ToolResult | null {
-  return authz.allowedSubsidiaryIds === null
-    ? null
-    : { ok: false, error: 'forbidden' }
+  return authz.allowedSubsidiaryIds === null ? null : { ok: false, error: "forbidden" };
 }
 
 const getCloseRunStatus: AssistantToolDef = {
-  name: 'get_close_run_status',
+  name: "get_close_run_status",
   description:
     "One close run's state: period/book, lifecycle stage, readiness, task counts, open exceptions (worst first), sign-offs, period locks. Use list_close_runs first. Read-only.",
-  category: 'read',
-  gate: { mode: 'anyOf', perms: ['close.read'] },
+  category: "read",
+  gate: { mode: "anyOf", perms: ["close.read"] },
   inputSchema: z.object({ runId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const denied = closeScopeDenied(authz)
-    if (denied) return denied
-    const a = raw as { runId: string }
+    const denied = closeScopeDenied(authz);
+    if (denied) return denied;
+    const a = raw as { runId: string };
     const [runRes, taskRes, exceptionRes, signoffRes] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select r.id, r.status, r.current_stage, r.readiness_score, r.target_close_date,
                r.started_at, r.last_validated_at,
-               p.id as period_id, ${canonicalPeriodLabelSql('p')} as period_name, p.starts_on, p.ends_on, p.fiscal_year,
+               p.id as period_id, ${canonicalPeriodLabelSql("p")} as period_name, p.starts_on, p.ends_on, p.fiscal_year,
                b.id as book_id, b.name as book_name, b.code as book_code,
                starter.name as started_by_name
           from close_runs r
@@ -50,14 +49,20 @@ const getCloseRunStatus: AssistantToolDef = {
           join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
           left join users starter on starter.id = r.started_by
          where r.id = ${a.runId} and r.org_id = ${authz.user.orgId}
-      `, 'objects'),
-      db.execute<{ status: string; n: string }>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<{ status: string; n: string }>(
+        sql`
         select status, count(*)::text as n
           from close_run_tasks
          where run_id = ${a.runId} and org_id = ${authz.user.orgId}
          group by status
-      `, 'objects'),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select code, category, severity, status, title, message, created_at,
                count(*) over() as total
           from close_exceptions
@@ -65,22 +70,24 @@ const getCloseRunStatus: AssistantToolDef = {
          order by case severity when 'critical' then 1 when 'error' then 2 when 'warning' then 3 else 4 end,
                   created_at
          limit 11
-      `, 'objects'),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select s.signoff_type, s.decision, s.signed_at, u.name as signed_by_name
           from close_signoffs s join users u on u.id = s.signed_by
          where s.run_id = ${a.runId} and s.org_id = ${authz.user.orgId}
          order by s.signed_at desc
-      `, 'objects'),
-    ])
-    const run = runRes[0]
-    if (!run) return { ok: false, error: 'close_run_not_found' }
-    const exceptionPage = assistantListPage(
-      exceptionRes,
-      10,
-      Number(exceptionRes[0]?.total ?? 0),
-    )
-    const locks = await db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+    ]);
+    const run = runRes[0];
+    if (!run) return { ok: false, error: "close_run_not_found" };
+    const exceptionPage = assistantListPage(exceptionRes, 10, Number(exceptionRes[0]?.total ?? 0));
+    const locks = await db.execute<Record<string, unknown>>(
+      sql`
       select l.module, l.state, l.reopen_expires_at, l.locked_at, l.reason,
              s.name as subsidiary_name
         from period_locks l
@@ -89,9 +96,11 @@ const getCloseRunStatus: AssistantToolDef = {
          and l.period_id = ${run.period_id as string}
          and l.book_id = ${run.book_id as string}
        order by l.subsidiary_id nulls first, l.module
-    `, 'objects')
-    const tasksByStatus: Record<string, number> = {}
-    for (const row of taskRes) tasksByStatus[row.status] = Number(row.n)
+    `,
+      "objects",
+    );
+    const tasksByStatus: Record<string, number> = {};
+    for (const row of taskRes) tasksByStatus[row.status] = Number(row.n);
     return {
       ok: true,
       data: {
@@ -141,52 +150,53 @@ const getCloseRunStatus: AssistantToolDef = {
         })),
         href: `/close?run=${a.runId}`,
       },
-    }
+    };
   },
-}
+};
 
 const listPeriodLocks: AssistantToolDef = {
-  name: 'list_period_locks',
+  name: "list_period_locks",
   description:
-    'Period locks by scope: period, book, subsidiary (null = org-wide), module, state, locker, reason, reopen expiry. Filter by period, state, module. Read-only.',
-  category: 'search',
-  gate: { mode: 'anyOf', perms: ['close.read'] },
+    "Period locks by scope: period, book, subsidiary (null = org-wide), module, state, locker, reason, reopen expiry. Filter by period, state, module. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["close.read"] },
   inputSchema: z.object({
     periodId: uuidInput.optional(),
     state: z
-      .enum(['open', 'soft_closed', 'closed'])
+      .enum(["open", "soft_closed", "closed"])
       .optional()
-      .describe('Only locks in this state'),
+      .describe("Only locks in this state"),
     module: z
-      .enum(['ar', 'ap', 'banking', 'assets', 'tax', 'gl'])
+      .enum(["ar", "ap", "banking", "assets", "tax", "gl"])
       .optional()
-      .describe('Only locks for this module'),
+      .describe("Only locks for this module"),
     limit: z
       .number()
       .int()
       .min(1)
       .max(200)
       .optional()
-      .describe('Maximum locks to return (default 50)'),
+      .describe("Maximum locks to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const denied = closeScopeDenied(authz)
-    if (denied) return denied
+    const denied = closeScopeDenied(authz);
+    if (denied) return denied;
     const a = raw as {
-      periodId?: string
-      state?: string
-      module?: string
-      limit?: number
-    }
-    const limit = Math.min(a.limit ?? 50, 200)
-    let where = sql`l.org_id = ${authz.user.orgId}`
-    if (a.periodId) where = sql`${where} and l.period_id = ${a.periodId}`
-    if (a.state) where = sql`${where} and l.state = ${a.state}`
-    if (a.module) where = sql`${where} and l.module = ${a.module}`
+      periodId?: string;
+      state?: string;
+      module?: string;
+      limit?: number;
+    };
+    const limit = Math.min(a.limit ?? 50, 200);
+    let where = sql`l.org_id = ${authz.user.orgId}`;
+    if (a.periodId) where = sql`${where} and l.period_id = ${a.periodId}`;
+    if (a.state) where = sql`${where} and l.state = ${a.state}`;
+    if (a.module) where = sql`${where} and l.module = ${a.module}`;
     const [rows, count] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select l.id, l.module, l.state, l.locked_at, l.reason, l.reopen_expires_at,
-               ${canonicalPeriodLabelSql('p')} as period_name, p.starts_on, p.ends_on,
+               ${canonicalPeriodLabelSql("p")} as period_name, p.starts_on, p.ends_on,
                b.name as book_name, b.code as book_code,
                s.name as subsidiary_name,
                u.name as locked_by_name
@@ -198,12 +208,17 @@ const listPeriodLocks: AssistantToolDef = {
          where ${where}
          order by p.ends_on desc, l.subsidiary_id nulls first, l.module
          limit ${limit}
-      `, 'objects'),
-      db.execute<{ n: string }>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<{ n: string }>(
+        sql`
         select count(*) as n from period_locks l where ${where}
-      `, 'objects'),
-    ])
-    const total = Number(count[0]?.n ?? 0)
+      `,
+        "objects",
+      ),
+    ]);
+    const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
       rows.map((l) => ({
         id: l.id,
@@ -221,7 +236,7 @@ const listPeriodLocks: AssistantToolDef = {
         reopenExpiresAt: l.reopen_expires_at,
       })),
       limit,
-    )
+    );
     return {
       ok: true,
       data: {
@@ -229,34 +244,27 @@ const listPeriodLocks: AssistantToolDef = {
         returned: items.length,
         truncated: truncated || total > items.length,
         locks: items,
-        href: '/close',
+        href: "/close",
       },
-    }
+    };
   },
-}
+};
 
 const listPeriodReopenRequests: AssistantToolDef = {
-  name: 'list_period_reopen_requests',
+  name: "list_period_reopen_requests",
   description:
-    'Period-reopen requests: scope, modules, reason, status, requester/approver, expiry. Request and submit via request_period_reopen / submit_period_reopen; configured gates are decided through Approvals. Read-only.',
-  category: 'search',
+    "Period-reopen requests: scope, modules, reason, status, requester/approver, expiry. Request and submit via request_period_reopen / submit_period_reopen; configured gates are decided through Approvals. Read-only.",
+  category: "search",
   // No close.read list surface shows these rows: requesting/deciding live
   // behind close.reopen (admin/close route) and the setup surface behind
   // periods.manage, so the read side admits exactly those two (flagged for
   // the permission-parity audit).
-  gate: { mode: 'anyOf', perms: ['close.reopen', 'periods.manage'] },
+  gate: { mode: "anyOf", perms: ["close.reopen", "periods.manage"] },
   inputSchema: z.object({
     status: z
-      .enum([
-        'requested',
-        'approved',
-        'rejected',
-        'withdrawn',
-        'expired',
-        'reclosed',
-      ])
+      .enum(["requested", "approved", "rejected", "withdrawn", "expired", "reclosed"])
       .optional()
-      .describe('Only requests in this status'),
+      .describe("Only requests in this status"),
     periodId: uuidInput.optional(),
     limit: z
       .number()
@@ -264,20 +272,21 @@ const listPeriodReopenRequests: AssistantToolDef = {
       .min(1)
       .max(100)
       .optional()
-      .describe('Maximum requests to return (default 50)'),
+      .describe("Maximum requests to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const denied = closeScopeDenied(authz)
-    if (denied) return denied
-    const a = raw as { status?: string; periodId?: string; limit?: number }
-    const limit = Math.min(a.limit ?? 50, 100)
-    let where = sql`r.org_id = ${authz.user.orgId}`
-    if (a.status) where = sql`${where} and r.status = ${a.status}`
-    if (a.periodId) where = sql`${where} and r.period_id = ${a.periodId}`
+    const denied = closeScopeDenied(authz);
+    if (denied) return denied;
+    const a = raw as { status?: string; periodId?: string; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 100);
+    let where = sql`r.org_id = ${authz.user.orgId}`;
+    if (a.status) where = sql`${where} and r.status = ${a.status}`;
+    if (a.periodId) where = sql`${where} and r.period_id = ${a.periodId}`;
     const [rows, count] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select r.id, r.modules, r.reason, r.status, r.expires_at, r.reclosed_at, r.created_at,
-               ${canonicalPeriodLabelSql('p')} as period_name, b.name as book_name, b.code as book_code,
+               ${canonicalPeriodLabelSql("p")} as period_name, b.name as book_name, b.code as book_code,
                s.name as subsidiary_name,
                req.name as requested_by_name, app.name as approved_by_name, r.approved_at
           from close_reopen_requests r
@@ -289,12 +298,17 @@ const listPeriodReopenRequests: AssistantToolDef = {
          where ${where}
          order by r.created_at desc
          limit ${limit}
-      `, 'objects'),
-      db.execute<{ n: string }>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<{ n: string }>(
+        sql`
         select count(*) as n from close_reopen_requests r where ${where}
-      `, 'objects'),
-    ])
-    const total = Number(count[0]?.n ?? 0)
+      `,
+        "objects",
+      ),
+    ]);
+    const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
       rows.map((r) => ({
         id: r.id,
@@ -313,7 +327,7 @@ const listPeriodReopenRequests: AssistantToolDef = {
         createdAt: r.created_at,
       })),
       limit,
-    )
+    );
     return {
       ok: true,
       data: {
@@ -321,14 +335,14 @@ const listPeriodReopenRequests: AssistantToolDef = {
         returned: items.length,
         truncated: truncated || total > items.length,
         requests: items,
-        href: '/close',
+        href: "/close",
       },
-    }
+    };
   },
-}
+};
 
 export const CLOSE_TOOLS: AssistantToolDef[] = [
   getCloseRunStatus,
   listPeriodLocks,
   listPeriodReopenRequests,
-]
+];

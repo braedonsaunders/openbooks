@@ -4,7 +4,11 @@ import { statementBalanceMismatch } from "./statement-import.ts";
 
 test("a statement whose opening plus lines reaches its closing raises no flag", () => {
   assert.equal(statementBalanceMismatch("243.36", "1161.10", "917.74", "asset_bank"), null);
-  assert.equal(statementBalanceMismatch(null, "1161.10", "917.74", "asset_bank"), null, "an absent balance is not checked");
+  assert.equal(
+    statementBalanceMismatch(null, "1161.10", "917.74", "asset_bank"),
+    null,
+    "an absent balance is not checked",
+  );
 });
 
 test("a closing the lines cannot reach is named with the closing they do reach", () => {

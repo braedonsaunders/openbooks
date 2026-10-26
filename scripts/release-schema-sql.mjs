@@ -11,12 +11,18 @@ export function releaseSchemaFiles(root = process.cwd()) {
   const directory = join(root, "schema", "migrations");
   const generatedDirectory = join(directory, "generated");
   const generated = existsSync(generatedDirectory)
-    ? readdirSync(generatedDirectory).filter((file) => file.endsWith(".sql")).sort()
+    ? readdirSync(generatedDirectory)
+        .filter((file) => file.endsWith(".sql"))
+        .sort()
     : [];
-  return releaseMigrationPlan(directory, generated).filenames
-    .map((filename) => ({ filename, path: join(directory, filename) }));
+  return releaseMigrationPlan(directory, generated).filenames.map((filename) => ({
+    filename,
+    path: join(directory, filename),
+  }));
 }
 
 export function releaseSchemaSql(root = process.cwd()) {
-  return releaseSchemaFiles(root).map(({ path }) => readFileSync(path, "utf8")).join("\n");
+  return releaseSchemaFiles(root)
+    .map(({ path }) => readFileSync(path, "utf8"))
+    .join("\n");
 }

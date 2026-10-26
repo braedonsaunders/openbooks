@@ -1,27 +1,45 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
-import type { ComponentType, ReactNode } from 'react'
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
+import type { ComponentType, ReactNode } from "react";
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
-await bootJsdomEnvironment({ html: "<!doctype html><html><body></body></html>", url: "http://localhost/", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  html: "<!doctype html><html><body></body></html>",
+  url: "http://localhost/",
+  matchMediaMatches: false,
+});
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__createMenuRouter}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: { source: "export function useRouter(){return globalThis.__createMenuRouter}" },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React, __createMenuRouter: { pushes: [] as string[], push(url: string) { this.pushes.push(url) }, refresh() {} } })
-const { act } = await import('react')
-const { createRoot } = await import('react-dom/client')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../messages/en')).default
-const menuMessages = messages.shell.globalCreate
+const React = await import("react");
+Object.assign(globalThis, {
+  React,
+  __createMenuRouter: {
+    pushes: [] as string[],
+    push(url: string) {
+      this.pushes.push(url);
+    },
+    refresh() {},
+  },
+});
+const { act } = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../messages/en")).default;
+const menuMessages = messages.shell.globalCreate;
 const IntlProvider = NextIntlClientProvider as unknown as ComponentType<{
-  locale: string
-  messages: typeof messages
-  timeZone: string
-  children?: ReactNode
-}>
-const { GlobalCreateMenu } = await import('./global-create-menu')
+  locale: string;
+  messages: typeof messages;
+  timeZone: string;
+  children?: ReactNode;
+}>;
+const { GlobalCreateMenu } = await import("./global-create-menu");
 
 const permissions = {
   accountsReceivable: true,
@@ -35,151 +53,176 @@ const permissions = {
   projects: true,
   assets: true,
   orders: true,
-}
+};
 const destinations = new Map([
-  ['Item', '/items?item=new'],
-  ['Asset', '/assets?assetNew=1'],
-  ['Customer', '/entities/customers?partyNew=1&role=customer'],
-  ['Vendor', '/entities/vendors?partyNew=1&role=vendor'],
-  ['Employee', '/entities/employees?partyNew=1&role=employee'],
-  ['Project', '/projects?projectNew=1'],
-])
-const tick = () => new Promise((resolve) => setTimeout(resolve, 25))
+  ["Item", "/items?item=new"],
+  ["Asset", "/assets?assetNew=1"],
+  ["Customer", "/entities/customers?partyNew=1&role=customer"],
+  ["Vendor", "/entities/vendors?partyNew=1&role=vendor"],
+  ["Employee", "/entities/employees?partyNew=1&role=employee"],
+  ["Project", "/projects?projectNew=1"],
+]);
+const tick = () => new Promise((resolve) => setTimeout(resolve, 25));
 
 async function click(target: Element) {
   await act(async () => {
-    target.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
+    target.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
 }
 
 // A real pointer press without the compatibility click: the trigger must
 // still open the menu, so a press whose release never becomes a click is
 // not silently lost. Keyboard activation (click only) keeps working.
 async function pointerPress(target: Element) {
-  const opts = { bubbles: true, cancelable: true, button: 0 }
+  const opts = { bubbles: true, cancelable: true, button: 0 };
   await act(async () => {
-    target.dispatchEvent(new window.MouseEvent('pointerdown', opts))
-    target.dispatchEvent(new window.MouseEvent('pointerup', opts))
-    await tick()
-    await tick()
-  })
+    target.dispatchEvent(new window.MouseEvent("pointerdown", opts));
+    target.dispatchEvent(new window.MouseEvent("pointerup", opts));
+    await tick();
+    await tick();
+  });
 }
 
-test('master-data choices navigate to their unsaved editor without creating drafts', async (t: TestContext) => {
-  const router = (globalThis as Record<string, unknown>).__createMenuRouter as { pushes: string[] }
-  router.pushes.length = 0
-  const priorFetch = globalThis.fetch
-  let fetches = 0
+test("master-data choices navigate to their unsaved editor without creating drafts", async (t: TestContext) => {
+  const router = (globalThis as Record<string, unknown>).__createMenuRouter as { pushes: string[] };
+  router.pushes.length = 0;
+  const priorFetch = globalThis.fetch;
+  let fetches = 0;
   globalThis.fetch = (async () => {
-    fetches += 1
-    return Response.json({ id: 'unexpected-draft' })
-  }) as typeof fetch
-  t.after(() => { globalThis.fetch = priorFetch })
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    fetches += 1;
+    return Response.json({ id: "unexpected-draft" });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = priorFetch;
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+  });
   await act(async () => {
     root.render(
       React.createElement(
         IntlProvider,
-        { locale: 'en', messages, timeZone: 'UTC' },
+        { locale: "en", messages, timeZone: "UTC" },
         React.createElement(GlobalCreateMenu, { permissions }),
       ),
-    )
-  })
+    );
+  });
 
-  const trigger = document.querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`)
-  assert.ok(trigger, 'the global create control is available')
+  const trigger = document.querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`);
+  assert.ok(trigger, "the global create control is available");
   for (const [label, href] of destinations) {
-    if (document.querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`)?.getAttribute('aria-expanded') !== 'true') {
-      await click(trigger)
+    if (
+      document
+        .querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`)
+        ?.getAttribute("aria-expanded") !== "true"
+    ) {
+      await click(trigger);
     }
-    const action = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === menuMessages.items[label.toLowerCase() as keyof typeof menuMessages.items])
-    assert.ok(action, `${label} is an available master-data choice`)
-    await click(action)
-    assert.equal(router.pushes.at(-1), href, `${label} opens the unsaved editor`)
+    const action = [...document.querySelectorAll("button")].find(
+      (button) =>
+        button.textContent?.trim() ===
+        menuMessages.items[label.toLowerCase() as keyof typeof menuMessages.items],
+    );
+    assert.ok(action, `${label} is an available master-data choice`);
+    await click(action);
+    assert.equal(router.pushes.at(-1), href, `${label} opens the unsaved editor`);
   }
-  assert.equal(fetches, 0, 'master-data navigation must not allocate a draft record')
-})
+  assert.equal(fetches, 0, "master-data navigation must not allocate a draft record");
+});
 
-test('the trigger opens on pointer release alone and stays open on repeat presses', async (t: TestContext) => {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+test("the trigger opens on pointer release alone and stays open on repeat presses", async (t: TestContext) => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+  });
   await act(async () => {
     root.render(
       React.createElement(
         IntlProvider,
-        { locale: 'en', messages, timeZone: 'UTC' },
+        { locale: "en", messages, timeZone: "UTC" },
         React.createElement(GlobalCreateMenu, { permissions }),
       ),
-    )
-  })
-  const trigger = document.querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`)
-  assert.ok(trigger, 'the global create control is available')
-  await pointerPress(trigger)
-  assert.equal(trigger.getAttribute('aria-expanded'), 'true', 'pointer release without a click must open the menu')
-  assert.ok(document.querySelector('[data-ui-overlay]'), 'the menu panel renders after a pointer-only press')
-  await click(trigger)
-  assert.equal(trigger.getAttribute('aria-expanded'), 'true', 'a repeat press keeps the open menu open')
-})
+    );
+  });
+  const trigger = document.querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`);
+  assert.ok(trigger, "the global create control is available");
+  await pointerPress(trigger);
+  assert.equal(
+    trigger.getAttribute("aria-expanded"),
+    "true",
+    "pointer release without a click must open the menu",
+  );
+  assert.ok(
+    document.querySelector("[data-ui-overlay]"),
+    "the menu panel renders after a pointer-only press",
+  );
+  await click(trigger);
+  assert.equal(
+    trigger.getAttribute("aria-expanded"),
+    "true",
+    "a repeat press keeps the open menu open",
+  );
+});
 
-test('ledger document choices open the unsaved-create drawer and allocate nothing', async (t: TestContext) => {
-  const router = (globalThis as Record<string, unknown>).__createMenuRouter as { pushes: string[] }
-  router.pushes.length = 0
-  const priorFetch = globalThis.fetch
-  let fetches = 0
+test("ledger document choices open the unsaved-create drawer and allocate nothing", async (t: TestContext) => {
+  const router = (globalThis as Record<string, unknown>).__createMenuRouter as { pushes: string[] };
+  router.pushes.length = 0;
+  const priorFetch = globalThis.fetch;
+  let fetches = 0;
   globalThis.fetch = (async () => {
-    fetches += 1
-    return Response.json({ id: 'unexpected-draft' })
-  }) as typeof fetch
-  t.after(() => { globalThis.fetch = priorFetch })
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    fetches += 1;
+    return Response.json({ id: "unexpected-draft" });
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = priorFetch;
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+  });
   await act(async () => {
     root.render(
       React.createElement(
         IntlProvider,
-        { locale: 'en', messages, timeZone: 'UTC' },
+        { locale: "en", messages, timeZone: "UTC" },
         React.createElement(GlobalCreateMenu, { permissions: { ...permissions, cashSales: true } }),
       ),
-    )
-  })
+    );
+  });
   const documents: [keyof typeof menuMessages.items, string][] = [
-    ['invoice', '/ar/invoices?doc=new&kind=customer_invoice&mode=edit'],
-    ['creditMemo', '/ar/invoices?doc=new&kind=customer_credit&mode=edit'],
-    ['cashSale', '/cash-sales?doc=new&kind=cash_sale&mode=edit'],
-    ['cashRefund', '/cash-sales?doc=new&kind=cash_refund&mode=edit'],
-    ['bill', '/ap/bills?doc=new&kind=vendor_bill&mode=edit'],
-    ['vendorCredit', '/ap/bills?doc=new&kind=vendor_credit&mode=edit'],
-    ['cardCharge', '/banking/transactions?doc=new&kind=card_charge&mode=edit'],
-    ['cardRefund', '/banking/transactions?doc=new&kind=card_refund&mode=edit'],
-    ['check', '/banking/transactions?doc=new&kind=check&mode=edit'],
-    ['deposit', '/banking/transactions?doc=new&kind=deposit&mode=edit'],
-    ['transfer', '/banking/transactions?doc=new&kind=transfer&mode=edit'],
-  ]
-  const trigger = document.querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`)
-  assert.ok(trigger, 'the global create control is available')
+    ["invoice", "/ar/invoices?doc=new&kind=customer_invoice&mode=edit"],
+    ["creditMemo", "/ar/invoices?doc=new&kind=customer_credit&mode=edit"],
+    ["cashSale", "/cash-sales?doc=new&kind=cash_sale&mode=edit"],
+    ["cashRefund", "/cash-sales?doc=new&kind=cash_refund&mode=edit"],
+    ["bill", "/ap/bills?doc=new&kind=vendor_bill&mode=edit"],
+    ["vendorCredit", "/ap/bills?doc=new&kind=vendor_credit&mode=edit"],
+    ["cardCharge", "/banking/transactions?doc=new&kind=card_charge&mode=edit"],
+    ["cardRefund", "/banking/transactions?doc=new&kind=card_refund&mode=edit"],
+    ["check", "/banking/transactions?doc=new&kind=check&mode=edit"],
+    ["deposit", "/banking/transactions?doc=new&kind=deposit&mode=edit"],
+    ["transfer", "/banking/transactions?doc=new&kind=transfer&mode=edit"],
+  ];
+  const trigger = document.querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`);
+  assert.ok(trigger, "the global create control is available");
   for (const [key, href] of documents) {
-    if (trigger.getAttribute('aria-expanded') !== 'true') await click(trigger)
-    const action = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === menuMessages.items[key])
-    assert.ok(action, `${key} is an available choice`)
-    await click(action)
-    assert.equal(router.pushes.at(-1), href, `${key} opens the unsaved-create drawer`)
+    if (trigger.getAttribute("aria-expanded") !== "true") await click(trigger);
+    const action = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === menuMessages.items[key],
+    );
+    assert.ok(action, `${key} is an available choice`);
+    await click(action);
+    assert.equal(router.pushes.at(-1), href, `${key} opens the unsaved-create drawer`);
   }
-  assert.equal(fetches, 0, 'choosing a document never mints a numbered draft')
-})
+  assert.equal(fetches, 0, "choosing a document never mints a numbered draft");
+});

@@ -27,17 +27,16 @@ test(
         kind: "vendor_bill",
         createdBy: actors.submitterId,
       });
-      const result = await submitAndReleaseIfUngated(
-        "vendor_bill",
-        id,
-        actors.submitterId,
-      );
+      const result = await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
       assert.equal(result.flowError, null);
       assert.equal(result.autoApproved, true);
       assert.equal(
-        (await db.execute<{ status: string }>(
-            sql`select status from documents where org_id=${org.orgId} and id=${id}`, "objects",
-          ))[0]?.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from documents where org_id=${org.orgId} and id=${id}`,
+            "objects",
+          )
+        )[0]?.status,
         "approved",
       );
     } finally {
@@ -64,15 +63,12 @@ test(
         kind: "vendor_bill",
         createdBy: actors.submitterId,
       });
-      const result = await submitAndReleaseIfUngated(
-        "vendor_bill",
-        id,
-        actors.submitterId,
-      );
+      const result = await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId);
       assert.equal(result.gated, true);
       const gates = await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending' order by id`, "objects",
-        );
+        sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending' order by id`,
+        "objects",
+      );
       assert.equal(gates.length, 10);
       for (const [index, gate] of gates.entries()) {
         await decideGate({
@@ -81,9 +77,12 @@ test(
           userId: actors.approver1Id,
         });
         assert.equal(
-          (await db.execute<{ status: string }>(
-              sql`select status from documents where org_id=${org.orgId} and id=${id}`, "objects",
-            ))[0]?.status,
+          (
+            await db.execute<{ status: string }>(
+              sql`select status from documents where org_id=${org.orgId} and id=${id}`,
+              "objects",
+            )
+          )[0]?.status,
           index === 9 ? "approved" : "pending_approval",
         );
       }

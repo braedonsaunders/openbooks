@@ -61,11 +61,7 @@ export const TOTAL_SLOT_GROSS = "gross";
 export const TOTAL_SLOT_NET = "net_pay";
 export const TOTAL_SLOT_EMPLOYER_COST = "employer_cost";
 
-export const TOTAL_SLOTS = [
-  TOTAL_SLOT_GROSS,
-  TOTAL_SLOT_NET,
-  TOTAL_SLOT_EMPLOYER_COST,
-] as const;
+export const TOTAL_SLOTS = [TOTAL_SLOT_GROSS, TOTAL_SLOT_NET, TOTAL_SLOT_EMPLOYER_COST] as const;
 
 /** One amount against one comparable slot. */
 export interface ParallelAmount {
@@ -173,10 +169,7 @@ export interface ParallelSlotTotal {
 }
 
 export type ParallelStatus =
-  | "clean"
-  | "clean_within_tolerance"
-  | "differences"
-  | "no_comparable_data";
+  "clean" | "clean_within_tolerance" | "differences" | "no_comparable_data";
 
 export interface ParallelTotalsReconciliation {
   prior: string;
@@ -280,7 +273,10 @@ interface NormalizedSide {
   employeePartyId: string;
   employeeName: string;
   totals: Record<string, string | null>;
-  amounts: Map<string, { kind: ParallelSlotKind; slot: string; amount: string; sourceColumn: string | null }>;
+  amounts: Map<
+    string,
+    { kind: ParallelSlotKind; slot: string; amount: string; sourceColumn: string | null }
+  >;
 }
 
 /**
@@ -294,9 +290,15 @@ interface NormalizedSide {
  * catches it if that was a mistake.
  */
 function normalizeSide(employee: ParallelEmployeeSide): NormalizedSide {
-  const amounts = new Map<string, {
-    kind: ParallelSlotKind; slot: string; amount: string; sourceColumn: string | null;
-  }>();
+  const amounts = new Map<
+    string,
+    {
+      kind: ParallelSlotKind;
+      slot: string;
+      amount: string;
+      sourceColumn: string | null;
+    }
+  >();
   for (const entry of employee.amounts) {
     if (!entry.slot) throw new ParallelRunError("a comparable amount needs a slot");
     const key = slotKey(entry.kind, entry.slot);
@@ -379,8 +381,7 @@ export function comparePriorPayrollPeriod(input: ComparePriorPayrollInput): Para
   const ours = indexSide(input.ours);
   const tolerances = toleranceIndex(input.tolerances ?? []);
   const labels = input.slotLabels ?? {};
-  const label = (kind: ParallelFindingKind, slot: string) =>
-    labels[slotKey(kind, slot)] ?? slot;
+  const label = (kind: ParallelFindingKind, slot: string) => labels[slotKey(kind, slot)] ?? slot;
 
   const findings: ParallelFinding[] = [];
   const counts: Record<ParallelClassification, number> = {
@@ -406,8 +407,7 @@ export function comparePriorPayrollPeriod(input: ComparePriorPayrollInput): Para
   const priorOnlyIds = priorIds.filter((id) => !ours.has(id));
   const ourOnlyIds = ourIds.filter((id) => !prior.has(id));
 
-  const nameOf = (id: string) =>
-    prior.get(id)?.employeeName ?? ours.get(id)?.employeeName ?? id;
+  const nameOf = (id: string) => prior.get(id)?.employeeName ?? ours.get(id)?.employeeName ?? id;
   const byName = (a: string, b: string) => nameOf(a).localeCompare(nameOf(b)) || a.localeCompare(b);
 
   // Per-slot accumulators for the population totals and the attribution.
@@ -458,8 +458,7 @@ export function comparePriorPayrollPeriod(input: ComparePriorPayrollInput): Para
         return { ...cell, kind, slot };
       })
       .sort(
-        (a, b) =>
-          KIND_SEQUENCE[a.kind] - KIND_SEQUENCE[b.kind] || a.slot.localeCompare(b.slot),
+        (a, b) => KIND_SEQUENCE[a.kind] - KIND_SEQUENCE[b.kind] || a.slot.localeCompare(b.slot),
       );
 
     for (const cell of cells) {
@@ -514,13 +513,7 @@ export function comparePriorPayrollPeriod(input: ComparePriorPayrollInput): Para
         sourceColumn,
         sequence: KIND_SEQUENCE[cell.kind],
       });
-      accumulate(
-        cell.kind,
-        cell.slot,
-        priorAmount ?? "0",
-        ourAmount ?? "0",
-        true,
-      );
+      accumulate(cell.kind, cell.slot, priorAmount ?? "0", ourAmount ?? "0", true);
     }
 
     // The stated totals, compared as cells of their own.
@@ -697,10 +690,7 @@ export function comparePriorPayrollPeriod(input: ComparePriorPayrollInput): Para
     prior: priorEmployerCost,
     ours: ourEmployerCost,
     difference: difference(priorEmployerCost, ourEmployerCost),
-    unattributed: difference(
-      difference(priorEmployerCost, ourEmployerCost),
-      employerDifference,
-    ),
+    unattributed: difference(difference(priorEmployerCost, ourEmployerCost), employerDifference),
   };
 
   const unattributedRows: { slot: string; reconciliation: ParallelTotalsReconciliation }[] = [
@@ -827,7 +817,10 @@ export function auditComparison(comparison: ParallelComparison): ParallelAuditFa
     fail("clean-compared-something", "a clean result produced no findings — nothing was compared");
   }
   if (clean && comparison.blockedReason !== null) {
-    fail("clean-is-not-blocked", `a clean result also carries a blocked reason: ${comparison.blockedReason}`);
+    fail(
+      "clean-is-not-blocked",
+      `a clean result also carries a blocked reason: ${comparison.blockedReason}`,
+    );
   }
   if (comparison.status === "no_comparable_data" && comparison.blockedReason === null) {
     fail("blocked-says-why", "no_comparable_data must state what was missing");

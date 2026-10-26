@@ -27,15 +27,11 @@ const routeState: RouteState = {
   authz: null,
   deny(permission) {
     return permission
-      ? NextResponse.json(
-          { error: `missing permission: ${permission}` },
-          { status: 403 },
-        )
+      ? NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
       : NextResponse.json({ error: "unauthorized" }, { status: 401 });
   },
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.banking-rules-route-test')]
@@ -65,7 +61,10 @@ const hooks = registerHooks({
     ) {
       return { url: "mock:banking-rules-authz", shortCircuit: true };
     }
-    if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("/banking/rules/[id]/route")) {
+    if (
+      specifier === "../../../../../lib/authz" &&
+      context.parentURL?.includes("/banking/rules/[id]/route")
+    ) {
       return { url: "mock:banking-rules-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -83,11 +82,9 @@ const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 const deleteRouteUrl = "./[id]/route.ts?banking-rules-delete-test";
 const { DELETE } = (await import(deleteRouteUrl)) as typeof import("./[id]/route.ts");
 
-const { db, withBypass, withOrgContext } =
-  await import("@openbooks/engine/platform/db");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/testing/fixtures");
-
 
 type RuleSnapshot = {
   name: string;
@@ -115,11 +112,7 @@ function criteria(needle: string): Record<string, unknown> {
 async function seed(): Promise<Fixture> {
   return withBypass(async () => {
     const org = await createScratchOrg();
-    const actorId = await createScratchUser(
-      org.orgId,
-      "Bank Rules Admin",
-      "bank_rules_admin",
-    );
+    const actorId = await createScratchUser(org.orgId, "Bank Rules Admin", "bank_rules_admin");
     const ruleId = randomUUID();
     await db.execute(sql`
       insert into bank_match_rules
@@ -148,17 +141,18 @@ function patchRequest(body: unknown): Request {
 }
 
 function patch(fixture: Fixture, body: RuleSnapshot): Promise<Response> {
-  return withOrgContext(fixture.orgId, () =>
-    PATCH(patchRequest({ id: fixture.ruleId, ...body })),
-  );
+  return withOrgContext(fixture.orgId, () => PATCH(patchRequest({ id: fixture.ruleId, ...body })));
 }
 
 async function ruleState(fixture: Fixture): Promise<RuleSnapshot> {
   return withOrgContext(fixture.orgId, async () => {
-    const result = await db.execute<RuleSnapshot>(sql`
+    const result = await db.execute<RuleSnapshot>(
+      sql`
       select name, criteria, outcome, priority
         from bank_match_rules
-       where id = ${fixture.ruleId} and org_id = ${fixture.orgId}`, "objects");
+       where id = ${fixture.ruleId} and org_id = ${fixture.orgId}`,
+      "objects",
+    );
     assert.ok(result[0], "the seeded banking rule must exist");
     return result[0]!;
   });
@@ -171,23 +165,30 @@ async function auditUpdates(
     const result = await db.execute<{
       before: RuleSnapshot;
       after: RuleSnapshot;
-    }>(sql`
+    }>(
+      sql`
       select changes->'before' as before, changes->'after' as after
         from audit_log
        where org_id = ${fixture.orgId}
          and table_name = 'bank_match_rules'
          and row_id = ${fixture.ruleId}
          and action = 'update'
-       order by id`, "objects");
+       order by id`,
+      "objects",
+    );
     return result;
   });
 }
 
 async function deleteRule(fixture: Fixture): Promise<Response> {
-  return withOrgContext(fixture.orgId, () => DELETE(
-    new Request(`http://openbooks.test/api/banking/rules/${fixture.ruleId}`, { method: "DELETE" }),
-    { params: Promise.resolve({ id: fixture.ruleId }) },
-  ));
+  return withOrgContext(fixture.orgId, () =>
+    DELETE(
+      new Request(`http://openbooks.test/api/banking/rules/${fixture.ruleId}`, {
+        method: "DELETE",
+      }),
+      { params: Promise.resolve({ id: fixture.ruleId }) },
+    ),
+  );
 }
 
 /**
@@ -201,7 +202,8 @@ async function deleteRule(fixture: Fixture): Promise<Response> {
 async function waitForRuleWriters(holderPid: number, expected: number): Promise<void> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
-    const result = await db.execute<{ count: number }>(sql`
+    const result = await db.execute<{ count: number }>(
+      sql`
       with queued as (
         select pid, pg_blocking_pids(pid) as blockers
           from pg_stat_activity
@@ -217,122 +219,117 @@ async function waitForRuleWriters(holderPid: number, expected: number): Promise<
       )
       select count(*)::int as count
         from queued
-       where blockers && array(select pid from blockers_in_chain)`, "objects");
+       where blockers && array(select pid from blockers_in_chain)`,
+      "objects",
+    );
     if ((result[0]?.count ?? 0) >= expected) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error(
-    `expected ${expected} banking-rule writers to queue behind the rule edit`,
-  );
+  throw new Error(`expected ${expected} banking-rule writers to queue behind the rule edit`);
 }
 
-test(
-  "concurrent PATCH requests chain bank-rule audit before-images from committed edits",
-  async () => {
-    const fixture = await seed();
-    const holder = new Client({
-      connectionString: process.env.OPENBOOKS_DB_URL,
-    });
-    let holderOpen = false;
-    try {
-      authorize(fixture);
-      await holder.connect();
-      holderOpen = true;
-      const holderPid = Number((await holder.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid);
-      await holder.query("begin");
-      await holder.query(
-        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
-        [fixture.orgId],
-      );
-      await holder.query(
-        "select id from bank_match_rules where id = $1 and org_id = $2 for update",
-        [fixture.ruleId, fixture.orgId],
-      );
+test("concurrent PATCH requests chain bank-rule audit before-images from committed edits", async () => {
+  const fixture = await seed();
+  const holder = new Client({
+    connectionString: process.env.OPENBOOKS_DB_URL,
+  });
+  let holderOpen = false;
+  try {
+    authorize(fixture);
+    await holder.connect();
+    holderOpen = true;
+    const holderPid = Number(
+      (await holder.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid,
+    );
+    await holder.query("begin");
+    await holder.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+      [fixture.orgId],
+    );
+    await holder.query("select id from bank_match_rules where id = $1 and org_id = $2 for update", [
+      fixture.ruleId,
+      fixture.orgId,
+    ]);
 
-      const firstEdit: RuleSnapshot = {
-        name: "First Edit",
-        criteria: criteria("first"),
-        outcome: { action: "exclude" },
-        priority: 110,
-      };
-      const secondEdit: RuleSnapshot = {
-        name: "Second Edit",
-        criteria: criteria("second"),
-        outcome: { action: "exclude" },
-        priority: 120,
-      };
-      const firstWrite = patch(fixture, firstEdit);
-      await waitForRuleWriters(holderPid, 1);
-      const secondWrite = patch(fixture, secondEdit);
-      await waitForRuleWriters(holderPid, 2);
+    const firstEdit: RuleSnapshot = {
+      name: "First Edit",
+      criteria: criteria("first"),
+      outcome: { action: "exclude" },
+      priority: 110,
+    };
+    const secondEdit: RuleSnapshot = {
+      name: "Second Edit",
+      criteria: criteria("second"),
+      outcome: { action: "exclude" },
+      priority: 120,
+    };
+    const firstWrite = patch(fixture, firstEdit);
+    await waitForRuleWriters(holderPid, 1);
+    const secondWrite = patch(fixture, secondEdit);
+    await waitForRuleWriters(holderPid, 2);
 
-      await holder.query("commit");
-      await holder.end();
-      holderOpen = false;
-      const responses = await Promise.all([firstWrite, secondWrite]);
-      assert.deepEqual(
-        responses.map((response) => response.status),
-        [200, 200],
-      );
+    await holder.query("commit");
+    await holder.end();
+    holderOpen = false;
+    const responses = await Promise.all([firstWrite, secondWrite]);
+    assert.deepEqual(
+      responses.map((response) => response.status),
+      [200, 200],
+    );
 
-      const audits = await auditUpdates(fixture);
-      assert.equal(audits.length, 2, "both committed edits need one audit row");
-      const initialToFirst = audits.find(
-        (audit) => audit.before.name === "Initial Rule",
-      );
-      assert.ok(
-        initialToFirst,
-        "one edit must preserve the initial before-image",
-      );
-      const chained = audits.find(
-        (audit) =>
-          audit.before.name === initialToFirst.after.name &&
-          audit.before.name !== "Initial Rule",
-      );
-      assert.ok(
-        chained,
-        "the second edit must snapshot the first committed configuration, not the stale initial row",
-      );
-      assert.deepEqual(
-        new Set(audits.map((audit) => audit.after.name)),
-        new Set([firstEdit.name, secondEdit.name]),
-      );
-      const final = await ruleState(fixture);
-      assert.ok(
-        final.name === firstEdit.name || final.name === secondEdit.name,
-        "the serialized writer must leave one committed edit as the current rule",
-      );
-    } finally {
-      routeState.authz = null;
-      if (holderOpen) {
-        await holder.query("rollback").catch(() => {});
-        await holder.end().catch(() => {});
-      }
-      await dropScratchOrg(fixture.orgId);
+    const audits = await auditUpdates(fixture);
+    assert.equal(audits.length, 2, "both committed edits need one audit row");
+    const initialToFirst = audits.find((audit) => audit.before.name === "Initial Rule");
+    assert.ok(initialToFirst, "one edit must preserve the initial before-image");
+    const chained = audits.find(
+      (audit) =>
+        audit.before.name === initialToFirst.after.name && audit.before.name !== "Initial Rule",
+    );
+    assert.ok(
+      chained,
+      "the second edit must snapshot the first committed configuration, not the stale initial row",
+    );
+    assert.deepEqual(
+      new Set(audits.map((audit) => audit.after.name)),
+      new Set([firstEdit.name, secondEdit.name]),
+    );
+    const final = await ruleState(fixture);
+    assert.ok(
+      final.name === firstEdit.name || final.name === secondEdit.name,
+      "the serialized writer must leave one committed edit as the current rule",
+    );
+  } finally {
+    routeState.authz = null;
+    if (holderOpen) {
+      await holder.query("rollback").catch(() => {});
+      await holder.end().catch(() => {});
     }
-  },
-);
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
-test(
-  "concurrent DELETE requests return one success and write one delete audit",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const responses = await Promise.all([deleteRule(fixture), deleteRule(fixture)]);
-      assert.deepEqual(responses.map((response) => response.status).sort(), [200, 404]);
-      const audits = await withOrgContext(fixture.orgId, () => db.execute<{ count: number }>(sql`
+test("concurrent DELETE requests return one success and write one delete audit", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const responses = await Promise.all([deleteRule(fixture), deleteRule(fixture)]);
+    assert.deepEqual(responses.map((response) => response.status).sort(), [200, 404]);
+    const audits = await withOrgContext(fixture.orgId, () =>
+      db.execute<{ count: number }>(
+        sql`
         select count(*)::int as count from audit_log
          where org_id = ${fixture.orgId} and table_name = 'bank_match_rules'
            and row_id = ${fixture.ruleId} and action = 'delete'
-      `, "objects"));
-      assert.equal(audits[0]?.count, 1);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(fixture.orgId);
-    }
-  },
-);
+      `,
+        "objects",
+      ),
+    );
+    assert.equal(audits[0]?.count, 1);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

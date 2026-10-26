@@ -7,14 +7,28 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { createHash } from "node:crypto";
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
-import { db, pool, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../platform/db.ts";
+import {
+  db,
+  pool,
+  schema,
+  withOrg,
+  withBypassContext,
+  withOrgContext,
+  withTransactionSavepoint,
+} from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
 import { DOCUMENT_FLOW_KINDS } from "./subject-profiles.ts";
 import { resolveSubjectSubsidiaries, subjectSubsidiarySql } from "./subject-scope.ts";
 import { CLOSE_RUN_SUBJECT_KIND } from "./close-runs-adapter.ts";
 import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
-import { MANUFACTURING_BOM_APPROVAL_OPERATION, MANUFACTURING_LOSS_DISPOSITION_OPERATION, MANUFACTURING_ROUTING_APPROVAL_OPERATION, MANUFACTURING_SCRAP_RESTATEMENT_OPERATION, MANUFACTURING_STANDARD_ROLLUP_OPERATION } from "../platform/financial-changes.ts";
+import {
+  MANUFACTURING_BOM_APPROVAL_OPERATION,
+  MANUFACTURING_LOSS_DISPOSITION_OPERATION,
+  MANUFACTURING_ROUTING_APPROVAL_OPERATION,
+  MANUFACTURING_SCRAP_RESTATEMENT_OPERATION,
+  MANUFACTURING_STANDARD_ROLLUP_OPERATION,
+} from "../platform/financial-changes.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { enqueueApprovalEscalation, enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { parseFlowGraph } from "./run.ts";
@@ -31,7 +45,6 @@ import { emailActionUrls } from "./email-tokens.ts";
 import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { resolveApprovalRequestNotices } from "./approval-notices.ts";
 import { sanitizeDecisionCause } from "./decision-cause.ts";
-
 
 export { sodBlockedIds } from "./sod.ts";
 
@@ -66,8 +79,10 @@ export function gateSubsidiaryScopeAllows(
 ): boolean {
   if (allowedSubsidiaryIds == null) return true;
   return (
-    subsidiaryId !== null && subsidiaryId !== undefined && subsidiaryId !== ""
-    && allowedSubsidiaryIds.has(subsidiaryId)
+    subsidiaryId !== null &&
+    subsidiaryId !== undefined &&
+    subsidiaryId !== "" &&
+    allowedSubsidiaryIds.has(subsidiaryId)
   );
 }
 
@@ -179,7 +194,10 @@ export class DecisionFailedError extends GateError {
  */
 export function isProgrammingError(e: unknown): boolean {
   return (
-    e instanceof TypeError || e instanceof ReferenceError || e instanceof RangeError || e instanceof SyntaxError
+    e instanceof TypeError ||
+    e instanceof ReferenceError ||
+    e instanceof RangeError ||
+    e instanceof SyntaxError
   );
 }
 
@@ -204,8 +222,8 @@ export class ReleaseError extends DecisionFailedError {
 /** Administrators may repair assignments and receive unresolved-routing notices. */
 const GATE_ADMIN_ROLE = "admin";
 
-function liveApprovalRunSql(orgId:SQL,runId:SQL,kind:SQL,subjectId:SQL):SQL{
- return sql`exists(select 1 from flow_runs r where r.org_id=${orgId} and r.id=${runId}
+function liveApprovalRunSql(orgId: SQL, runId: SQL, kind: SQL, subjectId: SQL): SQL {
+  return sql`exists(select 1 from flow_runs r where r.org_id=${orgId} and r.id=${runId}
   and r.subject_kind=${kind} and r.subject_id=${subjectId} and r.status in('waiting','running') and r.error is null
   and r.context->'submissionPolicy'->>'flowId'=r.flow_id::text
   and (r.trigger<>'on_submit' or exists(select 1 from flow_submissions receipt where receipt.org_id=r.org_id
@@ -214,12 +232,24 @@ function liveApprovalRunSql(orgId:SQL,runId:SQL,kind:SQL,subjectId:SQL):SQL{
       and newer.subject_id=receipt.subject_id and (newer.created_at,newer.id)>(receipt.created_at,receipt.id)))))`;
 }
 
-async function loadGate(gateId:string,orgId?:string):Promise<GateRow|null>{
- const[gate]=await db.select().from(schema.flowGates).where(and(eq(schema.flowGates.id,gateId),orgId?eq(schema.flowGates.orgId,orgId):undefined));
- return gate??null;
+async function loadGate(gateId: string, orgId?: string): Promise<GateRow | null> {
+  const [gate] = await db
+    .select()
+    .from(schema.flowGates)
+    .where(
+      and(eq(schema.flowGates.id, gateId), orgId ? eq(schema.flowGates.orgId, orgId) : undefined),
+    );
+  return gate ?? null;
 }
-async function hasLiveApprovalRun(gate:GateRow):Promise<boolean>{
- return(await db.execute<{live:boolean}>(sql`select ${liveApprovalRunSql(sql`${gate.orgId}::uuid`,sql`${gate.runId}::uuid`,sql`${gate.subjectKind}`,sql`${gate.subjectId}::uuid`)} as live`, "objects"))[0]?.live===true;
+async function hasLiveApprovalRun(gate: GateRow): Promise<boolean> {
+  return (
+    (
+      await db.execute<{ live: boolean }>(
+        sql`select ${liveApprovalRunSql(sql`${gate.orgId}::uuid`, sql`${gate.runId}::uuid`, sql`${gate.subjectKind}`, sql`${gate.subjectId}::uuid`)} as live`,
+        "objects",
+      )
+    )[0]?.live === true
+  );
 }
 
 /**
@@ -229,7 +259,10 @@ async function hasLiveApprovalRun(gate:GateRow):Promise<boolean>{
  * row or snapshot returns null so the adapter refuses instead of
  * releasing blind.
  */
-async function loadRunDispatchValues(orgId: string, runId: string): Promise<Record<string, unknown> | null> {
+async function loadRunDispatchValues(
+  orgId: string,
+  runId: string,
+): Promise<Record<string, unknown> | null> {
   const [run] = await db
     .select({ context: schema.flowRuns.context })
     .from(schema.flowRuns)
@@ -238,10 +271,7 @@ async function loadRunDispatchValues(orgId: string, runId: string): Promise<Reco
   return context && typeof context === "object" ? context : null;
 }
 
-function hasGateDecisionAuthority(
-  gate: GateRow,
-  userId: string,
-): Promise<boolean> {
+function hasGateDecisionAuthority(gate: GateRow, userId: string): Promise<boolean> {
   return hasFlowDecisionAuthority({
     orgId: gate.orgId,
     subjectKind: gate.subjectKind,
@@ -251,7 +281,7 @@ function hasGateDecisionAuthority(
 }
 
 async function canActOnGate(gate: GateRow, userId: string): Promise<boolean> {
-  if(!await hasLiveApprovalRun(gate))return false;
+  if (!(await hasLiveApprovalRun(gate))) return false;
   if (!(await hasGateDecisionAuthority(gate, userId))) return false;
   if (gate.assigneeUserId === userId) return true;
   const roles = await userRoleKeys(gate.orgId, userId);
@@ -269,7 +299,8 @@ async function assertGateSubsidiaryScope(
 ): Promise<void> {
   if (allowedSubsidiaryIds == null) return;
   const adapter = getFlowAdapter(gate.subjectKind);
-  if (!adapter) throw new GateError(`approval subject kind "${gate.subjectKind}" is not registered`);
+  if (!adapter)
+    throw new GateError(`approval subject kind "${gate.subjectKind}" is not registered`);
   const owners = await resolveSubjectSubsidiaries(
     gate.orgId,
     gate.subjectKind,
@@ -295,16 +326,15 @@ async function gateDecisionSodBlocked(
   subject: FlowSubjectContext | null | undefined,
   identities: readonly (string | null | undefined)[],
 ): Promise<boolean> {
-  const author = (await db.execute<{ created_by: string | null }>(
-      sql`select created_by from flow_runs where org_id=${gate.orgId} and id=${gate.runId}`, "objects",
-    ))[0]?.created_by;
-  const blocked = await resolveSodBlockedIds(
-    gate.orgId,
-    subject ?? null,
-    author ? [author] : [],
-  );
-  if (!identities.some((id) => id !== null && id !== undefined && blocked.has(id))) return false
-  const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId, gate.runId)
+  const author = (
+    await db.execute<{ created_by: string | null }>(
+      sql`select created_by from flow_runs where org_id=${gate.orgId} and id=${gate.runId}`,
+      "objects",
+    )
+  )[0]?.created_by;
+  const blocked = await resolveSodBlockedIds(gate.orgId, subject ?? null, author ? [author] : []);
+  if (!identities.some((id) => id !== null && id !== undefined && blocked.has(id))) return false;
+  const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId, gate.runId);
   return !node || node.preventSelfApproval !== false;
 }
 
@@ -323,9 +353,14 @@ async function gateDecisionSodBlocked(
 export async function gateDecisionCapability(
   gateId: string,
   userId: string,
-): Promise<{ canAct: boolean; signatureRequired: boolean; sodBlocked: boolean; canDelegate: boolean }> {
+): Promise<{
+  canAct: boolean;
+  signatureRequired: boolean;
+  sodBlocked: boolean;
+  canDelegate: boolean;
+}> {
   const gate = await loadGate(gateId);
-  if (!gate || gate.status !== "pending" || !await hasLiveApprovalRun(gate)) {
+  if (!gate || gate.status !== "pending" || !(await hasLiveApprovalRun(gate))) {
     return { canAct: false, signatureRequired: false, sodBlocked: false, canDelegate: false };
   }
   const canDelegate =
@@ -337,23 +372,38 @@ export async function gateDecisionCapability(
   let onBehalfOf: ResolvedUser | null = null;
   if (!authorized && gate.assigneeUserId) {
     onBehalfOf = await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId);
-    authorized =
-      onBehalfOf !== null && (await hasGateDecisionAuthority(gate, userId));
+    authorized = onBehalfOf !== null && (await hasGateDecisionAuthority(gate, userId));
   }
   if (!authorized) {
-    return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: false, canDelegate };
+    return {
+      canAct: false,
+      signatureRequired: gate.signatureRequired,
+      sodBlocked: false,
+      canDelegate,
+    };
   }
   const adapter = getFlowAdapter(gate.subjectKind);
   const subject = await adapter?.loadContext(gate.subjectId);
-  if (await gateDecisionSodBlocked(
-    gate,
-    adapter,
-    subject,
-    [userId, onBehalfOf?.id, gate.delegatedFromUserId],
-  )) {
-    return { canAct: false, signatureRequired: gate.signatureRequired, sodBlocked: true, canDelegate };
+  if (
+    await gateDecisionSodBlocked(gate, adapter, subject, [
+      userId,
+      onBehalfOf?.id,
+      gate.delegatedFromUserId,
+    ])
+  ) {
+    return {
+      canAct: false,
+      signatureRequired: gate.signatureRequired,
+      sodBlocked: true,
+      canDelegate,
+    };
   }
-  return { canAct: true, signatureRequired: gate.signatureRequired, sodBlocked: false, canDelegate };
+  return {
+    canAct: true,
+    signatureRequired: gate.signatureRequired,
+    sodBlocked: false,
+    canDelegate,
+  };
 }
 
 /** The gate node's authored GateData, for escalation targets. */
@@ -363,11 +413,13 @@ async function gateNodeData(
   nodeId: string,
   runId: string,
 ): Promise<GateData | null> {
-  const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, flowId), eq(schema.flows.orgId, orgId)));
+  const [flow] = await db
+    .select()
+    .from(schema.flows)
+    .where(and(eq(schema.flows.id, flowId), eq(schema.flows.orgId, orgId)));
   if (!flow) return null;
   const dispatch = await loadRunDispatchValues(orgId, runId);
-  const policy = dispatch?.submissionPolicy as
-    { graph?: unknown; flowId?: unknown } | undefined;
+  const policy = dispatch?.submissionPolicy as { graph?: unknown; flowId?: unknown } | undefined;
   if (!policy?.graph || policy.flowId !== flow.id)
     throw new GateError(
       "This submission has no frozen Flow policy. Withdraw it and submit the current record again.",
@@ -388,9 +440,12 @@ async function finalizeRunStatus(
   hadFailure: boolean,
   error?: string | null,
 ): Promise<void> {
-  const pending = await db.execute<{ n: number }>(sql`
+  const pending = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from flow_gates where run_id = ${runId} and org_id = ${orgId} and status in ('pending', 'escalated')
-  `, "objects");
+  `,
+    "objects",
+  );
   const stillWaiting = (pending[0]?.n ?? 0) > 0;
   const status = hadFailure ? "failed" : stillWaiting ? "waiting" : "completed";
   await db
@@ -400,9 +455,7 @@ async function finalizeRunStatus(
       error: hadFailure ? (error ?? "gate branch failed") : null,
       finishedAt: status === "waiting" ? null : new Date(),
     })
-    .where(
-      and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, orgId)),
-    );
+    .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, orgId)));
 }
 
 /**
@@ -443,15 +496,13 @@ export async function decideGate(args: {
   /** Typed attestation — required to approve a signature-required gate. */
   signature?: string | null;
 }): Promise<DecideGateResult> {
-  const gate=await loadGate(args.gateId);
-  if(!gate)throw new GateError("approval not found");
-  return withOrg(gate.orgId,()=>decideGateCore(args));
+  const gate = await loadGate(args.gateId);
+  if (!gate) throw new GateError("approval not found");
+  return withOrg(gate.orgId, () => decideGateCore(args));
 }
 
 /** Decide only as an authorized actor assigned by the frozen tenant Flow. */
-async function decideGateCore(
-  args: Parameters<typeof decideGate>[0],
-): Promise<DecideGateResult> {
+async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<DecideGateResult> {
   const { gateId, decision, userId } = args;
   const signature = args.signature?.trim() || null;
 
@@ -492,18 +543,20 @@ async function decideGateCore(
   // teamwork (maker, submitter, and an independent approver) keeps working.
   const preAdapter = getFlowAdapter(pre.subjectKind);
   const preSubject = await preAdapter?.loadContext(pre.subjectId);
-  if (await gateDecisionSodBlocked(
-    pre,
-    preAdapter,
-    preSubject,
-    [userId, onBehalfOf?.id, pre.delegatedFromUserId],
-  )) {
+  if (
+    await gateDecisionSodBlocked(pre, preAdapter, preSubject, [
+      userId,
+      onBehalfOf?.id,
+      pre.delegatedFromUserId,
+    ])
+  ) {
     // A timesheet's enterer reads a timesheet-worded refusal; every other
     // subject keeps the established generic text its tests assert.
-    const message = pre.subjectKind === "timesheet_week"
-      ? "You entered this timesheet; another approver must approve it."
-      : "you cannot approve your own submission — you created or submitted this record. " +
-        "Route it to another approver to decide.";
+    const message =
+      pre.subjectKind === "timesheet_week"
+        ? "You entered this timesheet; another approver must approve it."
+        : "you cannot approve your own submission — you created or submitted this record. " +
+          "Route it to another approver to decide.";
     throw new GateError(message, "self_approval_forbidden");
   }
 
@@ -531,16 +584,17 @@ async function decideGateCore(
       if (!gate || gate.status !== "pending") {
         throw new GateError("this approval was already resolved");
       }
-      if(!await hasLiveApprovalRun(gate))throw new GateError("This submission is no longer active. Recall it and submit the current record through Flows.");
+      if (!(await hasLiveApprovalRun(gate)))
+        throw new GateError(
+          "This submission is no longer active. Recall it and submit the current record through Flows.",
+        );
       {
         const currentAdapter = getFlowAdapter(gate.subjectKind);
         const permission = currentAdapter?.decisionPermission
           ? await currentAdapter.decisionPermission(gate.subjectId, userId)
           : currentAdapter?.permissions?.approve;
         if (!currentAdapter || !permission)
-          throw new GateError(
-            "This subject has no native approval authority contract.",
-          );
+          throw new GateError("This subject has no native approval authority contract.");
         const currentScope = await lockActorCommandAuthority(
           db,
           gate.orgId,
@@ -586,7 +640,11 @@ async function decideGateCore(
           updatedAt: new Date(),
         })
         .where(
-          and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, pre.orgId), eq(schema.flowGates.status, "pending")),
+          and(
+            eq(schema.flowGates.id, gateId),
+            eq(schema.flowGates.orgId, pre.orgId),
+            eq(schema.flowGates.status, "pending"),
+          ),
         )
         .returning({ id: schema.flowGates.id });
       if (decided.length === 0) throw new GateError("this approval was already resolved");
@@ -600,7 +658,11 @@ async function decideGateCore(
         })
         .from(schema.flowGates)
         .where(
-          and(eq(schema.flowGates.runId, gate.runId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.groupKey, gate.groupKey)),
+          and(
+            eq(schema.flowGates.runId, gate.runId),
+            eq(schema.flowGates.orgId, gate.orgId),
+            eq(schema.flowGates.groupKey, gate.groupKey),
+          ),
         )) as SiblingGate[];
       const outcome = resolveQuorumOutcome(gate.quorum, decision, siblings);
 
@@ -640,13 +702,12 @@ async function decideGateCore(
           subjectKind: gate.subjectKind,
           subjectId: gate.subjectId,
           cancelledGateIds: outcome.cancelIds,
-        },
-        )}::jsonb, ${userId})
+        })}::jsonb, ${userId})
       `);
       // The decider's request (and any sibling a quorum just cancelled) is no
       // longer waiting on them: their "Approval requested" notices resolve in
       // the same unit as the decision.
-      await resolveApprovalRequestNotices(gate.orgId, gate.subjectKind, gate.subjectId)
+      await resolveApprovalRequestNotices(gate.orgId, gate.subjectKind, gate.subjectId);
 
       if (!outcome.resume) {
         // 'all' quorum still collecting approvals — the run keeps waiting.
@@ -654,7 +715,10 @@ async function decideGateCore(
       }
 
       // --- Resume the decided branch on the SAME run -------------------------
-      const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, gate.flowId), eq(schema.flows.orgId, gate.orgId)));
+      const [flow] = await db
+        .select()
+        .from(schema.flows)
+        .where(and(eq(schema.flows.id, gate.flowId), eq(schema.flows.orgId, gate.orgId)));
       const adapter = getFlowAdapter(gate.subjectKind);
       if (!flow || !adapter) {
         throw new DecisionFailedError({
@@ -732,7 +796,9 @@ async function decideGateCore(
             rows: subject.rows ?? {},
           }
         : null;
-      const continuationPlan = continuationContext ? planFromGate(graph, gate.nodeId, outcome.resume, continuationContext) : null;
+      const continuationPlan = continuationContext
+        ? planFromGate(graph, gate.nodeId, outcome.resume, continuationContext)
+        : null;
       const release = adapter.releaseApproval;
       // Dispatch-time subject snapshot for engine-enforced release: adapters
       // whose release spends dispatch-time vetting bind to this run's pinned
@@ -752,10 +818,12 @@ async function decideGateCore(
         continuationPlan.actionNodes.length > 0 &&
         (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) > 0
       ) {
-        const pending =
-          await db.execute(sql`update flow_runs set context=jsonb_set(context,'{approvalContinuation}',
+        const pending = await db.execute(
+          sql`update flow_runs set context=jsonb_set(context,'{approvalContinuation}',
           ${JSON.stringify({ version: 1, gateId: gate.id, nodeId: gate.nodeId, actorId: userId, comment: args.comment?.trim() || null, evalCtx: continuationContext })}::jsonb),
-          status='waiting',finished_at=null,error=null where org_id=${gate.orgId} and id=${gate.runId} returning id`, "objects");
+          status='waiting',finished_at=null,error=null where org_id=${gate.orgId} and id=${gate.runId} returning id`,
+          "objects",
+        );
         if (pending.length !== 1)
           throw new DecisionFailedError({
             decision,
@@ -796,7 +864,7 @@ async function decideGateCore(
 
       let hadFailure = false;
       let error: string | null = null;
-      let branchCause:unknown;
+      let branchCause: unknown;
       if (!subject) {
         hadFailure = true;
         error = "subject record no longer exists";
@@ -813,7 +881,7 @@ async function decideGateCore(
             submitterUserId: subject.submitterUserId,
           });
           hadFailure = res.failed.length > 0;
-          branchCause=res.failureCauses[0];
+          branchCause = res.failureCauses[0];
           error = hadFailure ? res.failed.join("; ") : null;
         }
       }
@@ -836,12 +904,7 @@ async function decideGateCore(
       if (!hadFailure && release) {
         try {
           if (outcome.resume === "reject") {
-            await cancelSubjectApprovals(
-              gate.orgId,
-              gate.subjectKind,
-              gate.subjectId,
-              gate.runId,
-            );
+            await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId, gate.runId);
             await release(
               gate.subjectId,
               "rejected",
@@ -889,9 +952,9 @@ async function decideGateCore(
           decision,
           stage: "branch",
           cause: error ?? "gate branch failed",
-          originalCause:branchCause,
-          retryable:!isProgrammingError(branchCause),
-          causeKind:causeKindOf(branchCause),
+          originalCause: branchCause,
+          retryable: !isProgrammingError(branchCause),
+          causeKind: causeKindOf(branchCause),
         });
       }
       if (
@@ -906,8 +969,12 @@ async function decideGateCore(
         );
       await finalizeRunStatus(gate.runId, gate.orgId, hadFailure, error);
       const runStatus =
-        ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(and(eq(schema.flowRuns.id, gate.runId), eq(schema.flowRuns.orgId, gate.orgId))))[0]
-          ?.status as "waiting" | "completed") ?? "completed";
+        ((
+          await db
+            .select({ status: schema.flowRuns.status })
+            .from(schema.flowRuns)
+            .where(and(eq(schema.flowRuns.id, gate.runId), eq(schema.flowRuns.orgId, gate.orgId)))
+        )[0]?.status as "waiting" | "completed") ?? "completed";
       return { ok: true, resumed: outcome.resume, runStatus };
     });
   });
@@ -921,18 +988,20 @@ async function completeSubjectApprovalContinuations(
   currentRunId: string,
 ): Promise<void> {
   const rows = await db.execute<{
-      id: string;
-      flow_id: string;
-      name: string;
-      context: Record<string, unknown>;
-    }>(sql`
+    id: string;
+    flow_id: string;
+    name: string;
+    context: Record<string, unknown>;
+  }>(
+    sql`
     select r.id,r.flow_id,f.name,r.context from flow_runs r join flows f on f.org_id=r.org_id and f.id=r.flow_id
       where r.org_id=${orgId} and r.subject_kind=${subjectKind} and r.subject_id=${subjectId}
         and r.id<>${currentRunId} and r.status='waiting' and r.context ? 'approvalContinuation'
-      order by r.created_at,r.id for update of r`, "objects");
+      order by r.created_at,r.id for update of r`,
+    "objects",
+  );
   const adapter = getFlowAdapter(subjectKind);
-  if (!adapter && rows.length)
-    throw new Error("The pending approval subject is unavailable.");
+  if (!adapter && rows.length) throw new Error("The pending approval subject is unavailable.");
   for (const row of rows) {
     const pending = row.context.approvalContinuation as {
       version?: unknown;
@@ -968,23 +1037,14 @@ async function completeSubjectApprovalContinuations(
       original.nodeId !== pending.nodeId ||
       original.status !== "approved" ||
       original.decidedBy !== pending.actorId ||
-      !await hasLiveApprovalRun(original)
+      !(await hasLiveApprovalRun(original))
     )
-      throw new Error(
-        "The pending branch does not match its recorded native approval decision.",
-      );
+      throw new Error("The pending branch does not match its recorded native approval decision.");
     const permission = adapter!.decisionPermission
       ? await adapter!.decisionPermission(subjectId, pending.actorId)
       : adapter!.permissions?.approve;
-    if (!permission)
-      throw new Error("The pending branch has no native decision authority.");
-    const scope = await lockActorCommandAuthority(
-      db,
-      orgId,
-      pending.actorId,
-      null,
-      permission,
-    );
+    if (!permission) throw new Error("The pending branch has no native decision authority.");
+    const scope = await lockActorCommandAuthority(db, orgId, pending.actorId, null, permission);
     await assertGateSubsidiaryScope(original, scope);
     const graph = parseFlowGraph(row.flow_id, policy.graph);
     const subject = await adapter!.loadContext(subjectId);
@@ -992,18 +1052,10 @@ async function completeSubjectApprovalContinuations(
       throw new Error("The pending approval branch or subject is unavailable.");
     if (
       row.context.command &&
-      canonicalJson(row.context.command) !==
-        canonicalJson(pending.evalCtx.values.command)
+      canonicalJson(row.context.command) !== canonicalJson(pending.evalCtx.values.command)
     )
-      throw new Error(
-        "The pending branch command differs from its frozen submission.",
-      );
-    const plan = planFromGate(
-      graph,
-      pending.nodeId,
-      "approve",
-      pending.evalCtx,
-    );
+      throw new Error("The pending branch command differs from its frozen submission.");
+    const plan = planFromGate(graph, pending.nodeId, "approve", pending.evalCtx);
     if (plan.gates.length)
       throw new Error("The pending branch contains undecided approval stages.");
     const result = await executeFlowPlan(
@@ -1023,15 +1075,16 @@ async function completeSubjectApprovalContinuations(
         decision: "approved",
         stage: "branch",
         cause: result.failed.join("; "),
-        originalCause:result.failureCauses[0],
-        retryable:!isProgrammingError(result.failureCauses[0]),
-        causeKind:causeKindOf(result.failureCauses[0]),
+        originalCause: result.failureCauses[0],
+        retryable: !isProgrammingError(result.failureCauses[0]),
+        causeKind: causeKindOf(result.failureCauses[0]),
       });
-    const saved =
-      await db.execute(sql`update flow_runs set context=context-'approvalContinuation',status='completed',finished_at=now(),error=null
-      where org_id=${orgId} and id=${row.id} and status='waiting' returning id`, "objects");
-    if (saved.length !== 1)
-      throw new Error("The completed approval branch was not saved.");
+    const saved = await db.execute(
+      sql`update flow_runs set context=context-'approvalContinuation',status='completed',finished_at=now(),error=null
+      where org_id=${orgId} and id=${row.id} and status='waiting' returning id`,
+      "objects",
+    );
+    if (saved.length !== 1) throw new Error("The completed approval branch was not saved.");
   }
 }
 
@@ -1041,11 +1094,14 @@ async function subjectOpenGateCount(
   subjectKind: string,
   subjectId: string,
 ): Promise<number> {
-  const r = await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from flow_gates
      where org_id = ${orgId} and subject_kind = ${subjectKind} and subject_id = ${subjectId}
        and status in ('pending', 'escalated')
-  `, "objects");
+  `,
+    "objects",
+  );
   return r[0]?.n ?? 0;
 }
 
@@ -1325,20 +1381,22 @@ async function resolveWorklistSubsidiaries(
     if (gate.subsidiaryId != null) continue;
     missing.set(gate.subjectKind, [...(missing.get(gate.subjectKind) ?? []), gate]);
   }
-  await Promise.all([...missing].map(async ([kind, kindGates]) => {
-    const scope = getFlowAdapter(kind)?.scope;
-    // Documents already carry their entity through the join, and org-wide
-    // subjects have none; an unregistered kind keeps null and fails closed.
-    if (!scope || scope.via === "document" || scope.via === "none") return;
-    const owners = await resolveSubjectSubsidiaries(
-      orgId,
-      kind,
-      scope,
-      kindGates.map((gate) => gate.subjectId),
-      allowedSubsidiaryIds ?? null,
-    );
-    for (const gate of kindGates) gate.subsidiaryId = owners.get(gate.subjectId) ?? null;
-  }));
+  await Promise.all(
+    [...missing].map(async ([kind, kindGates]) => {
+      const scope = getFlowAdapter(kind)?.scope;
+      // Documents already carry their entity through the join, and org-wide
+      // subjects have none; an unregistered kind keeps null and fails closed.
+      if (!scope || scope.via === "document" || scope.via === "none") return;
+      const owners = await resolveSubjectSubsidiaries(
+        orgId,
+        kind,
+        scope,
+        kindGates.map((gate) => gate.subjectId),
+        allowedSubsidiaryIds ?? null,
+      );
+      for (const gate of kindGates) gate.subsidiaryId = owners.get(gate.subjectId) ?? null;
+    }),
+  );
 }
 
 /**
@@ -1391,10 +1449,13 @@ function worklistGateScopeSql(allowedSubsidiaryIds: GateSubsidiaryScope): SQL {
   const predicates = scoped.flatMap(({ subjectKind, scope }) =>
     scope.via === "custom" && scope.worklistPredicate
       ? [{ subjectKind, predicate: scope.worklistPredicate(ids) }]
-      : []);
-  const unfilteredCustomKinds = JSON.stringify(scoped
-    .filter(({ scope }) => scope.via === "custom" && !scope.worklistPredicate)
-    .map(({ subjectKind }) => subjectKind));
+      : [],
+  );
+  const unfilteredCustomKinds = JSON.stringify(
+    scoped
+      .filter(({ scope }) => scope.via === "custom" && !scope.worklistPredicate)
+      .map(({ subjectKind }) => subjectKind),
+  );
   const owner = subjectSubsidiarySql(
     scoped.filter(({ scope }) => scope.via !== "custom"),
     { kind: sql`g.subject_kind`, id: sql`g.subject_id`, org: sql`g.org_id` },
@@ -1403,8 +1464,12 @@ function worklistGateScopeSql(allowedSubsidiaryIds: GateSubsidiaryScope): SQL {
     d.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
     or (d.id is null and ${owner} in (select jsonb_array_elements_text(${ids}::jsonb)::uuid))
     or (d.id is null and g.subject_kind in (select jsonb_array_elements_text(${unfilteredCustomKinds}::jsonb)))
-    ${sql.join(predicates.map(({ subjectKind, predicate }) =>
-      sql`or (g.subject_kind = ${subjectKind} and ${predicate})`), sql` `)}
+    ${sql.join(
+      predicates.map(
+        ({ subjectKind, predicate }) => sql`or (g.subject_kind = ${subjectKind} and ${predicate})`,
+      ),
+      sql` `,
+    )}
   )`;
 }
 
@@ -1414,14 +1479,14 @@ function worklistGateKindSql(kind: string | undefined): SQL {
 }
 
 function worklistGateSearchSql(query: string | undefined): SQL {
-  const needle = query?.trim().toLowerCase()
-  if (!needle) return sql``
+  const needle = query?.trim().toLowerCase();
+  if (!needle) return sql``;
   // The close period matches by its shown label and by its stored name.
-  return sql`and position(${needle} in lower(concat_ws(' ', g.title, g.subject_kind, d.document_number, d.memo, cp.name, ${WORKLIST_SUBJECT_LABEL}))) > 0`
+  return sql`and position(${needle} in lower(concat_ws(' ', g.title, g.subject_kind, d.document_number, d.memo, cp.name, ${WORKLIST_SUBJECT_LABEL}))) > 0`;
 }
 
 function worklistGateOverdueSql(overdue: boolean | undefined): SQL {
-  return overdue ? sql`and g.escalate_at is not null and g.escalate_at < now()` : sql``
+  return overdue ? sql`and g.escalate_at is not null and g.escalate_at < now()` : sql``;
 }
 
 /**
@@ -1441,7 +1506,7 @@ function worklistGateOverdueSql(overdue: boolean | undefined): SQL {
  */
 function worklistLiveGateSql(): SQL {
   const docKinds = JSON.stringify([...DOCUMENT_FLOW_KINDS]);
-  return sql`and ${liveApprovalRunSql(sql`g.org_id`,sql`g.run_id`,sql`g.subject_kind`,sql`g.subject_id`)}
+  return sql`and ${liveApprovalRunSql(sql`g.org_id`, sql`g.run_id`, sql`g.subject_kind`, sql`g.subject_id`)}
   and (g.subject_kind <> 'financial_change' or exists (
     select 1 from financial_changes fc
      where fc.org_id = g.org_id and fc.id = g.subject_id and fc.status = 'pending'
@@ -1517,12 +1582,17 @@ export async function worklistGates(
   if (page?.audience === "organization") {
     // The oversight reading has no assignee condition and so no delegation
     // arm: a delegated gate is listed once, under its current assignee.
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = (
+      await db.execute<Record<string, unknown>>(
+        sql`
       ${WORKLIST_SELECT}
        where ${worklistOrganizationWhere(orgId, allowedSubsidiaryIds, kind, query, overdue)}
        order by g.created_at, g.id
        limit ${page.prefix}
-    `, "objects")).map((row) => mapWorklistRow(row, null));
+    `,
+        "objects",
+      )
+    ).map((row) => mapWorklistRow(row, null));
     await resolveWorklistSubsidiaries(orgId, rows, allowedSubsidiaryIds);
     return allowedSubsidiaryIds != null
       ? rows.filter((g) => gateSubsidiaryScopeAllows(allowedSubsidiaryIds, g.subsidiaryId))
@@ -1532,12 +1602,15 @@ export async function worklistGates(
   // The id tiebreaker pins page boundaries: without a unique order key
   // Postgres may return tied rows in any order and rows duplicate or drop
   // across pages (same rule as the document list order clause).
-  const r = await db.execute<Record<string, unknown>>(sql`
+  const r = await db.execute<Record<string, unknown>>(
+    sql`
     ${WORKLIST_SELECT}
      where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue, page?.gateId)}
      order by g.created_at, g.id
      ${page ? sql`limit ${page.prefix}` : sql``}
-  `, "objects");
+  `,
+    "objects",
+  );
   const out = r.map((row) => mapWorklistRow(row, null));
 
   // Delegated gates: pending rows whose DIRECT assignee currently delegates
@@ -1552,7 +1625,8 @@ export async function worklistGates(
   if (principals.length > 0) {
     const seen = new Set(out.map((g) => g.id));
     const byId = new Map(principals.map((p) => [p.id, p]));
-    const d = await db.execute<Record<string, unknown>>(sql`
+    const d = await db.execute<Record<string, unknown>>(
+      sql`
       ${WORKLIST_SELECT}
        where g.org_id = ${orgId} and g.status = 'pending'
          ${worklistLiveGateSql()}
@@ -1564,7 +1638,9 @@ export async function worklistGates(
          ${worklistGateSearchSql(query)}
          ${worklistGateOverdueSql(overdue)}
        order by g.created_at, g.id
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of d) {
       const id = String(row.id);
       if (seen.has(id)) continue;
@@ -1612,26 +1688,38 @@ export async function worklistGateKindCounts(
       left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id
       ${WORKLIST_SUBJECT_JOINS}`;
   if (audience === "organization") {
-    accumulate(await db.execute<{ kind: string; n: string }>(sql`
+    accumulate(
+      await db.execute<{ kind: string; n: string }>(
+        sql`
       select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
         ${baseJoins}
        where ${worklistOrganizationWhere(orgId, allowedSubsidiaryIds, kind, query, overdue)}
        group by coalesce(d.kind, g.subject_kind)
-    `, "objects"));
+    `,
+        "objects",
+      ),
+    );
     return counts;
   }
   const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
-  accumulate(await db.execute<{ kind: string; n: string }>(sql`
+  accumulate(
+    await db.execute<{ kind: string; n: string }>(
+      sql`
     select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
       ${baseJoins}
      where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue)}
      group by coalesce(d.kind, g.subject_kind)
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
   const principals = await activeDelegationPrincipals(orgId, userId);
   if (principals.length > 0) {
     // Same dedup as the row merge, expressed as a predicate: a delegated row
     // satisfying the direct condition would already be counted above.
-    accumulate(await db.execute<{ kind: string; n: string }>(sql`
+    accumulate(
+      await db.execute<{ kind: string; n: string }>(
+        sql`
       select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
         ${baseJoins}
        where g.org_id = ${orgId} and g.status = 'pending'
@@ -1646,7 +1734,10 @@ export async function worklistGateKindCounts(
          ${worklistGateSearchSql(query)}
          ${worklistGateOverdueSql(overdue)}
        group by coalesce(d.kind, g.subject_kind)
-    `, "objects"));
+    `,
+        "objects",
+      ),
+    );
   }
   return counts;
 }
@@ -1680,11 +1771,21 @@ export interface OrphanedPendingGate {
 export async function listOrphanedPendingGates(orgId: string): Promise<OrphanedPendingGate[]> {
   const docKinds = JSON.stringify([...DOCUMENT_FLOW_KINDS]);
   const rows = await db.execute<{
-    id: string; runId: string; flowId: string; subjectKind: string; subjectId: string;
-    assigneeUserId: string | null; assigneeRole: string | null; createdAt: Date;
-    runStatus: string | null; fcStatus: string | null; fcExists: boolean;
-    docExists: boolean; voidRequested: boolean;
-  }>(sql`
+    id: string;
+    runId: string;
+    flowId: string;
+    subjectKind: string;
+    subjectId: string;
+    assigneeUserId: string | null;
+    assigneeRole: string | null;
+    createdAt: Date;
+    runStatus: string | null;
+    fcStatus: string | null;
+    fcExists: boolean;
+    docExists: boolean;
+    voidRequested: boolean;
+  }>(
+    sql`
     select g.id::text as id, g.run_id::text as "runId", g.flow_id::text as "flowId",
            g.subject_kind as "subjectKind", g.subject_id::text as "subjectId",
            g.assignee_user_id::text as "assigneeUserId", g.assignee_role as "assigneeRole",
@@ -1699,7 +1800,9 @@ export async function listOrphanedPendingGates(orgId: string): Promise<OrphanedP
         and g.subject_kind in (select jsonb_array_elements_text(${docKinds}::jsonb))
      where g.org_id = ${orgId} and g.status = 'pending'
      order by g.created_at, g.id
-  `, "objects");
+  `,
+    "objects",
+  );
   const docKindSet = new Set<string>(DOCUMENT_FLOW_KINDS);
   const out: OrphanedPendingGate[] = [];
   for (const row of rows) {
@@ -1792,8 +1895,10 @@ export async function delegateGate(
     await lockApprovalSubject(gate.orgId, gate.subjectKind, gate.subjectId);
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${gate.runId}))`);
     const current = await loadGate(gateId, gate.orgId);
-    if (!current || current.status !== "pending" || !await hasLiveApprovalRun(current))
-      throw new GateError("This approval is no longer active. Reopen the current submission before delegating.");
+    if (!current || current.status !== "pending" || !(await hasLiveApprovalRun(current)))
+      throw new GateError(
+        "This approval is no longer active. Reopen the current submission before delegating.",
+      );
     const fromPermission =
       current.assigneeUserId === fromUserId
         ? adapter?.decisionPermission
@@ -1813,13 +1918,7 @@ export async function delegateGate(
       fromPermission,
     );
     await assertGateSubsidiaryScope(current, fromScope);
-    const toScope = await lockActorCommandAuthority(
-      db,
-      gate.orgId,
-      toUserId,
-      null,
-      toPermission,
-    );
+    const toScope = await lockActorCommandAuthority(db, gate.orgId, toUserId, null, toPermission);
     await assertGateSubsidiaryScope(current, toScope);
     if (
       await gateDecisionSodBlocked(
@@ -1842,7 +1941,13 @@ export async function delegateGate(
           updatedBy: fromUserId,
           updatedAt: new Date(),
         })
-        .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.status, "pending")))
+        .where(
+          and(
+            eq(schema.flowGates.id, gateId),
+            eq(schema.flowGates.orgId, gate.orgId),
+            eq(schema.flowGates.status, "pending"),
+          ),
+        )
         .returning({ id: schema.flowGates.id });
       if (delegated.length === 0) {
         throw new GateError("this approval was already resolved");
@@ -1853,7 +1958,9 @@ export async function delegateGate(
       // holds a sibling row of this gate — a data condition, not a
       // defect, so it keeps its own curated refusal.
       if (typeof e === "object" && e !== null && (e as { code?: unknown }).code === "23505") {
-        throw new GateError("the target already holds this approval — it cannot be delegated twice");
+        throw new GateError(
+          "the target already holds this approval — it cannot be delegated twice",
+        );
       }
       throw new GateError(`could not delegate: ${sanitizeDecisionCause(e)}`);
     }
@@ -1917,7 +2024,8 @@ export async function processGateTimers(
   // connection layer denies by default and no reminder ever fires.
   // bypass: scheduler-tick — due gate reminders are found across every production organization.
   const dueReminders = await withBypassContext(() =>
-    db.execute<{ id: string; orgId: string }>(sql`
+    db.execute<{ id: string; orgId: string }>(
+      sql`
     select gate.id, gate.org_id as "orgId" from flow_gates gate
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.remind_at is not null and gate.remind_at <= ${now}
@@ -1927,7 +2035,10 @@ export async function processGateTimers(
        and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
      order by gate.remind_at
      limit 200
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
 
   for (const { id, orgId } of dueReminders) {
     const client = await pool.connect();
@@ -1952,23 +2063,30 @@ export async function processGateTimers(
       // completion stamp until the notification effect has returned: a dead
       // process releases this lock and the still-due reminder is rediscovered.
       const [gate] = await withOrgContext(orgId, () =>
-        db.select().from(schema.flowGates).where(and(
-          eq(schema.flowGates.id, id),
-          eq(schema.flowGates.orgId, orgId),
-          eq(schema.flowGates.status, "pending"),
-          sql`${schema.flowGates.remindAt} <= ${now}`,
-          sql`${schema.flowGates.remindedAt} is null`,
-        )),
+        db
+          .select()
+          .from(schema.flowGates)
+          .where(
+            and(
+              eq(schema.flowGates.id, id),
+              eq(schema.flowGates.orgId, orgId),
+              eq(schema.flowGates.status, "pending"),
+              sql`${schema.flowGates.remindAt} <= ${now}`,
+              sql`${schema.flowGates.remindedAt} is null`,
+            ),
+          ),
       );
       if (!gate) continue;
 
       await withOrgContext(gate.orgId, () => notifyReminder(gate));
-      const completed = await withOrgContext(orgId, () => db.execute<Record<string, unknown>>(sql`
+      const completed = await withOrgContext(orgId, () =>
+        db.execute<Record<string, unknown>>(sql`
         update flow_gates set reminded_at = ${now}
          where id = ${id} and org_id = ${orgId} and status = 'pending'
            and remind_at <= ${now} and reminded_at is null
          returning id
-      `));
+      `),
+      );
       if (completed.rowCount) reminded++;
     } catch (e) {
       console.error(`[flows] gate ${id} reminder failed:`, e);
@@ -1991,7 +2109,8 @@ export async function processGateTimers(
   // a throw leaves status=failed + error so the next tick retries.
   // bypass: scheduler-tick — due gate escalations are found across every production organization.
   const dueEscalations = await withBypassContext(() =>
-    db.execute<{ id: string; orgId: string }>(sql`
+    db.execute<{ id: string; orgId: string }>(
+      sql`
     select gate.id, gate.org_id as "orgId" from flow_gates gate
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.escalate_at is not null and gate.escalate_at <= ${now}
@@ -2001,7 +2120,10 @@ export async function processGateTimers(
        and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
      order by gate.escalate_at
      limit 100
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
 
   for (const { id, orgId } of dueEscalations) {
     await withOrgContext(orgId, () => enqueueApprovalEscalation({ orgId, gateId: id }));
@@ -2054,14 +2176,27 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
             // this gate row + this assignee, 72-hour expiry.
             ...emailActionUrls(gate.id, assignee.id),
           })
-        : emails.flowApprovalEscalationEmail({ orgName: brand, gateTitle: gate.title, subjectLabel });
+        : emails.flowApprovalEscalationEmail({
+            orgName: brand,
+            gateTitle: gate.title,
+            subjectLabel,
+          });
     // A gate row can be reminded and escalated at most once. Its durable row
     // identity therefore names the send obligation and deduplicates a retry
     // after Redis accepted the email but the scheduler lost its reply.
     const emailIntentKey = `gate-${kind}|${gate.orgId}|${gate.id}|${assignee.id}`;
-    await enqueueFlowEmail({orgId:gate.orgId,runId:gate.runId,occurrenceKey:emailIntentKey,payload:{
-      to:[assignee.email],subject:mail.subject,html:mail.html,text:mail.text,meta:{category:"approvals"},
-    }});
+    await enqueueFlowEmail({
+      orgId: gate.orgId,
+      runId: gate.runId,
+      occurrenceKey: emailIntentKey,
+      payload: {
+        to: [assignee.email],
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
+        meta: { category: "approvals" },
+      },
+    });
   } catch (e) {
     console.error(`[flows] gate ${gate.id} ${kind} email enqueue failed:`, e);
   }
@@ -2108,7 +2243,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${pre.runId}))`);
     const gate = await loadGate(gateId, pre.orgId);
     if (!gate || gate.status !== "pending") return false;
-    if(!await hasLiveApprovalRun(gate))return false;
+    if (!(await hasLiveApprovalRun(gate))) return false;
 
     const adapter = getFlowAdapter(gate.subjectKind);
     const subject = adapter ? await adapter.loadContext(gate.subjectId) : null;
@@ -2121,30 +2256,34 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
     // Escalation recipients are authored in the frozen gate policy. Missing
     // recipients keep the original gate pending and notify administrators.
     const sodApplies = !nodeGate || nodeGate.preventSelfApproval !== false;
-    const author = (await db.execute<{ created_by: string | null }>(
-        sql`select created_by from flow_runs where org_id=${gate.orgId} and id=${gate.runId}`, "objects",
-      ))[0]?.created_by;
-    const blocked = await resolveSodBlockedIds(
-      gate.orgId,
-      subject ?? null,
-      author ? [author] : [],
-    );
+    const author = (
+      await db.execute<{ created_by: string | null }>(
+        sql`select created_by from flow_runs where org_id=${gate.orgId} and id=${gate.runId}`,
+        "objects",
+      )
+    )[0]?.created_by;
+    const blocked = await resolveSodBlockedIds(gate.orgId, subject ?? null, author ? [author] : []);
     const existingAssignees = new Set(
-    (await db.select({ assigneeUserId: schema.flowGates.assigneeUserId })
-      .from(schema.flowGates)
-      .where(and(
-        eq(schema.flowGates.orgId, gate.orgId),
-        eq(schema.flowGates.runId, gate.runId),
-        eq(schema.flowGates.nodeId, gate.nodeId),
-      )))
-      .flatMap(({ assigneeUserId }) => assigneeUserId ? [assigneeUserId] : []),
-  );
-    const eligible = (users: ResolvedUser[]) => users.filter((user) =>
-    !existingAssignees.has(user.id) &&
-    !(sodApplies && blocked.has(user.id)));
+      (
+        await db
+          .select({ assigneeUserId: schema.flowGates.assigneeUserId })
+          .from(schema.flowGates)
+          .where(
+            and(
+              eq(schema.flowGates.orgId, gate.orgId),
+              eq(schema.flowGates.runId, gate.runId),
+              eq(schema.flowGates.nodeId, gate.nodeId),
+            ),
+          )
+      ).flatMap(({ assigneeUserId }) => (assigneeUserId ? [assigneeUserId] : [])),
+    );
+    const eligible = (users: ResolvedUser[]) =>
+      users.filter(
+        (user) => !existingAssignees.has(user.id) && !(sodApplies && blocked.has(user.id)),
+      );
     let replacements = nodeGate?.escalateTo
-    ? eligible(await resolveAssigneeUsers([nodeGate.escalateTo], targetCtx))
-    : [];
+      ? eligible(await resolveAssigneeUsers([nodeGate.escalateTo], targetCtx))
+      : [];
     const authorized: ResolvedUser[] = [];
     for (const user of replacements) {
       if (await hasGateDecisionAuthority(gate, user.id)) authorized.push(user);
@@ -2178,11 +2317,11 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   `);
     if (!claimed.rowCount) return false;
     // The original assignee is no longer asked; their request notice resolves.
-    await resolveApprovalRequestNotices(gate.orgId, gate.subjectKind, gate.subjectId)
+    await resolveApprovalRequestNotices(gate.orgId, gate.subjectKind, gate.subjectId);
 
     await db
-    .insert(schema.flowGates)
-    .values(
+      .insert(schema.flowGates)
+      .values(
         replacements.map((u) => ({
           orgId: gate.orgId,
           flowId: gate.flowId,
@@ -2200,8 +2339,8 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
           // Replacement rows get no further escalation hop (no chains/loops);
           // a reminder still fires if the node configured one.
           remindAt: nodeGate?.reminderAfterHours
-          ? new Date(now.getTime() + nodeGate.reminderAfterHours * 3_600_000)
-          : null,
+            ? new Date(now.getTime() + nodeGate.reminderAfterHours * 3_600_000)
+            : null,
           escalateAt: null,
         })),
       )
@@ -2229,17 +2368,20 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
     // Notify each replacement (fetch the fresh rows so notifyGateAssignee has
     // real gate rows — also skips any that already existed via onConflict).
     const fresh = await db
-    .select()
-    .from(schema.flowGates)
-    .where(
-      and(
-        eq(schema.flowGates.orgId, gate.orgId),
-        eq(schema.flowGates.runId, gate.runId),
-        eq(schema.flowGates.nodeId, gate.nodeId),
-        eq(schema.flowGates.status, "pending"),
-        inArray(schema.flowGates.assigneeUserId, replacements.map((u) => u.id)),
-      ),
-    );
+      .select()
+      .from(schema.flowGates)
+      .where(
+        and(
+          eq(schema.flowGates.orgId, gate.orgId),
+          eq(schema.flowGates.runId, gate.runId),
+          eq(schema.flowGates.nodeId, gate.nodeId),
+          eq(schema.flowGates.status, "pending"),
+          inArray(
+            schema.flowGates.assigneeUserId,
+            replacements.map((u) => u.id),
+          ),
+        ),
+      );
     for (const row of fresh) {
       await notifyGateAssignee(row, "escalation");
     }

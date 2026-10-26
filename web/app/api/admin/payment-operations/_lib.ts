@@ -1,5 +1,5 @@
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 
 /**
  * Shared audit writer for the payment-operations config family (formats,
@@ -8,15 +8,16 @@ import { db } from '@openbooks/engine/platform/db'
  * actor plus before/after state — sealed secrets appear only as presence flags.
  */
 
-export type ConfigTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+export type ConfigTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Strips sealed originator credentials, keeping only a presence flag. */
 export function profileAuditView(row: Record<string, unknown>): Record<string, unknown> {
-  const { originator_secrets_encrypted, originatorSecretsEncrypted, ...rest } = row
+  const { originator_secrets_encrypted, originatorSecretsEncrypted, ...rest } = row;
   return {
     ...rest,
-    hasOriginatorSecrets: originator_secrets_encrypted != null || originatorSecretsEncrypted != null,
-  }
+    hasOriginatorSecrets:
+      originator_secrets_encrypted != null || originatorSecretsEncrypted != null,
+  };
 }
 
 export async function auditConfigChange(
@@ -35,5 +36,5 @@ export async function auditConfigChange(
     values
       (${orgId}, ${tableName}, ${rowId}, ${action},
        ${JSON.stringify(changes)}::jsonb, ${actorId}, ${requestId ?? null})
-  `)
+  `);
 }

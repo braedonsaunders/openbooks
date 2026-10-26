@@ -97,11 +97,16 @@ function statementNotVisible(): CompensationError {
  * statement operation completes and a waiter rechecks the committed link.
  */
 async function lockActorParty(orgId: string, actorId: string): Promise<string | null> {
-  const row = (await db.execute<{ partyId: string | null }>(sql`
+  const row = (
+    await db.execute<{ partyId: string | null }>(
+      sql`
     select party_id::text as "partyId" from users
      where org_id = ${orgId}::uuid and id = ${actorId}::uuid
      for share
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.partyId ?? null;
 }
 
@@ -114,17 +119,28 @@ async function isOwnEmployment(
 ): Promise<boolean> {
   if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) return false;
   if (!actorPartyId) return false;
-  return (await db.execute<{ visible: boolean }>(sql`
+  return (
+    (
+      await db.execute<{ visible: boolean }>(
+        sql`
     select exists (
       select 1 from worker_employments
        where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
          and worker_party_id = ${actorPartyId}::uuid
     ) as visible
-  `, "objects"))[0]?.visible === true;
+  `,
+        "objects",
+      )
+    )[0]?.visible === true
+  );
 }
 
 /** HR write leg over one employment: the grant was verified by the caller, so an HrmAuthorizationError here is the subject/scope denial and reports uniform not-found. Non-authorization failures propagate. */
-async function scopedCompensationManage(orgId: string, actorId: string, employmentId: string): Promise<void> {
+async function scopedCompensationManage(
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<void> {
   try {
     await requireHrmCompensationManageOnEmployment(db, orgId, actorId, employmentId);
   } catch (e) {
@@ -143,7 +159,8 @@ async function fetchStatements(
   employmentId: string,
   allowed: Set<string> | null,
 ): Promise<StatementRow[]> {
-  return await db.execute<StatementRow>(sql`
+  return await db.execute<StatementRow>(
+    sql`
     select s.id, s.employment_id, s.cycle_id, s.period_from::text as period_from,
            s.period_to::text as period_to, s.payload, s.file_id, s.generated_at::text as generated_at
       from hrm_comp_statements s
@@ -153,7 +170,9 @@ async function fetchStatements(
             or e.employer_subsidiary_id in (
               select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
             ))
-     order by s.generated_at desc`, "objects");
+     order by s.generated_at desc`,
+    "objects",
+  );
 }
 
 async function buildPayload(
@@ -164,55 +183,93 @@ async function buildPayload(
   asOf: string,
 ): Promise<Record<string, unknown>> {
   const settings = await laborCostingSettings(orgId);
-  const wage = await resolveWage(orgId, workerPartyId, asOf, { annualHoursDefault: settings.annualHours });
+  const wage = await resolveWage(orgId, workerPartyId, asOf, {
+    annualHoursDefault: settings.annualHours,
+  });
   // Annual truth without a round-trip (see bands.ts): a native row
   // annualizes through its own cadence; otherwise annualise the hourly wage.
   const native = wage
-    ? (await db.execute<{ rate: string; basis: string; currency: string }>(sql`
+    ? (
+        await db.execute<{ rate: string; basis: string; currency: string }>(
+          sql`
       select rate::text as rate, basis, currency
         from labor_cost_rates
        where org_id = ${orgId} and employee_party_id = ${workerPartyId} and is_active
          and effective_from <= ${asOf}::date
          and (effective_to is null or effective_to >= ${asOf}::date)
        order by effective_from desc
-       limit 1`, "objects"))[0]
+       limit 1`,
+          "objects",
+        )
+      )[0]
     : undefined;
   const currentRate =
     wage === null
       ? null
       : native
         ? {
-            rate: annualPayRate(String(native.rate), requirePayRateBasis(native.basis), String(settings.annualHours)),
+            rate: annualPayRate(
+              String(native.rate),
+              requirePayRateBasis(native.basis),
+              String(settings.annualHours),
+            ),
             currency: native.currency,
             basis: "annual",
           }
-        : { rate: mul(wage.wage, String(settings.annualHours)), currency: wage.currency, basis: "annual" };
+        : {
+            rate: mul(wage.wage, String(settings.annualHours)),
+            currency: wage.currency,
+            basis: "annual",
+          };
   let placement: Record<string, unknown> | null = null;
   // Band placement frozen without the actor-gated read (the caller is
   // already gated): position level at the date, narrowest live band,
   // rate over target. No band or no wage freezes as "no band", never 0.
-  const assignment = (await db.execute<{ position_id: string | null; department_id: string | null; location_id: string | null }>(sql`
+  const assignment = (
+    await db.execute<{
+      position_id: string | null;
+      department_id: string | null;
+      location_id: string | null;
+    }>(
+      sql`
     select position_id, department_id, location_id
       from employment_assignment_versions
      where org_id = ${orgId} and employment_id = ${employmentId} and is_primary
        and effective_from <= ${asOf}::date
        and (effective_to is null or effective_to >= ${asOf}::date)
        and recorded_until is null
-     order by effective_from desc limit 1`, "objects"))[0];
+     order by effective_from desc limit 1`,
+      "objects",
+    )
+  )[0];
   const position = assignment?.position_id
-    ? (await db.execute<{ level_id: string | null; location_id: string | null; employer_subsidiary_id: string }>(sql`
+    ? (
+        await db.execute<{
+          level_id: string | null;
+          location_id: string | null;
+          employer_subsidiary_id: string;
+        }>(
+          sql`
       select job_level_id as level_id, location_id, employer_subsidiary_id
         from position_versions
        where org_id = ${orgId} and position_id = ${assignment.position_id}
          and effective_from <= ${asOf}::date
          and (effective_to is null or effective_to >= ${asOf}::date)
          and recorded_until is null
-       order by effective_from desc limit 1`, "objects"))[0]
+       order by effective_from desc limit 1`,
+          "objects",
+        )
+      )[0]
     : undefined;
   const levelId = position?.level_id ?? null;
   if (levelId && currentRate) {
-    const level = (await db.execute<{ family_id: string | null }>(sql`
-      select family_id from hrm_job_levels where org_id = ${orgId} and id = ${levelId}`, "objects"))[0];
+    const level = (
+      await db.execute<{ family_id: string | null }>(
+        sql`
+      select family_id from hrm_job_levels where org_id = ${orgId} and id = ${levelId}`,
+        "objects",
+      )
+    )[0];
     const band = await resolveBandForScope(
       orgId,
       {
@@ -243,25 +300,33 @@ async function buildPayload(
     plan: string;
     employer_amount: string | null;
     currency: string;
-  }>(sql`
+  }>(
+    sql`
     select p.name as plan, e.employer_amount_per_period::text as employer_amount, e.currency
       from hrm_benefit_enrollments e
       join hrm_benefit_plans p on p.org_id = e.org_id and p.id = e.plan_id
      where e.org_id = ${orgId} and e.employment_id = ${employmentId}
        and e.status = 'elected'
        and e.effective_from <= ${asOf}::date
-       and (e.effective_to is null or e.effective_to >= ${asOf}::date)`, "objects");
+       and (e.effective_to is null or e.effective_to >= ${asOf}::date)`,
+    "objects",
+  );
   let cycleDecision: Record<string, unknown> | null = null;
   if (cycleId !== null) {
-    const line = (await db.execute<{
-      status: string;
-      proposed_pct: string | null;
-      proposed_rate: string | null;
-      reason: string | null;
-    }>(sql`
+    const line = (
+      await db.execute<{
+        status: string;
+        proposed_pct: string | null;
+        proposed_rate: string | null;
+        reason: string | null;
+      }>(
+        sql`
       select status, proposed_pct::text, proposed_rate::text, reason
         from hrm_comp_cycle_lines
-       where org_id = ${orgId} and cycle_id = ${cycleId} and employment_id = ${employmentId}`, "objects"))[0];
+       where org_id = ${orgId} and cycle_id = ${cycleId} and employment_id = ${employmentId}`,
+        "objects",
+      )
+    )[0];
     if (line) {
       cycleDecision = {
         status: line.status,
@@ -315,8 +380,13 @@ export async function generateStatement(query: {
         if (own) {
           // Own employment outside a restricted manage lens: self-service.
           const locked = await lockScopeRow(db, orgId, "employment", employmentId, null, "update");
-          const employment = (await db.execute<{ worker_party_id: string }>(sql`
-            select worker_party_id from worker_employments where org_id = ${orgId} and id = ${locked.id}`, "objects"))[0];
+          const employment = (
+            await db.execute<{ worker_party_id: string }>(
+              sql`
+            select worker_party_id from worker_employments where org_id = ${orgId} and id = ${locked.id}`,
+              "objects",
+            )
+          )[0];
           if (!employment) throw employmentNotVisible();
           workerPartyId = employment.worker_party_id;
         } else {
@@ -327,8 +397,13 @@ export async function generateStatement(query: {
       // Self-service can intentionally reach the actor's own employment
       // outside their HR lens; lock its canonical row before reading pay.
       const locked = await lockScopeRow(db, orgId, "employment", employmentId, null, "update");
-      const employment = (await db.execute<{ worker_party_id: string }>(sql`
-        select worker_party_id from worker_employments where org_id = ${orgId} and id = ${locked.id}`, "objects"))[0];
+      const employment = (
+        await db.execute<{ worker_party_id: string }>(
+          sql`
+        select worker_party_id from worker_employments where org_id = ${orgId} and id = ${locked.id}`,
+          "objects",
+        )
+      )[0];
       if (!employment) throw employmentNotVisible();
       workerPartyId = employment.worker_party_id;
     } else {
@@ -336,16 +411,31 @@ export async function generateStatement(query: {
     }
     if (!workerPartyId) throw employmentNotVisible();
     const today = await businessToday(orgId);
-    const payload = await buildPayload(orgId, employmentId, workerPartyId, query.cycleId ?? null, today);
-    const row = (await db.execute<StatementRow>(sql`
+    const payload = await buildPayload(
+      orgId,
+      employmentId,
+      workerPartyId,
+      query.cycleId ?? null,
+      today,
+    );
+    const row = (
+      await db.execute<StatementRow>(
+        sql`
       insert into hrm_comp_statements
         (org_id, employment_id, cycle_id, period_from, period_to, payload, generated_by, created_by, updated_by)
       values (${orgId}, ${employmentId}, ${query.cycleId ?? null},
               ${query.periodFrom}, ${query.periodTo}, ${JSON.stringify(payload)}::jsonb,
               ${actorId}, ${actorId}, ${actorId})
       returning id, employment_id, cycle_id, period_from::text as period_from, period_to::text as period_to,
-                payload, file_id, generated_at::text as generated_at`, "objects"))[0];
-    if (!row) throw new CompensationError("REFUSED", "the statement insert matched no row — the save is refused, never a silent success");
+                payload, file_id, generated_at::text as generated_at`,
+        "objects",
+      )
+    )[0];
+    if (!row)
+      throw new CompensationError(
+        "REFUSED",
+        "the statement insert matched no row — the save is refused, never a silent success",
+      );
     return toStatementDTO(row);
   });
 }
@@ -354,7 +444,12 @@ function renderRowToPdf(row: StatementRow, orgName: string): Promise<Buffer> {
   const payload = row.payload as Record<string, unknown>;
   const rate = payload.currentRate as { rate?: string; currency?: string } | null;
   const placement = payload.bandPlacement as { placement?: string; compaRatio?: string } | null;
-  const benefits = (payload.employerPaidBenefits as Array<{ plan?: string; employer_amount?: string | null; currency?: string }>) ?? [];
+  const benefits =
+    (payload.employerPaidBenefits as Array<{
+      plan?: string;
+      employer_amount?: string | null;
+      currency?: string;
+    }>) ?? [];
   return renderPdfDocument({
     title: "Total rewards statement",
     branding: { orgName },
@@ -363,7 +458,10 @@ function renderRowToPdf(row: StatementRow, orgName: string): Promise<Buffer> {
     layout: { paperSize: "a4", orientation: "portrait", marginMm: 15, density: "standard" },
     summary: [
       { label: "Annual rate", value: rate ? `${rate.rate} ${rate.currency}` : "—" },
-      { label: "Band placement", value: placement?.placement === "no_band" ? "No band" : (placement?.placement ?? "—") },
+      {
+        label: "Band placement",
+        value: placement?.placement === "no_band" ? "No band" : (placement?.placement ?? "—"),
+      },
     ],
     groups: [
       {
@@ -388,11 +486,16 @@ export async function renderStatementPdf(query: {
   const statementId = requireId(query.statementId, "statementId");
   return withOrgTransaction(orgId, async () => {
     const actorPartyId = await lockActorParty(orgId, actorId);
-    const row = (await db.execute<StatementRow>(sql`
+    const row = (
+      await db.execute<StatementRow>(
+        sql`
       select s.id, s.employment_id, s.cycle_id, s.period_from::text as period_from,
              s.period_to::text as period_to, s.payload, s.file_id, s.generated_at::text as generated_at
         from hrm_comp_statements s
-       where s.org_id = ${orgId} and s.id = ${statementId}`, "objects"))[0];
+       where s.org_id = ${orgId} and s.id = ${statementId}`,
+        "objects",
+      )
+    )[0];
     if (!row) throw statementNotVisible();
     if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
       try {
@@ -425,8 +528,13 @@ export async function renderStatementPdf(query: {
 
 /** Organization label used when rendering the operator-facing statement PDF. */
 export async function getStatementOrganizationName(orgId: string): Promise<string> {
-  const row = (await db.execute<{ name: string }>(sql`
-    select name from orgs where id = ${orgId}`, "objects"))[0];
+  const row = (
+    await db.execute<{ name: string }>(
+      sql`
+    select name from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   return row?.name ?? "Organization";
 }
 
@@ -448,8 +556,13 @@ export async function attachStatementPdf(query: {
     // version, blob, and statement writes, so a refused attach leaves
     // zero rows and missing, foreign, and hidden ids stay identical.
     await requireHrmCompensationManage(db, orgId, actorId);
-    const source = (await db.execute<{ employment_id: string }>(sql`
-      select employment_id from hrm_comp_statements where org_id = ${orgId} and id = ${statementId}`, "objects"))[0];
+    const source = (
+      await db.execute<{ employment_id: string }>(
+        sql`
+      select employment_id from hrm_comp_statements where org_id = ${orgId} and id = ${statementId}`,
+        "objects",
+      )
+    )[0];
     if (!source) throw statementNotVisible();
     try {
       await lockEmploymentsForScope(db, [source.employment_id], { orgId, actorId });
@@ -458,39 +571,81 @@ export async function attachStatementPdf(query: {
       if (e instanceof HrmAuthorizationError) throw statementNotVisible();
       throw e;
     }
-    const existing = (await db.execute<{ id: string }>(sql`
-      select id from folders where org_id = ${orgId} and system_kind = 'hrm_comp_statements' limit 1`, "objects"))[0];
+    const existing = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from folders where org_id = ${orgId} and system_kind = 'hrm_comp_statements' limit 1`,
+        "objects",
+      )
+    )[0];
     let folderId = existing?.id;
     if (!folderId) {
-      const created = (await db.execute<{ id: string }>(sql`
+      const created = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into folders (org_id, name, is_system, system_kind, is_private, owner_id, created_by, updated_by, created_at, updated_at)
         values (${orgId}, 'Compensation statements', true, 'hrm_comp_statements', true, null, ${actorId}, ${actorId}, now(), now())
-        returning id`, "objects"))[0];
-      if (!created) throw new CompensationError("REFUSED", "could not create the compensation statements folder");
+        returning id`,
+          "objects",
+        )
+      )[0];
+      if (!created)
+        throw new CompensationError(
+          "REFUSED",
+          "could not create the compensation statements folder",
+        );
       folderId = created.id;
     }
     const hash = createHash("sha256").update(query.bytes).digest("hex");
-    const file = (await db.execute<{ id: string }>(sql`
+    const file = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into files (org_id, folder_id, name, extension, file_type, content_type, size_bytes,
                          storage_kind, content_hash, created_by, updated_by, created_at, updated_at)
       values (${orgId}, ${folderId}, ${query.filename}, 'pdf', 'document', 'application/pdf',
               ${query.bytes.length}, 'db', ${hash}, ${actorId}, ${actorId}, now(), now())
-      returning id`, "objects"))[0];
-    if (!file) throw new CompensationError("REFUSED", "the statement file insert matched no row — refused, never silent");
-    const version = (await db.execute<{ id: string }>(sql`
+      returning id`,
+        "objects",
+      )
+    )[0];
+    if (!file)
+      throw new CompensationError(
+        "REFUSED",
+        "the statement file insert matched no row — refused, never silent",
+      );
+    const version = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind, content_hash, created_by, created_at)
       values (${file.id}, 1, ${query.bytes.length}, 'application/pdf', 'db', ${hash}, ${actorId}, now())
-      returning id`, "objects"))[0];
-    if (!version) throw new CompensationError("REFUSED", "the statement file version insert matched no row — refused, never silent");
-    await db.execute(sql`update files set current_version_id = ${version.id} where id = ${file.id} and org_id = ${orgId}`);
-    await db.execute(sql`insert into file_blobs (version_id, bytes) values (${version.id}, ${query.bytes})`);
-    const row = (await db.execute<StatementRow>(sql`
+      returning id`,
+        "objects",
+      )
+    )[0];
+    if (!version)
+      throw new CompensationError(
+        "REFUSED",
+        "the statement file version insert matched no row — refused, never silent",
+      );
+    await db.execute(
+      sql`update files set current_version_id = ${version.id} where id = ${file.id} and org_id = ${orgId}`,
+    );
+    await db.execute(
+      sql`insert into file_blobs (version_id, bytes) values (${version.id}, ${query.bytes})`,
+    );
+    const row = (
+      await db.execute<StatementRow>(
+        sql`
       insert into hrm_comp_statements (org_id, employment_id, cycle_id, period_from, period_to, payload, file_id, generated_by, created_by, updated_by)
       select org_id, employment_id, cycle_id, period_from, period_to, payload, ${file.id}, ${actorId}, ${actorId}, ${actorId}
         from hrm_comp_statements where org_id = ${orgId} and id = ${statementId}
       returning id, employment_id, cycle_id, period_from::text as period_from, period_to::text as period_to,
-                payload, file_id, generated_at::text as generated_at`, "objects"))[0];
-    if (!row) throw new CompensationError("NOT_FOUND", "statement is not visible in this organization");
+                payload, file_id, generated_at::text as generated_at`,
+        "objects",
+      )
+    )[0];
+    if (!row)
+      throw new CompensationError("NOT_FOUND", "statement is not visible in this organization");
     return toStatementDTO(row);
   });
 }
@@ -510,7 +665,11 @@ export async function listStatements(query: {
   return withOrgTransaction(orgId, async () => {
     const actorPartyId = await lockActorParty(orgId, actorId);
     if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
-      const subjects = await lockEmploymentsForScope(db, [employmentId], { orgId, actorId, outOfScope: "filter" });
+      const subjects = await lockEmploymentsForScope(db, [employmentId], {
+        orgId,
+        actorId,
+        outOfScope: "filter",
+      });
       if (subjects.length > 0) {
         const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
         return (await fetchStatements(orgId, employmentId, allowed)).map(toStatementDTO);
@@ -529,6 +688,9 @@ export async function listStatements(query: {
       await lockScopeRow(db, orgId, "employment", employmentId, null, "update");
       return (await fetchStatements(orgId, employmentId, null)).map(toStatementDTO);
     }
-    throw new CompensationError("REFUSED", "statements read for your own employment — HR reads the rest");
+    throw new CompensationError(
+      "REFUSED",
+      "statements read for your own employment — HR reads the rest",
+    );
   });
 }

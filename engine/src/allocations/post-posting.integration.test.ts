@@ -79,7 +79,11 @@ async function seedPostRule(
     bookIds?: string[];
     offsetAccountId?: string | null;
     accountId?: string;
-    basis?: { kind: "driver"; driverId: string; driverAsOf?: "period" | "document_date" | "prior_period" };
+    basis?: {
+      kind: "driver";
+      driverId: string;
+      driverAsOf?: "period" | "document_date" | "prior_period";
+    };
   },
 ): Promise<{ ruleId: string; versionId: string }> {
   const ruleId = randomUUID();
@@ -133,8 +137,13 @@ async function seedPeriod(
   ctx: Ctx,
   period: { year: number; num: number; name: string; start: string; end: string },
 ): Promise<void> {
-  const calId = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${ctx.org.orgId} and is_default = true`, "objects"))[0]!.id;
+  const calId = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from fiscal_calendars where org_id = ${ctx.org.orgId} and is_default = true`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
     values (${randomUUID()}, ${ctx.org.orgId}, ${period.year}, ${period.num}, ${period.name},
@@ -190,71 +199,90 @@ type EntryLine = {
 };
 
 async function entryLines(orgId: string, entryId: string): Promise<EntryLine[]> {
-  const r = await db.execute<EntryLine>(sql`
+  const r = await db.execute<EntryLine>(
+    sql`
     select id, line_number, account_id, department_id, amount::text,
            contributor_kind, contributor_ref
       from journal_lines
      where org_id = ${orgId} and entry_id = ${entryId}
-     order by line_number`, "objects");
+     order by line_number`,
+    "objects",
+  );
   return r;
 }
 
-test("net_zero_pair adds dimensional attribution without moving account totals", { skip: !DB }, async () => {
-  const ctx = await setupCtx();
-  try {
-    const { versionId } = await seedPostRule(ctx, {
-      key: "stat-pair",
-      impact: "net_zero_pair",
-      targets: [
-        { departmentId: ctx.deptA, fixedPercent: "60.0000", label: "Team A" },
-        { departmentId: ctx.deptB, fixedPercent: "40.0000", label: "Team B" },
-      ],
-    });
-    const entryId = await postBill(ctx, await seedBill(ctx, "BILL-PAIR-1", "100.0000"));
-    const lines = await entryLines(ctx.org.orgId, entryId);
-    assert.equal(lines.length, 5);
-    // Kernel lines keep numbers 1..2 and carry no contributor.
-    assert.deepEqual(lines.slice(0, 2).map((l) => [l.account_id, l.department_id, l.amount, l.contributor_kind]), [
-      [ctx.org.accounts.cogs, ctx.deptSrc, "100.0000", null],
-      [ctx.org.accounts.ap, null, "-100.0000", null],
-    ]);
-    // Contributed lines follow with rule stamps.
-    assert.deepEqual(lines.slice(2).map((l) => [l.account_id, l.department_id, l.amount]), [
-      [ctx.org.accounts.cogs, ctx.deptA, "60.0000"],
-      [ctx.org.accounts.cogs, ctx.deptB, "40.0000"],
-      [ctx.org.accounts.cogs, ctx.deptSrc, "-100.0000"],
-    ]);
-    for (const line of lines.slice(2)) {
-      assert.equal(line.contributor_kind, "rule");
-      assert.equal(line.contributor_ref, versionId);
-    }
-    // The pair nets to zero at the account level.
-    const cogs = lines.filter((l) => l.account_id === ctx.org.accounts.cogs);
-    const cogsTotal = cogs.reduce((acc, l) => acc + Number(l.amount), 0);
-    assert.equal(cogsTotal, 100);
-    // Lineage traces every contributed line to its kernel source.
-    const lineage = await db.execute<{
-      journal_line_id: string | null;
-      source_journal_line_id: string | null;
-      amount: string;
-      share: string;
-    }>(sql`
+test(
+  "net_zero_pair adds dimensional attribution without moving account totals",
+  { skip: !DB },
+  async () => {
+    const ctx = await setupCtx();
+    try {
+      const { versionId } = await seedPostRule(ctx, {
+        key: "stat-pair",
+        impact: "net_zero_pair",
+        targets: [
+          { departmentId: ctx.deptA, fixedPercent: "60.0000", label: "Team A" },
+          { departmentId: ctx.deptB, fixedPercent: "40.0000", label: "Team B" },
+        ],
+      });
+      const entryId = await postBill(ctx, await seedBill(ctx, "BILL-PAIR-1", "100.0000"));
+      const lines = await entryLines(ctx.org.orgId, entryId);
+      assert.equal(lines.length, 5);
+      // Kernel lines keep numbers 1..2 and carry no contributor.
+      assert.deepEqual(
+        lines.slice(0, 2).map((l) => [l.account_id, l.department_id, l.amount, l.contributor_kind]),
+        [
+          [ctx.org.accounts.cogs, ctx.deptSrc, "100.0000", null],
+          [ctx.org.accounts.ap, null, "-100.0000", null],
+        ],
+      );
+      // Contributed lines follow with rule stamps.
+      assert.deepEqual(
+        lines.slice(2).map((l) => [l.account_id, l.department_id, l.amount]),
+        [
+          [ctx.org.accounts.cogs, ctx.deptA, "60.0000"],
+          [ctx.org.accounts.cogs, ctx.deptB, "40.0000"],
+          [ctx.org.accounts.cogs, ctx.deptSrc, "-100.0000"],
+        ],
+      );
+      for (const line of lines.slice(2)) {
+        assert.equal(line.contributor_kind, "rule");
+        assert.equal(line.contributor_ref, versionId);
+      }
+      // The pair nets to zero at the account level.
+      const cogs = lines.filter((l) => l.account_id === ctx.org.accounts.cogs);
+      const cogsTotal = cogs.reduce((acc, l) => acc + Number(l.amount), 0);
+      assert.equal(cogsTotal, 100);
+      // Lineage traces every contributed line to its kernel source.
+      const lineage = await db.execute<{
+        journal_line_id: string | null;
+        source_journal_line_id: string | null;
+        amount: string;
+        share: string;
+      }>(
+        sql`
       select journal_line_id, source_journal_line_id, amount::text, share::text
         from allocation_lineage
        where org_id = ${ctx.org.orgId} and mode = 'post'
-       order by amount desc`, "objects");
-    assert.equal(lineage.length, 3);
-    const kernelIds = new Set(lines.slice(0, 2).map((l) => l.id));
-    const contribIds = new Set(lines.slice(2).map((l) => l.id));
-    for (const row of lineage) {
-      assert.ok(row.journal_line_id && contribIds.has(row.journal_line_id));
-      assert.ok(row.source_journal_line_id && kernelIds.has(row.source_journal_line_id));
+       order by amount desc`,
+        "objects",
+      );
+      assert.equal(lineage.length, 3);
+      const kernelIds = new Set(lines.slice(0, 2).map((l) => l.id));
+      const contribIds = new Set(lines.slice(2).map((l) => l.id));
+      for (const row of lineage) {
+        assert.ok(row.journal_line_id && contribIds.has(row.journal_line_id));
+        assert.ok(row.source_journal_line_id && kernelIds.has(row.source_journal_line_id));
+      }
+      assert.deepEqual(
+        lineage.map((r) => r.amount),
+        ["60.0000", "40.0000", "-100.0000"],
+      );
+    } finally {
+      await dropScratchOrg(ctx.org.orgId);
     }
-    assert.deepEqual(lineage.map((r) => r.amount), ["60.0000", "40.0000", "-100.0000"]);
-  } finally {
-    await dropScratchOrg(ctx.org.orgId);
-  }
-});
+  },
+);
 
 test("reclass moves the cost and the trial balance total is unchanged", { skip: !DB }, async () => {
   const ctx = await setupCtx();
@@ -262,15 +290,24 @@ test("reclass moves the cost and the trial balance total is unchanged", { skip: 
     await seedPostRule(ctx, {
       key: "move-cost",
       impact: "reclass",
-      targets: [{ departmentId: ctx.deptA, targetAccountId: ctx.org.accounts.adjustment, fixedPercent: "100.0000" }],
+      targets: [
+        {
+          departmentId: ctx.deptA,
+          targetAccountId: ctx.org.accounts.adjustment,
+          fixedPercent: "100.0000",
+        },
+      ],
     });
     const entryId = await postBill(ctx, await seedBill(ctx, "BILL-RECLASS-1", "100.0000"));
     const lines = await entryLines(ctx.org.orgId, entryId);
     assert.equal(lines.length, 4);
-    assert.deepEqual(lines.slice(2).map((l) => [l.account_id, l.amount]), [
-      [ctx.org.accounts.adjustment, "100.0000"],
-      [ctx.org.accounts.cogs, "-100.0000"],
-    ]);
+    assert.deepEqual(
+      lines.slice(2).map((l) => [l.account_id, l.amount]),
+      [
+        [ctx.org.accounts.adjustment, "100.0000"],
+        [ctx.org.accounts.cogs, "-100.0000"],
+      ],
+    );
     const total = lines.reduce((acc, l) => acc + Number(l.amount), 0);
     assert.equal(total, 0);
   } finally {
@@ -278,32 +315,41 @@ test("reclass moves the cost and the trial balance total is unchanged", { skip: 
   }
 });
 
-test("a cross-subsidiary contribution is refused with no partial write", { skip: !DB }, async () => {
-  const ctx = await setupCtx();
-  const documentId = await seedBill(ctx, "BILL-XSUB-1", "100.0000");
-  try {
-    const sub2 = randomUUID();
-    await db.execute(sql`
+test(
+  "a cross-subsidiary contribution is refused with no partial write",
+  { skip: !DB },
+  async () => {
+    const ctx = await setupCtx();
+    const documentId = await seedBill(ctx, "BILL-XSUB-1", "100.0000");
+    try {
+      const sub2 = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${sub2}, ${ctx.org.orgId}, ${ctx.org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
-    await seedPostRule(ctx, {
-      key: "xsub",
-      impact: "net_zero_pair",
-      targets: [{ departmentId: ctx.deptA, subsidiaryId: sub2, fixedPercent: "100.0000" }],
-    });
-    await assert.rejects(postBill(ctx, documentId), /does not balance/);
-    // No partial write: no entry, no lineage, document untouched.
-    const probe = (await db.execute<{ entries: number; lineage: number; status: string }>(sql`
+      await seedPostRule(ctx, {
+        key: "xsub",
+        impact: "net_zero_pair",
+        targets: [{ departmentId: ctx.deptA, subsidiaryId: sub2, fixedPercent: "100.0000" }],
+      });
+      await assert.rejects(postBill(ctx, documentId), /does not balance/);
+      // No partial write: no entry, no lineage, document untouched.
+      const probe = (
+        await db.execute<{ entries: number; lineage: number; status: string }>(
+          sql`
       select (select count(*)::int from journal_entries where org_id = ${ctx.org.orgId}) as entries,
              (select count(*)::int from allocation_lineage where org_id = ${ctx.org.orgId}) as lineage,
-             (select status from documents where id = ${documentId} and org_id = ${ctx.org.orgId}) as status`, "objects"))[0]!;
-    assert.equal(probe.entries, 0);
-    assert.equal(probe.lineage, 0);
-    assert.equal(probe.status, "approved");
-  } finally {
-    await dropScratchOrg(ctx.org.orgId);
-  }
-});
+             (select status from documents where id = ${documentId} and org_id = ${ctx.org.orgId}) as status`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(probe.entries, 0);
+      assert.equal(probe.lineage, 0);
+      assert.equal(probe.status, "approved");
+    } finally {
+      await dropScratchOrg(ctx.org.orgId);
+    }
+  },
+);
 
 test("secondary-book rules write a separate allocation entry", { skip: !DB }, async () => {
   const ctx = await setupCtx();
@@ -325,24 +371,44 @@ test("secondary-book rules write a separate allocation entry", { skip: !DB }, as
     assert.equal(primary.length, 2);
     assert.ok(primary.every((l) => l.contributor_kind === null));
     // The secondary entry carries the balanced pair with stamps.
-    const secondary = await db.execute<{ id: string; entry_number: string; origin: string; book_id: string }>(sql`
+    const secondary = await db.execute<{
+      id: string;
+      entry_number: string;
+      origin: string;
+      book_id: string;
+    }>(
+      sql`
       select id, entry_number, origin, book_id from journal_entries
        where org_id = ${ctx.org.orgId} and source_document_id is not null
-         and id <> ${entryId}`, "objects");
+         and id <> ${entryId}`,
+      "objects",
+    );
     assert.equal(secondary.length, 1);
     assert.equal(secondary[0]!.origin, "allocation");
     assert.equal(secondary[0]!.book_id, secBook);
     assert.match(secondary[0]!.entry_number, /-ALLOC-SEC$/);
     const secLines = await entryLines(ctx.org.orgId, secondary[0]!.id);
-    assert.deepEqual(secLines.map((l) => [l.account_id, l.department_id, l.amount]), [
-      [ctx.org.accounts.cogs, ctx.deptA, "100.0000"],
-      [ctx.org.accounts.cogs, ctx.deptSrc, "-100.0000"],
-    ]);
-    assert.ok(secLines.every((l) => l.contributor_kind === "rule" && l.contributor_ref === versionId));
+    assert.deepEqual(
+      secLines.map((l) => [l.account_id, l.department_id, l.amount]),
+      [
+        [ctx.org.accounts.cogs, ctx.deptA, "100.0000"],
+        [ctx.org.accounts.cogs, ctx.deptSrc, "-100.0000"],
+      ],
+    );
+    assert.ok(
+      secLines.every((l) => l.contributor_kind === "rule" && l.contributor_ref === versionId),
+    );
     // Lineage for secondary lines sources the primary kernel line.
-    const lineage = await db.execute<{ journal_entry_id: string; journal_line_id: string; source_journal_line_id: string }>(sql`
+    const lineage = await db.execute<{
+      journal_entry_id: string;
+      journal_line_id: string;
+      source_journal_line_id: string;
+    }>(
+      sql`
       select journal_entry_id, journal_line_id, source_journal_line_id
-        from allocation_lineage where org_id = ${ctx.org.orgId} and mode = 'post'`, "objects");
+        from allocation_lineage where org_id = ${ctx.org.orgId} and mode = 'post'`,
+      "objects",
+    );
     assert.equal(lineage.length, 2);
     const kernelIds = new Set(primary.map((l) => l.id));
     for (const row of lineage) {
@@ -372,9 +438,12 @@ test("report_only writes lineage rows and no journal lines", { skip: !DB }, asyn
       journal_entry_id: string;
       journal_line_id: string | null;
       amount: string;
-    }>(sql`
+    }>(
+      sql`
       select journal_entry_id, journal_line_id, amount::text
-        from allocation_lineage where org_id = ${ctx.org.orgId} and mode = 'post'`, "objects");
+        from allocation_lineage where org_id = ${ctx.org.orgId} and mode = 'post'`,
+      "objects",
+    );
     assert.equal(lineage.length, 2);
     assert.deepEqual(lineage.map((r) => r.amount).sort(), ["40.0000", "60.0000"]);
     assert.ok(lineage.every((r) => r.journal_entry_id === entryId && r.journal_line_id === null));
@@ -399,8 +468,13 @@ test("feature off contributes nothing and keeps posted data", { skip: !DB }, asy
     const entryId = await postBill(ctx, await seedBill(ctx, "BILL-GATE-1", "100.0000"));
     const lines = await entryLines(ctx.org.orgId, entryId);
     assert.equal(lines.length, 2);
-    const lineage = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from allocation_lineage where org_id = ${ctx.org.orgId}`, "objects"))[0]!;
+    const lineage = (
+      await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from allocation_lineage where org_id = ${ctx.org.orgId}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(lineage.n, 0);
   } finally {
     await dropScratchOrg(ctx.org.orgId);
@@ -440,7 +514,9 @@ test("void mirrors contributed lines with their contributor stamps", { skip: !DB
       assert.equal(after[i]!.contributor_kind, before[i]!.contributor_kind);
       assert.equal(after[i]!.contributor_ref, before[i]!.contributor_ref);
     }
-    assert.ok(after.slice(2).every((l) => l.contributor_kind === "rule" && l.contributor_ref === versionId));
+    assert.ok(
+      after.slice(2).every((l) => l.contributor_kind === "rule" && l.contributor_ref === versionId),
+    );
   } finally {
     await dropScratchOrg(ctx.org.orgId);
   }
@@ -471,137 +547,188 @@ test("void reverses secondary-book allocation entries too", { skip: !DB }, async
       source: "api",
     });
     assert.equal(result.status, "voided");
-    const reversed = await db.execute<{ entry_number: string; origin: string; status: string }>(sql`
+    const reversed = await db.execute<{ entry_number: string; origin: string; status: string }>(
+      sql`
       select e.entry_number, e.origin, e.status
         from journal_entries e
        where e.org_id = ${ctx.org.orgId} and e.reverses_entry_id is not null
-       order by e.entry_number`, "objects");
+       order by e.entry_number`,
+      "objects",
+    );
     // The primary entry and the secondary allocation entry are both reversed.
     assert.equal(reversed.length, 2);
     assert.ok(reversed.some((r) => r.origin === "allocation" && r.status === "posted"));
-    const live = (await db.execute<{ n: number }>(sql`
+    const live = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${ctx.org.orgId} and status = 'posted'`, "objects"))[0]!;
+       where org_id = ${ctx.org.orgId} and status = 'posted'`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(live.n, 2);
   } finally {
     await dropScratchOrg(ctx.org.orgId);
   }
 });
 
-test("driver-basis rules weight lines by the measured vector end to end", { skip: !DB }, async () => {
-  const ctx = await setupCtx();
-  try {
-    // No test double: the posting path composes the engine resolver, and a
-    // manual driver needs no report runner.
-    const driverId = await seedManualDriver(ctx, "headcount", [
-      [ctx.deptA, "3.0000"],
-      [ctx.deptB, "1.0000"],
-    ]);
-    const { versionId } = await seedPostRule(ctx, {
-      key: "headcount-split",
-      impact: "net_zero_pair",
-      basis: { kind: "driver", driverId },
-      targets: [{ departmentId: ctx.deptA }, { departmentId: ctx.deptB }],
-    });
-    const entryId = await postBill(ctx, await seedBill(ctx, "BILL-DRV-1", "100.0000"));
-    const lines = await entryLines(ctx.org.orgId, entryId);
-    assert.equal(lines.length, 5);
-    assert.deepEqual(lines.slice(2).map((l) => [l.account_id, l.department_id, l.amount]), [
-      [ctx.org.accounts.cogs, ctx.deptA, "75.0000"],
-      [ctx.org.accounts.cogs, ctx.deptB, "25.0000"],
-      [ctx.org.accounts.cogs, ctx.deptSrc, "-100.0000"],
-    ]);
-    assert.ok(lines.slice(2).every((l) => l.contributor_kind === "rule" && l.contributor_ref === versionId));
-    const lineage = await db.execute<{
-      journal_line_id: string | null;
-      driver_value: string | null;
-      driver_total: string | null;
-      share: string | null;
-      amount: string;
-    }>(sql`
+test(
+  "driver-basis rules weight lines by the measured vector end to end",
+  { skip: !DB },
+  async () => {
+    const ctx = await setupCtx();
+    try {
+      // No test double: the posting path composes the engine resolver, and a
+      // manual driver needs no report runner.
+      const driverId = await seedManualDriver(ctx, "headcount", [
+        [ctx.deptA, "3.0000"],
+        [ctx.deptB, "1.0000"],
+      ]);
+      const { versionId } = await seedPostRule(ctx, {
+        key: "headcount-split",
+        impact: "net_zero_pair",
+        basis: { kind: "driver", driverId },
+        targets: [{ departmentId: ctx.deptA }, { departmentId: ctx.deptB }],
+      });
+      const entryId = await postBill(ctx, await seedBill(ctx, "BILL-DRV-1", "100.0000"));
+      const lines = await entryLines(ctx.org.orgId, entryId);
+      assert.equal(lines.length, 5);
+      assert.deepEqual(
+        lines.slice(2).map((l) => [l.account_id, l.department_id, l.amount]),
+        [
+          [ctx.org.accounts.cogs, ctx.deptA, "75.0000"],
+          [ctx.org.accounts.cogs, ctx.deptB, "25.0000"],
+          [ctx.org.accounts.cogs, ctx.deptSrc, "-100.0000"],
+        ],
+      );
+      assert.ok(
+        lines
+          .slice(2)
+          .every((l) => l.contributor_kind === "rule" && l.contributor_ref === versionId),
+      );
+      const lineage = await db.execute<{
+        journal_line_id: string | null;
+        driver_value: string | null;
+        driver_total: string | null;
+        share: string | null;
+        amount: string;
+      }>(
+        sql`
       select journal_line_id, driver_value::text, driver_total::text, share::text, amount::text
         from allocation_lineage
        where org_id = ${ctx.org.orgId} and mode = 'post'
-       order by amount desc`, "objects");
-    assert.equal(lineage.length, 3);
-    assert.deepEqual(lineage.map((r) => [r.amount, r.driver_value, r.driver_total, r.share]), [
-      ["75.0000", "3.0000", "4.0000", "0.7500000000"],
-      ["25.0000", "1.0000", "4.0000", "0.2500000000"],
-      ["-100.0000", null, "4.0000", null],
-    ]);
-    assert.ok(lineage.every((r) => r.journal_line_id !== null));
-  } finally {
-    await dropScratchOrg(ctx.org.orgId);
-  }
-});
+       order by amount desc`,
+        "objects",
+      );
+      assert.equal(lineage.length, 3);
+      assert.deepEqual(
+        lineage.map((r) => [r.amount, r.driver_value, r.driver_total, r.share]),
+        [
+          ["75.0000", "3.0000", "4.0000", "0.7500000000"],
+          ["25.0000", "1.0000", "4.0000", "0.2500000000"],
+          ["-100.0000", null, "4.0000", null],
+        ],
+      );
+      assert.ok(lineage.every((r) => r.journal_line_id !== null));
+    } finally {
+      await dropScratchOrg(ctx.org.orgId);
+    }
+  },
+);
 
-test("a prior_period driver rule at posting measures the prior-period vector", { skip: !DB }, async () => {
-  const ctx = await setupCtx();
-  try {
-    await seedPeriod(ctx, { year: 2026, num: 6, name: "2026-06", start: "2026-06-01", end: "2026-06-30" });
-    // Headcount flips mid-year: the June (prior-period) vector is 80/20,
-    // the live July vector is 20/80. The old code measured the posting
-    // date and would post 20/80 here.
-    const driverId = await seedManualDriver(ctx, "headcount-prior", [
-      [ctx.deptA, "80.0000", "2026-01-01", "2026-06-30"],
-      [ctx.deptB, "20.0000", "2026-01-01", "2026-06-30"],
-      [ctx.deptA, "20.0000", "2026-07-01", null],
-      [ctx.deptB, "80.0000", "2026-07-01", null],
-    ]);
-    await seedPostRule(ctx, {
-      key: "headcount-prior-split",
-      impact: "net_zero_pair",
-      basis: { kind: "driver", driverId, driverAsOf: "prior_period" },
-      targets: [{ departmentId: ctx.deptA }, { departmentId: ctx.deptB }],
-    });
-    const entryId = await postBill(ctx, await seedBill(ctx, "BILL-DRV-PRIOR-1", "100.0000"));
-    const lines = await entryLines(ctx.org.orgId, entryId);
-    assert.deepEqual(lines.slice(2).map((l) => [l.department_id, l.amount]), [
-      [ctx.deptA, "80.0000"],
-      [ctx.deptB, "20.0000"],
-      [ctx.deptSrc, "-100.0000"],
-    ]);
-  } finally {
-    await dropScratchOrg(ctx.org.orgId);
-  }
-});
+test(
+  "a prior_period driver rule at posting measures the prior-period vector",
+  { skip: !DB },
+  async () => {
+    const ctx = await setupCtx();
+    try {
+      await seedPeriod(ctx, {
+        year: 2026,
+        num: 6,
+        name: "2026-06",
+        start: "2026-06-01",
+        end: "2026-06-30",
+      });
+      // Headcount flips mid-year: the June (prior-period) vector is 80/20,
+      // the live July vector is 20/80. The old code measured the posting
+      // date and would post 20/80 here.
+      const driverId = await seedManualDriver(ctx, "headcount-prior", [
+        [ctx.deptA, "80.0000", "2026-01-01", "2026-06-30"],
+        [ctx.deptB, "20.0000", "2026-01-01", "2026-06-30"],
+        [ctx.deptA, "20.0000", "2026-07-01", null],
+        [ctx.deptB, "80.0000", "2026-07-01", null],
+      ]);
+      await seedPostRule(ctx, {
+        key: "headcount-prior-split",
+        impact: "net_zero_pair",
+        basis: { kind: "driver", driverId, driverAsOf: "prior_period" },
+        targets: [{ departmentId: ctx.deptA }, { departmentId: ctx.deptB }],
+      });
+      const entryId = await postBill(ctx, await seedBill(ctx, "BILL-DRV-PRIOR-1", "100.0000"));
+      const lines = await entryLines(ctx.org.orgId, entryId);
+      assert.deepEqual(
+        lines.slice(2).map((l) => [l.department_id, l.amount]),
+        [
+          [ctx.deptA, "80.0000"],
+          [ctx.deptB, "20.0000"],
+          [ctx.deptSrc, "-100.0000"],
+        ],
+      );
+    } finally {
+      await dropScratchOrg(ctx.org.orgId);
+    }
+  },
+);
 
-test("a document_date driver rule at posting measures the document date, not the posting date", { skip: !DB }, async () => {
-  const ctx = await setupCtx();
-  try {
-    await seedPeriod(ctx, { year: 2026, num: 8, name: "2026-08", start: "2026-08-01", end: "2026-08-31" });
-    // A July bill posted in August: the document-date vector is 80/20, the
-    // live August vector is 20/80. The old code measured the posting date
-    // and would post 20/80 here.
-    const driverId = await seedManualDriver(ctx, "headcount-docdate", [
-      [ctx.deptA, "80.0000", "2026-01-01", "2026-07-31"],
-      [ctx.deptB, "20.0000", "2026-01-01", "2026-07-31"],
-      [ctx.deptA, "20.0000", "2026-08-01", null],
-      [ctx.deptB, "80.0000", "2026-08-01", null],
-    ]);
-    await seedPostRule(ctx, {
-      key: "headcount-docdate-split",
-      impact: "net_zero_pair",
-      basis: { kind: "driver", driverId, driverAsOf: "document_date" },
-      targets: [{ departmentId: ctx.deptA }, { departmentId: ctx.deptB }],
-    });
-    const entryId = await postBill(
-      ctx,
-      await seedBill(ctx, "BILL-DRV-DOCDATE-1", "100.0000", {
-        documentDate: "2026-07-15",
-        postingDate: "2026-08-05",
-      }),
-    );
-    const lines = await entryLines(ctx.org.orgId, entryId);
-    assert.deepEqual(lines.slice(2).map((l) => [l.department_id, l.amount]), [
-      [ctx.deptA, "80.0000"],
-      [ctx.deptB, "20.0000"],
-      [ctx.deptSrc, "-100.0000"],
-    ]);
-  } finally {
-    await dropScratchOrg(ctx.org.orgId);
-  }
-});
+test(
+  "a document_date driver rule at posting measures the document date, not the posting date",
+  { skip: !DB },
+  async () => {
+    const ctx = await setupCtx();
+    try {
+      await seedPeriod(ctx, {
+        year: 2026,
+        num: 8,
+        name: "2026-08",
+        start: "2026-08-01",
+        end: "2026-08-31",
+      });
+      // A July bill posted in August: the document-date vector is 80/20, the
+      // live August vector is 20/80. The old code measured the posting date
+      // and would post 20/80 here.
+      const driverId = await seedManualDriver(ctx, "headcount-docdate", [
+        [ctx.deptA, "80.0000", "2026-01-01", "2026-07-31"],
+        [ctx.deptB, "20.0000", "2026-01-01", "2026-07-31"],
+        [ctx.deptA, "20.0000", "2026-08-01", null],
+        [ctx.deptB, "80.0000", "2026-08-01", null],
+      ]);
+      await seedPostRule(ctx, {
+        key: "headcount-docdate-split",
+        impact: "net_zero_pair",
+        basis: { kind: "driver", driverId, driverAsOf: "document_date" },
+        targets: [{ departmentId: ctx.deptA }, { departmentId: ctx.deptB }],
+      });
+      const entryId = await postBill(
+        ctx,
+        await seedBill(ctx, "BILL-DRV-DOCDATE-1", "100.0000", {
+          documentDate: "2026-07-15",
+          postingDate: "2026-08-05",
+        }),
+      );
+      const lines = await entryLines(ctx.org.orgId, entryId);
+      assert.deepEqual(
+        lines.slice(2).map((l) => [l.department_id, l.amount]),
+        [
+          [ctx.deptA, "80.0000"],
+          [ctx.deptB, "20.0000"],
+          [ctx.deptSrc, "-100.0000"],
+        ],
+      );
+    } finally {
+      await dropScratchOrg(ctx.org.orgId);
+    }
+  },
+);
 
 test("report_definition drivers run saved definitions under the actor", { skip: !DB }, async () => {
   const ctx = await setupCtx();
@@ -655,7 +782,11 @@ test("report_definition drivers run saved definitions under the actor", { skip: 
     const detailed = await runDriverReport({ ...base, reportDefinitionId: rowsId });
     assert.deepEqual(detailed.rows, [{ dimension: ctx.org.accounts.cogs, value: "100.0000" }]);
     // An actor without reports.read is refused, not given silent zeros.
-    const outsider = await createScratchUser(ctx.org.orgId, "Outsider", "allocation_report_outsider");
+    const outsider = await createScratchUser(
+      ctx.org.orgId,
+      "Outsider",
+      "allocation_report_outsider",
+    );
     await assert.rejects(
       runDriverReport({ ...base, reportDefinitionId: summarizeId, actorId: outsider }),
       /cannot run reports/,

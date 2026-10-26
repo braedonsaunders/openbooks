@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
 
 // Route boundary suite for /api/pdf-templates/[id]: the REAL GET/PATCH/DELETE
 // handlers run against scripted gates and a spied template store. A malformed
@@ -8,13 +8,17 @@ import test, { after } from 'node:test'
 // store is consulted — otherwise the raw id reaches a uuid column and the
 // route surfaces a database error as a 500.
 
-const stateKey = Symbol.for('openbooks.pdf-template-id-route-test')
-const state = { lookups: [] as string[], writes: 0, template: null as null | Record<string, unknown> }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const stateKey = Symbol.for("openbooks.pdf-template-id-route-test");
+const state = {
+  lookups: [] as string[],
+  writes: 0,
+  template: null as null | Record<string, unknown>,
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   [
-    'db',
+    "db",
     `
       const state = globalThis[Symbol.for('openbooks.pdf-template-id-route-test')]
       export const db = {
@@ -24,7 +28,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'pdf',
+    "pdf",
     `
       // Thin re-export-plus-override of the real @openbooks/pdf surface: a
       // future export added to the package rides the star instead of breaking
@@ -36,7 +40,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'authz',
+    "authz",
     `
       export async function guardPermission() {
         return { user: { id: 'user-1', orgId: 'org-1' }, permissions: new Set(['admin.customization.manage']), allowedSubsidiaryIds: null }
@@ -46,10 +50,10 @@ const mockSources = new Map<string, string>([
       export function guardUnrestrictedScope() { return null }
     `,
   ],
-  ['documents', `export async function isDocKindEnabled() { return true }`],
-  ['prettify', `export async function prettifyTemplateHtml(source) { return source }`],
+  ["documents", `export async function isDocKindEnabled() { return true }`],
+  ["prettify", `export async function prettifyTemplateHtml(source) { return source }`],
   [
-    'store',
+    "store",
     `
       const state = globalThis[Symbol.for('openbooks.pdf-template-id-route-test')]
       export async function getPdfTemplate(_orgId, id) {
@@ -63,117 +67,135 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
-const SELF_URL = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
+const SELF_URL = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`;
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/authz', mockUrl('authz')],
-  ['@openbooks/engine/platform/db', mockUrl('db')],
-  ['@openbooks/pdf', mockUrl('pdf')],
-  ['../../../../lib/authz', mockUrl('authz')],
-  ['../../../../lib/documents.ts', mockUrl('documents')],
-  ['../../../../lib/pdf-templates/prettify', mockUrl('prettify')],
-  ['../../../../lib/pdf-templates/store', mockUrl('store')],
-])
+  ["@/lib/authz", mockUrl("authz")],
+  ["@openbooks/engine/platform/db", mockUrl("db")],
+  ["@openbooks/pdf", mockUrl("pdf")],
+  ["../../../../lib/authz", mockUrl("authz")],
+  ["../../../../lib/documents.ts", mockUrl("documents")],
+  ["../../../../lib/pdf-templates/prettify", mockUrl("prettify")],
+  ["../../../../lib/pdf-templates/store", mockUrl("store")],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const parsed = new URL(url)
-    if (parsed.search.startsWith('?mock=')) {
-      const source = mockSources.get(parsed.searchParams.get('mock') ?? '')
-      if (source !== undefined) return { format: 'module', source, shortCircuit: true }
+    const parsed = new URL(url);
+    if (parsed.search.startsWith("?mock=")) {
+      const source = mockSources.get(parsed.searchParams.get("mock") ?? "");
+      if (source !== undefined) return { format: "module", source, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?pdf-template-id-route-test'
-const { GET, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-after(() => hooks.deregister())
+const routeUrl = "./route.ts?pdf-template-id-route-test";
+const { GET, PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
+after(() => hooks.deregister());
 
 function reset(): void {
-  state.lookups = []
-  state.writes = 0
-  state.template = null
+  state.lookups = [];
+  state.writes = 0;
+  state.template = null;
 }
 
 const STORED_TEMPLATE = {
-  id: '00000000-0000-4000-8000-00000000b002',
-  recordType: 'customer_invoice',
-  name: 'Standard',
+  id: "00000000-0000-4000-8000-00000000b002",
+  recordType: "customer_invoice",
+  name: "Standard",
   description: null,
-  paperSize: 'letter',
-  orientation: 'portrait',
+  paperSize: "letter",
+  orientation: "portrait",
   marginMm: 14,
   headerHtml: null,
   footerHtml: null,
-  sourceHtml: '<p>Hi</p>',
-  compiledHtml: '<p>Hi</p>',
+  sourceHtml: "<p>Hi</p>",
+  compiledHtml: "<p>Hi</p>",
   isDefault: false,
   isActive: true,
-  updatedAt: '2026-08-24T12:00:00.000000Z',
-}
+  updatedAt: "2026-08-24T12:00:00.000000Z",
+};
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) })
-const url = (id: string) => `http://openbooks.test/api/pdf-templates/${encodeURIComponent(id)}`
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+const url = (id: string) => `http://openbooks.test/api/pdf-templates/${encodeURIComponent(id)}`;
 
-test('a missing template is a plain 404 on every verb', async () => {
-  reset()
-  const id = '00000000-0000-4000-8000-00000000b001'
+test("a missing template is a plain 404 on every verb", async () => {
+  reset();
+  const id = "00000000-0000-4000-8000-00000000b001";
   for (const response of [
     await GET(new Request(url(id)), params(id)),
-    await PATCH(new Request(url(id), { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: '{"name":"x"}' }), params(id)),
-    await DELETE(new Request(url(id), { method: 'DELETE' }), params(id)),
+    await PATCH(
+      new Request(url(id), {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: '{"name":"x"}',
+      }),
+      params(id),
+    ),
+    await DELETE(new Request(url(id), { method: "DELETE" }), params(id)),
   ]) {
-    assert.equal(response.status, 404)
-    assert.deepEqual(await response.json(), { error: 'not_found' })
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "not_found" });
   }
-  assert.deepEqual(state.lookups, [id, id, id])
-})
+  assert.deepEqual(state.lookups, [id, id, id]);
+});
 
-test('a PATCH whose row vanishes mid-flight is a 404, not a success', async () => {
+test("a PATCH whose row vanishes mid-flight is a 404, not a success", async () => {
   // The pre-check sees the template but the UPDATE matches zero rows (a
   // concurrent delete): reporting {ok:true} would commit a phantom audit
   // event for a design that no longer exists.
-  reset()
-  state.template = { ...STORED_TEMPLATE }
-  const id = STORED_TEMPLATE.id as string
+  reset();
+  state.template = { ...STORED_TEMPLATE };
+  const id = STORED_TEMPLATE.id as string;
   const response = await PATCH(
-    new Request(url(id), { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: '{"name":"Renamed"}' }),
+    new Request(url(id), {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: '{"name":"Renamed"}',
+    }),
     params(id),
-  )
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not_found' })
-})
+  );
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+});
 
-test('a DELETE whose row vanishes mid-flight is a 404, not a success', async () => {
-  reset()
-  state.template = { ...STORED_TEMPLATE }
-  const id = STORED_TEMPLATE.id as string
-  const response = await DELETE(new Request(url(id), { method: 'DELETE' }), params(id))
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not_found' })
-})
+test("a DELETE whose row vanishes mid-flight is a 404, not a success", async () => {
+  reset();
+  state.template = { ...STORED_TEMPLATE };
+  const id = STORED_TEMPLATE.id as string;
+  const response = await DELETE(new Request(url(id), { method: "DELETE" }), params(id));
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+});
 
-test('a malformed template id is indistinguishable from a missing one and never reaches the store', async () => {
-  for (const bad of ['not-a-uuid', '1 or 1=1', '00000000-0000-4000-8000-00000000b00', 'starter']) {
-    reset()
+test("a malformed template id is indistinguishable from a missing one and never reaches the store", async () => {
+  for (const bad of ["not-a-uuid", "1 or 1=1", "00000000-0000-4000-8000-00000000b00", "starter"]) {
+    reset();
     for (const response of [
       await GET(new Request(url(bad)), params(bad)),
-      await PATCH(new Request(url(bad), { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: '{"name":"x"}' }), params(bad)),
-      await DELETE(new Request(url(bad), { method: 'DELETE' }), params(bad)),
+      await PATCH(
+        new Request(url(bad), {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: '{"name":"x"}',
+        }),
+        params(bad),
+      ),
+      await DELETE(new Request(url(bad), { method: "DELETE" }), params(bad)),
     ]) {
-      assert.equal(response.status, 404, `"${bad}" must be a plain not-found`)
-      assert.deepEqual(await response.json(), { error: 'not_found' })
+      assert.equal(response.status, 404, `"${bad}" must be a plain not-found`);
+      assert.deepEqual(await response.json(), { error: "not_found" });
     }
-    assert.deepEqual(state.lookups, [], `"${bad}" must never be bound to the uuid column`)
-    assert.equal(state.writes, 0)
+    assert.deepEqual(state.lookups, [], `"${bad}" must never be bound to the uuid column`);
+    assert.equal(state.writes, 0);
   }
-})
+});

@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { automationRecipes } from "@openbooks/engine/automations/services";
 import { automationErrorResponse } from "../_lib";
 
-
 export const runtime = "nodejs";
 
 /** Shipped recipe templates for the builder's recipe picker. */

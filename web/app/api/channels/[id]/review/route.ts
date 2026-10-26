@@ -29,7 +29,8 @@ const acceptBodySchema = z.strictObject({
 });
 
 function notFoundWhenMissing(error: unknown) {
-  if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+  if (error instanceof CommerceError && error.code === "channel_not_found")
+    return notFound("channel");
   throw error;
 }
 
@@ -62,7 +63,10 @@ export const POST = defineRoute({
     if (!isUuid(id)) return notFound("channel");
     const outOfScope = await guardChannelScope(gate, id);
     if (outOfScope) return outOfScope;
-    const accountRefused = await channelAccountsRefusal(gate, body.accountMaps.map((map) => map.accountId));
+    const accountRefused = await channelAccountsRefusal(
+      gate,
+      body.accountMaps.map((map) => map.accountId),
+    );
     if (accountRefused) return accountRefused;
     try {
       const accepted = await acceptShopifyReview(gate.user.orgId, gate.user.id, id, {

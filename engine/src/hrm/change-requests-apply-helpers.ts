@@ -1,20 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
-import {
-  HrmPositionError,
-  positionDisagreements,
-} from "./positions.ts";
-import {
-  makeEffectiveInterval,
-  NoRevisionError,
-  parseCivilDate,
-  resolveAsOf,
-} from "./temporal.ts";
-import {
-  HrmChangeRequestError,
-  type AssignmentChangePayload,
-} from "./change-requests-payload.ts";
+import { HrmPositionError, positionDisagreements } from "./positions.ts";
+import { makeEffectiveInterval, NoRevisionError, parseCivilDate, resolveAsOf } from "./temporal.ts";
+import { HrmChangeRequestError, type AssignmentChangePayload } from "./change-requests-payload.ts";
 import {
   type RequestRow,
   type ClosureElement,
@@ -49,7 +38,8 @@ export async function positionLinkWarnings(
       effective_to: string | null;
       recorded_at: string;
       recorded_until: string | null;
-    }>(sql`
+    }>(
+      sql`
       select title, department_id::text as department_id, location_id::text as location_id,
              effective_from::text as effective_from,
              effective_to::text as effective_to,
@@ -59,7 +49,9 @@ export async function positionLinkWarnings(
        where org_id = ${args.orgId} and position_id = ${args.target.id}
          and recorded_until is null
        order by version_no
-    `, "objects");
+    `,
+      "objects",
+    );
     // resolveAsOf, NoRevisionError and parseCivilDate are the static
     // temporal imports at the top of this file — the same primitives the
     // employment paths resolve through.
@@ -133,11 +125,16 @@ export async function issueAssignmentSlot(
     windowStart,
     windowEnd,
   });
-  const slotId = (await exec.execute<{ id: string }>(sql`
+  const slotId = (
+    await exec.execute<{ id: string }>(
+      sql`
     insert into employment_assignments (org_id, employment_id, assignment_key, created_by, updated_by)
     values (${orgId}, ${request.employment_id}, ${payload.assignmentKey}, ${actorId}, ${actorId})
     returning id
-  `, "objects"))[0]?.id;
+  `,
+      "objects",
+    )
+  )[0]?.id;
   if (!slotId) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -177,7 +174,13 @@ export async function issueAssignmentSlot(
   });
   await closeLineManagerChange(exec, { orgId, actorId, request, reporting, changeId, recordedAt });
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+  await bumpAggregateRevision(exec, {
+    orgId,
+    actorId,
+    request,
+    expected: newRevision - 1,
+    next: newRevision,
+  });
 }
 
 export async function liveAssignmentVersions(
@@ -185,7 +188,8 @@ export async function liveAssignmentVersions(
   orgId: string,
   slotId: string,
 ): Promise<AssignmentSlotVersion[]> {
-  const rows = await exec.execute<AssignmentSlotVersion & { before: unknown }>(sql`
+  const rows = await exec.execute<AssignmentSlotVersion & { before: unknown }>(
+    sql`
     select id, version_no, position_id::text as position_id,
            job_title, department_id, location_id, fte::text as fte,
            is_primary, effective_from::text as effective_from,
@@ -195,7 +199,9 @@ export async function liveAssignmentVersions(
      where org_id = ${orgId} and assignment_id = ${slotId}
        and recorded_until is null
      order by version_no
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -220,20 +226,27 @@ export async function insertRetainedAssignmentPortions(
     recordedAt: DbInstant;
   },
 ): Promise<void> {
-  const { orgId, actorId, slotId, employmentId, overlapping, windowStart, windowEnd, recordedAt } = args;
-  const portions = overlapping.flatMap((version) => {
-    const retained: { version: AssignmentSlotVersion; from: string; to: string | null }[] = [];
-    if (version.effective_from < windowStart) {
-      retained.push({ version, from: version.effective_from, to: windowStart });
-    }
-    if (windowEnd !== null && (version.effective_to === null || version.effective_to > windowEnd)) {
-      retained.push({ version, from: windowEnd, to: version.effective_to });
-    }
-    return retained;
-  }).sort((left, right) => left.from.localeCompare(right.from));
+  const { orgId, actorId, slotId, employmentId, overlapping, windowStart, windowEnd, recordedAt } =
+    args;
+  const portions = overlapping
+    .flatMap((version) => {
+      const retained: { version: AssignmentSlotVersion; from: string; to: string | null }[] = [];
+      if (version.effective_from < windowStart) {
+        retained.push({ version, from: version.effective_from, to: windowStart });
+      }
+      if (
+        windowEnd !== null &&
+        (version.effective_to === null || version.effective_to > windowEnd)
+      ) {
+        retained.push({ version, from: windowEnd, to: version.effective_to });
+      }
+      return retained;
+    })
+    .sort((left, right) => left.from.localeCompare(right.from));
   for (const [offset, portion] of portions.entries()) {
     const { version } = portion;
-    const inserted = await exec.execute(sql`
+    const inserted = await exec.execute(
+      sql`
       insert into employment_assignment_versions
         (org_id, assignment_id, employment_id, position_id, version_no, job_title, department_id,
          location_id, fte, is_primary, effective_from, effective_to,
@@ -244,9 +257,14 @@ export async function insertRetainedAssignmentPortions(
               ${portion.from}::date, ${portion.to}::date,
               ${recordedAt}, ${actorId}, ${actorId})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (inserted.length !== 1) {
-      throw new HrmChangeRequestError("REFUSED", "The retained assignment interval was not saved; nothing applied.");
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "The retained assignment interval was not saved; nothing applied.",
+      );
     }
   }
 }
@@ -263,9 +281,14 @@ export async function assertAssignmentRefs(
 ): Promise<void> {
   const { orgId, employmentId, payload } = args;
   if (payload.departmentId) {
-    const found = (await exec.execute(sql`
+    const found = (
+      await exec.execute(
+        sql`
       select 1 as one from departments where org_id = ${orgId} and id = ${payload.departmentId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -274,9 +297,14 @@ export async function assertAssignmentRefs(
     }
   }
   if (payload.locationId) {
-    const found = (await exec.execute(sql`
+    const found = (
+      await exec.execute(
+        sql`
       select 1 as one from locations where org_id = ${orgId} and id = ${payload.locationId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -291,9 +319,14 @@ export async function assertAssignmentRefs(
         "an employment cannot report to itself — name another employment as manager",
       );
     }
-    const found = (await exec.execute(sql`
+    const found = (
+      await exec.execute(
+        sql`
       select 1 as one from worker_employments where org_id = ${orgId} and id = ${payload.managerEmploymentId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -320,7 +353,8 @@ export async function assertNoPrimaryConflict(
   },
 ): Promise<void> {
   if (!args.isPrimary) return;
-  const rows = await exec.execute<{ assignment_key: string }>(sql`
+  const rows = await exec.execute<{ assignment_key: string }>(
+    sql`
     select a.assignment_key
       from employment_assignment_versions av
       join employment_assignments a on a.id = av.assignment_id and a.org_id = av.org_id
@@ -330,7 +364,9 @@ export async function assertNoPrimaryConflict(
        and daterange(av.effective_from, coalesce(av.effective_to, 'infinity'::date), '[)')
            && daterange(${args.windowStart}::date, coalesce(${args.windowEnd}::date, 'infinity'::date), '[)')
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const clash = rows[0];
   if (clash) {
     throw new HrmChangeRequestError(
@@ -383,7 +419,10 @@ export async function planLineManagerChange(
       "manager removal is not modeled — a reporting line closes only onto a successor manager; file the change without managerEmploymentId to leave reporting untouched",
     );
   }
-  const live = (await exec.execute<LiveLineRelationship>(sql`
+  const live =
+    (
+      await exec.execute<LiveLineRelationship>(
+        sql`
     select id, relationship_id, version_no, manager_employment_id,
            effective_from::text as effective_from,
            effective_to::text as effective_to,
@@ -393,12 +432,18 @@ export async function planLineManagerChange(
        and kind = 'line' and recorded_until is null
      order by version_no desc
      limit 1
-  `, "objects"))[0] ?? null;
+  `,
+        "objects",
+      )
+    )[0] ?? null;
   if (live && live.manager_employment_id === args.managerId) {
     return { change: false };
   }
   if (live && live.version_no < 1) {
-    throw new HrmChangeRequestError("REFUSED", "the reporting line carries no version — refuse the repoint");
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "the reporting line carries no version — refuse the repoint",
+    );
   }
   return {
     change: true,
@@ -453,13 +498,16 @@ export async function closeLineManagerChange(
       return;
     }
     const successorNo = reporting.live.version_no + 1;
-    const closed = await exec.execute(sql`
+    const closed = await exec.execute(
+      sql`
       update reporting_relationships
          set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
              closed_by_change_id = ${changeId}
        where org_id = ${orgId} and id = ${reporting.live.id} and recorded_until is null
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (closed.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",

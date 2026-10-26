@@ -9,7 +9,11 @@ import test from "node:test";
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/labor-pricing?card=card-1", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/labor-pricing?card=card-1",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const script = { confirmResult: true, confirmCalls: 0 };
 Object.assign(globalThis, {
@@ -19,10 +23,12 @@ Object.assign(globalThis, {
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__laborDiscardRouter}export function usePathname(){return '/admin/setup/labor-pricing'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__laborDiscardRouter}export function usePathname(){return '/admin/setup/labor-pricing'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -143,7 +149,8 @@ async function editAndType() {
     const inputs = [...document.querySelectorAll("input")] as HTMLInputElement[];
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     for (const input of inputs) {
-      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox") continue;
+      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox")
+        continue;
       setter?.call(input, `${input.value}x`);
       input.dispatchEvent(new window.Event("input", { bubbles: true }));
     }

@@ -29,12 +29,27 @@ export type EInvoiceProfileKey =
   | "xrechnung-ubl"
   | "facturx"
   | "peppol-bis"
-  | "nlcius" | "ehf" | "peppol-aunz" | "peppol-sg" | "pint-aunz" | "pint-sg";
+  | "nlcius"
+  | "ehf"
+  | "peppol-aunz"
+  | "peppol-sg"
+  | "pint-aunz"
+  | "pint-sg";
 
 export type EInvoiceSyntax = "cii" | "ubl";
 
 /** Rule families the evaluator knows. A profile lists the ones its documents must satisfy. */
-export type EInvoiceRuleSetId = "en16931" | "xrechnung" | "peppol" | "peppol-nl" | "nlcius" | "norway" | "gst-shared" | "aunz" | "sg" | "house";
+export type EInvoiceRuleSetId =
+  | "en16931"
+  | "xrechnung"
+  | "peppol"
+  | "peppol-nl"
+  | "nlcius"
+  | "norway"
+  | "gst-shared"
+  | "aunz"
+  | "sg"
+  | "house";
 
 export interface EInvoiceProfile {
   key: EInvoiceProfileKey;
@@ -65,8 +80,10 @@ export interface EInvoiceProfile {
 }
 
 export const EN16931_GUIDELINE = "urn:cen.eu:en16931:2017";
-export const XRECHNUNG_GUIDELINE = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0";
-export const PEPPOL_BIS_GUIDELINE = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0";
+export const XRECHNUNG_GUIDELINE =
+  "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0";
+export const PEPPOL_BIS_GUIDELINE =
+  "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0";
 export const PEPPOL_BILLING_PROCESS = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0";
 
 const EN16931_TYPE_CODES: readonly string[] = [
@@ -110,11 +127,27 @@ const xrechnungBase = {
 
 export const SG_GST_CATEGORIES = [...SG_GST_CODES];
 
-function gstProfile(key: EInvoiceProfileKey, label: string, specificationVersion: string, guidelineId: string, businessProcessId: string, rules: "aunz" | "sg"): EInvoiceProfile {
+function gstProfile(
+  key: EInvoiceProfileKey,
+  label: string,
+  specificationVersion: string,
+  guidelineId: string,
+  businessProcessId: string,
+  rules: "aunz" | "sg",
+): EInvoiceProfile {
   return {
-    ...en16931Base, key, syntax: "ubl", label, specificationVersion, guidelineId, businessProcessId,
-    taxSchemeId: "GST", taxCategories: rules === "sg" ? SG_GST_CATEGORIES : ["S", "Z", "E", "G", "O"],
-    buyerReferenceRequired: true, orderReferenceSatisfiesBuyerReference: true, electronicAddressesRequired: true,
+    ...en16931Base,
+    key,
+    syntax: "ubl",
+    label,
+    specificationVersion,
+    guidelineId,
+    businessProcessId,
+    taxSchemeId: "GST",
+    taxCategories: rules === "sg" ? SG_GST_CATEGORIES : ["S", "Z", "E", "G", "O"],
+    buyerReferenceRequired: true,
+    orderReferenceSatisfiesBuyerReference: true,
+    electronicAddressesRequired: true,
     allowedTypeCodes: [...PINT_INVOICE_CODES, ...PINT_CREDITNOTE_CODES],
     ruleSets: ["gst-shared", rules, "house"],
   };
@@ -123,8 +156,18 @@ function gstProfile(key: EInvoiceProfileKey, label: string, specificationVersion
 export const EINVOICE_PROFILES: Readonly<Record<EInvoiceProfileKey, EInvoiceProfile>> = {
   "en16931-cii": { key: "en16931-cii", syntax: "cii", label: "EN 16931 (CII)", ...en16931Base },
   "en16931-ubl": { key: "en16931-ubl", syntax: "ubl", label: "EN 16931 (UBL)", ...en16931Base },
-  "xrechnung-cii": { key: "xrechnung-cii", syntax: "cii", label: "XRechnung 3.0 (CII)", ...xrechnungBase },
-  "xrechnung-ubl": { key: "xrechnung-ubl", syntax: "ubl", label: "XRechnung 3.0 (UBL)", ...xrechnungBase },
+  "xrechnung-cii": {
+    key: "xrechnung-cii",
+    syntax: "cii",
+    label: "XRechnung 3.0 (CII)",
+    ...xrechnungBase,
+  },
+  "xrechnung-ubl": {
+    key: "xrechnung-ubl",
+    syntax: "ubl",
+    label: "XRechnung 3.0 (UBL)",
+    ...xrechnungBase,
+  },
   facturx: {
     key: "facturx",
     syntax: "cii",
@@ -152,25 +195,62 @@ export const EINVOICE_PROFILES: Readonly<Record<EInvoiceProfileKey, EInvoiceProf
     nationalRuleSets: { NL: "peppol-nl", NO: "norway" },
   },
   nlcius: {
-    key: "nlcius", syntax: "ubl", label: "NLCIUS 1.0 (SI-UBL 2.0.3.13)", ...en16931Base,
+    key: "nlcius",
+    syntax: "ubl",
+    label: "NLCIUS 1.0 (SI-UBL 2.0.3.13)",
+    ...en16931Base,
     specificationVersion: "SI-UBL 2.0.3.13 / 2026-05-21",
     guidelineId: "urn:cen.eu:en16931:2017#compliant#urn:fdc:nen.nl:nlcius:v1.0",
     businessProcessId: PEPPOL_BILLING_PROCESS,
     ruleSets: ["en16931", "nlcius", "house"],
   },
   ehf: {
-    key: "ehf", syntax: "ubl", label: "EHF Billing 3.0 (May 2026)", ...en16931Base,
+    key: "ehf",
+    syntax: "ubl",
+    label: "EHF Billing 3.0 (May 2026)",
+    ...en16931Base,
     specificationVersion: "Peppol BIS Billing 3.0 / May 2026",
-    guidelineId: PEPPOL_BIS_GUIDELINE, businessProcessId: PEPPOL_BILLING_PROCESS,
-    buyerReferenceRequired: true, orderReferenceSatisfiesBuyerReference: true, electronicAddressesRequired: true,
+    guidelineId: PEPPOL_BIS_GUIDELINE,
+    businessProcessId: PEPPOL_BILLING_PROCESS,
+    buyerReferenceRequired: true,
+    orderReferenceSatisfiesBuyerReference: true,
+    electronicAddressesRequired: true,
     allowedTypeCodes: [...PEPPOL_INVOICE_TYPE_CODES, ...PEPPOL_CREDIT_NOTE_TYPE_CODES],
-    ruleSets: ["en16931", "peppol", "house"], nationalRuleSets: { NO: "norway" },
+    ruleSets: ["en16931", "peppol", "house"],
+    nationalRuleSets: { NO: "norway" },
   },
-  "peppol-aunz": gstProfile("peppol-aunz", "A-NZ BIS Billing 3.0 (legacy 1.0.12)", "BIS A-NZ 1.0.12", "urn:cen.eu:en16931:2017#conformant#urn:fdc:peppol.eu:2017:poacc:billing:international:aunz:3.0", PEPPOL_BILLING_PROCESS, "aunz"),
-  "peppol-sg": gstProfile("peppol-sg", "Singapore BIS Billing 3.0 (legacy)", "Singapore BIS Billing 3.0", "urn:cen.eu:en16931:2017#conformant#urn:fdc:peppol.eu:2017:poacc:billing:international:sg:3.0", PEPPOL_BILLING_PROCESS, "sg"),
-  "pint-aunz": gstProfile("pint-aunz", "PINT A-NZ Billing 1.1.3", "PINT A-NZ 1.1.3 / 2026-05-21", "urn:peppol:pint:billing-1@aunz-1", "urn:peppol:bis:billing", "aunz"),
-  "pint-sg": gstProfile("pint-sg", "PINT Singapore Billing 1.4.1", "PINT SG 1.4.1 / 2026-05-25", "urn:peppol:pint:billing-1@sg-1", "urn:peppol:bis:billing", "sg"),
-
+  "peppol-aunz": gstProfile(
+    "peppol-aunz",
+    "A-NZ BIS Billing 3.0 (legacy 1.0.12)",
+    "BIS A-NZ 1.0.12",
+    "urn:cen.eu:en16931:2017#conformant#urn:fdc:peppol.eu:2017:poacc:billing:international:aunz:3.0",
+    PEPPOL_BILLING_PROCESS,
+    "aunz",
+  ),
+  "peppol-sg": gstProfile(
+    "peppol-sg",
+    "Singapore BIS Billing 3.0 (legacy)",
+    "Singapore BIS Billing 3.0",
+    "urn:cen.eu:en16931:2017#conformant#urn:fdc:peppol.eu:2017:poacc:billing:international:sg:3.0",
+    PEPPOL_BILLING_PROCESS,
+    "sg",
+  ),
+  "pint-aunz": gstProfile(
+    "pint-aunz",
+    "PINT A-NZ Billing 1.1.3",
+    "PINT A-NZ 1.1.3 / 2026-05-21",
+    "urn:peppol:pint:billing-1@aunz-1",
+    "urn:peppol:bis:billing",
+    "aunz",
+  ),
+  "pint-sg": gstProfile(
+    "pint-sg",
+    "PINT Singapore Billing 1.4.1",
+    "PINT SG 1.4.1 / 2026-05-25",
+    "urn:peppol:pint:billing-1@sg-1",
+    "urn:peppol:bis:billing",
+    "sg",
+  ),
 };
 
 export function isEInvoiceProfileKey(key: string): key is EInvoiceProfileKey {

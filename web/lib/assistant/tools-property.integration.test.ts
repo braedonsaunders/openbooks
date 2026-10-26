@@ -1,12 +1,12 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import test from 'node:test';
-import type { SessionUser } from '../auth';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import type { SessionUser } from "../auth";
 
-const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { executeAssistantTool } = await import('./registry');
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { executeAssistantTool } = await import("./registry");
 
 function userFor(orgId: string, name: string): SessionUser {
   const userId = randomUUID();
@@ -14,31 +14,38 @@ function userFor(orgId: string, name: string): SessionUser {
     id: userId,
     orgId,
     name,
-    email: `${name.replaceAll(' ', '.').toLowerCase()}@scratch.test`,
-    roles: [{ key: 'ordinary-role', name: 'Ordinary role' }],
+    email: `${name.replaceAll(" ", ".").toLowerCase()}@scratch.test`,
+    roles: [{ key: "ordinary-role", name: "Ordinary role" }],
     isSuperAdmin: false,
-    envKind: 'production',
+    envKind: "production",
     productionOrgId: orgId,
     homeOrgId: orgId,
     homeUserId: userId,
   };
 }
 
-const PROPERTY_PERMS = ['assistant.use', 'ar.read'];
+const PROPERTY_PERMS = ["assistant.use", "ar.read"];
 
 // File-local seed helpers: always fixture writes, so they carry their own
 // bypass. The subsidiaries parent guard reads the parent row through the
 // ambient scope, so unscoped seeds misfire it even for same-org parents.
 async function enablePropertyManagement(orgId: string) {
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"propertyManagement":true}'::jsonb)
     where id=${orgId}
-  `));
+  `),
+  );
 }
 
 /** One visible property/lease (monthly rent + past-due invoice) and one hidden pair. */
 async function seedProperty(org: {
-  orgId: string; subsidiaryId: string; customerId: string; bookId: string; periodId: string; date: string;
+  orgId: string;
+  subsidiaryId: string;
+  customerId: string;
+  bookId: string;
+  periodId: string;
+  date: string;
   accounts: Record<"ar" | "revenue", string>;
 }) {
   const { orgId, customerId } = org;
@@ -94,7 +101,9 @@ async function seedProperty(org: {
     values (${randomUUID()},${orgId},${entry},1,${org.accounts.ar},${rootSubsidiary},'2000','CAD','2000','1',${customerId},true),
            (${randomUUID()},${orgId},${entry},2,${org.accounts.revenue},${rootSubsidiary},'-2000','CAD','-2000','1',null,false)
   `);
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`);
+  await db.execute(
+    sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`,
+  );
   await db.execute(sql`update documents set status = 'approved' where id = ${invoice}`);
   await db.execute(sql`
     update documents set status = 'posted', posted_entry_id = ${entry}, posting_period_id = ${org.periodId} where id = ${invoice}
@@ -106,106 +115,134 @@ async function seedProperty(org: {
   return { property, unit, lease, hiddenProperty, hiddenLease };
 }
 
-test('property assistant reads: register, lease detail, rent roll, arrears, deposits', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  await enablePropertyManagement(org.orgId);
-  try {
-    const seed = await withBypassContext(() => seedProperty(org));
-    const restricted = {
-      user: userFor(org.orgId, 'Property scope reader'),
-      permissions: new Set(PROPERTY_PERMS),
-      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-    };
-    await withOrgContext(org.orgId, async () => {
-      const properties = await executeAssistantTool(restricted, 'list_properties', {});
-      assert.ok(properties.ok, JSON.stringify(properties));
-      assert.equal((properties.data as { total: number }).total, 1);
-
-      const leases = await executeAssistantTool(restricted, 'list_leases', {});
-      assert.ok(leases.ok, JSON.stringify(leases));
-      const leaseData = leases.data as { total: number; leases: { leaseNumber: string; baseRent: number }[] };
-      assert.equal(leaseData.total, 1);
-      assert.equal(leaseData.leases[0]!.leaseNumber, 'L-1001');
-      assert.equal(leaseData.leases[0]!.baseRent, 2000);
-
-      await db.execute(sql`update property_leases set status='draft' where id=${seed.lease} and org_id=${org.orgId}`);
-      const filteredLeases = await executeAssistantTool(restricted, 'list_leases', { status: 'active' });
-      assert.ok(filteredLeases.ok, JSON.stringify(filteredLeases));
-      const filteredData = filteredLeases.data as { byStatus: { status: string; count: number }[] };
-      assert.deepEqual(filteredData.byStatus, [], 'status counts must use the same filtered lease set as the list');
-      await db.execute(sql`update property_leases set status='active' where id=${seed.lease} and org_id=${org.orgId}`);
-
-      const hidden = await executeAssistantTool(restricted, 'get_lease', { leaseId: seed.hiddenLease });
-      assert.deepEqual(hidden, { ok: false, error: 'lease_not_found' });
-
-      const detail = await executeAssistantTool(restricted, 'get_lease', { leaseId: seed.lease });
-      assert.ok(detail.ok, JSON.stringify(detail));
-      const lease = (detail.data as { lease: { monthlyCharges: number; pastDue: number } }).lease;
-      assert.equal(lease.monthlyCharges, 2000);
-      assert.equal(lease.pastDue, 2000);
-
-      const roll = await executeAssistantTool(restricted, 'rent_roll', {});
-      assert.ok(roll.ok, JSON.stringify(roll));
-      const rollData = roll.data as {
-        total: number;
-        monthlyChargesByCurrency: { currency: string; amount: number }[];
-        pastDueByCurrency: { currency: string; amount: number }[];
-        occupancy: { totalUnits: number; occupiedUnits: number };
+test(
+  "property assistant reads: register, lease detail, rent roll, arrears, deposits",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    await enablePropertyManagement(org.orgId);
+    try {
+      const seed = await withBypassContext(() => seedProperty(org));
+      const restricted = {
+        user: userFor(org.orgId, "Property scope reader"),
+        permissions: new Set(PROPERTY_PERMS),
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
       };
-      assert.equal(rollData.total, 1);
-      assert.deepEqual(rollData.monthlyChargesByCurrency, [{ currency: 'CAD', amount: '2000' }]);
-      assert.deepEqual(rollData.pastDueByCurrency, [{ currency: 'CAD', amount: '2000' }]);
-      assert.deepEqual(rollData.occupancy, { totalUnits: 1, occupiedUnits: 1 });
+      await withOrgContext(org.orgId, async () => {
+        const properties = await executeAssistantTool(restricted, "list_properties", {});
+        assert.ok(properties.ok, JSON.stringify(properties));
+        assert.equal((properties.data as { total: number }).total, 1);
 
-      const arrears = await executeAssistantTool(restricted, 'lease_arrears', {});
-      assert.ok(arrears.ok, JSON.stringify(arrears));
-      const arrearsData = arrears.data as {
-        total: number; totalsByCurrency: { currency: string; amount: number }[];
+        const leases = await executeAssistantTool(restricted, "list_leases", {});
+        assert.ok(leases.ok, JSON.stringify(leases));
+        const leaseData = leases.data as {
+          total: number;
+          leases: { leaseNumber: string; baseRent: number }[];
+        };
+        assert.equal(leaseData.total, 1);
+        assert.equal(leaseData.leases[0]!.leaseNumber, "L-1001");
+        assert.equal(leaseData.leases[0]!.baseRent, 2000);
+
+        await db.execute(
+          sql`update property_leases set status='draft' where id=${seed.lease} and org_id=${org.orgId}`,
+        );
+        const filteredLeases = await executeAssistantTool(restricted, "list_leases", {
+          status: "active",
+        });
+        assert.ok(filteredLeases.ok, JSON.stringify(filteredLeases));
+        const filteredData = filteredLeases.data as {
+          byStatus: { status: string; count: number }[];
+        };
+        assert.deepEqual(
+          filteredData.byStatus,
+          [],
+          "status counts must use the same filtered lease set as the list",
+        );
+        await db.execute(
+          sql`update property_leases set status='active' where id=${seed.lease} and org_id=${org.orgId}`,
+        );
+
+        const hidden = await executeAssistantTool(restricted, "get_lease", {
+          leaseId: seed.hiddenLease,
+        });
+        assert.deepEqual(hidden, { ok: false, error: "lease_not_found" });
+
+        const detail = await executeAssistantTool(restricted, "get_lease", { leaseId: seed.lease });
+        assert.ok(detail.ok, JSON.stringify(detail));
+        const lease = (detail.data as { lease: { monthlyCharges: number; pastDue: number } }).lease;
+        assert.equal(lease.monthlyCharges, 2000);
+        assert.equal(lease.pastDue, 2000);
+
+        const roll = await executeAssistantTool(restricted, "rent_roll", {});
+        assert.ok(roll.ok, JSON.stringify(roll));
+        const rollData = roll.data as {
+          total: number;
+          monthlyChargesByCurrency: { currency: string; amount: number }[];
+          pastDueByCurrency: { currency: string; amount: number }[];
+          occupancy: { totalUnits: number; occupiedUnits: number };
+        };
+        assert.equal(rollData.total, 1);
+        assert.deepEqual(rollData.monthlyChargesByCurrency, [{ currency: "CAD", amount: "2000" }]);
+        assert.deepEqual(rollData.pastDueByCurrency, [{ currency: "CAD", amount: "2000" }]);
+        assert.deepEqual(rollData.occupancy, { totalUnits: 1, occupiedUnits: 1 });
+
+        const arrears = await executeAssistantTool(restricted, "lease_arrears", {});
+        assert.ok(arrears.ok, JSON.stringify(arrears));
+        const arrearsData = arrears.data as {
+          total: number;
+          totalsByCurrency: { currency: string; amount: number }[];
+        };
+        assert.equal(arrearsData.total, 1);
+        assert.deepEqual(arrearsData.totalsByCurrency, [{ currency: "CAD", amount: "2000" }]);
+
+        const deposits = await executeAssistantTool(restricted, "property_deposits", {});
+        assert.ok(deposits.ok, JSON.stringify(deposits));
+        assert.equal((deposits.data as { returned: number }).returned, 1);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "property assistant reads isolate orgs and honor the feature flag",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const orgA = await withBypassContext(() => createScratchOrg());
+    const orgB = await withBypassContext(() => createScratchOrg());
+    await enablePropertyManagement(orgA.orgId);
+    await enablePropertyManagement(orgB.orgId);
+    try {
+      const seedA = await withBypassContext(() => seedProperty(orgA));
+      const authzA = {
+        user: userFor(orgA.orgId, "Property org reader"),
+        permissions: new Set(PROPERTY_PERMS),
+        allowedSubsidiaryIds: null as Set<string> | null,
       };
-      assert.equal(arrearsData.total, 1);
-      assert.deepEqual(arrearsData.totalsByCurrency, [{ currency: 'CAD', amount: '2000' }]);
-
-      const deposits = await executeAssistantTool(restricted, 'property_deposits', {});
-      assert.ok(deposits.ok, JSON.stringify(deposits));
-      assert.equal((deposits.data as { returned: number }).returned, 1);
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test('property assistant reads isolate orgs and honor the feature flag', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await withBypassContext(() => createScratchOrg());
-  const orgB = await withBypassContext(() => createScratchOrg());
-  await enablePropertyManagement(orgA.orgId);
-  await enablePropertyManagement(orgB.orgId);
-  try {
-    const seedA = await withBypassContext(() => seedProperty(orgA));
-    const authzA = {
-      user: userFor(orgA.orgId, 'Property org reader'),
-      permissions: new Set(PROPERTY_PERMS),
-      allowedSubsidiaryIds: null as Set<string> | null,
-    };
-    await withOrgContext(orgB.orgId, async () => {
-      const cross = await executeAssistantTool(
-        { ...authzA, user: { ...authzA.user, orgId: orgB.orgId } },
-        'get_lease',
-        { leaseId: seedA.lease },
-      );
-      assert.deepEqual(cross, { ok: false, error: 'lease_not_found' });
-    });
-    // Same fixture-write class as enablePropertyManagement above: unscoped,
-    // the constrained role updates zero orgs rows and the flag stays on.
-    await withBypassContext(() => db.execute(sql`
+      await withOrgContext(orgB.orgId, async () => {
+        const cross = await executeAssistantTool(
+          { ...authzA, user: { ...authzA.user, orgId: orgB.orgId } },
+          "get_lease",
+          { leaseId: seedA.lease },
+        );
+        assert.deepEqual(cross, { ok: false, error: "lease_not_found" });
+      });
+      // Same fixture-write class as enablePropertyManagement above: unscoped,
+      // the constrained role updates zero orgs rows and the flag stays on.
+      await withBypassContext(() =>
+        db.execute(sql`
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"propertyManagement":false}'::jsonb)
       where id=${orgA.orgId}
-    `));
-    await withOrgContext(orgA.orgId, async () => {
-      const off = await executeAssistantTool(authzA, 'list_properties', {});
-      assert.deepEqual(off, { ok: false, error: 'propertyManagement_feature_disabled' });
-    });
-  } finally {
-    await dropScratchOrg(orgA.orgId);
-    await dropScratchOrg(orgB.orgId);
-  }
-});
+    `),
+      );
+      await withOrgContext(orgA.orgId, async () => {
+        const off = await executeAssistantTool(authzA, "list_properties", {});
+        assert.deepEqual(off, { ok: false, error: "propertyManagement_feature_disabled" });
+      });
+    } finally {
+      await dropScratchOrg(orgA.orgId);
+      await dropScratchOrg(orgB.orgId);
+    }
+  },
+);

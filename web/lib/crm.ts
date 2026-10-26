@@ -1,19 +1,32 @@
-import 'server-only'
-import { crmOpportunityScope, crmSharedScope, crmActivityScope } from './crm-scope'
-import { sql, type SQL } from 'drizzle-orm'
-import { subsidiaryVisibleFilter } from './subsidiaries'
-import { db } from '@openbooks/engine/platform/db'
-import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
-import { documentRevisionCounterSql, documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
+import "server-only";
+import { crmOpportunityScope, crmSharedScope, crmActivityScope } from "./crm-scope";
+import { sql, type SQL } from "drizzle-orm";
+import { subsidiaryVisibleFilter } from "./subsidiaries";
+import { db } from "@openbooks/engine/platform/db";
+import { withScopeSnapshot } from "@openbooks/engine/organization/scope";
+import {
+  documentRevisionCounterSql,
+  documentRevisionSql,
+  isDocumentRevisionToken,
+} from "@openbooks/engine/records/revision";
 import { isDocKindEnabled } from "./documents.ts";
-import { isIsoCalendarDate } from './crm-dates'
+import { isIsoCalendarDate } from "./crm-dates";
 
-export function loadCrmAccount(partyId: string, orgId: string, allowed?: ReadonlySet<string> | null) {
-  return withScopeSnapshot(orgId, () => loadCrmAccountSnapshot(partyId, orgId, allowed))
+export function loadCrmAccount(
+  partyId: string,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+) {
+  return withScopeSnapshot(orgId, () => loadCrmAccountSnapshot(partyId, orgId, allowed));
 }
 
-async function loadCrmAccountSnapshot(partyId: string, orgId: string, allowed?: ReadonlySet<string> | null) {
-  const profile = (await db.execute<Record<string, unknown>>(sql`
+async function loadCrmAccountSnapshot(
+  partyId: string,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+) {
+  const profile = await db.execute<Record<string, unknown>>(
+    sql`
     select cp.*, ${documentRevisionSql(sql`cp.updated_at`)} as "__accountRevision",
            s.name as status_name, s.is_qualified, u.name as owner_name,
            t.name as territory_name, ls.name as lead_source_name
@@ -23,32 +36,38 @@ async function loadCrmAccountSnapshot(partyId: string, orgId: string, allowed?: 
       left join users u on u.id = cp.owner_user_id
       left join crm_sales_territories t on t.id = cp.territory_id and t.org_id = cp.org_id
       left join crm_lead_sources ls on ls.id = cp.lead_source_id and ls.org_id = cp.org_id
-     where cp.party_id = ${partyId} and cp.org_id = ${orgId}${crmSharedScope(sql`scope_party.subsidiary_id`,allowed)}
-  `, 'objects'))
-  if (!profile[0]) return null
+     where cp.party_id = ${partyId} and cp.org_id = ${orgId}${crmSharedScope(sql`scope_party.subsidiary_id`, allowed)}
+  `,
+    "objects",
+  );
+  if (!profile[0]) return null;
   // The revision token never leaves this module in raw form: updated_at
   // carries the exact persisted revision token every relationship save must
   // send back as expectedUpdatedAt (same wire form as document revisions,
   // and the same rewrite loadOpportunity performs for opportunities).
   {
-    const head = profile[0]!
-    const revision = head['__accountRevision']
+    const head = profile[0]!;
+    const revision = head["__accountRevision"];
     if (!isDocumentRevisionToken(revision)) {
-      throw new Error('account read did not return an exact persisted revision')
+      throw new Error("account read did not return an exact persisted revision");
     }
-    delete head['__accountRevision']
-    head.updated_at = revision
+    delete head["__accountRevision"];
+    head.updated_at = revision;
   }
   const [activities, opportunities, stageEvents, assignments] = await Promise.all([
-    db.execute(sql`
+    db.execute(
+      sql`
       select a.id, a.kind, a.status, a.subject, a.priority, a.starts_at, a.due_at,
              a.completed_at, u.name as assigned_name
         from crm_activities a
         join crm_activity_links l on l.activity_id = a.id and l.org_id = a.org_id
         left join users u on u.id = a.assigned_user_id
        where l.org_id = ${orgId} and l.subject_kind = 'account' and l.subject_id = ${partyId}${crmActivityScope(allowed)}
-       order by coalesce(a.starts_at, a.due_at, a.created_at) desc limit 50`, 'objects'),
-    db.execute(sql`
+       order by coalesce(a.starts_at, a.due_at, a.created_at) desc limit 50`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select o.id, o.opportunity_number, o.title, o.expected_close_date, o.forecast_category,
              o.probability, o.currency, o.projected_amount, o.weighted_amount,
              s.name as status_name, s.is_closed, s.is_won, u.name as owner_name
@@ -56,13 +75,19 @@ async function loadCrmAccountSnapshot(partyId: string, orgId: string, allowed?: 
         join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
         left join users u on u.id = o.owner_user_id
        where o.org_id = ${orgId} and o.party_id = ${partyId}${crmOpportunityScope(allowed)}
-       order by s.is_closed, o.expected_close_date nulls last, o.created_at desc limit 50`, 'objects'),
-    db.execute(sql`
+       order by s.is_closed, o.expected_close_date nulls last, o.created_at desc limit 50`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select e.*, u.name as actor_name from crm_account_stage_events e
       left join users u on u.id = e.created_by
       where e.account_profile_id = ${profile[0].id} and e.org_id = ${orgId}
-      order by e.occurred_at desc`, 'objects'),
-    db.execute(sql`
+      order by e.occurred_at desc`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select e.*, fu.name as from_owner_name, tu.name as to_owner_name,
              ft.name as from_territory_name, tt.name as to_territory_name
         from crm_account_assignment_events e
@@ -71,23 +96,30 @@ async function loadCrmAccountSnapshot(partyId: string, orgId: string, allowed?: 
         left join crm_sales_territories ft on ft.id = e.from_territory_id and ft.org_id = e.org_id
         left join crm_sales_territories tt on tt.id = e.to_territory_id and tt.org_id = e.org_id
        where e.account_profile_id = ${profile[0].id} and e.org_id = ${orgId}
-       order by e.occurred_at desc`, 'objects'),
-  ])
+       order by e.occurred_at desc`,
+      "objects",
+    ),
+  ]);
   return {
     profile: profile[0],
     activities,
     opportunities,
     stageEvents,
     assignments,
-  }
+  };
 }
 
 export function loadOpportunity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
-  return withScopeSnapshot(orgId, () => loadOpportunitySnapshot(id, orgId, allowed))
+  return withScopeSnapshot(orgId, () => loadOpportunitySnapshot(id, orgId, allowed));
 }
 
-async function loadOpportunitySnapshot(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
-  const opportunity = (await db.execute<Record<string, unknown>>(sql`
+async function loadOpportunitySnapshot(
+  id: string,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+) {
+  const opportunity = await db.execute<Record<string, unknown>>(
+    sql`
     select o.*, ${documentRevisionCounterSql(sql`o.revision_seq`)} as "__opportunityRevision",
            p.display_name as party_name, c.name as contact_name,
            s.name as status_name, s.is_closed, s.is_won,
@@ -100,122 +132,163 @@ async function loadOpportunitySnapshot(id: string, orgId: string, allowed?: Read
       left join crm_sales_teams st on st.id = o.sales_team_id and st.org_id = o.org_id
       left join crm_lead_sources ls on ls.id = o.lead_source_id and ls.org_id = o.org_id
      where o.id = ${id} and o.org_id = ${orgId}${crmOpportunityScope(allowed)}
-  `, 'objects'))
-  if (!opportunity[0]) return null
+  `,
+    "objects",
+  );
+  if (!opportunity[0]) return null;
   // The revision counter never leaves this module in raw form: updated_at
   // carries the exact persisted revision token every opportunity save must
   // send back as expectedUpdatedAt (same wire form as document revisions).
   {
-    const head = opportunity[0]!
-    const revision = head["__opportunityRevision"]
+    const head = opportunity[0]!;
+    const revision = head["__opportunityRevision"];
     if (!isDocumentRevisionToken(revision)) {
-      throw new Error('opportunity read did not return an exact persisted revision')
+      throw new Error("opportunity read did not return an exact persisted revision");
     }
-    delete head["__opportunityRevision"]
-    head.updated_at = revision
+    delete head["__opportunityRevision"];
+    head.updated_at = revision;
   }
   const [lines, team, documents, activities, history] = await Promise.all([
-    db.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${orgId} order by line_number`, 'objects'),
-    db.execute(sql`
+    db.execute(
+      sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${orgId} order by line_number`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select m.*, u.display_name as user_name, u.email as user_email
         from crm_opportunity_team_members m join parties u on u.id = m.employee_id and u.org_id=m.org_id
-       where m.opportunity_id = ${id} and m.org_id = ${orgId} order by m.is_primary desc, u.display_name`, 'objects'),
-    db.execute(sql`
+       where m.opportunity_id = ${id} and m.org_id = ${orgId} order by m.is_primary desc, u.display_name`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency, d.total
         from crm_opportunity_documents od join documents d on d.id = od.document_id and d.org_id = od.org_id
-       where od.opportunity_id = ${id} and od.org_id = ${orgId} and d.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`,allowed ?? null)}
-       order by d.document_date desc, d.created_at desc`, 'objects'),
-    db.execute(sql`
+       where od.opportunity_id = ${id} and od.org_id = ${orgId} and d.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed ?? null)}
+       order by d.document_date desc, d.created_at desc`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select a.id, a.kind, a.status, a.subject, a.starts_at, a.due_at, a.completed_at
         from crm_activities a join crm_activity_links l on l.activity_id = a.id and l.org_id = a.org_id
        where l.subject_kind = 'opportunity' and l.subject_id = ${id} and l.org_id = ${orgId}${crmActivityScope(allowed)}
-       order by coalesce(a.starts_at, a.due_at, a.created_at) desc`, 'objects'),
-    db.execute(sql`
+       order by coalesce(a.starts_at, a.due_at, a.created_at) desc`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select e.*, fs.name as from_status_name, ts.name as to_status_name, u.name as actor_name
         from crm_opportunity_stage_events e
         left join crm_opportunity_statuses fs on fs.id = e.from_status_id and fs.org_id = e.org_id
         join crm_opportunity_statuses ts on ts.id = e.to_status_id and ts.org_id = e.org_id
         left join users u on u.id = e.created_by
-       where e.opportunity_id = ${id} and e.org_id = ${orgId} order by e.occurred_at desc`, 'objects'),
-  ])
-  const visibleDocuments = []
+       where e.opportunity_id = ${id} and e.org_id = ${orgId} order by e.occurred_at desc`,
+      "objects",
+    ),
+  ]);
+  const visibleDocuments = [];
   for (const row of documents) {
     if (await isDocKindEnabled(orgId, String((row as { kind?: unknown }).kind))) {
-      visibleDocuments.push(row)
+      visibleDocuments.push(row);
     }
   }
-  return { opportunity: opportunity[0], lines, team, documents: visibleDocuments, activities, history }
+  return {
+    opportunity: opportunity[0],
+    lines,
+    team,
+    documents: visibleDocuments,
+    activities,
+    history,
+  };
 }
 
 export function loadActivity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
-  return withScopeSnapshot(orgId, () => loadActivitySnapshot(id, orgId, allowed))
+  return withScopeSnapshot(orgId, () => loadActivitySnapshot(id, orgId, allowed));
 }
 
-async function loadActivitySnapshot(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
-  const activity = (await db.execute<Record<string, unknown>>(sql`
+async function loadActivitySnapshot(
+  id: string,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+) {
+  const activity = await db.execute<Record<string, unknown>>(
+    sql`
     select a.*, ${documentRevisionSql(sql`a.updated_at`)} as "__activityRevision",
            ou.name as owner_name, au.name as assigned_name
       from crm_activities a
       left join users ou on ou.id = a.owner_user_id
       left join users au on au.id = a.assigned_user_id
-     where a.id = ${id} and a.org_id = ${orgId}${crmActivityScope(allowed)}`, 'objects'))
-  if (!activity[0]) return null
+     where a.id = ${id} and a.org_id = ${orgId}${crmActivityScope(allowed)}`,
+    "objects",
+  );
+  if (!activity[0]) return null;
   // The revision token never leaves this module in raw form: updated_at
   // carries the exact persisted revision token every activity save must send
   // back as expectedUpdatedAt (same wire form as document revisions, and the
   // same rewrite loadCrmAccount performs for accounts).
   {
-    const head = activity[0]!
-    const revision = head['__activityRevision']
+    const head = activity[0]!;
+    const revision = head["__activityRevision"];
     if (!isDocumentRevisionToken(revision)) {
-      throw new Error('activity read did not return an exact persisted revision')
+      throw new Error("activity read did not return an exact persisted revision");
     }
-    delete head['__activityRevision']
-    head.updated_at = revision
+    delete head["__activityRevision"];
+    head.updated_at = revision;
   }
   const [links, participants] = await Promise.all([
-    db.execute(sql`select * from crm_activity_links where activity_id = ${id} and org_id = ${orgId} order by created_at`, 'objects'),
-    db.execute(sql`
+    db.execute(
+      sql`select * from crm_activity_links where activity_id = ${id} and org_id = ${orgId} order by created_at`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select p.*, u.name as user_name, c.name as contact_name
         from crm_activity_participants p
         left join users u on u.id = p.user_id
         left join contacts c on c.id = p.contact_id and c.org_id = p.org_id
-       where p.activity_id = ${id} and p.org_id = ${orgId} order by p.created_at`, 'objects'),
-  ])
-  return { activity: activity[0], links, participants }
+       where p.activity_id = ${id} and p.org_id = ${orgId} order by p.created_at`,
+      "objects",
+    ),
+  ]);
+  return { activity: activity[0], links, participants };
 }
 
 export interface ForecastScope {
-  orgId: string
-  periodStart: string
-  periodEnd: string
-  ownerUserId?: string | null
-  salesTeamId?: string | null
-  allowedSubsidiaryIds?: ReadonlySet<string> | null
+  orgId: string;
+  periodStart: string;
+  periodEnd: string;
+  ownerUserId?: string | null;
+  salesTeamId?: string | null;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }
 
 export type ForecastRow = {
-  currency: string
-  pipeline_amount: string
-  weighted_amount: string
-  worst_case_amount: string
-  most_likely_amount: string
-  upside_amount: string
-  closed_amount: string
-}
+  currency: string;
+  pipeline_amount: string;
+  weighted_amount: string;
+  worst_case_amount: string;
+  most_likely_amount: string;
+  upside_amount: string;
+  closed_amount: string;
+};
 
 /** The CRM pipeline: an active opportunity whose status is open and whose
  * forecast category is not omitted. Every pipeline reader uses this predicate. */
 export function crmOpportunityInPipeline(opportunity: SQL, status: SQL): SQL {
-  return sql`(${opportunity}.is_active and not ${status}.is_closed and ${opportunity}.forecast_category <> 'omitted')`
+  return sql`(${opportunity}.is_active and not ${status}.is_closed and ${opportunity}.forecast_category <> 'omitted')`;
 }
 
 /** Exact forecast rollup performed by PostgreSQL numeric arithmetic. */
 export async function calculateForecast(scope: ForecastScope) {
-  if (!isIsoCalendarDate(scope.periodStart) || !isIsoCalendarDate(scope.periodEnd) || scope.periodEnd < scope.periodStart) {
-    throw new Error('invalid forecast period')
+  if (
+    !isIsoCalendarDate(scope.periodStart) ||
+    !isIsoCalendarDate(scope.periodEnd) ||
+    scope.periodEnd < scope.periodStart
+  ) {
+    throw new Error("invalid forecast period");
   }
-  const ownerFilter = scope.ownerUserId ? sql`and o.owner_user_id = ${scope.ownerUserId}` : sql``
+  const ownerFilter = scope.ownerUserId ? sql`and o.owner_user_id = ${scope.ownerUserId}` : sql``;
   /**
    * A team forecast is the set of opportunities assigned to that team. Keep
    * that boundary in one CTE so pipeline and closed-revenue rows cannot drift
@@ -223,7 +296,9 @@ export async function calculateForecast(scope: ForecastScope) {
    * opportunity to be active or in-period: historical invoices linked to an
    * opportunity remain attributable to its team.
    */
-  const teamScopeFilter = scope.salesTeamId ? sql`and o.sales_team_id = ${scope.salesTeamId}` : sql``
+  const teamScopeFilter = scope.salesTeamId
+    ? sql`and o.sales_team_id = ${scope.salesTeamId}`
+    : sql``;
   const teamScopedDocument = sql`
     exists (
       select 1
@@ -231,7 +306,7 @@ export async function calculateForecast(scope: ForecastScope) {
         join forecast_scope fo on fo.id = od.opportunity_id
       where od.org_id = ${scope.orgId}
          and od.document_id = d.id
-    )`
+    )`;
   /**
    * Closed is a net-revenue basis, not a tax-inclusive takings total:
    * invoices and cash sales contribute their subtotal (tax excluded) and
@@ -263,8 +338,9 @@ export async function calculateForecast(scope: ForecastScope) {
         and a.unapplied_at is null
         and (fe.source_document_id = d.id or te.source_document_id = d.id)
         and ${invoiceScope}
-    )`
-  const teamActualsFilter = scope.salesTeamId ? sql`
+    )`;
+  const teamActualsFilter = scope.salesTeamId
+    ? sql`
     and (
       (d.kind in ('customer_invoice', 'cash_sale') and ${teamScopedDocument})
       or (d.kind in ('customer_credit', 'cash_refund') and (
@@ -278,8 +354,10 @@ export async function calculateForecast(scope: ForecastScope) {
                and od.document_id = inv.id
           )`)}
       ))
-    )` : sql``
-  const ownerActualsFilter = scope.ownerUserId ? sql`
+    )`
+    : sql``;
+  const ownerActualsFilter = scope.ownerUserId
+    ? sql`
     and (
       (d.kind in ('customer_invoice', 'cash_sale') and exists (
         select 1 from crm_account_profiles cp
@@ -300,8 +378,10 @@ export async function calculateForecast(scope: ForecastScope) {
            where cp.org_id = inv.org_id and cp.party_id = inv.party_id and cp.owner_user_id = ${scope.ownerUserId}
         )`)}
       ))
-    )` : sql``
-  const rows = (await db.execute<ForecastRow>(sql`
+    )`
+    : sql``;
+  const rows = await db.execute<ForecastRow>(
+    sql`
     with forecast_scope as (
       select o.id
         from crm_opportunities o
@@ -310,7 +390,7 @@ export async function calculateForecast(scope: ForecastScope) {
          ${crmOpportunityScope(scope.allowedSubsidiaryIds)}
     ), opportunity_base as (
       select o.currency, o.projected_amount, o.weighted_amount, o.forecast_category,
-             ${crmOpportunityInPipeline(sql`${sql.identifier('o')}`, sql`${sql.identifier('s')}`)} as in_pipeline,
+             ${crmOpportunityInPipeline(sql`${sql.identifier("o")}`, sql`${sql.identifier("s")}`)} as in_pipeline,
              s.is_closed, s.is_won
         from crm_opportunities o
         join forecast_scope fo on fo.id = o.id
@@ -353,8 +433,10 @@ export async function calculateForecast(scope: ForecastScope) {
       left join opportunity_base o on o.currency = c.currency
       left join actuals a on a.currency = c.currency
      group by c.currency order by c.currency
-  `, 'objects'))
-  return rows
+  `,
+    "objects",
+  );
+  return rows;
 }
 
 /**
@@ -365,22 +447,25 @@ export async function calculateForecast(scope: ForecastScope) {
  * scope — the count names what the KPIs silently left out.
  */
 export async function countUndatedForecastExcluded(scope: {
-  orgId: string
-  ownerUserId?: string | null
-  salesTeamId?: string | null
-  allowedSubsidiaryIds?: ReadonlySet<string> | null
+  orgId: string;
+  ownerUserId?: string | null;
+  salesTeamId?: string | null;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }): Promise<number> {
-  const ownerFilter = scope.ownerUserId ? sql`and o.owner_user_id = ${scope.ownerUserId}` : sql``
-  const teamFilter = scope.salesTeamId ? sql`and o.sales_team_id = ${scope.salesTeamId}` : sql``
-  const rows = await db.execute<{ count: string }>(sql`
+  const ownerFilter = scope.ownerUserId ? sql`and o.owner_user_id = ${scope.ownerUserId}` : sql``;
+  const teamFilter = scope.salesTeamId ? sql`and o.sales_team_id = ${scope.salesTeamId}` : sql``;
+  const rows = await db.execute<{ count: string }>(
+    sql`
     select count(*)::text as count
       from crm_opportunities o
       join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
      where o.org_id = ${scope.orgId}
-       and ${crmOpportunityInPipeline(sql`${sql.identifier('o')}`, sql`${sql.identifier('s')}`)}
+       and ${crmOpportunityInPipeline(sql`${sql.identifier("o")}`, sql`${sql.identifier("s")}`)}
        and o.expected_close_date is null
        ${ownerFilter}
        ${teamFilter}${crmOpportunityScope(scope.allowedSubsidiaryIds)}
-  `, 'objects')
-  return Number(rows[0]?.count ?? 0)
+  `,
+    "objects",
+  );
+  return Number(rows[0]?.count ?? 0);
 }

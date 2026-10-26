@@ -219,20 +219,19 @@ export function requireUsStateWithholding(code: string): UsStateWithholdingEngin
   }
   const publication = PUBLICATIONS[code];
   throw new UsStateWithholdingError(
-    `${code} income tax withholding is not implemented by the US payroll pack. `
-    + `${code} levies a wage income tax, so nothing here may approximate it: withholding the `
-    + "federal amount, a neighbouring state's amount, or nothing at all would each be silently "
-    + `wrong money on every stub. `
-    + (publication ? `The tables are published in ${publication}. ` : "")
-    + `This state is not yet supported by the US pack; contact support. `
-    + `Implemented today: ${implementedUsStates().join(", ")}.`,
+    `${code} income tax withholding is not implemented by the US payroll pack. ` +
+      `${code} levies a wage income tax, so nothing here may approximate it: withholding the ` +
+      "federal amount, a neighbouring state's amount, or nothing at all would each be silently " +
+      `wrong money on every stub. ` +
+      (publication ? `The tables are published in ${publication}. ` : "") +
+      `This state is not yet supported by the US pack; contact support. ` +
+      `Implemented today: ${implementedUsStates().join(", ")}.`,
   );
 }
 
 /** States that levy a wage income tax and have no engine yet, in order. */
 export function unimplementedUsStates(): string[] {
-  return US_STATES.filter((state) =>
-    !NO_WITHHOLDING_STATES.has(state) && !BY_STATE.has(state));
+  return US_STATES.filter((state) => !NO_WITHHOLDING_STATES.has(state) && !BY_STATE.has(state));
 }
 
 /** The publication a named state's tables would be transcribed from, if known. */
@@ -247,8 +246,12 @@ export { CA_WITHHOLDING, caAnnualizedMethod, CA_RATES_2026 } from "./ca.ts";
 export { CO_WITHHOLDING, CO_RATES_2026 } from "./co.ts";
 export { CT_WITHHOLDING, CT_RATES_2026 } from "./ct.ts";
 export {
-  DC_WITHHOLDING, DC_RATES_2026, DC_TAX_YEAR_EDITIONS, dcAllowancePerPeriod,
-  dcDivisorForPeriod, dcScaledBrackets,
+  DC_WITHHOLDING,
+  DC_RATES_2026,
+  DC_TAX_YEAR_EDITIONS,
+  dcAllowancePerPeriod,
+  dcDivisorForPeriod,
+  dcScaledBrackets,
 } from "./dc.ts";
 export { AL_WITHHOLDING, AL_RATES_2026 } from "./al.ts";
 export { AR_WITHHOLDING, AR_RATES_2026 } from "./ar.ts";
@@ -259,7 +262,13 @@ export { SC_WITHHOLDING, SC_RATES_2026 } from "./sc.ts";
 export { VT_WITHHOLDING, VT_RATES_2026 } from "./vt.ts";
 export { IA_WITHHOLDING, IA_RATES_2026 } from "./ia.ts";
 export { IN_WITHHOLDING, IN_RATES_2026, IN_COUNTIES_2026 } from "./in.ts";
-export { KY_WITHHOLDING, KY_RATES_2026, LOUISVILLE_WITHHOLDING, LOUISVILLE_RATES, louisvilleRateFor } from "./ky.ts";
+export {
+  KY_WITHHOLDING,
+  KY_RATES_2026,
+  LOUISVILLE_WITHHOLDING,
+  LOUISVILLE_RATES,
+  louisvilleRateFor,
+} from "./ky.ts";
 export { MD_WITHHOLDING, MD_RATES_2026, MD_COUNTIES_2026 } from "./md.ts";
 export { OR_WITHHOLDING, OR_RATES_2026 } from "./or.ts";
 export { MN_WITHHOLDING, MN_RATES_2026 } from "./mn.ts";
@@ -276,20 +285,42 @@ export { NE_WITHHOLDING, NE_RATES_2026 } from "./ne.ts";
 export { NM_WITHHOLDING, NM_RATES_2026, nmScheduleFor, nmSupplementalFlat } from "./nm.ts";
 export { OK_WITHHOLDING, OK_RATES_2026 } from "./ok.ts";
 export {
-  MA_WITHHOLDING, MA_RATES_2026, maAnnualTax, maExemptionFactor, maSupplementalWithholding,
+  MA_WITHHOLDING,
+  MA_RATES_2026,
+  maAnnualTax,
+  maExemptionFactor,
+  maSupplementalWithholding,
 } from "./ma.ts";
 export {
-  MI_WITHHOLDING, DETROIT_WITHHOLDING, MI_RATES_2026, MI_TAXING_CITIES, MI_CITY_RATE_SOURCE,
-  miCityWithholding, miDetroitExemptionPerPeriod, miDetroitResidentRate,
+  MI_WITHHOLDING,
+  DETROIT_WITHHOLDING,
+  MI_RATES_2026,
+  MI_TAXING_CITIES,
+  MI_CITY_RATE_SOURCE,
+  miCityWithholding,
+  miDetroitExemptionPerPeriod,
+  miDetroitResidentRate,
 } from "./mi.ts";
 export {
-  NC_WITHHOLDING, NC_RATES_2026, ncAnnualizedMethod, ncPercentageMethod, ncRoundToDollar,
-  ncScheduleFor, ncSupplementalFlat,
+  NC_WITHHOLDING,
+  NC_RATES_2026,
+  ncAnnualizedMethod,
+  ncPercentageMethod,
+  ncRoundToDollar,
+  ncScheduleFor,
+  ncSupplementalFlat,
 } from "./nc.ts";
 export { NJ_WITHHOLDING, NJ_RATES_2026, njRateTableFor } from "./nj.ts";
 export {
-  OH_WITHHOLDING, OH_EDITIONS, OH_SCHOOL_DISTRICTS_2026, ohEditionFor, ohMunicipalWithholding,
-  ohOptionalComputerFormula, ohPercentageMethod, ohSchoolDistrict, ohSchoolDistrictWithholding,
+  OH_WITHHOLDING,
+  OH_EDITIONS,
+  OH_SCHOOL_DISTRICTS_2026,
+  ohEditionFor,
+  ohMunicipalWithholding,
+  ohOptionalComputerFormula,
+  ohPercentageMethod,
+  ohSchoolDistrict,
+  ohSchoolDistrictWithholding,
 } from "./oh.ts";
 export { US_LOCAL_RATE_SLOTS } from "./local-rates.ts";
 export { IL_WITHHOLDING, IL_RATES_2026 } from "./il.ts";
@@ -298,10 +329,19 @@ export { VA_WITHHOLDING, VA_RATES_2026, vaSupplementalFlat } from "./va.ts";
 export { WI_WITHHOLDING, WI_RATES_2026 } from "./wi.ts";
 export { WV_WITHHOLDING, WV_RATES_2026 } from "./wv.ts";
 export {
-  NY_WITHHOLDING, NYC_WITHHOLDING, YONKERS_WITHHOLDING,
-  NY_RATES_2026, nysWithholding, yonkersNonresidentAnnualized,
+  NY_WITHHOLDING,
+  NYC_WITHHOLDING,
+  YONKERS_WITHHOLDING,
+  NY_RATES_2026,
+  nysWithholding,
+  yonkersNonresidentAnnualized,
 } from "./ny.ts";
 export {
-  PA_WITHHOLDING, PHILADELPHIA_WITHHOLDING, PA_RATES_2026,
-  act32LocalEit, localServicesTaxPerPeriod, paUcEmployeeWithholding, philadelphiaRateFor,
+  PA_WITHHOLDING,
+  PHILADELPHIA_WITHHOLDING,
+  PA_RATES_2026,
+  act32LocalEit,
+  localServicesTaxPerPeriod,
+  paUcEmployeeWithholding,
+  philadelphiaRateFor,
 } from "./pa.ts";

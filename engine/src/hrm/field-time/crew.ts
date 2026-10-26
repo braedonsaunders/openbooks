@@ -77,11 +77,16 @@ export async function assertForemanOnProject(
   canManageAll: boolean,
 ): Promise<void> {
   if (canManageAll) return;
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select r.id from schedule_resources r
      where r.org_id = ${orgId} and r.party_id = ${foremanPartyId}
        and r.project_id = ${projectId}
-     limit 1 for update`, "objects"))[0];
+     limit 1 for update`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     refuse(
       "foreman_not_on_project",
@@ -90,7 +95,13 @@ export async function assertForemanOnProject(
   }
 }
 
-type BatchStatusRow = { id: string; status: string; project_id: string; foreman_party_id: string; worked_on: string };
+type BatchStatusRow = {
+  id: string;
+  status: string;
+  project_id: string;
+  foreman_party_id: string;
+  worked_on: string;
+};
 
 /**
  * The actor's own party (users.party_id on the trusted runner); null when
@@ -98,8 +109,13 @@ type BatchStatusRow = { id: string; status: string; project_id: string; foreman_
  * caller — a caller-supplied party id would be impersonation.
  */
 async function actorPartyId(orgId: string, actorUserId: string): Promise<string | null> {
-  const row = (await db.execute<{ party_id: string | null }>(sql`
-    select party_id from users where org_id = ${orgId} and id = ${actorUserId}`, "objects"))[0];
+  const row = (
+    await db.execute<{ party_id: string | null }>(
+      sql`
+    select party_id from users where org_id = ${orgId} and id = ${actorUserId}`,
+      "objects",
+    )
+  )[0];
   return row?.party_id ?? null;
 }
 
@@ -134,11 +150,19 @@ async function assertProjectInScope(
   projectId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+  const row = (
+    await db.execute<{ subsidiary_id: string | null }>(
+      sql`
     select subsidiary_id::text as subsidiary_id from projects
-     where org_id = ${orgId} and id = ${projectId} for update`, "objects"))[0];
+     where org_id = ${orgId} and id = ${projectId} for update`,
+      "objects",
+    )
+  )[0];
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
-    refuse("project_unknown", "The project is unknown in this organization — pick a project and retry");
+    refuse(
+      "project_unknown",
+      "The project is unknown in this organization — pick a project and retry",
+    );
   }
 }
 
@@ -159,21 +183,38 @@ async function assertLineEmployeesInScope(
 ): Promise<void> {
   const ids = [...new Set(employeePartyIds)].sort();
   for (const id of ids) {
-    const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    const row = (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`
       select subsidiary_id::text as subsidiary_id from parties
-       where org_id = ${orgId} and id = ${id} for share`, "objects"))[0];
+       where org_id = ${orgId} and id = ${id} for share`,
+        "objects",
+      )
+    )[0];
     if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
-      refuse("employee_unknown", "A line worker is unknown in this organization — pick the worker from the crew roster and retry");
+      refuse(
+        "employee_unknown",
+        "A line worker is unknown in this organization — pick the worker from the crew roster and retry",
+      );
     }
   }
 }
 
 async function loadBatch(orgId: string, batchId: string): Promise<BatchStatusRow> {
-  const row = (await db.execute<BatchStatusRow>(sql`
+  const row = (
+    await db.execute<BatchStatusRow>(
+      sql`
     select id::text as id, status, project_id::text as project_id,
            foreman_party_id::text as foreman_party_id, worked_on::text as worked_on
-      from crew_time_batches where org_id = ${orgId} and id = ${batchId}`, "objects"))[0];
-  if (!row) refuse("batch_unknown", "The crew batch is unknown in this organization — reload the crew list");
+      from crew_time_batches where org_id = ${orgId} and id = ${batchId}`,
+      "objects",
+    )
+  )[0];
+  if (!row)
+    refuse(
+      "batch_unknown",
+      "The crew batch is unknown in this organization — reload the crew list",
+    );
   return row!;
 }
 
@@ -191,16 +232,18 @@ async function appendEvent(
 
 function canonicalLinesDigest(lines: CrewLineRow[]): string {
   const canonical = [...lines]
-    .map((l) => [
-      l.employeePartyId,
-      l.hours,
-      l.timeTypeId ?? "",
-      l.projectTaskId ?? "",
-      l.costCodeRef ?? "",
-      l.equipmentId ?? "",
-      l.equipmentHours ?? "",
-      l.memo ?? "",
-    ].join("|"))
+    .map((l) =>
+      [
+        l.employeePartyId,
+        l.hours,
+        l.timeTypeId ?? "",
+        l.projectTaskId ?? "",
+        l.costCodeRef ?? "",
+        l.equipmentId ?? "",
+        l.equipmentHours ?? "",
+        l.memo ?? "",
+      ].join("|"),
+    )
     .sort()
     .join("\n");
   return createHash("sha256").update(canonical, "utf8").digest("hex");
@@ -216,12 +259,15 @@ type CrewLineRow = {
   equipmentId: string | null;
   equipmentHours: string | null;
   memo: string | null;
-}
+};
 
 function validHours(value: string, what: string): string {
   const canonical = canonicalNonNegativeDecimal(value, 4);
   if (canonical === null || canonical === "0") {
-    refuse("invalid_hours", `${what} must be a positive number with at most 4 decimals — fix the line and retry`);
+    refuse(
+      "invalid_hours",
+      `${what} must be a positive number with at most 4 decimals — fix the line and retry`,
+    );
   }
   return canonical;
 }
@@ -240,8 +286,11 @@ async function validateLines(
   for (const line of lines) {
     const hours = validHours(line.hours, "Line hours");
     const key = [
-      line.employeePartyId, line.timeTypeId ?? "", line.projectTaskId ?? "",
-      line.costCodeRef ?? "", line.equipmentId ?? "",
+      line.employeePartyId,
+      line.timeTypeId ?? "",
+      line.projectTaskId ?? "",
+      line.costCodeRef ?? "",
+      line.equipmentId ?? "",
     ].join("|");
     if (seen.has(key)) {
       refuse(
@@ -264,9 +313,14 @@ async function validateLines(
         );
       }
       equipmentHours = validHours(equipmentHours, "Equipment hours");
-      const unit = (await db.execute<{ id: string; status: string }>(sql`
+      const unit = (
+        await db.execute<{ id: string; status: string }>(
+          sql`
         select id from equipment_units
-         where org_id = ${orgId} and id = ${equipmentId} and status = 'active'`, "objects"))[0];
+         where org_id = ${orgId} and id = ${equipmentId} and status = 'active'`,
+          "objects",
+        )
+      )[0];
       if (!unit) {
         refuse(
           "equipment_unknown",
@@ -306,7 +360,10 @@ async function lockEquipmentScope(
     );
   } catch (error) {
     if (error instanceof ScopeNotFoundError) {
-      refuse("equipment_unknown", "The equipment unit is unknown or outside your organization scope — choose an in-scope active unit");
+      refuse(
+        "equipment_unknown",
+        "The equipment unit is unknown or outside your organization scope — choose an in-scope active unit",
+      );
     }
     throw error;
   }
@@ -328,22 +385,48 @@ async function lockLineEmployeeScope(
       employment = await resolveEffectiveEmployment(db, { orgId, partyId, workedOn, projectId });
     } catch (error) {
       if (error instanceof EffectiveEmploymentError) {
-        refuse("employee_scope", `Worker ${partyId} has no unambiguous employment for this project and date — correct the worker's employment assignment before saving the crew line`);
+        refuse(
+          "employee_scope",
+          `Worker ${partyId} has no unambiguous employment for this project and date — correct the worker's employment assignment before saving the crew line`,
+        );
       }
       throw error;
     }
-    if (!employment) refuse("employee_scope", `Worker ${partyId} is not employed by this project on ${workedOn} — choose a worker employed in the project's legal entity`);
+    if (!employment)
+      refuse(
+        "employee_scope",
+        `Worker ${partyId} is not employed by this project on ${workedOn} — choose a worker employed in the project's legal entity`,
+      );
     effective.push({ partyId, employmentId: employment.id });
   }
   try {
-    await lockScopeRows(db, orgId, effective.map(({ employmentId }) => ({ kind: "employment" as const, id: employmentId })), allowedSubsidiaryIds, "update");
+    await lockScopeRows(
+      db,
+      orgId,
+      effective.map(({ employmentId }) => ({ kind: "employment" as const, id: employmentId })),
+      allowedSubsidiaryIds,
+      "update",
+    );
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) refuse("employee_scope", "A crew worker is outside your subsidiary access — choose workers in your assigned entities");
+    if (error instanceof ScopeNotFoundError)
+      refuse(
+        "employee_scope",
+        "A crew worker is outside your subsidiary access — choose workers in your assigned entities",
+      );
     throw error;
   }
   for (const employee of effective) {
-    const current = await resolveEffectiveEmployment(db, { orgId, partyId: employee.partyId, workedOn, projectId });
-    if (!current || current.id !== employee.employmentId) refuse("employee_scope", "A crew worker's employment changed while saving — reload and choose a currently employed worker");
+    const current = await resolveEffectiveEmployment(db, {
+      orgId,
+      partyId: employee.partyId,
+      workedOn,
+      projectId,
+    });
+    if (!current || current.id !== employee.employmentId)
+      refuse(
+        "employee_scope",
+        "A crew worker's employment changed while saving — reload and choose a currently employed worker",
+      );
   }
 }
 
@@ -377,21 +460,37 @@ export async function createBatch(input: {
   try {
     return await withOrgTransaction(input.orgId, async () => {
       await assertProjectInScope(input.orgId, input.projectId, input.allowedSubsidiaryIds);
-      await assertForemanOnProject(input.orgId, input.foremanPartyId, input.projectId, input.canManageAll);
+      await assertForemanOnProject(
+        input.orgId,
+        input.foremanPartyId,
+        input.projectId,
+        input.canManageAll,
+      );
       // The insert runs behind a savepoint: a double-submit retry collides
       // on the foreman/day business key, and rolling back only to the
       // savepoint keeps the caller's transaction usable for the
       // existing-batch lookup below (a bare failure would abort it).
-      const id = await withTransactionSavepoint(db, async () =>
-        (await db.execute<{ id: string }>(sql`
+      const id = await withTransactionSavepoint(
+        db,
+        async () =>
+          (
+            await db.execute<{ id: string }>(
+              sql`
           insert into crew_time_batches
             (org_id, foreman_party_id, project_id, worked_on, status, notes, created_by, updated_by)
           values
             (${input.orgId}, ${input.foremanPartyId}, ${input.projectId}, ${input.workedOn}::date,
              'draft', ${input.notes?.trim() || null}, ${input.actorUserId}, ${input.actorUserId})
-          returning id::text as id`, "objects"))[0]?.id,
+          returning id::text as id`,
+              "objects",
+            )
+          )[0]?.id,
       );
-      if (!id) throw new FieldTimeError("batch_not_stored", "The crew batch was not stored — no row was written; retry");
+      if (!id)
+        throw new FieldTimeError(
+          "batch_not_stored",
+          "The crew batch was not stored — no row was written; retry",
+        );
       await appendEvent(input.orgId, id, "created", input.actorUserId, null);
       return id;
     });
@@ -400,11 +499,18 @@ export async function createBatch(input: {
     // foreman/day business key: name the existing batch instead of
     // leaking a PG unique violation.
     if (!isUniqueViolation(error)) throw error;
-    const existing = (await withOrg(input.orgId, () => db.execute<{ id: string }>(sql`
+    const existing = (
+      await withOrg(input.orgId, () =>
+        db.execute<{ id: string }>(
+          sql`
       select id::text as id from crew_time_batches
        where org_id = ${input.orgId} and foreman_party_id = ${input.foremanPartyId}
          and project_id = ${input.projectId} and worked_on = ${input.workedOn}::date
-       limit 1`, "objects")))[0];
+       limit 1`,
+          "objects",
+        ),
+      )
+    )[0];
     refuse(
       "batch_already_exists",
       existing?.id
@@ -435,21 +541,46 @@ export async function setBatchLines(input: {
   }
   const settings = await loadFieldTimeSettings(input.orgId);
   const equipmentOn = await lockAndCheckOrgFeature(db, input.orgId, EQUIPMENT_FEATURE);
-  const cleaned = await validateLines(input.orgId, input.lines, equipmentOn, settings.equipmentToleranceHours);
+  const cleaned = await validateLines(
+    input.orgId,
+    input.lines,
+    equipmentOn,
+    settings.equipmentToleranceHours,
+  );
   await withOrgTransaction(input.orgId, async () => {
     await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
     // The stored ids are the write: a foreign employee id saved here would
     // post B-owned time from this project workflow below.
-    await assertLineEmployeesInScope(input.orgId, cleaned.map((line) => line.employeePartyId), input.allowedSubsidiaryIds);
-    const still = (await db.execute<{ status: string }>(sql`
+    await assertLineEmployeesInScope(
+      input.orgId,
+      cleaned.map((line) => line.employeePartyId),
+      input.allowedSubsidiaryIds,
+    );
+    const still = (
+      await db.execute<{ status: string }>(
+        sql`
       select status from crew_time_batches
-       where org_id = ${input.orgId} and id = ${input.batchId} for update`, "objects"))[0];
+       where org_id = ${input.orgId} and id = ${input.batchId} for update`,
+        "objects",
+      )
+    )[0];
     if (!still || (still.status !== "draft" && still.status !== "rejected")) {
       refuse("batch_locked", "The batch moved out of draft while saving — reload and retry");
     }
-    await lockLineEmployeeScope(input.orgId, batch.project_id, batch.worked_on, input.lines.map((line) => line.employeePartyId), input.allowedSubsidiaryIds);
+    await lockLineEmployeeScope(
+      input.orgId,
+      batch.project_id,
+      batch.worked_on,
+      input.lines.map((line) => line.employeePartyId),
+      input.allowedSubsidiaryIds,
+    );
     if (equipmentOn) {
-      await lockEquipmentScope(input.orgId, batch.project_id, input.lines.map((line) => line.equipmentId ?? null), input.allowedSubsidiaryIds);
+      await lockEquipmentScope(
+        input.orgId,
+        batch.project_id,
+        input.lines.map((line) => line.equipmentId ?? null),
+        input.allowedSubsidiaryIds,
+      );
     }
     await db.execute(sql`delete from crew_time_batch_lines where batch_id = ${input.batchId}`);
     for (const line of cleaned) {
@@ -463,10 +594,17 @@ export async function setBatchLines(input: {
            ${line.equipmentId}, ${line.equipmentHours}, ${line.memo},
            ${input.actorUserId}, ${input.actorUserId})`);
     }
-    const moved = (await db.execute<{ n: number }>(sql`
+    const moved =
+      (
+        await db.execute<{ n: number }>(sql`
       update crew_time_batches set updated_at = now(), updated_by = ${input.actorUserId}
-       where org_id = ${input.orgId} and id = ${input.batchId}`)).rowCount ?? 0;
-    if (moved !== 1) throw new FieldTimeError("batch_not_stored", "The batch lines were not stored — retry the save");
+       where org_id = ${input.orgId} and id = ${input.batchId}`)
+      ).rowCount ?? 0;
+    if (moved !== 1)
+      throw new FieldTimeError(
+        "batch_not_stored",
+        "The batch lines were not stored — retry the save",
+      );
   });
   await appendEvent(input.orgId, input.batchId, "line_edited", input.actorUserId, null);
 }
@@ -481,11 +619,7 @@ export async function submitBatch(input: {
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<void> {
   return withOrgTransaction(input.orgId, async () => {
-    await lockApprovalSubject(
-      input.orgId,
-      CREW_TIME_BATCH_SUBJECT_KIND,
-      input.batchId,
-    );
+    await lockApprovalSubject(input.orgId, CREW_TIME_BATCH_SUBJECT_KIND, input.batchId);
     const nativeScope = await lockActorCommandAuthority(
       db,
       input.orgId,
@@ -495,63 +629,89 @@ export async function submitBatch(input: {
     );
     await requireCrewFeature(input.orgId);
     const batch = await loadBatch(input.orgId, input.batchId);
-    await assertBatchOwnerOrSupervisor(input.orgId,input.actorUserId,batch,input.canManageAll);
+    await assertBatchOwnerOrSupervisor(input.orgId, input.actorUserId, batch, input.canManageAll);
     await withOrgTransaction(input.orgId, async () => {
       await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
       await assertProjectInScope(input.orgId, batch.project_id, nativeScope);
-      const current = (await db.execute<BatchStatusRow>(sql`
+      const current = (
+        await db.execute<BatchStatusRow>(
+          sql`
       select id::text as id, status, project_id::text as project_id,
              foreman_party_id::text as foreman_party_id, worked_on::text as worked_on
         from crew_time_batches
        where org_id = ${input.orgId} and id = ${input.batchId}
-       for update`, "objects"))[0];
-      if (!current) refuse("batch_unknown", "The crew batch is unknown in this organization — reload the crew list");
+       for update`,
+          "objects",
+        )
+      )[0];
+      if (!current)
+        refuse(
+          "batch_unknown",
+          "The crew batch is unknown in this organization — reload the crew list",
+        );
       if (current.project_id !== batch.project_id) {
-      refuse("batch_moved", "The batch project moved while submitting — reload and retry");
-    }
-      await assertBatchOwnerOrSupervisor(input.orgId, input.actorUserId, current, input.canManageAll);
+        refuse("batch_moved", "The batch project moved while submitting — reload and retry");
+      }
+      await assertBatchOwnerOrSupervisor(
+        input.orgId,
+        input.actorUserId,
+        current,
+        input.canManageAll,
+      );
       if (current.status !== "draft" && current.status !== "rejected") {
-      refuse("batch_not_submittable", `Only a draft batch can be submitted — this batch is ${current.status}`);
-    }
-      const rows = await db.execute<CrewLineRow>(sql`
+        refuse(
+          "batch_not_submittable",
+          `Only a draft batch can be submitted — this batch is ${current.status}`,
+        );
+      }
+      const rows = await db.execute<CrewLineRow>(
+        sql`
       select employee_party_id as "employeePartyId", hours::text as hours,
              time_type_id::text as "timeTypeId", project_task_id::text as "projectTaskId",
              cost_code_ref as "costCodeRef", equipment_id::text as "equipmentId",
              equipment_hours::text as "equipmentHours", memo
         from crew_time_batch_lines where batch_id = ${input.batchId}
-       order by id`, "objects");
+       order by id`,
+        "objects",
+      );
       if (rows.length === 0) {
-      refuse("batch_empty", "The batch has no lines — add worker lines before submitting");
-    }
+        refuse("batch_empty", "The batch has no lines — add worker lines before submitting");
+      }
       const settings = await loadFieldTimeSettings(input.orgId);
       let evidence: {
-      signerName: string;
-      signedAt: string;
-      linesDigest: string;
-      hmac: string;
-    } | null = null;
+        signerName: string;
+        signedAt: string;
+        linesDigest: string;
+        hmac: string;
+      } | null = null;
       if (settings.signatureRequired) {
-      const name = input.signerName?.trim() ?? "";
-      if (name === "") {
-        refuse("signature_required", "Sign-and-submit needs the foreman signature — sign the batch before submitting");
+        const name = input.signerName?.trim() ?? "";
+        if (name === "") {
+          refuse(
+            "signature_required",
+            "Sign-and-submit needs the foreman signature — sign the batch before submitting",
+          );
+        }
+        const digest = canonicalLinesDigest(rows);
+        evidence = {
+          signerName: name,
+          signedAt: new Date().toISOString(),
+          linesDigest: digest,
+          hmac: keyedFingerprint("crew-time-batch-signature", `${input.batchId}|${digest}|${name}`),
+        };
       }
-      const digest = canonicalLinesDigest(rows);
-      evidence = {
-        signerName: name,
-        signedAt: new Date().toISOString(),
-        linesDigest: digest,
-        hmac: keyedFingerprint("crew-time-batch-signature", `${input.batchId}|${digest}|${name}`),
-      };
-    }
-      const moved = (await db.execute<{ n: number }>(sql`
+      const moved =
+        (
+          await db.execute<{ n: number }>(sql`
       update crew_time_batches
          set status = 'submitted', signature_evidence = ${evidence === null ? null : JSON.stringify(evidence)}::jsonb,
              submitted_at = now(), updated_at = now(), updated_by = ${input.actorUserId}
        where org_id = ${input.orgId} and id = ${input.batchId}
-         and status = ${current.status}`)).rowCount ?? 0;
+         and status = ${current.status}`)
+        ).rowCount ?? 0;
       if (moved !== 1) {
-      refuse("batch_not_submittable", "The batch moved while submitting — reload and retry");
-    }
+        refuse("batch_not_submittable", "The batch moved while submitting — reload and retry");
+      }
     });
     await appendEvent(input.orgId, input.batchId, "submitted", input.actorUserId, null);
     // Approval routing runs through Flows: tenant on_submit flows raise
@@ -563,8 +723,7 @@ export async function submitBatch(input: {
       subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
       subjectId: input.batchId,
     });
-    if (routing.policy.kind === "ungated")
-      await approveBatch({ ...input, comment: null });
+    if (routing.policy.kind === "ungated") await approveBatch({ ...input, comment: null });
   });
 }
 
@@ -578,11 +737,7 @@ export async function withdrawBatch(input: {
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<void> {
   return withOrgTransaction(input.orgId, async () => {
-    await lockApprovalSubject(
-      input.orgId,
-      CREW_TIME_BATCH_SUBJECT_KIND,
-      input.batchId,
-    );
+    await lockApprovalSubject(input.orgId, CREW_TIME_BATCH_SUBJECT_KIND, input.batchId);
     const nativeScope = await lockActorCommandAuthority(
       db,
       input.orgId,
@@ -602,15 +757,27 @@ export async function withdrawBatch(input: {
         subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
         subjectId: input.batchId,
       });
-      const moved = (await db.execute<{ n: number }>(sql`
+      const moved =
+        (
+          await db.execute<{ n: number }>(sql`
       update crew_time_batches
          set status = 'draft', submitted_at = null, updated_at = now(), updated_by = ${input.actorUserId}
-       where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)).rowCount ?? 0;
+       where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)
+        ).rowCount ?? 0;
       if (moved !== 1) {
-      refuse("batch_not_withdrawable", "Only a submitted batch can be withdrawn — approved and posted batches stay as history");
-    }
+        refuse(
+          "batch_not_withdrawable",
+          "Only a submitted batch can be withdrawn — approved and posted batches stay as history",
+        );
+      }
     });
-    await appendEvent(input.orgId, input.batchId, "withdrawn", input.actorUserId, input.reason ?? null);
+    await appendEvent(
+      input.orgId,
+      input.batchId,
+      "withdrawn",
+      input.actorUserId,
+      input.reason ?? null,
+    );
   });
 }
 
@@ -632,17 +799,19 @@ async function assertCrewDecision(
     approvalRunId: input.approvalRunId,
     outcome,
   });
-  const receipt = (await db.execute<{ valid: boolean }>(sql`select
+  const receipt = (
+    await db.execute<{ valid: boolean }>(
+      sql`select
    case when ${input.approvalRunId ?? null}::uuid is null then
     public.flow_ungated_submission_authorized(b.org_id,'crew_time_batch',b.id,${input.actorUserId},jsonb_build_object('approvalFingerprint',public.crew_time_batch_approval_fingerprint(b)))
    else exists(select 1 from flow_submissions s where s.org_id=b.org_id and s.subject_kind='crew_time_batch' and s.subject_id=b.id
     and s.policy->'runIds' ? ${input.approvalRunId ?? null} and s.context->>'approvalFingerprint'=public.crew_time_batch_approval_fingerprint(b)
     and not exists(select 1 from flow_submissions newer where newer.org_id=s.org_id and newer.subject_kind=s.subject_kind and newer.subject_id=s.subject_id and (newer.created_at,newer.id)>(s.created_at,s.id))) end as valid
-   from crew_time_batches b where b.org_id=${input.orgId} and b.id=${input.batchId}`, "objects"))[0];
-  if (
-    !receipt?.valid ||
-    (input.approvalRunId ? !decision : outcome !== "approved")
-  )
+   from crew_time_batches b where b.org_id=${input.orgId} and b.id=${input.batchId}`,
+      "objects",
+    )
+  )[0];
+  if (!receipt?.valid || (input.approvalRunId ? !decision : outcome !== "approved"))
     refuse(
       "batch_flow_decision_required",
       "Submit the current crew batch through Flows and complete its configured gates before release.",
@@ -667,29 +836,34 @@ export async function approveBatch(input: {
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<"approved"> {
   return withOrgTransaction(input.orgId, async () => {
-    await lockApprovalSubject(
-      input.orgId,
-      CREW_TIME_BATCH_SUBJECT_KIND,
-      input.batchId,
-    );
+    await lockApprovalSubject(input.orgId, CREW_TIME_BATCH_SUBJECT_KIND, input.batchId);
     await requireCrewFeature(input.orgId);
     const batch = await loadBatch(input.orgId, input.batchId);
     if (batch.status !== "submitted") {
-    refuse("batch_not_approvable", `The batch is ${batch.status} — nothing is awaiting approval`);
-  }
+      refuse("batch_not_approvable", `The batch is ${batch.status} — nothing is awaiting approval`);
+    }
     await withOrgTransaction(input.orgId, async () => {
       await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
       const nativeScope = await assertCrewDecision(input, "approved");
       await assertProjectInScope(input.orgId, batch.project_id, nativeScope);
-      const moved = (await db.execute<{ n: number }>(sql`
+      const moved =
+        (
+          await db.execute<{ n: number }>(sql`
       update crew_time_batches
          set status = 'approved', updated_at = now(), updated_by = ${input.actorUserId}
-       where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)).rowCount ?? 0;
+       where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)
+        ).rowCount ?? 0;
       if (moved !== 1) {
-      refuse("batch_moved", "The batch moved while approving — reload and retry");
-    }
+        refuse("batch_moved", "The batch moved while approving — reload and retry");
+      }
     });
-    await appendEvent(input.orgId, input.batchId, "approved", input.actorUserId, input.comment ?? null);
+    await appendEvent(
+      input.orgId,
+      input.batchId,
+      "approved",
+      input.actorUserId,
+      input.comment ?? null,
+    );
     return "approved" as const;
   });
 }
@@ -704,30 +878,38 @@ export async function rejectBatch(input: {
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<void> {
   return withOrgTransaction(input.orgId, async () => {
-    await lockApprovalSubject(
-      input.orgId,
-      CREW_TIME_BATCH_SUBJECT_KIND,
-      input.batchId,
-    );
+    await lockApprovalSubject(input.orgId, CREW_TIME_BATCH_SUBJECT_KIND, input.batchId);
     await requireCrewFeature(input.orgId);
     if (!input.reason || input.reason.trim() === "") {
-    refuse("reject_reason_required", "Rejecting needs a reason — tell the foreman what to fix");
-  }
+      refuse("reject_reason_required", "Rejecting needs a reason — tell the foreman what to fix");
+    }
     const batch = await loadBatch(input.orgId, input.batchId);
     if (batch.status !== "submitted") {
-    refuse("batch_not_rejectable", `Only a batch in approval can be rejected — this batch is ${batch.status}`);
-  }
+      refuse(
+        "batch_not_rejectable",
+        `Only a batch in approval can be rejected — this batch is ${batch.status}`,
+      );
+    }
     await withOrgTransaction(input.orgId, async () => {
       await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
       const nativeScope = await assertCrewDecision(input, "rejected");
       await assertProjectInScope(input.orgId, batch.project_id, nativeScope);
-      const moved = (await db.execute<{ n: number }>(sql`
+      const moved =
+        (
+          await db.execute<{ n: number }>(sql`
       update crew_time_batches
          set status = 'rejected', submitted_at = null, updated_at = now(), updated_by = ${input.actorUserId}
-       where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)).rowCount ?? 0;
+       where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)
+        ).rowCount ?? 0;
       if (moved !== 1) refuse("batch_moved", "The batch moved while rejecting — reload and retry");
     });
-    await appendEvent(input.orgId, input.batchId, "rejected", input.actorUserId, input.reason.trim());
+    await appendEvent(
+      input.orgId,
+      input.batchId,
+      "rejected",
+      input.actorUserId,
+      input.reason.trim(),
+    );
   });
 }
 
@@ -765,19 +947,25 @@ type ChargeSpec = {
  * transaction: a unit with no charge item, an unknown task, or an
  * unapproved batch never reaches the write.
  */
-async function planPost(orgId: string, batch: BatchStatusRow): Promise<{ lines: Array<CrewLineInput & { id: string }>; charges: ChargeSpec[] }> {
+async function planPost(
+  orgId: string,
+  batch: BatchStatusRow,
+): Promise<{ lines: Array<CrewLineInput & { id: string }>; charges: ChargeSpec[] }> {
   if (batch.status !== "approved") {
     refuse(
       "batch_not_approved",
       `The batch is ${batch.status} — it must be approved before posting`,
     );
   }
-  const lines = await db.execute<Required<CrewLineRow>>(sql`
+  const lines = await db.execute<Required<CrewLineRow>>(
+    sql`
     select id::text as id, employee_party_id as "employeePartyId", hours::text as hours,
            time_type_id::text as "timeTypeId", project_task_id::text as "projectTaskId",
            cost_code_ref as "costCodeRef", equipment_id::text as "equipmentId",
            equipment_hours::text as "equipmentHours", memo
-      from crew_time_batch_lines where batch_id = ${batch.id} order by id`, "objects");
+      from crew_time_batch_lines where batch_id = ${batch.id} order by id`,
+    "objects",
+  );
   if (lines.length === 0) refuse("batch_empty", "The batch has no lines — nothing to post");
   const equipmentOn = await lockAndCheckOrgFeature(db, orgId, EQUIPMENT_FEATURE);
   const settings = await loadFieldTimeSettings(orgId);
@@ -788,18 +976,34 @@ async function planPost(orgId: string, batch: BatchStatusRow): Promise<{ lines: 
       // be known and sit on the batch's project — a task from another
       // project would post its cost against the wrong job.
       const code = await taskPairingCode(orgId, batch.project_id, line.projectTaskId);
-      if (code === "task_unknown") refuse(code, "A batch line names a task outside this organization — fix the lines before posting");
-      if (code === "task_wrong_project") refuse(code, "A batch line names a task outside the batch's project — fix the lines before posting");
+      if (code === "task_unknown")
+        refuse(
+          code,
+          "A batch line names a task outside this organization — fix the lines before posting",
+        );
+      if (code === "task_wrong_project")
+        refuse(
+          code,
+          "A batch line names a task outside the batch's project — fix the lines before posting",
+        );
     }
     const equipmentId = equipmentOn ? line.equipmentId : null;
     const equipmentHours = equipmentOn ? line.equipmentHours : null;
     if (equipmentId && equipmentHours) {
       checkEquipmentTolerance(line.hours, equipmentHours, settings.equipmentToleranceHours);
-      const unit = (await db.execute<{ charge_item_id: string | null; status: string }>(sql`
+      const unit = (
+        await db.execute<{ charge_item_id: string | null; status: string }>(
+          sql`
         select charge_item_id::text as charge_item_id, status from equipment_units
-         where org_id = ${orgId} and id = ${equipmentId}`, "objects"))[0];
+         where org_id = ${orgId} and id = ${equipmentId}`,
+          "objects",
+        )
+      )[0];
       if (!unit || unit.status !== "active") {
-        refuse("equipment_unknown", "A batch line names equipment that is unknown or not active — fix the lines before posting");
+        refuse(
+          "equipment_unknown",
+          "A batch line names equipment that is unknown or not active — fix the lines before posting",
+        );
       }
       if (!unit.charge_item_id) {
         refuse(
@@ -807,16 +1011,29 @@ async function planPost(orgId: string, batch: BatchStatusRow): Promise<{ lines: 
           "An equipment unit on this batch has no charge item — link the unit to an equipment_charge item before posting",
         );
       }
-      const item = (await db.execute<{
-        kind: string; code: string; default_cost: string | null; default_rate: string | null;
-        expense_account_id: string | null; cost_recovery_account_id: string | null; is_active: boolean;
-      }>(sql`
+      const item = (
+        await db.execute<{
+          kind: string;
+          code: string;
+          default_cost: string | null;
+          default_rate: string | null;
+          expense_account_id: string | null;
+          cost_recovery_account_id: string | null;
+          is_active: boolean;
+        }>(
+          sql`
         select kind, code, default_cost::text as default_cost, default_rate::text as default_rate,
                expense_account_id::text as expense_account_id,
                cost_recovery_account_id::text as cost_recovery_account_id, is_active
-          from items where org_id = ${orgId} and id = ${unit.charge_item_id}`, "objects"))[0];
+          from items where org_id = ${orgId} and id = ${unit.charge_item_id}`,
+          "objects",
+        )
+      )[0];
       if (!item || item.kind !== "equipment_charge" || !item.is_active) {
-        refuse("equipment_no_charge_item", "An equipment unit on this batch has no usable equipment_charge item — link the unit before posting");
+        refuse(
+          "equipment_no_charge_item",
+          "An equipment unit on this batch has no usable equipment_charge item — link the unit before posting",
+        );
       }
       if (!item.default_cost || !item.expense_account_id || !item.cost_recovery_account_id) {
         refuse(
@@ -832,7 +1049,9 @@ async function planPost(orgId: string, batch: BatchStatusRow): Promise<{ lines: 
         equipmentId,
         equipmentHours,
         costAmount: multiply4(equipmentHours, item.default_cost),
-        billAmount: item.default_rate ? multiply4(equipmentHours, item.default_rate) : multiply4(equipmentHours, item.default_cost),
+        billAmount: item.default_rate
+          ? multiply4(equipmentHours, item.default_rate)
+          : multiply4(equipmentHours, item.default_cost),
         costRate: item.default_cost,
         billRate: item.default_rate,
         itemId: unit.charge_item_id,
@@ -862,11 +1081,19 @@ export async function postBatch(input: {
   await requireCrewFeature(input.orgId);
   const batch = await loadBatch(input.orgId, input.batchId);
   if (batch.status === "posted") {
-    refuse("batch_already_posted", "The batch is already posted — posting twice would double the hours");
+    refuse(
+      "batch_already_posted",
+      "The batch is already posted — posting twice would double the hours",
+    );
   }
   const { lines, charges } = await planPost(input.orgId, batch);
-  const org = (await db.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${input.orgId}`, "objects"))[0];
+  const org = (
+    await db.execute<{ base_currency: string }>(
+      sql`
+    select base_currency from orgs where id = ${input.orgId}`,
+      "objects",
+    )
+  )[0];
   if (!org) refuse("org_unknown", "The organization is unknown — reload and retry");
 
   // Feature off: equipment columns are ignored on the entries, never stored.
@@ -876,33 +1103,72 @@ export async function postBatch(input: {
     // transaction: a pre-read would let a concurrent rehome stamp and post
     // another entity's charges for a scoped caller.
     await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
-    const postingBatch = (await db.execute<{ status: string }>(sql`
-      select status from crew_time_batches where org_id = ${input.orgId} and id = ${input.batchId} for update`, "objects"))[0];
+    const postingBatch = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from crew_time_batches where org_id = ${input.orgId} and id = ${input.batchId} for update`,
+        "objects",
+      )
+    )[0];
     if (!postingBatch || postingBatch.status !== batch.status) {
-      refuse("batch_moved", "The batch changed while posting — reload the approval status and retry");
+      refuse(
+        "batch_moved",
+        "The batch changed while posting — reload the approval status and retry",
+      );
     }
     // Recheck the employees AS STORED: lines are read pre-transaction, so a
     // save that landed after the read must not post unchecked workers. The
     // row lock also serializes against a concurrent line replace.
-    const stored = await db.execute<{ employee_party_id: string }>(sql`
+    const stored = await db.execute<{ employee_party_id: string }>(
+      sql`
       select employee_party_id from crew_time_batch_lines
-       where org_id = ${input.orgId} and batch_id = ${input.batchId} for update`, "objects");
-    await assertLineEmployeesInScope(input.orgId, stored.map((line) => line.employee_party_id), input.allowedSubsidiaryIds);
-    const project = (await db.execute<{ subsidiary_id: string }>(sql`
+       where org_id = ${input.orgId} and batch_id = ${input.batchId} for update`,
+      "objects",
+    );
+    await assertLineEmployeesInScope(
+      input.orgId,
+      stored.map((line) => line.employee_party_id),
+      input.allowedSubsidiaryIds,
+    );
+    const project = (
+      await db.execute<{ subsidiary_id: string }>(
+        sql`
       select subsidiary_id::text as subsidiary_id from projects
-       where org_id = ${input.orgId} and id = ${batch.project_id}`, "objects"))[0];
-    if (!project) refuse("project_unknown", "The batch project is gone — withdraw the batch and re-enter it");
+       where org_id = ${input.orgId} and id = ${batch.project_id}`,
+        "objects",
+      )
+    )[0];
+    if (!project)
+      refuse("project_unknown", "The batch project is gone — withdraw the batch and re-enter it");
     if (equipmentOn) {
-      await lockEquipmentScope(input.orgId, batch.project_id, lines.map((line) => line.equipmentId ?? null), input.allowedSubsidiaryIds);
+      await lockEquipmentScope(
+        input.orgId,
+        batch.project_id,
+        lines.map((line) => line.equipmentId ?? null),
+        input.allowedSubsidiaryIds,
+      );
     }
-    await lockLineEmployeeScope(input.orgId, batch.project_id, batch.worked_on, lines.map((line) => line.employeePartyId), input.allowedSubsidiaryIds);
+    await lockLineEmployeeScope(
+      input.orgId,
+      batch.project_id,
+      batch.worked_on,
+      lines.map((line) => line.employeePartyId),
+      input.allowedSubsidiaryIds,
+    );
     // Posting writes open project time: the same disable-blocker class the
     // timesheet save fences, so a Projects disable racing this post refuses
     // one side or the other instead of stranding entries under a dark flag.
     if (!(await checkProjectsWriteEnabled(input.orgId, db))) {
-      refuse("projects_off", "This batch posts time against a project — turn Projects back on in Company Settings → Features before posting it");
+      refuse(
+        "projects_off",
+        "This batch posts time against a project — turn Projects back on in Company Settings → Features before posting it",
+      );
     }
-    await lockEmployeeTimeSources(db, input.orgId, lines.map((line) => line.employeePartyId));
+    await lockEmployeeTimeSources(
+      db,
+      input.orgId,
+      lines.map((line) => line.employeePartyId),
+    );
     for (const employeePartyId of [...new Set(lines.map((line) => line.employeePartyId))]) {
       await assertNoFieldTimeSourceCollision(db, {
         orgId: input.orgId,
@@ -914,7 +1180,9 @@ export async function postBatch(input: {
     }
     const entryIds: string[] = [];
     for (const line of lines) {
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into time_entries
           (org_id, employee_party_id, worked_on, hours, time_type_id,
            project_id, project_task_id, cost_code_ref, status,
@@ -927,21 +1195,35 @@ export async function postBatch(input: {
            ${equipmentOn ? line.equipmentId : null},
            ${equipmentOn ? line.equipmentHours : null},
            ${line.id}, ${input.actorUserId}, ${input.actorUserId})
-        returning id`, "objects"))[0];
-      if (!inserted) throw new FieldTimeError("entry_not_stored", "A batch line produced no entry — nothing was posted; retry");
+        returning id`,
+          "objects",
+        )
+      )[0];
+      if (!inserted)
+        throw new FieldTimeError(
+          "entry_not_stored",
+          "A batch line produced no entry — nothing was posted; retry",
+        );
       entryIds.push(inserted.id);
     }
     const chargeDocumentIds: string[] = [];
     for (const charge of charges) {
-      const seen = (await db.execute<{ id: string }>(sql`
+      const seen = (
+        await db.execute<{ id: string }>(
+          sql`
         select id::text as id from documents
          where org_id = ${input.orgId} and kind = 'project_charge'
-           and document_number = ${charge.documentNumber}`, "objects"))[0];
+           and document_number = ${charge.documentNumber}`,
+          "objects",
+        )
+      )[0];
       if (seen) {
         chargeDocumentIds.push(seen.id);
         continue;
       }
-      const docId = (await db.execute<{ id: string }>(sql`
+      const docId = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into documents
           (org_id, kind, document_number, document_date, posting_date, currency,
            status, project_id, subsidiary_id, subtotal, tax_total, total, custom, extra_dims)
@@ -950,8 +1232,15 @@ export async function postBatch(input: {
            ${batch.worked_on}::date, ${batch.worked_on}::date, ${org.base_currency},
            'draft', ${batch.project_id}, ${project.subsidiary_id},
            ${charge.costAmount}, '0', ${charge.costAmount}, '{}'::jsonb, '{}'::jsonb)
-        returning id::text as id`, "objects"))[0];
-      if (!docId) throw new FieldTimeError("charge_not_stored", "An equipment charge produced no document — nothing was posted; retry");
+        returning id::text as id`,
+          "objects",
+        )
+      )[0];
+      if (!docId)
+        throw new FieldTimeError(
+          "charge_not_stored",
+          "An equipment charge produced no document — nothing was posted; retry",
+        );
       // The header is created DRAFT and approved after its lines land.
       // document_line_immutability (0034) refuses line writes on anything
       // past draft, so creating the header approved made every equipment
@@ -968,10 +1257,15 @@ export async function postBatch(input: {
            ${batch.project_id}, ${charge.equipmentId}, ${charge.recoveryAccountId},
            ${charge.costRate}, ${charge.billRate}, ${charge.costAmount}, ${charge.billAmount},
            true, '{}'::jsonb, '{}'::jsonb)`);
-      const approved = (await db.execute<{ n: number }>(sql`
+      const approved = (
+        await db.execute<{ n: number }>(
+          sql`
         update documents set status = 'approved', updated_at = now()
          where org_id = ${input.orgId} and id = ${docId.id} and status = 'draft'
-        returning 1 as n`, "objects"))[0];
+        returning 1 as n`,
+          "objects",
+        )
+      )[0];
       if (!approved) {
         throw new FieldTimeError(
           "charge_not_approved",
@@ -980,10 +1274,13 @@ export async function postBatch(input: {
       }
       chargeDocumentIds.push(docId.id);
     }
-    const moved = (await db.execute<{ n: number }>(sql`
+    const moved =
+      (
+        await db.execute<{ n: number }>(sql`
       update crew_time_batches
          set status = 'posted', updated_at = now(), updated_by = ${input.actorUserId}
-       where org_id = ${input.orgId} and id = ${input.batchId} and status = ${batch.status}`)).rowCount ?? 0;
+       where org_id = ${input.orgId} and id = ${input.batchId} and status = ${batch.status}`)
+      ).rowCount ?? 0;
     if (moved !== 1) {
       refuse("batch_moved", "The batch moved while posting — nothing was posted; reload and retry");
     }

@@ -20,7 +20,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.overhead-apply-date-test')]
@@ -48,8 +48,10 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if ((specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead")) ||
-      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))) {
+    if (
+      (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -65,17 +67,19 @@ registerHooks({
 const routeUrl = "./route.ts?overhead-apply-date-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Overhead Admin", "admin"));
-  await withBypassContext(() => db.execute(sql`
+  const actorId = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Overhead Admin", "admin"),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
       coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ projects: true })}::jsonb)
-     where id = ${org.orgId}`));
+     where id = ${org.orgId}`),
+  );
   routeState.authz = {
     user: { orgId: org.orgId, id: actorId },
     permissions: new Set(["*"]),
@@ -91,42 +95,36 @@ function postRequest(body: unknown): Request {
   });
 }
 
-test(
-  "apply rejects an impossible calendar date with a 400 field error",
-  async () => {
-    const { orgId } = await seed();
-    const res = await withOrgContext(orgId, () =>
-      POST(
-        postRequest({
-          action: "apply",
-          projectTypeIds: [randomUUID()],
-          overhead: { method: "none" },
-          effectiveFrom: "2026-02-30",
-          reason: "test",
-        }),
-      ),
-    );
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /effectiveFrom/);
-  },
-);
+test("apply rejects an impossible calendar date with a 400 field error", async () => {
+  const { orgId } = await seed();
+  const res = await withOrgContext(orgId, () =>
+    POST(
+      postRequest({
+        action: "apply",
+        projectTypeIds: [randomUUID()],
+        overhead: { method: "none" },
+        effectiveFrom: "2026-02-30",
+        reason: "test",
+      }),
+    ),
+  );
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /effectiveFrom/);
+});
 
-test(
-  "apply still reaches the profile lookup for a real calendar date",
-  async () => {
-    const { orgId } = await seed();
-    const res = await withOrgContext(orgId, () =>
-      POST(
-        postRequest({
-          action: "apply",
-          projectTypeIds: [randomUUID()],
-          overhead: { method: "none" },
-          effectiveFrom: "2026-03-31",
-          reason: "test",
-        }),
-      ),
-    );
-    assert.equal(res.status, 422);
-    assert.match(String((await res.json()).error), /project type not found/);
-  },
-);
+test("apply still reaches the profile lookup for a real calendar date", async () => {
+  const { orgId } = await seed();
+  const res = await withOrgContext(orgId, () =>
+    POST(
+      postRequest({
+        action: "apply",
+        projectTypeIds: [randomUUID()],
+        overhead: { method: "none" },
+        effectiveFrom: "2026-03-31",
+        reason: "test",
+      }),
+    ),
+  );
+  assert.equal(res.status, 422);
+  assert.match(String((await res.json()).error), /project type not found/);
+});

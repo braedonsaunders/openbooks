@@ -15,8 +15,8 @@
  * runtime cycle that explodes depending on which module loads first.
  */
 export function foldWholeNumber(value: unknown): unknown {
-  if (value === undefined || value === null) return undefined
-  if (typeof value === 'string' && value.trim() === '') return undefined
-  const n = typeof value === 'number' ? value : Number(String(value).trim())
-  return Number.isInteger(n) ? n : value
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string" && value.trim() === "") return undefined;
+  const n = typeof value === "number" ? value : Number(String(value).trim());
+  return Number.isInteger(n) ? n : value;
 }

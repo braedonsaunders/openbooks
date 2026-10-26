@@ -45,8 +45,8 @@ const PL_REGIONS: PayrollCountryPack["regions"] = {
   regionNames: { PL: "Poland" },
   supported: ["PL"],
   unsupportedReason:
-    "income tax withholding for {region} is not implemented: the monthly PIT advance does not compute end to end. "
-    + "This region is not yet supported by the PL pack; contact support.",
+    "income tax withholding for {region} is not implemented: the monthly PIT advance does not compute end to end. " +
+    "This region is not yet supported by the PL pack; contact support.",
 };
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,15 @@ const PL_SLOTS: PayrollCountryPack["statutorySlots"] = [
       // (revenue minus KUP minus employee social contributions), so a
       // pre-tax deduction moves it — re-derived by the fixpoint like T4127
       // factor T.
-      { code: "PIT", name: "Zaliczka na podatek dochodowy (PIT)", systemKey: "pit", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+      {
+        code: "PIT",
+        name: "Zaliczka na podatek dochodowy (PIT)",
+        systemKey: "pit",
+        kind: "deduction",
+        sequence: 110,
+        assessedOn: "taxable_income",
+        remittance: "tax_authority",
+      },
     ],
   },
   {
@@ -70,9 +78,33 @@ const PL_SLOTS: PayrollCountryPack["statutorySlots"] = [
       // Employee social contributions collected by ZUS: emerytalne and
       // rentowe on the capped base, chorobowe on the full revenue.
       // Rate × base — deductions do not enter.
-      { code: "EMERYT", name: "Składka emerytalna (pracownik)", systemKey: "zus_emeryt", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "RENT", name: "Składka rentowa (pracownik)", systemKey: "zus_rent", kind: "deduction", sequence: 121, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "CHOR", name: "Składka chorobowa (pracownik)", systemKey: "zus_chor", kind: "deduction", sequence: 122, assessedOn: "earnings", remittance: "tax_authority" },
+      {
+        code: "EMERYT",
+        name: "Składka emerytalna (pracownik)",
+        systemKey: "zus_emeryt",
+        kind: "deduction",
+        sequence: 120,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "RENT",
+        name: "Składka rentowa (pracownik)",
+        systemKey: "zus_rent",
+        kind: "deduction",
+        sequence: 121,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "CHOR",
+        name: "Składka chorobowa (pracownik)",
+        systemKey: "zus_chor",
+        kind: "deduction",
+        sequence: 122,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
     ],
   },
   {
@@ -81,7 +113,15 @@ const PL_SLOTS: PayrollCountryPack["statutorySlots"] = [
       // NFZ zdrowotna: 9 % of revenue minus the employee's social
       // contributions, uncapped. The abated base is built first (art. 81
       // ust. 6) — never rate × brutto.
-      { code: "ZDR", name: "Składka zdrowotna (NFZ)", systemKey: "zus_zdr", kind: "deduction", sequence: 123, assessedOn: "earnings", remittance: "tax_authority" },
+      {
+        code: "ZDR",
+        name: "Składka zdrowotna (NFZ)",
+        systemKey: "zus_zdr",
+        kind: "deduction",
+        sequence: 123,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
     ],
   },
   {
@@ -90,9 +130,33 @@ const PL_SLOTS: PayrollCountryPack["statutorySlots"] = [
       // Employer social contributions collected by ZUS: emerytalne and
       // rentowe on the capped base; wypadkowe on the full revenue at the
       // payer-specific ZUS-notified rate.
-      { code: "EMERYT-ER", name: "Składka emerytalna (pracodawca)", systemKey: "zus_emeryt_er", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "RENT-ER", name: "Składka rentowa (pracodawca)", systemKey: "zus_rent_er", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "WYP-ER", name: "Składka wypadkowa (pracodawca)", systemKey: "wypadkowe_er", kind: "employer_contribution", sequence: 215, assessedOn: "earnings", remittance: "tax_authority" },
+      {
+        code: "EMERYT-ER",
+        name: "Składka emerytalna (pracodawca)",
+        systemKey: "zus_emeryt_er",
+        kind: "employer_contribution",
+        sequence: 210,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "RENT-ER",
+        name: "Składka rentowa (pracodawca)",
+        systemKey: "zus_rent_er",
+        kind: "employer_contribution",
+        sequence: 211,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "WYP-ER",
+        name: "Składka wypadkowa (pracodawca)",
+        systemKey: "wypadkowe_er",
+        kind: "employer_contribution",
+        sequence: 215,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
     ],
   },
   {
@@ -101,9 +165,33 @@ const PL_SLOTS: PayrollCountryPack["statutorySlots"] = [
       // Employer labour funds collected via ZUS on the uncapped base: FP
       // and FS at/above the minimum wage with the age bar, FGŚP always.
       // Rate × base; deductions do not enter.
-      { code: "FP-ER", name: "Fundusz Pracy (pracodawca)", systemKey: "fp_er", kind: "employer_contribution", sequence: 212, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "FS-ER", name: "Fundusz Solidarnościowy (pracodawca)", systemKey: "fs_er", kind: "employer_contribution", sequence: 213, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "FGSP-ER", name: "FGŚP (pracodawca)", systemKey: "fgsp_er", kind: "employer_contribution", sequence: 214, assessedOn: "earnings", remittance: "tax_authority" },
+      {
+        code: "FP-ER",
+        name: "Fundusz Pracy (pracodawca)",
+        systemKey: "fp_er",
+        kind: "employer_contribution",
+        sequence: 212,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "FS-ER",
+        name: "Fundusz Solidarnościowy (pracodawca)",
+        systemKey: "fs_er",
+        kind: "employer_contribution",
+        sequence: 213,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "FGSP-ER",
+        name: "FGŚP (pracodawca)",
+        systemKey: "fgsp_er",
+        kind: "employer_contribution",
+        sequence: 214,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
     ],
   },
 ];
@@ -128,15 +216,20 @@ const PL_RATES: PayrollPackRates = {
       // Missing it would omit an always-owed employer contribution.
       whenUnconfigured: "refuse",
       citation:
-        "Ustawa o systemie ubezpieczeń społecznych, art. 22 ust. 2 (różnicowanie stopy wypadkowej); "
-        + "ZUS, Ustalanie stopy procentowej składki na ubezpieczenie wypadkowe (stan prawny 1 stycznia 2026), "
-        + "https://www.zus.pl/documents/10182/167567/poradnik_wypadkowe.pdf/15281e1b-c3f3-472a-81b3-7d10e1a434c8",
+        "Ustawa o systemie ubezpieczeń społecznych, art. 22 ust. 2 (różnicowanie stopy wypadkowej); " +
+        "ZUS, Ustalanie stopy procentowej składki na ubezpieczenie wypadkowe (stan prawny 1 stycznia 2026), " +
+        "https://www.zus.pl/documents/10182/167567/poradnik_wypadkowe.pdf/15281e1b-c3f3-472a-81b3-7d10e1a434c8",
       variesBecause:
         "ZUS sets each payer its own wypadkowe rate from its activity risk category and claims record — a figure no published table can supply.",
       fields: [
         {
-          key: "stopa", label: "Stopa wypadkowa (%)", kind: "percent", decimals: 4,
-          min: "0", max: "100", required: true,
+          key: "stopa",
+          label: "Stopa wypadkowa (%)",
+          kind: "percent",
+          decimals: 4,
+          min: "0",
+          max: "100",
+          required: true,
           help: "As a percent, as notified for this payer for the rok składkowy: 1.67 is 1.67%.",
         },
       ],
@@ -158,7 +251,8 @@ export const PL_PAYROLL_PACK: PayrollCountryPack = {
     example: "44051401359",
     requiredForPayroll: true,
     neededFor: "PIT-11",
-    citation: "Ustawa o ewidencji ludności, art. 15 ust. 2; Rozporządzenie MSW z 4 stycznia 2012 r., §7",
+    citation:
+      "Ustawa o ewidencji ludności, art. 15 ust. 2; Rozporządzenie MSW z 4 stycznia 2012 r., §7",
     validator: {
       validate: isValidPesel,
       refusalReason: "check the encoded birth date and the final control digit",
@@ -181,7 +275,8 @@ export const PL_PAYROLL_PACK: PayrollCountryPack = {
   // of the period paid (art. 32).
   retroactivePayTreatment: "periodic",
   contributoryBases: {
-    pensionable: "Podstawa wymiaru składek na ubezpieczenia emerytalne i rentowe (capped at the 282 600 zł annual limit)",
+    pensionable:
+      "Podstawa wymiaru składek na ubezpieczenia emerytalne i rentowe (capped at the 282 600 zł annual limit)",
     // No employee contribution in this pack is assessed on a separate
     // insurable base: chorobowe, wypadkowe and zdrowotna all price the same
     // revenue (chorobowe/wypadkowe uncapped, zdrowotna abated) — so the flag

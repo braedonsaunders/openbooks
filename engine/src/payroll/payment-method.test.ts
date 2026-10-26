@@ -1,8 +1,18 @@
 import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
-  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
+  seedPayrollSchedule,
+  seedPayrollEmployeeRole,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -45,28 +55,39 @@ const resolve = (input: {
   partyMethod?: string | null;
   hasApprovedBankDetails?: boolean;
   fallbackToCheque?: boolean;
-}) => resolvePayrollPaymentMethod({
-  profileMethod: input.profileMethod ?? null,
-  partyMethod: input.partyMethod ?? null,
-  hasApprovedBankDetails: input.hasApprovedBankDetails ?? false,
-  fallbackToCheque: input.fallbackToCheque ?? true,
-});
+}) =>
+  resolvePayrollPaymentMethod({
+    profileMethod: input.profileMethod ?? null,
+    partyMethod: input.partyMethod ?? null,
+    hasApprovedBankDetails: input.hasApprovedBankDetails ?? false,
+    fallbackToCheque: input.fallbackToCheque ?? true,
+  });
 
 test("nothing configured: bank details decide, and the answer is never nothing", () => {
   assert.deepEqual(resolve({ hasApprovedBankDetails: true }), {
-    method: "eft", configured: "eft", source: "default",
-    missingBankDetails: false, unpayable: false,
+    method: "eft",
+    configured: "eft",
+    source: "default",
+    missingBankDetails: false,
+    unpayable: false,
   });
   // THE case this whole module exists for: no bank details is not an error,
   // it is a cheque.
   assert.deepEqual(resolve({ hasApprovedBankDetails: false }), {
-    method: "cheque", configured: "cheque", source: "default",
-    missingBankDetails: false, unpayable: false,
+    method: "cheque",
+    configured: "cheque",
+    source: "default",
+    missingBankDetails: false,
+    unpayable: false,
   });
 });
 
 test("the payroll override on the profile wins over the party preference", () => {
-  const cheque = resolve({ profileMethod: "cheque", partyMethod: "eft", hasApprovedBankDetails: true });
+  const cheque = resolve({
+    profileMethod: "cheque",
+    partyMethod: "eft",
+    hasApprovedBankDetails: true,
+  });
   assert.equal(cheque.method, "cheque");
   assert.equal(cheque.source, "profile");
   // An employee who holds approved bank details but is paid by cheque must NOT
@@ -98,7 +119,11 @@ test("configured EFT with no bank details falls back to cheque, and says so", ()
 });
 
 test("with the fallback turned off the same employee is unpayable, not silently rerouted", () => {
-  const blocked = resolve({ partyMethod: "eft", hasApprovedBankDetails: false, fallbackToCheque: false });
+  const blocked = resolve({
+    partyMethod: "eft",
+    hasApprovedBankDetails: false,
+    fallbackToCheque: false,
+  });
   assert.equal(blocked.method, "eft");
   assert.equal(blocked.missingBankDetails, true);
   assert.equal(blocked.unpayable, true);
@@ -110,7 +135,10 @@ test("every input combination resolves to one of the two rails", () => {
       for (const hasApprovedBankDetails of [true, false]) {
         for (const fallbackToCheque of [true, false]) {
           const resolved = resolve({
-            profileMethod, partyMethod, hasApprovedBankDetails, fallbackToCheque,
+            profileMethod,
+            partyMethod,
+            hasApprovedBankDetails,
+            fallbackToCheque,
           });
           assert.ok(
             (PAYROLL_PAYMENT_METHODS as readonly string[]).includes(resolved.method),
@@ -149,12 +177,18 @@ test("the SQL ladder gives the same answer as the resolver", { skip: !DB }, asyn
             hasBank: sql`${hasBank}::boolean`,
             fallbackToCheque,
           });
-          const row = (await db.execute<{ method: string }>(
-            sql`select ${expression} as method`, "objects",
-          ));
+          const row = await db.execute<{ method: string }>(
+            sql`select ${expression} as method`,
+            "objects",
+          );
           assert.equal(
             row[0]!.method,
-            resolve({ profileMethod, partyMethod, hasApprovedBankDetails: hasBank, fallbackToCheque }).method,
+            resolve({
+              profileMethod,
+              partyMethod,
+              hasApprovedBankDetails: hasBank,
+              fallbackToCheque,
+            }).method,
             `SQL disagrees for ${profileMethod}/${partyMethod}/bank=${hasBank}/fallback=${fallbackToCheque}`,
           );
         }
@@ -168,7 +202,10 @@ test("the SQL ladder gives the same answer as the resolver", { skip: !DB }, asyn
 /* ------------------------------------------------------------------ */
 
 interface Fixture {
-  orgId: string; subsidiaryId: string; actorId: string; scheduleId: string;
+  orgId: string;
+  subsidiaryId: string;
+  actorId: string;
+  scheduleId: string;
   accounts: Record<string, string>;
 }
 
@@ -194,35 +231,57 @@ async function payrollOrg(): Promise<Fixture> {
     vacationPayable: await account(org.orgId, "2320", "Vacation payable", "liability_current"),
   };
   await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: accounts.craPayable, ei: accounts.craPayable, qpip: accounts.craPayable, income_tax: accounts.craPayable, vacation: accounts.vacationPayable } },
-        wageExpenseAccountId: accounts.wageExpense,
-        burdenExpenseAccountId: accounts.burdenExpense,
-        netPayAccountId: accounts.netPayable,
+    slotAccounts: {
+      CA: {
+        cpp: accounts.craPayable,
+        ei: accounts.craPayable,
+        qpip: accounts.craPayable,
+        income_tax: accounts.craPayable,
+        vacation: accounts.vacationPayable,
+      },
+    },
+    wageExpenseAccountId: accounts.wageExpense,
+    burdenExpenseAccountId: accounts.burdenExpense,
+    netPayAccountId: accounts.netPayable,
 
-        wagesTo: "expense",
-      });
+    wagesTo: "expense",
+  });
   await seedPayrollComponents(org.orgId, actorId, "CA");
   // The ON hires calculate, so the EHT leg resolves (never asserted here).
   await seedOntarioEhtFixture(org.orgId, actorId);
-  const chequeBankId = await account(org.orgId, '1095', 'Payroll cheque stock bank', 'asset_bank', org.subsidiaryId);
-  const chequeFormatId = randomUUID(), chequeProfileId = randomUUID();
+  const chequeBankId = await account(
+    org.orgId,
+    "1095",
+    "Payroll cheque stock bank",
+    "asset_bank",
+    org.subsidiaryId,
+  );
+  const chequeFormatId = randomUUID(),
+    chequeProfileId = randomUUID();
   await db.execute(sql`insert into payment_formats(id,org_id,code,name,rail,direction,created_by,updated_by)
     values(${chequeFormatId},${org.orgId},'PAYROLL_CHEQUE','Payroll cheque register','cheque','credit',${actorId},${actorId})`);
   await db.execute(sql`insert into payment_bank_profiles(id,org_id,name,bank_account_id,payment_format_id,subsidiary_id,currency,created_by,updated_by)
     values(${chequeProfileId},${org.orgId},'Preprinted payroll cheque stock',${chequeBankId},${chequeFormatId},${org.subsidiaryId},'CAD',${actorId},${actorId})`);
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    name: "Biweekly",
+    frequency: "biweekly",
+    periodsPerYear: 26,
+    anchorPeriodEnd: "2026-07-18",
     payDateOffsetDays: 3,
   });
   return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, accounts };
 }
 
-async function employee(fx: Fixture, name: string, opts: {
-  partyMethod?: "eft" | "cheque" | "card" | "cash" | "other" | null;
-  profileMethod?: "eft" | "cheque" | null;
-  approvedBank?: boolean;
-} = {}): Promise<string> {
+async function employee(
+  fx: Fixture,
+  name: string,
+  opts: {
+    partyMethod?: "eft" | "cheque" | "card" | "cash" | "other" | null;
+    profileMethod?: "eft" | "cheque" | null;
+    approvedBank?: boolean;
+  } = {},
+): Promise<string> {
   const id = randomUUID();
   await seedPayrollPerson(fx.orgId, id, name, {
     paymentMethod: opts.partyMethod ?? null,
@@ -230,25 +289,54 @@ async function employee(fx: Fixture, name: string, opts: {
   await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID() });
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   await seedPayrollWage(fx.orgId, id, fx.actorId, {
-    currency: 'CAD', rate: '30', basis: 'hour', annualHours: '2080', effectiveFrom: '2026-01-01',
+    currency: "CAD",
+    rate: "30",
+    basis: "hour",
+    annualHours: "2080",
+    effectiveFrom: "2026-01-01",
   });
-  await seedPayrollProfile(fx.orgId, id, employmentId, fx.scheduleId, fx.actorId, {
-      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
-    country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
-    paymentMethod: opts.profileMethod ?? null,
-  }, { percentFloor: '4', method: 'accrue' });
+  await seedPayrollProfile(
+    fx.orgId,
+    id,
+    employmentId,
+    fx.scheduleId,
+    fx.actorId,
+    {
+      wcbExempt: true,
+      wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+      federalClaimCode: 1,
+      provincialClaimCode: 1,
+      paymentMethod: opts.profileMethod ?? null,
+    },
+    { percentFloor: "4", method: "accrue" },
+  );
 
   if (opts.approvedBank) {
-    await seedApprovedBankAccountFixture({ orgId: fx.orgId, actorId: fx.actorId, partyId: id,
-      bankName: 'Test Bank', country: 'CA', currency: 'CAD', routing: {}, lastFour: '1234' });
+    await seedApprovedBankAccountFixture({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      partyId: id,
+      bankName: "Test Bank",
+      country: "CA",
+      currency: "CAD",
+      routing: {},
+      lastFour: "1234",
+    });
   }
   return id;
 }
 
 const hours = async (fx: Fixture, employeeId: string, workedOn: string, qty: string) =>
   await seedPayrollTime(fx.orgId, employeeId, fx.actorId, {
-    workedOn: workedOn, hours: qty, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-    costingBasis: 'actual',
+    workedOn: workedOn,
+    hours: qty,
+    status: "approved",
+    isBillable: false,
+    billingStatus: "unbilled",
+    costingBasis: "actual",
   });
 
 test(
@@ -264,7 +352,9 @@ test(
     const wired = await employee(fx, "Ada Wired", { partyMethod: "eft", approvedBank: true });
     const paper = await employee(fx, "Bo Paper");
     const overridden = await employee(fx, "Cy Override", {
-      partyMethod: "eft", profileMethod: "cheque", approvedBank: true,
+      partyMethod: "eft",
+      profileMethod: "cheque",
+      approvedBank: true,
     });
     const stranded = await employee(fx, "Di Stranded", { partyMethod: "eft" });
     for (const id of [wired, paper, overridden, stranded]) {
@@ -274,11 +364,16 @@ test(
     }
 
     const run = await createPayRun({
-      orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-      periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      payScheduleId: fx.scheduleId,
+      periodStart: "2026-07-05",
+      periodEnd: "2026-07-18",
     });
     const calc = await calculatePayRun({
-      orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+      orgId: fx.orgId,
+      documentId: run.documentId,
+      actorId: fx.actorId,
     });
     assert.deepEqual(calc.errors, []);
     assert.equal(calc.employees, 4);
@@ -295,7 +390,10 @@ test(
     // override employee's account as well as handing them a cheque would pay
     // them twice — that is the defect this split exists to prevent.
     const file = await payRunBankFilePopulation(fx.orgId, run.documentId);
-    assert.deepEqual(file.entries.map((e) => e.employeePartyId), [wired]);
+    assert.deepEqual(
+      file.entries.map((e) => e.employeePartyId),
+      [wired],
+    );
     assert.deepEqual(
       file.excludedCheque.map((e) => e.employeePartyId).sort(),
       [paper, overridden, stranded].sort(),
@@ -307,10 +405,7 @@ test(
     const cheque = funding.rails.find((r) => r.method === "cheque")!;
     assert.equal(eft.employees, 1);
     assert.equal(cheque.employees, 3);
-    assert.equal(
-      Number(eft.netPay) + Number(cheque.netPay),
-      Number(funding.netPay),
-    );
+    assert.equal(Number(eft.netPay) + Number(cheque.netPay), Number(funding.netPay));
     assert.equal(Number(eft.netPay), Number(file.total));
 
     // Readiness: three employees have no bank details and exactly ONE of them
@@ -318,8 +413,14 @@ test(
     const readiness = await payRunReadiness(fx.orgId, run.documentId);
     const noBank = readiness.items.find((i) => i.code === "employee.noBankDetails");
     assert.equal(noBank?.severity, "warning");
-    assert.deepEqual(noBank?.employees.map((e) => e.partyId), [stranded]);
-    assert.equal(readiness.items.some((i) => i.code === "employee.eftNoBankDetails"), false);
+    assert.deepEqual(
+      noBank?.employees.map((e) => e.partyId),
+      [stranded],
+    );
+    assert.equal(
+      readiness.items.some((i) => i.code === "employee.eftNoBankDetails"),
+      false,
+    );
 
     // Turning the safety net off makes the same employee a blocker instead.
     await db.execute(sql`
@@ -329,8 +430,14 @@ test(
     const strict = await payRunReadiness(fx.orgId, run.documentId);
     const blocker = strict.items.find((i) => i.code === "employee.eftNoBankDetails");
     assert.equal(blocker?.severity, "blocker");
-    assert.deepEqual(blocker?.employees.map((e) => e.partyId), [stranded]);
-    assert.equal(strict.items.some((i) => i.code === "employee.noBankDetails"), false);
+    assert.deepEqual(
+      blocker?.employees.map((e) => e.partyId),
+      [stranded],
+    );
+    assert.equal(
+      strict.items.some((i) => i.code === "employee.noBankDetails"),
+      false,
+    );
     await db.execute(sql`
       update orgs set settings = settings #- '{payroll,eftFallbackToCheque}' where id = ${fx.orgId}`);
 
@@ -342,18 +449,31 @@ test(
     );
     await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
     const batch = await issuePayRunCheques({
-      orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+      orgId: fx.orgId,
+      documentId: run.documentId,
+      actorId: fx.actorId,
     });
     assert.equal(batch.issued, 3);
-    assert.deepEqual(batch.cheques.map((c) => c.chequeNumber), ["CHQ-00001", "CHQ-00002", "CHQ-00003"]);
+    assert.deepEqual(
+      batch.cheques.map((c) => c.chequeNumber),
+      ["CHQ-00001", "CHQ-00002", "CHQ-00003"],
+    );
     assert.equal(Number(batch.total), Number(cheque.netPay));
-    assert.equal(batch.cheques.some((c) => c.employeePartyId === wired), false);
+    assert.equal(
+      batch.cheques.some((c) => c.employeePartyId === wired),
+      false,
+    );
 
     const again = await issuePayRunCheques({
-      orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+      orgId: fx.orgId,
+      documentId: run.documentId,
+      actorId: fx.actorId,
     });
     assert.equal(again.issued, 0);
-    assert.deepEqual(again.cheques.map((c) => c.chequeNumber), batch.cheques.map((c) => c.chequeNumber));
+    assert.deepEqual(
+      again.cheques.map((c) => c.chequeNumber),
+      batch.cheques.map((c) => c.chequeNumber),
+    );
     assert.deepEqual(
       (await payRunCheques(fx.orgId, run.documentId)).cheques.map((c) => c.chequeNumber),
       batch.cheques.map((c) => c.chequeNumber),
@@ -375,10 +495,18 @@ test(
                 '{}'::jsonb, false, true, '{}'::jsonb)`);
       const sharedBankId = await account(fx.orgId, "9000", "Shared Payroll Bank", "asset_bank");
       const rootBankId = await account(
-        fx.orgId, "9010", "Root Payroll Bank", "asset_bank", fx.subsidiaryId,
+        fx.orgId,
+        "9010",
+        "Root Payroll Bank",
+        "asset_bank",
+        fx.subsidiaryId,
       );
       const childBankId = await account(
-        fx.orgId, "9020", "Child Payroll Bank", "asset_bank", childSubsidiaryId,
+        fx.orgId,
+        "9020",
+        "Child Payroll Bank",
+        "asset_bank",
+        childSubsidiaryId,
       );
       const run = await createPayRun({
         orgId: fx.orgId,
@@ -394,20 +522,13 @@ test(
       assert.ok(unrestrictedIds.has(rootBankId));
       assert.ok(unrestrictedIds.has(childBankId));
 
-      const restricted = await payRunFunding(
-        fx.orgId,
-        run.documentId,
-        new Set([fx.subsidiaryId]),
-      );
+      const restricted = await payRunFunding(fx.orgId, run.documentId, new Set([fx.subsidiaryId]));
       const restrictedIds = new Set(restricted.accounts.map((row) => row.id));
       assert.ok(restrictedIds.has(sharedBankId));
       assert.ok(restrictedIds.has(rootBankId));
       assert.equal(restrictedIds.has(childBankId), false);
 
-      await assert.rejects(
-        payRunFunding(fx.orgId, run.documentId, new Set()),
-        /pay run not found/,
-      );
+      await assert.rejects(payRunFunding(fx.orgId, run.documentId, new Set()), /pay run not found/);
     } finally {
       // The scratch-org teardown removes the child subsidiary and all account
       // rows with it, including the balances read by the funding query.

@@ -1,10 +1,10 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
-import { add, cmp, neg, normalizeMoney } from '@openbooks/engine/money/money'
-import { marginPercentText } from './financial-decimal'
-import { subsidiaryVisibleFilter } from './subsidiaries'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
+import { add, cmp, neg, normalizeMoney } from "@openbooks/engine/money/money";
+import { marginPercentText } from "./financial-decimal";
+import { subsidiaryVisibleFilter } from "./subsidiaries";
 
 /**
  * Set-based job-cost ranking across MANY projects — the portfolio view that
@@ -22,83 +22,83 @@ import { subsidiaryVisibleFilter } from './subsidiaries'
  * includes them and says so.
  */
 
-const COST_TYPES = ['expense', 'cogs', 'expense_other', 'expense_deferred']
-const REVENUE_TYPES = ['income', 'income_other']
+const COST_TYPES = ["expense", "cogs", "expense_other", "expense_deferred"];
+const REVENUE_TYPES = ["income", "income_other"];
 
 export const PROJECT_RANK_SORTS = [
-  'margin_asc',
-  'margin_desc',
-  'margin_percent_asc',
-  'cost_desc',
-  'revenue_desc',
-  'contract_value_desc',
-  'over_budget_desc',
-  'unbilled_contract_desc',
-] as const
-export type ProjectRankSort = (typeof PROJECT_RANK_SORTS)[number]
+  "margin_asc",
+  "margin_desc",
+  "margin_percent_asc",
+  "cost_desc",
+  "revenue_desc",
+  "contract_value_desc",
+  "over_budget_desc",
+  "unbilled_contract_desc",
+] as const;
+export type ProjectRankSort = (typeof PROJECT_RANK_SORTS)[number];
 
 export interface ProjectRankingArgs {
-  statuses?: readonly string[]
-  billingMethod?: string
-  query?: string
-  customerQuery?: string
-  negativeMarginOnly?: boolean
-  overBudgetOnly?: boolean
+  statuses?: readonly string[];
+  billingMethod?: string;
+  query?: string;
+  customerQuery?: string;
+  negativeMarginOnly?: boolean;
+  overBudgetOnly?: boolean;
   /** Drop projects with neither posted cost nor posted revenue (default true). */
-  withActivityOnly?: boolean
-  sort?: ProjectRankSort
-  limit: number
-  offset?: number
+  withActivityOnly?: boolean;
+  sort?: ProjectRankSort;
+  limit: number;
+  offset?: number;
 }
 
 export interface ProjectRankingRow {
-  id: string
-  code: string | null
-  name: string
-  status: string
-  customer: string | null
-  projectType: string | null
-  billingMethod: string | null
-  contractValue: string
-  costBudget: string
-  cost: string
-  revenue: string
-  margin: string
+  id: string;
+  code: string | null;
+  name: string;
+  status: string;
+  customer: string | null;
+  projectType: string | null;
+  billingMethod: string | null;
+  contractValue: string;
+  costBudget: string;
+  cost: string;
+  revenue: string;
+  margin: string;
   /** margin ÷ revenue × 100 at two decimals; null when there is no revenue. */
-  marginPercent: string | null
-  committedCost: string
+  marginPercent: string | null;
+  committedCost: string;
   /** cost + committed − cost budget; positive = over budget (null without a budget). */
-  budgetOverrun: string | null
+  budgetOverrun: string | null;
   /** contract value − posted revenue; what remains to bill on a fixed contract. */
-  unbilledContract: string
+  unbilledContract: string;
 }
 
 export interface ProjectRanking {
-  total: number
-  rows: ProjectRankingRow[]
+  total: number;
+  rows: ProjectRankingRow[];
 }
 
-const m = (v: unknown) => normalizeMoney(v == null ? '0' : String(v))
+const m = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 
 function orderBy(sort: ProjectRankSort): SQL {
   switch (sort) {
-    case 'margin_desc':
-      return sql`margin desc, name`
-    case 'margin_percent_asc':
-      return sql`(case when revenue = 0 then null else margin / revenue end) asc nulls last, margin asc, name`
-    case 'cost_desc':
-      return sql`cost desc, name`
-    case 'revenue_desc':
-      return sql`revenue desc, name`
-    case 'contract_value_desc':
-      return sql`contract_value desc, name`
-    case 'over_budget_desc':
-      return sql`(case when cost_budget > 0 then cost + committed_cost - cost_budget else null end) desc nulls last, name`
-    case 'unbilled_contract_desc':
-      return sql`(contract_value - revenue) desc, name`
-    case 'margin_asc':
+    case "margin_desc":
+      return sql`margin desc, name`;
+    case "margin_percent_asc":
+      return sql`(case when revenue = 0 then null else margin / revenue end) asc nulls last, margin asc, name`;
+    case "cost_desc":
+      return sql`cost desc, name`;
+    case "revenue_desc":
+      return sql`revenue desc, name`;
+    case "contract_value_desc":
+      return sql`contract_value desc, name`;
+    case "over_budget_desc":
+      return sql`(case when cost_budget > 0 then cost + committed_cost - cost_budget else null end) desc nulls last, name`;
+    case "unbilled_contract_desc":
+      return sql`(contract_value - revenue) desc, name`;
+    case "margin_asc":
     default:
-      return sql`margin asc, name`
+      return sql`margin asc, name`;
   }
 }
 
@@ -107,20 +107,27 @@ export async function rankProjects(
   args: ProjectRankingArgs,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<ProjectRanking> {
-  const limit = Math.max(1, Math.min(args.limit, 100))
-  const offset = Math.max(0, args.offset ?? 0)
-  const sort = args.sort ?? 'margin_asc'
-  const like = args.query ? `%${args.query}%` : null
-  const customerLike = args.customerQuery ? `%${args.customerQuery}%` : null
-  const statuses = args.statuses?.length ? args.statuses : null
-  const withActivityOnly = args.withActivityOnly ?? true
+  const limit = Math.max(1, Math.min(args.limit, 100));
+  const offset = Math.max(0, args.offset ?? 0);
+  const sort = args.sort ?? "margin_asc";
+  const like = args.query ? `%${args.query}%` : null;
+  const customerLike = args.customerQuery ? `%${args.customerQuery}%` : null;
+  const statuses = args.statuses?.length ? args.statuses : null;
+  const withActivityOnly = args.withActivityOnly ?? true;
 
-  const costSet = sql`(${sql.join(COST_TYPES.map((t) => sql`${t}`), sql`, `)})`
-  const revenueSet = sql`(${sql.join(REVENUE_TYPES.map((t) => sql`${t}`), sql`, `)})`
-  const projectScope = subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)
-  const lineScope = subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)
+  const costSet = sql`(${sql.join(
+    COST_TYPES.map((t) => sql`${t}`),
+    sql`, `,
+  )})`;
+  const revenueSet = sql`(${sql.join(
+    REVENUE_TYPES.map((t) => sql`${t}`),
+    sql`, `,
+  )})`;
+  const projectScope = subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds);
+  const lineScope = subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds);
 
-  const res = await db.execute<Record<string, unknown>>(sql`
+  const res = await db.execute<Record<string, unknown>>(
+    sql`
     with book as (
       select b.id from accounting_books b
        where b.org_id = ${orgId} and b.is_primary and b.is_active and b.posts_gl
@@ -133,7 +140,14 @@ export async function rankProjects(
         left join parties c on c.id = p.customer_id and c.org_id = p.org_id
         left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
        where p.org_id = ${orgId}${projectScope}
-         ${statuses ? sql`and p.status in (${sql.join(statuses.map((s) => sql`${s}`), sql`, `)})` : sql``}
+         ${
+           statuses
+             ? sql`and p.status in (${sql.join(
+                 statuses.map((s) => sql`${s}`),
+                 sql`, `,
+               )})`
+             : sql``
+         }
          ${args.billingMethod ? sql`and pt.billing_method = ${args.billingMethod}` : sql``}
          ${like ? sql`and (p.name ilike ${like} or p.code ilike ${like})` : sql``}
          ${customerLike ? sql`and c.display_name ilike ${customerLike}` : sql``}
@@ -199,15 +213,17 @@ export async function rankProjects(
        ${args.overBudgetOnly ? sql`and cost_budget > 0 and cost + committed_cost > cost_budget` : sql``}
      order by ${orderBy(sort)}
      limit ${limit} offset ${offset}
-  `, 'objects')
+  `,
+    "objects",
+  );
 
   const rows = res.map((r): ProjectRankingRow => {
-    const revenue = m(r.revenue)
-    const margin = m(r.margin)
-    const costBudget = m(r.cost_budget)
-    const cost = m(r.cost)
-    const committed = m(r.committed_cost)
-    const contractValue = m(r.contract_value)
+    const revenue = m(r.revenue);
+    const margin = m(r.margin);
+    const costBudget = m(r.cost_budget);
+    const cost = m(r.cost);
+    const committed = m(r.committed_cost);
+    const contractValue = m(r.contract_value);
     return {
       id: String(r.id),
       code: r.code == null ? null : String(r.code),
@@ -223,9 +239,9 @@ export async function rankProjects(
       margin,
       marginPercent: marginPercentText(margin, revenue),
       committedCost: committed,
-      budgetOverrun: cmp(costBudget, '0') > 0 ? add(add(cost, committed), neg(costBudget)) : null,
+      budgetOverrun: cmp(costBudget, "0") > 0 ? add(add(cost, committed), neg(costBudget)) : null,
       unbilledContract: add(contractValue, neg(revenue)),
-    }
-  })
-  return { total: Number(res[0]?.total ?? 0), rows }
+    };
+  });
+  return { total: Number(res[0]?.total ?? 0), rows };
 }

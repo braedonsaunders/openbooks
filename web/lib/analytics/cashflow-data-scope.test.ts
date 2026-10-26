@@ -9,18 +9,22 @@ Object.assign(globalThis, { [stateKey]: state });
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
   if (!Array.isArray(chunks)) return "";
-  return chunks.map((chunk) => {
-    if (typeof chunk === "string") return chunk;
-    const value = (chunk as { value?: unknown[] })?.value;
-    if (Array.isArray(value)) return value.map(String).join("");
-    if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
-    return "";
-  }).join("");
+  return chunks
+    .map((chunk) => {
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
+    })
+    .join("");
 }
 Object.assign(globalThis, { __cashflowSqlText: sqlText });
 
 const boundaries = new Map<string, string>([
-  [new URL("./query.ts", import.meta.url).href, `
+  [
+    new URL("./query.ts", import.meta.url).href,
+    `
     const state = globalThis[Symbol.for("openbooks.cashflow-data-scope-test")];
     export async function analyticsQuery(query) {
       const text = globalThis.__cashflowSqlText(query);
@@ -28,32 +32,50 @@ const boundaries = new Map<string, string>([
       if (text.includes('base_currency as "baseCurrency"')) return { rows: [{ baseCurrency: "USD" }] };
       return { rows: [] };
     }
-  `],
-  [new URL("../../../engine/src/platform/business-date.ts", import.meta.url).href, `
+  `,
+  ],
+  [
+    new URL("../../../engine/src/platform/business-date.ts", import.meta.url).href,
+    `
     export * from ${JSON.stringify(new URL("../../../engine/src/platform/business-date.ts", import.meta.url).href + "?native")};
     export async function businessToday() { return "2026-09-01"; }
-  `],
-  [new URL("../cash/open-items.ts", import.meta.url).href, `export async function openItems() { return []; }`],
-  [new URL("../fiscal.ts", import.meta.url).href, `
+  `,
+  ],
+  [
+    new URL("../cash/open-items.ts", import.meta.url).href,
+    `export async function openItems() { return []; }`,
+  ],
+  [
+    new URL("../fiscal.ts", import.meta.url).href,
+    `
     export async function fiscalStartMonth() { return 1; }
     export async function defaultFiscalCalendarPeriods() { return null; }
-  `],
-  [new URL("../money-server.ts", import.meta.url).href, `
+  `,
+  ],
+  [
+    new URL("../money-server.ts", import.meta.url).href,
+    `
     import { createMoneyFormatter } from ${JSON.stringify(new URL("../money-format.ts", import.meta.url).href)};
     export async function getMoneyFormatter() { return createMoneyFormatter("en-US", "USD"); }
-  `],
-  [new URL("../org-scope.ts", import.meta.url).href, `
+  `,
+  ],
+  [
+    new URL("../org-scope.ts", import.meta.url).href,
+    `
     export async function resolveOrgId(orgId) {
       if (orgId !== "org") throw new Error("Unexpected cashflow fixture organization");
       return orgId;
     }
-  `],
+  `,
+  ],
 ]);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const resolved = nextResolve(specifier, context);
     const source = boundaries.get(resolved.url);
-    return source === undefined ? resolved : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) };
+    return source === undefined
+      ? resolved
+      : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) };
   },
 });
 
@@ -62,14 +84,37 @@ hooks.deregister();
 
 test("cashflow forecast excludes categories outside a restricted subsidiary view", async () => {
   state.categories = [
-    { id: "unattributed", name: "General", method: "manual_recurring", amount: "10.0000", frequency: "weekly" },
-    { id: "subsidiary-a", name: "A rent", method: "manual_recurring", amount: "20.0000", frequency: "weekly", subsidiaryIds: ["a"] },
-    { id: "subsidiary-b", name: "B rent", method: "manual_recurring", amount: "30.0000", frequency: "weekly", subsidiaryIds: ["b"] },
+    {
+      id: "unattributed",
+      name: "General",
+      method: "manual_recurring",
+      amount: "10.0000",
+      frequency: "weekly",
+    },
+    {
+      id: "subsidiary-a",
+      name: "A rent",
+      method: "manual_recurring",
+      amount: "20.0000",
+      frequency: "weekly",
+      subsidiaryIds: ["a"],
+    },
+    {
+      id: "subsidiary-b",
+      name: "B rent",
+      method: "manual_recurring",
+      amount: "30.0000",
+      frequency: "weekly",
+      subsidiaryIds: ["b"],
+    },
   ];
 
   const result = await cashflowData("org", 4, "2026-09-01", new Set(["a"]));
 
-  assert.deepEqual(result.categories.map((category) => category.id), ["subsidiary-a"]);
+  assert.deepEqual(
+    result.categories.map((category) => category.id),
+    ["subsidiary-a"],
+  );
   // September 1 is Tuesday: four of the current week's five business days
   // remain, followed by three complete weeks (16 + 20 + 20 + 20).
   assert.deepEqual(result.categories[0]?.weekly, ["16.0000", "20.0000", "20.0000", "20.0000"]);

@@ -4,10 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-const crmRealUrl = new URL(
-  "../../../../engine/src/crm/crm.ts",
-  import.meta.url,
-).href;
+const crmRealUrl = new URL("../../../../engine/src/crm/crm.ts", import.meta.url).href;
 
 const mockCrm = `
   import { CrmLifecycleRefusalError } from ${JSON.stringify(crmRealUrl)};
@@ -34,12 +31,9 @@ const hooks = registerHooks({
   },
 });
 
-const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/platform/db"
-);
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createOrder } = await import("./create.ts");
 hooks.deregister();
 
@@ -51,36 +45,47 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  * through the refusal with a module double (a real demotion can no longer
  * reach it: quoting only ever advances the lifecycle).
  */
-test("an estimate create maps a lifecycle refusal to a 422 with its message", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Estimator", "admin"));
-    const partyId = (await withBypassContext(() =>
-        db.execute<{ id: string }>(sql`
+test(
+  "an estimate create maps a lifecycle refusal to a 422 with its message",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actorId = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Estimator", "admin"),
+      );
+      const partyId = (
+        await withBypassContext(() =>
+          db.execute<{ id: string }>(
+            sql`
           insert into parties (org_id, kind, display_name, is_active)
-          values (${org.orgId}, 'company', 'Refused Customer', true) returning id`, "objects"),
-      ))[0]!.id;
-    const res = (await withOrgContext(
-      org.orgId,
-      () =>
-        createOrder(
-          { kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" },
-          { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: null } as never,
-          new Request("http://openbooks.test/api/estimates", {
-            method: "POST",
-            headers: { "Idempotency-Key": randomUUID() },
-          }),
-          {
-            partyId,
-            documentDate: org.date,
-            lines: [{ itemId: org.items.service, quantity: "1", unitPrice: "100" }],
-          } as never,
-        ) as Promise<Response>,
-    )) as Response;
-    assert.equal(res.status, 422);
-    const body = (await res.json()) as { error?: unknown };
-    assert.match(String(body.error ?? ""), /cannot demote this customer/);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+          values (${org.orgId}, 'company', 'Refused Customer', true) returning id`,
+            "objects",
+          ),
+        )
+      )[0]!.id;
+      const res = (await withOrgContext(
+        org.orgId,
+        () =>
+          createOrder(
+            { kind: "quote", createPerm: "ar.create", numberPrefix: "EST-" },
+            { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: null } as never,
+            new Request("http://openbooks.test/api/estimates", {
+              method: "POST",
+              headers: { "Idempotency-Key": randomUUID() },
+            }),
+            {
+              partyId,
+              documentDate: org.date,
+              lines: [{ itemId: org.items.service, quantity: "1", unitPrice: "100" }],
+            } as never,
+          ) as Promise<Response>,
+      )) as Response;
+      assert.equal(res.status, 422);
+      const body = (await res.json()) as { error?: unknown };
+      assert.match(String(body.error ?? ""), /cannot demote this customer/);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

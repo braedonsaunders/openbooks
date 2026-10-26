@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button } from '@openbooks/ui'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { promptDialog } from '@/lib/prompt'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button } from "@openbooks/ui";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { promptDialog } from "@/lib/prompt";
 
 /**
  * Reconcile one legacy-provenance obligation: the operator attests the
@@ -15,43 +15,43 @@ import { promptDialog } from '@/lib/prompt'
  * the reason it collects is the audit evidence.
  */
 export function ReconcileLegacyButton({ obligationId }: { obligationId: string }) {
-  const t = useTranslations('revenue')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("revenue");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
 
   async function reconcile() {
     const reason = await promptDialog({
-      title: t('drawer.reconcileTitle'),
-      label: t('drawer.reconcileReason'),
-      placeholder: t('drawer.reconcilePlaceholder'),
-      confirmLabel: t('drawer.reconcileConfirm'),
-    })
-    if (!reason) return
-    setBusy(true)
+      title: t("drawer.reconcileTitle"),
+      label: t("drawer.reconcileReason"),
+      placeholder: t("drawer.reconcilePlaceholder"),
+      confirmLabel: t("drawer.reconcileConfirm"),
+    });
+    if (!reason) return;
+    setBusy(true);
     try {
       const res = await fetch(`/api/revenue/obligations/${obligationId}/reconcile-legacy`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ reason }),
-      })
+      });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('drawer.reconcileFailed')))
-        return
+        toast.error(await readApiErrorMessage(res, t("drawer.reconcileFailed")));
+        return;
       }
-      toast.success(t('drawer.reconciled'))
-      router.refresh()
+      toast.success(t("drawer.reconciled"));
+      router.refresh();
     } catch {
       // A network failure must toast like a refusal: try/finally alone
       // reset the button but left the throw unhandled and unnamed.
-      toast.error(t('drawer.reconcileFailed'))
+      toast.error(t("drawer.reconcileFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   return (
     <Button variant="outline" onClick={reconcile} disabled={busy}>
-      {t('drawer.reconcile')}
+      {t("drawer.reconcile")}
     </Button>
-  )
+  );
 }

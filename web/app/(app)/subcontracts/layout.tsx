@@ -1,8 +1,8 @@
-import { redirect } from 'next/navigation'
-import { getAuthz } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { redirect } from "next/navigation";
+import { getAuthz } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Feature-gate boundary for the Subcontracts module.
@@ -15,8 +15,8 @@ export const dynamic = 'force-dynamic'
  * instead of 404ing.
  */
 export default async function SubcontractsLayout({ children }: { children: React.ReactNode }) {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  await requireFeatureEnabled(authz.user.orgId, 'subcontracts')
-  return children
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
+  await requireFeatureEnabled(authz.user.orgId, "subcontracts");
+  return children;
 }

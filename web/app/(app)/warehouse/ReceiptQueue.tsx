@@ -3,10 +3,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@openbooks/ui";
 import { AsyncDrawer } from "@/components/async-url-drawer";
 import { PagedTable } from "@/components/paged-table";
-import {
-  DirectedExecutionForm,
-  useDirectedExecution,
-} from "@/components/directed-execution";
+import { DirectedExecutionForm, useDirectedExecution } from "@/components/directed-execution";
 export interface ReceiptQueueRow {
   lineId: string;
   number: string;
@@ -15,17 +12,9 @@ export interface ReceiptQueueRow {
   quantity: string;
   confirmed: boolean;
 }
-export function ReceiptQueue({
-  rows,
-  canPost,
-}: {
-  rows: ReceiptQueueRow[];
-  canPost: boolean;
-}) {
+export function ReceiptQueue({ rows, canPost }: { rows: ReceiptQueueRow[]; canPost: boolean }) {
   const router = useRouter(),
-    execution = useDirectedExecution("/api/inventory/execution", () =>
-      router.refresh(),
-    );
+    execution = useDirectedExecution("/api/inventory/execution", () => router.refresh());
   return (
     <>
       {execution.error && !execution.task ? (
@@ -64,9 +53,7 @@ export function ReceiptQueue({
                 <Button
                   size="sm"
                   disabled={execution.busy}
-                  onClick={() =>
-                    execution.prepare({ action: "receive", lineId: row.lineId })
-                  }
+                  onClick={() => execution.prepare({ action: "receive", lineId: row.lineId })}
                 >
                   Confirm receipt
                 </Button>

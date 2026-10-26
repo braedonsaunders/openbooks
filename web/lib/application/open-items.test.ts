@@ -19,9 +19,10 @@ const context = {
 test("open items reject unsupported sides before querying", async () => {
   await assert.rejects(
     listApplicationOpenItems(context, { side: "cash" }),
-    (error: unknown) => error instanceof ApplicationError
-      && error.code === "invalid_input"
-      && error.status === 422
-      && error.message === "side is required; use ar or ap",
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.code === "invalid_input" &&
+      error.status === 422 &&
+      error.message === "side is required; use ar or ap",
   );
 });

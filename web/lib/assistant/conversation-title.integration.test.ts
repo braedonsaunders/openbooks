@@ -9,12 +9,8 @@ import type { SessionUser } from "../auth";
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
-const {
-  markTitleRenamed,
-  readTitleState,
-  shouldAttemptAutoTitle,
-  writeAutoTitle,
-} = await import("./conversation-title");
+const { markTitleRenamed, readTitleState, shouldAttemptAutoTitle, writeAutoTitle } =
+  await import("./conversation-title");
 const { createConversation } = await import("../ai-conversations");
 
 const DB_ONLY = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -36,11 +32,16 @@ function userAuthz(orgId: string, userId: string): Authz {
 }
 
 async function seedUser(orgId: string, userId: string): Promise<void> {
-  const roleId = (await db.execute<{ id: string }>(sql`
+  const roleId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into app_roles (org_id, key, name, is_built_in, permissions)
     values (${orgId}, ${`title-${userId.slice(0, 8)}`}, 'Title User', false, '[]'::jsonb)
     returning id
-  `, "objects"))[0]!.id;
+  `,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into users (id, org_id, email, name, password_hash, is_active)
     values (${userId}, ${orgId}, ${`title-${userId.slice(0, 8)}@scratch.test`}, 'Title User', 'x', false)
@@ -90,9 +91,12 @@ test("auto title round-trips and stays owner-scoped", DB_ONLY, async () => {
       update ai_conversations set metadata = '{"pinned_tab":"inbox"}' where id = ${conversationId}
     `);
     assert.equal(await writeAutoTitle(owner, conversationId, "Vendor aging follow-up"), true);
-    const raw = await db.execute<{ metadata: unknown }>(sql`
+    const raw = await db.execute<{ metadata: unknown }>(
+      sql`
       select metadata from ai_conversations where id = ${conversationId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const metadata = raw[0]!.metadata as { pinned_tab?: string; title?: { source?: string } };
     assert.equal(metadata.pinned_tab, "inbox");
     assert.equal(metadata.title?.source, "auto");
@@ -107,7 +111,11 @@ test("a user rename is never overwritten by an auto title", DB_ONLY, async () =>
     const ownerId = randomUUID();
     await seedUser(org.orgId, ownerId);
     const owner = userAuthz(org.orgId, ownerId);
-    const conversationId = await createConversation(owner, "assistant", "How did we do last month?");
+    const conversationId = await createConversation(
+      owner,
+      "assistant",
+      "How did we do last month?",
+    );
 
     await markTitleRenamed(owner, conversationId);
     assert.deepEqual(await readTitleState(owner, conversationId), {

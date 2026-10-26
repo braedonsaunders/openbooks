@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  v1CreateAliasedRecord,
-  v1ListAliasedRecords,
-} from "../../../../lib/api/v1-records";
+import { v1CreateAliasedRecord, v1ListAliasedRecords } from "../../../../lib/api/v1-records";
 
 export const runtime = "nodejs";
 
@@ -30,10 +27,12 @@ async function handleV1POST(
 
 export const GET = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1GET(request, { params: Promise.resolve(params as never) } as never),
 });
 
 export const POST = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1POST(request, { params: Promise.resolve(params as never) } as never),
 });

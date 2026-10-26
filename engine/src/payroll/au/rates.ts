@@ -42,18 +42,19 @@ export const AU_PACK_RATES: PayrollPackRates = {
           min: "0",
           max: "1",
           required: true,
-          help: "The premium rate on the state insurer's notice, as a decimal "
-            + "fraction (0.027 for 2.7%).",
+          help:
+            "The premium rate on the state insurer's notice, as a decimal " +
+            "fraction (0.027 for 2.7%).",
         },
       ],
       citation:
-        "Safe Work Australia, Workers’ compensation and Premiums — "
-        + "https://www.safeworkaustralia.gov.au/workers-compensation — "
-        + "https://www.safeworkaustralia.gov.au/book/comparison-wc-arrangements-29ed/chapter-8/premiums",
+        "Safe Work Australia, Workers’ compensation and Premiums — " +
+        "https://www.safeworkaustralia.gov.au/workers-compensation — " +
+        "https://www.safeworkaustralia.gov.au/book/comparison-wc-arrangements-29ed/chapter-8/premiums",
       variesBecause:
-        "Premium rates are set per employer by each state or territory's "
-        + "workers' compensation insurer from the employer's industry and "
-        + "claims history. No pack constant can carry them.",
+        "Premium rates are set per employer by each state or territory's " +
+        "workers' compensation insurer from the employer's industry and " +
+        "claims history. No pack constant can carry them.",
     },
   ],
 };
@@ -66,9 +67,9 @@ export const AU_TAX_YEARS: PayrollTaxYearSupport = {
       label: "2025–26",
       effectiveFrom: "2025-07-01",
       citation:
-        "ATO PAYG withholding tax tables 2025–26 (Schedule 1 applied to "
-        + "payments 1 July 2024 – 30 June 2026) — "
-        + "https://www.ato.gov.au/tax-rates-and-codes/tax-tables-overview",
+        "ATO PAYG withholding tax tables 2025–26 (Schedule 1 applied to " +
+        "payments 1 July 2024 – 30 June 2026) — " +
+        "https://www.ato.gov.au/tax-rates-and-codes/tax-tables-overview",
       status: "draft",
     },
     {
@@ -76,12 +77,12 @@ export const AU_TAX_YEARS: PayrollTaxYearSupport = {
       label: "2026–27",
       effectiveFrom: "2026-07-01",
       citation:
-        "Taxation Administration (Withholding Schedules) Instrument 2026 "
-        + "(F2026L00716), Schedule 1 – Statement of formulas for calculating "
-        + "amounts to be withheld, made by Ben Kelly, Deputy Commissioner of "
-        + "Taxation, 2 June 2026, commencing 1 July 2026 — "
-        + "https://www.legislation.gov.au/F2026L00716/asmade/2026-06-12/"
-        + "text/original/epub/OEBPS/document_1/document_1.html",
+        "Taxation Administration (Withholding Schedules) Instrument 2026 " +
+        "(F2026L00716), Schedule 1 – Statement of formulas for calculating " +
+        "amounts to be withheld, made by Ben Kelly, Deputy Commissioner of " +
+        "Taxation, 2 June 2026, commencing 1 July 2026 — " +
+        "https://www.legislation.gov.au/F2026L00716/asmade/2026-06-12/" +
+        "text/original/epub/OEBPS/document_1/document_1.html",
       status: "published",
     },
   ],
@@ -92,11 +93,10 @@ export const AU_TAX_YEARS: PayrollTaxYearSupport = {
     files: [
       {
         path: "engine/src/payroll/au/schedule1-{year}.ts",
-        purpose:
-          "Transcribed ATO Schedule 1 coefficients (scales 1–6) for the year",
+        purpose: "Transcribed ATO Schedule 1 coefficients (scales 1–6) for the year",
         template:
-          "export const AU_PAYG_SCHEDULE_{year} = { year: {year}, "
-          + "priorYear: {priorYear}, scales: {} as const };\n",
+          "export const AU_PAYG_SCHEDULE_{year} = { year: {year}, " +
+          "priorYear: {priorYear}, scales: {} as const };\n",
       },
     ],
     barrels: [

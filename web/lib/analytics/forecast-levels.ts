@@ -9,7 +9,9 @@
  */
 export class UnknownConfidenceError extends Error {
   constructor(readonly level: number) {
-    super(`unknown forecast confidence level ${level} — choose one of ${FORECAST_CONFIDENCE_LEVELS.join(", ")}`);
+    super(
+      `unknown forecast confidence level ${level} — choose one of ${FORECAST_CONFIDENCE_LEVELS.join(", ")}`,
+    );
     this.name = "UnknownConfidenceError";
   }
 }

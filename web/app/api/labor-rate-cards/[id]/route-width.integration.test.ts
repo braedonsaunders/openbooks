@@ -12,10 +12,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __rateCardWidthState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -32,13 +38,15 @@ registerHooks({
           return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
         }
       `);
-    if (specifier.endsWith("/lib/projects-gate")) return virtual("export async function guardProjectsFeature() { return null }");
+    if (specifier.endsWith("/lib/projects-gate"))
+      return virtual("export async function guardProjectsFeature() { return null }");
     return next(specifier, context);
   },
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PUT } = await import("./route.ts");
 
 async function fixture() {
@@ -47,25 +55,35 @@ async function fixture() {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`,
+    ),
   );
   const bookId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into item_rate_books (org_id, id, code, name, currency, is_default, is_active, created_by, updated_by)
-    values (${org.orgId}, ${bookId}, 'WBOUND', 'Width bound', 'CAD', false, true, ${actorId}, ${actorId})`));
+    values (${org.orgId}, ${bookId}, 'WBOUND', 'Width bound', 'CAD', false, true, ${actorId}, ${actorId})`),
+  );
   const versionId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into item_rate_versions (org_id, id, rate_book_id, effective_from, status, custom, created_by, updated_by)
-    values (${org.orgId}, ${versionId}, ${bookId}, '2026-07-01', 'draft', '{}'::jsonb, ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
+    values (${org.orgId}, ${versionId}, ${bookId}, '2026-07-01', 'draft', '{}'::jsonb, ${actorId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into labor_rate_version_policies (org_id, version_id, derivation_policy, created_by, updated_by)
-    values (${org.orgId}, ${versionId}, 'explicit', ${actorId}, ${actorId})`));
+    values (${org.orgId}, ${versionId}, 'explicit', ${actorId}, ${actorId})`),
+  );
   const lineId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into item_rate_lines (org_id, id, version_id, item_id, unit_code, unit_name, base_quantity, bill_rate,
                                  time_type_bill_rates, sort_order, created_by, updated_by)
     values (${org.orgId}, ${lineId}, ${versionId}, ${org.items.fifo}, 'hour', 'Hour', 1, '100.00', '{}'::jsonb,
-            0, ${actorId}, ${actorId})`));
+            0, ${actorId}, ${actorId})`),
+  );
   return { org, versionId, lineId };
 }
 
@@ -82,15 +100,25 @@ const put = (versionId: string, body: unknown) =>
   );
 
 const body = (lineId: string, itemId: string, regular: string) => ({
-  name: "Width bound", code: "WBOUND2", effective_from: "2026-07-01", status: "draft",
-  derivation_policy: "explicit", scopes: [], terms: [],
+  name: "Width bound",
+  code: "WBOUND2",
+  effective_from: "2026-07-01",
+  status: "draft",
+  derivation_policy: "explicit",
+  scopes: [],
+  terms: [],
   lines: [{ id: lineId, itemId, regular }],
   adjustments: [],
 });
 
 async function billRate(lineId: string): Promise<string> {
-  const rows = await withBypassContext(() => db.execute<{ bill_rate: string }>(sql`
-    select bill_rate::text from item_rate_lines where id = ${lineId}`, "objects"));
+  const rows = await withBypassContext(() =>
+    db.execute<{ bill_rate: string }>(
+      sql`
+    select bill_rate::text from item_rate_lines where id = ${lineId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.bill_rate;
 }
 
@@ -99,7 +127,11 @@ test("rate-card save refuses a bill rate wider than numeric(19,4) without writin
   try {
     const response = await put(versionId, body(lineId, org.items.fifo, "99999999999999999999.99"));
     const json = (await response.json().catch(() => null)) as { errorCode?: string } | null;
-    assert.notEqual(json?.errorCode, "save", `expected a named refusal, got: ${JSON.stringify(json)}`);
+    assert.notEqual(
+      json?.errorCode,
+      "save",
+      `expected a named refusal, got: ${JSON.stringify(json)}`,
+    );
     assert.equal(await billRate(lineId), "100.0000");
   } finally {
     await dropScratchOrg(org.orgId);

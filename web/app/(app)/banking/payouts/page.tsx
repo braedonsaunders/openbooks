@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadPayouts, payoutsSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadPayouts, payoutsSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Banking → Payouts: every provider payout with its order lines, its bank
@@ -13,9 +13,9 @@ export const dynamic = 'force-dynamic'
 export default async function PayoutsPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadPayouts(sp)
-  return <ModuleView spec={payoutsSpec()} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadPayouts(sp);
+  return <ModuleView spec={payoutsSpec()} data={data} searchParams={sp} trusted />;
 }

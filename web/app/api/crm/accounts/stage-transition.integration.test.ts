@@ -1,290 +1,447 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Moving a lead to Prospect from the account drawer must persist.
 // The relationship tab sends the whole form, including the now-stale lead status id,
 // alongside the new stage. The stage write must survive that payload (and a
 // missing status), while genuinely unknown statuses still fail closed.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __crmStageTransitionState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __crmStageTransitionState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
-    if (specifier.endsWith('/lib/authz')) return virtual(`
+    if (specifier === "next/navigation")
+      return virtual(
+        'export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }',
+      );
+    if (specifier.endsWith("/lib/authz"))
+      return virtual(`
       export async function guardPermission() {
         const s = globalThis.__crmStageTransitionState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
-    if (specifier.endsWith('/lib/feature-gates')) return virtual(`
+    `);
+    if (specifier.endsWith("/lib/feature-gates"))
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__crmStageTransitionState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
-const { ensureCrmDefaults } = await import('@openbooks/engine/crm/crm')
-const { PATCH } = await import('./[id]/route.ts')
-const { POST: postDraft } = await import('./draft/route.ts')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
+const { ensureCrmDefaults } = await import("@openbooks/engine/crm/crm");
+const { PATCH } = await import("./[id]/route.ts");
+const { POST: postDraft } = await import("./draft/route.ts");
 
-type Fixture = { orgId: string; partyId: string; leadStatusId: string; prospectDefaultId: string; prospectOtherId: string; customerDefaultId: string }
+type Fixture = {
+  orgId: string;
+  partyId: string;
+  leadStatusId: string;
+  prospectDefaultId: string;
+  prospectOtherId: string;
+  customerDefaultId: string;
+};
 
 async function fixture(): Promise<Fixture> {
-  const org = await withBypassContext(() => createScratchOrg())
-  state.orgId = org.orgId
-  state.actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
+  const org = await withBypassContext(() => createScratchOrg());
+  state.orgId = org.orgId;
+  state.actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   await withBypassContext(async () => {
-    await db.execute(sql`update orgs set settings = settings || '{"features": {"crm": true}}'::jsonb where id = ${org.orgId}`)
-    await ensureCrmDefaults(org.orgId, state.actorId)
-  })
-  const statuses = await withBypassContext(() => db.execute<{ id: string; key: string; lifecycle_stage: string; is_default: boolean }>(sql`
-    select id, key, lifecycle_stage, is_default from crm_account_statuses where org_id = ${org.orgId} and is_active`, 'objects'))
-  const leadStatusId = statuses.find((s) => s.lifecycle_stage === 'lead' && s.is_default)!.id
-  const prospectDefaultId = statuses.find((s) => s.lifecycle_stage === 'prospect' && s.is_default)!.id
-  const prospectOtherId = statuses.find((s) => s.lifecycle_stage === 'prospect' && !s.is_default)!.id
-  const customerDefaultId = statuses.find((s) => s.lifecycle_stage === 'customer' && s.is_default)!.id
+    await db.execute(
+      sql`update orgs set settings = settings || '{"features": {"crm": true}}'::jsonb where id = ${org.orgId}`,
+    );
+    await ensureCrmDefaults(org.orgId, state.actorId);
+  });
+  const statuses = await withBypassContext(() =>
+    db.execute<{ id: string; key: string; lifecycle_stage: string; is_default: boolean }>(
+      sql`
+    select id, key, lifecycle_stage, is_default from crm_account_statuses where org_id = ${org.orgId} and is_active`,
+      "objects",
+    ),
+  );
+  const leadStatusId = statuses.find((s) => s.lifecycle_stage === "lead" && s.is_default)!.id;
+  const prospectDefaultId = statuses.find(
+    (s) => s.lifecycle_stage === "prospect" && s.is_default,
+  )!.id;
+  const prospectOtherId = statuses.find(
+    (s) => s.lifecycle_stage === "prospect" && !s.is_default,
+  )!.id;
+  const customerDefaultId = statuses.find(
+    (s) => s.lifecycle_stage === "customer" && s.is_default,
+  )!.id;
   const partyId = await withBypassContext(async () => {
-    const pid = (await db.execute<{ id: string }>(sql`
+    const pid = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into parties (org_id, kind, display_name, is_active)
-      values (${org.orgId}, 'company', 'Stagelead', true) returning id`, 'objects'))[0]!.id
+      values (${org.orgId}, 'company', 'Stagelead', true) returning id`,
+        "objects",
+      )
+    )[0]!.id;
     await db.execute(sql`
       insert into crm_account_profiles (org_id, party_id, lifecycle_stage, status_id, is_active)
-      values (${org.orgId}, ${pid}, 'lead', ${leadStatusId}, true)`)
-    return pid
-  })
-  return { orgId: org.orgId, partyId, leadStatusId, prospectDefaultId, prospectOtherId, customerDefaultId }
+      values (${org.orgId}, ${pid}, 'lead', ${leadStatusId}, true)`);
+    return pid;
+  });
+  return {
+    orgId: org.orgId,
+    partyId,
+    leadStatusId,
+    prospectDefaultId,
+    prospectOtherId,
+    customerDefaultId,
+  };
 }
 
-async function patch(id: string, body: unknown): Promise<{ status: number; json: { error?: string } | null }> {
-  const response = await withOrgContext(state.orgId, () => PATCH(
-    new Request(`http://crm.test/api/crm/accounts/${id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-    { params: Promise.resolve({ id }) },
-  ))
-  return { status: response.status, json: (await response.json().catch(() => null)) as { error?: string } | null }
+async function patch(
+  id: string,
+  body: unknown,
+): Promise<{ status: number; json: { error?: string } | null }> {
+  const response = await withOrgContext(state.orgId, () =>
+    PATCH(
+      new Request(`http://crm.test/api/crm/accounts/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ id }) },
+    ),
+  );
+  return {
+    status: response.status,
+    json: (await response.json().catch(() => null)) as { error?: string } | null,
+  };
 }
 
-async function draft(body: unknown): Promise<{ status: number; json: { id?: string; error?: string } | null }> {
-  const response = await withOrgContext(state.orgId, () => postDraft(
-    new Request('http://crm.test/api/crm/accounts/draft', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  ))
-  return { status: response.status, json: (await response.json().catch(() => null)) as { id?: string; error?: string } | null }
+async function draft(
+  body: unknown,
+): Promise<{ status: number; json: { id?: string; error?: string } | null }> {
+  const response = await withOrgContext(state.orgId, () =>
+    postDraft(
+      new Request("http://crm.test/api/crm/accounts/draft", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
+  );
+  return {
+    status: response.status,
+    json: (await response.json().catch(() => null)) as { id?: string; error?: string } | null,
+  };
 }
 
 async function profile(partyId: string) {
-  return (await withBypassContext(() => db.execute<{ lifecycle_stage: string; status_id: string | null; status_key: string | null }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{ lifecycle_stage: string; status_id: string | null; status_key: string | null }>(
+        sql`
     select cp.lifecycle_stage, cp.status_id, s.key as status_key
       from crm_account_profiles cp left join crm_account_statuses s on s.id = cp.status_id
-     where cp.party_id = ${partyId}`, 'objects')))[0]!
+     where cp.party_id = ${partyId}`,
+        "objects",
+      ),
+    )
+  )[0]!;
 }
 
 async function stageEvents(partyId: string) {
-  return await withBypassContext(() => db.execute<{ from_stage: string | null; to_stage: string; source_kind: string }>(sql`
+  return await withBypassContext(() =>
+    db.execute<{ from_stage: string | null; to_stage: string; source_kind: string }>(
+      sql`
     select e.from_stage, e.to_stage, e.source_kind from crm_account_stage_events e
      join crm_account_profiles cp on cp.id = e.account_profile_id
-     where cp.party_id = ${partyId} order by e.occurred_at`, 'objects'))
+     where cp.party_id = ${partyId} order by e.occurred_at`,
+      "objects",
+    ),
+  );
 }
-
 
 // The revision token PATCH mandates (F3-97): every pre-existing call below
 // targets other behavior, so each carries a fresh token to reach it.
 async function revisionFor(partyId: string): Promise<string> {
-  return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{ revision: string }>(
+        sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
-      from crm_account_profiles where party_id = ${partyId}`, 'objects')))[0]!.revision
+      from crm_account_profiles where party_id = ${partyId}`,
+        "objects",
+      ),
+    )
+  )[0]!.revision;
 }
 
-test('PATCH keeps a stage-only drawer save: stale lead status falls back to the prospect default', async () => {
-  const f = await fixture()
+test("PATCH keeps a stage-only drawer save: stale lead status falls back to the prospect default", async () => {
+  const f = await fixture();
   try {
     // Byte-shape of the party Relationship tab save when only the stage dropdown
     // moved (PartyRelationshipSection sends its whole form; party fields live on
     // the party record and are not part of this route's typed body).
     const result = await patch(f.partyId, {
-      lifecycleStage: 'prospect', statusId: f.leadStatusId,
-      ownerUserId: null, territoryId: null, leadSourceId: null,
-      industry: '', category: '', annualRevenue: '', employeeCount: '',
-      qualificationScore: '', nextActionAt: '', isActive: true, stageReason: null,
+      lifecycleStage: "prospect",
+      statusId: f.leadStatusId,
+      ownerUserId: null,
+      territoryId: null,
+      leadSourceId: null,
+      industry: "",
+      category: "",
+      annualRevenue: "",
+      employeeCount: "",
+      qualificationScore: "",
+      nextActionAt: "",
+      isActive: true,
+      stageReason: null,
       expectedUpdatedAt: await revisionFor(f.partyId),
-    })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.deepEqual(await profile(f.partyId), { lifecycle_stage: 'prospect', status_id: f.prospectDefaultId, status_key: 'open' })
-    assert.deepEqual(await stageEvents(f.partyId), [{ from_stage: 'lead', to_stage: 'prospect', source_kind: 'manual' }])
+    });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.deepEqual(await profile(f.partyId), {
+      lifecycle_stage: "prospect",
+      status_id: f.prospectDefaultId,
+      status_key: "open",
+    });
+    assert.deepEqual(await stageEvents(f.partyId), [
+      { from_stage: "lead", to_stage: "prospect", source_kind: "manual" },
+    ]);
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
 
-test('PATCH honors an explicit new-stage status on promotion', async () => {
-  const f = await fixture()
+test("PATCH honors an explicit new-stage status on promotion", async () => {
+  const f = await fixture();
   try {
-    const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: f.prospectOtherId, expectedUpdatedAt: await revisionFor(f.partyId) })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    const row = await profile(f.partyId)
-    assert.equal(row.lifecycle_stage, 'prospect')
-    assert.equal(row.status_id, f.prospectOtherId)
+    const result = await patch(f.partyId, {
+      lifecycleStage: "prospect",
+      statusId: f.prospectOtherId,
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    const row = await profile(f.partyId);
+    assert.equal(row.lifecycle_stage, "prospect");
+    assert.equal(row.status_id, f.prospectOtherId);
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
 
-test('PATCH with a cleared status on promotion keeps the promoted default instead of nulling it', async () => {
-  const f = await fixture()
+test("PATCH with a cleared status on promotion keeps the promoted default instead of nulling it", async () => {
+  const f = await fixture();
   try {
-    const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: null, expectedUpdatedAt: await revisionFor(f.partyId) })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.deepEqual(await profile(f.partyId), { lifecycle_stage: 'prospect', status_id: f.prospectDefaultId, status_key: 'open' })
+    const result = await patch(f.partyId, {
+      lifecycleStage: "prospect",
+      statusId: null,
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.deepEqual(await profile(f.partyId), {
+      lifecycle_stage: "prospect",
+      status_id: f.prospectDefaultId,
+      status_key: "open",
+    });
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
 
-test('PATCH with an unknown status id still fails closed on a stage change', async () => {
-  const f = await fixture()
+test("PATCH with an unknown status id still fails closed on a stage change", async () => {
+  const f = await fixture();
   try {
-    const result = await patch(f.partyId, { lifecycleStage: 'prospect', statusId: randomUUID(), expectedUpdatedAt: await revisionFor(f.partyId) })
-    assert.equal(result.status, 422, JSON.stringify(result.json))
-    assert.equal((await profile(f.partyId)).lifecycle_stage, 'lead')
+    const result = await patch(f.partyId, {
+      lifecycleStage: "prospect",
+      statusId: randomUUID(),
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    });
+    assert.equal(result.status, 422, JSON.stringify(result.json));
+    assert.equal((await profile(f.partyId)).lifecycle_stage, "lead");
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
 
-test('PATCH without a stage change still rejects a status from another stage', async () => {
-  const f = await fixture()
+test("PATCH without a stage change still rejects a status from another stage", async () => {
+  const f = await fixture();
   try {
-    const result = await patch(f.partyId, { statusId: f.prospectDefaultId, expectedUpdatedAt: await revisionFor(f.partyId) })
-    assert.equal(result.status, 422, JSON.stringify(result.json))
-    assert.equal((await profile(f.partyId)).status_id, f.leadStatusId)
+    const result = await patch(f.partyId, {
+      statusId: f.prospectDefaultId,
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    });
+    assert.equal(result.status, 422, JSON.stringify(result.json));
+    assert.equal((await profile(f.partyId)).status_id, f.leadStatusId);
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
 
-test('draft with a prospect stage creates a prospect with the prospect default status', async () => {
-  const f = await fixture()
+test("draft with a prospect stage creates a prospect with the prospect default status", async () => {
+  const f = await fixture();
   try {
-    const result = await draft({ lifecycleStage: 'prospect' })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    const createdId = result.json!.id!
-    assert.deepEqual(await profile(createdId), { lifecycle_stage: 'prospect', status_id: f.prospectDefaultId, status_key: 'open' })
-    assert.deepEqual(await stageEvents(createdId), [{ from_stage: null, to_stage: 'prospect', source_kind: 'manual' }])
+    const result = await draft({ lifecycleStage: "prospect" });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    const createdId = result.json!.id!;
+    assert.deepEqual(await profile(createdId), {
+      lifecycle_stage: "prospect",
+      status_id: f.prospectDefaultId,
+      status_key: "open",
+    });
+    assert.deepEqual(await stageEvents(createdId), [
+      { from_stage: null, to_stage: "prospect", source_kind: "manual" },
+    ]);
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
 
-test('draft without a stage still creates a lead', async () => {
-  const f = await fixture()
+test("draft without a stage still creates a lead", async () => {
+  const f = await fixture();
   try {
-    const result = await draft({})
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.equal((await profile(result.json!.id!)).lifecycle_stage, 'lead')
+    const result = await draft({});
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.equal((await profile(result.json!.id!)).lifecycle_stage, "lead");
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
 
-test('draft refuses an uncreatable stage instead of silently creating a lead', async () => {
-  const f = await fixture()
+test("draft refuses an uncreatable stage instead of silently creating a lead", async () => {
+  const f = await fixture();
   try {
-    for (const lifecycleStage of ['customer', ' closed ', 42, null]) {
-      const result = await draft({ lifecycleStage })
-      assert.equal(result.status, 422, `${JSON.stringify(lifecycleStage)}: ${JSON.stringify(result.json)}`)
+    for (const lifecycleStage of ["customer", " closed ", 42, null]) {
+      const result = await draft({ lifecycleStage });
+      assert.equal(
+        result.status,
+        422,
+        `${JSON.stringify(lifecycleStage)}: ${JSON.stringify(result.json)}`,
+      );
     }
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
 
 async function customerRoleActive(orgId: string, partyId: string): Promise<boolean> {
-  return (await withBypassContext(() => db.execute(sql`
-    select 1 from customer_roles where org_id = ${orgId} and party_id = ${partyId} and is_active`, 'objects'))).length > 0
+  return (
+    (
+      await withBypassContext(() =>
+        db.execute(
+          sql`
+    select 1 from customer_roles where org_id = ${orgId} and party_id = ${partyId} and is_active`,
+          "objects",
+        ),
+      )
+    ).length > 0
+  );
 }
 
 async function inCustomerPicker(orgId: string, partyId: string): Promise<boolean> {
   // The customer pickers join parties to ACTIVE customer roles; an ex-customer
   // must vanish from them the moment the demotion commits.
-  return (await withBypassContext(() => db.execute(sql`
+  return (
+    (
+      await withBypassContext(() =>
+        db.execute(
+          sql`
     select 1 from parties p join customer_roles r on r.org_id = p.org_id and r.party_id = p.id and r.is_active
-     where p.org_id = ${orgId} and p.id = ${partyId}`, 'objects'))).length > 0
+     where p.org_id = ${orgId} and p.id = ${partyId}`,
+          "objects",
+        ),
+      )
+    ).length > 0
+  );
 }
 
-test('PATCH demotion back to prospect deactivates the customer role in the same transaction', async () => {
-  const f = await fixture()
-  try {
-    const promoted = await patch(f.partyId, { lifecycleStage: 'customer', expectedUpdatedAt: await revisionFor(f.partyId) })
-    assert.equal(promoted.status, 200, JSON.stringify(promoted.json))
-    assert.equal(await customerRoleActive(f.orgId, f.partyId), true)
-    assert.equal(await inCustomerPicker(f.orgId, f.partyId), true)
-
-    const demoted = await patch(f.partyId, { lifecycleStage: 'prospect', stageReason: 'lost the deal', expectedUpdatedAt: await revisionFor(f.partyId) })
-    assert.equal(demoted.status, 200, JSON.stringify(demoted.json))
-    assert.equal((await profile(f.partyId)).lifecycle_stage, 'prospect')
-    assert.equal(await customerRoleActive(f.orgId, f.partyId), false)
-    assert.equal(await inCustomerPicker(f.orgId, f.partyId), false)
-    assert.deepEqual(await stageEvents(f.partyId), [
-      { from_stage: 'lead', to_stage: 'customer', source_kind: 'manual' },
-      { from_stage: 'customer', to_stage: 'prospect', source_kind: 'manual' },
-    ])
-  } finally {
-    await dropScratchOrg(f.orgId)
-  }
-})
-
-test('PATCH demotion replaces a stale customer status with the active prospect default', async () => {
-  const f = await fixture()
+test("PATCH demotion back to prospect deactivates the customer role in the same transaction", async () => {
+  const f = await fixture();
   try {
     const promoted = await patch(f.partyId, {
-      lifecycleStage: 'customer', statusId: f.customerDefaultId,
+      lifecycleStage: "customer",
       expectedUpdatedAt: await revisionFor(f.partyId),
-    })
-    assert.equal(promoted.status, 200, JSON.stringify(promoted.json))
+    });
+    assert.equal(promoted.status, 200, JSON.stringify(promoted.json));
+    assert.equal(await customerRoleActive(f.orgId, f.partyId), true);
+    assert.equal(await inCustomerPicker(f.orgId, f.partyId), true);
 
     const demoted = await patch(f.partyId, {
-      lifecycleStage: 'prospect', statusId: f.customerDefaultId,
-      stageReason: 'account returned to prospect', expectedUpdatedAt: await revisionFor(f.partyId),
-    })
-    assert.equal(demoted.status, 200, JSON.stringify(demoted.json))
-    assert.deepEqual(await profile(f.partyId), {
-      lifecycle_stage: 'prospect', status_id: f.prospectDefaultId, status_key: 'open',
-    })
+      lifecycleStage: "prospect",
+      stageReason: "lost the deal",
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    });
+    assert.equal(demoted.status, 200, JSON.stringify(demoted.json));
+    assert.equal((await profile(f.partyId)).lifecycle_stage, "prospect");
+    assert.equal(await customerRoleActive(f.orgId, f.partyId), false);
+    assert.equal(await inCustomerPicker(f.orgId, f.partyId), false);
+    assert.deepEqual(await stageEvents(f.partyId), [
+      { from_stage: "lead", to_stage: "customer", source_kind: "manual" },
+      { from_stage: "customer", to_stage: "prospect", source_kind: "manual" },
+    ]);
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
 
-test('PATCH demotion of a customer with an in-flight order is refused by name', async () => {
-  const f = await fixture()
+test("PATCH demotion replaces a stale customer status with the active prospect default", async () => {
+  const f = await fixture();
   try {
-    const promoted = await patch(f.partyId, { lifecycleStage: 'customer', expectedUpdatedAt: await revisionFor(f.partyId) })
-    assert.equal(promoted.status, 200, JSON.stringify(promoted.json))
-    await withBypassContext(() => db.execute(sql`
-      insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, total)
-      values (${f.orgId}, 'sales_order', 'SO-GUARD-1', '2026-01-05', 'USD', 'pending_approval', ${f.partyId}, '100.0000')`))
+    const promoted = await patch(f.partyId, {
+      lifecycleStage: "customer",
+      statusId: f.customerDefaultId,
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    });
+    assert.equal(promoted.status, 200, JSON.stringify(promoted.json));
 
-    const demoted = await patch(f.partyId, { lifecycleStage: 'prospect', stageReason: 'lost the deal', expectedUpdatedAt: await revisionFor(f.partyId) })
-    assert.equal(demoted.status, 422, JSON.stringify(demoted.json))
-    assert.match(demoted.json?.error ?? '', /in flight|open balance/i)
-    // The refusal changed nothing: still a customer with an active role.
-    assert.equal((await profile(f.partyId)).lifecycle_stage, 'customer')
-    assert.equal(await customerRoleActive(f.orgId, f.partyId), true)
+    const demoted = await patch(f.partyId, {
+      lifecycleStage: "prospect",
+      statusId: f.customerDefaultId,
+      stageReason: "account returned to prospect",
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    });
+    assert.equal(demoted.status, 200, JSON.stringify(demoted.json));
+    assert.deepEqual(await profile(f.partyId), {
+      lifecycle_stage: "prospect",
+      status_id: f.prospectDefaultId,
+      status_key: "open",
+    });
   } finally {
-    await dropScratchOrg(f.orgId)
+    await dropScratchOrg(f.orgId);
   }
-})
+});
+
+test("PATCH demotion of a customer with an in-flight order is refused by name", async () => {
+  const f = await fixture();
+  try {
+    const promoted = await patch(f.partyId, {
+      lifecycleStage: "customer",
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    });
+    assert.equal(promoted.status, 200, JSON.stringify(promoted.json));
+    await withBypassContext(() =>
+      db.execute(sql`
+      insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, total)
+      values (${f.orgId}, 'sales_order', 'SO-GUARD-1', '2026-01-05', 'USD', 'pending_approval', ${f.partyId}, '100.0000')`),
+    );
+
+    const demoted = await patch(f.partyId, {
+      lifecycleStage: "prospect",
+      stageReason: "lost the deal",
+      expectedUpdatedAt: await revisionFor(f.partyId),
+    });
+    assert.equal(demoted.status, 422, JSON.stringify(demoted.json));
+    assert.match(demoted.json?.error ?? "", /in flight|open balance/i);
+    // The refusal changed nothing: still a customer with an active role.
+    assert.equal((await profile(f.partyId)).lifecycle_stage, "customer");
+    assert.equal(await customerRoleActive(f.orgId, f.partyId), true);
+  } finally {
+    await dropScratchOrg(f.orgId);
+  }
+});

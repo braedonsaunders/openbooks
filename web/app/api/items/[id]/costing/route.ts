@@ -1,39 +1,55 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { defineRoute } from "@/lib/api/route";
 import { nullableUuidId, uuidId, nullableExactMoney } from "@/lib/api/json";
-import { z } from 'zod'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
-import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
-import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engine/inventory/contracts/module";
+import { z } from "zod";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
+import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/records/revision";
+import { normalizeMoney, wholeDigits } from "@openbooks/engine/money";
+import {
+  InventoryError,
+  CostingPolicyChangeBlockedError,
+} from "@openbooks/engine/inventory/contracts/module";
 import { inventoryOffsetAccountProblem } from "@openbooks/engine/inventory/journal";
-import { assertCostingAccountChangeAllowed, assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/inventory/profile-policy";
+import {
+  assertCostingAccountChangeAllowed,
+  assertCostingPolicyChangeAllowed,
+  lockItemInventoryProfile,
+  parseCostingMethod,
+  parseTrackingMode,
+  parseUnitConversions,
+} from "@openbooks/engine/inventory/profile-policy";
 import { revalueOpenLayersToStandardCost } from "@openbooks/engine/inventory/revaluation";
 import { loadCompanyReceivedNotBilledAccount } from "@openbooks/engine/records/control-accounts";
 import { lineRequiresReceipt } from "@openbooks/engine/records/stock-receipt";
-import { isUuid } from '../../../../../lib/list-params'
-import { canonicalDecimal } from '../../../../../lib/exact-decimal'
-import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
+import { isUuid } from "../../../../../lib/list-params";
+import { canonicalDecimal } from "../../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
 import { notFound } from "@/lib/api/responses";
 
-
-const itemParams = z.object({ id: z.string() })
+const itemParams = z.object({ id: z.string() });
 const costingBody = z.object({
   costingMethod: z.string(),
   tracking: z.string(),
-  abcClass: z.enum(["A","B","C"]).nullable().optional(),
-  recostingAuthorization: z.string().optional(), expectedUpdatedAt: z.union([z.string(), z.null()]).optional(),
-  assetAccountId: uuidId, cogsAccountId: uuidId,
-  adjustmentAccountId: nullableUuidId.optional(), varianceAccountId: nullableUuidId.optional(),
-  receivedNotBilledAccountId: nullableUuidId.optional(), standardCost: nullableExactMoney().optional(),
-  baseUnit: z.string().trim().min(1), unitConversions: z.record(z.string(), z.number()).nullable().optional(),
-  reorderPoint: nullableExactMoney().optional(), preferredStockLevel: nullableExactMoney().optional(),
-  allowNegativeInventory: z.boolean().optional(), negativeCostBasis: z.enum(["last_receipt", "standard", "configured"]).optional(),
+  abcClass: z.enum(["A", "B", "C"]).nullable().optional(),
+  recostingAuthorization: z.string().optional(),
+  expectedUpdatedAt: z.union([z.string(), z.null()]).optional(),
+  assetAccountId: uuidId,
+  cogsAccountId: uuidId,
+  adjustmentAccountId: nullableUuidId.optional(),
+  varianceAccountId: nullableUuidId.optional(),
+  receivedNotBilledAccountId: nullableUuidId.optional(),
+  standardCost: nullableExactMoney().optional(),
+  baseUnit: z.string().trim().min(1),
+  unitConversions: z.record(z.string(), z.number()).nullable().optional(),
+  reorderPoint: nullableExactMoney().optional(),
+  preferredStockLevel: nullableExactMoney().optional(),
+  allowNegativeInventory: z.boolean().optional(),
+  negativeCostBasis: z.enum(["last_receipt", "standard", "configured"]).optional(),
   provisionalUnitCost: nullableExactMoney().optional(),
-})
+});
 
 /**
  * Per-item inventory costing profile (item_inventory_profiles) — one row per
@@ -61,244 +77,361 @@ const costingBody = z.object({
 class ProfileRevisionConflictError extends Error {}
 
 async function loadItem(id: string, orgId: string) {
-  const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`, 'objects')))
-  return Boolean(item[0])
+  const item = await db.execute(
+    sql`select 1 from items where id = ${id} and org_id = ${orgId}`,
+    "objects",
+  );
+  return Boolean(item[0]);
 }
 
-export const GET = defineRoute({ permission: 'items.read', feature: 'inventory', params: itemParams, handler: async ({ params: { id }, authz: gate }) => {
-  if (!isUuid(id) || !(await loadItem(id, gate.user.orgId))) {
-    return notFound("record")
-  }
-  // updated_at doubles as the optimistic-concurrency revision token callers
-  // echo back as expectedUpdatedAt.
-  const profile = ((await db.execute(sql`
+export const GET = defineRoute({
+  permission: "items.read",
+  feature: "inventory",
+  params: itemParams,
+  handler: async ({ params: { id }, authz: gate }) => {
+    if (!isUuid(id) || !(await loadItem(id, gate.user.orgId))) {
+      return notFound("record");
+    }
+    // updated_at doubles as the optimistic-concurrency revision token callers
+    // echo back as expectedUpdatedAt.
+    const profile = await db.execute(
+      sql`
     select costing_method, tracking, abc_class, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
            standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
       from item_inventory_profiles
-     where org_id = ${gate.user.orgId} and item_id = ${id}`, 'objects')))
-  // The editor names the company fallback behind a blank RNB field, so the
-  // response carries the validated company default alongside the profile.
-  const companyReceivedNotBilledAccountId = await loadCompanyReceivedNotBilledAccount(db, gate.user.orgId)
-  return NextResponse.json({ profile: profile[0] ?? null, companyReceivedNotBilledAccountId })
-} })
+     where org_id = ${gate.user.orgId} and item_id = ${id}`,
+      "objects",
+    );
+    // The editor names the company fallback behind a blank RNB field, so the
+    // response carries the validated company default alongside the profile.
+    const companyReceivedNotBilledAccountId = await loadCompanyReceivedNotBilledAccount(
+      db,
+      gate.user.orgId,
+    );
+    return NextResponse.json({ profile: profile[0] ?? null, companyReceivedNotBilledAccountId });
+  },
+});
 
 function accountRef(value: unknown): string | null {
-  return value && isUuid(String(value)) ? String(value) : null
+  return value && isUuid(String(value)) ? String(value) : null;
 }
 
-function moneyOrNull(value: unknown): string | null | 'invalid' {
-  if (value === null || value === undefined || String(value).trim() === '') return null
-  const exact = canonicalDecimal(value, 4)
+function moneyOrNull(value: unknown): string | null | "invalid" {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const exact = canonicalDecimal(value, 4);
   // Costing money columns are numeric(19,4): refuse whole-digit widths the
   // column cannot hold before any write, instead of leaking the overflow.
-  if (exact === null || wholeDigits(exact) > 15) return 'invalid'
-  return normalizeMoney(exact)
+  if (exact === null || wholeDigits(exact) > 15) return "invalid";
+  return normalizeMoney(exact);
 }
 
 export const PUT = defineRoute({
-  permission: 'items.manage', feature: 'inventory', scope: 'unrestricted', params: itemParams, body: costingBody, invalidBodyStatus: 422,
+  permission: "items.manage",
+  feature: "inventory",
+  scope: "unrestricted",
+  params: itemParams,
+  body: costingBody,
+  invalidBodyStatus: 422,
   handler: async ({ params: { id }, body, authz: gate }) => {
-  // The costing profile is shared inventory policy (and can revalue layers
-  // org-wide); only the in-transaction layer revaluation below stays
-  // scoped to gate.allowedSubsidiaryIds.
-  const { orgId, id: actorId } = gate.user
-  if (!isUuid(id) || !(await loadItem(id, orgId))) {
-    return notFound("record")
-  }
+    // The costing profile is shared inventory policy (and can revalue layers
+    // org-wide); only the in-transaction layer revaluation below stays
+    // scoped to gate.allowedSubsidiaryIds.
+    const { orgId, id: actorId } = gate.user;
+    if (!isUuid(id) || !(await loadItem(id, orgId))) {
+      return notFound("record");
+    }
 
-  const costingMethod = parseCostingMethod(body.costingMethod)
-  if (!costingMethod) {
-    return NextResponse.json(
-      { error: 'costingMethod must be one of fifo, moving_average, or standard' },
-      { status: 422 },
-    )
-  }
-  const tracking = parseTrackingMode(body.tracking)
-  if (!tracking) {
-    return NextResponse.json(
-      { error: 'tracking must be one of none, lot, serial, or lot_serial' },
-      { status: 422 },
-    )
-  }
-  let recostingAuthorization: string | null = null
-  if (body.recostingAuthorization !== undefined && body.recostingAuthorization !== null) {
-    if (typeof body.recostingAuthorization !== 'string') {
-      return NextResponse.json({ error: 'recostingAuthorization must be a string' }, { status: 422 })
+    const costingMethod = parseCostingMethod(body.costingMethod);
+    if (!costingMethod) {
+      return NextResponse.json(
+        { error: "costingMethod must be one of fifo, moving_average, or standard" },
+        { status: 422 },
+      );
     }
-    recostingAuthorization = body.recostingAuthorization
-  }
-  // Explicit null asserts absence; omission must never bypass the review fence.
-  if (body.expectedUpdatedAt !== null && !isDocumentRevisionToken(body.expectedUpdatedAt)) {
-    return NextResponse.json(
-      { error: 'Reload and provide the exact costing profile revision (null only for a new profile)' },
-      { status: 409 },
-    )
-  }
-  const expectedRevision = body.expectedUpdatedAt
-  for (const key of ['assetAccountId', 'cogsAccountId', 'adjustmentAccountId', 'varianceAccountId', 'receivedNotBilledAccountId'] as const) {
-    const value = body[key]
-    if (value !== undefined && value !== null && value !== '' && (typeof value !== 'string' || !isUuid(value))) {
-      return NextResponse.json({ error: `${key} must be a valid account identifier` }, { status: 422 })
+    const tracking = parseTrackingMode(body.tracking);
+    if (!tracking) {
+      return NextResponse.json(
+        { error: "tracking must be one of none, lot, serial, or lot_serial" },
+        { status: 422 },
+      );
     }
-  }
-  const assetAccountId = accountRef(body.assetAccountId)
-  const cogsAccountId = accountRef(body.cogsAccountId)
-  if (!assetAccountId || !cogsAccountId) {
-    return NextResponse.json({ error: 'The asset and COGS accounts are required' }, { status: 400 })
-  }
-  const baseUnit = String(body.baseUnit ?? '').trim() || 'ea'
-  // Unit conversions make the posting-time refusal actionable: a line raised
-  // in "Each" against base "ea" is refused until the operator maps the alias
-  // once ({ Each: 1 }). Omission preserves the stored map — the PUT upserts
-  // the whole row, so defaulting here would wipe configuration silently.
-  const parsedConversions = parseUnitConversions(body.unitConversions)
-  if (parsedConversions === 'invalid') {
-    return NextResponse.json(
-      { error: 'unitConversions must be an object of unit names to positive numbers with at most four decimal places' },
-      { status: 422 },
-    )
-  }
-  const adjustmentAccountId = accountRef(body.adjustmentAccountId)
-  const varianceAccountId = accountRef(body.varianceAccountId)
-  const receivedNotBilledAccountId = accountRef(body.receivedNotBilledAccountId)
-  // A blank received-not-billed account is storable only when something will
-  // clear it. Receipt-tracked items with no company default would strand
-  // every future receipt at posting time, so refuse naming both places —
-  // the same explicit style as every other validation in this route.
-  if (!receivedNotBilledAccountId) {
-    const itemKind = (await db.execute<{ kind: string | null }>(sql`
-      select kind from items where id = ${id} and org_id = ${orgId}`, 'objects'))[0]?.kind ?? null
-    if (lineRequiresReceipt(itemKind) && !(await loadCompanyReceivedNotBilledAccount(db, orgId))) {
-      return NextResponse.json({ error: 'This item is receipt-tracked and no company received-not-billed default exists: set a received-not-billed account on this costing profile, or set the company Received not billed control account under Company Settings, before saving' }, { status: 422 })
-    }
-  }
-  for (const [label, accountId] of [
-    ['COGS', cogsAccountId], ['adjustment', adjustmentAccountId], ['variance', varianceAccountId],
-    ['received-not-billed', receivedNotBilledAccountId],
-  ] as const) {
-    const accountProblem = inventoryOffsetAccountProblem(assetAccountId, accountId, label)
-    if (accountProblem) return NextResponse.json({ error: accountProblem }, { status: 422 })
-  }
-  const standardCost = moneyOrNull(body.standardCost)
-  const reorderPoint = moneyOrNull(body.reorderPoint)
-  const preferredStockLevel = moneyOrNull(body.preferredStockLevel)
-  if (body.allowNegativeInventory !== undefined && typeof body.allowNegativeInventory !== 'boolean') {
-    return NextResponse.json({ error: 'allowNegativeInventory must be a boolean' }, { status: 422 })
-  }
-  if (body.negativeCostBasis !== undefined && (typeof body.negativeCostBasis !== 'string' || !['last_receipt', 'standard', 'configured'].includes(body.negativeCostBasis))) {
-    return NextResponse.json({ error: 'negativeCostBasis must be last_receipt, standard, or configured' }, { status: 422 })
-  }
-  const allowNegativeInventory = body.allowNegativeInventory === true
-  const negativeCostBasis = body.negativeCostBasis ?? 'last_receipt'
-  const provisionalUnitCost = moneyOrNull(body.provisionalUnitCost)
-  if (standardCost === 'invalid') {
-    return NextResponse.json({ error: moneyRefusal('Standard cost', body.standardCost) }, { status: 422 })
-  }
-  if (reorderPoint === 'invalid') {
-    return NextResponse.json({ error: moneyRefusal('Reorder point', body.reorderPoint, 'a quantity') }, { status: 422 })
-  }
-  if (preferredStockLevel === 'invalid') {
-    return NextResponse.json({ error: moneyRefusal('Preferred stock level', body.preferredStockLevel, 'a quantity') }, { status: 422 })
-  }
-  if (provisionalUnitCost === 'invalid') {
-    return NextResponse.json({ error: moneyRefusal('Provisional unit cost', body.provisionalUnitCost) }, { status: 422 })
-  }
-  if (allowNegativeInventory && negativeCostBasis === 'configured' && provisionalUnitCost == null) {
-    return NextResponse.json({ error: 'A configured provisional cost is required for negative inventory' }, { status: 400 })
-  }
-  if (costingMethod === 'standard' && standardCost == null) {
-    return NextResponse.json({ error: 'Standard costing requires a standard cost. Enter the standard cost, or choose another costing method.' }, { status: 422 })
-  }
-  if (allowNegativeInventory && negativeCostBasis === 'standard' && standardCost == null) {
-    return NextResponse.json({ error: 'A standard cost is required for standard provisional costing' }, { status: 400 })
-  }
-
-  try {
-    const result = await db.transaction(async (tx) => {
-      if (!(await lockAndCheckOrgFeature(tx, orgId, 'inventory'))) {
-        throw new InventoryError('inventory feature is disabled')
+    let recostingAuthorization: string | null = null;
+    if (body.recostingAuthorization !== undefined && body.recostingAuthorization !== null) {
+      if (typeof body.recostingAuthorization !== "string") {
+        return NextResponse.json(
+          { error: "recostingAuthorization must be a string" },
+          { status: 422 },
+        );
       }
-      // A missing profile cannot be row-locked. Serialize creation on its parent;
-      // NO KEY UPDATE remains compatible with inventory's foreign-key checks.
-      const parent = await tx.execute(sql`select id from items where id = ${id} and org_id = ${orgId} for no key update`, 'objects')
-      if (!parent[0]) throw new ProfileRevisionConflictError()
-      const before = await lockItemInventoryProfile(tx, orgId, id)
-      // The row is locked, so this revision read cannot race with a concurrent
-      // writer: compare it against the caller's token to fence the save.
-      const storedRevision = (await tx.execute<{ updated_at: string }>(sql`
-        select ${documentRevisionSql(sql`updated_at`)} as updated_at from item_inventory_profiles
-         where org_id = ${orgId} and item_id = ${id}`, 'objects'))[0]?.updated_at ?? null
-      if (storedRevision !== expectedRevision) throw new ProfileRevisionConflictError()
-      const assessment = await assertCostingPolicyChangeAllowed(
-        tx,
-        orgId,
-        id,
-        before,
-        { costingMethod, tracking },
-        recostingAuthorization,
-      )
-      // Account moves ride the same native service and audit as policy
-      // moves. Only the asset account re-points open valuation, so only it
-      // is fenced while stock is on hand; the rest price future postings.
-      const itemLabel = (await tx.execute<{ label: string }>(sql`
-        select coalesce(nullif(btrim(code), ''), btrim(name), ${id}) as label
-          from items where id = ${id} and org_id = ${orgId}`, 'objects'))[0]?.label ?? id
-      await assertCostingAccountChangeAllowed(tx, orgId, id, itemLabel, before, {
-        assetAccountId,
-        cogsAccountId,
-        adjustmentAccountId,
-        varianceAccountId,
-        receivedNotBilledAccountId,
-      })
-      const authorizedFlip = assessment.changed && assessment.historyExisted
-      // A standard-cost change on an item already costing standard is the
-      // same versioned policy event as a controlled switch onto standard:
-      // open layers must be revalued onto the new standard and the delta
-      // booked to variance atomically with the profile write, or the layers
-      // immediately disagree with the policy that governs them and issues
-      // strand residual inventory value in the GL.
-      const switchingToStandard =
-        authorizedFlip && costingMethod === 'standard' && before?.costing_method !== 'standard'
-      const revisingStandardCost =
-        !switchingToStandard &&
-        before?.costing_method === 'standard' &&
-        costingMethod === 'standard' &&
-        standardCost != null &&
-        before.standard_cost !== standardCost
-      const revaluationEntryId =
-        switchingToStandard || revisingStandardCost
-          ? await revalueOpenLayersToStandardCost(tx, orgId, actorId, id, {
-              standardCost,
-              allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-              assetAccountId,
-              varianceAccountId,
-              ...(revisingStandardCost
-                ? { memo: 'Standard cost revision revaluation' }
-                : {}),
-            })
-          : null
+      recostingAuthorization = body.recostingAuthorization;
+    }
+    // Explicit null asserts absence; omission must never bypass the review fence.
+    if (body.expectedUpdatedAt !== null && !isDocumentRevisionToken(body.expectedUpdatedAt)) {
+      return NextResponse.json(
+        {
+          error:
+            "Reload and provide the exact costing profile revision (null only for a new profile)",
+        },
+        { status: 409 },
+      );
+    }
+    const expectedRevision = body.expectedUpdatedAt;
+    for (const key of [
+      "assetAccountId",
+      "cogsAccountId",
+      "adjustmentAccountId",
+      "varianceAccountId",
+      "receivedNotBilledAccountId",
+    ] as const) {
+      const value = body[key];
+      if (
+        value !== undefined &&
+        value !== null &&
+        value !== "" &&
+        (typeof value !== "string" || !isUuid(value))
+      ) {
+        return NextResponse.json(
+          { error: `${key} must be a valid account identifier` },
+          { status: 422 },
+        );
+      }
+    }
+    const assetAccountId = accountRef(body.assetAccountId);
+    const cogsAccountId = accountRef(body.cogsAccountId);
+    if (!assetAccountId || !cogsAccountId) {
+      return NextResponse.json(
+        { error: "The asset and COGS accounts are required" },
+        { status: 400 },
+      );
+    }
+    const baseUnit = String(body.baseUnit ?? "").trim() || "ea";
+    // Unit conversions make the posting-time refusal actionable: a line raised
+    // in "Each" against base "ea" is refused until the operator maps the alias
+    // once ({ Each: 1 }). Omission preserves the stored map — the PUT upserts
+    // the whole row, so defaulting here would wipe configuration silently.
+    const parsedConversions = parseUnitConversions(body.unitConversions);
+    if (parsedConversions === "invalid") {
+      return NextResponse.json(
+        {
+          error:
+            "unitConversions must be an object of unit names to positive numbers with at most four decimal places",
+        },
+        { status: 422 },
+      );
+    }
+    const adjustmentAccountId = accountRef(body.adjustmentAccountId);
+    const varianceAccountId = accountRef(body.varianceAccountId);
+    const receivedNotBilledAccountId = accountRef(body.receivedNotBilledAccountId);
+    // A blank received-not-billed account is storable only when something will
+    // clear it. Receipt-tracked items with no company default would strand
+    // every future receipt at posting time, so refuse naming both places —
+    // the same explicit style as every other validation in this route.
+    if (!receivedNotBilledAccountId) {
+      const itemKind =
+        (
+          await db.execute<{ kind: string | null }>(
+            sql`
+      select kind from items where id = ${id} and org_id = ${orgId}`,
+            "objects",
+          )
+        )[0]?.kind ?? null;
+      if (
+        lineRequiresReceipt(itemKind) &&
+        !(await loadCompanyReceivedNotBilledAccount(db, orgId))
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "This item is receipt-tracked and no company received-not-billed default exists: set a received-not-billed account on this costing profile, or set the company Received not billed control account under Company Settings, before saving",
+          },
+          { status: 422 },
+        );
+      }
+    }
+    for (const [label, accountId] of [
+      ["COGS", cogsAccountId],
+      ["adjustment", adjustmentAccountId],
+      ["variance", varianceAccountId],
+      ["received-not-billed", receivedNotBilledAccountId],
+    ] as const) {
+      const accountProblem = inventoryOffsetAccountProblem(assetAccountId, accountId, label);
+      if (accountProblem) return NextResponse.json({ error: accountProblem }, { status: 422 });
+    }
+    const standardCost = moneyOrNull(body.standardCost);
+    const reorderPoint = moneyOrNull(body.reorderPoint);
+    const preferredStockLevel = moneyOrNull(body.preferredStockLevel);
+    if (
+      body.allowNegativeInventory !== undefined &&
+      typeof body.allowNegativeInventory !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "allowNegativeInventory must be a boolean" },
+        { status: 422 },
+      );
+    }
+    if (
+      body.negativeCostBasis !== undefined &&
+      (typeof body.negativeCostBasis !== "string" ||
+        !["last_receipt", "standard", "configured"].includes(body.negativeCostBasis))
+    ) {
+      return NextResponse.json(
+        { error: "negativeCostBasis must be last_receipt, standard, or configured" },
+        { status: 422 },
+      );
+    }
+    const allowNegativeInventory = body.allowNegativeInventory === true;
+    const negativeCostBasis = body.negativeCostBasis ?? "last_receipt";
+    const provisionalUnitCost = moneyOrNull(body.provisionalUnitCost);
+    if (standardCost === "invalid") {
+      return NextResponse.json(
+        { error: moneyRefusal("Standard cost", body.standardCost) },
+        { status: 422 },
+      );
+    }
+    if (reorderPoint === "invalid") {
+      return NextResponse.json(
+        { error: moneyRefusal("Reorder point", body.reorderPoint, "a quantity") },
+        { status: 422 },
+      );
+    }
+    if (preferredStockLevel === "invalid") {
+      return NextResponse.json(
+        { error: moneyRefusal("Preferred stock level", body.preferredStockLevel, "a quantity") },
+        { status: 422 },
+      );
+    }
+    if (provisionalUnitCost === "invalid") {
+      return NextResponse.json(
+        { error: moneyRefusal("Provisional unit cost", body.provisionalUnitCost) },
+        { status: 422 },
+      );
+    }
+    if (
+      allowNegativeInventory &&
+      negativeCostBasis === "configured" &&
+      provisionalUnitCost == null
+    ) {
+      return NextResponse.json(
+        { error: "A configured provisional cost is required for negative inventory" },
+        { status: 400 },
+      );
+    }
+    if (costingMethod === "standard" && standardCost == null) {
+      return NextResponse.json(
+        {
+          error:
+            "Standard costing requires a standard cost. Enter the standard cost, or choose another costing method.",
+        },
+        { status: 422 },
+      );
+    }
+    if (allowNegativeInventory && negativeCostBasis === "standard" && standardCost == null) {
+      return NextResponse.json(
+        { error: "A standard cost is required for standard provisional costing" },
+        { status: 400 },
+      );
+    }
 
-      // Omitted conversions preserve the stored map (read under the same row
-      // lock); only an explicit object or null replaces it.
-      const priorConversions = before?.unit_conversions
-      const unitConversions =
-        parsedConversions !== undefined
-          ? parsedConversions
-          : priorConversions !== null &&
-              typeof priorConversions === "object" &&
-              !Array.isArray(priorConversions)
-            ? (priorConversions as Record<string, number>)
-            : {};
-      const afterRows = ((await tx.execute(sql`
+    try {
+      const result = await db.transaction(async (tx) => {
+        if (!(await lockAndCheckOrgFeature(tx, orgId, "inventory"))) {
+          throw new InventoryError("inventory feature is disabled");
+        }
+        // A missing profile cannot be row-locked. Serialize creation on its parent;
+        // NO KEY UPDATE remains compatible with inventory's foreign-key checks.
+        const parent = await tx.execute(
+          sql`select id from items where id = ${id} and org_id = ${orgId} for no key update`,
+          "objects",
+        );
+        if (!parent[0]) throw new ProfileRevisionConflictError();
+        const before = await lockItemInventoryProfile(tx, orgId, id);
+        // The row is locked, so this revision read cannot race with a concurrent
+        // writer: compare it against the caller's token to fence the save.
+        const storedRevision =
+          (
+            await tx.execute<{ updated_at: string }>(
+              sql`
+        select ${documentRevisionSql(sql`updated_at`)} as updated_at from item_inventory_profiles
+         where org_id = ${orgId} and item_id = ${id}`,
+              "objects",
+            )
+          )[0]?.updated_at ?? null;
+        if (storedRevision !== expectedRevision) throw new ProfileRevisionConflictError();
+        const assessment = await assertCostingPolicyChangeAllowed(
+          tx,
+          orgId,
+          id,
+          before,
+          { costingMethod, tracking },
+          recostingAuthorization,
+        );
+        // Account moves ride the same native service and audit as policy
+        // moves. Only the asset account re-points open valuation, so only it
+        // is fenced while stock is on hand; the rest price future postings.
+        const itemLabel =
+          (
+            await tx.execute<{ label: string }>(
+              sql`
+        select coalesce(nullif(btrim(code), ''), btrim(name), ${id}) as label
+          from items where id = ${id} and org_id = ${orgId}`,
+              "objects",
+            )
+          )[0]?.label ?? id;
+        await assertCostingAccountChangeAllowed(tx, orgId, id, itemLabel, before, {
+          assetAccountId,
+          cogsAccountId,
+          adjustmentAccountId,
+          varianceAccountId,
+          receivedNotBilledAccountId,
+        });
+        const authorizedFlip = assessment.changed && assessment.historyExisted;
+        // A standard-cost change on an item already costing standard is the
+        // same versioned policy event as a controlled switch onto standard:
+        // open layers must be revalued onto the new standard and the delta
+        // booked to variance atomically with the profile write, or the layers
+        // immediately disagree with the policy that governs them and issues
+        // strand residual inventory value in the GL.
+        const switchingToStandard =
+          authorizedFlip && costingMethod === "standard" && before?.costing_method !== "standard";
+        const revisingStandardCost =
+          !switchingToStandard &&
+          before?.costing_method === "standard" &&
+          costingMethod === "standard" &&
+          standardCost != null &&
+          before.standard_cost !== standardCost;
+        const revaluationEntryId =
+          switchingToStandard || revisingStandardCost
+            ? await revalueOpenLayersToStandardCost(tx, orgId, actorId, id, {
+                standardCost,
+                allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+                assetAccountId,
+                varianceAccountId,
+                ...(revisingStandardCost ? { memo: "Standard cost revision revaluation" } : {}),
+              })
+            : null;
+
+        // Omitted conversions preserve the stored map (read under the same row
+        // lock); only an explicit object or null replaces it.
+        const priorConversions = before?.unit_conversions;
+        const unitConversions =
+          parsedConversions !== undefined
+            ? parsedConversions
+            : priorConversions !== null &&
+                typeof priorConversions === "object" &&
+                !Array.isArray(priorConversions)
+              ? (priorConversions as Record<string, number>)
+              : {};
+        const afterRows = await tx.execute(
+          sql`
         insert into item_inventory_profiles
           (org_id, item_id, costing_method, tracking, abc_class, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
            standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost, created_by, updated_by)
         values
-          (${orgId}, ${id}, ${costingMethod}, ${tracking}, ${body.abcClass===undefined ? before?.abc_class ?? null : body.abcClass}, ${assetAccountId}, ${cogsAccountId},
+          (${orgId}, ${id}, ${costingMethod}, ${tracking}, ${body.abcClass === undefined ? (before?.abc_class ?? null) : body.abcClass}, ${assetAccountId}, ${cogsAccountId},
            ${adjustmentAccountId}, ${varianceAccountId}, ${receivedNotBilledAccountId},
            ${standardCost}, ${baseUnit}, ${JSON.stringify(unitConversions)}::jsonb, ${reorderPoint}, ${preferredStockLevel},
            ${allowNegativeInventory}, ${negativeCostBasis}, ${provisionalUnitCost}, ${actorId}, ${actorId})
@@ -322,52 +455,57 @@ export const PUT = defineRoute({
           updated_at = greatest(clock_timestamp(), item_inventory_profiles.updated_at + interval '1 microsecond'), updated_by = ${actorId}
         where item_inventory_profiles.org_id = ${orgId}
           and item_inventory_profiles.updated_at = ${expectedRevision}::timestamptz
-        returning *, ${documentRevisionSql(sql`updated_at`)} as updated_at`, 'objects')))
-      const after = afterRows[0]
-      if (!after) throw new ProfileRevisionConflictError()
-      // Full mutation evidence in the same transaction as the mutation: exact
-      // before/after rows, requested policy, actor (audit_log.actor_id), the
-      // reason whenever one was supplied, and the revision on both sides.
-      const changes: Record<string, unknown> = {
-        requested: { costingMethod, tracking },
-        before: before ?? null,
-        after,
-        revision: { before: storedRevision, after: after?.updated_at ?? null },
-      }
-      if (recostingAuthorization?.trim()) {
-        changes.recostingAuthorization = recostingAuthorization.trim()
-      }
-      if (authorizedFlip) {
-        changes.revaluationEntryId = revaluationEntryId
-      }
-      if (revisingStandardCost) {
-        changes.standardCostRevision = {
-          from: before.standard_cost,
-          to: standardCost,
-          revaluationEntryIds: revaluationEntryId ?? [],
+        returning *, ${documentRevisionSql(sql`updated_at`)} as updated_at`,
+          "objects",
+        );
+        const after = afterRows[0];
+        if (!after) throw new ProfileRevisionConflictError();
+        // Full mutation evidence in the same transaction as the mutation: exact
+        // before/after rows, requested policy, actor (audit_log.actor_id), the
+        // reason whenever one was supplied, and the revision on both sides.
+        const changes: Record<string, unknown> = {
+          requested: { costingMethod, tracking },
+          before: before ?? null,
+          after,
+          revision: { before: storedRevision, after: after?.updated_at ?? null },
+        };
+        if (recostingAuthorization?.trim()) {
+          changes.recostingAuthorization = recostingAuthorization.trim();
         }
-      }
-      await tx.execute(sql`
+        if (authorizedFlip) {
+          changes.revaluationEntryId = revaluationEntryId;
+        }
+        if (revisingStandardCost) {
+          changes.standardCostRevision = {
+            from: before.standard_cost,
+            to: standardCost,
+            revaluationEntryIds: revaluationEntryId ?? [],
+          };
+        }
+        await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'item_inventory_profiles', ${id}, ${before ? 'update' : 'create'},
-                ${JSON.stringify(changes)}, ${actorId})`)
-      return {
-        policyChanged: assessment.changed,
-        revaluationEntryId,
-        updatedAt: (after?.updated_at as Date | string | undefined) ?? null,
+        values (${orgId}, 'item_inventory_profiles', ${id}, ${before ? "update" : "create"},
+                ${JSON.stringify(changes)}, ${actorId})`);
+        return {
+          policyChanged: assessment.changed,
+          revaluationEntryId,
+          updatedAt: (after?.updated_at as Date | string | undefined) ?? null,
+        };
+      });
+      return NextResponse.json({ ok: true, ...result });
+    } catch (e) {
+      if (e instanceof ProfileRevisionConflictError) {
+        return NextResponse.json(
+          {
+            error:
+              "the costing profile changed after you opened it; reload and review the latest revision",
+          },
+          { status: 409 },
+        );
       }
-    })
-    return NextResponse.json({ ok: true, ...result })
-  } catch (e) {
-    if (e instanceof ProfileRevisionConflictError) {
-      return NextResponse.json(
-        { error: 'the costing profile changed after you opened it; reload and review the latest revision' },
-        { status: 409 },
-      )
-    }
-    if (e instanceof CostingPolicyChangeBlockedError) {
-      try {
-        await db.execute(sql`
+      if (e instanceof CostingPolicyChangeBlockedError) {
+        try {
+          await db.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'item_inventory_profiles', ${id}, 'update',
                   ${JSON.stringify({
@@ -382,22 +520,28 @@ export const PUT = defineRoute({
                       receivedNotBilledAccountId: body.receivedNotBilledAccountId ?? null,
                     },
                     reason: e.message,
-                  })}, ${actorId})`)
-      } catch (auditError) {
-        // The refusal still reaches the operator, but a missing audit row is
-        // itself a control failure: surface it rather than swallow it.
-        console.error('[items/costing] failed to record the refused costing-policy change', auditError)
+                  })}, ${actorId})`);
+        } catch (auditError) {
+          // The refusal still reaches the operator, but a missing audit row is
+          // itself a control failure: surface it rather than swallow it.
+          console.error(
+            "[items/costing] failed to record the refused costing-policy change",
+            auditError,
+          );
+        }
+        return apiErrorResponse(e, { safeStatus: 409 });
       }
-      return apiErrorResponse(e, { safeStatus: 409 })
+      // FK violation → an account id doesn't belong to this org / isn't postable.
+      if ((e as { code?: string })?.code === "23503") {
+        return NextResponse.json(
+          { error: "Choose posting accounts from this organization" },
+          { status: 400 },
+        );
+      }
+      if (e instanceof InventoryError) {
+        return apiErrorResponse(e, { safeStatus: 422 });
+      }
+      return apiErrorResponse(e);
     }
-    // FK violation → an account id doesn't belong to this org / isn't postable.
-    if ((e as { code?: string })?.code === '23503') {
-      return NextResponse.json({ error: 'Choose posting accounts from this organization' }, { status: 400 })
-    }
-    if (e instanceof InventoryError) {
-      return apiErrorResponse(e, { safeStatus: 422 })
-    }
-    return apiErrorResponse(e)
-  }
   },
-})
+});

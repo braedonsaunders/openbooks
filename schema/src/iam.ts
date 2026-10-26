@@ -1,4 +1,13 @@
-import { boolean, foreignKey, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 import { orgs } from "./core";
 import { users } from "./extension";
@@ -49,7 +58,11 @@ export const appRoles = pgTable(
     uniqueIndex("app_roles_org_key").on(t.orgId, t.key),
     uniqueIndex("app_roles_org_id_id_unique").on(t.orgId, t.id),
     index("app_roles_org").on(t.orgId),
-    foreignKey({ name: "app_roles_org_id_fkey", columns: [t.orgId], foreignColumns: [orgs.id] }).onDelete("cascade"),
+    foreignKey({
+      name: "app_roles_org_id_fkey",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }).onDelete("cascade"),
   ],
 );
 
@@ -73,8 +86,20 @@ export const roleAssignments = pgTable(
     uniqueIndex("role_assignments_org_user_role").on(t.orgId, t.userId, t.roleId),
     index("role_assignments_user").on(t.userId),
     index("role_assignments_role").on(t.roleId),
-    foreignKey({ name: "role_assignments_org_id_fkey", columns: [t.orgId], foreignColumns: [orgs.id] }).onDelete("cascade"),
-    foreignKey({ name: "role_assignments_user_id_fkey", columns: [t.orgId, t.userId], foreignColumns: [users.orgId, users.id] }).onDelete("cascade"),
-    foreignKey({ name: "role_assignments_role_id_fkey", columns: [t.orgId, t.roleId], foreignColumns: [appRoles.orgId, appRoles.id] }),
+    foreignKey({
+      name: "role_assignments_org_id_fkey",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "role_assignments_user_id_fkey",
+      columns: [t.orgId, t.userId],
+      foreignColumns: [users.orgId, users.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "role_assignments_role_id_fkey",
+      columns: [t.orgId, t.roleId],
+      foreignColumns: [appRoles.orgId, appRoles.id],
+    }),
   ],
 );

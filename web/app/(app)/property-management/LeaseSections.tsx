@@ -2,12 +2,33 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Card, CardContent, Input, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  Input,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { Empty, Field, Small, Status } from "./workspace-ui";
 import { DepositTable } from "./LeaseTables";
-import type { ChargeRow, DepositRow, EscalationRow, LeaseRow, Money, PropertyAction, PropertyPermissions, WorkspaceOptions } from "./types";
-import { DateField } from '@/components/date-field'
+import type {
+  ChargeRow,
+  DepositRow,
+  EscalationRow,
+  LeaseRow,
+  Money,
+  PropertyAction,
+  PropertyPermissions,
+  WorkspaceOptions,
+} from "./types";
+import { DateField } from "@/components/date-field";
 
 export function ChargesSection({
   lease,
@@ -68,8 +89,7 @@ export function ChargesSection({
           ))}
         </TableBody>
       </Table>
-      {permissions.manage &&
-      ["draft", "active", "notice"].includes(lease.status) ? (
+      {permissions.manage && ["draft", "active", "notice"].includes(lease.status) ? (
         <Card>
           <CardContent className="space-y-3 p-4">
             <div className="font-medium">{t("leaseSections.charges.addTitle")}</div>
@@ -77,9 +97,7 @@ export function ChargesSection({
               <Field label={t("leaseSections.charges.labels.type")}>
                 <Select
                   value={form.chargeType}
-                  onChange={(e) =>
-                    setForm({ ...form, chargeType: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, chargeType: e.target.value })}
                 >
                   <option value="cam">{t("leaseSections.charges.types.cam")}</option>
                   <option value="parking">{t("leaseSections.charges.types.parking")}</option>
@@ -91,9 +109,7 @@ export function ChargesSection({
               <Field label={t("leaseSections.charges.labels.description")}>
                 <Input
                   value={form.description}
-                  onChange={(e) =>
-                    setForm({ ...form, description: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
               </Field>
               <Field label={t("leaseSections.charges.labels.amount")}>
@@ -107,38 +123,36 @@ export function ChargesSection({
               <Field label={t("leaseSections.charges.labels.frequency")}>
                 <Select
                   value={form.frequency}
-                  onChange={(e) =>
-                    setForm({ ...form, frequency: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, frequency: e.target.value })}
                 >
                   <option value="monthly">{t("leaseSections.charges.frequencies.monthly")}</option>
-                  <option value="quarterly">{t("leaseSections.charges.frequencies.quarterly")}</option>
-                  <option value="annually">{t("leaseSections.charges.frequencies.annually")}</option>
-                  <option value="one_time">{t("leaseSections.charges.frequencies.one_time")}</option>
+                  <option value="quarterly">
+                    {t("leaseSections.charges.frequencies.quarterly")}
+                  </option>
+                  <option value="annually">
+                    {t("leaseSections.charges.frequencies.annually")}
+                  </option>
+                  <option value="one_time">
+                    {t("leaseSections.charges.frequencies.one_time")}
+                  </option>
                 </Select>
               </Field>
               <Field label={t("leaseSections.charges.labels.effectiveFrom")}>
                 <DateField
                   value={form.effectiveFrom}
-                  onChange={(value) =>
-                    setForm({ ...form, effectiveFrom: value })
-                  }
+                  onChange={(value) => setForm({ ...form, effectiveFrom: value })}
                 />
               </Field>
               <Field label={t("leaseSections.charges.labels.effectiveTo")}>
                 <DateField
                   value={form.effectiveTo}
-                  onChange={(value) =>
-                    setForm({ ...form, effectiveTo: value })
-                  }
+                  onChange={(value) => setForm({ ...form, effectiveTo: value })}
                 />
               </Field>
               <Field label={t("leaseSections.charges.labels.incomeAccount")}>
                 <Select
                   value={form.incomeAccountId}
-                  onChange={(e) =>
-                    setForm({ ...form, incomeAccountId: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, incomeAccountId: e.target.value })}
                 >
                   <option value="">{t("leaseSections.charges.propertyDefault")}</option>
                   {options.incomeAccounts.map((o) => (
@@ -151,9 +165,7 @@ export function ChargesSection({
               <Field label={t("leaseSections.charges.labels.taxCode")}>
                 <Select
                   value={form.taxCodeId}
-                  onChange={(e) =>
-                    setForm({ ...form, taxCodeId: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, taxCodeId: e.target.value })}
                 >
                   <option value="">{t("leaseSections.charges.propertyDefault")}</option>
                   {options.taxCodes.map((o) => (
@@ -190,7 +202,19 @@ export function ChargesSection({
   );
 }
 
-export function EscalationsSection({ lease, rows, permissions, busy, act }: { lease: LeaseRow; rows: EscalationRow[]; permissions: PropertyPermissions; busy: boolean; act: PropertyAction }) {
+export function EscalationsSection({
+  lease,
+  rows,
+  permissions,
+  busy,
+  act,
+}: {
+  lease: LeaseRow;
+  rows: EscalationRow[];
+  permissions: PropertyPermissions;
+  busy: boolean;
+  act: PropertyAction;
+}) {
   const t = useTranslations("entities.propertyManagement");
   const [form, setForm] = useState({
     effectiveOn: lease.endsOn || lease.startsOn,
@@ -201,7 +225,9 @@ export function EscalationsSection({ lease, rows, permissions, busy, act }: { le
   // else), so only the earliest scheduled one is offered for application.
   const nextScheduledId = rows
     .filter((row) => row.status === "scheduled")
-    .sort((left, right) => String(left.effectiveOn).localeCompare(String(right.effectiveOn)))[0]?.id;
+    .sort((left, right) =>
+      String(left.effectiveOn).localeCompare(String(right.effectiveOn)),
+    )[0]?.id;
   return (
     <div className="space-y-4">
       {rows.length ? (
@@ -220,9 +246,7 @@ export function EscalationsSection({ lease, rows, permissions, busy, act }: { le
             {rows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell>{row.effectiveOn}</TableCell>
-                <TableCell className="capitalize">
-                  {row.method.replaceAll("_", " ")}
-                </TableCell>
+                <TableCell className="capitalize">{row.method.replaceAll("_", " ")}</TableCell>
                 <TableCell>{row.value}</TableCell>
                 <TableCell>{row.newAmount || "—"}</TableCell>
                 <TableCell>
@@ -263,9 +287,7 @@ export function EscalationsSection({ lease, rows, permissions, busy, act }: { le
               <Field label={t("leaseSections.escalations.labels.effectiveOn")}>
                 <DateField
                   value={form.effectiveOn}
-                  onChange={(value) =>
-                    setForm({ ...form, effectiveOn: value })
-                  }
+                  onChange={(value) => setForm({ ...form, effectiveOn: value })}
                 />
               </Field>
               <Field label={t("leaseSections.escalations.labels.method")}>
@@ -275,7 +297,9 @@ export function EscalationsSection({ lease, rows, permissions, busy, act }: { le
                 >
                   <option value="percent">{t("leaseSections.escalations.methods.percent")}</option>
                   <option value="fixed">{t("leaseSections.escalations.methods.fixed")}</option>
-                  <option value="new_amount">{t("leaseSections.escalations.methods.new_amount")}</option>
+                  <option value="new_amount">
+                    {t("leaseSections.escalations.methods.new_amount")}
+                  </option>
                 </Select>
               </Field>
               <Field label={t("leaseSections.escalations.labels.value")}>
@@ -339,9 +363,7 @@ export function DepositSection({
     occurredOn: today,
     reason: "",
   });
-  const invoices = options.openInvoices.filter(
-    (o) => o.partyId === lease.tenantId,
-  );
+  const invoices = options.openInvoices.filter((o) => o.partyId === lease.tenantId);
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -376,21 +398,32 @@ export function DepositSection({
         <Card className="border-red-200 dark:border-red-900">
           <CardContent className="space-y-3 p-4">
             <div>
-              <div className="font-medium text-red-700 dark:text-red-300">{t("leaseSections.deposits.reverseTitle")}</div>
+              <div className="font-medium text-red-700 dark:text-red-300">
+                {t("leaseSections.deposits.reverseTitle")}
+              </div>
               <p className="mt-1 text-xs text-slate-500">
-                {reverseRow.occurredOn} · {reverseRow.kind.replaceAll("_", " ")} · {money(reverseRow.amount, { currency: lease.currency })}
+                {reverseRow.occurredOn} · {reverseRow.kind.replaceAll("_", " ")} ·{" "}
+                {money(reverseRow.amount, { currency: lease.currency })}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t("leaseSections.deposits.reverseLabels.reversalDate")}>
-                <DateField value={reversal.occurredOn} onChange={(value) => setReversal({ ...reversal, occurredOn: value })} />
+                <DateField
+                  value={reversal.occurredOn}
+                  onChange={(value) => setReversal({ ...reversal, occurredOn: value })}
+                />
               </Field>
               <Field label={t("leaseSections.deposits.reverseLabels.reason")}>
-                <Input value={reversal.reason} onChange={(e) => setReversal({ ...reversal, reason: e.target.value })} />
+                <Input
+                  value={reversal.reason}
+                  onChange={(e) => setReversal({ ...reversal, reason: e.target.value })}
+                />
               </Field>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" disabled={busy} onClick={() => setReverseRow(null)}>{t("leaseSections.deposits.cancel")}</Button>
+              <Button variant="outline" disabled={busy} onClick={() => setReverseRow(null)}>
+                {t("leaseSections.deposits.cancel")}
+              </Button>
               <Button
                 disabled={busy || !reversal.occurredOn || !reversal.reason.trim()}
                 onClick={async () => {
@@ -444,9 +477,7 @@ export function DepositSection({
               <Field label={t("leaseSections.deposits.labels.date")}>
                 <DateField
                   value={form.occurredOn}
-                  onChange={(value) =>
-                    setForm({ ...form, occurredOn: value })
-                  }
+                  onChange={(value) => setForm({ ...form, occurredOn: value })}
                 />
               </Field>
               <Field label={t("leaseSections.deposits.labels.amount")}>
@@ -461,9 +492,7 @@ export function DepositSection({
                 <Field label={t("leaseSections.deposits.labels.bankAccount")}>
                   <Select
                     value={form.bankAccountId}
-                    onChange={(e) =>
-                      setForm({ ...form, bankAccountId: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, bankAccountId: e.target.value })}
                   >
                     <option value="">{t("leaseSections.deposits.propertyDefault")}</option>
                     {options.bankAccounts.map((o) => (
@@ -478,31 +507,22 @@ export function DepositSection({
                 <Field label={t("leaseSections.deposits.labels.tenantInvoice")}>
                   <Select
                     value={form.appliedDocumentId}
-                    onChange={(e) =>
-                      setForm({ ...form, appliedDocumentId: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, appliedDocumentId: e.target.value })}
                   >
                     <option value="">{t("leaseSections.deposits.selectPostedInvoice")}</option>
                     {invoices.map((o) => (
                       <option key={o.id} value={o.id}>
-                        {o.name} ·{" "}
-                        {money(o.openBalance ?? 0, { currency: lease.currency })}
+                        {o.name} · {money(o.openBalance ?? 0, { currency: lease.currency })}
                       </option>
                     ))}
                   </Select>
                 </Field>
               ) : null}
-              {[
-                "interest",
-                "adjustment_increase",
-                "adjustment_decrease",
-              ].includes(form.kind) ? (
+              {["interest", "adjustment_increase", "adjustment_decrease"].includes(form.kind) ? (
                 <Field label={t("leaseSections.deposits.labels.offsetAccount")}>
                   <Select
                     value={form.offsetAccountId}
-                    onChange={(e) =>
-                      setForm({ ...form, offsetAccountId: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, offsetAccountId: e.target.value })}
                   >
                     <option value="">{t("leaseSections.deposits.selectAccount")}</option>
                     {options.expenseAccounts.map((o) => (
@@ -525,9 +545,7 @@ export function DepositSection({
             <Button
               size="sm"
               disabled={
-                busy ||
-                !form.amount ||
-                (form.kind === "applied" && !form.appliedDocumentId)
+                busy || !form.amount || (form.kind === "applied" && !form.appliedDocumentId)
               }
               onClick={() =>
                 act(

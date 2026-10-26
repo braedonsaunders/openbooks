@@ -85,11 +85,17 @@ test("a review invitation redirects to the named billing review", async () => {
   portalCase(async () => ({ sessionToken: "session-3" }));
   const reviewId = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
   await assert.rejects(
-    PortalTokenPage({ params: Promise.resolve({ token: "link-2" }), searchParams: Promise.resolve({ review: reviewId }) }),
+    PortalTokenPage({
+      params: Promise.resolve({ token: "link-2" }),
+      searchParams: Promise.resolve({ review: reviewId }),
+    }),
     (error: unknown) => (error as { url?: string }).url === `/portal/session-3/reviews/${reviewId}`,
   );
   await assert.rejects(
-    PortalTokenPage({ params: Promise.resolve({ token: "link-3" }), searchParams: Promise.resolve({ review: "../admin" }) }),
+    PortalTokenPage({
+      params: Promise.resolve({ token: "link-3" }),
+      searchParams: Promise.resolve({ review: "../admin" }),
+    }),
     (error: unknown) => (error as { url?: string }).url === "/portal/session-3",
   );
 });

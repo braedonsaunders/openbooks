@@ -21,16 +21,10 @@ import test from "node:test";
 // route-level tests do (same seam as subsidiary-scope.test.ts).
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  seedFlowActors,
-} = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
-const {
-  createSetupRecord,
-  updateSetupRecord,
-} = await import("./write.ts");
+const { createSetupRecord, updateSetupRecord } = await import("./write.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -73,7 +67,9 @@ test(
       assert.match(String(refused.body.error), /Choose the subsidiary this schedule pays for/);
 
       const created = await createSetupRecord(
-        f.actor, "pay-schedules", scheduleBody({ subsidiaryId: f.secondId }),
+        f.actor,
+        "pay-schedules",
+        scheduleBody({ subsidiaryId: f.secondId }),
       );
       assert.equal(created.status, 200);
       assert.ok(typeof created.body.id === "string");
@@ -92,48 +88,52 @@ test(
   },
 );
 
-test(
-  "a single-entity org keeps the root default without being asked",
-  { skip: !DB },
-  async () => {
-    const f = await seedOrg();
-    try {
-      const created = await createSetupRecord(f.actor, "pay-schedules", scheduleBody());
-      assert.equal(created.status, 200);
-      const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+test("a single-entity org keeps the root default without being asked", { skip: !DB }, async () => {
+  const f = await seedOrg();
+  try {
+    const created = await createSetupRecord(f.actor, "pay-schedules", scheduleBody());
+    assert.equal(created.status, 200);
+    const row = (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`
         select subsidiary_id from pay_schedules
-         where id = ${String(created.body.id)} and org_id = ${f.orgId}`, "objects"))[0]!;
-      assert.equal(row.subsidiary_id, null);
-    } finally {
-      await dropScratchOrgReporting(f.orgId);
-    }
-  },
-);
+         where id = ${String(created.body.id)} and org_id = ${f.orgId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(row.subsidiary_id, null);
+  } finally {
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
 
-test(
-  "a single-entity org may name its only subsidiary explicitly",
-  { skip: !DB },
-  async () => {
-    // The payroll onboarding wizard always sends the org's sole subsidiary
-    // id on a single-entity tenant ("defaults to its only subsidiary
-    // without being asked"). The generic subsidiary feature fence must not
-    // refuse that: naming a real, active subsidiary of the org is always
-    // safe, and the engine's own pay-schedule rule validates it.
-    const f = await seedOrg();
-    try {
-      const created = await createSetupRecord(
-        f.actor, "pay-schedules", scheduleBody({ subsidiaryId: f.rootSubsidiaryId }),
-      );
-      assert.equal(created.status, 200);
-      const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+test("a single-entity org may name its only subsidiary explicitly", { skip: !DB }, async () => {
+  // The payroll onboarding wizard always sends the org's sole subsidiary
+  // id on a single-entity tenant ("defaults to its only subsidiary
+  // without being asked"). The generic subsidiary feature fence must not
+  // refuse that: naming a real, active subsidiary of the org is always
+  // safe, and the engine's own pay-schedule rule validates it.
+  const f = await seedOrg();
+  try {
+    const created = await createSetupRecord(
+      f.actor,
+      "pay-schedules",
+      scheduleBody({ subsidiaryId: f.rootSubsidiaryId }),
+    );
+    assert.equal(created.status, 200);
+    const row = (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`
         select subsidiary_id from pay_schedules
-         where id = ${String(created.body.id)} and org_id = ${f.orgId}`, "objects"))[0]!;
-      assert.equal(row.subsidiary_id, f.rootSubsidiaryId);
-    } finally {
-      await dropScratchOrgReporting(f.orgId);
-    }
-  },
-);
+         where id = ${String(created.body.id)} and org_id = ${f.orgId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(row.subsidiary_id, f.rootSubsidiaryId);
+  } finally {
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
 
 test(
   "re-scoping a schedule re-resolves its draft run in the same transaction",
@@ -142,17 +142,27 @@ test(
     const f = await seedOrg({ secondSubsidiary: true });
     try {
       const created = await createSetupRecord(
-        f.actor, "pay-schedules", scheduleBody({ subsidiaryId: f.rootSubsidiaryId }),
+        f.actor,
+        "pay-schedules",
+        scheduleBody({ subsidiaryId: f.rootSubsidiaryId }),
       );
       assert.equal(created.status, 200);
       const scheduleId = String(created.body.id);
 
       const run = await createPayRun({
-        orgId: f.orgId, actorId: f.actor.id, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: f.orgId,
+        actorId: f.actor.id,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const before = (await db.execute<{ subsidiary_id: string; currency: string }>(sql`
-        select subsidiary_id, currency from documents where id = ${run.documentId}`, "objects"))[0]!;
+      const before = (
+        await db.execute<{ subsidiary_id: string; currency: string }>(
+          sql`
+        select subsidiary_id, currency from documents where id = ${run.documentId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(before.subsidiary_id, f.rootSubsidiaryId);
       assert.equal(before.currency, "CAD");
 
@@ -163,8 +173,13 @@ test(
       assert.equal(updated.status, 200);
       assert.deepEqual(updated.body.rescope, { reresolved: 1, untouched: 0, skipped: [] });
 
-      const after = (await db.execute<{ subsidiary_id: string; currency: string }>(sql`
-        select subsidiary_id, currency from documents where id = ${run.documentId}`, "objects"))[0]!;
+      const after = (
+        await db.execute<{ subsidiary_id: string; currency: string }>(
+          sql`
+        select subsidiary_id, currency from documents where id = ${run.documentId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(after.subsidiary_id, f.secondId);
       assert.equal(after.currency, "USD");
     } finally {

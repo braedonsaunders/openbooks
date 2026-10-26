@@ -17,7 +17,14 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fix
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function seedUsdCash(orgId: string, subsidiaryId: string, accounts: { bank: string; clearing: string; fxGainLoss: string }, actorId: string, bookId: string, periodId: string): Promise<void> {
+async function seedUsdCash(
+  orgId: string,
+  subsidiaryId: string,
+  accounts: { bank: string; clearing: string; fxGainLoss: string },
+  actorId: string,
+  bookId: string,
+  periodId: string,
+): Promise<void> {
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
     coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${orgId}`);
   await db.execute(sql`
@@ -39,13 +46,18 @@ async function seedUsdCash(orgId: string, subsidiaryId: string, accounts: { bank
     values
       (${orgId}, ${entryId}, 1, ${accounts.bank}, ${subsidiaryId}, 136.00, 'USD', 100.00, 1.36, false),
       (${orgId}, ${entryId}, 2, ${accounts.clearing}, ${subsidiaryId}, -136.00, 'CAD', -136.00, 1, false)`);
-  await db.execute(sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`);
+  await db.execute(
+    sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`,
+  );
 }
 
 async function fxRevaluationEntryCount(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from journal_entries
-     where org_id=${orgId} and origin='fx_revaluation'`, "objects"));
+     where org_id=${orgId} and origin='fx_revaluation'`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
@@ -61,11 +73,17 @@ test("revaluation into a GL-closed period refuses with a named error", { skip: !
       select ${randomUUID()}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, fiscal_calendar_id
         from accounting_periods where id = ${org.periodId}`);
     await setPeriodLockState({
-      orgId: org.orgId, periodId: org.periodId, bookId: org.bookId,
-      module: "gl", state: "closed", actorId, reason: "July is closed before revaluation",
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      module: "gl",
+      state: "closed",
+      actorId,
+      reason: "July is closed before revaluation",
     });
     const run = await withOrgContext(org.orgId, () =>
-      runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]));
+      runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]),
+    );
     assert.equal(run.posted.length, 0, "nothing may post into a closed period");
     assert.equal(run.problems.length, 1, `one named refusal expected, got ${JSON.stringify(run)}`);
     assert.match(
@@ -73,39 +91,64 @@ test("revaluation into a GL-closed period refuses with a named error", { skip: !
       /FX revaluation cannot post into the closed GL period P07 FY2026\b/,
       `refusal must name the period by its fiscal position, got: ${run.problems[0]}`,
     );
-    assert.equal(await fxRevaluationEntryCount(org.orgId), 0, "the backstop must leave no partial pair");
+    assert.equal(
+      await fxRevaluationEntryCount(org.orgId),
+      0,
+      "the backstop must leave no partial pair",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("revaluation refuses with a named error when the reversal period is closed", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedUsdCash(org.orgId, org.subsidiaryId, org.accounts, actorId, org.bookId, org.periodId);
-    const augustId = randomUUID();
-    await db.execute(sql`
+test(
+  "revaluation refuses with a named error when the reversal period is closed",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedUsdCash(
+        org.orgId,
+        org.subsidiaryId,
+        org.accounts,
+        actorId,
+        org.bookId,
+        org.periodId,
+      );
+      const augustId = randomUUID();
+      await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       select ${augustId}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, fiscal_calendar_id
         from accounting_periods where id = ${org.periodId}`);
-    // July stays open; the August reversal leg is locked.
-    await setPeriodLockState({
-      orgId: org.orgId, periodId: augustId, bookId: org.bookId,
-      module: "gl", state: "closed", actorId, reason: "August is closed before July revaluation",
-    });
-    const run = await withOrgContext(org.orgId, () =>
-      runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]));
-    assert.equal(run.posted.length, 0, "the pair is atomic: no adjustment without its reversal");
-    assert.equal(run.problems.length, 1, `one named refusal expected, got ${JSON.stringify(run)}`);
-    assert.match(
-      run.problems[0]!,
-      /FX revaluation cannot post its reversal into the closed GL period P08 FY2026\b/,
-      `refusal must be named, got: ${run.problems[0]}`,
-    );
-    assert.equal(await fxRevaluationEntryCount(org.orgId), 0, "no half pair may survive");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // July stays open; the August reversal leg is locked.
+      await setPeriodLockState({
+        orgId: org.orgId,
+        periodId: augustId,
+        bookId: org.bookId,
+        module: "gl",
+        state: "closed",
+        actorId,
+        reason: "August is closed before July revaluation",
+      });
+      const run = await withOrgContext(org.orgId, () =>
+        runRevaluation(org.orgId, org.periodId, actorId, [org.subsidiaryId]),
+      );
+      assert.equal(run.posted.length, 0, "the pair is atomic: no adjustment without its reversal");
+      assert.equal(
+        run.problems.length,
+        1,
+        `one named refusal expected, got ${JSON.stringify(run)}`,
+      );
+      assert.match(
+        run.problems[0]!,
+        /FX revaluation cannot post its reversal into the closed GL period P08 FY2026\b/,
+        `refusal must be named, got: ${run.problems[0]}`,
+      );
+      assert.equal(await fxRevaluationEntryCount(org.orgId), 0, "no half pair may survive");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

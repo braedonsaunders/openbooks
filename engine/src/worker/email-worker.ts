@@ -1,6 +1,11 @@
-import { authorizeReportRun } from './render-client.ts';
+import { authorizeReportRun } from "./render-client.ts";
 import { Worker } from "bullmq";
-import { EMAIL_QUEUE, getBlockingConnection, resolveEmailDeliveryKey, type EmailJobData } from "@openbooks/jobs";
+import {
+  EMAIL_QUEUE,
+  getBlockingConnection,
+  resolveEmailDeliveryKey,
+  type EmailJobData,
+} from "@openbooks/jobs";
 import {
   emailDeliveryBlockedMessage,
   isEmailAttachmentRef,
@@ -23,7 +28,10 @@ import {
   resolveOrgEmailTransportDetailed,
 } from "../delivery/email-config.ts";
 import { sql } from "drizzle-orm";
-import { deleteStoredEmailAttachments, loadEmailAttachments } from "../delivery/email-attachments.ts";
+import {
+  deleteStoredEmailAttachments,
+  loadEmailAttachments,
+} from "../delivery/email-attachments.ts";
 import { db, withOrgContext } from "../platform/db.ts";
 import { emailAttachmentObjectKey } from "../platform/file-storage.ts";
 import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts";
@@ -98,332 +106,435 @@ export function createEmailWorker(): Worker<EmailJobData> {
       // outbox) belongs to the job's tenant. A queue callback carries no request
       // store, so this scope is what makes those queries legal at all.
       return await withOrgContext(d.orgId, async () => {
-      const reportDeliveryId = d.meta?.reportDeliveryId;
-      const paymentRemittanceId = d.meta?.paymentRemittanceId;
-      // A dunning letter's claim id travels in the outbox payload meta (the
-      // runner stamps it at deferral). The runner leaves the claim 'staged';
-      // the worker below is the only writer that settles it, from the
-      // provider's verdict — acceptance moves staged→sent, an exhausted
-      // rejection moves staged→failed, and uncertainty leaves it staged.
-      const dunningClaimId =
-        typeof d.meta?.dunningLogId === "string" && d.meta.dunningLogId.trim()
-          ? d.meta.dunningLogId
-          : null;
-      // Each settle is a guarded staged-only UPDATE naming its row back. A
-      // false return (row missing, already settled, or re-armed by a later
-      // dunning tick) is logged as a failure — never thrown (the email_log
-      // verdict above already stands) and never a silent success.
-      const settleDunningClaim = async (outcome: "sent" | "failed", detail: string | null): Promise<void> => {
-        if (!dunningClaimId) return;
-        const settled =
-          outcome === "sent"
-            ? await markDunningClaimSent(d.orgId, dunningClaimId)
-            : await markDunningClaimFailed(d.orgId, dunningClaimId, detail ?? "email delivery failed");
-        if (!settled) {
-          console.error(
-            `[worker] dunning claim ${dunningClaimId} was not marked ${outcome} — confirming the row exists and is still staged before treating the verdict as recorded`,
-          );
-        }
-      };
-      const queueAttempt = job.attemptsMade + 1;
-      // Staged attachment bytes are dropped once the delivery reaches a
-      // terminal state. Best-effort by design: a failed delete must never
-      // fail delivery bookkeeping, and a crash-orphaned blob is never
-      // re-read because only live job payloads reference storage ids.
-      const dropStagedAttachments = async (): Promise<void> => {
-        // Durable cleanup intents first so the worker duty
-        // retries what the inline delete below cannot confirm; the inline
-        // best-effort attempt stays (a failed delete must never fail
-        // delivery bookkeeping).
-        for (const attachment of d.attachments ?? []) {
-          if (isEmailAttachmentRef(attachment) && "storageKey" in attachment) {
-            await enqueueStorageCleanupStandalone({
-              orgId: d.orgId,
-              objectKey: emailAttachmentObjectKey(attachment.storageKey),
-              ownerKind: "email_attachment",
-              ownerId: attachment.storageKey,
-            });
-          }
-        }
-        await deleteStoredEmailAttachments(d.attachments).catch((error) => {
-          console.error("[worker] email attachment cleanup failed:", error instanceof Error ? error.message : error);
-        });
-      };
-      const deferEmailForReconciliation = async (logId: string, reason: string): Promise<never> => {
-        await appendEmailAttemptEvent(d.orgId, logId, { outcome: "blocked", detail: reason });
-        if (paymentRemittanceId) {
-          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, reason, queueAttempt, true);
-        }
-        if (reportDeliveryId) {
-          const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-          await markReportDeliveryFailed(d.orgId, reportDeliveryId, logId, `delivery pending reconciliation: ${reason}`, finalQueueAttempt);
-        }
-        // Acceptance remains unresolved, so preserve the canonical log as the
-        // authority and prevent a later worker attempt from transmitting again.
-        await dropStagedAttachments();
-        throw new Error(`email delivery deferred by reconciliation: ${reason}`);
-      };
-      // The start mark is the worker's lease on this delivery: when the fence
-      // rejects it (a racing callback or rebuild sweep already moved the row
-      // on), this job is stale and must not transmit — the owning transition
-      // drives the delivery from here. Standing down is lossless: a row the
-      // sweep parked as failed is redispatched as a new generation, and a
-      // sent row is already delivered.
-      if (reportDeliveryId) {
-        const started = await markReportDeliveryStarted(d.orgId, reportDeliveryId, job.id ?? null);
-        if (!started) {
-          console.error(
-            `[worker] report delivery ${reportDeliveryId} start not applied — ` +
-              `standing down without sending; the owning transition drives this delivery`,
-          );
-          return { skipped: true, reportDeliveryNotApplied: reportDeliveryId };
-        }
-      }
-      if (paymentRemittanceId) {
-        await markPaymentRemittanceAttempt(d.orgId, paymentRemittanceId, queueAttempt);
-      }
-      // The delivery key arrives in the job data, derived at enqueue from
-      // the caller's durable idempotency key — never from the BullMQ job id,
-      // whose auto-increment counter restarts after a Redis reset and would
-      // align new mail with old sent-log rows. Recomputing it after any
-      // crash must produce the same identity (and therefore the same
-      // canonical log row) instead of minting new mail.
-      const deliveryKey = resolveEmailDeliveryKey(d);
-
-      // Resolve and claim before any terminal suppression branch. A retry can
-      // arrive after its prior provider attempt became uncertain and the org
-      // was disabled; that unresolved acceptance must be reconciled first.
-      const sandbox = await isSandboxOrg(d.orgId);
-      const resolution = sandbox ? null : await resolveOrgEmailTransportDetailed(d.orgId);
-      const resolvedTransport = resolution?.state === "ready" ? resolution.transport : null;
-      const suppressionReason = sandbox
-        ? "sandbox environment — email egress blocked"
-        : resolution?.state === "unconfigured" ? "email provider not configured" : null;
-      const canonical = await claimEmailDeliveryLog({
-        orgId: d.orgId,
-        deliveryKey,
-        jobId: job.id ?? null,
-        provider: resolvedTransport?.provider ?? null,
-        recipients: [d.to],
-        fromAddr: resolvedTransport?.from ?? null,
-        replyToAddr: resolvedTransport?.replyTo ?? null,
-        subject: d.subject,
-        categoryKey: d.meta?.category ?? null,
-        meta: suppressionReason ? { ...d.meta, reason: suppressionReason } : d.meta ?? {},
-        ...(suppressionReason ? { status: "suppressed" as const, errorMessage: suppressionReason } : {}),
-        actor: emailActor,
-      });
-      const nextAttemptNo = canonical.attempts.length + 1;
-
-      // Reconciliation gate BEFORE any transmission: earlier attempts decide.
-      const decision = canonical.status === "uncertain"
-        ? { action: "suppress" as const, reason: canonical.attempts.at(-1)?.detail ?? "a previous provider attempt remains uncertain" }
-        : reconcileDeliveryAttempts(canonical.attempts);
-      if (decision.action === "complete") {
-        // An earlier attempt was accepted by the provider; finish bookkeeping
-        // without sending anything again.
-        await appendEmailAttemptEvent(d.orgId, canonical.id, {
-          outcome: "blocked",
-          detail: `not resent — accepted on a previous attempt (${decision.providerMessageId})`,
-        });
-        await confirmEmailSentGuarded(d.orgId, canonical.id, decision.providerMessageId);
-        await dropStagedAttachments();
-        // An earlier attempt was accepted by the provider: that acceptance
-        // settles the dunning claim even though this execution sent nothing.
-        await settleDunningClaim("sent", null);
-        if (paymentRemittanceId) {
-          await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
-        }
-        if (reportDeliveryId) {
-          if (!(await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, decision.providerMessageId))) {
+        const reportDeliveryId = d.meta?.reportDeliveryId;
+        const paymentRemittanceId = d.meta?.paymentRemittanceId;
+        // A dunning letter's claim id travels in the outbox payload meta (the
+        // runner stamps it at deferral). The runner leaves the claim 'staged';
+        // the worker below is the only writer that settles it, from the
+        // provider's verdict — acceptance moves staged→sent, an exhausted
+        // rejection moves staged→failed, and uncertainty leaves it staged.
+        const dunningClaimId =
+          typeof d.meta?.dunningLogId === "string" && d.meta.dunningLogId.trim()
+            ? d.meta.dunningLogId
+            : null;
+        // Each settle is a guarded staged-only UPDATE naming its row back. A
+        // false return (row missing, already settled, or re-armed by a later
+        // dunning tick) is logged as a failure — never thrown (the email_log
+        // verdict above already stands) and never a silent success.
+        const settleDunningClaim = async (
+          outcome: "sent" | "failed",
+          detail: string | null,
+        ): Promise<void> => {
+          if (!dunningClaimId) return;
+          const settled =
+            outcome === "sent"
+              ? await markDunningClaimSent(d.orgId, dunningClaimId)
+              : await markDunningClaimFailed(
+                  d.orgId,
+                  dunningClaimId,
+                  detail ?? "email delivery failed",
+                );
+          if (!settled) {
             console.error(
-              `[worker] report delivery ${reportDeliveryId} sent-mark not applied — ` +
-                `the row moved on under a racing transition; the provider acceptance stands in email_log ${canonical.id}`,
+              `[worker] dunning claim ${dunningClaimId} was not marked ${outcome} — confirming the row exists and is still staged before treating the verdict as recorded`,
             );
           }
-        }
-        return { id: decision.providerMessageId, reconciled: true };
-      }
-      if (decision.action === "suppress") {
-        await deferEmailForReconciliation(canonical.id, decision.reason);
-      }
-
-      if (suppressionReason) {
-        // A concurrent uncertain transition after the read fence must also
-        // stand down. Do not record a suppression verdict or settle dependants
-        // unless the canonical email row actually reached that terminal state.
-        if (!(await markEmailSuppressed(d.orgId, canonical.id, suppressionReason))) {
-          await deferEmailForReconciliation(canonical.id, "a previous provider attempt remains uncertain");
-        }
-        await appendEmailAttemptEvent(d.orgId, canonical.id, { outcome: "suppressed", detail: suppressionReason });
-        await dropStagedAttachments();
-        if (paymentRemittanceId) {
-          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, suppressionReason, queueAttempt, true);
-        }
-        if (reportDeliveryId && !(await markReportDeliverySuppressed(d.orgId, reportDeliveryId, canonical.id, suppressionReason))) {
-          console.error(`[worker] report delivery ${reportDeliveryId} suppression not applied — row moved on under a racing transition; the suppression stands in email_log ${canonical.id}`);
-        }
-        // Dunning remains staged: no provider attempt was made.
-        return { suppressed: true, ...(sandbox ? { sandbox: true } : {}) };
-      }
-
-      const transport = resolvedTransport;
-      if (transport) {
-        await appendEmailAttemptEvent(d.orgId, canonical.id, {
-          attempt: nextAttemptNo,
-          outcome: "started",
-          detail: `sending via ${transport.provider} with identity ${deliveryKey}`,
-        });
-      }
-
-      try {
-        // A configured-but-unusable transport fails here — inside the
-        // attempt boundary, so the failure lands on the lineage as notSent
-        // evidence and BullMQ retries it instead of acking the mail as "not
-        // configured" forever. The mail was never transmitted.
-        if (!transport) {
-          throw new Error(
-            resolution?.state === "unusable"
-              ? `${emailDeliveryBlockedMessage(resolution)} The queued retry sends once it is fixed.`
-              : "Email delivery is unavailable for this organization. The queued retry sends once it is fixed.",
-          );
-        }
-        // Check current grants immediately before transmission. Keep this in
-        // the attempt boundary so revoked access becomes durable not-sent
-        // evidence, and accepted retries can reconcile without sending again.
+        };
+        const queueAttempt = job.attemptsMade + 1;
+        // Staged attachment bytes are dropped once the delivery reaches a
+        // terminal state. Best-effort by design: a failed delete must never
+        // fail delivery bookkeeping, and a crash-orphaned blob is never
+        // re-read because only live job payloads reference storage ids.
+        const dropStagedAttachments = async (): Promise<void> => {
+          // Durable cleanup intents first so the worker duty
+          // retries what the inline delete below cannot confirm; the inline
+          // best-effort attempt stays (a failed delete must never fail
+          // delivery bookkeeping).
+          for (const attachment of d.attachments ?? []) {
+            if (isEmailAttachmentRef(attachment) && "storageKey" in attachment) {
+              await enqueueStorageCleanupStandalone({
+                orgId: d.orgId,
+                objectKey: emailAttachmentObjectKey(attachment.storageKey),
+                ownerKind: "email_attachment",
+                ownerId: attachment.storageKey,
+              });
+            }
+          }
+          await deleteStoredEmailAttachments(d.attachments).catch((error) => {
+            console.error(
+              "[worker] email attachment cleanup failed:",
+              error instanceof Error ? error.message : error,
+            );
+          });
+        };
+        const deferEmailForReconciliation = async (
+          logId: string,
+          reason: string,
+        ): Promise<never> => {
+          await appendEmailAttemptEvent(d.orgId, logId, { outcome: "blocked", detail: reason });
+          if (paymentRemittanceId) {
+            await markPaymentRemittanceFailed(
+              d.orgId,
+              paymentRemittanceId,
+              reason,
+              queueAttempt,
+              true,
+            );
+          }
+          if (reportDeliveryId) {
+            const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+            await markReportDeliveryFailed(
+              d.orgId,
+              reportDeliveryId,
+              logId,
+              `delivery pending reconciliation: ${reason}`,
+              finalQueueAttempt,
+            );
+          }
+          // Acceptance remains unresolved, so preserve the canonical log as the
+          // authority and prevent a later worker attempt from transmitting again.
+          await dropStagedAttachments();
+          throw new Error(`email delivery deferred by reconciliation: ${reason}`);
+        };
+        // The start mark is the worker's lease on this delivery: when the fence
+        // rejects it (a racing callback or rebuild sweep already moved the row
+        // on), this job is stale and must not transmit — the owning transition
+        // drives the delivery from here. Standing down is lossless: a row the
+        // sweep parked as failed is redispatched as a new generation, and a
+        // sent row is already delivered.
         if (reportDeliveryId) {
-          const run = (await db.execute<{ run_id: string; definition_id: string }>(sql`
+          const started = await markReportDeliveryStarted(
+            d.orgId,
+            reportDeliveryId,
+            job.id ?? null,
+          );
+          if (!started) {
+            console.error(
+              `[worker] report delivery ${reportDeliveryId} start not applied — ` +
+                `standing down without sending; the owning transition drives this delivery`,
+            );
+            return { skipped: true, reportDeliveryNotApplied: reportDeliveryId };
+          }
+        }
+        if (paymentRemittanceId) {
+          await markPaymentRemittanceAttempt(d.orgId, paymentRemittanceId, queueAttempt);
+        }
+        // The delivery key arrives in the job data, derived at enqueue from
+        // the caller's durable idempotency key — never from the BullMQ job id,
+        // whose auto-increment counter restarts after a Redis reset and would
+        // align new mail with old sent-log rows. Recomputing it after any
+        // crash must produce the same identity (and therefore the same
+        // canonical log row) instead of minting new mail.
+        const deliveryKey = resolveEmailDeliveryKey(d);
+
+        // Resolve and claim before any terminal suppression branch. A retry can
+        // arrive after its prior provider attempt became uncertain and the org
+        // was disabled; that unresolved acceptance must be reconciled first.
+        const sandbox = await isSandboxOrg(d.orgId);
+        const resolution = sandbox ? null : await resolveOrgEmailTransportDetailed(d.orgId);
+        const resolvedTransport = resolution?.state === "ready" ? resolution.transport : null;
+        const suppressionReason = sandbox
+          ? "sandbox environment — email egress blocked"
+          : resolution?.state === "unconfigured"
+            ? "email provider not configured"
+            : null;
+        const canonical = await claimEmailDeliveryLog({
+          orgId: d.orgId,
+          deliveryKey,
+          jobId: job.id ?? null,
+          provider: resolvedTransport?.provider ?? null,
+          recipients: [d.to],
+          fromAddr: resolvedTransport?.from ?? null,
+          replyToAddr: resolvedTransport?.replyTo ?? null,
+          subject: d.subject,
+          categoryKey: d.meta?.category ?? null,
+          meta: suppressionReason ? { ...d.meta, reason: suppressionReason } : (d.meta ?? {}),
+          ...(suppressionReason
+            ? { status: "suppressed" as const, errorMessage: suppressionReason }
+            : {}),
+          actor: emailActor,
+        });
+        const nextAttemptNo = canonical.attempts.length + 1;
+
+        // Reconciliation gate BEFORE any transmission: earlier attempts decide.
+        const decision =
+          canonical.status === "uncertain"
+            ? {
+                action: "suppress" as const,
+                reason:
+                  canonical.attempts.at(-1)?.detail ??
+                  "a previous provider attempt remains uncertain",
+              }
+            : reconcileDeliveryAttempts(canonical.attempts);
+        if (decision.action === "complete") {
+          // An earlier attempt was accepted by the provider; finish bookkeeping
+          // without sending anything again.
+          await appendEmailAttemptEvent(d.orgId, canonical.id, {
+            outcome: "blocked",
+            detail: `not resent — accepted on a previous attempt (${decision.providerMessageId})`,
+          });
+          await confirmEmailSentGuarded(d.orgId, canonical.id, decision.providerMessageId);
+          await dropStagedAttachments();
+          // An earlier attempt was accepted by the provider: that acceptance
+          // settles the dunning claim even though this execution sent nothing.
+          await settleDunningClaim("sent", null);
+          if (paymentRemittanceId) {
+            await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
+          }
+          if (reportDeliveryId) {
+            if (
+              !(await markReportDeliverySent(
+                d.orgId,
+                reportDeliveryId,
+                canonical.id,
+                decision.providerMessageId,
+              ))
+            ) {
+              console.error(
+                `[worker] report delivery ${reportDeliveryId} sent-mark not applied — ` +
+                  `the row moved on under a racing transition; the provider acceptance stands in email_log ${canonical.id}`,
+              );
+            }
+          }
+          return { id: decision.providerMessageId, reconciled: true };
+        }
+        if (decision.action === "suppress") {
+          await deferEmailForReconciliation(canonical.id, decision.reason);
+        }
+
+        if (suppressionReason) {
+          // A concurrent uncertain transition after the read fence must also
+          // stand down. Do not record a suppression verdict or settle dependants
+          // unless the canonical email row actually reached that terminal state.
+          if (!(await markEmailSuppressed(d.orgId, canonical.id, suppressionReason))) {
+            await deferEmailForReconciliation(
+              canonical.id,
+              "a previous provider attempt remains uncertain",
+            );
+          }
+          await appendEmailAttemptEvent(d.orgId, canonical.id, {
+            outcome: "suppressed",
+            detail: suppressionReason,
+          });
+          await dropStagedAttachments();
+          if (paymentRemittanceId) {
+            await markPaymentRemittanceFailed(
+              d.orgId,
+              paymentRemittanceId,
+              suppressionReason,
+              queueAttempt,
+              true,
+            );
+          }
+          if (
+            reportDeliveryId &&
+            !(await markReportDeliverySuppressed(
+              d.orgId,
+              reportDeliveryId,
+              canonical.id,
+              suppressionReason,
+            ))
+          ) {
+            console.error(
+              `[worker] report delivery ${reportDeliveryId} suppression not applied — row moved on under a racing transition; the suppression stands in email_log ${canonical.id}`,
+            );
+          }
+          // Dunning remains staged: no provider attempt was made.
+          return { suppressed: true, ...(sandbox ? { sandbox: true } : {}) };
+        }
+
+        const transport = resolvedTransport;
+        if (transport) {
+          await appendEmailAttemptEvent(d.orgId, canonical.id, {
+            attempt: nextAttemptNo,
+            outcome: "started",
+            detail: `sending via ${transport.provider} with identity ${deliveryKey}`,
+          });
+        }
+
+        try {
+          // A configured-but-unusable transport fails here — inside the
+          // attempt boundary, so the failure lands on the lineage as notSent
+          // evidence and BullMQ retries it instead of acking the mail as "not
+          // configured" forever. The mail was never transmitted.
+          if (!transport) {
+            throw new Error(
+              resolution?.state === "unusable"
+                ? `${emailDeliveryBlockedMessage(resolution)} The queued retry sends once it is fixed.`
+                : "Email delivery is unavailable for this organization. The queued retry sends once it is fixed.",
+            );
+          }
+          // Check current grants immediately before transmission. Keep this in
+          // the attempt boundary so revoked access becomes durable not-sent
+          // evidence, and accepted retries can reconcile without sending again.
+          if (reportDeliveryId) {
+            const run = (
+              await db.execute<{ run_id: string; definition_id: string }>(
+                sql`
             select r.id as run_id, r.definition_id
               from report_delivery_outbox delivery
               join report_runs r on r.id = delivery.run_id and r.org_id = delivery.org_id
              where delivery.id = ${reportDeliveryId} and delivery.org_id = ${d.orgId}
                and delivery.recipient = ${d.to}
-          `, "objects"))[0];
-          if (!run) throw new Error('Report delivery evidence not found');
-          await authorizeReportRun(d.orgId, run.definition_id, run.run_id);
-        }
-        // Attachments arrive by reference and are fetched here, at send
-        // time — the queue payload never carries file bytes.
-        const attachments = await loadEmailAttachments(d.orgId, d.attachments);
-        const outcome = await sendVia(transport, {
-          to: d.to,
-          subject: d.subject,
-          html: d.html,
-          text: d.text,
-          attachments,
-          ...(d.replyTo ? { replyTo: d.replyTo } : {}),
-        }, { deliveryKey });
-        if (outcome.kind === "sent") {
-          await appendEmailAttemptEvent(d.orgId, canonical.id, {
-            attempt: nextAttemptNo,
-            outcome: "sent",
-            detail: outcome.providerMessageId,
-          });
-          await markEmailSent(d.orgId, canonical.id, outcome.providerMessageId);
-          await dropStagedAttachments();
-          // The provider already accepted the letter: everything below is
-          // bookkeeping, not the send. A fault here must never reach the
-          // send-failure catch — that path means "the customer got nothing"
-          // and would orphan the claim as staged until a later tick re-arms
-          // it under a fresh delivery identity and sends the letter twice.
-          try {
-            // Provider acceptance moves the staged dunning claim to sent.
-            await settleDunningClaim("sent", null);
-            if (paymentRemittanceId) {
-              await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
-            }
-            if (reportDeliveryId) {
-              if (!(await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, outcome.providerMessageId))) {
-                console.error(
-                  `[worker] report delivery ${reportDeliveryId} sent-mark not applied — ` +
-                    `the row moved on under a racing transition; the provider acceptance stands in email_log ${canonical.id}`,
-                );
-              }
-            }
-          } catch (bookkeepingError) {
-            console.error(
-              `[worker] email ${canonical.id} was accepted by the provider but post-acceptance bookkeeping failed — leaving the acceptance for reconciliation, never re-sending:`,
-              bookkeepingError instanceof Error ? bookkeepingError.message : bookkeepingError,
-            );
-            throw new PostAcceptanceBookkeepingError(canonical.id, bookkeepingError);
+          `,
+                "objects",
+              )
+            )[0];
+            if (!run) throw new Error("Report delivery evidence not found");
+            await authorizeReportRun(d.orgId, run.definition_id, run.run_id);
           }
-          return { id: outcome.providerMessageId };
-        }
-        // Unresolved acceptance state: park it explicitly. BullMQ will retry,
-        // but the reconciliation gate above turns every subsequent attempt
-        // into blocked evidence instead of another transmission.
-        await appendEmailAttemptEvent(d.orgId, canonical.id, {
-          attempt: nextAttemptNo,
-          outcome: "uncertain",
-          detail: outcome.reason,
-        });
-        await markEmailUncertain(d.orgId, canonical.id, outcome.reason);
-        // Unresolved acceptance stays staged: re-arming now would defer a
-        // second letter while the first may already have been accepted. The
-        // detail is recorded on the email_log lineage above, and the
-        // reconciliation gate turns retries into blocked evidence instead of
-        // another transmission — the staged claim keeps blocking the runner
-        // from enqueueing a duplicate in the meantime.
-        if (paymentRemittanceId) {
-          await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, outcome.reason, queueAttempt, true);
-        }
-        if (reportDeliveryId) {
-          const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-          await markReportDeliveryFailed(d.orgId, reportDeliveryId, canonical.id, outcome.reason, finalQueueAttempt);
-        }
-        throw new Error(outcome.reason);
-      } catch (e) {
-        // A post-acceptance bookkeeping fault is not a send failure — the
-        // provider already accepted the letter — so recording notSent /
-        // failed evidence here would orphan the claim and invite a duplicate
-        // re-send. Rethrow untouched: the BullMQ retry reconciles onto the
-        // recorded acceptance without transmitting.
-        if (e instanceof PostAcceptanceBookkeepingError) throw e;
-        const message = e instanceof Error ? e.message : String(e);
-        const alreadyRecorded =
-          e instanceof Error &&
-          (message.startsWith("email delivery deferred by reconciliation") || /acceptance state unresolved/.test(message));
-        if (alreadyRecorded && job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
-          // Terminal uncertain/suppressed delivery whose evidence is already
-          // on the log lineage: the no-resend gate stands, but the staged
-          // bytes will never be fetched again — drop them so exhaustion
-          // doesn't orphan blobs once the failed job ages out of Redis.
-          await dropStagedAttachments();
-        }
-        if (!alreadyRecorded) {
-          // Definite failure: record evidence, rethrow so BullMQ retries.
-          await appendEmailAttemptEvent(d.orgId, canonical.id, {
-            attempt: nextAttemptNo,
-            outcome: "notSent",
-            detail: message,
-          });
-          await markEmailFailed(d.orgId, canonical.id, message);
-          if (job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+          // Attachments arrive by reference and are fetched here, at send
+          // time — the queue payload never carries file bytes.
+          const attachments = await loadEmailAttachments(d.orgId, d.attachments);
+          const outcome = await sendVia(
+            transport,
+            {
+              to: d.to,
+              subject: d.subject,
+              html: d.html,
+              text: d.text,
+              attachments,
+              ...(d.replyTo ? { replyTo: d.replyTo } : {}),
+            },
+            { deliveryKey },
+          );
+          if (outcome.kind === "sent") {
+            await appendEmailAttemptEvent(d.orgId, canonical.id, {
+              attempt: nextAttemptNo,
+              outcome: "sent",
+              detail: outcome.providerMessageId,
+            });
+            await markEmailSent(d.orgId, canonical.id, outcome.providerMessageId);
             await dropStagedAttachments();
+            // The provider already accepted the letter: everything below is
+            // bookkeeping, not the send. A fault here must never reach the
+            // send-failure catch — that path means "the customer got nothing"
+            // and would orphan the claim as staged until a later tick re-arms
+            // it under a fresh delivery identity and sends the letter twice.
+            try {
+              // Provider acceptance moves the staged dunning claim to sent.
+              await settleDunningClaim("sent", null);
+              if (paymentRemittanceId) {
+                await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
+              }
+              if (reportDeliveryId) {
+                if (
+                  !(await markReportDeliverySent(
+                    d.orgId,
+                    reportDeliveryId,
+                    canonical.id,
+                    outcome.providerMessageId,
+                  ))
+                ) {
+                  console.error(
+                    `[worker] report delivery ${reportDeliveryId} sent-mark not applied — ` +
+                      `the row moved on under a racing transition; the provider acceptance stands in email_log ${canonical.id}`,
+                  );
+                }
+              }
+            } catch (bookkeepingError) {
+              console.error(
+                `[worker] email ${canonical.id} was accepted by the provider but post-acceptance bookkeeping failed — leaving the acceptance for reconciliation, never re-sending:`,
+                bookkeepingError instanceof Error ? bookkeepingError.message : bookkeepingError,
+              );
+              throw new PostAcceptanceBookkeepingError(canonical.id, bookkeepingError);
+            }
+            return { id: outcome.providerMessageId };
           }
-          // Rejection settles the dunning claim only once BullMQ's own
-          // retries are exhausted: settling earlier would let the runner
-          // re-arm (with a fresh delivery identity) while this delivery is
-          // still retrying, sending the customer two letters for one rung.
-          if (job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
-            await settleDunningClaim("failed", message);
-          }
+          // Unresolved acceptance state: park it explicitly. BullMQ will retry,
+          // but the reconciliation gate above turns every subsequent attempt
+          // into blocked evidence instead of another transmission.
+          await appendEmailAttemptEvent(d.orgId, canonical.id, {
+            attempt: nextAttemptNo,
+            outcome: "uncertain",
+            detail: outcome.reason,
+          });
+          await markEmailUncertain(d.orgId, canonical.id, outcome.reason);
+          // Unresolved acceptance stays staged: re-arming now would defer a
+          // second letter while the first may already have been accepted. The
+          // detail is recorded on the email_log lineage above, and the
+          // reconciliation gate turns retries into blocked evidence instead of
+          // another transmission — the staged claim keeps blocking the runner
+          // from enqueueing a duplicate in the meantime.
           if (paymentRemittanceId) {
             await markPaymentRemittanceFailed(
               d.orgId,
               paymentRemittanceId,
-              message,
+              outcome.reason,
               queueAttempt,
-              queueAttempt >= (job.opts.attempts ?? 1),
+              true,
             );
           }
           if (reportDeliveryId) {
             const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-            await markReportDeliveryFailed(d.orgId, reportDeliveryId, canonical.id, message, finalQueueAttempt);
+            await markReportDeliveryFailed(
+              d.orgId,
+              reportDeliveryId,
+              canonical.id,
+              outcome.reason,
+              finalQueueAttempt,
+            );
           }
+          throw new Error(outcome.reason);
+        } catch (e) {
+          // A post-acceptance bookkeeping fault is not a send failure — the
+          // provider already accepted the letter — so recording notSent /
+          // failed evidence here would orphan the claim and invite a duplicate
+          // re-send. Rethrow untouched: the BullMQ retry reconciles onto the
+          // recorded acceptance without transmitting.
+          if (e instanceof PostAcceptanceBookkeepingError) throw e;
+          const message = e instanceof Error ? e.message : String(e);
+          const alreadyRecorded =
+            e instanceof Error &&
+            (message.startsWith("email delivery deferred by reconciliation") ||
+              /acceptance state unresolved/.test(message));
+          if (alreadyRecorded && job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+            // Terminal uncertain/suppressed delivery whose evidence is already
+            // on the log lineage: the no-resend gate stands, but the staged
+            // bytes will never be fetched again — drop them so exhaustion
+            // doesn't orphan blobs once the failed job ages out of Redis.
+            await dropStagedAttachments();
+          }
+          if (!alreadyRecorded) {
+            // Definite failure: record evidence, rethrow so BullMQ retries.
+            await appendEmailAttemptEvent(d.orgId, canonical.id, {
+              attempt: nextAttemptNo,
+              outcome: "notSent",
+              detail: message,
+            });
+            await markEmailFailed(d.orgId, canonical.id, message);
+            if (job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+              await dropStagedAttachments();
+            }
+            // Rejection settles the dunning claim only once BullMQ's own
+            // retries are exhausted: settling earlier would let the runner
+            // re-arm (with a fresh delivery identity) while this delivery is
+            // still retrying, sending the customer two letters for one rung.
+            if (job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+              await settleDunningClaim("failed", message);
+            }
+            if (paymentRemittanceId) {
+              await markPaymentRemittanceFailed(
+                d.orgId,
+                paymentRemittanceId,
+                message,
+                queueAttempt,
+                queueAttempt >= (job.opts.attempts ?? 1),
+              );
+            }
+            if (reportDeliveryId) {
+              const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+              await markReportDeliveryFailed(
+                d.orgId,
+                reportDeliveryId,
+                canonical.id,
+                message,
+                finalQueueAttempt,
+              );
+            }
+          }
+          throw e;
         }
-        throw e;
-      }
       });
     },
     { connection: getBlockingConnection(), concurrency: 5 },

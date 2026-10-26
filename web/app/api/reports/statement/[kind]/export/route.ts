@@ -1,10 +1,10 @@
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { getTranslations } from 'next-intl/server'
-import { withReportBookColumn } from '../../../../../../lib/report-book-label'
-import { reportBookSelection } from '../../../../../../lib/report-books'
-import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { getTranslations } from "next-intl/server";
+import { withReportBookColumn } from "../../../../../../lib/report-book-label";
+import { reportBookSelection } from "../../../../../../lib/report-books";
+import { rendererUnavailableResponse } from "../../../../../../lib/api/pdf-renderer";
 import {
   exportDataToCsv,
   exportDataToPdf,
@@ -16,160 +16,218 @@ import {
   statementViewToXlsx,
   type ExportData,
   type Translator,
-} from '../../../../../../lib/report-pdf'
-import { xlsxMoneyContext } from '../../../../../../lib/xlsx-money'
-import { isReportKind, resolveReport, type ReportKind } from '../../../../../../lib/report-run'
-import { resolvePdfPageSetup } from '@openbooks/pdf'
-import { resolvePeriod } from '../../../../../../lib/periods'
-import { parseReportQuery } from '../../../../../../lib/report-filters'
-import { reportCsvOptions } from '../../../../../../lib/report-labels'
-import { csvResponse, pdfResponse, reportExportFilename, xlsxResponse } from '../../../../../../lib/export'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { isFeatureEnabled } from '../../../../../../lib/features'
-import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
-import { renderGeneralLedgerPaperPdf } from '../../../../../../lib/general-ledger-pdf'
+} from "../../../../../../lib/report-pdf";
+import { xlsxMoneyContext } from "../../../../../../lib/xlsx-money";
+import { isReportKind, resolveReport, type ReportKind } from "../../../../../../lib/report-run";
+import { resolvePdfPageSetup } from "@openbooks/pdf";
+import { resolvePeriod } from "../../../../../../lib/periods";
+import { parseReportQuery } from "../../../../../../lib/report-filters";
+import { reportCsvOptions } from "../../../../../../lib/report-labels";
+import {
+  csvResponse,
+  pdfResponse,
+  reportExportFilename,
+  xlsxResponse,
+} from "../../../../../../lib/export";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { isFeatureEnabled } from "../../../../../../lib/features";
+import { guardProjectsFeature } from "../../../../../../lib/projects-gate";
+import { renderGeneralLedgerPaperPdf } from "../../../../../../lib/general-ledger-pdf";
 import { notFound } from "@/lib/api/responses";
-import { can } from '../../../../../../lib/authz'
-import { guardStatementAccess } from '../../../../../../lib/report-authz'
+import { can } from "../../../../../../lib/authz";
+import { guardStatementAccess } from "../../../../../../lib/report-authz";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 export const GET = defineRoute({
-  permission: 'reports.read',
-  feature: { none: "The selected statement kind checks its Projects or budgets feature before export." },
+  permission: "reports.read",
+  feature: {
+    none: "The selected statement kind checks its Projects or budgets feature before export.",
+  },
   handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { kind: string });
     const gate = routeAuthz;
-    const { kind } = await params
+    const { kind } = await params;
     if (!isReportKind(kind)) {
-        return NextResponse.json({ error: 'unknown statement' }, { status: 422 })
-      }
-    const statementDenied = guardStatementAccess(gate, kind, new URL(req.url).searchParams)
-    if (statementDenied) return statementDenied
-    if (kind === 'project-profitability') {
-        const feature = await guardProjectsFeature(gate.user.orgId)
-        if (feature) return feature
-      }
-  if (kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
-    return notFound("record")
-  }
-  if ((kind === 'availability' || kind === 'replenishment') && !(await isFeatureEnabled(gate.user.orgId, 'warehousing'))) {
-    return notFound('record')
-  }
-  if (kind === 'project-budget-vs-actual') {
-    if (!can(gate, 'projects.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
-    const feature = await guardProjectsFeature(gate.user.orgId)
-    if (feature) return feature
-  }
-  if (kind === 'earned-value') {
-    if (!can(gate, 'projects.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
-    if (!(await isFeatureEnabled(gate.user.orgId, 'projectProgress'))) return notFound('record')
-  }
-  if (kind === 'attendance-exceptions') {
-    if (!can(gate, 'hrm.attendance.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
-    for (const feature of ['hrm', 'hrmShiftPlanning', 'hrmAttendance']) if (!(await isFeatureEnabled(gate.user.orgId, feature))) return notFound('record')
-  }
-  if (kind === 'book-differences' && !(await isFeatureEnabled(gate.user.orgId, 'multiBookAccounting'))) {
-    return notFound('record')
-  }
-  if (kind.startsWith('resourcing-')) {
-    if (!can(gate, 'resourcing.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
-    if (!(await isFeatureEnabled(gate.user.orgId, 'resourcing'))) return notFound('record')
-  }
-    const url = new URL(req.url)
-    const p = url.searchParams
-    const format = (p.get('format') ?? 'pdf').toLowerCase()
-    if (!['pdf', 'xlsx', 'csv'].includes(format)) {
-        return NextResponse.json({ error: 'invalid format' }, { status: 422 })
-      }
-    const t = (await getTranslations('reports')) as unknown as Translator
-    const stamp = await businessToday(gate.user.orgId)
-    const generatedAt = new Date()
-    let filename = reportExportFilename(kind, { producedOn: stamp })
-    const branding = await orgBranding()
-    let csvBook: { label: string; value: string } | undefined
+      return NextResponse.json({ error: "unknown statement" }, { status: 422 });
+    }
+    const statementDenied = guardStatementAccess(gate, kind, new URL(req.url).searchParams);
+    if (statementDenied) return statementDenied;
+    if (kind === "project-profitability") {
+      const feature = await guardProjectsFeature(gate.user.orgId);
+      if (feature) return feature;
+    }
+    if (kind === "budget" && !(await isFeatureEnabled(gate.user.orgId, "budgets"))) {
+      return notFound("record");
+    }
+    if (
+      (kind === "availability" || kind === "replenishment") &&
+      !(await isFeatureEnabled(gate.user.orgId, "warehousing"))
+    ) {
+      return notFound("record");
+    }
+    if (kind === "project-budget-vs-actual") {
+      if (!can(gate, "projects.read"))
+        return NextResponse.json({ error: "you do not have access to this data" }, { status: 403 });
+      const feature = await guardProjectsFeature(gate.user.orgId);
+      if (feature) return feature;
+    }
+    if (kind === "earned-value") {
+      if (!can(gate, "projects.read"))
+        return NextResponse.json({ error: "you do not have access to this data" }, { status: 403 });
+      if (!(await isFeatureEnabled(gate.user.orgId, "projectProgress"))) return notFound("record");
+    }
+    if (kind === "attendance-exceptions") {
+      if (!can(gate, "hrm.attendance.read"))
+        return NextResponse.json({ error: "you do not have access to this data" }, { status: 403 });
+      for (const feature of ["hrm", "hrmShiftPlanning", "hrmAttendance"])
+        if (!(await isFeatureEnabled(gate.user.orgId, feature))) return notFound("record");
+    }
+    if (
+      kind === "book-differences" &&
+      !(await isFeatureEnabled(gate.user.orgId, "multiBookAccounting"))
+    ) {
+      return notFound("record");
+    }
+    if (kind.startsWith("resourcing-")) {
+      if (!can(gate, "resourcing.read"))
+        return NextResponse.json({ error: "you do not have access to this data" }, { status: 403 });
+      if (!(await isFeatureEnabled(gate.user.orgId, "resourcing"))) return notFound("record");
+    }
+    const url = new URL(req.url);
+    const p = url.searchParams;
+    const format = (p.get("format") ?? "pdf").toLowerCase();
+    if (!["pdf", "xlsx", "csv"].includes(format)) {
+      return NextResponse.json({ error: "invalid format" }, { status: 422 });
+    }
+    const t = (await getTranslations("reports")) as unknown as Translator;
+    const stamp = await businessToday(gate.user.orgId);
+    const generatedAt = new Date();
+    let filename = reportExportFilename(kind, { producedOn: stamp });
+    const branding = await orgBranding();
+    let csvBook: { label: string; value: string } | undefined;
     const emitData = async (data: ExportData) => {
-        if (format === 'csv') {
-          const { sectionHeader } = await reportCsvOptions()
-          const csvData = csvBook ? withReportBookColumn(data, csvBook) : data
-          return csvResponse(exportDataToCsv(csvData, { sectionHeader }), filename)
-        }
-        if (format === 'xlsx') {
-          return xlsxResponse(await exportDataToXlsx(data, {
+      if (format === "csv") {
+        const { sectionHeader } = await reportCsvOptions();
+        const csvData = csvBook ? withReportBookColumn(data, csvBook) : data;
+        return csvResponse(exportDataToCsv(csvData, { sectionHeader }), filename);
+      }
+      if (format === "xlsx") {
+        return xlsxResponse(
+          await exportDataToXlsx(data, {
             reportName: data.title,
             dateRangeLabel: data.dateRangeLabel,
             generatedAt,
             money: await xlsxMoneyContext(gate.user.orgId),
-          }), filename)
-        }
-        const { page, showSummary } = resolveLayout(null)
-        return pdfResponse(await exportDataToPdf(data, branding, page, {
+          }),
+          filename,
+        );
+      }
+      const { page, showSummary } = resolveLayout(null);
+      return pdfResponse(
+        await exportDataToPdf(data, branding, page, {
           showSummary,
           generatedAt,
-        }), filename)
-      }
+        }),
+        filename,
+      );
+    };
     try {
-        const q = parseReportQuery(p)
-        const period = await resolvePeriod(q.period, { customFrom: p.get('from'), customTo: p.get('to') })
-        const resolved = await resolveReport(kind as ReportKind, p, { orgId: gate.user.orgId, t, period, query: q })
-        // A point-in-time statement is named for the date it reports on.
-        filename = reportExportFilename(kind, { asOf: resolved.asOf, producedOn: stamp })
-        const bookKinds = new Set(['pnl', 'balance-sheet', 'general-ledger', 'journal', 'registers', 'partner-statement', 'project-profitability', 'trial-balance', 'partners', 'cash-flow', 'cash-flow-indirect'])
-        const selection = bookKinds.has(kind) ? await reportBookSelection(gate.user.orgId, p.get('book')) : null
-        if (selection && selection.books.length > 1) {
-          const { selectedBook } = selection
-          csvBook = { label: (await getTranslations('budgets'))('list.bookFilter'), value: `${selectedBook.code} · ${selectedBook.name}` }
-          if (resolved.render === 'data') resolved.data.dateRangeLabel = `${selectedBook.name} · ${resolved.data.dateRangeLabel}`
-        }
+      const q = parseReportQuery(p);
+      const period = await resolvePeriod(q.period, {
+        customFrom: p.get("from"),
+        customTo: p.get("to"),
+      });
+      const resolved = await resolveReport(kind as ReportKind, p, {
+        orgId: gate.user.orgId,
+        t,
+        period,
+        query: q,
+      });
+      // A point-in-time statement is named for the date it reports on.
+      filename = reportExportFilename(kind, { asOf: resolved.asOf, producedOn: stamp });
+      const bookKinds = new Set([
+        "pnl",
+        "balance-sheet",
+        "general-ledger",
+        "journal",
+        "registers",
+        "partner-statement",
+        "project-profitability",
+        "trial-balance",
+        "partners",
+        "cash-flow",
+        "cash-flow-indirect",
+      ]);
+      const selection = bookKinds.has(kind)
+        ? await reportBookSelection(gate.user.orgId, p.get("book"))
+        : null;
+      if (selection && selection.books.length > 1) {
+        const { selectedBook } = selection;
+        csvBook = {
+          label: (await getTranslations("budgets"))("list.bookFilter"),
+          value: `${selectedBook.code} · ${selectedBook.name}`,
+        };
+        if (resolved.render === "data")
+          resolved.data.dateRangeLabel = `${selectedBook.name} · ${resolved.data.dateRangeLabel}`;
+      }
 
-        if (resolved.render === 'view') {
-          const { view, title, periodPhrase } = resolved
-          if (format === 'pdf') {
-            const page = resolvePdfPageSetup({
-              paperSize: 'letter',
-              orientation: view.columns.length > 4 ? 'landscape' : 'portrait',
-              marginMm: 16,
-              density: 'standard',
-            })
-            return pdfResponse(await renderStatementViewPdf(view, branding, page, {
+      if (resolved.render === "view") {
+        const { view, title, periodPhrase } = resolved;
+        if (format === "pdf") {
+          const page = resolvePdfPageSetup({
+            paperSize: "letter",
+            orientation: view.columns.length > 4 ? "landscape" : "portrait",
+            marginMm: 16,
+            density: "standard",
+          });
+          return pdfResponse(
+            await renderStatementViewPdf(view, branding, page, {
               title,
               periodPhrase,
               scale: q.scale,
               generatedAt,
-            }), filename)
-          }
-          if (format === 'xlsx') {
-            return xlsxResponse(
-              await statementViewToXlsx(view, {
-                company: branding.orgName,
-                title,
-                periodPhrase,
-                accountLabel: t('export.columns.accountName'),
-                generatedAt,
-              }),
-              filename,
-            )
-          }
-          return emitData(statementViewToExportData(view, { title, dateRangeLabel: periodPhrase, accountLabel: t('export.columns.accountName') }))
-        }
-
-        if (format === 'pdf' && kind === 'general-ledger') {
-          const { page } = resolveLayout(null)
-          return pdfResponse(
-            await renderGeneralLedgerPaperPdf(resolved.data, branding, page),
+            }),
             filename,
-          )
+          );
         }
-
-        return emitData(resolved.data)
-      } catch (err) {
-        const rendererRefusal = rendererUnavailableResponse(err)
-        if (rendererRefusal) return rendererRefusal
-        // Typed refusals (currency basis, a drifted saved query failing
-        // ReportQueryValidationError) answer 422 intact, like the run route;
-        // untyped faults still sanitize to a generic 500.
-        return apiErrorResponse(err, { safeStatus: 422 })
+        if (format === "xlsx") {
+          return xlsxResponse(
+            await statementViewToXlsx(view, {
+              company: branding.orgName,
+              title,
+              periodPhrase,
+              accountLabel: t("export.columns.accountName"),
+              generatedAt,
+            }),
+            filename,
+          );
+        }
+        return emitData(
+          statementViewToExportData(view, {
+            title,
+            dateRangeLabel: periodPhrase,
+            accountLabel: t("export.columns.accountName"),
+          }),
+        );
       }
+
+      if (format === "pdf" && kind === "general-ledger") {
+        const { page } = resolveLayout(null);
+        return pdfResponse(
+          await renderGeneralLedgerPaperPdf(resolved.data, branding, page),
+          filename,
+        );
+      }
+
+      return emitData(resolved.data);
+    } catch (err) {
+      const rendererRefusal = rendererUnavailableResponse(err);
+      if (rendererRefusal) return rendererRefusal;
+      // Typed refusals (currency basis, a drifted saved query failing
+      // ReportQueryValidationError) answer 422 intact, like the run route;
+      // untyped faults still sanitize to a generic 500.
+      return apiErrorResponse(err, { safeStatus: 422 });
+    }
   },
 });

@@ -1,9 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { fromUnits, normalizeDecimal, toUnits } from "../money/money.ts";
-import type {
-  MigrationSource,
-} from "./source.ts";
+import type { MigrationSource } from "./source.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { retireSourceProjectInputs } from "./project-input-retirement.ts";
 import {
@@ -63,9 +61,7 @@ type TargetProjectState = {
   contract_value: string | null;
 };
 
-function duplicates(
-  refs: string[],
-): string[] {
+function duplicates(refs: string[]): string[] {
   const seen = new Set<string>();
   const found = new Set<string>();
   for (const ref of refs) {
@@ -95,15 +91,11 @@ export async function syncProjectFinancialInputs(
   },
 ): Promise<ProjectFinancialInputSyncResult> {
   if (!source.projectFinancialInputs) {
-    throw new Error(
-      `${source.name} does not expose project-financial input synchronization`,
-    );
+    throw new Error(`${source.name} does not expose project-financial input synchronization`);
   }
   const snapshot = await source.projectFinancialInputs();
   const sourceStates = snapshot.timeEntryBillingStates;
-  const duplicateSourceRefs = duplicates(
-    sourceStates.map((state) => state.sourceRef),
-  );
+  const duplicateSourceRefs = duplicates(sourceStates.map((state) => state.sourceRef));
   if (duplicateSourceRefs.length) {
     throw new Error(
       `source returned duplicate time-entry billing identities: ${duplicateSourceRefs
@@ -112,7 +104,8 @@ export async function syncProjectFinancialInputs(
     );
   }
 
-  const targetResult = (await db.execute<TargetBillingState>(sql`
+  const targetResult = await db.execute<TargetBillingState>(
+    sql`
     select time.id, time.custom ->> ${source.refKey} as source_ref,
            time.billing_status, time.costing_basis,
            time.custom ->> 'sourceBillingStatus' as source_status,
@@ -149,9 +142,12 @@ export async function syncProjectFinancialInputs(
        and ticket_project.org_id = ticket.org_id
      where time.org_id = ${options.orgId}
        and time.custom ->> ${source.refKey} is not null
-  `, "objects"));
+  `,
+    "objects",
+  );
 
-  const referenceRows = (await db.execute<{ kind: string; id: string; source_ref: string | null }>(sql`
+  const referenceRows = await db.execute<{ kind: string; id: string; source_ref: string | null }>(
+    sql`
     select 'employee' as kind, id, custom ->> ${source.refKey} as source_ref
       from parties where org_id = ${options.orgId}
     union all
@@ -166,7 +162,9 @@ export async function syncProjectFinancialInputs(
     union all
     select 'time_type', id, custom ->> ${source.refKey}
       from time_types where org_id = ${options.orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const idsByKind = new Map<string, Map<string, string>>();
   for (const row of referenceRows) {
     if (!row.source_ref) continue;
@@ -187,17 +185,13 @@ export async function syncProjectFinancialInputs(
   ): string | null => {
     if (!sourceRef) {
       if (required) {
-        throw new Error(
-          `source time entry ${timeEntryRef} has no ${kind} identity`,
-        );
+        throw new Error(`source time entry ${timeEntryRef} has no ${kind} identity`);
       }
       return null;
     }
     const id = idsByKind.get(kind)?.get(sourceRef) ?? null;
     if (!id) {
-      throw new Error(
-        `source time entry ${timeEntryRef} requires missing ${kind} ${sourceRef}`,
-      );
+      throw new Error(`source time entry ${timeEntryRef} requires missing ${kind} ${sourceRef}`);
     }
     return id;
   };
@@ -228,7 +222,8 @@ export async function syncProjectFinancialInputs(
         .join(", ")}`,
     );
   }
-  const targetProjectsResult = (await db.execute<TargetProjectState>(sql`
+  const targetProjectsResult = await db.execute<TargetProjectState>(
+    sql`
     select p.id, p.custom ->> ${source.refKey} as source_ref,
            p.project_type_id, pt.key as project_type_key, p.contract_value
       from projects p
@@ -236,7 +231,9 @@ export async function syncProjectFinancialInputs(
         on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.org_id = ${options.orgId}
        and p.custom ->> ${source.refKey} is not null
-  `, "objects"));
+  `,
+    "objects",
+  );
   const targetProjectByRef = new Map<string, TargetProjectState>();
   const duplicateTargetProjectRefs: string[] = [];
   for (const row of targetProjectsResult) {
@@ -255,16 +252,15 @@ export async function syncProjectFinancialInputs(
         .join(", ")}`,
     );
   }
-  const projectTypeResult = (await db.execute<{ id: string; key: string }>(sql`
+  const projectTypeResult = await db.execute<{ id: string; key: string }>(
+    sql`
     select id, key from project_types
      where org_id = ${options.orgId} and is_active
-  `, "objects"));
-  const projectTypeIdByKey = new Map(
-    projectTypeResult.map((row) => [row.key, row.id]),
+  `,
+    "objects",
   );
-  const sourceProjectRefs = new Set(
-    snapshot.projects.map((project) => project.sourceRef),
-  );
+  const projectTypeIdByKey = new Map(projectTypeResult.map((row) => [row.key, row.id]));
+  const sourceProjectRefs = new Set(snapshot.projects.map((project) => project.sourceRef));
   const missingTargetProjects = snapshot.projects.filter(
     (project) => !targetProjectByRef.has(project.sourceRef),
   );
@@ -274,23 +270,15 @@ export async function syncProjectFinancialInputs(
   const changedProjects = snapshot.projects.flatMap((project) => {
     const target = targetProjectByRef.get(project.sourceRef);
     if (!target) return [];
-    const targetContract = fromUnits(
-      toUnits(target.contract_value ?? "0"),
-    );
+    const targetContract = fromUnits(toUnits(target.contract_value ?? "0"));
     const sourceContract =
-      project.contractValue === null
-        ? null
-        : fromUnits(toUnits(project.contractValue));
+      project.contractValue === null ? null : fromUnits(toUnits(project.contractValue));
     const typeChanged =
-      project.billingMethod !== null &&
-      target.project_type_key !== project.billingMethod;
-    const contractChanged =
-      sourceContract !== null && targetContract !== sourceContract;
+      project.billingMethod !== null && target.project_type_key !== project.billingMethod;
+    const contractChanged = sourceContract !== null && targetContract !== sourceContract;
     if (!typeChanged && !contractChanged) return [];
     const projectTypeId =
-      project.billingMethod === null
-        ? null
-        : projectTypeIdByKey.get(project.billingMethod);
+      project.billingMethod === null ? null : projectTypeIdByKey.get(project.billingMethod);
     if (project.billingMethod && !projectTypeId) {
       throw new Error(
         `source project ${project.sourceRef} requires missing project type ${project.billingMethod}`,
@@ -302,8 +290,7 @@ export async function syncProjectFinancialInputs(
         sourceRef: project.sourceRef,
         beforeProjectTypeId: target.project_type_id,
         beforeProjectType: target.project_type_key,
-        afterProjectType:
-          project.billingMethod ?? target.project_type_key,
+        afterProjectType: project.billingMethod ?? target.project_type_key,
         afterProjectTypeId: projectTypeId ?? null,
         beforeContractValue: targetContract,
         beforeContractValueRaw: target.contract_value,
@@ -313,12 +300,8 @@ export async function syncProjectFinancialInputs(
   });
 
   const sourceRefs = new Set(sourceStates.map((state) => state.sourceRef));
-  const missingTarget = sourceStates.filter(
-    (state) => !targetByRef.has(state.sourceRef),
-  );
-  const targetOnly = targetResult.filter(
-    (row) => !sourceRefs.has(row.source_ref),
-  );
+  const missingTarget = sourceStates.filter((state) => !targetByRef.has(state.sourceRef));
+  const targetOnly = targetResult.filter((row) => !sourceRefs.has(row.source_ref));
   const changed = sourceStates.flatMap((state) => {
     const target = targetByRef.get(state.sourceRef);
     if (!target) return [];
@@ -328,12 +311,7 @@ export async function syncProjectFinancialInputs(
     const afterEmployeeId =
       state.employeeRef === undefined
         ? target.employee_party_id
-        : resolveRef(
-            "employee",
-            state.employeeRef,
-            state.sourceRef,
-            true,
-          );
+        : resolveRef("employee", state.employeeRef, state.sourceRef, true);
     const afterProjectId =
       state.projectRef === undefined
         ? target.project_id
@@ -351,33 +329,21 @@ export async function syncProjectFinancialInputs(
         ? target.time_type_id
         : resolveRef("time_type", state.timeTypeRef, state.sourceRef);
     const factsChanged =
-      (state.employeeRef !== undefined &&
-        target.employee_ref !== (state.employeeRef ?? null)) ||
-      (state.projectRef !== undefined &&
-        target.project_ref !== (state.projectRef ?? null)) ||
-      (state.itemRef !== undefined &&
-        target.item_ref !== (state.itemRef ?? null)) ||
+      (state.employeeRef !== undefined && target.employee_ref !== (state.employeeRef ?? null)) ||
+      (state.projectRef !== undefined && target.project_ref !== (state.projectRef ?? null)) ||
+      (state.itemRef !== undefined && target.item_ref !== (state.itemRef ?? null)) ||
       (state.departmentRef !== undefined &&
         target.department_ref !== (state.departmentRef ?? null)) ||
-      (state.timeTypeRef !== undefined &&
-        target.time_type_ref !== (state.timeTypeRef ?? null)) ||
-      (state.workedOn !== undefined &&
-        target.worked_on !== (state.workedOn ?? null)) ||
-      (state.hours !== undefined &&
-        decimal(target.hours) !== decimal(state.hours)) ||
-      (state.costRate !== undefined &&
-        decimal(target.cost_rate) !== decimal(state.costRate)) ||
-      (state.billRate !== undefined &&
-        decimal(target.bill_rate) !== decimal(state.billRate)) ||
+      (state.timeTypeRef !== undefined && target.time_type_ref !== (state.timeTypeRef ?? null)) ||
+      (state.workedOn !== undefined && target.worked_on !== (state.workedOn ?? null)) ||
+      (state.hours !== undefined && decimal(target.hours) !== decimal(state.hours)) ||
+      (state.costRate !== undefined && decimal(target.cost_rate) !== decimal(state.costRate)) ||
+      (state.billRate !== undefined && decimal(target.bill_rate) !== decimal(state.billRate)) ||
       (state.isBillable !== undefined &&
         state.isBillable !== null &&
         target.is_billable !== state.isBillable);
     if (!billingChanged && !costingChanged && !factsChanged) return [];
-    if (
-      billingChanged &&
-      target.invoiced_by_line_id &&
-      state.billingStatus === "unbilled"
-    ) {
+    if (billingChanged && target.invoiced_by_line_id && state.billingStatus === "unbilled") {
       throw new Error(
         `source time entry ${state.sourceRef} is unbilled but OpenBooks carries invoice-line provenance`,
       );
@@ -420,15 +386,11 @@ export async function syncProjectFinancialInputs(
         beforeEmployeeRef: target.employee_ref,
         beforeEmployeeId: target.employee_party_id,
         employeeId: afterEmployeeId,
-        employeeRef:
-          state.employeeRef === undefined
-            ? target.employee_ref
-            : state.employeeRef,
+        employeeRef: state.employeeRef === undefined ? target.employee_ref : state.employeeRef,
         beforeProjectRef: target.project_ref,
         beforeProjectId: target.project_id,
         projectId: afterProjectId,
-        projectRef:
-          state.projectRef === undefined ? target.project_ref : state.projectRef,
+        projectRef: state.projectRef === undefined ? target.project_ref : state.projectRef,
         beforeItemRef: target.item_ref,
         beforeItemId: target.item_id,
         itemId: afterItemId,
@@ -437,51 +399,53 @@ export async function syncProjectFinancialInputs(
         beforeDepartmentId: target.department_id,
         departmentId: afterDepartmentId,
         departmentRef:
-          state.departmentRef === undefined
-            ? target.department_ref
-            : state.departmentRef,
+          state.departmentRef === undefined ? target.department_ref : state.departmentRef,
         beforeTimeTypeRef: target.time_type_ref,
         beforeTimeTypeId: target.time_type_id,
         timeTypeId: afterTimeTypeId,
-        timeTypeRef:
-          state.timeTypeRef === undefined
-            ? target.time_type_ref
-            : state.timeTypeRef,
+        timeTypeRef: state.timeTypeRef === undefined ? target.time_type_ref : state.timeTypeRef,
         beforeWorkedOn: target.worked_on,
         workedOn: state.workedOn ?? target.worked_on,
         beforeHours: decimal(target.hours),
         hours: decimal(state.hours) ?? decimal(target.hours),
         beforeCostRate: decimal(target.cost_rate),
         costRate:
-          state.costRate === undefined
-            ? decimal(target.cost_rate)
-            : decimal(state.costRate),
+          state.costRate === undefined ? decimal(target.cost_rate) : decimal(state.costRate),
         beforeBillRate: decimal(target.bill_rate),
         billRate:
-          state.billRate === undefined
-            ? decimal(target.bill_rate)
-            : decimal(state.billRate),
+          state.billRate === undefined ? decimal(target.bill_rate) : decimal(state.billRate),
         beforeIsBillable: target.is_billable,
-        isBillable:
-          state.isBillable == null ? target.is_billable : state.isBillable,
+        isBillable: state.isBillable == null ? target.is_billable : state.isBillable,
       },
     ];
   });
 
-  const deletionEvidence = (targetOnly.length || targetOnlyProjects.length) && source.projectInputDeletions
-    ? await source.projectInputDeletions({ projects: targetOnlyProjects.map(row => row.source_ref), timeEntries: targetOnly.map(row => row.source_ref) })
-    : { projects: [], timeEntries: [] };
-  const deletedProjects = new Map(deletionEvidence.projects.map(row => [row.sourceRef, row.deletedAt]));
-  const deletedTime = new Map(deletionEvidence.timeEntries.map(row => [row.sourceRef, row.deletedAt]));
+  const deletionEvidence =
+    (targetOnly.length || targetOnlyProjects.length) && source.projectInputDeletions
+      ? await source.projectInputDeletions({
+          projects: targetOnlyProjects.map((row) => row.source_ref),
+          timeEntries: targetOnly.map((row) => row.source_ref),
+        })
+      : { projects: [], timeEntries: [] };
+  const deletedProjects = new Map(
+    deletionEvidence.projects.map((row) => [row.sourceRef, row.deletedAt]),
+  );
+  const deletedTime = new Map(
+    deletionEvidence.timeEntries.map((row) => [row.sourceRef, row.deletedAt]),
+  );
   const preservedSourceDeletions = await retireSourceProjectInputs({
-    orgId: options.orgId, connectionId: options.connectionId, runId: options.runId,
+    orgId: options.orgId,
+    connectionId: options.connectionId,
+    runId: options.runId,
     actorId: options.actorId && isUuid(options.actorId) ? options.actorId : null,
-    source: source.name, refKey: source.refKey, apply: options.apply,
-    projects: targetOnlyProjects.flatMap(row => {
+    source: source.name,
+    refKey: source.refKey,
+    apply: options.apply,
+    projects: targetOnlyProjects.flatMap((row) => {
       const deletedAt = deletedProjects.get(row.source_ref);
       return deletedAt ? [{ id: row.id, sourceRef: row.source_ref, deletedAt }] : [];
     }),
-    timeEntries: targetOnly.flatMap(row => {
+    timeEntries: targetOnly.flatMap((row) => {
       const deletedAt = deletedTime.get(row.source_ref);
       return deletedAt ? [{ id: row.id, sourceRef: row.source_ref, deletedAt }] : [];
     }),
@@ -489,22 +453,20 @@ export async function syncProjectFinancialInputs(
   const result: ProjectFinancialInputSyncResult = {
     sourceTimeEntries: sourceStates.length,
     targetTimeEntries: targetResult.length,
-    exactTimeEntries:
-      sourceStates.length - missingTarget.length - changed.length,
+    exactTimeEntries: sourceStates.length - missingTarget.length - changed.length,
     changedTimeEntries: changed.length,
     missingTargetTimeEntries: missingTarget.length,
     targetOnlyTimeEntries: targetOnly.length - preservedSourceDeletions.timeEntries,
     sourceProjects: snapshot.projects.length,
     targetProjects: targetProjectsResult.length,
-    exactProjects:
-      snapshot.projects.length -
-      missingTargetProjects.length -
-      changedProjects.length,
+    exactProjects: snapshot.projects.length - missingTargetProjects.length - changedProjects.length,
     changedProjects: changedProjects.length,
     missingTargetProjects: missingTargetProjects.length,
     targetOnlyProjects: targetOnlyProjects.length - preservedSourceDeletions.projects,
     preservedSourceDeletions,
-    applied: options.apply && (preservedSourceDeletions.projects > 0 || preservedSourceDeletions.timeEntries > 0),
+    applied:
+      options.apply &&
+      (preservedSourceDeletions.projects > 0 || preservedSourceDeletions.timeEntries > 0),
   };
   if (missingTarget.length) {
     throw new Error(
@@ -522,23 +484,17 @@ export async function syncProjectFinancialInputs(
         .join(", ")})`,
     );
   }
-  if (
-    !options.apply ||
-    (changed.length === 0 && changedProjects.length === 0)
-  ) {
+  if (!options.apply || (changed.length === 0 && changedProjects.length === 0)) {
     return result;
   }
 
-  const actorId =
-    options.actorId &&
-    isUuid(options.actorId)
-      ? options.actorId
-      : null;
+  const actorId = options.actorId && isUuid(options.actorId) ? options.actorId : null;
   const BATCH = 1_000;
   await db.transaction(async (tx) => {
     for (let offset = 0; offset < changed.length; offset += BATCH) {
       const batch = changed.slice(offset, offset + BATCH);
-      const write = await tx.execute(sql`
+      const write = await tx.execute(
+        sql`
         with input as (
           select *
             from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
@@ -681,7 +637,9 @@ export async function syncProjectFinancialInputs(
           from input
           join updated on updated.id = input.id
           returning row_id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (write.length !== batch.length) {
         throw new Error(
           `project-financial input sync detected concurrent time-entry edits; retry (expected ${batch.length} updates, applied ${write.length})`,
@@ -695,7 +653,9 @@ export async function syncProjectFinancialInputs(
     // records.
     const controlled: string[] = [];
     let controlMessage = "";
-    for (const project of [...changedProjects].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    for (const project of [...changedProjects].sort((a, b) =>
+      a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    )) {
       if (project.afterContractValue === project.beforeContractValue) continue;
       try {
         await assertProjectHeaderChangeAllowed(tx, options.orgId, project.id, {
@@ -714,11 +674,7 @@ export async function syncProjectFinancialInputs(
           .join(", ")}): ${controlMessage}`,
       );
     }
-    for (
-      let offset = 0;
-      offset < changedProjects.length;
-      offset += BATCH
-    ) {
+    for (let offset = 0; offset < changedProjects.length; offset += BATCH) {
       const batch = changedProjects.slice(offset, offset + BATCH);
       const updated = await tx.execute<Record<string, unknown>>(sql`
         with input as (

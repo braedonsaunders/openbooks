@@ -1,18 +1,30 @@
-'use client'
+"use client";
 
 /** Split from RunWizard.tsx; moved without behavior changes. */
-import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "@openbooks/ui"
-import { type StubChange, type StubRow, type AdjustmentRow, type ComponentOption, GENERIC_FACTOR_LABELS, withholding } from './run-wizard-model'
-import { HeaderFact } from './run-wizard-controls'
-import { Fragment, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { AlertTriangle, FileDown, Loader2 } from 'lucide-react'
-import { Button, Drawer, FieldHelp, Select, cn } from '@openbooks/ui'
-import { MoneyInput, moneyFieldError } from '../../../../../components/money-input'
-import { useDirtyClose } from '../../../../../lib/use-dirty-close'
-import { type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
-import { add, cmp, neg, sum } from '@openbooks/engine/money'
-import { DateField } from '../../../../../components/date-field'
+import {
+  Table as SharedTable,
+  TableBody as SharedTableBody,
+  TableRow as SharedTableRow,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import {
+  type StubChange,
+  type StubRow,
+  type AdjustmentRow,
+  type ComponentOption,
+  GENERIC_FACTOR_LABELS,
+  withholding,
+} from "./run-wizard-model";
+import { HeaderFact } from "./run-wizard-controls";
+import { Fragment, useState } from "react";
+import { useTranslations } from "next-intl";
+import { AlertTriangle, FileDown, Loader2 } from "lucide-react";
+import { Button, Drawer, FieldHelp, Select, cn } from "@openbooks/ui";
+import { MoneyInput, moneyFieldError } from "../../../../../components/money-input";
+import { useDirtyClose } from "../../../../../lib/use-dirty-close";
+import { type RegisterBucket } from "../../../../../lib/payroll-register-buckets";
+import { add, cmp, neg, sum } from "@openbooks/engine/money";
+import { DateField } from "../../../../../components/date-field";
 
 /** One employee's stub — the house flyout: header facts, pay lines, the T4127
  * factor trace, and the variance flag, with the paystub PDF one click away.
@@ -36,83 +48,101 @@ export function StubDrawer({
   traceEngines,
   factorLabels,
 }: {
-  stub: StubRow
-  variance: { percent: number; flagged: boolean } | null
-  change: StubChange | null
-  onClose: () => void
-  fmt: (v: string | number | null | undefined) => string
-  adjustments: AdjustmentRow[]
-  components: ComponentOption[]
-  canAdjust: boolean
+  stub: StubRow;
+  variance: { percent: number; flagged: boolean } | null;
+  change: StubChange | null;
+  onClose: () => void;
+  fmt: (v: string | number | null | undefined) => string;
+  adjustments: AdjustmentRow[];
+  components: ComponentOption[];
+  canAdjust: boolean;
   /** Parent in-flight mutation state: the add/exclude/remove buttons disable while it runs. */
-  busy: boolean
-  onAdjust: (body: Record<string, unknown>) => Promise<boolean>
-  buckets: RegisterBucket[]
-  regionLabel: string
-  traceEngines: Record<string, string>
-  factorLabels: Record<string, Record<string, string>>
+  busy: boolean;
+  onAdjust: (body: Record<string, unknown>) => Promise<boolean>;
+  buckets: RegisterBucket[];
+  regionLabel: string;
+  traceEngines: Record<string, string>;
+  factorLabels: Record<string, Record<string, string>>;
 }) {
-  const t = useTranslations('payroll')
-  const tCommon = useTranslations('common')
-  const held = withholding(stub, buckets)
-  const nonCash = sum(stub.lines.filter(line => line.kind === 'earning' && line.payment_kind === 'non_cash').map(line => line.amount))
+  const t = useTranslations("payroll");
+  const tCommon = useTranslations("common");
+  const held = withholding(stub, buckets);
+  const nonCash = sum(
+    stub.lines
+      .filter((line) => line.kind === "earning" && line.payment_kind === "non_cash")
+      .map((line) => line.amount),
+  );
   // The trace heads the filing regime the numbers were computed under
   // (T4127 for CA, Pub 15-T for US) — never a hardcoded country.
-  const traceEngine = traceEngines[stub.country ?? ''] ?? Object.values(traceEngines)[0] ?? ''
-  const factorEntries = Object.entries(stub.factors ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  const traceEngine = traceEngines[stub.country ?? ""] ?? Object.values(traceEngines)[0] ?? "";
+  const factorEntries = Object.entries(stub.factors ?? {}).sort(([a], [b]) => a.localeCompare(b));
   // Labels resolve through the stub country's pack declaration (server-
   // supplied), then the generic-engine keys, then the raw key — the pack
   // owns its notation, so California's CA_TAX never reads as Canada's CA.
-  const stubLabels = factorLabels[stub.country ?? ''] ?? {}
+  const stubLabels = factorLabels[stub.country ?? ""] ?? {};
   const factorLabel = (key: string) => {
-    const labelled = stubLabels[key] ?? GENERIC_FACTOR_LABELS[key]
-    if (labelled !== undefined) return labelled
-    if (key.startsWith('PROT_SHORT:')) return key.slice('PROT_SHORT:'.length)
-    return key
-  }
-  const [adjComponent, setAdjComponent] = useState('')
-  const [adjAmount, setAdjAmount] = useState('')
-  const [adjNote, setAdjNote] = useState('')
-  const [bankHours, setBankHours] = useState('')
-  const [bankRate, setBankRate] = useState('')
-  const [outsideBankAmount, setOutsideBankAmount] = useState('')
-  const [bankSourceReference, setBankSourceReference] = useState('')
-  const [declaredVacationAmount, setDeclaredVacationAmount] = useState('')
-  const [declaredVacationReason, setDeclaredVacationReason] = useState('')
-  const [declaredVacationSource, setDeclaredVacationSource] = useState('')
-  const [adjEarnedFrom, setAdjEarnedFrom] = useState('')
-  const [adjEarnedTo, setAdjEarnedTo] = useState('')
-  const [adjReplace, setAdjReplace] = useState(false)
+    const labelled = stubLabels[key] ?? GENERIC_FACTOR_LABELS[key];
+    if (labelled !== undefined) return labelled;
+    if (key.startsWith("PROT_SHORT:")) return key.slice("PROT_SHORT:".length);
+    return key;
+  };
+  const [adjComponent, setAdjComponent] = useState("");
+  const [adjAmount, setAdjAmount] = useState("");
+  const [adjNote, setAdjNote] = useState("");
+  const [bankHours, setBankHours] = useState("");
+  const [bankRate, setBankRate] = useState("");
+  const [outsideBankAmount, setOutsideBankAmount] = useState("");
+  const [bankSourceReference, setBankSourceReference] = useState("");
+  const [declaredVacationAmount, setDeclaredVacationAmount] = useState("");
+  const [declaredVacationReason, setDeclaredVacationReason] = useState("");
+  const [declaredVacationSource, setDeclaredVacationSource] = useState("");
+  const [adjEarnedFrom, setAdjEarnedFrom] = useState("");
+  const [adjEarnedTo, setAdjEarnedTo] = useState("");
+  const [adjReplace, setAdjReplace] = useState(false);
   // One idempotency key per form session: a double-clicked Add (or a retried
   // request) reuses it and replays instead of writing twice. Rotated after
   // every SUCCESSFUL add only — a failed attempt keeps its key, so the retry
   // replays instead of duplicating.
-  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID())
-  const bankCashComponent = components.find(component => component.id === adjComponent)?.bank_cash_component === true
+  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
+  const bankCashComponent =
+    components.find((component) => component.id === adjComponent)?.bank_cash_component === true;
   // A half-typed Add-adjustment draft never closes silently: Escape, the
   // backdrop, the X and Close all funnel through the shared guard, which
   // also refuses to dismiss while the parent mutation is in flight. A clean
   // drawer still closes without prompting; the successful-exclude path below
   // keeps the direct onClose (its work already landed).
   const adjustGuard = useDirtyClose({
-    dirty: adjComponent !== '' || adjAmount !== '' || adjNote !== '' || bankHours !== '' || bankRate !== '' || outsideBankAmount !== '' || bankSourceReference !== '' || adjEarnedFrom !== '' || adjEarnedTo !== '' || adjReplace || declaredVacationAmount !== '' || declaredVacationReason !== '' || declaredVacationSource !== '',
+    dirty:
+      adjComponent !== "" ||
+      adjAmount !== "" ||
+      adjNote !== "" ||
+      bankHours !== "" ||
+      bankRate !== "" ||
+      outsideBankAmount !== "" ||
+      bankSourceReference !== "" ||
+      adjEarnedFrom !== "" ||
+      adjEarnedTo !== "" ||
+      adjReplace ||
+      declaredVacationAmount !== "" ||
+      declaredVacationReason !== "" ||
+      declaredVacationSource !== "",
     busy,
     onClose,
-    message: tCommon('feedback.unsavedChanges'),
-    confirmLabel: tCommon('confirm.discardChanges'),
-  })
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
   return (
     <Drawer
       open
       onClose={adjustGuard.close}
       title={stub.employee_name}
-      description={t('wizard.review.drawerDescription')}
+      description={t("wizard.review.drawerDescription")}
       footer={
         <div className="flex justify-between gap-2">
           <Button variant="outline" asChild>
             <a href={`/api/record-pdf/pay_stub/${stub.id}`} target="_blank" rel="noreferrer">
               <FileDown size={14} aria-hidden />
-              {t('wizard.review.downloadPdf')}
+              {t("wizard.review.downloadPdf")}
             </a>
           </Button>
           <span className="flex items-center gap-2">
@@ -121,21 +151,22 @@ export function StubDrawer({
                 variant="outline"
                 disabled={busy}
                 onClick={() =>
-                  void onAdjust({ action: 'exclude-employee', employeePartyId: stub.employee_party_id }).then(
-                    (applied) => {
-                      // The drawer closes only on success: closing over a
-                      // refused exclusion would strand the typed adjustments
-                      // with the stub that still holds them.
-                      if (applied) onClose()
-                    },
-                  )
+                  void onAdjust({
+                    action: "exclude-employee",
+                    employeePartyId: stub.employee_party_id,
+                  }).then((applied) => {
+                    // The drawer closes only on success: closing over a
+                    // refused exclusion would strand the typed adjustments
+                    // with the stub that still holds them.
+                    if (applied) onClose();
+                  })
                 }
               >
-                {t('wizard.adjust.exclude')}
+                {t("wizard.adjust.exclude")}
               </Button>
             )}
             <Button variant="ghost" onClick={adjustGuard.close}>
-              {t('wizard.review.close')}
+              {t("wizard.review.close")}
             </Button>
           </span>
         </div>
@@ -145,62 +176,75 @@ export function StubDrawer({
         {variance?.flagged && (
           <div className="flex items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
             <AlertTriangle size={14} aria-hidden />
-            {t('wizard.review.drawerVariance', {
-              percent: `${variance.percent > 0 ? '+' : ''}${variance.percent.toFixed(1)}`,
+            {t("wizard.review.drawerVariance", {
+              percent: `${variance.percent > 0 ? "+" : ""}${variance.percent.toFixed(1)}`,
             })}
           </div>
         )}
 
         <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <HeaderFact label={regionLabel}>{stub.province}</HeaderFact>
-          <HeaderFact label={t('columns.gross')}>{fmt(stub.gross)}</HeaderFact>
-          {cmp(nonCash, '0') !== 0 && <>
-            <HeaderFact label={t('run.stub.nonCash')}>{fmt(nonCash)}</HeaderFact>
-            <HeaderFact label={t('run.stub.cashGross')}>{fmt(add(stub.gross, neg(nonCash)))}</HeaderFact>
-          </>}
-          <HeaderFact label={t('columns.net')}>{fmt(stub.net_pay)}</HeaderFact>
+          <HeaderFact label={t("columns.gross")}>{fmt(stub.gross)}</HeaderFact>
+          {cmp(nonCash, "0") !== 0 && (
+            <>
+              <HeaderFact label={t("run.stub.nonCash")}>{fmt(nonCash)}</HeaderFact>
+              <HeaderFact label={t("run.stub.cashGross")}>
+                {fmt(add(stub.gross, neg(nonCash)))}
+              </HeaderFact>
+            </>
+          )}
+          <HeaderFact label={t("columns.net")}>{fmt(stub.net_pay)}</HeaderFact>
           {buckets.map((bucket, index) => (
-            <HeaderFact key={bucket.code} label={bucket.label}>{fmt(held.amounts[index] ?? '0')}</HeaderFact>
+            <HeaderFact key={bucket.code} label={bucket.label}>
+              {fmt(held.amounts[index] ?? "0")}
+            </HeaderFact>
           ))}
-          <HeaderFact label={t('run.stub.tax')}>{fmt(held.total)}</HeaderFact>
+          <HeaderFact label={t("run.stub.tax")}>{fmt(held.total)}</HeaderFact>
           {variance !== null && (
-            <HeaderFact label={t('wizard.review.varianceColumn')}>
-              {`${variance.percent > 0 ? '+' : ''}${variance.percent.toFixed(1)}%`}
+            <HeaderFact label={t("wizard.review.varianceColumn")}>
+              {`${variance.percent > 0 ? "+" : ""}${variance.percent.toFixed(1)}%`}
             </HeaderFact>
           )}
-          <HeaderFact label={t('run.employerCost')}>{fmt(stub.employer_cost)}</HeaderFact>
+          <HeaderFact label={t("run.employerCost")}>{fmt(stub.employer_cost)}</HeaderFact>
         </dl>
 
         <div>
           <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-            {t('run.stub.lines')}
+            {t("run.stub.lines")}
           </h4>
           <SharedTable className="w-full text-sm">
             <SharedTableBody>
               {stub.lines.map((line, index) => (
-                <SharedTableRow key={index} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                <SharedTableRow
+                  key={index}
+                  className="border-b border-slate-100 last:border-0 dark:border-slate-800"
+                >
                   <SharedTableCell className="py-1 pr-2 text-slate-500 dark:text-slate-400">
                     {t(`run.lineKind.${line.kind}`)}
                   </SharedTableCell>
                   <SharedTableCell className="py-1 pr-2">
                     {line.description}
-                    {line.payment_kind === 'non_cash' && <span className="ml-1 text-xs text-slate-500 dark:text-slate-400">{t('run.stub.nonCash')}</span>}
+                    {line.payment_kind === "non_cash" && (
+                      <span className="ml-1 text-xs text-slate-500 dark:text-slate-400">
+                        {t("run.stub.nonCash")}
+                      </span>
+                    )}
                     {(line.project_name || line.department_name) && (
                       <span className="ml-1 text-xs text-slate-400">
-                        {[line.project_name, line.department_name].filter(Boolean).join(' · ')}
+                        {[line.project_name, line.department_name].filter(Boolean).join(" · ")}
                       </span>
                     )}
                   </SharedTableCell>
                   <SharedTableCell className="py-1 pr-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
-                    {line.hours ? `${line.hours} × ${fmt(line.rate)}` : ''}
+                    {line.hours ? `${line.hours} × ${fmt(line.rate)}` : ""}
                   </SharedTableCell>
                   <SharedTableCell
                     className={cn(
-                      'py-1 text-right tabular-nums',
-                      line.kind === 'deduction' && 'text-red-600 dark:text-red-400',
+                      "py-1 text-right tabular-nums",
+                      line.kind === "deduction" && "text-red-600 dark:text-red-400",
                     )}
                   >
-                    {line.kind === 'deduction' ? `−${fmt(line.amount)}` : fmt(line.amount)}
+                    {line.kind === "deduction" ? `−${fmt(line.amount)}` : fmt(line.amount)}
                   </SharedTableCell>
                 </SharedTableRow>
               ))}
@@ -211,24 +255,29 @@ export function StubDrawer({
         {change?.previousPayDate && (
           <div>
             <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-              {t('wizard.review.changedTitle', { date: change.previousPayDate })}
+              {t("wizard.review.changedTitle", { date: change.previousPayDate })}
             </h4>
             {change.changes.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">{t('wizard.review.noChangeDetail')}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t("wizard.review.noChangeDetail")}
+              </p>
             ) : (
               <SharedTable className="w-full text-sm">
                 <SharedTableBody>
                   {change.changes.map((row, index) => (
-                    <SharedTableRow key={index} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                    <SharedTableRow
+                      key={index}
+                      className="border-b border-slate-100 last:border-0 dark:border-slate-800"
+                    >
                       <SharedTableCell className="py-1 pr-2 text-slate-500 dark:text-slate-400">
                         {t(`wizard.review.changeKind.${row.kind}`)}
                       </SharedTableCell>
                       <SharedTableCell className="py-1 pr-2">{row.component}</SharedTableCell>
                       <SharedTableCell className="py-1 pr-2 text-right tabular-nums text-slate-500 dark:text-slate-400">
-                        {row.from === null ? '—' : fmt(row.from)}
+                        {row.from === null ? "—" : fmt(row.from)}
                       </SharedTableCell>
                       <SharedTableCell className="py-1 text-right tabular-nums">
-                        {row.to === null ? '—' : fmt(row.to)}
+                        {row.to === null ? "—" : fmt(row.to)}
                       </SharedTableCell>
                     </SharedTableRow>
                   ))}
@@ -236,7 +285,7 @@ export function StubDrawer({
               </SharedTable>
             )}
             <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-              {t('wizard.review.changedTotals', {
+              {t("wizard.review.changedTotals", {
                 net: fmt(change.netDelta),
                 hours: Number(change.hoursDelta).toFixed(2),
               })}
@@ -246,14 +295,16 @@ export function StubDrawer({
 
         <div>
           <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-            {t('run.stub.trace', { engine: traceEngine })}
+            {t("run.stub.trace", { engine: traceEngine })}
           </h4>
           <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-sm">
             {factorEntries.map(([key, value]) => (
               <Fragment key={key}>
                 <dt className="text-slate-600 dark:text-slate-300">
                   {factorLabel(key)}
-                  <span className="ml-1.5 font-mono text-[10px] text-slate-400 dark:text-slate-500">{key}</span>
+                  <span className="ml-1.5 font-mono text-[10px] text-slate-400 dark:text-slate-500">
+                    {key}
+                  </span>
                 </dt>
                 <dd className="text-right tabular-nums">{value}</dd>
               </Fragment>
@@ -264,7 +315,7 @@ export function StubDrawer({
         {(canAdjust || adjustments.length > 0) && (
           <div>
             <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-              {t('wizard.adjust.title')}
+              {t("wizard.adjust.title")}
             </h4>
             {adjustments.length > 0 && (
               <ul className="mb-3 space-y-1 text-sm">
@@ -272,9 +323,15 @@ export function StubDrawer({
                   <li key={row.id} className="flex items-center justify-between gap-2">
                     <span>
                       {row.component_name}
-                      {row.earned_from && row.earned_to ? <span className="ml-1.5 text-xs text-slate-500">{row.earned_from} – {row.earned_to}</span> : null}
-                      {row.replace_component ? ` · ${t('wizard.adjust.replaces')}` : ''}
-                      {row.note ? <span className="ml-1.5 text-xs text-slate-400">{row.note}</span> : null}
+                      {row.earned_from && row.earned_to ? (
+                        <span className="ml-1.5 text-xs text-slate-500">
+                          {row.earned_from} – {row.earned_to}
+                        </span>
+                      ) : null}
+                      {row.replace_component ? ` · ${t("wizard.adjust.replaces")}` : ""}
+                      {row.note ? (
+                        <span className="ml-1.5 text-xs text-slate-400">{row.note}</span>
+                      ) : null}
                     </span>
                     <span className="flex items-center gap-2">
                       <span className="tabular-nums">{fmt(row.amount)}</span>
@@ -282,9 +339,11 @@ export function StubDrawer({
                         <button
                           className="text-xs font-medium text-rose-600 hover:underline dark:text-rose-400 disabled:opacity-50"
                           disabled={busy}
-                          onClick={() => void onAdjust({ action: 'delete-adjustment', adjustmentId: row.id })}
+                          onClick={() =>
+                            void onAdjust({ action: "delete-adjustment", adjustmentId: row.id })
+                          }
                         >
-                          {t('wizard.adjust.remove')}
+                          {t("wizard.adjust.remove")}
                         </button>
                       )}
                     </span>
@@ -296,200 +355,324 @@ export function StubDrawer({
               <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
                 <div className="grid grid-cols-2 gap-2">
                   <Select
-                    aria-label={t('wizard.adjust.component')}
+                    aria-label={t("wizard.adjust.component")}
                     value={adjComponent}
-                    onChange={(e) => { setAdjComponent(e.target.value); setAdjEarnedFrom(''); setAdjEarnedTo(''); setBankHours(''); setBankRate(''); setOutsideBankAmount(''); setBankSourceReference(''); setAdjReplace(false) }}
+                    onChange={(e) => {
+                      setAdjComponent(e.target.value);
+                      setAdjEarnedFrom("");
+                      setAdjEarnedTo("");
+                      setBankHours("");
+                      setBankRate("");
+                      setOutsideBankAmount("");
+                      setBankSourceReference("");
+                      setAdjReplace(false);
+                    }}
                   >
-                    <option value="">{t('wizard.adjust.component')}</option>
-                    <optgroup label={t('wizard.adjust.earnings')}>
-                      {components.filter((c) => c.kind === 'earning' && !c.bank_cash_component).map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
+                    <option value="">{t("wizard.adjust.component")}</option>
+                    <optgroup label={t("wizard.adjust.earnings")}>
+                      {components
+                        .filter((c) => c.kind === "earning" && !c.bank_cash_component)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
                     </optgroup>
-                    <optgroup label={t('wizard.adjust.bankComponents')}>
-                      {components.filter((c) => c.bank_cash_component).map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
+                    <optgroup label={t("wizard.adjust.bankComponents")}>
+                      {components
+                        .filter((c) => c.bank_cash_component)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
                     </optgroup>
-                    <optgroup label={t('wizard.adjust.deductions')}>
-                      {components.filter((c) => c.kind === 'deduction').map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
+                    <optgroup label={t("wizard.adjust.deductions")}>
+                      {components
+                        .filter((c) => c.kind === "deduction")
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
                     </optgroup>
                   </Select>
                   <MoneyInput
-                    ariaLabel={t('wizard.adjust.amount')}
+                    ariaLabel={t("wizard.adjust.amount")}
                     value={adjAmount}
                     onChange={setAdjAmount}
-                    field={t('wizard.adjust.amount')}
+                    field={t("wizard.adjust.amount")}
                     noun="a money amount"
                     maxScale={bankCashComponent ? 2 : 4}
                     required={!bankCashComponent || !bankRate}
-                    placeholder={t('wizard.adjust.amount')}
+                    placeholder={t("wizard.adjust.amount")}
                     className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums dark:border-slate-700 dark:bg-slate-900"
                   />
                 </div>
                 {bankCashComponent && (
                   <>
-                    <p className="text-xs text-slate-500">{t('wizard.adjust.bankInputHelp')}</p>
+                    <p className="text-xs text-slate-500">{t("wizard.adjust.bankInputHelp")}</p>
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="text-sm text-slate-700 dark:text-slate-200">{t('wizard.adjust.bankHours')}
-                        <MoneyInput value={bankHours} onChange={setBankHours} field={t('wizard.adjust.bankHours')} noun="signed bank hours" maxScale={2} required className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                      <label className="text-sm text-slate-700 dark:text-slate-200">
+                        {t("wizard.adjust.bankHours")}
+                        <MoneyInput
+                          value={bankHours}
+                          onChange={setBankHours}
+                          field={t("wizard.adjust.bankHours")}
+                          noun="signed bank hours"
+                          maxScale={2}
+                          required
+                          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                        />
                       </label>
-                      <label className="text-sm text-slate-700 dark:text-slate-200">{t('wizard.adjust.bankRate')}
-                        <MoneyInput value={bankRate} onChange={setBankRate} field={t('wizard.adjust.bankRate')} noun="an hourly rate" maxScale={2} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                      <label className="text-sm text-slate-700 dark:text-slate-200">
+                        {t("wizard.adjust.bankRate")}
+                        <MoneyInput
+                          value={bankRate}
+                          onChange={setBankRate}
+                          field={t("wizard.adjust.bankRate")}
+                          noun="an hourly rate"
+                          maxScale={2}
+                          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                        />
                       </label>
                     </div>
-                    <label className="block text-sm text-slate-700 dark:text-slate-200">{t('wizard.adjust.bankOutsideAmount')}
-                      <MoneyInput value={outsideBankAmount} onChange={setOutsideBankAmount} field={t('wizard.adjust.bankOutsideAmount')} noun="a money amount" maxScale={2} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                    <label className="block text-sm text-slate-700 dark:text-slate-200">
+                      {t("wizard.adjust.bankOutsideAmount")}
+                      <MoneyInput
+                        value={outsideBankAmount}
+                        onChange={setOutsideBankAmount}
+                        field={t("wizard.adjust.bankOutsideAmount")}
+                        noun="a money amount"
+                        maxScale={2}
+                        className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                      />
                     </label>
                     <input
-                      aria-label={t('wizard.adjust.bankSourceReference')}
+                      aria-label={t("wizard.adjust.bankSourceReference")}
                       value={bankSourceReference}
                       onChange={(e) => setBankSourceReference(e.target.value)}
-                      placeholder={t('wizard.adjust.bankSourceReference')}
+                      placeholder={t("wizard.adjust.bankSourceReference")}
                       className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
                     />
                   </>
                 )}
                 <input
-                  aria-label={t('wizard.adjust.note')}
+                  aria-label={t("wizard.adjust.note")}
                   value={adjNote}
                   onChange={(e) => setAdjNote(e.target.value)}
-                  placeholder={bankCashComponent ? t('wizard.adjust.bankReason') : t('wizard.adjust.note')}
+                  placeholder={
+                    bankCashComponent ? t("wizard.adjust.bankReason") : t("wizard.adjust.note")
+                  }
                   className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
                 />
-                {!bankCashComponent && components.find(component => component.id === adjComponent)?.kind === 'earning' && (
-                  <details className="text-sm text-slate-700 dark:text-slate-200">
-                    <summary className="cursor-pointer">{t('wizard.adjust.earnedDates')}</summary>
-                    <p className="mt-2 text-xs text-slate-500">{t('wizard.adjust.earnedDatesHelp')}</p>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      <label>{t('wizard.adjust.earnedFrom')}
-                        <DateField value={adjEarnedFrom} onChange={value => setAdjEarnedFrom(value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
-                      </label>
-                      <label>{t('wizard.adjust.earnedTo')}
-                        <DateField value={adjEarnedTo} onChange={value => setAdjEarnedTo(value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
-                      </label>
-                    </div>
-                  </details>
+                {!bankCashComponent &&
+                  components.find((component) => component.id === adjComponent)?.kind ===
+                    "earning" && (
+                    <details className="text-sm text-slate-700 dark:text-slate-200">
+                      <summary className="cursor-pointer">{t("wizard.adjust.earnedDates")}</summary>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {t("wizard.adjust.earnedDatesHelp")}
+                      </p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <label>
+                          {t("wizard.adjust.earnedFrom")}
+                          <DateField
+                            value={adjEarnedFrom}
+                            onChange={(value) => setAdjEarnedFrom(value)}
+                            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                          />
+                        </label>
+                        <label>
+                          {t("wizard.adjust.earnedTo")}
+                          <DateField
+                            value={adjEarnedTo}
+                            onChange={(value) => setAdjEarnedTo(value)}
+                            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900"
+                          />
+                        </label>
+                      </div>
+                    </details>
+                  )}
+                {!bankCashComponent && (
+                  <span className="flex items-center gap-1.5">
+                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={adjReplace}
+                        onChange={(e) => setAdjReplace(e.target.checked)}
+                      />
+                      {t("wizard.adjust.replace")}
+                    </label>
+                    <FieldHelp help={t("wizard.adjust.replaceHelp")} />
+                  </span>
                 )}
-                {!bankCashComponent && <span className="flex items-center gap-1.5">
-                  <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                    <input type="checkbox" checked={adjReplace} onChange={(e) => setAdjReplace(e.target.checked)} />
-                    {t('wizard.adjust.replace')}
-                  </label>
-                  <FieldHelp help={t('wizard.adjust.replaceHelp')} />
-                </span>}
                 <div className="flex justify-end">
                   <Button
                     size="sm"
                     disabled={
-                      !adjComponent
-                      || moneyFieldError(t('wizard.adjust.amount'), 'a money amount', adjAmount, bankCashComponent ? 2 : 4, { required: !bankCashComponent || !bankRate }) !== null
-                      || (bankCashComponent && (moneyFieldError(t('wizard.adjust.bankHours'), 'signed bank hours', bankHours, 2, { required: true }) !== null
-                        || moneyFieldError(t('wizard.adjust.bankRate'), 'an hourly rate', bankRate, 2) !== null))
-                      || (outsideBankAmount.trim() !== '' && moneyFieldError(t('wizard.adjust.bankOutsideAmount'), 'a money amount', outsideBankAmount, 2) !== null)
-                      || (bankCashComponent && (!bankHours.trim() || !(adjAmount.trim() || bankRate.trim()) || !adjNote.trim() || !bankSourceReference.trim()))
-                      || ((adjEarnedFrom === '') !== (adjEarnedTo === ''))
-                      || (adjEarnedFrom !== '' && adjEarnedFrom > adjEarnedTo)
-                      || busy
+                      !adjComponent ||
+                      moneyFieldError(
+                        t("wizard.adjust.amount"),
+                        "a money amount",
+                        adjAmount,
+                        bankCashComponent ? 2 : 4,
+                        { required: !bankCashComponent || !bankRate },
+                      ) !== null ||
+                      (bankCashComponent &&
+                        (moneyFieldError(
+                          t("wizard.adjust.bankHours"),
+                          "signed bank hours",
+                          bankHours,
+                          2,
+                          { required: true },
+                        ) !== null ||
+                          moneyFieldError(
+                            t("wizard.adjust.bankRate"),
+                            "an hourly rate",
+                            bankRate,
+                            2,
+                          ) !== null)) ||
+                      (outsideBankAmount.trim() !== "" &&
+                        moneyFieldError(
+                          t("wizard.adjust.bankOutsideAmount"),
+                          "a money amount",
+                          outsideBankAmount,
+                          2,
+                        ) !== null) ||
+                      (bankCashComponent &&
+                        (!bankHours.trim() ||
+                          !(adjAmount.trim() || bankRate.trim()) ||
+                          !adjNote.trim() ||
+                          !bankSourceReference.trim())) ||
+                      (adjEarnedFrom === "") !== (adjEarnedTo === "") ||
+                      (adjEarnedFrom !== "" && adjEarnedFrom > adjEarnedTo) ||
+                      busy
                     }
                     onClick={() => {
                       void onAdjust({
-                        ...(bankCashComponent ? {
-                          action: 'bank-cash-input',
-                          employeePartyId: stub.employee_party_id,
-                          componentId: adjComponent,
-                          hours: bankHours,
-                          ...(adjAmount.trim() ? { amount: adjAmount } : {}),
-                          ...(bankRate.trim() ? { rate: bankRate } : {}),
-                          ...(outsideBankAmount.trim() ? { outsideBankAmount } : {}),
-                          reason: adjNote,
-                          sourceReference: bankSourceReference,
-                          idempotencyKey: requestKey,
-                        } : {
-                        action: 'add-adjustment',
-                        employeePartyId: stub.employee_party_id,
-                        componentId: adjComponent,
-                        amount: adjAmount,
-                        note: adjNote || undefined,
-                        earnedFrom: adjEarnedFrom || undefined,
-                        earnedTo: adjEarnedTo || undefined,
-                        replaceComponent: adjReplace,
-                        idempotencyKey: requestKey,
-                        })
+                        ...(bankCashComponent
+                          ? {
+                              action: "bank-cash-input",
+                              employeePartyId: stub.employee_party_id,
+                              componentId: adjComponent,
+                              hours: bankHours,
+                              ...(adjAmount.trim() ? { amount: adjAmount } : {}),
+                              ...(bankRate.trim() ? { rate: bankRate } : {}),
+                              ...(outsideBankAmount.trim() ? { outsideBankAmount } : {}),
+                              reason: adjNote,
+                              sourceReference: bankSourceReference,
+                              idempotencyKey: requestKey,
+                            }
+                          : {
+                              action: "add-adjustment",
+                              employeePartyId: stub.employee_party_id,
+                              componentId: adjComponent,
+                              amount: adjAmount,
+                              note: adjNote || undefined,
+                              earnedFrom: adjEarnedFrom || undefined,
+                              earnedTo: adjEarnedTo || undefined,
+                              replaceComponent: adjReplace,
+                              idempotencyKey: requestKey,
+                            }),
                       }).then((added) => {
-                        if (!added) return
-                        setAdjComponent(''); setAdjAmount(''); setAdjNote(''); setBankHours(''); setBankRate(''); setOutsideBankAmount(''); setBankSourceReference(''); setAdjEarnedFrom(''); setAdjEarnedTo(''); setAdjReplace(false)
-                        setRequestKey(crypto.randomUUID())
-                      })
+                        if (!added) return;
+                        setAdjComponent("");
+                        setAdjAmount("");
+                        setAdjNote("");
+                        setBankHours("");
+                        setBankRate("");
+                        setOutsideBankAmount("");
+                        setBankSourceReference("");
+                        setAdjEarnedFrom("");
+                        setAdjEarnedTo("");
+                        setAdjReplace(false);
+                        setRequestKey(crypto.randomUUID());
+                      });
                     }}
                   >
                     {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
-                    {busy ? tCommon('actions.saving') : t('wizard.adjust.add')}
+                    {busy ? tCommon("actions.saving") : t("wizard.adjust.add")}
                   </Button>
                 </div>
               </div>
             )}
           </div>
         )}
-        {canAdjust && components.some(component => component.declared_vacation_accrual_enabled) && (
-          <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('wizard.adjust.declaredVacationTitle')}</h4>
-            <p className="text-xs text-slate-500">{t('wizard.adjust.declaredVacationHelp')}</p>
-            <MoneyInput
-              ariaLabel={t('wizard.adjust.declaredVacationAmount')}
-              value={declaredVacationAmount}
-              onChange={setDeclaredVacationAmount}
-              field={t('wizard.adjust.declaredVacationAmount')}
-              noun="a positive vacation accrual amount"
-              maxScale={2}
-              required
-              placeholder={t('wizard.adjust.declaredVacationAmount')}
-              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums dark:border-slate-700 dark:bg-slate-900"
-            />
-            <input
-              aria-label={t('wizard.adjust.declaredVacationReason')}
-              value={declaredVacationReason}
-              maxLength={500}
-              onChange={event => setDeclaredVacationReason(event.target.value)}
-              placeholder={t('wizard.adjust.declaredVacationReason')}
-              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
-            />
-            <input
-              aria-label={t('wizard.adjust.declaredVacationSource')}
-              value={declaredVacationSource}
-              maxLength={300}
-              onChange={event => setDeclaredVacationSource(event.target.value)}
-              placeholder={t('wizard.adjust.declaredVacationSource')}
-              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
-            />
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                disabled={moneyFieldError(t('wizard.adjust.declaredVacationAmount'), 'a positive vacation accrual amount', declaredVacationAmount, 2, { required: true }) !== null || cmp(declaredVacationAmount, '0') <= 0 || !declaredVacationReason.trim() || !declaredVacationSource.trim() || busy}
-                onClick={() => {
-                  void onAdjust({
-                    action: 'declared-vacation-accrual',
-                    employeePartyId: stub.employee_party_id,
-                    amount: declaredVacationAmount,
-                    reason: declaredVacationReason,
-                    sourceReference: declaredVacationSource,
-                    idempotencyKey: requestKey,
-                  }).then(added => {
-                    if (!added) return
-                    setDeclaredVacationAmount(''); setDeclaredVacationReason(''); setDeclaredVacationSource('')
-                    setRequestKey(crypto.randomUUID())
-                  })
-                }}
-              >
-                {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
-                {busy ? tCommon('actions.saving') : t('wizard.adjust.declaredVacationAdd')}
-              </Button>
+        {canAdjust &&
+          components.some((component) => component.declared_vacation_accrual_enabled) && (
+            <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                {t("wizard.adjust.declaredVacationTitle")}
+              </h4>
+              <p className="text-xs text-slate-500">{t("wizard.adjust.declaredVacationHelp")}</p>
+              <MoneyInput
+                ariaLabel={t("wizard.adjust.declaredVacationAmount")}
+                value={declaredVacationAmount}
+                onChange={setDeclaredVacationAmount}
+                field={t("wizard.adjust.declaredVacationAmount")}
+                noun="a positive vacation accrual amount"
+                maxScale={2}
+                required
+                placeholder={t("wizard.adjust.declaredVacationAmount")}
+                className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums dark:border-slate-700 dark:bg-slate-900"
+              />
+              <input
+                aria-label={t("wizard.adjust.declaredVacationReason")}
+                value={declaredVacationReason}
+                maxLength={500}
+                onChange={(event) => setDeclaredVacationReason(event.target.value)}
+                placeholder={t("wizard.adjust.declaredVacationReason")}
+                className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+              />
+              <input
+                aria-label={t("wizard.adjust.declaredVacationSource")}
+                value={declaredVacationSource}
+                maxLength={300}
+                onChange={(event) => setDeclaredVacationSource(event.target.value)}
+                placeholder={t("wizard.adjust.declaredVacationSource")}
+                className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+              />
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  disabled={
+                    moneyFieldError(
+                      t("wizard.adjust.declaredVacationAmount"),
+                      "a positive vacation accrual amount",
+                      declaredVacationAmount,
+                      2,
+                      { required: true },
+                    ) !== null ||
+                    cmp(declaredVacationAmount, "0") <= 0 ||
+                    !declaredVacationReason.trim() ||
+                    !declaredVacationSource.trim() ||
+                    busy
+                  }
+                  onClick={() => {
+                    void onAdjust({
+                      action: "declared-vacation-accrual",
+                      employeePartyId: stub.employee_party_id,
+                      amount: declaredVacationAmount,
+                      reason: declaredVacationReason,
+                      sourceReference: declaredVacationSource,
+                      idempotencyKey: requestKey,
+                    }).then((added) => {
+                      if (!added) return;
+                      setDeclaredVacationAmount("");
+                      setDeclaredVacationReason("");
+                      setDeclaredVacationSource("");
+                      setRequestKey(crypto.randomUUID());
+                    });
+                  }}
+                >
+                  {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
+                  {busy ? tCommon("actions.saving") : t("wizard.adjust.declaredVacationAdd")}
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </div>
     </Drawer>
-  )
+  );
 }

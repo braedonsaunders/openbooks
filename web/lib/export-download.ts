@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { readApiErrorMessage } from './api-error'
+import { readApiErrorMessage } from "./api-error";
 
 /**
  * Shared fetch-download-announce for every report export menu (UX-16b).
@@ -19,20 +19,20 @@ export function filenameFromDisposition(disposition: string | null, fallback: st
   if (disposition) {
     // The RFC 5987 starred parameter carries the real (possibly non-ASCII)
     // name; the plain parameter is its ASCII fallback. Prefer the real name.
-    const extended = /filename\*=UTF-8''([^;\s]+)/i.exec(disposition)?.[1]
+    const extended = /filename\*=UTF-8''([^;\s]+)/i.exec(disposition)?.[1];
     if (extended) {
       try {
-        return decodeURIComponent(extended)
+        return decodeURIComponent(extended);
       } catch {
-        return extended
+        return extended;
       }
     }
-    const quoted = /filename="([^"]+)"/.exec(disposition)?.[1]
-    if (quoted) return quoted
-    const bare = /filename=([^;\s]+)/i.exec(disposition)?.[1]?.trim()
-    if (bare) return bare
+    const quoted = /filename="([^"]+)"/.exec(disposition)?.[1];
+    if (quoted) return quoted;
+    const bare = /filename=([^;\s]+)/i.exec(disposition)?.[1]?.trim();
+    if (bare) return bare;
   }
-  return fallback
+  return fallback;
 }
 
 export async function downloadExportFile(
@@ -42,22 +42,25 @@ export async function downloadExportFile(
 ): Promise<string> {
   // The status is checked FIRST: a refusal must surface the server's message,
   // never a download of an error body.
-  const res = await fetch(url, init)
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, opts.failedMessage))
-  const blob = await res.blob()
-  const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), opts.fallbackFilename)
-  const objectUrl = URL.createObjectURL(blob)
+  const res = await fetch(url, init);
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, opts.failedMessage));
+  const blob = await res.blob();
+  const filename = filenameFromDisposition(
+    res.headers.get("Content-Disposition"),
+    opts.fallbackFilename,
+  );
+  const objectUrl = URL.createObjectURL(blob);
   try {
-    const anchor = document.createElement('a')
-    anchor.href = objectUrl
-    anchor.download = filename
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
   } finally {
-    URL.revokeObjectURL(objectUrl)
+    URL.revokeObjectURL(objectUrl);
   }
   // Completion is claimed only now: the bytes arrived and the download
   // started, with the real filename.
-  return filename
+  return filename;
 }

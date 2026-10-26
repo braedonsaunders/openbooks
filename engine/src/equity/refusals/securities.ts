@@ -1,7 +1,8 @@
 /** Refusals of securities: issuance, vesting schedules, grant-date valuation, holdings and convertible instruments. */
 export const SECURITY_REFUSALS = {
   equityIdNotGenerated: {
-    code: "equity_write_failed", status: 409,
+    code: "equity_write_failed",
+    status: 409,
     message: "No identifier was generated.",
     remedy: "Try again.",
   },
@@ -13,8 +14,10 @@ export const SECURITY_REFUSALS = {
   },
   issuanceMemoTooLong: {
     code: "equity_security_invalid",
-    message: "“{field}” is longer than {max} {maxCount, plural, one {character} other {characters}}.",
-    remedy: "Shorten “{field}” to at most {max} {maxCount, plural, one {character} other {characters}}.",
+    message:
+      "“{field}” is longer than {max} {maxCount, plural, one {character} other {characters}}.",
+    remedy:
+      "Shorten “{field}” to at most {max} {maxCount, plural, one {character} other {characters}}.",
     params: { field: "term", max: "count" },
   },
   issuanceClassRequired: {
@@ -211,7 +214,8 @@ export const SECURITY_REFUSALS = {
   issuanceDiscountOutOfRange: {
     code: "equity_security_invalid",
     message: "“{field}” must be at least {zero} and below {hundred}.",
-    remedy: "Enter a discount from {zero} up to, but not including, {hundred} under “{field}”, or leave it blank for none.",
+    remedy:
+      "Enter a discount from {zero} up to, but not including, {hundred} under “{field}”, or leave it blank for none.",
     params: { field: "term", zero: "percent", hundred: "percent" },
   },
   issuanceInterestRateRequired: {
@@ -223,7 +227,8 @@ export const SECURITY_REFUSALS = {
   issuanceInterestBasisRequired: {
     code: "equity_security_invalid",
     message: "Choose how the note's interest accrues.",
-    remedy: "Choose simple interest, or compounding annually, semiannually, quarterly or monthly, under “{field}”.",
+    remedy:
+      "Choose simple interest, or compounding annually, semiannually, quarterly or monthly, under “{field}”.",
     params: { field: "term" },
   },
   issuanceDayCountRequired: {
@@ -269,26 +274,32 @@ export const SECURITY_REFUSALS = {
   },
   issuanceNumberTooLong: {
     code: "equity_security_invalid",
-    message: "“{field}” is longer than {max} {maxCount, plural, one {character} other {characters}}.",
-    remedy: "Shorten “{field}” to at most {max} {maxCount, plural, one {character} other {characters}}.",
+    message:
+      "“{field}” is longer than {max} {maxCount, plural, one {character} other {characters}}.",
+    remedy:
+      "Shorten “{field}” to at most {max} {maxCount, plural, one {character} other {characters}}.",
     params: { field: "term", max: "count" },
   },
   securityNumberTaken: {
-    code: "equity_security_number_taken", status: 409,
+    code: "equity_security_number_taken",
+    status: 409,
     message: "Security number {number} is already used by this legal entity.",
-    remedy: "Enter a different number under “{field}”, or leave it blank to number it automatically.",
+    remedy:
+      "Enter a different number under “{field}”, or leave it blank to number it automatically.",
     params: { number: "text", field: "term" },
   },
   issuanceBelowPar: {
     code: "equity_security_invalid",
     message: "The consideration is below the shares' par value.",
-    remedy: "Shares cannot be issued below par; enter the full consideration received under “{field}”.",
+    remedy:
+      "Shares cannot be issued below par; enter the full consideration received under “{field}”.",
     params: { field: "term" },
   },
   issuanceParConsiderationRequired: {
     code: "equity_security_invalid",
     message: "Shares carry par value, so their issuance needs consideration.",
-    remedy: "Enter the cash received for the shares under “{field}” and the account that received it under “{account}”.",
+    remedy:
+      "Enter the cash received for the shares under “{field}” and the account that received it under “{account}”.",
     params: { field: "term", account: "term" },
   },
   vestingShapesMixed: {
@@ -313,7 +324,8 @@ export const SECURITY_REFUSALS = {
   },
   vestingTranchesTotalMismatch: {
     code: "equity_vesting_invalid",
-    message: "The tranches vest {total} {totalCount, plural, one {share} other {shares}}, but the security carries {quantity} {quantityCount, plural, one {share} other {shares}}.",
+    message:
+      "The tranches vest {total} {totalCount, plural, one {share} other {shares}}, but the security carries {quantity} {quantityCount, plural, one {share} other {shares}}.",
     remedy: "Make the tranche quantities sum to the security's quantity.",
     params: { total: "shares", quantity: "shares" },
   },
@@ -412,8 +424,10 @@ export const SECURITY_REFUSALS = {
     params: { security: "text" },
   },
   holdingEventExceeded: {
-    code: "equity_event_exceeds_holding", status: 409,
-    message: "The {kind, select, exercise {exercise} settle {settlement} forfeit {forfeiture} expire {expiry} cancel {cancellation} repurchase {repurchase} transfer {transfer} convert {conversion} other {event}} of {quantity} {quantityCount, plural, one {unit} other {units}} on {date} exceeds what {security} held.",
+    code: "equity_event_exceeds_holding",
+    status: 409,
+    message:
+      "The {kind, select, exercise {exercise} settle {settlement} forfeit {forfeiture} expire {expiry} cancel {cancellation} repurchase {repurchase} transfer {transfer} convert {conversion} other {event}} of {quantity} {quantityCount, plural, one {unit} other {units}} on {date} exceeds what {security} held.",
     remedy: "Review the security's history; the recorded quantities cannot be replayed.",
     params: { kind: "choice", quantity: "shares", date: "date", security: "text" },
   },
@@ -431,8 +445,10 @@ export const SECURITY_REFUSALS = {
   },
   postMoneyOverclaim: {
     code: "equity_post_money_overclaim",
-    message: "The capped post-money SAFEs claim {limit} or more of the company, so the conversion has no meaningful solution.",
-    remedy: "Check “{principal}” and “{cap}” of the post-money SAFEs; a cap entered in the wrong unit is the usual cause.",
+    message:
+      "The capped post-money SAFEs claim {limit} or more of the company, so the conversion has no meaningful solution.",
+    remedy:
+      "Check “{principal}” and “{cap}” of the post-money SAFEs; a cap entered in the wrong unit is the usual cause.",
     params: { limit: "percent", principal: "term", cap: "term" },
   },
   postMoneyUnsettled: {
@@ -453,7 +469,8 @@ export const SECURITY_REFUSALS = {
     remedy: "Enter the round price per share.",
   },
   conversionNotOutstanding: {
-    code: "equity_event_invalid", status: 409,
+    code: "equity_event_invalid",
+    status: 409,
     message: "Instrument {security} is not outstanding on {date}, the round's closing date.",
     remedy: "Check the instrument's issue date and history.",
     params: { security: "text", date: "date" },

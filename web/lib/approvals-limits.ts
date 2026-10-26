@@ -5,4 +5,4 @@
  * on purpose: two numbers would drift, and drift would turn select-all into
  * a whole-batch 400.
  */
-export const APPROVALS_BULK_BATCH_MAX = 50
+export const APPROVALS_BULK_BATCH_MAX = 50;

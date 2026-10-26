@@ -19,20 +19,20 @@
  * `other`) are not listed and the save refuses them by name.
  */
 export const ADJUSTMENT_TARGET_TYPES = [
-  'labor',
-  'material',
-  'item',
-  'item_kind',
-  'item_category',
-  'department',
-  'subsidiary',
-  'location',
-  'class',
-  'trade',
-  'job_title',
-  'project',
-  'customer',
-] as const
+  "labor",
+  "material",
+  "item",
+  "item_kind",
+  "item_category",
+  "department",
+  "subsidiary",
+  "location",
+  "class",
+  "trade",
+  "job_title",
+  "project",
+  "customer",
+] as const;
 
 /**
  * How an adjustment turns into money. Every entry here must have a pricing
@@ -40,33 +40,27 @@ export const ADJUSTMENT_TARGET_TYPES = [
  * bill line carries — no mileage source exists and `time` is undefined —
  * so they are not listed and the save refuses them by name.
  */
-export const ADJUSTMENT_CALCULATIONS = [
-  'percent',
-  'fixed',
-  'per_hour',
-  'per_day',
-  'text',
-] as const
+export const ADJUSTMENT_CALCULATIONS = ["percent", "fixed", "per_hour", "per_day", "text"] as const;
 
 /** What kind of commercial term the adjustment is. */
 export const ADJUSTMENT_CATEGORIES = [
-  'markup',
-  'travel',
-  'allowance',
-  'minimum',
-  'surcharge',
-  'other',
-] as const
+  "markup",
+  "travel",
+  "allowance",
+  "minimum",
+  "surcharge",
+  "other",
+] as const;
 
 /** How the charge reaches the invoice. */
-export const ADJUSTMENT_PRESENTATIONS = ['included', 'separate', 'informational'] as const
+export const ADJUSTMENT_PRESENTATIONS = ["included", "separate", "informational"] as const;
 
 /**
  * Targets addressed by free text rather than a UUID reference. Everything
  * else names a row by id.
  */
 export const ADJUSTMENT_TEXT_TARGETS: ReadonlySet<string> = new Set([
-  'item_kind',
-  'item_category',
-  'job_title',
-])
+  "item_kind",
+  "item_category",
+  "job_title",
+]);

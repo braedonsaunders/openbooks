@@ -1,4 +1,4 @@
-import { takeOpeningSourceYearFence } from '../organization/payroll-source-fence.ts';
+import { takeOpeningSourceYearFence } from "../organization/payroll-source-fence.ts";
 import { sql, type SQL } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
@@ -17,7 +17,10 @@ import { PACK_OPENING_BALANCE_FIELDS } from "./opening-ytd-registry.ts";
 import { requirePayrollFeature } from "./feature-gate.ts";
 import { US_STATES } from "./us/rates.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { annualPeriodOpeningBounds, assertAnnualPeriodOpeningBounds } from './period-opening-bounds.ts';
+import {
+  annualPeriodOpeningBounds,
+  assertAnnualPeriodOpeningBounds,
+} from "./period-opening-bounds.ts";
 
 function openingSubsidiaryScopeFilter(
   column: SQL,
@@ -26,7 +29,10 @@ function openingSubsidiaryScopeFilter(
   if (allowedSubsidiaryIds == null) return sql``;
   const ids = [...allowedSubsidiaryIds];
   return ids.length > 0
-    ? sql` and ${column} in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
+    ? sql` and ${column} in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`
     : sql` and false`;
 }
 
@@ -106,47 +112,65 @@ export interface OpeningBalanceField {
  */
 export const OPENING_BALANCE_FIELDS: readonly OpeningBalanceField[] = [
   {
-    key: "pensionableYtd", column: "pensionable_ytd", packs: ["CA", "US"],
+    key: "pensionableYtd",
+    column: "pensionable_ytd",
+    packs: ["CA", "US"],
     label: "Pensionable / FICA wages",
     help: "CPP pensionable earnings (Canada) or Social Security and Medicare wages (US) paid this year before adoption.",
   },
   {
-    key: "insurableYtd", column: "insurable_ytd", packs: ["CA", "US"],
+    key: "insurableYtd",
+    column: "insurable_ytd",
+    packs: ["CA", "US"],
     label: "Insurable / unemployment wages",
     help: "EI insurable earnings (Canada) or FUTA and state-unemployment wages (US) paid this year before adoption.",
   },
   {
-    key: "cppYtd", column: "cpp_ytd", packs: ["CA"],
+    key: "cppYtd",
+    column: "cpp_ytd",
+    packs: ["CA"],
     label: "CPP contributions",
     help: "Employee CPP (or QPP) contributions already withheld this year.",
   },
   {
-    key: "cpp2Ytd", column: "cpp2_ytd", packs: ["CA"],
+    key: "cpp2Ytd",
+    column: "cpp2_ytd",
+    packs: ["CA"],
     label: "CPP2 contributions",
     help: "Second additional CPP contributions already withheld this year.",
   },
   {
-    key: "eiYtd", column: "ei_ytd", packs: ["CA"],
+    key: "eiYtd",
+    column: "ei_ytd",
+    packs: ["CA"],
     label: "EI premiums",
     help: "Employee EI premiums already withheld this year.",
   },
   {
-    key: "qpipYtd", column: "qpip_ytd", packs: ["CA"],
+    key: "qpipYtd",
+    column: "qpip_ytd",
+    packs: ["CA"],
     label: "QPIP premiums",
     help: "Employee QPIP premiums already withheld this year (Quebec).",
   },
   {
-    key: "taxableYtd", column: "taxable_ytd", packs: ["CA", "US"],
+    key: "taxableYtd",
+    column: "taxable_ytd",
+    packs: ["CA", "US"],
     label: "Taxable earnings",
     help: "Taxable employment income paid this year before adoption (T4 box 14 / W-2 box 1).",
   },
   {
-    key: "taxYtd", column: "tax_ytd", packs: ["CA", "US"],
+    key: "taxYtd",
+    column: "tax_ytd",
+    packs: ["CA", "US"],
     label: "Income tax withheld",
     help: "Federal (and provincial, where combined) income tax already withheld this year.",
   },
   {
-    key: "nonPeriodicYtd", column: "non_periodic_ytd", packs: ["CA", "US"],
+    key: "nonPeriodicYtd",
+    column: "non_periodic_ytd",
+    packs: ["CA", "US"],
     label: "Bonus / supplemental earnings",
     help: "Bonuses and other non-periodic earnings paid this year — the bonus-method year-to-date.",
   },
@@ -186,8 +210,9 @@ export async function declaredProgramBaseFields(): Promise<DeclaredProgramBaseFi
       fields.push({ country, programKey: program.key, label: program.label, help: program.help });
     }
   }
-  return fields.sort((a, b) =>
-    a.country.localeCompare(b.country) || a.programKey.localeCompare(b.programKey));
+  return fields.sort(
+    (a, b) => a.country.localeCompare(b.country) || a.programKey.localeCompare(b.programKey),
+  );
 }
 
 /**
@@ -226,7 +251,8 @@ export function normalizeOpeningProgramBases(
     } catch {
       throw new PayrollError(`program carry-in for "${key}" is not an amount: "${String(raw)}"`);
     }
-    if (cmp(value, "0") < 0) throw new PayrollError(`program carry-in for "${key}" cannot be negative`);
+    if (cmp(value, "0") < 0)
+      throw new PayrollError(`program carry-in for "${key}" cannot be negative`);
     amounts[key] = value;
   }
   return amounts;
@@ -278,9 +304,7 @@ const US_STATE_CODES: ReadonlySet<string> = new Set(US_STATES);
  * the transfer determination for those wages: enter only wages the gaining
  * state's rule lets transfer (see engine/src/payroll/us/sui-transfer.ts).
  */
-function normalizeOpeningSuiStates(
-  input: Record<string, unknown>,
-): OpeningSuiStateAmounts {
+function normalizeOpeningSuiStates(input: Record<string, unknown>): OpeningSuiStateAmounts {
   const amounts: OpeningSuiStateAmounts = {};
   for (const [rawKey, raw] of Object.entries(input)) {
     const key = String(rawKey).trim().toUpperCase();
@@ -327,15 +351,23 @@ export interface DeclaredAccountOpeningBaseField {
   replacesStateCarryIn?: boolean;
 }
 
-export async function declaredAccountOpeningBaseFields(): Promise<DeclaredAccountOpeningBaseField[]> {
+export async function declaredAccountOpeningBaseFields(): Promise<
+  DeclaredAccountOpeningBaseField[]
+> {
   const { PAYROLL_COUNTRY_PACKS } = await import("./packs.ts");
-  return Object.entries(PAYROLL_COUNTRY_PACKS).flatMap(([country, pack]) =>
-    (pack.accountOpeningBases ?? []).map((field) => ({
-      country, programKey: field.key, label: field.label, help: field.help,
-      filingProgramType: field.filingProgramType, requiresRegion: field.requiresRegion,
-      replacesLegacyField: field.replacesLegacyField,
-      replacesStateCarryIn: field.replacesStateCarryIn,
-    })))
+  return Object.entries(PAYROLL_COUNTRY_PACKS)
+    .flatMap(([country, pack]) =>
+      (pack.accountOpeningBases ?? []).map((field) => ({
+        country,
+        programKey: field.key,
+        label: field.label,
+        help: field.help,
+        filingProgramType: field.filingProgramType,
+        requiresRegion: field.requiresRegion,
+        replacesLegacyField: field.replacesLegacyField,
+        replacesStateCarryIn: field.replacesStateCarryIn,
+      })),
+    )
     .sort((a, b) => a.country.localeCompare(b.country) || a.programKey.localeCompare(b.programKey));
 }
 
@@ -344,26 +376,41 @@ function normalizeOpeningAccountBases(
   country: string,
   declared: readonly DeclaredAccountOpeningBaseField[],
 ): OpeningAccountBase[] {
-  const fields = new Map(declared.filter((field) => field.country === country).map((field) => [field.programKey, field]));
+  const fields = new Map(
+    declared.filter((field) => field.country === country).map((field) => [field.programKey, field]),
+  );
   const seen = new Set<string>();
   return input.map((raw) => {
     const programKey = String(raw.programKey ?? "").trim();
     const field = fields.get(programKey);
-    if (!field) throw new PayrollError(`"${programKey}" is not an account-scoped opening base declared by the ${country} payroll pack`);
+    if (!field)
+      throw new PayrollError(
+        `"${programKey}" is not an account-scoped opening base declared by the ${country} payroll pack`,
+      );
     const filingAccountId = String(raw.filingAccountId ?? "").trim();
     if (!isUuid(filingAccountId)) {
       throw new PayrollError(`${field.label} requires a valid filing account id`);
     }
-    const region = raw.region == null || raw.region === "" ? null : String(raw.region).trim().toUpperCase();
-    if (field.requiresRegion !== (region !== null) || (region !== null && !/^[A-Z]{2}$/.test(region))) {
-      throw new PayrollError(`${field.label} ${field.requiresRegion ? "requires the account's two-letter state" : "is federal and cannot carry a state"}`);
+    const region =
+      raw.region == null || raw.region === "" ? null : String(raw.region).trim().toUpperCase();
+    if (
+      field.requiresRegion !== (region !== null) ||
+      (region !== null && !/^[A-Z]{2}$/.test(region))
+    ) {
+      throw new PayrollError(
+        `${field.label} ${field.requiresRegion ? "requires the account's two-letter state" : "is federal and cannot carry a state"}`,
+      );
     }
     const key = `${programKey}\u001f${filingAccountId}\u001f${region ?? ""}`;
-    if (seen.has(key)) throw new PayrollError(`${field.label} is duplicated for this filing account and jurisdiction`);
+    if (seen.has(key))
+      throw new PayrollError(
+        `${field.label} is duplicated for this filing account and jurisdiction`,
+      );
     seen.add(key);
     const rawAmount = String(raw.insurableYtd ?? "").trim();
     const exact = canonicalDecimal(rawAmount, 4);
-    if (exact === null) throw new PayrollError(decimalNullRefusal(field.label, "an amount", raw.insurableYtd, 4));
+    if (exact === null)
+      throw new PayrollError(decimalNullRefusal(field.label, "an amount", raw.insurableYtd, 4));
     const insurableYtd = normalizeMoney(exact);
     if (cmp(insurableYtd, "0") < 0) throw new PayrollError(`${field.label} cannot be negative`);
     return { programKey, filingAccountId, region, insurableYtd };
@@ -414,7 +461,9 @@ const MAX_TAX_YEAR = 2100;
 export function assertTaxYear(taxYear: unknown): number {
   const year = Number(taxYear);
   if (!Number.isInteger(year) || year < MIN_TAX_YEAR || year > MAX_TAX_YEAR) {
-    throw new PayrollError(`tax year must be an integer between ${MIN_TAX_YEAR} and ${MAX_TAX_YEAR}`);
+    throw new PayrollError(
+      `tax year must be an integer between ${MIN_TAX_YEAR} and ${MAX_TAX_YEAR}`,
+    );
   }
   return year;
 }
@@ -461,8 +510,8 @@ export function normalizeOpeningBalance(input: Record<string, unknown>): Opening
   // must be stated — an exempt employee states 0.
   if (blank.has("insurableYtd") && cmp(amounts.pensionableYtd!, "0") > 0) {
     throw new PayrollError(
-      `Insurable / unemployment wages is blank while pensionable / FICA wages are ${amounts.pensionableYtd} — `
-      + `enter the EI-insurable (Canada) or FUTA and state-unemployment (US) wages paid this year, or 0 if the employee is exempt`,
+      `Insurable / unemployment wages is blank while pensionable / FICA wages are ${amounts.pensionableYtd} — ` +
+        `enter the EI-insurable (Canada) or FUTA and state-unemployment (US) wages paid this year, or 0 if the employee is exempt`,
     );
   }
 
@@ -471,7 +520,9 @@ export function normalizeOpeningBalance(input: Record<string, unknown>): Opening
   // which is otherwise invisible until the first stub withholds nothing.
   const over = (amount: string, base: string, what: string, baseWhat: string) => {
     if (cmp(amounts[amount]!, amounts[base]!) > 0) {
-      throw new PayrollError(`${what} (${amounts[amount]}) exceeds ${baseWhat} (${amounts[base]}) — check the columns`);
+      throw new PayrollError(
+        `${what} (${amounts[amount]}) exceeds ${baseWhat} (${amounts[base]}) — check the columns`,
+      );
     }
   };
   if (cmp(add(amounts.cppYtd!, amounts.cpp2Ytd!), amounts.pensionableYtd!) > 0) {
@@ -550,14 +601,14 @@ export function normalizeOpeningComponents(
     if (cmp(value, "0") === 0) continue; // zero is "no carry-in", not a row
     if (!component.capped || component.basisCapAmountPerYear == null) {
       throw new PayrollError(
-        `${component.name} has no annual basis cap, so an opening year-to-date for it would `
-        + "change nothing — set the component's per-year cap first",
+        `${component.name} has no annual basis cap, so an opening year-to-date for it would ` +
+          "change nothing — set the component's per-year cap first",
       );
     }
     if (cmp(value, component.basisCapAmountPerYear) > 0) {
       throw new PayrollError(
-        `${component.name} year-to-date (${value}) exceeds its annual cap `
-        + `(${component.basisCapAmountPerYear}) — check the columns`,
+        `${component.name} year-to-date (${value}) exceeds its annual cap ` +
+          `(${component.basisCapAmountPerYear}) — check the columns`,
       );
     }
     amounts[component.componentId] = value;
@@ -609,7 +660,8 @@ export async function openingComponentFields(
   taxYear: number | null,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<OpeningComponentField[]> {
-  const rows = (await runner.execute<Record<string, unknown>>(sql`
+  const rows = await runner.execute<Record<string, unknown>>(
+    sql`
     select c.id, c.code, c.name, c.kind, c.basis_cap_amount_per_year
       from pay_components c
      where c.org_id = ${orgId}
@@ -621,15 +673,18 @@ export async function openingComponentFields(
                where oc.org_id = ${orgId} and oc.component_id = c.id
                  and (${taxYear}::int is null or b.tax_year = ${taxYear}::int)))
      order by c.code
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     componentId: String(row.id),
     code: String(row.code),
     name: String(row.name),
     kind: String(row.kind) as OpeningComponentField["kind"],
-    basisCapAmountPerYear: row.basis_cap_amount_per_year == null
-      ? null
-      : normalizeMoney(String(row.basis_cap_amount_per_year)),
+    basisCapAmountPerYear:
+      row.basis_cap_amount_per_year == null
+        ? null
+        : normalizeMoney(String(row.basis_cap_amount_per_year)),
     capped: row.basis_cap_amount_per_year != null,
   }));
 }
@@ -651,7 +706,8 @@ export async function openingBalanceLocks(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
   employeePartyIds?: readonly string[],
 ): Promise<Map<string, { documentNumber: string | null; payDate: string }>> {
-  const rows = (await runner.execute<LockRow>(sql`
+  const rows = await runner.execute<LockRow>(
+    sql`
     select distinct on (s.employee_party_id)
            s.employee_party_id, d.document_number, s.pay_date::text as pay_date
       from pay_stubs s
@@ -662,9 +718,14 @@ export async function openingBalanceLocks(
        ${employeePartyIds === undefined ? sql`` : sql`and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeePartyIds)}::jsonb)::uuid)`}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by s.employee_party_id, s.pay_date
-  `, "objects"));
+  `,
+    "objects",
+  );
   return new Map(
-    rows.map((r) => [r.employee_party_id, { documentNumber: r.document_number, payDate: r.pay_date }]),
+    rows.map((r) => [
+      r.employee_party_id,
+      { documentNumber: r.document_number, payDate: r.pay_date },
+    ]),
   );
 }
 
@@ -680,11 +741,18 @@ export async function openingProgramBasesByEmployee(
   taxYear: number,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<Map<string, OpeningProgramAmounts>> {
-  const rows = (await runner.execute<{ employee_party_id: string; program_key: string; insurable_ytd: string }>(sql`
+  const rows = await runner.execute<{
+    employee_party_id: string;
+    program_key: string;
+    insurable_ytd: string;
+  }>(
+    sql`
     select employee_party_id, program_key, insurable_ytd
       from payroll_opening_program_bases
      where org_id = ${orgId} and tax_year = ${taxYear}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const byEmployee = new Map<string, OpeningProgramAmounts>();
   for (const row of rows) {
     const amounts = byEmployee.get(row.employee_party_id) ?? {};
@@ -708,7 +776,8 @@ export async function openingBalancesForYear(
   const year = assertTaxYear(taxYear);
   const amountCols = OPENING_BALANCE_FIELDS.map((f) => sql.raw(`b.${f.column}`));
 
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select p.id as employee_party_id, p.display_name as employee_name,
            er.employee_number, prof.country, prof.province,
            b.id is not null as has_row, b.id as row_id,
@@ -723,11 +792,14 @@ export async function openingBalancesForYear(
      where prof.org_id = ${orgId} and prof.is_active and p.is_active
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   // Rows for people who no longer have an active profile still exist and still
   // feed the engine, so surface them rather than pretending they are gone.
-  const orphans = (await db.execute<Record<string, unknown>>(sql`
+  const orphans = await db.execute<Record<string, unknown>>(
+    sql`
     select b.employee_party_id, p.display_name as employee_name, er.employee_number,
            prof.country, prof.province, true as has_row, b.id as row_id,
            b.updated_at::text as updated_at,
@@ -741,9 +813,12 @@ export async function openingBalancesForYear(
        and (prof.id is null or not prof.is_active or not p.is_active)
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
 
-  const years = (await db.execute<{ tax_year: number }>(sql`
+  const years = await db.execute<{ tax_year: number }>(
+    sql`
     select distinct tax_year from payroll_opening_balances
      where org_id = ${orgId}
        and employee_party_id in (
@@ -751,19 +826,28 @@ export async function openingBalancesForYear(
           where p.org_id = ${orgId}
             ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)})
      order by tax_year desc
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   const components = await openingComponentFields(orgId, year);
 
   // Component openings for the whole year in one pass, keyed by parent row.
-  const componentRows = (await db.execute<{ opening_balance_id: string; component_id: string; ytd_amount: string }>(sql`
+  const componentRows = await db.execute<{
+    opening_balance_id: string;
+    component_id: string;
+    ytd_amount: string;
+  }>(
+    sql`
     select oc.opening_balance_id, oc.component_id, oc.ytd_amount
       from payroll_opening_balance_components oc
       join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
       left join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
      where oc.org_id = ${orgId} and b.tax_year = ${year}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const componentsByRow = new Map<string, OpeningComponentAmounts>();
   for (const row of componentRows) {
     const amounts = componentsByRow.get(row.opening_balance_id) ?? {};
@@ -773,13 +857,20 @@ export async function openingBalancesForYear(
 
   // Program carry-ins share the parent's natural key (org, employee, year):
   // one query for the year, keyed by employee like the slip readers below.
-  const programRows = (await db.execute<{ employee_party_id: string; program_key: string; insurable_ytd: string }>(sql`
+  const programRows = await db.execute<{
+    employee_party_id: string;
+    program_key: string;
+    insurable_ytd: string;
+  }>(
+    sql`
     select pb.employee_party_id, pb.program_key, pb.insurable_ytd
       from payroll_opening_program_bases pb
       left join parties p on p.id = pb.employee_party_id and p.org_id = pb.org_id
      where pb.org_id = ${orgId} and pb.tax_year = ${year}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const programsByEmployee = new Map<string, OpeningProgramAmounts>();
   for (const row of programRows) {
     const amounts = programsByEmployee.get(row.employee_party_id) ?? {};
@@ -789,14 +880,21 @@ export async function openingBalancesForYear(
 
   // State SUI carry-ins for the whole year in one pass, keyed by parent row
   // like the component openings above.
-  const suiRows = (await db.execute<{ opening_balance_id: string; state: string; insurable_ytd: string }>(sql`
+  const suiRows = await db.execute<{
+    opening_balance_id: string;
+    state: string;
+    insurable_ytd: string;
+  }>(
+    sql`
     select sw.opening_balance_id, sw.state, sw.insurable_ytd
       from payroll_opening_sui_wages sw
       join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
       left join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
      where sw.org_id = ${orgId} and b.tax_year = ${year}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const suiStatesByRow = new Map<string, OpeningSuiStateAmounts>();
   for (const row of suiRows) {
     const amounts = suiStatesByRow.get(row.opening_balance_id) ?? {};
@@ -804,15 +902,21 @@ export async function openingBalancesForYear(
     suiStatesByRow.set(row.opening_balance_id, amounts);
   }
   const accountBaseRows = await db.execute<{
-    employee_party_id: string; program_key: string; filing_account_id: string;
-    region: string | null; insurable_ytd: string;
-  }>(sql`
+    employee_party_id: string;
+    program_key: string;
+    filing_account_id: string;
+    region: string | null;
+    insurable_ytd: string;
+  }>(
+    sql`
     select ab.employee_party_id, ab.program_key, ab.filing_account_id, ab.region, ab.insurable_ytd
       from payroll_opening_account_bases ab
       left join parties p on p.id = ab.employee_party_id and p.org_id = ab.org_id
      where ab.org_id = ${orgId} and ab.tax_year = ${year}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `, "objects");
+  `,
+    "objects",
+  );
   const accountBasesByEmployee = new Map<string, OpeningAccountBase[]>();
   for (const row of accountBaseRows) {
     const bases = accountBasesByEmployee.get(row.employee_party_id) ?? [];
@@ -914,7 +1018,10 @@ export interface OpeningBalanceSaveResult {
   errors: { employeePartyId: string; employeeName?: string; message: string }[];
 }
 
-export function openingBalanceAuditContext(input: { auditReason?: unknown; sourceReference?: unknown }): { reason: string | null; sourceReference: string | null } {
+export function openingBalanceAuditContext(input: {
+  auditReason?: unknown;
+  sourceReference?: unknown;
+}): { reason: string | null; sourceReference: string | null } {
   const text = (value: unknown, label: string): string | null => {
     if (value === undefined) return null;
     if (typeof value !== "string" || !value.trim() || value.trim().length > 2000) {
@@ -924,23 +1031,39 @@ export function openingBalanceAuditContext(input: { auditReason?: unknown; sourc
   };
   const reason = text(input.auditReason, "Opening-balance audit reason");
   const sourceReference = text(input.sourceReference, "Opening-balance source reference");
-  if (sourceReference !== null && reason === null) throw new PayrollError("A source-referenced opening change requires an audit reason");
+  if (sourceReference !== null && reason === null)
+    throw new PayrollError("A source-referenced opening change requires an audit reason");
   return { reason, sourceReference };
 }
 
 /** Retain native identities and decimal text before replacing or clearing carry-in. */
-async function openingBalanceAuditRecord(runner: Pick<typeof db, "execute">, orgId: string, employeeId: string, year: number): Promise<{ balance: Record<string, unknown>; [key: string]: unknown } | null> {
-  const amounts = sql.join([
-    ...OPENING_BALANCE_FIELDS.map(field => sql`(${field.column}::text, b.${sql.identifier(field.column)}::text)`),
-    sql`('vacation_balance'::text, b.vacation_balance::text)`,
-  ], sql`, `);
-  const rows = await runner.execute<{ image: { balance: Record<string, unknown>; [key: string]: unknown } }>(sql`
+async function openingBalanceAuditRecord(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+  employeeId: string,
+  year: number,
+): Promise<{ balance: Record<string, unknown>; [key: string]: unknown } | null> {
+  const amounts = sql.join(
+    [
+      ...OPENING_BALANCE_FIELDS.map(
+        (field) => sql`(${field.column}::text, b.${sql.identifier(field.column)}::text)`,
+      ),
+      sql`('vacation_balance'::text, b.vacation_balance::text)`,
+    ],
+    sql`, `,
+  );
+  const rows = await runner.execute<{
+    image: { balance: Record<string, unknown>; [key: string]: unknown };
+  }>(
+    sql`
     select jsonb_build_object(
       'balance', to_jsonb(b) || (select jsonb_object_agg(v.key, v.amount) from (values ${amounts}) v(key,amount)),
       'children', public.payroll_opening_source_children(b.org_id, b.id, b.employee_party_id, b.tax_year)
     ) image from payroll_opening_balances b
     where b.org_id=${orgId} and b.employee_party_id=${employeeId} and b.tax_year=${year}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0]?.image ?? null;
 }
 
@@ -977,16 +1100,28 @@ export async function saveOpeningBalances(input: {
 }): Promise<OpeningBalanceSaveResult> {
   const year = assertTaxYear(input.taxYear);
   const auditContext = openingBalanceAuditContext(input);
-  const result: OpeningBalanceSaveResult = { created: 0, updated: 0, deleted: 0, skipped: [], errors: [] };
+  const result: OpeningBalanceSaveResult = {
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    skipped: [],
+    errors: [],
+  };
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
-    await takeOpeningSourceYearFence(tx,input.orgId,year);
-    await requirePayrollFeature(tx, input.orgId)
+    await takeOpeningSourceYearFence(tx, input.orgId, year);
+    await requirePayrollFeature(tx, input.orgId);
     // The route's scope query is only an early refusal. Lock the current
     // employee rows again in the write transaction so a rehome cannot move a
     // caller-approved employee out of scope before any carry-in is changed.
-    await lockScopeRows(tx, input.orgId, input.rows.map((row) => ({ kind: "party", id: row.employeePartyId })), input.allowedSubsidiaryIds ?? null, "share");
+    await lockScopeRows(
+      tx,
+      input.orgId,
+      input.rows.map((row) => ({ kind: "party", id: row.employeePartyId })),
+      input.allowedSubsidiaryIds ?? null,
+      "share",
+    );
     // Serialize with any pay-run commit for these employees' statutory year:
     // a commit in flight finishes first and the lock check below sees its
     // stubs; a save that wins the fence commits first and the run's freshness
@@ -996,13 +1131,23 @@ export async function saveOpeningBalances(input: {
       input.rows.map((row) => employeeTaxYearFenceKey(input.orgId, row.employeePartyId, year)),
     );
     const employeeIds = input.rows.map((row) => row.employeePartyId);
-    const locks = await openingBalanceLocks(input.orgId, year, tx, input.allowedSubsidiaryIds, employeeIds);
+    const locks = await openingBalanceLocks(
+      input.orgId,
+      year,
+      tx,
+      input.allowedSubsidiaryIds,
+      employeeIds,
+    );
 
     // Employees must belong to this org. Resolving names in one pass also
     // gives every error message something a human can act on.
-    const names = (await tx.execute<{
-      id: string; display_name: string; subsidiary_id: string | null; country: string | null;
-    }>(sql`
+    const names = await tx.execute<{
+      id: string;
+      display_name: string;
+      subsidiary_id: string | null;
+      country: string | null;
+    }>(
+      sql`
       select p.id, p.display_name, p.subsidiary_id, prof.country
         from parties p
         left join employee_payroll_profiles prof
@@ -1011,16 +1156,25 @@ export async function saveOpeningBalances(input: {
          select (value->>'id')::uuid from jsonb_array_elements(${JSON.stringify(
            input.rows.map((r) => ({ id: r.employeePartyId })),
          )}::jsonb) as value)
-    `, "objects"));
+    `,
+      "objects",
+    );
     const nameById = new Map(names.map((r) => [r.id, r.display_name]));
     const subsidiaryById = new Map(names.map((r) => [r.id, r.subsidiary_id]));
     const countryById = new Map(names.map((r) => [r.id, r.country]));
 
-    const existing = (await tx.execute<{ id: string; employee_party_id: string; updated_at: string | null }>(sql`
+    const existing = await tx.execute<{
+      id: string;
+      employee_party_id: string;
+      updated_at: string | null;
+    }>(
+      sql`
       select id, employee_party_id, updated_at::text as updated_at from payroll_opening_balances
        where org_id = ${input.orgId} and tax_year = ${year}
          and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
-    `, "objects"));
+    `,
+      "objects",
+    );
     const hasRow = new Set(existing.map((r) => r.employee_party_id));
     // The stored version per row, for the lost-update guard below. Compared
     // as the same `::text` the loader serves, so a client echo is exact.
@@ -1029,13 +1183,20 @@ export async function saveOpeningBalances(input: {
     // Component descriptors resolve names/codes and enforce the annual cap;
     // stored amounts are what a caller that says nothing about components keeps.
     const componentFields = await openingComponentFields(input.orgId, year, tx);
-    const storedComponents = (await tx.execute<{ employee_party_id: string; component_id: string; ytd_amount: string }>(sql`
+    const storedComponents = await tx.execute<{
+      employee_party_id: string;
+      component_id: string;
+      ytd_amount: string;
+    }>(
+      sql`
       select b.employee_party_id, oc.component_id, oc.ytd_amount
         from payroll_opening_balance_components oc
         join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
        where oc.org_id = ${input.orgId} and b.tax_year = ${year}
          and b.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
-    `, "objects"));
+    `,
+      "objects",
+    );
     const storedByEmployee = new Map<string, OpeningComponentAmounts>();
     for (const row of storedComponents) {
       const amounts = storedByEmployee.get(row.employee_party_id) ?? {};
@@ -1047,12 +1208,19 @@ export async function saveOpeningBalances(input: {
     // declares would be stored but never read. Stored program bases ride the
     // same keep-on-silence contract as stored components.
     const declaredPrograms = await declaredProgramBaseFields();
-    const storedPrograms = (await tx.execute<{ employee_party_id: string; program_key: string; insurable_ytd: string }>(sql`
+    const storedPrograms = await tx.execute<{
+      employee_party_id: string;
+      program_key: string;
+      insurable_ytd: string;
+    }>(
+      sql`
       select employee_party_id, program_key, insurable_ytd
         from payroll_opening_program_bases
        where org_id = ${input.orgId} and tax_year = ${year}
          and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
-    `, "objects"));
+    `,
+      "objects",
+    );
     const storedProgramsByEmployee = new Map<string, OpeningProgramAmounts>();
     for (const row of storedPrograms) {
       const amounts = storedProgramsByEmployee.get(row.employee_party_id) ?? {};
@@ -1060,14 +1228,20 @@ export async function saveOpeningBalances(input: {
       storedProgramsByEmployee.set(row.employee_party_id, amounts);
     }
     const storedAccountBases = await tx.execute<{
-      employee_party_id: string; program_key: string; filing_account_id: string;
-      region: string | null; insurable_ytd: string;
-    }>(sql`
+      employee_party_id: string;
+      program_key: string;
+      filing_account_id: string;
+      region: string | null;
+      insurable_ytd: string;
+    }>(
+      sql`
       select employee_party_id, program_key, filing_account_id, region, insurable_ytd
         from payroll_opening_account_bases
        where org_id = ${input.orgId} and tax_year = ${year}
          and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
-    `, "objects");
+    `,
+      "objects",
+    );
     const storedAccountBasesByEmployee = new Map<string, OpeningAccountBase[]>();
     for (const row of storedAccountBases) {
       const bases = storedAccountBasesByEmployee.get(row.employee_party_id) ?? [];
@@ -1080,37 +1254,56 @@ export async function saveOpeningBalances(input: {
       storedAccountBasesByEmployee.set(row.employee_party_id, bases);
     }
     const declaredAccountBases = await declaredAccountOpeningBaseFields();
-    const accountInfo = new Map<string, {
-      country: string; program_type: string; state_code: string | null;
-      subsidiary_id: string | null; is_active: boolean;
-    }>();
+    const accountInfo = new Map<
+      string,
+      {
+        country: string;
+        program_type: string;
+        state_code: string | null;
+        subsidiary_id: string | null;
+        is_active: boolean;
+      }
+    >();
     const accountIds = new Set([
-      ...input.rows.flatMap((row) => row.accountBases ?? []).map((base) =>
-        typeof base.filingAccountId === "string" ? base.filingAccountId : ""),
+      ...input.rows
+        .flatMap((row) => row.accountBases ?? [])
+        .map((base) => (typeof base.filingAccountId === "string" ? base.filingAccountId : "")),
       ...storedAccountBases.map((base) => base.filing_account_id),
     ]);
     for (const accountId of accountIds) {
-      if (!isUuid(accountId)
-        || accountInfo.has(accountId)) continue;
+      if (!isUuid(accountId) || accountInfo.has(accountId)) continue;
       const found = await tx.execute<{
-        country: string; program_type: string; state_code: string | null;
-        subsidiary_id: string | null; is_active: boolean;
-      }>(sql`
+        country: string;
+        program_type: string;
+        state_code: string | null;
+        subsidiary_id: string | null;
+        is_active: boolean;
+      }>(
+        sql`
         select country, program_type, state_code, subsidiary_id, is_active
           from payroll_filing_accounts
          where org_id = ${input.orgId} and id = ${accountId}::uuid
-      `, "objects");
+      `,
+        "objects",
+      );
       if (found[0]) accountInfo.set(accountId, found[0]);
     }
 
     // Stored per-state SUI carry-ins ride the same keep-on-silence contract:
     // keyed by parent row, like the components above.
-    const storedSui = (await tx.execute<{ opening_balance_id: string; state: string; insurable_ytd: string }>(sql`
+    const storedSui = await tx.execute<{
+      opening_balance_id: string;
+      state: string;
+      insurable_ytd: string;
+    }>(
+      sql`
       select sw.opening_balance_id, sw.state, sw.insurable_ytd
         from payroll_opening_sui_wages sw
         join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
        where sw.org_id = ${input.orgId} and b.tax_year = ${year}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const storedSuiByRow = new Map<string, OpeningSuiStateAmounts>();
     for (const row of storedSui) {
       const amounts = storedSuiByRow.get(row.opening_balance_id) ?? {};
@@ -1137,8 +1330,8 @@ export async function saveOpeningBalances(input: {
         continue;
       }
       if (
-        input.allowedSubsidiaryIds != null
-        && !input.allowedSubsidiaryIds.has(subsidiaryById.get(row.employeePartyId) ?? "")
+        input.allowedSubsidiaryIds != null &&
+        !input.allowedSubsidiaryIds.has(subsidiaryById.get(row.employeePartyId) ?? "")
       ) {
         fail("employee is outside the caller's subsidiary scope");
         continue;
@@ -1157,7 +1350,7 @@ export async function saveOpeningBalances(input: {
       // either fully committed (and is seen here) or has not started yet.
       if (row.updatedAt !== undefined) {
         const stored = storedVersion.has(row.employeePartyId)
-          ? storedVersion.get(row.employeePartyId) ?? null
+          ? (storedVersion.get(row.employeePartyId) ?? null)
           : null;
         if (stored !== (row.updatedAt ?? null)) {
           fail(
@@ -1180,98 +1373,134 @@ export async function saveOpeningBalances(input: {
         result.skipped.push({
           employeePartyId: row.employeePartyId,
           employeeName,
-          reason: `carry-in consumed by committed run ${lock.documentNumber ?? lock.payDate} `
-            + `on ${lock.payDate} for ${year}; void that run before changing it`,
+          reason:
+            `carry-in consumed by committed run ${lock.documentNumber ?? lock.payDate} ` +
+            `on ${lock.payDate} for ${year}; void that run before changing it`,
         });
         continue;
       }
       try {
         const amounts = normalizeOpeningBalance(row.amounts);
         const stored = storedByEmployee.get(row.employeePartyId) ?? {};
-        const components = row.components === undefined
-          ? stored
-          : {
-            // An opening against a component whose annual cap has since been
-            // removed is INERT but real — somebody entered it, and a cap may
-            // come back. Nobody may re-enter it (that is the refusal in
-            // normalizeOpeningComponents) and nobody may clear it by omission
-            // either, so it is carried forward unconditionally.
-            ...inertOpenings(stored, componentFields),
-            ...normalizeOpeningComponents(row.components, componentFields),
-          };
+        const components =
+          row.components === undefined
+            ? stored
+            : {
+                // An opening against a component whose annual cap has since been
+                // removed is INERT but real — somebody entered it, and a cap may
+                // come back. Nobody may re-enter it (that is the refusal in
+                // normalizeOpeningComponents) and nobody may clear it by omission
+                // either, so it is carried forward unconditionally.
+                ...inertOpenings(stored, componentFields),
+                ...normalizeOpeningComponents(row.components, componentFields),
+              };
         const storedPrograms = storedProgramsByEmployee.get(row.employeePartyId) ?? {};
-        const programs = row.programs === undefined
-          ? storedPrograms
-          : normalizeOpeningProgramBases(row.programs, declaredPrograms);
+        const programs =
+          row.programs === undefined
+            ? storedPrograms
+            : normalizeOpeningProgramBases(row.programs, declaredPrograms);
         const storedRowId = existing.find((r) => r.employee_party_id === row.employeePartyId)?.id;
-        const storedSuiStates = (storedRowId === undefined ? undefined : storedSuiByRow.get(storedRowId)) ?? {};
-        const suiStates = row.suiStates === undefined
-          ? storedSuiStates
-          : normalizeOpeningSuiStates(row.suiStates);
-        const accountBases = row.accountBases === undefined
-          ? storedAccountBasesByEmployee.get(row.employeePartyId) ?? []
-          : normalizeOpeningAccountBases(
-            row.accountBases,
-            countryById.get(row.employeePartyId) ?? "",
-            declaredAccountBases,
-          );
-        const storedAccountBasesForEmployee = storedAccountBasesByEmployee.get(row.employeePartyId) ?? [];
+        const storedSuiStates =
+          (storedRowId === undefined ? undefined : storedSuiByRow.get(storedRowId)) ?? {};
+        const suiStates =
+          row.suiStates === undefined ? storedSuiStates : normalizeOpeningSuiStates(row.suiStates);
+        const accountBases =
+          row.accountBases === undefined
+            ? (storedAccountBasesByEmployee.get(row.employeePartyId) ?? [])
+            : normalizeOpeningAccountBases(
+                row.accountBases,
+                countryById.get(row.employeePartyId) ?? "",
+                declaredAccountBases,
+              );
+        const storedAccountBasesForEmployee =
+          storedAccountBasesByEmployee.get(row.employeePartyId) ?? [];
         for (const base of accountBases) {
-          const declared = declaredAccountBases.find((field) =>
-            field.country === (countryById.get(row.employeePartyId) ?? "") && field.programKey === base.programKey);
+          const declared = declaredAccountBases.find(
+            (field) =>
+              field.country === (countryById.get(row.employeePartyId) ?? "") &&
+              field.programKey === base.programKey,
+          );
           const account = accountInfo.get(base.filingAccountId);
-          const unchangedStored = storedAccountBasesForEmployee.some((storedBase) =>
-            storedBase.programKey === base.programKey
-            && storedBase.filingAccountId === base.filingAccountId
-            && storedBase.region === base.region
-            && cmp(storedBase.insurableYtd, base.insurableYtd) === 0);
-          if (!declared || !account || account.country !== declared.country
-            || account.program_type !== declared.filingProgramType
+          const unchangedStored = storedAccountBasesForEmployee.some(
+            (storedBase) =>
+              storedBase.programKey === base.programKey &&
+              storedBase.filingAccountId === base.filingAccountId &&
+              storedBase.region === base.region &&
+              cmp(storedBase.insurableYtd, base.insurableYtd) === 0,
+          );
+          if (
+            !declared ||
+            !account ||
+            account.country !== declared.country ||
+            account.program_type !== declared.filingProgramType ||
             // An org-wide account (no subsidiary) files for every legal
             // employer in the organization, the employee's included.
-            || (account.subsidiary_id !== null
-              && account.subsidiary_id !== (subsidiaryById.get(row.employeePartyId) ?? null))
-            || (!account.is_active && !unchangedStored)
-            || (declared.requiresRegion ? account.state_code !== base.region : base.region !== null)) {
+            (account.subsidiary_id !== null &&
+              account.subsidiary_id !== (subsidiaryById.get(row.employeePartyId) ?? null)) ||
+            (!account.is_active && !unchangedStored) ||
+            (declared.requiresRegion ? account.state_code !== base.region : base.region !== null)
+          ) {
             throw new PayrollError(
               `${declared?.label ?? base.programKey} must reference a ${declared?.filingProgramType ?? "declared"} filing account${declared?.requiresRegion ? ` for ${base.region}` : ""} belonging to this employee's legal employer; inactive accounts can only retain an unchanged stored carry-in`,
             );
           }
         }
         for (const base of accountBases) {
-          const declared = declaredAccountBases.find((field) =>
-            field.country === (countryById.get(row.employeePartyId) ?? "") && field.programKey === base.programKey);
-          const legacyField = declared?.replacesLegacyField as keyof OpeningBalanceAmounts | undefined;
+          const declared = declaredAccountBases.find(
+            (field) =>
+              field.country === (countryById.get(row.employeePartyId) ?? "") &&
+              field.programKey === base.programKey,
+          );
+          const legacyField = declared?.replacesLegacyField as
+            keyof OpeningBalanceAmounts | undefined;
           // The pack's statutory engine and its year-end slips read the
           // filing-account column AND the legacy column it replaces, so an
           // amount in both counts twice; the remedy keeps the scoped column,
           // the one every reader resolves for the account.
-          if (legacyField && cmp(amounts[legacyField] ?? "0", "0") !== 0
-            && cmp(base.insurableYtd, "0") !== 0) {
+          if (
+            legacyField &&
+            cmp(amounts[legacyField] ?? "0", "0") !== 0 &&
+            cmp(base.insurableYtd, "0") !== 0
+          ) {
             const legacyLabel = FIELD_BY_KEY.get(legacyField)?.label ?? legacyField;
             throw new PayrollError(
-              `${declared!.label} and the employee-only ${legacyLabel} carry-in both hold amounts, so the `
-              + `prior-provider amount would count twice. Enter it once: keep it in ${declared!.label} for this `
-              + `filing account and set ${legacyLabel} to zero.`,
+              `${declared!.label} and the employee-only ${legacyLabel} carry-in both hold amounts, so the ` +
+                `prior-provider amount would count twice. Enter it once: keep it in ${declared!.label} for this ` +
+                `filing account and set ${legacyLabel} to zero.`,
             );
           }
-          if (declared?.replacesStateCarryIn && base.region !== null
-            && cmp(base.insurableYtd, "0") !== 0 && cmp(suiStates[base.region] ?? "0", "0") !== 0) {
+          if (
+            declared?.replacesStateCarryIn &&
+            base.region !== null &&
+            cmp(base.insurableYtd, "0") !== 0 &&
+            cmp(suiStates[base.region] ?? "0", "0") !== 0
+          ) {
             throw new PayrollError(
-              `${declared.label} for ${base.region} and the ${base.region} state carry-in both hold amounts, so the `
-              + `prior-provider amount would count twice. Enter it once: keep it in ${declared.label} for this `
-              + `filing account and set the ${base.region} state carry-in to zero.`,
+              `${declared.label} for ${base.region} and the ${base.region} state carry-in both hold amounts, so the ` +
+                `prior-provider amount would count twice. Enter it once: keep it in ${declared.label} for this ` +
+                `filing account and set the ${base.region} state carry-in to zero.`,
             );
           }
         }
         const admittedPeriod = periodBounds.get(row.employeePartyId);
-        if (admittedPeriod) assertAnnualPeriodOpeningBounds({ bounds: admittedPeriod, programs,
-          annualColumns: Object.fromEntries(OPENING_BALANCE_FIELDS.map((field) => [field.column, amounts[field.key]!])),
-          columnLabels: Object.fromEntries(OPENING_BALANCE_FIELDS.map((field) => [field.column, field.label])),
-        });
+        if (admittedPeriod)
+          assertAnnualPeriodOpeningBounds({
+            bounds: admittedPeriod,
+            programs,
+            annualColumns: Object.fromEntries(
+              OPENING_BALANCE_FIELDS.map((field) => [field.column, amounts[field.key]!]),
+            ),
+            columnLabels: Object.fromEntries(
+              OPENING_BALANCE_FIELDS.map((field) => [field.column, field.label]),
+            ),
+          });
         planned.push({
           employeePartyId: row.employeePartyId,
-          amounts: !admittedPeriod && isEmptyOpeningBalance(amounts, components, programs, suiStates, accountBases) ? null : amounts,
+          amounts:
+            !admittedPeriod &&
+            isEmptyOpeningBalance(amounts, components, programs, suiStates, accountBases)
+              ? null
+              : amounts,
           components,
           programs,
           suiStates,
@@ -1290,16 +1519,33 @@ export async function saveOpeningBalances(input: {
 
     const columns = OPENING_BALANCE_FIELDS.map((f) => f.column);
     for (const row of planned) {
-      const beforeRecord = await openingBalanceAuditRecord(tx, input.orgId, row.employeePartyId, year);
-      const beforeAmounts = beforeRecord === null ? null : Object.fromEntries(OPENING_BALANCE_FIELDS.map(field => [field.key, beforeRecord.balance[field.column]]));
+      const beforeRecord = await openingBalanceAuditRecord(
+        tx,
+        input.orgId,
+        row.employeePartyId,
+        year,
+      );
+      const beforeAmounts =
+        beforeRecord === null
+          ? null
+          : Object.fromEntries(
+              OPENING_BALANCE_FIELDS.map((field) => [
+                field.key,
+                beforeRecord.balance[field.column],
+              ]),
+            );
       if (row.amounts === null) {
-        const deleted = (await tx.execute<{ id: string }>(sql`
+        const deleted = await tx.execute<{ id: string }>(
+          sql`
           delete from payroll_opening_balances
            where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
              and tax_year = ${year}
            returning id
-        `, "objects"));
-        if (deleted.length > 1 || (beforeRecord !== null && deleted.length !== 1)) throw new PayrollError("The opening carry-in changed while it was being cleared");
+        `,
+          "objects",
+        );
+        if (deleted.length > 1 || (beforeRecord !== null && deleted.length !== 1))
+          throw new PayrollError("The opening carry-in changed while it was being cleared");
         if (deleted.length > 0) {
           result.deleted++;
           // The children cascade with the parent. Naming what they held is the
@@ -1307,13 +1553,21 @@ export async function saveOpeningBalances(input: {
           // record of its value cannot be reconstructed from the trail — and
           // the same holds for a program base.
           await auditOpeningBalance(tx, {
-            orgId: input.orgId, actorId: input.actorId, rowId: deleted[0]!.id,
+            orgId: input.orgId,
+            actorId: input.actorId,
+            rowId: deleted[0]!.id,
             action: "delete",
             changes: {
-              employeePartyId: row.employeePartyId, taxYear: year,
-              before: beforeAmounts, after: null, beforeRecord, afterRecord: null,
+              employeePartyId: row.employeePartyId,
+              taxYear: year,
+              before: beforeAmounts,
+              after: null,
+              beforeRecord,
+              afterRecord: null,
               reason: auditContext.reason ?? "Opening payroll carry-in cleared",
-              ...(auditContext.sourceReference === null ? {} : { sourceReference: auditContext.sourceReference }),
+              ...(auditContext.sourceReference === null
+                ? {}
+                : { sourceReference: auditContext.sourceReference }),
               beforeComponents: storedByEmployee.get(row.employeePartyId) ?? {},
               beforePrograms: storedProgramsByEmployee.get(row.employeePartyId) ?? {},
               beforeSuiStates: storedSuiByRow.get(deleted[0]!.id) ?? {},
@@ -1328,7 +1582,8 @@ export async function saveOpeningBalances(input: {
       const updates = OPENING_BALANCE_FIELDS.map(
         (f) => sql`${sql.raw(f.column)} = excluded.${sql.raw(f.column)}`,
       );
-      const saved = (await tx.execute<{ id: string }>(sql`
+      const saved = await tx.execute<{ id: string }>(
+        sql`
         insert into payroll_opening_balances
           (org_id, employee_party_id, tax_year, ${sql.raw(columns.join(", "))}, created_by, updated_by)
         values
@@ -1340,7 +1595,9 @@ export async function saveOpeningBalances(input: {
                updated_at = now()
         where payroll_opening_balances.org_id = ${input.orgId}
         returning id
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (saved.length !== 1) throw new PayrollError("The opening carry-in did not persist");
       const rowId = saved[0]!.id;
 
@@ -1437,34 +1694,54 @@ export async function saveOpeningBalances(input: {
            and tax_year = ${year}
       `);
       for (const base of row.accountBases) {
-        const inserted = await tx.execute<{ id: string }>(sql`
+        const inserted = await tx.execute<{ id: string }>(
+          sql`
           insert into payroll_opening_account_bases
             (org_id, employee_party_id, tax_year, program_key, filing_account_id, region,
              insurable_ytd, created_by, updated_by)
           values (${input.orgId}, ${row.employeePartyId}, ${year}, ${base.programKey},
             ${base.filingAccountId}::uuid, ${base.region}, ${base.insurableYtd}, ${input.actorId}, ${input.actorId})
           returning id
-        `, "objects");
+        `,
+          "objects",
+        );
         if (!inserted[0]) {
-          throw new PayrollError(`${base.programKey} account opening was not saved — insert returned no row`);
+          throw new PayrollError(
+            `${base.programKey} account opening was not saved — insert returned no row`,
+          );
         }
       }
 
-      const afterRecord = await openingBalanceAuditRecord(tx, input.orgId, row.employeePartyId, year);
-      if (afterRecord === null) throw new PayrollError("The opening carry-in readback was not found");
+      const afterRecord = await openingBalanceAuditRecord(
+        tx,
+        input.orgId,
+        row.employeePartyId,
+        year,
+      );
+      if (afterRecord === null)
+        throw new PayrollError("The opening carry-in readback was not found");
       const wasThere = hasRow.has(row.employeePartyId);
       if (wasThere) result.updated++;
       else result.created++;
       await auditOpeningBalance(tx, {
-        orgId: input.orgId, actorId: input.actorId, rowId,
+        orgId: input.orgId,
+        actorId: input.actorId,
+        rowId,
         action: wasThere ? "update" : "insert",
         changes: {
-          employeePartyId: row.employeePartyId, taxYear: year,
-          before: beforeAmounts, beforeRecord, afterRecord,
+          employeePartyId: row.employeePartyId,
+          taxYear: year,
+          before: beforeAmounts,
+          beforeRecord,
+          afterRecord,
           reason: auditContext.reason ?? "Opening payroll carry-in recorded",
-          ...(auditContext.sourceReference === null ? {} : { sourceReference: auditContext.sourceReference }),
-          after: row.amounts, afterComponents: row.components,
-          afterPrograms: row.programs, afterSuiStates: row.suiStates,
+          ...(auditContext.sourceReference === null
+            ? {}
+            : { sourceReference: auditContext.sourceReference }),
+          after: row.amounts,
+          afterComponents: row.components,
+          afterPrograms: row.programs,
+          afterSuiStates: row.suiStates,
           afterAccountBases: row.accountBases,
         },
       });
@@ -1484,15 +1761,20 @@ export class OpeningBalanceSaveError extends PayrollError {
 async function auditOpeningBalance(
   runner: Pick<typeof db, "execute">,
   args: {
-    orgId: string; actorId: string; rowId: string;
+    orgId: string;
+    actorId: string;
+    rowId: string;
     action: "insert" | "update" | "delete";
     changes: Record<string, unknown>;
   },
 ): Promise<void> {
-  const written = await runner.execute(sql`
+  const written = await runner.execute(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${args.orgId}, 'payroll_opening_balances', ${args.rowId}, ${args.action},
-            ${JSON.stringify(args.changes)}, ${args.actorId}) returning id`, "objects");
+            ${JSON.stringify(args.changes)}, ${args.actorId}) returning id`,
+    "objects",
+  );
   if (written.length !== 1) throw new PayrollError("The opening carry-in audit did not persist");
 }
 
@@ -1529,19 +1811,35 @@ export async function componentYearToDate(
   // Configured component caps are employee/year limits; a later employer or
   // country change does not erase the same component's certified carry-in.
   const opening = await readEmployeeOpeningLevySources(executor, {
-    orgId: args.orgId, employeePartyId: args.employeePartyId, taxYear: args.taxYear,
+    orgId: args.orgId,
+    employeePartyId: args.employeePartyId,
+    taxYear: args.taxYear,
   });
   if (opening.hasMaterialHistory && !opening.openingChildren) {
-    throw new PayrollError("Qualify the exact original component opening source in Payroll → Opening balances → Levy source before calculating");
+    throw new PayrollError(
+      "Qualify the exact original component opening source in Payroll → Opening balances → Levy source before calculating",
+    );
   }
-  const components = opening.openingChildren?.components.filter((component) => component.component_id === args.componentId) ?? [];
-  if (components.length > 1) throw new PayrollError("The employee/year component opening identity is ambiguous");
+  const components =
+    opening.openingChildren?.components.filter(
+      (component) => component.component_id === args.componentId,
+    ) ?? [];
+  if (components.length > 1)
+    throw new PayrollError("The employee/year component opening identity is ambiguous");
   const carryIn = components.length === 0 ? "0" : canonicalDecimal(components[0]!.ytd_amount, 4);
   if (carryIn === null) {
-    throw new PayrollError(decimalNullRefusal("Component opening year-to-date", "an amount", components[0]!.ytd_amount, 4));
+    throw new PayrollError(
+      decimalNullRefusal(
+        "Component opening year-to-date",
+        "an amount",
+        components[0]!.ytd_amount,
+        4,
+      ),
+    );
   }
   const exclude = args.excludeRunDocumentId ?? null;
-  const r = (await executor.execute<{ ytd: string }>(sql`
+  const r = await executor.execute<{ ytd: string }>(
+    sql`
     select coalesce((
         select sum(l.amount) from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -1552,11 +1850,16 @@ export async function componentYearToDate(
            and r.run_status = 'committed' and d.status <> 'voided'
            and (${exclude}::uuid is null or s.pay_run_document_id <> ${exclude}::uuid)
       ), 0)::text as ytd
-  `, "objects"));
-  if (r.length !== 1) throw new PayrollError("The committed component year-to-date could not be resolved uniquely");
+  `,
+    "objects",
+  );
+  if (r.length !== 1)
+    throw new PayrollError("The committed component year-to-date could not be resolved uniquely");
   const committed = canonicalDecimal(r[0]!.ytd, 4);
   if (committed === null) {
-    throw new PayrollError(decimalNullRefusal("Committed component year-to-date", "an amount", r[0]!.ytd, 4));
+    throw new PayrollError(
+      decimalNullRefusal("Committed component year-to-date", "an amount", r[0]!.ytd, 4),
+    );
   }
   return add(committed, carryIn);
 }
@@ -1613,13 +1916,18 @@ export interface DeclaredEmployerLevyField {
  * graph, so a static import would join the cycle the opening-ytd registry
  * exists to avoid.
  */
-export async function declaredEmployerLevyFields(year: number): Promise<DeclaredEmployerLevyField[]> {
+export async function declaredEmployerLevyFields(
+  year: number,
+): Promise<DeclaredEmployerLevyField[]> {
   const taxYear = assertTaxYear(year);
   const { PAYROLL_COUNTRY_PACKS } = await import("./packs.ts");
   const fields: DeclaredEmployerLevyField[] = [];
   for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
     let levies: readonly {
-      key: string; label: string; description: string; base: { scope: string };
+      key: string;
+      label: string;
+      description: string;
+      base: { scope: string };
     }[];
     try {
       levies = pack.employerAggregateLevies?.(taxYear) ?? [];
@@ -1639,8 +1947,9 @@ export async function declaredEmployerLevyFields(year: number): Promise<Declared
       });
     }
   }
-  return fields.sort((a, b) =>
-    a.country.localeCompare(b.country) || a.label.localeCompare(b.label));
+  return fields.sort(
+    (a, b) => a.country.localeCompare(b.country) || a.label.localeCompare(b.label),
+  );
 }
 
 /** One stored employer carry-in row. */
@@ -1657,12 +1966,20 @@ export async function employerLevyOpeningsForYear(
   taxYear: number,
 ): Promise<EmployerLevyOpeningRow[]> {
   const year = assertTaxYear(taxYear);
-  const rows = (await db.execute<{ country: string; levy_key: string; region: string | null; base_ytd: string }>(sql`
+  const rows = await db.execute<{
+    country: string;
+    levy_key: string;
+    region: string | null;
+    base_ytd: string;
+  }>(
+    sql`
     select country, levy_key, region, base_ytd::text as base_ytd
       from payroll_employer_levy_opening
      where org_id = ${orgId} and tax_year = ${year}
      order by country, levy_key, region nulls first
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     country: row.country,
     levyKey: row.levy_key,
@@ -1690,16 +2007,22 @@ export async function saveEmployerLevyOpening(input: {
   );
 
   return db.transaction(async (tx) => {
-    await requirePayrollFeature(tx, input.orgId)
+    await requirePayrollFeature(tx, input.orgId);
     await takeEmployerLevyFences(
       tx,
       input.rows.map((row) => employerLevyFenceKey(input.orgId, year, row.country, row.levyKey)),
     );
 
     const seen = new Set<string>();
-    const planned: { country: string; levyKey: string; region: string | null; base: string | null }[] = [];
+    const planned: {
+      country: string;
+      levyKey: string;
+      region: string | null;
+      base: string | null;
+    }[] = [];
     for (const row of input.rows) {
-      const fail = (message: string) => result.errors.push({ levyKey: row.levyKey, region: row.region, message });
+      const fail = (message: string) =>
+        result.errors.push({ levyKey: row.levyKey, region: row.region, message });
       const point = `${row.country}\u001f${row.levyKey}\u001f${row.region ?? ""}`;
       if (seen.has(point)) {
         fail("appears more than once in this load");
@@ -1709,8 +2032,8 @@ export async function saveEmployerLevyOpening(input: {
       const declaration = declared.get(`${row.country}\u001f${row.levyKey}`);
       if (!declaration) {
         fail(
-          `levy "${row.levyKey}" is not declared by the ${row.country} pack for ${year} — `
-          + "a carry-in for a levy nothing computes would shelter base nothing reads",
+          `levy "${row.levyKey}" is not declared by the ${row.country} pack for ${year} — ` +
+            "a carry-in for a levy nothing computes would shelter base nothing reads",
         );
         continue;
       }
@@ -1719,7 +2042,9 @@ export async function saveEmployerLevyOpening(input: {
         continue;
       }
       if (declaration.scope === "region" && (row.region == null || row.region === "")) {
-        fail(`levy "${row.levyKey}" is assessed per region — name the region this history belongs to`);
+        fail(
+          `levy "${row.levyKey}" is assessed per region — name the region this history belongs to`,
+        );
         continue;
       }
       let base: string;
@@ -1735,7 +2060,8 @@ export async function saveEmployerLevyOpening(input: {
       }
       // Committed stubs already consumed this scope point's room: the
       // carry-in is immutable from that commit on, void the run to change it.
-      const locked = (await tx.execute<{ locked: boolean }>(sql`
+      const locked = await tx.execute<{ locked: boolean }>(
+        sql`
         select exists (
           select 1 from pay_stubs s
             join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
@@ -1744,13 +2070,18 @@ export async function saveEmployerLevyOpening(input: {
              and (${row.region}::text is null or s.province = ${row.region})
              and r.run_status = 'committed' and d.status <> 'voided'
         ) as locked
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (locked[0]!.locked) {
-        fail("a committed run already consumed this scope point's room; void that run before changing it");
+        fail(
+          "a committed run already consumed this scope point's room; void that run before changing it",
+        );
         continue;
       }
       planned.push({
-        country: row.country, levyKey: row.levyKey,
+        country: row.country,
+        levyKey: row.levyKey,
         region: row.region == null || row.region === "" ? null : row.region,
         base: cmp(base, "0") === 0 ? null : base,
       });
@@ -1766,16 +2097,21 @@ export async function saveEmployerLevyOpening(input: {
       // The unique index cannot serialize two transactions that both observe
       // a missing scope point, so an advisory lock keyed by the complete
       // point closes the gap — the same lock the statutory-rate upsert takes.
-      const lockKey = [input.orgId, year, row.country, row.levyKey, row.region ?? ""].join("\u001f");
+      const lockKey = [input.orgId, year, row.country, row.levyKey, row.region ?? ""].join(
+        "\u001f",
+      );
       await tx.execute(sql`
         select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
-      const existing = (await tx.execute<{ id: string }>(sql`
+      const existing = await tx.execute<{ id: string }>(
+        sql`
         select id from payroll_employer_levy_opening
          where org_id = ${input.orgId} and tax_year = ${year}
            and country = ${row.country} and levy_key = ${row.levyKey}
            and region is not distinct from ${row.region}
          for update
-      `, "objects"));
+      `,
+        "objects",
+      );
       const before = existing[0];
       if (before && input.mode === "insert") {
         result.errors.push({
@@ -1792,9 +2128,16 @@ export async function saveEmployerLevyOpening(input: {
              where org_id = ${input.orgId} and id = ${before.id}`);
           result.deleted++;
           await auditEmployerLevyOpening(tx, {
-            orgId: input.orgId, actorId: input.actorId, rowId: before.id,
+            orgId: input.orgId,
+            actorId: input.actorId,
+            rowId: before.id,
             action: "delete",
-            changes: { country: row.country, levyKey: row.levyKey, region: row.region, taxYear: year },
+            changes: {
+              country: row.country,
+              levyKey: row.levyKey,
+              region: row.region,
+              taxYear: year,
+            },
           });
         }
         continue;
@@ -1806,30 +2149,43 @@ export async function saveEmployerLevyOpening(input: {
            where org_id = ${input.orgId} and id = ${before.id}`);
         result.updated++;
       } else {
-        const saved = (await tx.execute<{ id: string }>(sql`
+        const saved = await tx.execute<{ id: string }>(
+          sql`
           insert into payroll_employer_levy_opening
             (org_id, tax_year, country, levy_key, region, base_ytd, created_by, updated_by)
           values (${input.orgId}, ${year}, ${row.country}, ${row.levyKey}, ${row.region},
                   ${row.base}, ${input.actorId}, ${input.actorId})
           returning id
-        `, "objects"));
+        `,
+          "objects",
+        );
         result.created++;
         await auditEmployerLevyOpening(tx, {
-          orgId: input.orgId, actorId: input.actorId, rowId: saved[0]!.id,
+          orgId: input.orgId,
+          actorId: input.actorId,
+          rowId: saved[0]!.id,
           action: "insert",
           changes: {
-            country: row.country, levyKey: row.levyKey, region: row.region,
-            taxYear: year, baseYtd: row.base,
+            country: row.country,
+            levyKey: row.levyKey,
+            region: row.region,
+            taxYear: year,
+            baseYtd: row.base,
           },
         });
         continue;
       }
       await auditEmployerLevyOpening(tx, {
-        orgId: input.orgId, actorId: input.actorId, rowId: before.id,
+        orgId: input.orgId,
+        actorId: input.actorId,
+        rowId: before.id,
         action: "update",
         changes: {
-          country: row.country, levyKey: row.levyKey, region: row.region,
-          taxYear: year, baseYtd: row.base,
+          country: row.country,
+          levyKey: row.levyKey,
+          region: row.region,
+          taxYear: year,
+          baseYtd: row.base,
         },
       });
     }
@@ -1848,7 +2204,9 @@ export class EmployerLevyOpeningSaveError extends PayrollError {
 async function auditEmployerLevyOpening(
   runner: Pick<typeof db, "execute">,
   args: {
-    orgId: string; actorId: string; rowId: string;
+    orgId: string;
+    actorId: string;
+    rowId: string;
     action: "insert" | "update" | "delete";
     changes: Record<string, unknown>;
   },

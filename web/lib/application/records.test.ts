@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
 // records.ts composes the engine pool and server-only services; shim the
 // marker package so the module graph loads under the plain runner (same seam
@@ -9,27 +9,33 @@ import { sql } from 'drizzle-orm'
 // PostgreSQL array literals, and a malformed binding only fails against live
 // Postgres once the bound collection holds more than one element — so every
 // restricted collection exercised here is deliberately multi-element.
-const { listRecordTypes, listRecords, getRecord, createApplicationRecord, updateApplicationRecord, normalizeDocumentRecordRevisions } = await import('./records.ts')
-const { resolveEntityLabels: resolveEntityLabelsFromModule } = await import('../records.ts')
-const { ApplicationError } = await import('./errors.ts')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
+const {
+  listRecordTypes,
+  listRecords,
+  getRecord,
+  createApplicationRecord,
+  updateApplicationRecord,
+  normalizeDocumentRecordRevisions,
+} = await import("./records.ts");
+const { resolveEntityLabels: resolveEntityLabelsFromModule } = await import("../records.ts");
+const { ApplicationError } = await import("./errors.ts");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface SeededDocument {
-  id: string
-  kind: string
-  subsidiaryId: string
+  id: string;
+  kind: string;
+  subsidiaryId: string;
 }
 
 interface Fixture {
-  orgId: string
-  actorId: string
+  orgId: string;
+  actorId: string;
   /** [home (seeded by the scratch org), branch (inserted here)]. */
-  subsidiaries: [string, string]
-  bills: SeededDocument[]
-  payments: SeededDocument[]
+  subsidiaries: [string, string];
+  bills: SeededDocument[];
+  payments: SeededDocument[];
 }
 
 async function insertDocument(
@@ -41,7 +47,7 @@ async function insertDocument(
   partyId: string,
   subsidiaryId: string,
 ): Promise<string> {
-  const id = randomUUID()
+  const id = randomUUID();
   await db.execute(sql`
     insert into documents
       (id, org_id, kind, document_number, party_id, subsidiary_id,
@@ -51,52 +57,67 @@ async function insertDocument(
       (${id}, ${orgId}, ${kind}, ${documentNumber}, ${partyId}, ${subsidiaryId},
        ${date}, 'CAD', 'draft', '0', '0', '0', 'array binding evidence',
        '{}'::jsonb, '{}'::jsonb, ${actorId}, now(), now(), null)
-  `)
-  return id
+  `);
+  return id;
 }
 
 async function seed(): Promise<Fixture> {
-  const org = await createScratchOrg()
-  const actorId = (await seedFlowActors(org.orgId)).adminId
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
 
   // The scratch org seeds exactly one root subsidiary ("Main Co"); a child
   // subsidiary makes every fence in this suite provably multi-element.
-  const branchSubsidiaryId = randomUUID()
+  const branchSubsidiaryId = randomUUID();
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${branchSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Branch Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`)
+    values (${branchSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Branch Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
 
-  const billSubsidiaries = [org.subsidiaryId, org.subsidiaryId, branchSubsidiaryId]
-  const bills: SeededDocument[] = []
+  const billSubsidiaries = [org.subsidiaryId, org.subsidiaryId, branchSubsidiaryId];
+  const bills: SeededDocument[] = [];
   for (const [i, subsidiaryId] of billSubsidiaries.entries()) {
     bills.push({
       id: await insertDocument(
-        org.orgId, actorId, org.date,
-        'vendor_bill', `REC-BILL-${i + 1}`, org.vendorId, subsidiaryId,
+        org.orgId,
+        actorId,
+        org.date,
+        "vendor_bill",
+        `REC-BILL-${i + 1}`,
+        org.vendorId,
+        subsidiaryId,
       ),
-      kind: 'vendor_bill',
+      kind: "vendor_bill",
       subsidiaryId,
-    })
+    });
   }
 
   const payments: SeededDocument[] = [
     {
       id: await insertDocument(
-        org.orgId, actorId, org.date,
-        'vendor_payment', 'REC-PAY-1', org.vendorId, org.subsidiaryId,
+        org.orgId,
+        actorId,
+        org.date,
+        "vendor_payment",
+        "REC-PAY-1",
+        org.vendorId,
+        org.subsidiaryId,
       ),
-      kind: 'vendor_payment',
+      kind: "vendor_payment",
       subsidiaryId: org.subsidiaryId,
     },
     {
       id: await insertDocument(
-        org.orgId, actorId, org.date,
-        'customer_payment', 'REC-PAY-2', org.customerId, branchSubsidiaryId,
+        org.orgId,
+        actorId,
+        org.date,
+        "customer_payment",
+        "REC-PAY-2",
+        org.customerId,
+        branchSubsidiaryId,
       ),
-      kind: 'customer_payment',
+      kind: "customer_payment",
       subsidiaryId: branchSubsidiaryId,
     },
-  ]
+  ];
 
   return {
     orgId: org.orgId,
@@ -104,180 +125,194 @@ async function seed(): Promise<Fixture> {
     subsidiaries: [org.subsidiaryId, branchSubsidiaryId],
     bills,
     payments,
-  }
+  };
 }
 
 function contextFor(fixture: Fixture, allowedSubsidiaryIds: ReadonlySet<string>) {
   const user = {
     id: fixture.actorId,
-    email: 'records-fence@scratch.test',
-    name: 'Records Fence Controller',
-    roles: [{ key: 'admin', name: 'Admin' }],
+    email: "records-fence@scratch.test",
+    name: "Records Fence Controller",
+    roles: [{ key: "admin", name: "Admin" }],
     orgId: fixture.orgId,
-    envKind: 'production' as const,
+    envKind: "production" as const,
     productionOrgId: fixture.orgId,
     isSuperAdmin: false,
     homeUserId: fixture.actorId,
     homeOrgId: fixture.orgId,
-  }
+  };
   return {
-    authz: { user, permissions: new Set(['*']), allowedSubsidiaryIds: new Set(allowedSubsidiaryIds) },
-    source: 'api' as const,
+    authz: {
+      user,
+      permissions: new Set(["*"]),
+      allowedSubsidiaryIds: new Set(allowedSubsidiaryIds),
+    },
+    source: "api" as const,
     requestId: randomUUID(),
     apiKeyId: null,
-  }
+  };
 }
 
 function notFound(error: unknown): boolean {
-  return error instanceof ApplicationError && error.code === 'not_found'
+  return error instanceof ApplicationError && error.code === "not_found";
 }
 
 test(
-  'custom-record label resolution never returns a referenced party from another organization',
+  "custom-record label resolution never returns a referenced party from another organization",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
-    const orgA = await withBypass(() => createScratchOrg())
-    const orgB = await withBypass(() => createScratchOrg())
+    const orgA = await withBypass(() => createScratchOrg());
+    const orgB = await withBypass(() => createScratchOrg());
     try {
-      const sections = [{
-        id: 'main',
-        label: 'Main',
-        fields: [{ id: 'counterparty', label: 'Counterparty', type: 'party' }],
-      }] as unknown as Parameters<typeof resolveEntityLabelsFromModule>[1]
-      const labels = await withBypass(() => resolveEntityLabelsFromModule(orgA.orgId, sections, [
-        { counterparty: orgB.vendorId },
-      ]))
-      assert.equal(labels.parties.has(orgB.vendorId), false)
+      const sections = [
+        {
+          id: "main",
+          label: "Main",
+          fields: [{ id: "counterparty", label: "Counterparty", type: "party" }],
+        },
+      ] as unknown as Parameters<typeof resolveEntityLabelsFromModule>[1];
+      const labels = await withBypass(() =>
+        resolveEntityLabelsFromModule(orgA.orgId, sections, [{ counterparty: orgB.vendorId }]),
+      );
+      assert.equal(labels.parties.has(orgB.vendorId), false);
     } finally {
-      await withBypass(() => dropScratchOrg(orgA.orgId))
-      await withBypass(() => dropScratchOrg(orgB.orgId))
+      await withBypass(() => dropScratchOrg(orgA.orgId));
+      await withBypass(() => dropScratchOrg(orgB.orgId));
     }
   },
-)
+);
 
 test(
-  'document-backed list/get succeed under a multi-subsidiary scope and multi-kind allowlist',
+  "document-backed list/get succeed under a multi-subsidiary scope and multi-kind allowlist",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
-    const fixture = await withBypass(seed)
+    const fixture = await withBypass(seed);
     try {
-      const bothSubsidiaries = new Set(fixture.subsidiaries)
+      const bothSubsidiaries = new Set(fixture.subsidiaries);
       await withOrgContext(fixture.orgId, async () => {
-        const context = contextFor(fixture, bothSubsidiaries)
+        const context = contextFor(fixture, bothSubsidiaries);
 
         // "payments" resolves the two-element ["vendor_payment",
         // "customer_payment"] kind allowlist while the subsidiary fence binds
         // two uuids — both collections are multi-element on purpose.
-        const listed = await listRecords(context, { typeKey: 'payments' })
-        assert.equal(listed.total, fixture.payments.length)
+        const listed = await listRecords(context, { typeKey: "payments" });
+        assert.equal(listed.total, fixture.payments.length);
         assert.deepEqual(
           listed.records.map((record) => record.id).sort(),
           fixture.payments.map((payment) => payment.id).sort(),
-        )
-        assert.deepEqual(
-          [...new Set(listed.records.map((record) => record.kind))].sort(),
-          ['customer_payment', 'vendor_payment'],
-        )
+        );
+        assert.deepEqual([...new Set(listed.records.map((record) => record.kind))].sort(), [
+          "customer_payment",
+          "vendor_payment",
+        ]);
         for (const payment of fixture.payments) {
-          const record = await getRecord(context, { typeKey: 'payments', id: payment.id })
-          assert.equal(record.id, payment.id)
-          assert.equal(record.kind, payment.kind)
+          const record = await getRecord(context, { typeKey: "payments", id: payment.id });
+          assert.equal(record.id, payment.id);
+          assert.equal(record.kind, payment.kind);
         }
 
         // "bills" carries a single-element kind allowlist but still exercises
         // the multi-element subsidiary fence across list and get.
-        const bills = await listRecords(context, { typeKey: 'bills' })
-        assert.equal(bills.total, fixture.bills.length)
+        const bills = await listRecords(context, { typeKey: "bills" });
+        assert.equal(bills.total, fixture.bills.length);
         assert.deepEqual(
           bills.records.map((record) => record.id).sort(),
           fixture.bills.map((bill) => bill.id).sort(),
-        )
-        const fetched = await getRecord(context, { typeKey: 'bills', id: fixture.bills[2]!.id })
-        assert.equal(fetched.id, fixture.bills[2]!.id)
-        assert.equal(fetched.subsidiary_id, fixture.subsidiaries[1])
-      })
+        );
+        const fetched = await getRecord(context, { typeKey: "bills", id: fixture.bills[2]!.id });
+        assert.equal(fetched.id, fixture.bills[2]!.id);
+        assert.equal(fetched.subsidiary_id, fixture.subsidiaries[1]);
+      });
     } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId))
+      await withBypass(() => dropScratchOrg(fixture.orgId));
     }
   },
-)
+);
 
 test(
-  'a narrower subsidiary scope filters rows instead of failing the query',
+  "a narrower subsidiary scope filters rows instead of failing the query",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
-    const fixture = await withBypass(seed)
+    const fixture = await withBypass(seed);
     try {
-      const homeOnly = new Set([fixture.subsidiaries[0]])
-      const branchBill = fixture.bills[2]!
-      const branchPayment = fixture.payments[1]!
+      const homeOnly = new Set([fixture.subsidiaries[0]]);
+      const branchBill = fixture.bills[2]!;
+      const branchPayment = fixture.payments[1]!;
       await withOrgContext(fixture.orgId, async () => {
-        const context = contextFor(fixture, homeOnly)
+        const context = contextFor(fixture, homeOnly);
 
-        const payments = await listRecords(context, { typeKey: 'payments' })
-        assert.equal(payments.total, 1)
-        assert.equal(payments.records[0]?.id, fixture.payments[0]!.id)
-        assert.equal(payments.records[0]?.kind, 'vendor_payment')
+        const payments = await listRecords(context, { typeKey: "payments" });
+        assert.equal(payments.total, 1);
+        assert.equal(payments.records[0]?.id, fixture.payments[0]!.id);
+        assert.equal(payments.records[0]?.kind, "vendor_payment");
         await assert.rejects(
-          getRecord(context, { typeKey: 'payments', id: branchPayment.id }),
+          getRecord(context, { typeKey: "payments", id: branchPayment.id }),
           notFound,
-        )
+        );
 
-        const bills = await listRecords(context, { typeKey: 'bills' })
-        assert.equal(bills.total, 2)
+        const bills = await listRecords(context, { typeKey: "bills" });
+        assert.equal(bills.total, 2);
         assert.deepEqual(
           bills.records.map((record) => record.id).sort(),
-          fixture.bills.slice(0, 2).map((bill) => bill.id).sort(),
-        )
-        await assert.rejects(getRecord(context, { typeKey: 'bills', id: branchBill.id }), notFound)
-      })
+          fixture.bills
+            .slice(0, 2)
+            .map((bill) => bill.id)
+            .sort(),
+        );
+        await assert.rejects(getRecord(context, { typeKey: "bills", id: branchBill.id }), notFound);
+      });
     } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId))
+      await withBypass(() => dropScratchOrg(fixture.orgId));
     }
   },
-)
+);
 
 test(
-  'an empty subsidiary scope yields zero rows without binding an array at all',
+  "an empty subsidiary scope yields zero rows without binding an array at all",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
-    const fixture = await withBypass(seed)
+    const fixture = await withBypass(seed);
     try {
       await withOrgContext(fixture.orgId, async () => {
-        const context = contextFor(fixture, new Set())
-        const payments = await listRecords(context, { typeKey: 'payments' })
-        assert.equal(payments.total, 0)
-        assert.deepEqual(payments.records, [])
-        const bills = await listRecords(context, { typeKey: 'bills' })
-        assert.equal(bills.total, 0)
-        await assert.rejects(getRecord(context, { typeKey: 'bills', id: fixture.bills[0]!.id }), notFound)
-      })
+        const context = contextFor(fixture, new Set());
+        const payments = await listRecords(context, { typeKey: "payments" });
+        assert.equal(payments.total, 0);
+        assert.deepEqual(payments.records, []);
+        const bills = await listRecords(context, { typeKey: "bills" });
+        assert.equal(bills.total, 0);
+        await assert.rejects(
+          getRecord(context, { typeKey: "bills", id: fixture.bills[0]!.id }),
+          notFound,
+        );
+      });
     } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId))
+      await withBypass(() => dropScratchOrg(fixture.orgId));
     }
   },
-)
+);
 
-test('document-backed record payloads keep their exact persisted revision', () => {
-  const lossy = new Date('2026-08-24T12:34:56.123Z')
-  const exact = '2026-08-24T12:34:56.123456Z'
-  const [record] = normalizeDocumentRecordRevisions('documents', [{
-    id: '00000000-0000-4000-8000-000000000001',
-    updated_at: lossy,
-    __documentRevision: exact,
-  }])
-  assert.equal(record?.updated_at, exact)
-  assert.equal('__documentRevision' in (record ?? {}), false)
-})
+test("document-backed record payloads keep their exact persisted revision", () => {
+  const lossy = new Date("2026-08-24T12:34:56.123Z");
+  const exact = "2026-08-24T12:34:56.123456Z";
+  const [record] = normalizeDocumentRecordRevisions("documents", [
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      updated_at: lossy,
+      __documentRevision: exact,
+    },
+  ]);
+  assert.equal(record?.updated_at, exact);
+  assert.equal("__documentRevision" in (record ?? {}), false);
+});
 
 test(
-  'a custom record audience is enforced by application list types, list, and get',
+  "a custom record audience is enforced by application list types, list, and get",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
-    const fixture = await withBypass(seed)
-    const typeKey = 'private-record'
-    const typeId = randomUUID()
-    const recordId = randomUUID()
+    const fixture = await withBypass(seed);
+    const typeKey = "private-record";
+    const typeId = randomUUID();
+    const recordId = randomUUID();
     try {
       await withOrgContext(fixture.orgId, async () => {
         await db.execute(sql`
@@ -285,33 +320,36 @@ test(
             (id, org_id, key, name, plural_name, fields, status, allowed_roles, created_by, updated_by)
           values
             (${typeId}, ${fixture.orgId}, ${typeKey}, 'Private Record', 'Private Records',
-             ${JSON.stringify([{ id: 'main', title: 'Details', fields: [{ id: 'secret', type: 'text', label: 'Secret' }] }])}::jsonb,
+             ${JSON.stringify([{ id: "main", title: "Details", fields: [{ id: "secret", type: "text", label: "Secret" }] }])}::jsonb,
              'published', '["private-role"]'::jsonb, ${fixture.actorId}, ${fixture.actorId})
-        `)
+        `);
         await db.execute(sql`
           insert into custom_records
             (id, org_id, type_id, type_key, record_number, status, data, search_text, created_by, updated_by)
           values
             (${recordId}, ${fixture.orgId}, ${typeId}, ${typeKey}, 'PRIVATE-1', 'active',
              '{"secret":"classified"}'::jsonb, 'private-1 classified', ${fixture.actorId}, ${fixture.actorId})
-        `)
+        `);
 
-        const context = contextFor(fixture, new Set(fixture.subsidiaries))
-        context.authz.user.roles = [{ key: 'ordinary-role', name: 'Ordinary role' }]
+        const context = contextFor(fixture, new Set(fixture.subsidiaries));
+        context.authz.user.roles = [{ key: "ordinary-role", name: "Ordinary role" }];
 
-        const types = await listRecordTypes(context)
-        assert.equal(types.some((type) => type.key === typeKey), false)
-        await assert.rejects(listRecords(context, { typeKey }), notFound)
-        await assert.rejects(getRecord(context, { typeKey, id: recordId }), notFound)
-      })
+        const types = await listRecordTypes(context);
+        assert.equal(
+          types.some((type) => type.key === typeKey),
+          false,
+        );
+        await assert.rejects(listRecords(context, { typeKey }), notFound);
+        await assert.rejects(getRecord(context, { typeKey, id: recordId }), notFound);
+      });
     } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId))
+      await withBypass(() => dropScratchOrg(fixture.orgId));
     }
   },
-)
+);
 
 function conflict(error: unknown): boolean {
-  return error instanceof ApplicationError && error.code === 'conflict'
+  return error instanceof ApplicationError && error.code === "conflict";
 }
 
 /**
@@ -321,49 +359,49 @@ function conflict(error: unknown): boolean {
  * overwriting the first tab's data (same contract as the interactive route).
  */
 test(
-  'a stale custom-record revision conflicts instead of overwriting through the application writer',
+  "a stale custom-record revision conflicts instead of overwriting through the application writer",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
-    const fixture = await withBypass(seed)
-    const typeKey = `v1rev-${randomUUID().replaceAll('-', '').slice(0, 10)}`
-    const typeId = randomUUID()
+    const fixture = await withBypass(seed);
+    const typeKey = `v1rev-${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+    const typeId = randomUUID();
     try {
       await withOrgContext(fixture.orgId, async () => {
-        const context = contextFor(fixture, new Set(fixture.subsidiaries))
+        const context = contextFor(fixture, new Set(fixture.subsidiaries));
         await db.execute(sql`
           insert into custom_record_types
             (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
           values
             (${typeId}, ${fixture.orgId}, ${typeKey}, 'V1 Revision', 'V1 Revisions',
-             ${JSON.stringify([{ id: 'main', title: 'Details', fields: [{ id: 'title', type: 'text', label: 'Title' }] }])}::jsonb,
+             ${JSON.stringify([{ id: "main", title: "Details", fields: [{ id: "title", type: "text", label: "Title" }] }])}::jsonb,
              'published', ${fixture.actorId}, ${fixture.actorId})
-        `)
+        `);
         // Creating with data seeds its own revision evidence: the creator
         // holds no token yet, so no token is required on create.
         const created = await createApplicationRecord(context, {
           typeKey,
-          body: { data: { title: 'v1 original' } },
+          body: { data: { title: "v1 original" } },
           idempotencyKey: randomUUID(),
-        })
-        assert.equal(created.status, 201)
-        const id = (created.result as { record: { id: string } }).record.id
+        });
+        assert.equal(created.status, 201);
+        const id = (created.result as { record: { id: string } }).record.id;
 
         // Both tabs read the same revision.
         const read = (await getRecord(context, { typeKey, id })) as unknown as {
-          data: { title: string }
-          updated_at: string
-        }
-        assert.match(read.updated_at, /^\d{1,20}$/)
-        const stale = read.updated_at
+          data: { title: string };
+          updated_at: string;
+        };
+        assert.match(read.updated_at, /^\d{1,20}$/);
+        const stale = read.updated_at;
 
         // Tab A saves with the fresh token.
         const tabA = await updateApplicationRecord(context, {
           typeKey,
           id,
-          body: { data: { title: 'v1 tab A' }, expectedUpdatedAt: stale },
+          body: { data: { title: "v1 tab A" }, expectedUpdatedAt: stale },
           idempotencyKey: randomUUID(),
-        })
-        assert.equal(tabA.status, 200)
+        });
+        assert.equal(tabA.status, 200);
 
         // Tab B still holds the pre-A token: it must lose loudly, and the
         // live data must stay exactly what tab A wrote.
@@ -371,29 +409,29 @@ test(
           updateApplicationRecord(context, {
             typeKey,
             id,
-            body: { data: { title: 'v1 tab B' }, expectedUpdatedAt: stale },
+            body: { data: { title: "v1 tab B" }, expectedUpdatedAt: stale },
             idempotencyKey: randomUUID(),
           }),
           conflict,
-        )
+        );
         const live = (await getRecord(context, { typeKey, id })) as unknown as {
-          data: { title: string }
-        }
-        assert.equal(live.data.title, 'v1 tab A')
+          data: { title: string };
+        };
+        assert.equal(live.data.title, "v1 tab A");
 
         // A data update with no token conflicts before any work happens.
         await assert.rejects(
           updateApplicationRecord(context, {
             typeKey,
             id,
-            body: { data: { title: 'v1 sneaky' } },
+            body: { data: { title: "v1 sneaky" } },
             idempotencyKey: randomUUID(),
           }),
           conflict,
-        )
-      })
+        );
+      });
     } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId))
+      await withBypass(() => dropScratchOrg(fixture.orgId));
     }
   },
-)
+);

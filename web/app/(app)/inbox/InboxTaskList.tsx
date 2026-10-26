@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // HR-15 inbox task rows: the non-decision inbox items (checklist steps,
 // own drafts, reviews, enrollment windows, qualifications, signatures,
@@ -10,43 +10,41 @@
 // posts to /api/inbox/act, which delegates to the source's native service;
 // a refusal toasts the service's message intact and the row stays.
 
-import { PagedTable } from '../../../components/paged-table'
-import { useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Badge, Button, Select } from '@openbooks/ui'
-import { promptDialog } from '../../../lib/prompt'
-import { readApiErrorMessage } from '../../../lib/api-error'
+import { PagedTable } from "../../../components/paged-table";
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Badge, Button, Select } from "@openbooks/ui";
+import { promptDialog } from "../../../lib/prompt";
+import { readApiErrorMessage } from "../../../lib/api-error";
 
 export interface InboxTaskAction {
-  key: string
-  label: string
-  style: 'primary' | 'secondary' | 'danger'
-  needsReason: boolean
+  key: string;
+  label: string;
+  style: "primary" | "secondary" | "danger";
+  needsReason: boolean;
 }
 
 export interface InboxTaskRow {
-  id: string
-  kindLabel: string
-  title: string
-  subtitle: string | null
+  id: string;
+  kindLabel: string;
+  title: string;
+  subtitle: string | null;
   /** Localized "Waiting since <date>" for items awaiting a decision. */
-  waitingSinceLabel?: string | null
-  dueLabel: string | null
-  priorityLabel: string | null
-  priorityTone: 'rose' | 'amber' | 'slate'
-  href: string
-  actions: InboxTaskAction[]
+  waitingSinceLabel?: string | null;
+  dueLabel: string | null;
+  priorityLabel: string | null;
+  priorityTone: "rose" | "amber" | "slate";
+  href: string;
+  actions: InboxTaskAction[];
 }
 
-function actionVariant(
-  style: InboxTaskAction['style'],
-): 'default' | 'outline' | 'destructive' {
-  if (style === 'danger') return 'destructive'
-  if (style === 'secondary') return 'outline'
-  return 'default'
+function actionVariant(style: InboxTaskAction["style"]): "default" | "outline" | "destructive" {
+  if (style === "danger") return "destructive";
+  if (style === "secondary") return "outline";
+  return "default";
 }
 
 export function InboxTaskList({
@@ -55,11 +53,11 @@ export function InboxTaskList({
   labels,
   notices,
 }: {
-  rows: InboxTaskRow[]
-  users: { id: string; name: string }[]
-  labels: { open: string; acted: string; delegatePlaceholder: string }
+  rows: InboxTaskRow[];
+  users: { id: string; name: string }[];
+  labels: { open: string; acted: string; delegatePlaceholder: string };
   /** Named per-source notices for the legs that refused or failed (OM-10). */
-  notices?: string[]
+  notices?: string[];
 }) {
   // `refused` carries an ICU argument, so it is resolved HERE, where the
   // argument exists. Resolved in the loader it threw FORMATTING_ERROR and
@@ -68,75 +66,75 @@ export function InboxTaskList({
   // every refusal this list can raise reached the operator as the literal
   // text `inbox.refused`. The service's message was computed, correct, and
   // dropped on the way out.
-  const t = useTranslations('inbox')
-  const router = useRouter()
-  const [done, setDone] = useState<Set<string>>(new Set())
-  const [busy, setBusy] = useState<string | null>(null)
-  const [delegating, setDelegating] = useState<string | null>(null)
+  const t = useTranslations("inbox");
+  const router = useRouter();
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<string | null>(null);
+  const [delegating, setDelegating] = useState<string | null>(null);
 
   async function post(itemId: string, actionKey: string, reason?: string) {
-    setBusy(`${itemId}:${actionKey}`)
+    setBusy(`${itemId}:${actionKey}`);
     try {
-      const res = await fetch('/api/inbox/act', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/inbox/act", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           itemId,
           actionKey,
           ...(reason ? { reason } : {}),
         }),
-      })
+      });
       if (!res.ok) {
         // Error bodies are checked before they are parsed: a refusal is a
         // message for the operator, never a parse error. It reads through
         // the shared helper so message, remedy and code render.
-        toast.error(t('refused', { message: await readApiErrorMessage(res, actionKey) }))
-        return
+        toast.error(t("refused", { message: await readApiErrorMessage(res, actionKey) }));
+        return;
       }
-      setDone((prev) => new Set(prev).add(itemId))
-      toast.success(labels.acted)
-      router.refresh()
+      setDone((prev) => new Set(prev).add(itemId));
+      toast.success(labels.acted);
+      router.refresh();
     } finally {
-      setBusy(null)
-      setDelegating(null)
+      setBusy(null);
+      setDelegating(null);
     }
   }
 
   async function run(row: InboxTaskRow, action: InboxTaskAction) {
-    if (action.key === 'delegate') {
-      setDelegating(row.id)
-      return
+    if (action.key === "delegate") {
+      setDelegating(row.id);
+      return;
     }
-    let reason: string | undefined
+    let reason: string | undefined;
     if (action.needsReason) {
       const answer = await promptDialog({
         title: action.label,
         label: action.label,
         confirmLabel: action.label,
-      })
-      if (!answer) return
-      reason = answer
+      });
+      if (!answer) return;
+      reason = answer;
     }
-    await post(row.id, action.key, reason)
+    await post(row.id, action.key, reason);
   }
 
   async function runDelegate(row: InboxTaskRow, toUserId: string) {
-    if (!toUserId) return
+    if (!toUserId) return;
     const note = await promptDialog({
-      title: row.actions.find((a) => a.key === 'delegate')?.label ?? 'Delegate',
+      title: row.actions.find((a) => a.key === "delegate")?.label ?? "Delegate",
       label: labels.delegatePlaceholder,
       confirmLabel: labels.delegatePlaceholder,
-    })
+    });
     if (note === null) {
-      setDelegating(null)
-      return
+      setDelegating(null);
+      return;
     }
-    await post(row.id, 'delegate', `user:${toUserId}: ${note ?? ''}`)
+    await post(row.id, "delegate", `user:${toUserId}: ${note ?? ""}`);
   }
 
-  const visible = rows.filter((row) => !done.has(row.id))
-  const notes = notices ?? []
-  if (visible.length === 0 && notes.length === 0) return null
+  const visible = rows.filter((row) => !done.has(row.id));
+  const notes = notices ?? [];
+  if (visible.length === 0 && notes.length === 0) return null;
 
   return (
     <>
@@ -160,8 +158,8 @@ export function InboxTaskList({
           empty=""
           columns={[
             {
-              key: 'column_0',
-              header: <>{t('columns.task')}</>,
+              key: "column_0",
+              header: <>{t("columns.task")}</>,
               cell: (row) => (
                 <>
                   <Link
@@ -174,35 +172,31 @@ export function InboxTaskList({
               ),
               search: (row) =>
                 Object.values(row)
-                  .filter(
-                    (value) =>
-                      typeof value === 'string' || typeof value === 'number',
-                  )
-                  .join(' '),
+                  .filter((value) => typeof value === "string" || typeof value === "number")
+                  .join(" "),
             },
             {
-              key: 'column_1',
-              header: <>{t('columns.detail')}</>,
-              className: 'max-w-md text-slate-500 dark:text-slate-400',
+              key: "column_1",
+              header: <>{t("columns.detail")}</>,
+              className: "max-w-md text-slate-500 dark:text-slate-400",
               cell: (row) => (
                 <>
-                  <span className="line-clamp-2">{row.subtitle ?? '—'}</span>
+                  <span className="line-clamp-2">{row.subtitle ?? "—"}</span>
                   {row.waitingSinceLabel ? (
-                    <span className="block text-xs text-slate-400 dark:text-slate-500">{row.waitingSinceLabel}</span>
+                    <span className="block text-xs text-slate-400 dark:text-slate-500">
+                      {row.waitingSinceLabel}
+                    </span>
                   ) : null}
                 </>
               ),
               search: (row) =>
                 Object.values(row)
-                  .filter(
-                    (value) =>
-                      typeof value === 'string' || typeof value === 'number',
-                  )
-                  .join(' '),
+                  .filter((value) => typeof value === "string" || typeof value === "number")
+                  .join(" "),
             },
             {
-              key: 'column_2',
-              header: <>{t('columns.kind')}</>,
+              key: "column_2",
+              header: <>{t("columns.kind")}</>,
               cell: (row) => (
                 <>
                   <Badge variant="secondary">{row.kindLabel}</Badge>
@@ -210,58 +204,49 @@ export function InboxTaskList({
               ),
               search: (row) =>
                 Object.values(row)
-                  .filter(
-                    (value) =>
-                      typeof value === 'string' || typeof value === 'number',
-                  )
-                  .join(' '),
+                  .filter((value) => typeof value === "string" || typeof value === "number")
+                  .join(" "),
             },
             {
-              key: 'column_3',
-              header: <>{t('columns.due')}</>,
-              className: 'tabular-nums text-slate-500 dark:text-slate-400',
-              cell: (row) => <>{row.dueLabel ?? '—'}</>,
+              key: "column_3",
+              header: <>{t("columns.due")}</>,
+              className: "tabular-nums text-slate-500 dark:text-slate-400",
+              cell: (row) => <>{row.dueLabel ?? "—"}</>,
               search: (row) =>
                 Object.values(row)
-                  .filter(
-                    (value) =>
-                      typeof value === 'string' || typeof value === 'number',
-                  )
-                  .join(' '),
+                  .filter((value) => typeof value === "string" || typeof value === "number")
+                  .join(" "),
             },
             {
-              key: 'column_4',
-              header: <>{t('columns.priority')}</>,
+              key: "column_4",
+              header: <>{t("columns.priority")}</>,
               cell: (row) => (
                 <>
                   {row.priorityLabel ? (
                     <Badge
                       variant={
-                        row.priorityTone === 'slate'
-                          ? 'outline'
-                          : row.priorityTone === 'amber'
-                            ? 'warning'
-                            : 'destructive'
+                        row.priorityTone === "slate"
+                          ? "outline"
+                          : row.priorityTone === "amber"
+                            ? "warning"
+                            : "destructive"
                       }
                     >
                       {row.priorityLabel}
                     </Badge>
                   ) : (
-                    '—'
+                    "—"
                   )}
                 </>
               ),
               search: (row) =>
                 Object.values(row)
-                  .filter(
-                    (value) =>
-                      typeof value === 'string' || typeof value === 'number',
-                  )
-                  .join(' '),
+                  .filter((value) => typeof value === "string" || typeof value === "number")
+                  .join(" "),
             },
             {
-              key: 'column_5',
-              header: <>{t('columns.actions')}</>,
+              key: "column_5",
+              header: <>{t("columns.actions")}</>,
               cell: (row) => (
                 <>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -287,9 +272,7 @@ export function InboxTaskList({
                             defaultValue=""
                             onChange={(e) => runDelegate(row, e.target.value)}
                           >
-                            <option value="">
-                              {labels.delegatePlaceholder}
-                            </option>
+                            <option value="">{labels.delegatePlaceholder}</option>
                             {users.map((u) => (
                               <option key={u.id} value={u.id}>
                                 {u.name}
@@ -297,11 +280,7 @@ export function InboxTaskList({
                             ))}
                           </Select>
                         </span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setDelegating(null)}
-                        >
+                        <Button size="sm" variant="ghost" onClick={() => setDelegating(null)}>
                           ×
                         </Button>
                       </span>
@@ -311,15 +290,12 @@ export function InboxTaskList({
               ),
               search: (row) =>
                 Object.values(row)
-                  .filter(
-                    (value) =>
-                      typeof value === 'string' || typeof value === 'number',
-                  )
-                  .join(' '),
+                  .filter((value) => typeof value === "string" || typeof value === "number")
+                  .join(" "),
             },
           ]}
         />
       ) : null}
     </>
-  )
+  );
 }

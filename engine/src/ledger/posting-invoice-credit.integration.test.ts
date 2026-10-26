@@ -5,9 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { postDocument } from "./posting-document.ts";
-import {
-  measureCustomerExposure,
-} from "../receivables/credit-policy.ts";
+import { measureCustomerExposure } from "../receivables/credit-policy.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -109,10 +107,15 @@ async function post(org: Org, invoiceId: string): Promise<string> {
 
 async function invoiceState(org: Org, id: string) {
   return withBypass(async () => {
-    const row = (await db.execute<{ status: string; balance: string | null; entries: number }>(sql`
+    const row = (
+      await db.execute<{ status: string; balance: string | null; entries: number }>(
+        sql`
         select status, open_balance::text as balance,
                (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
-          from documents where id = ${id} and org_id = ${org.orgId}`, "objects"))[0]!;
+          from documents where id = ${id} and org_id = ${org.orgId}`,
+        "objects",
+      )
+    )[0]!;
     return row;
   });
 }
@@ -175,7 +178,13 @@ test(
       );
       await seedCustomerRole(org, actorId, org.customerId, { creditLimit: "15000" });
       const orderId = await seedOpenOrder(org, actorId, "SO-POST-RELIEF-1", "10000");
-      const invoiceId = await seedConvertedInvoice(org, actorId, orderId, "INV-POST-RELIEF-1", "10000");
+      const invoiceId = await seedConvertedInvoice(
+        org,
+        actorId,
+        orderId,
+        "INV-POST-RELIEF-1",
+        "10000",
+      );
 
       // Without relief this would read as 10000 open + 10000 new = 20000 and
       // refuse; the swap lands exactly at 10000 and posts.
@@ -189,12 +198,7 @@ test(
       // The order remainder is now billed cover, not exposure: 10000 unpaid
       // plus a 6000 direct invoice reaches 16000 and refuses naming it.
       const extraId = await seedDirectInvoice(org, actorId, "INV-POST-OVER-2", "6000");
-      await expectPostingRefusal(
-        post(org, extraId),
-        /16000/,
-        /15000/,
-        /unpaid invoices 10000/,
-      );
+      await expectPostingRefusal(post(org, extraId), /16000/, /15000/, /unpaid invoices 10000/);
       assert.deepEqual(await invoiceState(org, extraId), {
         status: "approved",
         balance: null,
@@ -206,39 +210,35 @@ test(
   },
 );
 
-test(
-  "partial billing relieves only what it bills",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      const actorId = await withBypass(() =>
-        createScratchUser(org.orgId, "Posting partial clerk", "posting_partial_clerk"),
-      );
-      await seedCustomerRole(org, actorId, org.customerId, { creditLimit: "15000" });
-      const orderId = await seedOpenOrder(org, actorId, "SO-POST-PARTIAL-1", "10000");
+test("partial billing relieves only what it bills", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() =>
+      createScratchUser(org.orgId, "Posting partial clerk", "posting_partial_clerk"),
+    );
+    await seedCustomerRole(org, actorId, org.customerId, { creditLimit: "15000" });
+    const orderId = await seedOpenOrder(org, actorId, "SO-POST-PARTIAL-1", "10000");
 
-      // First partial billing: 10000 open + 3000 new − 3000 relief = 10000.
-      const firstId = await seedConvertedInvoice(org, actorId, orderId, "INV-POST-PART-1", "3000");
-      await post(org, firstId);
+    // First partial billing: 10000 open + 3000 new − 3000 relief = 10000.
+    const firstId = await seedConvertedInvoice(org, actorId, orderId, "INV-POST-PART-1", "3000");
+    await post(org, firstId);
 
-      // Second billing for the rest: 7000 remainder + 3000 unpaid + 7000 new
-      // − 7000 relief = 10000. Counting either invoice twice would refuse.
-      const secondId = await seedConvertedInvoice(org, actorId, orderId, "INV-POST-PART-2", "7000");
-      await post(org, secondId);
+    // Second billing for the rest: 7000 remainder + 3000 unpaid + 7000 new
+    // − 7000 relief = 10000. Counting either invoice twice would refuse.
+    const secondId = await seedConvertedInvoice(org, actorId, orderId, "INV-POST-PART-2", "7000");
+    await post(org, secondId);
 
-      const exposure = await withBypass(() =>
-        measureCustomerExposure(db, org.orgId, org.customerId, "CAD"),
-      );
-      assert.deepEqual(exposure, {
-        openOrderExposure: "0.0000",
-        unpaidInvoiceExposure: "10000.0000",
-      });
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+    const exposure = await withBypass(() =>
+      measureCustomerExposure(db, org.orgId, org.customerId, "CAD"),
+    );
+    assert.deepEqual(exposure, {
+      openOrderExposure: "0.0000",
+      unpaidInvoiceExposure: "10000.0000",
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test(
   "billing relabelled to another party does not relieve the source order",
@@ -261,7 +261,13 @@ test(
       const orderId = await seedOpenOrder(org, actorId, "SO-POST-STRAY-1", "10000");
       // Legacy shape: the conversion child carries the other party, so its
       // totals must never release the source commitment.
-      const strayId = await seedConvertedInvoice(org, actorId, orderId, "INV-POST-STRAY-1", "10000");
+      const strayId = await seedConvertedInvoice(
+        org,
+        actorId,
+        orderId,
+        "INV-POST-STRAY-1",
+        "10000",
+      );
       await withBypass(async () => {
         await db.execute(sql`
           update documents set party_id = ${otherParty}, updated_at = now(), updated_by = ${actorId}
@@ -295,19 +301,28 @@ test(
       const actorId = await withBypass(() =>
         createScratchUser(org.orgId, "Posting foreign clerk", "posting_foreign_clerk"),
       );
-      await seedCustomerRole(org, actorId, org.customerId, { creditLimit: "10000", currency: "USD" });
+      await seedCustomerRole(org, actorId, org.customerId, {
+        creditLimit: "10000",
+        currency: "USD",
+      });
       for (const [index, limitCurrency] of ["USD", "EUR", "GBP"].entries()) {
         const invoiceCurrency = "CAD";
-        await withBypass(() => db.execute(sql`
+        await withBypass(() =>
+          db.execute(sql`
           update customer_roles set currency = ${limitCurrency}
            where org_id = ${org.orgId} and party_id = ${org.customerId}
-        `));
+        `),
+        );
         const number = `INV-POST-FX-${index + 1}`;
         const invoiceId = await seedDirectInvoice(org, actorId, number, "50000", invoiceCurrency);
         await expectPostingRefusal(
           post(org, invoiceId),
-          new RegExp(`customer credit limit is configured in ${limitCurrency}, but invoice ${number} is in ${invoiceCurrency}`),
-          new RegExp(`update the customer credit-limit currency and amount to ${invoiceCurrency} before posting`),
+          new RegExp(
+            `customer credit limit is configured in ${limitCurrency}, but invoice ${number} is in ${invoiceCurrency}`,
+          ),
+          new RegExp(
+            `update the customer credit-limit currency and amount to ${invoiceCurrency} before posting`,
+          ),
         );
         assert.equal((await invoiceState(org, invoiceId)).status, "approved");
       }
@@ -317,83 +332,97 @@ test(
   },
 );
 
-test(
-  "posting without a role or without a limit stays ungated",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      const actorId = await withBypass(() =>
-        createScratchUser(org.orgId, "Posting unconfigured clerk", "posting_unconfigured_clerk"),
-      );
-      // No customer_roles row at all: nothing to evaluate.
-      const bareId = await seedDirectInvoice(org, actorId, "INV-POST-BARE-1", "25000");
-      await post(org, bareId);
-      assert.equal((await invoiceState(org, bareId)).status, "posted");
+test("posting without a role or without a limit stays ungated", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() =>
+      createScratchUser(org.orgId, "Posting unconfigured clerk", "posting_unconfigured_clerk"),
+    );
+    // No customer_roles row at all: nothing to evaluate.
+    const bareId = await seedDirectInvoice(org, actorId, "INV-POST-BARE-1", "25000");
+    await post(org, bareId);
+    assert.equal((await invoiceState(org, bareId)).status, "posted");
 
-      // Explicitly unlimited: the gate measures nothing against null.
-      const otherParty = randomUUID();
-      await withBypass(async () => {
-        await db.execute(sql`
+    // Explicitly unlimited: the gate measures nothing against null.
+    const otherParty = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, is_active, custom)
           values (${otherParty}, ${org.orgId}, 'customer', 'Unlimited Customer', true, '{}'::jsonb)`);
-      });
-      await seedCustomerRole(org, actorId, otherParty, { creditLimit: null });
-      const freeId = await seedDirectInvoice(org, actorId, "INV-POST-FREE-1", "25000", "CAD", otherParty);
-      await post(org, freeId);
-      assert.equal((await invoiceState(org, freeId)).status, "posted");
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+    });
+    await seedCustomerRole(org, actorId, otherParty, { creditLimit: null });
+    const freeId = await seedDirectInvoice(
+      org,
+      actorId,
+      "INV-POST-FREE-1",
+      "25000",
+      "CAD",
+      otherParty,
+    );
+    await post(org, freeId);
+    assert.equal((await invoiceState(org, freeId)).status, "posted");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
-test(
-  "misconfigured roles refuse posting by name",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      const actorId = await withBypass(() =>
-        createScratchUser(org.orgId, "Posting config clerk", "posting_config_clerk"),
-      );
-      const negativeParty = randomUUID();
-      const currencylessParty = randomUUID();
-      await withBypass(async () => {
-        for (const [party, name] of [
-          [negativeParty, "Negative Customer"],
-          [currencylessParty, "Currencyless Customer"],
-        ] as const) {
-          await db.execute(sql`
+test("misconfigured roles refuse posting by name", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() =>
+      createScratchUser(org.orgId, "Posting config clerk", "posting_config_clerk"),
+    );
+    const negativeParty = randomUUID();
+    const currencylessParty = randomUUID();
+    await withBypass(async () => {
+      for (const [party, name] of [
+        [negativeParty, "Negative Customer"],
+        [currencylessParty, "Currencyless Customer"],
+      ] as const) {
+        await db.execute(sql`
             insert into parties (id, org_id, kind, display_name, is_active, custom)
             values (${party}, ${org.orgId}, 'customer', ${name}, true, '{}'::jsonb)`);
-        }
-      });
-      await seedCustomerRole(org, actorId, negativeParty, { creditLimit: "-500" });
-      await seedCustomerRole(org, actorId, currencylessParty, { creditLimit: "10000", currency: null });
+      }
+    });
+    await seedCustomerRole(org, actorId, negativeParty, { creditLimit: "-500" });
+    await seedCustomerRole(org, actorId, currencylessParty, {
+      creditLimit: "10000",
+      currency: null,
+    });
 
-      const negativeId = await seedDirectInvoice(org, actorId, "INV-POST-NEG-1", "100", "CAD", negativeParty);
-      await expectPostingRefusal(post(org, negativeId), /cannot be negative/);
-      assert.deepEqual(await invoiceState(org, negativeId), {
-        status: "approved",
-        balance: null,
-        entries: 0,
-      });
+    const negativeId = await seedDirectInvoice(
+      org,
+      actorId,
+      "INV-POST-NEG-1",
+      "100",
+      "CAD",
+      negativeParty,
+    );
+    await expectPostingRefusal(post(org, negativeId), /cannot be negative/);
+    assert.deepEqual(await invoiceState(org, negativeId), {
+      status: "approved",
+      balance: null,
+      entries: 0,
+    });
 
-      const currencylessId = await seedDirectInvoice(
-        org, actorId, "INV-POST-NOCUR-1", "100", "CAD", currencylessParty,
-      );
-      await expectPostingRefusal(post(org, currencylessId), /has no currency/);
-      assert.deepEqual(await invoiceState(org, currencylessId), {
-        status: "approved",
-        balance: null,
-        entries: 0,
-      });
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+    const currencylessId = await seedDirectInvoice(
+      org,
+      actorId,
+      "INV-POST-NOCUR-1",
+      "100",
+      "CAD",
+      currencylessParty,
+    );
+    await expectPostingRefusal(post(org, currencylessId), /has no currency/);
+    assert.deepEqual(await invoiceState(org, currencylessId), {
+      status: "approved",
+      balance: null,
+      entries: 0,
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test(
   "a converted invoice that still breaches refuses and names the order override path",
@@ -406,7 +435,13 @@ test(
       );
       await seedCustomerRole(org, actorId, org.customerId, { creditLimit: "8000" });
       const orderId = await seedOpenOrder(org, actorId, "SO-POST-BREACH-1", "10000");
-      const invoiceId = await seedConvertedInvoice(org, actorId, orderId, "INV-POST-BREACH-1", "10000");
+      const invoiceId = await seedConvertedInvoice(
+        org,
+        actorId,
+        orderId,
+        "INV-POST-BREACH-1",
+        "10000",
+      );
 
       // Relief swaps the 10000 order remainder for the 10000 invoice, still
       // above the 8000 limit: refuse by name, and since this invoice IS
@@ -451,7 +486,14 @@ test(
                held_at = now(), held_by = ${actorId}
            where org_id = ${org.orgId} and party_id = ${heldParty}`);
       });
-      const invoiceId = await seedDirectInvoice(org, actorId, "INV-POST-HOLD-1", "100", "CAD", heldParty);
+      const invoiceId = await seedDirectInvoice(
+        org,
+        actorId,
+        "INV-POST-HOLD-1",
+        "100",
+        "CAD",
+        heldParty,
+      );
 
       await expectPostingRefusal(
         post(org, invoiceId),

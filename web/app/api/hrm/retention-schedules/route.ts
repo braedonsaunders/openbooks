@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  listSchedules,
-  saveSchedule,
-} from "@openbooks/engine/hrm/documents/retention";
+import { listSchedules, saveSchedule } from "@openbooks/engine/hrm/documents/retention";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveScheduleBody } from "./bodies";
 export const GET = defineRoute({
@@ -37,10 +34,7 @@ export const POST = defineRoute({
         action: body.action,
         isActive: body.isActive,
       });
-      return NextResponse.json(
-        { schedule },
-        { status: body.scheduleId ? 200 : 201 },
-      );
+      return NextResponse.json({ schedule }, { status: body.scheduleId ? 200 : 201 });
     } catch (e) {
       return hrmDocumentsErrorResponse(e);
     }

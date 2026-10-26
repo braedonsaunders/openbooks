@@ -82,8 +82,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmBenefitsWindowsRouteNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmBenefitsWindowsRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
@@ -93,21 +94,28 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/platform/db", "mock:read"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-benefits-windows-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "@/lib/authz" || specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "./features"
+          ? "mock:features"
+          : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-benefits-windows-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
@@ -134,7 +142,9 @@ const draftBody = {
 
 test("GET lists windows with status pass-through", async () => {
   reset();
-  const res = await collectionRoute!.GET(new Request("http://x/api/hrm/enrollment-windows?status=open"));
+  const res = await collectionRoute!.GET(
+    new Request("http://x/api/hrm/enrollment-windows?status=open"),
+  );
   assert.equal(res.status, 200);
   const body = (await res.json()) as { windows: unknown[] };
   assert.equal(body.windows.length, 1);
@@ -146,7 +156,9 @@ test("GET lists windows with status pass-through", async () => {
 
 test("GET refuses unknown status before the service", async () => {
   reset();
-  const bad = await collectionRoute!.GET(new Request("http://x/api/hrm/enrollment-windows?status=archived"));
+  const bad = await collectionRoute!.GET(
+    new Request("http://x/api/hrm/enrollment-windows?status=archived"),
+  );
   assert.equal(bad.status, 400);
   assert.equal(routeState.calls.length, 0, "the service never runs on a rejected boundary");
 });
@@ -164,21 +176,33 @@ test("GET forwards the gate and the feature switch", async () => {
 
 test("POST creates a draft through the real body parser", async () => {
   reset();
-  const res = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/enrollment-windows", draftBody));
+  const res = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/enrollment-windows", draftBody),
+  );
   assert.equal(res.status, 200);
   const body = (await res.json()) as { window: { id: string } };
   assert.equal(body.window.id, "window-1");
   assert.deepEqual(routeState.calls[0], {
     fn: "create",
-    args: { orgId: "org-1", actorId: "user-1", ...draftBody, employerSubsidiaryId: null, departmentId: null },
+    args: {
+      orgId: "org-1",
+      actorId: "user-1",
+      ...draftBody,
+      employerSubsidiaryId: null,
+      departmentId: null,
+    },
   });
 });
 
 test("POST refuses a malformed body with 400 and never calls the service", async () => {
   reset();
-  const malformed = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/enrollment-windows", "{oops"));
+  const malformed = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/enrollment-windows", "{oops"),
+  );
   assert.equal(malformed.status, 400);
-  const missing = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/enrollment-windows", { name: "x" }));
+  const missing = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/enrollment-windows", { name: "x" }),
+  );
   assert.equal(missing.status, 400);
   assert.equal(routeState.calls.length, 0);
 });
@@ -189,7 +213,9 @@ test("POST maps computed refusals with message intact — status first, body sec
     "REFUSED",
     "enrollment window New overlaps open window Old of the same kind and scope — close Old first so one window covers these people",
   );
-  const refused = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/enrollment-windows", draftBody));
+  const refused = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/enrollment-windows", draftBody),
+  );
   assert.equal(refused.status, 422);
   assert.ok(refused.headers.get("content-type")!.includes("application/json"));
   const body = (await refused.json()) as { error: string };

@@ -10,9 +10,9 @@ import type { PayrollOpeningYtdField } from "./packs.ts";
  * registry keeps the generic layer declarative while leaving each pack's
  * fields next to its own statutory code.
  */
-export const PACK_OPENING_BALANCE_FIELDS: readonly (
-  PayrollOpeningYtdField & { packs: readonly string[] }
-)[] = [
+export const PACK_OPENING_BALANCE_FIELDS: readonly (PayrollOpeningYtdField & {
+  packs: readonly string[];
+})[] = [
   ...CA_OPENING_YTD_FIELDS.map((field) => ({ ...field, packs: ["CA"] as const })),
   ...US_OPENING_YTD_FIELDS.map((field) => ({ ...field, packs: ["US"] as const })),
 ];

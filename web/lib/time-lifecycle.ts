@@ -7,4 +7,4 @@ export {
   type EntryProvenance,
   type LockReason,
   type ReopenDecision,
-} from '@openbooks/engine/projects/time-lifecycle'
+} from "@openbooks/engine/projects/time-lifecycle";

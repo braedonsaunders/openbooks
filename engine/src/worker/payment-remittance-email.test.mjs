@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 const state = {
   handler: null,
@@ -11,14 +11,17 @@ const state = {
   remittanceFailed: [],
   dunningSent: [],
   dunningFailed: [],
-}
-globalThis.__paymentRemittanceEmailTest = state
+};
+globalThis.__paymentRemittanceEmailTest = state;
 
 const sources = {
-  bullmq: 'export class Worker { constructor(_queue, handler) { globalThis.__paymentRemittanceEmailTest.handler = handler } }',
-  '@openbooks/jobs': 'export const EMAIL_QUEUE = "test"; export const getBlockingConnection = () => ({}); export const resolveEmailDeliveryKey = () => "delivery-key";',
-  '../delivery/email-attachments.ts': 'export const loadEmailAttachments = async () => []; export const deleteStoredEmailAttachments = async () => {};',
-  '@openbooks/emails': `
+  bullmq:
+    "export class Worker { constructor(_queue, handler) { globalThis.__paymentRemittanceEmailTest.handler = handler } }",
+  "@openbooks/jobs":
+    'export const EMAIL_QUEUE = "test"; export const getBlockingConnection = () => ({}); export const resolveEmailDeliveryKey = () => "delivery-key";',
+  "../delivery/email-attachments.ts":
+    "export const loadEmailAttachments = async () => []; export const deleteStoredEmailAttachments = async () => {};",
+  "@openbooks/emails": `
     export function emailDeliveryBlockedMessage() { return 'Email delivery is unavailable.' }
     export const deriveEmailDeliveryKey = () => 'delivery';
     export function isEmailAttachmentRef(attachment) { return !('content' in attachment) }
@@ -30,9 +33,10 @@ const sources = {
       return { kind: 'sent', providerMessageId: 'provider-1' };
     }
   `,
-  '../platform/db.ts': 'export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === "objects" ? result.rows : result)) }; export const withOrgContext = (_org, action) => action();',
-  '../organization/sandbox-guard.ts': 'export const isSandboxOrg = async () => false;',
-  '../delivery/email-config.ts': `
+  "../platform/db.ts":
+    'export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === "objects" ? result.rows : result)) }; export const withOrgContext = (_org, action) => action();',
+  "../organization/sandbox-guard.ts": "export const isSandboxOrg = async () => false;",
+  "../delivery/email-config.ts": `
     export const resolveOrgEmailTransportDetailed = async () => ({ state: 'ready', transport: { provider: 'test' } });
     export const claimEmailDeliveryLog = async () => ({ id: 'log', attempts: [] });
     export const appendEmailAttemptEvent = async () => [];
@@ -47,57 +51,62 @@ const sources = {
     export const markDunningClaimSent = async (_org, id) => globalThis.__paymentRemittanceEmailTest.dunningSent.push(id);
     export const markDunningClaimFailed = async (_org, id, detail) => globalThis.__paymentRemittanceEmailTest.dunningFailed.push([id, detail]);
   `,
-  '../delivery/report-delivery.ts': `
+  "../delivery/report-delivery.ts": `
     export const markReportDeliveryFailed = async () => {};
     export const markReportDeliverySent = async () => {};
     export const markReportDeliveryStarted = async () => {};
     export const markReportDeliverySuppressed = async () => {};
   `,
-}
+};
 
-const hooks = registerHooks({ resolve(specifier, context, next) {
-  if (context.parentURL?.endsWith('/email-worker.ts') && sources[specifier]) {
-    return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(sources[specifier])}` }
-  }
-  return next(specifier, context)
-} })
-const { createEmailWorker } = await import('./email-worker.ts')
-createEmailWorker()
-hooks.deregister()
+const hooks = registerHooks({
+  resolve(specifier, context, next) {
+    if (context.parentURL?.endsWith("/email-worker.ts") && sources[specifier]) {
+      return {
+        shortCircuit: true,
+        url: `data:text/javascript,${encodeURIComponent(sources[specifier])}`,
+      };
+    }
+    return next(specifier, context);
+  },
+});
+const { createEmailWorker } = await import("./email-worker.ts");
+createEmailWorker();
+hooks.deregister();
 
 function job(attemptsMade = 0) {
   return {
-    id: 'remittance-job',
+    id: "remittance-job",
     attemptsMade,
     opts: { attempts: 2 },
     data: {
-      orgId: 'org',
-      to: 'recipient@example.test',
-      subject: 'test',
-      html: '',
-      text: '',
-      meta: { paymentRemittanceId: 'rem-1' },
+      orgId: "org",
+      to: "recipient@example.test",
+      subject: "test",
+      html: "",
+      text: "",
+      meta: { paymentRemittanceId: "rem-1" },
     },
-  }
+  };
 }
 
-test('provider acceptance marks the payment remittance sent', async () => {
-  assert.deepEqual(await state.handler(job()), { id: 'provider-1' })
-  assert.equal(state.sent, 1)
-  assert.deepEqual(state.remittanceAttempts, [['rem-1', 1]])
-  assert.deepEqual(state.remittanceSent, ['rem-1'])
-  assert.deepEqual(state.remittanceFailed, [])
-})
+test("provider acceptance marks the payment remittance sent", async () => {
+  assert.deepEqual(await state.handler(job()), { id: "provider-1" });
+  assert.equal(state.sent, 1);
+  assert.deepEqual(state.remittanceAttempts, [["rem-1", 1]]);
+  assert.deepEqual(state.remittanceSent, ["rem-1"]);
+  assert.deepEqual(state.remittanceFailed, []);
+});
 
-test('a transport failure keeps the remittance pending for BullMQ retry', async () => {
-  state.sendError = new Error('provider unavailable')
-  await assert.rejects(state.handler(job()), /provider unavailable/)
-  assert.deepEqual(state.remittanceAttempts.at(-1), ['rem-1', 1])
-  assert.deepEqual(state.remittanceFailed.at(-1), ['rem-1', 'provider unavailable', 1, false])
-  assert.deepEqual(state.remittanceSent, ['rem-1'])
-})
+test("a transport failure keeps the remittance pending for BullMQ retry", async () => {
+  state.sendError = new Error("provider unavailable");
+  await assert.rejects(state.handler(job()), /provider unavailable/);
+  assert.deepEqual(state.remittanceAttempts.at(-1), ["rem-1", 1]);
+  assert.deepEqual(state.remittanceFailed.at(-1), ["rem-1", "provider unavailable", 1, false]);
+  assert.deepEqual(state.remittanceSent, ["rem-1"]);
+});
 
-test('remittance mail never settles a dunning claim', async () => {
-  assert.deepEqual(state.dunningSent, [])
-  assert.deepEqual(state.dunningFailed, [])
-})
+test("remittance mail never settles a dunning claim", async () => {
+  assert.deepEqual(state.dunningSent, []);
+  assert.deepEqual(state.dunningFailed, []);
+});

@@ -200,8 +200,7 @@ export function documentSubjectProfile(kind: string): FlowSubjectProfile {
   // Order-cycle records are created and edited through the order pipeline
   // (twin: ORDER_KINDS in web/lib/order-kinds.ts), which emits no
   // create/update flow events — the lint names such triggers never firing.
-  const orderRecord =
-    kind === "quote" || kind === "sales_order" || kind === "purchase_order";
+  const orderRecord = kind === "quote" || kind === "sales_order" || kind === "purchase_order";
   return {
     subjectKind: kind,
     label: titleize(kind),

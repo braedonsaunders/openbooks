@@ -21,7 +21,11 @@ registerHooks({
     // The route factory imports the gate by @/ alias at request time, from
     // web/lib/api/route.ts rather than the route directory; serve it the
     // same intended session as the route's own import.
-    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/setup/project-types/"))) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") &&
+        context.parentURL?.includes("/api/admin/setup/project-types/"))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -36,7 +40,8 @@ registerHooks({
 });
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PATCH } = await import("./route");
 
 const patchJson = (body: unknown) =>
@@ -49,7 +54,8 @@ const patchJson = (body: unknown) =>
 async function typeRow(orgId: string, id: string) {
   const r = await withBypassContext(() =>
     db.execute<{ name: string; is_active: boolean; sort_order: number }>(
-      sql`select name, is_active, sort_order from project_types where id = ${id} and org_id = ${orgId}`, "objects",
+      sql`select name, is_active, sort_order from project_types where id = ${id} and org_id = ${orgId}`,
+      "objects",
     ),
   );
   return r[0]!;
@@ -58,18 +64,27 @@ async function typeRow(orgId: string, id: string) {
 test("project-type PATCH refuses non-boolean isActive without writing", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
     await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`),
+      db.execute(
+        sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`,
+      ),
     );
     const id = randomUUID();
-    await withBypassContext(() => db.execute(sql`insert into project_types
+    await withBypassContext(() =>
+      db.execute(sql`insert into project_types
       (id, org_id, key, name, description, is_active, sort_order, billing_method, invoicing_profile, backup_profile)
       values (${id}, ${org.orgId}, 'tm-flags', 'Flags probe', null, false, 7,
-        'time_and_materials', '{"billingProcedure":"standard","allowedBases":["time_selection"],"defaultBasis":"time_selection"}'::jsonb, '{}'::jsonb)`));
+        'time_and_materials', '{"billingProcedure":"standard","allowedBases":["time_selection"],"defaultBasis":"time_selection"}'::jsonb, '{}'::jsonb)`),
+    );
 
     // The string "false" must not activate an archived type with a 200.
-    const str = await PATCH(patchJson({ id, billingMethod: "time_and_materials", isActive: "false" }));
+    const str = await PATCH(
+      patchJson({ id, billingMethod: "time_and_materials", isActive: "false" }),
+    );
     assert.equal(str.status, 422, JSON.stringify(await str.clone().json()));
     assert.equal((await typeRow(org.orgId, id)).is_active, false);
 
@@ -90,22 +105,33 @@ test("project-type PATCH refuses non-boolean isActive without writing", async ()
 test("project-type PATCH refuses a non-numeric sortOrder with a field error", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
     await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`),
+      db.execute(
+        sql`update orgs set settings = settings || '{"features": {"projects": true}}'::jsonb where id = ${org.orgId}`,
+      ),
     );
     const id = randomUUID();
-    await withBypassContext(() => db.execute(sql`insert into project_types
+    await withBypassContext(() =>
+      db.execute(sql`insert into project_types
       (id, org_id, key, name, description, is_active, sort_order, billing_method, invoicing_profile, backup_profile)
       values (${id}, ${org.orgId}, 'tm-sort', 'Sort probe', null, true, 7,
-        'time_and_materials', '{"billingProcedure":"standard","allowedBases":["time_selection"],"defaultBasis":"time_selection"}'::jsonb, '{}'::jsonb)`));
+        'time_and_materials', '{"billingProcedure":"standard","allowedBases":["time_selection"],"defaultBasis":"time_selection"}'::jsonb, '{}'::jsonb)`),
+    );
 
-    const bad = await PATCH(patchJson({ id, billingMethod: "time_and_materials", sortOrder: "abc" }));
+    const bad = await PATCH(
+      patchJson({ id, billingMethod: "time_and_materials", sortOrder: "abc" }),
+    );
     assert.equal(bad.status, 422, JSON.stringify(await bad.clone().json()));
     assert.match(JSON.stringify(await bad.clone().json()), /sortOrder/i);
     assert.equal((await typeRow(org.orgId, id)).sort_order, 7);
 
-    const frac = await PATCH(patchJson({ id, billingMethod: "time_and_materials", sortOrder: 1.5 }));
+    const frac = await PATCH(
+      patchJson({ id, billingMethod: "time_and_materials", sortOrder: 1.5 }),
+    );
     assert.equal(frac.status, 422, JSON.stringify(await frac.clone().json()));
     assert.equal((await typeRow(org.orgId, id)).sort_order, 7);
   } finally {

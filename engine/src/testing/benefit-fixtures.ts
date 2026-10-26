@@ -4,7 +4,12 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { recurringBenefitsRunSource } from "../payroll/benefit-plan-inputs.ts";
 import { decideGate } from "../flows/gates.ts";
 import { getBenefitAward } from "../hrm/benefits/awards.ts";
-import { activateBenefitProgram, addProgramMembership, createBenefitProgram, type CreateBenefitProgramQuery } from "../hrm/benefits/programs.ts";
+import {
+  activateBenefitProgram,
+  addProgramMembership,
+  createBenefitProgram,
+  type CreateBenefitProgramQuery,
+} from "../hrm/benefits/programs.ts";
 import { mkHr } from "./hrm-harness.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { submitEnrollment } from "../hrm/benefits/enrollments.ts";
@@ -22,7 +27,8 @@ interface BenefitFixtureContext {
 /** Common native payroll-program construction; policy differences stay explicit at each call. */
 export async function seedPayrollBenefitProgram(
   context: BenefitFixtureContext,
-  policy: Pick<CreateBenefitProgramQuery, "code" | "name" | "family"> & Partial<CreateBenefitProgramQuery>,
+  policy: Pick<CreateBenefitProgramQuery, "code" | "name" | "family"> &
+    Partial<CreateBenefitProgramQuery>,
   options: { employmentIds?: readonly string[]; activate?: boolean } = {},
 ) {
   const created = await createBenefitProgram({
@@ -36,31 +42,64 @@ export async function seedPayrollBenefitProgram(
     ...policy,
   });
   for (const employmentId of options.employmentIds ?? []) {
-    await addProgramMembership({ orgId: context.orgId, actorId: context.actorId, programId: created.id,
-      employmentId, effectiveFrom: context.effectiveFrom ?? "2026-01-01" });
+    await addProgramMembership({
+      orgId: context.orgId,
+      actorId: context.actorId,
+      programId: created.id,
+      employmentId,
+      effectiveFrom: context.effectiveFrom ?? "2026-01-01",
+    });
   }
-  return options.activate === false ? created
-    : activateBenefitProgram({ orgId: context.orgId, actorId: context.actorId, programId: created.id });
+  return options.activate === false
+    ? created
+    : activateBenefitProgram({
+        orgId: context.orgId,
+        actorId: context.actorId,
+        programId: created.id,
+      });
 }
 
 /** Role grants and entity restrictions use the existing native actor fixture, never user overrides. */
-export async function seedBenefitRoleActors<const K extends string>(orgId: string, actors: Record<K, {
-  name: string; roleKey: string; permissions: string[]; subsidiaryIds?: string[] | null;
-}>): Promise<Record<K, string>> {
+export async function seedBenefitRoleActors<const K extends string>(
+  orgId: string,
+  actors: Record<
+    K,
+    {
+      name: string;
+      roleKey: string;
+      permissions: string[];
+      subsidiaryIds?: string[] | null;
+    }
+  >,
+): Promise<Record<K, string>> {
   const ids = {} as Record<K, string>;
   for (const key of Object.keys(actors) as K[]) {
     const actor = actors[key];
-    ids[key] = await mkHr(orgId, actor.name, actor.roleKey, actor.subsidiaryIds ?? null, actor.permissions);
+    ids[key] = await mkHr(
+      orgId,
+      actor.name,
+      actor.roleKey,
+      actor.subsidiaryIds ?? null,
+      actor.permissions,
+    );
   }
   return ids;
 }
 
 /** Decide the real pending gate; financial scenarios never manufacture an approved award. */
-export async function approveBenefitFixture(query: { orgId: string; actorId: string; awardId: string }, message = "the configured approval policy must create a real pending gate") {
-  const gate = (await db.execute<{ id: string }>(sql`
+export async function approveBenefitFixture(
+  query: { orgId: string; actorId: string; awardId: string },
+  message = "the configured approval policy must create a real pending gate",
+) {
+  const gate = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from flow_gates where org_id=${query.orgId} and subject_kind='hrm_benefit_award'
       and subject_id=${query.awardId} and status='pending'
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   assert.ok(gate, message);
   await decideGate({ gateId: gate.id, userId: query.actorId, decision: "approved" });
   return getBenefitAward(db, query.orgId, query.actorId, query.awardId);
@@ -69,26 +108,51 @@ export async function approveBenefitFixture(query: { orgId: string; actorId: str
 /** A committed-state negative fixture deliberately has no paid employee.
  * Record the native empty recurring source, retaining the transition trigger;
  * this fixture supplies no evidence that an award was delivered. */
-export async function seedCommittedBenefitRunWithoutStubs(orgId: string, documentId: string): Promise<void> {
+export async function seedCommittedBenefitRunWithoutStubs(
+  orgId: string,
+  documentId: string,
+): Promise<void> {
   await withOrgTransaction(orgId, async () => {
     const source = await recurringBenefitsRunSource(db, orgId, documentId, true);
     assert.deepEqual(source, [], "the missing-delivery fixture must have no employee stub source");
-    assert.equal((await db.execute<{ count: number }>(sql`
+    assert.equal(
+      (
+        await db.execute<{ count: number }>(
+          sql`
       select count(*)::int as count from pay_run_benefit_allocations
-      where org_id=${orgId} and pay_run_document_id=${documentId}`, "objects"))[0]!.count, 0);
-    const updated = await db.execute<{ document_id: string }>(sql`
+      where org_id=${orgId} and pay_run_document_id=${documentId}`,
+          "objects",
+        )
+      )[0]!.count,
+      0,
+    );
+    const updated = await db.execute<{ document_id: string }>(
+      sql`
       update pay_runs set benefit_source_snapshot=${JSON.stringify(source)}::jsonb, run_status='committed'
       where org_id=${orgId} and document_id=${documentId} and run_status='draft'
-      returning document_id`, "objects");
-    assert.deepEqual(updated.map(row => row.document_id), [documentId]);
+      returning document_id`,
+      "objects",
+    );
+    assert.deepEqual(
+      updated.map((row) => row.document_id),
+      [documentId],
+    );
   });
 }
 
 /** Payroll scenarios submit their seeded election through real tenant routing. */
-export async function submitBenefitEnrollmentFixture(orgId:string,actorId:string,enrollmentId:string): Promise<void> {
+export async function submitBenefitEnrollmentFixture(
+  orgId: string,
+  actorId: string,
+  enrollmentId: string,
+): Promise<void> {
   await assertFixtureDatabase();
   installEngineSeams();
-  await grantScratchPermissions(orgId,actorId,["hrm.benefits.manage"]);
-  const result=await submitEnrollment({orgId,actorId,enrollmentId});
-  assert.equal(result.status,"active","the fixture's explicit zero-gate tenant policy must activate its election");
+  await grantScratchPermissions(orgId, actorId, ["hrm.benefits.manage"]);
+  const result = await submitEnrollment({ orgId, actorId, enrollmentId });
+  assert.equal(
+    result.status,
+    "active",
+    "the fixture's explicit zero-gate tenant policy must activate its election",
+  );
 }

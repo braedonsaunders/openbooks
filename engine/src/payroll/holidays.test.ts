@@ -54,7 +54,10 @@ const on = (holidays: readonly ObservedHoliday[], key: string) =>
 
 const year = (jurisdiction: string, y: number, overrides?: readonly HolidayOverride[]) =>
   resolveObservedHolidays({
-    jurisdiction, from: `${y}-01-01`, to: `${y}-12-31`, overrides,
+    jurisdiction,
+    from: `${y}-01-01`,
+    to: `${y}-12-31`,
+    overrides,
   });
 
 // ---------------------------------------------------------------------------
@@ -89,7 +92,10 @@ test("holiday rules keep literal years 0001-0099 (no 1900 remap)", () => {
   // 0096 is a Saturday, so Labour Day is September 3rd.
   assert.equal(easterSunday(96), "0096-04-01");
   assert.equal(resolveHolidayRule({ kind: "fixed", month: 12, day: 25 }, 96), "0096-12-25");
-  assert.equal(resolveHolidayRule({ kind: "nth_weekday", month: 9, weekday: 1, nth: 1 }, 96), "0096-09-03");
+  assert.equal(
+    resolveHolidayRule({ kind: "nth_weekday", month: 9, weekday: 1, nth: 1 }, 96),
+    "0096-09-03",
+  );
 });
 
 test("the first Monday in September, across four years", () => {
@@ -144,9 +150,18 @@ test("the CRA's own 2026 calendar is not any province's calendar", () => {
   // remittance due date moves against. It carries Easter Monday and the Civic
   // Holiday, which no employment-standards act does.
   assert.deepEqual(dates(year("CA-CRA", 2026)), [
-    "2026-01-01", "2026-04-03", "2026-04-06", "2026-05-18", "2026-07-01",
-    "2026-08-03", "2026-09-07", "2026-09-30", "2026-10-12", "2026-11-11",
-    "2026-12-25", "2026-12-26",
+    "2026-01-01",
+    "2026-04-03",
+    "2026-04-06",
+    "2026-05-18",
+    "2026-07-01",
+    "2026-08-03",
+    "2026-09-07",
+    "2026-09-30",
+    "2026-10-12",
+    "2026-11-11",
+    "2026-12-25",
+    "2026-12-26",
   ]);
   // Quebec's variant: Saint-Jean-Baptiste in, Civic Holiday out.
   const quebec = dates(year("CA-CRA-QC", 2026));
@@ -168,64 +183,132 @@ test("the eight jurisdictions the packs used to refuse, hand-worked for 2026", (
   // more than a "Canadian statutory holidays" list suggests: six days in Nova
   // Scotia against eleven in the territories, three different August days, and
   // September 30 binding private employers in five of the eight.
-  assert.deepEqual(dates(year("CA-MB", 2026)), [
-    "2026-01-01", // New Year's Day
-    "2026-02-16", // Louis Riel Day
-    "2026-04-03", // Good Friday
-    "2026-05-18", // Victoria Day
-    "2026-07-01", // Canada Day
-    "2026-09-07", // Labour Day
-    "2026-09-30", // Orange Shirt Day
-    "2026-10-12", // Thanksgiving
-    "2026-12-25", // Christmas Day
-  ], "Manitoba: nine, and Remembrance Day is NOT one of them");
+  assert.deepEqual(
+    dates(year("CA-MB", 2026)),
+    [
+      "2026-01-01", // New Year's Day
+      "2026-02-16", // Louis Riel Day
+      "2026-04-03", // Good Friday
+      "2026-05-18", // Victoria Day
+      "2026-07-01", // Canada Day
+      "2026-09-07", // Labour Day
+      "2026-09-30", // Orange Shirt Day
+      "2026-10-12", // Thanksgiving
+      "2026-12-25", // Christmas Day
+    ],
+    "Manitoba: nine, and Remembrance Day is NOT one of them",
+  );
 
-  assert.deepEqual(dates(year("CA-NB", 2026)), [
-    "2026-01-01", "2026-02-16", "2026-04-03", "2026-07-01",
-    "2026-08-03", // New Brunswick Day, the first Monday in August
-    "2026-09-07",
-    "2026-11-11", // Remembrance Day IS a public holiday here
-    "2026-12-25",
-  ], "New Brunswick: eight, no Victoria Day and no Thanksgiving");
+  assert.deepEqual(
+    dates(year("CA-NB", 2026)),
+    [
+      "2026-01-01",
+      "2026-02-16",
+      "2026-04-03",
+      "2026-07-01",
+      "2026-08-03", // New Brunswick Day, the first Monday in August
+      "2026-09-07",
+      "2026-11-11", // Remembrance Day IS a public holiday here
+      "2026-12-25",
+    ],
+    "New Brunswick: eight, no Victoria Day and no Thanksgiving",
+  );
 
-  assert.deepEqual(dates(year("CA-NL", 2026)), [
-    "2026-01-01", "2026-04-03",
-    "2026-07-01", // Memorial Day, not Canada Day
-    "2026-09-07", "2026-11-11", "2026-12-25",
-  ], "Newfoundland and Labrador: six");
+  assert.deepEqual(
+    dates(year("CA-NL", 2026)),
+    [
+      "2026-01-01",
+      "2026-04-03",
+      "2026-07-01", // Memorial Day, not Canada Day
+      "2026-09-07",
+      "2026-11-11",
+      "2026-12-25",
+    ],
+    "Newfoundland and Labrador: six",
+  );
   assert.equal(on(year("CA-NL", 2026), "memorial_day"), "2026-07-01");
 
-  assert.deepEqual(dates(year("CA-NS", 2026)), [
-    "2026-01-01",
-    "2026-02-16", // Nova Scotia Heritage Day
-    "2026-04-03", "2026-07-01", "2026-09-07", "2026-12-25",
-  ], "Nova Scotia: six — the thinnest list in the country, and no Remembrance Day");
+  assert.deepEqual(
+    dates(year("CA-NS", 2026)),
+    [
+      "2026-01-01",
+      "2026-02-16", // Nova Scotia Heritage Day
+      "2026-04-03",
+      "2026-07-01",
+      "2026-09-07",
+      "2026-12-25",
+    ],
+    "Nova Scotia: six — the thinnest list in the country, and no Remembrance Day",
+  );
 
-  assert.deepEqual(dates(year("CA-NT", 2026)), [
-    "2026-01-01", "2026-04-03", "2026-05-18",
-    "2026-06-21", // National Indigenous Peoples Day
-    "2026-07-01",
-    "2026-08-03", // the first Monday in August
-    "2026-09-07", "2026-09-30", "2026-10-12", "2026-11-11", "2026-12-25",
-  ], "Northwest Territories: eleven");
+  assert.deepEqual(
+    dates(year("CA-NT", 2026)),
+    [
+      "2026-01-01",
+      "2026-04-03",
+      "2026-05-18",
+      "2026-06-21", // National Indigenous Peoples Day
+      "2026-07-01",
+      "2026-08-03", // the first Monday in August
+      "2026-09-07",
+      "2026-09-30",
+      "2026-10-12",
+      "2026-11-11",
+      "2026-12-25",
+    ],
+    "Northwest Territories: eleven",
+  );
 
-  assert.deepEqual(dates(year("CA-NU", 2026)), [
-    "2026-01-01", "2026-04-03", "2026-05-18", "2026-07-01",
-    "2026-07-09", // Nunavut Day
-    "2026-08-03", "2026-09-07", "2026-09-30", "2026-10-12", "2026-11-11", "2026-12-25",
-  ], "Nunavut: eleven, with Nunavut Day and no June 21");
+  assert.deepEqual(
+    dates(year("CA-NU", 2026)),
+    [
+      "2026-01-01",
+      "2026-04-03",
+      "2026-05-18",
+      "2026-07-01",
+      "2026-07-09", // Nunavut Day
+      "2026-08-03",
+      "2026-09-07",
+      "2026-09-30",
+      "2026-10-12",
+      "2026-11-11",
+      "2026-12-25",
+    ],
+    "Nunavut: eleven, with Nunavut Day and no June 21",
+  );
 
-  assert.deepEqual(dates(year("CA-PE", 2026)), [
-    "2026-01-01",
-    "2026-02-16", // Islander Day
-    "2026-04-03", "2026-07-01", "2026-09-07", "2026-09-30", "2026-11-11", "2026-12-25",
-  ], "Prince Edward Island: eight");
+  assert.deepEqual(
+    dates(year("CA-PE", 2026)),
+    [
+      "2026-01-01",
+      "2026-02-16", // Islander Day
+      "2026-04-03",
+      "2026-07-01",
+      "2026-09-07",
+      "2026-09-30",
+      "2026-11-11",
+      "2026-12-25",
+    ],
+    "Prince Edward Island: eight",
+  );
 
-  assert.deepEqual(dates(year("CA-YT", 2026)), [
-    "2026-01-01", "2026-04-03", "2026-05-18", "2026-06-21", "2026-07-01",
-    "2026-08-17", // Discovery Day is the THIRD Monday in August
-    "2026-09-07", "2026-09-30", "2026-10-12", "2026-11-11", "2026-12-25",
-  ], "Yukon: eleven, and no Heritage Day");
+  assert.deepEqual(
+    dates(year("CA-YT", 2026)),
+    [
+      "2026-01-01",
+      "2026-04-03",
+      "2026-05-18",
+      "2026-06-21",
+      "2026-07-01",
+      "2026-08-17", // Discovery Day is the THIRD Monday in August
+      "2026-09-07",
+      "2026-09-30",
+      "2026-10-12",
+      "2026-11-11",
+      "2026-12-25",
+    ],
+    "Yukon: eleven, and no Heritage Day",
+  );
 });
 
 test("the three different August days, and the one province with none", () => {
@@ -319,20 +402,37 @@ test("effective-dated elections use the observed date after weekend observance",
   // 27th. An election starting on the observed day must apply; an election
   // ending on the statutory Sunday must already be expired. Comparing against
   // the recurrence date would produce the opposite answers.
-  const startsOnObserved = [override({
-    jurisdiction: "CA", packKey: "christmas", effectiveFrom: "2027-12-27", isPaid: false,
-  })];
+  const startsOnObserved = [
+    override({
+      jurisdiction: "CA",
+      packKey: "christmas",
+      effectiveFrom: "2027-12-27",
+      isPaid: false,
+    }),
+  ];
   const observed = resolveObservedHolidays({
-    jurisdiction: "CA", from: "2027-12-01", to: "2027-12-31", overrides: startsOnObserved,
+    jurisdiction: "CA",
+    from: "2027-12-01",
+    to: "2027-12-31",
+    overrides: startsOnObserved,
   });
   assert.equal(observed.find((h) => h.key === "christmas")?.date, "2027-12-27");
   assert.equal(observed.find((h) => h.key === "christmas")?.paid, false);
 
-  const endsOnStatutory = [override({
-    jurisdiction: "CA", packKey: "christmas", effectiveFrom: "2000-01-01", effectiveTo: "2027-12-25", isPaid: false,
-  })];
+  const endsOnStatutory = [
+    override({
+      jurisdiction: "CA",
+      packKey: "christmas",
+      effectiveFrom: "2000-01-01",
+      effectiveTo: "2027-12-25",
+      isPaid: false,
+    }),
+  ];
   const stillPaid = resolveObservedHolidays({
-    jurisdiction: "CA", from: "2027-12-01", to: "2027-12-31", overrides: endsOnStatutory,
+    jurisdiction: "CA",
+    from: "2027-12-01",
+    to: "2027-12-31",
+    overrides: endsOnStatutory,
   });
   assert.equal(stillPaid.find((h) => h.key === "christmas")?.date, "2027-12-27");
   assert.equal(stillPaid.find((h) => h.key === "christmas")?.paid, true);
@@ -357,29 +457,45 @@ test("US federal holidays observe on the nearest weekday, both directions", () =
 
 const override = (patch: Partial<HolidayOverride>): HolidayOverride => ({
   id: "00000000-0000-0000-0000-000000000001",
-  jurisdiction: "CA-ON", packKey: null, name: null, ruleKind: null,
-  ruleMonth: null, ruleDay: null, ruleWeekday: null, ruleNth: null, ruleOffset: null,
-  observedOn: null, observance: "none", isObserved: true, isPaid: true,
-  effectiveFrom: "2000-01-01", effectiveTo: null,
+  jurisdiction: "CA-ON",
+  packKey: null,
+  name: null,
+  ruleKind: null,
+  ruleMonth: null,
+  ruleDay: null,
+  ruleWeekday: null,
+  ruleNth: null,
+  ruleOffset: null,
+  observedOn: null,
+  observance: "none",
+  isObserved: true,
+  isPaid: true,
+  effectiveFrom: "2000-01-01",
+  effectiveTo: null,
   ...patch,
 });
 
 test("an employer elects an optional day, effective-dated", () => {
-  const elected = [override({
-    packKey: "civic_holiday", isObserved: true, effectiveFrom: "2026-01-01",
-  })];
+  const elected = [
+    override({
+      packKey: "civic_holiday",
+      isObserved: true,
+      effectiveFrom: "2026-01-01",
+    }),
+  ];
   assert.ok(!dates(year("CA-ON", 2025, elected)).includes("2025-08-04"));
   assert.ok(dates(year("CA-ON", 2026, elected)).includes("2026-08-03"));
-  assert.equal(
-    year("CA-ON", 2026, elected).find((h) => h.key === "civic_holiday")?.elected,
-    true,
-  );
+  assert.equal(year("CA-ON", 2026, elected).find((h) => h.key === "civic_holiday")?.elected, true);
 });
 
 test("an election that has expired stops applying, without restating the past", () => {
-  const elected = [override({
-    packKey: "civic_holiday", effectiveFrom: "2024-01-01", effectiveTo: "2026-12-31",
-  })];
+  const elected = [
+    override({
+      packKey: "civic_holiday",
+      effectiveFrom: "2024-01-01",
+      effectiveTo: "2026-12-31",
+    }),
+  ];
   assert.ok(dates(year("CA-ON", 2026, elected)).includes("2026-08-03"));
   assert.ok(!dates(year("CA-ON", 2027, elected)).includes("2027-08-02"));
 });
@@ -387,13 +503,23 @@ test("an election that has expired stops applying, without restating the past", 
 test("a company holiday carries its own recurrence and can be unpaid", () => {
   const shutdown = [
     override({
-      packKey: null, name: "Shop shutdown", ruleKind: "fixed", ruleMonth: 12, ruleDay: 24,
-      isPaid: false, effectiveFrom: "2026-01-01",
+      packKey: null,
+      name: "Shop shutdown",
+      ruleKind: "fixed",
+      ruleMonth: 12,
+      ruleDay: 24,
+      isPaid: false,
+      effectiveFrom: "2026-01-01",
     }),
     override({
       id: "00000000-0000-0000-0000-000000000002",
-      packKey: null, name: "Founders' Friday", ruleKind: "nth_weekday",
-      ruleMonth: 8, ruleWeekday: 5, ruleNth: 1, effectiveFrom: "2026-01-01",
+      packKey: null,
+      name: "Founders' Friday",
+      ruleKind: "nth_weekday",
+      ruleMonth: 8,
+      ruleWeekday: 5,
+      ruleNth: 1,
+      effectiveFrom: "2026-01-01",
     }),
   ];
   const observed = year("CA-ON", 2026, shutdown);
@@ -406,10 +532,15 @@ test("a company holiday carries its own recurrence and can be unpaid", () => {
 });
 
 test("a one-off company holiday is generated once, not every year", () => {
-  const oneOff = [override({
-    packKey: null, name: "Anniversary", ruleKind: "date", observedOn: "2026-03-11",
-    effectiveFrom: "2026-01-01",
-  })];
+  const oneOff = [
+    override({
+      packKey: null,
+      name: "Anniversary",
+      ruleKind: "date",
+      observedOn: "2026-03-11",
+      effectiveFrom: "2026-01-01",
+    }),
+  ];
   assert.ok(dates(year("CA-ON", 2026, oneOff)).includes("2026-03-11"));
   assert.equal(year("CA-ON", 2027, oneOff).filter((h) => h.source === "company").length, 0);
 });
@@ -418,18 +549,23 @@ test("a tenant cannot switch off a holiday the law requires", () => {
   assert.throws(
     () => year("CA-ON", 2026, [override({ packKey: "canada_day", isObserved: false })]),
     (error: unknown) =>
-      error instanceof PayrollHolidayError && /cannot be switched off/.test((error as Error).message),
+      error instanceof PayrollHolidayError &&
+      /cannot be switched off/.test((error as Error).message),
   );
   // Switching off an OPTIONAL day it previously elected is fine.
-  assert.ok(!dates(year("CA-ON", 2026, [override({ packKey: "civic_holiday", isObserved: false })]))
-    .includes("2026-08-03"));
+  assert.ok(
+    !dates(
+      year("CA-ON", 2026, [override({ packKey: "civic_holiday", isObserved: false })]),
+    ).includes("2026-08-03"),
+  );
 });
 
 test("an override naming a day the pack does not declare is refused", () => {
   assert.throws(
     () => year("CA-ON", 2026, [override({ packKey: "bastille_day" })]),
     (error: unknown) =>
-      error instanceof PayrollHolidayError && /declares no statutory holiday/.test((error as Error).message),
+      error instanceof PayrollHolidayError &&
+      /declares no statutory holiday/.test((error as Error).message),
   );
 });
 
@@ -446,16 +582,26 @@ test("an undeclared jurisdiction refuses loudly instead of returning nothing", (
   assert.throws(
     () => year("CA-ZZ", 2026),
     (error: unknown) =>
-      error instanceof PayrollPackError
-      && /no payroll pack declares the statutory holiday calendar for "CA-ZZ"/
-        .test((error as Error).message),
+      error instanceof PayrollPackError &&
+      /no payroll pack declares the statutory holiday calendar for "CA-ZZ"/.test(
+        (error as Error).message,
+      ),
   );
   assert.throws(() => statutoryHolidayPayRule("CA-ZZ", "2026-07-01"), PayrollPackError);
   // A typo is refused the same way, and never resolved to the nearest match.
   assert.throws(() => statutoryHolidayPayRule("CA-ONT", "2026-07-01"), PayrollPackError);
   // The eight that used to be on this list are declared now — every Canadian
   // employment-standards jurisdiction states a rule.
-  for (const jurisdiction of ["CA-MB", "CA-NB", "CA-NL", "CA-NS", "CA-NT", "CA-NU", "CA-PE", "CA-YT"]) {
+  for (const jurisdiction of [
+    "CA-MB",
+    "CA-NB",
+    "CA-NL",
+    "CA-NS",
+    "CA-NT",
+    "CA-NU",
+    "CA-PE",
+    "CA-YT",
+  ]) {
     assert.ok(statutoryHolidayPayRule(jurisdiction, "2026-07-01"), `${jurisdiction} states a rule`);
   }
 });
@@ -482,7 +628,7 @@ const CRA_2026 = holidayDateSet(
 );
 
 test("a business day is neither a weekend nor an observed holiday", () => {
-  assert.equal(isBusinessDay("2026-04-02", CRA_2026), true);  // Thursday
+  assert.equal(isBusinessDay("2026-04-02", CRA_2026), true); // Thursday
   assert.equal(isBusinessDay("2026-04-03", CRA_2026), false); // Good Friday
   assert.equal(isBusinessDay("2026-04-04", CRA_2026), false); // Saturday
   assert.equal(isBusinessDay("2026-04-06", CRA_2026), false); // Easter Monday
@@ -518,8 +664,14 @@ test("businessDaysBetween counts inclusively", () => {
 // ---------------------------------------------------------------------------
 
 const holiday = (date: string, key = "canada_day"): ObservedHoliday => ({
-  jurisdiction: "CA-ON", key, name: "Canada Day", statutoryDate: date, date,
-  source: "pack", elected: false, paid: true,
+  jurisdiction: "CA-ON",
+  key,
+  name: "Canada Day",
+  statutoryDate: date,
+  date,
+  source: "pack",
+  elected: false,
+  paid: true,
 });
 
 const payContext = (patch: Partial<HolidayPayContext>): HolidayPayContext => ({
@@ -544,20 +696,35 @@ const ruleFor = (jurisdiction: string, onDate = "2026-07-01") => {
 test("Ontario: regular wages plus vacation pay, divided by 20", () => {
   // Ontario's own guide: $2,400 of regular wages and no vacation pay payable
   // gives $120.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "2400.00" },
-  })).holidayPay, "120.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-ON"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "2400.00" },
+      }),
+    ).holidayPay,
+    "120.0000",
+  );
   // And the common compliance error the guide names: $4,000 of wages with
   // $640 of vacation pay payable is $232, not $200.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "4000.00", vacationPay: "640.00" },
-  })).holidayPay, "232.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-ON"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "4000.00", vacationPay: "640.00" },
+      }),
+    ).holidayPay,
+    "232.0000",
+  );
 });
 
 test("Ontario excludes overtime and other public holidays from the base", () => {
-  const result = computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-    earnings: { regular: "2400.00", overtime: "900.00", vacationPay: "0", holidayPay: "150.00" },
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-ON"),
+    payContext({
+      earnings: { regular: "2400.00", overtime: "900.00", vacationPay: "0", holidayPay: "150.00" },
+    }),
+  );
   // Only the $2,400 counts: ESA s.24 'regular wages' excludes overtime pay,
   // premium pay and pay for other public holidays.
   assert.equal(result.holidayPay, "120.0000");
@@ -566,54 +733,92 @@ test("Ontario excludes overtime and other public holidays from the base", () => 
 test("Quebec: one twentieth of four complete weeks of pay", () => {
   // CNESST's example: $12.50/hour, 8 hours a day, five days a week is $500 a
   // week; four weeks is $2,000 and the indemnity is $100.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-QC"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
-  })).holidayPay, "100.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-QC"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+      }),
+    ).holidayPay,
+    "100.0000",
+  );
 });
 
 test("Quebec pays a commission earner one sixtieth of twelve weeks", () => {
-  const result = computeStatutoryHolidayPay(ruleFor("CA-QC"), payContext({
-    paidOnCommission: true,
-    employmentWeeks: 30,
-    earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
-    commissionEarnings: { ...emptyLookbackEarnings(), regular: "9000.00" },
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-QC"),
+    payContext({
+      paidOnCommission: true,
+      employmentWeeks: 30,
+      earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+      commissionEarnings: { ...emptyLookbackEarnings(), regular: "9000.00" },
+    }),
+  );
   assert.equal(result.holidayPay, "150.0000"); // 9,000 ÷ 60
   // Under twelve complete weeks of employment the long window does not apply
   // and the ordinary 1/20 of four weeks does.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-QC"), payContext({
-      paidOnCommission: true,
-      employmentWeeks: 8,
-      earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
-      commissionEarnings: { ...emptyLookbackEarnings(), regular: "9000.00" },
-  })).holidayPay, "100.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-QC"),
+      payContext({
+        paidOnCommission: true,
+        employmentWeeks: 8,
+        earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+        commissionEarnings: { ...emptyLookbackEarnings(), regular: "9000.00" },
+      }),
+    ).holidayPay,
+    "100.0000",
+  );
 });
 
 test("the Canada Labour Code divides four weeks by 20", () => {
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-  })).holidayPay, "200.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+      }),
+    ).holidayPay,
+    "200.0000",
+  );
 });
 
 test("British Columbia divides thirty days by the days actually worked", () => {
   // The BC interpretive guideline's example: $3,200 over 20 days is $160.00.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "3200.00" },
-      daysWorked: 20, daysWorkedInQualifyingWindow: 20,
-  })).holidayPay, "160.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-BC"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "3200.00" },
+        daysWorked: 20,
+        daysWorkedInQualifyingWindow: 20,
+      }),
+    ).holidayPay,
+    "160.0000",
+  );
   // A part-timer with the same total over fewer days is paid MORE per day —
   // the divisor is days worked, not a notional 20.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "3200.00" },
-      daysWorked: 16, daysWorkedInQualifyingWindow: 16,
-  })).holidayPay, "200.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-BC"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "3200.00" },
+        daysWorked: 16,
+        daysWorkedInQualifyingWindow: 16,
+      }),
+    ).holidayPay,
+    "200.0000",
+  );
 });
 
 test("Alberta's average daily wage is wages over days worked, overtime out", () => {
-  const result = computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({
-    earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
-    daysWorked: 15,
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-AB"),
+    payContext({
+      earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
+      daysWorked: 15,
+    }),
+  );
   // (3,000 + 120) ÷ 15 = 208.00. Overtime pay is not wages for this purpose.
   assert.equal(result.holidayPay, "208.0000");
 });
@@ -624,11 +829,14 @@ test("Alberta: a salaried employee who does not work the holiday is paid by the 
   // pay. Pricing the computed $208 on top of the undiminished salary would
   // pay the day twice, so the treatment settles it at zero — qualified, with
   // the salary named as the payment, never a silent zero.
-  const result = computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({
-    earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
-    daysWorked: 15,
-    salaried: true,
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-AB"),
+    payContext({
+      earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
+      daysWorked: 15,
+      salaried: true,
+    }),
+  );
   assert.equal(result.qualified, true);
   assert.equal(result.holidayPay, "0");
   assert.equal(result.premiumPay, "0");
@@ -641,13 +849,16 @@ test("Alberta: a salaried employee who works the holiday earns the premium only"
   // a 1.0× base (a salary prices no timesheet), so the premium is the FULL
   // 1.5× multiple: 8 × 25 × 1.5 = 300. The hourly uplift of 0.5× here would
   // leave the worked hours nearly unpaid.
-  const result = computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({
-    earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
-    daysWorked: 15,
-    salaried: true,
-    hoursWorked: "8.00",
-    hourlyRate: "25.00",
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-AB"),
+    payContext({
+      earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
+      daysWorked: 15,
+      salaried: true,
+      hoursWorked: "8.00",
+      hourlyRate: "25.00",
+    }),
+  );
   assert.equal(result.qualified, true);
   assert.equal(result.holidayPay, "0");
   assert.equal(result.premiumPay, "300.0000");
@@ -656,18 +867,24 @@ test("Alberta: a salaried employee who works the holiday earns the premium only"
 test("Alberta: an hourly employee prices the day as transcribed", () => {
   // The treatment is read only for salaried stubs. Hourly timesheets keep the
   // average day plus the 0.5× uplift the timesheet's own 1.0× leaves unpaid.
-  const result = computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({
-    earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
-    daysWorked: 15,
-    hoursWorked: "8.00",
-    hourlyRate: "25.00",
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-AB"),
+    payContext({
+      earnings: { regular: "3000.00", overtime: "600.00", vacationPay: "120.00", holidayPay: "0" },
+      daysWorked: 15,
+      hoursWorked: "8.00",
+      hourlyRate: "25.00",
+    }),
+  );
   assert.equal(result.holidayPay, "208.0000");
   assert.equal(result.premiumPay, "100.0000"); // 8 × 25 × 0.5
 });
 
 test("an undated stub fully inside the window attributes its full amount", () => {
-  const result = attributeStubEarningsToWindow("4000.00", "2026-06-01", "2026-06-27", { from: "2026-06-01", to: "2026-07-01" });
+  const result = attributeStubEarningsToWindow("4000.00", "2026-06-01", "2026-06-27", {
+    from: "2026-06-01",
+    to: "2026-07-01",
+  });
   assert.equal(result.attributed, "4000.0000");
   assert.equal(result.overlapDays, 27);
   assert.equal(result.periodDays, 27);
@@ -676,14 +893,20 @@ test("an undated stub fully inside the window attributes its full amount", () =>
 test("an undated stub straddling the window attributes by calendar-day overlap", () => {
   // The even spread is the only auditable split without dated evidence:
   // 4,000 × 25 days in window ÷ 27-day period = 3,703.7037, rounded once.
-  const result = attributeStubEarningsToWindow("4000.00", "2026-06-01", "2026-06-27", { from: "2026-06-03", to: "2026-06-30" });
+  const result = attributeStubEarningsToWindow("4000.00", "2026-06-01", "2026-06-27", {
+    from: "2026-06-03",
+    to: "2026-06-30",
+  });
   assert.equal(result.attributed, "3703.7037");
   assert.equal(result.overlapDays, 25);
   assert.equal(result.periodDays, 27);
 });
 
 test("an undated stub outside the window attributes nothing", () => {
-  const result = attributeStubEarningsToWindow("4000.00", "2026-06-01", "2026-06-27", { from: "2026-06-28", to: "2026-07-25" });
+  const result = attributeStubEarningsToWindow("4000.00", "2026-06-01", "2026-06-27", {
+    from: "2026-06-28",
+    to: "2026-07-25",
+  });
   assert.equal(result.attributed, "0.0000");
   assert.equal(result.overlapDays, 0);
 });
@@ -694,44 +917,82 @@ test("jurisdictions without a salary treatment price the salaried day as transcr
   // salaried stub there prices exactly as an hourly one until such guidance
   // is transcribed with its own citation. Removing pay without a statutory
   // basis underpays; keeping it only ever overpays.
-  const ontario = computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-    earnings: { ...emptyLookbackEarnings(), regular: "2400.00" },
-    salaried: true,
-  }));
+  const ontario = computeStatutoryHolidayPay(
+    ruleFor("CA-ON"),
+    payContext({
+      earnings: { ...emptyLookbackEarnings(), regular: "2400.00" },
+      salaried: true,
+    }),
+  );
   assert.equal(ontario.holidayPay, "120.0000");
-  const bc = computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-    earnings: { ...emptyLookbackEarnings(), regular: "3200.00" },
-    daysWorked: 20, daysWorkedInQualifyingWindow: 20,
-    salaried: true,
-  }));
+  const bc = computeStatutoryHolidayPay(
+    ruleFor("CA-BC"),
+    payContext({
+      earnings: { ...emptyLookbackEarnings(), regular: "3200.00" },
+      daysWorked: 20,
+      daysWorkedInQualifyingWindow: 20,
+      salaried: true,
+    }),
+  );
   assert.equal(bc.holidayPay, "160.0000");
 });
 
 test("Saskatchewan takes five per cent of four weeks", () => {
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-SK"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
-  })).holidayPay, "100.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-SK"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+      }),
+    ).holidayPay,
+    "100.0000",
+  );
 });
 
 test("the divisor rounds once, at the cent, half away from zero", () => {
   // 1,234.57 ÷ 20 = 61.7285 exactly; the cent is 61.73, and a float
   // reciprocal lands on 61.72 often enough to be a real complaint.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "1234.57" },
-  })).holidayPay, "61.7300");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-ON"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "1234.57" },
+      }),
+    ).holidayPay,
+    "61.7300",
+  );
   // 1,234.50 ÷ 20 = 61.725 — the exact half, which must go up.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "1234.50" },
-  })).holidayPay, "61.7300");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-ON"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "1234.50" },
+      }),
+    ).holidayPay,
+    "61.7300",
+  );
   // 5% of 1,234.57 = 61.7285 by the other route, and must agree to the cent.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-SK"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "1234.57" },
-  })).holidayPay, "61.7300");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-SK"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "1234.57" },
+      }),
+    ).holidayPay,
+    "61.7300",
+  );
   // BC's days-worked divisor on an awkward denominator: 1,000 ÷ 7 = 142.857…
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "1000.00" },
-      daysWorked: 7, daysWorkedInQualifyingWindow: 20,
-  })).holidayPay, "142.8600");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-BC"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "1000.00" },
+        daysWorked: 7,
+        daysWorkedInQualifyingWindow: 20,
+      }),
+    ).holidayPay,
+    "142.8600",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -739,27 +1000,42 @@ test("the divisor rounds once, at the cent, half away from zero", () => {
 // ---------------------------------------------------------------------------
 
 test("British Columbia's 30-day and 15-of-30 qualifiers both bite", () => {
-  const tooNew = computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-    earnings: { ...emptyLookbackEarnings(), regular: "1600.00" },
-    employmentDays: 21, daysWorked: 16, daysWorkedInQualifyingWindow: 16,
-  }));
+  const tooNew = computeStatutoryHolidayPay(
+    ruleFor("CA-BC"),
+    payContext({
+      earnings: { ...emptyLookbackEarnings(), regular: "1600.00" },
+      employmentDays: 21,
+      daysWorked: 16,
+      daysWorkedInQualifyingWindow: 16,
+    }),
+  );
   assert.equal(tooNew.qualified, false);
   assert.equal(tooNew.holidayPay, "0");
   assert.match(tooNew.disqualifiedReason!, /employed 21 of the 30 calendar days/);
 
-  const tooFewDays = computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-    earnings: { ...emptyLookbackEarnings(), regular: "1600.00" },
-    employmentDays: 400, daysWorked: 14, daysWorkedInQualifyingWindow: 14,
-  }));
+  const tooFewDays = computeStatutoryHolidayPay(
+    ruleFor("CA-BC"),
+    payContext({
+      earnings: { ...emptyLookbackEarnings(), regular: "1600.00" },
+      employmentDays: 400,
+      daysWorked: 14,
+      daysWorkedInQualifyingWindow: 14,
+    }),
+  );
   assert.equal(tooFewDays.qualified, false);
   assert.match(tooFewDays.disqualifiedReason!, /14 of the 30 days/);
 
   // Exactly 15 qualifies.
   assert.equal(
-    computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "1500.00" },
-      employmentDays: 30, daysWorked: 15, daysWorkedInQualifyingWindow: 15,
-    })).qualified,
+    computeStatutoryHolidayPay(
+      ruleFor("CA-BC"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "1500.00" },
+        employmentDays: 30,
+        daysWorked: 15,
+        daysWorkedInQualifyingWindow: 15,
+      }),
+    ).qualified,
     true,
   );
 });
@@ -773,9 +1049,16 @@ test("a jurisdiction with a service test and no hire date refuses", () => {
       error instanceof PayrollHolidayError && /needs a hire date/.test((error as Error).message),
   );
   // Ontario has no service test, so a missing hire date is harmless there.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-      employmentDays: null, earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
-  })).holidayPay, "100.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-ON"),
+      payContext({
+        employmentDays: null,
+        earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+      }),
+    ).holidayPay,
+    "100.0000",
+  );
 });
 
 test("the last-and-first test denies only when the absence is asserted", () => {
@@ -783,9 +1066,13 @@ test("the last-and-first test denies only when the absence is asserted", () => {
     earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
   };
   // Ontario declares the test; asserting the unapproved absence denies the day.
-  const denied = computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-    ...base, absentWithoutConsent: true,
-  }));
+  const denied = computeStatutoryHolidayPay(
+    ruleFor("CA-ON"),
+    payContext({
+      ...base,
+      absentWithoutConsent: true,
+    }),
+  );
   assert.equal(denied.qualified, false);
   assert.match(denied.disqualifiedReason!, /without the employer's consent/);
   // Not asserting it does NOT deny: consent is not a fact a timesheet records,
@@ -793,18 +1080,25 @@ test("the last-and-first test denies only when the absence is asserted", () => {
   assert.equal(computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext(base)).qualified, true);
   // The federal code has no such test, so the assertion cannot deny the day.
   assert.equal(
-    computeStatutoryHolidayPay(ruleFor("CA"), payContext({
-      ...base, absentWithoutConsent: true,
-    })).qualified,
+    computeStatutoryHolidayPay(
+      ruleFor("CA"),
+      payContext({
+        ...base,
+        absentWithoutConsent: true,
+      }),
+    ).qualified,
     true,
   );
 });
 
 test("an unpaid company closure pays nothing, and says so", () => {
-  const closure = computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-    holiday: { ...holiday("2026-12-24", "shutdown"), source: "company", paid: false },
-    earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
-  }));
+  const closure = computeStatutoryHolidayPay(
+    ruleFor("CA-ON"),
+    payContext({
+      holiday: { ...holiday("2026-12-24", "shutdown"), source: "company", paid: false },
+      earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+    }),
+  );
   assert.equal(closure.qualified, false);
   assert.equal(closure.holidayPay, "0");
   assert.match(closure.disqualifiedReason!, /unpaid closure/);
@@ -814,11 +1108,17 @@ test("an average-day rule with earnings but no days worked refuses", () => {
   // The average is undefined, not zero. Paying zero would lose a real
   // entitlement silently; this names the employee and stops.
   assert.throws(
-    () => computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({
-      earnings: { ...emptyLookbackEarnings(), regular: "2000.00" }, daysWorked: 0,
-    })),
+    () =>
+      computeStatutoryHolidayPay(
+        ruleFor("CA-AB"),
+        payContext({
+          earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+          daysWorked: 0,
+        }),
+      ),
     (error: unknown) =>
-      error instanceof PayrollHolidayError && /the average is undefined/.test((error as Error).message),
+      error instanceof PayrollHolidayError &&
+      /the average is undefined/.test((error as Error).message),
   );
   // With no earnings either, zero really is the answer.
   const nothing = computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({ daysWorked: 0 }));
@@ -834,31 +1134,44 @@ test("the premium is the UPLIFT, because the hours are already paid once", () =>
   // Ontario: time and a half for hours worked plus public holiday pay. The
   // timesheet already pays the eight hours at 1.0×, so the premium line is the
   // remaining 0.5× — emitting 1.5× here would pay the hours twice.
-  const result = computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext({
-    earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
-    hoursWorked: "8.00", hourlyRate: "25.00",
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-ON"),
+    payContext({
+      earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+      hoursWorked: "8.00",
+      hourlyRate: "25.00",
+    }),
+  );
   assert.equal(result.premiumPay, "100.0000"); // 8 × 25 × 0.5
   assert.equal(result.holidayPay, "100.0000"); // still owed on top
 });
 
 test("British Columbia pays double time past twelve hours", () => {
   // ESA s.46: 1.5× to 12 hours, 2× beyond, plus an average day's pay.
-  const result = computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-    earnings: { ...emptyLookbackEarnings(), regular: "3200.00" },
-    daysWorked: 20, daysWorkedInQualifyingWindow: 20,
-    hoursWorked: "14.00", hourlyRate: "20.00",
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-BC"),
+    payContext({
+      earnings: { ...emptyLookbackEarnings(), regular: "3200.00" },
+      daysWorked: 20,
+      daysWorkedInQualifyingWindow: 20,
+      hoursWorked: "14.00",
+      hourlyRate: "20.00",
+    }),
+  );
   // 12 × 20 × 0.5 = 120, plus 2 × 20 × 1.0 = 40.
   assert.equal(result.premiumPay, "160.0000");
   assert.equal(result.holidayPay, "160.0000");
 });
 
 test("Quebec owes the indemnity and ordinary wages, and no premium at all", () => {
-  const result = computeStatutoryHolidayPay(ruleFor("CA-QC"), payContext({
-    earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
-    hoursWorked: "8.00", hourlyRate: "25.00",
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-QC"),
+    payContext({
+      earnings: { ...emptyLookbackEarnings(), regular: "2000.00" },
+      hoursWorked: "8.00",
+      hourlyRate: "25.00",
+    }),
+  );
   assert.equal(result.premiumPay, "0.0000");
   assert.equal(result.holidayPay, "100.0000");
 });
@@ -875,20 +1188,39 @@ test("a lookback ends where its own statute says, and the two differ by days", (
   // the window entirely, so it runs Sunday May 31 to Saturday June 27 — four
   // COMPLETE weeks, which is what the statute asks for and what a window ending
   // June 30 was not.
-  assert.deepEqual(lookbackWindow(ruleFor("CA-ON"), "2026-07-01"), { from: "2026-05-31", to: "2026-06-27" });
-  assert.deepEqual(lookbackWindow(ruleFor("CA-ON"), "2026-01-08"), { from: "2025-12-07", to: "2026-01-03", });
-  assert.deepEqual(lookbackWindow(ruleFor("CA-ON"), "2026-01-08", 1), { from: "2025-12-08", to: "2026-01-04", });
+  assert.deepEqual(lookbackWindow(ruleFor("CA-ON"), "2026-07-01"), {
+    from: "2026-05-31",
+    to: "2026-06-27",
+  });
+  assert.deepEqual(lookbackWindow(ruleFor("CA-ON"), "2026-01-08"), {
+    from: "2025-12-07",
+    to: "2026-01-03",
+  });
+  assert.deepEqual(lookbackWindow(ruleFor("CA-ON"), "2026-01-08", 1), {
+    from: "2025-12-08",
+    to: "2026-01-04",
+  });
   // The Canada Labour Code s. 196 and Quebec s. 62 are worded the same way.
-  assert.deepEqual(lookbackWindow(ruleFor("CA"), "2026-07-01"), { from: "2026-05-31", to: "2026-06-27" });
-  assert.deepEqual(lookbackWindow(ruleFor("CA-QC"), "2026-07-01"), { from: "2026-05-31", to: "2026-06-27" });
+  assert.deepEqual(lookbackWindow(ruleFor("CA"), "2026-07-01"), {
+    from: "2026-05-31",
+    to: "2026-06-27",
+  });
+  assert.deepEqual(lookbackWindow(ruleFor("CA-QC"), "2026-07-01"), {
+    from: "2026-05-31",
+    to: "2026-06-27",
+  });
   // BC s. 45(1) is "the 30 CALENDAR DAY period preceding the statutory
   // holiday" — the day, not the week, and unchanged.
-  assert.deepEqual(lookbackWindow(ruleFor("CA-BC"), "2026-07-01"), { from: "2026-06-01", to: "2026-06-30" });
+  assert.deepEqual(lookbackWindow(ruleFor("CA-BC"), "2026-07-01"), {
+    from: "2026-06-01",
+    to: "2026-06-30",
+  });
   // Alberta, Saskatchewan, Manitoba and Prince Edward Island are all worded
   // "immediately preceding the general holiday" and all end June 30.
   for (const jurisdiction of ["CA-AB", "CA-SK", "CA-MB", "CA-PE"]) {
     assert.equal(
-      lookbackWindow(ruleFor(jurisdiction), "2026-07-01").to, "2026-06-30",
+      lookbackWindow(ruleFor(jurisdiction), "2026-07-01").to,
+      "2026-06-30",
       `${jurisdiction} counts to the day before the holiday`,
     );
   }
@@ -906,9 +1238,23 @@ test("every declared jurisdiction either states a rule or states there is none",
   // The pack is the single source of truth, and it answers for every key it
   // declares — no key resolves to undefined.
   for (const key of [
-    "CA", "CA-ON", "CA-QC", "CA-BC", "CA-AB", "CA-SK",
-    "CA-MB", "CA-NB", "CA-NL", "CA-NS", "CA-NT", "CA-NU", "CA-PE", "CA-YT",
-    "CA-CRA", "US", "US-NY",
+    "CA",
+    "CA-ON",
+    "CA-QC",
+    "CA-BC",
+    "CA-AB",
+    "CA-SK",
+    "CA-MB",
+    "CA-NB",
+    "CA-NL",
+    "CA-NS",
+    "CA-NT",
+    "CA-NU",
+    "CA-PE",
+    "CA-YT",
+    "CA-CRA",
+    "US",
+    "US-NY",
   ]) {
     const declaration = payrollJurisdiction(key);
     assert.ok(declaration.holidays.length > 0, `${key} declares holidays`);
@@ -933,10 +1279,7 @@ test("every Canadian employment jurisdiction cites the Act its rule came from", 
       // what is asserted is that something substantial is there and that it is
       // not a neighbour's.
       assert.ok(edition.rule.citation.length >= 30, `${jurisdiction.key} names its instrument`);
-      assert.ok(
-        !citations.has(edition.rule.citation),
-        `${jurisdiction.key}'s citation is its own`,
-      );
+      assert.ok(!citations.has(edition.rule.citation), `${jurisdiction.key}'s citation is its own`);
       citations.add(edition.rule.citation);
       // An edition must say when it starts, even when the answer is "no earlier
       // transcription exists". Omission and assertion are different claims.
@@ -954,28 +1297,47 @@ test("every Canadian employment jurisdiction cites the Act its rule came from", 
 
 /** Monday to Friday, `hours` a day, anchored on a Sunday. */
 const pattern = (hours: string, days = [1, 2, 3, 4, 5]): ResolvedWorkSchedule => ({
-  id: "sched", name: null, scope: "employee", pattern: "cycle",
-  cycleDays: 7, cycleAnchor: "2026-01-04",
+  id: "sched",
+  name: null,
+  scope: "employee",
+  pattern: "cycle",
+  cycleDays: 7,
+  cycleAnchor: "2026-01-04",
   days: days.map((dayIndex) => ({ dayIndex, hours })),
   effectiveFrom: "2020-01-01",
 });
 
 const VARIES: ResolvedWorkSchedule = {
-  id: "varies", name: null, scope: "employee", pattern: "varies",
-  cycleDays: null, cycleAnchor: null, days: [], effectiveFrom: "2020-01-01",
+  id: "varies",
+  name: null,
+  scope: "employee",
+  pattern: "varies",
+  cycleDays: null,
+  cycleAnchor: null,
+  days: [],
+  effectiveFrom: "2020-01-01",
 };
 
 test("a normal-day jurisdiction pays ONE normal working day, from the schedule", () => {
-  const result = computeStatutoryHolidayPay(ruleFor("CA-MB"), payContext({
-    schedule: pattern("8"), hourlyRate: "25.00",
-    earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-MB"),
+    payContext({
+      schedule: pattern("8"),
+      hourlyRate: "25.00",
+      earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+    }),
+  );
   assert.equal(result.holidayPay, "200.0000");
   assert.match(result.basis, /one normal working day/);
   // Four 10-hour days have a $250 normal-day wage, not $200.
-  const tenHourDay = computeStatutoryHolidayPay(ruleFor("CA-MB"), payContext({
-    schedule: pattern("10", [1, 2, 3, 4]), hourlyRate: "25.00", earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-  }));
+  const tenHourDay = computeStatutoryHolidayPay(
+    ruleFor("CA-MB"),
+    payContext({
+      schedule: pattern("10", [1, 2, 3, 4]),
+      hourlyRate: "25.00",
+      earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+    }),
+  );
   assert.equal(tenHourDay.holidayPay, "250.0000");
 });
 
@@ -984,36 +1346,49 @@ test("a holiday landing on the employee's day off still owes a normal day", () =
   // holiday pay when the holiday falls on a day the employee does not work, so
   // the answer must not depend on which weekday the holiday occupied.
   // 2026-07-01 is a Wednesday; a Thursday-and-Friday employee does not work it.
-  const result = computeStatutoryHolidayPay(ruleFor("CA-MB"), payContext({
-    schedule: pattern("8", [4, 5]), hourlyRate: "25.00",
-    earnings: { ...emptyLookbackEarnings(), regular: "1600.00" },
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-MB"),
+    payContext({
+      schedule: pattern("8", [4, 5]),
+      hourlyRate: "25.00",
+      earnings: { ...emptyLookbackEarnings(), regular: "1600.00" },
+    }),
+  );
   assert.equal(result.holidayPay, "200.0000");
 });
 
 test("Manitoba falls through to five per cent only where the hours vary", () => {
   // s. 23(2): the percentage applies where the normal workday's wage CANNOT be
   // determined. 5% of $4,000 = $200.00, and the derivation says why it took it.
-  const varying = computeStatutoryHolidayPay(ruleFor("CA-MB"), payContext({
-    schedule: VARIES, hourlyRate: "25.00",
-    earnings: { ...emptyLookbackEarnings(), regular: "4000.00", overtime: "900.00" },
-  }));
+  const varying = computeStatutoryHolidayPay(
+    ruleFor("CA-MB"),
+    payContext({
+      schedule: VARIES,
+      hourlyRate: "25.00",
+      earnings: { ...emptyLookbackEarnings(), regular: "4000.00", overtime: "900.00" },
+    }),
+  );
   assert.equal(varying.holidayPay, "200.0000", "overtime is out of the base");
   assert.match(varying.basis, /hours vary/);
   assert.match(varying.basis, /5% of 4000/);
 
   // Unequal hours across the working days are varying hours just as much.
-  const unequal = computeStatutoryHolidayPay(ruleFor("CA-MB"), payContext({
-    schedule: {
-      ...pattern("8"),
-      days: [
-        { dayIndex: 1, hours: "10" }, { dayIndex: 2, hours: "10" },
-        { dayIndex: 3, hours: "10" }, { dayIndex: 4, hours: "4" },
-      ],
-    },
-    hourlyRate: "25.00",
-    earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-  }));
+  const unequal = computeStatutoryHolidayPay(
+    ruleFor("CA-MB"),
+    payContext({
+      schedule: {
+        ...pattern("8"),
+        days: [
+          { dayIndex: 1, hours: "10" },
+          { dayIndex: 2, hours: "10" },
+          { dayIndex: 3, hours: "10" },
+          { dayIndex: 4, hours: "4" },
+        ],
+      },
+      hourlyRate: "25.00",
+      earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+    }),
+  );
   assert.equal(unequal.holidayPay, "200.0000");
 });
 
@@ -1023,66 +1398,134 @@ test("a normal-day jurisdiction REFUSES when no schedule is recorded", () => {
   // correct one. Every jurisdiction whose measure is the normal day must stop.
   for (const jurisdiction of ["CA-MB", "CA-NB", "CA-NS", "CA-NT", "CA-NU", "CA-YT"]) {
     assert.throws(
-      () => computeStatutoryHolidayPay(ruleFor(jurisdiction), payContext({
-        hourlyRate: "25.00", daysWorkedInQualifyingWindow: 30,
-        earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-      })),
+      () =>
+        computeStatutoryHolidayPay(
+          ruleFor(jurisdiction),
+          payContext({
+            hourlyRate: "25.00",
+            daysWorkedInQualifyingWindow: 30,
+            earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+          }),
+        ),
       (error: unknown) =>
-        error instanceof PayrollHolidayError
-        && /no work schedule is in force/.test((error as Error).message)
-        && /Test Employee/.test((error as Error).message),
+        error instanceof PayrollHolidayError &&
+        /no work schedule is in force/.test((error as Error).message) &&
+        /Test Employee/.test((error as Error).message),
       `${jurisdiction} refuses by name`,
     );
   }
   // …and the jurisdictions whose measure is a lookback are UNAFFECTED by the
   // absence, because they never needed it.
-  for (const jurisdiction of ["CA", "CA-ON", "CA-QC", "CA-BC", "CA-AB", "CA-SK", "CA-NL", "CA-PE"]) {
-    assert.doesNotThrow(() => computeStatutoryHolidayPay(ruleFor(jurisdiction), payContext({
-      hourlyRate: "25.00", daysWorked: 20, daysWorkedInQualifyingWindow: 20,
-      ...(jurisdiction === "CA-NL" ? { hoursWorkedInLookback: "160" } : {}),
-      earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-    })), `${jurisdiction} needs no schedule`);
+  for (const jurisdiction of [
+    "CA",
+    "CA-ON",
+    "CA-QC",
+    "CA-BC",
+    "CA-AB",
+    "CA-SK",
+    "CA-NL",
+    "CA-PE",
+  ]) {
+    assert.doesNotThrow(
+      () =>
+        computeStatutoryHolidayPay(
+          ruleFor(jurisdiction),
+          payContext({
+            hourlyRate: "25.00",
+            daysWorked: 20,
+            daysWorkedInQualifyingWindow: 20,
+            ...(jurisdiction === "CA-NL" ? { hoursWorkedInLookback: "160" } : {}),
+            earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+          }),
+        ),
+      `${jurisdiction} needs no schedule`,
+    );
   }
 });
 
 test("New Brunswick averages thirty days only when the wages vary", () => {
   // s. 18(2) regular wages for the day; s. 21(1) average daily earnings,
   // exclusive of overtime, over the days worked in the preceding 30 days.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-NB"), payContext({
-      schedule: pattern("7.5"), hourlyRate: "24.00", employmentDays: 400,
-      earnings: { ...emptyLookbackEarnings(), regular: "3600.00" },
-  })).holidayPay, "180.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-NB"),
+      payContext({
+        schedule: pattern("7.5"),
+        hourlyRate: "24.00",
+        employmentDays: 400,
+        earnings: { ...emptyLookbackEarnings(), regular: "3600.00" },
+      }),
+    ).holidayPay,
+    "180.0000",
+  );
   // $3,600 over 20 days worked = $180.00 — and the 30-day window is the rule's.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-NB"), payContext({
-      schedule: VARIES, hourlyRate: "24.00", employmentDays: 400, daysWorked: 20,
-      earnings: { ...emptyLookbackEarnings(), regular: "3600.00" },
-  })).holidayPay, "180.0000");
-  assert.deepEqual(lookbackWindow(ruleFor("CA-NB"), "2026-07-01"), { from: "2026-06-01", to: "2026-06-30" });
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-NB"),
+      payContext({
+        schedule: VARIES,
+        hourlyRate: "24.00",
+        employmentDays: 400,
+        daysWorked: 20,
+        earnings: { ...emptyLookbackEarnings(), regular: "3600.00" },
+      }),
+    ).holidayPay,
+    "180.0000",
+  );
+  assert.deepEqual(lookbackWindow(ruleFor("CA-NB"), "2026-07-01"), {
+    from: "2026-06-01",
+    to: "2026-06-30",
+  });
 });
 
 test("New Brunswick's ninety-day service test is the longest in the country", () => {
-  const denied = computeStatutoryHolidayPay(ruleFor("CA-NB"), payContext({
-    schedule: pattern("8"), hourlyRate: "24.00", employmentDays: 89,
-  }));
+  const denied = computeStatutoryHolidayPay(
+    ruleFor("CA-NB"),
+    payContext({
+      schedule: pattern("8"),
+      hourlyRate: "24.00",
+      employmentDays: 89,
+    }),
+  );
   assert.equal(denied.qualified, false);
   assert.match(denied.disqualifiedReason ?? "", /89 of the 90 calendar days/);
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-NB"), payContext({
-    schedule: pattern("8"), hourlyRate: "24.00", employmentDays: 90,
-  })).qualified, true);
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-NB"),
+      payContext({
+        schedule: pattern("8"),
+        hourlyRate: "24.00",
+        employmentDays: 90,
+      }),
+    ).qualified,
+    true,
+  );
 });
 
 test("New Brunswick caps a route salesperson's unworked WEEK at the four-week average", async () => {
   // ESA s. 21(2): $800 of week earnings plus a priced $300 day against
   // $4,000 over the preceding 28 days ($1,000/week average) pays $200 — the
   // week total is capped, never the day alone.
-  const trailing = [{
-    system_key: "", amount: "4000.00", earned_from: null, earned_to: null,
-    period_start: "2026-06-01", period_end: "2026-06-27",
-  }];
-  const week = [{
-    system_key: "", amount: "800.00", earned_from: null, earned_to: null,
-    period_start: "2026-06-28", period_end: "2026-07-04",
-  }];
+  const trailing = [
+    {
+      system_key: "",
+      amount: "4000.00",
+      earned_from: null,
+      earned_to: null,
+      period_start: "2026-06-01",
+      period_end: "2026-06-27",
+    },
+  ];
+  const week = [
+    {
+      system_key: "",
+      amount: "800.00",
+      earned_from: null,
+      earned_to: null,
+      period_start: "2026-06-28",
+      period_end: "2026-07-04",
+    },
+  ];
   const makeTx = () => {
     // Each lookback read issues two queries in order — the stub-line
     // evidence, then the retained prior-payroll history (empty here: the
@@ -1090,23 +1533,45 @@ test("New Brunswick caps a route salesperson's unworked WEEK at the four-week av
     // none). A mock that answers every query with stub lines predates that
     // read and fails its contract instead of pricing the cap.
     const queued = [trailing, [], week, []];
-    return { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: queued.shift() ?? [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) };
+    return {
+      execute: async (_query: unknown, mode?: string) =>
+        Promise.resolve({ rows: queued.shift() ?? [] }).then(
+          <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+        ),
+    };
   };
   const base = {
-    orgId: "org", employeePartyId: "emp", excludeDocumentId: "run",
-    employeeName: "Emp", rule: ruleFor("CA-NB"), holidayDate: "2026-07-01",
-    occupationClass: "route_salesperson", hoursWorked: "0",
-    periodStart: "2026-06-28", periodEnd: "2026-07-04", currentLines: [],
+    orgId: "org",
+    employeePartyId: "emp",
+    excludeDocumentId: "run",
+    employeeName: "Emp",
+    rule: ruleFor("CA-NB"),
+    holidayDate: "2026-07-01",
+    occupationClass: "route_salesperson",
+    hoursWorked: "0",
+    periodStart: "2026-06-28",
+    periodEnd: "2026-07-04",
+    currentLines: [],
   };
-  const capped = await applyOccupationWeeklyCap(makeTx() as never, { ...base, computedPay: "300.0000" });
+  const capped = await applyOccupationWeeklyCap(makeTx() as never, {
+    ...base,
+    computedPay: "300.0000",
+  });
   assert.equal(capped.pay, "200.0000");
   assert.match(capped.note ?? "", /occupation weekly cap/);
   // Under the ceiling the day passes through untouched ...
-  const silent = await applyOccupationWeeklyCap(makeTx() as never, { ...base, computedPay: "150.0000" });
+  const silent = await applyOccupationWeeklyCap(makeTx() as never, {
+    ...base,
+    computedPay: "150.0000",
+  });
   assert.equal(silent.pay, "150.0000");
   assert.equal(silent.note, null);
   // ... and a worked holiday is outside s. 21(2) by its own words.
-  const worked = await applyOccupationWeeklyCap(makeTx() as never, { ...base, hoursWorked: "8", computedPay: "300.0000" });
+  const worked = await applyOccupationWeeklyCap(makeTx() as never, {
+    ...base,
+    hoursWorked: "8",
+    computedPay: "300.0000",
+  });
   assert.equal(worked.pay, "300.0000");
 });
 
@@ -1121,15 +1586,24 @@ test("an excluded occupation is denied the day; the gate refuses unrecorded and 
   assert.match(denied.disqualifiedReason ?? "", /s\. 7\(1\)\(e\)/);
   // Any other class runs the general rule: a qualified non-member prices one
   // normal day (8h x $25).
-  const control = computeStatutoryHolidayPay(rule, payContext({
-    occupationClass: "general", schedule: pattern("8"), hourlyRate: "25.00", daysWorkedInQualifyingWindow: 20,
-  }));
+  const control = computeStatutoryHolidayPay(
+    rule,
+    payContext({
+      occupationClass: "general",
+      schedule: pattern("8"),
+      hourlyRate: "25.00",
+      daysWorkedInQualifyingWindow: 20,
+    }),
+  );
   assert.equal(control.qualified, true);
   assert.equal(control.holidayPay, "200.0000");
   // ... while the gate refuses what was never answered, or never declared.
   const nb = ruleFor("CA-NB");
   assert.throws(() => assertOccupationClass(nb, "CA", null, "Emp"), /not recorded/);
-  assert.throws(() => assertOccupationClass(nb, "CA", "vice_president", "Emp"), /unrecognized occupation class/);
+  assert.throws(
+    () => assertOccupationClass(nb, "CA", "vice_president", "Emp"),
+    /unrecognized occupation class/,
+  );
   assert.throws(() => assertOccupationClass(nb, "CA", undefined, "Emp"), /not recorded/);
   assert.doesNotThrow(() => assertOccupationClass(nb, "CA", "general", "Emp"));
   assert.doesNotThrow(() => assertOccupationClass(ruleFor("CA-SK"), "CA", null, "Emp"));
@@ -1137,50 +1611,89 @@ test("an excluded occupation is denied the day; the gate refuses unrecorded and 
   // route_salesperson and the PEI exclusion's elect_to_work alike.
   assert.ok(occupationCapValues("CA").includes("route_salesperson"));
   assert.ok(occupationCapValues("CA").includes("elect_to_work"));
-  assert.ok(holidayOccupationClassesOf("CA-NB").some((entry) => entry.classKey === "route_salesperson"));
-  assert.ok(holidayOccupationClassesOf("CA-PE").some((entry) => entry.classKey === "elect_to_work"));
+  assert.ok(
+    holidayOccupationClassesOf("CA-NB").some((entry) => entry.classKey === "route_salesperson"),
+  );
+  assert.ok(
+    holidayOccupationClassesOf("CA-PE").some((entry) => entry.classKey === "elect_to_work"),
+  );
 });
 
 test("Newfoundland pays DOUBLE for the day worked, instead of stacking", () => {
   // s. 17(1): double wages for that day, or a lieu day, at the employee's
   // election — the only jurisdiction in the country where working the holiday
   // REPLACES the day's holiday pay rather than adding to it.
-  const worked = computeStatutoryHolidayPay(ruleFor("CA-NL"), payContext({
-    daysWorked: 15, hoursWorkedInLookback: "120", hoursWorked: "8", hourlyRate: "25.00", employmentDays: 400, earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
-  }));
+  const worked = computeStatutoryHolidayPay(
+    ruleFor("CA-NL"),
+    payContext({
+      daysWorked: 15,
+      hoursWorkedInLookback: "120",
+      hoursWorked: "8",
+      hourlyRate: "25.00",
+      employmentDays: 400,
+      earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
+    }),
+  );
   // The 8 hours are already on the stub at 1.0×, so the uplift is one more
   // times, and the day's pay is dropped.
   assert.equal(worked.premiumPay, "200.0000");
   assert.equal(worked.holidayPay, "0");
 
   // Not worked: an average day over the three-week window. $3,000 ÷ 15 = $200.
-  const rested = computeStatutoryHolidayPay(ruleFor("CA-NL"), payContext({
-    daysWorked: 15, hoursWorkedInLookback: "120", hourlyRate: "25.00", employmentDays: 400, earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
-  }));
+  const rested = computeStatutoryHolidayPay(
+    ruleFor("CA-NL"),
+    payContext({
+      daysWorked: 15,
+      hoursWorkedInLookback: "120",
+      hourlyRate: "25.00",
+      employmentDays: 400,
+      earnings: { ...emptyLookbackEarnings(), regular: "3000.00" },
+    }),
+  );
   assert.equal(rested.holidayPay, "200.0000");
-  assert.deepEqual(lookbackWindow(ruleFor("CA-NL"), "2026-07-01"), { from: "2026-06-10", to: "2026-06-30" });
+  assert.deepEqual(lookbackWindow(ruleFor("CA-NL"), "2026-07-01"), {
+    from: "2026-06-10",
+    to: "2026-06-30",
+  });
 });
 
 test("Newfoundland uses the current hourly rate times average lookback hours", () => {
   // LSA s. 15(3): the holiday is paid at the employee's current rate, even
   // where that rate changed during the three-week hours lookback.
-  const result = computeStatutoryHolidayPay(ruleFor("CA-NL"), payContext({
-    daysWorked: 10, hoursWorkedInLookback: "75.0000", hourlyRate: "30.00", employmentDays: 400, earnings: { ...emptyLookbackEarnings(), regular: "1500.00" },
-  }));
+  const result = computeStatutoryHolidayPay(
+    ruleFor("CA-NL"),
+    payContext({
+      daysWorked: 10,
+      hoursWorkedInLookback: "75.0000",
+      hourlyRate: "30.00",
+      employmentDays: 400,
+      earnings: { ...emptyLookbackEarnings(), regular: "1500.00" },
+    }),
+  );
   assert.equal(result.holidayPay, "225.0000");
 });
 
 test("Nova Scotia's fifteen-of-thirty test bites, and stacks the premium", () => {
-  const denied = computeStatutoryHolidayPay(ruleFor("CA-NS"), payContext({
-    schedule: pattern("8"), hourlyRate: "25.00", daysWorkedInQualifyingWindow: 14,
-  }));
+  const denied = computeStatutoryHolidayPay(
+    ruleFor("CA-NS"),
+    payContext({
+      schedule: pattern("8"),
+      hourlyRate: "25.00",
+      daysWorkedInQualifyingWindow: 14,
+    }),
+  );
   assert.equal(denied.qualified, false);
   assert.match(denied.disqualifiedReason ?? "", /14 of the 30 days/);
 
-  const worked = computeStatutoryHolidayPay(ruleFor("CA-NS"), payContext({
-    schedule: pattern("8"), hourlyRate: "25.00",
-    daysWorkedInQualifyingWindow: 15, hoursWorked: "8",
-  }));
+  const worked = computeStatutoryHolidayPay(
+    ruleFor("CA-NS"),
+    payContext({
+      schedule: pattern("8"),
+      hourlyRate: "25.00",
+      daysWorkedInQualifyingWindow: 15,
+      hoursWorked: "8",
+    }),
+  );
   // s. 41(2): the day's pay PLUS time and a half for the hours worked.
   assert.equal(worked.holidayPay, "200.0000");
   assert.equal(worked.premiumPay, "100.0000");
@@ -1189,56 +1702,104 @@ test("Nova Scotia's fifteen-of-thirty test bites, and stacks the premium", () =>
 test("the territories share one formula and two different calendars", () => {
   // NT s. 23(1) and NU s. 24 are word for word; the days are not.
   const context = {
-    schedule: pattern("8"), hourlyRate: "30.00", daysWorkedInQualifyingWindow: 30,
+    schedule: pattern("8"),
+    hourlyRate: "30.00",
+    daysWorkedInQualifyingWindow: 30,
   };
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-NT"), payContext(context)).holidayPay, "240.0000");
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-NU"), payContext(context)).holidayPay, "240.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(ruleFor("CA-NT"), payContext(context)).holidayPay,
+    "240.0000",
+  );
+  assert.equal(
+    computeStatutoryHolidayPay(ruleFor("CA-NU"), payContext(context)).holidayPay,
+    "240.0000",
+  );
   // Thirty days WORKED in the preceding twelve months, not thirty days of
   // service — a genuinely different test, and it is declared as the one it is.
-  const denied = computeStatutoryHolidayPay(ruleFor("CA-NT"), payContext({
-    ...context, daysWorkedInQualifyingWindow: 29,
-  }));
+  const denied = computeStatutoryHolidayPay(
+    ruleFor("CA-NT"),
+    payContext({
+      ...context,
+      daysWorkedInQualifyingWindow: 29,
+    }),
+  );
   assert.equal(denied.qualified, false);
   assert.match(denied.disqualifiedReason ?? "", /29 of the 365 days/);
   // The irregular arm averages the four weeks worked: $4,800 ÷ 20 = $240.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-NU"), payContext({
-      ...context, schedule: VARIES, daysWorked: 20,
-      earnings: { ...emptyLookbackEarnings(), regular: "4800.00" },
-  })).holidayPay, "240.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-NU"),
+      payContext({
+        ...context,
+        schedule: VARIES,
+        daysWorked: 20,
+        earnings: { ...emptyLookbackEarnings(), regular: "4800.00" },
+      }),
+    ).holidayPay,
+    "240.0000",
+  );
 });
 
 test("Prince Edward Island's five per cent counts vacation and prior holidays in", () => {
   // s. 28(2) is the only provision in the country that says so expressly.
   // 5% of (3,800 + 160 + 40) = 5% of 4,000 = $200.00, overtime excluded.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-PE"), payContext({
-      earnings: { regular: "3800.00", overtime: "900.00", vacationPay: "160.00", holidayPay: "40.00" },
-  })).holidayPay, "200.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-PE"),
+      payContext({
+        earnings: {
+          regular: "3800.00",
+          overtime: "900.00",
+          vacationPay: "160.00",
+          holidayPay: "40.00",
+        },
+      }),
+    ).holidayPay,
+    "200.0000",
+  );
   // No service qualifier in the new Act: a two-day-old employee qualifies.
   assert.equal(
-    computeStatutoryHolidayPay(ruleFor("CA-PE"), payContext({
-      employmentDays: 2, earnings: { ...emptyLookbackEarnings(), regular: "400.00" },
-    })).qualified,
+    computeStatutoryHolidayPay(
+      ruleFor("CA-PE"),
+      payContext({
+        employmentDays: 2,
+        earnings: { ...emptyLookbackEarnings(), regular: "400.00" },
+      }),
+    ).qualified,
     true,
   );
 });
 
 test("Yukon splits on STANDARD hours, not on whether the hours vary", () => {
-  const fullTime = computeStatutoryHolidayPay(ruleFor("CA-YT"), payContext({
-    schedule: pattern("8"), hourlyRate: "28.00", employmentDays: 400,
-    earnings: { ...emptyLookbackEarnings(), regular: "2240.00" },
-  }));
+  const fullTime = computeStatutoryHolidayPay(
+    ruleFor("CA-YT"),
+    payContext({
+      schedule: pattern("8"),
+      hourlyRate: "28.00",
+      employmentDays: 400,
+      earnings: { ...emptyLookbackEarnings(), regular: "2240.00" },
+    }),
+  );
   assert.equal(fullTime.holidayPay, "224.0000", "40 hours a week is standard");
 
-  const partTime = computeStatutoryHolidayPay(ruleFor("CA-YT"), payContext({
-    schedule: pattern("5"), hourlyRate: "28.00", employmentDays: 400,
-    // Two weeks of wages: 25 hours a week at $28.00 = $1,400, plus $200 of
-    // overtime, which Yukon INCLUDES, and $90 of vacation pay, which it does
-    // not. 10% of $1,600 = $160.00.
-    earnings: { regular: "1400.00", overtime: "200.00", vacationPay: "90.00", holidayPay: "0" },
-  }));
+  const partTime = computeStatutoryHolidayPay(
+    ruleFor("CA-YT"),
+    payContext({
+      schedule: pattern("5"),
+      hourlyRate: "28.00",
+      employmentDays: 400,
+      // Two weeks of wages: 25 hours a week at $28.00 = $1,400, plus $200 of
+      // overtime, which Yukon INCLUDES, and $90 of vacation pay, which it does
+      // not. 10% of $1,600 = $160.00.
+      earnings: { regular: "1400.00", overtime: "200.00", vacationPay: "90.00", holidayPay: "0" },
+    }),
+  );
   assert.equal(partTime.holidayPay, "160.0000");
   assert.match(partTime.basis, /less than the 40/);
-  assert.deepEqual(lookbackWindow(ruleFor("CA-YT"), "2026-07-01"), { from: "2026-06-14", to: "2026-06-27" });
+  assert.deepEqual(lookbackWindow(ruleFor("CA-YT"), "2026-07-01"), {
+    from: "2026-06-14",
+    to: "2026-06-27",
+  });
 });
 
 test("declaring eight jurisdictions moved NONE of the six that were already there", () => {
@@ -1247,38 +1808,76 @@ test("declaring eight jurisdictions moved NONE of the six that were already ther
   // shared shape that quietly altered one of them fails here rather than in
   // somebody's pay run.
   assert.deepEqual(ruleFor("CA").basis, {
-    kind: "fixed_divisor", divisor: 20, lookbackWeeks: 4,
+    kind: "fixed_divisor",
+    divisor: 20,
+    lookbackWeeks: 4,
     commission: { divisor: 60, lookbackWeeks: 12, minWeeksEmployed: 12 },
   });
-  assert.deepEqual(ruleFor("CA-ON").basis, { kind: "fixed_divisor", divisor: 20, lookbackWeeks: 4 });
+  assert.deepEqual(ruleFor("CA-ON").basis, {
+    kind: "fixed_divisor",
+    divisor: 20,
+    lookbackWeeks: 4,
+  });
   // BC's denominator is "worked OR EARNED WAGES" (s. 45(1)); Alberta's is days
   // worked. Two different sentences that used to be one implementation.
-  assert.deepEqual(ruleFor("CA-BC").basis, { kind: "average_day", lookbackDays: 30, counting: "worked_or_earned_wages", });
-  assert.deepEqual(ruleFor("CA-AB").basis, { kind: "average_day", lookbackWeeks: 4, counting: "worked", });
-  assert.deepEqual(ruleFor("CA-SK").basis, { kind: "percent_of_earnings", percent: "5", lookbackWeeks: 4, });
+  assert.deepEqual(ruleFor("CA-BC").basis, {
+    kind: "average_day",
+    lookbackDays: 30,
+    counting: "worked_or_earned_wages",
+  });
+  assert.deepEqual(ruleFor("CA-AB").basis, {
+    kind: "average_day",
+    lookbackWeeks: 4,
+    counting: "worked",
+  });
+  assert.deepEqual(ruleFor("CA-SK").basis, {
+    kind: "percent_of_earnings",
+    percent: "5",
+    lookbackWeeks: 4,
+  });
   assert.deepEqual(ruleFor("CA-QC").premium, { multiplier: "1", plusHolidayPay: true });
-  assert.deepEqual(ruleFor("CA-BC").premium, { multiplier: "1.5", overtimeAfterHours: 12, overtimeMultiplier: "2", plusHolidayPay: true, });
-  assert.deepEqual(ruleFor("CA-ON").include, { overtime: false, vacationPay: true, holidayPay: false });
+  assert.deepEqual(ruleFor("CA-BC").premium, {
+    multiplier: "1.5",
+    overtimeAfterHours: 12,
+    overtimeMultiplier: "2",
+    plusHolidayPay: true,
+  });
+  assert.deepEqual(ruleFor("CA-ON").include, {
+    overtime: false,
+    vacationPay: true,
+    holidayPay: false,
+  });
 
   // The four numbers the statutes' own worked examples produce, recomputed with
   // a schedule present — which must change nothing at all, because none of
   // these six reads one.
   const withSchedule = {
-    schedule: pattern("8"), hourlyRate: "999.00",
+    schedule: pattern("8"),
+    hourlyRate: "999.00",
     earnings: { ...emptyLookbackEarnings(), regular: "2400.00" },
   };
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext(withSchedule)).holidayPay, "120.0000",
+  assert.equal(
+    computeStatutoryHolidayPay(ruleFor("CA-ON"), payContext(withSchedule)).holidayPay,
+    "120.0000",
   );
   assert.equal(
-    computeStatutoryHolidayPay(ruleFor("CA"), payContext(withSchedule)).holidayPay, "120.0000",
+    computeStatutoryHolidayPay(ruleFor("CA"), payContext(withSchedule)).holidayPay,
+    "120.0000",
   );
   assert.equal(
-    computeStatutoryHolidayPay(ruleFor("CA-SK"), payContext(withSchedule)).holidayPay, "120.0000",
+    computeStatutoryHolidayPay(ruleFor("CA-SK"), payContext(withSchedule)).holidayPay,
+    "120.0000",
   );
   assert.equal(
-    computeStatutoryHolidayPay(ruleFor("CA-AB"), payContext({
-      ...withSchedule, daysWorked: 20,
-  })).holidayPay, "120.0000");
+    computeStatutoryHolidayPay(
+      ruleFor("CA-AB"),
+      payContext({
+        ...withSchedule,
+        daysWorked: 20,
+      }),
+    ).holidayPay,
+    "120.0000",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -1316,8 +1915,11 @@ test("BC: paid vacation with no time entries now qualifies, and did not before",
   // days inside the two periods: June 1–5, 8–12, 15–19 and 22–26.
   const counted = (counting: "worked" | "worked_or_earned_wages") =>
     countHolidayQualifyingDays({
-      employee: "Test Employee", window: JUNE_2026, counting,
-      evidence: PAID_FORTNIGHT, schedule: pattern("8"),
+      employee: "Test Employee",
+      window: JUNE_2026,
+      counting,
+      evidence: PAID_FORTNIGHT,
+      schedule: pattern("8"),
     });
 
   // What the engine used to count — approved timesheets, and there are none.
@@ -1326,23 +1928,30 @@ test("BC: paid vacation with no time entries now qualifies, and did not before",
   assert.equal(counted("worked_or_earned_wages"), 20);
 
   // And the money. Under the old measure the 15-of-30 gate denied the day…
-  const denied = computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-    holiday: holiday("2026-07-01"),
-    earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-    daysWorked: counted("worked"), daysWorkedInQualifyingWindow: counted("worked"),
-  }));
+  const denied = computeStatutoryHolidayPay(
+    ruleFor("CA-BC"),
+    payContext({
+      holiday: holiday("2026-07-01"),
+      earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+      daysWorked: counted("worked"),
+      daysWorkedInQualifyingWindow: counted("worked"),
+    }),
+  );
   assert.equal(denied.qualified, false);
   assert.match(denied.disqualifiedReason!, /worked or earned wages on 0 of the 30 days/);
   assert.equal(denied.holidayPay, "0");
 
   // …and under the statute's own words the employee is paid an average day.
   // $4,000 over twenty days on which wages were earned is $200.00.
-  const paid = computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-    holiday: holiday("2026-07-01"),
-    earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-    daysWorked: counted("worked_or_earned_wages"),
-    daysWorkedInQualifyingWindow: counted("worked_or_earned_wages"),
-  }));
+  const paid = computeStatutoryHolidayPay(
+    ruleFor("CA-BC"),
+    payContext({
+      holiday: holiday("2026-07-01"),
+      earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+      daysWorked: counted("worked_or_earned_wages"),
+      daysWorkedInQualifyingWindow: counted("worked_or_earned_wages"),
+    }),
+  );
   assert.equal(paid.qualified, true);
   assert.equal(paid.holidayPay, "200.0000");
   assert.match(paid.basis, /÷ 20 days worked or earned wages/);
@@ -1355,16 +1964,22 @@ test("a paid day is not every calendar day — the denominator would sag if it w
   // whole calendar would divide the same wages by 28 instead of 20 and quietly
   // cut every salaried employee's holiday pay by nearly a third.
   const days = countHolidayQualifyingDays({
-    employee: "Test Employee", window: JUNE_2026, counting: "worked_or_earned_wages",
-    evidence: PAID_FORTNIGHT, schedule: pattern("8"),
+    employee: "Test Employee",
+    window: JUNE_2026,
+    counting: "worked_or_earned_wages",
+    evidence: PAID_FORTNIGHT,
+    schedule: pattern("8"),
   });
   assert.equal(days, 20);
   assert.notEqual(days, 28);
   // A four-day compressed week earns wages on four days a week, not five.
   assert.equal(
     countHolidayQualifyingDays({
-      employee: "Test Employee", window: JUNE_2026, counting: "worked_or_earned_wages",
-      evidence: PAID_FORTNIGHT, schedule: pattern("10", [1, 2, 3, 4]),
+      employee: "Test Employee",
+      window: JUNE_2026,
+      counting: "worked_or_earned_wages",
+      evidence: PAID_FORTNIGHT,
+      schedule: pattern("10", [1, 2, 3, 4]),
     }),
     16,
   );
@@ -1399,8 +2014,11 @@ test("hours on the stub mean the day count is the timesheet's, not the period's"
   };
   assert.equal(
     countHolidayQualifyingDays({
-      employee: "Test Employee", window: JUNE_2026, counting: "worked_or_earned_wages",
-      evidence, schedule: pattern("8"),
+      employee: "Test Employee",
+      window: JUNE_2026,
+      counting: "worked_or_earned_wages",
+      evidence,
+      schedule: pattern("8"),
     }),
     4,
   );
@@ -1412,7 +2030,9 @@ test("a jurisdiction that counts days WORKED is untouched by any of it", () => {
   // denominators by one day, and no schedule is consulted for them at all.
   assert.equal(
     countHolidayQualifyingDays({
-      employee: "Test Employee", window: JUNE_2026, counting: "worked",
+      employee: "Test Employee",
+      window: JUNE_2026,
+      counting: "worked",
       evidence: { ...PAID_FORTNIGHT, workedOn: ["2026-06-02", "2026-06-03"] },
       schedule: null,
     }),
@@ -1427,25 +2047,33 @@ test("an untimed paid period with no schedule REFUSES rather than invent a week"
   // overlaps the window, so every employee whose time is on a timesheet is
   // unaffected.
   assert.throws(
-    () => countHolidayQualifyingDays({
-      employee: "Robin Salaried", window: JUNE_2026, counting: "worked_or_earned_wages",
-      evidence: PAID_FORTNIGHT, schedule: null,
-    }),
+    () =>
+      countHolidayQualifyingDays({
+        employee: "Robin Salaried",
+        window: JUNE_2026,
+        counting: "worked_or_earned_wages",
+        evidence: PAID_FORTNIGHT,
+        schedule: null,
+      }),
     (error: unknown) =>
-      error instanceof PayrollHolidayError
-      && /Robin Salaried/.test((error as Error).message)
-      && /WORKED OR EARNED WAGES/.test((error as Error).message),
+      error instanceof PayrollHolidayError &&
+      /Robin Salaried/.test((error as Error).message) &&
+      /WORKED OR EARNED WAGES/.test((error as Error).message),
   );
   // "Their hours vary" is a recorded answer and still cannot say which days
   // were worked, so it refuses too — pointing at the recording that can.
   assert.throws(
-    () => countHolidayQualifyingDays({
-      employee: "Robin Salaried", window: JUNE_2026, counting: "entitled_to_pay",
-      evidence: PAID_FORTNIGHT, schedule: VARIES,
-    }),
+    () =>
+      countHolidayQualifyingDays({
+        employee: "Robin Salaried",
+        window: JUNE_2026,
+        counting: "entitled_to_pay",
+        evidence: PAID_FORTNIGHT,
+        schedule: VARIES,
+      }),
     (error: unknown) =>
-      error instanceof PayrollHolidayError
-      && /record the leave as time entries/.test((error as Error).message),
+      error instanceof PayrollHolidayError &&
+      /record the leave as time entries/.test((error as Error).message),
   );
 });
 
@@ -1453,13 +2081,23 @@ test("Nova Scotia's qualifier quotes its own section, not British Columbia's", (
   // s. 42(1) is "received or was ENTITLED TO RECEIVE pay", and an employee
   // refused under it was not "not working enough" — a different fact, and a
   // different conversation with their employer.
-  const denied = computeStatutoryHolidayPay(ruleFor("CA-NS"), payContext({
-    schedule: pattern("8"), hourlyRate: "25.00", daysWorkedInQualifyingWindow: 14,
-  }));
+  const denied = computeStatutoryHolidayPay(
+    ruleFor("CA-NS"),
+    payContext({
+      schedule: pattern("8"),
+      hourlyRate: "25.00",
+      daysWorkedInQualifyingWindow: 14,
+    }),
+  );
   assert.match(denied.disqualifiedReason!, /was paid, or entitled to be paid on 14 of the 30/);
-  const bc = computeStatutoryHolidayPay(ruleFor("CA-BC"), payContext({
-    employmentDays: 400, daysWorked: 14, daysWorkedInQualifyingWindow: 14,
-  }));
+  const bc = computeStatutoryHolidayPay(
+    ruleFor("CA-BC"),
+    payContext({
+      employmentDays: 400,
+      daysWorked: 14,
+      daysWorkedInQualifyingWindow: 14,
+    }),
+  );
   assert.match(bc.disqualifiedReason!, /worked or earned wages on 14 of the 30/);
 });
 
@@ -1470,19 +2108,21 @@ test("Nova Scotia's qualifier quotes its own section, not British Columbia's", (
 test("Prince Edward Island's Act changed mid-2026, and the date decides which", () => {
   // SPEI 2024 c 66 came into force 2026-06-30 and replaced a regular day's pay
   // with five per cent of four weeks. Canada Day 2026 is under the new Act.
-  assert.equal(computeStatutoryHolidayPay(ruleFor("CA-PE", "2026-07-01"), payContext({
-    earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
-  })).holidayPay, "200.0000");
+  assert.equal(
+    computeStatutoryHolidayPay(
+      ruleFor("CA-PE", "2026-07-01"),
+      payContext({
+        earnings: { ...emptyLookbackEarnings(), regular: "4000.00" },
+      }),
+    ).holidayPay,
+    "200.0000",
+  );
   // Good Friday 2026 (April 3) is under the repealed RSPEI 1988 c E-6.2,
   // transcribed as the pre-2026-06-30 edition: a regular day's pay, never
   // the new five per cent and never a refusal. The boundary is exact —
   // 2026-06-29 belongs to the old measure, 2026-06-30 to the new.
-  assert.match(
-    ruleFor("CA-PE", "2026-04-03").citation, /RSPEI 1988/,
-  );
-  assert.match(
-    ruleFor("CA-PE", "2026-06-29").citation, /RSPEI 1988/,
-  );
+  assert.match(ruleFor("CA-PE", "2026-04-03").citation, /RSPEI 1988/);
+  assert.match(ruleFor("CA-PE", "2026-06-29").citation, /RSPEI 1988/);
   assert.ok(statutoryHolidayPayRule("CA-PE", "2026-06-30"), "in force on the day it commenced");
 });
 
@@ -1492,8 +2132,19 @@ test("adding a time dimension re-dated nothing: every other rule answers for any
   // transcription is carried" — so they answer for 2019 exactly as they answer
   // for 2026, which is what they did before this existed.
   for (const key of [
-    "CA", "CA-ON", "CA-QC", "CA-BC", "CA-AB", "CA-SK",
-    "CA-MB", "CA-NB", "CA-NL", "CA-NS", "CA-NT", "CA-NU", "CA-YT",
+    "CA",
+    "CA-ON",
+    "CA-QC",
+    "CA-BC",
+    "CA-AB",
+    "CA-SK",
+    "CA-MB",
+    "CA-NB",
+    "CA-NL",
+    "CA-NS",
+    "CA-NT",
+    "CA-NU",
+    "CA-YT",
   ]) {
     for (const date of ["2019-07-01", "2026-07-01", "2031-07-01"]) {
       assert.equal(
@@ -1522,7 +2173,11 @@ test("a profile runs under its declared labour jurisdiction, otherwise under its
 });
 
 test("Alberta's 2026 calendar lists its general holidays from the Code and omits the optional days", () => {
-  const reading = statutoryHolidayCalendarsFor({ jurisdictions: ["CA-AB"], year: 2026, overrides: [] });
+  const reading = statutoryHolidayCalendarsFor({
+    jurisdictions: ["CA-AB"],
+    year: 2026,
+    overrides: [],
+  });
   assert.deepEqual(reading.refusals, []);
   const [calendar] = reading.calendars;
   assert.ok(calendar);
@@ -1531,7 +2186,17 @@ test("Alberta's 2026 calendar lists its general holidays from the Code and omits
   const dates = calendar.holidays.map((holiday) => holiday.date);
   // Hand-worked: Family Day is the third Monday of February, Good Friday is two
   // days before Easter Sunday (April 5, 2026), Victoria Day is the Monday before May 25.
-  for (const date of ["2026-01-01", "2026-02-16", "2026-04-03", "2026-05-18", "2026-07-01", "2026-09-07", "2026-10-12", "2026-11-11", "2026-12-25"]) {
+  for (const date of [
+    "2026-01-01",
+    "2026-02-16",
+    "2026-04-03",
+    "2026-05-18",
+    "2026-07-01",
+    "2026-09-07",
+    "2026-10-12",
+    "2026-11-11",
+    "2026-12-25",
+  ]) {
     assert.ok(dates.includes(date), `${date} is an Alberta general holiday`);
   }
   // Boxing Day, Heritage Day and Easter Monday are optional in Alberta and stay off until elected.
@@ -1553,16 +2218,23 @@ test("an Alberta optional day is listed as elected, on its observed date, once t
 });
 
 test("a jurisdiction no pack declares is refused by name without blanking the calendars that can be read", () => {
-  const reading = statutoryHolidayCalendarsFor({ jurisdictions: ["XX-QQ", "CA-AB"], year: 2026, overrides: [] });
-  assert.deepEqual(reading.calendars.map((calendar) => calendar.jurisdiction), ["CA-AB"]);
+  const reading = statutoryHolidayCalendarsFor({
+    jurisdictions: ["XX-QQ", "CA-AB"],
+    year: 2026,
+    overrides: [],
+  });
+  assert.deepEqual(
+    reading.calendars.map((calendar) => calendar.jurisdiction),
+    ["CA-AB"],
+  );
   assert.equal(reading.refusals.length, 1);
   assert.equal(reading.refusals[0]?.jurisdiction, "XX-QQ");
   assert.match(reading.refusals[0]?.message ?? "", /XX-QQ/);
 });
 
 test("no payroll profile means there is no calendar to read", () => {
-  assert.deepEqual(
-    statutoryHolidayCalendarsFor({ jurisdictions: [], year: 2026, overrides: [] }),
-    { calendars: [], refusals: [] },
-  );
+  assert.deepEqual(statutoryHolidayCalendarsFor({ jurisdictions: [], year: 2026, overrides: [] }), {
+    calendars: [],
+    refusals: [],
+  });
 });

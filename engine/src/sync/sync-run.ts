@@ -457,7 +457,12 @@ export async function runSync(
   });
 
   try {
-    const { selection, since, outOfPeriodDatePolicy } = await prepareSyncConnection(source, identity, opts, supplemental);
+    const { selection, since, outOfPeriodDatePolicy } = await prepareSyncConnection(
+      source,
+      identity,
+      opts,
+      supplemental,
+    );
     const { entityStats, partyOutcome } = await loadSyncEntities({
       source,
       triggeredBy,

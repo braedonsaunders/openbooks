@@ -21,7 +21,8 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -49,7 +50,11 @@ const mockedTransport: typeof fetch = (input, init) => globalThis.fetch(input, i
 /** Remap the allowlisted NetSuite origins onto a local test server so the
  *  client exercises its real URL construction and credential placement
  *  without touching the network. Records the redirect mode of every call. */
-function remapNetsuiteOrigins(originalFetch: typeof fetch, origins: string[], targetOrigin: string) {
+function remapNetsuiteOrigins(
+  originalFetch: typeof fetch,
+  origins: string[],
+  targetOrigin: string,
+) {
   const redirectModes: Array<RequestRedirect | undefined> = [];
   globalThis.fetch = (input, init) => {
     redirectModes.push(init?.redirect);
@@ -72,21 +77,27 @@ test("every credentialed NetSuite request opts out of redirect-following", async
     seen.push({ url: String(input), init });
     const pathname = new URL(String(input)).pathname;
     if (pathname.endsWith("/suiteql")) {
-      return Promise.resolve(new Response(JSON.stringify({ items: [], hasMore: false }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ items: [], hasMore: false }), { status: 200 }),
+      );
     }
     if (/\/record\/v1\/customer\/\d+$/.test(pathname)) {
       return Promise.resolve(new Response(JSON.stringify({ id: "42" }), { status: 200 }));
     }
     if (pathname.includes("/record/v1/")) {
-      return Promise.resolve(new Response(JSON.stringify({ items: [], hasMore: false }), { status: 200 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ items: [], hasMore: false }), { status: 200 }),
+      );
     }
     if (pathname.includes("/NetSuitePort_")) {
-      return Promise.resolve(new Response(
-        `<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body>` +
-        `<getResponse isSuccess="true"><name>f.txt</name><content>${Buffer.from("hello").toString("base64")}</content></getResponse>` +
-        `</soap-env:Body></soap-env:Envelope>`,
-        { status: 200 },
-      ));
+      return Promise.resolve(
+        new Response(
+          `<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/"><soap-env:Body>` +
+            `<getResponse isSuccess="true"><name>f.txt</name><content>${Buffer.from("hello").toString("base64")}</content></getResponse>` +
+            `</soap-env:Body></soap-env:Envelope>`,
+          { status: 200 },
+        ),
+      );
     }
     return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
   }) as typeof fetch;
@@ -96,17 +107,27 @@ test("every credentialed NetSuite request opts out of redirect-following", async
     await netsuiteRecords("customer", creds, 1000, mockedTransport);
     await netsuiteRecord("customer", 42, creds, mockedTransport);
     await netsuiteRestlet("customscript_x", "customdeploy_x", {}, creds, "GET", mockedTransport);
-    await netsuiteRestlet("customscript_x", "customdeploy_x", { payload: { a: 1 } }, creds, "POST", mockedTransport);
+    await netsuiteRestlet(
+      "customscript_x",
+      "customdeploy_x",
+      { payload: { a: 1 } },
+      creds,
+      "POST",
+      mockedTransport,
+    );
     await netsuiteSoapFileGet("42", creds, "2022_1", mockedTransport);
 
-    assert.deepEqual(seen.map(({ url }) => new URL(url).href), [
-      `${SUITETALK_ORIGIN}/services/rest/query/v1/suiteql?limit=1000&offset=0`,
-      `${SUITETALK_ORIGIN}/services/rest/record/v1/customer?limit=1000&offset=0`,
-      `${SUITETALK_ORIGIN}/services/rest/record/v1/customer/42?expandSubResources=true`,
-      `${RESTLET_ORIGIN}/app/site/hosting/restlet.nl?script=customscript_x&deploy=customdeploy_x`,
-      `${RESTLET_ORIGIN}/app/site/hosting/restlet.nl?script=customscript_x&deploy=customdeploy_x`,
-      `${SUITETALK_ORIGIN}/services/NetSuitePort_2022_1`,
-    ]);
+    assert.deepEqual(
+      seen.map(({ url }) => new URL(url).href),
+      [
+        `${SUITETALK_ORIGIN}/services/rest/query/v1/suiteql?limit=1000&offset=0`,
+        `${SUITETALK_ORIGIN}/services/rest/record/v1/customer?limit=1000&offset=0`,
+        `${SUITETALK_ORIGIN}/services/rest/record/v1/customer/42?expandSubResources=true`,
+        `${RESTLET_ORIGIN}/app/site/hosting/restlet.nl?script=customscript_x&deploy=customdeploy_x`,
+        `${RESTLET_ORIGIN}/app/site/hosting/restlet.nl?script=customscript_x&deploy=customdeploy_x`,
+        `${SUITETALK_ORIGIN}/services/NetSuitePort_2022_1`,
+      ],
+    );
     // The exact opt-out: without it, fetch follows redirects and replays the
     // OAuth1 Authorization header (and POST bodies) against the redirect
     // target.
@@ -115,7 +136,7 @@ test("every credentialed NetSuite request opts out of redirect-following", async
       ["manual", "manual", "manual", "manual", "manual", "manual"],
     );
     const authorizations = seen.map(({ init }) =>
-      String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "")
+      String((init?.headers as Record<string, string> | undefined)?.Authorization ?? ""),
     );
     for (let i = 0; i < 5; i++) {
       assert.match(authorizations[i]!, /^OAuth realm="123456"/);
@@ -165,27 +186,50 @@ test("NetSuite SuiteQL/REST calls refuse every redirect class without forwarding
   });
   const netsuiteOrigin = await listen(redirector);
   const originalFetch = globalThis.fetch;
-  const redirectModes = remapNetsuiteOrigins(originalFetch, [SUITETALK_ORIGIN, RESTLET_ORIGIN], netsuiteOrigin);
+  const redirectModes = remapNetsuiteOrigins(
+    originalFetch,
+    [SUITETALK_ORIGIN, RESTLET_ORIGIN],
+    netsuiteOrigin,
+  );
 
   try {
-    await assert.rejects(suiteql("select * from customer", creds, 1000, mockedTransport), /HTTP 301 redirect.*credential-capture/s);
+    await assert.rejects(
+      suiteql("select * from customer", creds, 1000, mockedTransport),
+      /HTTP 301 redirect.*credential-capture/s,
+    );
     await assert.rejects(netsuiteRecords("customer", creds, 1000, mockedTransport), /redirect/i);
     await assert.rejects(netsuiteRecord("customer", 42, creds, mockedTransport), /redirect/i);
-    await assert.rejects(netsuiteRestlet("customscript_x", "customdeploy_x", { p: "v" }, creds, "GET", mockedTransport), /redirect/i);
-    await assert.rejects(netsuiteRestlet("customscript_x", "customdeploy_x", { a: 1 }, creds, "POST", mockedTransport), /redirect/i);
+    await assert.rejects(
+      netsuiteRestlet(
+        "customscript_x",
+        "customdeploy_x",
+        { p: "v" },
+        creds,
+        "GET",
+        mockedTransport,
+      ),
+      /redirect/i,
+    );
+    await assert.rejects(
+      netsuiteRestlet("customscript_x", "customdeploy_x", { a: 1 }, creds, "POST", mockedTransport),
+      /redirect/i,
+    );
     await assert.rejects(netsuiteSoapFileGet("42", creds, "2022_1", mockedTransport), /redirect/i);
 
     // Exactly one hop per call reaches the allowlisted NetSuite origin —
     // never a second, followed hop — proving each refusal is terminal rather
     // than retried into the redirector.
-    assert.deepEqual(hops.map(({ path }) => new URL(path, netsuiteOrigin).pathname), [
-      "/services/rest/query/v1/suiteql",
-      "/services/rest/record/v1/customer",
-      "/services/rest/record/v1/customer/42",
-      "/app/site/hosting/restlet.nl",
-      "/app/site/hosting/restlet.nl",
-      "/services/NetSuitePort_2022_1",
-    ]);
+    assert.deepEqual(
+      hops.map(({ path }) => new URL(path, netsuiteOrigin).pathname),
+      [
+        "/services/rest/query/v1/suiteql",
+        "/services/rest/record/v1/customer",
+        "/services/rest/record/v1/customer/42",
+        "/app/site/hosting/restlet.nl",
+        "/app/site/hosting/restlet.nl",
+        "/services/NetSuitePort_2022_1",
+      ],
+    );
     assert.deepEqual(redirectModes, ["manual", "manual", "manual", "manual", "manual", "manual"]);
     // The OAuth1 header was present on the legitimate hops — i.e. the exact
     // material a followed redirect would have leaked — yet the attacker saw
@@ -220,11 +264,19 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
       if (url.pathname === "/services/rest/query/v1/suiteql") {
         suiteqlPages += 1;
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify(
-          suiteqlPages === 1
-            ? { items: [{ id: "1", entityid: "A" }, { id: "2", entityid: "B" }], hasMore: true }
-            : { items: [{ id: "3", entityid: "C" }], hasMore: false },
-        ));
+        res.end(
+          JSON.stringify(
+            suiteqlPages === 1
+              ? {
+                  items: [
+                    { id: "1", entityid: "A" },
+                    { id: "2", entityid: "B" },
+                  ],
+                  hasMore: true,
+                }
+              : { items: [{ id: "3", entityid: "C" }], hasMore: false },
+          ),
+        );
         return;
       }
       if (url.pathname === "/services/rest/record/v1/customer/77") {
@@ -241,7 +293,12 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
       if (url.pathname === "/app/site/hosting/restlet.nl") {
         if (req.method === "GET") {
           res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ script: url.searchParams.get("script"), got: url.searchParams.get("p") }));
+          res.end(
+            JSON.stringify({
+              script: url.searchParams.get("script"),
+              got: url.searchParams.get("p"),
+            }),
+          );
         } else {
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ posted: JSON.parse(raw) }));
@@ -252,9 +309,9 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
         res.writeHead(200, { "content-type": "text/xml" });
         res.end(
           `<?xml version="1.0"?><soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/">` +
-          `<soap-env:Body><getResponse isSuccess="true"><name>invoice.pdf</name>` +
-          `<content>${Buffer.from("pdf-bytes").toString("base64")}</content></getResponse></soap-env:Body>` +
-          `</soap-env:Envelope>`,
+            `<soap-env:Body><getResponse isSuccess="true"><name>invoice.pdf</name>` +
+            `<content>${Buffer.from("pdf-bytes").toString("base64")}</content></getResponse></soap-env:Body>` +
+            `</soap-env:Envelope>`,
         );
         return;
       }
@@ -270,7 +327,12 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
   remapNetsuiteOrigins(originalFetch, [RESTLET_ORIGIN], netsuiteOrigin);
 
   try {
-    const rows = await suiteql<{ id: string; entityid: string }>("select id, entityid from customer", { ...creds, host: netsuiteOrigin }, 1000, mockedTransport);
+    const rows = await suiteql<{ id: string; entityid: string }>(
+      "select id, entityid from customer",
+      { ...creds, host: netsuiteOrigin },
+      1000,
+      mockedTransport,
+    );
     assert.deepEqual(rows, [
       { id: "1", entityid: "A" },
       { id: "2", entityid: "B" },
@@ -278,10 +340,20 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
     ]);
     assert.equal(suiteqlPages, 2, "pagination must follow hasMore with limit/offset");
 
-    const collection = await netsuiteRecords<{ id: string }>("customer", { ...creds, host: netsuiteOrigin }, 1000, mockedTransport);
+    const collection = await netsuiteRecords<{ id: string }>(
+      "customer",
+      { ...creds, host: netsuiteOrigin },
+      1000,
+      mockedTransport,
+    );
     assert.deepEqual(collection, [{ id: "77", entityid: "Acme" }]);
 
-    const record = await netsuiteRecord<{ id: string }>("customer", "77", { ...creds, host: netsuiteOrigin }, mockedTransport);
+    const record = await netsuiteRecord<{ id: string }>(
+      "customer",
+      "77",
+      { ...creds, host: netsuiteOrigin },
+      mockedTransport,
+    );
     assert.equal(record.id, "77");
 
     const restletGet = await netsuiteRestlet<{ script: string; got: string }>(
@@ -294,10 +366,22 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
     );
     assert.deepEqual(restletGet, { script: "customscript_x", got: "v" });
 
-    const restletPost = await netsuiteRestlet<{ posted: unknown }>("customscript_x", "customdeploy_x", { a: 1 }, creds, "POST", mockedTransport);
+    const restletPost = await netsuiteRestlet<{ posted: unknown }>(
+      "customscript_x",
+      "customdeploy_x",
+      { a: 1 },
+      creds,
+      "POST",
+      mockedTransport,
+    );
     assert.deepEqual(restletPost, { posted: { a: 1 } });
 
-    const file = await netsuiteSoapFileGet("42", { ...creds, host: netsuiteOrigin }, "2022_1", mockedTransport);
+    const file = await netsuiteSoapFileGet(
+      "42",
+      { ...creds, host: netsuiteOrigin },
+      "2022_1",
+      mockedTransport,
+    );
     assert.equal(file.name, "invoice.pdf");
     assert.deepEqual(file.bytes, Buffer.from("pdf-bytes"));
 
@@ -311,7 +395,12 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
     // RESTlet GET parameters stay typed: objects are rejected before any
     // request is made.
     await assert.rejects(
-      netsuiteRestlet("customscript_x", "customdeploy_x", { bad: { nested: true } } as never, creds),
+      netsuiteRestlet(
+        "customscript_x",
+        "customdeploy_x",
+        { bad: { nested: true } } as never,
+        creds,
+      ),
       /must be a string or number/,
     );
   } finally {
@@ -326,12 +415,28 @@ test("a RESTlet call refuses an account ID that is not a NetSuite host label bef
     requests++;
     return Response.json({});
   };
-  for (const account of ["evil.example.com/x?", "123456@attacker", "a b", "-123456", "123456_", "", "x".repeat(64)]) {
+  for (const account of [
+    "evil.example.com/x?",
+    "123456@attacker",
+    "a b",
+    "-123456",
+    "123456_",
+    "",
+    "x".repeat(64),
+  ]) {
     await assert.rejects(
-      netsuiteRestlet("customscript_x", "customdeploy_x", {}, { ...creds, account }, "GET", transport),
+      netsuiteRestlet(
+        "customscript_x",
+        "customdeploy_x",
+        {},
+        { ...creds, account },
+        "GET",
+        transport,
+      ),
       /NetSuite account ID must be/,
     );
   }
   assert.equal(requests, 0);
-  for (const account of ["1234567", "1234567_SB1", "TSTDRV1234567"]) assert.equal(isNetSuiteAccountId(account), true);
+  for (const account of ["1234567", "1234567_SB1", "TSTDRV1234567"])
+    assert.equal(isNetSuiteAccountId(account), true);
 });

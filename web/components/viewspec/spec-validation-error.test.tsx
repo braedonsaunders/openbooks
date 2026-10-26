@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../../testing/jsdom-env.ts";
 
 // F5-7: ModuleView's spec-validation failure title was hardcoded English in
 // a server component that binds no next-intl namespace. Any-locale users
@@ -39,7 +39,10 @@ test("F5-7: the invalid-view panel title reads the session locale", async () => 
   try {
     const text = host.textContent ?? "";
     assert.match(text, /Diese Ansicht konnte nicht gerendert werden/);
-    assert.ok(!text.includes("This view could not be rendered"), "English panel title must not leak");
+    assert.ok(
+      !text.includes("This view could not be rendered"),
+      "English panel title must not leak",
+    );
     // The validator diagnostics themselves are data, not chrome: they pass
     // through untouched in every locale.
     assert.ok(text.includes("blocks[0] is unknown"), "validator errors must still render");

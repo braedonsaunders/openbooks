@@ -12,9 +12,8 @@ import type { Authz } from "../../../lib/authz";
  */
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { loadPaymentFlyout } = await import("./payment-flyout");
 
 async function receiptActor(orgId: string) {

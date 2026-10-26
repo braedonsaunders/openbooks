@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto'
-import { NextResponse } from 'next/server'
-import { apiErrorResponse, typedRefusal } from './api/error-response'
+import { randomUUID } from "node:crypto";
+import { NextResponse } from "next/server";
+import { apiErrorResponse, typedRefusal } from "./api/error-response";
 
 /**
  * Shared failure mapper for compliance write verbs. It lives apart from
@@ -14,30 +14,30 @@ import { apiErrorResponse, typedRefusal } from './api/error-response'
  * the server log, never in the body.
  */
 export async function complianceWriteFailure(error: unknown): Promise<NextResponse> {
-  if (typedRefusal(error)) return apiErrorResponse(error)
-  const code = (error as { code?: unknown } | null)?.code
-  if (code === '23505') {
+  if (typedRefusal(error)) return apiErrorResponse(error);
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code === "23505") {
     return NextResponse.json(
-      { error: 'conflicts with an existing record — reread it before writing again' },
+      { error: "conflicts with an existing record — reread it before writing again" },
       { status: 409 },
-    )
+    );
   }
-  if (code === '23503') {
+  if (code === "23503") {
     return NextResponse.json(
-      { error: 'a referenced record no longer exists — reread the form and retry' },
+      { error: "a referenced record no longer exists — reread the form and retry" },
       { status: 422 },
-    )
+    );
   }
-  if (code === '22P02' || code === '22001') {
+  if (code === "22P02" || code === "22001") {
     return NextResponse.json(
-      { error: 'an input value has an invalid shape for its column' },
+      { error: "an input value has an invalid shape for its column" },
       { status: 400 },
-    )
+    );
   }
-  const correlationId = randomUUID()
+  const correlationId = randomUUID();
   console.error(
     `[compliance-write-failure] ${correlationId}:`,
     error instanceof Error ? error.message : error,
-  )
-  return NextResponse.json({ error: 'save failed', correlationId }, { status: 500 })
+  );
+  return NextResponse.json({ error: "save failed", correlationId }, { status: 500 });
 }

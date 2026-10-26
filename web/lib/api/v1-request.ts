@@ -37,11 +37,13 @@ export async function emitV1ExecutionEvent(
 ): Promise<NextResponse | null> {
   try {
     if (!takeClaimedCommandEvidence(auth.audit)) {
-      await insertApiKeyEvent(transportEvent(
-        auth.audit,
-        { orgId: auth.user.orgId, keyId: auth.keyId },
-        { statusCode: status, error: error ?? null },
-      ));
+      await insertApiKeyEvent(
+        transportEvent(
+          auth.audit,
+          { orgId: auth.user.orgId, keyId: auth.keyId },
+          { statusCode: status, error: error ?? null },
+        ),
+      );
     }
     return null;
   } catch (cause) {
@@ -124,16 +126,21 @@ export async function withV1Request(
       status: result.status,
       headers: {
         "cache-control": "no-store",
-        ...(result.replayed === undefined ? {} : { "idempotency-replayed": String(result.replayed) }),
+        ...(result.replayed === undefined
+          ? {}
+          : { "idempotency-replayed": String(result.replayed) }),
       },
     });
   } catch (error) {
     try {
       const mapped = mapV1Error(error);
       const tail = await emitV1ExecutionEvent(label, mapped.status, auth, mapped.code);
-      return tail ?? NextResponse.json(
-        { error: mapped.code, message: mapped.message, details: mapped.details },
-        { status: mapped.status },
+      return (
+        tail ??
+        NextResponse.json(
+          { error: mapped.code, message: mapped.message, details: mapped.details },
+          { status: mapped.status },
+        )
       );
     } catch (unmapped) {
       console.error(`[${label}] application operation failed`, unmapped);

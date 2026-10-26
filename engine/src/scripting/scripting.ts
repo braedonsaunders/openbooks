@@ -1,6 +1,11 @@
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { randomUUID } from "node:crypto";
-import { createGuestLogSink, GUEST_LOG_MAX_BYTES, GUEST_LOG_MAX_ENTRIES, newAsyncContext } from "../platform/quickjs.ts";
+import {
+  createGuestLogSink,
+  GUEST_LOG_MAX_BYTES,
+  GUEST_LOG_MAX_ENTRIES,
+  newAsyncContext,
+} from "../platform/quickjs.ts";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import type { ContributedLine } from "../journal/contributed-lines.ts";
 import type { CustomGlLineRunEvidence } from "../journal/posting-contracts.ts";
@@ -16,7 +21,12 @@ import { CronExpressionParser } from "cron-parser";
 import { listSchema, runUserSql } from "../platform/sqlapi.ts";
 import type { ScriptJournalResult } from "../journal/script-journal-contract.ts";
 import { installedScriptJournalWriter } from "./journal-writer.ts";
-import { actorHasPermission, actorIdentity, actorPrincipal, isSystemAutomationActor } from "../organization/actor-permissions.ts";
+import {
+  actorHasPermission,
+  actorIdentity,
+  actorPrincipal,
+  isSystemAutomationActor,
+} from "../organization/actor-permissions.ts";
 import { grantsConferring } from "../organization/permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -202,8 +212,10 @@ export function beforePostCustomControlsChanged(previous: unknown, next: unknown
   const before = isRecord(previous) ? previous : {};
   const after = isRecord(next) ? next : {};
   for (const key of BEFORE_POST_PROTECTED_CUSTOM_FIELDS) {
-    if (Object.hasOwn(before, key) !== Object.hasOwn(after, key)
-      || (Object.hasOwn(before, key) && canonicalJson(before[key]) !== canonicalJson(after[key]))) {
+    if (
+      Object.hasOwn(before, key) !== Object.hasOwn(after, key) ||
+      (Object.hasOwn(before, key) && canonicalJson(before[key]) !== canonicalJson(after[key]))
+    ) {
       return `before-post automation changed protected posting custom field "custom.${key}"; configure that financial control before approval`;
     }
   }
@@ -260,7 +272,10 @@ async function scriptAuthorityRefusal(
   if (!authority) {
     return `this run has no signed-in user and the script has no run-as user; save the script again as a user who holds ${permission} so its unattended runs act under that user's permissions`;
   }
-  if (authority.kind === "run_as" && !(await actorIdentity(db, orgId, authority.userId))?.isActive) {
+  if (
+    authority.kind === "run_as" &&
+    !(await actorIdentity(db, orgId, authority.userId))?.isActive
+  ) {
     return `the script's run-as user is no longer an active user of this organization; save the script again as an active user who holds ${permission}`;
   }
   if (!(await actorHasPermission(db, orgId, authority.userId, permission))) {
@@ -285,7 +300,8 @@ export async function scriptQueryRefusal(
 ): Promise<string | null> {
   const authority = scriptAuthority(ctx, runAsUserId);
   // Canonical switchboard read (::boolean casts threw on non-boolean imports).
-  if (!(await orgFeatureEnabled(ctx.org.id, "queryConsole"))) return "queryConsole feature is disabled";
+  if (!(await orgFeatureEnabled(ctx.org.id, "queryConsole")))
+    return "queryConsole feature is disabled";
   const refusal = await scriptAuthorityRefusal(ctx.org.id, authority, "sql.execute");
   if (refusal) return refusal;
   if ((await actorAllowedSubsidiaryIds(db, ctx.org.id, authority!.userId)) !== null) {
@@ -305,7 +321,10 @@ export async function scriptPayrollRead(
   runAsUserId?: string | null,
 ): Promise<boolean> {
   const authority = scriptAuthority(ctx, runAsUserId);
-  return authority !== null && (await actorHasPermission(db, ctx.org.id, authority.userId, "payroll.read"));
+  return (
+    authority !== null &&
+    (await actorHasPermission(db, ctx.org.id, authority.userId, "payroll.read"))
+  );
 }
 
 /**
@@ -347,25 +366,30 @@ export async function scriptSaveRefusal(
       return "this script reads with ob.query, ob.search or ob.record, which need the queryConsole feature";
     }
     const refusal = await scriptAuthorityRefusal(orgId, authority, "sql.execute");
-    if (refusal) return `this script reads with ob.query, ob.search or ob.record and runs under your permissions: ${refusal}`;
+    if (refusal)
+      return `this script reads with ob.query, ob.search or ob.record and runs under your permissions: ${refusal}`;
     if ((await actorAllowedSubsidiaryIds(db, orgId, saverId)) !== null) {
       return "this script reads with ob.query, ob.search or ob.record and runs under your permissions: raw queries require unrestricted subsidiary access";
     }
   }
   if (SCRIPT_JOURNAL_CALL.test(source)) {
     const refusal = await scriptAuthorityRefusal(orgId, authority, "gl.post");
-    if (refusal) return `this script writes journals with ob.journal.create and runs under your permissions: ${refusal}`;
+    if (refusal)
+      return `this script writes journals with ob.journal.create and runs under your permissions: ${refusal}`;
   }
   return null;
 }
 
 /** Domain-boundary gate for every script execution path. */
 export async function scriptingFeatureEnabled(orgId: string): Promise<boolean> {
-  const result = (await db.execute<{ enabled: string | null }>(sql`
+  const result = await db.execute<{ enabled: string | null }>(
+    sql`
     select settings #>> '{features,scripts}' as enabled
       from orgs
      where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return result[0]?.enabled === "true";
 }
 
@@ -459,18 +483,12 @@ const SCRIPT_JOURNAL_TRIGGERS = new Set([
   "endpoint",
 ]);
 
-export function scriptHostAllowsQuery(
-  trigger: string,
-  opts: RunScriptOptions = {},
-): boolean {
+export function scriptHostAllowsQuery(trigger: string, opts: RunScriptOptions = {}): boolean {
   if (opts.deterministic) return false;
   return SCRIPT_QUERY_TRIGGERS.has(trigger);
 }
 
-export function scriptHostAllowsJournal(
-  trigger: string,
-  opts: RunScriptOptions = {},
-): boolean {
+export function scriptHostAllowsJournal(trigger: string, opts: RunScriptOptions = {}): boolean {
   if (opts.forbidJournalCreate) return false;
   return SCRIPT_JOURNAL_TRIGGERS.has(trigger);
 }
@@ -546,9 +564,7 @@ export function buildGovernedSearchSql(
   let entries: Array<[string, unknown]> = [];
   if (filters !== undefined && filters !== null) {
     if (!isRecord(filters)) {
-      throw new Error(
-        `ob.search filters on ${table} must be an object of column = value pairs`,
-      );
+      throw new Error(`ob.search filters on ${table} must be an object of column = value pairs`);
     }
     entries = Object.entries(filters);
   }
@@ -616,8 +632,7 @@ export const SCRIPT_JOURNAL_SETTLE_GRACE_MS = 5_000;
 /** Terminal outcome of one journal.create host write (authorization refusal
  * or the ledger result), shared by the raced write and its settlement read. */
 export type JournalWriteOutcome =
-  | { kind: "created"; created: ScriptJournalResult }
-  | { kind: "refused"; refusal: string };
+  { kind: "created"; created: ScriptJournalResult } | { kind: "refused"; refusal: string };
 
 type SettledJournalWrite =
   | { status: "committed"; outcome: JournalWriteOutcome }
@@ -650,9 +665,7 @@ export async function settleTimedOutJournalWrite(
   return settled;
 }
 
-export type ScriptQueryJson =
-  | { ok: true; json: string }
-  | { ok: false; refusal: string };
+export type ScriptQueryJson = { ok: true; json: string } | { ok: false; refusal: string };
 
 export function scriptQueryResultCapRefusal(
   maxBytes: number = MAX_SCRIPT_QUERY_RESULT_BYTES,
@@ -705,12 +718,12 @@ function createByteCappedJsonWriter(maxBytes: number) {
     // Unescaped UTF-8 plus quotes is a lower bound: refuse before escaping
     // so a multi-megabyte cell never becomes a JSON string.
     if (offset + Buffer.byteLength(s, "utf8") + 2 > maxBytes) return false;
-    if (!write("\"")) return false;
+    if (!write('"')) return false;
     let start = 0;
     for (let i = 0; i < s.length; i++) {
       const c = s.charCodeAt(i);
       let esc: string | undefined;
-      if (c === 0x22) esc = "\\\"";
+      if (c === 0x22) esc = '\\"';
       else if (c === 0x5c) esc = "\\\\";
       else if (c === 0x08) esc = "\\b";
       else if (c === 0x09) esc = "\\t";
@@ -725,7 +738,7 @@ function createByteCappedJsonWriter(maxBytes: number) {
       }
     }
     if (start < s.length && !write(s.slice(start))) return false;
-    return write("\"");
+    return write('"');
   }
 
   function encode(value: unknown): boolean {
@@ -820,8 +833,9 @@ export async function runScript(
       return { error: vm.newError(`__OB_ABORT__${String(reason)}`) };
     });
 
-    const hostTimeoutError = (op: string) =>
-      ({ error: vm.newError(`__OB_HOST_TIMEOUT__${op}: script run deadline exceeded`) });
+    const hostTimeoutError = (op: string) => ({
+      error: vm.newError(`__OB_HOST_TIMEOUT__${op}: script run deadline exceeded`),
+    });
 
     // The caller's query authorization is fixed for the run; resolve it once
     // on first use so ob.search loops do not re-read roles per statement.
@@ -898,7 +912,9 @@ export async function runScript(
       try {
         filters = JSON.parse(String(vm.dump(filtersH)));
       } catch {
-        return { error: vm.newError(`search: filters must be a JSON object of column = value pairs`) };
+        return {
+          error: vm.newError(`search: filters must be a JSON object of column = value pairs`),
+        };
       }
       try {
         const outcome = await withScriptHostDeadline(deadline, async () => {
@@ -906,13 +922,16 @@ export async function runScript(
           const refusal = await queryRefusal;
           if (refusal) return { kind: "refused" as const, refusal };
           searchSchema ??= new Map(
-            (await listSchema(ctx.org.id, {
-              payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)),
-              expenseRead: await (expenseRead ??= scriptExpenseRead(ctx, opts.runAsUserId)),
-            })).map((t) => [t.name, t.columns.map((c) => c.name)]),
+            (
+              await listSchema(ctx.org.id, {
+                payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)),
+                expenseRead: await (expenseRead ??= scriptExpenseRead(ctx, opts.runAsUserId)),
+              })
+            ).map((t) => [t.name, t.columns.map((c) => c.name)]),
           );
           const columns = searchSchema.get(table);
-          if (!columns) return { kind: "refused" as const, refusal: unknownSearchTableRefusal(table) };
+          if (!columns)
+            return { kind: "refused" as const, refusal: unknownSearchTableRefusal(table) };
           const result = await runUserSql(buildGovernedSearchSql(table, filters, columns), {
             orgId: ctx.org.id,
             payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)),
@@ -943,96 +962,101 @@ export async function runScript(
     // namespace, call N writes under `${namespace}#${N}` so a retry of the
     // same logical run observes the first execution's document.
     let journalCallOrdinal = 0;
-    const journalFn = vm.newAsyncifiedFunction(
-      "__journal_create",
-      async (inputH, postH) => {
-        // custom_gl_lines contributes lines through its return value; a
-        // direct ledger write from inside the trigger would bypass host
-        // validation (balance, account checks) and the single-entry stamp.
-        if (!journalAllowed) {
-          return {
-            error: vm.newError(
-              opts.forbidJournalCreate
-                ? `journal.create is not available in ${ctx.trigger} (return { lines: [...] } instead)`
-                : `journal.create is not available in ${ctx.trigger}`,
-            ),
-          };
-        }
-        const remainingMs = deadline - Date.now();
-        if (remainingMs <= 0) return hostTimeoutError("journal.create");
-        const post = vm.dump(postH) === true;
-        if (post && ctx.trigger.startsWith("before_")) {
-          return {
-            error: vm.newError(
-              `journal.create: post:true is not allowed in ${ctx.trigger} (create a draft instead)`,
-            ),
-          };
-        }
-        try {
-          // gl.post and the live subsidiary allowlist are host I/O: they
-          // must share the run deadline with the ledger write. A late
-          // authorization read cannot outlive the script timeout. The write
-          // itself runs fenced to the same deadline inside the ledger
-          // boundary (SET LOCAL statement_timeout on the transaction it
-          // owns), so a statement still blocked past the deadline is
-          // aborted by PostgreSQL instead of committing after the host
-          // already reported a timeout.
-          const idempotencyKey = opts.idempotencyNamespace === undefined
+    const journalFn = vm.newAsyncifiedFunction("__journal_create", async (inputH, postH) => {
+      // custom_gl_lines contributes lines through its return value; a
+      // direct ledger write from inside the trigger would bypass host
+      // validation (balance, account checks) and the single-entry stamp.
+      if (!journalAllowed) {
+        return {
+          error: vm.newError(
+            opts.forbidJournalCreate
+              ? `journal.create is not available in ${ctx.trigger} (return { lines: [...] } instead)`
+              : `journal.create is not available in ${ctx.trigger}`,
+          ),
+        };
+      }
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return hostTimeoutError("journal.create");
+      const post = vm.dump(postH) === true;
+      if (post && ctx.trigger.startsWith("before_")) {
+        return {
+          error: vm.newError(
+            `journal.create: post:true is not allowed in ${ctx.trigger} (create a draft instead)`,
+          ),
+        };
+      }
+      try {
+        // gl.post and the live subsidiary allowlist are host I/O: they
+        // must share the run deadline with the ledger write. A late
+        // authorization read cannot outlive the script timeout. The write
+        // itself runs fenced to the same deadline inside the ledger
+        // boundary (SET LOCAL statement_timeout on the transaction it
+        // owns), so a statement still blocked past the deadline is
+        // aborted by PostgreSQL instead of committing after the host
+        // already reported a timeout.
+        const idempotencyKey =
+          opts.idempotencyNamespace === undefined
             ? undefined
             : `${opts.idempotencyNamespace}#${(journalCallOrdinal += 1)}`;
-          let pendingWrite: Promise<JournalWriteOutcome> | undefined;
-          const outcome = await withScriptHostDeadline(deadline, () => {
-            pendingWrite = (async (): Promise<JournalWriteOutcome> => {
-              // Fail closed when the process never installed the ledger
-              // writer: refuse before any authorization I/O, never no-op.
-              const writer = installedScriptJournalWriter();
-              if (!writer) {
-                return { kind: "refused" as const, refusal: "journal.create: journal writes are not installed in this process (call installEngineSeams())" };
-              }
-              const authority = scriptAuthority(ctx, opts.runAsUserId);
-              const refusal = await scriptAuthorityRefusal(ctx.org.id, authority, "gl.post");
-              if (refusal) return { kind: "refused" as const, refusal: `journal.create: ${refusal}` };
-              const input = JSON.parse(String(vm.dump(inputH)));
-              const allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(db, ctx.org.id, authority!.userId);
-              const created = await writer(
-                ctx.org.id,
-                ctx.user?.id ?? null,
-                input,
-                { post, allowedSubsidiaryIds, idempotencyKey, deadlineMs: deadline, requireScriptsFeature: true },
-              );
-              return { kind: "created" as const, created };
-            })();
-            return pendingWrite;
-          });
-          if (outcome === SCRIPT_HOST_TIMEOUT) {
-            // The race fired while the write was still in flight: await its
-            // terminal outcome and report THAT. A write that committed in
-            // the same instant as the deadline reports its journal — never
-            // a timeout for a journal that exists, and never a silent
-            // commit behind a timeout report. Under fencing this settles
-            // almost immediately; only a write nested in an outer
-            // (unfenced) transaction can outlive the grace, and that case
-            // keeps the timeout report.
-            const settled = await settleTimedOutJournalWrite(pendingWrite);
-            if (settled.status === "committed") {
-              if (settled.outcome.kind === "refused") {
-                return { error: vm.newError(settled.outcome.refusal) };
-              }
-              return vm.newString(JSON.stringify(settled.outcome.created));
+        let pendingWrite: Promise<JournalWriteOutcome> | undefined;
+        const outcome = await withScriptHostDeadline(deadline, () => {
+          pendingWrite = (async (): Promise<JournalWriteOutcome> => {
+            // Fail closed when the process never installed the ledger
+            // writer: refuse before any authorization I/O, never no-op.
+            const writer = installedScriptJournalWriter();
+            if (!writer) {
+              return {
+                kind: "refused" as const,
+                refusal:
+                  "journal.create: journal writes are not installed in this process (call installEngineSeams())",
+              };
             }
-            return hostTimeoutError("journal.create");
+            const authority = scriptAuthority(ctx, opts.runAsUserId);
+            const refusal = await scriptAuthorityRefusal(ctx.org.id, authority, "gl.post");
+            if (refusal) return { kind: "refused" as const, refusal: `journal.create: ${refusal}` };
+            const input = JSON.parse(String(vm.dump(inputH)));
+            const allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(
+              db,
+              ctx.org.id,
+              authority!.userId,
+            );
+            const created = await writer(ctx.org.id, ctx.user?.id ?? null, input, {
+              post,
+              allowedSubsidiaryIds,
+              idempotencyKey,
+              deadlineMs: deadline,
+              requireScriptsFeature: true,
+            });
+            return { kind: "created" as const, created };
+          })();
+          return pendingWrite;
+        });
+        if (outcome === SCRIPT_HOST_TIMEOUT) {
+          // The race fired while the write was still in flight: await its
+          // terminal outcome and report THAT. A write that committed in
+          // the same instant as the deadline reports its journal — never
+          // a timeout for a journal that exists, and never a silent
+          // commit behind a timeout report. Under fencing this settles
+          // almost immediately; only a write nested in an outer
+          // (unfenced) transaction can outlive the grace, and that case
+          // keeps the timeout report.
+          const settled = await settleTimedOutJournalWrite(pendingWrite);
+          if (settled.status === "committed") {
+            if (settled.outcome.kind === "refused") {
+              return { error: vm.newError(settled.outcome.refusal) };
+            }
+            return vm.newString(JSON.stringify(settled.outcome.created));
           }
-          if (outcome.kind === "refused") return { error: vm.newError(outcome.refusal) };
-          return vm.newString(JSON.stringify(outcome.created));
-        } catch (e) {
-          return {
-            error: vm.newError(
-              `journal.create failed: ${(e as Error).message}`,
-            ),
-          };
+          return hostTimeoutError("journal.create");
         }
-      },
-    );
+        if (outcome.kind === "refused") return { error: vm.newError(outcome.refusal) };
+        return vm.newString(JSON.stringify(outcome.created));
+      } catch (e) {
+        return {
+          error: vm.newError(`journal.create failed: ${(e as Error).message}`),
+        };
+      }
+    });
 
     vm.setProp(obHandle, "log", logFn);
     vm.setProp(obHandle, "abort", abortFn);
@@ -1105,9 +1129,7 @@ export async function runScript(
       })()
     `;
 
-    const preparation = opts.deterministic
-      ? vm.evalCode(DETERMINISTIC_SCRIPT_GLOBALS)
-      : null;
+    const preparation = opts.deterministic ? vm.evalCode(DETERMINISTIC_SCRIPT_GLOBALS) : null;
     // A preparation failure must reach the same error outcome as a script
     // failure. Never execute user source with partially installed controls.
     let result: Awaited<ReturnType<typeof vm.evalCodeAsync>>;
@@ -1121,9 +1143,7 @@ export async function runScript(
       const err = vm.dump(result.error);
       result.error.dispose();
       const msg =
-        typeof err === "object" && err && "message" in err
-          ? String((err).message)
-          : String(err);
+        typeof err === "object" && err && "message" in err ? String(err.message) : String(err);
       if (msg.startsWith("__OB_ABORT__")) {
         return {
           status: "aborted",
@@ -1146,8 +1166,7 @@ export async function runScript(
     result.value.dispose();
     // raw is the VM's JSON.stringify(out); non-serializable returns (functions,
     // undefined) come back as a non-string — treat them as "no return value".
-    const parsed =
-      typeof raw === "string" && raw !== "null" ? JSON.parse(raw) : null;
+    const parsed = typeof raw === "string" && raw !== "null" ? JSON.parse(raw) : null;
     let set: Record<string, unknown> | undefined;
     // The { set: {...} } mutation contract only applies to before_* triggers —
     // endpoint/bulk/scheduled scripts' returns are plain data, never mutations.
@@ -1180,9 +1199,9 @@ export async function runScript(
           }
         }
         if (
-          (ctx.trigger === "before_submit" || ctx.trigger === "before_post")
-          && k === "custom"
-          && ["vendor_payment", "customer_payment"].includes(String(ctx.document?.kind))
+          (ctx.trigger === "before_submit" || ctx.trigger === "before_post") &&
+          k === "custom" &&
+          ["vendor_payment", "customer_payment"].includes(String(ctx.document?.kind))
         ) {
           const paymentError = paymentCustomMutationError(v);
           if (paymentError) {
@@ -1264,12 +1283,7 @@ export async function runTriggerScripts(
     await db.execute(
       sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${ctx.org.id}`,
     );
-    if (
-      res.status === "aborted" ||
-      res.status === "error" ||
-      res.status === "timeout"
-    )
-      break;
+    if (res.status === "aborted" || res.status === "error" || res.status === "timeout") break;
   }
   return outcomes;
 }
@@ -1302,10 +1316,7 @@ export async function runScheduledScript(
     computeScheduledScriptNextRunAt(s.cron);
   }
 
-  const [org] = await db
-    .select()
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
   if (!org) throw new Error("org not found");
 
   // Attribution before any source runs: a manual "Run now" carries its
@@ -1374,10 +1385,7 @@ export async function runEndpointScript(
     );
   if (!s) return null;
 
-  const [org] = await db
-    .select()
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
   if (!org) throw new Error("org not found");
 
   const ctx: ScriptContext = {
@@ -1443,10 +1451,7 @@ export async function runBulkScript(
     );
   if (!s) throw new Error("script not found");
 
-  const [org] = await db
-    .select()
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, orgId));
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
   if (!org) throw new Error("org not found");
 
   // Attribution before any source runs, exactly like the scheduled runner:
@@ -1545,18 +1550,15 @@ export async function resolveScriptUser(
   if (!actorId || isSystemAutomationActor(actorId)) return null;
   const u = await actorPrincipal(db, orgId, actorId);
   if (!u?.isActive) {
-    throw new ScriptActorError(`run actor ${actorId} is not an active authorized user of organization ${orgId}`);
+    throw new ScriptActorError(
+      `run actor ${actorId} is not an active authorized user of organization ${orgId}`,
+    );
   }
   const roles = await db
     .select({ key: schema.appRoles.key })
     .from(schema.roleAssignments)
     .innerJoin(schema.appRoles, eq(schema.appRoles.id, schema.roleAssignments.roleId))
-    .where(
-      and(
-        eq(schema.roleAssignments.orgId, orgId),
-        eq(schema.roleAssignments.userId, actorId),
-      ),
-    )
+    .where(and(eq(schema.roleAssignments.orgId, orgId), eq(schema.roleAssignments.userId, actorId)))
     .orderBy(asc(schema.appRoles.isBuiltIn), asc(schema.appRoles.key));
   return { id: u.id, name: u.name, roles: roles.map((r) => r.key) };
 }
@@ -1600,8 +1602,7 @@ export function computeNextRunAt(
   }
 }
 
-export const SCHEDULED_SCRIPT_SCHEDULER_IDENTITY =
-  "scheduled-script-scheduler";
+export const SCHEDULED_SCRIPT_SCHEDULER_IDENTITY = "scheduled-script-scheduler";
 
 /**
  * Atomically quarantine one malformed active scheduled script and preserve
@@ -1616,7 +1617,8 @@ export async function quarantineInvalidScheduledScript(input: {
   nextRunAt: Date | string | null;
 }): Promise<boolean> {
   const errorMessage = "scheduled script quarantined: invalid cron expression";
-  const quarantined = await db.execute<{ runId: string }>(sql`
+  const quarantined = await db.execute<{ runId: string }>(
+    sql`
     with quarantined as (
       update user_scripts
          set is_active = false,
@@ -1666,7 +1668,9 @@ export async function quarantineInvalidScheduledScript(input: {
     select failure.id as "runId"
       from failure
       cross join audited
-  `, "objects");
+  `,
+    "objects",
+  );
   return quarantined.length === 1;
 }
 
@@ -1757,16 +1761,16 @@ export interface CustomGlLineRunRequest {
  * enabled while the parent is off). Unknown keys resolve closed.
  */
 export async function customGlLinesEnabled(orgId: string): Promise<boolean> {
-  const r = (await db.execute<{ features: FeatureState | null }>(sql`
+  const r = await db.execute<{ features: FeatureState | null }>(
+    sql`
     select settings->'features' as features
       from orgs
      where id = ${orgId}
-  `, "objects"));
-  const state = r[0]?.features ?? {};
-  return (
-    featureEnabled(state, "scripts") &&
-    featureEnabled(state, "allocationsAtPosting")
+  `,
+    "objects",
   );
+  const state = r[0]?.features ?? {};
+  return featureEnabled(state, "scripts") && featureEnabled(state, "allocationsAtPosting");
 }
 
 /**
@@ -1782,9 +1786,7 @@ export async function runCustomGlLineScripts(
   req: CustomGlLineRunRequest,
 ): Promise<ContributedLine[]> {
   if (!(await customGlLinesEnabled(req.orgId))) return [];
-  const docKind = String(
-    (req.document as { kind?: unknown } | null)?.kind ?? "",
-  );
+  const docKind = String((req.document as { kind?: unknown } | null)?.kind ?? "");
   const scripts = await db
     .select()
     .from(schema.userScripts)
@@ -1793,23 +1795,23 @@ export async function runCustomGlLineScripts(
         eq(schema.userScripts.orgId, req.orgId),
         eq(schema.userScripts.triggerPoint, CUSTOM_GL_LINES_TRIGGER),
         eq(schema.userScripts.isActive, true),
-        or(
-          isNull(schema.userScripts.documentKind),
-          eq(schema.userScripts.documentKind, docKind),
-        ),
+        or(isNull(schema.userScripts.documentKind), eq(schema.userScripts.documentKind, docKind)),
       ),
     )
     .orderBy(asc(schema.userScripts.sortOrder));
   if (scripts.length === 0) return [];
 
   const documentSubsidiary = req.document.subsidiaryId;
-  const documentSubsidiaryId = typeof documentSubsidiary === "string"
-    ? documentSubsidiary
-    : documentSubsidiary === null
-      ? (await loadSubsidiaryContext(db, req.orgId)).rootId
-      : null;
+  const documentSubsidiaryId =
+    typeof documentSubsidiary === "string"
+      ? documentSubsidiary
+      : documentSubsidiary === null
+        ? (await loadSubsidiaryContext(db, req.orgId)).rootId
+        : null;
   if (!documentSubsidiaryId) {
-    throw new CustomGlLinesError("custom_gl_lines: the document's subsidiary could not be resolved");
+    throw new CustomGlLinesError(
+      "custom_gl_lines: the document's subsidiary could not be resolved",
+    );
   }
 
   // The posting caller needs gl.post, re-resolved live against its roles —
@@ -1818,19 +1820,11 @@ export async function runCustomGlLineScripts(
   // has no caller, so each script is authorized as its run-as user instead
   // (checked per script below) and refused by name when it has none.
   const user = await resolveScriptUser(req.orgId, req.actorId);
-  if (
-    user &&
-    !(await actorHasPermission(db, req.orgId, user.id, "gl.post"))
-  ) {
-    throw new CustomGlLinesError(
-      `custom_gl_lines: user "${user.name}" lacks gl.post`,
-    );
+  if (user && !(await actorHasPermission(db, req.orgId, user.id, "gl.post"))) {
+    throw new CustomGlLinesError(`custom_gl_lines: user "${user.name}" lacks gl.post`);
   }
 
-  const [org] = await db
-    .select()
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, req.orgId));
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, req.orgId));
   if (!org) throw new CustomGlLinesError("custom_gl_lines: organization not found");
 
   // The same live allowlist __journal_create passes into createScriptJournal:
@@ -1854,7 +1848,9 @@ export async function runCustomGlLineScripts(
       const authority = scriptAuthority({}, s.runAsUserId);
       const refusal = await scriptAuthorityRefusal(req.orgId, authority, "gl.post");
       if (refusal) {
-        throw new CustomGlLinesError(`custom_gl_lines script "${s.name}": ${refusal}`, [...completed]);
+        throw new CustomGlLinesError(`custom_gl_lines script "${s.name}": ${refusal}`, [
+          ...completed,
+        ]);
       }
       allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(db, req.orgId, authority!.userId);
     }
@@ -1905,14 +1901,16 @@ export async function runCustomGlLineScripts(
       );
     }
     try {
-      out.push(...(await resolveCustomGlLines(
-        req.orgId,
-        s.id,
-        s.name,
-        res.returned,
-        documentSubsidiaryId,
-        allowedSubsidiaryIds,
-      )));
+      out.push(
+        ...(await resolveCustomGlLines(
+          req.orgId,
+          s.id,
+          s.name,
+          res.returned,
+          documentSubsidiaryId,
+          allowedSubsidiaryIds,
+        )),
+      );
     } catch (error) {
       // A refused line set (unbalanced, unknown account, over-limit,
       // out-of-scope subsidiary) rolls back the ok row above with the post;
@@ -1944,8 +1942,8 @@ export function customGlLineOutOfScopeIndex(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): number | null {
   if (allowedSubsidiaryIds === null) return null;
-  const index = lines.findIndex((line) =>
-    !allowedSubsidiaryIds.has(line.subsidiaryId ?? documentSubsidiaryId),
+  const index = lines.findIndex(
+    (line) => !allowedSubsidiaryIds.has(line.subsidiaryId ?? documentSubsidiaryId),
   );
   return index < 0 ? null : index + 1;
 }
@@ -2053,9 +2051,10 @@ export async function resolveCustomGlLines(
       locationId: customGlLineId(scriptName, index, "locationId", entry.locationId),
       classId: customGlLineId(scriptName, index, "classId", entry.classId),
       subsidiaryId: customGlLineId(scriptName, index, "subsidiaryId", entry.subsidiaryId),
-      memo: entry.memo === undefined || entry.memo === null || entry.memo === ""
-        ? null
-        : String(entry.memo).slice(0, 500),
+      memo:
+        entry.memo === undefined || entry.memo === null || entry.memo === ""
+          ? null
+          : String(entry.memo).slice(0, 500),
       ...(bookCode ? { bookCode } : {}),
     };
   });
@@ -2065,12 +2064,17 @@ export async function resolveCustomGlLines(
   // governed journal write — a well-formed foreign id must never die at the
   // composite FK as an unhandled storage error.
   const codes = [...new Set(parsed.filter((l) => !l.accountId).map((l) => l.accountCode!))];
-  const accountIds = [...new Set(parsed.map((l) => l.accountId).filter((x): x is string => typeof x === "string"))];
+  const accountIds = [
+    ...new Set(parsed.map((l) => l.accountId).filter((x): x is string => typeof x === "string")),
+  ];
   const byCode = new Map<string, string>();
   if (codes.length > 0) {
-    const r = (await db.execute<{ id: string; number: string }>(sql`
+    const r = await db.execute<{ id: string; number: string }>(
+      sql`
       select id, number from accounts
-       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`, "objects"));
+       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`,
+      "objects",
+    );
     for (const row of r) byCode.set(String(row.number), String(row.id));
     for (const line of parsed) {
       if (!line.accountId && !byCode.has(line.accountCode!)) {
@@ -2082,9 +2086,12 @@ export async function resolveCustomGlLines(
     }
   }
   if (accountIds.length > 0) {
-    const r = (await db.execute<{ id: string }>(sql`
+    const r = await db.execute<{ id: string }>(
+      sql`
       select id from accounts
-       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${accountIds}`, "objects"));
+       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${accountIds}`,
+      "objects",
+    );
     const found = new Set(r.map((x) => String(x.id)));
     const foreign = parsed.find((l) => l.accountId && !found.has(l.accountId));
     if (foreign) {
@@ -2102,13 +2109,14 @@ export async function resolveCustomGlLines(
   ] as const;
   for (const [key, label, table] of dimChecks) {
     const refIds = [
-      ...new Set(
-        parsed.map((l) => l[key]).filter((x): x is string => typeof x === "string"),
-      ),
+      ...new Set(parsed.map((l) => l[key]).filter((x): x is string => typeof x === "string")),
     ];
     if (refIds.length === 0) continue;
-    const r = (await db.execute<{ id: string }>(sql`
-      select id from ${sql.raw(`"${table}"`)} where org_id = ${orgId} and id in ${refIds}`, "objects"));
+    const r = await db.execute<{ id: string }>(
+      sql`
+      select id from ${sql.raw(`"${table}"`)} where org_id = ${orgId} and id in ${refIds}`,
+      "objects",
+    );
     const found = new Set(r.map((x) => String(x.id)));
     const foreign = parsed.find((l) => l[key] && !found.has(l[key]!));
     if (foreign) {
@@ -2118,7 +2126,11 @@ export async function resolveCustomGlLines(
     }
   }
 
-  const outOfScopeLine = customGlLineOutOfScopeIndex(parsed, documentSubsidiaryId, allowedSubsidiaryIds);
+  const outOfScopeLine = customGlLineOutOfScopeIndex(
+    parsed,
+    documentSubsidiaryId,
+    allowedSubsidiaryIds,
+  );
   if (outOfScopeLine !== null) {
     throw new CustomGlLinesError(
       `custom_gl_lines script "${scriptName}" line ${outOfScopeLine}: subsidiary is outside the script owner's allowed scope`,
@@ -2128,10 +2140,15 @@ export async function resolveCustomGlLines(
   // Secondary-book targets arrive with allocation rule support; a script
   // line pinned to a non-primary book is refused rather than silently posted
   // to the primary book.
-  const bookCodes = [...new Set(parsed.map((l) => l.bookCode).filter((x): x is string => typeof x === "string"))];
+  const bookCodes = [
+    ...new Set(parsed.map((l) => l.bookCode).filter((x): x is string => typeof x === "string")),
+  ];
   if (bookCodes.length > 0) {
-    const books = (await db.execute<{ code: string; isPrimary: boolean }>(sql`
-      select code, is_primary as "isPrimary" from accounting_books where org_id = ${orgId}`, "objects"));
+    const books = await db.execute<{ code: string; isPrimary: boolean }>(
+      sql`
+      select code, is_primary as "isPrimary" from accounting_books where org_id = ${orgId}`,
+      "objects",
+    );
     for (const code of bookCodes) {
       const book = books.find((b) => b.code === code);
       if (!book) {

@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import Link from 'next/link'
-import { ArrowUpRight } from 'lucide-react'
-import { metricTilePack, packsEqual } from './_metric-tile-density'
-import type { DashboardMetrics } from './_metrics'
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { metricTilePack, packsEqual } from "./_metric-tile-density";
+import type { DashboardMetrics } from "./_metrics";
 
 /** What a widget render function receives: its id and its pruned metrics. */
-export type WidgetCardProps = { widgetId: string; data: DashboardMetrics }
+export type WidgetCardProps = { widgetId: string; data: DashboardMetrics };
 
 /**
  * The shared tile primitives every dashboard widget renders through — the
@@ -21,10 +21,10 @@ export function CardShell({
   href,
   children,
 }: {
-  title: string
-  icon?: React.ReactNode
-  href?: string
-  children: React.ReactNode
+  title: string;
+  icon?: React.ReactNode;
+  href?: string;
+  children: React.ReactNode;
 }) {
   const header = (
     <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
@@ -35,45 +35,96 @@ export function CardShell({
       ) : null}
       <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
     </div>
-  )
+  );
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       {href ? <Link href={href}>{header}</Link> : header}
       {/* Let scrolling continue to the page when the card is empty or at its edge. */}
       <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>
-  )
+  );
 }
 
-
-export type MetricTone = 'teal' | 'sky' | 'emerald' | 'amber' | 'orange' | 'rose' | 'violet' | 'slate'
-export const METRIC_TONES: Record<MetricTone, { icon: string; accent: string; wash: string; hover: string; dot: string }> = {
-  teal: { icon: 'bg-teal-500/10 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300', accent: 'from-teal-500 to-cyan-400', wash: 'from-teal-500/[0.07]', hover: 'hover:border-teal-300/80 dark:hover:border-teal-700/70', dot: 'bg-teal-500' },
-  sky: { icon: 'bg-sky-500/10 text-sky-700 dark:bg-sky-400/10 dark:text-sky-300', accent: 'from-sky-500 to-indigo-400', wash: 'from-sky-500/[0.07]', hover: 'hover:border-sky-300/80 dark:hover:border-sky-700/70', dot: 'bg-sky-500' },
-  emerald: { icon: 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300', accent: 'from-emerald-500 to-teal-400', wash: 'from-emerald-500/[0.07]', hover: 'hover:border-emerald-300/80 dark:hover:border-emerald-700/70', dot: 'bg-emerald-500' },
-  amber: { icon: 'bg-amber-500/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300', accent: 'from-amber-500 to-yellow-400', wash: 'from-amber-500/[0.08]', hover: 'hover:border-amber-300/80 dark:hover:border-amber-700/70', dot: 'bg-amber-500' },
-  orange: { icon: 'bg-orange-500/10 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300', accent: 'from-orange-500 to-amber-400', wash: 'from-orange-500/[0.08]', hover: 'hover:border-orange-300/80 dark:hover:border-orange-700/70', dot: 'bg-orange-500' },
-  rose: { icon: 'bg-rose-500/10 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300', accent: 'from-rose-500 to-pink-400', wash: 'from-rose-500/[0.07]', hover: 'hover:border-rose-300/80 dark:hover:border-rose-700/70', dot: 'bg-rose-500' },
-  violet: { icon: 'bg-violet-500/10 text-violet-700 dark:bg-violet-400/10 dark:text-violet-300', accent: 'from-violet-500 to-fuchsia-400', wash: 'from-violet-500/[0.07]', hover: 'hover:border-violet-300/80 dark:hover:border-violet-700/70', dot: 'bg-violet-500' },
-  slate: { icon: 'bg-slate-500/10 text-slate-700 dark:bg-slate-400/10 dark:text-slate-300', accent: 'from-slate-500 to-slate-300', wash: 'from-slate-500/[0.06]', hover: 'hover:border-slate-300 dark:hover:border-slate-600', dot: 'bg-slate-400' },
-}
+export type MetricTone =
+  "teal" | "sky" | "emerald" | "amber" | "orange" | "rose" | "violet" | "slate";
+export const METRIC_TONES: Record<
+  MetricTone,
+  { icon: string; accent: string; wash: string; hover: string; dot: string }
+> = {
+  teal: {
+    icon: "bg-teal-500/10 text-teal-700 dark:bg-teal-400/10 dark:text-teal-300",
+    accent: "from-teal-500 to-cyan-400",
+    wash: "from-teal-500/[0.07]",
+    hover: "hover:border-teal-300/80 dark:hover:border-teal-700/70",
+    dot: "bg-teal-500",
+  },
+  sky: {
+    icon: "bg-sky-500/10 text-sky-700 dark:bg-sky-400/10 dark:text-sky-300",
+    accent: "from-sky-500 to-indigo-400",
+    wash: "from-sky-500/[0.07]",
+    hover: "hover:border-sky-300/80 dark:hover:border-sky-700/70",
+    dot: "bg-sky-500",
+  },
+  emerald: {
+    icon: "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300",
+    accent: "from-emerald-500 to-teal-400",
+    wash: "from-emerald-500/[0.07]",
+    hover: "hover:border-emerald-300/80 dark:hover:border-emerald-700/70",
+    dot: "bg-emerald-500",
+  },
+  amber: {
+    icon: "bg-amber-500/10 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300",
+    accent: "from-amber-500 to-yellow-400",
+    wash: "from-amber-500/[0.08]",
+    hover: "hover:border-amber-300/80 dark:hover:border-amber-700/70",
+    dot: "bg-amber-500",
+  },
+  orange: {
+    icon: "bg-orange-500/10 text-orange-700 dark:bg-orange-400/10 dark:text-orange-300",
+    accent: "from-orange-500 to-amber-400",
+    wash: "from-orange-500/[0.08]",
+    hover: "hover:border-orange-300/80 dark:hover:border-orange-700/70",
+    dot: "bg-orange-500",
+  },
+  rose: {
+    icon: "bg-rose-500/10 text-rose-700 dark:bg-rose-400/10 dark:text-rose-300",
+    accent: "from-rose-500 to-pink-400",
+    wash: "from-rose-500/[0.07]",
+    hover: "hover:border-rose-300/80 dark:hover:border-rose-700/70",
+    dot: "bg-rose-500",
+  },
+  violet: {
+    icon: "bg-violet-500/10 text-violet-700 dark:bg-violet-400/10 dark:text-violet-300",
+    accent: "from-violet-500 to-fuchsia-400",
+    wash: "from-violet-500/[0.07]",
+    hover: "hover:border-violet-300/80 dark:hover:border-violet-700/70",
+    dot: "bg-violet-500",
+  },
+  slate: {
+    icon: "bg-slate-500/10 text-slate-700 dark:bg-slate-400/10 dark:text-slate-300",
+    accent: "from-slate-500 to-slate-300",
+    wash: "from-slate-500/[0.06]",
+    hover: "hover:border-slate-300 dark:hover:border-slate-600",
+    dot: "bg-slate-400",
+  },
+};
 
 export function useMetricTilePack() {
-  const ref = useRef<HTMLDivElement | null>(null)
-  const [pack, setPack] = useState(() => metricTilePack(0, 0))
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [pack, setPack] = useState(() => metricTilePack(0, 0));
   useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
+    const el = ref.current;
+    if (!el) return;
     const read = () => {
-      const next = metricTilePack(el.clientWidth, el.clientHeight)
-      setPack((prev) => (packsEqual(prev, next) ? prev : next))
-    }
-    read()
-    const ro = new ResizeObserver(read)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-  return { ref, pack }
+      const next = metricTilePack(el.clientWidth, el.clientHeight);
+      setPack((prev) => (packsEqual(prev, next) ? prev : next));
+    };
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, pack };
 }
 
 /**
@@ -90,15 +141,15 @@ export function MetricTile({
   hint,
   tone,
 }: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  href?: string
-  hint?: string
-  tone: MetricTone
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  href?: string;
+  hint?: string;
+  tone: MetricTone;
 }) {
-  const colors = METRIC_TONES[tone]
-  const { ref, pack } = useMetricTilePack()
+  const colors = METRIC_TONES[tone];
+  const { ref, pack } = useMetricTilePack();
   const inner = (
     <div
       ref={ref}
@@ -135,12 +186,15 @@ export function MetricTile({
         </div>
         <div className="flex items-center gap-2" style={{ marginTop: pack.hintGap }}>
           {pack.narrow ? null : (
-            <span aria-hidden className={`h-[3px] w-8 shrink-0 rounded-full bg-gradient-to-r ${colors.accent}`} />
+            <span
+              aria-hidden
+              className={`h-[3px] w-8 shrink-0 rounded-full bg-gradient-to-r ${colors.accent}`}
+            />
           )}
           {hint ? (
             <span
               className={`min-w-0 text-[11px] font-medium text-slate-400 dark:text-slate-500 ${
-                pack.hintLines > 1 ? 'line-clamp-2 leading-snug' : 'truncate leading-none'
+                pack.hintLines > 1 ? "line-clamp-2 leading-snug" : "truncate leading-none"
               }`}
             >
               {hint}
@@ -149,22 +203,28 @@ export function MetricTile({
         </div>
       </div>
     </div>
-  )
-  const shell = `group block h-full rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 dark:border-slate-800 dark:bg-slate-900`
+  );
+  const shell = `group block h-full rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 dark:border-slate-800 dark:bg-slate-900`;
   if (href) {
     return (
-      <Link href={href} className={`${shell} hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)] ${colors.hover}`}>
+      <Link
+        href={href}
+        className={`${shell} hover:-translate-y-0.5 hover:shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)] ${colors.hover}`}
+      >
         {inner}
       </Link>
-    )
+    );
   }
-  return <div className={shell}>{inner}</div>
+  return <div className={shell}>{inner}</div>;
 }
 
 /** A tile whose figures are still loading: the card's outline, quietly pulsing. */
 export function WidgetSkeleton() {
   return (
-    <div aria-hidden className="flex h-full animate-pulse flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <div
+      aria-hidden
+      className="flex h-full animate-pulse flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+    >
       <div className="flex items-center gap-2.5">
         <span className="h-7 w-7 rounded-xl bg-slate-100 dark:bg-slate-800" />
         <span className="h-3 w-28 rounded bg-slate-100 dark:bg-slate-800" />
@@ -172,16 +232,16 @@ export function WidgetSkeleton() {
       <div className="min-h-0 flex-1" />
       <span className="h-6 w-24 rounded bg-slate-100 dark:bg-slate-800" />
     </div>
-  )
+  );
 }
 
 /** An empty card's body: what the card would list, said plainly; a bare dash where no statement fits. */
 export function EmptyRow({ children }: { children?: ReactNode }) {
   return (
     <div className="flex h-full items-center justify-center px-6 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-      {children ?? '—'}
+      {children ?? "—"}
     </div>
-  )
+  );
 }
 
 /**
@@ -197,12 +257,12 @@ export function ChartTile({
   context,
   children,
 }: {
-  title: string
-  icon?: React.ReactNode
-  href?: string
-  headline?: string
-  context?: string
-  children: React.ReactNode
+  title: string;
+  icon?: React.ReactNode;
+  href?: string;
+  headline?: string;
+  context?: string;
+  children: React.ReactNode;
 }) {
   return (
     <CardShell title={title} icon={icon} href={href}>
@@ -210,15 +270,23 @@ export function ChartTile({
         {headline || context ? (
           <div className="flex items-baseline justify-between gap-3">
             {headline ? (
-              <span className="truncate text-lg font-semibold tracking-tight text-slate-950 tabular-nums dark:text-white">{headline}</span>
-            ) : <span />}
-            {context ? <span className="min-w-0 truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">{context}</span> : null}
+              <span className="truncate text-lg font-semibold tracking-tight text-slate-950 tabular-nums dark:text-white">
+                {headline}
+              </span>
+            ) : (
+              <span />
+            )}
+            {context ? (
+              <span className="min-w-0 truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                {context}
+              </span>
+            ) : null}
           </div>
         ) : null}
         <div className="min-h-0 flex-1">{children}</div>
       </div>
     </CardShell>
-  )
+  );
 }
 
 /**
@@ -230,5 +298,5 @@ export function UnavailableRow({ reason }: { reason: string }) {
     <div className="flex h-full items-center justify-center px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
       {reason}
     </div>
-  )
+  );
 }

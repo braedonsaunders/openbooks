@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../../../../components/viewspec/module-view'
-import { loadReportDelivery, reportDeliverySpec } from './view'
+import { ModuleView } from "../../../../../../../components/viewspec/module-view";
+import { loadReportDelivery, reportDeliverySpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Delivery management for one saved report: e-mail schedules and the recorded
@@ -12,12 +12,12 @@ export default async function ReportDeliveryPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>
+  params: Promise<{ id: string }>;
   // Optional: this route natively takes only `params`.
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = (await searchParams) ?? {}
-  const { id } = await params
-  const data = await loadReportDelivery(id)
-  return <ModuleView spec={reportDeliverySpec(data)} data={data} searchParams={sp} trusted />
+  const sp = (await searchParams) ?? {};
+  const { id } = await params;
+  const data = await loadReportDelivery(id);
+  return <ModuleView spec={reportDeliverySpec(data)} data={data} searchParams={sp} trusted />;
 }

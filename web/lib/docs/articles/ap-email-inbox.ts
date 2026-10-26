@@ -1,14 +1,28 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const apEmailInbox: DocArticle = {
-  slug: 'ap-email-inbox',
-  title: 'AP Email Inbox and Bill Auto-Post',
-  category: 'transactions',
+  slug: "ap-email-inbox",
+  title: "AP Email Inbox and Bill Auto-Post",
+  category: "transactions",
   order: 22,
-  summary: 'Receive vendor bills by email for each legal entity, connect Postmark, Mailgun, SendGrid or a generic webhook, review captures from the keyboard, and let trusted vendors post automatically.',
-  updated: '2026-10-21',
-  keywords: ['bill capture', 'inbound email', 'AP inbox', 'Postmark', 'Mailgun', 'SendGrid', 'webhook', 'OCR', 'auto-post', 'trusted vendor', 'keyboard', 'accounts payable'],
-  related: ['purchasing-workflow', 'electronic-invoicing'],
+  summary:
+    "Receive vendor bills by email for each legal entity, connect Postmark, Mailgun, SendGrid or a generic webhook, review captures from the keyboard, and let trusted vendors post automatically.",
+  updated: "2026-10-21",
+  keywords: [
+    "bill capture",
+    "inbound email",
+    "AP inbox",
+    "Postmark",
+    "Mailgun",
+    "SendGrid",
+    "webhook",
+    "OCR",
+    "auto-post",
+    "trusted vendor",
+    "keyboard",
+    "accounts payable",
+  ],
+  related: ["purchasing-workflow", "electronic-invoicing"],
   body: `# AP Email Inbox and Bill Auto-Post
 
 Bill capture reads vendor bills (PDF, image or XML e-invoice) and turns each one
@@ -151,4 +165,4 @@ Every automatic post is in the audit trail with the policy version and the
 captures that earned the vendor's trust, and the capture shows the vendor's
 streak (for example, Trusted: 3 clean bills in a row) and the decision taken.
 `,
-}
+};

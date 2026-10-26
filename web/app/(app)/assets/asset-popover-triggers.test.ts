@@ -1,206 +1,240 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
 
 declare global {
-  var __assetActionRouter: { refresh(): void } | undefined
-  var __assetActionToasts: { kind: string; message: string }[] | undefined
+  var __assetActionRouter: { refresh(): void } | undefined;
+  var __assetActionToasts: { kind: string; message: string }[] | undefined;
 }
 
-const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/assets', matchMediaMatches: false, scrollIntoView: false })
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/assets",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+});
 
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__assetActionRouter}export function usePathname(){return \'/assets\'}export function useSearchParams(){return new URLSearchParams()}' })
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__assetActionRouter}export function usePathname(){return '/assets'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'next/link') {
+    if (specifier === "next/link") {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export default function Link(p){return globalThis.React.createElement("a",{href:p.href},p.children)}',
-      }
+      };
     }
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
         url: "data:text/javascript,export const toast={success(m){(globalThis.__assetActionToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__assetActionToasts??=[]).push({kind:'error',message:String(m)})}}",
-      }
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
-const { BusinessDateProvider } = await import('../../../components/business-date-provider')
-const { MoneyProvider } = await import('../../../components/money-provider')
-const { DisposeButton } = await import('./DisposeButton')
-const { RemeasureButton } = await import('./RemeasureButton')
-const { DepreciationInputButton } = await import('./DepreciationInputButton')
-const { ReverseEventButton } = await import('./ReverseEventButton')
-const { RunDepreciationButton } = await import('./RunDepreciationButton')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+const { BusinessDateProvider } = await import("../../../components/business-date-provider");
+const { MoneyProvider } = await import("../../../components/money-provider");
+const { DisposeButton } = await import("./DisposeButton");
+const { RemeasureButton } = await import("./RemeasureButton");
+const { DepreciationInputButton } = await import("./DepreciationInputButton");
+const { ReverseEventButton } = await import("./ReverseEventButton");
+const { RunDepreciationButton } = await import("./RunDepreciationButton");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 40))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 40));
 
-async function mount(t: TestContext, component: React.ReactNode, fetcher: typeof fetch = async () => Response.json({})) {
-  const previousFetch = globalThis.fetch
-  globalThis.fetch = fetcher
-  globalThis.__assetActionRouter = { refresh() {} }
-  globalThis.__assetActionToasts = []
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+async function mount(
+  t: TestContext,
+  component: React.ReactNode,
+  fetcher: typeof fetch = async () => Response.json({}),
+) {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = fetcher;
+  globalThis.__assetActionRouter = { refresh() {} };
+  globalThis.__assetActionToasts = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-    globalThis.fetch = previousFetch
-  })
+    await act(async () => root.unmount());
+    host.remove();
+    globalThis.fetch = previousFetch;
+  });
   await act(async () => {
     root.render(
       React.createElement(
         NextIntlClientProvider,
-        { locale: 'en', messages, timeZone: 'UTC' } as unknown as React.ComponentProps<typeof NextIntlClientProvider>,
+        { locale: "en", messages, timeZone: "UTC" } as unknown as React.ComponentProps<
+          typeof NextIntlClientProvider
+        >,
         React.createElement(
           BusinessDateProvider,
-          { today: '2026-09-24' } as React.ComponentProps<typeof BusinessDateProvider>,
+          { today: "2026-09-24" } as React.ComponentProps<typeof BusinessDateProvider>,
           React.createElement(
             MoneyProvider,
-            { currency: 'USD' } as React.ComponentProps<typeof MoneyProvider>,
+            { currency: "USD" } as React.ComponentProps<typeof MoneyProvider>,
             component,
           ),
         ),
       ),
-    )
-    await tick()
-  })
-  return host
+    );
+    await tick();
+  });
+  return host;
 }
 
 async function clickButton(label: string) {
-  const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === label)
-  assert.ok(button, `expected visible ${label} action`)
+  const button = [...document.querySelectorAll("button")].find(
+    (item) => item.textContent?.trim() === label,
+  );
+  assert.ok(button, `expected visible ${label} action`);
   await act(async () => {
-    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
 }
 
 function setTextArea(textarea: HTMLTextAreaElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-  setter?.call(textarea, value)
-  textarea.dispatchEvent(new window.Event('input', { bubbles: true }))
+  const setter = Object.getOwnPropertyDescriptor(
+    window.HTMLTextAreaElement.prototype,
+    "value",
+  )?.set;
+  setter?.call(textarea, value);
+  textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
 
 function dialog() {
-  return document.body.querySelector('[role="dialog"]')
+  return document.body.querySelector('[role="dialog"]');
 }
 
-test('dispose opens the sale and write-off form', async (t) => {
-  await mount(t, React.createElement(DisposeButton, { assetId: 'asset-1', accountOptions: [] }))
-  await clickButton('Dispose')
-  assert.match(dialog()?.textContent ?? '', /Sale proceeds/)
-  assert.match(dialog()?.textContent ?? '', /Disposal date/)
-})
+test("dispose opens the sale and write-off form", async (t) => {
+  await mount(t, React.createElement(DisposeButton, { assetId: "asset-1", accountOptions: [] }));
+  await clickButton("Dispose");
+  assert.match(dialog()?.textContent ?? "", /Sale proceeds/);
+  assert.match(dialog()?.textContent ?? "", /Disposal date/);
+});
 
-test('revalue opens the carrying-value form', async (t) => {
-  await mount(t, React.createElement(RemeasureButton, { assetId: 'asset-1' }))
-  await clickButton('Revalue')
-  assert.match(dialog()?.textContent ?? '', /New carrying value/)
-  assert.match(dialog()?.textContent ?? '', /Apply/)
-})
+test("revalue opens the carrying-value form", async (t) => {
+  await mount(t, React.createElement(RemeasureButton, { assetId: "asset-1" }));
+  await clickButton("Revalue");
+  assert.match(dialog()?.textContent ?? "", /New carrying value/);
+  assert.match(dialog()?.textContent ?? "", /Apply/);
+});
 
-test('recording depreciation opens the evidence form and loads attached files', async (t) => {
-  const requests: string[] = []
+test("recording depreciation opens the evidence form and loads attached files", async (t) => {
+  const requests: string[] = [];
   await mount(
     t,
     React.createElement(DepreciationInputButton, {
-      assetId: 'asset-1',
-      schedules: [{ bookId: 'book-1', bookName: 'Corporate', method: 'manual' }],
+      assetId: "asset-1",
+      schedules: [{ bookId: "book-1", bookName: "Corporate", method: "manual" }],
     }),
     async (input) => {
-      requests.push(String(input))
-      return Response.json({ attachments: [{ id: 'file-1', name: 'Invoice.pdf' }] })
+      requests.push(String(input));
+      return Response.json({ attachments: [{ id: "file-1", name: "Invoice.pdf" }] });
     },
-  )
-  await clickButton('Record manual depreciation')
-  assert.deepEqual(requests, ['/api/file-cabinet/attachments?targetTable=fixed_assets&targetId=asset-1'])
-  assert.match(dialog()?.textContent ?? '', /Depreciation amount/)
-  await clickButton('Select an attached file')
-  assert.match(document.body.textContent ?? '', /Invoice\.pdf/)
-})
+  );
+  await clickButton("Record manual depreciation");
+  assert.deepEqual(requests, [
+    "/api/file-cabinet/attachments?targetTable=fixed_assets&targetId=asset-1",
+  ]);
+  assert.match(dialog()?.textContent ?? "", /Depreciation amount/);
+  await clickButton("Select an attached file");
+  assert.match(document.body.textContent ?? "", /Invoice\.pdf/);
+});
 
-test('reversal opens a refusal when lifecycle events cannot be loaded', async (t) => {
-  await mount(
-    t,
-    React.createElement(ReverseEventButton, { assetId: 'asset-1' }),
-    async () => Response.json({ error: 'Lifecycle events are unavailable' }, { status: 503 }),
-  )
-  await clickButton('Reverse event')
+test("reversal opens a refusal when lifecycle events cannot be loaded", async (t) => {
+  await mount(t, React.createElement(ReverseEventButton, { assetId: "asset-1" }), async () =>
+    Response.json({ error: "Lifecycle events are unavailable" }, { status: 503 }),
+  );
+  await clickButton("Reverse event");
   assert.deepEqual(globalThis.__assetActionToasts, [
-    { kind: 'error', message: 'Lifecycle events are unavailable' },
-  ])
-})
+    { kind: "error", message: "Lifecycle events are unavailable" },
+  ]);
+});
 
-test('reversal sends the selected event, date, and trimmed reason and surfaces the refusal', async (t) => {
-  const requests: { url: string; method: string; body?: unknown }[] = []
+test("reversal sends the selected event, date, and trimmed reason and surfaces the refusal", async (t) => {
+  const requests: { url: string; method: string; body?: unknown }[] = [];
   await mount(
     t,
-    React.createElement(ReverseEventButton, { assetId: 'asset-1' }),
+    React.createElement(ReverseEventButton, { assetId: "asset-1" }),
     async (input, init) => {
       requests.push({
         url: String(input),
-        method: (init?.method ?? 'GET').toUpperCase(),
-        body: init?.body ? JSON.parse(String(init.body)) as unknown : undefined,
-      })
-      if ((init?.method ?? 'GET').toUpperCase() === 'GET') {
-        return Response.json({ events: [{
-          id: 'event-17', kind: 'disposed', occurredOn: '2026-05-31', amount: '125.00',
-          entryNumber: 'JE-42', postingDate: '2026-05-31', entryStatus: 'posted', reversible: true,
-          blockReason: null, laterKind: null,
-        }] })
+        method: (init?.method ?? "GET").toUpperCase(),
+        body: init?.body ? (JSON.parse(String(init.body)) as unknown) : undefined,
+      });
+      if ((init?.method ?? "GET").toUpperCase() === "GET") {
+        return Response.json({
+          events: [
+            {
+              id: "event-17",
+              kind: "disposed",
+              occurredOn: "2026-05-31",
+              amount: "125.00",
+              entryNumber: "JE-42",
+              postingDate: "2026-05-31",
+              entryStatus: "posted",
+              reversible: true,
+              blockReason: null,
+              laterKind: null,
+            },
+          ],
+        });
       }
-      return Response.json({ error: 'The reversal period is closed' }, { status: 409 })
+      return Response.json({ error: "The reversal period is closed" }, { status: 409 });
     },
-  )
-  await clickButton('Reverse event')
-  assert.match(dialog()?.textContent ?? '', /JE-42/)
-  const reason = dialog()?.querySelector('textarea')
-  assert.ok(reason, 'reversal reason is required before posting')
+  );
+  await clickButton("Reverse event");
+  assert.match(dialog()?.textContent ?? "", /JE-42/);
+  const reason = dialog()?.querySelector("textarea");
+  assert.ok(reason, "reversal reason is required before posting");
   await act(async () => {
-    setTextArea(reason, '  Approved correction  ')
-    await tick()
-  })
-  await clickButton('Post reversal')
+    setTextArea(reason, "  Approved correction  ");
+    await tick();
+  });
+  await clickButton("Post reversal");
   assert.deepEqual(requests, [
-    { url: '/api/assets/asset-1/reverse-event', method: 'GET', body: undefined },
+    { url: "/api/assets/asset-1/reverse-event", method: "GET", body: undefined },
     {
-      url: '/api/assets/asset-1/reverse-event',
-      method: 'POST',
-      body: { eventId: 'event-17', date: '2026-09-24', reason: 'Approved correction' },
+      url: "/api/assets/asset-1/reverse-event",
+      method: "POST",
+      body: { eventId: "event-17", date: "2026-09-24", reason: "Approved correction" },
     },
-  ])
+  ]);
   assert.deepEqual(globalThis.__assetActionToasts, [
-    { kind: 'error', message: 'The reversal period is closed' },
-  ])
-})
+    { kind: "error", message: "The reversal period is closed" },
+  ]);
+});
 
-test('run depreciation opens its review drawer without posting', async (t) => {
-  const requests: string[] = []
+test("run depreciation opens its review drawer without posting", async (t) => {
+  const requests: string[] = [];
   await mount(
     t,
     React.createElement(RunDepreciationButton, {
-      assetId: 'asset-1', assetNumber: 'FA-17', assetName: 'Forklift',
-      books: [{ id: 'book-1', name: 'Corporate', is_primary: true }],
-      candidates: [], periods: [],
+      assetId: "asset-1",
+      assetNumber: "FA-17",
+      assetName: "Forklift",
+      books: [{ id: "book-1", name: "Corporate", is_primary: true }],
+      candidates: [],
+      periods: [],
     }),
-    async (input) => { requests.push(String(input)); return Response.json({}) },
-  )
-  await clickButton('Run depreciation')
-  assert.match(dialog()?.textContent ?? '', /Review depreciation/)
-  assert.deepEqual(requests, [], 'opening review does not preview or post until the operator asks')
-})
+    async (input) => {
+      requests.push(String(input));
+      return Response.json({});
+    },
+  );
+  await clickButton("Run depreciation");
+  assert.match(dialog()?.textContent ?? "", /Review depreciation/);
+  assert.deepEqual(requests, [], "opening review does not preview or post until the operator asks");
+});

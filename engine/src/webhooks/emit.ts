@@ -70,7 +70,10 @@ export type EmitDomainEventResult = {
 } | null;
 
 async function currentXactId(executor: SqlExecutor): Promise<string> {
-  const rows = await executor.execute<{ xact: string }>(sql`select pg_current_xact_id()::text as xact`, "objects");
+  const rows = await executor.execute<{ xact: string }>(
+    sql`select pg_current_xact_id()::text as xact`,
+    "objects",
+  );
   return rows[0]!.xact;
 }
 
@@ -84,7 +87,9 @@ async function insertEventRow(
   // The conflict is the expected benign replay (a retried posting effect
   // re-emits the same dedupe key): the existing row is re-read and
   // returned, so one business effect is one event.
-  const inserted = (await executor.execute<{ id: string }>(sql`
+  const inserted = (
+    await executor.execute<{ id: string }>(
+      sql`
     insert into webhook_events (org_id, event_type, entity_kind, entity_id, payload, dedupe_key, occurred_at)
     values (${input.orgId}, ${input.type}, ${input.entityKind ?? null},
             ${input.entityId ?? null}::uuid, ${JSON.stringify(input.payload)}::jsonb,
@@ -92,11 +97,19 @@ async function insertEventRow(
     -- A dedupe-key replay resolves the existing event below rather than emitting a second event.
     on conflict (org_id, dedupe_key) do nothing
     returning id
-  `, "objects"))[0]?.id;
+  `,
+      "objects",
+    )
+  )[0]?.id;
   if (inserted) return inserted;
-  const existing = (await executor.execute<{ id: string }>(sql`
+  const existing = (
+    await executor.execute<{ id: string }>(
+      sql`
     select id from webhook_events where org_id = ${input.orgId} and dedupe_key = ${input.dedupeKey} limit 1
-  `, "objects"))[0]?.id;
+  `,
+      "objects",
+    )
+  )[0]?.id;
   if (!existing) {
     throw new WebhookEmitError(
       `webhook event '${input.type}' was not stored and no replay row exists — retry the action`,
@@ -137,10 +150,13 @@ export async function emitDomainEvent(
   }
   if (!(await orgFeatureEnabled(input.orgId, "outboundWebhooks", executor))) return null;
   const eventId = await insertEventRow(executor, { ...input, type: input.type });
-  const endpoints = await executor.execute<{ id: string }>(sql`
+  const endpoints = await executor.execute<{ id: string }>(
+    sql`
     select id from webhook_endpoints
      where org_id = ${input.orgId} and status = 'active' and events @> array[${input.type}]::text[]
-  `, "objects");
+  `,
+    "objects",
+  );
   let deliveries = 0;
   for (const endpoint of endpoints) {
     if (await insertDeliveryRow(executor, input.orgId, eventId, endpoint.id)) deliveries += 1;
@@ -184,16 +200,27 @@ type DocumentSnapshot = {
   partyId: string | null;
 };
 
-async function loadDocumentSnapshot(executor: SqlExecutor, orgId: string, documentId: string): Promise<DocumentSnapshot> {
-  const row = (await executor.execute<DocumentSnapshot>(sql`
+async function loadDocumentSnapshot(
+  executor: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<DocumentSnapshot> {
+  const row = (
+    await executor.execute<DocumentSnapshot>(
+      sql`
     select id, kind,
            document_number as "documentNumber", currency, total::text as total,
            document_date::text as "documentDate", posting_date::text as "postingDate",
            party_id as "partyId"
       from documents where org_id = ${orgId} and id = ${documentId}::uuid limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
-    throw new WebhookEmitError("the posted document is gone — the record was deleted; nothing was emitted");
+    throw new WebhookEmitError(
+      "the posted document is gone — the record was deleted; nothing was emitted",
+    );
   }
   return row;
 }
@@ -286,20 +313,39 @@ export async function emitItemUpdated(
   orgId: string,
   itemId: string,
 ): Promise<EmitDomainEventResult> {
-  const row = (await executor.execute<{
-    id: string; code: string | null; name: string | null; kind: string | null; isActive: boolean | null;
-  }>(sql`
+  const row = (
+    await executor.execute<{
+      id: string;
+      code: string | null;
+      name: string | null;
+      kind: string | null;
+      isActive: boolean | null;
+    }>(
+      sql`
     select id, code, name, kind, is_active as "isActive"
       from items where org_id = ${orgId} and id = ${itemId}::uuid limit 1
-  `, "objects"))[0];
-  if (!row) throw new WebhookEmitError("the updated item is gone — the record was deleted; nothing was emitted");
+  `,
+      "objects",
+    )
+  )[0];
+  if (!row)
+    throw new WebhookEmitError(
+      "the updated item is gone — the record was deleted; nothing was emitted",
+    );
   return emitDomainEvent(executor, {
     orgId,
     type: "item.updated",
     entityKind: "item",
     entityId: itemId,
     dedupeKey: `item.updated:${itemId}:${await currentXactId(executor)}`,
-    payload: { ...eventEnvelope(), itemId, code: row.code, name: row.name, kind: row.kind, isActive: row.isActive },
+    payload: {
+      ...eventEnvelope(),
+      itemId,
+      code: row.code,
+      name: row.name,
+      kind: row.kind,
+      isActive: row.isActive,
+    },
   });
 }
 
@@ -309,18 +355,31 @@ export async function emitCustomerUpdated(
   orgId: string,
   partyId: string,
 ): Promise<EmitDomainEventResult> {
-  const row = (await executor.execute<{ id: string; displayName: string | null; email: string | null }>(sql`
+  const row = (
+    await executor.execute<{ id: string; displayName: string | null; email: string | null }>(
+      sql`
     select id, display_name as "displayName", email
       from parties where org_id = ${orgId} and id = ${partyId}::uuid limit 1
-  `, "objects"))[0];
-  if (!row) throw new WebhookEmitError("the updated customer is gone — the record was deleted; nothing was emitted");
+  `,
+      "objects",
+    )
+  )[0];
+  if (!row)
+    throw new WebhookEmitError(
+      "the updated customer is gone — the record was deleted; nothing was emitted",
+    );
   return emitDomainEvent(executor, {
     orgId,
     type: "customer.updated",
     entityKind: "customer",
     entityId: partyId,
     dedupeKey: `customer.updated:${partyId}:${await currentXactId(executor)}`,
-    payload: { ...eventEnvelope(), customerId: partyId, displayName: row.displayName, email: row.email },
+    payload: {
+      ...eventEnvelope(),
+      customerId: partyId,
+      displayName: row.displayName,
+      email: row.email,
+    },
   });
 }
 
@@ -394,7 +453,9 @@ export async function emitEntitlementChanged(
   input: { subscriptionId: string; featureKey: string; change: string; dedupeKey: string },
 ): Promise<EmitDomainEventResult> {
   if (!input.subscriptionId.trim() || !input.featureKey.trim() || !input.change.trim()) {
-    throw new WebhookEmitError("entitlement emission requires a subscription, a feature and a change description");
+    throw new WebhookEmitError(
+      "entitlement emission requires a subscription, a feature and a change description",
+    );
   }
   if (!input.dedupeKey.trim()) throw new WebhookEmitError("webhook emission requires a dedupe key");
   return emitDomainEvent(executor, {
@@ -411,4 +472,3 @@ export async function emitEntitlementChanged(
     },
   });
 }
-

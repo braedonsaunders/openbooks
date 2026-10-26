@@ -38,21 +38,11 @@ export function validateReviewTemplateDocument(
   const refuse = (message: string): never => {
     throw new HrmPerformanceError("INVALID_INPUT", message);
   };
-  if (
-    !value ||
-    typeof value.name !== "string" ||
-    !value.name.trim() ||
-    value.name.length > 240
-  )
+  if (!value || typeof value.name !== "string" || !value.name.trim() || value.name.length > 240)
     refuse("Give the review template a name of at most 240 characters.");
-  if (
-    typeof value.instructions !== "string" ||
-    value.instructions.length > 8000
-  )
+  if (typeof value.instructions !== "string" || value.instructions.length > 8000)
     refuse("Reviewer instructions must contain at most 8,000 characters.");
-  const scale = mathRefusal("INVALID_INPUT", () =>
-    parseRatingScale(value.ratingScale),
-  );
+  const scale = mathRefusal("INVALID_INPUT", () => parseRatingScale(value.ratingScale));
   if (!Array.isArray(value.sections) || value.sections.length > 100)
     refuse("A review template supports at most 100 sections.");
   const keys = new Set<string>();
@@ -64,12 +54,9 @@ export function validateReviewTemplateDocument(
     keys.add(section.id);
     if (
       section.weight != null &&
-      (canonicalDecimal(section.weight, 4) === null ||
-        section.weight.trim().startsWith("-"))
+      (canonicalDecimal(section.weight, 4) === null || section.weight.trim().startsWith("-"))
     )
-      refuse(
-        "A section weight must be a non-negative decimal with at most four decimal places.",
-      );
+      refuse("A section weight must be a non-negative decimal with at most four decimal places.");
     if (section.competencyId != null && !isUuid(section.competencyId))
       refuse("Choose an available competency for this section.");
     if (
@@ -77,13 +64,9 @@ export function validateReviewTemplateDocument(
       section.title.length > 240 ||
       !["competency", "goals", "free_text"].includes(section.kind)
     )
-      refuse(
-        "Each section needs a supported type and a title of at most 240 characters.",
-      );
-    if (publish && !section.title.trim())
-      refuse("Give every section a title before publishing.");
-    if (!Array.isArray(section.questions))
-      refuse("Each section must contain a question list.");
+      refuse("Each section needs a supported type and a title of at most 240 characters.");
+    if (publish && !section.title.trim()) refuse("Give every section a title before publishing.");
+    if (!Array.isArray(section.questions)) refuse("Each section must contain a question list.");
     for (const q of section.questions) {
       if (!q || !isUuid(q.id) || keys.has(q.id))
         refuse("Every section and question needs a distinct identifier.");
@@ -97,17 +80,14 @@ export function validateReviewTemplateDocument(
         refuse(
           "Every question needs a supported response type and a prompt of at most 2,000 characters.",
         );
-      if (publish && !q.prompt.trim())
-        refuse("Give every question a prompt before publishing.");
+      if (publish && !q.prompt.trim()) refuse("Give every question a prompt before publishing.");
       count++;
       if (q.required) required++;
     }
   }
   if (count > 500) refuse("A review template supports at most 500 questions.");
   if (publish && required === 0)
-    refuse(
-      "Add at least one required question before publishing this template.",
-    );
+    refuse("Add at least one required question before publishing this template.");
   return {
     ...value,
     name: value.name.trim(),

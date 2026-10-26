@@ -26,7 +26,9 @@ const WEEKLY = {
 } as const;
 
 const withhold = (income: string, overrides: Record<string, unknown> = {}): string =>
-  calculateAu2027({ ...WEEKLY, income, pensionable: "0", ...overrides } as Parameters<typeof calculateAu2027>[0]).payg;
+  calculateAu2027({ ...WEEKLY, income, pensionable: "0", ...overrides } as Parameters<
+    typeof calculateAu2027
+  >[0]).payg;
 
 /**
  * "Weekly withholding amounts — Amounts to be withheld, weekly", columns
@@ -78,7 +80,11 @@ test("AU instrument: weekly sample data scales 1, 2, 3, 5 and 6", () => {
   for (const [weekly, s1, s2, s3, s5, s6] of rows) {
     assert.equal(withhold(weekly, { claimsThreshold: false }), s1, `scale 1 weekly ${weekly}`);
     assert.equal(withhold(weekly), s2, `scale 2 weekly ${weekly}`);
-    assert.equal(withhold(weekly, { residency: "foreign_resident" }), s3, `scale 3 weekly ${weekly}`);
+    assert.equal(
+      withhold(weekly, { residency: "foreign_resident" }),
+      s3,
+      `scale 3 weekly ${weekly}`,
+    );
     assert.equal(withhold(weekly, { medicareExemption: "full" }), s5, `scale 5 weekly ${weekly}`);
     assert.equal(withhold(weekly, { medicareExemption: "half" }), s6, `scale 6 weekly ${weekly}`);
   }
@@ -118,7 +124,8 @@ test("AU instrument: monthly sample data pins the 33-cent rule", () => {
  */
 test("AU instrument: monthly sample data scales 5 and 6", () => {
   const monthly = (income: string, medicareExemption: "full" | "half"): string =>
-    calculateAu2027({ ...WEEKLY, income, medicareExemption, pensionable: "0", periodsPerYear: 12 }).payg;
+    calculateAu2027({ ...WEEKLY, income, medicareExemption, pensionable: "0", periodsPerYear: 12 })
+      .payg;
   assert.equal(monthly("4914", "full"), "685.0000");
   assert.equal(monthly("4914", "half"), "737.0000");
   assert.equal(monthly("4918.33", "full"), "689.0000");
@@ -139,7 +146,11 @@ test("AU instrument: monthly sample data scales 5 and 6", () => {
  */
 test("AU instrument: general example 2 withholds $86 fortnightly on scale 5", () => {
   const result = calculateAu2027({
-    ...WEEKLY, income: "1299.30", medicareExemption: "full", pensionable: "0", periodsPerYear: 26,
+    ...WEEKLY,
+    income: "1299.30",
+    medicareExemption: "full",
+    pensionable: "0",
+    periodsPerYear: 26,
   });
   assert.equal(result.payg, "86.0000");
 });
@@ -164,7 +175,12 @@ test("AU instrument: general example 1 withholds $245 weekly", () => {
  * quoted but not applied: no Withholding declaration is carried.
  */
 test("AU instrument: general example 3 withholds $940 monthly", () => {
-  const monthly = calculateAu2027({ ...WEEKLY, income: "5400.33", pensionable: "0", periodsPerYear: 12 });
+  const monthly = calculateAu2027({
+    ...WEEKLY,
+    income: "5400.33",
+    pensionable: "0",
+    periodsPerYear: 12,
+  });
   assert.equal(monthly.payg, "940.0000");
 });
 
@@ -174,10 +190,16 @@ test("AU instrument: general example 3 withholds $940 monthly", () => {
  */
 test("AU instrument: bi-monthly withholding is half the monthly calculation", () => {
   const monthly = calculateAu2027({
-    ...WEEKLY, income: "5400.33", pensionable: "0", periodsPerYear: 12,
+    ...WEEKLY,
+    income: "5400.33",
+    pensionable: "0",
+    periodsPerYear: 12,
   });
   const twiceMonthly = calculateAu2027({
-    ...WEEKLY, income: "2700.165", pensionable: "0", periodsPerYear: 24,
+    ...WEEKLY,
+    income: "2700.165",
+    pensionable: "0",
+    periodsPerYear: 24,
   });
   assert.equal(monthly.payg, "940.0000");
   assert.equal(twiceMonthly.payg, "470.0000");

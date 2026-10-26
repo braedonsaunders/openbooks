@@ -10,15 +10,15 @@
  * turns adversarially deep documents into a clean SyntaxError instead of a
  * stack-overflow crash.
  */
-const MAX_NESTING_DEPTH = 200
+const MAX_NESTING_DEPTH = 200;
 
 function isDigit(ch: string | undefined): boolean {
-  return ch !== undefined && ch >= '0' && ch <= '9'
+  return ch !== undefined && ch >= "0" && ch <= "9";
 }
 
 function isHexDigit(ch: string | undefined): boolean {
-  if (ch === undefined) return false
-  return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
+  if (ch === undefined) return false;
+  return (ch >= "0" && ch <= "9") || (ch >= "a" && ch <= "f") || (ch >= "A" && ch <= "F");
 }
 
 /**
@@ -41,186 +41,216 @@ function isHexDigit(ch: string | undefined): boolean {
  * drop-in for JSON.parse when number fidelity matters more than numeric
  * convenience.
  */
-export function parseExactJson(text: string, options: { rejectDuplicateKeys?: boolean } = {}): unknown {
-  let pos = 0
+export function parseExactJson(
+  text: string,
+  options: { rejectDuplicateKeys?: boolean } = {},
+): unknown {
+  let pos = 0;
 
   const fail = (message: string): never => {
-    throw new SyntaxError(`${message} at position ${pos}`)
-  }
+    throw new SyntaxError(`${message} at position ${pos}`);
+  };
 
   const skipWhitespace = () => {
     while (pos < text.length) {
-      const code = text.charCodeAt(pos)
-      if (code !== 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) break
-      pos++
+      const code = text.charCodeAt(pos);
+      if (code !== 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) break;
+      pos++;
     }
-  }
+  };
 
   const parseString = (): string => {
-    pos++ // opening quote
-    let out = ''
-    let chunkStart = pos
+    pos++; // opening quote
+    let out = "";
+    let chunkStart = pos;
     for (;;) {
-      if (pos >= text.length) fail('unterminated string')
-      const code = text.charCodeAt(pos)
+      if (pos >= text.length) fail("unterminated string");
+      const code = text.charCodeAt(pos);
       if (code === 0x22) {
-        out += text.slice(chunkStart, pos)
-        pos++
-        return out
+        out += text.slice(chunkStart, pos);
+        pos++;
+        return out;
       }
       if (code === 0x5c) {
-        out += text.slice(chunkStart, pos)
-        pos++
-        if (pos >= text.length) fail('unterminated escape')
-        const esc = text[pos]!
+        out += text.slice(chunkStart, pos);
+        pos++;
+        if (pos >= text.length) fail("unterminated escape");
+        const esc = text[pos]!;
         switch (esc) {
-          case '"': out += '"'; break
-          case '\\': out += '\\'; break
-          case '/': out += '/'; break
-          case 'b': out += '\b'; break
-          case 'f': out += '\f'; break
-          case 'n': out += '\n'; break
-          case 'r': out += '\r'; break
-          case 't': out += '\t'; break
-          case 'u': {
-            let hex = ''
+          case '"':
+            out += '"';
+            break;
+          case "\\":
+            out += "\\";
+            break;
+          case "/":
+            out += "/";
+            break;
+          case "b":
+            out += "\b";
+            break;
+          case "f":
+            out += "\f";
+            break;
+          case "n":
+            out += "\n";
+            break;
+          case "r":
+            out += "\r";
+            break;
+          case "t":
+            out += "\t";
+            break;
+          case "u": {
+            let hex = "";
             for (let i = 0; i < 4; i++) {
-              const digit = text[pos + 1 + i]
-              if (!isHexDigit(digit)) fail('invalid unicode escape')
-              hex += digit
+              const digit = text[pos + 1 + i];
+              if (!isHexDigit(digit)) fail("invalid unicode escape");
+              hex += digit;
             }
-            out += String.fromCharCode(parseInt(hex, 16))
-            pos += 4
-            break
+            out += String.fromCharCode(parseInt(hex, 16));
+            pos += 4;
+            break;
           }
           default:
-            fail(`invalid escape "\\${esc}"`)
+            fail(`invalid escape "\\${esc}"`);
         }
-        pos++
-        chunkStart = pos
-        continue
+        pos++;
+        chunkStart = pos;
+        continue;
       }
-      if (code < 0x20) fail('unescaped control character in string')
-      pos++
+      if (code < 0x20) fail("unescaped control character in string");
+      pos++;
     }
-  }
+  };
 
   /** Returns the token's source text — deliberately NOT a double. */
   const parseNumberToken = (): string => {
-    const start = pos
-    if (text[pos] === '-') pos++
-    if (text[pos] === '0') {
-      pos++
+    const start = pos;
+    if (text[pos] === "-") pos++;
+    if (text[pos] === "0") {
+      pos++;
     } else if (isDigit(text[pos])) {
-      while (isDigit(text[pos])) pos++
+      while (isDigit(text[pos])) pos++;
     } else {
-      fail('invalid number')
+      fail("invalid number");
     }
-    if (text[pos] === '.') {
-      pos++
-      if (!isDigit(text[pos])) fail('digit expected after decimal point')
-      while (isDigit(text[pos])) pos++
+    if (text[pos] === ".") {
+      pos++;
+      if (!isDigit(text[pos])) fail("digit expected after decimal point");
+      while (isDigit(text[pos])) pos++;
     }
-    if (text[pos] === 'e' || text[pos] === 'E') {
-      pos++
-      if (text[pos] === '+' || text[pos] === '-') pos++
-      if (!isDigit(text[pos])) fail('digit expected in exponent')
-      while (isDigit(text[pos])) pos++
+    if (text[pos] === "e" || text[pos] === "E") {
+      pos++;
+      if (text[pos] === "+" || text[pos] === "-") pos++;
+      if (!isDigit(text[pos])) fail("digit expected in exponent");
+      while (isDigit(text[pos])) pos++;
     }
-    return text.slice(start, pos)
-  }
+    return text.slice(start, pos);
+  };
 
   const parseLiteral = (word: string, value: unknown): unknown => {
     if (text.startsWith(word, pos)) {
-      pos += word.length
-      return value
+      pos += word.length;
+      return value;
     }
-    return fail('invalid literal')
-  }
+    return fail("invalid literal");
+  };
 
   const setProperty = (target: Record<string, unknown>, key: string, value: unknown) => {
-    if (key === '__proto__') {
+    if (key === "__proto__") {
       // JSON.parse creates __proto__ as an own data property; assignment would
       // swap the prototype instead, so mirror the spec here too.
-      Object.defineProperty(target, key, { value, writable: true, enumerable: true, configurable: true })
-      return
+      Object.defineProperty(target, key, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+      return;
     }
-    target[key] = value
-  }
+    target[key] = value;
+  };
 
   const parseObject = (depth: number): Record<string, unknown> => {
-    if (depth > MAX_NESTING_DEPTH) fail(`JSON nesting deeper than ${MAX_NESTING_DEPTH}`)
-    pos++ // '{'
-    const obj: Record<string, unknown> = {}
-    skipWhitespace()
-    if (text[pos] === '}') {
-      pos++
-      return obj
+    if (depth > MAX_NESTING_DEPTH) fail(`JSON nesting deeper than ${MAX_NESTING_DEPTH}`);
+    pos++; // '{'
+    const obj: Record<string, unknown> = {};
+    skipWhitespace();
+    if (text[pos] === "}") {
+      pos++;
+      return obj;
     }
     for (;;) {
-      skipWhitespace()
-      if (text[pos] !== '"') fail('string key expected')
-      const key = parseString()
-      if (options.rejectDuplicateKeys && Object.hasOwn(obj, key)) fail('duplicate object key')
-      skipWhitespace()
-      if (text[pos] !== ':') fail("':' expected")
-      pos++
-      setProperty(obj, key, parseValue(depth + 1))
-      skipWhitespace()
-      if (text[pos] === ',') {
-        pos++
-        continue
+      skipWhitespace();
+      if (text[pos] !== '"') fail("string key expected");
+      const key = parseString();
+      if (options.rejectDuplicateKeys && Object.hasOwn(obj, key)) fail("duplicate object key");
+      skipWhitespace();
+      if (text[pos] !== ":") fail("':' expected");
+      pos++;
+      setProperty(obj, key, parseValue(depth + 1));
+      skipWhitespace();
+      if (text[pos] === ",") {
+        pos++;
+        continue;
       }
-      if (text[pos] === '}') {
-        pos++
-        return obj
+      if (text[pos] === "}") {
+        pos++;
+        return obj;
       }
-      fail("',' or '}' expected")
+      fail("',' or '}' expected");
     }
-  }
+  };
 
   const parseArray = (depth: number): unknown[] => {
-    if (depth > MAX_NESTING_DEPTH) fail(`JSON nesting deeper than ${MAX_NESTING_DEPTH}`)
-    pos++ // '['
-    const arr: unknown[] = []
-    skipWhitespace()
-    if (text[pos] === ']') {
-      pos++
-      return arr
+    if (depth > MAX_NESTING_DEPTH) fail(`JSON nesting deeper than ${MAX_NESTING_DEPTH}`);
+    pos++; // '['
+    const arr: unknown[] = [];
+    skipWhitespace();
+    if (text[pos] === "]") {
+      pos++;
+      return arr;
     }
     for (;;) {
-      arr.push(parseValue(depth + 1))
-      skipWhitespace()
-      if (text[pos] === ',') {
-        pos++
-        continue
+      arr.push(parseValue(depth + 1));
+      skipWhitespace();
+      if (text[pos] === ",") {
+        pos++;
+        continue;
       }
-      if (text[pos] === ']') {
-        pos++
-        return arr
+      if (text[pos] === "]") {
+        pos++;
+        return arr;
       }
-      fail("',' or ']' expected")
+      fail("',' or ']' expected");
     }
-  }
+  };
 
   function parseValue(depth: number): unknown {
-    skipWhitespace()
-    if (pos >= text.length) fail('unexpected end of input')
+    skipWhitespace();
+    if (pos >= text.length) fail("unexpected end of input");
     switch (text[pos]) {
-      case '{': return parseObject(depth)
-      case '[': return parseArray(depth)
-      case '"': return parseString()
-      case 't': return parseLiteral('true', true)
-      case 'f': return parseLiteral('false', false)
-      case 'n': return parseLiteral('null', null)
+      case "{":
+        return parseObject(depth);
+      case "[":
+        return parseArray(depth);
+      case '"':
+        return parseString();
+      case "t":
+        return parseLiteral("true", true);
+      case "f":
+        return parseLiteral("false", false);
+      case "n":
+        return parseLiteral("null", null);
       default:
-        if (text[pos] === '-' || isDigit(text[pos])) return parseNumberToken()
-        fail(`unexpected character '${text[pos!]}'`)
+        if (text[pos] === "-" || isDigit(text[pos])) return parseNumberToken();
+        fail(`unexpected character '${text[pos!]}'`);
     }
   }
 
-  const value = parseValue(1)
-  skipWhitespace()
-  if (pos !== text.length) fail('unexpected trailing content')
-  return value
+  const value = parseValue(1);
+  skipWhitespace();
+  if (pos !== text.length) fail("unexpected trailing content");
+  return value;
 }

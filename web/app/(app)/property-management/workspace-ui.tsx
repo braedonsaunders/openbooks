@@ -26,14 +26,12 @@ export const PROPERTY_TYPE_OPTIONS = [
 ] as const;
 
 export function Status({ value, label }: { value: string; label?: string }) {
-  const variant = ["active", "occupied", "invoiced", "finalized"].includes(
-    value,
-  )
+  const variant = ["active", "occupied", "invoiced", "finalized"].includes(value)
     ? "success"
     : ["notice", "open", "scheduled"].includes(value)
       ? "warning"
       : "secondary";
-  return <Badge variant={(variant)}>{label ?? value.replaceAll("_", " ")}</Badge>;
+  return <Badge variant={variant}>{label ?? value.replaceAll("_", " ")}</Badge>;
 }
 export function Empty({ title, detail }: { title: string; detail: string }) {
   return (
@@ -44,7 +42,7 @@ export function Empty({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-export { RecordTabs } from '@/components/module-home/record-tabs'
+export { RecordTabs } from "@/components/module-home/record-tabs";
 
 export function Small({ label, value }: { label: string; value: string }) {
   return (
@@ -74,15 +72,12 @@ export function Field({
   hint?: string;
 }) {
   const generatedId = useId();
-  const labelable =
-    isValidElement<{ id?: string }>(children) && children.type !== "div";
+  const labelable = isValidElement<{ id?: string }>(children) && children.type !== "div";
   const child = labelable
     ? cloneElement(children, { id: children.props.id ?? generatedId })
     : children;
   const controlId =
-    labelable && isValidElement<{ id?: string }>(child)
-      ? child.props.id
-      : undefined;
+    labelable && isValidElement<{ id?: string }>(child) ? child.props.id : undefined;
   return (
     <div className="min-w-0 space-y-1.5">
       <Label htmlFor={controlId}>{label}</Label>

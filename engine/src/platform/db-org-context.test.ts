@@ -67,8 +67,10 @@ test("withBypassContext holds the scope until a lazy query actually runs", async
 
 test("withOrgContext holds the scope until a lazy query actually runs", async () => {
   const observed: (unknown | null)[] = [];
-  await withOrgContext("11111111-1111-1111-1111-111111111111", () =>
-    lazyWork(observed) as Promise<string>);
+  await withOrgContext(
+    "11111111-1111-1111-1111-111111111111",
+    () => lazyWork(observed) as Promise<string>,
+  );
   assert.deepEqual(
     observed[0],
     { orgId: "11111111-1111-1111-1111-111111111111", bypass: false },
@@ -95,8 +97,10 @@ test("a nested lazy query still sees the innermost scope", async () => {
   const outer: (unknown | null)[] = [];
   const inner: (unknown | null)[] = [];
   await withBypassContext(async () => {
-    await withOrgContext("22222222-2222-2222-2222-222222222222", () =>
-      lazyWork(inner) as Promise<string>);
+    await withOrgContext(
+      "22222222-2222-2222-2222-222222222222",
+      () => lazyWork(inner) as Promise<string>,
+    );
     await (lazyWork(outer) as Promise<string>);
   });
   assert.deepEqual(inner[0], { orgId: "22222222-2222-2222-2222-222222222222", bypass: false });
@@ -132,11 +136,16 @@ test("a nested isolation request inside an ambient bypass transaction refuses by
 
 test("a nested db.transaction verifies the enclosing isolation and access mode instead of dropping them", async () => {
   const ambient = (isolation: string, readOnly: string) => ({
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ isolation, read_only: readOnly }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: [{ isolation, read_only: readOnly }] }).then(
+        <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+      ),
   });
   const nested = (txDb: object, config: Parameters<typeof db.transaction>[1]) =>
-    orgContext.run({ orgId: "11111111-1111-1111-1111-111111111111", bypass: false, txDb: txDb as never }, () =>
-      db.transaction(async () => "joined", config));
+    orgContext.run(
+      { orgId: "11111111-1111-1111-1111-111111111111", bypass: false, txDb: txDb as never },
+      () => db.transaction(async () => "joined", config),
+    );
   await assert.rejects(
     () => nested(ambient("read committed", "off"), { isolationLevel: "repeatable read" }),
     /cannot raise isolation to repeatable read inside an active transaction running at read committed/,
@@ -145,7 +154,13 @@ test("a nested db.transaction verifies the enclosing isolation and access mode i
     () => nested(ambient("serializable", "off"), { accessMode: "read only" }),
     /cannot make an active read-write transaction read only/,
   );
-  assert.equal(await nested(ambient("serializable", "on"), { isolationLevel: "repeatable read", accessMode: "read only" }), "joined");
+  assert.equal(
+    await nested(ambient("serializable", "on"), {
+      isolationLevel: "repeatable read",
+      accessMode: "read only",
+    }),
+    "joined",
+  );
   assert.equal(await nested(ambient("read committed", "off"), undefined), "joined");
 });
 
@@ -161,15 +176,16 @@ async function withFakePoolClient<T>(
   const stats = { connects: 0, queries: [] as string[], releases: [] as unknown[] };
   const fakeClient = Object.assign(new EventEmitter(), {
     query: async (input: unknown) => {
-      const text = typeof input === "string"
-        ? input
-        : (input as { text?: string } | null)?.text ?? "";
+      const text =
+        typeof input === "string" ? input : ((input as { text?: string } | null)?.text ?? "");
       stats.queries.push(text);
       const failure = failures[text.trim().toLowerCase()];
       if (failure) throw failure;
       return { rows: [], fields: [], command: "", rowCount: 0, oid: 0 };
     },
-    release: (error?: unknown) => { stats.releases.push(error); },
+    release: (error?: unknown) => {
+      stats.releases.push(error);
+    },
   });
   const originalConnect = pool.connect;
   (pool as unknown as { connect: unknown }).connect = async () => {
@@ -198,7 +214,11 @@ test("db.transaction without an org boundary pins txDb and nested units join it"
         assert.equal(pinnedTransactionExecutor() as unknown, tx as unknown);
 
         await db.transaction(async (nestedTx) => {
-          assert.equal(nestedTx as unknown, tx as unknown, "nested db.transaction opened a second unit");
+          assert.equal(
+            nestedTx as unknown,
+            tx as unknown,
+            "nested db.transaction opened a second unit",
+          );
         });
         await inDbTransaction(async (joinedTx) => {
           assert.equal(joinedTx as unknown, tx as unknown, "inDbTransaction opened a second unit");
@@ -272,33 +292,53 @@ test("rollback effects run when db.transaction rejects and not when it resolves"
         /unit failed/,
       );
       assert.deepEqual(compensated, ["rolled-back-unit"]);
-      assert.equal(pinnedTransactionExecutor(), undefined, "the pin outlived the failed transaction");
+      assert.equal(
+        pinnedTransactionExecutor(),
+        undefined,
+        "the pin outlived the failed transaction",
+      );
     });
   });
 });
 
-
 test("a refused transaction start releases its connection and never runs business work", async () => {
   const failure = new Error("transaction start refused");
   let called = false;
-  await withFakePoolClient(async (stats) => {
-    await assert.rejects(db.transaction(async () => { called = true; }),
-      (error: unknown) => error instanceof Error && error.cause === failure);
-    assert.equal(called, false);
-    assert.equal(stats.releases.length, 1);
-    assert.equal(stats.queries.filter(query => query.trim().toLowerCase() === "rollback").length, 0);
-  }, { begin: failure });
+  await withFakePoolClient(
+    async (stats) => {
+      await assert.rejects(
+        db.transaction(async () => {
+          called = true;
+        }),
+        (error: unknown) => error instanceof Error && error.cause === failure,
+      );
+      assert.equal(called, false);
+      assert.equal(stats.releases.length, 1);
+      assert.equal(
+        stats.queries.filter((query) => query.trim().toLowerCase() === "rollback").length,
+        0,
+      );
+    },
+    { begin: failure },
+  );
 });
 
 test("a rollback failure preserves the business refusal and discards the damaged connection", async () => {
   const refusal = new Error("business operation refused");
   const rollbackFailure = new Error("rollback failed");
-  await withFakePoolClient(async (stats) => {
-    await assert.rejects(db.transaction(async () => { throw refusal; }),
-      (error: unknown) => error === refusal);
-    assert.equal(stats.releases.length, 1);
-    const releasedWith = stats.releases[0];
-    assert.ok(releasedWith instanceof Error);
-    assert.equal(releasedWith.cause, rollbackFailure);
-  }, { rollback: rollbackFailure });
+  await withFakePoolClient(
+    async (stats) => {
+      await assert.rejects(
+        db.transaction(async () => {
+          throw refusal;
+        }),
+        (error: unknown) => error === refusal,
+      );
+      assert.equal(stats.releases.length, 1);
+      const releasedWith = stats.releases[0];
+      assert.ok(releasedWith instanceof Error);
+      assert.equal(releasedWith.cause, rollbackFailure);
+    },
+    { rollback: rollbackFailure },
+  );
 });

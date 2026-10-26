@@ -14,15 +14,13 @@ export const POST = defineRoute({
   handler: async ({ request: _req, authz: gate, params, body }) => {
     try {
       const { id } = params;
-      const qualification = await withOrgTransaction(
-        gate.user.orgId,
-        async () =>
-          verifyQualification(db, {
-            orgId: gate.user.orgId,
-            actorId: gate.user.id,
-            qualificationId: id,
-            ...body,
-          }),
+      const qualification = await withOrgTransaction(gate.user.orgId, async () =>
+        verifyQualification(db, {
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          qualificationId: id,
+          ...body,
+        }),
       );
       return NextResponse.json({ qualification });
     } catch (e) {

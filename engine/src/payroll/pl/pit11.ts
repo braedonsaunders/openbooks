@@ -118,9 +118,9 @@ function assertPlTaxYearSupported(taxYear: number): void {
   const loaded = payrollSupportedTaxYears(PL_TAX_YEARS);
   if (loaded.includes(taxYear)) return;
   throw new PayrollPackError(
-    `${taxYear} statutory tables are not loaded for PL — `
-    + (loaded.length > 0 ? `loaded years: ${loaded.join(", ")}. ` : "no years are loaded. ")
-    + "This year is not yet supported by the PL pack; contact support.",
+    `${taxYear} statutory tables are not loaded for PL — ` +
+      (loaded.length > 0 ? `loaded years: ${loaded.join(", ")}. ` : "no years are loaded. ") +
+      "This year is not yet supported by the PL pack; contact support.",
   );
 }
 
@@ -129,7 +129,8 @@ export async function pit11Slips(orgId: string, taxYear: number): Promise<Pit11S
   assertPlTaxYearSupported(taxYear);
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.employee_party_id, p.display_name,
            count(*)::int as stub_count,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -156,7 +157,9 @@ export async function pit11Slips(orgId: string, taxYear: number): Promise<Pit11S
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'PL'
      group by s.employee_party_id, p.display_name
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => {
     const przychod = normalizeMoney(num(row.przychod));
     const kup = normalizeMoney(num(row.kup));
@@ -190,8 +193,8 @@ export async function pit11Population(orgId: string, taxYear: number): Promise<P
   const slips = await pit11Slips(orgId, taxYear);
   if (slips.length === 0) {
     throw new PayrollError(
-      `no committed PL pay stubs for tax year ${taxYear} — a PIT-11 with no rows is a wrong `
-      + "statutory form, not an empty one. Commit the year's pay runs before opening the filing.",
+      `no committed PL pay stubs for tax year ${taxYear} — a PIT-11 with no rows is a wrong ` +
+        "statutory form, not an empty one. Commit the year's pay runs before opening the filing.",
     );
   }
   const total = (pick: (slip: Pit11Slip) => string) =>
@@ -223,7 +226,11 @@ export async function pit11Population(orgId: string, taxYear: number): Promise<P
       // The PIT-4R tie, stated where the operator reconciles: the employer's
       // annual PIT-4R declaration of advances withheld must equal this sum —
       // both read the same committed `pit` stub lines.
-      { label: "Zaliczki pobrane (poz. 33 — PIT-4R tie)", value: total((slip) => slip.zaliczka), money: true },
+      {
+        label: "Zaliczki pobrane (poz. 33 — PIT-4R tie)",
+        value: total((slip) => slip.zaliczka),
+        money: true,
+      },
     ],
   };
 }
@@ -238,8 +245,8 @@ export async function pit11Slip(
   const slip = slips.find((entry) => entry.employeePartyId === rowId);
   if (!slip) {
     throw new PayrollError(
-      `no ${taxYear} PIT-11 matches the requested employee — the information exists only `
-      + "for employees with committed PL pay stubs in that year",
+      `no ${taxYear} PIT-11 matches the requested employee — the information exists only ` +
+        "for employees with committed PL pay stubs in that year",
     );
   }
   // The validated identifier is rendered, not just checked: the operator
@@ -250,7 +257,8 @@ export async function pit11Slip(
   const pesel = await loadValidPesel(orgId, rowId);
   return {
     formCode: "PL_PIT11",
-    formName: "PIT-11 — Informacja o przychodach z innych źródeł oraz o dochodach i pobranych zaliczkach na podatek dochodowy",
+    formName:
+      "PIT-11 — Informacja o przychodach z innych źródeł oraz o dochodach i pobranych zaliczkach na podatek dochodowy",
     formNumber: "PIT-11",
     headerFields: [
       { label: "Employee (podatnik)", value: slip.employeeName },
@@ -258,16 +266,38 @@ export async function pit11Slip(
       { label: "Tax year (rok, poz. 4)", value: String(taxYear) },
       {
         label: "Form edition",
-        value: "PIT-11(29) box layout (rok 2025) — re-verify box numbers against the 2026-year edition when the Ministry publishes it",
+        value:
+          "PIT-11(29) box layout (rok 2025) — re-verify box numbers against the 2026-year edition when the Ministry publishes it",
       },
     ],
     boxes: [
-      { code: "29", label: "Przychód — należności ze stosunku pracy (E.1, kol. b)", value: slip.przychod },
-      { code: "30", label: "Koszty uzyskania przychodu faktycznie uwzględnione (E.1, kol. c)", value: slip.kup },
+      {
+        code: "29",
+        label: "Przychód — należności ze stosunku pracy (E.1, kol. b)",
+        value: slip.przychod,
+      },
+      {
+        code: "30",
+        label: "Koszty uzyskania przychodu faktycznie uwzględnione (E.1, kol. c)",
+        value: slip.kup,
+      },
       { code: "31", label: "Dochód (poz. 29 minus poz. 30)", value: slip.dochod, emphasis: true },
-      { code: "33", label: "Zaliczka pobrana przez płatnika (E.1, kol. f)", value: slip.zaliczka, emphasis: true },
-      { code: "95", label: "Składki na ubezpieczenia społeczne odliczone od dochodu", value: slip.skladkiSpoleczne },
-      { code: "122", label: "Składki na ubezpieczenie zdrowotne pobrane przez płatnika", value: slip.skladkiZdrowotne },
+      {
+        code: "33",
+        label: "Zaliczka pobrana przez płatnika (E.1, kol. f)",
+        value: slip.zaliczka,
+        emphasis: true,
+      },
+      {
+        code: "95",
+        label: "Składki na ubezpieczenia społeczne odliczone od dochodu",
+        value: slip.skladkiSpoleczne,
+      },
+      {
+        code: "122",
+        label: "Składki na ubezpieczenie zdrowotne pobrane przez płatnika",
+        value: slip.skladkiZdrowotne,
+      },
     ],
     notes: [
       "Section E row 1 (art. 31 employer payers). Every figure reads a committed stub — never a recomputation — and the slip's totals tie to the year's committed pay runs to the grosz.",
@@ -288,7 +318,9 @@ export async function pit11Slip(
  * cancellation code. Pure: the delta rides the generic correction row, so
  * the amended slip is verifiable without a database.
  */
-export async function pit11CorrectionSlip(row: PayrollFilingCorrectionRow): Promise<PayrollFilingSlipData> {
+export async function pit11CorrectionSlip(
+  row: PayrollFilingCorrectionRow,
+): Promise<PayrollFilingSlipData> {
   const boxes = row.changes
     .filter((change) => change.code != null)
     .flatMap((change) => [
@@ -302,8 +334,8 @@ export async function pit11CorrectionSlip(row: PayrollFilingCorrectionRow): Prom
     ]);
   if (boxes.length === 0) {
     throw new PayrollError(
-      `nothing on ${row.label}'s PIT-11 changed — an amended information restating the same `
-      + "figures tells the urząd skarbowy nothing and must not be filed",
+      `nothing on ${row.label}'s PIT-11 changed — an amended information restating the same ` +
+        "figures tells the urząd skarbowy nothing and must not be filed",
     );
   }
   return {
@@ -344,24 +376,30 @@ export async function pit11ConfidentialFields(
   // Same stored-key recompute as the T4 SIN: the snapshot names the key
   // that proves the current PESEL is the reported one, across rotations.
   const stored = previous?.find((entry) => entry.label === label)?.fingerprint;
-  return [{
-    label,
-    fingerprint: keyedFingerprintForComparison("pl.pesel", pesel, stored),
-  }];
+  return [
+    {
+      label,
+      fingerprint: keyedFingerprintForComparison("pl.pesel", pesel, stored),
+    },
+  ];
 }
 
 /** PIT-11 requires a legally valid PESEL even for profiles saved before validation existed. */
 async function loadValidPesel(orgId: string, employeePartyId: string): Promise<string> {
-  const rows = await db.execute<{ sin_encrypted: string | null }>(sql`
+  const rows = await db.execute<{ sin_encrypted: string | null }>(
+    sql`
     select sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const sealed = rows[0]?.sin_encrypted ?? null;
-  const pesel = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
+  const pesel =
+    sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
   if (!pesel || !isValidPesel(pesel)) {
     throw new PayrollError(
-      `cannot issue or amend this employee's PIT-11 because the PESEL is ${pesel ? "invalid" : "missing"} — `
-      + "save a valid 11-digit PESEL with a valid encoded birth date and control digit",
+      `cannot issue or amend this employee's PIT-11 because the PESEL is ${pesel ? "invalid" : "missing"} — ` +
+        "save a valid 11-digit PESEL with a valid encoded birth date and control digit",
     );
   }
   return pesel;

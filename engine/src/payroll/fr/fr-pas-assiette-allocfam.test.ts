@@ -17,20 +17,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { toUnits } from "../../money/money.ts";
-import { EMPTY_EMPLOYER_LEVY_FACTORS, type PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import {
+  EMPTY_EMPLOYER_LEVY_FACTORS,
+  type PayrollStatutoryComputeContext,
+} from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { buildResolution } from "../statutory-rates.ts";
 import type { StatutoryRateRow } from "../statutory-rates.ts";
 import { calculateFrPas2026 } from "./compute-statutory.ts";
-import {
-  calculateFrCotisations2026,
-  calculateFrNetImposable2026,
-} from "./cotisations.ts";
-import {
-  FR_ALLOC_FAM_ER_2026,
-  FR_ALLOC_FAM_SEUIL_2026,
-  FR_SMIC_2026,
-} from "./cotisations-2026.ts";
+import { calculateFrCotisations2026, calculateFrNetImposable2026 } from "./cotisations.ts";
+import { FR_ALLOC_FAM_ER_2026, FR_ALLOC_FAM_SEUIL_2026, FR_SMIC_2026 } from "./cotisations-2026.ts";
 import { FR_PAYROLL_PACK } from "./pack.ts";
 import { frAllocFamReducedEligible, FR_PACK_RATES } from "./statutory-rates.ts";
 
@@ -38,22 +34,40 @@ const PAY = "2026-06-15";
 const COTS = { payDate: PAY, periodsPerYear: 12, employerEffectif: "10.00" } as const;
 
 /** Adapter context for a métropole employee with a transmitted PAS rate. */
-function ctxFor(brut: string, transmitted: string, employerEffectif = "10.00"): PayrollStatutoryComputeContext {
+function ctxFor(
+  brut: string,
+  transmitted: string,
+  employerEffectif = "10.00",
+): PayrollStatutoryComputeContext {
   const pushed: { systemKey: string; kind: string; amount: string }[] = [];
   let query = 0;
   return {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
-    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve(++query === 1
-      ? ({ rows: [{ fact_value: employerEffectif }] })
-      : query === 3
-      ? ({ rows: [{ fact_value: "droit_commun" }] })
-      : ({ rows: [{ fact_value: "ordinary", remuneration: "0", smic: "0", reduction: "0" }] })).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as never,
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
+    tx: {
+      execute: async (_query: unknown, mode?: string) =>
+        Promise.resolve(
+          ++query === 1
+            ? { rows: [{ fact_value: employerEffectif }] }
+            : query === 3
+              ? { rows: [{ fact_value: "droit_commun" }] }
+              : {
+                  rows: [{ fact_value: "ordinary", remuneration: "0", smic: "0", reduction: "0" }],
+                },
+        ).then(<T extends { rows: unknown }>(result: T) =>
+          mode === "objects" ? result.rows : result,
+        ),
+    } as never,
     orgId: "org",
     subsidiaryId: "legal-employer",
-    resolveStatutoryRates: async () => ({
-      values: (slotKey: string) => slotKey === "fr_atmp" ? { taux: "0.0000" } : null,
-    }) as never,
+    resolveStatutoryRates: async () =>
+      ({
+        values: (slotKey: string) => (slotKey === "fr_atmp" ? { taux: "0.0000" } : null),
+      }) as never,
     documentId: "doc",
     employeePartyId: "emp",
     employmentId: "employment",
@@ -147,7 +161,10 @@ test("DEFECT 1: PAS prices the net imposable, not the brut (3 400 €, transmis 
 test("eligible French payroll refuses a missing period-hours fact by name", async () => {
   const context = ctxFor("3400.00", "5");
   context.statutoryHours = { regular: null, extra: "0" };
-  await assert.rejects(FR_PAYROLL_PACK.computeStatutory(context), /contractual hours for this pay period are missing.*effective work schedule or approved hours/);
+  await assert.rejects(
+    FR_PAYROLL_PACK.computeStatutory(context),
+    /contractual hours for this pay period are missing.*effective work schedule or approved hours/,
+  );
 });
 
 test("French statutory compute refuses an unresolved establishment AT/MP rate by name", async () => {
@@ -186,17 +203,19 @@ test("PAS assiette: CSG add-back identity holds below and above the PASS", () =>
     assert.equal(net.cegSal, cots.cegSal, brut);
     assert.equal(net.cetSal, cots.cetSal, brut);
     // brut − déductibles form.
-    const expected = toUnits(brut)
-      - toUnits(net.vieillesseSal)
-      - toUnits(net.csgDeductible)
-      - toUnits(net.arrcoSal)
-      - toUnits(net.cegSal);
+    const expected =
+      toUnits(brut) -
+      toUnits(net.vieillesseSal) -
+      toUnits(net.csgDeductible) -
+      toUnits(net.arrcoSal) -
+      toUnits(net.cegSal);
     assert.equal(toUnits(net.netImposable), expected, brut);
     // net social + add-back form.
-    const rebuilt = toUnits(net.netSocial)
-      + toUnits(net.csgNonDeductible)
-      + toUnits(net.crds)
-      + toUnits(net.cetSal);
+    const rebuilt =
+      toUnits(net.netSocial) +
+      toUnits(net.csgNonDeductible) +
+      toUnits(net.crds) +
+      toUnits(net.cetSal);
     assert.equal(toUnits(net.netImposable), rebuilt, brut);
   }
 });
@@ -227,7 +246,9 @@ test("eligible employer: 3 400 € annualises below 3.5×2023 SMIC → 3.45%", (
   // Only specified exemption/special-regime employers can use the reduced
   // rate; the €73,382.40 annual threshold is 3.5×the 31-Dec-2023 SMIC.
   const r = calculateFrCotisations2026({
-    brut: "3400.00", ...COTS, allocFamReducedEligible: true,
+    brut: "3400.00",
+    ...COTS,
+    allocFamReducedEligible: true,
   });
   assert.equal(r.allocFamErRate, FR_ALLOC_FAM_ER_2026.reduit.rate);
   assert.equal(r.allocFamErRate, "0.0345");
@@ -237,7 +258,9 @@ test("eligible employer: 3 400 € annualises below 3.5×2023 SMIC → 3.45%", (
 test("eligible employer above the 2023-SMIC ceiling owes the 5.25% family rate", () => {
   // 7,000 × 12 exceeds the €73,382.40 reduced-rate ceiling.
   const r = calculateFrCotisations2026({
-    brut: "7000.00", ...COTS, allocFamReducedEligible: true,
+    brut: "7000.00",
+    ...COTS,
+    allocFamReducedEligible: true,
   });
   assert.equal(r.allocFamErRate, FR_ALLOC_FAM_ER_2026.plein.rate);
   assert.equal(r.allocFamErRate, "0.0525");
@@ -288,7 +311,10 @@ test("reduced-rate eligibility resolves only from the employer's account", () =>
     supersededOn: null,
   };
   const resolution = buildResolution({
-    country: "FR", taxYear: 2026, pack: FR_PACK_RATES, rows: [rate],
+    country: "FR",
+    taxYear: 2026,
+    pack: FR_PACK_RATES,
+    rows: [rate],
   });
   assert.equal(frAllocFamReducedEligible(resolution, "FR", "siret-eligible"), true);
   assert.equal(frAllocFamReducedEligible(resolution, "FR", "siret-ordinary"), false);
@@ -305,5 +331,8 @@ test("year values: reduced-rate threshold is tied to the 2023 SMIC", () => {
   assert.equal(FR_ALLOC_FAM_SEUIL_2026.multiple, "3.5");
   assert.equal(FR_ALLOC_FAM_SEUIL_2026.annual, "73382.40");
   assert.equal(FR_ALLOC_FAM_SEUIL_2026.referenceSmicAnnual, "20966.40");
-  assert.equal(toUnits(FR_ALLOC_FAM_SEUIL_2026.annual), (toUnits(FR_ALLOC_FAM_SEUIL_2026.referenceSmicAnnual) * 35n) / 10n);
+  assert.equal(
+    toUnits(FR_ALLOC_FAM_SEUIL_2026.annual),
+    (toUnits(FR_ALLOC_FAM_SEUIL_2026.referenceSmicAnnual) * 35n) / 10n,
+  );
 });

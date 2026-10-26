@@ -37,15 +37,24 @@ test("the US pack declares no destination schedule", () => {
 
 test("the RQ schedule declares three cited bands with exact thresholds", () => {
   const bands = RQ_REMITTANCE_SCHEDULE.frequencies;
-  assert.deepEqual(bands.map((band) => band.frequency), ["quarterly", "monthly", "twice_monthly"]);
+  assert.deepEqual(
+    bands.map((band) => band.frequency),
+    ["quarterly", "monthly", "twice_monthly"],
+  );
   // Under $3,000 quarterly; $3,000 to under $25,000 monthly; $25,000 or more
   // twice a month. A value on a shared boundary belongs to the higher band.
   assert.equal(remittanceBandForAverage(RQ_REMITTANCE_SCHEDULE, "0")?.frequency, "quarterly");
   assert.equal(remittanceBandForAverage(RQ_REMITTANCE_SCHEDULE, "2999.99")?.frequency, "quarterly");
   assert.equal(remittanceBandForAverage(RQ_REMITTANCE_SCHEDULE, "3000")?.frequency, "monthly");
   assert.equal(remittanceBandForAverage(RQ_REMITTANCE_SCHEDULE, "24999.99")?.frequency, "monthly");
-  assert.equal(remittanceBandForAverage(RQ_REMITTANCE_SCHEDULE, "25000")?.frequency, "twice_monthly");
-  assert.equal(remittanceBandForAverage(RQ_REMITTANCE_SCHEDULE, "250000")?.frequency, "twice_monthly");
+  assert.equal(
+    remittanceBandForAverage(RQ_REMITTANCE_SCHEDULE, "25000")?.frequency,
+    "twice_monthly",
+  );
+  assert.equal(
+    remittanceBandForAverage(RQ_REMITTANCE_SCHEDULE, "250000")?.frequency,
+    "twice_monthly",
+  );
 });
 
 test("the RQ schedule defaults to monthly — Revenu Québec's new-employer frequency", () => {
@@ -60,16 +69,22 @@ test("the RQ schedule moves deadlines on the Québec calendar", () => {
 });
 
 test("the RQ schedule is in force for current periods", () => {
-  assert.equal(remittanceScheduleInForce("rqRemittancePartyId", "2026-07-31"), RQ_REMITTANCE_SCHEDULE);
+  assert.equal(
+    remittanceScheduleInForce("rqRemittancePartyId", "2026-07-31"),
+    RQ_REMITTANCE_SCHEDULE,
+  );
   assert.equal(remittanceScheduleInForce("rqRemittancePartyId", "2023-12-31"), null);
 });
 
 test("schedule versions are effective-dated: the version in force on the period end wins", () => {
   const v1: PayrollRemittanceSchedule = {
-    ...RQ_REMITTANCE_SCHEDULE, effectiveFrom: "2024-01-01", effectiveTo: "2027-01-01",
+    ...RQ_REMITTANCE_SCHEDULE,
+    effectiveFrom: "2024-01-01",
+    effectiveTo: "2027-01-01",
   };
   const v2: PayrollRemittanceSchedule = {
-    ...RQ_REMITTANCE_SCHEDULE, effectiveFrom: "2027-01-01",
+    ...RQ_REMITTANCE_SCHEDULE,
+    effectiveFrom: "2027-01-01",
   };
   const schedules = [v2, v1];
   assert.equal(remittanceScheduleInForce("rqRemittancePartyId", "2026-12-31", schedules), v1);
@@ -79,10 +94,13 @@ test("schedule versions are effective-dated: the version in force on the period 
 
 test("overlapping schedule versions for one vendor are refused, never a coin toss", () => {
   const v1: PayrollRemittanceSchedule = {
-    ...RQ_REMITTANCE_SCHEDULE, effectiveFrom: "2024-01-01", effectiveTo: "2027-01-01",
+    ...RQ_REMITTANCE_SCHEDULE,
+    effectiveFrom: "2024-01-01",
+    effectiveTo: "2027-01-01",
   };
   const v2: PayrollRemittanceSchedule = {
-    ...RQ_REMITTANCE_SCHEDULE, effectiveFrom: "2026-01-01",
+    ...RQ_REMITTANCE_SCHEDULE,
+    effectiveFrom: "2026-01-01",
   };
   const overlapping = {
     CA: { ...payrollPack("CA"), remittanceSchedules: [v1] },
@@ -91,7 +109,8 @@ test("overlapping schedule versions for one vendor are refused, never a coin tos
   assert.throws(() => allRemittanceSchedules(overlapping), PayrollPackError);
   // Contiguous ranges are the lawful handoff, not an overlap.
   const v3: PayrollRemittanceSchedule = {
-    ...RQ_REMITTANCE_SCHEDULE, effectiveFrom: "2027-01-01",
+    ...RQ_REMITTANCE_SCHEDULE,
+    effectiveFrom: "2027-01-01",
   };
   const contiguous = {
     CA: { ...payrollPack("CA"), remittanceSchedules: [v1] },
@@ -111,9 +130,11 @@ test("a schedule whose default names no band is refused", () => {
 test("a schedule with an empty average-monthly band is refused", () => {
   const bad: PayrollRemittanceSchedule = {
     ...RQ_REMITTANCE_SCHEDULE,
-    frequencies: RQ_REMITTANCE_SCHEDULE.frequencies.map((band) => band.frequency === "monthly"
-      ? { ...band, averageMonthlyMin: "25000", averageMonthlyMaxExclusive: "3000" }
-      : band),
+    frequencies: RQ_REMITTANCE_SCHEDULE.frequencies.map((band) =>
+      band.frequency === "monthly"
+        ? { ...band, averageMonthlyMin: "25000", averageMonthlyMaxExclusive: "3000" }
+        : band,
+    ),
   };
   assert.throws(
     () => allRemittanceSchedules({ CA: { ...payrollPack("CA"), remittanceSchedules: [bad] } }),
@@ -138,9 +159,7 @@ test("a schedule on an undeclared calendar is refused", () => {
 });
 
 test("frequency settings keys derive from the declared schedules", () => {
-  assert.deepEqual(declaredRemittanceFrequencySettingsKeys(), [
-    "rqRemittanceFrequency",
-  ]);
+  assert.deepEqual(declaredRemittanceFrequencySettingsKeys(), ["rqRemittanceFrequency"]);
 });
 
 test("an unknown frequency resolves to no band — the caller falls back, never guesses", () => {

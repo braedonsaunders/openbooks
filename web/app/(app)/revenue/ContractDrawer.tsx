@@ -17,7 +17,7 @@ import {
 } from "@openbooks/ui";
 import { add, neg, sum } from "@openbooks/engine/money/money";
 import { RecognitionControls } from "./RecognitionControls";
-import { PrepaidBreakageButton } from './PrepaidBreakageButton'
+import { PrepaidBreakageButton } from "./PrepaidBreakageButton";
 import { CancelRecognitionButton } from "./CancelRecognitionButton";
 import { ReconcileLegacyButton } from "./ReconcileLegacyButton";
 import { RunRecognitionButton } from "./RunRecognitionButton";
@@ -30,10 +30,7 @@ import {
 import type { RevenueModificationOptions, ContractPayload } from "./_lib";
 import type { MoneyFormatter } from "@/lib/money-format";
 
-const STATUS_VARIANT: Record<
-  string,
-  "success" | "secondary" | "warning" | "outline"
-> = {
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "warning" | "outline"> = {
   active: "success",
   complete: "secondary",
   draft: "outline",
@@ -50,9 +47,7 @@ export function contractSummaryTotals(
   return {
     recognized: sum(obligations.map((obligation) => obligation.recognized)),
     deferred: sum(
-      obligations.map((obligation) =>
-        add(obligation.planned, neg(obligation.recognized)),
-      ),
+      obligations.map((obligation) => add(obligation.planned, neg(obligation.recognized))),
     ),
   };
 }
@@ -129,9 +124,7 @@ export function ContractDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{c.contract_number}</span>
-          <Badge variant={STATUS_VARIANT[c.status] ?? "secondary"}>
-            {t(`status.${c.status}`)}
-          </Badge>
+          <Badge variant={STATUS_VARIANT[c.status] ?? "secondary"}>{t(`status.${c.status}`)}</Badge>
         </span>
       }
       description={c.customer}
@@ -163,18 +156,9 @@ export function ContractDrawer({
 
         {/* -- summary ------------------------------------------------- */}
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Stat
-            label={t("labels.total")}
-            value={money(c.total_transaction_price)}
-          />
-          <Stat
-            label={t("drawer.obligations")}
-            value={String(payload.obligations.length)}
-          />
-          <Stat
-            label={t("labels.recognized")}
-            value={money(totals.recognized)}
-          />
+          <Stat label={t("labels.total")} value={money(c.total_transaction_price)} />
+          <Stat label={t("drawer.obligations")} value={String(payload.obligations.length)} />
+          <Stat label={t("labels.recognized")} value={money(totals.recognized)} />
           <Stat label={t("labels.deferred")} value={money(totals.deferred)} />
         </section>
 
@@ -193,216 +177,205 @@ export function ContractDrawer({
           ariaLabel={t("drawer.contractTabs.ariaLabel")}
         />
         <div hidden={section !== "overview"} className="space-y-6">
-        {/* -- configure: every billing posted against this contract ------ */}
-        {payload.billings.length > 0 ? (
-          <section className="space-y-2">
-            <h3 className="font-semibold">{t("drawer.billingsTitle")}</h3>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("drawer.billingInvoice")}</TableHead>
-                  <TableHead>{t("drawer.billedOn")}</TableHead>
-                  <TableHead className="text-right">
-                    {t("drawer.billedAmount")}
-                  </TableHead>
-                  {showBillingCancellation ? <TableHead /> : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {payload.billings.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell>
-                      <Link
-                        className="underline"
-                        href={`/ar/invoices?doc=${b.id}`}
-                      >
-                        {b.document_number}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{b.billed_on}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {money(b.amount)}
-                    </TableCell>
-                    {showBillingCancellation ? (
-                      <TableCell className="text-right">
-                        {b.status === "posted" ? (
-                          <CancelRecognitionButton
-                            documentId={b.id}
-                            invoiceNumber={b.document_number}
-                          />
-                        ) : null}
-                      </TableCell>
-                    ) : null}
+          {/* -- configure: every billing posted against this contract ------ */}
+          {payload.billings.length > 0 ? (
+            <section className="space-y-2">
+              <h3 className="font-semibold">{t("drawer.billingsTitle")}</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("drawer.billingInvoice")}</TableHead>
+                    <TableHead>{t("drawer.billedOn")}</TableHead>
+                    <TableHead className="text-right">{t("drawer.billedAmount")}</TableHead>
+                    {showBillingCancellation ? <TableHead /> : null}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </section>
-        ) : null}
+                </TableHeader>
+                <TableBody>
+                  {payload.billings.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell>
+                        <Link className="underline" href={`/ar/invoices?doc=${b.id}`}>
+                          {b.document_number}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{b.billed_on}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(b.amount)}</TableCell>
+                      {showBillingCancellation ? (
+                        <TableCell className="text-right">
+                          {b.status === "posted" ? (
+                            <CancelRecognitionButton
+                              documentId={b.id}
+                              invoiceNumber={b.document_number}
+                            />
+                          ) : null}
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </section>
+          ) : null}
 
-        {/* -- cancellation: invoice-scoped contracts use their single source
+          {/* -- cancellation: invoice-scoped contracts use their single source
             invoice; shared contracts expose the action beside each billing. */}
-        {canRun && c.status === "active" && c.sourceInvoiceId ? (
-          <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t("cancel.drawerHint")}
-            </p>
-            <CancelRecognitionButton
-              documentId={c.sourceInvoiceId}
-              invoiceNumber={c.sourceInvoiceNumber ?? c.contract_number}
-            />
-          </section>
-        ) : null}
+          {canRun && c.status === "active" && c.sourceInvoiceId ? (
+            <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t("cancel.drawerHint")}</p>
+              <CancelRecognitionButton
+                documentId={c.sourceInvoiceId}
+                invoiceNumber={c.sourceInvoiceNumber ?? c.contract_number}
+              />
+            </section>
+          ) : null}
 
-        {canRun &&
-        modificationOptions &&
-        ["active", "complete"].includes(c.status) ? (
-          <ModifyContractButton
-            payload={payload}
-            options={modificationOptions}
-          />
-        ) : null}
-        {canRun && payload.prepaidGrants?.length ? <PrepaidBreakageButton grants={payload.prepaidGrants} /> : null}
+          {canRun && modificationOptions && ["active", "complete"].includes(c.status) ? (
+            <ModifyContractButton payload={payload} options={modificationOptions} />
+          ) : null}
+          {canRun && payload.prepaidGrants?.length ? (
+            <PrepaidBreakageButton grants={payload.prepaidGrants} />
+          ) : null}
         </div>
         {/* -- sibling: accounting events on their own tab, with the same
             deep links the overview used to carry inline. */}
         <div hidden={section !== "changes"} className="space-y-2">
-        {payload.changes?.length ? (
-          <section className="space-y-2">
-            <h3 className="font-semibold">{t("drawer.eventsTitle")}</h3>
-            {payload.changes.map((change) => (
-              <p key={change.id}>
-                <Link
-                  className="underline"
-                  href={`/accounting/changes?change=${change.id}`}
-                >
-                  {change.effective_on} · {financialChangeEventLabel(change.operation)} ·{" "}
-                  {financialChangeStatusLabel(change.status)}
-                </Link>
-              </p>
-            ))}
-          </section>
-        ) : null}
+          {payload.changes?.length ? (
+            <section className="space-y-2">
+              <h3 className="font-semibold">{t("drawer.eventsTitle")}</h3>
+              {payload.changes.map((change) => (
+                <p key={change.id}>
+                  <Link className="underline" href={`/accounting/changes?change=${change.id}`}>
+                    {change.effective_on} · {financialChangeEventLabel(change.operation)} ·{" "}
+                    {financialChangeStatusLabel(change.status)}
+                  </Link>
+                </p>
+              ))}
+            </section>
+          ) : null}
         </div>
         <div hidden={section !== "obligations"} className="space-y-4">
-        {/* -- parent: the shared drawer strip names each obligation once, so
+          {/* -- parent: the shared drawer strip names each obligation once, so
             the body holds exactly one concept table at a time. Period counts
             ride on the tabs; the focused pane below names the selection. */}
-        <DrawerTabStrip
-          tabs={payload.obligations.map((o) => ({
-            key: o.id,
-            label: o.description,
-            count: o.lines.length,
-          }))}
-          activeKey={selectedObligation?.id ?? ""}
-          onSelect={(key) => setSelectedObligationId(key)}
-          ariaLabel={t("drawer.obligations")}
-        />
-        {/* -- focused child: only the selected obligation's schedule ------- */}
-        {selectedObligation ? (
-          <section
-            aria-label={selectedObligation.description}
-            className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">{selectedObligation.description}</span>
-                <Badge variant={STATUS_VARIANT[selectedObligation.status] ?? "secondary"}>
-                  {t(`obligationStatus.${selectedObligation.status}`)}
-                </Badge>
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {t(`method.${selectedObligation.method}`)} · {money(selectedObligation.allocated_price)}
-                </span>
-                {selectedObligation.legacy_unverified ? (
-                  <Badge variant="warning">
-                    {t("drawer.legacyUnverified")}
+          <DrawerTabStrip
+            tabs={payload.obligations.map((o) => ({
+              key: o.id,
+              label: o.description,
+              count: o.lines.length,
+            }))}
+            activeKey={selectedObligation?.id ?? ""}
+            onSelect={(key) => setSelectedObligationId(key)}
+            ariaLabel={t("drawer.obligations")}
+          />
+          {/* -- focused child: only the selected obligation's schedule ------- */}
+          {selectedObligation ? (
+            <section
+              aria-label={selectedObligation.description}
+              className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">{selectedObligation.description}</span>
+                  <Badge variant={STATUS_VARIANT[selectedObligation.status] ?? "secondary"}>
+                    {t(`obligationStatus.${selectedObligation.status}`)}
                   </Badge>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {t(`method.${selectedObligation.method}`)} ·{" "}
+                    {money(selectedObligation.allocated_price)}
+                  </span>
+                  {selectedObligation.legacy_unverified ? (
+                    <Badge variant="warning">{t("drawer.legacyUnverified")}</Badge>
+                  ) : null}
+                  {selectedObligation.fair_value_flag ? (
+                    <Badge variant="warning">
+                      {t("drawer.fairValueOutOfRange", {
+                        low:
+                          selectedObligation.fair_value_low != null
+                            ? money(selectedObligation.fair_value_low)
+                            : "—",
+                        high:
+                          selectedObligation.fair_value_high != null
+                            ? money(selectedObligation.fair_value_high)
+                            : "—",
+                      })}
+                    </Badge>
+                  ) : null}
+                </div>
+                {canRun ? (
+                  <RunRecognitionButton
+                    obligationId={selectedObligation.id}
+                    obligationDescription={selectedObligation.description}
+                  />
                 ) : null}
-                {selectedObligation.fair_value_flag ? (
-                  <Badge variant="warning">
-                    {t("drawer.fairValueOutOfRange", {
-                      low:
-                        selectedObligation.fair_value_low != null
-                          ? money(selectedObligation.fair_value_low)
-                          : "—",
-                      high:
-                        selectedObligation.fair_value_high != null
-                          ? money(selectedObligation.fair_value_high)
-                          : "—",
-                    })}
-                  </Badge>
+                {canRun && selectedObligation.legacy_unverified ? (
+                  <ReconcileLegacyButton obligationId={selectedObligation.id} />
                 ) : null}
               </div>
               {canRun ? (
-                <RunRecognitionButton obligationId={selectedObligation.id} obligationDescription={selectedObligation.description} />
+                <RecognitionControls
+                  obligationId={selectedObligation.id}
+                  held={selectedObligation.recognition_held ?? false}
+                  revision={selectedObligation.control_revision ?? 1}
+                  deliveredOn={selectedObligation.delivered_on ?? null}
+                  deliveryRequired={!!selectedObligation.delivery_bundle_document_id}
+                />
               ) : null}
-              {canRun && selectedObligation.legacy_unverified ? (
-                <ReconcileLegacyButton obligationId={selectedObligation.id} />
-              ) : null}
-            </div>
-            {canRun ? <RecognitionControls obligationId={selectedObligation.id} held={selectedObligation.recognition_held ?? false} revision={selectedObligation.control_revision ?? 1} deliveredOn={selectedObligation.delivered_on ?? null} deliveryRequired={!!selectedObligation.delivery_bundle_document_id} /> : null}
-            {/* -- advanced: period-by-period posting detail, collapsed with
+              {/* -- advanced: period-by-period posting detail, collapsed with
                 its position summarized. Forced open while it needs
                 attention (no plan, unverified history, out-of-range
                 allocation). */}
-            <DisclosureSection
-              title={t("drawer.scheduleTitle")}
-              summary={t("drawer.scheduleSummary", {
-                periods: selectedObligation.lines.length,
-                recognized: money(selectedObligation.recognized),
-                planned: money(selectedObligation.planned),
-              })}
-              forceOpen={obligationNeedsAttention(selectedObligation)}
-            >
-              {selectedObligation.lines.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t("drawer.noSchedule")}
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("drawer.period")}</TableHead>
-                      <TableHead className="text-right">
-                        {t("drawer.planned")}
-                      </TableHead>
-                      <TableHead className="text-right">
-                        {t("drawer.recognized")}
-                      </TableHead>
-                      <TableHead>{tCommon("labels.status")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedObligation.lines.map((l, i) => (
-                      <TableRow key={i}>
-                        <TableCell>{l.period_name}</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {money(l.planned_amount)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {l.journal_entry_id ? money(l.recognized_amount) : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={l.journal_entry_id ? "success" : "outline"}
-                          >
-                            {l.superseded_by_change_id
-                              ? t("drawer.supersededStatus")
-                              : l.reversal_journal_entry_id
-                                ? t("drawer.reversedStatus")
-                                : l.journal_entry_id
-                                  ? t("drawer.postedStatus")
-                                  : t("drawer.plannedStatus")}
-                          </Badge>
-                        </TableCell>
+              <DisclosureSection
+                title={t("drawer.scheduleTitle")}
+                summary={t("drawer.scheduleSummary", {
+                  periods: selectedObligation.lines.length,
+                  recognized: money(selectedObligation.recognized),
+                  planned: money(selectedObligation.planned),
+                })}
+                forceOpen={obligationNeedsAttention(selectedObligation)}
+              >
+                {selectedObligation.lines.length === 0 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t("drawer.noSchedule")}
+                  </p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("drawer.period")}</TableHead>
+                        <TableHead className="text-right">{t("drawer.planned")}</TableHead>
+                        <TableHead className="text-right">{t("drawer.recognized")}</TableHead>
+                        <TableHead>{tCommon("labels.status")}</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </DisclosureSection>
-          </section>
-        ) : null}
+                    </TableHeader>
+                    <TableBody>
+                      {selectedObligation.lines.map((l, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{l.period_name}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {money(l.planned_amount)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {l.journal_entry_id ? money(l.recognized_amount) : "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={l.journal_entry_id ? "success" : "outline"}>
+                              {l.superseded_by_change_id
+                                ? t("drawer.supersededStatus")
+                                : l.reversal_journal_entry_id
+                                  ? t("drawer.reversedStatus")
+                                  : l.journal_entry_id
+                                    ? t("drawer.postedStatus")
+                                    : t("drawer.plannedStatus")}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </DisclosureSection>
+            </section>
+          ) : null}
         </div>
       </div>
     </UrlDrawer>
@@ -449,11 +422,7 @@ function coverageLine(
 }
 
 /** Everyday position: billed against recognized, with the side named. */
-function positionLine(
-  t: Translator,
-  money: MoneyFormat,
-  payload: ContractPayload,
-): string {
+function positionLine(t: Translator, money: MoneyFormat, payload: ContractPayload): string {
   const position = payload.position;
   if (position.side === "settled") return t("position.settled");
   if (position.side === "liability") {
@@ -466,8 +435,6 @@ function positionLine(
   return t("position.asset", {
     billed: money(position.billed),
     recognized: money(position.recognized),
-    net: money(
-      position.net.startsWith("-") ? position.net.slice(1) : position.net,
-    ),
+    net: money(position.net.startsWith("-") ? position.net.slice(1) : position.net),
   });
 }

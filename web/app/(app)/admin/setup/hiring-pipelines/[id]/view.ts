@@ -1,11 +1,11 @@
-import 'server-only'
+import "server-only";
 
-import { notFound } from 'next/navigation'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../../../lib/feature-gates'
-import { loadPipelineTemplateNode } from '../../../../../../lib/setup/hrm-builders'
-import type { PipelineTemplateNode } from '../../../../../../lib/setup/hrm-builder-outline'
+import { notFound } from "next/navigation";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../../../lib/feature-gates";
+import { loadPipelineTemplateNode } from "../../../../../../lib/setup/hrm-builders";
+import type { PipelineTemplateNode } from "../../../../../../lib/setup/hrm-builder-outline";
 
 /**
  * One hiring pipeline's builder page: the pipeline, its ordered stages with
@@ -13,25 +13,25 @@ import type { PipelineTemplateNode } from '../../../../../../lib/setup/hrm-build
  */
 
 export interface PipelineBuilderData {
-  pipeline: PipelineTemplateNode
+  pipeline: PipelineTemplateNode;
 }
 
 export async function loadPipelineBuilder(id: string): Promise<PipelineBuilderData> {
-  const authz = await requirePermission('admin.setup.manage')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'hrm')
-  const pipeline = await loadPipelineTemplateNode(orgId, id)
-  if (!pipeline) notFound()
-  return { pipeline }
+  const authz = await requirePermission("admin.setup.manage");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "hrm");
+  const pipeline = await loadPipelineTemplateNode(orgId, id);
+  if (!pipeline) notFound();
+  return { pipeline };
 }
 
 export function pipelineBuilderSpec(data: PipelineBuilderData): PageSpec {
   return page({
-    route: '/admin/setup/hiring-pipelines/[id]',
+    route: "/admin/setup/hiring-pipelines/[id]",
     // One client island: the stage list, drag state, the stage-flow strip and
     // the inspector drafts share state a spec cannot name.
-    layout: 'bare',
+    layout: "bare",
     header: [],
-    body: [widgetBlock('hiring-pipeline-builder', { pipeline: data.pipeline })],
-  })
+    body: [widgetBlock("hiring-pipeline-builder", { pipeline: data.pipeline })],
+  });
 }

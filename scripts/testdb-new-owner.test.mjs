@@ -24,10 +24,7 @@ async function schemaFingerprint() {
   const source = await readFile(script, "utf8");
   const implementation = source.match(/^schema_fingerprint\(\) \{[\s\S]*?^\}/m)?.[0];
   assert.ok(implementation, "the test database fingerprint implementation must exist");
-  const { stdout } = await execFileAsync("bash", [
-    "-c",
-    implementation + "\nschema_fingerprint",
-  ]);
+  const { stdout } = await execFileAsync("bash", ["-c", implementation + "\nschema_fingerprint"]);
   return stdout.trim();
 }
 
@@ -41,7 +38,10 @@ async function harness(fingerprint, templateMigrations = 1) {
   const bin = join(root, "bin");
   const log = join(root, "psql.log");
   await mkdir(bin);
-  await writeExecutable(join(bin, "docker"), `#!/bin/sh\ncase "$1" in info) exit 0 ;; inspect) printf 'true\\n' ;; *) exit 0 ;; esac\n`);
+  await writeExecutable(
+    join(bin, "docker"),
+    `#!/bin/sh\ncase "$1" in info) exit 0 ;; inspect) printf 'true\\n' ;; *) exit 0 ;; esac\n`,
+  );
   await writeExecutable(
     join(bin, "psql"),
     `#!/bin/sh
@@ -57,14 +57,21 @@ esac
   const run = async (args, env = {}) => {
     try {
       const { stdout, stderr } = await execFileAsync("bash", [script, ...args], {
-        env: { ...process.env, OPENBOOKS_TESTDB_ALLOW_STALE: "", OPENBOOKS_TESTDB_TEMPLATE: "", ...env, PATH: `${bin}:${process.env.PATH}` },
+        env: {
+          ...process.env,
+          OPENBOOKS_TESTDB_ALLOW_STALE: "",
+          OPENBOOKS_TESTDB_TEMPLATE: "",
+          ...env,
+          PATH: `${bin}:${process.env.PATH}`,
+        },
       });
       return { code: 0, stdout, stderr };
     } catch (error) {
       return { code: error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? "" };
     }
   };
-  const statements = async () => (await readFile(log, "utf8").catch(() => "")).split("\n").filter(Boolean);
+  const statements = async () =>
+    (await readFile(log, "utf8").catch(() => "")).split("\n").filter(Boolean);
   return { run, statements, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 
@@ -77,7 +84,10 @@ test("new hands back a database owned by the runtime role the suite connects as"
 
   const creates = (await h.statements()).filter((line) => /create database/i.test(line));
   assert.equal(creates.length, 1, "exactly one database is created");
-  assert.match(creates[0], /create database ob_ownercheck template openbooks_template owner openbooks_app/);
+  assert.match(
+    creates[0],
+    /create database ob_ownercheck template openbooks_template owner openbooks_app/,
+  );
 
   // The property worth guarding is that the OWNER is the role the suite
   // CONNECTS as: a copy the runtime role cannot extend is unusable for any
@@ -99,32 +109,77 @@ test("new refuses a template built from a different schema unless --allow-stale,
   t.after(h.cleanup);
 
   const refused = await h.run(["new", "stalecheck"]);
-  assert.equal(refused.code, 1, `a copy of a mismatched template was handed out:\n${refused.stderr}`);
+  assert.equal(
+    refused.code,
+    1,
+    `a copy of a mismatched template was handed out:\n${refused.stderr}`,
+  );
   assert.equal(refused.stdout, "", "no exports are handed out");
-  assert.deepEqual((await h.statements()).filter((line) => /create database/i.test(line)), []);
-  assert.match(refused.stderr, /template openbooks_template: 1 migrations {3}this checkout: \d+ migrations/);
+  assert.deepEqual(
+    (await h.statements()).filter((line) => /create database/i.test(line)),
+    [],
+  );
+  assert.match(
+    refused.stderr,
+    /template openbooks_template: 1 migrations {3}this checkout: \d+ migrations/,
+  );
   assert.match(refused.stderr, /your migrations are NOT in the template\.$/m);
   assert.match(refused.stderr, /pass --allow-stale \(or OPENBOOKS_TESTDB_ALLOW_STALE=1\)/);
-  assert.match(refused.stderr, /reset rebuilds the SHARED template openbooks_template from this checkout, for every worktree on this machine/);
-  const remedies = ["OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_<suffix> scripts/testdb.sh new", "--allow-stale", "scripts/bootstrap.ts", "scripts/testdb.sh reset"];
+  assert.match(
+    refused.stderr,
+    /reset rebuilds the SHARED template openbooks_template from this checkout, for every worktree on this machine/,
+  );
+  const remedies = [
+    "OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_<suffix> scripts/testdb.sh new",
+    "--allow-stale",
+    "scripts/bootstrap.ts",
+    "scripts/testdb.sh reset",
+  ];
   const at = remedies.map((remedy) => refused.stderr.indexOf(remedy));
-  assert.ok(at.every((pos, i) => pos >= 0 && (i === 0 || pos > at[i - 1])), `remedies must run ${remedies.join(" < ")}:\n${refused.stderr}`);
+  assert.ok(
+    at.every((pos, i) => pos >= 0 && (i === 0 || pos > at[i - 1])),
+    `remedies must run ${remedies.join(" < ")}:\n${refused.stderr}`,
+  );
 
   const logged = (await h.statements()).length;
   const reset = await h.run(["reset"]);
-  assert.equal(reset.code, 1, `reset rebuilt the shared template without an acknowledgement:\n${reset.stderr}`);
-  assert.match(reset.stderr, /no terminal to confirm on\. If you own this machine's template, pass --i-own-this-template/);
+  assert.equal(
+    reset.code,
+    1,
+    `reset rebuilt the shared template without an acknowledgement:\n${reset.stderr}`,
+  );
+  assert.match(
+    reset.stderr,
+    /no terminal to confirm on\. If you own this machine's template, pass --i-own-this-template/,
+  );
   assert.equal((await h.statements()).length, logged, "a refused reset touches no database");
   const ahead = await harness("0".repeat(64), 99999);
   t.after(ahead.cleanup);
-  for (const [args, env] of [[["reset", "--i-own-this-template"]], [["reset"], { OPENBOOKS_TESTDB_TEMPLATE: "openbooks_template_mine" }]]) {
+  for (const [args, env] of [
+    [["reset", "--i-own-this-template"]],
+    [["reset"], { OPENBOOKS_TESTDB_TEMPLATE: "openbooks_template_mine" }],
+  ]) {
     const passed = await ahead.run(args, env);
-    assert.match(passed.stderr, /refusing to rebuild backwards/, `the acknowledgement or a private template must pass the guard:\n${passed.stderr}`);
+    assert.match(
+      passed.stderr,
+      /refusing to rebuild backwards/,
+      `the acknowledgement or a private template must pass the guard:\n${passed.stderr}`,
+    );
   }
   const behind = await ahead.run(["new", "behindcheck"]);
-  assert.doesNotMatch(behind.stderr, /scripts\/testdb\.sh reset/, `a checkout behind the shared template must not be told to reset it:\n${behind.stderr}`);
-  const mine = await ahead.run(["new", "behindcheck"], { OPENBOOKS_TESTDB_TEMPLATE: "openbooks_template_mine" });
-  assert.match(mine.stderr, /OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_mine scripts\/testdb\.sh reset --force$/m, mine.stderr);
+  assert.doesNotMatch(
+    behind.stderr,
+    /scripts\/testdb\.sh reset/,
+    `a checkout behind the shared template must not be told to reset it:\n${behind.stderr}`,
+  );
+  const mine = await ahead.run(["new", "behindcheck"], {
+    OPENBOOKS_TESTDB_TEMPLATE: "openbooks_template_mine",
+  });
+  assert.match(
+    mine.stderr,
+    /OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_mine scripts\/testdb\.sh reset --force$/m,
+    mine.stderr,
+  );
 
   for (const [args, env] of [
     [["new", "--allow-stale", "stalecheck"]],
@@ -133,9 +188,16 @@ test("new refuses a template built from a different schema unless --allow-stale,
   ]) {
     const allowed = await h.run(args, env);
     assert.equal(allowed.code, 0, allowed.stderr);
-    assert.match(allowed.stdout, /^export OPENBOOKS_DB_URL='[^']+\/ob_stalecheck'$/m, "the exports stay eval-able");
+    assert.match(
+      allowed.stdout,
+      /^export OPENBOOKS_DB_URL='[^']+\/ob_stalecheck'$/m,
+      "the exports stay eval-able",
+    );
     const lines = allowed.stderr.split("\n").filter(Boolean);
-    assert.ok(lines.some((line) => /ob_stalecheck ready/.test(line)), allowed.stderr);
+    assert.ok(
+      lines.some((line) => /ob_stalecheck ready/.test(line)),
+      allowed.stderr,
+    );
     for (const line of lines) assert.match(line, /^stale-template: /);
   }
 });

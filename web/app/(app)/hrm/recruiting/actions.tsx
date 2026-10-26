@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { useId, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
-import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { promptDialog } from '../../../../lib/prompt'
-import { civilDateTimeToInstant } from '@openbooks/engine/platform/time-zone'
-import { DateField } from '../../../../components/date-field'
+import { useId, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Button, Input, Label, Select, Textarea } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { promptDialog } from "../../../../lib/prompt";
+import { civilDateTimeToInstant } from "@openbooks/engine/platform/time-zone";
+import { DateField } from "../../../../components/date-field";
 
 /**
  * Recruiting action islands: small client forms posting through the same
@@ -18,17 +18,21 @@ import { DateField } from '../../../../components/date-field'
  */
 
 export interface Option {
-  value: string
-  label: string
+  value: string;
+  label: string;
 }
 
 function useRefresh(): () => void {
-  const router = useRouter()
-  return () => router.refresh()
+  const router = useRouter();
+  return () => router.refresh();
 }
 
 async function postJson(url: string, method: string, body: unknown): Promise<Response> {
-  return fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  return fetch(url, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 /**
@@ -41,98 +45,114 @@ export function ApplicationAttachIsland({
   requisitionId,
   labels,
 }: {
-  requisitionId: string
-  labels: { name: string; email: string; phone: string; submit: string; failed: string; mergedNote: string }
+  requisitionId: string;
+  labels: {
+    name: string;
+    email: string;
+    phone: string;
+    submit: string;
+    failed: string;
+    mergedNote: string;
+  };
 }) {
-  const refresh = useRefresh()
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function attachOnce(body: Record<string, unknown>): Promise<{
-    res: Response
+    res: Response;
     payload: {
-      attached?: { candidate?: { id?: unknown }; mergedInto?: { id?: unknown } | null }
-      error?: unknown
-      candidate?: { id?: unknown; displayName?: unknown }
-    }
+      attached?: { candidate?: { id?: unknown }; mergedInto?: { id?: unknown } | null };
+      error?: unknown;
+      candidate?: { id?: unknown; displayName?: unknown };
+    };
   }> {
-    const res = await postJson('/api/hrm/recruiting/attachments', 'POST', { requisitionId, ...body })
+    const res = await postJson("/api/hrm/recruiting/attachments", "POST", {
+      requisitionId,
+      ...body,
+    });
     // The clone feeds the duplicate-shape check; the original body stays
     // unread so readApiErrorMessage still names the server's refusal.
-    const payload = (await res.clone().json().catch(() => ({}))) as {
-      attached?: { candidate?: { id?: unknown }; mergedInto?: { id?: unknown } | null }
-      error?: unknown
-      candidate?: { id?: unknown; displayName?: unknown }
-    }
-    return { res, payload }
+    const payload = (await res
+      .clone()
+      .json()
+      .catch(() => ({}))) as {
+      attached?: { candidate?: { id?: unknown }; mergedInto?: { id?: unknown } | null };
+      error?: unknown;
+      candidate?: { id?: unknown; displayName?: unknown };
+    };
+    return { res, payload };
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const displayName = name.trim()
-    if (displayName.length === 0 || busy) return
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    const displayName = name.trim();
+    if (displayName.length === 0 || busy) return;
+    setBusy(true);
+    setError(null);
     try {
       const draft = {
         displayName,
         ...(email.trim() ? { email: email.trim() } : {}),
         ...(phone.trim() ? { phone: phone.trim() } : {}),
-      }
-      let attempt = await attachOnce(draft)
+      };
+      let attempt = await attachOnce(draft);
       // Email-dedupe retry (HR-20): a duplicate email with the SAME name
       // attaches to the surviving candidate; anything else stays refused.
       // Each attempt is atomic, so a refused first attempt stores nothing.
       if (!attempt.res.ok && attempt.res.status === 409) {
-        const raw = attempt.payload
-        const existing = raw.error === 'duplicate-email' ? raw.candidate : undefined
+        const raw = attempt.payload;
+        const existing = raw.error === "duplicate-email" ? raw.candidate : undefined;
         if (
           existing &&
-          typeof existing.id === 'string' &&
-          typeof existing.displayName === 'string' &&
+          typeof existing.id === "string" &&
+          typeof existing.displayName === "string" &&
           existing.displayName.trim().toLowerCase() === displayName.toLowerCase()
         ) {
-          const survivor = existing.id
+          const survivor = existing.id;
           // The merge is evidence, not telemetry: the operator typed a name
           // that already exists under this email, and the application lands
           // on the surviving candidate.
-          console.info('[hrm] recruiting attach: duplicate email merged into the existing candidate', {
-            requisitionId,
-            survivor,
-          })
-          toast.info(labels.mergedNote)
-          attempt = await attachOnce({ ...draft, mergeInto: survivor })
+          console.info(
+            "[hrm] recruiting attach: duplicate email merged into the existing candidate",
+            {
+              requisitionId,
+              survivor,
+            },
+          );
+          toast.info(labels.mergedNote);
+          attempt = await attachOnce({ ...draft, mergeInto: survivor });
         }
       }
       if (!attempt.res.ok) {
-        setError(await readApiErrorMessage(attempt.res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(attempt.res, labels.failed));
+        setBusy(false);
+        return;
       }
-      const attached = attempt.payload.attached
+      const attached = attempt.payload.attached;
       const survivor =
-        typeof attached?.mergedInto?.id === 'string'
+        typeof attached?.mergedInto?.id === "string"
           ? attached.mergedInto.id
-          : typeof attached?.candidate?.id === 'string'
+          : typeof attached?.candidate?.id === "string"
             ? attached.candidate.id
-            : null
+            : null;
       if (survivor === null) {
-        setError(labels.failed)
-        setBusy(false)
-        return
+        setError(labels.failed);
+        setBusy(false);
+        return;
       }
-      setName('')
-      setEmail('')
-      setPhone('')
-      setBusy(false)
-      refresh()
+      setName("");
+      setEmail("");
+      setPhone("");
+      setBusy(false);
+      refresh();
     } catch {
-      setError(labels.failed)
+      setError(labels.failed);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -141,16 +161,29 @@ export function ApplicationAttachIsland({
       <div className="grid grid-cols-2 gap-2">
         <div>
           <Label htmlFor={`attach-name-${requisitionId}`}>{labels.name}</Label>
-          <Input id={`attach-name-${requisitionId}`} value={name} onChange={(event) => setName(event.target.value)} required />
+          <Input
+            id={`attach-name-${requisitionId}`}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+          />
         </div>
         <div>
           <Label htmlFor={`attach-email-${requisitionId}`}>{labels.email}</Label>
-          <Input id={`attach-email-${requisitionId}`} value={email} onChange={(event) => setEmail(event.target.value)} />
+          <Input
+            id={`attach-email-${requisitionId}`}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
         </div>
       </div>
       <div>
         <Label htmlFor={`attach-phone-${requisitionId}`}>{labels.phone}</Label>
-        <Input id={`attach-phone-${requisitionId}`} value={phone} onChange={(event) => setPhone(event.target.value)} />
+        <Input
+          id={`attach-phone-${requisitionId}`}
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+        />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -161,7 +194,7 @@ export function ApplicationAttachIsland({
         {labels.submit}
       </Button>
     </form>
-  )
+  );
 }
 
 /**
@@ -171,13 +204,13 @@ export function ApplicationAttachIsland({
  * The matrix mirrors transitionRequisition/openRequisition — the server
  * stays authoritative and refuses anything else by name.
  */
-export type RequisitionLifecycleAction = 'open' | 'hold' | 'resume' | 'cancel'
+export type RequisitionLifecycleAction = "open" | "hold" | "resume" | "cancel";
 
 export function lifecycleActionsForStatus(status: string): RequisitionLifecycleAction[] {
-  if (status === 'draft') return ['open']
-  if (status === 'open') return ['hold', 'cancel']
-  if (status === 'on_hold') return ['resume']
-  return []
+  if (status === "draft") return ["open"];
+  if (status === "open") return ["hold", "cancel"];
+  if (status === "on_hold") return ["resume"];
+  return [];
 }
 
 /** Open, hold, resume, or cancel one requisition through its PATCH route. */
@@ -187,45 +220,61 @@ export function RequisitionLifecycleIsland({
   canManage,
   labels,
 }: {
-  requisitionId: string
-  status: string
+  requisitionId: string;
+  status: string;
   /** The hrm.recruiting.manage grant the API enforces — display gating only. */
-  canManage: boolean
-  labels: { title: string; open: string; hold: string; resume: string; cancel: string; reason: string; failed: string }
+  canManage: boolean;
+  labels: {
+    title: string;
+    open: string;
+    hold: string;
+    resume: string;
+    cancel: string;
+    reason: string;
+    failed: string;
+  };
 }) {
-  const refresh = useRefresh()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!canManage) return null
-  const actions = lifecycleActionsForStatus(status)
-  if (actions.length === 0) return null
+  if (!canManage) return null;
+  const actions = lifecycleActionsForStatus(status);
+  if (actions.length === 0) return null;
 
   async function act(action: RequisitionLifecycleAction): Promise<void> {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      let body: { action: RequisitionLifecycleAction; reason?: string } = { action }
-      if (action !== 'open') {
-        const reason = await promptDialog({ title: labels[action], label: labels.reason, confirmLabel: labels[action] })
+      let body: { action: RequisitionLifecycleAction; reason?: string } = { action };
+      if (action !== "open") {
+        const reason = await promptDialog({
+          title: labels[action],
+          label: labels.reason,
+          confirmLabel: labels[action],
+        });
         if (!reason) {
-          setBusy(false)
-          return
+          setBusy(false);
+          return;
         }
-        body = { action, reason }
+        body = { action, reason };
       }
-      const res = await postJson(`/api/hrm/recruiting/requisitions/${requisitionId}`, 'PATCH', body)
+      const res = await postJson(
+        `/api/hrm/recruiting/requisitions/${requisitionId}`,
+        "PATCH",
+        body,
+      );
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      setBusy(false)
-      refresh()
+      setBusy(false);
+      refresh();
     } catch {
-      setError(labels.failed)
+      setError(labels.failed);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -237,7 +286,13 @@ export function RequisitionLifecycleIsland({
           <Button
             key={action}
             size="sm"
-            variant={action === 'cancel' ? 'destructive' : action === 'open' || action === 'resume' ? 'default' : 'outline'}
+            variant={
+              action === "cancel"
+                ? "destructive"
+                : action === "open" || action === "resume"
+                  ? "default"
+                  : "outline"
+            }
             disabled={busy}
             onClick={() => void act(action)}
           >
@@ -251,24 +306,24 @@ export function RequisitionLifecycleIsland({
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 export interface PostingContentLabels {
-  heading: string
-  title: string
-  employmentKind: string
-  description: string
-  empty: string
-  source: string
-  copyTitle: string
-  copyDescription: string
-  copied: string
-  copyFailed: string
-  edit: string
-  save: string
-  cancel: string
-  failed: string
+  heading: string;
+  title: string;
+  employmentKind: string;
+  description: string;
+  empty: string;
+  source: string;
+  copyTitle: string;
+  copyDescription: string;
+  copied: string;
+  copyFailed: string;
+  edit: string;
+  save: string;
+  cancel: string;
+  failed: string;
 }
 
 /**
@@ -287,80 +342,91 @@ export function PostingContentIsland({
   canEdit,
   labels,
 }: {
-  requisitionId: string
-  revision: number
-  title: string
-  employmentKind: string | null
-  description: string | null
+  requisitionId: string;
+  revision: number;
+  title: string;
+  employmentKind: string | null;
+  description: string | null;
   /** Library entry the opening started from, already interpolated into labels.source. */
-  sourceName: string | null
+  sourceName: string | null;
   /** The hrm.recruiting.manage grant on a draft, open or on-hold opening — display gating only. */
-  canEdit: boolean
-  labels: PostingContentLabels
+  canEdit: boolean;
+  labels: PostingContentLabels;
 }) {
-  const refresh = useRefresh()
-  const fieldId = useId()
-  const [editing, setEditing] = useState(false)
-  const [draftTitle, setDraftTitle] = useState(title)
-  const [draftKind, setDraftKind] = useState(employmentKind ?? '')
-  const [draftDescription, setDraftDescription] = useState(description ?? '')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const fieldId = useId();
+  const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(title);
+  const [draftKind, setDraftKind] = useState(employmentKind ?? "");
+  const [draftDescription, setDraftDescription] = useState(description ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function copy(text: string) {
     try {
-      await navigator.clipboard.writeText(text)
-      toast.success(labels.copied)
+      await navigator.clipboard.writeText(text);
+      toast.success(labels.copied);
     } catch {
-      toast.error(labels.copyFailed)
+      toast.error(labels.copyFailed);
     }
   }
 
   function startEditing() {
-    setDraftTitle(title)
-    setDraftKind(employmentKind ?? '')
-    setDraftDescription(description ?? '')
-    setError(null)
-    setEditing(true)
+    setDraftTitle(title);
+    setDraftKind(employmentKind ?? "");
+    setDraftDescription(description ?? "");
+    setError(null);
+    setEditing(true);
   }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (busy) return
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(`/api/hrm/recruiting/requisitions/${requisitionId}`, 'PATCH', {
-        action: 'revise',
+      const res = await postJson(`/api/hrm/recruiting/requisitions/${requisitionId}`, "PATCH", {
+        action: "revise",
         expectedRevision: revision,
         title: draftTitle.trim(),
         employmentKind: draftKind.trim() ? draftKind.trim() : null,
         description: draftDescription.trim() ? draftDescription : null,
-      })
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        return;
       }
-      setEditing(false)
-      refresh()
+      setEditing(false);
+      refresh();
     } catch {
-      setError(labels.failed)
+      setError(labels.failed);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   if (editing) {
     return (
       <form className="space-y-3" onSubmit={save}>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.heading}</h4>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {labels.heading}
+        </h4>
         <div>
           <Label htmlFor={`${fieldId}-title`}>{labels.title}</Label>
-          <Input id={`${fieldId}-title`} value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} required />
+          <Input
+            id={`${fieldId}-title`}
+            value={draftTitle}
+            onChange={(event) => setDraftTitle(event.target.value)}
+            required
+          />
         </div>
         <div>
           <Label htmlFor={`${fieldId}-kind`}>{labels.employmentKind}</Label>
-          <Input id={`${fieldId}-kind`} value={draftKind} onChange={(event) => setDraftKind(event.target.value)} />
+          <Input
+            id={`${fieldId}-kind`}
+            value={draftKind}
+            onChange={(event) => setDraftKind(event.target.value)}
+          />
         </div>
         <div>
           <Label htmlFor={`${fieldId}-description`}>{labels.description}</Label>
@@ -380,25 +446,35 @@ export function PostingContentIsland({
           <Button type="submit" size="sm" disabled={busy || draftTitle.trim().length === 0}>
             {labels.save}
           </Button>
-          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setEditing(false)}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => setEditing(false)}
+          >
             {labels.cancel}
           </Button>
         </div>
       </form>
-    )
+    );
   }
 
   return (
     <div className="space-y-2">
       <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.heading}</h4>
-      {sourceName ? <p className="text-xs text-slate-500 dark:text-slate-400">{labels.source}</p> : null}
+      {sourceName ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">{labels.source}</p>
+      ) : null}
       {employmentKind ? (
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {labels.employmentKind}: {employmentKind}
         </p>
       ) : null}
       {description ? (
-        <p className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{description}</p>
+        <p className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">
+          {description}
+        </p>
       ) : (
         <p className="text-sm text-slate-500 dark:text-slate-400">{labels.empty}</p>
       )}
@@ -418,7 +494,7 @@ export function PostingContentIsland({
         ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 /**
@@ -434,49 +510,61 @@ export function ApplicationActionsIsland({
   canDecide,
   labels,
 }: {
-  applicationId: string
-  stages: Option[]
-  canMove: boolean
-  canDecide: boolean
-  labels: { move: string; reject: string; reason: string; withdraw: string; failed: string }
+  applicationId: string;
+  stages: Option[];
+  canMove: boolean;
+  canDecide: boolean;
+  labels: { move: string; reject: string; reason: string; withdraw: string; failed: string };
 }) {
-  const refresh = useRefresh()
-  const [stage, setStage] = useState(stages[0]?.value ?? '')
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const [stage, setStage] = useState(stages[0]?.value ?? "");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function act(body: unknown): Promise<void> {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(`/api/hrm/recruiting/applications/${applicationId}`, 'PATCH', body)
+      const res = await postJson(
+        `/api/hrm/recruiting/applications/${applicationId}`,
+        "PATCH",
+        body,
+      );
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      setBusy(false)
-      refresh()
+      setBusy(false);
+      refresh();
     } catch {
-      setError(labels.failed)
-      setBusy(false)
+      setError(labels.failed);
+      setBusy(false);
     }
   }
 
-  if (!canMove && !canDecide) return null
+  if (!canMove && !canDecide) return null;
   return (
     <div className="space-y-2">
       {canMove ? (
         <div className="flex items-center gap-2">
-          <Select aria-label={labels.move} value={stage} onChange={(event) => setStage(event.target.value)}>
+          <Select
+            aria-label={labels.move}
+            value={stage}
+            onChange={(event) => setStage(event.target.value)}
+          >
             {stages.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </Select>
-          <Button size="sm" disabled={busy || stage === ''} onClick={() => void act({ action: 'move', toStageId: stage })}>
+          <Button
+            size="sm"
+            disabled={busy || stage === ""}
+            onClick={() => void act({ action: "move", toStageId: stage })}
+          >
             {labels.move}
           </Button>
         </div>
@@ -489,10 +577,20 @@ export function ApplicationActionsIsland({
             value={reason}
             onChange={(event) => setReason(event.target.value)}
           />
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => void act({ action: 'reject', reason: reason.trim() })}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void act({ action: "reject", reason: reason.trim() })}
+          >
             {labels.reject}
           </Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act({ action: 'withdraw' })}>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => void act({ action: "withdraw" })}
+          >
             {labels.withdraw}
           </Button>
         </div>
@@ -503,7 +601,7 @@ export function ApplicationActionsIsland({
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 /** Schedule a sitting on the application with an optional employee panel. */
@@ -514,63 +612,74 @@ export function InterviewScheduleIsland({
   timeZone,
   labels,
 }: {
-  applicationId: string
-  kinds: Option[]
-  employees: Option[]
-  timeZone: string
-  labels: { kind: string; when: string; duration: string; location: string; panel: string; submit: string; failed: string; invalidTime: string }
+  applicationId: string;
+  kinds: Option[];
+  employees: Option[];
+  timeZone: string;
+  labels: {
+    kind: string;
+    when: string;
+    duration: string;
+    location: string;
+    panel: string;
+    submit: string;
+    failed: string;
+    invalidTime: string;
+  };
 }) {
-  const fieldPrefix = useId()
-  const refresh = useRefresh()
-  const [kind, setKind] = useState(kinds[0]?.value ?? 'video')
-  const [when, setWhen] = useState('')
-  const [duration, setDuration] = useState('30')
-  const [location, setLocation] = useState('')
-  const [panel, setPanel] = useState<string[]>([])
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const fieldPrefix = useId();
+  const refresh = useRefresh();
+  const [kind, setKind] = useState(kinds[0]?.value ?? "video");
+  const [when, setWhen] = useState("");
+  const [duration, setDuration] = useState("30");
+  const [location, setLocation] = useState("");
+  const [panel, setPanel] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function togglePanel(id: string): void {
-    setPanel((current) => (current.includes(id) ? current.filter((member) => member !== id) : [...current, id]))
+    setPanel((current) =>
+      current.includes(id) ? current.filter((member) => member !== id) : [...current, id],
+    );
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    event.preventDefault();
     // The input is a wall-clock datetime-local: resolve it in the org's
     // business time zone to the ISO instant the schedule endpoint
     // requires, exactly as the slot proposer does. A skipped or repeated
     // civil time (clock change) refuses with its remedy, never a 400.
-    let scheduledAt: string
+    let scheduledAt: string;
     try {
-      scheduledAt = civilDateTimeToInstant(when, timeZone).toISOString()
+      scheduledAt = civilDateTimeToInstant(when, timeZone).toISOString();
     } catch {
-      setError(labels.invalidTime)
-      return
+      setError(labels.invalidTime);
+      return;
     }
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson('/api/hrm/recruiting/interviews', 'POST', {
+      const res = await postJson("/api/hrm/recruiting/interviews", "POST", {
         applicationId,
         kind,
         scheduledAt,
-        durationMinutes: duration === '' ? null : Number.parseInt(duration, 10),
+        durationMinutes: duration === "" ? null : Number.parseInt(duration, 10),
         location: location.trim() || null,
         panelPartyIds: panel,
-      })
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      setWhen('')
-      setLocation('')
-      setPanel([])
-      setBusy(false)
-      refresh()
+      setWhen("");
+      setLocation("");
+      setPanel([]);
+      setBusy(false);
+      refresh();
     } catch {
-      setError(labels.failed)
-      setBusy(false)
+      setError(labels.failed);
+      setBusy(false);
     }
   }
 
@@ -579,7 +688,11 @@ export function InterviewScheduleIsland({
       <div className="grid grid-cols-2 gap-2">
         <div>
           <Label id={`${fieldPrefix}-kind-label`}>{labels.kind}</Label>
-          <Select aria-labelledby={`${fieldPrefix}-kind-label`} value={kind} onChange={(event) => setKind(event.target.value)}>
+          <Select
+            aria-labelledby={`${fieldPrefix}-kind-label`}
+            value={kind}
+            onChange={(event) => setKind(event.target.value)}
+          >
             {kinds.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -589,26 +702,50 @@ export function InterviewScheduleIsland({
         </div>
         <div>
           <Label htmlFor={`${fieldPrefix}-when`}>{labels.when}</Label>
-          <Input id={`${fieldPrefix}-when`} type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} required />
+          <Input
+            id={`${fieldPrefix}-when`}
+            type="datetime-local"
+            value={when}
+            onChange={(event) => setWhen(event.target.value)}
+            required
+          />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <Label htmlFor={`${fieldPrefix}-duration`}>{labels.duration}</Label>
-          <Input id={`${fieldPrefix}-duration`} inputMode="numeric" value={duration} onChange={(event) => setDuration(event.target.value)} />
+          <Input
+            id={`${fieldPrefix}-duration`}
+            inputMode="numeric"
+            value={duration}
+            onChange={(event) => setDuration(event.target.value)}
+          />
         </div>
         <div>
           <Label htmlFor={`${fieldPrefix}-location`}>{labels.location}</Label>
-          <Input id={`${fieldPrefix}-location`} value={location} onChange={(event) => setLocation(event.target.value)} />
+          <Input
+            id={`${fieldPrefix}-location`}
+            value={location}
+            onChange={(event) => setLocation(event.target.value)}
+          />
         </div>
       </div>
       {employees.length > 0 ? (
         <fieldset>
-          <legend className="text-xs font-medium text-slate-700 dark:text-slate-300">{labels.panel}</legend>
+          <legend className="text-xs font-medium text-slate-700 dark:text-slate-300">
+            {labels.panel}
+          </legend>
           <div className="mt-1 flex flex-wrap gap-2">
             {employees.map((option) => (
-              <label key={option.value} className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300">
-                <input type="checkbox" checked={panel.includes(option.value)} onChange={() => togglePanel(option.value)} />
+              <label
+                key={option.value}
+                className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-300"
+              >
+                <input
+                  type="checkbox"
+                  checked={panel.includes(option.value)}
+                  onChange={() => togglePanel(option.value)}
+                />
                 {option.label}
               </label>
             ))}
@@ -624,7 +761,7 @@ export function InterviewScheduleIsland({
         {labels.submit}
       </Button>
     </form>
-  )
+  );
 }
 
 /** Complete a sitting with its verdict, or cancel the schedule. */
@@ -633,59 +770,80 @@ export function InterviewActionsIsland({
   outcomes,
   labels,
 }: {
-  interviewId: string
-  outcomes: Option[]
-  labels: { outcome: string; feedback: string; submit: string; cancel: string; failed: string }
+  interviewId: string;
+  outcomes: Option[];
+  labels: { outcome: string; feedback: string; submit: string; cancel: string; failed: string };
 }) {
-  const refresh = useRefresh()
-  const [outcome, setOutcome] = useState(outcomes[0]?.value ?? 'advance')
-  const [feedback, setFeedback] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const [outcome, setOutcome] = useState(outcomes[0]?.value ?? "advance");
+  const [feedback, setFeedback] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function act(body: unknown): Promise<void> {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}`, 'PATCH', body)
+      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}`, "PATCH", body);
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      setBusy(false)
-      refresh()
+      setBusy(false);
+      refresh();
     } catch {
-      setError(labels.failed)
-      setBusy(false)
+      setError(labels.failed);
+      setBusy(false);
     }
   }
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <Select aria-label={labels.outcome} value={outcome} onChange={(event) => setOutcome(event.target.value)}>
+        <Select
+          aria-label={labels.outcome}
+          value={outcome}
+          onChange={(event) => setOutcome(event.target.value)}
+        >
           {outcomes.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </Select>
-        <Button size="sm" disabled={busy} onClick={() => void act({ action: 'complete', outcome, feedback: feedback.trim() || null })}>
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={() =>
+            void act({ action: "complete", outcome, feedback: feedback.trim() || null })
+          }
+        >
           {labels.submit}
         </Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act({ action: 'cancel' })}>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => void act({ action: "cancel" })}
+        >
           {labels.cancel}
         </Button>
       </div>
-      <Textarea aria-label={labels.feedback} placeholder={labels.feedback} value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={2} />
+      <Textarea
+        aria-label={labels.feedback}
+        placeholder={labels.feedback}
+        value={feedback}
+        onChange={(event) => setFeedback(event.target.value)}
+        rows={2}
+      />
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -694,14 +852,14 @@ export function InterviewActionsIsland({
  * out-of-scope one by name.
  */
 export function buildOfferDraftBody(input: {
-  applicationId: string
-  employerSubsidiaryId: string
-  jobTitle: string
-  proposedStartOn: string
-  compensationAmount: string
-  compensationCurrency: string
-  compensationBasis: string
-  expiresOn: string | null
+  applicationId: string;
+  employerSubsidiaryId: string;
+  jobTitle: string;
+  proposedStartOn: string;
+  compensationAmount: string;
+  compensationCurrency: string;
+  compensationBasis: string;
+  expiresOn: string | null;
 }): Record<string, unknown> {
   return {
     applicationId: input.applicationId,
@@ -712,7 +870,7 @@ export function buildOfferDraftBody(input: {
     compensationCurrency: input.compensationCurrency.trim().toUpperCase(),
     compensationBasis: input.compensationBasis,
     expiresOn: input.expiresOn,
-  }
+  };
 }
 
 /** Draft the terms on the application. */
@@ -723,38 +881,49 @@ export function OfferCreateIsland({
   employers,
   labels,
 }: {
-  applicationId: string
-  bases: Option[]
+  applicationId: string;
+  bases: Option[];
   /** The requisition's legal entity: the deterministic employer default (name for the eye). */
-  employer: { value: string; label: string }
+  employer: { value: string; label: string };
   /** The authorized employers the caller may instead choose. */
-  employers: Option[]
-  labels: { employer: string; job: string; start: string; amount: string; currency: string; basis: string; expires: string; submit: string; failed: string }
+  employers: Option[];
+  labels: {
+    employer: string;
+    job: string;
+    start: string;
+    amount: string;
+    currency: string;
+    basis: string;
+    expires: string;
+    submit: string;
+    failed: string;
+  };
 }) {
-  const fieldPrefix = useId()
-  const refresh = useRefresh()
-  const [job, setJob] = useState('')
-  const [start, setStart] = useState('')
-  const [amount, setAmount] = useState('')
-  const [currency, setCurrency] = useState('USD')
-  const [basis, setBasis] = useState(bases[0]?.value ?? 'annual')
-  const [expires, setExpires] = useState('')
+  const fieldPrefix = useId();
+  const refresh = useRefresh();
+  const [job, setJob] = useState("");
+  const [start, setStart] = useState("");
+  const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [basis, setBasis] = useState(bases[0]?.value ?? "annual");
+  const [expires, setExpires] = useState("");
   // The picker shows only when the caller may genuinely choose: several
   // authorized employers including the requisition's own. Otherwise the
   // inherited entity renders as fixed text — never a raw id.
-  const showPicker = employers.length > 1 && employers.some((option) => option.value === employer.value)
-  const [employerId, setEmployerId] = useState(employer.value)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const showPicker =
+    employers.length > 1 && employers.some((option) => option.value === employer.value);
+  const [employerId, setEmployerId] = useState(employer.value);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
     try {
       const res = await postJson(
-        '/api/hrm/recruiting/offers',
-        'POST',
+        "/api/hrm/recruiting/offers",
+        "POST",
         buildOfferDraftBody({
           applicationId,
           employerSubsidiaryId: employerId,
@@ -765,17 +934,17 @@ export function OfferCreateIsland({
           compensationBasis: basis,
           expiresOn: expires || null,
         }),
-      )
+      );
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      setBusy(false)
-      refresh()
+      setBusy(false);
+      refresh();
     } catch {
-      setError(labels.failed)
-      setBusy(false)
+      setError(labels.failed);
+      setBusy(false);
     }
   }
 
@@ -784,7 +953,11 @@ export function OfferCreateIsland({
       <div>
         <Label id={`${fieldPrefix}-employer-label`}>{labels.employer}</Label>
         {showPicker ? (
-          <Select aria-labelledby={`${fieldPrefix}-employer-label`} value={employerId} onChange={(event) => setEmployerId(event.target.value)}>
+          <Select
+            aria-labelledby={`${fieldPrefix}-employer-label`}
+            value={employerId}
+            onChange={(event) => setEmployerId(event.target.value)}
+          >
             {employers.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -798,25 +971,49 @@ export function OfferCreateIsland({
       <div className="grid grid-cols-2 gap-2">
         <div>
           <Label htmlFor={`${fieldPrefix}-job`}>{labels.job}</Label>
-          <Input id={`${fieldPrefix}-job`} value={job} onChange={(event) => setJob(event.target.value)} required />
+          <Input
+            id={`${fieldPrefix}-job`}
+            value={job}
+            onChange={(event) => setJob(event.target.value)}
+            required
+          />
         </div>
         <div>
           <Label htmlFor={`${fieldPrefix}-start`}>{labels.start}</Label>
-          <DateField id={`${fieldPrefix}-start`} value={start} onChange={(value) => setStart(value)} required />
+          <DateField
+            id={`${fieldPrefix}-start`}
+            value={start}
+            onChange={(value) => setStart(value)}
+            required
+          />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
         <div>
           <Label htmlFor={`${fieldPrefix}-amount`}>{labels.amount}</Label>
-          <Input id={`${fieldPrefix}-amount`} value={amount} onChange={(event) => setAmount(event.target.value)} required />
+          <Input
+            id={`${fieldPrefix}-amount`}
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            required
+          />
         </div>
         <div>
           <Label htmlFor={`${fieldPrefix}-currency`}>{labels.currency}</Label>
-          <Input id={`${fieldPrefix}-currency`} value={currency} onChange={(event) => setCurrency(event.target.value)} required />
+          <Input
+            id={`${fieldPrefix}-currency`}
+            value={currency}
+            onChange={(event) => setCurrency(event.target.value)}
+            required
+          />
         </div>
         <div>
           <Label id={`${fieldPrefix}-basis-label`}>{labels.basis}</Label>
-          <Select aria-labelledby={`${fieldPrefix}-basis-label`} value={basis} onChange={(event) => setBasis(event.target.value)}>
+          <Select
+            aria-labelledby={`${fieldPrefix}-basis-label`}
+            value={basis}
+            onChange={(event) => setBasis(event.target.value)}
+          >
             {bases.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -827,7 +1024,11 @@ export function OfferCreateIsland({
       </div>
       <div>
         <Label htmlFor={`${fieldPrefix}-expires`}>{labels.expires}</Label>
-        <DateField id={`${fieldPrefix}-expires`} value={expires} onChange={(value) => setExpires(value)} />
+        <DateField
+          id={`${fieldPrefix}-expires`}
+          value={expires}
+          onChange={(value) => setExpires(value)}
+        />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -838,7 +1039,7 @@ export function OfferCreateIsland({
         {labels.submit}
       </Button>
     </form>
-  )
+  );
 }
 
 /** Send, accept (hire), decline, or withdraw one offer. */
@@ -846,39 +1047,47 @@ export function OfferActionsIsland({
   offerId,
   labels,
 }: {
-  offerId: string
-  labels: { send: string; accept: string; decline: string; withdraw: string; reason: string; failed: string; addBankAccount: string }
+  offerId: string;
+  labels: {
+    send: string;
+    accept: string;
+    decline: string;
+    withdraw: string;
+    reason: string;
+    failed: string;
+    addBankAccount: string;
+  };
 }) {
-  const refresh = useRefresh()
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   // Accept mints the employment: offer direct-deposit capture for the new
   // hire next — the employee record's Employment tab carries the bank
   // section for HR/payroll operators.
-  const [hiredPartyId, setHiredPartyId] = useState<string | null>(null)
+  const [hiredPartyId, setHiredPartyId] = useState<string | null>(null);
 
   async function act(body: unknown): Promise<void> {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(`/api/hrm/recruiting/offers/${offerId}`, 'PATCH', body)
+      const res = await postJson(`/api/hrm/recruiting/offers/${offerId}`, "PATCH", body);
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      if ((body as { action?: unknown } | null)?.action === 'accept') {
-        const data = (await res.json().catch(() => ({}))) as { hire?: { workerPartyId?: unknown } }
-        if (typeof data.hire?.workerPartyId === 'string' && data.hire.workerPartyId) {
-          setHiredPartyId(data.hire.workerPartyId)
+      if ((body as { action?: unknown } | null)?.action === "accept") {
+        const data = (await res.json().catch(() => ({}))) as { hire?: { workerPartyId?: unknown } };
+        if (typeof data.hire?.workerPartyId === "string" && data.hire.workerPartyId) {
+          setHiredPartyId(data.hire.workerPartyId);
         }
       }
-      setBusy(false)
-      refresh()
+      setBusy(false);
+      refresh();
     } catch {
-      setError(labels.failed)
-      setBusy(false)
+      setError(labels.failed);
+      setBusy(false);
     }
   }
 
@@ -895,27 +1104,42 @@ export function OfferActionsIsland({
         </p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={busy} onClick={() => void act({ action: 'send' })}>
+        <Button size="sm" disabled={busy} onClick={() => void act({ action: "send" })}>
           {labels.send}
         </Button>
-        <Button size="sm" disabled={busy} onClick={() => void act({ action: 'accept' })}>
+        <Button size="sm" disabled={busy} onClick={() => void act({ action: "accept" })}>
           {labels.accept}
         </Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void act({ action: 'decline', reason: reason.trim() })}>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void act({ action: "decline", reason: reason.trim() })}
+        >
           {labels.decline}
         </Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act({ action: 'withdraw', reason: reason.trim() })}>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => void act({ action: "withdraw", reason: reason.trim() })}
+        >
           {labels.withdraw}
         </Button>
       </div>
-      <Input aria-label={labels.reason} placeholder={labels.reason} value={reason} onChange={(event) => setReason(event.target.value)} />
+      <Input
+        aria-label={labels.reason}
+        placeholder={labels.reason}
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+      />
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -925,7 +1149,7 @@ export function OfferActionsIsland({
  * above; labels loader-resolved; @openbooks/ui inputs throughout.
  */
 
-const RATING_KEYS = ['strong_no', 'no', 'yes', 'strong_yes'] as const
+const RATING_KEYS = ["strong_no", "no", "yes", "strong_yes"] as const;
 
 /** Submit the viewer's own scorecard: overall plus per-attribute ratings. */
 export function ScorecardFormIsland({
@@ -933,45 +1157,57 @@ export function ScorecardFormIsland({
   criteria,
   labels,
 }: {
-  interviewId: string
+  interviewId: string;
   /** One input per kit criterion (id + display label); empty while the
    * interview names no kit, in which case only overall + notes submit. */
-  criteria: { id: string; label: string }[]
-  labels: { overall: string; submit: string; failed: string; ratings: string; privateNotes: string; sharedNotes: string; ratingOptions: Record<(typeof RATING_KEYS)[number], string> }
+  criteria: { id: string; label: string }[];
+  labels: {
+    overall: string;
+    submit: string;
+    failed: string;
+    ratings: string;
+    privateNotes: string;
+    sharedNotes: string;
+    ratingOptions: Record<(typeof RATING_KEYS)[number], string>;
+  };
 }) {
-  const fieldPrefix = useId()
-  const refresh = useRefresh()
-  const [overall, setOverall] = useState<string>('yes')
-  const [ratings, setRatings] = useState<Record<string, string>>({})
-  const [privateNotes, setPrivateNotes] = useState('')
-  const [sharedNotes, setSharedNotes] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const fieldPrefix = useId();
+  const refresh = useRefresh();
+  const [overall, setOverall] = useState<string>("yes");
+  const [ratings, setRatings] = useState<Record<string, string>>({});
+  const [privateNotes, setPrivateNotes] = useState("");
+  const [sharedNotes, setSharedNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
     try {
       // Unrated criteria stay out of the payload — the endpoint owns
       // requiredness and refuses by name.
-      const rated = Object.fromEntries(Object.entries(ratings).filter(([, value]) => value !== ''))
-      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/scorecards`, 'POST', {
-        overall,
-        ratings: rated,
-        privateNotes: privateNotes.trim() || null,
-        sharedNotes: sharedNotes.trim() || null,
-      })
+      const rated = Object.fromEntries(Object.entries(ratings).filter(([, value]) => value !== ""));
+      const res = await postJson(
+        `/api/hrm/recruiting/interviews/${interviewId}/scorecards`,
+        "POST",
+        {
+          overall,
+          ratings: rated,
+          privateNotes: privateNotes.trim() || null,
+          sharedNotes: sharedNotes.trim() || null,
+        },
+      );
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      refresh()
+      refresh();
     } catch {
-      setError(labels.failed)
+      setError(labels.failed);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -979,7 +1215,11 @@ export function ScorecardFormIsland({
     <form onSubmit={(event) => void submit(event)} className="space-y-3">
       <div>
         <Label id={`${fieldPrefix}-overall-label`}>{labels.overall}</Label>
-        <Select aria-labelledby={`${fieldPrefix}-overall-label`} value={overall} onChange={(event) => setOverall(event.target.value)}>
+        <Select
+          aria-labelledby={`${fieldPrefix}-overall-label`}
+          value={overall}
+          onChange={(event) => setOverall(event.target.value)}
+        >
           {RATING_KEYS.map((key) => (
             <option key={key} value={key}>
               {labels.ratingOptions[key]}
@@ -1000,8 +1240,10 @@ export function ScorecardFormIsland({
                 </Label>
                 <Select
                   id={`${fieldPrefix}-rating-${criterion.id}`}
-                  value={ratings[criterion.id] ?? ''}
-                  onChange={(event) => setRatings((prev) => ({ ...prev, [criterion.id]: event.target.value }))}
+                  value={ratings[criterion.id] ?? ""}
+                  onChange={(event) =>
+                    setRatings((prev) => ({ ...prev, [criterion.id]: event.target.value }))
+                  }
                 >
                   <option value="">—</option>
                   {RATING_KEYS.map((key) => (
@@ -1017,11 +1259,19 @@ export function ScorecardFormIsland({
       ) : null}
       <div>
         <Label htmlFor={`${fieldPrefix}-private-notes`}>{labels.privateNotes}</Label>
-        <Textarea id={`${fieldPrefix}-private-notes`} value={privateNotes} onChange={(event) => setPrivateNotes(event.target.value)} />
+        <Textarea
+          id={`${fieldPrefix}-private-notes`}
+          value={privateNotes}
+          onChange={(event) => setPrivateNotes(event.target.value)}
+        />
       </div>
       <div>
         <Label htmlFor={`${fieldPrefix}-shared-notes`}>{labels.sharedNotes}</Label>
-        <Textarea id={`${fieldPrefix}-shared-notes`} value={sharedNotes} onChange={(event) => setSharedNotes(event.target.value)} />
+        <Textarea
+          id={`${fieldPrefix}-shared-notes`}
+          value={sharedNotes}
+          onChange={(event) => setSharedNotes(event.target.value)}
+        />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -1032,7 +1282,7 @@ export function ScorecardFormIsland({
         {labels.submit}
       </Button>
     </form>
-  )
+  );
 }
 
 /** Propose slots from declared windows; surfaces the booking link. */
@@ -1042,108 +1292,148 @@ export function SlotProposeIsland({
   timeZone,
   labels,
 }: {
-  interviewId: string
-  pools: { id: string; name: string; windowCount: number }[]
-  timeZone: string
-  labels: { submit: string; failed: string; invalidTime: string; proposeFromPool: string; starts: string; ends: string; timezone: string; bookingLink: string }
+  interviewId: string;
+  pools: { id: string; name: string; windowCount: number }[];
+  timeZone: string;
+  labels: {
+    submit: string;
+    failed: string;
+    invalidTime: string;
+    proposeFromPool: string;
+    starts: string;
+    ends: string;
+    timezone: string;
+    bookingLink: string;
+  };
 }) {
-  const refresh = useRefresh()
-  const [startsAt, setStartsAt] = useState('')
-  const [endsAt, setEndsAt] = useState('')
-  const [poolId, setPoolId] = useState('')
-  const [link, setLink] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
+  const [poolId, setPoolId] = useState("");
+  const [link, setLink] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function proposeFromPool(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!poolId) return
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    if (!poolId) return;
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/slots`, 'POST', { poolId })
+      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/slots`, "POST", {
+        poolId,
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      const body = (await res.json()) as { bookingUrlPath: string }
-      setLink(body.bookingUrlPath)
-      refresh()
+      const body = (await res.json()) as { bookingUrlPath: string };
+      setLink(body.bookingUrlPath);
+      refresh();
     } catch {
-      setError(labels.failed)
+      setError(labels.failed);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    let startsInstant: Date
-    let endsInstant: Date
+    event.preventDefault();
+    let startsInstant: Date;
+    let endsInstant: Date;
     try {
-      startsInstant = civilDateTimeToInstant(startsAt, timeZone)
-      endsInstant = civilDateTimeToInstant(endsAt, timeZone)
+      startsInstant = civilDateTimeToInstant(startsAt, timeZone);
+      endsInstant = civilDateTimeToInstant(endsAt, timeZone);
     } catch {
-      setError(labels.invalidTime)
-      return
+      setError(labels.invalidTime);
+      return;
     }
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/slots`, 'POST', {
-        windows: [{ startsAt: startsInstant.toISOString(), endsAt: endsInstant.toISOString(), timezone: timeZone }],
-      })
+      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/slots`, "POST", {
+        windows: [
+          {
+            startsAt: startsInstant.toISOString(),
+            endsAt: endsInstant.toISOString(),
+            timezone: timeZone,
+          },
+        ],
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      const body = (await res.json()) as { bookingUrlPath: string }
-      setLink(body.bookingUrlPath)
-      refresh()
+      const body = (await res.json()) as { bookingUrlPath: string };
+      setLink(body.bookingUrlPath);
+      refresh();
     } catch {
-      setError(labels.failed)
+      setError(labels.failed);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   return (
     <>
-    {pools.length > 0 ? (
-      <form onSubmit={(event) => void proposeFromPool(event)} className="mb-3 flex flex-wrap items-center gap-2">
-        <Select aria-label={labels.proposeFromPool} value={poolId} onChange={(event) => setPoolId(event.target.value)}>
-          <option value="">{labels.proposeFromPool}</option>
-          {pools.map((pool) => (
-            <option key={pool.id} value={pool.id}>
-              {pool.name} ({pool.windowCount})
-            </option>
-          ))}
-        </Select>
-        <Button size="sm" type="submit" disabled={busy || !poolId}>
-          {labels.proposeFromPool}
+      {pools.length > 0 ? (
+        <form
+          onSubmit={(event) => void proposeFromPool(event)}
+          className="mb-3 flex flex-wrap items-center gap-2"
+        >
+          <Select
+            aria-label={labels.proposeFromPool}
+            value={poolId}
+            onChange={(event) => setPoolId(event.target.value)}
+          >
+            <option value="">{labels.proposeFromPool}</option>
+            {pools.map((pool) => (
+              <option key={pool.id} value={pool.id}>
+                {pool.name} ({pool.windowCount})
+              </option>
+            ))}
+          </Select>
+          <Button size="sm" type="submit" disabled={busy || !poolId}>
+            {labels.proposeFromPool}
+          </Button>
+        </form>
+      ) : null}
+      <form onSubmit={(event) => void submit(event)} className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <Input
+            aria-label={labels.starts}
+            type="datetime-local"
+            value={startsAt}
+            onChange={(event) => setStartsAt(event.target.value)}
+          />
+          <Input
+            aria-label={labels.ends}
+            type="datetime-local"
+            value={endsAt}
+            onChange={(event) => setEndsAt(event.target.value)}
+          />
+          <span className="self-center text-sm text-slate-500">
+            {labels.timezone}: {timeZone}
+          </span>
+        </div>
+        {error ? (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        ) : null}
+        {link ? (
+          <p className="text-xs text-slate-500">
+            {labels.bookingLink}: {link}
+          </p>
+        ) : null}
+        <Button size="sm" type="submit" disabled={busy || !startsAt || !endsAt}>
+          {labels.submit}
         </Button>
       </form>
-    ) : null}
-    <form onSubmit={(event) => void submit(event)} className="space-y-2">
-      <div className="flex flex-wrap gap-2">
-        <Input aria-label={labels.starts} type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
-        <Input aria-label={labels.ends} type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
-        <span className="self-center text-sm text-slate-500">{labels.timezone}: {timeZone}</span>
-      </div>
-      {error ? (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      ) : null}
-      {link ? <p className="text-xs text-slate-500">{labels.bookingLink}: {link}</p> : null}
-      <Button size="sm" type="submit" disabled={busy || !startsAt || !endsAt}>
-        {labels.submit}
-      </Button>
-    </form>
     </>
-  )
+  );
 }
 
 /** Offer signing desk: email the signing link, or void an unsigned letter. */
@@ -1151,46 +1441,83 @@ export function OfferSigningIsland({
   offerId,
   labels,
 }: {
-  offerId: string
-  labels: { sendLink: string; void: string; failed: string; email: string; name: string; reason: string }
+  offerId: string;
+  labels: {
+    sendLink: string;
+    void: string;
+    failed: string;
+    email: string;
+    name: string;
+    reason: string;
+  };
 }) {
-  const refresh = useRefresh()
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function act(body: unknown) {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(`/api/hrm/recruiting/offers/${offerId}/signing`, 'POST', body)
+      const res = await postJson(`/api/hrm/recruiting/offers/${offerId}/signing`, "POST", body);
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      refresh()
+      refresh();
     } catch {
-      setError(labels.failed)
+      setError(labels.failed);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <Input aria-label={labels.email} placeholder={labels.email} value={email} onChange={(event) => setEmail(event.target.value)} />
-        <Input aria-label={labels.name} placeholder={labels.name} value={name} onChange={(event) => setName(event.target.value)} />
-        <Button size="sm" disabled={busy || !email} onClick={() => void act({ action: 'send-link', candidateEmail: email, candidateName: name || undefined })}>
+        <Input
+          aria-label={labels.email}
+          placeholder={labels.email}
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+        <Input
+          aria-label={labels.name}
+          placeholder={labels.name}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <Button
+          size="sm"
+          disabled={busy || !email}
+          onClick={() =>
+            void act({
+              action: "send-link",
+              candidateEmail: email,
+              candidateName: name || undefined,
+            })
+          }
+        >
           {labels.sendLink}
         </Button>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Input aria-label={labels.reason} placeholder={labels.reason} value={reason} onChange={(event) => setReason(event.target.value)} />
-        <Button size="sm" variant="outline" disabled={busy || !reason.trim()} onClick={() => void act({ action: 'void', reason: reason.trim() })}>
+        <Input
+          aria-label={labels.reason}
+          placeholder={labels.reason}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy || !reason.trim()}
+          onClick={() => void act({ action: "void", reason: reason.trim() })}
+        >
           {labels.void}
         </Button>
       </div>
@@ -1200,7 +1527,7 @@ export function OfferSigningIsland({
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 /** Posting controls: publish to a board, pause, or close. */
@@ -1210,30 +1537,38 @@ export function PostingActionsIsland({
   requisitionId,
   labels,
 }: {
-  postingId?: string
-  status?: string
-  requisitionId?: string
-  labels: { publish: string; pause: string; close: string; failed: string; board: string; internal: string; feed: string }
+  postingId?: string;
+  status?: string;
+  requisitionId?: string;
+  labels: {
+    publish: string;
+    pause: string;
+    close: string;
+    failed: string;
+    board: string;
+    internal: string;
+    feed: string;
+  };
 }) {
-  const refresh = useRefresh()
-  const [boardKey, setBoardKey] = useState('internal')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const [boardKey, setBoardKey] = useState("internal");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function act(url: string, body: unknown) {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(url, 'POST', body)
+      const res = await postJson(url, "POST", body);
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        return;
       }
-      refresh()
+      refresh();
     } catch {
-      setError(labels.failed)
+      setError(labels.failed);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -1241,21 +1576,43 @@ export function PostingActionsIsland({
     <div className="space-y-2">
       {requisitionId ? (
         <div className="flex flex-wrap gap-2">
-          <Select aria-label={labels.board} value={boardKey} onChange={(event) => setBoardKey(event.target.value)}>
+          <Select
+            aria-label={labels.board}
+            value={boardKey}
+            onChange={(event) => setBoardKey(event.target.value)}
+          >
             <option value="internal">{labels.internal}</option>
             <option value="feed">{labels.feed}</option>
           </Select>
-          <Button size="sm" disabled={busy} onClick={() => void act('/api/hrm/recruiting/postings', { requisitionId, boardKey })}>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => void act("/api/hrm/recruiting/postings", { requisitionId, boardKey })}
+          >
             {labels.publish}
           </Button>
         </div>
       ) : null}
-      {postingId && status !== 'closed' ? (
+      {postingId && status !== "closed" ? (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(`/api/hrm/recruiting/postings/${postingId}`, { action: 'pause' })}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              void act(`/api/hrm/recruiting/postings/${postingId}`, { action: "pause" })
+            }
+          >
             {labels.pause}
           </Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act(`/api/hrm/recruiting/postings/${postingId}`, { action: 'close' })}>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() =>
+              void act(`/api/hrm/recruiting/postings/${postingId}`, { action: "close" })
+            }
+          >
             {labels.close}
           </Button>
         </div>
@@ -1266,7 +1623,7 @@ export function PostingActionsIsland({
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 /** Match pool members to an opening by declared tags. */
@@ -1274,43 +1631,66 @@ export function PoolRediscoverIsland({
   poolId,
   labels,
 }: {
-  poolId: string
-  labels: { tags: string; failed: string; requisition: string; requisitionId: string; match: string }
+  poolId: string;
+  labels: {
+    tags: string;
+    failed: string;
+    requisition: string;
+    requisitionId: string;
+    match: string;
+  };
 }) {
-  const [requisitionId, setRequisitionId] = useState('')
-  const [tags, setTags] = useState('')
-  const [matches, setMatches] = useState<{ candidateId: string; displayName: string; matchedTags: readonly string[] }[]>([])
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [requisitionId, setRequisitionId] = useState("");
+  const [tags, setTags] = useState("");
+  const [matches, setMatches] = useState<
+    { candidateId: string; displayName: string; matchedTags: readonly string[] }[]
+  >([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(`/api/hrm/recruiting/talent-pools/${poolId}/rediscover`, 'POST', {
+      const res = await postJson(`/api/hrm/recruiting/talent-pools/${poolId}/rediscover`, "POST", {
         requisitionId,
-        requisitionTags: tags.split(',').map((tag) => tag.trim()).filter((tag) => tag.length > 0),
-      })
+        requisitionTags: tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter((tag) => tag.length > 0),
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      const body = (await res.json()) as { matches: { candidateId: string; displayName: string; matchedTags: readonly string[] }[] }
-      setMatches(body.matches)
-      setBusy(false)
+      const body = (await res.json()) as {
+        matches: { candidateId: string; displayName: string; matchedTags: readonly string[] }[];
+      };
+      setMatches(body.matches);
+      setBusy(false);
     } catch {
-      setError(labels.failed)
-      setBusy(false)
+      setError(labels.failed);
+      setBusy(false);
     }
   }
 
   return (
     <form onSubmit={(event) => void submit(event)} className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <Input aria-label={labels.requisition} placeholder={labels.requisitionId} value={requisitionId} onChange={(event) => setRequisitionId(event.target.value)} />
-        <Input aria-label={labels.tags} placeholder={labels.tags} value={tags} onChange={(event) => setTags(event.target.value)} />
+        <Input
+          aria-label={labels.requisition}
+          placeholder={labels.requisitionId}
+          value={requisitionId}
+          onChange={(event) => setRequisitionId(event.target.value)}
+        />
+        <Input
+          aria-label={labels.tags}
+          placeholder={labels.tags}
+          value={tags}
+          onChange={(event) => setTags(event.target.value)}
+        />
         <Button size="sm" type="submit" disabled={busy || !requisitionId || !tags.trim()}>
           {labels.match}
         </Button>
@@ -1324,13 +1704,13 @@ export function PoolRediscoverIsland({
         <ul className="space-y-1 text-sm">
           {matches.map((match) => (
             <li key={match.candidateId}>
-              {match.displayName} · {match.matchedTags.join(', ')}
+              {match.displayName} · {match.matchedTags.join(", ")}
             </li>
           ))}
         </ul>
       ) : null}
     </form>
-  )
+  );
 }
 
 /** Remove one pool membership. */
@@ -1339,31 +1719,31 @@ export function PoolMemberRemoveIsland({
   candidateId,
   labels,
 }: {
-  poolId: string
-  candidateId: string
-  labels: { remove: string; failed: string }
+  poolId: string;
+  candidateId: string;
+  labels: { remove: string; failed: string };
 }) {
-  const refresh = useRefresh()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const refresh = useRefresh();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function remove() {
-    setBusy(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const res = await postJson(`/api/hrm/recruiting/talent-pools/${poolId}/members`, 'POST', {
-        action: 'remove',
+      const res = await postJson(`/api/hrm/recruiting/talent-pools/${poolId}/members`, "POST", {
+        action: "remove",
         candidateId,
-      })
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      refresh()
+      refresh();
     } catch {
-      setError(labels.failed)
-      setBusy(false)
+      setError(labels.failed);
+      setBusy(false);
     }
   }
 
@@ -1378,5 +1758,5 @@ export function PoolMemberRemoveIsland({
         </span>
       ) : null}
     </span>
-  )
+  );
 }

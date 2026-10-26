@@ -49,9 +49,7 @@ export function TerritoryMap({
     mode: "select",
   });
 
-  const [countries, setCountries] = useState<{ id: string; name: string }[]>(
-    [],
-  );
+  const [countries, setCountries] = useState<{ id: string; name: string }[]>([]);
   const [country, setCountry] = useState("CAN");
   const [level, setLevel] = useState<"ADM0" | "ADM1" | "ADM2">("ADM1");
   const [boundaries, setBoundaries] = useState<BoundarySelection[]>([]);
@@ -170,15 +168,7 @@ export function TerritoryMap({
         filter: ["has", "point_count"],
         paint: {
           "circle-color": "#0284c7",
-          "circle-radius": [
-            "step",
-            ["get", "point_count"],
-            14,
-            20,
-            20,
-            100,
-            27,
-          ],
+          "circle-radius": ["step", ["get", "point_count"], 14, 20, 20, 100, 27],
           "circle-opacity": 0.9,
           "circle-stroke-color": "#fff",
           "circle-stroke-width": 2,
@@ -244,9 +234,7 @@ export function TerritoryMap({
         const list = current.value[key];
         const exists = list.some(
           (b) =>
-            b.id === boundary.id &&
-            b.country === boundary.country &&
-            b.level === boundary.level,
+            b.id === boundary.id && b.country === boundary.country && b.level === boundary.level,
         );
         current.onChange({
           ...current.value,
@@ -322,11 +310,7 @@ export function TerritoryMap({
             ...current.value,
             polygons: drawing
               .getSnapshot()
-              .filter(
-                (f) =>
-                  f.geometry.type === "Polygon" &&
-                  f.properties.mode !== "select",
-              )
+              .filter((f) => f.geometry.type === "Polygon" && f.properties.mode !== "select")
               .map((f, i) => ({
                 id: String(f.id),
                 name: `${t("drawnArea")} ${i + 1}`,
@@ -345,8 +329,8 @@ export function TerritoryMap({
               .map((f, i) => ({
                 id: String(f.id),
                 name:
-                  current.value.polygons.find((p) => p.id === String(f.id))
-                    ?.name ?? `${t("drawnArea")} ${i + 1}`,
+                  current.value.polygons.find((p) => p.id === String(f.id))?.name ??
+                  `${t("drawnArea")} ${i + 1}`,
                 geometry: f.geometry as AreaGeometry,
               })),
           });
@@ -406,14 +390,11 @@ export function TerritoryMap({
       const bounds = new maplibregl.LngLatBounds();
       for (const b of boundaries) {
         const polygons =
-          b.geometry.type === "Polygon"
-            ? [b.geometry.coordinates]
-            : b.geometry.coordinates;
+          b.geometry.type === "Polygon" ? [b.geometry.coordinates] : b.geometry.coordinates;
         for (const rings of polygons)
           for (const ring of rings) for (const pos of ring) bounds.extend(pos);
       }
-      if (!bounds.isEmpty())
-        instance.fitBounds(bounds, { padding: 40, maxZoom: 8, duration: 500 });
+      if (!bounds.isEmpty()) instance.fitBounds(bounds, { padding: 40, maxZoom: 8, duration: 500 });
     }
   }, [ready, boundaries]);
   useEffect(() => {
@@ -426,10 +407,7 @@ export function TerritoryMap({
         }));
     const features: Feature<AreaGeometry>[] = [];
     for (const entry of entries) {
-      for (const b of [
-        ...entry.geography.includes,
-        ...entry.geography.excludes,
-      ])
+      for (const b of [...entry.geography.includes, ...entry.geography.excludes])
         features.push({
           type: "Feature",
           geometry: b.geometry,
@@ -476,10 +454,7 @@ export function TerritoryMap({
   function toggle(boundary: BoundarySelection) {
     const key = excluded ? "excludes" : "includes";
     const present = value[key].some(
-      (b) =>
-        b.id === boundary.id &&
-        b.country === boundary.country &&
-        b.level === boundary.level,
+      (b) => b.id === boundary.id && b.country === boundary.country && b.level === boundary.level,
     );
     onChange?.({
       ...value,
@@ -562,12 +537,7 @@ export function TerritoryMap({
           {error}
         </p>
       ) : null}
-      <div
-        ref={container}
-        className="h-[440px] w-full"
-        aria-label={t("map")}
-        aria-busy={loading}
-      />
+      <div ref={container} className="h-[440px] w-full" aria-label={t("map")} aria-busy={loading} />
       {onChange ? (
         <div className="space-y-3 border-t bg-white p-3 dark:bg-slate-900">
           <p className="text-xs text-slate-500">{t("mapHelp")}</p>
@@ -579,18 +549,13 @@ export function TerritoryMap({
           />
           <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
             {boundaries
-              .filter((b) =>
-                b.name.toLowerCase().includes(search.toLowerCase()),
-              )
+              .filter((b) => b.name.toLowerCase().includes(search.toLowerCase()))
               .map((b) => (
                 <Button
                   key={b.id}
                   variant={
                     value[excluded ? "excludes" : "includes"].some(
-                      (v) =>
-                        v.id === b.id &&
-                        v.country === b.country &&
-                        v.level === b.level,
+                      (v) => v.id === b.id && v.country === b.country && v.level === b.level,
                     )
                       ? "secondary"
                       : "outline"

@@ -45,9 +45,8 @@ registerHooks({
 });
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedDraftDocument, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedDraftDocument, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./post-with-applications/route.ts");
 
 const json = (body: unknown) =>
@@ -71,18 +70,22 @@ test("a malformed allocation target id fails closed as 404, never a 500", async 
   try {
     const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     state.user = { orgId: org.orgId, id: adminId };
-    const subsidiaryId = (await withBypassContext(
-        () =>
-          db.execute<{ id: string }>(
-            sql`select id from subsidiaries where org_id = ${org.orgId} and parent_id is null order by created_at limit 1`, "objects",
-          ),
-      ))[0]!.id;
+    const subsidiaryId = (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`select id from subsidiaries where org_id = ${org.orgId} and parent_id is null order by created_at limit 1`,
+          "objects",
+        ),
+      )
+    )[0]!.id;
     state.allowed = new Set([subsidiaryId]);
     const documentId = await withBypassContext(() =>
       seedDraftDocument(org.orgId, { kind: "vendor_payment", createdBy: adminId }),
     );
-    await withBypassContext(
-      () => db.execute(sql`update documents set subsidiary_id = ${subsidiaryId} where id = ${documentId}`),
+    await withBypassContext(() =>
+      db.execute(
+        sql`update documents set subsidiary_id = ${subsidiaryId} where id = ${documentId}`,
+      ),
     );
 
     for (const openLineId of ["not-a-uuid", "new", "00000000-0000-0000-0000-00000000000"]) {

@@ -1,18 +1,22 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
-import type { CaptureListRow } from './sections'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
+import type { CaptureListRow } from "./sections";
 
 // Bulk capture actions parsed the body before the status and collapsed
 // per-item reasons to counts ("2 succeeded, 1 failed"), so the operator
 // could not tell WHICH document failed or WHY. Mounts the real CaptureList
 // under jsdom and drives a partial bulk result with scripted fetches.
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/ap/capture', scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/ap/capture",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const script = {
   errors: [] as string[],
   successes: [] as string[],
-}
+};
 Object.assign(globalThis, {
   __captureTestRouter: {
     push() {},
@@ -21,50 +25,52 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__captureTestRouter}export function usePathname(){return "/ap/capture"}export function useSearchParams(){return new URLSearchParams()}' })
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__captureTestRouter}export function usePathname(){return "/ap/capture"}export function useSearchParams(){return new URLSearchParams()}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(m){(globalThis.__captureToasts ?? {success:[],error:[]}).success.push(String(m))},error(m){(globalThis.__captureToasts ?? {success:[],error:[]}).error.push(String(m))}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(m){(globalThis.__captureToasts ?? {success:[],error:[]}).success.push(String(m))},error(m){(globalThis.__captureToasts ?? {success:[],error:[]}).error.push(String(m))}};export function Toaster(){return null}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { CaptureList } = await import('./sections')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { CaptureList } = await import("./sections");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 function row(id: string, filename: string): CaptureListRow {
   return {
     id,
-    status: 'ready',
+    status: "ready",
     filename,
-    documentKind: 'vendor_bill',
-    vendorName: 'Acme',
+    documentKind: "vendor_bill",
+    vendorName: "Acme",
     resolvedVendor: null,
-    invoiceNumber: 'INV-9',
-    invoiceDate: '2026-08-01',
-    currency: 'USD',
-    total: '100.00',
+    invoiceNumber: "INV-9",
+    invoiceDate: "2026-08-01",
+    currency: "USD",
+    total: "100.00",
     overallConfidence: null,
     validationIssues: [],
     documentId: null,
-    receivedAt: '2026-08-02T10:00:00.000Z',
-  }
+    receivedAt: "2026-08-02T10:00:00.000Z",
+  };
 }
 
 async function mount(
@@ -72,30 +78,33 @@ async function mount(
   handler: (body: { action: string; ids: string[] }) => Response,
   count = 2,
 ): Promise<void> {
-  script.errors = []
-  script.successes = []
-  ;(globalThis as Record<string, unknown>).__captureToasts = { success: script.successes, error: script.errors }
-  const prior = globalThis.fetch
+  script.errors = [];
+  script.successes = [];
+  (globalThis as Record<string, unknown>).__captureToasts = {
+    success: script.successes,
+    error: script.errors,
+  };
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    if (String(input) === '/api/ap-capture/actions' && (init?.method ?? 'GET') === 'POST') {
-      return handler(JSON.parse(String(init?.body)) as { action: string; ids: string[] })
+    if (String(input) === "/api/ap-capture/actions" && (init?.method ?? "GET") === "POST") {
+      return handler(JSON.parse(String(init?.body)) as { action: string; ids: string[] });
     }
-    throw new Error(`unexpected fetch ${String(input)}`)
-  }) as typeof fetch
+    throw new Error(`unexpected fetch ${String(input)}`);
+  }) as typeof fetch;
   t.after(() => {
-    globalThis.fetch = prior
-  })
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const rootHandle = createRoot(host)
+    globalThis.fetch = prior;
+  });
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const rootHandle = createRoot(host);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    host.remove()
-    for (const node of [...document.body.children]) node.remove()
-  })
-  const rows = Array.from({ length: count }, (_, i) => row(`c${i + 1}`, `invoice-${i + 1}.pdf`))
+      rootHandle.unmount();
+    });
+    host.remove();
+    for (const node of [...document.body.children]) node.remove();
+  });
+  const rows = Array.from({ length: count }, (_, i) => row(`c${i + 1}`, `invoice-${i + 1}.pdf`));
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -108,163 +117,232 @@ async function mount(
           dir="desc"
         />
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
 }
 
 async function click(element: HTMLElement): Promise<void> {
   await act(async () => {
-    element.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
+    element.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 8; i++) await tick();
+  });
 }
 
 function checkboxFor(name: string): HTMLInputElement {
-  const box = document.querySelector(`input[aria-label="Select ${name}"]`) as HTMLInputElement | null
-  assert.ok(box, `the row checkbox for ${name} must render`)
-  return box
+  const box = document.querySelector(
+    `input[aria-label="Select ${name}"]`,
+  ) as HTMLInputElement | null;
+  assert.ok(box, `the row checkbox for ${name} must render`);
+  return box;
 }
 
-test('a partial bulk result names each failed document with its reason and keeps it selected', async (t) => {
-  await mount(t, () =>
-    Response.json({
-      results: [
-        { id: 'c1', ok: true },
-        { id: 'c2', ok: false, error: 'duplicate invoice INV-9' },
-      ],
-    }),
+test("a partial bulk result names each failed document with its reason and keeps it selected", async (t) => {
+  await mount(
+    t,
+    () =>
+      Response.json({
+        results: [
+          { id: "c1", ok: true },
+          { id: "c2", ok: false, error: "duplicate invoice INV-9" },
+        ],
+      }),
     2,
-  )
-  await click(checkboxFor('invoice-1.pdf'))
-  await click(checkboxFor('invoice-2.pdf'))
-  const drafts = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Create drafts'))
-  assert.ok(drafts, 'bulk actions must appear once rows are selected')
-  await click(drafts as HTMLButtonElement)
-  assert.deepEqual(script.successes, [], 'a partial result must not toast success')
-  assert.equal(script.errors.length, 1, 'a partial result must toast once')
-  assert.match(script.errors[0]!, /1 succeeded, 1 failed/)
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the failed reasons must render inline, not only in the toast')
-  assert.match(alert.textContent ?? '', /invoice-2\.pdf/)
-  assert.match(alert.textContent ?? '', /duplicate invoice INV-9/)
-  assert.ok(!/invoice-1\.pdf/.test(alert.textContent ?? ''), 'the succeeded document must not be listed as failed')
-  assert.equal(checkboxFor('invoice-2.pdf').checked, true, 'the failed row stays selected for a one-click retry')
-  assert.equal(checkboxFor('invoice-1.pdf').checked, false, 'the succeeded row leaves the selection')
-  const actions = [...document.querySelectorAll('button')].filter((b) => /Reprocess|Reject|Create drafts/.test(b.textContent ?? ''))
-  assert.ok(actions.length > 0 && actions.every((b) => !(b as HTMLButtonElement).disabled), 'busy must release after a partial result')
-})
+  );
+  await click(checkboxFor("invoice-1.pdf"));
+  await click(checkboxFor("invoice-2.pdf"));
+  const drafts = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Create drafts"),
+  );
+  assert.ok(drafts, "bulk actions must appear once rows are selected");
+  await click(drafts as HTMLButtonElement);
+  assert.deepEqual(script.successes, [], "a partial result must not toast success");
+  assert.equal(script.errors.length, 1, "a partial result must toast once");
+  assert.match(script.errors[0]!, /1 succeeded, 1 failed/);
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the failed reasons must render inline, not only in the toast");
+  assert.match(alert.textContent ?? "", /invoice-2\.pdf/);
+  assert.match(alert.textContent ?? "", /duplicate invoice INV-9/);
+  assert.ok(
+    !/invoice-1\.pdf/.test(alert.textContent ?? ""),
+    "the succeeded document must not be listed as failed",
+  );
+  assert.equal(
+    checkboxFor("invoice-2.pdf").checked,
+    true,
+    "the failed row stays selected for a one-click retry",
+  );
+  assert.equal(
+    checkboxFor("invoice-1.pdf").checked,
+    false,
+    "the succeeded row leaves the selection",
+  );
+  const actions = [...document.querySelectorAll("button")].filter((b) =>
+    /Reprocess|Reject|Create drafts/.test(b.textContent ?? ""),
+  );
+  assert.ok(
+    actions.length > 0 && actions.every((b) => !(b as HTMLButtonElement).disabled),
+    "busy must release after a partial result",
+  );
+});
 
-test('a non-JSON 502 on a bulk action marks the chunk unknown with the named outcome, never a SyntaxError', async (t) => {
-  await mount(t, () => new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }), 2)
-  await click(checkboxFor('invoice-1.pdf'))
-  const drafts = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Create drafts'))
-  assert.ok(drafts, 'bulk actions must appear once rows are selected')
-  await click(drafts as HTMLButtonElement)
+test("a non-JSON 502 on a bulk action marks the chunk unknown with the named outcome, never a SyntaxError", async (t) => {
+  await mount(
+    t,
+    () =>
+      new Response("<html>Bad Gateway</html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+    2,
+  );
+  await click(checkboxFor("invoice-1.pdf"));
+  const drafts = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Create drafts"),
+  );
+  assert.ok(drafts, "bulk actions must appear once rows are selected");
+  await click(drafts as HTMLButtonElement);
   assert.deepEqual(script.errors, [
-    'Bulk action partially complete: 0 succeeded, 1 failed. The failed documents stay selected with their reasons below.',
-  ])
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the failed chunk renders its named outcome inline')
-  assert.match(alert.textContent ?? '', /Outcome unknown/)
-  assert.match(alert.textContent ?? '', /The capture action failed\. \(status 502\)/)
-  assert.equal(checkboxFor('invoice-1.pdf').checked, true, 'the unknown rows stay selected')
-})
+    "Bulk action partially complete: 0 succeeded, 1 failed. The failed documents stay selected with their reasons below.",
+  ]);
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the failed chunk renders its named outcome inline");
+  assert.match(alert.textContent ?? "", /Outcome unknown/);
+  assert.match(alert.textContent ?? "", /The capture action failed\. \(status 502\)/);
+  assert.equal(checkboxFor("invoice-1.pdf").checked, true, "the unknown rows stay selected");
+});
 
-test('a 60-row selection is attempted in bounded batches and unanswered ids stay selected', async (t) => {
-  const batches: string[][] = []
+test("a 60-row selection is attempted in bounded batches and unanswered ids stay selected", async (t) => {
+  const batches: string[][] = [];
   await mount(
     t,
     (body) => {
-      batches.push(body.ids)
+      batches.push(body.ids);
       // First batch fully answered; second batch answers only 5 of 10 —
       // the old silent-truncation shape. Every requested id must still get
       // exactly one verdict.
-      const answered = batches.length === 1 ? body.ids : body.ids.slice(0, 5)
-      return Response.json({ results: answered.map((id) => ({ id, ok: true })) })
+      const answered = batches.length === 1 ? body.ids : body.ids.slice(0, 5);
+      return Response.json({ results: answered.map((id) => ({ id, ok: true })) });
     },
     60,
-  )
-  const selectAll = document.querySelector('label input[type="checkbox"]') as HTMLInputElement | null
-  assert.ok(selectAll, 'the select-all checkbox must render')
-  await click(selectAll)
-  const reject = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Reject'))
-  assert.ok(reject, 'bulk actions must appear once rows are selected')
-  await click(reject as HTMLButtonElement)
+  );
+  const selectAll = document.querySelector(
+    'label input[type="checkbox"]',
+  ) as HTMLInputElement | null;
+  assert.ok(selectAll, "the select-all checkbox must render");
+  await click(selectAll);
+  const reject = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Reject"),
+  );
+  assert.ok(reject, "bulk actions must appear once rows are selected");
+  await click(reject as HTMLButtonElement);
   assert.deepEqual(
     batches.map((batch) => batch.length),
     [50, 10],
-    'no request may exceed the route batch ceiling',
-  )
-  assert.equal(script.errors.length, 1)
-  assert.match(script.errors[0]!, /55 succeeded, 5 failed/)
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the unanswered ids must render inline')
-  assert.match(alert.textContent ?? '', /Not processed in this run/)
+    "no request may exceed the route batch ceiling",
+  );
+  assert.equal(script.errors.length, 1);
+  assert.match(script.errors[0]!, /55 succeeded, 5 failed/);
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the unanswered ids must render inline");
+  assert.match(alert.textContent ?? "", /Not processed in this run/);
   for (let i = 56; i <= 60; i++) {
-    assert.equal(checkboxFor(`invoice-${i}.pdf`).checked, true, `unanswered invoice-${i}.pdf must stay selected`)
+    assert.equal(
+      checkboxFor(`invoice-${i}.pdf`).checked,
+      true,
+      `unanswered invoice-${i}.pdf must stay selected`,
+    );
   }
-  assert.equal(checkboxFor('invoice-1.pdf').checked, false, 'an answered row must leave the selection')
-})
+  assert.equal(
+    checkboxFor("invoice-1.pdf").checked,
+    false,
+    "an answered row must leave the selection",
+  );
+});
 
-test('a second-batch 502 keeps the first batch confirmed verdicts and marks the rest unknown', async (t) => {
-  const batches: string[][] = []
+test("a second-batch 502 keeps the first batch confirmed verdicts and marks the rest unknown", async (t) => {
+  const batches: string[][] = [];
   await mount(
     t,
     (body) => {
-      batches.push(body.ids)
-      if (batches.length === 1) return Response.json({ results: body.ids.map((id) => ({ id, ok: true })) })
-      return new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } })
+      batches.push(body.ids);
+      if (batches.length === 1)
+        return Response.json({ results: body.ids.map((id) => ({ id, ok: true })) });
+      return new Response("<html>Bad Gateway</html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      });
     },
     60,
-  )
-  const selectAll = document.querySelector('label input[type="checkbox"]') as HTMLInputElement | null
-  assert.ok(selectAll, 'the select-all checkbox must render')
-  await click(selectAll)
-  const reject = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Reject'))
-  assert.ok(reject, 'bulk actions must appear once rows are selected')
-  await click(reject as HTMLButtonElement)
+  );
+  const selectAll = document.querySelector(
+    'label input[type="checkbox"]',
+  ) as HTMLInputElement | null;
+  assert.ok(selectAll, "the select-all checkbox must render");
+  await click(selectAll);
+  const reject = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Reject"),
+  );
+  assert.ok(reject, "bulk actions must appear once rows are selected");
+  await click(reject as HTMLButtonElement);
   assert.deepEqual(
     batches.map((batch) => batch.length),
     [50, 10],
-    'both batches must be attempted',
-  )
-  assert.equal(script.errors.length, 1)
-  assert.match(script.errors[0]!, /50 succeeded, 10 failed/)
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the unknown chunk must render inline with its named outcome')
-  assert.match(alert.textContent ?? '', /Outcome unknown/)
-  assert.match(alert.textContent ?? '', /status 502/)
+    "both batches must be attempted",
+  );
+  assert.equal(script.errors.length, 1);
+  assert.match(script.errors[0]!, /50 succeeded, 10 failed/);
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the unknown chunk must render inline with its named outcome");
+  assert.match(alert.textContent ?? "", /Outcome unknown/);
+  assert.match(alert.textContent ?? "", /status 502/);
   for (let i = 51; i <= 60; i++) {
-    assert.equal(checkboxFor(`invoice-${i}.pdf`).checked, true, `unknown invoice-${i}.pdf must stay selected`)
+    assert.equal(
+      checkboxFor(`invoice-${i}.pdf`).checked,
+      true,
+      `unknown invoice-${i}.pdf must stay selected`,
+    );
   }
-  assert.equal(checkboxFor('invoice-1.pdf').checked, false, 'a confirmed row must leave the selection, not replay')
-})
+  assert.equal(
+    checkboxFor("invoice-1.pdf").checked,
+    false,
+    "a confirmed row must leave the selection, not replay",
+  );
+});
 
-test('a lost acknowledgement after first-batch success marks only the lost chunk unknown', async (t) => {
-  const batches: string[][] = []
+test("a lost acknowledgement after first-batch success marks only the lost chunk unknown", async (t) => {
+  const batches: string[][] = [];
   await mount(
     t,
     (body) => {
-      batches.push(body.ids)
-      if (batches.length === 1) return Response.json({ results: body.ids.map((id) => ({ id, ok: true })) })
-      throw new TypeError('fetch failed')
+      batches.push(body.ids);
+      if (batches.length === 1)
+        return Response.json({ results: body.ids.map((id) => ({ id, ok: true })) });
+      throw new TypeError("fetch failed");
     },
     60,
-  )
-  const selectAll = document.querySelector('label input[type="checkbox"]') as HTMLInputElement | null
-  assert.ok(selectAll, 'the select-all checkbox must render')
-  await click(selectAll)
-  const reject = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Reject'))
-  assert.ok(reject, 'bulk actions must appear once rows are selected')
-  await click(reject as HTMLButtonElement)
-  assert.match(script.errors[0]!, /50 succeeded, 10 failed/)
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the lost chunk must render inline')
-  assert.match(alert.textContent ?? '', /Outcome unknown/)
+  );
+  const selectAll = document.querySelector(
+    'label input[type="checkbox"]',
+  ) as HTMLInputElement | null;
+  assert.ok(selectAll, "the select-all checkbox must render");
+  await click(selectAll);
+  const reject = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Reject"),
+  );
+  assert.ok(reject, "bulk actions must appear once rows are selected");
+  await click(reject as HTMLButtonElement);
+  assert.match(script.errors[0]!, /50 succeeded, 10 failed/);
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the lost chunk must render inline");
+  assert.match(alert.textContent ?? "", /Outcome unknown/);
   for (let i = 51; i <= 60; i++) {
-    assert.equal(checkboxFor(`invoice-${i}.pdf`).checked, true, `lost invoice-${i}.pdf must stay selected`)
+    assert.equal(
+      checkboxFor(`invoice-${i}.pdf`).checked,
+      true,
+      `lost invoice-${i}.pdf must stay selected`,
+    );
   }
-  assert.equal(checkboxFor('invoice-50.pdf').checked, false, 'a confirmed row must not replay')
-})
+  assert.equal(checkboxFor("invoice-50.pdf").checked, false, "a confirmed row must not replay");
+});

@@ -1,6 +1,11 @@
-import 'server-only'
-import { renderHtmlDocumentPdf } from '@openbooks/pdf'
-import { esc, renderLienWaiverBody, type LienWaiverFormData, type LienWaiverPrintOptions } from './lien-waiver-form'
+import "server-only";
+import { renderHtmlDocumentPdf } from "@openbooks/pdf";
+import {
+  esc,
+  renderLienWaiverBody,
+  type LienWaiverFormData,
+  type LienWaiverPrintOptions,
+} from "./lien-waiver-form";
 
 /**
  * Print a lien waiver to PDF through the shared Chromium printer. The wording
@@ -16,9 +21,9 @@ export async function renderLienWaiverPdf(
 ): Promise<Buffer> {
   return renderHtmlDocumentPdf({
     bodyHtml: renderLienWaiverBody(data, orgName, opts),
-    paperSize: 'letter',
-    orientation: 'portrait',
+    paperSize: "letter",
+    orientation: "portrait",
     marginMm: 16,
     footerHtml: `${esc(data.waiverNumber)} · ${esc(data.projectName)} · page {{page}} of {{pages}}`,
-  })
+  });
 }

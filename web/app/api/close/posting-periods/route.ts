@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 
 import { NextResponse } from "next/server";
 import { getLocale } from "next-intl/server";
@@ -21,7 +21,6 @@ const requestBodySchema = z.object({
   adjustmentPeriodId: uuidString().optional(),
 });
 
-
 export const runtime = "nodejs";
 
 type Gate = Exclude<Awaited<ReturnType<typeof guardFeaturePermission>>, NextResponse>;
@@ -32,10 +31,7 @@ function subsidiaryScope(gate: Gate): string[] | null | NextResponse {
   const allowed = [...gate.allowedSubsidiaryIds];
   return allowed.length > 0
     ? allowed
-    : NextResponse.json(
-        { error: "no subsidiaries are in the caller's scope" },
-        { status: 403 },
-      );
+    : NextResponse.json({ error: "no subsidiaries are in the caller's scope" }, { status: 403 });
 }
 
 function parseIdList(value: string | null): string[] | undefined | NextResponse {
@@ -74,7 +70,10 @@ async function legacyGET(req: Request) {
       subsidiaryIds: scope,
       adjustmentPeriodId,
     });
-    return NextResponse.json({ ...preview, rows: labelPostingPeriodCandidates(preview.rows, await getLocale()) });
+    return NextResponse.json({
+      ...preview,
+      rows: labelPostingPeriodCandidates(preview.rows, await getLocale()),
+    });
   } catch (error) {
     if (error instanceof PostingPeriodAssignmentError || error instanceof CloseError) {
       return apiErrorResponse(error, { safeStatus: 422 });
@@ -84,7 +83,6 @@ async function legacyGET(req: Request) {
 }
 
 /** Commit the assignment (preview first: only previewed rows are committed). */
-
 
 export const GET = defineRoute({
   permission: "close.run",
@@ -97,11 +95,7 @@ export const POST = defineRoute({
   feature: "continuousClose",
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
-
     const gate = routeAuthz;
-
-
-
 
     const bookId = typeof body.bookId === "string" ? body.bookId : "";
     if (!isUuid(bookId)) {
@@ -110,9 +104,9 @@ export const POST = defineRoute({
     const rawIds = body.documentIds;
     if (rawIds !== undefined) {
       if (
-        !Array.isArray(rawIds)
-        || rawIds.some((id) => typeof id !== "string" || !isUuid(id))
-        || new Set(rawIds).size !== rawIds.length
+        !Array.isArray(rawIds) ||
+        rawIds.some((id) => typeof id !== "string" || !isUuid(id)) ||
+        new Set(rawIds).size !== rawIds.length
       ) {
         return NextResponse.json(
           { error: "documentIds must contain unique valid UUIDs" },
@@ -122,7 +116,8 @@ export const POST = defineRoute({
     }
     const scope = subsidiaryScope(gate);
     if (scope instanceof NextResponse) return scope;
-    const adjustmentPeriodId = typeof body.adjustmentPeriodId === "string" ? body.adjustmentPeriodId : undefined;
+    const adjustmentPeriodId =
+      typeof body.adjustmentPeriodId === "string" ? body.adjustmentPeriodId : undefined;
     try {
       const result = await commitPostingPeriodAssignment(gate.user.orgId, {
         bookId,

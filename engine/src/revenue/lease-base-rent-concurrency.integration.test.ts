@@ -3,11 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -188,7 +184,12 @@ test(
         propertyId,
         `CANON-${randomUUID().slice(0, 8)}`,
       );
-      const canonicalChargeId = await createCharge(org, canonicalLeaseId, "2026-07-01", "Canonical rent");
+      const canonicalChargeId = await createCharge(
+        org,
+        canonicalLeaseId,
+        "2026-07-01",
+        "Canonical rent",
+      );
 
       // The base-rent exclusion constraint prevents constructing overlapping
       // charges in a current schema.  Remove it only in this scratch database,
@@ -204,12 +205,7 @@ test(
           propertyId,
           `CONFLICT-${suffix}-${randomUUID().slice(0, 8)}`,
         );
-        const olderChargeId = await createCharge(
-          org,
-          leaseId,
-          "2026-01-01",
-          `Older ${suffix}`,
-        );
+        const olderChargeId = await createCharge(org, leaseId, "2026-01-01", `Older ${suffix}`);
         await createCharge(org, leaseId, "2026-03-01", `Successor ${suffix}`);
 
         // One line per conflict is cancellable.  The invoiced line is posted
@@ -238,9 +234,7 @@ test(
       }
 
       const repaired = (
-        await pool.query<RepairResult>(
-          "select * from public.lease_charges_base_rent_repair()",
-        )
+        await pool.query<RepairResult>("select * from public.lease_charges_base_rent_repair()")
       ).rows[0]!;
       assert.deepEqual(
         repaired,
@@ -255,22 +249,18 @@ test(
         "the non-conflicting charge keeps its open window",
       );
       assert.equal(
-        afterRepair.schedules.filter((line) => line.status === "cancelled")
-          .length,
+        afterRepair.schedules.filter((line) => line.status === "cancelled").length,
         2,
         "one scheduled line per conflict is cancelled",
       );
       assert.equal(
-        afterRepair.schedules.filter((line) => line.status === "invoiced")
-          .length,
+        afterRepair.schedules.filter((line) => line.status === "invoiced").length,
         2,
         "invoiced schedule evidence is preserved",
       );
 
       const secondPass = (
-        await pool.query<RepairResult>(
-          "select * from public.lease_charges_base_rent_repair()",
-        )
+        await pool.query<RepairResult>("select * from public.lease_charges_base_rent_repair()")
       ).rows[0]!;
       assert.deepEqual(
         secondPass,

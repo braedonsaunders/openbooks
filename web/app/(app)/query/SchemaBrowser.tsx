@@ -1,29 +1,39 @@
-'use client'
+"use client";
 
-import { useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { ChevronRight, Columns3, Database, Eye, KeyRound, Play, Search, Table2, TextCursorInput } from 'lucide-react'
-import { ContextMenu, Input, cn, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import {
+  ChevronRight,
+  Columns3,
+  Database,
+  Eye,
+  KeyRound,
+  Play,
+  Search,
+  Table2,
+  TextCursorInput,
+} from "lucide-react";
+import { ContextMenu, Input, cn, useContextMenu, type ContextMenuEntry } from "@openbooks/ui";
 
 export interface SchemaColumn {
-  name: string
-  type: string
-  nullable: boolean
-  isKey: boolean
+  name: string;
+  type: string;
+  nullable: boolean;
+  isKey: boolean;
 }
 export interface SchemaTable {
-  name: string
-  kind: 'table' | 'view'
-  columns: SchemaColumn[]
+  name: string;
+  kind: "table" | "view";
+  columns: SchemaColumn[];
 }
 
 /** Quote a PostgreSQL identifier without treating any part of it as SQL. */
 function quoteIdentifier(identifier: string): string {
-  return `"${identifier.replace(/"/g, '""')}"`
+  return `"${identifier.replace(/"/g, '""')}"`;
 }
 
 function selectTemplate(tableName: string): string {
-  return `select *\n  from ${quoteIdentifier(tableName)}\n limit 100`
+  return `select *\n  from ${quoteIdentifier(tableName)}\n limit 100`;
 }
 
 /**
@@ -42,82 +52,85 @@ export function SchemaBrowser({
   onInsert,
   onBrowse,
 }: {
-  tables: SchemaTable[]
-  loading: boolean
-  error: string | null
-  onInsert: (text: string) => void
-  onBrowse: (sql: string) => void
+  tables: SchemaTable[];
+  loading: boolean;
+  error: string | null;
+  onInsert: (text: string) => void;
+  onBrowse: (sql: string) => void;
 }) {
-  const t = useTranslations('query')
-  const [q, setQ] = useState('')
-  const [open, setOpen] = useState<Record<string, boolean>>({})
-  const [menuTable, setMenuTable] = useState<SchemaTable | null>(null)
-  const menu = useContextMenu()
+  const t = useTranslations("query");
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [menuTable, setMenuTable] = useState<SchemaTable | null>(null);
+  const menu = useContextMenu();
 
-  const query = q.trim().toLowerCase()
+  const query = q.trim().toLowerCase();
   const filtered = useMemo(() => {
-    if (!query) return tables
+    if (!query) return tables;
     return tables
       .map((tbl) => {
-        if (tbl.name.toLowerCase().includes(query)) return tbl
-        const cols = tbl.columns.filter((c) => c.name.toLowerCase().includes(query))
-        return cols.length ? { ...tbl, columns: cols } : null
+        if (tbl.name.toLowerCase().includes(query)) return tbl;
+        const cols = tbl.columns.filter((c) => c.name.toLowerCase().includes(query));
+        return cols.length ? { ...tbl, columns: cols } : null;
       })
-      .filter((x): x is SchemaTable => x !== null)
-  }, [tables, query])
+      .filter((x): x is SchemaTable => x !== null);
+  }, [tables, query]);
 
-  const isOpen = (name: string) => open[name] ?? Boolean(query)
+  const isOpen = (name: string) => open[name] ?? Boolean(query);
 
   function showSchema(table: SchemaTable) {
-    setQ(table.name)
-    setOpen((current) => ({ ...current, [table.name]: true }))
+    setQ(table.name);
+    setOpen((current) => ({ ...current, [table.name]: true }));
   }
 
   function openTableMenu(event: React.MouseEvent<HTMLButtonElement>, table: SchemaTable) {
-    setMenuTable(table)
-    event.currentTarget.focus()
-    menu.onContextMenu(event)
+    setMenuTable(table);
+    event.currentTarget.focus();
+    menu.onContextMenu(event);
   }
 
   const menuItems: ContextMenuEntry[] = menuTable
     ? [
         {
-          key: 'show-schema',
-          label: t('schema.showSchema'),
+          key: "show-schema",
+          label: t("schema.showSchema"),
           icon: Columns3,
           onSelect: () => showSchema(menuTable),
         },
         {
-          key: 'browse-rows',
-          label: t('schema.browseRows'),
+          key: "browse-rows",
+          label: t("schema.browseRows"),
           icon: Play,
           onSelect: () => onBrowse(selectTemplate(menuTable.name)),
         },
-        { key: 'insert-separator', separator: true },
+        { key: "insert-separator", separator: true },
         {
-          key: 'insert-table',
-          label: t('schema.insertTableName'),
+          key: "insert-table",
+          label: t("schema.insertTableName"),
           icon: TextCursorInput,
           onSelect: () => onInsert(quoteIdentifier(menuTable.name)),
         },
         {
-          key: 'insert-select',
-          label: t('schema.insertSelectTemplate'),
+          key: "insert-select",
+          label: t("schema.insertSelectTemplate"),
           icon: Table2,
           onSelect: () => onInsert(selectTemplate(menuTable.name)),
         },
       ]
-    : []
+    : [];
 
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-slate-200 p-2 dark:border-slate-800">
         <div className="relative">
-          <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" />
+          <Search
+            size={14}
+            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
+          />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={t('schema.searchPlaceholder')}
+            placeholder={t("schema.searchPlaceholder")}
             className="h-8 pl-8 text-xs"
             spellCheck={false}
           />
@@ -128,7 +141,10 @@ export function SchemaBrowser({
         {loading ? (
           <div className="space-y-1 p-1">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-7 animate-pulse rounded bg-slate-100 dark:bg-slate-800/60" />
+              <div
+                key={i}
+                className="h-7 animate-pulse rounded bg-slate-100 dark:bg-slate-800/60"
+              />
             ))}
           </div>
         ) : error ? (
@@ -136,7 +152,7 @@ export function SchemaBrowser({
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 p-6 text-center text-xs text-slate-400 dark:text-slate-500">
             <Database size={20} />
-            {t('schema.noMatch')}
+            {t("schema.noMatch")}
           </div>
         ) : (
           <ul className="space-y-0.5">
@@ -150,9 +166,12 @@ export function SchemaBrowser({
                 >
                   <ChevronRight
                     size={13}
-                    className={cn('shrink-0 text-slate-400 transition-transform', isOpen(tbl.name) && 'rotate-90')}
+                    className={cn(
+                      "shrink-0 text-slate-400 transition-transform",
+                      isOpen(tbl.name) && "rotate-90",
+                    )}
                   />
-                  {tbl.kind === 'view' ? (
+                  {tbl.kind === "view" ? (
                     <Eye size={13} className="shrink-0 text-violet-500" />
                   ) : (
                     <Table2 size={13} className="shrink-0 text-teal-600 dark:text-teal-400" />
@@ -165,10 +184,10 @@ export function SchemaBrowser({
                   <span
                     className="min-w-0 flex-1 truncate font-mono text-slate-700 dark:text-slate-200"
                     onClick={(e) => {
-                      e.stopPropagation()
-                      onBrowse(selectTemplate(tbl.name))
+                      e.stopPropagation();
+                      onBrowse(selectTemplate(tbl.name));
                     }}
-                    title={t('schema.browseRows')}
+                    title={t("schema.browseRows")}
                   >
                     {tbl.name}
                   </span>
@@ -183,20 +202,22 @@ export function SchemaBrowser({
                         <button
                           type="button"
                           onClick={() => onInsert(quoteIdentifier(col.name))}
-                          title={t('schema.insertColumn')}
+                          title={t("schema.insertColumn")}
                           className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800/70"
                         >
                           <Columns3 size={12} className="shrink-0 text-slate-400" />
-                          <span className="min-w-0 flex-1 truncate font-mono text-slate-600 dark:text-slate-300">{col.name}</span>
+                          <span className="min-w-0 flex-1 truncate font-mono text-slate-600 dark:text-slate-300">
+                            {col.name}
+                          </span>
                           {col.isKey ? (
                             <span
                               data-column-key={col.name}
-                              title={t('schema.keyColumn')}
+                              title={t("schema.keyColumn")}
                               className="shrink-0"
                             >
                               <KeyRound
                                 size={10}
-                                aria-label={t('schema.keyColumn')}
+                                aria-label={t("schema.keyColumn")}
                                 className="text-amber-500 opacity-70"
                               />
                             </span>
@@ -214,7 +235,12 @@ export function SchemaBrowser({
           </ul>
         )}
       </div>
-      <ContextMenu open={menu.open} position={menu.position} items={menuItems} onClose={menu.close} />
+      <ContextMenu
+        open={menu.open}
+        position={menu.position}
+        items={menuItems}
+        onClose={menu.close}
+      />
     </div>
-  )
+  );
 }

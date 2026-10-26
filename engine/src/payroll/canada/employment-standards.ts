@@ -52,60 +52,90 @@ import { NS_REMEMBRANCE_EXEMPT_BUSINESS_CLASSES } from "./employer-facts.ts";
 // jurisdiction lists say WHICH days it observes, not what a day is.
 
 const NEW_YEARS: PayrollHoliday = {
-  key: "new_years", name: "New Year's Day",
-  rule: { kind: "fixed", month: 1, day: 1 }, observance: "none",
+  key: "new_years",
+  name: "New Year's Day",
+  rule: { kind: "fixed", month: 1, day: 1 },
+  observance: "none",
 };
 const GOOD_FRIDAY: PayrollHoliday = {
-  key: "good_friday", name: "Good Friday",
-  rule: { kind: "easter_offset", days: -2 }, observance: "none",
+  key: "good_friday",
+  name: "Good Friday",
+  rule: { kind: "easter_offset", days: -2 },
+  observance: "none",
 };
 const EASTER_MONDAY: PayrollHoliday = {
-  key: "easter_monday", name: "Easter Monday",
-  rule: { kind: "easter_offset", days: 1 }, observance: "none",
+  key: "easter_monday",
+  name: "Easter Monday",
+  rule: { kind: "easter_offset", days: 1 },
+  observance: "none",
 };
 const VICTORIA_DAY: PayrollHoliday = {
-  key: "victoria_day", name: "Victoria Day",
+  key: "victoria_day",
+  name: "Victoria Day",
   // The Monday preceding May 25 — never May 25 itself when that is a Monday.
-  rule: { kind: "weekday_before", month: 5, day: 25, weekday: 1 }, observance: "none",
+  rule: { kind: "weekday_before", month: 5, day: 25, weekday: 1 },
+  observance: "none",
 };
 const CANADA_DAY: PayrollHoliday = {
-  key: "canada_day", name: "Canada Day",
-  rule: { kind: "fixed", month: 7, day: 1 }, observance: "none",
+  key: "canada_day",
+  name: "Canada Day",
+  rule: { kind: "fixed", month: 7, day: 1 },
+  observance: "none",
 };
 const LABOUR_DAY: PayrollHoliday = {
-  key: "labour_day", name: "Labour Day",
-  rule: { kind: "nth_weekday", month: 9, weekday: 1, nth: 1 }, observance: "none",
+  key: "labour_day",
+  name: "Labour Day",
+  rule: { kind: "nth_weekday", month: 9, weekday: 1, nth: 1 },
+  observance: "none",
 };
 const TRUTH_AND_RECONCILIATION: PayrollHoliday = {
-  key: "truth_and_reconciliation", name: "National Day for Truth and Reconciliation",
-  rule: { kind: "fixed", month: 9, day: 30 }, observance: "none", from: 2021,
+  key: "truth_and_reconciliation",
+  name: "National Day for Truth and Reconciliation",
+  rule: { kind: "fixed", month: 9, day: 30 },
+  observance: "none",
+  from: 2021,
 };
 const THANKSGIVING_CA: PayrollHoliday = {
-  key: "thanksgiving", name: "Thanksgiving Day",
-  rule: { kind: "nth_weekday", month: 10, weekday: 1, nth: 2 }, observance: "none",
+  key: "thanksgiving",
+  name: "Thanksgiving Day",
+  rule: { kind: "nth_weekday", month: 10, weekday: 1, nth: 2 },
+  observance: "none",
 };
 const REMEMBRANCE_DAY: PayrollHoliday = {
-  key: "remembrance_day", name: "Remembrance Day",
-  rule: { kind: "fixed", month: 11, day: 11 }, observance: "none",
+  key: "remembrance_day",
+  name: "Remembrance Day",
+  rule: { kind: "fixed", month: 11, day: 11 },
+  observance: "none",
 };
 const CHRISTMAS: PayrollHoliday = {
-  key: "christmas", name: "Christmas Day",
-  rule: { kind: "fixed", month: 12, day: 25 }, observance: "none",
+  key: "christmas",
+  name: "Christmas Day",
+  rule: { kind: "fixed", month: 12, day: 25 },
+  observance: "none",
 };
 const BOXING_DAY: PayrollHoliday = {
-  key: "boxing_day", name: "Boxing Day",
-  rule: { kind: "fixed", month: 12, day: 26 }, observance: "none",
+  key: "boxing_day",
+  name: "Boxing Day",
+  rule: { kind: "fixed", month: 12, day: 26 },
+  observance: "none",
 };
 const THIRD_MONDAY_FEBRUARY: PayrollHolidayRule = {
-  kind: "nth_weekday", month: 2, weekday: 1, nth: 3,
+  kind: "nth_weekday",
+  month: 2,
+  weekday: 1,
+  nth: 3,
 };
 const FIRST_MONDAY_AUGUST: PayrollHolidayRule = {
-  kind: "nth_weekday", month: 8, weekday: 1, nth: 1,
+  kind: "nth_weekday",
+  month: 8,
+  weekday: 1,
+  nth: 1,
 };
 
 /** The Canada Labour Code moves a weekend general holiday to a working day. */
 const federal = (holiday: PayrollHoliday): PayrollHoliday => ({
-  ...holiday, observance: "next_monday",
+  ...holiday,
+  observance: "next_monday",
 });
 
 // --- Canadian holiday-pay rules --------------------------------------------
@@ -127,16 +157,19 @@ const ENDS_DAY_BEFORE: PayrollHolidayLookbackBoundary = { kind: "day_before" };
  * the generic calculation uses for those boundaries.
  */
 const ENDS_WEEK_BEFORE: PayrollHolidayLookbackBoundary = {
-  kind: "week_before", weekStartsOn: 0,
+  kind: "week_before",
+  weekStartsOn: 0,
 };
 const ENDS_SELECTED_WORK_WEEK_BEFORE: PayrollHolidayLookbackBoundary = {
-  ...ENDS_WEEK_BEFORE, employerWeekStartsOnFact: "work_week_start",
+  ...ENDS_WEEK_BEFORE,
+  employerWeekStartsOnFact: "work_week_start",
 };
 
 /** The pack's only transcription of a jurisdiction's formula: offered for
  *  every date it is asked about, because no earlier edition is carried. */
-const onlyEdition = (rule: PayrollHolidayPayRule): readonly PayrollHolidayPayEdition[] =>
-  [{ effectiveFrom: null, effectiveTo: null, rule }];
+const onlyEdition = (rule: PayrollHolidayPayRule): readonly PayrollHolidayPayEdition[] => [
+  { effectiveFrom: null, effectiveTo: null, rule },
+];
 
 /**
  * Canada Labour Code s. 196(1)–(2). One twentieth of the wages, excluding
@@ -148,7 +181,9 @@ const onlyEdition = (rule: PayrollHolidayPayRule): readonly PayrollHolidayPayEdi
 const CLC_HOLIDAY_PAY: PayrollHolidayPayRule = {
   citation: "Canada Labour Code, RSC 1985 c L-2, ss. 196–197",
   basis: {
-    kind: "fixed_divisor", divisor: 20, lookbackWeeks: 4,
+    kind: "fixed_divisor",
+    divisor: 20,
+    lookbackWeeks: 4,
     commission: { divisor: 60, lookbackWeeks: 12, minWeeksEmployed: 12 },
   },
   include: { overtime: false, vacationPay: true, holidayPay: true },
@@ -187,7 +222,9 @@ const ON_HOLIDAY_PAY: PayrollHolidayPayRule = {
 const QC_HOLIDAY_PAY: PayrollHolidayPayRule = {
   citation: "Act respecting labour standards (Quebec), CQLR c N-1.1, ss. 62–65",
   basis: {
-    kind: "fixed_divisor", divisor: 20, lookbackWeeks: 4,
+    kind: "fixed_divisor",
+    divisor: 20,
+    lookbackWeeks: 4,
     commission: { divisor: 60, lookbackWeeks: 12, minWeeksEmployed: 12 },
   },
   include: { overtime: false, vacationPay: true, holidayPay: true },
@@ -236,7 +273,9 @@ const BC_HOLIDAY_PAY: PayrollHolidayPayRule = {
     averagingAgreementAlternative: true,
   },
   premium: {
-    multiplier: "1.5", overtimeAfterHours: 12, overtimeMultiplier: "2",
+    multiplier: "1.5",
+    overtimeAfterHours: 12,
+    overtimeMultiplier: "2",
     plusHolidayPay: true,
   },
   // s. 45(1): "the 30 calendar day period preceding the statutory holiday" —
@@ -270,7 +309,8 @@ const AB_HOLIDAY_PAY: PayrollHolidayPayRule = {
   // 1: hours × wage × 1.5 plus the average daily wage the salary already
   // paid), because the salary never paid a 1.0× base for them.
   salariedTreatment: {
-    citation: "Employment standards – Alberta general holidays (Alberta.ca), 'Employees paid other than hourly: Salaried employees'; Employment Standards Code, RSA 2000 c E-9, Part 2 Div. 5",
+    citation:
+      "Employment standards – Alberta general holidays (Alberta.ca), 'Employees paid other than hourly: Salaried employees'; Employment Standards Code, RSA 2000 c E-9, Part 2 Div. 5",
   },
   // "the 4 weeks immediately preceding the general holiday" — the day, not the
   // week. (The Code's alternative, four weeks ending on the last day of the
@@ -346,7 +386,10 @@ export const MB_CONSTRUCTION_HOLIDAY = {
 
 const MB_HOLIDAY_PAY: PayrollHolidayPayRule = {
   occupationClasses: {
-    general: { label: "General employee", citation: "The Employment Standards Code (Manitoba), CCSM c E110, ss. 22–25" },
+    general: {
+      label: "General employee",
+      citation: "The Employment Standards Code (Manitoba), CCSM c E110, ss. 22–25",
+    },
     construction: { label: "Construction employee", citation: MB_CONSTRUCTION_HOLIDAY.citation },
   },
   citation: "The Employment Standards Code (Manitoba), CCSM c E110, ss. 22–25",
@@ -512,7 +555,8 @@ export const NS_REMEMBRANCE_ALTERNATE_DAY: PayrollRemembranceAlternateDayRule = 
   exemptBusinessClasses: NS_REMEMBRANCE_EXEMPT_BUSINESS_CLASSES,
   // The Act binds Nova Scotia employment: only a CA-NS labour jurisdiction can ever accrue the bank.
   jurisdictions: ["CA-NS"],
-  citation: "Remembrance Day Act (Nova Scotia), RSNS 1989 c 396 — alternate day off with regular pay",
+  citation:
+    "Remembrance Day Act (Nova Scotia), RSNS 1989 c 396 — alternate day off with regular pay",
 };
 
 /**
@@ -558,7 +602,9 @@ const TERRITORIAL_HOLIDAY_PAY = {
     // WORKED immediately preceding the week in which the statutory holiday
     // occurs" — days worked.
     whenIrregular: {
-      kind: "average_day" as const, lookbackWeeks: 4, counting: "worked" as const,
+      kind: "average_day" as const,
+      lookbackWeeks: 4,
+      counting: "worked" as const,
     },
   },
   include: { overtime: false, vacationPay: true, holidayPay: true },
@@ -652,8 +698,9 @@ const NU_HOLIDAY_PAY: PayrollHolidayPayRule = {
  * the engine's normal-day arm already pays one day's wages either way.
  */
 const PE_HOLIDAY_PAY_REPEALED: PayrollHolidayPayRule = {
-  citation: "Employment Standards Act (Prince Edward Island), RSPEI 1988 c E-6.2, ss. 6–10 "
-    + "(as consolidated 2013; repealed by SPEI 2024 c 66 s. 105 — governs holidays through 2026-06-29)",
+  citation:
+    "Employment Standards Act (Prince Edward Island), RSPEI 1988 c E-6.2, ss. 6–10 " +
+    "(as consolidated 2013; repealed by SPEI 2024 c 66 s. 105 — governs holidays through 2026-06-29)",
   basis: { kind: "normal_day" },
   excludedOccupations: {
     elect_to_work: {
@@ -675,9 +722,10 @@ const PE_HOLIDAY_PAY_REPEALED: PayrollHolidayPayRule = {
 };
 
 const PE_HOLIDAY_PAY: PayrollHolidayPayRule = {
-  citation: "Employment Standards Act (Prince Edward Island), SPEI 2024 c 66, ss. 27–28 "
-    + "(in force 2026-06-30; earlier periods are governed by the repealed RSPEI 1988 c E-6.2, "
-    + "transcribed as the pre-2026-06-30 edition)",
+  citation:
+    "Employment Standards Act (Prince Edward Island), SPEI 2024 c 66, ss. 27–28 " +
+    "(in force 2026-06-30; earlier periods are governed by the repealed RSPEI 1988 c E-6.2, " +
+    "transcribed as the pre-2026-06-30 edition)",
   basis: { kind: "percent_of_earnings", percent: "5", lookbackWeeks: 4 },
   include: { overtime: false, vacationPay: true, holidayPay: true },
   qualifying: { lastAndFirstScheduledShift: true },
@@ -732,7 +780,8 @@ const YT_HOLIDAY_PAY: PayrollHolidayPayRule = {
   },
   include: { overtime: true, vacationPay: false, holidayPay: false },
   qualifying: {
-    minEmploymentDays: 30, minEmploymentDaysWhenUnworked: true,
+    minEmploymentDays: 30,
+    minEmploymentDaysWhenUnworked: true,
     lastAndFirstScheduledShift: true,
   },
   premium: { multiplier: "1.5", plusHolidayPay: true },
@@ -765,8 +814,15 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     scope: "employment",
     citation: "Canada Labour Code, RSC 1985 c L-2, ss. 191–197",
     holidays: [
-      NEW_YEARS, GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY, LABOUR_DAY,
-      TRUTH_AND_RECONCILIATION, THANKSGIVING_CA, REMEMBRANCE_DAY, CHRISTMAS,
+      NEW_YEARS,
+      GOOD_FRIDAY,
+      VICTORIA_DAY,
+      CANADA_DAY,
+      LABOUR_DAY,
+      TRUTH_AND_RECONCILIATION,
+      THANKSGIVING_CA,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       BOXING_DAY,
     ].map(federal),
     holidayPay: onlyEdition(CLC_HOLIDAY_PAY),
@@ -779,11 +835,22 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     holidays: [
       NEW_YEARS,
       { key: "family_day", name: "Family Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none" },
-      GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY, LABOUR_DAY, THANKSGIVING_CA,
-      CHRISTMAS, BOXING_DAY,
+      GOOD_FRIDAY,
+      VICTORIA_DAY,
+      CANADA_DAY,
+      LABOUR_DAY,
+      THANKSGIVING_CA,
+      CHRISTMAS,
+      BOXING_DAY,
       // Not ESA public holidays. An Ontario employer may observe them, and
       // many do, but only by election — hence optional, not absent.
-      { key: "civic_holiday", name: "Civic Holiday", rule: FIRST_MONDAY_AUGUST, observance: "none", optional: true },
+      {
+        key: "civic_holiday",
+        name: "Civic Holiday",
+        rule: FIRST_MONDAY_AUGUST,
+        observance: "none",
+        optional: true,
+      },
       { ...TRUTH_AND_RECONCILIATION, optional: true },
       { ...REMEMBRANCE_DAY, optional: true },
       { ...EASTER_MONDAY, optional: true },
@@ -802,11 +869,22 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
       // chooses Easter Monday turns the optional day on and this one off.
       GOOD_FRIDAY,
       { ...EASTER_MONDAY, optional: true },
-      { key: "national_patriots_day", name: "National Patriots' Day",
-        rule: { kind: "weekday_before", month: 5, day: 25, weekday: 1 }, observance: "none" },
-      { key: "st_jean_baptiste", name: "National Holiday (Saint-Jean-Baptiste)",
-        rule: { kind: "fixed", month: 6, day: 24 }, observance: "none" },
-      CANADA_DAY, LABOUR_DAY, THANKSGIVING_CA, CHRISTMAS,
+      {
+        key: "national_patriots_day",
+        name: "National Patriots' Day",
+        rule: { kind: "weekday_before", month: 5, day: 25, weekday: 1 },
+        observance: "none",
+      },
+      {
+        key: "st_jean_baptiste",
+        name: "National Holiday (Saint-Jean-Baptiste)",
+        rule: { kind: "fixed", month: 6, day: 24 },
+        observance: "none",
+      },
+      CANADA_DAY,
+      LABOUR_DAY,
+      THANKSGIVING_CA,
+      CHRISTMAS,
       { ...BOXING_DAY, optional: true },
       { ...REMEMBRANCE_DAY, optional: true },
     ],
@@ -820,15 +898,35 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     holidays: [
       NEW_YEARS,
       // Moved from the second to the THIRD Monday in February in 2019.
-      { key: "family_day", name: "Family Day",
-        rule: { kind: "nth_weekday", month: 2, weekday: 1, nth: 2 }, observance: "none", until: 2018 },
-      { key: "family_day", name: "Family Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none", from: 2019 },
-      GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY,
-      { key: "bc_day", name: "British Columbia Day", rule: FIRST_MONDAY_AUGUST, observance: "none" },
+      {
+        key: "family_day",
+        name: "Family Day",
+        rule: { kind: "nth_weekday", month: 2, weekday: 1, nth: 2 },
+        observance: "none",
+        until: 2018,
+      },
+      {
+        key: "family_day",
+        name: "Family Day",
+        rule: THIRD_MONDAY_FEBRUARY,
+        observance: "none",
+        from: 2019,
+      },
+      GOOD_FRIDAY,
+      VICTORIA_DAY,
+      CANADA_DAY,
+      {
+        key: "bc_day",
+        name: "British Columbia Day",
+        rule: FIRST_MONDAY_AUGUST,
+        observance: "none",
+      },
       LABOUR_DAY,
       // A BC statutory holiday from 2023 (Bill 2, 2023).
       { ...TRUTH_AND_RECONCILIATION, from: 2023 },
-      THANKSGIVING_CA, REMEMBRANCE_DAY, CHRISTMAS,
+      THANKSGIVING_CA,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       { ...BOXING_DAY, optional: true },
     ],
     holidayPay: onlyEdition(BC_HOLIDAY_PAY),
@@ -840,12 +938,28 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     citation: "Employment Standards Code (Alberta), s. 1(1)(n) 'general holiday'",
     holidays: [
       NEW_YEARS,
-      { key: "family_day", name: "Alberta Family Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none" },
-      GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY, LABOUR_DAY, THANKSGIVING_CA,
-      REMEMBRANCE_DAY, CHRISTMAS,
+      {
+        key: "family_day",
+        name: "Alberta Family Day",
+        rule: THIRD_MONDAY_FEBRUARY,
+        observance: "none",
+      },
+      GOOD_FRIDAY,
+      VICTORIA_DAY,
+      CANADA_DAY,
+      LABOUR_DAY,
+      THANKSGIVING_CA,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       // Alberta's optional general holidays, listed by the Code itself.
       { ...EASTER_MONDAY, optional: true },
-      { key: "heritage_day", name: "Heritage Day", rule: FIRST_MONDAY_AUGUST, observance: "none", optional: true },
+      {
+        key: "heritage_day",
+        name: "Heritage Day",
+        rule: FIRST_MONDAY_AUGUST,
+        observance: "none",
+        optional: true,
+      },
       { ...BOXING_DAY, optional: true },
       { ...TRUTH_AND_RECONCILIATION, optional: true },
     ],
@@ -859,9 +973,19 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     holidays: [
       NEW_YEARS,
       { key: "family_day", name: "Family Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none" },
-      GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY,
-      { key: "saskatchewan_day", name: "Saskatchewan Day", rule: FIRST_MONDAY_AUGUST, observance: "none" },
-      LABOUR_DAY, THANKSGIVING_CA, REMEMBRANCE_DAY, CHRISTMAS,
+      GOOD_FRIDAY,
+      VICTORIA_DAY,
+      CANADA_DAY,
+      {
+        key: "saskatchewan_day",
+        name: "Saskatchewan Day",
+        rule: FIRST_MONDAY_AUGUST,
+        observance: "none",
+      },
+      LABOUR_DAY,
+      THANKSGIVING_CA,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       { ...BOXING_DAY, optional: true },
       { ...TRUTH_AND_RECONCILIATION, optional: true },
     ],
@@ -874,16 +998,29 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     citation: "The Employment Standards Code (Manitoba), CCSM c E110, s. 21(1) 'general holiday'",
     holidays: [
       NEW_YEARS,
-      { key: "louis_riel_day", name: "Louis Riel Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none" },
-      GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY, LABOUR_DAY,
+      {
+        key: "louis_riel_day",
+        name: "Louis Riel Day",
+        rule: THIRD_MONDAY_FEBRUARY,
+        observance: "none",
+      },
+      GOOD_FRIDAY,
+      VICTORIA_DAY,
+      CANADA_DAY,
+      LABOUR_DAY,
       // s. 21(1)(e.1), added by S.M. 2023, c. 50 (Bill 4, royal assent
       // 2023-12-07): first observed as a general holiday on 2024-09-30.
       // s. 28(4) makes it the ONE general holiday an employer may not
       // substitute another day for — a fact this shape cannot carry, so an
       // employer that substitutes it is out of compliance in a way the payroll
       // engine will not catch.
-      { ...TRUTH_AND_RECONCILIATION, name: "Orange Shirt Day (National Day for Truth and Reconciliation)", from: 2024 },
-      THANKSGIVING_CA, CHRISTMAS,
+      {
+        ...TRUTH_AND_RECONCILIATION,
+        name: "Orange Shirt Day (National Day for Truth and Reconciliation)",
+        from: 2024,
+      },
+      THANKSGIVING_CA,
+      CHRISTMAS,
       // Remembrance Day is not a Code general holiday. Its separate, work-
       // triggered entitlement is declared below and never enters the general
       // holiday calendar (employees who stay home receive no statutory pay).
@@ -901,13 +1038,26 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     holidays: [
       NEW_YEARS,
       // New Brunswick Family Day, first observed in 2018.
-      { key: "family_day", name: "Family Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none", from: 2018 },
-      GOOD_FRIDAY, CANADA_DAY,
-      { key: "new_brunswick_day", name: "New Brunswick Day", rule: FIRST_MONDAY_AUGUST, observance: "none" },
+      {
+        key: "family_day",
+        name: "Family Day",
+        rule: THIRD_MONDAY_FEBRUARY,
+        observance: "none",
+        from: 2018,
+      },
+      GOOD_FRIDAY,
+      CANADA_DAY,
+      {
+        key: "new_brunswick_day",
+        name: "New Brunswick Day",
+        rule: FIRST_MONDAY_AUGUST,
+        observance: "none",
+      },
       LABOUR_DAY,
       // Unlike Manitoba and Nova Scotia, Remembrance Day IS a public holiday
       // under New Brunswick's employment standards and carries holiday pay.
-      REMEMBRANCE_DAY, CHRISTMAS,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       // Not public holidays in New Brunswick: Victoria Day, Thanksgiving,
       // Boxing Day, Easter Monday, and September 30. An employer may observe
       // any of them, so they are electable rather than absent.
@@ -924,11 +1074,19 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     scope: "employment",
     citation: "Labour Standards Act (Newfoundland and Labrador), RSNL 1990 c L-2, s. 14(1)",
     holidays: [
-      NEW_YEARS, GOOD_FRIDAY,
+      NEW_YEARS,
+      GOOD_FRIDAY,
       // July 1 is Memorial Day in Newfoundland and Labrador, commemorating
       // Beaumont-Hamel. Same date as Canada Day, different day.
-      { key: "memorial_day", name: "Memorial Day", rule: { kind: "fixed", month: 7, day: 1 }, observance: "none" },
-      LABOUR_DAY, REMEMBRANCE_DAY, CHRISTMAS,
+      {
+        key: "memorial_day",
+        name: "Memorial Day",
+        rule: { kind: "fixed", month: 7, day: 1 },
+        observance: "none",
+      },
+      LABOUR_DAY,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       // s. 14(1) lists six and no more. Victoria Day, Thanksgiving, Boxing Day,
       // Easter Monday, the Regatta and the provincial closure days in the Shops
       // Closing Act are not paid public holidays here — several are closure
@@ -951,8 +1109,17 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
       NEW_YEARS,
       // s. 2(ga) states the recurrence and not the name; the day is called
       // Nova Scotia Heritage Day. First observed 2015.
-      { key: "heritage_day", name: "Nova Scotia Heritage Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none", from: 2015 },
-      GOOD_FRIDAY, CANADA_DAY, LABOUR_DAY, CHRISTMAS,
+      {
+        key: "heritage_day",
+        name: "Nova Scotia Heritage Day",
+        rule: THIRD_MONDAY_FEBRUARY,
+        observance: "none",
+        from: 2015,
+      },
+      GOOD_FRIDAY,
+      CANADA_DAY,
+      LABOUR_DAY,
+      CHRISTMAS,
       // Six, and the thinnest list in the country. Remembrance Day is ABSENT
       // for the same reason as in Manitoba: the Remembrance Day Act, RSNS 1989
       // c 396 is a business-closing statute, and its pay rule is inverted — an
@@ -964,7 +1131,13 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
       // Scotia, and neither are Victoria Day, Thanksgiving, Boxing Day, Easter
       // Monday or September 30. All are electable.
       { ...VICTORIA_DAY, optional: true },
-      { key: "natal_day", name: "Natal Day", rule: FIRST_MONDAY_AUGUST, observance: "none", optional: true },
+      {
+        key: "natal_day",
+        name: "Natal Day",
+        rule: FIRST_MONDAY_AUGUST,
+        observance: "none",
+        optional: true,
+      },
       { ...THANKSGIVING_CA, optional: true },
       { ...TRUTH_AND_RECONCILIATION, optional: true },
       { ...BOXING_DAY, optional: true },
@@ -977,18 +1150,32 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     scope: "employment",
     citation: "Employment Standards Act (Northwest Territories), SNWT 2007 c 13, s. 22(1)",
     holidays: [
-      NEW_YEARS, GOOD_FRIDAY, VICTORIA_DAY,
+      NEW_YEARS,
+      GOOD_FRIDAY,
+      VICTORIA_DAY,
       // A full statutory holiday in the Northwest Territories since 2001 — one
       // of only two jurisdictions where June 21 binds private employers.
-      { key: "national_indigenous_peoples_day", name: "National Indigenous Peoples Day",
-        rule: { kind: "fixed", month: 6, day: 21 }, observance: "none", from: 2001 },
+      {
+        key: "national_indigenous_peoples_day",
+        name: "National Indigenous Peoples Day",
+        rule: { kind: "fixed", month: 6, day: 21 },
+        observance: "none",
+        from: 2001,
+      },
       CANADA_DAY,
       // s. 22(1)(f) names no day, only "the first Monday in August".
-      { key: "august_civic_holiday", name: "August Civic Holiday", rule: FIRST_MONDAY_AUGUST, observance: "none" },
+      {
+        key: "august_civic_holiday",
+        name: "August Civic Holiday",
+        rule: FIRST_MONDAY_AUGUST,
+        observance: "none",
+      },
       LABOUR_DAY,
       // s. 22(1)(g.1), in force 2022-06-03, so first observed 2022-09-30.
       { ...TRUTH_AND_RECONCILIATION, from: 2022 },
-      THANKSGIVING_CA, REMEMBRANCE_DAY, CHRISTMAS,
+      THANKSGIVING_CA,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       { ...BOXING_DAY, optional: true },
     ],
     holidayPay: onlyEdition(NT_HOLIDAY_PAY),
@@ -999,7 +1186,8 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     scope: "employment",
     citation: "Labour Standards Act (Nunavut), RSNWT (Nu) 1988 c L-1, s. 1 'general holiday'",
     holidays: [
-      NEW_YEARS, GOOD_FRIDAY,
+      NEW_YEARS,
+      GOOD_FRIDAY,
       // Nunavut's statute names no "Victoria Day": it is the day fixed by the
       // Governor General for the observance of the reigning sovereign's
       // birthday, which is in practice the Monday preceding May 25.
@@ -1008,11 +1196,24 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
       // Added by Bill 29 (assent 2019-11-29); first observed as a territorial
       // statutory holiday on 2020-07-09. It bound Government of Nunavut
       // employees before that, which is not the same thing.
-      { key: "nunavut_day", name: "Nunavut Day", rule: { kind: "fixed", month: 7, day: 9 }, observance: "none", from: 2020 },
-      { key: "august_civic_holiday", name: "August Civic Holiday", rule: FIRST_MONDAY_AUGUST, observance: "none" },
+      {
+        key: "nunavut_day",
+        name: "Nunavut Day",
+        rule: { kind: "fixed", month: 7, day: 9 },
+        observance: "none",
+        from: 2020,
+      },
+      {
+        key: "august_civic_holiday",
+        name: "August Civic Holiday",
+        rule: FIRST_MONDAY_AUGUST,
+        observance: "none",
+      },
       LABOUR_DAY,
       { ...TRUTH_AND_RECONCILIATION, from: 2022 },
-      THANKSGIVING_CA, REMEMBRANCE_DAY, CHRISTMAS,
+      THANKSGIVING_CA,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       { ...BOXING_DAY, optional: true },
     ],
     holidayPay: onlyEdition(NU_HOLIDAY_PAY),
@@ -1021,25 +1222,39 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     key: "CA-PE",
     name: "Prince Edward Island",
     scope: "employment",
-    citation: "Employment Standards Act (Prince Edward Island), SPEI 2024 c 66, s. 1(n) 'paid holiday'",
+    citation:
+      "Employment Standards Act (Prince Edward Island), SPEI 2024 c 66, s. 1(n) 'paid holiday'",
     holidays: [
       NEW_YEARS,
       // Islander Day, first observed in 2009 on the SECOND Monday in February
       // and moved to the third for 2010 to line up with the rest of the
       // country. Both are declared, the same way British Columbia's Family Day
       // move is, so a historical calendar reproduces the day it actually was.
-      { key: "islander_day", name: "Islander Day",
-        rule: { kind: "nth_weekday", month: 2, weekday: 1, nth: 2 }, observance: "none",
-        from: 2009, until: 2009 },
-      { key: "islander_day", name: "Islander Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none", from: 2010 },
+      {
+        key: "islander_day",
+        name: "Islander Day",
+        rule: { kind: "nth_weekday", month: 2, weekday: 1, nth: 2 },
+        observance: "none",
+        from: 2009,
+        until: 2009,
+      },
+      {
+        key: "islander_day",
+        name: "Islander Day",
+        rule: THIRD_MONDAY_FEBRUARY,
+        observance: "none",
+        from: 2010,
+      },
       GOOD_FRIDAY,
       // The new Act says "July 1" and drops the words "Canada Day".
-      CANADA_DAY, LABOUR_DAY,
+      CANADA_DAY,
+      LABOUR_DAY,
       // Added to the repealed Act by Bill 22 in force 2021-11-17 and carried
       // into s. 1(n)(vi) of the new one. PEI was among the first provinces to
       // bind private employers to September 30.
       { ...TRUTH_AND_RECONCILIATION, from: 2021 },
-      REMEMBRANCE_DAY, CHRISTMAS,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       // Not paid holidays in PEI: Victoria Day, Thanksgiving, Boxing Day,
       // Easter Monday, the August civic day.
       { ...VICTORIA_DAY, optional: true },
@@ -1054,26 +1269,44 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     scope: "employment",
     citation: "Employment Standards Act (Yukon), RSY 2002 c 72, s. 1(1) 'general holiday'",
     holidays: [
-      NEW_YEARS, GOOD_FRIDAY, VICTORIA_DAY,
+      NEW_YEARS,
+      GOOD_FRIDAY,
+      VICTORIA_DAY,
       // Added to the ESA definition by the National Aboriginal Day Act,
       // SY 2017 c 1, and later renamed. Yukon and the Northwest Territories are
       // the only jurisdictions where June 21 is a statutory holiday.
-      { key: "national_indigenous_peoples_day", name: "National Indigenous Peoples Day",
-        rule: { kind: "fixed", month: 6, day: 21 }, observance: "none", from: 2017 },
+      {
+        key: "national_indigenous_peoples_day",
+        name: "National Indigenous Peoples Day",
+        rule: { kind: "fixed", month: 6, day: 21 },
+        observance: "none",
+        from: 2017,
+      },
       CANADA_DAY,
       // Discovery Day is the THIRD Monday in August. Yukon has no first-Monday
       // civic holiday, and getting this wrong moves a paid day by a fortnight.
-      { key: "discovery_day", name: "Discovery Day",
-        rule: { kind: "nth_weekday", month: 8, weekday: 1, nth: 3 }, observance: "none" },
+      {
+        key: "discovery_day",
+        name: "Discovery Day",
+        rule: { kind: "nth_weekday", month: 8, weekday: 1, nth: 3 },
+        observance: "none",
+      },
       LABOUR_DAY,
       // Legislated by Bill 305 (assent 2022-11-24); first observed 2023-09-30.
       { ...TRUTH_AND_RECONCILIATION, from: 2023 },
-      THANKSGIVING_CA, REMEMBRANCE_DAY, CHRISTMAS,
+      THANKSGIVING_CA,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
       // Yukon Heritage Day (the last Friday in February) binds Yukon government
       // employees ONLY and is not a general holiday — a common and expensive
       // mistake. Declared electable so an employer that observes it can say so.
-      { key: "heritage_day", name: "Yukon Heritage Day",
-        rule: { kind: "nth_weekday", month: 2, weekday: 5, nth: -1 }, observance: "none", optional: true },
+      {
+        key: "heritage_day",
+        name: "Yukon Heritage Day",
+        rule: { kind: "nth_weekday", month: 2, weekday: 5, nth: -1 },
+        observance: "none",
+        optional: true,
+      },
       { ...BOXING_DAY, optional: true },
     ],
     holidayPay: onlyEdition(YT_HOLIDAY_PAY),
@@ -1096,10 +1329,23 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     scope: "tax_administration",
     citation: "https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html",
     holidays: [
-      NEW_YEARS, GOOD_FRIDAY, EASTER_MONDAY, VICTORIA_DAY, CANADA_DAY,
-      { key: "civic_holiday", name: "Civic Holiday", rule: FIRST_MONDAY_AUGUST, observance: "none" },
-      LABOUR_DAY, TRUTH_AND_RECONCILIATION, THANKSGIVING_CA, REMEMBRANCE_DAY,
-      CHRISTMAS, BOXING_DAY,
+      NEW_YEARS,
+      GOOD_FRIDAY,
+      EASTER_MONDAY,
+      VICTORIA_DAY,
+      CANADA_DAY,
+      {
+        key: "civic_holiday",
+        name: "Civic Holiday",
+        rule: FIRST_MONDAY_AUGUST,
+        observance: "none",
+      },
+      LABOUR_DAY,
+      TRUTH_AND_RECONCILIATION,
+      THANKSGIVING_CA,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
+      BOXING_DAY,
     ],
     holidayPay: null,
   },
@@ -1111,11 +1357,23 @@ export const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     scope: "tax_administration",
     citation: "https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html",
     holidays: [
-      NEW_YEARS, GOOD_FRIDAY, EASTER_MONDAY, VICTORIA_DAY,
-      { key: "st_jean_baptiste", name: "Saint-Jean-Baptiste Day",
-        rule: { kind: "fixed", month: 6, day: 24 }, observance: "none" },
-      CANADA_DAY, LABOUR_DAY, TRUTH_AND_RECONCILIATION, THANKSGIVING_CA,
-      REMEMBRANCE_DAY, CHRISTMAS, BOXING_DAY,
+      NEW_YEARS,
+      GOOD_FRIDAY,
+      EASTER_MONDAY,
+      VICTORIA_DAY,
+      {
+        key: "st_jean_baptiste",
+        name: "Saint-Jean-Baptiste Day",
+        rule: { kind: "fixed", month: 6, day: 24 },
+        observance: "none",
+      },
+      CANADA_DAY,
+      LABOUR_DAY,
+      TRUTH_AND_RECONCILIATION,
+      THANKSGIVING_CA,
+      REMEMBRANCE_DAY,
+      CHRISTMAS,
+      BOXING_DAY,
     ],
     holidayPay: null,
   },

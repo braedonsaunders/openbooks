@@ -51,7 +51,9 @@ const REFUSAL =
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -130,10 +132,7 @@ test("a refused decide pins the remedy to the row instead of refreshing it away"
     pinned.textContent?.includes("no linked person"),
     "the pin carries the server refusal with its remedy",
   );
-  assert.ok(
-    pinned.textContent?.includes("Link person"),
-    "the operator reads what to do next",
-  );
+  assert.ok(pinned.textContent?.includes("Link person"), "the operator reads what to do next");
   assert.equal(globalThis.__gateRefreshes, 0, "no refresh wipes the explanation away");
   assert.ok(
     (globalThis.__gateToasts ?? []).some((toast) => toast.kind === "error"),

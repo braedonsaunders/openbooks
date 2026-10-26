@@ -1,4 +1,4 @@
-import { suppliedValue } from './payroll-decimal-refusal'
+import { suppliedValue } from "./payroll-decimal-refusal";
 
 /**
  * The sanity window for an operator-supplied payroll tax year, shared by the
@@ -12,7 +12,7 @@ import { suppliedValue } from './payroll-decimal-refusal'
  * they know — or ever learn — the country, and gating a field's validity on
  * a country resolved wrongly stops the field validating at all.
  */
-export const PAYROLL_TAX_YEAR_SANITY_WINDOW = { min: 2020, max: 2100 } as const
+export const PAYROLL_TAX_YEAR_SANITY_WINDOW = { min: 2020, max: 2100 } as const;
 
 /**
  * Why an operator-supplied year value was refused, read off the value
@@ -26,21 +26,21 @@ export const PAYROLL_TAX_YEAR_SANITY_WINDOW = { min: 2020, max: 2100 } as const
  * was always not-a-number; an empty string is absent, not zero.
  */
 export type PayrollYearNullCause =
-  | { cause: 'absent' }
-  | { cause: 'not-a-number' }
-  | { cause: 'non-integer' }
-  | { cause: 'below-range'; year: number }
-  | { cause: 'above-range'; year: number }
+  | { cause: "absent" }
+  | { cause: "not-a-number" }
+  | { cause: "non-integer" }
+  | { cause: "below-range"; year: number }
+  | { cause: "above-range"; year: number };
 
 export function payrollYearNullCause(raw: unknown): PayrollYearNullCause | null {
-  if (raw === null || raw === undefined) return { cause: 'absent' }
-  if (typeof raw === 'string' && raw.trim() === '') return { cause: 'absent' }
-  const year = Number(raw)
-  if (Number.isNaN(year)) return { cause: 'not-a-number' }
-  if (!Number.isInteger(year)) return { cause: 'non-integer' }
-  if (year < PAYROLL_TAX_YEAR_SANITY_WINDOW.min) return { cause: 'below-range', year }
-  if (year > PAYROLL_TAX_YEAR_SANITY_WINDOW.max) return { cause: 'above-range', year }
-  return null
+  if (raw === null || raw === undefined) return { cause: "absent" };
+  if (typeof raw === "string" && raw.trim() === "") return { cause: "absent" };
+  const year = Number(raw);
+  if (Number.isNaN(year)) return { cause: "not-a-number" };
+  if (!Number.isInteger(year)) return { cause: "non-integer" };
+  if (year < PAYROLL_TAX_YEAR_SANITY_WINDOW.min) return { cause: "below-range", year };
+  if (year > PAYROLL_TAX_YEAR_SANITY_WINDOW.max) return { cause: "above-range", year };
+  return null;
 }
 
 /**
@@ -50,19 +50,19 @@ export function payrollYearNullCause(raw: unknown): PayrollYearNullCause | null 
  * accept/refuse sets are unchanged from the guard this replaces.
  */
 export function payrollYearRefusal(raw: unknown): string | null {
-  const cause = payrollYearNullCause(raw)
-  if (cause === null) return null
-  const { min, max } = PAYROLL_TAX_YEAR_SANITY_WINDOW
+  const cause = payrollYearNullCause(raw);
+  if (cause === null) return null;
+  const { min, max } = PAYROLL_TAX_YEAR_SANITY_WINDOW;
   switch (cause.cause) {
-    case 'absent':
-      return `year is required — pass a year between ${min} and ${max}`
-    case 'not-a-number':
-      return `year must be a whole number — "${suppliedValue(raw)}" is not a number; pass a year between ${min} and ${max}`
-    case 'non-integer':
-      return `year must be a whole year — got "${suppliedValue(raw)}"; pass a year between ${min} and ${max}`
-    case 'below-range':
-      return `year ${cause.year} is before ${min} — pass a year between ${min} and ${max}`
-    case 'above-range':
-      return `year ${cause.year} is after ${max} — pass a year between ${min} and ${max}`
+    case "absent":
+      return `year is required — pass a year between ${min} and ${max}`;
+    case "not-a-number":
+      return `year must be a whole number — "${suppliedValue(raw)}" is not a number; pass a year between ${min} and ${max}`;
+    case "non-integer":
+      return `year must be a whole year — got "${suppliedValue(raw)}"; pass a year between ${min} and ${max}`;
+    case "below-range":
+      return `year ${cause.year} is before ${min} — pass a year between ${min} and ${max}`;
+    case "above-range":
+      return `year ${cause.year} is after ${max} — pass a year between ${min} and ${max}`;
   }
 }

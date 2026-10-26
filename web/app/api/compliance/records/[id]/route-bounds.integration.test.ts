@@ -14,10 +14,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __compliancePatchBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function getAuthz() {
@@ -32,7 +38,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PATCH } = await import("./route.ts");
 
 async function fixture(): Promise<{ orgId: string; recordId: string }> {
@@ -41,26 +48,48 @@ async function fixture(): Promise<{ orgId: string; recordId: string }> {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true}}'::jsonb where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true}}'::jsonb where id = ${org.orgId}`,
+    ),
   );
   const partyId = randomUUID();
   const classId = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-    values (${partyId},${org.orgId},'vendor','Record vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${partyId},${org.orgId},'vendor','Record vendor',${org.subsidiaryId},true,'{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into compliance_classes (id, org_id, code, name, lien_waiver_enforcement, default_information_return, created_by, updated_by)
-    values (${classId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
+    values (${classId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into vendor_roles (org_id, party_id, compliance_class_id, created_by, updated_by)
-    values (${org.orgId}, ${partyId}, ${classId}, ${actorId}, ${actorId})`));
-  const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    values (${org.orgId}, ${partyId}, ${classId}, ${actorId}, ${actorId})`),
+  );
+  const requirementId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
     insert into compliance_requirements (org_id, code, name, category, class_id, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', ${classId}, 'block_payment', ${actorId}, ${actorId})
-    returning id`, "objects")))[0]!.id;
-  const recordId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
+  const recordId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
     insert into compliance_records (org_id, party_id, requirement_id, effective_from, coverage_amount, created_by, updated_by)
     values (${org.orgId}, ${partyId}, ${requirementId}, '2026-01-01', '1000000.00', ${actorId}, ${actorId})
-    returning id`, "objects")))[0]!.id;
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
   return { orgId: org.orgId, recordId };
 }
 
@@ -79,17 +108,27 @@ const patch = (recordId: string, body: unknown) =>
 async function coverageOf(orgId: string, recordId: string): Promise<string | null> {
   const rows = await withBypassContext(() =>
     db.execute<{ coverage_amount: string | null }>(
-      sql`select coverage_amount from compliance_records where org_id = ${orgId} and id = ${recordId}`, "objects",
-    ));
+      sql`select coverage_amount from compliance_records where org_id = ${orgId} and id = ${recordId}`,
+      "objects",
+    ),
+  );
   return rows[0]?.coverage_amount ?? null;
 }
 
 test("certificate update refuses a non-calendar effective date without writing", async () => {
   const { orgId, recordId } = await fixture();
   try {
-    const response = await patch(recordId, { action: "update", revision: 1, effectiveFrom: "2026-09-31" });
+    const response = await patch(recordId, {
+      action: "update",
+      revision: 1,
+      effectiveFrom: "2026-09-31",
+    });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      400,
+      `expected 400, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal(Number(await coverageOf(orgId, recordId)), 1000000);
   } finally {
@@ -100,9 +139,17 @@ test("certificate update refuses a non-calendar effective date without writing",
 test("certificate update refuses a coverage amount wider than numeric(19,4) without writing", async () => {
   const { orgId, recordId } = await fixture();
   try {
-    const response = await patch(recordId, { action: "update", revision: 1, coverageAmount: "99999999999999999999.99" });
+    const response = await patch(recordId, {
+      action: "update",
+      revision: 1,
+      coverageAmount: "99999999999999999999.99",
+    });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /numeric field overflow|Failed query/i);
     assert.equal(Number(await coverageOf(orgId, recordId)), 1000000);
   } finally {
@@ -113,7 +160,11 @@ test("certificate update refuses a coverage amount wider than numeric(19,4) with
 test("certificate update still saves an ordinary amount", async () => {
   const { orgId, recordId } = await fixture();
   try {
-    const response = await patch(recordId, { action: "update", revision: 1, coverageAmount: "2000000.00" });
+    const response = await patch(recordId, {
+      action: "update",
+      revision: 1,
+      coverageAmount: "2000000.00",
+    });
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(Number(await coverageOf(orgId, recordId)), 2000000);
   } finally {

@@ -35,8 +35,10 @@ export function resolveAssetAccounts(
 ): AssetAccounts {
   return {
     assetAccountId: asset.assetAccountId || category.assetAccountId,
-    accumulatedDepreciationAccountId: asset.accumulatedDepreciationAccountId || category.accumulatedDepreciationAccountId,
-    depreciationExpenseAccountId: asset.depreciationExpenseAccountId || category.depreciationExpenseAccountId,
+    accumulatedDepreciationAccountId:
+      asset.accumulatedDepreciationAccountId || category.accumulatedDepreciationAccountId,
+    depreciationExpenseAccountId:
+      asset.depreciationExpenseAccountId || category.depreciationExpenseAccountId,
   };
 }
 
@@ -45,11 +47,7 @@ export function resolveAssetAccounts(
 // ---------------------------------------------------------------------------
 
 export type DepreciationMethod =
-  | "straight_line"
-  | "declining_balance"
-  | "double_declining"
-  | "units_of_production"
-  | "manual";
+  "straight_line" | "declining_balance" | "double_declining" | "units_of_production" | "manual";
 
 export interface ScheduleInput {
   /** acquisition cost, decimal string */
@@ -95,13 +93,25 @@ export function computeUnitsOfProductionCharge(input: UnitsOfProductionChargeInp
   const period = toUnits(input.periodUnits);
   const priorUnits = toUnits(input.unitsAlreadyRecorded ?? "0");
   const already = toUnits(input.depreciationAlreadyPlanned);
-  if (basis < 0n) throw new DepreciationRefusalError("salvage value cannot exceed acquisition cost");
-  if (lifetime <= 0n) throw new DepreciationRefusalError("expected lifetime production units must be greater than zero");
+  if (basis < 0n)
+    throw new DepreciationRefusalError("salvage value cannot exceed acquisition cost");
+  if (lifetime <= 0n)
+    throw new DepreciationRefusalError(
+      "expected lifetime production units must be greater than zero",
+    );
   if (period === 0n) throw new DepreciationRefusalError("period production units must be non-zero");
-  if (priorUnits < 0n || priorUnits > lifetime || priorUnits + period < 0n || priorUnits + period > lifetime) {
-    throw new DepreciationRefusalError("recorded production must remain between zero and expected lifetime units");
+  if (
+    priorUnits < 0n ||
+    priorUnits > lifetime ||
+    priorUnits + period < 0n ||
+    priorUnits + period > lifetime
+  ) {
+    throw new DepreciationRefusalError(
+      "recorded production must remain between zero and expected lifetime units",
+    );
   }
-  if (already < 0n || already > basis) throw new DepreciationRefusalError("existing depreciation exceeds the depreciable basis");
+  if (already < 0n || already > basis)
+    throw new DepreciationRefusalError("existing depreciation exceeds the depreciable basis");
   const remaining = basis - already;
   if (priorUnits + period === lifetime) return fromUnits(remaining);
   const magnitude = toUnits(mulRatio(fromUnits(basis), period < 0n ? -period : period, lifetime));
@@ -136,9 +146,10 @@ export function monthStart(date: string): string {
  * what `half_year` meant and disagreed: half of one monthly period here, half
  * of a year there. The shared table is now the only place that answer exists.
  */
-export function conventionFraction(
-  convention: string | null | undefined,
-): { firstPeriodFraction: string; firstFractionPeriods: number } {
+export function conventionFraction(convention: string | null | undefined): {
+  firstPeriodFraction: string;
+  firstFractionPeriods: number;
+} {
   return bookConventionWindow(convention as BookDepreciationConvention | null | undefined);
 }
 
@@ -187,17 +198,22 @@ function formulaForMethod(
     case "double_declining":
       return { formula: BUILTIN_FORMULAS.double_declining };
     case "declining_balance": {
-      const monthlyRate = ratePercent != null && cmp(ratePercent, "0") > 0
-        ? exactRatio(ratePercent, "1200")
-        : exactRatio("1", String(lifeMonths));
+      const monthlyRate =
+        ratePercent != null && cmp(ratePercent, "0") > 0
+          ? exactRatio(ratePercent, "1200")
+          : exactRatio("1", String(lifeMonths));
       return { formula: "(NB-RV)*R1~(NB-RV)/RL", rateTable: [monthlyRate] };
     }
     case "straight_line":
       return { formula: BUILTIN_FORMULAS.straight_line };
     case "manual":
-      throw new DepreciationRefusalError("manual depreciation requires a recorded period amount and evidence");
+      throw new DepreciationRefusalError(
+        "manual depreciation requires a recorded period amount and evidence",
+      );
     case "units_of_production":
-      throw new DepreciationRefusalError("units-of-production depreciation requires recorded period usage and lifetime units");
+      throw new DepreciationRefusalError(
+        "units-of-production depreciation requires recorded period usage and lifetime units",
+      );
     default: {
       const exhaustive: never = method;
       throw new Error(`unsupported depreciation method ${exhaustive}`);

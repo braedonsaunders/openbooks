@@ -21,7 +21,11 @@ interface JsonRpcResponse<T> {
   jsonrpc: string;
   id: number;
   result?: T;
-  error?: { code: number; message: string; data?: { name?: string; message?: string; debug?: string } };
+  error?: {
+    code: number;
+    message: string;
+    data?: { name?: string; message?: string; debug?: string };
+  };
 }
 
 /** Odoo credentials must never cross an HTTP redirect boundary. Every JSON-RPC
@@ -82,7 +86,12 @@ export class OdooClient {
     return uid;
   }
 
-  async executeKw<T>(model: string, method: string, args: unknown[], kwargs: Record<string, unknown> = {}): Promise<T> {
+  async executeKw<T>(
+    model: string,
+    method: string,
+    args: unknown[],
+    kwargs: Record<string, unknown> = {},
+  ): Promise<T> {
     const uid = await this.authenticate();
     return this.rpc<T>("object", "execute_kw", [
       this.creds.database,

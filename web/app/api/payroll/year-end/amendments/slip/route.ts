@@ -1,20 +1,20 @@
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { PayrollPackError } from '@openbooks/engine/payroll/packs'
-import { PayrollError } from '@openbooks/engine/payroll/error'
-import { filingCorrectionSlip } from '@openbooks/engine/payroll/yearend-amendments'
-import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
-import { payrollYearRefusal } from '../../../../../../lib/payroll-year'
-import { pdfResponse, safeName } from '../../../../../../lib/export'
-import { payrollSlipFacsimile } from '../../../../../../lib/payroll-slip-facsimile'
-import { renderTaxFormFacsimilePdf } from '../../../../../../lib/tax-form-facsimile'
-import { orgBranding } from '../../../../../../lib/report-pdf'
-import { guardPayrollFilingRowIds } from '../../../subsidiary-scope'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { PayrollPackError } from "@openbooks/engine/payroll/packs";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { filingCorrectionSlip } from "@openbooks/engine/payroll/yearend-amendments";
+import { rendererUnavailableResponse } from "../../../../../../lib/api/pdf-renderer";
+import { payrollYearRefusal } from "../../../../../../lib/payroll-year";
+import { pdfResponse, safeName } from "../../../../../../lib/export";
+import { payrollSlipFacsimile } from "../../../../../../lib/payroll-slip-facsimile";
+import { renderTaxFormFacsimilePdf } from "../../../../../../lib/tax-form-facsimile";
+import { orgBranding } from "../../../../../../lib/report-pdf";
+import { guardPayrollFilingRowIds } from "../../../subsidiary-scope";
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * GET ?country=&filing=&year=&row=&revision=[&format=pdf] — ONE row's
@@ -26,29 +26,26 @@ export const dynamic = 'force-dynamic'
  * correction refuses here, by name, in its own words (422).
  */
 export const GET = defineRoute({
-  permission: 'payroll.read',
-  feature: 'payroll',
+  permission: "payroll.read",
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    const url = new URL(req.url)
-    const yearRaw = url.searchParams.get('year')
-    const yearRefusal = payrollYearRefusal(yearRaw)
+    const url = new URL(req.url);
+    const yearRaw = url.searchParams.get("year");
+    const yearRefusal = payrollYearRefusal(yearRaw);
     if (yearRefusal !== null) {
-      return NextResponse.json({ error: yearRefusal }, { status: 422 })
+      return NextResponse.json({ error: yearRefusal }, { status: 422 });
     }
-    const year = Number(yearRaw)
-    const row = url.searchParams.get('row') ?? ''
-    if (!row) return NextResponse.json({ error: 'row is required' }, { status: 422 })
-    const revision = url.searchParams.get('revision') ?? 'amended'
-    if (revision !== 'amended' && revision !== 'cancelled') {
-      return NextResponse.json(
-        { error: 'revision must be amended or cancelled' },
-        { status: 422 },
-      )
+    const year = Number(yearRaw);
+    const row = url.searchParams.get("row") ?? "";
+    if (!row) return NextResponse.json({ error: "row is required" }, { status: 422 });
+    const revision = url.searchParams.get("revision") ?? "amended";
+    if (revision !== "amended" && revision !== "cancelled") {
+      return NextResponse.json({ error: "revision must be amended or cancelled" }, { status: 422 });
     }
-    const country = url.searchParams.get('country') ?? ''
-    const filing = url.searchParams.get('filing') ?? ''
-    const denied = await guardPayrollFilingRowIds(gate, country, filing, [row], year)
-    if (denied) return denied
+    const country = url.searchParams.get("country") ?? "";
+    const filing = url.searchParams.get("filing") ?? "";
+    const denied = await guardPayrollFilingRowIds(gate, country, filing, [row], year);
+    if (denied) return denied;
     try {
       const slip = await filingCorrectionSlip(
         gate.user.orgId,
@@ -58,10 +55,10 @@ export const GET = defineRoute({
         row,
         revision,
         gate.allowedSubsidiaryIds ?? undefined,
-      )
-      const branding = await orgBranding()
-      if ((url.searchParams.get('format') ?? 'json') === 'pdf') {
-        const { result, layout } = payrollSlipFacsimile(slip, year, branding.baseCurrency)
+      );
+      const branding = await orgBranding();
+      if ((url.searchParams.get("format") ?? "json") === "pdf") {
+        const { result, layout } = payrollSlipFacsimile(slip, year, branding.baseCurrency);
         return pdfResponse(
           await renderTaxFormFacsimilePdf(
             result,
@@ -69,16 +66,19 @@ export const GET = defineRoute({
             layout,
           ),
           `${safeName(slip.formCode)}-${year}-${safeName(row)}-${await businessToday(gate.user.orgId)}`,
-        )
+        );
       }
-      return NextResponse.json({ slip, orgName: branding.orgName, currency: branding.baseCurrency })
+      return NextResponse.json({
+        slip,
+        orgName: branding.orgName,
+        currency: branding.baseCurrency,
+      });
     } catch (e) {
-      if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
-      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-      const rendererRefusal = rendererUnavailableResponse(e)
-      if (rendererRefusal) return rendererRefusal
-      throw e
+      if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 });
+      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 });
+      const rendererRefusal = rendererUnavailableResponse(e);
+      if (rendererRefusal) return rendererRefusal;
+      throw e;
     }
-
   },
-})
+});

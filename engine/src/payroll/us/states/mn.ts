@@ -24,7 +24,9 @@
  */
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
@@ -40,7 +42,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/mn.ts";
 
 /**
@@ -104,16 +110,64 @@ export const MN_RATES_2026: MnYearRates = {
   supplementalRate: pctToRate("6.25"),
   schedules: {
     single: [
-      { moreThan: "4700", butNotMoreThan: "38010", subtract: "4700", rate: pctToRate("5.35"), add: "0" },
-      { moreThan: "38010", butNotMoreThan: "114130", subtract: "38010", rate: pctToRate("6.80"), add: "1782.09" },
-      { moreThan: "114130", butNotMoreThan: "207850", subtract: "114130", rate: pctToRate("7.85"), add: "6958.25" },
-      { moreThan: "207850", butNotMoreThan: null, subtract: "207850", rate: pctToRate("9.85"), add: "14315.27" },
+      {
+        moreThan: "4700",
+        butNotMoreThan: "38010",
+        subtract: "4700",
+        rate: pctToRate("5.35"),
+        add: "0",
+      },
+      {
+        moreThan: "38010",
+        butNotMoreThan: "114130",
+        subtract: "38010",
+        rate: pctToRate("6.80"),
+        add: "1782.09",
+      },
+      {
+        moreThan: "114130",
+        butNotMoreThan: "207850",
+        subtract: "114130",
+        rate: pctToRate("7.85"),
+        add: "6958.25",
+      },
+      {
+        moreThan: "207850",
+        butNotMoreThan: null,
+        subtract: "207850",
+        rate: pctToRate("9.85"),
+        add: "14315.27",
+      },
     ],
     married: [
-      { moreThan: "14700", butNotMoreThan: "63400", subtract: "14700", rate: pctToRate("5.35"), add: "0" },
-      { moreThan: "63400", butNotMoreThan: "208180", subtract: "63400", rate: pctToRate("6.80"), add: "2605.45" },
-      { moreThan: "208180", butNotMoreThan: "352630", subtract: "208180", rate: pctToRate("7.85"), add: "12450.49" },
-      { moreThan: "352630", butNotMoreThan: null, subtract: "352630", rate: pctToRate("9.85"), add: "23789.82" },
+      {
+        moreThan: "14700",
+        butNotMoreThan: "63400",
+        subtract: "14700",
+        rate: pctToRate("5.35"),
+        add: "0",
+      },
+      {
+        moreThan: "63400",
+        butNotMoreThan: "208180",
+        subtract: "63400",
+        rate: pctToRate("6.80"),
+        add: "2605.45",
+      },
+      {
+        moreThan: "208180",
+        butNotMoreThan: "352630",
+        subtract: "208180",
+        rate: pctToRate("7.85"),
+        add: "12450.49",
+      },
+      {
+        moreThan: "352630",
+        butNotMoreThan: null,
+        subtract: "352630",
+        rate: pctToRate("9.85"),
+        add: "23789.82",
+      },
     ],
   },
 };
@@ -122,16 +176,18 @@ const MN_EDITIONS_BY_YEAR: Record<number, MnYearRates> = {
   [MN_RATES_2026.year]: MN_RATES_2026,
 };
 
-export const MN_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "2026 Minnesota Withholding Tax Instructions and Tables, Computer Formula",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Minnesota Department of Revenue, 2026 Minnesota Withholding Tax Instructions and Tables, "
-    + "Computer Formula (p. 34), effective January 1, 2026; Form W-4MN (Rev. 4/26)",
-  status: "published",
-  region: "MN",
-}];
+export const MN_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "2026 Minnesota Withholding Tax Instructions and Tables, Computer Formula",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Minnesota Department of Revenue, 2026 Minnesota Withholding Tax Instructions and Tables, " +
+      "Computer Formula (p. 34), effective January 1, 2026; Form W-4MN (Rev. 4/26)",
+    status: "published",
+    region: "MN",
+  },
+];
 
 /**
  * W-4MN marital-status boxes onto the two Step-5 charts.
@@ -187,7 +243,9 @@ function compute(
   const { factors, trace } = context;
 
   const exempt = context.exemptResult({
-    factorKey: "MN_EXEMPT", statutoryTax: true, additionalWithholding: true,
+    factorKey: "MN_EXEMPT",
+    statutoryTax: true,
+    additionalWithholding: true,
   });
   if (exempt) return exempt;
 
@@ -206,14 +264,20 @@ function compute(
     const allocation = requireUsWageAllocation(input.wageAllocations, "MN", null);
     const sourceWages = U(requireUsSourceWages(input.wageAllocations, "MN", null));
     const threshold = evaluateUsNonresidentThreshold(
-      allocation, MN_NONRESIDENT_EXPECTED_PAY_RULE, P,
+      allocation,
+      MN_NONRESIDENT_EXPECTED_PAY_RULE,
+      P,
     );
     trace("MN_NONRESIDENT_SOURCE_WAGES", sourceWages);
     trace("MN_EXPECTED_ANNUAL_SOURCE_WAGES", sourceWages * BigInt(annualP));
     if (!threshold.crossed) {
       factors.MN_NONRESIDENT_UNDER_15300 = "1";
       return {
-        state: "MN", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors,
+        state: "MN",
+        year: rates.year,
+        tax: D(0n),
+        taxSupplemental: D(0n),
+        factors,
       };
     }
   }
@@ -230,7 +294,12 @@ function compute(
   if (taxable === 0n) {
     const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
     return {
-      state: "MN", year: rates.year, tax: D(extra), statutoryTax: D(0n), additionalWithholding: D(extra), taxSupplemental: D(0n),
+      state: "MN",
+      year: rates.year,
+      tax: D(extra),
+      statutoryTax: D(0n),
+      additionalWithholding: D(extra),
+      taxSupplemental: D(0n),
       factors: { ...factors, MN_ANNUAL_TAX: D(0n), MN_WITHHELD: D(extra) },
     };
   }
@@ -308,17 +377,22 @@ export const MN_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "MN" },
   purpose: "withholding",
   citation:
-    "Minnesota Form W-4MN (Rev. 4/26); 2026 Minnesota Withholding Tax Instructions and Tables "
-    + "(Computer Formula p. 34)",
+    "Minnesota Form W-4MN (Rev. 4/26); 2026 Minnesota Withholding Tax Instructions and Tables " +
+    "(Computer Formula p. 34)",
   summary:
-    "Sets Minnesota withholding allowances and marital status. If no completed W-4MN is on file, "
-    + "the employer must withhold at the single filing status with zero allowances.",
+    "Sets Minnesota withholding allowances and marital status. If no completed W-4MN is on file, " +
+    "the employer must withhold at the single filing status with zero allowances.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "marital_status", label: "Marital status", kind: "choice",
+      key: "marital_status",
+      label: "Marital status",
+      kind: "choice",
       choices: [
-        { value: "single", label: "Single; Married, but legally separated; or Spouse is a nonresident alien" },
+        {
+          value: "single",
+          label: "Single; Married, but legally separated; or Spouse is a nonresident alien",
+        },
         { value: "married", label: "Married" },
         {
           value: "married_higher_single",
@@ -326,26 +400,39 @@ export const MN_CERTIFICATE: PayrollCertificate = {
           help: "Uses the Single Step-5 chart.",
         },
       ],
-      default: "single", required: true,
-      help: "If the employee does not complete a Form W-4MN, withhold at the single filing status "
-        + "with zero allowances.",
+      default: "single",
+      required: true,
+      help:
+        "If the employee does not complete a Form W-4MN, withhold at the single filing status " +
+        "with zero allowances.",
     },
     {
-      key: "allowances", label: "Line 1 — Minnesota allowances", kind: "count",
-      min: "0", max: "99", default: "0",
-      help: "From Section 1 Step F (or the itemized-deductions worksheet Step 10). Worth $5,300 "
-        + "a year each in 2026. Default zero: that is the booklet's no-certificate rule.",
+      key: "allowances",
+      label: "Line 1 — Minnesota allowances",
+      kind: "count",
+      min: "0",
+      max: "99",
+      default: "0",
+      help:
+        "From Section 1 Step F (or the itemized-deductions worksheet Step 10). Worth $5,300 " +
+        "a year each in 2026. Default zero: that is the booklet's no-certificate rule.",
     },
     {
-      key: "additional_per_period", label: "Line 2 — Additional Minnesota withholding per pay period",
-      kind: "amount", decimals: 4, min: "0",
+      key: "additional_per_period",
+      label: "Line 2 — Additional Minnesota withholding per pay period",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "A flat dollar amount, not a percentage. Added after the formula.",
     },
     {
-      key: "exempt", label: "Section 2 — Exempt from Minnesota withholding", kind: "flag",
-      help: "Boxes A–F. A new W-4MN is due by February 15 each year; without one, withhold as "
-        + "single with zero allowances. Reciprocity for Michigan or North Dakota is Form MWR, "
-        + "not this box.",
+      key: "exempt",
+      label: "Section 2 — Exempt from Minnesota withholding",
+      kind: "flag",
+      help:
+        "Boxes A–F. A new W-4MN is due by February 15 each year; without one, withhold as " +
+        "single with zero allowances. Reciprocity for Michigan or North Dakota is Form MWR, " +
+        "not this box.",
     },
   ],
 };
@@ -364,23 +451,26 @@ export const MN_MWR: PayrollCertificate = {
   scope: { level: "region", region: "MN" },
   purpose: "non_residence",
   citation:
-    "Minnesota Form MWR for Tax Year 2026; 2026 Minnesota Withholding Tax Instructions and "
-    + "Tables p. 4, \"Reciprocity for Residents of Michigan or North Dakota\"",
+    "Minnesota Form MWR for Tax Year 2026; 2026 Minnesota Withholding Tax Instructions and " +
+    'Tables p. 4, "Reciprocity for Residents of Michigan or North Dakota"',
   summary:
-    "Claims exemption from Minnesota withholding under the Michigan or North Dakota reciprocity "
-    + "agreement. \"If your employees … give you a properly completed Form MWR … each year.\" "
-    + "Without it, Minnesota tax is withheld.",
+    "Claims exemption from Minnesota withholding under the Michigan or North Dakota reciprocity " +
+    'agreement. "If your employees … give you a properly completed Form MWR … each year." ' +
+    "Without it, Minnesota tax is withheld.",
   storage: "certificate_rows",
   fields: [
     {
-      key: "resident_state", label: "State of permanent residence", kind: "choice",
+      key: "resident_state",
+      label: "State of permanent residence",
+      kind: "choice",
       choices: [
         { value: "MI", label: "Michigan" },
         { value: "ND", label: "North Dakota" },
       ],
       required: true,
-      help: "Minnesota has reciprocal agreements with exactly these two states. The employee must "
-        + "return to that residence at least once a month.",
+      help:
+        "Minnesota has reciprocal agreements with exactly these two states. The employee must " +
+        "return to that residence at least once a month.",
     },
   ],
 };
@@ -437,9 +527,9 @@ export const MN_REGION: PayrollRegionWithholding = {
       },
       implemented: true,
       citation:
-        "Minnesota Paid Leave (Minn. Stat. ch. 268B): employer premium on covered Minnesota wages "
-        + "from January 1, 2026, to the Social Security wage base; 2026 Small Employer Premium Rate "
-        + "Designation (DEED); quarterly wage detail and premium (UIMN Taxes and Premiums)",
+        "Minnesota Paid Leave (Minn. Stat. ch. 268B): employer premium on covered Minnesota wages " +
+        "from January 1, 2026, to the Social Security wage base; 2026 Small Employer Premium Rate " +
+        "Designation (DEED); quarterly wage detail and premium (UIMN Taxes and Premiums)",
     },
     {
       code: "PLE",
@@ -462,13 +552,13 @@ export const MN_REGION: PayrollRegionWithholding = {
       },
       implemented: true,
       citation:
-        "Minnesota Paid Leave (Minn. Stat. ch. 268B): the employer pays at least half the premium "
-        + "and deducts at most 0.44% from employee wages; 2026 Small Employer Premium Rate Designation "
-        + "(DEED)",
+        "Minnesota Paid Leave (Minn. Stat. ch. 268B): the employer pays at least half the premium " +
+        "and deducts at most 0.44% from employee wages; 2026 Small Employer Premium Rate Designation " +
+        "(DEED)",
     },
   ],
   subRegionConflictRule: "both",
   citation:
-    "Minnesota Department of Revenue, 2026 Minnesota Withholding Tax Instructions and Tables, "
-    + "Computer Formula (p. 34); Form W-4MN (Rev. 4/26)",
+    "Minnesota Department of Revenue, 2026 Minnesota Withholding Tax Instructions and Tables, " +
+    "Computer Formula (p. 34); Form W-4MN (Rev. 4/26)",
 };

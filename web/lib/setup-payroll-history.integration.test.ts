@@ -1,40 +1,62 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { registerHooks } from 'node:module';
-import test from 'node:test';
-import { sql } from 'drizzle-orm';
-import { db } from '@openbooks/engine/platform/db';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment } from '@openbooks/engine/testing/fixtures';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "@openbooks/engine/testing/fixtures";
 
-const state: {gate: {user: {orgId: string; id: string}} | null} = {gate: null};
-Object.assign(globalThis, {__payrollPolicySetup: state});
-registerHooks({resolve(specifier, context, next) {
-  // The route factory imports the exact alias lazily at request time from
-  // its own module URL, so it never matches the route-directory guard.
-  // Match the alias exactly so the factory gate uses this test's session.
-  if (specifier === '@/lib/authz' || (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/'))) {
-    return {shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return globalThis.__payrollPolicySetup.gate}'};
-  }
-  return next(specifier, context);
-}});
-const {PATCH, DELETE} = await import('../app/api/admin/setup/[entity]/route');
-const {setupResource} = await import('./data-io/setup-resources');
-const {SETUP_ENTITY_BY_KEY} = await import('./setup/registry');
+const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
+Object.assign(globalThis, { __payrollPolicySetup: state });
+registerHooks({
+  resolve(specifier, context, next) {
+    // The route factory imports the exact alias lazily at request time from
+    // its own module URL, so it never matches the route-directory guard.
+    // Match the alias exactly so the factory gate uses this test's session.
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/setup/"))
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function guardPermission(){return globalThis.__payrollPolicySetup.gate}",
+      };
+    }
+    return next(specifier, context);
+  },
+});
+const { PATCH, DELETE } = await import("../app/api/admin/setup/[entity]/route");
+const { setupResource } = await import("./data-io/setup-resources");
+const { SETUP_ENTITY_BY_KEY } = await import("./setup/registry");
 
-for (const channel of ['PATCH', 'DELETE', 'import', 'preview'] as const) {
-  test(`setup ${channel} preserves historical component policy and audit evidence`,
-    {skip: !process.env.OPENBOOKS_DB_URL}, async () => {
+for (const channel of ["PATCH", "DELETE", "import", "preview"] as const) {
+  test(
+    `setup ${channel} preserves historical component policy and audit evidence`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
       const org = await createScratchOrg();
       try {
         const actorId = (await seedFlowActors(org.orgId)).adminId;
-        state.gate = {user: {orgId: org.orgId, id: actorId}};
+        state.gate = { user: { orgId: org.orgId, id: actorId } };
         await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
           coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${org.orgId}`);
-        const employeeId = randomUUID(), scheduleId = randomUUID(), documentId = randomUUID();
-        const stubId = randomUUID(), componentId = randomUUID();
+        const employeeId = randomUUID(),
+          scheduleId = randomUUID(),
+          documentId = randomUUID();
+        const stubId = randomUUID(),
+          componentId = randomUUID();
         await db.execute(sql`insert into parties(id,org_id,kind,display_name) values
           (${employeeId},${org.orgId},'person','Historical employee')`);
-        const historyEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+        const historyEmploymentId = await seedWorkerEmployment(
+          org.orgId,
+          employeeId,
+          org.subsidiaryId,
+        );
         await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end)
           values(${scheduleId},${org.orgId},'Historical schedule','biweekly',26,'2026-07-18')`);
         await db.execute(sql`insert into documents(id,org_id,kind,document_number,subsidiary_id,document_date,currency)
@@ -47,26 +69,68 @@ for (const channel of ['PATCH', 'DELETE', 'import', 'preview'] as const) {
           values(${componentId},${org.orgId},'HISTORY','Historical earning','earning')`);
         await db.execute(sql`insert into pay_stub_lines(org_id,stub_id,component_id,kind,description,amount)
           values(${org.orgId},${stubId},${componentId},'earning','Historical earning','240')`);
-        const before = await db.execute(sql`select * from pay_components where org_id=${org.orgId} and id=${componentId}`, 'objects');
-        const auditBefore = await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`, 'objects');
-        const body = {id: componentId, code: 'HISTORY', name: 'Changed earning', kind: 'earning', taxable: false};
-        if (channel === 'import' || channel === 'preview') {
-          const outcome = await setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId)
-            .write([body],'upsert',{orgId: org.orgId,actorId,dryRun: channel === 'preview'});
-          assert.equal(outcome.updated,0); assert.equal(outcome.failed,1);
-          assert.match(outcome.errors[0]!.message,/fixed after committed payroll/);
+        const before = await db.execute(
+          sql`select * from pay_components where org_id=${org.orgId} and id=${componentId}`,
+          "objects",
+        );
+        const auditBefore = await db.execute(
+          sql`select * from audit_log where org_id=${org.orgId} order by id`,
+          "objects",
+        );
+        const body = {
+          id: componentId,
+          code: "HISTORY",
+          name: "Changed earning",
+          kind: "earning",
+          taxable: false,
+        };
+        if (channel === "import" || channel === "preview") {
+          const outcome = await setupResource(
+            SETUP_ENTITY_BY_KEY.get("pay-components")!,
+            org.orgId,
+          ).write([body], "upsert", { orgId: org.orgId, actorId, dryRun: channel === "preview" });
+          assert.equal(outcome.updated, 0);
+          assert.equal(outcome.failed, 1);
+          assert.match(outcome.errors[0]!.message, /fixed after committed payroll/);
         } else {
-          const response = await (channel === 'PATCH' ? PATCH : DELETE)(new Request(
-            `http://audit.local/api/admin/setup/pay-components?id=${componentId}`,
-            {method: channel,headers: {'Content-Type':'application/json'},
-              ...(channel === 'PATCH' ? {body: JSON.stringify(body)} : {})}),
-          {params: Promise.resolve({entity: 'pay-components'})});
-          assert.equal(response.status,409);
-          assert.match((await response.json()).error,/fixed after committed payroll/);
+          const response = await (channel === "PATCH" ? PATCH : DELETE)(
+            new Request(`http://audit.local/api/admin/setup/pay-components?id=${componentId}`, {
+              method: channel,
+              headers: { "Content-Type": "application/json" },
+              ...(channel === "PATCH" ? { body: JSON.stringify(body) } : {}),
+            }),
+            { params: Promise.resolve({ entity: "pay-components" }) },
+          );
+          assert.equal(response.status, 409);
+          assert.match((await response.json()).error, /fixed after committed payroll/);
         }
-        assert.deepEqual(await db.execute(sql`select * from pay_components where org_id=${org.orgId} and id=${componentId}`, 'objects'),before);
-        assert.deepEqual(await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`, 'objects'),auditBefore);
-        assert.equal((await db.execute(sql`select component_id from pay_stub_lines where org_id=${org.orgId} and stub_id=${stubId}`, 'objects'))[0]?.component_id,componentId);
-      } finally {state.gate=null;await dropScratchOrg(org.orgId);}
-    });
+        assert.deepEqual(
+          await db.execute(
+            sql`select * from pay_components where org_id=${org.orgId} and id=${componentId}`,
+            "objects",
+          ),
+          before,
+        );
+        assert.deepEqual(
+          await db.execute(
+            sql`select * from audit_log where org_id=${org.orgId} order by id`,
+            "objects",
+          ),
+          auditBefore,
+        );
+        assert.equal(
+          (
+            await db.execute(
+              sql`select component_id from pay_stub_lines where org_id=${org.orgId} and stub_id=${stubId}`,
+              "objects",
+            )
+          )[0]?.component_id,
+          componentId,
+        );
+      } finally {
+        state.gate = null;
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }

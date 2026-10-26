@@ -20,18 +20,13 @@ import { isUuid } from "@openbooks/engine/platform/identifiers";
  * the construction-billing errors).
  */
 export class BillingRequestValidationError extends Error {
-  readonly status = 422
+  readonly status = 422;
 }
 
 export interface BillingRequestInput {
   projectId: string;
   invoiceType?: "progress" | "final";
-  basis?:
-    | "date_range"
-    | "draw_amount"
-    | "time_selection"
-    | "milestone"
-    | "field_ticket";
+  basis?: "date_range" | "draw_amount" | "time_selection" | "milestone" | "field_ticket";
   drawAmount?: string | null;
   startDate?: string | null;
   cutoffDate?: string | null;
@@ -52,13 +47,7 @@ const BACKUP_TYPES = new Set([
   "purchases",
   "purchases_shop_time",
 ]);
-const BASES = new Set([
-  "date_range",
-  "draw_amount",
-  "time_selection",
-  "milestone",
-  "field_ticket",
-]);
+const BASES = new Set(["date_range", "draw_amount", "time_selection", "milestone", "field_ticket"]);
 
 export async function createBillingRequest(
   orgId: string,
@@ -66,17 +55,19 @@ export async function createBillingRequest(
   input: BillingRequestInput,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ) {
-  if (!(await isFeatureEnabled(orgId, "projects")))
-    throw new Error("Projects feature is disabled");
+  if (!(await isFeatureEnabled(orgId, "projects"))) throw new Error("Projects feature is disabled");
   const proj = await db.execute<{
     id: string;
     customer_po_number: string | null;
-  }>(sql`
+  }>(
+    sql`
     select id, customer_po_number
       from projects
      where id = ${input.projectId} and org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds ?? null)}
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!proj[0]) throw new Error("Project not found");
 
   // The project type is the authoritative classifier; snapshot its coarse
@@ -99,54 +90,48 @@ export async function createBillingRequest(
     throw new Error("Invoice stage must be progress or final");
   }
   const requestedBasis = input.basis ?? eff.defaultBasis;
-  if (!BASES.has(requestedBasis))
-    throw new Error("Choose a valid billing basis");
+  if (!BASES.has(requestedBasis)) throw new Error("Choose a valid billing basis");
   if (!eff.allowedBases.includes(requestedBasis)) {
-    throw new Error(
-      "The selected billing basis is not enabled for this project type",
-    );
+    throw new Error("The selected billing basis is not enabled for this project type");
   }
-  if (
-    requestedBasis === "field_ticket" &&
-    !(await isFeatureEnabled(orgId, "fieldTickets"))
-  ) {
+  if (requestedBasis === "field_ticket" && !(await isFeatureEnabled(orgId, "fieldTickets"))) {
     throw new Error("Field Ticket billing is disabled");
   }
   const basis = requestedBasis;
-  const selectedTimeEntryIds = [
-    ...new Set((input.selectedTimeEntryIds ?? []).map(String)),
-  ].sort();
+  const selectedTimeEntryIds = [...new Set((input.selectedTimeEntryIds ?? []).map(String))].sort();
   if (basis === "time_selection") {
     // An explicitly empty selection refuses: without this the generator sees
     // no filter and bills EVERY eligible entry on the project. Omitting the
     // field keeps the legacy "bill all eligible" request the project UI
     // relies on; sending [] is never what the caller meant.
-    if (input.selectedTimeEntryIds !== undefined && input.selectedTimeEntryIds !== null && selectedTimeEntryIds.length === 0)
-      throw new Error("Select at least one time entry to bill — an empty selection would bill every eligible entry");
+    if (
+      input.selectedTimeEntryIds !== undefined &&
+      input.selectedTimeEntryIds !== null &&
+      selectedTimeEntryIds.length === 0
+    )
+      throw new Error(
+        "Select at least one time entry to bill — an empty selection would bill every eligible entry",
+      );
     if (selectedTimeEntryIds.some((id) => !isUuid(id)))
       throw new Error("A selected time entry is invalid");
   } else if (selectedTimeEntryIds.length > 0) {
-    throw new Error(
-      "Time entries may be selected only for time-selection billing",
-    );
+    throw new Error("Time entries may be selected only for time-selection billing");
   }
-  const fieldTicketIds = [
-    ...new Set((input.fieldTicketIds ?? []).map(String)),
-  ].sort();
+  const fieldTicketIds = [...new Set((input.fieldTicketIds ?? []).map(String))].sort();
   if (basis === "field_ticket") {
-    if (fieldTicketIds.length === 0)
-      throw new Error("Select at least one Field Ticket");
+    if (fieldTicketIds.length === 0) throw new Error("Select at least one Field Ticket");
     if (fieldTicketIds.some((id) => !isUuid(id)))
       throw new Error("A selected Field Ticket is invalid");
   } else if (fieldTicketIds.length > 0) {
-    throw new Error(
-      "Field Tickets may be selected only for Field Ticket billing",
-    );
+    throw new Error("Field Tickets may be selected only for Field Ticket billing");
   }
   // start_date/cutoff_date are date columns: refuse anything that is not a
   // real calendar day before the write, or Postgres dies with a raw failure
   // that the route can only surface as driver text.
-  for (const [label, value] of [["Start date", input.startDate], ["Cutoff date", input.cutoffDate]] as const) {
+  for (const [label, value] of [
+    ["Start date", input.startDate],
+    ["Cutoff date", input.cutoffDate],
+  ] as const) {
     if (value != null && value !== "" && !isIsoCalendarDate(value)) {
       throw new BillingRequestValidationError(`${label} must be a real calendar date (YYYY-MM-DD)`);
     }
@@ -156,8 +141,14 @@ export async function createBillingRequest(
   // misspelled type must refuse — silently persisting the default (or none)
   // would issue the customer a packet nobody asked for, or no packet where
   // the approver required one.
-  if (input.backupType !== undefined && input.backupType !== null && !BACKUP_TYPES.has(input.backupType)) {
-    throw new Error(`Unknown backup type "${input.backupType}" — choose one of ${[...BACKUP_TYPES].sort().join(", ")}`);
+  if (
+    input.backupType !== undefined &&
+    input.backupType !== null &&
+    !BACKUP_TYPES.has(input.backupType)
+  ) {
+    throw new Error(
+      `Unknown backup type "${input.backupType}" — choose one of ${[...BACKUP_TYPES].sort().join(", ")}`,
+    );
   }
   const backupType =
     input.backupType && BACKUP_TYPES.has(input.backupType)
@@ -190,25 +181,32 @@ export async function createBillingRequest(
     const lockedProject = await tx.execute<{
       id: string;
       customer_po_number: string | null;
-    }>(sql`
+    }>(
+      sql`
       select id, customer_po_number
         from projects
        where id = ${input.projectId} and org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds ?? null)}
        for share
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!lockedProject[0]) throw new Error("Project not found");
 
-    const numberRow = await tx.execute<{ n: string }>(sql`
+    const numberRow = await tx.execute<{ n: string }>(
+      sql`
       select coalesce(max((regexp_replace(request_number, '\\D', '', 'g'))::bigint), 0) as n
         from billing_requests
        where org_id = ${orgId}
          and request_number ~ '^BREQ-[0-9]+$'
-    `, "objects");
+    `,
+      "objects",
+    );
     const requestNumber = `BREQ-${String(Number(numberRow[0]?.n ?? 0) + 1).padStart(5, "0")}`;
 
     if (basis === "field_ticket") {
-      const selected = await tx.execute<{ id: string }>(sql`
+      const selected = await tx.execute<{ id: string }>(
+        sql`
         select ticket.id
           from documents ticket
          where ticket.org_id = ${orgId}
@@ -242,13 +240,16 @@ export async function createBillingRequest(
            )
          order by ticket.id
          for update
-      `, "objects");
+      `,
+        "objects",
+      );
       if (selected.length !== fieldTicketIds.length) {
         throw new Error(
           "Every selected Field Ticket must be approved, unbilled, and belong to this project",
         );
       }
-      const unavailable = await tx.execute<{ document_number: string }>(sql`
+      const unavailable = await tx.execute<{ document_number: string }>(
+        sql`
         select ticket.document_number
           from billing_request_field_tickets selected
           join billing_requests request
@@ -261,7 +262,9 @@ export async function createBillingRequest(
            and selected.field_ticket_id = any(${`{${fieldTicketIds.join(",")}}`}::uuid[])
            and request.status <> 'cancelled'
          order by ticket.document_number
-      `, "objects");
+      `,
+        "objects",
+      );
       if (unavailable.length > 0) {
         throw new Error(
           `Field Ticket ${unavailable.map((row) => row.document_number).join(", ")} is already on another billing request`,
@@ -272,12 +275,13 @@ export async function createBillingRequest(
     let drawAmount: string | null = null;
     if (input.drawAmount != null && input.drawAmount !== "") {
       const exact = canonicalDecimal(input.drawAmount, 4);
-      if (exact === null)
-        throw new Error("Draw amount must be an exact decimal");
+      if (exact === null) throw new Error("Draw amount must be an exact decimal");
       // draw_amount is numeric(19,4): a wider figure would die in Postgres
       // with a raw failure the route can only surface as driver text.
       if (wholeDigits(exact) > 15)
-        throw new BillingRequestValidationError("Draw amount is out of range — at most 15 whole digits fit the ledger");
+        throw new BillingRequestValidationError(
+          "Draw amount is out of range — at most 15 whole digits fit the ledger",
+        );
       try {
         drawAmount = normalizeMoney(exact);
       } catch {
@@ -285,7 +289,8 @@ export async function createBillingRequest(
       }
     }
 
-    const row = await tx.execute<{ id: string; request_number: string }>(sql`
+    const row = await tx.execute<{ id: string; request_number: string }>(
+      sql`
       insert into billing_requests (
         org_id, project_id, request_number, invoice_type, basis, draw_amount, start_date, cutoff_date,
         invoice_description, customer_po, billing_method_snapshot, backup_required, backup_type,
@@ -298,7 +303,9 @@ export async function createBillingRequest(
         ${selectedTimeEntryIds.length ? JSON.stringify(selectedTimeEntryIds) : null},
         ${input.notes ?? null}, 'open', ${userId}, ${userId})
       returning id, request_number
-    `, "objects");
+    `,
+      "objects",
+    );
     const created = row[0]!;
 
     for (const fieldTicketId of fieldTicketIds) {
@@ -357,7 +364,8 @@ export async function listBillingRequests(
   projectId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<BillingRequestRow[]> {
-  const r = await db.execute<BillingRequestRow>(sql`
+  const r = await db.execute<BillingRequestRow>(
+    sql`
     select br.id, br.request_number as "requestNumber", br.invoice_type as "invoiceType",
            br.basis, br.draw_amount as "drawAmount", br.start_date as "startDate",
            br.cutoff_date as "cutoffDate", br.backup_required as "backupRequired",
@@ -381,7 +389,9 @@ export async function listBillingRequests(
        and br.project_id = ${projectId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
      order by br.created_at desc
-  `, "objects");
+  `,
+    "objects",
+  );
   return r;
 }
 
@@ -399,7 +409,8 @@ export async function listBillableFieldTickets(
   orgId: string,
   projectId: string,
 ): Promise<BillableFieldTicketRow[]> {
-  const rows = await db.execute<BillableFieldTicketRow>(sql`
+  const rows = await db.execute<BillableFieldTicketRow>(
+    sql`
     select ticket.id,
            ticket.document_number as "documentNumber",
            ticket.document_date::text as "documentDate",
@@ -464,7 +475,9 @@ export async function listBillableFieldTickets(
             and request.status <> 'cancelled'
        )
      order by field_ticket.period_end desc, ticket.document_number desc
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -475,22 +488,27 @@ export async function cancelBillingRequest(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   return db.transaction(async (tx) => {
-    const visible = await tx.execute(sql`
+    const visible = await tx.execute(
+      sql`
       select br.id from billing_requests br
         join projects p on p.id = br.project_id and p.org_id = br.org_id
        where br.id = ${id} and br.org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
        for update of br for share of p
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!visible[0]) throw new Error("Billing request not found");
-    const r = await tx.execute<{ id: string }>(sql`
+    const r = await tx.execute<{ id: string }>(
+      sql`
       update billing_requests
          set status = 'cancelled', updated_at = now(), updated_by = ${userId}
        where id = ${id} and org_id = ${orgId} and status = 'open'
        returning id
-    `, "objects");
-    if (!r[0])
-      throw new Error("Only an open billing request can be cancelled");
+    `,
+      "objects",
+    );
+    if (!r[0]) throw new Error("Only an open billing request can be cancelled");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (

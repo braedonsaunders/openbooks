@@ -12,7 +12,10 @@ interface CallbackState {
   connection: Record<string, unknown>;
   updated: Record<string, unknown> | null;
 }
-const secrets = sealJson({ clientId: "dyn-client", clientSecret: "dyn-secret" }, { orgId: "org-1", purpose: "connection.secrets" });
+const secrets = sealJson(
+  { clientId: "dyn-client", clientSecret: "dyn-secret" },
+  { orgId: "org-1", purpose: "connection.secrets" },
+);
 const state: CallbackState = {
   companies: [
     { id: "first-co", name: "First" },
@@ -91,7 +94,10 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ["mock:audit", `export function connectionAuditChanges() { return { event: "oauth_connected" } }`],
+  [
+    "mock:audit",
+    `export function connectionAuditChanges() { return { event: "oauth_connected" } }`,
+  ],
   ["mock:super-admin", `export async function lockActorPermission(tx, gate) { return gate }`],
   ["mock:email-tokens", `export function appBaseUrl() { return "https://books.example"; }`],
 ]);
@@ -119,12 +125,13 @@ const hooks = registerHooks({
   },
 });
 
-const dynamics_oauth_callbackUrl = './route.ts?dynamics-oauth-callback'
-const { GET } = (await import(dynamics_oauth_callbackUrl)) as typeof import('./route.ts');
-const dynamics_oauth_callback_flowUrl = '../../_flow.ts?dynamics-oauth-callback-flow'
-const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(dynamics_oauth_callback_flowUrl)) as typeof import('../../_flow.ts');
-test.after(() => hooks.deregister())
-
+const dynamics_oauth_callbackUrl = "./route.ts?dynamics-oauth-callback";
+const { GET } = (await import(dynamics_oauth_callbackUrl)) as typeof import("./route.ts");
+const dynamics_oauth_callback_flowUrl = "../../_flow.ts?dynamics-oauth-callback-flow";
+const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(
+  dynamics_oauth_callback_flowUrl
+)) as typeof import("../../_flow.ts");
+test.after(() => hooks.deregister());
 
 function reset(): void {
   state.companies = [
@@ -155,7 +162,9 @@ async function callback(init: { state: string; cookie?: string | null }): Promis
 test("Dynamics callback bounce uses appBaseUrl, not the request Host", async () => {
   reset();
   const res = await GET(
-    new Request("https://evil.example/api/platform/connections/oauth/dynamics/callback?error=access_denied"),
+    new Request(
+      "https://evil.example/api/platform/connections/oauth/dynamics/callback?error=access_denied",
+    ),
   );
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=denied");
 });
@@ -163,7 +172,10 @@ test("Dynamics callback bounce uses appBaseUrl, not the request Host", async () 
 test("a reusable sealed org/connection pair without the cookie nonce is badstate", async () => {
   reset();
   const res = await callback({
-    state: sealJson({ orgId: "org-1", connectionId: "conn-1" }, { orgId: "system", purpose: "connection.oauth.state" }),
+    state: sealJson(
+      { orgId: "org-1", connectionId: "conn-1" },
+      { orgId: "system", purpose: "connection.oauth.state" },
+    ),
     cookie: "unrelated-nonce",
   });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=badstate");
@@ -186,5 +198,8 @@ test("Dynamics callback pins a prior stored companyId instead of companies[0]", 
   const { state: sealed, nonce } = mintConnectionOauthState("org-1", "conn-1");
   const res = await callback({ state: sealed, cookie: nonce });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=connected");
-  assert.equal((state.updated?.config as { companyId?: string } | undefined)?.companyId, "stored-co");
+  assert.equal(
+    (state.updated?.config as { companyId?: string } | undefined)?.companyId,
+    "stored-co",
+  );
 });

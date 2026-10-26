@@ -98,11 +98,16 @@ async function seedScriptOrg(): Promise<ScriptOrg> {
 }
 
 /** Count the ledger surface an unauthorized create/post must never touch. */
-async function ledgerRowCounts(orgId: string): Promise<{ docs: string; lines: string; entries: string }> {
-  const r = (await db.execute<{ docs: string; lines: string; entries: string }>(sql`
+async function ledgerRowCounts(
+  orgId: string,
+): Promise<{ docs: string; lines: string; entries: string }> {
+  const r = await db.execute<{ docs: string; lines: string; entries: string }>(
+    sql`
     select (select count(*) from documents where org_id = ${orgId})::text as docs,
            (select count(*) from document_lines where org_id = ${orgId})::text as lines,
-           (select count(*) from journal_entries where org_id = ${orgId})::text as entries`, "objects"));
+           (select count(*) from journal_entries where org_id = ${orgId})::text as entries`,
+    "objects",
+  );
   return r[0]!;
 }
 
@@ -112,139 +117,200 @@ async function seedEndpointScript(orgId: string, slug: string): Promise<void> {
     values (${randomUUID()}, ${orgId}, ${"restlet-" + slug}, 'endpoint', ${slug}, ${JOURNAL_SCRIPT})`);
 }
 
-test("an engine-only user's effective-permission gate resolves roles, wildcards, overrides, and identity", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    assert.equal(await actorHasPermission(db, seeded.org.orgId, seeded.clerkId, "gl.post"), false);
-    assert.equal(await actorHasPermission(db, seeded.org.orgId, seeded.posterId, "gl.post"), true);
-    assert.equal(await actorHasPermission(db, seeded.org.orgId, seeded.wildId, "gl.post"), true);
-    assert.equal(await actorHasPermission(db, seeded.org.orgId, seeded.deniedId, "gl.post"), false);
-    assert.equal(await actorHasPermission(db, seeded.org.orgId, seeded.superId, "gl.post"), true);
-    // Fail closed on phantom or inactive principals.
-    assert.equal(await actorHasPermission(db, seeded.org.orgId, randomUUID(), "gl.post"), false);
-    await db.execute(sql`update users set is_active = false where id = ${seeded.posterId}`);
-    await db.execute(sql`update users set is_active = false where id = ${seeded.posterId}`);
-    assert.equal(await actorHasPermission(db, seeded.org.orgId, seeded.posterId, "gl.post"), false);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+test(
+  "an engine-only user's effective-permission gate resolves roles, wildcards, overrides, and identity",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      assert.equal(
+        await actorHasPermission(db, seeded.org.orgId, seeded.clerkId, "gl.post"),
+        false,
+      );
+      assert.equal(
+        await actorHasPermission(db, seeded.org.orgId, seeded.posterId, "gl.post"),
+        true,
+      );
+      assert.equal(await actorHasPermission(db, seeded.org.orgId, seeded.wildId, "gl.post"), true);
+      assert.equal(
+        await actorHasPermission(db, seeded.org.orgId, seeded.deniedId, "gl.post"),
+        false,
+      );
+      assert.equal(await actorHasPermission(db, seeded.org.orgId, seeded.superId, "gl.post"), true);
+      // Fail closed on phantom or inactive principals.
+      assert.equal(await actorHasPermission(db, seeded.org.orgId, randomUUID(), "gl.post"), false);
+      await db.execute(sql`update users set is_active = false where id = ${seeded.posterId}`);
+      await db.execute(sql`update users set is_active = false where id = ${seeded.posterId}`);
+      assert.equal(
+        await actorHasPermission(db, seeded.org.orgId, seeded.posterId, "gl.post"),
+        false,
+      );
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
 
-test("a scripts.execute-only caller cannot draft a journal through an endpoint script", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    const slug = "no-draft-rights";
-    await seedEndpointScript(seeded.org.orgId, slug);
-    const outcome = await runEndpointScript(
-      slug,
-      seeded.org.orgId,
-      { id: seeded.clerkId, name: "Clerk", roles: [seeded.clerkRoleKey] },
-      { method: "POST", query: {}, body: null },
-    );
-    assert.ok(outcome, "the active endpoint script was found");
-    assert.equal(outcome!.status, "error");
-    assert.match(outcome!.abortReason ?? "", /missing permission: gl\.post/);
-    assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), { docs: "0", lines: "0", entries: "0" });
-    // The refusal stays on the audit trail as a failed run.
-    const runs = await db.execute<{ status: string; error_message: string | null }>(sql`
-      select status::text as status, error_message from script_runs where org_id = ${seeded.org.orgId}`, "objects");
-    assert.equal(runs.length, 1);
-    assert.equal(runs[0]!.status, "error");
-    assert.match(runs[0]!.error_message ?? "", /gl\.post/);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+test(
+  "a scripts.execute-only caller cannot draft a journal through an endpoint script",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      const slug = "no-draft-rights";
+      await seedEndpointScript(seeded.org.orgId, slug);
+      const outcome = await runEndpointScript(
+        slug,
+        seeded.org.orgId,
+        { id: seeded.clerkId, name: "Clerk", roles: [seeded.clerkRoleKey] },
+        { method: "POST", query: {}, body: null },
+      );
+      assert.ok(outcome, "the active endpoint script was found");
+      assert.equal(outcome!.status, "error");
+      assert.match(outcome!.abortReason ?? "", /missing permission: gl\.post/);
+      assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), {
+        docs: "0",
+        lines: "0",
+        entries: "0",
+      });
+      // The refusal stays on the audit trail as a failed run.
+      const runs = await db.execute<{ status: string; error_message: string | null }>(
+        sql`
+      select status::text as status, error_message from script_runs where org_id = ${seeded.org.orgId}`,
+        "objects",
+      );
+      assert.equal(runs.length, 1);
+      assert.equal(runs[0]!.status, "error");
+      assert.match(runs[0]!.error_message ?? "", /gl\.post/);
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
 
-test("the same caller cannot post either — refusal is independent of the draft case", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    const slug = "no-post-rights";
-    await seedEndpointScript(seeded.org.orgId, slug);
-    const outcome = await runEndpointScript(
-      slug,
-      seeded.org.orgId,
-      { id: seeded.clerkId, name: "Clerk", roles: [seeded.clerkRoleKey] },
-      { method: "POST", query: {}, body: { post: true } },
-    );
-    assert.ok(outcome);
-    assert.equal(outcome!.status, "error");
-    assert.match(outcome!.abortReason ?? "", /missing permission: gl\.post/);
-    assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), { docs: "0", lines: "0", entries: "0" });
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+test(
+  "the same caller cannot post either — refusal is independent of the draft case",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      const slug = "no-post-rights";
+      await seedEndpointScript(seeded.org.orgId, slug);
+      const outcome = await runEndpointScript(
+        slug,
+        seeded.org.orgId,
+        { id: seeded.clerkId, name: "Clerk", roles: [seeded.clerkRoleKey] },
+        { method: "POST", query: {}, body: { post: true } },
+      );
+      assert.ok(outcome);
+      assert.equal(outcome!.status, "error");
+      assert.match(outcome!.abortReason ?? "", /missing permission: gl\.post/);
+      assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), {
+        docs: "0",
+        lines: "0",
+        entries: "0",
+      });
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
 
-test("a gl.post holder creates drafts and posts through the unchanged sandbox path", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    const slug = "poster-restlet";
-    await seedEndpointScript(seeded.org.orgId, slug);
-    const caller = (id: string) => ({ id, name: "Caller", roles: ["any"] });
+test(
+  "a gl.post holder creates drafts and posts through the unchanged sandbox path",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      const slug = "poster-restlet";
+      await seedEndpointScript(seeded.org.orgId, slug);
+      const caller = (id: string) => ({ id, name: "Caller", roles: ["any"] });
 
-    const draft = await runEndpointScript(slug, seeded.org.orgId, caller(seeded.posterId), {
-      method: "POST",
-      query: {},
-      body: null,
-    });
-    assert.ok(draft && draft.status === "ok", `draft run errored: ${draft?.abortReason}`);
-    const draftResult = draft!.returned as { id: string; documentNumber: string; entryId?: string };
-    assert.ok(draftResult.documentNumber.startsWith("JE-"));
-    assert.equal(draftResult.entryId, undefined, "draft-only creation posts nothing");
-    const docRow = (await db.execute<{ created_by: string | null }>(sql`
-      select created_by::text from documents where id = ${draftResult.id} and org_id = ${seeded.org.orgId}`, "objects"))[0];
-    assert.equal(docRow?.created_by, seeded.posterId);
-
-    const posted = await runEndpointScript(slug, seeded.org.orgId, caller(seeded.posterId), {
-      method: "POST",
-      query: {},
-      body: { post: true },
-    });
-    assert.ok(posted && posted.status === "ok", `post run errored: ${posted?.abortReason}`);
-    const postedResult = posted!.returned as { id: string; entryId?: string };
-    assert.ok(postedResult.entryId, "posting returned a ledger entry");
-    const entry = await db.execute(sql`
-      select 1 from journal_entries where id = ${postedResult.entryId!} and org_id = ${seeded.org.orgId}`, "objects");
-    assert.equal(entry.length, 1);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
-
-test("wildcard grants and platform super admins are authorized; a deny override is not", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    const slug = "matrix-restlet";
-    await seedEndpointScript(seeded.org.orgId, slug);
-    const caller = (id: string) => ({ id, name: "Caller", roles: [] });
-
-    for (const [label, userId, expectedOk] of [
-      ["gl.* holder", seeded.wildId, true],
-      ["super admin", seeded.superId, true],
-      ["denied override", seeded.deniedId, false],
-    ] as const) {
-      const outcome = await runEndpointScript(slug, seeded.org.orgId, caller(userId), {
+      const draft = await runEndpointScript(slug, seeded.org.orgId, caller(seeded.posterId), {
         method: "POST",
         query: {},
-        body: { post: false },
+        body: null,
       });
-      if (expectedOk) {
-        assert.ok(outcome && outcome.status === "ok", `${label} should pass: ${outcome?.abortReason}`);
-      } else {
-        assert.ok(outcome && outcome.status === "error", `${label} should be refused`);
-        assert.match(outcome!.abortReason ?? "", /missing permission: gl\.post/);
-      }
-    }
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+      assert.ok(draft && draft.status === "ok", `draft run errored: ${draft?.abortReason}`);
+      const draftResult = draft!.returned as {
+        id: string;
+        documentNumber: string;
+        entryId?: string;
+      };
+      assert.ok(draftResult.documentNumber.startsWith("JE-"));
+      assert.equal(draftResult.entryId, undefined, "draft-only creation posts nothing");
+      const docRow = (
+        await db.execute<{ created_by: string | null }>(
+          sql`
+      select created_by::text from documents where id = ${draftResult.id} and org_id = ${seeded.org.orgId}`,
+          "objects",
+        )
+      )[0];
+      assert.equal(docRow?.created_by, seeded.posterId);
 
-test("an unattended scheduled script posts only as an accountable run-as user, confined to that user's entities", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    const scheduledSource = `
+      const posted = await runEndpointScript(slug, seeded.org.orgId, caller(seeded.posterId), {
+        method: "POST",
+        query: {},
+        body: { post: true },
+      });
+      assert.ok(posted && posted.status === "ok", `post run errored: ${posted?.abortReason}`);
+      const postedResult = posted!.returned as { id: string; entryId?: string };
+      assert.ok(postedResult.entryId, "posting returned a ledger entry");
+      const entry = await db.execute(
+        sql`
+      select 1 from journal_entries where id = ${postedResult.entryId!} and org_id = ${seeded.org.orgId}`,
+        "objects",
+      );
+      assert.equal(entry.length, 1);
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
+
+test(
+  "wildcard grants and platform super admins are authorized; a deny override is not",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      const slug = "matrix-restlet";
+      await seedEndpointScript(seeded.org.orgId, slug);
+      const caller = (id: string) => ({ id, name: "Caller", roles: [] });
+
+      for (const [label, userId, expectedOk] of [
+        ["gl.* holder", seeded.wildId, true],
+        ["super admin", seeded.superId, true],
+        ["denied override", seeded.deniedId, false],
+      ] as const) {
+        const outcome = await runEndpointScript(slug, seeded.org.orgId, caller(userId), {
+          method: "POST",
+          query: {},
+          body: { post: false },
+        });
+        if (expectedOk) {
+          assert.ok(
+            outcome && outcome.status === "ok",
+            `${label} should pass: ${outcome?.abortReason}`,
+          );
+        } else {
+          assert.ok(outcome && outcome.status === "error", `${label} should be refused`);
+          assert.match(outcome!.abortReason ?? "", /missing permission: gl\.post/);
+        }
+      }
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
+
+test(
+  "an unattended scheduled script posts only as an accountable run-as user, confined to that user's entities",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      const scheduledSource = `
 function main(ctx) {
   return ob.journal.create({
     documentDate: "${seeded.org.date}",
@@ -256,45 +322,64 @@ function main(ctx) {
   }, { post: true });
 }
 `;
-    const scriptId = randomUUID();
-    await db.execute(sql`
+      const scriptId = randomUUID();
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, cron, next_run_at, source)
       values (${scriptId}, ${seeded.org.orgId}, 'nightly', 'scheduled', '* * * * *', now(), ${scheduledSource})`);
-    const runAs = (userId: string | null) => db.execute(sql`
+      const runAs = (userId: string | null) =>
+        db.execute(sql`
       update user_scripts set run_as_user_id = ${userId} where id = ${scriptId} and org_id = ${seeded.org.orgId}`);
-    const before = await ledgerRowCounts(seeded.org.orgId);
+      const before = await ledgerRowCounts(seeded.org.orgId);
 
-    // No signed-in user and no saver on record: nobody is accountable, so nothing posts.
-    const orphan = await runScheduledScript(scriptId, seeded.org.orgId, { idempotencyScope: "orphan" });
-    assert.equal(orphan.status, "error");
-    assert.match(orphan.abortReason ?? "", /journal\.create: this run has no signed-in user and the script has no run-as user; save the script again as a user who holds gl\.post/);
-    // A saver without gl.post cannot post through the schedule either.
-    await runAs(seeded.clerkId);
-    const clerk = await runScheduledScript(scriptId, seeded.org.orgId, { idempotencyScope: "clerk" });
-    assert.equal(clerk.status, "error");
-    assert.match(clerk.abortReason ?? "", /missing permission: gl\.post \(the script's run-as user lacks it/);
-    assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), before);
+      // No signed-in user and no saver on record: nobody is accountable, so nothing posts.
+      const orphan = await runScheduledScript(scriptId, seeded.org.orgId, {
+        idempotencyScope: "orphan",
+      });
+      assert.equal(orphan.status, "error");
+      assert.match(
+        orphan.abortReason ?? "",
+        /journal\.create: this run has no signed-in user and the script has no run-as user; save the script again as a user who holds gl\.post/,
+      );
+      // A saver without gl.post cannot post through the schedule either.
+      await runAs(seeded.clerkId);
+      const clerk = await runScheduledScript(scriptId, seeded.org.orgId, {
+        idempotencyScope: "clerk",
+      });
+      assert.equal(clerk.status, "error");
+      assert.match(
+        clerk.abortReason ?? "",
+        /missing permission: gl\.post \(the script's run-as user lacks it/,
+      );
+      assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), before);
 
-    // A run-as user restricted to a child entity posts there, never into the root.
-    const childId = await seedChildSubsidiary(seeded.org.orgId, seeded.org.subsidiaryId);
-    await restrictRole(seeded.org.orgId, "poster", [childId]);
-    await runAs(seeded.posterId);
-    const outcome = await runScheduledScript(scriptId, seeded.org.orgId, { idempotencyScope: "poster" });
-    assert.equal(outcome.status, "ok", outcome.abortReason ?? "");
-    const result = outcome.returned as { entryId?: string };
-    assert.ok(result.entryId);
-    assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
-    const docRow = (await db.execute<{ created_by: string | null; custom: Record<string, string> }>(sql`
+      // A run-as user restricted to a child entity posts there, never into the root.
+      const childId = await seedChildSubsidiary(seeded.org.orgId, seeded.org.subsidiaryId);
+      await restrictRole(seeded.org.orgId, "poster", [childId]);
+      await runAs(seeded.posterId);
+      const outcome = await runScheduledScript(scriptId, seeded.org.orgId, {
+        idempotencyScope: "poster",
+      });
+      assert.equal(outcome.status, "ok", outcome.abortReason ?? "");
+      const result = outcome.returned as { entryId?: string };
+      assert.ok(result.entryId);
+      assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
+      const docRow = (
+        await db.execute<{ created_by: string | null; custom: Record<string, string> }>(
+          sql`
       select d.created_by::text as created_by, d.custom
         from journal_entries e join documents d on d.id = e.source_document_id
-       where e.id = ${result.entryId!} and e.org_id = ${seeded.org.orgId}`, "objects"))[0];
-    // The write keeps system provenance; the run-as user is who authorized it.
-    assert.equal(docRow!.created_by, null);
-    assert.equal(docRow!.custom.actorKind, "system");
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+       where e.id = ${result.entryId!} and e.org_id = ${seeded.org.orgId}`,
+          "objects",
+        )
+      )[0];
+      // The write keeps system provenance; the run-as user is who authorized it.
+      assert.equal(docRow!.created_by, null);
+      assert.equal(docRow!.custom.actorKind, "system");
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Subsidiary scope (X1): sandboxed journal writes always resolved the ROOT
@@ -329,7 +414,11 @@ async function seedChildSubsidiary(orgId: string, rootId: string): Promise<strin
   return childId;
 }
 
-async function restrictRole(orgId: string, roleKey: string, subsidiaryIds: string[]): Promise<void> {
+async function restrictRole(
+  orgId: string,
+  roleKey: string,
+  subsidiaryIds: string[],
+): Promise<void> {
   await db.execute(sql`
     update app_roles
        set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
@@ -337,109 +426,161 @@ async function restrictRole(orgId: string, roleKey: string, subsidiaryIds: strin
 }
 
 async function journalSubsidiaries(orgId: string): Promise<string[]> {
-  const r = (await db.execute<{ subsidiary_id: string }>(sql`
-    select subsidiary_id::text from documents where org_id = ${orgId} and kind = 'journal'`, "objects"));
+  const r = await db.execute<{ subsidiary_id: string }>(
+    sql`
+    select subsidiary_id::text from documents where org_id = ${orgId} and kind = 'journal'`,
+    "objects",
+  );
   return r.map((row) => row.subsidiary_id);
 }
 
-test("a caller restricted to a child entity never journals into the root, even when posting", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    const rootId = seeded.org.subsidiaryId;
-    const childId = await seedChildSubsidiary(seeded.org.orgId, rootId);
-    await restrictRole(seeded.org.orgId, "poster", [childId]);
-    const slug = "scoped-restlet";
-    await db.execute(sql`
+test(
+  "a caller restricted to a child entity never journals into the root, even when posting",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      const rootId = seeded.org.subsidiaryId;
+      const childId = await seedChildSubsidiary(seeded.org.orgId, rootId);
+      await restrictRole(seeded.org.orgId, "poster", [childId]);
+      const slug = "scoped-restlet";
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, endpoint_slug, source)
       values (${randomUUID()}, ${seeded.org.orgId}, 'scoped', 'endpoint', ${slug}, ${SCOPED_JOURNAL_SCRIPT})`);
-    const caller = { id: seeded.posterId, name: "Poster", roles: ["poster"] };
+      const caller = { id: seeded.posterId, name: "Poster", roles: ["poster"] };
 
-    // Omitted subsidiaryId: the single allowed entity is selected, not the root.
-    const posted = await runEndpointScript(slug, seeded.org.orgId, caller, {
-      method: "POST", query: {}, body: { post: true },
-    });
-    assert.ok(posted && posted.status === "ok", `post run errored: ${posted?.abortReason}`);
-    const result = posted!.returned as { entryId?: string };
-    assert.ok(result.entryId, "posting succeeded inside the caller's own entity");
-    assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
-    const entry = (await db.execute<{ subsidiary_id: string }>(sql`
-      select subsidiary_id::text from journal_entries where id = ${result.entryId!} and org_id = ${seeded.org.orgId}`, "objects"))[0];
-    assert.equal(entry?.subsidiary_id, childId, "the ledger entry is booked in the child entity");
+      // Omitted subsidiaryId: the single allowed entity is selected, not the root.
+      const posted = await runEndpointScript(slug, seeded.org.orgId, caller, {
+        method: "POST",
+        query: {},
+        body: { post: true },
+      });
+      assert.ok(posted && posted.status === "ok", `post run errored: ${posted?.abortReason}`);
+      const result = posted!.returned as { entryId?: string };
+      assert.ok(result.entryId, "posting succeeded inside the caller's own entity");
+      assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
+      const entry = (
+        await db.execute<{ subsidiary_id: string }>(
+          sql`
+      select subsidiary_id::text from journal_entries where id = ${result.entryId!} and org_id = ${seeded.org.orgId}`,
+          "objects",
+        )
+      )[0];
+      assert.equal(entry?.subsidiary_id, childId, "the ledger entry is booked in the child entity");
 
-    // Explicit root: refused indistinguishably from a missing entity, zero rows written.
-    const before = await ledgerRowCounts(seeded.org.orgId);
-    const refused = await runEndpointScript(slug, seeded.org.orgId, caller, {
-      method: "POST", query: {}, body: { post: true, subsidiaryId: rootId },
-    });
-    assert.ok(refused && refused.status === "error", "an out-of-scope entity is refused");
-    assert.match(refused!.abortReason ?? "", /subsidiary not found/);
-    assert.doesNotMatch(refused!.abortReason ?? "", /permission/);
-    assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), before);
-    assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+      // Explicit root: refused indistinguishably from a missing entity, zero rows written.
+      const before = await ledgerRowCounts(seeded.org.orgId);
+      const refused = await runEndpointScript(slug, seeded.org.orgId, caller, {
+        method: "POST",
+        query: {},
+        body: { post: true, subsidiaryId: rootId },
+      });
+      assert.ok(refused && refused.status === "error", "an out-of-scope entity is refused");
+      assert.match(refused!.abortReason ?? "", /subsidiary not found/);
+      assert.doesNotMatch(refused!.abortReason ?? "", /permission/);
+      assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), before);
+      assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
 
-test("an empty or ambiguous restricted scope is refused rather than defaulted to the root", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    const rootId = seeded.org.subsidiaryId;
-    const childId = await seedChildSubsidiary(seeded.org.orgId, rootId);
-    const slug = "scope-edges";
-    await db.execute(sql`
+test(
+  "an empty or ambiguous restricted scope is refused rather than defaulted to the root",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      const rootId = seeded.org.subsidiaryId;
+      const childId = await seedChildSubsidiary(seeded.org.orgId, rootId);
+      const slug = "scope-edges";
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, endpoint_slug, source)
       values (${randomUUID()}, ${seeded.org.orgId}, 'edges', 'endpoint', ${slug}, ${SCOPED_JOURNAL_SCRIPT})`);
-    const caller = { id: seeded.posterId, name: "Poster", roles: ["poster"] };
+      const caller = { id: seeded.posterId, name: "Poster", roles: ["poster"] };
 
-    await restrictRole(seeded.org.orgId, "poster", []);
-    const empty = await runEndpointScript(slug, seeded.org.orgId, caller, { method: "POST", query: {}, body: null });
-    assert.ok(empty && empty.status === "error");
-    assert.match(empty!.abortReason ?? "", /no available subsidiary/);
+      await restrictRole(seeded.org.orgId, "poster", []);
+      const empty = await runEndpointScript(slug, seeded.org.orgId, caller, {
+        method: "POST",
+        query: {},
+        body: null,
+      });
+      assert.ok(empty && empty.status === "error");
+      assert.match(empty!.abortReason ?? "", /no available subsidiary/);
 
-    await restrictRole(seeded.org.orgId, "poster", [rootId, childId]);
-    const ambiguous = await runEndpointScript(slug, seeded.org.orgId, caller, { method: "POST", query: {}, body: null });
-    assert.ok(ambiguous && ambiguous.status === "error");
-    assert.match(ambiguous!.abortReason ?? "", /subsidiaryId must be selected/);
+      await restrictRole(seeded.org.orgId, "poster", [rootId, childId]);
+      const ambiguous = await runEndpointScript(slug, seeded.org.orgId, caller, {
+        method: "POST",
+        query: {},
+        body: null,
+      });
+      assert.ok(ambiguous && ambiguous.status === "error");
+      assert.match(ambiguous!.abortReason ?? "", /subsidiaryId must be selected/);
 
-    // Selecting one of the two allowed entities explicitly works.
-    const chosen = await runEndpointScript(slug, seeded.org.orgId, caller, {
-      method: "POST", query: {}, body: { subsidiaryId: childId },
-    });
-    assert.ok(chosen && chosen.status === "ok", `explicit in-scope entity errored: ${chosen?.abortReason}`);
-    assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), { docs: "1", lines: "2", entries: "0" });
-    assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+      // Selecting one of the two allowed entities explicitly works.
+      const chosen = await runEndpointScript(slug, seeded.org.orgId, caller, {
+        method: "POST",
+        query: {},
+        body: { subsidiaryId: childId },
+      });
+      assert.ok(
+        chosen && chosen.status === "ok",
+        `explicit in-scope entity errored: ${chosen?.abortReason}`,
+      );
+      assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), {
+        docs: "1",
+        lines: "2",
+        entries: "0",
+      });
+      assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
 
-test("an unrestricted caller keeps the root default and may pick any active entity", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    const rootId = seeded.org.subsidiaryId;
-    const childId = await seedChildSubsidiary(seeded.org.orgId, rootId);
-    const slug = "unrestricted-scope";
-    await db.execute(sql`
+test(
+  "an unrestricted caller keeps the root default and may pick any active entity",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      const rootId = seeded.org.subsidiaryId;
+      const childId = await seedChildSubsidiary(seeded.org.orgId, rootId);
+      const slug = "unrestricted-scope";
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, endpoint_slug, source)
       values (${randomUUID()}, ${seeded.org.orgId}, 'unrestricted', 'endpoint', ${slug}, ${SCOPED_JOURNAL_SCRIPT})`);
-    const caller = { id: seeded.posterId, name: "Poster", roles: ["poster"] };
-    const defaulted = await runEndpointScript(slug, seeded.org.orgId, caller, { method: "POST", query: {}, body: null });
-    assert.ok(defaulted && defaulted.status === "ok", defaulted?.abortReason ?? "");
-    const explicit = await runEndpointScript(slug, seeded.org.orgId, caller, {
-      method: "POST", query: {}, body: { subsidiaryId: childId },
-    });
-    assert.ok(explicit && explicit.status === "ok", explicit?.abortReason ?? "");
-    assert.deepEqual((await journalSubsidiaries(seeded.org.orgId)).sort(), [rootId, childId].sort());
-    const bogus = await runEndpointScript(slug, seeded.org.orgId, caller, {
-      method: "POST", query: {}, body: { subsidiaryId: randomUUID() },
-    });
-    assert.ok(bogus && bogus.status === "error");
-    assert.match(bogus!.abortReason ?? "", /invalid subsidiary/);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+      const caller = { id: seeded.posterId, name: "Poster", roles: ["poster"] };
+      const defaulted = await runEndpointScript(slug, seeded.org.orgId, caller, {
+        method: "POST",
+        query: {},
+        body: null,
+      });
+      assert.ok(defaulted && defaulted.status === "ok", defaulted?.abortReason ?? "");
+      const explicit = await runEndpointScript(slug, seeded.org.orgId, caller, {
+        method: "POST",
+        query: {},
+        body: { subsidiaryId: childId },
+      });
+      assert.ok(explicit && explicit.status === "ok", explicit?.abortReason ?? "");
+      assert.deepEqual(
+        (await journalSubsidiaries(seeded.org.orgId)).sort(),
+        [rootId, childId].sort(),
+      );
+      const bogus = await runEndpointScript(slug, seeded.org.orgId, caller, {
+        method: "POST",
+        query: {},
+        body: { subsidiaryId: randomUUID() },
+      });
+      assert.ok(bogus && bogus.status === "error");
+      assert.match(bogus!.abortReason ?? "", /invalid subsidiary/);
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Raw SQL (X2): ob.query / ob.record.load / ob.search ran runUserSql for ANY
@@ -471,121 +612,153 @@ async function setQueryConsole(orgId: string, enabled: boolean): Promise<void> {
      where id = ${orgId}`);
 }
 
-test("a scripts.execute-only caller cannot read the catalog through ob.query, ob.record.load, or ob.search", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    await setQueryConsole(seeded.org.orgId, true);
-    const slug = "clerk-query";
-    await seedQueryScript(seeded.org.orgId, slug);
-    for (const mode of ["query", "load", "search"]) {
-      const outcome = await runEndpointScript(
-        slug,
-        seeded.org.orgId,
-        { id: seeded.clerkId, name: "Clerk", roles: [seeded.clerkRoleKey] },
-        { method: "POST", query: {}, body: { mode } },
+test(
+  "a scripts.execute-only caller cannot read the catalog through ob.query, ob.record.load, or ob.search",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      await setQueryConsole(seeded.org.orgId, true);
+      const slug = "clerk-query";
+      await seedQueryScript(seeded.org.orgId, slug);
+      for (const mode of ["query", "load", "search"]) {
+        const outcome = await runEndpointScript(
+          slug,
+          seeded.org.orgId,
+          { id: seeded.clerkId, name: "Clerk", roles: [seeded.clerkRoleKey] },
+          { method: "POST", query: {}, body: { mode } },
+        );
+        assert.ok(outcome, "the active endpoint script was found");
+        assert.equal(outcome!.status, "error", `${mode} must be refused`);
+        assert.match(outcome!.abortReason ?? "", /missing permission: sql\.execute/);
+        assert.equal(outcome!.returned, undefined);
+      }
+      const runs = await db.execute<{ status: string; error_message: string | null }>(
+        sql`
+      select status::text as status, error_message from script_runs where org_id = ${seeded.org.orgId}`,
+        "objects",
       );
-      assert.ok(outcome, "the active endpoint script was found");
-      assert.equal(outcome!.status, "error", `${mode} must be refused`);
-      assert.match(outcome!.abortReason ?? "", /missing permission: sql\.execute/);
-      assert.equal(outcome!.returned, undefined);
+      assert.equal(runs.length, 3);
+      for (const run of runs) assert.match(run.error_message ?? "", /sql\.execute/);
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
     }
-    const runs = await db.execute<{ status: string; error_message: string | null }>(sql`
-      select status::text as status, error_message from script_runs where org_id = ${seeded.org.orgId}`, "objects");
-    assert.equal(runs.length, 3);
-    for (const run of runs) assert.match(run.error_message ?? "", /sql\.execute/);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+  },
+);
 
-test("ob.query honours the queryConsole feature and the unrestricted-scope rule exactly like /api/query", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    const slug = "analyst-query";
-    await seedQueryScript(seeded.org.orgId, slug);
-    const analystId = await createScratchUser(seeded.org.orgId, "Analyst", "analyst");
-    await db.execute(sql`
+test(
+  "ob.query honours the queryConsole feature and the unrestricted-scope rule exactly like /api/query",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      const slug = "analyst-query";
+      await seedQueryScript(seeded.org.orgId, slug);
+      const analystId = await createScratchUser(seeded.org.orgId, "Analyst", "analyst");
+      await db.execute(sql`
       update app_roles set permissions = '["sql.execute"]'::jsonb
        where org_id = ${seeded.org.orgId} and key = 'analyst'`);
-    const caller = { id: analystId, name: "Analyst", roles: ["analyst"] };
-    const run = (body: Record<string, unknown> | null = null) =>
-      runEndpointScript(slug, seeded.org.orgId, caller, { method: "POST", query: {}, body });
+      const caller = { id: analystId, name: "Analyst", roles: ["analyst"] };
+      const run = (body: Record<string, unknown> | null = null) =>
+        runEndpointScript(slug, seeded.org.orgId, caller, { method: "POST", query: {}, body });
 
-    // Feature off: refused by name even with the permission.
-    await setQueryConsole(seeded.org.orgId, false);
-    const disabled = await run();
-    assert.equal(disabled!.status, "error");
-    assert.match(disabled!.abortReason ?? "", /queryConsole feature is disabled/);
+      // Feature off: refused by name even with the permission.
+      await setQueryConsole(seeded.org.orgId, false);
+      const disabled = await run();
+      assert.equal(disabled!.status, "error");
+      assert.match(disabled!.abortReason ?? "", /queryConsole feature is disabled/);
 
-    // Feature on + sql.execute + unrestricted: rows flow.
-    await setQueryConsole(seeded.org.orgId, true);
-    const allowed = await run();
-    assert.equal(allowed!.status, "ok", allowed!.abortReason ?? "");
-    assert.deepEqual(allowed!.returned, [{ n: 0 }]);
-    const loaded = await run({ mode: "load" });
-    assert.equal(loaded!.status, "ok", loaded!.abortReason ?? "");
-    assert.equal((loaded!.returned as { number: string }).number, "5100");
-    const searched = await run({ mode: "search" });
-    assert.equal(searched!.status, "ok", searched!.abortReason ?? "");
-    assert.equal((searched!.returned as { number: string }[]).length, 1);
+      // Feature on + sql.execute + unrestricted: rows flow.
+      await setQueryConsole(seeded.org.orgId, true);
+      const allowed = await run();
+      assert.equal(allowed!.status, "ok", allowed!.abortReason ?? "");
+      assert.deepEqual(allowed!.returned, [{ n: 0 }]);
+      const loaded = await run({ mode: "load" });
+      assert.equal(loaded!.status, "ok", loaded!.abortReason ?? "");
+      assert.equal((loaded!.returned as { number: string }).number, "5100");
+      const searched = await run({ mode: "search" });
+      assert.equal(searched!.status, "ok", searched!.abortReason ?? "");
+      assert.equal((searched!.returned as { number: string }[]).length, 1);
 
-    // Payroll relations follow payroll.read, exactly like the console.
-    const payroll = await run({ mode: "payroll" });
-    assert.equal(payroll!.status, "error");
-    assert.match(payroll!.abortReason ?? "", /requires the payroll\.read permission: this query reads pay_stubs/);
-    await db.execute(sql`
+      // Payroll relations follow payroll.read, exactly like the console.
+      const payroll = await run({ mode: "payroll" });
+      assert.equal(payroll!.status, "error");
+      assert.match(
+        payroll!.abortReason ?? "",
+        /requires the payroll\.read permission: this query reads pay_stubs/,
+      );
+      await db.execute(sql`
       update app_roles set permissions = '["sql.execute","payroll.read"]'::jsonb
        where org_id = ${seeded.org.orgId} and key = 'analyst'`);
-    const payrollGranted = await run({ mode: "payroll" });
-    assert.equal(payrollGranted!.status, "ok", payrollGranted!.abortReason ?? "");
+      const payrollGranted = await run({ mode: "payroll" });
+      assert.equal(payrollGranted!.status, "ok", payrollGranted!.abortReason ?? "");
 
-    // Restricted subsidiary scope: raw SQL cannot apply the allowlist, so refused.
-    await restrictRole(seeded.org.orgId, "analyst", [seeded.org.subsidiaryId]);
-    const restricted = await run();
-    assert.equal(restricted!.status, "error");
-    assert.match(restricted!.abortReason ?? "", /unrestricted subsidiary access/);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+      // Restricted subsidiary scope: raw SQL cannot apply the allowlist, so refused.
+      await restrictRole(seeded.org.orgId, "analyst", [seeded.org.subsidiaryId]);
+      const restricted = await run();
+      assert.equal(restricted!.status, "error");
+      assert.match(restricted!.abortReason ?? "", /unrestricted subsidiary access/);
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
 
-test("an unattended ob.query reads only under a live run-as user who passes the query console's gates", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    await setQueryConsole(seeded.org.orgId, true);
-    const analystId = await createScratchUser(seeded.org.orgId, "Analyst", "analyst");
-    await db.execute(sql`
+test(
+  "an unattended ob.query reads only under a live run-as user who passes the query console's gates",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      await setQueryConsole(seeded.org.orgId, true);
+      const analystId = await createScratchUser(seeded.org.orgId, "Analyst", "analyst");
+      await db.execute(sql`
       update app_roles set permissions = '["sql.execute"]'::jsonb
        where org_id = ${seeded.org.orgId} and key = 'analyst'`);
-    const scriptId = randomUUID();
-    await db.execute(sql`
+      const scriptId = randomUUID();
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, cron, next_run_at, source)
       values (${scriptId}, ${seeded.org.orgId}, 'nightly-read', 'scheduled', '* * * * *', now(), ${QUERY_SCRIPT})`);
-    const orphan = await runScheduledScript(scriptId, seeded.org.orgId);
-    assert.equal(orphan.status, "error");
-    assert.match(orphan.abortReason ?? "", /query: this run has no signed-in user and the script has no run-as user; save the script again as a user who holds sql\.execute/);
+      const orphan = await runScheduledScript(scriptId, seeded.org.orgId);
+      assert.equal(orphan.status, "error");
+      assert.match(
+        orphan.abortReason ?? "",
+        /query: this run has no signed-in user and the script has no run-as user; save the script again as a user who holds sql\.execute/,
+      );
 
-    await db.execute(sql`update user_scripts set run_as_user_id = ${analystId} where id = ${scriptId} and org_id = ${seeded.org.orgId}`);
-    const outcome = await runScheduledScript(scriptId, seeded.org.orgId);
-    assert.equal(outcome.status, "ok", outcome.abortReason ?? "");
-    assert.deepEqual(outcome.returned, [{ n: 0 }]);
+      await db.execute(
+        sql`update user_scripts set run_as_user_id = ${analystId} where id = ${scriptId} and org_id = ${seeded.org.orgId}`,
+      );
+      const outcome = await runScheduledScript(scriptId, seeded.org.orgId);
+      assert.equal(outcome.status, "ok", outcome.abortReason ?? "");
+      assert.deepEqual(outcome.returned, [{ n: 0 }]);
 
-    // Authority is read live: a deactivated saver no longer covers the schedule.
-    await db.execute(sql`update users set is_active = false where id = ${analystId} and org_id = ${seeded.org.orgId}`);
-    const departed = await runScheduledScript(scriptId, seeded.org.orgId);
-    assert.equal(departed.status, "error");
-    assert.match(departed.abortReason ?? "", /run-as user is no longer an active user of this organization/);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+      // Authority is read live: a deactivated saver no longer covers the schedule.
+      await db.execute(
+        sql`update users set is_active = false where id = ${analystId} and org_id = ${seeded.org.orgId}`,
+      );
+      const departed = await runScheduledScript(scriptId, seeded.org.orgId);
+      assert.equal(departed.status, "error");
+      assert.match(
+        departed.abortReason ?? "",
+        /run-as user is no longer an active user of this organization/,
+      );
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Human-driven document triggers must carry ctx.user so query/journal gates
 // never take the actor-less system path for a signed-in submit/post/void.
 // ---------------------------------------------------------------------------
 
-const HOSTLESS_ORG = { id: "00000000-0000-4000-8000-000000000001", name: "Host", baseCurrency: "CAD" };
+const HOSTLESS_ORG = {
+  id: "00000000-0000-4000-8000-000000000001",
+  name: "Host",
+  baseCurrency: "CAD",
+};
 
 test("script host I/O is raced against the same wall-clock deadline as the interrupt handler", async () => {
   let ranAfterDeadline = false;
@@ -597,13 +770,18 @@ test("script host I/O is raced against the same wall-clock deadline as the inter
   assert.equal(ranAfterDeadline, false, "a host call must not start once the deadline has passed");
 
   const started = Date.now();
-  const raced = await withScriptHostDeadline(Date.now() + 25, () =>
-    new Promise<string>((resolve) => {
-      setTimeout(() => resolve("late"), 250);
-    }),
+  const raced = await withScriptHostDeadline(
+    Date.now() + 25,
+    () =>
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve("late"), 250);
+      }),
   );
   assert.equal(raced, SCRIPT_HOST_TIMEOUT);
-  assert.ok(Date.now() - started < 200, `host deadline race exceeded bound: ${Date.now() - started}ms`);
+  assert.ok(
+    Date.now() - started < 200,
+    `host deadline race exceeded bound: ${Date.now() - started}ms`,
+  );
 });
 
 test("ob.log is capped on the host side independently of the QuickJS heap", async () => {
@@ -694,44 +872,62 @@ function main(ctx) {
 }
 `;
 
-test("ob.search refuses injected and unknown filter keys by name and runs no search SQL", { skip: !DB }, async () => {
-  const seeded = await seedScriptOrg();
-  try {
-    await setQueryConsole(seeded.org.orgId, true);
-    const slug = "search-keys";
-    await db.execute(sql`
+test(
+  "ob.search refuses injected and unknown filter keys by name and runs no search SQL",
+  { skip: !DB },
+  async () => {
+    const seeded = await seedScriptOrg();
+    try {
+      await setQueryConsole(seeded.org.orgId, true);
+      const slug = "search-keys";
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, endpoint_slug, source, timeout_ms)
       values (${randomUUID()}, ${seeded.org.orgId}, 'search-keys', 'endpoint', ${slug}, ${SEARCH_KEY_SCRIPT}, 10000)`);
-    const analystId = await createScratchUser(seeded.org.orgId, "SearchAnalyst", "search-analyst");
-    await db.execute(sql`
+      const analystId = await createScratchUser(
+        seeded.org.orgId,
+        "SearchAnalyst",
+        "search-analyst",
+      );
+      await db.execute(sql`
       update app_roles set permissions = '["sql.execute"]'::jsonb
        where org_id = ${seeded.org.orgId} and key = 'search-analyst'`);
-    const caller = { id: analystId, name: "SearchAnalyst", roles: ["search-analyst"] };
-    const run = (mode: string) =>
-      runEndpointScript(slug, seeded.org.orgId, caller, { method: "POST", query: {}, body: { mode } });
+      const caller = { id: analystId, name: "SearchAnalyst", roles: ["search-analyst"] };
+      const run = (mode: string) =>
+        runEndpointScript(slug, seeded.org.orgId, caller, {
+          method: "POST",
+          query: {},
+          body: { mode },
+        });
 
-    // A valid key still works: the same query that would have run the
-    // injection returns the governed row instead.
-    const valid = await run("valid");
-    assert.equal(valid!.status, "ok", valid!.abortReason ?? "");
-    assert.equal((valid!.returned as { number: string }[]).length, 1);
-    assert.equal((valid!.returned as { number: string }[])[0]!.number, "5100");
+      // A valid key still works: the same query that would have run the
+      // injection returns the governed row instead.
+      const valid = await run("valid");
+      assert.equal(valid!.status, "ok", valid!.abortReason ?? "");
+      assert.equal((valid!.returned as { number: string }[]).length, 1);
+      assert.equal((valid!.returned as { number: string }[])[0]!.number, "5100");
 
-    // The injected key is refused by name — had it been spliced, this same
-    // call would have returned rows with status ok.
-    const injected = await run("injected");
-    assert.equal(injected!.status, "error");
-    assert.match(injected!.abortReason ?? "", /unknown search column "1=1 UNION SELECT password FROM users --"/);
-    assert.equal(injected!.returned, undefined);
+      // The injected key is refused by name — had it been spliced, this same
+      // call would have returned rows with status ok.
+      const injected = await run("injected");
+      assert.equal(injected!.status, "error");
+      assert.match(
+        injected!.abortReason ?? "",
+        /unknown search column "1=1 UNION SELECT password FROM users --"/,
+      );
+      assert.equal(injected!.returned, undefined);
 
-    const unknownColumn = await run("unknown-column");
-    assert.equal(unknownColumn!.status, "error");
-    assert.match(unknownColumn!.abortReason ?? "", /unknown search column "password" on accounts/);
+      const unknownColumn = await run("unknown-column");
+      assert.equal(unknownColumn!.status, "error");
+      assert.match(
+        unknownColumn!.abortReason ?? "",
+        /unknown search column "password" on accounts/,
+      );
 
-    const unknownTable = await run("unknown-table");
-    assert.equal(unknownTable!.status, "error");
-    assert.match(unknownTable!.abortReason ?? "", /unknown search table "pg_shadow"/);
-  } finally {
-    await dropScratchOrgReporting(seeded.org.orgId);
-  }
-});
+      const unknownTable = await run("unknown-table");
+      assert.equal(unknownTable!.status, "error");
+      assert.match(unknownTable!.abortReason ?? "", /unknown search table "pg_shadow"/);
+    } finally {
+      await dropScratchOrgReporting(seeded.org.orgId);
+    }
+  },
+);

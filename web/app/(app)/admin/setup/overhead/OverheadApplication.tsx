@@ -1,40 +1,40 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button, Label, Select, cn } from '@openbooks/ui'
-import { PagedTable } from '../../../../../components/paged-table'
-import { useMoney } from '@/components/money-provider'
-import { formatDecimal } from '@/lib/money-format'
-import { enumLabel } from '@/lib/enum-label'
-import { readApiErrorMessage } from '@/lib/api-error'
+import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button, Label, Select, cn } from "@openbooks/ui";
+import { PagedTable } from "../../../../../components/paged-table";
+import { useMoney } from "@/components/money-provider";
+import { formatDecimal } from "@/lib/money-format";
+import { enumLabel } from "@/lib/enum-label";
+import { readApiErrorMessage } from "@/lib/api-error";
 
-type OverheadJournalStatus = 'posted' | 'voided' | 'reversed'
+type OverheadJournalStatus = "posted" | "voided" | "reversed";
 
 export interface ApplicationRow {
-  id: string
-  entry_number: string
-  posting_date: string
-  status: string
-  applied_total: string
-  projects: number
+  id: string;
+  entry_number: string;
+  posting_date: string;
+  status: string;
+  applied_total: string;
+  projects: number;
 }
 
 export interface SystemRuleEvidence {
-  ruleId: string | null
-  ruleKey: string
-  ruleName: string
-  isActive: boolean
+  ruleId: string | null;
+  ruleKey: string;
+  ruleName: string;
+  isActive: boolean;
   currentVersion: {
-    id: string
-    versionNo: number
-    effectiveFrom: string
-    definitionHash: string | null
-    accountId: string | null
-  } | null
+    id: string;
+    versionNo: number;
+    effectiveFrom: string;
+    definitionHash: string | null;
+    accountId: string | null;
+  } | null;
 }
 
 /**
@@ -44,133 +44,157 @@ export interface SystemRuleEvidence {
  * zero (the account balance doubles as the audit: it must stay ~0).
  */
 export function OverheadApplication(props: {
-  mode: 'report_only' | 'net_zero_pair' | 'off'
-  accountId: string | null
-  accounts: { id: string; label: string }[]
-  applications: ApplicationRow[]
-  unapplied: { entries: number; hours: string }
-  systemRule?: SystemRuleEvidence | null
+  mode: "report_only" | "net_zero_pair" | "off";
+  accountId: string | null;
+  accounts: { id: string; label: string }[];
+  applications: ApplicationRow[];
+  unapplied: { entries: number; hours: string };
+  systemRule?: SystemRuleEvidence | null;
 }) {
-  const { money } = useMoney()
-  const locale = useLocale()
-  const t = useTranslations('admin.setup.entities.overhead-model.application')
-  const tFailure = useTranslations('admin.setup.entities.overhead-model')
-  const common = useTranslations('common')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [mode, setMode] = useState(props.mode)
-  const [accountId, setAccountId] = useState(props.accountId ?? '')
+  const { money } = useMoney();
+  const locale = useLocale();
+  const t = useTranslations("admin.setup.entities.overhead-model.application");
+  const tFailure = useTranslations("admin.setup.entities.overhead-model");
+  const common = useTranslations("common");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState(props.mode);
+  const [accountId, setAccountId] = useState(props.accountId ?? "");
 
   async function post(payload: Record<string, unknown>) {
-    const res = await fetch('/api/admin/setup/overhead', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch("/api/admin/setup/overhead", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-    })
+    });
     // The refusal reads through the shared helper so message, remedy and
     // code render instead of a bare fallback; the success body parses after
     // the ok check.
-    if (!res.ok) throw new Error(await readApiErrorMessage(res, tFailure('errors.requestFailed')))
-    return res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(await readApiErrorMessage(res, tFailure("errors.requestFailed")));
+    return res.json().catch(() => ({}));
   }
 
   async function saveMode() {
-    setBusy(true)
+    setBusy(true);
     try {
-      await post({ action: 'set-application', mode, accountId: accountId || null })
-      toast.success(t('saved'))
-      router.refresh()
+      await post({ action: "set-application", mode, accountId: accountId || null });
+      toast.success(t("saved"));
+      router.refresh();
     } catch {
-      toast.error(tFailure('errors.requestFailed'))
+      toast.error(tFailure("errors.requestFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function backfill() {
-    setBusy(true)
+    setBusy(true);
     try {
-      const r = await post({ action: 'backfill-overhead' })
-      toast.success(t('backfilled', { total: formatDecimal(locale, r.total, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), entries: r.entries }))
-      router.refresh()
+      const r = await post({ action: "backfill-overhead" });
+      toast.success(
+        t("backfilled", {
+          total: formatDecimal(locale, r.total, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }),
+          entries: r.entries,
+        }),
+      );
+      router.refresh();
     } catch {
-      toast.error(tFailure('errors.requestFailed'))
+      toast.error(tFailure("errors.requestFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
-      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('hint')}</p>
+      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("title")}</h3>
+      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t("hint")}</p>
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <div className="flex gap-2">
-          {(['report_only', 'net_zero_pair', 'off'] as const).map((m) => (
+          {(["report_only", "net_zero_pair", "off"] as const).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => setMode(m)}
               className={cn(
-                'rounded-md border px-3 py-1.5 text-sm',
+                "rounded-md border px-3 py-1.5 text-sm",
                 mode === m
-                  ? 'border-teal-600 bg-teal-50 font-medium text-teal-700 dark:border-teal-400 dark:bg-teal-950/50 dark:text-teal-300'
-                  : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800',
+                  ? "border-teal-600 bg-teal-50 font-medium text-teal-700 dark:border-teal-400 dark:bg-teal-950/50 dark:text-teal-300"
+                  : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800",
               )}
             >
               {t(`modes.${m}`)}
             </button>
           ))}
         </div>
-        {mode === 'net_zero_pair' && (
+        {mode === "net_zero_pair" && (
           <div className="min-w-64">
-            <Label htmlFor="ovh-acct">{t('account')}</Label>
+            <Label htmlFor="ovh-acct">{t("account")}</Label>
             <Select id="ovh-acct" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               <option value="">—</option>
               {props.accounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.label}</option>
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
               ))}
             </Select>
           </div>
         )}
-        <Button size="sm" onClick={saveMode} disabled={busy}>{t('save')}</Button>
+        <Button size="sm" onClick={saveMode} disabled={busy}>
+          {t("save")}
+        </Button>
       </div>
 
-      {mode === 'net_zero_pair' && props.systemRule && (
+      {mode === "net_zero_pair" && props.systemRule && (
         <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-700 dark:bg-slate-950">
-          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{t('systemRule.title')}</p>
+          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+            {t("systemRule.title")}
+          </p>
           {props.systemRule.currentVersion ? (
             <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-              {t('systemRule.body', {
+              {t("systemRule.body", {
                 key: props.systemRule.ruleKey,
                 version: props.systemRule.currentVersion.versionNo,
                 date: props.systemRule.currentVersion.effectiveFrom,
-                hash: (props.systemRule.currentVersion.definitionHash ?? '').slice(0, 8),
+                hash: (props.systemRule.currentVersion.definitionHash ?? "").slice(0, 8),
               })}
             </p>
           ) : (
-            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{t('systemRule.noVersion')}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              {t("systemRule.noVersion")}
+            </p>
           )}
           <Link
             href="/admin/setup/allocations"
             className="mt-1 inline-block text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
           >
-            {t('systemRule.viewRule')} →
+            {t("systemRule.viewRule")} →
           </Link>
         </div>
       )}
 
-      {mode === 'net_zero_pair' && (
+      {mode === "net_zero_pair" && (
         <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('autoHint')}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("autoHint")}</p>
           {props.unapplied.entries > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-amber-50 p-2.5 dark:bg-amber-950/30">
               <span className="text-xs text-amber-700 dark:text-amber-300">
-                {t('backfillPrompt', { entries: props.unapplied.entries, hours: Number(props.unapplied.hours).toFixed(0) })}
+                {t("backfillPrompt", {
+                  entries: props.unapplied.entries,
+                  hours: Number(props.unapplied.hours).toFixed(0),
+                })}
               </span>
-              <Button size="sm" variant="outline" onClick={backfill} disabled={busy || !props.accountId}>
-                {t('backfill')}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={backfill}
+                disabled={busy || !props.accountId}
+              >
+                {t("backfill")}
               </Button>
             </div>
           )}
@@ -182,13 +206,40 @@ export function OverheadApplication(props: {
                 pageSize={8}
                 empty={null}
                 columns={[
-                  { key: 'entry', header: t('entry'), cell: (a) => <span className="font-mono text-xs">{a.entry_number}</span> },
-                  { key: 'date', header: t('date'), cell: (a) => <span className="tabular-nums">{a.posting_date}</span> },
-                  { key: 'projects', header: t('projects'), cell: (a) => <span className="tabular-nums">{a.projects}</span> },
-                  { key: 'total', header: t('total'), cell: (a) => <span className="tabular-nums">{money(a.applied_total)}</span> },
-                  { key: 'status', header: t('status'), cell: (a) => enumLabel(a.status, {
-                    posted: common('status.posted'), voided: common('status.voided'), reversed: common('status.reversed'),
-                  } satisfies Record<OverheadJournalStatus, string>, t('unknownStatus')) },
+                  {
+                    key: "entry",
+                    header: t("entry"),
+                    cell: (a) => <span className="font-mono text-xs">{a.entry_number}</span>,
+                  },
+                  {
+                    key: "date",
+                    header: t("date"),
+                    cell: (a) => <span className="tabular-nums">{a.posting_date}</span>,
+                  },
+                  {
+                    key: "projects",
+                    header: t("projects"),
+                    cell: (a) => <span className="tabular-nums">{a.projects}</span>,
+                  },
+                  {
+                    key: "total",
+                    header: t("total"),
+                    cell: (a) => <span className="tabular-nums">{money(a.applied_total)}</span>,
+                  },
+                  {
+                    key: "status",
+                    header: t("status"),
+                    cell: (a) =>
+                      enumLabel(
+                        a.status,
+                        {
+                          posted: common("status.posted"),
+                          voided: common("status.voided"),
+                          reversed: common("status.reversed"),
+                        } satisfies Record<OverheadJournalStatus, string>,
+                        t("unknownStatus"),
+                      ),
+                  },
                 ]}
               />
             </div>
@@ -196,5 +247,5 @@ export function OverheadApplication(props: {
         </div>
       )}
     </section>
-  )
+  );
 }

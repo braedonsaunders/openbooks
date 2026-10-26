@@ -1,8 +1,12 @@
-import { customFieldVisible, redactHiddenCustomValues, type CustomFieldViewer } from '@openbooks/engine/records/custom-fields'
+import {
+  customFieldVisible,
+  redactHiddenCustomValues,
+  type CustomFieldViewer,
+} from "@openbooks/engine/records/custom-fields";
 
 export interface CustomFieldAccessDefinition {
-  key: string
-  config: { allowedRoles?: unknown } | null | undefined
+  key: string;
+  config: { allowedRoles?: unknown } | null | undefined;
 }
 
 export function redactRecordCustomValues<T extends Record<string, unknown>>(
@@ -10,7 +14,7 @@ export function redactRecordCustomValues<T extends Record<string, unknown>>(
   definitions: readonly CustomFieldAccessDefinition[],
   viewer: CustomFieldViewer,
 ): T {
-  if (!('custom' in row)) return row
+  if (!("custom" in row)) return row;
   return {
     ...row,
     custom: redactHiddenCustomValues(
@@ -18,7 +22,7 @@ export function redactRecordCustomValues<T extends Record<string, unknown>>(
       viewer,
       row.custom as Record<string, unknown> | null,
     ),
-  }
+  };
 }
 
 export function filterVisibleCustomFields<T extends { name: string; custom?: boolean }>(
@@ -26,10 +30,10 @@ export function filterVisibleCustomFields<T extends { name: string; custom?: boo
   definitions: readonly CustomFieldAccessDefinition[],
   viewer: CustomFieldViewer,
 ): T[] {
-  const byKey = new Map(definitions.map((definition) => [definition.key, definition]))
+  const byKey = new Map(definitions.map((definition) => [definition.key, definition]));
   return fields.filter((field) => {
-    if (!field.custom || !field.name.startsWith('cf_')) return true
-    const definition = byKey.get(field.name.slice(3))
-    return definition !== undefined && customFieldVisible(definition, viewer)
-  })
+    if (!field.custom || !field.name.startsWith("cf_")) return true;
+    const definition = byKey.get(field.name.slice(3));
+    return definition !== undefined && customFieldVisible(definition, viewer);
+  });
 }

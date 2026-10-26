@@ -9,11 +9,12 @@ import { isLocale } from "../../../i18n/config";
 import { isNavMode } from "../../../lib/nav-mode";
 import { preferenceUserIdentity } from "../../../lib/user-preference-identity";
 
-const requestBodySchema = z.object({
-  locale: z.string().refine(isLocale, "unsupported locale").nullable().optional(),
-  navMode: z.string().refine(isNavMode, "unsupported nav mode").nullable().optional(),
-}).refine((body) => body.locale !== undefined || body.navMode !== undefined, "nothing to update");
-
+const requestBodySchema = z
+  .object({
+    locale: z.string().refine(isLocale, "unsupported locale").nullable().optional(),
+    navMode: z.string().refine(isNavMode, "unsupported nav mode").nullable().optional(),
+  })
+  .refine((body) => body.locale !== undefined || body.navMode !== undefined, "nothing to update");
 
 export const runtime = "nodejs";
 
@@ -25,19 +26,14 @@ export const runtime = "nodejs";
  * row; audited like every other mutation.
  */
 
-
 export const PATCH = defineRoute({
   public: "session",
   body: requestBodySchema,
   handler: async ({ body }) => {
-
     const authz = await getAuthz();
     if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
     const preferenceUser = preferenceUserIdentity(user);
-
-
-
 
     const hasLocale = "locale" in body;
     const hasNavMode = "navMode" in body;
@@ -69,10 +65,13 @@ export const PATCH = defineRoute({
     // record atomic while checking that the identity is still active.
     // bypass: user-keyed-lookup — update and audit the verified home preference identity while another workspace is active.
     const saved = await withBypass(async () => {
-      const result = await db.execute<{ id: string }>(sql`
+      const result = await db.execute<{ id: string }>(
+        sql`
         update users set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
          where id = ${preferenceUser.id} and org_id = ${preferenceUser.orgId} and is_active
-         returning id`, "objects");
+         returning id`,
+        "objects",
+      );
       if (result.length !== 1) return false;
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -82,7 +81,10 @@ export const PATCH = defineRoute({
     });
     if (!saved) {
       return NextResponse.json(
-        { error: "Your account is not active in this workspace, so the preference was not saved.", remedy: "Sign in again, then choose the preference." },
+        {
+          error: "Your account is not active in this workspace, so the preference was not saved.",
+          remedy: "Sign in again, then choose the preference.",
+        },
         { status: 409 },
       );
     }

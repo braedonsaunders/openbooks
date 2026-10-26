@@ -55,7 +55,11 @@ test("Xero invoices keep mixed tax types on their own detail-line carriers", () 
 
   assert.ok(!("skip" in built));
   assert.deepEqual(
-    built.lines.map((line) => ({ taxAmount: line.taxAmount, taxCodeId: line.taxCodeId, taxOverridden: line.taxOverridden })),
+    built.lines.map((line) => ({
+      taxAmount: line.taxAmount,
+      taxCodeId: line.taxCodeId,
+      taxOverridden: line.taxOverridden,
+    })),
     [
       { taxAmount: "10.0000", taxCodeId: "tax-output-id", taxOverridden: true },
       { taxAmount: "5.0000", taxCodeId: "tax-input-id", taxOverridden: true },
@@ -115,7 +119,35 @@ test("Xero bank documents preserve transfer valuation safety and reconciliation 
     },
     { accountIdByCode: codes },
   );
-  assert.ok(!("skip" in built) && "skip" in buildNativeFromXero({ ...context(), accountByRef: new Map([["from", { id: "from", number: null, name: "CAD", type: "asset_bank" }], ["to", { id: "to", number: null, name: "USD", type: "asset_bank" }]]) }, "BankTransfer", { BankTransferID: "transfer-1", DateString: "2026-08-28", Amount: 100, CurrencyRate: 0.75, FromBankAccount: { AccountID: "from" }, ToBankAccount: { AccountID: "to" } }, { accountIdByCode, accountCurrencyById: new Map([["from", "CAD"], ["to", "USD"]]) }));
+  assert.ok(
+    !("skip" in built) &&
+      "skip" in
+        buildNativeFromXero(
+          {
+            ...context(),
+            accountByRef: new Map([
+              ["from", { id: "from", number: null, name: "CAD", type: "asset_bank" }],
+              ["to", { id: "to", number: null, name: "USD", type: "asset_bank" }],
+            ]),
+          },
+          "BankTransfer",
+          {
+            BankTransferID: "transfer-1",
+            DateString: "2026-08-28",
+            Amount: 100,
+            CurrencyRate: 0.75,
+            FromBankAccount: { AccountID: "from" },
+            ToBankAccount: { AccountID: "to" },
+          },
+          {
+            accountIdByCode,
+            accountCurrencyById: new Map([
+              ["from", "CAD"],
+              ["to", "USD"],
+            ]),
+          },
+        ),
+  );
   // Xero states reconciliation per bank transaction, not per line: every leg
   // shares the header state (the engine stamps only reconcilable accounts),
   // dated at the bank transaction date (Xero states no clear date).
@@ -158,9 +190,7 @@ test("Xero credit-note tax stays negative on negative lines", () => {
       Type: "ACCRECCREDIT",
       Status: "AUTHORISED",
       DateString: "2026-08-27",
-      LineItems: [
-        { AccountCode: "4000", LineAmount: -100, TaxType: "OUTPUT", TaxAmount: -10 },
-      ],
+      LineItems: [{ AccountCode: "4000", LineAmount: -100, TaxType: "OUTPUT", TaxAmount: -10 }],
     },
     { accountIdByCode },
   );
@@ -194,7 +224,11 @@ test("Xero customer refund against a credit note posts cash OUT of AR", () => {
   const built = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ CreditNote: { CreditNoteID: "cn-1", Type: "ACCRECCREDIT" }, PaymentType: "ARCREDITPAYMENT", Amount: 50 }),
+    payDoc({
+      CreditNote: { CreditNoteID: "cn-1", Type: "ACCRECCREDIT" },
+      PaymentType: "ARCREDITPAYMENT",
+      Amount: 50,
+    }),
     { accountIdByCode },
   );
 
@@ -209,7 +243,10 @@ test("Xero receipt against a receive-prepayment posts cash IN to AR", () => {
   const built = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ Prepayment: { PrepaymentID: "pre-1", Type: "RECEIVE-PREPAYMENT" }, PaymentType: "ARPREPAYMENTPAYMENT" }),
+    payDoc({
+      Prepayment: { PrepaymentID: "pre-1", Type: "RECEIVE-PREPAYMENT" },
+      PaymentType: "ARPREPAYMENTPAYMENT",
+    }),
     { accountIdByCode },
   );
 
@@ -221,7 +258,11 @@ test("Xero supplier refund against a spend-overpayment posts cash IN to AP", () 
   const built = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ Overpayment: { OverpaymentID: "over-1", Type: "SPEND-OVERPAYMENT" }, PaymentType: "APOVERPAYMENTPAYMENT", Amount: 50 }),
+    payDoc({
+      Overpayment: { OverpaymentID: "over-1", Type: "SPEND-OVERPAYMENT" },
+      PaymentType: "APOVERPAYMENTPAYMENT",
+      Amount: 50,
+    }),
     { accountIdByCode },
   );
 
@@ -236,13 +277,21 @@ test("Xero normal invoice payments keep the receipt/payment direction", () => {
   const receipt = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ Invoice: { InvoiceID: "inv-1", Type: "ACCREC" }, PaymentType: "ACCRECPAYMENT", Amount: 50 }),
+    payDoc({
+      Invoice: { InvoiceID: "inv-1", Type: "ACCREC" },
+      PaymentType: "ACCRECPAYMENT",
+      Amount: 50,
+    }),
     { accountIdByCode },
   );
   const payment = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ Invoice: { InvoiceID: "inv-2", Type: "ACCPAY" }, PaymentType: "ACCPAYPAYMENT", Amount: 50 }),
+    payDoc({
+      Invoice: { InvoiceID: "inv-2", Type: "ACCPAY" },
+      PaymentType: "ACCPAYPAYMENT",
+      Amount: 50,
+    }),
     { accountIdByCode },
   );
 
@@ -290,7 +339,10 @@ test("Xero payment with an unknown target type refuses by name", () => {
   const built = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ Overpayment: { OverpaymentID: "over-9", Type: "FUTURE-OVERPAYMENT" }, PaymentType: "FUTURE-PAYMENT" }),
+    payDoc({
+      Overpayment: { OverpaymentID: "over-9", Type: "FUTURE-OVERPAYMENT" },
+      PaymentType: "FUTURE-PAYMENT",
+    }),
     { accountIdByCode },
   );
 

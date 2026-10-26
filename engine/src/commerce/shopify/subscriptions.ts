@@ -86,14 +86,22 @@ const LIST_QUERY = `{ webhookSubscriptions(first: 250) {
   pageInfo { hasNextPage }
 } }`;
 
-export async function listShopifySubscriptions(client: ShopifyClient): Promise<ShopifySubscription[]> {
+export async function listShopifySubscriptions(
+  client: ShopifyClient,
+): Promise<ShopifySubscription[]> {
   const out: ShopifySubscription[] = [];
   for await (const node of client.paginate<Record<string, unknown>>(
     `query shopifySubscriptions($after: String) ${LIST_QUERY}`,
     {},
     (data) =>
-      (data as { webhookSubscriptions: { edges: { node: Record<string, unknown> }[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } })
-        .webhookSubscriptions,
+      (
+        data as {
+          webhookSubscriptions: {
+            edges: { node: Record<string, unknown> }[];
+            pageInfo: { hasNextPage: boolean; endCursor: string | null };
+          };
+        }
+      ).webhookSubscriptions,
   )) {
     const uri = typeof node.uri === "string" ? node.uri : null;
     out.push({

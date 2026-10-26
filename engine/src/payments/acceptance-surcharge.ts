@@ -28,9 +28,11 @@ export function configSecrets(config: ProviderConfigRow, orgId: string): Provide
     apiKey: sealed?.apiKey,
     webhookSecret: sealed?.webhookSecret,
     publishableKey: config.publishable_key ?? undefined,
-    merchantAccount: typeof settings.merchantAccount === "string" ? settings.merchantAccount : undefined,
+    merchantAccount:
+      typeof settings.merchantAccount === "string" ? settings.merchantAccount : undefined,
     apiBase: typeof settings.apiBase === "string" ? settings.apiBase : undefined,
-    recurringApiBase: typeof settings.recurringApiBase === "string" ? settings.recurringApiBase : undefined,
+    recurringApiBase:
+      typeof settings.recurringApiBase === "string" ? settings.recurringApiBase : undefined,
   };
 }
 
@@ -43,30 +45,42 @@ export function assertAcceptanceUuid(value: string, label: string): void {
 /** Validate a receipt bank reference at the service boundary. The migration
  *  also enforces this invariant for direct SQL writers; keeping the check here
  *  makes stale/deactivated accounts fail before any payment-side effect. */
-export async function validateAcceptanceBankAccount(orgId: string, accountId: string): Promise<void> {
+export async function validateAcceptanceBankAccount(
+  orgId: string,
+  accountId: string,
+): Promise<void> {
   assertAcceptanceUuid(accountId, "bank account");
-  const row = await db.execute<{ id: string }>(sql`
+  const row = await db.execute<{ id: string }>(
+    sql`
     select id
       from accounts
      where org_id = ${orgId} and id = ${accountId}
        and type = 'asset_bank' and is_active and not is_summary
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!row[0]) {
     throw new PaymentAcceptanceError("bank account must be an active bank-type account");
   }
 }
 
 /** Surcharge income is deliberately narrower than a generic posting account. */
-export async function validateSurchargeIncomeAccount(orgId: string, accountId: string): Promise<void> {
+export async function validateSurchargeIncomeAccount(
+  orgId: string,
+  accountId: string,
+): Promise<void> {
   assertAcceptanceUuid(accountId, "surcharge income account");
-  const row = await db.execute<{ id: string }>(sql`
+  const row = await db.execute<{ id: string }>(
+    sql`
     select id
       from accounts
      where org_id = ${orgId} and id = ${accountId}
        and type in ('income', 'income_other') and is_active and not is_summary
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!row[0]) {
     throw new PaymentAcceptanceError("surcharge income account must be an active income account");
   }
@@ -99,14 +113,17 @@ export async function validateConfiguredSurchargeRule(
     effective_from: string;
     effective_to: string | null;
     fee_income_account_id: string;
-  }>(sql`
+  }>(
+    sql`
     select id, name, is_active, provider, payment_method,
            effective_from::text as effective_from, effective_to::text as effective_to,
            fee_income_account_id
       from payment_surcharge_rules
      where org_id = ${orgId} and id = ${ruleId}
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const rule = row[0];
   if (!rule) {
     throw new PaymentAcceptanceError(
@@ -137,8 +154,14 @@ export async function validateConfiguredSurchargeRule(
   // onDate, open-ended or effective_to >= onDate): ISO dates compare
   // lexicographically, so the TypeScript check below cannot drift from it.
   if (options.onDate !== undefined) {
-    const window = rule.effective_to === null ? `${rule.effective_from} onwards` : `${rule.effective_from} to ${rule.effective_to}`;
-    if (options.onDate < rule.effective_from || (rule.effective_to !== null && options.onDate > rule.effective_to)) {
+    const window =
+      rule.effective_to === null
+        ? `${rule.effective_from} onwards`
+        : `${rule.effective_from} to ${rule.effective_to}`;
+    if (
+      options.onDate < rule.effective_from ||
+      (rule.effective_to !== null && options.onDate > rule.effective_to)
+    ) {
       throw new PaymentAcceptanceError(
         `surcharge rule "${rule.name}" is not in effect on ${options.onDate} (effective ${window}); ` +
           "choose a surcharge rule in effect for the quote date in Company Settings → Payment Providers",
@@ -164,7 +187,12 @@ export async function validateProviderConfigReferences(
 /** Pure surcharge math: percent / fixed / percent+fixed, optional cap. */
 export function computeSurcharge(
   baseAmount: string,
-  rule: { calculation: string; percent: string | null; fixed_amount: string | null; cap_amount: string | null },
+  rule: {
+    calculation: string;
+    percent: string | null;
+    fixed_amount: string | null;
+    cap_amount: string | null;
+  },
 ): string {
   let fee = "0";
   if (rule.calculation === "percent" || rule.calculation === "percent_plus_fixed") {
@@ -213,7 +241,13 @@ export function quantizeSurchargeToMinorUnits(amount: string, currency: string):
 
 export async function resolveSurcharge(
   orgId: string,
-  opts: { provider: AcceptanceProvider; amount: string; currency: string; onDate: string; configuredRuleId?: string | null },
+  opts: {
+    provider: AcceptanceProvider;
+    amount: string;
+    currency: string;
+    onDate: string;
+    configuredRuleId?: string | null;
+  },
 ): Promise<SurchargeResolution> {
   const configuredRuleId = opts.configuredRuleId ?? null;
   if (configuredRuleId !== null) {
@@ -221,8 +255,18 @@ export async function resolveSurcharge(
     // Refuses by name when the explicit rule cannot price this quote
     // (wrong provider/method, retired, or outside its effective window) —
     // the resolution below must never fall back to another rule instead.
-    await validateConfiguredSurchargeRule(orgId, opts.provider, configuredRuleId, { onDate: opts.onDate });
-    const r = (await db.execute<{ id: string; calculation: string; percent: string | null; fixed_amount: string | null; cap_amount: string | null; fee_income_account_id: string }>(sql`
+    await validateConfiguredSurchargeRule(orgId, opts.provider, configuredRuleId, {
+      onDate: opts.onDate,
+    });
+    const r = await db.execute<{
+      id: string;
+      calculation: string;
+      percent: string | null;
+      fixed_amount: string | null;
+      cap_amount: string | null;
+      fee_income_account_id: string;
+    }>(
+      sql`
       select id, calculation, percent, fixed_amount, cap_amount, fee_income_account_id
         from payment_surcharge_rules
        where org_id = ${orgId} and id = ${configuredRuleId} and is_active
@@ -231,7 +275,9 @@ export async function resolveSurcharge(
          and (provider is null or provider = ${opts.provider})
          and payment_method in ('all', ${providerPaymentMethod(opts.provider)})
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     const rule = r[0];
     // Unreachable unless the rule changed between the validation above and
     // this read: fail closed on the explicit reference rather than falling
@@ -243,10 +289,21 @@ export async function resolveSurcharge(
       );
     }
     await validateSurchargeIncomeAccount(orgId, rule.fee_income_account_id);
-    const amount = quantizeSurchargeToMinorUnits(computeSurcharge(opts.amount, rule), opts.currency);
+    const amount = quantizeSurchargeToMinorUnits(
+      computeSurcharge(opts.amount, rule),
+      opts.currency,
+    );
     return { amount, ruleId: rule.id, feeIncomeAccountId: rule.fee_income_account_id };
   }
-  const r = (await db.execute<{ id: string; calculation: string; percent: string | null; fixed_amount: string | null; cap_amount: string | null; fee_income_account_id: string }>(sql`
+  const r = await db.execute<{
+    id: string;
+    calculation: string;
+    percent: string | null;
+    fixed_amount: string | null;
+    cap_amount: string | null;
+    fee_income_account_id: string;
+  }>(
+    sql`
     select id, calculation, percent, fixed_amount, cap_amount, fee_income_account_id
       from payment_surcharge_rules
      where org_id = ${orgId} and is_active
@@ -258,7 +315,9 @@ export async function resolveSurcharge(
                effective_from desc,
                id desc
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const rule = r[0];
   if (!rule) return { amount: "0", ruleId: null, feeIncomeAccountId: null };
   await validateSurchargeIncomeAccount(orgId, rule.fee_income_account_id);

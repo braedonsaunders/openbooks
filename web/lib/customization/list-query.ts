@@ -3,15 +3,8 @@ import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/modu
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import { isUuid } from "../list-params";
-import type {
-  ListViewConfig,
-  FilterClause,
-} from "@openbooks/customization";
-import {
-  listColumnMeta,
-  isCustomFieldKey,
-  customFieldDefKey,
-} from "@openbooks/customization";
+import type { ListViewConfig, FilterClause } from "@openbooks/customization";
+import { listColumnMeta, isCustomFieldKey, customFieldDefKey } from "@openbooks/customization";
 import type { CustomFieldDef } from "../custom-fields";
 
 /**
@@ -22,20 +15,20 @@ import type { CustomFieldDef } from "../custom-fields";
  * comes from user input — only catalog keys bind values).
  */
 
-export type ColKind = "reference" | "text" | "date" | "amount" | "status" | "custom"
+export type ColKind = "reference" | "text" | "date" | "amount" | "status" | "custom";
 
 export interface ListColDesc {
-  key: string
-  kind: ColKind
-  label: string
+  key: string;
+  kind: ColKind;
+  label: string;
   /** SQL select expression for a persisted list field. */
-  expr?: SQL
-  sortable: boolean
-  sortKey?: string
-  width?: number | null
+  expr?: SQL;
+  sortable: boolean;
+  sortKey?: string;
+  width?: number | null;
   /** For custom columns: the custom field def key. */
-  defKey?: string
-  defType?: CustomFieldDef["fieldType"]
+  defKey?: string;
+  defType?: CustomFieldDef["fieldType"];
 }
 
 /**
@@ -43,7 +36,7 @@ export interface ListColDesc {
  * computeBillTotals natively and denormalized from the posted entry on import
  * (engine setDocumentTotalsFromEntry + the backfill). The list reads it directly.
  */
-export const DOC_AMOUNT_EXPR = sql`d.total`
+export const DOC_AMOUNT_EXPR = sql`d.total`;
 
 /** Sort fragments shared by every documents-backed list, keyed by sortKey. */
 export const DOCUMENT_SORTS: Record<string, SQL> = {
@@ -56,7 +49,7 @@ export const DOCUMENT_SORTS: Record<string, SQL> = {
   balance: sql`d.open_balance`,
   status: sql`d.status`,
   work_completed: sql`d.work_completed_on`,
-}
+};
 
 /**
  * Human document number for display. Mirrored rows can carry
@@ -71,7 +64,7 @@ export const DISPLAY_DOCUMENT_NUMBER_EXPR = sql`
     when d.document_number ~ '^[A-Za-z][A-Za-z0-9]*:[0-9a-fA-F-]{36}$'
       then coalesce(nullif(d.reference_number, ''), d.document_number)
     else d.document_number
-  end`
+  end`;
 
 /** Built-in column key → select expression, shared by documents-backed lists. */
 export const DOCUMENT_BUILT_IN_EXPR: Record<string, SQL> = {
@@ -83,10 +76,10 @@ export const DOCUMENT_BUILT_IN_EXPR: Record<string, SQL> = {
   open_balance: sql`d.open_balance`,
   status: sql`d.status`,
   work_completed_on: sql`d.work_completed_on`,
-}
+};
 
 const SHOW_IN_LIST_BY_KEY = (defs: CustomFieldDef[]) =>
-  new Map(defs.filter((d) => d.config.showInList).map((d) => [d.key, d]))
+  new Map(defs.filter((d) => d.config.showInList).map((d) => [d.key, d]));
 
 /**
  * Build the ordered, visible column descriptors for a record list table from a
@@ -104,14 +97,14 @@ export function columnDescriptors(
    *  user input). 'd' for documents-backed lists, e.g. 'p' for projects. */
   tableAlias = "d",
 ): ListColDesc[] {
-  const cfByDefKey = SHOW_IN_LIST_BY_KEY(showInListDefs)
-  const out: ListColDesc[] = []
+  const cfByDefKey = SHOW_IN_LIST_BY_KEY(showInListDefs);
+  const out: ListColDesc[] = [];
   for (const c of view.columns) {
-    if (!c.visible) continue
+    if (!c.visible) continue;
     if (isCustomFieldKey(c.key)) {
-      const defKey = customFieldDefKey(c.key)
-      const def = cfByDefKey.get(defKey)
-      if (!def) continue
+      const defKey = customFieldDefKey(c.key);
+      const def = cfByDefKey.get(defKey);
+      if (!def) continue;
       // Boolean customs must extract as real booleans: ->> yields the TEXT
       // 'false' for a stored false, which is truthy in JS and rendered "Yes".
       // The CASE is total on purpose — legacy rows can hold anything and a
@@ -120,7 +113,7 @@ export function columnDescriptors(
       const expr =
         def.fieldType === "boolean"
           ? sql`case ${sql.raw(tableAlias)}.custom->>${defKey} when 'true' then true when 'false' then false end`
-          : sql`${sql.raw(tableAlias)}.custom->>${defKey}`
+          : sql`${sql.raw(tableAlias)}.custom->>${defKey}`;
       out.push({
         key: c.key,
         kind: "custom",
@@ -130,12 +123,12 @@ export function columnDescriptors(
         defKey,
         defType: def.fieldType,
         width: c.width,
-      })
-      continue
+      });
+      continue;
     }
-    const meta = listColumnMeta(recordType, c.key)
-    const expr = builtInExpr[c.key]
-    if (!meta || !expr) continue
+    const meta = listColumnMeta(recordType, c.key);
+    const expr = builtInExpr[c.key];
+    if (!meta || !expr) continue;
     out.push({
       key: c.key,
       kind: (meta.kind as ColKind) ?? "text",
@@ -144,9 +137,9 @@ export function columnDescriptors(
       sortable: !!meta.sortable,
       sortKey: meta.sortKey,
       width: c.width ?? meta.defaultWidth ?? null,
-    })
+    });
   }
-  return out
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -154,7 +147,7 @@ export function columnDescriptors(
 /* ------------------------------------------------------------------ */
 
 /** Payments share the universal journal-fallback amount. */
-const PAYMENT_AMOUNT_EXPR = DOC_AMOUNT_EXPR
+const PAYMENT_AMOUNT_EXPR = DOC_AMOUNT_EXPR;
 
 /**
  * The funding account (bank or card). Prefer the account named in the payment's
@@ -171,7 +164,7 @@ const PAYMENT_BANK_EXPR = sql`coalesce(
       and acc.type not in ('liability_payable', 'asset_receivable')
     order by abs(jl.amount) desc
     limit 1)
-)`
+)`;
 
 /** The funding account's id (for drill-through), resolved the same way as
  *  PAYMENT_BANK_EXPR: custom.bankAccountId, else the entry's non-control line. */
@@ -184,7 +177,7 @@ export const PAYMENT_BANK_ID_EXPR = sql`coalesce(
       and acc.type not in ('liability_payable', 'asset_receivable')
     order by abs(jl.amount) desc
     limit 1)
-)`
+)`;
 
 export const PAYMENT_BUILT_IN_EXPR: Record<string, SQL> = {
   document_number: DISPLAY_DOCUMENT_NUMBER_EXPR,
@@ -194,7 +187,7 @@ export const PAYMENT_BUILT_IN_EXPR: Record<string, SQL> = {
   reference_number: sql`d.reference_number`,
   total: PAYMENT_AMOUNT_EXPR,
   status: sql`d.status`,
-}
+};
 
 /** Sort fragments for the payments list (keyed by column sortKey). */
 export const PAYMENT_SORTS: Record<string, SQL> = {
@@ -203,20 +196,20 @@ export const PAYMENT_SORTS: Record<string, SQL> = {
   date: sql`d.document_date`,
   total: PAYMENT_AMOUNT_EXPR,
   status: sql`d.status`,
-}
+};
 
 /** Allowed ad-hoc URL filters (the quick toolbar filters). */
 export interface AdhocFilters {
-  q?: string
-  status?: string
-  statuses?: readonly string[]
-  vendor?: string
-  from?: string
-  to?: string
+  q?: string;
+  status?: string;
+  statuses?: readonly string[];
+  vendor?: string;
+  from?: string;
+  to?: string;
   /** Narrow to a single document kind within the view's kind set. */
-  kind?: string
+  kind?: string;
   /** Extra reusable quick-filter values keyed by registry filter key. */
-  filters?: Record<string, string | undefined>
+  filters?: Record<string, string | undefined>;
 }
 
 /**
@@ -226,11 +219,11 @@ export interface AdhocFilters {
  * empty match instead — the same fail-closed contract the write paths use.
  */
 export function uuidOrFalse(value: string): SQL | null {
-  return isUuid(value) ? null : sql`false`
+  return isUuid(value) ? null : sql`false`;
 }
 
 export function dateOrFalse(value: string): SQL | null {
-  return isIsoCalendarDate(value) ? null : sql`false`
+  return isIsoCalendarDate(value) ? null : sql`false`;
 }
 
 /**
@@ -243,38 +236,43 @@ export function dateOrFalse(value: string): SQL | null {
  * columnDescriptors.
  */
 export function customFieldFilterPredicate(clause: FilterClause, tableAlias = "d"): SQL | null {
-  if (!isCustomFieldKey(clause.key)) return null
-  if (!/^[a-z_][a-z0-9_]*$/.test(tableAlias)) return sql`false`
-  const defKey = customFieldDefKey(clause.key)
-  const extracted = sql`${sql.raw(tableAlias)}.custom->>${defKey}`
-  const { operator, value } = clause
-  const single = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? "") : String(v ?? ""))
-  const needsValue = operator !== "is_set" && operator !== "is_not_set"
+  if (!isCustomFieldKey(clause.key)) return null;
+  if (!/^[a-z_][a-z0-9_]*$/.test(tableAlias)) return sql`false`;
+  const defKey = customFieldDefKey(clause.key);
+  const extracted = sql`${sql.raw(tableAlias)}.custom->>${defKey}`;
+  const { operator, value } = clause;
+  const single = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? "") : String(v ?? ""));
+  const needsValue = operator !== "is_set" && operator !== "is_not_set";
   if (needsValue) {
-    const hasValue = Array.isArray(value) ? value.length > 0 : value != null && value !== ""
-    if (!hasValue) return sql`false`
+    const hasValue = Array.isArray(value) ? value.length > 0 : value != null && value !== "";
+    if (!hasValue) return sql`false`;
   }
   switch (operator) {
     case "eq":
-      return sql`${extracted} = ${single(value)}`
+      return sql`${extracted} = ${single(value)}`;
     case "ne":
-      return sql`${extracted} <> ${single(value)}`
+      return sql`${extracted} <> ${single(value)}`;
     case "contains":
-      return sql`${extracted} ilike ${"%" + single(value) + "%"}`
+      return sql`${extracted} ilike ${"%" + single(value) + "%"}`;
     case "is_set":
-      return sql`(${extracted} is not null and ${extracted} <> '')`
+      return sql`(${extracted} is not null and ${extracted} <> '')`;
     case "is_not_set":
-      return sql`(${extracted} is null or ${extracted} = '')`
+      return sql`(${extracted} is null or ${extracted} = '')`;
     case "in":
     case "not_in": {
-      const values = (Array.isArray(value) ? value : [String(value ?? "")]).map(String)
-      if (values.length === 0) return operator === "in" ? sql`false` : sql`true`
-      const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
-      return operator === "in" ? sql`${extracted} in (${list})` : sql`${extracted} not in (${list})`
+      const values = (Array.isArray(value) ? value : [String(value ?? "")]).map(String);
+      if (values.length === 0) return operator === "in" ? sql`false` : sql`true`;
+      const list = sql.join(
+        values.map((item) => sql`${item}`),
+        sql`, `,
+      );
+      return operator === "in"
+        ? sql`${extracted} in (${list})`
+        : sql`${extracted} not in (${list})`;
     }
     default:
       // gte/lte/between need a field type; without one, empty-match not drop.
-      return sql`false`
+      return sql`false`;
   }
 }
 
@@ -291,79 +289,88 @@ export function pushCustomFieldFilter(
   clause: FilterClause,
   customAlias: string | null,
 ): boolean {
-  if (!isCustomFieldKey(clause.key)) return false
-  const predicate = customAlias ? customFieldFilterPredicate(clause, customAlias) : sql`false`
-  if (predicate) parts.push(sql`and ${predicate}`)
-  return true
+  if (!isCustomFieldKey(clause.key)) return false;
+  const predicate = customAlias ? customFieldFilterPredicate(clause, customAlias) : sql`false`;
+  if (predicate) parts.push(sql`and ${predicate}`);
+  return true;
 }
 
 function filterPredicate(clause: FilterClause): SQL | null {
-  const custom = customFieldFilterPredicate(clause, "d")
-  if (custom) return custom
-  const { key, operator } = clause
-  const value = clause.value
-  const to = clause.to
-  const single = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? "") : String(v ?? ""))
+  const custom = customFieldFilterPredicate(clause, "d");
+  if (custom) return custom;
+  const { key, operator } = clause;
+  const value = clause.value;
+  const to = clause.to;
+  const single = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? "") : String(v ?? ""));
   switch (key) {
     case "status":
-      if (operator === "eq") return sql`d.status = ${single(value)}`
-      if (operator === "ne") return sql`d.status <> ${single(value)}`
+      if (operator === "eq") return sql`d.status = ${single(value)}`;
+      if (operator === "ne") return sql`d.status <> ${single(value)}`;
       if (operator === "in" || operator === "not_in") {
-        const values = (Array.isArray(value) ? value : [String(value ?? "")]).map(String)
-        if (values.length === 0) return operator === "in" ? sql`false` : sql`true`
-        const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
-        return operator === "in" ? sql`d.status in (${list})` : sql`d.status not in (${list})`
+        const values = (Array.isArray(value) ? value : [String(value ?? "")]).map(String);
+        if (values.length === 0) return operator === "in" ? sql`false` : sql`true`;
+        const list = sql.join(
+          values.map((item) => sql`${item}`),
+          sql`, `,
+        );
+        return operator === "in" ? sql`d.status in (${list})` : sql`d.status not in (${list})`;
       }
-      return null
+      return null;
     case "transaction_kind":
-      if (operator === "eq") return sql`d.kind = ${single(value)}`
-      if (operator === "ne") return sql`d.kind <> ${single(value)}`
+      if (operator === "eq") return sql`d.kind = ${single(value)}`;
+      if (operator === "ne") return sql`d.kind <> ${single(value)}`;
       if (operator === "in" || operator === "not_in") {
-        const values = (Array.isArray(value) ? value : [String(value ?? "")]).map(String)
-        if (values.length === 0) return operator === "in" ? sql`false` : sql`true`
-        const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
-        return operator === "in" ? sql`d.kind in (${list})` : sql`d.kind not in (${list})`
+        const values = (Array.isArray(value) ? value : [String(value ?? "")]).map(String);
+        if (values.length === 0) return operator === "in" ? sql`false` : sql`true`;
+        const list = sql.join(
+          values.map((item) => sql`${item}`),
+          sql`, `,
+        );
+        return operator === "in" ? sql`d.kind in (${list})` : sql`d.kind not in (${list})`;
       }
-      return null
+      return null;
     case "party_id": {
-      const id = single(value)
-      const refused = uuidOrFalse(id)
-      if (refused) return refused
-      if (operator === "eq") return sql`d.party_id = ${id}`
-      if (operator === "ne") return sql`d.party_id <> ${id}`
-      return null
+      const id = single(value);
+      const refused = uuidOrFalse(id);
+      if (refused) return refused;
+      if (operator === "eq") return sql`d.party_id = ${id}`;
+      if (operator === "ne") return sql`d.party_id <> ${id}`;
+      return null;
     }
     case "service_party_id": {
-      const id = single(value)
-      const refused = uuidOrFalse(id)
-      if (refused) return refused
-      if (operator === "eq") return invoiceServicePartyMatch(id)
-      if (operator === "ne") return sql`not (${invoiceServicePartyMatch(id)})`
-      return null
+      const id = single(value);
+      const refused = uuidOrFalse(id);
+      if (refused) return refused;
+      if (operator === "eq") return invoiceServicePartyMatch(id);
+      if (operator === "ne") return sql`not (${invoiceServicePartyMatch(id)})`;
+      return null;
     }
     case "document_date": {
-      const day = single(value)
-      const refusedDay = dateOrFalse(day)
-      if (refusedDay) return refusedDay
-      if (operator === "eq") return sql`d.document_date = ${day}`
-      if (operator === "gte") return sql`d.document_date >= ${day}`
-      if (operator === "lte") return sql`d.document_date <= ${day}`
+      const day = single(value);
+      const refusedDay = dateOrFalse(day);
+      if (refusedDay) return refusedDay;
+      if (operator === "eq") return sql`d.document_date = ${day}`;
+      if (operator === "gte") return sql`d.document_date >= ${day}`;
+      if (operator === "lte") return sql`d.document_date <= ${day}`;
       if (operator === "between") {
-        const upper = single(to)
-        const refusedUpper = dateOrFalse(upper)
-        if (refusedUpper) return refusedUpper
-        return sql`d.document_date between ${day} and ${upper}`
+        const upper = single(to);
+        const refusedUpper = dateOrFalse(upper);
+        if (refusedUpper) return refusedUpper;
+        return sql`d.document_date between ${day} and ${upper}`;
       }
-      return null
+      return null;
     }
     case "reference_number":
-      if (operator === "eq") return sql`d.reference_number = ${single(value)}`
-      if (operator === "contains") return sql`d.reference_number ilike ${"%" + single(value) + "%"}`
-      if (operator === "is_set") return sql`(d.reference_number is not null and d.reference_number <> '')`
-      if (operator === "is_not_set") return sql`(d.reference_number is null or d.reference_number = '')`
-      return null
+      if (operator === "eq") return sql`d.reference_number = ${single(value)}`;
+      if (operator === "contains")
+        return sql`d.reference_number ilike ${"%" + single(value) + "%"}`;
+      if (operator === "is_set")
+        return sql`(d.reference_number is not null and d.reference_number <> '')`;
+      if (operator === "is_not_set")
+        return sql`(d.reference_number is null or d.reference_number = '')`;
+      return null;
     default:
-      return null
+      return null;
   }
 }
 
@@ -385,42 +392,61 @@ export function documentWhere(
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
   const parts: SQL[] = [
-    sql`d.org_id = ${orgId} and d.kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)})`,
-  ]
+    sql`d.org_id = ${orgId} and d.kind in (${sql.join(
+      kinds.map((k) => sql`${k}`),
+      sql`, `,
+    )})`,
+  ];
   if (allowedSubsidiaryIds) {
-    const ids = [...allowedSubsidiaryIds]
-    parts.push(ids.length ? sql`and d.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])` : sql`and false`)
+    const ids = [...allowedSubsidiaryIds];
+    parts.push(
+      ids.length ? sql`and d.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])` : sql`and false`,
+    );
   }
   for (const f of view.filters) {
-    const p = filterPredicate(f)
-    if (p) parts.push(sql`and ${p}`)
+    const p = filterPredicate(f);
+    if (p) parts.push(sql`and ${p}`);
   }
-  if (adhoc.status) parts.push(sql`and d.status = ${adhoc.status}`)
-  if (adhoc.statuses !== undefined) parts.push(adhoc.statuses.length
-    ? sql`and d.status in (${sql.join(adhoc.statuses.map(status => sql`${status}`), sql`, `)})`
-    : sql`and false`)
-  if (adhoc.kind) parts.push(sql`and d.kind = ${adhoc.kind}`)
+  if (adhoc.status) parts.push(sql`and d.status = ${adhoc.status}`);
+  if (adhoc.statuses !== undefined)
+    parts.push(
+      adhoc.statuses.length
+        ? sql`and d.status in (${sql.join(
+            adhoc.statuses.map((status) => sql`${status}`),
+            sql`, `,
+          )})`
+        : sql`and false`,
+    );
+  if (adhoc.kind) parts.push(sql`and d.kind = ${adhoc.kind}`);
   // Reference and date quick-filter values arrive from URL params uncast;
   // a malformed one must empty the list, never 500 it (see uuidOrFalse).
   if (adhoc.filters?.party_id) {
-    parts.push(isUuid(adhoc.filters.party_id) ? sql`and d.party_id = ${adhoc.filters.party_id}` : sql`and false`)
+    parts.push(
+      isUuid(adhoc.filters.party_id)
+        ? sql`and d.party_id = ${adhoc.filters.party_id}`
+        : sql`and false`,
+    );
   }
   if (adhoc.vendor) {
-    parts.push(isUuid(adhoc.vendor) ? sql`and d.party_id = ${adhoc.vendor}` : sql`and false`)
+    parts.push(isUuid(adhoc.vendor) ? sql`and d.party_id = ${adhoc.vendor}` : sql`and false`);
   }
   if (adhoc.from) {
-    parts.push(isIsoCalendarDate(adhoc.from) ? sql`and d.document_date >= ${adhoc.from}` : sql`and false`)
+    parts.push(
+      isIsoCalendarDate(adhoc.from) ? sql`and d.document_date >= ${adhoc.from}` : sql`and false`,
+    );
   }
   if (adhoc.to) {
-    parts.push(isIsoCalendarDate(adhoc.to) ? sql`and d.document_date <= ${adhoc.to}` : sql`and false`)
+    parts.push(
+      isIsoCalendarDate(adhoc.to) ? sql`and d.document_date <= ${adhoc.to}` : sql`and false`,
+    );
   }
   if (adhoc.q)
     parts.push(
       // The storefront reference answers the operator's "where is SHOP-1001"
       // the same way the number and vendor reference do.
       sql`and (d.document_number ilike ${"%" + adhoc.q + "%"} or p.display_name ilike ${"%" + adhoc.q + "%"} or d.reference_number ilike ${"%" + adhoc.q + "%"} or d.external_ref ilike ${"%" + adhoc.q + "%"} or d.external_source ilike ${"%" + adhoc.q + "%"})`,
-    )
-  return sql.join(parts, sql` `)
+    );
+  return sql.join(parts, sql` `);
 }
 
 /** A reconcilable account touched by a banking document. Posted documents use
@@ -430,7 +456,7 @@ export const BANK_TRANSACTION_ACCOUNT_MATCH = sql`a.org_id = d.org_id and a.reco
   or exists (select 1 from document_lines dl where dl.org_id = d.org_id and dl.document_id = d.id and dl.account_id = a.id)
   or a.id = nullif(d.custom->>'controlAccountId', '')::uuid
   or a.id = (select pc.liability_account_id from payment_cards pc where pc.id = d.payment_card_id and pc.org_id = d.org_id)
-)`
+)`;
 
 export function bankTransactionWhere(
   kinds: readonly string[],
@@ -439,18 +465,24 @@ export function bankTransactionWhere(
   orgId: string,
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
-  const parts: SQL[] = [documentWhere(kinds, view, adhoc, orgId, allowedSubsidiaryIds)]
-  const accountClauses = view.filters.filter((filter) => filter.key === 'bank_account_id')
+  const parts: SQL[] = [documentWhere(kinds, view, adhoc, orgId, allowedSubsidiaryIds)];
+  const accountClauses = view.filters.filter((filter) => filter.key === "bank_account_id");
   for (const clause of accountClauses) {
-    const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+    const value = Array.isArray(clause.value)
+      ? String(clause.value[0] ?? "")
+      : String(clause.value ?? "");
     if (!isUuid(value)) {
-      parts.push(sql`and false`)
-      continue
+      parts.push(sql`and false`);
+      continue;
     }
-    if (clause.operator === 'eq') {
-      parts.push(sql`and exists (select 1 from accounts a where a.id = ${value} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`)
-    } else if (clause.operator === 'ne') {
-      parts.push(sql`and not exists (select 1 from accounts a where a.id = ${value} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`)
+    if (clause.operator === "eq") {
+      parts.push(
+        sql`and exists (select 1 from accounts a where a.id = ${value} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`,
+      );
+    } else if (clause.operator === "ne") {
+      parts.push(
+        sql`and not exists (select 1 from accounts a where a.id = ${value} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`,
+      );
     }
   }
   if (adhoc.filters?.bank_account_id) {
@@ -458,9 +490,9 @@ export function bankTransactionWhere(
       isUuid(adhoc.filters.bank_account_id)
         ? sql`and exists (select 1 from accounts a where a.id = ${adhoc.filters.bank_account_id} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`
         : sql`and false`,
-    )
+    );
   }
-  return sql.join(parts, sql` `)
+  return sql.join(parts, sql` `);
 }
 
 /** Predicate matching a document's pay run against a run stage or schedule.
@@ -482,7 +514,9 @@ export function payRunWhere(
   const parts: SQL[] = [documentWhere(kinds, view, adhoc, orgId, allowedSubsidiaryIds)];
   parts.push(payrollRunPopulationScopeFilter(orgId, sql`d.id`, allowedSubsidiaryIds));
   for (const clause of view.filters) {
-    const value = Array.isArray(clause.value) ? String(clause.value[0] ?? "") : String(clause.value ?? "");
+    const value = Array.isArray(clause.value)
+      ? String(clause.value[0] ?? "")
+      : String(clause.value ?? "");
     if (clause.key === "run_stage" && value) {
       if (clause.operator === "eq") parts.push(sql`and ${PAY_RUN_STAGE_MATCH(value)}`);
       else if (clause.operator === "ne") parts.push(sql`and not (${PAY_RUN_STAGE_MATCH(value)})`);
@@ -496,7 +530,8 @@ export function payRunWhere(
       else if (clause.operator === "ne") parts.push(sql`and not ${match}`);
     }
   }
-  if (adhoc.filters?.run_stage) parts.push(sql`and ${PAY_RUN_STAGE_MATCH(adhoc.filters.run_stage)}`);
+  if (adhoc.filters?.run_stage)
+    parts.push(sql`and ${PAY_RUN_STAGE_MATCH(adhoc.filters.run_stage)}`);
   if (adhoc.filters?.pay_schedule_id) {
     parts.push(
       isUuid(adhoc.filters.pay_schedule_id)
@@ -538,7 +573,9 @@ export function fulfillmentWhere(
 ): SQL {
   const parts: SQL[] = [documentWhere(kinds, view, adhoc, orgId, allowedSubsidiaryIds)];
   for (const clause of view.filters) {
-    const value = Array.isArray(clause.value) ? String(clause.value[0] ?? "") : String(clause.value ?? "");
+    const value = Array.isArray(clause.value)
+      ? String(clause.value[0] ?? "")
+      : String(clause.value ?? "");
     const match =
       clause.key === "fulfillment_stage" && value
         ? fulfillmentStageMatch(value)
@@ -549,8 +586,10 @@ export function fulfillmentWhere(
     if (clause.operator === "eq") parts.push(sql`and (${match})`);
     else if (clause.operator === "ne") parts.push(sql`and not (${match})`);
   }
-  if (adhoc.filters?.fulfillment_stage) parts.push(sql`and (${fulfillmentStageMatch(adhoc.filters.fulfillment_stage)})`);
-  if (adhoc.filters?.warehouse_id) parts.push(sql`and (${fulfillmentWarehouseMatch(adhoc.filters.warehouse_id)})`);
+  if (adhoc.filters?.fulfillment_stage)
+    parts.push(sql`and (${fulfillmentStageMatch(adhoc.filters.fulfillment_stage)})`);
+  if (adhoc.filters?.warehouse_id)
+    parts.push(sql`and (${fulfillmentWarehouseMatch(adhoc.filters.warehouse_id)})`);
   return sql.join(parts, sql` `);
 }
 

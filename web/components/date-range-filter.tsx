@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // Reusable from/to date-range filter for server-rendered list pages. Two shared
 // date fields bound to each other (From never after To; an empty bound's
@@ -7,61 +7,61 @@
 // param and resetting pagination. Consume server-side as `col >= from::date`
 // and `col < to::date + interval '1 day'` (end-inclusive).
 
-import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import { X } from 'lucide-react'
-import { DateField } from './date-field'
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { X } from "lucide-react";
+import { DateField } from "./date-field";
 
 export function DateRangeFilter({
-  fromKey = 'from',
-  toKey = 'to',
+  fromKey = "from",
+  toKey = "to",
   fromLabel,
   toLabel,
-  clearLabel = 'Clear dates',
-  pageParamKey = 'page',
+  clearLabel = "Clear dates",
+  pageParamKey = "page",
   defaultFrom,
   defaultTo,
   clearable = true,
 }: {
-  fromKey?: string
-  toKey?: string
-  fromLabel: string
-  toLabel: string
-  clearLabel?: string
-  pageParamKey?: string
+  fromKey?: string;
+  toKey?: string;
+  fromLabel: string;
+  toLabel: string;
+  clearLabel?: string;
+  pageParamKey?: string;
   /** Values displayed when the corresponding URL key is absent. */
-  defaultFrom?: string
-  defaultTo?: string
+  defaultFrom?: string;
+  defaultTo?: string;
   /** Required-period controls can suppress the clear affordance. */
-  clearable?: boolean
+  clearable?: boolean;
 }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const sp = useSearchParams()
-  const rawFrom = sp.get(fromKey)
-  const rawTo = sp.get(toKey)
-  const from = rawFrom ?? defaultFrom ?? ''
-  const to = rawTo ?? defaultTo ?? ''
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  const rawFrom = sp.get(fromKey);
+  const rawTo = sp.get(toKey);
+  const from = rawFrom ?? defaultFrom ?? "";
+  const to = rawTo ?? defaultTo ?? "";
 
   function apply(next: URLSearchParams) {
-    next.delete(pageParamKey)
-    const qs = next.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname)
+    next.delete(pageParamKey);
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
   }
   function set(key: string, value: string) {
-    const next = new URLSearchParams(sp.toString())
-    if (value) next.set(key, value)
-    else next.delete(key)
-    apply(next)
+    const next = new URLSearchParams(sp.toString());
+    if (value) next.set(key, value);
+    else next.delete(key);
+    apply(next);
   }
   function clear() {
-    const next = new URLSearchParams(sp.toString())
-    next.delete(fromKey)
-    next.delete(toKey)
-    apply(next)
+    const next = new URLSearchParams(sp.toString());
+    next.delete(fromKey);
+    next.delete(toKey);
+    apply(next);
   }
 
   const inputCls =
-    'h-8 w-36 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 focus:ring-1 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+    "h-8 w-36 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 focus:ring-1 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200";
 
   return (
     <div className="flex items-center gap-1.5">
@@ -93,5 +93,5 @@ export function DateRangeFilter({
         </button>
       )}
     </div>
-  )
+  );
 }

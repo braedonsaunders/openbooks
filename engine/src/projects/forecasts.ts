@@ -20,7 +20,12 @@ import { assertProgressEnabled, lockProgressTask, ProjectProgressError } from ".
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const NOTE_MAX = 500;
-const FORECAST_METHODS = new Set<ForecastMethod>(["manual", "remaining_budget", "units_productivity", "cost_performance"]);
+const FORECAST_METHODS = new Set<ForecastMethod>([
+  "manual",
+  "remaining_budget",
+  "units_productivity",
+  "cost_performance",
+]);
 
 export interface ProjectForecast {
   id: string;
@@ -56,12 +61,18 @@ export async function suggestForecasts(input: {
   asOf: string;
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<{ taskId: string; suggestions: ForecastSuggestion[] }[] | null> {
-  if (!DATE.test(input.asOf)) throw new ProjectProgressError("Date must be YYYY-MM-DD", 422, "invalid");
-  const projects = await withOrgTransaction(input.orgId, () => loadEarnedValue(db, input.orgId, {
-    asOf: input.asOf,
-    projectIds: [input.projectId],
-    allowedSubsidiaryIds: input.allowedSubsidiaryIds,
-  }), { isolationLevel: "REPEATABLE READ", readOnly: true });
+  if (!DATE.test(input.asOf))
+    throw new ProjectProgressError("Date must be YYYY-MM-DD", 422, "invalid");
+  const projects = await withOrgTransaction(
+    input.orgId,
+    () =>
+      loadEarnedValue(db, input.orgId, {
+        asOf: input.asOf,
+        projectIds: [input.projectId],
+        allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+      }),
+    { isolationLevel: "REPEATABLE READ", readOnly: true },
+  );
   const project = projects[0];
   if (!project) return null;
   return project.tasks.map((task) => ({ taskId: task.taskId, suggestions: task.suggestions }));
@@ -87,7 +98,8 @@ export async function recordForecast(input: {
   note?: string | null;
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<ProjectForecast> {
-  if (!DATE.test(input.asOfDate)) throw new ProjectProgressError("Date must be YYYY-MM-DD", 422, "invalid");
+  if (!DATE.test(input.asOfDate))
+    throw new ProjectProgressError("Date must be YYYY-MM-DD", 422, "invalid");
   if (!FORECAST_METHODS.has(input.method)) {
     throw new ProjectProgressError("Unsupported forecast method", 422, "invalid");
   }
@@ -95,16 +107,26 @@ export async function recordForecast(input: {
   if (note && note.length > NOTE_MAX) {
     throw new ProjectProgressError(`Note must be ${NOTE_MAX} characters or fewer`, 422, "invalid");
   }
-  const manualCost = input.method === "manual"
-    ? normalizeMoney(exactNonNegative(input.costToComplete, 4, "Cost to complete"))
-    : null;
-  const manualHours = input.method === "manual" && input.hoursToComplete != null && input.hoursToComplete.trim() !== ""
-    ? exactNonNegative(input.hoursToComplete, 4, "Hours to complete")
-    : null;
+  const manualCost =
+    input.method === "manual"
+      ? normalizeMoney(exactNonNegative(input.costToComplete, 4, "Cost to complete"))
+      : null;
+  const manualHours =
+    input.method === "manual" &&
+    input.hoursToComplete != null &&
+    input.hoursToComplete.trim() !== ""
+      ? exactNonNegative(input.hoursToComplete, 4, "Hours to complete")
+      : null;
 
   return withOrgTransaction(input.orgId, async () => {
     await assertProgressEnabled(db, input.orgId);
-    const task = await lockProgressTask(db, input.orgId, input.projectId, input.taskId, input.allowedSubsidiaryIds);
+    const task = await lockProgressTask(
+      db,
+      input.orgId,
+      input.projectId,
+      input.taskId,
+      input.allowedSubsidiaryIds,
+    );
     const today = await businessTodayInTx(db, input.orgId);
     if (input.asOfDate > today) {
       throw new ProjectProgressError(
@@ -140,13 +162,18 @@ export async function recordForecast(input: {
       hoursToComplete = suggestion.hoursToComplete;
     }
 
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into project_forecasts
         (org_id, project_id, project_task_id, as_of_date, method, cost_to_complete, hours_to_complete, note, created_by)
       values (${input.orgId}, ${task.projectId}, ${task.id}, ${input.asOfDate}, ${input.method},
               ${costToComplete}, ${hoursToComplete}, ${note}, ${input.actorId})
       returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!inserted) throw new Error("forecast insert returned no row");
     const after = {
       projectId: task.projectId,
@@ -167,11 +194,22 @@ export async function recordForecast(input: {
   });
 }
 
-async function readForecasts(orgId: string, filter: ReturnType<typeof sql>): Promise<ProjectForecast[]> {
+async function readForecasts(
+  orgId: string,
+  filter: ReturnType<typeof sql>,
+): Promise<ProjectForecast[]> {
   const rows = await db.execute<{
-    id: string; task_id: string; as_of_date: string; method: ForecastMethod; cost_to_complete: string;
-    hours_to_complete: string | null; note: string | null; created_at: string; created_by_name: string | null;
-  }>(sql`
+    id: string;
+    task_id: string;
+    as_of_date: string;
+    method: ForecastMethod;
+    cost_to_complete: string;
+    hours_to_complete: string | null;
+    note: string | null;
+    created_at: string;
+    created_by_name: string | null;
+  }>(
+    sql`
     select f.id, f.project_task_id as task_id, f.as_of_date::text as as_of_date, f.method,
            f.cost_to_complete::text as cost_to_complete, f.hours_to_complete::text as hours_to_complete,
            f.note, f.created_at::text as created_at, u.name as created_by_name
@@ -179,7 +217,9 @@ async function readForecasts(orgId: string, filter: ReturnType<typeof sql>): Pro
       left join users u on u.id = f.created_by
      where f.org_id = ${orgId} ${filter}
      order by f.as_of_date desc, f.created_at desc, f.id desc
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     taskId: row.task_id,
@@ -201,7 +241,16 @@ export async function listForecasts(input: {
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<ProjectForecast[]> {
   return withOrgTransaction(input.orgId, async () => {
-    await lockProgressTask(db, input.orgId, input.projectId, input.taskId, input.allowedSubsidiaryIds);
-    return readForecasts(input.orgId, sql`and f.project_id = ${input.projectId} and f.project_task_id = ${input.taskId}`);
+    await lockProgressTask(
+      db,
+      input.orgId,
+      input.projectId,
+      input.taskId,
+      input.allowedSubsidiaryIds,
+    );
+    return readForecasts(
+      input.orgId,
+      sql`and f.project_id = ${input.projectId} and f.project_task_id = ${input.taskId}`,
+    );
   });
 }

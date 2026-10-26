@@ -1,11 +1,11 @@
-import { ModuleView } from '../../../../../../components/viewspec/module-view'
-import { compPlanSpec, compPlanTitle, loadCompPlanPage } from './view'
+import { ModuleView } from "../../../../../../components/viewspec/module-view";
+import { compPlanSpec, compPlanTitle, loadCompPlanPage } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  return { title: await compPlanTitle(id) }
+  const { id } = await params;
+  return { title: await compPlanTitle(id) };
 }
 
 /**
@@ -17,11 +17,11 @@ export default async function CompPlanPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>
-  searchParams: Promise<Record<string, string | undefined>>
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { id } = await params
-  const sp = await searchParams
-  const data = await loadCompPlanPage(id)
-  return <ModuleView spec={compPlanSpec(data)} data={data} searchParams={sp} trusted />
+  const { id } = await params;
+  const sp = await searchParams;
+  const data = await loadCompPlanPage(id);
+  return <ModuleView spec={compPlanSpec(data)} data={data} searchParams={sp} trusted />;
 }

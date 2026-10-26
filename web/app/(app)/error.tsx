@@ -1,54 +1,54 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import Link from 'next/link'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { useTranslations } from 'next-intl'
-import { Button } from '@openbooks/ui'
-import { RouteStateView } from '@/components/route-state'
-import { isStaleDeploymentError } from '@/lib/stale-deployment'
+import { useEffect } from "react";
+import Link from "next/link";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { Button } from "@openbooks/ui";
+import { RouteStateView } from "@/components/route-state";
+import { isStaleDeploymentError } from "@/lib/stale-deployment";
 
 export default function AppError({
   error,
   reset,
 }: {
-  error: Error & { digest?: string }
-  reset: () => void
+  error: Error & { digest?: string };
+  reset: () => void;
 }) {
-  const t = useTranslations('shell.routeState')
-  const tCommon = useTranslations('common.actions')
+  const t = useTranslations("shell.routeState");
+  const tCommon = useTranslations("common.actions");
 
   useEffect(() => {
-    console.error(error)
-  }, [error])
+    console.error(error);
+  }, [error]);
 
   if (isStaleDeploymentError(error)) {
     return (
       <RouteStateView
         state="error"
         icon={<RefreshCw />}
-        title={t('updatedTitle')}
-        description={t('updatedDescription')}
-        action={<Button onClick={() => window.location.reload()}>{t('reload')}</Button>}
+        title={t("updatedTitle")}
+        description={t("updatedDescription")}
+        action={<Button onClick={() => window.location.reload()}>{t("reload")}</Button>}
       />
-    )
+    );
   }
 
   return (
     <RouteStateView
       state="error"
       icon={<AlertTriangle />}
-      title={t('errorTitle')}
-      description={t('errorDescription')}
-      footer={error.digest ? t('errorReference', { id: error.digest }) : undefined}
+      title={t("errorTitle")}
+      description={t("errorDescription")}
+      footer={error.digest ? t("errorReference", { id: error.digest }) : undefined}
       action={
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <Button onClick={reset}>{tCommon('retry')}</Button>
+          <Button onClick={reset}>{tCommon("retry")}</Button>
           <Button variant="outline" asChild>
-            <Link href="/dashboard">{t('backToDashboard')}</Link>
+            <Link href="/dashboard">{t("backToDashboard")}</Link>
           </Button>
         </div>
       }
     />
-  )
+  );
 }

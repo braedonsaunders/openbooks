@@ -1,11 +1,11 @@
-import 'server-only'
+import "server-only";
 
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { getOrgAiConfig } from '../../../lib/assistant/ai-config'
-import { getModel } from '../../../lib/assistant/client'
-import { listConversations } from '../../../lib/ai-conversations'
-import { isUuid } from '../../../lib/list-params'
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../lib/authz";
+import { getOrgAiConfig } from "../../../lib/assistant/ai-config";
+import { getModel } from "../../../lib/assistant/client";
+import { listConversations } from "../../../lib/ai-conversations";
+import { isUuid } from "../../../lib/list-params";
 
 /**
  * The assistant new-chat page, split into a loader and a spec.
@@ -32,49 +32,49 @@ import { isUuid } from '../../../lib/list-params'
 
 /** Loader-resolved, presentation-ready props for the `assistant-app` widget. */
 export interface AssistantData {
-  conversations: { id: string; title: string; updatedAt: string }[]
-  canWrite: boolean
-  canConfigureAi: boolean
-  aiEnabled: boolean
-  initialPrompt?: string
+  conversations: { id: string; title: string; updatedAt: string }[];
+  canWrite: boolean;
+  canConfigureAi: boolean;
+  aiEnabled: boolean;
+  initialPrompt?: string;
   /** Finding id from /assistant?finding= (the workbench "Ask about this"). */
-  initialFindingId?: string
+  initialFindingId?: string;
 }
 
 export async function loadAssistant(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<AssistantData> {
   // Native page.tsx, verbatim: permission first, then sidebar + config + ?q=.
-  const authz = await requirePermission('assistant.use')
+  const authz = await requirePermission("assistant.use");
   const [conversations, aiConfig] = await Promise.all([
-    listConversations(authz, 'assistant'),
+    listConversations(authz, "assistant"),
     getOrgAiConfig(authz.user.orgId),
-  ])
-  const q = sp.q
-  const finding = sp.finding
+  ]);
+  const q = sp.q;
+  const finding = sp.finding;
   return {
     conversations,
-    canWrite: can(authz, 'assistant.write'),
-    canConfigureAi: can(authz, 'admin.ai.manage'),
-    aiEnabled: getModel(aiConfig, 'smart') !== null,
+    canWrite: can(authz, "assistant.write"),
+    canConfigureAi: can(authz, "admin.ai.manage"),
+    aiEnabled: getModel(aiConfig, "smart") !== null,
     // Single-valued ?q= only; an array (or absent) prompt is no prompt.
-    ...(typeof q === 'string' ? { initialPrompt: q } : {}),
+    ...(typeof q === "string" ? { initialPrompt: q } : {}),
     // Single-valued uuid ?finding= only; anything else is no handoff (the
     // chat route re-validates and the context loader fails closed anyway).
-    ...(typeof finding === 'string' && isUuid(finding) ? { initialFindingId: finding } : {}),
-  }
+    ...(typeof finding === "string" && isUuid(finding) ? { initialFindingId: finding } : {}),
+  };
 }
 
 export function assistantSpec(data: AssistantData): PageSpec {
   return page({
-    route: '/assistant',
+    route: "/assistant",
     // Bare: the app owns its own full-height flex column (the native root
     // is `flex h-full min-h-0 flex-1` under the app shell's <main>), so no
     // ListPageLayout chrome may wrap it.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      widgetBlock('assistant-app', {
+      widgetBlock("assistant-app", {
         conversations: data.conversations,
         activeId: null,
         initialMessages: [],
@@ -88,5 +88,5 @@ export function assistantSpec(data: AssistantData): PageSpec {
         ...(data.initialFindingId !== undefined ? { initialFindingId: data.initialFindingId } : {}),
       }),
     ],
-  })
+  });
 }

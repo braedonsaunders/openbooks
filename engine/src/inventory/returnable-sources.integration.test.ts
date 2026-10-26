@@ -8,7 +8,12 @@ import { returnableSources, assertReturnSourceSelectable } from "./returnable-so
 import { assertCustomerCreditInventoryReturnsPostable } from "./documents-customer-credits.ts";
 import { reverseInventoryMovement } from "./reversal.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -51,9 +56,14 @@ async function postInvoiceShipping(
   await db.execute(sql`
     update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
   await postDocument(documentId, depsFor(org));
-  const issue = (await db.execute<{ id: string }>(sql`
+  const issue = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from inventory_movements
-     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, "objects"))[0];
+     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`,
+      "objects",
+    )
+  )[0];
   assert.ok(issue);
   return { documentId, lineId, issueMovementId: issue.id };
 }
@@ -62,16 +72,25 @@ test("a shipment is offered until it is fully returned", { skip: !DB }, async ()
   const org = await createScratchOrg();
   try {
     await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-      quantity: "10", unitCost: "4", subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.clearing, date: org.date,
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "4",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
     });
     const shipment = await postInvoiceShipping(org, {
-      itemId: org.items.fifo, quantity: "10", unitPrice: "25", amount: "250",
+      itemId: org.items.fifo,
+      quantity: "10",
+      unitPrice: "25",
+      amount: "250",
     });
 
     const offered = await returnableSources(db, org.orgId, {
-      side: "sales", partyId: org.customerId, itemId: org.items.fifo,
+      side: "sales",
+      partyId: org.customerId,
+      itemId: org.items.fifo,
     });
     assert.equal(offered.sources.length, 1);
     assert.equal(offered.hasMore, false);
@@ -92,7 +111,8 @@ test("a shipment is offered until it is fully returned", { skip: !DB }, async ()
     );
     // Nor to the purchase leg, which consumes receipts.
     assert.deepEqual(
-      (await returnableSources(db, org.orgId, { side: "purchase", partyId: org.customerId })).sources,
+      (await returnableSources(db, org.orgId, { side: "purchase", partyId: org.customerId }))
+        .sources,
       [],
     );
 
@@ -101,8 +121,11 @@ test("a shipment is offered until it is fully returned", { skip: !DB }, async ()
       db,
       org.orgId,
       {
-        side: "sales", partyId: org.customerId, itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId, movementId: shipment.issueMovementId,
+        side: "sales",
+        partyId: org.customerId,
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        movementId: shipment.issueMovementId,
       },
       "Line 1",
     );
@@ -115,8 +138,11 @@ test("a shipment is offered until it is fully returned", { skip: !DB }, async ()
           db,
           org.orgId,
           {
-            side: "sales", partyId: org.customerId, itemId: org.items.fifo,
-            stockLocationId: org.stockLocationId, movementId: randomUUID(),
+            side: "sales",
+            partyId: org.customerId,
+            itemId: org.items.fifo,
+            stockLocationId: org.stockLocationId,
+            movementId: randomUUID(),
           },
           "Line 1",
         ),
@@ -131,12 +157,19 @@ test("a posted return reduces the shipment's remaining quantity", { skip: !DB },
   const org = await createScratchOrg();
   try {
     await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-      quantity: "10", unitCost: "4", subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.clearing, date: org.date,
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "4",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
     });
     const shipment = await postInvoiceShipping(org, {
-      itemId: org.items.fifo, quantity: "10", unitPrice: "25", amount: "250",
+      itemId: org.items.fifo,
+      quantity: "10",
+      unitPrice: "25",
+      amount: "250",
     });
 
     const creditId = randomUUID();
@@ -166,7 +199,9 @@ test("a posted return reduces the shipment's remaining quantity", { skip: !DB },
     await postDocument(creditId, depsFor(org));
 
     const offered = await returnableSources(db, org.orgId, {
-      side: "sales", partyId: org.customerId, itemId: org.items.fifo,
+      side: "sales",
+      partyId: org.customerId,
+      itemId: org.items.fifo,
     });
     assert.equal(offered.sources.length, 1);
     assert.equal(offered.sources[0]!.returned, "3.0000");
@@ -204,7 +239,9 @@ test("a receipt is offered on the purchase leg with its vendor", { skip: !DB }, 
     await postDocument(billId, depsFor(org));
 
     const offered = await returnableSources(db, org.orgId, {
-      side: "purchase", partyId: org.vendorId, itemId: org.items.fifo,
+      side: "purchase",
+      partyId: org.vendorId,
+      itemId: org.items.fifo,
     });
     assert.equal(offered.sources.length, 1);
     assert.equal(offered.sources[0]!.documentKind, "vendor_bill");
@@ -256,14 +293,23 @@ async function postVendorBillLines(
 test("a return against the oldest of 201 receipts validates by exact id and pages", async () => {
   const org = await createScratchOrg();
   try {
-    await postVendorBillLines(org, { subsidiaryId: org.subsidiaryId, lineCount: 201, numberPrefix: "BILL-D7" });
+    await postVendorBillLines(org, {
+      subsidiaryId: org.subsidiaryId,
+      lineCount: 201,
+      numberPrefix: "BILL-D7",
+    });
     const first = await returnableSources(db, org.orgId, {
-      side: "purchase", partyId: org.vendorId, limit: 200,
+      side: "purchase",
+      partyId: org.vendorId,
+      limit: 200,
     });
     assert.equal(first.sources.length, 200);
     assert.equal(first.hasMore, true);
     const rest = await returnableSources(db, org.orgId, {
-      side: "purchase", partyId: org.vendorId, limit: 200, offset: 200,
+      side: "purchase",
+      partyId: org.vendorId,
+      limit: 200,
+      offset: 200,
     });
     assert.equal(rest.sources.length, 1);
     assert.equal(rest.hasMore, false);
@@ -274,8 +320,11 @@ test("a return against the oldest of 201 receipts validates by exact id and page
       db,
       org.orgId,
       {
-        side: "purchase", partyId: org.vendorId, itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId, movementId: oldest.movementId,
+        side: "purchase",
+        partyId: org.vendorId,
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        movementId: oldest.movementId,
       },
       "Line 1",
     );
@@ -324,9 +373,14 @@ async function postCustomerCreditReturn(
   await db.execute(sql`
     update documents set status = 'approved' where id = ${creditId} and org_id = ${org.orgId}`);
   await postDocument(creditId, depsFor(org));
-  const receipt = (await db.execute<{ id: string }>(sql`
+  const receipt = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from inventory_movements
-     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`, "objects"))[0];
+     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`,
+      "objects",
+    )
+  )[0];
   assert.ok(receipt, "a posted customer credit return records a receipt movement");
   return { creditId, lineId, returnMovementId: receipt.id };
 }
@@ -335,15 +389,24 @@ test("a reversed customer return is returnable again in picker, save check and p
   const org = await createScratchOrg();
   try {
     await receiveInventory(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-      quantity: "5", unitCost: "4", subsidiaryId: org.subsidiaryId,
-      offsetAccountId: org.accounts.clearing, date: org.date,
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "5",
+      unitCost: "4",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
     });
     const shipment = await postInvoiceShipping(org, {
-      itemId: org.items.fifo, quantity: "5", unitPrice: "25", amount: "125",
+      itemId: org.items.fifo,
+      quantity: "5",
+      unitPrice: "25",
+      amount: "125",
     });
     const returned = await postCustomerCreditReturn(org, {
-      issueMovementId: shipment.issueMovementId, quantity: "5", numberPrefix: "CM-D8",
+      issueMovementId: shipment.issueMovementId,
+      quantity: "5",
+      numberPrefix: "CM-D8",
     });
     // Fully returned: the picker offers nothing and the save check refuses.
     assert.deepEqual(
@@ -351,38 +414,65 @@ test("a reversed customer return is returnable again in picker, save check and p
       [],
     );
     await assert.rejects(
-      assertReturnSourceSelectable(db, org.orgId, {
-        side: "sales", partyId: org.customerId, itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId, movementId: shipment.issueMovementId,
-      }, "Line 1"),
+      assertReturnSourceSelectable(
+        db,
+        org.orgId,
+        {
+          side: "sales",
+          partyId: org.customerId,
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          movementId: shipment.issueMovementId,
+        },
+        "Line 1",
+      ),
       /not available to return/,
     );
     // Reverse the return itself: stock is gone again, so the remainder must
     // become selectable and returnable once more.
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await reverseInventoryMovement(org.orgId, actorId, {
-      movementId: returned.returnMovementId, reversalDate: org.date, reason: "Return refused at the dock",
+      movementId: returned.returnMovementId,
+      reversalDate: org.date,
+      reason: "Return refused at the dock",
     });
     const offered = await returnableSources(db, org.orgId, {
-      side: "sales", partyId: org.customerId,
+      side: "sales",
+      partyId: org.customerId,
     });
     assert.equal(offered.sources.length, 1);
     assert.equal(offered.sources[0]!.movementId, shipment.issueMovementId);
     assert.equal(offered.sources[0]!.returned, "0.0000");
     assert.equal(offered.sources[0]!.remaining, "5.0000");
-    const selected = await assertReturnSourceSelectable(db, org.orgId, {
-      side: "sales", partyId: org.customerId, itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId, movementId: shipment.issueMovementId,
-    }, "Line 1");
+    const selected = await assertReturnSourceSelectable(
+      db,
+      org.orgId,
+      {
+        side: "sales",
+        partyId: org.customerId,
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        movementId: shipment.issueMovementId,
+      },
+      "Line 1",
+    );
     assert.equal(selected.remaining, "5.0000");
     // And a later DRAFT credit for the same 5 units passes the post guard:
     // the reversed return no longer counts as already returned. (The guard
     // runs pre-post, so it is checked on a draft, not on a posted credit
     // whose own receipt would count against itself.)
     const second = await draftCustomerCreditReturn(org, {
-      issueMovementId: shipment.issueMovementId, quantity: "5", numberPrefix: "CM-D8B",
+      issueMovementId: shipment.issueMovementId,
+      quantity: "5",
+      numberPrefix: "CM-D8B",
     });
-    await assertCustomerCreditInventoryReturnsPostable(db, org.orgId, second.creditId, org.customerId, org.subsidiaryId);
+    await assertCustomerCreditInventoryReturnsPostable(
+      db,
+      org.orgId,
+      second.creditId,
+      org.customerId,
+      org.subsidiaryId,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -408,22 +498,33 @@ test("sources scope to the full subsidiary grant; an empty grant sees nothing", 
     await db.execute(sql`
       insert into party_subsidiaries (id, org_id, party_id, subsidiary_id)
       values (${randomUUID()}, ${org.orgId}, ${org.vendorId}, ${subC})`);
-    await postVendorBillLines(org, { subsidiaryId: org.subsidiaryId, lineCount: 1, numberPrefix: "BILL-D9A" });
+    await postVendorBillLines(org, {
+      subsidiaryId: org.subsidiaryId,
+      lineCount: 1,
+      numberPrefix: "BILL-D9A",
+    });
     await postVendorBillLines(org, { subsidiaryId: subC, lineCount: 1, numberPrefix: "BILL-D9C" });
     const scoped = await returnableSources(db, org.orgId, {
-      side: "purchase", partyId: org.vendorId, subsidiaryIds: [org.subsidiaryId, subB],
+      side: "purchase",
+      partyId: org.vendorId,
+      subsidiaryIds: [org.subsidiaryId, subB],
     });
     assert.equal(scoped.sources.length, 1, "a grant of {A,B} must not surface C's receipt");
     assert.match(scoped.sources[0]!.documentNumber ?? "", /BILL-D9A-/);
     assert.deepEqual(
-      (await returnableSources(db, org.orgId, {
-        side: "purchase", partyId: org.vendorId, subsidiaryIds: [],
-      })).sources,
+      (
+        await returnableSources(db, org.orgId, {
+          side: "purchase",
+          partyId: org.vendorId,
+          subsidiaryIds: [],
+        })
+      ).sources,
       [],
       "an empty grant matches nothing instead of leaking every entity",
     );
     assert.equal(
-      (await returnableSources(db, org.orgId, { side: "purchase", partyId: org.vendorId })).sources.length,
+      (await returnableSources(db, org.orgId, { side: "purchase", partyId: org.vendorId })).sources
+        .length,
       2,
       "full access still reads org-wide",
     );
@@ -431,16 +532,36 @@ test("sources scope to the full subsidiary grant; an empty grant sees nothing", 
     // under [B], naming the refusal instead of saving a foreign source.
     const movementA = scoped.sources[0]!.movementId;
     assert.ok(
-      (await assertReturnSourceSelectable(db, org.orgId, {
-        side: "purchase", partyId: org.vendorId, itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId, movementId: movementA, subsidiaryIds: [org.subsidiaryId],
-      }, "Line 1")).movementId,
+      (
+        await assertReturnSourceSelectable(
+          db,
+          org.orgId,
+          {
+            side: "purchase",
+            partyId: org.vendorId,
+            itemId: org.items.fifo,
+            stockLocationId: org.stockLocationId,
+            movementId: movementA,
+            subsidiaryIds: [org.subsidiaryId],
+          },
+          "Line 1",
+        )
+      ).movementId,
     );
     await assert.rejects(
-      assertReturnSourceSelectable(db, org.orgId, {
-        side: "purchase", partyId: org.vendorId, itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId, movementId: movementA, subsidiaryIds: [subB],
-      }, "Line 1"),
+      assertReturnSourceSelectable(
+        db,
+        org.orgId,
+        {
+          side: "purchase",
+          partyId: org.vendorId,
+          itemId: org.items.fifo,
+          stockLocationId: org.stockLocationId,
+          movementId: movementA,
+          subsidiaryIds: [subB],
+        },
+        "Line 1",
+      ),
       /not available to return/,
     );
   } finally {

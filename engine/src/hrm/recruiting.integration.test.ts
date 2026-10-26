@@ -12,10 +12,16 @@ import { Client } from "pg";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
+import { dropScratchOrg } from "../testing/fixtures.ts";
 import {
-  dropScratchOrg
-} from "../testing/fixtures.ts";
-import { enableFeatures, mkEmployment, mkParty, recruitingError, withHarness as runWithHarness, seedFlow, setupHarness } from "../testing/hrm-harness.ts";
+  enableFeatures,
+  mkEmployment,
+  mkParty,
+  recruitingError,
+  withHarness as runWithHarness,
+  seedFlow,
+  setupHarness,
+} from "../testing/hrm-harness.ts";
 import { createPosition, writePositionFunding } from "./positions.ts";
 import {
   createApplication,
@@ -25,22 +31,10 @@ import {
 } from "./recruiting/applications.ts";
 import { DuplicateProspectError, createCandidate } from "./recruiting/candidates.ts";
 import { acceptOfferAsHire } from "./recruiting/hire.ts";
-import {
-  cancelInterview,
-  completeInterview,
-  scheduleInterview,
-} from "./recruiting/interviews.ts";
+import { cancelInterview, completeInterview, scheduleInterview } from "./recruiting/interviews.ts";
 import { createOfferTemplate, renderOfferVersion } from "./recruiting/offers-signing.ts";
-import {
-  createOffer,
-  declineOffer,
-  sendOffer,
-  withdrawOffer,
-} from "./recruiting/offers.ts";
-import {
-  createPipelineTemplate,
-  ensureDefaultPipelineTemplate,
-} from "./recruiting/pipeline.ts";
+import { createOffer, declineOffer, sendOffer, withdrawOffer } from "./recruiting/offers.ts";
+import { createPipelineTemplate, ensureDefaultPipelineTemplate } from "./recruiting/pipeline.ts";
 import {
   applyViaPosting,
   createFeedToken,
@@ -70,15 +64,47 @@ type Harness = Awaited<ReturnType<typeof setupRecruitingHarness>>;
 
 const RECRUITING_FEATURE_KEYS = ["hrm", "hrmRecruiting"];
 
-const setupRecruitingHarness = () => setupHarness({
-  features: RECRUITING_FEATURE_KEYS,
-  users: [
-    { key: "recruiterId", name: "HRM Recruiter", handle: "hrm_recruiter", permissions: ["hrm.recruiting.read", "hrm.recruiting.manage", "hrm.position.read", "hrm.position.manage", "hrm.employment.read", "hrm.employment.manage"], link: "Recruiter Person" },
-    { key: "approverId", name: "HRM Approver", handle: "hrm_approver", permissions: ["hrm.employment.read", "hrm.employment.approve"], link: "Approver Person" },
-    { key: "managerId", name: "Hiring Manager", handle: "hiring_manager", link: "Hiring Manager Person", partyKey: "managerPartyId" },
-    { key: "interviewerId", name: "Interviewer", handle: "interviewer", link: "Interviewer Person", partyKey: "interviewerPartyId" },
-  ],
-});
+const setupRecruitingHarness = () =>
+  setupHarness({
+    features: RECRUITING_FEATURE_KEYS,
+    users: [
+      {
+        key: "recruiterId",
+        name: "HRM Recruiter",
+        handle: "hrm_recruiter",
+        permissions: [
+          "hrm.recruiting.read",
+          "hrm.recruiting.manage",
+          "hrm.position.read",
+          "hrm.position.manage",
+          "hrm.employment.read",
+          "hrm.employment.manage",
+        ],
+        link: "Recruiter Person",
+      },
+      {
+        key: "approverId",
+        name: "HRM Approver",
+        handle: "hrm_approver",
+        permissions: ["hrm.employment.read", "hrm.employment.approve"],
+        link: "Approver Person",
+      },
+      {
+        key: "managerId",
+        name: "Hiring Manager",
+        handle: "hiring_manager",
+        link: "Hiring Manager Person",
+        partyKey: "managerPartyId",
+      },
+      {
+        key: "interviewerId",
+        name: "Interviewer",
+        handle: "interviewer",
+        link: "Interviewer Person",
+        partyKey: "interviewerPartyId",
+      },
+    ],
+  });
 
 function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
   return runWithHarness(setupRecruitingHarness, fn);
@@ -90,10 +116,17 @@ async function seedHolder(
   positionId: string,
 ): Promise<{ employmentId: string; workerPartyId: string }> {
   const workerPartyId = await mkParty(orgId, "Position Holder");
-  const employmentId = await mkEmployment(orgId, workerPartyId, subsidiaryId, { from: "2026-07-01" });
-  const slotId = (await db.execute<{ id: string }>(sql`
+  const employmentId = await mkEmployment(orgId, workerPartyId, subsidiaryId, {
+    from: "2026-07-01",
+  });
+  const slotId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, 'primary') returning id`, "objects"))[0]!.id;
+    values (${orgId}, ${employmentId}, 'primary') returning id`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, position_id, version_no, fte, is_primary, effective_from)
@@ -102,14 +135,21 @@ async function seedHolder(
   return { employmentId, workerPartyId };
 }
 
-function seedEmploymentForParty(orgId: string, subsidiaryId: string, workerPartyId: string): Promise<string> {
+function seedEmploymentForParty(
+  orgId: string,
+  subsidiaryId: string,
+  workerPartyId: string,
+): Promise<string> {
   return mkEmployment(orgId, workerPartyId, subsidiaryId, { from: "2026-07-01" });
 }
 
 async function eventKinds(orgId: string, applicationId: string): Promise<string[]> {
-  const rows = await db.execute<{ kind: string }>(sql`
+  const rows = await db.execute<{ kind: string }>(
+    sql`
     select kind from hrm_application_events
-     where org_id = ${orgId} and application_id = ${applicationId} order by recorded_at, id`, "objects");
+     where org_id = ${orgId} and application_id = ${applicationId} order by recorded_at, id`,
+    "objects",
+  );
   return rows.map((row) => row.kind);
 }
 
@@ -123,39 +163,60 @@ async function assertStorageRefused(promise: Promise<unknown>, pattern: RegExp):
   assert.match(text, pattern);
 }
 
-test("0195 bootstraps: nine tables, org isolation, partial uniques, immutable ledger", { skip: !DB }, async () => {
-  const tables = [
-    "hrm_pipeline_templates",
-    "hrm_pipeline_stages",
-    "hrm_requisitions",
-    "hrm_candidates",
-    "hrm_applications",
-    "hrm_application_events",
-    "hrm_interviews",
-    "hrm_interview_panel",
-    "hrm_offers",
-  ];
-  for (const table of tables) {
-    const policy = (await db.execute<{ n: number }>(sql`
+test(
+  "0195 bootstraps: nine tables, org isolation, partial uniques, immutable ledger",
+  { skip: !DB },
+  async () => {
+    const tables = [
+      "hrm_pipeline_templates",
+      "hrm_pipeline_stages",
+      "hrm_requisitions",
+      "hrm_candidates",
+      "hrm_applications",
+      "hrm_application_events",
+      "hrm_interviews",
+      "hrm_interview_panel",
+      "hrm_offers",
+    ];
+    for (const table of tables) {
+      const policy = (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from pg_policies
-       where schemaname = 'public' and tablename = ${table} and policyname = 'org_isolation'`, "objects"))[0]!.n;
-    assert.equal(policy, 1, `${table} carries the org_isolation policy`);
-    const forced = (await db.execute<{ relforcerowsecurity: boolean }>(sql`
-      select relforcerowsecurity from pg_class where relname = ${table}`, "objects"))[0]!
-      .relforcerowsecurity;
-    assert.equal(forced, true, `${table} forces row-level security`);
-  }
-  const indexes = await db.execute<{ indexname: string }>(sql`
+       where schemaname = 'public' and tablename = ${table} and policyname = 'org_isolation'`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(policy, 1, `${table} carries the org_isolation policy`);
+      const forced = (
+        await db.execute<{ relforcerowsecurity: boolean }>(
+          sql`
+      select relforcerowsecurity from pg_class where relname = ${table}`,
+          "objects",
+        )
+      )[0]!.relforcerowsecurity;
+      assert.equal(forced, true, `${table} forces row-level security`);
+    }
+    const indexes = await db.execute<{ indexname: string }>(
+      sql`
     select indexname from pg_indexes where schemaname = 'public'
-     and indexname in ('hrm_pipeline_templates_one_default_per_org', 'hrm_offers_one_live_per_application')`, "objects");
-  assert.deepEqual(
-    indexes.map((row) => row.indexname).sort(),
-    ["hrm_offers_one_live_per_application", "hrm_pipeline_templates_one_default_per_org"],
-  );
-  const trigger = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from pg_trigger where tgname = 'hrm_application_events_immutable'`, "objects"))[0]!.n;
-  assert.equal(trigger, 1, "the append-only ledger trigger stands");
-});
+     and indexname in ('hrm_pipeline_templates_one_default_per_org', 'hrm_offers_one_live_per_application')`,
+      "objects",
+    );
+    assert.deepEqual(indexes.map((row) => row.indexname).sort(), [
+      "hrm_offers_one_live_per_application",
+      "hrm_pipeline_templates_one_default_per_org",
+    ]);
+    const trigger = (
+      await db.execute<{ n: number }>(
+        sql`
+    select count(*)::int as n from pg_trigger where tgname = 'hrm_application_events_immutable'`,
+        "objects",
+      )
+    )[0]!.n;
+    assert.equal(trigger, 1, "the append-only ledger trigger stands");
+  },
+);
 
 test("the default funnel seeds on demand with applied-to-hired stages", { skip: !DB }, async () => {
   await withHarness(async (h) => {
@@ -201,7 +262,11 @@ test("full funnel: draft to filled hire with storage proofs", { skip: !DB }, asy
     });
     assert.equal(requisition.status, "draft");
     assert.match(requisition.requisitionNumber, /^REQ-/);
-    const opened = await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+    const opened = await openRequisition({
+      orgId,
+      actorId: h.recruiterId,
+      requisitionId: requisition.id,
+    });
     assert.equal(opened.status, "open");
     assert.ok(opened.pipelineTemplateId, "opening names the default funnel");
 
@@ -213,13 +278,27 @@ test("full funnel: draft to filled hire with storage proofs", { skip: !DB }, asy
       phone: "+1-555-0100",
       source: "direct",
     });
-    const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: opened.id, candidateId: candidate.id });
+    const application = await createApplication({
+      orgId,
+      actorId: h.recruiterId,
+      requisitionId: opened.id,
+      candidateId: candidate.id,
+    });
     assert.equal(application.status, "active");
     assert.deepEqual(await eventKinds(orgId, application.id), ["applied"]);
 
-    const detail = await getRequisitionDetail({ orgId, actorId: h.recruiterId, requisitionId: opened.id });
+    const detail = await getRequisitionDetail({
+      orgId,
+      actorId: h.recruiterId,
+      requisitionId: opened.id,
+    });
     const screen = detail.stages.find((stage) => stage.key === "screening")!;
-    const moved = await moveApplicationStage({ orgId, actorId: h.recruiterId, applicationId: application.id, toStageId: screen.id });
+    const moved = await moveApplicationStage({
+      orgId,
+      actorId: h.recruiterId,
+      applicationId: application.id,
+      toStageId: screen.id,
+    });
     assert.equal(moved.stageId, screen.id);
 
     const interview = await scheduleInterview({
@@ -232,13 +311,28 @@ test("full funnel: draft to filled hire with storage proofs", { skip: !DB }, asy
       panelPartyIds: [h.interviewerPartyId],
     });
     assert.equal(interview.status, "scheduled");
-    const completed = await completeInterview({ orgId, actorId: h.recruiterId, interviewId: interview.id, outcome: "advance" });
+    const completed = await completeInterview({
+      orgId,
+      actorId: h.recruiterId,
+      interviewId: interview.id,
+      outcome: "advance",
+    });
     assert.equal(completed.outcome, "advance");
 
     const interviewStage = detail.stages.find((stage) => stage.key === "interview")!;
-    await moveApplicationStage({ orgId, actorId: h.recruiterId, applicationId: application.id, toStageId: interviewStage.id });
+    await moveApplicationStage({
+      orgId,
+      actorId: h.recruiterId,
+      applicationId: application.id,
+      toStageId: interviewStage.id,
+    });
     const offerStage = detail.stages.find((stage) => stage.key === "offer")!;
-    await moveApplicationStage({ orgId, actorId: h.recruiterId, applicationId: application.id, toStageId: offerStage.id });
+    await moveApplicationStage({
+      orgId,
+      actorId: h.recruiterId,
+      applicationId: application.id,
+      toStageId: offerStage.id,
+    });
 
     const offer = await createOffer({
       orgId,
@@ -262,24 +356,49 @@ test("full funnel: draft to filled hire with storage proofs", { skip: !DB }, asy
     assert.ok(hire.changeRequestId);
 
     // Storage proofs, not return values alone.
-    const storedOffer = (await db.execute<{ status: string; approved_change_id: string | null }>(sql`
-      select status, approved_change_id from hrm_offers where id = ${offer.id}`, "objects"))[0]!;
+    const storedOffer = (
+      await db.execute<{ status: string; approved_change_id: string | null }>(
+        sql`
+      select status, approved_change_id from hrm_offers where id = ${offer.id}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(storedOffer.status, "accepted");
     assert.equal(storedOffer.approved_change_id, hire.changeRequestId);
-    const storedApplication = (await db.execute<{ status: string; hired_employment_id: string | null }>(sql`
-      select status, hired_employment_id from hrm_applications where id = ${application.id}`, "objects"))[0]!;
+    const storedApplication = (
+      await db.execute<{ status: string; hired_employment_id: string | null }>(
+        sql`
+      select status, hired_employment_id from hrm_applications where id = ${application.id}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(storedApplication.status, "hired");
     assert.equal(storedApplication.hired_employment_id, hire.employmentId);
-    const storedRequisition = (await db.execute<{ filled_count: number; status: string; revision: number }>(sql`
-      select filled_count, status, revision from hrm_requisitions where id = ${opened.id}`, "objects"))[0]!;
+    const storedRequisition = (
+      await db.execute<{ filled_count: number; status: string; revision: number }>(
+        sql`
+      select filled_count, status, revision from hrm_requisitions where id = ${opened.id}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(storedRequisition.filled_count, 1);
     assert.equal(storedRequisition.status, "filled");
     assert.equal(storedRequisition.revision, 2);
-    const requestStatus = (await db.execute<{ status: string }>(sql`
-      select status from hrm_employment_change_requests where id = ${hire.changeRequestId}`, "objects"))[0]!.status;
+    const requestStatus = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from hrm_employment_change_requests where id = ${hire.changeRequestId}`,
+        "objects",
+      )
+    )[0]!.status;
     assert.equal(requestStatus, "pending_approval");
-    const candidateParty = (await db.execute<{ party_id: string | null }>(sql`
-      select party_id from hrm_candidates where id = ${candidate.id}`, "objects"))[0]!.party_id;
+    const candidateParty = (
+      await db.execute<{ party_id: string | null }>(
+        sql`
+      select party_id from hrm_candidates where id = ${candidate.id}`,
+        "objects",
+      )
+    )[0]!.party_id;
     assert.equal(candidateParty, hire.workerPartyId);
     assert.deepEqual(await eventKinds(orgId, application.id), [
       "applied",
@@ -298,61 +417,68 @@ test("full funnel: draft to filled hire with storage proofs", { skip: !DB }, asy
   });
 });
 
-test("opening refuses a closed position, a full establishment, and names the override", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    const mkRequisition = async (positionId: string | null) =>
-      createRequisition({
+test(
+  "opening refuses a closed position, a full establishment, and names the override",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      const mkRequisition = async (positionId: string | null) =>
+        createRequisition({
+          orgId,
+          actorId: h.recruiterId,
+          title: "Vacancy",
+          positionId,
+          employerSubsidiaryId: h.org.subsidiaryId,
+          headcount: 1,
+          // Inside the scratch fiscal period (2026-07) so funding applies.
+          targetStartOn: "2026-07-15",
+        });
+      // Planned headcount with no position opens freely.
+      const free = await mkRequisition(null);
+      assert.equal(
+        (await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: free.id })).status,
+        "open",
+      );
+
+      const position = await createPosition({
         orgId,
         actorId: h.recruiterId,
-        title: "Vacancy",
-        positionId,
+        positionCode: "ENG-2200",
+        title: "Engineer",
         employerSubsidiaryId: h.org.subsidiaryId,
-        headcount: 1,
-        // Inside the scratch fiscal period (2026-07) so funding applies.
-        targetStartOn: "2026-07-15",
+        plannedFte: "1.0000",
+        status: "open",
+        effectiveFrom: "2026-07-01",
+        reason: "open",
       });
-    // Planned headcount with no position opens freely.
-    const free = await mkRequisition(null);
-    assert.equal((await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: free.id })).status, "open");
-
-    const position = await createPosition({
-      orgId,
-      actorId: h.recruiterId,
-      positionCode: "ENG-2200",
-      title: "Engineer",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      plannedFte: "1.0000",
-      status: "open",
-      effectiveFrom: "2026-07-01",
-      reason: "open",
+      // Fund the establishment so the refusal under test is the zero-vacancy
+      // one, not the under-funding one.
+      await writePositionFunding({
+        orgId,
+        actorId: h.recruiterId,
+        positionId: position.id,
+        periodId: h.org.periodId,
+        fundedFte: "1.0000",
+        reason: "fund the establishment",
+      });
+      await seedHolder(orgId, h.org.subsidiaryId, position.id);
+      const full = await mkRequisition(position.id);
+      await assert.rejects(
+        openRequisition({ orgId, actorId: h.recruiterId, requisitionId: full.id }),
+        /no vacant FTE.*overEstablishment/,
+        "zero vacant FTE refuses without the flag",
+      );
+      const over = await openRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: full.id,
+        overEstablishment: true,
+      });
+      assert.equal(over.status, "open", "the explicit flag opens over establishment");
     });
-    // Fund the establishment so the refusal under test is the zero-vacancy
-    // one, not the under-funding one.
-    await writePositionFunding({
-      orgId,
-      actorId: h.recruiterId,
-      positionId: position.id,
-      periodId: h.org.periodId,
-      fundedFte: "1.0000",
-      reason: "fund the establishment",
-    });
-    await seedHolder(orgId, h.org.subsidiaryId, position.id);
-    const full = await mkRequisition(position.id);
-    await assert.rejects(
-      openRequisition({ orgId, actorId: h.recruiterId, requisitionId: full.id }),
-      /no vacant FTE.*overEstablishment/,
-      "zero vacant FTE refuses without the flag",
-    );
-    const over = await openRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      requisitionId: full.id,
-      overEstablishment: true,
-    });
-    assert.equal(over.status, "open", "the explicit flag opens over establishment");
-  });
-});
+  },
+);
 
 test("hold, resume, and cancel move the lifecycle with reasons", { skip: !DB }, async () => {
   await withHarness(async (h) => {
@@ -371,15 +497,36 @@ test("hold, resume, and cancel move the lifecycle with reasons", { skip: !DB }, 
       "a hold without a why is refused",
     );
     assert.equal(
-      (await holdRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, reason: "hiring freeze" })).status,
+      (
+        await holdRequisition({
+          orgId,
+          actorId: h.recruiterId,
+          requisitionId: requisition.id,
+          reason: "hiring freeze",
+        })
+      ).status,
       "on_hold",
     );
     assert.equal(
-      (await resumeRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, reason: "freeze lifted" })).status,
+      (
+        await resumeRequisition({
+          orgId,
+          actorId: h.recruiterId,
+          requisitionId: requisition.id,
+          reason: "freeze lifted",
+        })
+      ).status,
       "open",
     );
     assert.equal(
-      (await cancelRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, reason: "role cut" })).status,
+      (
+        await cancelRequisition({
+          orgId,
+          actorId: h.recruiterId,
+          requisitionId: requisition.id,
+          reason: "role cut",
+        })
+      ).status,
       "cancelled",
     );
     await assert.rejects(
@@ -390,155 +537,263 @@ test("hold, resume, and cancel move the lifecycle with reasons", { skip: !DB }, 
   });
 });
 
-test("duplicate candidate email refuses without mergeInto and merges with it", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    const first = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Ada", email: "ada@example.test" });
-    assert.equal(first.mergedInto, null);
-    const refusal = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Ada Clone", email: "ADA@example.test" }).then(
-      () => null,
-      (error: unknown) => recruitingError(error),
-    );
-    assert.ok(refusal, "the duplicate refuses");
-    // H-RECRUIT-DEDUPE on F3-62's attach: the in-scope duplicate keeps the
-    // structural retry (the id the island merges with) with no name in the
-    // message — the merger can already see both on the funnel.
-    assert.ok(refusal instanceof DuplicateProspectError, "the refusal is structural, never a parsed message");
-    assert.equal(refusal.candidateId, first.candidate.id, "the retry reference rides structurally");
-    assert.ok(!refusal.message.includes("Ada"), "the survivor's name never rides the refusal");
-    assert.match(refusal.message, /mergeInto/, "the refusal names the merge remedy");
-    const countBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from hrm_candidates where org_id = ${orgId}`, "objects"))[0]!.n;
-    const merged = await createCandidate({
-      orgId,
-      actorId: h.recruiterId,
-      displayName: "Ada Clone",
-      email: "ada@example.test",
-      mergeInto: first.candidate.id,
-    });
-    assert.equal(merged.mergedInto!.id, first.candidate.id, "no new record: the survivor attaches");
-    const countAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from hrm_candidates where org_id = ${orgId}`, "objects"))[0]!.n;
-    assert.equal(countAfter, countBefore, "merging writes no candidate row");
+test(
+  "duplicate candidate email refuses without mergeInto and merges with it",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      const first = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Ada",
+        email: "ada@example.test",
+      });
+      assert.equal(first.mergedInto, null);
+      const refusal = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Ada Clone",
+        email: "ADA@example.test",
+      }).then(
+        () => null,
+        (error: unknown) => recruitingError(error),
+      );
+      assert.ok(refusal, "the duplicate refuses");
+      // H-RECRUIT-DEDUPE on F3-62's attach: the in-scope duplicate keeps the
+      // structural retry (the id the island merges with) with no name in the
+      // message — the merger can already see both on the funnel.
+      assert.ok(
+        refusal instanceof DuplicateProspectError,
+        "the refusal is structural, never a parsed message",
+      );
+      assert.equal(
+        refusal.candidateId,
+        first.candidate.id,
+        "the retry reference rides structurally",
+      );
+      assert.ok(!refusal.message.includes("Ada"), "the survivor's name never rides the refusal");
+      assert.match(refusal.message, /mergeInto/, "the refusal names the merge remedy");
+      const countBefore = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from hrm_candidates where org_id = ${orgId}`,
+          "objects",
+        )
+      )[0]!.n;
+      const merged = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Ada Clone",
+        email: "ada@example.test",
+        mergeInto: first.candidate.id,
+      });
+      assert.equal(
+        merged.mergedInto!.id,
+        first.candidate.id,
+        "no new record: the survivor attaches",
+      );
+      const countAfter = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from hrm_candidates where org_id = ${orgId}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(countAfter, countBefore, "merging writes no candidate row");
 
-    // The merged application records its evidence.
-    const requisition = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "Vacancy",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      headcount: 1,
+      // The merged application records its evidence.
+      const requisition = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "Vacancy",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        headcount: 1,
+      });
+      await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+      const application = await createApplication({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: requisition.id,
+        candidateId: merged.mergedInto!.id,
+        merged: true,
+      });
+      assert.deepEqual(await eventKinds(orgId, application.id), ["merged"]);
+      // A second attach of the same pair refuses by name.
+      await assert.rejects(
+        createApplication({
+          orgId,
+          actorId: h.recruiterId,
+          requisitionId: requisition.id,
+          candidateId: merged.mergedInto!.id,
+        }),
+        /already attached/,
+      );
     });
-    await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    const application = await createApplication({
-      orgId,
-      actorId: h.recruiterId,
-      requisitionId: requisition.id,
-      candidateId: merged.mergedInto!.id,
-      merged: true,
-    });
-    assert.deepEqual(await eventKinds(orgId, application.id), ["merged"]);
-    // A second attach of the same pair refuses by name.
-    await assert.rejects(
-      createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: merged.mergedInto!.id }),
-      /already attached/,
-    );
-  });
-});
+  },
+);
 
-test("stage moves refuse across templates, into hired by hand, and out of terminal states", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    const other = await createPipelineTemplate({
-      orgId,
-      actorId: h.recruiterId,
-      name: "Executive funnel",
-      stages: [
-        { key: "intake", name: "Intake", kind: "screening" },
-        { key: "hired", name: "Hired", kind: "hired" },
-      ],
+test(
+  "stage moves refuse across templates, into hired by hand, and out of terminal states",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      const other = await createPipelineTemplate({
+        orgId,
+        actorId: h.recruiterId,
+        name: "Executive funnel",
+        stages: [
+          { key: "intake", name: "Intake", kind: "screening" },
+          { key: "hired", name: "Hired", kind: "hired" },
+        ],
+      });
+      const requisition = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "Vacancy",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        headcount: 1,
+      });
+      await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+      const { candidate } = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Bo",
+      });
+      const application = await createApplication({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: requisition.id,
+        candidateId: candidate.id,
+      });
+      await assert.rejects(
+        moveApplicationStage({
+          orgId,
+          actorId: h.recruiterId,
+          applicationId: application.id,
+          toStageId: other.stages[0]!.id,
+        }),
+        /another pipeline template/,
+      );
+      const detail = await getRequisitionDetail({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: requisition.id,
+      });
+      const hiredStage = detail.stages.find((stage) => stage.kind === "hired")!;
+      await assert.rejects(
+        moveApplicationStage({
+          orgId,
+          actorId: h.recruiterId,
+          applicationId: application.id,
+          toStageId: hiredStage.id,
+        }),
+        /only through hire/,
+      );
+      const rejected = await rejectApplication({
+        orgId,
+        actorId: h.recruiterId,
+        applicationId: application.id,
+        reason: "not a fit",
+      });
+      assert.equal(rejected.status, "rejected");
+      await assert.rejects(
+        moveApplicationStage({
+          orgId,
+          actorId: h.recruiterId,
+          applicationId: application.id,
+          toStageId: detail.stages[0]!.id,
+        }),
+        /terminal/,
+      );
+      await assert.rejects(
+        withdrawApplication({ orgId, actorId: h.recruiterId, applicationId: application.id }),
+        /cannot be withdrawn/,
+      );
+      // Rejecting demands its reason.
+      const { candidate: second } = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Cy",
+      });
+      const secondApplication = await createApplication({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: requisition.id,
+        candidateId: second.id,
+      });
+      await assert.rejects(
+        rejectApplication({
+          orgId,
+          actorId: h.recruiterId,
+          applicationId: secondApplication.id,
+          reason: "  ",
+        }),
+        /non-blank reason/,
+      );
     });
-    const requisition = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "Vacancy",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      headcount: 1,
-    });
-    await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    const { candidate } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Bo" });
-    const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id });
-    await assert.rejects(
-      moveApplicationStage({ orgId, actorId: h.recruiterId, applicationId: application.id, toStageId: other.stages[0]!.id }),
-      /another pipeline template/,
-    );
-    const detail = await getRequisitionDetail({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    const hiredStage = detail.stages.find((stage) => stage.kind === "hired")!;
-    await assert.rejects(
-      moveApplicationStage({ orgId, actorId: h.recruiterId, applicationId: application.id, toStageId: hiredStage.id }),
-      /only through hire/,
-    );
-    const rejected = await rejectApplication({ orgId, actorId: h.recruiterId, applicationId: application.id, reason: "not a fit" });
-    assert.equal(rejected.status, "rejected");
-    await assert.rejects(
-      moveApplicationStage({ orgId, actorId: h.recruiterId, applicationId: application.id, toStageId: detail.stages[0]!.id }),
-      /terminal/,
-    );
-    await assert.rejects(
-      withdrawApplication({ orgId, actorId: h.recruiterId, applicationId: application.id }),
-      /cannot be withdrawn/,
-    );
-    // Rejecting demands its reason.
-    const { candidate: second } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Cy" });
-    const secondApplication = await createApplication({
-      orgId,
-      actorId: h.recruiterId,
-      requisitionId: requisition.id,
-      candidateId: second.id,
-    });
-    await assert.rejects(
-      rejectApplication({ orgId, actorId: h.recruiterId, applicationId: secondApplication.id, reason: "  " }),
-      /non-blank reason/,
-    );
-  });
-});
+  },
+);
 
-test("one live offer per application: the second drafts only after the first leaves", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    const requisition = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "Vacancy",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      headcount: 1,
+test(
+  "one live offer per application: the second drafts only after the first leaves",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      const requisition = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "Vacancy",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        headcount: 1,
+      });
+      await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+      const { candidate } = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Dee",
+      });
+      const application = await createApplication({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: requisition.id,
+        candidateId: candidate.id,
+      });
+      const terms = {
+        orgId,
+        actorId: h.recruiterId,
+        applicationId: application.id,
+        employerSubsidiaryId: h.org.subsidiaryId,
+        jobTitle: "Engineer",
+        proposedStartOn: "2026-10-01",
+        compensationAmount: "90000",
+        compensationCurrency: "USD",
+        compensationBasis: "annual" as const,
+      };
+      const first = await createOffer(terms);
+      await assert.rejects(
+        createOffer(terms),
+        /live offer already stands/,
+        "the second drafts while one lives",
+      );
+      await withdrawOffer({
+        orgId,
+        actorId: h.recruiterId,
+        offerId: first.id,
+        reason: "terms revised",
+      });
+      const second = await createOffer(terms);
+      assert.equal(second.status, "draft", "withdrawing frees the live-offer slot");
+      await assert.rejects(
+        declineOffer({ orgId, actorId: h.recruiterId, offerId: second.id, reason: "changed mind" }),
+        /cannot be declined/,
+        "a draft never declines",
+      );
     });
-    await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    const { candidate } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Dee" });
-    const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id });
-    const terms = {
-      orgId,
-      actorId: h.recruiterId,
-      applicationId: application.id,
-      employerSubsidiaryId: h.org.subsidiaryId,
-      jobTitle: "Engineer",
-      proposedStartOn: "2026-10-01",
-      compensationAmount: "90000",
-      compensationCurrency: "USD",
-      compensationBasis: "annual" as const,
-    };
-    const first = await createOffer(terms);
-    await assert.rejects(createOffer(terms), /live offer already stands/, "the second drafts while one lives");
-    await withdrawOffer({ orgId, actorId: h.recruiterId, offerId: first.id, reason: "terms revised" });
-    const second = await createOffer(terms);
-    assert.equal(second.status, "draft", "withdrawing frees the live-offer slot");
-    await assert.rejects(
-      declineOffer({ orgId, actorId: h.recruiterId, offerId: second.id, reason: "changed mind" }),
-      /cannot be declined/,
-      "a draft never declines",
-    );
-  });
-});
+  },
+);
 
 test("a past-due sent offer reads expired and refuses its accept", { skip: !DB }, async () => {
   await withHarness(async (h) => {
@@ -552,8 +807,17 @@ test("a past-due sent offer reads expired and refuses its accept", { skip: !DB }
       headcount: 1,
     });
     await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    const { candidate } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Eli" });
-    const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id });
+    const { candidate } = await createCandidate({
+      orgId,
+      actorId: h.recruiterId,
+      displayName: "Eli",
+    });
+    const application = await createApplication({
+      orgId,
+      actorId: h.recruiterId,
+      requisitionId: requisition.id,
+      candidateId: candidate.id,
+    });
     const offer = await createOffer({
       orgId,
       actorId: h.recruiterId,
@@ -575,11 +839,24 @@ test("a past-due sent offer reads expired and refuses its accept", { skip: !DB }
     // The refused hire wrote NOTHING — not even the expiry: expiry
     // materialises in its own commit before the hire opens, and the hire
     // itself stays all-or-nothing.
-    const stored = (await db.execute<{ status: string }>(sql`
-      select status from hrm_offers where id = ${offer.id}`, "objects"))[0]!.status;
+    const stored = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from hrm_offers where id = ${offer.id}`,
+        "objects",
+      )
+    )[0]!.status;
     assert.equal(stored, "expired", "the expiry materialised before the refused hire");
-    const drawer = await getRequisitionDetail({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    assert.equal(drawer.applications[0]!.liveOfferStatus, null, "the expired offer leaves the live slot");
+    const drawer = await getRequisitionDetail({
+      orgId,
+      actorId: h.recruiterId,
+      requisitionId: requisition.id,
+    });
+    assert.equal(
+      drawer.applications[0]!.liveOfferStatus,
+      null,
+      "the expired offer leaves the live slot",
+    );
     // ...so new terms draft freely after expiry.
     const renewed = await createOffer({
       orgId,
@@ -596,235 +873,350 @@ test("a past-due sent offer reads expired and refuses its accept", { skip: !DB }
   });
 });
 
-test("hire without an approval flow applies directly through the governed admission", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    // Deliberately no seedFlow: approval is optional, so the submission
-    // applies directly with automatic evidence instead of refusing.
-    const requisition = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "Vacancy",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      headcount: 1,
-    });
-    await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    const { candidate } = await createCandidate({
-      orgId,
-      actorId: h.recruiterId,
-      displayName: "Fay Direct",
-      email: "fay@example.test",
-    });
-    const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id });
-    const offer = await createOffer({
-      orgId,
-      actorId: h.recruiterId,
-      applicationId: application.id,
-      employerSubsidiaryId: h.org.subsidiaryId,
-      jobTitle: "Engineer",
-      proposedStartOn: "2026-10-01",
-      compensationAmount: "90000",
-      compensationCurrency: "USD",
-      compensationBasis: "annual",
-    });
-    await sendOffer({ orgId, actorId: h.recruiterId, offerId: offer.id });
-    const partiesBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from parties where org_id = ${orgId}`, "objects"))[0]!.n;
-    const hire = await acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id });
-    // The employee party is minted, the first version applied at once.
-    const employeeRole = (await db.execute<{ id: string; active: boolean }>(sql`
+test(
+  "hire without an approval flow applies directly through the governed admission",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      // Deliberately no seedFlow: approval is optional, so the submission
+      // applies directly with automatic evidence instead of refusing.
+      const requisition = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "Vacancy",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        headcount: 1,
+      });
+      await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+      const { candidate } = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Fay Direct",
+        email: "fay@example.test",
+      });
+      const application = await createApplication({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: requisition.id,
+        candidateId: candidate.id,
+      });
+      const offer = await createOffer({
+        orgId,
+        actorId: h.recruiterId,
+        applicationId: application.id,
+        employerSubsidiaryId: h.org.subsidiaryId,
+        jobTitle: "Engineer",
+        proposedStartOn: "2026-10-01",
+        compensationAmount: "90000",
+        compensationCurrency: "USD",
+        compensationBasis: "annual",
+      });
+      await sendOffer({ orgId, actorId: h.recruiterId, offerId: offer.id });
+      const partiesBefore = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from parties where org_id = ${orgId}`,
+          "objects",
+        )
+      )[0]!.n;
+      const hire = await acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id });
+      // The employee party is minted, the first version applied at once.
+      const employeeRole = (
+        await db.execute<{ id: string; active: boolean }>(
+          sql`
       select id, is_active as active from employee_roles where org_id = ${orgId} and party_id = ${hire.workerPartyId}
-    `, "objects"))[0];
-    assert.equal(employeeRole?.active, true);
-    const roleAudit = (await db.execute<{ actor: string; reason: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0];
+      assert.equal(employeeRole?.active, true);
+      const roleAudit = (
+        await db.execute<{ actor: string; reason: string }>(
+          sql`
       select actor_id::text as actor, changes ->> 'reason' as reason from audit_log
        where org_id = ${orgId} and table_name = 'employee_roles' and row_id = ${employeeRole!.id}
-    `, "objects"))[0];
-    assert.equal(roleAudit?.actor, h.recruiterId);
-    assert.match(roleAudit!.reason, /Hire for requisition/);
-    assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from parties where org_id = ${orgId}`, "objects"))[0]!.n,
-      partiesBefore + 1,
-      "the hire mints the employee party",
-    );
-    const versions = await db.execute<{ no: number; status: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0];
+      assert.equal(roleAudit?.actor, h.recruiterId);
+      assert.match(roleAudit!.reason, /Hire for requisition/);
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from parties where org_id = ${orgId}`,
+            "objects",
+          )
+        )[0]!.n,
+        partiesBefore + 1,
+        "the hire mints the employee party",
+      );
+      const versions = await db.execute<{ no: number; status: string }>(
+        sql`
       select version_no as no, status from worker_employment_versions
-       where employment_id = ${hire.employmentId} and recorded_until is null order by version_no`, "objects");
-    assert.deepEqual(versions, [{ no: 1, status: "active" }]);
-    const stored = (await db.execute<{ status: string; snapshot: { mode: string; gates: unknown[]; policy: { kind: string } } }>(sql`
-      select status, decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}`, "objects"))[0]!;
-    assert.equal(stored.status, "applied");
-    assert.equal(stored.snapshot.mode, "automatic");
-    assert.deepEqual(stored.snapshot.gates, []);
-    assert.equal(stored.snapshot.policy.kind, "ungated");
-    assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where id = ${offer.id}`, "objects"))[0]!.status, "accepted");
-    assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from hrm_applications where id = ${application.id}`, "objects"))[0]!.status,
-      "hired",
-    );
-    assert.equal(
-      (await db.execute<{ filled_count: number }>(sql`select filled_count from hrm_requisitions where id = ${requisition.id}`, "objects"))[0]!
-        .filled_count,
-      1,
-    );
-    assert.deepEqual(await eventKinds(orgId, application.id), ["applied", "offer_created", "offer_sent", "offer_accepted", "hired"]);
-  });
-});
+       where employment_id = ${hire.employmentId} and recorded_until is null order by version_no`,
+        "objects",
+      );
+      assert.deepEqual(versions, [{ no: 1, status: "active" }]);
+      const stored = (
+        await db.execute<{
+          status: string;
+          snapshot: { mode: string; gates: unknown[]; policy: { kind: string } };
+        }>(
+          sql`
+      select status, decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(stored.status, "applied");
+      assert.equal(stored.snapshot.mode, "automatic");
+      assert.deepEqual(stored.snapshot.gates, []);
+      assert.equal(stored.snapshot.policy.kind, "ungated");
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from hrm_offers where id = ${offer.id}`,
+            "objects",
+          )
+        )[0]!.status,
+        "accepted",
+      );
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from hrm_applications where id = ${application.id}`,
+            "objects",
+          )
+        )[0]!.status,
+        "hired",
+      );
+      assert.equal(
+        (
+          await db.execute<{ filled_count: number }>(
+            sql`select filled_count from hrm_requisitions where id = ${requisition.id}`,
+            "objects",
+          )
+        )[0]!.filled_count,
+        1,
+      );
+      assert.deepEqual(await eventKinds(orgId, application.id), [
+        "applied",
+        "offer_created",
+        "offer_sent",
+        "offer_accepted",
+        "hired",
+      ]);
+    });
+  },
+);
 
-test("hire refuses off an unopened requisition and off a position filled under us", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    await seedFlow(orgId, h.approverId);
-    const position = await createPosition({
-      orgId,
-      actorId: h.recruiterId,
-      positionCode: "ENG-3300",
-      title: "Engineer",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      plannedFte: "1.0000",
-      status: "open",
-      effectiveFrom: "2026-07-01",
-      reason: "open",
-    });
-    await writePositionFunding({
-      orgId,
-      actorId: h.recruiterId,
-      positionId: position.id,
-      periodId: h.org.periodId,
-      fundedFte: "1.0000",
-      reason: "fund the establishment",
-    });
-    const draft = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "Vacancy",
-      positionId: position.id,
-      employerSubsidiaryId: h.org.subsidiaryId,
-      headcount: 1,
-      targetStartOn: "2026-07-15",
-    });
-    const opened = await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: draft.id });
-    const { candidate } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Gus" });
-    const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: opened.id, candidateId: candidate.id });
-    const offer = await createOffer({
-      orgId,
-      actorId: h.recruiterId,
-      applicationId: application.id,
-      employerSubsidiaryId: h.org.subsidiaryId,
-      jobTitle: "Engineer",
-      proposedStartOn: "2026-07-15",
-      compensationAmount: "90000",
-      compensationCurrency: "USD",
-      compensationBasis: "annual",
-    });
-    await sendOffer({ orgId, actorId: h.recruiterId, offerId: offer.id });
-    // The establishment fills under us before the hire lands.
-    await seedHolder(orgId, h.org.subsidiaryId, position.id);
-    await assert.rejects(
-      acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id }),
-      /no longer vacant/,
-      "a hire past the plan is refused, never silently allowed",
-    );
+test(
+  "hire refuses off an unopened requisition and off a position filled under us",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      await seedFlow(orgId, h.approverId);
+      const position = await createPosition({
+        orgId,
+        actorId: h.recruiterId,
+        positionCode: "ENG-3300",
+        title: "Engineer",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        plannedFte: "1.0000",
+        status: "open",
+        effectiveFrom: "2026-07-01",
+        reason: "open",
+      });
+      await writePositionFunding({
+        orgId,
+        actorId: h.recruiterId,
+        positionId: position.id,
+        periodId: h.org.periodId,
+        fundedFte: "1.0000",
+        reason: "fund the establishment",
+      });
+      const draft = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "Vacancy",
+        positionId: position.id,
+        employerSubsidiaryId: h.org.subsidiaryId,
+        headcount: 1,
+        targetStartOn: "2026-07-15",
+      });
+      const opened = await openRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: draft.id,
+      });
+      const { candidate } = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Gus",
+      });
+      const application = await createApplication({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: opened.id,
+        candidateId: candidate.id,
+      });
+      const offer = await createOffer({
+        orgId,
+        actorId: h.recruiterId,
+        applicationId: application.id,
+        employerSubsidiaryId: h.org.subsidiaryId,
+        jobTitle: "Engineer",
+        proposedStartOn: "2026-07-15",
+        compensationAmount: "90000",
+        compensationCurrency: "USD",
+        compensationBasis: "annual",
+      });
+      await sendOffer({ orgId, actorId: h.recruiterId, offerId: offer.id });
+      // The establishment fills under us before the hire lands.
+      await seedHolder(orgId, h.org.subsidiaryId, position.id);
+      await assert.rejects(
+        acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id }),
+        /no longer vacant/,
+        "a hire past the plan is refused, never silently allowed",
+      );
 
-    // And a cancelled opening takes no hire either.
-    const free = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "Free vacancy",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      headcount: 1,
+      // And a cancelled opening takes no hire either.
+      const free = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "Free vacancy",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        headcount: 1,
+      });
+      await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: free.id });
+      const { candidate: second } = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Hal",
+      });
+      const secondApplication = await createApplication({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: free.id,
+        candidateId: second.id,
+      });
+      const secondOffer = await createOffer({
+        orgId,
+        actorId: h.recruiterId,
+        applicationId: secondApplication.id,
+        employerSubsidiaryId: h.org.subsidiaryId,
+        jobTitle: "Engineer",
+        proposedStartOn: "2026-10-01",
+        compensationAmount: "90000",
+        compensationCurrency: "USD",
+        compensationBasis: "annual",
+      });
+      await sendOffer({ orgId, actorId: h.recruiterId, offerId: secondOffer.id });
+      await cancelRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: free.id,
+        reason: "role cut",
+      });
+      await assert.rejects(
+        acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: secondOffer.id }),
+        /cancelled.*hires land only on open/,
+      );
     });
-    await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: free.id });
-    const { candidate: second } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Hal" });
-    const secondApplication = await createApplication({
-      orgId,
-      actorId: h.recruiterId,
-      requisitionId: free.id,
-      candidateId: second.id,
-    });
-    const secondOffer = await createOffer({
-      orgId,
-      actorId: h.recruiterId,
-      applicationId: secondApplication.id,
-      employerSubsidiaryId: h.org.subsidiaryId,
-      jobTitle: "Engineer",
-      proposedStartOn: "2026-10-01",
-      compensationAmount: "90000",
-      compensationCurrency: "USD",
-      compensationBasis: "annual",
-    });
-    await sendOffer({ orgId, actorId: h.recruiterId, offerId: secondOffer.id });
-    await cancelRequisition({ orgId, actorId: h.recruiterId, requisitionId: free.id, reason: "role cut" });
-    await assert.rejects(
-      acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: secondOffer.id }),
-      /cancelled.*hires land only on open/,
-    );
-  });
-});
+  },
+);
 
-test("the hiring manager moves their own funnel without the grant and never sees PII", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    const requisition = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "Managed vacancy",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      hiringManagerPartyId: h.managerPartyId,
-      headcount: 1,
+test(
+  "the hiring manager moves their own funnel without the grant and never sees PII",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      const requisition = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "Managed vacancy",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        hiringManagerPartyId: h.managerPartyId,
+        headcount: 1,
+      });
+      await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+      const { candidate } = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Ivy Prospect",
+        email: "ivy@example.test",
+        phone: "+1-555-0199",
+        source: "referral",
+      });
+      const application = await createApplication({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: requisition.id,
+        candidateId: candidate.id,
+      });
+      // No grants on the manager: the list refuses, the drawer admits.
+      await assert.rejects(
+        listRequisitions({ orgId, actorId: h.managerId }),
+        /hrm.recruiting.read/,
+      );
+      const drawer = await getRequisitionDetail({
+        orgId,
+        actorId: h.managerId,
+        requisitionId: requisition.id,
+      });
+      assert.equal(drawer.applications.length, 1);
+      assert.equal(drawer.applications[0]!.candidate.displayName, "Ivy Prospect");
+      assert.equal(
+        drawer.applications[0]!.candidate.email,
+        null,
+        "contact PII never reaches the manager",
+      );
+      assert.equal(drawer.applications[0]!.candidate.phone, null);
+      const screen = drawer.stages.find((stage) => stage.key === "screening")!;
+      const moved = await moveApplicationStage({
+        orgId,
+        actorId: h.managerId,
+        applicationId: application.id,
+        toStageId: screen.id,
+      });
+      assert.equal(moved.stageId, screen.id, "the manager moves their own funnel");
+      // Terminal funnel decisions stay behind the grant: the manager moves,
+      // never rejects.
+      await assert.rejects(
+        rejectApplication({
+          orgId,
+          actorId: h.managerId,
+          applicationId: application.id,
+          reason: "no",
+        }),
+        /hrm.recruiting.manage/,
+      );
+      // Another manager's opening stays shut.
+      const other = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "Other vacancy",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        headcount: 1,
+      });
+      await assert.rejects(
+        getRequisitionDetail({ orgId, actorId: h.managerId, requisitionId: other.id }),
+        /hrm.recruiting.read/,
+      );
+      // The candidate drawer through the manager's own funnel redacts too.
+      const candidateDrawer = await getCandidateDetail({
+        orgId,
+        actorId: h.managerId,
+        candidateId: candidate.id,
+      });
+      assert.equal(candidateDrawer.email, null);
+      assert.equal(candidateDrawer.applications.length, 1);
     });
-    await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    const { candidate } = await createCandidate({
-      orgId,
-      actorId: h.recruiterId,
-      displayName: "Ivy Prospect",
-      email: "ivy@example.test",
-      phone: "+1-555-0199",
-      source: "referral",
-    });
-    const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id });
-    // No grants on the manager: the list refuses, the drawer admits.
-    await assert.rejects(
-      listRequisitions({ orgId, actorId: h.managerId }),
-      /hrm.recruiting.read/,
-    );
-    const drawer = await getRequisitionDetail({ orgId, actorId: h.managerId, requisitionId: requisition.id });
-    assert.equal(drawer.applications.length, 1);
-    assert.equal(drawer.applications[0]!.candidate.displayName, "Ivy Prospect");
-    assert.equal(drawer.applications[0]!.candidate.email, null, "contact PII never reaches the manager");
-    assert.equal(drawer.applications[0]!.candidate.phone, null);
-    const screen = drawer.stages.find((stage) => stage.key === "screening")!;
-    const moved = await moveApplicationStage({
-      orgId,
-      actorId: h.managerId,
-      applicationId: application.id,
-      toStageId: screen.id,
-    });
-    assert.equal(moved.stageId, screen.id, "the manager moves their own funnel");
-    // Terminal funnel decisions stay behind the grant: the manager moves,
-    // never rejects.
-    await assert.rejects(
-      rejectApplication({ orgId, actorId: h.managerId, applicationId: application.id, reason: "no" }),
-      /hrm.recruiting.manage/,
-    );
-    // Another manager's opening stays shut.
-    const other = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "Other vacancy",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      headcount: 1,
-    });
-    await assert.rejects(
-      getRequisitionDetail({ orgId, actorId: h.managerId, requisitionId: other.id }),
-      /hrm.recruiting.read/,
-    );
-    // The candidate drawer through the manager's own funnel redacts too.
-    const candidateDrawer = await getCandidateDetail({ orgId, actorId: h.managerId, candidateId: candidate.id });
-    assert.equal(candidateDrawer.email, null);
-    assert.equal(candidateDrawer.applications.length, 1);
-  });
-});
+  },
+);
 
 test("the interviewer sees the name and the interview, nothing else", { skip: !DB }, async () => {
   await withHarness(async (h) => {
@@ -845,7 +1237,12 @@ test("the interviewer sees the name and the interview, nothing else", { skip: !D
       email: "jon@example.test",
       phone: "+1-555-0188",
     });
-    const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id });
+    const application = await createApplication({
+      orgId,
+      actorId: h.recruiterId,
+      requisitionId: requisition.id,
+      candidateId: candidate.id,
+    });
     const interview = await scheduleInterview({
       orgId,
       actorId: h.recruiterId,
@@ -867,9 +1264,16 @@ test("the interviewer sees the name and the interview, nothing else", { skip: !D
       /not an employee/,
       "the manager holds no employment row, so the panel refuses",
     );
-    const view = await getInterviewForPanelist({ orgId, actorId: h.interviewerId, interviewId: interview.id });
+    const view = await getInterviewForPanelist({
+      orgId,
+      actorId: h.interviewerId,
+      interviewId: interview.id,
+    });
     assert.equal(view.candidateName, "Jon Prospect");
-    assert.ok(!("email" in view) && !("phone" in view), "no contact PII key exists on the interviewer's view");
+    assert.ok(
+      !("email" in view) && !("phone" in view),
+      "no contact PII key exists on the interviewer's view",
+    );
     await assert.rejects(
       getCandidateDetail({ orgId, actorId: h.interviewerId, candidateId: candidate.id }),
       /not visible/,
@@ -880,86 +1284,137 @@ test("the interviewer sees the name and the interview, nothing else", { skip: !D
       /not visible/,
       "a non-panelist reaches no interview",
     );
-    const cancelled = await cancelInterview({ orgId, actorId: h.recruiterId, interviewId: interview.id });
+    const cancelled = await cancelInterview({
+      orgId,
+      actorId: h.recruiterId,
+      interviewId: interview.id,
+    });
     assert.equal(cancelled.status, "cancelled");
   });
 });
 
-test("a second organization sees nothing of the first, at the policy itself", { skip: !DB }, async () => {
-  const first = await setupRecruitingHarness();
-  const second = await setupRecruitingHarness();
-  try {
-    const requisition = await createRequisition({
-      orgId: first.org.orgId,
-      actorId: first.recruiterId,
-      title: "First vacancy",
-      employerSubsidiaryId: first.org.subsidiaryId,
-      headcount: 1,
-    });
-    // Service predicates isolate: the foreign org lists nothing and loads nothing.
-    assert.equal((await listRequisitions({ orgId: second.org.orgId, actorId: second.recruiterId })).length, 0);
-    await assert.rejects(
-      getRequisitionDetail({ orgId: second.org.orgId, actorId: second.recruiterId, requisitionId: requisition.id }),
-      /not visible in this organization/,
-    );
-    // Raw constrained sessions (no test bypass): the policy is the oracle.
-    const url = process.env.OPENBOOKS_RUNTIME_DB_URL || process.env.OPENBOOKS_DB_URL!;
-    const countAs = async (orgId: string, table: string): Promise<number> => {
-      const client = new Client({ connectionString: url });
-      await client.connect();
-      try {
-        await client.query("select set_config('app.current_org', $1, false)", [orgId]);
-        const res = await client.query(`select count(*)::int as n from ${table}`);
-        return res.rows[0].n as number;
-      } finally {
-        await client.end();
+test(
+  "a second organization sees nothing of the first, at the policy itself",
+  { skip: !DB },
+  async () => {
+    const first = await setupRecruitingHarness();
+    const second = await setupRecruitingHarness();
+    try {
+      const requisition = await createRequisition({
+        orgId: first.org.orgId,
+        actorId: first.recruiterId,
+        title: "First vacancy",
+        employerSubsidiaryId: first.org.subsidiaryId,
+        headcount: 1,
+      });
+      // Service predicates isolate: the foreign org lists nothing and loads nothing.
+      assert.equal(
+        (await listRequisitions({ orgId: second.org.orgId, actorId: second.recruiterId })).length,
+        0,
+      );
+      await assert.rejects(
+        getRequisitionDetail({
+          orgId: second.org.orgId,
+          actorId: second.recruiterId,
+          requisitionId: requisition.id,
+        }),
+        /not visible in this organization/,
+      );
+      // Raw constrained sessions (no test bypass): the policy is the oracle.
+      const url = process.env.OPENBOOKS_RUNTIME_DB_URL || process.env.OPENBOOKS_DB_URL!;
+      const countAs = async (orgId: string, table: string): Promise<number> => {
+        const client = new Client({ connectionString: url });
+        await client.connect();
+        try {
+          await client.query("select set_config('app.current_org', $1, false)", [orgId]);
+          const res = await client.query(`select count(*)::int as n from ${table}`);
+          return res.rows[0].n as number;
+        } finally {
+          await client.end();
+        }
+      };
+      for (const table of [
+        "hrm_requisitions",
+        "hrm_candidates",
+        "hrm_applications",
+        "hrm_application_events",
+        "hrm_interviews",
+        "hrm_offers",
+      ]) {
+        assert.equal(await countAs(first.org.orgId, table), table === "hrm_requisitions" ? 1 : 0);
+        assert.equal(
+          await countAs(second.org.orgId, table),
+          0,
+          `a foreign org session sees zero ${table} rows`,
+        );
       }
-    };
-    for (const table of ["hrm_requisitions", "hrm_candidates", "hrm_applications", "hrm_application_events", "hrm_interviews", "hrm_offers"]) {
-      assert.equal(await countAs(first.org.orgId, table), table === "hrm_requisitions" ? 1 : 0);
-      assert.equal(await countAs(second.org.orgId, table), 0, `a foreign org session sees zero ${table} rows`);
+    } finally {
+      await dropScratchOrg(first.org.orgId);
+      await dropScratchOrg(second.org.orgId);
     }
-  } finally {
-    await dropScratchOrg(first.org.orgId);
-    await dropScratchOrg(second.org.orgId);
-  }
-});
+  },
+);
 
-test("storage refuses event edits, event deletes, and template deletes with history", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    const requisition = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "Vacancy",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      headcount: 1,
+test(
+  "storage refuses event edits, event deletes, and template deletes with history",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      const requisition = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "Vacancy",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        headcount: 1,
+      });
+      await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+      const { candidate } = await createCandidate({
+        orgId,
+        actorId: h.recruiterId,
+        displayName: "Kay",
+      });
+      const application = await createApplication({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: requisition.id,
+        candidateId: candidate.id,
+      });
+      const eventId = (
+        await db.execute<{ id: string }>(
+          sql`
+      select id from hrm_application_events where org_id = ${orgId} and application_id = ${application.id} limit 1`,
+          "objects",
+        )
+      )[0]!.id;
+      await assertStorageRefused(
+        db.execute(
+          sql`update hrm_application_events set reason = 'rewritten' where id = ${eventId}`,
+        ),
+        /append-only/,
+      );
+      await assertStorageRefused(
+        db.execute(sql`delete from hrm_application_events where id = ${eventId}`),
+        /append-only/,
+      );
+      const templateId = (
+        await db.execute<{ pipeline_template_id: string }>(
+          sql`
+      select pipeline_template_id from hrm_requisitions where id = ${requisition.id}`,
+          "objects",
+        )
+      )[0]!.pipeline_template_id;
+      await assertStorageRefused(
+        db.execute(sql`delete from hrm_pipeline_templates where id = ${templateId}`),
+        /retained as history/,
+      );
+      await assertStorageRefused(
+        db.execute(sql`delete from hrm_requisitions where id = ${requisition.id}`),
+        /retained as history/,
+      );
     });
-    await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    const { candidate } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Kay" });
-    const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id });
-    const eventId = (await db.execute<{ id: string }>(sql`
-      select id from hrm_application_events where org_id = ${orgId} and application_id = ${application.id} limit 1`, "objects"))[0]!.id;
-    await assertStorageRefused(
-      db.execute(sql`update hrm_application_events set reason = 'rewritten' where id = ${eventId}`),
-      /append-only/,
-    );
-    await assertStorageRefused(
-      db.execute(sql`delete from hrm_application_events where id = ${eventId}`),
-      /append-only/,
-    );
-    const templateId = (await db.execute<{ pipeline_template_id: string }>(sql`
-      select pipeline_template_id from hrm_requisitions where id = ${requisition.id}`, "objects"))[0]!.pipeline_template_id;
-    await assertStorageRefused(
-      db.execute(sql`delete from hrm_pipeline_templates where id = ${templateId}`),
-      /retained as history/,
-    );
-    await assertStorageRefused(
-      db.execute(sql`delete from hrm_requisitions where id = ${requisition.id}`),
-      /retained as history/,
-    );
-  });
-});
+  },
+);
 
 // Recruiting-depth hostile loops, proved against storage. Every refusal
 // below asserts the writes that must NOT exist; every success reads its
@@ -970,7 +1425,9 @@ async function enableRecruiting(orgId: string): Promise<void> {
   await enableFeatures(orgId, RECRUITING_FEATURE_KEYS);
 }
 
-async function seedSentOffer(h: Harness): Promise<{ applicationId: string; candidateId: string; offerId: string }> {
+async function seedSentOffer(
+  h: Harness,
+): Promise<{ applicationId: string; candidateId: string; offerId: string }> {
   const orgId = h.org.orgId;
   await seedFlow(orgId, h.approverId);
   const position = await createPosition({
@@ -994,7 +1451,11 @@ async function seedSentOffer(h: Harness): Promise<{ applicationId: string; candi
     headcount: 1,
     targetStartOn: "2026-10-01",
   });
-  const opened = await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+  const opened = await openRequisition({
+    orgId,
+    actorId: h.recruiterId,
+    requisitionId: requisition.id,
+  });
   const { candidate } = await createCandidate({
     orgId,
     actorId: h.recruiterId,
@@ -1003,7 +1464,12 @@ async function seedSentOffer(h: Harness): Promise<{ applicationId: string; candi
     phone: "+1-555-0200",
     source: "direct",
   });
-  const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: opened.id, candidateId: candidate.id });
+  const application = await createApplication({
+    orgId,
+    actorId: h.recruiterId,
+    requisitionId: opened.id,
+    candidateId: candidate.id,
+  });
   const offer = await createOffer({
     orgId,
     actorId: h.recruiterId,
@@ -1022,86 +1488,126 @@ async function seedSentOffer(h: Harness): Promise<{ applicationId: string; candi
 }
 
 async function employmentCount(orgId: string): Promise<number> {
-  const rows = await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from worker_employments where org_id = ${orgId}`, "objects");
+  const rows = await db.execute<{ count: string }>(
+    sql`
+    select count(*)::text as count from worker_employments where org_id = ${orgId}`,
+    "objects",
+  );
   return Number(rows[0]!.count);
 }
 
-test("hire refuses an offer whose rendered letter is unsigned, writing nothing", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    await enableRecruiting(orgId);
-    const before = await employmentCount(orgId);
-    const { offerId } = await seedSentOffer(h);
-    // Rendering the letter puts the offer into the e-sign lifecycle; from
-    // then on hire needs the candidate's signature.
-    const template = await createOfferTemplate({
-      orgId,
-      actorId: h.recruiterId,
-      name: "Standard letter",
-      bodyTemplate: "Dear {{candidate_name}}, we offer you {{job_title}}.",
-      clauses: [],
+test(
+  "hire refuses an offer whose rendered letter is unsigned, writing nothing",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      await enableRecruiting(orgId);
+      const before = await employmentCount(orgId);
+      const { offerId } = await seedSentOffer(h);
+      // Rendering the letter puts the offer into the e-sign lifecycle; from
+      // then on hire needs the candidate's signature.
+      const template = await createOfferTemplate({
+        orgId,
+        actorId: h.recruiterId,
+        name: "Standard letter",
+        bodyTemplate: "Dear {{candidate_name}}, we offer you {{job_title}}.",
+        clauses: [],
+      });
+      await renderOfferVersion({ orgId, actorId: h.recruiterId, offerId, templateId: template.id });
+      await sendOffer({ orgId, actorId: h.recruiterId, offerId });
+      await assert.rejects(
+        acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId }),
+        /unsigned/,
+        "hire names the missing signature",
+      );
+      assert.equal(await employmentCount(orgId), before, "a refused hire writes no employment");
+      const stored = (
+        await db.execute<{ status: string }>(
+          sql`
+      select status from hrm_offers where id = ${offerId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(stored.status, "sent", "the offer stands untouched by the refused hire");
     });
-    await renderOfferVersion({ orgId, actorId: h.recruiterId, offerId, templateId: template.id });
-    await sendOffer({ orgId, actorId: h.recruiterId, offerId });
-    await assert.rejects(
-      acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId }),
-      /unsigned/,
-      "hire names the missing signature",
-    );
-    assert.equal(await employmentCount(orgId), before, "a refused hire writes no employment");
-    const stored = (await db.execute<{ status: string }>(sql`
-      select status from hrm_offers where id = ${offerId}`, "objects"))[0]!;
-    assert.equal(stored.status, "sent", "the offer stands untouched by the refused hire");
-  });
-});
+  },
+);
 
-test("scheduling proposes from a pool's declared windows and books first-wins", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    await enableRecruiting(orgId);
-    await seedEmploymentForParty(orgId, h.org.subsidiaryId, h.interviewerPartyId);
-    const { applicationId } = await seedSentOffer(h);
-    const interview = await scheduleInterview({
-      orgId,
-      actorId: h.recruiterId,
-      applicationId,
-      kind: "video",
-      scheduledAt: "2027-09-25T14:00:00Z",
-      durationMinutes: 45,
-      panelPartyIds: [h.interviewerPartyId],
-    });
-    const poolId = randomUUID();
-    await db.execute(sql`
+test(
+  "scheduling proposes from a pool's declared windows and books first-wins",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      await enableRecruiting(orgId);
+      await seedEmploymentForParty(orgId, h.org.subsidiaryId, h.interviewerPartyId);
+      const { applicationId } = await seedSentOffer(h);
+      const interview = await scheduleInterview({
+        orgId,
+        actorId: h.recruiterId,
+        applicationId,
+        kind: "video",
+        scheduledAt: "2027-09-25T14:00:00Z",
+        durationMinutes: 45,
+        panelPartyIds: [h.interviewerPartyId],
+      });
+      const poolId = randomUUID();
+      await db.execute(sql`
       insert into hrm_interviewer_pools (id, org_id, name, availability, is_active)
       values (${poolId}, ${orgId}, 'Pool A',
               '[{"startsAt": "2027-10-01T09:00:00Z", "endsAt": "2027-10-01T09:30:00Z", "timezone": "America/Toronto"}]'::jsonb,
               true)`);
-    const pools = await listInterviewerPools({ orgId, actorId: h.recruiterId });
-    assert.equal(pools.length, 1, "the pool reads back through the service");
-    const proposed = await proposeSlots({ orgId, actorId: h.recruiterId, interviewId: interview.id, poolId });
-    assert.equal(proposed.slots.length, 1, "one slot from the pool's declared window");
-    const slotId = proposed.slots[0]!.id;
-    // The candidate email rides the shared job queue (Redis-backed, disabled
-    // in tests): inject the noop like the retention tests do — the race
-    // under test is slot contention, not delivery.
-    const [first, second] = await Promise.allSettled([
-      bookSlot({ bookingToken: proposed.bookingToken, slotId, candidateName: "Depth Candidate", enqueueEmail: async () => { } }),
-      bookSlot({ bookingToken: proposed.bookingToken, slotId, candidateName: "Depth Candidate", enqueueEmail: async () => { } }),
-    ]);
-    assert.equal(
-      [first.status, second.status].filter((status) => status === "fulfilled").length,
-      1,
-      "exactly one booking wins the race",
-    );
-    const loser = first.status === "rejected" ? first : second;
-    assert.match(String((loser as PromiseRejectedResult).reason), /taken/, "the loser is refused by name");
-    const booked = (await db.execute<{ count: string }>(sql`
+      const pools = await listInterviewerPools({ orgId, actorId: h.recruiterId });
+      assert.equal(pools.length, 1, "the pool reads back through the service");
+      const proposed = await proposeSlots({
+        orgId,
+        actorId: h.recruiterId,
+        interviewId: interview.id,
+        poolId,
+      });
+      assert.equal(proposed.slots.length, 1, "one slot from the pool's declared window");
+      const slotId = proposed.slots[0]!.id;
+      // The candidate email rides the shared job queue (Redis-backed, disabled
+      // in tests): inject the noop like the retention tests do — the race
+      // under test is slot contention, not delivery.
+      const [first, second] = await Promise.allSettled([
+        bookSlot({
+          bookingToken: proposed.bookingToken,
+          slotId,
+          candidateName: "Depth Candidate",
+          enqueueEmail: async () => {},
+        }),
+        bookSlot({
+          bookingToken: proposed.bookingToken,
+          slotId,
+          candidateName: "Depth Candidate",
+          enqueueEmail: async () => {},
+        }),
+      ]);
+      assert.equal(
+        [first.status, second.status].filter((status) => status === "fulfilled").length,
+        1,
+        "exactly one booking wins the race",
+      );
+      const loser = first.status === "rejected" ? first : second;
+      assert.match(
+        String((loser as PromiseRejectedResult).reason),
+        /taken/,
+        "the loser is refused by name",
+      );
+      const booked = (
+        await db.execute<{ count: string }>(
+          sql`
       select count(*)::text as count from hrm_interview_slots
-       where org_id = ${orgId} and interview_id = ${interview.id} and kind = 'booked'`, "objects"))[0]!;
-    assert.equal(Number(booked.count), 1, "storage holds exactly one booked slot");
-  });
-});
+       where org_id = ${orgId} and interview_id = ${interview.id} and kind = 'booked'`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(Number(booked.count), 1, "storage holds exactly one booked slot");
+    });
+  },
+);
 
 async function seedAgedApplication(
   h: Harness,
@@ -1130,7 +1636,11 @@ async function seedAgedApplication(
     headcount: 1,
     targetStartOn: "2026-10-01",
   });
-  const opened = await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+  const opened = await openRequisition({
+    orgId,
+    actorId: h.recruiterId,
+    requisitionId: requisition.id,
+  });
   const { candidate } = await createCandidate({
     orgId,
     actorId: h.recruiterId,
@@ -1139,10 +1649,18 @@ async function seedAgedApplication(
     phone: "+1-555-0200",
     source: "direct",
   });
-  const templateId = (await db.execute<{ pipelineTemplateId: string }>(sql`
-    select pipeline_template_id as "pipelineTemplateId" from hrm_requisitions where id = ${opened.id}`, "objects"))[0]!.pipelineTemplateId;
-  const stageRows = await db.execute<{ id: string; key: string }>(sql`
-    select id, key from hrm_pipeline_stages where org_id = ${orgId} and template_id = ${templateId}`, "objects");
+  const templateId = (
+    await db.execute<{ pipelineTemplateId: string }>(
+      sql`
+    select pipeline_template_id as "pipelineTemplateId" from hrm_requisitions where id = ${opened.id}`,
+      "objects",
+    )
+  )[0]!.pipelineTemplateId;
+  const stageRows = await db.execute<{ id: string; key: string }>(
+    sql`
+    select id, key from hrm_pipeline_stages where org_id = ${orgId} and template_id = ${templateId}`,
+    "objects",
+  );
   const stageId = (key: string) => stageRows.find((stage) => stage.key === key)!.id;
   const applicationId = randomUUID();
   const rejected = status === "rejected";
@@ -1170,77 +1688,133 @@ async function seedAgedApplication(
   return { candidateId: candidate.id, applicationId };
 }
 
-test("retention anonymizes an expired prospect and keeps the analytics", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    await enableRecruiting(orgId);
-    const ruleId = randomUUID();
-    await db.execute(sql`
+test(
+  "retention anonymizes an expired prospect and keeps the analytics",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      await enableRecruiting(orgId);
+      const ruleId = randomUUID();
+      await db.execute(sql`
       insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
       values (${ruleId}, ${orgId}, 'Stale prospects', '{}'::jsonb, 'inactivity', 1, 'anonymize', true)`);
-    const { candidateId, applicationId } = await seedAgedApplication(h, "rejected");
-    const run = await evaluateRetentionRule(
-      { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => { }, enqueueEmail: async () => { } },
-    );
-    assert.equal(run.candidatesAnonymized, 1, "the expired prospect is anonymized");
-    const candidate = (await db.execute<{ display_name: string; email: string | null; phone: string | null }>(sql`
-      select display_name, email, phone from hrm_candidates where id = ${candidateId}`, "objects"))[0]!;
-    assert.equal(candidate.display_name, "Anonymized candidate");
-    assert.equal(candidate.email, null, "contact PII is cleared");
-    assert.equal(candidate.phone, null, "contact PII is cleared");
-    const events = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from hrm_application_events where org_id = ${orgId} and application_id = ${applicationId}`, "objects"))[0]!;
-    assert.ok(Number(events.count) > 0, "funnel analytics survive anonymization");
-    const runs = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from hrm_retention_runs where org_id = ${orgId} and rule_id = ${ruleId}`, "objects"))[0]!;
-    assert.equal(Number(runs.count), 1, "the run is recorded");
-  });
-});
+      const { candidateId, applicationId } = await seedAgedApplication(h, "rejected");
+      const run = await evaluateRetentionRule(
+        { orgId, actorId: h.recruiterId, ruleId },
+        { removeFile: async () => {}, enqueueEmail: async () => {} },
+      );
+      assert.equal(run.candidatesAnonymized, 1, "the expired prospect is anonymized");
+      const candidate = (
+        await db.execute<{ display_name: string; email: string | null; phone: string | null }>(
+          sql`
+      select display_name, email, phone from hrm_candidates where id = ${candidateId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(candidate.display_name, "Anonymized candidate");
+      assert.equal(candidate.email, null, "contact PII is cleared");
+      assert.equal(candidate.phone, null, "contact PII is cleared");
+      const events = (
+        await db.execute<{ count: string }>(
+          sql`
+      select count(*)::text as count from hrm_application_events where org_id = ${orgId} and application_id = ${applicationId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.ok(Number(events.count) > 0, "funnel analytics survive anonymization");
+      const runs = (
+        await db.execute<{ count: string }>(
+          sql`
+      select count(*)::text as count from hrm_retention_runs where org_id = ${orgId} and rule_id = ${ruleId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(Number(runs.count), 1, "the run is recorded");
+    });
+  },
+);
 
-test("country-scoped retention matches the candidate's requisition legal-entity country", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    await enableRecruiting(orgId);
-    const country = (await db.execute<{ country: string }>(sql`
+test(
+  "country-scoped retention matches the candidate's requisition legal-entity country",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      await enableRecruiting(orgId);
+      const country = (
+        await db.execute<{ country: string }>(
+          sql`
       select country from subsidiaries where org_id = ${orgId} and id = ${h.org.subsidiaryId}
-    `, "objects"))[0]!.country;
-    const ruleId = randomUUID();
-    await db.execute(sql`
+    `,
+          "objects",
+        )
+      )[0]!.country;
+      const ruleId = randomUUID();
+      await db.execute(sql`
       insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
       values (${ruleId}, ${orgId}, 'Scoped stale prospects', ${JSON.stringify({ applies_to: "countries", countries: [country] })}::jsonb,
               'inactivity', 1, 'anonymize', true)`);
-    const { candidateId } = await seedAgedApplication(h, "rejected");
-    const run = await evaluateRetentionRule(
-      { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => { }, enqueueEmail: async () => { } },
-    );
-    assert.equal(run.candidatesAnonymized, 1, "the legal entity's country is supplied to the matcher");
-    const candidate = (await db.execute<{ display_name: string }>(sql`
-      select display_name from hrm_candidates where id = ${candidateId}`, "objects"))[0]!;
-    assert.equal(candidate.display_name, "Anonymized candidate");
-  });
-});
+      const { candidateId } = await seedAgedApplication(h, "rejected");
+      const run = await evaluateRetentionRule(
+        { orgId, actorId: h.recruiterId, ruleId },
+        { removeFile: async () => {}, enqueueEmail: async () => {} },
+      );
+      assert.equal(
+        run.candidatesAnonymized,
+        1,
+        "the legal entity's country is supplied to the matcher",
+      );
+      const candidate = (
+        await db.execute<{ display_name: string }>(
+          sql`
+      select display_name from hrm_candidates where id = ${candidateId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(candidate.display_name, "Anonymized candidate");
+    });
+  },
+);
 
-test("the system retention duty returns its durable per-rule business-day claim", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    await enableRecruiting(orgId);
-    const ruleId = randomUUID();
-    await db.execute(sql`
+test(
+  "the system retention duty returns its durable per-rule business-day claim",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      await enableRecruiting(orgId);
+      const ruleId = randomUUID();
+      await db.execute(sql`
       insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
       values (${ruleId}, ${orgId}, 'Daily recruiting retention', '{}'::jsonb, 'inactivity', 12, 'anonymize', true)`);
-    const day = await businessToday(orgId);
-    const options = { now: new Date(), runner: { kind: "system" as const }, claimBusinessDay: day };
-    const first = await evaluateRetentionRule({ orgId, actorId: SYSTEM_ACTOR_ID, ruleId }, options);
-    const repeated = await evaluateRetentionRule({ orgId, actorId: SYSTEM_ACTOR_ID, ruleId }, options);
-    assert.equal(repeated.id, first.id, "a retry reuses the durable completed run");
-    const count = (await db.execute<{ count: number }>(sql`
+      const day = await businessToday(orgId);
+      const options = {
+        now: new Date(),
+        runner: { kind: "system" as const },
+        claimBusinessDay: day,
+      };
+      const first = await evaluateRetentionRule(
+        { orgId, actorId: SYSTEM_ACTOR_ID, ruleId },
+        options,
+      );
+      const repeated = await evaluateRetentionRule(
+        { orgId, actorId: SYSTEM_ACTOR_ID, ruleId },
+        options,
+      );
+      assert.equal(repeated.id, first.id, "a retry reuses the durable completed run");
+      const count = (
+        await db.execute<{ count: number }>(
+          sql`
       select count(*)::int as count from hrm_retention_runs where org_id = ${orgId} and rule_id = ${ruleId}
-    `, "objects"))[0]!.count;
-    assert.equal(count, 1, "the rule has one committed run row for the business day");
-  });
-});
+    `,
+          "objects",
+        )
+      )[0]!.count;
+      assert.equal(count, 1, "the rule has one committed run row for the business day");
+    });
+  },
+);
 
 test("retention never touches a candidate with an open application", { skip: !DB }, async () => {
   await withHarness(async (h) => {
@@ -1255,94 +1829,148 @@ test("retention never touches a candidate with an open application", { skip: !DB
     const { candidateId } = await seedAgedApplication(h, "active");
     const run = await evaluateRetentionRule(
       { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => { }, enqueueEmail: async () => { } },
+      { removeFile: async () => {}, enqueueEmail: async () => {} },
     );
     assert.equal(run.candidatesAnonymized, 0, "nothing is anonymized");
     assert.equal(run.candidatesDeleted, 0, "nothing is deleted");
-    const candidate = (await db.execute<{ display_name: string }>(sql`
-      select display_name from hrm_candidates where id = ${candidateId}`, "objects"))[0]!;
+    const candidate = (
+      await db.execute<{ display_name: string }>(
+        sql`
+      select display_name from hrm_candidates where id = ${candidateId}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(candidate.display_name, "Depth Candidate", "the open candidacy is untouched");
   });
 });
 
-test("retention rechecks open applications after locking against a concurrent attach", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    await enableRecruiting(orgId);
-    const ruleId = randomUUID();
-    await db.execute(sql`
+test(
+  "retention rechecks open applications after locking against a concurrent attach",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      await enableRecruiting(orgId);
+      const ruleId = randomUUID();
+      await db.execute(sql`
       insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
       values (${ruleId}, ${orgId}, 'Concurrent prospect cleanup', '{}'::jsonb, 'inactivity', 1, 'anonymize', true)`);
-    const { candidateId } = await seedAgedApplication(h, "rejected");
-    const requisition = await createRequisition({
-      orgId,
-      actorId: h.recruiterId,
-      title: "New application during retention",
-      employerSubsidiaryId: h.org.subsidiaryId,
-      headcount: 1,
-    });
-    const opened = await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
-    let unlockAppTransaction!: () => void;
-    let reportAppLock!: () => void;
-    const appTransactionHeld = new Promise<void>((resolve) => { unlockAppTransaction = resolve; });
-    const appRowLocked = new Promise<void>((resolve) => { reportAppLock = resolve; });
-    const appWrite = withOrgTransaction(orgId, async () => {
-      await db.execute(sql`
+      const { candidateId } = await seedAgedApplication(h, "rejected");
+      const requisition = await createRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        title: "New application during retention",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        headcount: 1,
+      });
+      const opened = await openRequisition({
+        orgId,
+        actorId: h.recruiterId,
+        requisitionId: requisition.id,
+      });
+      let unlockAppTransaction!: () => void;
+      let reportAppLock!: () => void;
+      const appTransactionHeld = new Promise<void>((resolve) => {
+        unlockAppTransaction = resolve;
+      });
+      const appRowLocked = new Promise<void>((resolve) => {
+        reportAppLock = resolve;
+      });
+      const appWrite = withOrgTransaction(orgId, async () => {
+        await db.execute(sql`
         select id from hrm_candidates where org_id = ${orgId} and id = ${candidateId} for update
       `);
-      reportAppLock();
-      await appTransactionHeld;
-      await createApplication({ orgId, actorId: h.recruiterId, requisitionId: opened.id, candidateId });
-    });
-    await appRowLocked;
-    const retention = evaluateRetentionRule(
-      { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => { }, enqueueEmail: async () => { } },
-    );
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-    unlockAppTransaction();
-    await appWrite;
-    const run = await retention;
-    assert.equal(run.candidatesAnonymized, 0, "retention sees the active application committed before its candidate lock releases");
-    const candidate = (await db.execute<{ display_name: string }>(sql`
+        reportAppLock();
+        await appTransactionHeld;
+        await createApplication({
+          orgId,
+          actorId: h.recruiterId,
+          requisitionId: opened.id,
+          candidateId,
+        });
+      });
+      await appRowLocked;
+      const retention = evaluateRetentionRule(
+        { orgId, actorId: h.recruiterId, ruleId },
+        { removeFile: async () => {}, enqueueEmail: async () => {} },
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      unlockAppTransaction();
+      await appWrite;
+      const run = await retention;
+      assert.equal(
+        run.candidatesAnonymized,
+        0,
+        "retention sees the active application committed before its candidate lock releases",
+      );
+      const candidate = (
+        await db.execute<{ display_name: string }>(
+          sql`
       select display_name from hrm_candidates where org_id = ${orgId} and id = ${candidateId}
-    `, "objects"))[0]!;
-    assert.equal(candidate.display_name, "Depth Candidate");
-  });
-});
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(candidate.display_name, "Depth Candidate");
+    });
+  },
+);
 
-test("consent extension emails go once per grant, then lapse into the action", { skip: !DB }, async () => {
-  await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    await enableRecruiting(orgId);
-    const ruleId = randomUUID();
-    await db.execute(sql`
+test(
+  "consent extension emails go once per grant, then lapse into the action",
+  { skip: !DB },
+  async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId;
+      await enableRecruiting(orgId);
+      const ruleId = randomUUID();
+      await db.execute(sql`
       insert into hrm_retention_rules
         (id, org_id, name, region_scope, basis, retain_months, action, consent_extension_lead_days, is_active)
       values (${ruleId}, ${orgId}, 'Consent lapses', '{}'::jsonb, 'consent', 12, 'anonymize', 14, true)`);
-    const { candidateId } = await (async () => {
-      const seeded = await seedSentOffer(h);
-      await rejectApplication({ orgId, actorId: h.recruiterId, applicationId: seeded.applicationId, reason: "not a fit" });
-      return { candidateId: seeded.candidateId };
-    })();
-    await db.execute(sql`
+      const { candidateId } = await (async () => {
+        const seeded = await seedSentOffer(h);
+        await rejectApplication({
+          orgId,
+          actorId: h.recruiterId,
+          applicationId: seeded.applicationId,
+          reason: "not a fit",
+        });
+        return { candidateId: seeded.candidateId };
+      })();
+      await db.execute(sql`
       insert into hrm_candidate_consents (org_id, candidate_id, purpose, source, expires_at)
       values (${orgId}, ${candidateId}, 'future_roles', 'form', now() + interval '5 days')`);
-    const sent: string[] = [];
-    const first = await evaluateRetentionRule(
-      { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => { }, enqueueEmail: async (message) => { sent.push(message.to); } },
-    );
-    assert.equal(first.extensionsRequested, 1, "the first eligible run requests the extension");
-    assert.deepEqual(sent, ["depth@example.test"], "the extension goes to the candidate's email");
-    const second = await evaluateRetentionRule(
-      { orgId, actorId: h.recruiterId, ruleId },
-      { removeFile: async () => { }, enqueueEmail: async (message) => { sent.push(message.to); } },
-    );
-    assert.equal(second.extensionsRequested, 0, "the second run sends nothing — asked once per grant");
-    assert.equal(sent.length, 1, "exactly one email leaves");
-  });
-});
+      const sent: string[] = [];
+      const first = await evaluateRetentionRule(
+        { orgId, actorId: h.recruiterId, ruleId },
+        {
+          removeFile: async () => {},
+          enqueueEmail: async (message) => {
+            sent.push(message.to);
+          },
+        },
+      );
+      assert.equal(first.extensionsRequested, 1, "the first eligible run requests the extension");
+      assert.deepEqual(sent, ["depth@example.test"], "the extension goes to the candidate's email");
+      const second = await evaluateRetentionRule(
+        { orgId, actorId: h.recruiterId, ruleId },
+        {
+          removeFile: async () => {},
+          enqueueEmail: async (message) => {
+            sent.push(message.to);
+          },
+        },
+      );
+      assert.equal(
+        second.extensionsRequested,
+        0,
+        "the second run sends nothing — asked once per grant",
+      );
+      assert.equal(sent.length, 1, "exactly one email leaves");
+    });
+  },
+);
 
 test("feed tokens round-trip for their org and refuse tampering", { skip: !DB }, async () => {
   await withHarness(async (h) => {
@@ -1350,8 +1978,16 @@ test("feed tokens round-trip for their org and refuse tampering", { skip: !DB },
     const token = createFeedToken(orgId);
     assert.equal(await resolveFeedOrg(token), orgId, "a minted feed token resolves its org");
     const tampered = token.slice(0, -1) + (token.endsWith("A") ? "B" : "A");
-    await assert.rejects(resolveFeedOrg(tampered), /invalid or expired/, "a tampered feed token is refused");
-    await assert.rejects(resolveFeedOrg("not-a-token"), /invalid or expired/, "garbage is refused by name");
+    await assert.rejects(
+      resolveFeedOrg(tampered),
+      /invalid or expired/,
+      "a tampered feed token is refused",
+    );
+    await assert.rejects(
+      resolveFeedOrg("not-a-token"),
+      /invalid or expired/,
+      "garbage is refused by name",
+    );
   });
 });
 
@@ -1360,9 +1996,19 @@ test("a public apply captures consents and records the posting source", { skip: 
     const orgId = h.org.orgId;
     await enableRecruiting(orgId);
     const seeded = await seedSentOffer(h);
-    const requisitionId = (await db.execute<{ requisition_id: string }>(sql`
-      select requisition_id from hrm_applications where id = ${seeded.applicationId}`, "objects"))[0]!.requisition_id;
-    const posting = await publishPosting({ orgId, actorId: h.recruiterId, requisitionId, boardKey: "internal" });
+    const requisitionId = (
+      await db.execute<{ requisition_id: string }>(
+        sql`
+      select requisition_id from hrm_applications where id = ${seeded.applicationId}`,
+        "objects",
+      )
+    )[0]!.requisition_id;
+    const posting = await publishPosting({
+      orgId,
+      actorId: h.recruiterId,
+      requisitionId,
+      boardKey: "internal",
+    });
     assert.equal(posting.status, "published");
     const { applicationId, candidateId } = await applyViaPosting({
       orgId,
@@ -1371,17 +2017,32 @@ test("a public apply captures consents and records the posting source", { skip: 
       email: "public@example.test",
       consentFutureRoles: true,
     });
-    const stored = (await db.execute<{ status: string; source_posting_id: string | null }>(sql`
-      select status, source_posting_id from hrm_applications where id = ${applicationId}`, "objects"))[0]!;
+    const stored = (
+      await db.execute<{ status: string; source_posting_id: string | null }>(
+        sql`
+      select status, source_posting_id from hrm_applications where id = ${applicationId}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(stored.status, "active");
     assert.equal(stored.source_posting_id, posting.id, "the application carries its board source");
-    const consents = (await db.execute<{ purpose: string }>(sql`
+    const consents = (
+      await db.execute<{ purpose: string }>(
+        sql`
       select purpose from hrm_candidate_consents where org_id = ${orgId} and candidate_id = ${candidateId}
-       order by purpose`, "objects")).map((row) => row.purpose);
+       order by purpose`,
+        "objects",
+      )
+    ).map((row) => row.purpose);
     assert.deepEqual(consents, ["future_roles", "this_application"], "both consents are captured");
-    const kinds = (await db.execute<{ kind: string }>(sql`
+    const kinds = (
+      await db.execute<{ kind: string }>(
+        sql`
       select kind from hrm_posting_events where org_id = ${orgId} and posting_id = ${posting.id}
-       order by recorded_at`, "objects")).map((row) => row.kind);
+       order by recorded_at`,
+        "objects",
+      )
+    ).map((row) => row.kind);
     assert.ok(kinds.includes("apply_received"), "the board ledger records the apply");
     // One candidacy per opening still holds, but a public applicant is
     // NOT told they already applied: on an anonymous form a
@@ -1389,59 +2050,156 @@ test("a public apply captures consents and records the posting source", { skip: 
     // for any guessable email. The second apply writes nothing and looks
     // exactly like the first from outside.
     const again = await applyViaPosting({
-      orgId, postingId: posting.id, displayName: "Public Applicant", email: "public@example.test",
+      orgId,
+      postingId: posting.id,
+      displayName: "Public Applicant",
+      email: "public@example.test",
     });
-    assert.equal(again.duplicate, true, "the service knows it is a duplicate even though the applicant is not told");
+    assert.equal(
+      again.duplicate,
+      true,
+      "the service knows it is a duplicate even though the applicant is not told",
+    );
     assert.equal(again.applicationId, applicationId, "no second candidacy is created");
-    const applications = (await db.execute<{ n: string }>(sql`
+    const applications = (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from hrm_applications
-       where org_id = ${orgId} and candidate_id = ${candidateId}`, "objects"))[0]?.n;
+       where org_id = ${orgId} and candidate_id = ${candidateId}`,
+        "objects",
+      )
+    )[0]?.n;
     assert.equal(applications, "1", "one candidacy per opening");
     // The hiring team still sees the attempt: the posting ledger is
     // staff-only, so recording it there leaks nothing to the applicant.
-    const afterKinds = (await db.execute<{ kind: string }>(sql`
+    const afterKinds = (
+      await db.execute<{ kind: string }>(
+        sql`
       select kind from hrm_posting_events where org_id = ${orgId} and posting_id = ${posting.id}
-       order by recorded_at`, "objects")).map((row) => row.kind);
-    assert.ok(afterKinds.includes("apply_duplicate"), "the duplicate attempt is recorded for staff");
+       order by recorded_at`,
+        "objects",
+      )
+    ).map((row) => row.kind);
+    assert.ok(
+      afterKinds.includes("apply_duplicate"),
+      "the duplicate attempt is recorded for staff",
+    );
   });
 });
 
 for (const worker of [
-  { kind: 'employee', roleActive: true, permitted: true },
-  { kind: 'employee', roleActive: false, permitted: false },
-  { kind: 'company', roleActive: true, permitted: false },
+  { kind: "employee", roleActive: true, permitted: true },
+  { kind: "employee", roleActive: false, permitted: false },
+  { kind: "company", roleActive: true, permitted: false },
 ] as const) {
-  test(`recruiting hire preserves admission for ${worker.kind} with ${worker.roleActive ? 'active' : 'inactive'} employee role`, { skip: !DB }, async () => {
-    await withHarness(async (h) => {
-      const orgId = h.org.orgId
-      const partyId = randomUUID()
-      await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active,custom)
-        values (${partyId},${orgId},${worker.kind},'Linked candidate',true,'{}'::jsonb)`)
-      const role = (await db.execute<{ id: string }>(sql`insert into employee_roles(org_id,party_id,is_active)
-        values (${orgId},${partyId},${worker.roleActive}) returning id`, "objects"))[0]!
-      const requisition = await createRequisition({ orgId, actorId: h.recruiterId, title: 'Vacancy', employerSubsidiaryId: h.org.subsidiaryId, headcount: 1 })
-      await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id })
-      const { candidate } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: 'Linked candidate' })
-      await db.execute(sql`update hrm_candidates set party_id=${partyId} where org_id=${orgId} and id=${candidate.id}`)
-      const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id })
-      const offer = await createOffer({ orgId, actorId: h.recruiterId, applicationId: application.id, employerSubsidiaryId: h.org.subsidiaryId,
-        jobTitle: 'Engineer', proposedStartOn: '2026-10-01', compensationAmount: '90000', compensationCurrency: 'USD', compensationBasis: 'annual' })
-      await sendOffer({ orgId, actorId: h.recruiterId, offerId: offer.id })
-      if (worker.permitted) {
-        const hire = await acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id })
-        assert.equal(hire.workerPartyId, partyId)
-        assert.deepEqual(await db.execute<{ status: string }>(sql`select status from worker_employment_versions
-          where org_id=${orgId} and employment_id=${hire.employmentId} and recorded_until is null`, "objects"), [{ status: 'active' }])
-      } else {
-        await assert.rejects(acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id }),
-          worker.kind === 'company' ? /active natural person/ : /employee role is inactive/)
-        assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from worker_employments
-          where org_id=${orgId} and worker_party_id=${partyId}`, "objects"))[0]!.n, '0')
-        assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where org_id=${orgId} and id=${offer.id}`, "objects"))[0]!.status, 'sent')
-      }
-      assert.deepEqual(await db.execute<{ id: string; active: boolean }>(sql`select id,is_active as active from employee_roles
-        where org_id=${orgId} and party_id=${partyId}`, "objects"), [{ id: role.id, active: worker.roleActive }])
-      assert.equal((await db.execute<{ kind: string }>(sql`select kind from parties where org_id=${orgId} and id=${partyId}`, "objects"))[0]!.kind, worker.kind)
-    })
-  })
+  test(
+    `recruiting hire preserves admission for ${worker.kind} with ${worker.roleActive ? "active" : "inactive"} employee role`,
+    { skip: !DB },
+    async () => {
+      await withHarness(async (h) => {
+        const orgId = h.org.orgId;
+        const partyId = randomUUID();
+        await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active,custom)
+        values (${partyId},${orgId},${worker.kind},'Linked candidate',true,'{}'::jsonb)`);
+        const role = (
+          await db.execute<{ id: string }>(
+            sql`insert into employee_roles(org_id,party_id,is_active)
+        values (${orgId},${partyId},${worker.roleActive}) returning id`,
+            "objects",
+          )
+        )[0]!;
+        const requisition = await createRequisition({
+          orgId,
+          actorId: h.recruiterId,
+          title: "Vacancy",
+          employerSubsidiaryId: h.org.subsidiaryId,
+          headcount: 1,
+        });
+        await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
+        const { candidate } = await createCandidate({
+          orgId,
+          actorId: h.recruiterId,
+          displayName: "Linked candidate",
+        });
+        await db.execute(
+          sql`update hrm_candidates set party_id=${partyId} where org_id=${orgId} and id=${candidate.id}`,
+        );
+        const application = await createApplication({
+          orgId,
+          actorId: h.recruiterId,
+          requisitionId: requisition.id,
+          candidateId: candidate.id,
+        });
+        const offer = await createOffer({
+          orgId,
+          actorId: h.recruiterId,
+          applicationId: application.id,
+          employerSubsidiaryId: h.org.subsidiaryId,
+          jobTitle: "Engineer",
+          proposedStartOn: "2026-10-01",
+          compensationAmount: "90000",
+          compensationCurrency: "USD",
+          compensationBasis: "annual",
+        });
+        await sendOffer({ orgId, actorId: h.recruiterId, offerId: offer.id });
+        if (worker.permitted) {
+          const hire = await acceptOfferAsHire({
+            orgId,
+            actorId: h.recruiterId,
+            offerId: offer.id,
+          });
+          assert.equal(hire.workerPartyId, partyId);
+          assert.deepEqual(
+            await db.execute<{ status: string }>(
+              sql`select status from worker_employment_versions
+          where org_id=${orgId} and employment_id=${hire.employmentId} and recorded_until is null`,
+              "objects",
+            ),
+            [{ status: "active" }],
+          );
+        } else {
+          await assert.rejects(
+            acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id }),
+            worker.kind === "company" ? /active natural person/ : /employee role is inactive/,
+          );
+          assert.equal(
+            (
+              await db.execute<{ n: string }>(
+                sql`select count(*)::text as n from worker_employments
+          where org_id=${orgId} and worker_party_id=${partyId}`,
+                "objects",
+              )
+            )[0]!.n,
+            "0",
+          );
+          assert.equal(
+            (
+              await db.execute<{ status: string }>(
+                sql`select status from hrm_offers where org_id=${orgId} and id=${offer.id}`,
+                "objects",
+              )
+            )[0]!.status,
+            "sent",
+          );
+        }
+        assert.deepEqual(
+          await db.execute<{ id: string; active: boolean }>(
+            sql`select id,is_active as active from employee_roles
+        where org_id=${orgId} and party_id=${partyId}`,
+            "objects",
+          ),
+          [{ id: role.id, active: worker.roleActive }],
+        );
+        assert.equal(
+          (
+            await db.execute<{ kind: string }>(
+              sql`select kind from parties where org_id=${orgId} and id=${partyId}`,
+              "objects",
+            )
+          )[0]!.kind,
+          worker.kind,
+        );
+      });
+    },
+  );
 }

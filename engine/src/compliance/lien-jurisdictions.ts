@@ -332,7 +332,20 @@ const GB: SubdivisionEntry[] = [
 
 /** Every subdivision the registry recognises, in ISO 3166-2 code order. */
 export const SUBDIVISIONS: readonly SubdivisionEntry[] = [
-  ...US, ...CA, ...AU, ...DE, ...FR, ...ES, ...IT, ...NL, ...BE, ...CH, ...AT, ...MX, ...BR, ...GB,
+  ...US,
+  ...CA,
+  ...AU,
+  ...DE,
+  ...FR,
+  ...ES,
+  ...IT,
+  ...NL,
+  ...BE,
+  ...CH,
+  ...AT,
+  ...MX,
+  ...BR,
+  ...GB,
 ];
 
 const KNOWN_CODES = new Set(SUBDIVISIONS.map((entry) => entry.code));

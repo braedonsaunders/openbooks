@@ -19,5 +19,7 @@ export function evaluateAnalyticsRatio(
     scale,
     expr: { op: "/", left: { ref: "numerator" }, right: { ref: "denominator" } },
   };
-  return evaluateFormulaMeasures([...RATIO_INPUTS, measure], [numerator, denominator])[2]?.value ?? null;
+  return (
+    evaluateFormulaMeasures([...RATIO_INPUTS, measure], [numerator, denominator])[2]?.value ?? null
+  );
 }

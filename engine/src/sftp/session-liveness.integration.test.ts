@@ -3,10 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { dbResolver, encryptSecret } from "./manager.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -36,19 +33,24 @@ async function setActive(fixture: Fixture, active: boolean): Promise<void> {
   await withBypassContext(() =>
     db.execute(sql`
       update sftp_servers set is_active = ${active}, updated_at = now()
-       where id = ${fixture.serverId} and org_id = ${fixture.orgId}`));
+       where id = ${fixture.serverId} and org_id = ${fixture.orgId}`),
+  );
 }
 
 async function rotatePassword(fixture: Fixture, password: string): Promise<void> {
   await withBypassContext(() =>
     db.execute(sql`
       update sftp_servers set password_encrypted = ${encryptSecret(password, fixture.orgId)}, updated_at = now()
-       where id = ${fixture.serverId} and org_id = ${fixture.orgId}`));
+       where id = ${fixture.serverId} and org_id = ${fixture.orgId}`),
+  );
 }
 
 async function deleteServer(fixture: Fixture): Promise<void> {
   await withBypassContext(() =>
-    db.execute(sql`delete from sftp_servers where id = ${fixture.serverId} and org_id = ${fixture.orgId}`));
+    db.execute(
+      sql`delete from sftp_servers where id = ${fixture.serverId} and org_id = ${fixture.orgId}`,
+    ),
+  );
 }
 
 async function setBankFeeds(orgId: string, on: boolean): Promise<void> {
@@ -57,7 +59,8 @@ async function setBankFeeds(orgId: string, on: boolean): Promise<void> {
     db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,bankFeeds}', ${flag}::jsonb)
-       where id = ${orgId}`));
+       where id = ${orgId}`),
+  );
 }
 
 test(
@@ -133,9 +136,12 @@ test(
 
       // Data is kept: the row and its active flag survive the feature-off.
       const kept = await withBypassContext(async () => {
-        const r = await db.execute<{ count: number; active: boolean }>(sql`
+        const r = await db.execute<{ count: number; active: boolean }>(
+          sql`
           select count(*)::int as count, bool_and(is_active) as active
-            from sftp_servers where id = ${fixture.serverId} and org_id = ${fixture.orgId}`, "objects");
+            from sftp_servers where id = ${fixture.serverId} and org_id = ${fixture.orgId}`,
+          "objects",
+        );
         return r[0]!;
       });
       assert.equal(kept.count, 1);

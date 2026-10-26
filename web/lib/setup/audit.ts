@@ -1,7 +1,7 @@
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import type { SetupEntity } from './types'
-import { NUMBER_SEQUENCE_READ_COLUMNS } from './number-sequence-position'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import type { SetupEntity } from "./types";
+import { NUMBER_SEQUENCE_READ_COLUMNS } from "./number-sequence-position";
 
 /** Snapshot the actual stored setup row, including its ordered join-table
  * values. Call with lock=true before a mutation, on its transaction executor. */
@@ -9,42 +9,58 @@ export async function loadSetupAuditRow(
   entity: SetupEntity,
   orgId: string,
   rowId: string,
-  runner: Pick<typeof db, 'execute'>,
+  runner: Pick<typeof db, "execute">,
   lock = false,
 ): Promise<Record<string, unknown> | undefined> {
   // Sequence audits record the operator's next number, matching what Setup
   // displays and accepts (see number-sequence-position.ts).
-  const projection = entity.key === 'number-sequences' ? NUMBER_SEQUENCE_READ_COLUMNS.join(', ') : '*'
-  const row = (await runner.execute(sql`
+  const projection =
+    entity.key === "number-sequences" ? NUMBER_SEQUENCE_READ_COLUMNS.join(", ") : "*";
+  const row = (
+    await runner.execute(
+      sql`
     select ${sql.raw(projection)} from ${sql.raw(entity.table)}
-     where ${sql.raw(entity.idColumn ?? 'id')} = ${rowId}
+     where ${sql.raw(entity.idColumn ?? "id")} = ${rowId}
        ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
        ${lock ? sql`for update` : sql``}
-  `, 'objects'))[0]
-  if (!row) return undefined
-  if (entity.key === 'tax-groups') {
-    const members = await runner.execute<{ tax_code_id: string }>(sql`
+  `,
+      "objects",
+    )
+  )[0];
+  if (!row) return undefined;
+  if (entity.key === "tax-groups") {
+    const members = await runner.execute<{ tax_code_id: string }>(
+      sql`
       select tax_code_id from tax_group_members where tax_group_id = ${rowId}
-       order by sequence, tax_code_id`, 'objects')
-    return { ...row, members: members.map(member => member.tax_code_id) }
+       order by sequence, tax_code_id`,
+      "objects",
+    );
+    return { ...row, members: members.map((member) => member.tax_code_id) };
   }
-  if (entity.key === 'pay-components') {
+  if (entity.key === "pay-components") {
     const classification = await runner.execute<{
-      supplemental_wage_category: string | null; statutory_reporting_category: string | null;
+      supplemental_wage_category: string | null;
+      statutory_reporting_category: string | null;
       statutory_exemption_category: string | null;
-    }>(sql`
+    }>(
+      sql`
       select supplemental_wage_category, statutory_reporting_category, statutory_exemption_category
         from pay_component_earning_classifications
-       where org_id = ${orgId} and pay_component_id = ${rowId}`, 'objects')
-    const value = classification[0]
-    if (!value) throw new Error('pay component classification is missing')
-    return { ...row, earningClassification: {
-      supplementalWageCategory: value.supplemental_wage_category,
-      statutoryReportingCategory: value.statutory_reporting_category,
-      statutoryExemptionCategory: value.statutory_exemption_category,
-    } }
+       where org_id = ${orgId} and pay_component_id = ${rowId}`,
+      "objects",
+    );
+    const value = classification[0];
+    if (!value) throw new Error("pay component classification is missing");
+    return {
+      ...row,
+      earningClassification: {
+        supplementalWageCategory: value.supplemental_wage_category,
+        statutoryReportingCategory: value.statutory_reporting_category,
+        statutoryExemptionCategory: value.statutory_exemption_category,
+      },
+    };
   }
-  return row
+  return row;
 }
 
 /**
@@ -56,20 +72,23 @@ export async function loadSetupAuditRow(
  */
 export async function auditSetupChange(
   args: {
-    orgId: string | null
-    table: string
-    rowId: string
-    action: 'insert' | 'update' | 'delete'
-    changes: Record<string, unknown>
-    actorId: string
+    orgId: string | null;
+    table: string;
+    rowId: string;
+    action: "insert" | "update" | "delete";
+    changes: Record<string, unknown>;
+    actorId: string;
     /** Idempotency key that created the row (insert only): correlates retries. */
-    requestId?: string
+    requestId?: string;
   },
-  runner: Pick<typeof db, 'execute'> = db,
+  runner: Pick<typeof db, "execute"> = db,
 ): Promise<void> {
-  const written = await runner.execute(sql`
+  const written = await runner.execute(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${args.orgId}, ${args.table}, ${args.rowId}, ${args.action},
-            ${JSON.stringify(args.changes)}, ${args.actorId}, ${args.requestId ?? null}) returning id`, 'objects')
-  if (written.length !== 1) throw new Error('The configuration audit event was not recorded')
+            ${JSON.stringify(args.changes)}, ${args.actorId}, ${args.requestId ?? null}) returning id`,
+    "objects",
+  );
+  if (written.length !== 1) throw new Error("The configuration audit event was not recorded");
 }

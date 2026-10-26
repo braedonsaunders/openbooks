@@ -1,4 +1,4 @@
-import { defineRoute } from '@/lib/api/route'
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { analyticsQueryLive as analyticsQuery } from "../../../../../lib/analytics/query";
@@ -9,7 +9,15 @@ import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 
 export const runtime = "nodejs";
 
-const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", "expense_report", "journal", "customer_credit"];
+const SPEND_KINDS = [
+  "vendor_bill",
+  "vendor_credit",
+  "vendor_payment",
+  "check",
+  "expense_report",
+  "journal",
+  "customer_credit",
+];
 
 /**
  * Benford digit drill for the transaction flyout.
@@ -21,13 +29,16 @@ const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", 
  */
 export const GET = defineRoute({
   permission: "reports.read",
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  feature: { none: "No optional feature applies to this permission-governed endpoint." },
   handler: async ({ request: req, authz: gate }) => {
     // Whole-ledger forensics: the same gate as the page loader (unrestricted
     // reports + audit access). A reports-only role gets a 403, never rows.
     const denied = sentinelAccessDenied(gate);
     if (denied) {
-      return NextResponse.json({ error: "forbidden", message: `sentinel forensics requires ${denied}` }, { status: 403 });
+      return NextResponse.json(
+        { error: "forbidden", message: `sentinel forensics requires ${denied}` },
+        { status: 403 },
+      );
     }
     const user = gate.user;
     const url = new URL(req.url);
@@ -36,21 +47,37 @@ export const GET = defineRoute({
     const from = url.searchParams.get("from");
     const to = url.searchParams.get("to");
     const currency = url.searchParams.get("currency");
-    if ((dim !== "1d" && dim !== "2d") || !Number.isInteger(digit)
-      || digit < (dim === "2d" ? 10 : 1) || digit > (dim === "2d" ? 99 : 9)
-      || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to
-      || (currency !== null && !/^[A-Z]{3}$/.test(currency))) {
-      return NextResponse.json({ error: "valid digit, dimension and date range required" }, { status: 400 });
+    if (
+      (dim !== "1d" && dim !== "2d") ||
+      !Number.isInteger(digit) ||
+      digit < (dim === "2d" ? 10 : 1) ||
+      digit > (dim === "2d" ? 99 : 9) ||
+      !isIsoCalendarDate(from) ||
+      !isIsoCalendarDate(to) ||
+      from > to ||
+      (currency !== null && !/^[A-Z]{3}$/.test(currency))
+    ) {
+      return NextResponse.json(
+        { error: "valid digit, dimension and date range required" },
+        { status: 400 },
+      );
     }
 
-    const kindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
-    const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds);
+    const kindsIn = sql.join(
+      SPEND_KINDS.map((k) => sql`${k}`),
+      sql`, `,
+    );
+    const subsidiaryFilter = subsidiaryVisibleFilter(
+      sql`d.subsidiary_id`,
+      gate.allowedSubsidiaryIds,
+    );
     // Match sentinelData's exact decimal text-prefix extraction. Logarithmic
     // magnitude scaling can round boundary values into a neighboring digit.
-    const leadExpr = dim === "2d"
-      ? sql`case when abs(d.total) >= 10 then left(trunc(abs(d.total))::bigint::text, 2)
+    const leadExpr =
+      dim === "2d"
+        ? sql`case when abs(d.total) >= 10 then left(trunc(abs(d.total))::bigint::text, 2)
           else left(trunc(abs(d.total) * 10)::bigint::text, 2) end::int`
-      : sql`left(trunc(abs(d.total))::bigint::text, 1)::int`;
+        : sql`left(trunc(abs(d.total))::bigint::text, 1)::int`;
 
     const base = sql`
       from documents d
@@ -65,7 +92,7 @@ export const GET = defineRoute({
         and ${leadExpr} = ${digit}
     `;
     const [detail, agg] = await Promise.all([
-      (analyticsQuery(sql`
+      analyticsQuery(sql`
         select d.id as doc_id, d.kind as doc_kind, d.document_number,
           coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount,
           d.currency as currency,
@@ -74,8 +101,8 @@ export const GET = defineRoute({
         ${base}
         order by abs(d.total) desc
         limit 500
-      `)),
-      (analyticsQuery(sql`select count(*) as n, coalesce(sum(abs(d.total)), 0) as total ${base}`)),
+      `),
+      analyticsQuery(sql`select count(*) as n, coalesce(sum(abs(d.total)), 0) as total ${base}`),
     ]);
 
     return NextResponse.json({
@@ -84,11 +111,16 @@ export const GET = defineRoute({
       currency,
       count: Number(agg.rows[0]?.n ?? 0),
       total: normalizeMoney(String(agg.rows[0]?.total ?? "0")),
-      documents: ((detail.rows)).map((r) => ({
-        docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "",
-        date: r.date, amount: normalizeMoney(String(r.amount ?? "0")), currency: r.currency, partyName: r.party_name,
+      documents: detail.rows.map((r) => ({
+        docId: r.doc_id,
+        docKind: r.doc_kind,
+        entryId: r.entry_id,
+        docNumber: r.document_number ?? "",
+        date: r.date,
+        amount: normalizeMoney(String(r.amount ?? "0")),
+        currency: r.currency,
+        partyName: r.party_name,
       })),
     });
-
   },
-})
+});

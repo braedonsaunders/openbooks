@@ -8,7 +8,6 @@ import { simulateAutomationBody } from "../../bodies";
 import { automationErrorResponse } from "../../_lib";
 import { notFound } from "@/lib/api/responses";
 
-
 export const runtime = "nodejs";
 
 /**
@@ -28,10 +27,7 @@ export const POST = defineRoute({
     }
     const { id } = await ctx.params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "automation id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "automation id must be a uuid" }, { status: 400 });
 
     const body = routeBody;
     if (body.subjectId != null && body.subjectEntity == null) {

@@ -1,10 +1,7 @@
 import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { allocationScopeVisible } from "../organization/allocation-scope.ts";
-import {
-  routeNativeApproval,
-  readNativeApprovalDecision,
-} from "../platform/approval-routing.ts";
+import { routeNativeApproval, readNativeApprovalDecision } from "../platform/approval-routing.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { resolveAccountGroups } from "../records/account-groups.ts";
@@ -12,15 +9,20 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { db, inDbTransaction, withOrgTransaction } from "../platform/db.ts";
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
 import { AllocationApportionError, apportionTargets, fixedPercentWeights } from "./apportion.ts";
-import { previewPinError, sourceScopeViolation, targetPinViolation } from "../organization/allocation-scope.ts";
+import {
+  previewPinError,
+  sourceScopeViolation,
+  targetPinViolation,
+} from "../organization/allocation-scope.ts";
 import type { DriverResolveOptions } from "./drivers.ts";
 import { allocationServiceDeps } from "./service.ts";
-import {
-  reverseProjectGlEntryWithinTransaction,
-  type GlLine,
-} from "../journal/origin-entry.ts";
+import { reverseProjectGlEntryWithinTransaction, type GlLine } from "../journal/origin-entry.ts";
 import { postEntry } from "../journal/post-entry.ts";
-import { assertPeriodModulesOpen, canonicalPeriodLabel, CloseError } from "../periods/period-policy.ts";
+import {
+  assertPeriodModulesOpen,
+  canonicalPeriodLabel,
+  CloseError,
+} from "../periods/period-policy.ts";
 import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
@@ -155,8 +157,6 @@ export interface RerunAllocationRunResult {
   idempotent: boolean;
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Apportionment is the canonical engine (`./apportion.ts`): exact bigint
 // money, floors plus a single residual absorber, Σ(amounts) === total always.
@@ -245,17 +245,27 @@ function periodLabel(period: PeriodRow): string {
 type Tx = DbTransaction;
 
 async function loadRule(tx: Tx, orgId: string, ruleId: string): Promise<RuleRow> {
-  const rows = await tx.execute<RuleRow>(sql`
+  const rows = await tx.execute<RuleRow>(
+    sql`
     select id, org_id, key, name, mode, is_active, current_version_id
-      from allocation_rules where id = ${ruleId} for share`, "objects");
+      from allocation_rules where id = ${ruleId} for share`,
+    "objects",
+  );
   const rule = rows[0];
   if (!rule || rule.org_id !== orgId) {
-    throw new AllocationRunError("NOT_FOUND", `allocation rule ${ruleId} does not belong to this organization`);
+    throw new AllocationRunError(
+      "NOT_FOUND",
+      `allocation rule ${ruleId} does not belong to this organization`,
+    );
   }
   if (rule.mode !== "period") {
-    throw new AllocationRunError("INVALID", `allocation rule ${rule.key} is a ${rule.mode} rule and cannot run as a period sweep`);
+    throw new AllocationRunError(
+      "INVALID",
+      `allocation rule ${rule.key} is a ${rule.mode} rule and cannot run as a period sweep`,
+    );
   }
-  if (!rule.is_active) throw new AllocationRunError("INVALID", `allocation rule ${rule.key} is not active`);
+  if (!rule.is_active)
+    throw new AllocationRunError("INVALID", `allocation rule ${rule.key} is not active`);
   return rule;
 }
 
@@ -279,13 +289,16 @@ async function assertNoVersionEdgeInsidePeriod(
     version_no: number;
     effective_from: string;
     effective_to: string | null;
-  }>(sql`
+  }>(
+    sql`
     select id, version_no, effective_from::text, effective_to::text
       from allocation_rule_versions
      where org_id = ${rule.org_id} and rule_id = ${rule.id} and status = 'published'
        and effective_from <= ${period.ends_on}
        and (effective_to is null or effective_to >= ${period.starts_on})
-     order by version_no for share`, "objects");
+     order by version_no for share`,
+    "objects",
+  );
   // A from-edge on the period's first day (and a to-edge on its last day)
   // governs the whole period — only strictly interior edges mix regimes.
   const fromInside = (date: string): boolean => date > period.starts_on && date <= period.ends_on;
@@ -302,7 +315,9 @@ async function assertNoVersionEdgeInsidePeriod(
     ...new Set(
       crossing.flatMap((version) => [
         ...(fromInside(version.effective_from) ? [version.effective_from] : []),
-        ...(version.effective_to !== null && toInside(version.effective_to) ? [version.effective_to] : []),
+        ...(version.effective_to !== null && toInside(version.effective_to)
+          ? [version.effective_to]
+          : []),
       ]),
     ),
   ].sort();
@@ -325,24 +340,39 @@ async function assertNoVersionEdgeInsidePeriod(
   );
 }
 
-async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow, requestedVersionId?: string): Promise<VersionRow> {
+async function loadVersionInForce(
+  tx: Tx,
+  rule: RuleRow,
+  period: PeriodRow,
+  requestedVersionId?: string,
+): Promise<VersionRow> {
   // A period pool cannot be split by day: refuse before selecting anything.
   await assertNoVersionEdgeInsidePeriod(tx, rule, period);
   const load = async (id: string): Promise<VersionRow | undefined> =>
-    (await tx.execute<VersionRow>(sql`
+    (
+      await tx.execute<VersionRow>(
+        sql`
       select id, org_id, rule_id, status, effective_from::text, effective_to::text,
              book_scope, book_ids, account_scope, dimension_filters, source_measure,
              basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
              offset_account_id, residual_policy, residual_target_id, approval_flow_id,
              memo_template, line_description_template, definition_hash, solve_method
         from allocation_rule_versions
-       where id = ${id} and org_id = ${rule.org_id} for share`, "objects"))[0];
+       where id = ${id} and org_id = ${rule.org_id} for share`,
+        "objects",
+      )
+    )[0];
   const inWindow = (version: VersionRow): boolean =>
     version.effective_from <= period.ends_on &&
     (version.effective_to === null || version.effective_to >= period.starts_on);
   if (requestedVersionId) {
     const pinned = await load(requestedVersionId);
-    if (!pinned || pinned.rule_id !== rule.id || pinned.status !== "published" || !inWindow(pinned)) {
+    if (
+      !pinned ||
+      pinned.rule_id !== rule.id ||
+      pinned.status !== "published" ||
+      !inWindow(pinned)
+    ) {
       throw new AllocationRunError(
         "INVALID",
         `allocation rule ${rule.key} version ${requestedVersionId} is not published and effective for period ${periodLabel(period)}`,
@@ -354,7 +384,9 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow, requ
     const current = await load(rule.current_version_id);
     if (current && current.status === "published" && inWindow(current)) return current;
   }
-  const published = (await tx.execute<VersionRow>(sql`
+  const published = (
+    await tx.execute<VersionRow>(
+      sql`
     select id, org_id, rule_id, status, effective_from::text, effective_to::text,
            book_scope, book_ids, account_scope, dimension_filters, source_measure,
            basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
@@ -364,52 +396,84 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow, requ
      where org_id = ${rule.org_id} and rule_id = ${rule.id} and status = 'published'
        and effective_from <= ${period.ends_on}
        and (effective_to is null or effective_to >= ${period.starts_on})
-     order by version_no desc limit 1 for share`, "objects"))[0];
+     order by version_no desc limit 1 for share`,
+      "objects",
+    )
+  )[0];
   if (!published) {
-    throw new AllocationRunError("INVALID", `allocation rule ${rule.key} has no published version in effect for period ${periodLabel(period)}`);
+    throw new AllocationRunError(
+      "INVALID",
+      `allocation rule ${rule.key} has no published version in effect for period ${periodLabel(period)}`,
+    );
   }
   return published;
 }
 
 async function loadTargets(tx: Tx, orgId: string, versionId: string): Promise<TargetRow[]> {
-  const rows = await tx.execute<TargetRow>(sql`
+  const rows = await tx.execute<TargetRow>(
+    sql`
     select id, sequence, target_account_id, department_id, location_id, class_id,
            project_id, subsidiary_id, extra_dims,
            fixed_percent::text, weight::text, is_remainder, label
       from allocation_rule_targets
      where org_id = ${orgId} and version_id = ${versionId}
-     order by sequence for share`, "objects");
+     order by sequence for share`,
+    "objects",
+  );
   return rows.map((row) => ({ ...row, extra_dims: row.extra_dims ?? {} }));
 }
 
 async function loadPeriod(tx: Tx, orgId: string, periodId: string): Promise<PeriodRow> {
-  const rows = await tx.execute<PeriodRow>(sql`
+  const rows = await tx.execute<PeriodRow>(
+    sql`
     select id, org_id, name, starts_on::text, ends_on::text, fiscal_year,
            period_number, fiscal_calendar_id, is_adjustment
-      from accounting_periods where id = ${periodId} for share`, "objects");
+      from accounting_periods where id = ${periodId} for share`,
+    "objects",
+  );
   const period = rows[0];
   if (!period || period.org_id !== orgId) {
-    throw new AllocationRunError("NOT_FOUND", `accounting period ${periodId} does not belong to this organization`);
+    throw new AllocationRunError(
+      "NOT_FOUND",
+      `accounting period ${periodId} does not belong to this organization`,
+    );
   }
   return period;
 }
 
-async function loadBook(tx: Tx, orgId: string, bookId: string): Promise<{ id: string; code: string; isPrimary: boolean }> {
-  const rows = await tx.execute<{ id: string; org_id: string; code: string; is_primary: boolean }>(sql`
+async function loadBook(
+  tx: Tx,
+  orgId: string,
+  bookId: string,
+): Promise<{ id: string; code: string; isPrimary: boolean }> {
+  const rows = await tx.execute<{ id: string; org_id: string; code: string; is_primary: boolean }>(
+    sql`
     select id, org_id, code, is_primary
       from accounting_books
-     where id = ${bookId} and is_active and posts_gl for share`, "objects");
+     where id = ${bookId} and is_active and posts_gl for share`,
+    "objects",
+  );
   const book = rows[0];
   if (!book || book.org_id !== orgId) {
-    throw new AllocationRunError("NOT_FOUND", `accounting book ${bookId} does not belong to this organization`);
+    throw new AllocationRunError(
+      "NOT_FOUND",
+      `accounting book ${bookId} does not belong to this organization`,
+    );
   }
   return { id: book.id, code: book.code, isPrimary: book.is_primary };
 }
 
 async function requireSubsidiary(tx: Tx, orgId: string, subsidiaryId: string): Promise<void> {
-  const rows = await tx.execute<{ id: string }>(sql`
-    select id from subsidiaries where id = ${subsidiaryId} and org_id = ${orgId} and is_active for share`, "objects");
-  if (!rows[0]) throw new AllocationRunError("NOT_FOUND", `subsidiary ${subsidiaryId} does not belong to this organization`);
+  const rows = await tx.execute<{ id: string }>(
+    sql`
+    select id from subsidiaries where id = ${subsidiaryId} and org_id = ${orgId} and is_active for share`,
+    "objects",
+  );
+  if (!rows[0])
+    throw new AllocationRunError(
+      "NOT_FOUND",
+      `subsidiary ${subsidiaryId} does not belong to this organization`,
+    );
 }
 
 /**
@@ -462,9 +526,12 @@ export function renderMemo(
     : `${vars.ruleName} — ${vars.periodLabel}`;
   if (!template) return fallback;
   return template
-    .split("{{rule.name}}").join(vars.ruleName)
-    .split("{{period.name}}").join(vars.periodName)
-    .split("{{target.label}}").join(vars.targetLabel);
+    .split("{{rule.name}}")
+    .join(vars.ruleName)
+    .split("{{period.name}}")
+    .join(vars.periodName)
+    .split("{{target.label}}")
+    .join(vars.targetLabel);
 }
 
 // ---------------------------------------------------------------------------
@@ -484,7 +551,8 @@ interface SourcePool {
 function dimensionFilterSql(filters: DimensionFilters): { clause: SQL; subsidiaryIds: string[] } {
   const parts: SQL[] = [];
   const eqAny = (column: string, ids: string[] | undefined): void => {
-    if (ids && ids.length > 0) parts.push(sql`and l.${sql.raw(column)} = any(${uuidArray(ids)}::uuid[])`);
+    if (ids && ids.length > 0)
+      parts.push(sql`and l.${sql.raw(column)} = any(${uuidArray(ids)}::uuid[])`);
   };
   eqAny("department_id", filters.departmentIds);
   eqAny("location_id", filters.locationIds);
@@ -496,7 +564,8 @@ function dimensionFilterSql(filters: DimensionFilters): { clause: SQL; subsidiar
   }
   const extra = filters.extraDims ?? {};
   for (const [segment, values] of Object.entries(extra)) {
-    if (values.length > 0) parts.push(sql`and l.extra_dims ->> ${segment} = any(${sql.param(values)}::text[])`);
+    if (values.length > 0)
+      parts.push(sql`and l.extra_dims ->> ${segment} = any(${sql.param(values)}::text[])`);
   }
   const untagged = filters.requireUntagged ?? [];
   for (const dimension of untagged) {
@@ -520,16 +589,17 @@ async function readSources(
     sourceMeasure: AllocationSourceMeasure;
   },
 ): Promise<SourcePool> {
-  const { clause: filterClause, subsidiaryIds: filterSubs } = dimensionFilterSql(opts.dimensionFilters);
+  const { clause: filterClause, subsidiaryIds: filterSubs } = dimensionFilterSql(
+    opts.dimensionFilters,
+  );
   // The pin intersects the published rule's subsidiary filter: a B-only
   // rule pinned to A would otherwise sweep A's ledger under a rule that
   // does not cover A. An empty intersection refuses by name.
   const scopeViolation = sourceScopeViolation(opts.ruleName, opts.subsidiaryId, filterSubs);
   if (scopeViolation) throw new AllocationRunError("INVALID", scopeViolation);
   const scopeSubs = opts.subsidiaryId ? [opts.subsidiaryId] : filterSubs;
-  const subClause = scopeSubs.length > 0
-    ? sql`and l.subsidiary_id = any(${uuidArray(scopeSubs)}::uuid[])`
-    : sql``;
+  const subClause =
+    scopeSubs.length > 0 ? sql`and l.subsidiary_id = any(${uuidArray(scopeSubs)}::uuid[])` : sql``;
 
   let accountClause: SQL = sql``;
   if (opts.accountScope.kind === "accounts") {
@@ -586,7 +656,8 @@ async function readSources(
     extra_dims: Record<string, string | null> | null;
     amount: string;
     line_count: string;
-  }>(sql`
+  }>(
+    sql`
     select l.account_id, l.subsidiary_id, l.department_id, l.location_id, l.class_id,
            l.project_id, l.party_id, l.extra_dims,
            sum(l.amount)::text as amount, count(*)::text as line_count
@@ -612,7 +683,9 @@ async function readSources(
               l.class_id, l.project_id, l.party_id, l.extra_dims
     having sum(l.amount) <> 0
      order by l.account_id, l.subsidiary_id, l.department_id, l.location_id,
-              l.class_id, l.project_id, l.party_id`, "objects");
+              l.class_id, l.project_id, l.party_id`,
+    "objects",
+  );
 
   const sources: SourceCoordinate[] = rows.map((row) => ({
     accountId: row.account_id,
@@ -641,7 +714,10 @@ interface ResolvedTarget {
   driverValue: string | null;
 }
 
-const DIMENSION_TABLES: Record<string, "departments" | "locations" | "classes" | "projects" | "subsidiaries"> = {
+const DIMENSION_TABLES: Record<
+  string,
+  "departments" | "locations" | "classes" | "projects" | "subsidiaries"
+> = {
   department: "departments",
   location: "locations",
   class: "classes",
@@ -658,13 +734,21 @@ function targetDimensionValue(target: TargetRow, dimension: AllocationDimension)
   return target.extra_dims?.[dimension.slice("extra:".length)] ?? null;
 }
 
-function setDimensionValue(coordinate: Coordinate, dimension: AllocationDimension, valueId: string): void {
+function setDimensionValue(
+  coordinate: Coordinate,
+  dimension: AllocationDimension,
+  valueId: string,
+): void {
   if (dimension === "department") coordinate.departmentId = valueId;
   else if (dimension === "location") coordinate.locationId = valueId;
   else if (dimension === "class") coordinate.classId = valueId;
   else if (dimension === "project") coordinate.projectId = valueId;
   else if (dimension === "subsidiary") coordinate.subsidiaryId = valueId;
-  else coordinate.extraDims = { ...(coordinate.extraDims ?? {}), [dimension.slice("extra:".length)]: valueId };
+  else
+    coordinate.extraDims = {
+      ...(coordinate.extraDims ?? {}),
+      [dimension.slice("extra:".length)]: valueId,
+    };
 }
 
 /**
@@ -673,13 +757,15 @@ function setDimensionValue(coordinate: Coordinate, dimension: AllocationDimensio
  * remainder target only pairs with a percent grid — ambiguous grids fail
  * closed here instead of silently under-allocating.
  */
-function resolveExplicitWeights(
-  targets: TargetRow[],
-): { weights: WeightedTarget[] } {
+function resolveExplicitWeights(targets: TargetRow[]): { weights: WeightedTarget[] } {
   if (targets.length === 0) throw new Error("allocation rule version has no targets");
   const percentTargets = targets.filter((target) => target.fixed_percent !== null);
-  const weightTargets = targets.filter((target) => target.fixed_percent === null && target.weight !== null);
-  const bare = targets.filter((target) => target.fixed_percent === null && target.weight === null && !target.is_remainder);
+  const weightTargets = targets.filter(
+    (target) => target.fixed_percent === null && target.weight !== null,
+  );
+  const bare = targets.filter(
+    (target) => target.fixed_percent === null && target.weight === null && !target.is_remainder,
+  );
   if (bare.length > 0) {
     throw new Error("explicit allocation targets need a fixed percent or a weight");
   }
@@ -692,13 +778,15 @@ function resolveExplicitWeights(
     throw new Error("cannot mix fixed-percent and manual-weight targets on one version");
   }
   if (percentTargets.length > 0 || remainders.length === 1) {
-    const weights = fixedPercentWeights(targets.map((target) => ({
-      sequence: target.sequence,
-      id: target.id,
-      fixedPercent: target.fixed_percent,
-      weight: target.weight,
-      isRemainder: target.is_remainder,
-    })));
+    const weights = fixedPercentWeights(
+      targets.map((target) => ({
+        sequence: target.sequence,
+        id: target.id,
+        fixedPercent: target.fixed_percent,
+        weight: target.weight,
+        isRemainder: target.is_remainder,
+      })),
+    );
     return { weights };
   }
   return {
@@ -727,30 +815,57 @@ async function resolveDriverVectorForRun(
   vector: DriverVector;
   temporal: ReportDriverTemporal | null;
 }> {
-  if (!opts.version.driver_id) throw new AllocationRunError("INVALID", `allocation rule ${opts.ruleKey} uses a driver basis but names no driver`);
+  if (!opts.version.driver_id)
+    throw new AllocationRunError(
+      "INVALID",
+      `allocation rule ${opts.ruleKey} uses a driver basis but names no driver`,
+    );
   const rows = await tx.execute<{
-    id: string; org_id: string; key: string; name: string; unit: string | null;
-    dimension: string; source_kind: AllocationDriver["sourceKind"]; config: Record<string, unknown>;
+    id: string;
+    org_id: string;
+    key: string;
+    name: string;
+    unit: string | null;
+    dimension: string;
+    source_kind: AllocationDriver["sourceKind"];
+    config: Record<string, unknown>;
     is_active: boolean;
-  }>(sql`
+  }>(
+    sql`
     select id, org_id, key, name, unit, dimension, source_kind, config, is_active
       from allocation_drivers
-     where id = ${opts.version.driver_id} for share`, "objects");
+     where id = ${opts.version.driver_id} for share`,
+    "objects",
+  );
   const driver = rows[0];
   if (!driver || driver.org_id !== opts.orgId) {
-    throw new AllocationRunError("NOT_FOUND", `allocation driver ${opts.version.driver_id} does not belong to this organization`);
+    throw new AllocationRunError(
+      "NOT_FOUND",
+      `allocation driver ${opts.version.driver_id} does not belong to this organization`,
+    );
   }
-  if (!driver.is_active) throw new AllocationRunError("INVALID", `allocation driver ${driver.key} is not active`);
+  if (!driver.is_active)
+    throw new AllocationRunError("INVALID", `allocation driver ${driver.key} is not active`);
   // The driver dispatcher covers every source_kind; report_definition needs the
   // production runner, which the single service factory provides by default.
   // Callers may still inject a test double through deps.
   const resolver = deps.driverResolver ?? allocationServiceDeps().driverResolver;
   // The version's driver vintage resolves through the one shared mapping the
   // posting seam uses, against this sweep's period.
-  const vintage = await resolveDriverVintage(tx, opts.orgId, driverAsOf(opts.version.driver_as_of), {
-    kind: "period",
-    period: { id: opts.period.id, label: periodLabel(opts.period), startsOn: opts.period.starts_on, endsOn: opts.period.ends_on },
-  });
+  const vintage = await resolveDriverVintage(
+    tx,
+    opts.orgId,
+    driverAsOf(opts.version.driver_as_of),
+    {
+      kind: "period",
+      period: {
+        id: opts.period.id,
+        label: periodLabel(opts.period),
+        startsOn: opts.period.starts_on,
+        endsOn: opts.period.ends_on,
+      },
+    },
+  );
   if ("refusal" in vintage) throw new AllocationRunError("INVALID", vintage.refusal);
   const asOf = vintage.asOf;
   // A2 honors these knobs when present: this rule's own lines stay out of
@@ -866,31 +981,47 @@ async function resolveTargets(
   }
   if (opts.version.target_kind === "dynamic") {
     const dynamic = opts.version.dynamic_target as {
-      dimension?: AllocationDimension; include?: string[]; exclude?: string[]; minWeight?: string; targetAccountId?: string | null;
+      dimension?: AllocationDimension;
+      include?: string[];
+      exclude?: string[];
+      minWeight?: string;
+      targetAccountId?: string | null;
     };
     const dimension = dynamic.dimension;
-    if (!dimension) throw new AllocationRunError("INVALID", "dynamic allocation targets name no dimension");
+    if (!dimension)
+      throw new AllocationRunError("INVALID", "dynamic allocation targets name no dimension");
     if (opts.version.basis_kind !== "driver") {
       throw new AllocationRunError("INVALID", "dynamic allocation targets need a driver basis");
     }
     const table = DIMENSION_TABLES[dimension];
-    if (!table) throw new AllocationRunError("INVALID", `dynamic allocation targets on ${dimension} are not supported yet`);
+    if (!table)
+      throw new AllocationRunError(
+        "INVALID",
+        `dynamic allocation targets on ${dimension} are not supported yet`,
+      );
     const include = dynamic.include ?? [];
     const exclude = dynamic.exclude ?? [];
     const minWeight = dynamic.minWeight ?? "0";
     const resolved = await resolveDriverVectorForRun(tx, opts, deps);
-    let values = await tx.execute<{ id: string; name: string }>(sql`
+    let values = await tx.execute<{ id: string; name: string }>(
+      sql`
       select id, name from ${sql.raw(table)}
        where org_id = ${opts.orgId} and is_active
          ${include.length > 0 ? sql`and id = any(${uuidArray(include)}::uuid[])` : sql``}
          ${exclude.length > 0 ? sql`and not (id = any(${uuidArray(exclude)}::uuid[]))` : sql``}
          ${dimension === "subsidiary" && opts.subsidiaryId ? sql`and id = ${opts.subsidiaryId}` : sql``}
-       order by name, id for share`, "objects");
+       order by name, id for share`,
+      "objects",
+    );
     values = values.filter((value) => {
       const weight = resolved.vector.get(value.id) ?? "0";
       return cmp(weight, minWeight) > 0;
     });
-    if (values.length === 0) throw new AllocationRunError("INVALID", "no dynamic allocation target clears the minimum weight");
+    if (values.length === 0)
+      throw new AllocationRunError(
+        "INVALID",
+        "no dynamic allocation target clears the minimum weight",
+      );
     const resolvedTargets: ResolvedTarget[] = values.map((value) => {
       const coordinate: Coordinate = {
         accountId: dynamic.targetAccountId ?? "",
@@ -924,7 +1055,10 @@ async function resolveTargets(
     const resolvedTargets: ResolvedTarget[] = opts.targets.map((target) => {
       const value = targetDimensionValue(target, driverDimension);
       if (!value) {
-        throw new AllocationRunError("INVALID", "explicit driver-basis targets must carry a value in the driver dimension");
+        throw new AllocationRunError(
+          "INVALID",
+          "explicit driver-basis targets must carry a value in the driver dimension",
+        );
       }
       const coordinate: Coordinate = {
         accountId: target.target_account_id ?? "",
@@ -1013,7 +1147,10 @@ async function buildComputation(
   deps: PeriodRunDeps,
 ): Promise<BuiltComputation> {
   if (!opts.version.definition_hash) {
-    throw new AllocationRunError("INVALID", `allocation rule ${opts.rule.key} has a published version with no definition hash`);
+    throw new AllocationRunError(
+      "INVALID",
+      `allocation rule ${opts.rule.key} has a published version with no definition hash`,
+    );
   }
   // Reciprocal (simultaneous) solving is not implemented — publication
   // refuses it, and this guard covers versions published before the refusal
@@ -1026,16 +1163,27 @@ async function buildComputation(
   }
   // Book scope: a primary-scoped version only sweeps the primary book.
   if (opts.version.book_scope === "primary") {
-    const primary = (await tx.execute<{ id: string }>(sql`
+    const primary = (
+      await tx.execute<{ id: string }>(
+        sql`
       select id from accounting_books
-       where org_id = ${opts.orgId} and is_primary and is_active limit 1 for share`, "objects"))[0];
+       where org_id = ${opts.orgId} and is_primary and is_active limit 1 for share`,
+        "objects",
+      )
+    )[0];
     if (!primary || primary.id !== opts.bookId) {
-      throw new AllocationRunError("INVALID", `allocation rule ${opts.rule.key} is scoped to the primary book`);
+      throw new AllocationRunError(
+        "INVALID",
+        `allocation rule ${opts.rule.key} is scoped to the primary book`,
+      );
     }
   } else if (opts.version.book_scope === "books") {
     const allowed = (opts.version.book_ids ?? []) as string[];
     if (!allowed.includes(opts.bookId)) {
-      throw new AllocationRunError("INVALID", `allocation rule ${opts.rule.key} does not cover the requested book`);
+      throw new AllocationRunError(
+        "INVALID",
+        `allocation rule ${opts.rule.key} does not cover the requested book`,
+      );
     }
   }
 
@@ -1075,7 +1223,8 @@ async function buildComputation(
     },
     deps,
   );
-  if (targetSet.resolved.length === 0) throw new AllocationRunError("INVALID", "allocation produced no targets");
+  if (targetSet.resolved.length === 0)
+    throw new AllocationRunError("INVALID", "allocation produced no targets");
   // A run pinned to one subsidiary must not post into another: the kernel
   // has no intercompany balancing (contributed lines balance per
   // subsidiary), so cross-pin targets refuse by name instead of leaking
@@ -1088,17 +1237,26 @@ async function buildComputation(
   if (pinViolation) throw new AllocationRunError("INVALID", pinViolation);
   // Absorber precedence: an explicit residual key wins, else a sole
   // remainder target absorbs, else the residual policy decides.
-  const residualKey = opts.version.residual_policy === "explicit_target"
-    ? (opts.version.residual_target_id ?? undefined)
-    : undefined;
+  const residualKey =
+    opts.version.residual_policy === "explicit_target"
+      ? (opts.version.residual_target_id ?? undefined)
+      : undefined;
   // Zero weights carry no basis; apportionment refuses them for every
   // allocation path (percent grids always sum to 100 and never trip this).
   let display: ReturnType<typeof apportionTargets>;
   try {
-    display = apportionTargets(pool.total, targetSet.weights, opts.version.residual_policy, residualKey);
+    display = apportionTargets(
+      pool.total,
+      targetSet.weights,
+      opts.version.residual_policy,
+      residualKey,
+    );
   } catch (error) {
     if (error instanceof AllocationApportionError && error.code === "no_driver_weight") {
-      throw new AllocationRunError("INVALID", `allocation produced no positive target weight: ${error.message}`);
+      throw new AllocationRunError(
+        "INVALID",
+        `allocation produced no positive target weight: ${error.message}`,
+      );
     }
     throw error;
   }
@@ -1134,10 +1292,16 @@ async function buildComputation(
     }
   } else {
     for (const source of pool.sources) {
-      const split = apportionTargets(source.amount, targetSet.weights, opts.version.residual_policy, residualKey);
-      const creditAccount = opts.version.impact === "reclass"
-        ? (opts.version.offset_account_id ?? source.accountId)
-        : source.accountId;
+      const split = apportionTargets(
+        source.amount,
+        targetSet.weights,
+        opts.version.residual_policy,
+        residualKey,
+      );
+      const creditAccount =
+        opts.version.impact === "reclass"
+          ? (opts.version.offset_account_id ?? source.accountId)
+          : source.accountId;
       // Reclass credits the offset (contra/clearing) account when one is set,
       // else the source coordinate itself; net_zero_pair always credits the
       // source account at the source coordinate so no account total can move.
@@ -1165,8 +1329,14 @@ async function buildComputation(
       for (const apportioned of split.targets) {
         if (isZero(apportioned.amount)) continue;
         const target = byKey.get(apportioned.key)!;
-        if (opts.version.impact === "net_zero_pair" && target.coordinate.accountId && target.coordinate.accountId !== source.accountId) {
-          throw new Error("net_zero_pair targets must use the source account so no account total moves");
+        if (
+          opts.version.impact === "net_zero_pair" &&
+          target.coordinate.accountId &&
+          target.coordinate.accountId !== source.accountId
+        ) {
+          throw new Error(
+            "net_zero_pair targets must use the source account so no account total moves",
+          );
         }
         const coordinate = sameDims(target.coordinate, source);
         if (opts.version.impact === "net_zero_pair") coordinate.accountId = source.accountId;
@@ -1191,8 +1361,14 @@ async function buildComputation(
           },
         };
         lines.push(debitLine);
-        targetAmounts.set(target.key, add(targetAmounts.get(target.key) ?? "0.0000", apportioned.amount));
-        targetResiduals.set(target.key, add(targetResiduals.get(target.key) ?? "0.0000", apportioned.residual));
+        targetAmounts.set(
+          target.key,
+          add(targetAmounts.get(target.key) ?? "0.0000", apportioned.amount),
+        );
+        targetResiduals.set(
+          target.key,
+          add(targetResiduals.get(target.key) ?? "0.0000", apportioned.residual),
+        );
       }
     }
     const check = sum(lines.map((line) => line.amount));
@@ -1229,13 +1405,16 @@ async function buildComputation(
         share: shown.share,
         amount: targetAmounts.get(target.key) ?? "0.0000",
         residual: targetResiduals.get(target.key) ?? "0.0000",
-        coordinate: sameDims(target.coordinate, pool.sources[0] ?? {
-          accountId: target.coordinate.accountId || "",
-          subsidiaryId: opts.subsidiaryId,
-          extraDims: {},
-          amount: "0.0000",
-          lineCount: 0,
-        }),
+        coordinate: sameDims(
+          target.coordinate,
+          pool.sources[0] ?? {
+            accountId: target.coordinate.accountId || "",
+            subsidiaryId: opts.subsidiaryId,
+            extraDims: {},
+            amount: "0.0000",
+            lineCount: 0,
+          },
+        ),
         label: target.label,
       };
     }),
@@ -1339,8 +1518,11 @@ async function insertRunRow(
             'previewed', ${opts.trigger}, ${opts.built.sourceTotal}, ${opts.built.allocatedTotal},
             ${opts.built.residual}, ${JSON.stringify(opts.built.computation)}::jsonb,
             ${opts.built.fingerprint}, ${opts.actorId}, now(), now(), ${opts.actorId}, ${opts.actorId})`);
-  const rows = await tx.execute<RunRow>(sql`
-    select ${RUN_COLUMNS} from allocation_runs where id = ${id} and org_id = ${opts.orgId}`, "objects");
+  const rows = await tx.execute<RunRow>(
+    sql`
+    select ${RUN_COLUMNS} from allocation_runs where id = ${id} and org_id = ${opts.orgId}`,
+    "objects",
+  );
   const row = rows[0];
   if (!row) throw new Error("allocation run insert returned no row");
   return row;
@@ -1412,13 +1594,18 @@ async function postStoredJournal(
   const lineSubs = glLines.map((line) => line.subsidiaryId ?? headerSubsidiary);
   if (lineSubs.some((sub) => !sub)) throw new Error("allocation lines are missing a subsidiary");
   await assertPeriodOpen(tx, opts.orgId, opts.period, opts.run.book_id, lineSubs as string[]);
-  const duplicate = (await tx.execute<{ id: string }>(sql`
+  const duplicate = (
+    await tx.execute<{ id: string }>(
+      sql`
     select id from allocation_runs
      where org_id = ${opts.orgId} and rule_id = ${opts.run.rule_id}
        and period_id = ${opts.run.period_id} and book_id = ${opts.run.book_id}
        and coalesce(subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid)
          = coalesce(${opts.run.subsidiary_id}, '00000000-0000-0000-0000-000000000000'::uuid)
-       and status = 'posted' and id <> ${opts.run.id} for share`, "objects"))[0];
+       and status = 'posted' and id <> ${opts.run.id} for share`,
+      "objects",
+    )
+  )[0];
   if (duplicate) {
     throw new AllocationRunError(
       "INVALID",
@@ -1429,14 +1616,21 @@ async function postStoredJournal(
   // the rendered memo/line-description templates from preview time).
   const memo = `Allocation ${opts.ruleKey} — ${periodLabel(opts.period)}`;
   const lineSubsidiaries = [...new Set(lineSubs as string[])];
-  const currencies = await tx.execute<{ subsidiary_id: string; subsidiary_name: string; currency: string | null }>(sql`
+  const currencies = await tx.execute<{
+    subsidiary_id: string;
+    subsidiary_name: string;
+    currency: string | null;
+  }>(
+    sql`
     select subsidiary.id as subsidiary_id,
            subsidiary.name as subsidiary_name,
            public.accounting_book_currency(${opts.orgId}, ${opts.run.book_id}, subsidiary.id) as currency
       from subsidiaries subsidiary
      where subsidiary.org_id = ${opts.orgId}
        and subsidiary.id = any(${uuidArray(lineSubsidiaries)}::uuid[])
-     order by subsidiary.id`, "objects");
+     order by subsidiary.id`,
+    "objects",
+  );
   const currencyBySubsidiary = new Map(currencies.map((row) => [row.subsidiary_id, row]));
   for (const subsidiaryId of lineSubsidiaries) {
     const currency = currencyBySubsidiary.get(subsidiaryId);
@@ -1470,9 +1664,12 @@ async function postStoredJournal(
     }),
   });
   const entryId = posted.entryId;
-  const postedLines = await tx.execute<{ id: string; line_number: number }>(sql`
+  const postedLines = await tx.execute<{ id: string; line_number: number }>(
+    sql`
     select id, line_number from journal_lines
-     where org_id = ${opts.orgId} and entry_id = ${entryId} order by line_number for share`, "objects");
+     where org_id = ${opts.orgId} and entry_id = ${entryId} order by line_number for share`,
+    "objects",
+  );
   const lineIdByNumber = new Map(postedLines.map((line) => [line.line_number, line.id]));
   for (const line of computation.lines) {
     const journalLineId = lineIdByNumber.get(line.lineNumber);
@@ -1508,8 +1705,13 @@ async function reportDriverValueLookup(
   const direct = (key: string): string | null => vectorByKey.get(key) ?? null;
   const driverId = run.computation.driver?.id ?? null;
   if (!driverId) return direct;
-  const driver = (await tx.execute<{ dimension: string }>(sql`
-    select dimension from allocation_drivers where org_id = ${orgId} and id = ${driverId} for share`, "objects"))[0];
+  const driver = (
+    await tx.execute<{ dimension: string }>(
+      sql`
+    select dimension from allocation_drivers where org_id = ${orgId} and id = ${driverId} for share`,
+      "objects",
+    )
+  )[0];
   if (!driver) return direct;
   const rows = await tx.execute<{
     id: string;
@@ -1519,10 +1721,13 @@ async function reportDriverValueLookup(
     project_id: string | null;
     subsidiary_id: string | null;
     extra_dims: Record<string, string | null> | null;
-  }>(sql`
+  }>(
+    sql`
     select id, department_id, location_id, class_id, project_id, subsidiary_id, extra_dims
       from allocation_rule_targets
-     where org_id = ${orgId} and version_id = ${run.version_id} for share`, "objects");
+     where org_id = ${orgId} and version_id = ${run.version_id} for share`,
+    "objects",
+  );
   const dimension = driver.dimension;
   const valueOf = (row: (typeof rows)[number]): string | null => {
     switch (dimension) {
@@ -1559,15 +1764,14 @@ async function reportDriverValueLookup(
 }
 
 /** Lineage for a report-only post: per-target statistical rows, no journal. */
-async function writeReportLineage(
-  tx: Tx,
-  opts: { orgId: string; run: RunRow },
-): Promise<void> {
+async function writeReportLineage(tx: Tx, opts: { orgId: string; run: RunRow }): Promise<void> {
   const computation = opts.run.computation;
   const driverTotal = computation.driver
     ? computation.driver.vector.reduce((acc, entry) => add(acc, entry.value), "0")
     : null;
-  const vectorByKey = new Map((computation.driver?.vector ?? []).map((entry) => [entry.key, entry.value]));
+  const vectorByKey = new Map(
+    (computation.driver?.vector ?? []).map((entry) => [entry.key, entry.value]),
+  );
   const driverValueFor = await reportDriverValueLookup(tx, opts.orgId, opts.run, vectorByKey);
   for (const target of computation.targets) {
     await tx.execute(sql`
@@ -1599,9 +1803,12 @@ async function reverseStoredJournal(
   if (!opts.run.journal_entry_id) {
     // Report-only runs post no journal: the reversal mirrors the statistical
     // rows with negated amounts so the attribution nets to zero in reports.
-    const originals = await tx.execute<{ id: string }>(sql`
+    const originals = await tx.execute<{ id: string }>(
+      sql`
       select id from allocation_lineage
-       where org_id = ${opts.orgId} and run_id = ${opts.run.id} for share`, "objects");
+       where org_id = ${opts.orgId} and run_id = ${opts.run.id} for share`,
+      "objects",
+    );
     for (const original of originals) {
       await tx.execute(sql`
         insert into allocation_lineage
@@ -1627,15 +1834,24 @@ async function reverseStoredJournal(
   }
   const reversalEntryId = reversal.reversalId;
   if (!reversalEntryId) throw new Error("allocation reversal returned no entry");
-  const reversalLines = await tx.execute<{ id: string; line_number: number }>(sql`
+  const reversalLines = await tx.execute<{ id: string; line_number: number }>(
+    sql`
     select id, line_number from journal_lines
-     where org_id = ${opts.orgId} and entry_id = ${reversalEntryId} order by line_number for share`, "objects");
+     where org_id = ${opts.orgId} and entry_id = ${reversalEntryId} order by line_number for share`,
+    "objects",
+  );
   const reversalByNumber = new Map(reversalLines.map((line) => [line.line_number, line.id]));
   const originals = await tx.execute<{
-    journal_line_id: string | null; line_number: number | null;
-    driver_id: string | null; driver_value: string | null; driver_total: string | null;
-    share: string | null; amount: string; residual: string;
-  }>(sql`
+    journal_line_id: string | null;
+    line_number: number | null;
+    driver_id: string | null;
+    driver_value: string | null;
+    driver_total: string | null;
+    share: string | null;
+    amount: string;
+    residual: string;
+  }>(
+    sql`
     select lineage.journal_line_id, line.line_number,
            lineage.driver_id, lineage.driver_value::text, lineage.driver_total::text,
            lineage.share::text, lineage.amount::text, lineage.residual::text
@@ -1643,11 +1859,12 @@ async function reverseStoredJournal(
       left join journal_lines line
         on line.id = lineage.journal_line_id and line.org_id = lineage.org_id
      where lineage.org_id = ${opts.orgId} and lineage.run_id = ${opts.run.id}
-       and lineage.journal_entry_id = ${opts.run.journal_entry_id}`, "objects");
+       and lineage.journal_entry_id = ${opts.run.journal_entry_id}`,
+    "objects",
+  );
   for (const original of originals) {
-    const reversalLineId = original.line_number === null
-      ? null
-      : (reversalByNumber.get(original.line_number) ?? null);
+    const reversalLineId =
+      original.line_number === null ? null : (reversalByNumber.get(original.line_number) ?? null);
     await tx.execute(sql`
       insert into allocation_lineage
         (id, org_id, mode, rule_id, version_id, definition_hash, run_id,
@@ -1673,7 +1890,10 @@ function requireActor(actorId: string): void {
 function requireReason(reason: string, what: string): string {
   const trimmed = reason.trim();
   if (trimmed.length === 0 || trimmed.length > 500) {
-    throw new AllocationRunError("INVALID", `a ${what} reason between 1 and 500 characters is required`);
+    throw new AllocationRunError(
+      "INVALID",
+      `a ${what} reason between 1 and 500 characters is required`,
+    );
   }
   return trimmed;
 }
@@ -1756,8 +1976,11 @@ export async function previewAllocationRun(
 
 /** Lock a run row for a state transition; the run's own org scopes everything. */
 async function lockRun(tx: Tx, runId: string): Promise<RunRow> {
-  const rows = await tx.execute<RunRow>(sql`
-    select ${RUN_COLUMNS} from allocation_runs where id = ${runId} for update`, "objects");
+  const rows = await tx.execute<RunRow>(
+    sql`
+    select ${RUN_COLUMNS} from allocation_runs where id = ${runId} for update`,
+    "objects",
+  );
   const run = rows[0];
   if (!run) throw new AllocationRunError("NOT_FOUND", `allocation run ${runId} was not found`);
   return run;
@@ -1793,10 +2016,7 @@ async function openRunApproval(
     return null;
   }
   if (!routing.gatingRunId)
-    throw new AllocationRunError(
-      "INVALID",
-      "The submitted allocation has no pending Flow gate.",
-    );
+    throw new AllocationRunError("INVALID", "The submitted allocation has no pending Flow gate.");
   const gated = { runId: routing.gatingRunId };
   await tx.execute(sql`
     update allocation_runs
@@ -1833,11 +2053,7 @@ export async function postAllocationRun(
   const cleanReason = requireReason(reason, "posting");
   return withOrgTransaction(await readRunOrgId(runId), () =>
     inDbTransaction(async (tx) => {
-      await lockApprovalSubject(
-        await readRunOrgId(runId),
-        "allocation_run",
-        runId,
-      );
+      await lockApprovalSubject(await readRunOrgId(runId), "allocation_run", runId);
       const run = await lockRun(tx, runId);
       const decision = opts.approvalRunId
         ? await readNativeApprovalDecision({
@@ -1864,18 +2080,21 @@ export async function postAllocationRun(
       if (!allocationScopeVisible(scope, run.subsidiary_id, run.computation))
         throw new AllocationRunError("NOT_FOUND", "Allocation run not found.");
       if (Boolean(decision)) {
-      // The approval engine's release: the run waited in pending_approval
-      // for exactly this call. Anything else is a double-release or a
-      // lifecycle violation — never post it.
-      if (run.status !== "pending_approval") {
+        // The approval engine's release: the run waited in pending_approval
+        // for exactly this call. Anything else is a double-release or a
+        // lifecycle violation — never post it.
+        if (run.status !== "pending_approval") {
+          throw new AllocationRunError(
+            "INVALID",
+            `allocation run ${runId} is ${run.status} and cannot be released from approval`,
+          );
+        }
+      } else if (run.status !== "previewed") {
         throw new AllocationRunError(
           "INVALID",
-          `allocation run ${runId} is ${run.status} and cannot be released from approval`,
+          `allocation run ${runId} is ${run.status} and cannot be posted`,
         );
       }
-    } else if (run.status !== "previewed") {
-      throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be posted`);
-    }
       const orgId = run.org_id;
       // The native transaction keeps the subject and period fences through
       // its own writes instead (the approval stamp inside openRunApproval, the
@@ -1886,24 +2105,33 @@ export async function postAllocationRun(
       // the same guards preview and rerun already enforce.
       const rule = await loadRule(tx, orgId, run.rule_id);
       const ruleKey = rule.key;
-      const version = (await tx.execute<VersionRow>(sql`
+      const version = (
+        await tx.execute<VersionRow>(
+          sql`
       select id, org_id, rule_id, status, effective_from::text, effective_to::text,
              book_scope, book_ids, account_scope, dimension_filters, source_measure,
              basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
              offset_account_id, residual_policy, residual_target_id, approval_flow_id,
              memo_template, line_description_template, definition_hash, solve_method
         from allocation_rule_versions
-       where id = ${run.version_id} and org_id = ${orgId} for share`, "objects"))[0];
+       where id = ${run.version_id} and org_id = ${orgId} for share`,
+          "objects",
+        )
+      )[0];
       if (!version || version.status !== "published") {
-      throw new AllocationRunError(
-        "INVALID",
-        `allocation rule ${ruleKey} version ${run.version_id} is ${version?.status ?? "missing"} and cannot take postings`,
-      );
-    }
+        throw new AllocationRunError(
+          "INVALID",
+          `allocation rule ${ruleKey} version ${run.version_id} is ${version?.status ?? "missing"} and cannot take postings`,
+        );
+      }
       // The preview may predate the boundary proof (or a mid-period version
       // may have been hand-published since): re-prove the run's period before
       // money moves or an approval gate opens.
-      await assertNoVersionEdgeInsidePeriod(tx, { id: rule.id, org_id: orgId, key: ruleKey }, period);
+      await assertNoVersionEdgeInsidePeriod(
+        tx,
+        { id: rule.id, org_id: orgId, key: ruleKey },
+        period,
+      );
       if (!decision) {
         const waiting = await openRunApproval(tx, {
           orgId,
@@ -1923,47 +2151,51 @@ export async function postAllocationRun(
       // posted run FIRST (frees the one-posted-run slot), then post the
       // replacement below in the same transaction.
       if (run.reverses_run_id) {
-      await reverseSupersededForApproval(tx, {
-        orgId,
-        actorId,
-        freshId: run.id,
-        oldRunId: run.reverses_run_id,
-        period,
-        reason: cleanReason,
-      });
-    }
+        await reverseSupersededForApproval(tx, {
+          orgId,
+          actorId,
+          freshId: run.id,
+          oldRunId: run.reverses_run_id,
+          period,
+          reason: cleanReason,
+        });
+      }
       let journalEntryId: string | null = null;
       try {
-      journalEntryId = await postStoredJournal(tx, {
-        orgId,
-        actorId,
-        run,
-        ruleKey,
-        period,
-        entryNumberSuffix: run.id.slice(0, 8),
-      });
-      if (!journalEntryId && run.computation.impact === "report_only") {
-        await writeReportLineage(tx, { orgId, run });
+        journalEntryId = await postStoredJournal(tx, {
+          orgId,
+          actorId,
+          run,
+          ruleKey,
+          period,
+          entryNumberSuffix: run.id.slice(0, 8),
+        });
+        if (!journalEntryId && run.computation.impact === "report_only") {
+          await writeReportLineage(tx, { orgId, run });
+        }
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          (error as { code?: string }).code === "23505"
+        ) {
+          throw new AllocationRunError(
+            "INVALID",
+            "one posted run already exists for this rule, period, book and subsidiary",
+          );
+        }
+        throw error;
       }
-    } catch (error) {
-      if (error instanceof Error && "code" in error && (error as { code?: string }).code === "23505") {
-        throw new AllocationRunError(
-          "INVALID",
-          "one posted run already exists for this rule, period, book and subsidiary",
-        );
-      }
-      throw error;
-    }
       await tx.execute(sql`
       update allocation_runs
          set status = 'posted', journal_entry_id = ${journalEntryId},
              completed_at = now(), updated_at = now(), updated_by = ${actorId}
        where id = ${run.id} and org_id = ${orgId}`);
       await writeAudit(tx, orgId, run.id, actorId, {
-      mode: "allocation_run_post",
-      reason: cleanReason,
-      journalEntryId,
-    });
+        mode: "allocation_run_post",
+        reason: cleanReason,
+        journalEntryId,
+      });
       return toRecord({ ...run, status: "posted", journal_entry_id: journalEntryId });
     }),
   );
@@ -1979,7 +2211,9 @@ function touchedSubsidiaries(run: RunRow): string[] {
   }
   return [
     ...(run.subsidiary_id ? [run.subsidiary_id] : []),
-    ...computation.sources.map((source) => source.subsidiaryId).filter((sub): sub is string => !!sub),
+    ...computation.sources
+      .map((source) => source.subsidiaryId)
+      .filter((sub): sub is string => !!sub),
   ];
 }
 
@@ -2005,7 +2239,10 @@ async function reverseSupersededForApproval(
 ): Promise<void> {
   const old = await lockRun(tx, opts.oldRunId);
   if (old.org_id !== opts.orgId) {
-    throw new AllocationRunError("NOT_FOUND", `allocation run ${opts.oldRunId} does not belong to this organization`);
+    throw new AllocationRunError(
+      "NOT_FOUND",
+      `allocation run ${opts.oldRunId} does not belong to this organization`,
+    );
   }
   if (old.status !== "posted") return;
   const reversalDate = opts.period.ends_on;
@@ -2051,12 +2288,18 @@ export async function reverseAllocationRun(
   requireActor(actorId);
   const cleanReason = reason.trim();
   if (cleanReason.length < 5 || cleanReason.length > 500) {
-    throw new AllocationRunError("INVALID", "a reversal reason between 5 and 500 characters is required");
+    throw new AllocationRunError(
+      "INVALID",
+      "a reversal reason between 5 and 500 characters is required",
+    );
   }
   return inDbTransaction(async (tx) => {
     const run = await lockRun(tx, runId);
     if (run.status !== "posted") {
-      throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be reversed`);
+      throw new AllocationRunError(
+        "INVALID",
+        `allocation run ${runId} is ${run.status} and cannot be reversed`,
+      );
     }
     const orgId = run.org_id;
     // Same fence as posting: reversing writes a reversal journal, so a
@@ -2111,8 +2354,11 @@ export interface RerunAllocationRunOptions {
  */
 /** The owning org of a run, read before its transaction opens. */
 async function readRunOrgId(runId: string): Promise<string> {
-  const rows = await db.execute<{ org_id: string }>(sql`
-    select org_id from allocation_runs where id = ${runId}`, "objects");
+  const rows = await db.execute<{ org_id: string }>(
+    sql`
+    select org_id from allocation_runs where id = ${runId}`,
+    "objects",
+  );
   const orgId = rows[0]?.org_id;
   if (!orgId) throw new AllocationRunError("NOT_FOUND", `allocation run ${runId} was not found`);
   return orgId;
@@ -2128,7 +2374,10 @@ export async function rerunAllocationRun(
   requireActor(actorId);
   const cleanReason = reason.trim();
   if (cleanReason.length < 5 || cleanReason.length > 500) {
-    throw new AllocationRunError("INVALID", "a re-run reason between 5 and 500 characters is required");
+    throw new AllocationRunError(
+      "INVALID",
+      "a re-run reason between 5 and 500 characters is required",
+    );
   }
   // Pin the org transaction FIRST: the approval dispatch below
   // (openRunApproval → flow engine) reads the fresh run through the ambient
@@ -2141,8 +2390,11 @@ export async function rerunAllocationRun(
     inDbTransaction(async (tx) => {
       const run = await lockRun(tx, runId);
       if (run.status !== "posted" && run.status !== "previewed" && run.status !== "reversed") {
-      throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be re-run`);
-    }
+        throw new AllocationRunError(
+          "INVALID",
+          `allocation run ${runId} is ${run.status} and cannot be re-run`,
+        );
+      }
       const orgId = run.org_id;
       // Fence placement matters here (see the version-load comment below): the
       // direct branch fences before any write, while the approval branch
@@ -2163,19 +2415,19 @@ export async function rerunAllocationRun(
       await assertAllocationsEnabled(tx, orgId, "re-run");
       const targets = await loadTargets(tx, orgId, version.id);
       const built = await buildComputation(
-      tx,
-      {
-        orgId,
-        rule,
-        version,
-        targets,
-        period,
-        bookId: book.id,
-        subsidiaryId: run.subsidiary_id,
-        actorId,
-      },
-      deps,
-    );
+        tx,
+        {
+          orgId,
+          rule,
+          version,
+          targets,
+          period,
+          bookId: book.id,
+          subsidiaryId: run.subsidiary_id,
+          actorId,
+        },
+        deps,
+      );
       if (built.fingerprint === run.fingerprint) {
         // No writes follow on this path, so fencing here cannot deadlock —
         // but the verb stays gated: a disabled feature refuses by name rather
@@ -2184,17 +2436,17 @@ export async function rerunAllocationRun(
         return { run: toRecord(run), idempotent: true };
       }
       const fresh = await insertRunRow(tx, {
-      orgId,
-      ruleId: rule.id,
-      actorId,
-      trigger: "rerun",
-      built,
-      versionId: version.id,
-      definitionHash: version.definition_hash!,
-      periodId: period.id,
-      bookId: book.id,
-      subsidiaryId: run.subsidiary_id,
-    });
+        orgId,
+        ruleId: rule.id,
+        actorId,
+        trigger: "rerun",
+        built,
+        versionId: version.id,
+        definitionHash: version.definition_hash!,
+        periodId: period.id,
+        bookId: book.id,
+        subsidiaryId: run.subsidiary_id,
+      });
       // A re-run under a flow-governed version needs fresh approval: the new
       // run waits in pending_approval instead of posting (same path as post).
       // A posted old run stays posted and effective until that approval lands
@@ -2211,87 +2463,91 @@ export async function rerunAllocationRun(
       });
       if (waiting) {
         if (run.status === "reversed") {
-        // Already unwound (reversal_entry_id kept): just chain forward.
-        await tx.execute(sql`
+          // Already unwound (reversal_entry_id kept): just chain forward.
+          await tx.execute(sql`
           update allocation_runs
              set superseded_by_run_id = ${fresh.id},
                  completed_at = now(), updated_at = now(), updated_by = ${actorId}
            where id = ${run.id} and org_id = ${orgId}`);
-      } else if (run.status !== "posted") {
-        await tx.execute(sql`
+        } else if (run.status !== "posted") {
+          await tx.execute(sql`
           update allocation_runs
              set status = 'superseded', superseded_by_run_id = ${fresh.id},
                  completed_at = now(), updated_at = now(), updated_by = ${actorId}
            where id = ${run.id} and org_id = ${orgId}`);
-      }
+        }
         await tx.execute(sql`
         update allocation_runs
            set reverses_run_id = ${run.id}
          where id = ${fresh.id} and org_id = ${orgId}`);
         await writeAudit(tx, orgId, fresh.id, actorId, {
-        mode: "allocation_run_rerun",
-        reason: cleanReason,
-        reversesRunId: run.id,
-        flowRunId: waiting.flowRunId,
-      });
+          mode: "allocation_run_rerun",
+          reason: cleanReason,
+          reversesRunId: run.id,
+          flowRunId: waiting.flowRunId,
+        });
         return {
-        run: { ...waiting, reversesRunId: run.id },
-        idempotent: false,
-      };
+          run: { ...waiting, reversesRunId: run.id },
+          idempotent: false,
+        };
       }
       const reversalDate = opts.reversalDate ?? period.ends_on;
       if (run.status === "posted") {
-      await assertPeriodOpen(tx, orgId, period, run.book_id, touchedSubsidiaries(run));
-      const reversalEntryId = await reverseStoredJournal(tx, {
-        orgId,
-        actorId,
-        run,
-        reason: cleanReason,
-        reversalDate,
-        reversalPeriodId: reversalDate === period.ends_on ? period.id : undefined,
-      });
-      await tx.execute(sql`
+        await assertPeriodOpen(tx, orgId, period, run.book_id, touchedSubsidiaries(run));
+        const reversalEntryId = await reverseStoredJournal(tx, {
+          orgId,
+          actorId,
+          run,
+          reason: cleanReason,
+          reversalDate,
+          reversalPeriodId: reversalDate === period.ends_on ? period.id : undefined,
+        });
+        await tx.execute(sql`
         update allocation_runs
            set status = 'reversed', reversal_entry_id = ${reversalEntryId},
                superseded_by_run_id = ${fresh.id},
                completed_at = now(), updated_at = now(), updated_by = ${actorId}
          where id = ${run.id} and org_id = ${orgId}`);
-    } else if (run.status === "reversed") {
-      // Already unwound (reversal_entry_id kept): just chain forward.
-      await tx.execute(sql`
+      } else if (run.status === "reversed") {
+        // Already unwound (reversal_entry_id kept): just chain forward.
+        await tx.execute(sql`
         update allocation_runs
            set superseded_by_run_id = ${fresh.id},
                completed_at = now(), updated_at = now(), updated_by = ${actorId}
          where id = ${run.id} and org_id = ${orgId}`);
-    } else {
-      await tx.execute(sql`
+      } else {
+        await tx.execute(sql`
         update allocation_runs
            set status = 'superseded', superseded_by_run_id = ${fresh.id},
                completed_at = now(), updated_at = now(), updated_by = ${actorId}
          where id = ${run.id} and org_id = ${orgId}`);
-    }
+      }
       let journalEntryId: string | null = null;
       try {
-      journalEntryId = await postStoredJournal(tx, {
-        orgId,
-        actorId,
-        run: fresh,
-        ruleKey: rule.key,
-        period,
-        entryNumberSuffix: fresh.id.slice(0, 8),
-      });
-      if (!journalEntryId && fresh.computation.impact === "report_only") {
-        await writeReportLineage(tx, { orgId, run: fresh });
+        journalEntryId = await postStoredJournal(tx, {
+          orgId,
+          actorId,
+          run: fresh,
+          ruleKey: rule.key,
+          period,
+          entryNumberSuffix: fresh.id.slice(0, 8),
+        });
+        if (!journalEntryId && fresh.computation.impact === "report_only") {
+          await writeReportLineage(tx, { orgId, run: fresh });
+        }
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          (error as { code?: string }).code === "23505"
+        ) {
+          throw new AllocationRunError(
+            "INVALID",
+            "one posted run already exists for this rule, period, book and subsidiary",
+          );
+        }
+        throw error;
       }
-    } catch (error) {
-      if (error instanceof Error && "code" in error && (error as { code?: string }).code === "23505") {
-        throw new AllocationRunError(
-          "INVALID",
-          "one posted run already exists for this rule, period, book and subsidiary",
-        );
-      }
-      throw error;
-    }
       await tx.execute(sql`
       update allocation_runs
          set status = 'posted', journal_entry_id = ${journalEntryId},
@@ -2299,15 +2555,20 @@ export async function rerunAllocationRun(
              completed_at = now(), updated_at = now(), updated_by = ${actorId}
        where id = ${fresh.id} and org_id = ${orgId}`);
       await writeAudit(tx, orgId, fresh.id, actorId, {
-      mode: "allocation_run_rerun",
-      reason: cleanReason,
-      reversesRunId: run.id,
-      journalEntryId,
-    });
+        mode: "allocation_run_rerun",
+        reason: cleanReason,
+        reversesRunId: run.id,
+        journalEntryId,
+      });
       return {
-      run: toRecord({ ...fresh, status: "posted", journal_entry_id: journalEntryId, reverses_run_id: run.id }),
-      idempotent: false,
-    };
+        run: toRecord({
+          ...fresh,
+          status: "posted",
+          journal_entry_id: journalEntryId,
+          reverses_run_id: run.id,
+        }),
+        idempotent: false,
+      };
     }),
   );
 }

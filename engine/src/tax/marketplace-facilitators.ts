@@ -40,15 +40,20 @@ export async function assertSuitableClearingAccount(
   clearingAccountId: string,
   remedy: string,
 ): Promise<void> {
-  const account = (await runner.execute<{
-    id: string;
-    type: string;
-    isActive: boolean;
-    isSummary: boolean;
-  }>(sql`
+  const account = (
+    await runner.execute<{
+      id: string;
+      type: string;
+      isActive: boolean;
+      isSummary: boolean;
+    }>(
+      sql`
     select id, type, is_active as "isActive", is_summary as "isSummary"
       from accounts where org_id = ${orgId} and id = ${clearingAccountId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!account) {
     throw new TaxMarketplaceError(
       `marketplace facilitator "${facilitatorName}" points at a clearing account that no longer exists — ${remedy}`,
@@ -64,7 +69,9 @@ export async function assertSuitableClearingAccount(
       `marketplace facilitator "${facilitatorName}" needs an asset clearing account (the marketplace owes the merchant this tax) — ${remedy}`,
     );
   }
-  const control = (await runner.execute<{ one: number }>(sql`
+  const control = (
+    await runner.execute<{ one: number }>(
+      sql`
     select 1 as one
       from tax_codes
      where org_id = ${orgId}
@@ -72,13 +79,21 @@ export async function assertSuitableClearingAccount(
          or paid_account_id = ${clearingAccountId}
          or withholding_account_id = ${clearingAccountId})
      limit 1
-  `, "objects"))[0];
-  const orgControl = (await runner.execute<{ one: number }>(sql`
+  `,
+      "objects",
+    )
+  )[0];
+  const orgControl = (
+    await runner.execute<{ one: number }>(
+      sql`
     select 1 as one from orgs
      where id = ${orgId}
        and (settings->'controlAccounts'->>'taxCollected' = ${clearingAccountId}
          or settings->'controlAccounts'->>'taxPaid' = ${clearingAccountId})
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (control ?? orgControl) {
     throw new TaxMarketplaceError(
       `marketplace facilitator "${facilitatorName}" uses an account that is also a tax control account — facilitator tax would re-enter the merchant's returns; ${remedy}`,
@@ -99,17 +114,22 @@ export async function resolveMarketplaceClearing(
   const unique = [...new Set(names)];
   const out = new Map<string, MarketplaceClearing>();
   for (const name of unique) {
-    const row = (await runner.execute<{
-      name: string;
-      clearingAccountId: string;
-      mode: MarketplaceCollectionMode;
-      isActive: boolean;
-    }>(sql`
+    const row = (
+      await runner.execute<{
+        name: string;
+        clearingAccountId: string;
+        mode: MarketplaceCollectionMode;
+        isActive: boolean;
+      }>(
+        sql`
       select name, clearing_account_id as "clearingAccountId",
              collection_mode as mode, is_active as "isActive"
         from marketplace_facilitators
        where org_id = ${orgId} and name = ${name}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row) {
       throw new TaxMarketplaceError(
         `marketplace facilitator "${name}" is not configured — ${remedy}`,
@@ -139,20 +159,27 @@ export async function validateMarketplaceFacilitatorWrite(
   rowId: string | null,
 ): Promise<void> {
   const current = rowId
-    ? (await runner.execute<{
-        name: string;
-        clearingAccountId: string;
-        mode: MarketplaceCollectionMode;
-        states: string[] | null;
-        isActive: boolean;
-      }>(sql`
+    ? (
+        await runner.execute<{
+          name: string;
+          clearingAccountId: string;
+          mode: MarketplaceCollectionMode;
+          states: string[] | null;
+          isActive: boolean;
+        }>(
+          sql`
         select name, clearing_account_id as "clearingAccountId",
                collection_mode as mode, states, is_active as "isActive"
           from marketplace_facilitators where id = ${rowId} and org_id = ${orgId}
-      `, "objects"))[0]
+      `,
+          "objects",
+        )
+      )[0]
     : null;
   if (rowId && !current) {
-    throw new TaxMarketplaceError("that marketplace facilitator no longer exists — refresh the setup list and try again");
+    throw new TaxMarketplaceError(
+      "that marketplace facilitator no longer exists — refresh the setup list and try again",
+    );
   }
   const merged: SaveMarketplaceFacilitatorInput = {
     name: body.name === undefined ? (current?.name ?? "") : String(body.name),
@@ -170,8 +197,7 @@ export async function validateMarketplaceFacilitatorWrite(
         : Array.isArray(body.states)
           ? body.states.map(String)
           : [],
-    isActive:
-      body.isActive === undefined ? (current?.isActive ?? true) : body.isActive !== false,
+    isActive: body.isActive === undefined ? (current?.isActive ?? true) : body.isActive !== false,
   };
   validateMarketplaceFacilitatorInput(merged);
   await assertSuitableClearingAccount(
@@ -207,14 +233,20 @@ function toTextArrayLiteral(values: string[]): string {
  */
 export function validateMarketplaceFacilitatorInput(input: SaveMarketplaceFacilitatorInput): void {
   if (!input.name.trim()) {
-    throw new TaxMarketplaceError("a marketplace facilitator needs a name — enter the marketplace as customers know it");
+    throw new TaxMarketplaceError(
+      "a marketplace facilitator needs a name — enter the marketplace as customers know it",
+    );
   }
   if (!input.clearingAccountId.trim()) {
     throw new TaxMarketplaceError(
       `marketplace facilitator "${input.name.trim()}" needs a clearing account — pick the asset account the marketplace settlement relieves`,
     );
   }
-  if (input.collectionMode !== undefined && input.collectionMode !== "gross" && input.collectionMode !== "net") {
+  if (
+    input.collectionMode !== undefined &&
+    input.collectionMode !== "gross" &&
+    input.collectionMode !== "net"
+  ) {
     throw new TaxMarketplaceError(
       `marketplace facilitator "${input.name.trim()}" collection is "${input.collectionMode}" — choose "gross" (tax inside the charged total, posted to clearing) or "net" (document net of tax, no posting leg)`,
     );
@@ -245,16 +277,22 @@ export async function saveMarketplaceFacilitator(
   const states = [...new Set((input.states ?? []).map((s) => s.trim()))].sort();
   // The clearing account must exist in this org; resolveMarketplaceClearing
   // re-checks suitability at every posting, so setup stays fast.
-  const account = (await runner.execute<{ id: string }>(sql`
+  const account = (
+    await runner.execute<{ id: string }>(
+      sql`
     select id from accounts where org_id = ${orgId} and id = ${input.clearingAccountId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!account) {
     throw new TaxMarketplaceError(
       `marketplace facilitator "${name}" points at an account outside this organization — pick a clearing account from this organization's chart`,
     );
   }
   if (input.id) {
-    const updated = (await runner.execute<{ id: string }>(sql`
+    const updated = await runner.execute<{ id: string }>(
+      sql`
       update marketplace_facilitators
          set name = ${name}, clearing_account_id = ${input.clearingAccountId},
              collection_mode = ${mode}, states = ${toTextArrayLiteral(states)}::text[],
@@ -262,20 +300,30 @@ export async function saveMarketplaceFacilitator(
              updated_at = now(), updated_by = ${actorId}
        where id = ${input.id} and org_id = ${orgId}
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!updated[0]) {
-      throw new TaxMarketplaceError(`marketplace facilitator "${name}" was not updated — it may belong to another organization`);
+      throw new TaxMarketplaceError(
+        `marketplace facilitator "${name}" was not updated — it may belong to another organization`,
+      );
     }
     return updated[0].id;
   }
-  const inserted = (await runner.execute<{ id: string }>(sql`
+  const inserted = await runner.execute<{ id: string }>(
+    sql`
     insert into marketplace_facilitators
       (org_id, name, clearing_account_id, collection_mode, states, is_active, created_by, updated_by)
     values (${orgId}, ${name}, ${input.clearingAccountId}, ${mode}, ${toTextArrayLiteral(states)}::text[],
             ${input.isActive ?? true}, ${actorId}, ${actorId})
     returning id
-  `, "objects"));
-  if (!inserted[0]) throw new TaxMarketplaceError(`marketplace facilitator "${name}" was not stored — no row was written`);
+  `,
+    "objects",
+  );
+  if (!inserted[0])
+    throw new TaxMarketplaceError(
+      `marketplace facilitator "${name}" was not stored — no row was written`,
+    );
   return inserted[0].id;
 }
 
@@ -295,18 +343,26 @@ export async function readAllMarketplaceNexusRules(
     includeInThreshold: boolean;
     needsReview: boolean;
     source: string;
-  }>(sql`
+  }>(
+    sql`
     select state,
            include_in_threshold as "includeInThreshold",
            needs_review as "needsReview", source
       from marketplace_nexus_state_rules
-  `, "objects");
-  return new Map(rows.map((row) => [row.state, {
-    state: row.state,
-    includeInThreshold: row.includeInThreshold,
-    needsReview: row.needsReview,
-    source: row.source,
-  }]));
+  `,
+    "objects",
+  );
+  return new Map(
+    rows.map((row) => [
+      row.state,
+      {
+        state: row.state,
+        includeInThreshold: row.includeInThreshold,
+        needsReview: row.needsReview,
+        source: row.source,
+      },
+    ]),
+  );
 }
 
 /** Apply the verified-or-default rule: seeded rows govern, unlisted states
@@ -315,12 +371,14 @@ export function marketplaceNexusRuleFor(
   state: string,
   seeded: Map<string, MarketplaceNexusRule>,
 ): MarketplaceNexusRule {
-  return seeded.get(state.trim().toUpperCase()) ?? {
-    state: state.trim().toUpperCase(),
-    includeInThreshold: true,
-    needsReview: true,
-    source: "",
-  };
+  return (
+    seeded.get(state.trim().toUpperCase()) ?? {
+      state: state.trim().toUpperCase(),
+      includeInThreshold: true,
+      needsReview: true,
+      source: "",
+    }
+  );
 }
 
 /**
@@ -334,15 +392,20 @@ export async function readMarketplaceNexusRule(
   runner: Runner = db,
 ): Promise<MarketplaceNexusRule> {
   const code = state.trim().toUpperCase();
-  const row = (await runner.execute<{
-    includeInThreshold: boolean;
-    needsReview: boolean;
-    source: string;
-  }>(sql`
+  const row = (
+    await runner.execute<{
+      includeInThreshold: boolean;
+      needsReview: boolean;
+      source: string;
+    }>(
+      sql`
     select include_in_threshold as "includeInThreshold",
            needs_review as "needsReview", source
       from marketplace_nexus_state_rules where state = ${code}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return {
     state: code,
     includeInThreshold: row?.includeInThreshold ?? true,

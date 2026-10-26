@@ -34,11 +34,7 @@ export const POST = defineRoute({
     const body = routeBody;
     try {
       return NextResponse.json(
-        await installTaxDepreciationPack(
-          gate.user.orgId,
-          body.code,
-          gate.user.id,
-        ),
+        await installTaxDepreciationPack(gate.user.orgId, body.code, gate.user.id),
       );
     } catch (error) {
       return apiErrorResponse(error, { safeStatus: 422 });

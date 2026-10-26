@@ -1,4 +1,7 @@
-import { CONTINUOUS_CLOSE_AGENT_KEYS, type ContinuousCloseAgentKey } from "@openbooks/engine/agents/continuous-close-config";
+import {
+  CONTINUOUS_CLOSE_AGENT_KEYS,
+  type ContinuousCloseAgentKey,
+} from "@openbooks/engine/agents/continuous-close-config";
 import { isUuid, parseListParams, pickString } from "../list-params";
 import type { AgentInboxFilters, InboxSeverity, InboxStatus } from "../agents/inbox";
 
@@ -61,7 +64,10 @@ function asOne<T extends string>(raw: string | undefined, allowed: readonly T[])
 }
 
 /** Map a stable `since` window key to an ISO lookback instant. */
-export function findingsSinceIso(since: FindingSince | undefined, now: number = Date.now()): string | undefined {
+export function findingsSinceIso(
+  since: FindingSince | undefined,
+  now: number = Date.now(),
+): string | undefined {
   if (!since || !(since in FINDING_SINCE_WINDOWS)) return undefined;
   return new Date(now - FINDING_SINCE_WINDOWS[since]).toISOString();
 }
@@ -105,5 +111,11 @@ export function parseAgentFindingsParams(
   else if (assigned === "unassigned") filters.unassignedOnly = true as const;
   else if (assigned === "overdue") filters.overdueOnly = true as const;
 
-  return { filters, sort: params.sort, dir: params.dir, page: params.page, perPage: params.perPage };
+  return {
+    filters,
+    sort: params.sort,
+    dir: params.dir,
+    page: params.page,
+    perPage: params.perPage,
+  };
 }

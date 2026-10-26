@@ -251,24 +251,30 @@ const GB_EMPLOYMENT_ALLOWANCE_SLOT: PayrollStatutoryRateSlot = {
   // computed as though every employer qualified.
   systemKeys: [],
   citation:
-    "HMRC Employment Allowance "
-    + "(https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2026-to-2027; "
-    + "eligibility https://www.gov.uk/claim-employment-allowance/eligibility)",
+    "HMRC Employment Allowance " +
+    "(https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2026-to-2027; " +
+    "eligibility https://www.gov.uk/claim-employment-allowance/eligibility)",
   variesBecause:
-    "Only eligible employers can claim, and eligibility turns on employer facts "
-    + "no payroll table carries: a single-director company where the director is "
-    + "the only employee liable for secondary Class 1 NICs cannot claim, more "
-    + "than half the work must not be public-sector, and certain employees cannot "
-    + "be included. The pack cannot test any of that, so the claimed amount is "
-    + "tenant-entered.",
+    "Only eligible employers can claim, and eligibility turns on employer facts " +
+    "no payroll table carries: a single-director company where the director is " +
+    "the only employee liable for secondary Class 1 NICs cannot claim, more " +
+    "than half the work must not be public-sector, and certain employees cannot " +
+    "be included. The pack cannot test any of that, so the claimed amount is " +
+    "tenant-entered.",
   fields: [
     {
-      key: "amount", label: "Allowance available", kind: "amount", decimals: 2,
-      min: "0", max: GB_EMPLOYMENT_ALLOWANCE_ANNUAL, required: true,
-      help: "The Employment Allowance the employer claims for the year, up to "
-        + "£10,500 for 2026/27. Claim only if eligible: not a single-director "
-        + "company with no other secondary Class 1 liability, less than half "
-        + "the work in the public sector, and no excluded employees.",
+      key: "amount",
+      label: "Allowance available",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      max: GB_EMPLOYMENT_ALLOWANCE_ANNUAL,
+      required: true,
+      help:
+        "The Employment Allowance the employer claims for the year, up to " +
+        "£10,500 for 2026/27. Claim only if eligible: not a single-director " +
+        "company with no other secondary Class 1 liability, less than half " +
+        "the work in the public sector, and no excluded employees.",
     },
   ],
 };
@@ -296,9 +302,16 @@ export const GB_AE_QUALIFYING_BAND_LOWER = "6240";
 export const GB_AE_QUALIFYING_BAND_UPPER = "50270";
 
 /** Published 2026/27 pay-reference thresholds; keys are periods per year. */
-export const GB_AE_THRESHOLDS: Readonly<Record<number, {
-  trigger: string; lower: string; upper: string;
-}>> = {
+export const GB_AE_THRESHOLDS: Readonly<
+  Record<
+    number,
+    {
+      trigger: string;
+      lower: string;
+      upper: string;
+    }
+  >
+> = {
   1: { trigger: "10000", lower: "6240", upper: "50270" },
   2: { trigger: "4998", lower: "3120", upper: "25135" },
   4: { trigger: "2499", lower: "1560", upper: "12568" },
@@ -407,23 +420,23 @@ const GB_EDITION_SCAFFOLD: PayrollEditionScaffold = {
   // steps below, so the rollover stays a checklist.
   barrels: [],
   steps: [
-    "Fetch the year's Rates and thresholds for employers page from gov.uk "
-    + "(never from memory), plus P9X, the scottish-income-tax and "
-    + "welsh-income-tax tables, and the DWP auto-enrolment review.",
-    "Replace every UNFILLED in engine/src/payroll/gb/rates-{year}.ts, keeping "
-    + "the published figure's exact scale: Scotland bands from the Scotland "
-    + "section (cross-checked to the pound against scottish-income-tax), "
-    + "weekly/monthly NIC as published, never annual ÷ 52 or ÷ 12.",
-    "Cross-verify arithmetically (Scottish gross-space tops, the taper-zero "
-    + "identity, employer-rate changes confirmed against the neighbour "
-    + "year's page in both directions).",
-    "Add citation-backed GOLDENS to engine/src/payroll/gb/parity.test.ts. Paste independently worked rows into GOLDENS, including cases that discriminate {year} from adjacent years; for example:\n"
-    + "  { year: {year}, label: \"monthly PAYE example\", input: { kind: \"paye\", code: \"1257L\", payDate: \"{year}-04-06\", pay: \"...\", periodsPerYear: 12 }, expected: { tax: \"...\" }, citation: \"HMRC Rates and thresholds for employers, {year} edition\" },",
-    "Add applicable refusal cases to REFUSALS in engine/src/payroll/gb/parity.test.ts using its row shape: "
-    + "{ label: \"...\", input: { kind: \"year\", payDate: \"...\" }, refusal: /remedy/ }.",
-    "Wire GB_{year}_TABLES into engine/src/payroll/gb/year-tables.ts, add the "
-    + "main AND SCT editions to GB_TAX_YEARS.editions as published, then run "
-    + "the GB suite: the {year} GOLDENS must pass and the older goldens must not move.",
+    "Fetch the year's Rates and thresholds for employers page from gov.uk " +
+      "(never from memory), plus P9X, the scottish-income-tax and " +
+      "welsh-income-tax tables, and the DWP auto-enrolment review.",
+    "Replace every UNFILLED in engine/src/payroll/gb/rates-{year}.ts, keeping " +
+      "the published figure's exact scale: Scotland bands from the Scotland " +
+      "section (cross-checked to the pound against scottish-income-tax), " +
+      "weekly/monthly NIC as published, never annual ÷ 52 or ÷ 12.",
+    "Cross-verify arithmetically (Scottish gross-space tops, the taper-zero " +
+      "identity, employer-rate changes confirmed against the neighbour " +
+      "year's page in both directions).",
+    "Add citation-backed GOLDENS to engine/src/payroll/gb/parity.test.ts. Paste independently worked rows into GOLDENS, including cases that discriminate {year} from adjacent years; for example:\n" +
+      '  { year: {year}, label: "monthly PAYE example", input: { kind: "paye", code: "1257L", payDate: "{year}-04-06", pay: "...", periodsPerYear: 12 }, expected: { tax: "..." }, citation: "HMRC Rates and thresholds for employers, {year} edition" },',
+    "Add applicable refusal cases to REFUSALS in engine/src/payroll/gb/parity.test.ts using its row shape: " +
+      '{ label: "...", input: { kind: "year", payDate: "..." }, refusal: /remedy/ }.',
+    "Wire GB_{year}_TABLES into engine/src/payroll/gb/year-tables.ts, add the " +
+      "main AND SCT editions to GB_TAX_YEARS.editions as published, then run " +
+      "the GB suite: the {year} GOLDENS must pass and the older goldens must not move.",
     "Add NIC category letters beyond A once a category-letter input channel exists.",
   ],
 };
@@ -446,9 +459,9 @@ export const GB_TAX_YEARS: PayrollTaxYearSupport = {
       label: "Rates and thresholds for employers 2024 to 2025",
       effectiveFrom: GB_2024_TAX_YEAR_START,
       citation:
-        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2024-to-2025 "
-        + "(published 6 February 2024; figures apply from 6 April 2024 to 5 April 2025) — "
-        + "transcribed in engine/src/payroll/gb/rates-2024.ts",
+        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2024-to-2025 " +
+        "(published 6 February 2024; figures apply from 6 April 2024 to 5 April 2025) — " +
+        "transcribed in engine/src/payroll/gb/rates-2024.ts",
       status: "published",
     },
     {
@@ -457,9 +470,9 @@ export const GB_TAX_YEARS: PayrollTaxYearSupport = {
       label: "Rates and thresholds for employers 2024 to 2025 (Scotland bands)",
       effectiveFrom: GB_2024_TAX_YEAR_START,
       citation:
-        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2024-to-2025 "
-        + "(Scotland section), cross-checked against https://www.gov.uk/scottish-income-tax "
-        + "2024 to 2025 table — transcribed in engine/src/payroll/gb/rates-2024.ts",
+        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2024-to-2025 " +
+        "(Scotland section), cross-checked against https://www.gov.uk/scottish-income-tax " +
+        "2024 to 2025 table — transcribed in engine/src/payroll/gb/rates-2024.ts",
       status: "published",
     },
     {
@@ -467,9 +480,9 @@ export const GB_TAX_YEARS: PayrollTaxYearSupport = {
       label: "Rates and thresholds for employers 2025 to 2026",
       effectiveFrom: GB_2025_TAX_YEAR_START,
       citation:
-        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2025-to-2026 "
-        + "(published 31 January 2025; figures apply from 6 April 2025 to 5 April 2026) — "
-        + "transcribed in engine/src/payroll/gb/rates-2025.ts",
+        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2025-to-2026 " +
+        "(published 31 January 2025; figures apply from 6 April 2025 to 5 April 2026) — " +
+        "transcribed in engine/src/payroll/gb/rates-2025.ts",
       status: "published",
     },
     {
@@ -478,9 +491,9 @@ export const GB_TAX_YEARS: PayrollTaxYearSupport = {
       label: "Rates and thresholds for employers 2025 to 2026 (Scotland bands)",
       effectiveFrom: GB_2025_TAX_YEAR_START,
       citation:
-        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2025-to-2026 "
-        + "(Scotland section), cross-checked against https://www.gov.uk/scottish-income-tax "
-        + "2025 to 2026 table — transcribed in engine/src/payroll/gb/rates-2025.ts",
+        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2025-to-2026 " +
+        "(Scotland section), cross-checked against https://www.gov.uk/scottish-income-tax " +
+        "2025 to 2026 table — transcribed in engine/src/payroll/gb/rates-2025.ts",
       status: "published",
     },
     {
@@ -488,8 +501,8 @@ export const GB_TAX_YEARS: PayrollTaxYearSupport = {
       label: "Rates and thresholds for employers 2026 to 2027",
       effectiveFrom: GB_TAX_YEAR_START,
       citation:
-        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2026-to-2027 "
-        + "(published 30 January 2026, last updated 1 September 2026)",
+        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2026-to-2027 " +
+        "(published 30 January 2026, last updated 1 September 2026)",
       status: "published",
     },
     {
@@ -498,10 +511,10 @@ export const GB_TAX_YEARS: PayrollTaxYearSupport = {
       label: "Rates and thresholds for employers 2026 to 2027 (Scotland bands)",
       effectiveFrom: GB_TAX_YEAR_START,
       citation:
-        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2026-to-2027 "
-        + "(Scotland section; starter 19% to £3,967 through top 48% above £125,140), "
-        + "cross-checked against https://www.gov.uk/scottish-income-tax current-rates table "
-        + "and Tax Tables B-D 2026/27 PDF p.3 (see GB_SCT_BANDS)",
+        "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2026-to-2027 " +
+        "(Scotland section; starter 19% to £3,967 through top 48% above £125,140), " +
+        "cross-checked against https://www.gov.uk/scottish-income-tax current-rates table " +
+        "and Tax Tables B-D 2026/27 PDF p.3 (see GB_SCT_BANDS)",
       status: "published",
     },
   ],

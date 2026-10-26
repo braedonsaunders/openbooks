@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -12,7 +12,7 @@ const worktreeUi = pathToFileURL(
 ).href;
 await bootJsdomEnvironment({ url: "http://localhost:4800/customers", matchMediaMatches: false });
 
-stubModules({ navigation: { pathname: '/customers' }, intl: false, authz: false, features: false });
+stubModules({ navigation: { pathname: "/customers" }, intl: false, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -129,8 +129,24 @@ test("view-picker menu exposes menu/menuitem roles", async () => {
       provider(
         React.createElement(ViewsMenu, {
           available: [
-            { id: "v1", name: "V One", recordType: "customer", scope: "user", ownerId: null, isDefault: false, isActive: true },
-            { id: "v2", name: "V Two", recordType: "customer", scope: "org", ownerId: null, isDefault: true, isActive: true },
+            {
+              id: "v1",
+              name: "V One",
+              recordType: "customer",
+              scope: "user",
+              ownerId: null,
+              isDefault: false,
+              isActive: true,
+            },
+            {
+              id: "v2",
+              name: "V Two",
+              recordType: "customer",
+              scope: "org",
+              ownerId: null,
+              isDefault: true,
+              isActive: true,
+            },
           ],
           currentId: "v1",
           currentName: "V One",

@@ -11,7 +11,7 @@ import { useAppAction } from "../lib/use-app-action";
 import { decimalCmp } from "../lib/statement-format";
 import { moneyFieldError } from "./money-input";
 import type { InvoiceWriteOffDrawer } from "../lib/invoice-write-off-drawer";
-import { DateField } from './date-field'
+import { DateField } from "./date-field";
 
 /**
  * Write off the open balance of a posted customer invoice. The engine posts a

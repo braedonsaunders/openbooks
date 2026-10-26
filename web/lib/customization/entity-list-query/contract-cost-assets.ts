@@ -26,7 +26,7 @@ export const CONTRACT_COST_ASSET_BASE_JOINS = sql`
        and jl.contributor_kind = 'contract_cost_asset'
        and jl.contributor_ref = a.id
        and je.status in ('posted', 'reversed')
-  ) cc_carry on true`
+  ) cc_carry on true`;
 
 export const CONTRACT_COST_ASSET_BUILT_IN_EXPR: Record<string, SQL> = {
   contract_number: sql`cc_contract.contract_number`,
@@ -37,7 +37,7 @@ export const CONTRACT_COST_ASSET_BUILT_IN_EXPR: Record<string, SQL> = {
   carrying: sql`cc_carry.carrying::text`,
   capitalized_on: sql`a.capitalized_on`,
   status: sql`a.status`,
-}
+};
 
 export const CONTRACT_COST_ASSET_SORTS: Record<string, SQL> = {
   contract: sql`cc_contract.contract_number`,
@@ -48,35 +48,43 @@ export const CONTRACT_COST_ASSET_SORTS: Record<string, SQL> = {
   carrying: sql`cc_carry.carrying`,
   capitalized: sql`a.capitalized_on`,
   status: sql`a.status`,
-}
+};
 
 function contractCostAssetFilterPredicate(clause: FilterClause): SQL | null {
-  const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
-  if (clause.key === 'status') {
-    if (clause.operator === 'eq') return sql`a.status = ${value}`
-    if (clause.operator === 'ne') return sql`a.status <> ${value}`
+  const value = Array.isArray(clause.value)
+    ? String(clause.value[0] ?? "")
+    : String(clause.value ?? "");
+  if (clause.key === "status") {
+    if (clause.operator === "eq") return sql`a.status = ${value}`;
+    if (clause.operator === "ne") return sql`a.status <> ${value}`;
   }
-  if (clause.key === 'cost_type') {
-    if (clause.operator === 'eq') return sql`a.cost_type = ${value}`
-    if (clause.operator === 'ne') return sql`a.cost_type <> ${value}`
+  if (clause.key === "cost_type") {
+    if (clause.operator === "eq") return sql`a.cost_type = ${value}`;
+    if (clause.operator === "ne") return sql`a.cost_type <> ${value}`;
   }
-  return null
+  return null;
 }
 
-export function contractCostAssetWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
+export function contractCostAssetWhere(
+  view: ListViewConfig,
+  adhoc: EntityAdhoc,
+  orgId: string,
+): SQL {
   // Assets carry no subsidiary: a capitalized cost belongs to the contract,
   // not to a legal entity posting scope, so subsidiary scoping does not
   // narrow the list — the org boundary and the read permission govern.
-  const parts: SQL[] = [sql`a.org_id = ${orgId}`]
+  const parts: SQL[] = [sql`a.org_id = ${orgId}`];
   for (const filter of view.filters) {
-    if (pushCustomFieldFilter(parts, filter, "a")) continue
-    const predicate = contractCostAssetFilterPredicate(filter)
-    if (predicate) parts.push(sql`and ${predicate}`)
+    if (pushCustomFieldFilter(parts, filter, "a")) continue;
+    const predicate = contractCostAssetFilterPredicate(filter);
+    if (predicate) parts.push(sql`and ${predicate}`);
   }
-  if (adhoc.filters?.status) parts.push(sql`and a.status = ${adhoc.filters.status}`)
+  if (adhoc.filters?.status) parts.push(sql`and a.status = ${adhoc.filters.status}`);
   if (adhoc.q) {
-    const query = `%${adhoc.q}%`
-    parts.push(sql`and (cc_contract.contract_number ilike ${query} or cc_customer.display_name ilike ${query} or cc_rep.display_name ilike ${query})`)
+    const query = `%${adhoc.q}%`;
+    parts.push(
+      sql`and (cc_contract.contract_number ilike ${query} or cc_customer.display_name ilike ${query} or cc_rep.display_name ilike ${query})`,
+    );
   }
-  return sql.join(parts, sql` `)
+  return sql.join(parts, sql` `);
 }

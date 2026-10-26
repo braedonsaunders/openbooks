@@ -82,12 +82,14 @@ export function validateControls(cases: readonly ControlCase[] = CONTROL_CORPUS)
     if (ids.has(kase.id)) problems.push(`${kase.id}: duplicate case id`);
     ids.add(kase.id);
 
-    if (!kase.control.trim()) problems.push(`${kase.id}: a case must map to an AUDIT-CONTROLS.md control id`);
+    if (!kase.control.trim())
+      problems.push(`${kase.id}: a case must map to an AUDIT-CONTROLS.md control id`);
     if (!kase.assertion.trim()) problems.push(`${kase.id}: missing assertion`);
     if (kase.facts.length === 0) problems.push(`${kase.id}: a case must state its facts`);
 
     if (kase.support === "not-implemented") {
-      if (!kase.gap?.trim()) problems.push(`${kase.id}: a declared gap must describe what is missing`);
+      if (!kase.gap?.trim())
+        problems.push(`${kase.id}: a declared gap must describe what is missing`);
       if (kase.run) problems.push(`${kase.id}: a declared gap must not have a run function`);
     } else {
       if (!kase.run) problems.push(`${kase.id}: an implemented case must have a run function`);
@@ -102,7 +104,8 @@ export function validateControls(cases: readonly ControlCase[] = CONTROL_CORPUS)
     }
 
     const hasExpectation =
-      (kase.expected.entries?.length ?? 0) > 0 || Object.keys(kase.expected.values ?? {}).length > 0;
+      (kase.expected.entries?.length ?? 0) > 0 ||
+      Object.keys(kase.expected.values ?? {}).length > 0;
     if (!hasExpectation) {
       problems.push(`${kase.id}: a case must state an expected outcome, including a declared gap`);
     }
@@ -147,7 +150,9 @@ function supportLabel(result: CaseResult<ControlCase>): string {
 }
 
 /** Group by the mapped AUDIT-CONTROLS.md control id, the case's home. */
-function byControl(results: readonly CaseResult<ControlCase>[]): Map<string, CaseResult<ControlCase>[]> {
+function byControl(
+  results: readonly CaseResult<ControlCase>[],
+): Map<string, CaseResult<ControlCase>[]> {
   const groups = new Map<string, CaseResult<ControlCase>[]>();
   for (const result of results) {
     const list = groups.get(result.case.control) ?? [];
@@ -200,7 +205,8 @@ export function renderControlsMarkdown(report: CorpusReport<ControlCase>): strin
     out.push("");
 
     const notable = results.filter(
-      (r) => r.case.support === "partial" || r.case.support === "not-implemented" || r.status === "fail",
+      (r) =>
+        r.case.support === "partial" || r.case.support === "not-implemented" || r.status === "fail",
     );
     if (notable.length > 0) {
       out.push(`### Control ${control} — shortfalls`);
@@ -217,7 +223,9 @@ export function renderControlsMarkdown(report: CorpusReport<ControlCase>): strin
           }
           for (const difference of result.differences) {
             out.push("");
-            out.push(`- ${difference.at}: expected \`${difference.expected}\`, got \`${difference.actual}\``);
+            out.push(
+              `- ${difference.at}: expected \`${difference.expected}\`, got \`${difference.actual}\``,
+            );
           }
         }
         out.push("");
@@ -278,7 +286,13 @@ export function renderControlsJson(report: CorpusReport<ControlCase>): string {
 export function renderControlsConsole(report: CorpusReport<ControlCase>): string {
   const lines = report.results.map((result) => {
     const mark =
-      result.status === "pass" ? "ok  " : result.status === "fail" ? "FAIL" : result.status === "gap" ? "gap " : "skip";
+      result.status === "pass"
+        ? "ok  "
+        : result.status === "fail"
+          ? "FAIL"
+          : result.status === "gap"
+            ? "gap "
+            : "skip";
     return `  ${mark}  ${result.case.id.padEnd(46)} control ${result.case.control}`;
   });
   const { totals } = report;

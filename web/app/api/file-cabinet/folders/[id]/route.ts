@@ -2,12 +2,7 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  deleteFolder,
-  getFolder,
-  patchFolder,
-  purgeFolder,
-} from "../../../../../lib/file-cabinet";
+import { deleteFolder, getFolder, patchFolder, purgeFolder } from "../../../../../lib/file-cabinet";
 import { isUuid } from "../../../../../lib/list-params";
 import { can } from "../../../../../lib/authz";
 import { fileViewer, requireFolderAccess } from "../../lib";
@@ -24,7 +19,8 @@ const patchBodySchema0 = z
       context.addIssue({
         code: "custom",
         path: ["isInactive"],
-        message: "folder trash state cannot be changed with PATCH — use DELETE to trash the subtree or the restore action to restore it",
+        message:
+          "folder trash state cannot be changed with PATCH — use DELETE to trash the subtree or the restore action to restore it",
       });
     }
     if (!Object.keys(body).some((key) => key !== "isInactive")) {
@@ -44,11 +40,9 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     const folder = await getFolder(gate.user.orgId, id, fileViewer(gate));
-    if (!folder)
-      return notFound("record");
+    if (!folder) return notFound("record");
     return NextResponse.json({ folder });
   },
 });
@@ -60,15 +54,13 @@ export const PATCH = defineRoute({
   body: patchBodySchema0,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     // Editing a folder (rename/move/flags) needs Manager on it.
     const access = await requireFolderAccess(gate, id, "manager");
     if (access) return access;
 
     const body = routeBody;
-    if (!body)
-      return NextResponse.json({ error: "invalid body" }, { status: 400 });
+    if (!body) return NextResponse.json({ error: "invalid body" }, { status: 400 });
     if (Object.prototype.hasOwnProperty.call(body, "isInactive")) {
       return NextResponse.json(
         {
@@ -93,11 +85,7 @@ export const PATCH = defineRoute({
       if (!current || (body.parentId ?? null) !== current.parentId) {
         if (typeof body.parentId === "string") {
           // Moving also needs Editor+ on the destination parent.
-          const destGate = await requireFolderAccess(
-            gate,
-            body.parentId,
-            "editor",
-          );
+          const destGate = await requireFolderAccess(gate, body.parentId, "editor");
           if (destGate) return destGate;
         } else if (!can(gate, "documents.manage") && !can(gate, "*")) {
           // Moving to the cabinet root publishes the subtree to every
@@ -112,23 +100,13 @@ export const PATCH = defineRoute({
     }
     if (typeof body.isPrivate === "boolean") patch.isPrivate = body.isPrivate;
     if (Object.keys(patch).length > 0) {
-      const result = await patchFolder(
-        gate.user.orgId,
-        id,
-        patch,
-        gate.user.id,
-        {
-          actorId: gate.user.id,
-          viewer: fileViewer(gate),
-        },
-      );
+      const result = await patchFolder(gate.user.orgId, id, patch, gate.user.id, {
+        actorId: gate.user.id,
+        viewer: fileViewer(gate),
+      });
       if (!result.ok) {
         const status =
-          result.reason === "not found"
-            ? 404
-            : result.reason === "forbidden"
-              ? 403
-              : 400;
+          result.reason === "not found" ? 404 : result.reason === "forbidden" ? 403 : 400;
         return NextResponse.json({ error: result.reason }, { status });
       }
     }
@@ -142,8 +120,7 @@ export const DELETE = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     // Deleting a folder needs Manager on it.
     const access = await requireFolderAccess(gate, id, "manager");
     if (access) return access;

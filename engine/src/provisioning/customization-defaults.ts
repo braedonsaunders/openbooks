@@ -20,12 +20,8 @@ export async function ensureCustomizationDefaults(args: {
   actorId?: string | null;
   recordTypes?: string[];
 }): Promise<void> {
-  const requested = new Set(
-    args.recordTypes ?? RECORD_TYPES.map((recordType) => recordType.key),
-  );
-  const metas = RECORD_TYPES.filter((recordType) =>
-    requested.has(recordType.key),
-  );
+  const requested = new Set(args.recordTypes ?? RECORD_TYPES.map((recordType) => recordType.key));
+  const metas = RECORD_TYPES.filter((recordType) => requested.has(recordType.key));
 
   await db.transaction(async (tx) => {
     for (const meta of metas) {

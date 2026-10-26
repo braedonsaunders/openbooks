@@ -4,13 +4,10 @@ import test from "node:test";
 
 // POST /api/v1/customers/upsert — match by id, external reference, email,
 // or unambiguous name; anything ambiguous is refused naming the remedy.
-const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/platform/db"
-);
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { generateApiKey } = await import("../../../../lib/api-auth.ts");
 const { POST } = await import("./upsert/route.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -23,18 +20,24 @@ interface Setup {
 
 async function setup(): Promise<Setup> {
   const org = await withBypassContext(() => createScratchOrg());
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features', '{}'::jsonb) || '{"apiAccess":true}'::jsonb)
-    where id = ${org.orgId}`));
+    where id = ${org.orgId}`),
+  );
   const actor = await withBypassContext(() => createScratchUser(org.orgId, "Api", "api_owner"));
-  await withBypassContext(() => db.execute(sql`
-    update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'api_owner'`));
+  await withBypassContext(() =>
+    db.execute(sql`
+    update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'api_owner'`),
+  );
   const generated = generateApiKey();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into api_keys (org_id, user_id, name, key_prefix, key_hash, key_preview, scopes, is_active)
     values (${org.orgId}, ${actor}, 'upsert test', ${generated.keyPrefix}, ${generated.keyHash},
-            ${generated.keyPreview}, '["parties.manage","parties.read"]'::jsonb, true)`));
+            ${generated.keyPreview}, '["parties.manage","parties.read"]'::jsonb, true)`),
+  );
   return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, key: generated.plaintext };
 }
 
@@ -42,40 +45,54 @@ async function callUpsert(
   setup: Setup,
   body: unknown,
 ): Promise<{ status: number; json: Record<string, unknown> }> {
-  const response = await withOrgContext(
-    setup.orgId,
-    () =>
-      POST(
-        new Request("http://openbooks.test/api/v1/customers/upsert", {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${setup.key}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify(body),
-        }),
-      ),
+  const response = await withOrgContext(setup.orgId, () =>
+    POST(
+      new Request("http://openbooks.test/api/v1/customers/upsert", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${setup.key}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
   return { status: response.status, json: (await response.json()) as Record<string, unknown> };
 }
 
 async function partyRow(orgId: string, id: string) {
-  return (await withBypassContext(() => db.execute<Record<string, unknown>>(sql`
-    select id, display_name, email, subsidiary_id, custom from parties where id = ${id} and org_id = ${orgId}`, "objects")))[0];
+  return (
+    await withBypassContext(() =>
+      db.execute<Record<string, unknown>>(
+        sql`
+    select id, display_name, email, subsidiary_id, custom from parties where id = ${id} and org_id = ${orgId}`,
+        "objects",
+      ),
+    )
+  )[0];
 }
 
-async function seedParty(orgId: string, name: string, email: string | null, subsidiaryId: string | null = null): Promise<string> {
+async function seedParty(
+  orgId: string,
+  name: string,
+  email: string | null,
+  subsidiaryId: string | null = null,
+): Promise<string> {
   const id = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into parties (id, org_id, kind, display_name, email, subsidiary_id, is_active)
-    values (${id}, ${orgId}, 'company', ${name}, ${email}, ${subsidiaryId}, true)`));
+    values (${id}, ${orgId}, 'company', ${name}, ${email}, ${subsidiaryId}, true)`),
+  );
   return id;
 }
 
 async function restrictApiRoleTo(orgId: string, subsidiaryIds: string[]): Promise<void> {
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-     where org_id = ${orgId} and key = 'api_owner'`));
+     where org_id = ${orgId} and key = 'api_owner'`),
+  );
 }
 
 test("upsert creates by email with an address, then matches", { skip: !DB }, async () => {
@@ -86,19 +103,39 @@ test("upsert creates by email with an address, then matches", { skip: !DB }, asy
       email,
       name: "Storefront Customer",
       phone: "555-0100",
-      address: { line1: "1 Market St", city: "Springfield", region: "IL", postalCode: "62701", country: "US" },
+      address: {
+        line1: "1 Market St",
+        city: "Springfield",
+        region: "IL",
+        postalCode: "62701",
+        country: "US",
+      },
     });
     assert.equal(created.status, 201, JSON.stringify(created.json));
     assert.equal(created.json.created, true);
     const id = String(created.json.id);
     const stored = await partyRow(fixture.orgId, id);
     assert.equal(stored?.email, email);
-    const role = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from customer_roles where org_id = ${fixture.orgId} and party_id = ${id}`, "objects")))[0]!.n;
+    const role = (
+      await withBypassContext(() =>
+        db.execute<{ n: string }>(
+          sql`
+      select count(*)::text as n from customer_roles where org_id = ${fixture.orgId} and party_id = ${id}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(role, "1");
-    const address = (await withBypassContext(() => db.execute<{ line1: string | null; country: string | null }>(sql`
+    const address = (
+      await withBypassContext(() =>
+        db.execute<{ line1: string | null; country: string | null }>(
+          sql`
       select line1, country from addresses
-       where org_id = ${fixture.orgId} and party_id = ${id} and is_default_billing`, "objects")))[0];
+       where org_id = ${fixture.orgId} and party_id = ${id} and is_default_billing`,
+          "objects",
+        ),
+      )
+    )[0];
     assert.equal(address?.line1, "1 Market St");
     assert.equal(address?.country, "US");
 
@@ -108,8 +145,15 @@ test("upsert creates by email with an address, then matches", { skip: !DB }, asy
     assert.equal(matched.json.created, false);
     assert.equal(matched.json.id, id);
     assert.equal((await partyRow(fixture.orgId, id))?.display_name, "Storefront Customer Inc.");
-    const addressCount = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from addresses where org_id = ${fixture.orgId} and party_id = ${id}`, "objects")))[0]!.n;
+    const addressCount = (
+      await withBypassContext(() =>
+        db.execute<{ n: string }>(
+          sql`
+      select count(*)::text as n from addresses where org_id = ${fixture.orgId} and party_id = ${id}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(addressCount, "1");
   } finally {
     await withBypassContext(() => dropScratchOrg(fixture.orgId));
@@ -187,7 +231,10 @@ test("restricted upserts require an in-scope subsidiary for creation", { skip: !
   const fixture = await setup();
   try {
     await restrictApiRoleTo(fixture.orgId, [fixture.subsidiaryId]);
-    const missingScope = await callUpsert(fixture, { email: `scoped-${randomUUID()}@example.com`, name: "Scoped Customer" });
+    const missingScope = await callUpsert(fixture, {
+      email: `scoped-${randomUUID()}@example.com`,
+      name: "Scoped Customer",
+    });
     assert.equal(missingScope.status, 403, JSON.stringify(missingScope.json));
 
     const created = await callUpsert(fixture, {
@@ -203,37 +250,66 @@ test("restricted upserts require an in-scope subsidiary for creation", { skip: !
   }
 });
 
-test("upsert does not turn another party into a customer or cross subsidiary scope", { skip: !DB }, async () => {
-  const fixture = await setup();
-  try {
-    const childId = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+test(
+  "upsert does not turn another party into a customer or cross subsidiary scope",
+  { skip: !DB },
+  async () => {
+    const fixture = await setup();
+    try {
+      const childId = randomUUID();
+      await withBypassContext(() =>
+        db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-      values (${childId}, ${fixture.orgId}, ${fixture.subsidiaryId}, 'Other Customer Entity', 'CAD', 'CA')`));
-    const employeeEmail = `staff-${randomUUID()}@example.com`;
-    const employeeId = await seedParty(fixture.orgId, "Existing Employee", employeeEmail, fixture.subsidiaryId);
-    const foreignEmail = `foreign-${randomUUID()}@example.com`;
-    const foreignId = await seedParty(fixture.orgId, "Foreign Customer Candidate", foreignEmail, childId);
-    await restrictApiRoleTo(fixture.orgId, [fixture.subsidiaryId]);
+      values (${childId}, ${fixture.orgId}, ${fixture.subsidiaryId}, 'Other Customer Entity', 'CAD', 'CA')`),
+      );
+      const employeeEmail = `staff-${randomUUID()}@example.com`;
+      const employeeId = await seedParty(
+        fixture.orgId,
+        "Existing Employee",
+        employeeEmail,
+        fixture.subsidiaryId,
+      );
+      const foreignEmail = `foreign-${randomUUID()}@example.com`;
+      const foreignId = await seedParty(
+        fixture.orgId,
+        "Foreign Customer Candidate",
+        foreignEmail,
+        childId,
+      );
+      await restrictApiRoleTo(fixture.orgId, [fixture.subsidiaryId]);
 
-    const employeeMatch = await callUpsert(fixture, { email: employeeEmail, name: "Renamed Employee" });
-    assert.equal(employeeMatch.status, 409, JSON.stringify(employeeMatch.json));
-    assert.equal((await partyRow(fixture.orgId, employeeId))?.display_name, "Existing Employee");
-    const employeeNameMatch = await callUpsert(fixture, { name: "Existing Employee" });
-    assert.equal(employeeNameMatch.status, 409, JSON.stringify(employeeNameMatch.json));
-    const employeeRoleCount = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from customer_roles where org_id = ${fixture.orgId} and party_id = ${employeeId}`, "objects")))[0]!.n;
-    assert.equal(employeeRoleCount, "0");
+      const employeeMatch = await callUpsert(fixture, {
+        email: employeeEmail,
+        name: "Renamed Employee",
+      });
+      assert.equal(employeeMatch.status, 409, JSON.stringify(employeeMatch.json));
+      assert.equal((await partyRow(fixture.orgId, employeeId))?.display_name, "Existing Employee");
+      const employeeNameMatch = await callUpsert(fixture, { name: "Existing Employee" });
+      assert.equal(employeeNameMatch.status, 409, JSON.stringify(employeeNameMatch.json));
+      const employeeRoleCount = (
+        await withBypassContext(() =>
+          db.execute<{ n: string }>(
+            sql`
+      select count(*)::text as n from customer_roles where org_id = ${fixture.orgId} and party_id = ${employeeId}`,
+            "objects",
+          ),
+        )
+      )[0]!.n;
+      assert.equal(employeeRoleCount, "0");
 
-    const foreignMatch = await callUpsert(fixture, {
-      email: foreignEmail,
-      name: "Scoped Duplicate Customer",
-      subsidiaryId: fixture.subsidiaryId,
-    });
-    assert.equal(foreignMatch.status, 201, JSON.stringify(foreignMatch.json));
-    assert.notEqual(foreignMatch.json.id, foreignId);
-    assert.equal((await partyRow(fixture.orgId, foreignId))?.display_name, "Foreign Customer Candidate");
-  } finally {
-    await withBypassContext(() => dropScratchOrg(fixture.orgId));
-  }
-});
+      const foreignMatch = await callUpsert(fixture, {
+        email: foreignEmail,
+        name: "Scoped Duplicate Customer",
+        subsidiaryId: fixture.subsidiaryId,
+      });
+      assert.equal(foreignMatch.status, 201, JSON.stringify(foreignMatch.json));
+      assert.notEqual(foreignMatch.json.id, foreignId);
+      assert.equal(
+        (await partyRow(fixture.orgId, foreignId))?.display_name,
+        "Foreign Customer Candidate",
+      );
+    } finally {
+      await withBypassContext(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);

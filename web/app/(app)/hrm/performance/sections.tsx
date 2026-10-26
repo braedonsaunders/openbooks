@@ -1,16 +1,16 @@
-import Link from 'next/link'
-import { Button } from '@openbooks/ui'
-import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
-import {CycleManagement} from './CycleManagement'
-import { CycleActions } from './CycleActions'
-import { CycleCreateForm } from './CycleCreateForm'
-import { GoalForm, GoalProgressForm } from './GoalForm'
-import { ReviewActions } from './ReviewActions'
-import { ReviewAnswerForm } from './ReviewAnswerForm'
-import { ExitRecordForm } from './ExitRecordForm'
-import type { PerformanceLoadError, PerformancePageData } from './view'
+import Link from "next/link";
+import { Button } from "@openbooks/ui";
+import { DirtyUrlDrawer } from "../../../../components/dirty-url-drawer";
+import { CycleManagement } from "./CycleManagement";
+import { CycleActions } from "./CycleActions";
+import { CycleCreateForm } from "./CycleCreateForm";
+import { GoalForm, GoalProgressForm } from "./GoalForm";
+import { ReviewActions } from "./ReviewActions";
+import { ReviewAnswerForm } from "./ReviewAnswerForm";
+import { ExitRecordForm } from "./ExitRecordForm";
+import type { PerformanceLoadError, PerformancePageData } from "./view";
 
-type PageData = PerformancePageData
+type PageData = PerformancePageData;
 
 /**
  * Performance drawer sections (server components): the cycle flyout with
@@ -35,11 +35,15 @@ export function DrawerLoadError({ error }: { error: PerformanceLoadError }) {
         <Link href={error.retryHref}>{error.retryLabel}</Link>
       </Button>
     </div>
-  )
+  );
 }
 
-export function CycleDrawerBody({ detail }: { detail: NonNullable<PerformancePageData['detail']> }) {
-  if(detail.management)return <CycleManagement detail={detail}/>
+export function CycleDrawerBody({
+  detail,
+}: {
+  detail: NonNullable<PerformancePageData["detail"]>;
+}) {
+  if (detail.management) return <CycleManagement detail={detail} />;
   return (
     <div className="space-y-6">
       <div>
@@ -49,7 +53,9 @@ export function CycleDrawerBody({ detail }: { detail: NonNullable<PerformancePag
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{detail.period}</p>
       </div>
       <div>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.reviewsTitle}</h4>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {detail.reviewsTitle}
+        </h4>
         {detail.reviews.length === 0 ? (
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{detail.reviewsEmpty}</p>
         ) : (
@@ -58,7 +64,7 @@ export function CycleDrawerBody({ detail }: { detail: NonNullable<PerformancePag
               <li key={review.id} className="text-sm text-slate-600 dark:text-slate-300">
                 <a className="font-medium underline" href={review.href}>
                   {review.kindLabel}
-                </a>{' '}
+                </a>{" "}
                 · {review.statusLabel}
                 {review.rating ? ` · ${review.rating}` : null}
               </li>
@@ -68,7 +74,7 @@ export function CycleDrawerBody({ detail }: { detail: NonNullable<PerformancePag
       </div>
       <CycleActions cycleId={detail.cycleId} calibration={detail.calibration} />
     </div>
-  )
+  );
 }
 
 /** The cycle flyout shell: a URL drawer around CycleDrawerBody that closes by navigation. */
@@ -78,18 +84,18 @@ export function CycleDrawer({
   fallbackTitle,
   loadError,
 }: {
-  detail: PerformancePageData['detail']
-  missingDetail: string | null
-  fallbackTitle: string
-  loadError: PerformancePageData['detailError']
+  detail: PerformancePageData["detail"];
+  missingDetail: string | null;
+  fallbackTitle: string;
+  loadError: PerformancePageData["detailError"];
 }) {
-  if (!detail && !missingDetail && !loadError) return null
+  if (!detail && !missingDetail && !loadError) return null;
   return (
     <DirtyUrlDrawer
       open
-      openKey={detail?.cycleId??"cycle"}
+      openKey={detail?.cycleId ?? "cycle"}
       size="2xl"
-      closeHref={detail?.closeHref ?? '/hrm/performance'}
+      closeHref={detail?.closeHref ?? "/hrm/performance"}
       title={detail?.cycleName ?? fallbackTitle}
       description={detail ? `${detail.templateName} · ${detail.period}` : undefined}
     >
@@ -101,10 +107,14 @@ export function CycleDrawer({
         <p className="text-sm text-slate-500 dark:text-slate-400">{missingDetail}</p>
       )}
     </DirtyUrlDrawer>
-  )
+  );
 }
 
-export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePageData['review']> }) {
+export function ReviewDrawerBody({
+  review,
+}: {
+  review: NonNullable<PerformancePageData["review"]>;
+}) {
   return (
     <div className="space-y-6">
       <div>
@@ -112,14 +122,20 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
           {review.kindLabel} · {review.statusLabel}
         </h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          {review.overallLabel}: {review.overallRating ?? '—'}
-          {review.calibratedRating ? ` · ${review.calibratedLabel}: ${review.calibratedRating}` : null}
+          {review.overallLabel}: {review.overallRating ?? "—"}
+          {review.calibratedRating
+            ? ` · ${review.calibratedLabel}: ${review.calibratedRating}`
+            : null}
         </p>
         {review.calibrationReason ? (
           <p className="text-xs text-slate-500 dark:text-slate-400">{review.calibrationReason}</p>
         ) : null}
       </div>
-      {review.instructions&&<p className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{review.instructions}</p>}
+      {review.instructions && (
+        <p className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">
+          {review.instructions}
+        </p>
+      )}
       {review.canAnswer ? (
         <ReviewAnswerForm
           reviewId={review.id}
@@ -144,23 +160,26 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
                 {answer.questionPrompt ? ` — ${answer.questionPrompt}` : null}
               </h4>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                {answer.rating ?? ''}
-                {answer.rating && answer.text ? ' · ' : null}
-                {answer.text ?? ''}
+                {answer.rating ?? ""}
+                {answer.rating && answer.text ? " · " : null}
+                {answer.text ?? ""}
               </p>
             </div>
           ))}
         </div>
       )}
       <div>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{review.goalsTitle}</h4>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {review.goalsTitle}
+        </h4>
         {review.goals.length === 0 && !review.canWriteGoals ? (
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{review.goalsEmpty}</p>
         ) : (
           <ul className="mt-1 space-y-1.5">
             {review.goals.map((goal) => (
               <li key={goal.id} className="text-sm text-slate-600 dark:text-slate-300">
-                <span className="font-medium">{goal.title}</span> · {goal.statusLabel} · {goal.progress}%
+                <span className="font-medium">{goal.title}</span> · {goal.statusLabel} ·{" "}
+                {goal.progress}%
                 {review.canWriteGoals ? (
                   <GoalProgressForm goalId={goal.id} failed={review.failed} />
                 ) : null}
@@ -187,7 +206,7 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
         failed={review.failed}
       />
     </div>
-  )
+  );
 }
 
 /** The review flyout shell: a URL drawer around ReviewDrawerBody that closes by navigation. */
@@ -197,16 +216,16 @@ export function ReviewDrawer({
   fallbackTitle,
   loadError,
 }: {
-  review: PerformancePageData['review']
-  missingReview: string | null
-  fallbackTitle: string
-  loadError: PerformancePageData['reviewError']
+  review: PerformancePageData["review"];
+  missingReview: string | null;
+  fallbackTitle: string;
+  loadError: PerformancePageData["reviewError"];
 }) {
-  if (!review && !missingReview && !loadError) return null
+  if (!review && !missingReview && !loadError) return null;
   return (
     <DirtyUrlDrawer
       open
-      closeHref={review?.closeHref ?? '/hrm/performance'}
+      closeHref={review?.closeHref ?? "/hrm/performance"}
       title={review?.kindLabel ?? fallbackTitle}
     >
       {review ? (
@@ -217,17 +236,17 @@ export function ReviewDrawer({
         <p className="text-sm text-slate-500 dark:text-slate-400">{missingReview}</p>
       )}
     </DirtyUrlDrawer>
-  )
+  );
 }
 
 /** The cycle create dialog, opened from the page header through `?cycle=new`. */
-export function CycleDialog({ create }: { create: PerformancePageData['create'] }) {
-  if (!create) return null
+export function CycleDialog({ create }: { create: PerformancePageData["create"] }) {
+  if (!create) return null;
   return (
     <DirtyUrlDrawer open closeHref={create.closeHref} title={create.title}>
       <CycleCreateForm {...create} />
     </DirtyUrlDrawer>
-  )
+  );
 }
 
 /** The Retention panel: trailing-twelve-months turnover, regrettable leavers, gaps. */
@@ -237,7 +256,7 @@ export function CycleDialog({ create }: { create: PerformancePageData['create'] 
 // — three stat tiles and a table — in ./view.
 
 export function GoalSection({ employmentId, cycleId }: { employmentId: string; cycleId: string }) {
-  return <GoalForm employmentId={employmentId} cycleId={cycleId} />
+  return <GoalForm employmentId={employmentId} cycleId={cycleId} />;
 }
 
 /** The exit drawer (?exit=<employmentId>): HR managers record and correct
@@ -247,13 +266,17 @@ export function ExitDrawer({
   missingExit,
   loadError,
 }: {
-  exit: PageData['exit']
-  missingExit: string | null
-  loadError: PageData['exitError']
+  exit: PageData["exit"];
+  missingExit: string | null;
+  loadError: PageData["exitError"];
 }) {
-  if (!exit && !missingExit && !loadError) return null
+  if (!exit && !missingExit && !loadError) return null;
   return (
-    <DirtyUrlDrawer open closeHref={exit?.closeHref ?? '/hrm/performance'} title={exit?.title ?? ''}>
+    <DirtyUrlDrawer
+      open
+      closeHref={exit?.closeHref ?? "/hrm/performance"}
+      title={exit?.title ?? ""}
+    >
       {loadError && !exit ? (
         <DrawerLoadError error={loadError} />
       ) : exit ? (
@@ -263,7 +286,7 @@ export function ExitDrawer({
           <div className="space-y-2">
             <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
               {exit.existing.reasonKind}
-              {' · '}
+              {" · "}
               {exit.existing.isVoluntary ? exit.voluntaryLabel : exit.involuntaryLabel}
               {exit.existing.destination ? ` · ${exit.existing.destination}` : null}
             </p>
@@ -278,5 +301,5 @@ export function ExitDrawer({
         <p className="text-sm text-slate-500 dark:text-slate-400">{missingExit}</p>
       )}
     </DirtyUrlDrawer>
-  )
+  );
 }

@@ -30,8 +30,8 @@ export const PL_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     kind: "year",
     label: "Birth year (rok urodzenia)",
     refusalReason:
-      "The FP/FS age bar (art. 261) and the under-26 refusal cannot be decided without it, "
-      + "and an unknown age must not fall through to standard pricing.",
+      "The FP/FS age bar (art. 261) and the under-26 refusal cannot be decided without it, " +
+      "and an unknown age must not fall through to standard pricing.",
     required: true,
     producer: { kind: "profile_column", column: "pl_rok_urodzenia" },
   },
@@ -40,16 +40,16 @@ export const PL_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     kind: "code",
     label: "Working-time fraction (wymiar etatu)",
     refusalReason:
-      "The FP/FS threshold is the full-time minimum wage times the working-time fraction "
-      + "(art. 259), and a part-time base below the full minimum must not fall through to zero.",
+      "The FP/FS threshold is the full-time minimum wage times the working-time fraction " +
+      "(art. 259), and a part-time base below the full minimum must not fall through to zero.",
     required: false,
     producer: { kind: "certificate", certificate: "pl_zatrudnienie", field: "wymiar_etatu" },
   },
   employeeRecordDateFact(
     "hired_on",
-    "The 120 000 zł PIT threshold and the emerytalne/rentowe limit test what this payer paid since "
-    + "1 January; an employee hired after the payer's payroll started running here has every "
-    + "payment on file, which the hire date proves.",
+    "The 120 000 zł PIT threshold and the emerytalne/rentowe limit test what this payer paid since " +
+      "1 January; an employee hired after the payer's payroll started running here has every " +
+      "payment on file, which the hire date proves.",
   ),
 ];
 

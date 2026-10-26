@@ -24,11 +24,18 @@ import { uuidInput } from "./tools-shared";
 const MAX_ROWS = 200;
 
 const listInput = z.object({
-  openOnly: z.boolean().optional().describe("Only documents not yet complete or voided. Default false"),
+  openOnly: z
+    .boolean()
+    .optional()
+    .describe("Only documents not yet complete or voided. Default false"),
   limit: z.number().int().min(1).max(MAX_ROWS).optional().describe("Default 50"),
 });
 
-async function listDocuments(kind: FulfillmentKind, raw: unknown, authz: Authz): Promise<ToolResult> {
+async function listDocuments(
+  kind: FulfillmentKind,
+  raw: unknown,
+  authz: Authz,
+): Promise<ToolResult> {
   const a = raw as { openOnly?: boolean; limit?: number };
   const limit = Math.min(a.limit ?? 50, MAX_ROWS);
   // One row past the limit tells the model whether more exist.
@@ -52,9 +59,17 @@ async function listDocuments(kind: FulfillmentKind, raw: unknown, authz: Authz):
 
 async function getDocument(kind: FulfillmentKind, raw: unknown, authz: Authz): Promise<ToolResult> {
   const { id } = raw as { id: string };
-  const document = await getFulfillmentDocument(db, authz.user.orgId, id, authz.allowedSubsidiaryIds);
+  const document = await getFulfillmentDocument(
+    db,
+    authz.user.orgId,
+    id,
+    authz.allowedSubsidiaryIds,
+  );
   if (!document || document.kind !== kind) return { ok: false, error: "not found" };
-  return { ok: true, data: { ...document, href: kind === PICK_LIST_KIND ? "/picks" : "/shipments" } };
+  return {
+    ok: true,
+    data: { ...document, href: kind === PICK_LIST_KIND ? "/picks" : "/shipments" },
+  };
 }
 
 const listPickListsTool: AssistantToolDef = {

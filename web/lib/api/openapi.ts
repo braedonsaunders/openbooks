@@ -53,17 +53,15 @@ export interface OpenApiSpec {
   security: Record<string, string[]>[];
 }
 
-export function buildOpenApiSpec(
-  schema: ApiRecordTypeSchema[],
-  baseUrl: string,
-): OpenApiSpec {
+export function buildOpenApiSpec(schema: ApiRecordTypeSchema[], baseUrl: string): OpenApiSpec {
   const paths: Record<string, OpenApiPathItem> = {};
   const schemas: Record<string, OpenApiSchema> = {};
   const idempotencyParameter = {
     name: "Idempotency-Key",
     in: "header",
     required: true,
-    description: "Unique 8-200 character retry key for this exact mutation. Reuse only after an uncertain outcome with identical input.",
+    description:
+      "Unique 8-200 character retry key for this exact mutation. Reuse only after an uncertain outcome with identical input.",
     schema: { type: "string", minLength: 8, maxLength: 200, pattern: "^[A-Za-z0-9._:-]+$" },
   };
 
@@ -156,8 +154,17 @@ export function buildOpenApiSpec(
           parameters: [
             { name: "q", in: "query", schema: { type: "string" }, description: "Search query" },
             { name: "page", in: "query", schema: { type: "integer", default: 1, minimum: 1 } },
-            { name: "perPage", in: "query", schema: { type: "integer", default: 25, minimum: 5, maximum: 100 } },
-            { name: "subsidiaryId", in: "query", schema: ID_SCHEMA, description: "Optional subsidiary filter; actor restrictions still apply." },
+            {
+              name: "perPage",
+              in: "query",
+              schema: { type: "integer", default: 25, minimum: 5, maximum: 100 },
+            },
+            {
+              name: "subsidiaryId",
+              in: "query",
+              schema: ID_SCHEMA,
+              description: "Optional subsidiary filter; actor restrictions still apply.",
+            },
           ],
           responses: {
             "200": {
@@ -167,7 +174,10 @@ export function buildOpenApiSpec(
                   schema: {
                     type: "object",
                     properties: {
-                      records: { type: "array", items: { $ref: `#/components/schemas/${modelKey}` } },
+                      records: {
+                        type: "array",
+                        items: { $ref: `#/components/schemas/${modelKey}` },
+                      },
                       total: { type: "integer" },
                       page: { type: "integer" },
                       perPage: { type: "integer" },
@@ -192,13 +202,13 @@ export function buildOpenApiSpec(
           description: rt.description,
           tags: [rt.dynamic ? "Custom Records" : "Records"],
           security: [{ BearerAuth: [] }],
-          parameters: [
-            { name: "id", in: "path", required: true, schema: ID_SCHEMA },
-          ],
+          parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
           responses: {
             "200": {
               description: "The record",
-              content: { "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } } },
+              content: {
+                "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } },
+              },
             },
             "404": { description: "Not found" },
           },
@@ -218,15 +228,22 @@ export function buildOpenApiSpec(
           parameters: [idempotencyParameter],
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { $ref: `#/components/schemas/${writeModelKey}` } } },
+            content: {
+              "application/json": { schema: { $ref: `#/components/schemas/${writeModelKey}` } },
+            },
           },
           responses: {
             "201": {
               description: "Created",
-              content: { "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } } },
+              content: {
+                "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } },
+              },
             },
             "403": { $ref: "#/components/responses/Forbidden" },
-            "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "422": {
+              description: "Validation error",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+            },
           },
         },
       };
@@ -246,16 +263,27 @@ export function buildOpenApiSpec(
           ],
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { $ref: `#/components/schemas/${updateModelKey}` } } },
+            content: {
+              "application/json": { schema: { $ref: `#/components/schemas/${updateModelKey}` } },
+            },
           },
           responses: {
             "200": {
               description: "Updated",
-              content: { "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } } },
+              content: {
+                "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } },
+              },
             },
             "404": { description: "Not found" },
-            "409": { description: "Conflict — the record changed after it was read, or the expectedUpdatedAt precondition was missing or stale. Re-read the record and retry once with the fresh updated_at copied verbatim into expectedUpdatedAt.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-            "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "409": {
+              description:
+                "Conflict — the record changed after it was read, or the expectedUpdatedAt precondition was missing or stale. Re-read the record and retry once with the fresh updated_at copied verbatim into expectedUpdatedAt.",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+            },
+            "422": {
+              description: "Validation error",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+            },
           },
         },
       };
@@ -276,7 +304,11 @@ export function buildOpenApiSpec(
           responses: {
             "200": {
               description: "Deleted",
-              content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" } } } } },
+              content: {
+                "application/json": {
+                  schema: { type: "object", properties: { ok: { type: "boolean" } } },
+                },
+              },
             },
             "404": { description: "Not found" },
             "409": { description: "Blocked — referenced by other records" },
@@ -293,8 +325,12 @@ export function buildOpenApiSpec(
         const existing = paths[pretty] ?? {};
         paths[pretty] = {
           ...existing,
-          ...(collection.get && !existing.get ? { get: { ...collection.get, tags: [rt.label] } } : {}),
-          ...(collection.post && !existing.post ? { post: { ...collection.post, tags: [rt.label] } } : {}),
+          ...(collection.get && !existing.get
+            ? { get: { ...collection.get, tags: [rt.label] } }
+            : {}),
+          ...(collection.post && !existing.post
+            ? { post: { ...collection.post, tags: [rt.label] } }
+            : {}),
         };
       }
       if (item) {
@@ -302,8 +338,12 @@ export function buildOpenApiSpec(
         paths[`${pretty}/{id}`] = {
           ...existingItem,
           ...(item.get && !existingItem.get ? { get: { ...item.get, tags: [rt.label] } } : {}),
-          ...(item.patch && !existingItem.patch ? { patch: { ...item.patch, tags: [rt.label] } } : {}),
-          ...(item.delete && !existingItem.delete ? { delete: { ...item.delete, tags: [rt.label] } } : {}),
+          ...(item.patch && !existingItem.patch
+            ? { patch: { ...item.patch, tags: [rt.label] } }
+            : {}),
+          ...(item.delete && !existingItem.delete
+            ? { delete: { ...item.delete, tags: [rt.label] } }
+            : {}),
         };
       }
     }
@@ -323,7 +363,10 @@ export function buildOpenApiSpec(
       "201": { description: "Created" },
       "401": { $ref: "#/components/responses/Unauthorized" },
       "403": { $ref: "#/components/responses/Forbidden" },
-      "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      "422": {
+        description: "Validation error",
+        content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+      },
     },
   });
 
@@ -341,14 +384,18 @@ export function buildOpenApiSpec(
       "200": { description: "Application command result" },
       "401": { $ref: "#/components/responses/Unauthorized" },
       "403": { $ref: "#/components/responses/Forbidden" },
-      "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      "422": {
+        description: "Validation error",
+        content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+      },
     },
   });
 
   paths["/api/v1/commands"] = {
     get: {
       summary: "List application commands",
-      description: "The same application catalog MCP exposes, filtered to this API key's permissions and feature gates.",
+      description:
+        "The same application catalog MCP exposes, filtered to this API key's permissions and feature gates.",
       tags: ["Commands"],
       security: [{ BearerAuth: [] }],
       responses: { "200": { description: "Visible commands" } },
@@ -385,7 +432,11 @@ export function buildOpenApiSpec(
     },
   };
   paths["/api/v1/approvals/decide"] = {
-    post: idempotentPost("Decide an approval", "Approve or reject one visible pending subject.", "Approvals"),
+    post: idempotentPost(
+      "Decide an approval",
+      "Approve or reject one visible pending subject.",
+      "Approvals",
+    ),
   };
   paths["/api/v1/documents/{id}/{action}"] = {
     post: {
@@ -396,7 +447,12 @@ export function buildOpenApiSpec(
       ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
-        { name: "action", in: "path", required: true, schema: { type: "string", enum: ["submit", "post", "void", "correct"] } },
+        {
+          name: "action",
+          in: "path",
+          required: true,
+          schema: { type: "string", enum: ["submit", "post", "void", "correct"] },
+        },
         idempotencyParameter,
       ],
     },
@@ -409,12 +465,19 @@ export function buildOpenApiSpec(
         "Balanced-line manual journal. The Idempotency-Key must be a UUID; it becomes the document id. Same writer as POST /api/journals.",
         "Documents",
       ),
-      responses: { ...idempotentPost("", "", "Documents").responses, "201": { description: "Created" } },
+      responses: {
+        ...idempotentPost("", "", "Documents").responses,
+        "201": { description: "Created" },
+      },
     },
   };
   paths["/api/v1/journals/{id}/post"] = {
     post: {
-      ...idempotentPost("Post a journal", "Journals skip the generic document lifecycle.", "Documents"),
+      ...idempotentPost(
+        "Post a journal",
+        "Journals skip the generic document lifecycle.",
+        "Documents",
+      ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
@@ -434,7 +497,10 @@ export function buildOpenApiSpec(
           "Empty commercial-order draft — same writer as the New Order drawer. Add lines through the document update on the returned id.",
           "Orders",
         ),
-        responses: { ...idempotentPost("", "", "Orders").responses, "201": { description: "Created" } },
+        responses: {
+          ...idempotentPost("", "", "Orders").responses,
+          "201": { description: "Created" },
+        },
       },
     };
     paths[`${path}/{id}/convert`] = {
@@ -461,7 +527,9 @@ export function buildOpenApiSpec(
     documentDate: "2026-07-15",
     currency: "CAD",
     lines: [{ itemCode: "WIDGET-1", quantity: "2", unitPrice: "19.99", discountPercent: "10" }],
-    shippingLines: [{ accountId: "22222222-2222-4222-8222-222222222222", description: "Freight", amount: "5.00" }],
+    shippingLines: [
+      { accountId: "22222222-2222-4222-8222-222222222222", description: "Freight", amount: "5.00" },
+    ],
     externalRef: "SHOP-1001",
     externalSource: "shopify",
   };
@@ -535,17 +603,34 @@ export function buildOpenApiSpec(
         "Draft a field ticket on a project. Same writer as POST /api/field-tickets. Feature-off is a 404.",
         "Projects",
       ),
-      responses: { ...idempotentPost("", "", "Projects").responses, "201": { description: "Created" } },
+      responses: {
+        ...idempotentPost("", "", "Projects").responses,
+        "201": { description: "Created" },
+      },
     },
   };
   paths["/api/v1/payments"] = {
     ...(paths["/api/v1/payments"] ?? {}),
-    post: { ...idempotentPost("Create a payment draft", "Vendor payment or customer receipt.", "Payments"), responses: { ...idempotentPost("", "", "Payments").responses, "201": { description: "Created" } } },
+    post: {
+      ...idempotentPost(
+        "Create a payment draft",
+        "Vendor payment or customer receipt.",
+        "Payments",
+      ),
+      responses: {
+        ...idempotentPost("", "", "Payments").responses,
+        "201": { description: "Created" },
+      },
+    },
   };
   paths["/api/v1/payments/{id}"] = {
     ...(paths["/api/v1/payments/{id}"] ?? {}),
     patch: {
-      ...idempotentPost("Update a payment draft", "Header and exact open-item allocations.", "Payments"),
+      ...idempotentPost(
+        "Update a payment draft",
+        "Header and exact open-item allocations.",
+        "Payments",
+      ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
@@ -554,7 +639,11 @@ export function buildOpenApiSpec(
   };
   paths["/api/v1/payments/{id}/post"] = {
     post: {
-      ...idempotentPost("Post a payment", "Submit and post with open-item applications.", "Payments"),
+      ...idempotentPost(
+        "Post a payment",
+        "Submit and post with open-item applications.",
+        "Payments",
+      ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
@@ -572,21 +661,37 @@ export function buildOpenApiSpec(
       ],
       responses: { "200": { description: "Close runs" } },
     },
-    post: idempotentPost("Start a close run", "Start or resume the period-close checklist.", "Close"),
+    post: idempotentPost(
+      "Start a close run",
+      "Start or resume the period-close checklist.",
+      "Close",
+    ),
   };
   paths["/api/v1/close/locks"] = {
     get: {
       summary: "List period locks",
-      description: "Period locks by period, book, subsidiary, and module. Restricted subsidiary callers are refused by name — never an empty list.",
+      description:
+        "Period locks by period, book, subsidiary, and module. Restricted subsidiary callers are refused by name — never an empty list.",
       tags: ["Close"],
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "periodId", in: "query", schema: ID_SCHEMA },
-        { name: "state", in: "query", schema: { type: "string", enum: ["open", "soft_closed", "closed"] } },
-        { name: "module", in: "query", schema: { type: "string", enum: ["ar", "ap", "banking", "assets", "tax", "gl"] } },
+        {
+          name: "state",
+          in: "query",
+          schema: { type: "string", enum: ["open", "soft_closed", "closed"] },
+        },
+        {
+          name: "module",
+          in: "query",
+          schema: { type: "string", enum: ["ar", "ap", "banking", "assets", "tax", "gl"] },
+        },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
-      responses: { "200": { description: "Period locks" }, "403": { description: "Caller is subsidiary-restricted" } },
+      responses: {
+        "200": { description: "Period locks" },
+        "403": { description: "Caller is subsidiary-restricted" },
+      },
     },
   };
   paths["/api/v1/close/runs/{id}"] = {
@@ -600,7 +705,11 @@ export function buildOpenApiSpec(
   };
   paths["/api/v1/close/runs/{id}/advance"] = {
     post: {
-      ...idempotentPost("Advance a close run", "refresh, request_approval, attest, close, or publish.", "Close"),
+      ...idempotentPost(
+        "Advance a close run",
+        "refresh, request_approval, attest, close, or publish.",
+        "Close",
+      ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
@@ -610,21 +719,40 @@ export function buildOpenApiSpec(
   paths["/api/v1/close/reopen"] = {
     get: {
       summary: "List period reopen requests",
-      description: "The reopen queue. Restricted subsidiary callers are refused by name — never an empty list.",
+      description:
+        "The reopen queue. Restricted subsidiary callers are refused by name — never an empty list.",
       tags: ["Close"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "status", in: "query", schema: { type: "string", enum: ["requested", "approved", "rejected", "expired", "reclosed"] } },
+        {
+          name: "status",
+          in: "query",
+          schema: {
+            type: "string",
+            enum: ["requested", "approved", "rejected", "expired", "reclosed"],
+          },
+        },
         { name: "periodId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
       ],
-      responses: { "200": { description: "Reopen requests" }, "403": { description: "Caller is subsidiary-restricted" } },
+      responses: {
+        "200": { description: "Reopen requests" },
+        "403": { description: "Caller is subsidiary-restricted" },
+      },
     },
-    post: idempotentPost("Request a period reopen", "Hard-closed scopes only. Soft-close unlocks from Setup.", "Close"),
+    post: idempotentPost(
+      "Request a period reopen",
+      "Hard-closed scopes only. Soft-close unlocks from Setup.",
+      "Close",
+    ),
   };
   paths["/api/v1/close/reopen/{id}/decide"] = {
     post: {
-      ...idempotentPost("Decide a reopen request", "Independent approval of a controlled reopen.", "Close"),
+      ...idempotentPost(
+        "Decide a reopen request",
+        "Independent approval of a controlled reopen.",
+        "Close",
+      ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
@@ -632,7 +760,11 @@ export function buildOpenApiSpec(
     },
   };
   paths["/api/v1/close/revaluation"] = {
-    post: idempotentPost("Run FX revaluation", "Period FX revaluation through the close application command.", "Close"),
+    post: idempotentPost(
+      "Run FX revaluation",
+      "Period FX revaluation through the close application command.",
+      "Close",
+    ),
   };
   paths["/api/v1/setup"] = {
     get: {
@@ -646,15 +778,35 @@ export function buildOpenApiSpec(
   paths["/api/v1/setup/{entityKey}"] = {
     get: {
       summary: "List setup records",
-      description: "Records of one Setup-registry entity. Archived rows are excluded where the entity supports is_active.",
+      description:
+        "Records of one Setup-registry entity. Archived rows are excluded where the entity supports is_active.",
       tags: ["Setup"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "entityKey", in: "path", required: true, schema: { type: "string" }, description: "Setup entity key, e.g. tax-codes, departments, payment-terms." },
-        { name: "q", in: "query", schema: { type: "string" }, description: "Match across the entity's list columns" },
-        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 }, description: "Page size (default 50, max 200)" },
+        {
+          name: "entityKey",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+          description: "Setup entity key, e.g. tax-codes, departments, payment-terms.",
+        },
+        {
+          name: "q",
+          in: "query",
+          schema: { type: "string" },
+          description: "Match across the entity's list columns",
+        },
+        {
+          name: "limit",
+          in: "query",
+          schema: { type: "integer", minimum: 1, maximum: 200 },
+          description: "Page size (default 50, max 200)",
+        },
       ],
-      responses: { "200": { description: "Setup records" }, "404": { description: "Unknown or feature-disabled entity" } },
+      responses: {
+        "200": { description: "Setup records" },
+        "404": { description: "Unknown or feature-disabled entity" },
+      },
     },
     post: {
       ...idempotentPost(
@@ -663,7 +815,13 @@ export function buildOpenApiSpec(
         "Setup",
       ),
       parameters: [
-        { name: "entityKey", in: "path", required: true, schema: { type: "string" }, description: "Setup entity key, e.g. tax-codes, departments, payment-terms." },
+        {
+          name: "entityKey",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+          description: "Setup entity key, e.g. tax-codes, departments, payment-terms.",
+        },
         idempotencyParameter,
       ],
     },
@@ -678,7 +836,10 @@ export function buildOpenApiSpec(
         { name: "entityKey", in: "path", required: true, schema: { type: "string" } },
         { name: "id", in: "path", required: true, schema: { type: "string" } },
       ],
-      responses: { "200": { description: "Setup record" }, "404": { description: "Unknown entity or record" } },
+      responses: {
+        "200": { description: "Setup record" },
+        "404": { description: "Unknown entity or record" },
+      },
     },
     patch: {
       ...idempotentPost(
@@ -694,7 +855,8 @@ export function buildOpenApiSpec(
     },
     delete: {
       summary: "Delete a setup record",
-      description: "Delete (or archive, where the entity keeps history) one configuration record by id.",
+      description:
+        "Delete (or archive, where the entity keeps history) one configuration record by id.",
       tags: ["Setup"],
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -726,7 +888,8 @@ export function buildOpenApiSpec(
     },
     delete: {
       summary: "Clear a page layout",
-      description: "Drop a layout for a route (?route=, optional ?scope=org|user) so the page returns to its built-in spec.",
+      description:
+        "Drop a layout for a route (?route=, optional ?scope=org|user) so the page returns to its built-in spec.",
       tags: ["Layouts"],
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -752,18 +915,42 @@ export function buildOpenApiSpec(
       tags: ["Layouts"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "route", in: "query", required: true, schema: { type: "string" }, description: "Next.js route pattern, e.g. /banking or /apps/[key]." },
-        { name: "params", in: "query", schema: { type: "string" }, description: "Optional JSON object of dynamic-segment values." },
-        { name: "searchParams", in: "query", schema: { type: "string" }, description: "Optional JSON object for the query string." },
+        {
+          name: "route",
+          in: "query",
+          required: true,
+          schema: { type: "string" },
+          description: "Next.js route pattern, e.g. /banking or /apps/[key].",
+        },
+        {
+          name: "params",
+          in: "query",
+          schema: { type: "string" },
+          description: "Optional JSON object of dynamic-segment values.",
+        },
+        {
+          name: "searchParams",
+          in: "query",
+          schema: { type: "string" },
+          description: "Optional JSON object for the query string.",
+        },
       ],
       responses: { "200": { description: "Page description" } },
     },
   };
   paths["/api/v1/layouts/validate"] = {
-    post: plainPost("Validate a page layout", "Check a draft layout via { spec } without storing it.", "Layouts"),
+    post: plainPost(
+      "Validate a page layout",
+      "Check a draft layout via { spec } without storing it.",
+      "Layouts",
+    ),
   };
   paths["/api/v1/layouts/preview"] = {
-    post: plainPost("Preview a page layout", "Stage a draft layout via { route, spec, params } for a private expiring preview url.", "Layouts"),
+    post: plainPost(
+      "Preview a page layout",
+      "Stage a draft layout via { route, spec, params } for a private expiring preview url.",
+      "Layouts",
+    ),
   };
   paths["/api/v1/layouts/history"] = {
     get: {
@@ -771,14 +958,16 @@ export function buildOpenApiSpec(
       description: "Every layout ever saved for a route (?route=), newest first.",
       tags: ["Layouts"],
       security: [{ BearerAuth: [] }],
-      parameters: [
-        { name: "route", in: "query", required: true, schema: { type: "string" } },
-      ],
+      parameters: [{ name: "route", in: "query", required: true, schema: { type: "string" } }],
       responses: { "200": { description: "Layout versions" } },
     },
   };
   paths["/api/v1/layouts/restore"] = {
-    post: plainPost("Restore a page layout", "Republish a past layout version via { route, versionId }.", "Layouts"),
+    post: plainPost(
+      "Restore a page layout",
+      "Republish a past layout version via { route, versionId }.",
+      "Layouts",
+    ),
   };
   paths["/api/v1/apps"] = {
     get: {
@@ -792,14 +981,19 @@ export function buildOpenApiSpec(
   paths["/api/v1/apps/vocabulary"] = {
     get: {
       summary: "Describe app capabilities",
-      description: "The native screen and package contract plus the draft → preview → approve workflow.",
+      description:
+        "The native screen and package contract plus the draft → preview → approve workflow.",
       tags: ["Apps"],
       security: [{ BearerAuth: [] }],
       responses: { "200": { description: "App vocabulary" } },
     },
   };
   paths["/api/v1/apps/drafts"] = {
-    post: plainPost("Prepare an app draft", "Save an immutable unpublished app package via { bundle, reason }. Revisions are new drafts.", "Apps"),
+    post: plainPost(
+      "Prepare an app draft",
+      "Save an immutable unpublished app package via { bundle, reason }. Revisions are new drafts.",
+      "Apps",
+    ),
   };
   paths["/api/v1/apps/drafts/{id}"] = {
     get: {
@@ -813,18 +1007,22 @@ export function buildOpenApiSpec(
   };
   paths["/api/v1/apps/drafts/{id}/activate"] = {
     post: {
-      ...plainPost("Activate a reviewed app draft", "Activate the exact reviewed draft via { contentHash }. Refuses stale bases.", "Apps"),
-      parameters: [
-        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
-      ],
+      ...plainPost(
+        "Activate a reviewed app draft",
+        "Activate the exact reviewed draft via { contentHash }. Refuses stale bases.",
+        "Apps",
+      ),
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
     },
   };
   paths["/api/v1/apps/drafts/{id}/discard"] = {
     post: {
-      ...plainPost("Discard an app draft", "Discard an unpublished draft via { contentHash }, preserving source and audit evidence.", "Apps"),
-      parameters: [
-        { name: "id", in: "path", required: true, schema: ID_SCHEMA },
-      ],
+      ...plainPost(
+        "Discard an app draft",
+        "Discard an unpublished draft via { contentHash }, preserving source and audit evidence.",
+        "Apps",
+      ),
+      parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
     },
   };
   paths["/api/v1/apps/{key}"] = {
@@ -846,35 +1044,50 @@ export function buildOpenApiSpec(
       description: "Feed connections. Credentials are never returned — only whether they exist.",
       tags: ["Banking"],
       security: [{ BearerAuth: [] }],
-      responses: { "200": { description: "Bank feeds" }, "404": { description: "bankFeeds is off" } },
+      responses: {
+        "200": { description: "Bank feeds" },
+        "404": { description: "bankFeeds is off" },
+      },
     },
   };
   paths["/api/v1/banking/lines"] = {
     get: {
       summary: "List unmatched bank lines",
-      description: "Imported statement lines still awaiting a match. Amount is an exact decimal string.",
+      description:
+        "Imported statement lines still awaiting a match. Amount is an exact decimal string.",
       tags: ["Banking"],
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "accountId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
-      responses: { "200": { description: "Unmatched lines" }, "404": { description: "banking is off" } },
+      responses: {
+        "200": { description: "Unmatched lines" },
+        "404": { description: "banking is off" },
+      },
     },
   };
   paths["/api/v1/banking/reconciliations"] = {
     get: {
       summary: "List bank reconciliations",
-      description: "Reconciliation sessions newest first. Statement balance is an exact decimal string. Feature-off is a 404 naming GET /api/v1/settings/features.",
+      description:
+        "Reconciliation sessions newest first. Statement balance is an exact decimal string. Feature-off is a 404 naming GET /api/v1/settings/features.",
       tags: ["Banking"],
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "accountId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
-      responses: { "200": { description: "Reconciliation sessions" }, "404": { description: "banking is off" } },
+      responses: {
+        "200": { description: "Reconciliation sessions" },
+        "404": { description: "banking is off" },
+      },
     },
-    post: idempotentPost("Start a bank reconciliation", "One open session per account; match lines then sign off.", "Banking"),
+    post: idempotentPost(
+      "Start a bank reconciliation",
+      "One open session per account; match lines then sign off.",
+      "Banking",
+    ),
   };
   paths["/api/v1/banking/reconciliations/{id}"] = {
     get: {
@@ -883,12 +1096,19 @@ export function buildOpenApiSpec(
       tags: ["Banking"],
       security: [{ BearerAuth: [] }],
       parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
-      responses: { "200": { description: "Reconciliation" }, "404": { description: "Not found or banking is off" } },
+      responses: {
+        "200": { description: "Reconciliation" },
+        "404": { description: "Not found or banking is off" },
+      },
     },
   };
   paths["/api/v1/banking/reconciliations/{id}/sign-off"] = {
     post: {
-      ...idempotentPost("Sign off a reconciliation", "Zero-difference sessions only. Permanent.", "Banking"),
+      ...idempotentPost(
+        "Sign off a reconciliation",
+        "Zero-difference sessions only. Permanent.",
+        "Banking",
+      ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
@@ -897,7 +1117,11 @@ export function buildOpenApiSpec(
   };
   paths["/api/v1/banking/lines/{id}/match"] = {
     post: {
-      ...idempotentPost("Match a bank line", "Pair one unmatched statement line with posted journal lines.", "Banking"),
+      ...idempotentPost(
+        "Match a bank line",
+        "Pair one unmatched statement line with posted journal lines.",
+        "Banking",
+      ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
@@ -906,7 +1130,11 @@ export function buildOpenApiSpec(
   };
   paths["/api/v1/banking/lines/{id}/match-journal"] = {
     post: {
-      ...idempotentPost("Match a bank line with a journal", "Create a categorizing journal and match it in-session.", "Banking"),
+      ...idempotentPost(
+        "Match a bank line with a journal",
+        "Create a categorizing journal and match it in-session.",
+        "Banking",
+      ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
@@ -925,10 +1153,14 @@ export function buildOpenApiSpec(
   paths["/api/v1/budgets"] = {
     get: {
       summary: "List budget scenarios",
-      description: "Non-archived budget and forecast scenarios. Feature-off is a 404 naming GET /api/v1/settings/features.",
+      description:
+        "Non-archived budget and forecast scenarios. Feature-off is a 404 naming GET /api/v1/settings/features.",
       tags: ["Budgets"],
       security: [{ BearerAuth: [] }],
-      responses: { "200": { description: "Budget scenarios" }, "404": { description: "budgets is off" } },
+      responses: {
+        "200": { description: "Budget scenarios" },
+        "404": { description: "budgets is off" },
+      },
     },
   };
   paths["/api/v1/budgets/{id}"] = {
@@ -938,12 +1170,19 @@ export function buildOpenApiSpec(
       tags: ["Budgets"],
       security: [{ BearerAuth: [] }],
       parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
-      responses: { "200": { description: "Budget scenario" }, "404": { description: "Not found or budgets is off" } },
+      responses: {
+        "200": { description: "Budget scenario" },
+        "404": { description: "Not found or budgets is off" },
+      },
     },
   };
   paths["/api/v1/budgets/{id}/cells"] = {
     post: {
-      ...idempotentPost("Update budget cells", "Draft scenarios only. expectedRevision must match.", "Budgets"),
+      ...idempotentPost(
+        "Update budget cells",
+        "Draft scenarios only. expectedRevision must match.",
+        "Budgets",
+      ),
       parameters: [
         { name: "id", in: "path", required: true, schema: ID_SCHEMA },
         idempotencyParameter,
@@ -953,7 +1192,8 @@ export function buildOpenApiSpec(
   paths["/api/v1/files"] = {
     get: {
       summary: "List File Cabinet files",
-      description: "Metadata only. Respects the same folder grants as the files screen. Never returns contents.",
+      description:
+        "Metadata only. Respects the same folder grants as the files screen. Never returns contents.",
       tags: ["Files"],
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -964,7 +1204,11 @@ export function buildOpenApiSpec(
       ],
       responses: { "200": { description: "Files" } },
     },
-    post: idempotentPost("Upload a File Cabinet file", "Same storage and folder grants as the files screen. At most 1 MB.", "Files"),
+    post: idempotentPost(
+      "Upload a File Cabinet file",
+      "Same storage and folder grants as the files screen. At most 1 MB.",
+      "Files",
+    ),
   };
   paths["/api/v1/files/folders"] = {
     get: {
@@ -992,7 +1236,11 @@ export function buildOpenApiSpec(
       security: [{ BearerAuth: [] }],
       responses: { "200": { description: "Company & accounting settings" } },
     },
-    patch: idempotentPost("Update company settings", "Only passed keys change. Fiscal calendar and base currency refuse once postings exist.", "Settings"),
+    patch: idempotentPost(
+      "Update company settings",
+      "Only passed keys change. Fiscal calendar and base currency refuse once postings exist.",
+      "Settings",
+    ),
   };
   paths["/api/v1/settings/features"] = {
     get: {
@@ -1000,23 +1248,39 @@ export function buildOpenApiSpec(
       description: "The Company Settings → Features switchboard as this organization sees it.",
       tags: ["Settings"],
       security: [{ BearerAuth: [] }],
-      responses: { "200": { description: "Feature gates" }, "403": { $ref: "#/components/responses/Forbidden" } },
+      responses: {
+        "200": { description: "Feature gates" },
+        "403": { $ref: "#/components/responses/Forbidden" },
+      },
     },
-    post: idempotentPost("Update feature gates", "The Features switchboard write. Dependencies and load-bearing modules are enforced.", "Settings"),
+    post: idempotentPost(
+      "Update feature gates",
+      "The Features switchboard write. Dependencies and load-bearing modules are enforced.",
+      "Settings",
+    ),
   };
   paths["/api/v1/open-items"] = {
     get: {
       summary: "List open items",
-      description: "Unpaid or unapplied AR/AP items. Remaining amounts are exact decimal strings. side=ar requires ar.read; side=ap requires ap.read.",
+      description:
+        "Unpaid or unapplied AR/AP items. Remaining amounts are exact decimal strings. side=ar requires ar.read; side=ap requires ap.read.",
       tags: ["Payments"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "side", in: "query", required: true, schema: { type: "string", enum: ["ar", "ap"] } },
+        {
+          name: "side",
+          in: "query",
+          required: true,
+          schema: { type: "string", enum: ["ar", "ap"] },
+        },
         { name: "asOf", in: "query", schema: { type: "string", format: "date" } },
         { name: "partyId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
-      responses: { "200": { description: "Open items" }, "422": { description: "side missing or not ar/ap" } },
+      responses: {
+        "200": { description: "Open items" },
+        "422": { description: "side missing or not ar/ap" },
+      },
     },
   };
   paths["/api/v1/currencies"] = {
@@ -1031,17 +1295,31 @@ export function buildOpenApiSpec(
   paths["/api/v1/fx/rates"] = {
     get: {
       summary: "List FX rates",
-      description: "Dated rates for one currency pair. Rate is an exact decimal string. Feature-off is a 404 naming GET /api/v1/settings/features.",
+      description:
+        "Dated rates for one currency pair. Rate is an exact decimal string. Feature-off is a 404 naming GET /api/v1/settings/features.",
       tags: ["FX"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "fromCurrency", in: "query", required: true, schema: { type: "string", minLength: 3, maxLength: 3 } },
-        { name: "toCurrency", in: "query", required: true, schema: { type: "string", minLength: 3, maxLength: 3 } },
+        {
+          name: "fromCurrency",
+          in: "query",
+          required: true,
+          schema: { type: "string", minLength: 3, maxLength: 3 },
+        },
+        {
+          name: "toCurrency",
+          in: "query",
+          required: true,
+          schema: { type: "string", minLength: 3, maxLength: 3 },
+        },
         { name: "asOf", in: "query", schema: { type: "string", format: "date" } },
         { name: "rateType", in: "query", schema: { type: "string" } },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
       ],
-      responses: { "200": { description: "FX rates" }, "404": { description: "multiCurrency is off" } },
+      responses: {
+        "200": { description: "FX rates" },
+        "404": { description: "multiCurrency is off" },
+      },
     },
   };
   paths["/api/v1/inventory/available"] = {
@@ -1082,18 +1360,20 @@ export function buildOpenApiSpec(
                 type: "object",
                 example: {
                   subsidiaryId: "11111111-1111-4111-8111-111111111111",
-                  rows: [{
-                    itemId: "22222222-2222-4222-8222-222222222222",
-                    itemCode: "WIDGET-1",
-                    itemName: "Widget",
-                    warehouseId: "33333333-3333-4333-8333-333333333333",
-                    warehouseName: "Main",
-                    baseUnit: "ea",
-                    onHand: "10",
-                    committed: "3",
-                    incoming: "5",
-                    available: "7",
-                  }],
+                  rows: [
+                    {
+                      itemId: "22222222-2222-4222-8222-222222222222",
+                      itemCode: "WIDGET-1",
+                      itemName: "Widget",
+                      warehouseId: "33333333-3333-4333-8333-333333333333",
+                      warehouseName: "Main",
+                      baseUnit: "ea",
+                      onHand: "10",
+                      committed: "3",
+                      incoming: "5",
+                      available: "7",
+                    },
+                  ],
                 },
               },
             },
@@ -1105,7 +1385,8 @@ export function buildOpenApiSpec(
   paths["/api/v1/inventory/levels"] = {
     get: {
       summary: "List inventory levels",
-      description: "On-hand quantity and value from posted movements. Value is an exact decimal string.",
+      description:
+        "On-hand quantity and value from posted movements. Value is an exact decimal string.",
       tags: ["Inventory"],
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -1113,39 +1394,57 @@ export function buildOpenApiSpec(
         { name: "stockLocationId", in: "query", schema: ID_SCHEMA },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
-      responses: { "200": { description: "Inventory levels" }, "404": { description: "inventory is off" } },
+      responses: {
+        "200": { description: "Inventory levels" },
+        "404": { description: "inventory is off" },
+      },
     },
   };
   paths["/api/v1/payroll/employees"] = {
     get: {
       summary: "List payroll employees",
-      description: "Employees with a payroll profile. Withholding elections and government ids are never returned.",
+      description:
+        "Employees with a payroll profile. Withholding elections and government ids are never returned.",
       tags: ["Payroll"],
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "q", in: "query", schema: { type: "string" }, description: "Match employee name" },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
-      responses: { "200": { description: "Payroll employees" }, "404": { description: "payroll is off" } },
+      responses: {
+        "200": { description: "Payroll employees" },
+        "404": { description: "payroll is off" },
+      },
     },
   };
   paths["/api/v1/search"] = {
     get: {
       summary: "Global search",
-      description: "Grouped global search over the same finder as the header search bar. Every group is scoped by the caller's own permissions; restricted scopes are refused, never dropped.",
+      description:
+        "Grouped global search over the same finder as the header search bar. Every group is scoped by the caller's own permissions; restricted scopes are refused, never dropped.",
       tags: ["Meta"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "q", in: "query", required: true, schema: { type: "string" }, description: "Search text" },
+        {
+          name: "q",
+          in: "query",
+          required: true,
+          schema: { type: "string" },
+          description: "Search text",
+        },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50 } },
       ],
-      responses: { "200": { description: "Grouped search hits" }, "422": { description: "q missing" } },
+      responses: {
+        "200": { description: "Grouped search hits" },
+        "422": { description: "q missing" },
+      },
     },
   };
   paths["/api/v1/tax/returns"] = {
     get: {
       summary: "List tax return forms",
-      description: "Indirect-tax return forms for this org, with registration status. The same rows the /tax filing screen and list_tax_return_forms read.",
+      description:
+        "Indirect-tax return forms for this org, with registration status. The same rows the /tax filing screen and list_tax_return_forms read.",
       tags: ["Tax"],
       security: [{ BearerAuth: [] }],
       responses: { "200": { description: "Tax return forms" } },
@@ -1159,7 +1458,11 @@ export function buildOpenApiSpec(
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "q", in: "query", schema: { type: "string" }, description: "Match name or email" },
-        { name: "status", in: "query", schema: { type: "string", enum: ["active", "inactive", "all"] } },
+        {
+          name: "status",
+          in: "query",
+          schema: { type: "string", enum: ["active", "inactive", "all"] },
+        },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
       ],
       responses: { "200": { description: "Users" } },
@@ -1172,8 +1475,17 @@ export function buildOpenApiSpec(
       tags: ["Admin"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "q", in: "query", schema: { type: "string" }, description: "Match name, description, or key" },
-        { name: "type", in: "query", schema: { type: "string", enum: ["built_in", "custom", "all"] } },
+        {
+          name: "q",
+          in: "query",
+          schema: { type: "string" },
+          description: "Match name, description, or key",
+        },
+        {
+          name: "type",
+          in: "query",
+          schema: { type: "string", enum: ["built_in", "custom", "all"] },
+        },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
       ],
       responses: { "200": { description: "Roles" } },
@@ -1182,29 +1494,44 @@ export function buildOpenApiSpec(
   paths["/api/v1/admin/audit"] = {
     get: {
       summary: "Search the audit log",
-      description: "Company audit events. Restricted subsidiary callers are refused by name — never an empty log.",
+      description:
+        "Company audit events. Restricted subsidiary callers are refused by name — never an empty log.",
       tags: ["Admin"],
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "q", in: "query", schema: { type: "string" } },
         { name: "action", in: "query", schema: { type: "string" } },
         { name: "recordType", in: "query", schema: { type: "string" } },
-        { name: "actorId", in: "query", schema: { type: "string" }, description: "User id, or the literal system" },
+        {
+          name: "actorId",
+          in: "query",
+          schema: { type: "string" },
+          description: "User id, or the literal system",
+        },
         { name: "from", in: "query", schema: { type: "string", format: "date" } },
         { name: "to", in: "query", schema: { type: "string", format: "date" } },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50 } },
       ],
-      responses: { "200": { description: "Audit events" }, "403": { description: "Caller is subsidiary-restricted" } },
+      responses: {
+        "200": { description: "Audit events" },
+        "403": { description: "Caller is subsidiary-restricted" },
+      },
     },
   };
   paths["/api/v1/opportunities"] = {
     get: {
       summary: "List opportunities",
-      description: "Sales opportunities. Projected and weighted amounts are exact decimal strings. Feature-off is a 404 naming GET /api/v1/settings/features.",
+      description:
+        "Sales opportunities. Projected and weighted amounts are exact decimal strings. Feature-off is a 404 naming GET /api/v1/settings/features.",
       tags: ["CRM"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "q", in: "query", schema: { type: "string" }, description: "Match title, number, or customer name" },
+        {
+          name: "q",
+          in: "query",
+          schema: { type: "string" },
+          description: "Match title, number, or customer name",
+        },
         { name: "openOnly", in: "query", schema: { type: "boolean" } },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
@@ -1214,11 +1541,15 @@ export function buildOpenApiSpec(
   paths["/api/v1/opportunities/{id}"] = {
     get: {
       summary: "Get an opportunity",
-      description: "One opportunity through the same loader as the opportunity drawer. Amounts are exact decimal strings.",
+      description:
+        "One opportunity through the same loader as the opportunity drawer. Amounts are exact decimal strings.",
       tags: ["CRM"],
       security: [{ BearerAuth: [] }],
       parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
-      responses: { "200": { description: "Opportunity" }, "404": { description: "Not found or crm is off" } },
+      responses: {
+        "200": { description: "Opportunity" },
+        "404": { description: "Not found or crm is off" },
+      },
     },
   };
   paths["/api/v1/crm/accounts"] = {
@@ -1229,7 +1560,11 @@ export function buildOpenApiSpec(
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "q", in: "query", schema: { type: "string" } },
-        { name: "stage", in: "query", schema: { type: "string", enum: ["lead", "prospect", "customer"] } },
+        {
+          name: "stage",
+          in: "query",
+          schema: { type: "string", enum: ["lead", "prospect", "customer"] },
+        },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
       responses: { "200": { description: "CRM accounts" }, "404": { description: "crm is off" } },
@@ -1238,54 +1573,96 @@ export function buildOpenApiSpec(
   paths["/api/v1/crm/accounts/{id}"] = {
     get: {
       summary: "Get a CRM account",
-      description: "One account through the same loader as the account drawer. Amounts are exact decimal strings.",
+      description:
+        "One account through the same loader as the account drawer. Amounts are exact decimal strings.",
       tags: ["CRM"],
       security: [{ BearerAuth: [] }],
       parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
-      responses: { "200": { description: "CRM account" }, "404": { description: "Not found or crm is off" } },
+      responses: {
+        "200": { description: "CRM account" },
+        "404": { description: "Not found or crm is off" },
+      },
     },
   };
   paths["/api/v1/aging"] = {
     get: {
       summary: "AR/AP aging",
-      description: "Collections aging by party, or per-document with view=detail. Amounts are exact decimal strings. Missing spot rates are a 422 naming the pair and as-of date.",
+      description:
+        "Collections aging by party, or per-document with view=detail. Amounts are exact decimal strings. Missing spot rates are a 422 naming the pair and as-of date.",
       tags: ["Reports"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "side", in: "query", required: true, schema: { type: "string", enum: ["ar", "ap"] } },
+        {
+          name: "side",
+          in: "query",
+          required: true,
+          schema: { type: "string", enum: ["ar", "ap"] },
+        },
         { name: "asOf", in: "query", schema: { type: "string", format: "date" } },
         { name: "view", in: "query", schema: { type: "string", enum: ["summary", "detail"] } },
-        { name: "bucket", in: "query", schema: { type: "string", enum: ["current", "days1to30", "days31to60", "days61to90", "over90", "over30", "over60", "overdue"] } },
+        {
+          name: "bucket",
+          in: "query",
+          schema: {
+            type: "string",
+            enum: [
+              "current",
+              "days1to30",
+              "days31to60",
+              "days61to90",
+              "over90",
+              "over30",
+              "over60",
+              "overdue",
+            ],
+          },
+        },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
-      responses: { "200": { description: "Aging" }, "422": { description: "side missing or spot rate unavailable" } },
+      responses: {
+        "200": { description: "Aging" },
+        "422": { description: "side missing or spot rate unavailable" },
+      },
     },
   };
   paths["/api/v1/trial-balance"] = {
     get: {
       summary: "Trial balance",
-      description: "Every account with nonzero activity as of a date. Amounts are exact decimal strings.",
+      description:
+        "Every account with nonzero activity as of a date. Amounts are exact decimal strings.",
       tags: ["Reports"],
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "asOf", in: "query", required: true, schema: { type: "string", format: "date" } },
       ],
-      responses: { "200": { description: "Trial balance" }, "422": { description: "asOf missing or not YYYY-MM-DD" } },
+      responses: {
+        "200": { description: "Trial balance" },
+        "422": { description: "asOf missing or not YYYY-MM-DD" },
+      },
     },
   };
   paths["/api/v1/statements"] = {
     get: {
       summary: "Customer or vendor statement",
-      description: "Opening, dated activity, closing, and aged summary for one party. Amounts are exact decimal strings.",
+      description:
+        "Opening, dated activity, closing, and aged summary for one party. Amounts are exact decimal strings.",
       tags: ["Reports"],
       security: [{ BearerAuth: [] }],
       parameters: [
         { name: "partyId", in: "query", required: true, schema: ID_SCHEMA },
-        { name: "side", in: "query", required: true, schema: { type: "string", enum: ["ar", "ap"] } },
+        {
+          name: "side",
+          in: "query",
+          required: true,
+          schema: { type: "string", enum: ["ar", "ap"] },
+        },
         { name: "from", in: "query", required: true, schema: { type: "string", format: "date" } },
         { name: "to", in: "query", required: true, schema: { type: "string", format: "date" } },
       ],
-      responses: { "200": { description: "Statement" }, "422": { description: "Missing party, side, or dates" } },
+      responses: {
+        "200": { description: "Statement" },
+        "422": { description: "Missing party, side, or dates" },
+      },
     },
   };
   paths["/api/v1/customers"] = {
@@ -1319,7 +1696,13 @@ export function buildOpenApiSpec(
                 externalSource: "shopify",
                 email: "buyer@example.com",
                 name: "Buyer Inc.",
-                address: { line1: "1 Market St", city: "Springfield", region: "IL", postalCode: "62701", country: "US" },
+                address: {
+                  line1: "1 Market St",
+                  city: "Springfield",
+                  region: "IL",
+                  postalCode: "62701",
+                  country: "US",
+                },
               },
             },
           },
@@ -1349,7 +1732,8 @@ export function buildOpenApiSpec(
   paths["/api/v1/employees"] = {
     get: {
       summary: "List employees",
-      description: "Parties with an active employee role. Birth date and government identifiers are never returned.",
+      description:
+        "Parties with an active employee role. Birth date and government identifiers are never returned.",
       tags: ["Parties"],
       security: [{ BearerAuth: [] }],
       parameters: [
@@ -1362,29 +1746,62 @@ export function buildOpenApiSpec(
   paths["/api/v1/tax/returns/{code}"] = {
     get: {
       summary: "Compute a tax return",
-      description: "One filing entity's computed return through the same engine as the /tax filing screen and tax_return. Box values are exact decimal strings. Unknown forms, uncovered periods, and unresolvable scopes are 422 refusals.",
+      description:
+        "One filing entity's computed return through the same engine as the /tax filing screen and tax_return. Box values are exact decimal strings. Unknown forms, uncovered periods, and unresolvable scopes are 422 refusals.",
       tags: ["Tax"],
       security: [{ BearerAuth: [] }],
       parameters: [
-        { name: "code", in: "path", required: true, schema: { type: "string" }, description: "Form code from GET /api/v1/tax/returns, e.g. CA_GST34" },
+        {
+          name: "code",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+          description: "Form code from GET /api/v1/tax/returns, e.g. CA_GST34",
+        },
         { name: "from", in: "query", required: true, schema: { type: "string", format: "date" } },
         { name: "to", in: "query", required: true, schema: { type: "string", format: "date" } },
-        { name: "subsidiary", in: "query", schema: { type: "string" }, description: "Filing-entity subsidiary id; repeat or comma-separate. Omit for the org-wide return (full-scope callers only)." },
-        { name: "registration", in: "query", schema: ID_SCHEMA, description: "Pin the registration whose number travels on the return." },
-        { name: "presentationCurrency", in: "query", schema: { type: "string", minLength: 3, maxLength: 3 } },
+        {
+          name: "subsidiary",
+          in: "query",
+          schema: { type: "string" },
+          description:
+            "Filing-entity subsidiary id; repeat or comma-separate. Omit for the org-wide return (full-scope callers only).",
+        },
+        {
+          name: "registration",
+          in: "query",
+          schema: ID_SCHEMA,
+          description: "Pin the registration whose number travels on the return.",
+        },
+        {
+          name: "presentationCurrency",
+          in: "query",
+          schema: { type: "string", minLength: 3, maxLength: 3 },
+        },
         { name: "rateType", in: "query", schema: { type: "string" } },
         { name: "rateDate", in: "query", schema: { type: "string", format: "date" } },
       ],
-      responses: { "200": { description: "Computed return" }, "422": { description: "Unknown form, uncovered period, or unresolvable scope" } },
+      responses: {
+        "200": { description: "Computed return" },
+        "422": { description: "Unknown form, uncovered period, or unresolvable scope" },
+      },
     },
   };
   paths["/api/v1/reports"] = {
     get: {
       summary: "List report definitions",
-      description: "Saved report definitions this actor may run — the same catalog as the Reports hub.",
+      description:
+        "Saved report definitions this actor may run — the same catalog as the Reports hub.",
       tags: ["Reports"],
       security: [{ BearerAuth: [] }],
-      parameters: [{ name: "q", in: "query", schema: { type: "string" }, description: "Match definition name" }],
+      parameters: [
+        {
+          name: "q",
+          in: "query",
+          schema: { type: "string" },
+          description: "Match definition name",
+        },
+      ],
       responses: { "200": { description: "Report definitions" } },
     },
   };
@@ -1394,13 +1811,17 @@ export function buildOpenApiSpec(
       tags: ["Reports"],
       security: [{ BearerAuth: [] }],
       parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
-      responses: { "200": { description: "Report definition" }, "404": { description: "Not found" } },
+      responses: {
+        "200": { description: "Report definition" },
+        "404": { description: "Not found" },
+      },
     },
   };
   paths["/api/v1/reports/{id}/run"] = {
     post: {
       summary: "Run a saved report",
-      description: "Execute a definition through the same report engine as the Reports hub. Restricted subsidiary scopes are refused.",
+      description:
+        "Execute a definition through the same report engine as the Reports hub. Restricted subsidiary scopes are refused.",
       tags: ["Reports"],
       security: [{ BearerAuth: [] }],
       parameters: [{ name: "id", in: "path", required: true, schema: ID_SCHEMA }],
@@ -1420,7 +1841,8 @@ export function buildOpenApiSpec(
   paths["/api/v1/openapi"] = {
     get: {
       summary: "OpenAPI 3.0 spec",
-      description: "This document — the full, tenant-specific API schema (including custom records and fields).",
+      description:
+        "This document — the full, tenant-specific API schema (including custom records and fields).",
       tags: ["Meta"],
       security: [{ BearerAuth: [] }],
       responses: { "200": { description: "OpenAPI 3.0 JSON document" } },
@@ -1466,8 +1888,14 @@ export function buildOpenApiSpec(
       },
       schemas,
       responses: {
-        Unauthorized: { description: "Invalid or missing API key", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        Forbidden: { description: "Insufficient permissions", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        Unauthorized: {
+          description: "Invalid or missing API key",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
+        Forbidden: {
+          description: "Insufficient permissions",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
       },
     },
     security: [{ BearerAuth: [] }],

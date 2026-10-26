@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { businessTimeZone, businessToday, calendarDaysBetween, formatInZone } from "../platform/business-date.ts";
+import {
+  businessTimeZone,
+  businessToday,
+  calendarDaysBetween,
+  formatInZone,
+} from "../platform/business-date.ts";
 import { add, cmp, neg } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
@@ -37,14 +42,12 @@ export class ComplianceError extends Error {}
 // Types
 // ---------------------------------------------------------------------------
 
-export type RequirementCategory = "insurance" | "tax_form" | "licence" | "bond" | "safety" | "other";
+export type RequirementCategory =
+  "insurance" | "tax_form" | "licence" | "bond" | "safety" | "other";
 export type RequirementEnforcement = "advisory" | "warn" | "block_payment" | "block_bill";
 export type LienWaiverEnforcement = "none" | "warn" | "block";
 export type LienWaiverType =
-  | "conditional_progress"
-  | "unconditional_progress"
-  | "conditional_final"
-  | "unconditional_final";
+  "conditional_progress" | "unconditional_progress" | "conditional_final" | "unconditional_final";
 
 /**
  * Why a requirement is not satisfied. Machine-readable so the UI, the pay-run
@@ -171,7 +174,10 @@ export function revocationLocalDate(revokedAt: string | Date, timeZone: string):
  * when it is absent (pure unit callers that only set the instant) the UTC
  * date of the instant applies.
  */
-export function waiverInForceOn(w: Pick<WaiverRecord, "effectiveFrom" | "expiresOn" | "approvedAt" | "revokedAt" | "revokedOn">, asOf: string): boolean {
+export function waiverInForceOn(
+  w: Pick<WaiverRecord, "effectiveFrom" | "expiresOn" | "approvedAt" | "revokedAt" | "revokedOn">,
+  asOf: string,
+): boolean {
   if (w.approvedAt === null || (w.approvedAt as unknown) === undefined) return false;
   if (calendarDaysBetween(w.effectiveFrom, asOf) < 0) return false;
   if (calendarDaysBetween(asOf, w.expiresOn) < 0) return false;
@@ -246,7 +252,8 @@ function evidenceShortfalls(policy: RequirementPolicy, record: EvidenceRecord): 
   // the mismatch names the remedy. (A missing amount is currency-independent
   // and is still reported.)
   const currencyMismatch =
-    needsAmount && (!policy.coverageCurrency || record.coverageCurrency !== policy.coverageCurrency);
+    needsAmount &&
+    (!policy.coverageCurrency || record.coverageCurrency !== policy.coverageCurrency);
   if (currencyMismatch) reasons.push("coverage_currency_mismatch");
   if (policy.minCoverageAmount !== null) {
     if (record.coverageAmount === null) reasons.push("coverage_amount_missing");
@@ -260,7 +267,8 @@ function evidenceShortfalls(policy: RequirementPolicy, record: EvidenceRecord): 
       reasons.push("aggregate_below_minimum");
     }
   }
-  if (policy.requiresAdditionalInsured && !record.additionalInsured) reasons.push("missing_additional_insured");
+  if (policy.requiresAdditionalInsured && !record.additionalInsured)
+    reasons.push("missing_additional_insured");
   if (policy.requiresWaiverOfSubrogation && !record.waiverOfSubrogation) {
     reasons.push("missing_waiver_of_subrogation");
   }
@@ -301,7 +309,11 @@ function evaluateEvidence(
   }
   const shortfalls = evidenceShortfalls(policy, record);
   if (record.status === "pending_review" || (policy.requiresVerification && !record.verifiedAt)) {
-    return { state: "awaiting_verification", reasons: ["awaiting_verification", ...shortfalls], record };
+    return {
+      state: "awaiting_verification",
+      reasons: ["awaiting_verification", ...shortfalls],
+      record,
+    };
   }
   if (calendarDaysBetween(record.effectiveFrom, asOf) < 0) {
     return { state: "insufficient", reasons: ["not_yet_effective", ...shortfalls], record };
@@ -348,9 +360,10 @@ export function evaluateRequirement(args: {
     .filter((r) => r.requirementId === policy.id && inScope(r))
     .map((r) => evaluateEvidence(policy, r, asOf));
 
-  let best: Candidate = candidates.length > 0
-    ? candidates.reduce((a, b) => (STATE_RANK[b.state] < STATE_RANK[a.state] ? b : a))
-    : { state: "missing", reasons: ["no_evidence"], record: null };
+  let best: Candidate =
+    candidates.length > 0
+      ? candidates.reduce((a, b) => (STATE_RANK[b.state] < STATE_RANK[a.state] ? b : a))
+      : { state: "missing", reasons: ["no_evidence"], record: null };
 
   // Two certificates ranked equal: prefer the one that covers longest, so the
   // reported expiry is the one the vendor actually relies on.
@@ -369,10 +382,7 @@ export function evaluateRequirement(args: {
   // the finding reads the way the control read on that date — revoking an
   // exception narrows its window, it does not erase it.
   const waiver = args.waivers.find(
-    (w) =>
-      w.requirementId === policy.id &&
-      inScope(w) &&
-      waiverInForceOn(w, asOf),
+    (w) => w.requirementId === policy.id && inScope(w) && waiverInForceOn(w, asOf),
   );
 
   const failing = FAILING_STATES.has(best.state);
@@ -381,7 +391,8 @@ export function evaluateRequirement(args: {
   const blocksBill = enforced && policy.enforcement === "block_bill";
   // block_bill is strictly stronger than block_payment: evidence that stops a
   // bill from being recorded certainly stops its cash from leaving.
-  const blocksPayment = enforced && (policy.enforcement === "block_payment" || policy.enforcement === "block_bill");
+  const blocksPayment =
+    enforced && (policy.enforcement === "block_payment" || policy.enforcement === "block_bill");
 
   return {
     requirementId: policy.id,
@@ -431,7 +442,13 @@ export function evaluateVendorCompliance(args: {
   }
   const applicable = args.policies.filter((p) => p.classId === null || p.classId === args.classId);
   const findings = applicable.map((policy) =>
-    evaluateRequirement({ policy, records: args.records, waivers: args.waivers, asOf: args.asOf, projectId }),
+    evaluateRequirement({
+      policy,
+      records: args.records,
+      waivers: args.waivers,
+      asOf: args.asOf,
+      projectId,
+    }),
   );
   const overall = findings.reduce<ComplianceState>(
     (worst, f) => (STATE_RANK[f.state] > STATE_RANK[worst] ? f.state : worst),
@@ -481,7 +498,16 @@ export interface LienWaiverCoverage {
   coveredThrough: string | null;
   /** Amount still unreleased when a waiver is short. */
   shortfall: string | null;
-  reason: "not_required" | "covered" | "no_signed_waiver" | "unevaluable" | "jurisdiction_mismatch" | "through_date_short" | "amount_short" | "currency_mismatch" | null;
+  reason:
+    | "not_required"
+    | "covered"
+    | "no_signed_waiver"
+    | "unevaluable"
+    | "jurisdiction_mismatch"
+    | "through_date_short"
+    | "amount_short"
+    | "currency_mismatch"
+    | null;
   blocksPayment: boolean;
 }
 
@@ -534,7 +560,10 @@ export function evaluateLienWaiverCoverage(args: {
     null,
   );
 
-  const fail = (reason: LienWaiverCoverage["reason"], shortfall: string | null = null): LienWaiverCoverage => ({
+  const fail = (
+    reason: LienWaiverCoverage["reason"],
+    shortfall: string | null = null,
+  ): LienWaiverCoverage => ({
     ...base,
     required: true,
     covered: false,
@@ -563,7 +592,10 @@ export function evaluateLienWaiverCoverage(args: {
   const usable = reaching.filter((w) => w.currency === args.billCurrency);
   const sufficient = usable.filter((w) => cmp(w.amount, args.billAmount) >= 0);
   if (sufficient.length === 0) {
-    const bestAmount = usable.reduce<string>((max, w) => (cmp(w.amount, max) > 0 ? w.amount : max), "0");
+    const bestAmount = usable.reduce<string>(
+      (max, w) => (cmp(w.amount, max) > 0 ? w.amount : max),
+      "0",
+    );
     return fail("amount_short", add(args.billAmount, neg(bestAmount)));
   }
   // Prefer the tightest sufficient release, so the reported waiver is the one a
@@ -611,7 +643,8 @@ export async function loadRequirementPolicies(
   // coalesce only ever fires for rows that predate it; anything still
   // undenominated after it fails closed in evidenceShortfalls instead of
   // comparing across currencies.)
-  const r = (await runner.execute<RequirementPolicy>(sql`
+  const r = await runner.execute<RequirementPolicy>(
+    sql`
     select id, code, name, category, class_id as "classId",
            requires_expiry as "requiresExpiry",
            min_coverage_amount as "minCoverageAmount",
@@ -628,7 +661,9 @@ export async function loadRequirementPolicies(
       from compliance_requirements
      where org_id = ${orgId} and is_active
      order by category, code
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r;
 }
 
@@ -650,13 +685,16 @@ export async function loadApplicableRequirement(
   requirementId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<ApplicableRequirement | undefined> {
-  const applicable = await runner.execute<ApplicableRequirement>(sql`
+  const applicable = await runner.execute<ApplicableRequirement>(
+    sql`
     select req.id, req.requires_expiry as "requiresExpiry"
       from compliance_requirements req
       join vendor_roles vr on vr.org_id = req.org_id and vr.party_id = ${partyId}
      where req.org_id = ${orgId} and req.id = ${requirementId} and req.is_active
        and (req.class_id is null or req.class_id = vr.compliance_class_id)
-  `, "objects");
+  `,
+    "objects",
+  );
   return applicable[0];
 }
 
@@ -677,14 +715,21 @@ export async function loadVendorComplianceInputs(
   // Sequential reads: the runner may be a caller-owned transaction (one pg
   // client — the posting kernel passes its tx), where concurrent queries
   // interleave on the single connection.
-  const role = await runner.execute<{ classId: string | null; lienWaiverEnforcement: LienWaiverEnforcement }>(sql`
+  const role = await runner.execute<{
+    classId: string | null;
+    lienWaiverEnforcement: LienWaiverEnforcement;
+  }>(
+    sql`
       select vr.compliance_class_id as "classId",
              coalesce(cc.lien_waiver_enforcement, 'none') as "lienWaiverEnforcement"
         from vendor_roles vr
         left join compliance_classes cc
                on cc.id = vr.compliance_class_id and cc.org_id = vr.org_id and cc.is_active
-       where vr.org_id = ${orgId} and vr.party_id = ${partyId}`, "objects");
-  const records = await runner.execute<EvidenceRecord>(sql`
+       where vr.org_id = ${orgId} and vr.party_id = ${partyId}`,
+    "objects",
+  );
+  const records = await runner.execute<EvidenceRecord>(
+    sql`
       select id, requirement_id as "requirementId", project_id as "projectId", status,
              effective_from as "effectiveFrom", expires_on as "expiresOn",
              coverage_amount as "coverageAmount", aggregate_amount as "aggregateAmount",
@@ -694,24 +739,32 @@ export async function loadVendorComplianceInputs(
              primary_noncontributory as "primaryNoncontributory",
              verified_at as "verifiedAt"
         from compliance_records
-       where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`, "objects");
+       where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`,
+    "objects",
+  );
   // Revoked rows load too: the evaluator dates them by the revocation's
   // org-local date, so an as-of read sees the exception exactly while it
   // was in force. Pending requests (never approved) load too but the
   // evaluator never honours them — requesting is not granting.
-  const waivers = await runner.execute<WaiverRow>(sql`
+  const waivers = await runner.execute<WaiverRow>(
+    sql`
       select id, requirement_id as "requirementId", project_id as "projectId",
              effective_from as "effectiveFrom", expires_on as "expiresOn",
              approved_at as "approvedAt", revoked_at as "revokedAt"
         from compliance_waivers
-       where org_id = ${orgId} and party_id = ${partyId}`, "objects");
-  const lienWaivers = await runner.execute<LienWaiverEvidence>(sql`
+       where org_id = ${orgId} and party_id = ${partyId}`,
+    "objects",
+  );
+  const lienWaivers = await runner.execute<LienWaiverEvidence>(
+    sql`
       select id, waiver_number as "waiverNumber", status, direction,
              project_id as "projectId", through_date as "throughDate",
              amount, currency, jurisdiction, bill_document_id as "billDocumentId"
         from lien_waivers
        where org_id = ${orgId} and party_id = ${partyId} and direction = 'received'
-         and status = 'signed'`, "objects");
+         and status = 'signed'`,
+    "objects",
+  );
   const timeZone = await businessTimeZone(orgId);
   return {
     classId: role[0]?.classId ?? null,
@@ -929,9 +982,14 @@ export async function evaluateBillsForRelease(args: {
     projectIds.length === 0
       ? new Map<string, string | null>()
       : new Map<string, string | null>(
-          (await runner.execute<{ id: string; siteJurisdiction: string | null }>(sql`
+          (
+            await runner.execute<{ id: string; siteJurisdiction: string | null }>(
+              sql`
               select id, site_jurisdiction as "siteJurisdiction" from projects
-               where org_id = ${args.orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`, "objects")).map((row) => [row.id, row.siteJurisdiction]),
+               where org_id = ${args.orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`,
+              "objects",
+            )
+          ).map((row) => [row.id, row.siteJurisdiction]),
         );
   return args.bills.map((bill) =>
     evaluateBillRelease({

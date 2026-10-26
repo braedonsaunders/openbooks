@@ -51,8 +51,13 @@ async function postTaxActivity(
   org: Awaited<ReturnType<typeof createScratchOrg>>,
   codeId: string,
 ): Promise<void> {
-  const book = (await db.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${org.orgId} and is_primary limit 1`, "objects"))[0]!;
+  const book = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from accounting_books where org_id = ${org.orgId} and is_primary limit 1`,
+      "objects",
+    )
+  )[0]!;
   const entryId = randomUUID();
   await db.execute(sql`
     insert into journal_entries
@@ -71,16 +76,16 @@ async function postTaxActivity(
      where id = ${entryId} and org_id = ${org.orgId}`);
 }
 
-async function rejectsUnderstating(org: Awaited<ReturnType<typeof createScratchOrg>>, code: string): Promise<void> {
-  await assert.rejects(
-    computeTaxReturn(org.orgId, FORM, org.date, org.date),
-    (e: unknown) => {
-      assert.ok(e instanceof TaxReturnError);
-      assert.match(e.message, /understates/);
-      assert.ok(e.message.includes(code), e.message);
-      return true;
-    },
-  );
+async function rejectsUnderstating(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  code: string,
+): Promise<void> {
+  await assert.rejects(computeTaxReturn(org.orgId, FORM, org.date, org.date), (e: unknown) => {
+    assert.ok(e instanceof TaxReturnError);
+    assert.match(e.message, /understates/);
+    assert.ok(e.message.includes(code), e.message);
+    return true;
+  });
 }
 
 test("an in-jurisdiction code with activity but no box refuses", { skip: !DB }, async () => {
@@ -95,19 +100,23 @@ test("an in-jurisdiction code with activity but no box refuses", { skip: !DB }, 
   }
 });
 
-test("the catalog-expected code with activity but no jurisdiction refuses", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await seedNyForm(org.orgId);
-    // US-NY-ST is the library's own code for US_NY_ST100: hand-made without
-    // a jurisdiction, the install maps it nowhere — the defect's row.
-    const codeId = await seedCode(org.orgId, "US-NY-ST", null, "US");
-    await postTaxActivity(org, codeId);
-    await rejectsUnderstating(org, "US-NY-ST");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "the catalog-expected code with activity but no jurisdiction refuses",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await seedNyForm(org.orgId);
+      // US-NY-ST is the library's own code for US_NY_ST100: hand-made without
+      // a jurisdiction, the install maps it nowhere — the defect's row.
+      const codeId = await seedCode(org.orgId, "US-NY-ST", null, "US");
+      await postTaxActivity(org, codeId);
+      await rejectsUnderstating(org, "US-NY-ST");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("deactivating a code does not hide its posted in-period activity", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -115,34 +124,39 @@ test("deactivating a code does not hide its posted in-period activity", { skip: 
     const nyId = await seedNyForm(org.orgId);
     const codeId = await seedCode(org.orgId, "US-NY-INACTIVE", nyId, "US");
     await postTaxActivity(org, codeId);
-    await db.execute(sql`update tax_codes set is_active = false where org_id = ${org.orgId} and id = ${codeId}`);
+    await db.execute(
+      sql`update tax_codes set is_active = false where org_id = ${org.orgId} and id = ${codeId}`,
+    );
     await rejectsUnderstating(org, "US-NY-INACTIVE");
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("a voided source document is not return-relevant unmapped activity", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const nyId = await seedNyForm(org.orgId);
-    const codeId = await seedCode(org.orgId, "US-NY-VOIDED", nyId, "US");
-    const documentId = randomUUID();
-    const lineId = randomUUID();
-    await db.execute(sql`
+test(
+  "a voided source document is not return-relevant unmapped activity",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const nyId = await seedNyForm(org.orgId);
+      const codeId = await seedCode(org.orgId, "US-NY-VOIDED", nyId, "US");
+      const documentId = randomUUID();
+      const lineId = randomUUID();
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
       values (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-VOIDED-NY',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${org.date}, 'CAD', 1,
               '200.0000', '20.0000', '220.0000')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
          tax_amount, tax_code_id, quantity, unit_price)
       values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, '200.0000',
               '200.0000', '20.0000', ${codeId}, '1', '200.0000')`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_line_tax_components
         (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
          tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
@@ -151,29 +165,34 @@ test("a voided source document is not return-relevant unmapped activity", { skip
       values (${org.orgId}, ${lineId}, ${codeId}, 1, '10', '200.0000', '20.0000',
               '20.0000', '0.0000', 'standard', false, false, 2, ${org.accounts.taxOutput},
               null, null, false)`);
-    await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${documentId}`);
-    await postDocument(documentId, { control: {
-      ar: org.accounts.ar,
-      ap: org.accounts.ap,
-      bank: org.accounts.bank,
-    } });
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const voidResult = await requestDocumentVoid({
-      documentId,
-      orgId: org.orgId,
-      actorId,
-      reason: "voided tax transaction probe",
-      reversalDate: org.date,
-      source: "api",
-    });
-    assert.equal(voidResult.status, "voided");
+      await db.execute(
+        sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${documentId}`,
+      );
+      await postDocument(documentId, {
+        control: {
+          ar: org.accounts.ar,
+          ap: org.accounts.ap,
+          bank: org.accounts.bank,
+        },
+      });
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const voidResult = await requestDocumentVoid({
+        documentId,
+        orgId: org.orgId,
+        actorId,
+        reason: "voided tax transaction probe",
+        reversalDate: org.date,
+        source: "api",
+      });
+      assert.equal(voidResult.status, "voided");
 
-    const result = await computeTaxReturn(org.orgId, FORM, org.date, org.date);
-    assert.equal(result.boxes.length, 1);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const result = await computeTaxReturn(org.orgId, FORM, org.date, org.date);
+      assert.equal(result.boxes.length, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("another jurisdiction's active code does not block this return", { skip: !DB }, async () => {
   const org = await createScratchOrg();

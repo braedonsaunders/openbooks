@@ -7,13 +7,20 @@ const DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/;
 
 export function decimalValue(value: unknown, field: string, remedy: string): string {
   if (typeof value !== "string" || !DECIMAL.test(value)) {
-    throw new ManufacturingError(`${field} must be an exact decimal with at most four decimal places.`, {
-      code: "invalid_decimal", field, remedy,
-    });
+    throw new ManufacturingError(
+      `${field} must be an exact decimal with at most four decimal places.`,
+      {
+        code: "invalid_decimal",
+        field,
+        remedy,
+      },
+    );
   }
   if (!fitsLedgerRange(value)) {
     throw new ManufacturingError(`${field} exceeds the supported numeric range.`, {
-      code: "decimal_out_of_range", field, remedy,
+      code: "decimal_out_of_range",
+      field,
+      remedy,
     });
   }
   return value;
@@ -32,13 +39,17 @@ export function compareDecimal(left: string, right: string): number {
 export function isoDate(value: unknown, field: string): string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new ManufacturingError(`${field} must be a calendar date in YYYY-MM-DD format.`, {
-      code: "invalid_date", field, remedy: "Enter a valid calendar date in YYYY-MM-DD format.",
+      code: "invalid_date",
+      field,
+      remedy: "Enter a valid calendar date in YYYY-MM-DD format.",
     });
   }
   const date = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== value) {
     throw new ManufacturingError(`${field} must be a valid calendar date.`, {
-      code: "invalid_date", field, remedy: "Enter a valid calendar date in YYYY-MM-DD format.",
+      code: "invalid_date",
+      field,
+      remedy: "Enter a valid calendar date in YYYY-MM-DD format.",
     });
   }
   return value;
@@ -50,18 +61,39 @@ export function refused(message: string, code: string, field?: string, remedy?: 
 
 export async function auditChange(
   tx: SqlExecutor,
-  input: { orgId: string; actorId: string; table: string; rowId: string; action: "insert" | "update" | "delete"; before: unknown; after: unknown; requestId?: string; match?: Record<string, unknown> },
+  input: {
+    orgId: string;
+    actorId: string;
+    table: string;
+    rowId: string;
+    action: "insert" | "update" | "delete";
+    before: unknown;
+    after: unknown;
+    requestId?: string;
+    match?: Record<string, unknown>;
+  },
 ): Promise<void> {
-  const changes = { before: input.before, after: input.after, ...(input.match ? { match: input.match } : {}) };
-  const result = await tx.execute<{ id: string }>(sql`
+  const changes = {
+    before: input.before,
+    after: input.after,
+    ...(input.match ? { match: input.match } : {}),
+  };
+  const result = await tx.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${input.orgId}, ${input.table}, ${input.rowId}, ${input.action},
       ${JSON.stringify(changes)}::jsonb, ${input.actorId}, ${input.requestId ?? null})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (result.length !== 1) {
-    throw new ManufacturingError("The manufacturing change could not be recorded in the audit history.", {
-      code: "audit_write_failed", remedy: "Retry the change; contact an administrator if it continues.",
-    });
+    throw new ManufacturingError(
+      "The manufacturing change could not be recorded in the audit history.",
+      {
+        code: "audit_write_failed",
+        remedy: "Retry the change; contact an administrator if it continues.",
+      },
+    );
   }
 }
 

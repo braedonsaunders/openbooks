@@ -1,95 +1,102 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMoney } from '@/components/money-provider'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
 // Confirm card for a drafted (proposed) write. The
 // draft tool returns a signed proposal in its output; this renders the
 // journal preview + Apply/Discard. The real mutation happens only in
 // /api/assistant/commit after the user clicks Apply — and lands as a DRAFT
 // journal, never a posted entry.
 
-import { useState, useTransition } from 'react'
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
-import { Check, ExternalLink, FileWarning, Sparkles } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { ApiResponseError, apiJson } from '@/lib/api-error'
-import { decimalCmp, decimalNeg } from '@/lib/statement-format'
+import { useState, useTransition } from "react";
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Check, ExternalLink, FileWarning, Sparkles } from "lucide-react";
+import { Button } from "@openbooks/ui";
+import { ApiResponseError, apiJson } from "@/lib/api-error";
+import { decimalCmp, decimalNeg } from "@/lib/statement-format";
 type ProposalData = {
-  kind: string
+  kind: string;
   preview: {
-    documentDate?: string
-    memo?: string | null
-    lines?: { accountLabel: string; description: string | null; amount: string }[]
-  }
-  confirmToken: string
-}
+    documentDate?: string;
+    memo?: string | null;
+    lines?: { accountLabel: string; description: string | null; amount: string }[];
+  };
+  confirmToken: string;
+};
 
 /** Extract a proposal from a tool output, if present. */
 export function proposalFromOutput(output: unknown): ProposalData | null {
-  if (!output || typeof output !== 'object') return null
-  const o = output as Record<string, unknown>
-  const data = (o.data ?? null) as Record<string, unknown> | null
+  if (!output || typeof output !== "object") return null;
+  const o = output as Record<string, unknown>;
+  const data = (o.data ?? null) as Record<string, unknown> | null;
   const proposed =
-    data && typeof data === 'object' ? (data.proposed as ProposalData | undefined) : undefined
+    data && typeof data === "object" ? (data.proposed as ProposalData | undefined) : undefined;
   if (
     proposed &&
-    typeof proposed === 'object' &&
-    typeof proposed.kind === 'string' &&
-    typeof proposed.confirmToken === 'string'
+    typeof proposed === "object" &&
+    typeof proposed.kind === "string" &&
+    typeof proposed.confirmToken === "string"
   ) {
-    return proposed
+    return proposed;
   }
-  return null
+  return null;
 }
 
 export function ProposalCard({ proposal }: { proposal: ProposalData }) {
-  const { money } = useMoney()
-  const t = useTranslations('assistant')
-  const [state, setState] = useState<'idle' | 'done' | 'discarded' | 'error'>('idle')
-  const [result, setResult] = useState<{ documentNumber: string; href: string } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [pending, start] = useTransition()
+  const { money } = useMoney();
+  const t = useTranslations("assistant");
+  const [state, setState] = useState<"idle" | "done" | "discarded" | "error">("idle");
+  const [result, setResult] = useState<{ documentNumber: string; href: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
 
-  const lines = proposal.preview.lines ?? []
+  const lines = proposal.preview.lines ?? [];
 
   function apply() {
-    setError(null)
+    setError(null);
     start(async () => {
       try {
         const body = await apiJson<{
-          ok?: boolean
-          documentNumber?: string
-          href?: string
+          ok?: boolean;
+          documentNumber?: string;
+          href?: string;
         }>(
-          '/api/assistant/commit',
+          "/api/assistant/commit",
           {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            method: "POST",
+            headers: { "content-type": "application/json" },
             body: JSON.stringify(proposal),
           },
-          t('proposal.failed'),
-        )
+          t("proposal.failed"),
+        );
         if (body.ok && body.href) {
-          setResult({ documentNumber: body.documentNumber ?? '', href: body.href })
-          setState('done')
+          setResult({ documentNumber: body.documentNumber ?? "", href: body.href });
+          setState("done");
         } else {
-          setError(t('proposal.failed'))
-          setState('error')
+          setError(t("proposal.failed"));
+          setState("error");
         }
       } catch (error) {
-        setError(error instanceof ApiResponseError ? error.message : t('proposal.failed'))
-        setState('error')
+        setError(error instanceof ApiResponseError ? error.message : t("proposal.failed"));
+        setState("error");
       }
-    })
+    });
   }
 
-  if (state === 'discarded') {
+  if (state === "discarded") {
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
-        {t('proposal.discarded')}
+        {t("proposal.discarded")}
       </div>
-    )
+    );
   }
 
   return (
@@ -97,7 +104,7 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
       <div className="flex items-center gap-2 border-b border-teal-200/70 px-3 py-2 dark:border-teal-900/40">
         <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
         <span className="text-xs font-semibold tracking-wide text-teal-700 uppercase dark:text-teal-300">
-          {t('proposal.title')}
+          {t("proposal.title")}
         </span>
         {proposal.preview.documentDate ? (
           <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
@@ -114,16 +121,25 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
         <SharedTable className="w-full text-sm">
           <SharedTableHeader>
             <SharedTableRow className="text-[11px] tracking-wide text-slate-400 uppercase dark:text-slate-500">
-              <SharedTableHead className="pb-1 text-left font-medium">{t('proposal.account')}</SharedTableHead>
-              <SharedTableHead className="pb-1 text-right font-medium">{t('proposal.debit')}</SharedTableHead>
-              <SharedTableHead className="pb-1 text-right font-medium">{t('proposal.credit')}</SharedTableHead>
+              <SharedTableHead className="pb-1 text-left font-medium">
+                {t("proposal.account")}
+              </SharedTableHead>
+              <SharedTableHead className="pb-1 text-right font-medium">
+                {t("proposal.debit")}
+              </SharedTableHead>
+              <SharedTableHead className="pb-1 text-right font-medium">
+                {t("proposal.credit")}
+              </SharedTableHead>
             </SharedTableRow>
           </SharedTableHeader>
           <SharedTableBody>
             {lines.map((l, i) => {
-              const amountSign = decimalCmp(l.amount, '0')
+              const amountSign = decimalCmp(l.amount, "0");
               return (
-                <SharedTableRow key={i} className="border-t border-teal-100 dark:border-teal-900/30">
+                <SharedTableRow
+                  key={i}
+                  className="border-t border-teal-100 dark:border-teal-900/30"
+                >
                   <SharedTableCell className="py-1 pr-2 text-slate-700 dark:text-slate-200">
                     {l.accountLabel}
                     {l.description ? (
@@ -133,46 +149,46 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
                     ) : null}
                   </SharedTableCell>
                   <SharedTableCell className="py-1 text-right tabular-nums text-slate-700 dark:text-slate-200">
-                    {amountSign > 0 ? money(l.amount) : ''}
+                    {amountSign > 0 ? money(l.amount) : ""}
                   </SharedTableCell>
                   <SharedTableCell className="py-1 text-right tabular-nums text-slate-700 dark:text-slate-200">
-                    {amountSign < 0 ? money(decimalNeg(l.amount)) : ''}
+                    {amountSign < 0 ? money(decimalNeg(l.amount)) : ""}
                   </SharedTableCell>
                 </SharedTableRow>
-              )
+              );
             })}
           </SharedTableBody>
         </SharedTable>
 
-        {state === 'done' && result ? (
+        {state === "done" && result ? (
           <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">
             <Check className="h-4 w-4" />
-            {t('proposal.created', { number: result.documentNumber })}
+            {t("proposal.created", { number: result.documentNumber })}
             <Link
               href={result.href}
               className="inline-flex items-center gap-1 font-medium underline"
             >
-              {t('proposal.open')} <ExternalLink className="h-3 w-3" />
+              {t("proposal.open")} <ExternalLink className="h-3 w-3" />
             </Link>
           </div>
         ) : (
           <div className="flex items-center gap-2">
             <Button type="button" size="sm" onClick={apply} disabled={pending}>
               <Check className="h-4 w-4" />
-              {pending ? t('proposal.applying') : t('proposal.apply')}
+              {pending ? t("proposal.applying") : t("proposal.apply")}
             </Button>
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              onClick={() => setState('discarded')}
+              onClick={() => setState("discarded")}
               disabled={pending}
             >
-              {t('proposal.discard')}
+              {t("proposal.discard")}
             </Button>
           </div>
         )}
-        {state === 'error' && error ? (
+        {state === "error" && error ? (
           <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
             <FileWarning className="h-4 w-4" />
             {error}
@@ -180,5 +196,5 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
         ) : null}
       </div>
     </div>
-  )
+  );
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../../testing/stub-modules.ts'
+import { stubModules } from "../../testing/stub-modules.ts";
 
 // The generic record writer funnels document writes through the same
 // createDocumentDraft + applyDocumentEdit path the drawer uses (including
@@ -11,9 +11,8 @@ stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { API_RECORD_TYPES, toResolved } = await import("./registry-data.ts");
 const { createRecord } = await import("./writers.ts");
 
@@ -45,7 +44,11 @@ interface Fixture {
 async function fixture(): Promise<Fixture> {
   const seeded = await withBypassContext(async () => {
     const org = await createScratchOrg();
-    const actor = await createScratchUser(org.orgId, "Writer distribution keeper", "writer_dist_keeper");
+    const actor = await createScratchUser(
+      org.orgId,
+      "Writer distribution keeper",
+      "writer_dist_keeper",
+    );
     await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',
       coalesce(settings->'features','{}'::jsonb)||'{"allocations":true,"allocationsAtEntry":true}'::jsonb)
       where id=${org.orgId}`);
@@ -114,80 +117,107 @@ async function fixture(): Promise<Fixture> {
   return { org, user, expenseAccount, deptSource, deptA, deptB, deptC, taxCode };
 }
 
-test("API bill create explodes a matching line and retaxes the children", { skip: !DB }, async () => {
-  const f = await fixture();
-  try {
-    const result = await withOrgContext(f.org.orgId, () => createRecord(
-      f.user,
-      bills,
-      [],
-      {
-        partyId: f.org.vendorId,
-        documentDate: f.org.date,
-        lines: [
+test(
+  "API bill create explodes a matching line and retaxes the children",
+  { skip: !DB },
+  async () => {
+    const f = await fixture();
+    try {
+      const result = await withOrgContext(f.org.orgId, () =>
+        createRecord(
+          f.user,
+          bills,
+          [],
           {
-            accountId: f.expenseAccount,
-            amount: "10.0000",
-            taxCodeId: f.taxCode,
-            departmentId: f.deptSource,
+            partyId: f.org.vendorId,
+            documentDate: f.org.date,
+            lines: [
+              {
+                accountId: f.expenseAccount,
+                amount: "10.0000",
+                taxCodeId: f.taxCode,
+                departmentId: f.deptSource,
+              },
+            ],
           },
-        ],
-      },
-      { source: "api", allowedSubsidiaryIds: null },
-    ));
-    assert.equal(result.status, 201);
-    const docId = (
-      loaded: unknown,
-    ): string => (loaded as { doc: { id: string } }).doc.id;
-    const id = docId(result.body);
-    const lines = await withOrgContext(f.org.orgId, () => db.execute<{ amount: string; taxAmount: string; departmentId: string | null; groupId: string | null }>(sql`
+          { source: "api", allowedSubsidiaryIds: null },
+        ),
+      );
+      assert.equal(result.status, 201);
+      const docId = (loaded: unknown): string => (loaded as { doc: { id: string } }).doc.id;
+      const id = docId(result.body);
+      const lines = await withOrgContext(f.org.orgId, () =>
+        db.execute<{
+          amount: string;
+          taxAmount: string;
+          departmentId: string | null;
+          groupId: string | null;
+        }>(
+          sql`
         select amount::text as amount, tax_amount::text as "taxAmount",
                department_id as "departmentId", distribution_group_id as "groupId"
           from document_lines where document_id = ${id} and org_id = ${f.org.orgId}
          order by line_number
-      `, "objects"));
-    assert.equal(lines.length, 3);
-    assert.deepEqual(lines.map((l) => l.amount).sort(), ["3.3333", "3.3333", "3.3334"]);
-    assert.ok(lines.every((l) => l.groupId !== null));
-    // Per-child tax in cents (0.33 x 3 = 0.99), not the parent's 1.00: the
-    // create path recomputed after the explosion instead of reusing its
-    // preflight. The engine rounds every line's tax to cents, so the
-    // children are taxed exactly like hand-entered lines.
-    assert.deepEqual(lines.map((l) => l.taxAmount).sort(), ["0.3300", "0.3300", "0.3300"]);
-    const totals = (await withOrgContext(f.org.orgId, () => db.execute<{ subtotal: string; taxTotal: string; total: string }>(sql`
+      `,
+          "objects",
+        ),
+      );
+      assert.equal(lines.length, 3);
+      assert.deepEqual(lines.map((l) => l.amount).sort(), ["3.3333", "3.3333", "3.3334"]);
+      assert.ok(lines.every((l) => l.groupId !== null));
+      // Per-child tax in cents (0.33 x 3 = 0.99), not the parent's 1.00: the
+      // create path recomputed after the explosion instead of reusing its
+      // preflight. The engine rounds every line's tax to cents, so the
+      // children are taxed exactly like hand-entered lines.
+      assert.deepEqual(lines.map((l) => l.taxAmount).sort(), ["0.3300", "0.3300", "0.3300"]);
+      const totals = (
+        await withOrgContext(f.org.orgId, () =>
+          db.execute<{ subtotal: string; taxTotal: string; total: string }>(
+            sql`
         select subtotal::text as subtotal, tax_total::text as "taxTotal", total::text as total
           from documents where id = ${id} and org_id = ${f.org.orgId}
-      `, "objects")))[0];
-    assert.deepEqual(totals, { subtotal: "10.0000", taxTotal: "0.9900", total: "10.9900" });
-  } finally {
-    await dropScratchOrg(f.org.orgId);
-  }
-});
+      `,
+            "objects",
+          ),
+        )
+      )[0];
+      assert.deepEqual(totals, { subtotal: "10.0000", taxTotal: "0.9900", total: "10.9900" });
+    } finally {
+      await dropScratchOrg(f.org.orgId);
+    }
+  },
+);
 
-test("API bill create rejects an unknown distributionKey with a clear error", { skip: !DB }, async () => {
-  const f = await fixture();
-  try {
-    const result = await withOrgContext(f.org.orgId, () => createRecord(
-      f.user,
-      bills,
-      [],
-      {
-        partyId: f.org.vendorId,
-        documentDate: f.org.date,
-        lines: [
+test(
+  "API bill create rejects an unknown distributionKey with a clear error",
+  { skip: !DB },
+  async () => {
+    const f = await fixture();
+    try {
+      const result = await withOrgContext(f.org.orgId, () =>
+        createRecord(
+          f.user,
+          bills,
+          [],
           {
-            accountId: f.expenseAccount,
-            amount: "10.0000",
-            departmentId: f.deptSource,
-            distributionKey: "no-such-rule",
+            partyId: f.org.vendorId,
+            documentDate: f.org.date,
+            lines: [
+              {
+                accountId: f.expenseAccount,
+                amount: "10.0000",
+                departmentId: f.deptSource,
+                distributionKey: "no-such-rule",
+              },
+            ],
           },
-        ],
-      },
-      { source: "api", allowedSubsidiaryIds: null },
-    ));
-    assert.equal(result.status, 422);
-    assert.match((result.body as { error: string }).error, /does not match an allocation rule/);
-  } finally {
-    await dropScratchOrg(f.org.orgId);
-  }
-});
+          { source: "api", allowedSubsidiaryIds: null },
+        ),
+      );
+      assert.equal(result.status, 422);
+      assert.match((result.body as { error: string }).error, /does not match an allocation rule/);
+    } finally {
+      await dropScratchOrg(f.org.orgId);
+    }
+  },
+);

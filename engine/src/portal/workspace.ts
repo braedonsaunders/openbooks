@@ -71,12 +71,18 @@ export type PortalPrepaidGrant = {
 export type PortalAcceptanceProvider = { provider: string };
 
 /** Acceptance-enabled PSP providers for this org, in preference order. */
-export async function portalAcceptanceProviders(orgId: string, runner: SqlExecutor = db): Promise<PortalAcceptanceProvider[]> {
-  const rows = await runner.execute<{ provider: string }>(sql`
+export async function portalAcceptanceProviders(
+  orgId: string,
+  runner: SqlExecutor = db,
+): Promise<PortalAcceptanceProvider[]> {
+  const rows = await runner.execute<{ provider: string }>(
+    sql`
     select provider from psp_provider_configs
      where org_id = ${orgId} and is_enabled and acceptance_enabled
      order by case provider when 'stripe' then 0 when 'adyen' then 1 else 2 end
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({ provider: row.provider }));
 }
 
@@ -93,20 +99,33 @@ export type PortalHome = {
 };
 
 /** Everything one customer sees on portal home — every list filtered to their party. */
-export async function portalHome(orgId: string, partyId: string, runner: SqlExecutor = db): Promise<PortalHome> {
-  const party = (await runner.execute<{ name: string; email: string }>(sql`
+export async function portalHome(
+  orgId: string,
+  partyId: string,
+  runner: SqlExecutor = db,
+): Promise<PortalHome> {
+  const party = (
+    await runner.execute<{ name: string; email: string }>(
+      sql`
     select display_name as name, coalesce(email, '') as email from parties where org_id = ${orgId} and id = ${partyId} limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const settings = await readPortalSettings(orgId, runner);
-  const invoices = await runner.execute<PortalInvoice>(sql`
+  const invoices = await runner.execute<PortalInvoice>(
+    sql`
     select id, document_number as "documentNumber", document_date::text as "documentDate",
            currency, total::text as total, coalesce(open_balance, '0')::text as "openBalance", status
       from documents
      where org_id = ${orgId} and party_id = ${partyId} and kind = 'customer_invoice' and status = 'posted'
      order by document_date desc
      limit 20
-  `, "objects");
-  const subscriptions = await runner.execute<PortalSubscription>(sql`
+  `,
+    "objects",
+  );
+  const subscriptions = await runner.execute<PortalSubscription>(
+    sql`
     select s.id, s.status, s.quantity::text as quantity, s.price_override::text as "priceOverride",
            s.start_on::text as "startOn", s.next_bill_on::text as "nextBillOn",
            p.name as "planName", p.amount::text as "planAmount",
@@ -117,16 +136,22 @@ export async function portalHome(orgId: string, partyId: string, runner: SqlExec
      where s.org_id = ${orgId} and s.customer_id = ${partyId}
      order by s.start_on desc
      limit 20
-  `, "objects");
-  const paymentMethods = await runner.execute<PortalPaymentMethod>(sql`
+  `,
+    "objects",
+  );
+  const paymentMethods = await runner.execute<PortalPaymentMethod>(
+    sql`
     select id, provider, brand, last4, exp_month as "expMonth", exp_year as "expYear",
            is_default as "isDefault"
       from customer_payment_methods
      where org_id = ${orgId} and party_id = ${partyId} and status = 'active'
      order by is_default desc, created_at desc
      limit 20
-  `, "objects");
-  const orders = await runner.execute<PortalChannelOrder>(sql`
+  `,
+    "objects",
+  );
+  const orders = await runner.execute<PortalChannelOrder>(
+    sql`
     select o.id, o.external_number as "externalNumber", o.ordered_at::text as "orderedAt",
            o.shop_currency as currency, o.total_minor::text as "totalMinor",
            case when c.minor_units between 0 and 4 then c.minor_units else null end as "minorUnits",
@@ -137,23 +162,31 @@ export async function portalHome(orgId: string, partyId: string, runner: SqlExec
      where o.org_id = ${orgId} and o.customer_party_id = ${partyId}
      order by o.ordered_at desc
      limit 20
-  `, "objects");
-  const storeCredit = await runner.execute<PortalStoredCredit>(sql`
+  `,
+    "objects",
+  );
+  const storeCredit = await runner.execute<PortalStoredCredit>(
+    sql`
     select id, kind, code_last4 as "codeLast4", currency,
            balance_minor::text as "balanceMinor", status, expires_on::text as "expiresOn"
       from stored_value_accounts
      where org_id = ${orgId} and customer_party_id = ${partyId} and kind = 'store_credit'
      order by created_at desc
      limit 20
-  `, "objects");
-  const prepaidGrants = await runner.execute<PortalPrepaidGrant>(sql`
+  `,
+    "objects",
+  );
+  const prepaidGrants = await runner.execute<PortalPrepaidGrant>(
+    sql`
     select id, amount::text as amount, coalesce(currency_code, '') as currency,
            expires_on::text as "expiresOn"
       from usage_prepaid_grants
      where org_id = ${orgId} and customer_id = ${partyId}
      order by expires_on nulls last
      limit 20
-  `, "objects");
+  `,
+    "objects",
+  );
   return {
     partyName: party?.name ?? "",
     email: party?.email ?? "",
@@ -184,7 +217,8 @@ export function extractPayloadTracking(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
   const record = payload as Record<string, unknown>;
   for (const key of ["tracking_number", "trackingNumber"]) {
-    if (typeof record[key] === "string" && (record[key] as string).trim()) return (record[key] as string).trim();
+    if (typeof record[key] === "string" && (record[key] as string).trim())
+      return (record[key] as string).trim();
   }
   const tracking = record["tracking"];
   if (tracking && typeof tracking === "object") {
@@ -195,7 +229,9 @@ export function extractPayloadTracking(payload: unknown): string | null {
   if (Array.isArray(trackings)) {
     for (const entry of trackings) {
       if (entry && typeof entry === "object") {
-        const number = (entry as Record<string, unknown>)["number"] ?? (entry as Record<string, unknown>)["tracking_number"];
+        const number =
+          (entry as Record<string, unknown>)["number"] ??
+          (entry as Record<string, unknown>)["tracking_number"];
         if (typeof number === "string" && number.trim()) return number.trim();
       }
     }
@@ -210,15 +246,24 @@ export async function portalOrderTracking(
   orderId: string,
   runner: SqlExecutor = db,
 ): Promise<PortalOrderTracking[]> {
-  const order = (await runner.execute<{ postingId: string | null }>(sql`
+  const order = (
+    await runner.execute<{ postingId: string | null }>(
+      sql`
     select posting_document_id as "postingId" from channel_orders
      where org_id = ${orgId} and customer_party_id = ${partyId} and id = ${orderId} limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const tracking: PortalOrderTracking[] = [];
   if (order?.postingId) {
     const labels = await runner.execute<{
-      carrier: string; trackingNumber: string | null; status: string; purchasedAt: string;
-    }>(sql`
+      carrier: string;
+      trackingNumber: string | null;
+      status: string;
+      purchasedAt: string;
+    }>(
+      sql`
       select carrier, tracking_number as "trackingNumber", tracking_status as status,
              purchased_at::text as "purchasedAt"
         from shipment_labels
@@ -226,7 +271,9 @@ export async function portalOrderTracking(
          and (order_document_id = ${order.postingId} or shipment_document_id = ${order.postingId})
          and status = 'purchased'
        order by purchased_at desc
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const label of labels) {
       tracking.push({
         carrier: label.carrier,
@@ -237,14 +284,17 @@ export async function portalOrderTracking(
       });
     }
   }
-  const fulfilments = await runner.execute<{ payload: unknown; occurredAt: string }>(sql`
+  const fulfilments = await runner.execute<{ payload: unknown; occurredAt: string }>(
+    sql`
     select e.payload, e.occurred_at::text as "occurredAt"
       from channel_order_events e
       join channel_orders o on o.org_id = e.org_id and o.id = e.order_id
      where e.org_id = ${orgId} and o.customer_party_id = ${partyId}
        and e.order_id = ${orderId} and e.kind = 'fulfilment'
      order by e.occurred_at desc
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const event of fulfilments) {
     tracking.push({
       carrier: null,
@@ -272,14 +322,19 @@ export async function resolvePortalSetupCurrency(
   partyId: string,
   runner: SqlExecutor = db,
 ): Promise<string> {
-  const row = (await runner.execute<{ currency: string | null }>(sql`
+  const row = (
+    await runner.execute<{ currency: string | null }>(
+      sql`
     with ranked as (
       select currency, row_number() over (order by document_date desc, created_at desc, id desc) as rn
         from documents
        where org_id = ${orgId} and party_id = ${partyId} and kind = 'customer_invoice'
     )
     select coalesce((select currency from ranked where rn = 1),
-                    (select base_currency from orgs where id = ${orgId})) as currency`, "objects"))[0];
+                    (select base_currency from orgs where id = ${orgId})) as currency`,
+      "objects",
+    )
+  )[0];
   if (!row?.currency) {
     throw portalRefusal(
       "No payment currency is on file for this account",

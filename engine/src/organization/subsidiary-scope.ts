@@ -72,11 +72,9 @@ export function subsidiaryVisibleFilter(
   if (!allowed) return sql` and false`;
   const ids = [...allowed];
   if (options.orgWideNull) {
-    return sql` and (${column} is null or ${column} = any(${`{${ids.join(',')}}`}::uuid[]))`;
+    return sql` and (${column} is null or ${column} = any(${`{${ids.join(",")}}`}::uuid[]))`;
   }
-  return ids.length
-    ? sql` and ${column} = any(${`{${ids.join(',')}}`}::uuid[])`
-    : sql` and false`;
+  return ids.length ? sql` and ${column} = any(${`{${ids.join(",")}}`}::uuid[])` : sql` and false`;
 }
 
 /** Denial body for org-wide policy/config writes by restricted callers. */
@@ -169,20 +167,30 @@ export async function lockEmploymentScopeRows(
   scope: ReadonlySet<string> | null,
   outOfScope: "refuse" | "filter" = "refuse",
 ): Promise<readonly LockedEmploymentScope[]> {
-  const ordered = [...new Set(ids.map(id => id.toLowerCase()))].sort();
+  const ordered = [...new Set(ids.map((id) => id.toLowerCase()))].sort();
   if (!ordered.length) return [];
   const result = await tx.execute<{
-    id: string; subsidiaryId: string | null; orgId: string; workerPartyId: string; revision: number;
-  }>(sql`
+    id: string;
+    subsidiaryId: string | null;
+    orgId: string;
+    workerPartyId: string;
+    revision: number;
+  }>(
+    sql`
     select e.id, e.org_id as "orgId", e.worker_party_id as "workerPartyId",
            e.employer_subsidiary_id as "subsidiaryId", e.revision
       from worker_employments e
      where e.org_id = ${orgId}
-       and e.id in (${sql.join(ordered.map(id => sql`${id}::uuid`), sql`, `)})
+       and e.id in (${sql.join(
+         ordered.map((id) => sql`${id}::uuid`),
+         sql`, `,
+       )})
      order by e.id
      for update of e
-  `, "objects");
-  const byId = new Map(result.map(row => [row.id, row]));
+  `,
+    "objects",
+  );
+  const byId = new Map(result.map((row) => [row.id, row]));
   const visible: LockedEmploymentScope[] = [];
   for (const id of ordered) {
     const row = byId.get(id);
@@ -210,43 +218,72 @@ export async function lockScopeRow(
   options: SubsidiaryScopeOptions = {},
 ): Promise<LockedScopeRow> {
   const lock = mode === "share" ? "for share" : "for update";
-  const result = kind === "party"
-    ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+  const result =
+    kind === "party"
+      ? await tx.execute<{ id: string; subsidiaryId: string | null }>(
+          sql`
         select p.id, p.subsidiary_id as "subsidiaryId" from parties p
-         where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`, "objects")
-    : kind === "equipment_unit"
-      ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+         where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`,
+          "objects",
+        )
+      : kind === "equipment_unit"
+        ? await tx.execute<{ id: string; subsidiaryId: string | null }>(
+            sql`
           select e.id, e.subsidiary_id as "subsidiaryId" from equipment_units e
-           where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`, "objects")
-      : kind === "project"
-      ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+           where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`,
+            "objects",
+          )
+        : kind === "project"
+          ? await tx.execute<{ id: string; subsidiaryId: string | null }>(
+              sql`
           select p.id, p.subsidiary_id as "subsidiaryId" from projects p
-           where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`, "objects")
-      : kind === "document"
-        ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+           where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`,
+              "objects",
+            )
+          : kind === "document"
+            ? await tx.execute<{ id: string; subsidiaryId: string | null }>(
+                sql`
             select d.id, d.subsidiary_id as "subsidiaryId" from documents d
-             where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`, "objects")
-        : kind === "fixed_asset"
-          ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+             where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`,
+                "objects",
+              )
+            : kind === "fixed_asset"
+              ? await tx.execute<{ id: string; subsidiaryId: string | null }>(
+                  sql`
               select a.id, a.subsidiary_id as "subsidiaryId" from fixed_assets a
-               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`, "objects")
-        : kind === "equipment"
-          ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`,
+                  "objects",
+                )
+              : kind === "equipment"
+                ? await tx.execute<{ id: string; subsidiaryId: string | null }>(
+                    sql`
               select e.id, e.subsidiary_id as "subsidiaryId" from equipment_units e
-               where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`, "objects")
-        : kind === "account"
-          ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+               where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`,
+                    "objects",
+                  )
+                : kind === "account"
+                  ? await tx.execute<{ id: string; subsidiaryId: string | null }>(
+                      sql`
               select a.id, a.subsidiary_id as "subsidiaryId" from accounts a
-               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`, "objects")
-          : kind === "department"
-            ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`,
+                      "objects",
+                    )
+                  : kind === "department"
+                    ? await tx.execute<{ id: string; subsidiaryId: string | null }>(
+                        sql`
                 select d.id, d.subsidiary_id as "subsidiaryId" from departments d
-                 where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`, "objects")
-            : await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+                 where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`,
+                        "objects",
+                      )
+                    : await tx.execute<{ id: string; subsidiaryId: string | null }>(
+                        sql`
                 select e.id, e.employer_subsidiary_id as "subsidiaryId" from worker_employments e
-                 where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`, "objects");
+                 where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`,
+                        "objects",
+                      );
   const row = result[0];
-  if (!row || !subsidiaryScopeAllows(scope, row.subsidiaryId, options)) throw new ScopeNotFoundError();
+  if (!row || !subsidiaryScopeAllows(scope, row.subsidiaryId, options))
+    throw new ScopeNotFoundError();
   return row;
 }
 
@@ -260,8 +297,9 @@ export async function lockScopeRows(
   mode: "update" | "share" = "update",
   options: SubsidiaryScopeOptions = {},
 ): Promise<readonly LockedScopeRow[]> {
-  const ordered = [...new Map(targets.map((target) => [`${target.kind}:${target.id}`, target])).values()]
-    .sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
+  const ordered = [
+    ...new Map(targets.map((target) => [`${target.kind}:${target.id}`, target])).values(),
+  ].sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
   const rows: LockedScopeRow[] = [];
   for (const target of ordered) {
     rows.push(await lockScopeRow(tx, orgId, target.kind, target.id, scope, mode, options));
@@ -280,21 +318,33 @@ export async function lockEquipmentProjectScope(
   mode: "update" | "share" = "update",
 ): Promise<LockedProjectScope> {
   const ids = [...new Set(equipmentIds)].sort();
-  const rows = await lockScopeRows(tx, orgId, [
-    ...ids.map((id) => ({ kind: "equipment" as const, id })),
-    { kind: "project" as const, id: projectId },
-  ], scope, mode);
+  const rows = await lockScopeRows(
+    tx,
+    orgId,
+    [
+      ...ids.map((id) => ({ kind: "equipment" as const, id })),
+      { kind: "project" as const, id: projectId },
+    ],
+    scope,
+    mode,
+  );
   const project = rows[ids.length];
-  if (!project || rows.slice(0, ids.length).some((unit) =>
-    unit.subsidiaryId !== null && unit.subsidiaryId !== project.subsidiaryId
-  )) throw new ScopeNotFoundError();
+  if (
+    !project ||
+    rows
+      .slice(0, ids.length)
+      .some((unit) => unit.subsidiaryId !== null && unit.subsidiaryId !== project.subsidiaryId)
+  )
+    throw new ScopeNotFoundError();
   return { id: project.id, subsidiaryId: project.subsidiaryId };
 }
 
 /** Refusal raised when moving one side would split a fixed asset/equipment pair. */
 export class FixedAssetEquipmentLinkConflict extends Error {
   constructor() {
-    super("A fixed asset linked to equipment cannot be moved to another subsidiary. Keep the pair in its current subsidiary.");
+    super(
+      "A fixed asset linked to equipment cannot be moved to another subsidiary. Keep the pair in its current subsidiary.",
+    );
     this.name = "FixedAssetEquipmentLinkConflict";
   }
 }
@@ -313,10 +363,13 @@ export async function refuseFixedAssetRehomeWithEquipment(
 ): Promise<void> {
   if (fromSubsidiaryId === toSubsidiaryId) return;
   await lockScopeRow(tx, orgId, "fixed_asset", assetId, null, "update");
-  const linked = await tx.execute<{ id: string }>(sql`
+  const linked = await tx.execute<{ id: string }>(
+    sql`
     select id from equipment_units
      where org_id = ${orgId} and fixed_asset_id = ${assetId}
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   if (linked.length > 0) throw new FixedAssetEquipmentLinkConflict();
 }
 

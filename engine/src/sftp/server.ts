@@ -1,6 +1,13 @@
 import ssh2 from "ssh2";
 import type { Connection } from "ssh2";
-import { backendFor, cleanPath, isProtectedSftpPath, isSftpTempName, SftpDirectoryNotEmptyError, type SftpBackend } from "./backend.ts";
+import {
+  backendFor,
+  cleanPath,
+  isProtectedSftpPath,
+  isSftpTempName,
+  SftpDirectoryNotEmptyError,
+  type SftpBackend,
+} from "./backend.ts";
 
 const { Server, utils } = ssh2;
 const { STATUS_CODE, OPEN_MODE } = utils.sftp;
@@ -87,11 +94,23 @@ export interface SftpResolver {
    * The DB resolver holds share locks on the daemon, login, and org feature
    * rows, so a disable either wins before the mutation or commits after it.
    */
-  withMutationGuard?(config: SftpServerConfig, operation: (live: SessionLiveness) => Promise<void>): Promise<void>;
+  withMutationGuard?(
+    config: SftpServerConfig,
+    operation: (live: SessionLiveness) => Promise<void>,
+  ): Promise<void>;
 }
 
-interface OpenFile { path: string; backend: SftpBackend; write: boolean; append: boolean; buf: Buffer<ArrayBufferLike> }
-interface OpenDir { entries: { name: string; isDir: boolean; size: number; mtimeMs: number }[]; next: number }
+interface OpenFile {
+  path: string;
+  backend: SftpBackend;
+  write: boolean;
+  append: boolean;
+  buf: Buffer<ArrayBufferLike>;
+}
+interface OpenDir {
+  entries: { name: string; isDir: boolean; size: number; mtimeMs: number }[];
+  next: number;
+}
 
 /**
  * Bounds for one READDIR reply. ssh2 builds a single response packet per
@@ -154,10 +173,18 @@ export function sftpSessionLimits(): SftpSessionLimits {
   return { maxFileBytes, maxOpenHandles, maxSessionBufferBytes };
 }
 
-const S_IFDIR = 0o40000, S_IFREG = 0o100000;
+const S_IFDIR = 0o40000,
+  S_IFREG = 0o100000;
 
 function attrsFor(isDir: boolean, size: number, mtimeMs: number) {
-  return { mode: (isDir ? S_IFDIR | 0o755 : S_IFREG | 0o644), size, uid: 0, gid: 0, atime: Math.floor(mtimeMs / 1000), mtime: Math.floor(mtimeMs / 1000) };
+  return {
+    mode: isDir ? S_IFDIR | 0o755 : S_IFREG | 0o644,
+    size,
+    uid: 0,
+    gid: 0,
+    atime: Math.floor(mtimeMs / 1000),
+    mtime: Math.floor(mtimeMs / 1000),
+  };
 }
 function longname(name: string, isDir: boolean, size: number): string {
   const perm = isDir ? "drwxr-xr-x" : "-rw-r--r--";
@@ -175,12 +202,15 @@ function longname(name: string, isDir: boolean, size: number): string {
  * client gets the operation name and the error class, never server paths.
  */
 export function sftpStatusForError(e: unknown): number {
-  const err = e as {
-    code?: unknown;
-    name?: unknown;
-    message?: unknown;
-    $metadata?: { httpStatusCode?: unknown };
-  } | null | undefined;
+  const err = e as
+    | {
+        code?: unknown;
+        name?: unknown;
+        message?: unknown;
+        $metadata?: { httpStatusCode?: unknown };
+      }
+    | null
+    | undefined;
   const code = typeof err?.code === "string" ? err.code : "";
   const name = typeof err?.name === "string" ? err.name : "";
   const message = typeof err?.message === "string" ? err.message : "";
@@ -247,7 +277,12 @@ export interface SftpServerHandle {
   revoke(serverId: string): void;
 }
 
-export function startSftpServer(opts: { port: number; hostKey: string; resolve: SftpResolver; limits?: Partial<SftpSessionLimits> }): Promise<SftpServerHandle> {
+export function startSftpServer(opts: {
+  port: number;
+  hostKey: string;
+  resolve: SftpResolver;
+  limits?: Partial<SftpSessionLimits>;
+}): Promise<SftpServerHandle> {
   const limits: SftpSessionLimits = { ...sftpSessionLimits(), ...opts.limits };
   // Same floor as the env resolution: one open file must always fit.
   limits.maxSessionBufferBytes = Math.max(limits.maxSessionBufferBytes, limits.maxFileBytes);
@@ -265,8 +300,11 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           // before accepting, so a bookkeeping failure rejects instead of
           // accepting an unrecorded session.
           if (config) {
-            try { await opts.resolve.loginSucceeded?.(config); }
-            catch { config = null; }
+            try {
+              await opts.resolve.loginSucceeded?.(config);
+            } catch {
+              config = null;
+            }
           }
         } else if (ctx.method === "publickey" && opts.resolve.publicKey) {
           config = await opts.resolve.publicKey(ctx.username, ctx.key.algo, ctx.key.data);
@@ -283,16 +321,24 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             // the corresponding private key before the session is accepted —
             // and only that verified accept records the connection.
             const parsedKey = utils.parseKey(ctx.key.data);
-            if (parsedKey instanceof Error || !ctx.blob
-                || parsedKey.verify(ctx.blob, ctx.signature, ctx.hashAlgo) !== true) {
+            if (
+              parsedKey instanceof Error ||
+              !ctx.blob ||
+              parsedKey.verify(ctx.blob, ctx.signature, ctx.hashAlgo) !== true
+            ) {
               config = null;
             } else {
-              try { await opts.resolve.loginSucceeded?.(config); }
-              catch { config = null; }
+              try {
+                await opts.resolve.loginSucceeded?.(config);
+              } catch {
+                config = null;
+              }
             }
           }
         }
-      } catch { config = null; }
+      } catch {
+        config = null;
+      }
       if (config) ctx.accept();
       else ctx.reject(["password", "publickey"]);
     });
@@ -376,8 +422,13 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           };
 
           const refuseMutation = (reqid: number, live: SessionLiveness) => {
-            sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED,
-              live.alive ? "sftp login mutations require a serialized authority check; reconnect" : live.reason);
+            sftp.status(
+              reqid,
+              STATUS_CODE.PERMISSION_DENIED,
+              live.alive
+                ? "sftp login mutations require a serialized authority check; reconnect"
+                : live.reason,
+            );
             client.end();
           };
 
@@ -400,7 +451,10 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
                     await handler(reqid, ...args);
                   });
                 } catch {
-                  refuseMutation(reqid, { alive: false, reason: "sftp login could not be re-validated; reconnect" });
+                  refuseMutation(reqid, {
+                    alive: false,
+                    reason: "sftp login could not be re-validated; reconnect",
+                  });
                 }
                 return;
               }
@@ -409,10 +463,19 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             };
           };
 
-          sftp.on("REALPATH", fenced(async (reqid: number, p: string) => {
-            const cp = cleanPath(p === "." || p === "" ? "/" : p);
-            sftp.name(reqid, [{ filename: cp, longname: longname(cp, true, 0), attrs: attrsFor(true, 0, Date.now()) }]);
-          }));
+          sftp.on(
+            "REALPATH",
+            fenced(async (reqid: number, p: string) => {
+              const cp = cleanPath(p === "." || p === "" ? "/" : p);
+              sftp.name(reqid, [
+                {
+                  filename: cp,
+                  longname: longname(cp, true, 0),
+                  attrs: attrsFor(true, 0, Date.now()),
+                },
+              ]);
+            }),
+          );
 
           const doStat = fenced(async (reqid: number, p: string) => {
             try {
@@ -423,203 +486,294 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               const st = await backend.stat(p);
               if (!st) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               sftp.attrs(reqid, attrsFor(st.isDir, st.size, st.mtimeMs));
-            } catch (e) { fail(reqid, e, "stat"); }
+            } catch (e) {
+              fail(reqid, e, "stat");
+            }
           });
           sftp.on("STAT", doStat);
           sftp.on("LSTAT", doStat);
-          sftp.on("FSTAT", fenced(async (reqid: number, handle: Buffer) => {
-            const f = files.get(handle.toString());
-            if (!f) return sftp.status(reqid, STATUS_CODE.FAILURE);
-            sftp.attrs(reqid, attrsFor(false, f.buf.length, Date.now()));
-          }));
+          sftp.on(
+            "FSTAT",
+            fenced(async (reqid: number, handle: Buffer) => {
+              const f = files.get(handle.toString());
+              if (!f) return sftp.status(reqid, STATUS_CODE.FAILURE);
+              sftp.attrs(reqid, attrsFor(false, f.buf.length, Date.now()));
+            }),
+          );
 
-          sftp.on("OPENDIR", fenced(async (reqid: number, p: string) => {
-            if (overHandleCap()) return sftp.status(reqid, STATUS_CODE.FAILURE, handleCapRefusal);
-            try {
-              // Temp siblings of in-flight publishes never appear in a bank
-              // client's listing: without this, a client enumerating the
-              // outbound folder mid-publish could open the partial bytes by
-              // name (the OPEN guard below is the second half).
-              const entries = (await backend.list(p)).filter((e) => !isSftpTempName(e.name));
+          sftp.on(
+            "OPENDIR",
+            fenced(async (reqid: number, p: string) => {
+              if (overHandleCap()) return sftp.status(reqid, STATUS_CODE.FAILURE, handleCapRefusal);
+              try {
+                // Temp siblings of in-flight publishes never appear in a bank
+                // client's listing: without this, a client enumerating the
+                // outbound folder mid-publish could open the partial bytes by
+                // name (the OPEN guard below is the second half).
+                const entries = (await backend.list(p)).filter((e) => !isSftpTempName(e.name));
+                const h = newHandle();
+                dirs.set(h.toString(), { entries, next: 0 });
+                sftp.handle(reqid, h);
+              } catch (e) {
+                fail(reqid, e, "list");
+              }
+            }),
+          );
+          sftp.on(
+            "READDIR",
+            fenced(async (reqid: number, handle: Buffer) => {
+              const d = dirs.get(handle.toString());
+              if (!d) return sftp.status(reqid, STATUS_CODE.FAILURE);
+              if (d.next >= d.entries.length) return sftp.status(reqid, STATUS_CODE.EOF);
+              const batch: typeof d.entries = [];
+              let bytes = 0;
+              while (d.next < d.entries.length && batch.length < MAX_READDIR_ENTRIES) {
+                const e = d.entries[d.next]!;
+                // Estimated encoded size of this name in the reply packet:
+                // filename + longname bytes plus attribute overhead.
+                const estimate =
+                  Buffer.byteLength(e.name) +
+                  Buffer.byteLength(longname(e.name, e.isDir, e.size)) +
+                  64;
+                if (batch.length > 0 && bytes + estimate > MAX_READDIR_BYTES) break;
+                batch.push(e);
+                bytes += estimate;
+                d.next++;
+              }
+              sftp.name(
+                reqid,
+                batch.map((e) => ({
+                  filename: e.name,
+                  longname: longname(e.name, e.isDir, e.size),
+                  attrs: attrsFor(e.isDir, e.size, e.mtimeMs),
+                })),
+              );
+            }),
+          );
+
+          sftp.on(
+            "OPEN",
+            fenced(async (reqid: number, filename: string, flags: number) => {
+              // Neither reading a partial publish nor squatting its temp name:
+              // both directions report the temp pattern as absent.
+              if (isSftpTempName(filename)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+              if (overHandleCap()) return sftp.status(reqid, STATUS_CODE.FAILURE, handleCapRefusal);
+              // Published bank files are read-only over SFTP: any open that
+              // could create, truncate, overwrite, or append is refused before
+              // a handle exists. The app publishes through its own backend,
+              // never through a session, so no legitimate flow opens these
+              // paths for writing.
+              const writing = !!(flags & (OPEN_MODE.WRITE | OPEN_MODE.CREAT | OPEN_MODE.TRUNC));
+              if (writing || flags & OPEN_MODE.APPEND) {
+                if (denyPublished(reqid, filename)) return;
+              }
               const h = newHandle();
-              dirs.set(h.toString(), { entries, next: 0 });
-              sftp.handle(reqid, h);
-            } catch (e) { fail(reqid, e, "list"); }
-          }));
-          sftp.on("READDIR", fenced(async (reqid: number, handle: Buffer) => {
-            const d = dirs.get(handle.toString());
-            if (!d) return sftp.status(reqid, STATUS_CODE.FAILURE);
-            if (d.next >= d.entries.length) return sftp.status(reqid, STATUS_CODE.EOF);
-            const batch: typeof d.entries = [];
-            let bytes = 0;
-            while (d.next < d.entries.length && batch.length < MAX_READDIR_ENTRIES) {
-              const e = d.entries[d.next]!;
-              // Estimated encoded size of this name in the reply packet:
-              // filename + longname bytes plus attribute overhead.
-              const estimate = Buffer.byteLength(e.name) + Buffer.byteLength(longname(e.name, e.isDir, e.size)) + 64;
-              if (batch.length > 0 && bytes + estimate > MAX_READDIR_BYTES) break;
-              batch.push(e);
-              bytes += estimate;
-              d.next++;
-            }
-            sftp.name(reqid, batch.map((e) => ({ filename: e.name, longname: longname(e.name, e.isDir, e.size), attrs: attrsFor(e.isDir, e.size, e.mtimeMs) })));
-          }));
-
-          sftp.on("OPEN", fenced(async (reqid: number, filename: string, flags: number) => {
-            // Neither reading a partial publish nor squatting its temp name:
-            // both directions report the temp pattern as absent.
-            if (isSftpTempName(filename)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
-            if (overHandleCap()) return sftp.status(reqid, STATUS_CODE.FAILURE, handleCapRefusal);
-            // Published bank files are read-only over SFTP: any open that
-            // could create, truncate, overwrite, or append is refused before
-            // a handle exists. The app publishes through its own backend,
-            // never through a session, so no legitimate flow opens these
-            // paths for writing.
-            const writing = !!(flags & (OPEN_MODE.WRITE | OPEN_MODE.CREAT | OPEN_MODE.TRUNC));
-            if (writing || (flags & OPEN_MODE.APPEND)) {
-              if (denyPublished(reqid, filename)) return;
-            }
-            const h = newHandle();
-            // A file that already exceeds the per-file cap is refused BEFORE
-            // it is read into the session: stat first, read only when it fits.
-            const refuseOverCap = (size: number) => {
-              if (size <= limits.maxFileBytes) return false;
-              sftp.status(reqid, STATUS_CODE.FAILURE, `file is ${size} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit`);
-              return true;
-            };
-            // A buffer that would push the session past its total is refused
-            // BEFORE it is read: stacked large OPENs cannot pool memory.
-            const refuseOverSession = (size: number) => {
-              if (sessionBufferedBytes + size <= limits.maxSessionBufferBytes) return false;
-              sftp.status(reqid, STATUS_CODE.FAILURE, `opening ${size} more bytes would exceed the ${limits.maxSessionBufferBytes}-byte per-session SFTP buffer limit; close a file and retry`);
-              return true;
-            };
-            try {
-              if (writing) {
-                const path = cleanPath(filename);
-                let buf: Buffer<ArrayBufferLike> = Buffer.alloc(0);
-                if (!(flags & OPEN_MODE.TRUNC)) {
-                  const st = await backend.stat(path);
-                  if (st) {
-                    if (st.isDir) throw new Error("cannot open directory for writing");
-                    if (!st.isDir && refuseOverCap(st.size)) return;
-                    buf = await backend.read(path);
-                  } else if (!(flags & OPEN_MODE.CREAT)) {
-                    throw new Error("no such file");
+              // A file that already exceeds the per-file cap is refused BEFORE
+              // it is read into the session: stat first, read only when it fits.
+              const refuseOverCap = (size: number) => {
+                if (size <= limits.maxFileBytes) return false;
+                sftp.status(
+                  reqid,
+                  STATUS_CODE.FAILURE,
+                  `file is ${size} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit`,
+                );
+                return true;
+              };
+              // A buffer that would push the session past its total is refused
+              // BEFORE it is read: stacked large OPENs cannot pool memory.
+              const refuseOverSession = (size: number) => {
+                if (sessionBufferedBytes + size <= limits.maxSessionBufferBytes) return false;
+                sftp.status(
+                  reqid,
+                  STATUS_CODE.FAILURE,
+                  `opening ${size} more bytes would exceed the ${limits.maxSessionBufferBytes}-byte per-session SFTP buffer limit; close a file and retry`,
+                );
+                return true;
+              };
+              try {
+                if (writing) {
+                  const path = cleanPath(filename);
+                  let buf: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+                  if (!(flags & OPEN_MODE.TRUNC)) {
+                    const st = await backend.stat(path);
+                    if (st) {
+                      if (st.isDir) throw new Error("cannot open directory for writing");
+                      if (!st.isDir && refuseOverCap(st.size)) return;
+                      buf = await backend.read(path);
+                    } else if (!(flags & OPEN_MODE.CREAT)) {
+                      throw new Error("no such file");
+                    }
+                  }
+                  if (refuseOverSession(buf.length)) return;
+                  sessionBufferedBytes += buf.length;
+                  files.set(h.toString(), {
+                    path,
+                    backend,
+                    write: true,
+                    append: !!(flags & OPEN_MODE.APPEND),
+                    buf,
+                  });
+                } else {
+                  const st = await backend.stat(filename);
+                  if (st && !st.isDir && refuseOverCap(st.size)) return;
+                  // Missing names and directories fall through to the read so
+                  // the failure shape stays exactly what it was before the cap.
+                  const buf = await backend.read(filename);
+                  if (refuseOverCap(buf.length)) return;
+                  if (refuseOverSession(buf.length)) return;
+                  sessionBufferedBytes += buf.length;
+                  files.set(h.toString(), {
+                    path: cleanPath(filename),
+                    backend,
+                    write: false,
+                    append: false,
+                    buf,
+                  });
+                }
+                sftp.handle(reqid, h);
+              } catch (e) {
+                fail(reqid, e, "open");
+              }
+            }),
+          );
+          sftp.on(
+            "READ",
+            fenced(async (reqid: number, handle: Buffer, offset: number, length: number) => {
+              const f = files.get(handle.toString());
+              if (!f || f.write) return sftp.status(reqid, STATUS_CODE.FAILURE);
+              if (offset >= f.buf.length) return sftp.status(reqid, STATUS_CODE.EOF);
+              sftp.data(reqid, f.buf.subarray(offset, Math.min(offset + length, f.buf.length)));
+            }),
+          );
+          sftp.on(
+            "WRITE",
+            fenced(async (reqid: number, handle: Buffer, offset: number, data: Buffer) => {
+              const f = files.get(handle.toString());
+              if (!f || !f.write) return sftp.status(reqid, STATUS_CODE.FAILURE);
+              const position = f.append ? f.buf.length : Number(offset);
+              if (
+                !Number.isSafeInteger(position) ||
+                position < 0 ||
+                position + data.length > 0xffffffff
+              ) {
+                return sftp.status(reqid, STATUS_CODE.FAILURE);
+              }
+              // Sparse offsets and growth past the per-file cap refuse BEFORE
+              // Buffer.alloc: a 1-byte write at a ~4 GiB offset must never
+              // gap-fill a 4 GiB buffer in the shared web process.
+              const end = position + data.length;
+              if (end > limits.maxFileBytes) {
+                return sftp.status(
+                  reqid,
+                  STATUS_CODE.FAILURE,
+                  `write would grow the file to ${end} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit`,
+                );
+              }
+              const growth = Math.max(0, end - f.buf.length);
+              if (sessionBufferedBytes + growth > limits.maxSessionBufferBytes) {
+                return sftp.status(
+                  reqid,
+                  STATUS_CODE.FAILURE,
+                  `write would exceed the ${limits.maxSessionBufferBytes}-byte per-session SFTP buffer limit; close a file and retry`,
+                );
+              }
+              try {
+                if (end > f.buf.length) {
+                  const next = Buffer.alloc(end);
+                  f.buf.copy(next);
+                  f.buf = next;
+                  sessionBufferedBytes += growth;
+                }
+                Buffer.from(data).copy(f.buf, position);
+                sftp.status(reqid, STATUS_CODE.OK);
+              } catch {
+                sftp.status(reqid, STATUS_CODE.FAILURE);
+              }
+            }),
+          );
+          sftp.on(
+            "CLOSE",
+            fenced(async (reqid: number, handle: Buffer) => {
+              const key = handle.toString();
+              const f = files.get(key);
+              if (f) {
+                files.delete(key);
+                sessionBufferedBytes = Math.max(0, sessionBufferedBytes - f.buf.length);
+                if (f.write) {
+                  // Fail-closed on the storage write: the OPEN/WRITE guards
+                  // above make this unreachable, but an over-cap buffer must
+                  // never be persisted even if a guard is ever bypassed.
+                  if (f.buf.length > limits.maxFileBytes) {
+                    return sftp.status(
+                      reqid,
+                      STATUS_CODE.FAILURE,
+                      `file is ${f.buf.length} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit and cannot be saved`,
+                    );
+                  }
+                  try {
+                    await backend.write(f.path, f.buf);
+                  } catch (e) {
+                    return fail(reqid, e, "save");
                   }
                 }
-                if (refuseOverSession(buf.length)) return;
-                sessionBufferedBytes += buf.length;
-                files.set(h.toString(), {
-                  path,
-                  backend,
-                  write: true,
-                  append: !!(flags & OPEN_MODE.APPEND),
-                  buf,
-                });
-              } else {
-                const st = await backend.stat(filename);
-                if (st && !st.isDir && refuseOverCap(st.size)) return;
-                // Missing names and directories fall through to the read so
-                // the failure shape stays exactly what it was before the cap.
-                const buf = await backend.read(filename);
-                if (refuseOverCap(buf.length)) return;
-                if (refuseOverSession(buf.length)) return;
-                sessionBufferedBytes += buf.length;
-                files.set(h.toString(), { path: cleanPath(filename), backend, write: false, append: false, buf });
-              }
-              sftp.handle(reqid, h);
-            } catch (e) { fail(reqid, e, "open"); }
-          }));
-          sftp.on("READ", fenced(async (reqid: number, handle: Buffer, offset: number, length: number) => {
-            const f = files.get(handle.toString());
-            if (!f || f.write) return sftp.status(reqid, STATUS_CODE.FAILURE);
-            if (offset >= f.buf.length) return sftp.status(reqid, STATUS_CODE.EOF);
-            sftp.data(reqid, f.buf.subarray(offset, Math.min(offset + length, f.buf.length)));
-          }));
-          sftp.on("WRITE", fenced(async (reqid: number, handle: Buffer, offset: number, data: Buffer) => {
-            const f = files.get(handle.toString());
-            if (!f || !f.write) return sftp.status(reqid, STATUS_CODE.FAILURE);
-            const position = f.append ? f.buf.length : Number(offset);
-            if (!Number.isSafeInteger(position) || position < 0 || position + data.length > 0xFFFFFFFF) {
-              return sftp.status(reqid, STATUS_CODE.FAILURE);
-            }
-            // Sparse offsets and growth past the per-file cap refuse BEFORE
-            // Buffer.alloc: a 1-byte write at a ~4 GiB offset must never
-            // gap-fill a 4 GiB buffer in the shared web process.
-            const end = position + data.length;
-            if (end > limits.maxFileBytes) {
-              return sftp.status(reqid, STATUS_CODE.FAILURE, `write would grow the file to ${end} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit`);
-            }
-            const growth = Math.max(0, end - f.buf.length);
-            if (sessionBufferedBytes + growth > limits.maxSessionBufferBytes) {
-              return sftp.status(reqid, STATUS_CODE.FAILURE, `write would exceed the ${limits.maxSessionBufferBytes}-byte per-session SFTP buffer limit; close a file and retry`);
-            }
-            try {
-              if (end > f.buf.length) {
-                const next = Buffer.alloc(end);
-                f.buf.copy(next);
-                f.buf = next;
-                sessionBufferedBytes += growth;
-              }
-              Buffer.from(data).copy(f.buf, position);
+              } else dirs.delete(key);
               sftp.status(reqid, STATUS_CODE.OK);
-            } catch {
-              sftp.status(reqid, STATUS_CODE.FAILURE);
-            }
-          }));
-          sftp.on("CLOSE", fenced(async (reqid: number, handle: Buffer) => {
-            const key = handle.toString();
-            const f = files.get(key);
-            if (f) {
-              files.delete(key);
-              sessionBufferedBytes = Math.max(0, sessionBufferedBytes - f.buf.length);
-              if (f.write) {
-                // Fail-closed on the storage write: the OPEN/WRITE guards
-                // above make this unreachable, but an over-cap buffer must
-                // never be persisted even if a guard is ever bypassed.
-                if (f.buf.length > limits.maxFileBytes) {
-                  return sftp.status(reqid, STATUS_CODE.FAILURE, `file is ${f.buf.length} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit and cannot be saved`);
-                }
-                try { await backend.write(f.path, f.buf); }
-                catch (e) { return fail(reqid, e, "save"); }
-              }
-            } else dirs.delete(key);
-            sftp.status(reqid, STATUS_CODE.OK);
-          }, true));
+            }, true),
+          );
 
           // Deleting or moving an in-flight publish's temp sibling would
           // break the atomic rename the writer is about to perform, so temp
           // names refuse here exactly as they do for open and stat.
-          const wrap = (what: string, op: (p: string) => Promise<void>, mutation = false) => fenced(async (reqid: number, p: string) => {
-            try {
-              if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
-              if (denyPublished(reqid, p)) return;
-              await op(p); sftp.status(reqid, STATUS_CODE.OK);
-            } catch (e) { fail(reqid, e, what); }
-          }, mutation);
-          sftp.on("REMOVE", wrap("remove", (p) => backend.remove(p), true));
-          sftp.on("MKDIR", wrap("make folder", (p) => backend.mkdir(p), true));
-          sftp.on("RMDIR", fenced(async (reqid: number, p: string) => {
-            try {
-              if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
-              if (denyPublished(reqid, p)) return;
-              await backend.rmdir(p);
-              sftp.status(reqid, STATUS_CODE.OK);
-            } catch (e) {
-              // A populated folder refuses with FAILURE and its reason —
-              // never a phantom success, never a misleading NO_SUCH_FILE.
-              if (e instanceof SftpDirectoryNotEmptyError) return sftp.status(reqid, STATUS_CODE.FAILURE, e.message);
-              fail(reqid, e, "remove folder");
-            }
-          }, true));
-          sftp.on("RENAME", fenced(async (reqid: number, from: string, to: string) => {
-            try {
-              if (isSftpTempName(from) || isSftpTempName(to)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
-              if (denyPublished(reqid, from) || denyPublished(reqid, to)) return;
-              await backend.rename(from, to); sftp.status(reqid, STATUS_CODE.OK);
-            } catch (e) { fail(reqid, e, "rename"); }
-          }, true));
+          const wrap = (what: string, op: (p: string) => Promise<void>, mutation = false) =>
+            fenced(async (reqid: number, p: string) => {
+              try {
+                if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                if (denyPublished(reqid, p)) return;
+                await op(p);
+                sftp.status(reqid, STATUS_CODE.OK);
+              } catch (e) {
+                fail(reqid, e, what);
+              }
+            }, mutation);
+          sftp.on(
+            "REMOVE",
+            wrap("remove", (p) => backend.remove(p), true),
+          );
+          sftp.on(
+            "MKDIR",
+            wrap("make folder", (p) => backend.mkdir(p), true),
+          );
+          sftp.on(
+            "RMDIR",
+            fenced(async (reqid: number, p: string) => {
+              try {
+                if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                if (denyPublished(reqid, p)) return;
+                await backend.rmdir(p);
+                sftp.status(reqid, STATUS_CODE.OK);
+              } catch (e) {
+                // A populated folder refuses with FAILURE and its reason —
+                // never a phantom success, never a misleading NO_SUCH_FILE.
+                if (e instanceof SftpDirectoryNotEmptyError)
+                  return sftp.status(reqid, STATUS_CODE.FAILURE, e.message);
+                fail(reqid, e, "remove folder");
+              }
+            }, true),
+          );
+          sftp.on(
+            "RENAME",
+            fenced(async (reqid: number, from: string, to: string) => {
+              try {
+                if (isSftpTempName(from) || isSftpTempName(to))
+                  return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+                if (denyPublished(reqid, from) || denyPublished(reqid, to)) return;
+                await backend.rename(from, to);
+                sftp.status(reqid, STATUS_CODE.OK);
+              } catch (e) {
+                fail(reqid, e, "rename");
+              }
+            }, true),
+          );
           // Attribute mutation is not implemented and SftpBackend exposes no
           // attribute-update method, so SETSTAT/FSETSTAT must refuse instead
           // of answering OK: an OK for a no-op tells a partner its
@@ -632,28 +786,51 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           // after the liveness fence, so the published artifact's protection
           // does not depend on which refusal the generic path carries — and
           // a revoked session is ended before it can probe anything.
-          sftp.on("SETSTAT", fenced(async (reqid: number, p: string) => {
-            if (denyPublished(reqid, p)) return;
-            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "SETSTAT is not supported: attributes cannot be changed; re-upload the file instead");
-          }));
-          sftp.on("FSETSTAT", fenced(async (reqid: number, handle: Buffer) => {
-            const f = files.get(handle.toString());
-            if (f && denyPublished(reqid, f.path)) return;
-            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "FSETSTAT is not supported: attributes cannot be changed; re-upload the file instead");
-          }));
+          sftp.on(
+            "SETSTAT",
+            fenced(async (reqid: number, p: string) => {
+              if (denyPublished(reqid, p)) return;
+              sftp.status(
+                reqid,
+                STATUS_CODE.OP_UNSUPPORTED,
+                "SETSTAT is not supported: attributes cannot be changed; re-upload the file instead",
+              );
+            }),
+          );
+          sftp.on(
+            "FSETSTAT",
+            fenced(async (reqid: number, handle: Buffer) => {
+              const f = files.get(handle.toString());
+              if (f && denyPublished(reqid, f.path)) return;
+              sftp.status(
+                reqid,
+                STATUS_CODE.OP_UNSUPPORTED,
+                "FSETSTAT is not supported: attributes cannot be changed; re-upload the file instead",
+              );
+            }),
+          );
           // The backend has no symlink concept, so these can never succeed —
           // but they still go through the fence. Without an explicit handler
           // ssh2 answers OP_UNSUPPORTED itself, which would let a revoked
           // session probe request types without ever hitting the fence.
-          sftp.on("SYMLINK", fenced(async (reqid: number) => {
-            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "symlinks are not supported");
-          }));
-          sftp.on("READLINK", fenced(async (reqid: number) => {
-            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "symlinks are not supported");
-          }));
-          sftp.on("EXTENDED", fenced(async (reqid: number) => {
-            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "extended requests are not supported");
-          }));
+          sftp.on(
+            "SYMLINK",
+            fenced(async (reqid: number) => {
+              sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "symlinks are not supported");
+            }),
+          );
+          sftp.on(
+            "READLINK",
+            fenced(async (reqid: number) => {
+              sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "symlinks are not supported");
+            }),
+          );
+          sftp.on(
+            "EXTENDED",
+            fenced(async (reqid: number) => {
+              sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "extended requests are not supported");
+            }),
+          );
         });
       });
     });
@@ -666,10 +843,11 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
       const port = (server.address() as { port: number }).port;
       resolve({
         port,
-        close: () => new Promise<void>((res) => {
-          liveByServer.clear();
-          server.close(() => res());
-        }),
+        close: () =>
+          new Promise<void>((res) => {
+            liveByServer.clear();
+            server.close(() => res());
+          }),
         revoke: (serverId: string) => {
           const tracked = liveByServer.get(serverId);
           if (!tracked) return;

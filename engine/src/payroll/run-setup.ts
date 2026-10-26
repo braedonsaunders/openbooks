@@ -4,12 +4,22 @@
  * Extracted verbatim from engine/src/payroll/run.ts; bodies preserve exact
  * math, transaction/lock sequencing, and refusal identity.
  */
-import { payrollRunPopulationScopeFilter, payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
+import {
+  payrollRunPopulationScopeFilter,
+  payrollSubsidiaryInScope,
+  payrollSubsidiaryScopeFilter,
+  type PayrollSubsidiaryScope,
+} from "./scope.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { cmp, roundMoney } from "../money/money.ts";
-import { assertContributoryBasesDeclared, ensurePackSlotRoleAccounts, packStatutoryComponents, payrollPack } from "./packs.ts";
+import {
+  assertContributoryBasesDeclared,
+  ensurePackSlotRoleAccounts,
+  packStatutoryComponents,
+  payrollPack,
+} from "./packs.ts";
 import { type EntitlementPlan } from "./entitlements.ts";
 export interface PayrollSettings {
   /** DR for wages when a component has no expense account of its own. */
@@ -47,18 +57,27 @@ export async function payrollSettings(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayrollSettings> {
   if (allowedSubsidiaryIds != null) {
-    const root = (await db.execute<{ id: string }>(sql`
+    const root =
+      (
+        await db.execute<{ id: string }>(
+          sql`
       select id from subsidiaries
        where org_id = ${orgId} and parent_id is null and is_active
        order by created_at limit 1
-    `, "objects"))[0]?.id ?? null;
+    `,
+          "objects",
+        )
+      )[0]?.id ?? null;
     if (!payrollSubsidiaryInScope(allowedSubsidiaryIds, root)) {
       throw new PayrollError("payroll settings not found");
     }
   }
-  const row = (await db.execute<{ p: Record<string, unknown> | null }>(
-    sql`select settings->'payroll' as p from orgs where id = ${orgId}`, "objects",
-  ))[0];
+  const row = (
+    await db.execute<{ p: Record<string, unknown> | null }>(
+      sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new PayrollError("payroll settings not found");
   return resolvePayrollSettings(row.p);
 }
@@ -73,7 +92,8 @@ export async function payrollCalculationPolicyForPayRun(
   const policy = await payrollPolicyForPayRun(orgId, documentId, allowedSubsidiaryIds, executor);
   return {
     settings: resolvePayrollSettings(policy),
-    statutoryHolidayPay: policy?.statutoryHolidayPay === true || policy?.statutoryHolidayPay === "true",
+    statutoryHolidayPay:
+      policy?.statutoryHolidayPay === true || policy?.statutoryHolidayPay === "true",
   };
 }
 
@@ -84,11 +104,17 @@ export async function payrollConfigurationInScope(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<boolean> {
   if (allowedSubsidiaryIds == null) return true;
-  const root = (await executor.execute<{ id: string }>(sql`
+  const root =
+    (
+      await executor.execute<{ id: string }>(
+        sql`
     select id from subsidiaries
      where org_id = ${orgId} and parent_id is null and is_active
      order by created_at limit 1
-  `, "objects"))[0]?.id ?? null;
+  `,
+        "objects",
+      )
+    )[0]?.id ?? null;
   return payrollSubsidiaryInScope(allowedSubsidiaryIds, root);
 }
 
@@ -104,11 +130,17 @@ export function assertPayRunCalculationComponents(
     ...(statutoryHolidayPay ? STAT_HOLIDAY_COMPONENTS : []),
   ];
   for (const component of required) {
-    if (!components.some((row) => row.country === (component.country ?? null)
-      && row.system_key === component.systemKey && row.kind === component.kind)) {
+    if (
+      !components.some(
+        (row) =>
+          row.country === (component.country ?? null) &&
+          row.system_key === component.systemKey &&
+          row.kind === component.kind,
+      )
+    ) {
       throw new PayrollError(
-        `missing system pay component ${component.systemKey}/${component.kind} — `
-        + `ask an organization payroll administrator to install the ${country} payroll pack in Payroll setup → Accounts & posting`,
+        `missing system pay component ${component.systemKey}/${component.kind} — ` +
+          `ask an organization payroll administrator to install the ${country} payroll pack in Payroll setup → Accounts & posting`,
       );
     }
   }
@@ -121,7 +153,9 @@ export async function payrollSettingsForPayRun(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<PayrollSettings> {
-  return resolvePayrollSettings(await payrollPolicyForPayRun(orgId, documentId, allowedSubsidiaryIds, executor));
+  return resolvePayrollSettings(
+    await payrollPolicyForPayRun(orgId, documentId, allowedSubsidiaryIds, executor),
+  );
 }
 
 async function payrollPolicyForPayRun(
@@ -130,7 +164,9 @@ async function payrollPolicyForPayRun(
   allowedSubsidiaryIds: PayrollSubsidiaryScope,
   executor: Pick<typeof db, "execute">,
 ): Promise<Record<string, unknown> | null> {
-  const row = (await executor.execute<{ p: Record<string, unknown> | null }>(sql`
+  const row = (
+    await executor.execute<{ p: Record<string, unknown> | null }>(
+      sql`
     select o.settings->'payroll' as p
       from pay_runs r
       join documents d on d.org_id = r.org_id and d.id = r.document_id
@@ -138,7 +174,10 @@ async function payrollPolicyForPayRun(
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) throw new PayrollError("pay run not found");
   return row.p;
 }
@@ -152,17 +191,27 @@ function resolvePayrollSettings(blob: Record<string, unknown> | null): PayrollSe
     wagesTo: p.wagesTo === "labor_clearing" ? "labor_clearing" : "expense",
     craRemittancePartyId: p.craRemittancePartyId ?? null,
     rqRemittancePartyId: p.rqRemittancePartyId ?? null,
-    supplementalTaxMethod: p.supplementalTaxMethod === "per_run"
-      ? "per_run"
-      : p.supplementalTaxMethod === "period_cumulative" ? "period_cumulative" : null,
+    supplementalTaxMethod:
+      p.supplementalTaxMethod === "per_run"
+        ? "per_run"
+        : p.supplementalTaxMethod === "period_cumulative"
+          ? "period_cumulative"
+          : null,
   };
 }
 
-
 interface SeedComponent {
-  code: string; name: string; kind: string; systemKey: string | null;
-  basis?: string; taxable?: boolean; pensionable?: boolean; insurable?: boolean;
-  vacationable?: boolean; nonPeriodic?: boolean; sequence: number;
+  code: string;
+  name: string;
+  kind: string;
+  systemKey: string | null;
+  basis?: string;
+  taxable?: boolean;
+  pensionable?: boolean;
+  insurable?: boolean;
+  vacationable?: boolean;
+  nonPeriodic?: boolean;
+  sequence: number;
   /** Country pack the row belongs to; omitted = shared across packs. */
   country?: string;
 }
@@ -178,8 +227,20 @@ interface SeedComponent {
  * exactly this pair for orgs that predate it.
  */
 const STAT_HOLIDAY_COMPONENTS: SeedComponent[] = [
-  { code: "STAT", name: "Statutory holiday pay", kind: "earning", systemKey: "stat_holiday", sequence: 25 },
-  { code: "STATPREM", name: "Statutory holiday premium", kind: "earning", systemKey: "stat_holiday_premium", sequence: 26 },
+  {
+    code: "STAT",
+    name: "Statutory holiday pay",
+    kind: "earning",
+    systemKey: "stat_holiday",
+    sequence: 25,
+  },
+  {
+    code: "STATPREM",
+    name: "Statutory holiday premium",
+    kind: "earning",
+    systemKey: "stat_holiday_premium",
+    sequence: 26,
+  },
 ];
 
 /**
@@ -191,12 +252,48 @@ const STAT_HOLIDAY_COMPONENTS: SeedComponent[] = [
  * classification into every filing, instead of dissolving into gross.
  */
 const BASELINE_COMPONENTS: SeedComponent[] = [
-  { code: "BASE", name: "Base pay", kind: "earning", systemKey: "base_pay", basis: "per_hour", sequence: 10 },
-  { code: "OT", name: "Overtime", kind: "earning", systemKey: "overtime", basis: "per_hour", sequence: 20 },
+  {
+    code: "BASE",
+    name: "Base pay",
+    kind: "earning",
+    systemKey: "base_pay",
+    basis: "per_hour",
+    sequence: 10,
+  },
+  {
+    code: "OT",
+    name: "Overtime",
+    kind: "earning",
+    systemKey: "overtime",
+    basis: "per_hour",
+    sequence: 20,
+  },
   ...STAT_HOLIDAY_COMPONENTS,
-  { code: "ALLOW", name: "Allowance", kind: "earning", systemKey: "allowance", vacationable: false, sequence: 27 },
-  { code: "BONUS", name: "Bonus", kind: "earning", systemKey: "bonus", nonPeriodic: true, vacationable: false, sequence: 30 },
-  { code: "VACPAY", name: "Vacation pay", kind: "earning", systemKey: "vacation_payout", vacationable: false, sequence: 40 },
+  {
+    code: "ALLOW",
+    name: "Allowance",
+    kind: "earning",
+    systemKey: "allowance",
+    vacationable: false,
+    sequence: 27,
+  },
+  {
+    code: "BONUS",
+    name: "Bonus",
+    kind: "earning",
+    systemKey: "bonus",
+    nonPeriodic: true,
+    vacationable: false,
+    sequence: 30,
+  },
+  {
+    code: "VACPAY",
+    name: "Vacation pay",
+    kind: "earning",
+    systemKey: "vacation_payout",
+    vacationable: false,
+    sequence: 40,
+  },
 ];
 
 /**
@@ -213,8 +310,12 @@ const BASELINE_COMPONENTS: SeedComponent[] = [
  */
 export const statutoryComponents = (country: string): SeedComponent[] =>
   packStatutoryComponents(country).map((component) => ({
-    code: component.code, name: component.name, kind: component.kind,
-    systemKey: component.systemKey, sequence: component.sequence, country,
+    code: component.code,
+    name: component.name,
+    kind: component.kind,
+    systemKey: component.systemKey,
+    sequence: component.sequence,
+    country,
   }));
 
 /** Canonical system components: shared earnings plus the run country's statutory declaration. */
@@ -225,7 +326,9 @@ export function payRunComponentDeclarations(country: string): readonly SeedCompo
 /** One idempotent component insert — the single seeding path. */
 export async function ensureComponents(
   executor: Pick<typeof db, "execute">,
-  orgId: string, actorId: string | null, rows: readonly SeedComponent[],
+  orgId: string,
+  actorId: string | null,
+  rows: readonly SeedComponent[],
 ): Promise<void> {
   for (const c of rows) {
     // Conflict target is the component IDENTITY (org, country, system_key,
@@ -243,7 +346,8 @@ export async function ensureComponents(
     // (no matching arbiter) rather than silently skipping — that is
     // deliberate, per the on-conflict justification rule: silent skips are
     // how one country's component absorbed another's.
-    const inserted = await executor.execute<{ id: string }>(sql`
+    const inserted = await executor.execute<{ id: string }>(
+      sql`
       insert into pay_components (org_id, code, name, kind, system_key, country, basis, taxable,
                                   pensionable, insurable, vacationable, non_periodic, sequence,
                                   created_by, updated_by)
@@ -254,16 +358,23 @@ export async function ensureComponents(
       -- The same country and statutory system key retain their existing component configuration.
       on conflict (org_id, country, system_key, kind) where system_key is not null do nothing
       returning id::text as id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (inserted[0]) {
-      const treatment = await executor.execute(sql`
+      const treatment = await executor.execute(
+        sql`
         insert into pay_component_statutory_treatments
           (org_id, pay_component_id, effective_from, program_exclusions, vacationable, created_by, updated_by)
         values (${orgId}, ${inserted[0]!.id}, DATE '0001-01-01', '{}'::text[], ${c.vacationable ?? true}, ${actorId}, ${actorId})
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (treatment.length !== 1) {
-        throw new PayrollError(`statutory treatment for seeded pay component ${c.systemKey ?? c.code} was not created`);
+        throw new PayrollError(
+          `statutory treatment for seeded pay component ${c.systemKey ?? c.code} was not created`,
+        );
       }
     }
   }
@@ -280,15 +391,23 @@ export async function ensureComponents(
  * `packStatutoryComponents` before anything is written.
  */
 export async function seedPayrollComponents(
-  orgId: string, actorId: string | null, country: string,
+  orgId: string,
+  actorId: string | null,
+  country: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<void> {
   if (allowedSubsidiaryIds != null) {
-    const root = (await db.execute<{ id: string }>(sql`
+    const root =
+      (
+        await db.execute<{ id: string }>(
+          sql`
       select id from subsidiaries
        where org_id = ${orgId} and parent_id is null and is_active
        order by created_at limit 1
-    `, "objects"))[0]?.id ?? null;
+    `,
+          "objects",
+        )
+      )[0]?.id ?? null;
     if (!payrollSubsidiaryInScope(allowedSubsidiaryIds, root)) {
       throw new PayrollError("payroll settings not found");
     }
@@ -308,13 +427,20 @@ export async function seedPayrollComponents(
 
 /** Apply declared setup defaults only for the organization's installed packs. */
 export async function provisionPayrollPackDefaults(
-  orgId: string, actorId: string | null = null, countries?: readonly string[],
+  orgId: string,
+  actorId: string | null = null,
+  countries?: readonly string[],
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const org = (await tx.execute<{ countries: string[] | null }>(sql`
+    const org = (
+      await tx.execute<{ countries: string[] | null }>(
+        sql`
       select settings#>'{payroll,countries}' as countries from orgs
        where id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!org) throw new PayrollError("payroll organization not found — defaults were not applied");
     for (const country of countries ?? org.countries ?? []) {
       await payrollPack(country).provisionDefaults?.({ tx, orgId, actorId });
@@ -329,15 +455,23 @@ export async function provisionPayrollPackDefaults(
  * mechanism for a missing component on a long-lived tenant.
  */
 export async function ensureStatutoryHolidayComponents(
-  executor: Pick<typeof db, "execute">, orgId: string, actorId: string | null,
+  executor: Pick<typeof db, "execute">,
+  orgId: string,
+  actorId: string | null,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<void> {
   if (allowedSubsidiaryIds != null) {
-    const root = (await executor.execute<{ id: string }>(sql`
+    const root =
+      (
+        await executor.execute<{ id: string }>(
+          sql`
       select id from subsidiaries
        where org_id = ${orgId} and parent_id is null and is_active
        order by created_at limit 1
-    `, "objects"))[0]?.id ?? null;
+    `,
+          "objects",
+        )
+      )[0]?.id ?? null;
     if (!payrollSubsidiaryInScope(allowedSubsidiaryIds, root)) {
       throw new PayrollError("payroll settings not found");
     }
@@ -359,27 +493,37 @@ export async function statutoryHolidayPayEnabled(
   executorOrScope: Pick<typeof db, "execute"> | PayrollSubsidiaryScope = db,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<boolean> {
-  const isExecutor = executorOrScope != null
-    && typeof executorOrScope === "object" && "execute" in executorOrScope;
-  const executor = isExecutor
-    ? executorOrScope as Pick<typeof db, "execute">
-    : db;
-  const scope = allowedSubsidiaryIds !== undefined
-    ? allowedSubsidiaryIds
-    : (isExecutor ? undefined : executorOrScope as PayrollSubsidiaryScope);
+  const isExecutor =
+    executorOrScope != null && typeof executorOrScope === "object" && "execute" in executorOrScope;
+  const executor = isExecutor ? (executorOrScope as Pick<typeof db, "execute">) : db;
+  const scope =
+    allowedSubsidiaryIds !== undefined
+      ? allowedSubsidiaryIds
+      : isExecutor
+        ? undefined
+        : (executorOrScope as PayrollSubsidiaryScope);
   if (scope != null) {
-    const root = (await executor.execute<{ id: string }>(sql`
+    const root =
+      (
+        await executor.execute<{ id: string }>(
+          sql`
       select id from subsidiaries
        where org_id = ${orgId} and parent_id is null and is_active
        order by created_at limit 1
-    `, "objects"))[0]?.id ?? null;
+    `,
+          "objects",
+        )
+      )[0]?.id ?? null;
     if (!payrollSubsidiaryInScope(scope, root)) {
       throw new PayrollError("payroll settings not found");
     }
   }
-  const r = (await executor.execute<{ enabled: string | null }>(sql`
+  const r = await executor.execute<{ enabled: string | null }>(
+    sql`
     select settings#>>'{payroll,statutoryHolidayPay}' as enabled from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]?.enabled === "true";
 }
 
@@ -400,10 +544,13 @@ export async function statutoryHolidayPayEnabled(
  * adopted by having the binding stamped onto it rather than being duplicated.
  */
 async function seedVacationEntitlementPlan(
-  orgId: string, actorId: string | null, country: string,
+  orgId: string,
+  actorId: string | null,
+  country: string,
 ): Promise<void> {
-  const declaresVacation = packStatutoryComponents(country)
-    .some((component) => component.systemKey === "vacation_accrual");
+  const declaresVacation = packStatutoryComponents(country).some(
+    (component) => component.systemKey === "vacation_accrual",
+  );
   if (!declaresVacation) return;
 
   // The plan's BASE rate. Per-employee rates keep their one home on the
@@ -411,14 +558,17 @@ async function seedVacationEntitlementPlan(
   // tiers raise them; this is only what an employee with neither falls back
   // to. Same derivation the migration script uses, so a migrated tenant and a
   // freshly seeded one land on the same number.
-  const modal = (await db.execute<{ percent: string }>(sql`
+  const modal = await db.execute<{ percent: string }>(
+    sql`
     select percent_floor::text as percent
       from payroll_vacation_terms
      where org_id = ${orgId} and percent_floor is not null and percent_floor > 0 and effective_to is null
      group by percent_floor
      order by count(*) desc, percent_floor asc
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const accrualValue = roundMoney(modal[0]?.percent ?? "4", 4);
 
   await db.execute(sql`
@@ -473,9 +623,9 @@ export function assertVacationPlanResolved(
   if (!percent || cmp(percent, "0") <= 0) return;
   if (terminationRun || emp.vacation_method === "pay_each_period") return;
   throw new PayrollError(
-    `${emp.display_name ?? emp.party_id} accrues ${percent}% vacation, but this organization `
-    + "has no vacation entitlement plan to accrue it into — create one in Payroll setup → "
-    + "Entitlement plans (or set the employee's vacation method to pay each period)",
+    `${emp.display_name ?? emp.party_id} accrues ${percent}% vacation, but this organization ` +
+      "has no vacation entitlement plan to accrue it into — create one in Payroll setup → " +
+      "Entitlement plans (or set the employee's vacation method to pay each period)",
   );
 }
 
@@ -496,7 +646,9 @@ export function assertVacationPlanResolved(
  * never a branch here — the generic layer names no country.
  */
 async function seedAlternateDayEntitlementPlan(
-  orgId: string, actorId: string | null, country: string,
+  orgId: string,
+  actorId: string | null,
+  country: string,
 ): Promise<void> {
   if (payrollPack(country).alternateDayGrant === undefined) return;
 

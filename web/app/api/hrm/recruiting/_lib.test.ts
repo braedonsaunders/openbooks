@@ -13,7 +13,10 @@ async function bodyOf(response: NextResponse): Promise<{ error: string }> {
 }
 
 test("every recruiting refusal code maps with its message intact", async () => {
-  const cases: Array<{ code: "INVALID_INPUT" | "NOT_FOUND" | "BAD_STATE" | "STALE_REVISION" | "REFUSED"; status: number }> = [
+  const cases: Array<{
+    code: "INVALID_INPUT" | "NOT_FOUND" | "BAD_STATE" | "STALE_REVISION" | "REFUSED";
+    status: number;
+  }> = [
     { code: "INVALID_INPUT", status: 400 },
     { code: "NOT_FOUND", status: 404 },
     { code: "BAD_STATE", status: 409 },
@@ -30,11 +33,15 @@ test("every recruiting refusal code maps with its message intact", async () => {
 
 test("authorization failures hide existence but name missing grants", async () => {
   const hidden = recruitingErrorResponse(
-    new HrmAuthorizationError("Requisition is not visible in this organization and legal-entity scope."),
+    new HrmAuthorizationError(
+      "Requisition is not visible in this organization and legal-entity scope.",
+    ),
   );
   assert.equal(hidden.status, 404);
   const forbidden = recruitingErrorResponse(
-    new HrmAuthorizationError("Recruiting access requires the hrm.recruiting.manage permission — ask an administrator to grant it in /admin/roles."),
+    new HrmAuthorizationError(
+      "Recruiting access requires the hrm.recruiting.manage permission — ask an administrator to grant it in /admin/roles.",
+    ),
   );
   assert.equal(forbidden.status, 403);
   assert.match((await bodyOf(forbidden)).error, /hrm\.recruiting\.manage/);
@@ -52,7 +59,17 @@ test("accept without an employment-change flow answers 422 with the NO_FLOW reme
 });
 
 test("every change-request refusal code maps with its message intact", async () => {
-  const cases: Array<{ code: "UNKNOWN_KIND" | "INVALID_PAYLOAD" | "NOT_FOUND" | "BAD_STATE" | "STALE_REVISION" | "FLOW_ERROR" | "REFUSED"; status: number }> = [
+  const cases: Array<{
+    code:
+      | "UNKNOWN_KIND"
+      | "INVALID_PAYLOAD"
+      | "NOT_FOUND"
+      | "BAD_STATE"
+      | "STALE_REVISION"
+      | "FLOW_ERROR"
+      | "REFUSED";
+    status: number;
+  }> = [
     { code: "INVALID_PAYLOAD", status: 400 },
     { code: "NOT_FOUND", status: 404 },
     { code: "BAD_STATE", status: 409 },
@@ -70,10 +87,14 @@ test("every change-request refusal code maps with its message intact", async () 
 });
 
 test("hire-path vacancy and headcount refusals map with their message intact", async () => {
-  const position = recruitingErrorResponse(new HrmPositionError("REFUSED", "the position is no longer vacant as of 2026-10-01"));
+  const position = recruitingErrorResponse(
+    new HrmPositionError("REFUSED", "the position is no longer vacant as of 2026-10-01"),
+  );
   assert.equal(position.status, 422);
   assert.match((await bodyOf(position)).error, /no longer vacant/);
-  const plan = recruitingErrorResponse(new CompensationError("REFUSED", "the plan line cannot absorb this hire"));
+  const plan = recruitingErrorResponse(
+    new CompensationError("REFUSED", "the plan line cannot absorb this hire"),
+  );
   assert.equal(plan.status, 422);
   assert.match((await bodyOf(plan)).error, /plan line/);
 });

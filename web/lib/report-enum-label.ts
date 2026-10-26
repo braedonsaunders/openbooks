@@ -1,8 +1,8 @@
 /** The slice of a next-intl translator scoped to the `reports` namespace that enum labels need. */
 export type ReportEnumTranslator = {
-  (key: string): string
-  has(key: string): boolean
-}
+  (key: string): string;
+  has(key: string): boolean;
+};
 
 /**
  * Display label of a report enum value. The same stored value can mean
@@ -18,9 +18,9 @@ export function reportEnumLabel(
   scope?: { entity: string; column: string },
 ): string | null {
   if (scope) {
-    const scoped = `catalog.columnValues.${scope.entity}.${scope.column}.${value}`
-    if (t.has(scoped)) return t(scoped)
+    const scoped = `catalog.columnValues.${scope.entity}.${scope.column}.${value}`;
+    if (t.has(scoped)) return t(scoped);
   }
-  const shared = `catalog.enumValues.${value}`
-  return t.has(shared) ? t(shared) : null
+  const shared = `catalog.enumValues.${value}`;
+  return t.has(shared) ? t(shared) : null;
 }

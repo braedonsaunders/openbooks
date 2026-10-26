@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { loadApiSchema, type ApiRecordTypeSchema } from '../../../lib/api/schema-registry'
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { loadApiSchema, type ApiRecordTypeSchema } from "../../../lib/api/schema-registry";
 
 /**
  * API docs + interactive REST console, split into a loader and a spec.
@@ -28,13 +28,13 @@ import { loadApiSchema, type ApiRecordTypeSchema } from '../../../lib/api/schema
  */
 
 export interface ApiDocsData {
-  schema: ApiRecordTypeSchema[]
+  schema: ApiRecordTypeSchema[];
 }
 
 export async function loadApiDocs(): Promise<ApiDocsData> {
   // Native gates, verbatim: permission first, then feature flag.
-  const authz = await requirePermission('api.keys.manage')
-  await requireFeatureEnabled(authz.user.orgId, 'apiAccess')
+  const authz = await requirePermission("api.keys.manage");
+  await requireFeatureEnabled(authz.user.orgId, "apiAccess");
   // The console owns the full-height workbench (record-type rail + reference +
   // interactive runner). The schema is plain data — safe to hand to the client.
   const schema = await loadApiSchema(
@@ -42,20 +42,20 @@ export async function loadApiDocs(): Promise<ApiDocsData> {
     authz.user.roles.map(({ key }) => key),
     {
       roleKeys: authz.user.roles.map(({ key }) => key),
-      canManageCustomFields: authz.permissions.has('admin.custom_fields.manage'),
+      canManageCustomFields: authz.permissions.has("admin.custom_fields.manage"),
     },
-  )
-  return { schema }
+  );
+  return { schema };
 }
 
 export function apiDocsSpec(data: ApiDocsData): PageSpec {
   return page({
-    route: '/api-docs',
+    route: "/api-docs",
     // Bare: the console owns its own full-height flex column (the native root
     // is `flex h-full min-h-0 flex-col` under the app shell's <main>), so no
     // ListPageLayout chrome may wrap it.
-    layout: 'bare',
+    layout: "bare",
     header: [],
-    body: [widgetBlock('api-console', { schema: data.schema })],
-  })
+    body: [widgetBlock("api-console", { schema: data.schema })],
+  });
 }

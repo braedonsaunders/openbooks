@@ -1,40 +1,50 @@
-import assert from 'node:assert/strict'
+import assert from "node:assert/strict";
 import hrmCatalog from "../../../../messages/en/hrm.json";
 import type { PortfolioCatalog } from "../../../../lib/hrm/benefits-workspace";
 import { stubModules } from "../../../../testing/stub-modules";
 import test, { beforeEach, afterEach } from "node:test";
 import { createTranslator } from "next-intl";
-import { PgDialect } from 'drizzle-orm/pg-core';
+import { PgDialect } from "drizzle-orm/pg-core";
 
 // Exercise the Benefits loader and rendered lists with service read fixtures.
 // Translations use the real catalog; authorization and database access are
 // isolated here, with tenant isolation covered by native database tests.
-const translate = createTranslator({ locale: 'en', messages: hrmCatalog, onError: error => { throw error } });
+const translate = createTranslator({
+  locale: "en",
+  messages: hrmCatalog,
+  onError: (error) => {
+    throw error;
+  },
+});
 const portfolioCatalog: PortfolioCatalog = Object.assign(
-  (key: string, params?: Record<string, string | number>) => translate(key as Parameters<typeof translate>[0], params),
+  (key: string, params?: Record<string, string | number>) =>
+    translate(key as Parameters<typeof translate>[0], params),
   { has: (key: string) => translate.has(key as Parameters<typeof translate.has>[0]) },
-);(globalThis as Record<string, unknown>).__benefitsTranslations = portfolioCatalog;
+);
+(globalThis as Record<string, unknown>).__benefitsTranslations = portfolioCatalog;
 
 const authzSource = `export const can = (authz, perm) => authz.permissions.has('*') || authz.permissions.has(perm);
              export async function requirePermission() { throw new Error('stubbed requirePermission must not run here'); }
-             export async function getAuthz() { return null; }`
+             export async function getAuthz() { return null; }`;
 const featuresSource = `export async function isFeatureEnabled() { return true; }
              export async function requireFeatureEnabled() {}
-             export async function subsidiaryFeatureEnabled() { return false; }`
-const databaseSource = "export const db = { execute: async (query, mode) => Promise.resolve({ rows: globalThis.__benefitsExecute(query) }).then((result) => (mode === 'objects' ? result.rows : result)) }; export async function withBypass(work) { return work() } export async function withBypassContext(work) { return work() } export function ambientTenantOrgId() { return null } let resolver = null; export function currentRequestOrgResolver() { return resolver } export function registerRequestOrgResolver(fn) { resolver = fn } export async function withOrgContext(_orgId, work) { return work() } export async function withOrgTransaction(_orgId, work) { return work() }"
+             export async function subsidiaryFeatureEnabled() { return false; }`;
+const databaseSource =
+  "export const db = { execute: async (query, mode) => Promise.resolve({ rows: globalThis.__benefitsExecute(query) }).then((result) => (mode === 'objects' ? result.rows : result)) }; export async function withBypass(work) { return work() } export async function withBypassContext(work) { return work() } export function ambientTenantOrgId() { return null } let resolver = null; export function currentRequestOrgResolver() { return resolver } export function registerRequestOrgResolver(fn) { resolver = fn } export async function withOrgContext(_orgId, work) { return work() } export async function withOrgTransaction(_orgId, work) { return work() }";
 stubModules({
   intl: `export async function getLocale() { return 'en'; }
         export async function getTranslations() { return globalThis.__benefitsTranslations; }`,
   authz: authzSource,
   features: featuresSource,
   extra: {
-    'server-only': "export {}",
-    '../authz': authzSource,
-    '../features': featuresSource,
-    './features': featuresSource,
-    '../../components/module-home/group-tabs': "export async function hrmGroupTabs() { return []; }",
-    '../money-server': `export const getMoneyFormatter = async () => ({ money: (value, opts) => value + ' ' + (opts && opts.currency ? opts.currency : '') });`,
-    '@openbooks/engine/hrm/benefits': `
+    "server-only": "export {}",
+    "../authz": authzSource,
+    "../features": featuresSource,
+    "./features": featuresSource,
+    "../../components/module-home/group-tabs":
+      "export async function hrmGroupTabs() { return []; }",
+    "../money-server": `export const getMoneyFormatter = async () => ({ money: (value, opts) => value + ' ' + (opts && opts.currency ? opts.currency : '') });`,
+    "@openbooks/engine/hrm/benefits": `
         export async function listBenefitsProgramActivity() { return [] }
         export async function listBenefitsProgramCatalog() { const a=globalThis.__benefitsReads?.catalogPlans ?? [],b=globalThis.__portfolioReads?.programs ?? [];return [...a.map(p=>({...p,type:p.kind==='retirement'?'retirement':'health',parentProgramIds:[],status:p.isActive?'active':'inactive'})),...b.map(p=>({...p,type:p.family,parentProgramIds:[]}))].sort((a,b)=>a.name.localeCompare(b.name)); }
         export async function benefitCurrencyOptions() { globalThis.__benefitsOptionReads.push('currencies'); if(globalThis.__benefitsOptionsError)throw new Error(globalThis.__benefitsOptionsError); return [{value: 'USD', label: 'USD · US Dollar', scopeValue: null}] }
@@ -45,9 +55,11 @@ stubModules({
         export async function listProgramSources() { const s = globalThis.__portfolioReads; if (s?.sourcesError) throw new Error(s.sourcesError); return s?.sources ?? [] }
         export async function reconcileIncentivePeriod() { throw new Error('Simulation was not requested') }
       `,
-    './benefits-reports': 'export async function loadBenefitsReportLinks() { globalThis.__benefitsDataReads.push("reports"); return [] }',
-    '@openbooks/engine/platform/business-date/module': "export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
-    '@openbooks/engine/hrm/benefits/benefits-read': `export async function listEnrollmentWindows(db, orgId, actorId, filter) { globalThis.__benefitsDataReads.push("windows");
+    "./benefits-reports":
+      'export async function loadBenefitsReportLinks() { globalThis.__benefitsDataReads.push("reports"); return [] }',
+    "@openbooks/engine/platform/business-date/module":
+      "export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
+    "@openbooks/engine/hrm/benefits/benefits-read": `export async function listEnrollmentWindows(db, orgId, actorId, filter) { globalThis.__benefitsDataReads.push("windows");
               const s = globalThis.__benefitsReads;
               const windows = (s && s.windows) || [];
               if (filter && filter.status) return windows.filter((w) => w.status === filter.status);
@@ -62,38 +74,39 @@ stubModules({
             export async function benefitsCockpit() {
               return { openWindows: [], pendingCount: 0, missingCount: 0 };
             }`,
-    '@openbooks/engine/platform/db': databaseSource,
-    '@openbooks/engine/platform/database': databaseSource,
+    "@openbooks/engine/platform/db": databaseSource,
+    "@openbooks/engine/platform/database": databaseSource,
   },
-})
+});
 
 const { loadBenefits } = await import("../../../../lib/hrm/benefits.ts");
-const { loadBenefitsPortfolio } = await import('../../../../lib/hrm/benefits-workspace.ts')
-const { benefitsSpec } = await import('./view.ts')
+const { loadBenefitsPortfolio } = await import("../../../../lib/hrm/benefits-workspace.ts");
+const { benefitsSpec } = await import("./view.ts");
 
 const gap = globalThis as Record<string, unknown>;
-const optionReads: string[] = []
-gap.__benefitsOptionReads = optionReads
-gap.__benefitsExecute = (query: Parameters<PgDialect['sqlToQuery']>[0]) => {
+const optionReads: string[] = [];
+gap.__benefitsOptionReads = optionReads;
+gap.__benefitsExecute = (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
   const text = new PgDialect().sqlToQuery(query).sql;
   optionReads.push(text);
   if (gap.__benefitsOptionsError) throw new Error(String(gap.__benefitsOptionsError));
-  if (/from subsidiaries\b/.test(text)) return [{ id: 'entity', name: 'Visible legal entity' }];
-  if (/from pay_components\b/.test(text)) return [{ id: 'earning', code: 'BONUS', name: 'Bonus', paymentKind: 'cash' }];
-  if (/from worker_employments w\b/.test(text)) return [{ id: 'worker', name: 'Visible worker' }];
+  if (/from subsidiaries\b/.test(text)) return [{ id: "entity", name: "Visible legal entity" }];
+  if (/from pay_components\b/.test(text))
+    return [{ id: "earning", code: "BONUS", name: "Bonus", paymentKind: "cash" }];
+  if (/from worker_employments w\b/.test(text)) return [{ id: "worker", name: "Visible worker" }];
   return [];
 };
 beforeEach(() => {
   optionReads.length = 0;
   gap.__benefitsDataReads = [];
   gap.__benefitsOptionsError = undefined;
-  stubReads([], [])
-  gap.__portfolioReads = undefined
-})
+  stubReads([], []);
+  gap.__portfolioReads = undefined;
+});
 afterEach(() => {
-  gap.__portfolioReads = undefined
-  stubReads([], [])
-})
+  gap.__portfolioReads = undefined;
+  stubReads([], []);
+});
 
 function authzWith(permissions: string[]) {
   return {
@@ -105,7 +118,10 @@ function authzWith(permissions: string[]) {
 
 const HR_BENEFITS = authzWith(["hrm.benefits.read", "hrm.benefits.manage"]);
 
-function stubReads(windows: Array<Record<string, unknown>>, enrolments: Array<Record<string, unknown>>) {
+function stubReads(
+  windows: Array<Record<string, unknown>>,
+  enrolments: Array<Record<string, unknown>>,
+) {
   gap.__benefitsReads = { windows, enrolments };
 }
 
@@ -114,7 +130,15 @@ function windowRow(id: string, status: string): Record<string, unknown> {
 }
 
 function enrolmentRow(id: string, windowId: string): Record<string, unknown> {
-  return { id, windowId, employmentId: "emp-1", employeeName: "Ada", status: "elected", currency: "CAD", contributions: [] };
+  return {
+    id,
+    windowId,
+    employmentId: "emp-1",
+    employeeName: "Ada",
+    status: "elected",
+    currency: "CAD",
+    contributions: [],
+  };
 }
 
 test("an unknown segment refuses naming the segment, never an empty table", async () => {
@@ -125,44 +149,59 @@ test("an unknown segment refuses naming the segment, never an empty table", asyn
   assert.equal(data.showingEnrolments, false, "a refused segment shows neither view");
 });
 
-test('closed benefits drawers do not load selector catalogs or surface their failures', async () => {
-  gap.__benefitsOptionsError = 'Catalog temporarily unavailable';
-  for (const view of ['overview', 'programs', 'delivery', 'employees']) {
+test("closed benefits drawers do not load selector catalogs or surface their failures", async () => {
+  gap.__benefitsOptionsError = "Catalog temporarily unavailable";
+  for (const view of ["overview", "programs", "delivery", "employees"]) {
     const data = await loadBenefits(HR_BENEFITS, { view });
     assert.equal(data.optionsRefusal, null);
     assert.equal(data.programBuilderOpen, false);
     assert.deepEqual(data.employmentOptions, []);
   }
-  assert.deepEqual(optionReads, [], 'list and overview reads do not fetch closed form options');
+  assert.deepEqual(optionReads, [], "list and overview reads do not fetch closed form options");
 });
 
-test('program forms resolve their complete scoped options and refuse failed catalogs', async () => {
-  const params = { view: 'programs', program: 'new', family: 'reward' };
+test("program forms resolve their complete scoped options and refuse failed catalogs", async () => {
+  const params = { view: "programs", program: "new", family: "reward" };
   const data = await loadBenefits(HR_BENEFITS, params);
   assert.equal(data.programBuilderOpen, true);
-  assert.deepEqual(data.subsidiaryOptions, [{ value: 'entity', label: 'Visible legal entity' }]);
-  assert.deepEqual(data.payComponentOptions, [{ value: 'earning', label: 'BONUS — Bonus', paymentKind: 'cash' }]);
-  assert.equal(data.currencyOptions[0]?.value, 'USD');
+  assert.deepEqual(data.subsidiaryOptions, [{ value: "entity", label: "Visible legal entity" }]);
+  assert.deepEqual(data.payComponentOptions, [
+    { value: "earning", label: "BONUS — Bonus", paymentKind: "cash" },
+  ]);
+  assert.equal(data.currencyOptions[0]?.value, "USD");
   assert.ok(optionReads.some((text) => /from accounts\b/.test(text)));
-  assert.equal(optionReads.filter((text) => /from subsidiaries\b/.test(text)).length, 1,
-    'program forms share the portfolio legal-entity selector instead of reading it twice');
-  gap.__benefitsOptionsError = 'Catalog temporarily unavailable';
+  assert.equal(
+    optionReads.filter((text) => /from subsidiaries\b/.test(text)).length,
+    1,
+    "program forms share the portfolio legal-entity selector instead of reading it twice",
+  );
+  gap.__benefitsOptionsError = "Catalog temporarily unavailable";
   const refused = await loadBenefits(HR_BENEFITS, params);
   assert.equal(refused.programBuilderOpen, false);
-  assert.equal(refused.optionsRefusal?.message, 'Catalog temporarily unavailable');
+  assert.equal(refused.optionsRefusal?.message, "Catalog temporarily unavailable");
 });
 
-test('recipient and window forms load only their own option catalogs', async () => {
-  const award = await loadBenefits(HR_BENEFITS, { view: 'delivery', award: 'new' });
+test("recipient and window forms load only their own option catalogs", async () => {
+  const award = await loadBenefits(HR_BENEFITS, { view: "delivery", award: "new" });
   assert.equal(award.awardBuilderOpen, true);
-  assert.deepEqual(award.employmentOptions, [{ value: 'worker', label: 'Visible worker' }]);
-  assert.equal(optionReads.some((text) => /from accounts\b|from pay_components\b|from subsidiaries\b/.test(text)), false);
+  assert.deepEqual(award.employmentOptions, [{ value: "worker", label: "Visible worker" }]);
+  assert.equal(
+    optionReads.some((text) =>
+      /from accounts\b|from pay_components\b|from subsidiaries\b/.test(text),
+    ),
+    false,
+  );
   optionReads.length = 0;
-  const window = await loadBenefits(HR_BENEFITS, { view: 'employees', window: 'new' });
+  const window = await loadBenefits(HR_BENEFITS, { view: "employees", window: "new" });
   assert.equal(window.dialogOpen, true);
-  assert.deepEqual(window.subsidiaryOptions, [{ value: 'entity', label: 'Visible legal entity' }]);
+  assert.deepEqual(window.subsidiaryOptions, [{ value: "entity", label: "Visible legal entity" }]);
   assert.equal(optionReads.filter((text) => /from subsidiaries\b/.test(text)).length, 1);
-  assert.equal(optionReads.some((text) => /from accounts\b|from pay_components\b|from worker_employments w\b/.test(text)), false);
+  assert.equal(
+    optionReads.some((text) =>
+      /from accounts\b|from pay_components\b|from worker_employments w\b/.test(text),
+    ),
+    false,
+  );
 });
 
 test("the enrolments view swaps the table for the other entity", async () => {
@@ -172,216 +211,457 @@ test("the enrolments view swaps the table for the other entity", async () => {
   assert.equal(data.showingEnrolments, true, "the view flag swaps the table");
   assert.equal(data.enrollmentRows.length, 1, "enrolments list on their own view");
   assert.equal(data.enrollmentRows[0]!.employeeLabel, "Ada", "rows resolve the employee name");
-  assert.ok(data.newWindowHref.includes("view=employees"), "dialogs opened from the view close back onto it");
+  assert.ok(
+    data.newWindowHref.includes("view=employees"),
+    "dialogs opened from the view close back onto it",
+  );
 });
 
 test("the benefits copy ships with translated statuses in every section", () => {
-  for (const key of ['title', 'windowsTitle', 'enrolmentsTitle', 'segments.open', 'segments.draft', 'segments.closed']) {
-    assert.ok(portfolioCatalog(`benefits.${key}`).length > 0, `${key} resolves from the catalog`)
-    assert.notEqual(portfolioCatalog(`benefits.${key}`), `benefits.${key}`, `${key} is translated`)
+  for (const key of [
+    "title",
+    "windowsTitle",
+    "enrolmentsTitle",
+    "segments.open",
+    "segments.draft",
+    "segments.closed",
+  ]) {
+    assert.ok(portfolioCatalog(`benefits.${key}`).length > 0, `${key} resolves from the catalog`);
+    assert.notEqual(portfolioCatalog(`benefits.${key}`), `benefits.${key}`, `${key} is translated`);
   }
 });
 
-test('loaded portfolio keeps all rows searchable beyond 500 and totals exact values', async () => {
-  gap.__portfolioReads = { programs: [], awards: Array.from({ length: 501 }, (_, index) => ({
-    id: `award-${index}`, programId: 'program', employmentId: 'employment', value: '0.01', currency: 'USD', status: 'approved',
-  })) }
-  const data = await loadBenefitsPortfolio(HR_BENEFITS, {}, { openCount: 0, pendingEnrollments: 0 }, portfolioCatalog)
-  assert.equal(data.awards.length, 501)
-  assert.equal(data.awardsTotal, 501)
-  assert.equal(data.awardsTruncated, false)
-  assert.equal(data.vitals.awaitingByCurrency[0]?.amount, '5.0100')
-  assert.equal(data.canQueue, false, 'HR manage cannot release finance payouts')
-})
+test("loaded portfolio keeps all rows searchable beyond 500 and totals exact values", async () => {
+  gap.__portfolioReads = {
+    programs: [],
+    awards: Array.from({ length: 501 }, (_, index) => ({
+      id: `award-${index}`,
+      programId: "program",
+      employmentId: "employment",
+      value: "0.01",
+      currency: "USD",
+      status: "approved",
+    })),
+  };
+  const data = await loadBenefitsPortfolio(
+    HR_BENEFITS,
+    {},
+    { openCount: 0, pendingEnrollments: 0 },
+    portfolioCatalog,
+  );
+  assert.equal(data.awards.length, 501);
+  assert.equal(data.awardsTotal, 501);
+  assert.equal(data.awardsTruncated, false);
+  assert.equal(data.vitals.awaitingByCurrency[0]?.amount, "5.0100");
+  assert.equal(data.canQueue, false, "HR manage cannot release finance payouts");
+});
 
-test('refused source read travels into the edit refusal and never implies a cleared set', async () => {
-  gap.__portfolioReads = { programs: [], awards: [], sourcesError: 'Select an account in this legal entity before editing.' }
-  const data = await loadBenefitsPortfolio(HR_BENEFITS, { program: 'program', edit: '1' }, { openCount: 0, pendingEnrollments: 0 }, portfolioCatalog)
-  assert.equal(data.editSourcesRefusal?.message, 'Select an account in this legal entity before editing.')
-  assert.equal(data.optionsRefusal?.message, data.editSourcesRefusal?.message)
-})
+test("refused source read travels into the edit refusal and never implies a cleared set", async () => {
+  gap.__portfolioReads = {
+    programs: [],
+    awards: [],
+    sourcesError: "Select an account in this legal entity before editing.",
+  };
+  const data = await loadBenefitsPortfolio(
+    HR_BENEFITS,
+    { program: "program", edit: "1" },
+    { openCount: 0, pendingEnrollments: 0 },
+    portfolioCatalog,
+  );
+  assert.equal(
+    data.editSourcesRefusal?.message,
+    "Select an account in this legal entity before editing.",
+  );
+  assert.equal(data.optionsRefusal?.message, data.editSourcesRefusal?.message);
+});
 
-test('Programs has one catalog and Delivery has one existing-obligation queue', async () => {
-  const programs = benefitsSpec(await loadBenefits(HR_BENEFITS, { view:'programs' }))
-  const header = programs.header?.find(block => block.kind === 'page-header')
-  assert.equal(header?.actions?.filter(action => action.widget === 'link-button' && action.props?.iconKey === 'plus').length,1)
-  assert.equal((JSON.stringify(programs.body).match(/"widget":"hrm-program-table"/g) ?? []).length,1)
-  const delivery = benefitsSpec(await loadBenefits(HR_BENEFITS, { view:'delivery' }))
-  const deliveryHeader = delivery.header?.find(block => block.kind === 'page-header')
-  assert.equal(deliveryHeader?.actions?.filter(action => action.widget === 'link-button').length,0)
-  assert.equal((JSON.stringify(delivery.body).match(/"widget":"hrm-benefit-delivery-table"/g) ?? []).length,1)
-})
+test("Programs has one catalog and Delivery has one existing-obligation queue", async () => {
+  const programs = benefitsSpec(await loadBenefits(HR_BENEFITS, { view: "programs" }));
+  const header = programs.header?.find((block) => block.kind === "page-header");
+  assert.equal(
+    header?.actions?.filter(
+      (action) => action.widget === "link-button" && action.props?.iconKey === "plus",
+    ).length,
+    1,
+  );
+  assert.equal(
+    (JSON.stringify(programs.body).match(/"widget":"hrm-program-table"/g) ?? []).length,
+    1,
+  );
+  const delivery = benefitsSpec(await loadBenefits(HR_BENEFITS, { view: "delivery" }));
+  const deliveryHeader = delivery.header?.find((block) => block.kind === "page-header");
+  assert.equal(
+    deliveryHeader?.actions?.filter((action) => action.widget === "link-button").length,
+    0,
+  );
+  assert.equal(
+    (JSON.stringify(delivery.body).match(/"widget":"hrm-benefit-delivery-table"/g) ?? []).length,
+    1,
+  );
+});
 
-test('a refused award read shows unknown vitals and omits zero-shaped currency totals', async () => {
-  gap.__portfolioReads = { awardsError: 'Ask finance to restore access before reviewing payouts.' }
-  const data = await loadBenefits(HR_BENEFITS, {})
-  assert.equal(data.awardsRefusal?.message, 'Ask finance to restore access before reviewing payouts.')
-  assert.equal(data.tiles.pendingApprovals, '—')
-  assert.equal(data.tiles.queuedPayouts, '—')
-  const spec = JSON.stringify(benefitsSpec(data))
-  assert.ok(!spec.includes('deliveredRows'), 'a failed read cannot render a no-awards currency table')
-})
+test("a refused award read shows unknown vitals and omits zero-shaped currency totals", async () => {
+  gap.__portfolioReads = { awardsError: "Ask finance to restore access before reviewing payouts." };
+  const data = await loadBenefits(HR_BENEFITS, {});
+  assert.equal(
+    data.awardsRefusal?.message,
+    "Ask finance to restore access before reviewing payouts.",
+  );
+  assert.equal(data.tiles.pendingApprovals, "—");
+  assert.equal(data.tiles.queuedPayouts, "—");
+  const spec = JSON.stringify(benefitsSpec(data));
+  assert.ok(
+    !spec.includes("deliveredRows"),
+    "a failed read cannot render a no-awards currency table",
+  );
+});
 
-test('Benefits overview uses the native cockpit hero and rail without enrollment tables or creation cards', async () => {
-  const data = await loadBenefits(HR_BENEFITS, {})
-  const spec = benefitsSpec(data)
-  const body = spec.body.find((block) => block.kind === 'grid')
-  assert.ok(body?.kind === 'grid')
-  const cockpit = body.blocks.find((block) => block.kind === 'grid' && block.className?.includes('lg:grid-cols-3'))
-  assert.ok(cockpit?.kind === 'grid')
-  const hero = cockpit.blocks[0]
-  assert.ok(hero?.kind === 'panel')
-  assert.match(hero.className ?? '', /lg:col-span-2/)
-  assert.ok(hero.blocks.some((block) => block.kind === 'widget' && block.widget === 'hrm-program-table'))
-  const rail = cockpit.blocks[1]
-  assert.ok(rail?.kind === 'grid')
-  assert.match(rail.className ?? '', /overflow-y-auto/)
-  const serialized = JSON.stringify(spec)
-  assert.ok(serialized.includes('attention-list'))
-  assert.ok(serialized.includes('directory-section'))
-  assert.ok(!serialized.includes('hrm_benefits_windows'))
-  assert.ok(!serialized.includes('hrm_benefits_enrolments'))
-  assert.ok(!data.programTypePickerOpen, 'type picker is closed on overview')
-  assert.ok(!serialized.includes('hrm-facts'), 'empty award balances do not create empty money panels')
-})
+test("Benefits overview uses the native cockpit hero and rail without enrollment tables or creation cards", async () => {
+  const data = await loadBenefits(HR_BENEFITS, {});
+  const spec = benefitsSpec(data);
+  const body = spec.body.find((block) => block.kind === "grid");
+  assert.ok(body?.kind === "grid");
+  const cockpit = body.blocks.find(
+    (block) => block.kind === "grid" && block.className?.includes("lg:grid-cols-3"),
+  );
+  assert.ok(cockpit?.kind === "grid");
+  const hero = cockpit.blocks[0];
+  assert.ok(hero?.kind === "panel");
+  assert.match(hero.className ?? "", /lg:col-span-2/);
+  assert.ok(
+    hero.blocks.some((block) => block.kind === "widget" && block.widget === "hrm-program-table"),
+  );
+  const rail = cockpit.blocks[1];
+  assert.ok(rail?.kind === "grid");
+  assert.match(rail.className ?? "", /overflow-y-auto/);
+  const serialized = JSON.stringify(spec);
+  assert.ok(serialized.includes("attention-list"));
+  assert.ok(serialized.includes("directory-section"));
+  assert.ok(!serialized.includes("hrm_benefits_windows"));
+  assert.ok(!serialized.includes("hrm_benefits_enrolments"));
+  assert.ok(!data.programTypePickerOpen, "type picker is closed on overview");
+  assert.ok(
+    !serialized.includes("hrm-facts"),
+    "empty award balances do not create empty money panels",
+  );
+});
 
-test('Benefits overview preserves exact currency lines in native populated summaries', async () => {
-  gap.__portfolioReads = { programs: [], awards: [
-    { id: 'usd', programId: 'program', employmentId: 'emp', status: 'approved', value: '25.00', currency: 'USD', periodFrom: '2026-01-01', createdAt: '2026-01-01T00:00:00Z', programCode: 'BONUS', programName: 'Bonus', programFamily: 'reward' },
-    { id: 'jpy', programId: 'program', employmentId: 'emp', status: 'approved', value: '1000', currency: 'JPY', periodFrom: '2026-01-01', createdAt: '2026-01-01T00:00:00Z', programCode: 'BONUS', programName: 'Bonus', programFamily: 'reward' },
-  ] }
-  const data = await loadBenefits(HR_BENEFITS, {})
-  const serialized = JSON.stringify(benefitsSpec(data))
-  assert.ok(serialized.includes('hrm-facts'))
+test("Benefits overview preserves exact currency lines in native populated summaries", async () => {
+  gap.__portfolioReads = {
+    programs: [],
+    awards: [
+      {
+        id: "usd",
+        programId: "program",
+        employmentId: "emp",
+        status: "approved",
+        value: "25.00",
+        currency: "USD",
+        periodFrom: "2026-01-01",
+        createdAt: "2026-01-01T00:00:00Z",
+        programCode: "BONUS",
+        programName: "Bonus",
+        programFamily: "reward",
+      },
+      {
+        id: "jpy",
+        programId: "program",
+        employmentId: "emp",
+        status: "approved",
+        value: "1000",
+        currency: "JPY",
+        periodFrom: "2026-01-01",
+        createdAt: "2026-01-01T00:00:00Z",
+        programCode: "BONUS",
+        programName: "Bonus",
+        programFamily: "reward",
+      },
+    ],
+  };
+  const data = await loadBenefits(HR_BENEFITS, {});
+  const serialized = JSON.stringify(benefitsSpec(data));
+  assert.ok(serialized.includes("hrm-facts"));
   for (const row of data.awaitingRows) {
-    assert.ok(serialized.includes(JSON.stringify({ label: row.currency, value: row.display })))
+    assert.ok(serialized.includes(JSON.stringify({ label: row.currency, value: row.display })));
   }
-  assert.deepEqual(data.awaitingRows.map((row) => [row.currency, row.amount]), [['JPY', '1000.0000'], ['USD', '25.0000']])
-})
+  assert.deepEqual(
+    data.awaitingRows.map((row) => [row.currency, row.amount]),
+    [
+      ["JPY", "1000.0000"],
+      ["USD", "25.0000"],
+    ],
+  );
+});
 
-test('Employee benefits owns window management through its canonical destination', async () => {
-  const data = await loadBenefits(HR_BENEFITS, { view: 'employees', windows: '1' })
-  assert.equal(data.enrollmentWindowsHref, '/hrm/benefits?view=employees&windows=1')
-  assert.equal(data.windowsManagerOpen, true)
-  assert.equal(data.portfolioView, 'employees')
-})
+test("Employee benefits owns window management through its canonical destination", async () => {
+  const data = await loadBenefits(HR_BENEFITS, { view: "employees", windows: "1" });
+  assert.equal(data.enrollmentWindowsHref, "/hrm/benefits?view=employees&windows=1");
+  assert.equal(data.windowsManagerOpen, true);
+  assert.equal(data.portfolioView, "employees");
+});
 
-test('New enrollment binds the native controlled election form to the HR filing API', async () => {
-  stubReads([windowRow('open', 'open'), windowRow('draft', 'draft')], [])
-  const data = await loadBenefits(HR_BENEFITS, { view: 'employees', enrollment: 'new' })
-  assert.equal(data.enrollmentDialog?.title, 'New enrollment')
-  assert.deepEqual(data.enrollmentDialog?.windows.map((window) => window.value), ['open'])
-  const serialized = JSON.stringify(benefitsSpec(data))
-  assert.ok(serialized.includes('"mode":"manage"'))
-  const readonly = await loadBenefits(authzWith(['hrm.benefits.read']), { view: 'employees', enrollment: 'new' })
-  assert.equal(readonly.enrollmentDialog, null)
-})
+test("New enrollment binds the native controlled election form to the HR filing API", async () => {
+  stubReads([windowRow("open", "open"), windowRow("draft", "draft")], []);
+  const data = await loadBenefits(HR_BENEFITS, { view: "employees", enrollment: "new" });
+  assert.equal(data.enrollmentDialog?.title, "New enrollment");
+  assert.deepEqual(
+    data.enrollmentDialog?.windows.map((window) => window.value),
+    ["open"],
+  );
+  const serialized = JSON.stringify(benefitsSpec(data));
+  assert.ok(serialized.includes('"mode":"manage"'));
+  const readonly = await loadBenefits(authzWith(["hrm.benefits.read"]), {
+    view: "employees",
+    enrollment: "new",
+  });
+  assert.equal(readonly.enrollmentDialog, null);
+});
 
-test('Programs combines insured plans and employer programs in one filterable population', async () => {
-  gap.__benefitsReads = { windows: [], enrolments: [], catalogPlans: [
-    { id: 'health', code: 'HEALTH', name: 'Health coverage', kind: 'health', currency: 'USD', isActive: true, effectiveFrom: '2026-01-01', effectiveTo: null },
-    { id: 'retired', code: 'OLD', name: 'Retired plan', kind: 'dental', currency: 'USD', isActive: false, effectiveFrom: '2025-01-01', effectiveTo: '2025-12-31' },
-  ] }
-  gap.__portfolioReads = { programs: [{ id: 'reward', code: 'RECOG', name: 'Recognition', family: 'reward', currency: 'USD', status: 'active', valuation: 'fixed', fixedAmount: '25.0000', effectiveFrom: '2026-01-01', effectiveTo: null }], awards: [] }
+test("Programs combines insured plans and employer programs in one filterable population", async () => {
+  gap.__benefitsReads = {
+    windows: [],
+    enrolments: [],
+    catalogPlans: [
+      {
+        id: "health",
+        code: "HEALTH",
+        name: "Health coverage",
+        kind: "health",
+        currency: "USD",
+        isActive: true,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        id: "retired",
+        code: "OLD",
+        name: "Retired plan",
+        kind: "dental",
+        currency: "USD",
+        isActive: false,
+        effectiveFrom: "2025-01-01",
+        effectiveTo: "2025-12-31",
+      },
+    ],
+  };
+  gap.__portfolioReads = {
+    programs: [
+      {
+        id: "reward",
+        code: "RECOG",
+        name: "Recognition",
+        family: "reward",
+        currency: "USD",
+        status: "active",
+        valuation: "fixed",
+        fixedAmount: "25.0000",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+    ],
+    awards: [],
+  };
   // Current programs by default; closed and inactive history on request.
-  const data = await loadBenefits(HR_BENEFITS, { view: 'programs' })
-  assert.deepEqual(data.unifiedProgramRows.map((row) => row.id), ['health', 'reward'])
-  assert.equal(data.unifiedProgramRows[0]?.programHref, '/hrm/benefits?view=programs&program=health')
-  const everything = await loadBenefits(HR_BENEFITS, { view: 'programs', status: 'all' })
-  assert.deepEqual(everything.unifiedProgramRows.map((row) => row.id), ['health', 'reward', 'retired'])
-  assert.equal(everything.unifiedProgramRows[2]?.statusLabel, 'Inactive')
-  const history = await loadBenefits(HR_BENEFITS, { view: 'programs', status: 'closed' })
-  assert.deepEqual(history.unifiedProgramRows.map((row) => row.id), ['retired'])
-  const filtered = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'health', status: 'all' })
-  assert.equal(filtered.unifiedProgramRows.length, 2)
-  assert.equal(filtered.programTypeFilter.currentParams.type, 'health')
-  assert.equal(filtered.programStatusFilter.currentParams.status, 'all')
-  const body = JSON.stringify(benefitsSpec(data).body)
-  assert.equal((body.match(/"widget":"hrm-program-table"/g) ?? []).length, 1)
-  assert.ok(body.includes('typeFilter'))
-  assert.ok(!body.includes('setup-entity-section'))
-  const overview = await loadBenefits(HR_BENEFITS, {})
-  assert.equal(overview.tiles.activePrograms, '2')
-  const overviewBody = JSON.stringify(benefitsSpec(overview).body)
-  for (const name of ['Health coverage', 'Recognition']) assert.ok(overviewBody.includes(name))
-  assert.ok(!overviewBody.includes('Retired plan'))
-  const unknown = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'typo' })
-  assert.match(unknown.programsRefusal?.message ?? '', /typo.*filter/)
-})
+  const data = await loadBenefits(HR_BENEFITS, { view: "programs" });
+  assert.deepEqual(
+    data.unifiedProgramRows.map((row) => row.id),
+    ["health", "reward"],
+  );
+  assert.equal(
+    data.unifiedProgramRows[0]?.programHref,
+    "/hrm/benefits?view=programs&program=health",
+  );
+  const everything = await loadBenefits(HR_BENEFITS, { view: "programs", status: "all" });
+  assert.deepEqual(
+    everything.unifiedProgramRows.map((row) => row.id),
+    ["health", "reward", "retired"],
+  );
+  assert.equal(everything.unifiedProgramRows[2]?.statusLabel, "Inactive");
+  const history = await loadBenefits(HR_BENEFITS, { view: "programs", status: "closed" });
+  assert.deepEqual(
+    history.unifiedProgramRows.map((row) => row.id),
+    ["retired"],
+  );
+  const filtered = await loadBenefits(HR_BENEFITS, {
+    view: "programs",
+    type: "health",
+    status: "all",
+  });
+  assert.equal(filtered.unifiedProgramRows.length, 2);
+  assert.equal(filtered.programTypeFilter.currentParams.type, "health");
+  assert.equal(filtered.programStatusFilter.currentParams.status, "all");
+  const body = JSON.stringify(benefitsSpec(data).body);
+  assert.equal((body.match(/"widget":"hrm-program-table"/g) ?? []).length, 1);
+  assert.ok(body.includes("typeFilter"));
+  assert.ok(!body.includes("setup-entity-section"));
+  const overview = await loadBenefits(HR_BENEFITS, {});
+  assert.equal(overview.tiles.activePrograms, "2");
+  const overviewBody = JSON.stringify(benefitsSpec(overview).body);
+  for (const name of ["Health coverage", "Recognition"]) assert.ok(overviewBody.includes(name));
+  assert.ok(!overviewBody.includes("Retired plan"));
+  const unknown = await loadBenefits(HR_BENEFITS, { view: "programs", type: "typo" });
+  assert.match(unknown.programsRefusal?.message ?? "", /typo.*filter/);
+});
 
-test('New program chooses a native Benefits type before creating a record', async () => {
-  const data = await loadBenefits(HR_BENEFITS, { view: 'programs', program: 'new' })
-  assert.equal(data.programTypePickerOpen, true)
-  assert.equal(data.programBuilderOpen, false)
-  for (const card of data.overview.cards) assert.ok(card.href.startsWith('/hrm/benefits?view=programs&'))
-  const health = data.overview.cards.find((card) => card.key === 'health')!
-  assert.equal(health.href, '/hrm/benefits?view=programs&plan=new&kind=health')
-  const reward = await loadBenefits(HR_BENEFITS, { view: 'programs', program: 'new', family: 'reward' })
-  assert.equal(reward.programTypePickerOpen, false)
-  assert.equal(reward.programBuilderOpen, true)
-  assert.equal(reward.programBuilderFamily, 'reward')
-})
+test("New program chooses a native Benefits type before creating a record", async () => {
+  const data = await loadBenefits(HR_BENEFITS, { view: "programs", program: "new" });
+  assert.equal(data.programTypePickerOpen, true);
+  assert.equal(data.programBuilderOpen, false);
+  for (const card of data.overview.cards)
+    assert.ok(card.href.startsWith("/hrm/benefits?view=programs&"));
+  const health = data.overview.cards.find((card) => card.key === "health")!;
+  assert.equal(health.href, "/hrm/benefits?view=programs&plan=new&kind=health");
+  const reward = await loadBenefits(HR_BENEFITS, {
+    view: "programs",
+    program: "new",
+    family: "reward",
+  });
+  assert.equal(reward.programTypePickerOpen, false);
+  assert.equal(reward.programBuilderOpen, true);
+  assert.equal(reward.programBuilderFamily, "reward");
+});
 
-test('cash payroll processing labels do not claim bank payment', async () => {
-  gap.__portfolioReads = { programs: [{ id: 'program', code: 'BONUS', name: 'Bonus', family: 'reward', currency: 'USD', status: 'active', deliveryMethod: 'payroll', valuation: 'fixed', fixedAmount: '25.00' }], awards: [{ id: 'reward', programId: 'program', employmentId: 'employment', value: '25.00', currency: 'USD', status: 'delivered' }] }
-  const data = await loadBenefits(HR_BENEFITS, { view: 'delivery' })
-  assert.equal(data.awardRows[0]?.statusLabel, 'Processed in payroll')
-})
+test("cash payroll processing labels do not claim bank payment", async () => {
+  gap.__portfolioReads = {
+    programs: [
+      {
+        id: "program",
+        code: "BONUS",
+        name: "Bonus",
+        family: "reward",
+        currency: "USD",
+        status: "active",
+        deliveryMethod: "payroll",
+        valuation: "fixed",
+        fixedAmount: "25.00",
+      },
+    ],
+    awards: [
+      {
+        id: "reward",
+        programId: "program",
+        employmentId: "employment",
+        value: "25.00",
+        currency: "USD",
+        status: "delivered",
+      },
+    ],
+  };
+  const data = await loadBenefits(HR_BENEFITS, { view: "delivery" });
+  assert.equal(data.awardRows[0]?.statusLabel, "Processed in payroll");
+});
 
-test('external payout progress comes only from verified native payroll consumption', async () => {
-  const program = { id: 'external-program', code: 'GIFTS', name: 'Gift cards', family: 'reward', currency: 'USD', status: 'active', deliveryMethod: 'external', valuation: 'fixed', fixedAmount: '25.00' }
-  const award = { id: 'gift', programId: program.id, employmentId: 'employment', value: '25.00', currency: 'USD', status: 'queued' }
-  for (const [payrollProcessed, expected] of [[false, 'Queued on a pay run'], [true, 'Processed in payroll · awaiting fulfillment']] as const) {
-    gap.__portfolioReads = { programs: [program], awards: [{ ...award, payrollProcessed }] }
-    const data = await loadBenefits(HR_BENEFITS, { view: 'delivery' })
-    assert.equal(data.awardRows[0]?.statusLabel, expected)
-  }
-})
-
-test('approval policy editing authority follows the native Flows grant rather than HR management', async () => {
-  const hr = await loadBenefits(HR_BENEFITS, { view: 'programs', program: 'new', family: 'reward' })
-  assert.equal(hr.canConfigureApprovalPolicies, false)
-  const workflowManager = await loadBenefits(authzWith(['hrm.benefits.read', 'hrm.benefits.manage', 'flows.manage']), { view: 'programs', program: 'new', family: 'reward' })
-  assert.equal(workflowManager.canConfigureApprovalPolicies, true)
-  assert.ok(JSON.stringify(benefitsSpec(workflowManager)).includes('canConfigureApprovalPolicies'))
-})
-
-test('Payouts contains only released delivery obligations and recorded payroll history', async () => {
+test("external payout progress comes only from verified native payroll consumption", async () => {
   const program = {
-    id: 'program',
-    code: 'THANKS',
-    name: 'Recognition',
-    family: 'reward',
-    currency: 'USD',
-    status: 'active',
-    deliveryMethod: 'payroll',
-    valuation: 'fixed',
-    fixedAmount: '25.00',
+    id: "external-program",
+    code: "GIFTS",
+    name: "Gift cards",
+    family: "reward",
+    currency: "USD",
+    status: "active",
+    deliveryMethod: "external",
+    valuation: "fixed",
+    fixedAmount: "25.00",
+  };
+  const award = {
+    id: "gift",
+    programId: program.id,
+    employmentId: "employment",
+    value: "25.00",
+    currency: "USD",
+    status: "queued",
+  };
+  for (const [payrollProcessed, expected] of [
+    [false, "Queued on a pay run"],
+    [true, "Processed in payroll · awaiting fulfillment"],
+  ] as const) {
+    gap.__portfolioReads = { programs: [program], awards: [{ ...award, payrollProcessed }] };
+    const data = await loadBenefits(HR_BENEFITS, { view: "delivery" });
+    assert.equal(data.awardRows[0]?.statusLabel, expected);
   }
-  const statuses = ['draft', 'pending', 'approved', 'queued', 'delivered', 'rejected', 'voided']
-  const awards = statuses.map((status) => ({ id: status, programId: program.id, employmentId: 'employment', value: '25.00', currency: 'USD', status, payRunDocumentId: null, payRunAdjustmentId: null }))
-  awards.push({ ...awards[6]!, id: 'recorded-void', payRunDocumentId: 'run', payRunAdjustmentId: 'adjustment' } as never)
-  gap.__portfolioReads = { programs: [program], awards }
-  const payouts = await loadBenefits(HR_BENEFITS, { view: 'delivery' })
-  assert.deepEqual(payouts.payoutAwardRows.map((award) => award.id), ['approved', 'queued', 'delivered', 'recorded-void'])
-  const spec = JSON.stringify(benefitsSpec(payouts))
-  assert.ok(!spec.includes('"label":"New award"'))
-  assert.ok(!spec.includes('"label":"New reward"'))
-  assert.ok(!spec.includes('"id":"draft"'))
-  const rewards = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'reward' })
-  assert.deepEqual(rewards.rewardAwardRows, [], 'the program catalog does not read unrelated award history')
-  const overview = await loadBenefits(HR_BENEFITS, {})
-  assert.ok(['draft', 'pending', 'rejected'].every((id) => overview.rewardAwardRows.some((row) => row.id === id)))
-  assert.equal(payouts.overview.attention.find((item) => item.key === 'pending-awards')?.href, '/inbox')
-})
+});
 
+test("approval policy editing authority follows the native Flows grant rather than HR management", async () => {
+  const hr = await loadBenefits(HR_BENEFITS, {
+    view: "programs",
+    program: "new",
+    family: "reward",
+  });
+  assert.equal(hr.canConfigureApprovalPolicies, false);
+  const workflowManager = await loadBenefits(
+    authzWith(["hrm.benefits.read", "hrm.benefits.manage", "flows.manage"]),
+    { view: "programs", program: "new", family: "reward" },
+  );
+  assert.equal(workflowManager.canConfigureApprovalPolicies, true);
+  assert.ok(JSON.stringify(benefitsSpec(workflowManager)).includes("canConfigureApprovalPolicies"));
+});
 
-test('Programs loads its catalog without enrollment populations, award history or overview reports', async () => {
-  gap.__portfolioReads = { programs: [], awardsError: 'Award history unavailable' }
-  const data = await loadBenefits(HR_BENEFITS, { view: 'programs' })
-  assert.equal(data.hasContent, true)
-  assert.equal(data.awardsRefusal, null)
-  assert.deepEqual(gap.__benefitsDataReads, [])
-  await loadBenefits(HR_BENEFITS, {})
-  assert.deepEqual(new Set(gap.__benefitsDataReads as string[]), new Set(['windows', 'enrollments', 'awards', 'reports']))
-})
+test("Payouts contains only released delivery obligations and recorded payroll history", async () => {
+  const program = {
+    id: "program",
+    code: "THANKS",
+    name: "Recognition",
+    family: "reward",
+    currency: "USD",
+    status: "active",
+    deliveryMethod: "payroll",
+    valuation: "fixed",
+    fixedAmount: "25.00",
+  };
+  const statuses = ["draft", "pending", "approved", "queued", "delivered", "rejected", "voided"];
+  const awards = statuses.map((status) => ({
+    id: status,
+    programId: program.id,
+    employmentId: "employment",
+    value: "25.00",
+    currency: "USD",
+    status,
+    payRunDocumentId: null,
+    payRunAdjustmentId: null,
+  }));
+  awards.push({
+    ...awards[6]!,
+    id: "recorded-void",
+    payRunDocumentId: "run",
+    payRunAdjustmentId: "adjustment",
+  } as never);
+  gap.__portfolioReads = { programs: [program], awards };
+  const payouts = await loadBenefits(HR_BENEFITS, { view: "delivery" });
+  assert.deepEqual(
+    payouts.payoutAwardRows.map((award) => award.id),
+    ["approved", "queued", "delivered", "recorded-void"],
+  );
+  const spec = JSON.stringify(benefitsSpec(payouts));
+  assert.ok(!spec.includes('"label":"New award"'));
+  assert.ok(!spec.includes('"label":"New reward"'));
+  assert.ok(!spec.includes('"id":"draft"'));
+  const rewards = await loadBenefits(HR_BENEFITS, { view: "programs", type: "reward" });
+  assert.deepEqual(
+    rewards.rewardAwardRows,
+    [],
+    "the program catalog does not read unrelated award history",
+  );
+  const overview = await loadBenefits(HR_BENEFITS, {});
+  assert.ok(
+    ["draft", "pending", "rejected"].every((id) =>
+      overview.rewardAwardRows.some((row) => row.id === id),
+    ),
+  );
+  assert.equal(
+    payouts.overview.attention.find((item) => item.key === "pending-awards")?.href,
+    "/inbox",
+  );
+});
+
+test("Programs loads its catalog without enrollment populations, award history or overview reports", async () => {
+  gap.__portfolioReads = { programs: [], awardsError: "Award history unavailable" };
+  const data = await loadBenefits(HR_BENEFITS, { view: "programs" });
+  assert.equal(data.hasContent, true);
+  assert.equal(data.awardsRefusal, null);
+  assert.deepEqual(gap.__benefitsDataReads, []);
+  await loadBenefits(HR_BENEFITS, {});
+  assert.deepEqual(
+    new Set(gap.__benefitsDataReads as string[]),
+    new Set(["windows", "enrollments", "awards", "reports"]),
+  );
+});

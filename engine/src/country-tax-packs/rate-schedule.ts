@@ -29,7 +29,8 @@ export function packRatesCoveringDate(
   today: string,
 ): readonly EffectiveTaxRate[] {
   return (rates ?? []).filter(
-    (rate) => rate.effectiveFrom <= today && (rate.effectiveTo === undefined || rate.effectiveTo >= today),
+    (rate) =>
+      rate.effectiveFrom <= today && (rate.effectiveTo === undefined || rate.effectiveTo >= today),
   );
 }
 
@@ -58,33 +59,33 @@ export function assertPackCodeRateSchedule(
     const last = rates.at(-1)!;
     if (last.effectiveTo !== undefined && last.effectiveTo < today) {
       throw new Error(
-        `${label} has no rate covering ${today}: its last band (${describeBand(last)}) already ended, `
-        + `so the pack needs the successor rate transcribed before this code can provision current tax`,
+        `${label} has no rate covering ${today}: its last band (${describeBand(last)}) already ended, ` +
+          `so the pack needs the successor rate transcribed before this code can provision current tax`,
       );
     }
     const first = rates[0]!;
     if (first.effectiveFrom > today) {
       throw new Error(
-        `${label} has no rate covering ${today}: its earliest band (${describeBand(first)}) `
-        + `does not start until ${first.effectiveFrom}, so no declared rate is in force yet`,
+        `${label} has no rate covering ${today}: its earliest band (${describeBand(first)}) ` +
+          `does not start until ${first.effectiveFrom}, so no declared rate is in force yet`,
       );
     }
     throw new Error(
-      `${label} has no rate covering ${today}: the declared bands leave a gap on that date, `
-      + `so the pack needs a band transcribed for it before this code can provision current tax`,
+      `${label} has no rate covering ${today}: the declared bands leave a gap on that date, ` +
+        `so the pack needs a band transcribed for it before this code can provision current tax`,
     );
   }
   if (covering.length > 1) {
     throw new Error(
-      `${label} has ${covering.length} rates covering ${today} `
-      + `(${covering.map(describeBand).join("; ")}): exactly one rate may cover today`,
+      `${label} has ${covering.length} rates covering ${today} ` +
+        `(${covering.map(describeBand).join("; ")}): exactly one rate may cover today`,
     );
   }
   const current = covering[0]!;
   if (definition.ratePercent !== current.ratePercent) {
     throw new Error(
-      `${label} headline rate is stale: ${describeBand(current)} covers ${today} `
-      + `but ratePercent is ${definition.ratePercent}`,
+      `${label} headline rate is stale: ${describeBand(current)} covers ${today} ` +
+        `but ratePercent is ${definition.ratePercent}`,
     );
   }
 }

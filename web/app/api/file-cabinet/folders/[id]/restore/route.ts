@@ -14,8 +14,7 @@ export const POST = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     const access = await requireFolderAccess(gate, id, "manager");
     if (access) return access;
     const ok = await restoreFolder(gate.user.orgId, id, {

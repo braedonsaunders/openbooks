@@ -50,7 +50,10 @@ test("a rate increase differences to the per-bucket difference, exactly", () => 
   assert.equal(difference.delta, "240.0000");
   assert.deepEqual(
     difference.buckets.map((b) => [b.projectId, b.amount]),
-    [["jobA", "180.0000"], ["jobB", "60.0000"]],
+    [
+      ["jobA", "180.0000"],
+      ["jobB", "60.0000"],
+    ],
   );
   // The proportions the ORIGINAL hours had: 60/80 and 20/80 of the increase.
   assert.equal(difference.buckets[0]!.originalHours, "60.0000");
@@ -73,7 +76,9 @@ test("paying a difference makes it zero next time, and a later correction is sti
 
   // Detection runs again against exactly the same configuration.
   const second = differenceRetroEarnings({
-    original, recomputed: afterFirstIncrease, settled,
+    original,
+    recomputed: afterFirstIncrease,
+    settled,
   });
   assert.equal(second.delta, "0.0000", "the same money is never owed twice");
   assert.equal(retroOutcome(second.delta), "none");
@@ -81,7 +86,9 @@ test("paying a difference makes it zero next time, and a later correction is sti
   // The settlement is then CORRECTED upward. Only the increment is owed — a
   // "already settled" flag would refuse this entirely.
   const third = differenceRetroEarnings({
-    original, recomputed: [line({ amount: "1150.00" })], settled,
+    original,
+    recomputed: [line({ amount: "1150.00" })],
+    settled,
   });
   assert.equal(third.delta, "50.0000");
   assert.equal(retroOutcome(third.delta), "payable");
@@ -132,7 +139,10 @@ test("one job falling while another rises keeps both signs and the right total",
   const paying = payableRetroBuckets(difference);
   assert.deepEqual(
     paying.map((b) => [b.projectId, b.amount]),
-    [["jobA", "400.0000"], ["jobB", "-100.0000"]],
+    [
+      ["jobA", "400.0000"],
+      ["jobB", "-100.0000"],
+    ],
     "job B was over-costed and the retro takes it back off that job",
   );
 });
@@ -172,8 +182,20 @@ test("payable and overpaid are summarized apart, never netted", () => {
     { employeePartyId: "e2", employeeName: "Blair", delta: "12.50" },
   ]);
   assert.deepEqual(summary, [
-    { employeePartyId: "e1", employeeName: "Avery", periods: 3, payable: "180.0000", overpaid: "-40.0000" },
-    { employeePartyId: "e2", employeeName: "Blair", periods: 1, payable: "12.5000", overpaid: "0.0000" },
+    {
+      employeePartyId: "e1",
+      employeeName: "Avery",
+      periods: 3,
+      payable: "180.0000",
+      overpaid: "-40.0000",
+    },
+    {
+      employeePartyId: "e2",
+      employeeName: "Blair",
+      periods: 1,
+      payable: "12.5000",
+      overpaid: "0.0000",
+    },
   ]);
 });
 
@@ -181,8 +203,12 @@ test("fractional-cent inputs are refused rather than silently rounded into money
   // money.ts is the only arithmetic in this module, and it does not tolerate
   // precision it cannot represent. A rate that produced a sub-cent line would
   // be a bug upstream, and it must not be laundered here.
-  assert.throws(() => differenceRetroEarnings({
-    original: [line({ amount: "1.000001" })],
-    recomputed: [line({ amount: "2.00" })],
-  }), /precision/);
+  assert.throws(
+    () =>
+      differenceRetroEarnings({
+        original: [line({ amount: "1.000001" })],
+        recomputed: [line({ amount: "2.00" })],
+      }),
+    /precision/,
+  );
 });

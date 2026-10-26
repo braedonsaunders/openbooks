@@ -31,13 +31,21 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount, certificateFlag, type PayrollCertificate,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
+  certificateFlag,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import { roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   evaluateUsNonresidentThreshold,
@@ -72,18 +80,25 @@ const WV_MOBILE_WORKFORCE_RULE: UsNonresidentThresholdRule = {
 const WV_MOBILE_FACTS: readonly { key: string; description: string }[] = [
   {
     key: "not_excluded_role",
-    description: "the employee is not a professional athlete, professional entertainer, or public figure",
+    description:
+      "the employee is not a professional athlete, professional entertainer, or public figure",
   },
   {
     key: "residence_state_qualifies",
-    description: "the employee's residence state provides a substantially similar exclusion, imposes no individual income tax, or the income is exempt under the United States Constitution or federal statute",
+    description:
+      "the employee's residence state provides a substantially similar exclusion, imposes no individual income tax, or the income is exempt under the United States Constitution or federal statute",
   },
 ];
 
 type WvPeriod = "weekly" | "biweekly" | "semimonthly" | "monthly" | "annual" | "daily";
 
 const WV_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "annual",
+  "daily",
 ];
 
 export type WvSchedule = "two_earner" | "one_earner";
@@ -256,17 +271,19 @@ const WV_EDITIONS_BY_YEAR: Record<number, WvYearRates> = {
   [WV_RATES_2026.year]: WV_RATES_2026,
 };
 
-export const WV_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "WV IT-100.2A (March 2026) Percentage Method",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "West Virginia Tax Division, Form WV IT-100.2A, Tables for Percentage Method of Withholding "
-    + "(March 2026) — two-earner tables (pp. 1–2) and optional one-earner tables (pp. 3–4); "
-    + "IT-104 Rev. 03/2023; Method II rounding to the nearest whole dollar",
-  status: "published",
-  region: "WV",
-}];
+export const WV_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "WV IT-100.2A (March 2026) Percentage Method",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "West Virginia Tax Division, Form WV IT-100.2A, Tables for Percentage Method of Withholding " +
+      "(March 2026) — two-earner tables (pp. 1–2) and optional one-earner tables (pp. 3–4); " +
+      "IT-104 Rev. 03/2023; Method II rounding to the nearest whole dollar",
+    status: "published",
+    region: "WV",
+  },
+];
 
 function wvPeriodFor(periodsPerYear: number): WvPeriod {
   return WV_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, WV_PERIODS, 260) as WvPeriod;
@@ -328,19 +345,38 @@ function compute(
   rates: WvYearRates,
   context: StateEngineContext<WvYearRates>,
 ): UsStateWithholdingResult {
-
   const militarySpouseCertificate = input.supportingCertificates?.us_wv_it104nr;
   if (militarySpouseCertificate?.onFile) {
     requireMilitarySpouseEligibility(militarySpouseCertificate, "West Virginia", [
-      { key: "servicemember_is_armed_forces_member", description: "the employee's spouse is a member of the Armed Forces" },
-      { key: "servicemember_present_under_orders", description: "the servicemember is present in West Virginia in compliance with military orders" },
-      { key: "spouse_present_solely_to_accompany", description: "the employee is present in West Virginia solely to be with the servicemember" },
-      { key: "spouse_domiciled_outside_wv", description: "the employee maintains domicile in another state" },
-      { key: "spousal_military_id_on_file", description: "a copy of the spousal military identification card is attached" },
+      {
+        key: "servicemember_is_armed_forces_member",
+        description: "the employee's spouse is a member of the Armed Forces",
+      },
+      {
+        key: "servicemember_present_under_orders",
+        description:
+          "the servicemember is present in West Virginia in compliance with military orders",
+      },
+      {
+        key: "spouse_present_solely_to_accompany",
+        description: "the employee is present in West Virginia solely to be with the servicemember",
+      },
+      {
+        key: "spouse_domiciled_outside_wv",
+        description: "the employee maintains domicile in another state",
+      },
+      {
+        key: "spousal_military_id_on_file",
+        description: "a copy of the spousal military identification card is attached",
+      },
     ]);
     return {
-      state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
-      statutoryTax: D(0n), additionalWithholding: D(0n),
+      state: "WV",
+      year: rates.year,
+      tax: D(0n),
+      taxSupplemental: D(0n),
+      statutoryTax: D(0n),
+      additionalWithholding: D(0n),
       factors: { WV_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "1" },
     };
   }
@@ -359,14 +395,16 @@ function compute(
   const wagesOnly = certificateFlag(input.certificate, "only_wv_source_income_is_wages");
   const reciprocalStates = ["KY", "MD", "OH", "PA", "VA"];
   if (
-    reciprocalExemptionClaimed
-    && input.basis === "nonresident"
-    && !invalidReciprocalResidence
-    && reciprocalStates.includes(reciprocalResidence ?? "")
-    && wagesOnly
+    reciprocalExemptionClaimed &&
+    input.basis === "nonresident" &&
+    !invalidReciprocalResidence &&
+    reciprocalStates.includes(reciprocalResidence ?? "") &&
+    wagesOnly
   ) {
     const exempt = context.exemptResult({
-      factorKey: "WV_EXEMPT", statutoryTax: true, additionalWithholding: true,
+      factorKey: "WV_EXEMPT",
+      statutoryTax: true,
+      additionalWithholding: true,
     });
     if (exempt) return exempt;
   }
@@ -397,15 +435,15 @@ function compute(
       const status = input.supportingCertificates?.us_wv_military_pay;
       if (!status?.onFile) {
         throw new PayrollError(
-          "West Virginia military pay is classified but no military-pay attestation is on file — "
-          + "record the member's Armed Forces status and Guard/Reserve exception answers before "
-          + "calculating; refused by name",
+          "West Virginia military pay is classified but no military-pay attestation is on file — " +
+            "record the member's Armed Forces status and Guard/Reserve exception answers before " +
+            "calculating; refused by name",
         );
       }
       if (!certificateFlag(status, "armed_forces_member")) {
         throw new PayrollError(
-          "West Virginia military-pay attestation does not certify Armed Forces membership — "
-          + "the §11-21-71 exclusion covers members only; correct the attestation before calculating",
+          "West Virginia military-pay attestation does not certify Armed Forces membership — " +
+            "the §11-21-71 exclusion covers members only; correct the attestation before calculating",
         );
       }
       if (certificateFlag(status, "guard_reserve_excepted_duty")) {
@@ -428,9 +466,10 @@ function compute(
   const grossWages = U(input.wages) + U(input.supplemental ?? "0");
   // Nonresidents withhold on verified West Virginia-source wages;
   // the mobile exclusion below prices off the same allocation when it applies.
-  let wages = input.basis === "nonresident"
-    ? U(requireUsSourceWages(input.wageAllocations, "WV", null))
-    : grossWages;
+  let wages =
+    input.basis === "nonresident"
+      ? U(requireUsSourceWages(input.wageAllocations, "WV", null))
+      : grossWages;
   // Federally exempt component dollars leave the priced base here, so the
   // low-income spread, the mobile exclusion, and the source-wage trace all
   // price the reduced base. (The mobile branch below re-establishes `wages`
@@ -446,7 +485,10 @@ function compute(
   if (certificateFlag(input.certificate, "low_income_exclusion_claim")) {
     const filingStatus = certificateChoice(input.certificate, "low_income_return_status");
     const expectedAgi = certificateAmount(input.certificate, "expected_annual_federal_agi");
-    const expectedEarnedIncome = certificateAmount(input.certificate, "expected_annual_earned_income");
+    const expectedEarnedIncome = certificateAmount(
+      input.certificate,
+      "expected_annual_earned_income",
+    );
     if (filingStatus == null || expectedAgi == null || expectedEarnedIncome == null) {
       throw new PayrollError(
         "West Virginia low-income exclusion claim needs the expected return status, annual federal AGI, and annual earned income; complete all three verified facts before calculating; refused by name",
@@ -462,7 +504,8 @@ function compute(
       );
     }
     const annualExclusionLimit = U(separateReturn ? "5000" : "10000");
-    const annualExclusion = earnedIncome < annualExclusionLimit ? earnedIncome : annualExclusionLimit;
+    const annualExclusion =
+      earnedIncome < annualExclusionLimit ? earnedIncome : annualExclusionLimit;
     const periodExclusion = divIntCents(annualExclusion, input.periodsPerYear);
     wages = max0(wages - periodExclusion);
     lowIncomeFactors.WV_LOW_INCOME_ANNUAL_EXCLUSION = D(annualExclusion);
@@ -486,15 +529,17 @@ function compute(
       const unmet = WV_MOBILE_FACTS.filter((fact) => !certificateFlag(mobile, fact.key));
       if (unmet.length > 0) {
         throw new PayrollError(
-          "West Virginia mobile-employee exclusion requires proof that "
-          + unmet.map((fact) => fact.description).join("; "),
+          "West Virginia mobile-employee exclusion requires proof that " +
+            unmet.map((fact) => fact.description).join("; "),
         );
       }
       const workedOutsideWv = (input.wageAllocations ?? []).some((item) => item.region !== "WV");
       if (workedOutsideWv) {
         const allocation = requireUsWageAllocation(input.wageAllocations, "WV", null);
         const threshold = evaluateUsNonresidentThreshold(
-          allocation, WV_MOBILE_WORKFORCE_RULE, input.periodsPerYear,
+          allocation,
+          WV_MOBILE_WORKFORCE_RULE,
+          input.periodsPerYear,
         );
         wages = max0(U(requireUsSourceWages(input.wageAllocations, "WV", null)) - federallyExempt);
         mobileFactors.WV_SOURCE_WAGES = D(wages);
@@ -502,7 +547,10 @@ function compute(
         if (!threshold.crossed) {
           mobileFactors.WV_MOBILE_EXCLUDED = "1";
           return {
-            state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
+            state: "WV",
+            year: rates.year,
+            tax: D(0n),
+            taxSupplemental: D(0n),
             factors: { ...exemptionFactors, ...mobileFactors },
           };
         }
@@ -545,7 +593,8 @@ function compute(
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
   if (reciprocalExemptionClaimed) {
     factors.WV_RECIPROCAL_EXEMPTION_NOT_APPLIED =
-      input.basis !== "nonresident" ? "not_nonresident"
+      input.basis !== "nonresident"
+        ? "not_nonresident"
         : invalidReciprocalResidence || !reciprocalStates.includes(reciprocalResidence ?? "")
           ? "ineligible_resident_state"
           : "wv_income_not_certified_as_wages_only";
@@ -567,7 +616,8 @@ function compute(
  * module header.
  */
 export const WV_FACTOR_LABELS: Readonly<Record<string, string>> = {
-  WV_NONRESIDENT_MILITARY_SPOUSE_EXEMPT: "West Virginia qualifying military-spouse wages exempt from withholding",
+  WV_NONRESIDENT_MILITARY_SPOUSE_EXEMPT:
+    "West Virginia qualifying military-spouse wages exempt from withholding",
   WV_EXEMPT_MILITARY_PAY: "West Virginia nonresident Armed Forces pay excluded from withholding",
   WV_EXEMPT_SEAFARER_WAGES: "West Virginia qualifying seafarer wages excluded from withholding",
   WV_MILITARY_PAY_TAXABLE: "West Virginia military pay taxable under a Guard/Reserve exception",
@@ -627,35 +677,39 @@ export const WV_CERTIFICATE: PayrollCertificate = {
   citation:
     "West Virginia Form WV IT-104 / IT-104NR (Rev. 03/2023); Form WV IT-100.2A (March 2026)",
   summary:
-    "Sets West Virginia withholding exemptions and the optional one-earner schedule. If the "
-    + "employee does not complete the form, no exemptions are claimed and the two-earner "
-    + "percentage tables apply — IT-104's own warning is that withholding \"may not be "
-    + "sufficient,\" not that the employer may skip withholding.",
+    "Sets West Virginia withholding exemptions and the optional one-earner schedule. If the " +
+    "employee does not complete the form, no exemptions are claimed and the two-earner " +
+    "percentage tables apply — IT-104's own warning is that withholding \"may not be " +
+    'sufficient," not that the employer may skip withholding.',
   storage: "certificate_rows",
   fields: [
     {
       key: "exemptions",
       label: "Line 4 — Total withholding exemptions",
       kind: "count",
-      min: "0", max: "99", default: "0",
+      min: "0",
+      max: "99",
+      default: "0",
       help:
-        "The sum of IT-104 lines 1–3 (self, spouse, dependents). Worth $2,000 a year each "
-        + "(IT-100.2A Table 5). Default zero: an unfiled certificate claims no exemptions.",
+        "The sum of IT-104 lines 1–3 (self, spouse, dependents). Worth $2,000 a year each " +
+        "(IT-100.2A Table 5). Default zero: an unfiled certificate claims no exemptions.",
     },
     {
       key: "one_earner",
       label: "Line 5 — Optional one-earner / one-job schedule",
       kind: "flag",
       help:
-        "Checked only if the employee is single, head of household, or married with a "
-        + "non-employed spouse, receives wages from only one job, and wants the lower "
-        + "optional one-earner tables. Unchecked is the two-earner default the wage-bracket "
-        + "tables themselves are computed from.",
+        "Checked only if the employee is single, head of household, or married with a " +
+        "non-employed spouse, receives wages from only one job, and wants the lower " +
+        "optional one-earner tables. Unchecked is the two-earner default the wage-bracket " +
+        "tables themselves are computed from.",
     },
     {
       key: "additional_per_period",
       label: "Line 6 — Additional withholding per pay period",
-      kind: "amount", decimals: 4, min: "0",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Added AFTER the percentage method is rounded to the dollar.",
     },
     {
@@ -677,13 +731,17 @@ export const WV_CERTIFICATE: PayrollCertificate = {
     {
       key: "expected_annual_federal_agi",
       label: "Expected federal adjusted gross income for this tax year",
-      kind: "amount", decimals: 2, min: "0",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
       help: "Enter a good-faith estimate of total federal AGI for the full tax year, including income beyond this West Virginia job.",
     },
     {
       key: "expected_annual_earned_income",
       label: "Expected annual earned income included in federal AGI",
-      kind: "amount", decimals: 2, min: "0",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
       help: "Enter a good-faith estimate of wages, compensation, and net self-employment income included in federal AGI; the statutory exclusion is limited to this amount and the filing-status cap.",
     },
     {
@@ -691,8 +749,8 @@ export const WV_CERTIFICATE: PayrollCertificate = {
       label: "IT-104NR — Claim exemption from West Virginia withholding",
       kind: "flag",
       help:
-        "Claim only when the employee resides outside West Virginia and meets all IT-104NR "
-        + "eligibility conditions below. An ineligible claim does not stop ordinary withholding.",
+        "Claim only when the employee resides outside West Virginia and meets all IT-104NR " +
+        "eligibility conditions below. An ineligible claim does not stop ordinary withholding.",
     },
     {
       key: "resident_state",
@@ -725,38 +783,43 @@ export const WV_IT104NR_CERTIFICATE: PayrollCertificate = {
   purpose: "exemption",
   citation: "West Virginia Form WV IT-104 / IT-104NR (Rev. 03/2023), military-spouse statement",
   summary:
-    "The military-spouse exemption requires the separate IT-104NR statement, all eligibility "
-    + "conditions, and a copy of the spouse's military identification card.",
+    "The military-spouse exemption requires the separate IT-104NR statement, all eligibility " +
+    "conditions, and a copy of the spouse's military identification card.",
   storage: "certificate_rows",
   fields: [
     {
       key: "servicemember_is_armed_forces_member",
       label: "Spouse is a member of the Armed Forces",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "IT-104NR condition (a).",
     },
     {
       key: "servicemember_present_under_orders",
       label: "Servicemember is present in West Virginia in compliance with military orders",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "IT-104NR condition (a).",
     },
     {
       key: "spouse_present_solely_to_accompany",
       label: "Employee is present in West Virginia solely to be with the servicemember",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "IT-104NR condition (b).",
     },
     {
       key: "spouse_domiciled_outside_wv",
       label: "Employee maintains domicile in another state",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "IT-104NR condition (c): record the state of domicile on the signed form.",
     },
     {
       key: "spousal_military_id_on_file",
       label: "Copy of spousal military identification card is attached",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "The IT-104NR instructions require the employee to attach this supporting document.",
     },
   ],
@@ -775,27 +838,30 @@ export const WV_MILITARY_PAY_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "WV" },
   purpose: "withholding",
   citation:
-    "WV Code §11-21-71; WV Tax Division TSD 381 (withholding not required for "
-    + "a nonresident Armed Forces member)",
+    "WV Code §11-21-71; WV Tax Division TSD 381 (withholding not required for " +
+    "a nonresident Armed Forces member)",
   summary:
-    "The employer attests the nonresident employee's Armed Forces membership "
-    + "and Guard/Reserve exception status so classified military pay is "
-    + "excluded only for qualifying members.",
+    "The employer attests the nonresident employee's Armed Forces membership " +
+    "and Guard/Reserve exception status so classified military pay is " +
+    "excluded only for qualifying members.",
   storage: "certificate_rows",
   fields: [
     {
       key: "armed_forces_member",
       label: "Employee is a member of the Armed Forces of the United States",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "The §11-21-71 exclusion covers members only.",
     },
     {
       key: "guard_reserve_excepted_duty",
       label: "Member serves in a TSD 381 excepted duty status",
-      kind: "flag", required: true,
-      help: "Set when the member is National Guard on 32 USC §502 duty or "
-        + "ready reserve on scheduled duties or 10 USC §270(a) active duty — "
-        + "TSD 381 does not extend the withholding exclusion to those duties.",
+      kind: "flag",
+      required: true,
+      help:
+        "Set when the member is National Guard on 32 USC §502 duty or " +
+        "ready reserve on scheduled duties or 10 USC §270(a) active duty — " +
+        "TSD 381 does not extend the withholding exclusion to those duties.",
     },
   ],
 };
@@ -814,25 +880,28 @@ export const WV_MOBILE_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "WV" },
   purpose: "exemption",
   citation:
-    "West Virginia Code §11-21-31 (mobile-employee exclusion from state source income); "
-    + "WV Tax Division TSD 381 (Rev. September 2025)",
+    "West Virginia Code §11-21-31 (mobile-employee exclusion from state source income); " +
+    "WV Tax Division TSD 381 (Rev. September 2025)",
   summary:
-    "Attests a nonresident's §11-21-31 eligibility (ordinary role, qualifying "
-    + "residence state). With it on file, verified West Virginia service days "
-    + "at or under 30 exclude the wages; past 30, every West Virginia day that "
-    + "year withholds. Without it, ordinary withholding applies.",
+    "Attests a nonresident's §11-21-31 eligibility (ordinary role, qualifying " +
+    "residence state). With it on file, verified West Virginia service days " +
+    "at or under 30 exclude the wages; past 30, every West Virginia day that " +
+    "year withholds. Without it, ordinary withholding applies.",
   storage: "certificate_rows",
   fields: [
     {
       key: "not_excluded_role",
       label: "Employee is not a professional athlete, professional entertainer, or public figure",
-      kind: "flag", required: true,
+      kind: "flag",
+      required: true,
       help: "§11-21-31(b)(3): the exclusion does not cover duties performed in those capacities.",
     },
     {
       key: "residence_state_qualifies",
-      label: "Residence state provides a substantially similar exclusion, imposes no individual income tax, or the income is constitutionally or federally exempt",
-      kind: "flag", required: true,
+      label:
+        "Residence state provides a substantially similar exclusion, imposes no individual income tax, or the income is constitutionally or federally exempt",
+      kind: "flag",
+      required: true,
       help: "§11-21-31(b)(4): one of the three residence-state prongs must hold.",
     },
   ],
@@ -856,6 +925,6 @@ export const WV_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "West Virginia Code §11-21-71(a); Tax Division, Form WV IT-100.2A (March 2026); Form WV IT-104 "
-    + "(Rev. 03/2023); TSD 381 (Rev. September 2025)",
+    "West Virginia Code §11-21-71(a); Tax Division, Form WV IT-100.2A (March 2026); Form WV IT-104 " +
+    "(Rev. 03/2023); TSD 381 (Rev. September 2025)",
 };

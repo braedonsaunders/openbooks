@@ -1,15 +1,15 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { subsidiaryVisibleFilter } from './subsidiaries'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { subsidiaryVisibleFilter } from "./subsidiaries";
 
 export type ReceivablePurchaseOrderRow = Record<string, unknown> & {
-  id: string
-  number: string | null
-  vendor: string | null
-  openLines: number
-}
+  id: string;
+  number: string | null;
+  vendor: string | null;
+  openLines: number;
+};
 
 /** Approved stock orders that the goods-receipt flow can receive into inventory. */
 export async function listReceivablePurchaseOrders(
@@ -34,5 +34,5 @@ export async function listReceivablePurchaseOrders(
      group by d.id, d.document_number, d.document_date, p.display_name
      order by d.document_date desc, d.document_number, d.id
      limit 100
-  `)
+  `);
 }

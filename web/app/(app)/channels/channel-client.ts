@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import {
   ActionError,
@@ -6,8 +6,8 @@ import {
   readActionResult,
   transportError,
   type ActionResult,
-} from '@braedonsaunders/appkit-errors'
-import { readApiErrorMessage } from '@/lib/api-error'
+} from "@braedonsaunders/appkit-errors";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /**
  * One request to a channel order route, shaped for useAppAction. The status
@@ -17,26 +17,33 @@ import { readApiErrorMessage } from '@/lib/api-error'
  */
 export async function channelRequest<T>(
   url: string,
-  init: { method: 'GET' | 'POST' | 'PATCH'; body?: unknown },
+  init: { method: "GET" | "POST" | "PATCH"; body?: unknown },
   fallbackMessage: string,
 ): Promise<ActionResult<T>> {
-  let res: Response
+  let res: Response;
   try {
     res = await fetch(url, {
       method: init.method,
-      cache: 'no-store',
-      headers: init.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      cache: "no-store",
+      headers: init.body === undefined ? undefined : { "Content-Type": "application/json" },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    })
+    });
   } catch (error) {
-    return { ok: false, error: transportError(error instanceof Error ? error.message : String(error)) }
-  }
-  if (!res.ok) {
-    const message = await readApiErrorMessage(res, fallbackMessage)
     return {
       ok: false,
-      error: new ActionError({ kind: classifiedError(res.status).kind, status: res.status, serverMessage: message }),
-    }
+      error: transportError(error instanceof Error ? error.message : String(error)),
+    };
   }
-  return readActionResult<T>(res)
+  if (!res.ok) {
+    const message = await readApiErrorMessage(res, fallbackMessage);
+    return {
+      ok: false,
+      error: new ActionError({
+        kind: classifiedError(res.status).kind,
+        status: res.status,
+        serverMessage: message,
+      }),
+    };
+  }
+  return readActionResult<T>(res);
 }

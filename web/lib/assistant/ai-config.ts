@@ -28,12 +28,15 @@ import {
   type DocumentCaptureSettings,
   type StoredDocumentCapture,
 } from "@openbooks/engine/payables/ap-capture-config";
-import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "@openbooks/engine/payables/ap-capture";
-import { type SqlExecutor } from '@openbooks/engine/platform/db'
+import {
+  DEFAULT_INVOICE_MODEL,
+  validateAzureDocumentEndpoint,
+} from "@openbooks/engine/payables/ap-capture";
+import { type SqlExecutor } from "@openbooks/engine/platform/db";
 import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
-} from '@openbooks/engine/organization/org-feature-lock'
+} from "@openbooks/engine/organization/org-feature-lock";
 import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /**
@@ -90,7 +93,7 @@ export type AgentSettingsInput = {
   notification?: AgentNotificationSettings | null;
 };
 
-export type AgentNotificationMode = 'findings_only' | 'digest' | 'immediate';
+export type AgentNotificationMode = "findings_only" | "digest" | "immediate";
 
 export interface AgentNotificationSettings {
   mode: AgentNotificationMode;
@@ -104,18 +107,23 @@ export interface AgentNotificationSettings {
  * on anything else. No sender reads this yet — findings always surface under
  * Agent Activity — so validation stays structural (mode + id lists).
  */
-export function normalizeAgentNotificationSettings(raw: unknown): AgentNotificationSettings | null | undefined {
+export function normalizeAgentNotificationSettings(
+  raw: unknown,
+): AgentNotificationSettings | null | undefined {
   if (raw === undefined) return undefined;
   if (raw === null) return null;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('invalid agent notification settings');
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("invalid agent notification settings");
   const row = raw as Record<string, unknown>;
-  const mode = row.mode === undefined || row.mode === null || row.mode === '' ? 'findings_only' : row.mode;
-  if (mode !== 'findings_only' && mode !== 'digest' && mode !== 'immediate') {
-    throw new Error('invalid agent notification mode');
+  const mode =
+    row.mode === undefined || row.mode === null || row.mode === "" ? "findings_only" : row.mode;
+  if (mode !== "findings_only" && mode !== "digest" && mode !== "immediate") {
+    throw new Error("invalid agent notification mode");
   }
   const ids = (value: unknown, field: string): string[] => {
     if (value === undefined || value === null) return [];
-    if (!Array.isArray(value) || value.length > 100) throw new Error(`invalid agent notification ${field}`);
+    if (!Array.isArray(value) || value.length > 100)
+      throw new Error(`invalid agent notification ${field}`);
     const seen = new Set<string>();
     for (const entry of value) {
       if (!isUuid(entry)) throw new Error(`invalid agent notification ${field}`);
@@ -123,7 +131,7 @@ export function normalizeAgentNotificationSettings(raw: unknown): AgentNotificat
     }
     return [...seen];
   };
-  return { mode, roleIds: ids(row.roleIds, 'roleIds'), userIds: ids(row.userIds, 'userIds') };
+  return { mode, roleIds: ids(row.roleIds, "roleIds"), userIds: ids(row.userIds, "userIds") };
 }
 
 /** The mutable, non-secret fields the settings form collects. */
@@ -140,9 +148,12 @@ export type AiSettingsInput = {
 };
 
 async function readAi(orgId: string): Promise<{ ai: RawAi; orgName: string | null }> {
-  const r = (await db.execute<{ ai: unknown; name: string }>(sql`
+  const r = await db.execute<{ ai: unknown; name: string }>(
+    sql`
     select settings->'ai' as ai, name from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const raw = r[0]?.ai;
   return {
     ai: (raw && typeof raw === "object" ? raw : {}) as RawAi,
@@ -175,14 +186,23 @@ function normalizeDocumentCaptureInput(
   if (endpoint && !llm) validateAzureDocumentEndpoint(endpoint);
   // Azure models are short ids; AI model ids may carry vendor slugs and versions.
   const model = llm ? input.model.trim() : input.model.trim() || DEFAULT_INVOICE_MODEL;
-  if (llm ? model !== "" && !/^[A-Za-z0-9][A-Za-z0-9._:/@~-]{0,127}$/.test(model) : !/^[a-zA-Z0-9][a-zA-Z0-9._~-]{1,63}$/.test(model)) {
+  if (
+    llm
+      ? model !== "" && !/^[A-Za-z0-9][A-Za-z0-9._:/@~-]{0,127}$/.test(model)
+      : !/^[a-zA-Z0-9][a-zA-Z0-9._~-]{1,63}$/.test(model)
+  ) {
     throw new Error("invalid document capture model id");
   }
   if (llm && input.enabled) {
     const spec = providerSpec(ai.provider);
-    if (spec.vision.length === 0) throw new Error(`document capture with the AI model needs a provider with vision models; ${spec.label} reads no images`);
-    if (!ai.hasKey) throw new Error("document capture with the AI model needs the AI provider's API key");
-    if (!model && !(spec.smart)) throw new Error("document capture with the AI model needs a model id for this provider");
+    if (spec.vision.length === 0)
+      throw new Error(
+        `document capture with the AI model needs a provider with vision models; ${spec.label} reads no images`,
+      );
+    if (!ai.hasKey)
+      throw new Error("document capture with the AI model needs the AI provider's API key");
+    if (!model && !spec.smart)
+      throw new Error("document capture with the AI model needs a model id for this provider");
   }
   const threshold = String(input.confidenceThreshold).trim();
   if (!/^0(?:\.\d{1,4})?$|^1(?:\.0{1,4})?$/.test(threshold)) {
@@ -194,14 +214,17 @@ function normalizeDocumentCaptureInput(
     provider: llm ? "llm_vision" : "azure_document_intelligence",
     // The Azure endpoint and key are kept when the AI model reads instead,
     // so switching back restores them.
-    endpoint: llm ? previous?.endpoint ?? "" : endpoint,
+    endpoint: llm ? (previous?.endpoint ?? "") : endpoint,
     model,
     confidenceThreshold: `${whole}.${fraction.padEnd(4, "0")}`,
     autoCreatePoMatchedDrafts: input.autoCreatePoMatchedDrafts,
     keyEncrypted: previous?.keyEncrypted,
   };
   if (input.apiKey?.trim()) {
-    next.keyEncrypted = sealSecret(input.apiKey.trim(), { orgId, purpose: "payables.ap-capture.key" });
+    next.keyEncrypted = sealSecret(input.apiKey.trim(), {
+      orgId,
+      purpose: "payables.ap-capture.key",
+    });
   }
   if (input.enabled && !llm && (!endpoint || !next.keyEncrypted)) {
     throw new Error("document capture requires an endpoint and API key");
@@ -218,14 +241,17 @@ export function normalizeAgentSettingsInput(raw: unknown): AgentSettingsInput[] 
       if (typeof row.agentKey === "string") byKey.set(row.agentKey, row);
     }
   }
-  return CONTINUOUS_CLOSE_AGENT_KEYS.map((agentKey) => normalizeAgentSettingInput(agentKey, byKey.get(agentKey) ?? {}));
+  return CONTINUOUS_CLOSE_AGENT_KEYS.map((agentKey) =>
+    normalizeAgentSettingInput(agentKey, byKey.get(agentKey) ?? {}),
+  );
 }
 
 export function normalizeAgentSettingInput(
   agentKey: ContinuousCloseAgentKey,
   raw: unknown,
 ): AgentSettingsInput {
-  const row = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const row =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const rawThreshold = String(row.materialityThreshold ?? "1000").trim();
   let threshold: string;
   try {
@@ -313,9 +339,12 @@ async function refusePackEnableWhileFeatureOff(
   if (enabling.length === 0) return;
   await acquireOrgFeatureGateLock(tx, orgId);
   if (await lockAndCheckOrgFeature(tx, orgId, "continuousClose")) return;
-  const stored = await tx.execute<{ agent_key: string; enabled: boolean }>(sql`
+  const stored = await tx.execute<{ agent_key: string; enabled: boolean }>(
+    sql`
     select agent_key, enabled from ai_agent_policies where org_id = ${orgId} for update
-  `, "objects");
+  `,
+    "objects",
+  );
   const enabledByKey = new Map(stored.map((row) => [row.agent_key, row.enabled]));
   if (enabling.some((agent) => enabledByKey.get(agent.agentKey) !== true)) {
     throw new Error("feature_disabled");
@@ -336,9 +365,12 @@ export async function saveOrgAiSettings(
   const baseUrl = (await validateAiBaseUrlLive(input.provider, input.baseUrl)) ?? "";
   await db.transaction(async (tx) => {
     await refusePackEnableWhileFeatureOff(tx, orgId, input.agents);
-    const r = (await tx.execute<{ ai: unknown }>(sql`
+    const r = await tx.execute<{ ai: unknown }>(
+      sql`
       select settings->'ai' as ai from orgs where id = ${orgId} for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const raw = r[0]?.ai;
     const prev = (raw && typeof raw === "object" ? raw : {}) as RawAi;
     const next: RawAi = {
@@ -352,10 +384,15 @@ export async function saveOrgAiSettings(
     if (input.apiKey && input.apiKey.trim()) {
       next.keyEncrypted = sealSecret(input.apiKey.trim(), { orgId, purpose: "assistant.ai.key" });
     }
-    next.documentCapture = normalizeDocumentCaptureInput(orgId, input.documentCapture, prev.documentCapture, {
-      provider: input.provider,
-      hasKey: Boolean(next.keyEncrypted),
-    });
+    next.documentCapture = normalizeDocumentCaptureInput(
+      orgId,
+      input.documentCapture,
+      prev.documentCapture,
+      {
+        provider: input.provider,
+        hasKey: Boolean(next.keyEncrypted),
+      },
+    );
     await tx.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{ai}', ${JSON.stringify(next)}::jsonb),
@@ -389,7 +426,8 @@ export async function saveOrgAiSettings(
       })}::jsonb, ${userId})
     `);
 
-    for (const agent of input.agents) await persistAgentPolicy(tx, orgId, userId, input.enabled, agent);
+    for (const agent of input.agents)
+      await persistAgentPolicy(tx, orgId, userId, input.enabled, agent);
   });
 }
 
@@ -400,15 +438,28 @@ async function persistAgentPolicy(
   globalEnabled: boolean,
   agent: AgentSettingsInput,
 ): Promise<void> {
-  const prior = (await tx.execute<{ id: string; enabled: boolean; automatic_runs: boolean; cadence: AgentCadence; next_run_at: Date | null }>(sql`
+  const prior = await tx.execute<{
+    id: string;
+    enabled: boolean;
+    automatic_runs: boolean;
+    cadence: AgentCadence;
+    next_run_at: Date | null;
+  }>(
+    sql`
     select id, enabled, automatic_runs, cadence, next_run_at
       from ai_agent_policies
      where org_id = ${orgId} and agent_key = ${agent.agentKey}
      for update
-  `, "objects"));
+  `,
+    "objects",
+  );
   const previous = prior[0];
   const schedulable = globalEnabled && agent.enabled && agent.automaticRuns;
-  const scheduleChanged = !previous || !previous.enabled || !previous.automatic_runs || previous.cadence !== agent.cadence;
+  const scheduleChanged =
+    !previous ||
+    !previous.enabled ||
+    !previous.automatic_runs ||
+    previous.cadence !== agent.cadence;
   const nextRunAt = schedulable
     ? scheduleChanged || !previous?.next_run_at
       ? nextContinuousCloseRunAt(agent.cadence)
@@ -418,10 +469,12 @@ async function persistAgentPolicy(
   // Tri-state routing write: a caller that sent no notification section leaves
   // the stored routing untouched; an explicit null clears it to findings-only.
   const touchesNotification = agent.notification !== undefined;
-  const notificationJson = agent.notification === undefined || agent.notification === null
-    ? null
-    : JSON.stringify(agent.notification);
-  const saved = (await tx.execute<{ id: string }>(sql`
+  const notificationJson =
+    agent.notification === undefined || agent.notification === null
+      ? null
+      : JSON.stringify(agent.notification);
+  const saved = await tx.execute<{ id: string }>(
+    sql`
     insert into ai_agent_policies (
       org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
       detector_settings, analysis_settings, notification_settings, next_run_at, created_by, updated_by
@@ -447,7 +500,9 @@ async function persistAgentPolicy(
       updated_by = excluded.updated_by
     where ai_agent_policies.org_id = ${orgId}
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   await tx.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'ai_agent_policies', ${saved[0]!.id}, 'update', ${JSON.stringify({
@@ -469,19 +524,26 @@ export async function saveOrgAiAgentSettings(
   userId: string,
   raw: unknown,
 ): Promise<ContinuousClosePolicy> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("invalid agent settings");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("invalid agent settings");
   const agentKey = (raw as { agentKey?: unknown }).agentKey;
-  if (!CONTINUOUS_CLOSE_AGENT_KEYS.includes(agentKey as ContinuousCloseAgentKey)) throw new Error("invalid agent");
+  if (!CONTINUOUS_CLOSE_AGENT_KEYS.includes(agentKey as ContinuousCloseAgentKey))
+    throw new Error("invalid agent");
   const agent = normalizeAgentSettingInput(agentKey as ContinuousCloseAgentKey, raw);
   await db.transaction(async (tx) => {
     await refusePackEnableWhileFeatureOff(tx, orgId, [agent]);
-    const org = (await tx.execute<{ enabled: boolean }>(sql`
+    const org = await tx.execute<{ enabled: boolean }>(
+      sql`
       select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
         from orgs where id = ${orgId} for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     await persistAgentPolicy(tx, orgId, userId, org[0]?.enabled !== false, agent);
   });
-  return (await getContinuousClosePolicies(orgId)).find((policy) => policy.agentKey === agent.agentKey)!;
+  return (await getContinuousClosePolicies(orgId)).find(
+    (policy) => policy.agentKey === agent.agentKey,
+  )!;
 }
 
 /** Clear the stored API key for this org. */

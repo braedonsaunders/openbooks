@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseMoney, parseQuantity, parseRate } from "../../money/brands.ts";
 import type { Rate } from "../../money/brands.ts";
-import type { PackageRounding, RatingBandKind, UsageAggregation, UsageRecordInput } from "./rating.ts";
+import type {
+  PackageRounding,
+  RatingBandKind,
+  UsageAggregation,
+  UsageRecordInput,
+} from "./rating.ts";
 import { sum } from "../../money/money.ts";
 import { UsageBillingError } from "./errors.ts";
 import { aggregateUsage, applyPrepaid, commitShortfall, rateUsage } from "./rating.ts";
@@ -41,51 +46,53 @@ function band(
     unitPrice: parseRate(unitPrice),
     flatAmount: parseMoney(options?.flatAmount ?? "0.0000"),
     includedQty: parseQuantity(options?.includedQty ?? "0"),
-    packageSize: options?.packageSize === undefined || options?.packageSize === null
-      ? null
-      : parseQuantity(options.packageSize),
+    packageSize:
+      options?.packageSize === undefined || options?.packageSize === null
+        ? null
+        : parseQuantity(options.packageSize),
     packageRounding: options?.packageRounding ?? null,
   };
 }
 
 test("each aggregation applies reversals", () => {
   const reversed = record("rec-reversed", "5", { reversesId: "rec-target" });
-  const cases: { aggregation: UsageAggregation; records: UsageRecordInput[]; expected: string }[] = [
-    {
-      aggregation: "sum",
-      records: [record("rec-a", "10"), record("rec-target", "5"), reversed],
-      expected: "10",
-    },
-    {
-      aggregation: "count",
-      records: [record("rec-a", "10"), record("rec-target", "5"), reversed],
-      expected: "1",
-    },
-    {
-      aggregation: "max",
-      records: [record("rec-target", "10"), record("rec-other", "7"), reversed],
-      expected: "7",
-    },
-    {
-      aggregation: "last",
-      records: [
-        record("rec-early", "10", { occurredOn: "2026-09-01" }),
-        record("rec-target", "20", { occurredOn: "2026-09-05" }),
-        record("rec-rev", "20", { occurredOn: "2026-09-06", reversesId: "rec-target" }),
-      ],
-      expected: "10",
-    },
-    {
-      aggregation: "unique_count",
-      records: [
-        record("rec-a", "1", { distinctKey: "sess-1" }),
-        record("rec-b", "1", { distinctKey: "sess-1" }),
-        record("rec-c", "1", { distinctKey: "sess-2" }),
-        record("rec-rev", "1", { reversesId: "rec-a" }),
-      ],
-      expected: "2",
-    },
-  ];
+  const cases: { aggregation: UsageAggregation; records: UsageRecordInput[]; expected: string }[] =
+    [
+      {
+        aggregation: "sum",
+        records: [record("rec-a", "10"), record("rec-target", "5"), reversed],
+        expected: "10",
+      },
+      {
+        aggregation: "count",
+        records: [record("rec-a", "10"), record("rec-target", "5"), reversed],
+        expected: "1",
+      },
+      {
+        aggregation: "max",
+        records: [record("rec-target", "10"), record("rec-other", "7"), reversed],
+        expected: "7",
+      },
+      {
+        aggregation: "last",
+        records: [
+          record("rec-early", "10", { occurredOn: "2026-09-01" }),
+          record("rec-target", "20", { occurredOn: "2026-09-05" }),
+          record("rec-rev", "20", { occurredOn: "2026-09-06", reversesId: "rec-target" }),
+        ],
+        expected: "10",
+      },
+      {
+        aggregation: "unique_count",
+        records: [
+          record("rec-a", "1", { distinctKey: "sess-1" }),
+          record("rec-b", "1", { distinctKey: "sess-1" }),
+          record("rec-c", "1", { distinctKey: "sess-2" }),
+          record("rec-rev", "1", { reversesId: "rec-a" }),
+        ],
+        expected: "2",
+      },
+    ];
   for (const { aggregation, records, expected } of cases) {
     assert.equal(aggregateUsage(aggregation, records), expected, aggregation);
   }
@@ -130,7 +137,10 @@ test("graduated prices each unit in its band, with per-tier flat fees", () => {
 
 // upToQty is inclusive: a quantity exactly on a boundary belongs to the lower band.
 test("volume prices everything at the landed band, boundary included below", () => {
-  const bands = [band(1, "100", "0.1", { kind: "volume" }), band(2, null, "0.08", { kind: "volume" })];
+  const bands = [
+    band(1, "100", "0.1", { kind: "volume" }),
+    band(2, null, "0.08", { kind: "volume" }),
+  ];
   assert.deepEqual(rateUsage({ quantity: parseQuantity("100"), bands }), [
     { kind: "volume", bandSeq: 1, quantity: "100", unitPrice: "0.1", amount: "10.0000" },
   ]);
@@ -140,8 +150,14 @@ test("volume prices everything at the landed band, boundary included below", () 
 });
 
 test("package bills whole blocks, rounding the partial block up or down", () => {
-  const up: RatingBand = { ...band(1, null, "12", { kind: "package", packageSize: "100" }), packageRounding: "up" };
-  const down: RatingBand = { ...band(1, null, "12", { kind: "package", packageSize: "100" }), packageRounding: "down" };
+  const up: RatingBand = {
+    ...band(1, null, "12", { kind: "package", packageSize: "100" }),
+    packageRounding: "up",
+  };
+  const down: RatingBand = {
+    ...band(1, null, "12", { kind: "package", packageSize: "100" }),
+    packageRounding: "down",
+  };
   assert.deepEqual(rateUsage({ quantity: parseQuantity("250"), bands: [up] }), [
     { kind: "package", bandSeq: 1, quantity: "3", unitPrice: "12", amount: "36.0000" },
   ]);
@@ -172,7 +188,10 @@ test("a sub-cent price rounds once per line, and lines sum to the total", () => 
 
 test("zero quantity rates to no lines", () => {
   assert.deepEqual(
-    rateUsage({ quantity: parseQuantity("0"), bands: [band(1, "100", "0.1"), band(2, null, "0.05")] }),
+    rateUsage({
+      quantity: parseQuantity("0"),
+      bands: [band(1, "100", "0.1"), band(2, null, "0.05")],
+    }),
     [],
   );
 });
@@ -194,29 +213,48 @@ test("commit shortfall bills the positive remainder, else zero", () => {
     "25.0000",
   );
   assert.equal(
-    commitShortfall({ commitAmount: parseMoney("100.0000"), ratedInWindow: parseMoney("120.0000") }),
+    commitShortfall({
+      commitAmount: parseMoney("100.0000"),
+      ratedInWindow: parseMoney("120.0000"),
+    }),
     "0.0000",
   );
   assert.equal(
-    commitShortfall({ commitAmount: parseMoney("100.0000"), ratedInWindow: parseMoney("100.0000") }),
+    commitShortfall({
+      commitAmount: parseMoney("100.0000"),
+      ratedInWindow: parseMoney("100.0000"),
+    }),
     "0.0000",
   );
 });
 
 test("prepaid draws up to the balance, billing the remainder", () => {
   assert.deepEqual(
-    applyPrepaid({ rated: parseMoney("100.0000"), balance: parseMoney("40.0000"), allowOverage: true }),
+    applyPrepaid({
+      rated: parseMoney("100.0000"),
+      balance: parseMoney("40.0000"),
+      allowOverage: true,
+    }),
     { drawn: "40.0000", billable: "60.0000" },
   );
   assert.deepEqual(
-    applyPrepaid({ rated: parseMoney("30.0000"), balance: parseMoney("100.0000"), allowOverage: true }),
+    applyPrepaid({
+      rated: parseMoney("30.0000"),
+      balance: parseMoney("100.0000"),
+      allowOverage: true,
+    }),
     { drawn: "30.0000", billable: "0.0000" },
   );
 });
 
 test("prepaid shortfall with overage disallowed names all three remedies", () => {
   assert.throws(
-    () => applyPrepaid({ rated: parseMoney("100.0000"), balance: parseMoney("40.0000"), allowOverage: false }),
+    () =>
+      applyPrepaid({
+        rated: parseMoney("100.0000"),
+        balance: parseMoney("40.0000"),
+        allowOverage: false,
+      }),
     (error: unknown) => {
       assert.ok(error instanceof UsageBillingError);
       assert.equal(error.status, 422);
@@ -236,15 +274,20 @@ test("prepaid shortfall with overage disallowed names all three remedies", () =>
 
 test("non-invoice band kinds refuse toward their own functions", () => {
   assert.throws(
-    () => rateUsage({ quantity: parseQuantity("10"), bands: [band(1, null, "0.1", { kind: "commit_shortfall" })] }),
+    () =>
+      rateUsage({
+        quantity: parseQuantity("10"),
+        bands: [band(1, null, "0.1", { kind: "commit_shortfall" })],
+      }),
     /bill the shortfall with commitShortfall instead/,
   );
   assert.throws(
-    () => rateUsage({ quantity: parseQuantity("10"), bands: [band(1, null, "0.1", { kind: "prepaid_drawdown" })] }),
+    () =>
+      rateUsage({
+        quantity: parseQuantity("10"),
+        bands: [band(1, null, "0.1", { kind: "prepaid_drawdown" })],
+      }),
     /split the rated amount with applyPrepaid instead/,
   );
-  assert.throws(
-    () => aggregateUsage("bogus" as UsageAggregation, []),
-    /unknown usage aggregation/,
-  );
+  assert.throws(() => aggregateUsage("bogus" as UsageAggregation, []), /unknown usage aggregation/);
 });

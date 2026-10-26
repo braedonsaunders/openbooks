@@ -35,13 +35,29 @@ export interface ConversionReview {
 }
 
 /** Exchange rates and minor units of every currency converting in a round, on its closing date. */
-export async function roundPricing(runner: SqlExecutor, orgId: string, book: EquityBook, roundId: string, functional: string): Promise<RoundPricing> {
+export async function roundPricing(
+  runner: SqlExecutor,
+  orgId: string,
+  book: EquityBook,
+  roundId: string,
+  functional: string,
+): Promise<RoundPricing> {
   const round = book.rounds.find((row) => row.id === roundId)!;
   const rates = new Map<string, string>();
   const exponents = new Map<string, number>();
   for (const instrument of roundInstruments(book, roundId)) {
     if (rates.has(instrument.currency)) continue;
-    rates.set(instrument.currency, await spotRate(runner, orgId, instrument.currency, round.currency, round.closedOn, functional));
+    rates.set(
+      instrument.currency,
+      await spotRate(
+        runner,
+        orgId,
+        instrument.currency,
+        round.currency,
+        round.closedOn,
+        functional,
+      ),
+    );
     exponents.set(instrument.currency, await currencyExponent(runner, instrument.currency));
   }
   return { rates, exponents };
@@ -61,8 +77,11 @@ export async function reviewRecordedConversion(
   if (security.kind !== "safe" && security.kind !== "note") return null;
   const flagged = conversionOnVoidedTerms(book, security, asOf);
   const conversion = eventsOf(book, security.id, asOf).find((event) => event.kind === "convert");
-  const round = conversion?.roundId ? book.rounds.find((row) => row.id === conversion.roundId) : undefined;
-  if (!conversion || !round || !conversion.pricePerShare) return flagged ? { voidedTerms: flagged, drift: null } : null;
+  const round = conversion?.roundId
+    ? book.rounds.find((row) => row.id === conversion.roundId)
+    : undefined;
+  if (!conversion || !round || !conversion.pricePerShare)
+    return flagged ? { voidedTerms: flagged, drift: null } : null;
   const recorded = parsePrice(conversion.pricePerShare, "conversionPrice");
   let pricing = pricingCache?.get(round.id);
   let standing;
@@ -72,7 +91,6 @@ export async function reviewRecordedConversion(
       pricingCache?.set(round.id, pricing);
     }
     standing = conversionAtRound(book, security, round.id, pricing);
-
   } catch (error) {
     if (!(error instanceof EquityError)) throw error;
     return flagged ? { voidedTerms: flagged, drift: null } : null;
@@ -81,13 +99,18 @@ export async function reviewRecordedConversion(
     // A current price match cannot establish provenance: later activity can
     // move the standing price to a price once given by different terms.
     try {
-      const historical = recordedBook ?? await loadEquityBookAtEvent(runner, orgId, conversion.id);
+      const historical =
+        recordedBook ?? (await loadEquityBookAtEvent(runner, orgId, conversion.id));
       const original = historical?.securities.find((row) => row.id === security.id);
       if (!historical || !original) return { voidedTerms: flagged, drift: null };
       const originalPricing = await roundPricing(runner, orgId, historical, round.id, functional);
       const originalConversion = conversionAtRound(historical, original, round.id, originalPricing);
       const terms = effectiveConvertibleTerms(historical, original, conversion.effectiveOn);
-      if (formatPrice(recorded) !== formatPrice(originalConversion.price) || terms.electionId === flagged.electionId) return { voidedTerms: flagged, drift: null };
+      if (
+        formatPrice(recorded) !== formatPrice(originalConversion.price) ||
+        terms.electionId === flagged.electionId
+      )
+        return { voidedTerms: flagged, drift: null };
     } catch (error) {
       if (!(error instanceof EquityError)) throw error;
       return { voidedTerms: flagged, drift: null };
@@ -96,25 +119,48 @@ export async function reviewRecordedConversion(
   // Prices are stored to ten decimal places. A recomputed rational can carry
   // recurring digits beyond that precision without changing the recorded price.
   if (formatPrice(recorded) === formatPrice(standing.price)) return null;
-  const certificate = conversion.resultingSecurityId ? book.securities.find((row) => row.id === conversion.resultingSecurityId) : undefined;
+  const certificate = conversion.resultingSecurityId
+    ? book.securities.find((row) => row.id === conversion.resultingSecurityId)
+    : undefined;
   return {
     voidedTerms: null,
     drift: {
-      securityId: security.id, roundId: round.id, convertedOn: conversion.effectiveOn, resultingSecurityId: conversion.resultingSecurityId,
-      recordedPrice: formatPrice(recorded), standingPrice: formatPrice(standing.price),
-      recordedShares: (certificate?.quantity ?? conversion.quantity ?? 0n).toString(), standingShares: standing.shares.toString(),
+      securityId: security.id,
+      roundId: round.id,
+      convertedOn: conversion.effectiveOn,
+      resultingSecurityId: conversion.resultingSecurityId,
+      recordedPrice: formatPrice(recorded),
+      standingPrice: formatPrice(standing.price),
+      recordedShares: (certificate?.quantity ?? conversion.quantity ?? 0n).toString(),
+      standingShares: standing.shares.toString(),
     },
   };
 }
 
 /** Every recorded conversion into a round that has drifted from the round's current measurement. */
-export async function roundConversionDrift(runner: SqlExecutor, orgId: string, book: EquityBook, roundId: string, asOf: string, functional: string, pricingCache?: Map<string, RoundPricing>): Promise<ConversionDrift[]> {
+export async function roundConversionDrift(
+  runner: SqlExecutor,
+  orgId: string,
+  book: EquityBook,
+  roundId: string,
+  asOf: string,
+  functional: string,
+  pricingCache?: Map<string, RoundPricing>,
+): Promise<ConversionDrift[]> {
   const out: ConversionDrift[] = [];
   for (const security of book.securities) {
     if (security.kind !== "safe" && security.kind !== "note") continue;
     const conversion = eventsOf(book, security.id, asOf).find((event) => event.kind === "convert");
     if (conversion?.roundId !== roundId) continue;
-    const review = await reviewRecordedConversion(runner, orgId, book, security, asOf, functional, pricingCache);
+    const review = await reviewRecordedConversion(
+      runner,
+      orgId,
+      book,
+      security,
+      asOf,
+      functional,
+      pricingCache,
+    );
     if (review?.drift) out.push(review.drift);
   }
   return out;

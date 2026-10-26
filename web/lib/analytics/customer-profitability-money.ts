@@ -29,5 +29,9 @@ export function compareAtRiskCustomers(
   a: { churnScore: number; revenue: string; name: string },
   b: { churnScore: number; revenue: string; name: string },
 ): number {
-  return b.churnScore - a.churnScore || cmp(b.revenue, a.revenue) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  return (
+    b.churnScore - a.churnScore ||
+    cmp(b.revenue, a.revenue) ||
+    (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+  );
 }

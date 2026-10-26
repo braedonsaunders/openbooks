@@ -27,8 +27,15 @@ test("stat tiles wrap label, value, and sub instead of truncating", () => {
   );
   assert.ok(html.includes("CA$12,345,678.90"), "hero amounts must render in full");
   const [label, value, sub] = paragraphs(html);
-  assert.ok(label !== undefined && value !== undefined && sub !== undefined, "tile renders label, value, and sub");
-  for (const [name, cls] of [["label", label], ["value", value], ["sub", sub]] as const) {
+  assert.ok(
+    label !== undefined && value !== undefined && sub !== undefined,
+    "tile renders label, value, and sub",
+  );
+  for (const [name, cls] of [
+    ["label", label],
+    ["value", value],
+    ["sub", sub],
+  ] as const) {
     assert.ok(!cls.split(" ").includes("truncate"), `${name} must wrap, never ellipsis`);
   }
   assert.match(value, /break-words/, "unbroken figures must wrap mid-string, never clip");

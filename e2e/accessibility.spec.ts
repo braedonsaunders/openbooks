@@ -4,17 +4,12 @@ import { authedContext } from "./auth";
 
 const wcagTags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
-test("login has no automatically detectable WCAG A/AA violations", async ({
-  page,
-}) => {
+test("login has no automatically detectable WCAG A/AA violations", async ({ page }) => {
   await page.goto("/login");
   await expect(page.locator("main")).toBeVisible();
 
   const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
-  expect(
-    results.violations,
-    JSON.stringify(results.violations, null, 2),
-  ).toEqual([]);
+  expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
 });
 
 test("authenticated reports hub has no automatically detectable WCAG A/AA violations", async ({
@@ -32,15 +27,12 @@ test("authenticated reports hub has no automatically detectable WCAG A/AA violat
 
     // Opacity entrance animations temporarily blend otherwise accessible text
     // with the background. Inspect the settled page rather than a random frame.
-    for (const region of await page.locator('[data-page-motion]').all()) {
-      await expect(region).toHaveCSS('opacity', '1');
+    for (const region of await page.locator("[data-page-motion]").all()) {
+      await expect(region).toHaveCSS("opacity", "1");
     }
 
     const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
-    expect(
-      results.violations,
-      JSON.stringify(results.violations, null, 2),
-    ).toEqual([]);
+    expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
   } finally {
     await context.close();
   }

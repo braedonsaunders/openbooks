@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../testing/stub-modules";
+import test from "node:test";
 
 // A verify-only user holds the attestation duty (`compliance.verify`) but not
 // the editing duty (`compliance.manage`). An unknown `action` value must be
@@ -8,40 +8,43 @@ import test from 'node:test'
 // falls into the `update` branch, so a verify-only user can rewrite a
 // certificate's substance — the exact separation of duties the route comment
 // claims to enforce.
-const stateKey = Symbol.for('openbooks.compliance-record-action-allowlist-test')
+const stateKey = Symbol.for("openbooks.compliance-record-action-allowlist-test");
 
-type Certificate = Record<string, unknown>
-type DbCall = { kind: 'execute' | 'tx-execute'; text: string; params: string[] }
+type Certificate = Record<string, unknown>;
+type DbCall = { kind: "execute" | "tx-execute"; text: string; params: string[] };
 
 interface RouteState {
-  calls: DbCall[]
-  committedRecord: Certificate
-  transactions: number
+  calls: DbCall[];
+  committedRecord: Certificate;
+  transactions: number;
 }
 
-const state: RouteState = { calls: [], committedRecord: {}, transactions: 0 }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const state: RouteState = { calls: [], committedRecord: {}, transactions: 0 };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 /** Flatten a drizzle SQL chunk into text for statement routing and assertions. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextComplianceAllow?: unknown }).openbooksSqlTextComplianceAllow = sqlText
+(
+  globalThis as typeof globalThis &
+    Record<string, unknown> & { openbooksSqlTextComplianceAllow?: unknown }
+).openbooksSqlTextComplianceAllow = sqlText;
 
-const ORG_ID = '00000000-0000-4000-8000-00000000b001'
-const VERIFIER_ID = '00000000-0000-4000-8000-00000000b002'
-const CREATOR_ID = '00000000-0000-4000-8000-00000000b003'
-const RECORD_ID = '00000000-0000-4000-8000-00000000b006'
+const ORG_ID = "00000000-0000-4000-8000-00000000b001";
+const VERIFIER_ID = "00000000-0000-4000-8000-00000000b002";
+const CREATOR_ID = "00000000-0000-4000-8000-00000000b003";
+const RECORD_ID = "00000000-0000-4000-8000-00000000b006";
 
 stubModules({
   navigation: false,
@@ -94,58 +97,58 @@ stubModules({
       export async function guardComplianceFeature() { return null }
     `,
   },
-})
+});
 
-const routeUrl = './route.ts?compliance-record-action-allowlist-test'
-const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?compliance-record-action-allowlist-test";
+const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  state.calls = []
-  state.transactions = 0
+  state.calls = [];
+  state.transactions = 0;
   // A pending certificate recorded by somebody else (so `verify` is legal).
   state.committedRecord = {
     id: RECORD_ID,
-    status: 'pending_review',
-    party_id: '00000000-0000-4000-8000-00000000b004',
-    requirement_id: '00000000-0000-4000-8000-00000000b005',
+    status: "pending_review",
+    party_id: "00000000-0000-4000-8000-00000000b004",
+    requirement_id: "00000000-0000-4000-8000-00000000b005",
     created_by: CREATOR_ID,
-    issuer_name: 'Original Insurer',
-  }
+    issuer_name: "Original Insurer",
+  };
 }
 
 function patch(body: Record<string, unknown>): Promise<Response> {
   return PATCH(
     new Request(`http://openbooks.test/api/compliance/records/${RECORD_ID}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: RECORD_ID }) },
-  )
+  );
 }
 
 function updatesAttempted(): boolean {
-  return state.calls.some((call) => call.text.includes('update compliance_records'))
+  return state.calls.some((call) => call.text.includes("update compliance_records"));
 }
 
-test('control: a verify-only user cannot use the named update action', async () => {
-  reset()
+test("control: a verify-only user cannot use the named update action", async () => {
+  reset();
   // The revision token is required by the schema: without it the boundary
   // refuses first and the permission gate below is never exercised.
-  const response = await patch({ action: 'update', revision: 1, issuerName: 'Evil Insurer' })
-  assert.equal(response.status, 403)
-  assert.ok(!updatesAttempted(), 'no certificate write may run')
-})
+  const response = await patch({ action: "update", revision: 1, issuerName: "Evil Insurer" });
+  assert.equal(response.status, 403);
+  assert.ok(!updatesAttempted(), "no certificate write may run");
+});
 
-test('an unknown action is rejected instead of falling through to update', async () => {
-  reset()
-  const response = await patch({ action: 'approve_override', issuerName: 'Evil Insurer' })
-  assert.equal(response.status, 400)
-  const payload = (await response.json()) as { error?: string }
-  assert.ok(payload.error, 'the rejection names the problem')
-  assert.ok(!updatesAttempted(), 'a verify-only caller must not reach the update branch')
+test("an unknown action is rejected instead of falling through to update", async () => {
+  reset();
+  const response = await patch({ action: "approve_override", issuerName: "Evil Insurer" });
+  assert.equal(response.status, 400);
+  const payload = (await response.json()) as { error?: string };
+  assert.ok(payload.error, "the rejection names the problem");
+  assert.ok(!updatesAttempted(), "a verify-only caller must not reach the update branch");
   assert.deepEqual(
     (state.committedRecord as { issuer_name?: string }).issuer_name,
-    'Original Insurer',
-  )
-})
+    "Original Insurer",
+  );
+});

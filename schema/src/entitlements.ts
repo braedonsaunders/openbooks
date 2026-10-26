@@ -64,10 +64,7 @@ export const saasFeatures = pgTable(
       "saas_features_unit_scope",
       sql`${t.unit} is null or ${t.featureType} in ('quantity', 'metered')`,
     ),
-    check(
-      "saas_features_meter_scope",
-      sql`${t.meterId} is null or ${t.featureType} = 'metered'`,
-    ),
+    check("saas_features_meter_scope", sql`${t.meterId} is null or ${t.featureType} = 'metered'`),
     foreignKey({ name: "saas_features_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
     foreignKey({
       name: "saas_features_meter_org_fk",

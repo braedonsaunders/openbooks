@@ -1,36 +1,46 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { datedAppliedAmountSql } = await import('@openbooks/engine/records/balance-due')
-const { cmp } = await import('@openbooks/engine/money/money')
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+const { sql } = await import("drizzle-orm");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { datedAppliedAmountSql } = await import("@openbooks/engine/records/balance-due");
+const { cmp } = await import("@openbooks/engine/money/money");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-const { openItems } = await import('./open-items')
+const { openItems } = await import("./open-items");
 
 async function postBill(
-  scratch: { orgId: string; subsidiaryId: string; vendorId: string; customerId: string; accounts: { cogs: string; revenue: string; ar: string; ap: string; bank: string }; date: string },
+  scratch: {
+    orgId: string;
+    subsidiaryId: string;
+    vendorId: string;
+    customerId: string;
+    accounts: { cogs: string; revenue: string; ar: string; ap: string; bank: string };
+    date: string;
+  },
   actor: string,
-  kind: 'vendor_bill' | 'vendor_credit' | 'customer_invoice' | 'customer_credit',
+  kind: "vendor_bill" | "vendor_credit" | "customer_invoice" | "customer_credit",
   total: number,
-  currency = 'CAD',
-  fxRate = '1',
+  currency = "CAD",
+  fxRate = "1",
 ) {
-  const id = randomUUID()
-  const party = kind.startsWith('vendor_') ? scratch.vendorId : scratch.customerId
-  const lineAccount = kind.startsWith('vendor_') ? scratch.accounts.cogs : scratch.accounts.revenue
+  const id = randomUUID();
+  const party = kind.startsWith("vendor_") ? scratch.vendorId : scratch.customerId;
+  const lineAccount = kind.startsWith("vendor_") ? scratch.accounts.cogs : scratch.accounts.revenue;
   await db.execute(sql`insert into documents
     (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date,
      currency, fx_rate, subtotal, tax_total, total, created_by)
     values (${id}, ${scratch.orgId}, ${kind}, 'draft', ${id}, ${scratch.subsidiaryId},
-      ${party}, ${scratch.date}, ${currency}, ${fxRate}, ${total}, 0, ${total}, ${actor})`)
+      ${party}, ${scratch.date}, ${currency}, ${fxRate}, ${total}, 0, ${total}, ${actor})`);
   await db.execute(sql`insert into document_lines
     (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
-    values (${scratch.orgId}, ${id}, 1, ${lineAccount}, 1, ${total}, ${total}, 0, ${total})`)
-  await db.execute(sql`update documents set status = 'approved' where id = ${id}`)
-  await postDocument(id, { control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank } })
-  return id
+    values (${scratch.orgId}, ${id}, 1, ${lineAccount}, 1, ${total}, ${total}, 0, ${total})`);
+  await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
+  await postDocument(id, {
+    control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank },
+  });
+  return id;
 }
 
 /**
@@ -38,27 +48,35 @@ async function postBill(
  * net it against the party's bills (the aging report already does), not
  * pretend the gross bills are all still due.
  */
-test('open items net unapplied vendor credits against AP bills', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const scratch = await withBypass(() => createScratchOrg())
-  try {
-    const actor = await withBypass(() => createScratchUser(scratch.orgId, 'Credit Controller', 'admin'))
-    await withBypass(async () => {
-      await postBill(scratch, actor, 'vendor_bill', 1000)
-      await postBill(scratch, actor, 'vendor_credit', 300)
-    })
-    // The reader resolves the org's base currency through RLS like production's
-    // request scope, so read under the org context (bare reads see no org row
-    // and fail closed with 'has no base currency').
-    const items = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ap', '2026-07-31'))
-    assert.equal(items.length, 2)
-    const net = items.reduce((sum, item) => sum + Number(item.remaining), 0)
-    assert.equal(net.toFixed(4), '700.0000')
-    const credit = items.find((item) => item.docKind === 'vendor_credit')
-    assert.equal(credit?.remaining, '-300.0000')
-  } finally {
-    await withBypass(() => dropScratchOrg(scratch.orgId))
-  }
-})
+test(
+  "open items net unapplied vendor credits against AP bills",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const scratch = await withBypass(() => createScratchOrg());
+    try {
+      const actor = await withBypass(() =>
+        createScratchUser(scratch.orgId, "Credit Controller", "admin"),
+      );
+      await withBypass(async () => {
+        await postBill(scratch, actor, "vendor_bill", 1000);
+        await postBill(scratch, actor, "vendor_credit", 300);
+      });
+      // The reader resolves the org's base currency through RLS like production's
+      // request scope, so read under the org context (bare reads see no org row
+      // and fail closed with 'has no base currency').
+      const items = await withOrgContext(scratch.orgId, () =>
+        openItems(scratch.orgId, "ap", "2026-07-31"),
+      );
+      assert.equal(items.length, 2);
+      const net = items.reduce((sum, item) => sum + Number(item.remaining), 0);
+      assert.equal(net.toFixed(4), "700.0000");
+      const credit = items.find((item) => item.docKind === "vendor_credit");
+      assert.equal(credit?.remaining, "-300.0000");
+    } finally {
+      await withBypass(() => dropScratchOrg(scratch.orgId));
+    }
+  },
+);
 
 /**
  * A foreign-currency credit consumed as a settlement source is consumed in
@@ -67,72 +85,126 @@ test('open items net unapplied vendor credits against AP bills', { skip: !env.OP
  * functional remainder is 81 - 27 = 54, not 81 - 25 = 56. Reading amount for
  * both legs mixes denominations and leaves a false remainder.
  */
-test('open items consume a foreign credit through its source leg', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  await assertDedicatedFixtureDatabase()
-  const scratch = await withBypass(() => createScratchOrg())
-  try {
-    const actor = await withBypass(() => createScratchUser(scratch.orgId, 'Credit Controller', 'admin'))
-    const { invId, creditLine, invLine } = await withBypass(async () => {
-      const invId = await postBill(scratch, actor, 'customer_invoice', 100)
-      const creditId = await postBill(scratch, actor, 'customer_credit', 60, 'USD', '1.35')
-      const lines = await db.execute<{ id: string; doc: string }>(sql`select jl.id, je.source_document_id as doc
+test(
+  "open items consume a foreign credit through its source leg",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    await assertDedicatedFixtureDatabase();
+    const scratch = await withBypass(() => createScratchOrg());
+    try {
+      const actor = await withBypass(() =>
+        createScratchUser(scratch.orgId, "Credit Controller", "admin"),
+      );
+      const { invId, creditLine, invLine } = await withBypass(async () => {
+        const invId = await postBill(scratch, actor, "customer_invoice", 100);
+        const creditId = await postBill(scratch, actor, "customer_credit", 60, "USD", "1.35");
+        const lines = await db.execute<{ id: string; doc: string }>(
+          sql`select jl.id, je.source_document_id as doc
         from journal_lines jl join journal_entries je on je.id = jl.entry_id
-        where jl.org_id = ${scratch.orgId} and jl.is_open_item and je.source_document_id in (${invId}, ${creditId})`, 'objects')
-      const lineOf = (doc: string) => lines.find((row) => row.doc === doc)!.id
-      await db.execute(sql`insert into applications
+        where jl.org_id = ${scratch.orgId} and jl.is_open_item and je.source_document_id in (${invId}, ${creditId})`,
+          "objects",
+        );
+        const lineOf = (doc: string) => lines.find((row) => row.doc === doc)!.id;
+        await db.execute(sql`insert into applications
         (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
          source_transaction_currency, target_transaction_amount, target_transaction_currency,
          settlement_rate, settlement_rate_source, settlement_rate_reference, created_by, updated_by)
         values (${scratch.orgId}, ${lineOf(creditId)}, ${lineOf(invId)}, '25', '2026-07-12', '27', '20', 'USD', '25', 'CAD',
-          '1.25', 'manual', 'FX-CREDIT-CASH-TEST', ${actor}, ${actor})`)
-      return { invId, creditLine: lineOf(creditId), invLine: lineOf(invId) }
-    })
-    assert.ok(invId && creditLine && invLine)
-    const applicationsBefore = await withOrgContext(scratch.orgId, async () =>
-      await db.execute(sql`select * from applications where org_id=${scratch.orgId} order by id`, 'objects'))
-    for (const [asOf, expectedSource, expectedTarget] of [
-      ['2026-07-11', '0', '0'],
-      ['2026-07-12', '27', '25'],
-      ['2026-07-31', '27', '25'],
-    ]) {
-      const consumed = await withOrgContext(scratch.orgId, async () =>
-        (await db.execute<{ source: string; target: string }>(sql`select
+          '1.25', 'manual', 'FX-CREDIT-CASH-TEST', ${actor}, ${actor})`);
+        return { invId, creditLine: lineOf(creditId), invLine: lineOf(invId) };
+      });
+      assert.ok(invId && creditLine && invLine);
+      const applicationsBefore = await withOrgContext(
+        scratch.orgId,
+        async () =>
+          await db.execute(
+            sql`select * from applications where org_id=${scratch.orgId} order by id`,
+            "objects",
+          ),
+      );
+      for (const [asOf, expectedSource, expectedTarget] of [
+        ["2026-07-11", "0", "0"],
+        ["2026-07-12", "27", "25"],
+        ["2026-07-31", "27", "25"],
+      ]) {
+        const consumed = await withOrgContext(
+          scratch.orgId,
+          async () =>
+            (
+              await db.execute<{ source: string; target: string }>(
+                sql`select
           ${datedAppliedAmountSql(scratch.orgId, sql`${creditLine}::uuid`, asOf!)}::text as source,
-          ${datedAppliedAmountSql(scratch.orgId, sql`${invLine}::uuid`, asOf!)}::text as target`, 'objects'))[0]!)
-      assert.equal(cmp(consumed.source, expectedSource!), 0)
-      assert.equal(cmp(consumed.target, expectedTarget!), 0)
+          ${datedAppliedAmountSql(scratch.orgId, sql`${invLine}::uuid`, asOf!)}::text as target`,
+                "objects",
+              )
+            )[0]!,
+        );
+        assert.equal(cmp(consumed.source, expectedSource!), 0);
+        assert.equal(cmp(consumed.target, expectedTarget!), 0);
+      }
+      const foreignConsumption = await withOrgContext(
+        scratch.orgId,
+        async () =>
+          (
+            await db.execute<{ amount: string }>(
+              sql`select
+        ${datedAppliedAmountSql(randomUUID(), sql`${creditLine}::uuid`, "2026-07-31")}::text as amount`,
+              "objects",
+            )
+          )[0]!,
+      );
+      assert.equal(
+        foreignConsumption.amount,
+        "0",
+        "a tenant mismatch cannot consume another organization’s application",
+      );
+      const items = await withOrgContext(scratch.orgId, () =>
+        openItems(scratch.orgId, "ar", "2026-07-31"),
+      );
+      const credit = items.find((item) => item.docKind === "customer_credit");
+      assert.equal(credit?.remaining, "-54.0000");
+      const invoice = items.find((item) => item.docKind === "customer_invoice");
+      assert.equal(invoice?.remaining, "75.0000");
+      assert.deepEqual(
+        await withOrgContext(
+          scratch.orgId,
+          async () =>
+            await db.execute(
+              sql`select * from applications where org_id=${scratch.orgId} order by id`,
+              "objects",
+            ),
+        ),
+        applicationsBefore,
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(scratch.orgId));
     }
-    const foreignConsumption = await withOrgContext(scratch.orgId, async () =>
-      (await db.execute<{ amount: string }>(sql`select
-        ${datedAppliedAmountSql(randomUUID(), sql`${creditLine}::uuid`, '2026-07-31')}::text as amount`, 'objects'))[0]!)
-    assert.equal(foreignConsumption.amount, '0', 'a tenant mismatch cannot consume another organization’s application')
-    const items = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-07-31'))
-    const credit = items.find((item) => item.docKind === 'customer_credit')
-    assert.equal(credit?.remaining, '-54.0000')
-    const invoice = items.find((item) => item.docKind === 'customer_invoice')
-    assert.equal(invoice?.remaining, '75.0000')
-    assert.deepEqual(await withOrgContext(scratch.orgId, async () =>
-      await db.execute(sql`select * from applications where org_id=${scratch.orgId} order by id`, 'objects')), applicationsBefore)
-  } finally {
-    await withBypass(() => dropScratchOrg(scratch.orgId))
-  }
-})
+  },
+);
 
-test('open items net unapplied customer credits against AR invoices', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const scratch = await withBypass(() => createScratchOrg())
-  try {
-    const actor = await withBypass(() => createScratchUser(scratch.orgId, 'Credit Controller', 'admin'))
-    await withBypass(async () => {
-      await postBill(scratch, actor, 'customer_invoice', 500)
-      await postBill(scratch, actor, 'customer_credit', 200)
-    })
-    const items = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-07-31'))
-    assert.equal(items.length, 2)
-    const net = items.reduce((sum, item) => sum + Number(item.remaining), 0)
-    assert.equal(net.toFixed(4), '300.0000')
-    const credit = items.find((item) => item.docKind === 'customer_credit')
-    assert.equal(credit?.remaining, '-200.0000')
-  } finally {
-    await withBypass(() => dropScratchOrg(scratch.orgId))
-  }
-})
+test(
+  "open items net unapplied customer credits against AR invoices",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const scratch = await withBypass(() => createScratchOrg());
+    try {
+      const actor = await withBypass(() =>
+        createScratchUser(scratch.orgId, "Credit Controller", "admin"),
+      );
+      await withBypass(async () => {
+        await postBill(scratch, actor, "customer_invoice", 500);
+        await postBill(scratch, actor, "customer_credit", 200);
+      });
+      const items = await withOrgContext(scratch.orgId, () =>
+        openItems(scratch.orgId, "ar", "2026-07-31"),
+      );
+      assert.equal(items.length, 2);
+      const net = items.reduce((sum, item) => sum + Number(item.remaining), 0);
+      assert.equal(net.toFixed(4), "300.0000");
+      const credit = items.find((item) => item.docKind === "customer_credit");
+      assert.equal(credit?.remaining, "-200.0000");
+    } finally {
+      await withBypass(() => dropScratchOrg(scratch.orgId));
+    }
+  },
+);

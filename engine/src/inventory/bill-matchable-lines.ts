@@ -69,7 +69,11 @@ export function billLinePurchaseOrderLineId(custom: unknown): string | null {
   const direct = custom.purchaseOrderLineId;
   if (typeof direct === "string" && direct) return direct;
   const capture = custom.apCaptureEvidence;
-  if (isJsonRecord(capture) && typeof capture.purchaseOrderLineId === "string" && capture.purchaseOrderLineId) {
+  if (
+    isJsonRecord(capture) &&
+    typeof capture.purchaseOrderLineId === "string" &&
+    capture.purchaseOrderLineId
+  ) {
     return capture.purchaseOrderLineId;
   }
   return null;
@@ -100,10 +104,15 @@ async function itemProfile(
   orgId: string,
   itemId: string,
 ): Promise<ItemProfile | null> {
-  const row = (await runner.execute<{ base_unit: string; unit_conversions: unknown }>(sql`
+  const row = (
+    await runner.execute<{ base_unit: string; unit_conversions: unknown }>(
+      sql`
     select base_unit, unit_conversions
       from item_inventory_profiles
-     where org_id = ${orgId} and item_id = ${itemId}`, "objects"))[0];
+     where org_id = ${orgId} and item_id = ${itemId}`,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return {
     baseUnit: row.base_unit,
@@ -129,12 +138,18 @@ export async function livePurchaseOrderLineReceipts(
   orgId: string,
   purchaseOrderLineId: string,
 ): Promise<{ quantity: string; value: string }> {
-  const source = (await runner.execute<{ item_id: string }>(sql`
+  const source = (
+    await runner.execute<{ item_id: string }>(
+      sql`
     select item_id from document_lines
-     where org_id = ${orgId} and id = ${purchaseOrderLineId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${purchaseOrderLineId}`,
+      "objects",
+    )
+  )[0];
   if (!source) return { quantity: "0", value: "0" };
   const profile = await itemProfile(runner, orgId, source.item_id);
-  const receipts = await runner.execute<{ id: string }>(sql`
+  const receipts = await runner.execute<{ id: string }>(
+    sql`
     select m.id
       from inventory_movements m
       join document_lines rl on rl.id = m.document_line_id and rl.org_id = m.org_id
@@ -142,7 +157,9 @@ export async function livePurchaseOrderLineReceipts(
      where m.org_id = ${orgId} and m.kind = 'receipt' and m.status = 'posted'
        and rd.kind = 'purchase_receipt'
        and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
-  `, "objects");
+  `,
+    "objects",
+  );
   // One movement per receipt line in practice; each nets its own reversals
   // through the helper the vendor-return guard shares, so both readers
   // agree on what "received" means.
@@ -153,7 +170,9 @@ export async function livePurchaseOrderLineReceipts(
     quantity = fromQuantityUnits(toQuantityUnits(quantity) + toQuantityUnits(live.quantity));
     value = add(value, live.value);
   }
-  const corrections = (await runner.execute<{ quantity: string; value: string }>(sql`
+  const corrections = (
+    await runner.execute<{ quantity: string; value: string }>(
+      sql`
     select coalesce(sum(c.quantity + coalesce((
              select sum(r.quantity) from inventory_movements r
               where r.org_id = c.org_id and r.reverses_movement_id = c.id and r.status = 'posted'
@@ -170,10 +189,21 @@ export async function livePurchaseOrderLineReceipts(
        and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
        and (c.idempotency_key like 'receipt-remainder-%'
             or c.idempotency_key like 'receipt-quantity-%')
-  `, "objects"))[0];
-  quantity = fromQuantityUnits(toQuantityUnits(quantity) + toQuantityUnits(corrections?.quantity ?? "0"));
+  `,
+      "objects",
+    )
+  )[0];
+  quantity = fromQuantityUnits(
+    toQuantityUnits(quantity) + toQuantityUnits(corrections?.quantity ?? "0"),
+  );
   value = add(value, corrections?.value ?? "0");
-  const dropShipConfirmations = await runner.execute<{ quantity: string; value: string; fx_rate: string; unit: string | null }>(sql`
+  const dropShipConfirmations = await runner.execute<{
+    quantity: string;
+    value: string;
+    fx_rate: string;
+    unit: string | null;
+  }>(
+    sql`
     select rl.quantity::text as quantity, rl.amount::text as value, rd.fx_rate::text as fx_rate, rl.unit as unit
       from document_lines rl
       join documents rd on rd.id = rl.document_id and rd.org_id = rl.org_id
@@ -182,7 +212,9 @@ export async function livePurchaseOrderLineReceipts(
        and rd.status in ('approved', 'posted')
        and rd.custom ? 'dropShipConfirmation'
        and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const confirmation of dropShipConfirmations) {
     value = add(value, mulRate(confirmation.value, confirmation.fx_rate));
     // Receipt lines copy the order line's unit; convert to base so this
@@ -190,7 +222,10 @@ export async function livePurchaseOrderLineReceipts(
     quantity = profile
       ? fromQuantityUnits(
           toQuantityUnits(quantity) +
-            toBaseFloorUnits(confirmation.quantity, baseFactor(profile, confirmation.unit, "drop-ship receipt line")),
+            toBaseFloorUnits(
+              confirmation.quantity,
+              baseFactor(profile, confirmation.unit, "drop-ship receipt line"),
+            ),
         )
       : fromQuantityUnits(toQuantityUnits(quantity) + toQuantityUnits(confirmation.quantity));
   }
@@ -254,7 +289,8 @@ export async function liveLinkedBillReceipts(
   orgId: string,
   purchaseOrderLineId: string,
 ): Promise<LinkedBillReceipt[]> {
-  const movements = await runner.execute<{ id: string; bill_id: string; bill_number: string }>(sql`
+  const movements = await runner.execute<{ id: string; bill_id: string; bill_number: string }>(
+    sql`
     select m.id, bill.id as bill_id, bill.document_number as bill_number
       from inventory_movements m
       join document_lines bl on bl.id = m.document_line_id and bl.org_id = m.org_id
@@ -264,7 +300,9 @@ export async function liveLinkedBillReceipts(
        and (bl.custom->>'purchaseOrderLineId' = ${purchaseOrderLineId}
             or bl.custom->'convertedFrom'->>'lineId' = ${purchaseOrderLineId})
      order by bill.document_number, m.id
-  `, "objects");
+  `,
+    "objects",
+  );
   const byBill = new Map<string, LinkedBillReceipt>();
   for (const movement of movements) {
     const live = await liveReceiptQuantity(runner, orgId, movement.id);
@@ -275,7 +313,9 @@ export async function liveLinkedBillReceipts(
       quantity: "0",
       value: "0",
     };
-    entry.quantity = fromQuantityUnits(toQuantityUnits(entry.quantity) + toQuantityUnits(live.quantity));
+    entry.quantity = fromQuantityUnits(
+      toQuantityUnits(entry.quantity) + toQuantityUnits(live.quantity),
+    );
     entry.value = add(entry.value, live.value);
     byBill.set(movement.bill_id, entry);
   }
@@ -337,7 +377,12 @@ export async function unifiedUnbilledCover(
     cancelledQuantity: string;
   },
 ): Promise<UnifiedUnbilledCover> {
-  const empty = { billableQuantity: "0", coverQuantity: "0", liveReceivedQuantity: "0", liveReceivedValue: "0" };
+  const empty = {
+    billableQuantity: "0",
+    coverQuantity: "0",
+    liveReceivedQuantity: "0",
+    liveReceivedValue: "0",
+  };
   const profile = await itemProfile(runner, orgId, line.itemId);
   const live = await livePurchaseOrderLineReceipts(runner, orgId, line.purchaseOrderLineId);
   if (!profile) {
@@ -348,13 +393,19 @@ export async function unifiedUnbilledCover(
       fulfilledQuantity: line.fulfilledQuantity,
       requiresReceipt: true,
     });
-    return { ...empty, billableQuantity: fromQuantityUnits(billable), coverQuantity: fromQuantityUnits(billable) };
+    return {
+      ...empty,
+      billableQuantity: fromQuantityUnits(billable),
+      coverQuantity: fromQuantityUnits(billable),
+    };
   }
   const factor = baseFactor(profile, line.unit, "purchase-order line");
-  const orderedOpen = toQuantityUnits(line.orderedQuantity)
-    - toQuantityUnits(line.cancelledQuantity)
-    - toQuantityUnits(line.billedQuantity);
-  if (orderedOpen <= 0n) return { ...empty, liveReceivedQuantity: live.quantity, liveReceivedValue: live.value };
+  const orderedOpen =
+    toQuantityUnits(line.orderedQuantity) -
+    toQuantityUnits(line.cancelledQuantity) -
+    toQuantityUnits(line.billedQuantity);
+  if (orderedOpen <= 0n)
+    return { ...empty, liveReceivedQuantity: live.quantity, liveReceivedValue: live.value };
   const counterCover = toBaseFloorUnits(
     fromQuantityUnits(
       toQuantityUnits(line.fulfilledQuantity) - toQuantityUnits(line.billedQuantity),
@@ -365,11 +416,9 @@ export async function unifiedUnbilledCover(
   const billedBase = toBaseFloorUnits(line.billedQuantity, factor);
   const liveCover = toQuantityUnits(live.quantity) - billedBase;
   const coverBase = counterCover > liveCover ? counterCover : liveCover;
-  if (coverBase <= 0n) return { ...empty, liveReceivedQuantity: live.quantity, liveReceivedValue: live.value };
-  const orderedBase = toBaseFloorUnits(
-    fromQuantityUnits(orderedOpen),
-    factor,
-  );
+  if (coverBase <= 0n)
+    return { ...empty, liveReceivedQuantity: live.quantity, liveReceivedValue: live.value };
+  const orderedBase = toBaseFloorUnits(fromQuantityUnits(orderedOpen), factor);
   const billableBase = coverBase < orderedBase ? coverBase : orderedBase;
   // Floor back into the order line's unit so the offered quantity stays
   // inside both evidences.
@@ -415,7 +464,8 @@ export async function matchablePurchaseOrderLines(
     fulfilled_quantity: string;
     billed_quantity: string;
     cancelled_quantity: string;
-  }>(sql`
+  }>(
+    sql`
     select d.id as purchase_order_id, d.document_number as purchase_order_number,
            dl.id as purchase_order_line_id, dl.line_number as purchase_order_line_number,
            i.code as item_code, i.name as item_name,
@@ -431,7 +481,9 @@ export async function matchablePurchaseOrderLines(
        and dl.item_id = ${scope.itemId}
        and (d.party_id is not distinct from ${scope.partyId})
        and coalesce(d.subsidiary_id, ${rootId}) = ${entityId}
-     order by d.document_number, dl.line_number`, "objects");
+     order by d.document_number, dl.line_number`,
+    "objects",
+  );
   const baseUnit = (await itemProfile(runner, orgId, scope.itemId))?.baseUnit ?? null;
   const result: MatchablePurchaseOrderLine[] = [];
   for (const row of rows) {
@@ -445,10 +497,18 @@ export async function matchablePurchaseOrderLines(
       billedQuantity: row.billed_quantity,
       cancelledQuantity: row.cancelled_quantity,
     });
-    const remaining = billableRemainderUnits({ orderedQuantity: row.ordered_quantity,
-      billedQuantity: row.billed_quantity, cancelledQuantity: row.cancelled_quantity,
-      fulfilledQuantity: row.fulfilled_quantity, requiresReceipt: false });
-    if (toQuantityUnits(cover.billableQuantity) <= 0n && (!options.includeUnreceived || remaining <= 0n)) continue;
+    const remaining = billableRemainderUnits({
+      orderedQuantity: row.ordered_quantity,
+      billedQuantity: row.billed_quantity,
+      cancelledQuantity: row.cancelled_quantity,
+      fulfilledQuantity: row.fulfilled_quantity,
+      requiresReceipt: false,
+    });
+    if (
+      toQuantityUnits(cover.billableQuantity) <= 0n &&
+      (!options.includeUnreceived || remaining <= 0n)
+    )
+      continue;
     result.push({
       purchaseOrderId: row.purchase_order_id,
       purchaseOrderNumber: row.purchase_order_number,

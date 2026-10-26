@@ -1,9 +1,9 @@
-import { notFound } from 'next/navigation'
-import { verifyDocumentSignerToken } from '@openbooks/engine/hrm/documents/tokens'
-import { readTokenDocument } from '@openbooks/engine/hrm/documents/documents'
-import { SignDocumentForm } from './SignDocumentForm'
+import { notFound } from "next/navigation";
+import { verifyDocumentSignerToken } from "@openbooks/engine/hrm/documents/tokens";
+import { readTokenDocument } from "@openbooks/engine/hrm/documents/documents";
+import { SignDocumentForm } from "./SignDocumentForm";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * The signer-facing signing page — public, possession-authenticated by
@@ -16,30 +16,32 @@ export const dynamic = 'force-dynamic'
  * expired, and consumed links render the refusal, never a blank page.
  */
 export default async function SignDocumentPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params
-  if (!verifyDocumentSignerToken(token)) notFound()
-  let data
+  const { token } = await params;
+  if (!verifyDocumentSignerToken(token)) notFound();
+  let data;
   try {
-    data = await readTokenDocument(token)
+    data = await readTokenDocument(token);
   } catch {
-    notFound()
+    notFound();
   }
-  const timeline = data.signers.map((s) => ({ ord: s.ord, role: s.role, status: s.status }))
-  const mine = data.signers.find((s) => s.id === data.viewerSignerId) ?? null
+  const timeline = data.signers.map((s) => ({ ord: s.ord, role: s.role, status: s.status }));
+  const mine = data.signers.find((s) => s.id === data.viewerSignerId) ?? null;
   return (
     <main className="mx-auto min-h-screen max-w-2xl bg-white px-6 py-10 dark:bg-slate-950">
       <p className="text-xs uppercase tracking-widest text-slate-400">Signature requested</p>
-      <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">{data.document.title}</h1>
+      <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
+        {data.document.title}
+      </h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         Status: {data.document.status}
-        {data.document.expiresAt ? ` · Expires ${data.document.expiresAt}` : ''}
+        {data.document.expiresAt ? ` · Expires ${data.document.expiresAt}` : ""}
       </p>
       <ol className="mb-6 mt-4 flex flex-col gap-1">
         {timeline.map((signer, index) => (
           <li key={index} className="flex justify-between gap-3 text-sm">
             <span>
               {signer.ord + 1}. {signer.role}
-              {mine && timeline[index]?.ord === mine.ord ? ' (you)' : ''}
+              {mine && timeline[index]?.ord === mine.ord ? " (you)" : ""}
             </span>
             <span className="text-slate-500">{signer.status}</span>
           </li>
@@ -47,16 +49,19 @@ export default async function SignDocumentPage({ params }: { params: Promise<{ t
       </ol>
       {data.document.fileId && (
         <p className="mb-6">
-          <a className="text-sm text-teal-700 underline dark:text-teal-300" href={`/api/documents/sign/${token}?format=pdf`}>
+          <a
+            className="text-sm text-teal-700 underline dark:text-teal-300"
+            href={`/api/documents/sign/${token}?format=pdf`}
+          >
             Read the document (PDF)
           </a>
         </p>
       )}
       <SignDocumentForm
         token={token}
-        signerStatus={mine?.status ?? 'pending'}
+        signerStatus={mine?.status ?? "pending"}
         acknowledgmentOnly={data.acknowledgmentOnly}
       />
     </main>
-  )
+  );
 }

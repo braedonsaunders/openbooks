@@ -19,17 +19,10 @@ export const POST = defineRoute({
   body: Body,
   handler: async ({ request, authz, params, body }) => {
     if (!can(authz, "manufacturing.manage"))
-      return Response.json(
-        { error: "missing permission: manufacturing.manage" },
-        { status: 403 },
-      );
-    const key = uuidString()
-      .safeParse(request.headers.get("Idempotency-Key"));
+      return Response.json({ error: "missing permission: manufacturing.manage" }, { status: 403 });
+    const key = uuidString().safeParse(request.headers.get("Idempotency-Key"));
     if (!key.success)
-      return Response.json(
-        { error: "A UUID Idempotency-Key is required." },
-        { status: 400 },
-      );
+      return Response.json({ error: "A UUID Idempotency-Key is required." }, { status: 400 });
     return manufacturingTransaction(authz.user.orgId, async () =>
       Response.json(
         await recordNormalScrap(

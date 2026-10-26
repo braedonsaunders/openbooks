@@ -4,9 +4,8 @@ import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { listPdfTemplates } from "../../../../../lib/pdf-templates/store";
 import { notFound } from "@/lib/api/responses";
-import { defineRoute } from '@/lib/api/route'
-import { z } from 'zod'
-
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 
@@ -33,12 +32,15 @@ async function listRecordPdfOptions(
 
 export const GET = defineRoute({
   authorize: async ({ params }) => {
-    const recordType = (params as { recordType?: string } | undefined)?.recordType ?? ''
-    const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
-    if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })
-    return guardRecordTypeRead(recordType, meta.readPermission)
+    const recordType = (params as { recordType?: string } | undefined)?.recordType ?? "";
+    const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
+    if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+    return guardRecordTypeRead(recordType, meta.readPermission);
   },
-  feature: { none: 'Record-type availability is enforced by the document-kind gate in the PDF options handler.' },
+  feature: {
+    none: "Record-type availability is enforced by the document-kind gate in the PDF options handler.",
+  },
   params: z.object({ recordType: z.string() }),
-  handler: async ({ request, params }) => listRecordPdfOptions(request, { params: Promise.resolve(params) }),
-})
+  handler: async ({ request, params }) =>
+    listRecordPdfOptions(request, { params: Promise.resolve(params) }),
+});

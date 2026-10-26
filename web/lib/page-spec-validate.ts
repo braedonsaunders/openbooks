@@ -1,5 +1,5 @@
-import { pageSpecSchema, validateSpec, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { explainSpecIssues } from './page-spec-shapes'
+import { pageSpecSchema, validateSpec, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { explainSpecIssues } from "./page-spec-shapes";
 
 /**
  * Whether a document is a spec this host can render.
@@ -13,11 +13,11 @@ import { explainSpecIssues } from './page-spec-shapes'
  */
 
 export interface SpecRejection {
-  ok: false
-  errors: string[]
+  ok: false;
+  errors: string[];
 }
 
-export type SpecAcceptance = { ok: true; spec: PageSpec }
+export type SpecAcceptance = { ok: true; spec: PageSpec };
 
 /**
  * Validate a candidate spec against the closed schema AND the host's
@@ -46,65 +46,75 @@ export type SpecAcceptance = { ok: true; spec: PageSpec }
 export function validateAgainstRegistries(
   candidate: unknown,
   registries: {
-    widgets: ReadonlySet<string>
-    frames: ReadonlySet<string>
+    widgets: ReadonlySet<string>;
+    frames: ReadonlySet<string>;
     /** Prop names per widget. Omitted entirely, no props are checked. */
-    contracts?: Readonly<Record<string, { props: readonly string[]; open?: true }>>
+    contracts?: Readonly<Record<string, { props: readonly string[]; open?: true }>>;
   },
 ): SpecAcceptance | SpecRejection {
-  const result = validateSpec(candidate)
-  if (!result.ok) return { ok: false, errors: explainedErrors(candidate, result.errors) }
+  const result = validateSpec(candidate);
+  if (!result.ok) return { ok: false, errors: explainedErrors(candidate, result.errors) };
 
-  const errors: string[] = []
-  const seen = { widgets: new Set<string>(), frames: new Set<string>() }
-  const reported = new Set<string>()
+  const errors: string[] = [];
+  const seen = { widgets: new Set<string>(), frames: new Set<string>() };
+  const reported = new Set<string>();
   walk(result.spec, (name, kind, props) => {
-    const known = kind === 'widget' ? registries.widgets : registries.frames
-    const already = kind === 'widget' ? seen.widgets : seen.frames
+    const known = kind === "widget" ? registries.widgets : registries.frames;
+    const already = kind === "widget" ? seen.widgets : seen.frames;
     if (!known.has(name) && !already.has(name)) {
-      already.add(name)
-      errors.push(`unknown ${kind} "${name}"`)
-      return
+      already.add(name);
+      errors.push(`unknown ${kind} "${name}"`);
+      return;
     }
-    if (!props) return
+    if (!props) return;
     // The renderer resolves a reference only as a whole prop value. One nested
     // inside an object or list reaches the component unresolved, which crashes
     // it or renders the reference itself.
     for (const [prop, value] of Object.entries(props)) {
-      if (isFieldRef(value) || !containsFieldRef(value)) continue
-      const key = `${name}.${prop}:nested`
-      if (reported.has(key)) continue
-      reported.add(key)
-      errors.push(`${kind} "${name}" prop "${prop}" nests a field reference; a reference binds only as a whole prop value ("${prop}": { "$": "path" })`)
+      if (isFieldRef(value) || !containsFieldRef(value)) continue;
+      const key = `${name}.${prop}:nested`;
+      if (reported.has(key)) continue;
+      reported.add(key);
+      errors.push(
+        `${kind} "${name}" prop "${prop}" nests a field reference; a reference binds only as a whole prop value ("${prop}": { "$": "path" })`,
+      );
     }
-    if (kind !== 'widget') return
-    const contract = registries.contracts?.[name]
+    if (kind !== "widget") return;
+    const contract = registries.contracts?.[name];
     // No contract, or a widget that forwards its props wholesale: nothing can
     // be said about its prop names, so nothing is.
-    if (!contract || contract.open) return
+    if (!contract || contract.open) return;
     for (const prop of Object.keys(props)) {
-      const key = `${name}.${prop}`
-      if (contract.props.includes(prop) || reported.has(key)) continue
-      reported.add(key)
-      const near = closest(prop, contract.props)
+      const key = `${name}.${prop}`;
+      if (contract.props.includes(prop) || reported.has(key)) continue;
+      reported.add(key);
+      const near = closest(prop, contract.props);
       errors.push(
         `widget "${name}" does not read a prop called "${prop}"` +
-          (near ? ` — did you mean "${near}"?` : ''),
-      )
+          (near ? ` — did you mean "${near}"?` : ""),
+      );
     }
-  })
-  if (errors.length > 0) return { ok: false, errors }
-  return { ok: true, spec: result.spec }
+  });
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true, spec: result.spec };
 }
 
 function isFieldRef(value: unknown): boolean {
-  return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && typeof (value as { $?: unknown }).$ === 'string'
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === 1 &&
+    typeof (value as { $?: unknown }).$ === "string"
+  );
 }
 
 function containsFieldRef(value: unknown, depth = 0): boolean {
-  if (depth > 8 || !value || typeof value !== 'object') return false
-  if (isFieldRef(value)) return true
-  return (Array.isArray(value) ? value : Object.values(value)).some((child) => containsFieldRef(child, depth + 1))
+  if (depth > 8 || !value || typeof value !== "object") return false;
+  if (isFieldRef(value)) return true;
+  return (Array.isArray(value) ? value : Object.values(value)).some((child) =>
+    containsFieldRef(child, depth + 1),
+  );
 }
 
 /**
@@ -113,11 +123,11 @@ function containsFieldRef(value: unknown, depth = 0): boolean {
  * else is parsed again to name the property inside the block the author meant.
  */
 function explainedErrors(candidate: unknown, errors: string[]): string[] {
-  if (errors.some((error) => error.startsWith('block nesting exceeds'))) return errors
-  const parsed = pageSpecSchema.safeParse(candidate)
-  if (parsed.success) return errors
-  const explained = explainSpecIssues(parsed.error.issues as never)
-  return explained.length ? explained : errors
+  if (errors.some((error) => error.startsWith("block nesting exceeds"))) return errors;
+  const parsed = pageSpecSchema.safeParse(candidate);
+  if (parsed.success) return errors;
+  const explained = explainSpecIssues(parsed.error.issues as never);
+  return explained.length ? explained : errors;
 }
 
 /**
@@ -129,56 +139,52 @@ function explainedErrors(candidate: unknown, errors: string[]): string[] {
  * more than none.
  */
 function closest(prop: string, known: readonly string[]): string | null {
-  let best: string | null = null
-  let bestDistance = Math.floor(prop.length / 3) + 1
+  let best: string | null = null;
+  let bestDistance = Math.floor(prop.length / 3) + 1;
   for (const candidate of known) {
-    const distance = editDistance(prop.toLowerCase(), candidate.toLowerCase())
+    const distance = editDistance(prop.toLowerCase(), candidate.toLowerCase());
     if (distance < bestDistance) {
-      bestDistance = distance
-      best = candidate
+      bestDistance = distance;
+      best = candidate;
     }
   }
-  return best
+  return best;
 }
 
 function editDistance(a: string, b: string): number {
-  let previous = Array.from({ length: b.length + 1 }, (_, i) => i)
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
   for (let i = 1; i <= a.length; i++) {
-    const current = [i]
+    const current = [i];
     for (let j = 1; j <= b.length; j++) {
       current[j] = Math.min(
         previous[j]! + 1,
         current[j - 1]! + 1,
         previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
-      )
+      );
     }
-    previous = current
+    previous = current;
   }
-  return previous[b.length]!
+  return previous[b.length]!;
 }
 
 /** Visit every widget and frame a spec mentions, at any depth, with its props. */
 function walk(
   node: unknown,
-  visit: (
-    name: string,
-    kind: 'widget' | 'frame',
-    props?: Record<string, unknown>,
-  ) => void,
+  visit: (name: string, kind: "widget" | "frame", props?: Record<string, unknown>) => void,
 ): void {
   if (Array.isArray(node)) {
-    for (const entry of node) walk(entry, visit)
-    return
+    for (const entry of node) walk(entry, visit);
+    return;
   }
-  if (!node || typeof node !== 'object') return
-  const record = node as Record<string, unknown>
+  if (!node || typeof node !== "object") return;
+  const record = node as Record<string, unknown>;
   // `widget` names one on a widget block, a widget cell and a widget ref
   // alike; `frame` only ever names a frame. Both are plain strings by schema.
   const props =
-    record.props && typeof record.props === 'object' && !Array.isArray(record.props)
+    record.props && typeof record.props === "object" && !Array.isArray(record.props)
       ? (record.props as Record<string, unknown>)
-      : undefined
-  if (typeof record.widget === 'string') visit(record.widget, 'widget', props)
-  if (typeof record.frame === 'string') visit(record.frame, 'frame')
-  for (const value of Object.values(record)) walk(value, visit)
+      : undefined;
+  if (typeof record.widget === "string") visit(record.widget, "widget", props);
+  if (typeof record.frame === "string") visit(record.frame, "frame");
+  for (const value of Object.values(record)) walk(value, visit);
 }

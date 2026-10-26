@@ -93,11 +93,12 @@ const hooks = registerHooks({
 const { GET, POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
-const post = (body: unknown, headers: Record<string, string> = {}) => new Request("http://openbooks.test/api/v1/setup/tax-codes", {
-  method: "POST",
-  headers: { "content-type": "application/json", ...headers },
-  body: JSON.stringify(body),
-});
+const post = (body: unknown, headers: Record<string, string> = {}) =>
+  new Request("http://openbooks.test/api/v1/setup/tax-codes", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
 const params = { params: Promise.resolve({ entityKey: "tax-codes" }) };
 
 test("GET /api/v1/setup/[entityKey] lists through listSetupRecords", async () => {
@@ -115,18 +116,29 @@ test("GET /api/v1/setup/[entityKey] lists through listSetupRecords", async () =>
 
 test("POST /api/v1/setup/[entityKey] creates through the Setup command", async () => {
   routeState.created = null;
-  const response = await POST(post({ code: "GST", rate: "5" }, { "idempotency-key": "key-1" }), params);
+  const response = await POST(
+    post({ code: "GST", rate: "5" }, { "idempotency-key": "key-1" }),
+    params,
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { id: "row-1" });
   assert.equal(response.headers.get("idempotency-replayed"), "false");
   assert.deepEqual(routeState.created, {
     // Actor scope is threaded into the Setup command; null is the unrestricted admin modeled here.
-    actor: { orgId: "org-1", id: "user-1", permissions: ["admin.setup.manage"], allowedSubsidiaryIds: null },
+    actor: {
+      orgId: "org-1",
+      id: "user-1",
+      permissions: ["admin.setup.manage"],
+      allowedSubsidiaryIds: null,
+    },
     entityKey: "tax-codes",
     body: { code: "GST", rate: "5" },
   });
 });
 
 test("POST /api/v1/setup/[entityKey] requires an Idempotency-Key", async () => {
-  await assert.rejects(() => POST(post({ code: "GST" }), params), /Idempotency-Key header is required/);
+  await assert.rejects(
+    () => POST(post({ code: "GST" }), params),
+    /Idempotency-Key header is required/,
+  );
 });

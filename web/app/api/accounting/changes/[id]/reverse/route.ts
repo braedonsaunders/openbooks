@@ -15,10 +15,7 @@ export const POST = defineRoute({
       gate = await authorizeChange(id);
     if (gate instanceof NextResponse) return gate;
     if (gate.domain !== "asset")
-      return NextResponse.json(
-        { error: "select an asset disposal or transfer" },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: "select an asset disposal or transfer" }, { status: 422 });
     const body = await parseJsonBody(
       req,
       z.object({

@@ -53,13 +53,17 @@ const required = (key: string): string => {
 
 const ORG = assertImportOrgId(
   args.get("org") ??
-  process.env.TARGET_ORG ??
-  process.env.SANDBOX_ORG ??
-  (() => { throw new Error("--org, TARGET_ORG, or SANDBOX_ORG is required"); })(),
+    process.env.TARGET_ORG ??
+    process.env.SANDBOX_ORG ??
+    (() => {
+      throw new Error("--org, TARGET_ORG, or SANDBOX_ORG is required");
+    })(),
 );
 const APPLY = args.get("apply") === "true";
 if (args.has("identity-bindings")) {
-  throw new Error("source identity admission is held through manifests; certify one reviewed ticket through this command instead");
+  throw new Error(
+    "source identity admission is held through manifests; certify one reviewed ticket through this command instead",
+  );
 }
 
 function parseReferenceMap(raw: string): FieldTicketSourceReferenceMapInput {
@@ -81,7 +85,8 @@ function parseReferenceMap(raw: string): FieldTicketSourceReferenceMapInput {
   };
   const jobRef = text("jobRef");
   const projectId = text("projectId");
-  if (!jobRef || !projectId) throw new Error("--refs must name the source job reference and its reviewed native project");
+  if (!jobRef || !projectId)
+    throw new Error("--refs must name the source job reference and its reviewed native project");
   return {
     jobRef,
     customerRef: text("customerRef"),
@@ -113,26 +118,37 @@ const input = {
 (async () => {
   await resolveTargetOrg(ORG);
   if (!APPLY) {
-    const { tickets } = await retry(() => listFieldTicketSourceCertificationCandidates({
-      orgId: ORG, actorId: input.actorId,
-    }));
-    const candidate = tickets.find((ticket) => ticket.nativeDocumentId === input.nativeDocumentId.toLowerCase());
-    console.log(JSON.stringify({
-      mode: "plan",
-      writes: 0,
-      candidate: candidate ?? null,
-      reviewedBinding: {
-        nativeDocumentId: input.nativeDocumentId,
-        expectedNativeRevision: input.expectedNativeRevision,
-        sourceSystem: input.sourceSystem,
-        sourceTicketId: input.sourceTicketId,
-        sourceFileId: input.sourceFileId,
-        sourceVersionId: input.sourceVersionId,
-        sourceFileSha256: input.sourceFileSha256,
-        basis: "human_reviewed_crosswalk_operator_attestation",
-      },
-      remedy: "review the binding, then re-run with --apply to certify",
-    }, null, 2));
+    const { tickets } = await retry(() =>
+      listFieldTicketSourceCertificationCandidates({
+        orgId: ORG,
+        actorId: input.actorId,
+      }),
+    );
+    const candidate = tickets.find(
+      (ticket) => ticket.nativeDocumentId === input.nativeDocumentId.toLowerCase(),
+    );
+    console.log(
+      JSON.stringify(
+        {
+          mode: "plan",
+          writes: 0,
+          candidate: candidate ?? null,
+          reviewedBinding: {
+            nativeDocumentId: input.nativeDocumentId,
+            expectedNativeRevision: input.expectedNativeRevision,
+            sourceSystem: input.sourceSystem,
+            sourceTicketId: input.sourceTicketId,
+            sourceFileId: input.sourceFileId,
+            sourceVersionId: input.sourceVersionId,
+            sourceFileSha256: input.sourceFileSha256,
+            basis: "human_reviewed_crosswalk_operator_attestation",
+          },
+          remedy: "review the binding, then re-run with --apply to certify",
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
   const record = await retry(() => certifyFieldTicketSourceIdentity(input));

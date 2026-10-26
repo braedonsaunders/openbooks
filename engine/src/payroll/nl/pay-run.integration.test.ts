@@ -9,7 +9,12 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../../testing/fixtures.ts";
 
 /**
  * The NL pack, ON A REAL PAY RUN.
@@ -137,21 +142,27 @@ async function nlEmployee(
 }
 
 const stubOf = async (fx: Fixture, documentId: string, employeePartyId: string) => {
-  const r = (await db.execute<{ id: string; gross: string; factors: Record<string, string> }>(sql`
+  const r = await db.execute<{ id: string; gross: string; factors: Record<string, string> }>(
+    sql`
     select id, gross::text as gross, factors from pay_stubs
      where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}
        and employee_party_id = ${employeePartyId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0] ?? null;
 };
 
 const deductionsOf = async (fx: Fixture, stubId: string) => {
-  const r = (await db.execute<{ system_key: string; description: string; amount: string }>(sql`
+  const r = await db.execute<{ system_key: string; description: string; amount: string }>(
+    sql`
     select c.system_key, l.description, l.amount::text as amount
       from pay_stub_lines l join pay_components c on c.id = l.component_id
      where l.org_id = ${fx.orgId} and l.stub_id = ${stubId} and l.kind = 'deduction'
      order by l.sequence
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r;
 };
 
@@ -164,18 +175,34 @@ test(
     try {
       // Configured entirely through the declared surfaces: a bare profile
       // plus the pack's three certificates — no profile column, no default.
-      const employee = await nlEmployee(fx, "Jan Modaal", [
-        { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true", age_class: "under_aow" } },
-        { key: "nl_premies", answers: { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25", sv_loon_ytd: "0" } },
-        { key: "nl_tax_liability", answers: { liability_class: "standard_resident" } },
-        { key: "nl_contract", answers: { contract_start: "2025-01-01" } },
-      ], "123456782");
+      const employee = await nlEmployee(
+        fx,
+        "Jan Modaal",
+        [
+          {
+            key: "nl_loonheffingen",
+            answers: { apply_loonheffingskorting: "true", age_class: "under_aow" },
+          },
+          {
+            key: "nl_premies",
+            answers: { awf_laag: "true", aof_hoog: "false", whk_percent: "1.25", sv_loon_ytd: "0" },
+          },
+          { key: "nl_tax_liability", answers: { liability_class: "standard_resident" } },
+          { key: "nl_contract", answers: { contract_start: "2025-01-01" } },
+        ],
+        "123456782",
+      );
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
       });
       const result = await calculatePayRun({
-        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
       });
       assert.deepEqual(result.errors, [], "the persona's pay run calculates");
 
@@ -218,17 +245,30 @@ test(
     // on the undeclared AWf contract type instead.
     const fx = await nlPayrollOrg();
     try {
-      const employee = await nlEmployee(fx, "No Premies", [
-        { key: "nl_loonheffingen", answers: { apply_loonheffingskorting: "true", age_class: "under_aow" } },
-        { key: "nl_premies", answers: { sv_loon_ytd: "0" } },
-        { key: "nl_tax_liability", answers: { liability_class: "standard_resident" } },
-      ], "111222333");
+      const employee = await nlEmployee(
+        fx,
+        "No Premies",
+        [
+          {
+            key: "nl_loonheffingen",
+            answers: { apply_loonheffingskorting: "true", age_class: "under_aow" },
+          },
+          { key: "nl_premies", answers: { sv_loon_ytd: "0" } },
+          { key: "nl_tax_liability", answers: { liability_class: "standard_resident" } },
+        ],
+        "111222333",
+      );
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: PERIOD_START, periodEnd: PERIOD_END,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
       });
       const result = await calculatePayRun({
-        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
       });
       assert.equal(result.errors.length, 1);
       assert.match(result.errors[0]!.message, /AWf/);

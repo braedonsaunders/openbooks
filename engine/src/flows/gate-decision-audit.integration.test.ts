@@ -25,12 +25,7 @@ import { decideGate } from "./gates.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function withGatedDocument(
-  fn: (
-    org: ScratchOrg,
-    actors: FlowActors,
-    docId: string,
-    gateId: string,
-  ) => Promise<void>,
+  fn: (org: ScratchOrg, actors: FlowActors, docId: string, gateId: string) => Promise<void>,
 ): Promise<void> {
   const org = await createScratchOrg();
   try {
@@ -44,15 +39,16 @@ async function withGatedDocument(
       kind: "vendor_bill",
       createdBy: actors.submitterId,
     });
-    const res = await submitForApproval(
-      "vendor_bill",
-      docId,
-      actors.submitterId,
-    );
+    const res = await submitForApproval("vendor_bill", docId, actors.submitterId);
     assert.equal(res.gated, true, "submit created a gate");
-    const gate = (await db.execute<{ id: string }>(sql`
+    const gate = (
+      await db.execute<{ id: string }>(
+        sql`
         select id from flow_gates where subject_id = ${docId} order by created_at
-      `, "objects"))[0]!.id;
+      `,
+        "objects",
+      )
+    )[0]!.id;
     await fn(org, actors, docId, gate);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -60,14 +56,17 @@ async function withGatedDocument(
 }
 
 async function decisionAudit(orgId: string, gateId: string) {
-  return await db.execute(sql`
+  return await db.execute(
+    sql`
       select action, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId}
          and table_name = 'flow_gates'
          and row_id = ${gateId}
        order by at, id
-    `, "objects");
+    `,
+    "objects",
+  );
 }
 
 test(
@@ -82,11 +81,7 @@ test(
       });
       assert.equal(decision.resumed, "approve");
       const rows = await decisionAudit(org.orgId, gateId);
-      assert.equal(
-        rows.length,
-        1,
-        "approval must leave exactly one audit row for the gate",
-      );
+      assert.equal(rows.length, 1, "approval must leave exactly one audit row for the gate");
       assert.equal(rows[0]!.action, "update");
       assert.equal(rows[0]!.actorId, actors.approver1Id);
       const changes = rows[0]!.changes as {
@@ -121,11 +116,7 @@ test(
       });
       assert.equal(decision.resumed, "reject");
       const rows = await decisionAudit(org.orgId, gateId);
-      assert.equal(
-        rows.length,
-        1,
-        "rejection must leave exactly one audit row for the gate",
-      );
+      assert.equal(rows.length, 1, "rejection must leave exactly one audit row for the gate");
       assert.equal(rows[0]!.actorId, actors.approver1Id);
       const changes = rows[0]!.changes as {
         event: string;
@@ -158,14 +149,15 @@ test(
   { skip: !DB },
   async () => {
     await withGatedDocument(async (org, _actors, _docId, gateId) => {
-      await assert.rejects(
-        decideGate({ gateId, decision: "approved", userId: "" }),
-      );
+      await assert.rejects(decideGate({ gateId, decision: "approved", userId: "" }));
       assert.equal((await decisionAudit(org.orgId, gateId)).length, 0);
       assert.equal(
-        (await db.execute<{ status: string }>(
-            sql`select status from flow_gates where org_id=${org.orgId} and id=${gateId}`, "objects",
-          ))[0]?.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from flow_gates where org_id=${org.orgId} and id=${gateId}`,
+            "objects",
+          )
+        )[0]?.status,
         "pending",
       );
     });

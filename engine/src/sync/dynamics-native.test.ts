@@ -41,8 +41,20 @@ test("Dynamics invoices keep tax amounts and codes on their matching detail line
       invoiceDate: "2026-08-27",
       customerId: "customer-1",
       lines: [
-        { lineType: "Account", accountId: "sales-a", amountExcludingTax: 100, totalTaxAmount: 13, taxCode: "tax-a" },
-        { lineType: "Account", accountId: "sales-b", amountExcludingTax: 50, totalTaxAmount: 5, taxCode: "tax-b" },
+        {
+          lineType: "Account",
+          accountId: "sales-a",
+          amountExcludingTax: 100,
+          totalTaxAmount: 13,
+          taxCode: "tax-a",
+        },
+        {
+          lineType: "Account",
+          accountId: "sales-b",
+          amountExcludingTax: 50,
+          totalTaxAmount: 5,
+          taxCode: "tax-b",
+        },
       ],
     },
     { itemSalesAccount: new Map(), itemPurchaseAccount: new Map() },
@@ -61,8 +73,20 @@ test("Dynamics invoices keep tax amounts and codes on their matching detail line
       taxOverridden: line.taxOverridden,
     })),
     [
-      { accountId: "sales-a-id", amount: "100.0000", taxAmount: "13.0000", taxCodeId: "tax-a-id", taxOverridden: true },
-      { accountId: "sales-b-id", amount: "50.0000", taxAmount: "5.0000", taxCodeId: "tax-b-id", taxOverridden: true },
+      {
+        accountId: "sales-a-id",
+        amount: "100.0000",
+        taxAmount: "13.0000",
+        taxCodeId: "tax-a-id",
+        taxOverridden: true,
+      },
+      {
+        accountId: "sales-b-id",
+        amount: "50.0000",
+        taxAmount: "5.0000",
+        taxCodeId: "tax-b-id",
+        taxOverridden: true,
+      },
     ],
   );
 });
@@ -78,7 +102,13 @@ test("Dynamics foreign invoice carries its currency and dated rate, amounts unco
       customerId: "customer-1",
       currencyCode: "eur",
       lines: [
-        { lineType: "Account", accountId: "sales-a", amountExcludingTax: 1000, totalTaxAmount: 200, taxCode: "tax-a" },
+        {
+          lineType: "Account",
+          accountId: "sales-a",
+          amountExcludingTax: 1000,
+          totalTaxAmount: 200,
+          taxCode: "tax-a",
+        },
       ],
     },
     {
@@ -107,7 +137,13 @@ test("Dynamics foreign invoice without a dated rate refuses with the remedy", ()
       customerId: "customer-1",
       currencyCode: "EUR",
       lines: [
-        { lineType: "Account", accountId: "sales-a", amountExcludingTax: 1000, totalTaxAmount: 200, taxCode: "tax-a" },
+        {
+          lineType: "Account",
+          accountId: "sales-a",
+          amountExcludingTax: 1000,
+          totalTaxAmount: 200,
+          taxCode: "tax-a",
+        },
       ],
     },
     { itemSalesAccount: new Map(), itemPurchaseAccount: new Map() },
@@ -130,8 +166,20 @@ test("Dynamics tax keeps its sign when one tax code spans a reduction line", () 
       invoiceDate: "2026-08-27",
       customerId: "customer-1",
       lines: [
-        { lineType: "Account", accountId: "sales-a", amountExcludingTax: 100, totalTaxAmount: 10, taxCode: "tax-a" },
-        { lineType: "Account", accountId: "sales-b", amountExcludingTax: -20, totalTaxAmount: -2, taxCode: "tax-a" },
+        {
+          lineType: "Account",
+          accountId: "sales-a",
+          amountExcludingTax: 100,
+          totalTaxAmount: 10,
+          taxCode: "tax-a",
+        },
+        {
+          lineType: "Account",
+          accountId: "sales-b",
+          amountExcludingTax: -20,
+          totalTaxAmount: -2,
+          taxCode: "tax-a",
+        },
       ],
     },
     { itemSalesAccount: new Map(), itemPurchaseAccount: new Map() },

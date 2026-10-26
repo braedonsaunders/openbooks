@@ -89,11 +89,15 @@ function validateProvenance({ conformance, controls, checkpoint, sha }) {
   ]) {
     if (!artifact) continue;
     if (!Array.isArray(artifact.cases) || typeof artifact.casesSha256 !== "string") {
-      console.error(`${label} carries no case provenance (cases/casesSha256) — refusing to publish unverifiable evidence.`);
+      console.error(
+        `${label} carries no case provenance (cases/casesSha256) — refusing to publish unverifiable evidence.`,
+      );
       process.exit(1);
     }
     if (sha256Hex(JSON.stringify(artifact.cases)) !== artifact.casesSha256) {
-      console.error(`${label} case digest mismatch: the payload no longer matches its embedded digest — refusing to publish tampered evidence.`);
+      console.error(
+        `${label} case digest mismatch: the payload no longer matches its embedded digest — refusing to publish tampered evidence.`,
+      );
       process.exit(1);
     }
   }
@@ -190,12 +194,17 @@ try {
   console.error(`refusing to publish incomplete verification: ${error.message}`);
   process.exit(1);
 }
-for (const [label, report] of [["conformance", conformance], ["controls", controls]]) {
+for (const [label, report] of [
+  ["conformance", conformance],
+  ["controls", controls],
+]) {
   const totals = { pass: 0, fail: 0, gap: 0, skipped: 0 };
   const ids = new Set();
   for (const c of report.cases) {
     if (typeof c.id !== "string" || !c.id || ids.has(c.id) || !Object.hasOwn(totals, c.status)) {
-      console.error(`${label} evidence has duplicate cases or invalid results; refusing publication`);
+      console.error(
+        `${label} evidence has duplicate cases or invalid results; refusing publication`,
+      );
       process.exit(1);
     }
     ids.add(c.id);
@@ -206,18 +215,30 @@ for (const [label, report] of [["conformance", conformance], ["controls", contro
     process.exit(1);
   }
   if (label === "controls" && report.kind !== "internal-controls") {
-    console.error("controls evidence must identify internal-controls explicitly; refusing publication");
+    console.error(
+      "controls evidence must identify internal-controls explicitly; refusing publication",
+    );
     process.exit(1);
   }
-  const ledger = report.cases.filter(c => c.tier === "ledger" && c.support !== "not-implemented");
-  if (report.pass !== true || ledger.length === 0 || ledger.some(c => c.status !== "pass") ||
-      report.cases.some(c => c.status === "fail" || c.status === "skipped")) {
-    console.error(`${label} evidence is failed, empty, or not fully executed; refusing publication`);
+  const ledger = report.cases.filter((c) => c.tier === "ledger" && c.support !== "not-implemented");
+  if (
+    report.pass !== true ||
+    ledger.length === 0 ||
+    ledger.some((c) => c.status !== "pass") ||
+    report.cases.some((c) => c.status === "fail" || c.status === "skipped")
+  ) {
+    console.error(
+      `${label} evidence is failed, empty, or not fully executed; refusing publication`,
+    );
     process.exit(1);
   }
 }
-if (checkpoint.pass !== true || !Array.isArray(checkpoint.checks) || checkpoint.checks.length === 0 ||
-    checkpoint.checks.some(check => check.ok !== true)) {
+if (
+  checkpoint.pass !== true ||
+  !Array.isArray(checkpoint.checks) ||
+  checkpoint.checks.length === 0 ||
+  checkpoint.checks.some((check) => check.ok !== true)
+) {
   console.error("checkpoint invariants did not execute successfully; refusing publication");
   process.exit(1);
 }
@@ -275,19 +296,33 @@ function conformanceBadge() {
 
 function invariantBadge() {
   if (!checkpoint) {
-    return { schemaVersion: 1, label: "ledger invariants", message: "unavailable", color: "lightgrey" };
+    return {
+      schemaVersion: 1,
+      label: "ledger invariants",
+      message: "unavailable",
+      color: "lightgrey",
+    };
   }
   const failed = (checkpoint.checks ?? []).filter((check) => !check.ok);
   return {
     schemaVersion: 1,
     label: "ledger invariants",
-    message: failed.length > 0 ? `${failed.length} failing` : `${(checkpoint.checks ?? []).length} passing`,
+    message:
+      failed.length > 0
+        ? `${failed.length} failing`
+        : `${(checkpoint.checks ?? []).length} passing`,
     color: failed.length > 0 ? "red" : "brightgreen",
   };
 }
 
-writeFileSync(join(stagedDir, "badge-conformance.json"), `${JSON.stringify(conformanceBadge(), null, 2)}\n`);
-writeFileSync(join(stagedDir, "badge-invariants.json"), `${JSON.stringify(invariantBadge(), null, 2)}\n`);
+writeFileSync(
+  join(stagedDir, "badge-conformance.json"),
+  `${JSON.stringify(conformanceBadge(), null, 2)}\n`,
+);
+writeFileSync(
+  join(stagedDir, "badge-invariants.json"),
+  `${JSON.stringify(invariantBadge(), null, 2)}\n`,
+);
 
 // -- published artifacts ----------------------------------------------------
 // The controls set is published with its distinct kind intact: nothing here
@@ -308,7 +343,9 @@ const historyPath = join(outAbs, "history.json");
 const history = existsSync(historyPath) ? readJson(historyPath) : [];
 if (!Array.isArray(history)) {
   rmSync(stagedDir, { recursive: true, force: true });
-  throw new Error("publication history is unreadable; restore the prior history before publishing new evidence");
+  throw new Error(
+    "publication history is unreadable; restore the prior history before publishing new evidence",
+  );
 }
 
 const record = {
@@ -355,8 +392,14 @@ history.push(record);
 writeFileSync(join(stagedDir, "verification.json"), `${JSON.stringify(verification, null, 2)}\n`);
 writeFileSync(join(stagedDir, "history.json"), `${JSON.stringify(history, null, 2)}\n`);
 const bundle = {
-  schemaVersion: 1, gitSha: sha, at,
-  components: Object.fromEntries(readdirSync(stagedDir).sort().map(name => [name, fileDigest(join(stagedDir, name))])),
+  schemaVersion: 1,
+  gitSha: sha,
+  at,
+  components: Object.fromEntries(
+    readdirSync(stagedDir)
+      .sort()
+      .map((name) => [name, fileDigest(join(stagedDir, name))]),
+  ),
 };
 writeFileSync(join(stagedDir, "bundle.json"), `${JSON.stringify(bundle, null, 2)}\n`);
 

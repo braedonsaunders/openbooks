@@ -1,25 +1,25 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
-import { Button, EmptyState } from '@openbooks/ui'
-import shell from '@/messages/en/shell.json'
-import { isStaleDeploymentError } from '@/lib/stale-deployment'
+import { useEffect } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Button, EmptyState } from "@openbooks/ui";
+import shell from "@/messages/en/shell.json";
+import { isStaleDeploymentError } from "@/lib/stale-deployment";
 
 /** Catches root-layout failures; must define its own document (no app providers). */
 export default function GlobalError({
   error,
   reset,
 }: {
-  error: Error & { digest?: string }
-  reset: () => void
+  error: Error & { digest?: string };
+  reset: () => void;
 }) {
-  const t = shell.routeState
-  const stale = isStaleDeploymentError(error)
+  const t = shell.routeState;
+  const stale = isStaleDeploymentError(error);
 
   useEffect(() => {
-    console.error(error)
-  }, [error])
+    console.error(error);
+  }, [error]);
 
   return (
     <html lang="en">
@@ -43,12 +43,12 @@ export default function GlobalError({
             )}
             {!stale && error.digest ? (
               <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">
-                {t.errorReference.replace('{id}', error.digest)}
+                {t.errorReference.replace("{id}", error.digest)}
               </p>
             ) : null}
           </div>
         </div>
       </body>
     </html>
-  )
+  );
 }

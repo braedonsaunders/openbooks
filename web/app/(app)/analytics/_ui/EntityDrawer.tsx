@@ -1,16 +1,21 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "../../reports/ReportTable"
-import { useEffect, useState } from 'react'
-import { Drawer, cn } from '@openbooks/ui'
-import { Gauge as GaugeIcon, ChevronLeft, ChevronRight } from 'lucide-react'
-import { TxnLink } from '../../reports/TxnLink'
-import { SendButton } from '@/components/send-button'
-import { useAnalyticsMoney } from './format'
-import { refusalMessage } from './fetch-refusal'
-import { useLocale, useTranslations } from 'next-intl'
-import { dateLabel } from '@/lib/format'
-const PER_PAGE = 25
+import {
+  Table as SharedTable,
+  TableBody as SharedTableBody,
+  TableRow as SharedTableRow,
+  TableCell as SharedTableCell,
+} from "../../reports/ReportTable";
+import { useEffect, useState } from "react";
+import { Drawer, cn } from "@openbooks/ui";
+import { Gauge as GaugeIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { TxnLink } from "../../reports/TxnLink";
+import { SendButton } from "@/components/send-button";
+import { useAnalyticsMoney } from "./format";
+import { refusalMessage } from "./fetch-refusal";
+import { useLocale, useTranslations } from "next-intl";
+import { dateLabel } from "@/lib/format";
+const PER_PAGE = 25;
 
 /**
  * Party reliability drawer — the cash-flyout entity drill promoted to a
@@ -23,137 +28,196 @@ const PER_PAGE = 25
 /** One open item, as `/api/analytics/cashflow/entity` returns it: ISO-date
  *  strings and ledger-string amounts (never pre-rounded). */
 interface EntityOpenItem {
-  docId: string | null
-  docKind: string | null
-  entryId: string
-  docNumber: string
-  tranDate: string
-  dueDate: string | null
-  remaining: string
-  overdue: boolean
+  docId: string | null;
+  docKind: string | null;
+  entryId: string;
+  docNumber: string;
+  tranDate: string;
+  dueDate: string | null;
+  remaining: string;
+  overdue: boolean;
 }
 
 interface EntityPayment {
-  docId: string | null
-  docKind: string | null
-  entryId: string | null
-  docNumber: string
-  date: string
-  amount: string
+  docId: string | null;
+  docKind: string | null;
+  entryId: string | null;
+  docNumber: string;
+  date: string;
+  amount: string;
 }
 
 /** The entity endpoint's JSON body. Amounts are ledger strings — pass them to
  *  `fmtMoney` untouched so formatting keeps full decimal precision.
  *  `recentPayments` amounts are translated to `currency` (presentation). */
 interface EntityData {
-  avgDays: number | null
-  currency: string
-  totalPaid: string
-  paymentCount: number
-  openBalance: string
-  overdueCount: number
-  reliability: number
-  openItems: EntityOpenItem[]
-  recentPayments: EntityPayment[]
+  avgDays: number | null;
+  currency: string;
+  totalPaid: string;
+  paymentCount: number;
+  openBalance: string;
+  overdueCount: number;
+  reliability: number;
+  openItems: EntityOpenItem[];
+  recentPayments: EntityPayment[];
 }
 
-export function EntityDrawer({ party, name, side, onClose }: { party: string; name: string; side: 'ar' | 'ap'; onClose: () => void }) {
-  const locale = useLocale()
-  const t = useTranslations('analytics.entityDrawer')
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string) => fmtMoney(n, { compact: true })
-  const [data, setData] = useState<EntityData | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'open' | 'payments'>('open')
-  const [page, setPage] = useState(0)
+export function EntityDrawer({
+  party,
+  name,
+  side,
+  onClose,
+}: {
+  party: string;
+  name: string;
+  side: "ar" | "ap";
+  onClose: () => void;
+}) {
+  const locale = useLocale();
+  const t = useTranslations("analytics.entityDrawer");
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: string) => fmtMoney(n, { compact: true });
+  const [data, setData] = useState<EntityData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"open" | "payments">("open");
+  const [page, setPage] = useState(0);
   useEffect(() => {
-    let live = true
+    let live = true;
     fetch(`/api/analytics/cashflow/entity?party=${party}&side=${side}`)
       .then(async (r) => {
         // The endpoint refuses by name (e.g. the 422 missing-rate refusal)
         // in an `{error}` body (apiErrorResponse): check ok first, then
         // surface its remedy instead of a generic line.
-        if (!r.ok) throw new Error(await refusalMessage(r, t('historyUnavailable', { status: r.status })))
-        return r.json()
+        if (!r.ok)
+          throw new Error(await refusalMessage(r, t("historyUnavailable", { status: r.status })));
+        return r.json();
       })
-      .then((j) => { if (live) setData(j) })
-      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : t('loadFailed')) })
-    return () => { live = false }
-  }, [party, side, t])
-  const dt = (d: string) => dateLabel(new Date(d + 'T00:00:00Z'), locale)
-  const relTone = (r: number) => (r >= 80 ? 'text-emerald-600 dark:text-emerald-400' : r >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')
+      .then((j) => {
+        if (live) setData(j);
+      })
+      .catch((e: unknown) => {
+        if (live) setError(e instanceof Error ? e.message : t("loadFailed"));
+      });
+    return () => {
+      live = false;
+    };
+  }, [party, side, t]);
+  const dt = (d: string) => dateLabel(new Date(d + "T00:00:00Z"), locale);
+  const relTone = (r: number) =>
+    r >= 80
+      ? "text-emerald-600 dark:text-emerald-400"
+      : r >= 60
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-red-600 dark:text-red-400";
 
-  const openRows: EntityOpenItem[] = data?.openItems ?? []
-  const payRows: EntityPayment[] = data?.recentPayments ?? []
-  const rowCount = tab === 'open' ? openRows.length : payRows.length
-  const pageCount = Math.max(1, Math.ceil(rowCount / PER_PAGE))
-  const safePage = Math.min(page, pageCount - 1)
-  const visibleOpen = openRows.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE)
-  const visiblePay = payRows.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE)
-  const linkCls = 'font-medium text-slate-700 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400'
+  const openRows: EntityOpenItem[] = data?.openItems ?? [];
+  const payRows: EntityPayment[] = data?.recentPayments ?? [];
+  const rowCount = tab === "open" ? openRows.length : payRows.length;
+  const pageCount = Math.max(1, Math.ceil(rowCount / PER_PAGE));
+  const safePage = Math.min(page, pageCount - 1);
+  const visibleOpen = openRows.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
+  const visiblePay = payRows.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
+  const linkCls =
+    "font-medium text-slate-700 hover:text-teal-600 dark:text-slate-300 dark:hover:text-teal-400";
 
   return (
-    <Drawer open onClose={onClose} size="md" title={name} description={side === 'ar' ? t('descriptionCustomer') : t('descriptionVendor')} bodyClassName="overflow-hidden flex flex-col p-0">
+    <Drawer
+      open
+      onClose={onClose}
+      size="md"
+      title={name}
+      description={side === "ar" ? t("descriptionCustomer") : t("descriptionVendor")}
+      bodyClassName="overflow-hidden flex flex-col p-0"
+    >
       {error ? (
-        <p className="p-6 text-center text-sm text-slate-400" role="alert">{error}</p>
+        <p className="p-6 text-center text-sm text-slate-400" role="alert">
+          {error}
+        </p>
       ) : !data ? (
-        <p className="p-6 text-center text-sm text-slate-400">{t('loading')}</p>
+        <p className="p-6 text-center text-sm text-slate-400">{t("loading")}</p>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="grid shrink-0 grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 dark:divide-slate-800 dark:border-slate-800">
             <div className="px-5 py-3 text-center">
-              <p className={cn('text-2xl font-bold tabular-nums', relTone(data.reliability))}>{data.reliability}</p>
-              <p className="flex items-center justify-center gap-1 text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> {t('reliability')}</p>
+              <p className={cn("text-2xl font-bold tabular-nums", relTone(data.reliability))}>
+                {data.reliability}
+              </p>
+              <p className="flex items-center justify-center gap-1 text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                <GaugeIcon size={10} /> {t("reliability")}
+              </p>
             </div>
             <div className="px-5 py-3 text-center">
-              <p className="text-2xl font-bold tabular-nums text-slate-800 dark:text-slate-100">{data.avgDays === null ? '—' : t('daysValue', { days: data.avgDays })}</p>
-              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{side === 'ar' ? t('avgToCollect') : t('avgToPay')}</p>
+              <p className="text-2xl font-bold tabular-nums text-slate-800 dark:text-slate-100">
+                {data.avgDays === null ? "—" : t("daysValue", { days: data.avgDays })}
+              </p>
+              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                {side === "ar" ? t("avgToCollect") : t("avgToPay")}
+              </p>
             </div>
           </div>
           <div className="grid shrink-0 grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 dark:divide-slate-800 dark:border-slate-800">
             <div className="px-5 py-3 text-center">
-              <p className="text-lg font-semibold tabular-nums text-slate-700 dark:text-slate-200">{money(data.totalPaid)}</p>
-              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('paymentsCount', { count: data.paymentCount })}</p>
+              <p className="text-lg font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                {money(data.totalPaid)}
+              </p>
+              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                {t("paymentsCount", { count: data.paymentCount })}
+              </p>
             </div>
             <div className="px-5 py-3 text-center">
-              <p className="text-lg font-semibold tabular-nums text-slate-700 dark:text-slate-200">{money(data.openBalance)}</p>
-              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('openOverdue', { count: data.overdueCount })}</p>
+              <p className="text-lg font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                {money(data.openBalance)}
+              </p>
+              <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                {t("openOverdue", { count: data.overdueCount })}
+              </p>
             </div>
           </div>
 
           {/* Subtabs */}
           <div className="flex shrink-0 items-center gap-1 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
-            {([
-              ['open', t('tabOpen', { count: (data.openItems ?? []).length })],
-              ['payments', t('tabPayments', { count: (data.recentPayments ?? []).length, currency: data.currency })],
-            ] as const).map(([key, label]) => (
+            {(
+              [
+                ["open", t("tabOpen", { count: (data.openItems ?? []).length })],
+                [
+                  "payments",
+                  t("tabPayments", {
+                    count: (data.recentPayments ?? []).length,
+                    currency: data.currency,
+                  }),
+                ],
+              ] as const
+            ).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
-                onClick={() => { setTab(key); setPage(0) }}
+                onClick={() => {
+                  setTab(key);
+                  setPage(0);
+                }}
                 className={cn(
-                  'rounded-md px-2.5 py-1 text-xs font-semibold transition-colors',
+                  "rounded-md px-2.5 py-1 text-xs font-semibold transition-colors",
                   tab === key
-                    ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100'
-                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
+                    ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                    : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200",
                 )}
               >
                 {label}
               </button>
             ))}
-            {side === 'ar' ? (
+            {side === "ar" ? (
               <span className="ml-auto flex shrink-0 items-center gap-1">
                 <a
                   href={`/reports/statements/${encodeURIComponent(party)}?side=ar`}
                   className="rounded-md px-2.5 py-1 text-xs font-semibold text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                 >
-                  {t('viewStatement')}
+                  {t("viewStatement")}
                 </a>
                 <a
                   href={`/api/reports/statement/partner-statement/export?format=pdf&party=${encodeURIComponent(party)}&side=ar`}
                   className="rounded-md px-2.5 py-1 text-xs font-semibold text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                 >
-                  {t('statementPdf')}
+                  {t("statementPdf")}
                 </a>
                 <SendButton
                   recordType="party_statement"
@@ -166,18 +230,37 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
 
           {/* Paginated table — rows drill into the real document flyout. */}
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {(tab === 'open' ? visibleOpen.length === 0 : visiblePay.length === 0) ? (
+            {(tab === "open" ? visibleOpen.length === 0 : visiblePay.length === 0) ? (
               <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">
-                {tab === 'open' ? t('emptyOpen') : t('emptyPayments')}
+                {tab === "open" ? t("emptyOpen") : t("emptyPayments")}
               </p>
-            ) : tab === 'open' ? (
+            ) : tab === "open" ? (
               <SharedTable className="w-full text-sm">
                 <SharedTableBody>
                   {visibleOpen.map((i, k: number) => (
-                    <SharedTableRow key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <SharedTableCell className="px-4 py-1.5"><TxnLink entryId={i.entryId ?? ''} docKind={i.docKind} docId={i.docId} className={linkCls}>{i.docNumber || i.docKind}</TxnLink></SharedTableCell>
-                      <SharedTableCell className="px-3 py-1.5 text-right text-xs tabular-nums text-slate-400">{i.dueDate ? dt(i.dueDate) : '—'}{i.overdue ? <span className="ml-1 text-red-500">{t('overdue')}</span> : null}</SharedTableCell>
-                      <SharedTableCell className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(i.remaining)}</SharedTableCell>
+                    <SharedTableRow
+                      key={k}
+                      className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                    >
+                      <SharedTableCell className="px-4 py-1.5">
+                        <TxnLink
+                          entryId={i.entryId ?? ""}
+                          docKind={i.docKind}
+                          docId={i.docId}
+                          className={linkCls}
+                        >
+                          {i.docNumber || i.docKind}
+                        </TxnLink>
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-1.5 text-right text-xs tabular-nums text-slate-400">
+                        {i.dueDate ? dt(i.dueDate) : "—"}
+                        {i.overdue ? (
+                          <span className="ml-1 text-red-500">{t("overdue")}</span>
+                        ) : null}
+                      </SharedTableCell>
+                      <SharedTableCell className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">
+                        {money(i.remaining)}
+                      </SharedTableCell>
                     </SharedTableRow>
                   ))}
                 </SharedTableBody>
@@ -186,10 +269,26 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
               <SharedTable className="w-full text-sm">
                 <SharedTableBody>
                   {visiblePay.map((p, k: number) => (
-                    <SharedTableRow key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                      <SharedTableCell className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{dt(p.date)}</SharedTableCell>
-                      <SharedTableCell className="px-3 py-1.5"><TxnLink entryId={p.entryId ?? ''} docKind={p.docKind} docId={p.docId} className={linkCls}>{p.docNumber || p.docKind}</TxnLink></SharedTableCell>
-                      <SharedTableCell className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(p.amount)}</SharedTableCell>
+                    <SharedTableRow
+                      key={k}
+                      className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                    >
+                      <SharedTableCell className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                        {dt(p.date)}
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-1.5">
+                        <TxnLink
+                          entryId={p.entryId ?? ""}
+                          docKind={p.docKind}
+                          docId={p.docId}
+                          className={linkCls}
+                        >
+                          {p.docNumber || p.docKind}
+                        </TxnLink>
+                      </SharedTableCell>
+                      <SharedTableCell className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">
+                        {money(p.amount)}
+                      </SharedTableCell>
                     </SharedTableRow>
                   ))}
                 </SharedTableBody>
@@ -201,7 +300,11 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
           {rowCount > PER_PAGE ? (
             <div className="flex shrink-0 items-center justify-between border-t border-slate-100 px-4 py-2 dark:border-slate-800">
               <p className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
-                {t('pagerRange', { from: safePage * PER_PAGE + 1, to: Math.min((safePage + 1) * PER_PAGE, rowCount), total: rowCount })}
+                {t("pagerRange", {
+                  from: safePage * PER_PAGE + 1,
+                  to: Math.min((safePage + 1) * PER_PAGE, rowCount),
+                  total: rowCount,
+                })}
               </p>
               <div className="flex items-center gap-1">
                 <button
@@ -209,7 +312,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
                   onClick={() => setPage(Math.max(0, safePage - 1))}
                   disabled={safePage === 0}
                   className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
-                  aria-label={t('prevPage')}
+                  aria-label={t("prevPage")}
                 >
                   <ChevronLeft size={14} />
                 </button>
@@ -218,7 +321,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
                   onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))}
                   disabled={safePage >= pageCount - 1}
                   className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-30 dark:text-slate-400 dark:hover:bg-slate-800"
-                  aria-label={t('nextPage')}
+                  aria-label={t("nextPage")}
                 >
                   <ChevronRight size={14} />
                 </button>
@@ -228,5 +331,5 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
         </div>
       )}
     </Drawer>
-  )
+  );
 }

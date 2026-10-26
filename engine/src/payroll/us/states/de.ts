@@ -19,9 +19,18 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { PayrollError } from "../../error.ts";
-import { D, divIntCents, max0, mulRateCents, mulRatioCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount,
+  D,
+  divIntCents,
+  max0,
+  mulRateCents,
+  mulRatioCents,
+  U,
+} from "../../../money/payroll-decimal.ts";
+import {
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
@@ -34,7 +43,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/de.ts";
 const DE_W4NR_KEY = "us_de_w4nr";
 
@@ -63,17 +76,19 @@ const DE_EDITIONS_BY_YEAR: Record<number, DeYearRates> = {
   [DE_RATES_2026.year]: DE_RATES_2026,
 };
 
-export const DE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Delaware Employer's Guide annualized method (2025 table, still published)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Delaware Division of Revenue, Employer's Guide, Section 17 — Tax Computation "
-    + "Table Effective January 1, 2025; $3,250 / $6,500 standard deduction; $110 "
-    + "per exemption; official $25,000 single / joint / separate examples",
-  status: "published",
-  region: "DE",
-}];
+export const DE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Delaware Employer's Guide annualized method (2025 table, still published)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Delaware Division of Revenue, Employer's Guide, Section 17 — Tax Computation " +
+      "Table Effective January 1, 2025; $3,250 / $6,500 standard deduction; $110 " +
+      "per exemption; official $25,000 single / joint / separate examples",
+    status: "published",
+    region: "DE",
+  },
+];
 
 /**
  * The publication's own daily factor. Our interface marks daily as 260 or 365;
@@ -85,7 +100,9 @@ export function deAnnualPeriods(periodsPerYear: number, dailyPeriods: number): n
 }
 
 export function deStandardDeduction(status: DeFilingStatus, rates: DeYearRates): bigint {
-  return status === "married_joint" ? U(rates.jointStandardDeduction) : U(rates.singleStandardDeduction);
+  return status === "married_joint"
+    ? U(rates.jointStandardDeduction)
+    : U(rates.singleStandardDeduction);
 }
 
 /** Tax Computation Table Effective January 1, 2025. */
@@ -124,9 +141,9 @@ function compute(
     const totalDays = w4nr?.onFile ? certificateCount(w4nr, "total_work_days") : null;
     if (deDays == null || totalDays == null || totalDays < 1 || deDays < 0 || deDays > totalDays) {
       throw new PayrollError(
-        "Delaware nonresident withholding requires Form W-4NR source-allocation facts — Delaware "
-        + "work days and total work days for the period — to prorate the annualized-method tax; "
-        + "capture the Form W-4NR inputs before calculating — refused by name",
+        "Delaware nonresident withholding requires Form W-4NR source-allocation facts — Delaware " +
+          "work days and total work days for the period — to prorate the annualized-method tax; " +
+          "capture the Form W-4NR inputs before calculating — refused by name",
       );
     }
     proration = { deDays, totalDays };
@@ -170,9 +187,10 @@ function compute(
   // The W-4NR day share prorates the computed tax, never the wage base: the
   // annualized method must price total wages first. The ratio stays exact
   // (no four-place decimal) and rounds once, to the cent.
-  const deTax = proration == null
-    ? periodTax
-    : mulRatioCents(periodTax, BigInt(proration.deDays), BigInt(proration.totalDays));
+  const deTax =
+    proration == null
+      ? periodTax
+      : mulRatioCents(periodTax, BigInt(proration.deDays), BigInt(proration.totalDays));
   if (proration != null) {
     factors.DE_PRORATION = `${proration.deDays}/${proration.totalDays}`;
     trace("DE_PRORATED_TAX", deTax);
@@ -241,13 +259,18 @@ export const DE_WITHHOLDING: UsStateWithholdingEngine = {
  * confirm 1.25% for residents (all wages) and nonresidents (city work).
  */
 const WILMINGTON_RATES_2026: readonly {
-  effectiveFrom: string; effectiveTo: string | null; resident: string; nonresident: string;
-}[] = [{
-  effectiveFrom: "2026-01-01",
-  effectiveTo: null,
-  resident: "0.0125",
-  nonresident: "0.0125",
-}];
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  resident: string;
+  nonresident: string;
+}[] = [
+  {
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
+    resident: "0.0125",
+    nonresident: "0.0125",
+  },
+];
 
 const WILMINGTON_STATE_ENGINE = defineStateEngine({
   state: { state: "DE-WILM", label: "Wilmington city wage tax", printedPeriods: null },
@@ -259,12 +282,14 @@ export function wilmingtonRateFor(
   payDate: string,
   basis: "resident" | "nonresident",
 ): { rate: string; effectiveFrom: string } {
-  const period = WILMINGTON_RATES_2026.find((entry) =>
-    payDate >= entry.effectiveFrom && (entry.effectiveTo == null || payDate < entry.effectiveTo));
+  const period = WILMINGTON_RATES_2026.find(
+    (entry) =>
+      payDate >= entry.effectiveFrom && (entry.effectiveTo == null || payDate < entry.effectiveTo),
+  );
   if (!period) {
     throw new PayrollError(
-      `no Wilmington city wage tax rate is loaded for a pay date of ${payDate} — the City of Wilmington `
-      + `publishes its tax rates. This date is not yet supported by the US pack; contact support — refused by name.`,
+      `no Wilmington city wage tax rate is loaded for a pay date of ${payDate} — the City of Wilmington ` +
+        `publishes its tax rates. This date is not yet supported by the US pack; contact support — refused by name.`,
     );
   }
   return {
@@ -295,9 +320,9 @@ function computeWilmington(
     } catch (error) {
       if (error instanceof PayrollError) {
         throw new PayrollError(
-          "Wilmington nonresident wage tax needs the employee's verified share of services performed "
-          + "in Wilmington; record approved work-location dates or HR allocation for DE/WILMINGTON "
-          + "before calculating; refused by name",
+          "Wilmington nonresident wage tax needs the employee's verified share of services performed " +
+            "in Wilmington; record approved work-location dates or HR allocation for DE/WILMINGTON " +
+            "before calculating; refused by name",
         );
       }
       throw error;
@@ -356,13 +381,13 @@ export const DE_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "DE" },
   purpose: "withholding",
   citation:
-    "Delaware Division of Revenue, Employer's Guide (Withholding Regulations and "
-    + "Employer's Duties), Section 15 and Section 17; revenue.delaware.gov/"
-    + "employers-guide-withholding-regulations-employers-duties/",
+    "Delaware Division of Revenue, Employer's Guide (Withholding Regulations and " +
+    "Employer's Duties), Section 15 and Section 17; revenue.delaware.gov/" +
+    "employers-guide-withholding-regulations-employers-duties/",
   summary:
-    "Sets Delaware filing status and personal exemptions for the annualized "
-    + "method. \"If an employee fails to furnish a certificate, you must withhold "
-    + "tax as if the employee is a single person who has no withholding allowances.\"",
+    "Sets Delaware filing status and personal exemptions for the annualized " +
+    'method. "If an employee fails to furnish a certificate, you must withhold ' +
+    'tax as if the employee is a single person who has no withholding allowances."',
   storage: "certificate_rows",
   fields: [
     {
@@ -373,11 +398,14 @@ export const DE_CERTIFICATE: PayrollCertificate = {
       choices: [
         { value: "single", label: "Single — $3,250 standard deduction" },
         { value: "married_joint", label: "Married filing jointly — $6,500 standard deduction" },
-        { value: "married_separate", label: "Married filing separately — $3,250 standard deduction" },
+        {
+          value: "married_separate",
+          label: "Married filing separately — $3,250 standard deduction",
+        },
       ],
       help:
-        "Section 17 Step 2. Default Single is the publication's own rule when no "
-        + "certificate is on file, not an engine guess.",
+        "Section 17 Step 2. Default Single is the publication's own rule when no " +
+        "certificate is on file, not an engine guess.",
     },
     {
       key: "allowances",
@@ -387,10 +415,10 @@ export const DE_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "Each exemption is a $110 annual credit subtracted AFTER the tax (Section 17 "
-        + "Steps 5–6). Default zero: no certificate means a single person with no "
-        + "allowances. Post-2020 federal Form W-4 has no allowance count — enter the "
-        + "Delaware-purpose number, do not invent one from dependents.",
+        "Each exemption is a $110 annual credit subtracted AFTER the tax (Section 17 " +
+        "Steps 5–6). Default zero: no certificate means a single person with no " +
+        "allowances. Post-2020 federal Form W-4 has no allowance count — enter the " +
+        "Delaware-purpose number, do not invent one from dependents.",
     },
     {
       key: "additional_per_period",
@@ -399,16 +427,16 @@ export const DE_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "Section 17: additional amounts may be withheld under a written agreement. "
-        + "Added AFTER the annualized method is de-annualized.",
+        "Section 17: additional amounts may be withheld under a written agreement. " +
+        "Added AFTER the annualized method is de-annualized.",
     },
     {
       key: "exempt",
       label: "Exempt from Delaware withholding",
       kind: "flag",
       help:
-        "Section 15(b): an exempt certificate is honored unless the Division later "
-        + "notifies the employer it is defective. A current exempt flag withholds zero.",
+        "Section 15(b): an exempt certificate is honored unless the Division later " +
+        "notifies the employer it is defective. A current exempt flag withholds zero.",
     },
   ],
 };
@@ -426,13 +454,13 @@ export const DE_W4NR_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "DE" },
   purpose: "withholding",
   citation:
-    "Delaware Division of Revenue, Employer's Guide (Withholding Regulations and "
-    + "Employer's Duties), Section 16; Form W-4NR",
+    "Delaware Division of Revenue, Employer's Guide (Withholding Regulations and " +
+    "Employer's Duties), Section 16; Form W-4NR",
   summary:
-    "Records a nonresident's Delaware work days and total work days for the "
-    + "period. The engine prices the annualized method on total wages first, "
-    + "then prorates the computed tax to the Delaware day share. Without the "
-    + "filed day count the nonresident levy refuses by name.",
+    "Records a nonresident's Delaware work days and total work days for the " +
+    "period. The engine prices the annualized method on total wages first, " +
+    "then prorates the computed tax to the Delaware day share. Without the " +
+    "filed day count the nonresident levy refuses by name.",
   storage: "certificate_rows",
   fields: [
     {
@@ -479,13 +507,14 @@ export const DE_REGION: PayrollRegionWithholding = {
       // §44-121: 1.25% on residents' wages and on nonresidents' city work.
       reaches: ["resident", "nonresident"],
       rateSource: { kind: "pack" },
-      citation: "Wilmington Code of Ordinances §44-121; City of Wilmington FY2026 published tax rates",
+      citation:
+        "Wilmington Code of Ordinances §44-121; City of Wilmington FY2026 published tax rates",
       implemented: true,
     },
   ],
   subRegionConflictRule: "both",
   citation:
-    "Delaware Division of Revenue, Employer's Guide, Section 17 Withholding Methods "
-    + "Based on Annualized Wages, Tax Computation Table Effective January 1, 2025; "
-    + "Section 15 Withholding Exemption and Allowances; 30 Del.C. § 1151",
+    "Delaware Division of Revenue, Employer's Guide, Section 17 Withholding Methods " +
+    "Based on Annualized Wages, Tax Computation Table Effective January 1, 2025; " +
+    "Section 15 Withholding Exemption and Allowances; 30 Del.C. § 1151",
 };

@@ -1,8 +1,12 @@
 /** MT940 statement parsing. Split from banking.ts (pure moves only). */
-import { BankingError, type ParsedStatementLine, type ParsedStatement, type StatementSourceContent } from "../banking-core"
-import { decodeStatementSourceText } from "../statement-encoding"
-import { assertRealDate, expandTwoDigitYear, normalizeAmount } from "./shared"
-
+import {
+  BankingError,
+  type ParsedStatementLine,
+  type ParsedStatement,
+  type StatementSourceContent,
+} from "../banking-core";
+import { decodeStatementSourceText } from "../statement-encoding";
+import { assertRealDate, expandTwoDigitYear, normalizeAmount } from "./shared";
 
 /**
  * Parse a SWIFT MT940 (Customer Statement) message. Reads :61: statement lines
@@ -17,7 +21,8 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
   for (const ln of body.split("\n")) {
     const m = ln.match(/^:(\d{2}[A-Z]?):(.*)$/);
     if (m) fields.push({ tag: m[1]!, value: m[2]! });
-    else if (fields.length && ln.trim() && ln.trim() !== "-") fields[fields.length - 1]!.value += "\n" + ln;
+    else if (fields.length && ln.trim() && ln.trim() !== "-")
+      fields[fields.length - 1]!.value += "\n" + ln;
   }
   // One parse produces one statement with one account, one currency, and one
   // closing balance. A file carrying several :20: statements (or several :25:
@@ -31,7 +36,9 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
     );
   }
   const messageAccounts = new Set(
-    fields.map((field) => (field.tag === "25" ? field.value.trim() : "")).filter((value) => value !== ""),
+    fields
+      .map((field) => (field.tag === "25" ? field.value.trim() : ""))
+      .filter((value) => value !== ""),
   );
   if (messageAccounts.size > 1) {
     throw new BankingError(
@@ -61,16 +68,30 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
       const debit = m[3] === "D" || m[3] === "RC";
       const amount = normalizeAmount((debit ? "-" : "") + m[5], "MT940 amount", "swift-decimal");
       const rest = value.slice(m[0].length);
-      const ref = rest.split("//")[0]?.replace(/^N[A-Z]{3}/, "").trim() || null;
+      const ref =
+        rest
+          .split("//")[0]
+          ?.replace(/^N[A-Z]{3}/, "")
+          .trim() || null;
       pending = {
-        postedOn: assertRealDate(expandTwoDigitYear(dm[1]!), dm[2]!, dm[3]!, `MT940 date "${m[1]}"`),
+        postedOn: assertRealDate(
+          expandTwoDigitYear(dm[1]!),
+          dm[2]!,
+          dm[3]!,
+          `MT940 date "${m[1]}"`,
+        ),
         amount,
         description: null,
         counterpartyRef: ref,
         bankTransactionId: ref,
       };
     } else if (tag === "86" && pending) {
-      pending.description = value.replace(/\n/g, " ").replace(/[?>]\d{2}/g, " ").replace(/\s+/g, " ").trim() || null;
+      pending.description =
+        value
+          .replace(/\n/g, " ")
+          .replace(/[?>]\d{2}/g, " ")
+          .replace(/\s+/g, " ")
+          .trim() || null;
     } else if (tag === "60F" || tag === "60M" || tag === "62F" || tag === "62M") {
       // Balance fields carry the authoritative statement currency. The :25:
       // account reference never does — inferring a code from its suffix once
@@ -85,9 +106,18 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
       }
       if (balanceCurrency) currency = balanceCurrency;
       if ((tag === "62F" || tag === "62M") && m) {
-        closingBalance = normalizeAmount((m[1] === "D" ? "-" : "") + m[4], "MT940 closing balance", "swift-decimal");
+        closingBalance = normalizeAmount(
+          (m[1] === "D" ? "-" : "") + m[4],
+          "MT940 closing balance",
+          "swift-decimal",
+        );
         const dm = m[2]!.match(/^(\d{2})(\d{2})(\d{2})$/)!;
-        statementDate = assertRealDate(expandTwoDigitYear(dm[1]!), dm[2]!, dm[3]!, "MT940 balance date");
+        statementDate = assertRealDate(
+          expandTwoDigitYear(dm[1]!),
+          dm[2]!,
+          dm[3]!,
+          "MT940 balance date",
+        );
       }
     }
   }

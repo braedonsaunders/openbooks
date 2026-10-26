@@ -11,7 +11,9 @@ import {
 import { add, isZero, toUnits } from "../money/money.ts";
 
 const GL = "gainloss-acct";
-const pos = (p: Partial<RevaluationPosition> & Pick<RevaluationPosition, "accountId">): RevaluationPosition => ({
+const pos = (
+  p: Partial<RevaluationPosition> & Pick<RevaluationPosition, "accountId">,
+): RevaluationPosition => ({
   currency: "USD",
   carryingBase: "0.0000",
   foreignBalance: "0.0000",
@@ -22,7 +24,14 @@ const pos = (p: Partial<RevaluationPosition> & Pick<RevaluationPosition, "accoun
 test("no revaluation when spot rate already matches historical carrying", () => {
   // 1000 USD carried at 1.30 = 1300.00 CAD; period-end rate is still 1.30.
   const r = computeRevaluation(
-    [pos({ accountId: "bank", carryingBase: "1300.0000", foreignBalance: "1000.0000", periodEndRate: "1.3000000000" })],
+    [
+      pos({
+        accountId: "bank",
+        carryingBase: "1300.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.3000000000",
+      }),
+    ],
     GL,
   );
   assert.deepEqual(r.lines, []);
@@ -32,7 +41,14 @@ test("no revaluation when spot rate already matches historical carrying", () => 
 test("unrealized GAIN on a foreign bank asset: debit bank, credit gain/loss", () => {
   // 1000 USD carried at 1.30 (=1300); period-end 1.35 → 1350; +50 gain.
   const r = computeRevaluation(
-    [pos({ accountId: "bank", carryingBase: "1300.0000", foreignBalance: "1000.0000", periodEndRate: "1.3500000000" })],
+    [
+      pos({
+        accountId: "bank",
+        carryingBase: "1300.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.3500000000",
+      }),
+    ],
     GL,
   );
   assert.deepEqual(r.lines, [
@@ -45,7 +61,14 @@ test("unrealized GAIN on a foreign bank asset: debit bank, credit gain/loss", ()
 test("unrealized LOSS on a foreign bank asset: credit bank, debit gain/loss", () => {
   // 1000 USD carried at 1.30 (=1300); period-end 1.28 → 1280; −20 loss.
   const r = computeRevaluation(
-    [pos({ accountId: "bank", carryingBase: "1300.0000", foreignBalance: "1000.0000", periodEndRate: "1.2800000000" })],
+    [
+      pos({
+        accountId: "bank",
+        carryingBase: "1300.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.2800000000",
+      }),
+    ],
     GL,
   );
   assert.deepEqual(r.lines, [
@@ -58,7 +81,14 @@ test("foreign AP (a credit balance) revalues with the correct loss direction", (
   // Owe 1000 USD → carried as −1300 (credit); period-end 1.35 → −1350.
   // Liability grew by 50 → a −50 credit to AP, offset +50 debit to gain/loss (a loss).
   const r = computeRevaluation(
-    [pos({ accountId: "ap", carryingBase: "-1300.0000", foreignBalance: "-1000.0000", periodEndRate: "1.3500000000" })],
+    [
+      pos({
+        accountId: "ap",
+        carryingBase: "-1300.0000",
+        foreignBalance: "-1000.0000",
+        periodEndRate: "1.3500000000",
+      }),
+    ],
     GL,
   );
   assert.deepEqual(r.lines, [
@@ -70,9 +100,25 @@ test("foreign AP (a credit balance) revalues with the correct loss direction", (
 test("multiple positions net to a single balanced gain/loss line", () => {
   const r = computeRevaluation(
     [
-      pos({ accountId: "bank", carryingBase: "1300.0000", foreignBalance: "1000.0000", periodEndRate: "1.3500000000" }), // +50
-      pos({ accountId: "ar", currency: "EUR", carryingBase: "1450.0000", foreignBalance: "1000.0000", periodEndRate: "1.4200000000" }), // −30
-      pos({ accountId: "ap", carryingBase: "-1300.0000", foreignBalance: "-1000.0000", periodEndRate: "1.3500000000" }), // −50
+      pos({
+        accountId: "bank",
+        carryingBase: "1300.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.3500000000",
+      }), // +50
+      pos({
+        accountId: "ar",
+        currency: "EUR",
+        carryingBase: "1450.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.4200000000",
+      }), // −30
+      pos({
+        accountId: "ap",
+        carryingBase: "-1300.0000",
+        foreignBalance: "-1000.0000",
+        periodEndRate: "1.3500000000",
+      }), // −50
     ],
     GL,
   );
@@ -84,10 +130,27 @@ test("multiple positions net to a single balanced gain/loss line", () => {
 
 test("INVARIANT: every produced entry sums to exactly zero", () => {
   const cases: RevaluationPosition[][] = [
-    [pos({ accountId: "bank", carryingBase: "1300.0000", foreignBalance: "1000.0000", periodEndRate: "1.3517000000" })],
     [
-      pos({ accountId: "bank", carryingBase: "999.9900", foreignBalance: "733.3300", periodEndRate: "1.3648120000" }),
-      pos({ accountId: "ap", carryingBase: "-4210.5500", foreignBalance: "-3100.0000", periodEndRate: "1.3599990000" }),
+      pos({
+        accountId: "bank",
+        carryingBase: "1300.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.3517000000",
+      }),
+    ],
+    [
+      pos({
+        accountId: "bank",
+        carryingBase: "999.9900",
+        foreignBalance: "733.3300",
+        periodEndRate: "1.3648120000",
+      }),
+      pos({
+        accountId: "ap",
+        carryingBase: "-4210.5500",
+        foreignBalance: "-3100.0000",
+        periodEndRate: "1.3599990000",
+      }),
     ],
   ];
   for (const positions of cases) {
@@ -100,8 +163,19 @@ test("INVARIANT: every produced entry sums to exactly zero", () => {
 test("INVARIANT: the offset equals the negated sum of the monetary deltas", () => {
   const r = computeRevaluation(
     [
-      pos({ accountId: "bank", carryingBase: "1300.0000", foreignBalance: "1000.0000", periodEndRate: "1.3500000000" }),
-      pos({ accountId: "ar", currency: "GBP", carryingBase: "1700.0000", foreignBalance: "1000.0000", periodEndRate: "1.7325000000" }),
+      pos({
+        accountId: "bank",
+        carryingBase: "1300.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.3500000000",
+      }),
+      pos({
+        accountId: "ar",
+        currency: "GBP",
+        carryingBase: "1700.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.7325000000",
+      }),
     ],
     GL,
   );
@@ -113,7 +187,14 @@ test("INVARIANT: the offset equals the negated sum of the monetary deltas", () =
 test("rounding is exact at numeric(19,4)", () => {
   // 733.3333 USD × 1.3648120000 = 1000.870... → 1000.8710 revalued.
   const r = computeRevaluation(
-    [pos({ accountId: "bank", carryingBase: "1000.0000", foreignBalance: "733.3333", periodEndRate: "1.3648120000" })],
+    [
+      pos({
+        accountId: "bank",
+        carryingBase: "1000.0000",
+        foreignBalance: "733.3333",
+        periodEndRate: "1.3648120000",
+      }),
+    ],
     GL,
   );
   // Confirm the delta is (revalued − 1000) at 4dp and the line pair still balances.
@@ -125,8 +206,18 @@ test("rounding is exact at numeric(19,4)", () => {
 test("positions with zero delta are dropped even when others revalue", () => {
   const r = computeRevaluation(
     [
-      pos({ accountId: "steady", carryingBase: "1300.0000", foreignBalance: "1000.0000", periodEndRate: "1.3000000000" }), // 0
-      pos({ accountId: "moved", carryingBase: "1300.0000", foreignBalance: "1000.0000", periodEndRate: "1.3400000000" }), // +40
+      pos({
+        accountId: "steady",
+        carryingBase: "1300.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.3000000000",
+      }), // 0
+      pos({
+        accountId: "moved",
+        carryingBase: "1300.0000",
+        foreignBalance: "1000.0000",
+        periodEndRate: "1.3400000000",
+      }), // +40
     ],
     GL,
   );
@@ -154,18 +245,36 @@ test("a refused revaluation names the missing reversal period and the remedy", (
   assert.match(reason, /generate periods and re-run/);
 });
 
-
 const ENTITY_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ENTITY_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 test("revaluation selection preserves omitted caller scope and permits an authorized subset", () => {
   assert.equal(revaluationSubsidiarySelection(null), undefined);
-  assert.deepEqual(revaluationSubsidiarySelection(new Set([ENTITY_B, ENTITY_A])), [ENTITY_A, ENTITY_B]);
-  assert.deepEqual(revaluationSubsidiarySelection(null, [ENTITY_A.toUpperCase(), ENTITY_A]), [ENTITY_A]);
-  assert.deepEqual(revaluationSubsidiarySelection(new Set([ENTITY_A, ENTITY_B]), [ENTITY_B]), [ENTITY_B]);
+  assert.deepEqual(revaluationSubsidiarySelection(new Set([ENTITY_B, ENTITY_A])), [
+    ENTITY_A,
+    ENTITY_B,
+  ]);
+  assert.deepEqual(revaluationSubsidiarySelection(null, [ENTITY_A.toUpperCase(), ENTITY_A]), [
+    ENTITY_A,
+  ]);
+  assert.deepEqual(revaluationSubsidiarySelection(new Set([ENTITY_A, ENTITY_B]), [ENTITY_B]), [
+    ENTITY_B,
+  ]);
 });
 test("revaluation selection refuses empty authority, empty selection and unauthorized entities", () => {
-  assert.throws(() => revaluationSubsidiarySelection(new Set(), [ENTITY_A]), error => error instanceof RevaluationScopeError && error.status === 403);
-  assert.throws(() => revaluationSubsidiarySelection(null, []), error => error instanceof RevaluationScopeError && error.status === 422);
-  assert.throws(() => revaluationSubsidiarySelection(null, ["invalid"]), error => error instanceof RevaluationScopeError && error.status === 422);
-  assert.throws(() => revaluationSubsidiarySelection(new Set([ENTITY_A]), [ENTITY_A, ENTITY_B]), error => error instanceof RevaluationScopeError && error.status === 403);
+  assert.throws(
+    () => revaluationSubsidiarySelection(new Set(), [ENTITY_A]),
+    (error) => error instanceof RevaluationScopeError && error.status === 403,
+  );
+  assert.throws(
+    () => revaluationSubsidiarySelection(null, []),
+    (error) => error instanceof RevaluationScopeError && error.status === 422,
+  );
+  assert.throws(
+    () => revaluationSubsidiarySelection(null, ["invalid"]),
+    (error) => error instanceof RevaluationScopeError && error.status === 422,
+  );
+  assert.throws(
+    () => revaluationSubsidiarySelection(new Set([ENTITY_A]), [ENTITY_A, ENTITY_B]),
+    (error) => error instanceof RevaluationScopeError && error.status === 403,
+  );
 });

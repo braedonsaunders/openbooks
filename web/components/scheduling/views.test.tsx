@@ -1,76 +1,73 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import type { ReactNode } from 'react'
-import { stubModules } from '../../testing/stub-modules'
-stubModules({ navigation: true })
-import { bootJsdomEnvironment } from '../../testing/jsdom-env'
-import { scheduleWindow } from '../../testing/schedule-window'
-await bootJsdomEnvironment({ event: 'jsdom' })
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { ReactNode } from "react";
+import { stubModules } from "../../testing/stub-modules";
+stubModules({ navigation: true });
+import { bootJsdomEnvironment } from "../../testing/jsdom-env";
+import { scheduleWindow } from "../../testing/schedule-window";
+await bootJsdomEnvironment({ event: "jsdom" });
 Object.assign(globalThis, {
   location: window.location,
   history: window.history,
   addEventListener: window.addEventListener.bind(window),
   removeEventListener: window.removeEventListener.bind(window),
-})
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client'),
-  { act } = React
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../messages/en')).default
-const { TargetsView } = await import('./TargetsView'),
-  { CalendarView } = await import('./CalendarView')
-const { PeopleGrid } = await import('./PeopleGrid')
-const { TimelineView } = await import('./TimelineView')
-import type { BoardController } from './use-board'
+});
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client"),
+  { act } = React;
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../messages/en")).default;
+const { TargetsView } = await import("./TargetsView"),
+  { CalendarView } = await import("./CalendarView");
+const { PeopleGrid } = await import("./PeopleGrid");
+const { TimelineView } = await import("./TimelineView");
+import type { BoardController } from "./use-board";
 const controller = {
   entriesById: new Map(),
   notify() {},
   run: async () => [],
-} as unknown as BoardController
-async function mount(
-  t: { after: (cb: () => Promise<void>) => void },
-  element: ReactNode,
-) {
-  const host = document.createElement('div')
-  document.body.append(host)
-  const root = createRoot(host)
+} as unknown as BoardController;
+async function mount(t: { after: (cb: () => Promise<void>) => void }, element: ReactNode) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
   await act(async () =>
     root.render(
       <NextIntlClientProvider locale="en" messages={messages}>
         {element}
       </NextIntlClientProvider>,
     ),
-  )
+  );
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
-  return host
+    await act(async () => root.unmount());
+    host.remove();
+  });
+  return host;
 }
 
-test('duplicate-target day chips identify each native person/resource and preserve configured per-booking colors and actions', async (t) => {
-  const original = scheduleWindow()
+test("duplicate-target day chips identify each native person/resource and preserve configured per-booking colors and actions", async (t) => {
+  const original = scheduleWindow();
   const board = {
     ...original,
     rows: [
       original.rows[0]!,
       {
         ...original.rows[1]!,
-        subjectKind: 'equipment' as const,
-        name: 'Forklift 7',
+        subjectKind: "equipment" as const,
+        name: "Forklift 7",
       },
     ],
     entries: [
       original.entries[0]!,
       {
         ...original.entries[1]!,
-        subjectKind: 'equipment' as const,
+        subjectKind: "equipment" as const,
         workerPartyId: null,
       },
     ],
-  }
-  const opened: string[] = []
+  };
+  const opened: string[] = [];
   const host = await mount(
     t,
     <TargetsView
@@ -81,47 +78,43 @@ test('duplicate-target day chips identify each native person/resource and preser
       onOpenEntry={(entry) => opened.push(entry.id)}
       onOpenSourceRecord={() => {}}
     />,
-  )
-  const chips = [...host.querySelectorAll('tbody button')].filter(
-    (b) =>
-      b.textContent?.includes('Alex') || b.textContent?.includes('Forklift 7'),
-  )
-  assert.equal(chips.length, 2)
-  assert.ok(chips.every((b) => !b.textContent?.includes('SHOP')))
-  assert.notEqual(
-    (chips[0] as HTMLElement).style.cssText,
-    (chips[1] as HTMLElement).style.cssText,
-  )
+  );
+  const chips = [...host.querySelectorAll("tbody button")].filter(
+    (b) => b.textContent?.includes("Alex") || b.textContent?.includes("Forklift 7"),
+  );
+  assert.equal(chips.length, 2);
+  assert.ok(chips.every((b) => !b.textContent?.includes("SHOP")));
+  assert.notEqual((chips[0] as HTMLElement).style.cssText, (chips[1] as HTMLElement).style.cssText);
   await act(async () => {
-    ;(chips[1] as HTMLButtonElement).click()
-  })
-  assert.deepEqual(opened, [board.entries[1]!.id])
-  assert.equal(host.querySelectorAll('tbody tr').length, 2)
-})
+    (chips[1] as HTMLButtonElement).click();
+  });
+  assert.deepEqual(opened, [board.entries[1]!.id]);
+  assert.equal(host.querySelectorAll("tbody tr").length, 2);
+});
 
-test('literal source target rows put only the person in day chips and keep native source selection', async (t) => {
-  const original = scheduleWindow()
+test("literal source target rows put only the person in day chips and keep native source selection", async (t) => {
+  const original = scheduleWindow();
   const board = {
     ...original,
     entries: [],
     sourceRecords: [
       {
-        id: 'source-1',
-        sourceSystem: 'Legacy',
-        sourceDataset: 'manpower',
-        sourceKey: '1',
+        id: "source-1",
+        sourceSystem: "Legacy",
+        sourceDataset: "manpower",
+        sourceKey: "1",
         workerPartyId: original.rows[0]!.subjectId,
         onDate: original.from,
-        label: 'SHOP/ N',
+        label: "SHOP/ N",
         result: null,
         notes: null,
-        color: '#ff0000',
+        color: "#ff0000",
         visibleInSource: true,
-        recordedAt: '2026-10-12',
+        recordedAt: "2026-10-12",
       },
     ],
-  }
-  let opened = ''
+  };
+  let opened = "";
   const host = await mount(
     t,
     <TargetsView
@@ -131,23 +124,23 @@ test('literal source target rows put only the person in day chips and keep nativ
       today={board.from}
       onOpenEntry={() => {}}
       onOpenSourceRecord={(r) => {
-        opened = r.id
+        opened = r.id;
       }}
     />,
-  )
-  const chip = host.querySelector('tbody button')!
-  assert.equal(chip.textContent, 'Alex')
-  assert.match(host.querySelector('aside')!.textContent ?? '', /Alex/)
-  assert.ok(!host.querySelector('aside')!.textContent?.includes('Blair'))
-  assert.match(host.querySelector('tbody td')!.textContent ?? '', /SHOP\/ N/)
+  );
+  const chip = host.querySelector("tbody button")!;
+  assert.equal(chip.textContent, "Alex");
+  assert.match(host.querySelector("aside")!.textContent ?? "", /Alex/);
+  assert.ok(!host.querySelector("aside")!.textContent?.includes("Blair"));
+  assert.match(host.querySelector("tbody td")!.textContent ?? "", /SHOP\/ N/);
   await act(async () => {
-    ;(chip as HTMLButtonElement).click()
-  })
-  assert.equal(opened, 'source-1')
-})
+    (chip as HTMLButtonElement).click();
+  });
+  assert.equal(opened, "source-1");
+});
 
-test('Month has no second toolbar, keeps bounded equal columns and uses the parent search and subject identity', async (t) => {
-  const board = scheduleWindow()
+test("Month has no second toolbar, keeps bounded equal columns and uses the parent search and subject identity", async (t) => {
+  const board = scheduleWindow();
   const host = await mount(
     t,
     <CalendarView
@@ -159,34 +152,34 @@ test('Month has no second toolbar, keeps bounded equal columns and uses the pare
       onOpenEntry={() => {}}
       onOpenSourceRecord={() => {}}
     />,
-  )
-  assert.equal(host.querySelectorAll('select').length, 0)
-  assert.ok(host.querySelector('[class*="minmax(0,1fr)"]'))
-  assert.ok(!host.textContent?.includes('Alex'))
-})
+  );
+  assert.equal(host.querySelectorAll("select").length, 0);
+  assert.ok(host.querySelector('[class*="minmax(0,1fr)"]'));
+  assert.ok(!host.textContent?.includes("Alex"));
+});
 
-test('the optional hour column disappears without turning source-date unknown hours into zeros', async (t) => {
-  const original = scheduleWindow()
+test("the optional hour column disappears without turning source-date unknown hours into zeros", async (t) => {
+  const original = scheduleWindow();
   const board = {
     ...original,
     entries: [],
     sourceRecords: [
       {
-        id: 'source-1',
-        sourceSystem: 'Legacy',
-        sourceDataset: 'manpower',
-        sourceKey: '1',
+        id: "source-1",
+        sourceSystem: "Legacy",
+        sourceDataset: "manpower",
+        sourceKey: "1",
         workerPartyId: original.rows[0]!.subjectId,
         onDate: original.from,
-        label: 'SHOP',
+        label: "SHOP",
         result: null,
         notes: null,
-        color: '#ff0000',
+        color: "#ff0000",
         visibleInSource: true,
-        recordedAt: '2026-10-12',
+        recordedAt: "2026-10-12",
       },
     ],
-  }
+  };
   const host = await mount(
     t,
     <PeopleGrid
@@ -201,16 +194,18 @@ test('the optional hour column disappears without turning source-date unknown ho
       onOpenEntry={() => {}}
       onOpenSourceRecord={() => {}}
     />,
-  )
-  assert.equal(host.querySelectorAll('[class*="right-0"]').length, 0)
-  assert.ok(!host.textContent?.includes('0h'))
-  assert.ok([...host.querySelectorAll('button[title]')].some(button =>
-    button.getAttribute('title')?.includes(messages.scheduling.source.unknownHours),
-  ))
-})
+  );
+  assert.equal(host.querySelectorAll('[class*="right-0"]').length, 0);
+  assert.ok(!host.textContent?.includes("0h"));
+  assert.ok(
+    [...host.querySelectorAll("button[title]")].some((button) =>
+      button.getAttribute("title")?.includes(messages.scheduling.source.unknownHours),
+    ),
+  );
+});
 
-test('Timeline receives zoom from the host and contains no duplicate zoom buttons or toolbar', async (t) => {
-  const board = scheduleWindow()
+test("Timeline receives zoom from the host and contains no duplicate zoom buttons or toolbar", async (t) => {
+  const board = scheduleWindow();
   const host = await mount(
     t,
     <TimelineView
@@ -223,23 +218,23 @@ test('Timeline receives zoom from the host and contains no duplicate zoom button
       onOpenEntry={() => {}}
       onOpenSourceRecord={() => {}}
     />,
-  )
-  assert.equal(host.querySelectorAll('[aria-label*="Zoom"]').length, 0)
-  assert.equal(host.querySelectorAll('[role="toolbar"]').length, 0)
-})
+  );
+  assert.equal(host.querySelectorAll('[aria-label*="Zoom"]').length, 0);
+  assert.equal(host.querySelectorAll('[role="toolbar"]').length, 0);
+});
 
-test('the header owns search/settings and timeline zoom while More exposes exactly two native window-control rows', async (t) => {
-  const { SchedulingWorkspace } = await import('./SchedulingWorkspace')
-  const board = {...scheduleWindow(), canManage: true}
-  const originalFetch = globalThis.fetch
-  let requests = 0
+test("the header owns search/settings and timeline zoom while More exposes exactly two native window-control rows", async (t) => {
+  const { SchedulingWorkspace } = await import("./SchedulingWorkspace");
+  const board = { ...scheduleWindow(), canManage: true };
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
   globalThis.fetch = async () => {
-    requests++
-    return Response.json(board)
-  }
+    requests++;
+    return Response.json(board);
+  };
   t.after(() => {
-    globalThis.fetch = originalFetch
-  })
+    globalThis.fetch = originalFetch;
+  });
   const host = await mount(
     t,
     <SchedulingWorkspace
@@ -266,73 +261,76 @@ test('the header owns search/settings and timeline zoom while More exposes exact
       equipmentEnabled={false}
       roster={{ attendance: false, manageAttendance: false, closing: false }}
     />,
-  )
+  );
+  assert.equal(requests, 0, "the exact server window is reused without a duplicate request");
+  const toolbar = host.querySelector('[role="toolbar"]')!;
+  assert.equal(host.querySelectorAll('[role="toolbar"]').length, 1);
+  assert.ok(toolbar.classList.contains("flex-nowrap"));
+  assert.ok(toolbar.classList.contains("overflow-x-auto"));
+  assert.ok(toolbar.classList.contains("pb-4"), "scrollbar space stays below header hit targets");
+  const search = toolbar.querySelector("input[aria-label]")!;
+  const settings = toolbar.querySelector("a[aria-label]")!;
+  assert.ok(
+    search.nextElementSibling === settings || search.nextElementSibling?.contains(settings),
+  );
+  const zoom = [...toolbar.querySelectorAll("button")].filter((b) =>
+    b.getAttribute("aria-label")?.toLowerCase().includes("zoom"),
+  );
+  assert.equal(zoom.length, 2);
+  const more = [...toolbar.querySelectorAll("button")].find(
+    (b) => b.getAttribute("aria-label") === messages.scheduling.toolbar.more,
+  )!;
+  await act(async () => {
+    more.click();
+  });
+  const menu = document.querySelector("[data-schedule-window-menu]")!;
+  assert.ok(menu);
+  assert.equal(menu.children.length, 4);
+  assert.equal(menu.querySelectorAll("input[data-date-field]").length, 1);
+  assert.equal(menu.querySelectorAll("select").length, 2);
+  assert.equal(menu.querySelectorAll("input:not([data-date-field])").length, 0);
+  assert.ok(
+    menu.children[0]!.querySelector("input[data-date-field]"),
+    "the window start date comes first",
+  );
+  assert.equal(menu.children[1]!.tagName, "BUTTON");
+  assert.ok(menu.children[2]!.querySelector("select"));
+  assert.ok(menu.children[3]!.querySelector("select"));
+  const download = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === messages.scheduling.distribution.downloadPdf,
+  )!;
+  assert.ok(download, "the existing More menu exposes a report-only download action");
+  await act(async () => {
+    download.click();
+  });
+  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1);
+  assert.equal(document.querySelector("[data-schedule-recipients]"), null);
   assert.equal(
     requests,
     0,
-    'the exact server window is reused without a duplicate request',
-  )
-  const toolbar = host.querySelector('[role="toolbar"]')!
-  assert.equal(host.querySelectorAll('[role="toolbar"]').length, 1)
-  assert.ok(toolbar.classList.contains('flex-nowrap'))
-  assert.ok(toolbar.classList.contains('overflow-x-auto'))
-  assert.ok(toolbar.classList.contains('pb-4'), 'scrollbar space stays below header hit targets')
-  const search = toolbar.querySelector('input[aria-label]')!
-  const settings = toolbar.querySelector('a[aria-label]')!
-  assert.ok(
-    search.nextElementSibling === settings ||
-      search.nextElementSibling?.contains(settings),
-  )
-  const zoom = [...toolbar.querySelectorAll('button')].filter((b) =>
-    b.getAttribute('aria-label')?.toLowerCase().includes('zoom'),
-  )
-  assert.equal(zoom.length, 2)
-  const more = [...toolbar.querySelectorAll('button')].find(
-    (b) => b.getAttribute('aria-label') === messages.scheduling.toolbar.more,
-  )!
-  await act(async () => {
-    more.click()
-  })
-  const menu = document.querySelector('[data-schedule-window-menu]')!
-  assert.ok(menu)
-  assert.equal(menu.children.length, 4)
-  assert.equal(menu.querySelectorAll('input[data-date-field]').length, 1)
-  assert.equal(menu.querySelectorAll('select').length, 2)
-  assert.equal(menu.querySelectorAll('input:not([data-date-field])').length, 0)
-  assert.ok(menu.children[0]!.querySelector('input[data-date-field]'), 'the window start date comes first')
-  assert.equal(menu.children[1]!.tagName, 'BUTTON')
-  assert.ok(menu.children[2]!.querySelector('select'))
-  assert.ok(menu.children[3]!.querySelector('select'))
-  const download = [...document.querySelectorAll('button')].find(button => button.textContent === messages.scheduling.distribution.downloadPdf)!
-  assert.ok(download, 'the existing More menu exposes a report-only download action')
-  await act(async () => {download.click()})
-  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1)
-  assert.equal(document.querySelector('[data-schedule-recipients]'), null)
-  assert.equal(requests, 0, 'opening PDF layout does not fetch contacts or resolve an email audience')
+    "opening PDF layout does not fetch contacts or resolve an email audience",
+  );
+});
 
-})
-
-test('the visible hour-column preference saves through its typed native boundary and stays hidden on reopen', async (t) => {
-  const { SchedulingWorkspace } = await import('./SchedulingWorkspace')
+test("the visible hour-column preference saves through its typed native boundary and stays hidden on reopen", async (t) => {
+  const { SchedulingWorkspace } = await import("./SchedulingWorkspace");
   const initial = scheduleWindow(),
-    saved = { ...initial, board: { ...initial.board, showHoursColumn: false } }
+    saved = { ...initial, board: { ...initial.board, showHoursColumn: false } };
   const originalFetch = globalThis.fetch,
-    seen: { method: string; body: unknown }[] = []
+    seen: { method: string; body: unknown }[] = [];
   globalThis.fetch = async (_input, init) => {
     seen.push({
-      method: init?.method ?? 'GET',
+      method: init?.method ?? "GET",
       body: init?.body ? JSON.parse(String(init.body)) : null,
-    })
-    return Response.json(
-      init?.method === 'PATCH' ? { id: initial.board.id } : saved,
-    )
-  }
+    });
+    return Response.json(init?.method === "PATCH" ? { id: initial.board.id } : saved);
+  };
   t.after(() => {
-    globalThis.fetch = originalFetch
-  })
+    globalThis.fetch = originalFetch;
+  });
   const props = {
     boards: [initial.board],
-    view: 'grid',
+    view: "grid",
     anchor: initial.from,
     from: initial.from,
     through: initial.through,
@@ -344,92 +342,154 @@ test('the visible hour-column preference saves through its typed native boundary
     canManageProjects: false,
     canConfigure: true,
     timeZone: initial.board.timeZone,
-    settingsHref: '/scheduling?board=CREW',
+    settingsHref: "/scheduling?board=CREW",
     scope: { subsidiaries: [], departments: [], locations: [], projects: [] },
     peopleEnabled: true,
     tasksEnabled: false,
     resourcesEnabled: false,
     equipmentEnabled: false,
     roster: { attendance: false, manageAttendance: false, closing: false },
-  }
+  };
+  const host = await mount(
+    t,
+    <SchedulingWorkspace {...props} board={initial.board} initialWindow={initial} />,
+  );
+  const display = host.querySelector(
+    `[aria-label="${messages.scheduling.toolbar.display}"]`,
+  ) as HTMLButtonElement;
+  await act(async () => display.click());
+  const label = [...document.querySelectorAll("label")].find(
+    (l) => l.textContent === messages.scheduling.toolbar.showHoursColumn,
+  )!;
+  assert.ok(label);
+  const input = label.querySelector("input")!;
+  assert.equal(input.checked, true);
+  await act(async () => input.click());
+  assert.deepEqual(
+    seen.map((r) => r.method),
+    ["PATCH", "GET"],
+  );
+  assert.deepEqual(seen[0]!.body, { showHoursColumn: false });
+  assert.equal(input.checked, false);
+  const reopened = await mount(
+    t,
+    <SchedulingWorkspace {...props} board={saved.board} initialWindow={saved} />,
+  );
+  assert.equal(reopened.querySelectorAll('[class*="right-0"]').length, 0);
+});
+
+test("a managed shift roster adds its Roster tools, attendance badges and publication wait while a people board shows none of them", async (t) => {
+  const { SchedulingWorkspace } = await import("./SchedulingWorkspace");
+  const people = scheduleWindow();
+  const draft = {
+    ...people.entries[1]!,
+    id: "aa010000-0000-4000-8000-000000000009",
+    status: "draft" as const,
+  };
+  const roster = {
+    ...people,
+    board: { ...people.board, boardType: "shift_roster", publishPolicy: "staged" as const },
+    entries: [
+      {
+        ...people.entries[0]!,
+        governed: true,
+        attendance: { status: "present" as const, late: true, leftEarly: false, overBreak: false },
+      },
+      draft,
+    ],
+    pendingPublication: {
+      id: "aa010000-0000-4000-8000-000000000010",
+      createdAt: `${people.from}T12:00:00Z`,
+      flowGated: true,
+      entryIds: [draft.id],
+    },
+    canManage: true,
+  };
+  const originalFetch = globalThis.fetch;
+  const fetched: string[] = [];
+  globalThis.fetch = async (input) => {
+    fetched.push(String(input));
+    return Response.json(
+      String(input).endsWith("/assignments") ? { assignments: [], patterns: [] } : roster,
+    );
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const props = {
+    boards: [people.board],
+    view: "grid",
+    anchor: people.from,
+    from: people.from,
+    through: people.through,
+    rangeDays: 1,
+    today: people.from,
+    refusal: null,
+    projects: [],
+    selectedProjectId: null,
+    canManageProjects: false,
+    canConfigure: false,
+    timeZone: people.board.timeZone,
+    settingsHref: null,
+    scope: { subsidiaries: [], departments: [], locations: [], projects: [] },
+    peopleEnabled: true,
+    tasksEnabled: false,
+    resourcesEnabled: false,
+    equipmentEnabled: false,
+    roster: { attendance: true, manageAttendance: false, closing: false },
+  };
+  const rosterLabel = messages.scheduling.roster.title;
+  const plain = await mount(
+    t,
+    <SchedulingWorkspace {...props} board={people.board} initialWindow={people} />,
+  );
+  assert.equal(
+    plain.querySelector(`[aria-label="${rosterLabel}"]`),
+    null,
+    "a people board keeps its toolbar",
+  );
+  assert.equal(plain.textContent?.includes(messages.scheduling.attendance.short.late), false);
+
   const host = await mount(
     t,
     <SchedulingWorkspace
       {...props}
-      board={initial.board}
-      initialWindow={initial}
+      board={roster.board as typeof people.board}
+      initialWindow={roster as typeof people}
     />,
-  )
-  const display = host.querySelector(
-    `[aria-label="${messages.scheduling.toolbar.display}"]`,
-  ) as HTMLButtonElement
-  await act(async () => display.click())
-  const label = [...document.querySelectorAll('label')].find(
-    (l) => l.textContent === messages.scheduling.toolbar.showHoursColumn,
-  )!
-  assert.ok(label)
-  const input = label.querySelector('input')!
-  assert.equal(input.checked, true)
-  await act(async () => input.click())
-  assert.deepEqual(
-    seen.map((r) => r.method),
-    ['PATCH', 'GET'],
-  )
-  assert.deepEqual(seen[0]!.body, { showHoursColumn: false })
-  assert.equal(input.checked, false)
-  const reopened = await mount(
-    t,
-    <SchedulingWorkspace
-      {...props}
-      board={saved.board}
-      initialWindow={saved}
-    />,
-  )
-  assert.equal(reopened.querySelectorAll('[class*="right-0"]').length, 0)
-})
-
-test('a managed shift roster adds its Roster tools, attendance badges and publication wait while a people board shows none of them', async (t) => {
-  const { SchedulingWorkspace } = await import('./SchedulingWorkspace')
-  const people = scheduleWindow()
-  const draft = { ...people.entries[1]!, id: 'aa010000-0000-4000-8000-000000000009', status: 'draft' as const }
-  const roster = {
-    ...people,
-    board: { ...people.board, boardType: 'shift_roster', publishPolicy: 'staged' as const },
-    entries: [{ ...people.entries[0]!, governed: true, attendance: { status: 'present' as const, late: true, leftEarly: false, overBreak: false } }, draft],
-    pendingPublication: { id: 'aa010000-0000-4000-8000-000000000010', createdAt: `${people.from}T12:00:00Z`, flowGated: true, entryIds: [draft.id] },
-    canManage: true,
-  }
-  const originalFetch = globalThis.fetch
-  const fetched: string[] = []
-  globalThis.fetch = async (input) => {
-    fetched.push(String(input))
-    return Response.json(String(input).endsWith('/assignments') ? { assignments: [], patterns: [] } : roster)
-  }
-  t.after(() => { globalThis.fetch = originalFetch })
-  const props = {
-    boards: [people.board], view: 'grid', anchor: people.from, from: people.from, through: people.through, rangeDays: 1, today: people.from,
-    refusal: null, projects: [], selectedProjectId: null, canManageProjects: false, canConfigure: false, timeZone: people.board.timeZone,
-    settingsHref: null, scope: { subsidiaries: [], departments: [], locations: [], projects: [] },
-    peopleEnabled: true, tasksEnabled: false, resourcesEnabled: false, equipmentEnabled: false,
-    roster: { attendance: true, manageAttendance: false, closing: false },
-  }
-  const rosterLabel = messages.scheduling.roster.title
-  const plain = await mount(t, <SchedulingWorkspace {...props} board={people.board} initialWindow={people} />)
-  assert.equal(plain.querySelector(`[aria-label="${rosterLabel}"]`), null, 'a people board keeps its toolbar')
-  assert.equal(plain.textContent?.includes(messages.scheduling.attendance.short.late), false)
-
-  const host = await mount(t, <SchedulingWorkspace {...props} board={roster.board as typeof people.board} initialWindow={roster as typeof people} />)
-  assert.ok(host.textContent?.includes(messages.scheduling.attendance.short.late), 'the late arrival shows on the booking')
-  assert.ok(host.textContent?.includes('1 change is waiting for a publication decision.'))
-  assert.ok(host.querySelector('a[href="/inbox"]'), 'a Flow-gated publication links to the approvals inbox')
-  assert.equal([...host.querySelectorAll('button')].some((button) => button.textContent?.includes(messages.scheduling.publish.submit)), false,
-    'no second publication is offered while one waits')
-  const open = host.querySelector(`[aria-label="${rosterLabel}"]`) as HTMLButtonElement
-  assert.ok(open)
-  await act(async () => open.click())
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
-  assert.ok(fetched.some((url) => url.endsWith(`/api/scheduling/boards/${people.board.id}/assignments`)))
-  assert.ok(document.body.textContent?.includes(messages.scheduling.roster.recurring.noPatterns))
-  const tabs = [...document.querySelectorAll('nav[aria-label] button')].map((button) => button.textContent)
-  assert.deepEqual(tabs, [messages.scheduling.roster.tabs.recurring, messages.scheduling.roster.tabs.requests, messages.scheduling.roster.tabs.attendance])
-})
+  );
+  assert.ok(
+    host.textContent?.includes(messages.scheduling.attendance.short.late),
+    "the late arrival shows on the booking",
+  );
+  assert.ok(host.textContent?.includes("1 change is waiting for a publication decision."));
+  assert.ok(
+    host.querySelector('a[href="/inbox"]'),
+    "a Flow-gated publication links to the approvals inbox",
+  );
+  assert.equal(
+    [...host.querySelectorAll("button")].some((button) =>
+      button.textContent?.includes(messages.scheduling.publish.submit),
+    ),
+    false,
+    "no second publication is offered while one waits",
+  );
+  const open = host.querySelector(`[aria-label="${rosterLabel}"]`) as HTMLButtonElement;
+  assert.ok(open);
+  await act(async () => open.click());
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  assert.ok(
+    fetched.some((url) => url.endsWith(`/api/scheduling/boards/${people.board.id}/assignments`)),
+  );
+  assert.ok(document.body.textContent?.includes(messages.scheduling.roster.recurring.noPatterns));
+  const tabs = [...document.querySelectorAll("nav[aria-label] button")].map(
+    (button) => button.textContent,
+  );
+  assert.deepEqual(tabs, [
+    messages.scheduling.roster.tabs.recurring,
+    messages.scheduling.roster.tabs.requests,
+    messages.scheduling.roster.tabs.attendance,
+  ]);
+});

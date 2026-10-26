@@ -125,7 +125,13 @@ export function parseTap(output: string, exitCode: number | null): TapSummary {
     // without incrementing `# fail` on some Node versions.
     summary.fail = 1;
   }
-  if (summary.tests === 0 && summary.pass === 0 && summary.fail === 0 && exitCode !== 0 && exitCode !== null) {
+  if (
+    summary.tests === 0 &&
+    summary.pass === 0 &&
+    summary.fail === 0 &&
+    exitCode !== 0 &&
+    exitCode !== null
+  ) {
     summary.crashed = true;
   }
   return summary;
@@ -211,7 +217,10 @@ function shuffled<T>(items: readonly T[], seed: number): T[] {
   return copy;
 }
 
-export function selectMutants(mutants: readonly GeneratedMutant[], sample: number): GeneratedMutant[] {
+export function selectMutants(
+  mutants: readonly GeneratedMutant[],
+  sample: number,
+): GeneratedMutant[] {
   const ordered = [...mutants].sort((a, b) => (a.key < b.key ? -1 : 1));
   if (sample <= 0 || ordered.length <= sample) return ordered;
   return shuffled(ordered, 0x0c10c).slice(0, sample);
@@ -235,12 +244,17 @@ function childEnv(repoRoot: string, useDb: boolean): NodeJS.ProcessEnv {
 }
 
 function testArgs(useDb: boolean): string[] {
-  const args = [...(process.platform === "darwin"
-    ? ["--no-concurrent-sparkplug", "--no-concurrent-recompilation"]
-    : []),
-  "--import", "tsx",
-  ...(useDb ? ["--import", "./engine/src/testing/database-bypass.ts"] : []),
-  "--test", "--test-force-exit", "--test-reporter=tap"];
+  const args = [
+    ...(process.platform === "darwin"
+      ? ["--no-concurrent-sparkplug", "--no-concurrent-recompilation"]
+      : []),
+    "--import",
+    "tsx",
+    ...(useDb ? ["--import", "./engine/src/testing/database-bypass.ts"] : []),
+    "--test",
+    "--test-force-exit",
+    "--test-reporter=tap",
+  ];
   return args;
 }
 
@@ -311,11 +325,17 @@ async function syntaxGate(mutatedSource: string): Promise<string | null> {
   if (errors.length === 0) return null;
   return errors
     .slice(0, 3)
-    .map((d) => `TS${d.code}: ${typeof d.messageText === "string" ? d.messageText : d.messageText.messageText}`)
+    .map(
+      (d) =>
+        `TS${d.code}: ${typeof d.messageText === "string" ? d.messageText : d.messageText.messageText}`,
+    )
     .join("; ");
 }
 
-function verdictFor(summary: TapSummary, timedOut: boolean): { status: MutantStatus; detail: string } {
+function verdictFor(
+  summary: TapSummary,
+  timedOut: boolean,
+): { status: MutantStatus; detail: string } {
   if (timedOut) return { status: "timed-out", detail: "mutant run exceeded its time budget" };
   if (summary.fail > 0) {
     return { status: "killed", detail: `${summary.fail} failing test(s), ${summary.pass} passing` };
@@ -337,16 +357,27 @@ export async function runTarget(
   const log = options.onProgress ?? ((): void => {});
   const pristine = readFileSync(join(scratch, target.path), "utf8");
   const empty: TargetResult = {
-    target: target.path, status: "measured", needsDb: target.needsDb === true,
-    killed: 0, survived: 0, timedOut: 0, skipped: 0, error: 0,
-    total: 0, measured: 0, ratio: null, baselineFiles: [], mutants: [],
+    target: target.path,
+    status: "measured",
+    needsDb: target.needsDb === true,
+    killed: 0,
+    survived: 0,
+    timedOut: 0,
+    skipped: 0,
+    error: 0,
+    total: 0,
+    measured: 0,
+    ratio: null,
+    baselineFiles: [],
+    mutants: [],
   };
 
   // A pure neighbor passing does not measure a transaction owner. A reviewed
   // database requirement is decided before baseline execution, never inferred
   // from a low score or a failed import.
   if (!options.useDb && target.needsDb === true) {
-    if (!target.needsDbReason?.trim()) throw new Error(`${target.path}: database requirement has no source rationale`);
+    if (!target.needsDbReason?.trim())
+      throw new Error(`${target.path}: database requirement has no source rationale`);
     return { ...empty, status: "baseline-skipped", unmeasuredReason: target.needsDbReason };
   }
 
@@ -358,14 +389,22 @@ export async function runTarget(
     const summary = parseTap(run.output, run.exitCode);
     if (run.timedOut || summary.fail > 0 || summary.crashed) {
       const failed: BaselineFile = {
-        file, tests: summary.tests, pass: summary.pass, fail: summary.fail,
-        skipped: summary.skipped, executed: summary.pass + summary.fail > 0,
+        file,
+        tests: summary.tests,
+        pass: summary.pass,
+        fail: summary.fail,
+        skipped: summary.skipped,
+        executed: summary.pass + summary.fail > 0,
       };
       return { ...empty, status: "baseline-failed", baselineFiles: [...baselineFiles, failed] };
     }
     baselineFiles.push({
-      file, tests: summary.tests, pass: summary.pass, fail: summary.fail,
-      skipped: summary.skipped, executed: summary.pass + summary.fail > 0,
+      file,
+      tests: summary.tests,
+      pass: summary.pass,
+      fail: summary.fail,
+      skipped: summary.skipped,
+      executed: summary.pass + summary.fail > 0,
     });
   }
   const runnable = baselineFiles.filter((f) => f.executed).map((f) => f.file);
@@ -390,9 +429,14 @@ export async function runTarget(
     const gateError = await syntaxGate(mutant.mutatedSource);
     if (gateError) {
       results.push({
-        key: mutant.key, target: mutant.target, operator: mutant.operator,
-        line: mutant.line, description: mutant.description,
-        status: "error", detail: `does not parse: ${gateError}`, durationMs: 0,
+        key: mutant.key,
+        target: mutant.target,
+        operator: mutant.operator,
+        line: mutant.line,
+        description: mutant.description,
+        status: "error",
+        detail: `does not parse: ${gateError}`,
+        durationMs: 0,
       });
       continue;
     }
@@ -402,9 +446,14 @@ export async function runTarget(
     const summary = parseTap(run.output, run.exitCode);
     const verdict = verdictFor(summary, run.timedOut);
     results.push({
-      key: mutant.key, target: mutant.target, operator: mutant.operator,
-      line: mutant.line, description: mutant.description,
-      status: verdict.status, detail: verdict.detail, durationMs: run.durationMs,
+      key: mutant.key,
+      target: mutant.target,
+      operator: mutant.operator,
+      line: mutant.line,
+      description: mutant.description,
+      status: verdict.status,
+      detail: verdict.detail,
+      durationMs: run.durationMs,
     });
   }
   // Belt and braces: the target file is pristine no matter how the loop ends.
@@ -424,9 +473,15 @@ export async function runTarget(
   }
   const measured = killed + survived + timedOut;
   return {
-    ...empty, baselineFiles,
-    killed, survived, timedOut, skipped, error,
-    total: results.length, measured,
+    ...empty,
+    baselineFiles,
+    killed,
+    survived,
+    timedOut,
+    skipped,
+    error,
+    total: results.length,
+    measured,
     ratio: measured > 0 ? (killed + timedOut) / measured : null,
     mutants: results,
   };
@@ -456,10 +511,16 @@ export async function runMutationTargets(options: RunMutationOptions): Promise<M
       targets.push(await runTarget(scratch, target, options));
     }
     return {
-      version: 1, gitSha, runId: runId(), casesSha256: caseDigest(targets),
-      dirtyTargets, at: new Date().toISOString(),
+      version: 1,
+      gitSha,
+      runId: runId(),
+      casesSha256: caseDigest(targets),
+      dirtyTargets,
+      at: new Date().toISOString(),
       mode: options.useDb ? "db" : "unit",
-      sample: options.sample, timeoutSecs: options.timeoutSecs, targets,
+      sample: options.sample,
+      timeoutSecs: options.timeoutSecs,
+      targets,
     };
   } finally {
     removeScratchCopy(scratch);

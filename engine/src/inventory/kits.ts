@@ -25,10 +25,16 @@ export async function itemKinds(
   itemIds: readonly string[],
 ): Promise<Map<string, string>> {
   if (itemIds.length === 0) return new Map();
-  const rows = await runner.execute<{ id: string; kind: string }>(sql`
+  const rows = await runner.execute<{ id: string; kind: string }>(
+    sql`
     select id, kind from items
      where org_id = ${orgId}
-       and id in (${sql.join(itemIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects");
+       and id in (${sql.join(
+         itemIds.map((id) => sql`${id}::uuid`),
+         sql`, `,
+       )})`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.id, row.kind]));
 }
 
@@ -45,13 +51,14 @@ export function kitComponentMovesStock(kind: string): boolean {
 }
 
 /** Display label for a kit refusal: code when set, else name, else id. */
-export async function kitLabel(
-  runner: Runner,
-  orgId: string,
-  itemId: string,
-): Promise<string> {
-  const row = (await runner.execute<{ code: string | null; name: string }>(sql`
-    select code, name from items where org_id = ${orgId} and id = ${itemId}`, "objects"))[0];
+export async function kitLabel(runner: Runner, orgId: string, itemId: string): Promise<string> {
+  const row = (
+    await runner.execute<{ code: string | null; name: string }>(
+      sql`
+    select code, name from items where org_id = ${orgId} and id = ${itemId}`,
+      "objects",
+    )
+  )[0];
   if (!row) return itemId;
   return row.code?.trim() || row.name || itemId;
 }
@@ -61,8 +68,18 @@ export async function kitLabel(
  * a position that can never be valued or shipped. Refuse by name and point
  * at the components, which are the only stocked side of a kit.
  */
-export function kitNoStockRefusal(label: string, verb: "receive" | "adjust" | "build" | "count"): string {
-  const action = verb === "receive" ? "receive" : verb === "adjust" ? "adjust" : verb === "build" ? "build" : "count";
+export function kitNoStockRefusal(
+  label: string,
+  verb: "receive" | "adjust" | "build" | "count",
+): string {
+  const action =
+    verb === "receive"
+      ? "receive"
+      : verb === "adjust"
+        ? "adjust"
+        : verb === "build"
+          ? "build"
+          : "count";
   return (
     `kits hold no stock; receive the components — ` +
     `kit ${label} cannot be ${action === "build" ? "built into stock" : `${action}ed`}. ` +
@@ -116,7 +133,8 @@ export async function loadKitComponents(
     operation_seq: number | null;
     scrap_pct: string | null;
     is_byproduct: boolean;
-  }>(sql`
+  }>(
+    sql`
     select b.component_item_id, component.kind as component_kind,
            b.quantity_per::text as quantity_per, b.sort_order,
            b.operation_seq, b.scrap_pct::text as scrap_pct, b.is_byproduct
@@ -125,7 +143,9 @@ export async function loadKitComponents(
      where b.org_id = ${orgId} and b.assembly_item_id = ${kitItemId}
        and (b.effective_from is null or b.effective_from <= ${date}::date)
        and (b.effective_to is null or ${date}::date < b.effective_to)
-     order by b.sort_order, b.component_item_id`, "objects");
+     order by b.sort_order, b.component_item_id`,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new InventoryError(
       `kit ${await kitLabel(runner, orgId, kitItemId)} has no bill of materials effective on ${date}; ` +
@@ -144,7 +164,9 @@ export async function loadKitComponents(
   // or any operation or by-product row — is a manufacturing feature here.
   const manufactured = rows.find(
     (row) =>
-      row.operation_seq !== null || row.is_byproduct || (row.scrap_pct !== null && toUnits(row.scrap_pct) !== 0n),
+      row.operation_seq !== null ||
+      row.is_byproduct ||
+      (row.scrap_pct !== null && toUnits(row.scrap_pct) !== 0n),
   );
   if (manufactured) {
     throw new InventoryError(
@@ -302,7 +324,10 @@ export function parseKitComponentPicks(
     if (serialId !== null && (typeof serialId !== "string" || !isUuid(serialId))) {
       throw new InventoryError(`${label} serialId must be a UUID`);
     }
-    if (stockLocationId !== null && (typeof stockLocationId !== "string" || !isUuid(stockLocationId))) {
+    if (
+      stockLocationId !== null &&
+      (typeof stockLocationId !== "string" || !isUuid(stockLocationId))
+    ) {
       throw new InventoryError(`${label} stockLocationId must be a UUID`);
     }
     if (lotId !== null && serialId !== null) {

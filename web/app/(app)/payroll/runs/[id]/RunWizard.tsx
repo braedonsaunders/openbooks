@@ -1,31 +1,57 @@
-'use client'
+"use client";
 
-import { useIdentityState } from '@/lib/use-identity-state'
+import { useIdentityState } from "@/lib/use-identity-state";
 
-import { type WizardStep, STALE_REASON_FALLBACK, type Readiness, type Staleness, type Funding, type StubChange, type RunHeader, type StubRow, type RosterRow, type RemittanceRow, type GlLeg, type AdjustmentRow, type ComponentOption, runTypeLabel } from './run-wizard-model'
-import type { ClearingDesignationOption, RecordPaymentInput } from './run-wizard-controls'
-import { PeriodStep } from './steps/PeriodStep'
-import { ReadinessStep } from './steps/ReadinessStep'
-import { ReviewStep } from './steps/ReviewStep'
-import { GlStep } from './steps/GlStep'
-import { FinishStep } from './steps/FinishStep'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { AlertTriangle, Calculator, Check, ChevronRight, Loader2, RefreshCw, Trash2 } from 'lucide-react'
-import { Badge, Button, cn } from '@openbooks/ui'
-import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
-import type { PayRunCalculationError, PayRunRefusalAcknowledgement } from '@openbooks/engine/payroll/run-calculation-evidence'
-import type { PayRunApprovalState, PayRunRejection } from '@openbooks/engine/payroll/approval'
-import { refreshApprovalState } from '../../../../../components/approval-actions'
-import { readApiErrorMessage } from '../../../../../lib/api-error'
-import { useMoney } from '../../../../../components/money-provider'
-import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
-import { confirmDialog } from '../../../../../lib/confirm'
-import { promptDialog } from '../../../../../lib/prompt'
-import { promptVoidReversalPeriod } from '../../../../../lib/void-reversal-period'
-import { type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
+import {
+  type WizardStep,
+  STALE_REASON_FALLBACK,
+  type Readiness,
+  type Staleness,
+  type Funding,
+  type StubChange,
+  type RunHeader,
+  type StubRow,
+  type RosterRow,
+  type RemittanceRow,
+  type GlLeg,
+  type AdjustmentRow,
+  type ComponentOption,
+  runTypeLabel,
+} from "./run-wizard-model";
+import type { ClearingDesignationOption, RecordPaymentInput } from "./run-wizard-controls";
+import { PeriodStep } from "./steps/PeriodStep";
+import { ReadinessStep } from "./steps/ReadinessStep";
+import { ReviewStep } from "./steps/ReviewStep";
+import { GlStep } from "./steps/GlStep";
+import { FinishStep } from "./steps/FinishStep";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import {
+  AlertTriangle,
+  Calculator,
+  Check,
+  ChevronRight,
+  Loader2,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import { Badge, Button, cn } from "@openbooks/ui";
+import type { YearEndFilingSection } from "@openbooks/engine/payroll/yearend";
+import type {
+  PayRunCalculationError,
+  PayRunRefusalAcknowledgement,
+} from "@openbooks/engine/payroll/run-calculation-evidence";
+import type { PayRunApprovalState, PayRunRejection } from "@openbooks/engine/payroll/approval";
+import { refreshApprovalState } from "../../../../../components/approval-actions";
+import { readApiErrorMessage } from "../../../../../lib/api-error";
+import { useMoney } from "../../../../../components/money-provider";
+import { RunStatusBadge, runDisplayStatus } from "../../_ui/run-status";
+import { confirmDialog } from "../../../../../lib/confirm";
+import { promptDialog } from "../../../../../lib/prompt";
+import { promptVoidReversalPeriod } from "../../../../../lib/void-reversal-period";
+import { type RegisterBucket } from "../../../../../lib/payroll-register-buckets";
 
 /**
  * The pay-run wizard: four steps rendered as freely-navigable chips (no forced
@@ -34,174 +60,182 @@ import { type RegisterBucket } from '../../../../../lib/payroll-register-buckets
  * state; the GL step shows the exact journal BEFORE anything posts.
  */
 export function RunWizard(props: {
-  run: RunHeader
-  stubs: StubRow[]
-  roster: RosterRow[]
-  adjustments: AdjustmentRow[]
-  adjustableComponents: ComponentOption[]
+  run: RunHeader;
+  stubs: StubRow[];
+  roster: RosterRow[];
+  adjustments: AdjustmentRow[];
+  adjustableComponents: ComponentOption[];
   /** employee_party_id → net pay on the employee's previous committed stub. */
-  previousNet: Record<string, string>
+  previousNet: Record<string, string>;
   /** Credit legs by account from the committed document lines (negative). */
-  remittance: RemittanceRow[]
-  bankAccounts: { id: string; label: string }[]
-  clearingDesignations: ClearingDesignationOption[]
+  remittance: RemittanceRow[];
+  bankAccounts: { id: string; label: string }[];
+  clearingDesignations: ClearingDesignationOption[];
   /** The seeded 'payroll-register' report definition (full report engine). */
-  registerReportId: string | null
+  registerReportId: string | null;
   /** Pack-declared withholding buckets for the review grid and stub header. */
-  registerBuckets: RegisterBucket[]
+  registerBuckets: RegisterBucket[];
   /** Pack-language region column header ("Province" / "State" / "Region"). */
-  regionLabel: string
+  regionLabel: string;
   /** Statutory engine names by stub country for the trace heading. */
-  traceEngines: Record<string, string>
+  traceEngines: Record<string, string>;
   /** Pack-declared trace-factor labels by stub country for the trace rows. */
-  factorLabels: Record<string, Record<string, string>>
+  factorLabels: Record<string, Record<string, string>>;
   /** Engine-computed pre-flight: what blocks the run, what to look at. */
-  readiness: Readiness
+  readiness: Readiness;
   /** Whether the stubs still reflect the inputs they were built from. */
-  staleness: Staleness
+  staleness: Staleness;
   /** Cash required for the payday, against each bank account's balance. */
-  funding: Funding
+  funding: Funding;
   /** Per-employee change since the previous committed stub. */
-  changes: StubChange[]
+  changes: StubChange[];
   /**
    * Pack-declared separation filings (the ROE) for this run's employees —
    * populated by the server for termination runs, empty otherwise. The
    * Finish step renders one issue card per employee.
    */
-  separationSections: YearEndFilingSection[]
-  canRun: boolean
+  separationSections: YearEndFilingSection[];
+  canRun: boolean;
   /** Withdrawing an approval (the return-to-draft permission) — gates Recalculate on an approved run. */
-  canWithdrawApproval: boolean
-  initialStep: WizardStep
+  canWithdrawApproval: boolean;
+  initialStep: WizardStep;
   /**
    * The latest calculate's per-employee outcomes, persisted server-side at
    * calculate time. The exception list renders from THIS, not only from the
    * calculate response's memory — so the first calculate's refusals survive a
    * refresh that used to wipe them.
    */
-  calculationErrors: PayRunCalculationError[]
+  calculationErrors: PayRunCalculationError[];
   /** Recorded decision to commit despite refusals, if one was taken. */
-  refusalAcknowledgement: PayRunRefusalAcknowledgement | null
+  refusalAcknowledgement: PayRunRefusalAcknowledgement | null;
   /** Whether the recorded acknowledgement binds to the current refusal set. */
-  refusalsAcknowledged: boolean
+  refusalsAcknowledged: boolean;
   /**
    * Flows approval state, resolved server-side by the loader through the
    * native engine — the same state the commit boundary refuses on. The
    * expenses precedent: a boolean handed to the client, composed with
    * status; never a second switch, flag, or permission-only check.
    */
-  approval: PayRunApprovalState
+  approval: PayRunApprovalState;
   /**
    * The approver's rejection the run is waiting on, or null. A rejected run
    * is back in draft: it shows the rejection and stays open for recalculation
    * and resubmission.
    */
-  rejection: PayRunRejection | null
+  rejection: PayRunRejection | null;
   /** Open block-severity anomaly flags overlapping this run's period. The
    *  commit button stays off while nonzero; the commit route refuses
    *  regardless. */
-  anomalyBlocks: number
+  anomalyBlocks: number;
   /**
    * Active, non-elimination entities visible to the caller — the target
    * list for the Attribute entity action on a subsidiary-less run.
    */
-  entityOptions: { id: string; label: string }[]
+  entityOptions: { id: string; label: string }[];
   /** Attribution is org-wide: false for scoped callers the route would 404. */
-  canAttributeEntity: boolean
+  canAttributeEntity: boolean;
 }) {
-  const t = useTranslations('payroll')
-  const tc = useTranslations('common')
-  const router = useRouter()
-  const { money } = useMoney()
-  const run = props.run
-  const currency = run.currency
+  const t = useTranslations("payroll");
+  const tc = useTranslations("common");
+  const router = useRouter();
+  const { money } = useMoney();
+  const run = props.run;
+  const currency = run.currency;
   const fmt = useCallback(
-    (value: string | number | null | undefined) => money(value ?? '0', { currency }),
+    (value: string | number | null | undefined) => money(value ?? "0", { currency }),
     [money, currency],
-  )
+  );
 
-  const [step, setStep] = useState<WizardStep>(props.initialStep)
-  const [busy, setBusy] = useState(false)
+  const [step, setStep] = useState<WizardStep>(props.initialStep);
+  const [busy, setBusy] = useState(false);
   // Re-entry guard for adjustment edits: setBusy is state (async), so a
   // double-click lands twice before the buttons disable. The ref closes that
   // gap; try/finally in adjust() always releases it, so a failed request
   // never wedges the wizard.
-  const adjustInflight = useRef(false)
+  const adjustInflight = useRef(false);
   // The loader is the authority on the persisted refusal record: these start
   // from the run row (so the FIRST calculate's exceptions survive a refresh)
   // and are re-synced whenever a refresh delivers a newer row.
-  const [calcErrors, setCalcErrors] = useState<PayRunCalculationError[]>(props.calculationErrors)
+  const [calcErrors, setCalcErrors] = useState<PayRunCalculationError[]>(props.calculationErrors);
   const [acknowledgement, setAcknowledgement] = useState<PayRunRefusalAcknowledgement | null>(
     props.refusalAcknowledgement,
-  )
-  const [refusalsAcked, setRefusalsAcked] = useState(props.refusalsAcknowledged)
+  );
+  const [refusalsAcked, setRefusalsAcked] = useState(props.refusalsAcknowledged);
   /**
    * Every mutation below (calculate, acknowledge, scope and adjustment edits)
    * returns the run's authoritative refusal state in its own response, so
    * local state is set from responses — never synced from props in an effect.
    */
   function applyRefusalState(j: {
-    errors?: unknown
-    refusalAcknowledgement?: PayRunRefusalAcknowledgement | null
-    refusalsAcknowledged?: boolean
+    errors?: unknown;
+    refusalAcknowledgement?: PayRunRefusalAcknowledgement | null;
+    refusalsAcknowledged?: boolean;
   }) {
-    if (Array.isArray(j.errors)) setCalcErrors(j.errors as PayRunCalculationError[])
-    if (j.refusalAcknowledgement !== undefined) setAcknowledgement(j.refusalAcknowledgement)
-    if (j.refusalsAcknowledged !== undefined) setRefusalsAcked(j.refusalsAcknowledged)
+    if (Array.isArray(j.errors)) setCalcErrors(j.errors as PayRunCalculationError[]);
+    if (j.refusalAcknowledgement !== undefined) setAcknowledgement(j.refusalAcknowledgement);
+    if (j.refusalsAcknowledged !== undefined) setRefusalsAcked(j.refusalsAcknowledged);
   }
   /** In-scope refusals: entries that are not warnings on real stubs and not out-of-scope. */
   const refusals = calcErrors.filter(
-    (entry) => entry.kind !== 'warning' && entry.kind !== 'out-of-scope',
-  )
+    (entry) => entry.kind !== "warning" && entry.kind !== "out-of-scope",
+  );
   const [dry, setDry] = useState<{
-    employees: number
-    gross: string
-    net: string
-    employerCost: string
-    errors: { employee: string; message: string }[]
-  } | null>(null)
+    employees: number;
+    gross: string;
+    net: string;
+    employerCost: string;
+    errors: { employee: string; message: string }[];
+  } | null>(null);
   /**
    * Header vitals, refreshed from each recalculation's own result. The server
    * props only move on revisit, so without this the strip reads stale after
    * Save & recalculate until the operator leaves and comes back.
    */
-  const [vitals, setVitals] = useIdentityState([run.gross_total, run.net_total, run.employer_cost_total, run.employee_count], {
-    gross: run.gross_total,
-    net: run.net_total,
-    employerCost: run.employer_cost_total,
-    employees: run.employee_count,
-  })
+  const [vitals, setVitals] = useIdentityState(
+    [run.gross_total, run.net_total, run.employer_cost_total, run.employee_count],
+    {
+      gross: run.gross_total,
+      net: run.net_total,
+      employerCost: run.employer_cost_total,
+      employees: run.employee_count,
+    },
+  );
   /** Fold a calculate response's totals into the header strip. */
-  const applyVitals = (j: { gross?: unknown; net?: unknown; employerCost?: unknown; employees?: unknown }) => {
+  const applyVitals = (j: {
+    gross?: unknown;
+    net?: unknown;
+    employerCost?: unknown;
+    employees?: unknown;
+  }) => {
     setVitals((prev) => ({
-      gross: typeof j.gross === 'string' ? j.gross : prev.gross,
-      net: typeof j.net === 'string' ? j.net : prev.net,
-      employerCost: typeof j.employerCost === 'string' ? j.employerCost : prev.employerCost,
-      employees: typeof j.employees === 'number' ? j.employees : prev.employees,
-    }))
-  }
+      gross: typeof j.gross === "string" ? j.gross : prev.gross,
+      net: typeof j.net === "string" ? j.net : prev.net,
+      employerCost: typeof j.employerCost === "string" ? j.employerCost : prev.employerCost,
+      employees: typeof j.employees === "number" ? j.employees : prev.employees,
+    }));
+  };
   const [gl, setGl] = useState<{
-    state: 'idle' | 'loading' | 'ready' | 'setup-error'
-    legs: GlLeg[]
-    debitTotal: string
-    error: string
-  }>({ state: 'idle', legs: [], debitTotal: '0', error: '' })
+    state: "idle" | "loading" | "ready" | "setup-error";
+    legs: GlLeg[];
+    debitTotal: string;
+    error: string;
+  }>({ state: "idle", legs: [], debitTotal: "0", error: "" });
 
-  const posted = run.document_status === 'posted'
-  const voided = run.document_status === 'void' || run.document_status === 'voided'
-  const docDraft = run.document_status === 'draft'
-  const calculated = run.run_status !== 'draft'
-  const committed = run.run_status === 'committed'
+  const posted = run.document_status === "posted";
+  const voided = run.document_status === "void" || run.document_status === "voided";
+  const docDraft = run.document_status === "draft";
+  const calculated = run.run_status !== "draft";
+  const committed = run.run_status === "committed";
 
-  const blocked = props.readiness.blockers > 0
-  const canCalculate = props.canRun && docDraft && run.run_status !== 'committed' && !blocked
+  const blocked = props.readiness.blockers > 0;
+  const canCalculate = props.canRun && docDraft && run.run_status !== "committed" && !blocked;
   // After the flow releases the run its document reads 'approved', not
   // 'draft' — but the boundary says released, so money may move and the
   // commit affordance must say so too, or the submit button above would
   // strand the operator one step later (approved yet uncommittable). This
   // is a UI enablement only: the API boundary is unchanged and still
   // refuses anything unreleased.
-  const commitDocOpen = docDraft || (run.document_status === 'approved' && props.approval.released)
+  const commitDocOpen = docDraft || (run.document_status === "approved" && props.approval.released);
   // Submit for approval — the remedy the commit refusal names. Offered only
   // while an approval policy covers pay runs and this run has never been
   // submitted: "no flow configured" is a configuration question the Flows
@@ -216,38 +250,52 @@ export function RunWizard(props: {
   // assemblePayRunEvidence refuses an uncalculated run) — so this mirrors
   // the engine's accept set rather than inviting a 422.
   const canSubmitApproval =
-    props.canRun && docDraft && calculated && !props.staleness.stale && !committed
-    && props.approval.policyExists && !props.approval.submitted
+    props.canRun &&
+    docDraft &&
+    calculated &&
+    !props.staleness.stale &&
+    !committed &&
+    props.approval.policyExists &&
+    !props.approval.submitted;
   // Stale stubs must never be committed: recalculate first, always. And a run
   // with unacknowledged in-scope refusals must never commit silently: the
   // commit button stays off until the operator acknowledges exactly this
   // refusal set (the engine enforces the same gate, so a scripted call can
   // never slip past a stale tab either).
   const canCommit =
-    props.canRun && commitDocOpen && run.run_status === 'calculated' && !props.staleness.stale
-    && (refusals.length === 0 || refusalsAcked) && props.anomalyBlocks === 0
+    props.canRun &&
+    commitDocOpen &&
+    run.run_status === "calculated" &&
+    !props.staleness.stale &&
+    (refusals.length === 0 || refusalsAcked) &&
+    props.anomalyBlocks === 0;
   const canPost =
-    props.canRun && committed && (run.document_status === 'draft' || run.document_status === 'approved')
+    props.canRun &&
+    committed &&
+    (run.document_status === "draft" || run.document_status === "approved");
   // Discarding is the escape hatch for a run frozen to the wrong entity: it
   // is offered while the run has no accounting consequence. The engine holds
   // the exact boundary (committed, posted, paid, linked all refuse there), so
   // this flag is only the common case — a draft that has never committed.
-  const discardable = props.canRun && docDraft && !committed
+  const discardable = props.canRun && docDraft && !committed;
   // An approved run whose inputs moved since approval is recalculated by
   // withdrawing that approval (the engine refuses anything else). A run awaiting
   // approval has no recalculation control: its approval must be decided first.
-  const canRecalculateApproved = props.canRun && props.canWithdrawApproval
-    && run.document_status === 'approved' && !committed
+  const canRecalculateApproved =
+    props.canRun && props.canWithdrawApproval && run.document_status === "approved" && !committed;
   const staleReasonText = props.staleness.reasons
-    .map((r) => (t.has(`wizard.stale.reason.${r}` as never)
-      ? t(`wizard.stale.reason.${r}` as never)
-      : (STALE_REASON_FALLBACK[r] ?? r)))
-    .join(', ')
-  const staleBannerTitle = run.document_status === 'approved'
-    ? t('wizard.stale.approvedTitle', { reasons: staleReasonText })
-    : run.document_status === 'pending_approval'
-      ? t('wizard.stale.pendingTitle', { reasons: staleReasonText })
-      : t('wizard.stale.title', { reasons: staleReasonText })
+    .map((r) =>
+      t.has(`wizard.stale.reason.${r}` as never)
+        ? t(`wizard.stale.reason.${r}` as never)
+        : (STALE_REASON_FALLBACK[r] ?? r),
+    )
+    .join(", ");
+  const staleBannerTitle =
+    run.document_status === "approved"
+      ? t("wizard.stale.approvedTitle", { reasons: staleReasonText })
+      : run.document_status === "pending_approval"
+        ? t("wizard.stale.pendingTitle", { reasons: staleReasonText })
+        : t("wizard.stale.title", { reasons: staleReasonText });
 
   /** Step completion, derived — never client-side bookkeeping. */
   const complete: Record<WizardStep, boolean> = {
@@ -256,7 +304,7 @@ export function RunWizard(props: {
     review: calculated,
     gl: committed || posted,
     finish: posted,
-  }
+  };
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body. The idle→loading
@@ -264,72 +312,77 @@ export function RunWizard(props: {
   // a mount effect.
   const loadGlPreview = useCallback(() => {
     return fetch(`/api/payroll/runs/${run.document_id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'preview-gl' }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "preview-gl" }),
     })
       .then(async (res) => {
         // The status is checked before the body is parsed: a non-JSON error
         // body must surface the failure, never a SyntaxError from res.json().
         if (!res.ok) {
-          setGl({ state: 'setup-error', legs: [], debitTotal: '0', error: await readApiErrorMessage(res, 'failed') })
-          return
+          setGl({
+            state: "setup-error",
+            legs: [],
+            debitTotal: "0",
+            error: await readApiErrorMessage(res, "failed"),
+          });
+          return;
         }
-        const j = await res.json()
-        setGl({ state: 'ready', legs: j.legs ?? [], debitTotal: j.debitTotal ?? '0', error: '' })
+        const j = await res.json();
+        setGl({ state: "ready", legs: j.legs ?? [], debitTotal: j.debitTotal ?? "0", error: "" });
       })
       .catch((e: unknown) => {
-        setGl({ state: 'setup-error', legs: [], debitTotal: '0', error: (e as Error).message })
-      })
-  }, [run.document_id])
+        setGl({ state: "setup-error", legs: [], debitTotal: "0", error: (e as Error).message });
+      });
+  }, [run.document_id]);
 
   // The GL step self-loads whenever it becomes visible with calculated stubs,
   // entering the loading state during render (same committed values, no extra
   // render) so the fetch below triggers off it.
-  if (step === 'gl' && calculated && gl.state === 'idle') {
-    setGl({ ...gl, state: 'loading' })
+  if (step === "gl" && calculated && gl.state === "idle") {
+    setGl({ ...gl, state: "loading" });
   }
   useEffect(() => {
-    if (step === 'gl' && calculated && gl.state === 'loading') void loadGlPreview()
-  }, [step, calculated, gl.state, loadGlPreview])
+    if (step === "gl" && calculated && gl.state === "loading") void loadGlPreview();
+  }, [step, calculated, gl.state, loadGlPreview]);
 
-  async function act(action: 'calculate' | 'commit') {
-    setBusy(true)
+  async function act(action: "calculate" | "commit") {
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
-      })
+      });
       // The status is checked before the body is parsed: a non-JSON error body
       // must surface the failure, never a SyntaxError from res.json().
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      const j = await res.json()
-      if (action === 'calculate') {
-        const freshErrors: PayRunCalculationError[] = Array.isArray(j.errors) ? j.errors : []
-        applyRefusalState(j)
-        applyVitals(j)
-        setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
-        setStep('review')
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      const j = await res.json();
+      if (action === "calculate") {
+        const freshErrors: PayRunCalculationError[] = Array.isArray(j.errors) ? j.errors : [];
+        applyRefusalState(j);
+        applyVitals(j);
+        setGl({ state: "idle", legs: [], debitTotal: "0", error: "" });
+        setStep("review");
         // Zero stubs with refusals is not a success ("Calculated £0.00 / 0
         // employees" read as one): say plainly that nobody could be paid.
         const freshRefusals = freshErrors.filter(
-          (entry) => entry.kind !== 'warning' && entry.kind !== 'out-of-scope',
-        )
+          (entry) => entry.kind !== "warning" && entry.kind !== "out-of-scope",
+        );
         if ((j.employees ?? 0) === 0 && freshRefusals.length > 0) {
-          toast.warning(t('run.calculateRefusedAll', { count: freshRefusals.length }))
+          toast.warning(t("run.calculateRefusedAll", { count: freshRefusals.length }));
         } else {
-          toast.success(t(`run.${action}Done`))
+          toast.success(t(`run.${action}Done`));
         }
       } else {
-        setStep('finish')
-        toast.success(t(`run.${action}Done`))
+        setStep("finish");
+        toast.success(t(`run.${action}Done`));
       }
-      router.refresh()
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -344,24 +397,24 @@ export function RunWizard(props: {
    * where the policy was disabled mid-click.)
    */
   async function submitApproval() {
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'submit-approval' }),
-      })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "submit-approval" }),
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      const j = await res.json()
-      if (j.gated === false) toast.success(t('run.approvalNotRequired'))
-      else toast.success(t('run.approvalSubmitted'))
-      refreshApprovalState()
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      const j = await res.json();
+      if (j.gated === false) toast.success(t("run.approvalNotRequired"));
+      else toast.success(t("run.approvalSubmitted"));
+      refreshApprovalState();
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -372,26 +425,26 @@ export function RunWizard(props: {
    * exception list showed.
    */
   async function acknowledgeRefusals() {
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'acknowledge-refusals' }),
-      })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "acknowledge-refusals" }),
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      const j = await res.json()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      const j = await res.json();
       if (j.acknowledgement) {
-        setAcknowledgement(j.acknowledgement)
-        setRefusalsAcked(true)
+        setAcknowledgement(j.acknowledgement);
+        setRefusalsAcked(true);
       }
-      toast.success(t('wizard.gl.ackRecorded', { count: refusals.length }))
-      router.refresh()
+      toast.success(t("wizard.gl.ackRecorded", { count: refusals.length }));
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -400,60 +453,64 @@ export function RunWizard(props: {
    * operator can see the totals and every exception without touching the run.
    */
   async function dryRun() {
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'dry-run' }),
-      })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dry-run" }),
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      const j = await res.json()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      const j = await res.json();
       setDry({
         employees: j.employees ?? 0,
-        gross: j.gross ?? '0',
-        net: j.net ?? '0',
-        employerCost: j.employerCost ?? '0',
+        gross: j.gross ?? "0",
+        net: j.net ?? "0",
+        employerCost: j.employerCost ?? "0",
         errors: Array.isArray(j.errors) ? j.errors : [],
-      })
+      });
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   /** Apply an input adjustment, then recalculate so the stubs stay truthful. */
   /** Persist the run's employee scope, then recalculate if stubs exist. */
   async function setScope(includedPartyIds: string[], rosterPartyIds: string[]) {
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set-scope', employeePartyIds: includedPartyIds, rosterPartyIds }),
-      })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "set-scope",
+          employeePartyIds: includedPartyIds,
+          rosterPartyIds,
+        }),
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
       if (calculated) {
         const recalc = await fetch(`/api/payroll/runs/${run.document_id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'calculate' }),
-        })
-        if (!recalc.ok) throw new Error(await readApiErrorMessage(recalc, 'failed'))
-        const rj = await recalc.json()
-        applyRefusalState(rj)
-        applyVitals(rj)
-        setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "calculate" }),
+        });
+        if (!recalc.ok) throw new Error(await readApiErrorMessage(recalc, "failed"));
+        const rj = await recalc.json();
+        applyRefusalState(rj);
+        applyVitals(rj);
+        setGl({ state: "idle", legs: [], debitTotal: "0", error: "" });
       }
-      toast.success(t('wizard.period.scopeSaved', { count: includedPartyIds.length }))
-      router.refresh()
+      toast.success(t("wizard.period.scopeSaved", { count: includedPartyIds.length }));
+      router.refresh();
     } catch (error) {
-      toast.error((error as Error).message)
+      toast.error((error as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -463,88 +520,93 @@ export function RunWizard(props: {
    * a second adjustment — so callers must only clear/close on true.
    */
   async function adjust(body: Record<string, unknown>): Promise<boolean> {
-    if (adjustInflight.current) return false
-    adjustInflight.current = true
-    setBusy(true)
+    if (adjustInflight.current) return false;
+    adjustInflight.current = true;
+    setBusy(true);
     try {
       // The drawers mint one idempotency key per form session; it travels as
       // the Idempotency-Key header (the document-create contract), never as
       // a stored adjustment field.
-      const { idempotencyKey, ...action } = body
+      const { idempotencyKey, ...action } = body;
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          ...(typeof idempotencyKey === 'string' && idempotencyKey !== ''
-            ? { 'Idempotency-Key': idempotencyKey }
+          "Content-Type": "application/json",
+          ...(typeof idempotencyKey === "string" && idempotencyKey !== ""
+            ? { "Idempotency-Key": idempotencyKey }
             : {}),
         },
         body: JSON.stringify(action),
-      })
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
       const recalc = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'calculate' }),
-      })
-      if (!recalc.ok) throw new Error(await readApiErrorMessage(recalc, 'failed'))
-      const rj = await recalc.json()
-      applyRefusalState(rj)
-      applyVitals(rj)
-      setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
-      toast.success(t('wizard.adjust.applied'))
-      router.refresh()
-      return true
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "calculate" }),
+      });
+      if (!recalc.ok) throw new Error(await readApiErrorMessage(recalc, "failed"));
+      const rj = await recalc.json();
+      applyRefusalState(rj);
+      applyVitals(rj);
+      setGl({ state: "idle", legs: [], debitTotal: "0", error: "" });
+      toast.success(t("wizard.adjust.applied"));
+      router.refresh();
+      return true;
     } catch (e) {
-      toast.error((e as Error).message)
-      return false
+      toast.error((e as Error).message);
+      return false;
     } finally {
-      adjustInflight.current = false
-      setBusy(false)
+      adjustInflight.current = false;
+      setBusy(false);
     }
   }
 
   async function emailStubs() {
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'email-stubs' }),
-      })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "email-stubs" }),
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      const j = await res.json()
-      const skipped = [...(j.noEmail ?? []), ...(j.failed ?? []).map((f: { name: string }) => f.name)]
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      const j = await res.json();
+      const skipped = [
+        ...(j.noEmail ?? []),
+        ...(j.failed ?? []).map((f: { name: string }) => f.name),
+      ];
       if (skipped.length > 0) {
-        toast.warning(t('wizard.finish.stubsEmailedPartial', { sent: j.sent, skipped: skipped.join(', ') }))
+        toast.warning(
+          t("wizard.finish.stubsEmailedPartial", { sent: j.sent, skipped: skipped.join(", ") }),
+        );
       } else {
-        toast.success(t('wizard.finish.stubsEmailed', { sent: j.sent }))
+        toast.success(t("wizard.finish.stubsEmailed", { sent: j.sent }));
       }
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function recordPayment(input: RecordPaymentInput) {
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'record-payment', ...input }),
-      })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "record-payment", ...input }),
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      toast.success(t('wizard.finish.paymentRecorded'))
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      toast.success(t("wizard.finish.paymentRecorded"));
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -556,84 +618,84 @@ export function RunWizard(props: {
    */
   async function voidRun() {
     const reason = await promptDialog({
-      title: t('wizard.finish.voidTitle', { number: run.document_number }),
-      label: tc('amendment.reason'),
-      placeholder: tc('amendment.voidPlaceholder'),
-      confirmLabel: tc('actions.void'),
-    })
-    if (!reason) return
+      title: t("wizard.finish.voidTitle", { number: run.document_number }),
+      label: tc("amendment.reason"),
+      placeholder: tc("amendment.voidPlaceholder"),
+      confirmLabel: tc("actions.void"),
+    });
+    if (!reason) return;
     const reversal = await promptVoidReversalPeriod(run.document_id, {
-      title: tc('amendment.voidReversalPeriodTitle'),
-      dateLabel: tc('amendment.voidReversalDateLabel'),
-      summaryOriginal: tc('amendment.voidReversalSummaryOriginal'),
-      summaryReversal: tc('amendment.voidReversalSummaryReversal'),
-      fiscalYear: tc('amendment.voidReversalFiscalYear'),
-      fallbackNotice: tc('amendment.voidReversalFallbackNotice'),
-      closedNotice: tc('amendment.voidReversalClosedNotice'),
-      label: tc('amendment.voidReversalPeriodLabel'),
-      regularOption: tc('amendment.voidReversalPeriodRegular'),
-      confirm: tc('actions.void'),
-      cancel: tc('confirm.cancel'),
-    })
-    if (reversal.cancelled) return
-    setBusy(true)
+      title: tc("amendment.voidReversalPeriodTitle"),
+      dateLabel: tc("amendment.voidReversalDateLabel"),
+      summaryOriginal: tc("amendment.voidReversalSummaryOriginal"),
+      summaryReversal: tc("amendment.voidReversalSummaryReversal"),
+      fiscalYear: tc("amendment.voidReversalFiscalYear"),
+      fallbackNotice: tc("amendment.voidReversalFallbackNotice"),
+      closedNotice: tc("amendment.voidReversalClosedNotice"),
+      label: tc("amendment.voidReversalPeriodLabel"),
+      regularOption: tc("amendment.voidReversalPeriodRegular"),
+      confirm: tc("actions.void"),
+      cancel: tc("confirm.cancel"),
+    });
+    if (reversal.cancelled) return;
+    setBusy(true);
     try {
       const res = await fetch(`/api/documents/${run.document_id}/void`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reason,
           expectedUpdatedAt: run.document_revision,
           ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
           ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
         }),
-      })
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      toast.success(t('wizard.finish.voided', { number: run.document_number }))
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      toast.success(t("wizard.finish.voided", { number: run.document_number }));
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function attributeEntity(subsidiaryId: string) {
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'attribute-entity', subsidiaryId }),
-      })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "attribute-entity", subsidiaryId }),
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      toast.success(t('wizard.finish.entityAttributed'))
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      toast.success(t("wizard.finish.entityAttributed"));
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function post() {
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch('/api/documents/actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'post', documentId: run.document_id }),
-      })
+      const res = await fetch("/api/documents/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "post", documentId: run.document_id }),
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      toast.success(t('run.postDone'))
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      toast.success(t("run.postDone"));
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -646,92 +708,97 @@ export function RunWizard(props: {
    */
   async function recalculateApproved() {
     const confirmed = await confirmDialog({
-      title: t('wizard.stale.approvedConfirmTitle'),
-      message: t('wizard.stale.approvedConfirmBody'),
-      confirmLabel: t('wizard.stale.recalculateApproved'),
-      tone: 'danger',
-    })
-    if (!confirmed) return
-    setBusy(true)
+      title: t("wizard.stale.approvedConfirmTitle"),
+      message: t("wizard.stale.approvedConfirmBody"),
+      confirmLabel: t("wizard.stale.recalculateApproved"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    setBusy(true);
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'recalculate-approved' }),
-      })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "recalculate-approved" }),
+      });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      const j = await res.json()
-      applyRefusalState(j)
-      applyVitals(j)
-      setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
-      setStep('review')
-      toast.success(t(j.resubmitted ? 'run.recalculateApprovedDone' : 'run.calculateDone'))
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      const j = await res.json();
+      applyRefusalState(j);
+      applyVitals(j);
+      setGl({ state: "idle", legs: [], debitTotal: "0", error: "" });
+      setStep("review");
+      toast.success(t(j.resubmitted ? "run.recalculateApprovedDone" : "run.calculateDone"));
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
-      router.refresh()
+      toast.error((e as Error).message);
+      router.refresh();
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function discardDraft() {
     const confirmed = await confirmDialog({
-      title: t('run.discardTitle'),
-      message: t('run.discardBody'),
-      confirmLabel: t('run.discardDraft'),
-      tone: 'danger',
-    })
-    if (!confirmed) return
-    setBusy(true)
+      title: t("run.discardTitle"),
+      message: t("run.discardBody"),
+      confirmLabel: t("run.discardDraft"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    setBusy(true);
     try {
-      const res = await fetch(`/api/payroll/runs/${run.document_id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, { method: "DELETE" });
       // The status is checked before the body is parsed (see act above).
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      toast.success(t('run.discardDone'))
-      router.push('/payroll/runs')
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      toast.success(t("run.discardDone"));
+      router.push("/payroll/runs");
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   const steps: { key: WizardStep; label: string }[] = [
-    { key: 'period', label: t('wizard.steps.period') },
-    { key: 'readiness', label: t('wizard.steps.readiness') },
-    { key: 'review', label: t('wizard.steps.review') },
-    { key: 'gl', label: t('wizard.steps.gl') },
-    { key: 'finish', label: t('wizard.steps.finish') },
-  ]
+    { key: "period", label: t("wizard.steps.period") },
+    { key: "readiness", label: t("wizard.steps.readiness") },
+    { key: "review", label: t("wizard.steps.review") },
+    { key: "gl", label: t("wizard.steps.gl") },
+    { key: "finish", label: t("wizard.steps.finish") },
+  ];
 
   return (
     <div className="space-y-4">
       {/* Run vitals strip */}
       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
-        <RunStatusBadge status={props.rejection ? 'rejected' : runDisplayStatus(run, props.staleness.stale)} />
-        {run.run_type !== 'regular' && (
+        <RunStatusBadge
+          status={props.rejection ? "rejected" : runDisplayStatus(run, props.staleness.stale)}
+        />
+        {run.run_type !== "regular" && (
           <Badge variant="secondary">{runTypeLabel(t, run.run_type)}</Badge>
         )}
         <span>
-          {t('columns.payDate')}: <span className="font-medium tabular-nums">{run.pay_date}</span>
+          {t("columns.payDate")}: <span className="font-medium tabular-nums">{run.pay_date}</span>
         </span>
         <span>
-          {t('columns.gross')}: <span className="font-medium tabular-nums">{fmt(vitals.gross)}</span>
+          {t("columns.gross")}:{" "}
+          <span className="font-medium tabular-nums">{fmt(vitals.gross)}</span>
         </span>
         <span>
-          {t('columns.net')}: <span className="font-medium tabular-nums">{fmt(vitals.net)}</span>
+          {t("columns.net")}: <span className="font-medium tabular-nums">{fmt(vitals.net)}</span>
         </span>
         <span>
-          {t('run.employerCost')}: <span className="font-medium tabular-nums">{fmt(vitals.employerCost)}</span>
+          {t("run.employerCost")}:{" "}
+          <span className="font-medium tabular-nums">{fmt(vitals.employerCost)}</span>
         </span>
         <span>
-          {t('columns.employees')}: <span className="font-medium tabular-nums">{vitals.employees}</span>
+          {t("columns.employees")}:{" "}
+          <span className="font-medium tabular-nums">{vitals.employees}</span>
         </span>
         {discardable && (
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void discardDraft()}>
-            <Trash2 size={14} aria-hidden /> {t('run.discardDraft')}
+            <Trash2 size={14} aria-hidden /> {t("run.discardDraft")}
           </Button>
         )}
       </div>
@@ -739,7 +806,7 @@ export function RunWizard(props: {
       {voided && (
         <div className="flex items-center gap-3 rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
           <AlertTriangle size={16} aria-hidden />
-          {t('wizard.voided')}
+          {t("wizard.voided")}
         </div>
       )}
 
@@ -750,15 +817,17 @@ export function RunWizard(props: {
         <div className="rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
           <p className="flex items-center gap-2 font-semibold">
             <AlertTriangle size={16} aria-hidden />
-            {t('wizard.rejected.title', {
-              by: props.rejection.rejectedBy ?? t('wizard.rejected.unknownApprover'),
+            {t("wizard.rejected.title", {
+              by: props.rejection.rejectedBy ?? t("wizard.rejected.unknownApprover"),
               date: props.rejection.rejectedAt.slice(0, 10),
             })}
           </p>
           {props.rejection.reason ? (
-            <p className="mt-1">{t('wizard.rejected.reason', { reason: props.rejection.reason })}</p>
+            <p className="mt-1">
+              {t("wizard.rejected.reason", { reason: props.rejection.reason })}
+            </p>
           ) : null}
-          <p className="mt-1 text-xs">{t('wizard.rejected.hint')}</p>
+          <p className="mt-1 text-xs">{t("wizard.rejected.hint")}</p>
         </div>
       )}
 
@@ -772,47 +841,61 @@ export function RunWizard(props: {
             {staleBannerTitle}
           </span>
           {canCalculate && (
-            <Button size="sm" disabled={busy} onClick={() => act('calculate')}>
-              {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Calculator size={14} aria-hidden />}
-              {t('wizard.period.recalculate')}
+            <Button size="sm" disabled={busy} onClick={() => act("calculate")}>
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden />
+              ) : (
+                <Calculator size={14} aria-hidden />
+              )}
+              {t("wizard.period.recalculate")}
             </Button>
           )}
           {canRecalculateApproved && (
             <Button size="sm" disabled={busy} onClick={() => void recalculateApproved()}>
-              {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Calculator size={14} aria-hidden />}
-              {t('wizard.stale.recalculateApproved')}
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden />
+              ) : (
+                <Calculator size={14} aria-hidden />
+              )}
+              {t("wizard.stale.recalculateApproved")}
             </Button>
           )}
         </div>
       )}
 
       {/* Step chips — every step stays clickable (unlike a forced-linear wizard). */}
-      <ol className="flex flex-wrap items-center gap-2" aria-label={t('wizard.stepsAria')}>
+      <ol className="flex flex-wrap items-center gap-2" aria-label={t("wizard.stepsAria")}>
         {steps.map((item, index) => {
-          const isCurrent = step === item.key
-          const isDone = complete[item.key]
+          const isCurrent = step === item.key;
+          const isDone = complete[item.key];
           return (
             <li key={item.key} className="flex items-center gap-2">
-              {index > 0 && <ChevronRight size={14} aria-hidden className="text-slate-300 dark:text-slate-700" />}
+              {index > 0 && (
+                <ChevronRight
+                  size={14}
+                  aria-hidden
+                  className="text-slate-300 dark:text-slate-700"
+                />
+              )}
               <button
                 type="button"
                 onClick={() => setStep(item.key)}
-                aria-current={isCurrent ? 'step' : undefined}
+                aria-current={isCurrent ? "step" : undefined}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-full border py-1.5 pr-3.5 pl-1.5 text-sm font-medium transition-colors',
+                  "inline-flex items-center gap-2 rounded-full border py-1.5 pr-3.5 pl-1.5 text-sm font-medium transition-colors",
                   isCurrent
-                    ? 'border-teal-600 bg-teal-600 text-white shadow-sm dark:border-teal-500 dark:bg-teal-600'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-teal-700 dark:hover:text-teal-300',
+                    ? "border-teal-600 bg-teal-600 text-white shadow-sm dark:border-teal-500 dark:bg-teal-600"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-teal-700 dark:hover:text-teal-300",
                 )}
               >
                 <span
                   className={cn(
-                    'grid h-6 w-6 place-items-center rounded-full text-xs font-semibold',
+                    "grid h-6 w-6 place-items-center rounded-full text-xs font-semibold",
                     isCurrent
-                      ? 'bg-white/20 text-white'
+                      ? "bg-white/20 text-white"
                       : isDone
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                        : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                        : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
                   )}
                 >
                   {isDone && !isCurrent ? <Check size={13} aria-hidden /> : index + 1}
@@ -820,25 +903,25 @@ export function RunWizard(props: {
                 {item.label}
               </button>
             </li>
-          )
+          );
         })}
       </ol>
 
-      {step === 'period' && (
+      {step === "period" && (
         <PeriodStep
           run={run}
           roster={props.roster}
           stubs={props.stubs}
           adjustments={props.adjustments}
-          canEditScope={props.canRun && docDraft && run.run_status !== 'committed'}
+          canEditScope={props.canRun && docDraft && run.run_status !== "committed"}
           calculated={calculated}
           busy={busy}
-          onContinue={() => setStep('readiness')}
+          onContinue={() => setStep("readiness")}
           onSetScope={setScope}
           fmt={fmt}
         />
       )}
-      {step === 'readiness' && (
+      {step === "readiness" && (
         <ReadinessStep
           runId={run.document_id}
           roster={props.roster}
@@ -848,22 +931,22 @@ export function RunWizard(props: {
           busy={busy}
           dry={dry}
           onDryRun={dryRun}
-          onCalculate={() => act('calculate')}
+          onCalculate={() => act("calculate")}
           onAnswered={dryRun}
           fmt={fmt}
         />
       )}
-      {step === 'review' && (
+      {step === "review" && (
         <ReviewStep
           runId={run.document_id}
           roster={props.roster}
           stubs={props.stubs}
           adjustments={props.adjustments}
           components={props.adjustableComponents}
-          canAdjust={props.canRun && docDraft && run.run_status !== 'committed'}
+          canAdjust={props.canRun && docDraft && run.run_status !== "committed"}
           busy={busy}
           onAdjust={adjust}
-          onAnswered={() => act('calculate')}
+          onAnswered={() => act("calculate")}
           previousNet={props.previousNet}
           changes={props.changes}
           calcErrors={calcErrors}
@@ -877,7 +960,7 @@ export function RunWizard(props: {
           fmt={fmt}
         />
       )}
-      {step === 'gl' && (
+      {step === "gl" && (
         <GlStep
           gl={gl}
           documentId={run.document_id}
@@ -886,9 +969,9 @@ export function RunWizard(props: {
           canCommit={canCommit}
           canSubmitApproval={canSubmitApproval}
           approval={props.approval}
-          canAcknowledge={props.canRun && commitDocOpen && run.run_status === 'calculated'}
+          canAcknowledge={props.canRun && commitDocOpen && run.run_status === "calculated"}
           stale={props.staleness.stale}
-          approved={run.document_status === 'approved'}
+          approved={run.document_status === "approved"}
           funding={props.funding}
           busy={busy}
           refusals={refusals}
@@ -898,14 +981,14 @@ export function RunWizard(props: {
           onAcknowledge={() => void acknowledgeRefusals()}
           onSubmitApproval={() => void submitApproval()}
           onRetry={() => {
-            setGl((g) => ({ ...g, state: 'loading' }))
-            void loadGlPreview()
+            setGl((g) => ({ ...g, state: "loading" }));
+            void loadGlPreview();
           }}
-          onCommit={() => act('commit')}
+          onCommit={() => act("commit")}
           fmt={fmt}
         />
       )}
-      {step === 'finish' && (
+      {step === "finish" && (
         <FinishStep
           run={run}
           separationSections={props.separationSections}
@@ -931,11 +1014,24 @@ export function RunWizard(props: {
         />
       )}
     </div>
-  )
+  );
 }
 
 // Split from this file; the same exports stay available from this path.
-export type { WizardStep, ReadinessItem, Readiness, Staleness, Funding, StubChange, RunHeader, StubRow, RosterRow, RemittanceRow, AdjustmentRow, ComponentOption } from './run-wizard-model'
-export { BulkEditDrawer } from './BulkEditDrawer'
-export { StubDrawer } from './StubDrawer'
-export { fetchChequePdf } from './steps/FinishStep'
+export type {
+  WizardStep,
+  ReadinessItem,
+  Readiness,
+  Staleness,
+  Funding,
+  StubChange,
+  RunHeader,
+  StubRow,
+  RosterRow,
+  RemittanceRow,
+  AdjustmentRow,
+  ComponentOption,
+} from "./run-wizard-model";
+export { BulkEditDrawer } from "./BulkEditDrawer";
+export { StubDrawer } from "./StubDrawer";
+export { fetchChequePdf } from "./steps/FinishStep";

@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { diffStubLines } from "./explain-pay.ts";
-import {
-  AiRailsError,
-  autonomyRaiseRefused,
-  finalizeBlockedRefusal,
-} from "./errors.ts";
+import { AiRailsError, autonomyRaiseRefused, finalizeBlockedRefusal } from "./errors.ts";
 import { digest } from "./governance.ts";
 import {
   baselineBreaches,
@@ -40,7 +36,10 @@ test("registry holds six capabilities with prompt lines and notice texts", () =>
 });
 
 test("autonomy ladder orders read_only below act_with_confirmation", () => {
-  assert.deepEqual([...AI_AUTONOMY_LADDER], ["read_only", "draft", "propose", "act_with_confirmation"]);
+  assert.deepEqual(
+    [...AI_AUTONOMY_LADDER],
+    ["read_only", "draft", "propose", "act_with_confirmation"],
+  );
   assert.ok(autonomyRank("read_only") < autonomyRank("draft"));
   assert.ok(autonomyRank("draft") < autonomyRank("propose"));
   assert.ok(autonomyRank("propose") < autonomyRank("act_with_confirmation"));
@@ -48,32 +47,53 @@ test("autonomy ladder orders read_only below act_with_confirmation", () => {
 });
 
 test("unknown capability refuses with the remedy", () => {
-  assert.throws(() => requireCapability("hrmTimeTravel"), (e: unknown) =>
-    e instanceof AiRailsError && e.code === "ai_unknown_capability" && /\/admin\/setup\/ai-capabilities/.test(e.message));
+  assert.throws(
+    () => requireCapability("hrmTimeTravel"),
+    (e: unknown) =>
+      e instanceof AiRailsError &&
+      e.code === "ai_unknown_capability" &&
+      /\/admin\/setup\/ai-capabilities/.test(e.message),
+  );
 });
 
 test("autonomy may move down but never above the code maximum", () => {
   assertAutonomyAtOrBelowMax("hrmExplainPay", "read_only");
   assertAutonomyAtOrBelowMax("hrmPayrollAnomalies", "read_only");
-  assert.throws(() => assertAutonomyAtOrBelowMax("hrmExplainPay", "draft"), (e: unknown) =>
-    e instanceof AiRailsError && /cannot exceed code maximum "read_only"/.test(e.message));
-  assert.throws(() => assertAutonomyAtOrBelowMax("hrmDrafting", "act_with_confirmation"), /cannot exceed code maximum "draft"/);
+  assert.throws(
+    () => assertAutonomyAtOrBelowMax("hrmExplainPay", "draft"),
+    (e: unknown) =>
+      e instanceof AiRailsError && /cannot exceed code maximum "read_only"/.test(e.message),
+  );
+  assert.throws(
+    () => assertAutonomyAtOrBelowMax("hrmDrafting", "act_with_confirmation"),
+    /cannot exceed code maximum "draft"/,
+  );
   assert.match(autonomyRaiseRefused("k", "draft").message, /cannot exceed code maximum/);
 });
 
 test("every anomaly kind has a severity and blockers are the finalize gate", () => {
   assert.equal(Object.keys(SEVERITY_BY_KIND).length, 17);
-  for (const kind of ["terminated_with_pay", "duplicate_bank", "missing_rate", "negative_balance"] as const) {
+  for (const kind of [
+    "terminated_with_pay",
+    "duplicate_bank",
+    "missing_rate",
+    "negative_balance",
+  ] as const) {
     assert.equal(SEVERITY_BY_KIND[kind], "block");
   }
   assert.equal(SEVERITY_BY_KIND.retro_spike, "warn");
-  assert.throws(() => { throw finalizeBlockedRefusal(2, "2026-09-01", "2026-09-30"); },
-    /2 blocking payroll check\(s\) are open.*\/payroll\/anomalies/);
+  assert.throws(() => {
+    throw finalizeBlockedRefusal(2, "2026-09-01", "2026-09-30");
+  }, /2 blocking payroll check\(s\) are open.*\/payroll\/anomalies/);
 });
 
 test("explanations render with the numbers, naming what/expected/actual", () => {
   const text = renderExplanation("net_pay_spike", {
-    actual: "9200", z: "4.2", cohort: "sub-1", mean: "5000", stddev: "1000",
+    actual: "9200",
+    z: "4.2",
+    cohort: "sub-1",
+    mean: "5000",
+    stddev: "1000",
   });
   assert.ok(text.includes("9200") && text.includes("4.2") && text.includes("5000"));
   const dup = renderExplanation("duplicate_entry", { entryCount: "3" });
@@ -83,7 +103,10 @@ test("explanations render with the numbers, naming what/expected/actual", () => 
 });
 
 test("baseline breach math: z threshold with zero-spread fail-closed", () => {
-  assert.equal(baselineBreaches("9007199254740993.0123", "0.0001", "9007199254740993.0127", 3), true);
+  assert.equal(
+    baselineBreaches("9007199254740993.0123", "0.0001", "9007199254740993.0127", 3),
+    true,
+  );
   assert.equal(baselineBreaches("5000", "1000", "5000", 3), false);
   assert.equal(baselineBreaches("5000", "1000", "7999", 3), false);
   assert.equal(baselineBreaches("5000", "0", "5000", 3), false);
@@ -93,9 +116,18 @@ test("baseline breach math: z threshold with zero-spread fail-closed", () => {
 });
 
 test("suppression identity is stable per kind and detail key", () => {
-  assert.equal(suppressionKey("duplicate_bank", "bank:abc"), suppressionKey("duplicate_bank", "bank:abc"));
-  assert.notEqual(suppressionKey("duplicate_bank", "bank:abc"), suppressionKey("duplicate_bank", "bank:abd"));
-  assert.notEqual(suppressionKey("duplicate_bank", "bank:abc"), suppressionKey("retro_spike", "bank:abc"));
+  assert.equal(
+    suppressionKey("duplicate_bank", "bank:abc"),
+    suppressionKey("duplicate_bank", "bank:abc"),
+  );
+  assert.notEqual(
+    suppressionKey("duplicate_bank", "bank:abc"),
+    suppressionKey("duplicate_bank", "bank:abd"),
+  );
+  assert.notEqual(
+    suppressionKey("duplicate_bank", "bank:abc"),
+    suppressionKey("retro_spike", "bank:abc"),
+  );
 });
 
 test("stub diff names added, removed and changed lines with the input", () => {
@@ -122,7 +154,11 @@ test("stub diff names added, removed and changed lines with the input", () => {
 
 test("bias flags use the org list only, whole-word, with excerpts", () => {
   assert.deepEqual(flagBiasTerms("a strong candidate", []), []);
-  const flags = flagBiasTerms("We need a young energetic salesman for the team", ["young", "salesman", "cultural fit"]);
+  const flags = flagBiasTerms("We need a young energetic salesman for the team", [
+    "young",
+    "salesman",
+    "cultural fit",
+  ]);
   assert.equal(flags.length, 2);
   assert.ok(flags.every((f) => f.excerpt.length > f.term.length));
   // Substring is not a hit: "youngster" must not flag "young".
@@ -136,18 +172,21 @@ test("drafting writes nowhere except ai_decisions", async () => {
     const chunks = (query as { queryChunks?: unknown[] }).queryChunks ?? [];
     // Drizzle literal chunks are StringChunk objects whose `.value` is a
     // string array; interpolated params surface as String objects.
-    return chunks.map((c) => {
-      if (typeof c === "string") return c;
-      if (c instanceof String) return String(c);
-      const value = (c as { value?: unknown })?.value;
-      if (typeof value === "string") return value;
-      if (Array.isArray(value)) return value.filter((v) => typeof v === "string").join("");
-      return "";
-    }).join(" ");
+    return chunks
+      .map((c) => {
+        if (typeof c === "string") return c;
+        if (c instanceof String) return String(c);
+        const value = (c as { value?: unknown })?.value;
+        if (typeof value === "string") return value;
+        if (Array.isArray(value)) return value.filter((v) => typeof v === "string").join("");
+        return "";
+      })
+      .join(" ");
   };
   const fake = {
     execute: async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const text = textOf(query);
       const verb = text.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
       if (verb === "insert" && !text.includes("ai_decisions")) {
@@ -161,24 +200,34 @@ test("drafting writes nowhere except ai_decisions", async () => {
         return inMode({ rows: [{ id: "decision-1" }] });
       }
       if (text.includes("hrm_requisitions")) {
-        return inMode({ rows: [{
-          id: "req-1", title: "Support Engineer", employmentKind: "full_time",
-          compensationMin: "90000", compensationMax: "110000",
-          compensationCurrency: "CAD", compensationBasis: "annual",
-          description: "Own the queue", positionId: null,
-          // The subject gate reads the requisition's owning
-          // subsidiary: the stubbed subject lives in the actor's scope.
-          employerSubsidiaryId: "sub-1",
-        }] });
+        return inMode({
+          rows: [
+            {
+              id: "req-1",
+              title: "Support Engineer",
+              employmentKind: "full_time",
+              compensationMin: "90000",
+              compensationMax: "110000",
+              compensationCurrency: "CAD",
+              compensationBasis: "annual",
+              description: "Own the queue",
+              positionId: null,
+              // The subject gate reads the requisition's owning
+              // subsidiary: the stubbed subject lives in the actor's scope.
+              employerSubsidiaryId: "sub-1",
+            },
+          ],
+        });
       }
       if (text.includes("subsidiary_restriction")) {
         // The configured role explicitly permits every subsidiary.
-        return inMode({ rows: [{ restriction: {mode: "all"} }] });
+        return inMode({ rows: [{ restriction: { mode: "all" } }] });
       }
       if (text.includes("from orgs")) {
         return inMode({ rows: [{ features: { hrm: true, hrmRecruiting: true } }] });
       }
-      if (text.includes("from users")) return inMode({ rows: [{ isSuperAdmin: false, isActive: true }] });
+      if (text.includes("from users"))
+        return inMode({ rows: [{ isSuperAdmin: false, isActive: true }] });
       if (text.includes("app_role") || text.includes("role.permissions")) {
         return inMode({ rows: [{ permissions: ["hrm.recruiting.read"] }] });
       }
@@ -187,7 +236,10 @@ test("drafting writes nowhere except ai_decisions", async () => {
     },
   };
   const draft = await draftFromEvidence(fake as never, {
-    orgId: "org-1", actorId: "actor-1", kind: "job_description", subjectId: "req-1",
+    orgId: "org-1",
+    actorId: "actor-1",
+    kind: "job_description",
+    subjectId: "req-1",
   });
   assert.equal(draft.sources.length, 1);
   assert.ok(draft.text.includes("Support Engineer"));
@@ -208,16 +260,20 @@ const CATALOG: NlCatalogEntity[] = [
 ];
 
 test("nl validation accepts a well-formed definition", () => {
-  const def = validateNlDefinition({
-    entity: "payroll_stubs",
-    mode: "summarize",
-    columns: ["net_pay"],
-    breakouts: [{ column: "pay_date", bin: "month" }],
-    measures: [{ fn: "sum", column: "net_pay", label: "Total" }],
-    filters: { combinator: "and", rules: [{ field: "gross", op: "gte", value: 0 }] },
-    sorts: [{ column: "net_pay", direction: "desc" }],
-    limit: 100,
-  }, CATALOG, ["reports.read"]);
+  const def = validateNlDefinition(
+    {
+      entity: "payroll_stubs",
+      mode: "summarize",
+      columns: ["net_pay"],
+      breakouts: [{ column: "pay_date", bin: "month" }],
+      measures: [{ fn: "sum", column: "net_pay", label: "Total" }],
+      filters: { combinator: "and", rules: [{ field: "gross", op: "gte", value: 0 }] },
+      sorts: [{ column: "net_pay", direction: "desc" }],
+      limit: 100,
+    },
+    CATALOG,
+    ["reports.read"],
+  );
   assert.equal(def.entity, "payroll_stubs");
   assert.equal(def.mode, "summarize");
   assert.equal(def.limit, 100);
@@ -225,39 +281,102 @@ test("nl validation accepts a well-formed definition", () => {
 
 test("nl validation refuses the unsupported groupBy alias instead of dropping grouping", () => {
   assert.throws(
-    () => validateNlDefinition({ entity: "payroll_stubs", columns: ["net_pay"], groupBy: ["pay_date"] }, CATALOG, []),
+    () =>
+      validateNlDefinition(
+        { entity: "payroll_stubs", columns: ["net_pay"], groupBy: ["pay_date"] },
+        CATALOG,
+        [],
+      ),
     /unknown definition key "groupBy"/,
   );
 });
 
 test("nl validation refuses unknown entities, columns, fns and gated entities by name", () => {
-  assert.throws(() => validateNlDefinition({ entity: "payroll_stubs", columns: [] }, CATALOG, []),
-    /at least one column/);
-  assert.throws(() => validateNlDefinition({ entity: "nope", columns: ["x"] }, CATALOG, []),
-    /unknown report entity "nope" — visible to you: payroll_stubs, payroll_wages/);
+  assert.throws(
+    () => validateNlDefinition({ entity: "payroll_stubs", columns: [] }, CATALOG, []),
+    /at least one column/,
+  );
+  assert.throws(
+    () => validateNlDefinition({ entity: "nope", columns: ["x"] }, CATALOG, []),
+    /unknown report entity "nope" — visible to you: payroll_stubs, payroll_wages/,
+  );
   // A REALISTIC collision: the message must tell two entities apart, not
   // name the country twice. Here the caller sees one entity; the gated
   // one is refused by its permission, never listed as available.
   assert.throws(
-    () => validateNlDefinition({ entity: "payroll_wages", columns: ["net_pay"] }, CATALOG, ["reports.read"]),
+    () =>
+      validateNlDefinition({ entity: "payroll_wages", columns: ["net_pay"] }, CATALOG, [
+        "reports.read",
+      ]),
     /needs payroll\.manage/,
   );
-  assert.throws(() => validateNlDefinition({ entity: "payroll_stubs", columns: ["ssn"] }, CATALOG, []),
-    /"ssn" is not a column of entity "payroll_stubs"/);
-  assert.throws(() => validateNlDefinition({
-    entity: "payroll_stubs", columns: ["net_pay"], measures: [{ fn: "median", column: "net_pay" }],
-  }, CATALOG, []), /measure fn "median" is unknown/);
-  assert.throws(() => validateNlDefinition({
-    entity: "payroll_stubs", columns: ["net_pay"], sorts: [{ column: "net_pay", direction: "sideways" }],
-  }, CATALOG, []), /must be "asc" or "desc"/);
-  assert.throws(() => validateNlDefinition({
-    entity: "payroll_stubs", columns: ["net_pay"], frobnicate: true,
-  }, CATALOG, []), /unknown definition key "frobnicate"/);
-  assert.throws(() => validateNlDefinition({
-    entity: "payroll_stubs", columns: ["net_pay"],
-    filters: { combinator: "and", rules: [{ field: "net_pay", op: "approx", value: 1 }] },
-  }, CATALOG, []), /operator "approx".*is unknown/);
-  assert.throws(() => validateNlDefinition({
-    entity: "payroll_stubs", columns: ["net_pay"], limit: 20000,
-  }, CATALOG, []), /limit must be an integer from 1 to 10000/);
+  assert.throws(
+    () => validateNlDefinition({ entity: "payroll_stubs", columns: ["ssn"] }, CATALOG, []),
+    /"ssn" is not a column of entity "payroll_stubs"/,
+  );
+  assert.throws(
+    () =>
+      validateNlDefinition(
+        {
+          entity: "payroll_stubs",
+          columns: ["net_pay"],
+          measures: [{ fn: "median", column: "net_pay" }],
+        },
+        CATALOG,
+        [],
+      ),
+    /measure fn "median" is unknown/,
+  );
+  assert.throws(
+    () =>
+      validateNlDefinition(
+        {
+          entity: "payroll_stubs",
+          columns: ["net_pay"],
+          sorts: [{ column: "net_pay", direction: "sideways" }],
+        },
+        CATALOG,
+        [],
+      ),
+    /must be "asc" or "desc"/,
+  );
+  assert.throws(
+    () =>
+      validateNlDefinition(
+        {
+          entity: "payroll_stubs",
+          columns: ["net_pay"],
+          frobnicate: true,
+        },
+        CATALOG,
+        [],
+      ),
+    /unknown definition key "frobnicate"/,
+  );
+  assert.throws(
+    () =>
+      validateNlDefinition(
+        {
+          entity: "payroll_stubs",
+          columns: ["net_pay"],
+          filters: { combinator: "and", rules: [{ field: "net_pay", op: "approx", value: 1 }] },
+        },
+        CATALOG,
+        [],
+      ),
+    /operator "approx".*is unknown/,
+  );
+  assert.throws(
+    () =>
+      validateNlDefinition(
+        {
+          entity: "payroll_stubs",
+          columns: ["net_pay"],
+          limit: 20000,
+        },
+        CATALOG,
+        [],
+      ),
+    /limit must be an integer from 1 to 10000/,
+  );
 });

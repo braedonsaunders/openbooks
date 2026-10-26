@@ -13,10 +13,7 @@ import { registerRequestOrgResolver } from "../platform/db.ts";
  * opt-in, and refuse it categorically in production.
  */
 export function installTrustedTestDatabaseBypass(): void {
-  if (
-    process.env.OPENBOOKS_TRUSTED_TEST_BYPASS !== "1" ||
-    process.env.NODE_ENV === "production"
-  ) {
+  if (process.env.OPENBOOKS_TRUSTED_TEST_BYPASS !== "1" || process.env.NODE_ENV === "production") {
     throw new Error(
       "test database bypass requires OPENBOOKS_TRUSTED_TEST_BYPASS=1 outside production",
     );

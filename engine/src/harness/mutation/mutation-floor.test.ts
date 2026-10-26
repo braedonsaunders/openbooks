@@ -20,7 +20,10 @@ const DIR = new URL(".", import.meta.url).pathname.replace(/\/$/, "");
 
 interface FloorFile {
   readonly version: 1;
-  readonly floors: Record<string, { readonly ratio: number; readonly measured: number; readonly mode: string }>;
+  readonly floors: Record<
+    string,
+    { readonly ratio: number; readonly measured: number; readonly mode: string }
+  >;
 }
 
 function readJson<T>(name: string): T {
@@ -39,7 +42,10 @@ test("mutation scores hold above the floor and every target is measured", () => 
 
   // No silent scope loss: every configured target appears in the report.
   for (const path of configPaths) {
-    assert.ok(reportByTarget.has(path), `report is missing configured target ${path} — re-run test:mutation`);
+    assert.ok(
+      reportByTarget.has(path),
+      `report is missing configured target ${path} — re-run test:mutation`,
+    );
   }
   // No stale floors or phantom report entries.
   for (const path of Object.keys(floor.floors)) {
@@ -51,10 +57,21 @@ test("mutation scores hold above the floor and every target is measured", () => 
 
   for (const target of config.targets) {
     const entry = reportByTarget.get(target.path)!;
-    assert.notEqual(entry.status, "baseline-failed", `${target.path}: baseline failed — the harness cannot measure it`);
-    assert.notEqual(entry.status, "no-mutants", `${target.path}: zero mutants generated — operators cover nothing`);
+    assert.notEqual(
+      entry.status,
+      "baseline-failed",
+      `${target.path}: baseline failed — the harness cannot measure it`,
+    );
+    assert.notEqual(
+      entry.status,
+      "no-mutants",
+      `${target.path}: zero mutants generated — operators cover nothing`,
+    );
     if (entry.measured > 0) {
-      assert.ok(entry.ratio !== null && entry.ratio >= 0 && entry.ratio <= 1, `${target.path}: malformed ratio`);
+      assert.ok(
+        entry.ratio !== null && entry.ratio >= 0 && entry.ratio <= 1,
+        `${target.path}: malformed ratio`,
+      );
       const floorEntry = floor.floors[target.path];
       if (floorEntry) {
         assert.ok(

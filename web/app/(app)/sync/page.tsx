@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadSync, syncSpec } from './view'
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadSync, syncSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Platform → Migrations & Mirror. Tenant-configurable connections to external
@@ -13,9 +13,9 @@ export const dynamic = 'force-dynamic'
 export default async function PlatformPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadSync()
-  return <ModuleView spec={syncSpec()} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadSync();
+  return <ModuleView spec={syncSpec()} data={data} searchParams={sp} trusted />;
 }

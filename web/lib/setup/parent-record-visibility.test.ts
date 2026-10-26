@@ -4,17 +4,9 @@ import { setupParentRecordVisible } from "./types";
 import { SETUP_ENTITY_BY_KEY } from "./registry";
 test("declared resource delivery contacts are visible only for resource-board parents with native camel/snake field shapes", () => {
   const child = SETUP_ENTITY_BY_KEY.get("schedule-resource-recipients")!;
-  const binding = child.parentRecords!.find(
-    (owner) => owner.entityKey === "schedule-boards",
-  )!;
-  assert.equal(
-    setupParentRecordVisible(binding, { row_kind: "resources" }),
-    true,
-  );
-  assert.equal(
-    setupParentRecordVisible(binding, { rowKind: "resources" }),
-    true,
-  );
+  const binding = child.parentRecords!.find((owner) => owner.entityKey === "schedule-boards")!;
+  assert.equal(setupParentRecordVisible(binding, { row_kind: "resources" }), true);
+  assert.equal(setupParentRecordVisible(binding, { rowKind: "resources" }), true);
   for (const rowKind of ["people", "tasks", ""])
     assert.equal(setupParentRecordVisible(binding, { rowKind }), false);
   assert.equal(setupParentRecordVisible({}, {}), true);

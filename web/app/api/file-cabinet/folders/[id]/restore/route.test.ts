@@ -1,24 +1,24 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../../testing/stub-modules";
+import test from "node:test";
 
 // This route test runs the real restore helper and audit writer against a
 // transaction-aware in-memory database seam. It exercises the same production
 // call graph without requiring a live Postgres instance.
-const stateKey = Symbol.for('openbooks.folder-restore-route-test')
-const ORG_ID = '00000000-0000-4000-8000-00000000d001'
-const ACTOR_ID = '00000000-0000-4000-8000-00000000d002'
-const FOLDER_ID = '00000000-0000-4000-8000-00000000d003'
-const CHILD_FOLDER_ID = '00000000-0000-4000-8000-00000000d004'
-const FILE_ID = '00000000-0000-4000-8000-00000000d005'
+const stateKey = Symbol.for("openbooks.folder-restore-route-test");
+const ORG_ID = "00000000-0000-4000-8000-00000000d001";
+const ACTOR_ID = "00000000-0000-4000-8000-00000000d002";
+const FOLDER_ID = "00000000-0000-4000-8000-00000000d003";
+const CHILD_FOLDER_ID = "00000000-0000-4000-8000-00000000d004";
+const FILE_ID = "00000000-0000-4000-8000-00000000d005";
 
 interface RouteState {
-  folders: Record<string, boolean>
-  files: Record<string, boolean>
-  committedAudit: string[]
-  executed: Array<{ kind: 'db' | 'tx'; text: string }>
-  failAudit: boolean
-  transactionCount: number
+  folders: Record<string, boolean>;
+  files: Record<string, boolean>;
+  committedAudit: string[];
+  executed: Array<{ kind: "db" | "tx"; text: string }>;
+  failAudit: boolean;
+  transactionCount: number;
 }
 
 const routeState: RouteState = {
@@ -28,24 +28,24 @@ const routeState: RouteState = {
   executed: [],
   failAudit: false,
   transactionCount: 0,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL value for assertions and scripted responses. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextFolderRestore = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextFolderRestore = sqlText;
 
 stubModules({
   navigation: false,
@@ -142,58 +142,70 @@ stubModules({
       }
     `,
   },
-})
+});
 
-const routeUrl = './route.ts?folder-restore-route-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?folder-restore-route-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  routeState.folders = { [FOLDER_ID]: true, [CHILD_FOLDER_ID]: true }
-  routeState.files = { [FILE_ID]: true }
-  routeState.committedAudit = []
-  routeState.executed = []
-  routeState.failAudit = false
-  routeState.transactionCount = 0
+  routeState.folders = { [FOLDER_ID]: true, [CHILD_FOLDER_ID]: true };
+  routeState.files = { [FILE_ID]: true };
+  routeState.committedAudit = [];
+  routeState.executed = [];
+  routeState.failAudit = false;
+  routeState.transactionCount = 0;
 }
 
 function post(): Promise<Response> {
   return POST(
-    new Request(`http://openbooks.test/api/file-cabinet/folders/${FOLDER_ID}/restore`, { method: 'POST' }),
+    new Request(`http://openbooks.test/api/file-cabinet/folders/${FOLDER_ID}/restore`, {
+      method: "POST",
+    }),
     { params: Promise.resolve({ id: FOLDER_ID }) },
-  )
+  );
 }
 
-test('successful restore commits the subtree and actor-attributed before/after evidence together', async () => {
-  reset()
+test("successful restore commits the subtree and actor-attributed before/after evidence together", async () => {
+  reset();
 
-  const response = await post()
+  const response = await post();
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { ok: true })
-  assert.deepEqual(routeState.folders, { [FOLDER_ID]: false, [CHILD_FOLDER_ID]: false })
-  assert.deepEqual(routeState.files, { [FILE_ID]: false })
-  assert.equal(routeState.transactionCount, 1, 'restore and evidence share one transaction')
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.deepEqual(routeState.folders, { [FOLDER_ID]: false, [CHILD_FOLDER_ID]: false });
+  assert.deepEqual(routeState.files, { [FILE_ID]: false });
+  assert.equal(routeState.transactionCount, 1, "restore and evidence share one transaction");
 
-  const audit = routeState.committedAudit[0]
-  assert.ok(audit, 'successful restore leaves durable audit evidence')
-  assert.match(audit, /insert into audit_log/)
-  assert.match(audit, new RegExp(ACTOR_ID), 'evidence preserves the actor')
-  assert.match(audit, /now\(\)/, 'evidence gets its immutable database timestamp')
-  assert.match(audit, /"event":"restore"/)
-  assert.match(audit, /"before":/, 'evidence preserves the pre-restore state')
-  assert.match(audit, /"after":/, 'evidence preserves the post-restore state')
-  assert.ok(routeState.executed.every((call) => call.kind === 'tx'), 'all mutation and audit statements use the transaction executor')
-})
+  const audit = routeState.committedAudit[0];
+  assert.ok(audit, "successful restore leaves durable audit evidence");
+  assert.match(audit, /insert into audit_log/);
+  assert.match(audit, new RegExp(ACTOR_ID), "evidence preserves the actor");
+  assert.match(audit, /now\(\)/, "evidence gets its immutable database timestamp");
+  assert.match(audit, /"event":"restore"/);
+  assert.match(audit, /"before":/, "evidence preserves the pre-restore state");
+  assert.match(audit, /"after":/, "evidence preserves the post-restore state");
+  assert.ok(
+    routeState.executed.every((call) => call.kind === "tx"),
+    "all mutation and audit statements use the transaction executor",
+  );
+});
 
-test('injected audit failure rolls back the entire restore with zero committed state', async () => {
-  reset()
-  routeState.failAudit = true
+test("injected audit failure rolls back the entire restore with zero committed state", async () => {
+  reset();
+  routeState.failAudit = true;
 
-  await assert.rejects(() => post(), /forced audit failure/)
+  await assert.rejects(() => post(), /forced audit failure/);
 
-  assert.deepEqual(routeState.folders, { [FOLDER_ID]: true, [CHILD_FOLDER_ID]: true }, 'folder restore is rolled back')
-  assert.deepEqual(routeState.files, { [FILE_ID]: true }, 'contained file restore is rolled back')
-  assert.deepEqual(routeState.committedAudit, [], 'failed evidence leaves no committed audit row')
-  assert.equal(routeState.transactionCount, 1)
-  assert.ok(routeState.executed.some((call) => call.text.includes('update folders')), 'restore was attempted inside the transaction')
-})
+  assert.deepEqual(
+    routeState.folders,
+    { [FOLDER_ID]: true, [CHILD_FOLDER_ID]: true },
+    "folder restore is rolled back",
+  );
+  assert.deepEqual(routeState.files, { [FILE_ID]: true }, "contained file restore is rolled back");
+  assert.deepEqual(routeState.committedAudit, [], "failed evidence leaves no committed audit row");
+  assert.equal(routeState.transactionCount, 1);
+  assert.ok(
+    routeState.executed.some((call) => call.text.includes("update folders")),
+    "restore was attempted inside the transaction",
+  );
+});

@@ -1,13 +1,17 @@
-import 'server-only'
+import "server-only";
 
-import type { PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { migrationWorkspaceData, migrationWorkspaceSpec, type MigrationWorkspaceData } from '../view'
+import type { PageSpec } from "@braedonsaunders/appkit-viewspec";
+import {
+  migrationWorkspaceData,
+  migrationWorkspaceSpec,
+  type MigrationWorkspaceData,
+} from "../view";
 
 /** One deep-linkable migration conversation: the workspace loader with an owned conversation. */
 export function loadMigrationConversation(id: string): Promise<MigrationWorkspaceData> {
-  return migrationWorkspaceData(id)
+  return migrationWorkspaceData(id);
 }
 
 export function migrationConversationSpec(data: MigrationWorkspaceData): PageSpec {
-  return migrationWorkspaceSpec({ route: '/migrate/[id]' }, data)
+  return migrationWorkspaceSpec({ route: "/migrate/[id]" }, data);
 }

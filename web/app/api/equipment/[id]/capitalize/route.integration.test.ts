@@ -19,7 +19,7 @@ interface RouteState {
   categoryId: string | null;
 }
 const routeState: RouteState = { authz: null, categoryId: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.equipment-capitalization-route-test')]
@@ -47,22 +47,21 @@ const hooks = registerHooks({
     // the @/lib/feature-gates alias at request time, so the hook must cover
     // that alias in addition to the route's relative import.
     if (
-      (specifier === "../../../../../lib/feature-gates"
-        && context.parentURL?.includes("/api/equipment/")) ||
-      (specifier === "@/lib/feature-gates"
-        && context.parentURL?.includes("/lib/api/route"))
+      (specifier === "../../../../../lib/feature-gates" &&
+        context.parentURL?.includes("/api/equipment/")) ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:equipment-feature-gates", shortCircuit: true };
     }
     if (
-      specifier === "../../../../../lib/features"
-      && context.parentURL?.includes("/api/equipment/")
+      specifier === "../../../../../lib/features" &&
+      context.parentURL?.includes("/api/equipment/")
     ) {
       return { url: "mock:equipment-features", shortCircuit: true };
     }
     if (
-      specifier === "../../../assets/categories/_ensure"
-      && context.parentURL?.includes("/api/equipment/")
+      specifier === "../../../assets/categories/_ensure" &&
+      context.parentURL?.includes("/api/equipment/")
     ) {
       return { url: "mock:equipment-category", shortCircuit: true };
     }
@@ -86,9 +85,8 @@ const routeUrl: string = "./route.ts?equipment-capitalization-concurrency-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, pool } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures",
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { Client } = await import("pg");
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
 
@@ -135,10 +133,10 @@ async function holdEquipmentRow(fixture: Fixture): Promise<InstanceType<typeof C
     "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
     [fixture.org.orgId],
   );
-  await holder.query(
-    "select id from equipment_units where id = $1 and org_id = $2 for update",
-    [fixture.equipmentId, fixture.org.orgId],
-  );
+  await holder.query("select id from equipment_units where id = $1 and org_id = $2 for update", [
+    fixture.equipmentId,
+    fixture.org.orgId,
+  ]);
   return holder;
 }
 
@@ -172,69 +170,79 @@ async function waitForRouteWaiters(fixture: Fixture): Promise<void> {
   assert.fail(`timed out waiting for both capitalization requests on ${fixture.equipmentId}`);
 }
 
-test(
-  "concurrent capitalization creates one linked asset and returns a controlled conflict",
-  async () => {
-    const fixture = await seed();
-    const holder = await holdEquipmentRow(fixture);
-    let holderOpen = true;
-    try {
-      const requests = [post(fixture), post(fixture)];
-      await waitForRouteWaiters(fixture);
-      await holder.query("commit");
-      holderOpen = false;
-      const responses = await Promise.all(requests);
-      assert.deepEqual(
-        responses.map((response) => response.status).sort((left, right) => left - right),
-        [200, 409],
-        "one request must create the asset and the loser must receive a conflict, never a 500",
-      );
+test("concurrent capitalization creates one linked asset and returns a controlled conflict", async () => {
+  const fixture = await seed();
+  const holder = await holdEquipmentRow(fixture);
+  let holderOpen = true;
+  try {
+    const requests = [post(fixture), post(fixture)];
+    await waitForRouteWaiters(fixture);
+    await holder.query("commit");
+    holderOpen = false;
+    const responses = await Promise.all(requests);
+    assert.deepEqual(
+      responses.map((response) => response.status).sort((left, right) => left - right),
+      [200, 409],
+      "one request must create the asset and the loser must receive a conflict, never a 500",
+    );
 
-      const winner = responses.find((response) => response.status === 200)!;
-      const winnerBody = (await winner.json()) as { assetId: string; assetNumber: string };
-      assert.match(winnerBody.assetNumber, /^FA-\d+$/);
-      const loser = responses.find((response) => response.status === 409)!;
-      assert.deepEqual(await loser.json(), { error: "already_capitalized" });
+    const winner = responses.find((response) => response.status === 200)!;
+    const winnerBody = (await winner.json()) as { assetId: string; assetNumber: string };
+    assert.match(winnerBody.assetNumber, /^FA-\d+$/);
+    const loser = responses.find((response) => response.status === 409)!;
+    assert.deepEqual(await loser.json(), { error: "already_capitalized" });
 
-      const state = await db.execute<{
-        fixed_asset_id: string | null;
-        asset_count: number;
-        asset_status: string | null;
-        depreciation_method: string | null;
-        useful_life_months: number | null;
-        schedule_count: number;
-      }>(sql`
+    const state = await db.execute<{
+      fixed_asset_id: string | null;
+      asset_count: number;
+      asset_status: string | null;
+      depreciation_method: string | null;
+      useful_life_months: number | null;
+      schedule_count: number;
+    }>(
+      sql`
         select
           (select fixed_asset_id from equipment_units where id = ${fixture.equipmentId}) as fixed_asset_id,
           (select count(*)::int from fixed_assets where org_id = ${fixture.org.orgId}) as asset_count,
           (select status from fixed_assets where id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as asset_status,
           (select depreciation_method from fixed_assets where id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as depreciation_method,
           (select useful_life_months from fixed_assets where id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as useful_life_months,
-          (select count(*)::int from depreciation_schedules where asset_id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as schedule_count`, "objects");
-      assert.equal(state[0]?.fixed_asset_id, winnerBody.assetId, "the winner's id remains linked");
-      assert.equal(state[0]?.asset_count, 1, "the race must not duplicate the fixed asset");
-      assert.equal(state[0]?.asset_status, "in_service");
-      assert.equal(state[0]?.depreciation_method, "straight_line");
-      assert.equal(state[0]?.useful_life_months, 60);
-      assert.ok((state[0]?.schedule_count ?? 0) > 0, "an in-service asset must have depreciation schedules");
-      routeState.authz = { user: { orgId: fixture.org.orgId, id: fixture.actorId }, permissions: new Set(["*"]), allowedSubsidiaryIds: new Set() };
-      const [hidden, missing] = await Promise.all([post(fixture), post(fixture, randomUUID())]);
-      assert.deepEqual([hidden.status, missing.status, await hidden.json()], [404, 404, await missing.json()]);
-    } finally {
-      if (holderOpen) await holder.query("rollback").catch(() => undefined);
-      await holder.end();
-      // dropScratchOrg clears fixed_assets in its generic pass before the
-      // equipment_units core pass.  Remove this linked fixture first so the
-      // FK can be satisfied without weakening the production schema.
-      await db.execute(sql`
+          (select count(*)::int from depreciation_schedules where asset_id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as schedule_count`,
+      "objects",
+    );
+    assert.equal(state[0]?.fixed_asset_id, winnerBody.assetId, "the winner's id remains linked");
+    assert.equal(state[0]?.asset_count, 1, "the race must not duplicate the fixed asset");
+    assert.equal(state[0]?.asset_status, "in_service");
+    assert.equal(state[0]?.depreciation_method, "straight_line");
+    assert.equal(state[0]?.useful_life_months, 60);
+    assert.ok(
+      (state[0]?.schedule_count ?? 0) > 0,
+      "an in-service asset must have depreciation schedules",
+    );
+    routeState.authz = {
+      user: { orgId: fixture.org.orgId, id: fixture.actorId },
+      permissions: new Set(["*"]),
+      allowedSubsidiaryIds: new Set(),
+    };
+    const [hidden, missing] = await Promise.all([post(fixture), post(fixture, randomUUID())]);
+    assert.deepEqual(
+      [hidden.status, missing.status, await hidden.json()],
+      [404, 404, await missing.json()],
+    );
+  } finally {
+    if (holderOpen) await holder.query("rollback").catch(() => undefined);
+    await holder.end();
+    // dropScratchOrg clears fixed_assets in its generic pass before the
+    // equipment_units core pass.  Remove this linked fixture first so the
+    // FK can be satisfied without weakening the production schema.
+    await db.execute(sql`
         delete from equipment_units
          where id = ${fixture.equipmentId} and org_id = ${fixture.org.orgId}`);
-      routeState.authz = null;
-      routeState.categoryId = null;
-      await dropScratchOrg(fixture.org.orgId);
-    }
-  },
-);
+    routeState.authz = null;
+    routeState.categoryId = null;
+    await dropScratchOrg(fixture.org.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 // The factory's lazy feature-gate import runs on every request, so the hook

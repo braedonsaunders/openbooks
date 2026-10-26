@@ -29,9 +29,7 @@ export function isEmptyPopulation(source: readonly unknown[] | null): boolean {
 }
 
 /** The crew population arrives aggregated, so its emptiness is a map size. */
-export function isEmptyCrewPopulation(
-  crew: ReadonlyMap<unknown, unknown> | null,
-): boolean {
+export function isEmptyCrewPopulation(crew: ReadonlyMap<unknown, unknown> | null): boolean {
   return crew !== null && crew.size === 0;
 }
 

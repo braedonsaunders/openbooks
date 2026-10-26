@@ -72,7 +72,15 @@ export function buildTimeline(args: {
   /** BCP-47 locale for week labels; defaults to en-US. */
   locale?: string;
 }): TimelineResult {
-  const { weekStarts, startingCash, arByWeek, apByWeek, categories, apSettings, locale = "en-US" } = args;
+  const {
+    weekStarts,
+    startingCash,
+    arByWeek,
+    apByWeek,
+    categories,
+    apSettings,
+    locale = "en-US",
+  } = args;
   const weeklyCap = normalizeMoneyValue(apSettings.weeklyCap);
   const schedulingOn = compareMoney(weeklyCap, ZERO_MONEY) > 0 || apSettings.restrictToSafe;
 
@@ -86,8 +94,12 @@ export function buildTimeline(args: {
     const cur = parseISO(k);
     const arEntries = (arByWeek.get(k) ?? []).sort((a, b) => compareMoney(b.amount, a.amount));
     const dueThisWeek = apByWeek.get(k) ?? [];
-    const dynamicInflow = sumMoney(categories.filter((c) => c.direction === "inflow").map((c) => c.weekly[wi] ?? ZERO_MONEY));
-    const dynamicOutflow = sumMoney(categories.filter((c) => c.direction === "outflow").map((c) => c.weekly[wi] ?? ZERO_MONEY));
+    const dynamicInflow = sumMoney(
+      categories.filter((c) => c.direction === "inflow").map((c) => c.weekly[wi] ?? ZERO_MONEY),
+    );
+    const dynamicOutflow = sumMoney(
+      categories.filter((c) => c.direction === "outflow").map((c) => c.weekly[wi] ?? ZERO_MONEY),
+    );
     const arInflow = sumMoney(arEntries.map((e) => e.amount));
 
     let apEntries: ForecastEntry[];
@@ -102,20 +114,32 @@ export function buildTimeline(args: {
       });
       const safe = apSettings.restrictToSafe
         ? (() => {
-            const available = subtractMoney(addMoney(addMoney(running, arInflow), dynamicInflow), dynamicOutflow);
+            const available = subtractMoney(
+              addMoney(addMoney(running, arInflow), dynamicInflow),
+              dynamicOutflow,
+            );
             return compareMoney(available, ZERO_MONEY) > 0 ? available : ZERO_MONEY;
           })()
         : null;
-      apCapacity = safe === null
-        ? (compareMoney(weeklyCap, ZERO_MONEY) > 0 ? weeklyCap : null)
-        : compareMoney(weeklyCap, ZERO_MONEY) > 0 && compareMoney(weeklyCap, safe) < 0 ? weeklyCap : safe;
+      apCapacity =
+        safe === null
+          ? compareMoney(weeklyCap, ZERO_MONEY) > 0
+            ? weeklyCap
+            : null
+          : compareMoney(weeklyCap, ZERO_MONEY) > 0 && compareMoney(weeklyCap, safe) < 0
+            ? weeklyCap
+            : safe;
       const paid: ForecastEntry[] = [];
       let spent = ZERO_MONEY;
       const remaining: ForecastEntry[] = [];
       for (const e of backlog) {
         if (apCapacity === null || compareMoney(addMoney(spent, e.amount), apCapacity) <= 0) {
           spent = addMoney(spent, e.amount);
-          paid.push(e.weekStart === k ? e : { ...e, weekStart: k, method: `${e.method} (deferred from ${e.weekStart})` });
+          paid.push(
+            e.weekStart === k
+              ? e
+              : { ...e, weekStart: k, method: `${e.method} (deferred from ${e.weekStart})` },
+          );
         } else {
           remaining.push(e);
         }
@@ -216,7 +240,8 @@ export interface CashPosition {
  * everything — the limb never widens it.
  */
 function vendorDocScope(visible: ReadonlySet<string> | null, includeNullSubsidiary: boolean): SQL {
-  if (visible === null || visible.size === 0) return subsidiaryVisibleFilter(sql`d.subsidiary_id`, visible);
+  if (visible === null || visible.size === 0)
+    return subsidiaryVisibleFilter(sql`d.subsidiary_id`, visible);
   if (!includeNullSubsidiary) return subsidiaryVisibleFilter(sql`d.subsidiary_id`, visible);
   return sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${`{${[...visible].join(",")}}`}::uuid[]))`;
 }
@@ -245,31 +270,51 @@ export async function cashPosition(
    */
   locale = "en-US",
 ): Promise<CashPosition> {
-  const subIds = allowedSubsidiaryIds === null ? requestedSubIds
-    : requestedSubIds === undefined ? [...allowedSubsidiaryIds]
-    : requestedSubIds.filter(id => allowedSubsidiaryIds.has(id));
+  const subIds =
+    allowedSubsidiaryIds === null
+      ? requestedSubIds
+      : requestedSubIds === undefined
+        ? [...allowedSubsidiaryIds]
+        : requestedSubIds.filter((id) => allowedSubsidiaryIds.has(id));
   const visible = subIds === undefined ? null : new Set(subIds);
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows, subsidiaryRows, model, fiscalStart, fiscalCalendar] = await Promise.all([
+  const [
+    arItems,
+    apItems,
+    arStats,
+    apStats,
+    banks,
+    catConfigs,
+    accountRows,
+    vendorRows,
+    subsidiaryRows,
+    model,
+    fiscalStart,
+    fiscalCalendar,
+  ] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
     paymentStats("ar", asOfIso, subIds, orgId),
     paymentStats("ap", asOfIso, subIds, orgId),
     bankBalances(asOfIso, subIds, orgId),
     loadCategories(orgId),
-    db.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
+    db.execute<{ id: string; number: string | null; name: string; type: string }>(
+      sql`
       select id, number, name, type from accounts
       where org_id = ${orgId} and is_summary = false
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, visible, { orgWideNull: true })}
       order by number nulls last, name
-    `, "objects"),
+    `,
+      "objects",
+    ),
     // "Parties with any payable document" is a semi-join: joining every
     // payable document to its party and then DISTINCTing back down to a few
     // thousand names materialized the whole document set to answer a
     // yes/no question per party.
-    db.execute<{ id: string; name: string }>(sql`
+    db.execute<{ id: string; name: string }>(
+      sql`
       select p.id, p.display_name as name
       from parties p
       where p.org_id = ${orgId}
@@ -280,16 +325,21 @@ export async function cashPosition(
              ${vendorDocScope(visible, includeNullSubsidiary === true)}
         )
       order by 2
-    `, "objects"),
+    `,
+      "objects",
+    ),
     // Attribution picker scope: the caller's own allowed set (not the
     // narrowed view — attributing beyond the current view is legitimate),
     // active non-elimination subsidiaries, like the report picker.
-    db.execute<{ id: string; name: string }>(sql`
+    db.execute<{ id: string; name: string }>(
+      sql`
       select s.id, s.name from subsidiaries s
       where s.org_id = ${orgId} and s.is_active and not s.is_elimination
         ${subsidiaryVisibleFilter(sql`s.id`, allowedSubsidiaryIds)}
       order by s.name
-    `, "objects"),
+    `,
+      "objects",
+    ),
     cashflowModel(orgId),
     fiscalStartMonth(orgId),
     defaultFiscalCalendarPeriods(orgId),
@@ -301,7 +351,9 @@ export async function cashPosition(
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model, true);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
-    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
+    Object.fromEntries(
+      [...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]),
+    );
   const catContext = {
     arWeekly: weekTotals(ar.byWeek),
     apWeekly: weekTotals(ap.byWeek),
@@ -316,10 +368,16 @@ export async function cashPosition(
   // in a subsidiary-scoped view they show only when attributed to a visible
   // subsidiary. Unattributed ones hide (fail closed) rather than leaking
   // org-wide names and amounts into a restricted view.
-  const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
+  const visibleConfigs = catConfigs.filter((c) =>
+    isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds),
+  );
   // A refusing category contributes zeros and names its reason; the rest of
   // the forecast still renders. Anything else still throws.
-  const categories = await Promise.all(visibleConfigs.map((c) => forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
+  const categories = await Promise.all(
+    visibleConfigs.map((c) =>
+      forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale),
+    ),
+  );
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,
@@ -340,8 +398,16 @@ export async function cashPosition(
   }
   const n = timeline.weeks.length;
   const burnRate = n ? divideMoney(timeline.totalOutflows, String(n)) : ZERO_MONEY;
-  const netBurn = subtractMoney(burnRate, n ? divideMoney(timeline.totalInflows, String(n)) : ZERO_MONEY);
-  const runwayWeeks = compareMoney(netBurn, ZERO_MONEY) > 0 && compareMoney(startingCash, ZERO_MONEY) > 0 ? divideMoney(startingCash, netBurn) : compareMoney(startingCash, ZERO_MONEY) > 0 ? null : ZERO_MONEY;
+  const netBurn = subtractMoney(
+    burnRate,
+    n ? divideMoney(timeline.totalInflows, String(n)) : ZERO_MONEY,
+  );
+  const runwayWeeks =
+    compareMoney(netBurn, ZERO_MONEY) > 0 && compareMoney(startingCash, ZERO_MONEY) > 0
+      ? divideMoney(startingCash, netBurn)
+      : compareMoney(startingCash, ZERO_MONEY) > 0
+        ? null
+        : ZERO_MONEY;
   // One caution read: the caller's configured runwayCautionWeeks, or the spec
   // default for a legacy two-key settings object.
   const cautionWeeks = String(
@@ -351,8 +417,16 @@ export async function cashPosition(
   // A refused category contributes zeros, so outflows understate — the
   // position never reads healthy while any category is refused.
   const runwayStatus: CashPosition["runwayStatus"] =
-    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : refused.length > 0 ? "caution" : runwayWeeks !== null && compareMoney(runwayWeeks, cautionWeeks) < 0 ? "caution" : "healthy";
-  const projectedEnd = timeline.weeks.length ? timeline.weeks[timeline.weeks.length - 1]!.endingCash : startingCash;
+    compareMoney(lowestCash, ZERO_MONEY) < 0
+      ? "critical"
+      : refused.length > 0
+        ? "caution"
+        : runwayWeeks !== null && compareMoney(runwayWeeks, cautionWeeks) < 0
+          ? "caution"
+          : "healthy";
+  const projectedEnd = timeline.weeks.length
+    ? timeline.weeks[timeline.weeks.length - 1]!.endingCash
+    : startingCash;
 
   return {
     asOf: asOfIso,
@@ -375,12 +449,20 @@ export async function cashPosition(
     arOutstanding,
     apOutstanding,
     // Coverage formula: (starting cash + AR outstanding) / AP outstanding.
-    arCoverage: compareMoney(apOutstanding, ZERO_MONEY) > 0 ? divideMoney(addMoney(startingCash, arOutstanding), apOutstanding) : null,
+    arCoverage:
+      compareMoney(apOutstanding, ZERO_MONEY) > 0
+        ? divideMoney(addMoney(startingCash, arOutstanding), apOutstanding)
+        : null,
     categories,
     unavailableCategories: refused,
     apSettings: { ...apSettings, weeklyCap: normalizeMoneyValue(apSettings.weeklyCap) },
     vendorOptions: vendorRows.map((v) => ({ id: v.id, name: v.name })),
-    accountOptions: accountRows.map((a) => ({ id: a.id, number: a.number ?? null, name: a.name, type: a.type })),
+    accountOptions: accountRows.map((a) => ({
+      id: a.id,
+      number: a.number ?? null,
+      name: a.name,
+      type: a.type,
+    })),
     subsidiaryOptions: subsidiaryRows.map((s) => ({ id: s.id, name: s.name })),
   };
 }

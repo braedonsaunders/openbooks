@@ -18,7 +18,9 @@ const paymentAllocationBody = z.looseObject({
   settlementRateReference: z.string().trim().min(1).max(500),
   settlementFxRateId: z.string().nullable().optional(),
 });
-const postPaymentBody = z.looseObject({ allocations: z.array(paymentAllocationBody).min(1).max(1000).optional() });
+const postPaymentBody = z.looseObject({
+  allocations: z.array(paymentAllocationBody).min(1).max(1000).optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -41,5 +43,6 @@ async function handleV1POST(
 
 export const POST = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1POST(request, { params: Promise.resolve(params as never) } as never),
 });

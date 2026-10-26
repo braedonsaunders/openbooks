@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Route-boundary regression for list-preferences PUT. resolveListView only
 // loads is_active rows, so an inactive (or concurrently deactivated) view
@@ -8,72 +8,77 @@ import test from 'node:test'
 // probe and the preference upsert share one transaction and whether the
 // probe locks FOR UPDATE — it does not inspect the route source.
 
-const stateKey = Symbol.for('openbooks.list-preferences-route-test')
-interface DbCall { kind: 'execute' | 'tx-execute'; text: string }
+const stateKey = Symbol.for("openbooks.list-preferences-route-test");
+interface DbCall {
+  kind: "execute" | "tx-execute";
+  text: string;
+}
 interface RouteState {
-  calls: DbCall[]
-  inTx: boolean
-  respondTx: (text: string) => { rows: unknown[]; rowCount?: number }
+  calls: DbCall[];
+  inTx: boolean;
+  respondTx: (text: string) => { rows: unknown[]; rowCount?: number };
 }
 const routeState: RouteState = {
   calls: [],
   inTx: false,
   respondTx: () => ({ rows: [] }),
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & { openbooksSqlTextListPrefs?: unknown }).openbooksSqlTextListPrefs = sqlText
+(
+  globalThis as typeof globalThis & { openbooksSqlTextListPrefs?: unknown }
+).openbooksSqlTextListPrefs = sqlText;
 
-const VIEW_ID = '11111111-1111-4111-8111-111111111111'
+const VIEW_ID = "11111111-1111-4111-8111-111111111111";
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if ((specifier === '@/lib/authz' || specifier === '../../../../lib/authz')) {
-      return { shortCircuit: true, url: 'mock:authz' }
+    if (specifier === "@/lib/authz" || specifier === "../../../../lib/authz") {
+      return { shortCircuit: true, url: "mock:authz" };
     }
-    if (specifier === '../../../../lib/customization/gates') {
-      return { shortCircuit: true, url: 'mock:gates' }
+    if (specifier === "../../../../lib/customization/gates") {
+      return { shortCircuit: true, url: "mock:gates" };
     }
-    if (specifier === '@openbooks/engine/platform/db') {
-      return { shortCircuit: true, url: 'mock:db' }
+    if (specifier === "@openbooks/engine/platform/db") {
+      return { shortCircuit: true, url: "mock:db" };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:authz') {
+    if (url === "mock:authz") {
       return {
-        format: 'module',
+        format: "module",
         shortCircuit: true,
         source: `
           export async function getAuthz() {
             return { user: { orgId: 'org-1', id: 'user-1' }, permissions: [], allowedSubsidiaryIds: null }
           }
         `,
-      }
+      };
     }
-    if (url === 'mock:gates') {
+    if (url === "mock:gates") {
       return {
-        format: 'module',
+        format: "module",
         shortCircuit: true,
         source: `export async function refuseDisabledRecordType() { return null }`,
-      }
+      };
     }
-    if (url === 'mock:db') {
+    if (url === "mock:db") {
       return {
-        format: 'module',
+        format: "module",
         shortCircuit: true,
         source: `
           const state = globalThis[Symbol.for('openbooks.list-preferences-route-test')]
@@ -97,123 +102,131 @@ const _hooks = registerHooks({
             },
           }
         `,
-      }
+      };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const list_preferences_inactive_lockUrl = './route.ts?list-preferences-inactive-lock'
-const { PUT } = (await import(list_preferences_inactive_lockUrl)) as typeof import('./route.ts')
+const list_preferences_inactive_lockUrl = "./route.ts?list-preferences-inactive-lock";
+const { PUT } = (await import(list_preferences_inactive_lockUrl)) as typeof import("./route.ts");
 
-function reset(respondTx: RouteState['respondTx']): void {
-  routeState.calls = []
-  routeState.respondTx = respondTx
+function reset(respondTx: RouteState["respondTx"]): void {
+  routeState.calls = [];
+  routeState.respondTx = respondTx;
 }
 
 function put(body: unknown): Promise<Response> {
   return PUT(
-    new Request('http://openbooks.test/api/customization/list-preferences', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/customization/list-preferences", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
 function txCalls(): DbCall[] {
-  return routeState.calls.filter((call) => call.kind === 'tx-execute')
+  return routeState.calls.filter((call) => call.kind === "tx-execute");
 }
 
-test('PUT refuses an inactive owned view before the preference upsert', async () => {
+test("PUT refuses an inactive owned view before the preference upsert", async () => {
   reset((text) => {
-    if (text.includes('from list_views')) {
-      return { rows: [{ isActive: false, name: 'Archived bills' }], rowCount: 1 }
+    if (text.includes("from list_views")) {
+      return { rows: [{ isActive: false, name: "Archived bills" }], rowCount: 1 };
     }
-    return { rows: [], rowCount: 1 }
-  })
+    return { rows: [], rowCount: 1 };
+  });
 
-  const response = await put({ recordType: 'vendor_bill', viewId: VIEW_ID })
-  const json = (await response.json()) as { error?: string; ok?: unknown }
+  const response = await put({ recordType: "vendor_bill", viewId: VIEW_ID });
+  const json = (await response.json()) as { error?: string; ok?: unknown };
 
-  assert.equal(response.status, 422, JSON.stringify(json))
-  assert.equal(json.ok, undefined)
-  assert.match(String(json.error ?? ''), /list view "Archived bills" is inactive/)
-  assert.match(String(json.error ?? ''), /reactivate it or choose an active view/)
+  assert.equal(response.status, 422, JSON.stringify(json));
+  assert.equal(json.ok, undefined);
+  assert.match(String(json.error ?? ""), /list view "Archived bills" is inactive/);
+  assert.match(String(json.error ?? ""), /reactivate it or choose an active view/);
   assert.ok(
-    !routeState.calls.some((call) => call.text.includes('insert into user_list_preferences')),
-    'inactive view must not write a preference resolveListView cannot apply',
-  )
-})
+    !routeState.calls.some((call) => call.text.includes("insert into user_list_preferences")),
+    "inactive view must not write a preference resolveListView cannot apply",
+  );
+});
 
-test('PUT treats a missing view as not found and writes nothing', async () => {
-  reset(() => ({ rows: [], rowCount: 0 }))
+test("PUT treats a missing view as not found and writes nothing", async () => {
+  reset(() => ({ rows: [], rowCount: 0 }));
 
-  const response = await put({ recordType: 'vendor_bill', viewId: VIEW_ID })
-  const json = (await response.json()) as { error?: string; ok?: unknown }
+  const response = await put({ recordType: "vendor_bill", viewId: VIEW_ID });
+  const json = (await response.json()) as { error?: string; ok?: unknown };
 
-  assert.equal(response.status, 404, JSON.stringify(json))
-  assert.equal(json.ok, undefined)
-  assert.equal(json.error, 'list view not found')
-  assert.ok(!routeState.calls.some((call) => call.text.includes('insert into user_list_preferences')))
-})
+  assert.equal(response.status, 404, JSON.stringify(json));
+  assert.equal(json.ok, undefined);
+  assert.equal(json.error, "list view not found");
+  assert.ok(
+    !routeState.calls.some((call) => call.text.includes("insert into user_list_preferences")),
+  );
+});
 
-test('PUT locks the view FOR UPDATE in the same transaction as the upsert', async () => {
+test("PUT locks the view FOR UPDATE in the same transaction as the upsert", async () => {
   reset((text) => {
-    if (text.includes('from list_views')) {
-      return { rows: [{ isActive: true, name: 'Open bills' }], rowCount: 1 }
+    if (text.includes("from list_views")) {
+      return { rows: [{ isActive: true, name: "Open bills" }], rowCount: 1 };
     }
-    if (text.includes('insert into user_list_preferences')) return { rows: [], rowCount: 1 }
-    return { rows: [], rowCount: 0 }
-  })
+    if (text.includes("insert into user_list_preferences")) return { rows: [], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  });
 
-  const response = await put({ recordType: 'vendor_bill', viewId: VIEW_ID })
-  const json = (await response.json()) as { ok?: unknown; viewId?: string }
+  const response = await put({ recordType: "vendor_bill", viewId: VIEW_ID });
+  const json = (await response.json()) as { ok?: unknown; viewId?: string };
 
-  assert.equal(response.status, 200, JSON.stringify(json))
-  assert.equal(json.ok, true)
-  assert.equal(json.viewId, VIEW_ID)
-  assert.equal(routeState.calls.filter((call) => call.kind === 'execute').length, 0, 'probe and write must not use unlocked pool execute')
+  assert.equal(response.status, 200, JSON.stringify(json));
+  assert.equal(json.ok, true);
+  assert.equal(json.viewId, VIEW_ID);
+  assert.equal(
+    routeState.calls.filter((call) => call.kind === "execute").length,
+    0,
+    "probe and write must not use unlocked pool execute",
+  );
 
-  const lock = txCalls().find((call) => call.text.includes('from list_views') && call.text.includes('for update'))
-  const write = txCalls().find((call) => call.text.includes('insert into user_list_preferences'))
-  assert.ok(lock, 'the preference write must lock the list_views row FOR UPDATE')
-  assert.ok(write, 'the preference upsert must run inside the same transaction')
+  const lock = txCalls().find(
+    (call) => call.text.includes("from list_views") && call.text.includes("for update"),
+  );
+  const write = txCalls().find((call) => call.text.includes("insert into user_list_preferences"));
+  assert.ok(lock, "the preference write must lock the list_views row FOR UPDATE");
+  assert.ok(write, "the preference upsert must run inside the same transaction");
   assert.ok(
     routeState.calls.indexOf(lock!) < routeState.calls.indexOf(write!),
-    'the lock must precede the upsert so a concurrent deactivation waits',
-  )
-})
+    "the lock must precede the upsert so a concurrent deactivation waits",
+  );
+});
 
-test('PUT refuses a zero-row preference write instead of reporting ok', async () => {
+test("PUT refuses a zero-row preference write instead of reporting ok", async () => {
   reset((text) => {
-    if (text.includes('from list_views')) {
-      return { rows: [{ isActive: true, name: 'Open bills' }], rowCount: 1 }
+    if (text.includes("from list_views")) {
+      return { rows: [{ isActive: true, name: "Open bills" }], rowCount: 1 };
     }
-    return { rows: [], rowCount: 0 }
-  })
+    return { rows: [], rowCount: 0 };
+  });
 
-  const response = await put({ recordType: 'vendor_bill', viewId: VIEW_ID })
-  const json = (await response.json()) as { error?: string; ok?: unknown }
+  const response = await put({ recordType: "vendor_bill", viewId: VIEW_ID });
+  const json = (await response.json()) as { error?: string; ok?: unknown };
 
-  assert.equal(response.status, 409, JSON.stringify(json))
-  assert.equal(json.ok, undefined)
-  assert.match(String(json.error ?? ''), /list preference was not saved/)
-  assert.match(String(json.error ?? ''), /still active/)
-})
+  assert.equal(response.status, 409, JSON.stringify(json));
+  assert.equal(json.ok, undefined);
+  assert.match(String(json.error ?? ""), /list preference was not saved/);
+  assert.match(String(json.error ?? ""), /still active/);
+});
 
-test('PUT still clears a preference when viewId is null', async () => {
+test("PUT still clears a preference when viewId is null", async () => {
   reset((text) => {
-    if (text.includes('insert into user_list_preferences')) return { rows: [], rowCount: 1 }
-    return { rows: [], rowCount: 0 }
-  })
+    if (text.includes("insert into user_list_preferences")) return { rows: [], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  });
 
-  const response = await put({ recordType: 'vendor_bill', viewId: null })
-  const json = (await response.json()) as { ok?: unknown; viewId?: string | null }
+  const response = await put({ recordType: "vendor_bill", viewId: null });
+  const json = (await response.json()) as { ok?: unknown; viewId?: string | null };
 
-  assert.equal(response.status, 200, JSON.stringify(json))
-  assert.equal(json.ok, true)
-  assert.equal(json.viewId, null)
-  assert.ok(txCalls().some((call) => call.text.includes('insert into user_list_preferences')))
-  assert.ok(!txCalls().some((call) => call.text.includes('from list_views')))
-})
+  assert.equal(response.status, 200, JSON.stringify(json));
+  assert.equal(json.ok, true);
+  assert.equal(json.viewId, null);
+  assert.ok(txCalls().some((call) => call.text.includes("insert into user_list_preferences")));
+  assert.ok(!txCalls().some((call) => call.text.includes("from list_views")));
+});

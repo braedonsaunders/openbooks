@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // E4: attachments on uncertain deliveries were retained forever. The
 // reconciliation-suppress path threw without dropping staged blobs, and the
@@ -12,24 +12,26 @@ import test from 'node:test'
 // on the email_log lineage.
 globalThis.__emailTerminalCleanupTest = {
   attempts: [],
-  sendMode: 'uncertain',
+  sendMode: "uncertain",
   sendViaCalls: 0,
   uncertainMarks: 0,
   deleted: [],
-  transportResolution: { state: 'ready', transport: { provider: 'test' } },
-}
-const state = globalThis.__emailTerminalCleanupTest
+  transportResolution: { state: "ready", transport: { provider: "test" } },
+};
+const state = globalThis.__emailTerminalCleanupTest;
 
 const sources = {
-  bullmq: 'export class Worker { constructor(_queue, handler) { globalThis.__emailTerminalCleanupTest.handler = handler } }',
-  '@openbooks/jobs': 'export const EMAIL_QUEUE = "test"; export const getBlockingConnection = () => ({}); export const resolveEmailDeliveryKey = () => "delivery-key";',
-  '../delivery/email-attachments.ts': `
+  bullmq:
+    "export class Worker { constructor(_queue, handler) { globalThis.__emailTerminalCleanupTest.handler = handler } }",
+  "@openbooks/jobs":
+    'export const EMAIL_QUEUE = "test"; export const getBlockingConnection = () => ({}); export const resolveEmailDeliveryKey = () => "delivery-key";',
+  "../delivery/email-attachments.ts": `
     export const loadEmailAttachments = async () => [];
     export const deleteStoredEmailAttachments = async (attachments) => {
       globalThis.__emailTerminalCleanupTest.deleted.push(...(attachments ?? []));
     };
   `,
-  '@openbooks/emails': `
+  "@openbooks/emails": `
     export function emailDeliveryBlockedMessage(block) { return block.state === 'unusable' ? 'Email delivery cannot send: ' + block.reason + '. An administrator with setup access can re-enter the provider settings in Admin → Email.' : 'Email delivery is not enabled for this organization.' }
     export function isEmailAttachmentRef(attachment) { return !('content' in attachment) }
     export async function sendVia() {
@@ -45,9 +47,10 @@ const sources = {
       return { action: 'send' };
     }
   `,
-  '../platform/db.ts': 'export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === "objects" ? result.rows : result)) }; export const withOrgContext = (_org, action) => action();',
-  '../organization/sandbox-guard.ts': 'export const isSandboxOrg = async () => false;',
-  '../delivery/email-config.ts': `
+  "../platform/db.ts":
+    'export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === "objects" ? result.rows : result)) }; export const withOrgContext = (_org, action) => action();',
+  "../organization/sandbox-guard.ts": "export const isSandboxOrg = async () => false;",
+  "../delivery/email-config.ts": `
     export const resolveOrgEmailTransportDetailed = async () => globalThis.__emailTerminalCleanupTest.transportResolution;
     export const claimEmailDeliveryLog = async () => ({ id: 'log', attempts: globalThis.__emailTerminalCleanupTest.attempts });
     export const appendEmailAttemptEvent = async () => [];
@@ -62,86 +65,102 @@ const sources = {
     export const markDunningClaimSent = async () => true;
     export const markDunningClaimFailed = async () => true;
   `,
-  '../delivery/report-delivery.ts': `
+  "../delivery/report-delivery.ts": `
     export const markReportDeliveryFailed = async () => {};
     export const markReportDeliverySent = async () => {};
     export const markReportDeliveryStarted = async () => {};
     export const markReportDeliverySuppressed = async () => {};
   `,
-}
+};
 
-const hooks = registerHooks({ resolve(specifier, context, next) {
-  if (context.parentURL?.endsWith('/email-worker.ts') && sources[specifier]) {
-    return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(sources[specifier])}` }
-  }
-  return next(specifier, context)
-} })
-const { createEmailWorker } = await import('./email-worker.ts')
-createEmailWorker()
-hooks.deregister()
+const hooks = registerHooks({
+  resolve(specifier, context, next) {
+    if (context.parentURL?.endsWith("/email-worker.ts") && sources[specifier]) {
+      return {
+        shortCircuit: true,
+        url: `data:text/javascript,${encodeURIComponent(sources[specifier])}`,
+      };
+    }
+    return next(specifier, context);
+  },
+});
+const { createEmailWorker } = await import("./email-worker.ts");
+createEmailWorker();
+hooks.deregister();
 
-const ATTACHMENTS = [{ filename: 'inv.pdf', contentType: 'application/pdf', storageKey: 'staged-1' }]
+const ATTACHMENTS = [
+  { filename: "inv.pdf", contentType: "application/pdf", storageKey: "staged-1" },
+];
 
 function job({ attemptsMade = 0, attempts = 5 } = {}) {
   return {
-    id: 'email-job',
+    id: "email-job",
     attemptsMade,
     opts: { attempts },
     data: {
-      orgId: 'org',
-      to: 'billing@acme.test',
-      subject: 'Invoice',
-      html: '<p>Invoice</p>',
-      text: 'Invoice',
+      orgId: "org",
+      to: "billing@acme.test",
+      subject: "Invoice",
+      html: "<p>Invoice</p>",
+      text: "Invoice",
       attachments: ATTACHMENTS,
       meta: {},
     },
-  }
+  };
 }
 
 function reset() {
-  state.attempts = []
-  state.sendMode = 'uncertain'
-  state.sendViaCalls = 0
-  state.uncertainMarks = 0
-  state.deleted = []
-  state.transportResolution = { state: 'ready', transport: { provider: 'test' } }
+  state.attempts = [];
+  state.sendMode = "uncertain";
+  state.sendViaCalls = 0;
+  state.uncertainMarks = 0;
+  state.deleted = [];
+  state.transportResolution = { state: "ready", transport: { provider: "test" } };
 }
 
-test('uncertain on the final attempt deletes staged blobs, keeps evidence, never resends', async () => {
-  reset()
-  await assert.rejects(state.handler(job({ attemptsMade: 4, attempts: 5 })), /acceptance state unresolved/)
-  assert.equal(state.uncertainMarks, 1, 'the uncertain verdict must stay on the email_log lineage')
-  assert.deepEqual(state.deleted, ATTACHMENTS, 'exhausted retries must drop the staged blobs')
-  assert.equal(state.sendViaCalls, 1, 'nothing may be re-sent')
-})
+test("uncertain on the final attempt deletes staged blobs, keeps evidence, never resends", async () => {
+  reset();
+  await assert.rejects(
+    state.handler(job({ attemptsMade: 4, attempts: 5 })),
+    /acceptance state unresolved/,
+  );
+  assert.equal(state.uncertainMarks, 1, "the uncertain verdict must stay on the email_log lineage");
+  assert.deepEqual(state.deleted, ATTACHMENTS, "exhausted retries must drop the staged blobs");
+  assert.equal(state.sendViaCalls, 1, "nothing may be re-sent");
+});
 
-test('reconciliation suppress deletes staged blobs without transmitting', async () => {
-  reset()
-  state.attempts = [{ attempt: 1, outcome: 'uncertain', detail: 'prior timeout' }]
-  await assert.rejects(state.handler(job({ attemptsMade: 1, attempts: 5 })), /deferred by reconciliation/)
-  assert.equal(state.sendViaCalls, 0, 'a suppressed delivery must never touch the wire')
-  assert.deepEqual(state.deleted, ATTACHMENTS)
-})
+test("reconciliation suppress deletes staged blobs without transmitting", async () => {
+  reset();
+  state.attempts = [{ attempt: 1, outcome: "uncertain", detail: "prior timeout" }];
+  await assert.rejects(
+    state.handler(job({ attemptsMade: 1, attempts: 5 })),
+    /deferred by reconciliation/,
+  );
+  assert.equal(state.sendViaCalls, 0, "a suppressed delivery must never touch the wire");
+  assert.deepEqual(state.deleted, ATTACHMENTS);
+});
 
-test('non-terminal uncertainty keeps staged blobs for the still-pending delivery', async () => {
-  reset()
-  await assert.rejects(state.handler(job({ attemptsMade: 0, attempts: 5 })), /acceptance state unresolved/)
-  assert.equal(state.uncertainMarks, 1)
-  assert.deepEqual(state.deleted, [], 'only a terminal delivery may drop staged bytes')
-  assert.equal(state.sendViaCalls, 1)
-})
+test("non-terminal uncertainty keeps staged blobs for the still-pending delivery", async () => {
+  reset();
+  await assert.rejects(
+    state.handler(job({ attemptsMade: 0, attempts: 5 })),
+    /acceptance state unresolved/,
+  );
+  assert.equal(state.uncertainMarks, 1);
+  assert.deepEqual(state.deleted, [], "only a terminal delivery may drop staged bytes");
+  assert.equal(state.sendViaCalls, 1);
+});
 
-test('configured but unusable transport fails with its remedy and does not ack or send', async () => {
-  reset()
+test("configured but unusable transport fails with its remedy and does not ack or send", async () => {
+  reset();
   state.transportResolution = {
-    state: 'unusable',
-    reason: 'the stored provider credential could not be unsealed with the current data key',
-  }
+    state: "unusable",
+    reason: "the stored provider credential could not be unsealed with the current data key",
+  };
   await assert.rejects(
     state.handler(job({ attemptsMade: 0, attempts: 5 })),
     /Email delivery cannot send: the stored provider credential could not be unsealed.*re-enter the provider settings in Admin → Email/,
-  )
-  assert.equal(state.sendViaCalls, 0, 'a damaged credential must never reach the provider')
-  assert.deepEqual(state.deleted, [], 'retries remain available until the transport is repaired')
-})
+  );
+  assert.equal(state.sendViaCalls, 0, "a damaged credential must never reach the provider");
+  assert.deepEqual(state.deleted, [], "retries remain available until the transport is repaired");
+});

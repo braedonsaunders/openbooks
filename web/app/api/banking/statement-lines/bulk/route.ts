@@ -1,14 +1,17 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { NextResponse } from 'next/server'
-import { excludePossibleDuplicates } from '@openbooks/engine/banking/banking'
-import { isUuid } from '../../../../../lib/list-params'
-const POSTBodySchema1 = z.object({ action: z.literal('exclude-duplicates'), accountId: uuidString(), reason: z.string().trim().min(1) });
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { excludePossibleDuplicates } from "@openbooks/engine/banking/banking";
+import { isUuid } from "../../../../../lib/list-params";
+const POSTBodySchema1 = z.object({
+  action: z.literal("exclude-duplicates"),
+  accountId: uuidString(),
+  reason: z.string().trim().min(1),
+});
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Bulk review of flagged lines: { action: 'exclude-duplicates', accountId, reason }.
@@ -17,26 +20,29 @@ export const runtime = 'nodejs'
  * it is not one click per line. One audited row per line.
  */
 export const POST = defineRoute({
-  permission: 'banking.reconcile',
-  feature: 'banking',
+  permission: "banking.reconcile",
+  feature: "banking",
   body: POSTBodySchema1,
   handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
-    const { user } = gate
+    const { user } = gate;
 
-    const body = (routeBody) as { action?: string; accountId?: string; reason?: string }
-    if (body.action !== 'exclude-duplicates' || !isUuid(String(body.accountId ?? ''))) {
-        return NextResponse.json({ error: 'action must be "exclude-duplicates" with an accountId' }, { status: 400 })
-      }
+    const body = routeBody as { action?: string; accountId?: string; reason?: string };
+    if (body.action !== "exclude-duplicates" || !isUuid(String(body.accountId ?? ""))) {
+      return NextResponse.json(
+        { error: 'action must be "exclude-duplicates" with an accountId' },
+        { status: 400 },
+      );
+    }
     try {
-        const result = await excludePossibleDuplicates(
-          String(body.accountId),
-          String(body.reason ?? ''),
-          { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
-        )
-        return NextResponse.json({ ok: true, excluded: result.excluded })
-      } catch (e) {
-        return apiErrorResponse(e)
-      }
+      const result = await excludePossibleDuplicates(
+        String(body.accountId),
+        String(body.reason ?? ""),
+        { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
+      );
+      return NextResponse.json({ ok: true, excluded: result.excluded });
+    } catch (e) {
+      return apiErrorResponse(e);
+    }
   },
 });

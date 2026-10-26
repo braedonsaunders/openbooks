@@ -5,10 +5,7 @@ import { featureEnabled, type FeatureState } from "@openbooks/engine/organizatio
 import type { Authz } from "../authz";
 import { can, ForbiddenError } from "../authz";
 import { applicationContextFromSession } from "../application/context";
-import {
-  APPLICATION_TOOLS,
-  executeApplicationTool,
-} from "../application/tool-catalog";
+import { APPLICATION_TOOLS, executeApplicationTool } from "../application/tool-catalog";
 import { canRunTool } from "./gate";
 import {
   activateTurnModules,
@@ -115,7 +112,8 @@ export function applicationToolVisible(
   authz: Authz,
   features?: FeatureState | null,
 ): boolean {
-  if (definition.featureKey && features && !featureEnabled(features, definition.featureKey)) return false;
+  if (definition.featureKey && features && !featureEnabled(features, definition.featureKey))
+    return false;
   return definition.visibleTo(authz);
 }
 
@@ -173,7 +171,8 @@ export async function buildToolRegistryAsync(
     if (taken.has(view.name)) continue;
     const def = toAssistantToolDef(view);
     if (!canRunTool(authz, def, features)) continue;
-    const execute = (args: unknown): Promise<ToolResult> => executeAssistantTool(authz, def.name, args, features);
+    const execute = (args: unknown): Promise<ToolResult> =>
+      executeAssistantTool(authz, def.name, args, features);
     taken.add(def.name);
     (base as Record<string, ToolSet[string]>)[def.name] = tool({
       description: def.description,
@@ -196,66 +195,72 @@ export type ChatToolHooks = {
 /** Construct the permission- and feature-bound tool set the model may use this
  *  turn. `features` is the org's resolved feature state (resolve it once per
  *  turn with resolvedFeatureState); tools of disabled features are omitted. */
-export function buildToolRegistry(authz: Authz, features?: FeatureState | null, hooks?: ChatToolHooks): ToolSet {
+export function buildToolRegistry(
+  authz: Authz,
+  features?: FeatureState | null,
+  hooks?: ChatToolHooks,
+): ToolSet {
   const runnable = ASSISTANT_TOOLS.filter((t) => canRunTool(authz, t, features));
   const entries = runnable.map((t) => {
     // Shared execute wrapper: defensive gate re-check + never-throw contract.
-    const base = (args: unknown): Promise<ToolResult> => executeAssistantTool(authz, t.name, args, features);
+    const base = (args: unknown): Promise<ToolResult> =>
+      executeAssistantTool(authz, t.name, args, features);
     // find_tools both answers and activates: a successful search grows the
     // turn's sent tool set through the hook (no-op when no hook is passed).
     const onActivate = hooks?.onActivateModules;
-    const execute = t.name === "find_tools" && onActivate
-      ? async (args: unknown): Promise<ToolResult> => {
-        const result = await base(args);
-        const modules = findToolsModules(result);
-        if (modules.length > 0) onActivate(modules);
-        return result;
-      }
-      : base;
+    const execute =
+      t.name === "find_tools" && onActivate
+        ? async (args: unknown): Promise<ToolResult> => {
+            const result = await base(args);
+            const modules = findToolsModules(result);
+            if (modules.length > 0) onActivate(modules);
+            return result;
+          }
+        : base;
     return [
       t.name,
       tool({ description: t.description, inputSchema: t.inputSchema, execute }),
     ] as const;
   });
-  const applicationEntries = APPLICATION_TOOLS
-    .filter((definition) =>
-      applicationToolVisible(definition, authz, features)
-      && (definition.readOnly || can(authz, "assistant.write")))
-    .map((definition) => {
-      const execute = async (input: unknown): Promise<ToolResult> => {
-        try {
-          const parsed = definition.inputSchema.parse(input);
-          if (definition.assistantConfirmation === "always") {
-            return {
-              ok: true,
-              data: {
-                proposedApplicationCommand: {
-                  toolName: definition.name,
-                  title: definition.title,
-                  destructive: definition.destructive,
-                  input: parsed,
-                  confirmToken: signApplicationCommand(definition.name, parsed, authz),
-                },
+  const applicationEntries = APPLICATION_TOOLS.filter(
+    (definition) =>
+      applicationToolVisible(definition, authz, features) &&
+      (definition.readOnly || can(authz, "assistant.write")),
+  ).map((definition) => {
+    const execute = async (input: unknown): Promise<ToolResult> => {
+      try {
+        const parsed = definition.inputSchema.parse(input);
+        if (definition.assistantConfirmation === "always") {
+          return {
+            ok: true,
+            data: {
+              proposedApplicationCommand: {
+                toolName: definition.name,
+                title: definition.title,
+                destructive: definition.destructive,
+                input: parsed,
+                confirmToken: signApplicationCommand(definition.name, parsed, authz),
               },
-              note: "Awaiting explicit user confirmation. Nothing has been changed.",
-            };
-          }
-          const context = applicationContextFromSession(
-            authz,
-            "assistant",
-            `assistant:${randomUUID()}`,
-          );
-          return { ok: true, data: await executeApplicationTool(definition, context, parsed) };
-        } catch (error) {
-          console.warn(`[assistant] application tool ${definition.name} failed`, error);
-          return { ok: false, error: safeErrorMessage(error) };
+            },
+            note: "Awaiting explicit user confirmation. Nothing has been changed.",
+          };
         }
-      };
-      return [
-        definition.name,
-        tool({ description: definition.description, inputSchema: definition.inputSchema, execute }),
-      ] as const;
-    });
+        const context = applicationContextFromSession(
+          authz,
+          "assistant",
+          `assistant:${randomUUID()}`,
+        );
+        return { ok: true, data: await executeApplicationTool(definition, context, parsed) };
+      } catch (error) {
+        console.warn(`[assistant] application tool ${definition.name} failed`, error);
+        return { ok: false, error: safeErrorMessage(error) };
+      }
+    };
+    return [
+      definition.name,
+      tool({ description: definition.description, inputSchema: definition.inputSchema, execute }),
+    ] as const;
+  });
   return Object.fromEntries([...entries, ...applicationEntries]);
 }
 
@@ -310,10 +315,14 @@ export async function buildChatTurn(
   /** Modules a workspace always sends, e.g. migration tools in the migration workspace. */
   workspaceModules: readonly string[] = [],
 ): Promise<ChatTurn> {
-  const scope = createTurnScope([...new Set([
-    ...preRouteModules(message, priorNames, (name) => moduleOfTool(name, featureOfTool(name))),
-    ...workspaceModules,
-  ])].sort());
+  const scope = createTurnScope(
+    [
+      ...new Set([
+        ...preRouteModules(message, priorNames, (name) => moduleOfTool(name, featureOfTool(name))),
+        ...workspaceModules,
+      ]),
+    ].sort(),
+  );
   const tools = await buildToolRegistryAsync(authz, features, {
     onActivateModules: (modules) => activateTurnModules(scope, modules),
   });

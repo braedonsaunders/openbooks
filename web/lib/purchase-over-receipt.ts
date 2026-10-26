@@ -1,4 +1,4 @@
-import 'server-only'
+import "server-only";
 
 export {
   formatMaxReceivable,
@@ -6,4 +6,4 @@ export {
   overReceiptAllowanceUnits,
   resolveOverReceiptTolerance,
   type OverReceiptTolerance,
-} from '@openbooks/engine/sales/purchase-over-receipt'
+} from "@openbooks/engine/sales/purchase-over-receipt";

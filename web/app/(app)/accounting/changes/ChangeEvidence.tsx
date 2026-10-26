@@ -1,43 +1,190 @@
 import { useTranslations } from "next-intl";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@openbooks/ui";
-import { effectiveRequirementPerUnit, pairBomRevisionLines, type BomRevisionField, type BomRevisionPair } from "@/lib/bom-lines";
+  effectiveRequirementPerUnit,
+  pairBomRevisionLines,
+  type BomRevisionField,
+  type BomRevisionPair,
+} from "@/lib/bom-lines";
 import { BomRevisionDiffTable, type BomRevisionDiffRow } from "./BomRevisionDiffTable";
 const fieldKeys = new Set([
-  'identity', 'name', 'id', 'subsidiaryId', 'currency', 'expenseAccountId', 'liabilityAccountId', 'presentObligation', 'outflow', 'reliablyEstimable', 'evidence', 'discounting', 'discountEvidence', 'estimate', 'method', 'amount', 'outcomes', 'probability', 'minimum', 'maximum', 'reportingFramework', 'periodId', 'balance', 'events', 'recognized', 'liability', 'estimatedSettlement', 'disclosureRequired', 'priorLiability', 'currentPeriodCharge', 'entryId', 'requiredSubsidiaryIds',
-  'existingId', 'existingObligationIds', 'ssp', 'standaloneSellingPrice', 'recognitionRuleId',
-  'deferredAccountId', 'recognizedAccountId', 'totalAmount', 'catchUp', 'priorRecognized',
-  'targetRecognized', 'remaining', 'netCredits', 'newTotal', 'pool',
-  'remainingDistinct', 'additionsAtStandalonePrice', 'enforceableRightsEvidence', 'fxRate', 'bookId',
-  'effectiveOn', 'scopeReductionPercent', 'commensurateStandalonePrice', 'additionalRightOfUse', 'transfersOwnership',
-  'purchaseOptionReasonablyCertain', 'pvOfPayments', 'newRou', 'rouDelta', 'groupCarryingBefore',
-  'groupCarryingAfter', 'groupValuationDelta', 'netAssets', 'nci', 'parentGain',
-  'groupGain', 'recycledOci', 'transferredOci', 'totalGroupGain', 'retainedFairValue',
-  'carryingLiability', 'carryingRou', 'stubInterest', 'stubRou', 'prepaidCarrying',
-  'newLiability', 'liabilityDelta', 'removedLiability', 'removedRou', 'gain',
-  'settlement', 'settlementPayment', 'payment', 'periods', 'annualRatePercent',
-  'paymentTiming', 'paymentFrequency', 'assessment', 'dayCountPolicy', 'specializedAsset',
-  'economicLifeMonths', 'leaseTermMonths', 'termThresholdPercent', 'fairValue', 'pvThresholdPercent',
-  'assemblyItemId', 'expectedVersion', 'components', 'componentItemId', 'quantityPer', 'sortOrder',
-  'effectiveFrom', 'effectiveTo', 'operationSeq', 'scrapPct', 'isByproduct', 'quantityBasis',
-  'formulaOutputQuantity', 'outputCostWeight', 'routingId', 'supersedes', 'candidate',
-  'operations', 'operationName', 'workCenterId', 'workCenter', 'setupMinutes', 'runMinutesPerUnit',
-  'laborMinutesPerUnit', 'laborTimeSource', 'backflushAt', 'qualityGate', 'sequence', 'code',
-  'version', 'producedItemId', 'status', 'kind', 'workOrderId', 'operationId', 'reasonId',
-  'quantity', 'times', 'attemptedQty', 'actualSetupMinutes', 'actualRunMinutes', 'actualLaborMinutes',
-  'itemId', 'onDate', 'batchQuantity', 'standardCost', 'baseUnit', 'controlsBeforeTransfer',
-  'passThroughAccountId', 'controlEvidence', 'employmentId', 'grantId', 'pairId', 'bookId',
-  'eliminationSubsidiaryId', 'ociAccountId', 'profitLossAccountId', 'sourceLineIds',
-  'notPlannedOrLikely', 'nonTrade', 'qualificationEvidence', 'sourceChangeId', 'portion',
-  'percent', 'books', 'cost', 'accumulated', 'salvage', 'remainingProductionUnits', 'proceeds',
-  'proceedsAccountId', 'transfer', 'categoryId', 'assetNumber', 'buyerAmount', 'construction',
-  'gainLossAccountId', 'remainingTerms', 'separateLease', 'agreement',
+  "identity",
+  "name",
+  "id",
+  "subsidiaryId",
+  "currency",
+  "expenseAccountId",
+  "liabilityAccountId",
+  "presentObligation",
+  "outflow",
+  "reliablyEstimable",
+  "evidence",
+  "discounting",
+  "discountEvidence",
+  "estimate",
+  "method",
+  "amount",
+  "outcomes",
+  "probability",
+  "minimum",
+  "maximum",
+  "reportingFramework",
+  "periodId",
+  "balance",
+  "events",
+  "recognized",
+  "liability",
+  "estimatedSettlement",
+  "disclosureRequired",
+  "priorLiability",
+  "currentPeriodCharge",
+  "entryId",
+  "requiredSubsidiaryIds",
+  "existingId",
+  "existingObligationIds",
+  "ssp",
+  "standaloneSellingPrice",
+  "recognitionRuleId",
+  "deferredAccountId",
+  "recognizedAccountId",
+  "totalAmount",
+  "catchUp",
+  "priorRecognized",
+  "targetRecognized",
+  "remaining",
+  "netCredits",
+  "newTotal",
+  "pool",
+  "remainingDistinct",
+  "additionsAtStandalonePrice",
+  "enforceableRightsEvidence",
+  "fxRate",
+  "bookId",
+  "effectiveOn",
+  "scopeReductionPercent",
+  "commensurateStandalonePrice",
+  "additionalRightOfUse",
+  "transfersOwnership",
+  "purchaseOptionReasonablyCertain",
+  "pvOfPayments",
+  "newRou",
+  "rouDelta",
+  "groupCarryingBefore",
+  "groupCarryingAfter",
+  "groupValuationDelta",
+  "netAssets",
+  "nci",
+  "parentGain",
+  "groupGain",
+  "recycledOci",
+  "transferredOci",
+  "totalGroupGain",
+  "retainedFairValue",
+  "carryingLiability",
+  "carryingRou",
+  "stubInterest",
+  "stubRou",
+  "prepaidCarrying",
+  "newLiability",
+  "liabilityDelta",
+  "removedLiability",
+  "removedRou",
+  "gain",
+  "settlement",
+  "settlementPayment",
+  "payment",
+  "periods",
+  "annualRatePercent",
+  "paymentTiming",
+  "paymentFrequency",
+  "assessment",
+  "dayCountPolicy",
+  "specializedAsset",
+  "economicLifeMonths",
+  "leaseTermMonths",
+  "termThresholdPercent",
+  "fairValue",
+  "pvThresholdPercent",
+  "assemblyItemId",
+  "expectedVersion",
+  "components",
+  "componentItemId",
+  "quantityPer",
+  "sortOrder",
+  "effectiveFrom",
+  "effectiveTo",
+  "operationSeq",
+  "scrapPct",
+  "isByproduct",
+  "quantityBasis",
+  "formulaOutputQuantity",
+  "outputCostWeight",
+  "routingId",
+  "supersedes",
+  "candidate",
+  "operations",
+  "operationName",
+  "workCenterId",
+  "workCenter",
+  "setupMinutes",
+  "runMinutesPerUnit",
+  "laborMinutesPerUnit",
+  "laborTimeSource",
+  "backflushAt",
+  "qualityGate",
+  "sequence",
+  "code",
+  "version",
+  "producedItemId",
+  "status",
+  "kind",
+  "workOrderId",
+  "operationId",
+  "reasonId",
+  "quantity",
+  "times",
+  "attemptedQty",
+  "actualSetupMinutes",
+  "actualRunMinutes",
+  "actualLaborMinutes",
+  "itemId",
+  "onDate",
+  "batchQuantity",
+  "standardCost",
+  "baseUnit",
+  "controlsBeforeTransfer",
+  "passThroughAccountId",
+  "controlEvidence",
+  "employmentId",
+  "grantId",
+  "pairId",
+  "bookId",
+  "eliminationSubsidiaryId",
+  "ociAccountId",
+  "profitLossAccountId",
+  "sourceLineIds",
+  "notPlannedOrLikely",
+  "nonTrade",
+  "qualificationEvidence",
+  "sourceChangeId",
+  "portion",
+  "percent",
+  "books",
+  "cost",
+  "accumulated",
+  "salvage",
+  "remainingProductionUnits",
+  "proceeds",
+  "proceedsAccountId",
+  "transfer",
+  "categoryId",
+  "assetNumber",
+  "buyerAmount",
+  "construction",
+  "gainLossAccountId",
+  "remainingTerms",
+  "separateLease",
+  "agreement",
 ]);
 
 /** A catalog label for a known proposal field; any other key renders
@@ -79,7 +226,8 @@ export function ChangeEvidence({
   const label = useFieldLabel();
   if (value === null || value === undefined)
     return <span className="text-muted-foreground">{t("lifecycle.evidence.notSupplied")}</span>;
-  if (typeof value === "boolean") return <span>{value ? t("lifecycle.evidence.yes") : t("lifecycle.evidence.no")}</span>;
+  if (typeof value === "boolean")
+    return <span>{value ? t("lifecycle.evidence.yes") : t("lifecycle.evidence.no")}</span>;
   if (typeof value === "string" || typeof value === "number")
     return (
       <span className="break-words">
@@ -122,18 +270,27 @@ export function ChangeEvidence({
   return null;
 }
 
-
 export function ChangeFacts({ value }: { value: Record<string, unknown> }) {
   const t = useTranslations("accounting");
   const label = useFieldLabel();
   return (
     <dl className="grid grid-cols-2 gap-2">
       {Object.entries(value)
-        .filter(([key, v]) => fieldKeys.has(key) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean"))
+        .filter(
+          ([key, v]) =>
+            fieldKeys.has(key) &&
+            (typeof v === "string" || typeof v === "number" || typeof v === "boolean"),
+        )
         .map(([key, v]) => (
           <div key={key}>
             <dt className="text-sm text-slate-500">{label(key)}</dt>
-            <dd>{typeof v === "boolean" ? v ? t("lifecycle.evidence.yes") : t("lifecycle.evidence.no") : String(v).replaceAll("_", " ")}</dd>
+            <dd>
+              {typeof v === "boolean"
+                ? v
+                  ? t("lifecycle.evidence.yes")
+                  : t("lifecycle.evidence.no")
+                : String(v).replaceAll("_", " ")}
+            </dd>
           </div>
         ))}
     </dl>
@@ -143,7 +300,11 @@ export function ChangeFacts({ value }: { value: Record<string, unknown> }) {
 type RecipeLine = Record<string, unknown>;
 
 function asLines(value: unknown): RecipeLine[] {
-  return Array.isArray(value) ? value.filter((line): line is RecipeLine => !!line && typeof line === "object" && !Array.isArray(line)) : [];
+  return Array.isArray(value)
+    ? value.filter(
+        (line): line is RecipeLine => !!line && typeof line === "object" && !Array.isArray(line),
+      )
+    : [];
 }
 
 function lineText(value: unknown): string {
@@ -180,21 +341,32 @@ export function BomRevisionEvidence({
     asLines((after as RecipeLine | null)?.components),
   );
   const yesNo = (value: unknown) =>
-    value === true ? t("lifecycle.evidence.yes") : value === false ? t("lifecycle.evidence.no") : valueText(value);
+    value === true
+      ? t("lifecycle.evidence.yes")
+      : value === false
+        ? t("lifecycle.evidence.no")
+        : valueText(value);
   const readers = {
     quantityPer: (line: RecipeLine) => valueText(line.quantityPer),
     quantityBasis: (line: RecipeLine) => {
       const basis = valueText(line.quantityBasis ?? "per_unit");
-      return line.quantityBasis === "per_formula" ? `${basis} (${valueText(line.formulaOutputQuantity)})` : basis;
+      return line.quantityBasis === "per_formula"
+        ? `${basis} (${valueText(line.formulaOutputQuantity)})`
+        : basis;
     },
     scrapPct: (line: RecipeLine) => valueText(line.scrapPct),
     effective: (line: RecipeLine) => effectiveRequirementPerUnit(line) ?? "—",
     operationSeq: (line: RecipeLine) => valueText(line.operationSeq),
     isByproduct: (line: RecipeLine) => yesNo(line.isByproduct ?? false),
-    window: (line: RecipeLine) => `${valueText(line.effectiveFrom)} – ${valueText(line.effectiveTo)}`,
+    window: (line: RecipeLine) =>
+      `${valueText(line.effectiveFrom)} – ${valueText(line.effectiveTo)}`,
   };
   // The new value, or "old → new" when the field changed; removed and added lines show their one side.
-  const cell = (pair: BomRevisionPair, changed: boolean, read: (line: RecipeLine) => string): string => {
+  const cell = (
+    pair: BomRevisionPair,
+    changed: boolean,
+    read: (line: RecipeLine) => string,
+  ): string => {
     const next = pair.after ? read(pair.after) : null;
     const prior = pair.before ? read(pair.before) : null;
     if (next === null) return prior ?? "—";
@@ -205,15 +377,22 @@ export function BomRevisionEvidence({
     fields.some((field) => pair.changedFields.includes(field));
   const rows: BomRevisionDiffRow[] = pairs.map((pair, index) => {
     const effectiveChanged =
-      pair.before !== null && pair.after !== null && readers.effective(pair.before) !== readers.effective(pair.after);
+      pair.before !== null &&
+      pair.after !== null &&
+      readers.effective(pair.before) !== readers.effective(pair.after);
     return {
       key: `${index}:${pair.componentItemId}`,
       kind: pair.kind,
       kindLabel: t(`lifecycle.evidence.bom.${pair.kind}` as never),
       cells: [
-        names[pair.componentItemId] ?? (pair.componentItemId ? pair.componentItemId.slice(0, 8) : "—"),
+        names[pair.componentItemId] ??
+          (pair.componentItemId ? pair.componentItemId.slice(0, 8) : "—"),
         cell(pair, changedField(pair, "quantityPer"), readers.quantityPer),
-        cell(pair, changedField(pair, "quantityBasis", "formulaOutputQuantity"), readers.quantityBasis),
+        cell(
+          pair,
+          changedField(pair, "quantityBasis", "formulaOutputQuantity"),
+          readers.quantityBasis,
+        ),
         cell(pair, changedField(pair, "scrapPct"), readers.scrapPct),
         cell(pair, effectiveChanged, readers.effective),
         cell(pair, changedField(pair, "operationSeq"), readers.operationSeq),
@@ -270,12 +449,19 @@ export function RoutingRevisionEvidence({
 }) {
   useTranslations("accounting");
   const label = useFieldLabel();
-  const root = (evidence && typeof evidence === "object" ? evidence : {}) as Record<string, unknown>;
-  const candidate = (root.candidate && typeof root.candidate === "object" ? root.candidate : {}) as Record<string, unknown>;
+  const root = (evidence && typeof evidence === "object" ? evidence : {}) as Record<
+    string,
+    unknown
+  >;
+  const candidate = (
+    root.candidate && typeof root.candidate === "object" ? root.candidate : {}
+  ) as Record<string, unknown>;
   const operations = Array.isArray(candidate.operations)
     ? (candidate.operations as RoutingOperation[])
     : [];
-  const supersedes = Array.isArray(root.supersedes) ? (root.supersedes as Record<string, unknown>[]) : [];
+  const supersedes = Array.isArray(root.supersedes)
+    ? (root.supersedes as Record<string, unknown>[])
+    : [];
   const workCenterName = (id: unknown): string => {
     const key = String(id ?? "");
     return (key && names[key]) || (key ? key.slice(0, 8) : "…");
@@ -285,7 +471,8 @@ export function RoutingRevisionEvidence({
     if (op.qualityGate != null && op.qualityGate !== false && op.qualityGate !== "none")
       out.push(`${label("qualityGate")}: ${lineText(op.qualityGate)}`);
     if (op.backflushAt != null) out.push(`${label("backflushAt")}: ${lineText(op.backflushAt)}`);
-    if (op.laborTimeSource != null) out.push(`${label("laborTimeSource")}: ${lineText(op.laborTimeSource)}`);
+    if (op.laborTimeSource != null)
+      out.push(`${label("laborTimeSource")}: ${lineText(op.laborTimeSource)}`);
     return out;
   };
   return (
@@ -309,7 +496,9 @@ export function RoutingRevisionEvidence({
                 <span className="flex flex-col gap-1">
                   <span className="break-words">{lineText(op.name)}</span>
                   {flags(op).map((flag, j) => (
-                    <span key={j} className="text-xs text-slate-500 dark:text-slate-400">{flag}</span>
+                    <span key={j} className="text-xs text-slate-500 dark:text-slate-400">
+                      {flag}
+                    </span>
                   ))}
                 </span>
               </TableCell>

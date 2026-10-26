@@ -8,7 +8,16 @@ const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
 });
 const globals = globalThis as Record<string, unknown>;
 const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
+for (const key of [
+  "window",
+  "document",
+  "navigator",
+  "Node",
+  "Element",
+  "HTMLElement",
+  "Event",
+  "self",
+]) {
   if (globals[key] === undefined) globals[key] = domWindow[key];
 }
 if (typeof window.matchMedia !== "function") {
@@ -92,7 +101,13 @@ function payload(): Payload {
       },
     ],
     billings: [
-      { id: "bill-1", document_number: "INV-1", amount: "1200.0000", billed_on: "2026-01-05", status: "posted" },
+      {
+        id: "bill-1",
+        document_number: "INV-1",
+        amount: "1200.0000",
+        billed_on: "2026-01-05",
+        status: "posted",
+      },
     ],
     position: {
       billed: "1200.0000",
@@ -132,10 +147,7 @@ function twoObligationPayload(): Payload {
   };
   return {
     ...base,
-    obligations: [
-      { ...firstBase, id: "ob-1", description: "Annual plan A" },
-      second,
-    ],
+    obligations: [{ ...firstBase, id: "ob-1", description: "Annual plan A" }, second],
   };
 }
 
@@ -253,14 +265,8 @@ test("selecting an obligation shows only its recognition schedule", async (t) =>
     await tick();
   });
 
-  assert.ok(
-    selectorButton("Annual plan A"),
-    "the selector names the first obligation",
-  );
-  assert.ok(
-    selectorButton("Annual plan B"),
-    "the selector names the second obligation",
-  );
+  assert.ok(selectorButton("Annual plan A"), "the selector names the first obligation");
+  assert.ok(selectorButton("Annual plan B"), "the selector names the second obligation");
 
   // The focused pane is the single detail section named for the selection:
   // the sibling obligation's pane never renders beside it.
@@ -334,17 +340,12 @@ test("billings and accounting events never share a visible body", async (t) => {
   // Headings, not strip tabs: the events tab button carries the same text
   // as the events title, so exact-text lookup would find the tab first.
   const headingOf = (text: string): Element | null =>
-    Array.from(document.querySelectorAll("h3")).find(
-      (element) => element.textContent === text,
-    ) ?? null;
+    Array.from(document.querySelectorAll("h3")).find((element) => element.textContent === text) ??
+    null;
 
   const billingsHeading = headingOf("Billings");
   assert.ok(billingsHeading, "the billings table keeps its heading");
-  assert.equal(
-    billingsHeading.closest("div[hidden]"),
-    null,
-    "the billings body starts visible",
-  );
+  assert.equal(billingsHeading.closest("div[hidden]"), null, "the billings body starts visible");
   const eventsHeading = headingOf("Accounting events");
   assert.ok(eventsHeading, "the events list keeps its title");
   assert.ok(

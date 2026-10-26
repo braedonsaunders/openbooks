@@ -1,7 +1,7 @@
-import type { ComponentProps } from 'react'
-import Link from 'next/link'
-import { cn } from '@openbooks/ui'
-import { RelationshipsTable } from './RelationshipsTable'
+import type { ComponentProps } from "react";
+import Link from "next/link";
+import { cn } from "@openbooks/ui";
+import { RelationshipsTable } from "./RelationshipsTable";
 
 /**
  * The customers cockpit's bespoke panel bodies, extracted from the page.
@@ -31,14 +31,16 @@ export function RelationshipsSection({
   crmEnabled,
   empty,
 }: {
-  rows: ComponentProps<typeof RelationshipsTable>['rows']
-  crmEnabled: boolean
-  empty: string
+  rows: ComponentProps<typeof RelationshipsTable>["rows"];
+  crmEnabled: boolean;
+  empty: string;
 }) {
   if (rows.length === 0) {
-    return <p className="px-6 py-16 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+    return (
+      <p className="px-6 py-16 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+    );
   }
-  return <RelationshipsTable rows={rows} crmEnabled={crmEnabled} />
+  return <RelationshipsTable rows={rows} crmEnabled={crmEnabled} />;
 }
 
 export function ArPulse({
@@ -49,34 +51,46 @@ export function ArPulse({
   labels,
   href,
 }: {
-  outstanding: string
-  overdue: string
-  overdueIsNegative: boolean
-  dso: string
-  labels: { open: string; overdue: string; dso: string; cta: string }
-  href: string
+  outstanding: string;
+  overdue: string;
+  overdueIsNegative: boolean;
+  dso: string;
+  labels: { open: string; overdue: string; dso: string; cta: string };
+  href: string;
 }) {
   return (
     <>
       <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-800">
         <div className="min-w-0 px-2 py-2.5 text-center sm:px-3">
-          <p className="text-sm font-bold break-words tabular-nums text-slate-800 dark:text-slate-100">{outstanding}</p>
-          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{labels.open}</p>
+          <p className="text-sm font-bold break-words tabular-nums text-slate-800 dark:text-slate-100">
+            {outstanding}
+          </p>
+          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            {labels.open}
+          </p>
         </div>
         <div className="min-w-0 px-2 py-2.5 text-center sm:px-3">
           <p
             className={cn(
-              'text-sm font-bold break-words tabular-nums',
-              overdueIsNegative ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-100',
+              "text-sm font-bold break-words tabular-nums",
+              overdueIsNegative
+                ? "text-red-600 dark:text-red-400"
+                : "text-slate-800 dark:text-slate-100",
             )}
           >
             {overdue}
           </p>
-          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{labels.overdue}</p>
+          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            {labels.overdue}
+          </p>
         </div>
         <div className="min-w-0 px-2 py-2.5 text-center sm:px-3">
-          <p className="text-sm font-bold break-words tabular-nums text-slate-800 dark:text-slate-100">{dso}</p>
-          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{labels.dso}</p>
+          <p className="text-sm font-bold break-words tabular-nums text-slate-800 dark:text-slate-100">
+            {dso}
+          </p>
+          <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+            {labels.dso}
+          </p>
         </div>
       </div>
       <Link
@@ -86,5 +100,5 @@ export function ArPulse({
         {labels.cta} →
       </Link>
     </>
-  )
+  );
 }

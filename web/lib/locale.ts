@@ -17,7 +17,7 @@ import { canonicalTimeZone } from "@openbooks/engine/platform/time-zone";
  */
 const requestUser = cache(async () => {
   return currentUser().catch((error: unknown) => {
-    if (typeof error === 'object' && error !== null && 'digest' in error) throw error;
+    if (typeof error === "object" && error !== null && "digest" in error) throw error;
     if (error instanceof Error && /outside a request scope/i.test(error.message)) return null;
     throw error;
   });
@@ -30,7 +30,10 @@ function presentationFact<T>(key: string, load: () => Promise<T>): Promise<T> {
   const verified = requestAuthzContext();
   if (!verified) return load();
   let facts = presentationFacts.get(verified);
-  if (!facts) { facts = new Map(); presentationFacts.set(verified, facts); }
+  if (!facts) {
+    facts = new Map();
+    presentationFacts.set(verified, facts);
+  }
   const known = facts.get(key);
   if (known) return known as Promise<T>;
   const pending = load();
@@ -66,24 +69,34 @@ export function resolveLocale(): Promise<Locale> {
  * update writes, so the language a page renders in and the choice the
  * account menu marks always come from one place.
  */
-async function readLocaleSettings(): Promise<{ user_locale: unknown; org_default: unknown } | null> {
+async function readLocaleSettings(): Promise<{
+  user_locale: unknown;
+  org_default: unknown;
+} | null> {
   // Off-request requestUser() is null (see above), so this stays anonymous.
-  const activeUser = requestAuthzContext()?.user ?? await requestUser();
+  const activeUser = requestAuthzContext()?.user ?? (await requestUser());
   if (!activeUser) return null;
   const preferenceUser = preferenceUserIdentity(activeUser);
   // bypass: user-keyed-lookup — the acting identity's preference and active
   // organization's default are both qualified to their verified identities.
-  const r = await withBypassContext(() => db.execute<{ user_locale: unknown; org_default: unknown }>(sql`
+  const r = await withBypassContext(() =>
+    db.execute<{ user_locale: unknown; org_default: unknown }>(
+      sql`
       select u.locale as user_locale, o.settings ->> 'defaultLocale' as org_default
         from users u
         left join orgs o on o.id = ${activeUser.orgId}
        where u.id = ${preferenceUser.id} and u.org_id = ${preferenceUser.orgId} and u.is_active
-    `, "objects"));
+    `,
+      "objects",
+    ),
+  );
   return r[0] ?? null;
 }
 const renderLocaleSettings = cache(readLocaleSettings);
 function activeLocaleSettings() {
-  return requestAuthzContext() ? presentationFact("localeSettings", readLocaleSettings) : renderLocaleSettings();
+  return requestAuthzContext()
+    ? presentationFact("localeSettings", readLocaleSettings)
+    : renderLocaleSettings();
 }
 
 /**
@@ -103,18 +116,27 @@ export async function userLocalePreference(): Promise<Locale | null> {
  * stored zone is configuration corruption and must be fixed explicitly.
  */
 async function readTimeZone(): Promise<string> {
-  const activeUser = requestAuthzContext()?.user ?? await requestUser();
+  const activeUser = requestAuthzContext()?.user ?? (await requestUser());
   if (!activeUser) return "UTC";
-  const r = await withOrgContext(activeUser.orgId, async () => (await db.execute(sql`
+  const r = await withOrgContext(
+    activeUser.orgId,
+    async () =>
+      await db.execute(
+        sql`
       select settings ->> 'timeZone' as time_zone
         from orgs
        where id = ${activeUser.orgId}
-    `, "objects")));
+    `,
+        "objects",
+      ),
+  );
   const stored = r[0]?.time_zone;
   if (stored == null || String(stored).trim() === "") return "UTC";
   const canonical = canonicalTimeZone(String(stored));
   if (!canonical) {
-    throw new Error(`Organization time zone ${JSON.stringify(stored)} is invalid; correct Company Settings → Time zone.`);
+    throw new Error(
+      `Organization time zone ${JSON.stringify(stored)} is invalid; correct Company Settings → Time zone.`,
+    );
   }
   return canonical;
 }

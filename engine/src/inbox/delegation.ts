@@ -30,7 +30,8 @@ export type DelegationTarget = {
  */
 export function parseDelegationReason(reason: string | null | undefined): DelegationTarget {
   // The adapters rely on the throw, never on a silent default.
-  const REFUSAL = "delegation needs a recipient — give the reason as the colleague taking over, then the handover note";
+  const REFUSAL =
+    "delegation needs a recipient — give the reason as the colleague taking over, then the handover note";
   const text = (reason ?? "").trim();
   const prefix = /^user:/i.exec(text);
   if (!prefix) throw new Error(REFUSAL);

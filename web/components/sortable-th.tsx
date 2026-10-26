@@ -1,20 +1,20 @@
-import Link from 'next/link'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
-import { cn, TableHead } from '@openbooks/ui'
-import { mergeHref } from '@/lib/list-params'
+import Link from "next/link";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { cn, TableHead } from "@openbooks/ui";
+import { mergeHref } from "@/lib/list-params";
 
 type SortLinkProps = {
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
-  column: string
-  active: boolean
-  dir: 'asc' | 'desc'
-  align?: 'left' | 'right'
-  sortParamKey?: string
-  dirParamKey?: string
-  pageParamKey?: string
-  children: React.ReactNode
-}
+  basePath: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  column: string;
+  active: boolean;
+  dir: "asc" | "desc";
+  align?: "left" | "right";
+  sortParamKey?: string;
+  dirParamKey?: string;
+  pageParamKey?: string;
+  children: React.ReactNode;
+};
 
 /**
  * The clickable label shared by both header variants: renders the column name
@@ -28,29 +28,29 @@ function SortLink({
   column,
   active,
   dir,
-  align = 'left',
-  sortParamKey = 'sort',
-  dirParamKey = 'dir',
-  pageParamKey = 'page',
+  align = "left",
+  sortParamKey = "sort",
+  dirParamKey = "dir",
+  pageParamKey = "page",
   children,
 }: SortLinkProps) {
-  const nextDir: 'asc' | 'desc' = active && dir === 'asc' ? 'desc' : 'asc'
+  const nextDir: "asc" | "desc" = active && dir === "asc" ? "desc" : "asc";
   const href = mergeHref(basePath, currentParams, {
     [sortParamKey]: column,
     [dirParamKey]: nextDir,
     [pageParamKey]: 1,
-  })
+  });
   return (
     <Link
-      href={(href)}
+      href={href}
       className={cn(
-        'inline-flex items-center gap-1.5 hover:text-slate-900 dark:hover:text-slate-100',
-        align === 'right' && 'flex-row-reverse',
+        "inline-flex items-center gap-1.5 hover:text-slate-900 dark:hover:text-slate-100",
+        align === "right" && "flex-row-reverse",
       )}
     >
       {children}
       {active ? (
-        dir === 'asc' ? (
+        dir === "asc" ? (
           <ArrowUp size={12} className="text-slate-700 dark:text-slate-200" />
         ) : (
           <ArrowDown size={12} className="text-slate-700 dark:text-slate-200" />
@@ -59,7 +59,7 @@ function SortLink({
         <ArrowUpDown size={12} className="text-slate-300" />
       )}
     </Link>
-  )
+  );
 }
 
 /**
@@ -86,10 +86,10 @@ export function SortTh({
   sort,
   className,
   ...props
-}: Omit<SortLinkProps, 'active'> & { sort: string; className?: string }) {
+}: Omit<SortLinkProps, "active"> & { sort: string; className?: string }) {
   return (
     <TableHead className={className}>
       <SortLink {...props} active={sort === props.column} />
     </TableHead>
-  )
+  );
 }

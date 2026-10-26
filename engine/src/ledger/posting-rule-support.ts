@@ -1,7 +1,13 @@
 import { isZero, neg } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { negMoney, parseMoney, ZERO_MONEY } from "../money/brands.ts";
-import { type Doc, type DocLine, type KernelLine, type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
+import {
+  type Doc,
+  type DocLine,
+  type KernelLine,
+  type PostingDeps,
+  PostingError,
+} from "../journal/posting-contracts.ts";
 import { resolvedLineAccount, dims } from "./posting-rule-builders.ts";
 
 /**
@@ -23,7 +29,14 @@ export function controlLineIsOpenItem(
  * (a sale line and its discount line) post as they are; when every leg is
  * zero the document records its quantities instead.
  */
-export function settledAtNoCharge(doc: Doc, lines: DocLine[], legs: KernelLine[], deps: PostingDeps, sign: "1" | "-1", kindLabel: string): KernelLine[] {
+export function settledAtNoCharge(
+  doc: Doc,
+  lines: DocLine[],
+  legs: KernelLine[],
+  deps: PostingDeps,
+  sign: "1" | "-1",
+  kindLabel: string,
+): KernelLine[] {
   if (legs.some((leg) => !isZero(leg.amount))) return legs;
   if (!deps.noChargeUnitsAccountId) {
     throw new PostingError(
@@ -43,12 +56,20 @@ export function settledAtNoCharge(doc: Doc, lines: DocLine[], legs: KernelLine[]
  * journal identity, and the cost of any stocked goods posts through
  * inventory relief as on every sale.
  */
-export function noChargeMeasurementLegs(doc: Doc, lines: DocLine[], statisticalAccountId: string, sign: "1" | "-1", kindLabel: string): KernelLine[] {
+export function noChargeMeasurementLegs(
+  doc: Doc,
+  lines: DocLine[],
+  statisticalAccountId: string,
+  sign: "1" | "-1",
+  kindLabel: string,
+): KernelLine[] {
   const legs: KernelLine[] = [];
   for (const line of lines) {
     const quantity = canonicalDecimal(canonicalDecimal(line.quantity, 8), 4);
     if (quantity === null) {
-      throw new PostingError(`${kindLabel} ${doc.documentNumber} line ${line.lineNumber} quantity ${line.quantity} cannot be recorded at no charge — state the quantity with at most four decimal places`);
+      throw new PostingError(
+        `${kindLabel} ${doc.documentNumber} line ${line.lineNumber} quantity ${line.quantity} cannot be recorded at no charge — state the quantity with at most four decimal places`,
+      );
     }
     if (isZero(quantity)) continue;
     legs.push({
@@ -62,31 +83,31 @@ export function noChargeMeasurementLegs(doc: Doc, lines: DocLine[], statisticalA
     });
   }
   if (legs.length === 0) {
-    throw new PostingError(`${kindLabel} ${doc.documentNumber} settles nothing and records no quantity — add the items sold, or delete the draft`);
+    throw new PostingError(
+      `${kindLabel} ${doc.documentNumber} settles nothing and records no quantity — add the items sold, or delete the draft`,
+    );
   }
   return legs;
 }
 
 /** Marks a leg that defers its line through an amortization template. */
-export const amortizationSource = (l: DocLine, deps: PostingDeps): { amortizationSourceLineId?: string } =>
+export const amortizationSource = (
+  l: DocLine,
+  deps: PostingDeps,
+): { amortizationSourceLineId?: string } =>
   deps.amortizationByLine?.has(l.id) ? { amortizationSourceLineId: l.id } : {};
 
 /** Pure GL projection for a financial equipment/resource charge. The debit is
  * job cost; the credit relieves a distinct recovery pool. Keeping this helper
  * exported makes the accounting invariant directly testable. */
-export function projectChargeKernelLines(
-  doc: Doc,
-  lines: DocLine[],
-): KernelLine[] {
+export function projectChargeKernelLines(doc: Doc, lines: DocLine[]): KernelLine[] {
   const out: KernelLine[] = [];
   for (const line of lines) {
     const accountId = resolvedLineAccount(line);
     if (!line.recoveryAccountId)
       throw new PostingError("project charge requires a cost recovery account");
     if (line.recoveryAccountId === accountId) {
-      throw new PostingError(
-        "project charge cost and recovery accounts must be different",
-      );
+      throw new PostingError("project charge cost and recovery accounts must be different");
     }
     out.push({
       accountId,

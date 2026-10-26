@@ -28,11 +28,7 @@ const code = script
 
 test("the release runs the bootstrap migration chain", () => {
   assert.match(code, /node scripts\/bootstrap\.mjs/, "the release must apply pending migrations");
-  assert.match(
-    code,
-    /OPENBOOKS_BOOTSTRAP=1/,
-    "bootstrap requires its explicit opt-in flag",
-  );
+  assert.match(code, /OPENBOOKS_BOOTSTRAP=1/, "bootstrap requires its explicit opt-in flag");
   assert.match(
     code,
     /OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION=1/,
@@ -50,18 +46,13 @@ test("migrations run BEFORE the stack is repointed, not after", () => {
     migrateAt < swapAt,
     "the digest swap must not happen before migrations apply, or the new code serves against an old schema",
   );
-  assert.ok(
-    migrateAt < deployAt,
-    "the stack deploy must not happen before migrations apply",
-  );
+  assert.ok(migrateAt < deployAt, "the stack deploy must not happen before migrations apply");
 });
 
 test("a failed migration aborts the release instead of serving anyway", () => {
   assert.match(code, /set -euo pipefail/, "an unguarded failure would fall through to the swap");
   // The migration must not be neutered by a fallback that lets the release continue.
-  const migrateLine = code
-    .split("\n")
-    .find((line) => line.includes("node scripts/bootstrap.mjs"));
+  const migrateLine = code.split("\n").find((line) => line.includes("node scripts/bootstrap.mjs"));
   assert.ok(migrateLine !== undefined);
   assert.ok(
     !/\|\||true\s*$/.test(migrateLine),
@@ -136,7 +127,10 @@ function hasBoundedStdin(source, line) {
   }
   if (/<\/dev\/null/.test(command)) return true;
   const delimiter = /<<\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?/.exec(command)?.[1];
-  return delimiter !== undefined && new RegExp(`\n${delimiter}(?:\n|$)`).test(source.slice(at + line.length));
+  return (
+    delimiter !== undefined &&
+    new RegExp(`\n${delimiter}(?:\n|$)`).test(source.slice(at + line.length))
+  );
 }
 
 test("stdin protection refuses an unbounded or incomplete psql invocation", () => {
@@ -151,7 +145,8 @@ test("stdin protection refuses an unbounded or incomplete psql invocation", () =
 
 test("a here-document cannot consume the remainder of a piped release script", () => {
   const result = spawnSync("bash", ["-s"], {
-    input: "docker() { cat; }\ndocker exec -i database psql <<'SQL'\nselect 1;\nSQL\nprintf 'release continues\\n'\n",
+    input:
+      "docker() { cat; }\ndocker exec -i database psql <<'SQL'\nselect 1;\nSQL\nprintf 'release continues\\n'\n",
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stderr);

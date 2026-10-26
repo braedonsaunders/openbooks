@@ -2,7 +2,11 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { can, type Authz } from "../authz";
-import { canReadContinuousCloseAgent, loadWorkItemAccess, withLockedWorkItemAccess } from "../continuous-close";
+import {
+  canReadContinuousCloseAgent,
+  loadWorkItemAccess,
+  withLockedWorkItemAccess,
+} from "../continuous-close";
 import { workItemSubjectInScope } from "./work-item-subsidiary-scope";
 import { isUuid } from "@openbooks/engine/platform/identifiers";
 
@@ -51,7 +55,11 @@ async function readableItem(authz: Authz, itemId: string): Promise<boolean> {
   return (
     !!access &&
     canReadContinuousCloseAgent(authz, access.agentKey) &&
-    workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)
+    workItemSubjectInScope(
+      authz.allowedSubsidiaryIds,
+      access.subjectType ?? "",
+      access.subjectSubsidiaryId,
+    )
   );
 }
 
@@ -66,17 +74,23 @@ async function resolveAssignee(
   // a 22P02 throw instead of failing closed as invalid_assignee.
   if (assigneeUserId !== undefined && assigneeUserId !== null) {
     if (!isUuid(assigneeUserId)) return null;
-    const found = await db.execute<{ id: string }>(sql`
+    const found = await db.execute<{ id: string }>(
+      sql`
       select id from users where id = ${assigneeUserId} and org_id = ${orgId} and is_active
-    `, "objects");
+    `,
+      "objects",
+    );
     if (found.length === 0) return null;
     userId = String(found[0]?.id);
   }
   if (assigneeRole !== undefined && assigneeRole !== null) {
     if (!isUuid(assigneeRole)) return null;
-    const found = await db.execute<{ id: string }>(sql`
+    const found = await db.execute<{ id: string }>(
+      sql`
       select id from app_roles where id = ${assigneeRole} and org_id = ${orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     if (found.length === 0) return null;
     roleId = String(found[0]?.id);
   }
@@ -91,7 +105,10 @@ export async function setWorkItemAssignment(
   if (!can(authz, "assistant.write")) return { ok: false, error: "forbidden" };
   if (!(await readableItem(authz, itemId))) return { ok: false, error: "not_found" };
   const { assigneeUserId, assigneeRole, dueAt } = input;
-  const clearing = (assigneeUserId ?? null) === null && (assigneeRole ?? null) === null && (dueAt ?? null) === null;
+  const clearing =
+    (assigneeUserId ?? null) === null &&
+    (assigneeRole ?? null) === null &&
+    (dueAt ?? null) === null;
   let due: string | null = null;
   if (dueAt !== undefined && dueAt !== null) {
     const parsed = new Date(dueAt);
@@ -110,9 +127,15 @@ export async function setWorkItemAssignment(
     async (tx, access) => {
       if (
         !canReadContinuousCloseAgent(authz, access.agentKey) ||
-        !workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)
-      ) return false;
-      const changed = await tx.execute<{ id: string }>(sql`
+        !workItemSubjectInScope(
+          authz.allowedSubsidiaryIds,
+          access.subjectType ?? "",
+          access.subjectSubsidiaryId,
+        )
+      )
+        return false;
+      const changed = await tx.execute<{ id: string }>(
+        sql`
         update ai_work_items set
           assignee_user_id = ${resolved.userId},
           assignee_role = ${resolved.roleId},
@@ -120,7 +143,9 @@ export async function setWorkItemAssignment(
           updated_at = now(), updated_by = ${authz.user.id}
          where id = ${itemId} and org_id = ${authz.user.orgId}
          returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (changed.length === 0) return false;
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -151,13 +176,21 @@ export async function addWorkItemNote(
     async (tx, access) => {
       if (
         !canReadContinuousCloseAgent(authz, access.agentKey) ||
-        !workItemSubjectInScope(authz.allowedSubsidiaryIds, access.subjectType ?? "", access.subjectSubsidiaryId)
-      ) return null;
-      const inserted = await tx.execute<{ id: string }>(sql`
+        !workItemSubjectInScope(
+          authz.allowedSubsidiaryIds,
+          access.subjectType ?? "",
+          access.subjectSubsidiaryId,
+        )
+      )
+        return null;
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
         insert into ai_work_item_notes (org_id, work_item_id, user_id, body)
         values (${authz.user.orgId}, ${itemId}, ${authz.user.id}, ${text})
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       return inserted[0]?.id ?? null;
     },
   );
@@ -176,14 +209,17 @@ export async function loadWorkItemAssignment(
     assignee_role: string | null;
     assignee_role_name: string | null;
     due_at: string | Date | null;
-  }>(sql`
+  }>(
+    sql`
     select w.assignee_user_id, u.name as assignee_user_name,
            w.assignee_role, r.name as assignee_role_name, w.due_at
       from ai_work_items w
       left join users u on u.id = w.assignee_user_id and u.org_id = w.org_id
       left join app_roles r on r.id::text = w.assignee_role and r.org_id = w.org_id
      where w.id = ${itemId} and w.org_id = ${authz.user.orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = result[0];
   if (!row) return null;
   const dueAt = row.due_at ? new Date(row.due_at).toISOString() : null;
@@ -205,14 +241,17 @@ export async function listWorkItemNotes(authz: Authz, itemId: string): Promise<W
     user_name: string | null;
     body: string;
     created_at: string | Date;
-  }>(sql`
+  }>(
+    sql`
     select n.id, n.user_id, u.name as user_name, n.body, n.created_at
       from ai_work_item_notes n
       left join users u on u.id = n.user_id and u.org_id = n.org_id
      where n.work_item_id = ${itemId} and n.org_id = ${authz.user.orgId}
      order by n.created_at, n.id
      limit ${MAX_NOTES + 1}
-  `, "objects");
+  `,
+    "objects",
+  );
   return result.slice(0, MAX_NOTES).map((row) => ({
     id: String(row.id),
     userId: String(row.user_id),

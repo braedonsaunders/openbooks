@@ -7,7 +7,10 @@ process.env.OPENBOOKS_DATA_KEY ??=
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
 const stateKey = Symbol.for("openbooks.qbo-oauth-callback-test");
-const secrets = sealJson({ clientId: "qbo-client", clientSecret: "qbo-secret" }, { orgId: "org-1", purpose: "connection.secrets" });
+const secrets = sealJson(
+  { clientId: "qbo-client", clientSecret: "qbo-secret" },
+  { orgId: "org-1", purpose: "connection.secrets" },
+);
 const state = {
   connection: {
     id: "conn-1",
@@ -90,7 +93,10 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ["mock:audit", `export function connectionAuditChanges() { return { event: "oauth_connected" } }`],
+  [
+    "mock:audit",
+    `export function connectionAuditChanges() { return { event: "oauth_connected" } }`,
+  ],
   ["mock:super-admin", `export async function lockActorPermission(tx, gate) { return gate }`],
   ["mock:email-tokens", `export function appBaseUrl() { return "https://books.example"; }`],
 ]);
@@ -118,12 +124,13 @@ const hooks = registerHooks({
   },
 });
 
-const qbo_oauth_callbackUrl = './route.ts?qbo-oauth-callback'
-const { GET } = (await import(qbo_oauth_callbackUrl)) as typeof import('./route.ts');
-const qbo_oauth_callback_flowUrl = '../../_flow.ts?qbo-oauth-callback-flow'
-const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(qbo_oauth_callback_flowUrl)) as typeof import('../../_flow.ts');
-test.after(() => hooks.deregister())
-
+const qbo_oauth_callbackUrl = "./route.ts?qbo-oauth-callback";
+const { GET } = (await import(qbo_oauth_callbackUrl)) as typeof import("./route.ts");
+const qbo_oauth_callback_flowUrl = "../../_flow.ts?qbo-oauth-callback-flow";
+const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(
+  qbo_oauth_callback_flowUrl
+)) as typeof import("../../_flow.ts");
+test.after(() => hooks.deregister());
 
 function resetQbo(): void {
   state.updated = null;
@@ -138,7 +145,11 @@ function accessTokenForRealm(realm: string): string {
   return `${header}.${payload}.sig`;
 }
 
-async function callback(init: { state: string; cookie?: string | null; realmId?: string }): Promise<Response> {
+async function callback(init: {
+  state: string;
+  cookie?: string | null;
+  realmId?: string;
+}): Promise<Response> {
   const url = new URL("https://evil.example/api/platform/connections/oauth/qbo/callback");
   url.searchParams.set("code", "auth-code");
   url.searchParams.set("state", init.state);
@@ -150,7 +161,9 @@ async function callback(init: { state: string; cookie?: string | null; realmId?:
 
 test("QBO callback bounce uses appBaseUrl, not the request Host", async () => {
   const res = await GET(
-    new Request("https://evil.example/api/platform/connections/oauth/qbo/callback?error=access_denied"),
+    new Request(
+      "https://evil.example/api/platform/connections/oauth/qbo/callback?error=access_denied",
+    ),
   );
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=denied");
 });
@@ -158,7 +171,10 @@ test("QBO callback bounce uses appBaseUrl, not the request Host", async () => {
 test("a reusable sealed org/connection pair without the cookie nonce is badstate", async () => {
   resetQbo();
   const res = await callback({
-    state: sealJson({ orgId: "org-1", connectionId: "conn-1" }, { orgId: "system", purpose: "connection.oauth.state" }),
+    state: sealJson(
+      { orgId: "org-1", connectionId: "conn-1" },
+      { orgId: "system", purpose: "connection.oauth.state" },
+    ),
     cookie: "unrelated-nonce",
   });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=badstate");

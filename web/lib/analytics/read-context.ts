@@ -1,31 +1,38 @@
-import 'server-only'
-import { AsyncLocalStorage } from 'node:async_hooks'
-import type { Authz } from '../authz'
+import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
+import type { Authz } from "../authz";
 
 export interface AnalyticsReadContext {
-  authz: Authz
-  slug: string
-  projection: 'summary' | 'tab'
-  tab: string
-  locale: string
-  revision: string
-  observedAt: number
+  authz: Authz;
+  slug: string;
+  projection: "summary" | "tab";
+  tab: string;
+  locale: string;
+  revision: string;
+  observedAt: number;
 }
 
-const context = new AsyncLocalStorage<AnalyticsReadContext>()
-export const currentAnalyticsRead = () => context.getStore()
-export const withAnalyticsRead = <T>(read: AnalyticsReadContext, action: () => Promise<T>) => context.run(read, action)
+const context = new AsyncLocalStorage<AnalyticsReadContext>();
+export const currentAnalyticsRead = () => context.getStore();
+export const withAnalyticsRead = <T>(read: AnalyticsReadContext, action: () => Promise<T>) =>
+  context.run(read, action);
 
 export function observeAnalyticsSource(at: string): void {
-  const read = context.getStore()
-  if (read) read.observedAt = Math.min(read.observedAt, Date.parse(at))
+  const read = context.getStore();
+  if (read) read.observedAt = Math.min(read.observedAt, Date.parse(at));
 }
 
 /** Direct domain readers retain their full contract. Dashboard requests only
  * resolve the sections belonging to the selected view. */
-export function analyticsSection(slug: string, tabs: readonly string[], options: { summary?: boolean } = {}): boolean {
-  const read = context.getStore()
-  return !read || read.slug !== slug || (read.projection === 'summary'
-    ? options.summary === true
-    : tabs.includes(read.tab))
+export function analyticsSection(
+  slug: string,
+  tabs: readonly string[],
+  options: { summary?: boolean } = {},
+): boolean {
+  const read = context.getStore();
+  return (
+    !read ||
+    read.slug !== slug ||
+    (read.projection === "summary" ? options.summary === true : tabs.includes(read.tab))
+  );
 }

@@ -8,7 +8,16 @@ const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
 });
 const globals = globalThis as Record<string, unknown>;
 const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
+for (const key of [
+  "window",
+  "document",
+  "navigator",
+  "Node",
+  "Element",
+  "HTMLElement",
+  "Event",
+  "self",
+]) {
   if (globals[key] === undefined) globals[key] = domWindow[key];
 }
 if (typeof window.matchMedia !== "function") {
@@ -70,7 +79,11 @@ async function mountForm(
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      <SignDocumentForm token="test-token" signerStatus={signerStatus} acknowledgmentOnly={acknowledgmentOnly} />,
+      <SignDocumentForm
+        token="test-token"
+        signerStatus={signerStatus}
+        acknowledgmentOnly={acknowledgmentOnly}
+      />,
     );
     await tick();
   });
@@ -172,7 +185,11 @@ test("a failed sign shows the error and does not refresh", async (t) => {
 
   await signAs("Sara Lee");
 
-  assert.match(document.body.textContent ?? "", /link_expired/, "the refusal must reach the signer");
+  assert.match(
+    document.body.textContent ?? "",
+    /link_expired/,
+    "the refusal must reach the signer",
+  );
   assert.doesNotMatch(
     document.body.textContent ?? "",
     /signature is recorded/,

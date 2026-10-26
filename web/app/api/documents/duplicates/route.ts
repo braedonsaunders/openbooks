@@ -14,7 +14,10 @@ const querySchema = z
   .object({
     kind: z.enum(["customer_invoice", "vendor_bill", "vendor_credit"]),
     partyId: uuidString(),
-    documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    documentDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
     total: z.string().min(1).max(32).optional(),
     referenceNumber: z.string().max(200).optional(),
     excludeId: uuidString().optional(),
@@ -46,7 +49,10 @@ export const GET = defineRoute({
     const parsed = querySchema.safeParse(params);
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "kind and partyId are required, with referenceNumber for bills and credits or documentDate (YYYY-MM-DD) and total for invoices; excludeId must be a document id" },
+        {
+          error:
+            "kind and partyId are required, with referenceNumber for bills and credits or documentDate (YYYY-MM-DD) and total for invoices; excludeId must be a document id",
+        },
         { status: 400 },
       );
     }
@@ -56,15 +62,27 @@ export const GET = defineRoute({
     if (total !== undefined) {
       amount = canonicalDecimal(total, 4);
       if (amount === null || compareDecimal(amount, "0") <= 0) {
-        return NextResponse.json({ error: "total must be a positive exact decimal" }, { status: 400 });
+        return NextResponse.json(
+          { error: "total must be a positive exact decimal" },
+          { status: 400 },
+        );
       }
     }
     if (kind === "customer_invoice" && (!documentDate || amount === null)) {
-      return NextResponse.json({ error: "documentDate and total are required to check an invoice for duplicates" }, { status: 400 });
+      return NextResponse.json(
+        { error: "documentDate and total are required to check an invoice for duplicates" },
+        { status: 400 },
+      );
     }
     const duplicates = await findPossibleDuplicates({
-      orgId: authz.user.orgId, kind, partyId, documentDate, total: amount,
-      reference: referenceNumber, excludeId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      orgId: authz.user.orgId,
+      kind,
+      partyId,
+      documentDate,
+      total: amount,
+      reference: referenceNumber,
+      excludeId,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     });
     return NextResponse.json({ duplicates });
   },

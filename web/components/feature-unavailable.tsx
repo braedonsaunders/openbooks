@@ -1,14 +1,14 @@
-import 'server-only'
+import "server-only";
 
-import Link from 'next/link'
-import { ArrowRight, Power, Workflow } from 'lucide-react'
-import { getTranslations } from 'next-intl/server'
-import { Button, EmptyState } from '@openbooks/ui'
-import { FEATURE_BY_KEY } from '@openbooks/engine/organization/feature-registry'
-import { RouteStateView } from './route-state'
+import Link from "next/link";
+import { ArrowRight, Power, Workflow } from "lucide-react";
+import { getTranslations } from "next-intl/server";
+import { Button, EmptyState } from "@openbooks/ui";
+import { FEATURE_BY_KEY } from "@openbooks/engine/organization/feature-registry";
+import { RouteStateView } from "./route-state";
 
 /** Where to turn an organization feature on: Company Settings → Features. */
-export const FEATURES_SETUP_HREF = '/admin/setup/features'
+export const FEATURES_SETUP_HREF = "/admin/setup/features";
 
 /**
  * The Features switchboard opened on the tab that owns the feature. Without the
@@ -16,8 +16,8 @@ export const FEATURES_SETUP_HREF = '/admin/setup/features'
  * is not visible. Unknown keys keep the switchboard's default tab.
  */
 export function featureSetupHref(featureKey: string): string {
-  const category = FEATURE_BY_KEY.get(featureKey)?.category
-  return category ? `${FEATURES_SETUP_HREF}?tab=${category}` : FEATURES_SETUP_HREF
+  const category = FEATURE_BY_KEY.get(featureKey)?.category;
+  return category ? `${FEATURES_SETUP_HREF}?tab=${category}` : FEATURES_SETUP_HREF;
 }
 
 /**
@@ -26,9 +26,9 @@ export function featureSetupHref(featureKey: string): string {
  * to the key itself rather than crashing or leaking a message path.
  */
 export async function featureDisplayName(featureKey: string): Promise<string> {
-  const t = await getTranslations('admin.features')
-  const path = `${featureKey}.title`
-  return t.has(path as never) ? t(path as never) : featureKey
+  const t = await getTranslations("admin.features");
+  const path = `${featureKey}.title`;
+  return t.has(path as never) ? t(path as never) : featureKey;
 }
 
 /**
@@ -48,42 +48,47 @@ export async function featureDisplayName(featureKey: string): Promise<string> {
 export async function FeatureUnavailable({
   featureKey,
   canManageFeatures,
-  placement = 'section',
+  placement = "section",
 }: {
-  featureKey: string
+  featureKey: string;
   /** `admin.setup.manage`, resolved by the caller from its own authority. */
-  canManageFeatures: boolean
-  placement?: 'route' | 'section' | 'inline'
+  canManageFeatures: boolean;
+  placement?: "route" | "section" | "inline";
 }) {
-  const t = await getTranslations('shell.routeState')
-  const name = await featureDisplayName(featureKey)
-  const title = t('featureOffTitle', { name })
-  const explanation = t('featureOffDescription', { name })
-  const description = canManageFeatures ? explanation : `${explanation} ${t('askAdministrator')}`
-  const icon = featureKey === 'automations' ? <Workflow /> : <Power />
+  const t = await getTranslations("shell.routeState");
+  const name = await featureDisplayName(featureKey);
+  const title = t("featureOffTitle", { name });
+  const explanation = t("featureOffDescription", { name });
+  const description = canManageFeatures ? explanation : `${explanation} ${t("askAdministrator")}`;
+  const icon = featureKey === "automations" ? <Workflow /> : <Power />;
 
-  if (placement === 'inline') {
+  if (placement === "inline") {
     return (
       <div data-feature-state="disabled" data-feature-key={featureKey}>
         <EmptyState
           icon={icon}
           title={title}
           description={description}
-          action={canManageFeatures ? (
-            <Button asChild size="sm">
-              <Link href={featureSetupHref(featureKey)}>{t('turnOnFeature')}<ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>
-            </Button>
-          ) : undefined}
+          action={
+            canManageFeatures ? (
+              <Button asChild size="sm">
+                <Link href={featureSetupHref(featureKey)}>
+                  {t("turnOnFeature")}
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : undefined
+          }
         />
       </div>
-    )
+    );
   }
 
   const dashboard = (
     <Button asChild size="lg" variant="outline">
-      <Link href="/dashboard">{t('backToDashboard')}</Link>
+      <Link href="/dashboard">{t("backToDashboard")}</Link>
     </Button>
-  )
+  );
   return (
     <RouteStateView
       presentation="feature"
@@ -93,12 +98,19 @@ export async function FeatureUnavailable({
       icon={icon}
       title={title}
       description={description}
-      action={canManageFeatures ? (
-        <Button asChild size="lg">
-          <Link href={featureSetupHref(featureKey)}>{t('turnOnFeature')}<ArrowRight aria-hidden="true" className="h-4 w-4" /></Link>
-        </Button>
-      ) : dashboard}
+      action={
+        canManageFeatures ? (
+          <Button asChild size="lg">
+            <Link href={featureSetupHref(featureKey)}>
+              {t("turnOnFeature")}
+              <ArrowRight aria-hidden="true" className="h-4 w-4" />
+            </Link>
+          </Button>
+        ) : (
+          dashboard
+        )
+      }
       secondaryAction={canManageFeatures ? dashboard : undefined}
     />
-  )
+  );
 }

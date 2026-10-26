@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // The card-charge drawer names the reconcilable card account the charge posts
 // against. The helper guides the choice while none is selected, the selected
@@ -10,9 +10,20 @@ import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 // organization without reconcilable card accounts.
 
 const { registerHooks } = await import("node:module");
-await bootJsdomEnvironment({ url: "http://localhost:4800/banking/transactions", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/banking/transactions",
+  matchMediaMatches: false,
+});
 
-stubModules({ navigation: { source: 'export function useRouter(){return {push(){},refresh(){},replace(){},back(){},forward(){},prefetch(){}}}export function usePathname(){return \'/banking/transactions\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return {push(){},refresh(){},replace(){},back(){},forward(){},prefetch(){}}}export function usePathname(){return '/banking/transactions'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -52,7 +63,10 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const SEGMENTS: never[] = [];
 const VISA = { id: randomUUID(), number: "2500", name: "Visa", currency_restriction: null };
 
-async function mountCardCharge({ controlAccountId, cardAccounts }: {
+async function mountCardCharge({
+  controlAccountId,
+  cardAccounts,
+}: {
   controlAccountId: string | null;
   cardAccounts: Record<string, unknown>[];
 }) {
@@ -126,19 +140,28 @@ test("the card helper guides an unselected card account and yields once one is s
   const unselected = await mountCardCharge({ controlAccountId: null, cardAccounts: [VISA] });
   t.after(unselected.done);
   assert.ok(document.body.textContent?.includes(HELPER), "the helper guides the unselected choice");
-  assert.ok(!document.body.textContent?.includes(NO_ACCOUNTS), "card accounts exist, so no refusal shows");
+  assert.ok(
+    !document.body.textContent?.includes(NO_ACCOUNTS),
+    "card accounts exist, so no refusal shows",
+  );
   assert.doesNotMatch(document.body.textContent ?? "", /No cards on file/);
   await unselected.done();
 
   const selected = await mountCardCharge({ controlAccountId: VISA.id, cardAccounts: [VISA] });
   t.after(selected.done);
-  assert.ok(!document.body.textContent?.includes(HELPER), "the helper hides once the card account is selected");
+  assert.ok(
+    !document.body.textContent?.includes(HELPER),
+    "the helper hides once the card account is selected",
+  );
   assert.ok(!document.body.textContent?.includes(NO_ACCOUNTS));
 });
 
 test("the no-cards refusal appears only when the organization has no reconcilable card accounts", async (t) => {
   const none = await mountCardCharge({ controlAccountId: null, cardAccounts: [] });
   t.after(none.done);
-  assert.ok(document.body.textContent?.includes(NO_ACCOUNTS), "the empty organization is named as such");
+  assert.ok(
+    document.body.textContent?.includes(NO_ACCOUNTS),
+    "the empty organization is named as such",
+  );
   assert.ok(!document.body.textContent?.includes(HELPER), "no account picker, so no picker helper");
 });

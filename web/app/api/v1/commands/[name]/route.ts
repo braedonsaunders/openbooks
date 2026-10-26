@@ -28,7 +28,11 @@ async function handleV1POST(
     const { name } = await params;
     const definition = applicationTool(name);
     if (!definition) {
-      throw new ApplicationError("not_found", `command ${name} is not in the application catalog`, 404);
+      throw new ApplicationError(
+        "not_found",
+        `command ${name} is not in the application catalog`,
+        404,
+      );
     }
     const features = await resolvedFeatureState(auth.user.orgId);
     if (!applicationToolVisible(definition, context.authz, features)) {
@@ -46,5 +50,6 @@ async function handleV1POST(
 
 export const POST = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1POST(request, { params: Promise.resolve(params as never) } as never),
 });

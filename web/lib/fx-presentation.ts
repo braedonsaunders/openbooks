@@ -61,16 +61,18 @@ async function readPresentationCurrency(orgId: string): Promise<string> {
 }
 
 /** Functional currency of a journal line's entity; null (root-owned) lines read the org base. */
-export function lineFunctional(
-  subsidiaryBase: string | null,
-  orgBase: string,
-): string {
+export function lineFunctional(subsidiaryBase: string | null, orgBase: string): string {
   return subsidiaryBase ?? orgBase;
 }
 
 /** Shared direct-or-inverse closing spot selection. Direct rates win ties;
  * callers supply the needed currencies as a SQL relation with a ccy column. */
-export function presentationSpotRatesSql(orgId: string, base: string, currencies: SQL, refDate: string | SQL): SQL {
+export function presentationSpotRatesSql(
+  orgId: string,
+  base: string,
+  currencies: SQL,
+  refDate: string | SQL,
+): SQL {
   return sql`
     select distinct on (s.from_currency) s.from_currency, s.rate::text as rate
       from (
@@ -105,9 +107,7 @@ export async function presentationRates(
   froms: Iterable<string | null>,
   refDate: string,
 ): Promise<Map<string, string>> {
-  const needed = [...new Set([...froms].map((c) => c ?? base))].filter(
-    (c) => c !== base,
-  );
+  const needed = [...new Set([...froms].map((c) => c ?? base))].filter((c) => c !== base);
   const rates = new Map<string, string>([[base, "1"]]);
   if (needed.length === 0) return rates;
   const list = `{${needed.join(",")}}`;
@@ -141,26 +141,26 @@ export interface FlowRates {
 }
 
 export class MissingExchangeRateError extends Error {
-  readonly status = 422
+  readonly status = 422;
   /** First missing functional — the structured readers key on this. */
-  readonly func: string
+  readonly func: string;
   /** Every missing functional — the message names them all, never just the first. */
-  readonly funcs: string[]
-  readonly base: string
-  readonly date: string
+  readonly funcs: string[];
+  readonly base: string;
+  readonly date: string;
 
   constructor(func: string, base: string, date: string, funcs?: string[]) {
-    const all = funcs?.length ? [...new Set(funcs)] : [func]
+    const all = funcs?.length ? [...new Set(funcs)] : [func];
     super(
       all.length === 1
         ? `no spot rate for ${all[0]}→${base} on or before ${date} — add it at Setup → Exchange Rates`
-        : `no spot rates for ${all.map((f) => `${f}→${base}`).join(', ')} on or before ${date} — add them at Setup → Exchange Rates`,
-    )
-    this.name = 'MissingExchangeRateError'
-    this.func = all[0]!
-    this.funcs = all
-    this.base = base
-    this.date = date
+        : `no spot rates for ${all.map((f) => `${f}→${base}`).join(", ")} on or before ${date} — add them at Setup → Exchange Rates`,
+    );
+    this.name = "MissingExchangeRateError";
+    this.func = all[0]!;
+    this.funcs = all;
+    this.base = base;
+    this.date = date;
   }
 }
 
@@ -219,7 +219,8 @@ export async function flowRates(
       from quotes order by func, as_of desc, priority asc
     `);
     for (const func of funcs) timelines.set(func, []);
-    for (const row of result.rows) timelines.get(row.func)!.push({ asOf: row.as_of, rate: row.rate });
+    for (const row of result.rows)
+      timelines.get(row.func)!.push({ asOf: row.as_of, rate: row.rate });
   }
 
   return {
@@ -229,7 +230,7 @@ export async function flowRates(
       if (resolved === base) return "1";
       const rate = flowRateOnOrBefore(timelines.get(resolved) ?? [], date);
       if (!rate) {
-        throw new MissingExchangeRateError(resolved, base, date)
+        throw new MissingExchangeRateError(resolved, base, date);
       }
       return rate;
     },
@@ -238,8 +239,12 @@ export async function flowRates(
 
 /** Descending, date-unique spot timelines use logarithmic dated lookup.
  * The SQL reader preserves the direct-quote tie rule before this lookup. */
-export function flowRateOnOrBefore(timeline: readonly { asOf: string; rate: string }[], date: string): string | undefined {
-  let first = 0, last = timeline.length;
+export function flowRateOnOrBefore(
+  timeline: readonly { asOf: string; rate: string }[],
+  date: string,
+): string | undefined {
+  let first = 0,
+    last = timeline.length;
   while (first < last) {
     const middle = first + Math.floor((last - first) / 2);
     if (timeline[middle]!.asOf > date) first = middle + 1;

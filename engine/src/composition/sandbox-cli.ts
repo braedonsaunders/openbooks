@@ -13,11 +13,7 @@
 import { sql } from "drizzle-orm";
 import { db, pool, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { applyChangeSet, buildChangeSet } from "../sandbox/promote.ts";
-import {
-  createSandbox,
-  deleteSandbox,
-  refreshSandbox,
-} from "../sandbox/lifecycle.ts";
+import { createSandbox, deleteSandbox, refreshSandbox } from "../sandbox/lifecycle.ts";
 import { listSandboxes } from "../sandbox/index.ts";
 import { validateSandboxTier } from "../sandbox/clone.ts";
 import { resolveCliActor } from "../sandbox/cli-actor.ts";
@@ -36,7 +32,8 @@ async function firstOrg(): Promise<string> {
   // bypass: cross-org-by-design — with no organization given, the operator CLI picks the first production organization of the installation.
   const r = await withBypassContext(() =>
     db.execute<{ id: string }>(
-      sql`select id from orgs where env_kind = 'production' order by created_at limit 1`, "objects",
+      sql`select id from orgs where env_kind = 'production' order by created_at limit 1`,
+      "objects",
     ),
   );
   if (!r[0]) throw new Error("no production org found");
@@ -53,11 +50,13 @@ async function commandOrg(
   if (cmd === "list" || cmd === "create" || !cmd) {
     if (!suppliedOrg) return firstOrg();
     const org = await withOrgContext(suppliedOrg, () =>
-      db.execute<{ id: string }>(sql`
-      select id from orgs where id = ${suppliedOrg} and env_kind = 'production'`, "objects"),
+      db.execute<{ id: string }>(
+        sql`
+      select id from orgs where id = ${suppliedOrg} and env_kind = 'production'`,
+        "objects",
+      ),
     );
-    if (!org[0])
-      throw new Error(`production org not found: ${suppliedOrg}`);
+    if (!org[0]) throw new Error(`production org not found: ${suppliedOrg}`);
     return org[0].id;
   }
 
@@ -69,22 +68,24 @@ async function commandOrg(
   // bypass: cross-org-by-design — resolves which production organization owns a sandbox or change set.
   const ownerId = await withBypassContext(async () => {
     if (cmd === "apply") {
-      return (await db.execute<{ org_id: string }>(
-          sql`select org_id from change_sets where id = ${targetId}`, "objects",
-        ))[0]?.org_id;
+      return (
+        await db.execute<{ org_id: string }>(
+          sql`select org_id from change_sets where id = ${targetId}`,
+          "objects",
+        )
+      )[0]?.org_id;
     }
-    return (await db.execute<{ production_org_id: string }>(
-        sql`select production_org_id from sandboxes where id = ${targetId}`, "objects",
-      ))[0]?.production_org_id;
+    return (
+      await db.execute<{ production_org_id: string }>(
+        sql`select production_org_id from sandboxes where id = ${targetId}`,
+        "objects",
+      )
+    )[0]?.production_org_id;
   });
   if (!ownerId)
-    throw new Error(
-      `${cmd === "apply" ? "change set" : "sandbox"} not found: ${targetId}`,
-    );
+    throw new Error(`${cmd === "apply" ? "change set" : "sandbox"} not found: ${targetId}`);
   if (suppliedOrg && suppliedOrg !== ownerId) {
-    throw new Error(
-      `${cmd} target ${targetId} does not belong to production org ${suppliedOrg}`,
-    );
+    throw new Error(`${cmd} target ${targetId} does not belong to production org ${suppliedOrg}`);
   }
   return ownerId;
 }
@@ -127,9 +128,7 @@ async function main() {
           createdBy: actorId,
           lifecycleAuthority: { actorId },
         });
-        console.log(
-          `✓ sandbox ${sandboxId} (org ${sandboxOrgId}) ready in ${Date.now() - t0}ms`,
-        );
+        console.log(`✓ sandbox ${sandboxId} (org ${sandboxOrgId}) ready in ${Date.now() - t0}ms`);
         break;
       }
       case "refresh": {
@@ -156,14 +155,9 @@ async function main() {
       }
       case "promote": {
         const [id, name] = positional;
-        if (!id)
-          throw new Error("usage: promote <sandboxId> [name] --actor=<userId>");
+        if (!id) throw new Error("usage: promote <sandboxId> [name] --actor=<userId>");
         const actorId = await resolveCliActor(rest);
-        const { changeSetId, itemCount } = await buildChangeSet(
-          id,
-          name ?? "Change set",
-          actorId,
-        );
+        const { changeSetId, itemCount } = await buildChangeSet(id, name ?? "Change set", actorId);
         console.log(
           `✓ change set ${changeSetId} with ${itemCount} item(s). Apply with: apply ${changeSetId}`,
         );
@@ -178,9 +172,7 @@ async function main() {
         break;
       }
       default:
-        console.log(
-          "commands: list | create | refresh | delete | promote | apply",
-        );
+        console.log("commands: list | create | refresh | delete | promote | apply");
     }
   });
   await pool.end();

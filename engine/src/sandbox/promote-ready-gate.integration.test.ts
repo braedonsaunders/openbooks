@@ -11,7 +11,11 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, longPool } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+} from "../testing/fixtures.ts";
 import { sandboxRefreshLockKey } from "./lifecycle.ts";
 import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
@@ -36,7 +40,12 @@ async function runTeardowns(...steps: Array<() => Promise<unknown>>): Promise<vo
   if (failures.length > 0) throw new AggregateError(failures, "test teardown failed");
 }
 
-interface SandboxPair { prodOrgId: string; sbxOrgId: string; sandboxId: string; prodScriptId: string }
+interface SandboxPair {
+  prodOrgId: string;
+  sbxOrgId: string;
+  sandboxId: string;
+  prodScriptId: string;
+}
 
 /** Hand-rolled sandbox pair with one production-only customization. */
 async function seedPair(status: string): Promise<SandboxPair> {
@@ -62,7 +71,10 @@ async function seedPair(status: string): Promise<SandboxPair> {
 }
 
 async function changeSetCount(): Promise<number> {
-  const r = await db.execute<{ n: number }>(sql`select count(*)::int as n from change_sets`, "objects");
+  const r = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from change_sets`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
@@ -101,14 +113,21 @@ test("capture holds the refresh lock: a concurrent refresh waits, then the captu
     // The capture is issued but cannot proceed while the lock is held: give
     // it ample time to prove it blocks instead of finishing.
     await new Promise((resolve) => setTimeout(resolve, 500));
-    assert.equal(await changeSetCount(), before, "capture must not finish while a refresh holds the lock");
+    assert.equal(
+      await changeSetCount(),
+      before,
+      "capture must not finish while a refresh holds the lock",
+    );
     await holder.query("select pg_advisory_unlock(hashtextextended($1, 0))", [
       sandboxRefreshLockKey(pair.sandboxId),
     ]);
     const { changeSetId, itemCount } = await pending;
     assert.equal(itemCount, 1);
-    const items = (await db.execute<{ table_name: string; op: string; target_id: string }>(sql`
-      select table_name, op, target_id::text as target_id from change_set_items where change_set_id = ${changeSetId}`, "objects"));
+    const items = await db.execute<{ table_name: string; op: string; target_id: string }>(
+      sql`
+      select table_name, op, target_id::text as target_id from change_set_items where change_set_id = ${changeSetId}`,
+      "objects",
+    );
     assert.deepEqual(items, [
       { table_name: "user_scripts", op: "delete", target_id: pair.prodScriptId },
     ]);
@@ -134,12 +153,19 @@ test("apply refuses while the sandbox is mid-refresh", async () => {
     // remains independently required at application.
     const reviewer = await createScratchUser(pair.prodOrgId, "Gate Reviewer", "admin");
     const applier = await createScratchUser(pair.prodOrgId, "Gate Applier", "admin");
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${pair.prodOrgId} and key='admin'`);
+    await db.execute(
+      sql`update app_roles set permissions='["*"]'::jsonb where org_id=${pair.prodOrgId} and key='admin'`,
+    );
     await reviewChangeSet(changeSetId, reviewer);
     await db.execute(sql`update sandboxes set status = 'refreshing' where id = ${pair.sandboxId}`);
     await assert.rejects(() => applyChangeSet(changeSetId, applier), /not ready/);
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from change_sets where id = ${changeSetId}`, "objects"))[0]!.status;
+    const status = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from change_sets where id = ${changeSetId}`,
+        "objects",
+      )
+    )[0]!.status;
     assert.equal(status, "approved", "the refused apply must leave the approval intact");
   } finally {
     await runTeardowns(
@@ -153,13 +179,30 @@ test("review refuses a captured change set after its sandbox stops being ready",
   const pair = await seedPair("ready");
   try {
     const { changeSetId } = await buildChangeSet(pair.sandboxId, "Invalidated Capture", null);
-    const reviewer = await createScratchUser(pair.prodOrgId, "Invalidated Capture Reviewer", "admin");
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${pair.prodOrgId} and key='admin'`);
+    const reviewer = await createScratchUser(
+      pair.prodOrgId,
+      "Invalidated Capture Reviewer",
+      "admin",
+    );
+    await db.execute(
+      sql`update app_roles set permissions='["*"]'::jsonb where org_id=${pair.prodOrgId} and key='admin'`,
+    );
     await db.execute(sql`update sandboxes set status = 'failed' where id = ${pair.sandboxId}`);
 
-    await assert.rejects(() => reviewChangeSet(changeSetId, reviewer), /sandbox is failed, not ready/);
-    assert.equal((await db.execute<{ status: string }>(sql`
-      select status from change_sets where id = ${changeSetId}`, "objects"))[0]?.status, "draft");
+    await assert.rejects(
+      () => reviewChangeSet(changeSetId, reviewer),
+      /sandbox is failed, not ready/,
+    );
+    assert.equal(
+      (
+        await db.execute<{ status: string }>(
+          sql`
+      select status from change_sets where id = ${changeSetId}`,
+          "objects",
+        )
+      )[0]?.status,
+      "draft",
+    );
   } finally {
     await runTeardowns(
       () => dropScratchOrgReporting(pair.sbxOrgId),

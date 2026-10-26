@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Plus } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { mergeHref } from '@/lib/list-params'
+import { useRouter, useSearchParams } from "next/navigation";
+import { Plus } from "lucide-react";
+import { Button } from "@openbooks/ui";
+import { mergeHref } from "@/lib/list-params";
 
 /**
  * The one unsaved-create button. Opening it writes nothing — it navigates to
@@ -22,22 +22,22 @@ export function UnsavedCreateButton({
   extra,
   currentParams,
 }: {
-  base: string
-  param: string
-  clear?: readonly string[]
-  label: string
-  extra?: Readonly<Record<string, string>>
-  currentParams?: Record<string, string | string[] | undefined>
+  base: string;
+  param: string;
+  clear?: readonly string[];
+  label: string;
+  extra?: Readonly<Record<string, string>>;
+  currentParams?: Record<string, string | string[] | undefined>;
 }) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   function open() {
-    const current = currentParams ?? Object.fromEntries(searchParams.entries())
-    const overrides: Record<string, string | null> = { [param]: '1', ...(extra ?? {}) }
-    for (const key of clear) overrides[key] = null
-    router.push(mergeHref(base, current, overrides) as never)
-    router.refresh()
+    const current = currentParams ?? Object.fromEntries(searchParams.entries());
+    const overrides: Record<string, string | null> = { [param]: "1", ...(extra ?? {}) };
+    for (const key of clear) overrides[key] = null;
+    router.push(mergeHref(base, current, overrides) as never);
+    router.refresh();
   }
 
   return (
@@ -45,5 +45,5 @@ export function UnsavedCreateButton({
       <Plus size={15} />
       {label}
     </Button>
-  )
+  );
 }

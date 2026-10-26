@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { Plus, Trash2 } from 'lucide-react'
-import { Button, Input, Select, cn } from '@openbooks/ui'
+import { Plus, Trash2 } from "lucide-react";
+import { Button, Input, Select, cn } from "@openbooks/ui";
 import {
   type Condition,
   type ConditionGroup,
@@ -10,8 +10,8 @@ import {
   newCondition,
   operatorsForField,
   valueShapeFor,
-} from '../../lib/conditions'
-import { DateField } from '../date-field'
+} from "../../lib/conditions";
+import { DateField } from "../date-field";
 
 /**
  * Reusable, catalog-driven nested and/or condition builder. Given a field
@@ -23,30 +23,30 @@ import { DateField } from '../date-field'
  */
 
 export interface ConditionBuilderLabels {
-  match: string
-  allOf: string
-  anyOf: string
-  addCondition: string
-  addGroup: string
-  noConditions: string
-  remove: string
-  valuePlaceholder: string
-  andJoin: string
-  toJoin: string
+  match: string;
+  allOf: string;
+  anyOf: string;
+  addCondition: string;
+  addGroup: string;
+  noConditions: string;
+  remove: string;
+  valuePlaceholder: string;
+  andJoin: string;
+  toJoin: string;
 }
 
 const DEFAULT_LABELS: ConditionBuilderLabels = {
-  match: 'Match',
-  allOf: 'all of the following',
-  anyOf: 'any of the following',
-  addCondition: 'Add condition',
-  addGroup: 'Add group',
-  noConditions: 'No conditions — this matches every line.',
-  remove: 'Remove condition',
-  valuePlaceholder: 'Value',
-  andJoin: 'and',
-  toJoin: 'to',
-}
+  match: "Match",
+  allOf: "all of the following",
+  anyOf: "any of the following",
+  addCondition: "Add condition",
+  addGroup: "Add group",
+  noConditions: "No conditions — this matches every line.",
+  remove: "Remove condition",
+  valuePlaceholder: "Value",
+  andJoin: "and",
+  toJoin: "to",
+};
 
 export function ConditionBuilder({
   catalog,
@@ -57,32 +57,34 @@ export function ConditionBuilder({
   maxDepth = 3,
   depth = 0,
 }: {
-  catalog: FieldDef[]
-  group: ConditionGroup
-  onChange: (g: ConditionGroup) => void
-  operatorLabels?: Record<string, string>
-  labels?: Partial<ConditionBuilderLabels>
-  maxDepth?: number
-  depth?: number
+  catalog: FieldDef[];
+  group: ConditionGroup;
+  onChange: (g: ConditionGroup) => void;
+  operatorLabels?: Record<string, string>;
+  labels?: Partial<ConditionBuilderLabels>;
+  maxDepth?: number;
+  depth?: number;
 }) {
-  const labels = { ...DEFAULT_LABELS, ...labelOverrides }
+  const labels = { ...DEFAULT_LABELS, ...labelOverrides };
 
   const setRule = (i: number, rule: Condition | ConditionGroup) => {
-    const rules = [...group.rules]
-    rules[i] = rule
-    onChange({ ...group, rules })
-  }
-  const removeAt = (i: number) => onChange({ ...group, rules: group.rules.filter((_, j) => j !== i) })
-  const addCondition = () => onChange({ ...group, rules: [...group.rules, newCondition(catalog)] })
-  const addGroup = () => onChange({ ...group, rules: [...group.rules, { combinator: 'and', rules: [] }] })
+    const rules = [...group.rules];
+    rules[i] = rule;
+    onChange({ ...group, rules });
+  };
+  const removeAt = (i: number) =>
+    onChange({ ...group, rules: group.rules.filter((_, j) => j !== i) });
+  const addCondition = () => onChange({ ...group, rules: [...group.rules, newCondition(catalog)] });
+  const addGroup = () =>
+    onChange({ ...group, rules: [...group.rules, { combinator: "and", rules: [] }] });
 
   return (
     <div
       className={cn(
-        'space-y-2 rounded-lg border p-3',
+        "space-y-2 rounded-lg border p-3",
         depth === 0
-          ? 'border-slate-200 dark:border-slate-800'
-          : 'border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40',
+          ? "border-slate-200 dark:border-slate-800"
+          : "border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40",
       )}
     >
       <div className="flex items-center gap-2">
@@ -90,7 +92,7 @@ export function ConditionBuilder({
         <Select
           className="h-8 w-52"
           value={group.combinator}
-          onChange={(e) => onChange({ ...group, combinator: e.target.value as 'and' | 'or' })}
+          onChange={(e) => onChange({ ...group, combinator: e.target.value as "and" | "or" })}
         >
           <option value="and">{labels.allOf}</option>
           <option value="or">{labels.anyOf}</option>
@@ -138,7 +140,7 @@ export function ConditionBuilder({
         ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 function ConditionRow({
@@ -149,29 +151,35 @@ function ConditionRow({
   onChange,
   onRemove,
 }: {
-  catalog: FieldDef[]
-  condition: Condition
-  operatorLabels?: Record<string, string>
-  labels: ConditionBuilderLabels
-  onChange: (c: Condition) => void
-  onRemove: () => void
+  catalog: FieldDef[];
+  condition: Condition;
+  operatorLabels?: Record<string, string>;
+  labels: ConditionBuilderLabels;
+  onChange: (c: Condition) => void;
+  onRemove: () => void;
 }) {
-  const field = catalog.find((f) => f.key === condition.field) ?? catalog[0]
-  const ops = operatorsForField(field, operatorLabels)
-  const shape = valueShapeFor(field, condition.op)
+  const field = catalog.find((f) => f.key === condition.field) ?? catalog[0];
+  const ops = operatorsForField(field, operatorLabels);
+  const shape = valueShapeFor(field, condition.op);
 
   const changeField = (key: string) => {
-    const next = catalog.find((f) => f.key === key)
-    const nextOps = operatorsForField(next)
-    const op = nextOps.some((o) => o.key === condition.op) ? condition.op : (nextOps[0]?.key ?? 'contains')
-    onChange({ field: key, op, value: '' })
-  }
+    const next = catalog.find((f) => f.key === key);
+    const nextOps = operatorsForField(next);
+    const op = nextOps.some((o) => o.key === condition.op)
+      ? condition.op
+      : (nextOps[0]?.key ?? "contains");
+    onChange({ field: key, op, value: "" });
+  };
 
-  const range = Array.isArray(condition.value) ? condition.value : [undefined, undefined]
+  const range = Array.isArray(condition.value) ? condition.value : [undefined, undefined];
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Select className="h-8 w-full sm:w-44" value={condition.field} onChange={(e) => changeField(e.target.value)}>
+      <Select
+        className="h-8 w-full sm:w-44"
+        value={condition.field}
+        onChange={(e) => changeField(e.target.value)}
+      >
         {catalog.map((f) => (
           <option key={f.key} value={f.key}>
             {f.label}
@@ -190,10 +198,10 @@ function ConditionRow({
         ))}
       </Select>
 
-      {shape === 'none' ? null : shape === 'enum' || shape === 'flow' ? (
+      {shape === "none" ? null : shape === "enum" || shape === "flow" ? (
         <Select
           className="h-8 w-44"
-          value={typeof condition.value === 'string' ? condition.value : ''}
+          value={typeof condition.value === "string" ? condition.value : ""}
           onChange={(e) => onChange({ ...condition, value: e.target.value })}
         >
           <option value="">{labels.valuePlaceholder}</option>
@@ -203,36 +211,46 @@ function ConditionRow({
             </option>
           ))}
         </Select>
-      ) : shape === 'range' ? (
+      ) : shape === "range" ? (
         <div className="flex items-center gap-1.5">
           <Input
             className="h-8 w-24 text-right tabular-nums"
             inputMode="decimal"
-            value={range[0] ?? ''}
-            onChange={(e) => onChange({ ...condition, value: [Number(e.target.value), Number(range[1] ?? 0)] })}
+            value={range[0] ?? ""}
+            onChange={(e) =>
+              onChange({ ...condition, value: [Number(e.target.value), Number(range[1] ?? 0)] })
+            }
           />
           <span className="text-xs text-slate-400">{labels.toJoin}</span>
           <Input
             className="h-8 w-24 text-right tabular-nums"
             inputMode="decimal"
-            value={range[1] ?? ''}
-            onChange={(e) => onChange({ ...condition, value: [Number(range[0] ?? 0), Number(e.target.value)] })}
+            value={range[1] ?? ""}
+            onChange={(e) =>
+              onChange({ ...condition, value: [Number(range[0] ?? 0), Number(e.target.value)] })
+            }
           />
         </div>
-      ) : shape === 'date' ? (
+      ) : shape === "date" ? (
         <DateField
           className="h-8 w-44"
-          value={typeof condition.value === 'string' ? condition.value : ''}
+          value={typeof condition.value === "string" ? condition.value : ""}
           onChange={(next) => onChange({ ...condition, value: next })}
         />
       ) : (
         <Input
-          className={cn('h-8 w-44', shape === 'number' && 'w-32 text-right tabular-nums')}
-          type={shape === 'number' ? 'number' : 'text'}
-          inputMode={shape === 'number' ? 'decimal' : undefined}
+          className={cn("h-8 w-44", shape === "number" && "w-32 text-right tabular-nums")}
+          type={shape === "number" ? "number" : "text"}
+          inputMode={shape === "number" ? "decimal" : undefined}
           placeholder={field?.placeholder ?? labels.valuePlaceholder}
-          value={typeof condition.value === 'string' || typeof condition.value === 'number' ? String(condition.value) : ''}
-          onChange={(e) => onChange({ ...condition, value: shape === 'number' ? e.target.value : e.target.value })}
+          value={
+            typeof condition.value === "string" || typeof condition.value === "number"
+              ? String(condition.value)
+              : ""
+          }
+          onChange={(e) =>
+            onChange({ ...condition, value: shape === "number" ? e.target.value : e.target.value })
+          }
         />
       )}
 
@@ -240,5 +258,5 @@ function ConditionRow({
         <Trash2 size={14} />
       </Button>
     </div>
-  )
+  );
 }

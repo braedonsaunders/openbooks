@@ -173,10 +173,10 @@ export function waRatesForPayDate(payDate: string, backfill?: WaBackfillRates): 
     return { year, status: "published", ...backfill };
   }
   throw new PayrollError(
-    `Washington PFML and WA Cares have no rates for ${Number.isInteger(year) ? year : payDate} `
-    + `in this pack version — enter the year's published rates in Payroll Setup → Statutory rates `
-    + `(US · Washington PFML back-fill) with the official Employment Security Department citation, `
-    + `or contact support. Refused by name.`,
+    `Washington PFML and WA Cares have no rates for ${Number.isInteger(year) ? year : payDate} ` +
+      `in this pack version — enter the year's published rates in Payroll Setup → Statutory rates ` +
+      `(US · Washington PFML back-fill) with the official Employment Security Department citation, ` +
+      `or contact support. Refused by name.`,
   );
 }
 
@@ -188,13 +188,12 @@ export function waRatesForPayDate(payDate: string, backfill?: WaBackfillRates): 
  * the money path enforces it before pricing a cent.
  */
 function assertBackfillShares(backfill: WaBackfillRates): void {
-  const remedy = "correct the shares in Payroll Setup → Statutory rates "
-    + "(US · Washington PFML back-fill) so employee and employer sum to exactly 100%";
+  const remedy =
+    "correct the shares in Payroll Setup → Statutory rates " +
+    "(US · Washington PFML back-fill) so employee and employer sum to exactly 100%";
   for (const [key, value] of Object.entries(backfill)) {
     if (typeof value !== "string" || value.trim() === "") {
-      throw new PayrollError(
-        `Washington PFML back-fill refused: "${key}" is missing — ${remedy}.`,
-      );
+      throw new PayrollError(`Washington PFML back-fill refused: "${key}" is missing — ${remedy}.`);
     }
   }
   let employee: { num: bigint; den: bigint };
@@ -209,8 +208,8 @@ function assertBackfillShares(backfill: WaBackfillRates): void {
   }
   if (employee.num * employer.den + employer.num * employee.den !== employee.den * employer.den) {
     throw new PayrollError(
-      `Washington PFML back-fill refused: the entered employee and employer shares do not sum `
-      + `to exactly 100% of the total premium — ${remedy}.`,
+      `Washington PFML back-fill refused: the entered employee and employer shares do not sum ` +
+        `to exactly 100% of the total premium — ${remedy}.`,
     );
   }
 }
@@ -262,7 +261,11 @@ export function waPfmlWithholding(
  * WA Cares Fund employee premium — 0.58% of gross wages, no wage-base cap,
  * withheld beside income tax, never folded into it.
  */
-export function waCaresWithholding(payDate: string, coveredWages: string, backfill?: WaBackfillRates): string {
+export function waCaresWithholding(
+  payDate: string,
+  coveredWages: string,
+  backfill?: WaBackfillRates,
+): string {
   const rates = waRatesForPayDate(payDate, backfill);
   return D(mulRateCents(U(coveredWages), rates.caresRate));
 }

@@ -4,74 +4,88 @@
 // disabled, every Save/Add/Remove button gone, and a notice naming the
 // missing permission path.
 
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
 // jsdom first: the builder reads browser globals at render.
-const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000', matchMediaMatches: false, resizeObserver: true })
+const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/automations/00000000-0000-4000-8000-000000000000",
+  matchMediaMatches: false,
+  resizeObserver: true,
+});
 
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return{push(){},replace(){},refresh(){}}}export function usePathname(){return "/admin/automations/x"}export function useSearchParams(){return new URLSearchParams()}' })
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return{push(){},replace(){},refresh(){}}}export function usePathname(){return "/admin/automations/x"}export function useSearchParams(){return new URLSearchParams()}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'next/link') {
+    if (specifier === "next/link") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return p.children}',
-      }
+        url: "data:text/javascript,export default function Link(p){return p.children}",
+      };
     }
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){},warning(){},info(){}}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(){},warning(){},info(){}}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../../messages/en')).default
-const { AutomationBuilder } = await import('./AutomationBuilder')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../../messages/en")).default;
+const { AutomationBuilder } = await import("./AutomationBuilder");
 
 const AUTOMATION = {
-  id: '00000000-0000-4000-8000-000000000000',
-  name: 'Overdue notifier',
+  id: "00000000-0000-4000-8000-000000000000",
+  name: "Overdue notifier",
   description: null,
-  status: 'enabled',
+  status: "enabled",
   version: 3,
-  trigger: { kind: 'schedule', cron: '0 9 * * MON', timezone: 'UTC' },
+  trigger: { kind: "schedule", cron: "0 9 * * MON", timezone: "UTC" },
   rules: {},
   conditions: {},
-  actions: [{ kind: 'send_notification', to: 'manager', body: 'hi' }],
+  actions: [{ kind: "send_notification", to: "manager", body: "hi" }],
   errorMessage: null,
-}
+};
 
-const SAVE_LABELS = ['Save']
-const ADD_LABELS = ['Add action', 'Add condition', 'Remove']
+const SAVE_LABELS = ["Save"];
+const ADD_LABELS = ["Add action", "Add condition", "Remove"];
 
 function buttons(host: HTMLElement): string[] {
-  return [...host.querySelectorAll('button')].map((b) => (b.textContent ?? '').trim())
+  return [...host.querySelectorAll("button")].map((b) => (b.textContent ?? "").trim());
 }
 
 async function mount(canManage: boolean): Promise<HTMLElement> {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages}>
         <AutomationBuilder
           automation={AUTOMATION}
           runs={[]}
-          scopeOptions={{ subsidiaries: [], departments: [], locations: [], positions: [], users: [], roles: [], processTemplates: [] }}
+          scopeOptions={{
+            subsidiaries: [],
+            departments: [],
+            locations: [],
+            positions: [],
+            users: [],
+            roles: [],
+            processTemplates: [],
+          }}
           canSimulate={true}
           canManage={canManage}
           saveFailed="Save failed"
@@ -79,53 +93,53 @@ async function mount(canManage: boolean): Promise<HTMLElement> {
           backLabel="Back"
         />
       </NextIntlClientProvider>,
-    )
-  })
-  return host
+    );
+  });
+  return host;
 }
 
-test('the builder offers every save control to a manager', async () => {
-  const host = await mount(true)
+test("the builder offers every save control to a manager", async () => {
+  const host = await mount(true);
   try {
-    const labels = buttons(host)
+    const labels = buttons(host);
     for (const label of SAVE_LABELS) {
-      assert.ok(labels.includes(label), `managing builder is missing ${label}`)
+      assert.ok(labels.includes(label), `managing builder is missing ${label}`);
     }
-    const enabled = [...host.querySelectorAll('input,select,textarea')].filter(
+    const enabled = [...host.querySelectorAll("input,select,textarea")].filter(
       (el) => !(el as HTMLInputElement).disabled,
-    )
-    assert.ok(enabled.length > 0, 'managing builder has no enabled input')
+    );
+    assert.ok(enabled.length > 0, "managing builder has no enabled input");
   } finally {
-    host.remove()
+    host.remove();
   }
-})
+});
 
-test('the builder hides every mutating control from a reader', async () => {
-  const host = await mount(false)
+test("the builder hides every mutating control from a reader", async () => {
+  const host = await mount(false);
   try {
-    const labels = buttons(host)
+    const labels = buttons(host);
     for (const label of [...SAVE_LABELS, ...ADD_LABELS]) {
-      assert.ok(!labels.includes(label), `read-only builder still offers ${label}`)
+      assert.ok(!labels.includes(label), `read-only builder still offers ${label}`);
     }
-    const enabled = [...host.querySelectorAll('input,select,textarea')].filter(
+    const enabled = [...host.querySelectorAll("input,select,textarea")].filter(
       (el) => !(el as HTMLInputElement).disabled,
-    )
+    );
     // Simulate is read-guarded server-side, so its subject box is the only
     // control a reader may touch.
     assert.deepEqual(
       enabled.map((el) => (el as HTMLElement).id),
-      ['ab-sim-subject'],
-      'read-only builder leaves recipe inputs enabled',
-    )
+      ["ab-sim-subject"],
+      "read-only builder leaves recipe inputs enabled",
+    );
     // Simulate is read-guarded server-side, so it stays; the recipe,
     // the runs tab, and the back link stay readable.
-    assert.ok(labels.includes('Simulate'), 'read-only builder lost Simulate')
-    assert.ok((host.textContent ?? '').includes('Runs'), 'read-only builder lost the runs tab')
+    assert.ok(labels.includes("Simulate"), "read-only builder lost Simulate");
+    assert.ok((host.textContent ?? "").includes("Runs"), "read-only builder lost the runs tab");
     assert.ok(
-      (host.textContent ?? '').includes('Read-only'),
-      'read-only builder names no read-only notice',
-    )
+      (host.textContent ?? "").includes("Read-only"),
+      "read-only builder names no read-only notice",
+    );
   } finally {
-    host.remove()
+    host.remove();
   }
-})
+});

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeFunctionalMappingInput, resolveFunctionalAssignment, splitSharedCost, type FunctionalMapping } from "./functional.ts";
+import {
+  normalizeFunctionalMappingInput,
+  resolveFunctionalAssignment,
+  splitSharedCost,
+  type FunctionalMapping,
+} from "./functional.ts";
 
 const disclosure = {
   allocationRuleKey: "shared_occupancy",
@@ -28,12 +33,18 @@ test("shared costs split exactly under disclosed functional drivers", () => {
         weight,
       })),
     });
-    assert.deepEqual(result.targets.map((target) => target.amount), row.expected);
+    assert.deepEqual(
+      result.targets.map((target) => target.amount),
+      row.expected,
+    );
     const units = (amount: string) => {
       const [whole = "0", fraction = ""] = amount.split(".");
       return BigInt(whole) * 10_000n + BigInt(fraction.padEnd(4, "0"));
     };
-    assert.equal(result.targets.reduce((sum, target) => sum + units(target.amount), 0n), units(row.total));
+    assert.equal(
+      result.targets.reduce((sum, target) => sum + units(target.amount), 0n),
+      units(row.total),
+    );
     assert.equal(result.disclosure.driverUnit, "square feet");
   }
 });
@@ -51,21 +62,57 @@ test("functional assignment is effective-dated and refuses unmapped expense line
     createdAt: "2026-01-01T00:00:00.000Z",
     createdBy: "user-1",
   };
-  assert.deepEqual(resolveFunctionalAssignment({
-    accountName: "6100 Program supplies", departmentId: "dept-1", projectId: null, postingDate: "2026-06-30",
-  }, [mapping]), { functionKey: "program", programKey: "food_access" });
-  assert.throws(() => resolveFunctionalAssignment({
-    accountName: "6200 Rent", departmentId: "dept-missing", projectId: null, postingDate: "2026-06-30",
-  }, [mapping]), (error: unknown) => error instanceof Error && error.message.includes("6200 Rent"));
+  assert.deepEqual(
+    resolveFunctionalAssignment(
+      {
+        accountName: "6100 Program supplies",
+        departmentId: "dept-1",
+        projectId: null,
+        postingDate: "2026-06-30",
+      },
+      [mapping],
+    ),
+    { functionKey: "program", programKey: "food_access" },
+  );
+  assert.throws(
+    () =>
+      resolveFunctionalAssignment(
+        {
+          accountName: "6200 Rent",
+          departmentId: "dept-missing",
+          projectId: null,
+          postingDate: "2026-06-30",
+        },
+        [mapping],
+      ),
+    (error: unknown) => error instanceof Error && error.message.includes("6200 Rent"),
+  );
 });
 
 test("functional mapping commands normalize blank optional fields before validation and persistence", () => {
   const normalized = normalizeFunctionalMappingInput({
-    orgId: "org-1", departmentId: " dept-1 ", projectId: "", functionKey: "program",
-    programKey: " ", effectiveFrom: "2026-01-01", effectiveTo: "", actorId: "user-1", reason: "Map department costs",
+    orgId: "org-1",
+    departmentId: " dept-1 ",
+    projectId: "",
+    functionKey: "program",
+    programKey: " ",
+    effectiveFrom: "2026-01-01",
+    effectiveTo: "",
+    actorId: "user-1",
+    reason: "Map department costs",
   });
-  assert.deepEqual({ departmentId: normalized.departmentId, projectId: normalized.projectId,
-    programKey: normalized.programKey, effectiveTo: normalized.effectiveTo }, {
-    departmentId: "dept-1", projectId: null, programKey: null, effectiveTo: null,
-  });
+  assert.deepEqual(
+    {
+      departmentId: normalized.departmentId,
+      projectId: normalized.projectId,
+      programKey: normalized.programKey,
+      effectiveTo: normalized.effectiveTo,
+    },
+    {
+      departmentId: "dept-1",
+      projectId: null,
+      programKey: null,
+      effectiveTo: null,
+    },
+  );
 });

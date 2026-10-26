@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const aiGovernanceLedger: DocArticle = {
-  slug: 'ai-governance-ledger',
-  title: 'Assistant Reviews and Activity',
-  category: 'administration',
+  slug: "ai-governance-ledger",
+  title: "Assistant Reviews and Activity",
+  category: "administration",
   order: 13,
   summary:
-    'Review declarations for registered assistance actions and their append-only native activity references, sources and human review outcomes.',
-  updated: '2026-10-08',
-  keywords: ['ai', 'governance', 'ledger', 'autonomy', 'capabilities', 'review', 'audit', 'draft'],
-  related: ['assistant-chat', 'payroll-checks', 'payslip-explanations'],
+    "Review declarations for registered assistance actions and their append-only native activity references, sources and human review outcomes.",
+  updated: "2026-10-08",
+  keywords: ["ai", "governance", "ledger", "autonomy", "capabilities", "review", "audit", "draft"],
+  related: ["assistant-chat", "payroll-checks", "payslip-explanations"],
   body: `# Assistant Reviews and Activity
 
 AI in OpenBooks is tools and deterministic services, never free-text features. Every capability declares a code maximum for its action level. Native actions retain their permission, feature and lifecycle checks. Organization review declarations are validated against that maximum, but editing a declaration does not disable scans or change assistant authority: read-only explains from records, draft writes text a human inserts, propose surfaces findings a human decides, and nothing files, submits, approves or pays on its own.
@@ -30,4 +30,4 @@ Native services using this activity ledger append a row for the event: when, whi
 
 Company Setup → Workforce checks and drafting holds the existing organization policy. Its Checks, Drafting and Reviews sections replace one active record body. The review interval defaults to twelve months; action reviewers are assigned under Assistant action reviews. Overdue capabilities banner the ledger and nudge the setup admins' inbox until reviewed; recording a review stamps reviewer and time. The Checks section holds scan thresholds and baseline groups for deterministic payroll and timesheet checks; these checks do not call an AI provider or change payroll calculations. Drafting holds the organization’s language terms for human review. Admin → AI retains provider connection, model choices, encrypted credentials and document capture. Legacy provider-page policy drawer links lead to the actual Setup record without resetting stored settings.
 `,
-}
+};

@@ -5,7 +5,11 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -35,15 +39,23 @@ test("discount vendor payment pins total-as-cash with gross AP relief", { skip: 
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, party_id)
       values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '100', '100', '0', ${org.vendorId})`);
-    await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`);
+    await db.execute(
+      sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`,
+    );
     const billEntryId = await postDocument(billId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
-    const billLineId = (await db.execute<{ id: string }>(sql`
+    const billLineId = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from journal_lines where entry_id = ${billEntryId} and account_id = ${org.accounts.ap}
-    `, "objects"))[0]!.id;
+    `,
+        "objects",
+      )
+    )[0]!.id;
 
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+    const payment = await createPaymentDocument({
+      allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "vendor_payment",
       createdBy: actor,
@@ -56,39 +68,46 @@ test("discount vendor payment pins total-as-cash with gross AP relief", { skip: 
     });
     // A discount that consumes the whole application moves no cash: that is a
     // vendor credit, not a payment, and is refused before anything is saved.
-    await assert.rejects(updateDraftPayment(
-      payment.id,
-      {
-        partyId: org.vendorId,
-        bankAccountId: org.accounts.bank,
-        allocations: [{
-          openLineId: billLineId,
-          sourceTransactionAmount: "100",
-          targetTransactionAmount: "100",
-          settlementRate: "1",
-          settlementRateSource: "same_currency" as const,
-          settlementRateReference: "same transaction currency",
-        }],
-        discountAmount: "100.0000",
-        discountAccountId: org.accounts.cogs,
-      },
-      actor,
-      org.orgId,
-      { allowedSubsidiaryIds: null },
-    ), /early-payment discount must be less than the amount applied/);
+    await assert.rejects(
+      updateDraftPayment(
+        payment.id,
+        {
+          partyId: org.vendorId,
+          bankAccountId: org.accounts.bank,
+          allocations: [
+            {
+              openLineId: billLineId,
+              sourceTransactionAmount: "100",
+              targetTransactionAmount: "100",
+              settlementRate: "1",
+              settlementRateSource: "same_currency" as const,
+              settlementRateReference: "same transaction currency",
+            },
+          ],
+          discountAmount: "100.0000",
+          discountAccountId: org.accounts.cogs,
+        },
+        actor,
+        org.orgId,
+        { allowedSubsidiaryIds: null },
+      ),
+      /early-payment discount must be less than the amount applied/,
+    );
     await updateDraftPayment(
       payment.id,
       {
         partyId: org.vendorId,
         bankAccountId: org.accounts.bank,
-        allocations: [{
-          openLineId: billLineId,
-          sourceTransactionAmount: "100",
-          targetTransactionAmount: "100",
-          settlementRate: "1",
-          settlementRateSource: "same_currency" as const,
-          settlementRateReference: "same transaction currency",
-        }],
+        allocations: [
+          {
+            openLineId: billLineId,
+            sourceTransactionAmount: "100",
+            targetTransactionAmount: "100",
+            settlementRate: "1",
+            settlementRateSource: "same_currency" as const,
+            settlementRateReference: "same transaction currency",
+          },
+        ],
         discountAmount: "10.0000",
         discountAccountId: org.accounts.cogs,
       },
@@ -96,21 +115,31 @@ test("discount vendor payment pins total-as-cash with gross AP relief", { skip: 
       org.orgId,
       { allowedSubsidiaryIds: null },
     );
-    await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
+    await db.execute(
+      sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`,
+    );
     const entryId = await postDocument(payment.id, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
 
-    const doc = (await db.execute<{ total: string; open_balance: string }>(sql`
+    const doc = (
+      await db.execute<{ total: string; open_balance: string }>(
+        sql`
       select total::text, open_balance::text from documents where id = ${payment.id}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     // Cash frame on the header…
     assert.equal(doc.total, "90.0000");
     // …settlement frame in the legs…
-    const legs = await db.execute<{ account_id: string; amount: string; is_open_item: boolean }>(sql`
+    const legs = await db.execute<{ account_id: string; amount: string; is_open_item: boolean }>(
+      sql`
       select account_id, amount::text, is_open_item from journal_lines
        where entry_id = ${entryId} and org_id = ${org.orgId} order by line_number
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.deepEqual(
       legs.map((l) => [l.account_id, l.amount, l.is_open_item]),
       [
@@ -122,9 +151,14 @@ test("discount vendor payment pins total-as-cash with gross AP relief", { skip: 
     // …and the payment's open balance offers the gross 100 for application,
     // consuming 1:1 against the bill's open 100.
     assert.equal(doc.open_balance, "100.0000");
-    const bill = (await db.execute<{ open_balance: string }>(sql`
+    const bill = (
+      await db.execute<{ open_balance: string }>(
+        sql`
       select open_balance::text from documents where id = ${billId}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(bill.open_balance, "100.0000");
   } finally {
     await dropScratchOrgReporting(org.orgId);

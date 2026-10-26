@@ -3,7 +3,14 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { BASELINE_EXPOSED, noInterp, ownLoadPoints, scanFile, scanTree, stripped } from "./check-test-bypass-scope.mjs";
+import {
+  BASELINE_EXPOSED,
+  noInterp,
+  ownLoadPoints,
+  scanFile,
+  scanTree,
+  stripped,
+} from "./check-test-bypass-scope.mjs";
 import { codeOnly } from "./check-test-mock-surface.mjs";
 
 function fixtureTree(files) {
@@ -42,8 +49,9 @@ function withTree(files, inspect) {
 }
 
 test("bare setup under an eager web-reader import is exposed", () => {
-  withTree({
-    "web/lib/bad.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/bad.integration.test.ts": `import test from "node:test";
 const { reader } = await import("./reader.ts");
 test("setup", async () => {
   const org = await createScratchOrg();
@@ -51,18 +59,21 @@ test("setup", async () => {
   await reader();
 });
 `,
-  }, root => {
-    const findings = scanFile(join(root, "web/lib/bad.integration.test.ts"), root);
-    assert.equal(findings.length, 2);
-    assert.ok(findings.some((finding) => finding.call.startsWith("createScratchOrg")));
-    assert.ok(findings.some((finding) => finding.call.startsWith("db.execute(insert")));
-    assert.ok(findings[0].via.includes("reader.ts"));
-  });
+    },
+    (root) => {
+      const findings = scanFile(join(root, "web/lib/bad.integration.test.ts"), root);
+      assert.equal(findings.length, 2);
+      assert.ok(findings.some((finding) => finding.call.startsWith("createScratchOrg")));
+      assert.ok(findings.some((finding) => finding.call.startsWith("db.execute(insert")));
+      assert.ok(findings[0].via.includes("reader.ts"));
+    },
+  );
 });
 
 test("wrapped setup, lazy-only reach, and unreached files are clean", () => {
-  withTree({
-    "web/lib/good.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/good.integration.test.ts": `import test from "node:test";
 const { reader } = await import("./reader.ts");
 test("setup", async () => {
   await withBypassContext(async () => {
@@ -75,39 +86,42 @@ test("setup", async () => {
 });
 
 `,
-    "web/lib/lazy.integration.test.ts": `import test from "node:test";
+      "web/lib/lazy.integration.test.ts": `import test from "node:test";
 test("setup", async () => {
   const org = await createScratchOrg();
   const { lazyReader } = await import("./lazy-reader.ts");
   await lazyReader();
 });
 `,
-    "engine/src/plain.integration.test.ts": `import test from "node:test";
+      "engine/src/plain.integration.test.ts": `import test from "node:test";
 test("setup", async () => {
   const org = await createScratchOrg();
   await db.execute(sql\`insert into orgs(id) values (1)\`);
 });
 `,
-    "web/lib/support.ts": `export async function seed() {
+      "web/lib/support.ts": `export async function seed() {
   const org = await createScratchOrg();
 }
 `,
-  }, root => {
-    for (const file of [
-      "web/lib/good.integration.test.ts",
-      "web/lib/lazy.integration.test.ts",
-      "engine/src/plain.integration.test.ts",
-    ]) {
-      assert.deepEqual(scanFile(join(root, file), root), [], file);
-    }
-    assert.deepEqual(scanFile(join(root, "web/lib/support.ts"), root), []);
-    assert.deepEqual(scanTree(root), []);
-  });
+    },
+    (root) => {
+      for (const file of [
+        "web/lib/good.integration.test.ts",
+        "web/lib/lazy.integration.test.ts",
+        "engine/src/plain.integration.test.ts",
+      ]) {
+        assert.deepEqual(scanFile(join(root, file), root), [], file);
+      }
+      assert.deepEqual(scanFile(join(root, "web/lib/support.ts"), root), []);
+      assert.deepEqual(scanTree(root), []);
+    },
+  );
 });
 
 test("native tenant transactions preserve coverage while adjacent bare writes remain exposed", () => {
-  withTree({
-    "web/lib/transaction.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/transaction.integration.test.ts": `import test from "node:test";
 import "./reader.ts";
 test("native transaction", async () => {
   await withOrgTransaction(orgId, async () => {
@@ -116,17 +130,20 @@ test("native transaction", async () => {
   await db.execute(sql\`insert into unscoped_rows(id) values (2)\`);
 });
 `,
-  }, root => {
-    const findings = scanFile(join(root, "web/lib/transaction.integration.test.ts"), root);
-    assert.equal(findings.length, 1, "only the adjacent bare write is exposed");
-    assert.equal(findings[0].name, "native transaction");
-    assert.equal(findings[0].line, 7, "the native transaction's callback is scoped");
-  });
+    },
+    (root) => {
+      const findings = scanFile(join(root, "web/lib/transaction.integration.test.ts"), root);
+      assert.equal(findings.length, 1, "only the adjacent bare write is exposed");
+      assert.equal(findings[0].name, "native transaction");
+      assert.equal(findings[0].line, 7, "the native transaction's callback is scoped");
+    },
+  );
 });
 
 test("an apostrophe in a regex cannot hide a later unscoped fixture write", () => {
-  withTree({
-    "web/lib/regex.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/regex.integration.test.ts": `import test from "node:test";
 const { reader } = await import("./reader.ts");
 test("regex before fixture writes", async () => {
   assert.match(message, /not on this run's roster/);
@@ -137,16 +154,22 @@ test("regex before fixture writes", async () => {
   await reader();
 });
 `,
-  }, root => {
-    const findings = scanFile(join(root, "web/lib/regex.integration.test.ts"), root);
-    assert.deepEqual(findings.map(finding => finding.call), ["db.execute(insert ...)"]);
-    assert.equal(findings[0].name, "regex before fixture writes");
-  });
+    },
+    (root) => {
+      const findings = scanFile(join(root, "web/lib/regex.integration.test.ts"), root);
+      assert.deepEqual(
+        findings.map((finding) => finding.call),
+        ["db.execute(insert ...)"],
+      );
+      assert.equal(findings[0].name, "regex before fixture writes");
+    },
+  );
 });
 
 test("a top-level bypass reinstall neutralizes eager reader imports", () => {
-  withTree({
-    "web/lib/reinstalled.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/reinstalled.integration.test.ts": `import test from "node:test";
 import { installTrustedTestDatabaseBypass } from "./bypass.ts";
 const { reader } = await import("./reader.ts");
 installTrustedTestDatabaseBypass();
@@ -159,14 +182,17 @@ test("setup", async () => {
   await reader();
 });
 `,
-  }, root => {
-    assert.deepEqual(scanFile(join(root, "web/lib/reinstalled.integration.test.ts"), root), []);
-  });
+    },
+    (root) => {
+      assert.deepEqual(scanFile(join(root, "web/lib/reinstalled.integration.test.ts"), root), []);
+    },
+  );
 });
 
 test("a reader loaded after the reinstall re-exposes later writes", () => {
-  withTree({
-    "web/lib/relate.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/relate.integration.test.ts": `import test from "node:test";
 import { installTrustedTestDatabaseBypass } from "./bypass.ts";
 const { reader } = await import("./reader.ts");
 installTrustedTestDatabaseBypass();
@@ -176,7 +202,7 @@ test("setup", async () => {
   await lazyReader();
 });
 `,
-    "web/lib/inner.integration.test.ts": `import test from "node:test";
+      "web/lib/inner.integration.test.ts": `import test from "node:test";
 import { installTrustedTestDatabaseBypass } from "./bypass.ts";
 const { reader } = await import("./reader.ts");
 installTrustedTestDatabaseBypass();
@@ -186,17 +212,20 @@ test("setup", async () => {
   await lazyReader();
 });
 `,
-  }, root => {
-    // A top-level reader import after the call re-clobbers the slot.
-    assert.ok(scanFile(join(root, "web/lib/relate.integration.test.ts"), root).length > 0);
-    // So does a lazy in-test import: the reinstall cannot cover it.
-    assert.ok(scanFile(join(root, "web/lib/inner.integration.test.ts"), root).length > 0);
-  });
+    },
+    (root) => {
+      // A top-level reader import after the call re-clobbers the slot.
+      assert.ok(scanFile(join(root, "web/lib/relate.integration.test.ts"), root).length > 0);
+      // So does a lazy in-test import: the reinstall cannot cover it.
+      assert.ok(scanFile(join(root, "web/lib/inner.integration.test.ts"), root).length > 0);
+    },
+  );
 });
 
 test("a direct bypass reinstall covers setup; a scoped resolver does not", () => {
-  withTree({
-    "web/lib/direct.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/direct.integration.test.ts": `import test from "node:test";
 import { registerRequestOrgResolver } from "./db.ts";
 const { reader } = await import("./reader.ts");
 registerRequestOrgResolver(() => ({ orgId: null, bypass: true }));
@@ -205,7 +234,7 @@ test("setup", async () => {
   await reader();
 });
 `,
-    "web/lib/scoped.integration.test.ts": `import test from "node:test";
+      "web/lib/scoped.integration.test.ts": `import test from "node:test";
 import { registerRequestOrgResolver } from "./db.ts";
 const { reader } = await import("./reader.ts");
 registerRequestOrgResolver(() => ({ orgId: "o1", bypass: false }));
@@ -214,16 +243,19 @@ test("setup", async () => {
   await reader();
 });
 `,
-  }, root => {
-    assert.deepEqual(scanFile(join(root, "web/lib/direct.integration.test.ts"), root), []);
-    // Enforcement is not coverage: a scoped resolver still denies setup.
-    assert.ok(scanFile(join(root, "web/lib/scoped.integration.test.ts"), root).length > 0);
-  });
+    },
+    (root) => {
+      assert.deepEqual(scanFile(join(root, "web/lib/direct.integration.test.ts"), root), []);
+      // Enforcement is not coverage: a scoped resolver still denies setup.
+      assert.ok(scanFile(join(root, "web/lib/scoped.integration.test.ts"), root).length > 0);
+    },
+  );
 });
 
 test("helpers called only from scoped helpers are transitively covered", () => {
-  withTree({
-    "web/lib/transitive.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/transitive.integration.test.ts": `import test from "node:test";
 const { reader } = await import("./reader.ts");
 async function inner() {
   await db.execute(sql\`insert into t(id) values (1)\`);
@@ -238,20 +270,22 @@ test("b", async () => {
   await inner();
 });
 `,
-  }, root => {
-    const findings = scanFile(join(root, "web/lib/transitive.integration.test.ts"), root);
-    // Only the bare call in test b is exposed; the outer->inner chain is clean.
-    assert.equal(findings.length, 1);
-    assert.ok(findings[0].note.includes("inner"));
-    assert.equal(findings[0].name, "b");
-  });
+    },
+    (root) => {
+      const findings = scanFile(join(root, "web/lib/transitive.integration.test.ts"), root);
+      // Only the bare call in test b is exposed; the outer->inner chain is clean.
+      assert.equal(findings.length, 1);
+      assert.ok(findings[0].note.includes("inner"));
+      assert.equal(findings[0].name, "b");
+    },
+  );
 });
 
 test("projections preserve offsets on adversarial templates", () => {
   const src = [
     "await withBypassContext(async () => {",
     "  await db.execute(sql`insert into t(id) values (${ids.map((id) => `'${id}'`).join(\",\")})`);",
-    "  await db.execute(sql`insert into u(id) values (${ids.filter((id) => /[(]/.test(id)).join(\",\")})`);",
+    '  await db.execute(sql`insert into u(id) values (${ids.filter((id) => /[(]/.test(id)).join(",")})`);',
     "  const q = 'it''s (closed) `not a template`';",
     "  await createScratchOrg();",
     "});",
@@ -269,8 +303,9 @@ test("projections preserve offsets on adversarial templates", () => {
 });
 
 test("test bodies before the import and named test callbacks are still exposed", () => {
-  withTree({
-    "web/lib/early.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/early.integration.test.ts": `import test from "node:test";
 test("setup", async () => {
   const org = await createScratchOrg();
 });
@@ -279,27 +314,30 @@ test("uses", async () => {
   await reader();
 });
 `,
-    "web/lib/named.integration.test.ts": `import test from "node:test";
+      "web/lib/named.integration.test.ts": `import test from "node:test";
 const { reader } = await import("./reader.ts");
 async function seed() {
   await db.execute(sql\`insert into t(id) values (1)\`);
 }
 test("works", seed);
 `,
-  }, root => {
-    const early = scanFile(join(root, "web/lib/early.integration.test.ts"), root);
-    assert.equal(early.length, 1);
-    assert.equal(early[0].name, "setup");
-    const named = scanFile(join(root, "web/lib/named.integration.test.ts"), root);
-    assert.equal(named.length, 1);
-    assert.equal(named[0].name, "works");
-    assert.ok(named[0].note.includes("seed"));
-  });
+    },
+    (root) => {
+      const early = scanFile(join(root, "web/lib/early.integration.test.ts"), root);
+      assert.equal(early.length, 1);
+      assert.equal(early[0].name, "setup");
+      const named = scanFile(join(root, "web/lib/named.integration.test.ts"), root);
+      assert.equal(named.length, 1);
+      assert.equal(named[0].name, "works");
+      assert.ok(named[0].note.includes("seed"));
+    },
+  );
 });
 
 test("helpers called under a scope are covered; helpers called bare are flagged", () => {
-  withTree({
-    "web/lib/helpers.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/helpers.integration.test.ts": `import test from "node:test";
 const { reader } = await import("./reader.ts");
 async function safeSeed() {
   await db.execute(sql\`insert into t(id) values (1)\`);
@@ -315,12 +353,14 @@ test("b", async () => {
   await reader();
 });
 `,
-  }, root => {
-    const findings = scanFile(join(root, "web/lib/helpers.integration.test.ts"), root);
-    assert.equal(findings.length, 1);
-    assert.ok(findings[0].call.startsWith("db.execute(update"));
-    assert.ok(findings[0].note.includes("bareSeed"));
-  });
+    },
+    (root) => {
+      const findings = scanFile(join(root, "web/lib/helpers.integration.test.ts"), root);
+      assert.equal(findings.length, 1);
+      assert.ok(findings[0].call.startsWith("db.execute(update"));
+      assert.ok(findings[0].note.includes("bareSeed"));
+    },
+  );
 });
 
 test("the live repository exposes no files outside the tracked baseline", () => {
@@ -333,15 +373,18 @@ test("the live repository exposes no files outside the tracked baseline", () => 
     { added, removed },
     { added: [], removed: [] },
     `${added.length} new RLS exposures (wrap them, do not list them):\n` +
-    added.map((file) => `  + ${file}`).join("\n") +
-    (removed.length > 0 ? `\n${removed.length} fixed files still listed (drop their entries):\n` +
-      removed.map((file) => `  - ${file}`).join("\n") : ""),
+      added.map((file) => `  + ${file}`).join("\n") +
+      (removed.length > 0
+        ? `\n${removed.length} fixed files still listed (drop their entries):\n` +
+          removed.map((file) => `  - ${file}`).join("\n")
+        : ""),
   );
 });
 
 test("client receivers write like db.execute; DDL and reads stay out of scope", () => {
-  withTree({
-    "web/lib/receivers.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/receivers.integration.test.ts": `import test from "node:test";
 const { reader } = await import("./reader.ts");
 test("writes", async () => {
   await writer.query(\`update t set a = 1\`);
@@ -354,13 +397,14 @@ test("reads", async () => {
   await reader();
 });
 `,
-  }, root => {
-    const findings = scanFile(join(root, "web/lib/receivers.integration.test.ts"), root);
-    assert.deepEqual(
-      findings.map((finding) => finding.call).sort(),
-      ["writer.query(update ...)"],
-    );
-  });
+    },
+    (root) => {
+      const findings = scanFile(join(root, "web/lib/receivers.integration.test.ts"), root);
+      assert.deepEqual(findings.map((finding) => finding.call).sort(), [
+        "writer.query(update ...)",
+      ]);
+    },
+  );
 });
 
 // A one-off check of a single file must agree with scanTree about that file.
@@ -371,29 +415,32 @@ test("reads", async () => {
 // (possibly empty) exposure baseline here would couple this test to whichever
 // files happen to be tracked.
 test("a repo-relative path is scanned from the repo, not the process cwd", () => {
-  withTree({
-    "web/lib/rel.integration.test.ts": `import test from "node:test";
+  withTree(
+    {
+      "web/lib/rel.integration.test.ts": `import test from "node:test";
 const { reader } = await import("./reader.ts");
 test("setup", async () => {
   const org = await createScratchOrg();
   await reader();
 });
 `,
-  }, root => {
-    const relative = "web/lib/rel.integration.test.ts";
-    const fromRoot = scanFile(join(root, relative), root);
-    assert.ok(fromRoot.length > 0, "the synthetic file must scan exposed");
-    const cwd = process.cwd();
-    process.chdir(tmpdir());
-    try {
-      assert.deepEqual(
-        scanFile(relative, root).map((finding) => `${finding.line}:${finding.call}`),
-        fromRoot.map((finding) => `${finding.line}:${finding.call}`),
-      );
-    } finally {
-      process.chdir(cwd);
-    }
-  });
+    },
+    (root) => {
+      const relative = "web/lib/rel.integration.test.ts";
+      const fromRoot = scanFile(join(root, relative), root);
+      assert.ok(fromRoot.length > 0, "the synthetic file must scan exposed");
+      const cwd = process.cwd();
+      process.chdir(tmpdir());
+      try {
+        assert.deepEqual(
+          scanFile(relative, root).map((finding) => `${finding.line}:${finding.call}`),
+          fromRoot.map((finding) => `${finding.line}:${finding.call}`),
+        );
+      } finally {
+        process.chdir(cwd);
+      }
+    },
+  );
 });
 
 test("a dynamic import of a Next.js route group is a load point, parens and all", () => {
@@ -404,10 +451,16 @@ test("a dynamic import of a Next.js route group is a load point, parens and all"
   // writes behind it were never attributed to a bypass scope. Route groups are
   // used throughout this app, so this asserts the specifier survives whole.
   const points = ownLoadPoints(`const { loadArCockpit } = await import('../app/(app)/ar/view');\n`);
-  assert.deepEqual(points.map((point) => point.spec), ["../app/(app)/ar/view"]);
+  assert.deepEqual(
+    points.map((point) => point.spec),
+    ["../app/(app)/ar/view"],
+  );
 });
 
 test("a route-group specifier with a query tag still survives the scan", () => {
   const points = ownLoadPoints(`const mod = await import('../app/(app)/ap/view?tag');\n`);
-  assert.deepEqual(points.map((point) => point.spec), ["../app/(app)/ap/view?tag"]);
+  assert.deepEqual(
+    points.map((point) => point.spec),
+    ["../app/(app)/ap/view?tag"],
+  );
 });

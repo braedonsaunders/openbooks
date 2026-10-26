@@ -17,18 +17,10 @@ export const GET = defineRoute({
     const url = new URL(req.url);
     const employmentId = url.searchParams.get("employmentId");
     if (!employmentId || !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employment id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employment id must be a uuid" }, { status: 400 });
     }
     try {
-      const dependents = await listDependents(
-        db,
-        gate.user.orgId,
-        gate.user.id,
-        employmentId,
-      );
+      const dependents = await listDependents(db, gate.user.orgId, gate.user.id, employmentId);
       return NextResponse.json({ dependents });
     } catch (e) {
       return benefitsErrorResponse(e);

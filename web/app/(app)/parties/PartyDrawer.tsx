@@ -1,63 +1,106 @@
-'use client'
+"use client";
 
-import { useIdentityState } from '@/lib/use-identity-state'
+import { useIdentityState } from "@/lib/use-identity-state";
 
-import { type Opt, type AddressApiRecord, type ContactApiRecord, type PartyPayload, type SubsidiaryOpt, type AddressRow, type ContactRow, PAYMENT_METHOD_OPTIONS, emptyAddress, emptyContact, addressFromApi, contactFromApi, serializeAddresses, serializeContacts, type PartyTab, toShellTab, fromShellTab, rememberDrawerTab, checkboxClass, field, formatCreditLimit } from './party-drawer-model'
-import { PartyReadOnlyField, PartySummary, ReadOnlyLineSublist } from './PartySummary'
-import { SublistAddButton } from '../../../components/drawer-sublist'
-import { ContactForm, AddressForm } from './PartyContactForms'
-import { BankAccountsPanel } from './PartyBankAccountsPanel'
-import { IntercompanyRepresentationNote } from './IntercompanyRepresentationNote'
-import { PartyPaymentMethodsPanel } from './PartyPaymentMethodsPanel'
-import { PartyAutopayPanel } from './PartyAutopayPanel'
-import { PartyDebitMandatesPanel } from './PartyDebitMandatesPanel'
-import { EmployeeBenefitsPanel } from './EmployeeBenefitsPanel'
-import { ActivitySublist } from './PartyActivitySublist'
-import { TransactionSublist } from './PartyTransactionSublist'
-import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { RecordSaveContext, useRecordSaveRegistry } from '@/components/record-save-participants'
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { Building2, Plus, Users } from 'lucide-react'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { useAppAction } from '@/lib/use-app-action'
-import { customFieldDefKey, defaultFormLayout, isCustomFieldKey, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
-import { Badge, Button, Drawer, Input, Label, SearchSelect, Select, TabContent } from '@openbooks/ui'
-import { FieldControlAssociations } from '@/components/field'
-import { currencyDisplayName, currencyOptions } from '../../../lib/iso-currencies'
-import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
-import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
-import type { CustomFieldViewer } from '@openbooks/customization'
-import { CustomFieldInput } from '../../../components/custom-field-input'
-import { HeaderFields } from '../../../components/transaction-form/header-fields'
-import type { LineGridColumn } from '../../../components/line-grid'
-import { TransactionDrawer } from '../../../components/transaction-drawer'
-import { SendButton } from '../../../components/send-button'
-import { EmployeeCompensationPanel } from './EmployeeCompensationPanel'
-import { PartyPhoto } from './PartyPhoto'
-import { EmployeePayComponents } from './EmployeePayComponents'
-import { PayrollProfileTab, type PayrollSubTab } from '../payroll/_ui/PayrollProfileTab'
-import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
-import { EmploymentTab } from '../hrm/EmploymentTab'
-import { HireEmploymentDrawer } from '../hrm/HireEmploymentDrawer'
-import { RateBookAssignmentSection } from './RateBookAssignmentSection'
-import { PartyTaxIdSection } from './PartyTaxIdSection'
-import { BillingRelationshipsSection } from './BillingRelationshipsSection'
-import { VendorCompliancePanel, type ComplianceClassOption } from './VendorCompliancePanel'
-import { VendorCaptureTrust } from './VendorCaptureTrust'
-import { VendorTaxIdentityPanel, type VendorTaxIdentity } from './VendorTaxIdentityPanel'
-import { countryOptions } from '../../../lib/countries'
-import { ReadOnlyValue } from '../../../components/read-only-value'
-import { confirmDialog } from '../../../lib/confirm'
-import { promptDialog } from '../../../lib/prompt'
-import { PartyPulseSection } from './PartyPulseSection'
-import { StoreCreditPanel } from './StoreCreditPanel'
-import { PartyRelationshipSection } from './PartyRelationshipSection'
-import { ExternalIdsPanel } from '../channels/ExternalIdsPanel'
-import { DateField } from '@/components/date-field'
+import {
+  type Opt,
+  type AddressApiRecord,
+  type ContactApiRecord,
+  type PartyPayload,
+  type SubsidiaryOpt,
+  type AddressRow,
+  type ContactRow,
+  PAYMENT_METHOD_OPTIONS,
+  emptyAddress,
+  emptyContact,
+  addressFromApi,
+  contactFromApi,
+  serializeAddresses,
+  serializeContacts,
+  type PartyTab,
+  toShellTab,
+  fromShellTab,
+  rememberDrawerTab,
+  checkboxClass,
+  field,
+  formatCreditLimit,
+} from "./party-drawer-model";
+import { PartyReadOnlyField, PartySummary, ReadOnlyLineSublist } from "./PartySummary";
+import { SublistAddButton } from "../../../components/drawer-sublist";
+import { ContactForm, AddressForm } from "./PartyContactForms";
+import { BankAccountsPanel } from "./PartyBankAccountsPanel";
+import { IntercompanyRepresentationNote } from "./IntercompanyRepresentationNote";
+import { PartyPaymentMethodsPanel } from "./PartyPaymentMethodsPanel";
+import { PartyAutopayPanel } from "./PartyAutopayPanel";
+import { PartyDebitMandatesPanel } from "./PartyDebitMandatesPanel";
+import { EmployeeBenefitsPanel } from "./EmployeeBenefitsPanel";
+import { ActivitySublist } from "./PartyActivitySublist";
+import { TransactionSublist } from "./PartyTransactionSublist";
+import { initialDrawerMode, type DrawerMode } from "@/lib/drawer-mode";
+import { RecordSaveContext, useRecordSaveRegistry } from "@/components/record-save-participants";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { Building2, Plus, Users } from "lucide-react";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
+import { ActionAlert } from "@braedonsaunders/appkit-errors/react";
+import { useAppAction } from "@/lib/use-app-action";
+import {
+  customFieldDefKey,
+  defaultFormLayout,
+  isCustomFieldKey,
+  type FormLayoutConfig,
+  type HeaderFieldPlacement,
+} from "@openbooks/customization";
+import {
+  Badge,
+  Button,
+  Drawer,
+  Input,
+  Label,
+  SearchSelect,
+  Select,
+  TabContent,
+} from "@openbooks/ui";
+import { FieldControlAssociations } from "@/components/field";
+import { currencyDisplayName, currencyOptions } from "../../../lib/iso-currencies";
+import {
+  InvoicingPreferenceFields,
+  type InvoicingPref,
+} from "../../../components/invoicing-preference-fields";
+import {
+  CustomFieldInputs,
+  type CustomFieldDefClient,
+} from "../../../components/custom-field-inputs";
+import type { CustomFieldViewer } from "@openbooks/customization";
+import { CustomFieldInput } from "../../../components/custom-field-input";
+import { HeaderFields } from "../../../components/transaction-form/header-fields";
+import type { LineGridColumn } from "../../../components/line-grid";
+import { TransactionDrawer } from "../../../components/transaction-drawer";
+import { SendButton } from "../../../components/send-button";
+import { EmployeeCompensationPanel } from "./EmployeeCompensationPanel";
+import { PartyPhoto } from "./PartyPhoto";
+import { EmployeePayComponents } from "./EmployeePayComponents";
+import { PayrollProfileTab, type PayrollSubTab } from "../payroll/_ui/PayrollProfileTab";
+import { DrawerTabStrip } from "../../../components/drawer-tab-strip";
+import { EmploymentTab } from "../hrm/EmploymentTab";
+import { HireEmploymentDrawer } from "../hrm/HireEmploymentDrawer";
+import { RateBookAssignmentSection } from "./RateBookAssignmentSection";
+import { PartyTaxIdSection } from "./PartyTaxIdSection";
+import { BillingRelationshipsSection } from "./BillingRelationshipsSection";
+import { VendorCompliancePanel, type ComplianceClassOption } from "./VendorCompliancePanel";
+import { VendorCaptureTrust } from "./VendorCaptureTrust";
+import { VendorTaxIdentityPanel, type VendorTaxIdentity } from "./VendorTaxIdentityPanel";
+import { countryOptions } from "../../../lib/countries";
+import { ReadOnlyValue } from "../../../components/read-only-value";
+import { confirmDialog } from "../../../lib/confirm";
+import { promptDialog } from "../../../lib/prompt";
+import { PartyPulseSection } from "./PartyPulseSection";
+import { StoreCreditPanel } from "./StoreCreditPanel";
+import { PartyRelationshipSection } from "./PartyRelationshipSection";
+import { ExternalIdsPanel } from "../channels/ExternalIdsPanel";
+import { DateField } from "@/components/date-field";
 
 /**
  * The party row's concurrency revision plus the worker-compensation class the
@@ -65,15 +108,15 @@ import { DateField } from '@/components/date-field'
  * both change when a section writes the employee role.
  */
 interface PartyToken {
-  updatedAt: string
-  workerCompGroupId: string
+  updatedAt: string;
+  workerCompGroupId: string;
 }
 
 function partyTokenOf(payload: PartyPayload): PartyToken {
   return {
     updatedAt: payload.party.updated_at,
-    workerCompGroupId: payload.employee?.worker_comp_group_id ?? '',
-  }
+    workerCompGroupId: payload.employee?.worker_comp_group_id ?? "",
+  };
 }
 
 export function PartyDrawer({
@@ -117,9 +160,9 @@ export function PartyDrawer({
   consolidatedBilling = null,
   debitMandates = null,
   settlementHrefs = null,
-  initialTab = 'overview',
-  initialMode = 'view',
-  basePath = '/parties',
+  initialTab = "overview",
+  initialMode = "view",
+  basePath = "/parties",
   createMode = false,
   closeHref,
   layout,
@@ -128,147 +171,161 @@ export function PartyDrawer({
   recordType,
   canCustomize = false,
 }: {
-  payload: PartyPayload
-  paymentTerms: Opt[]
-  departments: Opt[]
-  trades: Opt[]
-  workerCompGroups?: Opt[]
-  accounts?: Opt[]
-  taxCodes?: Opt[]
-  salesReps?: Opt[]
-  fieldDefs: CustomFieldDefClient[]
+  payload: PartyPayload;
+  paymentTerms: Opt[];
+  departments: Opt[];
+  trades: Opt[];
+  workerCompGroups?: Opt[];
+  accounts?: Opt[];
+  taxCodes?: Opt[];
+  salesReps?: Opt[];
+  fieldDefs: CustomFieldDefClient[];
   /** The viewer's custom-field visibility from the server; omitted shows only open fields. */
-  customFieldViewer?: CustomFieldViewer | null
-  subsidiaries: SubsidiaryOpt[]
-  canManage: boolean
+  customFieldViewer?: CustomFieldViewer | null;
+  subsidiaries: SubsidiaryOpt[];
+  canManage: boolean;
   /**
    * Direct-deposit capture: the master-data grant or the HR/payroll manage
    * grant unlocks Add on the employee Bank accounts sections (the
    * bank-accounts route enforces the same rule per party). Without it the
    * sections read — "No bank accounts on file" with no control.
    */
-  canManageEmployeeBanks?: boolean
+  canManageEmployeeBanks?: boolean;
   /**
    * hrm.employment.manage — chains the unsaved-create save into the Hire
    * step so one drawer records the person and their first employment.
    * The hire route re-checks the grant; without it creation ends at the
    * record with its Hire button.
    */
-  canHire?: boolean
-  canReadActivities?: boolean
+  canHire?: boolean;
+  canReadActivities?: boolean;
   /** crm.activities.manage — enables the Activities tab's Add button. */
-  canManageActivities?: boolean
+  canManageActivities?: boolean;
   /** crm.accounts.read + the CRM feature enabled — shows the Relationship
    *  tab, the lifecycle stage / owner / territory / qualification profile a
    *  lead or prospect carries instead of a customer role. */
-  canReadCrmAccounts?: boolean
+  canReadCrmAccounts?: boolean;
   /** crm.accounts.manage — the Relationship tab is read-only without it
    *  (the PATCH route re-checks). */
-  canManageCrmAccounts?: boolean
+  canManageCrmAccounts?: boolean;
   /**
    * The account's stored `crm_account_profiles.lifecycle_stage`, or null when
    * it has no relationship profile. Decides whether saving from the account
    * list may force the AR customer role on — see `forcesCustomerRole`.
    */
-  lifecycleStage?: 'lead' | 'prospect' | 'customer' | null
+  lifecycleStage?: "lead" | "prospect" | "customer" | null;
   /** admin.setup.manage — wage data is confidential; edits wage rates on the Compensation tab. */
-  canManageWages?: boolean
+  canManageWages?: boolean;
   /** hrm.compensation.read + the HR feature — total compensation, history and bonuses. */
-  canReadCompensation?: boolean
+  canReadCompensation?: boolean;
   /** hrm.benefits.read + the HR feature — employee Benefits record access. */
-  canReadBenefits?: boolean
+  canReadBenefits?: boolean;
   /** payroll.manage + the payroll feature enabled — shows the Payroll tab. */
-  canManagePayroll?: boolean
+  canManagePayroll?: boolean;
   /** Company Settings → Features. Worker-comp group is Payroll
    *  configuration; hide and omit it when that switch is off. */
-  payrollEnabled?: boolean
+  payrollEnabled?: boolean;
   /** Company Settings → Features. Customer/vendor currency is
    *  Multi-currency configuration; hide and omit it when that switch is off. */
-  multiCurrency?: boolean
+  multiCurrency?: boolean;
   /** Company Settings → Features. The Subcontractor-compliance switch gates
    *  the vendor Compliance tab. */
-  complianceEnabled?: boolean
+  complianceEnabled?: boolean;
   /** compliance.manage — assigning the class releases vendor money, so the
    *  tab is read-only without it (the PATCH route re-checks). */
-  canManageCompliance?: boolean
+  canManageCompliance?: boolean;
   /** The vendor's assigned class + the active classes, for the Compliance tab. */
-  compliance?: { classId: string | null; classes: ComplianceClassOption[] } | null
+  compliance?: { classId: string | null; classes: ComplianceClassOption[] } | null;
   /** Company Settings → Features. The Information-returns tax switch gates
    *  the vendor tax-identity section. */
-  informationReturnsEnabled?: boolean
+  informationReturnsEnabled?: boolean;
   /** The vendor's masked tax identity (last four only — never ciphertext),
    *  for the Compliance tab. Null hides the section. */
-  taxIdentity?: VendorTaxIdentity | null
+  taxIdentity?: VendorTaxIdentity | null;
   /** Information-return form options for the tax-identity section. */
-  taxIdentityFormTypes?: string[]
+  taxIdentityFormTypes?: string[];
   /** Customer tax IDs: identity plus the manage grant; rows load in the section. Null hides the section. */
-  taxIds?: { partyId: string; canManage: boolean } | null
+  taxIds?: { partyId: string; canManage: boolean } | null;
   /** stored_value.read + the Stored value feature — shows the Store credit
    *  tab with this customer's available balances (null = gated, so the tab
    *  never renders without the read surface behind it). */
-  storedValue?: { balances: { currency: string; total: string }[] } | null
+  storedValue?: { balances: { currency: string; total: string }[] } | null;
   /** Company Settings → Features. The HRM switch plus hrm.employment.read
    *  gate the employee Employment tab; the ids are the party's scoped
    *  employments (null = gated, so the tab never renders without the read
    *  surface behind it). */
-  hrm?: { employmentIds: string[]; canManageHrm: boolean; canReadExits: boolean; canRecordExit: boolean; canVerb?: boolean } | null
+  hrm?: {
+    employmentIds: string[];
+    canManageHrm: boolean;
+    canReadExits: boolean;
+    canRecordExit: boolean;
+    canVerb?: boolean;
+  } | null;
   /** Customer storefront identities with unlink rights (null = gated). Rows
    *  cross as plain data; the tab never renders without the read surface
    *  behind it. */
   externalIdsTab?: {
-    links: { id: string; channelId: string | null; provider: string; externalAccount: string; objectType: string; externalId: string; lastSyncedAt: string | null }[];
+    links: {
+      id: string;
+      channelId: string | null;
+      provider: string;
+      externalAccount: string;
+      objectType: string;
+      externalId: string;
+      lastSyncedAt: string | null;
+    }[];
     canUnlink: boolean;
-  } | null
+  } | null;
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
    *  keeps that role enabled. Omitted on the unified /parties directory. */
-  role?: 'customer' | 'vendor' | 'employee'
+  role?: "customer" | "vendor" | "employee";
   /** Stored payment methods and autopay for a customer drawer. Null = gated
    *  (the autopay feature is off or the viewer lacks payment_methods.read),
    *  so the tab never renders without the read surface behind it. */
-  autopay?: { canManageMethods: boolean; canManageAutopay: boolean } | null
+  autopay?: { canManageMethods: boolean; canManageAutopay: boolean } | null;
   /** Payer-hierarchy billing for a customer drawer. Null = gated (the
    *  consolidatedBilling feature is off or the record is not a customer),
    *  so the tab never renders without the read surface behind it. */
-  consolidatedBilling?: { canManage: boolean } | null
+  consolidatedBilling?: { canManage: boolean } | null;
   /** Direct-debit mandates for a persisted customer record. Null = gated
    *  (the viewer lacks admin.setup.manage, the grant the mandate routes
    *  enforce, or the record has no customer role), so the tab never renders
    *  without the read surface behind it. */
-  debitMandates?: { partyId: string } | null
+  debitMandates?: { partyId: string } | null;
   /** Receive payment (customer) / Pay bills (vendor) links opening the new
    *  payment for this party. Resolved by the loader from the party's roles
    *  and the viewer's payment permissions; null entries hide the action. */
-  settlementHrefs?: { receivePayment: string | null; payBills: string | null } | null
-  initialTab?: PartyTab
-  initialMode?: DrawerMode
-  basePath?: string
-  layout?: FormLayoutConfig
-  forms?: { id: string; name: string }[]
-  currentFormId?: string | null
-  recordType?: 'customer' | 'vendor' | 'employee'
-  canCustomize?: boolean
+  settlementHrefs?: { receivePayment: string | null; payBills: string | null } | null;
+  initialTab?: PartyTab;
+  initialMode?: DrawerMode;
+  basePath?: string;
+  layout?: FormLayoutConfig;
+  forms?: { id: string; name: string }[];
+  currentFormId?: string | null;
+  recordType?: "customer" | "vendor" | "employee";
+  canCustomize?: boolean;
   /**
    * Unsaved-create: the drawer opens editable on a payload with no persisted
    * row. Cancel navigates away with zero writes; Save persists through one
    * idempotent POST. Only the overview, invoicing, contacts, addresses, and
    * accounting tabs draw — every other tab reads a persisted party.
    */
-  createMode?: boolean
+  createMode?: boolean;
   /** List URL (filters preserved) that Cancel and the close affordance return to. */
-  closeHref?: string
+  closeHref?: string;
 }) {
-  const t = useTranslations('parties.drawer')
-  const tsv = useTranslations('storedValue')
-  const tc = useTranslations('common')
-  const th = useTranslations('hrm')
-  const tEntities = useTranslations('entities')
-  const tInv = useTranslations('projects.invoicingPref')
-  const locale = useLocale()
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const t = useTranslations("parties.drawer");
+  const tsv = useTranslations("storedValue");
+  const tc = useTranslations("common");
+  const th = useTranslations("hrm");
+  const tEntities = useTranslations("entities");
+  const tInv = useTranslations("projects.invoicingPref");
+  const locale = useLocale();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   // The Compliance tab needs a vendor in an org with either switch on: the
   // class section rides subcontractor compliance, the tax-identity section
   // rides the informationReturns tax switch. The same predicate gates the tab
@@ -277,39 +334,50 @@ export function PartyDrawer({
   // OM-16: "a vendor" means the vendor ROLE row, never the role filter or
   // the kind column — ?role=vendor on a role-less party must not fake the
   // tab into existence. Employment, wages, and payroll read the same way.
-  const showComplianceTab = (complianceEnabled || informationReturnsEnabled) && payload.vendor != null
+  const showComplianceTab =
+    (complianceEnabled || informationReturnsEnabled) && payload.vendor != null;
   // The Employment tab needs an employee in an HRM-enabled org whose viewer
   // holds the read grant — the loader passes null unless both hold, so the
   // same predicate gates the tab button and the deep-link like Compliance.
-  const showEmploymentTab = hrm !== null && payload.employee != null
-  const showCompensationTab = role === 'employee' && (canManageWages || canReadCompensation) && payload.employee != null
-  const showBenefitsTab = role === 'employee' && canReadBenefits && payload.employee != null
-  const showPayrollTab = role === 'employee' && canManagePayroll && payload.employee != null
+  const showEmploymentTab = hrm !== null && payload.employee != null;
+  const showCompensationTab =
+    role === "employee" && (canManageWages || canReadCompensation) && payload.employee != null;
+  const showBenefitsTab = role === "employee" && canReadBenefits && payload.employee != null;
+  const showPayrollTab = role === "employee" && canManagePayroll && payload.employee != null;
   // The Payment methods tab needs a customer drawer whose viewer holds the
   // stored-methods read surface — the loader passes null unless the autopay
   // feature is on and payment_methods.read holds, so the same predicate
   // gates the tab button and the deep-link like Compliance.
-  const showPaymentMethodsTab = (role === 'customer' || (!role && payload.customer != null)) && autopay != null
+  const showPaymentMethodsTab =
+    (role === "customer" || (!role && payload.customer != null)) && autopay != null;
   // Billing hierarchies ride the same contract: the loader passes null
   // unless consolidated billing is on for a customer record, so the tab
   // (and the payer data behind it) stays hidden everywhere else.
-  const showBillingTab = (role === 'customer' || (!role && payload.customer != null)) && consolidatedBilling != null
+  const showBillingTab =
+    (role === "customer" || (!role && payload.customer != null)) && consolidatedBilling != null;
   // The relationship (CRM) profile is an account-side concern: it rides the
   // customer role, and it is what a lead or prospect has INSTEAD of one.
-  const showRelationshipTab = canReadCrmAccounts && (role === 'customer' || (!role && payload.customer != null))
+  const showRelationshipTab =
+    canReadCrmAccounts && (role === "customer" || (!role && payload.customer != null));
   // The Store credit tab needs a customer in a stored-value-enabled org
   // whose viewer may read balances — the same predicate gates the tab
   // button, the deep-link fallback, and the panel, so a stale
   // ?partyTab=store-credit can never strand the drawer on a missing panel.
-  const showStoreCreditTab = storedValue != null && (role === 'customer' || (!role && payload.customer != null))
+  const showStoreCreditTab =
+    storedValue != null && (role === "customer" || (!role && payload.customer != null));
   // Debit mandates ride the customer ROLE row of a persisted record: the
   // loader passes null unless the viewer holds the mandate grant, and the
   // same predicate gates the tab button and the ?partyTab= deep link.
-  const showDebitMandatesTab = debitMandates != null && !createMode && payload.customer != null && (role === 'customer' || !role)
+  const showDebitMandatesTab =
+    debitMandates != null &&
+    !createMode &&
+    payload.customer != null &&
+    (role === "customer" || !role);
   // External storefront identities ride the customer record the same way:
   // the server passes the rendered tab (null = gated), so the button never
   // appears without the identity surface behind it.
-  const showExternalIdsTab = externalIdsTab != null && (role === 'customer' || (!role && payload.customer != null))
+  const showExternalIdsTab =
+    externalIdsTab != null && (role === "customer" || (!role && payload.customer != null));
   /**
    * `role` says which role's FIELDS to show, and opening a record from the
    * account list used to mean "force the customer role on". It cannot any
@@ -318,79 +386,91 @@ export function PartyDrawer({
    * role is written by PROMOTION (promoteCrmAccount), so a pre-customer
    * account keeps whatever role state it already had.
    */
-  const preCustomerStage = lifecycleStage === 'lead' || lifecycleStage === 'prospect'
-  const forcesCustomerRole = role === 'customer' && !preCustomerStage
+  const preCustomerStage = lifecycleStage === "lead" || lifecycleStage === "prospect";
+  const forcesCustomerRole = role === "customer" && !preCustomerStage;
   // Unsaved-create draws only the tabs that work without a persisted party:
   // identity, role selection, invoicing, and the local contacts/addresses
   // lists. Everything else (transactions, compliance, payroll, employment,
   // relationship, attachments, audit) reads the row this drawer has not
   // written yet.
   const CREATE_TABS: ReadonlySet<PartyTab> = new Set<PartyTab>([
-    'overview', 'invoicing', 'contacts', 'addresses', 'accounting',
-  ])
+    "overview",
+    "invoicing",
+    "contacts",
+    "addresses",
+    "accounting",
+  ]);
   const allowedInitialTab = createMode
-    ? 'overview'
-    : (initialTab === 'compensation' && !showCompensationTab) ||
-    (initialTab === 'payroll' && !showPayrollTab) ||
-    (initialTab === 'benefits' && !showBenefitsTab) ||
-    (initialTab === 'activities' && !canReadActivities) ||
-    (initialTab === 'relationship' && !showRelationshipTab) ||
-    (initialTab === 'external-ids' && !showExternalIdsTab) ||
-    (initialTab === 'pulse' && (role !== 'customer' || payload.party.display_name === 'New party' || payload.party.display_name === 'New lead')) ||
-    (initialTab === 'compliance' && !showComplianceTab) ||
-    (initialTab === 'paymentMethods' && !showPaymentMethodsTab) ||
-    (initialTab === 'store-credit' && !showStoreCreditTab) ||
-    (initialTab === 'debitMandates' && !showDebitMandatesTab) ||
-    (initialTab === 'billing' && !showBillingTab) ||
-    (initialTab === 'employment' && !showEmploymentTab)
-      ? 'overview'
-      : initialTab
-  const [tab, setTab] = useState<PartyTab>(allowedInitialTab)
+    ? "overview"
+    : (initialTab === "compensation" && !showCompensationTab) ||
+        (initialTab === "payroll" && !showPayrollTab) ||
+        (initialTab === "benefits" && !showBenefitsTab) ||
+        (initialTab === "activities" && !canReadActivities) ||
+        (initialTab === "relationship" && !showRelationshipTab) ||
+        (initialTab === "external-ids" && !showExternalIdsTab) ||
+        (initialTab === "pulse" &&
+          (role !== "customer" ||
+            payload.party.display_name === "New party" ||
+            payload.party.display_name === "New lead")) ||
+        (initialTab === "compliance" && !showComplianceTab) ||
+        (initialTab === "paymentMethods" && !showPaymentMethodsTab) ||
+        (initialTab === "store-credit" && !showStoreCreditTab) ||
+        (initialTab === "debitMandates" && !showDebitMandatesTab) ||
+        (initialTab === "billing" && !showBillingTab) ||
+        (initialTab === "employment" && !showEmploymentTab)
+      ? "overview"
+      : initialTab;
+  const [tab, setTab] = useState<PartyTab>(allowedInitialTab);
   // The Payroll tab's own sub-tab. Client-local like the rail: switching
   // never navigates, and every section below stays mounted (hidden) so
   // unsaved edits survive sub-tab switches. A ?partyTab=payroll deep link
   // lands on the tab with the General half showing.
-  const [payrollSubTab, setPayrollSubTab] = useState<PayrollSubTab>('general')
+  const [payrollSubTab, setPayrollSubTab] = useState<PayrollSubTab>("general");
   // The Payment methods tab's own sub-tabs: stored methods and autopay
   // enrollments are separate concepts, so each gets its own body behind
   // the shared drawer strip (never stacked). Both panels stay mounted
   // (hidden) so a switch never discards in-flight edits.
-  const [paymentMethodsSubTab, setPaymentMethodsSubTab] = useState<'methods' | 'autopay'>('methods')
+  const [paymentMethodsSubTab, setPaymentMethodsSubTab] = useState<"methods" | "autopay">(
+    "methods",
+  );
   // Both payment-method sub-tabs stay mounted; a change in either re-reads both.
-  const [paymentMethodsRevision, setPaymentMethodsRevision] = useState(0)
+  const [paymentMethodsRevision, setPaymentMethodsRevision] = useState(0);
   // Tabs visited this drawer session. The employee compensation panels stay
   // mounted once visited (see the keep-alive blocks below) so tab switches
   // never discard their local edits. The drawer remounts per party
   // (key={party.id}), so nothing leaks across parties.
-  const [keptTabs, setKeptTabs] = useState<ReadonlySet<PartyTab>>(() => new Set<PartyTab>([allowedInitialTab]))
+  const [keptTabs, setKeptTabs] = useState<ReadonlySet<PartyTab>>(
+    () => new Set<PartyTab>([allowedInitialTab]),
+  );
   const showTab = (key: PartyTab) => {
-    setTab(key)
-    setKeptTabs((prev) => rememberDrawerTab(prev, key))
-  }
+    setTab(key);
+    setKeptTabs((prev) => rememberDrawerTab(prev, key));
+  };
   // Adopt a new initial tab during render (same committed values, no extra
   // render). `rememberDrawerTab` returns the previous set when the tab is
   // already kept, so this settles after one pass.
-  const [prevAllowedInitialTab, setPrevAllowedInitialTab] = useState(allowedInitialTab)
+  const [prevAllowedInitialTab, setPrevAllowedInitialTab] = useState(allowedInitialTab);
   if (prevAllowedInitialTab !== allowedInitialTab) {
-    setPrevAllowedInitialTab(allowedInitialTab)
-    setTab(allowedInitialTab)
-    setKeptTabs((prev) => rememberDrawerTab(prev, allowedInitialTab))
+    setPrevAllowedInitialTab(allowedInitialTab);
+    setTab(allowedInitialTab);
+    setKeptTabs((prev) => rememberDrawerTab(prev, allowedInitialTab));
   }
-  const p = payload.party
-  const effectiveLayout = layout ?? (recordType ? defaultFormLayout(recordType) : null)
-  const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((payload.party.invoicing_preference as InvoicingPref) ?? {})
+  const p = payload.party;
+  const effectiveLayout = layout ?? (recordType ? defaultFormLayout(recordType) : null);
+  const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>(
+    (payload.party.invoicing_preference as InvoicingPref) ?? {},
+  );
   // The server-side draft sentinels stored in the DB — compare and persist
   // them verbatim; only the *displayed* fallback is translated. The parties
   // draft writes 'New party'; the relationship draft (a lead or prospect
   // started from the account list) writes 'New lead'. Both land in this one
   // flyout, so both must blank the name field.
-  const placeholderName = p.display_name === 'New party' || p.display_name === 'New lead'
-    ? p.display_name
-    : null
-  const isPlaceholderName = placeholderName != null
+  const placeholderName =
+    p.display_name === "New party" || p.display_name === "New lead" ? p.display_name : null;
+  const isPlaceholderName = placeholderName != null;
 
   // -- identity --------------------------------------------------------------
-  const [kind, setKind] = useState<string>(p.kind ?? 'company')
+  const [kind, setKind] = useState<string>(p.kind ?? "company");
   // The stored kind can be any of the five party kinds (role lists are that
   // kind by construction) — the label must render what is stored, never fall
   // through to Company for a customer/vendor/employee row.
@@ -401,207 +481,229 @@ export function PartyDrawer({
   // falls back to Company, the product default for a party with no roles;
   // company/person need no backing and render as stored, even beside roles.
   const kindRoleBacked =
-    kind === 'customer'
+    kind === "customer"
       ? payload.customer != null && payload.customer.is_active !== false
-      : kind === 'vendor'
+      : kind === "vendor"
         ? payload.vendor != null && payload.vendor.is_active !== false
-        : kind === 'employee'
+        : kind === "employee"
           ? payload.employee != null && payload.employee.is_active !== false
-          : true
-  const effectiveKind = kindRoleBacked ? kind : 'company'
-  const kindLabel = effectiveKind === 'person'
-    ? t('kindPerson')
-    : effectiveKind === 'customer'
-      ? t('kindCustomer')
-      : effectiveKind === 'vendor'
-        ? t('kindVendor')
-        : effectiveKind === 'employee'
-          ? t('kindEmployee')
-          : t('kindCompany')
-  const [displayName, setDisplayName] = useState<string>(isPlaceholderName ? '' : (p.display_name ?? ''))
-  const [photoFileId, setPhotoFileId] = useState<string | null>(p.photo_file_id ?? null)
-  const [legalName, setLegalName] = useState<string>(p.legal_name ?? '')
-  const [shortCode, setShortCode] = useState<string>(p.short_code ?? '')
-  const [email, setEmail] = useState<string>(p.email ?? '')
-  const [phone, setPhone] = useState<string>(p.phone ?? '')
-  const [website, setWebsite] = useState<string>(p.website ?? '')
-  const [customValues, setCustomValues] = useState<Record<string, unknown>>(p.custom ?? {})
+          : true;
+  const effectiveKind = kindRoleBacked ? kind : "company";
+  const kindLabel =
+    effectiveKind === "person"
+      ? t("kindPerson")
+      : effectiveKind === "customer"
+        ? t("kindCustomer")
+        : effectiveKind === "vendor"
+          ? t("kindVendor")
+          : effectiveKind === "employee"
+            ? t("kindEmployee")
+            : t("kindCompany");
+  const [displayName, setDisplayName] = useState<string>(
+    isPlaceholderName ? "" : (p.display_name ?? ""),
+  );
+  const [photoFileId, setPhotoFileId] = useState<string | null>(p.photo_file_id ?? null);
+  const [legalName, setLegalName] = useState<string>(p.legal_name ?? "");
+  const [shortCode, setShortCode] = useState<string>(p.short_code ?? "");
+  const [email, setEmail] = useState<string>(p.email ?? "");
+  const [phone, setPhone] = useState<string>(p.phone ?? "");
+  const [website, setWebsite] = useState<string>(p.website ?? "");
+  const [customValues, setCustomValues] = useState<Record<string, unknown>>(p.custom ?? {});
   // Unsaved-create defaults the record to active: the drawer opens on nothing
   // persisted, so deactivation lifecycle guards have nothing to evaluate yet.
-  const [isActive, setIsActive] = useState<boolean>(createMode ? true : p.is_active === true)
-  const returnHref = closeHref ?? basePath
-  const requestIdRef = useRef<string | null>(null)
+  const [isActive, setIsActive] = useState<boolean>(createMode ? true : p.is_active === true);
+  const returnHref = closeHref ?? basePath;
+  const requestIdRef = useRef<string | null>(null);
   // The server sends [] when the feature is disabled and the full picker when
   // enabled, even before a second subsidiary has been added.
-  const multiSubsidiary = subsidiaries.some((s) => !s.isElimination)
-  const rootSubsidiaryId = subsidiaries.find((s) => s.parentId === null)?.id ?? ''
-  const [subsidiaryId, setSubsidiaryId] = useState<string>(p.subsidiary_id ?? rootSubsidiaryId)
+  const multiSubsidiary = subsidiaries.some((s) => !s.isElimination);
+  const rootSubsidiaryId = subsidiaries.find((s) => s.parentId === null)?.id ?? "";
+  const [subsidiaryId, setSubsidiaryId] = useState<string>(p.subsidiary_id ?? rootSubsidiaryId);
   const [additionalSubsidiaryIds, setAdditionalSubsidiaryIds] = useState<Set<string>>(
     new Set(payload.additionalSubsidiaryIds ?? []),
-  )
+  );
 
   // -- roles -------------------------------------------------------------
   const [customer, setCustomer] = useState({
     enabled: !!payload.customer && payload.customer.is_active !== false,
-    paymentTermsId: payload.customer?.payment_terms_id ?? '',
+    paymentTermsId: payload.customer?.payment_terms_id ?? "",
     creditLimit: formatCreditLimit(payload.customer?.credit_limit),
-    currency: payload.customer?.currency ?? '',
-    arAccountId: payload.customer?.ar_account_id ?? '',
-    salesRepId: payload.customer?.sales_rep_id ?? '',
-    taxCodeId: payload.customer?.tax_code_id ?? '',
+    currency: payload.customer?.currency ?? "",
+    arAccountId: payload.customer?.ar_account_id ?? "",
+    salesRepId: payload.customer?.sales_rep_id ?? "",
+    taxCodeId: payload.customer?.tax_code_id ?? "",
     isOnHold: payload.customer?.is_on_hold === true,
-    holdReason: payload.customer?.hold_reason ?? '',
-  })
+    holdReason: payload.customer?.hold_reason ?? "",
+  });
   const [vendor, setVendor] = useState({
     enabled: !!payload.vendor && payload.vendor.is_active !== false,
-    paymentMethod: payload.vendor?.payment_method ?? '',
-    eftNotificationEmail: payload.vendor?.eft_notification_email ?? '',
-    paymentTermsId: payload.vendor?.payment_terms_id ?? '',
-    currency: payload.vendor?.currency ?? '',
+    paymentMethod: payload.vendor?.payment_method ?? "",
+    eftNotificationEmail: payload.vendor?.eft_notification_email ?? "",
+    paymentTermsId: payload.vendor?.payment_terms_id ?? "",
+    currency: payload.vendor?.currency ?? "",
     is1099OrT4a: payload.vendor?.is_t4a === true,
-    apAccountId: payload.vendor?.ap_account_id ?? '',
-    defaultExpenseAccountId: payload.vendor?.default_expense_account_id ?? '',
-    taxCodeId: payload.vendor?.tax_code_id ?? '',
+    apAccountId: payload.vendor?.ap_account_id ?? "",
+    defaultExpenseAccountId: payload.vendor?.default_expense_account_id ?? "",
+    taxCodeId: payload.vendor?.tax_code_id ?? "",
     isOnHold: payload.vendor?.is_on_hold === true,
-    holdReason: payload.vendor?.hold_reason ?? '',
-  })
+    holdReason: payload.vendor?.hold_reason ?? "",
+  });
   const [employee, setEmployee] = useState({
     enabled: !!payload.employee && payload.employee.is_active !== false,
-    employeeNumber: payload.employee?.employee_number ?? '',
-    jobTitle: payload.employee?.job_title ?? '',
-    departmentId: payload.employee?.department_id ?? '',
-    tradeId: payload.employee?.trade_id ?? '',
-    workerCompGroupId: payload.employee?.worker_comp_group_id ?? '',
-    hiredOn: payload.employee?.hired_on ?? '',
-  })
+    employeeNumber: payload.employee?.employee_number ?? "",
+    jobTitle: payload.employee?.job_title ?? "",
+    departmentId: payload.employee?.department_id ?? "",
+    tradeId: payload.employee?.trade_id ?? "",
+    workerCompGroupId: payload.employee?.worker_comp_group_id ?? "",
+    hiredOn: payload.employee?.hired_on ?? "",
+  });
 
   // Concurrency token for the party row: every PATCH from this drawer sends
   // the revision it currently holds. It starts at the loaded revision, follows
   // this drawer's own saves, and is re-read after a section writes the row
   // (see refreshPartyAfterSectionSave). The server still refuses a write when
   // another editor changed the row after this drawer read it.
-  const [partyToken, setPartyToken] = useState<PartyToken>(() => partyTokenOf(payload))
-  const [prevServerUpdatedAt, setPrevServerUpdatedAt] = useState(p.updated_at)
+  const [partyToken, setPartyToken] = useState<PartyToken>(() => partyTokenOf(payload));
+  const [prevServerUpdatedAt, setPrevServerUpdatedAt] = useState(p.updated_at);
   if (prevServerUpdatedAt !== p.updated_at) {
-    setPrevServerUpdatedAt(p.updated_at)
-    setPartyToken(partyTokenOf(payload))
+    setPrevServerUpdatedAt(p.updated_at);
+    setPartyToken(partyTokenOf(payload));
   }
 
   // -- addresses ---------------------------------------------------------
-  const [addresses, setAddresses] = useState<AddressRow[]>(
-    payload.addresses.map(addressFromApi),
-  )
-  const [contacts, setContacts] = useState<ContactRow[]>(
-    payload.contacts.map(contactFromApi),
-  )
-  const [addressDraft, setAddressDraft] = useState<{ index: number | null; row: AddressRow } | null>(null)
-  const [contactDraft, setContactDraft] = useState<{ index: number | null; row: ContactRow } | null>(null)
+  const [addresses, setAddresses] = useState<AddressRow[]>(payload.addresses.map(addressFromApi));
+  const [contacts, setContacts] = useState<ContactRow[]>(payload.contacts.map(contactFromApi));
+  const [addressDraft, setAddressDraft] = useState<{
+    index: number | null;
+    row: AddressRow;
+  } | null>(null);
+  const [contactDraft, setContactDraft] = useState<{
+    index: number | null;
+    row: ContactRow;
+  } | null>(null);
   // First-employment Hire drawer state. The no-record Employment tab owns
   // it: a freshly created employee lands here with no employment yet, and
   // the Hire button beside the notice is the creation flow's remedy.
-  const [hiring, setHiring] = useState(false)
+  const [hiring, setHiring] = useState(false);
   // Unsaved-create chaining: after the person saves, the same drawer
   // continues into the Hire step instead of navigating away — one form
   // records the person and their first employment. A refused hire keeps
   // the step open with its remedy; the saved person waits underneath.
   const [hiredAfterCreate, setHiredAfterCreate] = useState<{
-    partyId: string
-    partyName: string
-    jobTitle: string
-    departmentId: string
-  } | null>(null)
+    partyId: string;
+    partyName: string;
+    jobTitle: string;
+    departmentId: string;
+  } | null>(null);
   // New-employee from an existing person: instead of minting a duplicate
   // party, Save adds the employee role to the picked person and chains
   // into Hire on the same party. Identity inputs lock while picked — they
   // are not written.
-  const [existingPersonId, setExistingPersonId] = useState('')
-  const [existingPersonLabel, setExistingPersonLabel] = useState('')
-  const [existingPersonOptions, setExistingPersonOptions] = useState<{ value: string; label: string; hasEmployeeRole?: boolean }[]>([])
-  const [existingPersonQuery, setExistingPersonQuery] = useState('')
-  const [existingPersonStatus, setExistingPersonStatus] = useState<string | undefined>(undefined)
-  const existingPersonRequestId = useRef(0)
-  const showExistingPersonPicker = createMode && recordType === 'employee' && canHire
-  const identityLocked = createMode && existingPersonId !== ''
-  const [existingPersonLoading, setExistingPersonLoading] = useIdentityState([showExistingPersonPicker, existingPersonQuery, existingPersonId], showExistingPersonPicker)
+  const [existingPersonId, setExistingPersonId] = useState("");
+  const [existingPersonLabel, setExistingPersonLabel] = useState("");
+  const [existingPersonOptions, setExistingPersonOptions] = useState<
+    { value: string; label: string; hasEmployeeRole?: boolean }[]
+  >([]);
+  const [existingPersonQuery, setExistingPersonQuery] = useState("");
+  const [existingPersonStatus, setExistingPersonStatus] = useState<string | undefined>(undefined);
+  const existingPersonRequestId = useRef(0);
+  const showExistingPersonPicker = createMode && recordType === "employee" && canHire;
+  const identityLocked = createMode && existingPersonId !== "";
+  const [existingPersonLoading, setExistingPersonLoading] = useIdentityState(
+    [showExistingPersonPicker, existingPersonQuery, existingPersonId],
+    showExistingPersonPicker,
+  );
 
   // Existing-person options over the employable-people source: bounded
   // page per query, sequence-guarded, refusal in the status line. Loads
   // only while the picker can show.
   useEffect(() => {
-    if (!showExistingPersonPicker) return
-    const id = (existingPersonRequestId.current += 1)
-    const params = new URLSearchParams()
-    params.set('source', 'employable-people')
-    params.set('limit', '25')
-    if (existingPersonQuery.trim()) params.set('q', existingPersonQuery.trim())
-    if (existingPersonId) params.set('include', existingPersonId)
-    fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
+    if (!showExistingPersonPicker) return;
+    const id = (existingPersonRequestId.current += 1);
+    const params = new URLSearchParams();
+    params.set("source", "employable-people");
+    params.set("limit", "25");
+    if (existingPersonQuery.trim()) params.set("q", existingPersonQuery.trim());
+    if (existingPersonId) params.set("include", existingPersonId);
+    fetch(`/api/hrm/options?${params.toString()}`, { method: "GET" })
       .then(async (res) => {
-        if (id !== existingPersonRequestId.current) return
+        if (id !== existingPersonRequestId.current) return;
         if (!res.ok) {
-          setExistingPersonStatus(th('employment.hire.existingPersonFailed'))
-          setExistingPersonLoading(false)
-          return
+          setExistingPersonStatus(th("employment.hire.existingPersonFailed"));
+          setExistingPersonLoading(false);
+          return;
         }
         const payload = (await res.json().catch(() => ({}))) as {
-          options?: { partyId?: unknown; label?: unknown; hasEmployeeRole?: unknown }[]
-        }
-        if (id !== existingPersonRequestId.current) return
-        const page = Array.isArray(payload.options) ? payload.options : []
-        const merged: { value: string; label: string; hasEmployeeRole?: boolean }[] = []
+          options?: { partyId?: unknown; label?: unknown; hasEmployeeRole?: unknown }[];
+        };
+        if (id !== existingPersonRequestId.current) return;
+        const page = Array.isArray(payload.options) ? payload.options : [];
+        const merged: { value: string; label: string; hasEmployeeRole?: boolean }[] = [];
         for (const row of page) {
-          if (typeof row.partyId === 'string' && typeof row.label === 'string') {
+          if (typeof row.partyId === "string" && typeof row.label === "string") {
             merged.push({
               value: row.partyId,
               label: row.label,
-              ...(typeof row.hasEmployeeRole === 'boolean' ? { hasEmployeeRole: row.hasEmployeeRole } : {}),
-            })
+              ...(typeof row.hasEmployeeRole === "boolean"
+                ? { hasEmployeeRole: row.hasEmployeeRole }
+                : {}),
+            });
           }
         }
         if (existingPersonId && !merged.some((option) => option.value === existingPersonId)) {
-          merged.push({ value: existingPersonId, label: existingPersonLabel || existingPersonId })
+          merged.push({ value: existingPersonId, label: existingPersonLabel || existingPersonId });
         }
-        setExistingPersonOptions(merged)
-        setExistingPersonStatus(undefined)
-        setExistingPersonLoading(false)
+        setExistingPersonOptions(merged);
+        setExistingPersonStatus(undefined);
+        setExistingPersonLoading(false);
       })
       .catch(() => {
-        if (id !== existingPersonRequestId.current) return
-        setExistingPersonStatus(th('employment.hire.existingPersonFailed'))
-        setExistingPersonLoading(false)
-      })
-  }, [showExistingPersonPicker, existingPersonQuery, existingPersonId, existingPersonLabel, th, setExistingPersonLoading])
+        if (id !== existingPersonRequestId.current) return;
+        setExistingPersonStatus(th("employment.hire.existingPersonFailed"));
+        setExistingPersonLoading(false);
+      });
+  }, [
+    showExistingPersonPicker,
+    existingPersonQuery,
+    existingPersonId,
+    existingPersonLabel,
+    th,
+    setExistingPersonLoading,
+  ]);
   // Address/contact rows save on their own lifecycle beside the main form —
   // one pin per surface, so a refused row save pins in its own editor.
-  const relatedAction = useAppAction()
-  const relatedBusy = relatedAction.busy
+  const relatedAction = useAppAction();
+  const relatedBusy = relatedAction.busy;
 
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const [nameError, setNameError] = useState(false)
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
+  const [nameError, setNameError] = useState(false);
   // A refused save or activate/deactivate pins its reason on the record until
   // the next action or cancel — a toast alone once let a refused save read as a
   // successful save while the data was silently lost.
-  const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
+  const { busy, refusal, execute, clearRefusal, refuse } = useAppAction();
 
   // Sections that persist through their own endpoint (relationship,
   // compliance) edit with the record and save through its single Save, so a
   // viewer who may manage only one of them can still enter edit mode; the
   // party fields stay governed by `canManage`.
-  const canEditRecord = canManage
-    || (showRelationshipTab && canManageCrmAccounts)
-    || (showComplianceTab && canManageCompliance)
+  const canEditRecord =
+    canManage ||
+    (showRelationshipTab && canManageCrmAccounts) ||
+    (showComplianceTab && canManageCompliance);
   // Existing parties default to read-only; creation flows can explicitly
   // request edit mode. Permission checks remain authoritative. Unsaved-create
   // opens editable: there is no persisted record to read yet.
   const [mode, setMode] = useState<DrawerMode>(
-    createMode ? 'edit' : initialDrawerMode(initialMode, canEditRecord),
-  )
-  const editable = mode === 'edit' && canManage
-  const saveRegistry = useRecordSaveRegistry(mode === 'edit')
-  const [savingSections, setSavingSections] = useState(false)
+    createMode ? "edit" : initialDrawerMode(initialMode, canEditRecord),
+  );
+  const editable = mode === "edit" && canManage;
+  const saveRegistry = useRecordSaveRegistry(mode === "edit");
+  const [savingSections, setSavingSections] = useState(false);
 
-  const nameValid = displayName.trim().length > 0
-    && displayName.trim() !== 'New party' && displayName.trim() !== 'New lead'
+  const nameValid =
+    displayName.trim().length > 0 &&
+    displayName.trim() !== "New party" &&
+    displayName.trim() !== "New lead";
 
   // -- explicit save (no autosave) -------------------------------------------
   const savePayload = useMemo(
@@ -609,7 +711,8 @@ export function PartyDrawer({
       kind,
       // An unnamed draft keeps the sentinel it was born with, so the server
       // recognises it as the same draft-completion flow it minted.
-      displayName: displayName.trim() || (isActive ? displayName : (placeholderName ?? 'New party')),
+      displayName:
+        displayName.trim() || (isActive ? displayName : (placeholderName ?? "New party")),
       legalName,
       shortCode,
       email,
@@ -625,7 +728,7 @@ export function PartyDrawer({
         customer: {
           // Same kind-echo as vendor below: choosing Kind Customer in the
           // generic drawer repairs the orphan in the same audited save.
-          enabled: forcesCustomerRole || kind === 'customer' ? true : customer.enabled,
+          enabled: forcesCustomerRole || kind === "customer" ? true : customer.enabled,
           paymentTermsId: customer.paymentTermsId || null,
           creditLimit: customer.creditLimit || null,
           ...(multiCurrency ? { currency: customer.currency || null } : {}),
@@ -646,7 +749,7 @@ export function PartyDrawer({
           // legacy row whose kind outlived its role). An unchecked role box
           // beside a role-kind kind still sends enabled — kind is the master
           // switch, and the server forbids the split pairing anyway.
-          enabled: role === 'vendor' || kind === 'vendor' ? true : vendor.enabled,
+          enabled: role === "vendor" || kind === "vendor" ? true : vendor.enabled,
           paymentMethod: vendor.paymentMethod || null,
           eftNotificationEmail: vendor.eftNotificationEmail || null,
           paymentTermsId: vendor.paymentTermsId || null,
@@ -661,7 +764,7 @@ export function PartyDrawer({
         employee: {
           // Same kind-echo as vendor: choosing Kind Employee in the generic
           // drawer repairs the orphan in the same audited save.
-          enabled: role === 'employee' || kind === 'employee' ? true : employee.enabled,
+          enabled: role === "employee" || kind === "employee" ? true : employee.enabled,
           employeeNumber: employee.employeeNumber || null,
           jobTitle: employee.jobTitle || null,
           departmentId: employee.departmentId || null,
@@ -674,8 +777,33 @@ export function PartyDrawer({
       addresses: serializeAddresses(addresses),
       contacts: serializeContacts(contacts),
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency, partyToken.updatedAt, placeholderName, forcesCustomerRole],
-  )
+    [
+      kind,
+      displayName,
+      legalName,
+      shortCode,
+      email,
+      phone,
+      website,
+      customValues,
+      invoicingPref,
+      subsidiaryId,
+      additionalSubsidiaryIds,
+      multiSubsidiary,
+      customer,
+      vendor,
+      employee,
+      addresses,
+      contacts,
+      isActive,
+      role,
+      payrollEnabled,
+      multiCurrency,
+      partyToken.updatedAt,
+      placeholderName,
+      forcesCustomerRole,
+    ],
+  );
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `skipDirty` is a
   // one-shot latch consumed here: the autosave writes server-canonical rows
@@ -684,175 +812,201 @@ export function PartyDrawer({
   // changes identity, so merely entering edit mode with untouched fields never
   // marks the form dirty (same guarantee as the ref-mirrored gate this
   // replaces, without the effect-body setState).
-  const [dirty, setDirty] = useState(false)
-  const [prevSavePayload, setPrevSavePayload] = useState(savePayload)
-  const [skipDirty, setSkipDirty] = useState(false)
+  const [dirty, setDirty] = useState(false);
+  const [prevSavePayload, setPrevSavePayload] = useState(savePayload);
+  const [skipDirty, setSkipDirty] = useState(false);
   // Nested payroll profile / certificate drafts keep their own local state
   // outside savePayload; the tab reports their dirtiness here.
-  const [payrollDirty, setPayrollDirty] = useState(false)
-  const [payComponentsDirty, setPayComponentsDirty] = useState(false)
+  const [payrollDirty, setPayrollDirty] = useState(false);
+  const [payComponentsDirty, setPayComponentsDirty] = useState(false);
   if (prevSavePayload !== savePayload) {
-    setPrevSavePayload(savePayload)
-    if (skipDirty) setSkipDirty(false)
-    else if (editable) setDirty(true)
+    setPrevSavePayload(savePayload);
+    if (skipDirty) setSkipDirty(false);
+    else if (editable) setDirty(true);
   }
   // Identity mirror of the draft snapshot for in-flight edit detection (see
   // save/saveNew): a response may only mark clean the exact payload it
   // persisted, never edits typed while the request was in flight.
-  const latestSavePayload = useRef(savePayload)
+  const latestSavePayload = useRef(savePayload);
   useEffect(() => {
-    latestSavePayload.current = savePayload
-  })
+    latestSavePayload.current = savePayload;
+  });
 
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
   async function confirmDiscard() {
-    if (mode !== 'edit' || (!dirty && !payrollDirty && !payComponentsDirty && !saveRegistry.dirty)) return true
+    if (mode !== "edit" || (!dirty && !payrollDirty && !payComponentsDirty && !saveRegistry.dirty))
+      return true;
     return confirmDialog({
-      message: tc('feedback.unsavedChanges'),
-      confirmLabel: tc('confirm.discardChanges'),
-      tone: 'danger',
-    })
+      message: tc("feedback.unsavedChanges"),
+      confirmLabel: tc("confirm.discardChanges"),
+      tone: "danger",
+    });
   }
 
   async function cancelWithConfirm() {
-    if (!(await confirmDiscard())) return
-    cancel()
+    if (!(await confirmDiscard())) return;
+    cancel();
   }
 
   /** Reset every field back to the loaded party (used by Cancel). */
   function resetForm() {
-    setKind(p.kind ?? 'company')
-    setDisplayName(isPlaceholderName ? '' : (p.display_name ?? ''))
-    setLegalName(p.legal_name ?? '')
-    setShortCode(p.short_code ?? '')
-    setEmail(p.email ?? '')
-    setPhone(p.phone ?? '')
-    setWebsite(p.website ?? '')
-    setCustomValues(p.custom ?? {})
-    setInvoicingPref((p.invoicing_preference as InvoicingPref) ?? {})
-    setSubsidiaryId(p.subsidiary_id ?? rootSubsidiaryId)
-    setAdditionalSubsidiaryIds(new Set(payload.additionalSubsidiaryIds ?? []))
+    setKind(p.kind ?? "company");
+    setDisplayName(isPlaceholderName ? "" : (p.display_name ?? ""));
+    setLegalName(p.legal_name ?? "");
+    setShortCode(p.short_code ?? "");
+    setEmail(p.email ?? "");
+    setPhone(p.phone ?? "");
+    setWebsite(p.website ?? "");
+    setCustomValues(p.custom ?? {});
+    setInvoicingPref((p.invoicing_preference as InvoicingPref) ?? {});
+    setSubsidiaryId(p.subsidiary_id ?? rootSubsidiaryId);
+    setAdditionalSubsidiaryIds(new Set(payload.additionalSubsidiaryIds ?? []));
     setCustomer({
       enabled: !!payload.customer && payload.customer.is_active !== false,
-      paymentTermsId: payload.customer?.payment_terms_id ?? '',
+      paymentTermsId: payload.customer?.payment_terms_id ?? "",
       creditLimit: formatCreditLimit(payload.customer?.credit_limit),
-      currency: payload.customer?.currency ?? '',
-      arAccountId: payload.customer?.ar_account_id ?? '',
-      salesRepId: payload.customer?.sales_rep_id ?? '',
-      taxCodeId: payload.customer?.tax_code_id ?? '',
+      currency: payload.customer?.currency ?? "",
+      arAccountId: payload.customer?.ar_account_id ?? "",
+      salesRepId: payload.customer?.sales_rep_id ?? "",
+      taxCodeId: payload.customer?.tax_code_id ?? "",
       isOnHold: payload.customer?.is_on_hold === true,
-      holdReason: payload.customer?.hold_reason ?? '',
-    })
+      holdReason: payload.customer?.hold_reason ?? "",
+    });
     setVendor({
       enabled: !!payload.vendor && payload.vendor.is_active !== false,
-      paymentMethod: payload.vendor?.payment_method ?? '',
-      eftNotificationEmail: payload.vendor?.eft_notification_email ?? '',
-      paymentTermsId: payload.vendor?.payment_terms_id ?? '',
-      currency: payload.vendor?.currency ?? '',
+      paymentMethod: payload.vendor?.payment_method ?? "",
+      eftNotificationEmail: payload.vendor?.eft_notification_email ?? "",
+      paymentTermsId: payload.vendor?.payment_terms_id ?? "",
+      currency: payload.vendor?.currency ?? "",
       is1099OrT4a: payload.vendor?.is_t4a === true,
-      apAccountId: payload.vendor?.ap_account_id ?? '',
-      defaultExpenseAccountId: payload.vendor?.default_expense_account_id ?? '',
-      taxCodeId: payload.vendor?.tax_code_id ?? '',
+      apAccountId: payload.vendor?.ap_account_id ?? "",
+      defaultExpenseAccountId: payload.vendor?.default_expense_account_id ?? "",
+      taxCodeId: payload.vendor?.tax_code_id ?? "",
       isOnHold: payload.vendor?.is_on_hold === true,
-      holdReason: payload.vendor?.hold_reason ?? '',
-    })
+      holdReason: payload.vendor?.hold_reason ?? "",
+    });
     setEmployee({
       enabled: !!payload.employee && payload.employee.is_active !== false,
-      employeeNumber: payload.employee?.employee_number ?? '',
-      jobTitle: payload.employee?.job_title ?? '',
-      departmentId: payload.employee?.department_id ?? '',
-      tradeId: payload.employee?.trade_id ?? '',
-      workerCompGroupId: payload.employee?.worker_comp_group_id ?? '',
-      hiredOn: payload.employee?.hired_on ?? '',
-    })
-    setAddresses(payload.addresses.map(addressFromApi))
-    setContacts(payload.contacts.map(contactFromApi))
+      employeeNumber: payload.employee?.employee_number ?? "",
+      jobTitle: payload.employee?.job_title ?? "",
+      departmentId: payload.employee?.department_id ?? "",
+      tradeId: payload.employee?.trade_id ?? "",
+      workerCompGroupId: payload.employee?.worker_comp_group_id ?? "",
+      hiredOn: payload.employee?.hired_on ?? "",
+    });
+    setAddresses(payload.addresses.map(addressFromApi));
+    setContacts(payload.contacts.map(contactFromApi));
   }
 
-  async function saveRelatedRows(kind: 'addresses' | 'contacts') {
-    const draft = kind === 'addresses' ? addressDraft : contactDraft
-    if (!draft) return
+  async function saveRelatedRows(kind: "addresses" | "contacts") {
+    const draft = kind === "addresses" ? addressDraft : contactDraft;
+    if (!draft) return;
     // Unsaved-create keeps related rows local: there is no persisted party to
     // PATCH, so the dialog confirms into form state and the single create
     // POST persists everything together. Zero writes here by construction.
     if (createMode) {
-      if (kind === 'addresses') {
-        const nextAddress = draft.row as AddressRow
-        const base = (draft.index === null
-          ? [...addresses, draft.row]
-          : addresses.map((row, index) => index === draft.index ? draft.row : row)) as AddressRow[]
-        setAddresses(base.map((row, index) => ({
-          ...row,
-          isDefaultBilling: nextAddress.isDefaultBilling === 'true' && index !== (draft.index ?? base.length - 1) ? 'false' : row.isDefaultBilling,
-          isDefaultShipping: nextAddress.isDefaultShipping === 'true' && index !== (draft.index ?? base.length - 1) ? 'false' : row.isDefaultShipping,
-        })))
-        setAddressDraft(null)
+      if (kind === "addresses") {
+        const nextAddress = draft.row as AddressRow;
+        const base = (
+          draft.index === null
+            ? [...addresses, draft.row]
+            : addresses.map((row, index) => (index === draft.index ? draft.row : row))
+        ) as AddressRow[];
+        setAddresses(
+          base.map((row, index) => ({
+            ...row,
+            isDefaultBilling:
+              nextAddress.isDefaultBilling === "true" && index !== (draft.index ?? base.length - 1)
+                ? "false"
+                : row.isDefaultBilling,
+            isDefaultShipping:
+              nextAddress.isDefaultShipping === "true" && index !== (draft.index ?? base.length - 1)
+                ? "false"
+                : row.isDefaultShipping,
+          })),
+        );
+        setAddressDraft(null);
       } else {
-        const nextContact = draft.row as ContactRow
-        const base = (draft.index === null
-          ? [...contacts, draft.row]
-          : contacts.map((row, index) => index === draft.index ? draft.row : row)) as ContactRow[]
+        const nextContact = draft.row as ContactRow;
+        const base = (
+          draft.index === null
+            ? [...contacts, draft.row]
+            : contacts.map((row, index) => (index === draft.index ? draft.row : row))
+        ) as ContactRow[];
         // Selecting a new primary is an explicit reassignment, matching the
         // persisted path below: untouched rows keep their flags.
-        setContacts(base.map((row, index) => ({
-          ...row,
-          isPrimary: nextContact.isPrimary === 'true' && index !== (draft.index ?? base.length - 1) ? 'false' : row.isPrimary,
-        })))
-        setContactDraft(null)
+        setContacts(
+          base.map((row, index) => ({
+            ...row,
+            isPrimary:
+              nextContact.isPrimary === "true" && index !== (draft.index ?? base.length - 1)
+                ? "false"
+                : row.isPrimary,
+          })),
+        );
+        setContactDraft(null);
       }
-      return
+      return;
     }
-    const currentRows = kind === 'addresses' ? addresses : contacts
-    let nextRows = draft.index === null
-      ? [...currentRows, draft.row]
-      : currentRows.map((row, index) => index === draft.index ? draft.row : row)
+    const currentRows = kind === "addresses" ? addresses : contacts;
+    let nextRows =
+      draft.index === null
+        ? [...currentRows, draft.row]
+        : currentRows.map((row, index) => (index === draft.index ? draft.row : row));
     // Selecting a new default is an explicit reassignment, not a request that
     // can silently lose to whichever row happened to be serialized first.
-    if (kind === 'addresses') {
-      const nextAddress = draft.row as AddressRow
+    if (kind === "addresses") {
+      const nextAddress = draft.row as AddressRow;
       nextRows = (nextRows as AddressRow[]).map((row, index) => ({
         ...row,
-        isDefaultBilling: nextAddress.isDefaultBilling === 'true' && index !== (draft.index ?? nextRows.length - 1) ? 'false' : row.isDefaultBilling,
-        isDefaultShipping: nextAddress.isDefaultShipping === 'true' && index !== (draft.index ?? nextRows.length - 1) ? 'false' : row.isDefaultShipping,
-      }))
-    } else if ((draft.row as ContactRow).isPrimary === 'true') {
+        isDefaultBilling:
+          nextAddress.isDefaultBilling === "true" && index !== (draft.index ?? nextRows.length - 1)
+            ? "false"
+            : row.isDefaultBilling,
+        isDefaultShipping:
+          nextAddress.isDefaultShipping === "true" && index !== (draft.index ?? nextRows.length - 1)
+            ? "false"
+            : row.isDefaultShipping,
+      }));
+    } else if ((draft.row as ContactRow).isPrimary === "true") {
       nextRows = (nextRows as ContactRow[]).map((row, index) => ({
         ...row,
-        isPrimary: index === (draft.index ?? nextRows.length - 1) ? 'true' : 'false',
-      }))
+        isPrimary: index === (draft.index ?? nextRows.length - 1) ? "true" : "false",
+      }));
     }
     const ok = await relatedAction.execute(
       () =>
         fetchAction(`/api/parties/${p.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             expectedUpdatedAt: partyToken.updatedAt,
-            [kind]: kind === 'addresses'
-              ? serializeAddresses(nextRows as AddressRow[])
-              : serializeContacts(nextRows as ContactRow[]),
+            [kind]:
+              kind === "addresses"
+                ? serializeAddresses(nextRows as AddressRow[])
+                : serializeContacts(nextRows as ContactRow[]),
           }),
         }),
       {
-        fallbackMessage: t('autosaveFailed'),
-        successMessage: tc('feedback.saved'),
+        fallbackMessage: t("autosaveFailed"),
+        successMessage: tc("feedback.saved"),
         onOk: (result) => {
-          setSkipDirty(true)
-          adoptPartyResponse(result)
-          const rows = (result as { addresses?: unknown; contacts?: unknown } | null)
-          if (kind === 'addresses') {
-            setAddresses(((rows?.addresses ?? []) as AddressApiRecord[]).map(addressFromApi))
-            setAddressDraft(null)
+          setSkipDirty(true);
+          adoptPartyResponse(result);
+          const rows = result as { addresses?: unknown; contacts?: unknown } | null;
+          if (kind === "addresses") {
+            setAddresses(((rows?.addresses ?? []) as AddressApiRecord[]).map(addressFromApi));
+            setAddressDraft(null);
           } else {
-            setContacts(((rows?.contacts ?? []) as ContactApiRecord[]).map(contactFromApi))
-            setContactDraft(null)
+            setContacts(((rows?.contacts ?? []) as ContactApiRecord[]).map(contactFromApi));
+            setContactDraft(null);
           }
         },
       },
-    )
+    );
     if (ok) {
-      router.refresh()
+      router.refresh();
     }
   }
 
@@ -870,32 +1024,34 @@ export function PartyDrawer({
    * reason with the form intact; the Hire step owns hire refusals.
    */
   async function saveExistingAsEmployee() {
-    setSaveState('saving')
-    let updatedAt: string | null = null
+    setSaveState("saving");
+    let updatedAt: string | null = null;
     try {
-      const got = await fetch(`/api/parties/${existingPersonId}`, { method: 'GET' })
+      const got = await fetch(`/api/parties/${existingPersonId}`, { method: "GET" });
       if (!got.ok) {
-        refuse(th('employment.hire.existingPersonFailed'), t('autosaveFailed'))
-        setSaveState('error')
-        return
+        refuse(th("employment.hire.existingPersonFailed"), t("autosaveFailed"));
+        setSaveState("error");
+        return;
       }
-      const data = (await got.json().catch(() => null)) as { party?: { updated_at?: unknown } } | null
-      updatedAt = typeof data?.party?.updated_at === 'string' ? data.party.updated_at : null
+      const data = (await got.json().catch(() => null)) as {
+        party?: { updated_at?: unknown };
+      } | null;
+      updatedAt = typeof data?.party?.updated_at === "string" ? data.party.updated_at : null;
     } catch {
-      refuse(th('employment.hire.existingPersonFailed'), t('autosaveFailed'))
-      setSaveState('error')
-      return
+      refuse(th("employment.hire.existingPersonFailed"), t("autosaveFailed"));
+      setSaveState("error");
+      return;
     }
     if (!updatedAt) {
-      refuse(th('employment.hire.existingPersonFailed'), t('autosaveFailed'))
-      setSaveState('error')
-      return
+      refuse(th("employment.hire.existingPersonFailed"), t("autosaveFailed"));
+      setSaveState("error");
+      return;
     }
     const ok = await execute(
       () =>
         fetchAction(`/api/parties/${existingPersonId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             expectedUpdatedAt: updatedAt,
             roles: {
@@ -908,45 +1064,45 @@ export function PartyDrawer({
           }),
         }),
       {
-        fallbackMessage: t('autosaveFailed'),
-        successMessage: tc('feedback.saved'),
+        fallbackMessage: t("autosaveFailed"),
+        successMessage: tc("feedback.saved"),
         onOk: () => {
-          setSaveState('saved')
-          setDirty(false)
+          setSaveState("saved");
+          setDirty(false);
           setHiredAfterCreate({
             partyId: existingPersonId,
             partyName: existingPersonLabel,
             jobTitle: employee.jobTitle,
             departmentId: employee.departmentId,
-          })
-          router.refresh()
+          });
+          router.refresh();
         },
         onRefused: () => {
-          setSaveState('error')
+          setSaveState("error");
         },
       },
-    )
-    if (ok) router.refresh()
+    );
+    if (ok) router.refresh();
   }
 
   async function saveNew() {
     if (existingPersonId) {
-      await saveExistingAsEmployee()
-      return
+      await saveExistingAsEmployee();
+      return;
     }
     // A blank display name must never persist a nameless record: fail fast
     // with an inline error instead of POSTing a request known to 422.
     if (!nameValid) {
-      setNameError(true)
-      setSaveState('error')
-      refuse(t('nameRequired'), t('autosaveFailed'))
-      return
+      setNameError(true);
+      setSaveState("error");
+      refuse(t("nameRequired"), t("autosaveFailed"));
+      return;
     }
-    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
-    setSaveState('saving')
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
+    setSaveState("saving");
     // Snapshot the exact submitted draft: edits typed while the POST is in
     // flight must not be marked clean by this response (see onOk).
-    const submitted = savePayload
+    const submitted = savePayload;
     // The create body is picked field-by-field: expectedUpdatedAt belongs to
     // the PATCH concurrency token (no row to version against here), and
     // isActive rides along explicitly — creates default to active.
@@ -966,59 +1122,65 @@ export function PartyDrawer({
       addresses: savePayload.addresses,
       contacts: savePayload.contacts,
       isActive,
-    }
+    };
     const ok = await execute(
       () =>
         fetchAction(`/api/parties`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current! },
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": requestIdRef.current! },
           body: JSON.stringify(createBody),
         }),
       {
-        fallbackMessage: t('autosaveFailed'),
-        successMessage: tc('feedback.saved'),
+        fallbackMessage: t("autosaveFailed"),
+        successMessage: tc("feedback.saved"),
         onOk: (data) => {
-          const createdId = (data as { party?: { id?: unknown } } | null)?.party?.id
+          const createdId = (data as { party?: { id?: unknown } } | null)?.party?.id;
           if (latestSavePayload.current !== submitted) {
             // Edited mid-flight: stay with the draft dirty, and retire the
             // idempotency key — a retry sends a changed payload, which must
             // never reuse the submitted key.
-            requestIdRef.current = null
-            setSaveState('dirty')
-            return
+            requestIdRef.current = null;
+            setSaveState("dirty");
+            return;
           }
-          setSaveState('saved')
-          setDirty(false)
+          setSaveState("saved");
+          setDirty(false);
           // New employees continue into Hire in the same drawer when the
           // grant allows: the person and their first employment save as one
           // form. Without the grant (or for other roles) creation ends at
           // the record, whose Employment tab carries the Hire button.
-          if (typeof createdId === 'string' && createdId && canHire && recordType === 'employee' && employee.enabled) {
+          if (
+            typeof createdId === "string" &&
+            createdId &&
+            canHire &&
+            recordType === "employee" &&
+            employee.enabled
+          ) {
             setHiredAfterCreate({
               partyId: createdId,
               partyName: submitted.displayName,
               jobTitle: employee.jobTitle,
               departmentId: employee.departmentId,
-            })
-            router.refresh()
-            return
+            });
+            router.refresh();
+            return;
           }
-          if (typeof createdId === 'string' && createdId) {
-            const separator = returnHref.includes('?') ? '&' : '?'
-            router.replace(`${returnHref}${separator}party=${createdId}` as never)
+          if (typeof createdId === "string" && createdId) {
+            const separator = returnHref.includes("?") ? "&" : "?";
+            router.replace(`${returnHref}${separator}party=${createdId}` as never);
           } else {
-            router.push(returnHref as never)
+            router.push(returnHref as never);
           }
-          router.refresh()
+          router.refresh();
         },
         onRefused: () => {
           // Stay in edit mode with the typed values intact: the form is
           // still dirty, nothing was persisted, the pin carries the reason.
-          setSaveState('error')
+          setSaveState("error");
         },
       },
-    )
-    if (ok) router.refresh()
+    );
+    if (ok) router.refresh();
   }
 
   /**
@@ -1027,9 +1189,9 @@ export function PartyDrawer({
    * party payload; anything else leaves the token as it was.
    */
   function adoptPartyResponse(data: unknown) {
-    const response = data as Partial<PartyPayload> | null
-    if (typeof response?.party?.updated_at !== 'string') return
-    setPartyToken(partyTokenOf(response as PartyPayload))
+    const response = data as Partial<PartyPayload> | null;
+    if (typeof response?.party?.updated_at !== "string") return;
+    setPartyToken(partyTokenOf(response as PartyPayload));
   }
 
   /**
@@ -1042,104 +1204,106 @@ export function PartyDrawer({
    * follow-through keeps the select in step with the row it writes.
    */
   async function refreshPartyAfterSectionSave() {
-    const before = partyToken
-    let fresh: PartyPayload | null = null
+    const before = partyToken;
+    let fresh: PartyPayload | null = null;
     try {
-      const res = await fetch(`/api/parties/${p.id}`, { method: 'GET' })
+      const res = await fetch(`/api/parties/${p.id}`, { method: "GET" });
       // A failed re-read leaves the token as it was; the server then refuses
       // the drawer's next Save, which tells the operator to reload.
-      if (!res.ok) return
-      fresh = (await res.json().catch(() => null)) as PartyPayload | null
+      if (!res.ok) return;
+      fresh = (await res.json().catch(() => null)) as PartyPayload | null;
     } catch {
-      return
+      return;
     }
-    if (typeof fresh?.party?.updated_at !== 'string') return
-    const next = partyTokenOf(fresh)
-    setPartyToken(next)
+    if (typeof fresh?.party?.updated_at !== "string") return;
+    const next = partyTokenOf(fresh);
+    setPartyToken(next);
     if (next.workerCompGroupId !== before.workerCompGroupId) {
-      setEmployee((previous) => (
+      setEmployee((previous) =>
         previous.workerCompGroupId === before.workerCompGroupId
           ? { ...previous, workerCompGroupId: next.workerCompGroupId }
-          : previous
-      ))
+          : previous,
+      );
     }
   }
 
   async function save() {
     if (createMode) {
-      await saveNew()
-      return
+      await saveNew();
+      return;
     }
     // A viewer who may edit only the relationship or compliance sections
     // saves those; the party fields stayed read-only for them.
     if (!canManage) {
-      await saveSections()
-      return
+      await saveSections();
+      return;
     }
     // A blank display name must never persist a nameless record: the API
     // accepts the 'New party' placeholder on inactive drafts, so the drawer
     // fails fast with an inline error instead of saving silently.
     if (!nameValid) {
-      setNameError(true)
-      setSaveState('error')
-      refuse(t('nameRequired'), t('autosaveFailed'))
-      return
+      setNameError(true);
+      setSaveState("error");
+      refuse(t("nameRequired"), t("autosaveFailed"));
+      return;
     }
     const materialControlChange =
       customer.isOnHold !== (payload.customer?.is_on_hold === true) ||
       vendor.isOnHold !== (payload.vendor?.is_on_hold === true) ||
-      (customer.isOnHold && customer.holdReason.trim() !== String(payload.customer?.hold_reason ?? '').trim()) ||
-      (vendor.isOnHold && vendor.holdReason.trim() !== String(payload.vendor?.hold_reason ?? '').trim())
-    let changeReason: string | undefined
+      (customer.isOnHold &&
+        customer.holdReason.trim() !== String(payload.customer?.hold_reason ?? "").trim()) ||
+      (vendor.isOnHold &&
+        vendor.holdReason.trim() !== String(payload.vendor?.hold_reason ?? "").trim());
+    let changeReason: string | undefined;
     if (materialControlChange) {
       const reason = await promptDialog({
-        title: tc('amendment.title'),
-        label: tc('amendment.reason'),
-        placeholder: tc('amendment.placeholder'),
-        confirmLabel: tc('actions.save'),
-      })
-      if (!reason) return
-      changeReason = reason
+        title: tc("amendment.title"),
+        label: tc("amendment.reason"),
+        placeholder: tc("amendment.placeholder"),
+        confirmLabel: tc("actions.save"),
+      });
+      if (!reason) return;
+      changeReason = reason;
     }
-    setSaveState('saving')
+    setSaveState("saving");
     // Snapshot the exact submitted draft: edits typed while the PATCH is in
     // flight must not be marked clean by this response (see onOk).
-    const submitted = savePayload
-    let partySaved = false
+    const submitted = savePayload;
+    let partySaved = false;
     const ok = await execute(
       () =>
         fetchAction(`/api/parties/${p.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...submitted, changeReason }),
         }),
       {
-        fallbackMessage: t('autosaveFailed'),
+        fallbackMessage: t("autosaveFailed"),
         onOk: (data) => {
-          adoptPartyResponse(data)
-          const party = (data as { party?: { is_active?: unknown } } | null)?.party
-          setIsActive(party?.is_active === true)
+          adoptPartyResponse(data);
+          const party = (data as { party?: { is_active?: unknown } } | null)?.party;
+          setIsActive(party?.is_active === true);
           if (latestSavePayload.current !== submitted) {
             // Edited mid-flight: the response persisted the earlier draft,
             // so the form stays dirty in edit mode instead of reading clean.
-            setSaveState('dirty')
-            return
+            setSaveState("dirty");
+            return;
           }
-          setDirty(false)
-          partySaved = true
+          setDirty(false);
+          partySaved = true;
         },
         onRefused: () => {
           // Stay in edit mode with the typed values intact: the form is
           // still dirty, nothing was persisted, the pin carries the reason.
-          setSaveState('error')
+          setSaveState("error");
         },
       },
-    )
-    if (!ok) return
+    );
+    if (!ok) return;
     // The submitted role (not live state, which a mid-flight edit may have
     // moved past the persisted draft) drives the kind-flip Hire chain.
-    if (partySaved) await saveSections(submitted.roles.employee.enabled === true)
-    router.refresh()
+    if (partySaved) await saveSections(submitted.roles.employee.enabled === true);
+    router.refresh();
   }
 
   /**
@@ -1148,38 +1312,42 @@ export function PartyDrawer({
    * section's tab, where its fields show the reason.
    */
   async function saveSections(submittedEmployee = false) {
-    setSaveState('saving')
-    setSavingSections(true)
+    setSaveState("saving");
+    setSavingSections(true);
     try {
-      const result = await saveRegistry.saveAll()
+      const result = await saveRegistry.saveAll();
       if (!result.ok) {
-        setSaveState('error')
-        showTab(result.key as PartyTab)
-        return
+        setSaveState("error");
+        showTab(result.key as PartyTab);
+        return;
       }
-      setSaveState('saved')
+      setSaveState("saved");
       // A newly added employee role routes into Hire in the same drawer
       // when the grant allows and no employment exists yet: a kind flip
       // to Employee never leaves an employment-less employee without its
       // Hire step. Otherwise the record opens in view mode with the
       // Employment tab's Hire button.
       if (
-        !createMode && canHire && submittedEmployee && payload.employee == null
-        && hrm && hrm.employmentIds.length === 0
+        !createMode &&
+        canHire &&
+        submittedEmployee &&
+        payload.employee == null &&
+        hrm &&
+        hrm.employmentIds.length === 0
       ) {
-        setMode('view')
+        setMode("view");
         setHiredAfterCreate({
           partyId: String(p.id),
           partyName: displayName,
           jobTitle: employee.jobTitle,
           departmentId: employee.departmentId,
-        })
-        router.refresh()
-        return
+        });
+        router.refresh();
+        return;
       }
-      setMode('view')
+      setMode("view");
     } finally {
-      setSavingSections(false)
+      setSavingSections(false);
     }
   }
 
@@ -1187,26 +1355,26 @@ export function PartyDrawer({
     // Unsaved-create Cancel writes nothing: there is no persisted row to
     // restore, so leave the URL (and the database) exactly as found.
     if (createMode) {
-      clearRefusal()
-      router.push(returnHref as never)
-      return
+      clearRefusal();
+      router.push(returnHref as never);
+      return;
     }
-    resetForm()
-    saveRegistry.resetAll()
-    setDirty(false)
-    setSaveState('saved')
-    clearRefusal()
-    setMode('view')
+    resetForm();
+    saveRegistry.resetAll();
+    setDirty(false);
+    setSaveState("saved");
+    clearRefusal();
+    setMode("view");
   }
 
   async function setActiveState(next: boolean) {
     const reason = await promptDialog({
-      title: next ? t('activate') : t('deactivate'),
-      label: tc('amendment.reason'),
-      placeholder: tc('amendment.placeholder'),
-      confirmLabel: next ? t('activate') : t('deactivate'),
-    })
-    if (!reason) return
+      title: next ? t("activate") : t("deactivate"),
+      label: tc("amendment.reason"),
+      placeholder: tc("amendment.placeholder"),
+      confirmLabel: next ? t("activate") : t("deactivate"),
+    });
+    if (!reason) return;
     // Activating is a drawer submit too: an operator who picks a subsidiary
     // and then activates without a prior save must not lose the choice —
     // the party would stay org-wide (NULL) and every later payroll-profile
@@ -1214,14 +1382,14 @@ export function PartyDrawer({
     // EXPLICIT choice rides along, never the root default, so activating an
     // org-wide party cannot silently re-scope it. Deactivation carries
     // status only.
-    const initialSubsidiaryId = p.subsidiary_id ?? rootSubsidiaryId
+    const initialSubsidiaryId = p.subsidiary_id ?? rootSubsidiaryId;
     const activateCarriesSubsidiary =
-      next && multiSubsidiary && subsidiaryId !== initialSubsidiaryId
+      next && multiSubsidiary && subsidiaryId !== initialSubsidiaryId;
     await execute(
       () =>
         fetchAction(`/api/parties/${p.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             isActive: next,
             expectedUpdatedAt: partyToken.updatedAt,
@@ -1229,21 +1397,23 @@ export function PartyDrawer({
             ...(activateCarriesSubsidiary
               ? {
                   subsidiaryId: subsidiaryId || null,
-                  additionalSubsidiaryIds: [...additionalSubsidiaryIds].filter((id) => id !== subsidiaryId),
+                  additionalSubsidiaryIds: [...additionalSubsidiaryIds].filter(
+                    (id) => id !== subsidiaryId,
+                  ),
                 }
               : {}),
           }),
         }),
       {
-        fallbackMessage: t('updateFailed'),
-        successMessage: next ? t('activated') : t('deactivated'),
+        fallbackMessage: t("updateFailed"),
+        successMessage: next ? t("activated") : t("deactivated"),
         onOk: (result) => {
-          adoptPartyResponse(result)
-          setIsActive(next)
+          adoptPartyResponse(result);
+          setIsActive(next);
         },
       },
-    )
-    router.refresh()
+    );
+    router.refresh();
   }
 
   /**
@@ -1253,173 +1423,826 @@ export function PartyDrawer({
    * role off with blanked details, base kind restored — without marking
    * dirty, and the refresh reloads the canonical payload behind it.
    */
-  async function removePartyRole(roleKind: 'customer' | 'vendor' | 'employee', roleLabel: string) {
-    if (createMode) return
+  async function removePartyRole(roleKind: "customer" | "vendor" | "employee", roleLabel: string) {
+    if (createMode) return;
     const confirmed = await confirmDialog({
-      title: t('removeRoleTitle', { role: roleLabel }),
-      message: t('removeRoleConfirm', { role: roleLabel }),
-      confirmLabel: t('removeRole'),
-      tone: 'danger',
-    })
-    if (!confirmed) return
+      title: t("removeRoleTitle", { role: roleLabel }),
+      message: t("removeRoleConfirm", { role: roleLabel }),
+      confirmLabel: t("removeRole"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
     const ok = await execute(
       () =>
         fetchAction(`/api/parties/${p.id}/roles/remove`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ role: roleKind }),
         }),
       {
-        fallbackMessage: t('removeRoleFailed'),
-        successMessage: tc('feedback.deleted'),
+        fallbackMessage: t("removeRoleFailed"),
+        successMessage: tc("feedback.deleted"),
         onOk: (result) => {
-          setSkipDirty(true)
-          if (roleKind === 'customer') {
-            setCustomer({ enabled: false, paymentTermsId: '', creditLimit: '', currency: '', arAccountId: '', salesRepId: '', taxCodeId: '', isOnHold: false, holdReason: '' })
-          } else if (roleKind === 'vendor') {
-            setVendor({ enabled: false, paymentMethod: '', eftNotificationEmail: '', paymentTermsId: '', currency: '', is1099OrT4a: false, apAccountId: '', defaultExpenseAccountId: '', taxCodeId: '', isOnHold: false, holdReason: '' })
+          setSkipDirty(true);
+          if (roleKind === "customer") {
+            setCustomer({
+              enabled: false,
+              paymentTermsId: "",
+              creditLimit: "",
+              currency: "",
+              arAccountId: "",
+              salesRepId: "",
+              taxCodeId: "",
+              isOnHold: false,
+              holdReason: "",
+            });
+          } else if (roleKind === "vendor") {
+            setVendor({
+              enabled: false,
+              paymentMethod: "",
+              eftNotificationEmail: "",
+              paymentTermsId: "",
+              currency: "",
+              is1099OrT4a: false,
+              apAccountId: "",
+              defaultExpenseAccountId: "",
+              taxCodeId: "",
+              isOnHold: false,
+              holdReason: "",
+            });
           } else {
-            setEmployee({ enabled: false, employeeNumber: '', jobTitle: '', departmentId: '', tradeId: '', workerCompGroupId: '', hiredOn: '' })
+            setEmployee({
+              enabled: false,
+              employeeNumber: "",
+              jobTitle: "",
+              departmentId: "",
+              tradeId: "",
+              workerCompGroupId: "",
+              hiredOn: "",
+            });
           }
-          const nextKind = (result as { kind?: unknown } | null)?.kind
-          if (nextKind === 'company' || nextKind === 'person') setKind(nextKind)
+          const nextKind = (result as { kind?: unknown } | null)?.kind;
+          if (nextKind === "company" || nextKind === "person") setKind(nextKind);
         },
       },
-    )
-    if (ok) router.refresh()
+    );
+    if (ok) router.refresh();
   }
 
-  const ro = !editable
-  const partyFieldsId = useId()
-  const yesNo = useMemo(() => [
-    { value: 'false', label: tc('labels.no') },
-    { value: 'true', label: tc('labels.yes') },
-  ], [tc])
-  const countries = useMemo(() => countryOptions(locale), [locale])
-  const currencies = useMemo(() => currencyOptions(locale), [locale])
-  const addressColumns = useMemo<LineGridColumn<AddressRow>[]>(() => [
-    { key: 'label', label: t('addressLabel'), type: 'text', width: '140px', placeholder: t('addressLabelPlaceholder') },
-    { key: 'line1', label: t('line1'), type: 'text', width: 'minmax(190px, 2fr)' },
-    { key: 'line2', label: t('line2'), type: 'text', width: 'minmax(150px, 1.4fr)' },
-    { key: 'city', label: t('city'), type: 'text', width: '130px' },
-    { key: 'region', label: t('region'), type: 'text', width: '120px' },
-    { key: 'postalCode', label: t('postalCode'), type: 'text', width: '110px' },
-    { key: 'country', label: t('country'), type: 'search-select', width: '170px', options: countries },
-    { key: 'isDefaultBilling', label: t('defaultBilling'), type: 'select', width: '115px', options: yesNo },
-    { key: 'isDefaultShipping', label: t('defaultShipping'), type: 'select', width: '125px', options: yesNo },
-  ], [countries, t, yesNo])
-  const contactColumns = useMemo<LineGridColumn<ContactRow>[]>(() => [
-    { key: 'name', label: t('contactName'), type: 'text', width: 'minmax(170px, 1.4fr)', required: true },
-    { key: 'title', label: t('contactTitle'), type: 'text', width: '140px' },
-    { key: 'role', label: t('contactRole'), type: 'text', width: '130px' },
-    { key: 'email', label: tc('labels.email'), type: 'text', width: 'minmax(190px, 1.5fr)' },
-    { key: 'phone', label: t('phone'), type: 'text', width: '135px' },
-    { key: 'mobilePhone', label: t('mobilePhone'), type: 'text', width: '135px' },
-    { key: 'isPrimary', label: t('primaryContact'), type: 'select', width: '110px', options: yesNo },
-    { key: 'isActive', label: tc('labels.active'), type: 'select', width: '95px', options: yesNo },
-  ], [t, tc, yesNo])
-  const customDefByKey = useMemo(() => new Map(fieldDefs.map((definition) => [definition.key, definition])), [fieldDefs])
-  const label = (placement: HeaderFieldPlacement, fallback: string) => placement.labelOverride?.trim() || fallback
+  const ro = !editable;
+  const partyFieldsId = useId();
+  const yesNo = useMemo(
+    () => [
+      { value: "false", label: tc("labels.no") },
+      { value: "true", label: tc("labels.yes") },
+    ],
+    [tc],
+  );
+  const countries = useMemo(() => countryOptions(locale), [locale]);
+  const currencies = useMemo(() => currencyOptions(locale), [locale]);
+  const addressColumns = useMemo<LineGridColumn<AddressRow>[]>(
+    () => [
+      {
+        key: "label",
+        label: t("addressLabel"),
+        type: "text",
+        width: "140px",
+        placeholder: t("addressLabelPlaceholder"),
+      },
+      { key: "line1", label: t("line1"), type: "text", width: "minmax(190px, 2fr)" },
+      { key: "line2", label: t("line2"), type: "text", width: "minmax(150px, 1.4fr)" },
+      { key: "city", label: t("city"), type: "text", width: "130px" },
+      { key: "region", label: t("region"), type: "text", width: "120px" },
+      { key: "postalCode", label: t("postalCode"), type: "text", width: "110px" },
+      {
+        key: "country",
+        label: t("country"),
+        type: "search-select",
+        width: "170px",
+        options: countries,
+      },
+      {
+        key: "isDefaultBilling",
+        label: t("defaultBilling"),
+        type: "select",
+        width: "115px",
+        options: yesNo,
+      },
+      {
+        key: "isDefaultShipping",
+        label: t("defaultShipping"),
+        type: "select",
+        width: "125px",
+        options: yesNo,
+      },
+    ],
+    [countries, t, yesNo],
+  );
+  const contactColumns = useMemo<LineGridColumn<ContactRow>[]>(
+    () => [
+      {
+        key: "name",
+        label: t("contactName"),
+        type: "text",
+        width: "minmax(170px, 1.4fr)",
+        required: true,
+      },
+      { key: "title", label: t("contactTitle"), type: "text", width: "140px" },
+      { key: "role", label: t("contactRole"), type: "text", width: "130px" },
+      { key: "email", label: tc("labels.email"), type: "text", width: "minmax(190px, 1.5fr)" },
+      { key: "phone", label: t("phone"), type: "text", width: "135px" },
+      { key: "mobilePhone", label: t("mobilePhone"), type: "text", width: "135px" },
+      {
+        key: "isPrimary",
+        label: t("primaryContact"),
+        type: "select",
+        width: "110px",
+        options: yesNo,
+      },
+      {
+        key: "isActive",
+        label: tc("labels.active"),
+        type: "select",
+        width: "95px",
+        options: yesNo,
+      },
+    ],
+    [t, tc, yesNo],
+  );
+  const customDefByKey = useMemo(
+    () => new Map(fieldDefs.map((definition) => [definition.key, definition])),
+    [fieldDefs],
+  );
+  const label = (placement: HeaderFieldPlacement, fallback: string) =>
+    placement.labelOverride?.trim() || fallback;
   const optionName = (options: Opt[], id: string) => {
-    const option = options.find((item) => item.id === id)
-    return option?.label ?? option?.name ?? ''
-  }
-  const partyValue = (value: ReactNode, className?: string) => <ReadOnlyValue value={value} className={className} />
+    const option = options.find((item) => item.id === id);
+    return option?.label ?? option?.name ?? "";
+  };
+  const partyValue = (value: ReactNode, className?: string) => (
+    <ReadOnlyValue value={value} className={className} />
+  );
   const renderPartyField = (placement: HeaderFieldPlacement) => {
     if (isCustomFieldKey(placement.key)) {
-      const definition = customDefByKey.get(customFieldDefKey(placement.key))
-      return definition ? <CustomFieldInput def={definition} value={customValues[definition.key]} onChange={(value) => setCustomValues((current) => ({ ...current, [definition.key]: value }))} readOnly={ro} /> : null
+      const definition = customDefByKey.get(customFieldDefKey(placement.key));
+      return definition ? (
+        <CustomFieldInput
+          def={definition}
+          value={customValues[definition.key]}
+          onChange={(value) =>
+            setCustomValues((current) => ({ ...current, [definition.key]: value }))
+          }
+          readOnly={ro}
+        />
+      ) : null;
     }
-    const controlId = `${partyFieldsId}-${placement.key}`
-    const labelId = `${controlId}-label`
+    const controlId = `${partyFieldsId}-${placement.key}`;
+    const labelId = `${controlId}-label`;
     const content = (() => {
-    switch (placement.key) {
-      case 'kind': return <><Label>{label(placement, t('kind'))}</Label>{editable && !identityLocked ? <Select value={kind} onChange={(event) => setKind(event.target.value)}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option><option value="customer">{t('kindCustomer')}</option><option value="vendor">{t('kindVendor')}</option><option value="employee">{t('kindEmployee')}</option></Select> : partyValue(kindLabel)}</>
-      case 'display_name': return <><Label>{label(placement, t('displayName'))}{editable && !identityLocked ? <span className="text-red-500"> *</span> : null}</Label>{editable && !identityLocked ? <><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} aria-invalid={nameError && !nameValid} />{nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('nameRequired')}</p> : null}</> : partyValue(displayName)}</>
-      case 'short_code': return <><Label>{label(placement, t('shortCode'))}</Label>{editable ? <Input value={shortCode} onChange={(event) => setShortCode(event.target.value)} className="font-mono" placeholder={t('shortCodePlaceholder')} /> : partyValue(shortCode, 'font-mono')}</>
-      case 'legal_name': return <><Label>{label(placement, t('legalName'))}</Label>{editable ? <Input value={legalName} onChange={(event) => setLegalName(event.target.value)} /> : partyValue(legalName)}</>
-      case 'email': return <><Label>{label(placement, tc('labels.email'))}</Label>{editable ? <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /> : partyValue(email)}</>
-      case 'phone': return <><Label>{label(placement, t('phone'))}</Label>{editable ? <Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /> : partyValue(phone)}</>
-      case 'website': return <><Label>{label(placement, t('website'))}</Label>{editable ? <Input value={website} onChange={(event) => setWebsite(event.target.value)} placeholder={t('websitePlaceholder')} /> : partyValue(website)}</>
-      case 'subsidiary_id':
-        if (!multiSubsidiary) return null
-        return <><Label>{label(placement, t('primarySubsidiary'))}</Label>{editable ? <Select value={subsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)}>{subsidiaries.filter((item) => !item.isElimination).map((item) => <option key={item.id} value={item.id}>{`${'— '.repeat(item.depth)}${item.name ?? ''}`}</option>)}</Select> : partyValue(optionName(subsidiaries, subsidiaryId))}<p className="text-xs text-slate-500 dark:text-slate-400">{t('primarySubsidiaryHint')}</p>{!createMode ? <IntercompanyRepresentationNote partyId={String(p.id)} /> : null}</>
-      case 'additional_subsidiaries':
-        if (!multiSubsidiary) return null
-        return <><Label>{label(placement, t('additionalSubsidiaries'))}</Label>{editable ? <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">{subsidiaries.filter((item) => !item.isElimination && item.id !== subsidiaryId).map((item) => <label key={item.id} className="flex cursor-pointer items-center gap-2.5 py-1.5"><input type="checkbox" checked={additionalSubsidiaryIds.has(item.id)} onChange={(event) => setAdditionalSubsidiaryIds((previous) => { const next = new Set(previous); if (event.target.checked) next.add(item.id); else next.delete(item.id); return next })} className={checkboxClass} /><span className="text-sm text-slate-800 dark:text-slate-200" style={{ paddingLeft: `${item.depth * 12}px` }}>{item.name}</span></label>)}</div> : partyValue(subsidiaries.filter((item) => additionalSubsidiaryIds.has(item.id)).map((item) => item.name).filter(Boolean).join(', '))}<p className="text-xs text-slate-500 dark:text-slate-400">{t('additionalSubsidiariesHint')}</p></>
-      case 'payment_terms_id': {
-        const value = recordType === 'vendor' ? vendor.paymentTermsId : customer.paymentTermsId
-        return <><Label>{label(placement, t('paymentTerms'))}</Label>{editable ? <Select value={value} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, paymentTermsId: event.target.value }) : setCustomer({ ...customer, paymentTermsId: event.target.value })}><option value="">—</option>{paymentTerms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}</Select> : partyValue(optionName(paymentTerms, value))}</>
+      switch (placement.key) {
+        case "kind":
+          return (
+            <>
+              <Label>{label(placement, t("kind"))}</Label>
+              {editable && !identityLocked ? (
+                <Select value={kind} onChange={(event) => setKind(event.target.value)}>
+                  <option value="company">{t("kindCompany")}</option>
+                  <option value="person">{t("kindPerson")}</option>
+                  <option value="customer">{t("kindCustomer")}</option>
+                  <option value="vendor">{t("kindVendor")}</option>
+                  <option value="employee">{t("kindEmployee")}</option>
+                </Select>
+              ) : (
+                partyValue(kindLabel)
+              )}
+            </>
+          );
+        case "display_name":
+          return (
+            <>
+              <Label>
+                {label(placement, t("displayName"))}
+                {editable && !identityLocked ? <span className="text-red-500"> *</span> : null}
+              </Label>
+              {editable && !identityLocked ? (
+                <>
+                  <Input
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    placeholder={
+                      kind === "person" ? t("personNamePlaceholder") : t("companyNamePlaceholder")
+                    }
+                    aria-invalid={nameError && !nameValid}
+                  />
+                  {nameError && !nameValid ? (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                      {t("nameRequired")}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                partyValue(displayName)
+              )}
+            </>
+          );
+        case "short_code":
+          return (
+            <>
+              <Label>{label(placement, t("shortCode"))}</Label>
+              {editable ? (
+                <Input
+                  value={shortCode}
+                  onChange={(event) => setShortCode(event.target.value)}
+                  className="font-mono"
+                  placeholder={t("shortCodePlaceholder")}
+                />
+              ) : (
+                partyValue(shortCode, "font-mono")
+              )}
+            </>
+          );
+        case "legal_name":
+          return (
+            <>
+              <Label>{label(placement, t("legalName"))}</Label>
+              {editable ? (
+                <Input value={legalName} onChange={(event) => setLegalName(event.target.value)} />
+              ) : (
+                partyValue(legalName)
+              )}
+            </>
+          );
+        case "email":
+          return (
+            <>
+              <Label>{label(placement, tc("labels.email"))}</Label>
+              {editable ? (
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              ) : (
+                partyValue(email)
+              )}
+            </>
+          );
+        case "phone":
+          return (
+            <>
+              <Label>{label(placement, t("phone"))}</Label>
+              {editable ? (
+                <Input
+                  type="tel"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                />
+              ) : (
+                partyValue(phone)
+              )}
+            </>
+          );
+        case "website":
+          return (
+            <>
+              <Label>{label(placement, t("website"))}</Label>
+              {editable ? (
+                <Input
+                  value={website}
+                  onChange={(event) => setWebsite(event.target.value)}
+                  placeholder={t("websitePlaceholder")}
+                />
+              ) : (
+                partyValue(website)
+              )}
+            </>
+          );
+        case "subsidiary_id":
+          if (!multiSubsidiary) return null;
+          return (
+            <>
+              <Label>{label(placement, t("primarySubsidiary"))}</Label>
+              {editable ? (
+                <Select
+                  value={subsidiaryId}
+                  onChange={(event) => setSubsidiaryId(event.target.value)}
+                >
+                  {subsidiaries
+                    .filter((item) => !item.isElimination)
+                    .map((item) => (
+                      <option
+                        key={item.id}
+                        value={item.id}
+                      >{`${"— ".repeat(item.depth)}${item.name ?? ""}`}</option>
+                    ))}
+                </Select>
+              ) : (
+                partyValue(optionName(subsidiaries, subsidiaryId))
+              )}
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("primarySubsidiaryHint")}
+              </p>
+              {!createMode ? <IntercompanyRepresentationNote partyId={String(p.id)} /> : null}
+            </>
+          );
+        case "additional_subsidiaries":
+          if (!multiSubsidiary) return null;
+          return (
+            <>
+              <Label>{label(placement, t("additionalSubsidiaries"))}</Label>
+              {editable ? (
+                <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
+                  {subsidiaries
+                    .filter((item) => !item.isElimination && item.id !== subsidiaryId)
+                    .map((item) => (
+                      <label
+                        key={item.id}
+                        className="flex cursor-pointer items-center gap-2.5 py-1.5"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={additionalSubsidiaryIds.has(item.id)}
+                          onChange={(event) =>
+                            setAdditionalSubsidiaryIds((previous) => {
+                              const next = new Set(previous);
+                              if (event.target.checked) next.add(item.id);
+                              else next.delete(item.id);
+                              return next;
+                            })
+                          }
+                          className={checkboxClass}
+                        />
+                        <span
+                          className="text-sm text-slate-800 dark:text-slate-200"
+                          style={{ paddingLeft: `${item.depth * 12}px` }}
+                        >
+                          {item.name}
+                        </span>
+                      </label>
+                    ))}
+                </div>
+              ) : (
+                partyValue(
+                  subsidiaries
+                    .filter((item) => additionalSubsidiaryIds.has(item.id))
+                    .map((item) => item.name)
+                    .filter(Boolean)
+                    .join(", "),
+                )
+              )}
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("additionalSubsidiariesHint")}
+              </p>
+            </>
+          );
+        case "payment_terms_id": {
+          const value = recordType === "vendor" ? vendor.paymentTermsId : customer.paymentTermsId;
+          return (
+            <>
+              <Label>{label(placement, t("paymentTerms"))}</Label>
+              {editable ? (
+                <Select
+                  value={value}
+                  onChange={(event) =>
+                    recordType === "vendor"
+                      ? setVendor({ ...vendor, paymentTermsId: event.target.value })
+                      : setCustomer({ ...customer, paymentTermsId: event.target.value })
+                  }
+                >
+                  <option value="">—</option>
+                  {paymentTerms.map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {term.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                partyValue(optionName(paymentTerms, value))
+              )}
+            </>
+          );
+        }
+        case "credit_limit":
+          return (
+            <>
+              <Label>{label(placement, t("creditLimit"))}</Label>
+              {editable ? (
+                <Input
+                  inputMode="decimal"
+                  className="text-right tabular-nums"
+                  value={customer.creditLimit}
+                  onChange={(event) =>
+                    setCustomer({ ...customer, creditLimit: event.target.value })
+                  }
+                />
+              ) : (
+                partyValue(customer.creditLimit, "text-right tabular-nums")
+              )}
+            </>
+          );
+        case "currency": {
+          if (!multiCurrency) return null;
+          const value = recordType === "vendor" ? vendor.currency : customer.currency;
+          return (
+            <>
+              <Label>{label(placement, tc("labels.currency"))}</Label>
+              {editable ? (
+                <Select
+                  value={value ?? ""}
+                  onChange={(event) =>
+                    recordType === "vendor"
+                      ? setVendor({ ...vendor, currency: event.target.value })
+                      : setCustomer({ ...customer, currency: event.target.value })
+                  }
+                >
+                  {!value && <option value="">—</option>}
+                  {currencies.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                partyValue(value ? `${value} · ${currencyDisplayName(value, locale)}` : value)
+              )}
+            </>
+          );
+        }
+        case "ar_account_id":
+          return (
+            <>
+              <Label>{label(placement, t("receivableAccount"))}</Label>
+              {editable ? (
+                <Select
+                  value={customer.arAccountId}
+                  onChange={(event) =>
+                    setCustomer({ ...customer, arAccountId: event.target.value })
+                  }
+                >
+                  <option value="">—</option>
+                  {accounts
+                    .filter((account) => account.type === "asset_receivable")
+                    .map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.label ?? account.name}
+                      </option>
+                    ))}
+                </Select>
+              ) : (
+                partyValue(optionName(accounts, customer.arAccountId))
+              )}
+            </>
+          );
+        case "sales_rep_id":
+          return (
+            <>
+              <Label>{label(placement, t("salesRepresentative"))}</Label>
+              {editable ? (
+                <Select
+                  value={customer.salesRepId}
+                  onChange={(event) => setCustomer({ ...customer, salesRepId: event.target.value })}
+                >
+                  <option value="">—</option>
+                  {salesReps.map((rep) => (
+                    <option key={rep.id} value={rep.id}>
+                      {rep.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                partyValue(optionName(salesReps, customer.salesRepId))
+              )}
+            </>
+          );
+        case "tax_code_id": {
+          const value = recordType === "vendor" ? vendor.taxCodeId : customer.taxCodeId;
+          return (
+            <>
+              <Label>{label(placement, t("taxCode"))}</Label>
+              {editable ? (
+                <Select
+                  value={value}
+                  onChange={(event) =>
+                    recordType === "vendor"
+                      ? setVendor({ ...vendor, taxCodeId: event.target.value })
+                      : setCustomer({ ...customer, taxCodeId: event.target.value })
+                  }
+                >
+                  <option value="">—</option>
+                  {taxCodes.map((code) => (
+                    <option key={code.id} value={code.id}>
+                      {code.label ?? code.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                partyValue(optionName(taxCodes, value))
+              )}
+            </>
+          );
+        }
+        // Invoicing preferences + labor pricing now live on dedicated subtabs, not
+        // inline in the overview layout — see the 'invoicing' / 'pricing' tabs.
+        case "invoicing_preference":
+          return null;
+        case "labor_pricing":
+          return null;
+        case "payment_method": {
+          const method = PAYMENT_METHOD_OPTIONS.find(
+            (option) => option.value === vendor.paymentMethod,
+          );
+          return (
+            <>
+              <Label>{label(placement, t("paymentMethod"))}</Label>
+              {editable ? (
+                <Select
+                  value={vendor.paymentMethod}
+                  onChange={(event) => setVendor({ ...vendor, paymentMethod: event.target.value })}
+                >
+                  <option value="">—</option>
+                  {PAYMENT_METHOD_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {t(option.labelKey)}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                partyValue(method ? t(method.labelKey) : "")
+              )}
+            </>
+          );
+        }
+        case "eft_notification_email":
+          return (
+            <>
+              <Label>{label(placement, t("eftNotificationEmail"))}</Label>
+              {editable ? (
+                <Input
+                  type="email"
+                  value={vendor.eftNotificationEmail}
+                  onChange={(event) =>
+                    setVendor({ ...vendor, eftNotificationEmail: event.target.value })
+                  }
+                />
+              ) : (
+                partyValue(vendor.eftNotificationEmail)
+              )}
+            </>
+          );
+        case "is_1099_or_t4a":
+          return editable ? (
+            <label className="flex items-center gap-2 pt-7">
+              <input
+                type="checkbox"
+                checked={vendor.is1099OrT4a}
+                onChange={(event) => setVendor({ ...vendor, is1099OrT4a: event.target.checked })}
+                className={checkboxClass}
+              />
+              <span className="text-sm">{label(placement, t("t4aReportable"))}</span>
+            </label>
+          ) : (
+            <>
+              <Label>{label(placement, t("t4aReportable"))}</Label>
+              {partyValue(vendor.is1099OrT4a ? tc("labels.yes") : tc("labels.no"))}
+            </>
+          );
+        case "ap_account_id":
+          return (
+            <>
+              <Label>{label(placement, t("payableAccount"))}</Label>
+              {editable ? (
+                <Select
+                  value={vendor.apAccountId}
+                  onChange={(event) => setVendor({ ...vendor, apAccountId: event.target.value })}
+                >
+                  <option value="">—</option>
+                  {accounts
+                    .filter((account) => account.type === "liability_payable")
+                    .map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.label ?? account.name}
+                      </option>
+                    ))}
+                </Select>
+              ) : (
+                partyValue(optionName(accounts, vendor.apAccountId))
+              )}
+            </>
+          );
+        case "default_expense_account_id":
+          return (
+            <>
+              <Label>{label(placement, t("defaultExpenseAccount"))}</Label>
+              {editable ? (
+                <Select
+                  value={vendor.defaultExpenseAccountId}
+                  onChange={(event) =>
+                    setVendor({ ...vendor, defaultExpenseAccountId: event.target.value })
+                  }
+                >
+                  <option value="">—</option>
+                  {accounts
+                    .filter(
+                      (account) =>
+                        account.type === "expense" ||
+                        account.type === "expense_other" ||
+                        account.type === "cogs",
+                    )
+                    .map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.label ?? account.name}
+                      </option>
+                    ))}
+                </Select>
+              ) : (
+                partyValue(optionName(accounts, vendor.defaultExpenseAccountId))
+              )}
+            </>
+          );
+        case "employee_number":
+          return (
+            <>
+              <Label>{label(placement, t("employeeNumber"))}</Label>
+              {editable ? (
+                <Input
+                  value={employee.employeeNumber}
+                  onChange={(event) =>
+                    setEmployee({ ...employee, employeeNumber: event.target.value })
+                  }
+                />
+              ) : (
+                partyValue(employee.employeeNumber, "font-mono")
+              )}
+            </>
+          );
+        case "job_title":
+          return (
+            <>
+              <Label>{label(placement, t("jobTitle"))}</Label>
+              {editable ? (
+                <Input
+                  value={employee.jobTitle}
+                  onChange={(event) => setEmployee({ ...employee, jobTitle: event.target.value })}
+                />
+              ) : (
+                partyValue(employee.jobTitle)
+              )}
+            </>
+          );
+        case "department_id":
+          return (
+            <>
+              <Label>{label(placement, tc("labels.department"))}</Label>
+              {editable ? (
+                <Select
+                  value={employee.departmentId}
+                  onChange={(event) =>
+                    setEmployee({ ...employee, departmentId: event.target.value })
+                  }
+                >
+                  <option value="">—</option>
+                  {departments.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                partyValue(optionName(departments, employee.departmentId))
+              )}
+            </>
+          );
+        case "trade_id":
+          return (
+            <>
+              <Label>{label(placement, t("trade"))}</Label>
+              {editable ? (
+                <Select
+                  value={employee.tradeId}
+                  onChange={(event) => setEmployee({ ...employee, tradeId: event.target.value })}
+                >
+                  <option value="">—</option>
+                  {trades.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                partyValue(optionName(trades, employee.tradeId))
+              )}
+            </>
+          );
+        case "worker_comp_group_id":
+          if (!payrollEnabled) return null;
+          return (
+            <>
+              <Label>{label(placement, t("workerCompGroup"))}</Label>
+              {editable ? (
+                <Select
+                  value={employee.workerCompGroupId}
+                  onChange={(event) =>
+                    setEmployee({ ...employee, workerCompGroupId: event.target.value })
+                  }
+                >
+                  <option value="">—</option>
+                  {workerCompGroups.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                partyValue(optionName(workerCompGroups, employee.workerCompGroupId))
+              )}
+            </>
+          );
+        case "hired_on":
+          return (
+            <>
+              <Label>{label(placement, t("hiredOn"))}</Label>
+              {editable ? (
+                <DateField
+                  value={employee.hiredOn}
+                  onChange={(value) => setEmployee({ ...employee, hiredOn: value })}
+                />
+              ) : (
+                partyValue(employee.hiredOn)
+              )}
+            </>
+          );
+        default:
+          return null;
       }
-      case 'credit_limit': return <><Label>{label(placement, t('creditLimit'))}</Label>{editable ? <Input inputMode="decimal" className="text-right tabular-nums" value={customer.creditLimit} onChange={(event) => setCustomer({ ...customer, creditLimit: event.target.value })} /> : partyValue(customer.creditLimit, 'text-right tabular-nums')}</>
-      case 'currency': {
-        if (!multiCurrency) return null
-        const value = recordType === 'vendor' ? vendor.currency : customer.currency
-        return <><Label>{label(placement, tc('labels.currency'))}</Label>{editable ? <Select value={value ?? ''} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, currency: event.target.value }) : setCustomer({ ...customer, currency: event.target.value })}>{!value && <option value="">—</option>}{currencies.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</Select> : partyValue(value ? `${value} · ${currencyDisplayName(value, locale)}` : value)}</>
-      }
-      case 'ar_account_id': return <><Label>{label(placement, t('receivableAccount'))}</Label>{editable ? <Select value={customer.arAccountId} onChange={(event) => setCustomer({ ...customer, arAccountId: event.target.value })}><option value="">—</option>{accounts.filter((account) => account.type === 'asset_receivable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select> : partyValue(optionName(accounts, customer.arAccountId))}</>
-      case 'sales_rep_id': return <><Label>{label(placement, t('salesRepresentative'))}</Label>{editable ? <Select value={customer.salesRepId} onChange={(event) => setCustomer({ ...customer, salesRepId: event.target.value })}><option value="">—</option>{salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}</Select> : partyValue(optionName(salesReps, customer.salesRepId))}</>
-      case 'tax_code_id': {
-        const value = recordType === 'vendor' ? vendor.taxCodeId : customer.taxCodeId
-        return <><Label>{label(placement, t('taxCode'))}</Label>{editable ? <Select value={value} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, taxCodeId: event.target.value }) : setCustomer({ ...customer, taxCodeId: event.target.value })}><option value="">—</option>{taxCodes.map((code) => <option key={code.id} value={code.id}>{code.label ?? code.name}</option>)}</Select> : partyValue(optionName(taxCodes, value))}</>
-      }
-      // Invoicing preferences + labor pricing now live on dedicated subtabs, not
-      // inline in the overview layout — see the 'invoicing' / 'pricing' tabs.
-      case 'invoicing_preference': return null
-      case 'labor_pricing': return null
-      case 'payment_method': {
-        const method = PAYMENT_METHOD_OPTIONS.find((option) => option.value === vendor.paymentMethod)
-        return <><Label>{label(placement, t('paymentMethod'))}</Label>{editable ? <Select value={vendor.paymentMethod} onChange={(event) => setVendor({ ...vendor, paymentMethod: event.target.value })}><option value="">—</option>{PAYMENT_METHOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{t(option.labelKey)}</option>)}</Select> : partyValue(method ? t(method.labelKey) : '')}</>
-      }
-      case 'eft_notification_email': return <><Label>{label(placement, t('eftNotificationEmail'))}</Label>{editable ? <Input type="email" value={vendor.eftNotificationEmail} onChange={(event) => setVendor({ ...vendor, eftNotificationEmail: event.target.value })} /> : partyValue(vendor.eftNotificationEmail)}</>
-      case 'is_1099_or_t4a': return editable ? <label className="flex items-center gap-2 pt-7"><input type="checkbox" checked={vendor.is1099OrT4a} onChange={(event) => setVendor({ ...vendor, is1099OrT4a: event.target.checked })} className={checkboxClass} /><span className="text-sm">{label(placement, t('t4aReportable'))}</span></label> : <><Label>{label(placement, t('t4aReportable'))}</Label>{partyValue(vendor.is1099OrT4a ? tc('labels.yes') : tc('labels.no'))}</>
-      case 'ap_account_id': return <><Label>{label(placement, t('payableAccount'))}</Label>{editable ? <Select value={vendor.apAccountId} onChange={(event) => setVendor({ ...vendor, apAccountId: event.target.value })}><option value="">—</option>{accounts.filter((account) => account.type === 'liability_payable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select> : partyValue(optionName(accounts, vendor.apAccountId))}</>
-      case 'default_expense_account_id': return <><Label>{label(placement, t('defaultExpenseAccount'))}</Label>{editable ? <Select value={vendor.defaultExpenseAccountId} onChange={(event) => setVendor({ ...vendor, defaultExpenseAccountId: event.target.value })}><option value="">—</option>{accounts.filter((account) => account.type === 'expense' || account.type === 'expense_other' || account.type === 'cogs').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select> : partyValue(optionName(accounts, vendor.defaultExpenseAccountId))}</>
-      case 'employee_number': return <><Label>{label(placement, t('employeeNumber'))}</Label>{editable ? <Input value={employee.employeeNumber} onChange={(event) => setEmployee({ ...employee, employeeNumber: event.target.value })} /> : partyValue(employee.employeeNumber, 'font-mono')}</>
-      case 'job_title': return <><Label>{label(placement, t('jobTitle'))}</Label>{editable ? <Input value={employee.jobTitle} onChange={(event) => setEmployee({ ...employee, jobTitle: event.target.value })} /> : partyValue(employee.jobTitle)}</>
-      case 'department_id': return <><Label>{label(placement, tc('labels.department'))}</Label>{editable ? <Select value={employee.departmentId} onChange={(event) => setEmployee({ ...employee, departmentId: event.target.value })}><option value="">—</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(departments, employee.departmentId))}</>
-      case 'trade_id': return <><Label>{label(placement, t('trade'))}</Label>{editable ? <Select value={employee.tradeId} onChange={(event) => setEmployee({ ...employee, tradeId: event.target.value })}><option value="">—</option>{trades.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(trades, employee.tradeId))}</>
-      case 'worker_comp_group_id': if (!payrollEnabled) return null; return <><Label>{label(placement, t('workerCompGroup'))}</Label>{editable ? <Select value={employee.workerCompGroupId} onChange={(event) => setEmployee({ ...employee, workerCompGroupId: event.target.value })}><option value="">—</option>{workerCompGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(workerCompGroups, employee.workerCompGroupId))}</>
-      case 'hired_on': return <><Label>{label(placement, t('hiredOn'))}</Label>{editable ? <DateField value={employee.hiredOn} onChange={(value) => setEmployee({ ...employee, hiredOn: value })} /> : partyValue(employee.hiredOn)}</>
-      default: return null
-    }
-    })()
-    return <FieldControlAssociations controlId={controlId} labelId={labelId}>{content}</FieldControlAssociations>
-  }
+    })();
+    return (
+      <FieldControlAssociations controlId={controlId} labelId={labelId}>
+        {content}
+      </FieldControlAssociations>
+    );
+  };
   // ONE rail, in reading order: what the account is, then how we sell to it,
   // then what we have done with it, then (appended by the shell) the record's
   // own evidence. These ride the shared flyout's strip as `detailTabs`, so
   // the shell renders no second strip above them.
   const allTabs: Array<{ key: PartyTab; label: string; count?: number }> = [
-    { key: 'overview', label: t('tabs.overview') },
-    ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pulse' as const, label: t('tabs.pulse') }] : []),
-    ...(showRelationshipTab ? [{ key: 'relationship' as const, label: t('tabs.relationship') }] : []),
-    ...(showExternalIdsTab ? [{ key: 'external-ids' as const, label: t('tabs.externalIds') }] : []),
+    { key: "overview", label: t("tabs.overview") },
+    ...(role === "customer" && !isPlaceholderName
+      ? [{ key: "pulse" as const, label: t("tabs.pulse") }]
+      : []),
+    ...(showRelationshipTab
+      ? [{ key: "relationship" as const, label: t("tabs.relationship") }]
+      : []),
+    ...(showExternalIdsTab ? [{ key: "external-ids" as const, label: t("tabs.externalIds") }] : []),
     // Invoicing preferences + labor pricing live on their own subtabs (customers only),
     // out of the crowded overview.
     // An employee record reads as a person first: their employment, what
     // they are paid, what they are covered by, and how payroll pays them.
-    ...(showEmploymentTab ? [{ key: 'employment' as const, label: t('tabs.employment') }] : []),
-    ...(showCompensationTab ? [{ key: 'compensation' as const, label: t('tabs.compensation') }] : []),
-    ...(showBenefitsTab ? [{ key: 'benefits' as const, label: th('benefits.title') }] : []),
-    ...(showPayrollTab ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
-    ...(role === 'customer' ? [{ key: 'invoicing' as const, label: t('tabs.invoicing') }] : []),
-    ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pricing' as const, label: t('tabs.pricing') }] : []),
-    ...(showBillingTab && !createMode ? [{ key: 'billing' as const, label: t('tabs.billing') }] : []),
-    ...(showPaymentMethodsTab ? [{ key: 'paymentMethods' as const, label: t('tabs.paymentMethods') }] : []),
-    ...(showStoreCreditTab ? [{ key: 'store-credit' as const, label: tsv('customer.tabLabel') }] : []),
-    ...(showDebitMandatesTab ? [{ key: 'debitMandates' as const, label: t('tabs.debitMandates') }] : []),
-    { key: 'transactions', label: t('tabs.transactions'), count: payload.transactionSummary.count },
-    ...(role === 'customer' && canReadActivities ? [{ key: 'activities' as const, label: t('tabs.activities') }] : []),
-    { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
-    { key: 'addresses', label: t('tabs.addresses'), count: addresses.length },
-    ...(!effectiveLayout || !role || role === 'vendor' ? [{ key: 'accounting' as const, label: role === 'vendor' && effectiveLayout ? t('bankAccountsHeading') : t('tabs.accounting') }] : []),
-    ...(showComplianceTab ? [{ key: 'compliance' as const, label: t('tabs.compliance') }] : []),
+    ...(showEmploymentTab ? [{ key: "employment" as const, label: t("tabs.employment") }] : []),
+    ...(showCompensationTab
+      ? [{ key: "compensation" as const, label: t("tabs.compensation") }]
+      : []),
+    ...(showBenefitsTab ? [{ key: "benefits" as const, label: th("benefits.title") }] : []),
+    ...(showPayrollTab ? [{ key: "payroll" as const, label: t("tabs.payroll") }] : []),
+    ...(role === "customer" ? [{ key: "invoicing" as const, label: t("tabs.invoicing") }] : []),
+    ...(role === "customer" && !isPlaceholderName
+      ? [{ key: "pricing" as const, label: t("tabs.pricing") }]
+      : []),
+    ...(showBillingTab && !createMode
+      ? [{ key: "billing" as const, label: t("tabs.billing") }]
+      : []),
+    ...(showPaymentMethodsTab
+      ? [{ key: "paymentMethods" as const, label: t("tabs.paymentMethods") }]
+      : []),
+    ...(showStoreCreditTab
+      ? [{ key: "store-credit" as const, label: tsv("customer.tabLabel") }]
+      : []),
+    ...(showDebitMandatesTab
+      ? [{ key: "debitMandates" as const, label: t("tabs.debitMandates") }]
+      : []),
+    { key: "transactions", label: t("tabs.transactions"), count: payload.transactionSummary.count },
+    ...(role === "customer" && canReadActivities
+      ? [{ key: "activities" as const, label: t("tabs.activities") }]
+      : []),
+    { key: "contacts", label: t("tabs.contacts"), count: contacts.length },
+    { key: "addresses", label: t("tabs.addresses"), count: addresses.length },
+    ...(!effectiveLayout || !role || role === "vendor"
+      ? [
+          {
+            key: "accounting" as const,
+            label:
+              role === "vendor" && effectiveLayout
+                ? t("bankAccountsHeading")
+                : t("tabs.accounting"),
+          },
+        ]
+      : []),
+    ...(showComplianceTab ? [{ key: "compliance" as const, label: t("tabs.compliance") }] : []),
     // Attachments and Audit trail close the rail. They are the shared shell's
     // own panels, so the shell appends them itself — listing them here would
     // duplicate the buttons.
-  ]
-  const tabs = allTabs.filter((item) => !createMode || CREATE_TABS.has(item.key))
+  ];
+  const tabs = allTabs.filter((item) => !createMode || CREATE_TABS.has(item.key));
 
   /**
    * The Actions menu carries exactly these entries: lifecycle activation
@@ -1430,1100 +2253,1591 @@ export function PartyDrawer({
    * and mode resolve every entry to null gets no button instead of a
    * button that opens an empty menu.
    */
-  const showLifecycleAction = !createMode && canManage
-  const showManageFormsAction = (canCustomize ?? false) && recordType != null
-  const showSettlementActions = mode !== 'edit' && (payload.customer != null || payload.vendor != null)
-  const hasRecordActions = showLifecycleAction || showManageFormsAction || showSettlementActions || showComplianceTab
+  const showLifecycleAction = !createMode && canManage;
+  const showManageFormsAction = (canCustomize ?? false) && recordType != null;
+  const showSettlementActions =
+    mode !== "edit" && (payload.customer != null || payload.vendor != null);
+  const hasRecordActions =
+    showLifecycleAction || showManageFormsAction || showSettlementActions || showComplianceTab;
 
   const selectForm = (formId: string) => {
-    const next = new URLSearchParams(searchParams.toString())
-    if (formId) next.set('partyForm', formId)
-    else next.delete('partyForm')
-    const query = next.toString()
-    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false })
-  }
+    const next = new URLSearchParams(searchParams.toString());
+    if (formId) next.set("partyForm", formId);
+    else next.delete("partyForm");
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
   return (
     <RecordSaveContext.Provider value={saveRegistry.context}>
-    <TransactionDrawer
-      closeHref={returnHref}
-      beforeClose={confirmDiscard}
-      recordId={createMode ? '' : String(p.id)}
-      targetTable="parties"
-      canEditAttachments={canManage && !createMode}
-      showEvidenceTabs={!createMode}
-      detailsLabel={t('tabs.overview')}
-      keepChildrenMounted
-      detailTabs={tabs
-        .filter((item) => item.key !== 'overview')
-        .map((item) => ({
-          key: item.key,
-          label: (
+      <TransactionDrawer
+        closeHref={returnHref}
+        beforeClose={confirmDiscard}
+        recordId={createMode ? "" : String(p.id)}
+        targetTable="parties"
+        canEditAttachments={canManage && !createMode}
+        showEvidenceTabs={!createMode}
+        detailsLabel={t("tabs.overview")}
+        keepChildrenMounted
+        detailTabs={tabs
+          .filter((item) => item.key !== "overview")
+          .map((item) => ({
+            key: item.key,
+            label: (
+              <>
+                {item.label}
+                {item.count != null ? (
+                  <span className="text-xs tabular-nums text-slate-400">{item.count}</span>
+                ) : null}
+              </>
+            ),
+          }))}
+        activeTab={toShellTab(tab)}
+        onActiveTabChange={(key) => showTab(fromShellTab(key))}
+        title={
+          <span className="flex items-center gap-2.5">
+            <span className="truncate">
+              {displayName.trim() ||
+                (role ? tEntities(`roles.${role}s.newLabel`) : t("newPartyFallback"))}
+            </span>
+            <Badge variant={isActive ? "success" : "outline"}>
+              {isActive ? tc("status.active") : tc("status.inactive")}
+            </Badge>
+          </span>
+        }
+        leading={
+          <PartyPhoto
+            partyId={createMode ? null : String(p.id)}
+            name={displayName.trim() || String(p.display_name ?? "")}
+            kind={role === "employee" ? "person" : kind}
+            photoFileId={photoFileId}
+            canManage={canManage}
+            onChange={(nextPhotoFileId) => {
+              setPhotoFileId(nextPhotoFileId);
+              void refreshPartyAfterSectionSave();
+            }}
+          />
+        }
+        description={mode === "edit" ? tc("feedback.editingHint") : undefined}
+        primaryAction={
+          canEditRecord ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || savingSections}
+              onClick={() => (mode === "edit" ? cancelWithConfirm() : setMode("edit"))}
+            >
+              {mode === "edit" ? tc("actions.cancel") : tc("actions.edit")}
+            </Button>
+          ) : undefined
+        }
+        actionsMenuHeader={
+          forms.length > 0 ? (
+            <div className="border-b border-slate-200 p-2 dark:border-slate-800">
+              <Label className="mb-1 block text-xs">{t("customForm")}</Label>
+              <Select
+                value={currentFormId ?? ""}
+                onChange={(event) => selectForm(event.target.value)}
+              >
+                {forms.map((form) => (
+                  <option key={form.id} value={form.id}>
+                    {form.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : undefined
+        }
+        actions={
+          hasRecordActions ? (
             <>
-              {item.label}
-              {item.count != null ? <span className="text-xs tabular-nums text-slate-400">{item.count}</span> : null}
-            </>
-          ),
-        }))}
-      activeTab={toShellTab(tab)}
-      onActiveTabChange={(key) => showTab(fromShellTab(key))}
-      title={
-        <span className="flex items-center gap-2.5">
-          <span className="truncate">{displayName.trim() || (role ? tEntities(`roles.${role}s.newLabel`) : t('newPartyFallback'))}</span>
-          <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? tc('status.active') : tc('status.inactive')}</Badge>
-        </span>
-      }
-      leading={
-        <PartyPhoto
-          partyId={createMode ? null : String(p.id)}
-          name={displayName.trim() || String(p.display_name ?? '')}
-          kind={role === 'employee' ? 'person' : kind}
-          photoFileId={photoFileId}
-          canManage={canManage}
-          onChange={(nextPhotoFileId) => {
-            setPhotoFileId(nextPhotoFileId)
-            void refreshPartyAfterSectionSave()
-          }}
-        />
-      }
-      description={mode === 'edit' ? tc('feedback.editingHint') : undefined}
-      primaryAction={canEditRecord ? <Button variant="outline" size="sm" disabled={busy || savingSections} onClick={() => mode === 'edit' ? cancelWithConfirm() : setMode('edit')}>{mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}</Button> : undefined}
-      actionsMenuHeader={forms.length > 0 ? (
-        <div className="border-b border-slate-200 p-2 dark:border-slate-800">
-          <Label className="mb-1 block text-xs">{t('customForm')}</Label>
-          <Select value={currentFormId ?? ''} onChange={(event) => selectForm(event.target.value)}>
-            {forms.map((form) => <option key={form.id} value={form.id}>{form.name}</option>)}
-          </Select>
-        </div>
-      ) : undefined}
-      actions={hasRecordActions ? (
-        <>
-          {/* Activation targets a persisted row: unsaved-create carries its
+              {/* Activation targets a persisted row: unsaved-create carries its
               active default into the create POST instead. */}
-          {showLifecycleAction ? isActive ? (
-            <Button disabled={busy} onClick={() => setActiveState(false)}>{t('deactivate')}</Button>
-          ) : (
-            <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>{t('activate')}</Button>
-          ) : null}
-          {showManageFormsAction ? (
-            <Button asChild><Link href={`/admin/customization?recordType=${recordType}&tab=forms`}>{t('manageForms')}</Link></Button>
-          ) : null}
-          {showSettlementActions ? (
-            <>
-              {settlementHrefs?.receivePayment ? (
-                <Button asChild variant="outline">
-                  <Link href={settlementHrefs.receivePayment}>{t('receivePayment')}</Link>
+              {showLifecycleAction ? (
+                isActive ? (
+                  <Button disabled={busy} onClick={() => setActiveState(false)}>
+                    {t("deactivate")}
+                  </Button>
+                ) : (
+                  <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
+                    {t("activate")}
+                  </Button>
+                )
+              ) : null}
+              {showManageFormsAction ? (
+                <Button asChild>
+                  <Link href={`/admin/customization?recordType=${recordType}&tab=forms`}>
+                    {t("manageForms")}
+                  </Link>
                 </Button>
               ) : null}
-              {settlementHrefs?.payBills ? (
-                <Button asChild variant="outline">
-                  <Link href={settlementHrefs.payBills}>{t('payBills')}</Link>
-                </Button>
+              {showSettlementActions ? (
+                <>
+                  {settlementHrefs?.receivePayment ? (
+                    <Button asChild variant="outline">
+                      <Link href={settlementHrefs.receivePayment}>{t("receivePayment")}</Link>
+                    </Button>
+                  ) : null}
+                  {settlementHrefs?.payBills ? (
+                    <Button asChild variant="outline">
+                      <Link href={settlementHrefs.payBills}>{t("payBills")}</Link>
+                    </Button>
+                  ) : null}
+                  <Button asChild variant="outline">
+                    <Link
+                      href={`/reports/statements/${payload.party.id}?side=${payload.vendor && !payload.customer ? "ap" : "ar"}`}
+                    >
+                      {t("viewStatement")}
+                    </Link>
+                  </Button>
+                  {canManage ? (
+                    <SendButton
+                      recordType="party_statement"
+                      recordId={payload.party.id}
+                      baseUrl={`/api/parties/${payload.party.id}/statement/send?side=${payload.vendor && !payload.customer ? "ap" : "ar"}`}
+                    />
+                  ) : null}
+                </>
               ) : null}
-              <Button asChild variant="outline">
-                <Link href={`/reports/statements/${payload.party.id}?side=${payload.vendor && !payload.customer ? 'ap' : 'ar'}`}>{t('viewStatement')}</Link>
-              </Button>
-              {canManage ? (
-                <SendButton
-                  recordType="party_statement"
-                  recordId={payload.party.id}
-                  baseUrl={`/api/parties/${payload.party.id}/statement/send?side=${payload.vendor && !payload.customer ? 'ap' : 'ar'}`}
-                />
-              ) : null}
-            </>
-          ) : null}
-          {/* 1099 settings live on the Compliance tab behind the same
+              {/* 1099 settings live on the Compliance tab behind the same
               predicate as the tab, so a read-only viewer still reaches
               them from Actions; switching tabs keeps unsaved edits. */}
-          {showComplianceTab ? (
-            <Button variant="outline" onClick={() => showTab('compliance')}>{t('tabs.compliance')}</Button>
-          ) : null}
-        </>
-      ) : undefined}
-      footer={
-        <div className="flex w-full items-center gap-3">
-          <span
-            className={
-              'text-xs ' +
-              (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
-            }
-          >
-            {mode === 'edit'
-              ? saveState === 'saving'
-                ? tc('actions.saving')
-                : saveState === 'error'
-                  ? t('saveFailedRetry')
-                  : dirty || saveRegistry.dirty
-                    ? t('unsavedChanges')
-                    : null
-              : null}
-          </span>
-          {mode === 'edit' ? (
-            <div className="ml-auto flex items-center gap-2">
-              <Button disabled={busy || savingSections || (createMode && !nameValid && !existingPersonId)} onClick={save}>{busy || savingSections ? tc('actions.saving') : tc('actions.save')}</Button>
-            </div>
-          ) : null}
-        </div>
-      }
-    >
-      <ActionAlert error={refusal} fallbackMessage={t('autosaveFailed')} title={t('saveFailedRetry')} className="mb-4" />
-      <TabContent tabKey={tab}>
-      <div className="space-y-7 p-1" inert={busy}>
-        {tab === 'overview' && showEmploymentTab && hrm && hrm.employmentIds.length === 0 && !createMode ? (
-          // An employee without an employment has no self-service, leave or
-          // HR records yet; say so where the record opens, not only on the tab.
-          <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-            <span>{th('employment.noRecord.notice')}</span>
-            <Button size="sm" variant="outline" onClick={() => showTab('employment')}>{th('employment.noRecord.openTab')}</Button>
-          </div>
-        ) : null}
-        {tab === 'overview' ? (
-          effectiveLayout && role ? (
-            <>
-              <PartySummary payload={payload} />
-              <HeaderFields
-                layout={effectiveLayout}
-                editable={!ro}
-                renderField={renderPartyField}
-              />
-            </>
-          ) : (
-          <>
-          <PartySummary payload={payload} />
-          {showExistingPersonPicker ? (
-            <section className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-              <div className="space-y-1.5">
-                <Label htmlFor="new-employee-person">{th('employment.hire.existingPersonLabel')}</Label>
-                <SearchSelect
-                  id="new-employee-person"
-                  value={existingPersonId}
-                  onChange={(next) => {
-                    const picked = existingPersonOptions.find((option) => option.value === next)
-                    setExistingPersonId(next)
-                    setExistingPersonLabel(picked?.label ?? next)
-                    clearRefusal()
-                  }}
-                  options={existingPersonOptions}
-                  ariaLabel={th('employment.hire.existingPersonLabel')}
-                  sheetTitle={th('employment.hire.existingPersonLabel')}
-                  emptyLabel={th('employment.hire.existingPersonPlaceholder')}
-                  clearable
-                  remote
-                  loading={existingPersonLoading}
-                  statusMessage={existingPersonStatus ?? (existingPersonOptions.length === 0 && !existingPersonLoading ? th('employment.hire.existingPersonEmpty') : undefined)}
-                  statusTone={existingPersonStatus ? 'error' : 'muted'}
-                  onSearchChange={(next) => {
-                    setExistingPersonQuery(next)
-                                    setExistingPersonStatus(undefined)
-                  }}
-                  disabled={busy}
-                />
-              </div>
-              {existingPersonId ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {th('employment.hire.existingPersonNote')}
-                </p>
+              {showComplianceTab ? (
+                <Button variant="outline" onClick={() => showTab("compliance")}>
+                  {t("tabs.compliance")}
+                </Button>
               ) : null}
-            </section>
-          ) : null}
-        {!identityLocked ? (
-        <>
-        {/* -- identity ------------------------------------------------- */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className={field}>
-            <Label>{t('kind')}</Label>
-            {editable ? <Select value={kind} onChange={(e) => setKind(e.target.value)}>
-              <option value="company">{t('kindCompany')}</option>
-              <option value="person">{t('kindPerson')}</option>
-              <option value="customer">{t('kindCustomer')}</option>
-              <option value="vendor">{t('kindVendor')}</option>
-              <option value="employee">{t('kindEmployee')}</option>
-            </Select> : partyValue(kindLabel)}
-          </div>
-          <div className={`${field} lg:col-span-2`}>
-            <Label>
-              {t('displayName')}{editable ? <span className="text-red-500"> *</span> : null}
-            </Label>
-            {editable ? <>
-              <Input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')}
-                aria-invalid={nameError && !nameValid}
-              />
-              {nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('nameRequired')}</p> : null}
-            </> : partyValue(displayName)}
-          </div>
-          <div className={field}>
-            <Label>{t('shortCode')}</Label>
-            {editable ? <Input
-              value={shortCode}
-              onChange={(e) => setShortCode(e.target.value)}
-              className="font-mono"
-              placeholder={t('shortCodePlaceholder')}
-            /> : partyValue(shortCode, 'font-mono')}
-          </div>
-          <div className={`${field} lg:col-span-2`}>
-            <Label>{t('legalName')}</Label>
-            {editable ? <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} /> : partyValue(legalName)}
-          </div>
-          <div className={field}>
-            <Label>{tc('labels.email')}</Label>
-            {editable ? <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /> : partyValue(email)}
-          </div>
-          <div className={field}>
-            <Label>{t('phone')}</Label>
-            {editable ? <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /> : partyValue(phone)}
-          </div>
-          <div className={`${field} lg:col-span-2`}>
-            <Label>{t('website')}</Label>
-            {editable ? <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('websitePlaceholder')} /> : partyValue(website)}
-          </div>
-          {createMode && editable ? (
-            <div className={field}>
-              <Label>{tc('labels.active')}</Label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className={checkboxClass} />
-                <span className="text-sm">{isActive ? tc('status.active') : tc('status.inactive')}</span>
-              </label>
-            </div>
-          ) : null}
-        </section>
-
-        <CustomFieldInputs defs={fieldDefs} values={customValues} onChange={setCustomValues} readOnly={ro} viewer={customFieldViewer} />
-
-        {multiSubsidiary ? (
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t('subsidiariesHeading')}
-            </h3>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className={field}>
-                <Label>{t('primarySubsidiary')}</Label>
-                {editable ? <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)}>
-                  {subsidiaries.filter((s) => !s.isElimination).map((s) => (
-                    <option key={s.id} value={s.id}>{`${'— '.repeat(s.depth)}${s.name ?? ''}`}</option>
-                  ))}
-                </Select> : partyValue(optionName(subsidiaries, subsidiaryId))}
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('primarySubsidiaryHint')}</p>
+            </>
+          ) : undefined
+        }
+        footer={
+          <div className="flex w-full items-center gap-3">
+            <span
+              className={
+                "text-xs " +
+                (saveState === "error"
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-slate-500 dark:text-slate-400")
+              }
+            >
+              {mode === "edit"
+                ? saveState === "saving"
+                  ? tc("actions.saving")
+                  : saveState === "error"
+                    ? t("saveFailedRetry")
+                    : dirty || saveRegistry.dirty
+                      ? t("unsavedChanges")
+                      : null
+                : null}
+            </span>
+            {mode === "edit" ? (
+              <div className="ml-auto flex items-center gap-2">
+                <Button
+                  disabled={
+                    busy || savingSections || (createMode && !nameValid && !existingPersonId)
+                  }
+                  onClick={save}
+                >
+                  {busy || savingSections ? tc("actions.saving") : tc("actions.save")}
+                </Button>
               </div>
-              <div className={field}>
-                <Label>{t('additionalSubsidiaries')}</Label>
-                {editable ? <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-                  {subsidiaries.filter((s) => !s.isElimination && s.id !== subsidiaryId).map((s) => (
-                    <label key={s.id} className="flex cursor-pointer items-center gap-2.5 py-1.5">
-                      <input
-                        type="checkbox"
-                        checked={additionalSubsidiaryIds.has(s.id)}
-                        onChange={(e) => setAdditionalSubsidiaryIds((previous) => {
-                          const next = new Set(previous)
-                          if (e.target.checked) next.add(s.id)
-                          else next.delete(s.id)
-                          return next
-                        })}
-                        className={checkboxClass}
+            ) : null}
+          </div>
+        }
+      >
+        <ActionAlert
+          error={refusal}
+          fallbackMessage={t("autosaveFailed")}
+          title={t("saveFailedRetry")}
+          className="mb-4"
+        />
+        <TabContent tabKey={tab}>
+          <div className="space-y-7 p-1" inert={busy}>
+            {tab === "overview" &&
+            showEmploymentTab &&
+            hrm &&
+            hrm.employmentIds.length === 0 &&
+            !createMode ? (
+              // An employee without an employment has no self-service, leave or
+              // HR records yet; say so where the record opens, not only on the tab.
+              <div
+                role="status"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+              >
+                <span>{th("employment.noRecord.notice")}</span>
+                <Button size="sm" variant="outline" onClick={() => showTab("employment")}>
+                  {th("employment.noRecord.openTab")}
+                </Button>
+              </div>
+            ) : null}
+            {tab === "overview" ? (
+              effectiveLayout && role ? (
+                <>
+                  <PartySummary payload={payload} />
+                  <HeaderFields
+                    layout={effectiveLayout}
+                    editable={!ro}
+                    renderField={renderPartyField}
+                  />
+                </>
+              ) : (
+                <>
+                  <PartySummary payload={payload} />
+                  {showExistingPersonPicker ? (
+                    <section className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="new-employee-person">
+                          {th("employment.hire.existingPersonLabel")}
+                        </Label>
+                        <SearchSelect
+                          id="new-employee-person"
+                          value={existingPersonId}
+                          onChange={(next) => {
+                            const picked = existingPersonOptions.find(
+                              (option) => option.value === next,
+                            );
+                            setExistingPersonId(next);
+                            setExistingPersonLabel(picked?.label ?? next);
+                            clearRefusal();
+                          }}
+                          options={existingPersonOptions}
+                          ariaLabel={th("employment.hire.existingPersonLabel")}
+                          sheetTitle={th("employment.hire.existingPersonLabel")}
+                          emptyLabel={th("employment.hire.existingPersonPlaceholder")}
+                          clearable
+                          remote
+                          loading={existingPersonLoading}
+                          statusMessage={
+                            existingPersonStatus ??
+                            (existingPersonOptions.length === 0 && !existingPersonLoading
+                              ? th("employment.hire.existingPersonEmpty")
+                              : undefined)
+                          }
+                          statusTone={existingPersonStatus ? "error" : "muted"}
+                          onSearchChange={(next) => {
+                            setExistingPersonQuery(next);
+                            setExistingPersonStatus(undefined);
+                          }}
+                          disabled={busy}
+                        />
+                      </div>
+                      {existingPersonId ? (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {th("employment.hire.existingPersonNote")}
+                        </p>
+                      ) : null}
+                    </section>
+                  ) : null}
+                  {!identityLocked ? (
+                    <>
+                      {/* -- identity ------------------------------------------------- */}
+                      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className={field}>
+                          <Label>{t("kind")}</Label>
+                          {editable ? (
+                            <Select value={kind} onChange={(e) => setKind(e.target.value)}>
+                              <option value="company">{t("kindCompany")}</option>
+                              <option value="person">{t("kindPerson")}</option>
+                              <option value="customer">{t("kindCustomer")}</option>
+                              <option value="vendor">{t("kindVendor")}</option>
+                              <option value="employee">{t("kindEmployee")}</option>
+                            </Select>
+                          ) : (
+                            partyValue(kindLabel)
+                          )}
+                        </div>
+                        <div className={`${field} lg:col-span-2`}>
+                          <Label>
+                            {t("displayName")}
+                            {editable ? <span className="text-red-500"> *</span> : null}
+                          </Label>
+                          {editable ? (
+                            <>
+                              <Input
+                                value={displayName}
+                                onChange={(e) => setDisplayName(e.target.value)}
+                                placeholder={
+                                  kind === "person"
+                                    ? t("personNamePlaceholder")
+                                    : t("companyNamePlaceholder")
+                                }
+                                aria-invalid={nameError && !nameValid}
+                              />
+                              {nameError && !nameValid ? (
+                                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                                  {t("nameRequired")}
+                                </p>
+                              ) : null}
+                            </>
+                          ) : (
+                            partyValue(displayName)
+                          )}
+                        </div>
+                        <div className={field}>
+                          <Label>{t("shortCode")}</Label>
+                          {editable ? (
+                            <Input
+                              value={shortCode}
+                              onChange={(e) => setShortCode(e.target.value)}
+                              className="font-mono"
+                              placeholder={t("shortCodePlaceholder")}
+                            />
+                          ) : (
+                            partyValue(shortCode, "font-mono")
+                          )}
+                        </div>
+                        <div className={`${field} lg:col-span-2`}>
+                          <Label>{t("legalName")}</Label>
+                          {editable ? (
+                            <Input
+                              value={legalName}
+                              onChange={(e) => setLegalName(e.target.value)}
+                            />
+                          ) : (
+                            partyValue(legalName)
+                          )}
+                        </div>
+                        <div className={field}>
+                          <Label>{tc("labels.email")}</Label>
+                          {editable ? (
+                            <Input
+                              type="email"
+                              value={email}
+                              onChange={(e) => setEmail(e.target.value)}
+                            />
+                          ) : (
+                            partyValue(email)
+                          )}
+                        </div>
+                        <div className={field}>
+                          <Label>{t("phone")}</Label>
+                          {editable ? (
+                            <Input
+                              type="tel"
+                              value={phone}
+                              onChange={(e) => setPhone(e.target.value)}
+                            />
+                          ) : (
+                            partyValue(phone)
+                          )}
+                        </div>
+                        <div className={`${field} lg:col-span-2`}>
+                          <Label>{t("website")}</Label>
+                          {editable ? (
+                            <Input
+                              value={website}
+                              onChange={(e) => setWebsite(e.target.value)}
+                              placeholder={t("websitePlaceholder")}
+                            />
+                          ) : (
+                            partyValue(website)
+                          )}
+                        </div>
+                        {createMode && editable ? (
+                          <div className={field}>
+                            <Label>{tc("labels.active")}</Label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isActive}
+                                onChange={(e) => setIsActive(e.target.checked)}
+                                className={checkboxClass}
+                              />
+                              <span className="text-sm">
+                                {isActive ? tc("status.active") : tc("status.inactive")}
+                              </span>
+                            </label>
+                          </div>
+                        ) : null}
+                      </section>
+
+                      <CustomFieldInputs
+                        defs={fieldDefs}
+                        values={customValues}
+                        onChange={setCustomValues}
+                        readOnly={ro}
+                        viewer={customFieldViewer}
                       />
-                      <span className="text-sm text-slate-800 dark:text-slate-200" style={{ paddingLeft: `${s.depth * 12}px` }}>
-                        {s.name}
-                      </span>
-                    </label>
-                  ))}
-                </div> : partyValue(subsidiaries.filter((item) => additionalSubsidiaryIds.has(item.id)).map((item) => item.name).filter(Boolean).join(', '))}
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('additionalSubsidiariesHint')}</p>
-              </div>
-            </div>
-            {!createMode ? <IntercompanyRepresentationNote partyId={String(p.id)} /> : null}
-          </section>
-        ) : null}
-        </>
-        ) : null}
 
-          </>
-          )
-        ) : null}
+                      {multiSubsidiary ? (
+                        <section className="space-y-3">
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {t("subsidiariesHeading")}
+                          </h3>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className={field}>
+                              <Label>{t("primarySubsidiary")}</Label>
+                              {editable ? (
+                                <Select
+                                  value={subsidiaryId}
+                                  onChange={(e) => setSubsidiaryId(e.target.value)}
+                                >
+                                  {subsidiaries
+                                    .filter((s) => !s.isElimination)
+                                    .map((s) => (
+                                      <option
+                                        key={s.id}
+                                        value={s.id}
+                                      >{`${"— ".repeat(s.depth)}${s.name ?? ""}`}</option>
+                                    ))}
+                                </Select>
+                              ) : (
+                                partyValue(optionName(subsidiaries, subsidiaryId))
+                              )}
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {t("primarySubsidiaryHint")}
+                              </p>
+                            </div>
+                            <div className={field}>
+                              <Label>{t("additionalSubsidiaries")}</Label>
+                              {editable ? (
+                                <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
+                                  {subsidiaries
+                                    .filter((s) => !s.isElimination && s.id !== subsidiaryId)
+                                    .map((s) => (
+                                      <label
+                                        key={s.id}
+                                        className="flex cursor-pointer items-center gap-2.5 py-1.5"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={additionalSubsidiaryIds.has(s.id)}
+                                          onChange={(e) =>
+                                            setAdditionalSubsidiaryIds((previous) => {
+                                              const next = new Set(previous);
+                                              if (e.target.checked) next.add(s.id);
+                                              else next.delete(s.id);
+                                              return next;
+                                            })
+                                          }
+                                          className={checkboxClass}
+                                        />
+                                        <span
+                                          className="text-sm text-slate-800 dark:text-slate-200"
+                                          style={{ paddingLeft: `${s.depth * 12}px` }}
+                                        >
+                                          {s.name}
+                                        </span>
+                                      </label>
+                                    ))}
+                                </div>
+                              ) : (
+                                partyValue(
+                                  subsidiaries
+                                    .filter((item) => additionalSubsidiaryIds.has(item.id))
+                                    .map((item) => item.name)
+                                    .filter(Boolean)
+                                    .join(", "),
+                                )
+                              )}
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {t("additionalSubsidiariesHint")}
+                              </p>
+                            </div>
+                          </div>
+                          {!createMode ? (
+                            <IntercompanyRepresentationNote partyId={String(p.id)} />
+                          ) : null}
+                        </section>
+                      ) : null}
+                    </>
+                  ) : null}
+                </>
+              )
+            ) : null}
 
-        {/* -- roles ------------------------------------------------------
+            {/* -- roles ------------------------------------------------------
              Role-scoped open (Customers/Vendors/Employees list): only that
              role's details render, with no enable checkbox — the multi-role
              party model is an internal abstraction. The unified /parties
              directory (no `role`) keeps the full checkbox view. Roles live
              on Overview beside identity, where operators land; Accounting
              keeps the bank accounts. */}
-        {tab === 'overview' && (!effectiveLayout || !role) && ro ? (
-          <section className="space-y-5">
-            {(!role || role === 'customer') && customer.enabled ? (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tc('labels.customer')}</h3>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <PartyReadOnlyField label={t('paymentTerms')} value={optionName(paymentTerms, customer.paymentTermsId)} />
-                  <PartyReadOnlyField label={t('creditLimit')} value={customer.creditLimit} className="tabular-nums" />
-                  {multiCurrency ? <PartyReadOnlyField label={tc('labels.currency')} value={customer.currency} className="font-mono" /> : null}
-                  <PartyReadOnlyField label={t('receivableAccount')} value={optionName(accounts, customer.arAccountId)} />
-                  <PartyReadOnlyField label={t('salesRepresentative')} value={optionName(salesReps, customer.salesRepId)} />
-                  <PartyReadOnlyField label={t('taxCode')} value={optionName(taxCodes, customer.taxCodeId)} />
-                </div>
-              </div>
-            ) : null}
-            {(!role || role === 'vendor') && vendor.enabled ? (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tc('labels.vendor')}</h3>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <PartyReadOnlyField label={t('paymentMethod')} value={vendor.paymentMethod ? t(PAYMENT_METHOD_OPTIONS.find((option) => option.value === vendor.paymentMethod)?.labelKey ?? 'paymentMethods.other') : ''} />
-                  <PartyReadOnlyField label={t('eftNotificationEmail')} value={vendor.eftNotificationEmail} />
-                  <PartyReadOnlyField label={t('paymentTerms')} value={optionName(paymentTerms, vendor.paymentTermsId)} />
-                  {multiCurrency ? <PartyReadOnlyField label={tc('labels.currency')} value={vendor.currency} className="font-mono" /> : null}
-                  <PartyReadOnlyField label={t('t4aReportable')} value={vendor.is1099OrT4a ? tc('labels.yes') : tc('labels.no')} />
-                  <PartyReadOnlyField label={t('payableAccount')} value={optionName(accounts, vendor.apAccountId)} />
-                  <PartyReadOnlyField label={t('defaultExpenseAccount')} value={optionName(accounts, vendor.defaultExpenseAccountId)} />
-                  <PartyReadOnlyField label={t('taxCode')} value={optionName(taxCodes, vendor.taxCodeId)} />
-                </div>
-              </div>
-            ) : null}
-            {(!role || role === 'employee') && employee.enabled ? (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tc('labels.employee')}</h3>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <PartyReadOnlyField label={t('employeeNumber')} value={employee.employeeNumber} className="font-mono" />
-                  <PartyReadOnlyField label={t('jobTitle')} value={employee.jobTitle} />
-                  <PartyReadOnlyField label={tc('labels.department')} value={optionName(departments, employee.departmentId)} />
-                  <PartyReadOnlyField label={t('trade')} value={optionName(trades, employee.tradeId)} />
-                  {payrollEnabled ? <PartyReadOnlyField label={t('workerCompGroup')} value={optionName(workerCompGroups, employee.workerCompGroupId)} /> : null}
-                  <PartyReadOnlyField label={t('hiredOn')} value={employee.hiredOn} />
-                </div>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-
-        {tab === 'overview' && (!effectiveLayout || !role) && editable ? (
-        <>
-        <section className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {role ? t(`detailsHeading.${role}`) : t('rolesHeading')}
-          </h3>
-
-          {!role || role === 'customer' ? (
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            {!role ? (
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={customer.enabled}
-                    onChange={(e) => setCustomer({ ...customer, enabled: e.target.checked })}
-                    disabled={ro}
-                    className={checkboxClass}
-                  />
-                  <span className="text-sm font-medium">{tc('labels.customer')}</span>
-                </label>
-                {customer.enabled && !createMode ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => removePartyRole('customer', tc('labels.customer'))}
-                    className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                  >
-                    {t('removeRole')}
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {role === 'customer' || customer.enabled ? (
-              <>
-              <div className={`${role ? '' : 'mt-3 '}grid gap-3 sm:grid-cols-3`}>
-                <div className={field}>
-                  <Label>{t('paymentTerms')}</Label>
-                  <Select
-                    value={customer.paymentTermsId}
-                    onChange={(e) => setCustomer({ ...customer, paymentTermsId: e.target.value })}
-                    disabled={ro}
-                  >
-                    <option value="">—</option>
-                    {paymentTerms.map((term) => (
-                      <option key={term.id} value={term.id}>
-                        {term.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className={field}>
-                  <Label>{t('creditLimit')}</Label>
-                  <Input
-                    inputMode="decimal"
-                    className="text-right tabular-nums"
-                    value={customer.creditLimit}
-                    onChange={(e) => setCustomer({ ...customer, creditLimit: e.target.value })}
-                    disabled={ro}
-                  />
-                </div>
-                {multiCurrency ? <div className={field}>
-                  <Label>{tc('labels.currency')}</Label>
-                  <Input
-                    maxLength={3}
-                    className="font-mono uppercase"
-                    placeholder={t('currencyPlaceholder')}
-                    value={customer.currency}
-                    onChange={(e) => setCustomer({ ...customer, currency: e.target.value.toUpperCase() })}
-                    disabled={ro}
-                  />
-                </div> : null}
-                <div className={field}>
-                  <Label>{t('receivableAccount')}</Label>
-                  <Select value={customer.arAccountId} onChange={(e) => setCustomer({ ...customer, arAccountId: e.target.value })} disabled={ro}>
-                    <option value="">—</option>
-                    {accounts.filter((account) => account.type === 'asset_receivable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}
-                  </Select>
-                </div>
-                <div className={field}>
-                  <Label>{t('salesRepresentative')}</Label>
-                  <Select value={customer.salesRepId} onChange={(e) => setCustomer({ ...customer, salesRepId: e.target.value })} disabled={ro}>
-                    <option value="">—</option>
-                    {salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
-                  </Select>
-                </div>
-                <div className={field}>
-                  <Label>{t('taxCode')}</Label>
-                  <Select value={customer.taxCodeId} onChange={(e) => setCustomer({ ...customer, taxCodeId: e.target.value })} disabled={ro}>
-                    <option value="">—</option>
-                    {taxCodes.map((code) => <option key={code.id} value={code.id}>{code.label ?? code.name}</option>)}
-                  </Select>
-                </div>
-                <label className="flex items-center gap-2 self-end pb-2">
-                  <input
-                    type="checkbox"
-                    checked={customer.isOnHold}
-                    onChange={(event) => setCustomer({ ...customer, isOnHold: event.target.checked })}
-                    disabled={ro}
-                    className={checkboxClass}
-                  />
-                  <span className="text-sm">{t('creditHold')}</span>
-                </label>
-                {customer.isOnHold ? (
-                  <div className={`${field} sm:col-span-2`}>
-                    <Label>{t('holdReason')}</Label>
-                    <Input value={customer.holdReason} onChange={(event) => setCustomer({ ...customer, holdReason: event.target.value })} disabled={ro} />
+            {tab === "overview" && (!effectiveLayout || !role) && ro ? (
+              <section className="space-y-5">
+                {(!role || role === "customer") && customer.enabled ? (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {tc("labels.customer")}
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <PartyReadOnlyField
+                        label={t("paymentTerms")}
+                        value={optionName(paymentTerms, customer.paymentTermsId)}
+                      />
+                      <PartyReadOnlyField
+                        label={t("creditLimit")}
+                        value={customer.creditLimit}
+                        className="tabular-nums"
+                      />
+                      {multiCurrency ? (
+                        <PartyReadOnlyField
+                          label={tc("labels.currency")}
+                          value={customer.currency}
+                          className="font-mono"
+                        />
+                      ) : null}
+                      <PartyReadOnlyField
+                        label={t("receivableAccount")}
+                        value={optionName(accounts, customer.arAccountId)}
+                      />
+                      <PartyReadOnlyField
+                        label={t("salesRepresentative")}
+                        value={optionName(salesReps, customer.salesRepId)}
+                      />
+                      <PartyReadOnlyField
+                        label={t("taxCode")}
+                        value={optionName(taxCodes, customer.taxCodeId)}
+                      />
+                    </div>
                   </div>
                 ) : null}
-              </div>
+                {(!role || role === "vendor") && vendor.enabled ? (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {tc("labels.vendor")}
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <PartyReadOnlyField
+                        label={t("paymentMethod")}
+                        value={
+                          vendor.paymentMethod
+                            ? t(
+                                PAYMENT_METHOD_OPTIONS.find(
+                                  (option) => option.value === vendor.paymentMethod,
+                                )?.labelKey ?? "paymentMethods.other",
+                              )
+                            : ""
+                        }
+                      />
+                      <PartyReadOnlyField
+                        label={t("eftNotificationEmail")}
+                        value={vendor.eftNotificationEmail}
+                      />
+                      <PartyReadOnlyField
+                        label={t("paymentTerms")}
+                        value={optionName(paymentTerms, vendor.paymentTermsId)}
+                      />
+                      {multiCurrency ? (
+                        <PartyReadOnlyField
+                          label={tc("labels.currency")}
+                          value={vendor.currency}
+                          className="font-mono"
+                        />
+                      ) : null}
+                      <PartyReadOnlyField
+                        label={t("t4aReportable")}
+                        value={vendor.is1099OrT4a ? tc("labels.yes") : tc("labels.no")}
+                      />
+                      <PartyReadOnlyField
+                        label={t("payableAccount")}
+                        value={optionName(accounts, vendor.apAccountId)}
+                      />
+                      <PartyReadOnlyField
+                        label={t("defaultExpenseAccount")}
+                        value={optionName(accounts, vendor.defaultExpenseAccountId)}
+                      />
+                      <PartyReadOnlyField
+                        label={t("taxCode")}
+                        value={optionName(taxCodes, vendor.taxCodeId)}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                {(!role || role === "employee") && employee.enabled ? (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {tc("labels.employee")}
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <PartyReadOnlyField
+                        label={t("employeeNumber")}
+                        value={employee.employeeNumber}
+                        className="font-mono"
+                      />
+                      <PartyReadOnlyField label={t("jobTitle")} value={employee.jobTitle} />
+                      <PartyReadOnlyField
+                        label={tc("labels.department")}
+                        value={optionName(departments, employee.departmentId)}
+                      />
+                      <PartyReadOnlyField
+                        label={t("trade")}
+                        value={optionName(trades, employee.tradeId)}
+                      />
+                      {payrollEnabled ? (
+                        <PartyReadOnlyField
+                          label={t("workerCompGroup")}
+                          value={optionName(workerCompGroups, employee.workerCompGroupId)}
+                        />
+                      ) : null}
+                      <PartyReadOnlyField label={t("hiredOn")} value={employee.hiredOn} />
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+
+            {tab === "overview" && (!effectiveLayout || !role) && editable ? (
+              <>
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {role ? t(`detailsHeading.${role}`) : t("rolesHeading")}
+                  </h3>
+
+                  {!role || role === "customer" ? (
+                    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                      {!role ? (
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={customer.enabled}
+                              onChange={(e) =>
+                                setCustomer({ ...customer, enabled: e.target.checked })
+                              }
+                              disabled={ro}
+                              className={checkboxClass}
+                            />
+                            <span className="text-sm font-medium">{tc("labels.customer")}</span>
+                          </label>
+                          {customer.enabled && !createMode ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => removePartyRole("customer", tc("labels.customer"))}
+                              className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                            >
+                              {t("removeRole")}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {role === "customer" || customer.enabled ? (
+                        <>
+                          <div className={`${role ? "" : "mt-3 "}grid gap-3 sm:grid-cols-3`}>
+                            <div className={field}>
+                              <Label>{t("paymentTerms")}</Label>
+                              <Select
+                                value={customer.paymentTermsId}
+                                onChange={(e) =>
+                                  setCustomer({ ...customer, paymentTermsId: e.target.value })
+                                }
+                                disabled={ro}
+                              >
+                                <option value="">—</option>
+                                {paymentTerms.map((term) => (
+                                  <option key={term.id} value={term.id}>
+                                    {term.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                            <div className={field}>
+                              <Label>{t("creditLimit")}</Label>
+                              <Input
+                                inputMode="decimal"
+                                className="text-right tabular-nums"
+                                value={customer.creditLimit}
+                                onChange={(e) =>
+                                  setCustomer({ ...customer, creditLimit: e.target.value })
+                                }
+                                disabled={ro}
+                              />
+                            </div>
+                            {multiCurrency ? (
+                              <div className={field}>
+                                <Label>{tc("labels.currency")}</Label>
+                                <Input
+                                  maxLength={3}
+                                  className="font-mono uppercase"
+                                  placeholder={t("currencyPlaceholder")}
+                                  value={customer.currency}
+                                  onChange={(e) =>
+                                    setCustomer({
+                                      ...customer,
+                                      currency: e.target.value.toUpperCase(),
+                                    })
+                                  }
+                                  disabled={ro}
+                                />
+                              </div>
+                            ) : null}
+                            <div className={field}>
+                              <Label>{t("receivableAccount")}</Label>
+                              <Select
+                                value={customer.arAccountId}
+                                onChange={(e) =>
+                                  setCustomer({ ...customer, arAccountId: e.target.value })
+                                }
+                                disabled={ro}
+                              >
+                                <option value="">—</option>
+                                {accounts
+                                  .filter((account) => account.type === "asset_receivable")
+                                  .map((account) => (
+                                    <option key={account.id} value={account.id}>
+                                      {account.label ?? account.name}
+                                    </option>
+                                  ))}
+                              </Select>
+                            </div>
+                            <div className={field}>
+                              <Label>{t("salesRepresentative")}</Label>
+                              <Select
+                                value={customer.salesRepId}
+                                onChange={(e) =>
+                                  setCustomer({ ...customer, salesRepId: e.target.value })
+                                }
+                                disabled={ro}
+                              >
+                                <option value="">—</option>
+                                {salesReps.map((rep) => (
+                                  <option key={rep.id} value={rep.id}>
+                                    {rep.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                            <div className={field}>
+                              <Label>{t("taxCode")}</Label>
+                              <Select
+                                value={customer.taxCodeId}
+                                onChange={(e) =>
+                                  setCustomer({ ...customer, taxCodeId: e.target.value })
+                                }
+                                disabled={ro}
+                              >
+                                <option value="">—</option>
+                                {taxCodes.map((code) => (
+                                  <option key={code.id} value={code.id}>
+                                    {code.label ?? code.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                            <label className="flex items-center gap-2 self-end pb-2">
+                              <input
+                                type="checkbox"
+                                checked={customer.isOnHold}
+                                onChange={(event) =>
+                                  setCustomer({ ...customer, isOnHold: event.target.checked })
+                                }
+                                disabled={ro}
+                                className={checkboxClass}
+                              />
+                              <span className="text-sm">{t("creditHold")}</span>
+                            </label>
+                            {customer.isOnHold ? (
+                              <div className={`${field} sm:col-span-2`}>
+                                <Label>{t("holdReason")}</Label>
+                                <Input
+                                  value={customer.holdReason}
+                                  onChange={(event) =>
+                                    setCustomer({ ...customer, holdReason: event.target.value })
+                                  }
+                                  disabled={ro}
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {!role || role === "vendor" ? (
+                    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                      {!role ? (
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={vendor.enabled}
+                              onChange={(e) => setVendor({ ...vendor, enabled: e.target.checked })}
+                              disabled={ro}
+                              className={checkboxClass}
+                            />
+                            <span className="text-sm font-medium">{tc("labels.vendor")}</span>
+                          </label>
+                          {vendor.enabled && !createMode ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => removePartyRole("vendor", tc("labels.vendor"))}
+                              className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                            >
+                              {t("removeRole")}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {role === "vendor" || vendor.enabled ? (
+                        <div className={`${role ? "" : "mt-3 "}grid gap-3 sm:grid-cols-3`}>
+                          <div className={field}>
+                            <Label>{t("paymentMethod")}</Label>
+                            <Select
+                              value={vendor.paymentMethod}
+                              onChange={(e) =>
+                                setVendor({ ...vendor, paymentMethod: e.target.value })
+                              }
+                              disabled={ro}
+                            >
+                              <option value="">—</option>
+                              {PAYMENT_METHOD_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {t(o.labelKey)}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <div className={`${field} sm:col-span-2`}>
+                            <Label>{t("eftNotificationEmail")}</Label>
+                            <Input
+                              type="email"
+                              value={vendor.eftNotificationEmail}
+                              onChange={(e) =>
+                                setVendor({ ...vendor, eftNotificationEmail: e.target.value })
+                              }
+                              disabled={ro}
+                            />
+                          </div>
+                          <div className={field}>
+                            <Label>{t("paymentTerms")}</Label>
+                            <Select
+                              value={vendor.paymentTermsId}
+                              onChange={(e) =>
+                                setVendor({ ...vendor, paymentTermsId: e.target.value })
+                              }
+                              disabled={ro}
+                            >
+                              <option value="">—</option>
+                              {paymentTerms.map((term) => (
+                                <option key={term.id} value={term.id}>
+                                  {term.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          {multiCurrency ? (
+                            <div className={field}>
+                              <Label>{tc("labels.currency")}</Label>
+                              <Input
+                                maxLength={3}
+                                className="font-mono uppercase"
+                                placeholder={t("currencyPlaceholder")}
+                                value={vendor.currency}
+                                onChange={(e) =>
+                                  setVendor({ ...vendor, currency: e.target.value.toUpperCase() })
+                                }
+                                disabled={ro}
+                              />
+                            </div>
+                          ) : null}
+                          <label className="flex items-center gap-2 self-end pb-2">
+                            <input
+                              type="checkbox"
+                              checked={vendor.is1099OrT4a}
+                              onChange={(e) =>
+                                setVendor({ ...vendor, is1099OrT4a: e.target.checked })
+                              }
+                              disabled={ro}
+                              className={checkboxClass}
+                            />
+                            <span className="text-sm">{t("t4aReportable")}</span>
+                          </label>
+                          <div className={field}>
+                            <Label>{t("payableAccount")}</Label>
+                            <Select
+                              value={vendor.apAccountId}
+                              onChange={(e) =>
+                                setVendor({ ...vendor, apAccountId: e.target.value })
+                              }
+                              disabled={ro}
+                            >
+                              <option value="">—</option>
+                              {accounts
+                                .filter((account) => account.type === "liability_payable")
+                                .map((account) => (
+                                  <option key={account.id} value={account.id}>
+                                    {account.label ?? account.name}
+                                  </option>
+                                ))}
+                            </Select>
+                          </div>
+                          <div className={field}>
+                            <Label>{t("defaultExpenseAccount")}</Label>
+                            <Select
+                              value={vendor.defaultExpenseAccountId}
+                              onChange={(e) =>
+                                setVendor({ ...vendor, defaultExpenseAccountId: e.target.value })
+                              }
+                              disabled={ro}
+                            >
+                              <option value="">—</option>
+                              {accounts
+                                .filter(
+                                  (account) =>
+                                    account.type === "expense" ||
+                                    account.type === "expense_other" ||
+                                    account.type === "cogs",
+                                )
+                                .map((account) => (
+                                  <option key={account.id} value={account.id}>
+                                    {account.label ?? account.name}
+                                  </option>
+                                ))}
+                            </Select>
+                          </div>
+                          <div className={field}>
+                            <Label>{t("taxCode")}</Label>
+                            <Select
+                              value={vendor.taxCodeId}
+                              onChange={(e) => setVendor({ ...vendor, taxCodeId: e.target.value })}
+                              disabled={ro}
+                            >
+                              <option value="">—</option>
+                              {taxCodes.map((code) => (
+                                <option key={code.id} value={code.id}>
+                                  {code.label ?? code.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <label className="flex items-center gap-2 self-end pb-2">
+                            <input
+                              type="checkbox"
+                              checked={vendor.isOnHold}
+                              onChange={(event) =>
+                                setVendor({ ...vendor, isOnHold: event.target.checked })
+                              }
+                              disabled={ro}
+                              className={checkboxClass}
+                            />
+                            <span className="text-sm">{t("paymentHold")}</span>
+                          </label>
+                          {vendor.isOnHold ? (
+                            <div className={`${field} sm:col-span-2`}>
+                              <Label>{t("holdReason")}</Label>
+                              <Input
+                                value={vendor.holdReason}
+                                onChange={(event) =>
+                                  setVendor({ ...vendor, holdReason: event.target.value })
+                                }
+                                disabled={ro}
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {!role || role === "employee" ? (
+                    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                      {!role ? (
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={employee.enabled}
+                              onChange={(e) =>
+                                setEmployee({ ...employee, enabled: e.target.checked })
+                              }
+                              disabled={ro}
+                              className={checkboxClass}
+                            />
+                            <span className="text-sm font-medium">{tc("labels.employee")}</span>
+                          </label>
+                          {employee.enabled && !createMode ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => removePartyRole("employee", tc("labels.employee"))}
+                              className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                            >
+                              {t("removeRole")}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {role === "employee" || employee.enabled ? (
+                        <div className={`${role ? "" : "mt-3 "}grid gap-3 sm:grid-cols-4`}>
+                          <div className={field}>
+                            <Label>{t("employeeNumber")}</Label>
+                            <Input
+                              className="font-mono"
+                              value={employee.employeeNumber}
+                              onChange={(e) =>
+                                setEmployee({ ...employee, employeeNumber: e.target.value })
+                              }
+                              disabled={ro}
+                            />
+                          </div>
+                          <div className={field}>
+                            <Label>{t("jobTitle")}</Label>
+                            <Input
+                              value={employee.jobTitle}
+                              onChange={(e) =>
+                                setEmployee({ ...employee, jobTitle: e.target.value })
+                              }
+                              disabled={ro}
+                              placeholder={t("jobTitlePlaceholder")}
+                            />
+                          </div>
+                          <div className={field}>
+                            <Label>{tc("labels.department")}</Label>
+                            <Select
+                              value={employee.departmentId}
+                              onChange={(e) =>
+                                setEmployee({ ...employee, departmentId: e.target.value })
+                              }
+                              disabled={ro}
+                            >
+                              <option value="">—</option>
+                              {departments.map((d) => (
+                                <option key={d.id} value={d.id}>
+                                  {d.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <div className={field}>
+                            <Label>{t("trade")}</Label>
+                            <Select
+                              value={employee.tradeId}
+                              onChange={(e) =>
+                                setEmployee({ ...employee, tradeId: e.target.value })
+                              }
+                              disabled={ro}
+                            >
+                              <option value="">—</option>
+                              {trades.map((trade) => (
+                                <option key={trade.id} value={trade.id}>
+                                  {trade.name}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          {payrollEnabled ? (
+                            <div className={field}>
+                              <Label>{t("workerCompGroup")}</Label>
+                              <Select
+                                value={employee.workerCompGroupId}
+                                onChange={(e) =>
+                                  setEmployee({ ...employee, workerCompGroupId: e.target.value })
+                                }
+                                disabled={ro}
+                              >
+                                <option value="">—</option>
+                                {workerCompGroups.map((g) => (
+                                  <option key={g.id} value={g.id}>
+                                    {g.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                          ) : null}
+                          <div className={field}>
+                            <Label>{t("hiredOn")}</Label>
+                            <DateField
+                              value={employee.hiredOn}
+                              onChange={(value) => setEmployee({ ...employee, hiredOn: value })}
+                              disabled={ro}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </section>
               </>
             ) : null}
-          </div>
-          ) : null}
 
-          {!role || role === 'vendor' ? (
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            {!role ? (
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={vendor.enabled}
-                    onChange={(e) => setVendor({ ...vendor, enabled: e.target.checked })}
-                    disabled={ro}
-                    className={checkboxClass}
-                  />
-                  <span className="text-sm font-medium">{tc('labels.vendor')}</span>
-                </label>
-                {vendor.enabled && !createMode ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => removePartyRole('vendor', tc('labels.vendor'))}
-                    className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                  >
-                    {t('removeRole')}
-                  </Button>
-                ) : null}
-              </div>
+            {tab === "invoicing" && role === "customer" ? (
+              <section className="space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {tInv("heading")}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {tInv("customerHint")}
+                  </p>
+                </div>
+                <InvoicingPreferenceFields
+                  value={invoicingPref}
+                  onChange={setInvoicingPref}
+                  disabled={ro}
+                />
+              </section>
             ) : null}
-            {role === 'vendor' || vendor.enabled ? (
-              <div className={`${role ? '' : 'mt-3 '}grid gap-3 sm:grid-cols-3`}>
-                <div className={field}>
-                  <Label>{t('paymentMethod')}</Label>
-                  <Select
-                    value={vendor.paymentMethod}
-                    onChange={(e) => setVendor({ ...vendor, paymentMethod: e.target.value })}
-                    disabled={ro}
-                  >
-                    <option value="">—</option>
-                    {PAYMENT_METHOD_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {t(o.labelKey)}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className={`${field} sm:col-span-2`}>
-                  <Label>{t('eftNotificationEmail')}</Label>
-                  <Input
-                    type="email"
-                    value={vendor.eftNotificationEmail}
-                    onChange={(e) => setVendor({ ...vendor, eftNotificationEmail: e.target.value })}
-                    disabled={ro}
-                  />
-                </div>
-                <div className={field}>
-                  <Label>{t('paymentTerms')}</Label>
-                  <Select
-                    value={vendor.paymentTermsId}
-                    onChange={(e) => setVendor({ ...vendor, paymentTermsId: e.target.value })}
-                    disabled={ro}
-                  >
-                    <option value="">—</option>
-                    {paymentTerms.map((term) => (
-                      <option key={term.id} value={term.id}>
-                        {term.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                {multiCurrency ? <div className={field}>
-                  <Label>{tc('labels.currency')}</Label>
-                  <Input
-                    maxLength={3}
-                    className="font-mono uppercase"
-                    placeholder={t('currencyPlaceholder')}
-                    value={vendor.currency}
-                    onChange={(e) => setVendor({ ...vendor, currency: e.target.value.toUpperCase() })}
-                    disabled={ro}
-                  />
-                </div> : null}
-                <label className="flex items-center gap-2 self-end pb-2">
-                  <input
-                    type="checkbox"
-                    checked={vendor.is1099OrT4a}
-                    onChange={(e) => setVendor({ ...vendor, is1099OrT4a: e.target.checked })}
-                    disabled={ro}
-                    className={checkboxClass}
-                  />
-                  <span className="text-sm">{t('t4aReportable')}</span>
-                </label>
-                <div className={field}>
-                  <Label>{t('payableAccount')}</Label>
-                  <Select value={vendor.apAccountId} onChange={(e) => setVendor({ ...vendor, apAccountId: e.target.value })} disabled={ro}>
-                    <option value="">—</option>
-                    {accounts.filter((account) => account.type === 'liability_payable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}
-                  </Select>
-                </div>
-                <div className={field}>
-                  <Label>{t('defaultExpenseAccount')}</Label>
-                  <Select value={vendor.defaultExpenseAccountId} onChange={(e) => setVendor({ ...vendor, defaultExpenseAccountId: e.target.value })} disabled={ro}>
-                    <option value="">—</option>
-                    {accounts.filter((account) => account.type === 'expense' || account.type === 'expense_other' || account.type === 'cogs').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}
-                  </Select>
-                </div>
-                <div className={field}>
-                  <Label>{t('taxCode')}</Label>
-                  <Select value={vendor.taxCodeId} onChange={(e) => setVendor({ ...vendor, taxCodeId: e.target.value })} disabled={ro}>
-                    <option value="">—</option>
-                    {taxCodes.map((code) => <option key={code.id} value={code.id}>{code.label ?? code.name}</option>)}
-                  </Select>
-                </div>
-                <label className="flex items-center gap-2 self-end pb-2">
-                  <input
-                    type="checkbox"
-                    checked={vendor.isOnHold}
-                    onChange={(event) => setVendor({ ...vendor, isOnHold: event.target.checked })}
-                    disabled={ro}
-                    className={checkboxClass}
-                  />
-                  <span className="text-sm">{t('paymentHold')}</span>
-                </label>
-                {vendor.isOnHold ? (
-                  <div className={`${field} sm:col-span-2`}>
-                    <Label>{t('holdReason')}</Label>
-                    <Input value={vendor.holdReason} onChange={(event) => setVendor({ ...vendor, holdReason: event.target.value })} disabled={ro} />
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          ) : null}
-
-          {!role || role === 'employee' ? (
-          <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            {!role ? (
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={employee.enabled}
-                    onChange={(e) => setEmployee({ ...employee, enabled: e.target.checked })}
-                    disabled={ro}
-                    className={checkboxClass}
-                  />
-                  <span className="text-sm font-medium">{tc('labels.employee')}</span>
-                </label>
-                {employee.enabled && !createMode ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => removePartyRole('employee', tc('labels.employee'))}
-                    className="ml-auto text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                  >
-                    {t('removeRole')}
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {role === 'employee' || employee.enabled ? (
-              <div className={`${role ? '' : 'mt-3 '}grid gap-3 sm:grid-cols-4`}>
-                <div className={field}>
-                  <Label>{t('employeeNumber')}</Label>
-                  <Input
-                    className="font-mono"
-                    value={employee.employeeNumber}
-                    onChange={(e) => setEmployee({ ...employee, employeeNumber: e.target.value })}
-                    disabled={ro}
-                  />
-                </div>
-                <div className={field}>
-                  <Label>{t('jobTitle')}</Label>
-                  <Input
-                    value={employee.jobTitle}
-                    onChange={(e) => setEmployee({ ...employee, jobTitle: e.target.value })}
-                    disabled={ro}
-                    placeholder={t('jobTitlePlaceholder')}
-                  />
-                </div>
-                <div className={field}>
-                  <Label>{tc('labels.department')}</Label>
-                  <Select
-                    value={employee.departmentId}
-                    onChange={(e) => setEmployee({ ...employee, departmentId: e.target.value })}
-                    disabled={ro}
-                  >
-                    <option value="">—</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className={field}>
-                  <Label>{t('trade')}</Label>
-                  <Select
-                    value={employee.tradeId}
-                    onChange={(e) => setEmployee({ ...employee, tradeId: e.target.value })}
-                    disabled={ro}
-                  >
-                    <option value="">—</option>
-                    {trades.map((trade) => (
-                      <option key={trade.id} value={trade.id}>
-                        {trade.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                {payrollEnabled ? <div className={field}>
-                  <Label>{t('workerCompGroup')}</Label>
-                  <Select
-                    value={employee.workerCompGroupId}
-                    onChange={(e) => setEmployee({ ...employee, workerCompGroupId: e.target.value })}
-                    disabled={ro}
-                  >
-                    <option value="">—</option>
-                    {workerCompGroups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div> : null}
-                <div className={field}>
-                  <Label>{t('hiredOn')}</Label>
-                  <DateField
-                    value={employee.hiredOn}
-                    onChange={(value) => setEmployee({ ...employee, hiredOn: value })}
-                    disabled={ro}
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
-          ) : null}
-        </section>
-
-        </>
-        ) : null}
-
-        {tab === 'invoicing' && role === 'customer' ? (
-          <section className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tInv('heading')}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{tInv('customerHint')}</p>
-            </div>
-            <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
-          </section>
-        ) : null}
-        {tab === 'pricing' && role === 'customer' && !isPlaceholderName ? (
-          <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} editable={editable} />
-        ) : null}
-        {tab === 'billing' && showBillingTab && !createMode ? (
-          <BillingRelationshipsSection
-            partyId={String(p.id)}
-            editable={editable && (consolidatedBilling?.canManage ?? false)}
-          />
-        ) : null}
-        {tab === 'paymentMethods' && showPaymentMethodsTab && !createMode ? (
-          <div className="space-y-4">
-            <DrawerTabStrip
-              tabs={[
-                { key: 'methods', label: t('paymentMethodSubtabs.methods') },
-                { key: 'autopay', label: t('paymentMethodSubtabs.autopay') },
-              ]}
-              activeKey={paymentMethodsSubTab}
-              onSelect={(key) => setPaymentMethodsSubTab(key as 'methods' | 'autopay')}
-              ariaLabel={t('paymentMethodSubtabs.ariaLabel')}
-            />
-            <div hidden={paymentMethodsSubTab !== 'methods'}>
-              <PartyPaymentMethodsPanel
-                partyId={String(p.id)}
-                canManageMethods={autopay?.canManageMethods ?? false}
-                revision={paymentMethodsRevision}
-                onChanged={() => setPaymentMethodsRevision((value) => value + 1)}
+            {tab === "pricing" && role === "customer" && !isPlaceholderName ? (
+              <RateBookAssignmentSection
+                scope="customer"
+                scopeId={String(p.id)}
+                editable={editable}
               />
-            </div>
-            <div hidden={paymentMethodsSubTab !== 'autopay'}>
-              <PartyAutopayPanel
+            ) : null}
+            {tab === "billing" && showBillingTab && !createMode ? (
+              <BillingRelationshipsSection
                 partyId={String(p.id)}
-                canManageAutopay={autopay?.canManageAutopay ?? false}
-                canManageMethods={autopay?.canManageMethods ?? false}
-                revision={paymentMethodsRevision}
-                onChanged={() => setPaymentMethodsRevision((value) => value + 1)}
+                editable={editable && (consolidatedBilling?.canManage ?? false)}
               />
-            </div>
-          </div>
-        ) : null}
-        {tab === 'store-credit' && showStoreCreditTab && storedValue ? (
-          <StoreCreditPanel balances={storedValue.balances} />
-        ) : null}
-        {tab === 'debitMandates' && showDebitMandatesTab && debitMandates ? (
-          <PartyDebitMandatesPanel partyId={debitMandates.partyId} />
-        ) : null}
-        {tab === 'pricing' && taxIds && !isPlaceholderName ? (
-          <PartyTaxIdSection partyId={taxIds.partyId} canManage={taxIds.canManage} />
-        ) : null}
+            ) : null}
+            {tab === "paymentMethods" && showPaymentMethodsTab && !createMode ? (
+              <div className="space-y-4">
+                <DrawerTabStrip
+                  tabs={[
+                    { key: "methods", label: t("paymentMethodSubtabs.methods") },
+                    { key: "autopay", label: t("paymentMethodSubtabs.autopay") },
+                  ]}
+                  activeKey={paymentMethodsSubTab}
+                  onSelect={(key) => setPaymentMethodsSubTab(key as "methods" | "autopay")}
+                  ariaLabel={t("paymentMethodSubtabs.ariaLabel")}
+                />
+                <div hidden={paymentMethodsSubTab !== "methods"}>
+                  <PartyPaymentMethodsPanel
+                    partyId={String(p.id)}
+                    canManageMethods={autopay?.canManageMethods ?? false}
+                    revision={paymentMethodsRevision}
+                    onChanged={() => setPaymentMethodsRevision((value) => value + 1)}
+                  />
+                </div>
+                <div hidden={paymentMethodsSubTab !== "autopay"}>
+                  <PartyAutopayPanel
+                    partyId={String(p.id)}
+                    canManageAutopay={autopay?.canManageAutopay ?? false}
+                    canManageMethods={autopay?.canManageMethods ?? false}
+                    revision={paymentMethodsRevision}
+                    onChanged={() => setPaymentMethodsRevision((value) => value + 1)}
+                  />
+                </div>
+              </div>
+            ) : null}
+            {tab === "store-credit" && showStoreCreditTab && storedValue ? (
+              <StoreCreditPanel balances={storedValue.balances} />
+            ) : null}
+            {tab === "debitMandates" && showDebitMandatesTab && debitMandates ? (
+              <PartyDebitMandatesPanel partyId={debitMandates.partyId} />
+            ) : null}
+            {tab === "pricing" && taxIds && !isPlaceholderName ? (
+              <PartyTaxIdSection partyId={taxIds.partyId} canManage={taxIds.canManage} />
+            ) : null}
 
-        {tab === 'transactions' ? <TransactionSublist partyId={String(p.id)} role={role} /> : null}
-        {tab === 'pulse' && role === 'customer' && !isPlaceholderName ? <PartyPulseSection partyId={String(p.id)} /> : null}
-        {tab === 'activities' && role === 'customer' && canReadActivities ? (
-          <ActivitySublist partyId={String(p.id)} canManage={canManageActivities} />
-        ) : null}
+            {tab === "transactions" ? (
+              <TransactionSublist partyId={String(p.id)} role={role} />
+            ) : null}
+            {tab === "pulse" && role === "customer" && !isPlaceholderName ? (
+              <PartyPulseSection partyId={String(p.id)} />
+            ) : null}
+            {tab === "activities" && role === "customer" && canReadActivities ? (
+              <ActivitySublist partyId={String(p.id)} canManage={canManageActivities} />
+            ) : null}
 
-        {tab === 'contacts' ? (
-          <ReadOnlyLineSublist
-            title={t('contactsHeading')}
-            description={t('contactsDescription')}
-            icon={<Users size={16} />}
-            action={canManage ? <SublistAddButton label={t('addContact')} onClick={() => setContactDraft({ index: null, row: emptyContact() })} /> : undefined}
-            emptyText={t('noContacts')}
-            columns={contactColumns}
-            rows={contacts}
-            searchPlaceholder={t('contactSearch')}
-            onEdit={canManage ? (row, index) => setContactDraft({ index, row: { ...row } }) : undefined}
-          />
-        ) : null}
+            {tab === "contacts" ? (
+              <ReadOnlyLineSublist
+                title={t("contactsHeading")}
+                description={t("contactsDescription")}
+                icon={<Users size={16} />}
+                action={
+                  canManage ? (
+                    <SublistAddButton
+                      label={t("addContact")}
+                      onClick={() => setContactDraft({ index: null, row: emptyContact() })}
+                    />
+                  ) : undefined
+                }
+                emptyText={t("noContacts")}
+                columns={contactColumns}
+                rows={contacts}
+                searchPlaceholder={t("contactSearch")}
+                onEdit={
+                  canManage
+                    ? (row, index) => setContactDraft({ index, row: { ...row } })
+                    : undefined
+                }
+              />
+            ) : null}
 
-        {tab === 'addresses' ? (
-          <ReadOnlyLineSublist
-            title={t('addressesHeading')}
-            description={t('addressesDescription')}
-            icon={<Building2 size={16} />}
-            action={canManage ? <SublistAddButton label={t('addAddress')} onClick={() => setAddressDraft({ index: null, row: emptyAddress() })} /> : undefined}
-            emptyText={t('noAddresses')}
-            columns={addressColumns}
-            rows={addresses}
-            searchPlaceholder={t('addressSearch')}
-            onEdit={canManage ? (row, index) => setAddressDraft({ index, row: { ...row } }) : undefined}
-          />
-        ) : null}
+            {tab === "addresses" ? (
+              <ReadOnlyLineSublist
+                title={t("addressesHeading")}
+                description={t("addressesDescription")}
+                icon={<Building2 size={16} />}
+                action={
+                  canManage ? (
+                    <SublistAddButton
+                      label={t("addAddress")}
+                      onClick={() => setAddressDraft({ index: null, row: emptyAddress() })}
+                    />
+                  ) : undefined
+                }
+                emptyText={t("noAddresses")}
+                columns={addressColumns}
+                rows={addresses}
+                searchPlaceholder={t("addressSearch")}
+                onEdit={
+                  canManage
+                    ? (row, index) => setAddressDraft({ index, row: { ...row } })
+                    : undefined
+                }
+              />
+            ) : null}
 
-        {tab === 'employment' && showEmploymentTab && hrm ? (
-          hrm.employmentIds.length === 1 ? (
-            <div className="space-y-6 p-1">
-              <EmploymentTab employmentId={hrm.employmentIds[0] as string} canManageHrm={hrm.canManageHrm} canReadExits={hrm.canReadExits} canRecordExit={hrm.canRecordExit} canVerb={hrm.canVerb ?? false} departmentOptions={departments.map((option) => ({ value: option.id, label: option.label ?? option.name ?? option.id }))} />
-              {/* Direct deposit at hire: the native party bank path with its
+            {tab === "employment" && showEmploymentTab && hrm ? (
+              hrm.employmentIds.length === 1 ? (
+                <div className="space-y-6 p-1">
+                  <EmploymentTab
+                    employmentId={hrm.employmentIds[0] as string}
+                    canManageHrm={hrm.canManageHrm}
+                    canReadExits={hrm.canReadExits}
+                    canRecordExit={hrm.canRecordExit}
+                    canVerb={hrm.canVerb ?? false}
+                    departmentOptions={departments.map((option) => ({
+                      value: option.id,
+                      label: option.label ?? option.name ?? option.id,
+                    }))}
+                  />
+                  {/* Direct deposit at hire: the native party bank path with its
                   approval controls, offered where the hiring operator works.
                   HR/payroll manage captures; pure readers see no section. */}
-              {canManageEmployeeBanks ? (
-                <BankAccountsPanel
-                  partyId={String(p.id)}
-                  initialAccounts={payload.bankAccounts}
-                  canManage={canManage || canManageEmployeeBanks}
-                  multiCurrency={multiCurrency}
-                  readOnly={!editable && !canManageEmployeeBanks}
-                />
-              ) : null}
-            </div>
-          ) : hrm.employmentIds.length === 0 ? (
-            <div className="space-y-2 p-1">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {th('employment.noRecord.title')}
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{th('employment.noRecord.description')}</p>
-              {hrm.canManageHrm && !createMode ? (
-                <div>
-                  <Button size="sm" onClick={() => setHiring(true)}>
-                    <Plus size={14} />{th('employment.hire.button')}
-                  </Button>
+                  {canManageEmployeeBanks ? (
+                    <BankAccountsPanel
+                      partyId={String(p.id)}
+                      initialAccounts={payload.bankAccounts}
+                      canManage={canManage || canManageEmployeeBanks}
+                      multiCurrency={multiCurrency}
+                      readOnly={!editable && !canManageEmployeeBanks}
+                    />
+                  ) : null}
                 </div>
-              ) : null}
-              {hiring ? (
-                <HireEmploymentDrawer
-                  partyId={String(p.id)}
-                  partyName={p.display_name}
-                  departmentOptions={departments.map((option) => ({ value: option.id, label: option.label ?? option.name ?? option.id }))}
-                  stacked
-                  onClose={() => setHiring(false)}
-                  onSaved={() => setHiring(false)}
+              ) : hrm.employmentIds.length === 0 ? (
+                <div className="space-y-2 p-1">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {th("employment.noRecord.title")}
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {th("employment.noRecord.description")}
+                  </p>
+                  {hrm.canManageHrm && !createMode ? (
+                    <div>
+                      <Button size="sm" onClick={() => setHiring(true)}>
+                        <Plus size={14} />
+                        {th("employment.hire.button")}
+                      </Button>
+                    </div>
+                  ) : null}
+                  {hiring ? (
+                    <HireEmploymentDrawer
+                      partyId={String(p.id)}
+                      partyName={p.display_name}
+                      departmentOptions={departments.map((option) => ({
+                        value: option.id,
+                        label: option.label ?? option.name ?? option.id,
+                      }))}
+                      stacked
+                      onClose={() => setHiring(false)}
+                      onSaved={() => setHiring(false)}
+                    />
+                  ) : null}
+                </div>
+              ) : (
+                <div className="space-y-2 p-1">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {th("employment.multiple.title")}
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {th("employment.multiple.description", { count: hrm.employmentIds.length })}
+                  </p>
+                </div>
+              )
+            ) : null}
+          </div>
+
+          <Drawer
+            open={contactDraft !== null}
+            onClose={() => {
+              if (!relatedBusy) setContactDraft(null);
+            }}
+            stacked
+            size="md"
+            title={
+              contactDraft?.index === null
+                ? t("addContact")
+                : `${tc("actions.edit")} · ${contactDraft?.row.name || t("contactName")}`
+            }
+            footer={
+              contactDraft ? (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={relatedBusy}
+                    onClick={() => setContactDraft(null)}
+                  >
+                    {tc("actions.cancel")}
+                  </Button>
+                  <Button
+                    disabled={relatedBusy || !contactDraft.row.name.trim()}
+                    onClick={() => saveRelatedRows("contacts")}
+                  >
+                    {relatedBusy ? tc("actions.saving") : tc("actions.save")}
+                  </Button>
+                </>
+              ) : undefined
+            }
+          >
+            {contactDraft ? (
+              <>
+                <ActionAlert error={relatedAction.refusal} fallbackMessage={t("autosaveFailed")} />
+                <ContactForm
+                  row={contactDraft.row}
+                  onChange={(row) => setContactDraft({ ...contactDraft, row })}
+                  yesNo={yesNo}
+                  labels={{
+                    name: t("contactName"),
+                    title: t("contactTitle"),
+                    role: t("contactRole"),
+                    email: tc("labels.email"),
+                    phone: t("phone"),
+                    mobilePhone: t("mobilePhone"),
+                    primary: t("primaryContact"),
+                    active: tc("labels.active"),
+                  }}
                 />
-              ) : null}
-            </div>
-          ) : (
-            <div className="space-y-2 p-1">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {th('employment.multiple.title')}
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {th('employment.multiple.description', { count: hrm.employmentIds.length })}
-              </p>
-            </div>
-          )
-        ) : null}
+              </>
+            ) : null}
+          </Drawer>
 
-      </div>
-
-      <Drawer
-        open={contactDraft !== null}
-        onClose={() => { if (!relatedBusy) setContactDraft(null) }}
-        stacked
-        size="md"
-        title={contactDraft?.index === null ? t('addContact') : `${tc('actions.edit')} · ${contactDraft?.row.name || t('contactName')}`}
-        footer={contactDraft ? (
-          <>
-            <Button variant="outline" disabled={relatedBusy} onClick={() => setContactDraft(null)}>{tc('actions.cancel')}</Button>
-            <Button disabled={relatedBusy || !contactDraft.row.name.trim()} onClick={() => saveRelatedRows('contacts')}>
-              {relatedBusy ? tc('actions.saving') : tc('actions.save')}
-            </Button>
-          </>
-        ) : undefined}
-      >
-        {contactDraft ? (
-          <>
-          <ActionAlert error={relatedAction.refusal} fallbackMessage={t('autosaveFailed')} />
-          <ContactForm
-            row={contactDraft.row}
-            onChange={(row) => setContactDraft({ ...contactDraft, row })}
-            yesNo={yesNo}
-            labels={{
-              name: t('contactName'),
-              title: t('contactTitle'),
-              role: t('contactRole'),
-              email: tc('labels.email'),
-              phone: t('phone'),
-              mobilePhone: t('mobilePhone'),
-              primary: t('primaryContact'),
-              active: tc('labels.active'),
+          <Drawer
+            open={addressDraft !== null}
+            onClose={() => {
+              if (!relatedBusy) setAddressDraft(null);
             }}
-          />
-          </>
-        ) : null}
-      </Drawer>
-
-      <Drawer
-        open={addressDraft !== null}
-        onClose={() => { if (!relatedBusy) setAddressDraft(null) }}
-        stacked
-        size="md"
-        title={addressDraft?.index === null ? t('addAddress') : `${tc('actions.edit')} · ${addressDraft?.row.label || t('addressesHeading')}`}
-        footer={addressDraft ? (
-          <>
-            <Button variant="outline" disabled={relatedBusy} onClick={() => setAddressDraft(null)}>{tc('actions.cancel')}</Button>
-            <Button
-              disabled={relatedBusy || ![
-                addressDraft.row.label,
-                addressDraft.row.line1,
-                addressDraft.row.line2,
-                addressDraft.row.city,
-                addressDraft.row.region,
-                addressDraft.row.postalCode,
-                addressDraft.row.country,
-              ].some((value) => value.trim())}
-              onClick={() => saveRelatedRows('addresses')}
-            >
-              {relatedBusy ? tc('actions.saving') : tc('actions.save')}
-            </Button>
-          </>
-        ) : undefined}
-      >
-        {addressDraft ? (
-          <>
-          <ActionAlert error={relatedAction.refusal} fallbackMessage={t('autosaveFailed')} />
-          <AddressForm
-            row={addressDraft.row}
-            onChange={(row) => setAddressDraft({ ...addressDraft, row })}
-            countries={countries}
-            yesNo={yesNo}
-            labels={{
-              label: t('addressLabel'),
-              labelPlaceholder: t('addressLabelPlaceholder'),
-              line1: t('line1'),
-              line2: t('line2'),
-              city: t('city'),
-              region: t('region'),
-              postalCode: t('postalCode'),
-              country: t('country'),
-              defaultBilling: t('defaultBilling'),
-              defaultShipping: t('defaultShipping'),
-            }}
-          />
-          </>
-        ) : null}
-      </Drawer>
-      </TabContent>
-      {/* Relationship, vendor bank accounts, and vendor compliance hold
+            stacked
+            size="md"
+            title={
+              addressDraft?.index === null
+                ? t("addAddress")
+                : `${tc("actions.edit")} · ${addressDraft?.row.label || t("addressesHeading")}`
+            }
+            footer={
+              addressDraft ? (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={relatedBusy}
+                    onClick={() => setAddressDraft(null)}
+                  >
+                    {tc("actions.cancel")}
+                  </Button>
+                  <Button
+                    disabled={
+                      relatedBusy ||
+                      ![
+                        addressDraft.row.label,
+                        addressDraft.row.line1,
+                        addressDraft.row.line2,
+                        addressDraft.row.city,
+                        addressDraft.row.region,
+                        addressDraft.row.postalCode,
+                        addressDraft.row.country,
+                      ].some((value) => value.trim())
+                    }
+                    onClick={() => saveRelatedRows("addresses")}
+                  >
+                    {relatedBusy ? tc("actions.saving") : tc("actions.save")}
+                  </Button>
+                </>
+              ) : undefined
+            }
+          >
+            {addressDraft ? (
+              <>
+                <ActionAlert error={relatedAction.refusal} fallbackMessage={t("autosaveFailed")} />
+                <AddressForm
+                  row={addressDraft.row}
+                  onChange={(row) => setAddressDraft({ ...addressDraft, row })}
+                  countries={countries}
+                  yesNo={yesNo}
+                  labels={{
+                    label: t("addressLabel"),
+                    labelPlaceholder: t("addressLabelPlaceholder"),
+                    line1: t("line1"),
+                    line2: t("line2"),
+                    city: t("city"),
+                    region: t("region"),
+                    postalCode: t("postalCode"),
+                    country: t("country"),
+                    defaultBilling: t("defaultBilling"),
+                    defaultShipping: t("defaultShipping"),
+                  }}
+                />
+              </>
+            ) : null}
+          </Drawer>
+        </TabContent>
+        {/* Relationship, vendor bank accounts, and vendor compliance hold
           unsaved edits in local component state, so they stay mounted once
           visited (hidden, outside the remounting TabContent) instead of
           discarding input on every tab switch. Mounting stays lazy:
           an unvisited tab issues no requests until first opened. */}
-      {showRelationshipTab && keptTabs.has('relationship') ? (
-        <div hidden={tab !== 'relationship'} className="space-y-7 p-1">
-          <PartyRelationshipSection partyId={String(p.id)} canManage={canManageCrmAccounts} editable={mode === 'edit' && canManageCrmAccounts} />
-        </div>
-      ) : null}
-      {showExternalIdsTab && keptTabs.has('external-ids') ? (
-        <div hidden={tab !== 'external-ids'} className="space-y-7 p-1">
-          <ExternalIdsPanel links={externalIdsTab!.links} canUnlink={externalIdsTab!.canUnlink} />
-        </div>
-      ) : null}
-      {(!role || role === 'vendor') && keptTabs.has('accounting') ? (
-        <div hidden={tab !== 'accounting'} className="space-y-7 p-1">
-          <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
-        </div>
-      ) : null}
-      {showComplianceTab && keptTabs.has('compliance') ? (
-        <div hidden={tab !== 'compliance'} className="space-y-7 p-1">
-          <VendorCaptureTrust partyId={String(p.id)} />
-          {compliance ? (
-            <VendorCompliancePanel
+        {showRelationshipTab && keptTabs.has("relationship") ? (
+          <div hidden={tab !== "relationship"} className="space-y-7 p-1">
+            <PartyRelationshipSection
               partyId={String(p.id)}
-              initialClassId={compliance.classId}
-              classes={compliance.classes}
-              editable={mode === 'edit' && canManageCompliance}
+              canManage={canManageCrmAccounts}
+              editable={mode === "edit" && canManageCrmAccounts}
             />
-          ) : null}
-          {taxIdentity ? (
-            <VendorTaxIdentityPanel
+          </div>
+        ) : null}
+        {showExternalIdsTab && keptTabs.has("external-ids") ? (
+          <div hidden={tab !== "external-ids"} className="space-y-7 p-1">
+            <ExternalIdsPanel links={externalIdsTab!.links} canUnlink={externalIdsTab!.canUnlink} />
+          </div>
+        ) : null}
+        {(!role || role === "vendor") && keptTabs.has("accounting") ? (
+          <div hidden={tab !== "accounting"} className="space-y-7 p-1">
+            <BankAccountsPanel
               partyId={String(p.id)}
-              initial={taxIdentity}
-              formTypes={taxIdentityFormTypes ?? []}
-              editable={mode === 'edit' && canManageCompliance}
+              initialAccounts={payload.bankAccounts}
+              canManage={canManage}
+              multiCurrency={multiCurrency}
             />
-          ) : null}
-        </div>
-      ) : null}
-      {/* Employee compensation tabs stay mounted once visited (hidden, outside
+          </div>
+        ) : null}
+        {showComplianceTab && keptTabs.has("compliance") ? (
+          <div hidden={tab !== "compliance"} className="space-y-7 p-1">
+            <VendorCaptureTrust partyId={String(p.id)} />
+            {compliance ? (
+              <VendorCompliancePanel
+                partyId={String(p.id)}
+                initialClassId={compliance.classId}
+                classes={compliance.classes}
+                editable={mode === "edit" && canManageCompliance}
+              />
+            ) : null}
+            {taxIdentity ? (
+              <VendorTaxIdentityPanel
+                partyId={String(p.id)}
+                initial={taxIdentity}
+                formTypes={taxIdentityFormTypes ?? []}
+                editable={mode === "edit" && canManageCompliance}
+              />
+            ) : null}
+          </div>
+        ) : null}
+        {/* Employee compensation tabs stay mounted once visited (hidden, outside
           the remounting TabContent) so switching tabs never discards their
           local edits — the payroll profile editor and wage-rate form hold
           unsaved state locally. Mounting stays lazy: an unvisited
           tab issues no requests until first opened. */}
-      {showCompensationTab && keptTabs.has('compensation') ? (
-        <div hidden={tab !== 'compensation'} className="p-1">
-          <EmployeeCompensationPanel partyId={String(p.id)} canReadTotal={canReadCompensation} canManageWages={canManageWages} />
-        </div>
-      ) : null}
-      {showBenefitsTab && keptTabs.has('benefits') ? <div hidden={tab !== 'benefits'} className="space-y-4 p-1"><EmployeeBenefitsPanel partyId={String(p.id)} /></div> : null}
-      {role === 'employee' && canManagePayroll && keptTabs.has('payroll') ? (
-        <div hidden={tab !== 'payroll'} className="space-y-6 p-1">
-          {/* The Payroll tab splits into sub-tabs on the shared drawer strip
+        {showCompensationTab && keptTabs.has("compensation") ? (
+          <div hidden={tab !== "compensation"} className="p-1">
+            <EmployeeCompensationPanel
+              partyId={String(p.id)}
+              canReadTotal={canReadCompensation}
+              canManageWages={canManageWages}
+            />
+          </div>
+        ) : null}
+        {showBenefitsTab && keptTabs.has("benefits") ? (
+          <div hidden={tab !== "benefits"} className="space-y-4 p-1">
+            <EmployeeBenefitsPanel partyId={String(p.id)} />
+          </div>
+        ) : null}
+        {role === "employee" && canManagePayroll && keptTabs.has("payroll") ? (
+          <div hidden={tab !== "payroll"} className="space-y-6 p-1">
+            {/* The Payroll tab splits into sub-tabs on the shared drawer strip
               (the same primitive as the rail, not a second tab style). The
               profile editor mounts once inside PayrollProfileTab and switches
               halves by prop; every section stays mounted (hidden). */}
-          <DrawerTabStrip
-            tabs={[
-              { key: 'general', label: t('payrollTabs.general') },
-              { key: 'tax', label: t('payrollTabs.tax') },
-              { key: 'accounts', label: t('payrollTabs.accounts') },
-            ]}
-            activeKey={payrollSubTab}
-            onSelect={(key) => setPayrollSubTab(key as PayrollSubTab)}
-            ariaLabel={t('payrollTabs.ariaLabel')}
-          />
-          <PayrollProfileTab
-            partyId={String(p.id)}
-            partyName={String(p.display_name ?? '')}
-            readOnly={!editable}
-            section={payrollSubTab}
-            onDirtyChange={setPayrollDirty}
-            onPartyRecordChanged={refreshPartyAfterSectionSave}
-          />
-          {/* Recurring pay components: fixed deductions, taxable benefits and
+            <DrawerTabStrip
+              tabs={[
+                { key: "general", label: t("payrollTabs.general") },
+                { key: "tax", label: t("payrollTabs.tax") },
+                { key: "accounts", label: t("payrollTabs.accounts") },
+              ]}
+              activeKey={payrollSubTab}
+              onSelect={(key) => setPayrollSubTab(key as PayrollSubTab)}
+              ariaLabel={t("payrollTabs.ariaLabel")}
+            />
+            <PayrollProfileTab
+              partyId={String(p.id)}
+              partyName={String(p.display_name ?? "")}
+              readOnly={!editable}
+              section={payrollSubTab}
+              onDirtyChange={setPayrollDirty}
+              onPartyRecordChanged={refreshPartyAfterSectionSave}
+            />
+            {/* Recurring pay components: fixed deductions, taxable benefits and
               premiums priced every regular run — the write side of the rows
               run-stub-compute prices. General section only: they are neither
               tax answers nor bank accounts. */}
-          <div hidden={payrollSubTab !== 'general'}>
-            <EmployeePayComponents
-              partyId={String(p.id)}
-              readOnly={!editable}
-              onDirtyChange={setPayComponentsDirty}
-            />
-          </div>
-          {/* Direct deposit: the same approval-gated bank accounts the AP
+            <div hidden={payrollSubTab !== "general"}>
+              <EmployeePayComponents
+                partyId={String(p.id)}
+                readOnly={!editable}
+                onDirtyChange={setPayComponentsDirty}
+              />
+            </div>
+            {/* Direct deposit: the same approval-gated bank accounts the AP
               side uses — the pay-run bank file only pays approved accounts. */}
-          <div hidden={payrollSubTab !== 'accounts'}>
-            <BankAccountsPanel
-              partyId={String(p.id)}
-              initialAccounts={payload.bankAccounts}
-              canManage={canManage || canManageEmployeeBanks}
-              multiCurrency={multiCurrency}
-              readOnly={!editable && !canManageEmployeeBanks}
-            />
+            <div hidden={payrollSubTab !== "accounts"}>
+              <BankAccountsPanel
+                partyId={String(p.id)}
+                initialAccounts={payload.bankAccounts}
+                canManage={canManage || canManageEmployeeBanks}
+                multiCurrency={multiCurrency}
+                readOnly={!editable && !canManageEmployeeBanks}
+              />
+            </div>
           </div>
-        </div>
-      ) : null}
-      {hiredAfterCreate ? (
-        <HireEmploymentDrawer
-          partyId={hiredAfterCreate.partyId}
-          partyName={hiredAfterCreate.partyName}
-          departmentOptions={departments.map((option) => ({ value: option.id, label: option.label ?? option.name ?? option.id }))}
-          stacked
-          initialJobTitle={hiredAfterCreate.jobTitle || undefined}
-          initialDepartmentId={hiredAfterCreate.departmentId || undefined}
-          onClose={() => {
-            // The person is saved; only the employment is still missing.
-            // Land on the record, whose Employment tab carries the Hire
-            // button for a later attempt.
-            const createdId = hiredAfterCreate.partyId
-            setHiredAfterCreate(null)
-            const separator = returnHref.includes('?') ? '&' : '?'
-            router.replace(`${returnHref}${separator}party=${createdId}` as never)
-            router.refresh()
-          }}
-          onSaved={() => {
-            // The hire is recorded; land on the Employment tab, whose bank
-            // section offers direct-deposit capture for the new employment.
-            // Viewers without the tab fall back to overview (same predicate
-            // gates the button and the deep link), so nobody strands.
-            const createdId = hiredAfterCreate.partyId
-            setHiredAfterCreate(null)
-            const separator = returnHref.includes('?') ? '&' : '?'
-            router.replace(`${returnHref}${separator}party=${createdId}&partyTab=employment` as never)
-            router.refresh()
-          }}
-        />
-      ) : null}
-    </TransactionDrawer>
+        ) : null}
+        {hiredAfterCreate ? (
+          <HireEmploymentDrawer
+            partyId={hiredAfterCreate.partyId}
+            partyName={hiredAfterCreate.partyName}
+            departmentOptions={departments.map((option) => ({
+              value: option.id,
+              label: option.label ?? option.name ?? option.id,
+            }))}
+            stacked
+            initialJobTitle={hiredAfterCreate.jobTitle || undefined}
+            initialDepartmentId={hiredAfterCreate.departmentId || undefined}
+            onClose={() => {
+              // The person is saved; only the employment is still missing.
+              // Land on the record, whose Employment tab carries the Hire
+              // button for a later attempt.
+              const createdId = hiredAfterCreate.partyId;
+              setHiredAfterCreate(null);
+              const separator = returnHref.includes("?") ? "&" : "?";
+              router.replace(`${returnHref}${separator}party=${createdId}` as never);
+              router.refresh();
+            }}
+            onSaved={() => {
+              // The hire is recorded; land on the Employment tab, whose bank
+              // section offers direct-deposit capture for the new employment.
+              // Viewers without the tab fall back to overview (same predicate
+              // gates the button and the deep link), so nobody strands.
+              const createdId = hiredAfterCreate.partyId;
+              setHiredAfterCreate(null);
+              const separator = returnHref.includes("?") ? "&" : "?";
+              router.replace(
+                `${returnHref}${separator}party=${createdId}&partyTab=employment` as never,
+              );
+              router.refresh();
+            }}
+          />
+        ) : null}
+      </TransactionDrawer>
     </RecordSaveContext.Provider>
-  )
+  );
 }
 
 // Split from this file; the same exports stay available from this path.
-export type { PartyTab } from './party-drawer-model'
-export { formatCreditLimit, rememberDrawerTab } from './party-drawer-model'
-export { ActivitySublist } from './PartyActivitySublist'
-export { TransactionSublist } from './PartyTransactionSublist'
+export type { PartyTab } from "./party-drawer-model";
+export { formatCreditLimit, rememberDrawerTab } from "./party-drawer-model";
+export { ActivitySublist } from "./PartyActivitySublist";
+export { TransactionSublist } from "./PartyTransactionSublist";

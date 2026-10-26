@@ -7,16 +7,8 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import {
-  ensurePackSlotRoleAccounts,
-  packSlotState,
-  setPackSlotAccount,
-} from "./packs.ts";
-import {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { ensurePackSlotRoleAccounts, packSlotState, setPackSlotAccount } from "./packs.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 import { seedGbLevyAllowanceFixture, seedHiredEmployee } from "./filing-test-fixtures.ts";
 import "../testing/database-bypass.ts";
 
@@ -30,7 +22,9 @@ async function makeAccount(
   type: string,
 ): Promise<string> {
   const id = randomUUID();
-  await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_active, is_summary, created_by, updated_by) values (${id}, ${orgId}, ${number}, ${name}, ${type}, true, false, ${actorId}, ${actorId})`);
+  await db.execute(
+    sql`insert into accounts (id, org_id, number, name, type, is_active, is_summary, created_by, updated_by) values (${id}, ${orgId}, ${number}, ${name}, ${type}, true, false, ${actorId}, ${actorId})`,
+  );
   return id;
 }
 
@@ -45,8 +39,17 @@ async function makeEmployee(
   currency: string,
 ): Promise<string> {
   const { employeeId } = await seedHiredEmployee(orgId, actorId, {
-    scheduleId, subsidiaryId, name: `Emp ${country}`, country, province, payBasis: "salary",
-    currency, rate, rateBasis: "year", annualHours: "2080", partySubsidiaryId: subsidiaryId,
+    scheduleId,
+    subsidiaryId,
+    name: `Emp ${country}`,
+    country,
+    province,
+    payBasis: "salary",
+    currency,
+    rate,
+    rateBasis: "year",
+    annualHours: "2080",
+    partySubsidiaryId: subsidiaryId,
   });
   return employeeId;
 }
@@ -81,10 +84,28 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const deductionsId = await makeAccount(org.orgId, actorId, "2110", "Payroll Deductions", "liability_current_other");
-      const subcontractorId = await makeAccount(org.orgId, actorId, "2130", "Subcontractor Payable", "liability_payable");
+      const deductionsId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2110",
+        "Payroll Deductions",
+        "liability_current_other",
+      );
+      const subcontractorId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2130",
+        "Subcontractor Payable",
+        "liability_payable",
+      );
       const wageId = await makeAccount(org.orgId, actorId, "6000", "Wages & Salaries", "expense");
-      const netId = await makeAccount(org.orgId, actorId, "2300", "Employee Payable", "liability_current_other");
+      const netId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2300",
+        "Employee Payable",
+        "liability_current_other",
+      );
       await db.execute(sql`
         update orgs
            set settings = jsonb_set(
@@ -107,11 +128,18 @@ test(
       // Defect C: IE seeds its own PAYE component — distinct code and system
       // key from the GB row, owned by the IE pack.
       const components = await db.execute<{
-        id: string; code: string; country: string | null; system_key: string | null; kind: string;
+        id: string;
+        code: string;
+        country: string | null;
+        system_key: string | null;
+        kind: string;
         liability_account_id: string | null;
-      }>(sql`
+      }>(
+        sql`
         select id, code, country, system_key, kind, liability_account_id from pay_components
-         where org_id = ${org.orgId} and country in ('GB', 'IE') order by code, kind`, "objects");
+         where org_id = ${org.orgId} and country in ('GB', 'IE') order by code, kind`,
+        "objects",
+      );
       const gbPayeRow = components.find((c) => c.code === "PAYE");
       const iePayeRow = components.find((c) => c.code === "IEPAYE");
       assert.ok(gbPayeRow, "GB PAYE component seeded");
@@ -130,9 +158,18 @@ test(
       assert.equal(iePayeRow.liability_account_id, deductionsId);
       const gbSlots = await packSlotState(org.orgId, ["GB"]);
       const ieSlots = await packSlotState(org.orgId, ["IE"]);
-      assert.equal(gbSlots.find((p) => p.country === "GB")!.slots.find((s) => s.key === "paye")!.accountId, deductionsId);
-      assert.equal(gbSlots.find((p) => p.country === "GB")!.slots.find((s) => s.key === "nic")!.accountId, deductionsId);
-      assert.equal(ieSlots.find((p) => p.country === "IE")!.slots.find((s) => s.key === "paye")!.accountId, deductionsId);
+      assert.equal(
+        gbSlots.find((p) => p.country === "GB")!.slots.find((s) => s.key === "paye")!.accountId,
+        deductionsId,
+      );
+      assert.equal(
+        gbSlots.find((p) => p.country === "GB")!.slots.find((s) => s.key === "nic")!.accountId,
+        deductionsId,
+      );
+      assert.equal(
+        ieSlots.find((p) => p.country === "IE")!.slots.find((s) => s.key === "paye")!.accountId,
+        deductionsId,
+      );
 
       // GB leg: monthly £3,000 on a 1257L cumulative code (starter A, second
       // tax month — mirrors the certified P6/P9 round trip).
@@ -146,43 +183,123 @@ test(
            subsidiary_id, is_active, created_by, updated_by)
         values (${gbScheduleId}, ${org.orgId}, 'GB monthly', 'monthly', 12, '2026-04-01', 0,
                 ${org.subsidiaryId}, true, ${actorId}, ${actorId})`);
-      const gbEmployee = await makeEmployee(org.orgId, org.subsidiaryId, actorId, gbScheduleId, "GB", "ENG", "36000", "GBP");
-      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_tax_code_notice", { tax_code: "1257L" }, "2026-04-06");
-      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_nic_category", {
-        category_letter: "A", director_status: "not_director",
-      }, "2026-04-06");
+      const gbEmployee = await makeEmployee(
+        org.orgId,
+        org.subsidiaryId,
+        actorId,
+        gbScheduleId,
+        "GB",
+        "ENG",
+        "36000",
+        "GBP",
+      );
+      await fileCertificate(
+        org.orgId,
+        gbEmployee,
+        actorId,
+        "GB",
+        "gb_tax_code_notice",
+        { tax_code: "1257L" },
+        "2026-04-06",
+      );
+      await fileCertificate(
+        org.orgId,
+        gbEmployee,
+        actorId,
+        "GB",
+        "gb_nic_category",
+        {
+          category_letter: "A",
+          director_status: "not_director",
+        },
+        "2026-04-06",
+      );
       // Outside automatic-enrolment age: no pension contributions price here.
-      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_workplace_pension", {
-        age_band: "under_22", worker_status: "noneligible_jobholder",
-        enrolment_status: "not_enrolled",
-      }, "2026-04-06");
-      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_workplace_pension_assessment",
-        { age_band: "under_22", membership_status: "not_eligible", scheme_basis: "not_applicable", deduction_method: "not_applicable" }, "2026-04-06");
-      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_starter_checklist", {
-        starter_declaration: "A", student_loan_plan: "none", student_loan_postgraduate: "false",
-      }, "2026-04-06");
+      await fileCertificate(
+        org.orgId,
+        gbEmployee,
+        actorId,
+        "GB",
+        "gb_workplace_pension",
+        {
+          age_band: "under_22",
+          worker_status: "noneligible_jobholder",
+          enrolment_status: "not_enrolled",
+        },
+        "2026-04-06",
+      );
+      await fileCertificate(
+        org.orgId,
+        gbEmployee,
+        actorId,
+        "GB",
+        "gb_workplace_pension_assessment",
+        {
+          age_band: "under_22",
+          membership_status: "not_eligible",
+          scheme_basis: "not_applicable",
+          deduction_method: "not_applicable",
+        },
+        "2026-04-06",
+      );
+      await fileCertificate(
+        org.orgId,
+        gbEmployee,
+        actorId,
+        "GB",
+        "gb_starter_checklist",
+        {
+          starter_declaration: "A",
+          student_loan_plan: "none",
+          student_loan_postgraduate: "false",
+        },
+        "2026-04-06",
+      );
       const gbRun = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: gbScheduleId,
-        periodStart: "2026-05-01", periodEnd: "2026-05-31", payDate: "2026-06-05",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: gbScheduleId,
+        periodStart: "2026-05-01",
+        periodEnd: "2026-05-31",
+        payDate: "2026-06-05",
       });
-      const gbCalc = await calculatePayRun({ orgId: org.orgId, actorId, documentId: gbRun.documentId });
+      const gbCalc = await calculatePayRun({
+        orgId: org.orgId,
+        actorId,
+        documentId: gbRun.documentId,
+      });
       assert.deepEqual(gbCalc.errors, []);
-      const gbStubRows = await db.execute<{ id: string; gross: string }>(sql`
+      const gbStubRows = await db.execute<{ id: string; gross: string }>(
+        sql`
         select id, gross::text as gross from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${gbRun.documentId}
-           and employee_party_id = ${gbEmployee}`, "objects");
+           and employee_party_id = ${gbEmployee}`,
+        "objects",
+      );
       assert.equal(gbStubRows.length, 1);
       assert.equal(gbStubRows[0]!.gross, "3000.0000");
       const gbStubLines = await db.execute<{
-        component_id: string | null; system_key: string | null; kind: string; amount: string;
-      }>(sql`
+        component_id: string | null;
+        system_key: string | null;
+        kind: string;
+        amount: string;
+      }>(
+        sql`
         select l.component_id, c.system_key, l.kind, l.amount::text as amount
           from pay_stub_lines l join pay_components c on c.id = l.component_id
          where l.org_id = ${org.orgId} and l.stub_id = ${gbStubRows[0]!.id}
-         order by l.sequence`, "objects");
-      const gbPayeLine = gbStubLines.find((line) => line.system_key === "paye" && line.kind === "deduction");
-      const gbNicEeLine = gbStubLines.find((line) => line.system_key === "nic" && line.kind === "deduction");
-      const gbNicErLine = gbStubLines.find((line) => line.system_key === "nic" && line.kind === "employer_contribution");
+         order by l.sequence`,
+        "objects",
+      );
+      const gbPayeLine = gbStubLines.find(
+        (line) => line.system_key === "paye" && line.kind === "deduction",
+      );
+      const gbNicEeLine = gbStubLines.find(
+        (line) => line.system_key === "nic" && line.kind === "deduction",
+      );
+      const gbNicErLine = gbStubLines.find(
+        (line) => line.system_key === "nic" && line.kind === "employer_contribution",
+      );
       assert.ok(gbPayeLine && gbNicEeLine && gbNicErLine, "GB PAYE and both NIC shares assessed");
       // The stub lines ride the GB components — the rows the GB slots map.
       assert.equal(gbPayeLine.component_id, gbPayeRow.id);
@@ -195,11 +312,17 @@ test(
       assert.equal(Number(gbNicEeLine.amount).toFixed(2), "156.16");
       assert.equal(Number(gbNicErLine.amount).toFixed(2), "387.45");
       await commitPayRun({ orgId: org.orgId, documentId: gbRun.documentId, actorId });
-      const gbLines = await db.execute<{ account_id: string; number: string; amount: string }>(sql`
+      const gbLines = await db.execute<{ account_id: string; number: string; amount: string }>(
+        sql`
         select l.account_id, a.number, l.amount::text as amount from document_lines l
           join accounts a on a.id = l.account_id
-         where l.org_id = ${org.orgId} and l.document_id = ${gbRun.documentId}`, "objects");
-      const gbTotalCents = gbLines.reduce((sum, line) => sum + Math.round(Number(line.amount) * 100), 0);
+         where l.org_id = ${org.orgId} and l.document_id = ${gbRun.documentId}`,
+        "objects",
+      );
+      const gbTotalCents = gbLines.reduce(
+        (sum, line) => sum + Math.round(Number(line.amount) * 100),
+        0,
+      );
       assert.equal(gbTotalCents, 0);
       // Credits (negative legs) are the only money the run owes anyone: net
       // pay to the employee account, every withholding to the deductions
@@ -214,7 +337,11 @@ test(
         .reduce((sum, line) => sum + Number(line.amount), 0);
       assert.equal(
         gbWithheldTotal.toFixed(2),
-        (-(Number(gbPayeLine.amount) + Number(gbNicEeLine.amount) + Number(gbNicErLine.amount))).toFixed(2),
+        (-(
+          Number(gbPayeLine.amount) +
+          Number(gbNicEeLine.amount) +
+          Number(gbNicErLine.amount)
+        )).toFixed(2),
       );
       assert.ok(
         gbLines.every((line) => line.account_id !== subcontractorId),
@@ -236,38 +363,93 @@ test(
            subsidiary_id, is_active, created_by, updated_by)
         values (${ieScheduleId}, ${org.orgId}, 'IE weekly', 'weekly', 52, '2026-01-04', 0,
                 ${ieSubId}, true, ${actorId}, ${actorId})`);
-      const ieEmployee = await makeEmployee(org.orgId, ieSubId, actorId, ieScheduleId, "IE", "IE", "44200", "EUR");
-      await fileCertificate(org.orgId, ieEmployee, actorId, "IE", "ie_rpn", {
-        tax_credits_total: "4000", rate_band_total: "44000", usc_cutoff_total: "70044",
-        pay_basis: "cumulative",
-      }, "2026-01-01");
-      await fileCertificate(org.orgId, ieEmployee, actorId, "IE", "ie_prsi_class", {
-        prsi_class: "A",
-      }, "2026-01-01");
+      const ieEmployee = await makeEmployee(
+        org.orgId,
+        ieSubId,
+        actorId,
+        ieScheduleId,
+        "IE",
+        "IE",
+        "44200",
+        "EUR",
+      );
+      await fileCertificate(
+        org.orgId,
+        ieEmployee,
+        actorId,
+        "IE",
+        "ie_rpn",
+        {
+          tax_credits_total: "4000",
+          rate_band_total: "44000",
+          usc_cutoff_total: "70044",
+          pay_basis: "cumulative",
+        },
+        "2026-01-01",
+      );
+      await fileCertificate(
+        org.orgId,
+        ieEmployee,
+        actorId,
+        "IE",
+        "ie_prsi_class",
+        {
+          prsi_class: "A",
+        },
+        "2026-01-01",
+      );
       const ieRun = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: ieScheduleId,
-        periodStart: "2025-12-29", periodEnd: "2026-01-04", payDate: "2026-01-04",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: ieScheduleId,
+        periodStart: "2025-12-29",
+        periodEnd: "2026-01-04",
+        payDate: "2026-01-04",
       });
-      const ieCalc = await calculatePayRun({ orgId: org.orgId, actorId, documentId: ieRun.documentId });
+      const ieCalc = await calculatePayRun({
+        orgId: org.orgId,
+        actorId,
+        documentId: ieRun.documentId,
+      });
       assert.deepEqual(ieCalc.errors, []);
-      const ieStubRows = await db.execute<{ id: string; gross: string }>(sql`
+      const ieStubRows = await db.execute<{ id: string; gross: string }>(
+        sql`
         select id, gross::text as gross from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${ieRun.documentId}
-           and employee_party_id = ${ieEmployee}`, "objects");
+           and employee_party_id = ${ieEmployee}`,
+        "objects",
+      );
       assert.equal(ieStubRows.length, 1);
       assert.equal(ieStubRows[0]!.gross, "850.0000");
       const ieStubLines = await db.execute<{
-        component_id: string | null; system_key: string | null; kind: string; amount: string;
-      }>(sql`
+        component_id: string | null;
+        system_key: string | null;
+        kind: string;
+        amount: string;
+      }>(
+        sql`
         select l.component_id, c.system_key, l.kind, l.amount::text as amount
           from pay_stub_lines l join pay_components c on c.id = l.component_id
          where l.org_id = ${org.orgId} and l.stub_id = ${ieStubRows[0]!.id}
-         order by l.sequence`, "objects");
-      const iePayeLine = ieStubLines.find((line) => line.system_key === "ie_paye" && line.kind === "deduction");
-      const iePrsiEeLine = ieStubLines.find((line) => line.system_key === "prsi" && line.kind === "deduction");
-      const iePrsiErLine = ieStubLines.find((line) => line.system_key === "prsi" && line.kind === "employer_contribution");
-      const ieUscLine = ieStubLines.find((line) => line.system_key === "usc" && line.kind === "deduction");
-      assert.ok(iePayeLine && iePrsiEeLine && iePrsiErLine && ieUscLine, "IE PAYE, PRSI shares and USC assessed");
+         order by l.sequence`,
+        "objects",
+      );
+      const iePayeLine = ieStubLines.find(
+        (line) => line.system_key === "ie_paye" && line.kind === "deduction",
+      );
+      const iePrsiEeLine = ieStubLines.find(
+        (line) => line.system_key === "prsi" && line.kind === "deduction",
+      );
+      const iePrsiErLine = ieStubLines.find(
+        (line) => line.system_key === "prsi" && line.kind === "employer_contribution",
+      );
+      const ieUscLine = ieStubLines.find(
+        (line) => line.system_key === "usc" && line.kind === "deduction",
+      );
+      assert.ok(
+        iePayeLine && iePrsiEeLine && iePrsiErLine && ieUscLine,
+        "IE PAYE, PRSI shares and USC assessed",
+      );
       // The stub line rides the IE component — not the GB row the unfused
       // pack used to share with it.
       assert.equal(iePayeLine.component_id, iePayeRow.id);
@@ -281,10 +463,16 @@ test(
       assert.equal(Number(iePrsiErLine.amount).toFixed(2), "95.63");
       assert.ok(Number(ieUscLine.amount) > 0, "USC assessed");
       await commitPayRun({ orgId: org.orgId, documentId: ieRun.documentId, actorId });
-      const ieLines = await db.execute<{ account_id: string; amount: string }>(sql`
+      const ieLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, amount::text as amount from document_lines
-         where org_id = ${org.orgId} and document_id = ${ieRun.documentId}`, "objects");
-      const ieTotalCents = ieLines.reduce((sum, line) => sum + Math.round(Number(line.amount) * 100), 0);
+         where org_id = ${org.orgId} and document_id = ${ieRun.documentId}`,
+        "objects",
+      );
+      const ieTotalCents = ieLines.reduce(
+        (sum, line) => sum + Math.round(Number(line.amount) * 100),
+        0,
+      );
       assert.equal(ieTotalCents, 0);
       const ieCredits = ieLines.filter((line) => Number(line.amount) < 0);
       assert.deepEqual(
@@ -296,8 +484,12 @@ test(
         .reduce((sum, line) => sum + Number(line.amount), 0);
       assert.equal(
         ieWithheldTotal.toFixed(3),
-        (-(Number(iePayeLine.amount) + Number(iePrsiEeLine.amount)
-          + Number(iePrsiErLine.amount) + Number(ieUscLine.amount))).toFixed(3),
+        (-(
+          Number(iePayeLine.amount) +
+          Number(iePrsiEeLine.amount) +
+          Number(iePrsiErLine.amount) +
+          Number(ieUscLine.amount)
+        )).toFixed(3),
       );
       assert.ok(
         ieLines.every((line) => line.account_id !== subcontractorId),
@@ -321,8 +513,20 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const deductionsId = await makeAccount(org.orgId, actorId, "2110", "Payroll Deductions", "liability_current_other");
-      const otherId = await makeAccount(org.orgId, actorId, "2120", "Other Payroll Liabilities", "liability_current_other");
+      const deductionsId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2110",
+        "Payroll Deductions",
+        "liability_current_other",
+      );
+      const otherId = await makeAccount(
+        org.orgId,
+        actorId,
+        "2120",
+        "Other Payroll Liabilities",
+        "liability_current_other",
+      );
       await db.execute(sql`
         update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts}',
           ${JSON.stringify({ payrollDeductions: deductionsId })}::jsonb)
@@ -335,20 +539,33 @@ test(
 
       await seedPayrollComponents(org.orgId, actorId, "GB");
       // Install wired the slot from the role (no hand mapping involved).
-      const wired = (await db.execute<{ liability_account_id: string | null }>(sql`
+      const wired = (
+        await db.execute<{ liability_account_id: string | null }>(
+          sql`
         select liability_account_id from pay_components
-         where org_id = ${org.orgId} and code = 'PAYE'`, "objects"))[0]!.liability_account_id;
+         where org_id = ${org.orgId} and code = 'PAYE'`,
+          "objects",
+        )
+      )[0]!.liability_account_id;
       assert.equal(wired, deductionsId);
 
       // The operator re-points the slot; later ensures must not move it.
       await setPackSlotAccount(org.orgId, actorId, "GB", "paye", otherId);
       await ensurePackSlotRoleAccounts(db, org.orgId, actorId, "GB");
-      const kept = (await db.execute<{ liability_account_id: string | null }>(sql`
+      const kept = (
+        await db.execute<{ liability_account_id: string | null }>(
+          sql`
         select liability_account_id from pay_components
-         where org_id = ${org.orgId} and code = 'PAYE'`, "objects"))[0]!.liability_account_id;
+         where org_id = ${org.orgId} and code = 'PAYE'`,
+          "objects",
+        )
+      )[0]!.liability_account_id;
       assert.equal(kept, otherId);
       const state = await packSlotState(org.orgId, ["GB"]);
-      assert.equal(state.find((p) => p.country === "GB")!.slots.find((s) => s.key === "paye")!.accountId, otherId);
+      assert.equal(
+        state.find((p) => p.country === "GB")!.slots.find((s) => s.key === "paye")!.accountId,
+        otherId,
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

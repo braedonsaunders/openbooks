@@ -9,10 +9,25 @@ import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext, uuidArray } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
-import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
+import {
+  assertStockLocationAdmitsSubsidiary,
+  assertNoForeignOnHand,
+  resolveProfile,
+  assertMovementOwner,
+  assertInventoryFeature,
+} from "./profile-policy.ts";
 import { assertItemsActive } from "./item-active.ts";
 import { postInventoryEntry } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney, assertInventoryDate, backdatedIssueShortage } from "./position.ts";
+import {
+  primaryBookId,
+  periodForDate,
+  subsidiaryCurrency,
+  getOnHandWith,
+  lockInventoryPosition,
+  persistReceiptMoney,
+  assertInventoryDate,
+  backdatedIssueShortage,
+} from "./position.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { consumeLayers, recordConsumptions, addLayerAtCost } from "./cost-layers.ts";
 
@@ -44,30 +59,59 @@ export async function transferInventory(
   entryId: string | null;
   value: string;
 }> {
-  return withOrgTransaction(orgId, () =>
-    transferInventoryTx(db, orgId, actorId, input),
-  );
+  return withOrgTransaction(orgId, () => transferInventoryTx(db, orgId, actorId, input));
 }
 
 /** Recover only an untouched, exactly reconciling legacy moving-average transit pool. */
 async function restoreLegacyTransitProvenance(
-  tx: Runner, orgId: string, actorId: string | null, input: TransferInput,
+  tx: Runner,
+  orgId: string,
+  actorId: string | null,
+  input: TransferInput,
 ): Promise<boolean> {
   // The caller owns the item/location position lock. Other order shipments and
   // receipts cannot change either the pool or their line evidence until commit.
-  const transit = (await tx.execute(sql`select id from stock_locations
-    where org_id=${orgId} and id=${input.fromStockLocationId} and kind='transit' for share`, "objects"))[0];
+  const transit = (
+    await tx.execute(
+      sql`select id from stock_locations
+    where org_id=${orgId} and id=${input.fromStockLocationId} and kind='transit' for share`,
+      "objects",
+    )
+  )[0];
   if (!transit) return false;
   const layers = await tx.execute<{
-    id: string; source_movement_id: string; original_quantity: string; remaining_quantity: string; unit_cost: string;
-  }>(sql`select id,source_movement_id,original_quantity,remaining_quantity,unit_cost from cost_layers
+    id: string;
+    source_movement_id: string;
+    original_quantity: string;
+    remaining_quantity: string;
+    unit_cost: string;
+  }>(
+    sql`select id,source_movement_id,original_quantity,remaining_quantity,unit_cost from cost_layers
     where org_id=${orgId} and item_id=${input.itemId} and stock_location_id=${input.fromStockLocationId}
-      and subsidiary_id=${input.subsidiaryId} and remaining_quantity>0 order by id for update`, "objects");
-  if (!layers.length || layers.some((layer) => cmp(layer.original_quantity, layer.remaining_quantity) !== 0)) return false;
-  const consumed = (await tx.execute(sql`select id from cost_layer_consumptions
-    where org_id=${orgId} and cost_layer_id=any(${uuidArray(layers.map((layer) => layer.id))}::uuid[]) limit 1`, "objects"))[0];
+      and subsidiary_id=${input.subsidiaryId} and remaining_quantity>0 order by id for update`,
+    "objects",
+  );
+  if (
+    !layers.length ||
+    layers.some((layer) => cmp(layer.original_quantity, layer.remaining_quantity) !== 0)
+  )
+    return false;
+  const consumed = (
+    await tx.execute(
+      sql`select id from cost_layer_consumptions
+    where org_id=${orgId} and cost_layer_id=any(${uuidArray(layers.map((layer) => layer.id))}::uuid[]) limit 1`,
+      "objects",
+    )
+  )[0];
   if (consumed) return false;
-  const shipments = await tx.execute<{ id: string; quantity: string; total_value: string; unit_cost: string; moved_at: string }>(sql`
+  const shipments = await tx.execute<{
+    id: string;
+    quantity: string;
+    total_value: string;
+    unit_cost: string;
+    moved_at: string;
+  }>(
+    sql`
     select inbound.id,inbound.quantity,inbound.total_value,inbound.unit_cost,inbound.moved_at::text
       from transfer_orders o join transfer_order_lines l on l.org_id=o.org_id and l.transfer_order_id=o.id
       join inventory_movements outbound on outbound.org_id=l.org_id and outbound.id=l.ship_movement_id
@@ -83,12 +127,23 @@ async function restoreLegacyTransitProvenance(
        and (o.transit_stock_location_id is null or o.transit_stock_location_id=inbound.stock_location_id)
        and not exists(select 1 from inventory_movements reversal where reversal.org_id=${orgId}
          and reversal.reverses_movement_id in (inbound.id,outbound.id))
-     order by inbound.moved_at,inbound.created_at,inbound.id`, "objects");
+     order by inbound.moved_at,inbound.created_at,inbound.id`,
+    "objects",
+  );
   const shipmentIds = new Set(shipments.map((shipment) => shipment.id));
-  if (!shipments.length || shipmentIds.size !== shipments.length ||
-      layers.some((layer) => !shipmentIds.has(layer.source_movement_id)) ||
-      cmp(sum(layers.map((layer) => layer.remaining_quantity)), sum(shipments.map((shipment) => shipment.quantity))) !== 0 ||
-      cmp(sum(layers.map((layer) => extendCost(layer.remaining_quantity, layer.unit_cost))), sum(shipments.map((shipment) => shipment.total_value))) !== 0) {
+  if (
+    !shipments.length ||
+    shipmentIds.size !== shipments.length ||
+    layers.some((layer) => !shipmentIds.has(layer.source_movement_id)) ||
+    cmp(
+      sum(layers.map((layer) => layer.remaining_quantity)),
+      sum(shipments.map((shipment) => shipment.quantity)),
+    ) !== 0 ||
+    cmp(
+      sum(layers.map((layer) => extendCost(layer.remaining_quantity, layer.unit_cost))),
+      sum(shipments.map((shipment) => shipment.total_value)),
+    ) !== 0
+  ) {
     return false;
   }
   for (const layer of layers) {
@@ -96,15 +151,29 @@ async function restoreLegacyTransitProvenance(
       where org_id=${orgId} and id=${layer.id}`);
     await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values (${orgId},'cost_layers',${layer.id},'update',${JSON.stringify({
-        reason: "Restore untouched legacy transit shipment provenance from immutable movement evidence",
-        before: layer, after: { original_quantity: "0.0000", remaining_quantity: "0.0000" },
+        reason:
+          "Restore untouched legacy transit shipment provenance from immutable movement evidence",
+        before: layer,
+        after: { original_quantity: "0.0000", remaining_quantity: "0.0000" },
         shipmentMovementIds: [...shipmentIds],
       })}::jsonb,${actorId})`);
   }
   for (const shipment of shipments) {
-    await addLayerAtCost(tx, orgId, input.subsidiaryId, input.itemId, input.fromStockLocationId,
-      shipment.quantity, shipment.total_value, "moving_average", shipment.id, shipment.moved_at.slice(0, 10),
-      actorId, shipment.unit_cost, null);
+    await addLayerAtCost(
+      tx,
+      orgId,
+      input.subsidiaryId,
+      input.itemId,
+      input.fromStockLocationId,
+      shipment.quantity,
+      shipment.total_value,
+      "moving_average",
+      shipment.id,
+      shipment.moved_at.slice(0, 10),
+      actorId,
+      shipment.unit_cost,
+      null,
+    );
   }
   return true;
 }
@@ -135,8 +204,7 @@ export async function transferInventoryTx(
   // Same early gate as receipts: junk must name InventoryError (not a bare
   // Error) and oversized figures must refuse before any journal math.
   const quantity = persistReceiptMoney(input.quantity, "transfer quantity");
-  if (cmp(quantity, "0") <= 0)
-    throw new InventoryError("transfer quantity must be positive");
+  if (cmp(quantity, "0") <= 0) throw new InventoryError("transfer quantity must be positive");
   if (input.fromStockLocationId === input.toStockLocationId)
     throw new InventoryError("transfer needs two different locations");
   assertInventoryDate(input.date, "transfer date");
@@ -147,12 +215,9 @@ export async function transferInventoryTx(
   const ctx = await loadSubsidiaryContext(tx, orgId);
   // Serialize every transfer touching either position. Sorting the lock keys
   // prevents two opposite-direction transfers from deadlocking.
-  for (const locationId of [
-    input.fromStockLocationId,
-    input.toStockLocationId,
-  ].sort()) {
+  for (const locationId of [input.fromStockLocationId, input.toStockLocationId].sort()) {
     await lockInventoryPosition(tx, input.itemId, locationId);
-    await lockSubcontractCustodyAuthority(tx,orgId,actorId,input.subsidiaryId,locationId);
+    await lockSubcontractCustodyAuthority(tx, orgId, actorId, input.subsidiaryId, locationId);
     await assertStockLocationAdmitsSubsidiary(
       tx,
       orgId,
@@ -164,9 +229,8 @@ export async function transferInventoryTx(
   }
   await assertInventoryFeature(tx, orgId);
   const period = await periodForDate(orgId, input.date, tx);
-  if (!period)
-    throw new InventoryError(`no accounting period for ${input.date}`);
-  const bookId = input.postingBookId ?? await primaryBookId(orgId, tx);
+  if (!period) throw new InventoryError(`no accounting period for ${input.date}`);
+  const bookId = input.postingBookId ?? (await primaryBookId(orgId, tx));
   // A transfer between locations that share a business dimension posts no
   // journal, so postInventoryEntry's GL close gate never runs for it. Check the
   // period explicitly, before any movement is written.
@@ -195,8 +259,7 @@ export async function transferInventoryTx(
   // Transfer orders inherit this fence by delegating here.
   await assertItemsActive(tx, orgId, [input.itemId], {
     inactiveRemedy: "reactivate it before posting stock movements",
-    outsideOrganization:
-      "transfer references an item outside this organization",
+    outsideOrganization: "transfer references an item outside this organization",
   });
   assertTracking(
     profile,
@@ -215,29 +278,38 @@ export async function transferInventoryTx(
       serialId: input.serialId,
     },
     "transfer",
-      actorId,
+    actorId,
   );
-  let onHand = await getOnHandWith(
-    tx,
-    orgId,
-    input.itemId,
-    input.fromStockLocationId,
-    { lotId: input.lotId, serialId: input.serialId, subsidiaryId: input.subsidiaryId,
-      sourceReceiptMovementId: input.sourceReceiptMovementId },
-  );
-  if (input.sourceReceiptMovementId && (
-    cmp(onHand.quantity, input.quantity) !== 0 ||
-    input.expectedSourceValue == null || cmp(onHand.value, input.expectedSourceValue) !== 0
-  )) {
-    const restored = profile.costingMethod === "moving_average" &&
-      await restoreLegacyTransitProvenance(tx, orgId, actorId, input);
+  let onHand = await getOnHandWith(tx, orgId, input.itemId, input.fromStockLocationId, {
+    lotId: input.lotId,
+    serialId: input.serialId,
+    subsidiaryId: input.subsidiaryId,
+    sourceReceiptMovementId: input.sourceReceiptMovementId,
+  });
+  if (
+    input.sourceReceiptMovementId &&
+    (cmp(onHand.quantity, input.quantity) !== 0 ||
+      input.expectedSourceValue == null ||
+      cmp(onHand.value, input.expectedSourceValue) !== 0)
+  ) {
+    const restored =
+      profile.costingMethod === "moving_average" &&
+      (await restoreLegacyTransitProvenance(tx, orgId, actorId, input));
     if (restored) {
-      onHand = await getOnHandWith(tx, orgId, input.itemId, input.fromStockLocationId,
-        { subsidiaryId: input.subsidiaryId, sourceReceiptMovementId: input.sourceReceiptMovementId });
+      onHand = await getOnHandWith(tx, orgId, input.itemId, input.fromStockLocationId, {
+        subsidiaryId: input.subsidiaryId,
+        sourceReceiptMovementId: input.sourceReceiptMovementId,
+      });
     }
-    if (!restored || cmp(onHand.quantity, input.quantity) !== 0 || input.expectedSourceValue == null ||
-        cmp(onHand.value, input.expectedSourceValue) !== 0) {
-      throw new InventoryError("transfer shipment layers have changed; reconcile the shipment before receiving it");
+    if (
+      !restored ||
+      cmp(onHand.quantity, input.quantity) !== 0 ||
+      input.expectedSourceValue == null ||
+      cmp(onHand.value, input.expectedSourceValue) !== 0
+    ) {
+      throw new InventoryError(
+        "transfer shipment layers have changed; reconcile the shipment before receiving it",
+      );
     }
   }
   if (cmp(input.quantity, onHand.quantity) > 0) {
@@ -274,21 +346,18 @@ export async function transferInventoryTx(
   );
   if (backdated) throw new InventoryError(backdated);
 
-  await assertOwnedLocation(tx,orgId,input.fromStockLocationId);
-  await assertOwnedLocation(tx,orgId,input.toStockLocationId);
-  const locDims = (await tx.execute<{ id: string; location_id: string }>(sql`
-    select id, location_id from stock_locations where org_id = ${orgId} and id in (${input.fromStockLocationId}, ${input.toStockLocationId})`, "objects"));
+  await assertOwnedLocation(tx, orgId, input.fromStockLocationId);
+  await assertOwnedLocation(tx, orgId, input.toStockLocationId);
+  const locDims = await tx.execute<{ id: string; location_id: string }>(
+    sql`
+    select id, location_id from stock_locations where org_id = ${orgId} and id in (${input.fromStockLocationId}, ${input.toStockLocationId})`,
+    "objects",
+  );
   if (locDims.length !== 2) {
-    throw new InventoryError(
-      "both transfer locations must belong to the organization",
-    );
+    throw new InventoryError("both transfer locations must belong to the organization");
   }
-  const fromDim =
-    locDims.find((r) => r.id === input.fromStockLocationId)?.location_id ??
-    null;
-  const toDim =
-    locDims.find((r) => r.id === input.toStockLocationId)?.location_id ??
-    null;
+  const fromDim = locDims.find((r) => r.id === input.fromStockLocationId)?.location_id ?? null;
+  const toDim = locDims.find((r) => r.id === input.toStockLocationId)?.location_id ?? null;
 
   const { consumptions } = await consumeLayers(
     tx,
@@ -299,7 +368,11 @@ export async function transferInventoryTx(
     input.quantity,
     onHand,
     onHand.unitCost,
-    { lotId: input.lotId, serialId: input.serialId, sourceReceiptMovementId: input.sourceReceiptMovementId },
+    {
+      lotId: input.lotId,
+      serialId: input.serialId,
+      sourceReceiptMovementId: input.sourceReceiptMovementId,
+    },
     input.subsidiaryId,
     actorId,
   );
@@ -345,7 +418,8 @@ export async function transferInventoryTx(
   // link back to the transfer_out (one direction is enough to relate them).
   const transferQuantity = persistReceiptMoney(input.quantity, "transfer quantity");
   const fromMovementId = randomUUID();
-  const outboundWritten=await tx.execute(sql`
+  const outboundWritten = await tx.execute(
+    sql`
       insert into inventory_movements
         (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id,
          serial_id, quantity, unit_cost, total_value, journal_entry_id, status,
@@ -354,10 +428,14 @@ export async function transferInventoryTx(
               ${input.date}, ${input.fromStockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${neg(transferQuantity)}, ${unitCost},
               ${neg(cost)}, ${entryId}, 'posted', ${input.memo ?? null},
-              ${actorId}, ${actorId}) returning id`, "objects");
-  if(outboundWritten.length!==1) throw new InventoryError("The outbound transfer movement was not recorded; nothing moved.");
+              ${actorId}, ${actorId}) returning id`,
+    "objects",
+  );
+  if (outboundWritten.length !== 1)
+    throw new InventoryError("The outbound transfer movement was not recorded; nothing moved.");
   const toMovementId = randomUUID();
-  const inboundWritten=await tx.execute(sql`
+  const inboundWritten = await tx.execute(
+    sql`
       insert into inventory_movements
         (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id,
          serial_id, quantity, unit_cost, total_value, journal_entry_id,
@@ -366,35 +444,62 @@ export async function transferInventoryTx(
               ${input.date}, ${input.toStockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${transferQuantity}, ${unitCost}, ${cost},
               ${entryId}, ${fromMovementId}, 'posted', ${input.memo ?? null},
-              ${actorId}, ${actorId}) returning id`, "objects");
-  if(inboundWritten.length!==1) throw new InventoryError("The inbound transfer movement was not recorded; nothing moved.");
-
-  await recordConsumptions(
-    tx,
-    orgId,
-    input.subsidiaryId,
-    consumptions,
-    fromMovementId,
-    actorId,
+              ${actorId}, ${actorId}) returning id`,
+    "objects",
   );
-  const carried = profile.costingMethod === "fifo"
-    ? consumptions.map((consumption) => ({ quantity: consumption.quantity, value: consumption.cost, unitCost: consumption.unitCost, originalCost: consumption.originalCost ?? null }))
-    : [{ quantity: input.quantity, value: cost, unitCost, originalCost: sumOriginalCosts(consumptions.map((consumption) => consumption.originalCost ?? null)) }];
+  if (inboundWritten.length !== 1)
+    throw new InventoryError("The inbound transfer movement was not recorded; nothing moved.");
+
+  await recordConsumptions(tx, orgId, input.subsidiaryId, consumptions, fromMovementId, actorId);
+  const carried =
+    profile.costingMethod === "fifo"
+      ? consumptions.map((consumption) => ({
+          quantity: consumption.quantity,
+          value: consumption.cost,
+          unitCost: consumption.unitCost,
+          originalCost: consumption.originalCost ?? null,
+        }))
+      : [
+          {
+            quantity: input.quantity,
+            value: cost,
+            unitCost,
+            originalCost: sumOriginalCosts(
+              consumptions.map((consumption) => consumption.originalCost ?? null),
+            ),
+          },
+        ];
   for (const fragment of carried) {
-    await addLayerAtCost(tx, orgId, input.subsidiaryId, input.itemId,
-      input.toStockLocationId, fragment.quantity, fragment.value, profile.costingMethod,
-      toMovementId, input.date, actorId, fragment.unitCost, fragment.originalCost);
+    await addLayerAtCost(
+      tx,
+      orgId,
+      input.subsidiaryId,
+      input.itemId,
+      input.toStockLocationId,
+      fragment.quantity,
+      fragment.value,
+      profile.costingMethod,
+      toMovementId,
+      input.date,
+      actorId,
+      fragment.unitCost,
+      fragment.originalCost,
+    );
   }
-  if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
-    const serialUpdate=await tx.execute(sql`
+  if (profile.tracking === "serial" || profile.tracking === "lot_serial") {
+    const serialUpdate = await tx.execute(
+      sql`
       update serials
          set status = 'in_stock',
              current_stock_location_id = ${input.toStockLocationId},
              updated_at = now(),
              updated_by = ${actorId}
        where id = ${input.serialId} and org_id = ${orgId} returning id
-    `, "objects");
-    if(serialUpdate.length!==1)throw new InventoryError('Serial transfer lifecycle was not recorded');
+    `,
+      "objects",
+    );
+    if (serialUpdate.length !== 1)
+      throw new InventoryError("Serial transfer lifecycle was not recorded");
   }
 
   return { fromMovementId, toMovementId, entryId, value: cost };

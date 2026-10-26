@@ -35,8 +35,9 @@ export async function listApplicationOpenItems(
     allowed === null ? undefined : [...allowed],
   );
   const scoped = input.partyId ? all.filter((item) => item.partyId === input.partyId) : all;
-  scoped.sort((left, right) =>
-    (left.dueDate ?? left.tranDate).getTime() - (right.dueDate ?? right.tranDate).getTime(),
+  scoped.sort(
+    (left, right) =>
+      (left.dueDate ?? left.tranDate).getTime() - (right.dueDate ?? right.tranDate).getTime(),
   );
   const limit = clamp(input.limit ?? 100, 1, 200);
   return {

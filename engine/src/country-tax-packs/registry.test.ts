@@ -35,23 +35,36 @@ interface PackFacts {
 }
 
 const COMPLETENESS_KEYS = [
-  "jurisdictions", "standardRates", "returnDefinitions", "localRates", "taxability", "sourcingRules", "nexusRules",
+  "jurisdictions",
+  "standardRates",
+  "returnDefinitions",
+  "localRates",
+  "taxability",
+  "sourcingRules",
+  "nexusRules",
 ] as const;
 
 function describeRates(rates: readonly EffectiveTaxRate[]): string {
-  return rates.map((rate, index) => {
-    const next = rates[index + 1];
-    const runsOn = rate.effectiveTo === undefined || (next !== undefined && dayAfter(rate.effectiveTo) === next.effectiveFrom);
-    return `${rate.ratePercent}% ${rate.effectiveFrom}${runsOn ? "" : `..${rate.effectiveTo}`}`;
-  }).join(", ");
+  return rates
+    .map((rate, index) => {
+      const next = rates[index + 1];
+      const runsOn =
+        rate.effectiveTo === undefined ||
+        (next !== undefined && dayAfter(rate.effectiveTo) === next.effectiveFrom);
+      return `${rate.ratePercent}% ${rate.effectiveFrom}${runsOn ? "" : `..${rate.effectiveTo}`}`;
+    })
+    .join(", ");
 }
 
 function factsOf(pack: CountryTaxPackDefinition): PackFacts {
   const returns: Record<string, ReturnFacts> = {};
   for (const returnPack of pack.returnPacks) {
-    const formulas = returnPack.boxes.filter((box) => box.formula).map((box) => `${box.lineCode} = ${box.formula}`);
-    const codes = packTaxCodesForReturn(pack, returnPack.code).map((code) =>
-      `${code.code} ${code.role ?? "-"}${code.returnBoxes ? ` -> ${code.returnBoxes.join(" ")}` : ""}: ${describeRates(code.rates ?? [])}`,
+    const formulas = returnPack.boxes
+      .filter((box) => box.formula)
+      .map((box) => `${box.lineCode} = ${box.formula}`);
+    const codes = packTaxCodesForReturn(pack, returnPack.code).map(
+      (code) =>
+        `${code.code} ${code.role ?? "-"}${code.returnBoxes ? ` -> ${code.returnBoxes.join(" ")}` : ""}: ${describeRates(code.rates ?? [])}`,
     );
     returns[returnPack.code] = {
       filing: `${returnPack.defaultFrequency} ${returnPack.submissionChannel} ${returnPack.governmentFormat}`,
@@ -70,7 +83,9 @@ function factsOf(pack: CountryTaxPackDefinition): PackFacts {
 
 const PACK_FACTS: Record<string, PackFacts> = {
   CA: {
-    taxType: "gst", completeness: "complete complete partial not_applicable partial partial partial", jurisdictions: 13,
+    taxType: "gst",
+    completeness: "complete complete partial not_applicable partial partial partial",
+    jurisdictions: 13,
     returns: {
       CA_GST34: {
         filing: "quarterly portal_manual portal_entry",
@@ -89,29 +104,35 @@ const PACK_FACTS: Record<string, PackFacts> = {
         codes: ["CA-GST -: 7% 1991-01-01, 6% 2006-07-01, 5% 2008-01-01"],
       },
       CA_BC_PST: {
-        filing: "monthly portal_manual portal_entry", boxes: "A B -C D E",
+        filing: "monthly portal_manual portal_entry",
+        boxes: "A B -C D E",
         formulas: ["E = C + D"],
         codes: ["CA-BC-PST - -> C: 7% 2013-04-01"],
       },
       CA_SK_PST: {
-        filing: "monthly portal_manual portal_entry", boxes: "1 2 -3 4 5",
+        filing: "monthly portal_manual portal_entry",
+        boxes: "1 2 -3 4 5",
         formulas: ["5 = 3 + 4"],
         codes: ["CA-SK-PST -: 6% 2017-03-23"],
       },
       CA_MB_RST: {
-        filing: "monthly portal_manual portal_entry", boxes: "1 2 -3 4 5",
+        filing: "monthly portal_manual portal_entry",
+        boxes: "1 2 -3 4 5",
         formulas: ["5 = 3 + 4"],
         codes: ["CA-MB-RST -: 7% 2019-07-01"],
       },
       CA_QC_QST: {
-        filing: "quarterly portal_manual portal_entry", boxes: "205 -203 205I 206 208",
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "205 -203 205I 206 208",
         formulas: ["208 = 203 - 205I + 206"],
         codes: ["CA-QC-QST -: 9.975% 2013-01-01"],
       },
     },
   },
   US: {
-    taxType: "sales_use", completeness: "complete partial partial partial partial partial partial", jurisdictions: 51,
+    taxType: "sales_use",
+    completeness: "complete partial partial partial partial partial partial",
+    jurisdictions: 51,
     returns: {
       US_SALES_TAX_WORKPAPER: {
         filing: "monthly portal_manual portal_entry",
@@ -119,44 +140,49 @@ const PACK_FACTS: Record<string, PackFacts> = {
         formulas: ["TAX_DUE = TAX_COLLECTED + ADJUSTMENTS"],
       },
       US_CA_CDTFA401: {
-        filing: "quarterly portal_manual portal_entry", boxes: "1 2 3 11 12 -19 20 21",
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "1 2 3 11 12 -19 20 21",
         formulas: ["3 = 1 + 2", "12 = 3 - 11", "21 = 19 - 20"],
         codes: [
-          "US-CA-ST -: 3% 1949-07-01, 4% 1962-01-01, 5% 1967-08-01, 5% 1972-07-01, 6% 1973-07-01, "
-            + "5% 1973-10-01, 6% 1974-04-01, 6.25% 1989-12-01, 6% 1991-01-01, 7.25% 1991-07-15, 7% 2001-01-01, "
-            + "7.25% 2002-01-01, 7.25% 2004-07-01, 8.25% 2009-04-01, 7.25% 2011-07-01, 7.5% 2013-01-01, "
-            + "7.25% 2017-01-01",
+          "US-CA-ST -: 3% 1949-07-01, 4% 1962-01-01, 5% 1967-08-01, 5% 1972-07-01, 6% 1973-07-01, " +
+            "5% 1973-10-01, 6% 1974-04-01, 6.25% 1989-12-01, 6% 1991-01-01, 7.25% 1991-07-15, 7% 2001-01-01, " +
+            "7.25% 2002-01-01, 7.25% 2004-07-01, 8.25% 2009-04-01, 7.25% 2011-07-01, 7.5% 2013-01-01, " +
+            "7.25% 2017-01-01",
         ],
       },
       US_TX_01114: {
-        filing: "monthly portal_manual portal_entry", boxes: "1 2 3 4 -7 13",
+        filing: "monthly portal_manual portal_entry",
+        boxes: "1 2 3 4 -7 13",
         formulas: ["4 = 2 + 3", "13 = 7"],
         codes: [
-          "US-TX-ST -: 2% 1961-09-01, 3% 1968-10-02, 3.25% 1969-10-01, 4% 1971-07-01, 4.125% 1984-10-02, "
-            + "5.25% 1987-01-01, 6% 1987-10-01, 6.25% 1990-07-01",
+          "US-TX-ST -: 2% 1961-09-01, 3% 1968-10-02, 3.25% 1969-10-01, 4% 1971-07-01, 4.125% 1984-10-02, " +
+            "5.25% 1987-01-01, 6% 1987-10-01, 6.25% 1990-07-01",
         ],
       },
       US_NY_ST100: {
-        filing: "quarterly portal_manual portal_entry", boxes: "1 1a 12 -14 17",
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "1 1a 12 -14 17",
         formulas: ["17 = 14"],
         codes: ["US-NY-ST -: 4.25% 2003-06-01, 4% 2005-06-01"],
       },
       US_FL_DR15: {
-        filing: "monthly portal_manual portal_entry", boxes: "A1 A2 A3 -5 6 7",
+        filing: "monthly portal_manual portal_entry",
+        boxes: "A1 A2 A3 -5 6 7",
         formulas: ["7 = 5 - 6"],
         codes: ["US-FL-ST -: 3% 1949-11-01, 4% 1968-04-01, 5% 1982-05-01, 6% 1988-02-01"],
       },
       US_WA_CET: {
         filing: "quarterly portal_manual portal_entry",
-        boxes: "BO_RET BO_WHO BO_MFG BO_SVC BO_SVC1M BO_SVC5M ST_TAXABLE ST_TAX USE_TAX LOCAL_TAXABLE LOCAL_TAX "
-          + "SBC_CREDIT WA_GROSS -WA_TAX TOTAL_DUE",
+        boxes:
+          "BO_RET BO_WHO BO_MFG BO_SVC BO_SVC1M BO_SVC5M ST_TAXABLE ST_TAX USE_TAX LOCAL_TAXABLE LOCAL_TAX " +
+          "SBC_CREDIT WA_GROSS -WA_TAX TOTAL_DUE",
         formulas: [
           "TOTAL_DUE = ST_TAX + USE_TAX + LOCAL_TAX + BO_RET + BO_WHO + BO_MFG + BO_SVC + BO_SVC1M + BO_SVC5M - SBC_CREDIT",
         ],
         codes: [
-          "US-WA-ST - -> ST_TAXABLE ST_TAX USE_TAX: 2% 1935-05-01, 3% 1941-05-01, 3.33% 1955-05-01, "
-            + "4% 1959-04-01, 4.2% 1965-06-01, 4.5% 1967-07-01, 4.6% 1976-06-01, 4.5% 1979-07-01, 5.5% 1981-12-04, "
-            + "5.4% 1982-05-01, 6.5% 1983-03-01",
+          "US-WA-ST - -> ST_TAXABLE ST_TAX USE_TAX: 2% 1935-05-01, 3% 1941-05-01, 3.33% 1955-05-01, " +
+            "4% 1959-04-01, 4.2% 1965-06-01, 4.5% 1967-07-01, 4.6% 1976-06-01, 4.5% 1979-07-01, 5.5% 1981-12-04, " +
+            "5.4% 1982-05-01, 6.5% 1983-03-01",
           "US-WA-BO-RET - -> BO_RET: 0.471% 1982-07-01, 0.5% 2027-01-01",
           "US-WA-BO-WHO - -> BO_WHO: 0.484% 1982-07-01, 0.5% 2027-01-01",
           "US-WA-BO-MFG - -> BO_MFG: 0.484% 1982-07-01, 0.5% 2027-01-01",
@@ -167,7 +193,8 @@ const PACK_FACTS: Record<string, PackFacts> = {
       },
       US_990: {
         filing: "annual portal_manual paper",
-        boxes: "VIII12A IX25B IX25C IX25D IX25A X16A X16B X26A X26B X32A X32B X33A X33B I12 I18 I19 I20 I21 I22",
+        boxes:
+          "VIII12A IX25B IX25C IX25D IX25A X16A X16B X26A X26B X32A X32B X33A X33B I12 I18 I19 I20 I21 I22",
         formulas: [
           "IX25A = IX25B + IX25C + IX25D",
           "X33A = X26A + X32A",
@@ -183,33 +210,39 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   AU: {
-    taxType: "gst", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "gst",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       AU_BAS_GST: {
-        filing: "quarterly portal_manual portal_entry", boxes: "G1 G2 G3 G10 G11 -1A 1B",
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "G1 G2 G3 G10 G11 -1A 1B",
         codes: ["AU-GST -: 10% 2000-07-01"],
       },
     },
   },
   NZ: {
-    taxType: "gst", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "gst",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       NZ_GST101A: {
-        filing: "bimonthly portal_manual portal_entry", boxes: "5 6 7 -8 9 10 11 12 13 14 15",
+        filing: "bimonthly portal_manual portal_entry",
+        boxes: "5 6 7 -8 9 10 11 12 13 14 15",
         formulas: ["7 = 5 - 6", "10 = 8 + 9", "14 = 12 + 13", "15 = abs(10 - 14)"],
         codes: ["NZ-GST -: 10% 1986-10-01, 12.5% 1989-07-01, 15% 2010-10-01"],
       },
     },
   },
   GB: {
-    taxType: "vat", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       GB_VAT100: {
-        filing: "quarterly efile_api api", boxes: "-1 2 3 4 5 6 7 8 9",
+        filing: "quarterly efile_api api",
+        boxes: "-1 2 3 4 5 6 7 8 9",
         formulas: ["3 = 1 + 2", "5 = abs(3 - 4)"],
         codes: [
-          "GB-VAT-STD standard: 10% 1973-04-01, 8% 1974-07-29, 15% 1979-06-18, 17.5% 1991-04-01, "
-            + "15% 2008-12-01, 17.5% 2010-01-01, 20% 2011-01-04",
+          "GB-VAT-STD standard: 10% 1973-04-01, 8% 1974-07-29, 15% 1979-06-18, 17.5% 1991-04-01, " +
+            "15% 2008-12-01, 17.5% 2010-01-01, 20% 2011-01-04",
           "GB-VAT-RED reduced: 8% 1994-04-01, 5% 1997-09-01",
           "GB-VAT-ZERO zero: 0% 1973-04-01",
         ],
@@ -217,24 +250,28 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   DE: {
-    taxType: "vat", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       DE_USTVA: {
-        filing: "monthly file_upload certified_file", boxes: "81 86 87 41 -OB_OUTPUT 66 61 62 67 OB_INPUT 83",
+        filing: "monthly file_upload certified_file",
+        boxes: "81 86 87 41 -OB_OUTPUT 66 61 62 67 OB_INPUT 83",
         codes: [
-          "DE-VAT-STD standard: 10% 1968-01-01, 11% 1968-07-01, 12% 1978-01-01, 13% 1979-07-01, "
-            + "14% 1983-07-01, 15% 1993-01-01, 16% 1998-04-01, 19% 2007-01-01, 16% 2020-07-01, 19% 2021-01-01",
-          "DE-VAT-RED reduced: 5% 1968-01-01, 5.5% 1968-07-01, 6% 1978-01-01, 6.5% 1979-07-01, 7% 1983-07-01, "
-            + "5% 2020-07-01, 7% 2021-01-01",
+          "DE-VAT-STD standard: 10% 1968-01-01, 11% 1968-07-01, 12% 1978-01-01, 13% 1979-07-01, " +
+            "14% 1983-07-01, 15% 1993-01-01, 16% 1998-04-01, 19% 2007-01-01, 16% 2020-07-01, 19% 2021-01-01",
+          "DE-VAT-RED reduced: 5% 1968-01-01, 5.5% 1968-07-01, 6% 1978-01-01, 6.5% 1979-07-01, 7% 1983-07-01, " +
+            "5% 2020-07-01, 7% 2021-01-01",
         ],
       },
     },
   },
   FR: {
-    taxType: "vat", completeness: "partial partial partial partial partial partial partial",
+    taxType: "vat",
+    completeness: "partial partial partial partial partial partial partial",
     returns: {
       FR_CA3: {
-        filing: "monthly file_upload certified_file", boxes: "A1 E1 08 09 9B -OB_OUTPUT 16 19 20 OB_INPUT 23 25 TD 28",
+        filing: "monthly file_upload certified_file",
+        boxes: "A1 E1 08 09 9B -OB_OUTPUT 16 19 20 OB_INPUT 23 25 TD 28",
         codes: [
           "FR-VAT-STD standard: 20% 2014-01-01",
           "FR-VAT-RED10 reduced: 10% 2014-01-01",
@@ -244,28 +281,42 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   ES: {
-    taxType: "vat", completeness: "partial partial partial partial partial partial partial",
+    taxType: "vat",
+    completeness: "partial partial partial partial partial partial partial",
     returns: {
       ES_MODELO303: {
-        filing: "quarterly portal_manual portal_entry", boxes: "01 02 -03 04 05 -06 07 08 -09 -27 28 29 45 46 -OB_OUTPUT OB_INPUT",
-        codes: ["ES-VAT-STD -: 21% 2012-09-01", "ES-VAT-RED reduced: 10% 2026-03-26", "ES-VAT-SUPERRED reduced: 4% 2026-03-26"],
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "01 02 -03 04 05 -06 07 08 -09 -27 28 29 45 46 -OB_OUTPUT OB_INPUT",
+        codes: [
+          "ES-VAT-STD -: 21% 2012-09-01",
+          "ES-VAT-RED reduced: 10% 2026-03-26",
+          "ES-VAT-SUPERRED reduced: 4% 2026-03-26",
+        ],
       },
     },
   },
   IT: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       IT_LIPE: {
-        filing: "quarterly file_upload certified_file", boxes: "VP2 VP3 -VP4 VP5 VP6 VP7 VP8 VP9 VP10 VP11 VP12 VP13 VP14",
-        codes: ["IT-VAT-STD -: 22% 2013-10-01", "IT-VAT-RED10 reduced: 10% 2026-09-18", "IT-VAT-RED4 reduced: 4% 2026-09-18"],
+        filing: "quarterly file_upload certified_file",
+        boxes: "VP2 VP3 -VP4 VP5 VP6 VP7 VP8 VP9 VP10 VP11 VP12 VP13 VP14",
+        codes: [
+          "IT-VAT-STD -: 22% 2013-10-01",
+          "IT-VAT-RED10 reduced: 10% 2026-09-18",
+          "IT-VAT-RED4 reduced: 4% 2026-09-18",
+        ],
       },
     },
   },
   NL: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       NL_OB: {
-        filing: "quarterly portal_manual portal_entry", boxes: "1a 1b 1c 1d 1e 2a 3a 3b 3c 4a 4b -5a 5b",
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "1a 1b 1c 1d 1e 2a 3a 3b 3c 4a 4b -5a 5b",
         codes: [
           "NL-VAT-STD standard -> 1a: 17.5% 1992-10-01, 19% 2001-01-01, 21% 2012-10-01",
           "NL-VAT-RED reduced -> 1b: 6% 2005-01-01, 9% 2019-01-01",
@@ -274,45 +325,54 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   IE: {
-    taxType: "vat", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       IE_VAT3: {
-        filing: "bimonthly portal_manual portal_entry", boxes: "-T1 T2 T3 T4 E1 E2 ES1 ES2 PA1",
+        filing: "bimonthly portal_manual portal_entry",
+        boxes: "-T1 T2 T3 T4 E1 E2 ES1 ES2 PA1",
         codes: [
-          "IE-VAT-STD standard: 16.37% 1972-11-01, 19.5% 1973-09-03, 20% 1976-03-01, 25% 1980-05-01, "
-            + "30% 1982-05-01, 35% 1983-03-01, 23% 1985-03-01, 25% 1986-03-01, 23% 1990-03-01, 21% 1991-03-01, "
-            + "20% 2001-01-01, 21% 2002-03-01, 21.5% 2008-12-01, 21% 2010-01-01, 23% 2012-01-01, 21% 2020-09-01, "
-            + "23% 2021-03-01",
-          "IE-VAT-RED reduced: 5.26% 1972-11-01, 6.75% 1973-09-03, 10% 1976-03-01, 15% 1981-09-01, "
-            + "18% 1982-05-01, 23% 1983-03-01, 10% 1985-03-01, 12.5% 1991-03-01, 16% 1992-03-01, 12.5% 1993-03-01, "
-            + "13.5% 2003-01-01",
+          "IE-VAT-STD standard: 16.37% 1972-11-01, 19.5% 1973-09-03, 20% 1976-03-01, 25% 1980-05-01, " +
+            "30% 1982-05-01, 35% 1983-03-01, 23% 1985-03-01, 25% 1986-03-01, 23% 1990-03-01, 21% 1991-03-01, " +
+            "20% 2001-01-01, 21% 2002-03-01, 21.5% 2008-12-01, 21% 2010-01-01, 23% 2012-01-01, 21% 2020-09-01, " +
+            "23% 2021-03-01",
+          "IE-VAT-RED reduced: 5.26% 1972-11-01, 6.75% 1973-09-03, 10% 1976-03-01, 15% 1981-09-01, " +
+            "18% 1982-05-01, 23% 1983-03-01, 10% 1985-03-01, 12.5% 1991-03-01, 16% 1992-03-01, 12.5% 1993-03-01, " +
+            "13.5% 2003-01-01",
           "IE-VAT-RED2 reduced: 5% 1988-03-01..1990-02-28, 12.5% 1992-03-01..1993-02-28, 9% 2011-07-01",
         ],
       },
     },
   },
   SG: {
-    taxType: "gst", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "gst",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       SG_GSTF5: {
-        filing: "quarterly portal_manual portal_entry", boxes: "1 2 3 4 5 -6 7 8 9 10 11 12 13 14 15",
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "1 2 3 4 5 -6 7 8 9 10 11 12 13 14 15",
         formulas: ["4 = 1 + 2 + 3", "8 = 6 - 7"],
-        codes: ["SG-GST -: 3% 1994-04-01, 4% 2003-01-01, 5% 2004-01-01, 7% 2007-07-01, 8% 2023-01-01, 9% 2024-01-01"],
+        codes: [
+          "SG-GST -: 3% 1994-04-01, 4% 2003-01-01, 5% 2004-01-01, 7% 2007-07-01, 8% 2023-01-01, 9% 2024-01-01",
+        ],
       },
     },
   },
   IN: {
-    taxType: "gst", completeness: "partial partial partial partial partial partial partial",
+    taxType: "gst",
+    completeness: "partial partial partial partial partial partial partial",
     returns: {
       IN_GSTR3B: {
         filing: "monthly portal_manual portal_entry",
-        boxes: "3.1(a) 3.1(b) 3.1(c) 3.1(d) 3.1(e) 3.1.1(i) 3.1.1(ii) 3.2 4(A) 4(B) 4(C) 4(D) 5 5.1 6.1 -OB_OUTPUT OB_INPUT",
+        boxes:
+          "3.1(a) 3.1(b) 3.1(c) 3.1(d) 3.1(e) 3.1.1(i) 3.1.1(ii) 3.2 4(A) 4(B) 4(C) 4(D) 5 5.1 6.1 -OB_OUTPUT OB_INPUT",
         codes: ["IN-GST-18 -: 18% 2017-07-01"],
       },
     },
   },
   ZA: {
-    taxType: "vat", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       ZA_VAT201: {
         filing: "bimonthly portal_manual portal_entry",
@@ -323,20 +383,24 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   AE: {
-    taxType: "vat", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       AE_VAT201: {
-        filing: "quarterly portal_manual portal_entry", boxes: "1 2 3 4 5 6 7 8 9 10 11 -12 13 14",
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "1 2 3 4 5 6 7 8 9 10 11 -12 13 14",
         formulas: ["14 = 12 - 13"],
         codes: ["AE-VAT-STD -: 5% 2018-01-01"],
       },
     },
   },
   JP: {
-    taxType: "consumption", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "consumption",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       JP_CONSUMPTION: {
-        filing: "annual portal_manual portal_entry", boxes: "1 -2 -3 4 5 6 7 8 9 10 11 12 26 -OB_OUTPUT OB_INPUT",
+        filing: "annual portal_manual portal_entry",
+        boxes: "1 -2 -3 4 5 6 7 8 9 10 11 12 26 -OB_OUTPUT OB_INPUT",
         codes: [
           "JP-CT-STD standard: 3% 1989-04-01, 5% 1997-04-01, 8% 2014-04-01, 10% 2019-10-01",
           "JP-CT-RED reduced: 8% 2019-10-01",
@@ -345,12 +409,14 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   CH: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       CH_MWST_ABRECHNUNG: {
         filing: "quarterly portal_manual portal_entry",
-        boxes: "200 205 220 221 225 230 235 280 289 299 -303 -302 -313 -312 -343 -342 -383 -382 -399 400 405 410 "
-          + "415 420 479 -500 510 -OB_OUTPUT OB_INPUT",
+        boxes:
+          "200 205 220 221 225 230 235 280 289 299 -303 -302 -313 -312 -343 -342 -383 -382 -399 400 405 410 " +
+          "415 420 479 -500 510 -OB_OUTPUT OB_INPUT",
         codes: [
           "CH-VAT-STD standard: 7.6% 2001-01-01, 8% 2011-01-01, 7.7% 2018-01-01, 8.1% 2024-01-01",
           "CH-VAT-RED reduced: 2.4% 2001-01-01, 2.5% 2011-01-01, 2.6% 2024-01-01",
@@ -360,10 +426,12 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   AT: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial not_applicable partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial not_applicable partial",
     returns: {
       AT_U30: {
-        filing: "monthly portal_manual portal_entry", boxes: "000 022 029 006 037 060 095 -OB_OUTPUT OB_INPUT",
+        filing: "monthly portal_manual portal_entry",
+        boxes: "000 022 029 006 037 060 095 -OB_OUTPUT OB_INPUT",
         codes: [
           "AT-VAT-STD standard: 20% 2026-08-01",
           "AT-VAT-RED10 reduced: 10% 2026-08-01",
@@ -374,10 +442,12 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   BE: {
-    taxType: "vat", completeness: "partial partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "partial partial partial not_applicable partial partial partial",
     returns: {
       BE_VAT_PERIODIC: {
-        filing: "monthly file_upload certified_file", boxes: "01 02 03 54 59 71 72 -OB_OUTPUT OB_INPUT",
+        filing: "monthly file_upload certified_file",
+        boxes: "01 02 03 54 59 71 72 -OB_OUTPUT OB_INPUT",
         codes: [
           "BE-VAT-STD standard: 21% 2026-09-18",
           "BE-VAT-RED12 reduced: 12% 2026-09-18",
@@ -387,7 +457,8 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   PL: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       PL_JPK_V7M: {
         filing: "monthly file_upload certified_file",
@@ -402,10 +473,12 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   SE: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       SE_MOMSDEKLARATION: {
-        filing: "quarterly portal_manual portal_entry", boxes: "05 06 07 08 -10 -11 -12 48 49 -OB_OUTPUT OB_INPUT",
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "05 06 07 08 -10 -11 -12 48 49 -OB_OUTPUT OB_INPUT",
         codes: [
           "SE-VAT-STD standard: 25% 2019-07-01",
           "SE-VAT-RED12 reduced: 12% 2019-07-01",
@@ -416,21 +489,25 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   KR: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       KR_VAT_RETURN: {
         filing: "quarterly portal_manual portal_entry",
-        boxes: "-OUTPUT_TAX ZERO_RATED_SUPPLIES INPUT_TAX TAX_PAYABLE_REFUNDABLE -OB_OUTPUT OB_INPUT",
+        boxes:
+          "-OUTPUT_TAX ZERO_RATED_SUPPLIES INPUT_TAX TAX_PAYABLE_REFUNDABLE -OB_OUTPUT OB_INPUT",
         codes: ["KR-VAT-STD standard: 10% 2024-01-01", "KR-VAT-ZERO zero: 0% 2024-01-01"],
       },
     },
   },
   PT: {
-    taxType: "vat", completeness: "complete partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "complete partial partial not_applicable partial partial partial",
     returns: {
       PT_IVA_DP: {
         filing: "monthly portal_manual portal_entry",
-        boxes: "1 -2 5 -6 3 -4 20 21 23 22 24 40 41 61 81 65 66 67 68 90 91 -92 -93 94 95 96 -OB_OUTPUT OB_INPUT",
+        boxes:
+          "1 -2 5 -6 3 -4 20 21 23 22 24 40 41 61 81 65 66 67 68 90 91 -92 -93 94 95 96 -OB_OUTPUT OB_INPUT",
         codes: [
           "PT-VAT-STD standard: 21% 2010-07-01, 23% 2011-01-01",
           "PT-VAT-INT reduced: 13% 2010-07-01",
@@ -446,21 +523,25 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   DK: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       DK_MOMS: {
         filing: "quarterly portal_manual portal_entry",
-        boxes: "-SALGSMOMS -EU_VAREKOEB_MOMS -UDLAND_YDELSER_MOMS KOEBSMOMS MOMSRESULTAT -OB_OUTPUT OB_INPUT",
+        boxes:
+          "-SALGSMOMS -EU_VAREKOEB_MOMS -UDLAND_YDELSER_MOMS KOEBSMOMS MOMSRESULTAT -OB_OUTPUT OB_INPUT",
         formulas: ["MOMSRESULTAT = SALGSMOMS+EU_VAREKOEB_MOMS+UDLAND_YDELSER_MOMS-KOEBSMOMS"],
         codes: ["DK-VAT-STD standard: 25% 1992-01-01"],
       },
     },
   },
   NO: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       NO_MVA_MELDING: {
-        filing: "bimonthly efile_api api", boxes: "3 31 33 32 5 6 1 11 13 12 -OB_OUTPUT OB_INPUT",
+        filing: "bimonthly efile_api api",
+        boxes: "3 31 33 32 5 6 1 11 13 12 -OB_OUTPUT OB_INPUT",
         codes: [
           "NO-VAT-STD standard: 25% 2012-01-01",
           "NO-VAT-FOOD reduced: 15% 2012-01-01",
@@ -471,21 +552,28 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   SA: {
-    taxType: "vat", completeness: "not_applicable complete partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable complete partial not_applicable partial partial partial",
     returns: {
       SA_VAT_RETURN: {
-        filing: "monthly portal_manual portal_entry", boxes: "1 2 3 4 5 6 7 8 9 10 11 12 -13 14 15 -16 -OB_OUTPUT OB_INPUT",
-        codes: ["SA-VAT-STD standard -> 1 7 8 9: 5% 2018-01-01, 15% 2020-07-01", "SA-VAT-ZERO zero: 0% 2018-01-01"],
+        filing: "monthly portal_manual portal_entry",
+        boxes: "1 2 3 4 5 6 7 8 9 10 11 12 -13 14 15 -16 -OB_OUTPUT OB_INPUT",
+        codes: [
+          "SA-VAT-STD standard -> 1 7 8 9: 5% 2018-01-01, 15% 2020-07-01",
+          "SA-VAT-ZERO zero: 0% 2018-01-01",
+        ],
       },
     },
   },
   TR: {
-    taxType: "vat", completeness: "partial partial partial partial partial partial partial",
+    taxType: "vat",
+    completeness: "partial partial partial partial partial partial partial",
     returns: {
       TR_KDV1: {
         filing: "monthly portal_manual portal_entry",
-        boxes: "MATRAH-20 -HESAPLANAN-20 MATRAH-10 -HESAPLANAN-10 MATRAH-1 -HESAPLANAN-1 INDIRILECEK-KDV "
-          + "ODENECEK-KDV -OB_OUTPUT OB_INPUT",
+        boxes:
+          "MATRAH-20 -HESAPLANAN-20 MATRAH-10 -HESAPLANAN-10 MATRAH-1 -HESAPLANAN-1 INDIRILECEK-KDV " +
+          "ODENECEK-KDV -OB_OUTPUT OB_INPUT",
         codes: [
           "TR-VAT-STD standard: 18% 2007-12-31, 20% 2023-07-10",
           "TR-VAT-RED10 reduced: 8% 2007-12-31, 10% 2023-07-10",
@@ -495,10 +583,12 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   HU: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       HU_AFA_65: {
-        filing: "monthly file_upload certified_file", boxes: "05 06 07 110 36 64 65 66 111 76 83 84 85 -OB_OUTPUT OB_INPUT",
+        filing: "monthly file_upload certified_file",
+        boxes: "05 06 07 110 36 64 65 66 111 76 83 84 85 -OB_OUTPUT OB_INPUT",
         codes: [
           "HU-VAT-STD standard: 27% 2012-01-01",
           "HU-VAT-RED18 reduced: 18% 2012-01-01",
@@ -509,19 +599,26 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   RO: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       RO_D300: {
-        filing: "monthly file_upload certified_file", boxes: "9 10 19 24 25 31 32 36 37 38 41 44 45 46 -OB_OUTPUT OB_INPUT",
-        codes: ["RO-VAT-STD standard: 19% 2017-01-01, 21% 2025-08-01", "RO-VAT-RED11 reduced: 11% 2025-08-01"],
+        filing: "monthly file_upload certified_file",
+        boxes: "9 10 19 24 25 31 32 36 37 38 41 44 45 46 -OB_OUTPUT OB_INPUT",
+        codes: [
+          "RO-VAT-STD standard: 19% 2017-01-01, 21% 2025-08-01",
+          "RO-VAT-RED11 reduced: 11% 2025-08-01",
+        ],
       },
     },
   },
   FI: {
-    taxType: "vat", completeness: "partial partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "partial partial partial not_applicable partial partial partial",
     returns: {
       FI_ALV: {
-        filing: "monthly portal_manual portal_entry", boxes: "-301 -302 -303 305 306 307 308 -OB_OUTPUT OB_INPUT",
+        filing: "monthly portal_manual portal_entry",
+        boxes: "-301 -302 -303 305 306 307 308 -OB_OUTPUT OB_INPUT",
         formulas: ["308 = 301 + 302 + 303 + 305 + 306 - 307"],
         codes: [
           "FI-VAT-STD standard: 24% 2013-01-01, 25.5% 2024-09-01",
@@ -533,23 +630,27 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   CL: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       CL_F29: {
         filing: "monthly portal_manual portal_entry",
-        boxes: "502 111 513 -510 -709 517 501 154 518 538 520 525 -528 532 535 553 504 -593 -594 -592 -539 164 127 "
-          + "544 523 537 77 89 91 -OB_OUTPUT OB_INPUT",
+        boxes:
+          "502 111 513 -510 -709 517 501 154 518 538 520 525 -528 532 535 553 504 -593 -594 -592 -539 164 127 " +
+          "544 523 537 77 89 91 -OB_OUTPUT OB_INPUT",
         formulas: ["89 = 538 - 537"],
         codes: ["CL-VAT-STD standard: 19% 2003-10-01"],
       },
     },
   },
   AR: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       AR_IVA_SIMPLE: {
         filing: "monthly portal_manual portal_entry",
-        boxes: "REG_EMITIDOS REG_RECIBIDOS -DET_DEBITO DET_CREDITO DET_RET_PERC DET_PAGOS_CTA DET_SALDO -OB_OUTPUT OB_INPUT",
+        boxes:
+          "REG_EMITIDOS REG_RECIBIDOS -DET_DEBITO DET_CREDITO DET_RET_PERC DET_PAGOS_CTA DET_SALDO -OB_OUTPUT OB_INPUT",
         codes: [
           "AR-VAT-STD standard: 18% 1992-03-01, 21% 1995-04-01, 21% 1996-04-01, 19% 2002-11-18, 21% 2003-01-18",
           "AR-VAT-RED105 reduced: 9.5% 2002-11-18, 10.5% 2003-01-18",
@@ -558,7 +659,8 @@ const PACK_FACTS: Record<string, PackFacts> = {
       },
       AR_F2002: {
         filing: "monthly portal_manual portal_entry",
-        boxes: "-DF_ALIC_21 -DF_ALIC_105 -DF_ALIC_27 CF_TOTAL SALDO_AFIP SALDO_CONTRIB -OB_OUTPUT OB_INPUT",
+        boxes:
+          "-DF_ALIC_21 -DF_ALIC_105 -DF_ALIC_27 CF_TOTAL SALDO_AFIP SALDO_CONTRIB -OB_OUTPUT OB_INPUT",
         codes: [
           "AR-VAT-STD standard: 18% 1992-03-01, 21% 1995-04-01, 21% 1996-04-01, 19% 2002-11-18, 21% 2003-01-18",
           "AR-VAT-RED105 reduced: 9.5% 2002-11-18, 10.5% 2003-01-18",
@@ -568,10 +670,12 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   MX: {
-    taxType: "vat", completeness: "partial partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "partial partial partial not_applicable partial partial partial",
     returns: {
       MX_IVA_MENSUAL: {
-        filing: "monthly portal_manual portal_entry", boxes: "-IVA-CAUSADO IVA-ACREDITABLE IVA-CARGO IVA-FAVOR -OB_OUTPUT OB_INPUT",
+        filing: "monthly portal_manual portal_entry",
+        boxes: "-IVA-CAUSADO IVA-ACREDITABLE IVA-CARGO IVA-FAVOR -OB_OUTPUT OB_INPUT",
         codes: [
           "MX-VAT-STD standard: 16% 2014-01-01",
           "MX-VAT-NORTH-8 reduced: 8% 2019-01-01, 8% 2026-01-01..2026-12-31",
@@ -582,12 +686,14 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   GR: {
-    taxType: "vat", completeness: "not_applicable partial partial partial partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial partial partial partial partial",
     returns: {
       GR_FPA_F2: {
         filing: "quarterly portal_manual portal_entry",
-        boxes: "301 -331 302 -332 303 -333 308 -338 304 -334 305 -335 306 -336 309 -339 307 -337 367 387 430 470 "
-          + "480 511 502 503 -OB_OUTPUT OB_INPUT",
+        boxes:
+          "301 -331 302 -332 303 -333 308 -338 304 -334 305 -335 306 -336 309 -339 307 -337 367 387 430 470 " +
+          "480 511 502 503 -OB_OUTPUT OB_INPUT",
         codes: [
           "GR-VAT-STD standard: 24% 2024-07-01",
           "GR-VAT-RED13 reduced: 13% 2024-07-01",
@@ -602,10 +708,12 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   CO: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial not_applicable partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial not_applicable partial",
     returns: {
       CO_F300: {
-        filing: "bimonthly portal_manual portal_entry", boxes: "27 28 35 -57 -58 -65 75 79 80 81 -OB_OUTPUT OB_INPUT",
+        filing: "bimonthly portal_manual portal_entry",
+        boxes: "27 28 35 -57 -58 -65 75 79 80 81 -OB_OUTPUT OB_INPUT",
         codes: [
           "CO-VAT-STD standard -> 28 58: 19% 2017-01-01",
           "CO-VAT-RED5 reduced: 5% 2017-01-01",
@@ -615,30 +723,43 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   IS: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       IS_VSK: {
         filing: "bimonthly portal_manual portal_entry",
         boxes: "VELTA-24 VELTA-11 VELTA-0 -UTSKATTUR INNSKATTUR MISMUNUR -OB_OUTPUT OB_INPUT",
         formulas: ["MISMUNUR = UTSKATTUR - INNSKATTUR"],
-        codes: ["IS-VAT-STD standard: 24% 2015-01-01", "IS-VAT-RED11 reduced: 11% 2015-01-01", "IS-VAT-ZERO zero: 0% 2014-09-01"],
+        codes: [
+          "IS-VAT-STD standard: 24% 2015-01-01",
+          "IS-VAT-RED11 reduced: 11% 2015-01-01",
+          "IS-VAT-ZERO zero: 0% 2014-09-01",
+        ],
       },
     },
   },
   CZ: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       CZ_DPH: {
-        filing: "monthly file_upload certified_file", boxes: "1 2 20 -OB_OUTPUT 40 41 46 OB_INPUT 62 63 64 65",
-        codes: ["CZ-VAT-STD standard: 21% 2023-06-06", "CZ-VAT-RED12 reduced: 12% 2024-01-01", "CZ-VAT-ZERO zero: 0% 2024-01-01"],
+        filing: "monthly file_upload certified_file",
+        boxes: "1 2 20 -OB_OUTPUT 40 41 46 OB_INPUT 62 63 64 65",
+        codes: [
+          "CZ-VAT-STD standard: 21% 2023-06-06",
+          "CZ-VAT-RED12 reduced: 12% 2024-01-01",
+          "CZ-VAT-ZERO zero: 0% 2024-01-01",
+        ],
       },
     },
   },
   TH: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       TH_PP30: {
-        filing: "monthly portal_manual portal_entry", boxes: "1 2 3 4 -5 6 7 8 9 10 11 12 -OB_OUTPUT OB_INPUT",
+        filing: "monthly portal_manual portal_entry",
+        boxes: "1 2 3 4 -5 6 7 8 9 10 11 12 -OB_OUTPUT OB_INPUT",
         codes: [
           "TH-VAT-STD standard: 7% 2023-10-01, 7% 2024-10-01, 7% 2025-10-01, 7% 2026-10-01..2027-09-30",
           "TH-VAT-ZERO zero: 0% 2000-02-07",
@@ -647,31 +768,40 @@ const PACK_FACTS: Record<string, PackFacts> = {
     },
   },
   KE: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       KE_VAT3: {
         filing: "monthly portal_manual portal_entry",
-        boxes: "-OUTPUT_TAX ZERO_RATED_SUPPLIES INPUT_TAX WITHHOLDING_VAT EXCESS_INPUT_BF TAX_PAYABLE_CREDIT_CF "
-          + "-OB_OUTPUT OB_INPUT",
-        codes: ["KE-VAT-STD standard -> OUTPUT_TAX: 14% 2020-04-01, 16% 2021-01-01", "KE-VAT-ZERO zero: 0% 2020-04-01"],
+        boxes:
+          "-OUTPUT_TAX ZERO_RATED_SUPPLIES INPUT_TAX WITHHOLDING_VAT EXCESS_INPUT_BF TAX_PAYABLE_CREDIT_CF " +
+          "-OB_OUTPUT OB_INPUT",
+        codes: [
+          "KE-VAT-STD standard -> OUTPUT_TAX: 14% 2020-04-01, 16% 2021-01-01",
+          "KE-VAT-ZERO zero: 0% 2020-04-01",
+        ],
       },
     },
   },
   PH: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       PH_BIR_2550Q: {
-        filing: "quarterly portal_manual portal_entry", boxes: "-31 32 -34 -37 60 61 -OB_OUTPUT OB_INPUT",
+        filing: "quarterly portal_manual portal_entry",
+        boxes: "-31 32 -34 -37 60 61 -OB_OUTPUT OB_INPUT",
         codes: ["PH-VAT-STD standard: 12% 2024-04-01", "PH-VAT-ZERO zero: 0% 2024-04-01"],
       },
     },
   },
   VN: {
-    taxType: "vat", completeness: "not_applicable partial partial not_applicable partial partial partial",
+    taxType: "vat",
+    completeness: "not_applicable partial partial not_applicable partial partial partial",
     returns: {
       VN_GTGT_01: {
         filing: "monthly portal_manual portal_entry",
-        boxes: "27 -28 29 30 -31 32 -33 25 36 40 PL08-I-05 PL08-I-06 PL08-II-07 -PL08-II-08 PL08-III-09 -OB_OUTPUT OB_INPUT",
+        boxes:
+          "27 -28 29 30 -31 32 -33 25 36 40 PL08-I-05 PL08-I-06 PL08-II-07 -PL08-II-08 PL08-III-09 -OB_OUTPUT OB_INPUT",
         codes: [
           "VN-VAT-STD standard: 10% 2009-01-01",
           "VN-VAT-RED8 reduced: 8% 2025-07-01..2026-12-31",
@@ -684,12 +814,19 @@ const PACK_FACTS: Record<string, PackFacts> = {
 };
 
 test("the fact table has exactly one row per registered pack", () => {
-  assert.deepEqual(Object.keys(PACK_FACTS).sort(), COUNTRY_TAX_PACKS.map((pack) => pack.country).sort());
+  assert.deepEqual(
+    Object.keys(PACK_FACTS).sort(),
+    COUNTRY_TAX_PACKS.map((pack) => pack.country).sort(),
+  );
 });
 
 for (const pack of COUNTRY_TAX_PACKS) {
   test(`${pack.country} files the returns, boxes and dated rate bands in its row`, () => {
-    assert.deepEqual(factsOf(pack), PACK_FACTS[pack.country], `${pack.code} differs from its PACK_FACTS row`);
+    assert.deepEqual(
+      factsOf(pack),
+      PACK_FACTS[pack.country],
+      `${pack.code} differs from its PACK_FACTS row`,
+    );
   });
 }
 
@@ -711,7 +848,10 @@ test("every band's rate history is closed and contiguous unless its gaps are nam
         for (let index = 1; index < rates.length; index++) {
           const prior = rates[index - 1]!;
           const current = rates[index]!;
-          assert.ok(prior.effectiveTo, `${label}: the ${prior.ratePercent}% band before ${current.effectiveFrom} must be closed`);
+          assert.ok(
+            prior.effectiveTo,
+            `${label}: the ${prior.ratePercent}% band before ${current.effectiveFrom} must be closed`,
+          );
           if (dayAfter(prior.effectiveTo) === current.effectiveFrom) continue;
           gapped.add(code.code);
           assert.ok(
@@ -723,7 +863,11 @@ test("every band's rate history is closed and contiguous unless its gaps are nam
       }
     }
   }
-  assert.deepEqual([...gapped].sort(), [...DISCONTIGUOUS_BANDS].sort(), "named gaps must all be live");
+  assert.deepEqual(
+    [...gapped].sort(),
+    [...DISCONTIGUOUS_BANDS].sort(),
+    "named gaps must all be live",
+  );
 });
 
 /** Packs set up per state or province rather than through one country-level return. */
@@ -740,8 +884,16 @@ test("every pack with a country-level return is provisionable by country from se
     }
     assert.equal(entry.countryStatus, "ready", `${pack.country} is not ready in setup`);
     assert.ok(pack.parentReturnPackCode, `${pack.country} names no country-level return`);
-    assert.equal(entry.countryPack, pack.parentReturnPackCode, `${pack.country} setup installs a different return`);
-    assert.equal(isTaxProvisionSelection(pack.parentReturnPackCode), true, `${pack.country} return is not selectable`);
+    assert.equal(
+      entry.countryPack,
+      pack.parentReturnPackCode,
+      `${pack.country} setup installs a different return`,
+    );
+    assert.equal(
+      isTaxProvisionSelection(pack.parentReturnPackCode),
+      true,
+      `${pack.country} return is not selectable`,
+    );
   }
 });
 
@@ -753,11 +905,19 @@ const WORKPAPER_BOXES: Record<string, Pick<TaxReturnPackBox, "basis" | "glMap">>
 test("every return files over https and ties its workpaper boxes to the ledger side they reconcile", () => {
   for (const pack of COUNTRY_TAX_PACKS) {
     for (const returnPack of pack.returnPacks) {
-      assert.match(returnPack.submissionUrl, /^https:\/\//, `${returnPack.code} files at a non-https address`);
+      assert.match(
+        returnPack.submissionUrl,
+        /^https:\/\//,
+        `${returnPack.code} files at a non-https address`,
+      );
       for (const box of returnPack.boxes) {
         const expected = WORKPAPER_BOXES[box.lineCode];
         if (!expected) continue;
-        assert.deepEqual({ basis: box.basis, glMap: box.glMap }, expected, `${returnPack.code}/${box.lineCode} reconciles the wrong ledger side`);
+        assert.deepEqual(
+          { basis: box.basis, glMap: box.glMap },
+          expected,
+          `${returnPack.code}/${box.lineCode} reconciles the wrong ledger side`,
+        );
       }
     }
   }
@@ -774,7 +934,13 @@ const AUTHORITY_HOSTS: Record<string, readonly string[]> = {
   AT: ["formulare.bmf.gv.at", "www.usp.gv.at", "finanzonline.bmf.gv.at"],
   AU: ["www.ato.gov.au"],
   BE: ["finance.belgium.be"],
-  CA: ["www.canada.ca", "www.bclaws.gov.bc.ca", "www.gov.mb.ca", "www.revenuquebec.ca", "sets.saskatchewan.ca"],
+  CA: [
+    "www.canada.ca",
+    "www.bclaws.gov.bc.ca",
+    "www.gov.mb.ca",
+    "www.revenuquebec.ca",
+    "sets.saskatchewan.ca",
+  ],
   CH: ["www.estv.admin.ch", "www.bazg.admin.ch", "www.estv2.admin.ch"],
   CL: ["www.sii.cl", "www.contraloria.cl"],
   CO: ["www.dian.gov.co", "www.funcionpublica.gov.co", "muisca.dian.gov.co"],
@@ -791,12 +957,22 @@ const AUTHORITY_HOSTS: Record<string, readonly string[]> = {
   IE: ["www.revenue.ie"],
   IN: ["cbic-gst.gov.in", "tutorial.gst.gov.in"],
   IS: ["www.skatturinn.is", "www.althingi.is", "www.reglugerd.is"],
-  IT: ["www.gazzettaufficiale.it", "def.finanze.it", "www1.agenziaentrate.gov.it", "www.agenziaentrate.gov.it"],
+  IT: [
+    "www.gazzettaufficiale.it",
+    "def.finanze.it",
+    "www1.agenziaentrate.gov.it",
+    "www.agenziaentrate.gov.it",
+  ],
   JP: ["www.nta.go.jp"],
   KE: ["www.kra.go.ke"],
   KR: ["nts.go.kr", "mofe.go.kr"],
   MX: ["www.diputados.gob.mx", "www.sat.gob.mx", "dof.gob.mx"],
-  NL: ["www.belastingdienst.nl", "zoek.officielebekendmakingen.nl", "download.belastingdienst.nl", "wetten.overheid.nl"],
+  NL: [
+    "www.belastingdienst.nl",
+    "zoek.officielebekendmakingen.nl",
+    "download.belastingdienst.nl",
+    "wetten.overheid.nl",
+  ],
   NO: ["lovdata.no", "www.skatteetaten.no"],
   NZ: ["www.taxtechnical.ird.govt.nz", "www.ird.govt.nz"],
   PH: ["www.bir.gov.ph", "bir-cdn.bir.gov.ph"],
@@ -812,16 +988,49 @@ const AUTHORITY_HOSTS: Record<string, readonly string[]> = {
   TH: ["www.rd.go.th", "rd.go.th", "efiling.rd.go.th"],
   TR: ["www.resmigazete.gov.tr", "dijital.gib.gov.tr", "ebeyan.gib.gov.tr"],
   US: [
-    "otr.cfo.dc.gov", "revenue.louisiana.gov", "www.tax.newmexico.gov", "dor.sd.gov", "www.cdtfa.ca.gov",
-    "comptroller.texas.gov", "www.tax.ny.gov", "floridarevenue.com", "dor.wa.gov", "lawfilesext.leg.wa.gov",
-    "www.dfa.arkansas.gov", "azjlbc.gov", "tax.colorado.gov", "portal.ct.gov", "dor.georgia.gov",
-    "legislature.idaho.gov", "cgfa.ilga.gov", "www.in.gov", "tax.iowa.gov", "ksrevenue.gov",
-    "apps.legislature.ky.gov", "www1.maine.gov", "www.marylandcomptroller.gov", "stage.mass.gov",
-    "www.michigan.gov", "www.house.mn.gov", "nebraskalegislature.gov",
-    "www.leg.state.nv.us", "www.nj.gov", "www.ncdor.gov", "www.tax.nd.gov", "dam.assets.ohio.gov",
-    "digitalprairie.ok.gov", "www.palrb.gov", "webserver.rilegislature.gov", "www.scstatehouse.gov",
-    "www.tn.gov", "le.utah.gov", "ljfo.vermont.gov", "www.tax.virginia.gov", "www.wvlegislature.gov",
-    "www.revenue.wi.gov", "wyoleg.gov",
+    "otr.cfo.dc.gov",
+    "revenue.louisiana.gov",
+    "www.tax.newmexico.gov",
+    "dor.sd.gov",
+    "www.cdtfa.ca.gov",
+    "comptroller.texas.gov",
+    "www.tax.ny.gov",
+    "floridarevenue.com",
+    "dor.wa.gov",
+    "lawfilesext.leg.wa.gov",
+    "www.dfa.arkansas.gov",
+    "azjlbc.gov",
+    "tax.colorado.gov",
+    "portal.ct.gov",
+    "dor.georgia.gov",
+    "legislature.idaho.gov",
+    "cgfa.ilga.gov",
+    "www.in.gov",
+    "tax.iowa.gov",
+    "ksrevenue.gov",
+    "apps.legislature.ky.gov",
+    "www1.maine.gov",
+    "www.marylandcomptroller.gov",
+    "stage.mass.gov",
+    "www.michigan.gov",
+    "www.house.mn.gov",
+    "nebraskalegislature.gov",
+    "www.leg.state.nv.us",
+    "www.nj.gov",
+    "www.ncdor.gov",
+    "www.tax.nd.gov",
+    "dam.assets.ohio.gov",
+    "digitalprairie.ok.gov",
+    "www.palrb.gov",
+    "webserver.rilegislature.gov",
+    "www.scstatehouse.gov",
+    "www.tn.gov",
+    "le.utah.gov",
+    "ljfo.vermont.gov",
+    "www.tax.virginia.gov",
+    "www.wvlegislature.gov",
+    "www.revenue.wi.gov",
+    "wyoleg.gov",
   ],
   VN: ["congbaocdn.chinhphu.vn", "www.vietnamtradeportal.gov.vn", "thuedientu.gdt.gov.vn"],
   ZA: ["www.sars.gov.za"],
@@ -884,12 +1093,19 @@ test("every pack sources only its own country's authority hosts or a named mirro
       );
     }
   }
-  assert.deepEqual([...seenExceptions].sort(), Object.keys(MIRRORED_PRIMARY_DOCUMENTS).sort(), "named exceptions must all be live");
+  assert.deepEqual(
+    [...seenExceptions].sort(),
+    Object.keys(MIRRORED_PRIMARY_DOCUMENTS).sort(),
+    "named exceptions must all be live",
+  );
 });
 
 /** Rate bands need return destinations, known sources, and reviewed reasons for fetch-date openings. */
 
-function governmentBoxes(pack: CountryTaxPackDefinition, returnPackCode: string): TaxReturnPackBox[] {
+function governmentBoxes(
+  pack: CountryTaxPackDefinition,
+  returnPackCode: string,
+): TaxReturnPackBox[] {
   const returnPack = pack.returnPacks.find((entry) => entry.code === returnPackCode);
   assert.ok(returnPack, `${pack.country}: return pack ${returnPackCode} is missing`);
   return returnPack.boxes.filter((box) => !box.lineCode.startsWith("OB_"));
@@ -910,9 +1126,12 @@ test("statutory fidelity: every priced band on a rate-split return has a box, a 
       // bands across boxes can drop one.
       if (!gov.some((box) => labelPercents(box.label).length > 0)) continue;
       for (const code of packTaxCodesForReturn(pack, returnPackCode)) {
-        const routed = code.ratePercent === "0"
-          ? gov.some((box) => labelPercents(box.label).includes("0") || /\bzero\b/i.test(box.label))
-          : gov.some((box) => labelPercents(box.label).includes(code.ratePercent));
+        const routed =
+          code.ratePercent === "0"
+            ? gov.some(
+                (box) => labelPercents(box.label).includes("0") || /\bzero\b/i.test(box.label),
+              )
+            : gov.some((box) => labelPercents(box.label).includes(code.ratePercent));
         if (routed) continue;
         if (code.returnBoxes?.length) {
           for (const line of code.returnBoxes) {

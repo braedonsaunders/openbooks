@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { compensationSpec, compensationTitle, loadCompensationPage } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { compensationSpec, compensationTitle, loadCompensationPage } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await compensationTitle() }
+  return { title: await compensationTitle() };
 }
 
 /**
@@ -16,9 +16,9 @@ export async function generateMetadata() {
 export default async function CompensationPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadCompensationPage(sp)
-  return <ModuleView spec={compensationSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadCompensationPage(sp);
+  return <ModuleView spec={compensationSpec(data)} data={data} searchParams={sp} trusted />;
 }

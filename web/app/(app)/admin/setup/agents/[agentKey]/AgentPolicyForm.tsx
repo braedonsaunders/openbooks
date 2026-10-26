@@ -1,53 +1,68 @@
-'use client'
+"use client";
 
-import { useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { Bell, ListChecks, Settings2, Sparkles, X } from 'lucide-react'
-import { toast } from 'sonner'
-import { Badge, Button, Card, CardContent, Input, Label, SearchSelect, cn } from '@openbooks/ui'
-import { Switch } from '@/components/switch'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { createMoneyFormatter } from '@/lib/money-format'
+import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { Bell, ListChecks, Settings2, Sparkles, X } from "lucide-react";
+import { toast } from "sonner";
+import { Badge, Button, Card, CardContent, Input, Label, SearchSelect, cn } from "@openbooks/ui";
+import { Switch } from "@/components/switch";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { createMoneyFormatter } from "@/lib/money-format";
 
 /** Serializable slices the loader hands over (JSON-safe engine policy JSON). */
 export type AgentPolicyDetectorDraft = {
-  detectorKey: string
-  enabled: boolean
-  materialityThreshold: string | null
-  parameters: Record<string, number>
-}
+  detectorKey: string;
+  enabled: boolean;
+  materialityThreshold: string | null;
+  parameters: Record<string, number>;
+};
 
 export type AgentPolicyDraft = {
-  enabled: boolean
-  automaticRuns: boolean
-  cadence: 'daily' | 'weekly'
-  materialityThreshold: string
-  detectors: AgentPolicyDetectorDraft[]
+  enabled: boolean;
+  automaticRuns: boolean;
+  cadence: "daily" | "weekly";
+  materialityThreshold: string;
+  detectors: AgentPolicyDetectorDraft[];
   analysis: {
-    rootCauseAnalysis: boolean
-    recommendations: boolean
-    narrative: boolean
-    modelTier: 'fast' | 'smart'
-    maxToolSteps: number
-  }
-}
+    rootCauseAnalysis: boolean;
+    recommendations: boolean;
+    narrative: boolean;
+    modelTier: "fast" | "smart";
+    maxToolSteps: number;
+  };
+};
 
 export type AgentPolicyNotificationDraft = {
-  mode: 'findings_only' | 'digest' | 'immediate'
-  roleIds: string[]
-  userIds: string[]
-} | null
+  mode: "findings_only" | "digest" | "immediate";
+  roleIds: string[];
+  userIds: string[];
+} | null;
 
 export type AgentPolicySpecView = {
-  detectorKey: string
-  supportsMateriality: boolean
-  parameters: { key: string; defaultValue: number; min: number; max: number; step: number; unit: string }[]
-}
+  detectorKey: string;
+  supportsMateriality: boolean;
+  parameters: {
+    key: string;
+    defaultValue: number;
+    min: number;
+    max: number;
+    step: number;
+    unit: string;
+  }[];
+};
 
-const NOTIFICATION_MODES = ['findings_only', 'digest', 'immediate'] as const
+const NOTIFICATION_MODES = ["findings_only", "digest", "immediate"] as const;
 
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+function Field({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+}) {
   // Descriptive hints live in the label's `?` popover (FieldLabel); inline
   // text under a control is reserved for validation/state messages.
   return (
@@ -55,7 +70,7 @@ function Field({ label, children, hint }: { label: string; children: React.React
       <Label help={hint}>{label}</Label>
       {children}
     </div>
-  )
+  );
 }
 
 /** Money input: 2-decimal numeric field with the org-currency adornment. */
@@ -66,11 +81,11 @@ function MoneyInput({
   onChange,
   ariaLabel,
 }: {
-  currency: string
-  value: string
-  disabled?: boolean
-  onChange: (value: string) => void
-  ariaLabel?: string
+  currency: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+  ariaLabel?: string;
 }) {
   return (
     <div className="relative">
@@ -91,14 +106,14 @@ function MoneyInput({
         className="pl-14 tabular-nums"
       />
     </div>
-  )
+  );
 }
 
 /** Display thresholds at 2 decimals — the save path canonicalizes scale server-side. */
 function twoDecimals(value: string): string {
-  if (value.trim() === '') return value
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed.toFixed(2) : value
+  if (value.trim() === "") return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed.toFixed(2) : value;
 }
 
 function Check({
@@ -107,17 +122,22 @@ function Check({
   onChange,
   children,
 }: {
-  checked: boolean
-  disabled?: boolean
-  onChange: (checked: boolean) => void
-  children: React.ReactNode
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+  children: React.ReactNode;
 }) {
   return (
     <label className="flex items-center gap-2 text-sm text-slate-700 disabled:opacity-50 dark:text-slate-200">
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
       {children}
     </label>
-  )
+  );
 }
 
 function Section({
@@ -126,28 +146,32 @@ function Section({
   description,
   children,
 }: {
-  icon: React.ReactNode
-  title: string
-  description: string
-  children: React.ReactNode
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  children: React.ReactNode;
 }) {
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-teal-50 p-2 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">{icon}</div>
+          <div className="rounded-lg bg-teal-50 p-2 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
+            {icon}
+          </div>
           <div>
             <h3 className="font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-            <p className="mt-0.5 max-w-3xl text-sm text-slate-500 dark:text-slate-400">{description}</p>
+            <p className="mt-0.5 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
+              {description}
+            </p>
           </div>
         </div>
       </div>
       {children}
     </section>
-  )
+  );
 }
 
-type TokenOption = { value: string; label: string; hint?: string }
+type TokenOption = { value: string; label: string; hint?: string };
 
 /** Searchable add-and-remove token list backed by a large option set (people,
  *  roles). Selected values render as removable chips. */
@@ -159,21 +183,21 @@ function TokenSelect({
   empty,
   ariaLabel,
 }: {
-  options: TokenOption[]
-  value: string[]
-  onChange: (next: string[]) => void
-  placeholder?: string
-  empty?: string
-  ariaLabel?: string
+  options: TokenOption[];
+  value: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+  empty?: string;
+  ariaLabel?: string;
 }) {
-  const byValue = new Map(options.map((option) => [option.value, option]))
-  const available = options.filter((option) => !value.includes(option.value))
+  const byValue = new Map(options.map((option) => [option.value, option]));
+  const available = options.filter((option) => !value.includes(option.value));
   return (
     <div className="space-y-2">
       <SearchSelect
         value=""
         onChange={(next) => {
-          if (next && !value.includes(next)) onChange([...value, next])
+          if (next && !value.includes(next)) onChange([...value, next]);
         }}
         options={available}
         placeholder={placeholder}
@@ -202,7 +226,7 @@ function TokenSelect({
         </div>
       ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -229,42 +253,46 @@ export function AgentPolicyForm({
   usersTruncated,
   featureEnabled,
 }: {
-  statusLabel: string
-  statusEnabled: boolean
-  description: string
-  runLine: string
-  currency: string
+  statusLabel: string;
+  statusEnabled: boolean;
+  description: string;
+  runLine: string;
+  currency: string;
   pack: {
-    agentKey: string
-    policy: AgentPolicyDraft
+    agentKey: string;
+    policy: AgentPolicyDraft;
     lastRun: {
-      startedAt: string
-      status: 'completed' | 'failed' | 'skipped' | 'running'
-    } | null
-    openFindings: number
-  }
-  specs: AgentPolicySpecView[]
-  notification: AgentPolicyNotificationDraft
-  roles: { id: string; name: string }[]
-  users: { id: string; name: string; email: string }[]
-  usersTruncated: boolean
-  featureEnabled: boolean
+      startedAt: string;
+      status: "completed" | "failed" | "skipped" | "running";
+    } | null;
+    openFindings: number;
+  };
+  specs: AgentPolicySpecView[];
+  notification: AgentPolicyNotificationDraft;
+  roles: { id: string; name: string }[];
+  users: { id: string; name: string; email: string }[];
+  usersTruncated: boolean;
+  featureEnabled: boolean;
 }) {
-  const t = useTranslations('admin')
-  const locale = useLocale()
-  const router = useRouter()
-  const formatMoney = useMemo(() => createMoneyFormatter(locale, currency).money, [locale, currency])
-  const initial = useRef({ policy: pack.policy, specs, notification })
-  const [draft, setDraft] = useState<AgentPolicyDraft>(() => structuredDraft(pack.policy, specs))
-  const [routing, setRouting] = useState<AgentPolicyNotificationDraft>(() => notification)
-  const [saving, setSaving] = useState(false)
+  const t = useTranslations("admin");
+  const locale = useLocale();
+  const router = useRouter();
+  const formatMoney = useMemo(
+    () => createMoneyFormatter(locale, currency).money,
+    [locale, currency],
+  );
+  const initial = useRef({ policy: pack.policy, specs, notification });
+  const [draft, setDraft] = useState<AgentPolicyDraft>(() => structuredDraft(pack.policy, specs));
+  const [routing, setRouting] = useState<AgentPolicyNotificationDraft>(() => notification);
+  const [saving, setSaving] = useState(false);
 
   function cancel() {
-    setDraft(structuredDraft(initial.current.policy, initial.current.specs))
-    setRouting(initial.current.notification)
+    setDraft(structuredDraft(initial.current.policy, initial.current.specs));
+    setRouting(initial.current.notification);
   }
 
-  const patch = (next: Partial<AgentPolicyDraft>) => setDraft((current) => ({ ...current, ...next }))
+  const patch = (next: Partial<AgentPolicyDraft>) =>
+    setDraft((current) => ({ ...current, ...next }));
 
   function updateDetector(detectorKey: string, next: Partial<AgentPolicyDetectorDraft>) {
     setDraft((current) => ({
@@ -272,7 +300,7 @@ export function AgentPolicyForm({
       detectors: current.detectors.map((detector) =>
         detector.detectorKey === detectorKey ? { ...detector, ...next } : detector,
       ),
-    }))
+    }));
   }
 
   function updateParam(detectorKey: string, paramKey: string, value: number) {
@@ -283,31 +311,38 @@ export function AgentPolicyForm({
           ? { ...detector, parameters: { ...detector.parameters, [paramKey]: value } }
           : detector,
       ),
-    }))
+    }));
   }
 
   function updateRouting(next: Partial<Exclude<AgentPolicyNotificationDraft, null>>) {
-    setRouting((current) => ({ mode: 'findings_only', roleIds: [], userIds: [], ...current, ...next }))
+    setRouting((current) => ({
+      mode: "findings_only",
+      roleIds: [],
+      userIds: [],
+      ...current,
+      ...next,
+    }));
   }
 
   async function save() {
-    if (saving) return
-    setSaving(true)
+    if (saving) return;
+    setSaving(true);
     try {
       const res = await fetch(`/api/admin/setup/agents/${pack.agentKey}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...draft, notification: routing }),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('ai.agents.configurationSaveFailed')))
-      toast.success(t('ai.agents.configurationSaved'))
-      router.refresh()
+      if (!res.ok)
+        throw new Error(await readApiErrorMessage(res, t("ai.agents.configurationSaveFailed")));
+      toast.success(t("ai.agents.configurationSaved"));
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
@@ -318,62 +353,72 @@ export function AgentPolicyForm({
         detectorKey: spec.detectorKey,
         enabled: true,
         materialityThreshold: null,
-        parameters: Object.fromEntries(spec.parameters.map((parameter) => [parameter.key, parameter.defaultValue])),
+        parameters: Object.fromEntries(
+          spec.parameters.map((parameter) => [parameter.key, parameter.defaultValue]),
+        ),
       })),
-    }))
+    }));
   }
 
-  const activeDetectors = draft.detectors.filter((detector) => detector.enabled).length
-  const routingMode = routing?.mode ?? 'findings_only'
+  const activeDetectors = draft.detectors.filter((detector) => detector.enabled).length;
+  const routingMode = routing?.mode ?? "findings_only";
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={statusEnabled ? 'success' : 'secondary'}>{statusLabel}</Badge>
+        <Badge variant={statusEnabled ? "success" : "secondary"}>{statusLabel}</Badge>
         <p className="w-full text-sm text-slate-500 dark:text-slate-400">{description}</p>
         <p className="w-full text-xs text-slate-500 dark:text-slate-400">{runLine}</p>
       </div>
 
-      <Section icon={<Settings2 size={17} />} title={t('ai.agents.operationTitle')} description={t('ai.agents.operationDescription')}>
+      <Section
+        icon={<Settings2 size={17} />}
+        title={t("ai.agents.operationTitle")}
+        description={t("ai.agents.operationDescription")}
+      >
         <Card>
           <CardContent className="space-y-4 p-4">
             <div className="flex items-center justify-between gap-4">
-              <span className="text-sm text-slate-700 dark:text-slate-200">{t('ai.agents.enabled')}</span>
+              <span className="text-sm text-slate-700 dark:text-slate-200">
+                {t("ai.agents.enabled")}
+              </span>
               <Switch
                 on={draft.enabled}
                 disabled={!featureEnabled}
                 onToggle={() => patch({ enabled: !draft.enabled })}
-                label={t('ai.agents.enabled')}
+                label={t("ai.agents.enabled")}
               />
             </div>
             <div className="flex items-center justify-between gap-4">
-              <span className="text-sm text-slate-700 dark:text-slate-200">{t('ai.agents.automaticRuns')}</span>
+              <span className="text-sm text-slate-700 dark:text-slate-200">
+                {t("ai.agents.automaticRuns")}
+              </span>
               <Switch
                 on={draft.automaticRuns}
                 disabled={!draft.enabled}
                 onToggle={() => patch({ automaticRuns: !draft.automaticRuns })}
-                label={t('ai.agents.automaticRuns')}
+                label={t("ai.agents.automaticRuns")}
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t('ai.agents.cadence')}>
+              <Field label={t("ai.agents.cadence")}>
                 <SearchSelect
                   value={draft.cadence}
-                  onChange={(value) => patch({ cadence: value === 'weekly' ? 'weekly' : 'daily' })}
+                  onChange={(value) => patch({ cadence: value === "weekly" ? "weekly" : "daily" })}
                   options={[
-                    { value: 'daily', label: t('ai.agents.cadences.daily') },
-                    { value: 'weekly', label: t('ai.agents.cadences.weekly') },
+                    { value: "daily", label: t("ai.agents.cadences.daily") },
+                    { value: "weekly", label: t("ai.agents.cadences.weekly") },
                   ]}
                   disabled={!draft.enabled || !draft.automaticRuns}
-                  ariaLabel={t('ai.agents.cadence')}
+                  ariaLabel={t("ai.agents.cadence")}
                 />
               </Field>
-              <Field label={t('ai.agents.materiality')} hint={t('ai.agents.materialityHint')}>
+              <Field label={t("ai.agents.materiality")} hint={t("ai.agents.materialityHint")}>
                 <MoneyInput
                   currency={currency}
                   value={draft.materialityThreshold}
                   disabled={!draft.enabled}
-                  ariaLabel={t('ai.agents.materiality')}
+                  ariaLabel={t("ai.agents.materiality")}
                   onChange={(value) => patch({ materialityThreshold: value })}
                 />
               </Field>
@@ -384,18 +429,15 @@ export function AgentPolicyForm({
 
       <Section
         icon={<ListChecks size={17} />}
-        title={t('ai.agents.detectorControlsTitle')}
-        description={t('ai.agents.detectorControlsDescription')}
+        title={t("ai.agents.detectorControlsTitle")}
+        description={t("ai.agents.detectorControlsDescription")}
       >
         {specs.map((spec) => {
-          const detector = draft.detectors.find((item) => item.detectorKey === spec.detectorKey)
-          if (!detector) return null
-          const customMateriality = detector.materialityThreshold !== null
+          const detector = draft.detectors.find((item) => item.detectorKey === spec.detectorKey);
+          if (!detector) return null;
+          const customMateriality = detector.materialityThreshold !== null;
           return (
-            <Card
-              key={spec.detectorKey}
-              className={cn(!detector.enabled && 'opacity-75')}
-            >
+            <Card key={spec.detectorKey} className={cn(!detector.enabled && "opacity-75")}>
               <CardContent className="space-y-4 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -408,7 +450,7 @@ export function AgentPolicyForm({
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {t(detector.enabled ? 'ai.agents.controlOn' : 'ai.agents.controlOff')}
+                      {t(detector.enabled ? "ai.agents.controlOn" : "ai.agents.controlOff")}
                     </span>
                     <Switch
                       on={detector.enabled}
@@ -431,16 +473,16 @@ export function AgentPolicyForm({
                         })
                       }
                     >
-                      {t('ai.agents.customMateriality')}
+                      {t("ai.agents.customMateriality")}
                     </Check>
                     {customMateriality ? (
                       <div className="max-w-xs">
-                        <Field label={t('ai.agents.detectorMateriality')}>
+                        <Field label={t("ai.agents.detectorMateriality")}>
                           <MoneyInput
                             currency={currency}
-                            value={detector.materialityThreshold ?? ''}
+                            value={detector.materialityThreshold ?? ""}
                             disabled={!detector.enabled}
-                            ariaLabel={t('ai.agents.detectorMateriality')}
+                            ariaLabel={t("ai.agents.detectorMateriality")}
                             onChange={(value) =>
                               updateDetector(detector.detectorKey, { materialityThreshold: value })
                             }
@@ -449,7 +491,9 @@ export function AgentPolicyForm({
                       </div>
                     ) : (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {t('ai.agents.inheritedMateriality', { amount: formatMoney(draft.materialityThreshold) })}
+                        {t("ai.agents.inheritedMateriality", {
+                          amount: formatMoney(draft.materialityThreshold),
+                        })}
                       </p>
                     )}
                   </div>
@@ -459,7 +503,7 @@ export function AgentPolicyForm({
                     {spec.parameters.map((parameter) => (
                       <Field
                         key={parameter.key}
-                        label={t('ai.agents.parameterLabel', {
+                        label={t("ai.agents.parameterLabel", {
                           label: t(`ai.agents.parameters.${parameter.key}`),
                           unit: t(`ai.agents.units.${parameter.unit}`),
                         })}
@@ -472,8 +516,9 @@ export function AgentPolicyForm({
                           value={detector.parameters[parameter.key] ?? parameter.defaultValue}
                           disabled={!detector.enabled}
                           onChange={(event) => {
-                            const value = Number(event.target.value)
-                            if (Number.isFinite(value)) updateParam(detector.detectorKey, parameter.key, value)
+                            const value = Number(event.target.value);
+                            if (Number.isFinite(value))
+                              updateParam(detector.detectorKey, parameter.key, value);
                           }}
                         />
                       </Field>
@@ -482,24 +527,30 @@ export function AgentPolicyForm({
                 ) : null}
               </CardContent>
             </Card>
-          )
+          );
         })}
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" size="sm" onClick={resetDefaults}>
-            {t('ai.agents.resetRecommended')}
+            {t("ai.agents.resetRecommended")}
           </Button>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">{t('ai.agents.disabledFindingBehavior')}</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            {t("ai.agents.disabledFindingBehavior")}
+          </p>
         </div>
       </Section>
 
-      <Section icon={<Sparkles size={17} />} title={t('ai.agents.reasoningTitle')} description={t('ai.agents.reasoningDescription')}>
+      <Section
+        icon={<Sparkles size={17} />}
+        title={t("ai.agents.reasoningTitle")}
+        description={t("ai.agents.reasoningDescription")}
+      >
         <Card>
           <CardContent className="space-y-4 p-4">
             {(
               [
-                ['rootCauseAnalysis', 'ai.agents.reasoning.rootCauseAnalysis'],
-                ['recommendations', 'ai.agents.reasoning.recommendations'],
-                ['narrative', 'ai.agents.reasoning.narrative'],
+                ["rootCauseAnalysis", "ai.agents.reasoning.rootCauseAnalysis"],
+                ["recommendations", "ai.agents.reasoning.recommendations"],
+                ["narrative", "ai.agents.reasoning.narrative"],
               ] as const
             ).map(([key, copyKey]) => (
               <Check
@@ -516,22 +567,25 @@ export function AgentPolicyForm({
               </Check>
             ))}
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t('ai.agents.modelTier')}>
+              <Field label={t("ai.agents.modelTier")}>
                 <SearchSelect
                   value={draft.analysis.modelTier}
                   onChange={(value) =>
                     patch({
-                      analysis: { ...draft.analysis, modelTier: value === 'fast' ? 'fast' : 'smart' },
+                      analysis: {
+                        ...draft.analysis,
+                        modelTier: value === "fast" ? "fast" : "smart",
+                      },
                     })
                   }
                   options={[
-                    { value: 'smart', label: t('ai.agents.modelTiers.smart') },
-                    { value: 'fast', label: t('ai.agents.modelTiers.fast') },
+                    { value: "smart", label: t("ai.agents.modelTiers.smart") },
+                    { value: "fast", label: t("ai.agents.modelTiers.fast") },
                   ]}
-                  ariaLabel={t('ai.agents.modelTier')}
+                  ariaLabel={t("ai.agents.modelTier")}
                 />
               </Field>
-              <Field label={t('ai.agents.maxToolSteps')} hint={t('ai.agents.maxToolStepsHint')}>
+              <Field label={t("ai.agents.maxToolSteps")} hint={t("ai.agents.maxToolStepsHint")}>
                 <Input
                   type="number"
                   min={4}
@@ -539,8 +593,9 @@ export function AgentPolicyForm({
                   step={1}
                   value={draft.analysis.maxToolSteps}
                   onChange={(event) => {
-                    const value = Number(event.target.value)
-                    if (Number.isInteger(value)) patch({ analysis: { ...draft.analysis, maxToolSteps: value } })
+                    const value = Number(event.target.value);
+                    if (Number.isInteger(value))
+                      patch({ analysis: { ...draft.analysis, maxToolSteps: value } });
                   }}
                 />
               </Field>
@@ -551,14 +606,17 @@ export function AgentPolicyForm({
 
       <Section
         icon={<Bell size={17} />}
-        title={t('setup.agents.policy.notificationsTitle')}
-        description={t('setup.agents.policy.notificationsDescription')}
+        title={t("setup.agents.policy.notificationsTitle")}
+        description={t("setup.agents.policy.notificationsDescription")}
       >
         <Card>
           <CardContent className="space-y-4 p-4">
             <div className="space-y-2">
               {NOTIFICATION_MODES.map((mode) => (
-                <label key={mode} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <label
+                  key={mode}
+                  className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300"
+                >
                   <input
                     type="radio"
                     name={`notify-${pack.agentKey}`}
@@ -567,7 +625,9 @@ export function AgentPolicyForm({
                     className="mt-0.5 h-4 w-4 border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
                   />
                   <span>
-                    <span className="font-medium">{t(`setup.agents.policy.modes.${mode}.title`)}</span>
+                    <span className="font-medium">
+                      {t(`setup.agents.policy.modes.${mode}.title`)}
+                    </span>
                     <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
                       {t(`setup.agents.policy.modes.${mode}.description`)}
                     </span>
@@ -575,66 +635,74 @@ export function AgentPolicyForm({
                 </label>
               ))}
             </div>
-            {routingMode !== 'findings_only' ? (
+            {routingMode !== "findings_only" ? (
               <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 dark:border-slate-800">
-                <Field label={t('setup.agents.policy.rolesLabel')}>
+                <Field label={t("setup.agents.policy.rolesLabel")}>
                   <TokenSelect
                     options={roles.map((role) => ({ value: role.id, label: role.name }))}
                     value={routing?.roleIds ?? []}
                     onChange={(roleIds) => updateRouting({ roleIds })}
-                    placeholder={t('setup.agents.policy.rolesPlaceholder')}
-                    empty={t('setup.agents.policy.noTargets')}
-                    ariaLabel={t('setup.agents.policy.rolesLabel')}
+                    placeholder={t("setup.agents.policy.rolesPlaceholder")}
+                    empty={t("setup.agents.policy.noTargets")}
+                    ariaLabel={t("setup.agents.policy.rolesLabel")}
                   />
                 </Field>
                 <div className="space-y-1.5">
-                  <Field label={t('setup.agents.policy.usersLabel')}>
+                  <Field label={t("setup.agents.policy.usersLabel")}>
                     <TokenSelect
-                      options={users.map((user) => ({ value: user.id, label: user.name, hint: user.email }))}
+                      options={users.map((user) => ({
+                        value: user.id,
+                        label: user.name,
+                        hint: user.email,
+                      }))}
                       value={routing?.userIds ?? []}
                       onChange={(userIds) => updateRouting({ userIds })}
-                      placeholder={t('setup.agents.policy.usersPlaceholder')}
-                      empty={t('setup.agents.policy.noTargets')}
-                      ariaLabel={t('setup.agents.policy.usersLabel')}
+                      placeholder={t("setup.agents.policy.usersPlaceholder")}
+                      empty={t("setup.agents.policy.noTargets")}
+                      ariaLabel={t("setup.agents.policy.usersLabel")}
                     />
                   </Field>
                   {usersTruncated ? (
-                    <p className="text-[11px] text-slate-400">{t('setup.agents.policy.usersTruncatedNote')}</p>
+                    <p className="text-[11px] text-slate-400">
+                      {t("setup.agents.policy.usersTruncatedNote")}
+                    </p>
                   ) : null}
                 </div>
               </div>
             ) : null}
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">{t('setup.agents.policy.deliveryNote')}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              {t("setup.agents.policy.deliveryNote")}
+            </p>
           </CardContent>
         </Card>
       </Section>
 
       <div className="flex items-center gap-3">
         <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
-          {t('setup.agents.overview.controlsEnabled', {
+          {t("setup.agents.overview.controlsEnabled", {
             count: activeDetectors,
             total: draft.detectors.length,
           })}
         </span>
         <span className="flex-1" />
         <Button type="button" variant="outline" onClick={cancel}>
-          {t('ai.agents.cancel')}
+          {t("ai.agents.cancel")}
         </Button>
         <Button type="button" disabled={saving || !featureEnabled} onClick={() => void save()}>
-          {t('ai.agents.saveConfiguration')}
+          {t("ai.agents.saveConfiguration")}
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
 /** Draft from the stored policy, backfilled against the current spec registry. */
 function structuredDraft(policy: AgentPolicyDraft, specs: AgentPolicySpecView[]): AgentPolicyDraft {
-  const byKey = new Map(policy.detectors.map((detector) => [detector.detectorKey, detector]))
+  const byKey = new Map(policy.detectors.map((detector) => [detector.detectorKey, detector]));
   const detectorThreshold = (detectorKey: string): string | null => {
-    const raw = byKey.get(detectorKey)?.materialityThreshold ?? null
-    return raw === null ? null : twoDecimals(raw)
-  }
+    const raw = byKey.get(detectorKey)?.materialityThreshold ?? null;
+    return raw === null ? null : twoDecimals(raw);
+  };
   return {
     ...policy,
     materialityThreshold: twoDecimals(policy.materialityThreshold),
@@ -649,5 +717,5 @@ function structuredDraft(policy: AgentPolicyDraft, specs: AgentPolicySpecView[])
         ]),
       ),
     })),
-  }
+  };
 }

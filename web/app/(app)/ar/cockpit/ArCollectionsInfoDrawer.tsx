@@ -67,17 +67,12 @@ export function ArCollectionsInfoDrawer({
         <Panel title={t("title")} icon={ListOrdered} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (
-              <li
-                key={i.label}
-                className="flex items-start justify-between gap-4 px-4 py-3"
-              >
+              <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
                     {i.label}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {i.note}
-                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{i.note}</p>
                 </div>
                 <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-right text-sm font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   {i.value}

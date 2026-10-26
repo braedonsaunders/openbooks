@@ -27,8 +27,10 @@ const hooks = registerHooks({
     // The route factory resolves its session gate lazily through the
     // @/lib/authz alias at request time, so the hook must cover that alias
     // in addition to the route's relative import.
-    if (specifier === "../../../../lib/authz" ||
-        (specifier === "@/lib/authz" && (context.parentURL ?? "").includes("/lib/api/route"))) {
+    if (
+      specifier === "../../../../lib/authz" ||
+      (specifier === "@/lib/authz" && (context.parentURL ?? "").includes("/lib/api/route"))
+    ) {
       return virtual(`
         export async function getAuthz() {
           const s = globalThis.__formPrefResolveGuardState;
@@ -43,15 +45,12 @@ const hooks = registerHooks({
   },
 });
 
-const form_pref_resolve_guardUrl = './route.ts?form-pref-resolve-guard'
-const { PUT } = (await import(form_pref_resolve_guardUrl)) as typeof import('./route.ts');
+const form_pref_resolve_guardUrl = "./route.ts?form-pref-resolve-guard";
+const { PUT } = (await import(form_pref_resolve_guardUrl)) as typeof import("./route.ts");
 
 const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 async function put(body: unknown): Promise<{ status: number; json: unknown }> {
   const response = await withOrgContext(state.orgId, () =>
@@ -67,29 +66,35 @@ async function put(body: unknown): Promise<{ status: number; json: unknown }> {
 }
 
 async function preferenceRows(): Promise<Array<{ layoutId: string | null }>> {
-  return await db.execute<{ layoutId: string | null }>(sql`
+  return await db.execute<{ layoutId: string | null }>(
+    sql`
     select layout_id as "layoutId" from user_form_preferences
-     where org_id = ${state.orgId} and user_id = ${state.actorId} and record_type = 'vendor_bill'`, "objects");
+     where org_id = ${state.orgId} and user_id = ${state.actorId} and record_type = 'vendor_bill'`,
+    "objects",
+  );
 }
 
-test(
-  "PUT refuses inactive or role-inaccessible layouts and does not write a preference",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actorId = (await db.execute<{ id: string }>(sql`
+test("PUT refuses inactive or role-inaccessible layouts and does not write a preference", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (
+      await db.execute<{ id: string }>(
+        sql`
         insert into users (org_id, email, name, password_hash, is_active)
         values (${org.orgId}, 'formpref-guard@test.local', 'Form Pref Guard', 'x', false)
-        returning id`, "objects"))[0]!.id;
-      state.orgId = org.orgId;
-      state.actorId = actorId;
-      state.roles = [{ key: "accountant", name: "Accountant" }];
+        returning id`,
+        "objects",
+      )
+    )[0]!.id;
+    state.orgId = org.orgId;
+    state.actorId = actorId;
+    state.roles = [{ key: "accountant", name: "Accountant" }];
 
-      const layout = '{"schemaVersion": 1, "recordType": "vendor_bill"}';
-      const activeId = randomUUID();
-      const inactiveId = randomUUID();
-      const restrictedId = randomUUID();
-      await db.execute(sql`
+    const layout = '{"schemaVersion": 1, "recordType": "vendor_bill"}';
+    const activeId = randomUUID();
+    const inactiveId = randomUUID();
+    const restrictedId = randomUUID();
+    await db.execute(sql`
         insert into form_layouts (id, org_id, record_type, name, is_active, allowed_roles, layout, created_by, updated_by)
         values
           (${activeId}, ${org.orgId}, 'vendor_bill', 'Active open', true, null, ${layout}::jsonb, ${actorId}, ${actorId}),
@@ -97,46 +102,46 @@ test(
           (${restrictedId}, ${org.orgId}, 'vendor_bill', 'AP only', true, ${JSON.stringify(["ap_clerk"])}::jsonb, ${layout}::jsonb, ${actorId}, ${actorId})
       `);
 
-      const inactive = await put({ recordType: "vendor_bill", layoutId: inactiveId });
-      assert.equal(inactive.status, 422, JSON.stringify(inactive.json));
-      assert.match(
-        String((inactive.json as { error?: string }).error),
-        /form layout is inactive/,
-      );
-      assert.match(
-        String((inactive.json as { error?: string }).error),
-        /activate it in Customization|choose an active form/,
-      );
-      assert.equal((await preferenceRows()).length, 0, "inactive refusal must not write a preference");
+    const inactive = await put({ recordType: "vendor_bill", layoutId: inactiveId });
+    assert.equal(inactive.status, 422, JSON.stringify(inactive.json));
+    assert.match(String((inactive.json as { error?: string }).error), /form layout is inactive/);
+    assert.match(
+      String((inactive.json as { error?: string }).error),
+      /activate it in Customization|choose an active form/,
+    );
+    assert.equal(
+      (await preferenceRows()).length,
+      0,
+      "inactive refusal must not write a preference",
+    );
 
-      const restricted = await put({ recordType: "vendor_bill", layoutId: restrictedId });
-      assert.equal(restricted.status, 403, JSON.stringify(restricted.json));
-      assert.match(
-        String((restricted.json as { error?: string }).error),
-        /restricted to other roles/,
-      );
-      assert.equal(
-        (await preferenceRows()).length,
-        0,
-        "role-inaccessible refusal must not write a preference",
-      );
+    const restricted = await put({ recordType: "vendor_bill", layoutId: restrictedId });
+    assert.equal(restricted.status, 403, JSON.stringify(restricted.json));
+    assert.match(
+      String((restricted.json as { error?: string }).error),
+      /restricted to other roles/,
+    );
+    assert.equal(
+      (await preferenceRows()).length,
+      0,
+      "role-inaccessible refusal must not write a preference",
+    );
 
-      // The guard is selective: an active, unrestricted layout still saves, so
-      // a blanket refuse would fail this assertion rather than look like a pass.
-      const ok = await put({ recordType: "vendor_bill", layoutId: activeId });
-      assert.equal(ok.status, 200, JSON.stringify(ok.json));
-      assert.deepEqual(ok.json, { ok: true, layoutId: activeId });
-      assert.deepEqual(await preferenceRows(), [{ layoutId: activeId }]);
+    // The guard is selective: an active, unrestricted layout still saves, so
+    // a blanket refuse would fail this assertion rather than look like a pass.
+    const ok = await put({ recordType: "vendor_bill", layoutId: activeId });
+    assert.equal(ok.status, 200, JSON.stringify(ok.json));
+    assert.deepEqual(ok.json, { ok: true, layoutId: activeId });
+    assert.deepEqual(await preferenceRows(), [{ layoutId: activeId }]);
 
-      state.roles = [{ key: "admin", name: "Admin" }];
-      const adminRestricted = await put({ recordType: "vendor_bill", layoutId: restrictedId });
-      assert.equal(adminRestricted.status, 200, JSON.stringify(adminRestricted.json));
-      assert.deepEqual(await preferenceRows(), [{ layoutId: restrictedId }]);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    state.roles = [{ key: "admin", name: "Admin" }];
+    const adminRestricted = await put({ recordType: "vendor_bill", layoutId: restrictedId });
+    assert.equal(adminRestricted.status, 200, JSON.stringify(adminRestricted.json));
+    assert.deepEqual(await preferenceRows(), [{ layoutId: restrictedId }]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 // The factory's lazy session-gate import runs on every request, so the hook

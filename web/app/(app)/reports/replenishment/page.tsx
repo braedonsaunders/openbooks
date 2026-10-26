@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadReplenishment, replenishmentSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadReplenishment, replenishmentSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('warehouse.replenishment')
-  return { title: t('title') }
+  const t = await getTranslations("warehouse.replenishment");
+  return { title: t("title") };
 }
 
 /**
@@ -18,9 +18,9 @@ export async function generateMetadata() {
 export default async function ReplenishmentReport({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadReplenishment(sp)
-  return <ModuleView spec={replenishmentSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadReplenishment(sp);
+  return <ModuleView spec={replenishmentSpec(data)} data={data} searchParams={sp} trusted />;
 }

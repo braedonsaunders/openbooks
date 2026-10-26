@@ -3,9 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 const { db, withBypass, env } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createConversation, deleteConversation } = await import("../ai-conversations.ts");
 const { createDbOwnedRunStore } = await import("./owned-runs-db.ts");
 import type { Authz } from "../authz.ts";
@@ -89,28 +88,24 @@ test(
   },
 );
 
-test(
-  "owned runs are owner-isolated and die with their conversation",
-  { skip: !DB },
-  async () => {
-    const fx = await makeFixture();
-    try {
-      const authz = authzFor(fx);
-      const store = createDbOwnedRunStore(authz);
-      const conversationId = await createConversation(authz, "assistant", "isolation probe");
-      const { runId } = await store.startRun(conversationId, "probe");
+test("owned runs are owner-isolated and die with their conversation", { skip: !DB }, async () => {
+  const fx = await makeFixture();
+  try {
+    const authz = authzFor(fx);
+    const store = createDbOwnedRunStore(authz);
+    const conversationId = await createConversation(authz, "assistant", "isolation probe");
+    const { runId } = await store.startRun(conversationId, "probe");
 
-      const stranger = authzFor({ orgId: fx.orgId, actorId: randomUUID() });
-      const strangerStore = createDbOwnedRunStore(stranger);
-      assert.equal(await strangerStore.readRun(runId), null);
-      assert.equal(await strangerStore.activeRun(conversationId), null);
-      assert.equal(await strangerStore.requestAbort(runId), false);
+    const stranger = authzFor({ orgId: fx.orgId, actorId: randomUUID() });
+    const strangerStore = createDbOwnedRunStore(stranger);
+    assert.equal(await strangerStore.readRun(runId), null);
+    assert.equal(await strangerStore.activeRun(conversationId), null);
+    assert.equal(await strangerStore.requestAbort(runId), false);
 
-      assert.equal(await deleteConversation(authz, conversationId, "assistant"), true);
-      assert.equal(await store.readRun(runId), null);
-      assert.equal(await store.writeProgress(runId, [], 9), false);
-    } finally {
-      await dropScratchOrg(fx.orgId);
-    }
-  },
-);
+    assert.equal(await deleteConversation(authz, conversationId, "assistant"), true);
+    assert.equal(await store.readRun(runId), null);
+    assert.equal(await store.writeProgress(runId, [], 9), false);
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});

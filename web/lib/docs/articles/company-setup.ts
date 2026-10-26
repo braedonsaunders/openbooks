@@ -1,4 +1,4 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 // One article per Company Setup menu group (the left rail in
 // Settings → Company Setup). The registry (web/lib/setup/registry.ts) drives the
@@ -7,24 +7,29 @@ import type { DocArticle } from '../types'
 // and link onward rather than duplicating that content.
 
 export const setupCompanyGroup: DocArticle = {
-  slug: 'setup-company-group',
-  title: 'Setup: Company',
-  category: 'administration',
+  slug: "setup-company-group",
+  title: "Setup: Company",
+  category: "administration",
   order: 10,
   summary:
-    'Organization identity, control accounts, the Features switchboard, subsidiaries, and home announcements.',
-  updated: '2026-10-07',
+    "Organization identity, control accounts, the Features switchboard, subsidiaries, and home announcements.",
+  updated: "2026-10-07",
   keywords: [
-    'company',
-    'organization',
-    'control accounts',
-    'subsidiaries',
-    'features',
-    'announcements',
-    'base currency',
-    'fiscal year',
+    "company",
+    "organization",
+    "control accounts",
+    "subsidiaries",
+    "features",
+    "announcements",
+    "base currency",
+    "fiscal year",
   ],
-  related: ['company-settings', 'setup-accounting-group', 'setup-currency-group', 'roles-and-permissions'],
+  related: [
+    "company-settings",
+    "setup-accounting-group",
+    "setup-currency-group",
+    "roles-and-permissions",
+  ],
   body: `# Setup: Company
 
 The **Company** group in **Settings → Company Setup** holds the organization's
@@ -95,17 +100,29 @@ chosen audience between a start and an optional end date.
   **Sales & CRM**.
 - Settings declared by installed apps are in **App settings**, one page per app.
 `,
-}
+};
 
 export const setupAccountingGroup: DocArticle = {
-  slug: 'setup-accounting-group',
-  title: 'Setup: Accounting',
-  category: 'administration',
+  slug: "setup-accounting-group",
+  title: "Setup: Accounting",
+  category: "administration",
   order: 11,
-  summary: 'Period close, accounting books, business calendars, aging buckets, allocations, and consolidation policy.',
-  updated: '2026-10-07',
-  keywords: ['accounting books', 'primary book', 'period close', 'close policy', 'multi-book', 'business calendar', 'aging buckets', 'intercompany', 'ownership', 'consolidation'],
-  related: ['setup-company-group', 'financial-reports', 'company-settings'],
+  summary:
+    "Period close, accounting books, business calendars, aging buckets, allocations, and consolidation policy.",
+  updated: "2026-10-07",
+  keywords: [
+    "accounting books",
+    "primary book",
+    "period close",
+    "close policy",
+    "multi-book",
+    "business calendar",
+    "aging buckets",
+    "intercompany",
+    "ownership",
+    "consolidation",
+  ],
+  related: ["setup-company-group", "financial-reports", "company-settings"],
   body: `# Setup: Accounting
 
 The **Accounting** group configures the books that postings land in, the
@@ -175,17 +192,32 @@ adjustments before replacing them. Consolidated reports exclude equity-method
 entities, apply exact ownership weights to proportionately consolidated
 entities, and include elimination entries for fully consolidated entities.
 `,
-}
+};
 
 export const setupTaxesGroup: DocArticle = {
-  slug: 'setup-taxes-group',
-  title: 'Setup: Taxes',
-  category: 'administration',
+  slug: "setup-taxes-group",
+  title: "Setup: Taxes",
+  category: "administration",
   order: 12,
-  summary: 'Jurisdictions, nexus, codes, rates, groups, and configurable government returns.',
-  updated: '2026-07-21',
-  keywords: ['tax', 'jurisdiction', 'nexus', 'tax code', 'tax rate', 'tax group', 'tax return', 'VAT', 'GST'],
-  related: ['tax-jurisdictions-and-nexus', 'tax-configuration', 'tax-returns-and-boxes', 'setup-assets-group'],
+  summary: "Jurisdictions, nexus, codes, rates, groups, and configurable government returns.",
+  updated: "2026-07-21",
+  keywords: [
+    "tax",
+    "jurisdiction",
+    "nexus",
+    "tax code",
+    "tax rate",
+    "tax group",
+    "tax return",
+    "VAT",
+    "GST",
+  ],
+  related: [
+    "tax-jurisdictions-and-nexus",
+    "tax-configuration",
+    "tax-returns-and-boxes",
+    "setup-assets-group",
+  ],
   body: `# Setup: Taxes
 
 The **Taxes** group turns tax law into data: where you are registered, what you
@@ -217,17 +249,25 @@ The Taxes documentation section covers each area in depth:
 - **Tax Codes, Rates, and Groups** — how tax is calculated and posted.
 - **Tax Returns and Boxes** — how ledger activity becomes a filed return.
 `,
-}
+};
 
 export const setupDimensionsGroup: DocArticle = {
-  slug: 'setup-dimensions-group',
-  title: 'Setup: Dimensions',
-  category: 'administration',
+  slug: "setup-dimensions-group",
+  title: "Setup: Dimensions",
+  category: "administration",
   order: 13,
-  summary: 'Departments, locations, classes, custom segments, and account-group classification.',
-  updated: '2026-07-21',
-  keywords: ['dimensions', 'department', 'location', 'class', 'segment', 'account group', 'analysis'],
-  related: ['chart-of-accounts-and-dimensions', 'company-settings', 'financial-reports'],
+  summary: "Departments, locations, classes, custom segments, and account-group classification.",
+  updated: "2026-07-21",
+  keywords: [
+    "dimensions",
+    "department",
+    "location",
+    "class",
+    "segment",
+    "account group",
+    "analysis",
+  ],
+  related: ["chart-of-accounts-and-dimensions", "company-settings", "financial-reports"],
   body: `# Setup: Dimensions
 
 Dimensions are the analysis axes tagged onto transactions so reports can slice
@@ -251,17 +291,24 @@ axes, any custom ones, and the reporting classification of the chart of accounts
 Keep codes stable — dimension codes appear on posted activity, so changing a
 code's meaning after it has been used rewrites the meaning of history.
 `,
-}
+};
 
 export const setupBillingGroup: DocArticle = {
-  slug: 'setup-billing-group',
-  title: 'Setup: Billing & Numbering',
-  category: 'administration',
+  slug: "setup-billing-group",
+  title: "Setup: Billing & Numbering",
+  category: "administration",
   order: 15,
-  summary: 'Payment terms and gapless, per-document number sequences.',
-  updated: '2026-07-21',
-  keywords: ['payment terms', 'number sequence', 'document numbering', 'gapless', 'prefix', 'discount'],
-  related: ['item-rates', 'sales-workflow', 'company-settings'],
+  summary: "Payment terms and gapless, per-document number sequences.",
+  updated: "2026-07-21",
+  keywords: [
+    "payment terms",
+    "number sequence",
+    "document numbering",
+    "gapless",
+    "prefix",
+    "discount",
+  ],
+  related: ["item-rates", "sales-workflow", "company-settings"],
   body: `# Setup: Billing & Numbering
 
 The **Billing & numbering** group controls the invoice workflows offered by the
@@ -320,17 +367,25 @@ configuration too, but it lives on the **Items** catalog and on the customer and
 project records rather than this rail. See **Item Rate Books** for how dated,
 customer- and project-scoped pricing resolves.
 `,
-}
+};
 
 export const setupRevenueGroup: DocArticle = {
-  slug: 'setup-revenue-group',
-  title: 'Setup: Revenue',
-  category: 'administration',
+  slug: "setup-revenue-group",
+  title: "Setup: Revenue",
+  category: "administration",
   order: 16,
-  summary: 'Reusable ASC 606 / IFRS 15 recognition rules and standalone selling prices.',
-  updated: '2026-07-21',
-  keywords: ['revenue recognition', 'ASC 606', 'IFRS 15', 'recognition rule', 'fair value', 'SSP', 'deferred revenue'],
-  related: ['revenue-recognition', 'setup-billing-group'],
+  summary: "Reusable ASC 606 / IFRS 15 recognition rules and standalone selling prices.",
+  updated: "2026-07-21",
+  keywords: [
+    "revenue recognition",
+    "ASC 606",
+    "IFRS 15",
+    "recognition rule",
+    "fair value",
+    "SSP",
+    "deferred revenue",
+  ],
+  related: ["revenue-recognition", "setup-billing-group"],
   body: `# Setup: Revenue
 
 The **Revenue** group holds the reusable recipes that turn a performance
@@ -354,17 +409,27 @@ live on the item record (a Fair Value section) rather than this rail.
 For the full model — obligations, allocation, schedules, and the close-time
 recognition run — see **Revenue Recognition**.
 `,
-}
+};
 
 export const setupWorkforceGroup: DocArticle = {
-  slug: 'setup-workforce-group',
-  title: 'Setup: Human resources',
-  category: 'administration',
+  slug: "setup-workforce-group",
+  title: "Setup: Human resources",
+  category: "administration",
   order: 17,
-  summary: 'Time types and worker-compensation groups used by timesheets and labor costing.',
-  updated: '2026-10-07',
-  keywords: ['human resources', 'HR', 'workforce', 'time type', 'worker comp', 'billable', 'cost multiplier', 'bill multiplier', 'labor'],
-  related: ['labor-costing', 'labor-pricing', 'company-settings'],
+  summary: "Time types and worker-compensation groups used by timesheets and labor costing.",
+  updated: "2026-10-07",
+  keywords: [
+    "human resources",
+    "HR",
+    "workforce",
+    "time type",
+    "worker comp",
+    "billable",
+    "cost multiplier",
+    "bill multiplier",
+    "labor",
+  ],
+  related: ["labor-costing", "labor-pricing", "company-settings"],
   body: `# Setup: Human resources
 
 The **Human resources** group configures how time is classified and how workers are
@@ -393,26 +458,27 @@ These settings are estimate inputs to labor rates. They never post overhead into
 the ledger on their own — see **Labor Costing** and **Labor Pricing** for how
 wage, burden, and overhead are kept as separate, correctly-posted layers.
 `,
-}
+};
 
 export const setupAssetsGroup: DocArticle = {
-  slug: 'setup-assets-group',
-  title: 'Setup: Assets',
-  category: 'administration',
+  slug: "setup-assets-group",
+  title: "Setup: Assets",
+  category: "administration",
   order: 18,
-  summary: 'Asset categories, depreciation methods and book policies, and configurable tax-depreciation regimes.',
-  updated: '2026-07-21',
+  summary:
+    "Asset categories, depreciation methods and book policies, and configurable tax-depreciation regimes.",
+  updated: "2026-07-21",
   keywords: [
-    'fixed assets',
-    'asset category',
-    'depreciation method',
-    'book policy',
-    'tax regime',
-    'CCA',
-    'capital allowance',
-    'first-year rule',
+    "fixed assets",
+    "asset category",
+    "depreciation method",
+    "book policy",
+    "tax regime",
+    "CCA",
+    "capital allowance",
+    "first-year rule",
   ],
-  related: ['setup-accounting-group', 'tax-configuration', 'company-settings'],
+  related: ["setup-accounting-group", "tax-configuration", "company-settings"],
   body: `# Setup: Assets
 
 The **Assets** group defines how fixed assets post, depreciate, and are treated
@@ -449,17 +515,25 @@ For jurisdictions that pool assets, these tabs make the regime data, not code:
 
 See **Tax Configuration** for how these regimes flow into tax returns.
 `,
-}
+};
 
 export const setupCurrencyGroup: DocArticle = {
-  slug: 'setup-currency-group',
-  title: 'Setup: Currency',
-  category: 'administration',
+  slug: "setup-currency-group",
+  title: "Setup: Currency",
+  category: "administration",
   order: 19,
-  summary: 'Currencies, an exchange-rate provider, dated FX rates, and consolidation rates.',
-  updated: '2026-09-16',
-  keywords: ['currency', 'exchange rate', 'FX', 'fx provider', 'consolidation', 'multi-currency', 'revaluation'],
-  related: ['setup-company-group', 'setup-accounting-group', 'financial-reports'],
+  summary: "Currencies, an exchange-rate provider, dated FX rates, and consolidation rates.",
+  updated: "2026-09-16",
+  keywords: [
+    "currency",
+    "exchange rate",
+    "FX",
+    "fx provider",
+    "consolidation",
+    "multi-currency",
+    "revaluation",
+  ],
+  related: ["setup-company-group", "setup-accounting-group", "financial-reports"],
   body: `# Setup: Currency
 
 The **Currency** group (shown when **multi-currency** is enabled) manages the
@@ -498,17 +572,25 @@ precision underneath; pickers show each currency's name in your UI language.
 Entries without an ISO minor unit (supranational units, test codes) cannot be
 transacted and stay out of the list.
 `,
-}
+};
 
 export const setupProjectsGroup: DocArticle = {
-  slug: 'setup-projects-group',
-  title: 'Setup: Projects',
-  category: 'administration',
+  slug: "setup-projects-group",
+  title: "Setup: Projects",
+  category: "administration",
   order: 14,
-  summary: 'Project types, the overhead model, and labor costing and pricing.',
-  updated: '2026-07-21',
-  keywords: ['projects', 'project type', 'overhead model', 'labor costing', 'labor pricing', 'profitability', 'billing'],
-  related: ['project-types', 'overhead-costing', 'labor-costing', 'labor-pricing'],
+  summary: "Project types, the overhead model, and labor costing and pricing.",
+  updated: "2026-07-21",
+  keywords: [
+    "projects",
+    "project type",
+    "overhead model",
+    "labor costing",
+    "labor pricing",
+    "profitability",
+    "billing",
+  ],
+  related: ["project-types", "overhead-costing", "labor-costing", "labor-pricing"],
   body: `# Setup: Projects
 
 The **Projects** group owns project-accounting configuration. The authoritative
@@ -539,17 +621,29 @@ The guiding rule across these workspaces: wage, estimated burden, and overhead
 are three distinct layers. Overhead never flows into labor rates, and never
 changes total company profit.
 `,
-}
+};
 
 export const setupAgentsGroup: DocArticle = {
-  slug: 'setup-agents-group',
-  title: 'Setup: Agents',
-  category: 'administration',
+  slug: "setup-agents-group",
+  title: "Setup: Agents",
+  category: "administration",
   order: 20,
-  summary: 'Background agent packs: install, schedules and checks, finding routing, runs and findings.',
-  updated: '2026-09-15',
-  keywords: ['agents', 'background agents', 'agent packs', 'continuous close', 'detectors', 'materiality', 'cadence', 'run now', 'findings', 'notification routing'],
-  related: ['setup-company-group', 'roles-and-permissions', 'audit-log'],
+  summary:
+    "Background agent packs: install, schedules and checks, finding routing, runs and findings.",
+  updated: "2026-09-15",
+  keywords: [
+    "agents",
+    "background agents",
+    "agent packs",
+    "continuous close",
+    "detectors",
+    "materiality",
+    "cadence",
+    "run now",
+    "findings",
+    "notification routing",
+  ],
+  related: ["setup-company-group", "roles-and-permissions", "audit-log"],
   body: `# Setup: Agents
 
 The **Agents** group configures the background agent packs that watch the books
@@ -577,17 +671,29 @@ own: every finding is a review list with the exact rows behind it.
 - Provider credentials stay on the **AI providers** page and are never part of
   agent configuration.
 `,
-}
+};
 
 export const setupBankingGroup: DocArticle = {
-  slug: 'setup-banking-group',
-  title: 'Setup: Banking & payments',
-  category: 'administration',
+  slug: "setup-banking-group",
+  title: "Setup: Banking & payments",
+  category: "administration",
   order: 12.5,
-  summary: 'Bank feeds, payment providers, payment profiles, formats, schedules, and corporate cards.',
-  updated: '2026-10-07',
-  keywords: ['bank feeds', 'payment providers', 'payment profile', 'payment format', 'payment schedule', 'NACHA', 'SEPA', 'CPA 005', 'corporate cards', 'debit mandates'],
-  related: ['setup-company-group', 'setup-accounting-group', 'company-settings'],
+  summary:
+    "Bank feeds, payment providers, payment profiles, formats, schedules, and corporate cards.",
+  updated: "2026-10-07",
+  keywords: [
+    "bank feeds",
+    "payment providers",
+    "payment profile",
+    "payment format",
+    "payment schedule",
+    "NACHA",
+    "SEPA",
+    "CPA 005",
+    "corporate cards",
+    "debit mandates",
+  ],
+  related: ["setup-company-group", "setup-accounting-group", "company-settings"],
   body: `# Setup: Banking & payments
 
 The **Banking & payments** group configures how money moves in and out of your
@@ -621,17 +727,26 @@ one row per card.
 Debit mandates — a customer's authorization to collect from their bank
 account — are kept on each customer record under **Debit mandates**.
 `,
-}
+};
 
 export const setupSalesGroup: DocArticle = {
-  slug: 'setup-sales-group',
-  title: 'Setup: Sales & CRM',
-  category: 'administration',
+  slug: "setup-sales-group",
+  title: "Setup: Sales & CRM",
+  category: "administration",
   order: 15.5,
-  summary: 'Account statuses, opportunity stages, lead sources, and promotions.',
-  updated: '2026-10-07',
-  keywords: ['CRM', 'account status', 'lifecycle', 'opportunity stage', 'pipeline', 'lead source', 'promotions', 'discount codes'],
-  related: ['setup-company-group', 'setup-billing-group'],
+  summary: "Account statuses, opportunity stages, lead sources, and promotions.",
+  updated: "2026-10-07",
+  keywords: [
+    "CRM",
+    "account status",
+    "lifecycle",
+    "opportunity stage",
+    "pipeline",
+    "lead source",
+    "promotions",
+    "discount codes",
+  ],
+  related: ["setup-company-group", "setup-billing-group"],
   body: `# Setup: Sales & CRM
 
 The **Sales & CRM** group holds the lists the Customers workspace and sales
@@ -657,17 +772,17 @@ under **Sales**.
 **Promotions** (when enabled) define discount codes and campaigns applied to
 sales document lines.
 `,
-}
+};
 
 export const setupAppSettingsGroup: DocArticle = {
-  slug: 'setup-app-settings-group',
-  title: 'Setup: App settings',
-  category: 'administration',
+  slug: "setup-app-settings-group",
+  title: "Setup: App settings",
+  category: "administration",
   order: 20.5,
-  summary: 'One settings page for each installed app that declares settings.',
-  updated: '2026-10-07',
-  keywords: ['apps', 'app settings', 'extensions', 'installed apps', 'configuration'],
-  related: ['setup-company-group'],
+  summary: "One settings page for each installed app that declares settings.",
+  updated: "2026-10-07",
+  keywords: ["apps", "app settings", "extensions", "installed apps", "configuration"],
+  related: ["setup-company-group"],
   body: `# Setup: App settings
 
 The **App settings** group lists one page for each installed app that declares
@@ -682,7 +797,7 @@ earlier activity is still read against the value that applied at the time.
 Install, update, and remove apps under **Settings → Apps**. An app's **Settings**
 button opens its page here.
 `,
-}
+};
 
 export const companySetupGroupArticles: DocArticle[] = [
   setupCompanyGroup,
@@ -699,4 +814,4 @@ export const companySetupGroupArticles: DocArticle[] = [
   setupProjectsGroup,
   setupAgentsGroup,
   setupAppSettingsGroup,
-]
+];

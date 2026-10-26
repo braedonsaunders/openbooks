@@ -4,7 +4,12 @@ import { randomUUID } from "node:crypto";
 import { isUuid } from "../platform/uuid.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
+import {
+  db,
+  withOrgTransaction,
+  withTransactionSavepoint,
+  type SqlExecutor,
+} from "../platform/db.ts";
 import { neg, normalizeMoney, sum } from "../money/money.ts";
 import {
   canonicalPeriodLabel,
@@ -22,7 +27,12 @@ import { featureEnabled, type FeatureState } from "../organization/feature-regis
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
-import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions, type SubsidiaryContext } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  validateSubsidiaryRestrictions,
+  type SubsidiaryContext,
+} from "../organization/subsidiaries.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { reversalPostEntryLine } from "../journal/reversal-posting-lines.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
@@ -98,7 +108,8 @@ export class PeriodEndJournalError extends Error {
   readonly name = "PeriodEndJournalError";
   constructor(
     message: string,
-    readonly code: PeriodEndProblemCode | "reason_required" | "not_found" | "not_generated" | "forbidden",
+    readonly code:
+      PeriodEndProblemCode | "reason_required" | "not_found" | "not_generated" | "forbidden",
     readonly remedy?: string,
     readonly details?: Record<string, unknown>,
   ) {
@@ -171,18 +182,30 @@ export async function loadPeriodEndFiscalYear(
   orgId: string,
   periodId: string,
 ): Promise<PeriodEndFiscalYear> {
-  const anchor = (await executor.execute<{ fiscal_calendar_id: string; fiscal_year: number }>(sql`
+  const anchor = (
+    await executor.execute<{ fiscal_calendar_id: string; fiscal_year: number }>(
+      sql`
     select fiscal_calendar_id, fiscal_year from accounting_periods
-     where org_id = ${orgId} and id = ${periodId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${periodId}`,
+      "objects",
+    )
+  )[0];
   if (!anchor) {
-    throw new PeriodEndJournalError("accounting period not found", "not_found", "Choose a period of the fiscal year to close.");
+    throw new PeriodEndJournalError(
+      "accounting period not found",
+      "not_found",
+      "Choose a period of the fiscal year to close.",
+    );
   }
-  const periods = await executor.execute<PeriodRow>(sql`
+  const periods = await executor.execute<PeriodRow>(
+    sql`
     select id, fiscal_year, starts_on::text as starts_on, ends_on::text as ends_on, is_adjustment, period_number
       from accounting_periods
      where org_id = ${orgId} and fiscal_calendar_id = ${anchor.fiscal_calendar_id}
        and fiscal_year = ${anchor.fiscal_year}
-     order by is_adjustment, period_number`, "objects");
+     order by is_adjustment, period_number`,
+    "objects",
+  );
   const regular = periods.filter((period) => !period.is_adjustment);
   const last = regular[regular.length - 1];
   if (!last || !regular[0]) {
@@ -193,18 +216,27 @@ export async function loadPeriodEndFiscalYear(
     );
   }
   const adjustment = periods.find((period) => period.is_adjustment) ?? null;
-  const next = (await executor.execute<PeriodRow>(sql`
+  const next =
+    (
+      await executor.execute<PeriodRow>(
+        sql`
     select id, fiscal_year, starts_on::text as starts_on, ends_on::text as ends_on, is_adjustment, period_number
       from accounting_periods
      where org_id = ${orgId} and fiscal_calendar_id = ${anchor.fiscal_calendar_id}
        and not is_adjustment and starts_on > ${last.ends_on}::date
-     order by starts_on limit 1`, "objects"))[0] ?? null;
+     order by starts_on limit 1`,
+        "objects",
+      )
+    )[0] ?? null;
   return {
     calendarId: anchor.fiscal_calendar_id,
     fiscalYear: Number(anchor.fiscal_year),
     startsOn: regular[0].starts_on,
     endsOn: last.ends_on,
-    periods: periods.map((period) => ({ ...periodEndPeriod(period), isAdjustment: period.is_adjustment })),
+    periods: periods.map((period) => ({
+      ...periodEndPeriod(period),
+      isAdjustment: period.is_adjustment,
+    })),
     lastRegularPeriod: periodEndPeriod(last),
     adjustmentPeriod: adjustment ? periodEndPeriod(adjustment) : null,
     nextYearFirstPeriod: next ? periodEndPeriod(next) : null,
@@ -219,7 +251,13 @@ function periodEndPeriod(row: PeriodRow): PeriodEndPeriod {
     startsOn: row.starts_on,
     endsOn: row.ends_on,
   };
-  return { id: row.id, name: canonicalPeriodLabel(periodRef), startsOn: row.starts_on, endsOn: row.ends_on, periodRef };
+  return {
+    id: row.id,
+    name: canonicalPeriodLabel(periodRef),
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+    periodRef,
+  };
 }
 
 type BookRow = {
@@ -229,15 +267,26 @@ type BookRow = {
   name: string;
 };
 
-async function resolveBook(executor: SqlExecutor, orgId: string, bookId?: string | null): Promise<BookRow> {
-  const row = (await executor.execute<BookRow>(sql`
+async function resolveBook(
+  executor: SqlExecutor,
+  orgId: string,
+  bookId?: string | null,
+): Promise<BookRow> {
+  const row = (
+    await executor.execute<BookRow>(
+      sql`
     select id, code, name, is_primary as "isPrimary" from accounting_books
      where org_id = ${orgId} and is_active and posts_gl
        and ${bookId ? sql`id = ${bookId}` : sql`is_primary`}
-     order by created_at limit 1`, "objects"))[0];
+     order by created_at limit 1`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new PeriodEndJournalError(
-      bookId ? "the accounting book is not an active posting book of this organization" : "the organization has no active primary posting book",
+      bookId
+        ? "the accounting book is not an active posting book of this organization"
+        : "the organization has no active primary posting book",
       "book_unavailable",
       "Choose an active posting book in Setup → Accounting → Accounting Books.",
     );
@@ -266,19 +315,31 @@ export async function periodEndPolicyInEffect(
   orgId: string,
   yearEndsOn: string,
 ): Promise<PeriodEndPolicy | null> {
-  const row = (await executor.execute<{
-    id: string; effective_from: string; closing_method: PeriodEndPolicy["closingMethod"];
-    retained_earnings_account_id: string; income_summary_account_id: string | null;
-    balance_sheet_journals: boolean; posting_period: PeriodEndPolicy["postingPeriod"];
-    preserve_departments: boolean; preserve_classes: boolean; preserve_locations: boolean;
-    preserve_projects: boolean; preserve_segments: boolean;
-  }>(sql`
+  const row = (
+    await executor.execute<{
+      id: string;
+      effective_from: string;
+      closing_method: PeriodEndPolicy["closingMethod"];
+      retained_earnings_account_id: string;
+      income_summary_account_id: string | null;
+      balance_sheet_journals: boolean;
+      posting_period: PeriodEndPolicy["postingPeriod"];
+      preserve_departments: boolean;
+      preserve_classes: boolean;
+      preserve_locations: boolean;
+      preserve_projects: boolean;
+      preserve_segments: boolean;
+    }>(
+      sql`
     select id, effective_from::text as effective_from, closing_method, retained_earnings_account_id,
            income_summary_account_id, balance_sheet_journals, posting_period, preserve_departments,
            preserve_classes, preserve_locations, preserve_projects, preserve_segments
       from period_end_journal_policies
      where org_id = ${orgId} and effective_from <= ${yearEndsOn}::date
-     order by effective_from desc limit 1`, "objects"))[0];
+     order by effective_from desc limit 1`,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return {
     id: row.id,
@@ -296,16 +357,37 @@ export async function periodEndPolicyInEffect(
   };
 }
 
-function closingPeriodFor(year: PeriodEndFiscalYear, policy: PeriodEndPolicy): PeriodEndPeriod | null {
-  return policy.postingPeriod === "adjustment_period" ? year.adjustmentPeriod : year.lastRegularPeriod;
+function closingPeriodFor(
+  year: PeriodEndFiscalYear,
+  policy: PeriodEndPolicy,
+): PeriodEndPeriod | null {
+  return policy.postingPeriod === "adjustment_period"
+    ? year.adjustmentPeriod
+    : year.lastRegularPeriod;
 }
 
 /** Equity accounts the policy names must still be active, postable equity accounts. */
-async function policyAccountProblems(executor: SqlExecutor, orgId: string, policy: PeriodEndPolicy): Promise<PeriodEndProblem[]> {
-  const ids = [policy.retainedEarningsAccountId, ...(policy.incomeSummaryAccountId ? [policy.incomeSummaryAccountId] : [])];
-  const rows = await executor.execute<{ id: string; name: string; type: string; is_summary: boolean; is_active: boolean }>(sql`
+async function policyAccountProblems(
+  executor: SqlExecutor,
+  orgId: string,
+  policy: PeriodEndPolicy,
+): Promise<PeriodEndProblem[]> {
+  const ids = [
+    policy.retainedEarningsAccountId,
+    ...(policy.incomeSummaryAccountId ? [policy.incomeSummaryAccountId] : []),
+  ];
+  const rows = await executor.execute<{
+    id: string;
+    name: string;
+    type: string;
+    is_summary: boolean;
+    is_active: boolean;
+  }>(
+    sql`
     select id, name, type, is_summary, is_active from accounts
-     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects");
+     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`,
+    "objects",
+  );
   const problems: PeriodEndProblem[] = [];
   for (const id of ids) {
     const account = rows.find((row) => row.id === id);
@@ -313,7 +395,8 @@ async function policyAccountProblems(executor: SqlExecutor, orgId: string, polic
       problems.push({
         code: "policy_account_invalid",
         message: `the ${id === policy.retainedEarningsAccountId ? "retained earnings" : "income summary"} account of the period-end journal policy is not an active, postable equity account`,
-        remedy: "Record a new period-end journal policy in Setup → Accounting → Period-End Journals naming an active equity account.",
+        remedy:
+          "Record a new period-end journal policy in Setup → Accounting → Period-End Journals naming an active equity account.",
         details: { accountId: id, accountName: account?.name ?? null },
       });
     }
@@ -338,7 +421,12 @@ async function openPeriodsOfYear(
   year: PeriodEndFiscalYear,
   closingPeriodId: string,
 ): Promise<string[]> {
-  const rows = await executor.execute<{ name: string; state: string | null; reopen_expires_at: Date | null }>(sql`
+  const rows = await executor.execute<{
+    name: string;
+    state: string | null;
+    reopen_expires_at: Date | null;
+  }>(
+    sql`
     select ${canonicalPeriodLabelSql()} as name, governing.state, governing.reopen_expires_at
       from accounting_periods p
      cross join unnest(${modulesLiteral()}::text[]) as m(module)
@@ -350,10 +438,14 @@ async function openPeriodsOfYear(
       ) governing on true
      where p.org_id = ${orgId} and p.fiscal_calendar_id = ${year.calendarId}
        and p.fiscal_year = ${year.fiscalYear} and p.id <> ${closingPeriodId}
-     order by p.starts_on, p.period_number`, "objects");
+     order by p.starts_on, p.period_number`,
+    "objects",
+  );
   const open = new Set<string>();
   for (const row of rows) {
-    const lock = row.state ? { state: row.state, reopenExpiresAt: row.reopen_expires_at, reason: null } : undefined;
+    const lock = row.state
+      ? { state: row.state, reopenExpiresAt: row.reopen_expires_at, reason: null }
+      : undefined;
     if (!periodLockRequiresApprovedReopen(lock)) open.add(row.name);
   }
   return [...open];
@@ -367,14 +459,23 @@ async function glAcceptsPostings(
   subsidiaryId: string,
   periodId: string,
 ): Promise<boolean> {
-  const lock = (await executor.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+  const lock = (
+    await executor.execute<{ state: string; reopen_expires_at: Date | null }>(
+      sql`
     select state, reopen_expires_at from period_locks
      where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId} and module = 'gl'
        and (subsidiary_id = ${subsidiaryId}::uuid or subsidiary_id is null)
-     order by (subsidiary_id is not null) desc limit 1`, "objects"))[0];
+     order by (subsidiary_id is not null) desc limit 1`,
+      "objects",
+    )
+  )[0];
   if (!lock) return true;
   if (lock.state === "soft_closed") return false;
-  return !periodLockRequiresApprovedReopen({ state: lock.state, reopenExpiresAt: lock.reopen_expires_at, reason: null });
+  return !periodLockRequiresApprovedReopen({
+    state: lock.state,
+    reopenExpiresAt: lock.reopen_expires_at,
+    reason: null,
+  });
 }
 
 async function draftsInYear(
@@ -384,8 +485,13 @@ async function draftsInYear(
   subsidiaryId: string,
   year: PeriodEndFiscalYear,
 ): Promise<number> {
-  const nonPosting = sql.join(NON_POSTING_DOCUMENT_KINDS.map((kind) => sql`${kind}`), sql`, `);
-  const row = (await executor.execute<{ count: string }>(sql`
+  const nonPosting = sql.join(
+    NON_POSTING_DOCUMENT_KINDS.map((kind) => sql`${kind}`),
+    sql`, `,
+  );
+  const row = (
+    await executor.execute<{ count: string }>(
+      sql`
     select (
       (select count(*) from journal_entries e
          join accounting_periods p on p.id = e.period_id and p.org_id = e.org_id
@@ -402,7 +508,10 @@ async function draftsInYear(
           and (d.subsidiary_id is null or d.subsidiary_id = ${subsidiaryId})
           and ((p.fiscal_calendar_id = ${year.calendarId} and p.fiscal_year = ${year.fiscalYear})
             or (d.posting_period_id is null and coalesce(d.posting_date, d.document_date) between ${year.startsOn}::date and ${year.endsOn}::date)))
-    )::text as count`, "objects"))[0];
+    )::text as count`,
+      "objects",
+    )
+  )[0];
   return Number(row?.count ?? 0);
 }
 
@@ -426,12 +535,19 @@ async function liveSet(
   subsidiaryId: string,
   year: PeriodEndFiscalYear,
 ): Promise<LiveSetRow | null> {
-  return (await executor.execute<LiveSetRow>(sql`
+  return (
+    (
+      await executor.execute<LiveSetRow>(
+        sql`
     select id, generation, content_hash, fiscal_year, year_ends_on::text as year_ends_on, closing_period_id,
            opening_period_id, generated_at, generated_by, subsidiary_id
       from period_end_journal_sets
      where org_id = ${orgId} and book_id = ${bookId} and subsidiary_id = ${subsidiaryId}
-       and fiscal_calendar_id = ${year.calendarId} and fiscal_year = ${year.fiscalYear} and status = 'posted'`, "objects"))[0] ?? null;
+       and fiscal_calendar_id = ${year.calendarId} and fiscal_year = ${year.fiscalYear} and status = 'posted'`,
+        "objects",
+      )
+    )[0] ?? null
+  );
 }
 
 async function laterLiveYear(
@@ -441,13 +557,20 @@ async function laterLiveYear(
   subsidiaryId: string,
   yearEndsOn: string,
 ): Promise<{ fiscal_year: number; period_name: string } | null> {
-  return (await executor.execute<{ fiscal_year: number; period_name: string }>(sql`
+  return (
+    (
+      await executor.execute<{ fiscal_year: number; period_name: string }>(
+        sql`
     select s.fiscal_year, ${canonicalPeriodLabelSql()} as period_name
       from period_end_journal_sets s
       join accounting_periods p on p.org_id = s.org_id and p.id = s.closing_period_id
      where s.org_id = ${orgId} and s.book_id = ${bookId} and s.subsidiary_id = ${subsidiaryId}
        and s.status = 'posted' and s.year_ends_on > ${yearEndsOn}::date
-     order by s.year_ends_on desc limit 1`, "objects"))[0] ?? null;
+     order by s.year_ends_on desc limit 1`,
+        "objects",
+      )
+    )[0] ?? null
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -464,18 +587,34 @@ interface DimensionPolicy {
 }
 
 /** Preserved dimensions: the policy's choices plus every balancing segment, which must stay balanced on its own. */
-async function dimensionPolicy(executor: SqlExecutor, orgId: string, policy: PeriodEndPolicy): Promise<DimensionPolicy> {
-  const balancing = await executor.execute<{ key: string; source_kind: string; storage_column: string | null }>(sql`
+async function dimensionPolicy(
+  executor: SqlExecutor,
+  orgId: string,
+  policy: PeriodEndPolicy,
+): Promise<DimensionPolicy> {
+  const balancing = await executor.execute<{
+    key: string;
+    source_kind: string;
+    storage_column: string | null;
+  }>(
+    sql`
     select key, source_kind, storage_column from segment_definitions
-     where org_id = ${orgId} and is_balancing`, "objects");
-  const builtin = new Set(balancing.filter((row) => row.source_kind === "builtin").map((row) => row.storage_column));
+     where org_id = ${orgId} and is_balancing`,
+    "objects",
+  );
+  const builtin = new Set(
+    balancing.filter((row) => row.source_kind === "builtin").map((row) => row.storage_column),
+  );
   return {
     departments: policy.preserveDepartments || builtin.has("department_id"),
     classes: policy.preserveClasses || builtin.has("class_id"),
     locations: policy.preserveLocations || builtin.has("location_id"),
     projects: policy.preserveProjects || builtin.has("project_id"),
     allSegments: policy.preserveSegments,
-    segmentKeys: balancing.filter((row) => row.source_kind === "custom").map((row) => row.key).sort(),
+    segmentKeys: balancing
+      .filter((row) => row.source_kind === "custom")
+      .map((row) => row.key)
+      .sort(),
   };
 }
 
@@ -510,19 +649,30 @@ async function ledgerBalances(
                        where d.key = any(${`{${dimensions.segmentKeys.join(",")}}`}::text[]) and d.value <> 'null'::jsonb), '{}'::jsonb)`
       : sql`'{}'::jsonb`;
   const rows = await executor.execute<{
-    account_id: string; type: string; department_id: string | null; class_id: string | null;
-    location_id: string | null; project_id: string | null; extra_dims: Record<string, string> | null;
-    amount: string; year_amount: string;
-  }>(sql`
+    account_id: string;
+    type: string;
+    department_id: string | null;
+    class_id: string | null;
+    location_id: string | null;
+    project_id: string | null;
+    extra_dims: Record<string, string> | null;
+    amount: string;
+    year_amount: string;
+  }>(
+    sql`
     with scoped as materialized (
       select e.id, e.origin, p.ends_on
         from journal_entries e
         join accounting_periods p on p.id = e.period_id and p.org_id = e.org_id
        where e.org_id = ${orgId} and e.book_id = ${bookId} and e.status in ('posted', 'reversed')
          and p.ends_on <= ${year.endsOn}::date
-         ${excludeSetId ? sql`and not exists (
+         ${
+           excludeSetId
+             ? sql`and not exists (
            select 1 from period_end_journal_entries pe
-            where pe.org_id = e.org_id and pe.set_id = ${excludeSetId} and pe.entry_id = e.id)` : sql``}
+            where pe.org_id = e.org_id and pe.set_id = ${excludeSetId} and pe.entry_id = e.id)`
+             : sql``
+         }
     )
     select l.account_id, a.type,
            ${dimensions.departments ? sql`l.department_id` : sql`null::uuid`} as department_id,
@@ -542,7 +692,9 @@ async function ledgerBalances(
     having sum(l.amount) <> 0
         or coalesce(sum(l.amount) filter (
              where s.ends_on >= ${year.startsOn}::date and s.origin not in (${sql.raw(PERIOD_END_JOURNAL_ORIGIN_LITERALS)})
-           ), 0) <> 0`, "objects");
+           ), 0) <> 0`,
+    "objects",
+  );
   const incomeStatement: PeriodEndBalance[] = [];
   const balanceSheet: PeriodEndBalance[] = [];
   const yearAmounts: string[] = [];
@@ -600,14 +752,20 @@ export interface PeriodEndPreviewJournal {
   lines: PeriodEndPreviewLine[];
 }
 
-export type PeriodEndEntityStatus = "not_generated" | "current" | "stale" | "nothing_to_close" | "blocked";
+export type PeriodEndEntityStatus =
+  "not_generated" | "current" | "stale" | "nothing_to_close" | "blocked";
 
 export interface PeriodEndEntityPreview {
   subsidiaryId: string;
   subsidiaryName: string;
   currency: string;
   status: PeriodEndEntityStatus;
-  liveSet: { id: string; generation: number; generatedAt: string; generatedBy: string | null } | null;
+  liveSet: {
+    id: string;
+    generation: number;
+    generatedAt: string;
+    generatedBy: string | null;
+  } | null;
   /** Credit-positive: the fiscal year's own net income. */
   fiscalYearEarnings: string;
   /** Credit-positive: earlier earnings never closed by journal, swept into this closing. */
@@ -627,7 +785,12 @@ export interface PeriodEndPreview {
   };
   book: { id: string; name: string };
   featureEnabled: boolean;
-  policy: (PeriodEndPolicy & { retainedEarningsAccountName: string | null; incomeSummaryAccountName: string | null }) | null;
+  policy:
+    | (PeriodEndPolicy & {
+        retainedEarningsAccountName: string | null;
+        incomeSummaryAccountName: string | null;
+      })
+    | null;
   problems: PeriodEndProblem[];
   entities: PeriodEndEntityPreview[];
 }
@@ -650,8 +813,13 @@ interface YearScope {
 }
 
 async function orgFeatures(executor: SqlExecutor, orgId: string): Promise<FeatureState> {
-  const row = (await executor.execute<{ features: FeatureState | null }>(sql`
-    select coalesce(settings->'features', '{}'::jsonb) as features from orgs where id = ${orgId}`, "objects"))[0];
+  const row = (
+    await executor.execute<{ features: FeatureState | null }>(
+      sql`
+    select coalesce(settings->'features', '{}'::jsonb) as features from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   return row?.features ?? {};
 }
 
@@ -679,16 +847,18 @@ async function resolveYearScope(
     globalProblems.push({
       code: "policy_missing",
       message: `no period-end journal policy is in effect for fiscal year ${year.fiscalYear} (ending ${year.endsOn})`,
-      remedy: "Record a period-end journal policy effective on or before the year end in Setup → Accounting → Period-End Journals.",
+      remedy:
+        "Record a period-end journal policy effective on or before the year end in Setup → Accounting → Period-End Journals.",
     });
   } else {
-    globalProblems.push(...await policyAccountProblems(executor, orgId, policy));
+    globalProblems.push(...(await policyAccountProblems(executor, orgId, policy)));
     closingPeriod = closingPeriodFor(year, policy);
     if (!closingPeriod) {
       globalProblems.push({
         code: "closing_period_missing",
         message: `fiscal year ${year.fiscalYear} has no adjustment period to post the period-end journals into`,
-        remedy: "Enable the adjustment period on the fiscal calendar and generate the year's periods, or record a policy that posts into the last period.",
+        remedy:
+          "Enable the adjustment period on the fiscal calendar and generate the year's periods, or record a policy that posts into the last period.",
       });
     }
     if (policy.balanceSheetJournals && !year.nextYearFirstPeriod) {
@@ -703,7 +873,12 @@ async function resolveYearScope(
 }
 
 /** The data-dependent multi-currency default, read without the share lock a write path takes. */
-async function lockFreeFeature(executor: SqlExecutor, orgId: string, key: "multiCurrency", features: FeatureState): Promise<boolean> {
+async function lockFreeFeature(
+  executor: SqlExecutor,
+  orgId: string,
+  key: "multiCurrency",
+  features: FeatureState,
+): Promise<boolean> {
   if (typeof features[key] === "boolean") return featureEnabled(features, key);
   return dataDependentFeatureDefault(executor, orgId, key, features);
 }
@@ -721,12 +896,14 @@ async function evaluateEntity(
     subsidiaryName: subsidiary.name,
     currency: subsidiary.baseCurrency,
     status: "blocked",
-    liveSet: live ? {
-      id: live.id,
-      generation: Number(live.generation),
-      generatedAt: new Date(live.generated_at).toISOString(),
-      generatedBy: live.generated_by,
-    } : null,
+    liveSet: live
+      ? {
+          id: live.id,
+          generation: Number(live.generation),
+          generatedAt: new Date(live.generated_at).toISOString(),
+          generatedBy: live.generated_by,
+        }
+      : null,
     fiscalYearEarnings: "0.0000",
     priorUnclosedEarnings: "0.0000",
     journals: [],
@@ -740,20 +917,46 @@ async function evaluateEntity(
   }
 
   try {
-    const bases = await resolveBookBases(executor, { orgId, book, subsidiaryIds: [subsidiary.id], postingDate: closingPeriod.endsOn });
+    const bases = await resolveBookBases(executor, {
+      orgId,
+      book,
+      subsidiaryIds: [subsidiary.id],
+      postingDate: closingPeriod.endsOn,
+    });
     preview.currency = bases.get(subsidiary.id)!.bookCurrency;
     if (policy.balanceSheetJournals) {
-      const openingBases = await resolveBookBases(executor, { orgId, book, subsidiaryIds: [subsidiary.id], postingDate: year.nextYearFirstPeriod!.startsOn });
-      if (openingBases.get(subsidiary.id)!.bookCurrency !== preview.currency) throw new BookTranslationError("Closing and opening balances must use the same book currency.");
+      const openingBases = await resolveBookBases(executor, {
+        orgId,
+        book,
+        subsidiaryIds: [subsidiary.id],
+        postingDate: year.nextYearFirstPeriod!.startsOn,
+      });
+      if (openingBases.get(subsidiary.id)!.bookCurrency !== preview.currency)
+        throw new BookTranslationError(
+          "Closing and opening balances must use the same book currency.",
+        );
     }
   } catch (error) {
     if (!(error instanceof BookTranslationError)) throw error;
-    preview.problems.push({ code: "computation_failed", message: error.message, remedy: "Set the book currency policy to cover the closing and opening dates in Setup → Accounting books." });
+    preview.problems.push({
+      code: "computation_failed",
+      message: error.message,
+      remedy:
+        "Set the book currency policy to cover the closing and opening dates in Setup → Accounting books.",
+    });
     return { preview, plan: null, contentHash: null, live };
   }
 
   const dimensions = await dimensionPolicy(executor, orgId, policy);
-  const balances = await ledgerBalances(executor, orgId, book.id, subsidiary.id, year, dimensions, live?.id ?? null);
+  const balances = await ledgerBalances(
+    executor,
+    orgId,
+    book.id,
+    subsidiary.id,
+    year,
+    dimensions,
+    live?.id ?? null,
+  );
   let plan: PeriodEndPlan;
   try {
     plan = computePeriodEndJournals({
@@ -766,7 +969,8 @@ async function evaluateEntity(
     preview.problems.push({
       code: "computation_failed",
       message: error.message,
-      remedy: "Review the legal entity's trial balance through the year end and correct the out-of-balance entry before generating.",
+      remedy:
+        "Review the legal entity's trial balance through the year end and correct the out-of-balance entry before generating.",
     });
     return { preview, plan: null, contentHash: null, live };
   }
@@ -778,7 +982,7 @@ async function evaluateEntity(
     calendarId: year.calendarId,
     fiscalYear: year.fiscalYear,
     closingPeriodId: closingPeriod.id,
-    openingPeriodId: policy.balanceSheetJournals ? year.nextYearFirstPeriod?.id ?? null : null,
+    openingPeriodId: policy.balanceSheetJournals ? (year.nextYearFirstPeriod?.id ?? null) : null,
     retainedEarningsAccountId: policy.retainedEarningsAccountId,
     incomeSummaryAccountId: policy.incomeSummaryAccountId,
   });
@@ -794,7 +998,9 @@ async function evaluateEntity(
     preview.status = "nothing_to_close";
     return { preview, plan, contentHash, live };
   }
-  preview.problems.push(...await entityProblems(executor, orgId, scope, subsidiary, closingPeriod, policy));
+  preview.problems.push(
+    ...(await entityProblems(executor, orgId, scope, subsidiary, closingPeriod, policy)),
+  );
   preview.status = preview.problems.length > 0 ? "blocked" : live ? "stale" : "not_generated";
   return { preview, plan, contentHash, live };
 }
@@ -813,7 +1019,8 @@ async function entityProblems(
     problems.push({
       code: "subsidiary_unavailable",
       message: `the legal entity ${subsidiary.name} is inactive`,
-      remedy: "Reactivate the legal entity in Setup → Company → Subsidiaries to post its period-end journals.",
+      remedy:
+        "Reactivate the legal entity in Setup → Company → Subsidiaries to post its period-end journals.",
     });
   }
   const later = await laterLiveYear(executor, orgId, book.id, subsidiary.id, year.endsOn);
@@ -825,12 +1032,20 @@ async function entityProblems(
       details: { fiscalYear: later.fiscal_year },
     });
   }
-  const open = await openPeriodsOfYear(executor, orgId, book.id, subsidiary.id, year, closingPeriod.id);
+  const open = await openPeriodsOfYear(
+    executor,
+    orgId,
+    book.id,
+    subsidiary.id,
+    year,
+    closingPeriod.id,
+  );
   if (open.length > 0) {
     problems.push({
       code: "periods_open",
       message: `${open.length} other period(s) of fiscal year ${year.fiscalYear} are not closed in every module: ${open.join(", ")}`,
-      remedy: "Close every other period of the year in Period Close before generating the period-end journals.",
+      remedy:
+        "Close every other period of the year in Period Close before generating the period-end journals.",
       details: { periods: open },
     });
   }
@@ -841,8 +1056,11 @@ async function entityProblems(
       remedy: `Generate the journals in ${closingPeriod.name}'s close run before it locks, or request a controlled reopen of ${closingPeriod.name}.`,
     });
   }
-  if (policy.balanceSheetJournals && year.nextYearFirstPeriod
-      && !(await glAcceptsPostings(executor, orgId, book.id, subsidiary.id, year.nextYearFirstPeriod.id))) {
+  if (
+    policy.balanceSheetJournals &&
+    year.nextYearFirstPeriod &&
+    !(await glAcceptsPostings(executor, orgId, book.id, subsidiary.id, year.nextYearFirstPeriod.id))
+  ) {
     problems.push({
       code: "opening_period_closed",
       message: `the general ledger is closed for ${year.nextYearFirstPeriod.name}, where the opening journal posts`,
@@ -854,7 +1072,8 @@ async function entityProblems(
     problems.push({
       code: "drafts_open",
       message: `${drafts} unposted draft or approved transaction(s) remain in fiscal year ${year.fiscalYear}`,
-      remedy: "Post, void or move every draft and approved transaction of the year before closing it.",
+      remedy:
+        "Post, void or move every draft and approved transaction of the year before closing it.",
       details: { count: drafts },
     });
   }
@@ -865,7 +1084,10 @@ async function entityProblems(
         code: "fx_unrevalued",
         message: `${fx.unrevaluedPositions} foreign-currency position(s) are not revalued at ${closingPeriod.name}`,
         remedy: `Run FX revaluation for ${closingPeriod.name} in its close run, then generate the period-end journals.`,
-        details: { positions: fx.unrevaluedPositions, missingSpotRates: fx.positionsMissingSpotRate },
+        details: {
+          positions: fx.unrevaluedPositions,
+          missingSpotRates: fx.positionsMissingSpotRate,
+        },
       });
     }
   }
@@ -879,9 +1101,17 @@ async function describeJournals(
   closingPeriod: PeriodEndPeriod,
   year: PeriodEndFiscalYear,
 ): Promise<PeriodEndPreviewJournal[]> {
-  const accountIds = [...new Set(plan.journals.flatMap((journal) => journal.lines.map((line) => line.accountId)))];
-  const accounts = accountIds.length === 0 ? [] : (await executor.execute<{ id: string; number: string | null; name: string }>(sql`
-    select id, number, name from accounts where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`, "objects"));
+  const accountIds = [
+    ...new Set(plan.journals.flatMap((journal) => journal.lines.map((line) => line.accountId))),
+  ];
+  const accounts =
+    accountIds.length === 0
+      ? []
+      : await executor.execute<{ id: string; number: string | null; name: string }>(
+          sql`
+    select id, number, name from accounts where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`,
+          "objects",
+        );
   const byId = new Map(accounts.map((account) => [account.id, account]));
   const labelOf = await dimensionLabeler(executor, orgId, plan);
   return plan.journals.map((journal) => {
@@ -892,7 +1122,9 @@ async function describeJournals(
       periodName: opening ? year.nextYearFirstPeriod!.name : closingPeriod.name,
       periodRef: opening ? year.nextYearFirstPeriod!.periodRef : closingPeriod.periodRef,
       postingDate: opening ? year.nextYearFirstPeriod!.startsOn : closingPeriod.endsOn,
-      debits: sum(journal.lines.filter((line) => !line.amount.startsWith("-")).map((line) => line.amount)),
+      debits: sum(
+        journal.lines.filter((line) => !line.amount.startsWith("-")).map((line) => line.amount),
+      ),
       lines: journal.lines.map((line) => ({
         accountId: line.accountId,
         accountNumber: byId.get(line.accountId)?.number ?? null,
@@ -915,7 +1147,13 @@ async function dimensionLabeler(
   for (const journal of plan.journals) {
     for (const line of journal.lines) {
       const d = line.dimensions;
-      for (const id of [d.departmentId, d.classId, d.locationId, d.projectId, ...Object.values(d.extraDims)]) {
+      for (const id of [
+        d.departmentId,
+        d.classId,
+        d.locationId,
+        d.projectId,
+        ...Object.values(d.extraDims),
+      ]) {
         if (id) ids.add(id);
       }
     }
@@ -923,14 +1161,17 @@ async function dimensionLabeler(
   const names = new Map<string, { name: string; segment: string | null }>();
   if (ids.size > 0) {
     const list = `{${[...ids].join(",")}}`;
-    const rows = await executor.execute<{ id: string; name: string; segment: string | null }>(sql`
+    const rows = await executor.execute<{ id: string; name: string; segment: string | null }>(
+      sql`
       select id, name, null::text as segment from departments where org_id = ${orgId} and id = any(${list}::uuid[])
       union all select id, name, null from classes where org_id = ${orgId} and id = any(${list}::uuid[])
       union all select id, name, null from locations where org_id = ${orgId} and id = any(${list}::uuid[])
       union all select id, name, null from projects where org_id = ${orgId} and id = any(${list}::uuid[])
       union all select v.id, v.name, d.name from segment_values v
         join segment_definitions d on d.org_id = v.org_id and d.id = v.segment_id
-       where v.org_id = ${orgId} and v.id = any(${list}::uuid[])`, "objects");
+       where v.org_id = ${orgId} and v.id = any(${list}::uuid[])`,
+      "objects",
+    );
     for (const row of rows) names.set(row.id, { name: row.name, segment: row.segment });
   }
   return (dimensions) => {
@@ -943,18 +1184,27 @@ async function dimensionLabeler(
     push("location", dimensions.locationId);
     push("project", dimensions.projectId);
     for (const [key, id] of Object.entries(dimensions.extraDims)) {
-      labels.push({ kind: "segment", segment: names.get(id)?.segment ?? key, label: names.get(id)?.name ?? id });
+      labels.push({
+        kind: "segment",
+        segment: names.get(id)?.segment ?? key,
+        label: names.get(id)?.name ?? id,
+      });
     }
     return labels;
   };
 }
 
-function scopeSubsidiaries(ctx: SubsidiaryContext, requested: readonly string[] | undefined | null) {
+function scopeSubsidiaries(
+  ctx: SubsidiaryContext,
+  requested: readonly string[] | undefined | null,
+) {
   const ids = requested ? [...new Set(requested)] : [...ctx.byId.keys()];
-  return ids.flatMap((id) => {
-    const subsidiary = ctx.byId.get(id);
-    return subsidiary ? [subsidiary] : [];
-  }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : 1));
+  return ids
+    .flatMap((id) => {
+      const subsidiary = ctx.byId.get(id);
+      return subsidiary ? [subsidiary] : [];
+    })
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : 1));
 }
 
 /**
@@ -974,9 +1224,14 @@ export async function previewPeriodEndJournals(
     if (evaluation.preview.status === "nothing_to_close" && subsidiary.isElimination) continue;
     entities.push(evaluation.preview);
   }
-  const names = scope.policy ? (await db.execute<{ id: string; name: string }>(sql`
+  const names = scope.policy
+    ? await db.execute<{ id: string; name: string }>(
+        sql`
     select id, name from accounts where org_id = ${orgId}
-       and id = any(${`{${[scope.policy.retainedEarningsAccountId, scope.policy.incomeSummaryAccountId].filter(Boolean).join(",")}}`}::uuid[])`, "objects")) : [];
+       and id = any(${`{${[scope.policy.retainedEarningsAccountId, scope.policy.incomeSummaryAccountId].filter(Boolean).join(",")}}`}::uuid[])`,
+        "objects",
+      )
+    : [];
   return {
     fiscalYear: {
       calendarId: scope.year.calendarId,
@@ -984,19 +1239,32 @@ export async function previewPeriodEndJournals(
       startsOn: scope.year.startsOn,
       endsOn: scope.year.endsOn,
       closingPeriod: scope.closingPeriod
-        ? { id: scope.closingPeriod.id, name: scope.closingPeriod.name, periodRef: scope.closingPeriod.periodRef }
+        ? {
+            id: scope.closingPeriod.id,
+            name: scope.closingPeriod.name,
+            periodRef: scope.closingPeriod.periodRef,
+          }
         : null,
-      openingPeriod: scope.policy?.balanceSheetJournals && scope.year.nextYearFirstPeriod
-        ? { id: scope.year.nextYearFirstPeriod.id, name: scope.year.nextYearFirstPeriod.name, periodRef: scope.year.nextYearFirstPeriod.periodRef }
-        : null,
+      openingPeriod:
+        scope.policy?.balanceSheetJournals && scope.year.nextYearFirstPeriod
+          ? {
+              id: scope.year.nextYearFirstPeriod.id,
+              name: scope.year.nextYearFirstPeriod.name,
+              periodRef: scope.year.nextYearFirstPeriod.periodRef,
+            }
+          : null,
     },
     book: { id: scope.book.id, name: scope.book.name },
     featureEnabled: scope.featureOn,
-    policy: scope.policy ? {
-      ...scope.policy,
-      retainedEarningsAccountName: names.find((row) => row.id === scope.policy!.retainedEarningsAccountId)?.name ?? null,
-      incomeSummaryAccountName: names.find((row) => row.id === scope.policy!.incomeSummaryAccountId)?.name ?? null,
-    } : null,
+    policy: scope.policy
+      ? {
+          ...scope.policy,
+          retainedEarningsAccountName:
+            names.find((row) => row.id === scope.policy!.retainedEarningsAccountId)?.name ?? null,
+          incomeSummaryAccountName:
+            names.find((row) => row.id === scope.policy!.incomeSummaryAccountId)?.name ?? null,
+        }
+      : null,
     problems: scope.globalProblems,
     entities,
   };
@@ -1009,7 +1277,13 @@ export async function previewPeriodEndJournals(
 export interface PeriodEndGenerationResult {
   fiscalYear: number;
   bookId: string;
-  generated: { subsidiaryId: string; setId: string; generation: number; entryIds: string[]; replacedSetId: string | null }[];
+  generated: {
+    subsidiaryId: string;
+    setId: string;
+    generation: number;
+    entryIds: string[];
+    replacedSetId: string | null;
+  }[];
   unchanged: { subsidiaryId: string; setId: string }[];
   skipped: { subsidiaryId: string; reason: "nothing_to_close" }[];
   refused: { subsidiaryId: string; subsidiaryName: string; problems: PeriodEndProblem[] }[];
@@ -1036,7 +1310,11 @@ async function assertActorAuthority(
   subsidiaryIds: readonly string[],
 ): Promise<void> {
   if (!(await actorHasPermission(executor, orgId, actorId, "close.run"))) {
-    throw new PeriodEndJournalError("running the close requires the close.run permission", "forbidden", "Ask an administrator for the Close run permission.");
+    throw new PeriodEndJournalError(
+      "running the close requires the close.run permission",
+      "forbidden",
+      "Ask an administrator for the Close run permission.",
+    );
   }
   const allowed = await actorAllowedSubsidiaryIds(executor, orgId, actorId);
   if (allowed !== null) {
@@ -1051,7 +1329,13 @@ async function assertActorAuthority(
   }
 }
 
-function setLockKey(orgId: string, bookId: string, subsidiaryId: string, calendarId: string, fiscalYear: number): string {
+function setLockKey(
+  orgId: string,
+  bookId: string,
+  subsidiaryId: string,
+  calendarId: string,
+  fiscalYear: number,
+): string {
   return `period-end-journals:${orgId}:${bookId}:${subsidiaryId}:${calendarId}:${fiscalYear}`;
 }
 
@@ -1066,7 +1350,12 @@ function setLockKey(orgId: string, bookId: string, subsidiaryId: string, calenda
 export async function generatePeriodEndJournals(
   orgId: string,
   actorId: string,
-  args: { periodId: string; bookId?: string | null; reason: string; subsidiaryIds?: readonly string[] | null },
+  args: {
+    periodId: string;
+    bookId?: string | null;
+    reason: string;
+    subsidiaryIds?: readonly string[] | null;
+  },
 ): Promise<PeriodEndGenerationResult> {
   const reason = requireReason(args.reason, "generating period-end journals");
   return withOrgTransaction(orgId, async () => {
@@ -1082,23 +1371,40 @@ export async function generatePeriodEndJournals(
     const blocking = scope.globalProblems.filter((problem) => problem.code !== "feature_disabled");
     if (blocking.length > 0 || !scope.policy || !scope.closingPeriod) {
       const first = blocking[0];
-      throw new PeriodEndJournalError(first?.message ?? "the period-end journal policy is not usable", first?.code ?? "policy_missing", first?.remedy, { problems: blocking });
+      throw new PeriodEndJournalError(
+        first?.message ?? "the period-end journal policy is not usable",
+        first?.code ?? "policy_missing",
+        first?.remedy,
+        { problems: blocking },
+      );
     }
     const policy = scope.policy;
     const closingPeriod = scope.closingPeriod;
     // Freeze the policy version and the accounts it names for the run.
-    await db.execute(sql`select id from period_end_journal_policies where org_id = ${orgId} and id = ${policy.id} for share`);
+    await db.execute(
+      sql`select id from period_end_journal_policies where org_id = ${orgId} and id = ${policy.id} for share`,
+    );
     const ctx = await loadSubsidiaryContext(db, orgId);
     const subsidiaries = scopeSubsidiaries(ctx, args.subsidiaryIds);
-    await assertActorAuthority(db, orgId, actorId, subsidiaries.map((subsidiary) => subsidiary.id));
+    await assertActorAuthority(
+      db,
+      orgId,
+      actorId,
+      subsidiaries.map((subsidiary) => subsidiary.id),
+    );
     // Exclusive side of the close/posting fence on every period the
     // generation reads or writes, in a stable order: an in-flight posting
     // commits first or waits until the generation commits and its seal holds.
-    const fencedPeriods = [...new Set([
-      ...scope.year.periods.map((period) => period.id),
-      ...(policy.balanceSheetJournals && scope.year.nextYearFirstPeriod ? [scope.year.nextYearFirstPeriod.id] : []),
-    ])].sort();
-    for (const periodId of fencedPeriods) await periodScopeAdvisoryLock(db, orgId, periodId, scope.book.id);
+    const fencedPeriods = [
+      ...new Set([
+        ...scope.year.periods.map((period) => period.id),
+        ...(policy.balanceSheetJournals && scope.year.nextYearFirstPeriod
+          ? [scope.year.nextYearFirstPeriod.id]
+          : []),
+      ]),
+    ].sort();
+    for (const periodId of fencedPeriods)
+      await periodScopeAdvisoryLock(db, orgId, periodId, scope.book.id);
 
     const result: PeriodEndGenerationResult = {
       fiscalYear: scope.year.fiscalYear,
@@ -1111,7 +1417,9 @@ export async function generatePeriodEndJournals(
     for (const subsidiary of subsidiaries) {
       try {
         await withTransactionSavepoint(db, async () => {
-          await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${setLockKey(orgId, scope.book.id, subsidiary.id, scope.year.calendarId, scope.year.fiscalYear)}, 0))`);
+          await db.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${setLockKey(orgId, scope.book.id, subsidiary.id, scope.year.calendarId, scope.year.fiscalYear)}, 0))`,
+          );
           const evaluation = await evaluateEntity(db, orgId, scope, subsidiary);
           const { preview, plan, contentHash, live } = evaluation;
           if (preview.status === "current" && live) {
@@ -1161,18 +1469,31 @@ export async function generatePeriodEndJournals(
         });
       } catch (error) {
         if (error instanceof EntityRefusal) {
-          result.refused.push({ subsidiaryId: subsidiary.id, subsidiaryName: subsidiary.name, problems: error.problems });
-          continue;
-        }
-        if (error instanceof PostingError || error instanceof CloseError || error instanceof SubsidiaryError || error instanceof PeriodEndJournalError) {
           result.refused.push({
             subsidiaryId: subsidiary.id,
             subsidiaryName: subsidiary.name,
-            problems: [{
-              code: "computation_failed",
-              message: error.message,
-              remedy: (error as { remedy?: string }).remedy ?? "Correct the refused condition and generate again.",
-            }],
+            problems: error.problems,
+          });
+          continue;
+        }
+        if (
+          error instanceof PostingError ||
+          error instanceof CloseError ||
+          error instanceof SubsidiaryError ||
+          error instanceof PeriodEndJournalError
+        ) {
+          result.refused.push({
+            subsidiaryId: subsidiary.id,
+            subsidiaryName: subsidiary.name,
+            problems: [
+              {
+                code: "computation_failed",
+                message: error.message,
+                remedy:
+                  (error as { remedy?: string }).remedy ??
+                  "Correct the refused condition and generate again.",
+              },
+            ],
           });
           continue;
         }
@@ -1201,8 +1522,10 @@ async function validateOffsetAccounts(
     orgId,
     ctx,
     docSubsidiaryId: subsidiaryId,
-    lines: [policy.retainedEarningsAccountId, ...(policy.incomeSummaryAccountId ? [policy.incomeSummaryAccountId] : [])]
-      .map((accountId) => ({ accountId, amount: "0", subsidiaryId })),
+    lines: [
+      policy.retainedEarningsAccountId,
+      ...(policy.incomeSummaryAccountId ? [policy.incomeSummaryAccountId] : []),
+    ].map((accountId) => ({ accountId, amount: "0", subsidiaryId })),
   });
 }
 
@@ -1226,10 +1549,17 @@ async function postGeneration(
   },
 ): Promise<{ setId: string; generation: number; entryIds: string[] }> {
   const { orgId, book, year, subsidiary, plan, policy, closingPeriod } = input;
-  const generation = Number((await executor.execute<{ next: number }>(sql`
+  const generation = Number(
+    (
+      await executor.execute<{ next: number }>(
+        sql`
     select coalesce(max(generation), 0) + 1 as next from period_end_journal_sets
      where org_id = ${orgId} and book_id = ${book.id} and subsidiary_id = ${subsidiary.id}
-       and fiscal_calendar_id = ${year.calendarId} and fiscal_year = ${year.fiscalYear}`, "objects"))[0]!.next);
+       and fiscal_calendar_id = ${year.calendarId} and fiscal_year = ${year.fiscalYear}`,
+        "objects",
+      )
+    )[0]!.next,
+  );
   const setId = randomUUID();
   const entryIds: { kind: PeriodEndJournalKind; entryId: string }[] = [];
   const subsidiaryCode = subsidiary.id.slice(0, 8).toUpperCase();
@@ -1282,7 +1612,9 @@ async function postGeneration(
     entryIds.push({ kind: journal.kind, entryId: posted.entryId });
   }
   const snapshot = { ...policy };
-  const inserted = (await executor.execute<{ id: string }>(sql`
+  const inserted = (
+    await executor.execute<{ id: string }>(
+      sql`
     insert into period_end_journal_sets
       (id, org_id, book_id, subsidiary_id, fiscal_calendar_id, fiscal_year, year_starts_on, year_ends_on,
        closing_period_id, opening_period_id, generation, policy_id, policy_snapshot, content_hash, currency,
@@ -1293,14 +1625,32 @@ async function postGeneration(
             ${generation}, ${policy.id}, ${JSON.stringify(snapshot)}::jsonb, ${input.contentHash},
             ${input.currency}, ${input.fiscalYearEarnings}, ${input.priorUnclosedEarnings},
             'posted', ${input.reason}, ${input.actorId}, ${input.actorId}, ${input.actorId})
-    returning id`, "objects"))[0];
-  if (!inserted) throw new PeriodEndJournalError("the period-end journal generation was not recorded", "computation_failed", "Generate again.");
+    returning id`,
+      "objects",
+    )
+  )[0];
+  if (!inserted)
+    throw new PeriodEndJournalError(
+      "the period-end journal generation was not recorded",
+      "computation_failed",
+      "Generate again.",
+    );
   for (const entry of entryIds) {
-    const link = (await executor.execute<{ id: string }>(sql`
+    const link = (
+      await executor.execute<{ id: string }>(
+        sql`
       insert into period_end_journal_entries (org_id, set_id, kind, entry_id)
       values (${orgId}, ${setId}, ${entry.kind}, ${entry.entryId})
-      returning id`, "objects"))[0];
-    if (!link) throw new PeriodEndJournalError("a period-end journal link was not recorded", "computation_failed", "Generate again.");
+      returning id`,
+        "objects",
+      )
+    )[0];
+    if (!link)
+      throw new PeriodEndJournalError(
+        "a period-end journal link was not recorded",
+        "computation_failed",
+        "Generate again.",
+      );
   }
   await executor.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -1328,7 +1678,12 @@ async function postGeneration(
 // Reversal
 // ---------------------------------------------------------------------------
 
-const REVERSAL_ORDER: PeriodEndJournalKind[] = ["opening", "balance_sheet", "income_summary", "income_statement"];
+const REVERSAL_ORDER: PeriodEndJournalKind[] = [
+  "opening",
+  "balance_sheet",
+  "income_summary",
+  "income_statement",
+];
 
 /**
  * Reverse one live generation through the posting kernel: each journal gets
@@ -1343,24 +1698,47 @@ async function reverseSet(
   setId: string,
   args: { actorId: string | null; reason: string; reopenRequestId: string | null },
 ): Promise<string[]> {
-  const set = (await executor.execute<{ id: string; status: string; fiscal_year: number }>(sql`
+  const set = (
+    await executor.execute<{ id: string; status: string; fiscal_year: number }>(
+      sql`
     select id, status, fiscal_year from period_end_journal_sets
-     where org_id = ${orgId} and id = ${setId} for update`, "objects"))[0];
+     where org_id = ${orgId} and id = ${setId} for update`,
+      "objects",
+    )
+  )[0];
   if (!set || set.status !== "posted") {
-    throw new PeriodEndJournalError("the period-end journal generation is not live", "not_generated", "Reload the year-end close and try again.");
+    throw new PeriodEndJournalError(
+      "the period-end journal generation is not live",
+      "not_generated",
+      "Reload the year-end close and try again.",
+    );
   }
-  const links = (await executor.execute<{ id: string; kind: PeriodEndJournalKind; entry_id: string }>(sql`
+  const links = (
+    await executor.execute<{ id: string; kind: PeriodEndJournalKind; entry_id: string }>(
+      sql`
     select id, kind, entry_id from period_end_journal_entries
-     where org_id = ${orgId} and set_id = ${setId} and reversal_entry_id is null for update`, "objects"))
-    .sort((a, b) => REVERSAL_ORDER.indexOf(a.kind) - REVERSAL_ORDER.indexOf(b.kind));
+     where org_id = ${orgId} and set_id = ${setId} and reversal_entry_id is null for update`,
+      "objects",
+    )
+  ).sort((a, b) => REVERSAL_ORDER.indexOf(a.kind) - REVERSAL_ORDER.indexOf(b.kind));
   const reversalIds: string[] = [];
   for (const link of links) {
-    const head = (await executor.execute<{
-      book_id: string; subsidiary_id: string; entry_number: string; posting_date: string;
-      period_id: string; origin: string; status: string;
-    }>(sql`
+    const head = (
+      await executor.execute<{
+        book_id: string;
+        subsidiary_id: string;
+        entry_number: string;
+        posting_date: string;
+        period_id: string;
+        origin: string;
+        status: string;
+      }>(
+        sql`
       select book_id, subsidiary_id, entry_number, posting_date::text as posting_date, period_id, origin, status
-        from journal_entries where org_id = ${orgId} and id = ${link.entry_id} for update`, "objects"))[0];
+        from journal_entries where org_id = ${orgId} and id = ${link.entry_id} for update`,
+        "objects",
+      )
+    )[0];
     if (!head || head.status !== "posted") {
       throw new PeriodEndJournalError(
         `period-end journal ${head?.entry_number ?? link.entry_id} is not a posted entry`,
@@ -1368,7 +1746,8 @@ async function reverseSet(
         "Have the journal entry investigated before reversing the generation.",
       );
     }
-    const lines = await executor.execute<Parameters<typeof reversalJournalLines>[0][number]>(sql`
+    const lines = await executor.execute<Parameters<typeof reversalJournalLines>[0][number]>(
+      sql`
       select line_number as "lineNumber", account_id as "accountId", subsidiary_id as "subsidiaryId",
              amount::text as amount, currency, txn_amount::text as "txnAmount", fx_rate::text as "fxRate",
              party_id as "partyId", department_id as "departmentId", project_id as "projectId",
@@ -1378,7 +1757,9 @@ async function reverseSet(
              memo, quantity::text as quantity, unit, custom, contributor_kind as "contributorKind",
              contributor_ref as "contributorRef"
         from journal_lines where org_id = ${orgId} and entry_id = ${link.entry_id}
-       order by line_number`, "objects");
+       order by line_number`,
+      "objects",
+    );
     const mirror = reversalJournalLines(lines, { entryId: "", orgId });
     const reversal = await postEntry(executor, {
       orgId,
@@ -1397,30 +1778,60 @@ async function reverseSet(
       idempotencyKey: `period-end-reversal:${link.entry_id}`,
       auditAction: "update",
       requestId: "period_end_journals",
-      auditChanges: { mode: "period_end_journal_reversal", setId, kind: link.kind, reversedEntryId: link.entry_id, reason: args.reason },
+      auditChanges: {
+        mode: "period_end_journal_reversal",
+        setId,
+        kind: link.kind,
+        reversedEntryId: link.entry_id,
+        reason: args.reason,
+      },
       lines: mirror.map(reversalPostEntryLine),
     });
     await markEntryReversed(executor, { orgId, entryId: link.entry_id, actorId: args.actorId });
-    const linked = (await executor.execute<{ id: string }>(sql`
+    const linked = (
+      await executor.execute<{ id: string }>(
+        sql`
       update period_end_journal_entries set reversal_entry_id = ${reversal.entryId}
        where org_id = ${orgId} and id = ${link.id} and reversal_entry_id is null
-       returning id`, "objects"))[0];
-    if (!linked) throw new PeriodEndJournalError("the period-end journal reversal was not linked", "not_generated", "Reload the year-end close and try again.");
+       returning id`,
+        "objects",
+      )
+    )[0];
+    if (!linked)
+      throw new PeriodEndJournalError(
+        "the period-end journal reversal was not linked",
+        "not_generated",
+        "Reload the year-end close and try again.",
+      );
     reversalIds.push(reversal.entryId);
   }
-  const updated = (await executor.execute<{ id: string }>(sql`
+  const updated = (
+    await executor.execute<{ id: string }>(
+      sql`
     update period_end_journal_sets
        set status = 'reversed', reversed_at = now(), reversed_by = ${args.actorId},
            reversal_reason = ${args.reason}, reopen_request_id = ${args.reopenRequestId},
            updated_at = now(), updated_by = ${args.actorId}
      where org_id = ${orgId} and id = ${setId} and status = 'posted'
-     returning id`, "objects"))[0];
-  if (!updated) throw new PeriodEndJournalError("the period-end journal generation was not marked reversed", "not_generated", "Reload the year-end close and try again.");
+     returning id`,
+      "objects",
+    )
+  )[0];
+  if (!updated)
+    throw new PeriodEndJournalError(
+      "the period-end journal generation was not marked reversed",
+      "not_generated",
+      "Reload the year-end close and try again.",
+    );
   await executor.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${orgId}, 'period_end_journal_sets', ${setId}, 'reverse', ${JSON.stringify({
       before: { status: "posted" },
-      after: { status: "reversed", reversalEntryIds: reversalIds, reopenRequestId: args.reopenRequestId },
+      after: {
+        status: "reversed",
+        reversalEntryIds: reversalIds,
+        reopenRequestId: args.reopenRequestId,
+      },
       reason: args.reason,
     })}::jsonb, ${args.actorId}, 'period_end_journals')`);
   return reversalIds;
@@ -1440,7 +1851,12 @@ export interface PeriodEndReversalResult {
 export async function reversePeriodEndJournals(
   orgId: string,
   actorId: string,
-  args: { periodId: string; bookId?: string | null; reason: string; subsidiaryIds?: readonly string[] | null },
+  args: {
+    periodId: string;
+    bookId?: string | null;
+    reason: string;
+    subsidiaryIds?: readonly string[] | null;
+  },
 ): Promise<PeriodEndReversalResult> {
   const reason = requireReason(args.reason, "reversing period-end journals");
   return withOrgTransaction(orgId, async () => {
@@ -1456,10 +1872,17 @@ export async function reversePeriodEndJournals(
     const year = await loadPeriodEndFiscalYear(db, orgId, args.periodId);
     const ctx = await loadSubsidiaryContext(db, orgId);
     const subsidiaries = scopeSubsidiaries(ctx, args.subsidiaryIds);
-    await assertActorAuthority(db, orgId, actorId, subsidiaries.map((subsidiary) => subsidiary.id));
+    await assertActorAuthority(
+      db,
+      orgId,
+      actorId,
+      subsidiaries.map((subsidiary) => subsidiary.id),
+    );
     const result: PeriodEndReversalResult = { fiscalYear: year.fiscalYear, reversed: [] };
     for (const subsidiary of subsidiaries) {
-      await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${setLockKey(orgId, book.id, subsidiary.id, year.calendarId, year.fiscalYear)}, 0))`);
+      await db.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${setLockKey(orgId, book.id, subsidiary.id, year.calendarId, year.fiscalYear)}, 0))`,
+      );
       const live = await liveSet(db, orgId, book.id, subsidiary.id, year);
       if (!live) continue;
       const later = await laterLiveYear(db, orgId, book.id, subsidiary.id, year.endsOn);
@@ -1470,7 +1893,11 @@ export async function reversePeriodEndJournals(
           `Reverse fiscal year ${later.fiscal_year}'s journals first; its closing period is ${later.period_name}.`,
         );
       }
-      const reversalEntryIds = await reverseSet(db, orgId, live.id, { actorId, reason, reopenRequestId: null });
+      const reversalEntryIds = await reverseSet(db, orgId, live.id, {
+        actorId,
+        reason,
+        reopenRequestId: null,
+      });
       result.reversed.push({ subsidiaryId: subsidiary.id, setId: live.id, reversalEntryIds });
     }
     if (result.reversed.length === 0) {
@@ -1508,13 +1935,24 @@ export interface PeriodEndHistoryEntry {
   reversedByName: string | null;
   reversalReason: string | null;
   reopenRequestId: string | null;
-  entries: { kind: PeriodEndJournalKind; entryId: string; entryNumber: string; reversalEntryId: string | null; reversalEntryNumber: string | null }[];
+  entries: {
+    kind: PeriodEndJournalKind;
+    entryId: string;
+    entryNumber: string;
+    reversalEntryId: string | null;
+    reversalEntryNumber: string | null;
+  }[];
 }
 
 /** Every generation of a fiscal year (or all years), newest first, with its journals and reversals. */
 export async function periodEndJournalHistory(
   orgId: string,
-  args: { fiscalYear?: number | null; bookId?: string | null; subsidiaryIds?: readonly string[] | null; limit?: number },
+  args: {
+    fiscalYear?: number | null;
+    bookId?: string | null;
+    subsidiaryIds?: readonly string[] | null;
+    limit?: number;
+  },
 ): Promise<PeriodEndHistoryEntry[]> {
   const subsidiaryFilter = args.subsidiaryIds
     ? args.subsidiaryIds.length
@@ -1522,13 +1960,28 @@ export async function periodEndJournalHistory(
       : sql`and false`
     : sql``;
   const rows = await db.execute<{
-    id: string; book_id: string; book_name: string; subsidiary_id: string; subsidiary_name: string;
-    fiscal_year: number; generation: number; status: "posted" | "reversed"; currency: string;
-    fiscal_year_earnings: string; prior_unclosed_earnings: string; closing_period_name: string;
-    reason: string; generated_at: Date; generated_by_name: string | null; reversed_at: Date | null;
-    reversed_by_name: string | null; reversal_reason: string | null; reopen_request_id: string | null;
+    id: string;
+    book_id: string;
+    book_name: string;
+    subsidiary_id: string;
+    subsidiary_name: string;
+    fiscal_year: number;
+    generation: number;
+    status: "posted" | "reversed";
+    currency: string;
+    fiscal_year_earnings: string;
+    prior_unclosed_earnings: string;
+    closing_period_name: string;
+    reason: string;
+    generated_at: Date;
+    generated_by_name: string | null;
+    reversed_at: Date | null;
+    reversed_by_name: string | null;
+    reversal_reason: string | null;
+    reopen_request_id: string | null;
     entries: PeriodEndHistoryEntry["entries"];
-  }>(sql`
+  }>(
+    sql`
     select s.id, s.book_id, b.name as book_name, s.subsidiary_id, sub.name as subsidiary_name,
            s.fiscal_year, s.generation, s.status, s.currency,
            s.fiscal_year_earnings::text as fiscal_year_earnings,
@@ -1557,7 +2010,9 @@ export async function periodEndJournalHistory(
        ${args.bookId ? sql`and s.book_id = ${args.bookId}` : sql``}
        ${subsidiaryFilter}
      order by s.fiscal_year desc, s.generated_at desc, sub.name
-     limit ${Math.min(Math.max(args.limit ?? 200, 1), 500)}`, "objects");
+     limit ${Math.min(Math.max(args.limit ?? 200, 1), 500)}`,
+    "objects",
+  );
   return rows.map((row) => ({
     setId: row.id,
     bookId: row.book_id,
@@ -1616,16 +2071,28 @@ export async function periodEndJournalCloseCheck(
   }
   if (scope.closingPeriod.id !== args.periodId) return { count: 0 };
   const ctx = await loadSubsidiaryContext(db, orgId);
-  const pending: { subsidiaryId: string; subsidiaryName: string; status: PeriodEndEntityStatus }[] = [];
-  for (const subsidiary of scopeSubsidiaries(ctx, args.subsidiaryIds.length ? args.subsidiaryIds : null)) {
+  const pending: { subsidiaryId: string; subsidiaryName: string; status: PeriodEndEntityStatus }[] =
+    [];
+  for (const subsidiary of scopeSubsidiaries(
+    ctx,
+    args.subsidiaryIds.length ? args.subsidiaryIds : null,
+  )) {
     const evaluation = await evaluateEntity(db, orgId, scope, subsidiary);
-    if (evaluation.preview.status === "current" || evaluation.preview.status === "nothing_to_close") continue;
-    pending.push({ subsidiaryId: subsidiary.id, subsidiaryName: subsidiary.name, status: evaluation.preview.status });
+    if (evaluation.preview.status === "current" || evaluation.preview.status === "nothing_to_close")
+      continue;
+    pending.push({
+      subsidiaryId: subsidiary.id,
+      subsidiaryName: subsidiary.name,
+      status: evaluation.preview.status,
+    });
   }
   const globalBlocking = scope.globalProblems.length;
   return {
     count: pending.length + globalBlocking,
-    details: pending.length || globalBlocking ? { entities: pending, problems: scope.globalProblems } : undefined,
+    details:
+      pending.length || globalBlocking
+        ? { entities: pending, problems: scope.globalProblems }
+        : undefined,
   };
 }
 
@@ -1643,10 +2110,16 @@ interface ReopenScope {
 
 async function liveSetsSealing(executor: SqlExecutor, scope: ReopenScope) {
   return await executor.execute<{
-    id: string; subsidiary_id: string; subsidiary_name: string; fiscal_year: number;
-    closing_period_id: string; closing_period_name: string; opening_period_id: string | null;
+    id: string;
+    subsidiary_id: string;
+    subsidiary_name: string;
+    fiscal_year: number;
+    closing_period_id: string;
+    closing_period_name: string;
+    opening_period_id: string | null;
     opening_period_name: string | null;
-  }>(sql`
+  }>(
+    sql`
     select s.id, s.subsidiary_id, sub.name as subsidiary_name, s.fiscal_year, s.closing_period_id,
            ${canonicalPeriodLabelSql("cp")} as closing_period_name, s.opening_period_id, ${canonicalPeriodLabelSql("op")} as opening_period_name
       from period_end_journal_sets s
@@ -1657,7 +2130,9 @@ async function liveSetsSealing(executor: SqlExecutor, scope: ReopenScope) {
      where s.org_id = ${scope.orgId} and s.book_id = ${scope.bookId} and s.status = 'posted'
        and target.ends_on <= s.year_ends_on
        ${scope.subsidiaryId ? sql`and s.subsidiary_id = ${scope.subsidiaryId}` : sql``}
-     order by s.year_ends_on desc, sub.name`, "objects");
+     order by s.year_ends_on desc, sub.name`,
+    "objects",
+  );
 }
 
 /**
@@ -1667,7 +2142,10 @@ async function liveSetsSealing(executor: SqlExecutor, scope: ReopenScope) {
  * journals can be reversed. Any other period of a closed year waits until
  * the year-end period has been reopened. Refused by name with the remedy.
  */
-export async function assertPeriodEndReopenAllowed(executor: SqlExecutor, scope: ReopenScope): Promise<void> {
+export async function assertPeriodEndReopenAllowed(
+  executor: SqlExecutor,
+  scope: ReopenScope,
+): Promise<void> {
   if (!scope.modules.includes("gl")) return;
   const sealing = await liveSetsSealing(executor, scope);
   if (sealing.length === 0) return;
@@ -1679,7 +2157,15 @@ export async function assertPeriodEndReopenAllowed(executor: SqlExecutor, scope:
   }
   for (const set of sealing) {
     if (!set.opening_period_id) continue;
-    if (!(await glAcceptsPostings(executor, scope.orgId, scope.bookId, set.subsidiary_id, set.opening_period_id))) {
+    if (
+      !(await glAcceptsPostings(
+        executor,
+        scope.orgId,
+        scope.bookId,
+        set.subsidiary_id,
+        set.opening_period_id,
+      ))
+    ) {
       throw new CloseError(
         `reopening ${set.closing_period_name} reverses fiscal year ${set.fiscal_year}'s opening journal in ${set.opening_period_name}, which is closed for ${set.subsidiary_name}; reopen ${set.opening_period_name} first`,
       );
@@ -1710,7 +2196,9 @@ export async function reversePeriodEndJournalsForReopen(
       });
     } catch (error) {
       if (error instanceof PostingError || error instanceof PeriodEndJournalError) {
-        throw new CloseError(`fiscal year ${set.fiscal_year}'s period-end journals for ${set.subsidiary_name} could not be reversed: ${error.message}`);
+        throw new CloseError(
+          `fiscal year ${set.fiscal_year}'s period-end journals for ${set.subsidiary_name} could not be reversed: ${error.message}`,
+        );
       }
       throw error;
     }
@@ -1731,25 +2219,44 @@ export async function reversePeriodEndJournalsForReopen(
 export async function periodEndPolicyWriteRefusal(
   executor: SqlExecutor,
   orgId: string,
-  input: { effectiveFrom?: unknown; closingMethod?: unknown; retainedEarningsAccountId?: unknown; incomeSummaryAccountId?: unknown },
+  input: {
+    effectiveFrom?: unknown;
+    closingMethod?: unknown;
+    retainedEarningsAccountId?: unknown;
+    incomeSummaryAccountId?: unknown;
+  },
 ): Promise<string | null> {
   const method = input.closingMethod === "income_summary" ? "income_summary" : "retained_earnings";
-  const retained = typeof input.retainedEarningsAccountId === "string" ? input.retainedEarningsAccountId : "";
-  const summary = typeof input.incomeSummaryAccountId === "string" && input.incomeSummaryAccountId !== ""
-    ? input.incomeSummaryAccountId
-    : null;
-  if (method === "income_summary" && !summary) return "Choose the income summary account the closing passes through.";
-  if (method === "retained_earnings" && summary) return "An income summary account applies only to the income summary closing method.";
-  if (summary && summary === retained) return "Choose an income summary account different from the retained earnings account.";
+  const retained =
+    typeof input.retainedEarningsAccountId === "string" ? input.retainedEarningsAccountId : "";
+  const summary =
+    typeof input.incomeSummaryAccountId === "string" && input.incomeSummaryAccountId !== ""
+      ? input.incomeSummaryAccountId
+      : null;
+  if (method === "income_summary" && !summary)
+    return "Choose the income summary account the closing passes through.";
+  if (method === "retained_earnings" && summary)
+    return "An income summary account applies only to the income summary closing method.";
+  if (summary && summary === retained)
+    return "Choose an income summary account different from the retained earnings account.";
   if (!isUuid(retained)) return "Choose the retained earnings account the closing credits.";
-  if (summary && !isUuid(summary)) return "Choose the income summary account the closing passes through.";
+  if (summary && !isUuid(summary))
+    return "Choose the income summary account the closing passes through.";
   if (input.effectiveFrom !== undefined && !isIsoCalendarDate(input.effectiveFrom)) {
     return "Choose a valid effective date for the closing policy.";
   }
   const ids = [retained, ...(summary ? [summary] : [])];
-  const accounts = await executor.execute<{ id: string; type: string; is_summary: boolean; is_active: boolean }>(sql`
+  const accounts = await executor.execute<{
+    id: string;
+    type: string;
+    is_summary: boolean;
+    is_active: boolean;
+  }>(
+    sql`
     select id, type, is_summary, is_active from accounts
-     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects");
+     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`,
+    "objects",
+  );
   for (const id of ids) {
     const account = accounts.find((row) => row.id === id);
     if (!account || account.type !== "equity" || account.is_summary || !account.is_active) {
@@ -1759,10 +2266,15 @@ export async function periodEndPolicyWriteRefusal(
     }
   }
   if (isIsoCalendarDate(input.effectiveFrom)) {
-    const closed = (await executor.execute<{ fiscal_year: number; year_ends_on: string }>(sql`
+    const closed = (
+      await executor.execute<{ fiscal_year: number; year_ends_on: string }>(
+        sql`
       select fiscal_year, year_ends_on::text as year_ends_on from period_end_journal_sets
        where org_id = ${orgId} and status = 'posted' and year_ends_on >= ${input.effectiveFrom}::date
-       order by year_ends_on desc limit 1`, "objects"))[0];
+       order by year_ends_on desc limit 1`,
+        "objects",
+      )
+    )[0];
     if (closed) {
       return `Fiscal year ${closed.fiscal_year} is closed by period-end journals through ${closed.year_ends_on}; choose an effective date after it, or reopen that year first.`;
     }

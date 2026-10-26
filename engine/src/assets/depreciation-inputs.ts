@@ -5,18 +5,29 @@ import { db } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fitsLedgerRange, neg, normalizeMoney, toUnits } from "../money/money.ts";
 import { assetBasisDelta } from "./asset-basis.ts";
-import { CloseError, assertPeriodModulesOpen, canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
+import {
+  CloseError,
+  assertPeriodModulesOpen,
+  canonicalPeriodLabel,
+  type PeriodDisplayInput,
+} from "../periods/period-policy.ts";
 import { DepreciationRefusalError } from "./depreciation-errors.ts";
-import { computeUnitsOfProductionCharge, type DepreciationMethod } from "./depreciation-schedule-math.ts";
+import {
+  computeUnitsOfProductionCharge,
+  type DepreciationMethod,
+} from "./depreciation-schedule-math.ts";
 import { assetDepreciationCalendar, primaryBookId } from "./depreciation-schedule-build.ts";
 import { isUuid } from "../platform/uuid.ts";
 
 /** Persist a manual/usage depreciation fact through exact decimal then ledger money. Fail closed. */
 function persistDepreciationInputValue(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new DepreciationRefusalError("depreciation value must be an exact decimal");
+  if (exact === null)
+    throw new DepreciationRefusalError("depreciation value must be an exact decimal");
   if (!fitsLedgerRange(exact)) {
-    throw new DepreciationRefusalError("depreciation value must fit within 15 whole digits and 4 decimal places");
+    throw new DepreciationRefusalError(
+      "depreciation value must fit within 15 whole digits and 4 decimal places",
+    );
   }
   try {
     return normalizeMoney(exact);
@@ -64,9 +75,7 @@ export async function recordDepreciationInput(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(args.effectiveDate))
     throw new DepreciationRefusalError("effective date is required");
   if (!memo) throw new DepreciationRefusalError("an accounting memo is required");
-  if (
-    !isUuid(args.evidenceFileId)
-  ) {
+  if (!isUuid(args.evidenceFileId)) {
     throw new DepreciationRefusalError("an attached evidence file is required");
   }
   const value = persistDepreciationInputValue(args.value);
@@ -100,7 +109,8 @@ export async function recordDepreciationInput(
       period_number: number;
       period_starts_on: string;
       period_ends_on: string;
-    }>(sql`
+    }>(
+      sql`
       select s.id, s.method, s.units_total, s.book_id,
              a.subsidiary_id, a.custom, a.asset_number,
              a.acquisition_cost, a.salvage_value, a.status, a.in_service_on,
@@ -114,7 +124,9 @@ export async function recordDepreciationInput(
        where s.org_id = ${args.orgId} and s.asset_id = ${args.assetId}
          and s.book_id=${selectedBookId}
        limit 1
-       for update of s, a, p`, "objects");
+       for update of s, a, p`,
+      "objects",
+    );
     const row = schedule[0];
     if (!row)
       throw new DepreciationRefusalError(
@@ -148,19 +160,19 @@ export async function recordDepreciationInput(
         throw new DepreciationRefusalError("the asset or GL period is closed");
       throw error;
     }
-    const expectedMethod =
-      args.kind === "manual" ? "manual" : "units_of_production";
+    const expectedMethod = args.kind === "manual" ? "manual" : "units_of_production";
     if (row.method !== expectedMethod)
-      throw new DepreciationRefusalError(
-        `schedule method is ${row.method}, not ${expectedMethod}`,
-      );
-    const evidence = await tx.execute(sql`
+      throw new DepreciationRefusalError(`schedule method is ${row.method}, not ${expectedMethod}`);
+    const evidence = await tx.execute(
+      sql`
       select 1
         from files f
         join file_attachments fa on fa.org_id = f.org_id and fa.file_id = f.id
        where f.id = ${args.evidenceFileId} and f.org_id = ${args.orgId} and not f.is_inactive
          and fa.target_table = 'fixed_assets' and fa.target_id = ${args.assetId}
-       limit 1`, "objects");
+       limit 1`,
+      "objects",
+    );
     if (!evidence[0])
       throw new DepreciationRefusalError("evidence file must be attached to this asset");
 
@@ -169,48 +181,51 @@ export async function recordDepreciationInput(
       id: string;
       posted_amount: string | null;
       input_id: string | null;
-    }>(sql`
+    }>(
+      sql`
       select id, posted_amount, input_id
         from depreciation_schedule_lines
        where org_id = ${args.orgId} and schedule_id = ${row.id} and period_id = ${row.period_id}
          and source = ${source} and posted_amount is null
        order by created_at desc
        limit 1
-       for update`, "objects");
+       for update`,
+      "objects",
+    );
     const replacedInputId = priorLine[0]?.input_id ?? null;
 
     const totals = await tx.execute<{
       planned: string;
       used_units: string;
-    }>(sql`
+    }>(
+      sql`
       select coalesce(sum(l.planned_amount), 0)::text as planned,
              coalesce(sum(i.production_units) filter (where i.voided_at is null), 0)::text as used_units
         from depreciation_schedule_lines l
         left join depreciation_inputs i on i.id = l.input_id and i.org_id = l.org_id
        where l.org_id = ${args.orgId} and l.schedule_id = ${row.id}
-         ${priorLine[0] ? sql`and l.id <> ${priorLine[0].id}` : sql``}`, "objects");
-    const basisChange = await assetBasisDelta(
-      tx,
-      args.orgId,
-      args.assetId,
-      row.book_id,
+         ${priorLine[0] ? sql`and l.id <> ${priorLine[0].id}` : sql``}`,
+      "objects",
     );
+    const basisChange = await assetBasisDelta(tx, args.orgId, args.assetId, row.book_id);
     if (basisChange.cutoff && args.effectiveDate < basisChange.cutoff)
       throw new DepreciationRefusalError(
         "depreciation input cannot precede the approved asset basis change",
       );
     const currentCost = add(row.acquisition_cost, basisChange.cost),
       currentSalvage = add(row.salvage_value, basisChange.salvage);
-    const valuation = (await tx.execute<{ delta: string; cutoff: string | null }>(
+    const valuation = (
+      await tx.execute<{ delta: string; cutoff: string | null }>(
         // Live entries only: the carrying delta is the sum of standing remeasurements, not their history.
-        sql`select coalesce(sum(v.amount),0)::text as delta,max(v.occurred_on)::text as cutoff from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${args.orgId} and v.asset_id=${args.assetId} and e.book_id=${row.book_id} and e.status='posted' and v.kind in('impaired','revalued') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id)`, "objects",
-      ))[0]!;
+        sql`select coalesce(sum(v.amount),0)::text as delta,max(v.occurred_on)::text as cutoff from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${args.orgId} and v.asset_id=${args.assetId} and e.book_id=${row.book_id} and e.status='posted' and v.kind in('impaired','revalued') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id)`,
+        "objects",
+      )
+    )[0]!;
     if (valuation.cutoff && args.effectiveDate < valuation.cutoff)
       throw new DepreciationRefusalError(
         "depreciation input cannot precede the retained asset valuation; correct that valuation before changing its historical inputs",
       );
-    const basis =
-      toUnits(add(currentCost, valuation.delta)) - toUnits(currentSalvage);
+    const basis = toUnits(add(currentCost, valuation.delta)) - toUnits(currentSalvage);
     if (basis < 0n)
       throw new DepreciationRefusalError("salvage value cannot exceed acquisition cost");
     // Continue-from-accumulated (migration 0156): evidence caps run against
@@ -234,27 +249,30 @@ export async function recordDepreciationInput(
       if (cmp(value, "0") === 0)
         throw new DepreciationRefusalError("production units must be non-zero");
       if (!row.units_total || cmp(row.units_total, "0") <= 0) {
-        throw new DepreciationRefusalError(
-          "expected lifetime production units are not configured",
-        );
+        throw new DepreciationRefusalError("expected lifetime production units are not configured");
       }
       const valuationCutover =
-        valuation.cutoff &&
-        (!basisChange.cutoff || valuation.cutoff >= basisChange.cutoff)
+        valuation.cutoff && (!basisChange.cutoff || valuation.cutoff >= basisChange.cutoff)
           ? valuation.cutoff
           : null;
       const cutoff = valuationCutover ?? basisChange.cutoff;
       const cutoverTotals = cutoff
-        ? (await tx.execute<{ planned: string; used_units: string }>(
-              sql`select coalesce(sum(l.planned_amount),0)::text as planned,coalesce(sum(i.production_units),0)::text as used_units from depreciation_schedule_lines l join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id left join depreciation_inputs i on i.org_id=l.org_id and i.id=l.input_id and i.voided_at is null where l.org_id=${args.orgId} and l.schedule_id=${row.id} ${valuationCutover ? sql`and p.ends_on>${cutoff}` : sql`and p.ends_on>=${cutoff}`} ${priorLine[0] ? sql`and l.id<>${priorLine[0].id}` : sql``}`, "objects",
-            ))[0]!
+        ? (
+            await tx.execute<{ planned: string; used_units: string }>(
+              sql`select coalesce(sum(l.planned_amount),0)::text as planned,coalesce(sum(i.production_units),0)::text as used_units from depreciation_schedule_lines l join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id left join depreciation_inputs i on i.org_id=l.org_id and i.id=l.input_id and i.voided_at is null where l.org_id=${args.orgId} and l.schedule_id=${row.id} ${valuationCutover ? sql`and p.ends_on>${cutoff}` : sql`and p.ends_on>=${cutoff}`} ${priorLine[0] ? sql`and l.id<>${priorLine[0].id}` : sql``}`,
+              "objects",
+            )
+          )[0]!
         : null;
       let lifetimeUnits = basisChange.unitsRemaining ?? row.units_total;
       let cutoverBasis = basisChange.depreciableAfter;
       if (valuationCutover) {
-        const prior = (await tx.execute<{ planned: string; units: string }>(
-            sql`select coalesce(sum(l.planned_amount),0)::text as planned,coalesce(sum(i.production_units) filter(where ${basisChange.cutoff ? sql`p.ends_on>=${basisChange.cutoff}` : sql`true`}),0)::text as units from depreciation_schedule_lines l join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id left join depreciation_inputs i on i.org_id=l.org_id and i.id=l.input_id and i.voided_at is null where l.org_id=${args.orgId} and l.schedule_id=${row.id} and p.ends_on<=${valuationCutover}`, "objects",
-          ))[0]!;
+        const prior = (
+          await tx.execute<{ planned: string; units: string }>(
+            sql`select coalesce(sum(l.planned_amount),0)::text as planned,coalesce(sum(i.production_units) filter(where ${basisChange.cutoff ? sql`p.ends_on>=${basisChange.cutoff}` : sql`true`}),0)::text as units from depreciation_schedule_lines l join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id left join depreciation_inputs i on i.org_id=l.org_id and i.id=l.input_id and i.voided_at is null where l.org_id=${args.orgId} and l.schedule_id=${row.id} and p.ends_on<=${valuationCutover}`,
+            "objects",
+          )
+        )[0]!;
         lifetimeUnits = add(lifetimeUnits, neg(prior.units));
         cutoverBasis = add(
           add(add(currentCost, valuation.delta), neg(currentSalvage)),
@@ -266,8 +284,7 @@ export async function recordDepreciationInput(
           ),
         );
       }
-      const usedUnits =
-        cutoverTotals?.used_units ?? totals[0]?.used_units ?? "0";
+      const usedUnits = cutoverTotals?.used_units ?? totals[0]?.used_units ?? "0";
       const nextUnits = toUnits(usedUnits) + toUnits(value);
       if (nextUnits < 0n || nextUnits > toUnits(lifetimeUnits))
         throw new DepreciationRefusalError(
@@ -291,14 +308,17 @@ export async function recordDepreciationInput(
            set voided_at = now(), voided_by = ${args.actorId}, updated_at = now(), updated_by = ${args.actorId}
          where id = ${replacedInputId} and org_id = ${args.orgId} and voided_at is null`);
     }
-    const inserted = await tx.execute<{ id: string }>(sql`
+    const inserted = await tx.execute<{ id: string }>(
+      sql`
       insert into depreciation_inputs
         (org_id, schedule_id, period_id, kind, manual_amount, production_units,
          memo, evidence_file_id, supersedes_input_id, created_by, updated_by)
       values (${args.orgId}, ${row.id}, ${row.period_id}, ${args.kind},
               ${args.kind === "manual" ? value : null}, ${args.kind === "production_usage" ? value : null},
               ${memo}, ${args.evidenceFileId}, ${replacedInputId}, ${args.actorId}, ${args.actorId})
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     const inputId = inserted[0]!.id;
 
     let scheduleLineId: string;
@@ -310,14 +330,17 @@ export async function recordDepreciationInput(
                input_id = ${inputId}, updated_at = now(), updated_by = ${args.actorId}
          where id = ${scheduleLineId} and org_id = ${args.orgId} and posted_amount is null`);
     } else {
-      const line = await tx.execute<{ id: string }>(sql`
+      const line = await tx.execute<{ id: string }>(
+        sql`
         insert into depreciation_schedule_lines
           (org_id, schedule_id, period_id, sequence, planned_amount, source, input_id, created_by, updated_by)
         values (${args.orgId}, ${row.id}, ${row.period_id},
                 (select coalesce(max(sequence), -1) + 1 from depreciation_schedule_lines where org_id = ${args.orgId} and schedule_id = ${row.id}),
                 ${plannedAmount}, ${args.kind === "manual" ? "manual" : "production_usage"},
                 ${inputId}, ${args.actorId}, ${args.actorId})
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       scheduleLineId = line[0]!.id;
     }
 

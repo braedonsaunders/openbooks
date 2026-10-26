@@ -3,7 +3,15 @@ import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { capitalizeCip } from "@openbooks/engine/assets/asset-cip";
-import { calendarDate, id, idempotencyKey, money, optionalText, reasonText, scopeOf } from "../../../_depth";
+import {
+  calendarDate,
+  id,
+  idempotencyKey,
+  money,
+  optionalText,
+  reasonText,
+  scopeOf,
+} from "../../../_depth";
 
 export const runtime = "nodejs";
 
@@ -20,11 +28,21 @@ const body = z.strictObject({
   capitalizedOn: calendarDate("capitalizedOn"),
   reason: reasonText,
   closeWhenEmpty: z.boolean().optional(),
-  lines: z.array(z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("asset"), ...assetLine }),
-    z.strictObject({ kind: z.literal("component"), parentAssetId: id, ...assetLine }),
-    z.strictObject({ kind: z.literal("expense"), expenseAccountId: id, amount: money("amount"), memo: optionalText(500) }),
-  ])).min(1, "add at least one line").max(200),
+  lines: z
+    .array(
+      z.discriminatedUnion("kind", [
+        z.strictObject({ kind: z.literal("asset"), ...assetLine }),
+        z.strictObject({ kind: z.literal("component"), parentAssetId: id, ...assetLine }),
+        z.strictObject({
+          kind: z.literal("expense"),
+          expenseAccountId: id,
+          amount: money("amount"),
+          memo: optionalText(500),
+        }),
+      ]),
+    )
+    .min(1, "add at least one line")
+    .max(200),
 });
 
 /**
@@ -41,7 +59,11 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, params, body: input }) => {
     const { id: cipAssetId } = await params;
     try {
-      const result = await capitalizeCip(gate.user.orgId, { ...input, cipAssetId }, { actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) });
+      const result = await capitalizeCip(
+        gate.user.orgId,
+        { ...input, cipAssetId },
+        { actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) },
+      );
       return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
     } catch (error) {
       // Placing a capitalized asset in service can raise the native schedule refusals.

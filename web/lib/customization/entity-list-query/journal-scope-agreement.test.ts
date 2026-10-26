@@ -14,7 +14,8 @@ import { sql, type SQL } from "drizzle-orm";
 // journal-scope-agreement.integration.test.ts, which needs a fixture
 // database. Only server-only is stubbed; query building is offline.
 const { db } = await import("@openbooks/engine/platform/db");
-const { JOURNAL_ENTRY_TABLE, journalEntryWhere, journalScopeWhere } = await import("./journal-entries.ts");
+const { JOURNAL_ENTRY_TABLE, journalEntryWhere, journalScopeWhere } =
+  await import("./journal-entries.ts");
 const { defaultListView } = await import("@openbooks/customization");
 
 const ORG = "019f5ea3-44c5-72c0-ad3b-ef34c19c8763";
@@ -33,8 +34,16 @@ function buildTotalSql(where: SQL): { text: string; params: unknown[] } {
 test("header/guide scope is exactly the list-total predicate", () => {
   const scope = buildTotalSql(journalScopeWhere(ORG, null));
   const list = buildTotalSql(journalEntryWhere(defaultListView("journal"), {}, ORG, null));
-  assert.equal(scope.text, list.text, "shared scope and default-view list total build identical SQL");
-  assert.deepEqual(scope.params, list.params, "shared scope and default-view list total bind identical params");
+  assert.equal(
+    scope.text,
+    list.text,
+    "shared scope and default-view list total build identical SQL",
+  );
+  assert.deepEqual(
+    scope.params,
+    list.params,
+    "shared scope and default-view list total bind identical params",
+  );
 });
 
 test("the shared scope carries no status filter of its own", () => {
@@ -51,7 +60,11 @@ test("the shared scope keeps the list subsidiary fence", () => {
   );
   const fenced = buildTotalSql(journalScopeWhere(ORG, new Set([SUB_A, SUB_B])));
   assert.match(fenced.text, /subsidiary_id/, "fenced scope constrains subsidiaries");
-  assert.deepEqual(fenced.params.slice(1), [ORG, `{${SUB_A},${SUB_B}}`], "fence binds the org and the id set");
+  assert.deepEqual(
+    fenced.params.slice(1),
+    [ORG, `{${SUB_A},${SUB_B}}`],
+    "fence binds the org and the id set",
+  );
   assert.match(
     buildTotalSql(journalScopeWhere(ORG, new Set())).text,
     /false/,
@@ -60,7 +73,11 @@ test("the shared scope keeps the list subsidiary fence", () => {
 });
 
 test("the journal default view carries no filters to split the counts", () => {
-  assert.deepEqual(defaultListView("journal").filters, [], "default journal view adds no predicate");
+  assert.deepEqual(
+    defaultListView("journal").filters,
+    [],
+    "default journal view adds no predicate",
+  );
 });
 
 test("the backing relation unions native legs with journal/pay-run documents", () => {

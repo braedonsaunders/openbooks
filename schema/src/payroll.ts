@@ -11,7 +11,7 @@ import {
   pgTable,
   text,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
 import { departments } from "./core";
@@ -65,7 +65,10 @@ export const paySchedules = pgTable(
     uniqueIndex("pay_schedules_org_name").on(t.orgId, t.name),
     index("pay_schedules_subsidiary").on(t.orgId, t.subsidiaryId),
     check("pay_schedules_periods", sql`${t.periodsPerYear} in (12, 24, 26, 27, 52, 53)`),
-    check("pay_schedules_offset", sql`${t.payDateOffsetDays} >= 0 and ${t.payDateOffsetDays} <= 31`),
+    check(
+      "pay_schedules_offset",
+      sql`${t.payDateOffsetDays} >= 0 and ${t.payDateOffsetDays} <= 31`,
+    ),
   ],
 );
 
@@ -110,11 +113,15 @@ export const payComponents = pgTable(
     /** How a user component's amount is produced (statutory rows ignore this). */
     basis: text("basis", {
       enum: ["fixed_amount", "per_hour", "percent_of_gross"],
-    }).notNull().default("fixed_amount"),
+    })
+      .notNull()
+      .default("fixed_amount"),
     /** Default amount / hourly rate / percent, overridable per employee. */
     value: money("value"),
     /** Non-cash earnings retain their statutory bases but create no cash entitlement. */
-    paymentKind: text("payment_kind", { enum: ["cash", "non_cash"] }).notNull().default("cash"),
+    paymentKind: text("payment_kind", { enum: ["cash", "non_cash"] })
+      .notNull()
+      .default("cash"),
     /** Explicit prepaid asset or provider liability credited for non-cash value. */
     nonCashAccountId: uuid("non_cash_account_id"),
     /** Earnings: statutory treatment of the amount. */
@@ -136,7 +143,9 @@ export const payComponents = pgTable(
      */
     taxTreatment: text("tax_treatment", {
       enum: ["none", "pension_f", "union_dues", "alimony"],
-    }).notNull().default("none"),
+    })
+      .notNull()
+      .default("none"),
     /**
      * Deduction protection ("protected earnings"): a deduction may not take
      * more than a share of what the employee actually earns. Ontario's Wages
@@ -149,7 +158,9 @@ export const payComponents = pgTable(
      */
     protectionBase: text("protection_base", {
       enum: ["none", "net_pay", "disposable_earnings", "gross"],
-    }).notNull().default("none"),
+    })
+      .notNull()
+      .default("none"),
     protectionMaxPercent: numeric("protection_max_percent", { precision: 7, scale: 4 }),
     /** Which order wins when several protected deductions compete for one
      * pool: lowest first (support outranks an ordinary creditor), and whatever
@@ -207,12 +218,17 @@ export const payComponents = pgTable(
     uniqueIndex("pay_components_org_system").on(t.orgId, t.country, t.systemKey, t.kind),
     index("pay_components_org_kind").on(t.orgId, t.kind),
     check("pay_components_payment_kind", sql`${t.paymentKind} in ('cash', 'non_cash')`),
-    check("pay_components_non_cash_shape", sql`
+    check(
+      "pay_components_non_cash_shape",
+      sql`
       (${t.paymentKind} = 'cash' and ${t.nonCashAccountId} is null) or
       (${t.paymentKind} = 'non_cash' and ${t.kind} = 'earning' and ${t.systemKey} is null and ${t.nonCashAccountId} is not null)
-    `),
-    foreignKey({ name: "pay_components_non_cash_account_tenant_fkey",
-      columns: [t.orgId, t.nonCashAccountId], foreignColumns: [accounts.orgId, accounts.id],
+    `,
+    ),
+    foreignKey({
+      name: "pay_components_non_cash_account_tenant_fkey",
+      columns: [t.orgId, t.nonCashAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
     }),
     // Statutory keys are pack-declared (0176): the database enforces that a
     // system key LOOKS like a stable machine identifier — lowercase
@@ -220,31 +236,45 @@ export const payComponents = pgTable(
     // 'income tax') still fails here at seed time; a legitimate new levy
     // ('hsf') passes without a schema change. The name is intentionally the
     // same as the pre-0176 enumeration CHECK it replaces.
-    check("pay_components_system_key",
-      sql`${t.systemKey} is null or ${t.systemKey} ~ '^[a-z][a-z0-9_]{0,63}$'`),
+    check(
+      "pay_components_system_key",
+      sql`${t.systemKey} is null or ${t.systemKey} ~ '^[a-z][a-z0-9_]{0,63}$'`,
+    ),
     // Protection is a property of money leaving the employee: an earning or an
     // employer contribution has nothing to protect, and a protected component
     // without a percentage would silently take everything.
-    check("pay_components_protection_deduction_only",
-      sql`${t.protectionBase} = 'none' or ${t.kind} = 'deduction'`),
-    check("pay_components_protection_percent",
+    check(
+      "pay_components_protection_deduction_only",
+      sql`${t.protectionBase} = 'none' or ${t.kind} = 'deduction'`,
+    ),
+    check(
+      "pay_components_protection_percent",
       sql`${t.protectionMaxPercent} is null
-          or (${t.protectionMaxPercent} >= 0 and ${t.protectionMaxPercent} <= 100)`),
-    check("pay_components_protection_shape",
-      sql`${t.protectionBase} = 'none' or ${t.protectionMaxPercent} is not null`),
+          or (${t.protectionMaxPercent} >= 0 and ${t.protectionMaxPercent} <= 100)`,
+    ),
+    check(
+      "pay_components_protection_shape",
+      sql`${t.protectionBase} = 'none' or ${t.protectionMaxPercent} is not null`,
+    ),
     check("pay_components_protection_priority", sql`${t.protectionPriority} >= 0`),
-    check("pay_components_protection_class",
+    check(
+      "pay_components_protection_class",
       sql`${t.protectionClass} is null
-          or (${t.protectionBase} <> 'none' and ${t.protectionClass} ~ '^[a-z][a-z0-9_]{0,63}$')`),
-    check("pay_components_basis_caps_nonnegative",
+          or (${t.protectionBase} <> 'none' and ${t.protectionClass} ~ '^[a-z][a-z0-9_]{0,63}$')`,
+    ),
+    check(
+      "pay_components_basis_caps_nonnegative",
       sql`(${t.basisCapHoursPerPeriod} is null or ${t.basisCapHoursPerPeriod} >= 0)
           and (${t.basisCapAmountPerPeriod} is null or ${t.basisCapAmountPerPeriod} >= 0)
-          and (${t.basisCapAmountPerYear} is null or ${t.basisCapAmountPerYear} >= 0)`),
+          and (${t.basisCapAmountPerYear} is null or ${t.basisCapAmountPerYear} >= 0)`,
+    ),
     // A per-period cap above the annual one can never bind — that is a typo,
     // not a policy.
-    check("pay_components_basis_cap_order",
+    check(
+      "pay_components_basis_cap_order",
       sql`${t.basisCapAmountPerPeriod} is null or ${t.basisCapAmountPerYear} is null
-          or ${t.basisCapAmountPerPeriod} <= ${t.basisCapAmountPerYear}`),
+          or ${t.basisCapAmountPerPeriod} <= ${t.basisCapAmountPerYear}`,
+    ),
   ],
 );
 
@@ -264,17 +294,29 @@ export const payComponentStatutoryTreatments = pgTable(
   },
   (t) => [
     uniqueIndex("pay_component_statutory_treatments_org_id_id_unique").on(t.orgId, t.id),
-    foreignKey({ name: "pay_component_statutory_treatments_component_fkey",
-      columns: [t.orgId, t.payComponentId], foreignColumns: [payComponents.orgId, payComponents.id],
+    foreignKey({
+      name: "pay_component_statutory_treatments_component_fkey",
+      columns: [t.orgId, t.payComponentId],
+      foreignColumns: [payComponents.orgId, payComponents.id],
     }).onDelete("cascade"),
-    foreignKey({ name: "pay_component_statutory_treatments_worker_comp_group_fkey",
-      columns: [t.orgId, t.workerCompGroupId], foreignColumns: [workerCompGroups.orgId, workerCompGroups.id],
+    foreignKey({
+      name: "pay_component_statutory_treatments_worker_comp_group_fkey",
+      columns: [t.orgId, t.workerCompGroupId],
+      foreignColumns: [workerCompGroups.orgId, workerCompGroups.id],
     }).onDelete("restrict"),
-    check("pay_component_statutory_treatments_effective_pair",
-      sql`${t.effectiveTo} is null or ${t.effectiveFrom} <= ${t.effectiveTo}`),
-    check("pay_component_statutory_treatments_keys",
-      sql`array_position(${t.programExclusions}, null) is null`),
-    index("pay_component_statutory_treatments_component").on(t.orgId, t.payComponentId, t.workerCompGroupId),
+    check(
+      "pay_component_statutory_treatments_effective_pair",
+      sql`${t.effectiveTo} is null or ${t.effectiveFrom} <= ${t.effectiveTo}`,
+    ),
+    check(
+      "pay_component_statutory_treatments_keys",
+      sql`array_position(${t.programExclusions}, null) is null`,
+    ),
+    index("pay_component_statutory_treatments_component").on(
+      t.orgId,
+      t.payComponentId,
+      t.workerCompGroupId,
+    ),
   ],
 );
 
@@ -355,7 +397,9 @@ export const employeePayrollProfiles = pgTable(
      * naming one country's occupations.
      */
     statutoryOccupationClass: text("statutory_occupation_class"),
-    payBasis: text("pay_basis", { enum: ["hourly", "salary"] }).notNull().default("hourly"),
+    payBasis: text("pay_basis", { enum: ["hourly", "salary"] })
+      .notNull()
+      .default("hourly"),
     /** TD1 federal claim: code 0–10, or an exact amount which wins over code. */
     federalClaimCode: integer("federal_claim_code"),
     federalClaimAmount: money("federal_claim_amount"),
@@ -417,7 +461,9 @@ export const employeePayrollProfiles = pgTable(
      * print set, or both. */
     stubDelivery: text("stub_delivery", {
       enum: ["email", "print", "both"],
-    }).notNull().default("email"),
+    })
+      .notNull()
+      .default("email"),
     /**
      * Payroll-owned override of how this employee's net pay leaves the bank.
      * NULL = inherit `parties.payment_method` (see
@@ -465,41 +511,66 @@ export const employeePayrollProfiles = pgTable(
     index("employee_payroll_profiles_employment").on(t.orgId, t.employmentId),
     // One profile per employment once stamped; mirrors
     // employee_payroll_profiles_employment_unique (0186).
-    uniqueIndex("employee_payroll_profiles_employment_unique").on(t.orgId, t.employmentId)
+    uniqueIndex("employee_payroll_profiles_employment_unique")
+      .on(t.orgId, t.employmentId)
       .where(sql`employment_id is not null`),
     index("employee_payroll_profiles_schedule").on(t.orgId, t.payScheduleId),
-    check("employee_payroll_profiles_fed_code",
-      sql`${t.federalClaimCode} is null or (${t.federalClaimCode} >= 0 and ${t.federalClaimCode} <= 10)`),
-    check("employee_payroll_profiles_prov_code",
-      sql`${t.provincialClaimCode} is null or (${t.provincialClaimCode} >= 0 and ${t.provincialClaimCode} <= 10)`),
-    check("employee_payroll_profiles_vacation",
-      sql`${t.vacationPercent} is null or ${t.vacationPercent} >= 0`),
+    check(
+      "employee_payroll_profiles_fed_code",
+      sql`${t.federalClaimCode} is null or (${t.federalClaimCode} >= 0 and ${t.federalClaimCode} <= 10)`,
+    ),
+    check(
+      "employee_payroll_profiles_prov_code",
+      sql`${t.provincialClaimCode} is null or (${t.provincialClaimCode} >= 0 and ${t.provincialClaimCode} <= 10)`,
+    ),
+    check(
+      "employee_payroll_profiles_vacation",
+      sql`${t.vacationPercent} is null or ${t.vacationPercent} >= 0`,
+    ),
     // 0662: an exemption without a reason is an uncovered employee the run
     // cannot tell from an excluded one — refused here, mirroring the
     // migration CHECK exactly.
-    check("employee_payroll_profiles_wcb_exempt_reason",
-      sql`${t.wcbExempt} = false or (${t.wcbExemptReason} is not null and btrim(${t.wcbExemptReason}) <> '')`),
-    check("employee_payroll_profiles_allowances",
-      sql`${t.w4Allowances} is null or ${t.w4Allowances} >= 0`),
+    check(
+      "employee_payroll_profiles_wcb_exempt_reason",
+      sql`${t.wcbExempt} = false or (${t.wcbExemptReason} is not null and btrim(${t.wcbExemptReason}) <> '')`,
+    ),
+    check(
+      "employee_payroll_profiles_allowances",
+      sql`${t.w4Allowances} is null or ${t.w4Allowances} >= 0`,
+    ),
     // 0191 pack-fact bounds (plus the 0389 salário-família count), mirroring
     // the migration CHECKs exactly: the ES año/grupo bands, the ES situación
     // and JP kaigo closed sets, and the non-negative BR dependent and
     // qualifying-children counts. PL rok urodzenia and JP hyōjun carry
     // no declared bounds, so they carry no CHECK either.
-    check("employee_payroll_profiles_es_ano",
-      sql`${t.esAnoNacimiento} is null or (${t.esAnoNacimiento} >= 1906 and ${t.esAnoNacimiento} <= 2026)`),
-    check("employee_payroll_profiles_es_grupo",
-      sql`${t.esGrupoCotizacion} is null or (${t.esGrupoCotizacion} >= 1 and ${t.esGrupoCotizacion} <= 11)`),
-    check("employee_payroll_profiles_es_situacion",
-      sql`${t.esSituacionLaboral} is null or ${t.esSituacionLaboral} in ('activo', 'pensionista', 'desempleado')`),
-    check("employee_payroll_profiles_es_contrato",
-      sql`${t.esContratoTemporal} is null or ${t.esContratoTemporal} in ('true', 'false')`),
-    check("employee_payroll_profiles_jp_kaigo",
-      sql`${t.jpKaigoDainigou} is null or ${t.jpKaigoDainigou} in ('true', 'false')`),
-    check("employee_payroll_profiles_br_dependentes",
-      sql`${t.brDependentes} is null or ${t.brDependentes} >= 0`),
-    check("employee_payroll_profiles_br_salario_familia",
-      sql`${t.brSalarioFamiliaFilhos} is null or ${t.brSalarioFamiliaFilhos} >= 0`),
+    check(
+      "employee_payroll_profiles_es_ano",
+      sql`${t.esAnoNacimiento} is null or (${t.esAnoNacimiento} >= 1906 and ${t.esAnoNacimiento} <= 2026)`,
+    ),
+    check(
+      "employee_payroll_profiles_es_grupo",
+      sql`${t.esGrupoCotizacion} is null or (${t.esGrupoCotizacion} >= 1 and ${t.esGrupoCotizacion} <= 11)`,
+    ),
+    check(
+      "employee_payroll_profiles_es_situacion",
+      sql`${t.esSituacionLaboral} is null or ${t.esSituacionLaboral} in ('activo', 'pensionista', 'desempleado')`,
+    ),
+    check(
+      "employee_payroll_profiles_es_contrato",
+      sql`${t.esContratoTemporal} is null or ${t.esContratoTemporal} in ('true', 'false')`,
+    ),
+    check(
+      "employee_payroll_profiles_jp_kaigo",
+      sql`${t.jpKaigoDainigou} is null or ${t.jpKaigoDainigou} in ('true', 'false')`,
+    ),
+    check(
+      "employee_payroll_profiles_br_dependentes",
+      sql`${t.brDependentes} is null or ${t.brDependentes} >= 0`,
+    ),
+    check(
+      "employee_payroll_profiles_br_salario_familia",
+      sql`${t.brSalarioFamiliaFilhos} is null or ${t.brSalarioFamiliaFilhos} >= 0`,
+    ),
   ],
 );
 
@@ -522,13 +593,16 @@ export const employeePayComponents = pgTable(
     ...auditColumns,
   },
   (t) => [
-
     index("employee_pay_components_employment").on(t.orgId, t.employmentId),
     index("employee_pay_components_employee").on(t.orgId, t.employeePartyId, t.effectiveFrom),
-    check("employee_pay_components_run_applicability",
-      sql`${t.runApplicability} in ('standard_runs', 'regular_only', 'periodic_and_final')`),
-    check("employee_pay_components_range",
-      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check(
+      "employee_pay_components_run_applicability",
+      sql`${t.runApplicability} in ('standard_runs', 'regular_only', 'periodic_and_final')`,
+    ),
+    check(
+      "employee_pay_components_range",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
   ],
 );
 
@@ -569,8 +643,10 @@ export const payComponentDepartmentExpenses = pgTable(
     }),
     index("pay_component_department_expenses_component").on(t.orgId, t.payComponentId),
     index("pay_component_department_expenses_lookup").on(t.orgId, t.payComponentId, t.departmentId),
-    check("pay_component_department_expenses_effective_pair",
-      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check(
+      "pay_component_department_expenses_effective_pair",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
   ],
 );
 
@@ -592,12 +668,16 @@ export const payStubs = pgTable(
     country: text("country"),
     countrySource: text("country_source", {
       enum: ["calculation", "legacy_region", "unknown"],
-    }).notNull().default("unknown"),
+    })
+      .notNull()
+      .default("unknown"),
     /** Explicit null means unassigned, never a live default-account fallback. */
     filingAccountId: uuid("filing_account_id"),
     filingAccountSource: text("filing_account_source", {
       enum: ["unknown", "calculation", "insertion", "reconciled"],
-    }).notNull().default("unknown"),
+    })
+      .notNull()
+      .default("unknown"),
     filingAccountEvidence: jsonb("filing_account_evidence"),
     /** Snapshot: recalculation never depends on the live profile. */
     province: text("province").notNull(),
@@ -614,7 +694,9 @@ export const payStubs = pgTable(
     employerCost: money("employer_cost").notNull().default("0"),
     vacationAccrued: money("vacation_accrued").notNull().default("0"),
     /** Every T4127 factor (A, K1…K4, T1…T4, V1, V2, S, TB…) for the trace UI. */
-    factors: jsonb("factors").notNull().default(sql`'{}'::jsonb`),
+    factors: jsonb("factors")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     /**
      * Snapshot: the rail this pay actually went out on, resolved at calculate
      * time. Re-resolving from the live party/profile would let a later edit
@@ -627,11 +709,11 @@ export const payStubs = pgTable(
     ...auditColumns,
   },
   (t) => [
-
-
     index("pay_stubs_employment").on(t.orgId, t.employmentId),
     index("pay_stubs_filing_account").on(t.orgId, t.filingAccountId),
-    check("pay_stubs_filing_account_evidence", sql`
+    check(
+      "pay_stubs_filing_account_evidence",
+      sql`
       (${t.filingAccountSource} = 'unknown' and ${t.filingAccountId} is null and ${t.filingAccountEvidence} is null) or
       (${t.filingAccountSource} in ('calculation', 'insertion') and ${t.filingAccountEvidence} is null) or
       (${t.filingAccountSource} = 'reconciled' and ${t.filingAccountEvidence} is not null
@@ -640,22 +722,31 @@ export const payStubs = pgTable(
         and coalesce(jsonb_typeof(${t.filingAccountEvidence}->'reference') = 'string', false)
         and length(trim(${t.filingAccountEvidence}->>'reason')) > 0
         and length(trim(${t.filingAccountEvidence}->>'reference')) > 0)
-    `),
-    check("pay_stubs_country_evidence", sql`
+    `,
+    ),
+    check(
+      "pay_stubs_country_evidence",
+      sql`
       (${t.country} is null and ${t.countrySource} = 'unknown') or
       (${t.country} is not null and ${t.country} ~ '^[A-Z]{2}$'
         and ${t.countrySource} in ('calculation', 'legacy_region'))
-    `),
+    `,
+    ),
     uniqueIndex("pay_stubs_run_employee").on(t.payRunDocumentId, t.employeePartyId),
     index("pay_stubs_employee_year").on(t.orgId, t.employeePartyId, t.taxYear, t.payDate),
-    uniqueIndex("pay_stubs_cheque_number").on(t.orgId, t.chequeNumber)
+    uniqueIndex("pay_stubs_cheque_number")
+      .on(t.orgId, t.chequeNumber)
       .where(sql`${t.chequeNumber} is not null`),
     check("pay_stubs_net_nonnegative", sql`${t.netPay} >= 0`),
-    check("pay_stubs_payment_method",
-      sql`${t.paymentMethod} is null or ${t.paymentMethod} in ('eft', 'cheque')`),
+    check(
+      "pay_stubs_payment_method",
+      sql`${t.paymentMethod} is null or ${t.paymentMethod} in ('eft', 'cheque')`,
+    ),
     // A cheque number can only exist on a cheque.
-    check("pay_stubs_cheque_number_method",
-      sql`${t.chequeNumber} is null or ${t.paymentMethod} = 'cheque'`),
+    check(
+      "pay_stubs_cheque_number_method",
+      sql`${t.chequeNumber} is null or ${t.paymentMethod} = 'cheque'`,
+    ),
   ],
 );
 
@@ -680,7 +771,9 @@ export const payStubLines = pgTable(
     earnedTo: date("earned_to", { mode: "string" }),
     amount: money("amount").notNull(),
     /** Calculated payment representation, frozen independently of component edits. */
-    paymentKind: text("payment_kind", { enum: ["cash", "non_cash"] }).notNull().default("cash"),
+    paymentKind: text("payment_kind", { enum: ["cash", "non_cash"] })
+      .notNull()
+      .default("cash"),
     nonCashAccountId: uuid("non_cash_account_id"),
     projectId: uuid("project_id"),
     departmentId: uuid("department_id"),
@@ -698,11 +791,19 @@ export const payStubLines = pgTable(
     expenseAccountId: uuid("expense_account_id"),
     expenseAccountSource: text("expense_account_source", {
       enum: ["unknown", "item", "component", "department", "org_default", "entitlement_plan"],
-    }).notNull().default("unknown"),
-    expenseAccountEvidence: jsonb("expense_account_evidence").$type<{ reason: string; reference: string }>(),
+    })
+      .notNull()
+      .default("unknown"),
+    expenseAccountEvidence: jsonb("expense_account_evidence").$type<{
+      reason: string;
+      reference: string;
+    }>(),
     /** Effective-date-resolved pack reporting code, snapshotted at payroll calculation. */
     statutoryReportingCode: jsonb("statutory_reporting_code").$type<{
-      formCode: string; boxCode: string; code: string; label: string;
+      formCode: string;
+      boxCode: string;
+      code: string;
+      label: string;
     }>(),
     /** Snapshot at commit: the vendor this line accrued to. Remittances route
      * by this, never the component's current vendor (migration 0296). A
@@ -714,44 +815,65 @@ export const payStubLines = pgTable(
     liabilityAccountId: uuid("liability_account_id"),
     liabilityAccountSource: text("liability_account_source", {
       enum: ["unknown", "commit", "legacy_component", "reconciled"],
-    }).notNull().default("unknown"),
-    liabilityAccountEvidence: jsonb("liability_account_evidence").$type<{ reason: string; reference: string }>(),
+    })
+      .notNull()
+      .default("unknown"),
+    liabilityAccountEvidence: jsonb("liability_account_evidence").$type<{
+      reason: string;
+      reference: string;
+    }>(),
     ...auditColumns,
   },
   (t) => [
     index("pay_stub_lines_stub").on(t.stubId, t.sequence),
-    index("pay_stub_lines_time_type_policy").on(t.orgId, t.timeTypeId)
+    index("pay_stub_lines_time_type_policy")
+      .on(t.orgId, t.timeTypeId)
       .where(sql`${t.timeTypeId} IS NOT NULL`),
-    check("pay_stub_lines_derived_quantity_evidence", sql`
+    check(
+      "pay_stub_lines_derived_quantity_evidence",
+      sql`
       (${t.derivedQuantity} is null and ${t.derivedRuleCode} is null) or
       (${t.derivedQuantity} is not null and ${t.derivedQuantity} > 0 and ${t.derivedQuantity} <> 'NaN'::numeric
         and ${t.derivedRuleCode} is not null and length(btrim(${t.derivedRuleCode})) > 0
         and ${t.derivedRuleCode} = btrim(${t.derivedRuleCode}) and ${t.kind} = 'earning' and ${t.hours} is null)
-    `),
+    `,
+    ),
     check("pay_stub_lines_payment_kind", sql`${t.paymentKind} in ('cash', 'non_cash')`),
-    check("pay_stub_lines_non_cash_shape", sql`
+    check(
+      "pay_stub_lines_non_cash_shape",
+      sql`
       (${t.paymentKind} = 'cash' and ${t.nonCashAccountId} is null) or
       (${t.paymentKind} = 'non_cash' and ${t.kind} = 'earning' and ${t.nonCashAccountId} is not null)
-    `),
-    foreignKey({ name: "pay_stub_lines_non_cash_account_tenant_fkey",
-      columns: [t.orgId, t.nonCashAccountId], foreignColumns: [accounts.orgId, accounts.id],
+    `,
+    ),
+    foreignKey({
+      name: "pay_stub_lines_non_cash_account_tenant_fkey",
+      columns: [t.orgId, t.nonCashAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
     }),
     index("pay_stub_lines_project").on(t.orgId, t.projectId),
-    check("pay_stub_lines_earning_dates_pair", sql`
+    check(
+      "pay_stub_lines_earning_dates_pair",
+      sql`
       (${t.earnedFrom} is null and ${t.earnedTo} is null) or
       (${t.earnedFrom} is not null and ${t.earnedTo} is not null and ${t.earnedFrom} <= ${t.earnedTo})
-    `),
-    foreignKey({ name: "pay_stub_lines_remittance_party_tenant_fkey",
+    `,
+    ),
+    foreignKey({
+      name: "pay_stub_lines_remittance_party_tenant_fkey",
       columns: [t.orgId, t.remittancePartyId],
       foreignColumns: [parties.orgId, parties.id],
     }),
     index("pay_stub_lines_remittance_party").on(t.orgId, t.remittancePartyId),
-    foreignKey({ name: "pay_stub_lines_liability_account_tenant_fkey",
+    foreignKey({
+      name: "pay_stub_lines_liability_account_tenant_fkey",
       columns: [t.orgId, t.liabilityAccountId],
       foreignColumns: [accounts.orgId, accounts.id],
     }),
     index("pay_stub_lines_liability_account").on(t.orgId, t.liabilityAccountId),
-    check("pay_stub_lines_liability_account_evidence", sql`
+    check(
+      "pay_stub_lines_liability_account_evidence",
+      sql`
       (${t.liabilityAccountSource} = 'unknown' and ${t.liabilityAccountId} is null and ${t.liabilityAccountEvidence} is null) or
       (${t.liabilityAccountSource} in ('commit', 'legacy_component') and ${t.liabilityAccountId} is not null and ${t.liabilityAccountEvidence} is null) or
       (${t.liabilityAccountSource} = 'reconciled' and ${t.liabilityAccountId} is not null and ${t.liabilityAccountEvidence} is not null
@@ -760,14 +882,18 @@ export const payStubLines = pgTable(
         and coalesce(jsonb_typeof(${t.liabilityAccountEvidence}->'reference') = 'string',false)
         and length(trim(${t.liabilityAccountEvidence}->>'reason')) > 0
         and length(trim(${t.liabilityAccountEvidence}->>'reference')) > 0)
-    `),
-    foreignKey({ name: "pay_stub_lines_expense_account_tenant_fkey",
+    `,
+    ),
+    foreignKey({
+      name: "pay_stub_lines_expense_account_tenant_fkey",
       columns: [t.orgId, t.expenseAccountId],
       foreignColumns: [accounts.orgId, accounts.id],
     }),
     index("pay_stub_lines_expense_account").on(t.orgId, t.expenseAccountId),
     index("pay_stub_lines_item").on(t.orgId, t.itemId),
-    check("pay_stub_lines_expense_account_evidence", sql`
+    check(
+      "pay_stub_lines_expense_account_evidence",
+      sql`
       (${t.expenseAccountSource} = 'unknown' and ${t.expenseAccountId} is null and ${t.expenseAccountEvidence} is null) or
       (${t.expenseAccountSource} in ('item', 'component', 'department', 'org_default', 'entitlement_plan') and ${t.expenseAccountId} is not null and ${t.expenseAccountEvidence} is not null
         and jsonb_typeof(${t.expenseAccountEvidence}) = 'object'
@@ -775,7 +901,8 @@ export const payStubLines = pgTable(
         and coalesce(jsonb_typeof(${t.expenseAccountEvidence}->'reference') = 'string',false)
         and length(trim(${t.expenseAccountEvidence}->>'reason')) > 0
         and length(trim(${t.expenseAccountEvidence}->>'reference')) > 0)
-    `),
+    `,
+    ),
   ],
 );
 
@@ -805,7 +932,9 @@ export const itAddizionaliOpeningBalances = pgTable(
   },
   (t) => [
     uniqueIndex("it_addizionali_opening_balances_employee_year").on(
-      t.orgId, t.employeePartyId, t.taxYear,
+      t.orgId,
+      t.employeePartyId,
+      t.taxYear,
     ),
     check(
       "it_addizionali_opening_balances_nonnegative",

@@ -28,7 +28,10 @@ test("the run's hourly wage converts every time-based cadence through the row's 
     payrollHourlyWage({ basis: "year", rate: "91234.5678", annualHours: "1950.5" }),
     divideMoney("91234.5678", "1950.5", 4),
   );
-  assert.equal(payrollHourlyWage({ basis: "hour", rate: "32.5000", annualHours: "2080" }), "32.5000");
+  assert.equal(
+    payrollHourlyWage({ basis: "hour", rate: "32.5000", annualHours: "2080" }),
+    "32.5000",
+  );
   assert.equal(payrollHourlyWage({ basis: "month", rate: "6800", annualHours: "2080" }), "39.2308");
   assert.equal(payrollHourlyWage({ basis: "week", rate: "1500", annualHours: "2080" }), "37.5000");
 });

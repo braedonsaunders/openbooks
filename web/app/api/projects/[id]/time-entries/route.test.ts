@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../testing/stub-modules";
+import test from "node:test";
 
 /**
  * The detail endpoint is a direct-by-id read, so its subsidiary boundary must
@@ -9,35 +9,38 @@ import test from 'node:test'
  * subsidiary predicate; that makes this regression red against the old
  * implementation rather than merely asserting a source string.
  */
-const stateKey = Symbol.for('openbooks.project-time-detail-route-test')
+const stateKey = Symbol.for("openbooks.project-time-detail-route-test");
 interface RouteState {
-  allowedSubsidiaryIds: Set<string> | null
-  projectSubsidiary: string | null
-  calls: string[]
+  allowedSubsidiaryIds: Set<string> | null;
+  projectSubsidiary: string | null;
+  calls: string[];
 }
 
 const routeState: RouteState = {
   allowedSubsidiaryIds: null,
   projectSubsidiary: null,
   calls: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL query into text for the scripted responses/assertions. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksProjectTimeSqlText?: unknown }).openbooksProjectTimeSqlText = sqlText
+(
+  globalThis as typeof globalThis &
+    Record<string, unknown> & { openbooksProjectTimeSqlText?: unknown }
+).openbooksProjectTimeSqlText = sqlText;
 
 stubModules({
   navigation: false,
@@ -115,51 +118,58 @@ stubModules({
       export async function withOrgTransaction(_orgId, work) { return work() }
     `,
   },
-})
+});
 
-const { GET } = (await import('./route.ts')) as typeof import('./route.ts')
+const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
 
-const ALLOWED_SUBSIDIARY = '00000000-0000-4000-8000-00000000a001'
-const DENIED_SUBSIDIARY = '00000000-0000-4000-8000-00000000b001'
-const PROJECT_ID = '00000000-0000-4000-8000-00000000c001'
+const ALLOWED_SUBSIDIARY = "00000000-0000-4000-8000-00000000a001";
+const DENIED_SUBSIDIARY = "00000000-0000-4000-8000-00000000b001";
+const PROJECT_ID = "00000000-0000-4000-8000-00000000c001";
 
 function reset(projectSubsidiary: string | null, allowedSubsidiaryIds: Set<string> | null): void {
-  routeState.calls.length = 0
-  routeState.projectSubsidiary = projectSubsidiary
-  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds
+  routeState.calls.length = 0;
+  routeState.projectSubsidiary = projectSubsidiary;
+  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
 }
 
 function get(): Promise<Response> {
   return GET(
-    new Request(`http://openbooks.test/api/projects/${PROJECT_ID}/time-entries?dimension=employee&key=unassigned&page=1`),
+    new Request(
+      `http://openbooks.test/api/projects/${PROJECT_ID}/time-entries?dimension=employee&key=unassigned&page=1`,
+    ),
     { params: Promise.resolve({ id: PROJECT_ID }) },
-  )
+  );
 }
 
-test('GET hides a project in a restricted subsidiary, including its time detail', async () => {
-  reset(DENIED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
+test("GET hides a project in a restricted subsidiary, including its time detail", async () => {
+  reset(DENIED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]));
 
-  const response = await get()
+  const response = await get();
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'Project not found' })
-  assert.equal(routeState.calls.filter((text) => text.includes('from time_entries')).length, 0)
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "Project not found" });
+  assert.equal(routeState.calls.filter((text) => text.includes("from time_entries")).length, 0);
+});
 
-test('GET still returns approved detail for a project in the caller scope', async () => {
-  reset(ALLOWED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]))
+test("GET still returns approved detail for a project in the caller scope", async () => {
+  reset(ALLOWED_SUBSIDIARY, new Set([ALLOWED_SUBSIDIARY]));
 
-  const response = await get()
+  const response = await get();
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   const payload = (await response.json()) as {
-    entries: Array<{ id: string; hours: string }>
-    totals: { entries: number; hours: string }
-  }
-  assert.equal(payload.entries[0]?.id, 'time-entry-1')
-  assert.equal(payload.entries[0]?.hours, '2.5')
-  assert.deepEqual(payload.totals, { entries: 1, hours: '2.5', cost: '100.0000', bill: '150.0000' })
-  const projectQuery = routeState.calls.find((text) => text.includes('from projects'))
-  assert.ok(projectQuery)
-  assert.match(projectQuery, /subsidiary_id = any/)
-})
+    entries: Array<{ id: string; hours: string }>;
+    totals: { entries: number; hours: string };
+  };
+  assert.equal(payload.entries[0]?.id, "time-entry-1");
+  assert.equal(payload.entries[0]?.hours, "2.5");
+  assert.deepEqual(payload.totals, {
+    entries: 1,
+    hours: "2.5",
+    cost: "100.0000",
+    bill: "150.0000",
+  });
+  const projectQuery = routeState.calls.find((text) => text.includes("from projects"));
+  assert.ok(projectQuery);
+  assert.match(projectQuery, /subsidiary_id = any/);
+});

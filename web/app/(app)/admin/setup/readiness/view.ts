@@ -1,11 +1,19 @@
-import 'server-only'
+import "server-only";
 
-import { field, grid, page, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { getTranslations } from 'next-intl/server'
-import { requirePermission } from '../../../../../lib/authz'
-import { loadReadinessSnapshot } from '../../../../../lib/setup/readiness-snapshot'
-import { MIGRATION_WORKSPACE_HREF } from '../../../../../lib/migration/links'
-import type { SetupReadinessCheck } from './sections'
+import {
+  field,
+  grid,
+  page,
+  ref,
+  repeat,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { getTranslations } from "next-intl/server";
+import { requirePermission } from "../../../../../lib/authz";
+import { loadReadinessSnapshot } from "../../../../../lib/setup/readiness-snapshot";
+import { MIGRATION_WORKSPACE_HREF } from "../../../../../lib/migration/links";
+import type { SetupReadinessCheck } from "./sections";
 
 /**
  * The setup readiness guide, split into a loader and a spec.
@@ -28,124 +36,161 @@ import type { SetupReadinessCheck } from './sections'
  */
 
 export interface SetupReadinessHero {
-  kicker: string
-  title: string
-  description: string
-  badgeLabel: string
-  badgeReady: boolean
-  progressLabel: string
-  progressOf: string
-  progressCount: number
-  progressTotal: number
-  progressPercent: number
-  progressMin: number
-  progressMax: number
-  progressNow: number
+  kicker: string;
+  title: string;
+  description: string;
+  badgeLabel: string;
+  badgeReady: boolean;
+  progressLabel: string;
+  progressOf: string;
+  progressCount: number;
+  progressTotal: number;
+  progressPercent: number;
+  progressMin: number;
+  progressMax: number;
+  progressNow: number;
 }
 
 export interface SetupReadinessData {
-  hero: SetupReadinessHero
-  checks: SetupReadinessCheck[]
+  hero: SetupReadinessHero;
+  checks: SetupReadinessCheck[];
 }
 
 export async function loadSetupReadiness(): Promise<SetupReadinessData> {
-  const { user } = await requirePermission('admin.setup.manage')
-  const t = await getTranslations('admin')
-  const tMigration = await getTranslations('sync.migrationAssistant')
-  const { org, workspaceProfile, bookStart, foundationReady, profileReady } = await loadReadinessSnapshot(user.orgId)
-  const taxPosition = ['registered', 'not_registered', 'unsure'].includes(String(workspaceProfile.taxPosition))
+  const { user } = await requirePermission("admin.setup.manage");
+  const t = await getTranslations("admin");
+  const tMigration = await getTranslations("sync.migrationAssistant");
+  const { org, workspaceProfile, bookStart, foundationReady, profileReady } =
+    await loadReadinessSnapshot(user.orgId);
+  const taxPosition = ["registered", "not_registered", "unsure"].includes(
+    String(workspaceProfile.taxPosition),
+  )
     ? String(workspaceProfile.taxPosition)
-    : 'unsure'
-  const closeCadence = ['monthly', 'quarterly', 'annual'].includes(String(workspaceProfile.closeCadence))
+    : "unsure";
+  const closeCadence = ["monthly", "quarterly", "annual"].includes(
+    String(workspaceProfile.closeCadence),
+  )
     ? String(workspaceProfile.closeCadence)
-    : 'monthly'
-  const closeName = t(`setup.guide.closeName.${closeCadence}`)
-  const closeTitle = t(`setup.guide.close.${closeCadence === 'annual' ? 'titleAnnual' : closeCadence === 'quarterly' ? 'titleQuarterly' : 'titleMonthly'}`)
-  const activityLabel = workspaceProfile.monthlyActivity === 'high'
-    ? t('setup.guide.activity.high')
-    : workspaceProfile.monthlyActivity === 'steady'
-      ? t('setup.guide.activity.steady')
-      : t('setup.guide.activity.light')
-  const checks: Omit<SetupReadinessCheck, 'indexLabel' | 'stateLabel'>[] = [
+    : "monthly";
+  const closeName = t(`setup.guide.closeName.${closeCadence}`);
+  const closeTitle = t(
+    `setup.guide.close.${closeCadence === "annual" ? "titleAnnual" : closeCadence === "quarterly" ? "titleQuarterly" : "titleMonthly"}`,
+  );
+  const activityLabel =
+    workspaceProfile.monthlyActivity === "high"
+      ? t("setup.guide.activity.high")
+      : workspaceProfile.monthlyActivity === "steady"
+        ? t("setup.guide.activity.steady")
+        : t("setup.guide.activity.light");
+  const checks: Omit<SetupReadinessCheck, "indexLabel" | "stateLabel">[] = [
     {
-      title: t('setup.guide.profile.title'),
+      title: t("setup.guide.profile.title"),
       description: profileReady
-        ? t('setup.guide.profile.descReady', { activity: activityLabel, close: closeName })
-        : t('setup.guide.profile.descWaiting'),
-      href: '/admin/setup/wizard', action: profileReady ? t('setup.guide.profile.actionReady') : t('setup.guide.profile.actionWaiting'),
-      state: profileReady ? 'complete' : 'waiting',
+        ? t("setup.guide.profile.descReady", { activity: activityLabel, close: closeName })
+        : t("setup.guide.profile.descWaiting"),
+      href: "/admin/setup/wizard",
+      action: profileReady
+        ? t("setup.guide.profile.actionReady")
+        : t("setup.guide.profile.actionWaiting"),
+      state: profileReady ? "complete" : "waiting",
     },
     {
-      title: t('setup.guide.foundation.title'),
+      title: t("setup.guide.foundation.title"),
       description: foundationReady
-        ? t('setup.guide.foundation.descReady', { count: org?.accounts ?? 0 })
-        : t('setup.guide.foundation.descWaiting'),
-      href: '/admin/setup/company', action: t('setup.guide.foundation.action'), state: foundationReady ? 'complete' : 'waiting',
+        ? t("setup.guide.foundation.descReady", { count: org?.accounts ?? 0 })
+        : t("setup.guide.foundation.descWaiting"),
+      href: "/admin/setup/company",
+      action: t("setup.guide.foundation.action"),
+      state: foundationReady ? "complete" : "waiting",
     },
     {
-      title: t('setup.guide.invoicing.title'),
-      description: org?.payment_terms > 0
-        ? t('setup.guide.invoicing.descReady', { count: org!.payment_terms })
-        : t('setup.guide.invoicing.descWaiting'),
-      href: '/admin/setup/invoicing', action: t('setup.guide.invoicing.action'), state: org?.payment_terms > 0 ? 'complete' : 'review',
+      title: t("setup.guide.invoicing.title"),
+      description:
+        org?.payment_terms > 0
+          ? t("setup.guide.invoicing.descReady", { count: org!.payment_terms })
+          : t("setup.guide.invoicing.descWaiting"),
+      href: "/admin/setup/invoicing",
+      action: t("setup.guide.invoicing.action"),
+      state: org?.payment_terms > 0 ? "complete" : "review",
     },
     {
-      title: t('setup.guide.tax.title'),
-      description: taxPosition === 'unsure'
-        ? t('setup.guide.tax.descUndecided')
-        : org?.tax_codes > 0
-        ? t('setup.guide.tax.descReady', { count: org!.tax_codes })
-        : taxPosition === 'not_registered'
-          ? t('setup.guide.tax.descNotRegistered')
-          : taxPosition === 'registered'
-            ? t('setup.guide.tax.descRegistered')
-            : t('setup.guide.tax.descUndecided'),
-      href: '/admin/setup/tax-setup', action: t('setup.guide.tax.action'),
-      state: taxPosition !== 'unsure' && (org?.tax_codes > 0 || taxPosition === 'not_registered') ? 'complete' : 'review',
+      title: t("setup.guide.tax.title"),
+      description:
+        taxPosition === "unsure"
+          ? t("setup.guide.tax.descUndecided")
+          : org?.tax_codes > 0
+            ? t("setup.guide.tax.descReady", { count: org!.tax_codes })
+            : taxPosition === "not_registered"
+              ? t("setup.guide.tax.descNotRegistered")
+              : taxPosition === "registered"
+                ? t("setup.guide.tax.descRegistered")
+                : t("setup.guide.tax.descUndecided"),
+      href: "/admin/setup/tax-setup",
+      action: t("setup.guide.tax.action"),
+      state:
+        taxPosition !== "unsure" && (org?.tax_codes > 0 || taxPosition === "not_registered")
+          ? "complete"
+          : "review",
     },
     {
-      title: t('setup.guide.bank.title'),
-      description: org?.bank_accounts > 0
-        ? t('setup.guide.bank.descReady', { count: org!.bank_accounts })
-        : t('setup.guide.bank.descWaiting'),
-      href: '/accounts', action: t('setup.guide.bank.action'), state: org?.bank_accounts > 0 ? 'complete' : 'review',
+      title: t("setup.guide.bank.title"),
+      description:
+        org?.bank_accounts > 0
+          ? t("setup.guide.bank.descReady", { count: org!.bank_accounts })
+          : t("setup.guide.bank.descWaiting"),
+      href: "/accounts",
+      action: t("setup.guide.bank.action"),
+      state: org?.bank_accounts > 0 ? "complete" : "review",
     },
     {
-      title: t('setup.guide.opening.title'),
-      description: bookStart === 'fresh'
-        ? org?.posted_entries > 0
-          ? t('setup.guide.opening.descFreshPosted', { count: org!.posted_entries })
-          : t('setup.guide.opening.descFreshEmpty')
-        : org?.posted_entries > 0
-          ? t('setup.guide.opening.descMigratePosted', { count: org!.posted_entries })
-          : t('setup.guide.opening.descMigrateEmpty'),
-      href: bookStart === 'migrate' && org.posted_entries === 0 ? MIGRATION_WORKSPACE_HREF : '/journal',
-      action: bookStart === 'fresh' ? t('setup.guide.opening.actionFreshLedger') : org?.posted_entries > 0 ? t('setup.guide.opening.actionMigrateJournal') : tMigration('entry.plan'),
-      state: bookStart === 'fresh' ? 'complete' : org?.posted_entries > 0 ? 'review' : 'waiting',
+      title: t("setup.guide.opening.title"),
+      description:
+        bookStart === "fresh"
+          ? org?.posted_entries > 0
+            ? t("setup.guide.opening.descFreshPosted", { count: org!.posted_entries })
+            : t("setup.guide.opening.descFreshEmpty")
+          : org?.posted_entries > 0
+            ? t("setup.guide.opening.descMigratePosted", { count: org!.posted_entries })
+            : t("setup.guide.opening.descMigrateEmpty"),
+      href:
+        bookStart === "migrate" && org.posted_entries === 0 ? MIGRATION_WORKSPACE_HREF : "/journal",
+      action:
+        bookStart === "fresh"
+          ? t("setup.guide.opening.actionFreshLedger")
+          : org?.posted_entries > 0
+            ? t("setup.guide.opening.actionMigrateJournal")
+            : tMigration("entry.plan"),
+      state: bookStart === "fresh" ? "complete" : org?.posted_entries > 0 ? "review" : "waiting",
     },
     {
       title: closeTitle,
-      description: org?.completed_closes > 0
-        ? t('setup.guide.close.descDone', { count: org!.completed_closes })
-        : org?.posted_entries > 0
-          ? t('setup.guide.close.descReview', { close: closeName })
-          : t('setup.guide.close.descWaiting', { close: closeName }),
-      href: '/close', action: org?.completed_closes > 0 ? t('setup.guide.close.actionDone') : t('setup.guide.close.actionReview'),
-      state: org?.completed_closes > 0 ? 'complete' : org?.posted_entries > 0 ? 'review' : 'waiting',
+      description:
+        org?.completed_closes > 0
+          ? t("setup.guide.close.descDone", { count: org!.completed_closes })
+          : org?.posted_entries > 0
+            ? t("setup.guide.close.descReview", { close: closeName })
+            : t("setup.guide.close.descWaiting", { close: closeName }),
+      href: "/close",
+      action:
+        org?.completed_closes > 0
+          ? t("setup.guide.close.actionDone")
+          : t("setup.guide.close.actionReview"),
+      state:
+        org?.completed_closes > 0 ? "complete" : org?.posted_entries > 0 ? "review" : "waiting",
     },
-  ]
-  const complete = checks.filter((item) => item.state === 'complete').length
-  const hardReady = profileReady && foundationReady
+  ];
+  const complete = checks.filter((item) => item.state === "complete").length;
+  const hardReady = profileReady && foundationReady;
 
   return {
     hero: {
-      kicker: t('setup.guide.hero.kicker'),
-      title: t('setup.guide.hero.title'),
-      description: t('setup.guide.hero.description'),
-      badgeLabel: hardReady ? t('setup.guide.hero.badgeReady') : t('setup.guide.hero.badgeNeeds'),
+      kicker: t("setup.guide.hero.kicker"),
+      title: t("setup.guide.hero.title"),
+      description: t("setup.guide.hero.description"),
+      badgeLabel: hardReady ? t("setup.guide.hero.badgeReady") : t("setup.guide.hero.badgeNeeds"),
       badgeReady: hardReady,
-      progressLabel: t('setup.guide.hero.progressLabel'),
-      progressOf: t('setup.guide.hero.progressOf', { done: complete, total: checks.length }),
+      progressLabel: t("setup.guide.hero.progressLabel"),
+      progressOf: t("setup.guide.hero.progressOf", { done: complete, total: checks.length }),
       progressCount: complete,
       progressTotal: checks.length,
       progressPercent: Math.round((complete / checks.length) * 100),
@@ -158,52 +203,52 @@ export async function loadSetupReadiness(): Promise<SetupReadinessData> {
       indexLabel: String(index + 1),
       stateLabel: t(`setup.guide.state.${item.state}`),
     })),
-  }
+  };
 }
 
-const f = ref<SetupReadinessData>()
-const item = field
+const f = ref<SetupReadinessData>();
+const item = field;
 
 export function setupReadinessSpec(): PageSpec {
   return page({
-    route: '/admin/setup/readiness',
-    layout: 'bare',
+    route: "/admin/setup/readiness",
+    layout: "bare",
     body: [
-      grid('space-y-6', [
-        widgetBlock('setup-readiness-hero', {
-          kicker: f('hero.kicker'),
-          title: f('hero.title'),
-          description: f('hero.description'),
-          badgeLabel: f('hero.badgeLabel'),
-          badgeReady: f('hero.badgeReady'),
-          progressLabel: f('hero.progressLabel'),
-          progressOf: f('hero.progressOf'),
-          progressPercent: f('hero.progressPercent'),
-          progressMin: f('hero.progressMin'),
-          progressMax: f('hero.progressMax'),
-          progressNow: f('hero.progressNow'),
+      grid("space-y-6", [
+        widgetBlock("setup-readiness-hero", {
+          kicker: f("hero.kicker"),
+          title: f("hero.title"),
+          description: f("hero.description"),
+          badgeLabel: f("hero.badgeLabel"),
+          badgeReady: f("hero.badgeReady"),
+          progressLabel: f("hero.progressLabel"),
+          progressOf: f("hero.progressOf"),
+          progressPercent: f("hero.progressPercent"),
+          progressMin: f("hero.progressMin"),
+          progressMax: f("hero.progressMax"),
+          progressNow: f("hero.progressNow"),
         }),
         // The seven checks: per-item field refs thread each check's fields
         // straight into the widget — the same threading the admin hub cards
         // use. The item IS the check; there is no nested object.
         repeat({
-          items: f('checks'),
-          itemKey: item('title'),
-          className: 'space-y-3',
+          items: f("checks"),
+          itemKey: item("title"),
+          className: "space-y-3",
           unwrapped: true,
           blocks: [
-            widgetBlock('setup-readiness-check-card', {
-              indexLabel: item('indexLabel'),
-              title: item('title'),
-              description: item('description'),
-              href: item('href'),
-              action: item('action'),
-              state: item('state'),
-              stateLabel: item('stateLabel'),
+            widgetBlock("setup-readiness-check-card", {
+              indexLabel: item("indexLabel"),
+              title: item("title"),
+              description: item("description"),
+              href: item("href"),
+              action: item("action"),
+              state: item("state"),
+              stateLabel: item("stateLabel"),
             }),
           ],
         }),
       ]),
     ],
-  })
+  });
 }

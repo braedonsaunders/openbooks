@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadYearEnd, yearEndSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadYearEnd, yearEndSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Year-end cockpit. The sections are NOT hardcoded forms: every payroll
@@ -20,9 +20,9 @@ export const dynamic = 'force-dynamic'
 export default async function PayrollYearEndPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadYearEnd(sp)
-  return <ModuleView spec={yearEndSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadYearEnd(sp);
+  return <ModuleView spec={yearEndSpec(data)} data={data} searchParams={sp} trusted />;
 }

@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadMeReviewsPage, meReviewsSpec, meReviewsTitle } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadMeReviewsPage, meReviewsSpec, meReviewsTitle } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await meReviewsTitle() }
+  return { title: await meReviewsTitle() };
 }
 
 /**
@@ -16,9 +16,9 @@ export async function generateMetadata() {
 export default async function MeReviewsPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadMeReviewsPage(sp)
-  return <ModuleView spec={meReviewsSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadMeReviewsPage(sp);
+  return <ModuleView spec={meReviewsSpec(data)} data={data} searchParams={sp} trusted />;
 }

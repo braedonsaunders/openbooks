@@ -1,316 +1,553 @@
 import { seedCloseRunApprovalFixture } from "@openbooks/engine/testing/close";
 import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/close/run-completion";
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import { resolveAppModule } from './test-module-hooks'
-import { pathToFileURL } from 'node:url'
-import test from 'node:test'
-import * as React from 'react'
-import type { SessionUser } from './auth'
-import { stubModules } from '../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import { resolveAppModule } from "./test-module-hooks";
+import { pathToFileURL } from "node:url";
+import test from "node:test";
+import * as React from "react";
+import type { SessionUser } from "./auth";
+import { stubModules } from "../testing/stub-modules.ts";
 
-const root = pathToFileURL(process.cwd() + '/').href
-const state: { user: SessionUser | null } = { user: null }
+const root = pathToFileURL(process.cwd() + "/").href;
+const state: { user: SessionUser | null } = { user: null };
 // The tsx runner compiles these RSC sources with the CLASSIC JSX transform,
 // which emits bare `React.createElement`. Next supplies the automatic runtime
 // in production; here the global is the equivalent. Needed since a page import
 // reaches the whole widget registry, and some of those components are JSX.
-Object.assign(globalThis, { __closeLifecycleUser: state, React })
-stubModules({ navigation: false, intl: 'export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}; export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}}', authz: false, features: false });
+Object.assign(globalThis, { __closeLifecycleUser: state, React });
+stubModules({
+  navigation: false,
+  intl: 'export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}; export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}}',
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
     // The session behind lib/authz is the test's own user; stubModules has no
     // option for a double conditioned on its importer.
-    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
-      return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent('export async function currentUser(){return globalThis.__closeLifecycleUser.user}') }
+    if (
+      (specifier === "./auth" || specifier.endsWith("/lib/auth")) &&
+      context.parentURL?.endsWith("/web/lib/authz.ts")
+    ) {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export async function currentUser(){return globalThis.__closeLifecycleUser.user}",
+          ),
+      };
     }
-    const app = resolveAppModule(specifier, context, next, root)
-    if (app) return app
-    return next(specifier, context)
+    const app = resolveAppModule(specifier, context, next, root);
+    if (app) return app;
+    return next(specifier, context);
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { startCloseRun } = await import("@openbooks/engine/close/run-start");
-const { POST: create } = await import('../app/api/close/runs/route')
-const { POST: action } = await import('../app/api/close/runs/[id]/route')
-const { GET: binder } = await import('../app/api/close/runs/[id]/binder/route')
-const { POST: task } = await import('../app/api/close/runs/[id]/tasks/[taskId]/route')
-const { POST: evidence } = await import('../app/api/close/runs/[id]/evidence/route')
-const { POST: setup } = await import('../app/api/admin/close/route')
-const { default: page } = await import('../app/(app)/close/page')
-const applicationClose = await import('./application/close')
-const { getAuthz } = await import('./authz')
-const { accountingHome } = await import('./module-home/accounting')
-const { CloseSetupPage } = await import('../app/(app)/admin/setup/[entity]/CloseSetupPage')
-const { READ_TOOLS } = await import('./assistant/tools')
-const request = (body: unknown) => new Request('http://audit.local', { method: 'POST', body: JSON.stringify(body) })
+const { POST: create } = await import("../app/api/close/runs/route");
+const { POST: action } = await import("../app/api/close/runs/[id]/route");
+const { GET: binder } = await import("../app/api/close/runs/[id]/binder/route");
+const { POST: task } = await import("../app/api/close/runs/[id]/tasks/[taskId]/route");
+const { POST: evidence } = await import("../app/api/close/runs/[id]/evidence/route");
+const { POST: setup } = await import("../app/api/admin/close/route");
+const { default: page } = await import("../app/(app)/close/page");
+const applicationClose = await import("./application/close");
+const { getAuthz } = await import("./authz");
+const { accountingHome } = await import("./module-home/accounting");
+const { CloseSetupPage } = await import("../app/(app)/admin/setup/[entity]/CloseSetupPage");
+const { READ_TOOLS } = await import("./assistant/tools");
+const request = (body: unknown) =>
+  new Request("http://audit.local", { method: "POST", body: JSON.stringify(body) });
 
-for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'page', 'setup', 'locks', 'application', 'cockpit', 'assistant', 'setup page'] as const) {
+for (const boundary of [
+  "creation",
+  "actions",
+  "task",
+  "evidence",
+  "binder",
+  "page",
+  "setup",
+  "locks",
+  "application",
+  "cockpit",
+  "assistant",
+  "setup page",
+] as const) {
   test(`close lifecycle scope: ${boundary}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await withBypassContext(() => createScratchOrg())
+    const org = await withBypassContext(() => createScratchOrg());
     try {
-      const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Close auditor', 'close_auditor'))
-      const other = randomUUID()
+      const actor = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Close auditor", "close_auditor"),
+      );
+      const other = randomUUID();
       await withBypassContext(async () => {
-        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`)
-        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb) || '{"multiSubsidiary":true,"continuousClose":true,"advancedClose":true}'::jsonb) where id=${org.orgId}`)
-        await db.execute(sql`update app_roles set permissions='["close.read","close.run","close.approve","close.reopen","periods.manage"]'::jsonb, subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[org.subsidiaryId]})}::jsonb where org_id=${org.orgId} and key='close_auditor'`)
-      })
-      state.user = { id:actor, orgId:org.orgId, name:'Close auditor', email:'close@scratch.test', roles:[], isSuperAdmin:false, envKind:'production', productionOrgId:org.orgId, homeOrgId:org.orgId, homeUserId:actor }
+        await db.execute(
+          sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`,
+        );
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb) || '{"multiSubsidiary":true,"continuousClose":true,"advancedClose":true}'::jsonb) where id=${org.orgId}`,
+        );
+        await db.execute(
+          sql`update app_roles set permissions='["close.read","close.run","close.approve","close.reopen","periods.manage"]'::jsonb, subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='close_auditor'`,
+        );
+      });
+      state.user = {
+        id: actor,
+        orgId: org.orgId,
+        name: "Close auditor",
+        email: "close@scratch.test",
+        roles: [],
+        isSuperAdmin: false,
+        envKind: "production",
+        productionOrgId: org.orgId,
+        homeOrgId: org.orgId,
+        homeUserId: actor,
+      };
       // Close lifecycle access remains restricted to organization-wide operators,
       // including when the run itself captures a single-entity scope.
-      const runId = await withBypassContext(() => startCloseRun({orgId:org.orgId, periodId:org.periodId, bookId:org.bookId, actorId:actor, subsidiaryIds:[org.subsidiaryId]}))
-      const taskId = await withBypassContext(async () => (await db.execute<{id:string}>(sql`select id from close_run_tasks where run_id=${runId} and org_id=${org.orgId} order by sort_order limit 1`, 'objects'))[0]!.id)
-      const params = { params: Promise.resolve({id:runId, taskId}) }
-      const target = {periodId:org.periodId,bookId:org.bookId}
+      const runId = await withBypassContext(() =>
+        startCloseRun({
+          orgId: org.orgId,
+          periodId: org.periodId,
+          bookId: org.bookId,
+          actorId: actor,
+          subsidiaryIds: [org.subsidiaryId],
+        }),
+      );
+      const taskId = await withBypassContext(
+        async () =>
+          (
+            await db.execute<{ id: string }>(
+              sql`select id from close_run_tasks where run_id=${runId} and org_id=${org.orgId} order by sort_order limit 1`,
+              "objects",
+            )
+          )[0]!.id,
+      );
+      const params = { params: Promise.resolve({ id: runId, taskId }) };
+      const target = { periodId: org.periodId, bookId: org.bookId };
       let expectedBinder: unknown;
-      if (boundary === 'binder') {
-        const publisher = await withBypassContext(() => createScratchUser(org.orgId, 'Close publisher', 'admin'))
+      if (boundary === "binder") {
+        const publisher = await withBypassContext(() =>
+          createScratchUser(org.orgId, "Close publisher", "admin"),
+        );
         await withBypassContext(async () => {
-          await seedCloseRunApprovalFixture(org.orgId, runId, publisher)
-          await closeApprovedRun(org.orgId, runId, publisher)
-          await publishCloseRun(org.orgId, runId, publisher)
-          expectedBinder = (await db.execute<{snapshot: unknown}>(sql`select binder_snapshot as snapshot from close_runs where org_id=${org.orgId} and id=${runId}`, 'objects'))[0]!.snapshot
-        })
+          await seedCloseRunApprovalFixture(org.orgId, runId, publisher);
+          await closeApprovedRun(org.orgId, runId, publisher);
+          await publishCloseRun(org.orgId, runId, publisher);
+          expectedBinder = (
+            await db.execute<{ snapshot: unknown }>(
+              sql`select binder_snapshot as snapshot from close_runs where org_id=${org.orgId} and id=${runId}`,
+              "objects",
+            )
+          )[0]!.snapshot;
+        });
       }
       await withOrgContext(org.orgId, async () => {
-        if (boundary === 'creation') assert.equal((await create(request(target))).status,404)
-        if (boundary === 'actions') {
-          for (const verb of ['refresh','request_approval','close','publish']) assert.equal((await action(request({action:verb}),params)).status,404,verb)
-          assert.equal((await action(request({action:'attest'}),params)).status,400,'the removed alternate approval action is refused')
+        if (boundary === "creation") assert.equal((await create(request(target))).status, 404);
+        if (boundary === "actions") {
+          for (const verb of ["refresh", "request_approval", "close", "publish"])
+            assert.equal((await action(request({ action: verb }), params)).status, 404, verb);
+          assert.equal(
+            (await action(request({ action: "attest" }), params)).status,
+            400,
+            "the removed alternate approval action is refused",
+          );
         }
-        if (boundary === 'task') assert.equal((await task(request({action:'start'}),params)).status,404)
-        if (boundary === 'evidence') assert.equal((await evidence(request({taskId,evidenceType:'note',label:'Unauthorized note',snapshot:{note:'test'}}),params)).status,404)
-        if (boundary === 'binder') {
-          assert.equal((await binder(request({}),params)).status,404)
+        if (boundary === "task")
+          assert.equal((await task(request({ action: "start" }), params)).status, 404);
+        if (boundary === "evidence")
+          assert.equal(
+            (
+              await evidence(
+                request({
+                  taskId,
+                  evidenceType: "note",
+                  label: "Unauthorized note",
+                  snapshot: { note: "test" },
+                }),
+                params,
+              )
+            ).status,
+            404,
+          );
+        if (boundary === "binder") {
+          assert.equal((await binder(request({}), params)).status, 404);
         }
-        if (boundary === 'page') await assert.rejects(page({searchParams:Promise.resolve({run:runId})}), /NEXT_HTTP_ERROR_FALLBACK;404/)
-        if (boundary === 'setup') {
-          for (const verb of ['save-calendar','generate-periods','save-blueprint','save-policy','save-automation','save-package','send-package','request-reopen','decide-reopen','withdraw-reopen','reclose-reopen']) {
-            assert.equal((await setup(request({...target,action:verb,modules:['gl'],reason:'Audit',requestId:randomUUID()}))).status,404,verb)
+        if (boundary === "page")
+          await assert.rejects(
+            page({ searchParams: Promise.resolve({ run: runId }) }),
+            /NEXT_HTTP_ERROR_FALLBACK;404/,
+          );
+        if (boundary === "setup") {
+          for (const verb of [
+            "save-calendar",
+            "generate-periods",
+            "save-blueprint",
+            "save-policy",
+            "save-automation",
+            "save-package",
+            "send-package",
+            "request-reopen",
+            "decide-reopen",
+            "withdraw-reopen",
+            "reclose-reopen",
+          ]) {
+            assert.equal(
+              (
+                await setup(
+                  request({
+                    ...target,
+                    action: verb,
+                    modules: ["gl"],
+                    reason: "Audit",
+                    requestId: randomUUID(),
+                  }),
+                )
+              ).status,
+              404,
+              verb,
+            );
           }
         }
-        if (boundary === 'setup page') await assert.rejects(CloseSetupPage({orgId:org.orgId,searchParams:{},canReopen:true}), /NEXT_HTTP_ERROR_FALLBACK;404/)
-        if (boundary === 'cockpit') assert.equal((await accountingHome(org.orgId,new Set([org.subsidiaryId]), { gl: true, close: true, findings: true, accounts: true, budgets: true, assets: true })).close.runId,null)
-        if (boundary === 'assistant') {
-          const authz = (await getAuthz())!
-          const output = await READ_TOOLS.find((tool)=>tool.name === 'financial_periods')!.execute({completedOnly:false},authz)
-          assert.equal(output.ok,true)
-          const data = output.data as {periods:{closeStatus:string|null;readinessScore:number|null}[]}
-          assert.ok(data.periods.length>0)
-          assert.ok(data.periods.every((period)=>period.closeStatus === null && period.readinessScore === null))
+        if (boundary === "setup page")
+          await assert.rejects(
+            CloseSetupPage({ orgId: org.orgId, searchParams: {}, canReopen: true }),
+            /NEXT_HTTP_ERROR_FALLBACK;404/,
+          );
+        if (boundary === "cockpit")
+          assert.equal(
+            (
+              await accountingHome(org.orgId, new Set([org.subsidiaryId]), {
+                gl: true,
+                close: true,
+                findings: true,
+                accounts: true,
+                budgets: true,
+                assets: true,
+              })
+            ).close.runId,
+            null,
+          );
+        if (boundary === "assistant") {
+          const authz = (await getAuthz())!;
+          const output = await READ_TOOLS.find(
+            (tool) => tool.name === "financial_periods",
+          )!.execute({ completedOnly: false }, authz);
+          assert.equal(output.ok, true);
+          const data = output.data as {
+            periods: { closeStatus: string | null; readinessScore: number | null }[];
+          };
+          assert.ok(data.periods.length > 0);
+          assert.ok(
+            data.periods.every(
+              (period) => period.closeStatus === null && period.readinessScore === null,
+            ),
+          );
         }
-        if (boundary === 'application') {
-          const context = {authz:(await getAuthz())!,source:'mcp' as const,requestId:randomUUID(),apiKeyId:null}
-          await assert.rejects(applicationClose.listCloseRuns(context,{}),(error: unknown) => {
-            assert.equal((error as {status?: number}).status,403)
-            assert.match((error as Error).message,/unrestricted subsidiary visibility/)
-            return true
-          })
-          await assert.rejects(applicationClose.listPeriodLocks(context,{}),(error: unknown) => {
-            assert.equal((error as {status?: number}).status,403)
-            assert.match((error as Error).message,/unrestricted subsidiary visibility/)
-            return true
-          })
-          await assert.rejects(applicationClose.listPeriodReopenRequests(context,{}),(error: unknown) => {
-            assert.equal((error as {status?: number}).status,403)
-            assert.match((error as Error).message,/unrestricted subsidiary visibility/)
-            return true
-          })
-          await assert.rejects(applicationClose.getCloseRun(context,runId),{status:403})
-          await assert.rejects(applicationClose.startApplicationCloseRun(context,{...target,subsidiaryIds:[org.subsidiaryId],idempotencyKey:randomUUID()}),{status:403})
-          await assert.rejects(applicationClose.advanceCloseRun(context,{runId,action:'refresh',idempotencyKey:randomUUID()}),{status:403})
-          await assert.rejects(applicationClose.createReopenRequest(context,{...target,subsidiaryId:org.subsidiaryId,modules:['gl'],reason:'Review',idempotencyKey:randomUUID()}),{status:403})
-          await assert.rejects(applicationClose.submitReopenRequest(context,{requestId:randomUUID(),idempotencyKey:randomUUID()}),{status:404})
+        if (boundary === "application") {
+          const context = {
+            authz: (await getAuthz())!,
+            source: "mcp" as const,
+            requestId: randomUUID(),
+            apiKeyId: null,
+          };
+          await assert.rejects(applicationClose.listCloseRuns(context, {}), (error: unknown) => {
+            assert.equal((error as { status?: number }).status, 403);
+            assert.match((error as Error).message, /unrestricted subsidiary visibility/);
+            return true;
+          });
+          await assert.rejects(applicationClose.listPeriodLocks(context, {}), (error: unknown) => {
+            assert.equal((error as { status?: number }).status, 403);
+            assert.match((error as Error).message, /unrestricted subsidiary visibility/);
+            return true;
+          });
+          await assert.rejects(
+            applicationClose.listPeriodReopenRequests(context, {}),
+            (error: unknown) => {
+              assert.equal((error as { status?: number }).status, 403);
+              assert.match((error as Error).message, /unrestricted subsidiary visibility/);
+              return true;
+            },
+          );
+          await assert.rejects(applicationClose.getCloseRun(context, runId), { status: 403 });
+          await assert.rejects(
+            applicationClose.startApplicationCloseRun(context, {
+              ...target,
+              subsidiaryIds: [org.subsidiaryId],
+              idempotencyKey: randomUUID(),
+            }),
+            { status: 403 },
+          );
+          await assert.rejects(
+            applicationClose.advanceCloseRun(context, {
+              runId,
+              action: "refresh",
+              idempotencyKey: randomUUID(),
+            }),
+            { status: 403 },
+          );
+          await assert.rejects(
+            applicationClose.createReopenRequest(context, {
+              ...target,
+              subsidiaryId: org.subsidiaryId,
+              modules: ["gl"],
+              reason: "Review",
+              idempotencyKey: randomUUID(),
+            }),
+            { status: 403 },
+          );
+          await assert.rejects(
+            applicationClose.submitReopenRequest(context, {
+              requestId: randomUUID(),
+              idempotencyKey: randomUUID(),
+            }),
+            { status: 404 },
+          );
         }
-        if (boundary === 'locks') {
-          const lock = {...target,action:'set-lock',module:'gl',state:'soft_closed',reason:'Review in progress'}
-          for (const subsidiaryId of [null,other]) assert.equal((await setup(request({...lock,subsidiaryId}))).status,404)
-          assert.equal((await setup(request({...lock,subsidiaryId:org.subsidiaryId}))).status,200)
+        if (boundary === "locks") {
+          const lock = {
+            ...target,
+            action: "set-lock",
+            module: "gl",
+            state: "soft_closed",
+            reason: "Review in progress",
+          };
+          for (const subsidiaryId of [null, other])
+            assert.equal((await setup(request({ ...lock, subsidiaryId }))).status, 404);
+          assert.equal(
+            (await setup(request({ ...lock, subsidiaryId: org.subsidiaryId }))).status,
+            200,
+          );
         }
-      })
+      });
       // Current permissions are consulted again: unrestricted operators retain
       // the workflow, and subsequent scope revocation cannot replay a binder.
-      await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='close_auditor'`))
+      await withBypassContext(() =>
+        db.execute(
+          sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='close_auditor'`,
+        ),
+      );
       await withOrgContext(org.orgId, async () => {
-        if (boundary === 'creation') {
+        if (boundary === "creation") {
           // For an unrestricted caller, omitted and explicit null scopes both
           // request an organization-wide run; neither may widen a captured run.
-          for (const body of [target, {...target,subsidiaryIds:null}]) {
-            const conflict = await create(request(body))
-            assert.equal(conflict.status,422)
-            assert.deepEqual(await conflict.json(),{error:'existing close run has a different subsidiary scope'})
+          for (const body of [target, { ...target, subsidiaryIds: null }]) {
+            const conflict = await create(request(body));
+            assert.equal(conflict.status, 422);
+            assert.deepEqual(await conflict.json(), {
+              error: "existing close run has a different subsidiary scope",
+            });
           }
-          const captured = await db.execute<{id:string;scope:{subsidiaryIds:string[]}}>(sql`select id,scope from close_runs where org_id=${org.orgId} and period_id=${org.periodId} and book_id=${org.bookId}`, 'objects')
-          assert.deepEqual(captured,[{id:runId,scope:{subsidiaryIds:[org.subsidiaryId]}}])
-          const resumed = await create(request({...target,subsidiaryIds:[org.subsidiaryId]}))
-          assert.equal(resumed.status,200)
-          assert.deepEqual(await resumed.json(),{ok:true,runId})
+          const captured = await db.execute<{ id: string; scope: { subsidiaryIds: string[] } }>(
+            sql`select id,scope from close_runs where org_id=${org.orgId} and period_id=${org.periodId} and book_id=${org.bookId}`,
+            "objects",
+          );
+          assert.deepEqual(captured, [{ id: runId, scope: { subsidiaryIds: [org.subsidiaryId] } }]);
+          const resumed = await create(request({ ...target, subsidiaryIds: [org.subsidiaryId] }));
+          assert.equal(resumed.status, 200);
+          assert.deepEqual(await resumed.json(), { ok: true, runId });
         }
-        if (boundary === 'actions') assert.equal((await action(request({action:'refresh'}),params)).status,200)
-        if (boundary === 'application') {
-          const context = {authz:(await getAuthz())!,source:'mcp' as const,requestId:randomUUID(),apiKeyId:null}
-          assert.equal((await applicationClose.listCloseRuns(context,{}))[0]?.id,runId)
-          assert.equal((await applicationClose.getCloseRun(context,runId)).id,runId)
+        if (boundary === "actions")
+          assert.equal((await action(request({ action: "refresh" }), params)).status, 200);
+        if (boundary === "application") {
+          const context = {
+            authz: (await getAuthz())!,
+            source: "mcp" as const,
+            requestId: randomUUID(),
+            apiKeyId: null,
+          };
+          assert.equal((await applicationClose.listCloseRuns(context, {}))[0]?.id, runId);
+          assert.equal((await applicationClose.getCloseRun(context, runId)).id, runId);
         }
-        if (boundary === 'binder') {
-          const result = await binder(request({}),params)
-          assert.equal(result.status,200)
-          assert.equal(result.headers.get('cache-control'),'private, no-store')
-          assert.deepEqual((await result.json()).binder,expectedBinder)
-          await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[]})}::jsonb where org_id=${org.orgId} and key='close_auditor'`))
-          assert.equal((await binder(request({}),params)).status,404)
+        if (boundary === "binder") {
+          const result = await binder(request({}), params);
+          assert.equal(result.status, 200);
+          assert.equal(result.headers.get("cache-control"), "private, no-store");
+          assert.deepEqual((await result.json()).binder, expectedBinder);
+          await withBypassContext(() =>
+            db.execute(
+              sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [] })}::jsonb where org_id=${org.orgId} and key='close_auditor'`,
+            ),
+          );
+          assert.equal((await binder(request({}), params)).status, 404);
         }
-      })
-      const persisted = await withBypassContext(() => db.execute<{n:number}>(sql`select count(*)::int as n from close_task_evidence where run_id=${runId} and org_id=${org.orgId}`, 'objects'))
-      assert.equal(persisted[0]!.n,0)
+      });
+      const persisted = await withBypassContext(() =>
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from close_task_evidence where run_id=${runId} and org_id=${org.orgId}`,
+          "objects",
+        ),
+      );
+      assert.equal(persisted[0]!.n, 0);
     } finally {
-      state.user=null
-      await withBypassContext(() => dropScratchOrg(org.orgId))
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
-  })
+  });
 }
 
-
 const closeRunCases = [
-  { label: "close run subsidiary authz", register: async () => {
-        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
-        const { registerHooks } = await import("node:module");
-        const test = (await import("node:test")).default;
-        const { randomUUID } = await import("node:crypto");
-        const { sql } = await import("drizzle-orm");
-        // Live-Postgres route regression: close-run creation must never turn a
-        // restricted caller's omitted, malformed, empty, or out-of-scope subsidiary
-        // selection into the engine's org-wide [] sentinel. The real session gate
-        // resolves the test role, and the route and close engine persist the accepted scope.
-        const hooks = registerHooks({
-          resolve(specifier, context, nextResolve) {
-            if (specifier.startsWith("@openbooks/engine/") && context.parentURL?.includes("/api/close/runs/route")) {
-              const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
-              const webRoot = parentDir.lastIndexOf("/web/");
-              if (webRoot === -1) return nextResolve(specifier, context);
-              return nextResolve(
-                new URL(
-                  parentDir.slice(0, webRoot + 1)
-                    + "engine/"
-                    + specifier.slice("@openbooks/engine/".length),
-                ).href,
-                context,
-              );
-            }
-            return nextResolve(specifier, context);
-          },
-        });
+  {
+    label: "close run subsidiary authz",
+    register: async () => {
+      const assert: typeof import("node:assert/strict") = (await import("node:assert/strict"))
+        .default;
+      const { registerHooks } = await import("node:module");
+      const test = (await import("node:test")).default;
+      const { randomUUID } = await import("node:crypto");
+      const { sql } = await import("drizzle-orm");
+      // Live-Postgres route regression: close-run creation must never turn a
+      // restricted caller's omitted, malformed, empty, or out-of-scope subsidiary
+      // selection into the engine's org-wide [] sentinel. The real session gate
+      // resolves the test role, and the route and close engine persist the accepted scope.
+      const hooks = registerHooks({
+        resolve(specifier, context, nextResolve) {
+          if (
+            specifier.startsWith("@openbooks/engine/") &&
+            context.parentURL?.includes("/api/close/runs/route")
+          ) {
+            const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
+            const webRoot = parentDir.lastIndexOf("/web/");
+            if (webRoot === -1) return nextResolve(specifier, context);
+            return nextResolve(
+              new URL(
+                parentDir.slice(0, webRoot + 1) +
+                  "engine/" +
+                  specifier.slice("@openbooks/engine/".length),
+              ).href,
+              context,
+            );
+          }
+          return nextResolve(specifier, context);
+        },
+      });
 
-        const routeUrl = "../app/api/close/runs/route.ts?close-run-subsidiary-authz";
-        const { POST } = (await import(routeUrl)) as typeof import("../app/api/close/runs/route.ts");
-        hooks.deregister();
+      const routeUrl = "../app/api/close/runs/route.ts?close-run-subsidiary-authz";
+      const { POST } = (await import(routeUrl)) as typeof import("../app/api/close/runs/route.ts");
+      hooks.deregister();
 
-        const { withBypassContext, db, env } = await import("@openbooks/engine/platform/db");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-          "@openbooks/engine/testing/fixtures",
-        );
+      const { withBypassContext, db, env } = await import("@openbooks/engine/platform/db");
+      const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+        await import("@openbooks/engine/testing/fixtures");
 
-        const DB = !!env.OPENBOOKS_DB_URL;
+      const DB = !!env.OPENBOOKS_DB_URL;
 
-        function post(body: Record<string, unknown>): Promise<Response> {
-          return POST(new Request("http://openbooks.test/api/close/runs", {
+      function post(body: Record<string, unknown>): Promise<Response> {
+        return POST(
+          new Request("http://openbooks.test/api/close/runs", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
-          }));
-        }
+          }),
+        );
+      }
 
-        async function setAuthz(
-          org: Awaited<ReturnType<typeof createScratchOrg>>,
-          actorId: string,
-          allowedSubsidiaryIds: Set<string> | null,
-        ): Promise<void> {
-          state.user = {
-            id: actorId,
-            orgId: org.orgId,
-            name: "Close run controller",
-            email: "close-run@scratch.test",
-            roles: [],
-            isSuperAdmin: false,
-            envKind: "production",
-            productionOrgId: org.orgId,
-            homeOrgId: org.orgId,
-            homeUserId: actorId,
-          };
-          const restriction = allowedSubsidiaryIds === null
+      async function setAuthz(
+        org: Awaited<ReturnType<typeof createScratchOrg>>,
+        actorId: string,
+        allowedSubsidiaryIds: Set<string> | null,
+      ): Promise<void> {
+        state.user = {
+          id: actorId,
+          orgId: org.orgId,
+          name: "Close run controller",
+          email: "close-run@scratch.test",
+          roles: [],
+          isSuperAdmin: false,
+          envKind: "production",
+          productionOrgId: org.orgId,
+          homeOrgId: org.orgId,
+          homeUserId: actorId,
+        };
+        const restriction =
+          allowedSubsidiaryIds === null
             ? { mode: "all" }
             : { mode: "list", subsidiaryIds: [...allowedSubsidiaryIds] };
-          await withBypassContext(() => db.execute(sql`
+        await withBypassContext(() =>
+          db.execute(sql`
             update app_roles
                set permissions='["close.run"]'::jsonb,
                    subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
              where org_id=${org.orgId} and key='admin'
-          `));
-        }
+          `),
+        );
+      }
 
-        test(
-          "close-run creation is fail-closed at the subsidiary authorization boundary",
-          { skip: !DB },
-          async () => {
-            const org = await withBypassContext(() => (createScratchOrg()));
-            const actors = await withBypassContext(() => (seedFlowActors(org.orgId)));
-            const otherSubsidiaryId = randomUUID();
-            try {
-              await withBypassContext(() => db.execute(sql`
+      test(
+        "close-run creation is fail-closed at the subsidiary authorization boundary",
+        { skip: !DB },
+        async () => {
+          const org = await withBypassContext(() => createScratchOrg());
+          const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+          const otherSubsidiaryId = randomUUID();
+          try {
+            await withBypassContext(() =>
+              db.execute(sql`
                 update orgs
                    set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)
                      || '{"multiSubsidiary":true,"continuousClose":true,"advancedClose":true}'::jsonb)
                  where id=${org.orgId}
-              `));
-              await withBypassContext(() => (db.execute(sql`
+              `),
+            );
+            await withBypassContext(() =>
+              db.execute(sql`
                 insert into subsidiaries
                   (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
                 values
                   (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Restricted Branch', 'CAD', 'CA',
-                   '{}'::jsonb, false, true, '{}'::jsonb)`)));
+                   '{}'::jsonb, false, true, '{}'::jsonb)`),
+            );
 
-              const validBody = { periodId: org.periodId, bookId: org.bookId };
+            const validBody = { periodId: org.periodId, bookId: org.bookId };
 
-              // A concrete target cannot grant access to the engine's organization-wide
-              // diagnostics and evidence. Refuse before any run is persisted.
-              await setAuthz(org, actors.adminId, new Set([org.subsidiaryId]));
-              const omitted = await post(validBody);
-              assert.equal(omitted.status, 404);
-              const omittedRun = (await db.execute<{ scope: { subsidiaryIds?: string[] } }>(sql`
+            // A concrete target cannot grant access to the engine's organization-wide
+            // diagnostics and evidence. Refuse before any run is persisted.
+            await setAuthz(org, actors.adminId, new Set([org.subsidiaryId]));
+            const omitted = await post(validBody);
+            assert.equal(omitted.status, 404);
+            const omittedRun = (
+              await db.execute<{ scope: { subsidiaryIds?: string[] } }>(
+                sql`
                 select scope from close_runs where org_id = ${org.orgId}
-                  and period_id = ${org.periodId} and book_id = ${org.bookId}`, 'objects'))[0];
-              assert.equal(omittedRun, undefined);
+                  and period_id = ${org.periodId} and book_id = ${org.bookId}`,
+                "objects",
+              )
+            )[0];
+            assert.equal(omittedRun, undefined);
 
-              // Invalid UUIDs are rejected instead of silently filtered to an empty,
-              // org-wide request, and an active but unauthorized entity is rejected.
-              const malformed = await post({ ...validBody, subsidiaryIds: ["bad"] });
-              assert.equal(malformed.status, 400);
-              const outOfScope = await post({ ...validBody, subsidiaryIds: [otherSubsidiaryId] });
-              assert.equal(outOfScope.status, 403);
+            // Invalid UUIDs are rejected instead of silently filtered to an empty,
+            // org-wide request, and an active but unauthorized entity is rejected.
+            const malformed = await post({ ...validBody, subsidiaryIds: ["bad"] });
+            assert.equal(malformed.status, 400);
+            const outOfScope = await post({ ...validBody, subsidiaryIds: [otherSubsidiaryId] });
+            assert.equal(outOfScope.status, 403);
 
-              // An empty restricted policy has no legal close scope and omission must
-              // fail closed rather than widening to the organization.
-              await setAuthz(org, actors.adminId, new Set());
-              const emptyRestricted = await post(validBody);
-              assert.equal(emptyRestricted.status, 403);
+            // An empty restricted policy has no legal close scope and omission must
+            // fail closed rather than widening to the organization.
+            await setAuthz(org, actors.adminId, new Set());
+            const emptyRestricted = await post(validBody);
+            assert.equal(emptyRestricted.status, 403);
 
-              // Only the null sentinel requests an org-wide scope for an unrestricted
-              // caller; [] is rejected so an accidental empty list cannot widen scope.
-              await setAuthz(org, actors.adminId, null);
-              const emptyUnrestricted = await post({ ...validBody, subsidiaryIds: [] });
-              assert.equal(emptyUnrestricted.status, 400);
-            } finally {
-              state.user = null;
-              await dropScratchOrg(org.orgId);
-            }
-          },
-        );
-  } },
+            // Only the null sentinel requests an org-wide scope for an unrestricted
+            // caller; [] is rejected so an accidental empty list cannot widen scope.
+            await setAuthz(org, actors.adminId, null);
+            const emptyUnrestricted = await post({ ...validBody, subsidiaryIds: [] });
+            assert.equal(emptyUnrestricted.status, 400);
+          } finally {
+            state.user = null;
+            await dropScratchOrg(org.orgId);
+          }
+        },
+      );
+    },
+  },
 ] as const;
 
 for (const row of closeRunCases) await row.register();

@@ -1,117 +1,171 @@
 import { defineRoute } from "@/lib/api/route";
 import { nullableUuidId, nullableExactMoney } from "@/lib/api/json";
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
-import { customFieldViewerFor, findUnownedCustomReferences, hiddenCustomFieldRefusal, loadFieldDefs, validateCustomValues, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
-import { loadProject } from '../_lib'
-import { normalizeMoney } from '@openbooks/engine/money/money'
-import { canonicalDecimal } from '../../../../lib/exact-decimal'
-import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { normalizeSubdivisionCode } from '@openbooks/engine/compliance/lien-jurisdictions'
-import { listScopedPartyOptions } from '../../../../lib/scoped-options'
-import { pinInternalPerson } from '@openbooks/engine/organization/internal-person'
-import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { guardSubsidiaryScope, subsidiariesInScope } from "../../../../lib/authz";
+import { isUuid } from "../../../../lib/list-params";
+import {
+  customFieldViewerFor,
+  findUnownedCustomReferences,
+  hiddenCustomFieldRefusal,
+  loadFieldDefs,
+  validateCustomValues,
+  visibleCustomFieldDefs,
+} from "../../../../lib/custom-fields";
+import { loadProject } from "../_lib";
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { normalizeSubdivisionCode } from "@openbooks/engine/compliance/lien-jurisdictions";
+import { listScopedPartyOptions } from "../../../../lib/scoped-options";
+import { pinInternalPerson } from "@openbooks/engine/organization/internal-person";
+import { acquireFeatureGateLock, isFeatureEnabled } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
-import { getTranslations } from 'next-intl/server'
+import { getTranslations } from "next-intl/server";
 import {
   ProjectHeaderControlError,
   assertProjectHeaderChangeAllowed,
   type ProjectHeaderControlCode,
-} from '@openbooks/engine/projects/header-controls'
+} from "@openbooks/engine/projects/header-controls";
 
-
-const projectParams = z.object({ id: z.string() })
-const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
-const projectPatchSchema = z.object({
-  name: z.string().optional(),
-  code: z.string().nullable().optional(), customerId: nullableUuidId.optional(),
-  foremanId: nullableUuidId.optional(), managerId: nullableUuidId.optional(),
-  status: z.enum(STATUSES).optional(), projectTypeId: z.string().nullable().optional(),
-  invoicingPreference: z.object({
-    defaultBasis: z.enum(["date_range", "draw_amount", "time_selection", "milestone"]).nullable().optional(),
-    backupRequired: z.boolean().nullable().optional(),
-    backupType: z.enum(["costed_timesheets", "timesheets_purchases", "purchases", "purchases_shop_time", "quote_only", "none"]).nullable().optional(),
-  }).nullable().optional(),
-  customerPoNumber: z.string().nullable().optional(), startsOn: z.string().nullable().optional(),
-  endsOn: z.string().nullable().optional(), notes: z.string().nullable().optional(),
-  siteJurisdiction: z.string().nullable().optional(), contractValue: nullableExactMoney().optional(),
-  custom: z.record(z.string(), z.json()).optional(), subsidiaryId: nullableUuidId.optional(),
-  subsidiaryIncludeChildren: z.boolean().optional(), isActive: z.boolean().optional(), tasks: z.never().optional(),
-  isInternal: z.boolean().optional(),
-}).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." })
+const projectParams = z.object({ id: z.string() });
+const STATUSES = [
+  "quoted",
+  "awarded",
+  "active",
+  "substantially_complete",
+  "closed",
+  "cancelled",
+] as const;
+const projectPatchSchema = z
+  .object({
+    name: z.string().optional(),
+    code: z.string().nullable().optional(),
+    customerId: nullableUuidId.optional(),
+    foremanId: nullableUuidId.optional(),
+    managerId: nullableUuidId.optional(),
+    status: z.enum(STATUSES).optional(),
+    projectTypeId: z.string().nullable().optional(),
+    invoicingPreference: z
+      .object({
+        defaultBasis: z
+          .enum(["date_range", "draw_amount", "time_selection", "milestone"])
+          .nullable()
+          .optional(),
+        backupRequired: z.boolean().nullable().optional(),
+        backupType: z
+          .enum([
+            "costed_timesheets",
+            "timesheets_purchases",
+            "purchases",
+            "purchases_shop_time",
+            "quote_only",
+            "none",
+          ])
+          .nullable()
+          .optional(),
+      })
+      .nullable()
+      .optional(),
+    customerPoNumber: z.string().nullable().optional(),
+    startsOn: z.string().nullable().optional(),
+    endsOn: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    siteJurisdiction: z.string().nullable().optional(),
+    contractValue: nullableExactMoney().optional(),
+    custom: z.record(z.string(), z.json()).optional(),
+    subsidiaryId: nullableUuidId.optional(),
+    subsidiaryIncludeChildren: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+    tasks: z.never().optional(),
+    isInternal: z.boolean().optional(),
+  })
+  .strict()
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one field must be provided.",
+  });
 
 function bad(error: string, fieldErrors?: Record<string, string>) {
-  return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 })
+  return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 });
 }
 
 /** Trimmed string or null ('' and non-strings collapse to null). */
 function strOrNull(v: unknown): string | null {
-  if (typeof v !== 'string') return null
-  const s = v.trim()
-  return s === '' ? null : s
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  return s === "" ? null : s;
 }
 
-function uuidOrNull(v: unknown): string | null | 'invalid' {
-  const s = strOrNull(v)
-  if (s === null) return null
-  return isUuid(s) ? s : 'invalid'
+function uuidOrNull(v: unknown): string | null | "invalid" {
+  const s = strOrNull(v);
+  if (s === null) return null;
+  return isUuid(s) ? s : "invalid";
 }
 
 /** Exact numeric(19,4) money string, null, or 'invalid'. */
-function moneyOrNull(v: unknown): string | null | 'invalid' {
-  if (v === null || v === undefined || v === '') return null
-  const exact = canonicalDecimal(v, 4)
-  if (exact === null) return 'invalid'
+function moneyOrNull(v: unknown): string | null | "invalid" {
+  if (v === null || v === undefined || v === "") return null;
+  const exact = canonicalDecimal(v, 4);
+  if (exact === null) return "invalid";
   // canonicalDecimal bounds scale, not magnitude: a pasted 20-digit figure
   // would otherwise sail through and die in Postgres as a raw numeric
   // overflow (HTTP 500). contract_value is numeric(19,4): 15 whole digits.
-  if (exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) return 'invalid'
+  if (exact.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) return "invalid";
   try {
-    return normalizeMoney(exact)
+    return normalizeMoney(exact);
   } catch {
-    return 'invalid'
+    return "invalid";
   }
 }
 
-const HEADER_CONTROL_KEYS: Record<Exclude<ProjectHeaderControlCode, 'project_not_found'>, string> = {
-  contract_value_controlled: 'projectContractValueControlled',
-  contract_value_controlled_type_changed: 'projectContractValueControlledTypeChanged',
-  subsidiary_has_posted_history: 'projectSubsidiaryHasPostedHistory',
-}
+const HEADER_CONTROL_KEYS: Record<
+  Exclude<ProjectHeaderControlCode, "project_not_found">,
+  string
+> = {
+  contract_value_controlled: "projectContractValueControlled",
+  contract_value_controlled_type_changed: "projectContractValueControlledTypeChanged",
+  subsidiary_has_posted_history: "projectSubsidiaryHasPostedHistory",
+};
 
 /** The refusal in the caller's language; the engine's English copy is the
  * fallback where no request locale is available. */
 async function headerControlMessage(error: ProjectHeaderControlError): Promise<string> {
-  if (error.code === 'project_not_found') return error.message
+  if (error.code === "project_not_found") return error.message;
   try {
-    const t = await getTranslations('apiErrors')
-    return t(HEADER_CONTROL_KEYS[error.code])
+    const t = await getTranslations("apiErrors");
+    return t(HEADER_CONTROL_KEYS[error.code]);
   } catch {
-    return error.message
+    return error.message;
   }
 }
 
 async function partyExists(id: string, orgId: string): Promise<boolean> {
-  const r = (await db.execute(
-    sql`select 1 from parties where id = ${id} and org_id = ${orgId}`, 'objects',
-  ))
-  return !!r[0]
+  const r = await db.execute(
+    sql`select 1 from parties where id = ${id} and org_id = ${orgId}`,
+    "objects",
+  );
+  return !!r[0];
 }
 
-export const GET = defineRoute({ permission: 'projects.read', feature: 'projects', params: projectParams, handler: async ({ authz: gate, params: { id } }) => {
-  if (!isUuid(id)) return notFound("record")
-  // The loader enforces the caller scope on the header and every
-  // subordinate read inside one snapshot, so an out-of-scope project answers
-  // exactly like a missing one with no post-hoc check to race.
-  const payload = await loadProject(id, gate.user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(gate) })
-  if (!payload) return notFound("record")
-  return NextResponse.json(payload)
-} })
+export const GET = defineRoute({
+  permission: "projects.read",
+  feature: "projects",
+  params: projectParams,
+  handler: async ({ authz: gate, params: { id } }) => {
+    if (!isUuid(id)) return notFound("record");
+    // The loader enforces the caller scope on the header and every
+    // subordinate read inside one snapshot, so an out-of-scope project answers
+    // exactly like a missing one with no post-hoc check to race.
+    const payload = await loadProject(id, gate.user.orgId, gate.allowedSubsidiaryIds, {
+      customFieldViewer: customFieldViewerFor(gate),
+    });
+    if (!payload) return notFound("record");
+    return NextResponse.json(payload);
+  },
+});
 
 /**
  * Autosave for the project flyout: header fields, the party links, the contract
@@ -128,197 +182,241 @@ export const GET = defineRoute({ permission: 'projects.read', feature: 'projects
  * re-evaluates its blockers, so exactly one side wins.
  */
 export const PATCH = defineRoute({
-  permission: 'projects.manage', feature: 'projects', params: projectParams, body: projectPatchSchema,
+  permission: "projects.manage",
+  feature: "projects",
+  params: projectParams,
+  body: projectPatchSchema,
   handler: async ({ params: { id }, body, authz: gate }) => {
-  const user = gate.user
-  if (!isUuid(id)) return notFound("record")
+    const user = gate.user;
+    if (!isUuid(id)) return notFound("record");
 
-  const existing = (await db.execute<{
-    name: string
-    is_active: boolean
-    custom: Record<string, unknown> | null
-    subsidiary_id: string | null
-  }>(sql`
+    const existing = await db.execute<{
+      name: string;
+      is_active: boolean;
+      custom: Record<string, unknown> | null;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select name, is_active, custom, subsidiary_id
       from projects where id = ${id} and org_id = ${user.orgId}
-  `, 'objects'))
-  if (!existing[0]) return notFound("record")
-  const existingDenied = guardSubsidiaryScope(gate, existing[0].subsidiary_id)
-  if (existingDenied) return existingDenied
+  `,
+      "objects",
+    );
+    if (!existing[0]) return notFound("record");
+    const existingDenied = guardSubsidiaryScope(gate, existing[0].subsidiary_id);
+    if (existingDenied) return existingDenied;
 
-  if (body.tasks !== undefined) {
-    return bad('Work breakdown tasks must be changed through the project task endpoint')
-  }
-  // Flags ride raw into boolean columns: PostgreSQL would silently coerce
-  // spellings like 'off'/'on' (deactivating a project with a 200) or throw
-  // 22P02 on anything else. Refuse non-booleans like every other flag write.
-  if (body.isActive !== undefined && typeof body.isActive !== 'boolean') {
-    return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 400 })
-  }
-  if (body.subsidiaryIncludeChildren !== undefined && typeof body.subsidiaryIncludeChildren !== 'boolean') {
-    return NextResponse.json({ error: 'subsidiaryIncludeChildren must be a boolean' }, { status: 400 })
-  }
-  if (body.isInternal !== undefined && typeof body.isInternal !== 'boolean') {
-    return NextResponse.json({ error: 'isInternal must be a boolean' }, { status: 400 })
-  }
-
-  // -- enums ---------------------------------------------------------------
-  if (body.status !== undefined && !STATUSES.includes(body.status as (typeof STATUSES)[number])) {
-    return bad('Invalid status')
-  }
-
-  // -- name / activation ---------------------------------------------------
-  if (body.name !== undefined && typeof body.name !== 'string') {
-    return bad('Project name must be a string')
-  }
-  const name = body.name !== undefined ? body.name.trim() : undefined
-  const willBeActive = body.isActive ?? existing[0].is_active
-  const effectiveName = name ?? existing[0].name.trim()
-  if (willBeActive && (!effectiveName || effectiveName === 'New project')) {
-    return bad(
-      body.isActive === true ? 'Give the project a real name before activating it' : 'An active project needs a name',
-    )
-  }
-
-  // -- party references (must exist & belong to org) -----------------------
-  let customerId: string | null | undefined
-  if (body.customerId !== undefined) {
-    const v = uuidOrNull(body.customerId)
-    if (v === 'invalid') return bad('Invalid customer')
-    if (v !== null && !(await partyExists(v, user.orgId))) return bad('Customer not found')
-    customerId = v
-  }
-  let foremanId: string | null | undefined
-  if (body.foremanId !== undefined) {
-    const v = uuidOrNull(body.foremanId)
-    if (v === 'invalid') return bad('Invalid foreman')
-    if (v !== null && !(await partyExists(v, user.orgId))) return bad('Foreman not found')
-    // Same rule as create: a foreman is an active employee or internal
-    // person, never a customer, vendor, or company party.
-    if (v !== null && !(await pinInternalPerson(db, user.orgId, v))) {
-      return bad(`project foreman "${v}" must be an active employee or internal person in this organization — choose the foreman from the organization's people`)
+    if (body.tasks !== undefined) {
+      return bad("Work breakdown tasks must be changed through the project task endpoint");
     }
-    foremanId = v
-  }
-  let managerId: string | null | undefined
-  if (body.managerId !== undefined) {
-    const v = uuidOrNull(body.managerId)
-    if (v === 'invalid') return bad('Invalid manager')
-    if (v !== null && !(await partyExists(v, user.orgId))) return bad('Manager not found')
-    // Same rule as create: a manager is an active employee or internal
-    // person, never a customer, vendor, or company party. Scope stays with
-    // the visibility check below so it keeps naming the legal entity.
-    if (v !== null && !(await pinInternalPerson(db, user.orgId, v))) {
-      return bad(`project manager "${v}" must be an active employee or internal person in this organization — choose the manager from the organization's people`)
+    // Flags ride raw into boolean columns: PostgreSQL would silently coerce
+    // spellings like 'off'/'on' (deactivating a project with a 200) or throw
+    // 22P02 on anything else. Refuse non-booleans like every other flag write.
+    if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
+      return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
     }
-    managerId = v
-  }
-  // Same agreement as create: the picker only offers subsidiary-visible
-  // parties, so re-pointing at an out-of-scope party is refused by name.
-  if (customerId || foremanId || managerId) {
-    const visiblePartyIds = new Set(
-      (await listScopedPartyOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true })).map((row) => row.id),
-    )
-    if (customerId && !visiblePartyIds.has(customerId)) {
-      return bad(`project customer "${customerId}" is not visible in your subsidiary scope`)
+    if (
+      body.subsidiaryIncludeChildren !== undefined &&
+      typeof body.subsidiaryIncludeChildren !== "boolean"
+    ) {
+      return NextResponse.json(
+        { error: "subsidiaryIncludeChildren must be a boolean" },
+        { status: 400 },
+      );
     }
-    if (foremanId && !visiblePartyIds.has(foremanId)) {
-      return bad(`project foreman "${foremanId}" is not visible in your subsidiary scope`)
+    if (body.isInternal !== undefined && typeof body.isInternal !== "boolean") {
+      return NextResponse.json({ error: "isInternal must be a boolean" }, { status: 400 });
     }
-    if (managerId && !visiblePartyIds.has(managerId)) {
-      return bad(`project manager "${managerId}" is not visible in your subsidiary scope`)
+
+    // -- enums ---------------------------------------------------------------
+    if (body.status !== undefined && !STATUSES.includes(body.status as (typeof STATUSES)[number])) {
+      return bad("Invalid status");
     }
-  }
 
-  let subsidiaryId: string | null | undefined
-  if (body.subsidiaryId !== undefined) {
-    const value = uuidOrNull(body.subsidiaryId)
-    if (value === 'invalid') return bad('Invalid subsidiary')
-    if (!subsidiariesInScope(gate, [value])) return bad('Subsidiary not found')
-    if (value) {
-      const subsidiary = ((await db.execute(sql`
-        select 1 from subsidiaries
-         where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`, 'objects')))
-      if (!subsidiary.length) return bad('Subsidiary not found')
+    // -- name / activation ---------------------------------------------------
+    if (body.name !== undefined && typeof body.name !== "string") {
+      return bad("Project name must be a string");
     }
-    subsidiaryId = value
-  }
+    const name = body.name !== undefined ? body.name.trim() : undefined;
+    const willBeActive = body.isActive ?? existing[0].is_active;
+    const effectiveName = name ?? existing[0].name.trim();
+    if (willBeActive && (!effectiveName || effectiveName === "New project")) {
+      return bad(
+        body.isActive === true
+          ? "Give the project a real name before activating it"
+          : "An active project needs a name",
+      );
+    }
 
-  // -- dates ---------------------------------------------------------------
-  // Strict calendar boundary: a shape-valid non-day such as February 30
-  // would otherwise reach the DATE columns and surface as a 500 from
-  // PostgreSQL instead of failing closed here.
-  let startsOn: string | null | undefined
-  if (body.startsOn !== undefined) {
-    const s = strOrNull(body.startsOn)
-    if (s !== null && !isIsoCalendarDate(s)) return bad('Invalid start date')
-    startsOn = s
-  }
-  let endsOn: string | null | undefined
-  if (body.endsOn !== undefined) {
-    const s = strOrNull(body.endsOn)
-    if (s !== null && !isIsoCalendarDate(s)) return bad('Invalid end date')
-    endsOn = s
-  }
-
-  // -- custom jsonb: admin-defined custom fields only -----------------------
-  // Native project-level invoicing override (a real column, not custom jsonb).
-  let invoicingPref: Record<string, unknown> | null | undefined
-  if (body.invoicingPreference !== undefined) {
-    const p = body.invoicingPreference
-    invoicingPref = p == null || (typeof p === 'object' && Object.values(p).every((v) => v == null)) ? null : p
-  }
-
-  const contractValue = body.contractValue === undefined ? undefined : moneyOrNull(body.contractValue)
-  if (contractValue === 'invalid') return bad(moneyRefusal('Contract value', body.contractValue))
-
-  // Where the improved property sits, as an ISO 3166-2 subdivision code:
-  // lien waivers release payment only when their jurisdiction matches it.
-  let siteJurisdiction: string | null | undefined
-  if (body.siteJurisdiction !== undefined) {
-    if (body.siteJurisdiction === null || body.siteJurisdiction === '') {
-      siteJurisdiction = null
-    } else {
-      const canonical = normalizeSubdivisionCode(body.siteJurisdiction)
-      if (!canonical) {
-        return bad(`unknown site jurisdiction ${JSON.stringify(body.siteJurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)`)
+    // -- party references (must exist & belong to org) -----------------------
+    let customerId: string | null | undefined;
+    if (body.customerId !== undefined) {
+      const v = uuidOrNull(body.customerId);
+      if (v === "invalid") return bad("Invalid customer");
+      if (v !== null && !(await partyExists(v, user.orgId))) return bad("Customer not found");
+      customerId = v;
+    }
+    let foremanId: string | null | undefined;
+    if (body.foremanId !== undefined) {
+      const v = uuidOrNull(body.foremanId);
+      if (v === "invalid") return bad("Invalid foreman");
+      if (v !== null && !(await partyExists(v, user.orgId))) return bad("Foreman not found");
+      // Same rule as create: a foreman is an active employee or internal
+      // person, never a customer, vendor, or company party.
+      if (v !== null && !(await pinInternalPerson(db, user.orgId, v))) {
+        return bad(
+          `project foreman "${v}" must be an active employee or internal person in this organization — choose the foreman from the organization's people`,
+        );
       }
-      siteJurisdiction = canonical
+      foremanId = v;
     }
-  }
+    let managerId: string | null | undefined;
+    if (body.managerId !== undefined) {
+      const v = uuidOrNull(body.managerId);
+      if (v === "invalid") return bad("Invalid manager");
+      if (v !== null && !(await partyExists(v, user.orgId))) return bad("Manager not found");
+      // Same rule as create: a manager is an active employee or internal
+      // person, never a customer, vendor, or company party. Scope stays with
+      // the visibility check below so it keeps naming the legal entity.
+      if (v !== null && !(await pinInternalPerson(db, user.orgId, v))) {
+        return bad(
+          `project manager "${v}" must be an active employee or internal person in this organization — choose the manager from the organization's people`,
+        );
+      }
+      managerId = v;
+    }
+    // Same agreement as create: the picker only offers subsidiary-visible
+    // parties, so re-pointing at an out-of-scope party is refused by name.
+    if (customerId || foremanId || managerId) {
+      const visiblePartyIds = new Set(
+        (
+          await listScopedPartyOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true })
+        ).map((row) => row.id),
+      );
+      if (customerId && !visiblePartyIds.has(customerId)) {
+        return bad(`project customer "${customerId}" is not visible in your subsidiary scope`);
+      }
+      if (foremanId && !visiblePartyIds.has(foremanId)) {
+        return bad(`project foreman "${foremanId}" is not visible in your subsidiary scope`);
+      }
+      if (managerId && !visiblePartyIds.has(managerId)) {
+        return bad(`project manager "${managerId}" is not visible in your subsidiary scope`);
+      }
+    }
 
-  // Project type governs the billing classifier (its own billing_method column);
-  // the project only stores the type reference.
-  let projectTypeId: string | null | undefined
-  if (body.projectTypeId !== undefined) {
-    const v = uuidOrNull(body.projectTypeId)
-    if (v === 'invalid') return bad('Invalid project type')
-    projectTypeId = v
-    if (v) {
-      const pt = (await db.execute(sql`select 1 from project_types where id = ${v} and org_id = ${user.orgId} and is_active`, 'objects'))
-      if (pt.length === 0) return bad('Unknown project type')
+    let subsidiaryId: string | null | undefined;
+    if (body.subsidiaryId !== undefined) {
+      const value = uuidOrNull(body.subsidiaryId);
+      if (value === "invalid") return bad("Invalid subsidiary");
+      if (!subsidiariesInScope(gate, [value])) return bad("Subsidiary not found");
+      if (value) {
+        const subsidiary = await db.execute(
+          sql`
+        select 1 from subsidiaries
+         where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`,
+          "objects",
+        );
+        if (!subsidiary.length) return bad("Subsidiary not found");
+      }
+      subsidiaryId = value;
     }
-  }
 
-  let featureRefused = false
-  let scopeRefused = false
-  let txRefused: NextResponse | null = null
-  await withOrgTransaction(user.orgId, async () => {
-    // Serialize against feature toggles, then re-ask the gate the entry guard
-    // already asked: its answer may be stale by the time this write lands.
-    await acquireFeatureGateLock(user.orgId)
-    if (!(await isFeatureEnabled(user.orgId, 'projects'))) {
-      featureRefused = true
-      return
+    // -- dates ---------------------------------------------------------------
+    // Strict calendar boundary: a shape-valid non-day such as February 30
+    // would otherwise reach the DATE columns and surface as a 500 from
+    // PostgreSQL instead of failing closed here.
+    let startsOn: string | null | undefined;
+    if (body.startsOn !== undefined) {
+      const s = strOrNull(body.startsOn);
+      if (s !== null && !isIsoCalendarDate(s)) return bad("Invalid start date");
+      startsOn = s;
     }
-    const locked = (await db.execute<{
-      name: string; code: string | null; customer_id: string | null; foreman_id: string | null;
-      manager_id: string | null; subsidiary_id: string | null; subsidiary_include_children: boolean | null;
-      status: string; customer_po_number: string | null; contract_value: string | null;
-      starts_on: string | null; ends_on: string | null; notes: string | null; is_active: boolean;
-      site_jurisdiction: string | null; is_internal: boolean;
-      project_type_id: string | null; invoicing_preference: unknown; custom: unknown;
-    }>(sql`
+    let endsOn: string | null | undefined;
+    if (body.endsOn !== undefined) {
+      const s = strOrNull(body.endsOn);
+      if (s !== null && !isIsoCalendarDate(s)) return bad("Invalid end date");
+      endsOn = s;
+    }
+
+    // -- custom jsonb: admin-defined custom fields only -----------------------
+    // Native project-level invoicing override (a real column, not custom jsonb).
+    let invoicingPref: Record<string, unknown> | null | undefined;
+    if (body.invoicingPreference !== undefined) {
+      const p = body.invoicingPreference;
+      invoicingPref =
+        p == null || (typeof p === "object" && Object.values(p).every((v) => v == null)) ? null : p;
+    }
+
+    const contractValue =
+      body.contractValue === undefined ? undefined : moneyOrNull(body.contractValue);
+    if (contractValue === "invalid") return bad(moneyRefusal("Contract value", body.contractValue));
+
+    // Where the improved property sits, as an ISO 3166-2 subdivision code:
+    // lien waivers release payment only when their jurisdiction matches it.
+    let siteJurisdiction: string | null | undefined;
+    if (body.siteJurisdiction !== undefined) {
+      if (body.siteJurisdiction === null || body.siteJurisdiction === "") {
+        siteJurisdiction = null;
+      } else {
+        const canonical = normalizeSubdivisionCode(body.siteJurisdiction);
+        if (!canonical) {
+          return bad(
+            `unknown site jurisdiction ${JSON.stringify(body.siteJurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)`,
+          );
+        }
+        siteJurisdiction = canonical;
+      }
+    }
+
+    // Project type governs the billing classifier (its own billing_method column);
+    // the project only stores the type reference.
+    let projectTypeId: string | null | undefined;
+    if (body.projectTypeId !== undefined) {
+      const v = uuidOrNull(body.projectTypeId);
+      if (v === "invalid") return bad("Invalid project type");
+      projectTypeId = v;
+      if (v) {
+        const pt = await db.execute(
+          sql`select 1 from project_types where id = ${v} and org_id = ${user.orgId} and is_active`,
+          "objects",
+        );
+        if (pt.length === 0) return bad("Unknown project type");
+      }
+    }
+
+    let featureRefused = false;
+    let scopeRefused = false;
+    let txRefused: NextResponse | null = null;
+    await withOrgTransaction(user.orgId, async () => {
+      // Serialize against feature toggles, then re-ask the gate the entry guard
+      // already asked: its answer may be stale by the time this write lands.
+      await acquireFeatureGateLock(user.orgId);
+      if (!(await isFeatureEnabled(user.orgId, "projects"))) {
+        featureRefused = true;
+        return;
+      }
+      const locked = await db.execute<{
+        name: string;
+        code: string | null;
+        customer_id: string | null;
+        foreman_id: string | null;
+        manager_id: string | null;
+        subsidiary_id: string | null;
+        subsidiary_include_children: boolean | null;
+        status: string;
+        customer_po_number: string | null;
+        contract_value: string | null;
+        starts_on: string | null;
+        ends_on: string | null;
+        notes: string | null;
+        is_active: boolean;
+        site_jurisdiction: string | null;
+        is_internal: boolean;
+        project_type_id: string | null;
+        invoicing_preference: unknown;
+        custom: unknown;
+      }>(
+        sql`
       select name, code, customer_id, foreman_id, manager_id, subsidiary_id,
              subsidiary_include_children, status, customer_po_number,
              contract_value::text as contract_value,
@@ -327,110 +425,123 @@ export const PATCH = defineRoute({
         from projects
        where id = ${id} and org_id = ${user.orgId}
        for update
-    `, 'objects'))
-    if (!locked[0] || guardSubsidiaryScope(gate, locked[0].subsidiary_id)) {
-      scopeRefused = true
-      return
-    }
-    const before = locked[0]
-    // Activation re-validates the name on the locked row: the entry check
-    // above ran on a pre-lock read, so a concurrent blank-name PATCH could
-    // otherwise land in between and this write would activate a nameless
-    // project. The locked row is authoritative; the entry check stays as a
-    // fast path only.
-    const lockedWillBeActive = body.isActive ?? before.is_active
-    const lockedEffectiveName = name ?? before.name.trim()
-    if (lockedWillBeActive && (!lockedEffectiveName || lockedEffectiveName === 'New project')) {
-      txRefused = bad(
-        body.isActive === true ? 'Give the project a real name before activating it' : 'An active project needs a name',
-      )
-      return
-    }
-    // Internal scope is validated on the locked row: an internal project has
-    // no customer and carries no invoicing configuration (storage re-checks),
-    // and the flag locks once time is booked (storage enforces) — here with
-    // a named refusal instead of a constraint error.
-    const willBeInternal = body.isInternal ?? before.is_internal
-    const effectiveCustomer = customerId !== undefined ? customerId : before.customer_id
-    const effectiveInvoicing = invoicingPref !== undefined ? invoicingPref : before.invoicing_preference
-    if (willBeInternal && effectiveCustomer !== null) {
-      txRefused = bad('An internal project has no customer')
-      return
-    }
-    if (willBeInternal && effectiveInvoicing !== null) {
-      txRefused = bad('Internal projects carry no invoicing configuration')
-      return
-    }
-    if (body.isInternal !== undefined && body.isInternal !== before.is_internal) {
-      const booked = (await db.execute<{ n: number }>(sql`
+    `,
+        "objects",
+      );
+      if (!locked[0] || guardSubsidiaryScope(gate, locked[0].subsidiary_id)) {
+        scopeRefused = true;
+        return;
+      }
+      const before = locked[0];
+      // Activation re-validates the name on the locked row: the entry check
+      // above ran on a pre-lock read, so a concurrent blank-name PATCH could
+      // otherwise land in between and this write would activate a nameless
+      // project. The locked row is authoritative; the entry check stays as a
+      // fast path only.
+      const lockedWillBeActive = body.isActive ?? before.is_active;
+      const lockedEffectiveName = name ?? before.name.trim();
+      if (lockedWillBeActive && (!lockedEffectiveName || lockedEffectiveName === "New project")) {
+        txRefused = bad(
+          body.isActive === true
+            ? "Give the project a real name before activating it"
+            : "An active project needs a name",
+        );
+        return;
+      }
+      // Internal scope is validated on the locked row: an internal project has
+      // no customer and carries no invoicing configuration (storage re-checks),
+      // and the flag locks once time is booked (storage enforces) — here with
+      // a named refusal instead of a constraint error.
+      const willBeInternal = body.isInternal ?? before.is_internal;
+      const effectiveCustomer = customerId !== undefined ? customerId : before.customer_id;
+      const effectiveInvoicing =
+        invoicingPref !== undefined ? invoicingPref : before.invoicing_preference;
+      if (willBeInternal && effectiveCustomer !== null) {
+        txRefused = bad("An internal project has no customer");
+        return;
+      }
+      if (willBeInternal && effectiveInvoicing !== null) {
+        txRefused = bad("Internal projects carry no invoicing configuration");
+        return;
+      }
+      if (body.isInternal !== undefined && body.isInternal !== before.is_internal) {
+        const booked = (
+          await db.execute<{ n: number }>(
+            sql`
         select count(*)::int as n from time_entries
          where org_id = ${user.orgId} and project_id = ${id}
-      `, 'objects'))[0]!.n
-      if (booked > 0) {
-        txRefused = bad('This project has booked time and its internal flag is immutable')
-        return
+      `,
+            "objects",
+          )
+        )[0]!.n;
+        if (booked > 0) {
+          txRefused = bad("This project has booked time and its internal flag is immutable");
+          return;
+        }
       }
-    }
-    // Contract value and subsidiary carry billed and posted history: the
-    // shared engine control locks this row and refuses a contract-value
-    // edit once billing has begun and a subsidiary move that would strand
-    // posted history, on this transaction and before the write below.
-    try {
-      await assertProjectHeaderChangeAllowed(db, user.orgId, id, { contractValue, subsidiaryId })
-    } catch (error) {
-      if (!(error instanceof ProjectHeaderControlError)) throw error
-      if (error.code === 'project_not_found') {
-        scopeRefused = true
-        return
+      // Contract value and subsidiary carry billed and posted history: the
+      // shared engine control locks this row and refuses a contract-value
+      // edit once billing has begun and a subsidiary move that would strand
+      // posted history, on this transaction and before the write below.
+      try {
+        await assertProjectHeaderChangeAllowed(db, user.orgId, id, { contractValue, subsidiaryId });
+      } catch (error) {
+        if (!(error instanceof ProjectHeaderControlError)) throw error;
+        if (error.code === "project_not_found") {
+          scopeRefused = true;
+          return;
+        }
+        txRefused = NextResponse.json(
+          { error: await headerControlMessage(error), code: error.code },
+          { status: error.status },
+        );
+        return;
       }
-      txRefused = NextResponse.json(
-        { error: await headerControlMessage(error), code: error.code },
-        { status: error.status },
-      )
-      return
-    }
-    // Custom jsonb merges under the row lock (read-modify-write on the
-    // locked bag): concurrent PATCHes for distinct keys all read the same
-    // pre-lock bag outside, so merging here — after this writer holds the
-    // lock — is what keeps the second writer from overwriting the first.
-    let mergedCustom: Record<string, unknown> | undefined
-    if (body.custom !== undefined) {
-      const base = { ...((before.custom as Record<string, unknown> | null) ?? {}) }
-      const viewer = customFieldViewerFor(gate)
-      const activeDefs = await loadFieldDefs('projects')
-      // A restricted field the caller cannot see is refused when changed; an
-      // unchanged echo passes. Hidden stored values stay in `base` below.
-      const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, body.custom, base)
-      if (hidden) {
-        txRefused = NextResponse.json({ error: hidden.message, fieldErrors: { [hidden.key]: hidden.message } }, { status: 403 })
-        return
+      // Custom jsonb merges under the row lock (read-modify-write on the
+      // locked bag): concurrent PATCHes for distinct keys all read the same
+      // pre-lock bag outside, so merging here — after this writer holds the
+      // lock — is what keeps the second writer from overwriting the first.
+      let mergedCustom: Record<string, unknown> | undefined;
+      if (body.custom !== undefined) {
+        const base = { ...((before.custom as Record<string, unknown> | null) ?? {}) };
+        const viewer = customFieldViewerFor(gate);
+        const activeDefs = await loadFieldDefs("projects");
+        // A restricted field the caller cannot see is refused when changed; an
+        // unchanged echo passes. Hidden stored values stay in `base` below.
+        const hidden = hiddenCustomFieldRefusal(activeDefs, viewer, body.custom, base);
+        if (hidden) {
+          txRefused = NextResponse.json(
+            { error: hidden.message, fieldErrors: { [hidden.key]: hidden.message } },
+            { status: 403 },
+          );
+          return;
+        }
+        const defs = visibleCustomFieldDefs(activeDefs, viewer);
+        // PATCH custom values are partial: validate the effective bag so an
+        // omitted required field can be satisfied by its stored value.
+        const result = validateCustomValues(defs, { ...base, ...body.custom });
+        if (!result.ok) {
+          txRefused = bad(Object.values(result.errors)[0]!, result.errors);
+          return;
+        }
+        // Reference custom values are uuid-SHAPED at this point but nothing
+        // proves the referenced row belongs to the caller: refuse foreign or
+        // dangling ids instead of persisting a cross-tenant pointer.
+        // Supplied values only, so legacy bags cannot lock unrelated edits.
+        const suppliedCustom: Record<string, unknown> = {};
+        for (const key of Object.keys(body.custom)) {
+          if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key];
+        }
+        const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom);
+        if (unowned.length > 0) {
+          txRefused = bad(`${unowned[0]!.label} not found in this organization`);
+          return;
+        }
+        for (const d of defs) delete base[d.key];
+        Object.assign(base, result.cleaned);
+        mergedCustom = base;
       }
-      const defs = visibleCustomFieldDefs(activeDefs, viewer)
-      // PATCH custom values are partial: validate the effective bag so an
-      // omitted required field can be satisfied by its stored value.
-      const result = validateCustomValues(defs, { ...base, ...body.custom })
-      if (!result.ok) {
-        txRefused = bad(Object.values(result.errors)[0]!, result.errors)
-        return
-      }
-      // Reference custom values are uuid-SHAPED at this point but nothing
-      // proves the referenced row belongs to the caller: refuse foreign or
-      // dangling ids instead of persisting a cross-tenant pointer.
-      // Supplied values only, so legacy bags cannot lock unrelated edits.
-      const suppliedCustom: Record<string, unknown> = {}
-      for (const key of Object.keys(body.custom)) {
-        if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key]
-      }
-      const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
-      if (unowned.length > 0) {
-        txRefused = bad(`${unowned[0]!.label} not found in this organization`)
-        return
-      }
-      for (const d of defs) delete base[d.key]
-      Object.assign(base, result.cleaned)
-      mergedCustom = base
-    }
-    await db.execute(sql`
+      await db.execute(sql`
     update projects set
       name = ${name !== undefined ? name : sql`name`},
       project_type_id = ${projectTypeId !== undefined ? projectTypeId : sql`project_type_id`},
@@ -453,45 +564,68 @@ export const PATCH = defineRoute({
       custom = ${mergedCustom !== undefined ? sql`${JSON.stringify(mergedCustom)}::jsonb` : sql`custom`},
       updated_at = now(), updated_by = ${user.id}
     where id = ${id} and org_id = ${user.orgId}
-  `)
-    // Header edits move billing caps, ownership, and legal-entity scope, so
-    // they carry the same audit row every other material project write does.
-    const changedFields: Array<[string, unknown, unknown]> = []
-    if (name !== undefined) changedFields.push(['name', before.name, name])
-    if (projectTypeId !== undefined) changedFields.push(['project_type_id', before.project_type_id, projectTypeId])
-    if (invoicingPref !== undefined) changedFields.push(['invoicing_preference', before.invoicing_preference, invoicingPref])
-    if (body.code !== undefined) changedFields.push(['code', before.code, strOrNull(body.code)])
-    if (customerId !== undefined) changedFields.push(['customer_id', before.customer_id, customerId])
-    if (foremanId !== undefined) changedFields.push(['foreman_id', before.foreman_id, foremanId])
-    if (managerId !== undefined) changedFields.push(['manager_id', before.manager_id, managerId])
-    if (subsidiaryId !== undefined) changedFields.push(['subsidiary_id', before.subsidiary_id, subsidiaryId])
-    if (body.subsidiaryIncludeChildren !== undefined) changedFields.push(['subsidiary_include_children', before.subsidiary_include_children, body.subsidiaryIncludeChildren])
-    if (body.isInternal !== undefined) changedFields.push(['is_internal', before.is_internal, body.isInternal])
-    if (body.status != null) changedFields.push(['status', before.status, body.status])
-    if (body.customerPoNumber !== undefined) changedFields.push(['customer_po_number', before.customer_po_number, strOrNull(body.customerPoNumber)])
-    if (contractValue !== undefined) changedFields.push(['contract_value', before.contract_value, contractValue])
-    if (startsOn !== undefined) changedFields.push(['starts_on', before.starts_on, startsOn])
-    if (endsOn !== undefined) changedFields.push(['ends_on', before.ends_on, endsOn])
-    if (body.notes !== undefined) changedFields.push(['notes', before.notes, strOrNull(body.notes)])
-    if (siteJurisdiction !== undefined) changedFields.push(['site_jurisdiction', before.site_jurisdiction, siteJurisdiction])
-    if (body.isActive !== undefined) changedFields.push(['is_active', before.is_active, body.isActive])
-    if (mergedCustom !== undefined) changedFields.push(['custom', before.custom, mergedCustom])
-    if (changedFields.length > 0) {
-      const image = Object.fromEntries(changedFields.map(([key, was, now]) => [key, { before: was, after: now }]))
-      await db.execute(sql`
+  `);
+      // Header edits move billing caps, ownership, and legal-entity scope, so
+      // they carry the same audit row every other material project write does.
+      const changedFields: Array<[string, unknown, unknown]> = [];
+      if (name !== undefined) changedFields.push(["name", before.name, name]);
+      if (projectTypeId !== undefined)
+        changedFields.push(["project_type_id", before.project_type_id, projectTypeId]);
+      if (invoicingPref !== undefined)
+        changedFields.push(["invoicing_preference", before.invoicing_preference, invoicingPref]);
+      if (body.code !== undefined) changedFields.push(["code", before.code, strOrNull(body.code)]);
+      if (customerId !== undefined)
+        changedFields.push(["customer_id", before.customer_id, customerId]);
+      if (foremanId !== undefined) changedFields.push(["foreman_id", before.foreman_id, foremanId]);
+      if (managerId !== undefined) changedFields.push(["manager_id", before.manager_id, managerId]);
+      if (subsidiaryId !== undefined)
+        changedFields.push(["subsidiary_id", before.subsidiary_id, subsidiaryId]);
+      if (body.subsidiaryIncludeChildren !== undefined)
+        changedFields.push([
+          "subsidiary_include_children",
+          before.subsidiary_include_children,
+          body.subsidiaryIncludeChildren,
+        ]);
+      if (body.isInternal !== undefined)
+        changedFields.push(["is_internal", before.is_internal, body.isInternal]);
+      if (body.status != null) changedFields.push(["status", before.status, body.status]);
+      if (body.customerPoNumber !== undefined)
+        changedFields.push([
+          "customer_po_number",
+          before.customer_po_number,
+          strOrNull(body.customerPoNumber),
+        ]);
+      if (contractValue !== undefined)
+        changedFields.push(["contract_value", before.contract_value, contractValue]);
+      if (startsOn !== undefined) changedFields.push(["starts_on", before.starts_on, startsOn]);
+      if (endsOn !== undefined) changedFields.push(["ends_on", before.ends_on, endsOn]);
+      if (body.notes !== undefined)
+        changedFields.push(["notes", before.notes, strOrNull(body.notes)]);
+      if (siteJurisdiction !== undefined)
+        changedFields.push(["site_jurisdiction", before.site_jurisdiction, siteJurisdiction]);
+      if (body.isActive !== undefined)
+        changedFields.push(["is_active", before.is_active, body.isActive]);
+      if (mergedCustom !== undefined) changedFields.push(["custom", before.custom, mergedCustom]);
+      if (changedFields.length > 0) {
+        const image = Object.fromEntries(
+          changedFields.map(([key, was, now]) => [key, { before: was, after: now }]),
+        );
+        await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'projects', ${id}, 'update', ${JSON.stringify(image)}::jsonb, ${user.id})
-      `)
+      `);
+      }
+    });
+    if (featureRefused) {
+      return NextResponse.json({ error: "projects feature is disabled" }, { status: 404 });
     }
-  })
-  if (featureRefused) {
-    return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
-  }
-  if (scopeRefused) return notFound("record")
-  if (txRefused) return txRefused
+    if (scopeRefused) return notFound("record");
+    if (txRefused) return txRefused;
 
-  const payload = await loadProject(id, user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(gate) })
-  if (!payload) return notFound("record")
-  return NextResponse.json(payload)
+    const payload = await loadProject(id, user.orgId, gate.allowedSubsidiaryIds, {
+      customFieldViewer: customFieldViewerFor(gate),
+    });
+    if (!payload) return notFound("record");
+    return NextResponse.json(payload);
   },
-})
+});

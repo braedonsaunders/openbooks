@@ -55,7 +55,11 @@ export type VariantKind = (typeof VARIANT_KINDS)[number];
 
 export const FAMILY_STATUSES = ["active", "inactive"] as const;
 
-export function cleanText(value: string | null | undefined, field: string, max = 200): string | null {
+export function cleanText(
+  value: string | null | undefined,
+  field: string,
+  max = 200,
+): string | null {
   if (value === undefined || value === null) return null;
   const trimmed = value.trim();
   if (trimmed === "") return null;
@@ -146,7 +150,10 @@ export function normalizeOptionValue(
   const raw = typeof entry === "string" ? { value: entry } : entry;
   const value = requiredText(raw.value, `a value for option ${optionName}`, 120);
   const previousRaw = typeof entry === "string" ? null : (entry.previousValue ?? null);
-  const previousValue = previousRaw === null ? null : requiredText(previousRaw, `the previous value for option ${optionName}`, 120);
+  const previousValue =
+    previousRaw === null
+      ? null
+      : requiredText(previousRaw, `the previous value for option ${optionName}`, 120);
   if (previousValue !== null && previousValue === value) {
     throw new ItemFamilyError(
       `option ${optionName} renames ${value} to itself`,
@@ -221,7 +228,10 @@ export function normalizeFamilyOptions(options: FamilyOptionInput[]): Normalized
       return normalized;
     });
     const defaultRaw = option.defaultValue ?? null;
-    const defaultValue = defaultRaw === null ? null : requiredText(defaultRaw, `the default value for option ${name}`, 120);
+    const defaultValue =
+      defaultRaw === null
+        ? null
+        : requiredText(defaultRaw, `the default value for option ${name}`, 120);
     if (defaultValue !== null && !values.some((candidate) => candidate.value === defaultValue)) {
       throw new ItemFamilyError(
         `default value ${defaultValue} is not one of option ${name}'s values`,
@@ -347,7 +357,12 @@ export function renderVariantCode(
 ): string {
   const trimmed = pattern.trim();
   if (!trimmed) {
-    throw new ItemFamilyError("a code pattern cannot be blank", "invalid_code_pattern", "use {family}-{values}", 422);
+    throw new ItemFamilyError(
+      "a code pattern cannot be blank",
+      "invalid_code_pattern",
+      "use {family}-{values}",
+      422,
+    );
   }
   if (trimmed.length > 120) {
     throw new ItemFamilyError(
@@ -370,7 +385,9 @@ export function renderVariantCode(
     throw new ItemFamilyError(
       `code pattern token {${unknown[1]}} is unknown`,
       "invalid_code_pattern",
-      `use one of ${Object.keys(tokens).map((token) => `{${token}}`).join(", ")}`,
+      `use one of ${Object.keys(tokens)
+        .map((token) => `{${token}}`)
+        .join(", ")}`,
       422,
     );
   }
@@ -427,12 +444,19 @@ export function sameValueSet(left: string[], right: string[]): boolean {
  * customized the family prefix. Fully rewritten names are left alone and
  * reported, never clobbered.
  */
-export function canRenameVariantName(name: string, familyName: string, valuesByOption: Record<string, string>): boolean {
+export function canRenameVariantName(
+  name: string,
+  familyName: string,
+  valuesByOption: Record<string, string>,
+): boolean {
   const values = Object.values(valuesByOption);
   if (name === variantDisplayName(familyName, values)) return true;
   const separator = name.indexOf(" — ");
   if (separator < 0) return false;
-  const segments = name.slice(separator + 3).split(" / ").map((segment) => segment.trim());
+  const segments = name
+    .slice(separator + 3)
+    .split(" / ")
+    .map((segment) => segment.trim());
   return values.some((value) => segments.includes(value));
 }
 

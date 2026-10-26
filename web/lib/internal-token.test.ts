@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { internalTokenMatches, parseInternalOrgId, requestHasInternalToken } from "./internal-token";
+import {
+  internalTokenMatches,
+  parseInternalOrgId,
+  requestHasInternalToken,
+} from "./internal-token";
 
 test("internalTokenMatches accepts only an exact, non-empty match", () => {
   assert.equal(internalTokenMatches("secret-token", "secret-token"), true);
   assert.equal(internalTokenMatches("secret-token", "secret-tokeN"), false);
-  assert.equal(internalTokenMatches("secret", "secret-token"), false, "length mismatch never matches");
+  assert.equal(
+    internalTokenMatches("secret", "secret-token"),
+    false,
+    "length mismatch never matches",
+  );
   assert.equal(internalTokenMatches("secret-token", "secret"), false);
 });
 
@@ -52,7 +60,10 @@ test("parseInternalOrgId returns a canonical uuid or null", () => {
     parseInternalOrgId("0190B7E4-1C2D-7A3B-8F4E-0123456789AB"),
     "0190b7e4-1c2d-7a3b-8f4e-0123456789ab",
   );
-  assert.equal(parseInternalOrgId(" 0190b7e4-1c2d-7a3b-8f4e-0123456789ab "), "0190b7e4-1c2d-7a3b-8f4e-0123456789ab");
+  assert.equal(
+    parseInternalOrgId(" 0190b7e4-1c2d-7a3b-8f4e-0123456789ab "),
+    "0190b7e4-1c2d-7a3b-8f4e-0123456789ab",
+  );
   assert.equal(parseInternalOrgId("not-a-uuid"), null);
   assert.equal(parseInternalOrgId(""), null);
   assert.equal(parseInternalOrgId(undefined), null);

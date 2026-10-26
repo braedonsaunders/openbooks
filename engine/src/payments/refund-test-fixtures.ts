@@ -7,9 +7,17 @@ import { db } from "../platform/db.ts";
 import { sealJson, sealSecret } from "../platform/secrets.ts";
 import { handleProviderWebhook } from "./acceptance.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, createScratchUser, grantScratchPermissions, seedApprovalFlow } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  grantScratchPermissions,
+  seedApprovalFlow,
+} from "../testing/fixtures.ts";
 
-function signedStripeBody(secret: string, event: unknown): { body: string; headers: Record<string, string> } {
+function signedStripeBody(
+  secret: string,
+  event: unknown,
+): { body: string; headers: Record<string, string> } {
   const body = JSON.stringify(event);
   const t = Math.floor(Date.now() / 1000);
   const v1 = createHmac("sha256", secret).update(`${t}.${body}`, "utf8").digest("hex");
@@ -33,7 +41,12 @@ export async function ensureOpenPeriod(orgId: string, periodId: string): Promise
   `);
 }
 
-export async function makeAccount(orgId: string, number: string, name: string, type: string): Promise<string> {
+export async function makeAccount(
+  orgId: string,
+  number: string,
+  name: string,
+  type: string,
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
@@ -53,13 +66,16 @@ export type Harness = {
   fire: (event: unknown) => ReturnType<typeof handleProviderWebhook>;
 };
 
-export async function settleHarness(org: Awaited<ReturnType<typeof createScratchOrg>>, opts: {
-  invoiceTotal?: string;
-  invoiceFxRate?: string;
-  currency?: string;
-  reviewFlow?: boolean;
-  disputeAccounts?: boolean;
-} = {}): Promise<Harness> {
+export async function settleHarness(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  opts: {
+    invoiceTotal?: string;
+    invoiceFxRate?: string;
+    currency?: string;
+    reviewFlow?: boolean;
+    disputeAccounts?: boolean;
+  } = {},
+): Promise<Harness> {
   const { installEngineSeams } = await import("../composition/install.ts");
   installEngineSeams();
   const total = opts.invoiceTotal ?? "100";
@@ -82,8 +98,12 @@ export async function settleHarness(org: Awaited<ReturnType<typeof createScratch
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', ${total}, ${total}, '0', '0')`);
-  await db.execute(sql`update documents set status = 'approved', updated_at = now() where id = ${invoiceId} and org_id = ${org.orgId}`);
-  await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  await db.execute(
+    sql`update documents set status = 'approved', updated_at = now() where id = ${invoiceId} and org_id = ${org.orgId}`,
+  );
+  await postDocument(invoiceId, {
+    control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+  });
 
   const secret = `whsec_auto_${randomUUID()}`;
   await db.execute(sql`
@@ -94,7 +114,12 @@ export async function settleHarness(org: Awaited<ReturnType<typeof createScratch
             ${org.accounts.bank}, ${sealJson({ apiKey: "sk_test_auto", webhookSecret: secret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
   if (opts.reviewFlow) await seedProviderReviewFlow(org.orgId, userId);
   if (opts.disputeAccounts) {
-    const disputedFunds = await makeAccount(org.orgId, "1150", "Disputed Funds Clearing", "asset_current_other");
+    const disputedFunds = await makeAccount(
+      org.orgId,
+      "1150",
+      "Disputed Funds Clearing",
+      "asset_current_other",
+    );
     const loss = await makeAccount(org.orgId, "7020", "Chargeback Losses", "expense");
     const fee = await makeAccount(org.orgId, "7030", "Dispute Fees", "expense");
     await db.execute(sql`
@@ -104,7 +129,8 @@ export async function settleHarness(org: Awaited<ReturnType<typeof createScratch
              default_dispute_fee_account_id = ${fee}
        where org_id = ${org.orgId} and provider = 'stripe'`);
   }
-  const linkId = randomUUID(), linkToken = `auto-link-${randomUUID()}`;
+  const linkId = randomUUID(),
+    linkToken = `auto-link-${randomUUID()}`;
   const sessionId = `cs_test_auto_${randomUUID().slice(0, 8)}`;
   const intentId = `pi_auto_${randomUUID().slice(0, 8)}`;
   await db.execute(sql`
@@ -122,7 +148,17 @@ export async function settleHarness(org: Awaited<ReturnType<typeof createScratch
     const signed = signedStripeBody(secret, event);
     return handleProviderWebhook("stripe", signed.headers, signed.body);
   };
-  return { orgId: org.orgId, userId, invoiceId, linkToken, intentId, sessionId, attemptId, secret, fire };
+  return {
+    orgId: org.orgId,
+    userId,
+    invoiceId,
+    linkToken,
+    intentId,
+    sessionId,
+    attemptId,
+    secret,
+    fire,
+  };
 }
 
 export async function settle(h: Harness, minor: number, currency = "cad"): Promise<void> {
@@ -145,31 +181,57 @@ export async function settle(h: Harness, minor: number, currency = "cad"): Promi
 }
 
 export async function invoiceOpen(orgId: string, invoiceId: string): Promise<string> {
-  const row = (await db.execute<{ open_balance: string }>(sql`
-    select open_balance::text from documents where id = ${invoiceId} and org_id = ${orgId}`, "objects"))[0];
+  const row = (
+    await db.execute<{ open_balance: string }>(
+      sql`
+    select open_balance::text from documents where id = ${invoiceId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   return row!.open_balance;
 }
 
-export async function disputeRows(orgId: string): Promise<{ id: string; kind: string; status: string; documents_posted: unknown }[]> {
-  return await db.execute<{ id: string; kind: string; status: string; documents_posted: unknown }>(sql`
-    select id, kind, status, documents_posted from payment_disputes where org_id = ${orgId} order by created_at`, "objects");
+export async function disputeRows(
+  orgId: string,
+): Promise<{ id: string; kind: string; status: string; documents_posted: unknown }[]> {
+  return await db.execute<{ id: string; kind: string; status: string; documents_posted: unknown }>(
+    sql`
+    select id, kind, status, documents_posted from payment_disputes where org_id = ${orgId} order by created_at`,
+    "objects",
+  );
 }
-
-
 
 /** The tenant explicitly permits this fixture operator to review its own submitted return. */
 export async function seedProviderReviewFlow(orgId: string, actorId: string) {
-  return seedApprovalFlow(orgId, { subjectKind: "payment_dispute_review",
-    assignees: [{type:"user",userId:actorId}], mode:"all", preventSelfApproval:false });
+  return seedApprovalFlow(orgId, {
+    subjectKind: "payment_dispute_review",
+    assignees: [{ type: "user", userId: actorId }],
+    mode: "all",
+    preventSelfApproval: false,
+  });
 }
 
 /** Drive the same gate decision as the native review drawer and read its financial result. */
-export async function decideProviderReview(orgId:string,id:string,actorId:string,decision:"approved"|"rejected",comment?:string) {
-  const gates=await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${orgId}
-    and subject_kind='payment_dispute_review' and subject_id=${id} and status='pending'`, "objects");
-  assert.equal(gates.length,1,"the declared return review policy must create one native gate");
-  await decideGate({gateId:gates[0]!.id,userId:actorId,decision,comment});
-  const row=(await db.execute<{status:string}>(sql`select status from payment_disputes where org_id=${orgId} and id=${id}`, "objects"))[0];
-  assert.ok(row,"native return decisions must remain visible");
+export async function decideProviderReview(
+  orgId: string,
+  id: string,
+  actorId: string,
+  decision: "approved" | "rejected",
+  comment?: string,
+) {
+  const gates = await db.execute<{ id: string }>(
+    sql`select id from flow_gates where org_id=${orgId}
+    and subject_kind='payment_dispute_review' and subject_id=${id} and status='pending'`,
+    "objects",
+  );
+  assert.equal(gates.length, 1, "the declared return review policy must create one native gate");
+  await decideGate({ gateId: gates[0]!.id, userId: actorId, decision, comment });
+  const row = (
+    await db.execute<{ status: string }>(
+      sql`select status from payment_disputes where org_id=${orgId} and id=${id}`,
+      "objects",
+    )
+  )[0];
+  assert.ok(row, "native return decisions must remain visible");
   return row;
 }

@@ -34,14 +34,18 @@ export type ApCaptureJobData = {
  * twice — one builder, never a second copy of the format.
  */
 export function apCaptureUploadJobId(captureItemId: string): string {
-  if (!captureItemId.trim()) throw new Error("ap-capture upload job identity requires the capture item id");
+  if (!captureItemId.trim())
+    throw new Error("ap-capture upload job identity requires the capture item id");
   return `ap-capture|${captureItemId}`;
 }
 
 export function apCaptureReprocessJobId(captureItemId: string, attempts: number): string {
-  if (!captureItemId.trim()) throw new Error("ap-capture reprocess job identity requires the capture item id");
+  if (!captureItemId.trim())
+    throw new Error("ap-capture reprocess job identity requires the capture item id");
   if (!Number.isSafeInteger(attempts) || attempts < 0) {
-    throw new Error("ap-capture reprocess job identity requires the non-negative attempt generation");
+    throw new Error(
+      "ap-capture reprocess job identity requires the non-negative attempt generation",
+    );
   }
   return `ap-capture|${captureItemId}|reprocess|a${attempts}`;
 }

@@ -82,10 +82,13 @@ test(
     const [resumed] = await claim(o.orgId, connectionId, "full_migration", "qbd");
     assert.ok(resumed?.id, "the connection is claimable again once the live run ends");
 
-    const live = await db.execute<{ n: number }>(sql`
+    const live = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from sync_runs
        where org_id = ${o.orgId} and connection_id = ${connectionId}
-         and kind = 'full_migration' and status = 'running'`, "objects");
+         and kind = 'full_migration' and status = 'running'`,
+      "objects",
+    );
     assert.equal(live[0]!.n, 1, "never more than one live full migration per connection");
   },
 );

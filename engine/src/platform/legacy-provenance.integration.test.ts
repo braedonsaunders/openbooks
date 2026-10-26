@@ -37,7 +37,9 @@ test("legacy provenance reads by membership, scoped to the tenant", { skip: !DB 
       // Membership decides while the registry exists; the transitional
       // fallback only fires before 0326 applies.
       assert.equal(
-        await isLegacyProvenance(db, org.orgId, "recognition_rules", randomUUID(), { fallback: true }),
+        await isLegacyProvenance(db, org.orgId, "recognition_rules", randomUUID(), {
+          fallback: true,
+        }),
         false,
         "the fallback never promotes an unmarked row once the table exists",
       );

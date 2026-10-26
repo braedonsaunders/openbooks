@@ -53,7 +53,11 @@ export interface ScorecardDTO {
   /** Present only for the author. */
   readonly privateNotes: string | null;
   readonly sharedNotes: string | null;
-  readonly ratings: readonly { attributeId: string; ratingKey: string | null; note: string | null }[];
+  readonly ratings: readonly {
+    attributeId: string;
+    ratingKey: string | null;
+    note: string | null;
+  }[];
 }
 
 export interface ScorecardSummary {
@@ -95,28 +99,40 @@ async function interviewRequisition(
   orgId: string,
   interviewId: string,
 ): Promise<{ applicationId: string; requisitionId: string; kitId: string | null }> {
-  const row = (await exec.execute<{
-    applicationId: string;
-    requisitionId: string;
-    kitId: string | null;
-  }>(sql`
+  const row = (
+    await exec.execute<{
+      applicationId: string;
+      requisitionId: string;
+      kitId: string | null;
+    }>(
+      sql`
     select i.application_id as "applicationId", a.requisition_id as "requisitionId",
            i.kit_id as "kitId"
       from hrm_interviews i
       join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
      where i.org_id = ${orgId} and i.id = ${interviewId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
   }
   return row;
 }
 
-async function panelPartyIds(exec: SqlExecutor, orgId: string, interviewId: string): Promise<string[]> {
-  const rows = await exec.execute<{ partyId: string }>(sql`
+async function panelPartyIds(
+  exec: SqlExecutor,
+  orgId: string,
+  interviewId: string,
+): Promise<string[]> {
+  const rows = await exec.execute<{ partyId: string }>(
+    sql`
     select party_id as "partyId" from hrm_interview_panel
      where org_id = ${orgId} and interview_id = ${interviewId} order by party_id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.partyId);
 }
 
@@ -126,10 +142,15 @@ async function panelFocusAttributeIds(
   interviewId: string,
   partyId: string,
 ): Promise<string[] | null> {
-  const row = (await exec.execute<{ focusAttributeIds: string[] | null }>(sql`
+  const row = (
+    await exec.execute<{ focusAttributeIds: string[] | null }>(
+      sql`
     select focus_attribute_ids as "focusAttributeIds" from hrm_interview_panel
      where org_id = ${orgId} and interview_id = ${interviewId} and party_id = ${partyId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.focusAttributeIds ?? null;
 }
 
@@ -140,10 +161,13 @@ async function partyDisplayNames(
 ): Promise<Map<string, string>> {
   const names = new Map<string, string>();
   if (partyIds.length === 0) return names;
-  const rows = await exec.execute<{ id: string; name: string }>(sql`
+  const rows = await exec.execute<{ id: string; name: string }>(
+    sql`
     select id, display_name as name from parties
      where org_id = ${orgId} and id = any(${pgUuidArray(partyIds)}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const row of rows) names.set(row.id, row.name);
   return names;
 }
@@ -165,7 +189,11 @@ function toDTO(
     sharedNotes: row.sharedNotes,
     ratings: ratings
       .filter((rating) => rating.scorecardId === row.id)
-      .map((rating) => ({ attributeId: rating.attributeId, ratingKey: rating.ratingKey, note: rating.note })),
+      .map((rating) => ({
+        attributeId: rating.attributeId,
+        ratingKey: rating.ratingKey,
+        note: rating.note,
+      })),
   };
 }
 
@@ -187,13 +215,18 @@ export async function ensurePanelScorecards(query: {
     const parties = await panelPartyIds(db, orgId, interviewId);
     let created = 0;
     for (const partyId of parties) {
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into hrm_scorecards (org_id, interview_id, interviewer_party_id, created_by, updated_by)
         values (${orgId}, ${interviewId}, ${partyId}, ${actorId}, ${actorId})
         -- Rescheduling retains the existing interviewer scorecard, including any submitted verdict.
         on conflict do nothing
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       // on conflict do nothing is load-bearing here, not a dropped write:
       // ensure runs on every schedule/reschedule, and an existing
       // scorecard — especially a submitted verdict — must never be reset
@@ -240,14 +273,19 @@ export async function submitScorecard(query: SubmitScorecardQuery): Promise<Scor
         "only a panel member submits a scorecard for this interview — ask the organizer to add you to the panel first",
       );
     }
-    const card = (await db.execute<ScorecardRow>(sql`
+    const card = (
+      await db.execute<ScorecardRow>(
+        sql`
       select id, interview_id as "interviewId", interviewer_party_id as "interviewerPartyId",
              overall, submitted_at as "submittedAt",
              private_notes as "privateNotes", shared_notes as "sharedNotes"
         from hrm_scorecards
        where org_id = ${orgId} and interview_id = ${interviewId}
          and interviewer_party_id = ${person.partyId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!card) {
       throw new RecruitingError(
         "NOT_FOUND",
@@ -269,14 +307,17 @@ export async function submitScorecard(query: SubmitScorecardQuery): Promise<Scor
         `an overall verdict is required from this kit's scale (${scale.join(", ")}) — pick the verdict the interview earned`,
       );
     }
-    const focus = (await panelFocusAttributeIds(db, orgId, interviewId, person.partyId)) ?? (
-      kit
-        ? (await listKitAttributes(db, orgId, kit.id)).filter((attr) => attr.isFocusDefault).map((attr) => attr.id)
-        : []
-    );
+    const focus =
+      (await panelFocusAttributeIds(db, orgId, interviewId, person.partyId)) ??
+      (kit
+        ? (await listKitAttributes(db, orgId, kit.id))
+            .filter((attr) => attr.isFocusDefault)
+            .map((attr) => attr.id)
+        : []);
     const ratings = query.ratings ?? {};
     const missing = focus.filter(
-      (attributeId) => typeof ratings[attributeId] !== "string" || !(ratings[attributeId] as string).length,
+      (attributeId) =>
+        typeof ratings[attributeId] !== "string" || !(ratings[attributeId] as string).length,
     );
     if (missing.length > 0) {
       throw new RecruitingError(
@@ -313,18 +354,28 @@ export async function submitScorecard(query: SubmitScorecardQuery): Promise<Scor
         ? null
         : String(query.sharedNotes);
     for (const [attributeId, ratingKey] of entries) {
-      const written = (await db.execute<{ id: string }>(sql`
+      const written = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into hrm_scorecard_ratings (org_id, scorecard_id, attribute_id, rating_key, created_by, updated_by)
         values (${orgId}, ${card.id}, ${attributeId}, ${ratingKey}, ${actorId}, ${actorId})
         on conflict (org_id, scorecard_id, attribute_id)
         do update set rating_key = excluded.rating_key, updated_by = excluded.updated_by, updated_at = now()
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!written) {
-        throw new RecruitingError("REFUSED", "the rating was not stored — no row was written; retry the request");
+        throw new RecruitingError(
+          "REFUSED",
+          "the rating was not stored — no row was written; retry the request",
+        );
       }
     }
-    const updated = (await db.execute<ScorecardRow>(sql`
+    const updated = (
+      await db.execute<ScorecardRow>(
+        sql`
       update hrm_scorecards
          set overall = ${overall}, submitted_at = now(),
              private_notes = ${privateNotes}, shared_notes = ${sharedNotes},
@@ -333,17 +384,23 @@ export async function submitScorecard(query: SubmitScorecardQuery): Promise<Scor
       returning id, interview_id as "interviewId", interviewer_party_id as "interviewerPartyId",
                 overall, submitted_at as "submittedAt",
                 private_notes as "privateNotes", shared_notes as "sharedNotes"
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
       throw new RecruitingError(
         "REFUSED",
         "this scorecard was submitted concurrently — the first submission stands; reload and read the recorded verdict",
       );
     }
-    const allRatings = await db.execute<RatingRow>(sql`
+    const allRatings = await db.execute<RatingRow>(
+      sql`
       select scorecard_id as "scorecardId", attribute_id as "attributeId", rating_key as "ratingKey", note
         from hrm_scorecard_ratings where org_id = ${orgId} and scorecard_id = ${card.id}
-    `, "objects");
+    `,
+      "objects",
+    );
     const names = await partyDisplayNames(db, orgId, [person.partyId]);
     return toDTO(updated, allRatings, names, true);
   });
@@ -401,21 +458,27 @@ export async function readScorecardsForInterview(query: ScorecardReadQuery): Pro
       // non-participants.
       return { mine: null, others: [], blinded: true };
     }
-    const cards = await db.execute<ScorecardRow>(sql`
+    const cards = await db.execute<ScorecardRow>(
+      sql`
       select id, interview_id as "interviewId", interviewer_party_id as "interviewerPartyId",
              overall, submitted_at as "submittedAt",
              private_notes as "privateNotes", shared_notes as "sharedNotes"
         from hrm_scorecards
        where org_id = ${orgId} and interview_id = ${interviewId}
        order by interviewer_party_id
-    `, "objects");
-    const ratings = await db.execute<RatingRow>(sql`
+    `,
+      "objects",
+    );
+    const ratings = await db.execute<RatingRow>(
+      sql`
       select r.scorecard_id as "scorecardId", r.attribute_id as "attributeId",
              r.rating_key as "ratingKey", r.note
         from hrm_scorecard_ratings r
         join hrm_scorecards s on s.org_id = r.org_id and s.id = r.scorecard_id
        where r.org_id = ${orgId} and s.interview_id = ${interviewId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const names = await partyDisplayNames(
       db,
       orgId,
@@ -471,21 +534,27 @@ export async function scorecardSummary(query: ScorecardReadQuery): Promise<Score
     if (!privileged) {
       await requireHrmRecruitingRead(db, orgId, actorId, chain.requisitionId);
     }
-    const cards = await db.execute<ScorecardRow>(sql`
+    const cards = await db.execute<ScorecardRow>(
+      sql`
       select id, interview_id as "interviewId", interviewer_party_id as "interviewerPartyId",
              overall, submitted_at as "submittedAt",
              private_notes as "privateNotes", shared_notes as "sharedNotes"
         from hrm_scorecards
        where org_id = ${orgId} and interview_id = ${interviewId}
        order by interviewer_party_id
-    `, "objects");
-    const ratings = await db.execute<RatingRow>(sql`
+    `,
+      "objects",
+    );
+    const ratings = await db.execute<RatingRow>(
+      sql`
       select r.scorecard_id as "scorecardId", r.attribute_id as "attributeId",
              r.rating_key as "ratingKey", r.note
         from hrm_scorecard_ratings r
         join hrm_scorecards s on s.org_id = r.org_id and s.id = r.scorecard_id
        where r.org_id = ${orgId} and s.interview_id = ${interviewId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const names = await partyDisplayNames(
       db,
       orgId,
@@ -542,10 +611,12 @@ export function blindVisibleCardIds(args: {
   cards: readonly { id: string; interviewerPartyId: string; submittedAt: string | null }[];
 }): { mine: string | null; otherIds: readonly string[]; blinded: boolean } {
   const mine = args.cards.find((card) => card.interviewerPartyId === args.viewerPartyId) ?? null;
-  const showOthers = args.privileged || (mine?.submittedAt != null);
+  const showOthers = args.privileged || mine?.submittedAt != null;
   return {
     mine: mine?.id ?? null,
-    otherIds: showOthers ? args.cards.filter((card) => card.id !== mine?.id).map((card) => card.id) : [],
+    otherIds: showOthers
+      ? args.cards.filter((card) => card.id !== mine?.id).map((card) => card.id)
+      : [],
     blinded: !showOthers,
   };
 }

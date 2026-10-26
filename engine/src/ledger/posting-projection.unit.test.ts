@@ -18,8 +18,7 @@ const deps = (): PostingDeps => ({
   control: { ar: "1100", ap: "2100", bank: "1000" },
 });
 
-const journalDoc = (): PostingDocument =>
-  ({ kind: "journal" }) as unknown as PostingDocument;
+const journalDoc = (): PostingDocument => ({ kind: "journal" }) as unknown as PostingDocument;
 
 const journalLine = (over: Record<string, unknown>): PostingDocumentLine =>
   ({ description: null, partyId: null, ...over }) as unknown as PostingDocumentLine;
@@ -33,16 +32,22 @@ const keyLine = (over: Record<string, unknown> = {}) => ({
 test("a balanced two-line journal projects to a balanced two-line entry", () => {
   const lines = buildProjection(
     journalDoc(),
-    [journalLine({ accountId: "1000", amount: "100.0000" }), journalLine({ accountId: "2000", amount: "-100.0000" })],
+    [
+      journalLine({ accountId: "1000", amount: "100.0000" }),
+      journalLine({ accountId: "2000", amount: "-100.0000" }),
+    ],
     deps(),
   );
   assert.equal(lines.length, 2);
   assert.equal(sum(lines.map((l) => l.amount)), "0.0000");
-  assert.deepEqual(lines.map((l) => l.accountId), ["1000", "2000"]);
+  assert.deepEqual(
+    lines.map((l) => l.accountId),
+    ["1000", "2000"],
+  );
 });
 
 test("an unknown document kind is refused by name", () => {
-  const doc = ({ kind: "bond_yield_curve" }) as unknown as PostingDocument;
+  const doc = { kind: "bond_yield_curve" } as unknown as PostingDocument;
   assert.throws(
     () => buildProjection(doc, [], deps()),
     (e: unknown) =>
@@ -61,8 +66,7 @@ test("a projection with fewer than two surviving lines is refused", () => {
         [journalLine({ accountId: "1000", amount: "50.0000" })],
         deps(),
       ),
-    (e: unknown) =>
-      e instanceof PostingError && /fewer than 2 lines/.test(e.message),
+    (e: unknown) => e instanceof PostingError && /fewer than 2 lines/.test(e.message),
   );
 });
 
@@ -77,32 +81,28 @@ test("an unbalanced rule result is refused, never posted lopsided", () => {
         ],
         deps(),
       ),
-    (e: unknown) =>
-      e instanceof PostingError && /does not balance/.test(e.message),
+    (e: unknown) => e instanceof PostingError && /does not balance/.test(e.message),
   );
 });
 
 test("an open-item leg without its party is refused", () => {
   // A customer invoice with no header party leaves the AR leg as an open
   // item with no customer: an anonymous subledger balance must fail closed.
-  const doc = ({
+  const doc = {
     kind: "customer_invoice",
     partyId: null,
-  }) as unknown as PostingDocument;
+  } as unknown as PostingDocument;
   assert.throws(
-    () =>
-      buildProjection(
-        doc,
-        [journalLine({ accountId: "4000", amount: "100.0000" })],
-        deps(),
-      ),
-    (e: unknown) =>
-      e instanceof PostingError && /has no party/.test(e.message),
+    () => buildProjection(doc, [journalLine({ accountId: "4000", amount: "100.0000" })], deps()),
+    (e: unknown) => e instanceof PostingError && /has no party/.test(e.message),
   );
 });
 
 test("the comparison key normalizes amount scales", () => {
-  assert.equal(glLineKey(keyLine({ amount: "100.00" })), glLineKey(keyLine({ amount: "100.0000" })));
+  assert.equal(
+    glLineKey(keyLine({ amount: "100.00" })),
+    glLineKey(keyLine({ amount: "100.0000" })),
+  );
 });
 
 test("dimension order and line order never change the projection key", () => {
@@ -123,19 +123,13 @@ test("the comparison key still separates account, direction, and open-item legs"
 test("projection scope changes only on period or posting date", () => {
   const scope = { periodId: "2026-09", postingDate: "2026-09-15" };
   assert.equal(glProjectionScopeUnchanged(scope, { ...scope }), true);
-  assert.equal(
-    glProjectionScopeUnchanged(scope, { ...scope, periodId: "2026-10" }),
-    false,
-  );
-  assert.equal(
-    glProjectionScopeUnchanged(scope, { ...scope, postingDate: "2026-09-16" }),
-    false,
-  );
+  assert.equal(glProjectionScopeUnchanged(scope, { ...scope, periodId: "2026-10" }), false);
+  assert.equal(glProjectionScopeUnchanged(scope, { ...scope, postingDate: "2026-09-16" }), false);
 });
 
-test('elimination flags and exact statistical measurements affect projection identity',()=>{
- assert.notEqual(glLineKey(keyLine()),glLineKey(keyLine({eliminate:true})));
- const stat={accountId:'statistical',amount:'0',quantity:'12.1234',unit:'sqm'};
- assert.notEqual(glLineKey(stat),glLineKey({...stat,quantity:'12.1235'}));
- assert.equal(glLineKey(stat),glLineKey({...stat,quantity:'12.12340000'}));
+test("elimination flags and exact statistical measurements affect projection identity", () => {
+  assert.notEqual(glLineKey(keyLine()), glLineKey(keyLine({ eliminate: true })));
+  const stat = { accountId: "statistical", amount: "0", quantity: "12.1234", unit: "sqm" };
+  assert.notEqual(glLineKey(stat), glLineKey({ ...stat, quantity: "12.1235" }));
+  assert.equal(glLineKey(stat), glLineKey({ ...stat, quantity: "12.12340000" }));
 });

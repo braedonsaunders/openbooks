@@ -1,10 +1,22 @@
 import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
-import { seedCanadianPostingAccounts, seedUnionPostingAccounts } from "../testing/payroll-posting-fixture.ts";
-import { seedEnabledPayrollConfiguration } from '../testing/fixtures.ts';
-import { seedPayrollSettings } from '../testing/fixtures.ts';
 import {
-  seedPayrollSchedule, seedPayrollPerson, seedPayrollTime, seedPostingAccount, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
+  seedCanadianPostingAccounts,
+  seedUnionPostingAccounts,
+} from "../testing/payroll-posting-fixture.ts";
+import { seedEnabledPayrollConfiguration } from "../testing/fixtures.ts";
+import { seedPayrollSettings } from "../testing/fixtures.ts";
+import {
+  seedPayrollSchedule,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -24,9 +36,21 @@ import { payRunBankFileEntitlement } from "./bank-file-artifact.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { resolveServiceTier, resolvePlanLimit, milestonesReachedInPeriod, validateEntitlementServiceTierConfiguration } from "./entitlements.ts";
+import {
+  resolveServiceTier,
+  resolvePlanLimit,
+  milestonesReachedInPeriod,
+  validateEntitlementServiceTierConfiguration,
+} from "./entitlements.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedVacationTerms, seedCanadianPayrollComponentsForTest, seedCntSubjectEmployerFixture, seedUsSuiAccount, seedUsEinAccount, type UsSuiFixtureSource } from "./filing-test-fixtures.ts";
+import {
+  seedVacationTerms,
+  seedCanadianPayrollComponentsForTest,
+  seedCntSubjectEmployerFixture,
+  seedUsSuiAccount,
+  seedUsEinAccount,
+  type UsSuiFixtureSource,
+} from "./filing-test-fixtures.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { assertPayRunNotStale, payRunStaleness } from "./readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./union.ts";
@@ -42,17 +66,36 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // exemption the calculation requires instead of leaving coverage undecided.
 const WCB_OUT_OF_SCOPE = {
   wcbExempt: true,
-  wcbExemptReason: 'Not covered by the employer workers-compensation account in this scenario',
+  wcbExemptReason: "Not covered by the employer workers-compensation account in this scenario",
 } as const;
 
-async function seedUsSui(orgId: string, actorId: string, employeeId: string, state: string,
-  rate: string, wageBase: string, source: UsSuiFixtureSource): Promise<string> {
+async function seedUsSui(
+  orgId: string,
+  actorId: string,
+  employeeId: string,
+  state: string,
+  rate: string,
+  wageBase: string,
+  source: UsSuiFixtureSource,
+): Promise<string> {
   const filingAccountId = await seedUsSuiAccount(orgId, actorId, state, source);
-  await upsertStatutoryRate({ orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
-    region: state, filingAccountId, taxYear: 2026, values: { rate, wageBase } });
-  const profile = await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-    where org_id=${orgId} and employee_party_id=${employeeId} returning employee_party_id`, "objects");
+  await upsertStatutoryRate({
+    orgId,
+    actorId,
+    rates: US_PACK_RATES,
+    rateKey: "us_sui",
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
+    region: state,
+    filingAccountId,
+    taxYear: 2026,
+    values: { rate, wageBase },
+  });
+  const profile = await db.execute(
+    sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+    where org_id=${orgId} and employee_party_id=${employeeId} returning employee_party_id`,
+    "objects",
+  );
   if (profile.length !== 1) throw new Error(`expected a payroll profile for ${employeeId}`);
   return filingAccountId;
 }
@@ -71,20 +114,31 @@ test(
 
       // Employee: person party + hourly wage + biweekly schedule + TD1 profile
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Terry Worker');
+      await seedPayrollPerson(org.orgId, employeeId, "Terry Worker");
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "30",
+        basis: "hour",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        name: "Biweekly",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 3,
       });
       // Stub calculation refuses employees without an HRM employment, so the
       // hire carries one and the profile points at it.
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
+        country: "CA",
+        province: "ON",
+        payBasis: "hourly",
+        federalClaimCode: 1,
+        provincialClaimCode: 1,
+        ...WCB_OUT_OF_SCOPE,
       });
 
       await db.execute(sql`insert into payroll_vacation_terms (org_id,employment_id,plan_id,method,percent_floor,effective_from,reason,created_by,updated_by)
@@ -103,48 +157,164 @@ test(
       const otherEmployee = randomUUID();
       await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
         values(${otherEmployer},${org.orgId},${org.subsidiaryId},'Other employer','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
-      await seedPayrollPerson(org.orgId, otherEmployee, 'Other employee');
+      await seedPayrollPerson(org.orgId, otherEmployee, "Other employee");
       const otherEmployment = await seedWorkerEmployment(org.orgId, otherEmployee, otherEmployer);
       await seedVacationTerms(org.orgId, otherEmployment, actorId);
-      await assert.rejects(() => resolveServiceTier(db,org.orgId,otherEmployee,'2026-07-18',otherEmployment), /record the employee service baseline/);
+      await assert.rejects(
+        () => resolveServiceTier(db, org.orgId, otherEmployee, "2026-07-18", otherEmployment),
+        /record the employee service baseline/,
+      );
       await db.execute(sql`insert into payroll_service_credits(org_id,employment_id,convention,as_of_date,credited_days,effective_from,reason,created_by,updated_by)
         values(${org.orgId},${otherEmployment},'actual_365','2026-07-18','1825','2026-07-01','Reviewed other employment service',${actorId},${actorId})`);
-      const otherTerms = await resolveServiceTier(db,org.orgId,otherEmployee,'2026-07-18',otherEmployment);
-      assert.deepEqual([...otherTerms.planAccrualValues.values()], ['5.0000'], 'another employer keeps the explicit default ladder');
-      const vacationPlanId = (await db.execute<{ id: string }>(sql`select id from entitlement_plans where org_id=${org.orgId} and system_key='vacation'`, "objects"))[0]!.id;
+      const otherTerms = await resolveServiceTier(
+        db,
+        org.orgId,
+        otherEmployee,
+        "2026-07-18",
+        otherEmployment,
+      );
+      assert.deepEqual(
+        [...otherTerms.planAccrualValues.values()],
+        ["5.0000"],
+        "another employer keeps the explicit default ladder",
+      );
+      const vacationPlanId = (
+        await db.execute<{ id: string }>(
+          sql`select id from entitlement_plans where org_id=${org.orgId} and system_key='vacation'`,
+          "objects",
+        )
+      )[0]!.id;
       await db.execute(sql`insert into entitlement_plan_limits(org_id,plan_id,subsidiary_id,max_balance,notify_balance,effective_from,created_by,updated_by)
         values(${org.orgId},${vacationPlanId},${org.subsidiaryId},4000,3500,'2026-07-01',${actorId},${actorId}),
           (${org.orgId},${vacationPlanId},${otherEmployer},2000,1500,'2026-07-01',${actorId},${actorId})`);
-      assert.equal((await resolvePlanLimit(db,org.orgId,vacationPlanId,employeeId,'2026-07-18',undefined,employmentId))?.maxBalance,'4000.0000');
-      assert.equal((await resolvePlanLimit(db,org.orgId,vacationPlanId,otherEmployee,'2026-07-18',undefined,otherEmployment))?.maxBalance,'2000.0000');
-      await assert.rejects(() => resolvePlanLimit(db,org.orgId,vacationPlanId,employeeId,'2026-07-18',undefined,otherEmployment), /Select an employment belonging to this employee and organization/);
+      assert.equal(
+        (
+          await resolvePlanLimit(
+            db,
+            org.orgId,
+            vacationPlanId,
+            employeeId,
+            "2026-07-18",
+            undefined,
+            employmentId,
+          )
+        )?.maxBalance,
+        "4000.0000",
+      );
+      assert.equal(
+        (
+          await resolvePlanLimit(
+            db,
+            org.orgId,
+            vacationPlanId,
+            otherEmployee,
+            "2026-07-18",
+            undefined,
+            otherEmployment,
+          )
+        )?.maxBalance,
+        "2000.0000",
+      );
+      await assert.rejects(
+        () =>
+          resolvePlanLimit(
+            db,
+            org.orgId,
+            vacationPlanId,
+            employeeId,
+            "2026-07-18",
+            undefined,
+            otherEmployment,
+          ),
+        /Select an employment belonging to this employee and organization/,
+      );
 
-      const milestones = (await milestonesReachedInPeriod(org.orgId, '2026-07-01', '2026-07-31')).filter((row) => row.employmentId === employmentId);
-      assert.deepEqual(milestones.map((row) => [row.milestoneDate, row.accrualValue]), [['2026-07-19', '6.0000']]);
+      const milestones = (
+        await milestonesReachedInPeriod(org.orgId, "2026-07-01", "2026-07-31")
+      ).filter((row) => row.employmentId === employmentId);
+      assert.deepEqual(
+        milestones.map((row) => [row.milestoneDate, row.accrualValue]),
+        [["2026-07-19", "6.0000"]],
+      );
       const nativeMilestones = async (allowedSubsidiaryIds: string[]) => {
         const entity = REPORT_ENTITY_MAP.entitlement_service_milestones!;
-        const compiled = compileCustomQuery(entity, { entity: entity.key, mode: 'rows', columns: ['employee_id','milestone_date','accrual_value'],
-          filters: { combinator: 'and', rules: [{ field: 'milestone_date', op: 'gte', value: '2026-01-01' },{ field: 'milestone_date', op: 'lte', value: '2026-12-31' }] } },org.orgId,{allowedSubsidiaryIds});
-        return (await withOrgContext(org.orgId,()=>pool.query(`select employee_id,milestone_date::text,accrual_value::text from (${compiled.text}) native`,compiled.values))).rows;
+        const compiled = compileCustomQuery(
+          entity,
+          {
+            entity: entity.key,
+            mode: "rows",
+            columns: ["employee_id", "milestone_date", "accrual_value"],
+            filters: {
+              combinator: "and",
+              rules: [
+                { field: "milestone_date", op: "gte", value: "2026-01-01" },
+                { field: "milestone_date", op: "lte", value: "2026-12-31" },
+              ],
+            },
+          },
+          org.orgId,
+          { allowedSubsidiaryIds },
+        );
+        return (
+          await withOrgContext(org.orgId, () =>
+            pool.query(
+              `select employee_id,milestone_date::text,accrual_value::text from (${compiled.text}) native`,
+              compiled.values,
+            ),
+          )
+        ).rows;
       };
-      assert.deepEqual(await nativeMilestones([org.subsidiaryId]), [{employee_id:employeeId,milestone_date:'2026-07-19',accrual_value:'6.0000'}]);
-      assert.deepEqual((await nativeMilestones([otherEmployer])).map((row) => [row.employee_id,row.accrual_value]), [[otherEmployee,'5.0000']]);
+      assert.deepEqual(await nativeMilestones([org.subsidiaryId]), [
+        { employee_id: employeeId, milestone_date: "2026-07-19", accrual_value: "6.0000" },
+      ]);
+      assert.deepEqual(
+        (await nativeMilestones([otherEmployer])).map((row) => [
+          row.employee_id,
+          row.accrual_value,
+        ]),
+        [[otherEmployee, "5.0000"]],
+      );
       assert.deepEqual(await nativeMilestones([]), []);
-      const tier = (await db.execute<{ id: string }>(sql`select id from entitlement_service_tiers where org_id=${org.orgId} and employer_subsidiary_id=${org.subsidiaryId} and after_months=60`, "objects"))[0]!;
-      await assert.rejects(() => validateEntitlementServiceTierConfiguration(db,org.orgId,{annualDays:'-1'},tier.id), /Annual days cannot be negative; enter a nonnegative/);
-      await assert.rejects(() => validateEntitlementServiceTierConfiguration(db,org.orgId,{employerSubsidiaryId:randomUUID()},tier.id), /Select a legal employer in this organization/);
+      const tier = (
+        await db.execute<{ id: string }>(
+          sql`select id from entitlement_service_tiers where org_id=${org.orgId} and employer_subsidiary_id=${org.subsidiaryId} and after_months=60`,
+          "objects",
+        )
+      )[0]!;
+      await assert.rejects(
+        () =>
+          validateEntitlementServiceTierConfiguration(db, org.orgId, { annualDays: "-1" }, tier.id),
+        /Annual days cannot be negative; enter a nonnegative/,
+      );
+      await assert.rejects(
+        () =>
+          validateEntitlementServiceTierConfiguration(
+            db,
+            org.orgId,
+            { employerSubsidiaryId: randomUUID() },
+            tier.id,
+          ),
+        /Select a legal employer in this organization/,
+      );
 
       // 80 approved hours inside the period 2026-07-05..07-18
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await seedPayrollTime(org.orgId, employeeId, actorId, {
-          workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-          costingBasis: 'actual',
+          workedOn: workedOn,
+          hours: 20,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       }
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
 
       const serviceComponent = randomUUID();
@@ -154,32 +324,68 @@ test(
         values(${org.orgId},${serviceComponent},${org.subsidiaryId},60,true,'2026-07-01',${actorId},${actorId})`);
       await db.execute(sql`insert into employee_pay_components(org_id,employee_party_id,employment_id,component_id,value,effective_from,created_by,updated_by)
         values(${org.orgId},${employeeId},${employmentId},${serviceComponent},10,'2026-07-01',${actorId},${actorId})`);
-      const premature = await calculatePayRun({orgId:org.orgId,documentId:run.documentId,actorId});
-      assert.equal(premature.employees,0);
-      assert.match(premature.errors[0]!.message,/Service match is not service-eligible at period end 2026-07-18; end the premature assignment or election/);
-      await db.execute(sql`update employee_pay_components set effective_to='2026-07-04' where org_id=${org.orgId} and component_id=${serviceComponent}`);
-      const statutory = (await db.execute<{id:string}>(sql`select id from pay_components where org_id=${org.orgId} and system_key='cpp' and kind='deduction'`, "objects"))[0]!;
-      await assert.rejects(()=>validateEntitlementServiceTierConfiguration(db,org.orgId,{componentId:statutory.id,afterMonths:1,eligible:true,effectiveFrom:'2026-07-01'}),/Engine-owned payroll components cannot have service gates/);
+      const premature = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
+      assert.equal(premature.employees, 0);
+      assert.match(
+        premature.errors[0]!.message,
+        /Service match is not service-eligible at period end 2026-07-18; end the premature assignment or election/,
+      );
+      await db.execute(
+        sql`update employee_pay_components set effective_to='2026-07-04' where org_id=${org.orgId} and component_id=${serviceComponent}`,
+      );
+      const statutory = (
+        await db.execute<{ id: string }>(
+          sql`select id from pay_components where org_id=${org.orgId} and system_key='cpp' and kind='deduction'`,
+          "objects",
+        )
+      )[0]!;
+      await assert.rejects(
+        () =>
+          validateEntitlementServiceTierConfiguration(db, org.orgId, {
+            componentId: statutory.id,
+            afterMonths: 1,
+            eligible: true,
+            effectiveFrom: "2026-07-01",
+          }),
+        /Engine-owned payroll components cannot have service gates/,
+      );
 
       // Calculate twice — recalculation must be idempotent (one stub, same totals)
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.equal(result.employees, 1);
       assert.deepEqual(result.errors, []);
 
-      const stubs = (await db.execute<Record<string, string>>(sql`
+      const stubs = await db.execute<Record<string, string>>(
+        sql`
         select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(stubs.length, 1);
       const stub = stubs[0]!;
       assert.equal(stub.gross, "2400.0000"); // 80h × $30
 
       // The stub must match the T4127 engine called directly with the same facts
       // (pay date 2026-07-21 → 123rd edition).
-      const expected = calculateT4127(assessedCanadianWages({
-        payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
-        income: "2400.00", federalClaimCode: 1, provincialClaimCode: 1,
-      }));
+      const expected = calculateT4127(
+        assessedCanadianWages({
+          payDate: "2026-07-21",
+          province: "ON",
+          periodsPerYear: 26,
+          income: "2400.00",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+        }),
+      );
       const factors = stub.factors as unknown as Record<string, string>;
       assert.equal(factors.C, expected.cpp);
       assert.equal(factors.EI, expected.ei);
@@ -190,8 +396,7 @@ test(
       // The five-year anniversary falls after period end but before pay date.
       // This period remains 4%; the next period reaches 6% in cash.
       assert.equal(stub.vacation_accrued, "96.0000");
-      assert.equal(stub.employer_cost,
-        sum([expected.cppEmployer, expected.eiEmployer, "96.00"]));
+      assert.equal(stub.employer_cost, sum([expected.cppEmployer, expected.eiEmployer, "96.00"]));
 
       // The engine commit itself enforces the blocker for the actual run
       // roster. A reviewed acknowledgement satisfies the documented gate.
@@ -206,51 +411,102 @@ test(
         commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }),
         /blocking payroll check\(s\) are open.*resolve or acknowledge/,
       );
-      const afterRefusal = (await db.execute<{ run_status: string; documents_status: string; line_count: string; claimed_count: string }>(sql`
+      const afterRefusal = (
+        await db.execute<{
+          run_status: string;
+          documents_status: string;
+          line_count: string;
+          claimed_count: string;
+        }>(
+          sql`
         select r.run_status, d.status as documents_status,
                (select count(*)::text from document_lines where org_id = r.org_id and document_id = r.document_id) as line_count,
                (select count(*)::text from time_entries where org_id = r.org_id and payroll_batch_ref = r.document_id::text) as claimed_count
           from pay_runs r join documents d on d.org_id = r.org_id and d.id = r.document_id
-         where r.org_id = ${org.orgId} and r.document_id = ${run.documentId}`, "objects"))[0]!;
+         where r.org_id = ${org.orgId} and r.document_id = ${run.documentId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(afterRefusal.run_status, "calculated");
       assert.equal(afterRefusal.documents_status, "draft");
-      assert.equal(afterRefusal.line_count, "0", "the gate refusal leaves the GL projection untouched");
+      assert.equal(
+        afterRefusal.line_count,
+        "0",
+        "the gate refusal leaves the GL projection untouched",
+      );
       assert.equal(afterRefusal.claimed_count, "0", "the gate refusal leaves time unclaimed");
       // Reviewing a blocking payroll check is a payroll-manager duty.
       await grantScratchPermissions(org.orgId, actorId, ["payroll.manage"]);
       await transitionFlag(db, {
-        orgId: org.orgId, actorId, flagId: anomalyFlagId,
-        to: "acknowledged", reason: "reviewed before releasing this payroll run",
+        orgId: org.orgId,
+        actorId,
+        flagId: anomalyFlagId,
+        to: "acknowledged",
+        reason: "reviewed before releasing this payroll run",
       });
 
       // Commit: balanced signed document lines, time entries claimed
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       const committedPolicyRefusal = (error: unknown): boolean => {
         const cause = (error as { cause?: { code?: string; message?: string } }).cause;
-        assert.equal(cause?.code, '23514');
-        assert.match(cause?.message ?? '', /committed payroll evidence.*replacement/);
+        assert.equal(cause?.code, "23514");
+        assert.match(cause?.message ?? "", /committed payroll evidence.*replacement/);
         return true;
       };
-      await assert.rejects(() => db.execute(sql`update payroll_service_credits set credited_days='1808' where org_id=${org.orgId} and employment_id=${employmentId}`), committedPolicyRefusal);
-      await assert.rejects(() => db.execute(sql`insert into entitlement_service_tiers(org_id,plan_id,employer_subsidiary_id,after_months,accrual_value,effective_from,created_by,updated_by)
-        select org_id,plan_id,employer_subsidiary_id,61,7,'2026-07-18',${actorId},${actorId} from entitlement_service_tiers where org_id=${org.orgId} and id=${tier.id}`), committedPolicyRefusal);
-      const balanceQuery=compileCustomQuery(REPORT_ENTITY_MAP.entitlement_balances!,{entity:'entitlement_balances',mode:'rows',columns:['employment_id','balance','max_balance'],filters:{combinator:'and',rules:[]}},org.orgId,{allowedSubsidiaryIds:[org.subsidiaryId],asOf:'2026-07-21'});
-      const reportedBalance=(await withOrgContext(org.orgId,()=>pool.query(balanceQuery.text,balanceQuery.values))).rows;
-      assert.deepEqual(reportedBalance,[{employment_id:employmentId,balance:'96.0000',max_balance:'4000.0000'}]);
-      const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null }>(sql`
+      await assert.rejects(
+        () =>
+          db.execute(
+            sql`update payroll_service_credits set credited_days='1808' where org_id=${org.orgId} and employment_id=${employmentId}`,
+          ),
+        committedPolicyRefusal,
+      );
+      await assert.rejects(
+        () =>
+          db.execute(sql`insert into entitlement_service_tiers(org_id,plan_id,employer_subsidiary_id,after_months,accrual_value,effective_from,created_by,updated_by)
+        select org_id,plan_id,employer_subsidiary_id,61,7,'2026-07-18',${actorId},${actorId} from entitlement_service_tiers where org_id=${org.orgId} and id=${tier.id}`),
+        committedPolicyRefusal,
+      );
+      const balanceQuery = compileCustomQuery(
+        REPORT_ENTITY_MAP.entitlement_balances!,
+        {
+          entity: "entitlement_balances",
+          mode: "rows",
+          columns: ["employment_id", "balance", "max_balance"],
+          filters: { combinator: "and", rules: [] },
+        },
+        org.orgId,
+        { allowedSubsidiaryIds: [org.subsidiaryId], asOf: "2026-07-21" },
+      );
+      const reportedBalance = (
+        await withOrgContext(org.orgId, () => pool.query(balanceQuery.text, balanceQuery.values))
+      ).rows;
+      assert.deepEqual(reportedBalance, [
+        { employment_id: employmentId, balance: "96.0000", max_balance: "4000.0000" },
+      ]);
+      const lines = await db.execute<{
+        account_id: string;
+        amount: string;
+        party_id: string | null;
+      }>(
+        sql`
         select account_id, amount, party_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.ok(lines.length >= 5);
       assert.equal(cmp(sum(lines.map((l) => l.amount)), "0"), 0, "GL projection balances");
       const netLeg = lines.find((l) => l.party_id === employeeId);
       assert.ok(netLeg, "net pay leg carries the employee party");
       assert.equal(netLeg!.amount, neg(stub.net_pay));
 
-      const claimed = (await db.execute<{ n: number }>(sql`
+      const claimed = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from time_entries
          where org_id = ${org.orgId} and payroll_batch_ref = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(claimed[0]!.n, 4);
 
       const entitlement = await payRunBankFileEntitlement(org.orgId, run.documentId);
@@ -259,47 +515,91 @@ test(
 
       // Committed stubs feed YTD: a second run must see this run's CPP/EI
       const run2 = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
       });
-      const r2 = (await db.execute<{ period_start: string; period_end: string }>(sql`
+      const r2 = await db.execute<{ period_start: string; period_end: string }>(
+        sql`
         select period_start, period_end from pay_runs where document_id = ${run2.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(r2[0]!.period_start, "2026-07-19"); // derived next period
       assert.equal(r2[0]!.period_end, "2026-08-01");
       await seedPayrollTime(org.orgId, employeeId, actorId, {
-        workedOn: '2026-07-22', hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-        costingBasis: 'actual',
+        workedOn: "2026-07-22",
+        hours: 20,
+        status: "approved",
+        isBillable: false,
+        billingStatus: "unbilled",
+        costingBasis: "actual",
       });
-      await db.execute(sql`update payroll_vacation_terms set effective_to='2026-07-18',updated_at=now(),updated_by=${actorId} where org_id=${org.orgId} and employment_id=${employmentId}`);
+      await db.execute(
+        sql`update payroll_vacation_terms set effective_to='2026-07-18',updated_at=now(),updated_by=${actorId} where org_id=${org.orgId} and employment_id=${employmentId}`,
+      );
       await db.execute(sql`insert into payroll_vacation_terms (org_id,employment_id,plan_id,method,percent_floor,effective_from,reason,created_by,updated_by)
         values (${org.orgId},${employmentId},${vacationPlanId},'pay_each_period','4','2026-07-19','Vacation payment election',${actorId},${actorId})`);
       await db.execute(sql`insert into employee_pay_components(org_id,employee_party_id,employment_id,component_id,value,effective_from,created_by,updated_by)
         values(${org.orgId},${employeeId},${employmentId},${serviceComponent},10,'2026-07-19',${actorId},${actorId})`);
-      for (const [method, gross] of [["pay_each_period", "636.0000"], ["paid_leave", "600.0000"]] as const) {
-        await db.execute(sql`update payroll_vacation_terms set method=${method},percent_floor=${method === 'paid_leave' ? '0' : '4'},annual_days_floor='25',updated_at=now(),updated_by=${actorId} where org_id=${org.orgId} and employment_id=${employmentId} and effective_from='2026-07-19'`);
+      for (const [method, gross] of [
+        ["pay_each_period", "636.0000"],
+        ["paid_leave", "600.0000"],
+      ] as const) {
+        await db.execute(
+          sql`update payroll_vacation_terms set method=${method},percent_floor=${method === "paid_leave" ? "0" : "4"},annual_days_floor='25',updated_at=now(),updated_by=${actorId} where org_id=${org.orgId} and employment_id=${employmentId} and effective_from='2026-07-19'`,
+        );
         await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
-        const stub2 = (await db.execute<{ factors: Record<string, string>; gross: string; vacation_accrued: string }>(sql`
+        const stub2 = await db.execute<{
+          factors: Record<string, string>;
+          gross: string;
+          vacation_accrued: string;
+        }>(
+          sql`
           select factors,gross,vacation_accrued from pay_stubs
            where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
-        `, "objects"));
-        const expected2 = calculateT4127(assessedCanadianWages({
-          payDate: "2026-08-04", province: "ON", periodsPerYear: 26,
-          income: gross, federalClaimCode: 1, provincialClaimCode: 1,
-          ytd: {
-            cpp: expected.cpp, cpp2: expected.cpp2, ei: expected.ei,
-            pensionable: "2400.00",
-          },
-        }));
+        `,
+          "objects",
+        );
+        const expected2 = calculateT4127(
+          assessedCanadianWages({
+            payDate: "2026-08-04",
+            province: "ON",
+            periodsPerYear: 26,
+            income: gross,
+            federalClaimCode: 1,
+            provincialClaimCode: 1,
+            ytd: {
+              cpp: expected.cpp,
+              cpp2: expected.cpp2,
+              ei: expected.ei,
+              pensionable: "2400.00",
+            },
+          }),
+        );
         assert.equal(stub2[0]!.gross, gross);
         assert.equal(stub2[0]!.vacation_accrued, "0.0000");
         assert.equal(stub2[0]!.factors.C, expected2.cpp);
         assert.equal(stub2[0]!.factors.EI, expected2.ei);
-        const paidMatch = await db.execute<{amount:string}>(sql`select l.amount from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-          where s.org_id=${org.orgId} and s.pay_run_document_id=${run2.documentId} and l.component_id=${serviceComponent}`, "objects");
-        assert.deepEqual(paidMatch.map((row)=>row.amount),['10.0000']);
+        const paidMatch = await db.execute<{ amount: string }>(
+          sql`select l.amount from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+          where s.org_id=${org.orgId} and s.pay_run_document_id=${run2.documentId} and l.component_id=${serviceComponent}`,
+          "objects",
+        );
+        assert.deepEqual(
+          paidMatch.map((row) => row.amount),
+          ["10.0000"],
+        );
       }
-      const bank = await db.execute<{ balance: string }>(sql`select sum(amount)::text as balance from entitlement_ledger where org_id=${org.orgId} and employee_party_id=${employeeId}`, "objects");
-      assert.equal(bank[0]!.balance, "96.0000", "paid leave preserves the previously committed money bank");
+      const bank = await db.execute<{ balance: string }>(
+        sql`select sum(amount)::text as balance from entitlement_ledger where org_id=${org.orgId} and employee_party_id=${employeeId}`,
+        "objects",
+      );
+      assert.equal(
+        bank[0]!.balance,
+        "96.0000",
+        "paid leave preserves the previously committed money bank",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -313,7 +613,10 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const { fringeExpense, duesPayable, fringePayable } = await seedUnionPostingAccounts(org.orgId, true);
+      const { fringeExpense, duesPayable, fringePayable } = await seedUnionPostingAccounts(
+        org.orgId,
+        true,
+      );
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const agreementId = randomUUID();
@@ -329,78 +632,140 @@ test(
         values (${classificationId}, ${org.orgId}, ${agreementId}, 'JW', 'Journeyman', true,
                 ${actorId}, ${actorId})`);
       await upsertUnionFringe(org.orgId, actorId, {
-        agreementId, code: "DUES", name: "Working dues", calc: "percent_of_gross",
-        value: "2.5", paidBy: "employee", liabilityAccountId: duesPayable!,
+        agreementId,
+        code: "DUES",
+        name: "Working dues",
+        calc: "percent_of_gross",
+        value: "2.5",
+        paidBy: "employee",
+        liabilityAccountId: duesPayable!,
       });
       await upsertUnionFringe(org.orgId, actorId, {
-        agreementId, code: "PEN", name: "Pension fund", calc: "per_hour_worked",
-        value: "5", paidBy: "employer", jobCosted: true,
-        expenseAccountId: fringeExpense, liabilityAccountId: fringePayable,
+        agreementId,
+        code: "PEN",
+        name: "Pension fund",
+        calc: "per_hour_worked",
+        value: "5",
+        paidBy: "employer",
+        jobCosted: true,
+        expenseAccountId: fringeExpense,
+        liabilityAccountId: fringePayable,
       });
 
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Jordan Sparks');
+      await seedPayrollPerson(org.orgId, employeeId, "Jordan Sparks");
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '48', basis: 'hour', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "48",
+        basis: "hour",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Union weekly', frequency: 'weekly', periodsPerYear: 52, anchorPeriodEnd: '2026-07-18',
+        name: "Union weekly",
+        frequency: "weekly",
+        periodsPerYear: 52,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 5,
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
-        unionAgreementId: agreementId, unionClassificationId: classificationId,
-      }, { percentFloor: null, method: 'accrue' });
+      await seedPayrollProfile(
+        org.orgId,
+        employeeId,
+        employmentId,
+        scheduleId,
+        actorId,
+        {
+          country: "CA",
+          province: "ON",
+          payBasis: "hourly",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          ...WCB_OUT_OF_SCOPE,
+          unionAgreementId: agreementId,
+          unionClassificationId: classificationId,
+        },
+        { percentFloor: null, method: "accrue" },
+      );
 
       const projectA = randomUUID();
       const projectB = randomUUID();
-      for (const [id, name] of [[projectA, "Job A"], [projectB, "Job B"]] as const) {
+      for (const [id, name] of [
+        [projectA, "Job A"],
+        [projectB, "Job B"],
+      ] as const) {
         await db.execute(sql`
           insert into projects (id, org_id, name, code, is_active, custom)
           values (${id}, ${org.orgId}, ${name}, ${name}, true, '{}'::jsonb)`);
       }
       // 24h on Job A, 16h on Job B inside 2026-07-12..07-18
       for (const [workedOn, hours, projectId] of [
-        ["2026-07-13", "12", projectA], ["2026-07-14", "12", projectA],
-        ["2026-07-15", "8", projectB], ["2026-07-16", "8", projectB],
+        ["2026-07-13", "12", projectA],
+        ["2026-07-14", "12", projectA],
+        ["2026-07-15", "8", projectB],
+        ["2026-07-16", "8", projectB],
       ] as const) {
         await seedPayrollTime(org.orgId, employeeId, actorId, {
-          workedOn: workedOn, hours: hours, projectId: projectId, status: 'approved', isBillable: false,
-          billingStatus: 'unbilled', costingBasis: 'actual',
+          workedOn: workedOn,
+          hours: hours,
+          projectId: projectId,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       }
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-12", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-12",
+        periodEnd: "2026-07-18",
       });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, []);
 
-      const stub = (await db.execute<Record<string, string>>(sql`
+      const stub = (
+        await db.execute<Record<string, string>>(
+          sql`
         select * from pay_stubs where pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(stub.gross, "1920.0000"); // 40h × $48
       const factors = stub.factors as unknown as Record<string, string>;
 
-      const stubLines = await db.execute<Record<string, string | null>>(sql`
+      const stubLines = await db.execute<Record<string, string | null>>(
+        sql`
         select l.description, l.kind, l.amount, l.hours, l.project_id
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${run.documentId} order by l.sequence
-      `, "objects");
+      `,
+        "objects",
+      );
 
       // Dues: 2.5% × 1920 = 48.00, deduction, feeds U1
       const dues = stubLines.find((l) => l.description === "Working dues");
       assert.equal(dues?.kind, "deduction");
       assert.equal(dues?.amount, "48.0000");
       // U1 reduces annual taxable income: A = 52 × (1920 − F5A − 48)
-      const expected = calculateT4127(assessedCanadianWages({
-        payDate: "2026-07-23", province: "ON", periodsPerYear: 52,
-        income: "1920.00", federalClaimCode: 1, provincialClaimCode: 1,
-        unionDues: "48.00",
-      }));
+      const expected = calculateT4127(
+        assessedCanadianWages({
+          payDate: "2026-07-23",
+          province: "ON",
+          periodsPerYear: 52,
+          income: "1920.00",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          unionDues: "48.00",
+        }),
+      );
       assert.equal(factors.A, expected.factors.A);
       assert.equal(factors.T, expected.periodicTax);
 
@@ -419,17 +784,28 @@ test(
 
       // Commit: fringe expense legs carry the project split
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = await db.execute<Record<string, string | null>>(sql`
+      const glLines = await db.execute<Record<string, string | null>>(
+        sql`
         select account_id, amount, project_id from document_lines
          where document_id = ${run.documentId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(cmp(sum(glLines.map((l) => l.amount!)), "0"), 0);
       const fringeLegs = glLines.filter((l) => l.account_id === fringeExpense && l.project_id);
       assert.equal(fringeLegs.length, 2);
-      assert.equal(new Map(fringeLegs.map((l) => [l.project_id, l.amount])).get(projectA), "120.0000");
+      assert.equal(
+        new Map(fringeLegs.map((l) => [l.project_id, l.amount])).get(projectA),
+        "120.0000",
+      );
 
       // Remittance report aggregates the committed month per fund
-      const report = await unionRemittanceReport(org.orgId, agreementId, "2026-07-01", "2026-07-31");
+      const report = await unionRemittanceReport(
+        org.orgId,
+        agreementId,
+        "2026-07-01",
+        "2026-07-31",
+      );
       const pensionRow = report.find((r) => r.fringeCode === "PEN");
       assert.equal(pensionRow?.amount, "200.0000");
       assert.equal(pensionRow?.hours, "40.00");
@@ -468,26 +844,52 @@ test(
         values (${classificationId}, ${org.orgId}, ${agreementId}, 'JW', 'Journeyman', true,
                 ${actorId}, ${actorId})`);
       await upsertUnionFringe(org.orgId, actorId, {
-        agreementId, code: "PENNY", name: "Penny fund", calc: "per_hour_worked",
-        value: "0.01", paidBy: "employer", jobCosted: true,
-        expenseAccountId: fringeExpense, liabilityAccountId: fringePayable,
+        agreementId,
+        code: "PENNY",
+        name: "Penny fund",
+        calc: "per_hour_worked",
+        value: "0.01",
+        paidBy: "employer",
+        jobCosted: true,
+        expenseAccountId: fringeExpense,
+        liabilityAccountId: fringePayable,
       });
 
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Robin Hale');
+      await seedPayrollPerson(org.orgId, employeeId, "Robin Hale");
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '25', basis: 'hour', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "25",
+        basis: "hour",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Union weekly', frequency: 'weekly', periodsPerYear: 52, anchorPeriodEnd: '2026-07-18',
+        name: "Union weekly",
+        frequency: "weekly",
+        periodsPerYear: 52,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 5,
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
-        unionAgreementId: agreementId, unionClassificationId: classificationId,
-      }, { percentFloor: null, method: 'accrue' });
+      await seedPayrollProfile(
+        org.orgId,
+        employeeId,
+        employmentId,
+        scheduleId,
+        actorId,
+        {
+          country: "CA",
+          province: "ON",
+          payBasis: "hourly",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          ...WCB_OUT_OF_SCOPE,
+          unionAgreementId: agreementId,
+          unionClassificationId: classificationId,
+        },
+        { percentFloor: null, method: "accrue" },
+      );
 
       const projects = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
       for (const [index, id] of projects.entries()) {
@@ -497,30 +899,50 @@ test(
       }
       // Half an hour on each of four jobs inside 2026-07-12..07-18.
       for (const [workedOn, projectId] of [
-        ["2026-07-13", projects[0]], ["2026-07-14", projects[1]],
-        ["2026-07-15", projects[2]], ["2026-07-16", projects[3]],
+        ["2026-07-13", projects[0]],
+        ["2026-07-14", projects[1]],
+        ["2026-07-15", projects[2]],
+        ["2026-07-16", projects[3]],
       ] as const) {
         await seedPayrollTime(org.orgId, employeeId, actorId, {
-          workedOn: workedOn, hours: '0.5', projectId: projectId, status: 'approved', isBillable: false,
-          billingStatus: 'unbilled', costingBasis: 'actual',
+          workedOn: workedOn,
+          hours: "0.5",
+          projectId: projectId,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       }
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-12", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-12",
+        periodEnd: "2026-07-18",
       });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, []);
 
-      const fringeLines = await db.execute<{ amount: string }>(sql`
+      const fringeLines = await db.execute<{ amount: string }>(
+        sql`
         select l.amount from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${run.documentId} and l.description = 'Penny fund'
          order by l.amount
-      `, "objects");
+      `,
+        "objects",
+      );
       // Two zero shares are correctly emitted as no line at all; the two
       // leftover cents land on later jobs. No job is ever paid a negative cent.
-      assert.deepEqual(fringeLines.map((l) => l.amount), ["0.0100", "0.0100"]);
+      assert.deepEqual(
+        fringeLines.map((l) => l.amount),
+        ["0.0100", "0.0100"],
+      );
       assert.equal(sum(fringeLines.map((l) => l.amount)), "0.0200");
       for (const line of fringeLines) {
         assert.ok(cmp(line.amount, "0") >= 0, `fringe split is not negative: ${line.amount}`);
@@ -542,21 +964,25 @@ test(
       const wageExpense = await account("6000", "Wages expense", "expense");
       const burdenExpense = await account("6010", "Payroll burden", "expense");
       const netPayable = await account("2300", "Wages payable", "liability_current");
-      const irsPayable = await account("2330", "Federal payroll taxes payable", "liability_current");
+      const irsPayable = await account(
+        "2330",
+        "Federal payroll taxes payable",
+        "liability_current",
+      );
       const futaPayable = await account("2340", "FUTA payable", "liability_current");
       const sutaPayable = await account("2350", "SUI payable", "liability_current");
       const statePayable = await account("2360", "State income tax payable", "liability_current");
       await seedEnabledPayrollConfiguration(org.orgId, {
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
-            wagesTo: "expense",
-            countries: ["US"],
-            us: {
-              // The fixture supplies the ordinary 0.6% FUTA method.
-              futaRate: "0.006",
-            },
-          });
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        countries: ["US"],
+        us: {
+          // The fixture supplies the ordinary 0.6% FUTA method.
+          futaRate: "0.006",
+        },
+      });
 
       await seedPayrollComponents(org.orgId, actorId, "US");
       // Statutory liabilities land on the components via the pack slots.
@@ -573,10 +999,16 @@ test(
       // A deficit account is exempt: no leg posts, and this test (FICA/FUTA/
       // SUI, never ETT) asserts none of it.
       await upsertStatutoryRate({
-        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_ca_ett",
-        region: "CA", filingAccountId: null, taxYear: 2026,
+        orgId: org.orgId,
+        actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_ca_ett",
+        region: "CA",
+        filingAccountId: null,
+        taxYear: 2026,
         values: { reserveBalance: "-100.00" },
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
       });
 
       const usSubId = randomUUID();
@@ -588,20 +1020,31 @@ test(
 
       // Salaried Texas employee, married filing jointly: $104,000/yr biweekly.
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Tex Worker', {
+      await seedPayrollPerson(org.orgId, employeeId, "Tex Worker", {
         subsidiaryId: usSubId,
       });
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'USD', rate: '104000', basis: 'year', annualHours: 2080, effectiveFrom: '2026-01-01',
+        currency: "USD",
+        rate: "104000",
+        basis: "year",
+        annualHours: 2080,
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly US', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
-        payDateOffsetDays: 3, subsidiaryId: usSubId,
+        name: "Biweekly US",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
+        payDateOffsetDays: 3,
+        subsidiaryId: usSubId,
       });
       const texEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, usSubId);
       await seedPayrollProfile(org.orgId, employeeId, texEmploymentId, scheduleId, actorId, {
-        country: 'US', province: 'TX', payBasis: 'salary', filingStatus: 'married_joint',
+        country: "US",
+        province: "TX",
+        payBasis: "salary",
+        filingStatus: "married_joint",
       });
       // The federal calculation refuses payroll without a tax-residency
       // status, so the hire states one — U.S. person, like the MFJ status.
@@ -614,15 +1057,21 @@ test(
                 ${actorId}, ${actorId})`);
 
       const caStateEmployee = randomUUID();
-      await seedPayrollPerson(org.orgId, caStateEmployee, 'Cali Worker', {
+      await seedPayrollPerson(org.orgId, caStateEmployee, "Cali Worker", {
         subsidiaryId: usSubId,
       });
       await seedPayrollWage(org.orgId, caStateEmployee, actorId, {
-        currency: 'USD', rate: '30', basis: 'hour', effectiveFrom: '2026-01-01',
+        currency: "USD",
+        rate: "30",
+        basis: "hour",
+        effectiveFrom: "2026-01-01",
       });
       const caEmploymentId = await seedWorkerEmployment(org.orgId, caStateEmployee, usSubId);
       await seedPayrollProfile(org.orgId, caStateEmployee, caEmploymentId, scheduleId, actorId, {
-        country: 'US', province: 'CA', payBasis: 'hourly', filingStatus: 'single',
+        country: "US",
+        province: "CA",
+        payBasis: "hourly",
+        filingStatus: "single",
       });
       await db.execute(sql`
         insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
@@ -632,25 +1081,42 @@ test(
                 '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
                 ${actorId}, ${actorId})`);
       await seedPayrollTime(org.orgId, caStateEmployee, actorId, {
-        workedOn: '2026-07-08', hours: 8, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-        costingBasis: 'actual',
+        workedOn: "2026-07-08",
+        hours: 8,
+        status: "approved",
+        isBillable: false,
+        billingStatus: "unbilled",
+        costingBasis: "actual",
       });
 
       const usEin = await seedUsEinAccount(org.orgId, actorId, usSubId, "12-3456789");
       await seedUsSui(org.orgId, actorId, employeeId, "TX", "0.027", "9000", {
-        federalAccountId: usEin, subsidiaryId: usSubId, effectiveFrom: "2026-01-01", effectiveTo: null,
+        federalAccountId: usEin,
+        subsidiaryId: usSubId,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
         sourceReference: "TX original employer registration",
       });
       await seedUsSui(org.orgId, actorId, caStateEmployee, "CA", "0.034", "7000", {
-        federalAccountId: usEin, subsidiaryId: usSubId, effectiveFrom: "2026-01-01", effectiveTo: null,
+        federalAccountId: usEin,
+        subsidiaryId: usSubId,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
         sourceReference: "CA original employer registration",
       });
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       // BOTH employees calculate now. This assertion used to be "1 paid, 1
       // refused, because California is not supported" — California IS
       // supported now: its tables are transcribed and its income tax and
@@ -658,10 +1124,13 @@ test(
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 2);
 
-      const stubs = (await db.execute<Record<string, string>>(sql`
+      const stubs = await db.execute<Record<string, string>>(
+        sql`
         select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
           and employee_party_id = ${employeeId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(stubs.length, 1);
       const stub = stubs[0]!;
       assert.equal(stub.gross, "4000.0000"); // 104,000 / 26
@@ -672,7 +1141,9 @@ test(
       // the configured rate the same way — because no 2026 Schedule A is
       // transcribed and the pure boundary refuses untranscribed years by name.
       const expected = calculatePub15T({
-        payDate: "2026-07-21", periodsPerYear: 26, wages: "4000.00",
+        payDate: "2026-07-21",
+        periodsPerYear: 26,
+        wages: "4000.00",
         filingStatus: "married_joint",
         futaEffectiveRate: "0.006",
         sui: { rate: "0.027", wageBase: "9000" },
@@ -694,14 +1165,23 @@ test(
 
       const deductions = sum([expected.fit, expected.ss, expected.medicare]);
       assert.equal(stub.net_pay, add("4000.0000", neg(deductions)));
-      assert.equal(stub.employer_cost,
-        sum([expected.ssEmployer, expected.medicareEmployer, expected.futa, expected.suta]));
+      assert.equal(
+        stub.employer_cost,
+        sum([expected.ssEmployer, expected.medicareEmployer, expected.futa, expected.suta]),
+      );
 
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null }>(sql`
+      const lines = await db.execute<{
+        account_id: string;
+        amount: string;
+        party_id: string | null;
+      }>(
+        sql`
         select account_id, amount, party_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(cmp(sum(lines.map((l) => l.amount)), "0"), 0, "GL projection balances");
       const sutaLegs = lines.filter((l) => l.account_id === sutaPayable);
       assert.ok(sutaLegs.length > 0, "SUI liability posts to its slot account");
@@ -712,11 +1192,14 @@ test(
       // Second run: YTD wage bases carry — FUTA has 3,000 of room left.
       const run2 = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
       await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
-      const stub2 = (await db.execute<{ factors: Record<string, string> }>(sql`
+      const stub2 = await db.execute<{ factors: Record<string, string> }>(
+        sql`
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
            and employee_party_id = ${employeeId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(stub2[0]!.factors.FUTA, "18.0000"); // min(4,000, 7,000 − 4,000) × 0.6%
       assert.equal(stub2[0]!.factors.SS, "248.0000"); // far from the wage base
 
@@ -741,14 +1224,20 @@ test(
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
       const removed = await uninstallPayrollPack(org.orgId, actorId, "CA");
       assert.equal(removed.componentsRemoved, 15);
-      const caLeft = (await db.execute<{ n: number }>(sql`
+      const caLeft = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from pay_components
-         where org_id = ${org.orgId} and country = 'CA'`, "objects"));
+         where org_id = ${org.orgId} and country = 'CA'`,
+        "objects",
+      );
       assert.equal(caLeft[0]!.n, 0);
-      const markers = (await db.execute<{ countries: unknown }>(sql`
+      const markers = await db.execute<{ countries: unknown }>(
+        sql`
         select settings#>'{payroll,countries}' as countries from orgs where id = ${org.orgId}
-      `, "objects"));
-      assert.ok(!(markers[0]!.countries as string[] | null ?? []).includes("CA"));
+      `,
+        "objects",
+      );
+      assert.ok(!((markers[0]!.countries as string[] | null) ?? []).includes("CA"));
       // W-2 and Form 941 are filed by the legal employer's EIN: both
       // employees' state SUI accounts belong to the US entity, so its EIN
       // carries both slips and every 941 quarter.
@@ -756,29 +1245,50 @@ test(
       const historical941 = await form941Worksheet(org.orgId, 2026);
       assert.equal(historicalW2.length, 2);
       assert.ok(historical941.length > 0);
-      const countryEvidence = await db.execute(sql`select country,country_source from pay_stubs
-        where org_id=${org.orgId} and pay_run_document_id=${run.documentId}`, "objects");
-      assert.deepEqual(countryEvidence,[{country:'US',country_source:'calculation'},{country:'US',country_source:'calculation'}]);
+      const countryEvidence = await db.execute(
+        sql`select country,country_source from pay_stubs
+        where org_id=${org.orgId} and pay_run_document_id=${run.documentId}`,
+        "objects",
+      );
+      assert.deepEqual(countryEvidence, [
+        { country: "US", country_source: "calculation" },
+        { country: "US", country_source: "calculation" },
+      ]);
       assert.deepEqual([...new Set(historicalW2.map((slip) => slip.filingAccountId))], [usEin]);
-      assert.deepEqual([...new Set(historical941.map((quarter) => quarter.filingAccountId))], [usEin]);
+      assert.deepEqual(
+        [...new Set(historical941.map((quarter) => quarter.filingAccountId))],
+        [usEin],
+      );
       // A later assignment to another legal employer's EIN does not move the
       // committed history off the employer that paid it.
       const nextEmployerId = randomUUID();
-      assert.equal((await db.execute(sql`insert into subsidiaries
+      assert.equal(
+        (
+          await db.execute(
+            sql`insert into subsidiaries
         (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
         values(${nextEmployerId},${org.orgId},${org.subsidiaryId},'Next US employer','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
-        returning id`, "objects")).length, 1);
-      const nextFilingAccountId = await seedUsEinAccount(org.orgId, actorId, nextEmployerId, "98-7654321");
+        returning id`,
+            "objects",
+          )
+        ).length,
+        1,
+      );
+      const nextFilingAccountId = await seedUsEinAccount(
+        org.orgId,
+        actorId,
+        nextEmployerId,
+        "98-7654321",
+      );
       await db.execute(sql`update employee_payroll_profiles set filing_account_id=${nextFilingAccountId}
         where org_id=${org.orgId}`);
-      assert.deepEqual(await w2Slips(org.orgId,2026),historicalW2);
-      assert.deepEqual(await form941Worksheet(org.orgId,2026),historical941);
+      assert.deepEqual(await w2Slips(org.orgId, 2026), historicalW2);
+      assert.deepEqual(await form941Worksheet(org.orgId, 2026), historical941);
       await db.execute(sql`update employee_payroll_profiles set country='CA',province='ON'
         where org_id=${org.orgId} and employee_party_id=${employeeId}`);
-      assert.deepEqual(await w2Slips(org.orgId,2026),historicalW2);
-      assert.deepEqual(await form941Worksheet(org.orgId,2026),historical941);
-      assert.deepEqual(await t4Slips(org.orgId,2026),[]);
-
+      assert.deepEqual(await w2Slips(org.orgId, 2026), historicalW2);
+      assert.deepEqual(await form941Worksheet(org.orgId, 2026), historical941);
+      assert.deepEqual(await t4Slips(org.orgId, 2026), []);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -811,8 +1321,8 @@ test(
       // Both packs: the US entity's employee needs the US pack's components.
       await seedPayrollComponents(org.orgId, actorId, "US");
       await seedPayrollSettings(org.orgId, {
-          features: { payroll: true },
-        });
+        features: { payroll: true },
+      });
       const usSubId = randomUUID();
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
@@ -826,7 +1336,10 @@ test(
           subsidiaryId: subsidiaryId,
         });
         await seedPayrollWage(org.orgId, id, actorId, {
-          currency: currency, rate: '40', basis: 'hour', effectiveFrom: '2026-01-01',
+          currency: currency,
+          rate: "40",
+          basis: "hour",
+          effectiveFrom: "2026-01-01",
         });
         return id;
       };
@@ -835,8 +1348,12 @@ test(
 
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'US biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
-        payDateOffsetDays: 3, subsidiaryId: usSubId,
+        name: "US biweekly",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
+        payDateOffsetDays: 3,
+        subsidiaryId: usSubId,
       });
       // Both profiles say Canada explicitly: Sam's 'CA' is the deliberate
       // misconfiguration the refusal below asserts on ("their profile still
@@ -846,9 +1363,21 @@ test(
         [usEmployee, "ON", usSubId],
       ] as const) {
         const employmentId = await seedWorkerEmployment(org.orgId, employee, subsidiaryId);
-        await seedPayrollProfile(org.orgId, employee, employmentId, scheduleId, actorId, {
-          country: 'CA', province: province, payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
-        }, { percentFloor: null, method: 'accrue' });
+        await seedPayrollProfile(
+          org.orgId,
+          employee,
+          employmentId,
+          scheduleId,
+          actorId,
+          {
+            country: "CA",
+            province: province,
+            payBasis: "hourly",
+            federalClaimCode: 1,
+            provincialClaimCode: 1,
+          },
+          { percentFloor: null, method: "accrue" },
+        );
         // Sam runs through US federal (the American entity pays him), which
         // refuses payroll without a tax-residency status — so he states U.S.
         // personhood. Rita is a Canadian hire and files no US form.
@@ -862,25 +1391,39 @@ test(
                     ${actorId}, ${actorId})`);
         }
         await seedPayrollTime(org.orgId, employee, actorId, {
-          workedOn: '2026-07-14', hours: 8, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-          costingBasis: 'actual',
+          workedOn: "2026-07-14",
+          hours: 8,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       }
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       // The run document carries the schedule's entity and its currency
-      const doc = (await db.execute<{ subsidiary_id: string; currency: string }>(sql`
+      const doc = (
+        await db.execute<{ subsidiary_id: string; currency: string }>(
+          sql`
         select subsidiary_id, currency from documents where id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(doc.subsidiary_id, usSubId);
       assert.equal(doc.currency, "USD");
 
       // Only the scoped subsidiary's employee is included…
       const refused = await calculatePayRun({
-        orgId: org.orgId, documentId: run.documentId, actorId,
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
       });
       assert.equal(refused.employees, 0, "the misconfigured employee produced no stub");
       assert.equal(refused.errors.length, 1);
@@ -895,9 +1438,14 @@ test(
         !refused.errors[0]!.message.includes("Scoped Sam"),
         "the name rides errors[].employee — repeating it in the message prints it twice",
       );
-      const noStubs = (await db.execute<{ n: number }>(sql`
+      const noStubs = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(noStubs.n, 0, "nothing wrong was written");
 
       // Configure the employee honestly — a US employee, in a state the US
@@ -910,22 +1458,39 @@ test(
          where org_id = ${org.orgId} and employee_party_id = ${usEmployee}`);
       const usEin = await seedUsEinAccount(org.orgId, actorId, usSubId, "12-3456789");
       await seedUsSui(org.orgId, actorId, usEmployee, "TX", "0.027", "9000", {
-        federalAccountId: usEin, subsidiaryId: usSubId, effectiveFrom: "2026-01-01", effectiveTo: null,
+        federalAccountId: usEin,
+        subsidiaryId: usSubId,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
         sourceReference: "TX original employer registration",
       });
       await seedPayrollSettings(org.orgId, {
-          // The fixture supplies the ordinary 0.6% FUTA method.
-          payroll: { us: { futaRate: "0.006" } },
-        });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        // The fixture supplies the ordinary 0.6% FUTA method.
+        payroll: { us: { futaRate: "0.006" } },
+      });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
-      const stubs = await db.execute<{ employee_party_id: string; currency_code: string; province: string;
-                factors: Record<string, string> }>(sql`
+      const stubs = await db.execute<{
+        employee_party_id: string;
+        currency_code: string;
+        province: string;
+        factors: Record<string, string>;
+      }>(
+        sql`
         select employee_party_id, currency_code, province, factors
           from pay_stubs where pay_run_document_id = ${run.documentId}
-      `, "objects");
-      assert.deepEqual(stubs.map((s) => s.employee_party_id), [usEmployee]);
+      `,
+        "objects",
+      );
+      assert.deepEqual(
+        stubs.map((s) => s.employee_party_id),
+        [usEmployee],
+      );
       // The whole chain agrees: US pack, US state, USD, and Pub 15-T factors
       // (SS/Medicare) rather than T4127's CPP/EI.
       assert.equal(stubs[0]!.currency_code, "USD");
@@ -948,57 +1513,106 @@ test(
     try {
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
       await seedPayrollSettings(org.orgId, {
-          features: { payroll: true },
-        });
+        features: { payroll: true },
+      });
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Adjusted Avery');
+      await seedPayrollPerson(org.orgId, employeeId, "Adjusted Avery");
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '78000', basis: 'year', annualHours: '2080', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "78000",
+        basis: "year",
+        annualHours: "2080",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        name: "Biweekly",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 3,
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
-      }, { percentFloor: null, method: 'accrue' });
+      await seedPayrollProfile(
+        org.orgId,
+        employeeId,
+        employmentId,
+        scheduleId,
+        actorId,
+        {
+          country: "CA",
+          province: "ON",
+          payBasis: "salary",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          ...WCB_OUT_OF_SCOPE,
+        },
+        { percentFloor: null, method: "accrue" },
+      );
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const baseline = (await db.execute<{ gross: string; net_pay: string }>(sql`
+      const baseline = (
+        await db.execute<{ gross: string; net_pay: string }>(
+          sql`
         select gross, net_pay from pay_stubs where pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(baseline.gross, "3000.0000"); // 78,000 / 26
 
       // One-off bonus: taxed with the non-periodic method (TB), gross +500
-      const bonusComponent = (await db.execute<{ id: string }>(sql`
+      const bonusComponent = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from pay_components where org_id = ${org.orgId} and code = 'BONUS'
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       await db.execute(sql`
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, component_id, amount, note, created_by, updated_by)
         values (${org.orgId}, ${run.documentId}, ${employeeId}, 'line', ${bonusComponent.id},
                 '500', 'Spot bonus', ${actorId}, ${actorId})`);
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const adjusted = (await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
+      const adjusted = (
+        await db.execute<{ gross: string; factors: Record<string, string> }>(
+          sql`
         select gross, factors from pay_stubs where pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(adjusted.gross, "3500.0000");
       assert.ok(Number(adjusted.factors.TB) > 0, "bonus method tax applies");
-      const bonusLine = await db.execute<{ description: string }>(sql`
+      const bonusLine = await db.execute<{ description: string }>(
+        sql`
         select l.description from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${run.documentId} and l.component_id = ${bonusComponent.id}
-      `, "objects");
-      assert.deepEqual(bonusLine.map((l) => l.description), ["Spot bonus"]);
+      `,
+        "objects",
+      );
+      assert.deepEqual(
+        bonusLine.map((l) => l.description),
+        ["Spot bonus"],
+      );
 
       // Replace: override the salary-derived base pay line entirely
-      const baseComponent = (await db.execute<{ id: string }>(sql`
+      const baseComponent = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from pay_components where org_id = ${org.orgId} and code = 'BASE'
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       await db.execute(sql`
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, component_id, amount, replace_component,
@@ -1006,9 +1620,14 @@ test(
         values (${org.orgId}, ${run.documentId}, ${employeeId}, 'line', ${baseComponent.id},
                 '2000', true, 'Unpaid leave proration', ${actorId}, ${actorId})`);
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const replaced = (await db.execute<{ gross: string }>(sql`
+      const replaced = (
+        await db.execute<{ gross: string }>(
+          sql`
         select gross from pay_stubs where pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(replaced.gross, "2500.0000"); // 2,000 replaced base + 500 bonus
 
       // Exclude: employee drops out of the run entirely
@@ -1016,11 +1635,20 @@ test(
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, created_by, updated_by)
         values (${org.orgId}, ${run.documentId}, ${employeeId}, 'exclude', ${actorId}, ${actorId})`);
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.equal(result.employees, 0);
-      const stubCount = (await db.execute<{ n: number }>(sql`
+      const stubCount = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(stubCount.n, 0);
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -1044,64 +1672,128 @@ test(
         const employeeId = randomUUID();
         await seedPayrollPerson(org.orgId, employeeId, "Tax Override Avery");
         await seedPayrollWage(org.orgId, employeeId, actorId, {
-          currency: "CAD", rate: "78000", basis: "year", annualHours: "2080", effectiveFrom: "2026-01-01",
+          currency: "CAD",
+          rate: "78000",
+          basis: "year",
+          annualHours: "2080",
+          effectiveFrom: "2026-01-01",
         });
         const scheduleId = randomUUID();
         await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-          name: "Biweekly", frequency: "biweekly", periodsPerYear: 26, anchorPeriodEnd: "2026-07-18",
+          name: "Biweekly",
+          frequency: "biweekly",
+          periodsPerYear: 26,
+          anchorPeriodEnd: "2026-07-18",
           payDateOffsetDays: 3,
         });
         const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-        await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-          country: "CA", province: "ON", payBasis: "salary", federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
-        }, { percentFloor: null, method: "accrue" });
+        await seedPayrollProfile(
+          org.orgId,
+          employeeId,
+          employmentId,
+          scheduleId,
+          actorId,
+          {
+            country: "CA",
+            province: "ON",
+            payBasis: "salary",
+            federalClaimCode: 1,
+            provincialClaimCode: 1,
+            ...WCB_OUT_OF_SCOPE,
+          },
+          { percentFloor: null, method: "accrue" },
+        );
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId,
-          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart: "2026-07-05",
+          periodEnd: "2026-07-18",
         });
         await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
         const baseMutation = {
-          orgId: org.orgId, documentId: run.documentId, actorId,
+          orgId: org.orgId,
+          documentId: run.documentId,
+          actorId,
           allowedSubsidiaryIds: null,
         };
-        const incomeTaxComponent = (await db.execute<{ id: string }>(sql`
+        const incomeTaxComponent = (
+          await db.execute<{ id: string }>(
+            sql`
           select id::text from pay_components
            where org_id=${org.orgId} and country='CA' and system_key='income_tax' and is_active
-        `, "objects"))[0]!;
-        await db.execute(sql`update pay_components set is_active=false where org_id=${org.orgId} and id=${incomeTaxComponent.id}`);
+        `,
+            "objects",
+          )
+        )[0]!;
+        await db.execute(
+          sql`update pay_components set is_active=false where org_id=${org.orgId} and id=${incomeTaxComponent.id}`,
+        );
         await assert.rejects(
           mutatePayRunAdjustment({
             ...baseMutation,
             mutation: {
-              action: "override_income_tax", employeePartyId: employeeId, amount: "120.15",
-              reason: "Record the operator-entered cheque withholding", sourceReference: "payroll-card:fixture-0",
+              action: "override_income_tax",
+              employeePartyId: employeeId,
+              amount: "120.15",
+              reason: "Record the operator-entered cheque withholding",
+              sourceReference: "payroll-card:fixture-0",
               idempotencyKey: randomUUID(),
             },
             reason: "Record the operator-entered cheque withholding",
           }),
           /exactly one active Canadian income-tax withholding component/,
         );
-        await db.execute(sql`update pay_components set is_active=true where org_id=${org.orgId} and id=${incomeTaxComponent.id}`);
+        await db.execute(
+          sql`update pay_components set is_active=true where org_id=${org.orgId} and id=${incomeTaxComponent.id}`,
+        );
         const first = {
-          action: "override_income_tax" as const, employeePartyId: employeeId,
-          amount: "120.15", reason: "Record the operator-entered cheque withholding",
-          sourceReference: "payroll-card:fixture-1", idempotencyKey: randomUUID(),
+          action: "override_income_tax" as const,
+          employeePartyId: employeeId,
+          amount: "120.15",
+          reason: "Record the operator-entered cheque withholding",
+          sourceReference: "payroll-card:fixture-1",
+          idempotencyKey: randomUUID(),
         };
         await seedPayrollSettings(org.orgId, { features: { payroll: false } });
-        await assert.rejects(mutatePayRunAdjustment({ ...baseMutation, mutation: first }), /Payroll feature is disabled/);
+        await assert.rejects(
+          mutatePayRunAdjustment({ ...baseMutation, mutation: first }),
+          /Payroll feature is disabled/,
+        );
         await seedPayrollSettings(org.orgId, { features: { payroll: true } });
-        const saved = await mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason });
+        const saved = await mutatePayRunAdjustment({
+          ...baseMutation,
+          mutation: first,
+          reason: first.reason,
+        });
         assert.deepEqual(saved, { changed: true, replayed: false });
-        const invalidated = (await db.execute<{ n: number }>(sql`
+        const invalidated = (
+          await db.execute<{ n: number }>(
+            sql`
           select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-        `, "objects"))[0]!;
-        assert.equal(invalidated.n, 0, "saving an override invalidates the prior calculated snapshot");
+        `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(
+          invalidated.n,
+          0,
+          "saving an override invalidates the prior calculated snapshot",
+        );
 
-        const replay = await mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason });
+        const replay = await mutatePayRunAdjustment({
+          ...baseMutation,
+          mutation: first,
+          reason: first.reason,
+        });
         assert.deepEqual(replay, { changed: false, replayed: true });
         await assert.rejects(
-          mutatePayRunAdjustment({ ...baseMutation, mutation: { ...first, amount: "120.16" }, reason: first.reason }),
+          mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: { ...first, amount: "120.16" },
+            reason: first.reason,
+          }),
           (error: unknown) => error instanceof PayRunAdjustmentIdempotencyConflict,
         );
         await assert.rejects(
@@ -1122,56 +1814,105 @@ test(
         );
         await assert.rejects(
           mutatePayRunAdjustment({
-            ...baseMutation, actorId: actors.outsiderId,
-            mutation: { ...first, idempotencyKey: randomUUID() }, reason: first.reason,
+            ...baseMutation,
+            actorId: actors.outsiderId,
+            mutation: { ...first, idempotencyKey: randomUUID() },
+            reason: first.reason,
           }),
         );
 
         await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-        const firstEvidence = (await db.execute<{
-          amount: string; description: string; factors: Record<string, string>;
-        }>(sql`
+        const firstEvidence = (
+          await db.execute<{
+            amount: string;
+            description: string;
+            factors: Record<string, string>;
+          }>(
+            sql`
           select l.amount::text as amount, l.description, s.factors
             from pay_stub_lines l
             join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
             join pay_components c on c.org_id=l.org_id and c.id=l.component_id
            where s.pay_run_document_id=${run.documentId} and c.system_key='income_tax'
-        `, "objects"))[0]!;
+        `,
+            "objects",
+          )
+        )[0]!;
         assert.equal(firstEvidence.amount, "120.1500");
-        assert.equal(firstEvidence.description,
-          "Income tax override — Record the operator-entered cheque withholding; source payroll-card:fixture-1");
+        assert.equal(
+          firstEvidence.description,
+          "Income tax override — Record the operator-entered cheque withholding; source payroll-card:fixture-1",
+        );
         assert.equal(firstEvidence.factors.CA_TAX_OVERRIDE, "120.1500");
         assert.equal(firstEvidence.factors.T, "120.1500");
-        assert.equal(typeof firstEvidence.factors.TF, "string", "the stub keeps its native federal reference leg");
-        assert.equal(typeof firstEvidence.factors.TP, "string", "the stub keeps its native provincial reference leg");
-        const calculatedSource = (await db.execute<{ calculation_source_snapshot: unknown }>(sql`
+        assert.equal(
+          typeof firstEvidence.factors.TF,
+          "string",
+          "the stub keeps its native federal reference leg",
+        );
+        assert.equal(
+          typeof firstEvidence.factors.TP,
+          "string",
+          "the stub keeps its native provincial reference leg",
+        );
+        const calculatedSource = (
+          await db.execute<{ calculation_source_snapshot: unknown }>(
+            sql`
           select calculation_source_snapshot from pay_runs
            where org_id=${org.orgId} and document_id=${run.documentId}
-        `, "objects"))[0]!.calculation_source_snapshot;
-        const sourceSnapshot = (typeof calculatedSource === "string" ? JSON.parse(calculatedSource) : calculatedSource) as {
+        `,
+            "objects",
+          )
+        )[0]!.calculation_source_snapshot;
+        const sourceSnapshot = (
+          typeof calculatedSource === "string" ? JSON.parse(calculatedSource) : calculatedSource
+        ) as {
           incomeTaxOverrides?: unknown[];
         };
-        assert.deepEqual(sourceSnapshot.incomeTaxOverrides, [{
-          adjustmentId: first.idempotencyKey,
-          employeePartyId: employeeId,
-          componentId: incomeTaxComponent.id,
-          amount: "120.1500",
-          reason: first.reason,
-          sourceReference: first.sourceReference,
-          requestId: first.idempotencyKey,
-        }]);
+        assert.deepEqual(sourceSnapshot.incomeTaxOverrides, [
+          {
+            adjustmentId: first.idempotencyKey,
+            employeePartyId: employeeId,
+            componentId: incomeTaxComponent.id,
+            amount: "120.1500",
+            reason: first.reason,
+            sourceReference: first.sourceReference,
+            requestId: first.idempotencyKey,
+          },
+        ]);
 
-        const second = { ...first, amount: "180.25", reason: "Correct to the revised operator entry", idempotencyKey: randomUUID() };
+        const second = {
+          ...first,
+          amount: "180.25",
+          reason: "Correct to the revised operator entry",
+          idempotencyKey: randomUUID(),
+        };
         await mutatePayRunAdjustment({ ...baseMutation, mutation: second, reason: second.reason });
-        const correctionInvalidated = (await db.execute<{ n: number }>(sql`
+        const correctionInvalidated = (
+          await db.execute<{ n: number }>(
+            sql`
           select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-        `, "objects"))[0]!;
-        assert.equal(correctionInvalidated.n, 0, "correcting an override invalidates the previous snapshot");
+        `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(
+          correctionInvalidated.n,
+          0,
+          "correcting an override invalidates the previous snapshot",
+        );
         assert.deepEqual(
-          await mutatePayRunAdjustment({ ...baseMutation, mutation: second, reason: second.reason }),
+          await mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: second,
+            reason: second.reason,
+          }),
           { changed: false, replayed: true },
         );
-        const readCurrentOverrideState = async () => (await db.execute<{ state: unknown }>(sql`
+        const readCurrentOverrideState = async () =>
+          (
+            await db.execute<{ state: unknown }>(
+              sql`
           select jsonb_build_object(
             'runStatus', r.run_status, 'calculationSnapshot', r.calculation_source_snapshot,
             'calculationDigest', r.calculation_source_digest,
@@ -1186,58 +1927,101 @@ test(
               where audit.org_id=r.org_id and audit.table_name='pay_run_adjustments'
                 and audit.row_id=${first.idempotencyKey})
           ) as state from pay_runs r where r.org_id=${org.orgId} and r.document_id=${run.documentId}
-        `, "objects"))[0]!.state;
+        `,
+              "objects",
+            )
+          )[0]!.state;
         const correctedInputState = await readCurrentOverrideState();
         await assert.rejects(
           mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason }),
-          (error: unknown) => error instanceof PayRunAdjustmentIdempotencyConflict
-            && /corrected or removed.*Review.*fresh request key/.test(error.message),
+          (error: unknown) =>
+            error instanceof PayRunAdjustmentIdempotencyConflict &&
+            /corrected or removed.*Review.*fresh request key/.test(error.message),
         );
-        assert.deepEqual(await readCurrentOverrideState(), correctedInputState,
-          "refusing an overwritten request preserves the corrected native input and audit history");
+        assert.deepEqual(
+          await readCurrentOverrideState(),
+          correctedInputState,
+          "refusing an overwritten request preserves the corrected native input and audit history",
+        );
         const audit = await db.execute<{
-          action: string; before_amount: string | null; after_amount: string | null;
-        }>(sql`
+          action: string;
+          before_amount: string | null;
+          after_amount: string | null;
+        }>(
+          sql`
           select action, changes->'before'->>'amount' as before_amount,
                  changes->'after'->>'amount' as after_amount
             from audit_log
            where org_id=${org.orgId} and table_name='pay_run_adjustments'
              and row_id=${first.idempotencyKey}
            order by at, id
-        `, "objects");
+        `,
+          "objects",
+        );
         assert.equal(audit.length, 2);
-        assert.deepEqual(audit.map(({ action, before_amount, after_amount }) => ({ action, before_amount, after_amount })), [
-          { action: "insert", before_amount: null, after_amount: "120.1500" },
-          { action: "update", before_amount: "120.1500", after_amount: "180.2500" },
-        ]);
+        assert.deepEqual(
+          audit.map(({ action, before_amount, after_amount }) => ({
+            action,
+            before_amount,
+            after_amount,
+          })),
+          [
+            { action: "insert", before_amount: null, after_amount: "120.1500" },
+            { action: "update", before_amount: "120.1500", after_amount: "180.2500" },
+          ],
+        );
         await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-        const correctedLine = (await db.execute<{ amount: string }>(sql`
+        const correctedLine = (
+          await db.execute<{ amount: string }>(
+            sql`
           select l.amount::text as amount from pay_stub_lines l
             join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
             join pay_components c on c.org_id=l.org_id and c.id=l.component_id
            where s.pay_run_document_id=${run.documentId} and c.system_key='income_tax'
-        `, "objects"))[0]!;
+        `,
+            "objects",
+          )
+        )[0]!;
         assert.equal(correctedLine.amount, "180.2500");
         const calculatedCorrectionState = await readCurrentOverrideState();
-        await assert.rejects(mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason }),
-          (error: unknown) => error instanceof PayRunAdjustmentIdempotencyConflict);
-        assert.deepEqual(await readCurrentOverrideState(), calculatedCorrectionState,
-          "an overwritten request cannot replace or invalidate the current calculated cheque snapshot");
-        assert.deepEqual(await mutatePayRunAdjustment({ ...baseMutation, mutation: second, reason: second.reason }),
-          { changed: false, replayed: true });
-        assert.deepEqual(await readCurrentOverrideState(), calculatedCorrectionState,
-          "a replay of the current request preserves its native input, calculated snapshot and audit history");
+        await assert.rejects(
+          mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason }),
+          (error: unknown) => error instanceof PayRunAdjustmentIdempotencyConflict,
+        );
+        assert.deepEqual(
+          await readCurrentOverrideState(),
+          calculatedCorrectionState,
+          "an overwritten request cannot replace or invalidate the current calculated cheque snapshot",
+        );
+        assert.deepEqual(
+          await mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: second,
+            reason: second.reason,
+          }),
+          { changed: false, replayed: true },
+        );
+        assert.deepEqual(
+          await readCurrentOverrideState(),
+          calculatedCorrectionState,
+          "a replay of the current request preserves its native input, calculated snapshot and audit history",
+        );
 
         const zero = { ...second, amount: "0", idempotencyKey: randomUUID() };
         await mutatePayRunAdjustment({ ...baseMutation, mutation: zero });
         await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-        const zeroStub = (await db.execute<{ factors: Record<string, string>; tax: string }>(sql`
+        const zeroStub = (
+          await db.execute<{ factors: Record<string, string>; tax: string }>(
+            sql`
           select s.factors, coalesce((select sum(l.amount) from pay_stub_lines l
             join pay_components c on c.org_id=l.org_id and c.id=l.component_id
             where l.org_id=s.org_id and l.stub_id=s.id and c.system_key='income_tax'),0)::text as tax
           from pay_stubs s where s.org_id=${org.orgId} and s.pay_run_document_id=${run.documentId}
             and s.employee_party_id=${employeeId}
-        `, "objects"))[0]!;
+        `,
+            "objects",
+          )
+        )[0]!;
         assert.equal(zeroStub.factors.CA_TAX_OVERRIDE, "0.0000");
         assert.equal(zeroStub.factors.T, "0.0000");
         assert.equal(cmp(zeroStub.tax, "0"), 0, "explicit zero replaces computed withholding");
@@ -1252,32 +2036,57 @@ test(
         // standards contribution, so the move declares the employer's HSF
         // sector class and CNT classification; the calculation below then
         // reaches the withholding override refusal rather than a missing levy.
-        await upsertStatutoryRate({ orgId: org.orgId, actorId, rates: CA_PACK_RATES, rateKey: "ca_hsf",
-          region: "QC", filingAccountId: null, taxYear: 2026, values: { sectorOther: "true" },
+        await upsertStatutoryRate({
+          orgId: org.orgId,
+          actorId,
+          rates: CA_PACK_RATES,
+          rateKey: "ca_hsf",
+          region: "QC",
+          filingAccountId: null,
+          taxYear: 2026,
+          values: { sectorOther: "true" },
           sourceCitation: "Revenu Québec 2026 health services fund contribution rate table",
-          reason: "Declare the ordinary-sector health services fund classification" });
+          reason: "Declare the ordinary-sector health services fund classification",
+        });
         await seedCntSubjectEmployerFixture(org.orgId, actorId, org.subsidiaryId, craPayable);
         await assert.rejects(
           mutatePayRunAdjustment({
             ...baseMutation,
-            mutation: { ...second, idempotencyKey: randomUUID() }, reason: second.reason,
+            mutation: { ...second, idempotencyKey: randomUUID() },
+            reason: second.reason,
           }),
           /single total cannot override Québec federal and provincial withholding separately/,
         );
-        const savedOverride = (await db.execute<{ id: string }>(sql`
+        const savedOverride = (
+          await db.execute<{ id: string }>(
+            sql`
           select id::text as id from pay_run_adjustments
            where org_id=${org.orgId} and pay_run_document_id=${run.documentId}
              and employee_party_id=${employeeId} and replace_component
-        `, "objects"))[0]!;
+        `,
+            "objects",
+          )
+        )[0]!;
         await assert.rejects(
           mutatePayRunAdjustment({
-            ...baseMutation, actorId: actors.outsiderId,
+            ...baseMutation,
+            actorId: actors.outsiderId,
             mutation: { action: "delete", adjustmentId: savedOverride.id },
           }),
         );
-        const unsupported = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const unsupported = await calculatePayRun({
+          orgId: org.orgId,
+          documentId: run.documentId,
+          actorId,
+        });
         assert.equal(unsupported.employees, 0);
-        assert.ok(unsupported.errors.some(error => /single total cannot override Québec federal and provincial withholding separately/.test(error.message)));
+        assert.ok(
+          unsupported.errors.some((error) =>
+            /single total cannot override Québec federal and provincial withholding separately/.test(
+              error.message,
+            ),
+          ),
+        );
         await db.execute(sql`
           update employee_payroll_profiles set country='US'
            where org_id=${org.orgId} and employee_party_id=${employeeId} and pay_schedule_id=${scheduleId}
@@ -1285,7 +2094,8 @@ test(
         await assert.rejects(
           mutatePayRunAdjustment({
             ...baseMutation,
-            mutation: { ...second, idempotencyKey: randomUUID() }, reason: second.reason,
+            mutation: { ...second, idempotencyKey: randomUUID() },
+            reason: second.reason,
           }),
           /available only for Canadian payroll profiles/,
         );
@@ -1295,12 +2105,28 @@ test(
         `);
         await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-        const yearEndSlip = (await t4Slips(org.orgId, 2026)).find(slip => slip.employeePartyId === employeeId);
-        assert.equal(yearEndSlip?.box22IncomeTax, "180.2500", "T4 box 22 aggregates the single overridden income-tax stub line");
-        await assert.rejects(mutatePayRunAdjustment({ ...baseMutation,
-          mutation: { ...second, idempotencyKey: randomUUID() } }), /pay run is not editable/);
-        await assert.rejects(mutatePayRunAdjustment({ ...baseMutation,
-          mutation: { action: "delete", adjustmentId: savedOverride.id } }), /pay run is not editable/);
+        const yearEndSlip = (await t4Slips(org.orgId, 2026)).find(
+          (slip) => slip.employeePartyId === employeeId,
+        );
+        assert.equal(
+          yearEndSlip?.box22IncomeTax,
+          "180.2500",
+          "T4 box 22 aggregates the single overridden income-tax stub line",
+        );
+        await assert.rejects(
+          mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: { ...second, idempotencyKey: randomUUID() },
+          }),
+          /pay run is not editable/,
+        );
+        await assert.rejects(
+          mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: { action: "delete", adjustmentId: savedOverride.id },
+          }),
+          /pay run is not editable/,
+        );
       });
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -1325,30 +2151,56 @@ test(
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Stale Sally');
+      await seedPayrollPerson(org.orgId, employeeId, "Stale Sally");
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "30",
+        basis: "hour",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        name: "Biweekly",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 3,
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
-      }, { percentFloor: '4', method: 'accrue' });
+      await seedPayrollProfile(
+        org.orgId,
+        employeeId,
+        employmentId,
+        scheduleId,
+        actorId,
+        {
+          country: "CA",
+          province: "ON",
+          payBasis: "hourly",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          ...WCB_OUT_OF_SCOPE,
+        },
+        { percentFloor: "4", method: "accrue" },
+      );
 
       for (const workedOn of ["2026-07-06", "2026-07-08"]) {
         await seedPayrollTime(org.orgId, employeeId, actorId, {
-          workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-          costingBasis: 'actual',
+          workedOn: workedOn,
+          hours: 20,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       }
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       // Fresh immediately after calculate — the gate must not block a clean run.
@@ -1378,14 +2230,24 @@ test(
         /inputs changed after it was last calculated \(wages\)/,
       );
       // And nothing was written: the run is still calculated, still empty of GL legs.
-      const refusedStatus = (await db.execute<{ run_status: string }>(sql`
+      const refusedStatus = (
+        await db.execute<{ run_status: string }>(
+          sql`
         select run_status from pay_runs where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!.run_status;
+      `,
+          "objects",
+        )
+      )[0]!.run_status;
       assert.equal(refusedStatus, "calculated");
-      const refusedLines = (await db.execute<{ n: number }>(sql`
+      const refusedLines = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(refusedLines, 0);
 
       // Recalculate and the SAME sequence commits: the gate tracks the inputs,
@@ -1393,16 +2255,23 @@ test(
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       await assertPayRunNotStale(org.orgId, run.documentId);
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const committedStatus = (await db.execute<{ run_status: string }>(sql`
+      const committedStatus = (
+        await db.execute<{ run_status: string }>(
+          sql`
         select run_status from pay_runs where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!.run_status;
+      `,
+          "objects",
+        )
+      )[0]!.run_status;
       assert.equal(committedStatus, "committed");
 
       // Division of labour with the commit engine's own guards: a
       // never-calculated run has nothing to be stale, so the freshness gate
       // defers and `commitPayRun`'s state guard names the real problem.
       const uncalculated = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
       });
       await assertPayRunNotStale(org.orgId, uncalculated.documentId);
       await assert.rejects(
@@ -1437,45 +2306,80 @@ test(
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Late Larry');
+      await seedPayrollPerson(org.orgId, employeeId, "Late Larry");
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "30",
+        basis: "hour",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        name: "Biweekly",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 3,
       });
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
-      }, { percentFloor: '4', method: 'accrue' });
+      await seedPayrollProfile(
+        org.orgId,
+        employeeId,
+        employmentId,
+        scheduleId,
+        actorId,
+        {
+          country: "CA",
+          province: "ON",
+          payBasis: "hourly",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          ...WCB_OUT_OF_SCOPE,
+        },
+        { percentFloor: "4", method: "accrue" },
+      );
 
       const addHours = async (workedOn: string) => {
         await seedPayrollTime(org.orgId, employeeId, actorId, {
-          workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-          costingBasis: 'actual',
+          workedOn: workedOn,
+          hours: 20,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       };
       await addHours("2026-07-06");
       await addHours("2026-07-08");
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const first = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const first = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(first.errors, []);
       assert.equal(first.gross, "1200.0000"); // 40h × $30
-      const source = (await db.execute<{
+      const source = (
+        await db.execute<{
           snapshot: { timeEntries: unknown[]; claimEntryIds: string[] };
           digest: string;
-        }>(sql`
+        }>(
+          sql`
         select calculation_source_snapshot as snapshot,
                calculation_source_digest as digest
           from pay_runs
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(source.snapshot.timeEntries.length, 2);
       assert.equal(source.snapshot.claimEntryIds.length, 2);
       assert.match(source.digest, /^[0-9a-f]{64}$/);
@@ -1504,9 +2408,13 @@ test(
         "the new time registers as staleness",
       );
 
-      const effectsBefore = (await db.execute<{
-          stubs: number; audit: number; entitlements: number;
-        }>(sql`
+      const effectsBefore = (
+        await db.execute<{
+          stubs: number;
+          audit: number;
+          entitlements: number;
+        }>(
+          sql`
         select (select count(*)::int from pay_stubs
                  where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}) as stubs,
                (select count(*)::int from audit_log
@@ -1514,7 +2422,10 @@ test(
                (select count(*)::int from entitlement_ledger
                  where org_id = ${org.orgId}
                    and pay_run_document_id = ${run.documentId}) as entitlements
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
 
       // The ENGINE refuses on its own — no route gate, no disabled button.
       await assert.rejects(
@@ -1523,23 +2434,42 @@ test(
       );
       // And the refusal wrote nothing: no hour marked paid, the run still
       // calculated, the document still empty of GL legs.
-      const claimedAfterRefusal = (await db.execute<{ n: number }>(sql`
+      const claimedAfterRefusal = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from time_entries
          where org_id = ${org.orgId} and payroll_batch_ref is not null
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(claimedAfterRefusal, 0, "no time was marked paid by the refused commit");
-      const statusAfterRefusal = (await db.execute<{ run_status: string }>(sql`
+      const statusAfterRefusal = (
+        await db.execute<{ run_status: string }>(
+          sql`
         select run_status from pay_runs where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!.run_status;
+      `,
+          "objects",
+        )
+      )[0]!.run_status;
       assert.equal(statusAfterRefusal, "calculated");
-      const glAfterRefusal = (await db.execute<{ n: number }>(sql`
+      const glAfterRefusal = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(glAfterRefusal, 0);
-      const effectsAfter = (await db.execute<{
-          stubs: number; audit: number; entitlements: number;
-        }>(sql`
+      const effectsAfter = (
+        await db.execute<{
+          stubs: number;
+          audit: number;
+          entitlements: number;
+        }>(
+          sql`
         select (select count(*)::int from pay_stubs
                  where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}) as stubs,
                (select count(*)::int from audit_log
@@ -1547,7 +2477,10 @@ test(
                (select count(*)::int from entitlement_ledger
                  where org_id = ${org.orgId}
                    and pay_run_document_id = ${run.documentId}) as entitlements
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(
         effectsAfter,
         effectsBefore,
@@ -1556,30 +2489,51 @@ test(
 
       // Recalculate — the stub now prices ALL four entries — and the SAME
       // direct engine call commits.
-      const second = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const second = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(second.errors, []);
       assert.equal(second.gross, "2400.0000"); // 80h × $30
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
-      const claimed = (await db.execute<{ n: number; distinct_n: number }>(sql`
+      const claimed = (
+        await db.execute<{ n: number; distinct_n: number }>(
+          sql`
         select count(*)::int as n, count(distinct te.id)::int as distinct_n from time_entries te
          where te.org_id = ${org.orgId}
            and te.worked_on between ${"2026-07-05"} and ${"2026-07-18"}
            and te.payroll_batch_ref = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(claimed.n, 4, "every eligible entry was claimed");
       assert.equal(claimed.distinct_n, 4, "each eligible entry exactly once");
-      const unclaimed = (await db.execute<{ n: number }>(sql`
+      const unclaimed = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from time_entries
          where org_id = ${org.orgId} and status = 'approved'
            and worked_on between ${"2026-07-05"} and ${"2026-07-18"}
            and payroll_batch_ref is null
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(unclaimed, 0, "no approved hour in the period was left behind");
-      const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null }>(sql`
+      const lines = await db.execute<{
+        account_id: string;
+        amount: string;
+        party_id: string | null;
+      }>(
+        sql`
         select account_id, amount, party_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(cmp(sum(lines.map((l) => l.amount)), "0"), 0, "GL projection balances");
       const netLeg = lines.find((l) => l.party_id === employeeId);
       assert.ok(netLeg, "the net pay leg carries the employee party");
@@ -1594,18 +2548,16 @@ test(
 // spend the employee's statutory year-to-date or commit a changed source.
 
 /** Independently declared fence identity for one employee's statutory year. */
-const payRunYtdFenceKey = (
-  orgId: string,
-  employeePartyId: string,
-  taxYear: number,
-): string => `payroll-run-ytd:${orgId}:${employeePartyId}:${taxYear}`;
+const payRunYtdFenceKey = (orgId: string, employeePartyId: string, taxYear: number): string =>
+  `payroll-run-ytd:${orgId}:${employeePartyId}:${taxYear}`;
 
 /** The fence key split into the unsigned (classid, objid) halves pg_locks shows. */
-async function ytdFenceHalves(
-  key: string,
-): Promise<{ classid: bigint; objid: bigint }> {
-  const r = (await db.execute<{ key: string }>(sql`
-    select hashtextextended(${key}, 0)::text as key`, "objects"));
+async function ytdFenceHalves(key: string): Promise<{ classid: bigint; objid: bigint }> {
+  const r = await db.execute<{ key: string }>(
+    sql`
+    select hashtextextended(${key}, 0)::text as key`,
+    "objects",
+  );
   const wide = BigInt.asUintN(64, BigInt(r[0]!.key));
   return { classid: wide >> 32n, objid: wide & 0xffffffffn };
 }
@@ -1654,21 +2606,27 @@ async function parkedSelectionBackends(): Promise<string[]> {
   // FIRST kilobyte of the calculation-source fence query. "stub_employees"
   // sits in its opening CTEs; the payroll_batch_ref predicate lives past
   // the 2kB mark and is invisible on default-configured servers.
-  const claims = (await db.execute<{ pid: number }>(sql`
+  const claims = await db.execute<{ pid: number }>(
+    sql`
     select pid from pg_stat_activity
      where datname = current_database()
        and state = 'active' and wait_event_type = 'Lock'
        and query like '%stub_employees%'
-       and pid <> pg_backend_pid()`, "objects"));
+       and pid <> pg_backend_pid()`,
+    "objects",
+  );
   return claims.map((r) => String(r.pid));
 }
 
 /** A backend queued on the declared financial source fence. */
 async function ytdFenceQueued(fence: { classid: bigint; objid: bigint }): Promise<boolean> {
-  const queued = (await db.execute(sql`
+  const queued = await db.execute(
+    sql`
     select 1 from pg_locks
      where locktype = 'advisory' and granted = false
-       and classid::bigint = ${fence.classid} and objid::bigint = ${fence.objid}`, "objects"));
+       and classid::bigint = ${fence.classid} and objid::bigint = ${fence.objid}`,
+    "objects",
+  );
   return queued.length > 0;
 }
 
@@ -1677,9 +2635,12 @@ async function waitForInterleaving(what: string, probe: () => Promise<boolean>):
     if (await probe()) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  const activity = await db.execute(sql`
+  const activity = await db.execute(
+    sql`
     select pid, state, wait_event_type, left(query, 160) as query
-      from pg_stat_activity where datname = current_database()`, "objects");
+      from pg_stat_activity where datname = current_database()`,
+    "objects",
+  );
   assert.fail(`timed out waiting for ${what}; backends: ${JSON.stringify(activity)}`);
 }
 
@@ -1704,24 +2665,47 @@ async function seedFencedRaceOrg(): Promise<{
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${employeeId}, ${org.orgId}, 'person', 'Racing Riley', true, '{}'::jsonb)`);
   await seedPayrollWage(org.orgId, employeeId, actorId, {
-    currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2026-01-01',
+    currency: "CAD",
+    rate: "30",
+    basis: "hour",
+    effectiveFrom: "2026-01-01",
   });
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    name: "Biweekly",
+    frequency: "biweekly",
+    periodsPerYear: 26,
+    anchorPeriodEnd: "2026-07-18",
     payDateOffsetDays: 3,
   });
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-  await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-    country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1, ...WCB_OUT_OF_SCOPE,
-  }, { percentFloor: '4', method: 'accrue' });
+  await seedPayrollProfile(
+    org.orgId,
+    employeeId,
+    employmentId,
+    scheduleId,
+    actorId,
+    {
+      country: "CA",
+      province: "ON",
+      payBasis: "hourly",
+      federalClaimCode: 1,
+      provincialClaimCode: 1,
+      ...WCB_OUT_OF_SCOPE,
+    },
+    { percentFloor: "4", method: "accrue" },
+  );
 
   // Two approved entries inside EACH period: every run in these tests must
   // have real time to price AND real rows the source selection must lock.
   for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-21", "2026-07-23"]) {
     await seedPayrollTime(org.orgId, employeeId, actorId, {
-      workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-      costingBasis: 'actual',
+      workedOn: workedOn,
+      hours: 20,
+      status: "approved",
+      isBillable: false,
+      billingStatus: "unbilled",
+      costingBasis: "actual",
     });
   }
   return { org, actorId, employeeId, scheduleId };
@@ -1757,15 +2741,29 @@ test(
     let parker: pg.Client | undefined;
     try {
       const runA = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       const runB = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-19", periodEnd: "2026-08-01",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-19",
+        periodEnd: "2026-08-01",
       });
-      const calcA = await calculatePayRun({ orgId: org.orgId, documentId: runA.documentId, actorId });
-      const calcB = await calculatePayRun({ orgId: org.orgId, documentId: runB.documentId, actorId });
+      const calcA = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: runA.documentId,
+        actorId,
+      });
+      const calcB = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: runB.documentId,
+        actorId,
+      });
       assert.deepEqual(calcA.errors, []);
       assert.deepEqual(calcB.errors, []);
       const fence = await ytdFenceHalves(payRunYtdFenceKey(org.orgId, employeeId, 2026));
@@ -1790,8 +2788,12 @@ test(
         [org.orgId, runB.documentId],
       );
 
-      const settledA = settle(commitPayRun({ orgId: org.orgId, documentId: runA.documentId, actorId }));
-      const settledB = settle(commitPayRun({ orgId: org.orgId, documentId: runB.documentId, actorId }));
+      const settledA = settle(
+        commitPayRun({ orgId: org.orgId, documentId: runA.documentId, actorId }),
+      );
+      const settledB = settle(
+        commitPayRun({ orgId: org.orgId, documentId: runB.documentId, actorId }),
+      );
 
       // A parks ON its claim: past its row lock, past its first freshness
       // gate, holding every write short of the terminal one.
@@ -1819,7 +2821,13 @@ test(
             observed = "both commits were past their gates at once";
             return true;
           }
-          if (parked.length >= 1 && ((await ytdFenceQueued(employeeFence)) || (await ytdFenceQueued(fence)) || (await ytdFenceQueued(serviceFence)) || (await ytdFenceQueued(openingSourceFence)))) {
+          if (
+            parked.length >= 1 &&
+            ((await ytdFenceQueued(employeeFence)) ||
+              (await ytdFenceQueued(fence)) ||
+              (await ytdFenceQueued(serviceFence)) ||
+              (await ytdFenceQueued(openingSourceFence)))
+          ) {
             observed = "second commit queued on a shared financial source fence";
             return true;
           }
@@ -1838,8 +2846,11 @@ test(
       ];
       const winners = outcomes.filter((r) => r.outcome.status === "fulfilled");
       const losers = outcomes.filter((r) => r.outcome.status === "rejected");
-      assert.equal(winners.length, 1,
-        `exactly one of two racing commits may spend one employee's tax-year YTD (${observed})`);
+      assert.equal(
+        winners.length,
+        1,
+        `exactly one of two racing commits may spend one employee's tax-year YTD (${observed})`,
+      );
       assert.equal(losers.length, 1);
       // The loser names every stale arm: the employee-year YTD moved AND the
       // employer-levy YTD the EHT exemption prices from moved with it.
@@ -1851,33 +2862,54 @@ test(
       const loser = losers[0]!.documentId;
 
       // Exactly one terminal state was written...
-      const statuses = (await db.execute<{ document_id: string; run_status: string }>(sql`
+      const statuses = await db.execute<{ document_id: string; run_status: string }>(
+        sql`
         select document_id, run_status from pay_runs
          where org_id = ${org.orgId}
            and (document_id = ${runA.documentId} or document_id = ${runB.documentId})
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(
         new Map(statuses.map((r) => [r.document_id, r.run_status])),
-        new Map([[winner, "committed"], [loser, "calculated"]]),
+        new Map([
+          [winner, "committed"],
+          [loser, "calculated"],
+        ]),
       );
       // ...money moved once: GL legs exist only for the winner...
-      const glRuns = (await db.execute<{ document_id: string }>(sql`
+      const glRuns = await db.execute<{ document_id: string }>(
+        sql`
         select distinct document_id from document_lines
          where org_id = ${org.orgId}
            and (document_id = ${runA.documentId} or document_id = ${runB.documentId})
-      `, "objects"));
-      assert.deepEqual(glRuns.map((r) => r.document_id), [winner]);
-      const stubs = (await db.execute<{ gross: string }>(sql`
+      `,
+        "objects",
+      );
+      assert.deepEqual(
+        glRuns.map((r) => r.document_id),
+        [winner],
+      );
+      const stubs = await db.execute<{ gross: string }>(
+        sql`
         select gross from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${winner}
-      `, "objects"));
-      assert.deepEqual(stubs.map((s) => s.gross), ["1200.0000"]); // 40h × $30
+      `,
+        "objects",
+      );
+      assert.deepEqual(
+        stubs.map((s) => s.gross),
+        ["1200.0000"],
+      ); // 40h × $30
       // ...and only the winner's hours are claimed as paid.
-      const claims = (await db.execute<{ batch: string; n: number }>(sql`
+      const claims = await db.execute<{ batch: string; n: number }>(
+        sql`
         select payroll_batch_ref as batch, count(*)::int as n from time_entries
          where org_id = ${org.orgId} and payroll_batch_ref is not null
         group by payroll_batch_ref
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(claims, [{ batch: winner, n: 2 }]);
 
       // The refusal must be recoverable, not poisoning: the loser recalculates
@@ -1913,8 +2945,11 @@ test(
     let holder: pg.Client | undefined;
     try {
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       const calc = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(calc.errors, []);
@@ -1927,7 +2962,9 @@ test(
           for update`,
         [org.orgId],
       );
-      const pending = settle(commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }));
+      const pending = settle(
+        commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }),
+      );
       await waitForInterleaving(
         "the commit to pass its first freshness gate and park on the time selection",
         async () => (await parkedSelectionBackends()).length >= 1,
@@ -1955,8 +2992,11 @@ test(
       holder = undefined;
 
       const result = await pending;
-      assert.equal(result.status, "rejected",
-        "a config write landing inside the gate gap must refuse the commit");
+      assert.equal(
+        result.status,
+        "rejected",
+        "a config write landing inside the gate gap must refuse the commit",
+      );
       assert.match(
         ((result as PromiseRejectedResult).reason as Error).message,
         /inputs changed after it was approved \(wages\)/,
@@ -1964,31 +3004,47 @@ test(
 
       // Nothing was written by the refused commit: no terminal state, no GL
       // legs, no hour marked paid.
-      const status = (await db.execute<{ run_status: string }>(sql`
+      const status = (
+        await db.execute<{ run_status: string }>(
+          sql`
         select run_status from pay_runs
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!.run_status;
+      `,
+          "objects",
+        )
+      )[0]!.run_status;
       assert.equal(status, "calculated");
-      const glLines = (await db.execute<{ n: number }>(sql`
+      const glLines = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(glLines, 0);
-      const claimed = (await db.execute<{ n: number }>(sql`
+      const claimed = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from time_entries
          where org_id = ${org.orgId} and payroll_batch_ref is not null
-      `, "objects"))[0]!.n;
+      `,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(claimed, 0);
       // The edit itself survived — it was never inside the rolled-back
       // transaction — and still names the refusal reason.
-      assert.deepEqual(
-        (await payRunStaleness(org.orgId, run.documentId)).reasons,
-        ["wages"],
-      );
+      assert.deepEqual((await payRunStaleness(org.orgId, run.documentId)).reasons, ["wages"]);
 
       // Control: recalculate prices the edited world and the SAME engine call
       // commits — the gate tracks inputs, it does not leak into a blocker.
-      const recalc = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const recalc = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(recalc.errors, []);
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
     } finally {

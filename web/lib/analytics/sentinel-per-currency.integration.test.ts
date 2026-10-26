@@ -1,41 +1,48 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { cmp } from '@openbooks/engine/money'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { cmp } from "@openbooks/engine/money";
 
 registerHooks({
   resolve(specifier, _context, next) {
-    return next(specifier)
+    return next(specifier);
   },
-})
+});
 
-const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { sentinelData } = await import('./sentinel-data')
-const { analyticsConfig } = await import('./config.ts')
+const { sql } = await import("drizzle-orm");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { sentinelData } = await import("./sentinel-data");
+const { analyticsConfig } = await import("./config.ts");
 
-type Authz = Parameters<typeof sentinelData>[2]
-type Data = Awaited<ReturnType<typeof sentinelData>>
+type Authz = Parameters<typeof sentinelData>[2];
+type Data = Awaited<ReturnType<typeof sentinelData>>;
 
-const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
+const P = { from: "2026-07-01", to: "2026-07-31", label: "July 2026" };
 
-interface SeedDoc { num: string; currency: string; fx: string; total: string; date: string; ref: string | null }
+interface SeedDoc {
+  num: string;
+  currency: string;
+  fx: string;
+  total: string;
+  date: string;
+  ref: string | null;
+}
 
 async function seedVendorBills(orgId: string, subsidiaryId: string, name: string, docs: SeedDoc[]) {
-  const vendorId = randomUUID()
+  const vendorId = randomUUID();
   await withBypass(async () => {
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${vendorId}, ${orgId}, 'vendor', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`)
+      values (${vendorId}, ${orgId}, 'vendor', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`);
     for (const d of docs) {
       await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id,
           document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance, reference_number)
         values (${randomUUID()}, ${orgId}, 'vendor_bill', ${d.num}, ${vendorId}, ${subsidiaryId},
-          ${d.date}, ${d.date}, ${d.currency}, ${d.fx}, 'draft', ${d.total}, 0, ${d.total}, ${d.total}, ${d.ref})`)
+          ${d.date}, ${d.date}, ${d.currency}, ${d.fx}, 'draft', ${d.total}, 0, ${d.total}, ${d.total}, ${d.ref})`);
     }
-  })
-  return vendorId
+  });
+  return vendorId;
 }
 
 // Noise floors exclude their detectors by name while unset, so scenarios
@@ -48,36 +55,40 @@ async function configureSentinel(orgId: string, values: Record<string, string | 
     await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb)
       || jsonb_build_object('analytics', coalesce(settings -> 'analytics', '{}'::jsonb)
         || jsonb_build_object('sentinel', ${JSON.stringify(values)}::jsonb))
-      where id = ${orgId}`)
+      where id = ${orgId}`);
     // A fixture write that no read can observe is not a setup: prove the
     // reader resolves every configured value before the scenario runs.
-    const cfg = await analyticsConfig(orgId, 'sentinel') as unknown as Record<string, unknown>
+    const cfg = (await analyticsConfig(orgId, "sentinel")) as unknown as Record<string, unknown>;
     for (const [key, value] of Object.entries(values)) {
-      assert.equal(cfg[key], value)
+      assert.equal(cfg[key], value);
     }
-  })
+  });
 }
 
 async function seedApprovalLimit(orgId: string, limit: number) {
   const graph = {
     nodes: [
-      { id: 'limit', position: { x: 0, y: 0 }, data: { kind: 'condition', rule: { op: 'gte', field: 'total', value: limit } } },
+      {
+        id: "limit",
+        position: { x: 0, y: 0 },
+        data: { kind: "condition", rule: { op: "gte", field: "total", value: limit } },
+      },
     ],
     edges: [],
-  }
+  };
   await withBypass(async () => {
     await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
-      values (${randomUUID()}, ${orgId}, 'Vendor bill approvals', 'vendor_bill', true, ${JSON.stringify(graph)}::jsonb)`)
-  })
+      values (${randomUUID()}, ${orgId}, 'Vendor bill approvals', 'vendor_bill', true, ${JSON.stringify(graph)}::jsonb)`);
+  });
 }
 
 async function runSentinel(orgId: string): Promise<Data> {
   const authz = {
     user: { orgId, id: randomUUID() },
-    permissions: new Set(['*']),
+    permissions: new Set(["*"]),
     allowedSubsidiaryIds: null,
-  } as unknown as Authz
-  return withOrgContext(orgId, () => sentinelData(orgId, P, authz))
+  } as unknown as Authz;
+  return withOrgContext(orgId, () => sentinelData(orgId, P, authz));
 }
 
 /**
@@ -85,34 +96,57 @@ async function runSentinel(orgId: string): Promise<Data> {
  * flags (15x), while a CAD 1500 bill with no CAD history must not borrow the
  * USD baseline — the mixed baseline used to flag it as a false positive.
  */
-test('sentinel RSF baselines never cross document currencies', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    const flatBaseline = (prefix: string) =>
-      ['100', '100', '100', '100', '100', '100'].map((total, i) => ({
-        num: `${prefix}-BASE-${i}`, currency: 'USD', fx: '1.35', total, date: '2026-06-15', ref: `${prefix}-B${i}`,
-      }))
-    await seedVendorBills(org.orgId, org.subsidiaryId, 'RSF Control Vendor', [
-      ...flatBaseline('RSF-A'),
-      { num: 'RSF-A-USD', currency: 'USD', fx: '1.35', total: '1500', date: '2026-07-10', ref: 'RSF-A-U1' },
-    ])
-    await seedVendorBills(org.orgId, org.subsidiaryId, 'RSF Mixed Vendor', [
-      ...flatBaseline('RSF-B'),
-      { num: 'RSF-B-CAD', currency: 'CAD', fx: '1', total: '1500', date: '2026-07-13', ref: 'RSF-B-C1' },
-    ])
-    // Money reads back canonicalized to four decimals, so the configured
-    // floors below are written canonically — the read-back loop in
-    // configureSentinel asserts the resolved value.
-    await configureSentinel(org.orgId, { rsfBaselineFloor: '1.0000' })
-    const data = await runSentinel(org.orgId)
-    // Exactly one RSF finding: the genuine same-currency outlier.
-    assert.equal(data.rsf.total, 1)
-    assert.equal(data.rsf.items[0]!.docNumber, 'RSF-A-USD')
-    assert.equal((data.rsf.items[0] as unknown as { currency?: string }).currency, 'USD')
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "sentinel RSF baselines never cross document currencies",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const flatBaseline = (prefix: string) =>
+        ["100", "100", "100", "100", "100", "100"].map((total, i) => ({
+          num: `${prefix}-BASE-${i}`,
+          currency: "USD",
+          fx: "1.35",
+          total,
+          date: "2026-06-15",
+          ref: `${prefix}-B${i}`,
+        }));
+      await seedVendorBills(org.orgId, org.subsidiaryId, "RSF Control Vendor", [
+        ...flatBaseline("RSF-A"),
+        {
+          num: "RSF-A-USD",
+          currency: "USD",
+          fx: "1.35",
+          total: "1500",
+          date: "2026-07-10",
+          ref: "RSF-A-U1",
+        },
+      ]);
+      await seedVendorBills(org.orgId, org.subsidiaryId, "RSF Mixed Vendor", [
+        ...flatBaseline("RSF-B"),
+        {
+          num: "RSF-B-CAD",
+          currency: "CAD",
+          fx: "1",
+          total: "1500",
+          date: "2026-07-13",
+          ref: "RSF-B-C1",
+        },
+      ]);
+      // Money reads back canonicalized to four decimals, so the configured
+      // floors below are written canonically — the read-back loop in
+      // configureSentinel asserts the resolved value.
+      await configureSentinel(org.orgId, { rsfBaselineFloor: "1.0000" });
+      const data = await runSentinel(org.orgId);
+      // Exactly one RSF finding: the genuine same-currency outlier.
+      assert.equal(data.rsf.total, 1);
+      assert.equal(data.rsf.items[0]!.docNumber, "RSF-A-USD");
+      assert.equal((data.rsf.items[0] as unknown as { currency?: string }).currency, "USD");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * Z-scores run per document currency: the USD 150 bill is a 3.3σ outlier
@@ -120,155 +154,216 @@ test('sentinel RSF baselines never cross document currencies', { skip: !env.OPEN
  * baseline this deep to clear 3σ), but a single CAD 1500 bill used to inflate
  * the shared baseline deviation and mask it entirely.
  */
-test('sentinel z-scores run per currency so foreign bills cannot mask outliers', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    const baseline = Array.from({ length: 12 }, (_, i) => ({
-      num: `Z-BASE-${i}`, currency: 'USD', fx: '1.35', total: '100', date: '2026-06-15', ref: `ZBASE-${i}`,
-    }))
-    await seedVendorBills(org.orgId, org.subsidiaryId, 'Z Vendor', [
-      ...baseline,
-      { num: 'Z-USD', currency: 'USD', fx: '1.35', total: '150', date: '2026-07-10', ref: 'Z-U1' },
-      { num: 'Z-CAD', currency: 'CAD', fx: '1', total: '1500', date: '2026-07-13', ref: 'Z-C1' },
-    ])
-    await configureSentinel(org.orgId, { rsfBaselineFloor: '1.0000', zscoreSigmaFloor: '1.0000' })
-    const data = await runSentinel(org.orgId)
-    const hits = data.zscore.items.filter((i) => cmp(i.amount, '150') === 0)
-    assert.equal(hits.length, 1)
-    assert.equal(hits[0]!.docNumber, 'Z-USD')
-    assert.equal((hits[0] as unknown as { currency?: string }).currency, 'USD')
-    // The lone CAD bill has no CAD baseline: no z finding, no RSF finding.
-    assert.equal(data.zscore.items.filter((i) => cmp(i.amount, '1500') === 0).length, 0)
-    assert.equal(data.rsf.items.filter((i) => cmp(i.amount, '1500') === 0).length, 0)
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "sentinel z-scores run per currency so foreign bills cannot mask outliers",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const baseline = Array.from({ length: 12 }, (_, i) => ({
+        num: `Z-BASE-${i}`,
+        currency: "USD",
+        fx: "1.35",
+        total: "100",
+        date: "2026-06-15",
+        ref: `ZBASE-${i}`,
+      }));
+      await seedVendorBills(org.orgId, org.subsidiaryId, "Z Vendor", [
+        ...baseline,
+        {
+          num: "Z-USD",
+          currency: "USD",
+          fx: "1.35",
+          total: "150",
+          date: "2026-07-10",
+          ref: "Z-U1",
+        },
+        { num: "Z-CAD", currency: "CAD", fx: "1", total: "1500", date: "2026-07-13", ref: "Z-C1" },
+      ]);
+      await configureSentinel(org.orgId, {
+        rsfBaselineFloor: "1.0000",
+        zscoreSigmaFloor: "1.0000",
+      });
+      const data = await runSentinel(org.orgId);
+      const hits = data.zscore.items.filter((i) => cmp(i.amount, "150") === 0);
+      assert.equal(hits.length, 1);
+      assert.equal(hits[0]!.docNumber, "Z-USD");
+      assert.equal((hits[0] as unknown as { currency?: string }).currency, "USD");
+      // The lone CAD bill has no CAD baseline: no z finding, no RSF finding.
+      assert.equal(data.zscore.items.filter((i) => cmp(i.amount, "1500") === 0).length, 0);
+      assert.equal(data.rsf.items.filter((i) => cmp(i.amount, "1500") === 0).length, 0);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * Benford digit analysis partitions by document currency — three USD bills
  * and two CAD bills yield one slice per currency, never a blended signal.
  */
-test('sentinel benford runs one distribution per document currency', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    await seedVendorBills(org.orgId, org.subsidiaryId, 'Benford Vendor', [
-      { num: 'B1', currency: 'USD', fx: '1.35', total: '120', date: '2026-07-06', ref: 'B-1' },
-      { num: 'B2', currency: 'USD', fx: '1.35', total: '250', date: '2026-07-07', ref: 'B-2' },
-      { num: 'B3', currency: 'USD', fx: '1.35', total: '1800', date: '2026-07-08', ref: 'B-3' },
-      { num: 'B4', currency: 'CAD', fx: '1', total: '95', date: '2026-07-09', ref: 'B-4' },
-      { num: 'B5', currency: 'CAD', fx: '1', total: '410', date: '2026-07-13', ref: 'B-5' },
-    ])
-    const data = await runSentinel(org.orgId)
-    const slices = (data.benford1D as unknown as {
-      byCurrency?: Array<{
-        currency: string
-        totalTransactions: number
-        digits: Array<{ digit: number; count: number; amount: string }>
-      }>
-    }).byCurrency
-    assert.ok(slices)
-    assert.equal(slices!.length, 2)
-    assert.equal(slices!.find((s) => s.currency === 'USD')?.totalTransactions, 3)
-    assert.equal(slices!.find((s) => s.currency === 'CAD')?.totalTransactions, 2)
-    // Digit amounts are exact transaction-currency sums in the slice
-    // currency — never blended, never zero: USD 120 + 1800 behind digit 1,
-    // CAD 410 behind digit 4.
-    const usd = slices!.find((s) => s.currency === 'USD')!
-    const usdDigit1 = usd.digits.find((d) => d.digit === 1)
-    assert.ok(usdDigit1, 'digit 1 is present in the USD slice')
-    assert.equal(cmp(usdDigit1.amount, '1920'), 0)
-    const cad = slices!.find((s) => s.currency === 'CAD')!
-    const cadDigit4 = cad.digits.find((d) => d.digit === 4)
-    assert.ok(cadDigit4, 'digit 4 is present in the CAD slice')
-    assert.equal(cmp(cadDigit4.amount, '410'), 0)
-    // The legacy top-level shape carries the largest slice, not a blend.
-    assert.equal(data.benford1D.totalTransactions, 3)
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "sentinel benford runs one distribution per document currency",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await seedVendorBills(org.orgId, org.subsidiaryId, "Benford Vendor", [
+        { num: "B1", currency: "USD", fx: "1.35", total: "120", date: "2026-07-06", ref: "B-1" },
+        { num: "B2", currency: "USD", fx: "1.35", total: "250", date: "2026-07-07", ref: "B-2" },
+        { num: "B3", currency: "USD", fx: "1.35", total: "1800", date: "2026-07-08", ref: "B-3" },
+        { num: "B4", currency: "CAD", fx: "1", total: "95", date: "2026-07-09", ref: "B-4" },
+        { num: "B5", currency: "CAD", fx: "1", total: "410", date: "2026-07-13", ref: "B-5" },
+      ]);
+      const data = await runSentinel(org.orgId);
+      const slices = (
+        data.benford1D as unknown as {
+          byCurrency?: Array<{
+            currency: string;
+            totalTransactions: number;
+            digits: Array<{ digit: number; count: number; amount: string }>;
+          }>;
+        }
+      ).byCurrency;
+      assert.ok(slices);
+      assert.equal(slices!.length, 2);
+      assert.equal(slices!.find((s) => s.currency === "USD")?.totalTransactions, 3);
+      assert.equal(slices!.find((s) => s.currency === "CAD")?.totalTransactions, 2);
+      // Digit amounts are exact transaction-currency sums in the slice
+      // currency — never blended, never zero: USD 120 + 1800 behind digit 1,
+      // CAD 410 behind digit 4.
+      const usd = slices!.find((s) => s.currency === "USD")!;
+      const usdDigit1 = usd.digits.find((d) => d.digit === 1);
+      assert.ok(usdDigit1, "digit 1 is present in the USD slice");
+      assert.equal(cmp(usdDigit1.amount, "1920"), 0);
+      const cad = slices!.find((s) => s.currency === "CAD")!;
+      const cadDigit4 = cad.digits.find((d) => d.digit === 4);
+      assert.ok(cadDigit4, "digit 4 is present in the CAD slice");
+      assert.equal(cmp(cadDigit4.amount, "410"), 0);
+      // The legacy top-level shape carries the largest slice, not a blend.
+      assert.equal(data.benford1D.totalTransactions, 3);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * Sequential runs are per (vendor, currency): the USD run flags with its
  * currency attached; two CAD invoices never reach the run minimum.
  */
-test('sentinel sequential runs carry their document currency', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    await seedVendorBills(org.orgId, org.subsidiaryId, 'Sequence Vendor', [
-      { num: 'S1', currency: 'USD', fx: '1.35', total: '500', date: '2026-07-01', ref: 'INV-1001' },
-      { num: 'S2', currency: 'USD', fx: '1.35', total: '600', date: '2026-07-06', ref: 'INV-1002' },
-      { num: 'S3', currency: 'USD', fx: '1.35', total: '700', date: '2026-07-10', ref: 'INV-1003' },
-      { num: 'S4', currency: 'CAD', fx: '1', total: '550', date: '2026-07-02', ref: 'C-2001' },
-      { num: 'S5', currency: 'CAD', fx: '1', total: '650', date: '2026-07-09', ref: 'C-2002' },
-    ])
-    const data = await runSentinel(org.orgId)
-    assert.equal(data.sequential.length, 1)
-    assert.equal((data.sequential[0] as unknown as { currency?: string }).currency, 'USD')
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "sentinel sequential runs carry their document currency",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await seedVendorBills(org.orgId, org.subsidiaryId, "Sequence Vendor", [
+        {
+          num: "S1",
+          currency: "USD",
+          fx: "1.35",
+          total: "500",
+          date: "2026-07-01",
+          ref: "INV-1001",
+        },
+        {
+          num: "S2",
+          currency: "USD",
+          fx: "1.35",
+          total: "600",
+          date: "2026-07-06",
+          ref: "INV-1002",
+        },
+        {
+          num: "S3",
+          currency: "USD",
+          fx: "1.35",
+          total: "700",
+          date: "2026-07-10",
+          ref: "INV-1003",
+        },
+        { num: "S4", currency: "CAD", fx: "1", total: "550", date: "2026-07-02", ref: "C-2001" },
+        { num: "S5", currency: "CAD", fx: "1", total: "650", date: "2026-07-09", ref: "C-2002" },
+      ]);
+      const data = await runSentinel(org.orgId);
+      assert.equal(data.sequential.length, 1);
+      assert.equal((data.sequential[0] as unknown as { currency?: string }).currency, "USD");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * Threshold traps stay transaction-denominated: a USD 99.00 bill flags as a
  * 99-trap at 99 (not at its 133.65 functional value), while the consolidated
  * trap total translates at document FX.
  */
-test('sentinel traps stay transaction-denominated with translated totals', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    await seedVendorBills(org.orgId, org.subsidiaryId, 'Trap Vendor', [
-      { num: 'TRAP-1', currency: 'USD', fx: '1.35', total: '99', date: '2026-07-14', ref: 'T-1' },
-    ])
-    // The trap detector is unavailable by name with no Flows amount
-    // condition; the USD 99 bill sits inside the 5% band under this limit.
-    await seedApprovalLimit(org.orgId, 100)
-    const data = await runSentinel(org.orgId)
-    assert.equal(data.thresholdTrap.total, 1)
-    assert.equal(cmp(data.thresholdTrap.items[0]!.amount, '99'), 0)
-    assert.equal((data.thresholdTrap.items[0] as unknown as { currency?: string }).currency, 'USD')
-    assert.equal(cmp(data.thresholdTrap.totalAmount, '133.65'), 0)
-    assert.equal(cmp(data.meta.totalAmount, '133.65'), 0)
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "sentinel traps stay transaction-denominated with translated totals",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await seedVendorBills(org.orgId, org.subsidiaryId, "Trap Vendor", [
+        { num: "TRAP-1", currency: "USD", fx: "1.35", total: "99", date: "2026-07-14", ref: "T-1" },
+      ]);
+      // The trap detector is unavailable by name with no Flows amount
+      // condition; the USD 99 bill sits inside the 5% band under this limit.
+      await seedApprovalLimit(org.orgId, 100);
+      const data = await runSentinel(org.orgId);
+      assert.equal(data.thresholdTrap.total, 1);
+      assert.equal(cmp(data.thresholdTrap.items[0]!.amount, "99"), 0);
+      assert.equal(
+        (data.thresholdTrap.items[0] as unknown as { currency?: string }).currency,
+        "USD",
+      );
+      assert.equal(cmp(data.thresholdTrap.totalAmount, "133.65"), 0);
+      assert.equal(cmp(data.meta.totalAmount, "133.65"), 0);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * Consolidated money columns translate at document FX: USD 100 @1.35 plus
  * CAD 100 reads 235 across meta, calendar, vendor risk and the weekend
  * aggregate — and the cross-currency pair is not a duplicate.
  */
-test('sentinel consolidated money translates at document FX', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    await seedVendorBills(org.orgId, org.subsidiaryId, 'Mixed Vendor', [
-      { num: 'M-USD', currency: 'USD', fx: '1.35', total: '100', date: '2026-07-11', ref: 'M-U' },
-      { num: 'M-CAD', currency: 'CAD', fx: '1', total: '100', date: '2026-07-13', ref: 'M-C' },
-    ])
-    const data = await runSentinel(org.orgId)
-    assert.equal(cmp(data.meta.totalAmount, '235'), 0)
-    assert.equal(data.duplicates.total, 0)
-    // 2026-07-11 is a Saturday: the weekend aggregate carries the USD bill
-    // translated, not the nominal 100.
-    assert.equal(data.weekend.total, 1)
-    assert.equal(cmp(data.weekend.totalAmount, '135'), 0)
-    assert.equal(cmp(data.summary.totalAtRisk, '135'), 0)
-    const sat = data.calendar.find((c) => c.date === '2026-07-11')
-    const mon = data.calendar.find((c) => c.date === '2026-07-13')
-    assert.ok(sat, 'the Saturday bucket is present')
-    assert.ok(mon, 'the Monday bucket is present')
-    assert.equal(cmp(sat.amount, '135'), 0)
-    assert.equal(cmp(mon.amount, '100'), 0)
-    // Vendor risk rolls flagged (weekend) money up translated.
-    assert.equal(data.vendorRisk.length, 1)
-    assert.equal(cmp(data.vendorRisk[0]!.totalAmount, '135'), 0)
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "sentinel consolidated money translates at document FX",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await seedVendorBills(org.orgId, org.subsidiaryId, "Mixed Vendor", [
+        { num: "M-USD", currency: "USD", fx: "1.35", total: "100", date: "2026-07-11", ref: "M-U" },
+        { num: "M-CAD", currency: "CAD", fx: "1", total: "100", date: "2026-07-13", ref: "M-C" },
+      ]);
+      const data = await runSentinel(org.orgId);
+      assert.equal(cmp(data.meta.totalAmount, "235"), 0);
+      assert.equal(data.duplicates.total, 0);
+      // 2026-07-11 is a Saturday: the weekend aggregate carries the USD bill
+      // translated, not the nominal 100.
+      assert.equal(data.weekend.total, 1);
+      assert.equal(cmp(data.weekend.totalAmount, "135"), 0);
+      assert.equal(cmp(data.summary.totalAtRisk, "135"), 0);
+      const sat = data.calendar.find((c) => c.date === "2026-07-11");
+      const mon = data.calendar.find((c) => c.date === "2026-07-13");
+      assert.ok(sat, "the Saturday bucket is present");
+      assert.ok(mon, "the Monday bucket is present");
+      assert.equal(cmp(sat.amount, "135"), 0);
+      assert.equal(cmp(mon.amount, "100"), 0);
+      // Vendor risk rolls flagged (weekend) money up translated.
+      assert.equal(data.vendorRisk.length, 1);
+      assert.equal(cmp(data.vendorRisk[0]!.totalAmount, "135"), 0);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * The analysis population keeps documents of at least one hundred minor
@@ -278,30 +373,68 @@ test('sentinel consolidated money translates at document FX', { skip: !env.OPENB
  * analyzed and the KWD bill was dropped. The KWD bill's '0' leading digit
  * still never enters a Benford slice: the law is defined on digits 1-9.
  */
-test('sentinel dust gate scales with each currency precision', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    await seedVendorBills(org.orgId, org.subsidiaryId, 'Dust Vendor', [
-      { num: 'DUST-USD', currency: 'USD', fx: '1', total: '0.05', date: '2026-07-10', ref: 'D-U' },
-      { num: 'DUST-JPY', currency: 'JPY', fx: '1', total: '50', date: '2026-07-10', ref: 'D-J' },
-      { num: 'KEEP-USD', currency: 'USD', fx: '1', total: '1.00', date: '2026-07-13', ref: 'D-KU' },
-      { num: 'KEEP-KWD', currency: 'KWD', fx: '1', total: '0.150', date: '2026-07-14', ref: 'D-KK' },
-    ])
-    const data = await runSentinel(org.orgId)
-    assert.equal(data.meta.totalDocs, 2)
-    const slices1D = (data.benford1D as unknown as {
-      byCurrency?: Array<{ currency: string; totalTransactions: number }>
-    }).byCurrency
-    assert.ok(slices1D)
-    assert.equal(slices1D!.find((s) => s.currency === 'USD')?.totalTransactions, 1)
-    assert.ok(!slices1D!.some((s) => s.currency === 'JPY'), 'a JPY 50 bill is dust at zero decimals')
-    assert.ok(!slices1D!.some((s) => s.currency === 'KWD'), "a '0' leading digit is not a Benford observation")
-    const slices2D = (data.benford2D as unknown as {
-      byCurrency?: Array<{ currency: string; totalTransactions: number }>
-    }).byCurrency
-    assert.ok(slices2D)
-    assert.ok(!slices2D!.some((s) => s.currency === 'JPY'), 'the dust gate applies to every detector population')
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+test(
+  "sentinel dust gate scales with each currency precision",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await seedVendorBills(org.orgId, org.subsidiaryId, "Dust Vendor", [
+        {
+          num: "DUST-USD",
+          currency: "USD",
+          fx: "1",
+          total: "0.05",
+          date: "2026-07-10",
+          ref: "D-U",
+        },
+        { num: "DUST-JPY", currency: "JPY", fx: "1", total: "50", date: "2026-07-10", ref: "D-J" },
+        {
+          num: "KEEP-USD",
+          currency: "USD",
+          fx: "1",
+          total: "1.00",
+          date: "2026-07-13",
+          ref: "D-KU",
+        },
+        {
+          num: "KEEP-KWD",
+          currency: "KWD",
+          fx: "1",
+          total: "0.150",
+          date: "2026-07-14",
+          ref: "D-KK",
+        },
+      ]);
+      const data = await runSentinel(org.orgId);
+      assert.equal(data.meta.totalDocs, 2);
+      const slices1D = (
+        data.benford1D as unknown as {
+          byCurrency?: Array<{ currency: string; totalTransactions: number }>;
+        }
+      ).byCurrency;
+      assert.ok(slices1D);
+      assert.equal(slices1D!.find((s) => s.currency === "USD")?.totalTransactions, 1);
+      assert.ok(
+        !slices1D!.some((s) => s.currency === "JPY"),
+        "a JPY 50 bill is dust at zero decimals",
+      );
+      assert.ok(
+        !slices1D!.some((s) => s.currency === "KWD"),
+        "a '0' leading digit is not a Benford observation",
+      );
+      const slices2D = (
+        data.benford2D as unknown as {
+          byCurrency?: Array<{ currency: string; totalTransactions: number }>;
+        }
+      ).byCurrency;
+      assert.ok(slices2D);
+      assert.ok(
+        !slices2D!.some((s) => s.currency === "JPY"),
+        "the dust gate applies to every detector population",
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

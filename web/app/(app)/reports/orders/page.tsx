@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadOrders, ordersSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadOrders, ordersSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Order pipeline report — open backlog (count + value) and conversion for
@@ -12,9 +12,9 @@ export const dynamic = 'force-dynamic'
 export default async function OrdersReport({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | undefined>>
+  searchParams?: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = (await searchParams) ?? {}
-  const data = await loadOrders()
-  return <ModuleView spec={ordersSpec()} data={data} searchParams={sp} trusted />
+  const sp = (await searchParams) ?? {};
+  const data = await loadOrders();
+  return <ModuleView spec={ordersSpec()} data={data} searchParams={sp} trusted />;
 }

@@ -1,4 +1,8 @@
-import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs,requireStatutoryHistoryFactors } from '../statutory-history-scope.ts';
+import {
+  resolveStatutoryHistoryScope,
+  employerScopedStatutoryStubs,
+  requireStatutoryHistoryFactors,
+} from "../statutory-history-scope.ts";
 import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { toCents } from "../../money/money.ts";
@@ -13,9 +17,7 @@ import {
   certificateFlag,
   type ResolvedCertificate,
 } from "../certificates.ts";
-import type {
-  PayrollStatutoryComputeContext,
-} from "../statutory-context.ts";
+import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
   NL_AHK_2026,
   NL_AOK_2026,
@@ -75,26 +77,37 @@ function parseCents(value: string, what: string): bigint {
   try {
     cents = toCents(value);
   } catch {
-    throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
+    throw new PayrollError(
+      `the NL payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`,
+    );
   }
-  if (cents < 0n) throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`);
+  if (cents < 0n)
+    throw new PayrollError(
+      `the NL payroll pack cannot price ${what}: "${value}" is not a non-negative money amount`,
+    );
   return cents;
 }
 
 /** A rate with up to 5 decimals → integer per 100000 (the voorschriften give factors to 5). */
 function parseRate5(value: string, what: string): bigint {
-  const canonical = canonicalNonNegativeDecimal(value,5);
-  if (canonical === null) throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a rate with at most 5 decimals`);
+  const canonical = canonicalNonNegativeDecimal(value, 5);
+  if (canonical === null)
+    throw new PayrollError(
+      `the NL payroll pack cannot price ${what}: "${value}" is not a rate with at most 5 decimals`,
+    );
   const [whole = "0", fraction = ""] = canonical.split(".");
-  return BigInt(whole) * 100000n + BigInt(fraction.padEnd(5,'0'));
+  return BigInt(whole) * 100000n + BigInt(fraction.padEnd(5, "0"));
 }
 
 /** A whole-percent or 2-decimal percent → integer per 100. */
 function parseRate2(value: string, what: string): bigint {
-  const canonical = canonicalNonNegativeDecimal(value,2);
-  if (canonical === null) throw new PayrollError(`the NL payroll pack cannot price ${what}: "${value}" is not a percentage`);
+  const canonical = canonicalNonNegativeDecimal(value, 2);
+  if (canonical === null)
+    throw new PayrollError(
+      `the NL payroll pack cannot price ${what}: "${value}" is not a percentage`,
+    );
   const [whole = "0", fraction = ""] = canonical.split(".");
-  return BigInt(whole) * 100n + BigInt(fraction.padEnd(2,'0'));
+  return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
 }
 
 const ceilDiv = (num: bigint, den: bigint): bigint => (num + den - 1n) / den;
@@ -115,8 +128,8 @@ function d4(cents: bigint): string {
 export function nlRatesForTaxYear(year: number): 2026 {
   if (!(NL_TRANSCRIBED_YEARS_2026 as readonly number[]).includes(year)) {
     throw new PayrollError(
-      `the NL payroll pack has no transcribed loonheffing tables for ${year} — 2026 is transcribed `
-      + "(Rekenvoorschriften januari 2026 v2); no other year is",
+      `the NL payroll pack has no transcribed loonheffing tables for ${year} — 2026 is transcribed ` +
+        "(Rekenvoorschriften januari 2026 v2); no other year is",
     );
   }
   return 2026;
@@ -227,7 +240,9 @@ function ahkAnnual(L: bigint, aow: boolean): bigint {
   if (L > BigInt(p.phaseTo)) return 0n;
   // "AHK = ahkm1 - (L - ahkg1) * ahka1, waarbij u AHK (jaarbedrag) naar
   // boven afrondt op hele euro's" and "AHK niet kleiner is dan € 0".
-  const remainder5 = BigInt(p.base) * 100000n - (L - BigInt(p.phaseFrom)) * parseRate5(p.phaseOut, "AHK afbouwfactor");
+  const remainder5 =
+    BigInt(p.base) * 100000n -
+    (L - BigInt(p.phaseFrom)) * parseRate5(p.phaseOut, "AHK afbouwfactor");
   const capped = remainder5 < 0n ? 0n : remainder5;
   return ceilDiv(capped, 100000n);
 }
@@ -238,7 +253,9 @@ function oukAnnual(L: bigint, aow: boolean): bigint {
   if (L <= BigInt(p.phaseFrom)) return BigInt(p.base);
   if (L > BigInt(p.phaseTo)) return 0n;
   // "u OUK (jaarbedrag) naar boven afrondt op hele euro's" / "niet kleiner dan € 0".
-  const remainder5 = BigInt(p.base) * 100000n - (L - BigInt(p.phaseFrom)) * parseRate5(p.phaseOut, "OUK afbouwfactor");
+  const remainder5 =
+    BigInt(p.base) * 100000n -
+    (L - BigInt(p.phaseFrom)) * parseRate5(p.phaseOut, "OUK afbouwfactor");
   const capped = remainder5 < 0n ? 0n : remainder5;
   return ceilDiv(capped, 100000n);
 }
@@ -276,8 +293,18 @@ function x1Annual(L: bigint, ageClass: NlAgeClass): bigint {
 }
 
 /** Price one annual withholding at or below Lmax (L whole euros, multiple of € 54). */
-function priceAnnual(L: bigint, ageClass: NlAgeClass, applyKorting: boolean, aokApply: boolean): {
-  x1: bigint; ahk: bigint; ouk: bigint; ark: bigint; aok: bigint; x: bigint;
+function priceAnnual(
+  L: bigint,
+  ageClass: NlAgeClass,
+  applyKorting: boolean,
+  aokApply: boolean,
+): {
+  x1: bigint;
+  ahk: bigint;
+  ouk: bigint;
+  ark: bigint;
+  aok: bigint;
+  x: bigint;
 } {
   const x1 = x1Annual(L, ageClass);
   const aow = ageClass !== "under_aow";
@@ -317,8 +344,8 @@ export function calculateNlStatutory(input: NlStatutoryInput): NlStatutoryResult
   const ageClass = input.ageClass;
   if (ageClass == null) {
     throw new PayrollError(
-      "the NL payroll pack cannot calculate without an AOW age class — record under_aow, aow_1945 or "
-      + "aow_1946 from the employee's date of birth before running payroll",
+      "the NL payroll pack cannot calculate without an AOW age class — record under_aow, aow_1945 or " +
+        "aow_1946 from the employee's date of birth before running payroll",
     );
   }
   if (!AGE_CLASSES.includes(ageClass)) {
@@ -329,22 +356,22 @@ export function calculateNlStatutory(input: NlStatutoryInput): NlStatutoryResult
   const F = NL_PERIOD_FACTORS_2026[input.periodsPerYear];
   if (F === undefined) {
     throw new PayrollError(
-      `the NL payroll pack cannot price ${input.periodsPerYear} periods per year — the Rekenvoorschriften `
-      + "publish tijdvakfactoren only for kwartaal (4), maand (12), vierweken (13), week (52) and dag (260)",
+      `the NL payroll pack cannot price ${input.periodsPerYear} periods per year — the Rekenvoorschriften ` +
+        "publish tijdvakfactoren only for kwartaal (4), maand (12), vierweken (13), week (52) and dag (260)",
     );
   }
   if (input.aokApply === true && ageClass === "under_aow") {
     throw new PayrollError(
-      "the NL payroll pack cannot apply the alleenstaande-ouderenkorting below the AOW age — "
-      + "Rekenvoorschriften Tabel 5 gives it as \"niet van toepassing\" for jonger dan de AOW-leeftijd",
+      "the NL payroll pack cannot apply the alleenstaande-ouderenkorting below the AOW age — " +
+        'Rekenvoorschriften Tabel 5 gives it as "niet van toepassing" for jonger dan de AOW-leeftijd',
     );
   }
   const nonPeriodic = input.nonPeriodic ?? "0";
   if (parseCents(nonPeriodic, "non-periodic pay") > 0n) {
     throw new PayrollError(
-      `the NL payroll pack refuses non-periodic pay of € ${nonPeriodic} by name — the tabel voor bijzondere `
-      + "beloningen is not transcribed (its row-selection rule, Handboek Loonheffingen 2026 §9.3.6, was not "
-      + "obtainable from the Belastingdienst), and pricing a bonus through the regular table over-withholds",
+      `the NL payroll pack refuses non-periodic pay of € ${nonPeriodic} by name — the tabel voor bijzondere ` +
+        "beloningen is not transcribed (its row-selection rule, Handboek Loonheffingen 2026 §9.3.6, was not " +
+        "obtainable from the Belastingdienst), and pricing a bonus through the regular table over-withholds",
     );
   }
 
@@ -383,20 +410,37 @@ export function calculateNlStatutory(input: NlStatutoryInput): NlStatutoryResult
     const priced = priceAnnual(L, ageClass, input.applyKorting, input.aokApply === true);
     const periodicCents = halfUpDiv(priced.x * 100n, BigInt(F));
     return finishCalculation({
-      input, F, aow, annualWage: L, priced, periodicCents,
-      aboveMaxCents: 0n, aboveMax: false,
+      input,
+      F,
+      aow,
+      annualWage: L,
+      priced,
+      periodicCents,
+      aboveMaxCents: 0n,
+      aboveMax: false,
     });
   }
   // Above Lmax there is no tabelloon: systematiek 1 prices the period wage
   // directly ("x = y + xboven").
-  const atMax = priceAnnual(BigInt(NL_LMAX_2026), ageClass, input.applyKorting, input.aokApply === true);
+  const atMax = priceAnnual(
+    BigInt(NL_LMAX_2026),
+    ageClass,
+    input.applyKorting,
+    input.aokApply === true,
+  );
   const yCents = halfUpDiv(atMax.x * 100n, BigInt(F));
   // "xboven = (L / F - Lmax / F) * (bmax / 100)", "u xboven naar beneden afrondt op 2 decimalen".
   const topRate = parseRate2(NL_BRACKETS_2026[ageClass][2]!.ratePct, "hoogste schijf");
   const aboveMaxCents = ((scaledCents - lmaxCents) * topRate) / (10000n * BigInt(F));
   return finishCalculation({
-    input, F, aow, annualWage: null, priced: atMax, periodicCents: yCents + aboveMaxCents,
-    aboveMaxCents, aboveMax: true,
+    input,
+    F,
+    aow,
+    annualWage: null,
+    priced: atMax,
+    periodicCents: yCents + aboveMaxCents,
+    aboveMaxCents,
+    aboveMax: true,
   });
 }
 
@@ -421,9 +465,10 @@ function finishCalculation(args: {
 
   // Tabelloon ℓ = L/F "naar boven op 2 decimalen" (Tabel 8); above Lmax the
   // period wage itself is the tabelloon.
-  const tableWageCents = args.annualWage === null
-    ? parseCents(input.income, "period wage")
-    : ceilDiv(args.annualWage * 100n, bigF);
+  const tableWageCents =
+    args.annualWage === null
+      ? parseCents(input.income, "period wage")
+      : ceilDiv(args.annualWage * 100n, bigF);
 
   // Jonggehandicaptenkorting: "het tijdvakbedrag van deze korting in
   // mindering brengen op het bedrag dat u volgens de loonbelastingtijdvaktabel
@@ -435,17 +480,17 @@ function finishCalculation(args: {
     // enough, so an ungrounded flag refuses instead of pricing zero or € 923.
     if (input.jgkBasis !== "wajong_benefit" && input.jgkBasis !== "uwv_entitlement") {
       throw new PayrollError(
-        "the NL payroll pack cannot apply the jonggehandicaptenkorting without an established "
-        + "Wajong entitlement — declare jgk_basis \"wajong_benefit\" (benefit received, directly or "
-        + "through employer payment) or \"uwv_entitlement\" (eligible but not receiving; Handboek "
-        + "Loonheffingen 2026, §24.1.5)",
+        "the NL payroll pack cannot apply the jonggehandicaptenkorting without an established " +
+          'Wajong entitlement — declare jgk_basis "wajong_benefit" (benefit received, directly or ' +
+          'through employer payment) or "uwv_entitlement" (eligible but not receiving; Handboek ' +
+          "Loonheffingen 2026, §24.1.5)",
       );
     }
     if (input.jgkBasis === "uwv_entitlement" && (input.jgkEvidence ?? "").trim() === "") {
       throw new PayrollError(
-        "the NL payroll pack cannot apply the jonggehandicaptenkorting for a Wajong-eligible "
-        + "employee without the retained UWV entitlement letter — record its reference in "
-        + "jgk_evidence (Handboek Loonheffingen 2026, §24.1.5)",
+        "the NL payroll pack cannot apply the jonggehandicaptenkorting for a Wajong-eligible " +
+          "employee without the retained UWV entitlement letter — record its reference in " +
+          "jgk_evidence (Handboek Loonheffingen 2026, §24.1.5)",
       );
     }
     const annual = args.aow ? NL_JGK_2026_AOW : NL_JGK_2026;
@@ -458,9 +503,10 @@ function finishCalculation(args: {
   // year (€ 79.409): "Loontijdvakmaxima zijn gelijk voor de
   // werknemersverzekeringen en de Zorgverzekeringswet".
   const svWageRaw = input.svWage ?? null;
-  const svEarn = svWageRaw === null || svWageRaw.trim() === ""
-    ? parseCents(input.income, "period wage")
-    : parseCents(svWageRaw, "SV wage");
+  const svEarn =
+    svWageRaw === null || svWageRaw.trim() === ""
+      ? parseCents(input.income, "period wage")
+      : parseCents(svWageRaw, "SV wage");
   const ytdRaw = input.svWageYtd ?? "0";
   const ytd = parseCents(ytdRaw, "declared SV year-to-date");
   const periodMax = parseCents(NL_MAX_PREMIUM_WAGE_2026[F]!, "maximumpremieloon");
@@ -489,33 +535,43 @@ function finishCalculation(args: {
     const ufoCovered = input.ufo === true;
     if (ufoCovered && input.awfLow !== null && input.awfLow !== undefined) {
       throw new PayrollError(
-        "the NL payroll pack cannot price a Ufo-covered government employee with an AWf contract-type "
-        + "declaration — Ufo replaces AWf (Handboek Loonheffingen 2026, §7.4). Leave awfLow unset for "
-        + "Ufo-covered employees",
+        "the NL payroll pack cannot price a Ufo-covered government employee with an AWf contract-type " +
+          "declaration — Ufo replaces AWf (Handboek Loonheffingen 2026, §7.4). Leave awfLow unset for " +
+          "Ufo-covered employees",
       );
     }
     if (!ufoCovered && (input.awfLow === null || input.awfLow === undefined)) {
       throw new PayrollError(
-        "the NL payroll pack cannot price the WW (AWf) premium without the contract-type declaration — "
-        + "declare awfLow (lage premie 2,74% for a qualifying vast contract, else hoge premie 7,74%)",
+        "the NL payroll pack cannot price the WW (AWf) premium without the contract-type declaration — " +
+          "declare awfLow (lage premie 2,74% for a qualifying vast contract, else hoge premie 7,74%)",
       );
     }
     if (input.aofHigh === null || input.aofHigh === undefined) {
       throw new PayrollError(
-        "the NL payroll pack cannot price the WIA (Aof) premium without the employer-size declaration — "
-        + "declare aofHigh (hoge premie 7,63% for a large employer, else lage premie 6,27%)",
+        "the NL payroll pack cannot price the WIA (Aof) premium without the employer-size declaration — " +
+          "declare aofHigh (hoge premie 7,63% for a large employer, else lage premie 6,27%)",
       );
     }
-    if (input.whkPercent === null || input.whkPercent === undefined || input.whkPercent.trim() === "") {
+    if (
+      input.whkPercent === null ||
+      input.whkPercent === undefined ||
+      input.whkPercent.trim() === ""
+    ) {
       throw new PayrollError(
-        "the NL payroll pack cannot price the Whk premium without the beschikking percentage — "
-        + "the Belastingdienst sets it per employer (\"Zie mededeling of beschikking\"), so declare whkPercent",
+        "the NL payroll pack cannot price the Whk premium without the beschikking percentage — " +
+          'the Belastingdienst sets it per employer ("Zie mededeling of beschikking"), so declare whkPercent',
       );
     }
     const awfRate = ufoCovered
       ? parseRate2(NL_EMPLOYER_PREMIUMS_2026.ufo, "Ufo")
-      : parseRate2(input.awfLow ? NL_EMPLOYER_PREMIUMS_2026.awfLow : NL_EMPLOYER_PREMIUMS_2026.awfHigh, "AWf");
-    const aofRate = parseRate2(input.aofHigh ? NL_EMPLOYER_PREMIUMS_2026.aofHigh : NL_EMPLOYER_PREMIUMS_2026.aofLow, "Aof");
+      : parseRate2(
+          input.awfLow ? NL_EMPLOYER_PREMIUMS_2026.awfLow : NL_EMPLOYER_PREMIUMS_2026.awfHigh,
+          "AWf",
+        );
+    const aofRate = parseRate2(
+      input.aofHigh ? NL_EMPLOYER_PREMIUMS_2026.aofHigh : NL_EMPLOYER_PREMIUMS_2026.aofLow,
+      "Aof",
+    );
     const whkRate = parseRate2(input.whkPercent, "Whk beschikking");
     if (whkRate > 10000n) {
       throw new PayrollError(
@@ -629,18 +685,26 @@ export const NL_FACTOR_LABELS: Readonly<Record<string, string>> = {
  * the cap in a later run). The declared sv_loon_ytd opening covers only
  * pay BEFORE this employer; the two sum to the effective year-to-date.
  */
-async function nlCommittedSvBase(args: Pick<
-  PayrollStatutoryComputeContext,
-  "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId"
->): Promise<string> {
-  const { tx,employeePartyId } = args;
-  const scope=await resolveStatutoryHistoryScope(tx,{...args,country:'NL'});
-  await requireStatutoryHistoryFactors(tx,scope,{employeePartyId},['SV_BASE']);
-  const rows = await tx.execute<{ sv: string }>(sql`
+async function nlCommittedSvBase(
+  args: Pick<
+    PayrollStatutoryComputeContext,
+    "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId"
+  >,
+): Promise<string> {
+  const { tx, employeePartyId } = args;
+  const scope = await resolveStatutoryHistoryScope(tx, { ...args, country: "NL" });
+  await requireStatutoryHistoryFactors(tx, scope, { employeePartyId }, ["SV_BASE"]);
+  const rows = await tx.execute<{ sv: string }>(
+    sql`
     select coalesce(sum((s.factors->>'SV_BASE')::numeric), 0)::text as sv
-    from ${employerScopedStatutoryStubs(scope,{employeePartyId})} s
-  `, "objects");
-  if(rows.length!==1)throw new PayrollError('NL committed statutory history did not return its required SV prior total');
+    from ${employerScopedStatutoryStubs(scope, { employeePartyId })} s
+  `,
+    "objects",
+  );
+  if (rows.length !== 1)
+    throw new PayrollError(
+      "NL committed statutory history did not return its required SV prior total",
+    );
   return rows[0]!.sv;
 }
 
@@ -652,8 +716,8 @@ function nlIsoDate(raw: string, what: string): string {
   // remaps years 0-99 onto 1900-1999 (see scripts/check-civil-date-arithmetic.mjs).
   if (!isIsoCalendarDate(text)) {
     throw new PayrollError(
-      `the NL ${what} must be a real ISO date (YYYY-MM-DD), got "${raw}". Correct it on the `
-      + "nl_contract certificate before running payroll",
+      `the NL ${what} must be a real ISO date (YYYY-MM-DD), got "${raw}". Correct it on the ` +
+        "nl_contract certificate before running payroll",
     );
   }
   return text;
@@ -666,16 +730,18 @@ function nlIsoDate(raw: string, what: string): string {
  * sealed profile column is the only identity channel — and the standard
  * tables price only on a BSN that passes the 11-proef.
  */
-async function nlProfileBsn(args: Pick<
-  PayrollStatutoryComputeContext,
-  "tx" | "orgId" | "employeePartyId"
->): Promise<string | null> {
+async function nlProfileBsn(
+  args: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId">,
+): Promise<string | null> {
   const { tx, orgId, employeePartyId } = args;
-  const rows = await tx.execute<{ sin_encrypted: string | null }>(sql`
+  const rows = await tx.execute<{ sin_encrypted: string | null }>(
+    sql`
     select prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId} and prof.employee_party_id = ${employeePartyId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const sealed = rows[0]?.sin_encrypted ?? null;
   return sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
 }
@@ -683,7 +749,17 @@ async function nlProfileBsn(args: Pick<
 export async function computeNlStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
-  const { region, taxYear, periodsPerYear: P, income, nonPeriodic, insurable, pushStatutory, assertRegionSupported, certificateFor } = ctx;
+  const {
+    region,
+    taxYear,
+    periodsPerYear: P,
+    income,
+    nonPeriodic,
+    insurable,
+    pushStatutory,
+    assertRegionSupported,
+    certificateFor,
+  } = ctx;
   assertRegionSupported(region);
   nlRatesForTaxYear(taxYear);
 
@@ -692,19 +768,20 @@ export async function computeNlStatutory(
   // liability employees need the Rekenvoorschriften herleidingssituatie /
   // woonland tables (chapters 7–8), which are not transcribed.
   const liability = certificateFor("nl_tax_liability");
-  const liabilityClass = liability === null ? null : certificateChoice(liability, "liability_class");
+  const liabilityClass =
+    liability === null ? null : certificateChoice(liability, "liability_class");
   if (liabilityClass === null) {
     throw new PayrollError(
-      "the NL payroll pack cannot calculate without a recorded tax-liability classification — record "
-      + "standard_resident, foreign_resident or partial_dutch_liability on the nl_tax_liability certificate "
-      + "(Belasting- en premieplicht) before running payroll",
+      "the NL payroll pack cannot calculate without a recorded tax-liability classification — record " +
+        "standard_resident, foreign_resident or partial_dutch_liability on the nl_tax_liability certificate " +
+        "(Belasting- en premieplicht) before running payroll",
     );
   }
   if (liabilityClass !== "standard_resident") {
     throw new PayrollError(
-      `the NL payroll pack prices only the standard resident witte tabellen — liability class "${liabilityClass}" `
-      + "needs the Rekenvoorschriften 2026 herleidingssituatie/woonland tables (chapters 7–8), which are not "
-      + "transcribed. Complete this run in payroll software that implements the applicable table",
+      `the NL payroll pack prices only the standard resident witte tabellen — liability class "${liabilityClass}" ` +
+        "needs the Rekenvoorschriften 2026 herleidingssituatie/woonland tables (chapters 7–8), which are not " +
+        "transcribed. Complete this run in payroll software that implements the applicable table",
     );
   }
 
@@ -717,10 +794,10 @@ export async function computeNlStatutory(
   const anonymous = !isValidBsn(bsn);
 
   const opgaaf = certificateFor("nl_loonheffingen");
-  const applyKorting = opgaaf === null ? false : certificateFlag(opgaaf, "apply_loonheffingskorting");
-  const ageClass = opgaaf === null
-    ? null
-    : certificateChoice(opgaaf, "age_class") as NlAgeClass | null;
+  const applyKorting =
+    opgaaf === null ? false : certificateFlag(opgaaf, "apply_loonheffingskorting");
+  const ageClass =
+    opgaaf === null ? null : (certificateChoice(opgaaf, "age_class") as NlAgeClass | null);
   const aokApply = opgaaf === null ? false : certificateFlag(opgaaf, "aok_apply");
   const jgkApply = opgaaf === null ? false : certificateFlag(opgaaf, "jgk_apply");
   const jgkBasis = opgaaf === null ? null : certificateChoice(opgaaf, "jgk_basis");
@@ -752,13 +829,15 @@ export async function computeNlStatutory(
     const opening = premies === null ? null : certificateAmount(premies, "sv_loon_ytd");
     if (opening === null) {
       throw new PayrollError(
-        "the NL payroll pack cannot price SV premiums without a verified premieloon opening balance — "
-        + "record the SV wage already paid this year before this employer on the nl_premies certificate "
-        + "(sv_loon_ytd; an explicit 0 for an employee employed all year by this employer) before running payroll",
+        "the NL payroll pack cannot price SV premiums without a verified premieloon opening balance — " +
+          "record the SV wage already paid this year before this employer on the nl_premies certificate " +
+          "(sv_loon_ytd; an explicit 0 for an employee employed all year by this employer) before running payroll",
       );
     }
     const committed = await nlCommittedSvBase(ctx);
-    effectiveYtd = d4(parseCents(opening, "SV opening balance") + parseCents(committed, "committed SV base"));
+    effectiveYtd = d4(
+      parseCents(opening, "SV opening balance") + parseCents(committed, "committed SV base"),
+    );
   }
   // Low-AWf revision policing (Rekenvoorschriften chapter 12): the low
   // rate revises to high retroactively when the employee leaves within
@@ -773,19 +852,23 @@ export async function computeNlStatutory(
     const startRaw = contract?.answers["contract_start"] ?? null;
     if (startRaw === null || startRaw === "") {
       throw new PayrollError(
-        "the NL payroll pack cannot price the low AWf rate without a dated contract — the two-month "
-        + "revision rule (Rekenvoorschriften chapter 12) cannot be policed without a start date. Record "
-        + "the contract start on the nl_contract certificate (arbeidsovereenkomst) before running payroll",
+        "the NL payroll pack cannot price the low AWf rate without a dated contract — the two-month " +
+          "revision rule (Rekenvoorschriften chapter 12) cannot be policed without a start date. Record " +
+          "the contract start on the nl_contract certificate (arbeidsovereenkomst) before running payroll",
       );
     }
     const start = nlIsoDate(startRaw, "contract start");
     const hoursRaw = contract?.answers["contract_hours_per_week"] ?? null;
     if (hoursRaw !== null && hoursRaw !== "") {
       const hours = Number(hoursRaw.trim());
-      if (canonicalNonNegativeDecimal(hoursRaw.trim(), 4) === null || !Number.isFinite(hours) || hours <= 0) {
+      if (
+        canonicalNonNegativeDecimal(hoursRaw.trim(), 4) === null ||
+        !Number.isFinite(hours) ||
+        hours <= 0
+      ) {
         throw new PayrollError(
-          `the NL contract hours per week must be a positive decimal ("40", "32"), got "${hoursRaw}". `
-          + "Correct the contract hours on the nl_contract certificate before running payroll",
+          `the NL contract hours per week must be a positive decimal ("40", "32"), got "${hoursRaw}". ` +
+            "Correct the contract hours on the nl_contract certificate before running payroll",
         );
       }
     }
@@ -794,17 +877,17 @@ export async function computeNlStatutory(
       const terminated = nlIsoDate(termRaw, "termination date");
       if (terminated < start) {
         throw new PayrollError(
-          `the NL termination date ${terminated} is before the contract start ${start}. Correct the `
-          + "dates on the nl_contract certificate before running payroll",
+          `the NL termination date ${terminated} is before the contract start ${start}. Correct the ` +
+            "dates on the nl_contract certificate before running payroll",
         );
       }
       if (terminated < addMonthsClamped(start, 2)) {
         throw new PayrollError(
-          `the NL low AWf rate revises to high retroactively: employment ended ${terminated}, within two `
-          + `months of the contract start ${start} (Rekenvoorschriften chapter 12). The pack has no `
-          + "loonaangifte correction path, so it refuses the low rate instead of keeping it. Reprice "
-          + "this run at the high AWf rate and correct the earlier filings in payroll software that "
-          + "implements the revision",
+          `the NL low AWf rate revises to high retroactively: employment ended ${terminated}, within two ` +
+            `months of the contract start ${start} (Rekenvoorschriften chapter 12). The pack has no ` +
+            "loonaangifte correction path, so it refuses the low rate instead of keeping it. Reprice " +
+            "this run at the high AWf rate and correct the earlier filings in payroll software that " +
+            "implements the revision",
         );
       }
     }
@@ -821,9 +904,12 @@ export async function computeNlStatutory(
     awfLow: flagOrNull(premies, "awf_laag"),
     ufo: premies === null ? false : certificateFlag(premies, "ufo"),
     aofHigh: flagOrNull(premies, "aof_hoog"),
-    whkPercent: whkRaw === null || whkRaw === ""
-      ? null
-      : premies === null ? null : certificateAmount(premies, "whk_percent"),
+    whkPercent:
+      whkRaw === null || whkRaw === ""
+        ? null
+        : premies === null
+          ? null
+          : certificateAmount(premies, "whk_percent"),
     aokApply,
     jgkApply,
     jgkBasis,
@@ -831,7 +917,13 @@ export async function computeNlStatutory(
     nonPeriodic,
   });
 
-  pushStatutory("loonheffing", "deduction", "Loonbelasting/premie volksverzekeringen", d4(result.withholdingCents), 110);
+  pushStatutory(
+    "loonheffing",
+    "deduction",
+    "Loonbelasting/premie volksverzekeringen",
+    d4(result.withholdingCents),
+    110,
+  );
   // Ufo-covered government employees owe no AWf: the WW leg carries the
   // Ufo premie instead, and the line is named for it.
   const wwLineName = (premies === null ? false : certificateFlag(premies, "ufo"))
@@ -840,9 +932,21 @@ export async function computeNlStatutory(
   pushStatutory("ww", "employer_contribution", wwLineName, d4(result.wwCents), 210);
   // Aof and the differentiated Whk beschikking share the WIA line; Opslag
   // Wko is identifiable separately, assessed against the same capped base.
-  pushStatutory("wia", "employer_contribution", "Arbeidsongeschiktheid (Aof + Whk)", d4(result.aofCents + result.whkCents), 211);
+  pushStatutory(
+    "wia",
+    "employer_contribution",
+    "Arbeidsongeschiktheid (Aof + Whk)",
+    d4(result.aofCents + result.whkCents),
+    211,
+  );
   pushStatutory("wko", "employer_contribution", "Opslag Wko", d4(result.wkoCents), 212);
-  pushStatutory("zvw", "employer_contribution", "Werkgeversheffing Zorgverzekeringswet", d4(result.zvwCents), 230);
+  pushStatutory(
+    "zvw",
+    "employer_contribution",
+    "Werkgeversheffing Zorgverzekeringswet",
+    d4(result.zvwCents),
+    230,
+  );
 
   return {
     L: result.annualWage === null ? "above_max" : `${result.annualWage}.0000`,

@@ -1,21 +1,21 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { stubModules } from '../../../../testing/stub-modules'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { stubModules } from "../../../../testing/stub-modules";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
-const STATE_KEY = Symbol.for('openbooks.assistant-commit-scope-test')
+const STATE_KEY = Symbol.for("openbooks.assistant-commit-scope-test");
 
 interface CommitState {
   authz: {
-    user: Record<string, unknown>
-    permissions: Set<string>
-    allowedSubsidiaryIds: Set<string> | null
-  } | null
+    user: Record<string, unknown>;
+    permissions: Set<string>;
+    allowedSubsidiaryIds: Set<string> | null;
+  } | null;
 }
 
-const commitState: CommitState = { authz: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[STATE_KEY] = commitState
+const commitState: CommitState = { authz: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[STATE_KEY] = commitState;
 
 // One session for every spelling of the gate: the route imports it by
 // relative path while the route factory resolves the same module by @/
@@ -33,7 +33,7 @@ const commitAuthzSource = `
     if (subsidiaryId == null || subsidiaryId === '') return opts.orgWideNull === true
     return scope.has(subsidiaryId)
   }
-`
+`;
 stubModules({
   navigation: false,
   intl: false,
@@ -49,13 +49,11 @@ stubModules({
       }
     `,
   },
-})
+});
 
-const { db, withBypass } = await import('@openbooks/engine/platform/db')
-const { withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
+const { db, withBypass } = await import("@openbooks/engine/platform/db");
+const { withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 /**
  * Through-stack proofs that the assistant commit boundary books drafts under
@@ -65,200 +63,209 @@ const { createScratchOrg, dropScratchOrg } = await import(
  * unrestricted caller keeps the existing root behavior.
  */
 
-const { POST } = await import('./route.ts')
+const { POST } = await import("./route.ts");
 
 type Fixture = {
-  org: Awaited<ReturnType<typeof createScratchOrg>>
-  actorId: string
-  childSub: string
-  bankLabel: string
-  revenueLabel: string
-}
+  org: Awaited<ReturnType<typeof createScratchOrg>>;
+  actorId: string;
+  childSub: string;
+  bankLabel: string;
+  revenueLabel: string;
+};
 
 // Preview lines carry the server-side "number · name" account label, so
 // resolve the scratch accounts' real labels rather than inventing text.
 async function makeFixture(): Promise<Fixture> {
   const org = await withBypass(async () => {
-    const created = await createScratchOrg()
-    const { seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
-    return { created, actors: await seedFlowActors(created.orgId) }
-  })
-  const childSub = randomUUID()
+    const created = await createScratchOrg();
+    const { seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+    return { created, actors: await seedFlowActors(created.orgId) };
+  });
+  const childSub = randomUUID();
   await withBypass(async () => {
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-      values (${childSub}, ${org.created.orgId}, ${org.created.subsidiaryId}, 'Branch Co', 'CAD', 'CA')`)
-  })
+      values (${childSub}, ${org.created.orgId}, ${org.created.subsidiaryId}, 'Branch Co', 'CAD', 'CA')`);
+  });
   const label = async (id: string) =>
-    (await withBypass(() =>
-      db.execute<{ number: string; name: string }>(sql`select number, name from accounts where id = ${id} and org_id = ${org.created.orgId}`, 'objects'),
-    ))[0]!
-  const bank = await label(org.created.accounts.bank)
-  const revenue = await label(org.created.accounts.revenue)
+    (
+      await withBypass(() =>
+        db.execute<{ number: string; name: string }>(
+          sql`select number, name from accounts where id = ${id} and org_id = ${org.created.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!;
+  const bank = await label(org.created.accounts.bank);
+  const revenue = await label(org.created.accounts.revenue);
   return {
     org: org.created,
     actorId: org.actors.adminId,
     childSub,
     bankLabel: `${bank.number} · ${bank.name}`,
     revenueLabel: `${revenue.number} · ${revenue.name}`,
-  }
+  };
 }
 
-function authzFor(fx: Fixture, allowed: Set<string> | null): CommitState['authz'] {
+function authzFor(fx: Fixture, allowed: Set<string> | null): CommitState["authz"] {
   return {
     user: {
       id: fx.actorId,
-      email: 'commit-scope@scratch.test',
-      name: 'Commit Scope Caller',
+      email: "commit-scope@scratch.test",
+      name: "Commit Scope Caller",
       roles: [],
       orgId: fx.org.orgId,
-      envKind: 'production',
+      envKind: "production",
       productionOrgId: fx.org.orgId,
       isSuperAdmin: false,
       homeUserId: fx.actorId,
       homeOrgId: fx.org.orgId,
     },
-    permissions: new Set(['assistant.write', 'gl.post']),
+    permissions: new Set(["assistant.write", "gl.post"]),
     allowedSubsidiaryIds: allowed,
-  }
+  };
 }
 
 function commitBody(fx: Fixture) {
   return {
-    kind: 'create_journal_entry',
+    kind: "create_journal_entry",
     preview: {
       documentDate: fx.org.date,
-      memo: 'commit scope probe',
+      memo: "commit scope probe",
       lines: [
-        { accountId: fx.org.accounts.bank, accountLabel: fx.bankLabel, description: null, amount: '10.00' },
-        { accountId: fx.org.accounts.revenue, accountLabel: fx.revenueLabel, description: null, amount: '-10.00' },
+        {
+          accountId: fx.org.accounts.bank,
+          accountLabel: fx.bankLabel,
+          description: null,
+          amount: "10.00",
+        },
+        {
+          accountId: fx.org.accounts.revenue,
+          accountLabel: fx.revenueLabel,
+          description: null,
+          amount: "-10.00",
+        },
       ],
     },
     confirmToken: `scope-probe-${randomUUID()}`,
-  }
+  };
 }
 
 function post(body: unknown): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/assistant/commit', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/assistant/commit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }) as never,
-  ) as unknown as Promise<Response>
+  ) as unknown as Promise<Response>;
 }
 
 async function journalDrafts(orgId: string): Promise<{ id: string; subsidiary_id: string }[]> {
   return await withOrgContext(orgId, () =>
-      db.execute<{ id: string; subsidiary_id: string }>(sql`
+    db.execute<{ id: string; subsidiary_id: string }>(
+      sql`
         select id, subsidiary_id from documents
-         where org_id = ${orgId} and kind = 'journal' order by created_at`, 'objects'),
-    )
+         where org_id = ${orgId} and kind = 'journal' order by created_at`,
+      "objects",
+    ),
+  );
 }
 
-test(
-  'a restricted commit lands in the single visible subsidiary, never root',
-  async () => {
-    const fx = await makeFixture()
-    try {
-      commitState.authz = authzFor(fx, new Set([fx.childSub]))
-      const response = await post(commitBody(fx))
-      assert.equal(response.status, 200)
-      const drafts = await journalDrafts(fx.org.orgId)
-      assert.equal(drafts.length, 1)
-      assert.equal(drafts[0]!.subsidiary_id, fx.childSub)
-    } finally {
-      commitState.authz = null
-      await dropScratchOrg(fx.org.orgId)
-    }
-  },
-)
+test("a restricted commit lands in the single visible subsidiary, never root", async () => {
+  const fx = await makeFixture();
+  try {
+    commitState.authz = authzFor(fx, new Set([fx.childSub]));
+    const response = await post(commitBody(fx));
+    assert.equal(response.status, 200);
+    const drafts = await journalDrafts(fx.org.orgId);
+    assert.equal(drafts.length, 1);
+    assert.equal(drafts[0]!.subsidiary_id, fx.childSub);
+  } finally {
+    commitState.authz = null;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
 
-test(
-  'an unrestricted commit keeps the existing root behavior',
-  async () => {
-    const fx = await makeFixture()
-    try {
-      commitState.authz = authzFor(fx, null)
-      const response = await post(commitBody(fx))
-      assert.equal(response.status, 200)
-      const drafts = await journalDrafts(fx.org.orgId)
-      assert.equal(drafts.length, 1)
-      assert.equal(drafts[0]!.subsidiary_id, fx.org.subsidiaryId)
-    } finally {
-      commitState.authz = null
-      await dropScratchOrg(fx.org.orgId)
-    }
-  },
-)
+test("an unrestricted commit keeps the existing root behavior", async () => {
+  const fx = await makeFixture();
+  try {
+    commitState.authz = authzFor(fx, null);
+    const response = await post(commitBody(fx));
+    assert.equal(response.status, 200);
+    const drafts = await journalDrafts(fx.org.orgId);
+    assert.equal(drafts.length, 1);
+    assert.equal(drafts[0]!.subsidiary_id, fx.org.subsidiaryId);
+  } finally {
+    commitState.authz = null;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
 
-test(
-  'commit refuses an account rehomed outside the journal subsidiary',
-  async () => {
-    const fx = await makeFixture()
-    try {
-      commitState.authz = authzFor(fx, null)
-      await withBypass(() => db.execute(sql`
+test("commit refuses an account rehomed outside the journal subsidiary", async () => {
+  const fx = await makeFixture();
+  try {
+    commitState.authz = authzFor(fx, null);
+    await withBypass(() =>
+      db.execute(sql`
         update accounts set subsidiary_id = ${fx.childSub}
          where org_id = ${fx.org.orgId} and id = ${fx.org.accounts.bank}
-      `))
-      const response = await post(commitBody(fx))
-      assert.equal(response.status, 404, 'a stale preview cannot use an account from another entity')
-      assert.deepEqual(await journalDrafts(fx.org.orgId), [], 'the refused account writes no journal')
-    } finally {
-      commitState.authz = null
-      await dropScratchOrg(fx.org.orgId)
-    }
-  },
-)
+      `),
+    );
+    const response = await post(commitBody(fx));
+    assert.equal(response.status, 404, "a stale preview cannot use an account from another entity");
+    assert.deepEqual(
+      await journalDrafts(fx.org.orgId),
+      [],
+      "the refused account writes no journal",
+    );
+  } finally {
+    commitState.authz = null;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
 
-test(
-  'a signed preview with an impossible document date fails closed instead of a storage 500',
-  async () => {
-    const fx = await makeFixture()
+test("a signed preview with an impossible document date fails closed instead of a storage 500", async () => {
+  const fx = await makeFixture();
+  try {
+    commitState.authz = authzFor(fx, null);
+    // Proposal verification is stubbed to accept: the HMAC covers preview
+    // integrity, not calendar semantics, so a model-emitted impossible day
+    // reaches the write boundary and must fail closed there.
+    const body = commitBody(fx);
+    body.preview.documentDate = "2026-02-30";
+    let status: number;
+    let payload: unknown = null;
     try {
-      commitState.authz = authzFor(fx, null)
-      // Proposal verification is stubbed to accept: the HMAC covers preview
-      // integrity, not calendar semantics, so a model-emitted impossible day
-      // reaches the write boundary and must fail closed there.
-      const body = commitBody(fx)
-      body.preview.documentDate = '2026-02-30'
-      let status: number
-      let payload: unknown = null
-      try {
-        const response = await post(body)
-        status = response.status
-        payload = await response.json().catch(() => null)
-      } catch {
-        status = 500
-      }
-      assert.ok(
-        status === 400 || status === 422,
-        `expected a domain 4xx, got ${status}: ${JSON.stringify(payload)}`,
-      )
-      assert.deepEqual(await journalDrafts(fx.org.orgId), [], 'refused dates write nothing')
-    } finally {
-      commitState.authz = null
-      await dropScratchOrg(fx.org.orgId)
+      const response = await post(body);
+      status = response.status;
+      payload = await response.json().catch(() => null);
+    } catch {
+      status = 500;
     }
-  },
-)
+    assert.ok(
+      status === 400 || status === 422,
+      `expected a domain 4xx, got ${status}: ${JSON.stringify(payload)}`,
+    );
+    assert.deepEqual(await journalDrafts(fx.org.orgId), [], "refused dates write nothing");
+  } finally {
+    commitState.authz = null;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
 
-test(
-  'an empty or ambiguous restricted scope is refused before anything is written',
-  async () => {
-    const fx = await makeFixture()
-    try {
-      commitState.authz = authzFor(fx, new Set())
-      const empty = await post(commitBody(fx))
-      assert.equal(empty.status, 409)
-      commitState.authz = authzFor(fx, new Set([fx.org.subsidiaryId, fx.childSub]))
-      const ambiguous = await post(commitBody(fx))
-      assert.equal(ambiguous.status, 409)
-      assert.deepEqual(await journalDrafts(fx.org.orgId), [])
-    } finally {
-      commitState.authz = null
-      await dropScratchOrg(fx.org.orgId)
-    }
-  },
-)
+test("an empty or ambiguous restricted scope is refused before anything is written", async () => {
+  const fx = await makeFixture();
+  try {
+    commitState.authz = authzFor(fx, new Set());
+    const empty = await post(commitBody(fx));
+    assert.equal(empty.status, 409);
+    commitState.authz = authzFor(fx, new Set([fx.org.subsidiaryId, fx.childSub]));
+    const ambiguous = await post(commitBody(fx));
+    assert.equal(ambiguous.status, 409);
+    assert.deepEqual(await journalDrafts(fx.org.orgId), []);
+  } finally {
+    commitState.authz = null;
+    await dropScratchOrg(fx.org.orgId);
+  }
+});

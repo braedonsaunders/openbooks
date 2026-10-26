@@ -1,17 +1,28 @@
-import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
 
-test('re-resolved actor authority is shared within a server render and live everywhere else', () => {
-  const result = spawnSync(process.execPath, [
-    '--no-concurrent-sparkplug', '--no-concurrent-recompilation',
-    '--conditions=react-server', '--import=tsx', '--input-type=module',
-  ], {
-    cwd: fileURLToPath(new URL('../', import.meta.url)),
-    encoding: 'utf8', timeout: 30_000,
-    env: { ...process.env, OPENBOOKS_DB_URL: '', TSX_TSCONFIG_PATH: fileURLToPath(new URL('../tsconfig.json', import.meta.url)) },
-    input: `
+test("re-resolved actor authority is shared within a server render and live everywhere else", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--no-concurrent-sparkplug",
+      "--no-concurrent-recompilation",
+      "--conditions=react-server",
+      "--import=tsx",
+      "--input-type=module",
+    ],
+    {
+      cwd: fileURLToPath(new URL("../", import.meta.url)),
+      encoding: "utf8",
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        OPENBOOKS_DB_URL: "",
+        TSX_TSCONFIG_PATH: fileURLToPath(new URL("../tsconfig.json", import.meta.url)),
+      },
+      input: `
       import assert from 'node:assert/strict';
       import {registerHooks, createRequire} from 'node:module';
       import {PassThrough} from 'node:stream';
@@ -76,7 +87,8 @@ test('re-resolved actor authority is shared within a server render and live ever
       assert.equal(await resolveAuthzByUserId('company-a','viewer'), null);
       assert.equal(state.reads.length, 2, 'API and background calls resolve live and fail closed on deactivation');
     `,
-  })
-  assert.equal(result.error, undefined)
-  assert.equal(result.status, 0, result.stderr || result.stdout)
-})
+    },
+  );
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});

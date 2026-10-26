@@ -1,7 +1,12 @@
 import { PaymentError } from "./payment-errors.ts";
 import { parseIsoDate, utcDateFromParts } from "../platform/business-date.ts";
 import { type EftSettings } from "./rail-settings.ts";
-import { ORIGINATOR_REMEDY, PAYEE_NAME_REMEDY, asciiRailText, isPrintableAscii } from "./rail-text.ts";
+import {
+  ORIGINATOR_REMEDY,
+  PAYEE_NAME_REMEDY,
+  asciiRailText,
+  isPrintableAscii,
+} from "./rail-text.ts";
 
 export interface Cpa005Payment {
   /** Amount in cents (positive integer, max 10 digits). */
@@ -99,27 +104,33 @@ function itemTraceNumber(opts: {
   itemSequence: number;
 }): string {
   if (!/^\d{5}$/.test(opts.destinationDataCentre)) {
-    throw new PaymentError(`destination data centre "${opts.destinationDataCentre}" must be 5 digits`);
+    throw new PaymentError(
+      `destination data centre "${opts.destinationDataCentre}" must be 5 digits`,
+    );
   }
   if (!/^\d{5}$/.test(opts.originatingDataCentre) || Number(opts.originatingDataCentre) === 0) {
     throw new PaymentError(
       `originating direct clearer's data centre "${opts.originatingDataCentre}" must be 5 digits and greater than zero`,
     );
   }
-  if (opts.fileCreationNumber < 1) throw new PaymentError("item trace number requires a file creation number above zero");
-  if (opts.itemSequence < 1) throw new PaymentError("item trace number requires an item sequence above zero");
+  if (opts.fileCreationNumber < 1)
+    throw new PaymentError("item trace number requires a file creation number above zero");
+  if (opts.itemSequence < 1)
+    throw new PaymentError("item trace number requires an item sequence above zero");
   const trace =
     opts.destinationDataCentre.slice(0, 4) +
     opts.originatingDataCentre +
     num(opts.fileCreationNumber, 4) +
     num(opts.itemSequence, 9);
-  if (trace.length !== 22) throw new PaymentError("internal error: CPA-005 item trace number is not 22 characters");
+  if (trace.length !== 22)
+    throw new PaymentError("internal error: CPA-005 item trace number is not 22 characters");
   return trace;
 }
 
 /** 9-digit institutional ID: 0 + institution(3) + transit(5). */
 function institutionalId(institution: string, transit: string): string {
-  if (!/^\d{3}$/.test(institution)) throw new PaymentError(`institution "${institution}" must be 3 digits`);
+  if (!/^\d{3}$/.test(institution))
+    throw new PaymentError(`institution "${institution}" must be 3 digits`);
   if (!/^\d{5}$/.test(transit)) throw new PaymentError(`transit "${transit}" must be 5 digits`);
   return `0${institution}${transit}`;
 }
@@ -139,7 +150,8 @@ export function buildCpa005File(run: Cpa005Run): string {
   // Names are folded to ASCII before they are cut to width: the file is
   // us-ascii and fixed-offset, so one multi-byte character would shift every
   // field after it (see rail-text.ts).
-  const originator = (value: string, field: string) => asciiRailText(value, "CPA-005", field, ORIGINATOR_REMEDY);
+  const originator = (value: string, field: string) =>
+    asciiRailText(value, "CPA-005", field, ORIGINATOR_REMEDY);
   const originatorId = alpha(originator(s.originatorId, "originator id"), 10);
   const originatorShortName = alpha(originator(s.originatorShortName, "originator short name"), 15);
   const originatorLongName = alpha(originator(s.originatorLongName, "originator long name"), 30);
@@ -148,8 +160,13 @@ export function buildCpa005File(run: Cpa005Run): string {
   // The creation day arrives already zoned (a civil-day string from the
   // caller), so the A record renders byte-identical bytes on any server.
   const creationJulian = julian(run.fileCreationDate, "file creation date");
-  if (s.transactionCode !== undefined && (typeof s.transactionCode !== "string" || !/^\d{3}$/.test(s.transactionCode))) {
-    throw new PaymentError("CPA-005 transaction code override must be three digits; omit it to use the standard 460 code");
+  if (
+    s.transactionCode !== undefined &&
+    (typeof s.transactionCode !== "string" || !/^\d{3}$/.test(s.transactionCode))
+  ) {
+    throw new PaymentError(
+      "CPA-005 transaction code override must be three digits; omit it to use the standard 460 code",
+    );
   }
   const txnType = s.transactionCode ?? "460";
 
@@ -176,9 +193,12 @@ export function buildCpa005File(run: Cpa005Run): string {
 
   const segments = run.payments.map((p, i) => {
     if (p.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
-    if (p.accountNumber.trim() === "") throw new PaymentError("payee account number must not be blank");
-    if (p.accountNumber.length > 12) throw new PaymentError("payee account number must be 12 characters or fewer");
-    if (p.crossReference.length > 19) throw new PaymentError("cross-reference must be 19 characters or fewer");
+    if (p.accountNumber.trim() === "")
+      throw new PaymentError("payee account number must not be blank");
+    if (p.accountNumber.length > 12)
+      throw new PaymentError("payee account number must be 12 characters or fewer");
+    if (p.crossReference.length > 19)
+      throw new PaymentError("cross-reference must be 19 characters or fewer");
     return (
       txnType + // transaction type (3)
       num(p.amountCents, 10) + // amount in cents (10)
@@ -207,7 +227,8 @@ export function buildCpa005File(run: Cpa005Run): string {
     );
   });
   for (const seg of segments) {
-    if (seg.length !== SEGMENT_LEN) throw new PaymentError("internal error: CPA-005 segment is not 240 characters");
+    if (seg.length !== SEGMENT_LEN)
+      throw new PaymentError("internal error: CPA-005 segment is not 240 characters");
   }
 
   for (let i = 0; i < segments.length; i += SEGMENTS_PER_RECORD) {
@@ -231,12 +252,14 @@ export function buildCpa005File(run: Cpa005Run): string {
       num(0, 14) + // total value of error corrections "E"
       num(0, 8) + // total number of error corrections "E"
       num(0, 14) + // total value of error corrections "F"
-      num(0, 8) // total number of error corrections "F"
-    ).padEnd(RECORD_LEN, " "),
+      num(0, 8)
+    ) // total number of error corrections "F"
+      .padEnd(RECORD_LEN, " "),
   );
 
   records.forEach((rec, i) => {
-    if (rec.length !== RECORD_LEN) throw new PaymentError("internal error: CPA-005 record is not 1464 characters");
+    if (rec.length !== RECORD_LEN)
+      throw new PaymentError("internal error: CPA-005 record is not 1464 characters");
     if (!isPrintableAscii(rec)) {
       throw new PaymentError(
         `CPA-005 record ${i + 1} contains a character with no ASCII form, which would shift every field after it — ` +

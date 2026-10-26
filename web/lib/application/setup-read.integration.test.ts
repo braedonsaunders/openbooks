@@ -21,7 +21,13 @@ const { ApplicationError } = await import("./errors.ts");
 const ADMIN_PERMISSIONS = ["admin.setup.manage"];
 const VIEWER_PERMISSIONS = [...(BUILT_IN_ROLES.viewer?.permissions ?? ["gl.read"])];
 
-function sessionUser(orgId: string, id: string, name: string, roleKey: string, roleName: string): SessionUser {
+function sessionUser(
+  orgId: string,
+  id: string,
+  name: string,
+  roleKey: string,
+  roleName: string,
+): SessionUser {
   return {
     id,
     email: `${id.slice(0, 8)}@scratch.test`,
@@ -72,10 +78,12 @@ test("getSetupRecord finds a tax code that a 200-row list page omits", async () 
   try {
     const adminA = await adminContext(orgA);
     const adminB = await adminContext(orgB);
-    await withOrgContext(orgA.orgId, () => db.execute(sql`
+    await withOrgContext(orgA.orgId, () =>
+      db.execute(sql`
       insert into tax_codes (org_id, code, name)
       select ${orgA.orgId}, 'GET-' || i::text, 'Code ' || i::text
-      from generate_series(1, 201) as i`));
+      from generate_series(1, 201) as i`),
+    );
 
     const listed = await withOrgContext(orgA.orgId, () =>
       listSetupRecords(adminA, { entityKey: "tax-codes", limit: 200 }),
@@ -83,8 +91,15 @@ test("getSetupRecord finds a tax code that a 200-row list page omits", async () 
     assert.equal(listed.total, 201);
     assert.equal(listed.records.length, 200);
     const listedIds = new Set(listed.records.map((row) => String(row.id)));
-    const allIds = (await withOrgContext(orgA.orgId, () => db.execute<{ id: string }>(sql`
-      select id from tax_codes where org_id = ${orgA.orgId}`, "objects"))).map((row) => row.id);
+    const allIds = (
+      await withOrgContext(orgA.orgId, () =>
+        db.execute<{ id: string }>(
+          sql`
+      select id from tax_codes where org_id = ${orgA.orgId}`,
+          "objects",
+        ),
+      )
+    ).map((row) => row.id);
     const omitted = allIds.find((id) => !listedIds.has(id));
     assert.ok(omitted, "the 201st tax code must fall off the 200-row list page");
 
@@ -94,7 +109,9 @@ test("getSetupRecord finds a tax code that a 200-row list page omits", async () 
     assert.equal(String(found.id), omitted);
 
     await assert.rejects(
-      withOrgContext(orgB.orgId, () => getSetupRecord(adminB, { entityKey: "tax-codes", id: omitted })),
+      withOrgContext(orgB.orgId, () =>
+        getSetupRecord(adminB, { entityKey: "tax-codes", id: omitted }),
+      ),
       (error: unknown) => {
         assert.ok(error instanceof ApplicationError);
         assert.equal(error.status, 404);
@@ -104,13 +121,17 @@ test("getSetupRecord finds a tax code that a 200-row list page omits", async () 
     );
 
     await assert.rejects(
-      withOrgContext(orgA.orgId, () => getSetupRecord(adminA, { entityKey: "tax-codes", id: randomUUID() })),
+      withOrgContext(orgA.orgId, () =>
+        getSetupRecord(adminA, { entityKey: "tax-codes", id: randomUUID() }),
+      ),
       /list ids from GET \/api\/v1\/setup\/tax-codes/,
     );
 
     const viewer = await viewerContext(orgA);
     await assert.rejects(
-      withOrgContext(orgA.orgId, () => getSetupRecord(viewer, { entityKey: "tax-codes", id: omitted })),
+      withOrgContext(orgA.orgId, () =>
+        getSetupRecord(viewer, { entityKey: "tax-codes", id: omitted }),
+      ),
       /forbidden/,
     );
   } finally {
@@ -123,17 +144,20 @@ test("feature-disabled setup entities return the catalog remedy", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const admin = await adminContext(org);
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,inventory}', 'false'::jsonb, true)
-       where id = ${org.orgId}`));
+       where id = ${org.orgId}`),
+    );
 
     await assert.rejects(
       withOrgContext(org.orgId, () => listSetupRecords(admin, { entityKey: "stock-locations" })),
-      (error: unknown) => error instanceof ApplicationError
-        && error.code === "not_found"
-        && error.status === 404
-        && error.message === "setup entity not found; list enabled entities from GET /api/v1/setup",
+      (error: unknown) =>
+        error instanceof ApplicationError &&
+        error.code === "not_found" &&
+        error.status === 404 &&
+        error.message === "setup entity not found; list enabled entities from GET /api/v1/setup",
     );
   } finally {
     await dropScratchOrg(org.orgId);

@@ -55,7 +55,11 @@ const ZZ_FILINGS: PayrollPackFilings = {
       parseRowId: () => null,
       download: {
         label: "Download P60 file",
-        build: async () => ({ filename: "P60.xml", contentType: "application/xml", body: "<p60/>" }),
+        build: async () => ({
+          filename: "P60.xml",
+          contentType: "application/xml",
+          body: "<p60/>",
+        }),
       },
       amendment: {
         supported: true,
@@ -78,7 +82,9 @@ const ZZ_AMENDMENT = {
  * i.e. the built-ins, in registry order. Read once, before any test registers
  * anything, so a test that forgets to unregister cannot inflate it.
  */
-const BUILT_IN_FILING_COUNTRIES: readonly string[] = declaredPayrollFilings().map((pack) => pack.country);
+const BUILT_IN_FILING_COUNTRIES: readonly string[] = declaredPayrollFilings().map(
+  (pack) => pack.country,
+);
 
 function builtInFilingCountries(): readonly string[] {
   return BUILT_IN_FILING_COUNTRIES;
@@ -98,78 +104,124 @@ function withZZ(fn: () => void | Promise<void>) {
   };
 }
 
-test("a registered third pack's filing appears in the declared enumeration", withZZ(() => {
-  const countries = declaredPayrollFilings().map((pack) => pack.country);
-  // The contract is the ORDER — every built-in first, the runtime
-  // registration last — not the identity of the built-ins. This pinned
-  // ["CA", "US", "ZZ"] and went red the day the registry opened past two
-  // countries, which is a stale pin, not a regression: derive the built-ins.
-  assert.deepEqual(
-    countries,
-    [...builtInFilingCountries(), "ZZ"],
-    "built-ins first, then registrations",
-  );
-  const filing = yearEndFiling("ZZ", "p60");
-  assert.equal(filing.label, "P60 end-of-year certificate");
-  assert.ok(filing.download, "the pack's declared file builder rides along");
-}));
+test(
+  "a registered third pack's filing appears in the declared enumeration",
+  withZZ(() => {
+    const countries = declaredPayrollFilings().map((pack) => pack.country);
+    // The contract is the ORDER — every built-in first, the runtime
+    // registration last — not the identity of the built-ins. This pinned
+    // ["CA", "US", "ZZ"] and went red the day the registry opened past two
+    // countries, which is a stale pin, not a regression: derive the built-ins.
+    assert.deepEqual(
+      countries,
+      [...builtInFilingCountries(), "ZZ"],
+      "built-ins first, then registrations",
+    );
+    const filing = yearEndFiling("ZZ", "p60");
+    assert.equal(filing.label, "P60 end-of-year certificate");
+    assert.ok(filing.download, "the pack's declared file builder rides along");
+  }),
+);
 
 test("an undeclared country and an undeclared filing are refused by name", () => {
-  assert.throws(() => payrollPackFilings("ZZ"), (error: Error) => {
-    assert.ok(error instanceof PayrollPackError);
-    assert.match(error.message, /no payroll pack declares filings for ZZ/);
-    assert.match(error.message, /CA, US/, "the refusal names what exists");
-    return true;
-  });
+  assert.throws(
+    () => payrollPackFilings("ZZ"),
+    (error: Error) => {
+      assert.ok(error instanceof PayrollPackError);
+      assert.match(error.message, /no payroll pack declares filings for ZZ/);
+      assert.match(error.message, /CA, US/, "the refusal names what exists");
+      return true;
+    },
+  );
   assert.throws(() => yearEndFiling("CA", "p60"), /declares no "p60" filing/);
 });
 
-test("duplicate registrations are refused — one declaration per country", withZZ(() => {
-  assert.throws(() => registerPayrollFilings(ZZ_FILINGS), /already declared/);
-  assert.throws(() => registerPayrollFilings({ ...ZZ_FILINGS, country: "CA" }), /already declared/);
-}));
+test(
+  "duplicate registrations are refused — one declaration per country",
+  withZZ(() => {
+    assert.throws(() => registerPayrollFilings(ZZ_FILINGS), /already declared/);
+    assert.throws(
+      () => registerPayrollFilings({ ...ZZ_FILINGS, country: "CA" }),
+      /already declared/,
+    );
+  }),
+);
 
-test("a jurisdiction filing registers onto an existing pack (the RL-1 path)", withZZ(() => {
-  registerYearEndFiling("ZZ", {
-    key: "fps",
-    label: "Full payment submission",
-    cadence: "quarterly",
-    population: async () => EMPTY_POPULATION,
-    parseRowId: () => null,
-    amendment: ZZ_AMENDMENT,
-  });
-  assert.deepEqual(payrollPackFilings("ZZ").yearEnd.map((filing) => filing.key), ["p60", "fps"]);
-  // A duplicate key is two declarations of one statutory filing — refused.
-  assert.throws(
-    () => registerYearEndFiling("ZZ", { key: "p60", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION, parseRowId: () => null, amendment: ZZ_AMENDMENT }),
-    /already declares a "p60" filing/,
-  );
-  // Registering onto a pack nobody declared refuses by name.
-  assert.throws(
-    () => registerYearEndFiling("XX", { key: "x", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION, parseRowId: () => null, amendment: ZZ_AMENDMENT }),
-    /no payroll pack declares filings for XX/,
-  );
-}));
-
-test("a filing without a declared cadence is refused — the deadline class is required", withZZ(() => {
-  assert.throws(
-    () => registerYearEndFiling("ZZ", {
-      key: "p45",
-      label: "P45 details of employee leaving work",
+test(
+  "a jurisdiction filing registers onto an existing pack (the RL-1 path)",
+  withZZ(() => {
+    registerYearEndFiling("ZZ", {
+      key: "fps",
+      label: "Full payment submission",
+      cadence: "quarterly",
       population: async () => EMPTY_POPULATION,
+      parseRowId: () => null,
       amendment: ZZ_AMENDMENT,
-    } as never),
-    /declares no cadence/,
-  );
-  assert.throws(
-    () => registerPayrollFilings({
-      ...ZZ_FILINGS,
-      country: "ZY",
-      yearEnd: [{ key: "x", label: "x", population: async () => EMPTY_POPULATION, amendment: ZZ_AMENDMENT } as never],
-    }),
-    /declares no cadence/,
-  );
-}));
+    });
+    assert.deepEqual(
+      payrollPackFilings("ZZ").yearEnd.map((filing) => filing.key),
+      ["p60", "fps"],
+    );
+    // A duplicate key is two declarations of one statutory filing — refused.
+    assert.throws(
+      () =>
+        registerYearEndFiling("ZZ", {
+          key: "p60",
+          label: "x",
+          cadence: "annual",
+          population: async () => EMPTY_POPULATION,
+          parseRowId: () => null,
+          amendment: ZZ_AMENDMENT,
+        }),
+      /already declares a "p60" filing/,
+    );
+    // Registering onto a pack nobody declared refuses by name.
+    assert.throws(
+      () =>
+        registerYearEndFiling("XX", {
+          key: "x",
+          label: "x",
+          cadence: "annual",
+          population: async () => EMPTY_POPULATION,
+          parseRowId: () => null,
+          amendment: ZZ_AMENDMENT,
+        }),
+      /no payroll pack declares filings for XX/,
+    );
+  }),
+);
+
+test(
+  "a filing without a declared cadence is refused — the deadline class is required",
+  withZZ(() => {
+    assert.throws(
+      () =>
+        registerYearEndFiling("ZZ", {
+          key: "p45",
+          label: "P45 details of employee leaving work",
+          population: async () => EMPTY_POPULATION,
+          amendment: ZZ_AMENDMENT,
+        } as never),
+      /declares no cadence/,
+    );
+    assert.throws(
+      () =>
+        registerPayrollFilings({
+          ...ZZ_FILINGS,
+          country: "ZY",
+          yearEnd: [
+            {
+              key: "x",
+              label: "x",
+              population: async () => EMPTY_POPULATION,
+              amendment: ZZ_AMENDMENT,
+            } as never,
+          ],
+        }),
+      /declares no cadence/,
+    );
+  }),
+);
 
 test("the built-ins declare the statute's own cadence", () => {
   assert.equal(yearEndFiling("CA", "t4").cadence, "annual");
@@ -185,68 +237,99 @@ test("the built-ins declare the statute's own cadence", () => {
 /* Filing accounts: pack-declared program types replace the DB CHECKs  */
 /* ------------------------------------------------------------------ */
 
-test("a filing account with a registered pack's program type is accepted", withZZ(() => {
-  assert.equal(
-    filingAccountProblem({ country: "ZZ", programType: "zz_paye", stateCode: null }),
-    null,
-  );
-  // The built-ins pass through the same declaration, not a special case.
-  assert.equal(filingAccountProblem({ country: "CA", programType: "ca_rp", stateCode: null }), null);
-  assert.equal(filingAccountProblem({ country: "US", programType: "us_ein", stateCode: null }), null);
-  assert.equal(filingAccountProblem({ country: "US", programType: "us_state_sui", stateCode: "CA" }), null);
-}));
+test(
+  "a filing account with a registered pack's program type is accepted",
+  withZZ(() => {
+    assert.equal(
+      filingAccountProblem({ country: "ZZ", programType: "zz_paye", stateCode: null }),
+      null,
+    );
+    // The built-ins pass through the same declaration, not a special case.
+    assert.equal(
+      filingAccountProblem({ country: "CA", programType: "ca_rp", stateCode: null }),
+      null,
+    );
+    assert.equal(
+      filingAccountProblem({ country: "US", programType: "us_ein", stateCode: null }),
+      null,
+    );
+    assert.equal(
+      filingAccountProblem({ country: "US", programType: "us_state_sui", stateCode: "CA" }),
+      null,
+    );
+  }),
+);
 
-test("an undeclared program type is refused, naming what the pack declares", withZZ(() => {
-  const problem = filingAccountProblem({ country: "ZZ", programType: "zz_nope", stateCode: null });
-  assert.ok(problem, "undeclared program type must be refused");
-  assert.match(problem!, /does not file under program type "zz_nope"/);
-  assert.match(problem!, /zz_paye/, "the refusal names the declared types");
+test(
+  "an undeclared program type is refused, naming what the pack declares",
+  withZZ(() => {
+    const problem = filingAccountProblem({
+      country: "ZZ",
+      programType: "zz_nope",
+      stateCode: null,
+    });
+    assert.ok(problem, "undeclared program type must be refused");
+    assert.match(problem!, /does not file under program type "zz_nope"/);
+    assert.match(problem!, /zz_paye/, "the refusal names the declared types");
 
-  // A country with NO pack at all gets the other refusal. This used GB, which
-  // had no pack when the test was written and now has one — so the assertion
-  // was pinning the two-country world, not the behaviour.
-  assert.match(
-    filingAccountProblem({ country: UNDECLARED_COUNTRY, programType: "paye", stateCode: null })!,
-    new RegExp(`no payroll pack declares filing program types for ${UNDECLARED_COUNTRY}`),
-  );
+    // A country with NO pack at all gets the other refusal. This used GB, which
+    // had no pack when the test was written and now has one — so the assertion
+    // was pinning the two-country world, not the behaviour.
+    assert.match(
+      filingAccountProblem({ country: UNDECLARED_COUNTRY, programType: "paye", stateCode: null })!,
+      new RegExp(`no payroll pack declares filing program types for ${UNDECLARED_COUNTRY}`),
+    );
 
-  // And a real built-in beyond CA/US refuses the same way ZZ does, naming what
-  // it declares — the behaviour this test is titled for, now that a pack whose
-  // program types are neither Canadian nor American exists to check it on.
-  const gb = filingAccountProblem({ country: "GB", programType: "paye", stateCode: null });
-  assert.ok(gb, "GB has a pack, and 'paye' is not one of its declared program types");
-  assert.match(gb, /does not file under program type "paye"/);
-  assert.match(gb, /gb_paye/, "the refusal names the declared type it should have been");
-}));
+    // And a real built-in beyond CA/US refuses the same way ZZ does, naming what
+    // it declares — the behaviour this test is titled for, now that a pack whose
+    // program types are neither Canadian nor American exists to check it on.
+    const gb = filingAccountProblem({ country: "GB", programType: "paye", stateCode: null });
+    assert.ok(gb, "GB has a pack, and 'paye' is not one of its declared program types");
+    assert.match(gb, /does not file under program type "paye"/);
+    assert.match(gb, /gb_paye/, "the refusal names the declared type it should have been");
+  }),
+);
 
-test("a region-scoped program type requires its region, and only then", withZZ(() => {
-  assert.match(
-    filingAccountProblem({ country: "ZZ", programType: "zz_regional", stateCode: null })!,
-    /state code is required/,
-  );
-  assert.equal(
-    filingAccountProblem({ country: "ZZ", programType: "zz_regional", stateCode: "NW" }),
-    null,
-  );
-  assert.match(
-    filingAccountProblem({ country: "ZZ", programType: "zz_paye", stateCode: "NW" })!,
-    /carries no state\/region code/,
-  );
-}));
+test(
+  "a region-scoped program type requires its region, and only then",
+  withZZ(() => {
+    assert.match(
+      filingAccountProblem({ country: "ZZ", programType: "zz_regional", stateCode: null })!,
+      /state code is required/,
+    );
+    assert.equal(
+      filingAccountProblem({ country: "ZZ", programType: "zz_regional", stateCode: "NW" }),
+      null,
+    );
+    assert.match(
+      filingAccountProblem({ country: "ZZ", programType: "zz_paye", stateCode: "NW" })!,
+      /carries no state\/region code/,
+    );
+  }),
+);
 
 /* ------------------------------------------------------------------ */
 /* Separation payments are a pack declaration                          */
 /* ------------------------------------------------------------------ */
 
-test("separation-payment component keys come from the pack, or refuse", withZZ(() => {
-  assert.deepEqual(separationPaymentKeys("CA"), {
-    vacationPay: ["vacation_payout"],
-    otherMonies: ["bonus"],
-  });
-  // ZZ declares no mapping: consumers refuse instead of filing 0.00.
-  assert.throws(() => separationPaymentKeys("ZZ"), /declares no separation-payment component mapping/);
-  assert.throws(() => separationPaymentKeys("US"), /declares no separation-payment component mapping/);
-}));
+test(
+  "separation-payment component keys come from the pack, or refuse",
+  withZZ(() => {
+    assert.deepEqual(separationPaymentKeys("CA"), {
+      vacationPay: ["vacation_payout"],
+      otherMonies: ["bonus"],
+    });
+    // ZZ declares no mapping: consumers refuse instead of filing 0.00.
+    assert.throws(
+      () => separationPaymentKeys("ZZ"),
+      /declares no separation-payment component mapping/,
+    );
+    assert.throws(
+      () => separationPaymentKeys("US"),
+      /declares no separation-payment component mapping/,
+    );
+  }),
+);
 
 /* ------------------------------------------------------------------ */
 /* The org-year enumeration (DB)                                       */
@@ -286,40 +369,36 @@ test(
 /* ROE: a non-Canadian attribution means no ROE, never a foreign filing */
 /* ------------------------------------------------------------------ */
 
-test(
-  "an ROE for a non-Canadian employee is refused, never filed",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actorId = (await seedFlowActors(org.orgId)).adminId;
-      const employeeId = randomUUID();
-      await db.execute(sql`
+test("an ROE for a non-Canadian employee is refused, never filed", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const employeeId = randomUUID();
+    await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
         values (${employeeId}, ${org.orgId}, 'person', 'Sam American', true, ${org.subsidiaryId}, '{}'::jsonb)`);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
         values (${org.orgId}, ${employeeId}, '2024-01-01', true, ${actorId}, ${actorId})`);
-      // Country-attributed profile with a real pay schedule: pay_schedule_id
-      // is NOT NULL, so a schedule-less profile row cannot exist, and the
-      // country gate runs before any schedule logic. A US-attributed
-      // employee matches no ROE row, so roeRecord returns null (fail closed)
-      // and every caller refuses — the slip builder throws "ROEs exist for
-      // Canadian-pack employees only".
-      const scheduleId = randomUUID();
-      await db.execute(sql`
+    // Country-attributed profile with a real pay schedule: pay_schedule_id
+    // is NOT NULL, so a schedule-less profile row cannot exist, and the
+    // country gate runs before any schedule logic. A US-attributed
+    // employee matches no ROE row, so roeRecord returns null (fail closed)
+    // and every caller refuses — the slip builder throws "ROEs exist for
+    // Canadian-pack employees only".
+    const scheduleId = randomUUID();
+    await db.execute(sql`
         insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end, is_active)
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-06-28', true)`);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province)
         values (${org.orgId}, ${employeeId}, ${scheduleId}, 'US', 'TX')`);
-      assert.equal(
-        await roeRecord(org.orgId, employeeId),
-        null,
-        "a US-attributed employee gets no ROE — the country refusal, not a filing",
-      );
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+    assert.equal(
+      await roeRecord(org.orgId, employeeId),
+      null,
+      "a US-attributed employee gets no ROE — the country refusal, not a filing",
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});

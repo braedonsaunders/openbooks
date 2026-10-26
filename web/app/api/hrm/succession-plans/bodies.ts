@@ -14,9 +14,11 @@ export const createSuccessionPlanBody = z.object({
   notes: z.string().nullable().optional(),
 });
 
-export const patchSuccessionPlanBody = z.object({
-  status: z.enum(["draft", "active", "archived"]).optional(),
-  notes: z.string().nullable().optional(),
-}).refine((body) => (body.status === undefined) !== (body.notes === undefined), {
-  message: "provide exactly one succession plan status or notes change",
-});
+export const patchSuccessionPlanBody = z
+  .object({
+    status: z.enum(["draft", "active", "archived"]).optional(),
+    notes: z.string().nullable().optional(),
+  })
+  .refine((body) => (body.status === undefined) !== (body.notes === undefined), {
+    message: "provide exactly one succession plan status or notes change",
+  });

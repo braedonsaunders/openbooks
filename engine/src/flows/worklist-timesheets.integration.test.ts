@@ -22,12 +22,7 @@ import { installEngineSeams } from "../composition/install.ts";
 installEngineSeams();
 const DB = { skip: !process.env.OPENBOOKS_DB_URL };
 
-async function week(
-  orgId: string,
-  subsidiaryId: string,
-  actorId: string,
-  weekStart: string,
-) {
+async function week(orgId: string, subsidiaryId: string, actorId: string, weekStart: string) {
   const person = randomUUID(),
     id = randomUUID();
   await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
@@ -61,12 +56,7 @@ test(
           assignees: [{ type: "user", userId: actors.approver1Id }],
           mode: "all",
         });
-      const submitted = await week(
-        org.orgId,
-        org.subsidiaryId,
-        actors.submitterId,
-        "2026-07-19",
-      );
+      const submitted = await week(org.orgId, org.subsidiaryId, actors.submitterId, "2026-07-19");
       const routing = await withOrgTransaction(org.orgId, () =>
         routeSubjectSubmission({
           orgId: org.orgId,
@@ -76,26 +66,17 @@ test(
         }),
       );
       assert.equal(routing.policy.kind, "gated");
-      const items = await worklistApprovals(
-        org.orgId,
-        actors.approver1Id,
-        scope,
-      );
+      const items = await worklistApprovals(org.orgId, actors.approver1Id, scope);
       assert.equal(items.length, 2);
       assert.ok(items.every((item) => item.gate.subjectId === submitted.id));
-      const page = await worklistApprovalsPage(
-        org.orgId,
-        actors.approver1Id,
-        scope,
-        { limit: 1, offset: 1 },
-      );
+      const page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, {
+        limit: 1,
+        offset: 1,
+      });
       assert.equal(page.total, 2);
       assert.equal(page.items.length, 1);
       assert.notEqual(page.items[0]!.id, items[0]!.id);
-      assert.equal(
-        await worklistApprovalsCount(org.orgId, actors.approver1Id, scope),
-        2,
-      );
+      assert.equal(await worklistApprovalsCount(org.orgId, actors.approver1Id, scope), 2);
       assert.equal(
         await worklistApprovalsCount(org.orgId, actors.approver1Id, {
           ...scope,
@@ -123,23 +104,21 @@ test(
       };
       const inbox = await timesheetWeekAdapter.list(ctx);
       assert.equal(inbox.length, 2);
-      assert.ok(
-        inbox.every((item) => item.source.kind === "timesheet_week_gate"),
-      );
-      assert.ok(
-        inbox.every((item) =>
-          item.actions.some((action) => action.key === "approve"),
-        ),
-      );
+      assert.ok(inbox.every((item) => item.source.kind === "timesheet_week_gate"));
+      assert.ok(inbox.every((item) => item.actions.some((action) => action.key === "approve")));
       assert.deepEqual(
         await flowsApprovalAdapter.list(ctx),
         [],
         "dedicated timesheet gates do not duplicate in the generic inbox",
       );
-      const centralized={...ctx,approvalWorklistOwnsGates:true};
-      assert.deepEqual(await timesheetWeekAdapter.list(centralized),[],"the approval worklist owns the gate instead of duplicating it as a task");
-      assert.equal((await flowsApprovalAdapter.list(centralized)).length,2);
-      assert.equal(await flowsApprovalAdapter.count!(centralized),2);
+      const centralized = { ...ctx, approvalWorklistOwnsGates: true };
+      assert.deepEqual(
+        await timesheetWeekAdapter.list(centralized),
+        [],
+        "the approval worklist owns the gate instead of duplicating it as a task",
+      );
+      assert.equal((await flowsApprovalAdapter.list(centralized)).length, 2);
+      assert.equal(await flowsApprovalAdapter.count!(centralized), 2);
       await db.execute(
         sql`update flow_runs set status='cancelled' where org_id=${org.orgId} and subject_id=${submitted.id}`,
       );

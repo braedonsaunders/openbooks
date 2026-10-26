@@ -1,21 +1,52 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertQbdResponsePayload, assertSoapEnvelopeComplexity, assertUniformReportLocale, buildCapturePlan, calendarMonths, continueRequestXml, identifyQbdSoapCall, negotiateQbxmlVersion, parseQbdReportAmount, parseQbdReportDate, parseReportRows, parseXml, QBD_PREAUTH_MAX_BYTES, requestElementName, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, xmlEscape } from "./qbxml.ts";
+import {
+  assertQbdResponsePayload,
+  assertSoapEnvelopeComplexity,
+  assertUniformReportLocale,
+  buildCapturePlan,
+  calendarMonths,
+  continueRequestXml,
+  identifyQbdSoapCall,
+  negotiateQbxmlVersion,
+  parseQbdReportAmount,
+  parseQbdReportDate,
+  parseReportRows,
+  parseXml,
+  QBD_PREAUTH_MAX_BYTES,
+  requestElementName,
+  requestIdFromRequestXml,
+  responseElementForRequest,
+  responseStatus,
+  stampRequestId,
+  xmlEscape,
+} from "./qbxml.ts";
 
 test("capture plan splits the ledger into bounded calendar months", () => {
   const through = new Date("2024-03-12T19:20:00Z");
   const plan = buildCapturePlan("2024-01-15", through);
-  assert.deepEqual(plan.filter((r) => r.family.startsWith("ledger:")).map((r) => r.family), [
-    "ledger:2024-01", "ledger:2024-02", "ledger:2024-03",
-  ]);
-  assert.match(plan.find((r) => r.family === "ledger:2024-01")!.requestXml, /<FromReportDate>2024-01-15<\/FromReportDate>/);
-  assert.match(plan.find((r) => r.family === "ledger:2024-03")!.requestXml, /<ToReportDate>2024-03-12<\/ToReportDate>/);
+  assert.deepEqual(
+    plan.filter((r) => r.family.startsWith("ledger:")).map((r) => r.family),
+    ["ledger:2024-01", "ledger:2024-02", "ledger:2024-03"],
+  );
+  assert.match(
+    plan.find((r) => r.family === "ledger:2024-01")!.requestXml,
+    /<FromReportDate>2024-01-15<\/FromReportDate>/,
+  );
+  assert.match(
+    plan.find((r) => r.family === "ledger:2024-03")!.requestXml,
+    /<ToReportDate>2024-03-12<\/ToReportDate>/,
+  );
   // Bounded history also captures a dated opening trial balance as of the
   // day before the window, so carried balances can reconcile.
   const opening = plan.find((r) => r.family === "opening-trial-balance")!;
   assert.equal(opening.requestKind, "TrialBalance");
   assert.match(opening.requestXml, /<ToReportDate>2024-01-14<\/ToReportDate>/);
-  assert.deepEqual(calendarMonths("2024-02-29", through)[0], { month: "2024-02", from: "2024-02-29", to: "2024-02-29" });
+  assert.deepEqual(calendarMonths("2024-02-29", through)[0], {
+    month: "2024-02",
+    from: "2024-02-29",
+    to: "2024-02-29",
+  });
 });
 
 test("the capture plan issues only read-only query requests", () => {
@@ -31,7 +62,11 @@ test("the capture plan issues only read-only query requests", () => {
   for (const request of plan) {
     const element = requestElementName(request.requestXml);
     assert.ok(element, `${request.family} carries a request element`);
-    assert.match(element, /QueryRq$/, `${request.family} must be a read-only query, got ${element}`);
+    assert.match(
+      element,
+      /QueryRq$/,
+      `${request.family} must be a read-only query, got ${element}`,
+    );
   }
 });
 
@@ -55,17 +90,41 @@ test("parser rejects DTD and entity declarations", () => {
 
 test("report amounts parse in either locale without silent rescaling", () => {
   // US company file: commas are grouping, unchanged from the old behavior.
-  assert.deepEqual(parseQbdReportAmount("1,234.56"), { text: "1234.56", decimal: ".", grouping: "," });
-  assert.deepEqual(parseQbdReportAmount("1,234.5678"), { text: "1234.5678", decimal: ".", grouping: "," });
+  assert.deepEqual(parseQbdReportAmount("1,234.56"), {
+    text: "1234.56",
+    decimal: ".",
+    grouping: ",",
+  });
+  assert.deepEqual(parseQbdReportAmount("1,234.5678"), {
+    text: "1234.5678",
+    decimal: ".",
+    grouping: ",",
+  });
   // German company file: the comma is the decimal mark — stripping it would
   // overstate twelve-thirty-four as 1234 (100x).
   assert.deepEqual(parseQbdReportAmount("12,34"), { text: "12.34", decimal: ",", grouping: null });
-  assert.deepEqual(parseQbdReportAmount("1.234,56"), { text: "1234.56", decimal: ",", grouping: "." });
-  assert.deepEqual(parseQbdReportAmount("-1.234,56"), { text: "-1234.56", decimal: ",", grouping: "." });
+  assert.deepEqual(parseQbdReportAmount("1.234,56"), {
+    text: "1234.56",
+    decimal: ",",
+    grouping: ".",
+  });
+  assert.deepEqual(parseQbdReportAmount("-1.234,56"), {
+    text: "-1234.56",
+    decimal: ",",
+    grouping: ".",
+  });
   // Unmarked and grouped-only values pin no decimal separator.
   assert.deepEqual(parseQbdReportAmount("25.00"), { text: "25.00", decimal: ".", grouping: null });
-  assert.deepEqual(parseQbdReportAmount("1,234,567"), { text: "1234567", decimal: null, grouping: "," });
-  assert.deepEqual(parseQbdReportAmount("1.234.567"), { text: "1234567", decimal: null, grouping: "." });
+  assert.deepEqual(parseQbdReportAmount("1,234,567"), {
+    text: "1234567",
+    decimal: null,
+    grouping: ",",
+  });
+  assert.deepEqual(parseQbdReportAmount("1.234.567"), {
+    text: "1234567",
+    decimal: null,
+    grouping: ".",
+  });
   // Empty cells (headings/blanks) stay zero; zeros never refuse over format.
   assert.deepEqual(parseQbdReportAmount(""), { text: "0", decimal: null, grouping: null });
   assert.deepEqual(parseQbdReportAmount("0.000"), { text: "0", decimal: null, grouping: null });
@@ -113,7 +172,9 @@ test("request version is negotiated down to the QuickBooks-supported qbXML versi
 });
 
 test("iterator continuation escapes the QuickBooks iterator id", () => {
-  const start = buildCapturePlan("2024-01-01", new Date("2024-01-01T00:00:00Z")).find((r) => r.family === "account")!;
+  const start = buildCapturePlan("2024-01-01", new Date("2024-01-01T00:00:00Z")).find(
+    (r) => r.family === "account",
+  )!;
   const next = continueRequestXml(start.requestXml, 'id&"');
   assert.match(next, /iterator="Continue" iteratorID="id&amp;&quot;"/);
   assert.match(continueRequestXml(next, "second"), /iterator="Continue" iteratorID="second"/);
@@ -122,22 +183,43 @@ test("iterator continuation escapes the QuickBooks iterator id", () => {
 
 test("status and report parsers handle qbXML attributes and column ids", () => {
   const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><GeneralDetailReportQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK" iteratorID="abc" iteratorRemainingCount="2"><ReportRet><ColDesc colID="1"><ColType>TxnID</ColType></ColDesc><ColDesc colID="2"><ColType>Amount</ColType></ColDesc><ReportData><DataRow><ColData colID="1" value="TXN-1"/><ColData colID="2" value="12.34"/></DataRow></ReportData></ReportRet></GeneralDetailReportQueryRs></QBXMLMsgsRs></QBXML>`;
-  assert.deepEqual(responseStatus(xml), { code: 0, severity: "Info", message: "Status OK", iteratorId: "abc", iteratorRemaining: 2, kind: "GeneralDetailReportQueryRs", requestId: null });
-  assert.deepEqual(parseReportRows(xml), [{ rowType: "DataRow", columns: { TxnID: "TXN-1", Amount: "12.34" } }]);
+  assert.deepEqual(responseStatus(xml), {
+    code: 0,
+    severity: "Info",
+    message: "Status OK",
+    iteratorId: "abc",
+    iteratorRemaining: 2,
+    kind: "GeneralDetailReportQueryRs",
+    requestId: null,
+  });
+  assert.deepEqual(parseReportRows(xml), [
+    { rowType: "DataRow", columns: { TxnID: "TXN-1", Amount: "12.34" } },
+  ]);
 });
 
 test("a success response without its payload is refused, never read as empty", () => {
   const truncated = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><GeneralDetailReportQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"></GeneralDetailReportQueryRs></QBXMLMsgsRs></QBXML>`;
   assert.throws(
-    () => assertQbdResponsePayload({ family: "ledger:2024-01", requestKind: "GeneralLedger", expectedRs: "GeneralDetailReportQueryRs", responseXml: truncated }),
+    () =>
+      assertQbdResponsePayload({
+        family: "ledger:2024-01",
+        requestKind: "GeneralLedger",
+        expectedRs: "GeneralDetailReportQueryRs",
+        responseXml: truncated,
+      }),
     /GeneralLedger capture for ledger:2024-01.*carries no report/,
   );
 
   // ReportRet and column descriptors present but zero data rows: a genuinely
   // empty month, still accepted.
   const emptyMonth = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><GeneralDetailReportQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"><ReportRet><ColDesc colID="1"><ColType>TxnID</ColType></ColDesc><ReportData></ReportData></ReportRet></GeneralDetailReportQueryRs></QBXMLMsgsRs></QBXML>`;
-  assert.doesNotThrow(
-    () => assertQbdResponsePayload({ family: "ledger:2024-01", requestKind: "GeneralLedger", expectedRs: "GeneralDetailReportQueryRs", responseXml: emptyMonth }),
+  assert.doesNotThrow(() =>
+    assertQbdResponsePayload({
+      family: "ledger:2024-01",
+      requestKind: "GeneralLedger",
+      expectedRs: "GeneralDetailReportQueryRs",
+      responseXml: emptyMonth,
+    }),
   );
   assert.deepEqual(parseReportRows(emptyMonth), []);
 
@@ -145,37 +227,66 @@ test("a success response without its payload is refused, never read as empty", (
   // refused, while a present-but-empty list stays valid.
   const noContainer = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs></QBXMLMsgsRs></QBXML>`;
   assert.throws(
-    () => assertQbdResponsePayload({ family: "customer", requestKind: "CustomerQuery", expectedRs: "CustomerQueryRs", responseXml: noContainer }),
+    () =>
+      assertQbdResponsePayload({
+        family: "customer",
+        requestKind: "CustomerQuery",
+        expectedRs: "CustomerQueryRs",
+        responseXml: noContainer,
+      }),
     /CustomerQuery capture for customer.*carries no CustomerQueryRs payload/,
   );
   const emptyList = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CustomerQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"></CustomerQueryRs></QBXMLMsgsRs></QBXML>`;
-  assert.doesNotThrow(
-    () => assertQbdResponsePayload({ family: "customer", requestKind: "CustomerQuery", expectedRs: "CustomerQueryRs", responseXml: emptyList }),
+  assert.doesNotThrow(() =>
+    assertQbdResponsePayload({
+      family: "customer",
+      requestKind: "CustomerQuery",
+      expectedRs: "CustomerQueryRs",
+      responseXml: emptyList,
+    }),
   );
 });
 
 test("the pre-auth head identifies the SOAP method and ticket without parsing", () => {
   assert.equal(QBD_PREAUTH_MAX_BYTES, 64 * 1024);
   const head = `<soap:Envelope><soap:Body><receiveResponseXML xmlns="http://developer.intuit.com/"><ticket>01a0ce9f-1d5b-7a7a-be6c-0585424d49f5</ticket><response>`;
-  assert.deepEqual(identifyQbdSoapCall(head), { method: "receiveResponseXML", ticket: "01a0ce9f-1d5b-7a7a-be6c-0585424d49f5" });
+  assert.deepEqual(identifyQbdSoapCall(head), {
+    method: "receiveResponseXML",
+    ticket: "01a0ce9f-1d5b-7a7a-be6c-0585424d49f5",
+  });
   // A truncated prefix still identifies: only the opening element matters.
-  assert.deepEqual(identifyQbdSoapCall(`<soap:Body><authenticate `), { method: "authenticate", ticket: null });
-  assert.deepEqual(
-    identifyQbdSoapCall(`<sendRequestXML><ticket>abc</ticket></sendRequestXML>`),
-    { method: "sendRequestXML", ticket: "abc" },
-  );
+  assert.deepEqual(identifyQbdSoapCall(`<soap:Body><authenticate `), {
+    method: "authenticate",
+    ticket: null,
+  });
+  assert.deepEqual(identifyQbdSoapCall(`<sendRequestXML><ticket>abc</ticket></sendRequestXML>`), {
+    method: "sendRequestXML",
+    ticket: "abc",
+  });
   assert.equal(identifyQbdSoapCall(`<soap:Body><unknownMethod/></soap:Body>`), null);
   assert.equal(identifyQbdSoapCall(""), null);
 });
 
 test("the complexity guard refuses deep or bloated envelopes before parsing", () => {
-  assert.doesNotThrow(() => assertSoapEnvelopeComplexity(`<soap:Envelope><soap:Body><serverVersion/></soap:Body></soap:Envelope>`));
+  assert.doesNotThrow(() =>
+    assertSoapEnvelopeComplexity(
+      `<soap:Envelope><soap:Body><serverVersion/></soap:Body></soap:Envelope>`,
+    ),
+  );
   const deep = `<a>`.repeat(200) + `x` + `</a>`.repeat(200);
   assert.throws(() => assertSoapEnvelopeComplexity(deep), /nests deeper than 128 elements/);
-  assert.throws(() => assertSoapEnvelopeComplexity(`<a/>`.repeat(11), { maxTags: 10, maxDepth: 128 }), /exceeds the 10-tag parser budget/);
-  assert.throws(() => assertSoapEnvelopeComplexity(`<!DOCTYPE x [<!ENTITY y "z">]><x/>`), /may not define a DTD or entity/);
+  assert.throws(
+    () => assertSoapEnvelopeComplexity(`<a/>`.repeat(11), { maxTags: 10, maxDepth: 128 }),
+    /exceeds the 10-tag parser budget/,
+  );
+  assert.throws(
+    () => assertSoapEnvelopeComplexity(`<!DOCTYPE x [<!ENTITY y "z">]><x/>`),
+    /may not define a DTD or entity/,
+  );
   // CDATA payload text is opaque: escaped bulk cannot inflate the count.
-  assert.doesNotThrow(() => assertSoapEnvelopeComplexity(`<response><![CDATA[${"<a>".repeat(5000)}]]></response>`));
+  assert.doesNotThrow(() =>
+    assertSoapEnvelopeComplexity(`<response><![CDATA[${"<a>".repeat(5000)}]]></response>`),
+  );
 });
 
 test("requestID correlation stamps the request element, never the envelope", () => {
@@ -207,7 +318,10 @@ test("requestID correlation stamps the request element, never the envelope", () 
   const account = plan.find((r) => r.family === "account")!;
   const stampedAccount = stampRequestId(account.requestXml, "33333333-2222-4333-8555-666666666666");
   assert.match(stampedAccount, /iterator="Start"/);
-  assert.equal(requestIdFromRequestXml(continueRequestXml(stampedAccount, "it-1")), "33333333-2222-4333-8555-666666666666");
+  assert.equal(
+    requestIdFromRequestXml(continueRequestXml(stampedAccount, "it-1")),
+    "33333333-2222-4333-8555-666666666666",
+  );
 
   const echoed = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CompanyQueryRs requestID="11111111-2222-4333-8555-666666666666" statusCode="0" statusSeverity="Info" statusMessage="Status OK"><CompanyRet/></CompanyQueryRs></QBXMLMsgsRs></QBXML>`;
   assert.deepEqual(responseStatus(echoed).requestId, "11111111-2222-4333-8555-666666666666");
@@ -221,13 +335,32 @@ test("responseStatus accepts strict integer tokens and refuses the rest", () => 
   // iterator count meaning the last page.
   assert.equal(responseStatus(rs('statusCode="0"')).code, 0);
   assert.equal(responseStatus(rs('statusCode="0"')).iteratorRemaining, 0);
-  assert.equal(responseStatus(rs('statusCode="0" iteratorRemainingCount="0"')).iteratorRemaining, 0);
-  assert.equal(responseStatus(rs('statusCode="0" iteratorRemainingCount="2" iteratorID="it-1"')).iteratorRemaining, 2);
+  assert.equal(
+    responseStatus(rs('statusCode="0" iteratorRemainingCount="0"')).iteratorRemaining,
+    0,
+  );
+  assert.equal(
+    responseStatus(rs('statusCode="0" iteratorRemainingCount="2" iteratorID="it-1"'))
+      .iteratorRemaining,
+    2,
+  );
   assert.equal(responseStatus(rs('statusCode="500"')).code, 500);
   assert.equal(responseStatus(rs('statusCode="-1"')).code, -1);
   // Refused iterator counts: unreadable, negative, fractional, infinite, and
   // anything outside the safe-integer range.
-  for (const bad of ["oops", "-1", "1.5", "Infinity", "NaN", "", " ", " 2", "2 ", "0x10", "99999999999999999999999"]) {
+  for (const bad of [
+    "oops",
+    "-1",
+    "1.5",
+    "Infinity",
+    "NaN",
+    "",
+    " ",
+    " 2",
+    "2 ",
+    "0x10",
+    "99999999999999999999999",
+  ]) {
     assert.throws(
       () => responseStatus(rs(`statusCode="0" iteratorRemainingCount="${bad}" iteratorID="it-1"`)),
       /invalid iteratorRemainingCount/,

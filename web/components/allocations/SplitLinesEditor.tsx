@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { Plus, Trash2 } from 'lucide-react'
-import { Button, Input, Select, SearchSelect, cn } from '@openbooks/ui'
+import { Plus, Trash2 } from "lucide-react";
+import { Button, Input, Select, SearchSelect, cn } from "@openbooks/ui";
 
 /**
  * Reusable editor for allocating an amount across coded lines. Each line points
@@ -17,56 +17,65 @@ export type {
   AllocationTargetBasis,
   CodingConfig,
   CodingKey,
-} from './split-lines-model'
+} from "./split-lines-model";
 export {
   allocationPortionFromInput,
   allocationTargetBasisFromLine,
   CODING_FIELD,
   newAllocationLine,
-} from './split-lines-model'
-import type { AllocationLine, CodingConfig } from './split-lines-model'
-import { allocationCodingPatch, allocationCodingValue, allocationPortionFromInput, newAllocationLine } from './split-lines-model'
+} from "./split-lines-model";
+import type { AllocationLine, CodingConfig } from "./split-lines-model";
+import {
+  allocationCodingPatch,
+  allocationCodingValue,
+  allocationPortionFromInput,
+  newAllocationLine,
+} from "./split-lines-model";
 
 export interface SplitLinesLabels {
-  account: string
-  accountPlaceholder: string
-  portion: string
-  remainder: string
-  percent: string
-  fixed: string
-  weight: string
-  sameAccount: string
-  addLine: string
-  removeLine: string
-  none: string
-  descriptionPlaceholder: string
-  labelPlaceholder: string
+  account: string;
+  accountPlaceholder: string;
+  portion: string;
+  remainder: string;
+  percent: string;
+  fixed: string;
+  weight: string;
+  sameAccount: string;
+  addLine: string;
+  removeLine: string;
+  none: string;
+  descriptionPlaceholder: string;
+  labelPlaceholder: string;
 }
 
 const DEFAULT_LABELS: SplitLinesLabels = {
-  account: 'Account',
-  accountPlaceholder: 'Select an account',
-  portion: 'Portion',
-  remainder: 'Remainder',
-  percent: 'Percent',
-  fixed: 'Fixed',
-  weight: 'Weight',
-  sameAccount: 'Same account',
-  addLine: 'Add line',
-  removeLine: 'Remove line',
-  none: '—',
-  descriptionPlaceholder: 'Line memo',
-  labelPlaceholder: 'Target label',
-}
+  account: "Account",
+  accountPlaceholder: "Select an account",
+  portion: "Portion",
+  remainder: "Remainder",
+  percent: "Percent",
+  fixed: "Fixed",
+  weight: "Weight",
+  sameAccount: "Same account",
+  addLine: "Add line",
+  removeLine: "Remove line",
+  none: "—",
+  descriptionPlaceholder: "Line memo",
+  labelPlaceholder: "Target label",
+};
 
-const PORTION_LABEL: Record<AllocationLine['portion']['kind'], keyof SplitLinesLabels> = {
-  remainder: 'remainder',
-  percent: 'percent',
-  fixed: 'fixed',
-  weight: 'weight',
-}
+const PORTION_LABEL: Record<AllocationLine["portion"]["kind"], keyof SplitLinesLabels> = {
+  remainder: "remainder",
+  percent: "percent",
+  fixed: "fixed",
+  weight: "weight",
+};
 
-const DEFAULT_PORTION_KINDS: AllocationLine['portion']['kind'][] = ['remainder', 'percent', 'fixed']
+const DEFAULT_PORTION_KINDS: AllocationLine["portion"]["kind"][] = [
+  "remainder",
+  "percent",
+  "fixed",
+];
 
 export function SplitLinesEditor({
   lines,
@@ -79,50 +88,57 @@ export function SplitLinesEditor({
   allowEmptyAccount = false,
   showLabel = false,
 }: {
-  lines: AllocationLine[]
-  onChange: (lines: AllocationLine[]) => void
-  accountOptions: { value: string; label: string }[]
-  codings?: CodingConfig[]
-  showDescription?: boolean
-  labels?: Partial<SplitLinesLabels>
+  lines: AllocationLine[];
+  onChange: (lines: AllocationLine[]) => void;
+  accountOptions: { value: string; label: string }[];
+  codings?: CodingConfig[];
+  showDescription?: boolean;
+  labels?: Partial<SplitLinesLabels>;
   /** Which portion kinds the select offers (allocation targets use remainder/percent/weight). */
-  portionKinds?: AllocationLine['portion']['kind'][]
+  portionKinds?: AllocationLine["portion"]["kind"][];
   /** An empty account means "same account" (allocation targets). */
-  allowEmptyAccount?: boolean
+  allowEmptyAccount?: boolean;
   /** Show the per-line target label input (allocation targets). */
-  showLabel?: boolean
+  showLabel?: boolean;
 }) {
-  const labels = { ...DEFAULT_LABELS, ...labelOverrides }
+  const labels = { ...DEFAULT_LABELS, ...labelOverrides };
 
   const setLine = (i: number, patch: Partial<AllocationLine>) => {
-    const next = lines.map((l, j) => (j === i ? { ...l, ...patch } : l))
-    onChange(next)
-  }
-  const removeAt = (i: number) => onChange(lines.filter((_, j) => j !== i))
-  const add = () => onChange([...lines, newAllocationLine(allowEmptyAccount ? '' : (accountOptions[0]?.value ?? ''))])
+    const next = lines.map((l, j) => (j === i ? { ...l, ...patch } : l));
+    onChange(next);
+  };
+  const removeAt = (i: number) => onChange(lines.filter((_, j) => j !== i));
+  const add = () =>
+    onChange([
+      ...lines,
+      newAllocationLine(allowEmptyAccount ? "" : (accountOptions[0]?.value ?? "")),
+    ]);
 
-  const setPortionKind = (i: number, kind: AllocationLine['portion']['kind']) => {
-    const portion: AllocationLine['portion'] =
-      kind === 'remainder'
-        ? { kind: 'remainder' }
-        : kind === 'percent'
-          ? { kind: 'percent', value: 100 }
-          : kind === 'weight'
-            ? { kind: 'weight', value: '1' }
-            : { kind: 'fixed', value: '0' }
-    setLine(i, { portion })
-  }
+  const setPortionKind = (i: number, kind: AllocationLine["portion"]["kind"]) => {
+    const portion: AllocationLine["portion"] =
+      kind === "remainder"
+        ? { kind: "remainder" }
+        : kind === "percent"
+          ? { kind: "percent", value: 100 }
+          : kind === "weight"
+            ? { kind: "weight", value: "1" }
+            : { kind: "fixed", value: "0" };
+    setLine(i, { portion });
+  };
 
   return (
     <div className="space-y-2">
       {lines.map((line, i) => (
-        <div key={i} className="space-y-2 rounded-lg border border-slate-200 p-2.5 dark:border-slate-800">
+        <div
+          key={i}
+          className="space-y-2 rounded-lg border border-slate-200 p-2.5 dark:border-slate-800"
+        >
           <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-[14rem] flex-1">
               <SearchSelect
                 options={accountOptions}
                 value={line.accountId}
-                onChange={(v) => setLine(i, { accountId: v ?? '' })}
+                onChange={(v) => setLine(i, { accountId: v ?? "" })}
                 placeholder={allowEmptyAccount ? labels.sameAccount : labels.accountPlaceholder}
                 clearable={allowEmptyAccount}
                 emptyLabel={allowEmptyAccount ? labels.sameAccount : undefined}
@@ -131,28 +147,41 @@ export function SplitLinesEditor({
             <Select
               className="h-8 w-32"
               value={line.portion.kind}
-              onChange={(e) => setPortionKind(i, e.target.value as AllocationLine['portion']['kind'])}
+              onChange={(e) =>
+                setPortionKind(i, e.target.value as AllocationLine["portion"]["kind"])
+              }
             >
               {portionKinds.map((kind) => (
-                <option key={kind} value={kind}>{labels[PORTION_LABEL[kind]]}</option>
+                <option key={kind} value={kind}>
+                  {labels[PORTION_LABEL[kind]]}
+                </option>
               ))}
             </Select>
-            {line.portion.kind !== 'remainder' ? (
+            {line.portion.kind !== "remainder" ? (
               <div className="relative">
                 <Input
-                  className={cn('h-8 w-24 text-right tabular-nums', line.portion.kind === 'percent' ? 'pr-6' : 'pr-2')}
+                  className={cn(
+                    "h-8 w-24 text-right tabular-nums",
+                    line.portion.kind === "percent" ? "pr-6" : "pr-2",
+                  )}
                   inputMode="decimal"
-                  value={String(line.portion.value ?? '')}
+                  value={String(line.portion.value ?? "")}
                   onChange={(e) => {
-                    setLine(i, { portion: allocationPortionFromInput(line.portion, e.target.value) })
+                    setLine(i, {
+                      portion: allocationPortionFromInput(line.portion, e.target.value),
+                    });
                   }}
                 />
-                {line.portion.kind === 'percent' ? (
-                  <span className="pointer-events-none absolute top-1.5 right-2 text-xs text-slate-400">%</span>
+                {line.portion.kind === "percent" ? (
+                  <span className="pointer-events-none absolute top-1.5 right-2 text-xs text-slate-400">
+                    %
+                  </span>
                 ) : null}
               </div>
             ) : (
-              <span className="w-24 text-right text-xs text-slate-400">{labels.remainder.toLowerCase()}</span>
+              <span className="w-24 text-right text-xs text-slate-400">
+                {labels.remainder.toLowerCase()}
+              </span>
             )}
             <Button
               type="button"
@@ -169,7 +198,7 @@ export function SplitLinesEditor({
           {(codings.length > 0 || showDescription || showLabel) && (
             <div className="flex flex-wrap items-center gap-2 pl-0.5">
               {codings.map((c) => {
-                const value = allocationCodingValue(line, c.key) ?? ''
+                const value = allocationCodingValue(line, c.key) ?? "";
                 return (
                   <div key={c.key} className="min-w-[9rem] flex-1">
                     <SearchSelect
@@ -181,12 +210,12 @@ export function SplitLinesEditor({
                       emptyLabel={c.label}
                     />
                   </div>
-                )
+                );
               })}
               {showDescription ? (
                 <Input
                   className="h-8 min-w-[10rem] flex-1"
-                  value={line.description ?? ''}
+                  value={line.description ?? ""}
                   placeholder={labels.descriptionPlaceholder}
                   onChange={(e) => setLine(i, { description: e.target.value || null })}
                 />
@@ -194,7 +223,7 @@ export function SplitLinesEditor({
               {showLabel ? (
                 <Input
                   className="h-8 min-w-[8rem] flex-1"
-                  value={line.label ?? ''}
+                  value={line.label ?? ""}
                   placeholder={labels.labelPlaceholder}
                   onChange={(e) => setLine(i, { label: e.target.value || null })}
                 />
@@ -208,5 +237,5 @@ export function SplitLinesEditor({
         <Plus size={14} /> {labels.addLine}
       </Button>
     </div>
-  )
+  );
 }

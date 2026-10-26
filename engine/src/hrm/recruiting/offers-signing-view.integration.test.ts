@@ -10,11 +10,7 @@ import {
   setupHarness,
   withHarness,
 } from "../../testing/hrm-harness.ts";
-import {
-  hashOfferDocument,
-  readOfferForSigning,
-  sendOfferLink,
-} from "./offers-signing.ts";
+import { hashOfferDocument, readOfferForSigning, sendOfferLink } from "./offers-signing.ts";
 
 /**
  * Offer signing view (fnd_muddmw7f) over the real 0229/0240 tables — DB-owned, one file at a
@@ -37,8 +33,7 @@ const OFFER_SIGNING_SPEC = {
 } as const;
 
 const priorSecret = process.env.SESSION_SECRET;
-process.env.SESSION_SECRET =
-  priorSecret ?? "openbooks-test-only-offer-signing-secret";
+process.env.SESSION_SECRET = priorSecret ?? "openbooks-test-only-offer-signing-secret";
 test.after(() => {
   if (priorSecret === undefined) delete process.env.SESSION_SECRET;
   else process.env.SESSION_SECRET = priorSecret;
@@ -48,10 +43,7 @@ test("signing view serves the sealed terms and letter with the hash the signatur
   await withHarness(
     () => setupHarness(OFFER_SIGNING_SPEC),
     async (h) => {
-      const { offerId, token } = await seedSigningRenderedOffer(
-        h.org,
-        h.recruiterId,
-      );
+      const { offerId, token } = await seedSigningRenderedOffer(h.org, h.recruiterId);
       const view = await readOfferForSigning(token);
       assert.equal(view.offerId, offerId);
       assert.equal(view.version, 1);
@@ -60,15 +52,17 @@ test("signing view serves the sealed terms and letter with the hash the signatur
       assert.match(view.letter, /120000/);
       assert.match(view.letter, /Employment is at will\./);
       // The served hash is the seal over the stored payload, proved from storage.
-      const stored = (await db.execute<{ payload: unknown }>(sql`
+      const stored = (
+        await db.execute<{ payload: unknown }>(
+          sql`
       select payload from hrm_offer_versions
        where org_id = ${h.org.orgId} and offer_id = ${offerId} order by version desc limit 1
-    `, "objects"))[0]!.payload;
+    `,
+          "objects",
+        )
+      )[0]!.payload;
       assert.deepEqual(view.terms, stored);
-      assert.equal(
-        view.documentHash,
-        hashOfferDocument(JSON.stringify(stored)),
-      );
+      assert.equal(view.documentHash, hashOfferDocument(JSON.stringify(stored)));
     },
   );
 });
@@ -86,10 +80,7 @@ test("signing view refuses when no terms were ever rendered", async () => {
         candidateName: "Offer Candidate",
         enqueueEmail: async () => {},
       });
-      assert.ok(
-        "signingToken" in link,
-        "The zero-gate offer must issue its native signing link",
-      );
+      assert.ok("signingToken" in link, "The zero-gate offer must issue its native signing link");
       const error = recruitingError(
         await readOfferForSigning(link.signingToken).then(
           () => null,

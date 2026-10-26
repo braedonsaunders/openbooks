@@ -3,7 +3,11 @@ import { decodeEntityMappings } from "./entity-mapping-contract.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
-import { isNetSuiteAccountId, NETSUITE_ACCOUNT_ID_REFUSED, type NetSuiteCreds } from "../connectors/netsuite.ts";
+import {
+  isNetSuiteAccountId,
+  NETSUITE_ACCOUNT_ID_REFUSED,
+  type NetSuiteCreds,
+} from "../connectors/netsuite.ts";
 import { NetSuiteSource, parseNetSuiteMappings } from "./netsuite-source.ts";
 import { OdooSource } from "./odoo-source.ts";
 import type { OdooCreds } from "../connectors/odoo.ts";
@@ -20,7 +24,13 @@ import { refusedConnectionBaseCurrency } from "./base-currency.ts";
 export { refusedConnectionBaseCurrency } from "./base-currency.ts";
 import { sealJson } from "../platform/secrets.ts";
 import type { MigrationSource } from "./source.ts";
-import { connectorSettings, connectionSourceOptions, resolveSyncSelection, type MappingGroup, type SyncCapabilities } from "./connection-settings.ts";
+import {
+  connectorSettings,
+  connectionSourceOptions,
+  resolveSyncSelection,
+  type MappingGroup,
+  type SyncCapabilities,
+} from "./connection-settings.ts";
 
 /**
  * Connection layer — the seam between a tenant's stored `connections` row and a
@@ -89,173 +99,281 @@ const QBD_REGION_LABELS: Record<(typeof QBD_WEB_CONNECTOR_REGIONS)[number], stri
   UK: "United Kingdom",
 };
 
-export const SOURCE_TYPES: SourceTypeManifest[] = ([
-  {
-    source: "netsuite",
-    displayName: "NetSuite",
-    authKind: "token",
-    blurb: "Token-based (TBA) access to SuiteQL. Create an integration + access token in NetSuite, then paste the four values. Native transactions, applications and orders migrate and mirror through the real posting engine.",
-    configFields: [
-      { key: "account", label: "Account ID", placeholder: "1234567", required: true, help: "Your NetSuite account id (the realm)." },
-      { key: "host", label: "SuiteTalk host", placeholder: "https://<acct>.suitetalk.api.netsuite.com", required: true },
-      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies", required: true },
-      {
-        key: "accountingBookId",
-        label: "Accounting book ID",
-        placeholder: "1",
-        help: "Authoritative NetSuite accounting book for GL verification. Optional only when the account exposes exactly one posted book; multi-book accounts must select one explicitly.",
-      },
-      {
-        key: "bridgeScriptId",
-        label: "Bridge script ID",
-        placeholder: "customscript_openbooks_bridge_rl",
-        help: "The script ID of the installed OpenBooks extraction RESTlet. Leave blank to use the standard ID.",
-      },
-      {
-        key: "bridgeDeploymentId",
-        label: "Bridge deployment ID",
-        placeholder: "customdeploy_openbooks_bridge_rl",
-        help: "The deployment ID of the installed OpenBooks extraction RESTlet. Leave blank to use the standard ID.",
-      },
-    ],
-    secretFields: [
-      { key: "consumerKey", label: "Consumer key", required: true },
-      { key: "consumerSecret", label: "Consumer secret", required: true },
-      { key: "tokenKey", label: "Token ID", required: true },
-      { key: "tokenSecret", label: "Token secret", required: true },
-    ],
-  },
-  {
-    source: "odoo",
-    displayName: "Odoo",
-    authKind: "token",
-    blurb: "Connect with your Odoo URL, database, user and an API key (Settings → My Profile → Account Security → API Keys). Invoices, bills, payments and journals migrate and mirror natively through the real posting engine.",
-    configFields: [
-      { key: "url", label: "Odoo URL", placeholder: "https://mycompany.odoo.com", required: true },
-      { key: "database", label: "Database", placeholder: "mycompany", required: true },
-      { key: "username", label: "User (login email)", placeholder: "admin@mycompany.com", required: true },
-      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies" },
-    ],
-    secretFields: [{ key: "apiKey", label: "API key", required: true }],
-  },
-  {
-    source: "erpnext",
-    displayName: "ERPNext",
-    authKind: "token",
-    blurb: "Connect with your ERPNext URL and an API key + secret (User → Settings → API Access). Invoices, bills, payment entries and journals migrate and mirror natively through the real posting engine.",
-    configFields: [
-      { key: "url", label: "ERPNext URL", placeholder: "https://mycompany.erpnext.com", required: true },
-      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies" },
-    ],
-    secretFields: [
-      { key: "apiKey", label: "API key", required: true },
-      { key: "apiSecret", label: "API secret", required: true },
-    ],
-  },
-  {
-    source: "qbd",
-    displayName: "QuickBooks Desktop",
-    authKind: "token",
-    blurb: "Install the downloaded Web Connector file on the Windows computer that runs QuickBooks Desktop, authorize the company once as an administrator, and keep QuickBooks open while a migration or mirror capture runs.",
-    configFields: [
-      { key: "historyStartDate", label: "History start date", placeholder: "2010-01-01", required: true, help: "The earliest posting date to migrate. Each mirror rechecks this complete range so historical edits and deletions are detected." },
-      {
-        key: "region",
-        label: "QuickBooks region",
-        kind: "select",
-        required: true,
-        options: QBD_WEB_CONNECTOR_REGIONS.map((value) => ({ value, label: QBD_REGION_LABELS[value] })),
-        help: "QuickBooks Desktop AU/NZ editions are not supported by the Intuit Web Connector (US, Canada and UK only).",
-      },
-      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies", required: true },
-      { key: "companyFile", label: "Company file path (optional)", placeholder: "C:\\Quickbooks Data\\Company.QBW", help: "Leave blank to use whichever company is open when Web Connector runs." },
-    ],
-    secretFields: [
-      { key: "webConnectorPassword", label: "Web Connector password", required: true, help: "You will enter this once in QuickBooks Web Connector after importing the .QWC file." },
-    ],
-  },
-  {
-    source: "qbo",
-    displayName: "QuickBooks Online",
-    authKind: "oauth2",
-    blurb: "Enter your Intuit app's Client ID + Secret (developer.intuit.com → Keys & credentials), save, then click Connect to authorize a company. Invoices, bills, payments, credits, journals and deposits migrate and mirror natively.",
-    configFields: [
-      {
-        key: "environment",
-        label: "Environment",
-        kind: "select",
-        options: [
-          { value: "sandbox", label: "Sandbox" },
-          { value: "production", label: "Production" },
+export const SOURCE_TYPES: SourceTypeManifest[] = (
+  [
+    {
+      source: "netsuite",
+      displayName: "NetSuite",
+      authKind: "token",
+      blurb:
+        "Token-based (TBA) access to SuiteQL. Create an integration + access token in NetSuite, then paste the four values. Native transactions, applications and orders migrate and mirror through the real posting engine.",
+      configFields: [
+        {
+          key: "account",
+          label: "Account ID",
+          placeholder: "1234567",
+          required: true,
+          help: "Your NetSuite account id (the realm).",
+        },
+        {
+          key: "host",
+          label: "SuiteTalk host",
+          placeholder: "https://<acct>.suitetalk.api.netsuite.com",
+          required: true,
+        },
+        {
+          key: "baseCurrency",
+          label: "Base currency",
+          kind: "select",
+          optionsSource: "currencies",
+          required: true,
+        },
+        {
+          key: "accountingBookId",
+          label: "Accounting book ID",
+          placeholder: "1",
+          help: "Authoritative NetSuite accounting book for GL verification. Optional only when the account exposes exactly one posted book; multi-book accounts must select one explicitly.",
+        },
+        {
+          key: "bridgeScriptId",
+          label: "Bridge script ID",
+          placeholder: "customscript_openbooks_bridge_rl",
+          help: "The script ID of the installed OpenBooks extraction RESTlet. Leave blank to use the standard ID.",
+        },
+        {
+          key: "bridgeDeploymentId",
+          label: "Bridge deployment ID",
+          placeholder: "customdeploy_openbooks_bridge_rl",
+          help: "The deployment ID of the installed OpenBooks extraction RESTlet. Leave blank to use the standard ID.",
+        },
+      ],
+      secretFields: [
+        { key: "consumerKey", label: "Consumer key", required: true },
+        { key: "consumerSecret", label: "Consumer secret", required: true },
+        { key: "tokenKey", label: "Token ID", required: true },
+        { key: "tokenSecret", label: "Token secret", required: true },
+      ],
+    },
+    {
+      source: "odoo",
+      displayName: "Odoo",
+      authKind: "token",
+      blurb:
+        "Connect with your Odoo URL, database, user and an API key (Settings → My Profile → Account Security → API Keys). Invoices, bills, payments and journals migrate and mirror natively through the real posting engine.",
+      configFields: [
+        {
+          key: "url",
+          label: "Odoo URL",
+          placeholder: "https://mycompany.odoo.com",
+          required: true,
+        },
+        { key: "database", label: "Database", placeholder: "mycompany", required: true },
+        {
+          key: "username",
+          label: "User (login email)",
+          placeholder: "admin@mycompany.com",
+          required: true,
+        },
+        {
+          key: "baseCurrency",
+          label: "Base currency",
+          kind: "select",
+          optionsSource: "currencies",
+        },
+      ],
+      secretFields: [{ key: "apiKey", label: "API key", required: true }],
+    },
+    {
+      source: "erpnext",
+      displayName: "ERPNext",
+      authKind: "token",
+      blurb:
+        "Connect with your ERPNext URL and an API key + secret (User → Settings → API Access). Invoices, bills, payment entries and journals migrate and mirror natively through the real posting engine.",
+      configFields: [
+        {
+          key: "url",
+          label: "ERPNext URL",
+          placeholder: "https://mycompany.erpnext.com",
+          required: true,
+        },
+        {
+          key: "baseCurrency",
+          label: "Base currency",
+          kind: "select",
+          optionsSource: "currencies",
+        },
+      ],
+      secretFields: [
+        { key: "apiKey", label: "API key", required: true },
+        { key: "apiSecret", label: "API secret", required: true },
+      ],
+    },
+    {
+      source: "qbd",
+      displayName: "QuickBooks Desktop",
+      authKind: "token",
+      blurb:
+        "Install the downloaded Web Connector file on the Windows computer that runs QuickBooks Desktop, authorize the company once as an administrator, and keep QuickBooks open while a migration or mirror capture runs.",
+      configFields: [
+        {
+          key: "historyStartDate",
+          label: "History start date",
+          placeholder: "2010-01-01",
+          required: true,
+          help: "The earliest posting date to migrate. Each mirror rechecks this complete range so historical edits and deletions are detected.",
+        },
+        {
+          key: "region",
+          label: "QuickBooks region",
+          kind: "select",
+          required: true,
+          options: QBD_WEB_CONNECTOR_REGIONS.map((value) => ({
+            value,
+            label: QBD_REGION_LABELS[value],
+          })),
+          help: "QuickBooks Desktop AU/NZ editions are not supported by the Intuit Web Connector (US, Canada and UK only).",
+        },
+        {
+          key: "baseCurrency",
+          label: "Base currency",
+          kind: "select",
+          optionsSource: "currencies",
+          required: true,
+        },
+        {
+          key: "companyFile",
+          label: "Company file path (optional)",
+          placeholder: "C:\\Quickbooks Data\\Company.QBW",
+          help: "Leave blank to use whichever company is open when Web Connector runs.",
+        },
+      ],
+      secretFields: [
+        {
+          key: "webConnectorPassword",
+          label: "Web Connector password",
+          required: true,
+          help: "You will enter this once in QuickBooks Web Connector after importing the .QWC file.",
+        },
+      ],
+    },
+    {
+      source: "qbo",
+      displayName: "QuickBooks Online",
+      authKind: "oauth2",
+      blurb:
+        "Enter your Intuit app's Client ID + Secret (developer.intuit.com → Keys & credentials), save, then click Connect to authorize a company. Invoices, bills, payments, credits, journals and deposits migrate and mirror natively.",
+      configFields: [
+        {
+          key: "environment",
+          label: "Environment",
+          kind: "select",
+          options: [
+            { value: "sandbox", label: "Sandbox" },
+            { value: "production", label: "Production" },
+          ],
+        },
+        {
+          key: "baseCurrency",
+          label: "Base currency",
+          kind: "select",
+          optionsSource: "currencies",
+        },
+      ],
+      secretFields: [
+        { key: "clientId", label: "Client ID", required: true },
+        { key: "clientSecret", label: "Client Secret", required: true },
+      ],
+      oauthSetup: {
+        portalUrl: "https://developer.intuit.com",
+        portalLabel: "Intuit Developer portal",
+        steps: [
+          "Create an app (QuickBooks Online and Payments) with the com.intuit.quickbooks.accounting scope.",
+          "Under Keys & credentials, add the Redirect URI shown below (use Development keys for a sandbox company, Production keys for a live one).",
+          "Copy the Client ID and Client Secret into this form, save, then click Connect.",
         ],
       },
-      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies" },
-    ],
-    secretFields: [
-      { key: "clientId", label: "Client ID", required: true },
-      { key: "clientSecret", label: "Client Secret", required: true },
-    ],
-    oauthSetup: {
-      portalUrl: "https://developer.intuit.com",
-      portalLabel: "Intuit Developer portal",
-      steps: [
-        "Create an app (QuickBooks Online and Payments) with the com.intuit.quickbooks.accounting scope.",
-        "Under Keys & credentials, add the Redirect URI shown below (use Development keys for a sandbox company, Production keys for a live one).",
-        "Copy the Client ID and Client Secret into this form, save, then click Connect.",
-      ],
     },
-  },
-  {
-    source: "xero",
-    displayName: "Xero",
-    authKind: "oauth2",
-    blurb: "Enter your Xero app's Client ID + Secret (developer.xero.com → My Apps), save, then click Connect to authorize an organisation. Invoices, bills, credit notes, payments, journals and bank transactions migrate and mirror natively.",
-    configFields: [
-      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies" },
-    ],
-    secretFields: [
-      { key: "clientId", label: "Client ID", required: true },
-      { key: "clientSecret", label: "Client Secret", required: true },
-    ],
-    oauthSetup: {
-      portalUrl: "https://developer.xero.com/app/manage",
-      portalLabel: "Xero developer portal",
-      steps: [
-        "Create a new app (integration type: Web app); the company URL can be this site's address.",
-        "Add the Redirect URI shown below to the app's OAuth 2.0 redirect URIs.",
-        "Copy the Client ID, generate a Client Secret, paste both into this form, save, then click Connect.",
+    {
+      source: "xero",
+      displayName: "Xero",
+      authKind: "oauth2",
+      blurb:
+        "Enter your Xero app's Client ID + Secret (developer.xero.com → My Apps), save, then click Connect to authorize an organisation. Invoices, bills, credit notes, payments, journals and bank transactions migrate and mirror natively.",
+      configFields: [
+        {
+          key: "baseCurrency",
+          label: "Base currency",
+          kind: "select",
+          optionsSource: "currencies",
+        },
       ],
-    },
-  },
-  {
-    source: "dynamics",
-    displayName: "Dynamics 365 Business Central",
-    authKind: "oauth2",
-    blurb: "Register an Entra ID (Azure AD) app, enter its Client ID + Secret plus your directory (tenant) ID and BC environment, save, then click Connect. Invoices, bills, credit memos, payments and journals migrate and mirror natively; the trial balance reconciles from the posted general-ledger entries.",
-    configFields: [
-      { key: "aadTenantId", label: "Directory (tenant) ID", placeholder: "00000000-0000-0000-0000-000000000000", required: true, help: "Your Microsoft Entra directory (tenant) id." },
-      { key: "environment", label: "BC environment", placeholder: "Production", required: true, help: "The Business Central environment name (e.g. Production or Sandbox)." },
-      { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies" },
-    ],
-    secretFields: [
-      { key: "clientId", label: "Client ID (Application ID)", required: true },
-      { key: "clientSecret", label: "Client Secret", required: true },
-    ],
-    oauthSetup: {
-      portalUrl: "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
-      portalLabel: "Azure portal · App registrations",
-      steps: [
-        "Register an app (single tenant is fine); note the Application (client) ID and Directory (tenant) ID.",
-        "Add the Redirect URI shown below (platform: Web) and create a client secret.",
-        "Under API permissions add Dynamics 365 Business Central → Financials.ReadWrite.All (delegated) and grant admin consent.",
-        "Paste the Client ID, Client Secret, tenant ID and environment name into this form, save, then click Connect.",
+      secretFields: [
+        { key: "clientId", label: "Client ID", required: true },
+        { key: "clientSecret", label: "Client Secret", required: true },
       ],
+      oauthSetup: {
+        portalUrl: "https://developer.xero.com/app/manage",
+        portalLabel: "Xero developer portal",
+        steps: [
+          "Create a new app (integration type: Web app); the company URL can be this site's address.",
+          "Add the Redirect URI shown below to the app's OAuth 2.0 redirect URIs.",
+          "Copy the Client ID, generate a Client Secret, paste both into this form, save, then click Connect.",
+        ],
+      },
     },
-  },
-] satisfies SourceTypeManifest[]).map((manifest) => ({
+    {
+      source: "dynamics",
+      displayName: "Dynamics 365 Business Central",
+      authKind: "oauth2",
+      blurb:
+        "Register an Entra ID (Azure AD) app, enter its Client ID + Secret plus your directory (tenant) ID and BC environment, save, then click Connect. Invoices, bills, credit memos, payments and journals migrate and mirror natively; the trial balance reconciles from the posted general-ledger entries.",
+      configFields: [
+        {
+          key: "aadTenantId",
+          label: "Directory (tenant) ID",
+          placeholder: "00000000-0000-0000-0000-000000000000",
+          required: true,
+          help: "Your Microsoft Entra directory (tenant) id.",
+        },
+        {
+          key: "environment",
+          label: "BC environment",
+          placeholder: "Production",
+          required: true,
+          help: "The Business Central environment name (e.g. Production or Sandbox).",
+        },
+        {
+          key: "baseCurrency",
+          label: "Base currency",
+          kind: "select",
+          optionsSource: "currencies",
+        },
+      ],
+      secretFields: [
+        { key: "clientId", label: "Client ID (Application ID)", required: true },
+        { key: "clientSecret", label: "Client Secret", required: true },
+      ],
+      oauthSetup: {
+        portalUrl:
+          "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
+        portalLabel: "Azure portal · App registrations",
+        steps: [
+          "Register an app (single tenant is fine); note the Application (client) ID and Directory (tenant) ID.",
+          "Add the Redirect URI shown below (platform: Web) and create a client secret.",
+          "Under API permissions add Dynamics 365 Business Central → Financials.ReadWrite.All (delegated) and grant admin consent.",
+          "Paste the Client ID, Client Secret, tenant ID and environment name into this form, save, then click Connect.",
+        ],
+      },
+    },
+  ] satisfies SourceTypeManifest[]
+).map((manifest) => ({
   ...manifest,
   ...connectorSettings(manifest.source),
-  configFields: [...manifest.configFields, { key: "syncOptions", label: "Sync content", kind: "sync-options" as const }, { key: "entityMappings", label: "Entity mappings", kind: "entity-mappings" as const }],
+  configFields: [
+    ...manifest.configFields,
+    { key: "syncOptions", label: "Sync content", kind: "sync-options" as const },
+    { key: "entityMappings", label: "Entity mappings", kind: "entity-mappings" as const },
+  ],
 }));
 
 export function sourceType(source: string): SourceTypeManifest | undefined {
@@ -269,14 +387,24 @@ export function validateSourceConfig(
 ): string | null {
   try {
     decodeEntityMappings(config.entityMappings);
-    connectionSourceOptions(config, manifest.mappingGroups ?? connectorSettings(manifest.source).mappingGroups);
-    resolveSyncSelection(config.syncOptions, manifest.syncCapabilities ?? connectorSettings(manifest.source).syncCapabilities);
-  } catch (error) { return error instanceof Error ? error.message : "Sync content is invalid"; }
+    connectionSourceOptions(
+      config,
+      manifest.mappingGroups ?? connectorSettings(manifest.source).mappingGroups,
+    );
+    resolveSyncSelection(
+      config.syncOptions,
+      manifest.syncCapabilities ?? connectorSettings(manifest.source).syncCapabilities,
+    );
+  } catch (error) {
+    return error instanceof Error ? error.message : "Sync content is invalid";
+  }
   // Truthful refusal before the generic option check below: an AU/NZ (or any
   // other unsupported) region must hear that the Intuit Web Connector does
   // not support it, not a bare "invalid value".
   if (manifest.source === "qbd") {
-    const region = String(config.region ?? "").trim().toUpperCase();
+    const region = String(config.region ?? "")
+      .trim()
+      .toUpperCase();
     if (region && !(QBD_WEB_CONNECTOR_REGIONS as readonly string[]).includes(region)) {
       return `QuickBooks Desktop ${region} editions are not supported by the Intuit Web Connector (supported regions: ${QBD_WEB_CONNECTOR_REGIONS.join(", ")})`;
     }
@@ -284,20 +412,33 @@ export function validateSourceConfig(
   for (const field of manifest.configFields) {
     const value = String(config[field.key] ?? "").trim();
     if (field.required && !value) return `${field.label} is required`;
-    if (value && field.kind === "select" && field.options && !field.options.some((option) => option.value === value)) {
+    if (
+      value &&
+      field.kind === "select" &&
+      field.options &&
+      !field.options.some((option) => option.value === value)
+    ) {
       return `${field.label} has an invalid value`;
     }
     // Currency pickers carry optionsSource instead of static options, so the
     // check above never applied to them: a legacy or corrupt stored code
     // bypassed save-time validation. They share the build path's validator.
-    if (value && field.optionsSource === "currencies" && refusedConnectionBaseCurrency(value) === "invalid") {
+    if (
+      value &&
+      field.optionsSource === "currencies" &&
+      refusedConnectionBaseCurrency(value) === "invalid"
+    ) {
       return `${field.label} has an invalid value`;
     }
   }
   if (manifest.source === "qbd") {
     const historyStart = String(config.historyStartDate ?? "");
     const parsedHistoryStart = new Date(`${historyStart}T00:00:00Z`);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(historyStart) || Number.isNaN(parsedHistoryStart.getTime()) || parsedHistoryStart.toISOString().slice(0, 10) !== historyStart) {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(historyStart) ||
+      Number.isNaN(parsedHistoryStart.getTime()) ||
+      parsedHistoryStart.toISOString().slice(0, 10) !== historyStart
+    ) {
       return "History start date must be a valid YYYY-MM-DD date";
     }
     const maxDay = opts?.today ?? new Date().toISOString().slice(0, 10);
@@ -317,7 +458,9 @@ export function validateSourceConfig(
       return "Accounting book ID must be numeric";
     }
     try {
-      parseNetSuiteMappings(connectionSourceOptions(config, connectorSettings(manifest.source).mappingGroups));
+      parseNetSuiteMappings(
+        connectionSourceOptions(config, connectorSettings(manifest.source).mappingGroups),
+      );
     } catch (error) {
       return error instanceof Error ? error.message : "NetSuite field mappings are invalid";
     }
@@ -363,14 +506,20 @@ const SELECT_COLS = sql`id, org_id as "orgId", source, display_name as "displayN
   cursor, last_run_at as "lastRunAt", last_error as "lastError"`;
 
 export async function listConnections(orgId: string): Promise<ConnectionRow[]> {
-  const r = (await db.execute<ConnectionRow>(sql`
-    select ${SELECT_COLS} from connections where org_id = ${orgId} order by created_at`, "objects"));
+  const r = await db.execute<ConnectionRow>(
+    sql`
+    select ${SELECT_COLS} from connections where org_id = ${orgId} order by created_at`,
+    "objects",
+  );
   return r;
 }
 
 export async function getConnection(orgId: string, id: string): Promise<ConnectionRow | null> {
-  const r = (await db.execute<ConnectionRow>(sql`
-    select ${SELECT_COLS} from connections where org_id = ${orgId} and id = ${id} limit 1`, "objects"));
+  const r = await db.execute<ConnectionRow>(
+    sql`
+    select ${SELECT_COLS} from connections where org_id = ${orgId} and id = ${id} limit 1`,
+    "objects",
+  );
   return r[0] ?? null;
 }
 
@@ -411,13 +560,18 @@ export async function refreshConnectionTokens<T extends RefreshableTokens>(
   refresh: (refreshToken: string) => Promise<T>,
 ): Promise<T> {
   return withOrgTransaction(connection.orgId, async () => {
-    const selected = await db.execute<{ secrets: string | null }>(sql`
+    const selected = await db.execute<{ secrets: string | null }>(
+      sql`
       select secrets from connections
        where id = ${connection.id} and org_id = ${connection.orgId}
-       for update`, "objects");
+       for update`,
+      "objects",
+    );
     const sealed = selected[0]?.secrets;
     if (typeof sealed !== "string" || sealed === "") {
-      throw new Error("Connection was removed or its credentials are unavailable during token refresh");
+      throw new Error(
+        "Connection was removed or its credentials are unavailable during token refresh",
+      );
     }
     const current = unsealJson<Record<string, unknown>>(sealed, {
       orgId: connection.orgId,
@@ -429,11 +583,16 @@ export async function refreshConnectionTokens<T extends RefreshableTokens>(
       expiresAt: current?.expiresAt,
     };
     if (
-      typeof currentTokens.accessToken !== "string" || currentTokens.accessToken === "" ||
-      typeof currentTokens.refreshToken !== "string" || currentTokens.refreshToken === "" ||
-      typeof currentTokens.expiresAt !== "string" || !Number.isFinite(Date.parse(currentTokens.expiresAt))
+      typeof currentTokens.accessToken !== "string" ||
+      currentTokens.accessToken === "" ||
+      typeof currentTokens.refreshToken !== "string" ||
+      currentTokens.refreshToken === "" ||
+      typeof currentTokens.expiresAt !== "string" ||
+      !Number.isFinite(Date.parse(currentTokens.expiresAt))
     ) {
-      throw new Error("Connection token credentials are incomplete — reconnect this source before syncing");
+      throw new Error(
+        "Connection token credentials are incomplete — reconnect this source before syncing",
+      );
     }
 
     const consumedSameGeneration =
@@ -454,11 +613,14 @@ export async function refreshConnectionTokens<T extends RefreshableTokens>(
       },
       { orgId: connection.orgId, purpose: "connection.secrets" },
     );
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update connections
          set secrets = ${updatedSecrets}, updated_at = now()
        where id = ${connection.id} and org_id = ${connection.orgId} and secrets = ${sealed}
-       returning id`, "objects");
+       returning id`,
+      "objects",
+    );
     if (updated.length !== 1) {
       throw new Error("Connection credentials changed during token refresh — retry the sync");
     }
@@ -475,16 +637,21 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
 function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
   if (conn.source === "qbd") {
     const cfg = conn.config as { historyStartDate?: string; baseCurrency?: string };
-    if (!cfg.historyStartDate) throw new Error("QuickBooks Desktop connection needs a history start date");
+    if (!cfg.historyStartDate)
+      throw new Error("QuickBooks Desktop connection needs a history start date");
     // A legacy or corrupt stored connection without a base currency bypasses
     // save-time validation: refuse by name before any capture or import
     // instead of importing a non-USD company as USD.
     const baseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
     if (baseState === "missing") {
-      throw new Error("QuickBooks Desktop connection needs its base currency — set it on the connection before syncing");
+      throw new Error(
+        "QuickBooks Desktop connection needs its base currency — set it on the connection before syncing",
+      );
     }
     if (baseState === "invalid") {
-      throw new Error(`QuickBooks Desktop connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+      throw new Error(
+        `QuickBooks Desktop connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`,
+      );
     }
     return new QbdSource({
       orgId: conn.orgId,
@@ -497,7 +664,10 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
     const secret =
       conn.secrets == null
         ? null
-        : unsealJson<Partial<NetSuiteCreds>>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
+        : unsealJson<Partial<NetSuiteCreds>>(conn.secrets, {
+            orgId: conn.orgId,
+            purpose: "connection.secrets",
+          });
     const cfg = conn.config as {
       account?: string;
       host?: string;
@@ -529,10 +699,14 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
     }
     const baseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
     if (baseState === "missing") {
-      throw new Error("NetSuite connection needs its base currency — set it on the connection before syncing");
+      throw new Error(
+        "NetSuite connection needs its base currency — set it on the connection before syncing",
+      );
     }
     if (baseState === "invalid") {
-      throw new Error(`NetSuite connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+      throw new Error(
+        `NetSuite connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`,
+      );
     }
     const creds: NetSuiteCreds = {
       account: String(cfg.account),
@@ -547,10 +721,14 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
     // instead of importing a non-USD company as USD.
     const netSuiteBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
     if (netSuiteBaseState === "missing") {
-      throw new Error("NetSuite connection needs its base currency — set it on the connection before syncing");
+      throw new Error(
+        "NetSuite connection needs its base currency — set it on the connection before syncing",
+      );
     }
     if (netSuiteBaseState === "invalid") {
-      throw new Error(`NetSuite connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+      throw new Error(
+        `NetSuite connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`,
+      );
     }
     return new NetSuiteSource(creds, {
       baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
@@ -565,11 +743,19 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
   }
 
   if (conn.source === "odoo") {
-    const cfg = conn.config as { url?: string; database?: string; username?: string; baseCurrency?: string };
+    const cfg = conn.config as {
+      url?: string;
+      database?: string;
+      username?: string;
+      baseCurrency?: string;
+    };
     const secret =
       conn.secrets == null
         ? null
-        : unsealJson<{ apiKey?: string }>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
+        : unsealJson<{ apiKey?: string }>(conn.secrets, {
+            orgId: conn.orgId,
+            purpose: "connection.secrets",
+          });
     if (!cfg.url || !cfg.database || !cfg.username || !secret?.apiKey) {
       throw new Error("Odoo connection is missing its URL, database, user or API key");
     }
@@ -581,12 +767,19 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
     };
     const odooBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
     if (odooBaseState === "missing") {
-      throw new Error("Odoo connection needs its base currency — set it on the connection before syncing");
+      throw new Error(
+        "Odoo connection needs its base currency — set it on the connection before syncing",
+      );
     }
     if (odooBaseState === "invalid") {
-      throw new Error(`Odoo connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+      throw new Error(
+        `Odoo connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`,
+      );
     }
-    return new OdooSource(creds, { orgId: conn.orgId, baseCurrency: String(cfg.baseCurrency).trim().toUpperCase() });
+    return new OdooSource(creds, {
+      orgId: conn.orgId,
+      baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
+    });
   }
 
   if (conn.source === "erpnext") {
@@ -601,15 +794,25 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
     if (!cfg.url || !secret?.apiKey || !secret?.apiSecret) {
       throw new Error("ERPNext connection is missing its URL, API key or API secret");
     }
-    const creds: ErpNextCreds = { url: String(cfg.url), apiKey: String(secret.apiKey), apiSecret: String(secret.apiSecret) };
+    const creds: ErpNextCreds = {
+      url: String(cfg.url),
+      apiKey: String(secret.apiKey),
+      apiSecret: String(secret.apiSecret),
+    };
     const erpNextBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
     if (erpNextBaseState === "missing") {
-      throw new Error("ERPNext connection needs its base currency — set it on the connection before syncing");
+      throw new Error(
+        "ERPNext connection needs its base currency — set it on the connection before syncing",
+      );
     }
     if (erpNextBaseState === "invalid") {
-      throw new Error(`ERPNext connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+      throw new Error(
+        `ERPNext connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`,
+      );
     }
-    return new ErpNextSource(creds, { baseCurrency: String(cfg.baseCurrency).trim().toUpperCase() });
+    return new ErpNextSource(creds, {
+      baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
+    });
   }
 
   if (conn.source === "qbo") {
@@ -617,12 +820,17 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
     const secret =
       conn.secrets == null
         ? null
-        : unsealJson<QboSecrets>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
+        : unsealJson<QboSecrets>(conn.secrets, {
+            orgId: conn.orgId,
+            purpose: "connection.secrets",
+          });
     if (!secret?.clientId || !secret?.clientSecret) {
       throw new Error("QuickBooks connection is missing its app credentials (Client ID / Secret)");
     }
     if (!cfg.realmId || !secret.refreshToken || !secret.accessToken || !secret.expiresAt) {
-      throw new Error("QuickBooks connection is not authorized yet — click Connect to grant access");
+      throw new Error(
+        "QuickBooks connection is not authorized yet — click Connect to grant access",
+      );
     }
     const app: QboApp = {
       clientId: secret.clientId,
@@ -639,12 +847,19 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
       refreshConnectionTokens(conn, consumed, refresh);
     const qboBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
     if (qboBaseState === "missing") {
-      throw new Error("QuickBooks connection needs its base currency — set it on the connection before syncing");
+      throw new Error(
+        "QuickBooks connection needs its base currency — set it on the connection before syncing",
+      );
     }
     if (qboBaseState === "invalid") {
-      throw new Error(`QuickBooks connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+      throw new Error(
+        `QuickBooks connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`,
+      );
     }
-    return new QboSource(new QboClient(app, String(cfg.realmId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: String(cfg.baseCurrency).trim().toUpperCase() });
+    return new QboSource(new QboClient(app, String(cfg.realmId), tokens, onRefresh), {
+      orgId: conn.orgId,
+      baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
+    });
   }
 
   if (conn.source === "xero") {
@@ -652,14 +867,21 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
     const secret =
       conn.secrets == null
         ? null
-        : unsealJson<XeroSecrets>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
+        : unsealJson<XeroSecrets>(conn.secrets, {
+            orgId: conn.orgId,
+            purpose: "connection.secrets",
+          });
     if (!secret?.clientId || !secret?.clientSecret) {
       throw new Error("Xero connection is missing its app credentials (Client ID / Secret)");
     }
     if (!cfg.tenantId || !secret.refreshToken || !secret.accessToken || !secret.expiresAt) {
       throw new Error("Xero connection is not authorized yet — click Connect to grant access");
     }
-    const app: XeroApp = { clientId: secret.clientId, clientSecret: secret.clientSecret, redirectUri: "" };
+    const app: XeroApp = {
+      clientId: secret.clientId,
+      clientSecret: secret.clientSecret,
+      redirectUri: "",
+    };
     const tokens: XeroTokens = {
       accessToken: secret.accessToken,
       refreshToken: secret.refreshToken,
@@ -670,20 +892,35 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
       refreshConnectionTokens(conn, consumed, refresh);
     const xeroBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
     if (xeroBaseState === "missing") {
-      throw new Error("Xero connection needs its base currency — set it on the connection before syncing");
+      throw new Error(
+        "Xero connection needs its base currency — set it on the connection before syncing",
+      );
     }
     if (xeroBaseState === "invalid") {
-      throw new Error(`Xero connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+      throw new Error(
+        `Xero connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`,
+      );
     }
-    return new XeroSource(new XeroClient(app, String(cfg.tenantId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: String(cfg.baseCurrency).trim().toUpperCase() });
+    return new XeroSource(new XeroClient(app, String(cfg.tenantId), tokens, onRefresh), {
+      orgId: conn.orgId,
+      baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
+    });
   }
 
   if (conn.source === "dynamics") {
-    const cfg = conn.config as { aadTenantId?: string; environment?: string; companyId?: string; baseCurrency?: string };
+    const cfg = conn.config as {
+      aadTenantId?: string;
+      environment?: string;
+      companyId?: string;
+      baseCurrency?: string;
+    };
     const secret =
       conn.secrets == null
         ? null
-        : unsealJson<DynamicsSecrets>(conn.secrets, { orgId: conn.orgId, purpose: "connection.secrets" });
+        : unsealJson<DynamicsSecrets>(conn.secrets, {
+            orgId: conn.orgId,
+            purpose: "connection.secrets",
+          });
     if (!secret?.clientId || !secret?.clientSecret) {
       throw new Error("Dynamics connection is missing its app credentials (Client ID / Secret)");
     }
@@ -704,19 +941,28 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
       refreshToken: secret.refreshToken,
       expiresAt: secret.expiresAt,
     };
-    const onRefresh = (consumed: DynamicsTokens, refresh: (token: string) => Promise<DynamicsTokens>) =>
-      refreshConnectionTokens(conn, consumed, refresh);
+    const onRefresh = (
+      consumed: DynamicsTokens,
+      refresh: (token: string) => Promise<DynamicsTokens>,
+    ) => refreshConnectionTokens(conn, consumed, refresh);
     const dynamicsBaseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
     if (dynamicsBaseState === "missing") {
-      throw new Error("Dynamics connection needs its base currency — set it on the connection before syncing");
+      throw new Error(
+        "Dynamics connection needs its base currency — set it on the connection before syncing",
+      );
     }
     if (dynamicsBaseState === "invalid") {
-      throw new Error(`Dynamics connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+      throw new Error(
+        `Dynamics connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`,
+      );
     }
-    return new DynamicsSource(new DynamicsClient(app, String(cfg.environment), String(cfg.companyId), tokens, onRefresh), {
-      orgId: conn.orgId,
-      baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
-    });
+    return new DynamicsSource(
+      new DynamicsClient(app, String(cfg.environment), String(cfg.companyId), tokens, onRefresh),
+      {
+        orgId: conn.orgId,
+        baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
+      },
+    );
   }
 
   throw new Error(`no adapter registered for source "${conn.source}"`);

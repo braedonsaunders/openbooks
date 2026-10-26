@@ -7,7 +7,12 @@ import { db } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
 import { payrollRemittanceSummary } from "./remittance.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -45,16 +50,26 @@ async function seedMixedOrg(options: { historicalBasis?: boolean } = {}): Promis
     update subsidiaries set base_currency = 'GBP', country = 'GB', name = 'London HQ'
      where org_id = ${orgId} and parent_id is null`);
   await db.execute(sql`update orgs set base_currency = 'GBP', country = 'GB' where id = ${orgId}`);
-  const rootSub = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null`, "objects"))[0]!.id;
+  const rootSub = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null`,
+      "objects",
+    )
+  )[0]!.id;
   const eurSub = randomUUID();
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
                               is_elimination, is_active, custom)
     values (${eurSub}, ${orgId}, ${rootSub}, 'Dublin Branch', 'EUR', 'IE', '{}'::jsonb,
             false, true, '{}'::jsonb)`);
-  const calendar = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`, "objects"))[0]!.id;
+  const calendar = (
+    await db.execute<{ id: string }>(
+      sql`
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`,
+      "objects",
+    )
+  )[0]!.id;
   const septPeriod = randomUUID();
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
@@ -88,7 +103,17 @@ async function seedMixedOrg(options: { historicalBasis?: boolean } = {}): Promis
        remittance_party_id, sequence, country, created_by, updated_by)
     values (${component}, ${orgId}, ${`MIX-${component.slice(0, 6)}`}, 'Test withholding', 'deduction',
             'income_tax', ${liability}, ${org.vendorId}, 10, 'GB', ${actorId}, ${actorId})`);
-  return { orgId, actorId, vendorId: org.vendorId, rootSub, eurSub, liability, component, septPeriod, control };
+  return {
+    orgId,
+    actorId,
+    vendorId: org.vendorId,
+    rootSub,
+    eurSub,
+    liability,
+    component,
+    septPeriod,
+    control,
+  };
 }
 
 async function addCommittedRun(
@@ -146,8 +171,20 @@ async function addCommittedRun(
 test("a GBP run and a EUR run never sum to one symbol-labelled figure", { skip: !DB }, async () => {
   const fx = await seedMixedOrg();
   try {
-    await addCommittedRun(fx, { subsidiary: fx.rootSub, currency: "GBP", gross: "11083.33", number: "PAY-00002", schedule: randomUUID() });
-    await addCommittedRun(fx, { subsidiary: fx.eurSub, currency: "EUR", gross: "12250.00", number: "PAY-00003", schedule: randomUUID() });
+    await addCommittedRun(fx, {
+      subsidiary: fx.rootSub,
+      currency: "GBP",
+      gross: "11083.33",
+      number: "PAY-00002",
+      schedule: randomUUID(),
+    });
+    await addCommittedRun(fx, {
+      subsidiary: fx.eurSub,
+      currency: "EUR",
+      gross: "12250.00",
+      number: "PAY-00003",
+      schedule: randomUUID(),
+    });
     await assert.rejects(
       payrollRemittanceSummary(fx.orgId, { from: "2026-09-01", to: "2026-09-30" }),
       /No consolidated exchange rates for EUR → GBP in the period ending 2026-09-30\. Derive rates from period close first\./,
@@ -158,35 +195,63 @@ test("a GBP run and a EUR run never sum to one symbol-labelled figure", { skip: 
   }
 });
 
-test("a mixed scope translates through derived rates — never at a silent 1.0", { skip: !DB }, async () => {
-  const fx = await seedMixedOrg({ historicalBasis: true });
-  try {
-    await addCommittedRun(fx, { subsidiary: fx.rootSub, currency: "GBP", gross: "11083.33", number: "PAY-00002", schedule: randomUUID() });
-    await addCommittedRun(fx, { subsidiary: fx.eurSub, currency: "EUR", gross: "12250.00", number: "PAY-00003", schedule: randomUUID() });
-    await db.execute(sql`
+test(
+  "a mixed scope translates through derived rates — never at a silent 1.0",
+  { skip: !DB },
+  async () => {
+    const fx = await seedMixedOrg({ historicalBasis: true });
+    try {
+      await addCommittedRun(fx, {
+        subsidiary: fx.rootSub,
+        currency: "GBP",
+        gross: "11083.33",
+        number: "PAY-00002",
+        schedule: randomUUID(),
+      });
+      await addCommittedRun(fx, {
+        subsidiary: fx.eurSub,
+        currency: "EUR",
+        gross: "12250.00",
+        number: "PAY-00003",
+        schedule: randomUUID(),
+      });
+      await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
       values (${fx.orgId}, 'EUR', 'GBP', '2026-09-15', 'spot', '0.85')`);
-    const written = await deriveConsolidatedRates(fx.orgId, fx.septPeriod, fx.actorId);
-    assert.ok(written > 0, "the September EUR→GBP rate derives");
-    const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-09-01", to: "2026-09-30" });
-    assert.equal(groups.length, 1);
-    // 11,083.33 GBP + 12,250.00 EUR × 0.85 = 21,495.83 GBP. The raw-unit sum
-    // 23,333.33 (a silent 1.0) must never appear.
-    assert.equal(groups[0]!.currency, "GBP");
-    assert.equal(groups[0]!.translated, true);
-    assert.equal(cmp(groups[0]!.grossPayroll, "21495.83"), 0);
-    assert.equal(cmp(groups[0]!.total, "21495.83"), 0);
-    assert.ok(cmp(groups[0]!.grossPayroll, "23333.33") !== 0);
-  } finally {
-    await dropScratchOrg(fx.orgId);
-  }
-});
+      const written = await deriveConsolidatedRates(fx.orgId, fx.septPeriod, fx.actorId);
+      assert.ok(written > 0, "the September EUR→GBP rate derives");
+      const groups = await payrollRemittanceSummary(fx.orgId, {
+        from: "2026-09-01",
+        to: "2026-09-30",
+      });
+      assert.equal(groups.length, 1);
+      // 11,083.33 GBP + 12,250.00 EUR × 0.85 = 21,495.83 GBP. The raw-unit sum
+      // 23,333.33 (a silent 1.0) must never appear.
+      assert.equal(groups[0]!.currency, "GBP");
+      assert.equal(groups[0]!.translated, true);
+      assert.equal(cmp(groups[0]!.grossPayroll, "21495.83"), 0);
+      assert.equal(cmp(groups[0]!.total, "21495.83"), 0);
+      assert.ok(cmp(groups[0]!.grossPayroll, "23333.33") !== 0);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
 
 test("a single-currency scope aggregates exactly as before", { skip: !DB }, async () => {
   const fx = await seedMixedOrg();
   try {
-    await addCommittedRun(fx, { subsidiary: fx.rootSub, currency: "GBP", gross: "11083.33", number: "PAY-00002", schedule: randomUUID() });
-    const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-09-01", to: "2026-09-30" });
+    await addCommittedRun(fx, {
+      subsidiary: fx.rootSub,
+      currency: "GBP",
+      gross: "11083.33",
+      number: "PAY-00002",
+      schedule: randomUUID(),
+    });
+    const groups = await payrollRemittanceSummary(fx.orgId, {
+      from: "2026-09-01",
+      to: "2026-09-30",
+    });
     assert.equal(groups.length, 1);
     assert.equal(cmp(groups[0]!.grossPayroll, "11083.33"), 0);
     assert.equal(cmp(groups[0]!.total, "11083.33"), 0);
@@ -196,36 +261,57 @@ test("a single-currency scope aggregates exactly as before", { skip: !DB }, asyn
   }
 });
 
-test("a homogeneous foreign-currency scope states its native currency, never the org base", { skip: !DB }, async () => {
-  const fx = await seedMixedOrg({ historicalBasis: true });
-  try {
-    await addCommittedRun(fx, { subsidiary: fx.eurSub, currency: "EUR", gross: "12250.00", number: "PAY-00003", schedule: randomUUID() });
-    const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-09-01", to: "2026-09-30" });
-    assert.equal(groups.length, 1);
-    // The consolidated figure is 12,250 EUR stated as EUR: the label travels
-    // with the amount, so no consumer can read it as £12,250.
-    assert.equal(groups[0]!.currency, "EUR");
-    assert.equal(groups[0]!.translated, false);
-    assert.equal(cmp(groups[0]!.grossPayroll, "12250.00"), 0);
-    assert.equal(cmp(groups[0]!.total, "12250.00"), 0);
-    // A derived non-1 rate must not leak into the single-currency reading:
-    // the scope stays native EUR rather than translating at 0.85.
-    await db.execute(sql`
+test(
+  "a homogeneous foreign-currency scope states its native currency, never the org base",
+  { skip: !DB },
+  async () => {
+    const fx = await seedMixedOrg({ historicalBasis: true });
+    try {
+      await addCommittedRun(fx, {
+        subsidiary: fx.eurSub,
+        currency: "EUR",
+        gross: "12250.00",
+        number: "PAY-00003",
+        schedule: randomUUID(),
+      });
+      const groups = await payrollRemittanceSummary(fx.orgId, {
+        from: "2026-09-01",
+        to: "2026-09-30",
+      });
+      assert.equal(groups.length, 1);
+      // The consolidated figure is 12,250 EUR stated as EUR: the label travels
+      // with the amount, so no consumer can read it as £12,250.
+      assert.equal(groups[0]!.currency, "EUR");
+      assert.equal(groups[0]!.translated, false);
+      assert.equal(cmp(groups[0]!.grossPayroll, "12250.00"), 0);
+      assert.equal(cmp(groups[0]!.total, "12250.00"), 0);
+      // A derived non-1 rate must not leak into the single-currency reading:
+      // the scope stays native EUR rather than translating at 0.85.
+      await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
       values (${fx.orgId}, 'EUR', 'GBP', '2026-09-15', 'spot', '0.85')`);
-    assert.ok(await deriveConsolidatedRates(fx.orgId, fx.septPeriod, fx.actorId) > 0);
-    const relabelled = await payrollRemittanceSummary(fx.orgId, { from: "2026-09-01", to: "2026-09-30" });
-    assert.equal(relabelled.length, 1);
-    assert.equal(relabelled[0]!.currency, "EUR");
-    assert.equal(relabelled[0]!.translated, false);
-    assert.equal(cmp(relabelled[0]!.grossPayroll, "12250.00"), 0);
-    assert.equal(cmp(relabelled[0]!.total, "12250.00"), 0);
-  } finally {
-    await dropScratchOrg(fx.orgId);
-  }
-});
+      assert.ok((await deriveConsolidatedRates(fx.orgId, fx.septPeriod, fx.actorId)) > 0);
+      const relabelled = await payrollRemittanceSummary(fx.orgId, {
+        from: "2026-09-01",
+        to: "2026-09-30",
+      });
+      assert.equal(relabelled.length, 1);
+      assert.equal(relabelled[0]!.currency, "EUR");
+      assert.equal(relabelled[0]!.translated, false);
+      assert.equal(cmp(relabelled[0]!.grossPayroll, "12250.00"), 0);
+      assert.equal(cmp(relabelled[0]!.total, "12250.00"), 0);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
 
-async function seedPostableRun(fx: MixedFixture, subsidiary: string, currency: string, number: string): Promise<string> {
+async function seedPostableRun(
+  fx: MixedFixture,
+  subsidiary: string,
+  currency: string,
+  number: string,
+): Promise<string> {
   const wages = randomUUID();
   const expenseNumber = `5${String(Math.floor(Math.random() * 9000) + 1000)}`;
   await db.execute(sql`
@@ -251,47 +337,67 @@ async function seedPostableRun(fx: MixedFixture, subsidiary: string, currency: s
   return documentId;
 }
 
-test("a foreign-subsidiary pay run refuses to post with no derived rate", { skip: !DB }, async () => {
-  const fx = await seedMixedOrg();
-  try {
-    const documentId = await seedPostableRun(fx, fx.eurSub, "EUR", "PAY-00003");
-    await assert.rejects(
-      postDocument(documentId, { control: fx.control }),
-      /No consolidated exchange rates for EUR → GBP in the period ending 2026-09-30\. Derive rates from period close first\./,
-    );
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${documentId}`, "objects"))[0]!.status;
-    assert.equal(status, "approved", "the refused run stays unposted");
-  } finally {
-    await dropScratchOrg(fx.orgId);
-  }
-});
+test(
+  "a foreign-subsidiary pay run refuses to post with no derived rate",
+  { skip: !DB },
+  async () => {
+    const fx = await seedMixedOrg();
+    try {
+      const documentId = await seedPostableRun(fx, fx.eurSub, "EUR", "PAY-00003");
+      await assert.rejects(
+        postDocument(documentId, { control: fx.control }),
+        /No consolidated exchange rates for EUR → GBP in the period ending 2026-09-30\. Derive rates from period close first\./,
+      );
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
+      select status from documents where id = ${documentId}`,
+          "objects",
+        )
+      )[0]!.status;
+      assert.equal(status, "approved", "the refused run stays unposted");
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
 
-test("a foreign-subsidiary pay run posts once rates derive, tagged with its currency", { skip: !DB }, async () => {
-  const fx = await seedMixedOrg({ historicalBasis: true });
-  try {
-    await db.execute(sql`
+test(
+  "a foreign-subsidiary pay run posts once rates derive, tagged with its currency",
+  { skip: !DB },
+  async () => {
+    const fx = await seedMixedOrg({ historicalBasis: true });
+    try {
+      await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
       values (${fx.orgId}, 'EUR', 'GBP', '2026-09-15', 'spot', '0.85')`);
-    await deriveConsolidatedRates(fx.orgId, fx.septPeriod, fx.actorId);
-    const documentId = await seedPostableRun(fx, fx.eurSub, "EUR", "PAY-00003");
-    const entryId = await postDocument(documentId, { control: fx.control });
-    const lines = await db.execute<{
-      subsidiary_id: string; amount: string; currency: string; txn_amount: string; fx_rate: string;
-    }>(sql`
+      await deriveConsolidatedRates(fx.orgId, fx.septPeriod, fx.actorId);
+      const documentId = await seedPostableRun(fx, fx.eurSub, "EUR", "PAY-00003");
+      const entryId = await postDocument(documentId, { control: fx.control });
+      const lines = await db.execute<{
+        subsidiary_id: string;
+        amount: string;
+        currency: string;
+        txn_amount: string;
+        fx_rate: string;
+      }>(
+        sql`
       select subsidiary_id, amount::text as amount, currency, txn_amount::text as txn_amount,
              fx_rate::text as fx_rate
-        from journal_lines where entry_id = ${entryId} order by line_number`, "objects");
-    assert.equal(lines.length, 2);
-    for (const line of lines) {
-      assert.equal(line.subsidiary_id, fx.eurSub);
-      assert.equal(line.currency, "EUR");
-      assert.equal(line.txn_amount, line.amount);
+        from journal_lines where entry_id = ${entryId} order by line_number`,
+        "objects",
+      );
+      assert.equal(lines.length, 2);
+      for (const line of lines) {
+        assert.equal(line.subsidiary_id, fx.eurSub);
+        assert.equal(line.currency, "EUR");
+        assert.equal(line.txn_amount, line.amount);
+      }
+    } finally {
+      await dropScratchOrg(fx.orgId);
     }
-  } finally {
-    await dropScratchOrg(fx.orgId);
-  }
-});
+  },
+);
 
 test("a root-currency pay run posts with no rates anywhere", { skip: !DB }, async () => {
   const fx = await seedMixedOrg();
@@ -299,8 +405,13 @@ test("a root-currency pay run posts with no rates anywhere", { skip: !DB }, asyn
     const documentId = await seedPostableRun(fx, fx.rootSub, "GBP", "PAY-00002");
     const entryId = await postDocument(documentId, { control: fx.control });
     assert.ok(entryId);
-    const count = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from consolidated_fx_rates where org_id = ${fx.orgId}`, "objects"))[0]!.n;
+    const count = (
+      await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from consolidated_fx_rates where org_id = ${fx.orgId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(count, 0, "no rate was needed or read");
   } finally {
     await dropScratchOrg(fx.orgId);
@@ -310,13 +421,28 @@ test("a root-currency pay run posts with no rates anywhere", { skip: !DB }, asyn
 test("translated totals never equal the raw-unit sum", { skip: !DB }, async () => {
   const fx = await seedMixedOrg({ historicalBasis: true });
   try {
-    await addCommittedRun(fx, { subsidiary: fx.rootSub, currency: "GBP", gross: "11083.33", number: "PAY-00002", schedule: randomUUID() });
-    await addCommittedRun(fx, { subsidiary: fx.eurSub, currency: "EUR", gross: "12250.00", number: "PAY-00003", schedule: randomUUID() });
+    await addCommittedRun(fx, {
+      subsidiary: fx.rootSub,
+      currency: "GBP",
+      gross: "11083.33",
+      number: "PAY-00002",
+      schedule: randomUUID(),
+    });
+    await addCommittedRun(fx, {
+      subsidiary: fx.eurSub,
+      currency: "EUR",
+      gross: "12250.00",
+      number: "PAY-00003",
+      schedule: randomUUID(),
+    });
     await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
       values (${fx.orgId}, 'EUR', 'GBP', '2026-09-15', 'spot', '1.17')`);
     await deriveConsolidatedRates(fx.orgId, fx.septPeriod, fx.actorId);
-    const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-09-01", to: "2026-09-30" });
+    const groups = await payrollRemittanceSummary(fx.orgId, {
+      from: "2026-09-01",
+      to: "2026-09-30",
+    });
     // A silent 1.0 would report 23,333.33; the translated figure differs.
     assert.ok(cmp(groups[0]!.grossPayroll, "23333.33") !== 0);
     assert.equal(cmp(groups[0]!.grossPayroll, "25415.83"), 0);

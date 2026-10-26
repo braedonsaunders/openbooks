@@ -40,7 +40,13 @@ export const INVENTORY_RECONCILE_STALE_MS = 4 * 60 * 60 * 1_000;
 /** Pairs pushed for one channel in one scan tick. */
 export const INVENTORY_SYNC_BATCH_LIMIT = 200;
 
-function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
+function refuse(
+  code: string,
+  message: string,
+  remedy: string,
+  field: string | null = null,
+  status: 422 | 409 = 422,
+): never {
   throw new CommerceError(code, message, remedy, { field, status });
 }
 
@@ -105,7 +111,8 @@ function toPair(channelId: string, row: SyncPairDbRow): SyncPair {
  * variants never appear — there is nothing truthful to push for them.
  */
 export async function listSyncPairs(orgId: string, channelId: string): Promise<SyncPair[]> {
-  const rows = await db.execute<SyncPairDbRow>(sql`
+  const rows = await db.execute<SyncPairDbRow>(
+    sql`
     select l.stock_location_id, sl.code as stock_location_code,
            l.external_location_id, l.external_name,
            v.native_id as item_id, i.code as item_code, i.name as item_name,
@@ -124,7 +131,9 @@ export async function listSyncPairs(orgId: string, channelId: string): Promise<S
        and p.channel_id = l.channel_id and p.item_id = v.native_id
      where l.org_id = ${orgId} and l.channel_id = ${channelId}
        and l.sync_inventory and l.stock_location_id is not null
-     order by l.external_name, i.code`, "objects");
+     order by l.external_name, i.code`,
+    "objects",
+  );
   return rows.map((row) => toPair(channelId, row));
 }
 
@@ -139,39 +148,64 @@ interface PushStateDbRow extends Record<string, unknown> {
 }
 
 async function readPushState(orgId: string, pair: SyncPair): Promise<PushStateDbRow | null> {
-  return (await db.execute<PushStateDbRow>(sql`
+  return (
+    (
+      await db.execute<PushStateDbRow>(
+        sql`
     select shopify_inventory_item_id, last_pushed_quantity, last_shopify_quantity,
            last_inventory_policy, last_pushed_at::text, last_status, last_error
       from channel_inventory_push_states
      where org_id = ${orgId} and channel_id = ${pair.channelId}
-       and stock_location_id = ${pair.stockLocationId} and item_id = ${pair.itemId}`, "objects"))[0] ?? null;
+       and stock_location_id = ${pair.stockLocationId} and item_id = ${pair.itemId}`,
+        "objects",
+      )
+    )[0] ?? null
+  );
 }
 
 /** The pair's latest resolved conflict, if any: what the operator last signed off. */
 async function latestResolvedConflict(
   orgId: string,
   pair: SyncPair,
-): Promise<{ resolution: string | null; openbooks_quantity: number; shopify_quantity: number } | null> {
-  return (await db.execute<{
-    resolution: string | null;
-    openbooks_quantity: number;
-    shopify_quantity: number;
-  }>(sql`
+): Promise<{
+  resolution: string | null;
+  openbooks_quantity: number;
+  shopify_quantity: number;
+} | null> {
+  return (
+    (
+      await db.execute<{
+        resolution: string | null;
+        openbooks_quantity: number;
+        shopify_quantity: number;
+      }>(
+        sql`
     select resolution, openbooks_quantity, shopify_quantity
       from channel_inventory_conflicts
      where org_id = ${orgId} and channel_id = ${pair.channelId}
        and stock_location_id = ${pair.stockLocationId} and item_id = ${pair.itemId}
        and status = 'resolved'
-     order by resolved_at desc nulls last, updated_at desc limit 1`, "objects"))[0] ?? null;
+     order by resolved_at desc nulls last, updated_at desc limit 1`,
+        "objects",
+      )
+    )[0] ?? null
+  );
 }
 
 /** An open conflict blocks the pair: the operator's decision comes first. */
 async function openConflict(orgId: string, pair: SyncPair): Promise<{ id: string } | null> {
-  return (await db.execute<{ id: string }>(sql`
+  return (
+    (
+      await db.execute<{ id: string }>(
+        sql`
     select id from channel_inventory_conflicts
      where org_id = ${orgId} and channel_id = ${pair.channelId}
        and stock_location_id = ${pair.stockLocationId} and item_id = ${pair.itemId}
-       and status = 'open' limit 1`, "objects"))[0] ?? null;
+       and status = 'open' limit 1`,
+        "objects",
+      )
+    )[0] ?? null
+  );
 }
 
 /**
@@ -188,7 +222,8 @@ export async function listDueSyncPairs(
 ): Promise<SyncPair[]> {
   const debounceAgo = new Date(now.getTime() - INVENTORY_PUSH_DEBOUNCE_MS).toISOString();
   const staleAgo = new Date(now.getTime() - INVENTORY_RECONCILE_STALE_MS).toISOString();
-  const rows = await db.execute<SyncPairDbRow>(sql`
+  const rows = await db.execute<SyncPairDbRow>(
+    sql`
     select l.stock_location_id, sl.code as stock_location_code,
            l.external_location_id, l.external_name,
            v.native_id as item_id, i.code as item_code, i.name as item_name,
@@ -225,7 +260,9 @@ export async function listDueSyncPairs(
                 or e.payload ->> 'stockLocationId' = l.stock_location_id::text)
               and e.occurred_at > s.last_pushed_at and e.occurred_at < ${debounceAgo}::timestamptz))
      order by s.last_pushed_at nulls first
-     limit ${limit}`, "objects");
+     limit ${limit}`,
+    "objects",
+  );
   return rows.map((row) => toPair(channelId, row));
 }
 
@@ -449,7 +486,11 @@ export async function pushInventoryPair(
     throw error;
   }
   if ((state?.last_inventory_policy ?? null) !== policy) {
-    await setVariantSellablePolicy(client, shopifyVariantGid(pair.variantExternalId), pair.stopSellingAtZero);
+    await setVariantSellablePolicy(
+      client,
+      shopifyVariantGid(pair.variantExternalId),
+      pair.stopSellingAtZero,
+    );
   }
   await writePushState(orgId, actor, pair, {
     inventoryItemId: inventoryItemGid,
@@ -490,14 +531,19 @@ export async function runCommerceChannelSyncScan(
   const summaries: ChannelSyncSummary[] = [];
   // bypass: scheduler-tick — the inventory scan crosses organizations
   // before each row's organization is known.
-  const channels = await withBypassContext(() => db.execute<{ org_id: string; id: string }>(sql`
+  const channels = await withBypassContext(() =>
+    db.execute<{ org_id: string; id: string }>(
+      sql`
     select c.org_id, c.id from sales_channels c
      where c.kind = 'shopify' and c.status = 'active'
        and exists (
          select 1 from sales_channel_locations l
           where l.org_id = c.org_id and l.channel_id = c.id
             and l.sync_inventory and l.stock_location_id is not null)
-     limit 50`, "objects"));
+     limit 50`,
+      "objects",
+    ),
+  );
   for (const channel of channels) {
     const summary: ChannelSyncSummary = {
       channelId: channel.id,
@@ -543,7 +589,8 @@ async function recordPairError(orgId: string, pair: SyncPair, error: unknown): P
       inventoryItemId: state?.shopify_inventory_item_id?.trim() || null,
       pushed: state?.last_pushed_quantity ?? 0,
       shopify: state?.last_shopify_quantity ?? 0,
-      policy: (state?.last_inventory_policy === "continue" ? "continue" : "deny") as "deny" | "continue",
+      policy: (state?.last_inventory_policy === "continue" ? "continue" : "deny") as
+        "deny" | "continue",
       status: "error",
       error: message.slice(0, 500),
       at: new Date(),
@@ -592,7 +639,9 @@ export async function listInventoryConflicts(
   orgId: string,
   channelId: string | null = null,
 ): Promise<InventoryConflictRow[]> {
-  const rows = await withOrgContext(orgId, () => db.execute<InventoryConflictDbRow>(sql`
+  const rows = await withOrgContext(orgId, () =>
+    db.execute<InventoryConflictDbRow>(
+      sql`
     select k.id, k.channel_id, c.name as channel_name, k.stock_location_id,
            sl.code as stock_location_code, l.external_name,
            k.item_id, i.code as item_code, i.name as item_name,
@@ -605,7 +654,10 @@ export async function listInventoryConflicts(
       join items i on i.org_id = k.org_id and i.id = k.item_id
      where k.org_id = ${orgId} and k.status = 'open'
        and (${channelId}::uuid is null or k.channel_id = ${channelId})
-     order by k.created_at`, "objects"));
+     order by k.created_at`,
+      "objects",
+    ),
+  );
   return rows.map((row) => ({
     id: row.id,
     channelId: row.channel_id,
@@ -656,18 +708,23 @@ export async function resolveInventoryConflict(
   return withOrg(orgId, async () => {
     await acquireOrgFeatureGateLock(db, orgId);
     await requireFeature(orgId);
-    const conflict = (await db.execute<{
-      id: string;
-      channel_id: string;
-      stock_location_id: string;
-      item_id: string;
-      openbooks_quantity: number;
-      shopify_quantity: number;
-    }>(sql`
+    const conflict = (
+      await db.execute<{
+        id: string;
+        channel_id: string;
+        stock_location_id: string;
+        item_id: string;
+        openbooks_quantity: number;
+        shopify_quantity: number;
+      }>(
+        sql`
       select id, channel_id, stock_location_id, item_id,
              openbooks_quantity, shopify_quantity
         from channel_inventory_conflicts
-       where org_id = ${orgId} and id = ${conflictId} and status = 'open'`, "objects"))[0];
+       where org_id = ${orgId} and id = ${conflictId} and status = 'open'`,
+        "objects",
+      )
+    )[0];
     if (!conflict) {
       refuse(
         "channel_inventory_conflict_missing",
@@ -680,7 +737,8 @@ export async function resolveInventoryConflict(
     const pairs = await listSyncPairs(orgId, conflict.channel_id);
     const pair = pairs.find(
       (candidate) =>
-        candidate.stockLocationId === conflict.stock_location_id && candidate.itemId === conflict.item_id,
+        candidate.stockLocationId === conflict.stock_location_id &&
+        candidate.itemId === conflict.item_id,
     );
     if (!pair) {
       refuse(
@@ -729,11 +787,27 @@ export async function resolveInventoryConflict(
       if ((closed.rowCount ?? 0) !== 1) {
         throw new Error("Channel inventory conflict matched no row; the resolution was lost");
       }
-      await writeAudit(orgId, "channel_inventory_conflicts", conflict.id, "update", actor, { status: "open" }, { status: "resolved", resolution: "accepted_shopify" }, "Operator accepted the storefront quantity");
+      await writeAudit(
+        orgId,
+        "channel_inventory_conflicts",
+        conflict.id,
+        "update",
+        actor,
+        { status: "open" },
+        { status: "resolved", resolution: "accepted_shopify" },
+        "Operator accepted the storefront quantity",
+      );
       return { resolution, quantity: live.quantity };
     }
     if (live.quantity !== null && live.quantity !== conflict.shopify_quantity) {
-      await openInventoryConflict(orgId, actor, pair, conflict.openbooks_quantity, live.quantity, inventoryItemGid);
+      await openInventoryConflict(
+        orgId,
+        actor,
+        pair,
+        conflict.openbooks_quantity,
+        live.quantity,
+        inventoryItemGid,
+      );
       refuse(
         "channel_inventory_conflict_moved",
         `Shopify moved again while the conflict waited (now ${live.quantity}); the queue shows the fresh quantities.`,
@@ -766,7 +840,16 @@ export async function resolveInventoryConflict(
     if ((closed.rowCount ?? 0) !== 1) {
       throw new Error("Channel inventory conflict matched no row; the resolution was lost");
     }
-    await writeAudit(orgId, "channel_inventory_conflicts", conflict.id, "update", actor, { status: "open" }, { status: "resolved", resolution: "pushed_openbooks" }, "Operator pushed the OpenBooks quantity");
+    await writeAudit(
+      orgId,
+      "channel_inventory_conflicts",
+      conflict.id,
+      "update",
+      actor,
+      { status: "open" },
+      { status: "resolved", resolution: "pushed_openbooks" },
+      "Operator pushed the OpenBooks quantity",
+    );
     return { resolution, quantity: conflict.openbooks_quantity };
   });
 }
@@ -821,22 +904,24 @@ export async function listLocationSyncStates(
   orgId: string,
   channelId: string,
 ): Promise<LocationSyncState[]> {
-  const rows = await withOrgContext(orgId, () => db.execute<
-    Record<string, unknown> & {
-      stock_location_id: string | null;
-      stock_location_code: string | null;
-      external_location_id: string;
-      external_name: string;
-      sync_inventory: boolean;
-      buffer_quantity: string;
-      stop_selling_at_zero: boolean;
-      mapped_pairs: string;
-      last_pushed_at: string | null;
-      open_conflicts: string;
-      error_pairs: string;
-      pending_pairs: string;
-    }
-  >(sql`
+  const rows = await withOrgContext(orgId, () =>
+    db.execute<
+      Record<string, unknown> & {
+        stock_location_id: string | null;
+        stock_location_code: string | null;
+        external_location_id: string;
+        external_name: string;
+        sync_inventory: boolean;
+        buffer_quantity: string;
+        stop_selling_at_zero: boolean;
+        mapped_pairs: string;
+        last_pushed_at: string | null;
+        open_conflicts: string;
+        error_pairs: string;
+        pending_pairs: string;
+      }
+    >(
+      sql`
     select l.stock_location_id, sl.code as stock_location_code,
            l.external_location_id, l.external_name, l.sync_inventory,
            l.buffer_quantity::text as buffer_quantity,
@@ -861,7 +946,10 @@ export async function listLocationSyncStates(
      where l.org_id = ${orgId} and l.channel_id = ${channelId}
      group by l.stock_location_id, sl.code, l.external_location_id, l.external_name,
               l.sync_inventory, l.buffer_quantity, l.stop_selling_at_zero
-     order by l.external_name`, "objects"));
+     order by l.external_name`,
+      "objects",
+    ),
+  );
   return rows.map((row) => ({
     stockLocationId: row.stock_location_id ?? "",
     stockLocationCode: row.stock_location_code ?? row.external_name,
@@ -901,29 +989,34 @@ export interface ItemChannelStockRow {
  * available to promise beside the last push, for the item drawer's channel
  * section. Read-only; policy changes happen from the channel side.
  */
-export async function listItemChannelStock(orgId: string, itemId: string): Promise<ItemChannelStockRow[]> {
-  const pairs = await withOrgContext(orgId, () => db.execute<
-    Record<string, unknown> & {
-      channel_id: string;
-      channel_name: string;
-      subsidiary_id: string | null;
-      stock_location_id: string;
-      stock_location_code: string | null;
-      external_location_id: string;
-      external_name: string;
-      location_buffer: string;
-      policy_buffer: string | null;
-      policy_stop: boolean | null;
-      policy_sync: boolean | null;
-      location_stop: boolean;
-      pushed: number | null;
-      shopify: number | null;
-      pushed_at: string | null;
-      status: string | null;
-      conflict_openbooks: number | null;
-      conflict_shopify: number | null;
-    }
-  >(sql`
+export async function listItemChannelStock(
+  orgId: string,
+  itemId: string,
+): Promise<ItemChannelStockRow[]> {
+  const pairs = await withOrgContext(orgId, () =>
+    db.execute<
+      Record<string, unknown> & {
+        channel_id: string;
+        channel_name: string;
+        subsidiary_id: string | null;
+        stock_location_id: string;
+        stock_location_code: string | null;
+        external_location_id: string;
+        external_name: string;
+        location_buffer: string;
+        policy_buffer: string | null;
+        policy_stop: boolean | null;
+        policy_sync: boolean | null;
+        location_stop: boolean;
+        pushed: number | null;
+        shopify: number | null;
+        pushed_at: string | null;
+        status: string | null;
+        conflict_openbooks: number | null;
+        conflict_shopify: number | null;
+      }
+    >(
+      sql`
     select c.id as channel_id, c.name as channel_name, c.subsidiary_id,
            l.stock_location_id, sl.code as stock_location_code,
            l.external_location_id, l.external_name,
@@ -950,7 +1043,10 @@ export async function listItemChannelStock(orgId: string, itemId: string): Promi
        and k.item_id = v.native_id and k.status = 'open'
      where l.org_id = ${orgId} and l.sync_inventory and l.stock_location_id is not null
        and coalesce(p.sync_inventory, true)
-     order by c.name, l.external_name`, "objects"));
+     order by c.name, l.external_name`,
+      "objects",
+    ),
+  );
   const out: ItemChannelStockRow[] = [];
   for (const row of pairs) {
     // A pair the engine cannot measure names its cause instead of
@@ -1019,24 +1115,32 @@ export interface ItemPolicyRow {
 }
 
 /** Every per-item override on a channel, with item labels, for the advanced policy editor. */
-export async function listItemInventoryPolicies(orgId: string, channelId: string): Promise<ItemPolicyRow[]> {
-  const rows = await withOrgContext(orgId, () => db.execute<
-    Record<string, unknown> & {
-      item_id: string;
-      item_code: string | null;
-      item_name: string;
-      buffer_quantity: string | null;
-      stop_selling_at_zero: boolean | null;
-      sync_inventory: boolean;
-    }
-  >(sql`
+export async function listItemInventoryPolicies(
+  orgId: string,
+  channelId: string,
+): Promise<ItemPolicyRow[]> {
+  const rows = await withOrgContext(orgId, () =>
+    db.execute<
+      Record<string, unknown> & {
+        item_id: string;
+        item_code: string | null;
+        item_name: string;
+        buffer_quantity: string | null;
+        stop_selling_at_zero: boolean | null;
+        sync_inventory: boolean;
+      }
+    >(
+      sql`
     select p.item_id, i.code as item_code, i.name as item_name,
            p.buffer_quantity::text as buffer_quantity,
            p.stop_selling_at_zero, p.sync_inventory
       from channel_item_inventory_policies p
       join items i on i.org_id = p.org_id and i.id = p.item_id
      where p.org_id = ${orgId} and p.channel_id = ${channelId}
-     order by i.code`, "objects"));
+     order by i.code`,
+      "objects",
+    ),
+  );
   return rows.map((row) => ({
     itemId: row.item_id,
     itemCode: row.item_code,
@@ -1085,8 +1189,13 @@ export async function upsertItemInventoryPolicy(
   await withOrg(orgId, async () => {
     await acquireOrgFeatureGateLock(db, orgId);
     await requireFeature(orgId);
-    const channel = (await db.execute<{ id: string }>(sql`
-      select id from sales_channels where org_id = ${orgId} and id = ${input.channelId}`, "objects"))[0];
+    const channel = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from sales_channels where org_id = ${orgId} and id = ${input.channelId}`,
+        "objects",
+      )
+    )[0];
     if (!channel) {
       refuse(
         "channel_not_found",
@@ -1095,8 +1204,13 @@ export async function upsertItemInventoryPolicy(
         "channelId",
       );
     }
-    const item = (await db.execute<{ id: string }>(sql`
-      select id from items where org_id = ${orgId} and id = ${input.itemId}`, "objects"))[0];
+    const item = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from items where org_id = ${orgId} and id = ${input.itemId}`,
+        "objects",
+      )
+    )[0];
     if (!item) {
       refuse(
         "channel_inventory_item_missing",

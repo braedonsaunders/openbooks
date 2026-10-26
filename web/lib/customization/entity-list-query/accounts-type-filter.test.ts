@@ -25,7 +25,12 @@ test("accountWhere narrows the list to one account type and binds the value", ()
 });
 
 test("accountWhere without a type filter does not constrain the type column", () => {
-  const where = accountWhere(defaultListView("account"), { showInactive: true, filters: {} }, ORG, null);
+  const where = accountWhere(
+    defaultListView("account"),
+    { showInactive: true, filters: {} },
+    ORG,
+    null,
+  );
   const { sql: text } = compiled(where);
   assert.doesNotMatch(text, /a\.type = \$/);
 });

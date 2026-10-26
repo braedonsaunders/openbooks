@@ -11,7 +11,10 @@ import { runPostDocumentEffects } from "./posting-dispatch.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import {
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from "../organization/org-feature-lock.ts";
 
 /**
  * Governed journal writes for sandboxed code (App backends + user scripts).
@@ -71,7 +74,9 @@ function persistJournalLineAmount(value: unknown, line: number): Money {
   try {
     return parseMoney(value);
   } catch {
-    throw new JournalWriteError(decimalNullRefusal(`line ${line} amount`, "a nonzero decimal amount", value, 4));
+    throw new JournalWriteError(
+      decimalNullRefusal(`line ${line} amount`, "a nonzero decimal amount", value, 4),
+    );
   }
 }
 
@@ -99,14 +104,23 @@ export function validateJournalInput(input: ScriptJournalInput): {
   documentDate: string;
   memo: string | null;
   referenceNumber: string | null;
-  lines: { accountId?: string; accountCode?: string; amount: Money; description: string | null; departmentId: string | null; projectId: string | null }[];
+  lines: {
+    accountId?: string;
+    accountCode?: string;
+    amount: Money;
+    description: string | null;
+    departmentId: string | null;
+    projectId: string | null;
+  }[];
   totalDebits: Money;
 } {
-  if (!input || typeof input !== "object") throw new JournalWriteError("journal input must be an object");
+  if (!input || typeof input !== "object")
+    throw new JournalWriteError("journal input must be an object");
   if (!Array.isArray(input.lines) || input.lines.length < 2) {
     throw new JournalWriteError("journal needs at least 2 lines");
   }
-  if (input.lines.length > MAX_LINES) throw new JournalWriteError(`too many lines (max ${MAX_LINES})`);
+  if (input.lines.length > MAX_LINES)
+    throw new JournalWriteError(`too many lines (max ${MAX_LINES})`);
   // The validator is pure and cannot know the tenant. Inventing UTC today
   // here would stamp journals onto the wrong day for every org that is not
   // on UTC. createScriptJournal applies businessToday before calling this.
@@ -126,19 +140,26 @@ export function validateJournalInput(input: ScriptJournalInput): {
   const amounts: Money[] = [];
   const lines = input.lines.map((l, i) => {
     const amount = persistJournalLineAmount(l.amount, i + 1);
-    if (isZero(amount)) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero decimal amount`);
+    if (isZero(amount))
+      throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero decimal amount`);
     // One shared ledger bound (money.ts MAX_LEDGER_WHOLE_DIGITS): the UI
     // draft refuses the same figures with the same message, so a line that
     // saves in the editor never dies here and vice versa.
     if (!fitsLedgerRange(amount)) {
-      throw new JournalWriteError(`line ${i + 1}: amount is out of range — at most 15 whole digits fit the ledger`);
+      throw new JournalWriteError(
+        `line ${i + 1}: amount is out of range — at most 15 whole digits fit the ledger`,
+      );
     }
-    if (!l.accountId && !l.accountCode) throw new JournalWriteError(`line ${i + 1}: accountId or accountCode required`);
-    if (l.accountId && !isUuid(l.accountId)) throw new JournalWriteError(`line ${i + 1}: invalid accountId`);
+    if (!l.accountId && !l.accountCode)
+      throw new JournalWriteError(`line ${i + 1}: accountId or accountCode required`);
+    if (l.accountId && !isUuid(l.accountId))
+      throw new JournalWriteError(`line ${i + 1}: invalid accountId`);
     // Dimensions are fail-closed like accountId: a malformed id must never
     // silently post without its dimension. Absent/empty stays null.
-    if (l.departmentId && !isUuid(l.departmentId)) throw new JournalWriteError(`line ${i + 1}: invalid departmentId`);
-    if (l.projectId && !isUuid(l.projectId)) throw new JournalWriteError(`line ${i + 1}: invalid projectId`);
+    if (l.departmentId && !isUuid(l.departmentId))
+      throw new JournalWriteError(`line ${i + 1}: invalid departmentId`);
+    if (l.projectId && !isUuid(l.projectId))
+      throw new JournalWriteError(`line ${i + 1}: invalid projectId`);
     amounts.push(amount);
     return {
       accountId: l.accountId,
@@ -159,10 +180,14 @@ export function validateJournalInput(input: ScriptJournalInput): {
   // by name instead of dying in Postgres.
   const { debits: debitTotal, credits: creditTotal } = ledgerSideTotals(amounts);
   if (!fitsLedgerRange(debitTotal)) {
-    throw new JournalWriteError(`journal debit total is out of range — at most 15 whole digits fit the ledger`);
+    throw new JournalWriteError(
+      `journal debit total is out of range — at most 15 whole digits fit the ledger`,
+    );
   }
   if (!fitsLedgerRange(creditTotal)) {
-    throw new JournalWriteError(`journal credit total is out of range — at most 15 whole digits fit the ledger`);
+    throw new JournalWriteError(
+      `journal credit total is out of range — at most 15 whole digits fit the ledger`,
+    );
   }
   return {
     documentDate,
@@ -242,9 +267,12 @@ async function insertScriptDraft(
       await fenceTransactionToDeadline(tx, deadlineMs);
     }
     if (idempotencyKey !== undefined) {
-      const existing = (await tx.execute<{ id: string; document_number: string }>(sql`
+      const existing = await tx.execute<{ id: string; document_number: string }>(
+        sql`
         select id, document_number from documents
-         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`, "objects"));
+         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`,
+        "objects",
+      );
       if (existing[0]) {
         return {
           id: String(existing[0].id),
@@ -256,7 +284,8 @@ async function insertScriptDraft(
     // JE- sequence via the ONE canonical allocator (engine/src/records/numbering.ts).
     const documentNumber = await allocateDocumentNumber(tx, orgId, "journal", "JE-");
 
-    const ins = (await tx.execute<{ id: string }>(sql`
+    const ins = await tx.execute<{ id: string }>(
+      sql`
       insert into documents (org_id, kind, document_number, subsidiary_id, document_date, currency,
                              memo, reference_number, subtotal, tax_total, total, created_by, custom,
                              idempotency_key)
@@ -265,15 +294,20 @@ async function insertScriptDraft(
               ${JSON.stringify(actorId ? {} : SYSTEM_PROVENANCE)}::jsonb, ${idempotencyKey ?? null})
       -- An identical idempotent write reuses the winner selected and checked below.
       on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
-      returning id`, "objects"));
+      returning id`,
+      "objects",
+    );
     const won = ins[0];
     if (!won) {
       // A concurrent identical write won the race: return its document rather
       // than a second numbered journal. The conflict above is the proof the
       // row exists — a zero-row read here is a failure, not a success.
-      const raced = (await tx.execute<{ id: string; document_number: string }>(sql`
+      const raced = await tx.execute<{ id: string; document_number: string }>(
+        sql`
         select id, document_number from documents
-         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`, "objects"));
+         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`,
+        "objects",
+      );
       const row = raced[0];
       if (!row) {
         throw new JournalWriteError(
@@ -293,7 +327,10 @@ async function insertScriptDraft(
         values (${orgId}, ${id}, ${i + 1}, ${accountId}, ${l.description},
                 '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId}, '{}')`);
     }
-    const num = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${id} and org_id = ${orgId}`, "objects"));
+    const num = await tx.execute<{ document_number: string }>(
+      sql`select document_number from documents where id = ${id} and org_id = ${orgId}`,
+      "objects",
+    );
     return { id, documentNumber: String(num[0]!.document_number), deduped: false };
   });
 }
@@ -320,12 +357,14 @@ async function resolveScriptJournalSubsidiary(
   requested: string | null | undefined,
   allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
 ): Promise<ResolvedJournalSubsidiary> {
-  const resolvedScope = allowedSubsidiaryIds === undefined
-    ? actorId ? await actorAllowedSubsidiaryIds(db, orgId, actorId) : null
-    : allowedSubsidiaryIds;
-  const scope = resolvedScope === null
-    ? null
-    : new Set([...resolvedScope].map((id) => id.toLowerCase()));
+  const resolvedScope =
+    allowedSubsidiaryIds === undefined
+      ? actorId
+        ? await actorAllowedSubsidiaryIds(db, orgId, actorId)
+        : null
+      : allowedSubsidiaryIds;
+  const scope =
+    resolvedScope === null ? null : new Set([...resolvedScope].map((id) => id.toLowerCase()));
 
   const pick = (row: { id: string; base_currency: string | null }): ResolvedJournalSubsidiary => {
     if (!row.base_currency) {
@@ -342,11 +381,16 @@ async function resolveScriptJournalSubsidiary(
     if (scope !== null && !scope.has(normalized)) {
       throw new JournalWriteError("subsidiary not found", "subsidiary_not_allowed");
     }
-    const explicit = (await db.execute<{ id: string; base_currency: string | null }>(sql`
+    const explicit = (
+      await db.execute<{ id: string; base_currency: string | null }>(
+        sql`
       select id, nullif(trim(base_currency), '') as base_currency
         from subsidiaries
        where org_id = ${orgId} and id = ${normalized}
-         and is_active and not is_elimination`, "objects"))[0];
+         and is_active and not is_elimination`,
+        "objects",
+      )
+    )[0];
     if (!explicit) throw new JournalWriteError("invalid subsidiary", "invalid_subsidiary");
     return pick(explicit);
   }
@@ -356,11 +400,14 @@ async function resolveScriptJournalSubsidiary(
     if (ids.length === 0) {
       throw new JournalWriteError("no available subsidiary", "no_available_subsidiary");
     }
-    const allowed = await db.execute<{ id: string; base_currency: string | null }>(sql`
+    const allowed = await db.execute<{ id: string; base_currency: string | null }>(
+      sql`
       select id, nullif(trim(base_currency), '') as base_currency
         from subsidiaries
        where org_id = ${orgId} and is_active and not is_elimination
-         and id in ${ids}`, "objects");
+         and id in ${ids}`,
+      "objects",
+    );
     if (allowed.length === 0) {
       throw new JournalWriteError("no available subsidiary", "no_available_subsidiary");
     }
@@ -373,7 +420,9 @@ async function resolveScriptJournalSubsidiary(
     return pick(allowed[0]!);
   }
 
-  const company = (await db.execute(sql`
+  const company = (
+    await db.execute(
+      sql`
     select s.id as subsidiary_id, nullif(trim(s.base_currency), '') as base_currency
       from orgs o
       left join lateral (
@@ -382,7 +431,10 @@ async function resolveScriptJournalSubsidiary(
          limit 1
       ) s on true
      where o.id = ${orgId}
-  `, "objects"))[0] as { subsidiary_id: string | null; base_currency: string | null } | undefined;
+  `,
+      "objects",
+    )
+  )[0] as { subsidiary_id: string | null; base_currency: string | null } | undefined;
   if (!company) throw new JournalWriteError("organization does not exist");
   if (!company.subsidiary_id) {
     throw new JournalWriteError("organization has no active root subsidiary");
@@ -414,9 +466,17 @@ async function findScriptJournalByKey(
   orgId: string,
   idempotencyKey: string,
 ): Promise<ScriptJournalResult | null> {
-  const r = (await db.execute<{ id: string; document_number: string; status: string; posted_entry_id: string | null }>(sql`
+  const r = await db.execute<{
+    id: string;
+    document_number: string;
+    status: string;
+    posted_entry_id: string | null;
+  }>(
+    sql`
     select id, document_number, status, posted_entry_id from documents
-     where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`, "objects"));
+     where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`,
+    "objects",
+  );
   const row = r[0];
   if (!row) return null;
   const base = { id: String(row.id), documentNumber: String(row.document_number) };
@@ -438,9 +498,12 @@ export async function createScriptJournal(
     ? input
     : { ...input, documentDate: await businessToday(orgId) };
   const v = validateJournalInput(effective);
-  const allowedSubsidiaryIds = opts.allowedSubsidiaryIds === undefined
-    ? actorId ? await actorAllowedSubsidiaryIds(db, orgId, actorId) : null
-    : opts.allowedSubsidiaryIds;
+  const allowedSubsidiaryIds =
+    opts.allowedSubsidiaryIds === undefined
+      ? actorId
+        ? await actorAllowedSubsidiaryIds(db, orgId, actorId)
+        : null
+      : opts.allowedSubsidiaryIds;
   const { subsidiaryId, baseCurrency } = await resolveScriptJournalSubsidiary(
     orgId,
     actorId,
@@ -461,40 +524,71 @@ export async function createScriptJournal(
   // NOTE: drizzle's sql`` expands a JS array into a ($1, $2, …) tuple — pair it
   // with `in`, never `= any()` (which needs a real array parameter).
   if (codes.length) {
-    const r = (await db.execute<{ id: string; number: string; subsidiaryId: string | null }>(sql`
+    const r = await db.execute<{ id: string; number: string; subsidiaryId: string | null }>(
+      sql`
       select id, number, subsidiary_id as "subsidiaryId" from accounts
-       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`, "objects"));
+       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`,
+      "objects",
+    );
     for (const row of r) {
       if (accountFitsJournal(row.subsidiaryId)) byCode.set(String(row.number), String(row.id));
     }
-    for (const c of codes) if (!byCode.has(c)) throw new JournalWriteError(`unknown, inactive, summary, or unavailable account code "${c}"`);
+    for (const c of codes)
+      if (!byCode.has(c))
+        throw new JournalWriteError(
+          `unknown, inactive, summary, or unavailable account code "${c}"`,
+        );
   }
   if (ids.length) {
-    const r = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+    const r = await db.execute<{ id: string; subsidiaryId: string | null }>(
+      sql`
       select id, subsidiary_id as "subsidiaryId" from accounts
-       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${ids}`, "objects"));
-    const found = new Set(r
-      .filter((row) => accountFitsJournal(row.subsidiaryId))
-      .map((row) => String(row.id)));
-    for (const id of ids) if (!found.has(id)) throw new JournalWriteError(`unknown, inactive, summary, or unavailable accountId "${id}"`);
+       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${ids}`,
+      "objects",
+    );
+    const found = new Set(
+      r.filter((row) => accountFitsJournal(row.subsidiaryId)).map((row) => String(row.id)),
+    );
+    for (const id of ids)
+      if (!found.has(id))
+        throw new JournalWriteError(`unknown, inactive, summary, or unavailable accountId "${id}"`);
   }
 
   // Line dimensions are fail-closed like accountId: the validator proves shape
   // only, so a well-formed id from another tenant would die at the composite
   // FK as an unhandled storage error. Prove org ownership here instead, with
   // a tenant-opaque refusal that reveals nothing about other tenants' charts.
-  for (const [key, label, table] of [["departmentId", "department", "departments"], ["projectId", "project", "projects"]] as const) {
-    const refIds = [...new Set(v.lines.map((l) => l[key]).filter((x): x is string => typeof x === "string" && x.length > 0))];
+  for (const [key, label, table] of [
+    ["departmentId", "department", "departments"],
+    ["projectId", "project", "projects"],
+  ] as const) {
+    const refIds = [
+      ...new Set(
+        v.lines
+          .map((l) => l[key])
+          .filter((x): x is string => typeof x === "string" && x.length > 0),
+      ),
+    ];
     if (refIds.length === 0) continue;
     let found: Set<string>;
     if (table === "projects") {
-      const projects = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+      const projects = await db.execute<{ id: string; subsidiaryId: string | null }>(
+        sql`
         select id, subsidiary_id as "subsidiaryId" from projects
-         where org_id = ${orgId} and id in ${refIds}`, "objects");
-      found = new Set(projects.filter((project) => accountFitsJournal(project.subsidiaryId)).map((project) => String(project.id)));
+         where org_id = ${orgId} and id in ${refIds}`,
+        "objects",
+      );
+      found = new Set(
+        projects
+          .filter((project) => accountFitsJournal(project.subsidiaryId))
+          .map((project) => String(project.id)),
+      );
     } else {
-      const departments = await db.execute<{ id: string }>(sql`
-        select id from departments where org_id = ${orgId} and id in ${refIds}`, "objects");
+      const departments = await db.execute<{ id: string }>(
+        sql`
+        select id from departments where org_id = ${orgId} and id in ${refIds}`,
+        "objects",
+      );
       found = new Set(departments.map((department) => String(department.id)));
     }
     const foreign = refIds.find((x) => !found.has(x));
@@ -525,7 +619,14 @@ export async function createScriptJournal(
     // A committed draft IS the documented successful outcome of a draft-only
     // request; it stands alone in its own transaction.
     const { deduped: _deduped, ...draft } = await insertScriptDraft(
-      orgId, subsidiaryId, baseCurrency, v, byCode, actorId, opts.idempotencyKey, opts.deadlineMs,
+      orgId,
+      subsidiaryId,
+      baseCurrency,
+      v,
+      byCode,
+      actorId,
+      opts.idempotencyKey,
+      opts.deadlineMs,
       opts.requireScriptsFeature,
     );
     return draft;
@@ -550,7 +651,14 @@ export async function createScriptJournal(
       await fenceTransactionToDeadline(db, opts.deadlineMs);
     }
     const docId = await insertScriptDraft(
-      orgId, subsidiaryId, baseCurrency, v, byCode, actorId, opts.idempotencyKey, opts.deadlineMs,
+      orgId,
+      subsidiaryId,
+      baseCurrency,
+      v,
+      byCode,
+      actorId,
+      opts.idempotencyKey,
+      opts.deadlineMs,
       opts.requireScriptsFeature,
     );
     // A deduped draft is another execution's committed unit: re-submitting

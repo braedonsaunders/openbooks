@@ -16,7 +16,10 @@ test("a live session record verifies active", async () => {
 });
 
 test("a revoked or unknown session verifies inactive", async () => {
-  assert.equal(await checkSessionLiveness("token", parsed, { lookup: async () => false }), "inactive");
+  assert.equal(
+    await checkSessionLiveness("token", parsed, { lookup: async () => false }),
+    "inactive",
+  );
 });
 
 test("a database failure verifies unavailable instead of throwing", async () => {

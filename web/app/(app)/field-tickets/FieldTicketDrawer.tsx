@@ -1,42 +1,53 @@
-'use client'
+"use client";
 
-import { useIdentityState } from '@/lib/use-identity-state'
+import { useIdentityState } from "@/lib/use-identity-state";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMoney } from '@/components/money-provider'
-import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { formatTicketHours } from '@/lib/format'
-import Link from 'next/link'
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { useViewerFormat } from '@/lib/viewer-format'
-import { toast } from 'sonner'
-import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { useAppAction } from '@/lib/use-app-action'
-import { canonicalDecimal, isPositiveDecimal } from '@/lib/exact-decimal'
-import { CalendarCheck, Mail, Plus, Send, Trash2 } from 'lucide-react'
-import type { ScheduledWork } from '@openbooks/engine/schedule-boards/prefill'
-import { fillTicketFromSchedule } from '@/lib/field-ticket-schedule-fill'
-import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
-import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
-import { add } from '@openbooks/engine/money/money'
-import { addCalendarDays, parseIsoDate } from '@openbooks/engine/platform/civil-date'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
+import { initialDrawerMode, type DrawerMode } from "@/lib/drawer-mode";
+import { formatTicketHours } from "@/lib/format";
+import Link from "next/link";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
+import { toast } from "sonner";
+import { ActionAlert } from "@braedonsaunders/appkit-errors/react";
+import { useAppAction } from "@/lib/use-app-action";
+import { canonicalDecimal, isPositiveDecimal } from "@/lib/exact-decimal";
+import { CalendarCheck, Mail, Plus, Send, Trash2 } from "lucide-react";
+import type { ScheduledWork } from "@openbooks/engine/schedule-boards/prefill";
+import { fillTicketFromSchedule } from "@/lib/field-ticket-schedule-fill";
+import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from "@openbooks/ui";
+import {
+  defaultFormLayout,
+  type FormLayoutConfig,
+  type HeaderFieldPlacement,
+} from "@openbooks/customization";
+import { add } from "@openbooks/engine/money/money";
+import { addCalendarDays, parseIsoDate } from "@openbooks/engine/platform/civil-date";
 import {
   executeDocumentSave,
   persistedDocumentRevision,
   type FencedSaveResult,
   type RevisionFencedRequest,
-} from '../../../components/document-drawer'
-import { displayFormName } from '../../../lib/document-display'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import { useDirtyClose } from '../../../lib/use-dirty-close'
-import { confirmDialog } from '@/lib/confirm'
-import { TransactionDrawer } from '../../../components/transaction-drawer'
-import { HeaderFields } from '../../../components/transaction-form/header-fields'
-import { PdfButton } from '../../../components/pdf-button'
-import { ApprovalActions } from '../../../components/approval-actions'
-import { DateField } from '@/components/date-field'
+} from "../../../components/document-drawer";
+import { displayFormName } from "../../../lib/document-display";
+import { readApiErrorMessage } from "../../../lib/api-error";
+import { useDirtyClose } from "../../../lib/use-dirty-close";
+import { confirmDialog } from "@/lib/confirm";
+import { TransactionDrawer } from "../../../components/transaction-drawer";
+import { HeaderFields } from "../../../components/transaction-form/header-fields";
+import { PdfButton } from "../../../components/pdf-button";
+import { ApprovalActions } from "../../../components/approval-actions";
+import { DateField } from "@/components/date-field";
 /**
  * The field-ticket flyout — the standard transaction drawer: configurable
  * header form (project → derives customer/PO/period), then the ticket's own
@@ -45,183 +56,204 @@ import { DateField } from '@/components/date-field'
  * lifecycle actions in the drawer header.
  */
 type Opt = {
-  id: string
-  name: string
-}; type TimeTypeOpt = Opt & {
-  bill_multiplier: string
-}; type ProjectOpt = Opt & {
-  customerName: string | null
-  period: string
-}; type ProjectTaskOpt = Opt & {
-  code: string | null
-  status: string
-  estimatedHours: string | null
+  id: string;
+  name: string;
+};
+type TimeTypeOpt = Opt & {
+  bill_multiplier: string;
+};
+type ProjectOpt = Opt & {
+  customerName: string | null;
+  period: string;
+};
+type ProjectTaskOpt = Opt & {
+  code: string | null;
+  status: string;
+  estimatedHours: string | null;
   /** Production is reported in the task's budget unit, only on tasks that carry one. */
-  budgetQuantity?: string | null
-  budgetUnit?: string | null
-}; type EquipmentOpt = Opt & {
-  unitNumber: string
-  chargeItemId: string
+  budgetQuantity?: string | null;
+  budgetUnit?: string | null;
+};
+type EquipmentOpt = Opt & {
+  unitNumber: string;
+  chargeItemId: string;
 };
 
 interface EntryRow {
-  id: string
-  employee_party_id: string
-  employee_name: string
-  item_id: string | null
-  item_name: string | null
-  time_type_id: string | null
-  time_classification: 'regular' | 'overtime' | 'double_time' | 'other'
-  project_task_id: string | null
-  project_task_name: string | null
-  worked_on: string
-  hours: string
-  bill_rate: string | null
+  id: string;
+  employee_party_id: string;
+  employee_name: string;
+  item_id: string | null;
+  item_name: string | null;
+  time_type_id: string | null;
+  time_classification: "regular" | "overtime" | "double_time" | "other";
+  project_task_id: string | null;
+  project_task_name: string | null;
+  worked_on: string;
+  hours: string;
+  bill_rate: string | null;
 }
 
 interface LineRow {
-  id: string
-  item_id: string | null
-  item_name: string | null
-  description: string | null
-  quantity: string
-  unit: string | null
-  unit_price: string
-  amount: string
-  bill_rate: string | null
-  bill_amount: string | null
-  equipment_name: string | null
-  project_task_name?: string | null
-  rate_components: { rateLineId: string | null; unitCode: string; unitName: string; quantity: string; rate: string; amount: string }[]
+  id: string;
+  item_id: string | null;
+  item_name: string | null;
+  description: string | null;
+  quantity: string;
+  unit: string | null;
+  unit_price: string;
+  amount: string;
+  bill_rate: string | null;
+  bill_amount: string | null;
+  equipment_name: string | null;
+  project_task_name?: string | null;
+  rate_components: {
+    rateLineId: string | null;
+    unitCode: string;
+    unitName: string;
+    quantity: string;
+    rate: string;
+    amount: string;
+  }[];
 }
 
 interface ProductionRow {
-  id: string
-  projectTaskId: string
-  taskCode: string | null
-  taskName: string
-  quantity: string
-  unit: string
-  note: string | null
+  id: string;
+  projectTaskId: string;
+  taskCode: string | null;
+  taskName: string;
+  quantity: string;
+  unit: string;
+  note: string | null;
 }
 
 interface RateUnitOpt {
-  unitCode: string
-  unitName: string
-  baseQuantity: string
-  costRate: string
-  billRate: string
+  unitCode: string;
+  unitName: string;
+  baseQuantity: string;
+  costRate: string;
+  billRate: string;
 }
 
 export interface TicketPayload {
-  id: string
-  documentNumber: string
-  status: string
-  documentDate: string
-  referenceNumber: string | null
-  memo: string | null
-  customerName: string
-  customerEmail?: string | null
-  projectId: string | null
-  projectName: string
-  foremanName: string
+  id: string;
+  documentNumber: string;
+  status: string;
+  documentDate: string;
+  referenceNumber: string | null;
+  memo: string | null;
+  customerName: string;
+  customerEmail?: string | null;
+  projectId: string | null;
+  projectName: string;
+  foremanName: string;
   /** Exact optimistic-concurrency token — echo it back as expectedRevision. */
-  revision: string
+  revision: string;
   fieldTicket: {
-    period: string
-    periodStart: string
-    periodEnd: string
-    foremanPartyId: string | null
-    rejectionReason?: string
-    signatures?: { customer?: { name: string; at: string; image?: string | null } }
-    send?: { to?: string | null; sentAt: string; expiresAt?: string | null; respondedAt?: string | null }
-  }
-  entries: EntryRow[]
-  lines: LineRow[]
-  laborTotal: string
+    period: string;
+    periodStart: string;
+    periodEnd: string;
+    foremanPartyId: string | null;
+    rejectionReason?: string;
+    signatures?: { customer?: { name: string; at: string; image?: string | null } };
+    send?: {
+      to?: string | null;
+      sentAt: string;
+      expiresAt?: string | null;
+      respondedAt?: string | null;
+    };
+  };
+  entries: EntryRow[];
+  lines: LineRow[];
+  laborTotal: string;
   /** Crew hours with no bill rate (unpriced at $0): shown, never silent. */
-  unpricedLaborHours?: string
-  linesTotal: string
-  grandTotal: string
+  unpricedLaborHours?: string;
+  linesTotal: string;
+  grandTotal: string;
   links: {
-    direction: 'from' | 'to'
-    link_type: string
-    id: string
-    kind: string
-    document_number: string
-    status: string
-  }[]
+    direction: "from" | "to";
+    link_type: string;
+    id: string;
+    kind: string;
+    document_number: string;
+    status: string;
+  }[];
   billingRequests: {
-    id: string
-    requestNumber: string
-    status: string
-    selectedAt: string
-    invoiceDocumentId: string | null
-    invoiceNumber: string | null
-    invoiceStatus: string | null
-  }[]
+    id: string;
+    requestNumber: string;
+    status: string;
+    selectedAt: string;
+    invoiceDocumentId: string | null;
+    invoiceNumber: string | null;
+    invoiceStatus: string | null;
+  }[];
   /** Production quantities reported on the ticket (Progress tracking). */
-  production?: ProductionRow[]
+  production?: ProductionRow[];
 }
 
 export interface GridRow {
-  employeePartyId: string
-  itemId: string | null
-  projectTaskId: string | null
-  cells: Record<string, string>
+  employeePartyId: string;
+  itemId: string | null;
+  projectTaskId: string | null;
+  cells: Record<string, string>;
 }
 
 export interface CrewGridSaveRow {
-  employeePartyId: string
-  itemId: string | null
-  projectTaskId: string | null
-  timeTypeId: string | null
-  hours: Record<string, string>
+  employeePartyId: string;
+  itemId: string | null;
+  projectTaskId: string | null;
+  timeTypeId: string | null;
+  hours: Record<string, string>;
 }
 
 /** A legacy/native entry can be missing its time type. Keep it in the same
  * cell map as typed entries under a non-UUID key so a grid save can round-trip
  * it instead of treating it as a cleared cell. */
-const UNCLASSIFIED_TIME_TYPE_ID = '__unclassified__'
+const UNCLASSIFIED_TIME_TYPE_ID = "__unclassified__";
 
-const STATUS_VARIANT: Record<string, 'secondary' | 'warning' | 'success' | 'outline'> = {
-  draft: 'secondary',
-  pending_approval: 'warning',
-  approved: 'success',
-  voided: 'outline',
-}
+const STATUS_VARIANT: Record<string, "secondary" | "warning" | "success" | "outline"> = {
+  draft: "secondary",
+  pending_approval: "warning",
+  approved: "success",
+  voided: "outline",
+};
 
 /** Each day of the window, capped at two weeks. */
 function daysInWindow(start: string, end: string): string[] {
-  const out: string[] = []
+  const out: string[] = [];
   for (let day = start; out.length < 14; day = addCalendarDays(day, 1)) {
-    out.push(day)
-    if (day >= end) break
+    out.push(day);
+    if (day >= end) break;
   }
-  return out
+  return out;
 }
 
 function ticketWindow(period: string, anchor: string): { start: string; end: string } {
-  if (period !== 'weekly') return { start: anchor, end: anchor }
-  const start = addCalendarDays(anchor, -parseIsoDate(anchor).getUTCDay())
-  return { start, end: addCalendarDays(start, 6) }
+  if (period !== "weekly") return { start: anchor, end: anchor };
+  const start = addCalendarDays(anchor, -parseIsoDate(anchor).getUTCDay());
+  return { start, end: addCalendarDays(start, 6) };
 }
 
 export function buildGrid(entries: EntryRow[]): GridRow[] {
-  const byKey = new Map<string, GridRow>()
+  const byKey = new Map<string, GridRow>();
   for (const e of entries) {
-    const k = `${e.employee_party_id}|${e.item_id ?? ''}|${e.project_task_id ?? ''}`
-    let row = byKey.get(k)
+    const k = `${e.employee_party_id}|${e.item_id ?? ""}|${e.project_task_id ?? ""}`;
+    let row = byKey.get(k);
     if (!row) {
-      row = { employeePartyId: e.employee_party_id, itemId: e.item_id, projectTaskId: e.project_task_id, cells: {} }
-      byKey.set(k, row)
+      row = {
+        employeePartyId: e.employee_party_id,
+        itemId: e.item_id,
+        projectTaskId: e.project_task_id,
+        cells: {},
+      };
+      byKey.set(k, row);
     }
-    const timeTypeId = e.time_type_id ?? UNCLASSIFIED_TIME_TYPE_ID
-    const cellKey = `${timeTypeId}|${e.worked_on}`
-    const previous = row.cells[cellKey]
-    row.cells[cellKey] = previous === undefined ? String(e.hours) : add(previous, String(e.hours))
+    const timeTypeId = e.time_type_id ?? UNCLASSIFIED_TIME_TYPE_ID;
+    const cellKey = `${timeTypeId}|${e.worked_on}`;
+    const previous = row.cells[cellKey];
+    row.cells[cellKey] = previous === undefined ? String(e.hours) : add(previous, String(e.hours));
   }
-  return [...byKey.values()]
+  return [...byKey.values()];
 }
 
 /** Convert the editable grid back to the server's replacement shape. The
@@ -231,15 +263,15 @@ export function serializeGridRows(grid: GridRow[]): CrewGridSaveRow[] {
   return grid
     .filter((r) => r.employeePartyId)
     .flatMap((r) => {
-      const byType: Record<string, Record<string, string>> = {}
+      const byType: Record<string, Record<string, string>> = {};
       for (const [k, v] of Object.entries(r.cells)) {
-        const [timeTypeId, day] = k.split('|')
-        if (v.trim() === '') continue
-        const h = canonicalDecimal(v, 4)
-        if (h !== null && !isPositiveDecimal(h)) continue
+        const [timeTypeId, day] = k.split("|");
+        if (v.trim() === "") continue;
+        const h = canonicalDecimal(v, 4);
+        if (h !== null && !isPositiveDecimal(h)) continue;
         // Keep invalid nonblank input for the native named refusal; never
         // round through binary floats or silently remove a draft crew cell.
-        ;(byType[timeTypeId!] ??= {})[day!] = h ?? v
+        (byType[timeTypeId!] ??= {})[day!] = h ?? v;
       }
       return Object.entries(byType).map(([timeTypeId, hours]) => ({
         employeePartyId: r.employeePartyId,
@@ -247,58 +279,58 @@ export function serializeGridRows(grid: GridRow[]): CrewGridSaveRow[] {
         projectTaskId: r.projectTaskId,
         timeTypeId: timeTypeId === UNCLASSIFIED_TIME_TYPE_ID ? null : timeTypeId,
         hours,
-      }))
-    })
+      }));
+    });
 }
 
 function relatedDocumentHref(kind: string, id: string, projectId: string | null): string | null {
-  if (kind === 'customer_invoice') return `/ar/invoices?doc=${id}`
-  if (kind === 'vendor_bill') return `/ap/bills?doc=${id}`
-  if (kind === 'sales_order') return `/sales-orders?order=${id}`
-  if (kind === 'purchase_order') return `/purchase-orders?order=${id}`
-  if (kind === 'quote') return `/estimates?estimate=${id}`
-  if (kind === 'field_ticket') return `/field-tickets?ticket=${id}`
+  if (kind === "customer_invoice") return `/ar/invoices?doc=${id}`;
+  if (kind === "vendor_bill") return `/ap/bills?doc=${id}`;
+  if (kind === "sales_order") return `/sales-orders?order=${id}`;
+  if (kind === "purchase_order") return `/purchase-orders?order=${id}`;
+  if (kind === "quote") return `/estimates?estimate=${id}`;
+  if (kind === "field_ticket") return `/field-tickets?ticket=${id}`;
   if (projectId) {
     const params = new URLSearchParams({
       project: projectId,
-      projectTab: 'transactions',
+      projectTab: "transactions",
       projectTxn: id,
       projectTxnKind: kind,
-    })
-    return `/projects?${params.toString()}`
+    });
+    return `/projects?${params.toString()}`;
   }
-  return null
+  return null;
 }
 
 export interface FieldTicketDrawerProps {
-  ticket: TicketPayload
-  employees: Opt[]
-  laborItems: Opt[]
-  timeTypes: TimeTypeOpt[]
-  catalogItems: { id: string; name: string; kind: string; default_rate: string | null }[]
-  projects: ProjectOpt[]
-  projectTasks: ProjectTaskOpt[]
-  equipmentUnits: EquipmentOpt[]
-  equipmentEnabled: boolean
+  ticket: TicketPayload;
+  employees: Opt[];
+  laborItems: Opt[];
+  timeTypes: TimeTypeOpt[];
+  catalogItems: { id: string; name: string; kind: string; default_rate: string | null }[];
+  projects: ProjectOpt[];
+  projectTasks: ProjectTaskOpt[];
+  equipmentUnits: EquipmentOpt[];
+  equipmentEnabled: boolean;
   /** Projects → Progress tracking: the ticket reports production per task. */
-  progressEnabled?: boolean
-  schedulingEnabled?: boolean
-  layout?: FormLayoutConfig
-  availableLayouts?: { id: string; name: string; isDefault?: boolean }[]
-  currentLayoutId?: string | null
-  canCustomize?: boolean
-  canManage: boolean
-  initialMode?: DrawerMode
+  progressEnabled?: boolean;
+  schedulingEnabled?: boolean;
+  layout?: FormLayoutConfig;
+  availableLayouts?: { id: string; name: string; isDefault?: boolean }[];
+  currentLayoutId?: string | null;
+  canCustomize?: boolean;
+  canManage: boolean;
+  initialMode?: DrawerMode;
 }
 
 export type FieldTicketMutationInput = {
-  ticketId: string
-  revision: string
-  method: 'PATCH' | 'POST'
-  body: Record<string, unknown>
-  fallbackMessage?: string
-  transport?: typeof fetch
-}
+  ticketId: string;
+  revision: string;
+  method: "PATCH" | "POST";
+  body: Record<string, unknown>;
+  fallbackMessage?: string;
+  transport?: typeof fetch;
+};
 
 /**
  * One revision-fenced field-ticket mutation — the exact routine the drawer's
@@ -314,325 +346,459 @@ export async function sendFieldTicketMutation(
     path: `/api/field-tickets/${input.ticketId}`,
     method: input.method,
     body: { ...input.body, expectedRevision: persistedDocumentRevision(input.revision) },
-  }
+  };
   const outcome = await executeDocumentSave<TicketPayload>(
     request,
-    input.fallbackMessage ?? 'failed',
+    input.fallbackMessage ?? "failed",
     input.transport ?? fetch,
-  )
+  );
   if (!outcome.ok) {
     return outcome.isConflict
-      ? { status: 'conflict', message: outcome.message }
-      : { status: 'error', message: outcome.message }
+      ? { status: "conflict", message: outcome.message }
+      : { status: "error", message: outcome.message };
   }
-  return { status: 'saved', saved: outcome.data, revision: outcome.revision }
+  return { status: "saved", saved: outcome.data, revision: outcome.revision };
 }
 
 export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
-  const { date } = useViewerFormat()
-  const { money } = useMoney()
-  const t = useTranslations('fieldTickets')
-  const tCommon = useTranslations('common')
-  const tNav = useTranslations('nav')
-  const tScheduling = useTranslations('scheduling')
-  const headerFieldId = useId()
-  const router = useRouter()
-  const pathname = usePathname() ?? '/field-tickets'
-  const searchParams = useSearchParams()
-  const [ticket, setTicket] = useState(props.ticket)
+  const { date } = useViewerFormat();
+  const { money } = useMoney();
+  const t = useTranslations("fieldTickets");
+  const tCommon = useTranslations("common");
+  const tNav = useTranslations("nav");
+  const tScheduling = useTranslations("scheduling");
+  const headerFieldId = useId();
+  const router = useRouter();
+  const pathname = usePathname() ?? "/field-tickets";
+  const searchParams = useSearchParams();
+  const [ticket, setTicket] = useState(props.ticket);
   // State updates are deferred until React renders again. Keep the revision
   // returned by each successful mutation synchronously available so a Save
   // spanning multiple sections can fence its next request with the newest
   // server token instead of the closure's stale ticket snapshot.
-  const latestRevisionRef = useRef(props.ticket.revision)
+  const latestRevisionRef = useRef(props.ticket.revision);
   // Project-context lookups are sequenced: a slow response
   // for a previously selected project must never overwrite the state
   // derived from the current selection.
-  const projectContextRequest = useRef(0)
-  const initialCanEdit = props.ticket.status === 'draft' && props.canManage
+  const projectContextRequest = useRef(0);
+  const initialCanEdit = props.ticket.status === "draft" && props.canManage;
   // Existing records default to read-only; newly created drafts can explicitly
   // request edit mode. Permissions and lifecycle state remain authoritative.
   const [mode, setMode] = useState<DrawerMode>(
     initialDrawerMode(props.initialMode, initialCanEdit),
-  )
-  const [grid, setGrid] = useState<GridRow[]>(() => buildGrid(props.ticket.entries))
-  const [gridDirty, setGridDirty] = useState(false)
-  const [scheduleTimeTypeId, setScheduleTimeTypeId] = useState('')
-  const [scheduleRetry, setScheduleRetry] = useState(0)
-  const [filledWindow, setFilledWindow] = useState<{ start: string; end: string } | null>(null)
-  const [busy, setBusy] = useState(false)
-  const { refusal, refuse, clearRefusal } = useAppAction()
-  const [sending, setSending] = useState(false)
-  const [sendTo, setSendTo] = useState(props.ticket.customerEmail ?? '')
-  const [sendMessage, setSendMessage] = useState('')
+  );
+  const [grid, setGrid] = useState<GridRow[]>(() => buildGrid(props.ticket.entries));
+  const [gridDirty, setGridDirty] = useState(false);
+  const [scheduleTimeTypeId, setScheduleTimeTypeId] = useState("");
+  const [scheduleRetry, setScheduleRetry] = useState(0);
+  const [filledWindow, setFilledWindow] = useState<{ start: string; end: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { refusal, refuse, clearRefusal } = useAppAction();
+  const [sending, setSending] = useState(false);
+  const [sendTo, setSendTo] = useState(props.ticket.customerEmail ?? "");
+  const [sendMessage, setSendMessage] = useState("");
   // A refused send (e.g. email delivery unconfigured, 422) must
   // persist in the dialog — toasts alone expire and the failure reads silent.
-  const [sendError, setSendError] = useState<string | null>(null)
-  const [customerName, setCustomerName] = useState(props.ticket.customerName)
-  const [projectTasks, setProjectTasks] = useState(props.projectTasks)
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [customerName, setCustomerName] = useState(props.ticket.customerName);
+  const [projectTasks, setProjectTasks] = useState(props.projectTasks);
 
   // Header form state (standard configurable form fields).
-  const [projectId, setProjectId] = useState(props.ticket.projectId ?? '')
-  const [documentDate, setDocumentDate] = useState(props.ticket.documentDate)
-  const [referenceNumber, setReferenceNumber] = useState(props.ticket.referenceNumber ?? '')
-  const [memo, setMemo] = useState(props.ticket.memo ?? '')
-  const [period, setPeriod] = useState(props.ticket.fieldTicket.period)
-  const [foreman, setForeman] = useState(props.ticket.fieldTicket.foremanPartyId ?? '')
-  const [headerDirty, setHeaderDirty] = useState(false)
+  const [projectId, setProjectId] = useState(props.ticket.projectId ?? "");
+  const [documentDate, setDocumentDate] = useState(props.ticket.documentDate);
+  const [referenceNumber, setReferenceNumber] = useState(props.ticket.referenceNumber ?? "");
+  const [memo, setMemo] = useState(props.ticket.memo ?? "");
+  const [period, setPeriod] = useState(props.ticket.fieldTicket.period);
+  const [foreman, setForeman] = useState(props.ticket.fieldTicket.foremanPartyId ?? "");
+  const [headerDirty, setHeaderDirty] = useState(false);
 
   // Add-line form.
-  const [lineItem, setLineItem] = useState('')
-  const [lineQty, setLineQty] = useState('1')
-  const [lineRate, setLineRate] = useState('')
-  const [lineAmount, setLineAmount] = useState('')
-  const [lineEquipment, setLineEquipment] = useState('')
-  const [lineOperator, setLineOperator] = useState('')
-  const [lineTask, setLineTask] = useState('')
+  const [lineItem, setLineItem] = useState("");
+  const [lineQty, setLineQty] = useState("1");
+  const [lineRate, setLineRate] = useState("");
+  const [lineAmount, setLineAmount] = useState("");
+  const [lineEquipment, setLineEquipment] = useState("");
+  const [lineOperator, setLineOperator] = useState("");
+  const [lineTask, setLineTask] = useState("");
   // Add-production form: the unit is the task's budget unit, never typed.
-  const [prodTask, setProdTask] = useState('')
-  const [prodQty, setProdQty] = useState('')
-  const [prodNote, setProdNote] = useState('')
-  const [lineRateUnit, setLineRateUnit] = useState('')
-  const [lineRateUnits, setLineRateUnits] = useState<RateUnitOpt[]>([])
-  const [lineRateLoading, setLineRateLoading] = useState(false)
-  const [lineRateSource, setLineRateSource] = useState<'rate_book' | 'item_default' | ''>('')
-  const [linePolicyProvenance, setLinePolicyProvenance] = useState<'pinned' | 'inferred' | 'live' | ''>('')
-  const [lineComponents, setLineComponents] = useState<{ unitName: string; quantity: string; rate: string; amount: string }[]>([])
+  const [prodTask, setProdTask] = useState("");
+  const [prodQty, setProdQty] = useState("");
+  const [prodNote, setProdNote] = useState("");
+  const [lineRateUnit, setLineRateUnit] = useState("");
+  const [lineRateUnits, setLineRateUnits] = useState<RateUnitOpt[]>([]);
+  const [lineRateLoading, setLineRateLoading] = useState(false);
+  const [lineRateSource, setLineRateSource] = useState<"rate_book" | "item_default" | "">("");
+  const [linePolicyProvenance, setLinePolicyProvenance] = useState<
+    "pinned" | "inferred" | "live" | ""
+  >("");
+  const [lineComponents, setLineComponents] = useState<
+    { unitName: string; quantity: string; rate: string; amount: string }[]
+  >([]);
   // The last rate lookup's named refusal, pinned beside the (stale but kept)
   // values instead of a toast: toasts expire and the blanked fields read as
   // "no rate" rather than "rate refused".
-  const [lineRateError, setLineRateError] = useState<string | null>(null)
+  const [lineRateError, setLineRateError] = useState<string | null>(null);
 
-  const effectiveLayout = props.layout ?? defaultFormLayout('field_ticket')
-  const actionLayout = effectiveLayout.actions
-  const canEditStatus = ticket.status === 'draft' && props.canManage
-  const editable = mode === 'edit' && canEditStatus
-  const gridHasHours = grid.some((row) => Object.values(row.cells).some((value) => Number(value) > 0))
-  const visibleWindow = useMemo(
-    () => {
-      if (editable && filledWindow && gridDirty) return filledWindow
-      return editable && !gridHasHours
-        ? ticketWindow(period, documentDate)
-        : { start: ticket.fieldTicket.periodStart, end: ticket.fieldTicket.periodEnd }
-    },
-    [documentDate, editable, filledWindow, gridDirty, gridHasHours, period, ticket.fieldTicket.periodEnd, ticket.fieldTicket.periodStart],
-  )
-  const days = useMemo(() => daysInWindow(visibleWindow.start, visibleWindow.end), [visibleWindow])
-  const sig = ticket.fieldTicket.signatures
-  const [schedulePreview, setSchedulePreview] = useIdentityState<{ scheduled: ScheduledWork[]; timeTypes: Opt[] } | null>([editable, props.schedulingEnabled, projectId, ticket.id, visibleWindow.start, visibleWindow.end, scheduleRetry], null)
-  const [scheduleError, setScheduleError] = useIdentityState<string | null>([editable, props.schedulingEnabled, projectId, ticket.id, visibleWindow.start, visibleWindow.end, scheduleRetry], null)
-  const [scheduleLoading, setScheduleLoading] = useIdentityState([editable, props.schedulingEnabled, projectId, ticket.id, visibleWindow.start, visibleWindow.end, scheduleRetry], Boolean(editable && props.schedulingEnabled && projectId))
-
+  const effectiveLayout = props.layout ?? defaultFormLayout("field_ticket");
+  const actionLayout = effectiveLayout.actions;
+  const canEditStatus = ticket.status === "draft" && props.canManage;
+  const editable = mode === "edit" && canEditStatus;
+  const gridHasHours = grid.some((row) =>
+    Object.values(row.cells).some((value) => Number(value) > 0),
+  );
+  const visibleWindow = useMemo(() => {
+    if (editable && filledWindow && gridDirty) return filledWindow;
+    return editable && !gridHasHours
+      ? ticketWindow(period, documentDate)
+      : { start: ticket.fieldTicket.periodStart, end: ticket.fieldTicket.periodEnd };
+  }, [
+    documentDate,
+    editable,
+    filledWindow,
+    gridDirty,
+    gridHasHours,
+    period,
+    ticket.fieldTicket.periodEnd,
+    ticket.fieldTicket.periodStart,
+  ]);
+  const days = useMemo(() => daysInWindow(visibleWindow.start, visibleWindow.end), [visibleWindow]);
+  const sig = ticket.fieldTicket.signatures;
+  const [schedulePreview, setSchedulePreview] = useIdentityState<{
+    scheduled: ScheduledWork[];
+    timeTypes: Opt[];
+  } | null>(
+    [
+      editable,
+      props.schedulingEnabled,
+      projectId,
+      ticket.id,
+      visibleWindow.start,
+      visibleWindow.end,
+      scheduleRetry,
+    ],
+    null,
+  );
+  const [scheduleError, setScheduleError] = useIdentityState<string | null>(
+    [
+      editable,
+      props.schedulingEnabled,
+      projectId,
+      ticket.id,
+      visibleWindow.start,
+      visibleWindow.end,
+      scheduleRetry,
+    ],
+    null,
+  );
+  const [scheduleLoading, setScheduleLoading] = useIdentityState(
+    [
+      editable,
+      props.schedulingEnabled,
+      projectId,
+      ticket.id,
+      visibleWindow.start,
+      visibleWindow.end,
+      scheduleRetry,
+    ],
+    Boolean(editable && props.schedulingEnabled && projectId),
+  );
 
   useEffect(() => {
-    if (!editable || !props.schedulingEnabled || !projectId) return
-    const controller = new AbortController()
-    let active = true
-    const query = new URLSearchParams({ projectId, from: visibleWindow.start, through: visibleWindow.end })
-    void fetch(`/api/field-tickets/${ticket.id}/schedule-preview?${query}`, { signal: controller.signal })
+    if (!editable || !props.schedulingEnabled || !projectId) return;
+    const controller = new AbortController();
+    let active = true;
+    const query = new URLSearchParams({
+      projectId,
+      from: visibleWindow.start,
+      through: visibleWindow.end,
+    });
+    void fetch(`/api/field-tickets/${ticket.id}/schedule-preview?${query}`, {
+      signal: controller.signal,
+    })
       .then(async (response) => {
-        if (!response.ok) throw new Error(await readApiErrorMessage(response, tScheduling('errors.load')))
-        const preview = await response.json() as { scheduled: ScheduledWork[]; timeTypes: Opt[] }
+        if (!response.ok)
+          throw new Error(await readApiErrorMessage(response, tScheduling("errors.load")));
+        const preview = (await response.json()) as { scheduled: ScheduledWork[]; timeTypes: Opt[] };
         if (active) {
-          setSchedulePreview(preview)
-          setScheduleTimeTypeId((selected) => preview.timeTypes.some((type) => type.id === selected)
-            ? selected : preview.timeTypes.length === 1 ? preview.timeTypes[0]!.id : '')
+          setSchedulePreview(preview);
+          setScheduleTimeTypeId((selected) =>
+            preview.timeTypes.some((type) => type.id === selected)
+              ? selected
+              : preview.timeTypes.length === 1
+                ? preview.timeTypes[0]!.id
+                : "",
+          );
         }
       })
       .catch((error: unknown) => {
-        if (active && (!(error instanceof Error) || error.name !== 'AbortError')) {
-          setScheduleError(error instanceof Error ? error.message : tScheduling('errors.load'))
+        if (active && (!(error instanceof Error) || error.name !== "AbortError")) {
+          setScheduleError(error instanceof Error ? error.message : tScheduling("errors.load"));
         }
       })
-      .finally(() => { if (active) setScheduleLoading(false) })
-    return () => { active = false; controller.abort() }
-  }, [editable, projectId, props.schedulingEnabled, scheduleRetry, ticket.id, visibleWindow.start, visibleWindow.end, tScheduling, setSchedulePreview, setScheduleError, setScheduleLoading])
+      .finally(() => {
+        if (active) setScheduleLoading(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    editable,
+    projectId,
+    props.schedulingEnabled,
+    scheduleRetry,
+    ticket.id,
+    visibleWindow.start,
+    visibleWindow.end,
+    tScheduling,
+    setSchedulePreview,
+    setScheduleError,
+    setScheduleLoading,
+  ]);
 
   function onFillFromSchedule() {
-    if (!schedulePreview || !schedulePreview.timeTypes.some((type) => type.id === scheduleTimeTypeId) || !editable || busy) return
-    if (!props.timeTypes.some((type) => type.id === scheduleTimeTypeId)
-      || schedulePreview.scheduled.some((work) => !props.employees.some((employee) => employee.id === work.workerPartyId)
-        || (work.projectTaskId !== null && !projectTasks.some((task) => task.id === work.projectTaskId)))) {
-      setScheduleError(tScheduling('prefill.reload'))
-      return
+    if (
+      !schedulePreview ||
+      !schedulePreview.timeTypes.some((type) => type.id === scheduleTimeTypeId) ||
+      !editable ||
+      busy
+    )
+      return;
+    if (
+      !props.timeTypes.some((type) => type.id === scheduleTimeTypeId) ||
+      schedulePreview.scheduled.some(
+        (work) =>
+          !props.employees.some((employee) => employee.id === work.workerPartyId) ||
+          (work.projectTaskId !== null &&
+            !projectTasks.some((task) => task.id === work.projectTaskId)),
+      )
+    ) {
+      setScheduleError(tScheduling("prefill.reload"));
+      return;
     }
     const result = fillTicketFromSchedule(grid, schedulePreview.scheduled, {
-      projectId, days, timeTypeId: scheduleTimeTypeId,
-    })
-    if (result.filled === 0) { toast.info(tScheduling('prefill.nothing')); return }
-    setGrid(result.rows)
-    setFilledWindow(visibleWindow)
-    setGridDirty(true)
-    toast.success(tScheduling('prefill.filled', { count: result.filled, skipped: result.skipped }))
+      projectId,
+      days,
+      timeTypeId: scheduleTimeTypeId,
+    });
+    if (result.filled === 0) {
+      toast.info(tScheduling("prefill.nothing"));
+      return;
+    }
+    setGrid(result.rows);
+    setFilledWindow(visibleWindow);
+    setGridDirty(true);
+    toast.success(tScheduling("prefill.filled", { count: result.filled, skipped: result.skipped }));
   }
 
-  const selectedItem = props.catalogItems.find((item) => item.id === lineItem)
-  const equipmentOptions = props.equipmentUnits.filter((unit) => unit.chargeItemId === lineItem)
-  const unclassifiedTimeTypeName = t('editor.crew.unclassified')
+  const selectedItem = props.catalogItems.find((item) => item.id === lineItem);
+  const equipmentOptions = props.equipmentUnits.filter((unit) => unit.chargeItemId === lineItem);
+  const unclassifiedTimeTypeName = t("editor.crew.unclassified");
   const gridTimeTypes = useMemo(() => {
-    const hasUnclassified = grid.some((row) => Object.keys(row.cells).some((key) => key.startsWith(`${UNCLASSIFIED_TIME_TYPE_ID}|`)))
+    const hasUnclassified = grid.some((row) =>
+      Object.keys(row.cells).some((key) => key.startsWith(`${UNCLASSIFIED_TIME_TYPE_ID}|`)),
+    );
     return hasUnclassified
-      ? [...props.timeTypes, { id: UNCLASSIFIED_TIME_TYPE_ID, name: unclassifiedTimeTypeName, bill_multiplier: '1' }]
-      : props.timeTypes
-  }, [grid, props.timeTypes, unclassifiedTimeTypeName])
+      ? [
+          ...props.timeTypes,
+          { id: UNCLASSIFIED_TIME_TYPE_ID, name: unclassifiedTimeTypeName, bill_multiplier: "1" },
+        ]
+      : props.timeTypes;
+  }, [grid, props.timeTypes, unclassifiedTimeTypeName]);
   /** The crew this ticket names — the only people its equipment can be
    *  attributed to. Taken from the hours grid so a member added in this session
    *  is selectable as soon as the crew is saved. */
   const crewOperatorOptions = useMemo(() => {
-    const seen = new Set(grid.map((row) => row.employeePartyId).filter(Boolean))
+    const seen = new Set(grid.map((row) => row.employeePartyId).filter(Boolean));
     return props.employees
       .filter((employee) => seen.has(employee.id))
-      .map((employee) => ({ value: employee.id, label: employee.name }))
-  }, [grid, props.employees])
-  const requestedSection = searchParams.get('transactionTab')
+      .map((employee) => ({ value: employee.id, label: employee.name }));
+  }, [grid, props.employees]);
+  const requestedSection = searchParams.get("transactionTab");
   const [activeSection, setActiveSection] = useState(() =>
-    requestedSection === 'time' || requestedSection === 'items' || requestedSection === 'tasks' || requestedSection === 'related'
-      || requestedSection === 'production'
+    requestedSection === "time" ||
+    requestedSection === "items" ||
+    requestedSection === "tasks" ||
+    requestedSection === "related" ||
+    requestedSection === "production"
       ? requestedSection
-      : 'details',
-  )
+      : "details",
+  );
 
   // Reset the resolved rate (or enter the loading state) when the rate inputs
   // change, during render (same committed values, no extra render). Keyed on
   // the fetch inputs below.
   const [prevRateKeys, setPrevRateKeys] = useState(() => ({
-    editable, lineEquipment, lineItem, lineQty, lineRateUnit, projectId, windowEnd: visibleWindow.end,
-  }))
+    editable,
+    lineEquipment,
+    lineItem,
+    lineQty,
+    lineRateUnit,
+    projectId,
+    windowEnd: visibleWindow.end,
+  }));
   if (
-    prevRateKeys.editable !== editable || prevRateKeys.lineEquipment !== lineEquipment ||
-    prevRateKeys.lineItem !== lineItem || prevRateKeys.lineQty !== lineQty ||
-    prevRateKeys.lineRateUnit !== lineRateUnit || prevRateKeys.projectId !== projectId ||
+    prevRateKeys.editable !== editable ||
+    prevRateKeys.lineEquipment !== lineEquipment ||
+    prevRateKeys.lineItem !== lineItem ||
+    prevRateKeys.lineQty !== lineQty ||
+    prevRateKeys.lineRateUnit !== lineRateUnit ||
+    prevRateKeys.projectId !== projectId ||
     prevRateKeys.windowEnd !== visibleWindow.end
   ) {
     setPrevRateKeys({
-      editable, lineEquipment, lineItem, lineQty, lineRateUnit, projectId, windowEnd: visibleWindow.end,
-    })
+      editable,
+      lineEquipment,
+      lineItem,
+      lineQty,
+      lineRateUnit,
+      projectId,
+      windowEnd: visibleWindow.end,
+    });
     if (!editable || !projectId || !lineItem) {
-      setLineRate('')
-      setLineAmount('')
-      setLineRateSource('')
-      setLinePolicyProvenance('')
-      setLineComponents([])
-      setLineRateUnit('')
-      setLineRateUnits([])
-      setLineRateLoading(false)
-      setLineRateError(null)
+      setLineRate("");
+      setLineAmount("");
+      setLineRateSource("");
+      setLinePolicyProvenance("");
+      setLineComponents([]);
+      setLineRateUnit("");
+      setLineRateUnits([]);
+      setLineRateLoading(false);
+      setLineRateError(null);
     } else if (!Number.isInteger(Number(lineQty)) || Number(lineQty) <= 0) {
-      setLineRate('')
-      setLineAmount('')
-      setLineRateSource('')
-      setLinePolicyProvenance('')
-      setLineComponents([])
-      setLineRateLoading(false)
-      setLineRateError(null)
+      setLineRate("");
+      setLineAmount("");
+      setLineRateSource("");
+      setLinePolicyProvenance("");
+      setLineComponents([]);
+      setLineRateLoading(false);
+      setLineRateError(null);
     } else {
-      setLineRateLoading(true)
-      setLineRateError(null)
+      setLineRateLoading(true);
+      setLineRateError(null);
     }
   }
 
   useEffect(() => {
-    if (!editable || !projectId || !lineItem) return
-    if (!Number.isInteger(Number(lineQty)) || Number(lineQty) <= 0) return
-    const controller = new AbortController()
-    let active = true
-    const query = new URLSearchParams({ projectId, itemId: lineItem, quantity: lineQty, onDate: visibleWindow.end })
-    if (lineEquipment) query.set('equipmentUnitId', lineEquipment)
-    if (lineRateUnit) query.set('rateUnitCode', lineRateUnit)
+    if (!editable || !projectId || !lineItem) return;
+    if (!Number.isInteger(Number(lineQty)) || Number(lineQty) <= 0) return;
+    const controller = new AbortController();
+    let active = true;
+    const query = new URLSearchParams({
+      projectId,
+      itemId: lineItem,
+      quantity: lineQty,
+      onDate: visibleWindow.end,
+    });
+    if (lineEquipment) query.set("equipmentUnitId", lineEquipment);
+    if (lineRateUnit) query.set("rateUnitCode", lineRateUnit);
     void fetch(`/api/field-tickets/item-rate?${query}`, { signal: controller.signal })
       .then(async (response) => {
         // The status is checked before the body parses: a 422 (no rate for
         // this item/date) must name its reason, never throw a SyntaxError.
-        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.lines.rateFailed')))
+        if (!response.ok)
+          throw new Error(await readApiErrorMessage(response, t("editor.lines.rateFailed")));
         const body = (await response.json()) as {
-          rateUnits?: RateUnitOpt[]
-          rate?: string | number | null
-          amount?: string | number | null
-          source?: string
-          policyProvenance?: string
-          components?: { unitName: string; quantity: string; rate: string; amount: string }[]
-        }
-        if (!active) return
-        const rateUnits = Array.isArray(body.rateUnits) ? body.rateUnits as RateUnitOpt[] : []
-        setLineRateUnits(rateUnits)
-        if (rateUnits.length === 0) setLineRateUnit('')
-        else if (!rateUnits.some((unit) => unit.unitCode === lineRateUnit)) setLineRateUnit(rateUnits[0]!.unitCode)
-        setLineRate(String(body.rate ?? ''))
-        setLineAmount(String(body.amount ?? ''))
-        setLineRateSource(body.source === 'rate_book' ? 'rate_book' : 'item_default')
+          rateUnits?: RateUnitOpt[];
+          rate?: string | number | null;
+          amount?: string | number | null;
+          source?: string;
+          policyProvenance?: string;
+          components?: { unitName: string; quantity: string; rate: string; amount: string }[];
+        };
+        if (!active) return;
+        const rateUnits = Array.isArray(body.rateUnits) ? (body.rateUnits as RateUnitOpt[]) : [];
+        setLineRateUnits(rateUnits);
+        if (rateUnits.length === 0) setLineRateUnit("");
+        else if (!rateUnits.some((unit) => unit.unitCode === lineRateUnit))
+          setLineRateUnit(rateUnits[0]!.unitCode);
+        setLineRate(String(body.rate ?? ""));
+        setLineAmount(String(body.amount ?? ""));
+        setLineRateSource(body.source === "rate_book" ? "rate_book" : "item_default");
         setLinePolicyProvenance(
-          body.policyProvenance === 'inferred' || body.policyProvenance === 'pinned' || body.policyProvenance === 'live'
+          body.policyProvenance === "inferred" ||
+            body.policyProvenance === "pinned" ||
+            body.policyProvenance === "live"
             ? body.policyProvenance
-            : '',
-        )
-        setLineComponents(Array.isArray(body.components) ? body.components : [])
-        setLineRateError(null)
+            : "",
+        );
+        setLineComponents(Array.isArray(body.components) ? body.components : []);
+        setLineRateError(null);
       })
       .catch((error: unknown) => {
-        if (active && (!(error instanceof Error) || error.name !== 'AbortError')) {
+        if (active && (!(error instanceof Error) || error.name !== "AbortError")) {
           // Keep the last good rate on screen: a refused lookup pins its
           // named reason beside the stale values instead of blanking them
           // into a silent "no rate".
-          setLineRateError(error instanceof Error ? error.message : t('editor.lines.rateFailed'))
+          setLineRateError(error instanceof Error ? error.message : t("editor.lines.rateFailed"));
         }
       })
-      .finally(() => { if (active) setLineRateLoading(false) })
+      .finally(() => {
+        if (active) setLineRateLoading(false);
+      });
     return () => {
-      active = false
-      controller.abort()
-    }
-  }, [editable, lineEquipment, lineItem, lineQty, lineRateUnit, projectId, t, visibleWindow.end])
+      active = false;
+      controller.abort();
+    };
+  }, [editable, lineEquipment, lineItem, lineQty, lineRateUnit, projectId, t, visibleWindow.end]);
 
   function applyPayload(j: TicketPayload) {
     // Fail closed before adopting any server state: a revision-less payload
     // could never fence this editor's next mutation.
-    persistedDocumentRevision(j.revision)
-    latestRevisionRef.current = j.revision
-    setTicket(j)
-    setCustomerName(j.customerName)
-    setGrid(buildGrid(j.entries))
-    setGridDirty(false)
-    setFilledWindow(null)
-    setProjectId(j.projectId ?? '')
-    setDocumentDate(j.documentDate)
-    setReferenceNumber(j.referenceNumber ?? '')
-    setMemo(j.memo ?? '')
-    setPeriod(j.fieldTicket.period)
-    setForeman(j.fieldTicket.foremanPartyId ?? '')
-    setSendTo(j.fieldTicket.send?.to ?? j.customerEmail ?? '')
-    setHeaderDirty(false)
+    persistedDocumentRevision(j.revision);
+    latestRevisionRef.current = j.revision;
+    setTicket(j);
+    setCustomerName(j.customerName);
+    setGrid(buildGrid(j.entries));
+    setGridDirty(false);
+    setFilledWindow(null);
+    setProjectId(j.projectId ?? "");
+    setDocumentDate(j.documentDate);
+    setReferenceNumber(j.referenceNumber ?? "");
+    setMemo(j.memo ?? "");
+    setPeriod(j.fieldTicket.period);
+    setForeman(j.fieldTicket.foremanPartyId ?? "");
+    setSendTo(j.fieldTicket.send?.to ?? j.customerEmail ?? "");
+    setHeaderDirty(false);
   }
 
   async function selectProject(nextProjectId: string) {
-    setProjectId(nextProjectId)
+    setProjectId(nextProjectId);
     // Every selection invalidates earlier in-flight lookups, including the
     // empty-selection case below which performs no fetch of its own.
-    const request = ++projectContextRequest.current
-    setHeaderDirty(true)
-    setLineEquipment('')
-    setLineRateUnit('')
-    setLineRateUnits([])
-    const option = props.projects.find((project) => project.id === nextProjectId)
-    setCustomerName(option?.customerName ?? '')
-    if (!gridHasHours && option?.period) setPeriod(option.period)
+    const request = ++projectContextRequest.current;
+    setHeaderDirty(true);
+    setLineEquipment("");
+    setLineRateUnit("");
+    setLineRateUnits([]);
+    const option = props.projects.find((project) => project.id === nextProjectId);
+    setCustomerName(option?.customerName ?? "");
+    if (!gridHasHours && option?.period) setPeriod(option.period);
     if (!nextProjectId) {
-      setProjectTasks([])
-      return
+      setProjectTasks([]);
+      return;
     }
     try {
-      const response = await fetch(`/api/field-tickets/project-context?projectId=${encodeURIComponent(nextProjectId)}`)
+      const response = await fetch(
+        `/api/field-tickets/project-context?projectId=${encodeURIComponent(nextProjectId)}`,
+      );
       // The status is checked before the body parses: a non-JSON 502 page
       // must toast the translated fallback, never a SyntaxError.
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.lines.projectLoadFailed')))
-      const body = (await response.json()) as { customerName?: string; tasks?: unknown; period?: string }
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, t("editor.lines.projectLoadFailed")));
+      const body = (await response.json()) as {
+        customerName?: string;
+        tasks?: unknown;
+        period?: string;
+      };
       // Apply only while this project is still selected: a superseded
       // response would offer another project's tasks on this ticket.
-      if (request !== projectContextRequest.current) return
-      setCustomerName(body.customerName ?? '')
-      setProjectTasks(Array.isArray(body.tasks) ? body.tasks : [])
-      if (!gridHasHours && body.period) setPeriod(body.period)
+      if (request !== projectContextRequest.current) return;
+      setCustomerName(body.customerName ?? "");
+      setProjectTasks(Array.isArray(body.tasks) ? body.tasks : []);
+      if (!gridHasHours && body.period) setPeriod(body.period);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('editor.lines.projectLoadFailed'))
+      toast.error(error instanceof Error ? error.message : t("editor.lines.projectLoadFailed"));
     }
   }
 
@@ -643,136 +809,158 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
    */
   async function reloadTicketAfterConflict(): Promise<void> {
     try {
-      const response = await fetch(`/api/field-tickets/${ticket.id}`)
+      const response = await fetch(`/api/field-tickets/${ticket.id}`);
       // The status is checked before the body parses, and the named refusal
       // is toasted — never the literal 'failed' the operator cannot act on.
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.lines.reloadFailed')))
-      applyPayload((await response.json()) as TicketPayload)
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, t("editor.lines.reloadFailed")));
+      applyPayload((await response.json()) as TicketPayload);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('editor.lines.reloadFailed'))
+      toast.error(e instanceof Error ? e.message : t("editor.lines.reloadFailed"));
     }
   }
 
   async function call(
-    method: 'PATCH' | 'POST',
+    method: "PATCH" | "POST",
     payload: Record<string, unknown>,
     options: { preserveDraft?: boolean; onErrorMessage?: (message: string) => void } = {},
   ): Promise<boolean> {
-    setBusy(true)
-    clearRefusal()
+    setBusy(true);
+    clearRefusal();
     try {
       const result = await sendFieldTicketMutation({
         ticketId: ticket.id,
         revision: latestRevisionRef.current,
         method,
         body: payload,
-        fallbackMessage: tCommon('feedback.saveFailed'),
-      })
-      if (result.status !== 'saved') {
-        refuse(result.message, tCommon('feedback.saveFailed'))
-        options.onErrorMessage?.(result.message)
-        if (result.status === 'conflict') await reloadTicketAfterConflict()
-        return false
+        fallbackMessage: tCommon("feedback.saveFailed"),
+      });
+      if (result.status !== "saved") {
+        refuse(result.message, tCommon("feedback.saveFailed"));
+        options.onErrorMessage?.(result.message);
+        if (result.status === "conflict") await reloadTicketAfterConflict();
+        return false;
       }
       if (options.preserveDraft) {
         // Some ticket operations persist immediately (header, grid, item
         // lines). Keep the other unsaved work area intact while refreshing
         // server-owned totals and snapshots.
-        latestRevisionRef.current = result.revision
-        setTicket(result.saved)
-        setCustomerName(result.saved.customerName)
+        latestRevisionRef.current = result.revision;
+        setTicket(result.saved);
+        setCustomerName(result.saved.customerName);
       } else {
-        applyPayload(result.saved)
+        applyPayload(result.saved);
       }
-      router.refresh()
-      return true
+      router.refresh();
+      return true;
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function saveHeader(): Promise<boolean> {
-    if (!headerDirty) return true
-    const saved = await call('PATCH', {
-      projectId: projectId || null,
-      documentDate,
-      referenceNumber: referenceNumber || null,
-      memo: memo || null,
-      period,
-      foremanPartyId: foreman || null,
-    }, { preserveDraft: true })
-    if (saved) setHeaderDirty(false)
-    return saved
+    if (!headerDirty) return true;
+    const saved = await call(
+      "PATCH",
+      {
+        projectId: projectId || null,
+        documentDate,
+        referenceNumber: referenceNumber || null,
+        memo: memo || null,
+        period,
+        foremanPartyId: foreman || null,
+      },
+      { preserveDraft: true },
+    );
+    if (saved) setHeaderDirty(false);
+    return saved;
   }
 
   async function saveGrid(): Promise<boolean> {
-    const rows = serializeGridRows(grid)
-    const saved = await call('POST', { action: 'save-grid', rows }, { preserveDraft: true })
-    if (saved) setGridDirty(false)
-    return saved
+    const rows = serializeGridRows(grid);
+    const saved = await call("POST", { action: "save-grid", rows }, { preserveDraft: true });
+    if (saved) setGridDirty(false);
+    return saved;
   }
 
   async function addItemLine() {
-    if (!lineItem) return toast.error(t('editor.lines.itemRequired'))
-    if (!/^[1-9]\d*$/.test(String(lineQty).trim())) return
+    if (!lineItem) return toast.error(t("editor.lines.itemRequired"));
+    if (!/^[1-9]\d*$/.test(String(lineQty).trim())) return;
     // The quote uses the selected project and period. Persist that context
     // before stamping the identical rate-unit snapshot on the new line.
-    if (headerDirty && !(await saveHeader())) return
-    if (await call(
-      'POST',
-      { action: 'add-line', itemId: lineItem, quantity: lineQty, rateUnitCode: lineRateUnit || null, equipmentUnitId: lineEquipment || null,
-        employeeId: (lineEquipment && lineOperator) || null, projectTaskId: lineTask || null },
-      { preserveDraft: true },
-    )) {
-      setLineItem('')
-      setLineTask('')
-      setLineQty('1')
-      setLineRate('')
-      setLineAmount('')
-      setLineEquipment('')
-      setLineOperator('')
-      setLineRateUnit('')
-      setLineRateUnits([])
-      setLineRateSource('')
-      setLineComponents([])
+    if (headerDirty && !(await saveHeader())) return;
+    if (
+      await call(
+        "POST",
+        {
+          action: "add-line",
+          itemId: lineItem,
+          quantity: lineQty,
+          rateUnitCode: lineRateUnit || null,
+          equipmentUnitId: lineEquipment || null,
+          employeeId: (lineEquipment && lineOperator) || null,
+          projectTaskId: lineTask || null,
+        },
+        { preserveDraft: true },
+      )
+    ) {
+      setLineItem("");
+      setLineTask("");
+      setLineQty("1");
+      setLineRate("");
+      setLineAmount("");
+      setLineEquipment("");
+      setLineOperator("");
+      setLineRateUnit("");
+      setLineRateUnits([]);
+      setLineRateSource("");
+      setLineComponents([]);
     }
   }
 
-  const productionTasks = projectTasks.filter((task) => task.budgetUnit)
-  const prodUnit = productionTasks.find((task) => task.id === prodTask)?.budgetUnit ?? ''
-  const prodQtyValid = /^\d+(\.\d{1,8})?$/.test(prodQty.trim()) && /[1-9]/.test(prodQty)
+  const productionTasks = projectTasks.filter((task) => task.budgetUnit);
+  const prodUnit = productionTasks.find((task) => task.id === prodTask)?.budgetUnit ?? "";
+  const prodQtyValid = /^\d+(\.\d{1,8})?$/.test(prodQty.trim()) && /[1-9]/.test(prodQty);
 
   async function addProduction() {
-    if (!prodTask || !prodUnit || !prodQtyValid) return
-    if (headerDirty && !(await saveHeader())) return
-    if (await call(
-      'POST',
-      { action: 'add-quantity', projectTaskId: prodTask, quantity: prodQty.trim(), unit: prodUnit, note: prodNote.trim() || null },
-      { preserveDraft: true },
-    )) {
-      setProdTask('')
-      setProdQty('')
-      setProdNote('')
+    if (!prodTask || !prodUnit || !prodQtyValid) return;
+    if (headerDirty && !(await saveHeader())) return;
+    if (
+      await call(
+        "POST",
+        {
+          action: "add-quantity",
+          projectTaskId: prodTask,
+          quantity: prodQty.trim(),
+          unit: prodUnit,
+          note: prodNote.trim() || null,
+        },
+        { preserveDraft: true },
+      )
+    ) {
+      setProdTask("");
+      setProdQty("");
+      setProdNote("");
     }
   }
 
   async function saveAll(): Promise<boolean> {
-    if (headerDirty && !(await saveHeader())) return false
-    if (gridDirty && !(await saveGrid())) return false
-    return true
+    if (headerDirty && !(await saveHeader())) return false;
+    if (gridDirty && !(await saveGrid())) return false;
+    return true;
   }
 
   async function submit() {
-    if (!(await saveAll())) return
-    if (await call('POST', { action: 'submit' })) {
-      setMode('view')
-      toast.success(t('editor.submitted'))
+    if (!(await saveAll())) return;
+    if (await call("POST", { action: "submit" })) {
+      setMode("view");
+      toast.success(t("editor.submitted"));
     }
   }
 
-  const [discardError, setDiscardError] = useState<string | null>(null)
-  const [discarding, setDiscarding] = useState(false)
-  const discardedRef = useRef(false)
+  const [discardError, setDiscardError] = useState<string | null>(null);
+  const [discarding, setDiscarding] = useState(false);
+  const discardedRef = useRef(false);
 
   /**
    * Discard an empty draft. The server is the authority on "untouched":
@@ -781,832 +969,1174 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
    * that is the requested end state too.
    */
   async function discardDraft(): Promise<boolean> {
-    if (discardedRef.current) return true
-    setDiscarding(true)
-    setDiscardError(null)
+    if (discardedRef.current) return true;
+    setDiscarding(true);
+    setDiscardError(null);
     try {
       const response = await fetch(`/api/field-tickets/${ticket.id}`, {
-        method: 'DELETE',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ expectedRevision: persistedDocumentRevision(latestRevisionRef.current) }),
-      })
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          expectedRevision: persistedDocumentRevision(latestRevisionRef.current),
+        }),
+      });
       if (!response.ok) {
         if (response.status === 404) {
-          discardedRef.current = true
-          return true
+          discardedRef.current = true;
+          return true;
         }
-        const message = await readApiErrorMessage(response, t('editor.discardFailed'))
-        setDiscardError(message)
-        toast.error(message)
-        return false
+        const message = await readApiErrorMessage(response, t("editor.discardFailed"));
+        setDiscardError(message);
+        toast.error(message);
+        return false;
       }
-      discardedRef.current = true
-      toast.success(t('editor.discarded'))
-      return true
+      discardedRef.current = true;
+      toast.success(t("editor.discarded"));
+      return true;
     } catch {
-      const message = t('editor.discardFailed')
-      setDiscardError(message)
-      toast.error(message)
-      return false
+      const message = t("editor.discardFailed");
+      setDiscardError(message);
+      toast.error(message);
+      return false;
     } finally {
-      setDiscarding(false)
+      setDiscarding(false);
     }
   }
 
   async function confirmDiscard() {
-    if (!(await confirmDialog(t('editor.discardConfirm')))) return
+    if (!(await confirmDialog(t("editor.discardConfirm")))) return;
     void discardDraft().then((ok) => {
-      if (ok) router.push('/field-tickets')
-    })
+      if (ok) router.push("/field-tickets");
+    });
   }
 
   function cancelEdit() {
-    const savedProjectId = ticket.projectId
-    setDiscardError(null)
-    applyPayload(ticket)
-    setLineItem('')
-    setLineQty('1')
-    setLineRate('')
-    setLineAmount('')
-    setLineEquipment('')
-    setLineRateUnit('')
-    setLineRateUnits([])
-    setLineRateSource('')
-    setLineComponents([])
+    const savedProjectId = ticket.projectId;
+    setDiscardError(null);
+    applyPayload(ticket);
+    setLineItem("");
+    setLineQty("1");
+    setLineRate("");
+    setLineAmount("");
+    setLineEquipment("");
+    setLineRateUnit("");
+    setLineRateUnits([]);
+    setLineRateSource("");
+    setLineComponents([]);
     if (!savedProjectId) {
-      setProjectTasks([])
+      setProjectTasks([]);
     } else if (savedProjectId === props.ticket.projectId) {
-      setProjectTasks(props.projectTasks)
+      setProjectTasks(props.projectTasks);
     } else {
-      const request = ++projectContextRequest.current
-      void fetch(`/api/field-tickets/project-context?projectId=${encodeURIComponent(savedProjectId)}`)
+      const request = ++projectContextRequest.current;
+      void fetch(
+        `/api/field-tickets/project-context?projectId=${encodeURIComponent(savedProjectId)}`,
+      )
         .then(async (response) => {
           // Status first: a non-JSON error page must not throw out of this
           // best-effort picker refresh.
-          if (!response.ok) return
-          const body = (await response.json()) as { tasks?: unknown }
-          if (request !== projectContextRequest.current) return
-          setProjectTasks(Array.isArray(body.tasks) ? body.tasks : [])
+          if (!response.ok) return;
+          const body = (await response.json()) as { tasks?: unknown };
+          if (request !== projectContextRequest.current) return;
+          setProjectTasks(Array.isArray(body.tasks) ? body.tasks : []);
         })
         .catch(() => {
-          if (request === projectContextRequest.current) setProjectTasks([])
-        })
+          if (request === projectContextRequest.current) setProjectTasks([]);
+        });
     }
-    setMode('view')
+    setMode("view");
   }
 
-  const markHeader = <T,>(setter: (v: T) => void) => (v: T) => {
-    setter(v)
-    setHeaderDirty(true)
-  }
+  const markHeader =
+    <T,>(setter: (v: T) => void) =>
+    (v: T) => {
+      setter(v);
+      setHeaderDirty(true);
+    };
 
   // ---- standard configurable header form -----------------------------------
   const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
-    const label = placement.labelOverride?.trim()
-    const controlId = `${headerFieldId}-${placement.key}`
-    const labelId = `${controlId}-label`
+    const label = placement.labelOverride?.trim();
+    const controlId = `${headerFieldId}-${placement.key}`;
+    const labelId = `${controlId}-label`;
     switch (placement.key) {
-      case 'project_id':
+      case "project_id":
         return (
           <>
-            <Label id={labelId}>{label || tCommon('labels.project')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>
+            <Label id={labelId}>
+              {label || tCommon("labels.project")}
+              {isEditable ? <span className="text-red-500"> *</span> : null}
+            </Label>
             {isEditable ? (
               <SearchSelect
                 id={controlId}
                 ariaLabelledBy={labelId}
                 options={props.projects.map((p) => ({ value: p.id, label: p.name }))}
                 value={projectId}
-                onChange={(value) => void selectProject(value ?? '')}
-                placeholder={t('list.pickProject')}
+                onChange={(value) => void selectProject(value ?? "")}
+                placeholder={t("list.pickProject")}
               />
             ) : (
-              <p className="text-sm">{ticket.projectName || '—'}</p>
+              <p className="text-sm">{ticket.projectName || "—"}</p>
             )}
           </>
-        )
-      case 'party_id':
+        );
+      case "party_id":
         return (
           <>
-            <Label>{label || tCommon('labels.customer')}</Label>
+            <Label>{label || tCommon("labels.customer")}</Label>
             {isEditable ? (
               <div className="flex min-h-10 items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                {customerName || '—'}
+                {customerName || "—"}
               </div>
             ) : (
-              <p className="text-sm text-slate-900 dark:text-slate-100">{customerName || '—'}</p>
+              <p className="text-sm text-slate-900 dark:text-slate-100">{customerName || "—"}</p>
             )}
           </>
-        )
-      case 'document_date':
+        );
+      case "document_date":
         return (
           <>
-            <Label id={labelId} htmlFor={controlId}>{label || tCommon('labels.date')}</Label>
+            <Label id={labelId} htmlFor={controlId}>
+              {label || tCommon("labels.date")}
+            </Label>
             {isEditable ? (
-              <DateField id={controlId} aria-labelledby={labelId} value={documentDate} onChange={(value) => markHeader(setDocumentDate)(value)} />
+              <DateField
+                id={controlId}
+                aria-labelledby={labelId}
+                value={documentDate}
+                onChange={(value) => markHeader(setDocumentDate)(value)}
+              />
             ) : (
               <p className="text-sm">{ticket.documentDate}</p>
             )}
           </>
-        )
-      case 'reference_number':
+        );
+      case "reference_number":
         return (
           <>
-            <Label id={labelId} htmlFor={controlId}>{label || t('editor.po')}</Label>
+            <Label id={labelId} htmlFor={controlId}>
+              {label || t("editor.po")}
+            </Label>
             {isEditable ? (
-              <Input id={controlId} aria-labelledby={labelId} value={referenceNumber} onChange={(e) => markHeader(setReferenceNumber)(e.target.value)} />
+              <Input
+                id={controlId}
+                aria-labelledby={labelId}
+                value={referenceNumber}
+                onChange={(e) => markHeader(setReferenceNumber)(e.target.value)}
+              />
             ) : (
-              <p className="text-sm">{ticket.referenceNumber || '—'}</p>
+              <p className="text-sm">{ticket.referenceNumber || "—"}</p>
             )}
           </>
-        )
-      case 'period':
+        );
+      case "period":
         return (
           <>
-            <Label id={labelId} htmlFor={controlId}>{label || t('list.period')}</Label>
+            <Label id={labelId} htmlFor={controlId}>
+              {label || t("list.period")}
+            </Label>
             {isEditable ? (
               <Select
                 id={controlId}
                 aria-labelledby={labelId}
                 value={period}
                 disabled={gridHasHours}
-                title={gridHasHours ? t('editor.periodLocked') : undefined}
+                title={gridHasHours ? t("editor.periodLocked") : undefined}
                 onChange={(e) => markHeader(setPeriod)(e.target.value)}
               >
-                <option value="shift">{t('period.shift')}</option>
-                <option value="daily">{t('period.daily')}</option>
-                <option value="weekly">{t('period.weekly')}</option>
+                <option value="shift">{t("period.shift")}</option>
+                <option value="daily">{t("period.daily")}</option>
+                <option value="weekly">{t("period.weekly")}</option>
               </Select>
             ) : (
-              <p className="text-sm text-slate-900 dark:text-slate-100">{t(`period.${ticket.fieldTicket.period}`)}</p>
+              <p className="text-sm text-slate-900 dark:text-slate-100">
+                {t(`period.${ticket.fieldTicket.period}`)}
+              </p>
             )}
           </>
-        )
-      case 'foreman_party_id':
+        );
+      case "foreman_party_id":
         return (
           <>
-            <Label id={labelId}>{label || t('editor.foreman')}</Label>
+            <Label id={labelId}>{label || t("editor.foreman")}</Label>
             {isEditable ? (
               <SearchSelect
                 id={controlId}
                 ariaLabelledBy={labelId}
-                options={[{ value: '', label: '—' }, ...props.employees.map((e) => ({ value: e.id, label: e.name }))]}
+                options={[
+                  { value: "", label: "—" },
+                  ...props.employees.map((e) => ({ value: e.id, label: e.name })),
+                ]}
                 value={foreman}
-                onChange={markHeader((v: string) => setForeman(v ?? ''))}
+                onChange={markHeader((v: string) => setForeman(v ?? ""))}
                 placeholder="—"
               />
             ) : (
-              <p className="text-sm text-slate-900 dark:text-slate-100">{ticket.foremanName || '—'}</p>
+              <p className="text-sm text-slate-900 dark:text-slate-100">
+                {ticket.foremanName || "—"}
+              </p>
             )}
           </>
-        )
-      case 'memo':
+        );
+      case "memo":
         return (
           <>
-            <Label id={labelId} htmlFor={controlId}>{label || t('editor.workDescription')}</Label>
+            <Label id={labelId} htmlFor={controlId}>
+              {label || t("editor.workDescription")}
+            </Label>
             {isEditable ? (
-              <Textarea id={controlId} aria-labelledby={labelId} rows={2} value={memo} onChange={(e) => markHeader(setMemo)(e.target.value)} />
+              <Textarea
+                id={controlId}
+                aria-labelledby={labelId}
+                rows={2}
+                value={memo}
+                onChange={(e) => markHeader(setMemo)(e.target.value)}
+              />
             ) : (
-              <p className="whitespace-pre-wrap text-sm">{ticket.memo || '—'}</p>
+              <p className="whitespace-pre-wrap text-sm">{ticket.memo || "—"}</p>
             )}
           </>
-        )
+        );
       default:
-        return null
+        return null;
     }
-  }
+  };
 
   async function setPreferredForm(layoutId: string | null) {
     try {
-      const response = await fetch('/api/customization/form-preferences', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recordType: 'field_ticket', layoutId }),
-      })
-      if (response.ok) toast.success(t('editor.form.preferredSaved'))
-      else toast.error(await readApiErrorMessage(response, t('editor.form.preferredFailed')))
+      const response = await fetch("/api/customization/form-preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recordType: "field_ticket", layoutId }),
+      });
+      if (response.ok) toast.success(t("editor.form.preferredSaved"));
+      else toast.error(await readApiErrorMessage(response, t("editor.form.preferredFailed")));
     } catch {
-      toast.error(t('editor.form.preferredFailed'))
+      toast.error(t("editor.form.preferredFailed"));
     }
   }
 
-  const showFormPicker = mode === 'view' && !!props.availableLayouts?.length
+  const showFormPicker = mode === "view" && !!props.availableLayouts?.length;
   const customizeHref = props.canCustomize
-    ? `/admin/customization?recordType=field_ticket&tab=forms${props.currentLayoutId ? `&form=${props.currentLayoutId}` : ''}`
-    : null
+    ? `/admin/customization?recordType=field_ticket&tab=forms${props.currentLayoutId ? `&form=${props.currentLayoutId}` : ""}`
+    : null;
 
   const renderFormAction = (key: string) => {
     switch (key) {
-      case 'customize':
-        return customizeHref ? <Button variant="ghost" asChild><Link href={customizeHref}>{tCommon('actions.customize')}</Link></Button> : null
-      case 'pdf':
-        return <PdfButton recordType="field_ticket" recordId={ticket.id} />
-      case 'approval':
-        return ticket.status === 'pending_approval' ? (
+      case "customize":
+        return customizeHref ? (
+          <Button variant="ghost" asChild>
+            <Link href={customizeHref}>{tCommon("actions.customize")}</Link>
+          </Button>
+        ) : null;
+      case "pdf":
+        return <PdfButton recordType="field_ticket" recordId={ticket.id} />;
+      case "approval":
+        return ticket.status === "pending_approval" ? (
           <Button variant="outline" asChild>
-            <Link href="/inbox">{tCommon('actions.view')} {tNav('modules.approvals')}</Link>
+            <Link href="/inbox">
+              {tCommon("actions.view")} {tNav("modules.approvals")}
+            </Link>
           </Button>
-        ) : null
-      case 'submit':
-        return ticket.status === 'draft' && props.canManage ? (
-          <Button disabled={busy} onClick={submit}><Send size={14} /> {t('editor.submit')}</Button>
-        ) : null
-      case 'workflow':
-        return ticket.status === 'approved' && props.canManage && !sig?.customer ? (
-          <Button disabled={busy} onClick={() => { setSendError(null); setSending(true) }}>
-            <Mail size={14} /> {ticket.fieldTicket.send?.sentAt ? t('editor.resendSignature') : t('editor.sendSignature')}
+        ) : null;
+      case "submit":
+        return ticket.status === "draft" && props.canManage ? (
+          <Button disabled={busy} onClick={submit}>
+            <Send size={14} /> {t("editor.submit")}
           </Button>
-        ) : null
+        ) : null;
+      case "workflow":
+        return ticket.status === "approved" && props.canManage && !sig?.customer ? (
+          <Button
+            disabled={busy}
+            onClick={() => {
+              setSendError(null);
+              setSending(true);
+            }}
+          >
+            <Mail size={14} />{" "}
+            {ticket.fieldTicket.send?.sentAt
+              ? t("editor.resendSignature")
+              : t("editor.sendSignature")}
+          </Button>
+        ) : null;
       default:
-        return null
+        return null;
     }
-  }
+  };
 
-  const rowHours = (r: GridRow) => Object.values(r.cells).reduce((a, v) => a + (Number(v) || 0), 0)
+  const rowHours = (r: GridRow) => Object.values(r.cells).reduce((a, v) => a + (Number(v) || 0), 0);
   const dayHours = (day: string) =>
-    grid.reduce((a, r) => a + gridTimeTypes.reduce((b, tt) => b + (Number(r.cells[`${tt.id}|${day}`]) || 0), 0), 0)
-  const totalHours = grid.reduce((a, r) => a + rowHours(r), 0)
-  const lineDraftDirty = lineItem !== '' || lineQty !== '1' || lineRate !== '' || lineAmount !== '' ||
-    lineEquipment !== '' || lineOperator !== '' || lineRateUnit !== '' || lineComponents.length > 0
+    grid.reduce(
+      (a, r) =>
+        a + gridTimeTypes.reduce((b, tt) => b + (Number(r.cells[`${tt.id}|${day}`]) || 0), 0),
+      0,
+    );
+  const totalHours = grid.reduce((a, r) => a + rowHours(r), 0);
+  const lineDraftDirty =
+    lineItem !== "" ||
+    lineQty !== "1" ||
+    lineRate !== "" ||
+    lineAmount !== "" ||
+    lineEquipment !== "" ||
+    lineOperator !== "" ||
+    lineRateUnit !== "" ||
+    lineComponents.length > 0;
   const closeGuard = useDirtyClose({
     dirty: headerDirty || gridDirty || lineDraftDirty,
     busy: busy || discarding,
     onClose: () => {},
-    message: tCommon('feedback.unsavedChanges'),
-    confirmLabel: tCommon('confirm.discardChanges'),
-  })
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
   const dayLabel = (isoDay: string) => {
-    const d = new Date(`${isoDay}T12:00:00Z`)
-    return { dow: date(d, { weekday: 'short', timeZone: 'UTC' }), dom: isoDay.slice(5) }
-  }
+    const d = new Date(`${isoDay}T12:00:00Z`);
+    return { dow: date(d, { weekday: "short", timeZone: "UTC" }), dom: isoDay.slice(5) };
+  };
 
   return (
     <TransactionDrawer
       closeHref="/field-tickets"
       beforeClose={async () => {
-        if (busy || discarding) return false
+        if (busy || discarding) return false;
         // A persisted ticket exists only because the operator saved it from
         // the unsaved New-ticket drawer, so closing never discards it; an
         // empty draft is removed through the explicit Discard action.
-        return closeGuard.beforeClose()
+        return closeGuard.beforeClose();
       }}
       recordId={ticket.id}
       canEditAttachments={props.canManage}
       title={
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{ticket.documentNumber}</span>
-          <Badge variant={STATUS_VARIANT[ticket.status] ?? 'secondary'}>{t(`status.${ticket.status}`)}</Badge>
+          <Badge variant={STATUS_VARIANT[ticket.status] ?? "secondary"}>
+            {t(`status.${ticket.status}`)}
+          </Badge>
           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             {t(`period.${ticket.fieldTicket.period}`)}
           </span>
         </span>
       }
       description={
-        mode === 'edit'
-          ? tCommon('feedback.editingHint')
-          : ticket.fieldTicket.period === 'weekly'
-          ? `${ticket.fieldTicket.periodStart} → ${ticket.fieldTicket.periodEnd}`
-          : ticket.fieldTicket.periodStart
+        mode === "edit"
+          ? tCommon("feedback.editingHint")
+          : ticket.fieldTicket.period === "weekly"
+            ? `${ticket.fieldTicket.periodStart} → ${ticket.fieldTicket.periodEnd}`
+            : ticket.fieldTicket.periodStart
       }
       primaryAction={
-        canEditStatus && actionLayout.find((action) => action.key === 'edit')?.visible !== false ? (
+        canEditStatus && actionLayout.find((action) => action.key === "edit")?.visible !== false ? (
           <Button
             variant="outline"
             size="sm"
             className="h-8 px-2.5 text-xs"
             disabled={busy}
-            onClick={() => mode === 'edit' ? cancelEdit() : setMode('edit')}
+            onClick={() => (mode === "edit" ? cancelEdit() : setMode("edit"))}
           >
-            {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
+            {mode === "edit" ? tCommon("actions.cancel") : tCommon("actions.edit")}
           </Button>
         ) : null
       }
-      actionsMenuHeader={showFormPicker && !sending ? (
-        <div className="mb-1.5 space-y-1.5 border-b border-slate-100 px-1 pb-2 dark:border-slate-800">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('editor.form.label')}</span>
-          <Select
-            value={props.currentLayoutId ?? ''}
-            onChange={(event) => {
-              const next = new URLSearchParams(searchParams.toString())
-              next.set('form', event.target.value)
-              router.push(`${pathname}?${next.toString()}`)
-            }}
-            aria-label={t('editor.form.label')}
-            triggerClassName="!h-8 !min-h-0 !px-2 !py-0 !text-xs"
-          >
-            {props.availableLayouts!.map((availableLayout) => (
-              <option key={availableLayout.id} value={availableLayout.id}>{displayFormName(availableLayout.name, availableLayout.isDefault, tCommon('labels.defaultForm'))}</option>
-            ))}
-          </Select>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="!h-8 w-full !justify-start !px-2 !text-xs"
-            onClick={() => void setPreferredForm(props.currentLayoutId ?? null)}
-            disabled={!props.currentLayoutId}
-          >
-            {t('editor.form.setPreferred')}
-          </Button>
-        </div>
-      ) : null}
+      actionsMenuHeader={
+        showFormPicker && !sending ? (
+          <div className="mb-1.5 space-y-1.5 border-b border-slate-100 px-1 pb-2 dark:border-slate-800">
+            <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              {t("editor.form.label")}
+            </span>
+            <Select
+              value={props.currentLayoutId ?? ""}
+              onChange={(event) => {
+                const next = new URLSearchParams(searchParams.toString());
+                next.set("form", event.target.value);
+                router.push(`${pathname}?${next.toString()}`);
+              }}
+              aria-label={t("editor.form.label")}
+              triggerClassName="!h-8 !min-h-0 !px-2 !py-0 !text-xs"
+            >
+              {props.availableLayouts!.map((availableLayout) => (
+                <option key={availableLayout.id} value={availableLayout.id}>
+                  {displayFormName(
+                    availableLayout.name,
+                    availableLayout.isDefault,
+                    tCommon("labels.defaultForm"),
+                  )}
+                </option>
+              ))}
+            </Select>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="!h-8 w-full !justify-start !px-2 !text-xs"
+              onClick={() => void setPreferredForm(props.currentLayoutId ?? null)}
+              disabled={!props.currentLayoutId}
+            >
+              {t("editor.form.setPreferred")}
+            </Button>
+          </div>
+        ) : null
+      }
       detailTabs={[
-        { key: 'time', label: t('editor.tabs.time') },
-        { key: 'items', label: t('editor.tabs.items') },
-        ...(projectTasks.length > 0 ? [{ key: 'tasks', label: t('editor.tabs.tasks') }] : []),
-        ...(props.progressEnabled && projectId ? [{ key: 'production', label: t('editor.tabs.production') }] : []),
-        { key: 'related', label: t('editor.tabs.related') },
+        { key: "time", label: t("editor.tabs.time") },
+        { key: "items", label: t("editor.tabs.items") },
+        ...(projectTasks.length > 0 ? [{ key: "tasks", label: t("editor.tabs.tasks") }] : []),
+        ...(props.progressEnabled && projectId
+          ? [{ key: "production", label: t("editor.tabs.production") }]
+          : []),
+        { key: "related", label: t("editor.tabs.related") },
       ]}
       activeTab={activeSection}
       onActiveTabChange={setActiveSection}
       actions={
         <>
-          {mode === 'edit' ? (
+          {mode === "edit" ? (
             <>
-              {actionLayout.find((action) => action.key === 'customize')?.visible ? renderFormAction('customize') : null}
-              <Button disabled={busy} onClick={async () => {
-                if (await saveAll()) setMode('view')
-              }}>
-                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
+              {actionLayout.find((action) => action.key === "customize")?.visible
+                ? renderFormAction("customize")
+                : null}
+              <Button
+                disabled={busy}
+                onClick={async () => {
+                  if (await saveAll()) setMode("view");
+                }}
+              >
+                {busy ? tCommon("actions.saving") : tCommon("actions.save")}
               </Button>
             </>
-          ) : (
-            sending ? (
-              <div className="space-y-2.5 px-1 py-1">
-                <div className="space-y-1">
-                  <Label htmlFor="ft-send-to" className="text-xs">{t('editor.sendTo')}</Label>
-                  <Input id="ft-send-to" type="email" value={sendTo} onChange={(event) => setSendTo(event.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="ft-send-msg" className="text-xs">{t('editor.sendMessage')}</Label>
-                  <Textarea id="ft-send-msg" rows={3} value={sendMessage} onChange={(event) => setSendMessage(event.target.value)} />
-                </div>
-                <p className="px-1 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t('editor.signatures.deliveryHelp')}</p>
-                {sendError ? (
-                  <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-                    {sendError}
-                  </p>
-                ) : null}
-                <Button
-                  disabled={busy || !sendTo.trim()}
-                  onClick={async () => {
-                    setSendError(null)
-                    if (await call('POST', { action: 'send-signature', to: sendTo, message: sendMessage || null }, { onErrorMessage: setSendError })) {
-                      setSending(false)
-                      setSendMessage('')
-                      toast.success(t('editor.signatureSent', { to: sendTo }))
-                    }
-                  }}
-                >
-                  <Send size={14} /> {t('editor.send')}
-                </Button>
-                <Button variant="ghost" disabled={busy} onClick={() => setSending(false)}>{t('editor.cancel')}</Button>
+          ) : sending ? (
+            <div className="space-y-2.5 px-1 py-1">
+              <div className="space-y-1">
+                <Label htmlFor="ft-send-to" className="text-xs">
+                  {t("editor.sendTo")}
+                </Label>
+                <Input
+                  id="ft-send-to"
+                  type="email"
+                  value={sendTo}
+                  onChange={(event) => setSendTo(event.target.value)}
+                />
               </div>
-            ) : (
-              <>
-                {actionLayout.filter((action) => action.visible && action.key !== 'edit').map((action) => (
+              <div className="space-y-1">
+                <Label htmlFor="ft-send-msg" className="text-xs">
+                  {t("editor.sendMessage")}
+                </Label>
+                <Textarea
+                  id="ft-send-msg"
+                  rows={3}
+                  value={sendMessage}
+                  onChange={(event) => setSendMessage(event.target.value)}
+                />
+              </div>
+              <p className="px-1 text-[11px] leading-4 text-slate-500 dark:text-slate-400">
+                {t("editor.signatures.deliveryHelp")}
+              </p>
+              {sendError ? (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+                >
+                  {sendError}
+                </p>
+              ) : null}
+              <Button
+                disabled={busy || !sendTo.trim()}
+                onClick={async () => {
+                  setSendError(null);
+                  if (
+                    await call(
+                      "POST",
+                      { action: "send-signature", to: sendTo, message: sendMessage || null },
+                      { onErrorMessage: setSendError },
+                    )
+                  ) {
+                    setSending(false);
+                    setSendMessage("");
+                    toast.success(t("editor.signatureSent", { to: sendTo }));
+                  }
+                }}
+              >
+                <Send size={14} /> {t("editor.send")}
+              </Button>
+              <Button variant="ghost" disabled={busy} onClick={() => setSending(false)}>
+                {t("editor.cancel")}
+              </Button>
+            </div>
+          ) : (
+            <>
+              {actionLayout
+                .filter((action) => action.visible && action.key !== "edit")
+                .map((action) => (
                   <Fragment key={action.key}>{renderFormAction(action.key)}</Fragment>
                 ))}
-                {ticket.status === 'draft' && props.canManage ? (
-                  <Button variant="ghost" disabled={busy || discarding} onClick={confirmDiscard}>
-                    <Trash2 size={14} /> {t('editor.discard')}
-                  </Button>
-                ) : null}
-                {/* Flow-gate Approve/Reject rides the viewer's gate
+              {ticket.status === "draft" && props.canManage ? (
+                <Button variant="ghost" disabled={busy || discarding} onClick={confirmDiscard}>
+                  <Trash2 size={14} /> {t("editor.discard")}
+                </Button>
+              ) : null}
+              {/* Flow-gate Approve/Reject rides the viewer's gate
                     capability (record-state/myActions), not the edit grant:
                     a gate assignee with read-only access decides here
                     through the same native gate decision path the Inbox
                     uses. Renders nothing when no gate awaits this viewer. */}
-                <ApprovalActions subjectKind="field_ticket" subjectId={ticket.id} />
-              </>
-            )
+              <ApprovalActions subjectKind="field_ticket" subjectId={ticket.id} />
+            </>
           )}
         </>
       }
       footer={
         <div className="flex w-full items-center gap-3">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {mode === 'edit' && (headerDirty || gridDirty) ? tCommon('feedback.unsavedChanges') : null}
+            {mode === "edit" && (headerDirty || gridDirty)
+              ? tCommon("feedback.unsavedChanges")
+              : null}
           </span>
           <span className="flex-1" />
           <span className="text-sm tabular-nums text-slate-600 dark:text-slate-300">
-            {t('editor.totals.labor')} {money(ticket.laborTotal)}
+            {t("editor.totals.labor")} {money(ticket.laborTotal)}
             {Number(ticket.unpricedLaborHours ?? 0) > 0 ? (
-              <span className="ml-1 font-medium text-amber-700 dark:text-amber-300" title={t('editor.totals.unpricedHours', { hours: ticket.unpricedLaborHours ?? 0 })}>
-                ({t('editor.totals.unpricedHours', { hours: ticket.unpricedLaborHours ?? 0 })})
+              <span
+                className="ml-1 font-medium text-amber-700 dark:text-amber-300"
+                title={t("editor.totals.unpricedHours", { hours: ticket.unpricedLaborHours ?? 0 })}
+              >
+                ({t("editor.totals.unpricedHours", { hours: ticket.unpricedLaborHours ?? 0 })})
               </span>
-            ) : null}
-            {' '}· {t('editor.totals.items')} {money(ticket.linesTotal)} ·{' '}
-            <strong className="text-slate-900 dark:text-slate-100">{money(ticket.grandTotal)}</strong>
+            ) : null}{" "}
+            · {t("editor.totals.items")} {money(ticket.linesTotal)} ·{" "}
+            <strong className="text-slate-900 dark:text-slate-100">
+              {money(ticket.grandTotal)}
+            </strong>
           </span>
         </div>
       }
     >
       <div className="space-y-6 p-1">
-        <ActionAlert error={refusal} fallbackMessage={tCommon('feedback.saveFailed')} />
+        <ActionAlert error={refusal} fallbackMessage={tCommon("feedback.saveFailed")} />
         {discardError ? (
-          <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+          <p
+            role="alert"
+            className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+          >
             {discardError}
           </p>
         ) : null}
-        {activeSection === 'details' ? <>
-        {ticket.fieldTicket.rejectionReason && ticket.status === 'draft' && (
-          <div className="rounded-md bg-rose-50 p-2.5 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-            {t('editor.rejectionNote', { reason: ticket.fieldTicket.rejectionReason })}
-          </div>
-        )}
+        {activeSection === "details" ? (
+          <>
+            {ticket.fieldTicket.rejectionReason && ticket.status === "draft" && (
+              <div className="rounded-md bg-rose-50 p-2.5 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                {t("editor.rejectionNote", { reason: ticket.fieldTicket.rejectionReason })}
+              </div>
+            )}
 
-        <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderHeaderField} />
-        </> : null}
+            <HeaderFields
+              layout={effectiveLayout}
+              editable={editable}
+              renderField={renderHeaderField}
+            />
+          </>
+        ) : null}
 
         {/* ---- crew hours ---- */}
-        {activeSection === 'time' ? <section>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.crew.title')}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.crew.hint')}</p>
+        {activeSection === "time" ? (
+          <section>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {t("editor.crew.title")}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t("editor.crew.hint")}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {editable &&
+                props.schedulingEnabled &&
+                projectId &&
+                (scheduleLoading || (schedulePreview?.scheduled.length ?? 0) > 0) ? (
+                  <>
+                    {(schedulePreview?.timeTypes.length ?? 0) > 1 ? (
+                      <Select
+                        value={scheduleTimeTypeId}
+                        onChange={(event) => setScheduleTimeTypeId(event.target.value)}
+                        aria-label={tScheduling("prefill.timeType")}
+                        disabled={busy || scheduleLoading}
+                      >
+                        <option value="">{tScheduling("prefill.timeType")}</option>
+                        {(schedulePreview?.timeTypes ?? []).map((type) => (
+                          <option key={type.id} value={type.id}>
+                            {type.name}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={onFillFromSchedule}
+                      disabled={busy || scheduleLoading || !scheduleTimeTypeId}
+                      title={tScheduling("prefill.ticketHint")}
+                    >
+                      <CalendarCheck size={14} /> {tScheduling("prefill.fill")}
+                    </Button>
+                  </>
+                ) : null}
+                <span className="text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
+                  {t("editor.crew.total", { hours: formatTicketHours(totalHours) })}
+                </span>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {editable && props.schedulingEnabled && projectId && (scheduleLoading || (schedulePreview?.scheduled.length ?? 0) > 0) ? (
-                <>
-                {(schedulePreview?.timeTypes.length ?? 0) > 1 ? <Select
-                  value={scheduleTimeTypeId} onChange={(event) => setScheduleTimeTypeId(event.target.value)}
-                  aria-label={tScheduling('prefill.timeType')}
-                  disabled={busy || scheduleLoading}>
-                  <option value="">{tScheduling('prefill.timeType')}</option>
-                  {(schedulePreview?.timeTypes ?? []).map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
-                </Select> : null}
-                <Button size="sm" variant="outline" onClick={onFillFromSchedule}
-                  disabled={busy || scheduleLoading || !scheduleTimeTypeId}
-                  title={tScheduling('prefill.ticketHint')}>
-                  <CalendarCheck size={14} /> {tScheduling('prefill.fill')}
+            {scheduleError ? (
+              <div
+                role="alert"
+                className="mb-2 flex items-center gap-2 text-sm text-red-600 dark:text-red-400"
+              >
+                <p>{scheduleError}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || scheduleLoading}
+                  onClick={() => setScheduleRetry((retry) => retry + 1)}
+                >
+                  {tCommon("actions.retry")}
                 </Button>
-                </>
-              ) : null}
-            <span className="text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
-              {t('editor.crew.total', { hours: formatTicketHours(totalHours) })}
-            </span>
-            </div>
-          </div>
-          {scheduleError ? <div role="alert" className="mb-2 flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
-            <p>{scheduleError}</p>
-            <Button size="sm" variant="outline" disabled={busy || scheduleLoading}
-              onClick={() => setScheduleRetry((retry) => retry + 1)}>{tCommon('actions.retry')}</Button>
-          </div> : null}
-          <div className="overflow-x-auto">
-            <SharedTable className="w-full min-w-[680px] text-sm">
-              <SharedTableHeader>
-                <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
-                  <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.crew.employee')}</SharedTableHead>
-                  <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.crew.laborItem')}</SharedTableHead>
-                  {projectTasks.length > 0 ? <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.crew.task')}</SharedTableHead> : null}
-                  {days.map((d) => {
-                    const l = dayLabel(d)
-                    return (
-                      <SharedTableHead key={d} className="px-1 py-1 text-center font-medium">
-                        <div>{l.dow}</div>
-                        <div className="font-normal text-slate-400">{l.dom}</div>
-                      </SharedTableHead>
-                    )
-                  })}
-                  <SharedTableHead className="py-1 pl-2 text-right font-medium">{t('editor.crew.rowTotal')}</SharedTableHead>
-                  {editable && <SharedTableHead className="w-8" />}
-                </SharedTableRow>
-              </SharedTableHeader>
-              <SharedTableBody>
-                {grid.map((row, i) => (
-                  <SharedTableRow key={i} className="border-t border-slate-100 align-top dark:border-slate-800">
-                    <SharedTableCell className="min-w-40 py-1.5 pr-2">
-                      {editable ? (
-                        <SearchSelect
-                          options={props.employees.map((emp) => ({ value: emp.id, label: emp.name }))}
-                          value={row.employeePartyId}
-                          onChange={(v) => {
-                            setGrid((g) => g.map((r, j) => (j === i ? { ...r, employeePartyId: v ?? '' } : r)))
-                            setGridDirty(true)
-                          }}
-                          placeholder="—"
-                          triggerClassName="h-8"
-                        />
-                      ) : (
-                        <span className="text-sm">{props.employees.find((e) => e.id === row.employeePartyId)?.name ?? '—'}</span>
-                      )}
-                    </SharedTableCell>
-                    <SharedTableCell className="min-w-36 py-1.5 pr-2">
-                      {editable ? (
-                        <SearchSelect
-                          options={[{ value: '', label: '—' }, ...props.laborItems.map((it) => ({ value: it.id, label: it.name }))]}
-                          value={row.itemId ?? ''}
-                          onChange={(v) => {
-                            setGrid((g) => g.map((r, j) => (j === i ? { ...r, itemId: v || null } : r)))
-                            setGridDirty(true)
-                          }}
-                          placeholder="—"
-                          triggerClassName="h-8"
-                        />
-                      ) : (
-                        <span className="text-xs text-slate-500">{props.laborItems.find((x) => x.id === row.itemId)?.name ?? '—'}</span>
-                      )}
-                    </SharedTableCell>
+              </div>
+            ) : null}
+            <div className="overflow-x-auto">
+              <SharedTable className="w-full min-w-[680px] text-sm">
+                <SharedTableHeader>
+                  <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
+                    <SharedTableHead className="py-1 pr-2 font-medium">
+                      {t("editor.crew.employee")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 font-medium">
+                      {t("editor.crew.laborItem")}
+                    </SharedTableHead>
                     {projectTasks.length > 0 ? (
+                      <SharedTableHead className="py-1 pr-2 font-medium">
+                        {t("editor.crew.task")}
+                      </SharedTableHead>
+                    ) : null}
+                    {days.map((d) => {
+                      const l = dayLabel(d);
+                      return (
+                        <SharedTableHead key={d} className="px-1 py-1 text-center font-medium">
+                          <div>{l.dow}</div>
+                          <div className="font-normal text-slate-400">{l.dom}</div>
+                        </SharedTableHead>
+                      );
+                    })}
+                    <SharedTableHead className="py-1 pl-2 text-right font-medium">
+                      {t("editor.crew.rowTotal")}
+                    </SharedTableHead>
+                    {editable && <SharedTableHead className="w-8" />}
+                  </SharedTableRow>
+                </SharedTableHeader>
+                <SharedTableBody>
+                  {grid.map((row, i) => (
+                    <SharedTableRow
+                      key={i}
+                      className="border-t border-slate-100 align-top dark:border-slate-800"
+                    >
                       <SharedTableCell className="min-w-40 py-1.5 pr-2">
                         {editable ? (
                           <SearchSelect
-                            options={[{ value: '', label: '—' }, ...projectTasks.map((task) => ({
-                              value: task.id,
-                              label: [task.code, task.name].filter(Boolean).join(' · '),
-                            }))]}
-                            value={row.projectTaskId ?? ''}
-                            onChange={(value) => {
-                              setGrid((current) => current.map((candidate, index) => index === i
-                                ? { ...candidate, projectTaskId: value || null }
-                                : candidate))
-                              setGridDirty(true)
+                            options={props.employees.map((emp) => ({
+                              value: emp.id,
+                              label: emp.name,
+                            }))}
+                            value={row.employeePartyId}
+                            onChange={(v) => {
+                              setGrid((g) =>
+                                g.map((r, j) => (j === i ? { ...r, employeePartyId: v ?? "" } : r)),
+                              );
+                              setGridDirty(true);
+                            }}
+                            placeholder="—"
+                            triggerClassName="h-8"
+                          />
+                        ) : (
+                          <span className="text-sm">
+                            {props.employees.find((e) => e.id === row.employeePartyId)?.name ?? "—"}
+                          </span>
+                        )}
+                      </SharedTableCell>
+                      <SharedTableCell className="min-w-36 py-1.5 pr-2">
+                        {editable ? (
+                          <SearchSelect
+                            options={[
+                              { value: "", label: "—" },
+                              ...props.laborItems.map((it) => ({ value: it.id, label: it.name })),
+                            ]}
+                            value={row.itemId ?? ""}
+                            onChange={(v) => {
+                              setGrid((g) =>
+                                g.map((r, j) => (j === i ? { ...r, itemId: v || null } : r)),
+                              );
+                              setGridDirty(true);
                             }}
                             placeholder="—"
                             triggerClassName="h-8"
                           />
                         ) : (
                           <span className="text-xs text-slate-500">
-                            {projectTasks.find((task) => task.id === row.projectTaskId)?.name ?? '—'}
+                            {props.laborItems.find((x) => x.id === row.itemId)?.name ?? "—"}
                           </span>
                         )}
                       </SharedTableCell>
-                    ) : null}
-                    {days.map((d) => (
-                      <SharedTableCell key={d} className="px-1 py-1.5">
-                        <div className="flex flex-col gap-0.5">
-                          {gridTimeTypes.map((tt) => {
-                            const k = `${tt.id}|${d}`
-                            const v = row.cells[k] ?? ''
-                            return (
-                              <div key={tt.id} className="flex items-center gap-0.5">
-                                <span className="w-3 text-[10px] font-medium text-slate-400" title={tt.name}>
-                                  {tt.name.charAt(0).toUpperCase()}
-                                </span>
-                                {editable ? (
-                                  <input
-                                    aria-label={`${tt.name} ${d}`}
-                                    inputMode="decimal"
-                                    className={cn(
-                                      'h-6 w-11 rounded border border-slate-200 bg-white px-1 text-right text-xs tabular-nums',
-                                      'focus:border-teal-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100',
-                                      v && 'border-teal-300 bg-teal-50/50 dark:border-teal-700 dark:bg-teal-950/30',
-                                    )}
-                                    value={v}
-                                    onChange={(e) => {
-                                      setGrid((g) => g.map((r, j) => (j === i ? { ...r, cells: { ...r.cells, [k]: e.target.value } } : r)))
-                                      setGridDirty(true)
-                                    }}
-                                  />
-                                ) : (
-                                  <span className="w-11 text-right text-xs tabular-nums">{v || '·'}</span>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
+                      {projectTasks.length > 0 ? (
+                        <SharedTableCell className="min-w-40 py-1.5 pr-2">
+                          {editable ? (
+                            <SearchSelect
+                              options={[
+                                { value: "", label: "—" },
+                                ...projectTasks.map((task) => ({
+                                  value: task.id,
+                                  label: [task.code, task.name].filter(Boolean).join(" · "),
+                                })),
+                              ]}
+                              value={row.projectTaskId ?? ""}
+                              onChange={(value) => {
+                                setGrid((current) =>
+                                  current.map((candidate, index) =>
+                                    index === i
+                                      ? { ...candidate, projectTaskId: value || null }
+                                      : candidate,
+                                  ),
+                                );
+                                setGridDirty(true);
+                              }}
+                              placeholder="—"
+                              triggerClassName="h-8"
+                            />
+                          ) : (
+                            <span className="text-xs text-slate-500">
+                              {projectTasks.find((task) => task.id === row.projectTaskId)?.name ??
+                                "—"}
+                            </span>
+                          )}
+                        </SharedTableCell>
+                      ) : null}
+                      {days.map((d) => (
+                        <SharedTableCell key={d} className="px-1 py-1.5">
+                          <div className="flex flex-col gap-0.5">
+                            {gridTimeTypes.map((tt) => {
+                              const k = `${tt.id}|${d}`;
+                              const v = row.cells[k] ?? "";
+                              return (
+                                <div key={tt.id} className="flex items-center gap-0.5">
+                                  <span
+                                    className="w-3 text-[10px] font-medium text-slate-400"
+                                    title={tt.name}
+                                  >
+                                    {tt.name.charAt(0).toUpperCase()}
+                                  </span>
+                                  {editable ? (
+                                    <input
+                                      aria-label={`${tt.name} ${d}`}
+                                      inputMode="decimal"
+                                      className={cn(
+                                        "h-6 w-11 rounded border border-slate-200 bg-white px-1 text-right text-xs tabular-nums",
+                                        "focus:border-teal-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100",
+                                        v &&
+                                          "border-teal-300 bg-teal-50/50 dark:border-teal-700 dark:bg-teal-950/30",
+                                      )}
+                                      value={v}
+                                      onChange={(e) => {
+                                        setGrid((g) =>
+                                          g.map((r, j) =>
+                                            j === i
+                                              ? { ...r, cells: { ...r.cells, [k]: e.target.value } }
+                                              : r,
+                                          ),
+                                        );
+                                        setGridDirty(true);
+                                      }}
+                                    />
+                                  ) : (
+                                    <span className="w-11 text-right text-xs tabular-nums">
+                                      {v || "·"}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </SharedTableCell>
+                      ))}
+                      <SharedTableCell className="py-1.5 pl-2 text-right text-sm font-medium tabular-nums">
+                        {formatTicketHours(rowHours(row))}
                       </SharedTableCell>
-                    ))}
-                    <SharedTableCell className="py-1.5 pl-2 text-right text-sm font-medium tabular-nums">{formatTicketHours(rowHours(row))}</SharedTableCell>
-                    {editable && (
-                      <SharedTableCell className="py-1.5 text-right">
-                        <button
-                          type="button"
-                          aria-label={t('editor.crew.removeRow')}
-                          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
-                          onClick={() => {
-                            setGrid((g) => g.filter((_, j) => j !== i))
-                            setGridDirty(true)
-                          }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                      {editable && (
+                        <SharedTableCell className="py-1.5 text-right">
+                          <button
+                            type="button"
+                            aria-label={t("editor.crew.removeRow")}
+                            className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
+                            onClick={() => {
+                              setGrid((g) => g.filter((_, j) => j !== i));
+                              setGridDirty(true);
+                            }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </SharedTableCell>
+                      )}
+                    </SharedTableRow>
+                  ))}
+                  {grid.length > 0 && (
+                    <SharedTableRow className="border-t border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                      <SharedTableCell className="py-1.5 pr-2 font-medium">
+                        {t("editor.crew.dayTotals")}
                       </SharedTableCell>
-                    )}
-                  </SharedTableRow>
-                ))}
-                {grid.length > 0 && (
-                  <SharedTableRow className="border-t border-slate-200 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                    <SharedTableCell className="py-1.5 pr-2 font-medium">{t('editor.crew.dayTotals')}</SharedTableCell>
-                    <SharedTableCell />
-                    {projectTasks.length > 0 ? <SharedTableCell /> : null}
-                    {days.map((d) => (
-                      <SharedTableCell key={d} className="px-1 py-1.5 text-center tabular-nums">{dayHours(d) > 0 ? formatTicketHours(dayHours(d)) : '·'}</SharedTableCell>
-                    ))}
-                    <SharedTableCell className="py-1.5 pl-2 text-right font-semibold tabular-nums">{formatTicketHours(totalHours)}</SharedTableCell>
-                    {editable && <SharedTableCell />}
-                  </SharedTableRow>
-                )}
-              </SharedTableBody>
-            </SharedTable>
-          </div>
-          {editable && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-2"
-              onClick={() => setGrid((g) => [...g, { employeePartyId: '', itemId: null, projectTaskId: null, cells: {} }])}
-            >
-              <Plus size={14} /> {t('editor.crew.addRow')}
-            </Button>
-          )}
-        </section> : null}
+                      <SharedTableCell />
+                      {projectTasks.length > 0 ? <SharedTableCell /> : null}
+                      {days.map((d) => (
+                        <SharedTableCell key={d} className="px-1 py-1.5 text-center tabular-nums">
+                          {dayHours(d) > 0 ? formatTicketHours(dayHours(d)) : "·"}
+                        </SharedTableCell>
+                      ))}
+                      <SharedTableCell className="py-1.5 pl-2 text-right font-semibold tabular-nums">
+                        {formatTicketHours(totalHours)}
+                      </SharedTableCell>
+                      {editable && <SharedTableCell />}
+                    </SharedTableRow>
+                  )}
+                </SharedTableBody>
+              </SharedTable>
+            </div>
+            {editable && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                onClick={() =>
+                  setGrid((g) => [
+                    ...g,
+                    { employeePartyId: "", itemId: null, projectTaskId: null, cells: {} },
+                  ])
+                }
+              >
+                <Plus size={14} /> {t("editor.crew.addRow")}
+              </Button>
+            )}
+          </section>
+        ) : null}
 
         {/* ---- items & equipment ---- */}
-        {activeSection === 'items' ? <section>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.lines.title')}</h3>
-          <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">{t('editor.lines.hint')}</p>
-          {editable && (
-            <div className={cn(
-              'mb-4 grid w-full items-end gap-3',
-              lineRateUnits.length > 0
-                ? 'md:grid-cols-[minmax(16rem,1fr)_7rem_9rem_9rem_9rem]'
-                : 'md:grid-cols-[minmax(16rem,1fr)_7rem_9rem_9rem]',
-            )}>
-              <div className="min-w-0">
-                <Label id={`${headerFieldId}-line-item-label`}>{t('editor.lines.item')}</Label>
-                <SearchSelect
-                  id={`${headerFieldId}-line-item`}
-                  ariaLabelledBy={`${headerFieldId}-line-item-label`}
-                  options={props.catalogItems.map((it) => ({ value: it.id, label: it.name }))}
-                  value={lineItem}
-                  onChange={(v) => {
-                    setLineItem(v ?? '')
-                    setLineEquipment('')
-                    setLineRateUnit('')
-                    setLineRateUnits([])
-                  }}
-                  placeholder={t('editor.lines.pickItem')}
-                />
-              </div>
-              <div>
-                <Label htmlFor="ft-qty">{t('editor.lines.quantity')}</Label>
-                <Input
-                  id="ft-qty"
-                  type="number"
-                  inputMode="numeric"
-                  min="1"
-                  step="1"
-                  className="w-24 text-right tabular-nums"
-                  value={lineQty}
-                  onChange={(e) => { if (/^\d*$/.test(e.target.value)) setLineQty(e.target.value) }}
-                  onBlur={() => { if (!Number.isInteger(Number(lineQty)) || Number(lineQty) < 1) setLineQty('1') }}
-                />
-              </div>
-              {lineRateUnits.length > 0 ? (
-                <div>
-                  <Label htmlFor="ft-rate-unit">{t('editor.lines.rateUnit')}</Label>
-                  <Select id="ft-rate-unit" value={lineRateUnit} onChange={(event) => setLineRateUnit(event.target.value)}>
-                    {lineRateUnits.map((unit) => (
-                      <option key={unit.unitCode} value={unit.unitCode}>{unit.unitName} · {money(unit.billRate)}</option>
-                    ))}
-                  </Select>
-                </div>
-              ) : null}
-              <div>
-                <Label htmlFor="ft-rate">{t('editor.lines.rate')}</Label>
-                <Input id="ft-rate" className="w-full cursor-not-allowed bg-slate-100 text-right tabular-nums text-slate-700 dark:bg-slate-900 dark:text-slate-300" value={lineRateLoading ? '…' : lineRate ? money(lineRate) : '—'} readOnly />
-              </div>
-              <div>
-                <Label htmlFor={`${headerFieldId}-line-amount`}>{t('editor.lines.amount')}</Label>
-                <Input id={`${headerFieldId}-line-amount`} className="w-full cursor-not-allowed bg-slate-100 text-right tabular-nums text-slate-700 dark:bg-slate-900 dark:text-slate-300" value={lineRateLoading ? '…' : lineAmount ? money(lineAmount) : '—'} readOnly />
-              </div>
-              {lineRateError && !lineRateLoading ? (
-                <p role="alert" className="text-xs text-red-600 md:col-span-full dark:text-red-400">{lineRateError}</p>
-              ) : null}
-              {props.equipmentEnabled && selectedItem?.kind === 'equipment_charge' && equipmentOptions.length > 0 ? (
-                <div className="min-w-0 md:col-span-2">
-                  <Label id={`${headerFieldId}-line-equipment-label`}>{t('editor.lines.equipment')}</Label>
+        {activeSection === "items" ? (
+          <section>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t("editor.lines.title")}
+            </h3>
+            <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+              {t("editor.lines.hint")}
+            </p>
+            {editable && (
+              <div
+                className={cn(
+                  "mb-4 grid w-full items-end gap-3",
+                  lineRateUnits.length > 0
+                    ? "md:grid-cols-[minmax(16rem,1fr)_7rem_9rem_9rem_9rem]"
+                    : "md:grid-cols-[minmax(16rem,1fr)_7rem_9rem_9rem]",
+                )}
+              >
+                <div className="min-w-0">
+                  <Label id={`${headerFieldId}-line-item-label`}>{t("editor.lines.item")}</Label>
                   <SearchSelect
-                    id={`${headerFieldId}-line-equipment`}
-                    ariaLabelledBy={`${headerFieldId}-line-equipment-label`}
-                    options={[{ value: '', label: t('editor.lines.pooledItem') }, ...equipmentOptions.map((unit) => ({ value: unit.id, label: `${unit.unitNumber} · ${unit.name}` }))]}
-                    value={lineEquipment}
-                    onChange={(value) => {
-                      setLineEquipment(value ?? '')
-                      // No unit, no operator: the attribution is to the machine.
-                      if (!value) setLineOperator('')
-                      setLineRateUnit('')
-                      setLineRateUnits([])
+                    id={`${headerFieldId}-line-item`}
+                    ariaLabelledBy={`${headerFieldId}-line-item-label`}
+                    options={props.catalogItems.map((it) => ({ value: it.id, label: it.name }))}
+                    value={lineItem}
+                    onChange={(v) => {
+                      setLineItem(v ?? "");
+                      setLineEquipment("");
+                      setLineRateUnit("");
+                      setLineRateUnits([]);
                     }}
-                    placeholder={t('editor.lines.pooledItem')}
+                    placeholder={t("editor.lines.pickItem")}
                   />
                 </div>
-              ) : null}
-              {/* Operator. Offered only once a specific unit is chosen, and only
+                <div>
+                  <Label htmlFor="ft-qty">{t("editor.lines.quantity")}</Label>
+                  <Input
+                    id="ft-qty"
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    step="1"
+                    className="w-24 text-right tabular-nums"
+                    value={lineQty}
+                    onChange={(e) => {
+                      if (/^\d*$/.test(e.target.value)) setLineQty(e.target.value);
+                    }}
+                    onBlur={() => {
+                      if (!Number.isInteger(Number(lineQty)) || Number(lineQty) < 1)
+                        setLineQty("1");
+                    }}
+                  />
+                </div>
+                {lineRateUnits.length > 0 ? (
+                  <div>
+                    <Label htmlFor="ft-rate-unit">{t("editor.lines.rateUnit")}</Label>
+                    <Select
+                      id="ft-rate-unit"
+                      value={lineRateUnit}
+                      onChange={(event) => setLineRateUnit(event.target.value)}
+                    >
+                      {lineRateUnits.map((unit) => (
+                        <option key={unit.unitCode} value={unit.unitCode}>
+                          {unit.unitName} · {money(unit.billRate)}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                ) : null}
+                <div>
+                  <Label htmlFor="ft-rate">{t("editor.lines.rate")}</Label>
+                  <Input
+                    id="ft-rate"
+                    className="w-full cursor-not-allowed bg-slate-100 text-right tabular-nums text-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                    value={lineRateLoading ? "…" : lineRate ? money(lineRate) : "—"}
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`${headerFieldId}-line-amount`}>{t("editor.lines.amount")}</Label>
+                  <Input
+                    id={`${headerFieldId}-line-amount`}
+                    className="w-full cursor-not-allowed bg-slate-100 text-right tabular-nums text-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                    value={lineRateLoading ? "…" : lineAmount ? money(lineAmount) : "—"}
+                    readOnly
+                  />
+                </div>
+                {lineRateError && !lineRateLoading ? (
+                  <p
+                    role="alert"
+                    className="text-xs text-red-600 md:col-span-full dark:text-red-400"
+                  >
+                    {lineRateError}
+                  </p>
+                ) : null}
+                {props.equipmentEnabled &&
+                selectedItem?.kind === "equipment_charge" &&
+                equipmentOptions.length > 0 ? (
+                  <div className="min-w-0 md:col-span-2">
+                    <Label id={`${headerFieldId}-line-equipment-label`}>
+                      {t("editor.lines.equipment")}
+                    </Label>
+                    <SearchSelect
+                      id={`${headerFieldId}-line-equipment`}
+                      ariaLabelledBy={`${headerFieldId}-line-equipment-label`}
+                      options={[
+                        { value: "", label: t("editor.lines.pooledItem") },
+                        ...equipmentOptions.map((unit) => ({
+                          value: unit.id,
+                          label: `${unit.unitNumber} · ${unit.name}`,
+                        })),
+                      ]}
+                      value={lineEquipment}
+                      onChange={(value) => {
+                        setLineEquipment(value ?? "");
+                        // No unit, no operator: the attribution is to the machine.
+                        if (!value) setLineOperator("");
+                        setLineRateUnit("");
+                        setLineRateUnits([]);
+                      }}
+                      placeholder={t("editor.lines.pooledItem")}
+                    />
+                  </div>
+                ) : null}
+                {/* Operator. Offered only once a specific unit is chosen, and only
                   from THIS ticket's crew — the ticket is signed as the record of
                   who was on site, so it cannot attribute a machine to somebody
                   it does not place there (the API enforces the same rule).
                   Left blank the charge still records normally; it is the
                   equipment incentive that refuses an unattributed month. */}
-              {props.equipmentEnabled && lineEquipment && crewOperatorOptions.length > 0 ? (
-                <div className="min-w-0 md:col-span-2">
-                  <Label id={`${headerFieldId}-line-operator-label`}>{t('editor.lines.operator')}</Label>
-                  <SearchSelect
-                    id={`${headerFieldId}-line-operator`}
-                    ariaLabelledBy={`${headerFieldId}-line-operator-label`}
-                    options={[{ value: '', label: t('editor.lines.noOperator') }, ...crewOperatorOptions]}
-                    value={lineOperator}
-                    onChange={(value) => setLineOperator(value ?? '')}
-                    placeholder={t('editor.lines.noOperator')}
-                  />
-                </div>
-              ) : null}
-              {projectTasks.length > 0 ? (
-                <div className="min-w-0 md:col-span-2">
-                  <Label id={`${headerFieldId}-line-task-label`}>{t('editor.lines.task')}</Label>
-                  <SearchSelect
-                    id={`${headerFieldId}-line-task`}
-                    ariaLabelledBy={`${headerFieldId}-line-task-label`}
-                    options={[{ value: '', label: t('editor.lines.noTask') }, ...projectTasks.map((task) => ({
-                      value: task.id,
-                      label: task.code ? `${task.code} · ${task.name}` : task.name,
-                    }))]}
-                    value={lineTask}
-                    onChange={(value) => setLineTask(value ?? '')}
-                    placeholder={t('editor.lines.noTask')}
-                  />
-                </div>
-              ) : null}
-              {lineRateSource ? (
-                <div className="text-xs text-slate-500 md:col-span-3 dark:text-slate-400">
-                  {t(`editor.lines.rateSource.${lineRateSource}`)}
-                  {lineComponents.length > 0 ? ` · ${lineComponents.map((component) => `${Number(component.quantity)} ${component.unitName} × ${money(component.rate)}`).join(' + ')}` : ''}
-                  {linePolicyProvenance === 'inferred' ? (
-                    <span className="text-amber-600 dark:text-amber-400">
-                      {` · ${t('editor.lines.inferredPolicy')}`}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          )}
-          {ticket.lines.length === 0 ? (
-            !editable ? <p className="py-3 text-center text-sm text-slate-400">{t('editor.lines.empty')}</p> : null
-          ) : (
-            <SharedTable className="w-full text-sm">
-              <SharedTableHeader>
-                <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
-                  <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.lines.item')}</SharedTableHead>
-                  <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.lines.description')}</SharedTableHead>
-                  <SharedTableHead className="py-1 pr-2 text-right font-medium">{t('editor.lines.quantity')}</SharedTableHead>
-                  <SharedTableHead className="py-1 pr-2 text-right font-medium">{t('editor.lines.rate')}</SharedTableHead>
-                  <SharedTableHead className="py-1 pr-2 text-right font-medium">{t('editor.lines.amount')}</SharedTableHead>
-                  {editable && <SharedTableHead className="w-8" />}
-                </SharedTableRow>
-              </SharedTableHeader>
-              <SharedTableBody>
-                {ticket.lines.map((l) => (
-                  <SharedTableRow key={l.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <SharedTableCell className="py-1.5 pr-2"><div>{l.item_name ?? '—'}</div>{l.equipment_name ? <div className="text-xs text-slate-500">{l.equipment_name}</div> : null}</SharedTableCell>
-                    <SharedTableCell className="py-1.5 pr-2 text-slate-500"><div>{l.description ?? '—'}</div>{l.project_task_name ? <div className="text-xs">{t('editor.lines.taskLabel', { task: l.project_task_name })}</div> : null}{l.rate_components?.length ? <div className="text-xs">{l.rate_components.map((component) => `${Number(component.quantity)} ${component.unitName}`).join(' + ')}</div> : null}</SharedTableCell>
-                    <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">
-                      {Number(l.quantity)} {l.rate_components?.length === 1 ? l.rate_components[0]!.unitName : (l.unit ?? '')}
-                    </SharedTableCell>
-                    <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">{money(l.bill_rate ?? l.unit_price)}</SharedTableCell>
-                    <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">{money(l.bill_amount ?? l.amount)}</SharedTableCell>
-                    {editable && (
-                      <SharedTableCell className="py-1.5 text-right">
-                        <button
-                          type="button"
-                          aria-label={t('editor.lines.remove')}
-                          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
-                          onClick={() => void call('POST', { action: 'remove-line', lineId: l.id }, { preserveDraft: true })}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </SharedTableCell>
-                    )}
+                {props.equipmentEnabled && lineEquipment && crewOperatorOptions.length > 0 ? (
+                  <div className="min-w-0 md:col-span-2">
+                    <Label id={`${headerFieldId}-line-operator-label`}>
+                      {t("editor.lines.operator")}
+                    </Label>
+                    <SearchSelect
+                      id={`${headerFieldId}-line-operator`}
+                      ariaLabelledBy={`${headerFieldId}-line-operator-label`}
+                      options={[
+                        { value: "", label: t("editor.lines.noOperator") },
+                        ...crewOperatorOptions,
+                      ]}
+                      value={lineOperator}
+                      onChange={(value) => setLineOperator(value ?? "")}
+                      placeholder={t("editor.lines.noOperator")}
+                    />
+                  </div>
+                ) : null}
+                {projectTasks.length > 0 ? (
+                  <div className="min-w-0 md:col-span-2">
+                    <Label id={`${headerFieldId}-line-task-label`}>{t("editor.lines.task")}</Label>
+                    <SearchSelect
+                      id={`${headerFieldId}-line-task`}
+                      ariaLabelledBy={`${headerFieldId}-line-task-label`}
+                      options={[
+                        { value: "", label: t("editor.lines.noTask") },
+                        ...projectTasks.map((task) => ({
+                          value: task.id,
+                          label: task.code ? `${task.code} · ${task.name}` : task.name,
+                        })),
+                      ]}
+                      value={lineTask}
+                      onChange={(value) => setLineTask(value ?? "")}
+                      placeholder={t("editor.lines.noTask")}
+                    />
+                  </div>
+                ) : null}
+                {lineRateSource ? (
+                  <div className="text-xs text-slate-500 md:col-span-3 dark:text-slate-400">
+                    {t(`editor.lines.rateSource.${lineRateSource}`)}
+                    {lineComponents.length > 0
+                      ? ` · ${lineComponents.map((component) => `${Number(component.quantity)} ${component.unitName} × ${money(component.rate)}`).join(" + ")}`
+                      : ""}
+                    {linePolicyProvenance === "inferred" ? (
+                      <span className="text-amber-600 dark:text-amber-400">
+                        {` · ${t("editor.lines.inferredPolicy")}`}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
+            {ticket.lines.length === 0 ? (
+              !editable ? (
+                <p className="py-3 text-center text-sm text-slate-400">{t("editor.lines.empty")}</p>
+              ) : null
+            ) : (
+              <SharedTable className="w-full text-sm">
+                <SharedTableHeader>
+                  <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
+                    <SharedTableHead className="py-1 pr-2 font-medium">
+                      {t("editor.lines.item")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 font-medium">
+                      {t("editor.lines.description")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 text-right font-medium">
+                      {t("editor.lines.quantity")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 text-right font-medium">
+                      {t("editor.lines.rate")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 text-right font-medium">
+                      {t("editor.lines.amount")}
+                    </SharedTableHead>
+                    {editable && <SharedTableHead className="w-8" />}
                   </SharedTableRow>
-                ))}
-              </SharedTableBody>
-            </SharedTable>
-          )}
-          {editable ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-2"
-              disabled={busy || lineRateLoading || lineRateError !== null || lineRate === '' || !Number.isInteger(Number(lineQty)) || Number(lineQty) < 1 || (lineRateUnits.length > 0 && !lineRateUnit)}
-              onClick={() => void addItemLine()}
-            >
-              <Plus size={14} /> {t('editor.lines.add')}
-            </Button>
-          ) : null}
-        </section> : null}
+                </SharedTableHeader>
+                <SharedTableBody>
+                  {ticket.lines.map((l) => (
+                    <SharedTableRow
+                      key={l.id}
+                      className="border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <SharedTableCell className="py-1.5 pr-2">
+                        <div>{l.item_name ?? "—"}</div>
+                        {l.equipment_name ? (
+                          <div className="text-xs text-slate-500">{l.equipment_name}</div>
+                        ) : null}
+                      </SharedTableCell>
+                      <SharedTableCell className="py-1.5 pr-2 text-slate-500">
+                        <div>{l.description ?? "—"}</div>
+                        {l.project_task_name ? (
+                          <div className="text-xs">
+                            {t("editor.lines.taskLabel", { task: l.project_task_name })}
+                          </div>
+                        ) : null}
+                        {l.rate_components?.length ? (
+                          <div className="text-xs">
+                            {l.rate_components
+                              .map(
+                                (component) =>
+                                  `${Number(component.quantity)} ${component.unitName}`,
+                              )
+                              .join(" + ")}
+                          </div>
+                        ) : null}
+                      </SharedTableCell>
+                      <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">
+                        {Number(l.quantity)}{" "}
+                        {l.rate_components?.length === 1
+                          ? l.rate_components[0]!.unitName
+                          : (l.unit ?? "")}
+                      </SharedTableCell>
+                      <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">
+                        {money(l.bill_rate ?? l.unit_price)}
+                      </SharedTableCell>
+                      <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">
+                        {money(l.bill_amount ?? l.amount)}
+                      </SharedTableCell>
+                      {editable && (
+                        <SharedTableCell className="py-1.5 text-right">
+                          <button
+                            type="button"
+                            aria-label={t("editor.lines.remove")}
+                            className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
+                            onClick={() =>
+                              void call(
+                                "POST",
+                                { action: "remove-line", lineId: l.id },
+                                { preserveDraft: true },
+                              )
+                            }
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </SharedTableCell>
+                      )}
+                    </SharedTableRow>
+                  ))}
+                </SharedTableBody>
+              </SharedTable>
+            )}
+            {editable ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                disabled={
+                  busy ||
+                  lineRateLoading ||
+                  lineRateError !== null ||
+                  lineRate === "" ||
+                  !Number.isInteger(Number(lineQty)) ||
+                  Number(lineQty) < 1 ||
+                  (lineRateUnits.length > 0 && !lineRateUnit)
+                }
+                onClick={() => void addItemLine()}
+              >
+                <Plus size={14} /> {t("editor.lines.add")}
+              </Button>
+            ) : null}
+          </section>
+        ) : null}
 
-        {activeSection === 'production' && props.progressEnabled ? (
+        {activeSection === "production" && props.progressEnabled ? (
           <section className="space-y-3">
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.production.title')}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.production.hint')}</p>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("editor.production.title")}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("editor.production.hint")}
+              </p>
             </div>
             {editable ? (
               productionTasks.length === 0 ? (
-                <p className="rounded-md bg-slate-50 p-2.5 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{t('editor.production.noBudgetedTasks')}</p>
+                <p className="rounded-md bg-slate-50 p-2.5 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                  {t("editor.production.noBudgetedTasks")}
+                </p>
               ) : (
                 <div className="grid w-full items-end gap-3 md:grid-cols-[minmax(14rem,1fr)_8rem_6rem]">
                   <div className="min-w-0">
-                    <Label id={`${headerFieldId}-prod-task-label`}>{t('editor.production.task')}</Label>
+                    <Label id={`${headerFieldId}-prod-task-label`}>
+                      {t("editor.production.task")}
+                    </Label>
                     <SearchSelect
                       id={`${headerFieldId}-prod-task`}
                       ariaLabelledBy={`${headerFieldId}-prod-task-label`}
@@ -1615,12 +2145,14 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                         label: task.code ? `${task.code} · ${task.name}` : task.name,
                       }))}
                       value={prodTask}
-                      onChange={(value) => setProdTask(value ?? '')}
-                      placeholder={t('editor.production.pickTask')}
+                      onChange={(value) => setProdTask(value ?? "")}
+                      placeholder={t("editor.production.pickTask")}
                     />
                   </div>
                   <div>
-                    <Label htmlFor={`${headerFieldId}-prod-qty`}>{t('editor.production.quantity')}</Label>
+                    <Label htmlFor={`${headerFieldId}-prod-qty`}>
+                      {t("editor.production.quantity")}
+                    </Label>
                     <Input
                       id={`${headerFieldId}-prod-qty`}
                       inputMode="decimal"
@@ -1630,46 +2162,90 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                     />
                   </div>
                   <div>
-                    <Label htmlFor={`${headerFieldId}-prod-unit`}>{t('editor.production.unit')}</Label>
-                    <Input id={`${headerFieldId}-prod-unit`} readOnly value={prodUnit || '—'} className="cursor-not-allowed bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300" />
+                    <Label htmlFor={`${headerFieldId}-prod-unit`}>
+                      {t("editor.production.unit")}
+                    </Label>
+                    <Input
+                      id={`${headerFieldId}-prod-unit`}
+                      readOnly
+                      value={prodUnit || "—"}
+                      className="cursor-not-allowed bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                    />
                   </div>
                   <div className="md:col-span-3">
-                    <Label htmlFor={`${headerFieldId}-prod-note`}>{t('editor.production.note')}</Label>
-                    <Input id={`${headerFieldId}-prod-note`} value={prodNote} maxLength={500} onChange={(event) => setProdNote(event.target.value)} />
+                    <Label htmlFor={`${headerFieldId}-prod-note`}>
+                      {t("editor.production.note")}
+                    </Label>
+                    <Input
+                      id={`${headerFieldId}-prod-note`}
+                      value={prodNote}
+                      maxLength={500}
+                      onChange={(event) => setProdNote(event.target.value)}
+                    />
                   </div>
                   <div className="md:col-span-3">
-                    <Button size="sm" variant="outline" disabled={busy || !prodTask || !prodQtyValid} onClick={() => void addProduction()}>
-                      <Plus size={14} /> {t('editor.production.add')}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy || !prodTask || !prodQtyValid}
+                      onClick={() => void addProduction()}
+                    >
+                      <Plus size={14} /> {t("editor.production.add")}
                     </Button>
                   </div>
                 </div>
               )
             ) : null}
             {(ticket.production ?? []).length === 0 ? (
-              !editable ? <p className="py-3 text-center text-sm text-slate-400">{t('editor.production.empty')}</p> : null
+              !editable ? (
+                <p className="py-3 text-center text-sm text-slate-400">
+                  {t("editor.production.empty")}
+                </p>
+              ) : null
             ) : (
               <SharedTable className="w-full text-sm">
                 <SharedTableHeader>
                   <SharedTableRow className="text-left text-xs text-slate-500 dark:text-slate-400">
-                    <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.production.task')}</SharedTableHead>
-                    <SharedTableHead className="py-1 pr-2 text-right font-medium">{t('editor.production.quantity')}</SharedTableHead>
-                    <SharedTableHead className="py-1 pr-2 font-medium">{t('editor.production.note')}</SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 font-medium">
+                      {t("editor.production.task")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 text-right font-medium">
+                      {t("editor.production.quantity")}
+                    </SharedTableHead>
+                    <SharedTableHead className="py-1 pr-2 font-medium">
+                      {t("editor.production.note")}
+                    </SharedTableHead>
                     {editable && <SharedTableHead className="w-8" />}
                   </SharedTableRow>
                 </SharedTableHeader>
                 <SharedTableBody>
                   {(ticket.production ?? []).map((row) => (
-                    <SharedTableRow key={row.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <SharedTableCell className="py-1.5 pr-2">{row.taskCode ? `${row.taskCode} · ${row.taskName}` : row.taskName}</SharedTableCell>
-                      <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">{row.quantity.replace(/\.?0+$/, '')} {row.unit}</SharedTableCell>
-                      <SharedTableCell className="py-1.5 pr-2 text-slate-500">{row.note ?? '—'}</SharedTableCell>
+                    <SharedTableRow
+                      key={row.id}
+                      className="border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <SharedTableCell className="py-1.5 pr-2">
+                        {row.taskCode ? `${row.taskCode} · ${row.taskName}` : row.taskName}
+                      </SharedTableCell>
+                      <SharedTableCell className="py-1.5 pr-2 text-right tabular-nums">
+                        {row.quantity.replace(/\.?0+$/, "")} {row.unit}
+                      </SharedTableCell>
+                      <SharedTableCell className="py-1.5 pr-2 text-slate-500">
+                        {row.note ?? "—"}
+                      </SharedTableCell>
                       {editable && (
                         <SharedTableCell className="py-1.5 text-right">
                           <button
                             type="button"
-                            aria-label={t('editor.production.remove')}
+                            aria-label={t("editor.production.remove")}
                             className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
-                            onClick={() => void call('POST', { action: 'remove-quantity', quantityId: row.id }, { preserveDraft: true })}
+                            onClick={() =>
+                              void call(
+                                "POST",
+                                { action: "remove-quantity", quantityId: row.id },
+                                { preserveDraft: true },
+                              )
+                            }
                           >
                             <Trash2 size={13} />
                           </button>
@@ -1683,58 +2259,97 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
           </section>
         ) : null}
 
-        {activeSection === 'tasks' ? (
+        {activeSection === "tasks" ? (
           <section className="space-y-3">
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.tasks.title')}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.tasks.hint')}</p>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("editor.tasks.title")}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t("editor.tasks.hint")}</p>
             </div>
             <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
               <SharedTable className="w-full text-sm">
                 <SharedTableHeader className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-                  <SharedTableRow><SharedTableHead className="px-3 py-2">{t('editor.tasks.code')}</SharedTableHead><SharedTableHead className="px-3 py-2">{t('editor.tasks.task')}</SharedTableHead><SharedTableHead className="px-3 py-2">{tCommon('labels.status')}</SharedTableHead><SharedTableHead className="px-3 py-2 text-right">{t('editor.tasks.estimatedHours')}</SharedTableHead></SharedTableRow>
-                </SharedTableHeader>
-                <SharedTableBody>{projectTasks.map((task) => (
-                  <SharedTableRow key={task.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <SharedTableCell className="px-3 py-2 font-mono text-xs">{task.code || '—'}</SharedTableCell>
-                    <SharedTableCell className="px-3 py-2">{task.name}</SharedTableCell>
-                    <SharedTableCell className="px-3 py-2 capitalize text-slate-500">{task.status.replaceAll('_', ' ')}</SharedTableCell>
-                    <SharedTableCell className="px-3 py-2 text-right tabular-nums">{task.estimatedHours ?? '—'}</SharedTableCell>
+                  <SharedTableRow>
+                    <SharedTableHead className="px-3 py-2">
+                      {t("editor.tasks.code")}
+                    </SharedTableHead>
+                    <SharedTableHead className="px-3 py-2">
+                      {t("editor.tasks.task")}
+                    </SharedTableHead>
+                    <SharedTableHead className="px-3 py-2">
+                      {tCommon("labels.status")}
+                    </SharedTableHead>
+                    <SharedTableHead className="px-3 py-2 text-right">
+                      {t("editor.tasks.estimatedHours")}
+                    </SharedTableHead>
                   </SharedTableRow>
-                ))}</SharedTableBody>
+                </SharedTableHeader>
+                <SharedTableBody>
+                  {projectTasks.map((task) => (
+                    <SharedTableRow
+                      key={task.id}
+                      className="border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <SharedTableCell className="px-3 py-2 font-mono text-xs">
+                        {task.code || "—"}
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-2">{task.name}</SharedTableCell>
+                      <SharedTableCell className="px-3 py-2 capitalize text-slate-500">
+                        {task.status.replaceAll("_", " ")}
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-2 text-right tabular-nums">
+                        {task.estimatedHours ?? "—"}
+                      </SharedTableCell>
+                    </SharedTableRow>
+                  ))}
+                </SharedTableBody>
               </SharedTable>
             </div>
           </section>
         ) : null}
 
-        {activeSection === 'related' ? (
+        {activeSection === "related" ? (
           <section className="space-y-5">
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.related.title')}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.related.hint')}</p>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {t("editor.related.title")}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t("editor.related.hint")}
+              </p>
             </div>
 
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                {t('editor.related.billingRequests')}
+                {t("editor.related.billingRequests")}
               </h4>
               {ticket.billingRequests.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                  {t('editor.related.noBillingRequests')}
+                  {t("editor.related.noBillingRequests")}
                 </p>
               ) : (
                 <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                   {ticket.billingRequests.map((request) => (
-                    <div key={request.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm">
+                    <div
+                      key={request.id}
+                      className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm"
+                    >
                       <Link
-                        href={ticket.projectId ? `/projects?project=${ticket.projectId}&projectTab=billing` : '/projects'}
+                        href={
+                          ticket.projectId
+                            ? `/projects?project=${ticket.projectId}&projectTab=billing`
+                            : "/projects"
+                        }
                         className="font-mono font-semibold text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {request.requestNumber}
                       </Link>
-                      <Badge variant={STATUS_VARIANT[request.status] ?? 'secondary'}>{request.status.replaceAll('_', ' ')}</Badge>
+                      <Badge variant={STATUS_VARIANT[request.status] ?? "secondary"}>
+                        {request.status.replaceAll("_", " ")}
+                      </Badge>
                       <span className="text-xs text-slate-500 dark:text-slate-400">
-                        {t('editor.related.selectedOn', { date: request.selectedAt.slice(0, 10) })}
+                        {t("editor.related.selectedOn", { date: request.selectedAt.slice(0, 10) })}
                       </span>
                       <span className="flex-1" />
                       {request.invoiceDocumentId && request.invoiceNumber ? (
@@ -1753,45 +2368,54 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
 
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                {t('editor.related.documents')}
+                {t("editor.related.documents")}
               </h4>
               {ticket.links.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                  {t('editor.related.noDocuments')}
+                  {t("editor.related.noDocuments")}
                 </p>
               ) : (
                 <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                   {ticket.links.map((link) => {
-                    const href = relatedDocumentHref(link.kind, link.id, ticket.projectId)
+                    const href = relatedDocumentHref(link.kind, link.id, ticket.projectId);
                     return (
-                      <div key={`${link.direction}-${link.link_type}-${link.id}`} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                      <div
+                        key={`${link.direction}-${link.link_type}-${link.id}`}
+                        className="flex items-center gap-3 px-3 py-2.5 text-sm"
+                      >
                         <span className="w-24 shrink-0 text-xs text-slate-500 dark:text-slate-400">
-                          {link.link_type === 'created_from'
-                            ? t('editor.related.linkType.created_from')
-                            : link.link_type === 'bills'
-                              ? t('editor.related.linkType.bills')
-                              : link.link_type.replaceAll('_', ' ')}
+                          {link.link_type === "created_from"
+                            ? t("editor.related.linkType.created_from")
+                            : link.link_type === "bills"
+                              ? t("editor.related.linkType.bills")
+                              : link.link_type.replaceAll("_", " ")}
                         </span>
                         {href ? (
-                          <Link href={href} className="font-mono font-semibold text-teal-700 hover:underline dark:text-teal-300">
+                          <Link
+                            href={href}
+                            className="font-mono font-semibold text-teal-700 hover:underline dark:text-teal-300"
+                          >
                             {link.document_number}
                           </Link>
                         ) : (
                           <span className="font-mono font-semibold">{link.document_number}</span>
                         )}
-                        <span className="text-xs text-slate-400">{link.kind.replaceAll('_', ' ')}</span>
+                        <span className="text-xs text-slate-400">
+                          {link.kind.replaceAll("_", " ")}
+                        </span>
                         <span className="flex-1" />
-                        <Badge variant={STATUS_VARIANT[link.status] ?? 'secondary'}>{link.status.replaceAll('_', ' ')}</Badge>
+                        <Badge variant={STATUS_VARIANT[link.status] ?? "secondary"}>
+                          {link.status.replaceAll("_", " ")}
+                        </Badge>
                       </div>
-                    )
+                    );
                   })}
                 </div>
               )}
             </div>
           </section>
         ) : null}
-
       </div>
     </TransactionDrawer>
-  )
+  );
 }

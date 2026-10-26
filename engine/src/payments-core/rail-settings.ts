@@ -44,8 +44,7 @@ const EFT_REQUIRED: (keyof EftSettings)[] = [
 ];
 
 export type EftSettingsResult =
-  | { ok: true; settings: EftSettings }
-  | { ok: false; missing: string[] };
+  { ok: true; settings: EftSettings } | { ok: false; missing: string[] };
 
 export function validateEftSettings(eft: Partial<EftSettings>): EftSettingsResult {
   const missing = EFT_REQUIRED.filter((k) => {
@@ -54,24 +53,37 @@ export function validateEftSettings(eft: Partial<EftSettings>): EftSettingsResul
   });
   if (missing.length > 0) return { ok: false, missing };
   const s = eft as EftSettings;
-  if (!/^\d{5}$/.test(s.dataCentre)) return { ok: false, missing: ["dataCentre (must be 5 digits)"] };
+  if (!/^\d{5}$/.test(s.dataCentre))
+    return { ok: false, missing: ["dataCentre (must be 5 digits)"] };
   if (!/^\d{5}$/.test(s.originatingDataCentre) || Number(s.originatingDataCentre) === 0) {
-    return { ok: false, missing: ["originatingDataCentre (must be 5 digits and greater than zero)"] };
+    return {
+      ok: false,
+      missing: ["originatingDataCentre (must be 5 digits and greater than zero)"],
+    };
   }
-  if (!/^\d{3}$/.test(s.institution)) return { ok: false, missing: ["institution (must be 3 digits)"] };
+  if (!/^\d{3}$/.test(s.institution))
+    return { ok: false, missing: ["institution (must be 3 digits)"] };
   if (!/^\d{5}$/.test(s.transit)) return { ok: false, missing: ["transit (must be 5 digits)"] };
   if (!/^\d{1,12}$/.test(s.account)) return { ok: false, missing: ["account (1–12 digits)"] };
-  if (s.originatorId.length > 10) return { ok: false, missing: ["originatorId (max 10 characters)"] };
+  if (s.originatorId.length > 10)
+    return { ok: false, missing: ["originatorId (max 10 characters)"] };
   const transactionCode = (eft as Record<string, unknown>).transactionCode;
-  if (transactionCode !== undefined && (typeof transactionCode !== "string" || !/^\d{3}$/.test(transactionCode))) {
-    return { ok: false, missing: ["transactionCode (must be three digits; omit it to use the standard 460 code)"] };
+  if (
+    transactionCode !== undefined &&
+    (typeof transactionCode !== "string" || !/^\d{3}$/.test(transactionCode))
+  ) {
+    return {
+      ok: false,
+      missing: ["transactionCode (must be three digits; omit it to use the standard 460 code)"],
+    };
   }
   return { ok: true, settings: s };
 }
 
 /** Read and validate the org's EFT origination settings. Never fakes success. */
 export async function loadEftSettings(orgId: string, runId?: string): Promise<EftSettingsResult> {
-  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+  const r = await db.execute<{ originator_secrets_encrypted: string | null }>(
+    sql`
     select p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
@@ -80,9 +92,14 @@ export async function loadEftSettings(orgId: string, runId?: string): Promise<Ef
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const sealed = r[0]?.originator_secrets_encrypted;
-  const eft = sealed == null ? {} : unsealJson<Partial<EftSettings>>(sealed, { orgId, purpose: "payment.originator.secrets" });
+  const eft =
+    sealed == null
+      ? {}
+      : unsealJson<Partial<EftSettings>>(sealed, { orgId, purpose: "payment.originator.secrets" });
   return validateEftSettings(eft);
 }
 
@@ -113,9 +130,7 @@ export function isValidIban(value: string): boolean {
   const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
   let remainder = 0;
   for (const character of rearranged) {
-    const digits = /[A-Z]/.test(character)
-      ? String(character.charCodeAt(0) - 55)
-      : character;
+    const digits = /[A-Z]/.test(character) ? String(character.charCodeAt(0) - 55) : character;
     for (const digit of digits) remainder = (remainder * 10 + Number(digit)) % 97;
   }
   return remainder === 1;

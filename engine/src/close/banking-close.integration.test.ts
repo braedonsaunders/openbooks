@@ -92,10 +92,15 @@ async function postBankJournal(
 }
 
 async function periodEndsOn(org: ScratchOrg): Promise<{ startsOn: string; endsOn: string }> {
-  const row = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
+  const row = (
+    await db.execute<{ starts_on: string; ends_on: string }>(
+      sql`
     select starts_on::text as starts_on, ends_on::text as ends_on
       from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}
-  `, "objects"))[0]!;
+  `,
+      "objects",
+    )
+  )[0]!;
   return { startsOn: row.starts_on, endsOn: row.ends_on };
 }
 
@@ -184,13 +189,17 @@ test(
         acknowledgement: "Controller accepts the unmatched period deposit; it clears next period.",
         evaluation,
       });
-      const event = (await db.execute<{ payload: Record<string, unknown> }>(sql`
+      const event = (
+        await db.execute<{ payload: Record<string, unknown> }>(
+          sql`
         select payload from close_events
          where org_id = ${org.orgId} and event_type = 'period.banking_close_acknowledged'
          order by at desc limit 1
-      `, "objects"))[0]?.payload as
-        | { acknowledgement?: string; accounts?: Array<{ status?: string }> }
-        | undefined;
+      `,
+          "objects",
+        )
+      )[0]?.payload as
+        { acknowledgement?: string; accounts?: Array<{ status?: string }> } | undefined;
       assert.equal(
         event?.acknowledgement,
         "Controller accepts the unmatched period deposit; it clears next period.",
@@ -275,16 +284,25 @@ test(
         },
         ctx,
       );
-      const statementLineId = (await db.execute<{ id: string }>(sql`
+      const statementLineId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = ${`gate-signed-deposit-${org.orgId}`}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: endsOn, statementBalance: "130" },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: periodLines },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [statementLineId],
+          journalLineIds: periodLines,
+        },
         ctx,
       );
       await markReconciled(recon.id, ctx);
@@ -322,7 +340,8 @@ test(
         periodId: org.periodId,
         bookId: org.bookId,
         actorId: actor,
-        acknowledgement: "Controller notes the late 50.00 back-dating; sign-off stands for the rest.",
+        acknowledgement:
+          "Controller notes the late 50.00 back-dating; sign-off stands for the rest.",
       });
       assert.equal(acknowledged.issues.length, 1);
     } finally {
@@ -331,35 +350,54 @@ test(
   },
 );
 
-test("source-evidenced sign-offs stop covering close when their policy is disabled", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-    const { endsOn } = await periodEndsOn(org);
-    await makeReconcilable(org);
-    const lineIds = await postBankJournal(org, actor, ["100"], "source-policy", org.date);
-    const entryId = (await db.execute<{ entry_id: string }>(sql`
-      select entry_id from journal_lines where org_id=${org.orgId} and id=${lineIds[0]}`, "objects"))[0]!.entry_id;
-    await applySourceLineEvidence(org.orgId, "test-connector", [{
-      entryId,
-      lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: endsOn }],
-    }]);
-    await refreshSourceReconciliationState(org.orgId, "test-connector");
-    const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
-    assert.equal(signed.signed, true);
-    const before = await bankingCloseStatus(org.orgId, { periodId: org.periodId, bookId: org.bookId, actorId: actor });
-    assert.equal(before[0]?.status, "signed_off");
+test(
+  "source-evidenced sign-offs stop covering close when their policy is disabled",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+      const { endsOn } = await periodEndsOn(org);
+      await makeReconcilable(org);
+      const lineIds = await postBankJournal(org, actor, ["100"], "source-policy", org.date);
+      const entryId = (
+        await db.execute<{ entry_id: string }>(
+          sql`
+      select entry_id from journal_lines where org_id=${org.orgId} and id=${lineIds[0]}`,
+          "objects",
+        )
+      )[0]!.entry_id;
+      await applySourceLineEvidence(org.orgId, "test-connector", [
+        {
+          entryId,
+          lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: endsOn }],
+        },
+      ]);
+      await refreshSourceReconciliationState(org.orgId, "test-connector");
+      const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);
+      assert.equal(signed.signed, true);
+      const before = await bankingCloseStatus(org.orgId, {
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actor,
+      });
+      assert.equal(before[0]?.status, "signed_off");
 
-    await ensureCloseDefaults(org.orgId, actor);
-    await db.execute(sql`update close_policies set is_active=false
+      await ensureCloseDefaults(org.orgId, actor);
+      await db.execute(sql`update close_policies set is_active=false
       where org_id=${org.orgId} and code='source-reconciliation-evidence'`);
-    const after = await bankingCloseStatus(org.orgId, { periodId: org.periodId, bookId: org.bookId, actorId: actor });
-    assert.equal(after[0]?.status, "none");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const after = await bankingCloseStatus(org.orgId, {
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actor,
+      });
+      assert.equal(after[0]?.status, "none");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test(
   "an account with activity but no reconciliation reports none and requires acknowledgement",
@@ -392,7 +430,8 @@ test(
         periodId: org.periodId,
         bookId: org.bookId,
         actorId: actor,
-        acknowledgement: "First banking close before statement feeds; reconciliation starts next period.",
+        acknowledgement:
+          "First banking close before statement feeds; reconciliation starts next period.",
       });
       assert.equal(evaluation.issues.length, 1);
     } finally {
@@ -439,10 +478,15 @@ test(
       const scope = { periodId: org.periodId, bookId: org.bookId };
       assert.equal(await bankingUnmatchedStatementLines(org.orgId, scope), 2);
       // Excluded lines leave the count: they need no match.
-      const excludedId = (await db.execute<{ id: string }>(sql`
+      const excludedId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = ${`m41-open-two-${org.orgId}`}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       await excludeStatementLine(excludedId, "duplicate of an earlier import", ctx);
       assert.equal(await bankingUnmatchedStatementLines(org.orgId, scope), 1);
     } finally {

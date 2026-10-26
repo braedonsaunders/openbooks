@@ -41,7 +41,12 @@ function source(): DynamicsSource {
             currencyCode: "EUR",
             remainingAmount: 60,
             salesInvoiceLines: [
-              { lineType: "Account", accountId: "GL-101", amountExcludingTax: 100, totalTaxAmount: 0 },
+              {
+                lineType: "Account",
+                accountId: "GL-101",
+                amountExcludingTax: 100,
+                totalTaxAmount: 0,
+              },
             ],
           },
         ];
@@ -95,11 +100,31 @@ test("invoice settlements and payment applications state the invoice currency wi
   // in transaction currency, and the links state the invoice currency.
   assert.deepEqual(changes.unbuildable, []);
   assert.deepEqual(
-    changes.documents.map((d) => ({ ref: d.sourceRef, kind: d.kind, currency: d.currency, fxRate: d.fxRate })),
+    changes.documents.map((d) => ({
+      ref: d.sourceRef,
+      kind: d.kind,
+      currency: d.currency,
+      fxRate: d.fxRate,
+    })),
     [
-      { ref: "salesInvoice:inv1", kind: "customer_invoice", currency: "EUR", fxRate: "1.1000000000" },
-      { ref: "salesInvoicePayment:inv1", kind: "customer_payment", currency: "EUR", fxRate: "1.1000000000" },
-      { ref: "customerPayment:pay1", kind: "customer_payment", currency: "EUR", fxRate: "1.1000000000" },
+      {
+        ref: "salesInvoice:inv1",
+        kind: "customer_invoice",
+        currency: "EUR",
+        fxRate: "1.1000000000",
+      },
+      {
+        ref: "salesInvoicePayment:inv1",
+        kind: "customer_payment",
+        currency: "EUR",
+        fxRate: "1.1000000000",
+      },
+      {
+        ref: "customerPayment:pay1",
+        kind: "customer_payment",
+        currency: "EUR",
+        fxRate: "1.1000000000",
+      },
     ],
   );
   assert.equal(changes.documents[0]?.lines[0]?.amount, "100.0000");
@@ -177,7 +202,12 @@ test("a blank invoice currency states the base with no rate", async () => {
             customerId: "c1",
             remainingAmount: 60,
             salesInvoiceLines: [
-              { lineType: "Account", accountId: "GL-101", amountExcludingTax: 100, totalTaxAmount: 0 },
+              {
+                lineType: "Account",
+                accountId: "GL-101",
+                amountExcludingTax: 100,
+                totalTaxAmount: 0,
+              },
             ],
           },
         ];
@@ -185,7 +215,10 @@ test("a blank invoice currency states the base with no rate", async () => {
       return [];
     },
   } as unknown as DynamicsClient;
-  const changes = await new DynamicsSource(client, { orgId: "org", baseCurrency: "USD" }).nativeChanges(null, ctx);
+  const changes = await new DynamicsSource(client, {
+    orgId: "org",
+    baseCurrency: "USD",
+  }).nativeChanges(null, ctx);
   assert.deepEqual(changes.applications, [
     {
       paymentRef: "salesInvoicePayment:inv1",
@@ -199,10 +232,34 @@ test("a blank invoice currency states the base with no rate", async () => {
 
 test("dated exchange rates resolve per posting date without floats", () => {
   const rateFor = bcFxRateFor("USD", [
-    { currencyCode: "EUR", startingDate: "2026-01-01", exchangeRateAmount: 1.1, relationalCurrencyCode: "USD", relationalExchangeRateAmount: 1 },
-    { currencyCode: "EUR", startingDate: "2026-02-01", exchangeRateAmount: 1.2, relationalCurrencyCode: "USD", relationalExchangeRateAmount: 1 },
-    { currencyCode: "GBP", startingDate: "2026-01-01", exchangeRateAmount: 1.5, relationalCurrencyCode: "EUR", relationalExchangeRateAmount: 1 },
-    { currencyCode: "JPY", startingDate: "not-a-date", exchangeRateAmount: 150, relationalCurrencyCode: "USD", relationalExchangeRateAmount: 1 },
+    {
+      currencyCode: "EUR",
+      startingDate: "2026-01-01",
+      exchangeRateAmount: 1.1,
+      relationalCurrencyCode: "USD",
+      relationalExchangeRateAmount: 1,
+    },
+    {
+      currencyCode: "EUR",
+      startingDate: "2026-02-01",
+      exchangeRateAmount: 1.2,
+      relationalCurrencyCode: "USD",
+      relationalExchangeRateAmount: 1,
+    },
+    {
+      currencyCode: "GBP",
+      startingDate: "2026-01-01",
+      exchangeRateAmount: 1.5,
+      relationalCurrencyCode: "EUR",
+      relationalExchangeRateAmount: 1,
+    },
+    {
+      currencyCode: "JPY",
+      startingDate: "not-a-date",
+      exchangeRateAmount: 150,
+      relationalCurrencyCode: "USD",
+      relationalExchangeRateAmount: 1,
+    },
   ]);
   assert.equal(rateFor("EUR", "2026-01-15"), "1.1000000000");
   assert.equal(rateFor("eur", "2026-02-10"), "1.2000000000");

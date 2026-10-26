@@ -1,15 +1,22 @@
 /** Database roles, RLS, and test ownership. Split from scripts/bootstrap.ts (pure moves only). */
-import { ensureRetirementBackupAccess } from "./retirement-backup-access.ts"
-import { migrationsDir, quoted, sha256 } from "../bootstrap-paths"
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
-import { revokeRuntimeFunctionExecute } from "../bootstrap-function-denials.ts"
-import { sql } from "drizzle-orm"
-import pg from "pg"
-import { constrainedSchemaOwnerRefusal, verifyReadRoleAssumption, type RuntimeDatabaseConfig } from "../bootstrap-roles.ts"
-import { db, env, pool } from "@openbooks/engine/platform/db"
-import { connectMigrationClient, describeBootstrapMigrationFailure, releaseMigrationClient } from "../bootstrap-migration-client.ts"
-
+import { ensureRetirementBackupAccess } from "./retirement-backup-access.ts";
+import { migrationsDir, quoted, sha256 } from "../bootstrap-paths";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { revokeRuntimeFunctionExecute } from "../bootstrap-function-denials.ts";
+import { sql } from "drizzle-orm";
+import pg from "pg";
+import {
+  constrainedSchemaOwnerRefusal,
+  verifyReadRoleAssumption,
+  type RuntimeDatabaseConfig,
+} from "../bootstrap-roles.ts";
+import { db, env, pool } from "@openbooks/engine/platform/db";
+import {
+  connectMigrationClient,
+  describeBootstrapMigrationFailure,
+  releaseMigrationClient,
+} from "../bootstrap-migration-client.ts";
 
 export async function assertConstrainedSchemaOwnerMigrationRole(
   runtimeConfig: RuntimeDatabaseConfig,
@@ -35,7 +42,9 @@ export async function assertConstrainedSchemaOwnerMigrationRole(
   const posture = result.rows[0];
   const runtimeUrl = new URL(runtimeConfig.connectionString);
   if (!env.OPENBOOKS_DB_URL?.trim()) {
-    throw new Error("constrained schema-owner migration requires OPENBOOKS_DB_URL (the migration login)");
+    throw new Error(
+      "constrained schema-owner migration requires OPENBOOKS_DB_URL (the migration login)",
+    );
   }
   const migrationUrl = new URL(env.OPENBOOKS_DB_URL);
   // Fail closed: the escape hatch this flag opens (migrating as the schema
@@ -139,10 +148,10 @@ export async function applyRowLevelSecurity(environment = "environments.sql"): P
   const file = join(migrationsDir, environment);
   const content = readFileSync(file, "utf8");
   const digest = sha256(content);
-  const state = (await db.execute<{
-      applied_digest: string | null;
-      catalog_drift: boolean;
-    }>(sql`
+  const state = await db.execute<{
+    applied_digest: string | null;
+    catalog_drift: boolean;
+  }>(sql`
     select
       (select sha256
          from public._applied_migrations
@@ -210,7 +219,7 @@ export async function applyRowLevelSecurity(environment = "environments.sql"): P
              )
            )
       ) as catalog_drift
-  `));
+  `);
   const policyState = state.rows[0]!;
   if (policyState.applied_digest !== digest || policyState.catalog_drift) {
     console.log("[bootstrap] refreshing row-level security catalog");
@@ -241,7 +250,7 @@ export async function applyRowLevelSecurity(environment = "environments.sql"): P
   // tooling paths connect as -- so an unprotected table looks protected in
   // every test. And a table with RLS on but no policy denies everyone, which
   // is a different failure that also must not reach a booting app.
-  const unprotected = (await db.execute<{ table_name: string; reason: string }>(sql`
+  const unprotected = await db.execute<{ table_name: string; reason: string }>(sql`
     select c.relname as table_name,
            case
              when not c.relrowsecurity then 'row-level security not enabled'
@@ -264,16 +273,14 @@ export async function applyRowLevelSecurity(environment = "environments.sql"): P
            select 1 from pg_policies p
             where p.schemaname = 'public' and p.tablename = c.relname)
        )
-  `));
+  `);
   // Fail loudly rather than booting an app whose tenant isolation has a hole.
   if (unprotected.rows.length > 0) {
     throw new Error(
       `row-level security incomplete on: ${unprotected.rows.map((r) => `${r.table_name} (${r.reason})`).join(", ")}`,
     );
   }
-  console.log(
-    "[bootstrap] row-level security verified on every org-scoped table",
-  );
+  console.log("[bootstrap] row-level security verified on every org-scoped table");
 }
 
 // Create the runtime database role (and reassert its safe posture) if it does
@@ -283,9 +290,7 @@ export async function applyRowLevelSecurity(environment = "environments.sql"): P
 // DDL time. Mirrors the openbooks_read pre-creation below migrate because
 // migrations also grant privileges to those roles. Idempotent — safe to call
 // again after migrate to grant access to newly created relations.
-export async function ensureRuntimeRoleExists(
-  config: RuntimeDatabaseConfig,
-): Promise<void> {
+export async function ensureRuntimeRoleExists(config: RuntimeDatabaseConfig): Promise<void> {
   const role = await quoted(config.roleName, "identifier");
   const password = await quoted(config.password, "literal");
   const existing = await pool.query<{ exists: boolean }>(
@@ -408,9 +413,7 @@ export async function ensureBypassObjectGrants(
   await pool.query(
     `grant select, insert, update, delete on all tables in schema public to ${role}`,
   );
-  await pool.query(
-    `grant usage, select, update on all sequences in schema public to ${role}`,
-  );
+  await pool.query(`grant usage, select, update on all sequences in schema public to ${role}`);
   // Same SECURITY DEFINER discipline as the runtime login: the public schema
   // holds tightly controlled maintenance functions the cross-tenant login
   // must not execute. The governed-query surface stays out: the bypass pool
@@ -424,8 +427,11 @@ export async function ensureBypassObjectGrants(
     `alter default privileges in schema public grant usage, select, update on sequences to ${role}`,
   );
   const backupClient = await pool.connect();
-  try { await ensureRetirementBackupAccess(backupClient, config.roleName); }
-  finally { backupClient.release(); }
+  try {
+    await ensureRetirementBackupAccess(backupClient, config.roleName);
+  } finally {
+    backupClient.release();
+  }
 }
 
 // Automatic mode: create the dedicated cross-tenant login when absent,
@@ -479,7 +485,8 @@ export async function ensureRuntimeDatabaseRole(
     // maintenance authority. Its query-context definer must still inherit the
     // runtime's temporary-table rights, in the same one-way direction required
     // by host-managed provisioning. Never grant the owner to the runtime.
-    const contextOwner = (await pool.query<{ owner: string }>(`
+    const contextOwner = (
+      await pool.query<{ owner: string }>(`
       select owner.rolname as owner
         from pg_proc function_row
         join pg_roles owner on owner.oid = function_row.proowner
@@ -487,18 +494,19 @@ export async function ensureRuntimeDatabaseRole(
        where function_row.oid = 'public.openbooks_query_org_id()'::regprocedure
          and function_row.prosecdef and business.relowner = owner.oid
          and owner.rolname = 'openbooks_schema_owner'
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (contextOwner) {
-      await pool.query(`grant ${role} to openbooks_schema_owner with inherit true, set false, admin false`);
+      await pool.query(
+        `grant ${role} to openbooks_schema_owner with inherit true, set false, admin false`,
+      );
     }
   }
   await pool.query(`grant usage on schema public to ${role}`);
   await pool.query(
     `grant select, insert, update, delete on all tables in schema public to ${role}`,
   );
-  await pool.query(
-    `grant usage, select, update on all sequences in schema public to ${role}`,
-  );
+  await pool.query(`grant usage, select, update on all sequences in schema public to ${role}`);
   // Function execution is inherited only from deliberately retained PUBLIC
   // grants. Never blanket-grant the runtime role: the public schema also holds
   // tightly controlled SECURITY DEFINER maintenance functions. The revoke is
@@ -602,9 +610,7 @@ export async function verifyRuntimeDatabaseRole(
         posture.rolreplication ||
         posture.unsafeRoles.length > 0
       ) {
-        throw new Error(
-          `unsafe runtime database role: ${JSON.stringify(posture ?? null)}`,
-        );
+        throw new Error(`unsafe runtime database role: ${JSON.stringify(posture ?? null)}`);
       }
 
       await client.query(
@@ -621,12 +627,13 @@ export async function verifyRuntimeDatabaseRole(
         "select set_config('app.current_org', $1, false), set_config('app.bypass_rls', 'off', false)",
         [orgId],
       );
-      const allowed = await client.query<{ id: string }>(
-        "select id from orgs where id = $1",
-        [orgId],
-      );
+      const allowed = await client.query<{ id: string }>("select id from orgs where id = $1", [
+        orgId,
+      ]);
       if (allowed.rows.length !== 1) {
-        throw new Error("RLS tenant proof failed: runtime role could not read its selected organization");
+        throw new Error(
+          "RLS tenant proof failed: runtime role could not read its selected organization",
+        );
       }
       // Exercise the real definer/temporary-context boundary from the runtime
       // login. Checking membership from the migration connection misses both
@@ -636,8 +643,11 @@ export async function verifyRuntimeDatabaseRole(
       try {
         await client.query("begin transaction read only");
         await client.query("set local role openbooks_read");
-        const context = await client.query<{ org: string }>("select public.openbooks_query_org_id() as org");
-        if (context.rows[0]?.org !== orgId) throw new Error("governed query context did not resolve its organization");
+        const context = await client.query<{ org: string }>(
+          "select public.openbooks_query_org_id() as org",
+        );
+        if (context.rows[0]?.org !== orgId)
+          throw new Error("governed query context did not resolve its organization");
         await client.query("select id from openbooks_query.accounting_books limit 1");
         // Every governed relation must be readable by the query role: a view
         // created after a grant loop (0338's payment_pending_clawbacks) left the
@@ -657,7 +667,10 @@ export async function verifyRuntimeDatabaseRole(
           );
         }
       } catch (error) {
-        throw new Error("[bootstrap] runtime governed-query verification failed; verify the read-role SET grant and migration-owner inheritance of the runtime role in docs/operations/communal-postgres.md", { cause: error });
+        throw new Error(
+          "[bootstrap] runtime governed-query verification failed; verify the read-role SET grant and migration-owner inheritance of the runtime role in docs/operations/communal-postgres.md",
+          { cause: error },
+        );
       } finally {
         await client.query("rollback");
       }
@@ -696,13 +709,9 @@ export async function transferTestOwnershipToRuntimeRole(
 ): Promise<void> {
   if (env.OPENBOOKS_TEST_OWNERSHIP_TRANSFER !== "1") return;
   if (env.NODE_ENV === "production") {
-    throw new Error(
-      "[bootstrap] OPENBOOKS_TEST_OWNERSHIP_TRANSFER is refused in production",
-    );
+    throw new Error("[bootstrap] OPENBOOKS_TEST_OWNERSHIP_TRANSFER is refused in production");
   }
-  const loginResult = await pool.query<{ login: string }>(
-    "select current_user as login",
-  );
+  const loginResult = await pool.query<{ login: string }>("select current_user as login");
   const login = loginResult.rows[0]!.login;
   if (login === config.roleName) return;
   const superResult = await pool.query<{ superuser: boolean }>(
@@ -800,9 +809,7 @@ export async function transferTestOwnershipToRuntimeRole(
  * after bootstrap) and type ownership (no RLS or execution nexus) are
  * ignored; the isolation surface is what must be fully vested.
  */
-async function verifyTestOwnership(
-  config: RuntimeDatabaseConfig,
-): Promise<void> {
+async function verifyTestOwnership(config: RuntimeDatabaseConfig): Promise<void> {
   const offenders = await pool.query<{ object_name: string }>(
     `select c.relname as object_name
        from pg_class c
@@ -864,19 +871,20 @@ export async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
     // Conditional like the bootstrap-user grant above: a re-run over the
     // transferred test login cannot administer memberships, so skip when it
     // already has SET permission instead of requiring an ADMIN OPTION grant.
-    steps.push(["grant to runtime user", `do $$ begin
+    steps.push([
+      "grant to runtime user",
+      `do $$ begin
          if not pg_has_role(${runtimeLiteral}, 'openbooks_read', 'SET') then
            grant openbooks_read to ${runtimeRole} with set true;
          end if;
-       end $$;`]);
+       end $$;`,
+    ]);
   }
   for (const [label, stmt] of steps) {
     try {
       await db.execute(sql.raw(stmt));
     } catch (err) {
-      throw new Error(
-        `[bootstrap] openbooks_read ${label} failed: ${(err as Error).message}`,
-      );
+      throw new Error(`[bootstrap] openbooks_read ${label} failed: ${(err as Error).message}`);
     }
   }
   await verifyReadRoleAssumption(pool, "bootstrap login");

@@ -1,5 +1,5 @@
-import Link from 'next/link'
-import { Badge } from '@openbooks/ui'
+import Link from "next/link";
+import { Badge } from "@openbooks/ui";
 
 /**
  * The one-click path into a proposed fix. The chip itself resolves nothing:
@@ -9,7 +9,15 @@ import { Badge } from '@openbooks/ui'
  * the approve action. Rendered through the entity list's trailing slot,
  * never as a forked list.
  */
-export function SuggestionChip({ href, label, title }: { href: string; label: string; title?: string }) {
+export function SuggestionChip({
+  href,
+  label,
+  title,
+}: {
+  href: string;
+  label: string;
+  title?: string;
+}) {
   return (
     <Link
       href={href}
@@ -19,5 +27,5 @@ export function SuggestionChip({ href, label, title }: { href: string; label: st
     >
       <Badge variant="outline">{label}</Badge>
     </Link>
-  )
+  );
 }

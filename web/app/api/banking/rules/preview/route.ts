@@ -1,22 +1,30 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { NextResponse } from 'next/server'
-import { isUuid } from '../../../../../lib/list-params'
-import { previewRules } from '../../../../../lib/banking-rules'
-import { validateCriteria, validateOutcome } from '../../../../../lib/banking-rules-validate'
-import { bankRulePriority } from '../../../../../lib/banking-rule-priority'
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { isUuid } from "../../../../../lib/list-params";
+import { previewRules } from "../../../../../lib/banking-rules";
+import { validateCriteria, validateOutcome } from "../../../../../lib/banking-rules-validate";
+import { bankRulePriority } from "../../../../../lib/banking-rule-priority";
 const POSTBodySchema1 = z.object({
   accountId: uuidString(),
-  criteria: z.object({ version: z.literal(2), match: z.json(), accountScope: z.array(uuidString()).optional() }).optional(),
-  id: uuidString().optional(), limit: z.number().int().positive().max(200).optional(),
-  onlyUnmatched: z.boolean().optional(), outcome: z.json().optional(),
-  priority: z.number().int().optional(), windowDays: z.number().int().positive().max(730).optional(),
+  criteria: z
+    .object({
+      version: z.literal(2),
+      match: z.json(),
+      accountScope: z.array(uuidString()).optional(),
+    })
+    .optional(),
+  id: uuidString().optional(),
+  limit: z.number().int().positive().max(200).optional(),
+  onlyUnmatched: z.boolean().optional(),
+  outcome: z.json().optional(),
+  priority: z.number().int().optional(),
+  windowDays: z.number().int().positive().max(730).optional(),
 });
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Dry-run rules against an account's recent bank lines without touching the
@@ -25,45 +33,45 @@ export const runtime = 'nodejs'
  * suggest surface). Never posts.
  */
 export const POST = defineRoute({
-  permission: 'banking.reconcile',
-  feature: 'banking',
+  permission: "banking.reconcile",
+  feature: "banking",
   body: POSTBodySchema1,
   handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
-    const { user } = gate
+    const { user } = gate;
 
-    const body = (routeBody) as Record<string, unknown>
+    const body = routeBody as Record<string, unknown>;
     if (!body.accountId || !isUuid(String(body.accountId))) {
-        return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
-      }
-    const accountId = String(body.accountId)
-    const windowDays = Number(body.windowDays) > 0 ? Math.min(Number(body.windowDays), 730) : 90
-    const onlyUnmatched = body.onlyUnmatched === true
-    const limit = Number(body.limit) > 0 ? Math.min(Number(body.limit), 200) : 25
-    let draftRule: NonNullable<Parameters<typeof previewRules>[2]>['draftRule']
+      return NextResponse.json({ error: "accountId is required" }, { status: 400 });
+    }
+    const accountId = String(body.accountId);
+    const windowDays = Number(body.windowDays) > 0 ? Math.min(Number(body.windowDays), 730) : 90;
+    const onlyUnmatched = body.onlyUnmatched === true;
+    const limit = Number(body.limit) > 0 ? Math.min(Number(body.limit), 200) : 25;
+    let draftRule: NonNullable<Parameters<typeof previewRules>[2]>["draftRule"];
     if (body.criteria !== undefined || body.outcome !== undefined) {
-        const c = validateCriteria(body.criteria)
-        if (!c.ok) return NextResponse.json({ error: c.error }, { status: 400 })
-        const o = validateOutcome(body.outcome ?? { action: 'exclude' })
-        if (!o.ok) return NextResponse.json({ error: o.error }, { status: 400 })
-        draftRule = {
-          criteria: c.value,
-          outcome: o.value,
-          priority: bankRulePriority(body.priority),
-          id: isUuid(String(body.id)) ? String(body.id) : undefined,
-        }
-      }
+      const c = validateCriteria(body.criteria);
+      if (!c.ok) return NextResponse.json({ error: c.error }, { status: 400 });
+      const o = validateOutcome(body.outcome ?? { action: "exclude" });
+      if (!o.ok) return NextResponse.json({ error: o.error }, { status: 400 });
+      draftRule = {
+        criteria: c.value,
+        outcome: o.value,
+        priority: bankRulePriority(body.priority),
+        id: isUuid(String(body.id)) ? String(body.id) : undefined,
+      };
+    }
     try {
-        const result = await previewRules(user.orgId, accountId, {
-          draftRule,
-          windowDays,
-          onlyUnmatched,
-          limit,
-          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        })
-        return NextResponse.json(result)
-      } catch (e) {
-        return apiErrorResponse(e)
-      }
+      const result = await previewRules(user.orgId, accountId, {
+        draftRule,
+        windowDays,
+        onlyUnmatched,
+        limit,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+      return NextResponse.json(result);
+    } catch (e) {
+      return apiErrorResponse(e);
+    }
   },
 });

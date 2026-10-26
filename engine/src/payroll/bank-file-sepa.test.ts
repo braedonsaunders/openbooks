@@ -62,15 +62,23 @@ const sepaInputs = (): PayRunBankFileInputs => ({
   },
   credits: [
     {
-      stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIRED", amount: "2500.0000",
-      employeeNumber: "EMP-0001", routing: { iban: "FR1420041010050500013M02606", bic: "AGRIFRPPXXX" },
+      stubId: "s1",
+      employeePartyId: "p1",
+      employeeName: "ADA WIRED",
+      amount: "2500.0000",
+      employeeNumber: "EMP-0001",
+      routing: { iban: "FR1420041010050500013M02606", bic: "AGRIFRPPXXX" },
       accountNumber: "FR1420041010050500013M02606",
       iban: "FR1420041010050500013M02606",
       bic: "AGRIFRPPXXX",
     },
     {
-      stubId: "s2", employeePartyId: "p2", employeeName: "BO SAVER", amount: "1821.5000",
-      employeeNumber: "EMP-0002", routing: { iban: "NL91ABNA0417164300" },
+      stubId: "s2",
+      employeePartyId: "p2",
+      employeeName: "BO SAVER",
+      amount: "1821.5000",
+      employeeNumber: "EMP-0002",
+      routing: { iban: "NL91ABNA0417164300" },
       accountNumber: "NL91ABNA0417164300",
       iban: "NL91ABNA0417164300",
       bic: null,
@@ -174,7 +182,10 @@ test("the SEPA trailer is parsed back out of the produced XML and ties to the ru
 });
 
 test("a SEPA file whose GrpHdr totals were tampered with is refused, not trusted", () => {
-  const tampered = renderSepa().content.replace("<CtrlSum>4321.50</CtrlSum>", "<CtrlSum>1.00</CtrlSum>");
+  const tampered = renderSepa().content.replace(
+    "<CtrlSum>4321.50</CtrlSum>",
+    "<CtrlSum>1.00</CtrlSum>",
+  );
   const trailer = readTrailerTotals("sepa", tampered);
   assert.notEqual(trailer.totalCents, 432150n);
   assert.throws(
@@ -289,7 +300,8 @@ test("an unconfigured SEPA originator is refused by name rather than emitting XM
         ...SEPA_ORIGINATOR,
         sepa: { originatorName: "", originatorIban: "NOT-AN-IBAN", originatorBic: "" },
       }),
-    (error: Error) => error instanceof PaymentError && /SEPA originator settings are invalid/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /SEPA originator settings are invalid/.test(error.message),
   );
 });
 
@@ -302,7 +314,8 @@ test("a profile that originates another format cannot render SEPA", () => {
         cpa005: undefined,
         sepa: undefined,
       } as unknown as PayrollOriginatorConfig),
-    (error: Error) => error instanceof PayrollError && /originates cpa005, not sepa/.test(error.message),
+    (error: Error) =>
+      error instanceof PayrollError && /originates cpa005, not sepa/.test(error.message),
   );
 });
 
@@ -318,7 +331,8 @@ test("SEPA requires an allocated message identification — never a default", ()
         createdAt: new Date("2026-08-14T00:00:00Z"),
         timeZone: "UTC",
       }),
-    (error: Error) => error instanceof PayrollError && /allocated message identification/.test(error.message),
+    (error: Error) =>
+      error instanceof PayrollError && /allocated message identification/.test(error.message),
   );
 });
 
@@ -369,45 +383,61 @@ async function sepaProfileOrg(secrets: Record<string, unknown>) {
   return { orgId: org.orgId, profileId };
 }
 
-test("a sepa_credit bank profile is listed for payroll and resolves its originator", { skip: !DB }, async () => {
-  const fx = await sepaProfileOrg({
-    originatorName: "BERLIN WORKS GMBH",
-    originatorIban: "DE89370400440532013000",
-    originatorBic: "COBADEFFXXX",
-  });
-  // Reachable: the operator's picker sees the profile, on the sepa format,
-  // fully configured — the "No originating bank profile is set up" dead end
-  // from the DE persona run is gone for this rail.
-  const profiles = await payrollBankProfiles(fx.orgId);
-  assert.deepEqual(
-    profiles.map((p) => ({ name: p.name, format: p.format, currency: p.currency, configured: p.configured })),
-    [{
-      name: "Payroll direct deposit (SEPA)",
-      format: "sepa",
-      currency: "EUR",
-      configured: true,
-    }],
-  );
-  const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
-  if (!resolved.ok) assert.fail(`expected a configured SEPA originator: ${resolved.missing.join(", ")}`);
-  assert.equal(resolved.format, "sepa");
-  assert.equal(resolved.config.currency, "EUR");
-  assert.deepEqual(resolved.config.sepa, {
-    originatorName: "BERLIN WORKS GMBH",
-    originatorIban: "DE89370400440532013000",
-    originatorBic: "COBADEFFXXX",
-  });
-});
+test(
+  "a sepa_credit bank profile is listed for payroll and resolves its originator",
+  { skip: !DB },
+  async () => {
+    const fx = await sepaProfileOrg({
+      originatorName: "BERLIN WORKS GMBH",
+      originatorIban: "DE89370400440532013000",
+      originatorBic: "COBADEFFXXX",
+    });
+    // Reachable: the operator's picker sees the profile, on the sepa format,
+    // fully configured — the "No originating bank profile is set up" dead end
+    // from the DE persona run is gone for this rail.
+    const profiles = await payrollBankProfiles(fx.orgId);
+    assert.deepEqual(
+      profiles.map((p) => ({
+        name: p.name,
+        format: p.format,
+        currency: p.currency,
+        configured: p.configured,
+      })),
+      [
+        {
+          name: "Payroll direct deposit (SEPA)",
+          format: "sepa",
+          currency: "EUR",
+          configured: true,
+        },
+      ],
+    );
+    const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
+    if (!resolved.ok)
+      assert.fail(`expected a configured SEPA originator: ${resolved.missing.join(", ")}`);
+    assert.equal(resolved.format, "sepa");
+    assert.equal(resolved.config.currency, "EUR");
+    assert.deepEqual(resolved.config.sepa, {
+      originatorName: "BERLIN WORKS GMBH",
+      originatorIban: "DE89370400440532013000",
+      originatorBic: "COBADEFFXXX",
+    });
+  },
+);
 
-test("a sepa profile with a broken originator IBAN is listed as not configured, naming it", { skip: !DB }, async () => {
-  const fx = await sepaProfileOrg({
-    originatorName: "BERLIN WORKS GMBH",
-    originatorIban: "DE89370400440532013001",
-    originatorBic: "COBADEFFXXX",
-  });
-  const profiles = await payrollBankProfiles(fx.orgId);
-  assert.equal(profiles[0]?.configured, false);
-  const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
-  if (resolved.ok) assert.fail("a broken originator IBAN must not resolve");
-  assert.match(resolved.missing.join(", "), /originatorIban/);
-});
+test(
+  "a sepa profile with a broken originator IBAN is listed as not configured, naming it",
+  { skip: !DB },
+  async () => {
+    const fx = await sepaProfileOrg({
+      originatorName: "BERLIN WORKS GMBH",
+      originatorIban: "DE89370400440532013001",
+      originatorBic: "COBADEFFXXX",
+    });
+    const profiles = await payrollBankProfiles(fx.orgId);
+    assert.equal(profiles[0]?.configured, false);
+    const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
+    if (resolved.ok) assert.fail("a broken originator IBAN must not resolve");
+    assert.match(resolved.missing.join(", "), /originatorIban/);
+  },
+);

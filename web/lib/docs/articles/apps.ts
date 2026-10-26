@@ -1,14 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const apps: DocArticle = {
-  slug: 'apps',
-  title: 'Apps and the App Library',
-  category: 'apps',
+  slug: "apps",
+  title: "Apps and the App Library",
+  category: "apps",
   order: 1,
-  summary: 'Find, install, update, open, and administer apps for your organization.',
-  updated: '2026-07-31',
-  related: ['app-builder', 'app-api-reference'],
-  keywords: ['apps', 'apps', 'library', 'install', 'update', 'app builder', 'marketplace', 'dashboard', 'navigation'],
+  summary: "Find, install, update, open, and administer apps for your organization.",
+  updated: "2026-07-31",
+  related: ["app-builder", "app-api-reference"],
+  keywords: [
+    "apps",
+    "apps",
+    "library",
+    "install",
+    "update",
+    "app builder",
+    "marketplace",
+    "dashboard",
+    "navigation",
+  ],
   body: `# Apps and the App Library
 
 Apps extend the platform with organization-specific workflows, screens, records,
@@ -66,4 +76,4 @@ Before enabling an app, review its requested permissions and grant only the
 capabilities it needs. Use the app's run history to investigate failed backend
 actions.
 `,
-}
+};

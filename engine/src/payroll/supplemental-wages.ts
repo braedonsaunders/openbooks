@@ -2,10 +2,7 @@ import { sum } from "../money/money.ts";
 import type { Line } from "./run-stub-records.ts";
 
 /** California's separate-supplemental schedule distinguishes these two classes. */
-export const US_SUPPLEMENTAL_WAGE_CATEGORIES = [
-  "bonus_or_stock_option",
-  "other",
-] as const;
+export const US_SUPPLEMENTAL_WAGE_CATEGORIES = ["bonus_or_stock_option", "other"] as const;
 
 export type UsSupplementalWageCategory = (typeof US_SUPPLEMENTAL_WAGE_CATEGORIES)[number];
 
@@ -21,7 +18,8 @@ export function aggregateUsSupplementalWageAmounts(
 ): UsSupplementalWageAmount[] {
   const grouped = new Map<UsSupplementalWageCategory | null, string[]>();
   for (const line of lines) {
-    if (line.kind !== "earning" || line.accrualOnly || line.taxable === false || !line.nonPeriodic) continue;
+    if (line.kind !== "earning" || line.accrualOnly || line.taxable === false || !line.nonPeriodic)
+      continue;
     const category = line.supplementalWageCategory ?? null;
     const amounts = grouped.get(category) ?? [];
     amounts.push(line.amount);

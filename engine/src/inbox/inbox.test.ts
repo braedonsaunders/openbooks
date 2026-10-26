@@ -63,7 +63,12 @@ describe("inbox ordering", () => {
       const listed = await listInbox(CTX);
       assert.deepEqual(
         listed.map((i) => i.id),
-        ["flows_approval:old", "flows_approval:soon", "flows_approval:new-a", "flows_approval:new-b"],
+        [
+          "flows_approval:old",
+          "flows_approval:soon",
+          "flows_approval:new-a",
+          "flows_approval:new-b",
+        ],
       );
       // Deterministic: same inputs, same list.
       const again = await listInbox(CTX);
@@ -116,12 +121,15 @@ describe("inbox act", () => {
     __testResetInboxAdapters([adapter]);
     try {
       await actOnInboxItem(CTX, "flows_approval:g1", "approve");
-      await assert.rejects(actOnInboxItem(CTX, "flows_approval:g1", "approve"), (error: unknown) => {
-        assert.ok(error instanceof InboxError);
-        assert.equal(error.code, "NOT_FOUND");
-        assert.match(error.message, /already be decided/);
-        return true;
-      });
+      await assert.rejects(
+        actOnInboxItem(CTX, "flows_approval:g1", "approve"),
+        (error: unknown) => {
+          assert.ok(error instanceof InboxError);
+          assert.equal(error.code, "NOT_FOUND");
+          assert.match(error.message, /already be decided/);
+          return true;
+        },
+      );
     } finally {
       __testResetInboxAdapters([]);
     }
@@ -130,12 +138,15 @@ describe("inbox act", () => {
   it("acting on an item the actor cannot see is 404, never 403", async () => {
     __testResetInboxAdapters([fakeAdapter([])]);
     try {
-      await assert.rejects(actOnInboxItem(CTX, "flows_approval:secret", "approve"), (error: unknown) => {
-        assert.ok(error instanceof InboxError);
-        assert.equal(error.code, "NOT_FOUND");
-        assert.doesNotMatch(error.message, /forbidden|permission|denied/i);
-        return true;
-      });
+      await assert.rejects(
+        actOnInboxItem(CTX, "flows_approval:secret", "approve"),
+        (error: unknown) => {
+          assert.ok(error instanceof InboxError);
+          assert.equal(error.code, "NOT_FOUND");
+          assert.doesNotMatch(error.message, /forbidden|permission|denied/i);
+          return true;
+        },
+      );
     } finally {
       __testResetInboxAdapters([]);
     }
@@ -177,10 +188,13 @@ describe("inbox act", () => {
         return true;
       });
       // Blank reasons refuse too — whitespace is not a reason.
-      await assert.rejects(actOnInboxItem(CTX, "flows_approval:g1", "reject", "   "), (error: unknown) => {
-        assert.ok(error instanceof InboxError && error.code === "REASON_REQUIRED");
-        return true;
-      });
+      await assert.rejects(
+        actOnInboxItem(CTX, "flows_approval:g1", "reject", "   "),
+        (error: unknown) => {
+          assert.ok(error instanceof InboxError && error.code === "REASON_REQUIRED");
+          return true;
+        },
+      );
     } finally {
       __testResetInboxAdapters([]);
     }
@@ -204,9 +218,7 @@ describe("inbox count and paging", () => {
     // A windowed source reports its full pending count: the badge must not
     // undercount past the list window.
     const adapter: InboxAdapter = {
-      ...fakeAdapter([
-        item({ id: "flows_approval:g1", actions: [] }),
-      ]),
+      ...fakeAdapter([item({ id: "flows_approval:g1", actions: [] })]),
       async count() {
         return 41;
       },
@@ -232,132 +244,154 @@ describe("inbox count and paging", () => {
     }
   });
 
-describe("adapter isolation (OM-10)", () => {
-  function failingAdapter(kind: "notification", error: Error): InboxAdapter {
-    return {
-      kind,
-      async list(): Promise<InboxItem[]> {
-        throw error;
-      },
-      async act(): Promise<void> {},
-    };
-  }
-
-  async function captureConsoleError<T>(work: () => Promise<T>): Promise<{ result: T; errors: unknown[][] }> {
-    const errors: unknown[][] = [];
-    const orig = console.error;
-    console.error = (...args: unknown[]) => {
-      errors.push(args);
-    };
-    try {
-      return { result: await work(), errors };
-    } finally {
-      console.error = orig;
+  describe("adapter isolation (OM-10)", () => {
+    function failingAdapter(kind: "notification", error: Error): InboxAdapter {
+      return {
+        kind,
+        async list(): Promise<InboxItem[]> {
+          throw error;
+        },
+        async act(): Promise<void> {},
+      };
     }
-  }
 
-  it("one failing source does not blank the others; the failure is named in notices", async () => {
-    const healthy = [item({ id: "flows_approval:g1", actions: [] })];
-    __testResetInboxAdapters([fakeAdapter(healthy), failingAdapter("notification", new Error("notification store unreachable"))]);
-    const notices: InboxSourceNotice[] = [];
-    try {
-      const { result: listed, errors } = await captureConsoleError(() => listInbox(CTX, { notices }));
-      assert.deepEqual(
-        listed.map((i) => i.id),
-        ["flows_approval:g1"],
-      );
-      assert.equal(notices.length, 1);
-      assert.equal(notices[0]!.kind, "notification");
-      assert.equal(notices[0]!.code, "failed");
-      assert.equal(notices[0]!.message, "the inbox source could not be read");
-      assert.equal(errors.length, 1, "an unexpected source failure is logged the way the house does");
-      assert.match(String(errors[0]![0]), /\[inbox\] notification/);
-    } finally {
-      __testResetInboxAdapters([]);
+    async function captureConsoleError<T>(
+      work: () => Promise<T>,
+    ): Promise<{ result: T; errors: unknown[][] }> {
+      const errors: unknown[][] = [];
+      const orig = console.error;
+      console.error = (...args: unknown[]) => {
+        errors.push(args);
+      };
+      try {
+        return { result: await work(), errors };
+      } finally {
+        console.error = orig;
+      }
     }
-  });
 
-  it("a source the actor holds no grant for is skipped silently, not noticed or logged", async () => {
-    // Gating refusals are an expected outcome of the read model, not an
-    // operational failure: the actor has no work in that source, so the
-    // inbox keeps the other legs and names nothing — never a permission
-    // key or setup route at the person it refused.
-    const healthy = [item({ id: "flows_approval:g1", actions: [] })];
-    __testResetInboxAdapters([
-      fakeAdapter(healthy),
-      failingAdapter(
-        "notification",
-        new HrmAuthorizationError(
-          "Leave access requires the hrm.leave.request permission — ask an administrator to grant it in /admin/roles.",
+    it("one failing source does not blank the others; the failure is named in notices", async () => {
+      const healthy = [item({ id: "flows_approval:g1", actions: [] })];
+      __testResetInboxAdapters([
+        fakeAdapter(healthy),
+        failingAdapter("notification", new Error("notification store unreachable")),
+      ]);
+      const notices: InboxSourceNotice[] = [];
+      try {
+        const { result: listed, errors } = await captureConsoleError(() =>
+          listInbox(CTX, { notices }),
+        );
+        assert.deepEqual(
+          listed.map((i) => i.id),
+          ["flows_approval:g1"],
+        );
+        assert.equal(notices.length, 1);
+        assert.equal(notices[0]!.kind, "notification");
+        assert.equal(notices[0]!.code, "failed");
+        assert.equal(notices[0]!.message, "the inbox source could not be read");
+        assert.equal(
+          errors.length,
+          1,
+          "an unexpected source failure is logged the way the house does",
+        );
+        assert.match(String(errors[0]![0]), /\[inbox\] notification/);
+      } finally {
+        __testResetInboxAdapters([]);
+      }
+    });
+
+    it("a source the actor holds no grant for is skipped silently, not noticed or logged", async () => {
+      // Gating refusals are an expected outcome of the read model, not an
+      // operational failure: the actor has no work in that source, so the
+      // inbox keeps the other legs and names nothing — never a permission
+      // key or setup route at the person it refused.
+      const healthy = [item({ id: "flows_approval:g1", actions: [] })];
+      __testResetInboxAdapters([
+        fakeAdapter(healthy),
+        failingAdapter(
+          "notification",
+          new HrmAuthorizationError(
+            "Leave access requires the hrm.leave.request permission — ask an administrator to grant it in /admin/roles.",
+          ),
         ),
-      ),
-    ]);
-    const notices: InboxSourceNotice[] = [];
-    try {
-      const { result: listed, errors } = await captureConsoleError(() => listInbox(CTX, { notices }));
-      assert.deepEqual(
-        listed.map((i) => i.id),
-        ["flows_approval:g1"],
-      );
-      assert.deepEqual(notices, [], "no notice names the refused source");
-      assert.deepEqual(errors, [], "an expected refusal must not log");
-    } finally {
-      __testResetInboxAdapters([]);
-    }
-  });
+      ]);
+      const notices: InboxSourceNotice[] = [];
+      try {
+        const { result: listed, errors } = await captureConsoleError(() =>
+          listInbox(CTX, { notices }),
+        );
+        assert.deepEqual(
+          listed.map((i) => i.id),
+          ["flows_approval:g1"],
+        );
+        assert.deepEqual(notices, [], "no notice names the refused source");
+        assert.deepEqual(errors, [], "an expected refusal must not log");
+      } finally {
+        __testResetInboxAdapters([]);
+      }
+    });
 
-  it("a source whose module is switched off is no work, not a failure", async () => {
-    const healthy = [item({ id: "flows_approval:g1", actions: [] })];
-    const featureOff = Object.assign(new Error("performance is switched off"), { code: "FEATURE_OFF" });
-    __testResetInboxAdapters([fakeAdapter(healthy), failingAdapter("notification", featureOff)]);
-    const notices: InboxSourceNotice[] = [];
-    try {
-      const { result: listed, errors } = await captureConsoleError(() => listInbox(CTX, { notices }));
-      assert.deepEqual(listed.map((i) => i.id), ["flows_approval:g1"]);
-      assert.deepEqual(notices, [], "a switched-off module names no failure");
-      assert.deepEqual(errors, []);
-    } finally {
-      __testResetInboxAdapters([]);
-    }
-  });
+    it("a source whose module is switched off is no work, not a failure", async () => {
+      const healthy = [item({ id: "flows_approval:g1", actions: [] })];
+      const featureOff = Object.assign(new Error("performance is switched off"), {
+        code: "FEATURE_OFF",
+      });
+      __testResetInboxAdapters([fakeAdapter(healthy), failingAdapter("notification", featureOff)]);
+      const notices: InboxSourceNotice[] = [];
+      try {
+        const { result: listed, errors } = await captureConsoleError(() =>
+          listInbox(CTX, { notices }),
+        );
+        assert.deepEqual(
+          listed.map((i) => i.id),
+          ["flows_approval:g1"],
+        );
+        assert.deepEqual(notices, [], "a switched-off module names no failure");
+        assert.deepEqual(errors, []);
+      } finally {
+        __testResetInboxAdapters([]);
+      }
+    });
 
-  it("a failing source is not cached as an empty leg", async () => {
-    let calls = 0;
-    const flaky: InboxAdapter = {
-      kind: "notification",
-      async list(): Promise<InboxItem[]> {
-        calls += 1;
-        throw new Error("notification store unreachable");
-      },
-      async act(): Promise<void> {},
-    };
-    __testResetInboxAdapters([flaky]);
-    const orig = console.error;
-    console.error = () => {};
-    try {
-      await listInbox(CTX, { kinds: ["notification"], cache: new Map(), notices: [] });
-      await listInbox(CTX, { kinds: ["notification"], cache: new Map(), notices: [] });
-      assert.equal(calls, 2, "a failed leg is re-attempted, never served as a cached empty list");
-    } finally {
-      console.error = orig;
-      __testResetInboxAdapters([]);
-    }
-  });
+    it("a failing source is not cached as an empty leg", async () => {
+      let calls = 0;
+      const flaky: InboxAdapter = {
+        kind: "notification",
+        async list(): Promise<InboxItem[]> {
+          calls += 1;
+          throw new Error("notification store unreachable");
+        },
+        async act(): Promise<void> {},
+      };
+      __testResetInboxAdapters([flaky]);
+      const orig = console.error;
+      console.error = () => {};
+      try {
+        await listInbox(CTX, { kinds: ["notification"], cache: new Map(), notices: [] });
+        await listInbox(CTX, { kinds: ["notification"], cache: new Map(), notices: [] });
+        assert.equal(calls, 2, "a failed leg is re-attempted, never served as a cached empty list");
+      } finally {
+        console.error = orig;
+        __testResetInboxAdapters([]);
+      }
+    });
 
-  it("countInbox skips a failing source instead of refusing the badge", async () => {
-    const healthy = [item({ id: "flows_approval:g1", actions: [] })];
-    __testResetInboxAdapters([fakeAdapter(healthy), failingAdapter("notification", new Error("notification store unreachable"))]);
-    const orig = console.error;
-    console.error = () => {};
-    try {
-      assert.equal(await countInbox(CTX), 1);
-    } finally {
-      console.error = orig;
-      __testResetInboxAdapters([]);
-    }
+    it("countInbox skips a failing source instead of refusing the badge", async () => {
+      const healthy = [item({ id: "flows_approval:g1", actions: [] })];
+      __testResetInboxAdapters([
+        fakeAdapter(healthy),
+        failingAdapter("notification", new Error("notification store unreachable")),
+      ]);
+      const orig = console.error;
+      console.error = () => {};
+      try {
+        assert.equal(await countInbox(CTX), 1);
+      } finally {
+        console.error = orig;
+        __testResetInboxAdapters([]);
+      }
+    });
   });
-
-});
 
   it("listInbox forwards the read window to the adapter", async () => {
     const seen: Array<{ limit?: number; offset?: number } | undefined> = [];
@@ -402,7 +436,9 @@ describe("inbox act by id (B-INB-2)", () => {
         return windowed;
       },
       async lookup(_ctx, sourceId) {
-        return sourceId === "g3" ? beyond : windowed.find((i) => i.source.id === sourceId) ?? null;
+        return sourceId === "g3"
+          ? beyond
+          : (windowed.find((i) => i.source.id === sourceId) ?? null);
       },
       async act(_ctx, sourceId, actionKey) {
         acts.push(`${sourceId}:${actionKey}`);
@@ -433,11 +469,14 @@ describe("inbox act by id (B-INB-2)", () => {
     };
     __testResetInboxAdapters([adapter]);
     try {
-      await assert.rejects(actOnInboxItem(CTX, "flows_approval:hidden", "approve"), (error: unknown) => {
-        assert.ok(error instanceof InboxError);
-        assert.equal((error as InboxError).code, "NOT_FOUND");
-        return true;
-      });
+      await assert.rejects(
+        actOnInboxItem(CTX, "flows_approval:hidden", "approve"),
+        (error: unknown) => {
+          assert.ok(error instanceof InboxError);
+          assert.equal((error as InboxError).code, "NOT_FOUND");
+          return true;
+        },
+      );
     } finally {
       __testResetInboxAdapters([]);
     }
@@ -449,10 +488,13 @@ describe("inbox act by id (B-INB-2)", () => {
     try {
       await actOnInboxItem(CTX, "flows_approval:g1", "approve");
       assert.deepEqual(acts, ["g1:approve"]);
-      await assert.rejects(actOnInboxItem(CTX, "flows_approval:g9", "approve"), (error: unknown) => {
-        assert.ok(error instanceof InboxError);
-        return true;
-      });
+      await assert.rejects(
+        actOnInboxItem(CTX, "flows_approval:g9", "approve"),
+        (error: unknown) => {
+          assert.ok(error instanceof InboxError);
+          return true;
+        },
+      );
     } finally {
       __testResetInboxAdapters([]);
     }
@@ -510,10 +552,14 @@ describe("inbox source reads", () => {
     // would never let the second source begin.
     let started = 0;
     let release!: () => void;
-    const allStarted = new Promise<void>((resolve) => { release = resolve; });
+    const allStarted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const source = (kind: InboxAdapter["kind"], outcome: number | Error): InboxAdapter => ({
       kind,
-      async list() { return []; },
+      async list() {
+        return [];
+      },
       async count() {
         if (++started === 3) release();
         await allStarted;
@@ -531,7 +577,9 @@ describe("inbox source reads", () => {
       const notices: InboxSourceNotice[] = [];
       const counted = await Promise.race([
         countInbox(CTX, { notices }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("sources were read one at a time")), 1000)),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("sources were read one at a time")), 1000),
+        ),
       ]);
       assert.equal(counted, 2);
       assert.deepEqual(notices, [

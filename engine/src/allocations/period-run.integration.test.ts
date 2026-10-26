@@ -30,7 +30,12 @@ import {
 } from "./period-run.ts";
 import { getRun, listRuns, queryLineage } from "./run-queries.ts";
 import type { DriverResolver, RunComputation } from "./types.ts";
-import { enableAllocations, journalLineCount, negate, seedDepartment } from "./integration-seeds.ts";
+import {
+  enableAllocations,
+  journalLineCount,
+  negate,
+  seedDepartment,
+} from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -203,31 +208,42 @@ async function seedSourceEntry(
 }
 
 async function accountTotals(orgId: string): Promise<Map<string, string>> {
-  const rows = await db.execute<{ account_id: string; total: string }>(sql`
+  const rows = await db.execute<{ account_id: string; total: string }>(
+    sql`
     select l.account_id, sum(l.amount)::text as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
-     group by l.account_id`, "objects");
+     group by l.account_id`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.account_id, row.total]));
 }
 
 async function coordinateTotals(orgId: string): Promise<Map<string, string>> {
-  const rows = await db.execute<{ account_id: string; department_id: string | null; total: string }>(sql`
+  const rows = await db.execute<{
+    account_id: string;
+    department_id: string | null;
+    total: string;
+  }>(
+    sql`
     select l.account_id, l.department_id, sum(l.amount)::text as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
-     group by l.account_id, l.department_id`, "objects");
-  return new Map(
-    rows.map((row) => [`${row.account_id}|${row.department_id ?? ""}`, row.total]),
+     group by l.account_id, l.department_id`,
+    "objects",
   );
+  return new Map(rows.map((row) => [`${row.account_id}|${row.department_id ?? ""}`, row.total]));
 }
 
 async function postedRunCount(orgId: string, ruleId: string): Promise<number> {
-  const rows = await db.execute<{ count: string }>(sql`
+  const rows = await db.execute<{ count: string }>(
+    sql`
     select count(*)::text as count from allocation_runs
-     where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'`, "objects");
+     where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'`,
+    "objects",
+  );
   return Number(rows[0]?.count ?? 0);
 }
 
@@ -237,9 +253,15 @@ test(
   async () => {
     const { org, actorId } = await newAllocationOrg();
     try {
-      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-        select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!.fiscal_calendar_id;
-      const adjustmentId = randomUUID(), augustId = randomUUID();
+      const calendar = (
+        await db.execute<{ fiscal_calendar_id: string }>(
+          sql`
+        select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`,
+          "objects",
+        )
+      )[0]!.fiscal_calendar_id;
+      const adjustmentId = randomUUID(),
+        augustId = randomUUID();
       await db.execute(sql`
         insert into accounting_periods
           (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
@@ -271,13 +293,23 @@ test(
           targets: [{ departmentId: dept, fixedPercent: "100.0000", label: "Dept" }],
         });
         const later = await previewAllocationRun({
-          orgId: org.orgId, ruleId, periodId: augustId, bookId: org.bookId, actorId, trigger: "manual",
+          orgId: org.orgId,
+          ruleId,
+          periodId: augustId,
+          bookId: org.bookId,
+          actorId,
+          trigger: "manual",
         });
         // Before the fix the not-is_adjustment pool filter dropped the
         // accrual from every later pool, so the balance was wrong forever.
         assert.equal(later.sourceTotal, "500.0000");
         const sameEnd = await previewAllocationRun({
-          orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId, actorId, trigger: "manual",
+          orgId: org.orgId,
+          ruleId,
+          periodId: org.periodId,
+          bookId: org.bookId,
+          actorId,
+          trigger: "manual",
         });
         // The adjustment shares the regular period's end date: it belongs to
         // the balance as of that date.
@@ -292,20 +324,35 @@ test(
         targets: [{ departmentId: dept, fixedPercent: "100.0000", label: "Adjustment target" }],
       });
       const run = await previewAllocationRun({
-        orgId: org.orgId, ruleId, periodId: adjustmentId, bookId: org.bookId, actorId, trigger: "manual",
+        orgId: org.orgId,
+        ruleId,
+        periodId: adjustmentId,
+        bookId: org.bookId,
+        actorId,
+        trigger: "manual",
       });
       assert.equal(run.sourceTotal, "500.0000");
       const posted = await postAllocationRun(run.id, actorId, "Post adjustment allocation");
-      const allocationEntry = (await db.execute<{ period_id: string; posting_date: string }>(sql`
+      const allocationEntry = (
+        await db.execute<{ period_id: string; posting_date: string }>(
+          sql`
         select period_id, posting_date::text as posting_date from journal_entries
-         where org_id = ${org.orgId} and id = ${posted.journalEntryId}`, "objects"))[0];
+         where org_id = ${org.orgId} and id = ${posted.journalEntryId}`,
+          "objects",
+        )
+      )[0];
       assert.equal(allocationEntry?.period_id, adjustmentId);
       assert.equal(allocationEntry?.posting_date, "2026-07-31");
 
       const reversed = await reverseAllocationRun(run.id, actorId, "Reverse adjustment allocation");
-      const reversalEntry = (await db.execute<{ period_id: string; posting_date: string }>(sql`
+      const reversalEntry = (
+        await db.execute<{ period_id: string; posting_date: string }>(
+          sql`
         select period_id, posting_date::text as posting_date from journal_entries
-         where org_id = ${org.orgId} and id = ${reversed.reversalEntryId}`, "objects"))[0];
+         where org_id = ${org.orgId} and id = ${reversed.reversalEntryId}`,
+          "objects",
+        )
+      )[0];
       assert.equal(reversalEntry?.period_id, adjustmentId);
       assert.equal(reversalEntry?.posting_date, "2026-07-31");
     } finally {
@@ -392,14 +439,29 @@ test(
       // The entry number keys on the stored period name and the authored
       // `{{period.name}}` line memo substitutes it; the system entry memo
       // names the period by its canonical fiscal label.
-      const ruleKey = (await db.execute<{ key: string }>(sql`
-        select key from allocation_rules where id = ${ruleId}`, "objects"))[0]!.key;
-      const header = (await db.execute<{ entry_number: string; memo: string }>(sql`
-        select entry_number, memo from journal_entries where id = ${posted.journalEntryId}`, "objects"))[0]!;
+      const ruleKey = (
+        await db.execute<{ key: string }>(
+          sql`
+        select key from allocation_rules where id = ${ruleId}`,
+          "objects",
+        )
+      )[0]!.key;
+      const header = (
+        await db.execute<{ entry_number: string; memo: string }>(
+          sql`
+        select entry_number, memo from journal_entries where id = ${posted.journalEntryId}`,
+          "objects",
+        )
+      )[0]!;
       assert.ok(header.entry_number.startsWith(`ALLOC-${ruleKey}-2026-07-`), header.entry_number);
       assert.equal(header.memo, `Allocation ${ruleKey} — P07 FY2026`);
-      const lineMemos = (await db.execute<{ memo: string | null }>(sql`
-        select distinct memo from journal_lines where entry_id = ${posted.journalEntryId}`, "objects")).map((row) => row.memo);
+      const lineMemos = (
+        await db.execute<{ memo: string | null }>(
+          sql`
+        select distinct memo from journal_lines where entry_id = ${posted.journalEntryId}`,
+          "objects",
+        )
+      ).map((row) => row.memo);
       assert.deepEqual(lineMemos, [`Allocation Rule ${ruleKey} for 2026-07`]);
 
       const after = await accountTotals(org.orgId);
@@ -445,7 +507,10 @@ test(
       assert.equal(preview.computation.targets.length, 3);
       assert.equal(preview.computation.targets.filter((target) => isZero(target.amount)).length, 2);
       assert.ok(preview.computation.lines.every((line) => !isZero(line.amount)));
-      assert.equal(preview.computation.lines.filter((line) => line.contributorKind === "rule").length, 2);
+      assert.equal(
+        preview.computation.lines.filter((line) => line.contributorKind === "rule").length,
+        2,
+      );
 
       const posted = await postAllocationRun(preview.id, actorId, "Post rounded allocation shares");
       assert.equal(posted.status, "posted");
@@ -529,7 +594,9 @@ test(
         0n,
       );
       assert.equal(total, 1000000n);
-      const residuals = preview.computation.targets.filter((target) => target.residual !== "0.0000");
+      const residuals = preview.computation.targets.filter(
+        (target) => target.residual !== "0.0000",
+      );
       assert.equal(residuals.length, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -537,115 +604,103 @@ test(
   },
 );
 
-test(
-  "net_zero_pair never changes any account total",
-  { skip: !DB },
-  async () => {
-    const { org, actorId } = await newAllocationOrg();
-    try {
-      const deptA = await seedDepartment(org.orgId, "Dept A");
-      const deptB = await seedDepartment(org.orgId, "Dept B");
-      await seedSourceEntry(org, actorId, "500.0000");
-      const { ruleId } = await seedPeriodRule({
-        orgId: org.orgId,
-        poolAccountId: org.accounts.adjustment,
-        impact: "net_zero_pair",
-        targets: [
-          { departmentId: deptA, fixedPercent: "50.0000", label: "Dept A" },
-          { departmentId: deptB, fixedPercent: "50.0000", label: "Dept B" },
-        ],
-      });
-      const before = await accountTotals(org.orgId);
-      const preview = await previewRule(org, actorId, ruleId);
-      await postAllocationRun(preview.id, actorId, "Post statistical attribution");
-      const after = await accountTotals(org.orgId);
-      assert.deepEqual([...after.entries()].sort(), [...before.entries()].sort());
-      const coords = await coordinateTotals(org.orgId);
-      assert.equal(coords.get(`${org.accounts.adjustment}|${deptA}`), "250.0000");
-      assert.equal(coords.get(`${org.accounts.adjustment}|${deptB}`), "250.0000");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("net_zero_pair never changes any account total", { skip: !DB }, async () => {
+  const { org, actorId } = await newAllocationOrg();
+  try {
+    const deptA = await seedDepartment(org.orgId, "Dept A");
+    const deptB = await seedDepartment(org.orgId, "Dept B");
+    await seedSourceEntry(org, actorId, "500.0000");
+    const { ruleId } = await seedPeriodRule({
+      orgId: org.orgId,
+      poolAccountId: org.accounts.adjustment,
+      impact: "net_zero_pair",
+      targets: [
+        { departmentId: deptA, fixedPercent: "50.0000", label: "Dept A" },
+        { departmentId: deptB, fixedPercent: "50.0000", label: "Dept B" },
+      ],
+    });
+    const before = await accountTotals(org.orgId);
+    const preview = await previewRule(org, actorId, ruleId);
+    await postAllocationRun(preview.id, actorId, "Post statistical attribution");
+    const after = await accountTotals(org.orgId);
+    assert.deepEqual([...after.entries()].sort(), [...before.entries()].sort());
+    const coords = await coordinateTotals(org.orgId);
+    assert.equal(coords.get(`${org.accounts.adjustment}|${deptA}`), "250.0000");
+    assert.equal(coords.get(`${org.accounts.adjustment}|${deptB}`), "250.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "report_only writes no journal lines but records lineage",
-  { skip: !DB },
-  async () => {
-    const { org, actorId } = await newAllocationOrg();
-    try {
-      const deptA = await seedDepartment(org.orgId, "Dept A");
-      await seedSourceEntry(org, actorId, "200.0000");
-      const { ruleId } = await seedPeriodRule({
-        orgId: org.orgId,
-        poolAccountId: org.accounts.adjustment,
-        impact: "report_only",
-        targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
-      });
-      const linesBefore = await journalLineCount(org.orgId);
-      const preview = await previewRule(org, actorId, ruleId);
-      assert.equal(preview.computation.lines.length, 0);
-      const posted = await postAllocationRun(preview.id, actorId, "Record statistical split");
-      assert.equal(posted.status, "posted");
-      assert.equal(posted.journalEntryId, null);
-      assert.equal(await journalLineCount(org.orgId), linesBefore);
-      const lineage = await queryLineage(org.orgId, { runId: preview.id });
-      assert.equal(lineage.rows.length, 1);
-      assert.equal(lineage.rows[0]?.amount, "200.0000");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("report_only writes no journal lines but records lineage", { skip: !DB }, async () => {
+  const { org, actorId } = await newAllocationOrg();
+  try {
+    const deptA = await seedDepartment(org.orgId, "Dept A");
+    await seedSourceEntry(org, actorId, "200.0000");
+    const { ruleId } = await seedPeriodRule({
+      orgId: org.orgId,
+      poolAccountId: org.accounts.adjustment,
+      impact: "report_only",
+      targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
+    });
+    const linesBefore = await journalLineCount(org.orgId);
+    const preview = await previewRule(org, actorId, ruleId);
+    assert.equal(preview.computation.lines.length, 0);
+    const posted = await postAllocationRun(preview.id, actorId, "Record statistical split");
+    assert.equal(posted.status, "posted");
+    assert.equal(posted.journalEntryId, null);
+    assert.equal(await journalLineCount(org.orgId), linesBefore);
+    const lineage = await queryLineage(org.orgId, { runId: preview.id });
+    assert.equal(lineage.rows.length, 1);
+    assert.equal(lineage.rows[0]?.amount, "200.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "reversal restores every account and dimension balance exactly",
-  { skip: !DB },
-  async () => {
-    const { org, actorId } = await newAllocationOrg();
-    try {
-      const deptA = await seedDepartment(org.orgId, "Dept A");
-      const deptB = await seedDepartment(org.orgId, "Dept B");
-      await seedSourceEntry(org, actorId, "1000.0000");
-      const { ruleId } = await seedPeriodRule({
-        orgId: org.orgId,
-        poolAccountId: org.accounts.adjustment,
-        impact: "reclass",
-        targets: [
-          { departmentId: deptA, fixedPercent: "70.0000", label: "Dept A" },
-          { departmentId: deptB, fixedPercent: "30.0000", label: "Dept B" },
-        ],
-      });
-      const before = await coordinateTotals(org.orgId);
-      const preview = await previewRule(org, actorId, ruleId);
-      await postAllocationRun(preview.id, actorId, "Post sweep before reversal check");
-      const reversed = await reverseAllocationRun(
-        preview.id,
-        actorId,
-        "Correction approved by controller",
-        { reversalDate: org.date },
-      );
-      assert.equal(reversed.status, "reversed");
-      assert.ok(reversed.reversalEntryId);
-      // Zero-sum coordinates the sweep created (and exactly unwound) carry no
-      // balance; drop them so the comparison is balance-exact, not row-exact.
-      const nonzero = (coords: Map<string, string>): Array<[string, string]> =>
-        [...coords.entries()].filter(([, total]) => !isZero(total)).sort();
-      const after = await coordinateTotals(org.orgId);
-      assert.deepEqual(nonzero(after), nonzero(before));
-      // Original post lines plus their reversal mirrors.
-      const lineage = await queryLineage(org.orgId, { runId: preview.id });
-      assert.equal(lineage.rows.length, 6);
-      const lineageSum = lineage.rows
-        .map((row) => row.amount)
-        .reduce((acc, amount) => acc + BigInt(amount.replace(".", "")), 0n);
-      assert.equal(lineageSum, 0n);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("reversal restores every account and dimension balance exactly", { skip: !DB }, async () => {
+  const { org, actorId } = await newAllocationOrg();
+  try {
+    const deptA = await seedDepartment(org.orgId, "Dept A");
+    const deptB = await seedDepartment(org.orgId, "Dept B");
+    await seedSourceEntry(org, actorId, "1000.0000");
+    const { ruleId } = await seedPeriodRule({
+      orgId: org.orgId,
+      poolAccountId: org.accounts.adjustment,
+      impact: "reclass",
+      targets: [
+        { departmentId: deptA, fixedPercent: "70.0000", label: "Dept A" },
+        { departmentId: deptB, fixedPercent: "30.0000", label: "Dept B" },
+      ],
+    });
+    const before = await coordinateTotals(org.orgId);
+    const preview = await previewRule(org, actorId, ruleId);
+    await postAllocationRun(preview.id, actorId, "Post sweep before reversal check");
+    const reversed = await reverseAllocationRun(
+      preview.id,
+      actorId,
+      "Correction approved by controller",
+      { reversalDate: org.date },
+    );
+    assert.equal(reversed.status, "reversed");
+    assert.ok(reversed.reversalEntryId);
+    // Zero-sum coordinates the sweep created (and exactly unwound) carry no
+    // balance; drop them so the comparison is balance-exact, not row-exact.
+    const nonzero = (coords: Map<string, string>): Array<[string, string]> =>
+      [...coords.entries()].filter(([, total]) => !isZero(total)).sort();
+    const after = await coordinateTotals(org.orgId);
+    assert.deepEqual(nonzero(after), nonzero(before));
+    // Original post lines plus their reversal mirrors.
+    const lineage = await queryLineage(org.orgId, { runId: preview.id });
+    assert.equal(lineage.rows.length, 6);
+    const lineageSum = lineage.rows
+      .map((row) => row.amount)
+      .reduce((acc, amount) => acc + BigInt(amount.replace(".", "")), 0n);
+    assert.equal(lineageSum, 0n);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "rerun with unchanged inputs yields the same fingerprint and posts nothing new",
@@ -702,9 +757,16 @@ test(
       const oldRun = await getRun(org.orgId, preview.id);
       assert.equal(oldRun.status, "reversed");
       // Chain links live on the run rows (A8 summaries omit them).
-      const chain = await db.execute<{ id: string; superseded_by_run_id: string | null; reverses_run_id: string | null }>(sql`
+      const chain = await db.execute<{
+        id: string;
+        superseded_by_run_id: string | null;
+        reverses_run_id: string | null;
+      }>(
+        sql`
         select id, superseded_by_run_id, reverses_run_id from allocation_runs
-         where org_id = ${org.orgId} and id in (${preview.id}::uuid, ${rerun.run.id}::uuid)`, "objects");
+         where org_id = ${org.orgId} and id in (${preview.id}::uuid, ${rerun.run.id}::uuid)`,
+        "objects",
+      );
       const byId = new Map(chain.map((row) => [row.id, row]));
       assert.equal(byId.get(preview.id)?.superseded_by_run_id, rerun.run.id);
       assert.equal(byId.get(rerun.run.id)?.reverses_run_id, preview.id);
@@ -714,103 +776,97 @@ test(
   },
 );
 
-test(
-  "a closed period refuses post and reverse",
-  { skip: !DB },
-  async () => {
-    const { org, actorId } = await newAllocationOrg();
-    try {
-      const deptA = await seedDepartment(org.orgId, "Dept A");
-      await seedSourceEntry(org, actorId, "300.0000");
-      const { ruleId } = await seedPeriodRule({
-        orgId: org.orgId,
-        poolAccountId: org.accounts.adjustment,
-        targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
-      });
-      const preview = await previewRule(org, actorId, ruleId);
-      await db.execute(sql`
+test("a closed period refuses post and reverse", { skip: !DB }, async () => {
+  const { org, actorId } = await newAllocationOrg();
+  try {
+    const deptA = await seedDepartment(org.orgId, "Dept A");
+    await seedSourceEntry(org, actorId, "300.0000");
+    const { ruleId } = await seedPeriodRule({
+      orgId: org.orgId,
+      poolAccountId: org.accounts.adjustment,
+      targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
+    });
+    const preview = await previewRule(org, actorId, ruleId);
+    await db.execute(sql`
         insert into period_locks
           (org_id, period_id, book_id, subsidiary_id, module, state, reason)
         values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl', 'closed', 'Month-end close')`);
-      await assert.rejects(
-        postAllocationRun(preview.id, actorId, "Attempt post into closed period"),
-        /closed/,
-      );
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    await assert.rejects(
+      postAllocationRun(preview.id, actorId, "Attempt post into closed period"),
+      /closed/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "reverse into a closed run period is refused",
-  { skip: !DB },
-  async () => {
-    const { org, actorId } = await newAllocationOrg();
-    try {
-      const deptA = await seedDepartment(org.orgId, "Dept A");
-      await seedSourceEntry(org, actorId, "300.0000");
-      const { ruleId } = await seedPeriodRule({
-        orgId: org.orgId,
-        poolAccountId: org.accounts.adjustment,
-        targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
-      });
-      const preview = await previewRule(org, actorId, ruleId);
-      await postAllocationRun(preview.id, actorId, "Post before the close");
-      await db.execute(sql`
+test("reverse into a closed run period is refused", { skip: !DB }, async () => {
+  const { org, actorId } = await newAllocationOrg();
+  try {
+    const deptA = await seedDepartment(org.orgId, "Dept A");
+    await seedSourceEntry(org, actorId, "300.0000");
+    const { ruleId } = await seedPeriodRule({
+      orgId: org.orgId,
+      poolAccountId: org.accounts.adjustment,
+      targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
+    });
+    const preview = await previewRule(org, actorId, ruleId);
+    await postAllocationRun(preview.id, actorId, "Post before the close");
+    await db.execute(sql`
         insert into period_locks
           (org_id, period_id, book_id, subsidiary_id, module, state, reason)
         values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl', 'closed', 'Month-end close')`);
-      await assert.rejects(
-        reverseAllocationRun(preview.id, actorId, "Attempt reverse in closed period", {
-          reversalDate: org.date,
-        }),
-        /closed/,
-      );
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    await assert.rejects(
+      reverseAllocationRun(preview.id, actorId, "Attempt reverse in closed period", {
+        reversalDate: org.date,
+      }),
+      /closed/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "cross-org rule and period references are refused",
-  { skip: !DB },
-  async () => {
-    const orgA = await createScratchOrg();
-    await enableAllocations(orgA.orgId);
-    const orgB = await createScratchOrg();
-    await enableAllocations(orgB.orgId);
-    const actorA = (await seedFlowActors(orgA.orgId)).adminId;
-    try {
-      const { ruleId } = await seedPeriodRule({ orgId: orgB.orgId, poolAccountId: orgB.accounts.adjustment });
-      await assert.rejects(
-        previewAllocationRun({
-          orgId: orgA.orgId,
-          ruleId,
-          periodId: orgA.periodId,
-          bookId: orgA.bookId,
-          actorId: actorA,
-        }),
-        /same organization|does not belong/i,
-      );
-      const { ruleId: ruleA } = await seedPeriodRule({ orgId: orgA.orgId, poolAccountId: orgA.accounts.adjustment });
-      await assert.rejects(
-        previewAllocationRun({
-          orgId: orgA.orgId,
-          ruleId: ruleA,
-          periodId: orgB.periodId,
-          bookId: orgA.bookId,
-          actorId: actorA,
-        }),
-        /same organization|does not belong/i,
-      );
-    } finally {
-      await dropScratchOrg(orgA.orgId);
-      await dropScratchOrg(orgB.orgId);
-    }
-  },
-);
+test("cross-org rule and period references are refused", { skip: !DB }, async () => {
+  const orgA = await createScratchOrg();
+  await enableAllocations(orgA.orgId);
+  const orgB = await createScratchOrg();
+  await enableAllocations(orgB.orgId);
+  const actorA = (await seedFlowActors(orgA.orgId)).adminId;
+  try {
+    const { ruleId } = await seedPeriodRule({
+      orgId: orgB.orgId,
+      poolAccountId: orgB.accounts.adjustment,
+    });
+    await assert.rejects(
+      previewAllocationRun({
+        orgId: orgA.orgId,
+        ruleId,
+        periodId: orgA.periodId,
+        bookId: orgA.bookId,
+        actorId: actorA,
+      }),
+      /same organization|does not belong/i,
+    );
+    const { ruleId: ruleA } = await seedPeriodRule({
+      orgId: orgA.orgId,
+      poolAccountId: orgA.accounts.adjustment,
+    });
+    await assert.rejects(
+      previewAllocationRun({
+        orgId: orgA.orgId,
+        ruleId: ruleA,
+        periodId: orgB.periodId,
+        bookId: orgA.bookId,
+        actorId: actorA,
+      }),
+      /same organization|does not belong/i,
+    );
+  } finally {
+    await dropScratchOrg(orgA.orgId);
+    await dropScratchOrg(orgB.orgId);
+  }
+});
 
 test(
   "a second posted run for the same rule, period, book and subsidiary is refused",
@@ -898,9 +954,23 @@ test(
       const deptA = await seedDepartment(org.orgId, "Dept A");
       const deptB = await seedDepartment(org.orgId, "Dept B");
       await seedSourceEntry(org, actorId, "1000.0000");
-      const driverId = await seedDriver({ orgId: org.orgId, dimension: "department", sourceKind: "manual" });
-      await seedDriverValue({ orgId: org.orgId, driverId, dimensionValueId: deptA, value: "3.0000" });
-      await seedDriverValue({ orgId: org.orgId, driverId, dimensionValueId: deptB, value: "1.0000" });
+      const driverId = await seedDriver({
+        orgId: org.orgId,
+        dimension: "department",
+        sourceKind: "manual",
+      });
+      await seedDriverValue({
+        orgId: org.orgId,
+        driverId,
+        dimensionValueId: deptA,
+        value: "3.0000",
+      });
+      await seedDriverValue({
+        orgId: org.orgId,
+        driverId,
+        dimensionValueId: deptB,
+        value: "1.0000",
+      });
       const { ruleId } = await seedPeriodRule({
         orgId: org.orgId,
         poolAccountId: org.accounts.adjustment,
@@ -913,7 +983,9 @@ test(
       // No injected resolver: the engine falls back to the driver dispatcher.
       const preview = await previewRule(org, actorId, ruleId);
       assert.equal(preview.sourceTotal, "1000.0000");
-      const amounts = new Map(preview.computation.targets.map((target) => [target.key, target.amount]));
+      const amounts = new Map(
+        preview.computation.targets.map((target) => [target.key, target.amount]),
+      );
       assert.equal(amounts.get(deptA), "750.0000");
       assert.equal(amounts.get(deptB), "250.0000");
       const posted = await postAllocationRun(preview.id, actorId, "A2 dispatcher post check");
@@ -926,55 +998,52 @@ test(
   },
 );
 
-test(
-  "post refuses a run whose rule was deactivated after preview",
-  { skip: !DB },
-  async () => {
-    const { org, actorId } = await newAllocationOrg();
-    try {
-      const deptA = await seedDepartment(org.orgId, "Dept A");
-      await seedSourceEntry(org, actorId, "300.0000");
-      const { ruleId } = await seedPeriodRule({
-        orgId: org.orgId,
-        poolAccountId: org.accounts.adjustment,
-        targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
-      });
-      const preview = await previewRule(org, actorId, ruleId);
-      await db.execute(sql`update allocation_rules set is_active = false where id = ${ruleId}`);
-      await assert.rejects(postAllocationRun(preview.id, actorId, "Post after deactivation"), /not active/);
-      const run = await getRun(org.orgId, preview.id);
-      assert.equal(run.status, "previewed");
-      assert.equal(run.journalEntryId, null);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("post refuses a run whose rule was deactivated after preview", { skip: !DB }, async () => {
+  const { org, actorId } = await newAllocationOrg();
+  try {
+    const deptA = await seedDepartment(org.orgId, "Dept A");
+    await seedSourceEntry(org, actorId, "300.0000");
+    const { ruleId } = await seedPeriodRule({
+      orgId: org.orgId,
+      poolAccountId: org.accounts.adjustment,
+      targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
+    });
+    const preview = await previewRule(org, actorId, ruleId);
+    await db.execute(sql`update allocation_rules set is_active = false where id = ${ruleId}`);
+    await assert.rejects(
+      postAllocationRun(preview.id, actorId, "Post after deactivation"),
+      /not active/,
+    );
+    const run = await getRun(org.orgId, preview.id);
+    assert.equal(run.status, "previewed");
+    assert.equal(run.journalEntryId, null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "post refuses a run whose version was retired after preview",
-  { skip: !DB },
-  async () => {
-    const { org, actorId } = await newAllocationOrg();
-    try {
-      const deptA = await seedDepartment(org.orgId, "Dept A");
-      await seedSourceEntry(org, actorId, "300.0000");
-      const { ruleId, versionId } = await seedPeriodRule({
-        orgId: org.orgId,
-        poolAccountId: org.accounts.adjustment,
-        targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
-      });
-      const preview = await previewRule(org, actorId, ruleId);
-      await db.execute(sql`update allocation_rule_versions set status = 'retired' where id = ${versionId}`);
-      await assert.rejects(postAllocationRun(preview.id, actorId, "Post after retire"), /retired/);
-      const run = await getRun(org.orgId, preview.id);
-      assert.equal(run.status, "previewed");
-      assert.equal(run.journalEntryId, null);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("post refuses a run whose version was retired after preview", { skip: !DB }, async () => {
+  const { org, actorId } = await newAllocationOrg();
+  try {
+    const deptA = await seedDepartment(org.orgId, "Dept A");
+    await seedSourceEntry(org, actorId, "300.0000");
+    const { ruleId, versionId } = await seedPeriodRule({
+      orgId: org.orgId,
+      poolAccountId: org.accounts.adjustment,
+      targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
+    });
+    const preview = await previewRule(org, actorId, ruleId);
+    await db.execute(
+      sql`update allocation_rule_versions set status = 'retired' where id = ${versionId}`,
+    );
+    await assert.rejects(postAllocationRun(preview.id, actorId, "Post after retire"), /retired/);
+    const run = await getRun(org.orgId, preview.id);
+    assert.equal(run.status, "previewed");
+    assert.equal(run.journalEntryId, null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "preview refuses an empty source pool instead of posting a silent zero run",
@@ -1015,9 +1084,23 @@ test(
       const deptA = await seedDepartment(org.orgId, "Dept A");
       const deptB = await seedDepartment(org.orgId, "Dept B");
       await seedSourceEntry(org, actorId, "200.0000");
-      const driverId = await seedDriver({ orgId: org.orgId, dimension: "department", sourceKind: "manual" });
-      await seedDriverValue({ orgId: org.orgId, driverId, dimensionValueId: deptA, value: "3.0000" });
-      await seedDriverValue({ orgId: org.orgId, driverId, dimensionValueId: deptB, value: "1.0000" });
+      const driverId = await seedDriver({
+        orgId: org.orgId,
+        dimension: "department",
+        sourceKind: "manual",
+      });
+      await seedDriverValue({
+        orgId: org.orgId,
+        driverId,
+        dimensionValueId: deptA,
+        value: "3.0000",
+      });
+      await seedDriverValue({
+        orgId: org.orgId,
+        driverId,
+        dimensionValueId: deptB,
+        value: "1.0000",
+      });
       const { ruleId } = await seedPeriodRule({
         orgId: org.orgId,
         poolAccountId: org.accounts.adjustment,
@@ -1033,48 +1116,44 @@ test(
       const posted = await postAllocationRun(preview.id, actorId, "Post statistical attribution");
       assert.equal(posted.status, "posted");
       assert.equal(posted.journalEntryId, null);
-      const lineage = await db.execute<{ driver_value: string | null; amount: string }>(sql`
+      const lineage = await db.execute<{ driver_value: string | null; amount: string }>(
+        sql`
         select driver_value::text as driver_value, amount::text as amount from allocation_lineage
-         where org_id = ${org.orgId} and run_id = ${preview.id}`, "objects");
-      assert.equal(lineage.length, 2);
-      assert.deepEqual(
-        lineage.map((row) => row.driver_value).sort(),
-        ["1.0000", "3.0000"],
+         where org_id = ${org.orgId} and run_id = ${preview.id}`,
+        "objects",
       );
+      assert.equal(lineage.length, 2);
+      assert.deepEqual(lineage.map((row) => row.driver_value).sort(), ["1.0000", "3.0000"]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
   },
 );
 
-test(
-  "listRuns and getRun expose the stored computation",
-  { skip: !DB },
-  async () => {
-    const { org, actorId } = await newAllocationOrg();
-    try {
-      const deptA = await seedDepartment(org.orgId, "Dept A");
-      await seedSourceEntry(org, actorId, "300.0000");
-      const { ruleId } = await seedPeriodRule({
-        orgId: org.orgId,
-        poolAccountId: org.accounts.adjustment,
-        targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
-      });
-      const preview = await previewRule(org, actorId, ruleId);
-      const listed = await listRuns(org.orgId, { ruleId });
-      assert.equal(listed.total, 1);
-      assert.equal(listed.runs.length, 1);
-      assert.equal(listed.runs[0]?.id, preview.id);
-      assert.equal(listed.runs[0]?.sourceTotal, "300.0000");
-      const run = await getRun(org.orgId, preview.id);
-      assert.equal(run.fingerprint, preview.fingerprint);
-      assert.equal((run.computation as RunComputation).sourceTotal, "300.0000");
-      assert.equal((run.computation as RunComputation).targets.length, 1);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("listRuns and getRun expose the stored computation", { skip: !DB }, async () => {
+  const { org, actorId } = await newAllocationOrg();
+  try {
+    const deptA = await seedDepartment(org.orgId, "Dept A");
+    await seedSourceEntry(org, actorId, "300.0000");
+    const { ruleId } = await seedPeriodRule({
+      orgId: org.orgId,
+      poolAccountId: org.accounts.adjustment,
+      targets: [{ departmentId: deptA, fixedPercent: "100.0000", label: "Dept A" }],
+    });
+    const preview = await previewRule(org, actorId, ruleId);
+    const listed = await listRuns(org.orgId, { ruleId });
+    assert.equal(listed.total, 1);
+    assert.equal(listed.runs.length, 1);
+    assert.equal(listed.runs[0]?.id, preview.id);
+    assert.equal(listed.runs[0]?.sourceTotal, "300.0000");
+    const run = await getRun(org.orgId, preview.id);
+    assert.equal(run.fingerprint, preview.fingerprint);
+    assert.equal((run.computation as RunComputation).sourceTotal, "300.0000");
+    assert.equal((run.computation as RunComputation).targets.length, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "S4: a pinned run whose targets cross the pin is refused at preview and post",
@@ -1091,17 +1170,33 @@ test(
       const { ruleId, versionId } = await seedPeriodRule({
         orgId: org.orgId,
         poolAccountId: org.accounts.adjustment,
-        targets: [{ departmentId: dept, subsidiaryId: subB, fixedPercent: "100.0000", label: "Branch" }],
+        targets: [
+          { departmentId: dept, subsidiaryId: subB, fixedPercent: "100.0000", label: "Branch" },
+        ],
       });
-      const runCount = async (): Promise<number> => Number((await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`, "objects"))[0]?.count ?? 0);
+      const runCount = async (): Promise<number> =>
+        Number(
+          (
+            await db.execute<{ count: string }>(
+              sql`
+        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`,
+              "objects",
+            )
+          )[0]?.count ?? 0,
+        );
       const before = await runCount();
       // Pinned to A with a B target: refused by name, nothing persisted.
       await assert.rejects(
-        () => previewAllocationRun({
-          orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId,
-          subsidiaryId: org.subsidiaryId, actorId, trigger: "manual",
-        }),
+        () =>
+          previewAllocationRun({
+            orgId: org.orgId,
+            ruleId,
+            periodId: org.periodId,
+            bookId: org.bookId,
+            subsidiaryId: org.subsidiaryId,
+            actorId,
+            trigger: "manual",
+          }),
         (error: unknown) =>
           error instanceof AllocationRunError &&
           error.message.includes(subB) &&
@@ -1110,19 +1205,38 @@ test(
       assert.equal(await runCount(), before);
       // Unpinned org-wide sweeps keep their existing behaviour.
       const open = await previewAllocationRun({
-        orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId, actorId, trigger: "manual",
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId,
+        trigger: "manual",
       });
       assert.equal(open.subsidiaryId, null);
       assert.equal(open.computation.targets[0]?.coordinate.subsidiaryId, subB);
       // A stored crossed run is refused at post by the same name.
       const crossedId = randomUUID();
       const crossedComputation = {
-        ruleId, versionId, definitionHash: "testhash", periodId: org.periodId, bookId: org.bookId,
-        subsidiaryId: org.subsidiaryId, sourceMeasure: "period_activity",
-        sources: [{ accountId: org.accounts.adjustment, subsidiaryId: org.subsidiaryId, amount: "100.0000", lineCount: 1 }],
+        ruleId,
+        versionId,
+        definitionHash: "testhash",
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId,
+        sourceMeasure: "period_activity",
+        sources: [
+          {
+            accountId: org.accounts.adjustment,
+            subsidiaryId: org.subsidiaryId,
+            amount: "100.0000",
+            lineCount: 1,
+          },
+        ],
         sourceTotal: "100.0000",
         targets: [{ key: "t1", coordinate: { subsidiaryId: subB }, amount: "100.0000" }],
-        lines: [], residualPolicy: "largest_share", impact: "report_only",
+        lines: [],
+        residualPolicy: "largest_share",
+        impact: "report_only",
       };
       await db.execute(sql`
         insert into allocation_runs
@@ -1132,11 +1246,19 @@ test(
         values (${crossedId}, ${org.orgId}, ${ruleId}, ${versionId}, 'testhash', ${org.periodId}, ${org.bookId},
           ${org.subsidiaryId}, 'previewed', 'manual', '100.0000', '100.0000', '0.00',
           ${JSON.stringify(crossedComputation)}::jsonb, 'fp-crossed', ${actorId}, ${actorId}, ${actorId})`);
-      await assert.rejects(() => postAllocationRun(crossedId, actorId, "posting a crossed run"),
+      await assert.rejects(
+        () => postAllocationRun(crossedId, actorId, "posting a crossed run"),
         (error: unknown) =>
-          error instanceof AllocationRunError && /outside the pinned subsidiary/.test(error.message));
-      const kept = (await db.execute<{ status: string }>(sql`
-        select status from allocation_runs where org_id = ${org.orgId} and id = ${crossedId}`, "objects"))[0];
+          error instanceof AllocationRunError &&
+          /outside the pinned subsidiary/.test(error.message),
+      );
+      const kept = (
+        await db.execute<{ status: string }>(
+          sql`
+        select status from allocation_runs where org_id = ${org.orgId} and id = ${crossedId}`,
+          "objects",
+        )
+      )[0];
       assert.equal(kept?.status, "previewed");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -1162,16 +1284,30 @@ test(
         dimensionFilters: { subsidiaryIds: [subB] },
         targets: [{ departmentId: dept, fixedPercent: "100.0000", label: "Dept" }],
       });
-      const runCount = async (): Promise<number> => Number((await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`, "objects"))[0]?.count ?? 0);
+      const runCount = async (): Promise<number> =>
+        Number(
+          (
+            await db.execute<{ count: string }>(
+              sql`
+        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`,
+              "objects",
+            )
+          )[0]?.count ?? 0,
+        );
       const before = await runCount();
       // Pinned to A under a B-only rule: the pin/filter intersection is
       // empty, so refuse by name instead of allocating A's books.
       await assert.rejects(
-        () => previewAllocationRun({
-          orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId,
-          subsidiaryId: org.subsidiaryId, actorId, trigger: "manual",
-        }),
+        () =>
+          previewAllocationRun({
+            orgId: org.orgId,
+            ruleId,
+            periodId: org.periodId,
+            bookId: org.bookId,
+            subsidiaryId: org.subsidiaryId,
+            actorId,
+            trigger: "manual",
+          }),
         (error: unknown) =>
           error instanceof AllocationRunError &&
           /does not cover subsidiary/.test(error.message) &&
@@ -1180,8 +1316,13 @@ test(
       assert.equal(await runCount(), before);
       // Pinned to B the same rule sweeps exactly B's pool.
       const pinned = await previewAllocationRun({
-        orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId,
-        subsidiaryId: subB, actorId, trigger: "manual",
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryId: subB,
+        actorId,
+        trigger: "manual",
       });
       assert.equal(pinned.sourceTotal, "250.0000");
       assert.ok(pinned.computation.sources.every((source) => source.subsidiaryId === subB));

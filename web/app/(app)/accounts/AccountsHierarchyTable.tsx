@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useState, type ReactNode } from 'react'
-import Link from 'next/link'
-import { ChevronDown, ChevronRight, BookOpenText } from 'lucide-react'
+import { useState, type ReactNode } from "react";
+import Link from "next/link";
+import { ChevronDown, ChevronRight, BookOpenText } from "lucide-react";
 import {
   Badge,
   Table,
@@ -12,33 +12,33 @@ import {
   TableHeader,
   TableRow,
   cn,
-} from '@openbooks/ui'
-import { AccountRegisterLink } from '../../../components/account-register-link'
-import { ReportDrillLink } from '../reports/ReportDrillLink'
-import type { ReportDrillTarget } from '../../../lib/report-drill'
+} from "@openbooks/ui";
+import { AccountRegisterLink } from "../../../components/account-register-link";
+import { ReportDrillLink } from "../reports/ReportDrillLink";
+import type { ReportDrillTarget } from "../../../lib/report-drill";
 
 export interface HierarchyAccountRow {
-  id: string
-  parentId: string | null
-  number: string
-  name: string
-  typeLabel: string
-  isSummary: boolean
-  isActive: boolean
-  balance: string
-  balanceNegative: boolean
-  drill: ReportDrillTarget | null
-  detailHref: string
+  id: string;
+  parentId: string | null;
+  number: string;
+  name: string;
+  typeLabel: string;
+  isSummary: boolean;
+  isActive: boolean;
+  balance: string;
+  balanceNegative: boolean;
+  drill: ReportDrillTarget | null;
+  detailHref: string;
 }
 
 export interface HierarchyAccountGroup {
-  key: string
-  label: string
-  count: number
-  balance: string
-  balanceNegative: boolean
-  drill: ReportDrillTarget
-  rows: HierarchyAccountRow[]
+  key: string;
+  label: string;
+  count: number;
+  balance: string;
+  balanceNegative: boolean;
+  drill: ReportDrillTarget;
+  rows: HierarchyAccountRow[];
 }
 
 /**
@@ -47,8 +47,8 @@ export interface HierarchyAccountGroup {
  * server/client boundary), so fill them at the row. Every toggle names its
  * own account instead of sharing one generic label.
  */
-function fillRowLabel(template: string, row: Pick<HierarchyAccountRow, 'number' | 'name'>): string {
-  return template.replace('{number}', row.number).replace('{name}', row.name)
+function fillRowLabel(template: string, row: Pick<HierarchyAccountRow, "number" | "name">): string {
+  return template.replace("{number}", row.number).replace("{name}", row.name);
 }
 
 function BalanceDrill({
@@ -56,11 +56,11 @@ function BalanceDrill({
   className,
   children,
 }: {
-  target: ReportDrillTarget | null
-  className: string
-  children: ReactNode
+  target: ReportDrillTarget | null;
+  className: string;
+  children: ReactNode;
 }) {
-  if (!target) return <span className={className}>{children}</span>
+  if (!target) return <span className={className}>{children}</span>;
   return (
     <ReportDrillLink
       target={target}
@@ -68,62 +68,62 @@ function BalanceDrill({
     >
       {children}
     </ReportDrillLink>
-  )
+  );
 }
 
 export function AccountsHierarchyTable({
   groups,
   labels,
 }: {
-  groups: HierarchyAccountGroup[]
+  groups: HierarchyAccountGroup[];
   labels: {
-    account: string
-    type: string
-    balance: string
-    actions: string
-    inactive: string
-    viewRegister: string
-    expandAccount: string
-    collapseAccount: string
-  }
+    account: string;
+    type: string;
+    balance: string;
+    actions: string;
+    inactive: string;
+    viewRegister: string;
+    expandAccount: string;
+    collapseAccount: string;
+  };
 }) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
   function toggle(id: string) {
     setCollapsed((current) => {
-      const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function visibleRows(rows: HierarchyAccountRow[]) {
-    const byId = new Map(rows.map((row) => [row.id, row]))
+    const byId = new Map(rows.map((row) => [row.id, row]));
     const depthOf = (row: HierarchyAccountRow) => {
-      let depth = 0
-      let parentId = row.parentId
-      const visited = new Set<string>()
+      let depth = 0;
+      let parentId = row.parentId;
+      const visited = new Set<string>();
       while (parentId && byId.has(parentId) && !visited.has(parentId)) {
-        visited.add(parentId)
-        depth += 1
-        parentId = byId.get(parentId)?.parentId ?? null
+        visited.add(parentId);
+        depth += 1;
+        parentId = byId.get(parentId)?.parentId ?? null;
       }
-      return depth
-    }
+      return depth;
+    };
     const hiddenByCollapsedParent = (row: HierarchyAccountRow) => {
-      let parentId = row.parentId
-      const visited = new Set<string>()
+      let parentId = row.parentId;
+      const visited = new Set<string>();
       while (parentId && byId.has(parentId) && !visited.has(parentId)) {
-        if (collapsed.has(parentId)) return true
-        visited.add(parentId)
-        parentId = byId.get(parentId)?.parentId ?? null
+        if (collapsed.has(parentId)) return true;
+        visited.add(parentId);
+        parentId = byId.get(parentId)?.parentId ?? null;
       }
-      return false
-    }
+      return false;
+    };
     return rows
       .filter((row) => !hiddenByCollapsedParent(row))
-      .map((row) => ({ row, depth: depthOf(row) }))
+      .map((row) => ({ row, depth: depthOf(row) }));
   }
 
   return (
@@ -151,7 +151,7 @@ export function AccountsHierarchyTable({
         ))}
       </TableBody>
     </Table>
-  )
+  );
 }
 
 function GroupRows({
@@ -161,16 +161,16 @@ function GroupRows({
   onToggle,
   labels,
 }: {
-  group: HierarchyAccountGroup
-  rows: { row: HierarchyAccountRow; depth: number }[]
-  collapsed: Set<string>
-  onToggle: (id: string) => void
+  group: HierarchyAccountGroup;
+  rows: { row: HierarchyAccountRow; depth: number }[];
+  collapsed: Set<string>;
+  onToggle: (id: string) => void;
   labels: {
-    inactive: string
-    viewRegister: string
-    expandAccount: string
-    collapseAccount: string
-  }
+    inactive: string;
+    viewRegister: string;
+    expandAccount: string;
+    collapseAccount: string;
+  };
 }) {
   return (
     <>
@@ -183,15 +183,17 @@ function GroupRows({
             <span className="text-xs font-bold tracking-[0.08em] text-slate-700 uppercase dark:text-slate-200">
               {group.label}
             </span>
-            <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">{group.count}</span>
+            <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">
+              {group.count}
+            </span>
           </div>
         </TableCell>
         <TableCell className="py-2.5 text-right">
           <BalanceDrill
             target={group.drill}
             className={cn(
-              'text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200',
-              group.balanceNegative && 'text-red-600 dark:text-red-400',
+              "text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200",
+              group.balanceNegative && "text-red-600 dark:text-red-400",
             )}
           >
             {group.balance}
@@ -200,23 +202,29 @@ function GroupRows({
         <TableCell className="py-2.5" />
       </TableRow>
       {rows.map(({ row, depth }) => {
-        const isCollapsed = collapsed.has(row.id)
+        const isCollapsed = collapsed.has(row.id);
         return (
           <TableRow
             key={row.id}
             className={cn(
-              'group',
-              row.isSummary && 'bg-slate-50/45 dark:bg-slate-900/45',
-              !row.isActive && 'opacity-65',
+              "group",
+              row.isSummary && "bg-slate-50/45 dark:bg-slate-900/45",
+              !row.isActive && "opacity-65",
             )}
           >
             <TableCell className="py-2.5">
-              <div className="flex min-w-0 items-center" style={{ paddingLeft: `${Math.min(depth, 6) * 20}px` }}>
+              <div
+                className="flex min-w-0 items-center"
+                style={{ paddingLeft: `${Math.min(depth, 6) * 20}px` }}
+              >
                 {row.isSummary ? (
                   <button
                     type="button"
                     onClick={() => onToggle(row.id)}
-                    aria-label={fillRowLabel(isCollapsed ? labels.expandAccount : labels.collapseAccount, row)}
+                    aria-label={fillRowLabel(
+                      isCollapsed ? labels.expandAccount : labels.collapseAccount,
+                      row,
+                    )}
                     aria-expanded={!isCollapsed}
                     className="mr-1.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                   >
@@ -231,13 +239,17 @@ function GroupRows({
                 <Link
                   href={row.detailHref as never}
                   className={cn(
-                    'min-w-0 truncate hover:text-teal-700 hover:underline dark:hover:text-teal-300',
-                    row.isSummary && 'font-semibold text-slate-900 dark:text-slate-100',
+                    "min-w-0 truncate hover:text-teal-700 hover:underline dark:hover:text-teal-300",
+                    row.isSummary && "font-semibold text-slate-900 dark:text-slate-100",
                   )}
                 >
                   {row.name}
                 </Link>
-                {!row.isActive ? <Badge variant="outline" className="ml-2 shrink-0">{labels.inactive}</Badge> : null}
+                {!row.isActive ? (
+                  <Badge variant="outline" className="ml-2 shrink-0">
+                    {labels.inactive}
+                  </Badge>
+                ) : null}
               </div>
             </TableCell>
             <TableCell className="truncate py-2.5 text-xs text-slate-500 dark:text-slate-400">
@@ -247,9 +259,9 @@ function GroupRows({
               <BalanceDrill
                 target={row.drill}
                 className={cn(
-                  'font-medium tabular-nums',
-                  row.balanceNegative && 'text-red-600 dark:text-red-400',
-                  row.isSummary && 'font-semibold',
+                  "font-medium tabular-nums",
+                  row.balanceNegative && "text-red-600 dark:text-red-400",
+                  row.isSummary && "font-semibold",
                 )}
               >
                 {row.balance}
@@ -266,8 +278,8 @@ function GroupRows({
               </AccountRegisterLink>
             </TableCell>
           </TableRow>
-        )
+        );
       })}
     </>
-  )
+  );
 }

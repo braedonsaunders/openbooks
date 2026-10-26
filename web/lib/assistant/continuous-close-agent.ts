@@ -16,7 +16,11 @@ import { resolvedFeatureState } from "../features";
 import type { FeatureState } from "@openbooks/engine/organization/feature-registry";
 import type { ToolResult } from "./types";
 import { validateFinanceNarrative } from "./continuous-close-validation";
-import { packMissionBrief, packNarrativeTitle, packSystemGuidance } from "./continuous-close-prompts.ts";
+import {
+  packMissionBrief,
+  packNarrativeTitle,
+  packSystemGuidance,
+} from "./continuous-close-prompts.ts";
 import { fiscalCalendarLine } from "./system-prompt";
 import { orgFiscalContext } from "../fiscal";
 import type { FiscalContext } from "@openbooks/reports";
@@ -49,7 +53,14 @@ type AgentNarrative = {
 /** Read permissions each background agent pack runs with. Packs only ever
  *  READ and propose; nothing here grants a write. */
 const AGENT_PACK_PERMISSIONS: Record<ContinuousCloseAgentKey, string[]> = {
-  accounting: ["banking.read", "banking.reconcile", "close.read", "ap.read", "ar.read", "expenses.read"],
+  accounting: [
+    "banking.read",
+    "banking.reconcile",
+    "close.read",
+    "ap.read",
+    "ar.read",
+    "expenses.read",
+  ],
   finance: ["budgets.read", "ap.read", "ar.read", "projects.read", "close.read"],
   collections: ["ar.read", "banking.read"],
   payables: ["ap.read", "banking.read", "flows.read"],
@@ -98,7 +109,10 @@ function systemAuthz(orgId: string, agentKey: ContinuousCloseAgentKey): Authz {
 }
 
 function parseJson(text: string): Record<string, unknown> {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const trimmed = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
   if (start < 0 || end <= start) throw new Error("agent returned no JSON object");
@@ -115,19 +129,24 @@ function cleanText(value: unknown, fallback = ""): string {
 
 function cleanList(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.map((item) => cleanText(item)).filter(Boolean).slice(0, MAX_LIST)
+    ? value
+        .map((item) => cleanText(item))
+        .filter(Boolean)
+        .slice(0, MAX_LIST)
     : [];
 }
 
 function cleanCitations(value: unknown): Citation[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-    const row = item as Record<string, unknown>;
-    const label = cleanText(row.label).slice(0, 160);
-    const href = cleanText(row.href).slice(0, 500);
-    return label && href.startsWith("/") && !href.startsWith("//") ? [{ label, href }] : [];
-  }).slice(0, MAX_LIST);
+  return value
+    .flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const row = item as Record<string, unknown>;
+      const label = cleanText(row.label).slice(0, 160);
+      const href = cleanText(row.href).slice(0, 500);
+      return label && href.startsWith("/") && !href.startsWith("//") ? [{ label, href }] : [];
+    })
+    .slice(0, MAX_LIST);
 }
 
 function cleanPayload(
@@ -141,29 +160,38 @@ function cleanPayload(
         const row = value as Record<string, unknown>;
         const findingId = cleanText(row.findingId);
         if (!allowedFindingIds.has(findingId)) return [];
-        return [{
-          findingId,
-          headline: cleanText(row.headline).slice(0, 240),
-          explanation: input.analysis.rootCauseAnalysis ? cleanText(row.explanation) : "",
-          rootCauses: input.analysis.rootCauseAnalysis ? cleanList(row.rootCauses) : [],
-          recommendations: input.analysis.recommendations ? cleanList(row.recommendations) : [],
-          citations: cleanCitations(row.citations),
-        }];
+        return [
+          {
+            findingId,
+            headline: cleanText(row.headline).slice(0, 240),
+            explanation: input.analysis.rootCauseAnalysis ? cleanText(row.explanation) : "",
+            rootCauses: input.analysis.rootCauseAnalysis ? cleanList(row.rootCauses) : [],
+            recommendations: input.analysis.recommendations ? cleanList(row.recommendations) : [],
+            citations: cleanCitations(row.citations),
+          },
+        ];
       })
     : [];
 
-  if (!input.analysis.narrative || !raw.narrative || typeof raw.narrative !== "object" || Array.isArray(raw.narrative)) {
+  if (
+    !input.analysis.narrative ||
+    !raw.narrative ||
+    typeof raw.narrative !== "object" ||
+    Array.isArray(raw.narrative)
+  ) {
     return { narrative: null, analyses };
   }
   const row = raw.narrative as Record<string, unknown>;
   const sections = Array.isArray(row.sections)
-    ? row.sections.flatMap((value) => {
-        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-        const section = value as Record<string, unknown>;
-        const title = cleanText(section.title).slice(0, 160);
-        const body = cleanText(section.body);
-        return title && body ? [{ title, body }] : [];
-      }).slice(0, 8)
+    ? row.sections
+        .flatMap((value) => {
+          if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+          const section = value as Record<string, unknown>;
+          const title = cleanText(section.title).slice(0, 160);
+          const body = cleanText(section.body);
+          return title && body ? [{ title, body }] : [];
+        })
+        .slice(0, 8)
     : [];
   return {
     analyses,
@@ -191,7 +219,9 @@ function agentSystemPrompt(
     input.analysis.rootCauseAnalysis ? "root-cause analysis" : null,
     input.analysis.recommendations ? "action recommendations" : null,
     input.analysis.narrative ? "a management narrative" : null,
-  ].filter(Boolean).join(", ");
+  ]
+    .filter(Boolean)
+    .join(", ");
   return [
     `You are the ${input.agentKey} Continuous Close agent${orgName ? ` for ${orgName}` : ""}.`,
     `Write the final narrative in ${locale === "fr" ? "French" : locale === "es" ? "Spanish" : "English"}. Keep record identifiers and accounting values exactly as tools return them.`,
@@ -212,14 +242,16 @@ function agentSystemPrompt(
     "Keep the report decision-dense: at most 5 highlights, 6 risks, 6 recommendations, and 5 sections. Keep each section body under 900 characters.",
     "Relative citations must point to real in-product paths returned by tools or documented in their results.",
     "Your final response must be one JSON object and no markdown. Do not add facts merely to make the report longer.",
-  ].filter((line): line is string => typeof line === "string" && line.length > 0).join("\n");
+  ]
+    .filter((line): line is string => typeof line === "string" && line.length > 0)
+    .join("\n");
 }
 
 type EvidencePacket = { calls: number; data: Record<string, unknown> };
 
 function dataOf(result: ToolResult): Record<string, unknown> | null {
   return result.ok && result.data && typeof result.data === "object" && !Array.isArray(result.data)
-    ? result.data as Record<string, unknown>
+    ? (result.data as Record<string, unknown>)
     : null;
 }
 
@@ -262,9 +294,10 @@ async function financeEvidence(
   };
   const periods = await run("financial_periods", { completedOnly: true, limit: 15 });
   const periodRows = dataOf(periods)?.periods;
-  const latest = Array.isArray(periodRows) && periodRows[0] && typeof periodRows[0] === "object"
-    ? periodRows[0] as Record<string, unknown>
-    : null;
+  const latest =
+    Array.isArray(periodRows) && periodRows[0] && typeof periodRows[0] === "object"
+      ? (periodRows[0] as Record<string, unknown>)
+      : null;
   const fromDate = typeof latest?.fromDate === "string" ? latest.fromDate : null;
   const toDate = typeof latest?.toDate === "string" ? latest.toDate : null;
   const today = await businessToday(input.orgId);
@@ -273,7 +306,9 @@ async function financeEvidence(
     ["aging_ar_current", { side: "ar", asOf: today, limit: 50 }],
     ["aging_ap_current", { side: "ap", asOf: today, limit: 50 }],
     ["budget_vs_actual", {}],
-    ...input.findingIds.map((findingId) => ["get_continuous_close_finding", { findingId }] as [string, unknown]),
+    ...input.findingIds.map(
+      (findingId) => ["get_continuous_close_finding", { findingId }] as [string, unknown],
+    ),
   ];
   if (fromDate && toDate) {
     tasks.push(
@@ -284,13 +319,17 @@ async function financeEvidence(
       ["vendor_concentration", { side: "vendor", fromDate, toDate, limit: 20 }],
     );
   }
-  const entries = await Promise.all(tasks.map(async ([label, args]) => {
-    const toolName = label.startsWith("aging_") ? "aging"
-      : label.endsWith("_concentration") ? "party_concentration"
-      : label;
-    const result = await run(toolName, args);
-    return [label, compactToolData(toolName, result)] as const;
-  }));
+  const entries = await Promise.all(
+    tasks.map(async ([label, args]) => {
+      const toolName = label.startsWith("aging_")
+        ? "aging"
+        : label.endsWith("_concentration")
+          ? "party_concentration"
+          : label;
+      const result = await run(toolName, args);
+      return [label, compactToolData(toolName, result)] as const;
+    }),
+  );
   return {
     calls,
     data: {
@@ -358,14 +397,16 @@ function agentPrompt(
         sections: [{ title: "string", body: "string" }],
         citations: [{ label: "string", href: "/relative/path" }],
       },
-      findingAnalyses: [{
-        findingId: "one supplied finding id",
-        headline: "string",
-        explanation: "string",
-        rootCauses: ["string"],
-        recommendations: ["string"],
-        citations: [{ label: "string", href: "/relative/path" }],
-      }],
+      findingAnalyses: [
+        {
+          findingId: "one supplied finding id",
+          headline: "string",
+          explanation: "string",
+          rootCauses: ["string"],
+          recommendations: ["string"],
+          citations: [{ label: "string", href: "/relative/path" }],
+        },
+      ],
     }),
   ].join("\n");
 }
@@ -390,10 +431,13 @@ export async function enrichContinuousCloseRun(
         : input.agentKey === "payables"
           ? await agingEvidence(input, authz, features, "ap")
           : null;
-  const org = (await db.execute<{ locale: string }>(sql`
+  const org = await db.execute<{ locale: string }>(
+    sql`
     select coalesce(settings->>'defaultLocale', 'en') as locale
       from orgs where id = ${input.orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const fiscal = await orgFiscalContext(undefined, input.orgId);
   const timeoutController = new AbortController();
   const timeout = setTimeout(
@@ -422,8 +466,9 @@ export async function enrichContinuousCloseRun(
     }
   }
   const applied = await applyFindingAnalyses(input.orgId, input.runId, cleaned.analyses);
-  const model = (input.analysis.modelTier === "smart" ? config?.modelSmart : config?.modelFast)
-    || (config ? defaultModel(config.provider, input.analysis.modelTier) : null);
+  const model =
+    (input.analysis.modelTier === "smart" ? config?.modelSmart : config?.modelFast) ||
+    (config ? defaultModel(config.provider, input.analysis.modelTier) : null);
   if (applied.supersededFindingIds.length > 0) {
     // A zero-row write is a lost update, never an applied one: the finding
     // moved on under another run (or left this org), so the analysis names
@@ -464,7 +509,8 @@ export async function applyFindingAnalyses(
   let applied = 0;
   const supersededFindingIds: string[] = [];
   for (const analysis of analyses) {
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update ai_work_items
          set summary = jsonb_set(summary, '{aiAnalysis}', ${JSON.stringify({
            ...analysis,
@@ -475,7 +521,9 @@ export async function applyFindingAnalyses(
        where id = ${analysis.findingId} and org_id = ${orgId}
          and last_detected_run_id = ${runId}
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length) applied += 1;
     else supersededFindingIds.push(analysis.findingId);
   }

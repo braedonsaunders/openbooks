@@ -30,7 +30,7 @@ export type IntercompanyPairRow = {
   toReceivableAccountId: string | null;
   toPayableAccountId: string | null;
   isActive: boolean;
-}
+};
 
 /** The accounts one side of a pair uses with its counterparty. */
 export interface IntercompanySideAccounts {
@@ -85,13 +85,18 @@ export async function loadIntercompanyPair(
   subsidiaryA: string,
   subsidiaryB: string,
 ): Promise<IntercompanyPairRow | null> {
-  const row = (await runner.execute<IntercompanyPairRow>(sql`
+  const row = (
+    await runner.execute<IntercompanyPairRow>(
+      sql`
     select ${PAIR_COLUMNS}
       from intercompany_pairs
      where org_id = ${orgId}
        and ((from_subsidiary_id = ${subsidiaryA} and to_subsidiary_id = ${subsidiaryB})
          or (from_subsidiary_id = ${subsidiaryB} and to_subsidiary_id = ${subsidiaryA}))
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   return row ?? null;
 }
 
@@ -100,11 +105,14 @@ export async function loadActiveIntercompanyPairs(
   runner: SqlExecutor,
   orgId: string,
 ): Promise<IntercompanyPairRow[]> {
-  return await runner.execute<IntercompanyPairRow>(sql`
+  return await runner.execute<IntercompanyPairRow>(
+    sql`
     select ${PAIR_COLUMNS}
       from intercompany_pairs
      where org_id = ${orgId} and is_active
-     order by created_at, id`, "objects");
+     order by created_at, id`,
+    "objects",
+  );
 }
 
 export interface IntercompanyRepresentation {
@@ -122,18 +130,28 @@ export async function loadPartyRepresentation(
   partyId: string,
   role: "customer" | "vendor",
 ): Promise<IntercompanyRepresentation | null> {
-  const row = (await runner.execute<{ id: string; subsidiaryId: string; subsidiaryName: string }>(
-    role === "customer"
-      ? sql`select r.id, r.subsidiary_id as "subsidiaryId", s.name as "subsidiaryName"
+  const row = (
+    await runner.execute<{ id: string; subsidiaryId: string; subsidiaryName: string }>(
+      role === "customer"
+        ? sql`select r.id, r.subsidiary_id as "subsidiaryId", s.name as "subsidiaryName"
               from intercompany_representing_parties r
               join subsidiaries s on s.org_id = r.org_id and s.id = r.subsidiary_id
              where r.org_id = ${orgId} and r.customer_party_id = ${partyId} and r.is_active`
-      : sql`select r.id, r.subsidiary_id as "subsidiaryId", s.name as "subsidiaryName"
+        : sql`select r.id, r.subsidiary_id as "subsidiaryId", s.name as "subsidiaryName"
               from intercompany_representing_parties r
               join subsidiaries s on s.org_id = r.org_id and s.id = r.subsidiary_id
-             where r.org_id = ${orgId} and r.vendor_party_id = ${partyId} and r.is_active`, "objects",
-  ))[0];
-  return row ? { representationId: row.id, subsidiaryId: row.subsidiaryId, subsidiaryName: row.subsidiaryName, role } : null;
+             where r.org_id = ${orgId} and r.vendor_party_id = ${partyId} and r.is_active`,
+      "objects",
+    )
+  )[0];
+  return row
+    ? {
+        representationId: row.id,
+        subsidiaryId: row.subsidiaryId,
+        subsidiaryName: row.subsidiaryName,
+        role,
+      }
+    : null;
 }
 
 /** The active representing customer and vendor of one subsidiary. */
@@ -142,10 +160,15 @@ export async function loadSubsidiaryRepresentatives(
   orgId: string,
   subsidiaryId: string,
 ): Promise<{ customerPartyId: string | null; vendorPartyId: string | null } | null> {
-  const row = (await runner.execute<{ customerPartyId: string | null; vendorPartyId: string | null }>(sql`
+  const row = (
+    await runner.execute<{ customerPartyId: string | null; vendorPartyId: string | null }>(
+      sql`
     select customer_party_id as "customerPartyId", vendor_party_id as "vendorPartyId"
       from intercompany_representing_parties
-     where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and is_active`, "objects"))[0];
+     where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and is_active`,
+      "objects",
+    )
+  )[0];
   return row ?? null;
 }
 
@@ -197,7 +220,12 @@ export async function intercompanyControlAccount(
       `this ${partyLabel} represents ${representation.subsidiaryName} itself; a subsidiary cannot be its own ${partyLabel} — post the document in another subsidiary or choose a different ${partyLabel}`,
     );
   }
-  const pair = await loadIntercompanyPair(runner, input.orgId, documentSubsidiaryId, representation.subsidiaryId);
+  const pair = await loadIntercompanyPair(
+    runner,
+    input.orgId,
+    documentSubsidiaryId,
+    representation.subsidiaryId,
+  );
   const names = await subsidiaryNames(runner, input.orgId, [documentSubsidiaryId]);
   const ownName = names.get(documentSubsidiaryId) ?? "this subsidiary";
   if (!pair || !pair.isActive) {
@@ -206,14 +234,20 @@ export async function intercompanyControlAccount(
     );
   }
   const sideAccounts = intercompanySideAccounts(pair, documentSubsidiaryId)!;
-  const accountId = input.side === "ar" ? sideAccounts.receivableAccountId : sideAccounts.payableAccountId;
+  const accountId =
+    input.side === "ar" ? sideAccounts.receivableAccountId : sideAccounts.payableAccountId;
   if (!accountId) {
     throw new IntercompanyPolicyError(
       `the intercompany pair of ${ownName} and ${representation.subsidiaryName} has no intercompany ${input.side === "ar" ? "receivable" : "payable"} account for ${ownName} — set it under Setup → Accounting → Intercompany pairs`,
     );
   }
-  const account = (await runner.execute<{ eliminate: boolean; is_active: boolean }>(sql`
-    select eliminate, is_active from accounts where org_id = ${input.orgId} and id = ${accountId}`, "objects"))[0];
+  const account = (
+    await runner.execute<{ eliminate: boolean; is_active: boolean }>(
+      sql`
+    select eliminate, is_active from accounts where org_id = ${input.orgId} and id = ${accountId}`,
+      "objects",
+    )
+  )[0];
   if (!account || !account.is_active || !account.eliminate) {
     throw new IntercompanyPolicyError(
       `the intercompany ${input.side === "ar" ? "receivable" : "payable"} account for ${ownName} must be active and marked Eliminate on consolidation — correct it in Chart of accounts or on the intercompany pair`,
@@ -228,8 +262,13 @@ export async function intercompanyControlAccount(
 }
 
 export async function rootSubsidiaryId(runner: SqlExecutor, orgId: string): Promise<string> {
-  const row = (await runner.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null`, "objects"))[0];
+  const row = (
+    await runner.execute<{ id: string }>(
+      sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new IntercompanyPolicyError("the organization has no root subsidiary");
   return row.id;
 }
@@ -240,8 +279,11 @@ export async function subsidiaryNames(
   ids: readonly string[],
 ): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
-  const rows = await runner.execute<{ id: string; name: string }>(sql`
+  const rows = await runner.execute<{ id: string; name: string }>(
+    sql`
     select id, name from subsidiaries
-     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`, "objects");
+     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.id, row.name]));
 }

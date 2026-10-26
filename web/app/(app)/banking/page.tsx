@@ -1,11 +1,11 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadBanking, bankingSpec } from './view'
-export const dynamic = 'force-dynamic'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadBanking, bankingSpec } from "./view";
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('banking')
-  return { title: t('home.title') }
+  const t = await getTranslations("banking");
+  return { title: t("home.title") };
 }
 
 /** Statements older than this are flagged as a stale feed on the roster. */
@@ -22,11 +22,11 @@ export async function generateMetadata() {
 export default async function BankingHomePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadBanking(sp)
-  return <ModuleView spec={bankingSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadBanking(sp);
+  return <ModuleView spec={bankingSpec(data)} data={data} searchParams={sp} trusted />;
 }
 
 /* ------------------------------------------------------------------------- */

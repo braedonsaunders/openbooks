@@ -1,12 +1,12 @@
-import 'server-only'
-import { WIDGETS } from '../app/(app)/dashboard/_widget-registry'
-import dashboardMessages from '../messages/en/dashboard.json'
+import "server-only";
+import { WIDGETS } from "../app/(app)/dashboard/_widget-registry";
+import dashboardMessages from "../messages/en/dashboard.json";
 
-type Messages = { widgets?: Record<string, string>; catalog?: Record<string, string> }
+type Messages = { widgets?: Record<string, string>; catalog?: Record<string, string> };
 
 function message(key: string, messages: Messages): string {
-  const [section, name] = key.split('.') as ['widgets' | 'catalog', string]
-  return messages[section]?.[name] ?? name
+  const [section, name] = key.split(".") as ["widgets" | "catalog", string];
+  return messages[section]?.[name] ?? name;
 }
 
 /**
@@ -15,9 +15,9 @@ function message(key: string, messages: Messages): string {
  * reader is decided at render; this lists what exists.
  */
 export function dashboardTileCatalog() {
-  const messages = dashboardMessages as Messages
+  const messages = dashboardMessages as Messages;
   return Object.values(WIDGETS)
-    .filter((widget) => !widget.id.startsWith('personal-'))
+    .filter((widget) => !widget.id.startsWith("personal-"))
     .map((widget) => ({
       id: widget.id,
       category: widget.category,
@@ -26,5 +26,5 @@ export function dashboardTileCatalog() {
       defaultSize: widget.defaultSize,
       minSize: widget.minSize,
       ...(widget.maxSize ? { maxSize: widget.maxSize } : {}),
-    }))
+    }));
 }

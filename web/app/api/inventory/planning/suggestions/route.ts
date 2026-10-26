@@ -10,15 +10,25 @@ const Params = z.object({}).strict();
 const Status = z.enum(["suggested", "confirmed", "converted", "dismissed", "open", "all"]);
 
 export const GET = defineRoute({
-  permission: "inventory.plan", feature: "demandPlanning", params: Params,
-  handler: async ({ request, authz }) => planningTransaction(authz.user.orgId, async () => {
-    const url = new URL(request.url);
-    const subsidiary = uuidString().safeParse(url.searchParams.get("subsidiaryId"));
-    if (!subsidiary.success) return Response.json({ error: "subsidiaryId must be a UUID" }, { status: 400 });
-    const denied = guardSubsidiaryScope(authz, subsidiary.data);
-    if (denied) return denied;
-    const status = Status.safeParse(url.searchParams.get("status") ?? "open");
-    if (!status.success) return Response.json({ error: "status must be suggested, confirmed, converted, dismissed, open or all" }, { status: 400 });
-    return Response.json(await listPlanSuggestions(db, authz.user.orgId, subsidiary.data, status.data));
-  }),
+  permission: "inventory.plan",
+  feature: "demandPlanning",
+  params: Params,
+  handler: async ({ request, authz }) =>
+    planningTransaction(authz.user.orgId, async () => {
+      const url = new URL(request.url);
+      const subsidiary = uuidString().safeParse(url.searchParams.get("subsidiaryId"));
+      if (!subsidiary.success)
+        return Response.json({ error: "subsidiaryId must be a UUID" }, { status: 400 });
+      const denied = guardSubsidiaryScope(authz, subsidiary.data);
+      if (denied) return denied;
+      const status = Status.safeParse(url.searchParams.get("status") ?? "open");
+      if (!status.success)
+        return Response.json(
+          { error: "status must be suggested, confirmed, converted, dismissed, open or all" },
+          { status: 400 },
+        );
+      return Response.json(
+        await listPlanSuggestions(db, authz.user.orgId, subsidiary.data, status.data),
+      );
+    }),
 });

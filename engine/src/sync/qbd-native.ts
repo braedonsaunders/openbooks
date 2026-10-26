@@ -1,10 +1,15 @@
 import { fromUnits, toUnits } from "../money/money.ts";
-import { assertUniformReportLocale, parseQbdReportAmount, parseQbdReportDate, type QbdReportAmount, type QbdReportRow } from "../qbd/qbxml.ts";
+import {
+  assertUniformReportLocale,
+  parseQbdReportAmount,
+  parseQbdReportDate,
+  type QbdReportAmount,
+  type QbdReportRow,
+} from "../qbd/qbxml.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 
 type ParsedAmounts =
-  | { ok: true; debit: QbdReportAmount; credit: QbdReportAmount }
-  | { ok: false; error: string };
+  { ok: true; debit: QbdReportAmount; credit: QbdReportAmount } | { ok: false; error: string };
 
 export type QbdPartyFamily = "customer" | "vendor" | "employee";
 
@@ -24,7 +29,13 @@ function resolveQbdLineParty(args: {
   // The account class picks the family — never the name: a same-named vendor
   // never answers for an AR line. Control metadata comes from the ledger's
   // own control accounts, never an account-name match.
-  const expected: QbdPartyFamily | null = isAR ? "customer" : isAP ? "vendor" : isEmployeePayable ? "employee" : null;
+  const expected: QbdPartyFamily | null = isAR
+    ? "customer"
+    : isAP
+      ? "vendor"
+      : isEmployeePayable
+        ? "employee"
+        : null;
   if (!name) {
     // A null party is kept only when the source Name is truly empty and the
     // account does not require one: a control posting with no party cannot
@@ -49,7 +60,10 @@ function resolveQbdLineParty(args: {
   }
   if (hits.length === 1) {
     const family = hits[0]!;
-    return { partyId: args.ctx.partyByRef.get(args.partyRefByFamily[family].get(name)!) ?? null, failure: null };
+    return {
+      partyId: args.ctx.partyByRef.get(args.partyRefByFamily[family].get(name)!) ?? null,
+      failure: null,
+    };
   }
   if (hits.length === 0) {
     return {
@@ -188,9 +202,10 @@ export function buildQbdLedgerDocuments(input: {
     if (lines.length < 2 || sum !== 0n) {
       unbuildable.push({
         ref: txnId,
-        reason: lines.length < 2
-          ? "ledger transaction has fewer than two mapped lines"
-          : `ledger transaction is out of balance by ${fromUnits(sum)}`,
+        reason:
+          lines.length < 2
+            ? "ledger transaction has fewer than two mapped lines"
+            : `ledger transaction is out of balance by ${fromUnits(sum)}`,
       });
       continue;
     }

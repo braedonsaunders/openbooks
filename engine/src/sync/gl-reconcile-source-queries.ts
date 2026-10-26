@@ -21,10 +21,7 @@ const SINCE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 /** Parse --since, refusing anything that is not a calendar date by name. */
 export function parseSince(raw: string | undefined): string {
   const since = (raw ?? DEFAULT_SINCE).trim();
-  if (
-    !SINCE_PATTERN.test(since) ||
-    Number.isNaN(Date.parse(`${since}T00:00:00Z`))
-  ) {
+  if (!SINCE_PATTERN.test(since) || Number.isNaN(Date.parse(`${since}T00:00:00Z`))) {
     throw new Error(
       `--since must be YYYY-MM-DD (received ${JSON.stringify(raw ?? "")}); ` +
         "the same date filters the source transaction date and the OpenBooks posting/document dates",
@@ -151,11 +148,7 @@ export function formatMoney(value: unknown): string {
  * a delta far below the old 0.5%-of-source tolerance that could hide a
  * million-scale misstatement behind a large source base.
  */
-export function compareMoneyBucket(
-  label: string,
-  ours: unknown,
-  theirs: unknown,
-): BucketVerdict {
+export function compareMoneyBucket(label: string, ours: unknown, theirs: unknown): BucketVerdict {
   const ourUnits = toUnits(String(ours ?? "0"));
   const theirUnits = toUnits(String(theirs ?? "0"));
   const delta = ourUnits - theirUnits;
@@ -173,11 +166,7 @@ export function compareMoneyBucket(
  * construction; a fractional count refuses by name instead of rounding into
  * agreement.
  */
-export function compareCountBucket(
-  label: string,
-  ours: unknown,
-  theirs: unknown,
-): BucketVerdict {
+export function compareCountBucket(label: string, ours: unknown, theirs: unknown): BucketVerdict {
   const toCount = (value: unknown): bigint => {
     const text = String(value ?? "0").trim();
     try {
@@ -247,27 +236,24 @@ export function alignMoneyBuckets(
   const sum = (rows: readonly MoneyBucket[]): Map<string, bigint> => {
     const totals = new Map<string, bigint>();
     for (const row of rows) {
-      const key = String(row.currency ?? "").trim().toUpperCase();
+      const key = String(row.currency ?? "")
+        .trim()
+        .toUpperCase();
       if (!key) {
         throw new Error(
           "refusing to compare a bucket with no currency label; " +
             "resolve the legal entity's base currency before comparing",
         );
       }
-      totals.set(
-        key,
-        (totals.get(key) ?? 0n) + toUnits(String(row.amount ?? "0")),
-      );
+      totals.set(key, (totals.get(key) ?? 0n) + toUnits(String(row.amount ?? "0")));
     }
     return totals;
   };
   const ourTotals = sum(ours);
   const theirTotals = sum(theirs);
-  return [...new Set([...ourTotals.keys(), ...theirTotals.keys()])]
-    .sort()
-    .map((currency) => ({
-      currency,
-      ours: fromUnits(ourTotals.get(currency) ?? 0n),
-      theirs: fromUnits(theirTotals.get(currency) ?? 0n),
-    }));
+  return [...new Set([...ourTotals.keys(), ...theirTotals.keys()])].sort().map((currency) => ({
+    currency,
+    ours: fromUnits(ourTotals.get(currency) ?? 0n),
+    theirs: fromUnits(theirTotals.get(currency) ?? 0n),
+  }));
 }

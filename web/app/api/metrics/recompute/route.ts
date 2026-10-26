@@ -9,5 +9,6 @@ export const POST = defineRoute({
   feature: "saasMetrics",
   scope: "unrestricted",
   body: Body,
-  handler: async ({ authz, body }) => Response.json(await recomputeSaasMetrics(authz.user.orgId, body.month)),
+  handler: async ({ authz, body }) =>
+    Response.json(await recomputeSaasMetrics(authz.user.orgId, body.month)),
 });

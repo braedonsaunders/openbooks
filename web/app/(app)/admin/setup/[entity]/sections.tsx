@@ -1,44 +1,53 @@
-import 'server-only'
-import { loadExtensionSettingRows, extensionSettingDrawerEntity } from '../../../../../lib/setup/extension-settings'
-import { appSettingsHref } from '../../../../../lib/setup/rail'
-import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announcements'
+import "server-only";
+import {
+  loadExtensionSettingRows,
+  extensionSettingDrawerEntity,
+} from "../../../../../lib/setup/extension-settings";
+import { appSettingsHref } from "../../../../../lib/setup/rail";
+import { loadHomeAnnouncementRows } from "../../../../../lib/setup/home-announcements";
 
-import Link from 'next/link'
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
-import { projectRuleSlotPrefills } from '../../../../../lib/setup/hrm-rule-slots'
-import { Badge, Button } from '@openbooks/ui'
-import { requirePermission } from '../../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
+import Link from "next/link";
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
+import { projectRuleSlotPrefills } from "../../../../../lib/setup/hrm-rule-slots";
+import { Badge, Button } from "@openbooks/ui";
+import { requirePermission } from "../../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
 import {
   SETUP_ENTITY_BY_KEY,
   resolveSetupEntityGate,
   setupEntityForFeatureState,
-} from '../../../../../lib/setup/registry'
-import { resolveDynamicSetupOptions, setupOptionsContext } from '../../../../../lib/setup/dynamic-options'
-import { resolvedFeatureState, featureEnabled } from '../../../../../lib/features'
+} from "../../../../../lib/setup/registry";
+import {
+  resolveDynamicSetupOptions,
+  setupOptionsContext,
+} from "../../../../../lib/setup/dynamic-options";
+import { resolvedFeatureState, featureEnabled } from "../../../../../lib/features";
 import {
   isUuid,
   mergeHref,
   parsePrefixedListParams,
   pickString,
-} from '../../../../../lib/list-params'
-import { loadRefOptions } from '../../../../../lib/setup/ref-options'
-import { setupEntityHasSubsidiaryAnchor, setupEntitySubsidiaryFilter } from '../../../../../lib/setup/subsidiary-scope'
-import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
-import { CompanyTab } from './CompanyTab'
-import { CloseSetupPage } from './CloseSetupPage'
-import { FxProviderPage } from './FxProviderPage'
-import { TaxProviderPage } from './TaxProviderPage'
-import { SetupDrawer } from '../../../../../components/viewspec/native-widgets.client'
-import { setupRecordTabs } from './SetupEntitySection'
-import { TaxReturnBoxesTab, type TaxReturnBoxRow } from './TaxReturnBoxesTab'
-import { TaxRatesTab, type TaxRateRow } from './TaxRatesTab'
-import { SegmentValuesTab, type SegmentValueRow } from './SegmentValuesTab'
-import { PayrollStatutoryHolidaysSection } from './PayrollStatutoryHolidays'
-import { statutoryHolidayCalendarsOf } from '@openbooks/engine/payroll/holidays'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+} from "../../../../../lib/list-params";
+import { loadRefOptions } from "../../../../../lib/setup/ref-options";
+import {
+  setupEntityHasSubsidiaryAnchor,
+  setupEntitySubsidiaryFilter,
+} from "../../../../../lib/setup/subsidiary-scope";
+import { setupReadProjection, setupReadSource } from "../../../../../lib/setup/read-shape";
+import { CompanyTab } from "./CompanyTab";
+import { CloseSetupPage } from "./CloseSetupPage";
+import { FxProviderPage } from "./FxProviderPage";
+import { TaxProviderPage } from "./TaxProviderPage";
+import { SetupDrawer } from "../../../../../components/viewspec/native-widgets.client";
+import { setupRecordTabs } from "./SetupEntitySection";
+import { TaxReturnBoxesTab, type TaxReturnBoxRow } from "./TaxReturnBoxesTab";
+import { TaxRatesTab, type TaxRateRow } from "./TaxRatesTab";
+import { SegmentValuesTab, type SegmentValueRow } from "./SegmentValuesTab";
+import { PayrollStatutoryHolidaysSection } from "./PayrollStatutoryHolidays";
+import { statutoryHolidayCalendarsOf } from "@openbooks/engine/payroll/holidays";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 
 /**
  * Composite cells and slots for the generic setup-entity list.
@@ -69,16 +78,16 @@ export function SetupDescription({
   docHref,
   learnMore,
 }: {
-  description: string
-  docHref: string | null
-  learnMore: string
+  description: string;
+  docHref: string | null;
+  learnMore: string;
 }) {
   return (
     <p className="text-sm text-slate-500 dark:text-slate-400">
       {description}
       {docHref ? (
         <>
-          {' '}
+          {" "}
           <Link
             href={docHref}
             className="font-medium text-teal-700 hover:underline dark:text-teal-300"
@@ -88,28 +97,28 @@ export function SetupDescription({
         </>
       ) : null}
     </p>
-  )
+  );
 }
 
-const ROW_LINK_CLASS = 'font-medium text-teal-700 hover:underline dark:text-teal-300'
+const ROW_LINK_CLASS = "font-medium text-teal-700 hover:underline dark:text-teal-300";
 
 export function SetupCodeCell({
   text,
   shown,
   href,
 }: {
-  text: string
-  shown: boolean
-  href?: string
+  text: string;
+  shown: boolean;
+  href?: string;
 }) {
-  if (!shown) return <>{text}</>
-  const inner = <span className="font-mono text-xs">{text}</span>
-  if (!href) return inner
+  if (!shown) return <>{text}</>;
+  const inner = <span className="font-mono text-xs">{text}</span>;
+  if (!href) return inner;
   return (
     <Link href={href} className={ROW_LINK_CLASS}>
       {inner}
     </Link>
-  )
+  );
 }
 
 export function SetupBadgeLinkCell({
@@ -117,18 +126,18 @@ export function SetupBadgeLinkCell({
   variant,
   href,
 }: {
-  label: string
-  variant: 'default' | 'secondary' | 'outline'
-  href: string
+  label: string;
+  variant: "default" | "secondary" | "outline";
+  href: string;
 }) {
   return (
     <Link href={href} className={ROW_LINK_CLASS}>
       <Badge variant={variant}>{label}</Badge>
     </Link>
-  )
+  );
 }
 
-type RefOption = { value: string; label: string }
+type RefOption = { value: string; label: string };
 
 /**
  * The setup create/edit drawer with its nested sub-tabs and stacked child
@@ -139,303 +148,382 @@ export async function SetupDrawerSlot({
   entityKey,
   sp,
 }: {
-  entityKey: string
-  sp: Record<string, string | string[] | undefined>
+  entityKey: string;
+  sp: Record<string, string | string[] | undefined>;
 }) {
-  const authz = await requirePermission('admin.setup.manage')
-  const { orgId } = authz.user
+  const authz = await requirePermission("admin.setup.manage");
+  const { orgId } = authz.user;
 
-  const baseEntity = SETUP_ENTITY_BY_KEY.get(entityKey)
+  const baseEntity = SETUP_ENTITY_BY_KEY.get(entityKey);
   // App settings render on each app's own page rather than a standalone one.
-  if (!baseEntity || baseEntity.nestedUnder || baseEntity.parentRecords?.length || (baseEntity.rehomed && baseEntity.dataSource !== 'extension-settings')) return null
-  const features = await resolvedFeatureState(orgId)
+  if (
+    !baseEntity ||
+    baseEntity.nestedUnder ||
+    baseEntity.parentRecords?.length ||
+    (baseEntity.rehomed && baseEntity.dataSource !== "extension-settings")
+  )
+    return null;
+  const features = await resolvedFeatureState(orgId);
   // One authoritative gate admits the drawer — never a local OR over featureKey.
-  if (!resolveSetupEntityGate(baseEntity, features).enabled) return null
+  if (!resolveSetupEntityGate(baseEntity, features).enabled) return null;
   const gatedEntity = setupEntityForFeatureState(baseEntity, {
-    multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
-    equipment: featureEnabled(features, 'equipment'),
-    fieldTickets: featureEnabled(features, 'fieldTickets'),
-        einvoicing: featureEnabled(features, 'einvoicing'),
-  })
-  const entity = resolveDynamicSetupOptions(gatedEntity, await setupOptionsContext(orgId, gatedEntity))
-  if (authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) return null
+    multiSubsidiary: featureEnabled(features, "multiSubsidiary"),
+    equipment: featureEnabled(features, "equipment"),
+    fieldTickets: featureEnabled(features, "fieldTickets"),
+    einvoicing: featureEnabled(features, "einvoicing"),
+  });
+  const entity = resolveDynamicSetupOptions(
+    gatedEntity,
+    await setupOptionsContext(orgId, gatedEntity),
+  );
+  if (authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) return null;
 
-  const t = await getTranslations('admin.setup')
-  const rowParam = typeof sp.row === 'string' ? sp.row : undefined
-  const closeHrefFor = (basePath: string) => mergeHref(basePath, sp, {
-    row: undefined,
-    setupTab: undefined,
-    boxRow: undefined,
-    rateRow: undefined,
-    taxBoxQ: undefined,
-    taxBoxPage: undefined,
-    taxRateQ: undefined,
-    taxRatePage: undefined,
-    valueRow: undefined,
-    segValQ: undefined,
-    segValPage: undefined,
-    childRow: undefined,
-    childQ: undefined,
-    childPage: undefined,
-    childShowInactive: undefined,
-  })
-  const closeHref = closeHrefFor(`/admin/setup/${entity.key}`)
+  const t = await getTranslations("admin.setup");
+  const rowParam = typeof sp.row === "string" ? sp.row : undefined;
+  const closeHrefFor = (basePath: string) =>
+    mergeHref(basePath, sp, {
+      row: undefined,
+      setupTab: undefined,
+      boxRow: undefined,
+      rateRow: undefined,
+      taxBoxQ: undefined,
+      taxBoxPage: undefined,
+      taxRateQ: undefined,
+      taxRatePage: undefined,
+      valueRow: undefined,
+      segValQ: undefined,
+      segValPage: undefined,
+      childRow: undefined,
+      childQ: undefined,
+      childPage: undefined,
+      childShowInactive: undefined,
+    });
+  const closeHref = closeHrefFor(`/admin/setup/${entity.key}`);
 
-  if (entity.dataSource === 'extension-settings') {
-    if (!rowParam || rowParam === 'new') return null
-    const row = (await loadExtensionSettingRows(orgId)).find((candidate) => candidate.id === rowParam)
-    if (!row) return null
-    return <SetupDrawer entity={extensionSettingDrawerEntity(entity, row)} row={row} members={[]} refOptions={{}} closeHref={closeHrefFor(appSettingsHref(row.extension_key))} />
+  if (entity.dataSource === "extension-settings") {
+    if (!rowParam || rowParam === "new") return null;
+    const row = (await loadExtensionSettingRows(orgId)).find(
+      (candidate) => candidate.id === rowParam,
+    );
+    if (!row) return null;
+    return (
+      <SetupDrawer
+        entity={extensionSettingDrawerEntity(entity, row)}
+        row={row}
+        members={[]}
+        refOptions={{}}
+        closeHref={closeHrefFor(appSettingsHref(row.extension_key))}
+      />
+    );
   }
   // HR-15: announcement rows come from org settings JSON, not a table.
-  if (entity.dataSource === 'home-announcements') {
-    if (!rowParam || rowParam === 'new') return null
-    const row = (await loadHomeAnnouncementRows(orgId)).find((candidate) => candidate.id === rowParam)
-    if (!row) return null
-    return <SetupDrawer entity={entity} row={row as unknown as Record<string, unknown>} members={[]} refOptions={{}} closeHref={closeHref} />
+  if (entity.dataSource === "home-announcements") {
+    if (!rowParam || rowParam === "new") return null;
+    const row = (await loadHomeAnnouncementRows(orgId)).find(
+      (candidate) => candidate.id === rowParam,
+    );
+    if (!row) return null;
+    return (
+      <SetupDrawer
+        entity={entity}
+        row={row as unknown as Record<string, unknown>}
+        members={[]}
+        refOptions={{}}
+        closeHref={closeHref}
+      />
+    );
   }
-  if (rowParam === 'new' && entity.allowCreate === false) return null
-  const refOptions = await loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds)
+  if (rowParam === "new" && entity.allowCreate === false) return null;
+  const refOptions = await loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds);
 
-  const idColumn = entity.idColumn ?? 'id'
+  const idColumn = entity.idColumn ?? "id";
   const open = rowParam
-    ? rowParam === 'new'
-      ? { creating: true, row: (null), members: [] as string[] }
+    ? rowParam === "new"
+      ? { creating: true, row: null, members: [] as string[] }
       : await (async () => {
-          const selected = ((await db.execute(sql`
+          const selected = await db.execute(
+            sql`
             select ${setupReadProjection(entity)} from ${setupReadSource(entity)}
              where ${sql.raw(idColumn)} = ${rowParam}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
              ${setupEntitySubsidiaryFilter(entity, authz.allowedSubsidiaryIds)}
-             limit 1`, 'objects')))
-          const found = selected[0] ?? null
+             limit 1`,
+            "objects",
+          );
+          const found = selected[0] ?? null;
           // Rule-slot entities store drawer fields folded into jsonb (no
           // generated columns to read back): unfold the stored rules into
           // the slot fields so the edit drawer prefills what it would
           // save (OM-17c). Real columns always win over the projection.
-          const row = found ? projectRuleSlotPrefills(entity.key, found as Record<string, unknown>) : null
-          let members: string[] = []
-          const multi = entity.fields.find((f) => f.kind === 'multiref')
+          const row = found
+            ? projectRuleSlotPrefills(entity.key, found as Record<string, unknown>)
+            : null;
+          let members: string[] = [];
+          const multi = entity.fields.find((f) => f.kind === "multiref");
           if (found && multi) {
-            const m = ((await db.execute(sql`
+            const m = await db.execute(
+              sql`
               select tgm.tax_code_id
                 from tax_group_members tgm
                 join tax_groups tg on tg.id = tgm.tax_group_id and tg.org_id = ${orgId}
                where tgm.tax_group_id = ${found.id}
-               order by tgm.sequence`, 'objects')))
-            members = m.map((x) => x.tax_code_id as string)
+               order by tgm.sequence`,
+              "objects",
+            );
+            members = m.map((x) => x.tax_code_id as string);
           }
-          return { creating: false, row, members }
+          return { creating: false, row, members };
         })()
-    : null
-  if (!open || (!open.creating && !open.row)) return null
+    : null;
+  if (!open || (!open.creating && !open.row)) return null;
 
   const childTabs = setupRecordTabs({
-    entity, row: open.row, orgId, actorId: authz.user.id, sp,
-    basePath: `/admin/setup/${entity.key}`, canManage: true,
-    allowedSubsidiaryIds: authz.allowedSubsidiaryIds, features, t,
-  })
+    entity,
+    row: open.row,
+    orgId,
+    actorId: authz.user.id,
+    sp,
+    basePath: `/admin/setup/${entity.key}`,
+    canManage: true,
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    features,
+    t,
+  });
 
-  const taxCodeRow = entity.key === 'tax-codes' ? open?.row : null
-  const taxReturnRow = entity.key === 'tax-return-forms' ? open?.row : null
+  const taxCodeRow = entity.key === "tax-codes" ? open?.row : null;
+  const taxReturnRow = entity.key === "tax-return-forms" ? open?.row : null;
 
-  const taxRateEntity = SETUP_ENTITY_BY_KEY.get('tax-rates')!
-  const taxRateList = parsePrefixedListParams(sp, 'taxRate', {
-    sort: 'default',
-    allowedSorts: ['default'] as const,
+  const taxRateEntity = SETUP_ENTITY_BY_KEY.get("tax-rates")!;
+  const taxRateList = parsePrefixedListParams(sp, "taxRate", {
+    sort: "default",
+    allowedSorts: ["default"] as const,
     perPage: 10,
-  })
-  const taxRateTabActive = Boolean(taxCodeRow) && pickString(sp.setupTab) === 'tax-rates'
-  let taxRateRows: TaxRateRow[] = []
-  let taxRateTotal = 0
-  let taxRateRefOptions: Record<string, RefOption[]> = {}
-  let taxRateOpen: { creating: boolean; row: Record<string, unknown> | null } | null = null
+  });
+  const taxRateTabActive = Boolean(taxCodeRow) && pickString(sp.setupTab) === "tax-rates";
+  let taxRateRows: TaxRateRow[] = [];
+  let taxRateTotal = 0;
+  let taxRateRefOptions: Record<string, RefOption[]> = {};
+  let taxRateOpen: { creating: boolean; row: Record<string, unknown> | null } | null = null;
 
   if (taxRateTabActive) {
-    const taxCodeId = String(taxCodeRow![idColumn])
-    const taxRateSearch = `%${taxRateList.q ?? ''}%`
+    const taxCodeId = String(taxCodeRow![idColumn]);
+    const taxRateSearch = `%${taxRateList.q ?? ""}%`;
     const taxRateFilter = sql`where org_id = ${orgId} and tax_code_id = ${taxCodeId}
-      ${taxRateList.q ? sql`and (
+      ${
+        taxRateList.q
+          ? sql`and (
         cast(rate_percent as text) ilike ${taxRateSearch}
         or cast(effective_from as text) ilike ${taxRateSearch}
         or coalesce(cast(effective_to as text), '') ilike ${taxRateSearch}
-      )` : sql``}`
+      )`
+          : sql``
+      }`;
     const [rateRowsRes, rateCountRes, childRefs] = await Promise.all([
-      db.execute<TaxRateRow>(sql`
+      db.execute<TaxRateRow>(
+        sql`
         select id, rate_percent, effective_from, effective_to
           from tax_rates ${taxRateFilter}
          order by effective_from desc
-         limit ${taxRateList.perPage} offset ${(taxRateList.page - 1) * taxRateList.perPage}`, 'objects'),
-      (db.execute(sql`select count(*)::int as n from tax_rates ${taxRateFilter}`, 'objects')),
+         limit ${taxRateList.perPage} offset ${(taxRateList.page - 1) * taxRateList.perPage}`,
+        "objects",
+      ),
+      db.execute(sql`select count(*)::int as n from tax_rates ${taxRateFilter}`, "objects"),
       loadRefOptions(taxRateEntity, orgId, authz.allowedSubsidiaryIds),
-    ])
-    taxRateRows = rateRowsRes
-    taxRateTotal = Number(rateCountRes[0]?.n ?? 0)
-    taxRateRefOptions = childRefs
+    ]);
+    taxRateRows = rateRowsRes;
+    taxRateTotal = Number(rateCountRes[0]?.n ?? 0);
+    taxRateRefOptions = childRefs;
 
-    const rateRowParam = pickString(sp.rateRow)
+    const rateRowParam = pickString(sp.rateRow);
     if (rateRowParam) {
-      if (rateRowParam === 'new') {
-        taxRateOpen = { creating: true, row: null }
+      if (rateRowParam === "new") {
+        taxRateOpen = { creating: true, row: null };
       } else if (isUuid(rateRowParam)) {
-        const selected = ((await db.execute(sql`
+        const selected = await db.execute(
+          sql`
           select * from tax_rates
            where id = ${rateRowParam} and org_id = ${orgId} and tax_code_id = ${taxCodeId}
-           limit 1`, 'objects')))
-        taxRateOpen = selected[0] ? { creating: false, row: selected[0] } : null
+           limit 1`,
+          "objects",
+        );
+        taxRateOpen = selected[0] ? { creating: false, row: selected[0] } : null;
       }
     }
   }
 
-  const taxRateCloseHref = mergeHref('/admin/setup/tax-codes', sp, {
-    setupTab: 'tax-rates',
+  const taxRateCloseHref = mergeHref("/admin/setup/tax-codes", sp, {
+    setupTab: "tax-rates",
     rateRow: undefined,
-  })
-  const taxRateTab = taxCodeRow ? await TaxRatesTab({
-    taxCode: String(taxCodeRow.code),
-    rows: taxRateRows,
-    total: taxRateTotal,
-    page: taxRateList.page,
-    perPage: taxRateList.perPage,
-    currentParams: sp,
-  }) : null
+  });
+  const taxRateTab = taxCodeRow
+    ? await TaxRatesTab({
+        taxCode: String(taxCodeRow.code),
+        rows: taxRateRows,
+        total: taxRateTotal,
+        page: taxRateList.page,
+        perPage: taxRateList.perPage,
+        currentParams: sp,
+      })
+    : null;
 
-  const taxBoxEntity = SETUP_ENTITY_BY_KEY.get('tax-report-lines')!
-  const taxBoxList = parsePrefixedListParams(sp, 'taxBox', {
-    sort: 'default',
-    allowedSorts: ['default'] as const,
+  const taxBoxEntity = SETUP_ENTITY_BY_KEY.get("tax-report-lines")!;
+  const taxBoxList = parsePrefixedListParams(sp, "taxBox", {
+    sort: "default",
+    allowedSorts: ["default"] as const,
     perPage: 10,
-  })
-  const taxBoxTabActive = Boolean(taxReturnRow) && pickString(sp.setupTab) === 'tax-return-boxes'
-  let taxBoxRows: TaxReturnBoxRow[] = []
-  let taxBoxTotal = 0
-  let taxBoxRefOptions: Record<string, RefOption[]> = {}
-  let taxBoxOpen: { creating: boolean; row: Record<string, unknown> | null } | null = null
+  });
+  const taxBoxTabActive = Boolean(taxReturnRow) && pickString(sp.setupTab) === "tax-return-boxes";
+  let taxBoxRows: TaxReturnBoxRow[] = [];
+  let taxBoxTotal = 0;
+  let taxBoxRefOptions: Record<string, RefOption[]> = {};
+  let taxBoxOpen: { creating: boolean; row: Record<string, unknown> | null } | null = null;
 
   if (taxBoxTabActive) {
-    const returnCode = String(taxReturnRow!.code)
-    const taxBoxSearch = `%${taxBoxList.q ?? ''}%`
+    const returnCode = String(taxReturnRow!.code);
+    const taxBoxSearch = `%${taxBoxList.q ?? ""}%`;
     const taxBoxFilter = sql`where org_id = ${orgId} and report_code = ${returnCode}
-      ${taxBoxList.q ? sql`and (
+      ${
+        taxBoxList.q
+          ? sql`and (
         line_code ilike ${taxBoxSearch}
         or label ilike ${taxBoxSearch}
         or coalesce(basis, '') ilike ${taxBoxSearch}
         or coalesce(formula, '') ilike ${taxBoxSearch}
-      )` : sql``}`
+      )`
+          : sql``
+      }`;
     const [boxRowsRes, boxCountRes, childRefs] = await Promise.all([
-      db.execute<TaxReturnBoxRow>(sql`
+      db.execute<TaxReturnBoxRow>(
+        sql`
         select id, report_code, line_code, label, basis, formula, tax_code_id
           from tax_report_lines ${taxBoxFilter}
          order by report_code, sequence, line_code
-         limit ${taxBoxList.perPage} offset ${(taxBoxList.page - 1) * taxBoxList.perPage}`, 'objects'),
-      (db.execute(sql`select count(*)::int as n from tax_report_lines ${taxBoxFilter}`, 'objects')),
+         limit ${taxBoxList.perPage} offset ${(taxBoxList.page - 1) * taxBoxList.perPage}`,
+        "objects",
+      ),
+      db.execute(sql`select count(*)::int as n from tax_report_lines ${taxBoxFilter}`, "objects"),
       loadRefOptions(taxBoxEntity, orgId, authz.allowedSubsidiaryIds),
-    ])
-    taxBoxRows = boxRowsRes
-    taxBoxTotal = Number(boxCountRes[0]?.n ?? 0)
-    taxBoxRefOptions = childRefs
+    ]);
+    taxBoxRows = boxRowsRes;
+    taxBoxTotal = Number(boxCountRes[0]?.n ?? 0);
+    taxBoxRefOptions = childRefs;
 
-    const boxRowParam = pickString(sp.boxRow)
+    const boxRowParam = pickString(sp.boxRow);
     if (boxRowParam) {
-      if (boxRowParam === 'new') {
-        taxBoxOpen = { creating: true, row: null }
+      if (boxRowParam === "new") {
+        taxBoxOpen = { creating: true, row: null };
       } else if (isUuid(boxRowParam)) {
-        const selected = ((await db.execute(sql`
+        const selected = await db.execute(
+          sql`
           select * from tax_report_lines
            where id = ${boxRowParam} and org_id = ${orgId}
              and report_code = ${returnCode}
-           limit 1`, 'objects')))
-        taxBoxOpen = selected[0] ? { creating: false, row: selected[0] } : null
+           limit 1`,
+          "objects",
+        );
+        taxBoxOpen = selected[0] ? { creating: false, row: selected[0] } : null;
       }
     }
   }
 
-  const taxBoxCloseHref = mergeHref('/admin/setup/tax-return-forms', sp, {
-    setupTab: 'tax-return-boxes',
+  const taxBoxCloseHref = mergeHref("/admin/setup/tax-return-forms", sp, {
+    setupTab: "tax-return-boxes",
     boxRow: undefined,
-  })
-  const taxBoxTab = taxReturnRow ? await TaxReturnBoxesTab({
-    returnCode: String(taxReturnRow.code),
-    rows: taxBoxRows,
-    total: taxBoxTotal,
-    page: taxBoxList.page,
-    perPage: taxBoxList.perPage,
-    currentParams: sp,
-  }) : null
+  });
+  const taxBoxTab = taxReturnRow
+    ? await TaxReturnBoxesTab({
+        returnCode: String(taxReturnRow.code),
+        rows: taxBoxRows,
+        total: taxBoxTotal,
+        page: taxBoxList.page,
+        perPage: taxBoxList.perPage,
+        currentParams: sp,
+      })
+    : null;
 
   // --- Segment values, nested under an open Segment definition ----------------
   // Custom segments own their values (managed here); built-in dimensions keep
   // their values on the dedicated Classes/Departments/Locations tabs, so their
   // drawer shows a pointer there instead of an editable list.
-  const segmentDefRow = entity.key === 'segment-definitions' ? open?.row : null
-  const segmentIsCustom = segmentDefRow?.source_kind === 'custom'
-  const segValEntity = SETUP_ENTITY_BY_KEY.get('segment-values')!
-  const segValList = parsePrefixedListParams(sp, 'segVal', {
-    sort: 'default',
-    allowedSorts: ['default'] as const,
+  const segmentDefRow = entity.key === "segment-definitions" ? open?.row : null;
+  const segmentIsCustom = segmentDefRow?.source_kind === "custom";
+  const segValEntity = SETUP_ENTITY_BY_KEY.get("segment-values")!;
+  const segValList = parsePrefixedListParams(sp, "segVal", {
+    sort: "default",
+    allowedSorts: ["default"] as const,
     perPage: 10,
-  })
+  });
   const segValTabActive =
-    Boolean(segmentDefRow) && segmentIsCustom && pickString(sp.setupTab) === 'segment-values'
-  let segValRows: SegmentValueRow[] = []
-  let segValTotal = 0
-  let segValRefOptions: Record<string, RefOption[]> = {}
-  let segValOpen: { creating: boolean; row: Record<string, unknown> | null } | null = null
+    Boolean(segmentDefRow) && segmentIsCustom && pickString(sp.setupTab) === "segment-values";
+  let segValRows: SegmentValueRow[] = [];
+  let segValTotal = 0;
+  let segValRefOptions: Record<string, RefOption[]> = {};
+  let segValOpen: { creating: boolean; row: Record<string, unknown> | null } | null = null;
 
   if (segValTabActive) {
-    const segmentId = String(segmentDefRow![idColumn])
-    const segValSearch = `%${segValList.q ?? ''}%`
+    const segmentId = String(segmentDefRow![idColumn]);
+    const segValSearch = `%${segValList.q ?? ""}%`;
     const segValFilter = sql`where org_id = ${orgId} and segment_id = ${segmentId}
-      ${segValList.q ? sql`and (
+      ${
+        segValList.q
+          ? sql`and (
         coalesce(code, '') ilike ${segValSearch}
         or name ilike ${segValSearch}
-      )` : sql``}`
+      )`
+          : sql``
+      }`;
     const [valRowsRes, valCountRes, childRefs] = await Promise.all([
-      db.execute<SegmentValueRow>(sql`
+      db.execute<SegmentValueRow>(
+        sql`
         select id, code, name, is_active
           from segment_values ${segValFilter}
          order by name
-         limit ${segValList.perPage} offset ${(segValList.page - 1) * segValList.perPage}`, 'objects'),
-      (db.execute(sql`select count(*)::int as n from segment_values ${segValFilter}`, 'objects')),
+         limit ${segValList.perPage} offset ${(segValList.page - 1) * segValList.perPage}`,
+        "objects",
+      ),
+      db.execute(sql`select count(*)::int as n from segment_values ${segValFilter}`, "objects"),
       loadRefOptions(segValEntity, orgId, authz.allowedSubsidiaryIds),
-    ])
-    segValRows = valRowsRes
-    segValTotal = Number(valCountRes[0]?.n ?? 0)
-    segValRefOptions = childRefs
+    ]);
+    segValRows = valRowsRes;
+    segValTotal = Number(valCountRes[0]?.n ?? 0);
+    segValRefOptions = childRefs;
 
-    const valueRowParam = pickString(sp.valueRow)
+    const valueRowParam = pickString(sp.valueRow);
     if (valueRowParam) {
-      if (valueRowParam === 'new') {
-        segValOpen = { creating: true, row: null }
+      if (valueRowParam === "new") {
+        segValOpen = { creating: true, row: null };
       } else if (isUuid(valueRowParam)) {
-        const selected = ((await db.execute(sql`
+        const selected = await db.execute(
+          sql`
           select * from segment_values
            where id = ${valueRowParam} and org_id = ${orgId} and segment_id = ${segmentId}
-           limit 1`, 'objects')))
-        segValOpen = selected[0] ? { creating: false, row: selected[0] } : null
+           limit 1`,
+          "objects",
+        );
+        segValOpen = selected[0] ? { creating: false, row: selected[0] } : null;
       }
     }
   }
 
-  const segValCloseHref = mergeHref('/admin/setup/segment-definitions', sp, {
-    setupTab: 'segment-values',
+  const segValCloseHref = mergeHref("/admin/setup/segment-definitions", sp, {
+    setupTab: "segment-values",
     valueRow: undefined,
-  })
+  });
 
   // Built-in dimensions store their values in a dedicated domain table surfaced
   // on its own setup tab; map the storage column to that tab for a deep link.
   const BUILTIN_VALUE_TAB: Record<string, string> = {
-    department_id: 'departments',
-    location_id: 'locations',
-    class_id: 'classes',
-    subsidiary_id: 'subsidiaries',
-  }
+    department_id: "departments",
+    location_id: "locations",
+    class_id: "classes",
+    subsidiary_id: "subsidiaries",
+  };
   const segmentDisplayName = segmentDefRow
     ? String(segmentDefRow.plural_name ?? segmentDefRow.name)
-    : ''
+    : "";
   const builtinValueTab = segmentDefRow
     ? BUILTIN_VALUE_TAB[String(segmentDefRow.storage_column)]
-    : undefined
+    : undefined;
 
   const segValTabContent = segmentDefRow ? (
     segmentIsCustom ? (
@@ -451,42 +539,50 @@ export async function SetupDrawerSlot({
       <div className="space-y-3 p-1 text-sm">
         <p className="text-slate-600 dark:text-slate-300">
           {builtinValueTab
-            ? t('segmentValues.builtinNotice', { name: segmentDisplayName })
-            : t('segmentValues.builtinNoticeNoLink', { name: segmentDisplayName })}
+            ? t("segmentValues.builtinNotice", { name: segmentDisplayName })
+            : t("segmentValues.builtinNoticeNoLink", { name: segmentDisplayName })}
         </p>
         {builtinValueTab ? (
           <Button asChild size="sm" variant="outline">
             <Link href={`/admin/setup/${builtinValueTab}`}>
-              {t('segmentValues.builtinLink', { name: segmentDisplayName })}
+              {t("segmentValues.builtinLink", { name: segmentDisplayName })}
             </Link>
           </Button>
         ) : null}
       </div>
     )
-  ) : null
+  ) : null;
 
   return (
     <>
       <SetupDrawer
-        key={`${entity.key}:${String(open.row?.[idColumn] ?? 'new')}`}
+        key={`${entity.key}:${String(open.row?.[idColumn] ?? "new")}`}
         entity={entity}
         row={open.row}
         members={open.members}
         refOptions={refOptions}
         closeHref={closeHref}
-        nestedTab={taxCodeRow ? {
-          key: 'tax-rates',
-          label: t('entities.tax-rates.title'),
-          content: taxRateTab,
-        } : taxReturnRow ? {
-          key: 'tax-return-boxes',
-          label: t('entities.tax-report-lines.title'),
-          content: taxBoxTab,
-        } : segmentDefRow ? {
-          key: 'segment-values',
-          label: t('entities.segment-values.title'),
-          content: segValTabContent,
-        } : undefined}
+        nestedTab={
+          taxCodeRow
+            ? {
+                key: "tax-rates",
+                label: t("entities.tax-rates.title"),
+                content: taxRateTab,
+              }
+            : taxReturnRow
+              ? {
+                  key: "tax-return-boxes",
+                  label: t("entities.tax-report-lines.title"),
+                  content: taxBoxTab,
+                }
+              : segmentDefRow
+                ? {
+                    key: "segment-values",
+                    label: t("entities.segment-values.title"),
+                    content: segValTabContent,
+                  }
+                : undefined
+        }
         nestedTabs={childTabs}
       />
 
@@ -526,13 +622,13 @@ export async function SetupDrawerSlot({
         />
       ) : null}
     </>
-  )
+  );
 }
 
 /** Company & Accounting settings tab, rendered from the session alone. */
 export async function SetupCompanySlot() {
-  const authz = await requirePermission('admin.setup.manage')
-  return <CompanyTab orgId={authz.user.orgId} />
+  const authz = await requirePermission("admin.setup.manage");
+  return <CompanyTab orgId={authz.user.orgId} />;
 }
 
 /** Period-close workspace. `canReopen` is a loader-resolved boolean. */
@@ -540,26 +636,24 @@ export async function SetupCloseSlot({
   sp,
   canReopen,
 }: {
-  sp: Record<string, string | string[] | undefined>
-  canReopen: boolean
+  sp: Record<string, string | string[] | undefined>;
+  canReopen: boolean;
 }) {
-  const authz = await requirePermission('admin.setup.manage')
-  return (
-    <CloseSetupPage orgId={authz.user.orgId} searchParams={sp} canReopen={canReopen} />
-  )
+  const authz = await requirePermission("admin.setup.manage");
+  return <CloseSetupPage orgId={authz.user.orgId} searchParams={sp} canReopen={canReopen} />;
 }
 
 /** FX provider page, rendered from the session alone. */
 export async function SetupFxSlot() {
-  const authz = await requirePermission('admin.setup.manage')
-  await requireFeatureEnabled(authz.user.orgId, 'multiCurrency')
-  return <FxProviderPage orgId={authz.user.orgId} />
+  const authz = await requirePermission("admin.setup.manage");
+  await requireFeatureEnabled(authz.user.orgId, "multiCurrency");
+  return <FxProviderPage orgId={authz.user.orgId} />;
 }
 
 /** Tax rate-provider page, rendered from the session alone. */
 export async function SetupTaxProviderSlot() {
-  const authz = await requirePermission('admin.setup.manage')
-  return <TaxProviderPage orgId={authz.user.orgId} />
+  const authz = await requirePermission("admin.setup.manage");
+  return <TaxProviderPage orgId={authz.user.orgId} />;
 }
 
 /**
@@ -570,25 +664,26 @@ export async function SetupTaxProviderSlot() {
 export async function SetupPayrollStatutoryHolidaysSlot({
   sp,
 }: {
-  sp: Record<string, string | string[] | undefined>
+  sp: Record<string, string | string[] | undefined>;
 }) {
-  const authz = await requirePermission('payroll.read')
-  const { orgId } = authz.user
-  await requireFeatureEnabled(orgId, 'payroll')
-  const requested = pickString(sp.holidayYear)
-  const thisYear = Number((await businessToday(orgId)).slice(0, 4))
-  const requestedYear = requested && /^\d{4}$/.test(requested) ? Number(requested) : NaN
-  const year = requestedYear >= 1900 && requestedYear <= 2999 ? requestedYear : thisYear
+  const authz = await requirePermission("payroll.read");
+  const { orgId } = authz.user;
+  await requireFeatureEnabled(orgId, "payroll");
+  const requested = pickString(sp.holidayYear);
+  const thisYear = Number((await businessToday(orgId)).slice(0, 4));
+  const requestedYear = requested && /^\d{4}$/.test(requested) ? Number(requested) : NaN;
+  const year = requestedYear >= 1900 && requestedYear <= 2999 ? requestedYear : thisYear;
   const reading = await statutoryHolidayCalendarsOf({
     orgId,
     year,
     subsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
-  })
-  const yearHref = (target: number) => mergeHref('/admin/setup/business-calendars', sp, {
-    view: 'payroll-holidays',
-    row: undefined,
-    holidayYear: String(target),
-  })
+  });
+  const yearHref = (target: number) =>
+    mergeHref("/admin/setup/business-calendars", sp, {
+      view: "payroll-holidays",
+      row: undefined,
+      holidayYear: String(target),
+    });
   return (
     <PayrollStatutoryHolidaysSection
       year={year}
@@ -598,5 +693,5 @@ export async function SetupPayrollStatutoryHolidaysSlot({
       nextYearHref={yearHref(year + 1)}
       payrollHolidaysHref="/admin/setup/payroll?tab=holidays"
     />
-  )
+  );
 }

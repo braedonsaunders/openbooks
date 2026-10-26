@@ -44,229 +44,287 @@ async function enablePropertyManagement(orgId: string): Promise<void> {
   `);
 }
 
-test("property creation rejects a location owned by another subsidiary", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await enablePropertyManagement(org.orgId);
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const locationId = await seedBranchLocation(org.orgId, org.subsidiaryId);
-    await assert.rejects(
-      createManagedProperty({
-        orgId: org.orgId,
-        actorId, allowedSubsidiaryIds: null,
-        subsidiaryId: org.subsidiaryId,
-        locationId,
-        code: "PROP-CROSS-SUB",
-        name: "Cross-subsidiary property",
-        propertyType: "commercial",
-      }),
-      (error: unknown) => error instanceof PropertyManagementError && /dimensions do not belong/.test(error.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "property creation rejects a location owned by another subsidiary",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await enablePropertyManagement(org.orgId);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const locationId = await seedBranchLocation(org.orgId, org.subsidiaryId);
+      await assert.rejects(
+        createManagedProperty({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          subsidiaryId: org.subsidiaryId,
+          locationId,
+          code: "PROP-CROSS-SUB",
+          name: "Cross-subsidiary property",
+          propertyType: "commercial",
+        }),
+        (error: unknown) =>
+          error instanceof PropertyManagementError &&
+          /dimensions do not belong/.test(error.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("property creation waits for a concurrent feature disable and then refuses", { skip: !process.env.OPENBOOKS_DB_URL, timeout: 180_000 }, async () => {
-  const org = await createScratchOrg();
-  const holder = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL });
-  let pending: Promise<{ id: string }> | undefined;
-  try {
-    await enablePropertyManagement(org.orgId);
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await holder.connect();
-    await holder.query("begin");
-    // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
-    await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`openbooks:feature-gate:${org.orgId}`]);
-    const staged = await holder.query(
-      "update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"propertyManagement\":false}'::jsonb) where id=$1",
-      [org.orgId],
-    );
-    assert.equal(staged.rowCount, 1, 'the concurrent writer must stage the feature disable');
-    const request = withBypass(() => createManagedProperty({
-      orgId: org.orgId,
-      actorId,
-      allowedSubsidiaryIds: null,
-      subsidiaryId: org.subsidiaryId,
-      code: 'PROPERTY-GATE-RACE',
-      name: 'Property gate race',
-      propertyType: 'commercial',
-    }));
-    pending = request;
-    void request.catch(() => {});
-    await waitForLockWaiter(holder, { label: 'the managed-property write' });
-    await holder.query('commit');
-    await assert.rejects(request, (error: unknown) =>
-      error instanceof PropertyManagementError && /feature is disabled/.test(error.message),
-    );
-    const row = await db.execute(sql`select id from managed_properties where org_id=${org.orgId} and code='PROPERTY-GATE-RACE'`, "objects");
-    assert.equal(row.length, 0);
-  } finally {
-    await holder.query('rollback').catch(() => {});
-    await pending?.catch(() => {});
-    await holder.end();
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("property updates reject moving a location across subsidiaries", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await enablePropertyManagement(org.orgId);
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const locationId = await seedBranchLocation(org.orgId, org.subsidiaryId);
-    const property = await createManagedProperty({
-      orgId: org.orgId,
-      actorId, allowedSubsidiaryIds: null,
-      subsidiaryId: org.subsidiaryId,
-      code: "PROP-DIMENSION",
-      name: "Dimension property",
-      propertyType: "commercial",
+test(
+  "property creation waits for a concurrent feature disable and then refuses",
+  { skip: !process.env.OPENBOOKS_DB_URL, timeout: 180_000 },
+  async () => {
+    const org = await createScratchOrg();
+    const holder = new pg.Client({
+      connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL,
     });
-    await assert.rejects(
-      updateManagedProperty({
+    let pending: Promise<{ id: string }> | undefined;
+    try {
+      await enablePropertyManagement(org.orgId);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await holder.connect();
+      await holder.query("begin");
+      // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
+      await holder.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+        `openbooks:feature-gate:${org.orgId}`,
+      ]);
+      const staged = await holder.query(
+        "update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"propertyManagement\":false}'::jsonb) where id=$1",
+        [org.orgId],
+      );
+      assert.equal(staged.rowCount, 1, "the concurrent writer must stage the feature disable");
+      const request = withBypass(() =>
+        createManagedProperty({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          subsidiaryId: org.subsidiaryId,
+          code: "PROPERTY-GATE-RACE",
+          name: "Property gate race",
+          propertyType: "commercial",
+        }),
+      );
+      pending = request;
+      void request.catch(() => {});
+      await waitForLockWaiter(holder, { label: "the managed-property write" });
+      await holder.query("commit");
+      await assert.rejects(
+        request,
+        (error: unknown) =>
+          error instanceof PropertyManagementError && /feature is disabled/.test(error.message),
+      );
+      const row = await db.execute(
+        sql`select id from managed_properties where org_id=${org.orgId} and code='PROPERTY-GATE-RACE'`,
+        "objects",
+      );
+      assert.equal(row.length, 0);
+    } finally {
+      await holder.query("rollback").catch(() => {});
+      await pending?.catch(() => {});
+      await holder.end();
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "property updates reject moving a location across subsidiaries",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await enablePropertyManagement(org.orgId);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const locationId = await seedBranchLocation(org.orgId, org.subsidiaryId);
+      const property = await createManagedProperty({
         orgId: org.orgId,
-        actorId, allowedSubsidiaryIds: null,
-        propertyId: property.id,
+        actorId,
+        allowedSubsidiaryIds: null,
         subsidiaryId: org.subsidiaryId,
-        locationId,
         code: "PROP-DIMENSION",
         name: "Dimension property",
         propertyType: "commercial",
-        status: "active",
-      }),
-      (error: unknown) => error instanceof PropertyManagementError && /dimensions do not belong/.test(error.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      });
+      await assert.rejects(
+        updateManagedProperty({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          propertyId: property.id,
+          subsidiaryId: org.subsidiaryId,
+          locationId,
+          code: "PROP-DIMENSION",
+          name: "Dimension property",
+          propertyType: "commercial",
+          status: "active",
+        }),
+        (error: unknown) =>
+          error instanceof PropertyManagementError &&
+          /dimensions do not belong/.test(error.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("property creation rejects an inactive subsidiary", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await enablePropertyManagement(org.orgId);
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const subsidiaryId = await seedInactiveSubsidiary(org.orgId, org.subsidiaryId);
-    await assert.rejects(
-      createManagedProperty({
-        orgId: org.orgId,
-        actorId, allowedSubsidiaryIds: null,
-        subsidiaryId,
-        code: "PROP-INACTIVE-SUB",
-        name: "Inactive subsidiary property",
-        propertyType: "commercial",
-      }),
-      (error: unknown) => error instanceof PropertyManagementError && /inactive/.test(error.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "property creation rejects an inactive subsidiary",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await enablePropertyManagement(org.orgId);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const subsidiaryId = await seedInactiveSubsidiary(org.orgId, org.subsidiaryId);
+      await assert.rejects(
+        createManagedProperty({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          subsidiaryId,
+          code: "PROP-INACTIVE-SUB",
+          name: "Inactive subsidiary property",
+          propertyType: "commercial",
+        }),
+        (error: unknown) =>
+          error instanceof PropertyManagementError && /inactive/.test(error.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("property updates reject assigning an inactive subsidiary", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await enablePropertyManagement(org.orgId);
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const subsidiaryId = await seedInactiveSubsidiary(org.orgId, org.subsidiaryId);
-    const property = await createManagedProperty({
-      orgId: org.orgId,
-      actorId, allowedSubsidiaryIds: null,
-      subsidiaryId: org.subsidiaryId,
-      code: "PROP-INACTIVE-UPDATE",
-      name: "Inactive update property",
-      propertyType: "commercial",
-    });
-    await assert.rejects(
-      updateManagedProperty({
+test(
+  "property updates reject assigning an inactive subsidiary",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await enablePropertyManagement(org.orgId);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const subsidiaryId = await seedInactiveSubsidiary(org.orgId, org.subsidiaryId);
+      const property = await createManagedProperty({
         orgId: org.orgId,
-        actorId, allowedSubsidiaryIds: null,
-        propertyId: property.id,
-        subsidiaryId,
+        actorId,
+        allowedSubsidiaryIds: null,
+        subsidiaryId: org.subsidiaryId,
         code: "PROP-INACTIVE-UPDATE",
         name: "Inactive update property",
         propertyType: "commercial",
-        status: "active",
-      }),
-      (error: unknown) => error instanceof PropertyManagementError && /inactive/.test(error.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      });
+      await assert.rejects(
+        updateManagedProperty({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          propertyId: property.id,
+          subsidiaryId,
+          code: "PROP-INACTIVE-UPDATE",
+          name: "Inactive update property",
+          propertyType: "commercial",
+          status: "active",
+        }),
+        (error: unknown) =>
+          error instanceof PropertyManagementError && /inactive/.test(error.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("property creation rejects a control account restricted to another subsidiary", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await enablePropertyManagement(org.orgId);
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const branchId = randomUUID();
-    await db.execute(sql`
+test(
+  "property creation rejects a control account restricted to another subsidiary",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await enablePropertyManagement(org.orgId);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const branchId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
       values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Control account branch', 'CAD', 'CA')
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       update accounts
          set subsidiary_id = ${branchId}, subsidiary_include_children = false
        where org_id = ${org.orgId} and id = ${org.accounts.revenue}
     `);
-    await assert.rejects(
-      createManagedProperty({
-        orgId: org.orgId,
-        actorId, allowedSubsidiaryIds: null,
-        subsidiaryId: org.subsidiaryId,
-        rentIncomeAccountId: org.accounts.revenue,
-        code: "PROP-CROSS-ACCOUNT",
-        name: "Cross-subsidiary account property",
-        propertyType: "commercial",
-      }),
-      (error: unknown) => error instanceof PropertyManagementError && /restricted to another subsidiary/.test(error.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        createManagedProperty({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          subsidiaryId: org.subsidiaryId,
+          rentIncomeAccountId: org.accounts.revenue,
+          code: "PROP-CROSS-ACCOUNT",
+          name: "Cross-subsidiary account property",
+          propertyType: "commercial",
+        }),
+        (error: unknown) =>
+          error instanceof PropertyManagementError &&
+          /restricted to another subsidiary/.test(error.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("property updates reject a control account after its subsidiary restriction changes", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await enablePropertyManagement(org.orgId);
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const property = await createManagedProperty({
-      orgId: org.orgId,
-      actorId, allowedSubsidiaryIds: null,
-      subsidiaryId: org.subsidiaryId,
-      rentIncomeAccountId: org.accounts.revenue,
-      code: "PROP-ACCOUNT-UPDATE",
-      name: "Account update property",
-      propertyType: "commercial",
-    });
-    const branchId = randomUUID();
-    await db.execute(sql`
-      insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
-      values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Updated account branch', 'CAD', 'CA')
-    `);
-    await db.execute(sql`
-      update accounts
-         set subsidiary_id = ${branchId}, subsidiary_include_children = false
-       where org_id = ${org.orgId} and id = ${org.accounts.revenue}
-    `);
-    await assert.rejects(
-      updateManagedProperty({
+test(
+  "property updates reject a control account after its subsidiary restriction changes",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await enablePropertyManagement(org.orgId);
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const property = await createManagedProperty({
         orgId: org.orgId,
-        actorId, allowedSubsidiaryIds: null,
-        propertyId: property.id,
+        actorId,
+        allowedSubsidiaryIds: null,
         subsidiaryId: org.subsidiaryId,
         rentIncomeAccountId: org.accounts.revenue,
         code: "PROP-ACCOUNT-UPDATE",
         name: "Account update property",
         propertyType: "commercial",
-        status: "active",
-      }),
-      (error: unknown) => error instanceof PropertyManagementError && /restricted to another subsidiary/.test(error.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      });
+      const branchId = randomUUID();
+      await db.execute(sql`
+      insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
+      values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Updated account branch', 'CAD', 'CA')
+    `);
+      await db.execute(sql`
+      update accounts
+         set subsidiary_id = ${branchId}, subsidiary_include_children = false
+       where org_id = ${org.orgId} and id = ${org.accounts.revenue}
+    `);
+      await assert.rejects(
+        updateManagedProperty({
+          orgId: org.orgId,
+          actorId,
+          allowedSubsidiaryIds: null,
+          propertyId: property.id,
+          subsidiaryId: org.subsidiaryId,
+          rentIncomeAccountId: org.accounts.revenue,
+          code: "PROP-ACCOUNT-UPDATE",
+          name: "Account update property",
+          propertyType: "commercial",
+          status: "active",
+        }),
+        (error: unknown) =>
+          error instanceof PropertyManagementError &&
+          /restricted to another subsidiary/.test(error.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

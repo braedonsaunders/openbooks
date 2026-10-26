@@ -1,23 +1,28 @@
-const { stubModules } = await import('../../../../../testing/stub-modules')
+const { stubModules } = await import("../../../../../testing/stub-modules");
 stubModules({
-  navigation: 'export function useRouter(){return globalThis.__feedTestRouter}',
+  navigation: "export function useRouter(){return globalThis.__feedTestRouter}",
   extra: {
-    '@/lib/confirm': 'export function confirmDialog(o){(globalThis.__feedConfirmCalls??=[]).push(String(typeof o==="string"?o:o.message));return Promise.resolve(globalThis.__feedConfirmAnswer??true)};export function ConfirmRoot(){return null}',
+    "@/lib/confirm":
+      'export function confirmDialog(o){(globalThis.__feedConfirmCalls??=[]).push(String(typeof o==="string"?o:o.message));return Promise.resolve(globalThis.__feedConfirmAnswer??true)};export function ConfirmRoot(){return null}',
   },
-})
-import assert from 'node:assert/strict'
-import test from 'node:test'
+});
+import assert from "node:assert/strict";
+import test from "node:test";
 
 // (bank feed Remove destroys the connection with no confirmation):
 // one click fires DELETE immediately. Removing feed wiring must confirm
 // first, mirroring the bank-rule Delete native confirm.
-const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/setup/bank-feeds', scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/bank-feeds",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 declare global {
-  var __feedConfirmCalls: string[] | undefined
-  var __feedConfirmAnswer: boolean | undefined
-  var __feedDeletes: string[] | undefined
+  var __feedConfirmCalls: string[] | undefined;
+  var __feedConfirmAnswer: boolean | undefined;
+  var __feedDeletes: string[] | undefined;
 }
 
 Object.assign(globalThis, {
@@ -31,47 +36,47 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../../messages/en')).default
-const { BankFeedsClient } = await import('./BankFeedsClient')
+});
+(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../../messages/en")).default;
+const { BankFeedsClient } = await import("./BankFeedsClient");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const connection = {
-  id: 'conn-1',
-  name: 'RBC manual upload',
-  provider: 'manual',
-  accountId: 'acc-1',
-  status: 'connected',
+  id: "conn-1",
+  name: "RBC manual upload",
+  provider: "manual",
+  accountId: "acc-1",
+  status: "connected",
   externalAccountId: null,
-  syncCadence: 'manual',
+  syncCadence: "manual",
   lastSyncAt: null,
   lastAttemptAt: null,
   lastError: null,
   isActive: true,
-  accountNumber: '1000',
-  accountName: 'Operating Cash',
-}
+  accountNumber: "1000",
+  accountName: "Operating Cash",
+};
 
 async function mount() {
-  ;(globalThis as Record<string, unknown>).__feedConfirmCalls = []
-  ;(globalThis as Record<string, unknown>).__feedDeletes = []
+  (globalThis as Record<string, unknown>).__feedConfirmCalls = [];
+  (globalThis as Record<string, unknown>).__feedDeletes = [];
   globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
-    if (init?.method === 'DELETE') {
-      ;(globalThis.__feedDeletes ?? []).push(String(url))
-      return Response.json({ ok: true })
+    if (init?.method === "DELETE") {
+      (globalThis.__feedDeletes ?? []).push(String(url));
+      return Response.json({ ok: true });
     }
-    throw new Error(`unexpected fetch ${String(url)}`)
-  }) as typeof fetch
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    throw new Error(`unexpected fetch ${String(url)}`);
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -79,75 +84,110 @@ async function mount() {
           connections={[connection]}
           sftpServers={[]}
           sftpSchedules={[]}
-          accounts={[{ id: 'acc-1', label: '1000 Operating Cash' }]}
-          daemon={{ enabled: false, port: 0, host: '', fingerprint: '' }}
+          accounts={[{ id: "acc-1", label: "1000 Operating Cash" }]}
+          daemon={{ enabled: false, port: 0, host: "", fingerprint: "" }}
         />
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  return { host, root }
+    );
+    await tick();
+  });
+  return { host, root };
 }
 
 function clickRemove() {
-  const btn = [...document.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === 'Remove',
-  ) as HTMLButtonElement | undefined
-  assert.ok(btn, 'the connection must offer Remove')
-  return btn
+  const btn = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Remove",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(btn, "the connection must offer Remove");
+  return btn;
 }
 
 const removeCases: Array<{
-  kind: string
-  leftAlone: string
-  mount: () => Promise<{ host: HTMLDivElement; root: { unmount(): void } }>
-  press: (host: HTMLDivElement) => void
-  confirm: RegExp
-  deleted: string
+  kind: string;
+  leftAlone: string;
+  mount: () => Promise<{ host: HTMLDivElement; root: { unmount(): void } }>;
+  press: (host: HTMLDivElement) => void;
+  confirm: RegExp;
+  deleted: string;
 }> = [
-  { kind: 'feed connection', leftAlone: 'the connection', mount, press: () => { clickRemove().click() }, confirm: /Remove this connection/, deleted: '/api/banking/bank-feeds/conn-1' },
-  { kind: 'SFTP server', leftAlone: 'the server', mount: mountSftpRemoves, press: (host) => { serverRemoveButton(host).click() }, confirm: /Remove this SFTP login/, deleted: '/api/banking/sftp/srv-1' },
-  { kind: 'routing schedule', leftAlone: 'the schedule', mount: mountSftpRemoves, press: (host) => { scheduleRemoveButton(host).click() }, confirm: /Remove this routing schedule/, deleted: '/api/banking/sftp/schedules/sched-1' },
-]
+  {
+    kind: "feed connection",
+    leftAlone: "the connection",
+    mount,
+    press: () => {
+      clickRemove().click();
+    },
+    confirm: /Remove this connection/,
+    deleted: "/api/banking/bank-feeds/conn-1",
+  },
+  {
+    kind: "SFTP server",
+    leftAlone: "the server",
+    mount: mountSftpRemoves,
+    press: (host) => {
+      serverRemoveButton(host).click();
+    },
+    confirm: /Remove this SFTP login/,
+    deleted: "/api/banking/sftp/srv-1",
+  },
+  {
+    kind: "routing schedule",
+    leftAlone: "the schedule",
+    mount: mountSftpRemoves,
+    press: (host) => {
+      scheduleRemoveButton(host).click();
+    },
+    confirm: /Remove this routing schedule/,
+    deleted: "/api/banking/sftp/schedules/sched-1",
+  },
+];
 
-test('removing a connection confirms first; cancelling leaves it alone (F4T2-12)', async () => {
+test("removing a connection confirms first; cancelling leaves it alone (F4T2-12)", async () => {
   for (const confirmed of [true, false]) {
     for (const removeCase of removeCases) {
-      globalThis.__feedConfirmAnswer = confirmed
-      const { host, root } = await removeCase.mount()
+      globalThis.__feedConfirmAnswer = confirmed;
+      const { host, root } = await removeCase.mount();
       try {
         await act(async () => {
-          removeCase.press(host)
-          await tick()
-          await tick()
-        })
-        assert.equal(globalThis.__feedConfirmCalls?.length, 1, `${removeCase.kind} Remove must confirm before deleting`)
+          removeCase.press(host);
+          await tick();
+          await tick();
+        });
+        assert.equal(
+          globalThis.__feedConfirmCalls?.length,
+          1,
+          `${removeCase.kind} Remove must confirm before deleting`,
+        );
         if (confirmed) {
-          assert.match(globalThis.__feedConfirmCalls?.[0] ?? '', removeCase.confirm)
-          assert.deepEqual(globalThis.__feedDeletes, [removeCase.deleted])
+          assert.match(globalThis.__feedConfirmCalls?.[0] ?? "", removeCase.confirm);
+          assert.deepEqual(globalThis.__feedDeletes, [removeCase.deleted]);
         } else {
-          assert.deepEqual(globalThis.__feedDeletes, [], `a cancelled confirm must not delete ${removeCase.leftAlone}`)
+          assert.deepEqual(
+            globalThis.__feedDeletes,
+            [],
+            `a cancelled confirm must not delete ${removeCase.leftAlone}`,
+          );
         }
       } finally {
         await act(async () => {
-          root.unmount()
-        })
-        host.remove()
+          root.unmount();
+        });
+        host.remove();
       }
     }
   }
-})
+});
 
 async function mountSftpSchedules(
   schedules: Array<{
-    id: string
-    format: string
-    expectedExternalAccountId: string | null
+    id: string;
+    format: string;
+    expectedExternalAccountId: string | null;
   }>,
 ) {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -155,34 +195,34 @@ async function mountSftpSchedules(
           connections={[]}
           sftpServers={[
             {
-              id: 'srv-1',
-              name: 'Bank SFTP',
-              username: 'feedbot',
-              rootPrefix: 'sftp-root',
+              id: "srv-1",
+              name: "Bank SFTP",
+              username: "feedbot",
+              rootPrefix: "sftp-root",
               isActive: true,
               lastConnectedAt: null,
             },
           ]}
           sftpSchedules={schedules.map((s, i) => ({
             id: s.id,
-            sftpServerId: 'srv-1',
-            accountId: 'acc-1',
+            sftpServerId: "srv-1",
+            accountId: "acc-1",
             folder: `inbound-${i}`,
             format: s.format,
             isActive: true,
             lastRunAt: null,
-            accountNumber: '1000',
-            accountName: 'Operating Cash',
+            accountNumber: "1000",
+            accountName: "Operating Cash",
             expectedExternalAccountId: s.expectedExternalAccountId,
           }))}
-          accounts={[{ id: 'acc-1', label: '1000 Operating Cash' }]}
-          daemon={{ enabled: false, port: 0, host: '', fingerprint: '' }}
+          accounts={[{ id: "acc-1", label: "1000 Operating Cash" }]}
+          daemon={{ enabled: false, port: 0, host: "", fingerprint: "" }}
         />
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  return { host, root }
+    );
+    await tick();
+  });
+  return { host, root };
 }
 
 // F4T2-14 (feedAction read the body before the status: a 500 with an empty
@@ -192,16 +232,16 @@ async function mountSftpSchedules(
 // is a named failure, never a phantom success; busy always releases.
 const plaidConnection = {
   ...connection,
-  id: 'conn-plaid',
-  name: 'Plaid test feed',
-  provider: 'plaid',
-}
+  id: "conn-plaid",
+  name: "Plaid test feed",
+  provider: "plaid",
+};
 
 async function mountFeed(fetchImpl: typeof fetch) {
-  globalThis.fetch = fetchImpl
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  globalThis.fetch = fetchImpl;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -209,25 +249,27 @@ async function mountFeed(fetchImpl: typeof fetch) {
           connections={[plaidConnection]}
           sftpServers={[]}
           sftpSchedules={[]}
-          accounts={[{ id: 'acc-1', label: '1000 Operating Cash' }]}
-          daemon={{ enabled: false, port: 0, host: '', fingerprint: '' }}
+          accounts={[{ id: "acc-1", label: "1000 Operating Cash" }]}
+          daemon={{ enabled: false, port: 0, host: "", fingerprint: "" }}
         />
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  return { host, root }
+    );
+    await tick();
+  });
+  return { host, root };
 }
 
 // the empty picker gave no path to the Chart of Accounts.
-test('an empty GL picker explains the precondition and links the Chart of Accounts', async (t) => {
-  const catalog = (await import('../../../../../messages/en/banking.json', { with: { type: 'json' } })).default
-  const note = catalog.bankFeeds.client.configure.noEligibleAccounts as string
-  const linkLabel = catalog.bankFeeds.client.configure.noEligibleAccountsLink as string
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
-  unmountAfter(t, host, root)
+test("an empty GL picker explains the precondition and links the Chart of Accounts", async (t) => {
+  const catalog = (
+    await import("../../../../../messages/en/banking.json", { with: { type: "json" } })
+  ).default;
+  const note = catalog.bankFeeds.client.configure.noEligibleAccounts as string;
+  const linkLabel = catalog.bankFeeds.client.configure.noEligibleAccountsLink as string;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  unmountAfter(t, host, root);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -236,85 +278,89 @@ test('an empty GL picker explains the precondition and links the Chart of Accoun
           sftpServers={[]}
           sftpSchedules={[]}
           accounts={[]}
-          daemon={{ enabled: false, port: 0, host: '', fingerprint: '' }}
+          daemon={{ enabled: false, port: 0, host: "", fingerprint: "" }}
         />
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  const connect = [...document.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === 'Connect your first bank',
-  ) as HTMLButtonElement | undefined
-  assert.ok(connect, 'the empty state must offer to connect')
+    );
+    await tick();
+  });
+  const connect = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Connect your first bank",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(connect, "the empty state must offer to connect");
   await act(async () => {
-    connect.click()
-    await tick()
-  })
-  const manual = [...document.querySelectorAll('button')].find((b) =>
-    (b.textContent ?? '').includes('Manual upload'),
-  ) as HTMLButtonElement | undefined
-  assert.ok(manual, 'the directory must offer a manual upload path')
+    connect.click();
+    await tick();
+  });
+  const manual = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Manual upload"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(manual, "the directory must offer a manual upload path");
   await act(async () => {
-    manual.click()
-    await tick()
-  })
+    manual.click();
+    await tick();
+  });
   assert.ok(
-    (document.body.textContent ?? '').includes(note),
-    'the empty picker must explain the missing reconcilable account',
-  )
-  const link = [...document.querySelectorAll('a')].find(
-    (a) => (a.textContent ?? '').trim() === linkLabel,
-  ) as HTMLAnchorElement | undefined
-  assert.ok(link, 'the explanation must link somewhere')
-  assert.equal(link?.getAttribute('href'), '/accounts', 'the link lands on the Chart of Accounts')
-})
+    (document.body.textContent ?? "").includes(note),
+    "the empty picker must explain the missing reconcilable account",
+  );
+  const link = [...document.querySelectorAll("a")].find(
+    (a) => (a.textContent ?? "").trim() === linkLabel,
+  ) as HTMLAnchorElement | undefined;
+  assert.ok(link, "the explanation must link somewhere");
+  assert.equal(link?.getAttribute("href"), "/accounts", "the link lands on the Chart of Accounts");
+});
 
 function actionButton(host: Element, label: string): HTMLButtonElement {
-  const btn = [...host.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === label,
-  ) as HTMLButtonElement | undefined
-  assert.ok(btn, `the connection must offer ${label}`)
-  return btn
+  const btn = [...host.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === label,
+  ) as HTMLButtonElement | undefined;
+  assert.ok(btn, `the connection must offer ${label}`);
+  return btn;
 }
 
-function unmountAfter(t: import('node:test').TestContext, host: HTMLDivElement, root: { unmount(): void }) {
+function unmountAfter(
+  t: import("node:test").TestContext,
+  host: HTMLDivElement,
+  root: { unmount(): void },
+) {
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
+      root.unmount();
+    });
+    host.remove();
+  });
 }
 
 async function clickAndSettle(btn: HTMLButtonElement) {
   await act(async () => {
-    btn.click()
-    await tick()
-    await tick()
-    await tick()
-    await tick()
-  })
+    btn.click();
+    await tick();
+    await tick();
+    await tick();
+    await tick();
+  });
 }
 
 // One Sync click drives the same mount/click/read flow; the rows differ only
 // in what the server answers and what must (not) render for it.
 for (const [name, respond, present, phantomMessage, checkBusy] of [
   [
-    'a non-JSON 500 on sync is a named failure, never a phantom import (F4T2-14)',
-    () => new Response('', { status: 500 }),
+    "a non-JSON 500 on sync is a named failure, never a phantom import (F4T2-14)",
+    () => new Response("", { status: 500 }),
     /Sync failed: unknown error/,
-    'no phantom import toast for work the server never did',
+    "no phantom import toast for work the server never did",
     true,
   ],
   [
-    'a named 422 on sync surfaces the server refusal (F4T2-14)',
-    () => Response.json({ error: 'not an API provider' }, { status: 422 }),
+    "a named 422 on sync surfaces the server refusal (F4T2-14)",
+    () => Response.json({ error: "not an API provider" }, { status: 422 }),
     /Sync failed: not an API provider/,
-    'no phantom import for a refused sync',
+    "no phantom import for a refused sync",
     false,
   ],
   [
-    'a successful sync still reports its counts (F4T2-14)',
+    "a successful sync still reports its counts (F4T2-14)",
     () => Response.json({ imported: 3, duplicates: 1 }, { status: 200 }),
     /Imported 3 new, 1 duplicate/,
     null,
@@ -322,88 +368,85 @@ for (const [name, respond, present, phantomMessage, checkBusy] of [
   ],
 ] as Array<[string, () => Response, RegExp, string | null, boolean]>) {
   test(name, async (t) => {
-    const { host, root } = await mountFeed((async () => respond()) as typeof fetch)
-    unmountAfter(t, host, root)
-    const btn = actionButton(host, 'Sync')
-    await clickAndSettle(btn)
-    assert.match(host.textContent ?? '', present)
+    const { host, root } = await mountFeed((async () => respond()) as typeof fetch);
+    unmountAfter(t, host, root);
+    const btn = actionButton(host, "Sync");
+    await clickAndSettle(btn);
+    assert.match(host.textContent ?? "", present);
     if (phantomMessage !== null) {
-      assert.doesNotMatch(host.textContent ?? '', /Imported/, phantomMessage)
+      assert.doesNotMatch(host.textContent ?? "", /Imported/, phantomMessage);
     }
     if (checkBusy) {
-      assert.equal(btn.disabled, false, 'busy releases after the failure')
+      assert.equal(btn.disabled, false, "busy releases after the failure");
     }
-  })
+  });
 }
 
-test('a refused probe reports its detail, a verified one confirms (F4T2-14)', async (t) => {
-  const refused = await mountFeed(
-    (async () => Response.json({ ok: false, detail: 'bad token' }, { status: 200 })) as typeof fetch,
-  )
-  unmountAfter(t, refused.host, refused.root)
-  await clickAndSettle(actionButton(refused.host, 'Test'))
-  assert.match(refused.host.textContent ?? '', /Test failed: bad token/)
-})
+test("a refused probe reports its detail, a verified one confirms (F4T2-14)", async (t) => {
+  const refused = await mountFeed((async () =>
+    Response.json({ ok: false, detail: "bad token" }, { status: 200 })) as typeof fetch);
+  unmountAfter(t, refused.host, refused.root);
+  await clickAndSettle(actionButton(refused.host, "Test"));
+  assert.match(refused.host.textContent ?? "", /Test failed: bad token/);
+});
 
-test('an unbound identifying schedule reads paused, bound and CSV routes do not', async (t) => {
+test("an unbound identifying schedule reads paused, bound and CSV routes do not", async (t) => {
   const { host, root } = await mountSftpSchedules([
-    { id: 'sched-unbound-ofx', format: 'ofx', expectedExternalAccountId: null },
-    { id: 'sched-bound-ofx', format: 'ofx', expectedExternalAccountId: 'BR001-77' },
-    { id: 'sched-unbound-csv', format: 'csv', expectedExternalAccountId: null },
-  ])
-  unmountAfter(t, host, root)
-  const badges = [...host.querySelectorAll('li')].filter((li) =>
-    (li.textContent ?? '').includes('Paused: expected account not set'),
-  )
-  assert.equal(badges.length, 1, 'exactly the unbound OFX schedule reads paused')
+    { id: "sched-unbound-ofx", format: "ofx", expectedExternalAccountId: null },
+    { id: "sched-bound-ofx", format: "ofx", expectedExternalAccountId: "BR001-77" },
+    { id: "sched-unbound-csv", format: "csv", expectedExternalAccountId: null },
+  ]);
+  unmountAfter(t, host, root);
+  const badges = [...host.querySelectorAll("li")].filter((li) =>
+    (li.textContent ?? "").includes("Paused: expected account not set"),
+  );
+  assert.equal(badges.length, 1, "exactly the unbound OFX schedule reads paused");
   assert.equal(
-    badges[0]?.getAttribute('id'),
-    'sftp-schedule-sched-unbound-ofx',
-    'the badge sits on the unbound schedule row',
-  )
-  const badge = [...(badges[0]?.querySelectorAll('span') ?? [])].find(
-    (s) => (s.textContent ?? '').trim() === 'Paused: expected account not set',
-  )
-  assert.ok(badge, 'the paused badge itself renders')
+    badges[0]?.getAttribute("id"),
+    "sftp-schedule-sched-unbound-ofx",
+    "the badge sits on the unbound schedule row",
+  );
+  const badge = [...(badges[0]?.querySelectorAll("span") ?? [])].find(
+    (s) => (s.textContent ?? "").trim() === "Paused: expected account not set",
+  );
+  assert.ok(badge, "the paused badge itself renders");
   assert.match(
-    badge?.getAttribute('title') ?? '',
+    badge?.getAttribute("title") ?? "",
     /bound/,
-    'the badge names the remedy, not a generic error',
-  )
-})
+    "the badge names the remedy, not a generic error",
+  );
+});
 
 // F4T2-12 (the SFTP server and schedule Removes DELETE with no confirm,
 // while the sibling connection Remove got one for ): both must
 // confirm first, and a cancelled confirm must not delete.
 async function mountSftpRemoves() {
-  ;(globalThis as Record<string, unknown>).__feedConfirmCalls = []
-  ;(globalThis as Record<string, unknown>).__feedDeletes = []
+  (globalThis as Record<string, unknown>).__feedConfirmCalls = [];
+  (globalThis as Record<string, unknown>).__feedDeletes = [];
   globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
-    if (init?.method === 'DELETE') {
-      ;(globalThis.__feedDeletes ?? []).push(String(url))
-      return Response.json({ ok: true })
+    if (init?.method === "DELETE") {
+      (globalThis.__feedDeletes ?? []).push(String(url));
+      return Response.json({ ok: true });
     }
-    throw new Error(`unexpected fetch ${String(url)}`)
-  }) as typeof fetch
-  return mountSftpSchedules([
-    { id: 'sched-1', format: 'csv', expectedExternalAccountId: null },
-  ])
+    throw new Error(`unexpected fetch ${String(url)}`);
+  }) as typeof fetch;
+  return mountSftpSchedules([{ id: "sched-1", format: "csv", expectedExternalAccountId: null }]);
 }
 
 function serverRemoveButton(host: Element): HTMLButtonElement {
-  const btn = [...host.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === 'Remove' && !b.closest('li'),
-  ) as HTMLButtonElement | undefined
-  assert.ok(btn, 'the server card must offer Remove')
-  return btn
+  const btn = [...host.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Remove" && !b.closest("li"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(btn, "the server card must offer Remove");
+  return btn;
 }
 
 function scheduleRemoveButton(host: Element): HTMLButtonElement {
-  const btn = [...host.querySelectorAll('li button')].find(
-    (b) => (b.textContent ?? '').trim() === 'Remove',
-  ) as HTMLButtonElement | undefined
-  assert.ok(btn, 'the schedule row must offer Remove')
-  return btn
+  const btn = [...host.querySelectorAll("li button")].find(
+    (b) => (b.textContent ?? "").trim() === "Remove",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(btn, "the schedule row must offer Remove");
+  return btn;
 }
 
 // F4T2-13 (pause/resume PATCH, binding PATCH, add-route POST and the SFTP
@@ -416,68 +459,70 @@ function scheduleRemoveButton(host: Element): HTMLButtonElement {
 // stays-open check.
 for (const [name, mountRow, clicks, checkOpen] of [
   [
-    'a refused pause surfaces instead of silently re-rendering (F4T2-13)',
-    () => mountFeed((async () => new Response('', { status: 500 })) as typeof fetch),
-    ['Pause'],
+    "a refused pause surfaces instead of silently re-rendering (F4T2-13)",
+    () => mountFeed((async () => new Response("", { status: 500 })) as typeof fetch),
+    ["Pause"],
     false,
   ],
   [
-    'a refused binding save stays open with the error (F4T2-13)',
-    () => mountSftpCustom(
-      (async () => new Response('', { status: 500 })) as typeof fetch,
-      [{ id: 'sched-bind', format: 'csv', expectedExternalAccountId: null }],
-    ),
-    ['no account bound', 'Save'],
+    "a refused binding save stays open with the error (F4T2-13)",
+    () =>
+      mountSftpCustom((async () => new Response("", { status: 500 })) as typeof fetch, [
+        { id: "sched-bind", format: "csv", expectedExternalAccountId: null },
+      ]),
+    ["no account bound", "Save"],
     true,
   ],
   [
-    'a refused add-route surfaces instead of a silent list (F4T2-13)',
-    () => mountSftpCustom(
-      (async () => new Response('', { status: 500 })) as typeof fetch,
-      [{ id: 'sched-route', format: 'csv', expectedExternalAccountId: null }],
-    ),
-    ['Routing', 'Add route'],
+    "a refused add-route surfaces instead of a silent list (F4T2-13)",
+    () =>
+      mountSftpCustom((async () => new Response("", { status: 500 })) as typeof fetch, [
+        { id: "sched-route", format: "csv", expectedExternalAccountId: null },
+      ]),
+    ["Routing", "Add route"],
     false,
   ],
-] as Array<[string, () => Promise<{ host: HTMLDivElement; root: { unmount(): void } }>, string[], boolean]>) {
+] as Array<
+  [string, () => Promise<{ host: HTMLDivElement; root: { unmount(): void } }>, string[], boolean]
+>) {
   test(name, async (t) => {
-    const { host, root } = await mountRow()
-    unmountAfter(t, host, root)
+    const { host, root } = await mountRow();
+    unmountAfter(t, host, root);
     for (const label of clicks) {
-      await clickAndSettle(actionButton(host, label))
+      await clickAndSettle(actionButton(host, label));
     }
-    assert.match(host.textContent ?? '', /unknown error/)
+    assert.match(host.textContent ?? "", /unknown error/);
     if (checkOpen) {
       assert.ok(
-        [...host.querySelectorAll('button')].some((b) => (b.textContent ?? '').trim() === 'Save'),
-        'the refused editor must stay open instead of pretending the binding held',
-      )
+        [...host.querySelectorAll("button")].some((b) => (b.textContent ?? "").trim() === "Save"),
+        "the refused editor must stay open instead of pretending the binding held",
+      );
     }
-  })
+  });
 }
 
 async function mountSftpCustom(
   fetchImpl: typeof fetch,
   schedules: Array<{ id: string; format: string; expectedExternalAccountId: string | null }>,
 ) {
-  globalThis.fetch = fetchImpl
-  return mountSftpSchedules(schedules)
+  globalThis.fetch = fetchImpl;
+  return mountSftpSchedules(schedules);
 }
 
-test('a failed auto-route still shows the secret but names the routing failure (F4T2-13)', async (t) => {
+test("a failed auto-route still shows the secret but names the routing failure (F4T2-13)", async (t) => {
   globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
-    const target = String(url)
-    if (target === '/api/banking/sftp') {
-      return Response.json({ id: 'srv-9', username: 'u9', password: 'p9' })
+    const target = String(url);
+    if (target === "/api/banking/sftp") {
+      return Response.json({ id: "srv-9", username: "u9", password: "p9" });
     }
-    if (target === '/api/banking/sftp/schedules') {
-      return new Response('', { status: 500 })
+    if (target === "/api/banking/sftp/schedules") {
+      return new Response("", { status: 500 });
     }
-    throw new Error(`unexpected fetch ${target} ${init?.method ?? ''}`)
-  }) as typeof fetch
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    throw new Error(`unexpected fetch ${target} ${init?.method ?? ""}`);
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -485,31 +530,46 @@ test('a failed auto-route still shows the secret but names the routing failure (
           connections={[]}
           sftpServers={[]}
           sftpSchedules={[]}
-          accounts={[{ id: 'acc-1', label: '1000 Operating Cash' }]}
-          daemon={{ enabled: false, port: 0, host: '', fingerprint: '' }}
+          accounts={[{ id: "acc-1", label: "1000 Operating Cash" }]}
+          daemon={{ enabled: false, port: 0, host: "", fingerprint: "" }}
         />
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  unmountAfter(t, host, root)
-  await clickAndSettle(actionButton(host, '+ Add connection'))
-  const sftpTile = [...host.querySelectorAll('button')].find((b) =>
-    [...b.querySelectorAll('div')].some((d) => (d.textContent ?? '').trim() === 'SFTP file drop'),
-  ) as HTMLButtonElement | undefined
-  assert.ok(sftpTile, 'the chooser must offer the SFTP file drop tile')
-  await clickAndSettle(sftpTile)
-  const name = host.querySelector('input[placeholder="e.g. Test SFTP"]') as HTMLInputElement | null
-    ?? host.querySelector('input[placeholder*="SFTP"]') as HTMLInputElement | null
-  const nameInput = name ?? ([...host.querySelectorAll('input')].find((i) => (i as HTMLInputElement).value === '') as HTMLInputElement | undefined)
-  assert.ok(nameInput, 'the connection name input must render')
+    );
+    await tick();
+  });
+  unmountAfter(t, host, root);
+  await clickAndSettle(actionButton(host, "+ Add connection"));
+  const sftpTile = [...host.querySelectorAll("button")].find((b) =>
+    [...b.querySelectorAll("div")].some((d) => (d.textContent ?? "").trim() === "SFTP file drop"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(sftpTile, "the chooser must offer the SFTP file drop tile");
+  await clickAndSettle(sftpTile);
+  const name =
+    (host.querySelector('input[placeholder="e.g. Test SFTP"]') as HTMLInputElement | null) ??
+    (host.querySelector('input[placeholder*="SFTP"]') as HTMLInputElement | null);
+  const nameInput =
+    name ??
+    ([...host.querySelectorAll("input")].find((i) => (i as HTMLInputElement).value === "") as
+      HTMLInputElement | undefined);
+  assert.ok(nameInput, "the connection name input must render");
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
-    setter.call(nameInput, 'Test SFTP')
-    nameInput.dispatchEvent(new window.Event('input', { bubbles: true }))
-  })
-  await tick()
-  await clickAndSettle(actionButton(host, 'Create SFTP login'))
-  assert.match(host.textContent ?? '', /u9/, 'the one-time username still shows — the login was created')
-  assert.match(host.textContent ?? '', /automatic routing failed/, 'the secret display must say the routing failed')
-})
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(nameInput, "Test SFTP");
+    nameInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+  await tick();
+  await clickAndSettle(actionButton(host, "Create SFTP login"));
+  assert.match(
+    host.textContent ?? "",
+    /u9/,
+    "the one-time username still shows — the login was created",
+  );
+  assert.match(
+    host.textContent ?? "",
+    /automatic routing failed/,
+    "the secret display must say the routing failed",
+  );
+});

@@ -1,576 +1,852 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import type { SessionUser } from './auth'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import type { SessionUser } from "./auth";
 
 // CRM write routes must (a) keep header probability and stored line detail in
 // one exact relationship (weighted_amount = sum of line expected_amount) and
 // (b) refuse malformed dates at the API boundary instead of surfacing a
 // Postgres cast failure as a 500.
-const state: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __crmWriteValidationUser: state })
+const state: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __crmWriteValidationUser: state });
 const virtual = (source: string) => ({
   shortCircuit: true as const,
-  url: 'data:text/javascript,' + encodeURIComponent(source),
-})
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (
-      (specifier === './auth' || specifier.endsWith('/lib/auth')) &&
-      context.parentURL?.endsWith('/web/lib/authz.ts')
+      (specifier === "./auth" || specifier.endsWith("/lib/auth")) &&
+      context.parentURL?.endsWith("/web/lib/authz.ts")
     ) {
       return virtual(
-        'export async function currentUser(){ return globalThis.__crmWriteValidationUser.user }',
-      )
+        "export async function currentUser(){ return globalThis.__crmWriteValidationUser.user }",
+      );
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 const { db, pool, withBypassContext, withOrgContext } =
-  await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
+  await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import('@openbooks/engine/testing/fixtures')
-const { ensureCrmDefaults } = await import('@openbooks/engine/crm/crm')
-const { PATCH: opportunityEdit } =
-  await import('../app/api/crm/opportunities/[id]/route')
+  await import("@openbooks/engine/testing/fixtures");
+const { ensureCrmDefaults } = await import("@openbooks/engine/crm/crm");
+const { PATCH: opportunityEdit } = await import("../app/api/crm/opportunities/[id]/route");
 const { PATCH: activityEdit, DELETE: activityDelete } =
-  await import('../app/api/crm/activities/[id]/route')
-const { POST: activityDraft } =
-  await import('../app/api/crm/activities/draft/route')
-const { PATCH: accountEdit } = await import('../app/api/crm/accounts/[id]/route')
-const { NextRequest } = await import('next/server')
+  await import("../app/api/crm/activities/[id]/route");
+const { POST: activityDraft } = await import("../app/api/crm/activities/draft/route");
+const { PATCH: accountEdit } = await import("../app/api/crm/accounts/[id]/route");
+const { NextRequest } = await import("next/server");
 
 const request = (body: unknown) =>
-  new Request('http://crm.local', { method: 'PATCH', body: JSON.stringify(body) })
-const params = (id: string) => ({ params: Promise.resolve({ id }) })
-const { loadActivity } = await import('./crm')
-const { documentRevisionSql } = await import('@openbooks/engine/records/revision')
+  new Request("http://crm.local", { method: "PATCH", body: JSON.stringify(body) });
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+const { loadActivity } = await import("./crm");
+const { documentRevisionSql } = await import("@openbooks/engine/records/revision");
 // The account PATCH requires the profile's current revision token (79b64f876).
 const accountToken = async (orgId: string, partyId: string) =>
-  (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
-    from crm_account_profiles where org_id=${orgId} and party_id=${partyId}`, 'objects'))[0]!.revision
+  (
+    await db.execute<{ revision: string }>(
+      sql`select ${documentRevisionSql(sql`updated_at`)} as revision
+    from crm_account_profiles where org_id=${orgId} and party_id=${partyId}`,
+      "objects",
+    )
+  )[0]!.revision;
 // The loader-projected revision token every activity PATCH must echo back.
 // Fetched at each call site so sequential saves always carry a fresh token.
 const activityToken = async (orgId: string, id: string) =>
-  ((await loadActivity(id, orgId, null))!.activity as Record<string, unknown>).updated_at as string
+  ((await loadActivity(id, orgId, null))!.activity as Record<string, unknown>).updated_at as string;
 
 async function fixture() {
-  const org = await withBypassContext(() => createScratchOrg())
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() =>
-      createScratchUser(org.orgId, 'CRM writer', 'crm_writer'),
-    )
+      createScratchUser(org.orgId, "CRM writer", "crm_writer"),
+    );
     await withBypassContext(async () => {
       await db.execute(
         sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb) || '{"crm":true}'::jsonb) where id=${org.orgId}`,
-      )
+      );
       await db.execute(
         sql`update app_roles set permissions='["ar.read","ar.create","crm.opportunities.read","crm.opportunities.manage","crm.opportunities.close","crm.accounts.read","crm.accounts.manage","crm.activities.read","crm.activities.manage"]'::jsonb, subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='crm_writer'`,
-      )
-    })
+      );
+    });
     state.user = {
       id: actor,
       orgId: org.orgId,
-      name: 'CRM writer',
-      email: 'crm-writer@scratch.test',
+      name: "CRM writer",
+      email: "crm-writer@scratch.test",
       roles: [],
       isSuperAdmin: false,
-      envKind: 'production',
+      envKind: "production",
       productionOrgId: org.orgId,
       homeOrgId: org.orgId,
       homeUserId: actor,
-    }
-    return { org, actor }
+    };
+    return { org, actor };
   } catch (e) {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-    throw e
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+    throw e;
   }
 }
 
 async function seedOpportunity(orgId: string, actor: string, date: string) {
-  await ensureCrmDefaults(orgId, actor)
-  const status = (await db.execute<{ id: string }>(
-      sql`select id from crm_opportunity_statuses where org_id=${orgId} and is_default and is_active limit 1`, 'objects',
-    ))[0]!.id
-  const id = randomUUID()
+  await ensureCrmDefaults(orgId, actor);
+  const status = (
+    await db.execute<{ id: string }>(
+      sql`select id from crm_opportunity_statuses where org_id=${orgId} and is_default and is_active limit 1`,
+      "objects",
+    )
+  )[0]!.id;
+  const id = randomUUID();
   // Header 10%: line 1 carries an explicit 100% override, line 2 inherits
   // (null), line 3 is a legacy row whose stored probability equals the header.
-  await withBypassContext(() => (db.execute(
-    sql`insert into crm_opportunities(id,org_id,opportunity_number,title,status_id,probability,currency,projected_amount,weighted_amount,expected_close_date,created_by,updated_by) values (${id},${orgId},${id},'Weighted opportunity',${status},10,'CAD','2500','1150',${date},${actor},${actor})`,
-  )))
-  await withBypassContext(() => (db.execute(
-    sql`insert into crm_opportunity_lines(org_id,opportunity_id,line_number,description,quantity,unit_price,amount,probability,expected_amount,created_by,updated_by) values
+  await withBypassContext(() =>
+    db.execute(
+      sql`insert into crm_opportunities(id,org_id,opportunity_number,title,status_id,probability,currency,projected_amount,weighted_amount,expected_close_date,created_by,updated_by) values (${id},${orgId},${id},'Weighted opportunity',${status},10,'CAD','2500','1150',${date},${actor},${actor})`,
+    ),
+  );
+  await withBypassContext(() =>
+    db.execute(
+      sql`insert into crm_opportunity_lines(org_id,opportunity_id,line_number,description,quantity,unit_price,amount,probability,expected_amount,created_by,updated_by) values
       (${orgId},${id},1,'Override line','1','1000','1000',100,'1000',${actor},${actor}),
       (${orgId},${id},2,'Inherited line','1','1000','1000',null,'100',${actor},${actor}),
       (${orgId},${id},3,'Legacy inherited line','1','500','500',10,'50',${actor},${actor})`,
-  )))
-  return { id, status }
+    ),
+  );
+  return { id, status };
 }
 
 async function storedLines(orgId: string, id: string) {
-  return await db.execute<{ line_number: number; probability: number | null; expected_amount: string }>(
-      sql`select line_number, probability, expected_amount from crm_opportunity_lines where org_id=${orgId} and opportunity_id=${id} order by line_number`, 'objects',
-    )
+  return await db.execute<{
+    line_number: number;
+    probability: number | null;
+    expected_amount: string;
+  }>(
+    sql`select line_number, probability, expected_amount from crm_opportunity_lines where org_id=${orgId} and opportunity_id=${id} order by line_number`,
+    "objects",
+  );
 }
 
 async function header(orgId: string, id: string) {
-  return (await db.execute<{ probability: number; projected_amount: string; weighted_amount: string; expected_close_date: string | null }>(
-      sql`select probability, projected_amount, weighted_amount, expected_close_date::text from crm_opportunities where org_id=${orgId} and id=${id}`, 'objects',
-    ))[0]!
+  return (
+    await db.execute<{
+      probability: number;
+      projected_amount: string;
+      weighted_amount: string;
+      expected_close_date: string | null;
+    }>(
+      sql`select probability, projected_amount, weighted_amount, expected_close_date::text from crm_opportunities where org_id=${orgId} and id=${id}`,
+      "objects",
+    )
+  )[0]!;
 }
 
 // Opportunity saves speak the revision contract: read the live token so the
 // validation assertions below exercise domain checks, not the 409 guard.
 async function edit(orgId: string, id: string, body: Record<string, unknown>) {
-  const revision = (await db.execute<{ revision: string }>(
-      sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`, 'objects',
-    ))[0]!.revision
-  return opportunityEdit(request({ ...body, expectedUpdatedAt: revision }), params(id))
+  const revision = (
+    await db.execute<{ revision: string }>(
+      sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`,
+      "objects",
+    )
+  )[0]!.revision;
+  return opportunityEdit(request({ ...body, expectedUpdatedAt: revision }), params(id));
 }
 
 test(
-  'PATCH probability without lines re-weights the stored line detail exactly',
+  "PATCH probability without lines re-weights the stored line detail exactly",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const { org, actor } = await fixture()
+    const { org, actor } = await fixture();
     try {
       await withOrgContext(org.orgId, async () => {
-        const { id } = await seedOpportunity(org.orgId, actor, org.date)
-        const edited = await edit(org.orgId, id, { probability: 20 })
-        assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
-        const row = await header(org.orgId, id)
-        assert.equal(row.probability, 20)
-        assert.equal(row.projected_amount, '2500.0000')
+        const { id } = await seedOpportunity(org.orgId, actor, org.date);
+        const edited = await edit(org.orgId, id, { probability: 20 });
+        assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()));
+        const row = await header(org.orgId, id);
+        assert.equal(row.probability, 20);
+        assert.equal(row.projected_amount, "2500.0000");
         // 1000 (override stays at 100%) + 200 (inherited) + 100 (legacy inherited)
-        assert.equal(row.weighted_amount, '1300.0000')
+        assert.equal(row.weighted_amount, "1300.0000");
         assert.deepEqual(await storedLines(org.orgId, id), [
-          { line_number: 1, probability: 100, expected_amount: '1000.0000' },
-          { line_number: 2, probability: null, expected_amount: '200.0000' },
-          { line_number: 3, probability: null, expected_amount: '100.0000' },
-        ])
+          { line_number: 1, probability: 100, expected_amount: "1000.0000" },
+          { line_number: 2, probability: null, expected_amount: "200.0000" },
+          { line_number: 3, probability: null, expected_amount: "100.0000" },
+        ]);
         // A second header move keeps following: the normalized rows inherit.
-        const again = await edit(org.orgId, id, { probability: 50 })
-        assert.equal(again.status, 200)
-        assert.equal((await header(org.orgId, id)).weighted_amount, '1750.0000')
+        const again = await edit(org.orgId, id, { probability: 50 });
+        assert.equal(again.status, 200);
+        assert.equal((await header(org.orgId, id)).weighted_amount, "1750.0000");
         assert.deepEqual(
           (await storedLines(org.orgId, id)).map((line) => line.expected_amount),
-          ['1000.0000', '500.0000', '250.0000'],
-        )
-      })
+          ["1000.0000", "500.0000", "250.0000"],
+        );
+      });
     } finally {
-      state.user = null
-      await withBypassContext(() => dropScratchOrg(org.orgId))
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   },
-)
+);
 
 test(
-  'a status-only change that moves the header probability re-weights lines',
+  "a status-only change that moves the header probability re-weights lines",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const { org, actor } = await fixture()
+    const { org, actor } = await fixture();
     try {
       await withOrgContext(org.orgId, async () => {
-        const { id, status } = await seedOpportunity(org.orgId, actor, org.date)
-        const next = (await db.execute<{ id: string; probability: number }>(
-            sql`select id, probability from crm_opportunity_statuses where org_id=${org.orgId} and is_active and not is_closed and id<>${status} and probability<>10 order by sequence limit 1`, 'objects',
-          ))[0]
-        assert.ok(next, 'defaults seed an open status with a different probability')
-        const edited = await edit(org.orgId, id, { statusId: next.id })
-        assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
-        const row = await header(org.orgId, id)
-        assert.equal(row.probability, next.probability)
-        const lines = await storedLines(org.orgId, id)
-        const total = lines.reduce((sum, line) => sum + Number(line.expected_amount), 0)
-        assert.equal(Number(row.weighted_amount), total)
-        assert.equal(lines[0]!.expected_amount, '1000.0000')
-        assert.equal(lines[1]!.probability, null)
-        assert.equal(lines[2]!.probability, null)
-      })
+        const { id, status } = await seedOpportunity(org.orgId, actor, org.date);
+        const next = (
+          await db.execute<{ id: string; probability: number }>(
+            sql`select id, probability from crm_opportunity_statuses where org_id=${org.orgId} and is_active and not is_closed and id<>${status} and probability<>10 order by sequence limit 1`,
+            "objects",
+          )
+        )[0];
+        assert.ok(next, "defaults seed an open status with a different probability");
+        const edited = await edit(org.orgId, id, { statusId: next.id });
+        assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()));
+        const row = await header(org.orgId, id);
+        assert.equal(row.probability, next.probability);
+        const lines = await storedLines(org.orgId, id);
+        const total = lines.reduce((sum, line) => sum + Number(line.expected_amount), 0);
+        assert.equal(Number(row.weighted_amount), total);
+        assert.equal(lines[0]!.expected_amount, "1000.0000");
+        assert.equal(lines[1]!.probability, null);
+        assert.equal(lines[2]!.probability, null);
+      });
     } finally {
-      state.user = null
-      await withBypassContext(() => dropScratchOrg(org.orgId))
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   },
-)
+);
 
 test(
-  'resent lines store null probability when they inherit the header',
+  "resent lines store null probability when they inherit the header",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const { org, actor } = await fixture()
+    const { org, actor } = await fixture();
     try {
       await withOrgContext(org.orgId, async () => {
-        const { id } = await seedOpportunity(org.orgId, actor, org.date)
+        const { id } = await seedOpportunity(org.orgId, actor, org.date);
         const edited = await edit(org.orgId, id, {
           probability: 30,
           lines: [
-            { itemId: org.items.service, description: 'Base service', unit: 'each', quantity: '2', unitPrice: '100' },
-            { itemId: org.items.service, description: 'Additional service', unit: 'each', quantity: '1', unitPrice: '100', probability: 60 },
+            {
+              itemId: org.items.service,
+              description: "Base service",
+              unit: "each",
+              quantity: "2",
+              unitPrice: "100",
+            },
+            {
+              itemId: org.items.service,
+              description: "Additional service",
+              unit: "each",
+              quantity: "1",
+              unitPrice: "100",
+              probability: 60,
+            },
           ],
-        })
-        assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
+        });
+        assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()));
         assert.deepEqual(await storedLines(org.orgId, id), [
-          { line_number: 1, probability: null, expected_amount: '60.0000' },
-          { line_number: 2, probability: 60, expected_amount: '60.0000' },
-        ])
-        const row = await header(org.orgId, id)
-        assert.equal(row.projected_amount, '300.0000')
-        assert.equal(row.weighted_amount, '120.0000')
-        const moved = await edit(org.orgId, id, { probability: 40 })
-        assert.equal(moved.status, 200)
-        assert.equal((await header(org.orgId, id)).weighted_amount, '140.0000')
-      })
+          { line_number: 1, probability: null, expected_amount: "60.0000" },
+          { line_number: 2, probability: 60, expected_amount: "60.0000" },
+        ]);
+        const row = await header(org.orgId, id);
+        assert.equal(row.projected_amount, "300.0000");
+        assert.equal(row.weighted_amount, "120.0000");
+        const moved = await edit(org.orgId, id, { probability: 40 });
+        assert.equal(moved.status, 200);
+        assert.equal((await header(org.orgId, id)).weighted_amount, "140.0000");
+      });
     } finally {
-      state.user = null
-      await withBypassContext(() => dropScratchOrg(org.orgId))
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   },
-)
+);
 
 test(
-  'malformed CRM dates are refused with 422 before reaching SQL',
+  "malformed CRM dates are refused with 422 before reaching SQL",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const { org, actor } = await fixture()
+    const { org, actor } = await fixture();
     try {
       await withOrgContext(org.orgId, async () => {
-        const { id } = await seedOpportunity(org.orgId, actor, org.date)
-        for (const expectedCloseDate of ['soon', '2026-02-30', '20260301', 'tomorrow', 12]) {
-          const response = await edit(org.orgId, id, { expectedCloseDate })
-          assert.equal(response.status, 422, `expectedCloseDate=${String(expectedCloseDate)}`)
+        const { id } = await seedOpportunity(org.orgId, actor, org.date);
+        for (const expectedCloseDate of ["soon", "2026-02-30", "20260301", "tomorrow", 12]) {
+          const response = await edit(org.orgId, id, { expectedCloseDate });
+          assert.equal(response.status, 422, `expectedCloseDate=${String(expectedCloseDate)}`);
         }
-        assert.equal((await header(org.orgId, id)).expected_close_date, org.date)
-        const accepted = await edit(org.orgId, id, { expectedCloseDate: '2026-03-01' })
-        assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()))
-        assert.equal((await header(org.orgId, id)).expected_close_date, '2026-03-01')
-        const cleared = await edit(org.orgId, id, { expectedCloseDate: null })
-        assert.equal(cleared.status, 200)
-        assert.equal((await header(org.orgId, id)).expected_close_date, null)
+        assert.equal((await header(org.orgId, id)).expected_close_date, org.date);
+        const accepted = await edit(org.orgId, id, { expectedCloseDate: "2026-03-01" });
+        assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()));
+        assert.equal((await header(org.orgId, id)).expected_close_date, "2026-03-01");
+        const cleared = await edit(org.orgId, id, { expectedCloseDate: null });
+        assert.equal(cleared.status, 200);
+        assert.equal((await header(org.orgId, id)).expected_close_date, null);
 
         const draft = await activityDraft(
-          new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'event' }) }),
-        )
-        assert.equal(draft.status, 200)
-        const activityId = (await draft.json()).id
+          new NextRequest("http://crm.local", {
+            method: "POST",
+            body: JSON.stringify({ kind: "event" }),
+          }),
+        );
+        assert.equal(draft.status, 200);
+        const activityId = (await draft.json()).id;
         for (const body of [
-          { startsAt: 'soon' },
-          { dueAt: '2026-13-01T10:00' },
-          { reminderAt: 'next week' },
-          { endsAt: '2026-09-05T25:00' },
-          { startsAt: '2026-09-05T10:30', endsAt: '2026-09-05T09:00' },
+          { startsAt: "soon" },
+          { dueAt: "2026-13-01T10:00" },
+          { reminderAt: "next week" },
+          { endsAt: "2026-09-05T25:00" },
+          { startsAt: "2026-09-05T10:30", endsAt: "2026-09-05T09:00" },
         ]) {
-          const response = await activityEdit(request({ ...body, expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
-          assert.equal(response.status, 422, JSON.stringify(body))
+          const response = await activityEdit(
+            request({ ...body, expectedUpdatedAt: await activityToken(org.orgId, activityId) }),
+            params(activityId),
+          );
+          assert.equal(response.status, 422, JSON.stringify(body));
         }
         const scheduled = await activityEdit(
-          request({ startsAt: '2026-09-05T10:30', endsAt: '2026-09-05T11:30', dueAt: '2026-09-05', reminderAt: '2026-09-05T10:00:00Z', expectedUpdatedAt: await activityToken(org.orgId, activityId) }),
+          request({
+            startsAt: "2026-09-05T10:30",
+            endsAt: "2026-09-05T11:30",
+            dueAt: "2026-09-05",
+            reminderAt: "2026-09-05T10:00:00Z",
+            expectedUpdatedAt: await activityToken(org.orgId, activityId),
+          }),
           params(activityId),
-        )
-        assert.equal(scheduled.status, 200, JSON.stringify(await scheduled.clone().json()))
+        );
+        assert.equal(scheduled.status, 200, JSON.stringify(await scheduled.clone().json()));
         // Cross-field ordering is checked against the STORED start when only
         // the end moves, so the database check constraint never fires a 500.
-        const reordered = await activityEdit(request({ endsAt: '2026-09-05T09:00', expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
-        assert.equal(reordered.status, 422)
+        const reordered = await activityEdit(
+          request({
+            endsAt: "2026-09-05T09:00",
+            expectedUpdatedAt: await activityToken(org.orgId, activityId),
+          }),
+          params(activityId),
+        );
+        assert.equal(reordered.status, 422);
 
         await db.execute(
           sql`insert into crm_account_profiles(org_id,party_id,lifecycle_stage,created_by,updated_by) values (${org.orgId},${org.customerId},'customer',${actor},${actor}) on conflict do nothing`,
-        )
-        for (const nextActionAt of ['soon', '2026-02-30T10:00', 'later']) {
-          const response = await accountEdit(request({ nextActionAt, expectedUpdatedAt: await accountToken(org.orgId, org.customerId) }), params(org.customerId))
-          assert.equal(response.status, 422, nextActionAt)
+        );
+        for (const nextActionAt of ["soon", "2026-02-30T10:00", "later"]) {
+          const response = await accountEdit(
+            request({
+              nextActionAt,
+              expectedUpdatedAt: await accountToken(org.orgId, org.customerId),
+            }),
+            params(org.customerId),
+          );
+          assert.equal(response.status, 422, nextActionAt);
         }
-        const followUp = await accountEdit(request({ nextActionAt: '2026-09-05T10:30', expectedUpdatedAt: await accountToken(org.orgId, org.customerId) }), params(org.customerId))
-        assert.equal(followUp.status, 200, JSON.stringify(await followUp.clone().json()))
-      })
+        const followUp = await accountEdit(
+          request({
+            nextActionAt: "2026-09-05T10:30",
+            expectedUpdatedAt: await accountToken(org.orgId, org.customerId),
+          }),
+          params(org.customerId),
+        );
+        assert.equal(followUp.status, 200, JSON.stringify(await followUp.clone().json()));
+      });
     } finally {
-      state.user = null
-      await withBypassContext(() => dropScratchOrg(org.orgId))
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   },
-)
+);
 
 test(
-  'activity PATCH audit chains predecessors and DELETE writes delete evidence',
+  "activity PATCH audit chains predecessors and DELETE writes delete evidence",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const { org, actor } = await fixture()
+    const { org, actor } = await fixture();
     try {
       await withOrgContext(org.orgId, async () => {
         const draft = await activityDraft(
-          new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task' }) }),
-        )
-        assert.equal(draft.status, 200)
-        const activityId = (await draft.json()).id
+          new NextRequest("http://crm.local", {
+            method: "POST",
+            body: JSON.stringify({ kind: "task" }),
+          }),
+        );
+        assert.equal(draft.status, 200);
+        const activityId = (await draft.json()).id;
         const audits = async () =>
-          await db.execute<{ action: string; actor_id: string; changes: { before: { subject: string } } }>(
-            sql`select action, actor_id, changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} order by at, id`, 'objects',
-          )
-        const first = await activityEdit(request({ subject: 'First save', expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
-        assert.equal(first.status, 200, JSON.stringify(await first.clone().json()))
-        const second = await activityEdit(request({ subject: 'Second save', expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
-        assert.equal(second.status, 200)
-        const updates = (await audits()).filter((row) => row.action === 'update')
-        assert.equal(updates.length, 2)
-        assert.equal(updates[0]!.changes.before.subject, 'New activity')
-        assert.equal(updates[0]!.actor_id, actor)
-        assert.equal(updates[1]!.changes.before.subject, 'First save')
-        const deleted = await activityDelete(
-          new Request('http://crm.local', { method: 'DELETE' }),
+          await db.execute<{
+            action: string;
+            actor_id: string;
+            changes: { before: { subject: string } };
+          }>(
+            sql`select action, actor_id, changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} order by at, id`,
+            "objects",
+          );
+        const first = await activityEdit(
+          request({
+            subject: "First save",
+            expectedUpdatedAt: await activityToken(org.orgId, activityId),
+          }),
           params(activityId),
-        )
-        assert.equal(deleted.status, 200, JSON.stringify(await deleted.clone().json()))
-        const removal = (await audits()).find((row) => row.action === 'delete')
-        assert.ok(removal, 'DELETE recorded audit evidence')
-        assert.equal(removal!.changes.before.subject, 'Second save')
-        assert.equal(removal!.actor_id, actor)
-      })
+        );
+        assert.equal(first.status, 200, JSON.stringify(await first.clone().json()));
+        const second = await activityEdit(
+          request({
+            subject: "Second save",
+            expectedUpdatedAt: await activityToken(org.orgId, activityId),
+          }),
+          params(activityId),
+        );
+        assert.equal(second.status, 200);
+        const updates = (await audits()).filter((row) => row.action === "update");
+        assert.equal(updates.length, 2);
+        assert.equal(updates[0]!.changes.before.subject, "New activity");
+        assert.equal(updates[0]!.actor_id, actor);
+        assert.equal(updates[1]!.changes.before.subject, "First save");
+        const deleted = await activityDelete(
+          new Request("http://crm.local", { method: "DELETE" }),
+          params(activityId),
+        );
+        assert.equal(deleted.status, 200, JSON.stringify(await deleted.clone().json()));
+        const removal = (await audits()).find((row) => row.action === "delete");
+        assert.ok(removal, "DELETE recorded audit evidence");
+        assert.equal(removal!.changes.before.subject, "Second save");
+        assert.equal(removal!.actor_id, actor);
+      });
     } finally {
-      state.user = null
-      await withBypassContext(() => dropScratchOrg(org.orgId))
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   },
-)
+);
 
 test(
-  'activity PATCH refuses non-boolean isPrivate and null link/participant elements with 422',
+  "activity PATCH refuses non-boolean isPrivate and null link/participant elements with 422",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const { org } = await fixture()
+    const { org } = await fixture();
     try {
       await withOrgContext(org.orgId, async () => {
         const draft = await activityDraft(
-          new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task' }) }),
-        )
-        assert.equal(draft.status, 200)
-        const activityId = (await draft.json()).id
+          new NextRequest("http://crm.local", {
+            method: "POST",
+            body: JSON.stringify({ kind: "task" }),
+          }),
+        );
+        assert.equal(draft.status, 200);
+        const activityId = (await draft.json()).id;
         for (const body of [
-          { isPrivate: 'yes' },
+          { isPrivate: "yes" },
           { isPrivate: 1 },
           { links: [null] },
-          { links: ['not-an-object'] },
+          { links: ["not-an-object"] },
           { participants: [null] },
           { participants: [42] },
         ]) {
-          const response = await activityEdit(request({ ...body, expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
-          assert.equal(response.status, 422, JSON.stringify(body))
+          const response = await activityEdit(
+            request({ ...body, expectedUpdatedAt: await activityToken(org.orgId, activityId) }),
+            params(activityId),
+          );
+          assert.equal(response.status, 422, JSON.stringify(body));
         }
-        const applied = await activityEdit(request({ isPrivate: true, expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
-        assert.equal(applied.status, 200, JSON.stringify(await applied.clone().json()))
-        const stored = (await db.execute<{ is_private: boolean }>(
-          sql`select is_private from crm_activities where org_id=${org.orgId} and id=${activityId}`, 'objects',
-        ))[0]!
-        assert.equal(stored.is_private, true)
+        const applied = await activityEdit(
+          request({
+            isPrivate: true,
+            expectedUpdatedAt: await activityToken(org.orgId, activityId),
+          }),
+          params(activityId),
+        );
+        assert.equal(applied.status, 200, JSON.stringify(await applied.clone().json()));
+        const stored = (
+          await db.execute<{ is_private: boolean }>(
+            sql`select is_private from crm_activities where org_id=${org.orgId} and id=${activityId}`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(stored.is_private, true);
         // The six refusals above all fired before the transaction, so exactly
         // one update audit row exists: refused writes leave no evidence.
         const updates = await db.execute<{ action: string }>(
-          sql`select action from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId}`, 'objects',
-        )
-        assert.equal(updates.length, 1)
-      })
+          sql`select action from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId}`,
+          "objects",
+        );
+        assert.equal(updates.length, 1);
+      });
     } finally {
-      state.user = null
-      await withBypassContext(() => dropScratchOrg(org.orgId))
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   },
-)
+);
 
 test(
-  'activity PATCH audit records the actual after state and child evidence',
+  "activity PATCH audit records the actual after state and child evidence",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const { org, actor } = await fixture()
+    const { org, actor } = await fixture();
     try {
       await withOrgContext(org.orgId, async () => {
         const draft = await activityDraft(
-          new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task' }) }),
-        )
-        assert.equal(draft.status, 200)
-        const activityId = (await draft.json()).id
+          new NextRequest("http://crm.local", {
+            method: "POST",
+            body: JSON.stringify({ kind: "task" }),
+          }),
+        );
+        assert.equal(draft.status, 200);
+        const activityId = (await draft.json()).id;
         const edited = await activityEdit(
-          request({ subject: 'Evidence save', participants: [{ userId: actor }], expectedUpdatedAt: await activityToken(org.orgId, activityId) }),
+          request({
+            subject: "Evidence save",
+            participants: [{ userId: actor }],
+            expectedUpdatedAt: await activityToken(org.orgId, activityId),
+          }),
           params(activityId),
-        )
-        assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
-        const rows = await db.execute<{ changes: {
-          before: { subject: string }
-          after: { subject: string }
-          links?: { before: unknown[]; after: unknown[] }
-          participants?: { before: unknown[]; after: Array<{ user_id: string | null; contact_id: string | null; email: string | null; response: string }> }
-        } }>(
-          sql`select changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} and action='update'`, 'objects',
-        )
-        assert.equal(rows.length, 1)
-        const changes = rows[0]!.changes
-        assert.equal(changes.before.subject, 'New activity')
-        assert.equal(changes.after.subject, 'Evidence save')
-        assert.ok(!('links' in changes), 'unrequested children leave no evidence key')
-        assert.deepEqual(changes.participants!.before, [])
-        assert.equal(changes.participants!.after.length, 1)
-        assert.equal(changes.participants!.after[0]!.user_id, actor)
-      })
+        );
+        assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()));
+        const rows = await db.execute<{
+          changes: {
+            before: { subject: string };
+            after: { subject: string };
+            links?: { before: unknown[]; after: unknown[] };
+            participants?: {
+              before: unknown[];
+              after: Array<{
+                user_id: string | null;
+                contact_id: string | null;
+                email: string | null;
+                response: string;
+              }>;
+            };
+          };
+        }>(
+          sql`select changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} and action='update'`,
+          "objects",
+        );
+        assert.equal(rows.length, 1);
+        const changes = rows[0]!.changes;
+        assert.equal(changes.before.subject, "New activity");
+        assert.equal(changes.after.subject, "Evidence save");
+        assert.ok(!("links" in changes), "unrequested children leave no evidence key");
+        assert.deepEqual(changes.participants!.before, []);
+        assert.equal(changes.participants!.after.length, 1);
+        assert.equal(changes.participants!.after[0]!.user_id, actor);
+      });
     } finally {
-      state.user = null
-      await withBypassContext(() => dropScratchOrg(org.orgId))
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
   },
-)
-
+);
 
 // A subsidiary-restricted actor drafts and links activities: subjects outside
 // the actor's scope refuse, and the refusal writes nothing.
 async function scopedCrmFixture() {
-  const { org, actor } = await fixture()
-  const hidden = randomUUID()
+  const { org, actor } = await fixture();
+  const hidden = randomUUID();
   try {
-    await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`))
-    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='crm_writer'`))
+    await withBypassContext(() =>
+      db.execute(
+        sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`,
+      ),
+    );
+    await withBypassContext(() =>
+      db.execute(
+        sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id=${org.orgId} and key='crm_writer'`,
+      ),
+    );
     const doc = async (number: string, subsidiaryId: string) => {
-      const id = randomUUID()
-      await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,status,subsidiary_id,created_by,updated_by) values (${id},${org.orgId},'sales_order',${number},${org.customerId},${org.date},'CAD','draft',${subsidiaryId},${actor},${actor})`))
-      return id
-    }
-    const visible = await doc('VIS-LINK-1', org.subsidiaryId)
-    const concealed = await doc('HID-LINK-1', hidden)
-    return { org, actor, hidden, visible, concealed }
+      const id = randomUUID();
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,status,subsidiary_id,created_by,updated_by) values (${id},${org.orgId},'sales_order',${number},${org.customerId},${org.date},'CAD','draft',${subsidiaryId},${actor},${actor})`,
+        ),
+      );
+      return id;
+    };
+    const visible = await doc("VIS-LINK-1", org.subsidiaryId);
+    const concealed = await doc("HID-LINK-1", hidden);
+    return { org, actor, hidden, visible, concealed };
   } catch (e) {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-    throw e
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+    throw e;
   }
 }
 
 async function activityCount(orgId: string) {
-  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_activities where org_id=${orgId}`, 'objects'))[0]!.n
+  return (
+    await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from crm_activities where org_id=${orgId}`,
+      "objects",
+    )
+  )[0]!.n;
 }
 
 async function linkSubjects(orgId: string, activityId: string) {
-  return (await db.execute<{ subject_id: string }>(sql`select subject_id from crm_activity_links where org_id=${orgId} and activity_id=${activityId} order by subject_id`, 'objects')).map((r) => r.subject_id)
+  return (
+    await db.execute<{ subject_id: string }>(
+      sql`select subject_id from crm_activity_links where org_id=${orgId} and activity_id=${activityId} order by subject_id`,
+      "objects",
+    )
+  ).map((r) => r.subject_id);
 }
 
-test('activity draft and link writes refuse out-of-scope subjects and write nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, visible, concealed } = await scopedCrmFixture()
-  try {
-    await withOrgContext(org.orgId, async () => {
-      const before = await activityCount(org.orgId)
-      const refused = await activityDraft(
-        new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task', subjectKind: 'document', subjectId: concealed }) }),
-      )
-      assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()))
-      assert.equal(await activityCount(org.orgId), before, 'a refused draft writes no activity')
-      assert.equal((await db.execute(sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${concealed}`, 'objects')).length, 0)
-
-      const accepted = await activityDraft(
-        new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task', subjectKind: 'document', subjectId: visible }) }),
-      )
-      assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()))
-      const activityId = (await accepted.json()).id as string
-      assert.deepEqual(await linkSubjects(org.orgId, activityId), [visible])
-
-      const relink = await activityEdit(request({ links: [{ subjectKind: 'document', subjectId: concealed }], expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
-      assert.equal(relink.status, 422, JSON.stringify(await relink.clone().json()))
-      assert.deepEqual(await linkSubjects(org.orgId, activityId), [visible], 'a refused relink keeps the stored links')
-    })
-  } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('activity draft waits on a subject rehome in flight instead of racing it', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, actor, hidden } = await scopedCrmFixture()
-  const writer = await pool.connect()
-  let pending: Promise<Response> | undefined
-  try {
-    const moving = randomUUID()
-    await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,status,subsidiary_id,created_by,updated_by) values (${moving},${org.orgId},'sales_order','MOV-LINK-1',${org.customerId},${org.date},'CAD','draft',${org.subsidiaryId},${actor},${actor})`))
-    const before = await activityCount(org.orgId)
-    await writer.query('begin')
-    await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
-    const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
-    await withBypassContext(() => (writer.query('update documents set subsidiary_id=$1 where id=$2 and org_id=$3', [hidden, moving, org.orgId])))
-    pending = withOrgContext(org.orgId, () => activityDraft(
-      new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task', subjectKind: 'document', subjectId: moving }) }),
-    ))
-    let blocked = false
-    for (let n = 0; n < 200; n++) {
-      blocked = !!((await pool.query('select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))', [pid])).rowCount)
-      if (blocked) break
-      await new Promise((resolve) => setTimeout(resolve, 10))
-    }
-    assert.ok(blocked, 'the draft waits on the locked subject instead of linking the pre-rehome row')
-    await writer.query('commit')
-    const response = await pending
-    assert.equal(response.status, 404, JSON.stringify(await response.clone().json()))
-    assert.equal(await activityCount(org.orgId), before, 'the draft refused after the rehome committed writes nothing')
-    assert.equal((await db.execute(sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${moving}`, 'objects')).length, 0)
-  } finally {
-    await writer.query('rollback').catch(() => {})
-    await pending?.catch(() => {})
-    writer.release()
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('activity PATCH refuses a token predating a concurrent commit and preserves deleted children',
-  { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const { org, actor } = await fixture()
-    const writer = await pool.connect()
-    let pending: Promise<Response> | undefined
+test(
+  "activity draft and link writes refuse out-of-scope subjects and write nothing",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, visible, concealed } = await scopedCrmFixture();
     try {
-      const draft = await withOrgContext(org.orgId, () => activityDraft(
-        new NextRequest('http://crm.local', {method:'POST',body:JSON.stringify({kind:'task'})}),
-      ))
-      assert.equal(draft.status,200)
-      const id = (await draft.json()).id as string
+      await withOrgContext(org.orgId, async () => {
+        const before = await activityCount(org.orgId);
+        const refused = await activityDraft(
+          new NextRequest("http://crm.local", {
+            method: "POST",
+            body: JSON.stringify({ kind: "task", subjectKind: "document", subjectId: concealed }),
+          }),
+        );
+        assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
+        assert.equal(await activityCount(org.orgId), before, "a refused draft writes no activity");
+        assert.equal(
+          (
+            await db.execute(
+              sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${concealed}`,
+              "objects",
+            )
+          ).length,
+          0,
+        );
+
+        const accepted = await activityDraft(
+          new NextRequest("http://crm.local", {
+            method: "POST",
+            body: JSON.stringify({ kind: "task", subjectKind: "document", subjectId: visible }),
+          }),
+        );
+        assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()));
+        const activityId = (await accepted.json()).id as string;
+        assert.deepEqual(await linkSubjects(org.orgId, activityId), [visible]);
+
+        const relink = await activityEdit(
+          request({
+            links: [{ subjectKind: "document", subjectId: concealed }],
+            expectedUpdatedAt: await activityToken(org.orgId, activityId),
+          }),
+          params(activityId),
+        );
+        assert.equal(relink.status, 422, JSON.stringify(await relink.clone().json()));
+        assert.deepEqual(
+          await linkSubjects(org.orgId, activityId),
+          [visible],
+          "a refused relink keeps the stored links",
+        );
+      });
+    } finally {
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "activity draft waits on a subject rehome in flight instead of racing it",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, actor, hidden } = await scopedCrmFixture();
+    const writer = await pool.connect();
+    let pending: Promise<Response> | undefined;
+    try {
+      const moving = randomUUID();
+      await withBypassContext(() =>
+        db.execute(
+          sql`insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,status,subsidiary_id,created_by,updated_by) values (${moving},${org.orgId},'sales_order','MOV-LINK-1',${org.customerId},${org.date},'CAD','draft',${org.subsidiaryId},${actor},${actor})`,
+        ),
+      );
+      const before = await activityCount(org.orgId);
+      await writer.query("begin");
+      await writer.query(
+        "select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)",
+      );
+      const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+        .pid;
+      await withBypassContext(() =>
+        writer.query("update documents set subsidiary_id=$1 where id=$2 and org_id=$3", [
+          hidden,
+          moving,
+          org.orgId,
+        ]),
+      );
+      pending = withOrgContext(org.orgId, () =>
+        activityDraft(
+          new NextRequest("http://crm.local", {
+            method: "POST",
+            body: JSON.stringify({ kind: "task", subjectKind: "document", subjectId: moving }),
+          }),
+        ),
+      );
+      let blocked = false;
+      for (let n = 0; n < 200; n++) {
+        blocked = !!(
+          await pool.query("select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))", [
+            pid,
+          ])
+        ).rowCount;
+        if (blocked) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.ok(
+        blocked,
+        "the draft waits on the locked subject instead of linking the pre-rehome row",
+      );
+      await writer.query("commit");
+      const response = await pending;
+      assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));
+      assert.equal(
+        await activityCount(org.orgId),
+        before,
+        "the draft refused after the rehome committed writes nothing",
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${moving}`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
+    } finally {
+      await writer.query("rollback").catch(() => {});
+      await pending?.catch(() => {});
+      writer.release();
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "activity PATCH refuses a token predating a concurrent commit and preserves deleted children",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, actor } = await fixture();
+    const writer = await pool.connect();
+    let pending: Promise<Response> | undefined;
+    try {
+      const draft = await withOrgContext(org.orgId, () =>
+        activityDraft(
+          new NextRequest("http://crm.local", {
+            method: "POST",
+            body: JSON.stringify({ kind: "task" }),
+          }),
+        ),
+      );
+      assert.equal(draft.status, 200);
+      const id = (await draft.json()).id as string;
       // Token read before the concurrent commit: the pending save below must
       // lose to it with a 409 instead of silently overwriting it.
-      const stale = await withOrgContext(org.orgId, () => activityToken(org.orgId, id))
-      await writer.query('begin')
-      await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
-      const pid = (await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid
-      await withBypassContext(() => (writer.query('update crm_activities set subject=$1, updated_at=now() where id=$2 and org_id=$3',['Concurrent predecessor',id,org.orgId])))
-      pending = withOrgContext(org.orgId, () => activityEdit(request({subject:'Final save',participants:[{userId:actor}],expectedUpdatedAt:stale}),params(id)))
-      let blocked=false
-      for(let n=0;n<200;n++) {
-        blocked=!!(await pool.query('select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))',[pid])).rowCount
-        if(blocked) break
-        await new Promise(resolve=>setTimeout(resolve,10))
+      const stale = await withOrgContext(org.orgId, () => activityToken(org.orgId, id));
+      await writer.query("begin");
+      await writer.query(
+        "select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)",
+      );
+      const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+        .pid;
+      await withBypassContext(() =>
+        writer.query(
+          "update crm_activities set subject=$1, updated_at=now() where id=$2 and org_id=$3",
+          ["Concurrent predecessor", id, org.orgId],
+        ),
+      );
+      pending = withOrgContext(org.orgId, () =>
+        activityEdit(
+          request({
+            subject: "Final save",
+            participants: [{ userId: actor }],
+            expectedUpdatedAt: stale,
+          }),
+          params(id),
+        ),
+      );
+      let blocked = false;
+      for (let n = 0; n < 200; n++) {
+        blocked = !!(
+          await pool.query("select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))", [
+            pid,
+          ])
+        ).rowCount;
+        if (blocked) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
       }
-      assert.ok(blocked,'PATCH read its preflight and waits on the locked predecessor')
-      await writer.query('commit')
-      const response=await pending
-      assert.equal(response.status,409,JSON.stringify(await response.clone().json()))
-      assert.match(String((await response.json() as { error?: unknown }).error ?? ''),/changed after you opened it/)
-      await withOrgContext(org.orgId,async()=>{
+      assert.ok(blocked, "PATCH read its preflight and waits on the locked predecessor");
+      await writer.query("commit");
+      const response = await pending;
+      assert.equal(response.status, 409, JSON.stringify(await response.clone().json()));
+      assert.match(
+        String(((await response.json()) as { error?: unknown }).error ?? ""),
+        /changed after you opened it/,
+      );
+      await withOrgContext(org.orgId, async () => {
         // The refused write changed nothing and left no update evidence: the
         // concurrent predecessor stands.
-        const stored=(await db.execute<{subject:string}>(sql`
-          select subject from crm_activities where org_id=${org.orgId} and id=${id}`, 'objects'))[0]!
-        assert.equal(stored.subject,'Concurrent predecessor')
-        const updates=await db.execute<{action:string}>(sql`
-          select action from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='update'`, 'objects')
-        assert.equal(updates.length,0)
+        const stored = (
+          await db.execute<{ subject: string }>(
+            sql`
+          select subject from crm_activities where org_id=${org.orgId} and id=${id}`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(stored.subject, "Concurrent predecessor");
+        const updates = await db.execute<{ action: string }>(
+          sql`
+          select action from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='update'`,
+          "objects",
+        );
+        assert.equal(updates.length, 0);
         // A fresh token still saves, so the delete half keeps its participant
         // evidence coverage.
-        const resave=await activityEdit(request({subject:'Final save',participants:[{userId:actor}],expectedUpdatedAt:await activityToken(org.orgId,id)}),params(id))
-        assert.equal(resave.status,200,JSON.stringify(await resave.clone().json()))
-        const result=await activityDelete(new Request('http://crm.local',{method:'DELETE'}),params(id))
-        assert.equal(result.status,200)
-        const removed=(await db.execute<{changes:{after:null;participants:{user_id:string}[];links:unknown[]}}>(sql`
-          select changes from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='delete'`, 'objects'))[0]!
-        assert.equal(removed.changes.after,null)
-        assert.deepEqual(removed.changes.participants.map(p=>p.user_id),[actor])
-        assert.deepEqual(removed.changes.links,[])
-      })
+        const resave = await activityEdit(
+          request({
+            subject: "Final save",
+            participants: [{ userId: actor }],
+            expectedUpdatedAt: await activityToken(org.orgId, id),
+          }),
+          params(id),
+        );
+        assert.equal(resave.status, 200, JSON.stringify(await resave.clone().json()));
+        const result = await activityDelete(
+          new Request("http://crm.local", { method: "DELETE" }),
+          params(id),
+        );
+        assert.equal(result.status, 200);
+        const removed = (
+          await db.execute<{
+            changes: { after: null; participants: { user_id: string }[]; links: unknown[] };
+          }>(
+            sql`
+          select changes from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='delete'`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(removed.changes.after, null);
+        assert.deepEqual(
+          removed.changes.participants.map((p) => p.user_id),
+          [actor],
+        );
+        assert.deepEqual(removed.changes.links, []);
+      });
     } finally {
-      await writer.query('rollback').catch(()=>{})
-      await pending?.catch(()=>{})
-      writer.release()
-      state.user=null
-      await withBypassContext(()=>dropScratchOrg(org.orgId))
+      await writer.query("rollback").catch(() => {});
+      await pending?.catch(() => {});
+      writer.release();
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
-  })
+  },
+);

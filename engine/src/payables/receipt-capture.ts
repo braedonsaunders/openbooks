@@ -41,13 +41,19 @@ import {
 export const DEFAULT_RECEIPT_MODEL = "prebuilt-receipt";
 
 /** Receipt evidence formats the provider reads and the cabinet previews. */
-export const RECEIPT_CONTENT_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/tiff"] as const;
+export const RECEIPT_CONTENT_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/tiff",
+] as const;
 export type ReceiptContentType = (typeof RECEIPT_CONTENT_TYPES)[number];
 export function isReceiptContentType(value: string): value is ReceiptContentType {
   return (RECEIPT_CONTENT_TYPES as readonly string[]).includes(value);
 }
 
-export type ReceiptHeaderField = "merchantName" | "transactionDate" | "currency" | "subtotal" | "taxTotal" | "tip" | "total";
+export type ReceiptHeaderField =
+  "merchantName" | "transactionDate" | "currency" | "subtotal" | "taxTotal" | "tip" | "total";
 
 export type ReceiptTaxDetail = {
   /** Canonical amount, or the refused supplied text. */
@@ -117,7 +123,12 @@ export function normalizeAzureReceipt(raw: AzureAnalyzeResponse): {
   if (!document) throw new Error("Document provider returned no recognized receipt");
   const fields = document.fields ?? {};
   const evidence: CaptureEvidence[] = [];
-  const record = (key: string, field: AzureField | undefined, value: unknown, lineIndex: number | null = null) => {
+  const record = (
+    key: string,
+    field: AzureField | undefined,
+    value: unknown,
+    lineIndex: number | null = null,
+  ) => {
     if (field) evidence.push(azureEvidence(key, field, value, lineIndex));
   };
 
@@ -125,16 +136,19 @@ export function normalizeAzureReceipt(raw: AzureAnalyzeResponse): {
   record("merchantName", fields.MerchantName, merchantName);
   const merchantAddress = azureFieldText(fields.MerchantAddress);
   record("merchantAddress", fields.MerchantAddress, merchantAddress);
-  const merchantPhone = typeof fields.MerchantPhoneNumber?.valuePhoneNumber === "string"
-    ? fields.MerchantPhoneNumber.valuePhoneNumber.trim() || null
-    : azureFieldText(fields.MerchantPhoneNumber);
+  const merchantPhone =
+    typeof fields.MerchantPhoneNumber?.valuePhoneNumber === "string"
+      ? fields.MerchantPhoneNumber.valuePhoneNumber.trim() || null
+      : azureFieldText(fields.MerchantPhoneNumber);
   record("merchantPhone", fields.MerchantPhoneNumber, merchantPhone);
 
   // Only a typed calendar date is a date. Printed text such as "03/04/26"
   // has several readings, so it rides as evidence and the draft stays blank.
   const typedDate = fields.TransactionDate?.valueDate?.trim() ?? null;
   const transactionDate = typedDate && isIsoCalendarDate(typedDate) ? typedDate : null;
-  const transactionDateText = transactionDate ? null : (fields.TransactionDate?.content?.trim() || typedDate || null);
+  const transactionDateText = transactionDate
+    ? null
+    : fields.TransactionDate?.content?.trim() || typedDate || null;
   record("transactionDate", fields.TransactionDate, transactionDate);
 
   const subtotal = receiptMoney(fields.Subtotal);
@@ -146,17 +160,21 @@ export function normalizeAzureReceipt(raw: AzureAnalyzeResponse): {
   const total = receiptMoney(fields.Total);
   record("total", fields.Total, total);
 
-  const taxDetails: ReceiptTaxDetail[] = (fields.TaxDetails?.valueArray ?? []).map((entry, index) => {
-    const detail = entry.valueObject ?? {};
-    const amount = receiptMoney(detail.Amount);
-    record("taxDetails.amount", detail.Amount, amount, index);
-    return {
-      amount,
-      rate: detail.Rate?.content?.trim() || (typeof detail.Rate?.valueNumber === "number" ? String(detail.Rate.valueNumber) : null),
-      netAmount: receiptMoney(detail.NetAmount),
-      description: azureFieldText(detail.Description),
-    };
-  });
+  const taxDetails: ReceiptTaxDetail[] = (fields.TaxDetails?.valueArray ?? []).map(
+    (entry, index) => {
+      const detail = entry.valueObject ?? {};
+      const amount = receiptMoney(detail.Amount);
+      record("taxDetails.amount", detail.Amount, amount, index);
+      return {
+        amount,
+        rate:
+          detail.Rate?.content?.trim() ||
+          (typeof detail.Rate?.valueNumber === "number" ? String(detail.Rate.valueNumber) : null),
+        netAmount: receiptMoney(detail.NetAmount),
+        description: azureFieldText(detail.Description),
+      };
+    },
+  );
 
   const items: ReceiptItem[] = [];
   for (const entry of fields.Items?.valueArray ?? []) {
@@ -179,13 +197,18 @@ export function normalizeAzureReceipt(raw: AzureAnalyzeResponse): {
   // The currency is what the document states, from any amount. Conflicting
   // codes are not reconciled here; the reviewer sees every reading.
   const readings = [
-    currencyCode(fields.Total), currencyCode(fields.Subtotal), currencyCode(fields.TotalTax), currencyCode(fields.Tip),
+    currencyCode(fields.Total),
+    currencyCode(fields.Subtotal),
+    currencyCode(fields.TotalTax),
+    currencyCode(fields.Tip),
     ...(fields.Items?.valueArray ?? []).map((entry) => currencyCode(entry.valueObject?.TotalPrice)),
   ].filter((code): code is string => code !== null);
   const currencyReadings = [...new Set(readings)];
   const currency = currencyReadings.length === 1 ? currencyReadings[0]! : null;
   const symbol = currencySymbol(fields.Total) ?? currencySymbol(fields.Subtotal);
-  const currencyField = [fields.Total, fields.Subtotal, fields.TotalTax, fields.Tip].find((field) => currencyCode(field));
+  const currencyField = [fields.Total, fields.Subtotal, fields.TotalTax, fields.Tip].find((field) =>
+    currencyCode(field),
+  );
 
   applyAzurePageGeometry(raw, evidence);
   return {
@@ -240,19 +263,32 @@ export function validateNormalizedReceipt(
   options: { confidenceThreshold: string; today?: string },
 ): CaptureIssue[] {
   const issues: CaptureIssue[] = [];
-  if (!receipt.merchantName) issues.push({ code: "required_field", severity: "blocking", field: "merchantName" });
+  if (!receipt.merchantName)
+    issues.push({ code: "required_field", severity: "blocking", field: "merchantName" });
   if (receipt.transactionDate === null) {
-    issues.push(receipt.transactionDateText
-      ? {
-          code: "invalid_date",
-          severity: "blocking",
-          field: "transactionDate",
-          actual: receipt.transactionDateText,
-          message: `The receipt date "${receipt.transactionDateText}" could not be read as one calendar date — enter the transaction date shown on the receipt`,
-        }
-      : { code: "required_field", severity: "blocking", field: "transactionDate" });
-  } else if (options.today && isIsoCalendarDate(options.today) && receipt.transactionDate > options.today) {
-    issues.push({ code: "future_date", severity: "warning", field: "transactionDate", actual: receipt.transactionDate, expected: options.today });
+    issues.push(
+      receipt.transactionDateText
+        ? {
+            code: "invalid_date",
+            severity: "blocking",
+            field: "transactionDate",
+            actual: receipt.transactionDateText,
+            message: `The receipt date "${receipt.transactionDateText}" could not be read as one calendar date — enter the transaction date shown on the receipt`,
+          }
+        : { code: "required_field", severity: "blocking", field: "transactionDate" },
+    );
+  } else if (
+    options.today &&
+    isIsoCalendarDate(options.today) &&
+    receipt.transactionDate > options.today
+  ) {
+    issues.push({
+      code: "future_date",
+      severity: "warning",
+      field: "transactionDate",
+      actual: receipt.transactionDate,
+      expected: options.today,
+    });
   }
   if (!receipt.total) issues.push({ code: "required_field", severity: "blocking", field: "total" });
 
@@ -278,18 +314,26 @@ export function validateNormalizedReceipt(
       severity: "warning",
       field: "currency",
       ...(receipt.currencySymbol ? { actual: receipt.currencySymbol } : {}),
-      message: "The receipt does not state a currency code — confirm the amount is in the report currency",
+      message:
+        "The receipt does not state a currency code — confirm the amount is in the report currency",
     });
   }
 
   for (const field of MONEY_FIELDS) {
     const value = receipt[field];
     if (value === null) continue;
-    if (!isCanonicalMoney(value)) issues.push(invalidMoneyIssue(field, "an amount", value, { field }));
-    else if (!withinNumeric19_4(value)) issues.push({ code: "amount_out_of_range", severity: "blocking", field });
+    if (!isCanonicalMoney(value))
+      issues.push(invalidMoneyIssue(field, "an amount", value, { field }));
+    else if (!withinNumeric19_4(value))
+      issues.push({ code: "amount_out_of_range", severity: "blocking", field });
   }
   if (usableMoney(receipt.total) && cmp(receipt.total, "0") <= 0) {
-    issues.push({ code: "non_positive_total", severity: "warning", field: "total", actual: receipt.total });
+    issues.push({
+      code: "non_positive_total",
+      severity: "warning",
+      field: "total",
+      actual: receipt.total,
+    });
   }
 
   for (const field of ["merchantName", "transactionDate", "currency", ...MONEY_FIELDS] as const) {
@@ -313,21 +357,46 @@ export function validateNormalizedReceipt(
     if (components.every((value) => value === null || usableMoney(value))) {
       const expected = sum(components.filter((value): value is string => value !== null));
       if (cmp(expected, receipt.total) !== 0) {
-        issues.push({ code: "total_mismatch", severity: "warning", field: "total", expected, actual: receipt.total });
+        issues.push({
+          code: "total_mismatch",
+          severity: "warning",
+          field: "total",
+          expected,
+          actual: receipt.total,
+        });
       }
     }
   }
-  if (usableMoney(receipt.taxTotal) && receipt.taxDetails.length > 0
-    && receipt.taxDetails.every((detail) => usableMoney(detail.amount))) {
+  if (
+    usableMoney(receipt.taxTotal) &&
+    receipt.taxDetails.length > 0 &&
+    receipt.taxDetails.every((detail) => usableMoney(detail.amount))
+  ) {
     const expected = sum(receipt.taxDetails.map((detail) => detail.amount!));
     if (cmp(expected, receipt.taxTotal) !== 0) {
-      issues.push({ code: "tax_detail_mismatch", severity: "warning", field: "taxTotal", expected, actual: receipt.taxTotal });
+      issues.push({
+        code: "tax_detail_mismatch",
+        severity: "warning",
+        field: "taxTotal",
+        expected,
+        actual: receipt.taxTotal,
+      });
     }
   }
-  if (usableMoney(receipt.subtotal) && receipt.items.length > 0 && receipt.items.every((item) => usableMoney(item.amount))) {
+  if (
+    usableMoney(receipt.subtotal) &&
+    receipt.items.length > 0 &&
+    receipt.items.every((item) => usableMoney(item.amount))
+  ) {
     const expected = sum(receipt.items.map((item) => item.amount!));
     if (cmp(expected, receipt.subtotal) !== 0) {
-      issues.push({ code: "items_mismatch", severity: "warning", field: "subtotal", expected, actual: receipt.subtotal });
+      issues.push({
+        code: "items_mismatch",
+        severity: "warning",
+        field: "subtotal",
+        expected,
+        actual: receipt.subtotal,
+      });
     }
   }
   return issues;
@@ -343,7 +412,11 @@ export function receiptMerchantKey(name: string | null | undefined): string | nu
   if (!name) return null;
   // Accents fold only on Latin letters: a Japanese voicing mark distinguishes
   // words and must survive.
-  const key = name.normalize("NFKD").replace(/(\p{Script=Latin})\p{M}+/gu, "$1").normalize("NFC").toLowerCase()
+  const key = name
+    .normalize("NFKD")
+    .replace(/(\p{Script=Latin})\p{M}+/gu, "$1")
+    .normalize("NFC")
+    .toLowerCase()
     .replace(/#\s*\d+/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, "");
   return key || null;
@@ -359,7 +432,8 @@ export type DraftField = {
   needsReview: boolean;
 };
 
-export type AccountSuggestionSource = "employee_history" | "organization_history" | "vendor_default";
+export type AccountSuggestionSource =
+  "employee_history" | "organization_history" | "vendor_default";
 export type AccountSuggestion = { accountId: string; source: AccountSuggestionSource };
 
 export type ReceiptLineDraft = {
@@ -378,7 +452,13 @@ export type ReceiptLineDraft = {
   suggestedAccount: AccountSuggestion | null;
 };
 
-function draftField(reading: string | null, confidence: string | null, threshold: string, valid: boolean, required: boolean): DraftField {
+function draftField(
+  reading: string | null,
+  confidence: string | null,
+  threshold: string,
+  valid: boolean,
+  required: boolean,
+): DraftField {
   if (reading === null) return { value: null, reading: null, confidence, needsReview: required };
   const confident = valid && !belowThreshold(confidence, threshold);
   return { value: confident ? reading : null, reading, confidence, needsReview: !confident };
@@ -399,11 +479,30 @@ export function draftExpenseLineFromReceipt(input: {
 }): ReceiptLineDraft {
   const { receipt, confidenceThreshold: threshold } = input;
   const currencyValid = receipt.currency !== null && isIso4217CurrencyCode(receipt.currency);
-  const currency = draftField(receipt.currency, receipt.confidence.currency, threshold, currencyValid, true);
-  const currencyMatchesReport = currency.value === null ? null : currency.value === input.reportCurrency;
+  const currency = draftField(
+    receipt.currency,
+    receipt.confidence.currency,
+    threshold,
+    currencyValid,
+    true,
+  );
+  const currencyMatchesReport =
+    currency.value === null ? null : currency.value === input.reportCurrency;
   const money = (field: "total" | "taxTotal" | "tip", required: boolean): DraftField =>
-    draftField(receipt[field], receipt.confidence[field], threshold, usableMoney(receipt[field]), required);
-  const merchant = draftField(receipt.merchantName, receipt.confidence.merchantName, threshold, true, true);
+    draftField(
+      receipt[field],
+      receipt.confidence[field],
+      threshold,
+      usableMoney(receipt[field]),
+      required,
+    );
+  const merchant = draftField(
+    receipt.merchantName,
+    receipt.confidence.merchantName,
+    threshold,
+    true,
+    true,
+  );
   return {
     transactionDate: draftField(
       receipt.transactionDate ?? receipt.transactionDateText,
@@ -455,22 +554,27 @@ export type ReceiptDuplicateCandidate = {
 };
 
 /** Duplicate receipts warn; the reviewer decides whether the expense is a second one. */
-export function receiptDuplicateIssues(candidates: readonly ReceiptDuplicateCandidate[]): CaptureIssue[] {
+export function receiptDuplicateIssues(
+  candidates: readonly ReceiptDuplicateCandidate[],
+): CaptureIssue[] {
   const seen = new Set<string>();
   const issues: CaptureIssue[] = [];
   for (const candidate of candidates) {
     const key = `${candidate.reason}:${candidate.documentId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const where = candidate.sameReport ? "this report" : `expense report ${candidate.documentNumber ?? candidate.documentId}`;
+    const where = candidate.sameReport
+      ? "this report"
+      : `expense report ${candidate.documentNumber ?? candidate.documentId}`;
     issues.push({
       code: "possible_duplicate",
       severity: "warning",
       cause: candidate.reason,
       detail: candidate.documentNumber ?? candidate.documentId,
-      message: candidate.reason === "same_file"
-        ? `This receipt file was already scanned on ${where} — discard it unless this is a separate expense`
-        : `A receipt with the same merchant, date and total is already on ${where} — discard it unless this is a separate expense`,
+      message:
+        candidate.reason === "same_file"
+          ? `This receipt file was already scanned on ${where} — discard it unless this is a separate expense`
+          : `A receipt with the same merchant, date and total is already on ${where} — discard it unless this is a separate expense`,
     });
   }
   return issues;
@@ -483,7 +587,7 @@ export function receiptDuplicateIssues(candidates: readonly ReceiptDuplicateCand
  */
 export const RECEIPT_LLM_PROMPT = [
   "You read one expense receipt. Answer with ONLY a JSON object: no prose, no code fences.",
-  "Every field is an object {\"value\": ..., \"confidence\": number from 0 to 1} giving your confidence that the value is exactly what the receipt prints.",
+  'Every field is an object {"value": ..., "confidence": number from 0 to 1} giving your confidence that the value is exactly what the receipt prints.',
   "Use null for any value that is not visible or not legible. Never guess, infer, compute or default a value.",
   "Use exactly these keys:",
   "{",
@@ -506,7 +610,9 @@ export const RECEIPT_LLM_PROMPT = [
 ].join("\n");
 
 function llmObject(raw: unknown): Record<string, unknown> {
-  return raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  return raw && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : {};
 }
 
 /**
@@ -520,7 +626,9 @@ export function normalizeLlmReceipt(answer: Record<string, unknown>): {
   overallConfidence: string | null;
 } {
   if (!("total" in answer) && !("merchantName" in answer)) {
-    throw new Error("The AI model's answer was not a receipt reading — retry the scan, or enter the line by hand");
+    throw new Error(
+      "The AI model's answer was not a receipt reading — retry the scan, or enter the line by hand",
+    );
   }
   const evidence: CaptureEvidence[] = [];
   const text = (key: string): LlmField => {
@@ -542,13 +650,24 @@ export function normalizeLlmReceipt(answer: Record<string, unknown>): {
   const dateRaw = llmObject(answer.transactionDate);
   const dateField = readLlmField(dateRaw);
   const date = llmDate(dateField);
-  const printedDate = typeof dateRaw.text === "string" && dateRaw.text.trim() ? dateRaw.text.trim() : null;
-  if (dateField.value !== null || printedDate) evidence.push(llmEvidence("transactionDate", { ...dateField, raw: printedDate ?? dateField.raw }, date.date));
+  const printedDate =
+    typeof dateRaw.text === "string" && dateRaw.text.trim() ? dateRaw.text.trim() : null;
+  if (dateField.value !== null || printedDate)
+    evidence.push(
+      llmEvidence(
+        "transactionDate",
+        { ...dateField, raw: printedDate ?? dateField.raw },
+        date.date,
+      ),
+    );
 
   const currencyRaw = llmObject(answer.currency);
   const currencyField = readLlmField(currencyRaw);
   const code = currencyField.value?.toUpperCase() ?? null;
-  const symbol = typeof currencyRaw.symbol === "string" && currencyRaw.symbol.trim() ? currencyRaw.symbol.trim() : null;
+  const symbol =
+    typeof currencyRaw.symbol === "string" && currencyRaw.symbol.trim()
+      ? currencyRaw.symbol.trim()
+      : null;
   if (code !== null) evidence.push(llmEvidence("currency", currencyField, code));
 
   const subtotal = money("subtotal");
@@ -556,20 +675,24 @@ export function normalizeLlmReceipt(answer: Record<string, unknown>): {
   const tip = money("tip");
   const total = money("total");
 
-  const taxDetails: ReceiptTaxDetail[] = (Array.isArray(answer.taxDetails) ? answer.taxDetails : []).slice(0, 50).map((entry, index) => {
-    const detail = llmObject(entry);
-    const amountField = readLlmField({ value: detail.amount, confidence: null });
-    const reading = llmMoney(amountField);
-    const amount = reading.canonical ?? reading.supplied;
-    if (amountField.value !== null) evidence.push(llmEvidence("taxDetails.amount", amountField, amount, index));
-    const net = llmMoney(readLlmField({ value: detail.netAmount }));
-    return {
-      amount,
-      rate: typeof detail.rate === "string" ? detail.rate.trim() || null : null,
-      netAmount: net.canonical ?? net.supplied,
-      description: typeof detail.description === "string" ? detail.description.trim() || null : null,
-    };
-  });
+  const taxDetails: ReceiptTaxDetail[] = (Array.isArray(answer.taxDetails) ? answer.taxDetails : [])
+    .slice(0, 50)
+    .map((entry, index) => {
+      const detail = llmObject(entry);
+      const amountField = readLlmField({ value: detail.amount, confidence: null });
+      const reading = llmMoney(amountField);
+      const amount = reading.canonical ?? reading.supplied;
+      if (amountField.value !== null)
+        evidence.push(llmEvidence("taxDetails.amount", amountField, amount, index));
+      const net = llmMoney(readLlmField({ value: detail.netAmount }));
+      return {
+        amount,
+        rate: typeof detail.rate === "string" ? detail.rate.trim() || null : null,
+        netAmount: net.canonical ?? net.supplied,
+        description:
+          typeof detail.description === "string" ? detail.description.trim() || null : null,
+      };
+    });
 
   const items: ReceiptItem[] = [];
   for (const entry of (Array.isArray(answer.items) ? answer.items : []).slice(0, 50)) {
@@ -580,8 +703,17 @@ export function normalizeLlmReceipt(answer: Record<string, unknown>): {
     const amount = reading.canonical ?? reading.supplied;
     if (!description && amount === null) continue;
     const index = items.length;
-    if (description) evidence.push(llmEvidence("items.description", { value: description, confidence: amountField.confidence, raw: description }, description, index));
-    if (amountField.value !== null) evidence.push(llmEvidence("items.amount", amountField, amount, index));
+    if (description)
+      evidence.push(
+        llmEvidence(
+          "items.description",
+          { value: description, confidence: amountField.confidence, raw: description },
+          description,
+          index,
+        ),
+      );
+    if (amountField.value !== null)
+      evidence.push(llmEvidence("items.amount", amountField, amount, index));
     const quantity = llmMoney(readLlmField({ value: item.quantity }));
     const unitPrice = llmMoney(readLlmField({ value: item.unitPrice }));
     items.push({
@@ -632,10 +764,18 @@ export async function extractLlmReceipt(input: {
   bytes: Uint8Array;
   fetchImpl?: typeof fetch;
   lookup?: AddressLookup;
-}): Promise<{ raw: { answer: string }; normalized: NormalizedReceipt; evidence: CaptureEvidence[]; overallConfidence: string | null }> {
+}): Promise<{
+  raw: { answer: string };
+  normalized: NormalizedReceipt;
+  evidence: CaptureEvidence[];
+  overallConfidence: string | null;
+}> {
   const answer = await requestLlmVision({ ...input, prompt: RECEIPT_LLM_PROMPT });
   const parsed = extractJsonObject(answer);
-  if (!parsed) throw new Error("The AI model did not answer with a receipt reading — retry the scan, or enter the line by hand");
+  if (!parsed)
+    throw new Error(
+      "The AI model did not answer with a receipt reading — retry the scan, or enter the line by hand",
+    );
   return { raw: { answer }, ...normalizeLlmReceipt(parsed) };
 }
 
@@ -647,7 +787,12 @@ export async function extractAzureReceipt(input: {
   bytes: Uint8Array;
   fetchImpl?: typeof fetch;
   lookup?: AddressLookup;
-}): Promise<{ raw: AzureAnalyzeResponse; normalized: NormalizedReceipt; evidence: CaptureEvidence[]; overallConfidence: string | null }> {
+}): Promise<{
+  raw: AzureAnalyzeResponse;
+  normalized: NormalizedReceipt;
+  evidence: CaptureEvidence[];
+  overallConfidence: string | null;
+}> {
   const raw = await analyzeAzureDocument({ ...input, model: DEFAULT_RECEIPT_MODEL });
   return { raw, ...normalizeAzureReceipt(raw) };
 }

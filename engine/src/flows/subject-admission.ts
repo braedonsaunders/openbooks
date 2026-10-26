@@ -53,7 +53,13 @@ export async function resolveFlowSubjectAdmission(
   graph: Pick<AutomationGraph, "subjectScope">,
 ): Promise<FlowSubjectAdmissionResult> {
   if (!graph.subjectScope) return { admission: "admitted", subsidiaryId: null };
-  const owners = await resolveSubjectSubsidiaries(orgId, subjectKind, adapter.scope, [subjectId], null);
+  const owners = await resolveSubjectSubsidiaries(
+    orgId,
+    subjectKind,
+    adapter.scope,
+    [subjectId],
+    null,
+  );
   const subsidiaryId = owners.get(subjectId) ?? null;
   return { admission: flowSubjectAdmission(graph.subjectScope, subsidiaryId), subsidiaryId };
 }
@@ -95,7 +101,13 @@ export async function lockFlowSubjectAdmission(
     if (error instanceof ScopeNotFoundError) return { admission: "unresolved", subsidiaryId: null };
     throw error;
   }
-  const owners = await resolveSubjectSubsidiaries(orgId, subjectKind, adapter.scope, [subjectId], null);
+  const owners = await resolveSubjectSubsidiaries(
+    orgId,
+    subjectKind,
+    adapter.scope,
+    [subjectId],
+    null,
+  );
   const subsidiaryId = owners.get(subjectId) ?? null;
   return { admission: flowSubjectAdmission(graph.subjectScope, subsidiaryId), subsidiaryId };
 }
@@ -124,7 +136,9 @@ export function flowGraphAdmitsSubjectSql(graph: SQL, subsidiaryId: SQL): SQL {
 /** Canonical (trimmed, lowercase) subsidiary id set for scope comparisons. */
 export function canonicalSubsidiaryIds(ids: Iterable<unknown>): Set<string> {
   return new Set(
-    [...ids].filter((id) => typeof id === "string").map((id) => (id as string).trim().toLowerCase()),
+    [...ids]
+      .filter((id) => typeof id === "string")
+      .map((id) => (id as string).trim().toLowerCase()),
   );
 }
 
@@ -164,11 +178,14 @@ export async function validateFlowSubjectScopeRefs(
       return "this flow names a legal entity outside your subsidiary access — choose only legal entities you administer, or ask an administrator with unrestricted access";
     }
   }
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from subsidiaries
      where org_id = ${orgId}
        and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
-  `, "objects");
+  `,
+    "objects",
+  );
   if (rows.length !== ids.length) {
     return "this flow names a legal entity that does not belong to this organization — choose from this organization's legal entities";
   }

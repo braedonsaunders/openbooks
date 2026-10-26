@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   page,
   pageHeader,
@@ -10,11 +10,11 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
-import { listKioskWorkersInScope } from '@openbooks/engine/hrm/field-time/kiosk'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
+import { listKioskWorkersInScope } from "@openbooks/engine/hrm/field-time/kiosk";
 
 /**
  * The field-time setup surface: declared rules, kiosks with token
@@ -24,115 +24,142 @@ import { listKioskWorkersInScope } from '@openbooks/engine/hrm/field-time/kiosk'
  */
 
 export interface FieldSetupData {
-  title: string
-  description: string
-  tabs: { href: string; label: string; active: boolean }[]
-  employees: { value: string; label: string }[]
+  title: string;
+  description: string;
+  tabs: { href: string; label: string; active: boolean }[];
+  employees: { value: string; label: string }[];
   initialSettings: {
-    roundingIncrement: number | null
-    roundingMode: string | null
-    unpaidBreakMinutes: number | null
-    autoCloseHours: number | null
-    signatureRequired: boolean | null
-    equipmentToleranceHours: string | null
-    photoRequired: boolean | null
-  }
+    roundingIncrement: number | null;
+    roundingMode: string | null;
+    unpaidBreakMinutes: number | null;
+    autoCloseHours: number | null;
+    signatureRequired: boolean | null;
+    equipmentToleranceHours: string | null;
+    photoRequired: boolean | null;
+  };
   kiosks: {
-    id: string
-    name: string
-    locationId: string | null
-    projectId: string | null
-    pinRequired: boolean
-    photoRequired: boolean
-    isActive: boolean
-    lastSeenAt: string | null
-  }[]
-  kioskLinkBase: string
+    id: string;
+    name: string;
+    locationId: string | null;
+    projectId: string | null;
+    pinRequired: boolean;
+    photoRequired: boolean;
+    isActive: boolean;
+    lastSeenAt: string | null;
+  }[];
+  kioskLinkBase: string;
   /**
    * Whether the caller may manage kiosks (time.kiosk.manage): without it
    * the kiosk section hides instead of showing devices whose
    * register/revoke calls would only 403.
    */
-  canManageKiosks: boolean
+  canManageKiosks: boolean;
   /**
    * Whether the caller's settings edits would persist: the PUT needs
    * unrestricted subsidiary scope, so a restricted manager reads the
    * policy with disabled forms instead of failing saves.
    */
-  canEditPolicy: boolean
+  canEditPolicy: boolean;
 }
 
-const f = ref<FieldSetupData>()
+const f = ref<FieldSetupData>();
 
 export async function loadFieldSetupPage(): Promise<FieldSetupData> {
-  const authz = await requirePermission('time.manage')
-  await requireFeatureEnabled(authz.user.orgId, 'fieldTime')
-  const t = await getTranslations('timesheets')
-  const orgId = authz.user.orgId
+  const authz = await requirePermission("time.manage");
+  await requireFeatureEnabled(authz.user.orgId, "fieldTime");
+  const t = await getTranslations("timesheets");
+  const orgId = authz.user.orgId;
   // Kiosk devices are the kiosks API's authority (time.kiosk.manage on
   // top of the fieldTime gate this page already requires): without it the
   // section hides, and with a restricted scope the list matches that
   // API's project visibility exactly.
-  const canManageKiosks = can(authz, 'time.kiosk.manage')
-  const canEditPolicy = authz.allowedSubsidiaryIds === null
-  const settings = (await db.execute<{ settings: unknown }>(sql`
-    select settings->'fieldTime' as settings from orgs where id = ${orgId}`, 'objects'))[0]?.settings as Record<string, unknown> | null
+  const canManageKiosks = can(authz, "time.kiosk.manage");
+  const canEditPolicy = authz.allowedSubsidiaryIds === null;
+  const settings = (
+    await db.execute<{ settings: unknown }>(
+      sql`
+    select settings->'fieldTime' as settings from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0]?.settings as Record<string, unknown> | null;
   const employees = canManageKiosks
-    ? (await listKioskWorkersInScope(orgId, authz.allowedSubsidiaryIds)).map((worker) => ({ value: worker.id, label: worker.name }))
-    : []
+    ? (await listKioskWorkersInScope(orgId, authz.allowedSubsidiaryIds)).map((worker) => ({
+        value: worker.id,
+        label: worker.name,
+      }))
+    : [];
   const kiosks = !canManageKiosks
     ? []
-    : (await db.execute<FieldSetupData['kiosks'][number]>(sql`
+    : await db.execute<FieldSetupData["kiosks"][number]>(
+        sql`
     select id::text as id, name, location_id::text as "locationId",
            project_id::text as "projectId", pin_required as "pinRequired",
            photo_required as "photoRequired", is_active as "isActive",
            last_seen_at::text as "lastSeenAt"
       from time_kiosks where org_id = ${orgId}
-       ${authz.allowedSubsidiaryIds === null ? sql`` : sql`and project_id is not null and exists (
+       ${
+         authz.allowedSubsidiaryIds === null
+           ? sql``
+           : sql`and project_id is not null and exists (
          select 1 from projects p
           where p.org_id = time_kiosks.org_id and p.id = time_kiosks.project_id
             and ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
-       )`}
-     order by name`, 'objects'))
+       )`
+       }
+     order by name`,
+        "objects",
+      );
   return {
-    title: t('field.setupTitle'),
-    description: t('field.setupDescription'),
+    title: t("field.setupTitle"),
+    description: t("field.setupDescription"),
     tabs: [
-      { href: '/timesheets', label: t('field.timesheetsTab'), active: false },
-      { href: '/time/clock', label: t('field.clockTab'), active: false },
-      { href: '/time/crew', label: t('field.crewTab'), active: false },
-      { href: '/time/setup', label: t('field.setupTitle'), active: true },
+      { href: "/timesheets", label: t("field.timesheetsTab"), active: false },
+      { href: "/time/clock", label: t("field.clockTab"), active: false },
+      { href: "/time/crew", label: t("field.crewTab"), active: false },
+      { href: "/time/setup", label: t("field.setupTitle"), active: true },
     ],
     employees,
     initialSettings: {
-      roundingIncrement: typeof settings?.roundingIncrement === 'number' ? (settings.roundingIncrement as number) : null,
-      roundingMode: typeof settings?.roundingMode === 'string' ? (settings.roundingMode as string) : null,
-      unpaidBreakMinutes: typeof settings?.unpaidBreakMinutes === 'number' ? (settings.unpaidBreakMinutes as number) : null,
-      autoCloseHours: typeof settings?.autoCloseHours === 'number' ? (settings.autoCloseHours as number) : null,
-      signatureRequired: typeof settings?.signatureRequired === 'boolean' ? settings.signatureRequired : null,
-      equipmentToleranceHours: typeof settings?.equipmentToleranceHours === 'string' ? (settings.equipmentToleranceHours as string) : null,
-      photoRequired: typeof settings?.photoRequired === 'boolean' ? settings.photoRequired : null,
+      roundingIncrement:
+        typeof settings?.roundingIncrement === "number"
+          ? (settings.roundingIncrement as number)
+          : null,
+      roundingMode:
+        typeof settings?.roundingMode === "string" ? (settings.roundingMode as string) : null,
+      unpaidBreakMinutes:
+        typeof settings?.unpaidBreakMinutes === "number"
+          ? (settings.unpaidBreakMinutes as number)
+          : null,
+      autoCloseHours:
+        typeof settings?.autoCloseHours === "number" ? (settings.autoCloseHours as number) : null,
+      signatureRequired:
+        typeof settings?.signatureRequired === "boolean" ? settings.signatureRequired : null,
+      equipmentToleranceHours:
+        typeof settings?.equipmentToleranceHours === "string"
+          ? (settings.equipmentToleranceHours as string)
+          : null,
+      photoRequired: typeof settings?.photoRequired === "boolean" ? settings.photoRequired : null,
     },
     kiosks,
-    kioskLinkBase: '/kiosk',
+    kioskLinkBase: "/kiosk",
     canManageKiosks,
     canEditPolicy,
-  }
+  };
 }
 
 export function fieldSetupSpec(data: FieldSetupData): PageSpec {
   return page({
-    route: '/time/setup',
-    layout: 'list',
+    route: "/time/setup",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("module-home-tabs", { tabs: data.tabs })],
       }),
     ],
     body: [
-      widgetBlock('hrm-field-time-setup', {
+      widgetBlock("hrm-field-time-setup", {
         initialSettings: data.initialSettings,
         kiosks: data.kiosks,
         employees: data.employees,
@@ -141,10 +168,10 @@ export function fieldSetupSpec(data: FieldSetupData): PageSpec {
         canEditPolicy: data.canEditPolicy,
       }),
     ],
-  })
+  });
 }
 
 export async function fieldSetupTitle(): Promise<string> {
-  const t = await getTranslations('timesheets')
-  return t('field.setupTitle')
+  const t = await getTranslations("timesheets");
+  return t("field.setupTitle");
 }

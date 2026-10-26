@@ -1,18 +1,26 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
-import { flagsForEmployment, listFlags, type FlagRow } from '@openbooks/engine/hrm/ai/anomalies'
-import { AI_CAPABILITIES, AI_AUTONOMY_LADDER, autonomyRank } from '@openbooks/engine/hrm/ai/registry'
-import { explainPayslip, type ExplainPayTrace } from '@openbooks/engine/hrm/ai/explain-pay'
-import { listCapabilities, overdueReviews, type CapabilityRow } from '@openbooks/engine/hrm/ai/governance'
-import { loadAiRailsSettings } from '@openbooks/engine/hrm/ai/settings'
-import { actorPartyOf } from '@openbooks/engine/hrm/self-service/actor'
-import { can, type Authz } from '../authz'
-import { isFeatureEnabled } from '../features'
-import { groupTabs } from '../../components/module-home/group-tabs'
-import { getMoneyFormatter } from '../money-server'
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
+import { flagsForEmployment, listFlags, type FlagRow } from "@openbooks/engine/hrm/ai/anomalies";
+import {
+  AI_CAPABILITIES,
+  AI_AUTONOMY_LADDER,
+  autonomyRank,
+} from "@openbooks/engine/hrm/ai/registry";
+import { explainPayslip, type ExplainPayTrace } from "@openbooks/engine/hrm/ai/explain-pay";
+import {
+  listCapabilities,
+  overdueReviews,
+  type CapabilityRow,
+} from "@openbooks/engine/hrm/ai/governance";
+import { loadAiRailsSettings } from "@openbooks/engine/hrm/ai/settings";
+import { actorPartyOf } from "@openbooks/engine/hrm/self-service/actor";
+import { can, type Authz } from "../authz";
+import { isFeatureEnabled } from "../features";
+import { groupTabs } from "../../components/module-home/group-tabs";
+import { getMoneyFormatter } from "../money-server";
 
 /**
  * Workforce assistance web loaders. Pages stay thin: every loader resolves
@@ -84,7 +92,20 @@ export interface AnomalyChecksData {
   stats: { blocking: number; warnings: number; acknowledged: number; falsePositiveRate: string };
   rows: AnomalyFlagDisplay[];
   truncated: boolean;
-  dialogFlag: (AnomalyFlagDisplay & AnomalyDrawerTerms & { transitionLabels: { acknowledge: string; resolve: string; falsePositive: string; reasonLabel: string; reasonPlaceholder: string; submitLabel: string; failedLabel: string } }) | null;
+  dialogFlag:
+    | (AnomalyFlagDisplay &
+        AnomalyDrawerTerms & {
+          transitionLabels: {
+            acknowledge: string;
+            resolve: string;
+            falsePositive: string;
+            reasonLabel: string;
+            reasonPlaceholder: string;
+            submitLabel: string;
+            failedLabel: string;
+          };
+        })
+    | null;
   dialogCloseHref: string;
   dialogOpen: boolean;
   canScan: boolean;
@@ -97,23 +118,23 @@ export interface AnomalyChecksData {
  * future kind renders its raw code, never a wrong label.
  */
 export const ANOMALY_KINDS = [
-  'terminated_with_pay',
-  'duplicate_bank',
-  'retro_spike',
-  'net_pay_spike',
-  'zero_hours_with_pay',
-  'hours_spike',
-  'missing_rate',
-  'expired_rate',
-  'prevailing_wage_missing',
-  'apprentice_ratio_breach',
-  'benefit_input_orphan',
-  'leave_input_orphan',
-  'negative_balance',
-  'duplicate_entry',
-  'geofence_outside',
-  'unrounded',
-  'custom',
+  "terminated_with_pay",
+  "duplicate_bank",
+  "retro_spike",
+  "net_pay_spike",
+  "zero_hours_with_pay",
+  "hours_spike",
+  "missing_rate",
+  "expired_rate",
+  "prevailing_wage_missing",
+  "apprentice_ratio_breach",
+  "benefit_input_orphan",
+  "leave_input_orphan",
+  "negative_balance",
+  "duplicate_entry",
+  "geofence_outside",
+  "unrounded",
+  "custom",
 ] as const;
 
 export function anomalyKindLabel(t: (key: string) => string, kind: string): string {
@@ -127,21 +148,28 @@ async function employmentLabels(
   const ids = [...new Set(employmentIds.filter((id): id is string => id !== null))];
   const labels = new Map<string, string>();
   if (ids.length === 0) return labels;
-  const rows = await db.execute<{ id: string; label: string }>(sql`
+  const rows = await db.execute<{ id: string; label: string }>(
+    sql`
     select e.id::text as id, p.display_name as label
       from worker_employments e
       join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
-     where e.org_id = ${orgId} and e.id = any(${sql.param(ids)}::uuid[])`, 'objects');
+     where e.org_id = ${orgId} and e.id = any(${sql.param(ids)}::uuid[])`,
+    "objects",
+  );
   for (const row of rows) labels.set(row.id, row.label);
   return labels;
 }
 
-const SEVERITY_VARIANTS: Record<string, string> = { block: 'danger', warn: 'warning', info: 'neutral' };
+const SEVERITY_VARIANTS: Record<string, string> = {
+  block: "danger",
+  warn: "warning",
+  info: "neutral",
+};
 const STATUS_VARIANTS: Record<string, string> = {
-  open: 'danger',
-  acknowledged: 'warning',
-  resolved: 'success',
-  false_positive: 'neutral',
+  open: "danger",
+  acknowledged: "warning",
+  resolved: "success",
+  false_positive: "neutral",
 };
 
 function toDisplay(
@@ -153,14 +181,14 @@ function toDisplay(
   return {
     id: flag.id,
     severityLabel: t(`anomalies.severity.${flag.severity}`),
-    severityVariant: SEVERITY_VARIANTS[flag.severity] ?? 'neutral',
+    severityVariant: SEVERITY_VARIANTS[flag.severity] ?? "neutral",
     kindLabel: anomalyKindLabel(t, flag.kind),
     periodLabel: `${flag.payPeriodFrom} → ${flag.payPeriodTo}`,
-    employmentLabel: employmentLabel ?? t('anomalies.unassigned'),
+    employmentLabel: employmentLabel ?? t("anomalies.unassigned"),
     explanation: flag.explanation,
     statusLabel: t(`anomalies.status.${flag.status}`),
-    statusVariant: STATUS_VARIANTS[flag.status] ?? 'neutral',
-    openLabel: t('anomalies.open'),
+    statusVariant: STATUS_VARIANTS[flag.status] ?? "neutral",
+    openLabel: t("anomalies.open"),
     flagHref: `/payroll/anomalies?${new URLSearchParams({ ...currentParams, flag: flag.id }).toString()}`,
     detail: flag.detail,
     reason: flag.reason,
@@ -175,96 +203,125 @@ export async function loadAnomalyChecks(
 ): Promise<AnomalyChecksData> {
   const orgId = authz.user.orgId;
   const actorId = authz.user.id;
-  const t = await getTranslations('payroll');
-  const severity = sp.severity === 'info' || sp.severity === 'warn' || sp.severity === 'block' ? sp.severity : undefined;
-  const status = sp.status === 'acknowledged' || sp.status === 'resolved' || sp.status === 'false_positive' ? sp.status : 'open';
-  const kind = sp.kind && (ANOMALY_KINDS as readonly string[]).includes(sp.kind) ? sp.kind : undefined;
+  const t = await getTranslations("payroll");
+  const severity =
+    sp.severity === "info" || sp.severity === "warn" || sp.severity === "block"
+      ? sp.severity
+      : undefined;
+  const status =
+    sp.status === "acknowledged" || sp.status === "resolved" || sp.status === "false_positive"
+      ? sp.status
+      : "open";
+  const kind =
+    sp.kind && (ANOMALY_KINDS as readonly string[]).includes(sp.kind) ? sp.kind : undefined;
   const [open, acknowledged, falsePositives] = await Promise.all([
-    listFlags(db, { orgId, actorId, severity, kind, status: 'open' }),
-    listFlags(db, { orgId, actorId, severity, kind, status: 'acknowledged' }),
-    listFlags(db, { orgId, actorId, status: 'false_positive' }),
+    listFlags(db, { orgId, actorId, severity, kind, status: "open" }),
+    listFlags(db, { orgId, actorId, severity, kind, status: "acknowledged" }),
+    listFlags(db, { orgId, actorId, status: "false_positive" }),
   ]);
-  const flags = status === 'open' ? open : status === 'acknowledged' ? acknowledged : await listFlags(db, { orgId, actorId, severity, kind, status });
-  const resolved = await listFlags(db, { orgId, actorId, status: 'resolved' });
+  const flags =
+    status === "open"
+      ? open
+      : status === "acknowledged"
+        ? acknowledged
+        : await listFlags(db, { orgId, actorId, severity, kind, status });
+  const resolved = await listFlags(db, { orgId, actorId, status: "resolved" });
   const closedTotal = resolved.length + falsePositives.length;
-  const fpRate = closedTotal === 0 ? '—' : `${Math.round((falsePositives.length / closedTotal) * 100)}%`;
+  const fpRate =
+    closedTotal === 0 ? "—" : `${Math.round((falsePositives.length / closedTotal) * 100)}%`;
   const currentParams: Record<string, string> = {};
-  for (const key of ['severity', 'kind', 'status']) {
+  for (const key of ["severity", "kind", "status"]) {
     if (sp[key]) currentParams[key] = sp[key]!;
   }
-  const labels = await employmentLabels(orgId, flags.map((f) => f.employmentId));
-  const cap = 100;
-  const rows: AnomalyFlagDisplay[] = flags.slice(0, cap).map((f) =>
-    toDisplay(t, f, (f.employmentId && labels.get(f.employmentId)) || null, currentParams),
+  const labels = await employmentLabels(
+    orgId,
+    flags.map((f) => f.employmentId),
   );
-  let dialogFlag: AnomalyChecksData['dialogFlag'] = null;
+  const cap = 100;
+  const rows: AnomalyFlagDisplay[] = flags
+    .slice(0, cap)
+    .map((f) =>
+      toDisplay(t, f, (f.employmentId && labels.get(f.employmentId)) || null, currentParams),
+    );
+  let dialogFlag: AnomalyChecksData["dialogFlag"] = null;
   if (sp.flag) {
     const found = flags.find((f) => f.id === sp.flag) ?? null;
     if (found) {
       dialogFlag = {
-        ...toDisplay(t, found, (found.employmentId && labels.get(found.employmentId)) || null, currentParams),
-        severityTerm: t('anomalies.columns.severity'),
-        kindTerm: t('anomalies.columns.kind'),
-        employmentTerm: t('anomalies.columns.employment'),
-        statusTerm: t('anomalies.columns.status'),
+        ...toDisplay(
+          t,
+          found,
+          (found.employmentId && labels.get(found.employmentId)) || null,
+          currentParams,
+        ),
+        severityTerm: t("anomalies.columns.severity"),
+        kindTerm: t("anomalies.columns.kind"),
+        employmentTerm: t("anomalies.columns.employment"),
+        statusTerm: t("anomalies.columns.status"),
         transitionLabels: {
-          acknowledge: t('anomalies.transitions.acknowledge'),
-          resolve: t('anomalies.transitions.resolve'),
-          falsePositive: t('anomalies.transitions.falsePositive'),
-          reasonLabel: t('anomalies.transitions.reason'),
-          reasonPlaceholder: t('anomalies.transitions.reasonPlaceholder'),
-          submitLabel: t('anomalies.transitions.submit'),
-          failedLabel: t('anomalies.transitions.failed'),
+          acknowledge: t("anomalies.transitions.acknowledge"),
+          resolve: t("anomalies.transitions.resolve"),
+          falsePositive: t("anomalies.transitions.falsePositive"),
+          reasonLabel: t("anomalies.transitions.reason"),
+          reasonPlaceholder: t("anomalies.transitions.reasonPlaceholder"),
+          submitLabel: t("anomalies.transitions.submit"),
+          failedLabel: t("anomalies.transitions.failed"),
         },
       };
     }
   }
-  const blocking = open.filter((f) => f.severity === 'block').length;
-  const warnings = open.filter((f) => f.severity === 'warn').length;
+  const blocking = open.filter((f) => f.severity === "block").length;
+  const warnings = open.filter((f) => f.severity === "warn").length;
   return {
-    tabs: await groupTabs('payroll', '/payroll/anomalies', { orgId }),
-    title: t('anomalies.title'),
-    description: t('anomalies.description'),
-    runsLabel: t('anomalies.runs'),
-    listTitle: t('anomalies.listTitle'),
-    emptyTitle: t('anomalies.emptyTitle'),
-    emptyDescription: t('anomalies.emptyDescription'),
-    allLabel: t('anomalies.all'),
-    severityLabel: t('anomalies.severityLabel'),
-    kindLabel: t('anomalies.kindLabel'),
-    statusLabel: t('anomalies.statusLabel'),
-    openLabel: t('anomalies.open'),
-    scanLabel: t('anomalies.scan'),
-    scanBusyLabel: t('anomalies.scanBusy'),
-    scanFailedLabel: t('anomalies.scanFailed'),
+    tabs: await groupTabs("payroll", "/payroll/anomalies", { orgId }),
+    title: t("anomalies.title"),
+    description: t("anomalies.description"),
+    runsLabel: t("anomalies.runs"),
+    listTitle: t("anomalies.listTitle"),
+    emptyTitle: t("anomalies.emptyTitle"),
+    emptyDescription: t("anomalies.emptyDescription"),
+    allLabel: t("anomalies.all"),
+    severityLabel: t("anomalies.severityLabel"),
+    kindLabel: t("anomalies.kindLabel"),
+    statusLabel: t("anomalies.statusLabel"),
+    openLabel: t("anomalies.open"),
+    scanLabel: t("anomalies.scan"),
+    scanBusyLabel: t("anomalies.scanBusy"),
+    scanFailedLabel: t("anomalies.scanFailed"),
     columns: {
-      severity: t('anomalies.columns.severity'),
-      kind: t('anomalies.columns.kind'),
-      period: t('anomalies.columns.period'),
-      employment: t('anomalies.columns.employment'),
-      explanation: t('anomalies.columns.explanation'),
-      status: t('anomalies.columns.status'),
+      severity: t("anomalies.columns.severity"),
+      kind: t("anomalies.columns.kind"),
+      period: t("anomalies.columns.period"),
+      employment: t("anomalies.columns.employment"),
+      explanation: t("anomalies.columns.explanation"),
+      status: t("anomalies.columns.status"),
     },
     tiles: {
-      blocking: t('anomalies.tiles.blocking'),
-      warnings: t('anomalies.tiles.warnings'),
-      acknowledged: t('anomalies.tiles.acknowledged'),
-      falsePositiveRate: t('anomalies.tiles.falsePositiveRate'),
+      blocking: t("anomalies.tiles.blocking"),
+      warnings: t("anomalies.tiles.warnings"),
+      acknowledged: t("anomalies.tiles.acknowledged"),
+      falsePositiveRate: t("anomalies.tiles.falsePositiveRate"),
     },
-    blockingTone: blocking > 0 ? 'danger' : 'neutral',
-    warningsTone: warnings > 0 ? 'warning' : 'neutral',
+    blockingTone: blocking > 0 ? "danger" : "neutral",
+    warningsTone: warnings > 0 ? "warning" : "neutral",
     currentParams,
-    severityOptions: ['block', 'warn', 'info'].map((value) => ({ value, label: t(`anomalies.severity.${value}`) })),
+    severityOptions: ["block", "warn", "info"].map((value) => ({
+      value,
+      label: t(`anomalies.severity.${value}`),
+    })),
     kindOptions: ANOMALY_KINDS.map((value) => ({ value, label: t(`anomalies.kinds.${value}`) })),
-    statusOptions: ['open', 'acknowledged', 'resolved', 'false_positive'].map((value) => ({ value, label: t(`anomalies.status.${value}`) })),
+    statusOptions: ["open", "acknowledged", "resolved", "false_positive"].map((value) => ({
+      value,
+      label: t(`anomalies.status.${value}`),
+    })),
     stats: { blocking, warnings, acknowledged: acknowledged.length, falsePositiveRate: fpRate },
     rows,
     truncated: flags.length > cap,
     dialogFlag,
-    dialogCloseHref: '/payroll/anomalies',
+    dialogCloseHref: "/payroll/anomalies",
     dialogOpen: dialogFlag !== null,
-    canScan: can(authz, 'payroll.manage') && authz.allowedSubsidiaryIds === null,
-    finalizeHref: '/payroll/runs',
+    canScan: can(authz, "payroll.manage") && authz.allowedSubsidiaryIds === null,
+    finalizeHref: "/payroll/runs",
   };
 }
 
@@ -280,21 +337,45 @@ export interface OwnStubRow {
 export async function loadOwnStubs(authz: Authz): Promise<OwnStubRow[]> {
   const partyId = await actorPartyOf(db, authz.user.orgId, authz.user.id);
   if (!partyId) return [];
-  const rows = await db.execute<{ id: string; payDate: string; gross: string; netPay: string; currency: string }>(sql`
+  const rows = await db.execute<{
+    id: string;
+    payDate: string;
+    gross: string;
+    netPay: string;
+    currency: string;
+  }>(
+    sql`
     select id::text as id, pay_date::text as "payDate",
            gross::text as gross, net_pay::text as "netPay", currency_code as currency
       from pay_stubs
      where org_id = ${authz.user.orgId} and employee_party_id = ${partyId}
      order by pay_date desc, id desc
-     limit 6`, 'objects');
-  return rows.map((row) => ({ id: row.id, payDate: row.payDate, gross: row.gross, netPay: row.netPay, currency: row.currency }));
+     limit 6`,
+    "objects",
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    payDate: row.payDate,
+    gross: row.gross,
+    netPay: row.netPay,
+    currency: row.currency,
+  }));
 }
 
 export interface MePaySection {
   hasPay: boolean;
   payTitle: string;
   /** Amounts stay exact decimals; the `*Text` fields are the viewer-formatted money in the stub's currency. */
-  payStubs: { id: string; payDate: string; gross: string; netPay: string; grossText: string; netPayText: string; explainLabel: string; explainHref: string }[];
+  payStubs: {
+    id: string;
+    payDate: string;
+    gross: string;
+    netPay: string;
+    grossText: string;
+    netPayText: string;
+    explainLabel: string;
+    explainHref: string;
+  }[];
   payColumns: { payDate: string; gross: string; netPay: string };
   payEmpty: string;
   payExplain: {
@@ -332,46 +413,46 @@ export async function loadMePaySection(
   authz: Authz,
   explainStubId: string | undefined,
 ): Promise<MePaySection> {
-  const t = await getTranslations('hrm');
-  const hasPay = await isFeatureEnabled(authz.user.orgId, 'payroll');
+  const t = await getTranslations("hrm");
+  const hasPay = await isFeatureEnabled(authz.user.orgId, "payroll");
   if (!hasPay) {
     return {
       hasPay: false,
-      payTitle: '',
+      payTitle: "",
       payStubs: [],
-      payColumns: { payDate: '', gross: '', netPay: '' },
-      payEmpty: '',
+      payColumns: { payDate: "", gross: "", netPay: "" },
+      payEmpty: "",
       payExplain: null,
     };
   }
   const stubs = await loadOwnStubs(authz);
   const formatter = await getMoneyFormatter(authz.user.orgId);
-  let payExplain: MePaySection['payExplain'] = null;
+  let payExplain: MePaySection["payExplain"] = null;
   if (explainStubId) {
     const found = stubs.find((s) => s.id === explainStubId) ?? null;
     // Capped-share labels ride both branches: the drawer renders them
     // only with a trace, but the shape stays one object either way.
     const cappedLabels = {
-      ytdLabel: t('me.pay.ytd'),
-      maximumLabel: t('me.pay.annualMaximum'),
-      remainingLabel: t('me.pay.remainingBeforeMax'),
-      cappedNoteTemplate: t('me.pay.cappedNote'),
+      ytdLabel: t("me.pay.ytd"),
+      maximumLabel: t("me.pay.annualMaximum"),
+      remainingLabel: t("me.pay.remainingBeforeMax"),
+      cappedNoteTemplate: t("me.pay.cappedNote"),
     };
     if (!found) {
       payExplain = {
         stubId: explainStubId,
-        closeHref: '/me',
-        title: t('me.pay.drawerTitle'),
-        missing: t('me.pay.missing'),
-        grossLabel: t('me.pay.columns.gross'),
-        netLabel: t('me.pay.columns.netPay'),
-        employerCostLabel: t('me.pay.employerCost'),
-        earningsTitle: t('me.pay.earnings'),
-        deductionsTitle: t('me.pay.deductions'),
-        contributionsTitle: t('me.pay.contributions'),
-        inputsTitle: t('me.pay.inputsTitle'),
-        diffTitle: t('me.pay.diffTitle'),
-        sourcesTitle: t('me.pay.sourcesTitle'),
+        closeHref: "/me",
+        title: t("me.pay.drawerTitle"),
+        missing: t("me.pay.missing"),
+        grossLabel: t("me.pay.columns.gross"),
+        netLabel: t("me.pay.columns.netPay"),
+        employerCostLabel: t("me.pay.employerCost"),
+        earningsTitle: t("me.pay.earnings"),
+        deductionsTitle: t("me.pay.deductions"),
+        contributionsTitle: t("me.pay.contributions"),
+        inputsTitle: t("me.pay.inputsTitle"),
+        diffTitle: t("me.pay.diffTitle"),
+        sourcesTitle: t("me.pay.sourcesTitle"),
         ...cappedLabels,
         trace: null,
       };
@@ -379,35 +460,39 @@ export async function loadMePaySection(
       const result = await loadExplainTrace(authz, explainStubId);
       payExplain = {
         stubId: explainStubId,
-        closeHref: '/me',
-        title: `${t('me.pay.drawerTitle')} · ${found.payDate}`,
-        missing: 'missing' in result ? result.missing : null,
-        grossLabel: t('me.pay.columns.gross'),
-        netLabel: t('me.pay.columns.netPay'),
-        employerCostLabel: t('me.pay.employerCost'),
-        earningsTitle: t('me.pay.earnings'),
-        deductionsTitle: t('me.pay.deductions'),
-        contributionsTitle: t('me.pay.contributions'),
-        inputsTitle: t('me.pay.inputsTitle'),
-        diffTitle: t('me.pay.diffTitle'),
-        sourcesTitle: t('me.pay.sourcesTitle'),
+        closeHref: "/me",
+        title: `${t("me.pay.drawerTitle")} · ${found.payDate}`,
+        missing: "missing" in result ? result.missing : null,
+        grossLabel: t("me.pay.columns.gross"),
+        netLabel: t("me.pay.columns.netPay"),
+        employerCostLabel: t("me.pay.employerCost"),
+        earningsTitle: t("me.pay.earnings"),
+        deductionsTitle: t("me.pay.deductions"),
+        contributionsTitle: t("me.pay.contributions"),
+        inputsTitle: t("me.pay.inputsTitle"),
+        diffTitle: t("me.pay.diffTitle"),
+        sourcesTitle: t("me.pay.sourcesTitle"),
         ...cappedLabels,
-        trace: 'trace' in result ? result.trace : null,
+        trace: "trace" in result ? result.trace : null,
       };
     }
   }
   return {
     hasPay: true,
-    payTitle: t('me.pay.title'),
+    payTitle: t("me.pay.title"),
     payStubs: stubs.map((s) => ({
       ...s,
       grossText: formatter.money(s.gross, { currency: s.currency }),
       netPayText: formatter.money(s.netPay, { currency: s.currency }),
-      explainLabel: t('me.pay.explain'),
+      explainLabel: t("me.pay.explain"),
       explainHref: `/me?explain=${s.id}`,
     })),
-    payColumns: { payDate: t('me.pay.columns.payDate'), gross: t('me.pay.columns.gross'), netPay: t('me.pay.columns.netPay') },
-    payEmpty: t('me.pay.empty'),
+    payColumns: {
+      payDate: t("me.pay.columns.payDate"),
+      gross: t("me.pay.columns.gross"),
+      netPay: t("me.pay.columns.netPay"),
+    },
+    payEmpty: t("me.pay.empty"),
     payExplain,
   };
 }
@@ -417,11 +502,18 @@ export async function loadExplainTrace(
   authz: Authz,
   stubId: string,
 ): Promise<{ trace: ExplainPayTrace } | { missing: string }> {
-  const stub = (await db.execute<{ employmentId: string | null }>(sql`
+  const stub = (
+    await db.execute<{ employmentId: string | null }>(
+      sql`
     select employment_id::text as "employmentId" from pay_stubs
-     where org_id = ${authz.user.orgId} and id = ${stubId}::uuid`, 'objects'))[0];
+     where org_id = ${authz.user.orgId} and id = ${stubId}::uuid`,
+      "objects",
+    )
+  )[0];
   if (!stub?.employmentId) {
-    return { missing: 'That payslip is missing or outside this organization — pick one from the list.' };
+    return {
+      missing: "That payslip is missing or outside this organization — pick one from the list.",
+    };
   }
   const trace = await explainPayslip({
     orgId: authz.user.orgId,
@@ -451,9 +543,28 @@ export interface AiLedgerData {
   reviewRecordedLabel: string;
   registryRefreshedLabel: string;
   codeMaximumLabel: string;
-  capabilityColumns: { capability: string; autonomy: string; reviewer: string; notice: string; reviewed: string; enabled: string };
-  decisionColumns: { when: string; capability: string; summary: string; outcome: string; reviewer: string };
-  capabilities: (CapabilityRow & { noticeLabel: string; reviewedLabel: string; enabledLabel: string; autonomyOptions: { value: string; label: string }[]; codeMaximum: string })[];
+  capabilityColumns: {
+    capability: string;
+    autonomy: string;
+    reviewer: string;
+    notice: string;
+    reviewed: string;
+    enabled: string;
+  };
+  decisionColumns: {
+    when: string;
+    capability: string;
+    summary: string;
+    outcome: string;
+    reviewer: string;
+  };
+  capabilities: (CapabilityRow & {
+    noticeLabel: string;
+    reviewedLabel: string;
+    enabledLabel: string;
+    autonomyOptions: { value: string; label: string }[];
+    codeMaximum: string;
+  })[];
   overdue: CapabilityRow[];
   reviewMonths: number;
   settings: { zThreshold: number; retroThreshold: string; cohortKey: string; reviewMonths: number };
@@ -462,55 +573,64 @@ export interface AiLedgerData {
 /** Native action-limit configuration, separate from provider credentials. */
 export async function loadAiLedger(authz: Authz): Promise<AiLedgerData> {
   const orgId = authz.user.orgId;
-  const t = await getTranslations('admin');
+  const t = await getTranslations("admin");
   const [capabilities, settings] = await Promise.all([
     listCapabilities(db, orgId),
     loadAiRailsSettings(db, orgId),
   ]);
   const overdue = await overdueReviews(db, orgId, settings.reviewMonths);
   return {
-    title: t('aiLedger.title'),
-    description: t('aiLedger.description'),
-    capabilitiesTitle: t('aiLedger.capabilitiesTitle'),
-    decisionsTitle: t('aiLedger.decisionsTitle'),
-    overdueTitle: t('aiLedger.overdueTitle'),
-    overdueDescription: t('aiLedger.overdueDescription'),
-    exportLabel: t('aiLedger.export'),
-    syncLabel: t('aiLedger.sync'),
-    syncDoneLabel: t('aiLedger.syncDone'),
-    reviewLabel: t('aiLedger.review'),
-    saveLabel: t('aiLedger.save'),
-    failedLabel: t('aiLedger.failed'),
-    allLabel: t('aiLedger.all'),
-    emptyLabel: t('aiLedger.empty'),
-    declarationSavedLabel: t('aiLedger.declarationSaved'),
-    reviewRecordedLabel: t('aiLedger.reviewRecorded'),
-    registryRefreshedLabel: t('aiLedger.registryRefreshed'),
-    codeMaximumLabel: t('aiLedger.codeMaximum'),
+    title: t("aiLedger.title"),
+    description: t("aiLedger.description"),
+    capabilitiesTitle: t("aiLedger.capabilitiesTitle"),
+    decisionsTitle: t("aiLedger.decisionsTitle"),
+    overdueTitle: t("aiLedger.overdueTitle"),
+    overdueDescription: t("aiLedger.overdueDescription"),
+    exportLabel: t("aiLedger.export"),
+    syncLabel: t("aiLedger.sync"),
+    syncDoneLabel: t("aiLedger.syncDone"),
+    reviewLabel: t("aiLedger.review"),
+    saveLabel: t("aiLedger.save"),
+    failedLabel: t("aiLedger.failed"),
+    allLabel: t("aiLedger.all"),
+    emptyLabel: t("aiLedger.empty"),
+    declarationSavedLabel: t("aiLedger.declarationSaved"),
+    reviewRecordedLabel: t("aiLedger.reviewRecorded"),
+    registryRefreshedLabel: t("aiLedger.registryRefreshed"),
+    codeMaximumLabel: t("aiLedger.codeMaximum"),
     capabilityColumns: {
-      capability: t('aiLedger.columns.capability'),
-      autonomy: t('aiLedger.columns.autonomy'),
-      reviewer: t('aiLedger.columns.reviewer'),
-      notice: t('aiLedger.columns.notice'),
-      reviewed: t('aiLedger.columns.reviewed'),
-      enabled: t('aiLedger.columns.enabled'),
+      capability: t("aiLedger.columns.capability"),
+      autonomy: t("aiLedger.columns.autonomy"),
+      reviewer: t("aiLedger.columns.reviewer"),
+      notice: t("aiLedger.columns.notice"),
+      reviewed: t("aiLedger.columns.reviewed"),
+      enabled: t("aiLedger.columns.enabled"),
     },
     decisionColumns: {
-      when: t('aiLedger.columns.when'),
-      capability: t('aiLedger.columns.capability'),
-      summary: t('aiLedger.columns.summary'),
-      outcome: t('aiLedger.columns.outcome'),
-      reviewer: t('aiLedger.columns.reviewer'),
+      when: t("aiLedger.columns.when"),
+      capability: t("aiLedger.columns.capability"),
+      summary: t("aiLedger.columns.summary"),
+      outcome: t("aiLedger.columns.outcome"),
+      reviewer: t("aiLedger.columns.reviewer"),
     },
     capabilities: capabilities.map((c) => ({
       ...c,
-      codeMaximum: AI_CAPABILITIES.has(c.key) ? t(`aiLedger.levels.${AI_CAPABILITIES.get(c.key)!.maxAutonomy}`) : t('aiLedger.notRegistered'),
-      autonomyOptions: AI_AUTONOMY_LADDER.filter((level) => autonomyRank(level) <= autonomyRank(AI_CAPABILITIES.get(c.key)?.maxAutonomy ?? 'read_only') || level === c.autonomy).map((value) => ({ value, label: t(`aiLedger.levels.${value}`) })),
+      codeMaximum: AI_CAPABILITIES.has(c.key)
+        ? t(`aiLedger.levels.${AI_CAPABILITIES.get(c.key)!.maxAutonomy}`)
+        : t("aiLedger.notRegistered"),
+      autonomyOptions: AI_AUTONOMY_LADDER.filter(
+        (level) =>
+          autonomyRank(level) <=
+            autonomyRank(AI_CAPABILITIES.get(c.key)?.maxAutonomy ?? "read_only") ||
+          level === c.autonomy,
+      ).map((value) => ({ value, label: t(`aiLedger.levels.${value}`) })),
       // The catalog notice text itself, not just its flag — this is the
       // line users see wherever the capability surfaces.
-      noticeLabel: c.noticeRequired ? (AI_CAPABILITIES.get(c.key)?.noticeText ?? t('aiLedger.noticeRequired')) : '—',
-      reviewedLabel: c.lastReviewedAt ?? t('aiLedger.neverReviewed'),
-      enabledLabel: c.enabled ? t('aiLedger.enabled') : t('aiLedger.disabled'),
+      noticeLabel: c.noticeRequired
+        ? (AI_CAPABILITIES.get(c.key)?.noticeText ?? t("aiLedger.noticeRequired"))
+        : "—",
+      reviewedLabel: c.lastReviewedAt ?? t("aiLedger.neverReviewed"),
+      enabledLabel: c.enabled ? t("aiLedger.enabled") : t("aiLedger.disabled"),
     })),
     overdue,
     reviewMonths: settings.reviewMonths,
@@ -552,24 +672,30 @@ export async function loadAiDraftDrawer(opts: {
   fieldId: string;
 }): Promise<AiDraftDrawerData | null> {
   if (!opts.draftParam) return null;
-  const separator = opts.draftParam.indexOf(':');
-  const kind = separator < 0 ? '' : opts.draftParam.slice(0, separator);
-  const subjectId = separator < 0 ? '' : opts.draftParam.slice(separator + 1);
-  const known = ['job_description', 'review_manager', 'review_self', 'onboarding_plan', 'offer_letter_clauses'];
+  const separator = opts.draftParam.indexOf(":");
+  const kind = separator < 0 ? "" : opts.draftParam.slice(0, separator);
+  const subjectId = separator < 0 ? "" : opts.draftParam.slice(separator + 1);
+  const known = [
+    "job_description",
+    "review_manager",
+    "review_self",
+    "onboarding_plan",
+    "offer_letter_clauses",
+  ];
   if (!known.includes(kind) || !subjectId) return null;
-  const t = await getTranslations('hrm');
+  const t = await getTranslations("hrm");
   return {
     draftParam: opts.draftParam,
     closeHref: opts.closeHref,
     fieldId: opts.fieldId,
-    title: t('aiDraft.title'),
-    insertLabel: t('aiDraft.insert'),
-    discardLabel: t('aiDraft.discard'),
-    failedLabel: t('aiDraft.failed'),
-    sourcesTitle: t('aiDraft.sources'),
-    biasTitle: t('aiDraft.biasFlags'),
-    loadingLabel: t('aiDraft.loading'),
-    copiedLabel: t('aiDraft.copied'),
+    title: t("aiDraft.title"),
+    insertLabel: t("aiDraft.insert"),
+    discardLabel: t("aiDraft.discard"),
+    failedLabel: t("aiDraft.failed"),
+    sourcesTitle: t("aiDraft.sources"),
+    biasTitle: t("aiDraft.biasFlags"),
+    loadingLabel: t("aiDraft.loading"),
+    copiedLabel: t("aiDraft.copied"),
   };
 }
 
@@ -580,10 +706,10 @@ export async function loadAiDraftDrawer(opts: {
  * and stays absent for actors without `assistant.use`.
  */
 export async function loadAiDraftButton(authz: Authz): Promise<string | null> {
-  if (!can(authz, 'assistant.use')) return null;
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) return null;
-  const t = await getTranslations('hrm');
-  return t('aiDraft.button');
+  if (!can(authz, "assistant.use")) return null;
+  if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) return null;
+  const t = await getTranslations("hrm");
+  return t("aiDraft.button");
 }
 
 export interface WeekFlagChip {
@@ -606,10 +732,13 @@ export async function loadOpenFlagsForWeek(
   weekStart: string,
   weekEnd: string,
 ): Promise<WeekFlagChip[]> {
-  const t = await getTranslations('payroll');
-  const employments = await db.execute<{ id: string }>(sql`
+  const t = await getTranslations("payroll");
+  const employments = await db.execute<{ id: string }>(
+    sql`
     select id::text as id from worker_employments
-     where org_id = ${authz.user.orgId} and worker_party_id = ${partyId}`, 'objects');
+     where org_id = ${authz.user.orgId} and worker_party_id = ${partyId}`,
+    "objects",
+  );
   if (employments.length === 0) return [];
   const chips: WeekFlagChip[] = [];
   for (const employment of employments) {
@@ -624,10 +753,15 @@ export async function loadOpenFlagsForWeek(
       return [];
     }
     for (const flag of flags) {
-      if (flag.status !== 'open') continue;
+      if (flag.status !== "open") continue;
       // Flag pay periods overlap the timesheet week (ISO dates compare).
       if (flag.payPeriodFrom > weekEnd || flag.payPeriodTo < weekStart) continue;
-      chips.push({ kind: flag.kind, kindLabel: anomalyKindLabel(t, flag.kind), severity: flag.severity, explanation: flag.explanation });
+      chips.push({
+        kind: flag.kind,
+        kindLabel: anomalyKindLabel(t, flag.kind),
+        severity: flag.severity,
+        explanation: flag.explanation,
+      });
     }
   }
   return chips;

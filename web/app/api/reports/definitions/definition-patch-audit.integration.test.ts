@@ -25,7 +25,10 @@ registerHooks({
     // The route factory imports the same alias lazily at request time from
     // its own module URL, so it never matches the route-directory guard.
     // Match the alias exactly so the factory gate uses this test's session.
-    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/"))) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/"))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -46,72 +49,74 @@ registerHooks({
   },
 });
 
-const { db, withBypass, withOrgContext } = await import(
-  "@openbooks/engine/platform/db"
-);
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PATCH } = await import("./[id]/route.ts");
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
-test(
-  "definition autosave audits before and after in the same transaction",
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId;
-    gateState.orgId = org.orgId;
-    gateState.userId = actorId;
-    const definitionId = randomUUID();
-    try {
-      await withBypass(() =>
-        db.execute(sql`
+test("definition autosave audits before and after in the same transaction", async () => {
+  const org = await withBypass(() => createScratchOrg());
+  const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId;
+  gateState.orgId = org.orgId;
+  gateState.userId = actorId;
+  const definitionId = randomUUID();
+  try {
+    await withBypass(() =>
+      db.execute(sql`
           insert into report_definitions
             (id, org_id, kind, report_type, slug, name, description, query, statement, system, created_by, updated_by)
           values
             (${definitionId}, ${org.orgId}, 'custom', 'statement', 'aged-audit', 'Aged audit',
              null, null, ${JSON.stringify({ kind: "pnl" })}::jsonb, false, ${actorId}, ${actorId})
         `),
-      );
-      const revision = (await withBypass(() =>
-          db.execute<{ updated_at: string }>(sql`
+    );
+    const revision = (
+      await withBypass(() =>
+        db.execute<{ updated_at: string }>(
+          sql`
             select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
               from report_definitions where id = ${definitionId} and org_id = ${org.orgId}
-          `, "objects"),
-        ))[0]!.updated_at;
+          `,
+          "objects",
+        ),
+      )
+    )[0]!.updated_at;
 
-      await withOrgContext(org.orgId, async () => {
-        const res = await PATCH(
-          new Request("http://audit.local/api/reports/definitions/x", {
-            method: "PATCH",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ name: "Aged audit v2", expectedUpdatedAt: revision }),
-          }),
-          params(definitionId),
-        );
-        assert.equal(res.status, 200);
-        const payload = (await res.json()) as { definition: { name: string } };
-        assert.equal(payload.definition.name, "Aged audit v2");
+    await withOrgContext(org.orgId, async () => {
+      const res = await PATCH(
+        new Request("http://audit.local/api/reports/definitions/x", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "Aged audit v2", expectedUpdatedAt: revision }),
+        }),
+        params(definitionId),
+      );
+      assert.equal(res.status, 200);
+      const payload = (await res.json()) as { definition: { name: string } };
+      assert.equal(payload.definition.name, "Aged audit v2");
 
-        const audits = await db.execute<{ action: string; actor_id: string; changes: unknown }>(sql`
+      const audits = await db.execute<{ action: string; actor_id: string; changes: unknown }>(
+        sql`
             select action, actor_id, changes from audit_log
              where org_id = ${org.orgId} and table_name = 'report_definitions' and row_id = ${definitionId}
-          `, "objects");
-        assert.equal(audits.length, 1);
-        assert.equal(audits[0]!.action, "update");
-        assert.equal(audits[0]!.actor_id, actorId);
-        const changes = audits[0]!.changes as {
-          before: { name: string };
-          after: { name: string };
-        };
-        assert.equal(changes.before.name, "Aged audit");
-        assert.equal(changes.after.name, "Aged audit v2");
-      });
-    } finally {
-      gateState.orgId = "org-1";
-      gateState.userId = "user-1";
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+          `,
+        "objects",
+      );
+      assert.equal(audits.length, 1);
+      assert.equal(audits[0]!.action, "update");
+      assert.equal(audits[0]!.actor_id, actorId);
+      const changes = audits[0]!.changes as {
+        before: { name: string };
+        after: { name: string };
+      };
+      assert.equal(changes.before.name, "Aged audit");
+      assert.equal(changes.after.name, "Aged audit v2");
+    });
+  } finally {
+    gateState.orgId = "org-1";
+    gateState.userId = "user-1";
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});

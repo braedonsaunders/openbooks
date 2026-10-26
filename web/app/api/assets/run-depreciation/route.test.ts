@@ -182,9 +182,8 @@ function inspect(query: unknown): { text: string; params: unknown[] } {
   return { text: walk(chunks, true), params };
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksDepreciationConfirmInspect = inspect;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksDepreciationConfirmInspect =
+  inspect;
 
 const mockDb = `
   const state = globalThis[Symbol.for('openbooks.depreciation-confirm-route-test')]
@@ -356,7 +355,10 @@ const mockDb = `
 
 const mockSources = new Map<string, string>([
   ["mock:db", mockDb],
-  ["mock:next-intl-server", "export async function getLocale() { return 'en' }\nexport async function getTranslations() { return (key) => key }"],
+  [
+    "mock:next-intl-server",
+    "export async function getLocale() { return 'en' }\nexport async function getTranslations() { return (key) => key }",
+  ],
   [
     "mock:feature-gates",
     `const state = globalThis[Symbol.for('openbooks.depreciation-confirm-route-test')]
@@ -392,15 +394,13 @@ const _hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
 
-const engineModule = (await import(
-  "@openbooks/engine/assets/depreciation"
-)) as typeof import("@openbooks/engine/assets/depreciation");
+const engineModule =
+  (await import("@openbooks/engine/assets/depreciation")) as typeof import("@openbooks/engine/assets/depreciation");
 const { previewDepreciationFingerprint, runDepreciation, StalePreviewError } = engineModule;
 
 const routeUrl = "./route.ts?depreciation-confirm-test";
@@ -465,9 +465,7 @@ function confirmRows() {
     creditAccountNumber: "1510",
     creditAccountName: "Accumulated depreciation",
     accountsResolved: true,
-    evidence: (row.posts_gl ? "gl-posting" : "reporting-only") as
-      | "gl-posting"
-      | "reporting-only",
+    evidence: (row.posts_gl ? "gl-posting" : "reporting-only") as "gl-posting" | "reporting-only",
   }));
 }
 
@@ -526,10 +524,7 @@ test("a changed candidate set fails the stale-input fence", async () => {
   state.due[0]!.amount = "101.0000";
   const res = await confirm(body);
   assert.equal(res.status, 409);
-  assert.equal(
-    ((await res.json()) as { error: string }).error,
-    "stale_preview",
-  );
+  assert.equal(((await res.json()) as { error: string }).error, "stale_preview");
   state.due[0]!.amount = "100.0000";
 });
 
@@ -551,10 +546,7 @@ test("a matching fingerprint over zero rows is a named refusal, not a zero post"
   };
   const res = await confirm(body);
   assert.equal(res.status, 422);
-  assert.equal(
-    ((await res.json()) as { error: string }).error,
-    "nothing_due",
-  );
+  assert.equal(((await res.json()) as { error: string }).error, "nothing_due");
 });
 
 function expectedFromDue() {
@@ -599,16 +591,12 @@ test("lines that vanish after the gate abort the batch, never half-post", async 
   assert.equal(res.status, 409);
   assert.equal(data.error, "stale_preview");
   assert.ok(!state.queries.some((text) => text.includes("insert into journal")));
-  assert.ok(
-    !state.queries.some((text) => text.includes("update depreciation_schedule_lines")),
-  );
+  assert.ok(!state.queries.some((text) => text.includes("update depreciation_schedule_lines")));
   // The batch scoped its pinned due query to the confirmed line ids.
   const dueTexts = state.queries.filter((text) =>
     text.includes("from depreciation_schedule_lines"),
   );
-  assert.ok(
-    dueTexts.some((text) => text.includes(LINE_A) && text.includes(LINE_B)),
-  );
+  assert.ok(dueTexts.some((text) => text.includes(LINE_A) && text.includes(LINE_B)));
 });
 
 test("drift under the locks aborts the whole batch before any write", async () => {
@@ -650,7 +638,13 @@ test("confirm posts every validated line with linked entries", async () => {
     recorded: number;
     skipped: number;
     totalAmount: string;
-    entries: { assetId: string; assetNumber: string; entryId: string; lineId: string; period: string }[];
+    entries: {
+      assetId: string;
+      assetNumber: string;
+      entryId: string;
+      lineId: string;
+      period: string;
+    }[];
   };
   assert.equal(data.posted, 2);
   assert.equal(data.recorded, 0);
@@ -668,11 +662,22 @@ test("confirm posts every validated line with linked entries", async () => {
   // Results label the period in the viewer's locale; the generated journal
   // keeps the stored name in its entry number and names the period by its
   // fiscal label in the memos.
-  assert.deepEqual(data.entries.map((entry) => entry.period), ["P09 FY2026 · Sep 2026", "P09 FY2026 · Sep 2026"]);
-  const journalInsert = state.queries.find((text) => text.includes("insert into journal_entries") && text.includes("FA-0001"));
+  assert.deepEqual(
+    data.entries.map((entry) => entry.period),
+    ["P09 FY2026 · Sep 2026", "P09 FY2026 · Sep 2026"],
+  );
+  const journalInsert = state.queries.find(
+    (text) => text.includes("insert into journal_entries") && text.includes("FA-0001"),
+  );
   assert.ok(journalInsert, "the first line posts a journal entry");
-  assert.ok(journalInsert.includes(`DEP-FA-0001-2026-09-${LINE_A}`), "entry number keeps the stored period name");
-  assert.ok(journalInsert.includes("Depreciation — Mill FA-0001 (P09 FY2026)"), "entry memo names the fiscal period");
+  assert.ok(
+    journalInsert.includes(`DEP-FA-0001-2026-09-${LINE_A}`),
+    "entry number keeps the stored period name",
+  );
+  assert.ok(
+    journalInsert.includes("Depreciation — Mill FA-0001 (P09 FY2026)"),
+    "entry memo names the fiscal period",
+  );
 });
 
 test("a reporting-only line is recognized with asset evidence, not a journal", async () => {
@@ -700,7 +705,13 @@ test("a reporting-only line is recognized with asset evidence, not a journal", a
         assetId: ASSET_B,
         assetNumber: "FA-0002",
         period: "P09 FY2026 · Sep 2026",
-        periodRef: { fiscalYear: 2026, periodNumber: 9, adjustment: false, startsOn: "2026-09-01", endsOn: "2026-09-30" },
+        periodRef: {
+          fiscalYear: 2026,
+          periodNumber: 9,
+          adjustment: false,
+          startsOn: "2026-09-01",
+          endsOn: "2026-09-30",
+        },
         amount: "250.5000",
         lineId: LINE_B,
       },
@@ -721,7 +732,13 @@ test("a posting date outside a line's period skips that line by name", async () 
   const rows = confirmRows();
   const fingerprint = previewDepreciationFingerprint(
     ORG_ID,
-    { asOfDate: "2026-09-30", bookId: BOOK_ID, periodId: PERIOD_ID, assetIds: [ASSET_A, ASSET_B], postingDate },
+    {
+      asOfDate: "2026-09-30",
+      bookId: BOOK_ID,
+      periodId: PERIOD_ID,
+      assetIds: [ASSET_A, ASSET_B],
+      postingDate,
+    },
     rows,
   );
   try {
@@ -809,9 +826,7 @@ test("legacy immediate runs keep working without a fingerprint", async () => {
 
 test("stale schedules refuse the batch with the rebuild remedy", async () => {
   reset();
-  state.stale = [
-    { asset_id: ASSET_A, asset_number: "FA-0001", asset_name: "Mill FA-0001" },
-  ];
+  state.stale = [{ asset_id: ASSET_A, asset_number: "FA-0001", asset_name: "Mill FA-0001" }];
   const res = await confirm(baseConfirm());
   assert.equal(res.status, 409);
   const data = (await res.json()) as {

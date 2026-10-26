@@ -35,7 +35,9 @@ const KEY_PATTERN = /^[A-Za-z0-9._:-]{8,200}$/;
 /** Require the caller's stable run key and validate it before claiming. */
 export function bulkRunClientKey(provided: unknown): string {
   if (typeof provided !== "string" || !KEY_PATTERN.test(provided)) {
-    throw new Error("script run idempotency key is required and must be 8-200 letters, digits, dot, underscore, colon, dash");
+    throw new Error(
+      "script run idempotency key is required and must be 8-200 letters, digits, dot, underscore, colon, dash",
+    );
   }
   return provided;
 }
@@ -76,7 +78,9 @@ export async function releaseAbandonedBulkRunKey(args: {
   key: string;
 }): Promise<boolean> {
   const hash = requestHash(args.scriptId);
-  const rival = (await db.execute<{ id: string }>(sql`
+  const rival = (
+    await db.execute<{ id: string }>(
+      sql`
     select id
       from application_idempotency_keys
      where org_id = ${args.orgId} and actor_id = ${args.actorId}
@@ -84,14 +88,20 @@ export async function releaseAbandonedBulkRunKey(args: {
        and idempotency_key = ${args.key}
        and request_hash = ${hash}
        and completed_at is null
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!rival) return false;
-  const deleted = (await db.execute<{ id: string }>(sql`
+  const deleted = await db.execute<{ id: string }>(
+    sql`
     delete from application_idempotency_keys
      where id = ${rival.id}
        and completed_at is null
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return (deleted?.length ?? 0) > 0;
 }
 
@@ -107,22 +117,30 @@ export async function claimBulkRunKey(args: {
   key: string;
 }): Promise<BulkRunClaim> {
   const hash = requestHash(args.scriptId);
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into application_idempotency_keys
       (org_id, actor_id, source, operation, idempotency_key, request_hash)
     values (${args.orgId}, ${args.actorId}, ${BULK_RUN_SOURCE}, ${BULK_RUN_OPERATION}, ${args.key}, ${hash})
     -- A retry resolves the existing claim below and verifies its request hash before replaying.
     on conflict (org_id, actor_id, source, operation, idempotency_key) do nothing
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (inserted[0]) return { status: "claimed" };
-  const rival = (await db.execute<{ requestHash: string; response: unknown; completedAt: Date | null }>(sql`
+  const rival = (
+    await db.execute<{ requestHash: string; response: unknown; completedAt: Date | null }>(
+      sql`
     select request_hash as "requestHash", response, completed_at as "completedAt"
       from application_idempotency_keys
      where org_id = ${args.orgId} and actor_id = ${args.actorId}
        and source = ${BULK_RUN_SOURCE} and operation = ${BULK_RUN_OPERATION}
        and idempotency_key = ${args.key}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!rival) return { status: "claimed" };
   if (rival.requestHash !== hash) return { status: "mismatched" };
   if (rival.completedAt !== null) return { status: "completed", response: rival.response };
@@ -175,7 +193,8 @@ export async function claimBulkRunExecution(args: {
   // One statement elects: exactly one rival wins the row lock. ISO-8601
   // markers compare lexicographically; coalesce keeps a non-marker response
   // takeover-eligible instead of throwing on the cast.
-  const won = (await db.execute<{ id: string }>(sql`
+  const won = await db.execute<{ id: string }>(
+    sql`
     update application_idempotency_keys
        set response = ${JSON.stringify({ bulkRunStartedAt: startedAt })}::jsonb
      where org_id = ${args.orgId} and actor_id = ${args.actorId}
@@ -185,15 +204,22 @@ export async function claimBulkRunExecution(args: {
        and completed_at is null
        and (response is null or coalesce(response->>'bulkRunStartedAt', '') < ${cutoff})
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (won[0]) return { status: "mine" };
-  const rival = (await db.execute<{ requestHash: string; response: unknown; completedAt: Date | null }>(sql`
+  const rival = (
+    await db.execute<{ requestHash: string; response: unknown; completedAt: Date | null }>(
+      sql`
     select request_hash as "requestHash", response, completed_at as "completedAt"
       from application_idempotency_keys
      where org_id = ${args.orgId} and actor_id = ${args.actorId}
        and source = ${BULK_RUN_SOURCE} and operation = ${BULK_RUN_OPERATION}
        and idempotency_key = ${args.key}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!rival) return { status: "mine" };
   if (rival.requestHash !== hash) return { status: "mismatched" };
   if (rival.completedAt !== null) return { status: "completed", response: rival.response };
@@ -208,13 +234,18 @@ export async function readBulkRunClaim(args: {
   key: string;
 }): Promise<BulkRunClaim> {
   const hash = requestHash(args.scriptId);
-  const row = (await db.execute<{ requestHash: string; response: unknown; completedAt: Date | null }>(sql`
+  const row = (
+    await db.execute<{ requestHash: string; response: unknown; completedAt: Date | null }>(
+      sql`
     select request_hash as "requestHash", response, completed_at as "completedAt"
       from application_idempotency_keys
      where org_id = ${args.orgId} and actor_id = ${args.actorId}
        and source = ${BULK_RUN_SOURCE} and operation = ${BULK_RUN_OPERATION}
        and idempotency_key = ${args.key}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return { status: "claimed" };
   if (row.requestHash !== hash) return { status: "mismatched" };
   if (row.completedAt !== null) return { status: "completed", response: row.response };
@@ -242,7 +273,8 @@ export async function completeBulkRunKey(args: {
   } catch {
     stored = { unserializableResponse: String(args.response).slice(0, 200) };
   }
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(
+    sql`
     update application_idempotency_keys
        set response = ${JSON.stringify(stored)}::jsonb,
            completed_at = coalesce(completed_at, now())
@@ -252,6 +284,8 @@ export async function completeBulkRunKey(args: {
        and request_hash = ${requestHash(args.scriptId)}
        and completed_at is null
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return (updated?.length ?? 0) > 0;
 }

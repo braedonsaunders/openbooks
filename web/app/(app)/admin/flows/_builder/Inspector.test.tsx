@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
 // F1 (flow builder keyboard connect): a Trigger + Approval pair must be
 // connectable without pointer events. The inspector's "Connect to next
@@ -7,53 +7,63 @@ import test from 'node:test'
 // drop path uses — this test drives that section with keyboard-equivalent
 // DOM events only (change + click, never a drag) and asserts the request
 // it emits, which targets are offered, and how nodes are named.
-const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/flows/flow-1', scrollIntoView: false })
+const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/flows/flow-1",
+  scrollIntoView: false,
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../../messages/en')).default
-const { Inspector } = await import('./Inspector')
-const { nodeAccessibleName } = await import('./nodes')
-import type { FlowSubjectProfile } from '@openbooks/forms-core'
-import type { ConnectRequest, FlowNode } from './graph'
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../../messages/en")).default;
+const { Inspector } = await import("./Inspector");
+const { nodeAccessibleName } = await import("./nodes");
+import type { FlowSubjectProfile } from "@openbooks/forms-core";
+import type { ConnectRequest, FlowNode } from "./graph";
 
 const profile: FlowSubjectProfile = {
-  subjectKind: 'test',
-  label: 'Test',
-  triggers: ['manual', 'on_submit'],
-  actions: ['notify'],
+  subjectKind: "test",
+  label: "Test",
+  triggers: ["manual", "on_submit"],
+  actions: ["notify"],
   statuses: [],
   fields: [],
-  roles: ['approver'],
-}
+  roles: ["approver"],
+};
 
 const triggerNode: FlowNode = {
-  id: 't',
+  id: "t",
   position: { x: 0, y: 0 },
-  data: { kind: 'trigger', trigger: { trigger: 'manual', buttonId: 'btn_1', label: 'Run flow' } },
-}
+  data: { kind: "trigger", trigger: { trigger: "manual", buttonId: "btn_1", label: "Run flow" } },
+};
 const gateNode: FlowNode = {
-  id: 'g',
+  id: "g",
   position: { x: 260, y: 0 },
   data: {
-    kind: 'gate',
-    gate: { title: 'Manager sign-off', assignees: [{ type: 'role', role: 'approver' }], mode: 'any' },
+    kind: "gate",
+    gate: {
+      title: "Manager sign-off",
+      assignees: [{ type: "role", role: "approver" }],
+      mode: "any",
+    },
   },
-}
+};
 const otherTrigger: FlowNode = {
-  id: 't2',
+  id: "t2",
   position: { x: 0, y: 160 },
-  data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
-}
+  data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+};
 
-function renderInspector(nodes: FlowNode[], onConnect: (req: ConnectRequest) => boolean): HTMLElement {
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+function renderInspector(
+  nodes: FlowNode[],
+  onConnect: (req: ConnectRequest) => boolean,
+): HTMLElement {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   act(() => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages}>
@@ -62,123 +72,131 @@ function renderInspector(nodes: FlowNode[], onConnect: (req: ConnectRequest) => 
           nodes={nodes}
           profile={profile}
           users={[]}
-          roles={[{ key: 'approver', name: 'Approver' }]}
+          roles={[{ key: "approver", name: "Approver" }]}
           permissions={[]}
           onChange={() => {}}
           onDelete={() => {}}
           onConnect={onConnect}
         />
       </NextIntlClientProvider>,
-    )
-  })
-  return host
+    );
+  });
+  return host;
 }
 
 function selectByLabel(host: HTMLElement, label: string): HTMLSelectElement {
-  const labels = [...host.querySelectorAll('label')]
-  const match = labels.find((el) => el.textContent?.trim() === label)
-  assert.ok(match, `expected a "${label}" label`)
+  const labels = [...host.querySelectorAll("label")];
+  const match = labels.find((el) => el.textContent?.trim() === label);
+  assert.ok(match, `expected a "${label}" label`);
   // The house Label wraps the text in a span (with a help button), so walk
   // up to the field container holding the select.
-  let container = match!.parentElement
-  while (container && !container.querySelector('select')) container = container.parentElement
-  const select = container?.querySelector('select')
-  assert.ok(select, `expected a select under "${label}"`)
-  return select as HTMLSelectElement
+  let container = match!.parentElement;
+  while (container && !container.querySelector("select")) container = container.parentElement;
+  const select = container?.querySelector("select");
+  assert.ok(select, `expected a select under "${label}"`);
+  return select as HTMLSelectElement;
 }
 
-test('node accessible names carry kind plus label', () => {
+test("node accessible names carry kind plus label", () => {
   const lookup = (key: string): string => {
-    const parts = key.split('.')
-    let cur: unknown = messages.admin.flows
-    for (const part of parts) cur = (cur as Record<string, unknown>)[part]
-    return String(cur)
-  }
-  assert.equal(nodeAccessibleName(lookup, triggerNode.data), 'Trigger: A user clicks a button')
-  assert.equal(nodeAccessibleName(lookup, gateNode.data), 'Approval: Manager sign-off')
+    const parts = key.split(".");
+    let cur: unknown = messages.admin.flows;
+    for (const part of parts) cur = (cur as Record<string, unknown>)[part];
+    return String(cur);
+  };
+  assert.equal(nodeAccessibleName(lookup, triggerNode.data), "Trigger: A user clicks a button");
+  assert.equal(nodeAccessibleName(lookup, gateNode.data), "Approval: Manager sign-off");
   assert.equal(
-    nodeAccessibleName(lookup, { kind: 'condition', rule: { op: 'isSet', field: 'status' } }),
-    'Condition: If…',
-  )
+    nodeAccessibleName(lookup, { kind: "condition", rule: { op: "isSet", field: "status" } }),
+    "Condition: If…",
+  );
   assert.equal(
     nodeAccessibleName(lookup, {
-      kind: 'action',
-      action: { action: 'notify', to: [{ type: 'submitter' }], title: 'Update' },
+      kind: "action",
+      action: { action: "notify", to: [{ type: "submitter" }], title: "Update" },
     }),
-    'Action: Update',
-  )
-})
+    "Action: Update",
+  );
+});
 
-test('keyboard connect wires trigger to approval without pointer events', () => {
-  const calls: ConnectRequest[] = []
+test("keyboard connect wires trigger to approval without pointer events", () => {
+  const calls: ConnectRequest[] = [];
   const host = renderInspector([triggerNode, gateNode, otherTrigger], (req) => {
-    calls.push(req)
-    return true
-  })
+    calls.push(req);
+    return true;
+  });
   try {
-    const options = [...selectByLabel(host, 'To step').querySelectorAll('option')].map((o) => ({
+    const options = [...selectByLabel(host, "To step").querySelectorAll("option")].map((o) => ({
       value: o.value,
       label: o.textContent?.trim(),
-    }))
+    }));
     // The picker offers the approval by its accessible name, and never the
     // source itself nor the other trigger (triggers expose no target).
     assert.ok(
-      options.some((o) => o.value === 'g' && o.label === 'Approval: Manager sign-off'),
+      options.some((o) => o.value === "g" && o.label === "Approval: Manager sign-off"),
       `approval must be offered by name, got: ${JSON.stringify(options)}`,
-    )
-    assert.ok(!options.some((o) => o.value === 't'), 'the source must not be offered')
-    assert.ok(!options.some((o) => o.value === 't2'), 'triggers must not be offered as targets')
+    );
+    assert.ok(!options.some((o) => o.value === "t"), "the source must not be offered");
+    assert.ok(!options.some((o) => o.value === "t2"), "triggers must not be offered as targets");
 
-    const target = selectByLabel(host, 'To step')
+    const target = selectByLabel(host, "To step");
     act(() => {
-      target.value = 'g'
-      target.dispatchEvent(new window.Event('change', { bubbles: true }))
-    })
-    const connect = [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Connect')
-    assert.ok(connect, 'expected a Connect button')
+      target.value = "g";
+      target.dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+    const connect = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Connect",
+    );
+    assert.ok(connect, "expected a Connect button");
     act(() => {
-      connect!.click()
-    })
-    assert.deepEqual(calls, [{ source: 't', sourceHandle: 'next', target: 'g' }])
+      connect!.click();
+    });
+    assert.deepEqual(calls, [{ source: "t", sourceHandle: "next", target: "g" }]);
     // The picker resets for the next connection.
-    assert.equal(selectByLabel(host, 'To step').value, '')
+    assert.equal(selectByLabel(host, "To step").value, "");
   } finally {
-    host.remove()
+    host.remove();
   }
-})
+});
 
-test('a refused connect keeps the picker selection', () => {
-  const calls: ConnectRequest[] = []
+test("a refused connect keeps the picker selection", () => {
+  const calls: ConnectRequest[] = [];
   const host = renderInspector([triggerNode, gateNode], (req) => {
-    calls.push(req)
-    return false
-  })
+    calls.push(req);
+    return false;
+  });
   try {
-    const target = selectByLabel(host, 'To step')
+    const target = selectByLabel(host, "To step");
     act(() => {
-      target.value = 'g'
-      target.dispatchEvent(new window.Event('change', { bubbles: true }))
-    })
-    const connect = [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Connect')
+      target.value = "g";
+      target.dispatchEvent(new window.Event("change", { bubbles: true }));
+    });
+    const connect = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === "Connect",
+    );
     act(() => {
-      connect!.click()
-    })
-    assert.deepEqual(calls, [{ source: 't', sourceHandle: 'next', target: 'g' }])
-    assert.equal(selectByLabel(host, 'To step').value, 'g', 'a refused request must not drop the selection')
+      connect!.click();
+    });
+    assert.deepEqual(calls, [{ source: "t", sourceHandle: "next", target: "g" }]);
+    assert.equal(
+      selectByLabel(host, "To step").value,
+      "g",
+      "a refused request must not drop the selection",
+    );
   } finally {
-    host.remove()
+    host.remove();
   }
-})
+});
 
-test('a lone trigger explains that no step exists yet', () => {
-  const host = renderInspector([triggerNode], () => true)
+test("a lone trigger explains that no step exists yet", () => {
+  const host = renderInspector([triggerNode], () => true);
   try {
     assert.match(
-      host.textContent ?? '',
+      host.textContent ?? "",
       /no other step yet/,
-      'the connect section must say why there is nothing to pick',
-    )
+      "the connect section must say why there is nothing to pick",
+    );
   } finally {
-    host.remove()
+    host.remove();
   }
-})
+});

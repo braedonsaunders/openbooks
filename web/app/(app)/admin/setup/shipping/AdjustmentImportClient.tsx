@@ -96,9 +96,13 @@ export function AdjustmentImportClient() {
       });
       // The import names skips and failures; parsing the body first would
       // turn its refusal into a syntax error.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("adjustments.errors.importFailed")));
+      if (!res.ok)
+        throw new Error(await readApiErrorMessage(res, t("adjustments.errors.importFailed")));
       const body = (await res.json()) as { adjustments?: { imported: number; skipped: number } };
-      setResult({ imported: body.adjustments?.imported ?? 0, skipped: body.adjustments?.skipped ?? 0 });
+      setResult({
+        imported: body.adjustments?.imported ?? 0,
+        skipped: body.adjustments?.skipped ?? 0,
+      });
       setPreview(null);
       setText("");
     } catch (error) {
@@ -123,7 +127,9 @@ export function AdjustmentImportClient() {
         description={t("adjustments.noAccounts.description")}
         action={
           <Button asChild>
-            <Link href="/admin/setup/shipping?tab=accounts">{t("adjustments.noAccounts.action")}</Link>
+            <Link href="/admin/setup/shipping?tab=accounts">
+              {t("adjustments.noAccounts.action")}
+            </Link>
           </Button>
         }
       />
@@ -165,7 +171,10 @@ export function AdjustmentImportClient() {
               <Button variant="outline" onClick={onParse} disabled={!text.trim() || !accountId}>
                 {t("adjustments.preview")}
               </Button>
-              <Button onClick={onImport} disabled={!preview || preview.length === 0 || !accountId || busy}>
+              <Button
+                onClick={onImport}
+                disabled={!preview || preview.length === 0 || !accountId || busy}
+              >
                 {t("adjustments.import", { count: preview?.length ?? 0 })}
               </Button>
             </div>
@@ -190,8 +199,12 @@ export function AdjustmentImportClient() {
               <TableBody>
                 {preview.map((item) => (
                   <TableRow key={item.providerAdjustmentId}>
-                    <TableCell className="font-mono text-[13px]">{item.providerAdjustmentId}</TableCell>
-                    <TableCell className="font-mono text-[13px]">{item.providerShipmentId}</TableCell>
+                    <TableCell className="font-mono text-[13px]">
+                      {item.providerAdjustmentId}
+                    </TableCell>
+                    <TableCell className="font-mono text-[13px]">
+                      {item.providerShipmentId}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{t(`adjustments.kinds.${item.kind}`)}</Badge>
                     </TableCell>

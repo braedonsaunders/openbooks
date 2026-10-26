@@ -13,14 +13,20 @@ declare global {
 
 // jsdom first: the designer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/customization?recordType=field_ticket&tab=forms&form=new", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/customization?recordType=field_ticket&tab=forms&form=new",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__designerRouter}export function usePathname(){return '/admin/customization'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__designerRouter}export function usePathname(){return '/admin/customization'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -37,10 +43,14 @@ const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../../messages/en")).default;
-const customizationMessages = (await import("../../../../messages/en/customization.json", { with: { type: "json" } })).default as {
+const customizationMessages = (
+  await import("../../../../messages/en/customization.json", { with: { type: "json" } })
+).default as {
   designer: { forms: { actionsSection: string } };
 };
-const commonMessages = (await import("../../../../messages/en/common.json", { with: { type: "json" } })).default as {
+const commonMessages = (
+  await import("../../../../messages/en/common.json", { with: { type: "json" } })
+).default as {
   actions: Record<string, string>;
 };
 const { FormDesigner } = await import("./FormDesigner");
@@ -48,7 +58,10 @@ const { FormDesigner } = await import("./FormDesigner");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 /** Labels of the action-toggle rows in the designer's Record-actions section. */
-async function offeredActionLabels(recordType: string, t: import("node:test").TestContext): Promise<string[]> {
+async function offeredActionLabels(
+  recordType: string,
+  t: import("node:test").TestContext,
+): Promise<string[]> {
   globalThis.__designerRouter = { push() {}, refresh() {} };
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -62,7 +75,13 @@ async function offeredActionLabels(recordType: string, t: import("node:test").Te
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <FormDesigner recordType={recordType} def={null} headerDefs={[]} lineDefs={[]} subsidiaryEnabled={false} />
+        <FormDesigner
+          recordType={recordType}
+          def={null}
+          headerDefs={[]}
+          lineDefs={[]}
+          subsidiaryEnabled={false}
+        />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -111,19 +130,31 @@ test("every removable header group exposes the translated delete action", async 
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <FormDesigner recordType="vendor_bill" def={null} headerDefs={[]} lineDefs={[]} subsidiaryEnabled={false} />
+        <FormDesigner
+          recordType="vendor_bill"
+          def={null}
+          headerDefs={[]}
+          lineDefs={[]}
+          subsidiaryEnabled={false}
+        />
       </NextIntlClientProvider>,
     );
     await tick();
   });
 
-  const addGroup = [...document.querySelectorAll("button")].find((button) => button.textContent?.includes("Add group"));
+  const addGroup = [...document.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Add group"),
+  );
   assert.ok(addGroup);
   await act(async () => {
     addGroup.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await tick();
   });
-  const groupInputs = [...document.querySelectorAll<HTMLInputElement>('input[placeholder="Group label"]')];
+  const groupInputs = [
+    ...document.querySelectorAll<HTMLInputElement>('input[placeholder="Group label"]'),
+  ];
   assert.ok(groupInputs.length > 1);
-  assert.ok(groupInputs.every((input) => input.parentElement?.querySelector('button[aria-label="Delete"]')));
+  assert.ok(
+    groupInputs.every((input) => input.parentElement?.querySelector('button[aria-label="Delete"]')),
+  );
 });

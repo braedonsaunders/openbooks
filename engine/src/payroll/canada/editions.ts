@@ -5,7 +5,4 @@ import { RATES_2024_JAN } from "./rates-2024.ts";
 import { RATES_2025_JAN } from "./rates-2025.ts";
 import type { EditionRates } from "./rates.ts";
 
-export const CA_EXTRA_EDITIONS: readonly EditionRates[] = [
-  RATES_2024_JAN,
-  RATES_2025_JAN,
-];
+export const CA_EXTRA_EDITIONS: readonly EditionRates[] = [RATES_2024_JAN, RATES_2025_JAN];

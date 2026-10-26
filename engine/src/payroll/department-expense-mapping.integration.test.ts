@@ -11,9 +11,19 @@ import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { setPackSlotAccount } from "./packs.ts";
-import { createRuleWithInitialDraft, updateDraftVersion, replaceTargets, publishVersion } from "../allocations/index.ts";
+import {
+  createRuleWithInitialDraft,
+  updateDraftVersion,
+  replaceTargets,
+  publishVersion,
+} from "../allocations/index.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -53,17 +63,24 @@ test(
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
         wagesTo: "expense",
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+        slotAccounts: {
+          CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable },
+        },
       });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await seedOntarioEhtFixture(org.orgId, actorId, "0");
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
       // Regular Wages defaults to 5110 at the component.
-      const baseId = (await db.execute<{ id: string }>(sql`
+      const baseId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from pay_components
          where org_id = ${org.orgId} and code = 'BASE' and country is null
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       await db.execute(sql`
         update pay_components set expense_account_id = ${wagesDefault}, updated_by = ${actorId}
          where org_id = ${org.orgId} and id = ${baseId}`);
@@ -84,19 +101,74 @@ test(
         values (${org.orgId}, ${baseId}, ${overheadId}, ${overheadExpense},
                 '2026-01-01', true, ${actorId}, ${actorId})`);
 
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb) where id = ${org.orgId}`);
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb) where id = ${org.orgId}`,
+      );
       const segmentId = randomUUID();
       const crewNorth = randomUUID();
       const crewSouth = randomUUID();
-      await db.execute(sql`insert into segment_definitions (id, org_id, key, name, plural_name, source_kind) values (${segmentId}, ${org.orgId}, 'crew', 'Crew', 'Crews', 'custom')`);
-      await db.execute(sql`insert into segment_values (id, org_id, segment_id, name) values (${crewNorth}, ${org.orgId}, ${segmentId}, 'North'), (${crewSouth}, ${org.orgId}, ${segmentId}, 'South')`);
-      const allocation = await createRuleWithInitialDraft({ orgId: org.orgId, key: 'overhead-crew', name: 'Overhead crews', mode: 'post', effectiveFrom: '2026-01-01', payrollExpenses: true, allowedSubsidiaryIds: null }, { actorId });
-      await updateDraftVersion(allocation.draft.version.id, { orgId: org.orgId, allowedSubsidiaryIds: null, documentKinds: ['pay_run'], dimensionFilters: { payrollExpensesOnly: true, payComponentIds: [baseId], departmentIds: [overheadId] }, basisKind: 'fixed_percent', impact: 'reclass' }, { actorId });
-      await replaceTargets(allocation.draft.version.id, { orgId: org.orgId, allowedSubsidiaryIds: null, targets: [
-        { sequence: 1, departmentId: fieldId, extraDims: { crew: crewNorth }, fixedPercent: '60' },
-        { sequence: 2, departmentId: overheadId, extraDims: { crew: crewSouth }, fixedPercent: '40' },
-      ] }, { actorId });
-      await publishVersion(allocation.draft.version.id, { orgId: org.orgId, actorId, allowedSubsidiaryIds: null, reason: 'Allocate overhead wages to the crews receiving the work.' });
+      await db.execute(
+        sql`insert into segment_definitions (id, org_id, key, name, plural_name, source_kind) values (${segmentId}, ${org.orgId}, 'crew', 'Crew', 'Crews', 'custom')`,
+      );
+      await db.execute(
+        sql`insert into segment_values (id, org_id, segment_id, name) values (${crewNorth}, ${org.orgId}, ${segmentId}, 'North'), (${crewSouth}, ${org.orgId}, ${segmentId}, 'South')`,
+      );
+      const allocation = await createRuleWithInitialDraft(
+        {
+          orgId: org.orgId,
+          key: "overhead-crew",
+          name: "Overhead crews",
+          mode: "post",
+          effectiveFrom: "2026-01-01",
+          payrollExpenses: true,
+          allowedSubsidiaryIds: null,
+        },
+        { actorId },
+      );
+      await updateDraftVersion(
+        allocation.draft.version.id,
+        {
+          orgId: org.orgId,
+          allowedSubsidiaryIds: null,
+          documentKinds: ["pay_run"],
+          dimensionFilters: {
+            payrollExpensesOnly: true,
+            payComponentIds: [baseId],
+            departmentIds: [overheadId],
+          },
+          basisKind: "fixed_percent",
+          impact: "reclass",
+        },
+        { actorId },
+      );
+      await replaceTargets(
+        allocation.draft.version.id,
+        {
+          orgId: org.orgId,
+          allowedSubsidiaryIds: null,
+          targets: [
+            {
+              sequence: 1,
+              departmentId: fieldId,
+              extraDims: { crew: crewNorth },
+              fixedPercent: "60",
+            },
+            {
+              sequence: 2,
+              departmentId: overheadId,
+              extraDims: { crew: crewSouth },
+              fixedPercent: "40",
+            },
+          ],
+        },
+        { actorId },
+      );
+      await publishVersion(allocation.draft.version.id, {
+        orgId: org.orgId,
+        actorId,
+        allowedSubsidiaryIds: null,
+        reason: "Allocate overhead wages to the crews receiving the work.",
+      });
 
       const scheduleId = randomUUID();
       await db.execute(sql`
@@ -128,7 +200,10 @@ test(
       const { seedVacationTerms } = await import("./filing-test-fixtures.ts");
       await seedVacationTerms(org.orgId, employmentId, actorId, "0", "accrue");
       // 40 Field hours (1,000.00) and 16 Overhead hours (400.00), no items.
-      for (const [departmentId, hours] of [[fieldId, "40"], [overheadId, "16"]] as const) {
+      for (const [departmentId, hours] of [
+        [fieldId, "40"],
+        [overheadId, "16"],
+      ] as const) {
         await db.execute(sql`
           insert into time_entries (org_id, employee_party_id, worked_on, hours, department_id, status,
                                     is_billable, billing_status, costing_basis, created_by, updated_by)
@@ -137,23 +212,35 @@ test(
       }
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-12", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-12",
+        periodEnd: "2026-07-18",
       });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, []);
 
       // The stub carries one line per department, each stamped at calculate.
-      const stubLines = (await db.execute<{
-        amount: string; department_id: string | null;
-        expense_account_id: string | null; expense_account_source: string | null;
-      }>(sql`
+      const stubLines = await db.execute<{
+        amount: string;
+        department_id: string | null;
+        expense_account_id: string | null;
+        expense_account_source: string | null;
+      }>(
+        sql`
         select l.amount, l.department_id, l.expense_account_id, l.expense_account_source
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.kind = 'earning'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(stubLines.length, 2);
       const fieldLine = stubLines.find((row) => row.department_id === fieldId)!;
       const overheadLine = stubLines.find((row) => row.department_id === overheadId)!;
@@ -182,10 +269,17 @@ test(
       );
 
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = (await db.execute<{ account_id: string; amount: string; custom: { payrollExpense?: boolean; payComponentId?: string | null } }>(sql`
+      const glLines = await db.execute<{
+        account_id: string;
+        amount: string;
+        custom: { payrollExpense?: boolean; payComponentId?: string | null };
+      }>(
+        sql`
         select account_id, amount, custom from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
       assert.equal(
         sum(glLines.filter((row) => row.account_id === wagesDefault).map((row) => row.amount)),
@@ -195,17 +289,69 @@ test(
         sum(glLines.filter((row) => row.account_id === overheadExpense).map((row) => row.amount)),
         "400.0000",
       );
-      const wageLegs = glLines.filter(row => row.account_id === wagesDefault || row.account_id === overheadExpense);
-      assert.ok(wageLegs.every(row => row.custom.payrollExpense === true && row.custom.payComponentId === baseId));
-      const liabilities = glLines.filter(row => cmp(row.amount, '0') < 0);
-      assert.ok(liabilities.every(row => row.custom.payrollExpense === false && row.custom.payComponentId === null));
-      await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${run.documentId}`);
-      const entryId = await postDocument(run.documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }, { audit: { actorId, source: "payroll" } });
-      const posted = await db.execute<{ account_id: string; amount: string; department_id: string | null; extra_dims: Record<string, string> }>(sql`select account_id, amount, department_id, extra_dims from journal_lines where org_id = ${org.orgId} and entry_id = ${entryId} order by line_number`, "objects");
-      assert.equal(cmp(sum(posted.map(row => row.amount)), '0'), 0);
-      assert.deepEqual(posted.filter(row => row.extra_dims.crew).map(row => [row.department_id, row.extra_dims.crew, row.amount]), [[fieldId, crewNorth, '240.0000'], [overheadId, crewSouth, '160.0000']]);
-      for (const liability of liabilities) assert.equal(sum(posted.filter(row => row.account_id === liability.account_id).map(row => row.amount)), sum(liabilities.filter(row => row.account_id === liability.account_id).map(row => row.amount)));
-      assert.equal((await db.execute<{ count: string }>(sql`select count(*)::text as count from allocation_lineage where org_id = ${org.orgId} and document_id = ${run.documentId} and version_id = ${allocation.draft.version.id}`, "objects"))[0]?.count, '3');
+      const wageLegs = glLines.filter(
+        (row) => row.account_id === wagesDefault || row.account_id === overheadExpense,
+      );
+      assert.ok(
+        wageLegs.every(
+          (row) => row.custom.payrollExpense === true && row.custom.payComponentId === baseId,
+        ),
+      );
+      const liabilities = glLines.filter((row) => cmp(row.amount, "0") < 0);
+      assert.ok(
+        liabilities.every(
+          (row) => row.custom.payrollExpense === false && row.custom.payComponentId === null,
+        ),
+      );
+      await db.execute(
+        sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${run.documentId}`,
+      );
+      const entryId = await postDocument(
+        run.documentId,
+        { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } },
+        { audit: { actorId, source: "payroll" } },
+      );
+      const posted = await db.execute<{
+        account_id: string;
+        amount: string;
+        department_id: string | null;
+        extra_dims: Record<string, string>;
+      }>(
+        sql`select account_id, amount, department_id, extra_dims from journal_lines where org_id = ${org.orgId} and entry_id = ${entryId} order by line_number`,
+        "objects",
+      );
+      assert.equal(cmp(sum(posted.map((row) => row.amount)), "0"), 0);
+      assert.deepEqual(
+        posted
+          .filter((row) => row.extra_dims.crew)
+          .map((row) => [row.department_id, row.extra_dims.crew, row.amount]),
+        [
+          [fieldId, crewNorth, "240.0000"],
+          [overheadId, crewSouth, "160.0000"],
+        ],
+      );
+      for (const liability of liabilities)
+        assert.equal(
+          sum(
+            posted
+              .filter((row) => row.account_id === liability.account_id)
+              .map((row) => row.amount),
+          ),
+          sum(
+            liabilities
+              .filter((row) => row.account_id === liability.account_id)
+              .map((row) => row.amount),
+          ),
+        );
+      assert.equal(
+        (
+          await db.execute<{ count: string }>(
+            sql`select count(*)::text as count from allocation_lineage where org_id = ${org.orgId} and document_id = ${run.documentId} and version_id = ${allocation.draft.version.id}`,
+            "objects",
+          )
+        )[0]?.count,
+        "3",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -246,15 +392,24 @@ test(
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
         wagesTo: "expense",
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+        slotAccounts: {
+          CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable },
+        },
       });
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await seedOntarioEhtFixture(org.orgId, actorId, "0");
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
-      const baseId = (await db.execute<{ id: string }>(sql`
-        select id from pay_components where org_id = ${org.orgId} and code = 'BASE' and country is null`, "objects"))[0]!.id;
+      const baseId = (
+        await db.execute<{ id: string }>(
+          sql`
+        select id from pay_components where org_id = ${org.orgId} and code = 'BASE' and country is null`,
+          "objects",
+        )
+      )[0]!.id;
       const officeId = randomUUID();
-      await db.execute(sql`insert into departments (id, org_id, code, name, is_active) values (${officeId}, ${org.orgId}, 'OFFICE', 'Office', true)`);
+      await db.execute(
+        sql`insert into departments (id, org_id, code, name, is_active) values (${officeId}, ${org.orgId}, 'OFFICE', 'Office', true)`,
+      );
       await db.execute(sql`
         insert into pay_component_department_expenses
                (org_id, pay_component_id, department_id, expense_account_id, effective_from, is_active, created_by, updated_by)
@@ -287,20 +442,46 @@ test(
       const { seedVacationTerms } = await import("./filing-test-fixtures.ts");
       await seedVacationTerms(org.orgId, employmentId, actorId, "0", "accrue");
 
-      const run = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId, periodStart: "2026-07-12", periodEnd: "2026-07-18" });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const run = await createPayRun({
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-12",
+        periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, []);
-      const lines = await db.execute<{ kind: string; department_id: string | null; expense_account_id: string | null; expense_account_source: string | null }>(sql`
+      const lines = await db.execute<{
+        kind: string;
+        department_id: string | null;
+        expense_account_id: string | null;
+        expense_account_source: string | null;
+      }>(
+        sql`
         select l.kind, l.department_id, l.expense_account_id, l.expense_account_source
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-           and l.kind in ('earning', 'employer_contribution')`, "objects");
+           and l.kind in ('earning', 'employer_contribution')`,
+        "objects",
+      );
       const salary = lines.filter((line) => line.kind === "earning");
       assert.equal(salary.length, 1);
-      assert.deepEqual(salary[0], { kind: "earning", department_id: officeId, expense_account_id: officeWages, expense_account_source: "department" });
+      assert.deepEqual(salary[0], {
+        kind: "earning",
+        department_id: officeId,
+        expense_account_id: officeWages,
+        expense_account_source: "department",
+      });
       const burdens = lines.filter((line) => line.kind === "employer_contribution");
       assert.ok(burdens.length > 0, "the salary carries employer contributions");
-      assert.ok(burdens.every((line) => line.department_id === officeId), "employer burdens carry the home department");
+      assert.ok(
+        burdens.every((line) => line.department_id === officeId),
+        "employer burdens carry the home department",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

@@ -50,9 +50,7 @@ async function line(
     await db.execute(
       sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`,
     );
-    await db.execute(
-      sql`update documents set status='approved' where id=${document}`,
-    );
+    await db.execute(sql`update documents set status='approved' where id=${document}`);
     await db.execute(
       sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${document}`,
     );
@@ -60,15 +58,14 @@ async function line(
   return id;
 }
 async function sourceDocument(lineId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(
-      sql`select je.source_document_id as id from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id where jl.id=${lineId}`, "objects",
-    ))[0]!.id;
+  return (
+    await db.execute<{ id: string }>(
+      sql`select je.source_document_id as id from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id where jl.id=${lineId}`,
+      "objects",
+    )
+  )[0]!.id;
 }
-async function postedCredit(
-  org: ScratchOrg,
-  actor: string,
-  vendor = false,
-): Promise<string> {
+async function postedCredit(org: ScratchOrg, actor: string, vendor = false): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate,subtotal,tax_total,total,created_by)
     values(${id},${org.orgId},${vendor ? "vendor_credit" : "customer_credit"},'draft',${id},${org.subsidiaryId},${vendor ? org.vendorId : org.customerId},${org.date},'CAD','1','30','0','30',${actor})`);
@@ -82,15 +79,19 @@ async function postedCredit(
       bank: org.accounts.bank,
     },
   });
-  return (await db.execute<{ id: string }>(
-      sql`select id from journal_lines where entry_id=${entry} and account_id=${vendor ? org.accounts.ap : org.accounts.ar}`, "objects",
-    ))[0]!.id;
+  return (
+    await db.execute<{ id: string }>(
+      sql`select id from journal_lines where entry_id=${entry} and account_id=${vendor ? org.accounts.ap : org.accounts.ar}`,
+      "objects",
+    )
+  )[0]!.id;
 }
 async function fixture() {
   const org = await createScratchOrg();
   const actor = await createScratchUser(org.orgId, "Scope audit", "admin");
   const target = await line(org);
-  const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+  const payment = await createPaymentDocument({
+    allowedSubsidiaryIds: null,
     orgId: org.orgId,
     kind: "customer_payment",
     createdBy: actor,
@@ -103,10 +104,15 @@ async function fixture() {
   return { org, actor, target, payment };
 }
 async function snapshot(org: ScratchOrg, payment: string) {
-  return (await db.execute(sql`select status, custom, total, posted_entry_id,
+  return (
+    await db.execute(
+      sql`select status, custom, total, posted_entry_id,
     (select count(*) from applications where org_id=${org.orgId}) as applications,
     (select count(*) from journal_entries where source_document_id=${payment}) as entries
-    from documents where id=${payment}`, "objects"))[0];
+    from documents where id=${payment}`,
+      "objects",
+    )
+  )[0];
 }
 test(
   "payment selection excludes parallel books and refuses their draft and approved allocations",
@@ -120,21 +126,35 @@ test(
       );
       const duplicate = await line(org, { book });
       assert.deepEqual(
-        (await openItemsForParty(org.customerId, "ar", org.orgId)).map(
-          (i) => i.lineId,
-        ),
+        (await openItemsForParty(org.customerId, "ar", org.orgId)).map((i) => i.lineId),
         [target],
       );
       const before = await snapshot(org, payment.id);
       const movedTo = randomUUID();
       await db.execute(sql`insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
         values (${movedTo}, ${org.orgId}, ${org.subsidiaryId}, 'Payment rehome target', 'CAD', 'CA')`);
-      await db.execute(sql`update documents set subsidiary_id=${movedTo} where id=${payment.id} and org_id=${org.orgId}`);
-      assert.equal(await loadPaymentDocument(payment.id, "customer_payment", org.orgId, new Set([org.subsidiaryId])), null);
-      await assert.rejects(updateDraftPayment(payment.id, { memo: "must not cross scope" }, actor, org.orgId,
-        { allowedSubsidiaryIds: new Set([org.subsidiaryId]) }), (e: unknown) => e instanceof ScopeNotFoundError);
+      await db.execute(
+        sql`update documents set subsidiary_id=${movedTo} where id=${payment.id} and org_id=${org.orgId}`,
+      );
+      assert.equal(
+        await loadPaymentDocument(
+          payment.id,
+          "customer_payment",
+          org.orgId,
+          new Set([org.subsidiaryId]),
+        ),
+        null,
+      );
+      await assert.rejects(
+        updateDraftPayment(payment.id, { memo: "must not cross scope" }, actor, org.orgId, {
+          allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+        }),
+        (e: unknown) => e instanceof ScopeNotFoundError,
+      );
       assert.deepEqual(await snapshot(org, payment.id), before);
-      await db.execute(sql`update documents set subsidiary_id=${org.subsidiaryId} where id=${payment.id} and org_id=${org.orgId}`);
+      await db.execute(
+        sql`update documents set subsidiary_id=${org.subsidiaryId} where id=${payment.id} and org_id=${org.orgId}`,
+      );
       await assert.rejects(
         updateDraftPayment(
           payment.id,
@@ -157,10 +177,7 @@ test(
         sql`update documents set status='approved',custom=jsonb_set(custom,'{allocations}',${JSON.stringify([sameCurrencyAllocation(duplicate, "25")])}::jsonb) where id=${payment.id}`,
       );
       const approved = await snapshot(org, payment.id);
-      await assert.rejects(
-        postPaymentWithApplications(payment.id, undefined, actor),
-        /open|book/i,
-      );
+      await assert.rejects(postPaymentWithApplications(payment.id, undefined, actor), /open|book/i);
       assert.deepEqual(await snapshot(org, payment.id), approved);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -226,10 +243,8 @@ for (const variant of [
           : variant === "wrong-sign"
             ? await line(org, { amount: "-100" })
             : target;
-        let claimedSource =
-          variant === "missing" ? randomUUID() : await sourceDocument(from);
-        if (variant === "source-document")
-          claimedSource = await sourceDocument(target);
+        let claimedSource = variant === "missing" ? randomUUID() : await sourceDocument(from);
+        if (variant === "source-document") claimedSource = await sourceDocument(target);
         if (variant === "foreign-source-document") {
           foreign = await createScratchOrg();
           claimedSource = await sourceDocument(await line(foreign));
@@ -243,10 +258,7 @@ for (const variant of [
           },
         ];
         const allocations = [
-          sameCurrencyAllocation(
-            target,
-            variant === "combined-cap" ? "80" : "25",
-          ),
+          sameCurrencyAllocation(target, variant === "combined-cap" ? "80" : "25"),
         ];
         const before = await snapshot(org, payment.id);
         if (variant === "valid") {
@@ -257,17 +269,13 @@ for (const variant of [
             org.orgId,
             { allowedSubsidiaryIds: null },
           );
-          await db.execute(
-            sql`update documents set status='approved' where id=${payment.id}`,
-          );
+          await db.execute(sql`update documents set status='approved' where id=${payment.id}`);
           await postPaymentWithApplications(payment.id, undefined, actor);
           assert.equal((await snapshot(org, payment.id))!.applications, "2");
         } else {
-          const expected = [
-            "source-document",
-            "foreign-source-document",
-            "missing",
-          ].includes(variant)
+          const expected = ["source-document", "foreign-source-document", "missing"].includes(
+            variant,
+          )
             ? /credit source document must match/
             : variant === "wrong-sign"
               ? /wrong payment side or sign/
@@ -285,21 +293,14 @@ for (const variant of [
             expected,
           );
           assert.deepEqual(await snapshot(org, payment.id), before);
-          await updateDraftPayment(
-            payment.id,
-            { allocations },
-            actor,
-            org.orgId,
-            { allowedSubsidiaryIds: null },
-          );
+          await updateDraftPayment(payment.id, { allocations }, actor, org.orgId, {
+            allowedSubsidiaryIds: null,
+          });
           await db.execute(
             sql`update documents set status='approved',custom=jsonb_set(custom,'{creditAllocations}',${JSON.stringify(credits)}::jsonb) where id=${payment.id}`,
           );
           const approved = await snapshot(org, payment.id);
-          await assert.rejects(
-            postPaymentWithApplications(payment.id, undefined, actor),
-            expected,
-          );
+          await assert.rejects(postPaymentWithApplications(payment.id, undefined, actor), expected);
           assert.deepEqual(await snapshot(org, payment.id), approved);
         }
       } finally {
@@ -311,84 +312,120 @@ for (const variant of [
 }
 
 for (const mode of ["inactive", "non-posting", "missing"] as const) {
-  test(
-    `payment book configuration fails closed: ${mode}`,
-    { skip: !DB },
-    async () => {
-      const { org, actor, target, payment } = await fixture();
-      try {
-        await db.transaction(async (tx) => {
-          // Seed legacy missing-primary policy after history only for this fixture.
-          // Payment validation below runs after the migration exemption ends.
-          if (mode === "missing") await tx.execute(sql`set local openbooks.migration=on`);
-          await tx.execute(sql`update accounting_books set
+  test(`payment book configuration fails closed: ${mode}`, { skip: !DB }, async () => {
+    const { org, actor, target, payment } = await fixture();
+    try {
+      await db.transaction(async (tx) => {
+        // Seed legacy missing-primary policy after history only for this fixture.
+        // Payment validation below runs after the migration exemption ends.
+        if (mode === "missing") await tx.execute(sql`set local openbooks.migration=on`);
+        await tx.execute(sql`update accounting_books set
           is_active=${mode !== "inactive"},posts_gl=${mode !== "non-posting"},is_primary=${mode !== "missing"}
           where id=${org.bookId}`);
+      });
+      await assert.rejects(
+        openItemsForParty(org.customerId, "ar", org.orgId),
+        /active primary posting book/,
+      );
+      const before = await snapshot(org, payment.id);
+      await assert.rejects(
+        updateDraftPayment(
+          payment.id,
+          { allocations: [sameCurrencyAllocation(target, "25")] },
+          actor,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        ),
+        /active primary posting book/,
+      );
+      assert.deepEqual(await snapshot(org, payment.id), before);
+      if (mode === "missing") {
+        // Undo the legacy un-set the same way it was seeded: with history
+        // present the guard refuses the pooled-slot reset's is_primary
+        // restore, failing the release after the test itself passed.
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.migration=on`);
+          await tx.execute(sql`update accounting_books set is_primary=true where id=${org.bookId}`);
         });
-        await assert.rejects(
-          openItemsForParty(org.customerId, "ar", org.orgId),
-          /active primary posting book/,
-        );
-        const before = await snapshot(org, payment.id);
-        await assert.rejects(
-          updateDraftPayment(
-            payment.id,
-            { allocations: [sameCurrencyAllocation(target, "25")] },
-            actor,
-            org.orgId,
-            { allowedSubsidiaryIds: null },
-          ),
-          /active primary posting book/,
-        );
-        assert.deepEqual(await snapshot(org, payment.id), before);
-        if (mode === "missing") {
-          // Undo the legacy un-set the same way it was seeded: with history
-          // present the guard refuses the pooled-slot reset's is_primary
-          // restore, failing the release after the test itself passed.
-          await db.transaction(async (tx) => {
-            await tx.execute(sql`set local openbooks.migration=on`);
-            await tx.execute(sql`update accounting_books set is_primary=true where id=${org.bookId}`);
-          });
-        }
-      } finally {
-        await dropScratchOrg(org.orgId);
       }
-    },
-  );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  });
 }
 
-test(
-  "vendor credits preserve legitimate payable settlement",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = await createScratchUser(org.orgId, "Scope audit", "admin");
-      const target = await line(org, {
-        party: org.vendorId,
-        account: org.accounts.ap,
-        amount: "-100",
-      });
-      const credit = await postedCredit(org, actor, true);
-      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-        orgId: org.orgId,
-        kind: "vendor_payment",
-        createdBy: actor,
-        partyId: org.vendorId,
-        bankAccountId: org.accounts.bank,
-        subsidiaryId: org.subsidiaryId,
-        documentDate: org.date,
-        currency: "CAD",
-      });
+test("vendor credits preserve legitimate payable settlement", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Scope audit", "admin");
+    const target = await line(org, {
+      party: org.vendorId,
+      account: org.accounts.ap,
+      amount: "-100",
+    });
+    const credit = await postedCredit(org, actor, true);
+    const payment = await createPaymentDocument({
+      allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      kind: "vendor_payment",
+      createdBy: actor,
+      partyId: org.vendorId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "CAD",
+    });
+    await updateDraftPayment(
+      payment.id,
+      {
+        allocations: [sameCurrencyAllocation(target, "70")],
+        creditAllocations: [
+          {
+            fromLineId: credit,
+            toLineId: target,
+            amount: "30",
+            sourceDocumentId: await sourceDocument(credit),
+          },
+        ],
+      },
+      actor,
+      org.orgId,
+      { allowedSubsidiaryIds: null },
+    );
+    await db.execute(sql`update documents set status='approved' where id=${payment.id}`);
+    await postPaymentWithApplications(payment.id, undefined, actor);
+    assert.equal((await snapshot(org, payment.id))!.applications, "2");
+    assert.deepEqual(await openItemsForParty(org.vendorId, "ap", org.orgId), []);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("competing payments cannot consume the same credit twice", { skip: !DB }, async () => {
+  const { org, actor, target, payment } = await fixture();
+  try {
+    const credit = await postedCredit(org, actor);
+    const other = await createPaymentDocument({
+      allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      kind: "customer_payment",
+      createdBy: actor,
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
+      currency: "CAD",
+    });
+    for (const candidate of [payment, other]) {
       await updateDraftPayment(
-        payment.id,
+        candidate.id,
         {
-          allocations: [sameCurrencyAllocation(target, "70")],
+          allocations: [sameCurrencyAllocation(target, "25")],
           creditAllocations: [
             {
               fromLineId: credit,
               toLineId: target,
-              amount: "30",
+              amount: "20",
               sourceDocumentId: await sourceDocument(credit),
             },
           ],
@@ -397,77 +434,22 @@ test(
         org.orgId,
         { allowedSubsidiaryIds: null },
       );
-      await db.execute(
-        sql`update documents set status='approved' where id=${payment.id}`,
-      );
-      await postPaymentWithApplications(payment.id, undefined, actor);
-      assert.equal((await snapshot(org, payment.id))!.applications, "2");
-      assert.deepEqual(
-        await openItemsForParty(org.vendorId, "ap", org.orgId),
-        [],
-      );
-    } finally {
-      await dropScratchOrg(org.orgId);
+      await db.execute(sql`update documents set status='approved' where id=${candidate.id}`);
     }
-  },
-);
-
-test(
-  "competing payments cannot consume the same credit twice",
-  { skip: !DB },
-  async () => {
-    const { org, actor, target, payment } = await fixture();
-    try {
-      const credit = await postedCredit(org, actor);
-      const other = await createPaymentDocument({ allowedSubsidiaryIds: null,
-        orgId: org.orgId,
-        kind: "customer_payment",
-        createdBy: actor,
-        partyId: org.customerId,
-        bankAccountId: org.accounts.bank,
-        subsidiaryId: org.subsidiaryId,
-        documentDate: org.date,
-        currency: "CAD",
-      });
-      for (const candidate of [payment, other]) {
-        await updateDraftPayment(
-          candidate.id,
-          {
-            allocations: [sameCurrencyAllocation(target, "25")],
-            creditAllocations: [
-              {
-                fromLineId: credit,
-                toLineId: target,
-                amount: "20",
-                sourceDocumentId: await sourceDocument(credit),
-              },
-            ],
-          },
-          actor,
-          org.orgId,
-          { allowedSubsidiaryIds: null },
-        );
-        await db.execute(
-          sql`update documents set status='approved' where id=${candidate.id}`,
-        );
-      }
-      const results = await Promise.allSettled(
-        [payment, other].map((p) =>
-          postPaymentWithApplications(p.id, undefined, actor),
-        ),
-      );
-      assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
-      const failure = results.find((r) => r.status === "rejected");
-      assert.match(String(failure?.reason), /open balance/);
-      assert.equal((await snapshot(org, payment.id))!.applications, "2");
-      const loser = results[0]!.status === "rejected" ? payment : other;
-      assert.equal((await snapshot(org, loser.id))!.status, "approved");
-      assert.equal((await snapshot(org, loser.id))!.entries, "0");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    const results = await Promise.allSettled(
+      [payment, other].map((p) => postPaymentWithApplications(p.id, undefined, actor)),
+    );
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+    const failure = results.find((r) => r.status === "rejected");
+    assert.match(String(failure?.reason), /open balance/);
+    assert.equal((await snapshot(org, payment.id))!.applications, "2");
+    const loser = results[0]!.status === "rejected" ? payment : other;
+    assert.equal((await snapshot(org, loser.id))!.status, "approved");
+    assert.equal((await snapshot(org, loser.id))!.entries, "0");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "payment runs consume credit source carrying amounts after an FX application",
@@ -486,9 +468,7 @@ test(
         values(${id},${org.orgId},'vendor_bill','draft',${id},${org.subsidiaryId},${org.vendorId},${org.date},${currency},${currency === "CAD" ? "1" : "1.2"},'100','0','100',${actor})`);
         await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount)
         values(${org.orgId},${id},1,${org.accounts.cogs},1,100,100,0,100)`);
-        await db.execute(
-          sql`update documents set status='approved' where id=${id}`,
-        );
+        await db.execute(sql`update documents set status='approved' where id=${id}`);
         const entry = await postDocument(id, {
           control: {
             ar: org.accounts.ar,
@@ -497,9 +477,12 @@ test(
           },
         });
         lines.push(
-          (await db.execute<{ id: string }>(
-              sql`select id from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`, "objects",
-            ))[0]!.id,
+          (
+            await db.execute<{ id: string }>(
+              sql`select id from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`,
+              "objects",
+            )
+          )[0]!.id,
         );
       }
       await db.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by)
@@ -511,18 +494,40 @@ test(
       await db.execute(sql`insert into payment_bank_profiles(id,org_id,name,bank_account_id,subsidiary_id,payment_format_id,currency,country,created_by,updated_by)
       values(${profile},${org.orgId},'Scope',${org.accounts.bank},${org.subsidiaryId},${format},'CAD','CA',${actor},${actor})`);
       const movedTo = randomUUID();
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${movedTo},${org.orgId},${org.subsidiaryId},'Rehome','CAD','CA')`);
-      await db.execute(sql`update parties set subsidiary_id=${movedTo} where id=${org.vendorId} and org_id=${org.orgId}`);
-      await assert.rejects(createPaymentRun({ allowedSubsidiaryIds: new Set([org.subsidiaryId]), orgId: org.orgId, createdBy: actor, paymentBankProfileId: profile, billDocumentIds: [bills[0]!], scheduledFor: org.date }), ScopeNotFoundError);
-      await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where id=${org.vendorId} and org_id=${org.orgId}`);
-      const run = await createPaymentRun({ allowedSubsidiaryIds: null,
+      await db.execute(
+        sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${movedTo},${org.orgId},${org.subsidiaryId},'Rehome','CAD','CA')`,
+      );
+      await db.execute(
+        sql`update parties set subsidiary_id=${movedTo} where id=${org.vendorId} and org_id=${org.orgId}`,
+      );
+      await assert.rejects(
+        createPaymentRun({
+          allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+          orgId: org.orgId,
+          createdBy: actor,
+          paymentBankProfileId: profile,
+          billDocumentIds: [bills[0]!],
+          scheduledFor: org.date,
+        }),
+        ScopeNotFoundError,
+      );
+      await db.execute(
+        sql`update parties set subsidiary_id=${org.subsidiaryId} where id=${org.vendorId} and org_id=${org.orgId}`,
+      );
+      const run = await createPaymentRun({
+        allowedSubsidiaryIds: null,
         orgId: org.orgId,
         createdBy: actor,
         paymentBankProfileId: profile,
         billDocumentIds: [bills[0]!],
         scheduledFor: org.date,
       });
-      const evidence = (await db.execute<{ amount: string; credits: string }>(sql`select pi.amount, d.custom->'creditAllocations'->0->>'amount' as credits from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`, "objects"))[0];
+      const evidence = (
+        await db.execute<{ amount: string; credits: string }>(
+          sql`select pi.amount, d.custom->'creditAllocations'->0->>'amount' as credits from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`,
+          "objects",
+        )
+      )[0];
       assert.deepEqual(evidence, { amount: "80.0000", credits: "20.0000" });
     } finally {
       await dropScratchOrg(org.orgId);
@@ -542,9 +547,7 @@ test(
       values(${bill},${org.orgId},'vendor_bill','draft',${bill},${org.subsidiaryId},${org.vendorId},${org.date},'USD','0.1','1','0','1',${actor})`);
       await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount)
       values(${org.orgId},${bill},1,${org.accounts.cogs},1,1,1,0,1)`);
-      await db.execute(
-        sql`update documents set status='approved' where id=${bill}`,
-      );
+      await db.execute(sql`update documents set status='approved' where id=${bill}`);
       const entry = await postDocument(bill, {
         control: {
           ar: org.accounts.ar,
@@ -552,10 +555,14 @@ test(
           bank: org.accounts.bank,
         },
       });
-      const target = (await db.execute<{ id: string }>(
-          sql`select id from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`, "objects",
-        ))[0]!.id;
-      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+      const target = (
+        await db.execute<{ id: string }>(
+          sql`select id from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`,
+          "objects",
+        )
+      )[0]!.id;
+      const payment = await createPaymentDocument({
+        allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "vendor_payment",
         createdBy: actor,
@@ -573,13 +580,10 @@ test(
         org.orgId,
         { allowedSubsidiaryIds: null },
       );
-      await db.execute(
-        sql`update documents set status='approved' where id=${payment.id}`,
-      );
+      await db.execute(sql`update documents set status='approved' where id=${payment.id}`);
       await postPaymentWithApplications(payment.id, undefined, actor);
       assert.equal(
-        (await openItemsForParty(org.vendorId, "ap", org.orgId))[0]!
-          .transactionOpen,
+        (await openItemsForParty(org.vendorId, "ap", org.orgId))[0]!.transactionOpen,
         "0.6667",
       );
       const format = randomUUID();
@@ -590,27 +594,28 @@ test(
       values(${profile},${org.orgId},'Scope',${org.accounts.bank},${org.subsidiaryId},${format},'USD','CA',${actor},${actor})`);
       await db.execute(sql`insert into fx_rates(org_id,from_currency,to_currency,as_of,rate_type,rate)
         values(${org.orgId},'USD','CAD',${org.date},'spot','0.1000000000')`);
-      const run = await createPaymentRun({ allowedSubsidiaryIds: null,
+      const run = await createPaymentRun({
+        allowedSubsidiaryIds: null,
         orgId: org.orgId,
         createdBy: actor,
         paymentBankProfileId: profile,
         billDocumentIds: [bill],
         scheduledFor: org.date,
       });
-      const generated = (await db.execute<{ id: string; total: string; document_date: string }>(
-          sql`select d.id,d.total,d.document_date from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`, "objects",
-        ))[0]!;
+      const generated = (
+        await db.execute<{ id: string; total: string; document_date: string }>(
+          sql`select d.id,d.total,d.document_date from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(generated.total, "0.6667");
       assert.equal(generated.document_date, org.date);
+      await db.execute(sql`update documents set status='approved' where id=${generated.id}`);
       await db.execute(
-        sql`update documents set status='approved' where id=${generated.id}`,
+        sql`update payment_runs set status='generated' where id=${run.id} and org_id=${org.orgId}`,
       );
-      await db.execute(sql`update payment_runs set status='generated' where id=${run.id} and org_id=${org.orgId}`);
-      assert.deepEqual(await postPaymentRun(run.id, org.orgId, actor), {posted:1,failures:[]});
-      assert.deepEqual(
-        await openItemsForParty(org.vendorId, "ap", org.orgId),
-        [],
-      );
+      assert.deepEqual(await postPaymentRun(run.id, org.orgId, actor), { posted: 1, failures: [] });
+      assert.deepEqual(await openItemsForParty(org.vendorId, "ap", org.orgId), []);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -628,11 +633,22 @@ test(
       const subB = randomUUID();
       const bankB = randomUUID();
       const format = randomUUID();
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${subB},${org.orgId},${org.subsidiaryId},'Second entity','CAD','CA')`);
-      await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children,subsidiary_id,currency_restriction) values(${bankB},${org.orgId},'1011','Second entity bank','asset_bank',false,true,false,true,'[]'::jsonb,'{}'::jsonb,true,${subB},'CAD')`);
-      await db.execute(sql`insert into payment_formats(id,org_id,code,name,rail,direction,country,currency,created_by,updated_by) values(${format},${org.orgId},'SCOPE','Scope','sepa','credit','CA','CAD',${actor},${actor})`);
+      await db.execute(
+        sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${subB},${org.orgId},${org.subsidiaryId},'Second entity','CAD','CA')`,
+      );
+      await db.execute(
+        sql`insert into accounts(id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children,subsidiary_id,currency_restriction) values(${bankB},${org.orgId},'1011','Second entity bank','asset_bank',false,true,false,true,'[]'::jsonb,'{}'::jsonb,true,${subB},'CAD')`,
+      );
+      await db.execute(
+        sql`insert into payment_formats(id,org_id,code,name,rail,direction,country,currency,created_by,updated_by) values(${format},${org.orgId},'SCOPE','Scope','sepa','credit','CA','CAD',${actor},${actor})`,
+      );
       await assert.rejects(
-        createPaymentBankProfile(org.orgId, actor, { name: "Scope", bankAccountId: bankB, paymentFormatId: format, currency: "CAD" }, new Set([org.subsidiaryId])),
+        createPaymentBankProfile(
+          org.orgId,
+          actor,
+          { name: "Scope", bankAccountId: bankB, paymentFormatId: format, currency: "CAD" },
+          new Set([org.subsidiaryId]),
+        ),
         ScopeNotFoundError,
       );
     } finally {

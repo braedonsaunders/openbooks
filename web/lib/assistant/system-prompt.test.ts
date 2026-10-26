@@ -187,9 +187,18 @@ describe("aiRailsPromptLines", () => {
   it("follows the owning module, and always carries ungated capabilities", async () => {
     const { aiRailsPromptLines } = await import("./system-prompt.ts");
     const on = aiRailsPromptLines({ hrm: true });
-    assert.ok(on.some((line) => /^hrmDrafting \(draft\)/.test(line)), `drafting line missing in ${JSON.stringify(on)}`);
+    assert.ok(
+      on.some((line) => /^hrmDrafting \(draft\)/.test(line)),
+      `drafting line missing in ${JSON.stringify(on)}`,
+    );
     const off = aiRailsPromptLines({ hrm: false });
-    assert.ok(off.every((line) => !line.startsWith("hrmDrafting ")), `drafting line leaked in ${JSON.stringify(off)}`);
-    assert.ok(off.some((line) => line.startsWith("hrmNlReports ")), `ungated line missing in ${JSON.stringify(off)}`);
+    assert.ok(
+      off.every((line) => !line.startsWith("hrmDrafting ")),
+      `drafting line leaked in ${JSON.stringify(off)}`,
+    );
+    assert.ok(
+      off.some((line) => line.startsWith("hrmNlReports ")),
+      `ungated line missing in ${JSON.stringify(off)}`,
+    );
   });
 });

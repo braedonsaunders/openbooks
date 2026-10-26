@@ -46,7 +46,8 @@ export function canReadContinuousCloseAgent(authz: Authz, agentKey: string): boo
   if (!(CONTINUOUS_CLOSE_AGENT_KEYS as readonly string[]).includes(agentKey)) return false;
   // Fail closed at runtime: the linked engine can ship packs this revision's
   // table does not know yet — deny, never crash.
-  const perms: readonly string[] | undefined = AGENT_READ_PERMS[agentKey as ContinuousCloseAgentKey];
+  const perms: readonly string[] | undefined =
+    AGENT_READ_PERMS[agentKey as ContinuousCloseAgentKey];
   if (!perms) return false;
   return perms.some((perm) => can(authz, perm));
 }
@@ -60,21 +61,28 @@ export async function loadWorkItemAccess(
   itemId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<WorkItemAccess | null> {
-  const result = (await db.execute<{
+  const result = await db.execute<{
     agent_key: ContinuousCloseAgentKey;
     status: WorkItemAccess["status"];
     subjectType: string | null;
     subjectSubsidiaryId: string | null;
-  }>(sql`
+  }>(
+    sql`
     select w.agent_key, w.status, w.subject_type as "subjectType",
            coalesce(subj_acct.subsidiary_id, subj_rec_acct.subsidiary_id, subj_doc.subsidiary_id) as "subjectSubsidiaryId"
       from ai_work_items w
       ${WORK_ITEM_SUBJECT_JOIN}
      where w.id = ${itemId} and w.org_id = ${orgId}
        ${workItemSubjectScopePredicate(orgId, allowedSubsidiaryIds)}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = result[0];
-  if (!row || !workItemSubjectInScope(allowedSubsidiaryIds, row.subjectType ?? "", row.subjectSubsidiaryId)) return null;
+  if (
+    !row ||
+    !workItemSubjectInScope(allowedSubsidiaryIds, row.subjectType ?? "", row.subjectSubsidiaryId)
+  )
+    return null;
   return {
     agentKey: row.agent_key,
     status: row.status,
@@ -95,48 +103,69 @@ export async function withLockedWorkItemAccess<T>(
   use: (tx: SqlExecutor, access: WorkItemAccess) => Promise<T>,
 ): Promise<T | null> {
   return db.transaction(async (tx) => {
-    const item = await tx.execute<{ subject_type: string | null; subject_id: string | null }>(sql`
+    const item = await tx.execute<{ subject_type: string | null; subject_id: string | null }>(
+      sql`
       select subject_type, subject_id from ai_work_items
        where id = ${itemId} and org_id = ${orgId}
        for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const subject = item[0];
     if (!subject) return null;
     // Lock the source row whose subsidiary determines visibility. Budget
     // edits lock their scenario before changing its subsidiary lines.
     if (subject.subject_type === "account" && subject.subject_id) {
-      await tx.execute(sql`select id from accounts where id = ${subject.subject_id} and org_id = ${orgId} for share`);
+      await tx.execute(
+        sql`select id from accounts where id = ${subject.subject_id} and org_id = ${orgId} for share`,
+      );
     } else if (subject.subject_type === "reconciliation" && subject.subject_id) {
-      const reconciliation = await tx.execute<{ account_id: string }>(sql`
+      const reconciliation = await tx.execute<{ account_id: string }>(
+        sql`
         select account_id from reconciliations
          where id = ${subject.subject_id} and org_id = ${orgId}
          for share
-      `, "objects");
+      `,
+        "objects",
+      );
       const accountId = reconciliation[0]?.account_id;
       if (accountId) {
-        await tx.execute(sql`select id from accounts where id = ${accountId} and org_id = ${orgId} for share`);
+        await tx.execute(
+          sql`select id from accounts where id = ${accountId} and org_id = ${orgId} for share`,
+        );
       }
     } else if (subject.subject_type === "documents" && subject.subject_id) {
-      await tx.execute(sql`select id from documents where id = ${subject.subject_id} and org_id = ${orgId} for share`);
+      await tx.execute(
+        sql`select id from documents where id = ${subject.subject_id} and org_id = ${orgId} for share`,
+      );
     } else if (subject.subject_type === "budget" && subject.subject_id) {
       // Budget edits lock their scenario before changing its subsidiary lines.
-      await tx.execute(sql`select id from budget_scenarios where id = ${subject.subject_id} and org_id = ${orgId} for share`);
+      await tx.execute(
+        sql`select id from budget_scenarios where id = ${subject.subject_id} and org_id = ${orgId} for share`,
+      );
     }
     const result = await tx.execute<{
       agent_key: ContinuousCloseAgentKey;
       status: WorkItemAccess["status"];
       subjectType: string | null;
       subjectSubsidiaryId: string | null;
-    }>(sql`
+    }>(
+      sql`
       select w.agent_key, w.status, w.subject_type as "subjectType",
              coalesce(subj_acct.subsidiary_id, subj_rec_acct.subsidiary_id, subj_doc.subsidiary_id) as "subjectSubsidiaryId"
         from ai_work_items w
         ${WORK_ITEM_SUBJECT_JOIN}
        where w.id = ${itemId} and w.org_id = ${orgId}
          ${workItemSubjectScopePredicate(orgId, allowedSubsidiaryIds)}
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = result[0];
-    if (!row || !workItemSubjectInScope(allowedSubsidiaryIds, row.subjectType ?? "", row.subjectSubsidiaryId)) return null;
+    if (
+      !row ||
+      !workItemSubjectInScope(allowedSubsidiaryIds, row.subjectType ?? "", row.subjectSubsidiaryId)
+    )
+      return null;
     return use(tx, {
       agentKey: row.agent_key,
       status: row.status,

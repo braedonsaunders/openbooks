@@ -1,17 +1,14 @@
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadParties, partiesSpec } from './view'
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadParties, partiesSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
-
-
-
+export const dynamic = "force-dynamic";
 
 export default async function Parties({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadParties(sp)
-  return <ModuleView spec={partiesSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadParties(sp);
+  return <ModuleView spec={partiesSpec(data)} data={data} searchParams={sp} trusted />;
 }

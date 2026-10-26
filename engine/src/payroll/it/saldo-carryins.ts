@@ -4,14 +4,8 @@ import { decimalNullRefusal } from "../../money/decimal-refusal.ts";
 import { cmp, normalizeMoney } from "../../money/money.ts";
 import { db } from "../../platform/db.ts";
 import { PayrollError } from "../error.ts";
-import {
-  employeeTaxYearFenceKey,
-  takeEmployeeTaxYearFences,
-} from "../fences.ts";
-import {
-  assertTaxYear,
-  openingBalanceLocks,
-} from "../opening-balances.ts";
+import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from "../fences.ts";
+import { assertTaxYear, openingBalanceLocks } from "../opening-balances.ts";
 import type { PayrollSubsidiaryScope } from "../scope.ts";
 
 /**
@@ -80,12 +74,15 @@ export async function itSurtaxSaldoCarryIns(
     employeePartyId: string;
     regionaleSaldo: string;
     comunaleSaldo: string;
-  }>(sql`
+  }>(
+    sql`
     select employee_party_id as "employeePartyId",
            regionale_saldo::text as "regionaleSaldo",
            comunale_saldo::text as "comunaleSaldo"
       from it_addizionali_opening_balances
-     where org_id = ${orgId} and tax_year = ${taxYear}`, "objects");
+     where org_id = ${orgId} and tax_year = ${taxYear}`,
+    "objects",
+  );
   return rows.map((row) => ({
     employeePartyId: String(row.employeePartyId),
     regionaleSaldo: String(row.regionaleSaldo),
@@ -114,7 +111,9 @@ function normalizeSaldo(label: string, raw: unknown): string | null {
 async function auditSurtaxSaldo(
   runner: Pick<typeof db, "execute">,
   args: {
-    orgId: string; actorId: string; rowId: string;
+    orgId: string;
+    actorId: string;
+    rowId: string;
     action: "insert" | "update" | "delete";
     changes: Record<string, unknown>;
   },
@@ -150,33 +149,51 @@ export async function saveItSurtaxSaldoCarryIns(input: {
         const lock = locks.get(row.employeePartyId);
         if (lock) {
           throw new PayrollError(
-            `assessed saldo is locked by committed run ${lock.documentNumber ?? "unknown"} `
-            + `(${lock.payDate}): the installments were priced off these figures — void the run to change them`,
+            `assessed saldo is locked by committed run ${lock.documentNumber ?? "unknown"} ` +
+              `(${lock.payDate}): the installments were priced off these figures — void the run to change them`,
           );
         }
-        const regionale = normalizeSaldo("Addizionale regionale a saldo (anno precedente)", row.regionaleSaldo);
-        const comunale = normalizeSaldo("Addizionale comunale a saldo (anno precedente)", row.comunaleSaldo);
+        const regionale = normalizeSaldo(
+          "Addizionale regionale a saldo (anno precedente)",
+          row.regionaleSaldo,
+        );
+        const comunale = normalizeSaldo(
+          "Addizionale comunale a saldo (anno precedente)",
+          row.comunaleSaldo,
+        );
         if (regionale === null && comunale === null) {
-          const deleted = (await tx.execute<{ id: string }>(sql`
+          const deleted = await tx.execute<{ id: string }>(
+            sql`
             delete from it_addizionali_opening_balances
              where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
                and tax_year = ${year}
-             returning id`, "objects"));
+             returning id`,
+            "objects",
+          );
           for (const gone of deleted) {
             result.deleted++;
             await auditSurtaxSaldo(tx, {
-              orgId: input.orgId, actorId: input.actorId, rowId: gone.id,
-              action: "delete", changes: { employeePartyId: row.employeePartyId, taxYear: year },
+              orgId: input.orgId,
+              actorId: input.actorId,
+              rowId: gone.id,
+              action: "delete",
+              changes: { employeePartyId: row.employeePartyId, taxYear: year },
             });
           }
           continue;
         }
-        const existing = (await tx.execute<{ id: string }>(sql`
+        const existing = (
+          await tx.execute<{ id: string }>(
+            sql`
           select id from it_addizionali_opening_balances
            where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
              and tax_year = ${year}
-           limit 1`, "objects"))[0];
-        const saved = (await tx.execute<{ id: string }>(sql`
+           limit 1`,
+            "objects",
+          )
+        )[0];
+        const saved = await tx.execute<{ id: string }>(
+          sql`
           insert into it_addizionali_opening_balances
             (org_id, employee_party_id, tax_year, regionale_saldo, comunale_saldo, created_by, updated_by)
           values (${input.orgId}, ${row.employeePartyId}, ${year},
@@ -188,16 +205,22 @@ export async function saveItSurtaxSaldoCarryIns(input: {
                  updated_by = ${input.actorId},
                  updated_at = now()
            where it_addizionali_opening_balances.org_id = ${input.orgId}
-          returning id`, "objects"));
+          returning id`,
+          "objects",
+        );
         const rowId = saved[0]!.id;
         if (existing) result.updated++;
         else result.created++;
         await auditSurtaxSaldo(tx, {
-          orgId: input.orgId, actorId: input.actorId, rowId,
+          orgId: input.orgId,
+          actorId: input.actorId,
+          rowId,
           action: existing ? "update" : "insert",
           changes: {
-            employeePartyId: row.employeePartyId, taxYear: year,
-            regionaleSaldo: regionale ?? "0.0000", comunaleSaldo: comunale ?? "0.0000",
+            employeePartyId: row.employeePartyId,
+            taxYear: year,
+            regionaleSaldo: regionale ?? "0.0000",
+            comunaleSaldo: comunale ?? "0.0000",
           },
         });
       } catch (error) {

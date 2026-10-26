@@ -1,325 +1,392 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { createServer, type IncomingMessage, type Server } from 'node:http'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
-import { isUuid } from '@/lib/list-params'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { createServer, type IncomingMessage, type Server } from "node:http";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { isUuid } from "@/lib/list-params";
 
 // documents.ts and bills.ts are server-only services (they pull the engine's
 // DB pool and the flows engine), so the runner cannot import them as-is. The
 // marker package gates only RSC bundling; shimming it to an empty module lets
 // these tests exercise the production services directly. node's test runner
 // isolates each file in its own process, so the hook cannot leak elsewhere.
-const { applyDocumentEdit, createPostedCorrectionDraft, runPostedCorrectionDraftFlows, validateEditableDocumentLines } = await import("./documents.ts"), { buildReversalLinkEvidence, DocumentEditError, runDocumentVersionedTransaction, validateCorrectionReason } = await import("@openbooks/engine/records/document-edit-policy"), { loadDocumentEditCurrent } = await import("@openbooks/engine/ledger/document-service");
+const {
+    applyDocumentEdit,
+    createPostedCorrectionDraft,
+    runPostedCorrectionDraftFlows,
+    validateEditableDocumentLines,
+  } = await import("./documents.ts"),
+  {
+    buildReversalLinkEvidence,
+    DocumentEditError,
+    runDocumentVersionedTransaction,
+    validateCorrectionReason,
+  } = await import("@openbooks/engine/records/document-edit-policy"),
+  { loadDocumentEditCurrent } = await import("@openbooks/engine/ledger/document-service");
 const { computeBillTotals } = await import("./bills.ts");
-const { createRecord } = await import('./api/writers.ts')
-const { saveTaxRateProviderConfig } = await import('@openbooks/engine/tax/rate-providers')
-const { withSimClock } = await import('@openbooks/engine/testing/platform/clock')
-const {
-  DocumentVoidError,
-  requestDocumentVoid,
-} = await import('@openbooks/engine/ledger/document-void')
-const { db, env, pool, withBypass, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
+const { createRecord } = await import("./api/writers.ts");
+const { saveTaxRateProviderConfig } = await import("@openbooks/engine/tax/rate-providers");
+const { withSimClock } = await import("@openbooks/engine/testing/platform/clock");
+const { DocumentVoidError, requestDocumentVoid } =
+  await import("@openbooks/engine/ledger/document-void");
+const { db, env, pool, withBypass, withOrgContext, withOrgTransaction } =
+  await import("@openbooks/engine/platform/db");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-const {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} = await import('@openbooks/engine/testing/fixtures')
-const { createApplicationRecord } = await import('./application/records.ts')
-const { correctPostedDocument } = await import('./application/documents.ts')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
+const { createApplicationRecord } = await import("./application/records.ts");
+const { correctPostedDocument } = await import("./application/documents.ts");
 
-const NO_PROFILES = { codes: new Map(), groups: new Map() }
+const NO_PROFILES = { codes: new Map(), groups: new Map() };
 
 async function listenProvider(server: Server): Promise<string> {
   await new Promise<void>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve())
-  })
-  const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('provider test server did not bind')
-  return `http://127.0.0.1:${address.port}`
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("provider test server did not bind");
+  return `http://127.0.0.1:${address.port}`;
 }
 
 function consumeRequest(req: IncomingMessage): Promise<void> {
   return new Promise((resolve, reject) => {
-    req.on('data', () => undefined)
-    req.on('end', resolve)
-    req.on('error', reject)
-  })
+    req.on("data", () => undefined);
+    req.on("end", resolve);
+    req.on("error", reject);
+  });
 }
 
 async function closeProvider(server: Server): Promise<void> {
-  if (!server.listening) return
-  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  if (!server.listening) return;
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
 }
 
 type StoredDocument = {
-  kind: string
-  status: string
-  total: string
-  taxTotal: string
-  partyId: string | null
-  documentDate: string
-  updatedAt: string
-  memo: string | null
-}
+  kind: string;
+  status: string;
+  total: string;
+  taxTotal: string;
+  partyId: string | null;
+  documentDate: string;
+  updatedAt: string;
+  memo: string | null;
+};
 
 type Settled<Result> =
-  | { status: 'fulfilled'; value: Result }
-  | { status: 'rejected'; reason: unknown }
+  { status: "fulfilled"; value: Result } | { status: "rejected"; reason: unknown };
 
 function settle<Result>(work: Promise<Result>): Promise<Settled<Result>> {
   return work.then(
-    (value) => ({ status: 'fulfilled' as const, value }),
-    (reason: unknown) => ({ status: 'rejected' as const, reason }),
-  )
+    (value) => ({ status: "fulfilled" as const, value }),
+    (reason: unknown) => ({ status: "rejected" as const, reason }),
+  );
 }
 
 function isConflict(error: unknown): boolean {
-  return error instanceof DocumentEditError && error.status === 409
+  return error instanceof DocumentEditError && error.status === 409;
 }
 
-
 async function loadStoredDocument(orgId: string, id: string): Promise<StoredDocument> {
-  const result = await withOrgContext(orgId, async () => db.execute<StoredDocument>(sql`
+  const result = await withOrgContext(orgId, async () =>
+    db.execute<StoredDocument>(
+      sql`
     select kind, status, total::text as "total", tax_total::text as "taxTotal",
            party_id as "partyId", document_date::text as "documentDate", memo,
            (revision_seq)::text as "updatedAt"
       from documents
      where org_id = ${orgId} and id = ${id}
-  `, 'objects'))
-  assert.ok(result[0], `document ${id} should exist`)
-  return result[0]
+  `,
+      "objects",
+    ),
+  );
+  assert.ok(result[0], `document ${id} should exist`);
+  return result[0];
 }
 
 function pids(value: unknown): number[] {
-  if (Array.isArray(value)) return value.map(Number)
-  return String(value ?? '')
-    .replace(/^\{|\}$/g, '')
-    .split(',')
+  if (Array.isArray(value)) return value.map(Number);
+  return String(value ?? "")
+    .replace(/^\{|\}$/g, "")
+    .split(",")
     .filter(Boolean)
-    .map(Number)
+    .map(Number);
 }
 
 async function waitForBlockedWriter(
   possibleBlockers: ReadonlySet<number>,
   excludedPids: ReadonlySet<number> = new Set(),
 ): Promise<{ pid: number; query: string; blockingPids: number[] }> {
-  const deadline = Date.now() + 10_000
+  const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    const rows = await withBypass(async () => await db.execute<{
-      pid: number
-      query: string
-      blockingPids: unknown
-    }>(sql`
+    const rows = await withBypass(
+      async () =>
+        await db.execute<{
+          pid: number;
+          query: string;
+          blockingPids: unknown;
+        }>(
+          sql`
       select pid, query, pg_blocking_pids(pid) as "blockingPids"
         from pg_stat_activity
        where datname = current_database()
          and pid <> pg_backend_pid()
          and cardinality(pg_blocking_pids(pid)) > 0
-    `, 'objects'))
+    `,
+          "objects",
+        ),
+    );
     for (const row of rows) {
-      const blockingPids = pids(row.blockingPids)
+      const blockingPids = pids(row.blockingPids);
       if (
-        !excludedPids.has(Number(row.pid))
-        && blockingPids.some((pid) => possibleBlockers.has(pid))
-        && /for\s+update|pg_advisory_xact_lock/i.test(row.query)
+        !excludedPids.has(Number(row.pid)) &&
+        blockingPids.some((pid) => possibleBlockers.has(pid)) &&
+        /for\s+update|pg_advisory_xact_lock/i.test(row.query)
       ) {
-        return { pid: Number(row.pid), query: row.query, blockingPids }
+        return { pid: Number(row.pid), query: row.query, blockingPids };
       }
     }
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(
-    `timed out waiting for a document write lock blocked by PostgreSQL pid(s) ${[...possibleBlockers].join(', ')}`,
-  )
+    `timed out waiting for a document write lock blocked by PostgreSQL pid(s) ${[...possibleBlockers].join(", ")}`,
+  );
 }
 
-test('negative and zero lines survive editor validation untouched', () => {
+test("negative and zero lines survive editor validation untouched", () => {
   const lines = validateEditableDocumentLines([
-    { accountId: 'acc-1', amount: '100.00' },
-    { accountId: 'acc-2', amount: '-40.00' },
-    { accountId: 'acc-3', amount: '0' },
-  ])
-  assert.deepEqual(lines.map((l) => l.amount), ['100.00', '-40.00', '0'])
-})
+    { accountId: "acc-1", amount: "100.00" },
+    { accountId: "acc-2", amount: "-40.00" },
+    { accountId: "acc-3", amount: "0" },
+  ]);
+  assert.deepEqual(
+    lines.map((l) => l.amount),
+    ["100.00", "-40.00", "0"],
+  );
+});
 
-test('a line without an account fails closed with its line number', () => {
+test("a line without an account fails closed with its line number", () => {
   assert.throws(
-    () => validateEditableDocumentLines([
-      { accountId: 'acc-1', amount: '10.00' },
-      { accountId: null, amount: '5.00' } as never,
-    ]),
-    (e: unknown) =>
-      e instanceof DocumentEditError && e.status === 422 && /Line 2/.test(e.message),
-  )
-})
+    () =>
+      validateEditableDocumentLines([
+        { accountId: "acc-1", amount: "10.00" },
+        { accountId: null, amount: "5.00" } as never,
+      ]),
+    (e: unknown) => e instanceof DocumentEditError && e.status === 422 && /Line 2/.test(e.message),
+  );
+});
 
-test('a malformed or over-precise amount fails closed with its line number', () => {
-  for (const [index, bad] of ['12ab', '', '1.00001'].entries()) {
+test("a malformed or over-precise amount fails closed with its line number", () => {
+  for (const [index, bad] of ["12ab", "", "1.00001"].entries()) {
     assert.throws(
-      () => validateEditableDocumentLines([{ accountId: 'acc-1', amount: bad }]),
-      (e: unknown) => e instanceof DocumentEditError && e.status === 422 && /Line 1/.test(e.message),
+      () => validateEditableDocumentLines([{ accountId: "acc-1", amount: bad }]),
+      (e: unknown) =>
+        e instanceof DocumentEditError && e.status === 422 && /Line 1/.test(e.message),
       `amount ${JSON.stringify(bad)} (case ${index}) should be rejected`,
-    )
+    );
   }
-})
+});
 
-test('a JSON number amount is refused with the decimal-string remedy', () => {
+test("a JSON number amount is refused with the decimal-string remedy", () => {
   assert.throws(
-    () => validateEditableDocumentLines([{ accountId: 'acc-1', amount: 100.25 as never }]),
-    (e: unknown) => e instanceof DocumentEditError
-      && e.status === 422
-      && /Line 1 amount must be sent as a decimal string, not a JSON number/.test(e.message),
-  )
-})
+    () => validateEditableDocumentLines([{ accountId: "acc-1", amount: 100.25 as never }]),
+    (e: unknown) =>
+      e instanceof DocumentEditError &&
+      e.status === 422 &&
+      /Line 1 amount must be sent as a decimal string, not a JSON number/.test(e.message),
+  );
+});
 
-test('a malformed, over-precise, or out-of-range quantity fails closed with its line number', () => {
+test("a malformed, over-precise, or out-of-range quantity fails closed with its line number", () => {
   // document_lines.quantity reached the insert unvalidated: junk, blank, and
   // 9dp quantities either died in Postgres with a storage error (a 500) or —
   // for 9dp — were silently rounded to the column scale. Fail closed instead.
-  for (const [index, bad] of ['12ab', '', '1.000000001', '99999999999999999999999', '−2'].entries()) {
+  for (const [index, bad] of [
+    "12ab",
+    "",
+    "1.000000001",
+    "99999999999999999999999",
+    "−2",
+  ].entries()) {
     assert.throws(
-      () => validateEditableDocumentLines([{ accountId: 'acc-1', amount: '10.00', quantity: bad }]),
-      (e: unknown) => e instanceof DocumentEditError && e.status === 422 && /Line 1/.test(e.message),
+      () => validateEditableDocumentLines([{ accountId: "acc-1", amount: "10.00", quantity: bad }]),
+      (e: unknown) =>
+        e instanceof DocumentEditError && e.status === 422 && /Line 1/.test(e.message),
       `quantity ${JSON.stringify(bad)} (case ${index}) should be rejected`,
-    )
+    );
   }
-})
+});
 
-test('well-formed quantities survive editor validation untouched', () => {
+test("well-formed quantities survive editor validation untouched", () => {
   const lines = validateEditableDocumentLines([
-    { accountId: 'acc-1', amount: '10.00', quantity: '2' },
-    { accountId: 'acc-2', amount: '10.00', quantity: '2.00000000' },
-    { accountId: 'acc-3', amount: '10.00', quantity: '-1.5' },
-    { accountId: 'acc-4', amount: '10.00' },
-    { accountId: 'acc-5', amount: '10.00', quantity: null },
-  ])
-  assert.deepEqual(lines.map((l) => l.quantity), ['2', '2.00000000', '-1.5', undefined, null])
-})
+    { accountId: "acc-1", amount: "10.00", quantity: "2" },
+    { accountId: "acc-2", amount: "10.00", quantity: "2.00000000" },
+    { accountId: "acc-3", amount: "10.00", quantity: "-1.5" },
+    { accountId: "acc-4", amount: "10.00" },
+    { accountId: "acc-5", amount: "10.00", quantity: null },
+  ]);
+  assert.deepEqual(
+    lines.map((l) => l.quantity),
+    ["2", "2.00000000", "-1.5", undefined, null],
+  );
+});
 
-test('a line amount wider than its ledger column fails closed with its line number', () => {
+test("a line amount wider than its ledger column fails closed with its line number", () => {
   // document_lines.amount is numeric(19,4): fifteen whole digits. A pasted
   // 16-digit amount cleared the format check and died in Postgres with a
   // storage error (a 500). The column maximum itself must still save — on
   // both sides, so the pair fits the side totals as well as every line.
   assert.throws(
-    () => validateEditableDocumentLines([{ accountId: 'acc-1', amount: '9999999999999999' }]),
+    () => validateEditableDocumentLines([{ accountId: "acc-1", amount: "9999999999999999" }]),
     (e: unknown) =>
       e instanceof DocumentEditError &&
       e.status === 422 &&
       /Line 1/.test(e.message) &&
       /at most 15 whole digits fit the ledger/.test(e.message),
-  )
+  );
   const ok = validateEditableDocumentLines([
-    { accountId: 'acc-1', amount: '999999999999999.9999' },
-    { accountId: 'acc-2', amount: '-999999999999999.9999' },
-  ])
-  assert.equal(ok[0]!.amount, '999999999999999.9999')
-  assert.equal(ok[1]!.amount, '-999999999999999.9999')
-})
+    { accountId: "acc-1", amount: "999999999999999.9999" },
+    { accountId: "acc-2", amount: "-999999999999999.9999" },
+  ]);
+  assert.equal(ok[0]!.amount, "999999999999999.9999");
+  assert.equal(ok[1]!.amount, "-999999999999999.9999");
+});
 
-test('draft side totals past the ledger refuse by name even when every line fits', () => {
+test("draft side totals past the ledger refuse by name even when every line fits", () => {
   // Fifteen whole digits per line, but the debit side sums to sixteen: the
   // stored document total is numeric(19,4) too, so the totals refuse with
   // the shared bound message instead of dying in Postgres.
   assert.throws(
     () =>
       validateEditableDocumentLines([
-        { accountId: 'acc-1', amount: '900000000000000' },
-        { accountId: 'acc-2', amount: '900000000000000' },
+        { accountId: "acc-1", amount: "900000000000000" },
+        { accountId: "acc-2", amount: "900000000000000" },
       ]),
     (e: unknown) =>
       e instanceof DocumentEditError &&
       e.status === 422 &&
       /draft debit total is out of range — at most 15 whole digits fit the ledger/.test(e.message),
-  )
-})
-
-test('a malformed or impossible edit date fails closed before any write', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  // The edit service wrote document_date/due_date/posting_date/
-  // expected_pay_date verbatim: an impossible or garbage date died in
-  // Postgres with a storage error (a 500 when no lines were supplied, a
-  // leaked driver message when tax lookup ran first). Fail closed instead.
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId
-    const id = randomUUID()
-    await withBypass(() => db.execute(sql`insert into documents (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, subtotal, tax_total, total, created_by)
-      values (${id}, ${org.orgId}, 'customer_invoice', 'draft', ${'EDATE-' + id.slice(0, 8)}, ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '0', '0', '0', ${actorId})`))
-    const patches: Record<string, string>[] = [
-      { documentDate: '2024-02-30' },
-      { documentDate: 'tomorrow' },
-      { dueDate: '2024-13-40' },
-      { postingDate: 'not-a-date' },
-      { expectedPayDate: '2023-02-29' },
-    ]
-    for (const patch of patches) {
-      const current = await withBypass(() => loadDocumentEditCurrent(id, org.orgId))
-      assert.ok(current)
-      await assert.rejects(
-        withOrgContext(org.orgId, () => applyDocumentEdit(id, current, { ...patch, expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: actorId, source: 'api' })),
-        (e: unknown) => e instanceof DocumentEditError && e.status === 422,
-        `patch ${JSON.stringify(patch)} should fail closed with a named error`,
-      )
-    }
-    // Nothing persisted, and a well-formed date still saves.
-    const stored = (await withBypass(() => db.execute<{ document_date: string }>(sql`
-      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`, 'objects')))[0]!
-    assert.equal(stored.document_date, org.date)
-    const current = await withBypass(() => loadDocumentEditCurrent(id, org.orgId))
-    assert.ok(current)
-    await withOrgContext(org.orgId, () => applyDocumentEdit(id, current, { documentDate: '2024-02-28', expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: actorId, source: 'api' }))
-    const moved = (await withBypass(() => db.execute<{ document_date: string }>(sql`
-      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`, 'objects')))[0]!
-    assert.equal(moved.document_date, '2024-02-28')
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('computeBillTotals carries negative and zero lines into the totals', () => {
-  const computed = computeBillTotals([
-    { accountId: 'acc-1', amount: '100.00' },
-    { accountId: 'acc-2', amount: '-40.00' },
-    { accountId: 'acc-3', amount: '0' },
-  ], NO_PROFILES)
-  assert.equal(computed.subtotal, '60.0000')
-  assert.equal(computed.taxTotal, '0.0000')
-  assert.equal(computed.total, '60.0000')
-})
+  );
+});
 
 test(
-  'PostgreSQL enforces exact, atomic document optimistic concurrency',
+  "a malformed or impossible edit date fails closed before any write",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    // The edit service wrote document_date/due_date/posting_date/
+    // expected_pay_date verbatim: an impossible or garbage date died in
+    // Postgres with a storage error (a 500 when no lines were supplied, a
+    // leaked driver message when tax lookup ran first). Fail closed instead.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId;
+      const id = randomUUID();
+      await withBypass(() =>
+        db.execute(sql`insert into documents (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, subtotal, tax_total, total, created_by)
+      values (${id}, ${org.orgId}, 'customer_invoice', 'draft', ${"EDATE-" + id.slice(0, 8)}, ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '0', '0', '0', ${actorId})`),
+      );
+      const patches: Record<string, string>[] = [
+        { documentDate: "2024-02-30" },
+        { documentDate: "tomorrow" },
+        { dueDate: "2024-13-40" },
+        { postingDate: "not-a-date" },
+        { expectedPayDate: "2023-02-29" },
+      ];
+      for (const patch of patches) {
+        const current = await withBypass(() => loadDocumentEditCurrent(id, org.orgId));
+        assert.ok(current);
+        await assert.rejects(
+          withOrgContext(org.orgId, () =>
+            applyDocumentEdit(
+              id,
+              current,
+              { ...patch, expectedUpdatedAt: current.updatedAt },
+              { orgId: org.orgId, userId: actorId, source: "api" },
+            ),
+          ),
+          (e: unknown) => e instanceof DocumentEditError && e.status === 422,
+          `patch ${JSON.stringify(patch)} should fail closed with a named error`,
+        );
+      }
+      // Nothing persisted, and a well-formed date still saves.
+      const stored = (
+        await withBypass(() =>
+          db.execute<{ document_date: string }>(
+            sql`
+      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.equal(stored.document_date, org.date);
+      const current = await withBypass(() => loadDocumentEditCurrent(id, org.orgId));
+      assert.ok(current);
+      await withOrgContext(org.orgId, () =>
+        applyDocumentEdit(
+          id,
+          current,
+          { documentDate: "2024-02-28", expectedUpdatedAt: current.updatedAt },
+          { orgId: org.orgId, userId: actorId, source: "api" },
+        ),
+      );
+      const moved = (
+        await withBypass(() =>
+          db.execute<{ document_date: string }>(
+            sql`
+      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.equal(moved.document_date, "2024-02-28");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test("computeBillTotals carries negative and zero lines into the totals", () => {
+  const computed = computeBillTotals(
+    [
+      { accountId: "acc-1", amount: "100.00" },
+      { accountId: "acc-2", amount: "-40.00" },
+      { accountId: "acc-3", amount: "0" },
+    ],
+    NO_PROFILES,
+  );
+  assert.equal(computed.subtotal, "60.0000");
+  assert.equal(computed.taxTotal, "0.0000");
+  assert.equal(computed.total, "60.0000");
+});
+
+test(
+  "PostgreSQL enforces exact, atomic document optimistic concurrency",
   { skip: !env.OPENBOOKS_DB_URL },
   async (t) => {
-    const missingId = randomUUID()
-    const nullId = randomUUID()
-    const exactConflictId = randomUUID()
-    const serializedId = randomUUID()
-    const rollbackId = randomUUID()
-    const rollbackLineId = randomUUID()
-    const correctionSourceId = randomUUID()
-    const correctionEntryId = randomUUID()
-    const applicationCorrectionSourceId = randomUUID()
-    const voidRollbackSourceId = randomUUID()
-    const createFlowId = randomUUID()
-    const correctionFlowId = randomUUID()
-    const correctionFlowGuard = `occ_correction_flow_${correctionFlowId.replaceAll('-', '')}`
+    const missingId = randomUUID();
+    const nullId = randomUUID();
+    const exactConflictId = randomUUID();
+    const serializedId = randomUUID();
+    const rollbackId = randomUUID();
+    const rollbackLineId = randomUUID();
+    const correctionSourceId = randomUUID();
+    const correctionEntryId = randomUUID();
+    const applicationCorrectionSourceId = randomUUID();
+    const voidRollbackSourceId = randomUUID();
+    const createFlowId = randomUUID();
+    const correctionFlowId = randomUUID();
+    const correctionFlowGuard = `occ_correction_flow_${correctionFlowId.replaceAll("-", "")}`;
 
     const fixture = await withBypass(async () => {
-      const org = await createScratchOrg()
-      const actorId = (await seedFlowActors(org.orgId)).adminId
+      const org = await createScratchOrg();
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
       await db.execute(sql`update app_roles set permissions = '["ap.create","ap.post","gl.post"]'::jsonb
-        where org_id = ${org.orgId} and key = 'admin'`)
+        where org_id = ${org.orgId} and key = 'admin'`);
 
-      const insertDraft = async (
-        id: string,
-        number: string,
-        revision: string,
-        memo: string,
-      ) => db.execute(sql`
+      const insertDraft = async (id: string, number: string, revision: string, memo: string) =>
+        db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, subsidiary_id, document_date,
            currency, status, subtotal, tax_total, total, memo, custom,
@@ -329,13 +396,33 @@ test(
            ${org.date}, 'CAD', 'draft', '0', '0', '0', ${memo}, '{}'::jsonb,
            '{}'::jsonb, ${actorId}, ${revision}::timestamptz,
            ${revision}::timestamptz, null)
-      `)
+      `);
 
-      await insertDraft(missingId, 'OCC-MISSING', '2026-08-24T12:00:00.100001Z', 'missing retained')
-      await insertDraft(nullId, 'OCC-NULL', '2026-08-24T12:00:00.100002Z', 'null retained')
-      await insertDraft(exactConflictId, 'OCC-EXACT', '2026-08-24T12:00:00.123001Z', 'opened value')
-      await insertDraft(serializedId, 'OCC-SERIAL', '2026-08-24T12:00:00.500001Z', 'serialized original')
-      await insertDraft(rollbackId, 'OCC-ROLLBACK', '2026-08-24T12:00:00.700001Z', 'rollback header')
+      await insertDraft(
+        missingId,
+        "OCC-MISSING",
+        "2026-08-24T12:00:00.100001Z",
+        "missing retained",
+      );
+      await insertDraft(nullId, "OCC-NULL", "2026-08-24T12:00:00.100002Z", "null retained");
+      await insertDraft(
+        exactConflictId,
+        "OCC-EXACT",
+        "2026-08-24T12:00:00.123001Z",
+        "opened value",
+      );
+      await insertDraft(
+        serializedId,
+        "OCC-SERIAL",
+        "2026-08-24T12:00:00.500001Z",
+        "serialized original",
+      );
+      await insertDraft(
+        rollbackId,
+        "OCC-ROLLBACK",
+        "2026-08-24T12:00:00.700001Z",
+        "rollback header",
+      );
       await db.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, account_id, description,
@@ -345,14 +432,14 @@ test(
           (${rollbackLineId}, ${org.orgId}, ${rollbackId}, 1,
            ${org.accounts.bank}, 'original line', '1', '7', '7', '7', '0',
            false, '{}'::jsonb, '{}'::jsonb)
-      `)
+      `);
 
       await insertDraft(
         correctionSourceId,
-        'OCC-CORRECTION-SOURCE',
-        '2026-08-24T12:00:00.900001Z',
-        'posted source',
-      )
+        "OCC-CORRECTION-SOURCE",
+        "2026-08-24T12:00:00.900001Z",
+        "posted source",
+      );
       await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -363,13 +450,13 @@ test(
            ${org.subsidiaryId}, 'OCC-CORRECTION-ENTRY', ${org.date},
            ${org.periodId}, 'posted source identity', 'draft',
            ${correctionSourceId}, 'document', '{}'::jsonb, ${actorId}, ${actorId})
-      `)
+      `);
       await db.execute(sql`
         update documents
            set status = 'posted', posted_entry_id = ${correctionEntryId},
                posting_period_id = ${org.periodId}, posting_date = ${org.date}
          where id = ${correctionSourceId} and org_id = ${org.orgId}
-      `)
+      `);
       await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
@@ -381,7 +468,7 @@ test(
            ${org.date}, ${org.date}, 'CAD', '1', 'draft', '125', '0', '125',
            'application correction source', '{}'::jsonb, '{}'::jsonb,
            ${actorId}, ${actorId})
-      `)
+      `);
       await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, account_id, quantity, unit_price,
@@ -390,11 +477,11 @@ test(
           (${org.orgId}, ${applicationCorrectionSourceId}, 1,
            ${org.accounts.cogs}, '1', '125', '125', '0', '{}'::jsonb,
            '{}'::jsonb, ${actorId}, ${actorId})
-      `)
+      `);
       await db.execute(sql`
         update documents set status = 'approved'
          where id = ${applicationCorrectionSourceId} and org_id = ${org.orgId}
-      `)
+      `);
       await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
@@ -406,7 +493,7 @@ test(
            ${org.date}, ${org.date}, 'CAD', '1', 'draft', '125', '0', '125',
            'void rollback source', '{}'::jsonb, '{}'::jsonb,
            ${actorId}, ${actorId})
-      `)
+      `);
       await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, account_id, quantity, unit_price,
@@ -415,11 +502,11 @@ test(
           (${org.orgId}, ${voidRollbackSourceId}, 1,
            ${org.accounts.cogs}, '1', '125', '125', '0', '{}'::jsonb,
            '{}'::jsonb, ${actorId}, ${actorId})
-      `)
+      `);
       await db.execute(sql`
         update documents set status = 'approved'
          where id = ${voidRollbackSourceId} and org_id = ${org.orgId}
-      `)
+      `);
       await db.execute(sql`
         insert into flows
           (id, org_id, name, subject_kind, enabled, graph, created_by, updated_by)
@@ -429,28 +516,26 @@ test(
              schemaVersion: 1,
              nodes: [
                {
-                 id: 'created',
+                 id: "created",
                  position: { x: 0, y: 0 },
-                 data: { kind: 'trigger', trigger: { trigger: 'on_create' } },
+                 data: { kind: "trigger", trigger: { trigger: "on_create" } },
                },
                {
-                 id: 'settled-field',
+                 id: "settled-field",
                  position: { x: 200, y: 0 },
                  data: {
-                   kind: 'action',
+                   kind: "action",
                    action: {
-                     action: 'set_field',
-                     field: 'internalNotes',
-                     value: { kind: 'literal', value: 'settled by on_create' },
+                     action: "set_field",
+                     field: "internalNotes",
+                     value: { kind: "literal", value: "settled by on_create" },
                    },
                  },
                },
              ],
-             edges: [
-               { id: 'created-to-field', source: 'created', target: 'settled-field' },
-             ],
-          })}::jsonb, ${actorId}, ${actorId})
-      `)
+             edges: [{ id: "created-to-field", source: "created", target: "settled-field" }],
+           })}::jsonb, ${actorId}, ${actorId})
+      `);
       await db.execute(sql`
         insert into flows
           (id, org_id, name, subject_kind, enabled, graph, created_by, updated_by)
@@ -460,27 +545,28 @@ test(
              schemaVersion: 1,
              nodes: [
                {
-                 id: 'created',
+                 id: "created",
                  position: { x: 0, y: 0 },
-                 data: { kind: 'trigger', trigger: { trigger: 'on_create' } },
+                 data: { kind: "trigger", trigger: { trigger: "on_create" } },
                },
                {
-                 id: 'notify',
+                 id: "notify",
                  position: { x: 200, y: 0 },
                  data: {
-                   kind: 'action',
+                   kind: "action",
                    action: {
-                     action: 'notify',
-                     to: [{ type: 'user', userId: actorId }],
-                     title: 'Correction committed',
+                     action: "notify",
+                     to: [{ type: "user", userId: actorId }],
+                     title: "Correction committed",
                    },
                  },
                },
              ],
-             edges: [{ id: 'created-to-notify', source: 'created', target: 'notify' }],
+             edges: [{ id: "created-to-notify", source: "created", target: "notify" }],
            })}::jsonb, ${actorId}, ${actorId})
-      `)
-      await db.execute(sql.raw(`
+      `);
+      await db.execute(
+        sql.raw(`
         create function public.${correctionFlowGuard}_fn() returns trigger
         language plpgsql as $guard$
         begin
@@ -499,99 +585,109 @@ test(
         create trigger ${correctionFlowGuard}
           before insert on flow_runs
           for each row execute function public.${correctionFlowGuard}_fn();
-      `))
+      `),
+      );
 
-      return { actorId, org }
-    })
+      return { actorId, org };
+    });
 
-    const { actorId, org } = fixture
+    const { actorId, org } = fixture;
     const editContext = {
       orgId: org.orgId,
       userId: actorId,
-      source: 'ui' as const,
+      source: "ui" as const,
       runFlows: false,
-    }
+    };
 
     try {
-      await withOrgContext(org.orgId, () => postDocument(
-        applicationCorrectionSourceId,
-        {
-          control: {
-            ar: org.accounts.ar,
-            ap: org.accounts.ap,
-            bank: org.accounts.bank,
+      await withOrgContext(org.orgId, () =>
+        postDocument(
+          applicationCorrectionSourceId,
+          {
+            control: {
+              ar: org.accounts.ar,
+              ap: org.accounts.ap,
+              bank: org.accounts.bank,
+            },
           },
-        },
-        { audit: { actorId, source: 'test' } },
-      ))
+          { audit: { actorId, source: "test" } },
+        ),
+      );
 
-      await t.test('pristine existing drafts reject missing and null revisions', async () => {
+      await t.test("pristine existing drafts reject missing and null revisions", async () => {
         // Seeded rows were only ever inserted, so each row's first counter
         // token is 0; the revision_seq counter (migration 0167) is the token,
         // never the seeded display timestamp.
         for (const [id, expectedMemo, expectedUpdatedAt, body] of [
-          [missingId, 'missing retained', '0', { memo: 'missing bypassed' }],
-          [nullId, 'null retained', '0', {
-            expectedUpdatedAt: null as never,
-            memo: 'null bypassed',
-          }],
+          [missingId, "missing retained", "0", { memo: "missing bypassed" }],
+          [
+            nullId,
+            "null retained",
+            "0",
+            {
+              expectedUpdatedAt: null as never,
+              memo: "null bypassed",
+            },
+          ],
         ] as const) {
-          const stored = await loadStoredDocument(org.orgId, id)
-          const currentWithoutRevision: Omit<StoredDocument, 'updatedAt' | 'memo'> = {
+          const stored = await loadStoredDocument(org.orgId, id);
+          const currentWithoutRevision: Omit<StoredDocument, "updatedAt" | "memo"> = {
             kind: stored.kind,
             status: stored.status,
             total: stored.total,
             taxTotal: stored.taxTotal,
             partyId: stored.partyId,
             documentDate: stored.documentDate,
-          }
+          };
           await assert.rejects(
-            withOrgContext(org.orgId, () => applyDocumentEdit(
-              id,
-              currentWithoutRevision as never,
-              body,
-              editContext,
-            )),
+            withOrgContext(org.orgId, () =>
+              applyDocumentEdit(id, currentWithoutRevision as never, body, editContext),
+            ),
             isConflict,
-          )
-          const retained = await loadStoredDocument(org.orgId, id)
-          assert.equal(retained.memo, expectedMemo)
-          assert.equal(retained.updatedAt, expectedUpdatedAt)
+          );
+          const retained = await loadStoredDocument(org.orgId, id);
+          assert.equal(retained.memo, expectedMemo);
+          assert.equal(retained.updatedAt, expectedUpdatedAt);
         }
-      })
+      });
 
-      await t.test('a concurrent display-timestamp write still produces a real stale conflict', async () => {
-        // The token is the revision_seq counter: the seeded row was only
-        // ever inserted, so its first token is 0 however precise the display
-        // timestamp looks.
-        const opened = await loadStoredDocument(org.orgId, exactConflictId)
-        assert.equal(opened.updatedAt, '0')
+      await t.test(
+        "a concurrent display-timestamp write still produces a real stale conflict",
+        async () => {
+          // The token is the revision_seq counter: the seeded row was only
+          // ever inserted, so its first token is 0 however precise the display
+          // timestamp looks.
+          const opened = await loadStoredDocument(org.orgId, exactConflictId);
+          assert.equal(opened.updatedAt, "0");
 
-        await withOrgContext(org.orgId, async () => {
-          await db.execute(sql`
+          await withOrgContext(org.orgId, async () => {
+            await db.execute(sql`
             update documents
                set memo = 'concurrent exact update',
                    updated_at = '2026-08-24T12:00:00.123999Z'::timestamptz,
                    updated_by = ${actorId}
              where id = ${exactConflictId} and org_id = ${org.orgId}
-          `)
-        })
+          `);
+          });
 
-        await assert.rejects(
-          withOrgContext(org.orgId, () => applyDocumentEdit(
-            exactConflictId,
-            opened,
-            { expectedUpdatedAt: opened.updatedAt, memo: 'stale overwrite' },
-            editContext,
-          )),
-          isConflict,
-        )
-        const retained = await loadStoredDocument(org.orgId, exactConflictId)
-        assert.equal(retained.memo, 'concurrent exact update')
-        assert.equal(retained.updatedAt, '1')
-      })
+          await assert.rejects(
+            withOrgContext(org.orgId, () =>
+              applyDocumentEdit(
+                exactConflictId,
+                opened,
+                { expectedUpdatedAt: opened.updatedAt, memo: "stale overwrite" },
+                editContext,
+              ),
+            ),
+            isConflict,
+          );
+          const retained = await loadStoredDocument(org.orgId, exactConflictId);
+          assert.equal(retained.memo, "concurrent exact update");
+          assert.equal(retained.updatedAt, "1");
+        },
+      );
 
-      await t.test('storage refuses to let two writes share one revision token', async () => {
+      await t.test("storage refuses to let two writes share one revision token", async () => {
         // Regression pin for the audited collapse: writers whose timestamp
         // source truncates PostgreSQL's microseconds (JavaScript Date) or
         // repeats `now()` inside one transaction could store an updated_at
@@ -602,7 +698,7 @@ test(
         // database boundary — including an explicit repeat of the stored
         // display timestamp (which documents_revision_monotonic still rewrites
         // forward) and an explicit backward timestamp (which it permits).
-        const collapseId = randomUUID()
+        const collapseId = randomUUID();
         await withBypass(async () => {
           await db.execute(sql`
             insert into documents
@@ -615,11 +711,11 @@ test(
                'collapse probe', '{}'::jsonb, '{}'::jsonb, ${actorId},
                '2026-08-24T12:00:00.400001Z'::timestamptz,
                '2026-08-24T12:00:00.400001Z'::timestamptz, null)
-          `)
-        })
+          `);
+        });
 
-        const opened = await loadStoredDocument(org.orgId, collapseId)
-        assert.equal(opened.updatedAt, '0')
+        const opened = await loadStoredDocument(org.orgId, collapseId);
+        assert.equal(opened.updatedAt, "0");
         await withOrgContext(org.orgId, async () => {
           // Repeat the stored DISPLAY timestamp exactly: the row's updated_at
           // is the seeded 400001Z value above, not the counter token.
@@ -628,16 +724,16 @@ test(
                set memo = 'repeat attempt',
                    updated_at = '2026-08-24T12:00:00.400001Z'::timestamptz
              where id = ${collapseId} and org_id = ${org.orgId}
-          `)
-        })
-        const afterRepeat = await loadStoredDocument(org.orgId, collapseId)
-        assert.equal(afterRepeat.memo, 'repeat attempt')
+          `);
+        });
+        const afterRepeat = await loadStoredDocument(org.orgId, collapseId);
+        assert.equal(afterRepeat.memo, "repeat attempt");
         assert.notEqual(
           afterRepeat.updatedAt,
           opened.updatedAt,
-          'a write repeating the stored display timestamp must receive a fresh token',
-        )
-        assert.match(afterRepeat.updatedAt, /^\d+$/)
+          "a write repeating the stored display timestamp must receive a fresh token",
+        );
+        assert.match(afterRepeat.updatedAt, /^\d+$/);
         // A backward display timestamp still commits new content — and still
         // advances the token, so reuse of an old display value can never
         // resurrect a stale token.
@@ -647,307 +743,358 @@ test(
                set memo = 'backward attempt',
                    updated_at = '2020-01-01T00:00:00.000000Z'::timestamptz
              where id = ${collapseId} and org_id = ${org.orgId}
-          `)
-        })
-        const afterBackward = await loadStoredDocument(org.orgId, collapseId)
-        assert.equal(afterBackward.memo, 'backward attempt')
+          `);
+        });
+        const afterBackward = await loadStoredDocument(org.orgId, collapseId);
+        assert.equal(afterBackward.memo, "backward attempt");
         assert.notEqual(
           afterBackward.updatedAt,
           afterRepeat.updatedAt,
-          'a backward display timestamp must still advance the token',
-        )
-        assert.match(afterBackward.updatedAt, /^\d+$/)
+          "a backward display timestamp must still advance the token",
+        );
+        assert.match(afterBackward.updatedAt, /^\d+$/);
 
         // Two updates inside one transaction share now() by construction;
         // only the storage rule keeps their committed revisions distinct.
-        await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-          for (const memo of ['same transaction write one', 'same transaction write two']) {
-            await tx.execute(sql`
+        await withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            for (const memo of ["same transaction write one", "same transaction write two"]) {
+              await tx.execute(sql`
               update documents
                  set memo = ${memo}, updated_at = now()
                where id = ${collapseId} and org_id = ${org.orgId}
-            `)
-          }
-        }))
-        const afterSameTransaction = await loadStoredDocument(org.orgId, collapseId)
-        assert.equal(afterSameTransaction.memo, 'same transaction write two')
+            `);
+            }
+          }),
+        );
+        const afterSameTransaction = await loadStoredDocument(org.orgId, collapseId);
+        assert.equal(afterSameTransaction.memo, "same transaction write two");
         assert.notEqual(
           afterSameTransaction.updatedAt,
           afterRepeat.updatedAt,
-          'two writes in one transaction may never commit one shared revision token',
-        )
+          "two writes in one transaction may never commit one shared revision token",
+        );
 
         // A stale holder of the pre-collapse token is rejected against the
         // advanced revision, proving the tokens really do distinguish the
         // writes that previously collapsed together.
         await assert.rejects(
-          withOrgContext(org.orgId, () => applyDocumentEdit(
-            collapseId,
-            {
-              kind: opened.kind,
-              status: opened.status,
-              total: opened.total,
-              taxTotal: opened.taxTotal,
-              partyId: opened.partyId,
-              documentDate: opened.documentDate,
-              updatedAt: opened.updatedAt,
-            },
-            { expectedUpdatedAt: opened.updatedAt, memo: 'stale overwrite' },
-            editContext,
-          )),
+          withOrgContext(org.orgId, () =>
+            applyDocumentEdit(
+              collapseId,
+              {
+                kind: opened.kind,
+                status: opened.status,
+                total: opened.total,
+                taxTotal: opened.taxTotal,
+                partyId: opened.partyId,
+                documentDate: opened.documentDate,
+                updatedAt: opened.updatedAt,
+              },
+              { expectedUpdatedAt: opened.updatedAt, memo: "stale overwrite" },
+              editContext,
+            ),
+          ),
           isConflict,
-        )
-      })
+        );
+      });
 
-      await t.test('SELECT FOR UPDATE serializes two writers from one exact revision', async () => {
-        const opened = await loadStoredDocument(org.orgId, serializedId)
-        const blocker = await withOrgContext(org.orgId, async () => pool.connect())
-        let blockerCommitted = false
+      await t.test("SELECT FOR UPDATE serializes two writers from one exact revision", async () => {
+        const opened = await loadStoredDocument(org.orgId, serializedId);
+        const blocker = await withOrgContext(org.orgId, async () => pool.connect());
+        let blockerCommitted = false;
         // The edit returns the deferred flow event (or nothing) — this test
         // only observes WHEN each writer settles, so it follows the writer's
         // own result type rather than pinning a shape it never reads.
-        type EditSettled = Settled<Awaited<ReturnType<typeof applyDocumentEdit>>>
-        let firstWrite: Promise<EditSettled> | undefined
-        let secondWrite: Promise<EditSettled> | undefined
-        let results: [EditSettled, EditSettled] | undefined
+        type EditSettled = Settled<Awaited<ReturnType<typeof applyDocumentEdit>>>;
+        let firstWrite: Promise<EditSettled> | undefined;
+        let secondWrite: Promise<EditSettled> | undefined;
+        let results: [EditSettled, EditSettled] | undefined;
         try {
-          await blocker.query('begin')
+          await blocker.query("begin");
           await blocker.query(
             "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
             [org.orgId],
-          )
-          const backend = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid')
-          const blockerPid = Number(backend.rows[0]!.pid)
-          await blocker.query(
-            'select id from documents where org_id = $1 and id = $2 for update',
-            [org.orgId, serializedId],
-          )
-
-          firstWrite = settle(withOrgContext(org.orgId, () => applyDocumentEdit(
+          );
+          const backend = await blocker.query<{ pid: number }>("select pg_backend_pid() as pid");
+          const blockerPid = Number(backend.rows[0]!.pid);
+          await blocker.query("select id from documents where org_id = $1 and id = $2 for update", [
+            org.orgId,
             serializedId,
-            opened,
-            { expectedUpdatedAt: opened.updatedAt, memo: 'first writer' },
-            editContext,
-          )))
-          const firstBlocked = await waitForBlockedWriter(new Set([blockerPid]))
-          assert.deepEqual(firstBlocked.blockingPids.includes(blockerPid), true)
+          ]);
 
-          secondWrite = settle(withOrgContext(org.orgId, () => applyDocumentEdit(
-            serializedId,
-            opened,
-            { expectedUpdatedAt: opened.updatedAt, memo: 'stale writer' },
-            editContext,
-          )))
+          firstWrite = settle(
+            withOrgContext(org.orgId, () =>
+              applyDocumentEdit(
+                serializedId,
+                opened,
+                { expectedUpdatedAt: opened.updatedAt, memo: "first writer" },
+                editContext,
+              ),
+            ),
+          );
+          const firstBlocked = await waitForBlockedWriter(new Set([blockerPid]));
+          assert.deepEqual(firstBlocked.blockingPids.includes(blockerPid), true);
+
+          secondWrite = settle(
+            withOrgContext(org.orgId, () =>
+              applyDocumentEdit(
+                serializedId,
+                opened,
+                { expectedUpdatedAt: opened.updatedAt, memo: "stale writer" },
+                editContext,
+              ),
+            ),
+          );
           const secondBlocked = await waitForBlockedWriter(
             new Set([blockerPid, firstBlocked.pid]),
             new Set([firstBlocked.pid]),
-          )
-          assert.notEqual(secondBlocked.pid, firstBlocked.pid)
+          );
+          assert.notEqual(secondBlocked.pid, firstBlocked.pid);
 
-          await blocker.query('commit')
-          blockerCommitted = true
-          results = await Promise.all([firstWrite, secondWrite])
+          await blocker.query("commit");
+          blockerCommitted = true;
+          results = await Promise.all([firstWrite, secondWrite]);
         } finally {
-          if (!blockerCommitted) await blocker.query('rollback').catch(() => undefined)
-          blocker.release()
+          if (!blockerCommitted) await blocker.query("rollback").catch(() => undefined);
+          blocker.release();
           if (!results) {
-            await Promise.all([firstWrite, secondWrite].filter(Boolean) as Promise<EditSettled>[])
+            await Promise.all([firstWrite, secondWrite].filter(Boolean) as Promise<EditSettled>[]);
           }
         }
 
-        assert.ok(results)
-        assert.equal(results[0].status, 'fulfilled')
-        assert.equal(results[1].status, 'rejected')
-        assert.ok(results[1].status === 'rejected' && isConflict(results[1].reason))
-        const saved = await loadStoredDocument(org.orgId, serializedId)
-        assert.equal(saved.memo, 'first writer')
-        assert.match(saved.updatedAt, /^\d+$/)
-        assert.notEqual(saved.updatedAt, opened.updatedAt)
-      })
+        assert.ok(results);
+        assert.equal(results[0].status, "fulfilled");
+        assert.equal(results[1].status, "rejected");
+        assert.ok(results[1].status === "rejected" && isConflict(results[1].reason));
+        const saved = await loadStoredDocument(org.orgId, serializedId);
+        assert.equal(saved.memo, "first writer");
+        assert.match(saved.updatedAt, /^\d+$/);
+        assert.notEqual(saved.updatedAt, opened.updatedAt);
+      });
 
-      await t.test('an unknown replacement line account is refused before any edit write', async () => {
-        // The editor now verifies every line account against the tenant's
-        // chart before touching storage (a foreign account is a domain 404,
-        // never a foreign-key crash), so the failed-second-line scenario is
-        // refused up front; the assertions below still prove that nothing —
-        // header, revision or lines — was written.
-        const opened = await loadStoredDocument(org.orgId, rollbackId)
-        const invalidAccountId = randomUUID()
-        await assert.rejects(
-          withOrgContext(org.orgId, () => applyDocumentEdit(
-            rollbackId,
-            opened,
-            {
-              expectedUpdatedAt: opened.updatedAt,
-              memo: 'header must roll back',
-              lines: [
-                { accountId: org.accounts.cogs, description: 'inserted before failure', amount: '12' },
-                { accountId: invalidAccountId, description: 'foreign-key failure', amount: '3' },
-              ],
-            },
-            editContext,
-          )),
-          (error: unknown) =>
-            error instanceof DocumentEditError
-            && error.status === 404
-            && error.message === 'account not found for this subsidiary',
-        )
+      await t.test(
+        "an unknown replacement line account is refused before any edit write",
+        async () => {
+          // The editor now verifies every line account against the tenant's
+          // chart before touching storage (a foreign account is a domain 404,
+          // never a foreign-key crash), so the failed-second-line scenario is
+          // refused up front; the assertions below still prove that nothing —
+          // header, revision or lines — was written.
+          const opened = await loadStoredDocument(org.orgId, rollbackId);
+          const invalidAccountId = randomUUID();
+          await assert.rejects(
+            withOrgContext(org.orgId, () =>
+              applyDocumentEdit(
+                rollbackId,
+                opened,
+                {
+                  expectedUpdatedAt: opened.updatedAt,
+                  memo: "header must roll back",
+                  lines: [
+                    {
+                      accountId: org.accounts.cogs,
+                      description: "inserted before failure",
+                      amount: "12",
+                    },
+                    {
+                      accountId: invalidAccountId,
+                      description: "foreign-key failure",
+                      amount: "3",
+                    },
+                  ],
+                },
+                editContext,
+              ),
+            ),
+            (error: unknown) =>
+              error instanceof DocumentEditError &&
+              error.status === 404 &&
+              error.message === "account not found for this subsidiary",
+          );
 
-        const retained = await loadStoredDocument(org.orgId, rollbackId)
-        assert.equal(retained.memo, 'rollback header')
-        assert.equal(retained.updatedAt, opened.updatedAt)
-        const lines = await withOrgContext(org.orgId, async () => await db.execute<{
-          id: string
-          accountId: string
-          description: string
-          amount: string
-        }>(sql`
+          const retained = await loadStoredDocument(org.orgId, rollbackId);
+          assert.equal(retained.memo, "rollback header");
+          assert.equal(retained.updatedAt, opened.updatedAt);
+          const lines = await withOrgContext(
+            org.orgId,
+            async () =>
+              await db.execute<{
+                id: string;
+                accountId: string;
+                description: string;
+                amount: string;
+              }>(
+                sql`
           select id, account_id as "accountId", description, amount::text
             from document_lines
            where org_id = ${org.orgId} and document_id = ${rollbackId}
            order by line_number
-        `, 'objects'))
-        assert.deepEqual(lines, [{
-          id: rollbackLineId,
-          accountId: org.accounts.bank,
-          description: 'original line',
-          amount: '7.0000',
-        }])
-      })
+        `,
+                "objects",
+              ),
+          );
+          assert.deepEqual(lines, [
+            {
+              id: rollbackLineId,
+              accountId: org.accounts.bank,
+              description: "original line",
+              amount: "7.0000",
+            },
+          ]);
+        },
+      );
 
-      await t.test('API and MCP creation reload the revision settled by on_create flows', async () => {
-        const user = {
-          id: actorId,
-          email: 'occ-writer@scratch.test',
-          name: 'OCC Writer',
-          roles: [{ key: 'admin', name: 'Admin' }],
-          orgId: org.orgId,
-          envKind: 'production' as const,
-          productionOrgId: org.orgId,
-          isSuperAdmin: false,
-          homeUserId: actorId,
-          homeOrgId: org.orgId,
-        }
+      await t.test(
+        "API and MCP creation reload the revision settled by on_create flows",
+        async () => {
+          const user = {
+            id: actorId,
+            email: "occ-writer@scratch.test",
+            name: "OCC Writer",
+            roles: [{ key: "admin", name: "Admin" }],
+            orgId: org.orgId,
+            envKind: "production" as const,
+            productionOrgId: org.orgId,
+            isSuperAdmin: false,
+            homeUserId: actorId,
+            homeOrgId: org.orgId,
+          };
 
-        for (const source of ['api', 'mcp'] as const) {
-          const writeResult = await withOrgContext(
-            org.orgId,
-            () => createApplicationRecord(
-              {
-                authz: {
-                  user,
-                  permissions: new Set(['*']),
-                  allowedSubsidiaryIds: null,
+          for (const source of ["api", "mcp"] as const) {
+            const writeResult = await withOrgContext(org.orgId, () =>
+              createApplicationRecord(
+                {
+                  authz: {
+                    user,
+                    permissions: new Set(["*"]),
+                    allowedSubsidiaryIds: null,
+                  },
+                  source,
+                  requestId: `occ-create-${source}`,
+                  apiKeyId: null,
                 },
-                source,
-                requestId: `occ-create-${source}`,
-                apiKeyId: null,
-              },
-              {
-                typeKey: 'invoices',
-                body: { memo: `${source} request persisted` },
-                idempotencyKey: `occ-create-${source}-0001`,
-              },
-            ),
-          )
-          assert.equal(writeResult.status, 201)
-          assert.equal(writeResult.replayed, false)
-          const payload = writeResult.result as {
-            doc: { id: string; memo: string | null; internal_notes: string | null; updated_at: string }
+                {
+                  typeKey: "invoices",
+                  body: { memo: `${source} request persisted` },
+                  idempotencyKey: `occ-create-${source}-0001`,
+                },
+              ),
+            );
+            assert.equal(writeResult.status, 201);
+            assert.equal(writeResult.replayed, false);
+            const payload = writeResult.result as {
+              doc: {
+                id: string;
+                memo: string | null;
+                internal_notes: string | null;
+                updated_at: string;
+              };
+            };
+            assert.equal(payload.doc.memo, `${source} request persisted`);
+            assert.equal(payload.doc.internal_notes, "settled by on_create");
+            assert.match(payload.doc.updated_at, /^\d+$/);
+            const persisted = await loadStoredDocument(org.orgId, payload.doc.id);
+            assert.equal(payload.doc.updated_at, persisted.updatedAt);
           }
-          assert.equal(payload.doc.memo, `${source} request persisted`)
-          assert.equal(payload.doc.internal_notes, 'settled by on_create')
-          assert.match(payload.doc.updated_at, /^\d+$/)
-          const persisted = await loadStoredDocument(org.orgId, payload.doc.id)
-          assert.equal(payload.doc.updated_at, persisted.updatedAt)
-        }
 
-        const runs = await withOrgContext(org.orgId, async () => await db.execute<{
-          status: string
-        }>(sql`
+          const runs = await withOrgContext(
+            org.orgId,
+            async () =>
+              await db.execute<{
+                status: string;
+              }>(
+                sql`
           select status
             from flow_runs
            where org_id = ${org.orgId} and flow_id = ${createFlowId}
              and trigger = 'on_create'
            order by started_at
-        `, 'objects'))
-        assert.deepEqual(runs, [
-          { status: 'completed' },
-          { status: 'completed' },
-        ])
-      })
+        `,
+                "objects",
+              ),
+          );
+          assert.deepEqual(runs, [{ status: "completed" }, { status: "completed" }]);
+        },
+      );
 
-      await t.test('concurrent posted corrections retain exactly one winner', async () => {
-        const source = await loadStoredDocument(org.orgId, correctionSourceId)
-        assert.equal(source.status, 'posted')
+      await t.test("concurrent posted corrections retain exactly one winner", async () => {
+        const source = await loadStoredDocument(org.orgId, correctionSourceId);
+        assert.equal(source.status, "posted");
         // The draft→posted flip is itself a mutation, so storage has advanced
         // the seeded counter: every committed documents update bumps
         // revision_seq (migration 0167), and this correction's OCC evidence
         // must be the current exact token, whatever value the flip produced.
-        assert.match(source.updatedAt, /^\d+$/)
-        assert.notEqual(source.updatedAt, '2026-08-24T12:00:00.900001Z')
+        assert.match(source.updatedAt, /^\d+$/);
+        assert.notEqual(source.updatedAt, "2026-08-24T12:00:00.900001Z");
         const correctionBody = {
           expectedUpdatedAt: source.updatedAt,
-          amendmentReason: 'Correct duplicated allocation',
-          memo: 'retained correction',
-        }
-        const blocker = await withOrgContext(org.orgId, async () => pool.connect())
-        type CorrectionResult = Awaited<ReturnType<typeof createPostedCorrectionDraft>>
-        let blockerCommitted = false
-        let firstAttempt: Promise<Settled<CorrectionResult>> | undefined
-        let secondAttempt: Promise<Settled<CorrectionResult>> | undefined
-        let attempts: Array<Settled<CorrectionResult>> | undefined
+          amendmentReason: "Correct duplicated allocation",
+          memo: "retained correction",
+        };
+        const blocker = await withOrgContext(org.orgId, async () => pool.connect());
+        type CorrectionResult = Awaited<ReturnType<typeof createPostedCorrectionDraft>>;
+        let blockerCommitted = false;
+        let firstAttempt: Promise<Settled<CorrectionResult>> | undefined;
+        let secondAttempt: Promise<Settled<CorrectionResult>> | undefined;
+        let attempts: Array<Settled<CorrectionResult>> | undefined;
         try {
-          await blocker.query('begin')
+          await blocker.query("begin");
           await blocker.query(
             "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
             [org.orgId],
-          )
-          const backend = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid')
-          const blockerPid = Number(backend.rows[0]!.pid)
-          await blocker.query(
-            'select id from documents where org_id = $1 and id = $2 for update',
-            [org.orgId, correctionSourceId],
-          )
+          );
+          const backend = await blocker.query<{ pid: number }>("select pg_backend_pid() as pid");
+          const blockerPid = Number(backend.rows[0]!.pid);
+          await blocker.query("select id from documents where org_id = $1 and id = $2 for update", [
+            org.orgId,
+            correctionSourceId,
+          ]);
 
-          firstAttempt = settle(withOrgContext(org.orgId, () => createPostedCorrectionDraft(
-            correctionSourceId,
-            correctionBody,
-            editContext,
-          )))
-          const firstBlocked = await waitForBlockedWriter(new Set([blockerPid]))
-          secondAttempt = settle(withOrgContext(org.orgId, () => createPostedCorrectionDraft(
-            correctionSourceId,
-            correctionBody,
-            editContext,
-          )))
+          firstAttempt = settle(
+            withOrgContext(org.orgId, () =>
+              createPostedCorrectionDraft(correctionSourceId, correctionBody, editContext),
+            ),
+          );
+          const firstBlocked = await waitForBlockedWriter(new Set([blockerPid]));
+          secondAttempt = settle(
+            withOrgContext(org.orgId, () =>
+              createPostedCorrectionDraft(correctionSourceId, correctionBody, editContext),
+            ),
+          );
           await waitForBlockedWriter(
             new Set([blockerPid, firstBlocked.pid]),
             new Set([firstBlocked.pid]),
-          )
-          await blocker.query('commit')
-          blockerCommitted = true
-          attempts = await Promise.all([firstAttempt, secondAttempt])
+          );
+          await blocker.query("commit");
+          blockerCommitted = true;
+          attempts = await Promise.all([firstAttempt, secondAttempt]);
         } finally {
-          if (!blockerCommitted) await blocker.query('rollback').catch(() => undefined)
-          blocker.release()
+          if (!blockerCommitted) await blocker.query("rollback").catch(() => undefined);
+          blocker.release();
           if (!attempts) {
-            await Promise.all([firstAttempt, secondAttempt].filter(Boolean) as Array<
-              Promise<Settled<CorrectionResult>>
-            >)
+            await Promise.all(
+              [firstAttempt, secondAttempt].filter(Boolean) as Array<
+                Promise<Settled<CorrectionResult>>
+              >,
+            );
           }
         }
-        assert.ok(attempts)
-        assert.equal(attempts.filter((attempt) => attempt.status === 'fulfilled').length, 1)
-        const loser = attempts.find((attempt) => attempt.status === 'rejected')
-        assert.ok(loser?.status === 'rejected' && isConflict(loser.reason))
+        assert.ok(attempts);
+        assert.equal(attempts.filter((attempt) => attempt.status === "fulfilled").length, 1);
+        const loser = attempts.find((attempt) => attempt.status === "rejected");
+        assert.ok(loser?.status === "rejected" && isConflict(loser.reason));
 
-        const links = await withOrgContext(org.orgId, async () => await db.execute<{
-          replacementId: string
-          status: string
-          memo: string | null
-          correctionOf: string | null
-        }>(sql`
+        const links = await withOrgContext(
+          org.orgId,
+          async () =>
+            await db.execute<{
+              replacementId: string;
+              status: string;
+              memo: string | null;
+              correctionOf: string | null;
+            }>(
+              sql`
           select link.from_document_id as "replacementId", replacement.status,
                  replacement.memo, replacement.custom->>'correctionOf' as "correctionOf"
             from document_links link
@@ -957,65 +1104,76 @@ test(
            where link.org_id = ${org.orgId}
              and link.to_document_id = ${correctionSourceId}
              and link.link_type = 'reverses'
-        `, 'objects'))
-        assert.equal(links.length, 1)
-        assert.equal(links[0]!.status, 'draft')
-        assert.equal(links[0]!.memo, 'retained correction')
-        assert.equal(links[0]!.correctionOf, correctionSourceId)
-      })
+        `,
+              "objects",
+            ),
+        );
+        assert.equal(links.length, 1);
+        assert.equal(links[0]!.status, "draft");
+        assert.equal(links[0]!.memo, "retained correction");
+        assert.equal(links[0]!.correctionOf, correctionSourceId);
+      });
 
-      await t.test('application correction routes flows inside its idempotent transaction', async () => {
-        const source = await loadStoredDocument(org.orgId, applicationCorrectionSourceId)
-        assert.equal(source.status, 'posted')
-        const user = {
-          id: actorId,
-          email: 'occ-correction@scratch.test',
-          name: 'OCC Correction Controller',
-          roles: [{ key: 'admin', name: 'Admin' }],
-          orgId: org.orgId,
-          envKind: 'production' as const,
-          productionOrgId: org.orgId,
-          isSuperAdmin: false,
-          homeUserId: actorId,
-          homeOrgId: org.orgId,
-        }
-        const correction = {
-          expectedUpdatedAt: source.updatedAt,
-          amendmentReason: 'Correct duplicated vendor charge',
-          partyId: org.vendorId,
-          documentDate: org.date,
-          memo: 'application correction committed',
-          lines: [{ accountId: org.accounts.cogs, amount: '125' }],
-        }
-        const correctionContext = {
-          authz: {
-            user,
-            permissions: new Set(['*']),
-            allowedSubsidiaryIds: null,
-          },
-          source: 'api' as const,
-          requestId: 'occ-application-correction',
-          apiKeyId: null,
-        }
-        const result = await withSimClock(org.date, () => withOrgContext(
-          org.orgId,
-          () => correctPostedDocument(correctionContext, {
-            documentId: applicationCorrectionSourceId,
-            correction,
-            idempotencyKey: 'occ-correction-postcommit-api-0001',
-          }),
-        ))
-        assert.equal(result.replayed, false)
-        const outcome = result.result as { correctionId: string; voidStatus: string }
-        assert.ok(isUuid(outcome.correctionId), 'expected a real UUID correction id')
-        assert.equal(outcome.voidStatus, 'voided')
+      await t.test(
+        "application correction routes flows inside its idempotent transaction",
+        async () => {
+          const source = await loadStoredDocument(org.orgId, applicationCorrectionSourceId);
+          assert.equal(source.status, "posted");
+          const user = {
+            id: actorId,
+            email: "occ-correction@scratch.test",
+            name: "OCC Correction Controller",
+            roles: [{ key: "admin", name: "Admin" }],
+            orgId: org.orgId,
+            envKind: "production" as const,
+            productionOrgId: org.orgId,
+            isSuperAdmin: false,
+            homeUserId: actorId,
+            homeOrgId: org.orgId,
+          };
+          const correction = {
+            expectedUpdatedAt: source.updatedAt,
+            amendmentReason: "Correct duplicated vendor charge",
+            partyId: org.vendorId,
+            documentDate: org.date,
+            memo: "application correction committed",
+            lines: [{ accountId: org.accounts.cogs, amount: "125" }],
+          };
+          const correctionContext = {
+            authz: {
+              user,
+              permissions: new Set(["*"]),
+              allowedSubsidiaryIds: null,
+            },
+            source: "api" as const,
+            requestId: "occ-application-correction",
+            apiKeyId: null,
+          };
+          const result = await withSimClock(org.date, () =>
+            withOrgContext(org.orgId, () =>
+              correctPostedDocument(correctionContext, {
+                documentId: applicationCorrectionSourceId,
+                correction,
+                idempotencyKey: "occ-correction-postcommit-api-0001",
+              }),
+            ),
+          );
+          assert.equal(result.replayed, false);
+          const outcome = result.result as { correctionId: string; voidStatus: string };
+          assert.ok(isUuid(outcome.correctionId), "expected a real UUID correction id");
+          assert.equal(outcome.voidStatus, "voided");
 
-        const committed = await withOrgContext(org.orgId, async () => (await db.execute<{
-          sourceStatus: string
-          replacementMemo: string | null
-          runs: number
-          notifications: number
-        }>(sql`
+          const committed = await withOrgContext(
+            org.orgId,
+            async () =>
+              (
+                await db.execute<{
+                  sourceStatus: string;
+                  replacementMemo: string | null;
+                  runs: number;
+                  notifications: number;
+                }>(
+                  sql`
           select source.status as "sourceStatus", replacement.memo as "replacementMemo",
                  (select count(*)::int from flow_runs
                    where org_id = ${org.orgId} and flow_id = ${correctionFlowId}) as runs,
@@ -1032,46 +1190,65 @@ test(
              and replacement.id = link.from_document_id
            where source.org_id = ${org.orgId}
              and source.id = ${applicationCorrectionSourceId}
-        `, 'objects'))[0])
-        assert.deepEqual(committed, {
-          sourceStatus: 'voided',
-          replacementMemo: 'application correction committed',
-          runs: 1,
-          notifications: 1,
-        })
+        `,
+                  "objects",
+                )
+              )[0],
+          );
+          assert.deepEqual(committed, {
+            sourceStatus: "voided",
+            replacementMemo: "application correction committed",
+            runs: 1,
+            notifications: 1,
+          });
 
-        // A completed key replays the committed response even though the
-        // source is now voided. The callback (and therefore flow dispatch)
-        // must not run a second time.
-        const replay = await withSimClock(org.date, () => withOrgContext(
-          org.orgId,
-          () => correctPostedDocument(correctionContext, {
-            documentId: applicationCorrectionSourceId,
-            correction,
-            idempotencyKey: 'occ-correction-postcommit-api-0001',
-          }),
-        ))
-        assert.equal(replay.replayed, true)
-        assert.deepEqual(replay.result, result.result)
-        const replayEffects = await withOrgContext(org.orgId, async () => (await db.execute<{
-          runs: number
-          notifications: number
-        }>(sql`
+          // A completed key replays the committed response even though the
+          // source is now voided. The callback (and therefore flow dispatch)
+          // must not run a second time.
+          const replay = await withSimClock(org.date, () =>
+            withOrgContext(org.orgId, () =>
+              correctPostedDocument(correctionContext, {
+                documentId: applicationCorrectionSourceId,
+                correction,
+                idempotencyKey: "occ-correction-postcommit-api-0001",
+              }),
+            ),
+          );
+          assert.equal(replay.replayed, true);
+          assert.deepEqual(replay.result, result.result);
+          const replayEffects = await withOrgContext(
+            org.orgId,
+            async () =>
+              (
+                await db.execute<{
+                  runs: number;
+                  notifications: number;
+                }>(
+                  sql`
           select
             (select count(*)::int from flow_runs
               where org_id = ${org.orgId} and flow_id = ${correctionFlowId}) as runs,
             (select count(*)::int from notifications
               where org_id = ${org.orgId} and kind = 'flow'
                 and title = 'Correction committed') as notifications
-        `, 'objects'))[0])
-        assert.deepEqual(replayEffects, { runs: 1, notifications: 1 })
-      })
+        `,
+                  "objects",
+                )
+              )[0],
+          );
+          assert.deepEqual(replayEffects, { runs: 1, notifications: 1 });
+        },
+      );
 
-      await t.test('flow routing failure rolls back correction, void, and idempotency claim', async () => {
-        // Force the correction flow's flow_runs insert to fail. Because the
-        // dispatcher now runs inside executeIdempotent's transaction, the
-        // aborted transaction must roll back every material write.
-        await withBypass(() => db.execute(sql.raw(`
+      await t.test(
+        "flow routing failure rolls back correction, void, and idempotency claim",
+        async () => {
+          // Force the correction flow's flow_runs insert to fail. Because the
+          // dispatcher now runs inside executeIdempotent's transaction, the
+          // aborted transaction must roll back every material write.
+          await withBypass(() =>
+            db.execute(
+              sql.raw(`
           create or replace function public.${correctionFlowGuard}_fn() returns trigger
           language plpgsql as $guard$
           begin
@@ -1081,66 +1258,78 @@ test(
             return new;
           end
           $guard$;
-        `)))
-        await withOrgContext(org.orgId, () => postDocument(
-          voidRollbackSourceId,
-          {
-            control: {
-              ar: org.accounts.ar,
-              ap: org.accounts.ap,
-              bank: org.accounts.bank,
-            },
-          },
-          { audit: { actorId, source: 'test' } },
-        ))
-        const source = await loadStoredDocument(org.orgId, voidRollbackSourceId)
-        const user = {
-          id: actorId,
-          email: 'occ-correction-failure@scratch.test',
-          name: 'OCC Correction Failure Controller',
-          roles: [{ key: 'admin', name: 'Admin' }],
-          orgId: org.orgId,
-          envKind: 'production' as const,
-          productionOrgId: org.orgId,
-          isSuperAdmin: false,
-          homeUserId: actorId,
-          homeOrgId: org.orgId,
-        }
-        const attempt = await settle(withSimClock(org.date, () => withOrgContext(
-          org.orgId,
-          () => correctPostedDocument(
-            {
-              authz: {
-                user,
-                permissions: new Set(['*']),
-                allowedSubsidiaryIds: null,
+        `),
+            ),
+          );
+          await withOrgContext(org.orgId, () =>
+            postDocument(
+              voidRollbackSourceId,
+              {
+                control: {
+                  ar: org.accounts.ar,
+                  ap: org.accounts.ap,
+                  bank: org.accounts.bank,
+                },
               },
-              source: 'api',
-              requestId: 'occ-application-correction-flow-failure',
-              apiKeyId: null,
-            },
-            {
-              documentId: voidRollbackSourceId,
-              correction: {
-                expectedUpdatedAt: source.updatedAt,
-                amendmentReason: 'Correct duplicated vendor charge after flow failure',
-                partyId: org.vendorId,
-                documentDate: org.date,
-                memo: 'flow failure must roll back',
-                lines: [{ accountId: org.accounts.cogs, amount: '125' }],
-              },
-              idempotencyKey: 'occ-correction-flow-failure-api-0001',
-            },
-          ),
-        )))
-        assert.equal(attempt.status, 'rejected')
+              { audit: { actorId, source: "test" } },
+            ),
+          );
+          const source = await loadStoredDocument(org.orgId, voidRollbackSourceId);
+          const user = {
+            id: actorId,
+            email: "occ-correction-failure@scratch.test",
+            name: "OCC Correction Failure Controller",
+            roles: [{ key: "admin", name: "Admin" }],
+            orgId: org.orgId,
+            envKind: "production" as const,
+            productionOrgId: org.orgId,
+            isSuperAdmin: false,
+            homeUserId: actorId,
+            homeOrgId: org.orgId,
+          };
+          const attempt = await settle(
+            withSimClock(org.date, () =>
+              withOrgContext(org.orgId, () =>
+                correctPostedDocument(
+                  {
+                    authz: {
+                      user,
+                      permissions: new Set(["*"]),
+                      allowedSubsidiaryIds: null,
+                    },
+                    source: "api",
+                    requestId: "occ-application-correction-flow-failure",
+                    apiKeyId: null,
+                  },
+                  {
+                    documentId: voidRollbackSourceId,
+                    correction: {
+                      expectedUpdatedAt: source.updatedAt,
+                      amendmentReason: "Correct duplicated vendor charge after flow failure",
+                      partyId: org.vendorId,
+                      documentDate: org.date,
+                      memo: "flow failure must roll back",
+                      lines: [{ accountId: org.accounts.cogs, amount: "125" }],
+                    },
+                    idempotencyKey: "occ-correction-flow-failure-api-0001",
+                  },
+                ),
+              ),
+            ),
+          );
+          assert.equal(attempt.status, "rejected");
 
-        const rolledBack = await withOrgContext(org.orgId, async () => (await db.execute<{
-          sourceStatus: string
-          links: number
-          replacements: number
-          claims: number
-        }>(sql`
+          const rolledBack = await withOrgContext(
+            org.orgId,
+            async () =>
+              (
+                await db.execute<{
+                  sourceStatus: string;
+                  links: number;
+                  replacements: number;
+                  claims: number;
+                }>(
+                  sql`
           select source.status as "sourceStatus",
                  (select count(*)::int from document_links
                    where org_id = ${org.orgId}
@@ -1158,16 +1347,22 @@ test(
             from documents source
            where source.org_id = ${org.orgId}
              and source.id = ${voidRollbackSourceId}
-        `, 'objects'))[0])
-        assert.deepEqual(rolledBack, {
-          sourceStatus: 'posted',
-          links: 0,
-          replacements: 0,
-          claims: 0,
-        })
+        `,
+                  "objects",
+                )
+              )[0],
+          );
+          assert.deepEqual(rolledBack, {
+            sourceStatus: "posted",
+            links: 0,
+            replacements: 0,
+            claims: 0,
+          });
 
-        // Restore the transactional guard for the remaining correction tests.
-        await withBypass(() => db.execute(sql.raw(`
+          // Restore the transactional guard for the remaining correction tests.
+          await withBypass(() =>
+            db.execute(
+              sql.raw(`
           create or replace function public.${correctionFlowGuard}_fn() returns trigger
           language plpgsql as $guard$
           begin
@@ -1183,18 +1378,25 @@ test(
             return new;
           end
           $guard$;
-        `)))
-      })
+        `),
+            ),
+          );
+        },
+      );
 
-      await t.test('a failing void rolls the whole posted correction back atomically', async () => {
+      await t.test("a failing void rolls the whole posted correction back atomically", async () => {
         // The UI route deliberately dispatches its deferred flow after the
         // surrounding transaction commits (it has no idempotent command
         // wrapper). The application correction assertions above own the
         // transaction guard; remove it here so this independent route
         // composition can continue to exercise its post-commit dispatch.
-        await withBypass(() => db.execute(sql.raw(`
+        await withBypass(() =>
+          db.execute(
+            sql.raw(`
           drop trigger if exists ${correctionFlowGuard} on flow_runs
-        `)))
+        `),
+          ),
+        );
         // A void claim that lands between the replacement draft and the void
         // request is exactly the window the removed compensating-delete
         // fallback could not reliably clean up. With the claim in place the
@@ -1208,58 +1410,63 @@ test(
                    void_reversal_date = ${org.date},
                    updated_by = ${actorId}
              where id = ${voidRollbackSourceId} and org_id = ${org.orgId}
-          `)
-        })
+          `);
+        });
 
         // The UI route's composition: both writes inside one tenant
         // transaction, flows deferred until it commits.
-        const runCorrectionCommand = () => withSimClock(org.date, () => withOrgContext(
-          org.orgId,
-          async () => {
-            const outcome = await withOrgTransaction(org.orgId, async () => {
-              const source = await loadStoredDocument(org.orgId, voidRollbackSourceId)
-              const replacement = await createPostedCorrectionDraft(
-                voidRollbackSourceId,
-                {
-                  expectedUpdatedAt: source.updatedAt,
-                  amendmentReason: 'Correct duplicated vendor charge',
-                  partyId: org.vendorId,
-                  documentDate: org.date,
-                  memo: 'atomic correction',
-                  lines: [{ accountId: org.accounts.cogs, amount: '125' }],
-                },
-                editContext,
-                { deferFlows: true },
-              )
-              const result = await requestDocumentVoid({
-                documentId: voidRollbackSourceId,
+        const runCorrectionCommand = () =>
+          withSimClock(org.date, () =>
+            withOrgContext(org.orgId, async () => {
+              const outcome = await withOrgTransaction(org.orgId, async () => {
+                const source = await loadStoredDocument(org.orgId, voidRollbackSourceId);
+                const replacement = await createPostedCorrectionDraft(
+                  voidRollbackSourceId,
+                  {
+                    expectedUpdatedAt: source.updatedAt,
+                    amendmentReason: "Correct duplicated vendor charge",
+                    partyId: org.vendorId,
+                    documentDate: org.date,
+                    memo: "atomic correction",
+                    lines: [{ accountId: org.accounts.cogs, amount: "125" }],
+                  },
+                  editContext,
+                  { deferFlows: true },
+                );
+                const result = await requestDocumentVoid({
+                  documentId: voidRollbackSourceId,
+                  orgId: org.orgId,
+                  actorId,
+                  reason: "Correct duplicated vendor charge",
+                  source: "ui",
+                });
+                return { replacement, result };
+              });
+              await runPostedCorrectionDraftFlows(outcome.replacement.id, "vendor_bill", {
                 orgId: org.orgId,
-                actorId,
-                reason: 'Correct duplicated vendor charge',
-                source: 'ui',
-              })
-              return { replacement, result }
-            })
-            await runPostedCorrectionDraftFlows(outcome.replacement.id, 'vendor_bill', {
-              orgId: org.orgId,
-              userId: actorId,
-              source: 'posted_correction',
-            })
-            return outcome
-          },
-        ))
+                userId: actorId,
+                source: "posted_correction",
+              });
+              return outcome;
+            }),
+          );
 
-        const attempt = await settle(runCorrectionCommand())
+        const attempt = await settle(runCorrectionCommand());
         assert.ok(
-          attempt.status === 'rejected'
-            && attempt.reason instanceof DocumentVoidError
-            && /already has a pending void request/.test(attempt.reason.message),
-        )
+          attempt.status === "rejected" &&
+            attempt.reason instanceof DocumentVoidError &&
+            /already has a pending void request/.test(attempt.reason.message),
+        );
 
-        const lineage = await withOrgContext(org.orgId, async () => (await db.execute<{
-          links: number
-          replacements: number
-        }>(sql`
+        const lineage = await withOrgContext(
+          org.orgId,
+          async () =>
+            (
+              await db.execute<{
+                links: number;
+                replacements: number;
+              }>(
+                sql`
           select
             (select count(*)::int from document_links
               where org_id = ${org.orgId}
@@ -1268,9 +1475,13 @@ test(
             (select count(*)::int from documents
               where org_id = ${org.orgId}
                 and custom->>'correctionOf' = ${voidRollbackSourceId}) as replacements
-        `, 'objects'))[0])
-        assert.deepEqual(lineage, { links: 0, replacements: 0 })
-        assert.equal((await loadStoredDocument(org.orgId, voidRollbackSourceId)).status, 'posted')
+        `,
+                "objects",
+              )
+            )[0],
+        );
+        assert.deepEqual(lineage, { links: 0, replacements: 0 });
+        assert.equal((await loadStoredDocument(org.orgId, voidRollbackSourceId)).status, "posted");
 
         // Fail-closed means recoverable: once the competing claim clears, the
         // same request succeeds end to end — no stuck correction edge.
@@ -1283,17 +1494,22 @@ test(
                    void_reversal_date = null,
                    updated_by = ${actorId}
              where id = ${voidRollbackSourceId} and org_id = ${org.orgId}
-          `)
-        })
-        const retry = await settle(runCorrectionCommand())
-        assert.ok(retry.status === 'fulfilled' && retry.value.result.status === 'voided')
+          `);
+        });
+        const retry = await settle(runCorrectionCommand());
+        assert.ok(retry.status === "fulfilled" && retry.value.result.status === "voided");
 
-        const committed = await withOrgContext(org.orgId, async () => (await db.execute<{
-          sourceStatus: string
-          links: number
-          replacementMemo: string | null
-          runs: number
-        }>(sql`
+        const committed = await withOrgContext(
+          org.orgId,
+          async () =>
+            (
+              await db.execute<{
+                sourceStatus: string;
+                links: number;
+                replacementMemo: string | null;
+                runs: number;
+              }>(
+                sql`
           select source.status as "sourceStatus",
                  (select count(*)::int from document_links l2
                    where l2.org_id = source.org_id
@@ -1314,46 +1530,53 @@ test(
                      )) as runs
             from documents source
            where source.org_id = ${org.orgId} and source.id = ${voidRollbackSourceId}
-        `, 'objects'))[0])
+        `,
+                "objects",
+              )
+            )[0],
+        );
         assert.deepEqual(committed, {
-          sourceStatus: 'voided',
+          sourceStatus: "voided",
           links: 1,
-          replacementMemo: 'atomic correction',
+          replacementMemo: "atomic correction",
           runs: 1,
-        })
-      })
+        });
+      });
     } finally {
       await withBypass(async () => {
-        await db.execute(sql.raw(`drop trigger if exists ${correctionFlowGuard} on flow_runs`))
-        await db.execute(sql.raw(`drop function if exists public.${correctionFlowGuard}_fn()`))
-      })
-      await dropScratchOrg(org.orgId)
+        await db.execute(sql.raw(`drop trigger if exists ${correctionFlowGuard} on flow_runs`));
+        await db.execute(sql.raw(`drop function if exists public.${correctionFlowGuard}_fn()`));
+      });
+      await dropScratchOrg(org.orgId);
     }
   },
-)
+);
 
-type VersionedLockRow = { status: string; updatedAt: unknown }
+type VersionedLockRow = { status: string; updatedAt: unknown };
 
 /** Drive runDocumentVersionedTransaction against a stubbed lock + mutation. */
-function versionedRun(lockedRow: VersionedLockRow | null, expectedRevision: string): {
-  run: Promise<number>
-  mutations: () => number
+function versionedRun(
+  lockedRow: VersionedLockRow | null,
+  expectedRevision: string,
+): {
+  run: Promise<number>;
+  mutations: () => number;
 } {
-  let writes = 0
+  let writes = 0;
   const run = runDocumentVersionedTransaction<{ handle: number }, VersionedLockRow, number>({
     expectedRevision,
     transaction: async (work) => work({ handle: 1 }),
     lock: async () => lockedRow,
     mutate: async () => {
-      writes += 1
-      return writes
+      writes += 1;
+      return writes;
     },
-  })
-  return { run, mutations: () => writes }
+  });
+  return { run, mutations: () => writes };
 }
 
-test('the locked revision must itself be an exact persisted token before any write', async () => {
-  const exact = '2026-08-24T12:00:00.123001Z'
+test("the locked revision must itself be an exact persisted token before any write", async () => {
+  const exact = "2026-08-24T12:00:00.123001Z";
   // A lock projection that regresses away documentRevisionSql hands back
   // whatever the driver or PostgreSQL defaults produce — a mapped Date, a
   // second-granularity timestamp, default text rendering, an empty value.
@@ -1362,190 +1585,256 @@ test('the locked revision must itself be an exact persisted token before any wri
   // before any comparison runs — even when the caller echoes the same lossy
   // value back verbatim.
   for (const [lossy, echoed] of [
-    [new Date('2026-08-24T12:00:00.123001Z'), exact],
-    ['2026-08-24T12:00:00Z', '2026-08-24T12:00:00Z'],
-    ['2026-08-24 12:00:00.123001+00', '2026-08-24 12:00:00.123001+00'],
-    ['', ''],
+    [new Date("2026-08-24T12:00:00.123001Z"), exact],
+    ["2026-08-24T12:00:00Z", "2026-08-24T12:00:00Z"],
+    ["2026-08-24 12:00:00.123001+00", "2026-08-24 12:00:00.123001+00"],
+    ["", ""],
     [null, exact],
   ] as const) {
-    const attempt = versionedRun({ status: 'draft', updatedAt: lossy }, echoed)
-    await assert.rejects(attempt.run, /exact persisted revision/)
-    assert.equal(attempt.mutations(), 0, `no mutation may follow a ${typeof lossy} lock revision`)
+    const attempt = versionedRun({ status: "draft", updatedAt: lossy }, echoed);
+    await assert.rejects(attempt.run, /exact persisted revision/);
+    assert.equal(attempt.mutations(), 0, `no mutation may follow a ${typeof lossy} lock revision`);
   }
 
-  const matched = versionedRun({ status: 'draft', updatedAt: exact }, exact)
-  assert.equal(await matched.run, 1)
-  assert.equal(matched.mutations(), 1)
+  const matched = versionedRun({ status: "draft", updatedAt: exact }, exact);
+  assert.equal(await matched.run, 1);
+  assert.equal(matched.mutations(), 1);
 
   await assert.rejects(
-    versionedRun({ status: 'draft', updatedAt: '2026-08-24T12:00:00.999999Z' }, exact).run,
+    versionedRun({ status: "draft", updatedAt: "2026-08-24T12:00:00.999999Z" }, exact).run,
     isConflict,
-  )
+  );
   await assert.rejects(
     versionedRun(null, exact).run,
     (e: unknown) => e instanceof DocumentEditError && e.status === 404,
-  )
-})
+  );
+});
 
-test('reversal link evidence carries the full mandatory audit contract', () => {
-  const before = new Date('2026-08-24T00:00:00Z')
+test("reversal link evidence carries the full mandatory audit contract", () => {
+  const before = new Date("2026-08-24T00:00:00Z");
   const link = buildReversalLinkEvidence({
-    fromDocumentId: 'replacement-1',
-    toDocumentId: 'source-1',
-    reason: '  mis-keyed vendor on the original bill  ',
-    requestedBy: 'user-1',
-  })
-  assert.equal(link.linkType, 'reverses')
-  assert.equal(link.fromDocumentId, 'replacement-1')
-  assert.equal(link.toDocumentId, 'source-1')
-  assert.equal(link.reason, 'mis-keyed vendor on the original bill')
-  assert.equal(link.requestedBy, 'user-1')
-  assert.ok(link.requestedAt instanceof Date && link.requestedAt >= before)
-})
+    fromDocumentId: "replacement-1",
+    toDocumentId: "source-1",
+    reason: "  mis-keyed vendor on the original bill  ",
+    requestedBy: "user-1",
+  });
+  assert.equal(link.linkType, "reverses");
+  assert.equal(link.fromDocumentId, "replacement-1");
+  assert.equal(link.toDocumentId, "source-1");
+  assert.equal(link.reason, "mis-keyed vendor on the original bill");
+  assert.equal(link.requestedBy, "user-1");
+  assert.ok(link.requestedAt instanceof Date && link.requestedAt >= before);
+});
 
-test('a reversal link cannot be constructed without the evidence the database mandates', () => {
+test("a reversal link cannot be constructed without the evidence the database mandates", () => {
   // The document_links_reversal_evidence CHECK refuses any 'reverses' edge
   // whose btrimmed reason falls outside 8..500 or whose requester is null —
   // so this seam must reject exactly those inputs instead of letting the
   // insert abort the whole correction transaction with a constraint error.
-  const base = { fromDocumentId: 'r1', toDocumentId: 's1' }
-  for (const bad of ['short', '       ', '', 'x'.repeat(501), undefined, null]) {
+  const base = { fromDocumentId: "r1", toDocumentId: "s1" };
+  for (const bad of ["short", "       ", "", "x".repeat(501), undefined, null]) {
     assert.throws(
-      () => buildReversalLinkEvidence({ ...base, reason: bad as string | null | undefined, requestedBy: 'user-1' }),
+      () =>
+        buildReversalLinkEvidence({
+          ...base,
+          reason: bad as string | null | undefined,
+          requestedBy: "user-1",
+        }),
       (e: unknown) =>
         e instanceof DocumentEditError && e.status === 422 && /8 and 500/.test(e.message),
       `reason ${JSON.stringify(bad)} must be rejected`,
-    )
+    );
   }
-  assert.equal(validateCorrectionReason(`  ${'y'.repeat(500)}  `).length, 500)
+  assert.equal(validateCorrectionReason(`  ${"y".repeat(500)}  `).length, 500);
 
   assert.throws(
-    () => buildReversalLinkEvidence({ ...base, reason: 'a perfectly valid reason', requestedBy: '' }),
-    (e: unknown) => e instanceof DocumentEditError && e.status === 422 && /attributable requester/.test(e.message),
-  )
+    () =>
+      buildReversalLinkEvidence({ ...base, reason: "a perfectly valid reason", requestedBy: "" }),
+    (e: unknown) =>
+      e instanceof DocumentEditError &&
+      e.status === 422 &&
+      /attributable requester/.test(e.message),
+  );
   assert.throws(
-    () => buildReversalLinkEvidence({ ...base, fromDocumentId: '', toDocumentId: 's1', reason: 'a perfectly valid reason', requestedBy: 'u1' }),
-    (e: unknown) => e instanceof DocumentEditError && e.status === 422 && /both the replacement and the corrected/.test(e.message),
-  )
-})
+    () =>
+      buildReversalLinkEvidence({
+        ...base,
+        fromDocumentId: "",
+        toDocumentId: "s1",
+        reason: "a perfectly valid reason",
+        requestedBy: "u1",
+      }),
+    (e: unknown) =>
+      e instanceof DocumentEditError &&
+      e.status === 422 &&
+      /both the replacement and the corrected/.test(e.message),
+  );
+});
 
-test('provider failure during API document create leaves no document or dependent rows', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId
-  const provider = createServer(async (req, res) => {
-    await consumeRequest(req)
-    res.writeHead(502, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ error: 'provider offline' }))
-  })
-  try {
-    const taxCodeId = randomUUID()
-    await withBypass(async () => {
-      await db.execute(sql`
+test(
+  "provider failure during API document create leaves no document or dependent rows",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId;
+    const provider = createServer(async (req, res) => {
+      await consumeRequest(req);
+      res.writeHead(502, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "provider offline" }));
+    });
+    try {
+      const taxCodeId = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`
         insert into tax_codes
           (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
         values (${taxCodeId}, ${org.orgId}, 'CREATE-EXT', 'Create external tax', '100',
-                ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`)
-      await db.execute(sql`
+                ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+        await db.execute(sql`
         insert into tax_rates (id, org_id, tax_code_id, rate_percent, effective_from)
-        values (${randomUUID()}, ${org.orgId}, ${taxCodeId}, '13', ${org.date})`)
-    })
-    const origin = await listenProvider(provider)
-    await withBypass(() => saveTaxRateProviderConfig(
-      org.orgId,
-      { provider: 'custom_http', isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/quote` } },
-      actorId,
-      // Local stub on loopback: the explicit per-call test switch. The
-      // document writer below still uses the production path, so its fetch
-      // is refused and the failure must leave zero partial rows.
-      { allowPrivateEndpoints: true },
-    ))
+        values (${randomUUID()}, ${org.orgId}, ${taxCodeId}, '13', ${org.date})`);
+      });
+      const origin = await listenProvider(provider);
+      await withBypass(() =>
+        saveTaxRateProviderConfig(
+          org.orgId,
+          {
+            provider: "custom_http",
+            isEnabled: true,
+            preferProvider: true,
+            settings: { quoteUrl: `${origin}/quote` },
+          },
+          actorId,
+          // Local stub on loopback: the explicit per-call test switch. The
+          // document writer below still uses the production path, so its fetch
+          // is refused and the failure must leave zero partial rows.
+          { allowPrivateEndpoints: true },
+        ),
+      );
 
-    const result = await createRecord(
-      { id: actorId, orgId: org.orgId, roles: [] } as never,
-      {
-        key: 'bills',
-        table: 'documents',
-        searchColumn: 'document_number',
-        readPermission: 'ap.read',
-        writePermission: 'ap.create',
-        operations: ['list', 'get', 'create', 'update', 'delete'],
-        writer: { kind: 'document', docKind: 'vendor_bill' },
-        dynamic: false,
-        documentKinds: ['vendor_bill'],
-      } as never,
-      [],
-      {
-        partyId: org.vendorId,
-        lines: [{ accountId: org.accounts.cogs, amount: '100.0000', taxCodeId }],
-      },
-      { source: 'api' },
-    )
-    assert.equal(result.status, 422)
-    const counts = await withBypass(() => db.execute<{
-      documents: string
-      lines: string
-      quotes: string
-      journals: string
-      effects: string
-      audits: string
-    }>(sql`
+      const result = await createRecord(
+        { id: actorId, orgId: org.orgId, roles: [] } as never,
+        {
+          key: "bills",
+          table: "documents",
+          searchColumn: "document_number",
+          readPermission: "ap.read",
+          writePermission: "ap.create",
+          operations: ["list", "get", "create", "update", "delete"],
+          writer: { kind: "document", docKind: "vendor_bill" },
+          dynamic: false,
+          documentKinds: ["vendor_bill"],
+        } as never,
+        [],
+        {
+          partyId: org.vendorId,
+          lines: [{ accountId: org.accounts.cogs, amount: "100.0000", taxCodeId }],
+        },
+        { source: "api" },
+      );
+      assert.equal(result.status, 422);
+      const counts = await withBypass(() =>
+        db.execute<{
+          documents: string;
+          lines: string;
+          quotes: string;
+          journals: string;
+          effects: string;
+          audits: string;
+        }>(
+          sql`
       select
         (select count(*) from documents where org_id = ${org.orgId} and document_number like 'BILL-%')::text as documents,
         (select count(*) from document_lines where org_id = ${org.orgId})::text as lines,
         (select count(*) from tax_rate_quotes where org_id = ${org.orgId})::text as quotes,
         (select count(*) from journal_entries where org_id = ${org.orgId})::text as journals,
         (select count(*) from posting_effects where org_id = ${org.orgId})::text as effects,
-        (select count(*) from audit_log where org_id = ${org.orgId} and table_name = 'documents')::text as audits`, 'objects'))
-    assert.deepEqual(counts[0], {
-      documents: '0',
-      lines: '0',
-      quotes: '0',
-      journals: '0',
-      effects: '0',
-      audits: '0',
-    })
-  } finally {
-    await closeProvider(provider)
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
+        (select count(*) from audit_log where org_id = ${org.orgId} and table_name = 'documents')::text as audits`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(counts[0], {
+        documents: "0",
+        lines: "0",
+        quotes: "0",
+        journals: "0",
+        effects: "0",
+        audits: "0",
+      });
+    } finally {
+      await closeProvider(provider);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 // The API must carry the revision and edited rows into the atomic command.
-test('posted correction validation retains its exact revision and edited lines', async () => {
-  const { documentCorrectionBodySchema } = await import('./api/document-edit-schema.ts');
-  const body = { expectedUpdatedAt: '42', amendmentReason: 'Correct duplicated allocation', lines: [{ accountId: randomUUID(), amount: '125.00' }] };
+test("posted correction validation retains its exact revision and edited lines", async () => {
+  const { documentCorrectionBodySchema } = await import("./api/document-edit-schema.ts");
+  const body = {
+    expectedUpdatedAt: "42",
+    amendmentReason: "Correct duplicated allocation",
+    lines: [{ accountId: randomUUID(), amount: "125.00" }],
+  };
   assert.deepEqual(documentCorrectionBodySchema.parse(body), body);
-  assert.equal(documentCorrectionBodySchema.safeParse({ ...body, expectedUpdatedAt: undefined }).success, false);
+  assert.equal(
+    documentCorrectionBodySchema.safeParse({ ...body, expectedUpdatedAt: undefined }).success,
+    false,
+  );
 });
 
 // The marketplace refusal is the operator's only signal that a line names a
 // facilitator nobody configured: it must name the facilitator and the exact
 // setup page that resolves it, never a bare "invalid" verdict.
-test('unknown marketplace facilitator names refuse with the setup remedy', async () => {
-  const { marketplaceFacilitatorNameRefusal } = await import('./documents.ts');
+test("unknown marketplace facilitator names refuse with the setup remedy", async () => {
+  const { marketplaceFacilitatorNameRefusal } = await import("./documents.ts");
   assert.equal(
-    marketplaceFacilitatorNameRefusal('Amazon', new Set(['Etsy'])),
+    marketplaceFacilitatorNameRefusal("Amazon", new Set(["Etsy"])),
     'marketplace facilitator "Amazon" is not configured — add it in Setup → Taxes → Marketplace facilitators',
   );
-  assert.equal(marketplaceFacilitatorNameRefusal('Etsy', new Set(['Etsy'])), null);
+  assert.equal(marketplaceFacilitatorNameRefusal("Etsy", new Set(["Etsy"])), null);
 });
 
 // The edit and correction schemas share the line shape, so the collector
 // flag rides both; a non-string flag fails closed at the boundary.
-test('document edit lines accept a marketplace facilitator name', async () => {
-  const { documentEditBodySchema } = await import('./api/document-edit-schema.ts');
-  const line = { lineId: null, accountId: randomUUID(), amount: '100.00', marketplaceFacilitator: 'Amazon' };
-  assert.equal(documentEditBodySchema.parse({ lines: [line] }).lines?.[0]?.marketplaceFacilitator, 'Amazon');
-  assert.equal(documentEditBodySchema.safeParse({ lines: [{ ...line, marketplaceFacilitator: 42 }] }).success, false);
+test("document edit lines accept a marketplace facilitator name", async () => {
+  const { documentEditBodySchema } = await import("./api/document-edit-schema.ts");
+  const line = {
+    lineId: null,
+    accountId: randomUUID(),
+    amount: "100.00",
+    marketplaceFacilitator: "Amazon",
+  };
+  assert.equal(
+    documentEditBodySchema.parse({ lines: [line] }).lines?.[0]?.marketplaceFacilitator,
+    "Amazon",
+  );
+  assert.equal(
+    documentEditBodySchema.safeParse({ lines: [{ ...line, marketplaceFacilitator: 42 }] }).success,
+    false,
+  );
 });
 
-
-test('native editable lines preserve exact direct costs and refuse unsupported amounts', () => {
-  const valid = { accountId: 'expense', amount: '400', withholdingTreatment: 'materials' as const, withholdingMaterialsCost: '300.0001' }
-  assert.equal(validateEditableDocumentLines([valid])[0]!.withholdingMaterialsCost, '300.0001')
-  assert.equal(validateEditableDocumentLines([{ ...valid, withholdingTreatment: 'labour' }])[0]!.withholdingMaterialsCost, '300.0001')
-  for (const value of ['', '300.00001', '3e2', '-1', '400.0001', 300 as never]) {
-    assert.throws(() => validateEditableDocumentLines([{ ...valid, withholdingMaterialsCost: value }]),
-      (error: unknown) => error instanceof DocumentEditError && error.status === 422 && /direct materials cost/.test(error.message))
+test("native editable lines preserve exact direct costs and refuse unsupported amounts", () => {
+  const valid = {
+    accountId: "expense",
+    amount: "400",
+    withholdingTreatment: "materials" as const,
+    withholdingMaterialsCost: "300.0001",
+  };
+  assert.equal(validateEditableDocumentLines([valid])[0]!.withholdingMaterialsCost, "300.0001");
+  assert.equal(
+    validateEditableDocumentLines([{ ...valid, withholdingTreatment: "labour" }])[0]!
+      .withholdingMaterialsCost,
+    "300.0001",
+  );
+  for (const value of ["", "300.00001", "3e2", "-1", "400.0001", 300 as never]) {
+    assert.throws(
+      () => validateEditableDocumentLines([{ ...valid, withholdingMaterialsCost: value }]),
+      (error: unknown) =>
+        error instanceof DocumentEditError &&
+        error.status === 422 &&
+        /direct materials cost/.test(error.message),
+    );
   }
-})
+});

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -25,7 +25,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ar/invoices\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ar/invoices'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -82,7 +90,9 @@ const SEGMENTS: never[] = [];
 function scriptFetch(handler: (url: string, init?: RequestInit) => void | Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -93,8 +103,8 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => void | Respon
 function buttonsNamed(name: string): HTMLButtonElement[] {
   // A drawer that can also post labels its draft save "Save draft".
   const names = name === "Save" ? ["Save", "Save draft"] : [name];
-  return [...document.querySelectorAll("button")].filter(
-    (b) => names.includes(b.textContent?.trim() ?? ""),
+  return [...document.querySelectorAll("button")].filter((b) =>
+    names.includes(b.textContent?.trim() ?? ""),
   ) as HTMLButtonElement[];
 }
 
@@ -203,8 +213,24 @@ async function mountInvoiceWithAccountlessLine() {
     total: "1480.00",
   };
   const lines = [
-    { id: randomUUID(), account_id: "income-acct", item_id: null, description: "booked", quantity: "1", unit_price: "1480", amount: "1480.0000" },
-    { id: "", account_id: "", item_id: "OPS-W01", description: "field work", quantity: "2", unit_price: "100", amount: "200.0000" },
+    {
+      id: randomUUID(),
+      account_id: "income-acct",
+      item_id: null,
+      description: "booked",
+      quantity: "1",
+      unit_price: "1480",
+      amount: "1480.0000",
+    },
+    {
+      id: "",
+      account_id: "",
+      item_id: "OPS-W01",
+      description: "field work",
+      quantity: "2",
+      unit_price: "100",
+      amount: "200.0000",
+    },
   ];
   await act(async () => {
     root.render(
@@ -254,7 +280,10 @@ test("a refused save pins the typed reason, not only a toast", async (t) => {
   freshGlobals();
   const restoreFetch = scriptFetch((url, init) => {
     if (url.startsWith("/api/documents/") && init?.method && init.method !== "GET") {
-      return Response.json({ error: "AR is closed for this period and accounting book" }, { status: 422 });
+      return Response.json(
+        { error: "AR is closed for this period and accounting book" },
+        { status: 422 },
+      );
     }
     return null;
   });
@@ -264,7 +293,11 @@ test("a refused save pins the typed reason, not only a toast", async (t) => {
   const save = await enterEditAndSave();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the save refusal must pin as an alert, not only toast");
-  assert.match(alert.textContent ?? "", /AR is closed for this period/, "the alert must carry the typed reason");
+  assert.match(
+    alert.textContent ?? "",
+    /AR is closed for this period/,
+    "the alert must carry the typed reason",
+  );
   const toasts = globalThis.__drawerToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "error" && /AR is closed/.test(toast.message)),
@@ -287,14 +320,28 @@ test("a dead network on save pins the connection-failure copy and releases Save"
   const save = await enterEditAndSave();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "a transport failure must still pin an alert — it cannot throw past the UI");
-  assert.match(alert.textContent ?? "", /server or connection failed/i, "a dead connection must not read as a refusal of the entries");
-  assert.doesNotMatch(alert.textContent ?? "", /fix and retry/, "a dead connection must not carry the refusal copy");
+  assert.match(
+    alert.textContent ?? "",
+    /server or connection failed/i,
+    "a dead connection must not read as a refusal of the entries",
+  );
+  assert.doesNotMatch(
+    alert.textContent ?? "",
+    /fix and retry/,
+    "a dead connection must not carry the refusal copy",
+  );
   const toasts = globalThis.__drawerToasts ?? [];
   assert.ok(
-    toasts.some((toast) => toast.kind === "error" && /server or connection failed/i.test(toast.message)),
+    toasts.some(
+      (toast) => toast.kind === "error" && /server or connection failed/i.test(toast.message),
+    ),
     "the transport failure must toast as an error with the connection copy",
   );
-  assert.equal(save.disabled, false, "busy must release after a transport failure so the user can retry");
+  assert.equal(
+    save.disabled,
+    false,
+    "busy must release after a transport failure so the user can retry",
+  );
 });
 
 test("a gateway 502 on save says the server failed and keeps the entries as typed", async (t) => {
@@ -314,17 +361,39 @@ test("a gateway 502 on save says the server failed and keeps the entries as type
   const save = await enterEditAndSave();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "a 502 must pin an alert");
-  assert.match(alert.textContent ?? "", /server or connection failed/i, "a 502 must name the server failure");
-  assert.doesNotMatch(alert.textContent ?? "", /fix and retry|HTTP 502/, "a 502 must not read as a refusal or leak the status");
+  assert.match(
+    alert.textContent ?? "",
+    /server or connection failed/i,
+    "a 502 must name the server failure",
+  );
+  assert.doesNotMatch(
+    alert.textContent ?? "",
+    /fix and retry|HTTP 502/,
+    "a 502 must not read as a refusal or leak the status",
+  );
   const body = document.body.textContent ?? "";
-  assert.ok(body.includes(messages.ar.drawer.saveState.unavailable), "the footer must name the server failure");
-  assert.ok(!body.includes(messages.ar.drawer.saveState.error), "the footer must not read as a validation refusal");
+  assert.ok(
+    body.includes(messages.ar.drawer.saveState.unavailable),
+    "the footer must name the server failure",
+  );
+  assert.ok(
+    !body.includes(messages.ar.drawer.saveState.error),
+    "the footer must not read as a validation refusal",
+  );
   assert.ok(body.includes("INV-00057"), "the document must stay on the record with its number");
-  assert.ok(body.includes(messages.ar.drawer.editingHint), "the drawer must stay in edit mode, not reseed from the server");
-  assert.ok(buttonsNamed("Save")[0], "the drawer must stay in edit mode so the entries can be retried");
+  assert.ok(
+    body.includes(messages.ar.drawer.editingHint),
+    "the drawer must stay in edit mode, not reseed from the server",
+  );
+  assert.ok(
+    buttonsNamed("Save")[0],
+    "the drawer must stay in edit mode so the entries can be retried",
+  );
   const toasts = globalThis.__drawerToasts ?? [];
   assert.ok(
-    toasts.some((toast) => toast.kind === "error" && /server or connection failed/i.test(toast.message)),
+    toasts.some(
+      (toast) => toast.kind === "error" && /server or connection failed/i.test(toast.message),
+    ),
     "the 502 must toast the connection copy",
   );
   assert.equal(save.disabled, false, "busy must release after a 502 so the user can retry");
@@ -356,7 +425,11 @@ test("saving with a contentful account-less line refuses by line name and keeps 
   assert.deepEqual(writes, [], "no document write may fire while a contentful line has no account");
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the missing account must pin as an alert, not only toast");
-  assert.match(alert.textContent ?? "", /Line 2: choose an account/, "the refusal must name the grid line and the remedy");
+  assert.match(
+    alert.textContent ?? "",
+    /Line 2: choose an account/,
+    "the refusal must name the grid line and the remedy",
+  );
   const toasts = globalThis.__drawerToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "error" && /Line 2/.test(toast.message)),

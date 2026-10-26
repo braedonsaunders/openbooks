@@ -30,7 +30,8 @@ registerHooks({
       return virtual("export function cookies() { throw new Error('no cookies in route test') }");
     if (
       specifier.endsWith("/lib/feature-gates") &&
-      (context.parentURL?.includes("/api/work-schedules/") || context.parentURL?.includes("/lib/api/route"))
+      (context.parentURL?.includes("/api/work-schedules/") ||
+        context.parentURL?.includes("/lib/api/route"))
     ) {
       return virtual(`
         export async function guardFeaturePermission() {
@@ -46,15 +47,11 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/platform/db"
-);
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { GET, POST } = await import("./route.ts");
-
 
 const WEEK = {
   pattern: "cycle",
@@ -72,25 +69,38 @@ async function fixture() {
   const branchId = randomUUID();
   const empA = randomUUID();
   const empB = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Division B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`
+    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Division B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values (${empA}, ${org.orgId}, 'person', 'Worker A', ${org.subsidiaryId}, true, '{}'::jsonb),
-           (${empB}, ${org.orgId}, 'person', 'Worker B', ${branchId}, true, '{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`
+           (${empB}, ${org.orgId}, 'person', 'Worker B', ${branchId}, true, '{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into employee_roles (org_id, party_id, hired_on, is_active)
     values (${org.orgId}, ${empA}, '2025-01-06', true),
-           (${org.orgId}, ${empB}, '2025-01-06', true)`));
+           (${org.orgId}, ${empB}, '2025-01-06', true)`),
+  );
   const seed = async (id: string, employeePartyId: string | null, subsidiaryId: string | null) =>
-    (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
         insert into work_schedules
           (id, org_id, name, employee_party_id, subsidiary_id, pattern, cycle_days, cycle_anchor,
            effective_from, is_active, created_by, updated_by)
         values (${id}, ${org.orgId}, ${`seed ${id.slice(0, 4)}`}, ${employeePartyId}, ${subsidiaryId},
                 'varies', null, null, '2026-01-05', true, ${actorId}, ${actorId})
-        returning id`, "objects")))[0]!.id;
+        returning id`,
+          "objects",
+        ),
+      )
+    )[0]!.id;
   const scheduleA = await seed(randomUUID(), empA, null);
   const scheduleB = await seed(randomUUID(), empB, null);
   const scheduleSubB = await seed(randomUUID(), null, branchId);
@@ -98,7 +108,8 @@ async function fixture() {
   return { org, branchId, empA, empB, scheduleA, scheduleB, scheduleSubB, scheduleOrg };
 }
 
-const get = () => withOrgContext(state.orgId, () => GET(new Request("http://schedules.test/api/work-schedules")));
+const get = () =>
+  withOrgContext(state.orgId, () => GET(new Request("http://schedules.test/api/work-schedules")));
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
@@ -113,8 +124,11 @@ const post = (body: unknown) =>
 
 async function scheduleCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from work_schedules where org_id = ${orgId}`, "objects"),
-    );
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from work_schedules where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -132,8 +146,14 @@ test("GET hides another subsidiary's workers, schedules and options", async () =
     assert.ok(!ids.has(scheduleB), "B's employee pattern is hidden");
     assert.ok(!ids.has(scheduleSubB), "B's subsidiary pattern is hidden");
     assert.equal(body.schedules.length, 2, "own employee pattern plus the org-wide one");
-    assert.ok(!body.options.employees.some((e) => e.id === empB), "B's worker is hidden from the picker");
-    assert.ok(body.options.subsidiaries.every((s) => s.id === org.subsidiaryId), "only visible subsidiaries are offered");
+    assert.ok(
+      !body.options.employees.some((e) => e.id === empB),
+      "B's worker is hidden from the picker",
+    );
+    assert.ok(
+      body.options.subsidiaries.every((s) => s.id === org.subsidiaryId),
+      "only visible subsidiaries are offered",
+    );
   } finally {
     state.allowedSubsidiaryIds = null;
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -184,10 +204,11 @@ test("save and delete cannot touch another subsidiary's pattern", async () => {
     assert.equal(remove.status, 404);
     assert.deepEqual(await remove.json(), { error: "not_found" });
     const rows = await withBypassContext(() =>
-        db.execute<{ n: number }>(
-          sql`select count(*)::int as n from work_schedules where org_id = ${org.orgId} and id = ${scheduleB}`, "objects",
-        ),
-      );
+      db.execute<{ n: number }>(
+        sql`select count(*)::int as n from work_schedules where org_id = ${org.orgId} and id = ${scheduleB}`,
+        "objects",
+      ),
+    );
     assert.equal(rows[0]!.n, 1, "a refused delete removes nothing");
   } finally {
     state.allowedSubsidiaryIds = null;
@@ -201,7 +222,12 @@ test("an unrestricted caller keeps the full surface", async () => {
     state.allowedSubsidiaryIds = null;
     const listed = (await (await get()).json()) as { schedules: unknown[] };
     assert.equal(listed.schedules.length, 4);
-    const created = await post({ action: "save", ...WEEK, employeePartyId: empA, effectiveFrom: "2027-06-01" });
+    const created = await post({
+      action: "save",
+      ...WEEK,
+      employeePartyId: empA,
+      effectiveFrom: "2027-06-01",
+    });
     assert.equal(created.status, 200, JSON.stringify(await created.json().catch(() => null)));
     const deleted = await post({ action: "delete", id: scheduleA });
     assert.equal(deleted.status, 200);

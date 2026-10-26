@@ -23,10 +23,10 @@ test("empty, absent, and non-array exclusions stamp nothing", () => {
 
 test("excluded program keys stamp false, everything else stays default-included", () => {
   assert.deepEqual(programApplicabilityFromExclusions(["qpip"]), { qpip: false });
-  assert.deepEqual(
-    programApplicabilityFromExclusions(["qpip", "cpp2x"]),
-    { qpip: false, cpp2x: false },
-  );
+  assert.deepEqual(programApplicabilityFromExclusions(["qpip", "cpp2x"]), {
+    qpip: false,
+    cpp2x: false,
+  });
 });
 
 test("blank and non-string entries are ignored, never stamped", () => {

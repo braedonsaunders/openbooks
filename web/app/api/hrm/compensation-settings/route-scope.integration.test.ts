@@ -29,8 +29,10 @@ const hooks = registerHooks({
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
       return virtual("export function cookies() { throw new Error('no cookies in route test') }");
-    if (!specifier.startsWith("file:") &&
-      (specifier.endsWith("/lib/authz") || specifier === "./authz")) {
+    if (
+      !specifier.startsWith("file:") &&
+      (specifier.endsWith("/lib/authz") || specifier === "./authz")
+    ) {
       // Only identity resolution is doubled; the scope guard is the real
       // one, re-exported — never a second implementation.
       return virtual(`
@@ -50,29 +52,34 @@ const hooks = registerHooks({
 });
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { GET, PUT } = await import("./route.ts");
 after(() => hooks.deregister());
-
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   state.orgId = org.orgId;
   state.actorId = actorId;
-  const role = await withBypassContext(() => db.execute<{ id: string }>(sql`
+  const role = await withBypassContext(() =>
+    db.execute<{ id: string }>(
+      sql`
     update app_roles set permissions = '["hrm.compensation.manage"]'::jsonb
      where org_id = ${org.orgId} and key = 'admin'
-     returning id`, "objects"));
+     returning id`,
+      "objects",
+    ),
+  );
   assert.equal(role.length, 1, "the scratch admin role exists");
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs
        set settings = jsonb_set(
          jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true),
          '{features,hrmCompensation}', 'true'::jsonb, true)
-     where id = ${org.orgId}`));
+     where id = ${org.orgId}`),
+  );
   return { org };
 }
 
@@ -86,10 +93,15 @@ const put = (body: unknown) =>
   );
 
 async function storedCompensation(orgId: string): Promise<Record<string, unknown> | null> {
-  const row = (await withBypassContext(() =>
-      db.execute<{ settings: Record<string, unknown> | null }>(sql`
-        select settings->'compensation' as settings from orgs where id = ${orgId}`, "objects"),
-    ))[0];
+  const row = (
+    await withBypassContext(() =>
+      db.execute<{ settings: Record<string, unknown> | null }>(
+        sql`
+        select settings->'compensation' as settings from orgs where id = ${orgId}`,
+        "objects",
+      ),
+    )
+  )[0];
   return row?.settings ?? null;
 }
 
@@ -115,7 +127,10 @@ test("an unrestricted caller writes it; restricted callers still read it", async
     assert.equal(numeric.status, 400, "the API rejects rounded JSON percentages");
     const saved = await put({ gapThresholdPct: "9007199254.000001", burdenRate: "1.25" });
     assert.equal(saved.status, 200, JSON.stringify(await saved.json().catch(() => null)));
-    assert.deepEqual(await storedCompensation(org.orgId), { gapThresholdPct: "9007199254.000001", burdenRate: "1.25" });
+    assert.deepEqual(await storedCompensation(org.orgId), {
+      gapThresholdPct: "9007199254.000001",
+      burdenRate: "1.25",
+    });
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
     const response = await GET(new Request("http://comp.test/api/hrm/compensation-settings"));
     assert.equal(response.status, 200);

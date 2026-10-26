@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listFailedPostingEffects, MAX_POSTING_EFFECTS_ATTEMPTS, postingEffectsBackoffMs, replayTerminalPostingEffect } from "./posting-effects.ts";
-
+import {
+  listFailedPostingEffects,
+  MAX_POSTING_EFFECTS_ATTEMPTS,
+  postingEffectsBackoffMs,
+  replayTerminalPostingEffect,
+} from "./posting-effects.ts";
 
 test("posting effects backoff doubles then caps at one hour", () => {
   assert.equal(postingEffectsBackoffMs(0), 60_000);
@@ -16,7 +20,11 @@ test("replay reason length is enforced before any database work", async () => {
   // rows pin both fences without a database: a narrowed bound accepts the
   // 9-character reason (or rejects the 1001-character one differently) and
   // a negated guard lets everything through to a connection error.
-  const base = { orgId: "00000000-0000-0000-0000-000000000000", id: "00000000-0000-0000-0000-000000000000", actorId: "00000000-0000-0000-0000-000000000000" };
+  const base = {
+    orgId: "00000000-0000-0000-0000-000000000000",
+    id: "00000000-0000-0000-0000-000000000000",
+    actorId: "00000000-0000-0000-0000-000000000000",
+  };
   await assert.rejects(
     () => replayTerminalPostingEffect({ ...base, reason: "too short" }),
     /between 10 and 1000/,
@@ -35,6 +43,9 @@ test("failed-effects listing requires its tenant scope up front", async () => {
 
 test("failed-effects listing refuses malformed limits instead of silently changing them", async () => {
   for (const limit of [NaN, Infinity, 0, -1, 1.5, 501]) {
-    await assert.rejects(() => listFailedPostingEffects("00000000-0000-0000-0000-000000000000", limit), /integer between 1 and 500/);
+    await assert.rejects(
+      () => listFailedPostingEffects("00000000-0000-0000-0000-000000000000", limit),
+      /integer between 1 and 500/,
+    );
   }
 });

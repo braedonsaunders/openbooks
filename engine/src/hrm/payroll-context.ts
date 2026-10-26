@@ -72,10 +72,7 @@ import { inputGuards } from "./input-guards.ts";
 
 /** Stable coded refusals of the employment-identity contract. */
 export type PayrollContextCode =
-  | "no_employment"
-  | "ambiguous_employment"
-  | "employer_mismatch"
-  | "ambiguous_manager";
+  "no_employment" | "ambiguous_employment" | "employer_mismatch" | "ambiguous_manager";
 
 export class PayrollContextError extends Error {
   readonly code: PayrollContextCode;
@@ -232,15 +229,10 @@ const { requireId } = inputGuards((message) => new Error(message));
 
 function nameIds(ids: readonly string[]): string {
   const shown = ids.slice(0, MAX_NAMED_IDS).join(", ");
-  return ids.length > MAX_NAMED_IDS
-    ? `${shown}, and ${ids.length - MAX_NAMED_IDS} more`
-    : shown;
+  return ids.length > MAX_NAMED_IDS ? `${shown}, and ${ids.length - MAX_NAMED_IDS} more` : shown;
 }
 
-async function requirePayrollRun(
-  orgId: string,
-  actorId: string,
-): Promise<void> {
+async function requirePayrollRun(orgId: string, actorId: string): Promise<void> {
   if (!(await actorHasPermission(db, orgId, actorId, RESOLVER_PERMISSION))) {
     throw new PayrollContextAuthorizationError(
       `resolving payroll employment context requires the ${RESOLVER_PERMISSION} permission — ask an administrator to grant it in /admin/roles.`,
@@ -254,21 +246,21 @@ interface EmploymentIdentity {
   readonly revision: number;
 }
 
-async function listEmployments(
-  orgId: string,
-  partyId: string,
-): Promise<EmploymentIdentity[]> {
+async function listEmployments(orgId: string, partyId: string): Promise<EmploymentIdentity[]> {
   const rows = await db.execute<{
     id: string;
     employerSubsidiaryId: string;
     revision: number;
-  }>(sql`
+  }>(
+    sql`
     select id,
            employer_subsidiary_id as "employerSubsidiaryId",
            revision
       from worker_employments
      where org_id = ${orgId} and worker_party_id = ${partyId}
-     order by id`, "objects");
+     order by id`,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     employerSubsidiaryId: row.employerSubsidiaryId,
@@ -298,7 +290,10 @@ async function resolveSingleEmployment(
   const employments = await listEmployments(orgId, partyId);
   if (employments.length === 0) throw noEmployment(partyId);
   if (employments.length > 1) {
-    throw ambiguousEmployment(partyId, employments.map((item) => item.id));
+    throw ambiguousEmployment(
+      partyId,
+      employments.map((item) => item.id),
+    );
   }
   return employments[0]!;
 }
@@ -312,8 +307,13 @@ async function resolveStatusAsOf(args: {
 }): Promise<{ revision: number; status: string; versionNo: number }> {
   const knownAt =
     args.knownAt ??
-    (await db.execute<{ at: string }>(sql`
-      select to_char(now() at time zone 'UTC', ${RECORDED_TEXT}) as at`, "objects"))[0]!.at;
+    (
+      await db.execute<{ at: string }>(
+        sql`
+      select to_char(now() at time zone 'UTC', ${RECORDED_TEXT}) as at`,
+        "objects",
+      )
+    )[0]!.at;
   const versions = await db.execute<{
     id: string;
     versionNo: number;
@@ -322,7 +322,8 @@ async function resolveStatusAsOf(args: {
     effectiveTo: string | null;
     recordedAt: string;
     recordedUntil: string | null;
-  }>(sql`
+  }>(
+    sql`
     select id::text as id, version_no as "versionNo", status,
            effective_from::text as "effectiveFrom",
            effective_to::text as "effectiveTo",
@@ -330,7 +331,9 @@ async function resolveStatusAsOf(args: {
            to_char(recorded_until at time zone 'UTC', ${RECORDED_TEXT}) as "recordedUntil"
       from worker_employment_versions
      where org_id = ${args.orgId} and employment_id = ${args.employment.id}
-     order by version_no`, "objects");
+     order by version_no`,
+    "objects",
+  );
   const stable: EmploymentStableRow = {
     id: args.employment.id,
     orgId: args.orgId,
@@ -398,7 +401,10 @@ export async function resolveEmploymentForPayroll(
     const employments = await listEmployments(orgId, partyId);
     if (employments.length === 0) throw noEmployment(partyId);
     if (employments.length > 1) {
-      throw ambiguousEmployment(partyId, employments.map((item) => item.id));
+      throw ambiguousEmployment(
+        partyId,
+        employments.map((item) => item.id),
+      );
     }
     const employment = employments[0]!;
     if (employment.employerSubsidiaryId !== subsidiaryId) {
@@ -445,7 +451,8 @@ export async function resolveManagerForRouting(
     const active = await db.execute<{
       managerEmploymentId: string;
       managerPartyId: string;
-    }>(sql`
+    }>(
+      sql`
       select distinct r.manager_employment_id as "managerEmploymentId",
              m.worker_party_id as "managerPartyId"
         from reporting_relationships r
@@ -456,7 +463,9 @@ export async function resolveManagerForRouting(
          and r.kind = 'line'
          and r.recorded_until is null
          and r.effective_from <= ${query.asOf}::date
-         and (r.effective_to is null or r.effective_to > ${query.asOf}::date)`, "objects");
+         and (r.effective_to is null or r.effective_to > ${query.asOf}::date)`,
+      "objects",
+    );
     const picked = pickActiveManager(active, { employmentId: employment.id, asOf: query.asOf });
     if (picked !== null) {
       return {
@@ -469,10 +478,15 @@ export async function resolveManagerForRouting(
     // No active line as-of. Reporting still governs when the employment has
     // ANY line history (it says no one, as-of) — the supervisor fallback is
     // only for employments reporting never covered.
-    const ever = (await db.execute<{ n: string }>(sql`
+    const ever = (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n
         from reporting_relationships
-       where org_id = ${orgId} and employment_id = ${employment.id} and kind = 'line'`, "objects"))[0]!.n;
+       where org_id = ${orgId} and employment_id = ${employment.id} and kind = 'line'`,
+        "objects",
+      )
+    )[0]!.n;
     if (ever !== "0") {
       return {
         employmentId: employment.id,
@@ -481,10 +495,16 @@ export async function resolveManagerForRouting(
         source: "reporting" as const,
       };
     }
-    const role = (await db.execute<{ supervisorId: string | null }>(sql`
+    const role =
+      (
+        await db.execute<{ supervisorId: string | null }>(
+          sql`
       select supervisor_id as "supervisorId"
         from employee_roles
-       where org_id = ${orgId} and party_id = ${partyId}`, "objects"))[0] ?? null;
+       where org_id = ${orgId} and party_id = ${partyId}`,
+          "objects",
+        )
+      )[0] ?? null;
     return {
       employmentId: employment.id,
       managerEmploymentId: null,
@@ -565,8 +585,9 @@ export async function stampEmploymentContext(options: StampOptions): Promise<Sta
       // The writer checks first: no tenant row is read or written before the
       // duty is proven — a dry-run preview is a read of nine tables too.
       await requirePayrollRun(orgId, actorId);
-    // People with payroll rows, with their party subsidiary for the match.
-    const people = await db.execute<{ partyId: string; subsidiaryId: string | null }>(sql`
+      // People with payroll rows, with their party subsidiary for the match.
+      const people = await db.execute<{ partyId: string; subsidiaryId: string | null }>(
+        sql`
       select p.id as "partyId", p.subsidiary_id as "subsidiaryId"
         from parties p
        where p.org_id = ${orgId}
@@ -582,143 +603,176 @@ export async function stampEmploymentContext(options: StampOptions): Promise<Sta
            union all select 1 from pay_run_adjustments t where t.org_id = ${orgId} and t.employee_party_id = p.id
            union all select 1 from pay_run_holiday_assertions t where t.org_id = ${orgId} and t.employee_party_id = p.id
          )
-       order by p.id`, "objects");
-    const employments = await db.execute<{
-      id: string;
-      workerPartyId: string;
-      employerSubsidiaryId: string;
-    }>(sql`
+       order by p.id`,
+        "objects",
+      );
+      const employments = await db.execute<{
+        id: string;
+        workerPartyId: string;
+        employerSubsidiaryId: string;
+      }>(
+        sql`
       select id, worker_party_id as "workerPartyId",
              employer_subsidiary_id as "employerSubsidiaryId"
         from worker_employments
        where org_id = ${orgId}
-       order by id`, "objects");
-    const byWorker = new Map<string, { id: string; employerSubsidiaryId: string }[]>();
-    for (const item of employments) {
-      const list = byWorker.get(item.workerPartyId) ?? [];
-      list.push({ id: item.id, employerSubsidiaryId: item.employerSubsidiaryId });
-      byWorker.set(item.workerPartyId, list);
-    }
-    const resolved = new Map<string, string>();
-    const requiresReview: StampReviewEntry[] = [];
-    for (const person of people) {
-      const held = byWorker.get(person.partyId) ?? [];
-      if (held.length === 0) {
-        requiresReview.push({
-          partyId: person.partyId,
-          reason: "no_employment",
-          detail: "no worker_employments row for this worker — create the employment first",
-        });
-        continue;
-      }
-      if (held.length > 1) {
-        requiresReview.push({
-          partyId: person.partyId,
-          reason: "ambiguous_employment",
-          detail: `holds ${held.length} employments (${nameIds(held.map((item) => item.id))}) — keep the single correct one first`,
-        });
-        continue;
-      }
-      const only = held[0]!;
-      if (person.subsidiaryId === null || only.employerSubsidiaryId !== person.subsidiaryId) {
-        requiresReview.push({
-          partyId: person.partyId,
-          reason: "employer_mismatch",
-          detail: `employment ${only.id} belongs to employer ${only.employerSubsidiaryId}, not party subsidiary ${person.subsidiaryId ?? "unknown"} — transfer first`,
-        });
-        continue;
-      }
-      resolved.set(person.partyId, only.id);
-    }
-    if (requiresReview.length > 0 && !allowPartial) {
-      throw new StampRefusedError(
-        `employment stamp refused for ${requiresReview.length} of ${people.length} people with payroll rows (first: ${requiresReview[0]!.partyId} — ${requiresReview[0]!.reason}); nothing was written — pass allowPartial to stamp only the unambiguous people, or resolve every listed person and re-run`,
-        requiresReview,
+       order by id`,
+        "objects",
       );
-    }
-    // Every resolved person is stampable here: without allowPartial any
-    // requires_review already refused above, and with it only unambiguous
-    // people resolve.
-    const targetPeople = [...resolved.keys()];
-    // A stamped row that disagrees with the resolver refuses the org: the
-    // resolver is the identity authority, and contradicting history is
-    // evidence to reconcile, never to overwrite — under allowPartial too.
-    const conflicts: StampReviewEntry[] = [];
-    for (const table of STAMP_TABLES) {
-      const rows = await db.execute<{ partyId: string; employmentId: string }>(sql`
+      const byWorker = new Map<string, { id: string; employerSubsidiaryId: string }[]>();
+      for (const item of employments) {
+        const list = byWorker.get(item.workerPartyId) ?? [];
+        list.push({ id: item.id, employerSubsidiaryId: item.employerSubsidiaryId });
+        byWorker.set(item.workerPartyId, list);
+      }
+      const resolved = new Map<string, string>();
+      const requiresReview: StampReviewEntry[] = [];
+      for (const person of people) {
+        const held = byWorker.get(person.partyId) ?? [];
+        if (held.length === 0) {
+          requiresReview.push({
+            partyId: person.partyId,
+            reason: "no_employment",
+            detail: "no worker_employments row for this worker — create the employment first",
+          });
+          continue;
+        }
+        if (held.length > 1) {
+          requiresReview.push({
+            partyId: person.partyId,
+            reason: "ambiguous_employment",
+            detail: `holds ${held.length} employments (${nameIds(held.map((item) => item.id))}) — keep the single correct one first`,
+          });
+          continue;
+        }
+        const only = held[0]!;
+        if (person.subsidiaryId === null || only.employerSubsidiaryId !== person.subsidiaryId) {
+          requiresReview.push({
+            partyId: person.partyId,
+            reason: "employer_mismatch",
+            detail: `employment ${only.id} belongs to employer ${only.employerSubsidiaryId}, not party subsidiary ${person.subsidiaryId ?? "unknown"} — transfer first`,
+          });
+          continue;
+        }
+        resolved.set(person.partyId, only.id);
+      }
+      if (requiresReview.length > 0 && !allowPartial) {
+        throw new StampRefusedError(
+          `employment stamp refused for ${requiresReview.length} of ${people.length} people with payroll rows (first: ${requiresReview[0]!.partyId} — ${requiresReview[0]!.reason}); nothing was written — pass allowPartial to stamp only the unambiguous people, or resolve every listed person and re-run`,
+          requiresReview,
+        );
+      }
+      // Every resolved person is stampable here: without allowPartial any
+      // requires_review already refused above, and with it only unambiguous
+      // people resolve.
+      const targetPeople = [...resolved.keys()];
+      // A stamped row that disagrees with the resolver refuses the org: the
+      // resolver is the identity authority, and contradicting history is
+      // evidence to reconcile, never to overwrite — under allowPartial too.
+      const conflicts: StampReviewEntry[] = [];
+      for (const table of STAMP_TABLES) {
+        const rows = await db.execute<{ partyId: string; employmentId: string }>(
+          sql`
         select employee_party_id as "partyId", employment_id as "employmentId"
           from ${sql.identifier(table)}
-         where org_id = ${orgId} and employment_id is not null`, "objects");
-      for (const row of rows) {
-        const expected = resolved.get(row.partyId);
-        if (expected === undefined || expected !== row.employmentId) {
-          conflicts.push({
-            partyId: row.partyId,
-            reason: "conflicting_stamp",
-            detail: `${table} already names employment ${row.employmentId} but the resolver ${expected === undefined ? "holds no unambiguous employment" : `resolves ${expected}`} — reconcile before stamping`,
-          });
+         where org_id = ${orgId} and employment_id is not null`,
+          "objects",
+        );
+        for (const row of rows) {
+          const expected = resolved.get(row.partyId);
+          if (expected === undefined || expected !== row.employmentId) {
+            conflicts.push({
+              partyId: row.partyId,
+              reason: "conflicting_stamp",
+              detail: `${table} already names employment ${row.employmentId} but the resolver ${expected === undefined ? "holds no unambiguous employment" : `resolves ${expected}`} — reconcile before stamping`,
+            });
+          }
         }
       }
-    }
-    if (conflicts.length > 0) {
-      throw new StampRefusedError(
-        `employment stamp refused: ${conflicts.length} stamped rows disagree with the resolver (first: ${conflicts[0]!.detail}); nothing was written — reconcile the listed rows and re-run`,
-        conflicts,
-      );
-    }
-    const stamped = Object.fromEntries(STAMP_TABLES.map((table) => [table, 0])) as Record<StampTable, number>;
-    const alreadyStamped = Object.fromEntries(STAMP_TABLES.map((table) => [table, 0])) as Record<StampTable, number>;
-    const unstampable: Partial<Record<StampTable, number>> = {};
-    // Explicit value list: bare JS arrays interpolate as row constructors in
-    // drizzle SQL, never as IN-lists, so the list is joined element-wise.
-    const targetList = targetPeople.length === 0
-      ? sql`false`
-      : sql`employee_party_id in (${sql.join(targetPeople.map((partyId) => sql`${partyId}`), sql`, `)})`;
-    for (const table of WRITABLE_STAMP_TABLES) {
-      const already = (await db.execute<{ n: string }>(sql`
+      if (conflicts.length > 0) {
+        throw new StampRefusedError(
+          `employment stamp refused: ${conflicts.length} stamped rows disagree with the resolver (first: ${conflicts[0]!.detail}); nothing was written — reconcile the listed rows and re-run`,
+          conflicts,
+        );
+      }
+      const stamped = Object.fromEntries(STAMP_TABLES.map((table) => [table, 0])) as Record<
+        StampTable,
+        number
+      >;
+      const alreadyStamped = Object.fromEntries(STAMP_TABLES.map((table) => [table, 0])) as Record<
+        StampTable,
+        number
+      >;
+      const unstampable: Partial<Record<StampTable, number>> = {};
+      // Explicit value list: bare JS arrays interpolate as row constructors in
+      // drizzle SQL, never as IN-lists, so the list is joined element-wise.
+      const targetList =
+        targetPeople.length === 0
+          ? sql`false`
+          : sql`employee_party_id in (${sql.join(
+              targetPeople.map((partyId) => sql`${partyId}`),
+              sql`, `,
+            )})`;
+      for (const table of WRITABLE_STAMP_TABLES) {
+        const already = (
+          await db.execute<{ n: string }>(
+            sql`
         select count(*)::text as n
           from ${sql.identifier(table)}
-         where org_id = ${orgId} and employment_id is not null and ${targetList}`, "objects"))[0]!.n;
-      alreadyStamped[table] = Number(already);
-      for (const partyId of targetPeople) {
-        await db.execute(sql`
+         where org_id = ${orgId} and employment_id is not null and ${targetList}`,
+            "objects",
+          )
+        )[0]!.n;
+        alreadyStamped[table] = Number(already);
+        for (const partyId of targetPeople) {
+          await db.execute(sql`
           update ${sql.identifier(table)} set employment_id = ${resolved.get(partyId)!}
            where org_id = ${orgId}
              and employee_party_id = ${partyId}
              and employment_id is null`);
+        }
       }
-    }
-    // Recount per table for the report: rows now carrying an id minus those
-    // already stamped equals this run's writes, because conflicting stamps
-    // refused above and only nulls were written.
-    for (const table of WRITABLE_STAMP_TABLES) {
-      const now = (await db.execute<{ n: string }>(sql`
+      // Recount per table for the report: rows now carrying an id minus those
+      // already stamped equals this run's writes, because conflicting stamps
+      // refused above and only nulls were written.
+      for (const table of WRITABLE_STAMP_TABLES) {
+        const now = (
+          await db.execute<{ n: string }>(
+            sql`
         select count(*)::text as n
           from ${sql.identifier(table)}
-         where org_id = ${orgId} and employment_id is not null and ${targetList}`, "objects"))[0]!.n;
-      stamped[table] = Number(now) - alreadyStamped[table]!;
-    }
-    // Read-only tables are counted, never written.
-    for (const table of READ_ONLY_STAMP_TABLES) {
-      const left = (await db.execute<{ n: string }>(sql`
+         where org_id = ${orgId} and employment_id is not null and ${targetList}`,
+            "objects",
+          )
+        )[0]!.n;
+        stamped[table] = Number(now) - alreadyStamped[table]!;
+      }
+      // Read-only tables are counted, never written.
+      for (const table of READ_ONLY_STAMP_TABLES) {
+        const left = (
+          await db.execute<{ n: string }>(
+            sql`
         select count(*)::text as n
           from ${sql.identifier(table)}
-         where org_id = ${orgId} and employment_id is null and ${targetList}`, "objects"))[0]!.n;
-      if (Number(left) > 0) unstampable[table] = Number(left);
-    }
-    const report: StampReport = {
-      orgId,
-      dryRun,
-      stamped,
-      alreadyStamped,
-      unstampable,
-      stampedPeople: targetPeople,
-      requiresReview,
-    };
-    // Dry-run proves the write path, then rolls everything back: the throw
-    // must ESCAPE withOrgTransaction (returning here would commit).
-    if (dryRun) throw new StampRollback(report);
-    return report;
+         where org_id = ${orgId} and employment_id is null and ${targetList}`,
+            "objects",
+          )
+        )[0]!.n;
+        if (Number(left) > 0) unstampable[table] = Number(left);
+      }
+      const report: StampReport = {
+        orgId,
+        dryRun,
+        stamped,
+        alreadyStamped,
+        unstampable,
+        stampedPeople: targetPeople,
+        requiresReview,
+      };
+      // Dry-run proves the write path, then rolls everything back: the throw
+      // must ESCAPE withOrgTransaction (returning here would commit).
+      if (dryRun) throw new StampRollback(report);
+      return report;
     });
   } catch (error) {
     if (error instanceof StampRollback) return error.report;

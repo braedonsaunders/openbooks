@@ -67,17 +67,25 @@ function safeRelations(): string[] {
       /INSERT INTO public\.openbooks_query_catalog_relations \(relation, added_in\) VALUES\n([\s\S]*?);\n/g,
     ),
   ];
-  assert.ok(inserts.length > 0, "the governed relation registry seed was not found in the baseline");
+  assert.ok(
+    inserts.length > 0,
+    "the governed relation registry seed was not found in the baseline",
+  );
   const relations = inserts.flatMap((insert) =>
-    [...insert[1]!.matchAll(/^\s*\('(\w+)',/gm)].map((m) => m[1]!));
-  assert.ok(relations.length > 100, `expected the registry seed to govern the catalog; found ${relations.length}`);
+    [...insert[1]!.matchAll(/^\s*\('(\w+)',/gm)].map((m) => m[1]!),
+  );
+  assert.ok(
+    relations.length > 100,
+    `expected the registry seed to govern the catalog; found ${relations.length}`,
+  );
   return relations;
 }
 
 /** Every `CREATE VIEW openbooks_query.x` and the columns it selects. */
 function shippedViews(): Map<string, Set<string> | "star"> {
   const views = new Map<string, Set<string> | "star">();
-  const re = /CREATE VIEW openbooks_query\.(\w+) WITH \(security_barrier='true'\) AS\n([\s\S]*?);\n/g;
+  const re =
+    /CREATE VIEW openbooks_query\.(\w+) WITH \(security_barrier='true'\) AS\n([\s\S]*?);\n/g;
   for (const match of BASELINE.matchAll(re)) {
     const select = match[2]!.split(/\n\s*FROM /i)[0]!;
     if (/^\s*SELECT \*/i.test(select)) {
@@ -90,7 +98,12 @@ function shippedViews(): Map<string, Set<string> | "star"> {
         select
           .replace(/^\s*SELECT\s+/i, "")
           .split(",")
-          .map((c) => c.trim().split(/\s+/)[0]!.replace(/^\w+\./, ""))
+          .map((c) =>
+            c
+              .trim()
+              .split(/\s+/)[0]!
+              .replace(/^\w+\./, ""),
+          )
           .filter(Boolean),
       ),
     );
@@ -101,7 +114,8 @@ function shippedViews(): Map<string, Set<string> | "star"> {
 /** Every `CREATE VIEW openbooks_query.x` and its full statement text. */
 function shippedViewBodies(): Map<string, string> {
   const bodies = new Map<string, string>();
-  const re = /CREATE VIEW openbooks_query\.(\w+) WITH \(security_barrier='true'\) AS\n([\s\S]*?);\n/g;
+  const re =
+    /CREATE VIEW openbooks_query\.(\w+) WITH \(security_barrier='true'\) AS\n([\s\S]*?);\n/g;
   for (const match of BASELINE.matchAll(re)) bodies.set(match[1]!, match[2]!);
   return bodies;
 }
@@ -176,8 +190,8 @@ test("a relation holding a secret is curated, never in the generic allowlist", (
   assert.deepEqual(
     leaked,
     [],
-    "these relations take the generic `select *` path but hold a secret; "
-      + `give each an explicit column list in openbooks_refresh_query_catalog(): ${leaked.join("; ")}`,
+    "these relations take the generic `select *` path but hold a secret; " +
+      `give each an explicit column list in openbooks_refresh_query_catalog(): ${leaked.join("; ")}`,
   );
 });
 
@@ -199,8 +213,8 @@ test("the function and the shipped views agree on every generic relation", () =>
   assert.deepEqual(
     drifted,
     [],
-    "shipped view narrower than the function's `select *` — either add the "
-      + `column to the view or curate the relation: ${drifted.join("; ")}`,
+    "shipped view narrower than the function's `select *` — either add the " +
+      `column to the view or curate the relation: ${drifted.join("; ")}`,
   );
 });
 
@@ -212,7 +226,8 @@ test("every curated relation is granted to openbooks_read", () => {
   const functionBody = refreshFunctionBody();
   const lastCuratedView = Math.max(
     ...MUST_BE_CURATED.map((relation) =>
-      functionBody.indexOf(`create view openbooks_query.${relation} with`)),
+      functionBody.indexOf(`create view openbooks_query.${relation} with`),
+    ),
   );
   const blanketGrant = functionBody.lastIndexOf(
     "grant select on all tables in schema openbooks_query to openbooks_read;",
@@ -239,7 +254,10 @@ test("the shipped catalog carries the tenant filter", () => {
   // tenants for as long as the file takes to apply. The shipped DDL must be
   // as safe as what the function rebuilds.
   const views = shippedViewBodies();
-  assert.ok(views.size > 100, `expected the baseline to ship the governed catalog; found ${views.size}`);
+  assert.ok(
+    views.size > 100,
+    `expected the baseline to ship the governed catalog; found ${views.size}`,
+  );
   const unfiltered = [...views]
     .filter(([, body]) => !body.includes("org_id = public.openbooks_query_org_id()"))
     .map(([relation]) => relation)
@@ -248,8 +266,8 @@ test("the shipped catalog carries the tenant filter", () => {
   assert.deepEqual(
     unfiltered,
     [...GLOBAL_RELATIONS].sort(),
-    "a governed view ships without `where org_id = openbooks_query_org_id()`. "
-      + "Add the filter and regenerate the baseline",
+    "a governed view ships without `where org_id = openbooks_query_org_id()`. " +
+      "Add the filter and regenerate the baseline",
   );
 });
 
@@ -314,7 +332,10 @@ test("the catalog redacts private CRM bodies and time memos", () => {
   // later catalog refresh would silently restore the private text projection.
   const generic = safeRelations();
   for (const relation of PRIVATE_TEXT_PROJECTIONS) {
-    assert.ok(!generic.includes(relation), `${relation} must not be registered for the generic path`);
+    assert.ok(
+      !generic.includes(relation),
+      `${relation} must not be registered for the generic path`,
+    );
   }
 
   // The curated definitions retain the row, tenant key, privacy flag, and

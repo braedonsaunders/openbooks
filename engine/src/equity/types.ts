@@ -13,7 +13,8 @@ export type SecurityKind = "share" | "option" | "rsu" | "warrant" | "safe" | "no
 export type VestingFrequency = "monthly" | "quarterly" | "annual";
 export type Acceleration = "none" | "single" | "double";
 export type SafeType = "pre_money" | "post_money";
-export type InterestBasis = "simple" | "compound_annual" | "compound_semiannual" | "compound_quarterly" | "compound_monthly";
+export type InterestBasis =
+  "simple" | "compound_annual" | "compound_semiannual" | "compound_quarterly" | "compound_monthly";
 /** How a note counts the days of an accrual period. */
 export type DayCount = "actual_365" | "actual_360" | "thirty_360" | "actual_actual";
 export type RepurchaseBasis = "cost" | "lower_of_cost_or_fmv";
@@ -26,7 +27,10 @@ export type ExpenseAttribution = "straight_line" | "graded";
  * their preference.
  */
 export type LiquidationPreferenceBasis = "original_issue_price" | "amount_paid";
-export const LIQUIDATION_PREFERENCE_BASES: readonly LiquidationPreferenceBasis[] = ["original_issue_price", "amount_paid"];
+export const LIQUIDATION_PREFERENCE_BASES: readonly LiquidationPreferenceBasis[] = [
+  "original_issue_price",
+  "amount_paid",
+];
 export type SecurityEventKind =
   | "exercise"
   | "settle"
@@ -41,15 +45,51 @@ export type SecurityEventKind =
   | "reverse"
   | "election_83b";
 
-export const INTEREST_BASES: readonly InterestBasis[] = ["simple", "compound_annual", "compound_semiannual", "compound_quarterly", "compound_monthly"];
-export const DAY_COUNTS: readonly DayCount[] = ["actual_365", "actual_360", "thirty_360", "actual_actual"];
+export const INTEREST_BASES: readonly InterestBasis[] = [
+  "simple",
+  "compound_annual",
+  "compound_semiannual",
+  "compound_quarterly",
+  "compound_monthly",
+];
+export const DAY_COUNTS: readonly DayCount[] = [
+  "actual_365",
+  "actual_360",
+  "thirty_360",
+  "actual_actual",
+];
 
-export const SECURITY_KINDS: readonly SecurityKind[] = ["share", "option", "rsu", "warrant", "safe", "note"];
+export const SECURITY_KINDS: readonly SecurityKind[] = [
+  "share",
+  "option",
+  "rsu",
+  "warrant",
+  "safe",
+  "note",
+];
 export const SECURITY_EVENT_KINDS: readonly SecurityEventKind[] = [
-  "exercise", "settle", "forfeit", "expire", "cancel", "repurchase", "transfer", "convert", "void", "repay", "reverse", "election_83b",
+  "exercise",
+  "settle",
+  "forfeit",
+  "expire",
+  "cancel",
+  "repurchase",
+  "transfer",
+  "convert",
+  "void",
+  "repay",
+  "reverse",
+  "election_83b",
 ];
 /** Events a governed reversal may undo. */
-export const REVERSIBLE_EVENT_KINDS: readonly SecurityEventKind[] = ["forfeit", "expire", "cancel", "repurchase", "repay", "election_83b"];
+export const REVERSIBLE_EVENT_KINDS: readonly SecurityEventKind[] = [
+  "forfeit",
+  "expire",
+  "cancel",
+  "repurchase",
+  "repay",
+  "election_83b",
+];
 /** Kinds that carry a share count and an underlying class. */
 export const SHARE_BASED_KINDS: readonly SecurityKind[] = ["share", "option", "rsu", "warrant"];
 /** Awards that convert into shares on exercise or settlement. */
@@ -222,5 +262,13 @@ export interface EquityBook {
 }
 
 export const EMPTY_EQUITY_BOOK: EquityBook = {
-  classes: [], amendments: [], splits: [], plans: [], reserveChanges: [], rounds: [], securities: [], events: [], securityAmendments: [],
+  classes: [],
+  amendments: [],
+  splits: [],
+  plans: [],
+  reserveChanges: [],
+  rounds: [],
+  securities: [],
+  events: [],
+  securityAmendments: [],
 };

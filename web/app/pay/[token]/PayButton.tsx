@@ -11,7 +11,11 @@ export function PayButton({ token, provider }: { token: string; provider: string
     setBusy(true);
     setError(null);
     try {
-      const json = await apiJson<{ redirectUrl?: string }>(`/api/pay/${token}`, { method: "POST" }, "checkout failed");
+      const json = await apiJson<{ redirectUrl?: string }>(
+        `/api/pay/${token}`,
+        { method: "POST" },
+        "checkout failed",
+      );
       if (!json.redirectUrl) {
         setError("checkout failed");
         setBusy(false);

@@ -134,10 +134,10 @@ test("subscription plans refuse negative amounts", async () => {
   const org = await createScratchOrg();
   try {
     const refused = await pool
-      .query(`insert into subscription_plans (id, org_id, name, amount) values ($1, $2, 'T8 plan', -10)`, [
-        randomUUID(),
-        org.orgId,
-      ])
+      .query(
+        `insert into subscription_plans (id, org_id, name, amount) values ($1, $2, 'T8 plan', -10)`,
+        [randomUUID(), org.orgId],
+      )
       .then(
         () => null,
         (error: unknown) => error,
@@ -161,10 +161,10 @@ test("forecast snapshots take at most one target and commit org-wide", async () 
     // An active user must carry a role assignment; createScratchUser
     // inserts user and assignment atomically.
     await createScratchUser(org.orgId, "T8 owner", "t8_owner", userId);
-    await pool.query(`insert into crm_sales_teams (id, org_id, key, name) values ($1, $2, 'T8', 'T8 team')`, [
-      teamId,
-      org.orgId,
-    ]);
+    await pool.query(
+      `insert into crm_sales_teams (id, org_id, key, name) values ($1, $2, 'T8', 'T8 team')`,
+      [teamId, org.orgId],
+    );
     const snapshot = (id: string, owner: string | null, team: string | null) =>
       pool.query(
         `insert into crm_forecast_snapshots
@@ -230,7 +230,9 @@ test("payroll pack facts refuse out-of-range values and accept unknown", async (
     const profileId = randomUUID();
     await base(profileId, "ES");
     const outOfRange = await pool
-      .query(`update employee_payroll_profiles set es_ano_nacimiento = 1800 where id = $1`, [profileId])
+      .query(`update employee_payroll_profiles set es_ano_nacimiento = 1800 where id = $1`, [
+        profileId,
+      ])
       .then(
         () => null,
         (error: unknown) => error,
@@ -239,9 +241,10 @@ test("payroll pack facts refuse out-of-range values and accept unknown", async (
       isConstraintViolation(outOfRange, /employee_payroll_profiles_es_ano|check/i),
       `expected the birth-year check to refuse, got: ${String(outOfRange)}`,
     );
-    await pool.query(`update employee_payroll_profiles set es_ano_nacimiento = null where id = $1`, [
-      profileId,
-    ]);
+    await pool.query(
+      `update employee_payroll_profiles set es_ano_nacimiento = null where id = $1`,
+      [profileId],
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -258,13 +261,14 @@ test("sync runs detach from a deleted connection instead of vanishing", async ()
       [connectionId, org.orgId],
     );
     const runId = randomUUID();
-    await pool.query(`insert into sync_runs (id, org_id, source, connection_id) values ($1, $2, 't8', $3)`, [
-      runId,
-      org.orgId,
-      connectionId,
-    ]);
+    await pool.query(
+      `insert into sync_runs (id, org_id, source, connection_id) values ($1, $2, 't8', $3)`,
+      [runId, org.orgId, connectionId],
+    );
     await pool.query(`delete from connections where id = $1`, [connectionId]);
-    const stored = await pool.query(`select connection_id, status from sync_runs where id = $1`, [runId]);
+    const stored = await pool.query(`select connection_id, status from sync_runs where id = $1`, [
+      runId,
+    ]);
     assert.equal(stored.rows[0]?.connection_id, null);
     assert.equal(stored.rows[0]?.status, "running");
   } finally {
@@ -334,10 +338,10 @@ test("delivery keys refuse malformed values and double-claimed identities", asyn
   const org = await createScratchOrg();
   try {
     const malformed = await pool
-      .query(`insert into email_log (id, org_id, subject, delivery_key) values ($1, $2, 'T8', 'not-a-key')`, [
-        randomUUID(),
-        org.orgId,
-      ])
+      .query(
+        `insert into email_log (id, org_id, subject, delivery_key) values ($1, $2, 'T8', 'not-a-key')`,
+        [randomUUID(), org.orgId],
+      )
       .then(
         () => null,
         (error: unknown) => error,
@@ -347,17 +351,15 @@ test("delivery keys refuse malformed values and double-claimed identities", asyn
       `expected the key format check to refuse, got: ${String(malformed)}`,
     );
     const key = `obem_${"a".repeat(40)}`;
-    await pool.query(`insert into email_log (id, org_id, subject, delivery_key) values ($1, $2, 'T8', $3)`, [
-      randomUUID(),
-      org.orgId,
-      key,
-    ]);
+    await pool.query(
+      `insert into email_log (id, org_id, subject, delivery_key) values ($1, $2, 'T8', $3)`,
+      [randomUUID(), org.orgId, key],
+    );
     const twin = await pool
-      .query(`insert into email_log (id, org_id, subject, delivery_key) values ($1, $2, 'T8 twin', $3)`, [
-        randomUUID(),
-        org.orgId,
-        key,
-      ])
+      .query(
+        `insert into email_log (id, org_id, subject, delivery_key) values ($1, $2, 'T8 twin', $3)`,
+        [randomUUID(), org.orgId, key],
+      )
       .then(
         () => null,
         (error: unknown) => error,
@@ -392,16 +394,17 @@ test("document revisions advance on every committed update", async () => {
       [id, org.orgId, `T8REV-${id.slice(0, 8)}`, org.subsidiaryId, stamp],
     );
     const read = async (): Promise<{ updated_at: Date; revision_seq: string }> =>
-      (await pool.query(`select updated_at, revision_seq from documents where id = $1`, [id])).rows[0] as {
+      (await pool.query(`select updated_at, revision_seq from documents where id = $1`, [id]))
+        .rows[0] as {
         updated_at: Date;
         revision_seq: string;
       };
     const first = await read();
     // Collapse-shaped write: store updated_at byte-identical to the row.
-    await pool.query(`update documents set memo = 'T8 collapse', updated_at = $2::timestamptz where id = $1`, [
-      id,
-      stamp,
-    ]);
+    await pool.query(
+      `update documents set memo = 'T8 collapse', updated_at = $2::timestamptz where id = $1`,
+      [id, stamp],
+    );
     const second = await read();
     assert.ok(
       second.updated_at > first.updated_at,
@@ -448,9 +451,15 @@ test("bank-feed bookkeeping separates the attempt cursor from the success cursor
       [id],
     );
     const attempted = (
-      await pool.query(`select last_attempt_at, last_sync_at from bank_feed_connections where id = $1`, [id])
+      await pool.query(
+        `select last_attempt_at, last_sync_at from bank_feed_connections where id = $1`,
+        [id],
+      )
     ).rows[0] as { last_attempt_at: Date | null; last_sync_at: Date | null };
-    assert.ok(attempted.last_attempt_at !== null, "a finished attempt must stamp the attempt cursor");
+    assert.ok(
+      attempted.last_attempt_at !== null,
+      "a finished attempt must stamp the attempt cursor",
+    );
     assert.equal(attempted.last_sync_at, null, "a failed attempt must not move the success cursor");
     await pool.query(
       `update bank_feed_connections set last_attempt_at = now(), last_sync_at = now(), last_error = null,
@@ -458,7 +467,10 @@ test("bank-feed bookkeeping separates the attempt cursor from the success cursor
       [id],
     );
     const succeeded = (
-      await pool.query(`select last_attempt_at, last_sync_at from bank_feed_connections where id = $1`, [id])
+      await pool.query(
+        `select last_attempt_at, last_sync_at from bank_feed_connections where id = $1`,
+        [id],
+      )
     ).rows[0] as { last_attempt_at: Date | null; last_sync_at: Date | null };
     assert.ok(succeeded.last_sync_at !== null, "a success must stamp the success cursor");
     assert.ok(succeeded.last_attempt_at !== null, "a success is also a finished attempt");
@@ -510,9 +522,19 @@ test("the installed catalog carries the canonical schema shape", async () => {
   assert.equal(triggers.rows.length, 1, "the posted-document guard trigger must exist");
   const indexes = await pool.query(
     `select indexname from pg_indexes where schemaname = 'public' and indexname = any ($1)`,
-    [["backup_runs_one_inflight_per_org", "parties_org_source_identity", "projects_org_source_identity"]],
+    [
+      [
+        "backup_runs_one_inflight_per_org",
+        "parties_org_source_identity",
+        "projects_org_source_identity",
+      ],
+    ],
   );
-  assert.equal(indexes.rows.length, 3, "one-inflight backup, tenant source-identity indexes must exist");
+  assert.equal(
+    indexes.rows.length,
+    3,
+    "one-inflight backup, tenant source-identity indexes must exist",
+  );
   const retired = await pool.query(
     `select tablename from pg_tables where schemaname = 'public' and tablename = any ($1)`,
     [
@@ -541,8 +563,16 @@ test("the installed catalog carries the canonical schema shape", async () => {
   const relkind = await pool.query(
     `select relforcerowsecurity, relrowsecurity from pg_class where relname = 'pay_run_adjustments'`,
   );
-  assert.equal(relkind.rows[0]?.relrowsecurity, true, "pay_run_adjustments must enforce row security");
-  assert.equal(relkind.rows[0]?.relforcerowsecurity, true, "pay_run_adjustments must force row security");
+  assert.equal(
+    relkind.rows[0]?.relrowsecurity,
+    true,
+    "pay_run_adjustments must enforce row security",
+  );
+  assert.equal(
+    relkind.rows[0]?.relforcerowsecurity,
+    true,
+    "pay_run_adjustments must force row security",
+  );
 });
 
 test("the payroll opening-balances view exposes the statutory columns", async () => {

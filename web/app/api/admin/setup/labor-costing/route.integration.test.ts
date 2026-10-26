@@ -31,7 +31,7 @@ interface RouteState {
   onExecute: ((text: string) => void) | null;
 }
 const routeState: RouteState = { authz: null, fault: null, onExecute: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 // Pure mirrors of web/lib/authz.ts's in-memory gates (the real module pulls in
 // the session/cookie stack the plain runner cannot load). guardPermission is
@@ -69,7 +69,7 @@ const mockAuthz = `
     return ids.every((id) => id !== null && id !== undefined && id !== '' && scope.has(id))
   }
 `;
-let authzRealUrl = '';
+let authzRealUrl = "";
 
 // Inject storage faults at the driver boundary while retaining the native
 // executor identity, RLS scope and transaction used by command authorization.
@@ -77,20 +77,29 @@ const pg = (await import("pg")).default;
 const nativeQuery = pg.Client.prototype.query;
 pg.Client.prototype.query = function (this: import("pg").Client, ...args: unknown[]) {
   const request = args[0];
-  const text = typeof request === "string" ? request :
-    typeof request === "object" && request !== null && "text" in request ? String(request.text) : "";
+  const text =
+    typeof request === "string"
+      ? request
+      : typeof request === "object" && request !== null && "text" in request
+        ? String(request.text)
+        : "";
   routeState.onExecute?.(text);
   if (routeState.fault?.(text)) throw new Error("injected database storage failure");
   return Reflect.apply(nativeQuery, this, args);
 } as typeof nativeQuery;
 const { after } = await import("node:test");
-after(() => { pg.Client.prototype.query = nativeQuery; });
+after(() => {
+  pg.Client.prototype.query = nativeQuery;
+});
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as platform.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
-    if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/labor-costing")) {
+    if (
+      specifier === "../../../../../lib/authz" &&
+      context.parentURL?.includes("setup/labor-costing")
+    ) {
       authzRealUrl = nextResolve(specifier, context).url;
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -105,7 +114,11 @@ registerHooks({
   },
   load(url, context, nextLoad) {
     if (url === "mock:authz") {
-      return { format: "module", source: `export { guardUnrestrictedScope } from ${JSON.stringify(authzRealUrl)};\n${mockAuthz}`, shortCircuit: true };
+      return {
+        format: "module",
+        source: `export { guardUnrestrictedScope } from ${JSON.stringify(authzRealUrl)};\n${mockAuthz}`,
+        shortCircuit: true,
+      };
     }
     return nextLoad(url, context);
   },
@@ -114,9 +127,7 @@ registerHooks({
 const routeUrl = "./route.ts?labor-costing-boundary-test";
 const { GET, PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -193,7 +204,11 @@ test("a restricted setup actor cannot change org-wide labor costing policy", asy
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: new Set([f.subsidiaryId]),
     };
-    const res = await PUT(putRequest({ settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [] } }));
+    const res = await PUT(
+      putRequest({
+        settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [] },
+      }),
+    );
     assert.equal(res.status, 403);
     assert.deepEqual(await res.json(), { error: "requires unrestricted subsidiary access" });
     assert.equal(await storedPolicy(f.orgId), null);
@@ -213,8 +228,15 @@ test("restricted save-rate refuses org-wide job-title, trade, and default rates 
       allowedSubsidiaryIds: new Set([f.subsidiaryId]),
     };
     const beforeRates = await storedRates(f.orgId);
-    const beforeAudit = Number((await db.execute(sql`
-      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`, "objects"))[0]!.n);
+    const beforeAudit = Number(
+      (
+        await db.execute(
+          sql`
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`,
+          "objects",
+        )
+      )[0]!.n,
+    );
 
     for (const scope of [
       { jobTitle: "Field technician" },
@@ -227,8 +249,15 @@ test("restricted save-rate refuses org-wide job-title, trade, and default rates 
     }
 
     assert.deepEqual(await storedRates(f.orgId), beforeRates);
-    const afterAudit = Number((await db.execute(sql`
-      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`, "objects"))[0]!.n);
+    const afterAudit = Number(
+      (
+        await db.execute(
+          sql`
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`,
+          "objects",
+        )
+      )[0]!.n,
+    );
     assert.equal(afterAudit, beforeAudit);
   } finally {
     routeState.authz = null;
@@ -245,13 +274,24 @@ test("restricted end-rate and delete-rate refuse org-wide rows without rate or a
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: null,
     };
-    const endCreated = await POST(postRequest(saveRateBody({ jobTitle: "Organization-wide field technician" })));
-    const deleteCreated = await POST(postRequest(saveRateBody({ rate: "125", effectiveFrom: "2026-02-01" })));
+    const endCreated = await POST(
+      postRequest(saveRateBody({ jobTitle: "Organization-wide field technician" })),
+    );
+    const deleteCreated = await POST(
+      postRequest(saveRateBody({ rate: "125", effectiveFrom: "2026-02-01" })),
+    );
     assert.equal(endCreated.status, 200);
     assert.equal(deleteCreated.status, 200);
     const beforeRates = await storedRates(f.orgId);
-    const beforeAudit = Number((await db.execute(sql`
-      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`, "objects"))[0]!.n);
+    const beforeAudit = Number(
+      (
+        await db.execute(
+          sql`
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`,
+          "objects",
+        )
+      )[0]!.n,
+    );
     const endId = beforeRates.find((rate) => rate.rate === "100.0000")!.id;
     const deleteId = beforeRates.find((rate) => rate.rate === "125.0000")!.id;
 
@@ -269,19 +309,39 @@ test("restricted end-rate and delete-rate refuse org-wide rows without rate or a
     }
 
     assert.deepEqual(await storedRates(f.orgId), beforeRates);
-    const afterAudit = Number((await db.execute(sql`
-      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`, "objects"))[0]!.n);
+    const afterAudit = Number(
+      (
+        await db.execute(
+          sql`
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`,
+          "objects",
+        )
+      )[0]!.n,
+    );
     assert.equal(afterAudit, beforeAudit);
 
     // A department-anchored rate ends for its own restricted setup actor.
-    const departmentId = (await db.execute<{ id: string }>(sql`
+    const departmentId = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into departments (org_id, name, is_active, subsidiary_id)
-      values (${f.orgId}, 'Field crew', true, ${f.subsidiaryId}) returning id`, "objects"))[0]!.id;
+      values (${f.orgId}, 'Field crew', true, ${f.subsidiaryId}) returning id`,
+        "objects",
+      )
+    )[0]!.id;
     const departmentCreated = await POST(postRequest(saveRateBody({ departmentId, rate: "140" })));
     assert.equal(departmentCreated.status, 200);
-    const departmentRateId = (await storedRates(f.orgId)).find((rate) => rate.rate === "140.0000")!.id;
-    const departmentEnd = await POST(postRequest({ action: "end-rate", id: departmentRateId, effectiveTo: "2026-06-30" }));
-    assert.equal(departmentEnd.status, 200, "end-rate admits the department subsidiary save-rate admits");
+    const departmentRateId = (await storedRates(f.orgId)).find(
+      (rate) => rate.rate === "140.0000",
+    )!.id;
+    const departmentEnd = await POST(
+      postRequest({ action: "end-rate", id: departmentRateId, effectiveTo: "2026-06-30" }),
+    );
+    assert.equal(
+      departmentEnd.status,
+      200,
+      "end-rate admits the department subsidiary save-rate admits",
+    );
   } finally {
     routeState.authz = null;
     const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
@@ -297,16 +357,19 @@ type StoredRate = {
   effectiveFrom: string;
   effectiveTo: string | null;
   isActive: boolean;
-}
+};
 
 async function storedRates(orgId: string): Promise<StoredRate[]> {
-  const rows = await db.execute<StoredRate>(sql`
+  const rows = await db.execute<StoredRate>(
+    sql`
     select id, rate::text as rate, payroll_rate_scale as "payrollRateScale",
            payroll_amount_rounding as "payrollAmountRounding", effective_from::text as "effectiveFrom",
            effective_to::text as "effectiveTo", is_active as "isActive"
       from labor_cost_rates
      where org_id = ${orgId}
-     order by effective_from`, "objects");
+     order by effective_from`,
+    "objects",
+  );
   return rows;
 }
 
@@ -320,14 +383,17 @@ type RateAudit = {
     before?: unknown;
     after?: unknown;
   };
-}
+};
 
 async function rateAudits(orgId: string): Promise<RateAudit[]> {
-  const rows = await db.execute<RateAudit>(sql`
+  const rows = await db.execute<RateAudit>(
+    sql`
     select action, actor_id, changes
       from audit_log
      where org_id = ${orgId} and table_name = 'labor_cost_rates'
-     order by at, id`, "objects");
+     order by at, id`,
+    "objects",
+  );
   return rows;
 }
 
@@ -343,7 +409,8 @@ async function seedSubsidiary(orgId: string, parentId: string, name: string): Pr
 async function seedEmployee(orgId: string, subsidiaryId: string | null): Promise<string> {
   const originalId = randomUUID();
   // Native rebased identifiers retain PostgreSQL shape without RFC version bits.
-  const partyId = originalId.slice(0, 14) + "e" + originalId.slice(15, 19) + "4" + originalId.slice(20);
+  const partyId =
+    originalId.slice(0, 14) + "e" + originalId.slice(15, 19) + "4" + originalId.slice(20);
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom, subsidiary_id)
     values (${partyId}, ${orgId}, 'employee', 'Waged Employee', true, '{}'::jsonb, ${subsidiaryId})`);
@@ -362,14 +429,20 @@ interface StoredPolicy {
 }
 
 async function storedPolicy(orgId: string): Promise<StoredPolicy | null> {
-  const rows = await db.execute<{ c: StoredPolicy | null }>(sql`
-    select settings->'laborCosting' as c from orgs where id = ${orgId}`, "objects");
+  const rows = await db.execute<{ c: StoredPolicy | null }>(
+    sql`
+    select settings->'laborCosting' as c from orgs where id = ${orgId}`,
+    "objects",
+  );
   return rows[0]!.c ?? null;
 }
 
 async function storedControl(orgId: string, key: string): Promise<string | null> {
-  const rows = await db.execute<{ v: string | null }>(sql`
-    select settings#>>'{controlAccounts,${sql.raw(key)}}' as v from orgs where id = ${orgId}`, "objects");
+  const rows = await db.execute<{ v: string | null }>(
+    sql`
+    select settings#>>'{controlAccounts,${sql.raw(key)}}' as v from orgs where id = ${orgId}`,
+    "objects",
+  );
   return rows[0]!.v ?? null;
 }
 
@@ -379,9 +452,12 @@ async function assertNothingPersisted(orgId: string): Promise<void> {
   for (const key of ["laborWip", "laborClearing", "payrollVariance"]) {
     assert.equal(await storedControl(orgId, key), null);
   }
-  const audits = await db.execute<{ n: number }>(sql`
+  const audits = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'orgs'`, "objects");
+     where org_id = ${orgId} and table_name = 'orgs'`,
+    "objects",
+  );
   assert.equal(audits[0]!.n, 0);
 }
 
@@ -394,20 +470,28 @@ test("a valid save persists policy, control accounts, and audit evidence in one 
       allowedSubsidiaryIds: null,
     };
 
-    const res = await PUT(putRequest({
-      settings: {
-        mode: "post",
-        hoursPerDay: "8.5",
-        annualHours: "2000",
-        components: [
-          { key: "burden", name: "Statutory Burden", kind: "percent_of_wage", value: "13", scaleWithOvertime: true },
-          { kind: "per_day", value: "75.50" },
-        ],
-      },
-      laborWip: f.wipAccount,
-      laborClearing: f.clearingAccount,
-      payrollVariance: f.varianceAccount,
-    }));
+    const res = await PUT(
+      putRequest({
+        settings: {
+          mode: "post",
+          hoursPerDay: "8.5",
+          annualHours: "2000",
+          components: [
+            {
+              key: "burden",
+              name: "Statutory Burden",
+              kind: "percent_of_wage",
+              value: "13",
+              scaleWithOvertime: true,
+            },
+            { kind: "per_day", value: "75.50" },
+          ],
+        },
+        laborWip: f.wipAccount,
+        laborClearing: f.clearingAccount,
+        payrollVariance: f.varianceAccount,
+      }),
+    );
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { ok: true });
 
@@ -416,7 +500,13 @@ test("a valid save persists policy, control accounts, and audit evidence in one 
       hoursPerDay: "8.5000",
       annualHours: "2000.0000",
       components: [
-        { key: "burden", name: "Statutory Burden", kind: "percent_of_wage", value: "13", scaleWithOvertime: true },
+        {
+          key: "burden",
+          name: "Statutory Burden",
+          kind: "percent_of_wage",
+          value: "13",
+          scaleWithOvertime: true,
+        },
         { key: "c1", name: "Component", kind: "per_day", value: "75.5", scaleWithOvertime: false },
       ],
       allowUnratedTime: false,
@@ -428,10 +518,17 @@ test("a valid save persists policy, control accounts, and audit evidence in one 
 
     // Audit evidence is part of the same commit: exactly one row carrying
     // before → after for the policy and each control account.
-    const audits = await db.execute<{ action: string; actor_id: string | null; changes: Record<string, unknown> }>(sql`
+    const audits = await db.execute<{
+      action: string;
+      actor_id: string | null;
+      changes: Record<string, unknown>;
+    }>(
+      sql`
       select action, actor_id, changes from audit_log
        where org_id = ${f.orgId} and table_name = 'orgs'
-       order by at`, "objects");
+       order by at`,
+      "objects",
+    );
     assert.equal(audits.length, 1);
     const audit = audits[0]!;
     assert.equal(audit.action, "update");
@@ -458,15 +555,31 @@ test("allowUnratedTime persists when explicitly set and rejects non-booleans", a
       allowedSubsidiaryIds: null,
     };
 
-    const res = await PUT(putRequest({
-      settings: { mode: "off", hoursPerDay: "8", annualHours: "2080", components: [], allowUnratedTime: true },
-    }));
+    const res = await PUT(
+      putRequest({
+        settings: {
+          mode: "off",
+          hoursPerDay: "8",
+          annualHours: "2080",
+          components: [],
+          allowUnratedTime: true,
+        },
+      }),
+    );
     assert.equal(res.status, 200);
     assert.equal((await storedPolicy(f.orgId))?.allowUnratedTime, true);
 
-    const bad = await PUT(putRequest({
-      settings: { mode: "off", hoursPerDay: "8", annualHours: "2080", components: [], allowUnratedTime: "yes" },
-    }));
+    const bad = await PUT(
+      putRequest({
+        settings: {
+          mode: "off",
+          hoursPerDay: "8",
+          annualHours: "2080",
+          components: [],
+          allowUnratedTime: "yes",
+        },
+      }),
+    );
     // The boundary requires a boolean at the exact field.
     const badBody = (await bad.json()) as { issues: { path: string }[] };
     assert.equal(bad.status, 400, `expected 400, got ${bad.status}: ${JSON.stringify(badBody)}`);
@@ -504,29 +617,48 @@ test("a malformed component rejects the whole save and persists nothing", async 
       ["not-an-object"],
     ];
     for (const components of malformedComponents) {
-      const res = await PUT(putRequest({
-        settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components },
-        laborWip: f.wipAccount,
-      }));
+      const res = await PUT(
+        putRequest({
+          settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components },
+          laborWip: f.wipAccount,
+        }),
+      );
       assert.equal(res.status, 400, `expected 400 for components ${JSON.stringify(components)}`);
     }
 
     // A decimal-shaped string that is too precise keeps the named scale
     // remedy at the boundary.
-    const precise = await PUT(putRequest({
-      settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [{ kind: "per_hour", value: "1.23456" }] },
-      laborWip: f.wipAccount,
-    }));
+    const precise = await PUT(
+      putRequest({
+        settings: {
+          mode: "post",
+          hoursPerDay: "8",
+          annualHours: "2080",
+          components: [{ kind: "per_hour", value: "1.23456" }],
+        },
+        laborWip: f.wipAccount,
+      }),
+    );
     assert.equal(precise.status, 400);
-    assert.match(((await precise.json()) as { error: string }).error, /allows at most 4 decimal places/);
+    assert.match(
+      ((await precise.json()) as { error: string }).error,
+      /allows at most 4 decimal places/,
+    );
 
     // A JSON number never reaches the decimal classifier: the boundary
     // requires a string at the exact field, so the rounded IEEE-754 value
     // can never look exact — and nothing is written.
-    const numeric = await PUT(putRequest({
-      settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [{ kind: "per_hour", value: 5 }] },
-      laborWip: f.wipAccount,
-    }));
+    const numeric = await PUT(
+      putRequest({
+        settings: {
+          mode: "post",
+          hoursPerDay: "8",
+          annualHours: "2080",
+          components: [{ kind: "per_hour", value: 5 }],
+        },
+        laborWip: f.wipAccount,
+      }),
+    );
     assert.equal(numeric.status, 400);
     const numericBody = (await numeric.json()) as { issues: { path: string }[] };
     assert.ok(
@@ -564,13 +696,19 @@ test("a valid save with an invalid control account persists NOTHING — not even
 
     // Regression: the old handler had already written laborCosting before it
     // validated the account ids, so this 422 still persisted the policy.
-    const badUuid = await PUT(putRequest({
-      settings: { mode: "post", hoursPerDay: "7.5", annualHours: "1900", components: [] },
-      laborWip: "not-a-uuid",
-    }));
+    const badUuid = await PUT(
+      putRequest({
+        settings: { mode: "post", hoursPerDay: "7.5", annualHours: "1900", components: [] },
+        laborWip: "not-a-uuid",
+      }),
+    );
     // The boundary requires a uuid at the exact account field.
     const badUuidBody = (await badUuid.json()) as { issues: { path: string }[] };
-    assert.equal(badUuid.status, 400, `expected 400, got ${badUuid.status}: ${JSON.stringify(badUuidBody)}`);
+    assert.equal(
+      badUuid.status,
+      400,
+      `expected 400, got ${badUuid.status}: ${JSON.stringify(badUuidBody)}`,
+    );
     assert.ok(
       badUuidBody.issues?.some((issue) => issue.path.includes("laborWip")),
       `the refusal names the field: ${JSON.stringify(badUuidBody)}`,
@@ -586,14 +724,21 @@ test("a valid save with an invalid control account persists NOTHING — not even
       ["laborClearing", randomUUID()],
       ["laborWip", summaryId],
     ] as const) {
-      const res = await PUT(putRequest({
-        settings: { mode: "post", hoursPerDay: "7.5", annualHours: "1900", components: [] },
-        [key]: accountId,
-      }));
+      const res = await PUT(
+        putRequest({
+          settings: { mode: "post", hoursPerDay: "7.5", annualHours: "1900", components: [] },
+          [key]: accountId,
+        }),
+      );
       assert.equal(res.status, 422);
-      const refusal = await res.json() as {error:string;code:string};
+      const refusal = (await res.json()) as { error: string; code: string };
       assert.equal(refusal.code, "invalid_control_account");
-      assert.match(refusal.error, key === "laborClearing" ? /Labor clearing.*does not exist in this organization/ : /Labor WIP.*summary/);
+      assert.match(
+        refusal.error,
+        key === "laborClearing"
+          ? /Labor clearing.*does not exist in this organization/
+          : /Labor WIP.*summary/,
+      );
     }
     await assertNothingPersisted(f.orgId);
   } finally {
@@ -616,14 +761,28 @@ test("re-saves keep the audit trail continuous — before values match what was 
       mode: "post",
       hoursPerDay: "8.0000",
       annualHours: "2080.0000",
-      components: [{ key: "burden", name: "Burden", kind: "percent_of_wage", value: "30", scaleWithOvertime: true }],
+      components: [
+        {
+          key: "burden",
+          name: "Burden",
+          kind: "percent_of_wage",
+          value: "30",
+          scaleWithOvertime: true,
+        },
+      ],
       allowUnratedTime: false,
     };
-    const res1 = await PUT(putRequest({
-      settings: { ...first, hoursPerDay: "8", components: first.components.map((c) => ({ ...c, value: "30" })) },
-      laborWip: f.wipAccount,
-      laborClearing: f.clearingAccount,
-    }));
+    const res1 = await PUT(
+      putRequest({
+        settings: {
+          ...first,
+          hoursPerDay: "8",
+          components: first.components.map((c) => ({ ...c, value: "30" })),
+        },
+        laborWip: f.wipAccount,
+        laborClearing: f.clearingAccount,
+      }),
+    );
     assert.equal(res1.status, 200);
 
     // Second save revises the policy and clears one control account; the new
@@ -635,11 +794,13 @@ test("re-saves keep the audit trail continuous — before values match what was 
       components: [],
       allowUnratedTime: false,
     };
-    const res2 = await PUT(putRequest({
-      settings: second,
-      laborWip: null,
-      payrollVariance: f.varianceAccount,
-    }));
+    const res2 = await PUT(
+      putRequest({
+        settings: second,
+        laborWip: null,
+        payrollVariance: f.varianceAccount,
+      }),
+    );
     assert.equal(res2.status, 200);
     assert.deepEqual(await storedPolicy(f.orgId), second);
     // Clearing sends an explicit jsonb null, read back as SQL NULL.
@@ -649,10 +810,15 @@ test("re-saves keep the audit trail continuous — before values match what was 
     assert.equal(await storedControl(f.orgId, "laborClearing"), f.clearingAccount);
     assert.equal(await storedControl(f.orgId, "payrollVariance"), f.varianceAccount);
 
-    const audits = await db.execute<{ changes: { laborCosting: unknown[]; controlAccounts: Record<string, unknown[]> } }>(sql`
+    const audits = await db.execute<{
+      changes: { laborCosting: unknown[]; controlAccounts: Record<string, unknown[]> };
+    }>(
+      sql`
       select changes from audit_log
        where org_id = ${f.orgId} and table_name = 'orgs'
-       order by at`, "objects");
+       order by at`,
+      "objects",
+    );
     assert.equal(audits.length, 2);
     const evidence = audits[1]!.changes;
     assert.deepEqual(evidence.laborCosting[0], first);
@@ -678,13 +844,18 @@ test("a save whose INSERT fails after the close commits NO rate gap and NO orpha
     };
 
     // Prior open rate, saved through the real path (one audit row).
-    const first = await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })));
+    const first = await POST(
+      postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })),
+    );
     assert.equal(first.status, 200);
 
     // Arm the injected failure on the replacement upsert — it fires after the
     // close UPDATE has already run inside the same transaction.
-    routeState.fault = (text) => text.replaceAll(/\s+/g, " ").trim().startsWith("insert into labor_cost_rates");
-    const failed = await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })));
+    routeState.fault = (text) =>
+      text.replaceAll(/\s+/g, " ").trim().startsWith("insert into labor_cost_rates");
+    const failed = await POST(
+      postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })),
+    );
     routeState.fault = null;
     assert.equal(failed.status, 422);
 
@@ -715,12 +886,16 @@ test("a save whose AUDIT write fails rolls the close and the replacement back to
       allowedSubsidiaryIds: null,
     };
 
-    const first = await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })));
+    const first = await POST(
+      postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })),
+    );
     assert.equal(first.status, 200);
 
     // Fail the LAST write in the unit: data must not survive without evidence.
     routeState.fault = (text) => text.replaceAll(/\s+/g, " ").includes("insert into audit_log");
-    const failed = await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })));
+    const failed = await POST(
+      postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })),
+    );
     routeState.fault = null;
     assert.equal(failed.status, 422);
 
@@ -811,9 +986,13 @@ test("saves keep exact decimal/date scope evidence — new start, correction in 
       allowedSubsidiaryIds: null,
     };
 
-    const first = await POST(postRequest(saveRateBody({ rate: "100.5", effectiveFrom: "2026-01-01" })));
+    const first = await POST(
+      postRequest(saveRateBody({ rate: "100.5", effectiveFrom: "2026-01-01" })),
+    );
     assert.equal(first.status, 200);
-    const successor = await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })));
+    const successor = await POST(
+      postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })),
+    );
     assert.equal(successor.status, 200);
 
     let rates = await storedRates(f.orgId);
@@ -823,11 +1002,15 @@ test("saves keep exact decimal/date scope evidence — new start, correction in 
 
     // Correcting the SAME start replaces the row in place and audits both
     // versions with exact decimal semantics.
-    const correction = await POST(postRequest(saveRateBody({
-      rate: "125.25",
-      effectiveFrom: "2026-03-01",
-      reason: "correction: wrong step",
-    })));
+    const correction = await POST(
+      postRequest(
+        saveRateBody({
+          rate: "125.25",
+          effectiveFrom: "2026-03-01",
+          reason: "correction: wrong step",
+        }),
+      ),
+    );
     assert.equal(correction.status, 200);
     rates = await storedRates(f.orgId);
     assert.equal(rates.length, 2);
@@ -848,12 +1031,14 @@ test("saves keep exact decimal/date scope evidence — new start, correction in 
     assert.equal(audits[2]!.changes.effectiveFrom, "2026-03-01");
 
     // Ending a rate carries the reason and the exact before/after dates.
-    const ended = await POST(postRequest({
-      action: "end-rate",
-      id: rates[1]!.id,
-      effectiveTo: "2026-06-30",
-      reason: "contract ended",
-    }));
+    const ended = await POST(
+      postRequest({
+        action: "end-rate",
+        id: rates[1]!.id,
+        effectiveTo: "2026-06-30",
+        reason: "contract ended",
+      }),
+    );
     assert.equal(ended.status, 200);
     audits = await rateAudits(f.orgId);
     assert.equal(audits.length, 4);
@@ -863,11 +1048,13 @@ test("saves keep exact decimal/date scope evidence — new start, correction in 
     assert.equal((audits[3]!.changes.after as StoredRate).effectiveTo, "2026-06-30");
 
     // Deleting (deactivating) carries the reason and both activation states.
-    const deleted = await POST(postRequest({
-      action: "delete-rate",
-      id: rates[1]!.id,
-      reason: "entered in error",
-    }));
+    const deleted = await POST(
+      postRequest({
+        action: "delete-rate",
+        id: rates[1]!.id,
+        reason: "entered in error",
+      }),
+    );
     assert.equal(deleted.status, 200);
     audits = await rateAudits(f.orgId);
     assert.equal(audits.length, 5);
@@ -892,13 +1079,17 @@ test("end/delete audit-write failures roll the data change back with the evidenc
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: null,
     };
-    const saved = await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })));
+    const saved = await POST(
+      postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })),
+    );
     assert.equal(saved.status, 200);
     const rates = await storedRates(f.orgId);
     const rateId = rates[0]!.id;
 
     routeState.fault = (text) => text.replaceAll(/\s+/g, " ").includes("insert into audit_log");
-    const ended = await POST(postRequest({ action: "end-rate", id: rateId, effectiveTo: "2026-06-30" }));
+    const ended = await POST(
+      postRequest({ action: "end-rate", id: rateId, effectiveTo: "2026-06-30" }),
+    );
     assert.equal(ended.status, 422);
     const deleted = await POST(postRequest({ action: "delete-rate", id: rateId }));
     assert.equal(deleted.status, 422);
@@ -931,12 +1122,17 @@ test("an inactive control account is refused like a summary one", async () => {
     await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${dormantId}, ${f.orgId}, '9998', 'Dormant Account', 'asset_current_other', false, false, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    const res = await PUT(putRequest({
-      settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [] },
-      laborWip: dormantId,
-    }));
+    const res = await PUT(
+      putRequest({
+        settings: { mode: "post", hoursPerDay: "8", annualHours: "2080", components: [] },
+        laborWip: dormantId,
+      }),
+    );
     assert.equal(res.status, 422);
-    assert.deepEqual(await res.json(), { error: "Labor WIP control account is inactive — choose an active account", code: "invalid_control_account" });
+    assert.deepEqual(await res.json(), {
+      error: "Labor WIP control account is inactive — choose an active account",
+      code: "invalid_control_account",
+    });
     await assertNothingPersisted(f.orgId);
   } finally {
     routeState.authz = null;
@@ -960,12 +1156,14 @@ test("out-of-scope compensation is 404 to a restricted setup actor; variance pos
     // The policy and the control accounts save together: the empty settings
     // object intentionally chooses the defaults rather than resetting them
     // by omission.
-    const configured = await PUT(putRequest({
-      settings: {},
-      laborWip: f.wipAccount,
-      laborClearing: f.clearingAccount,
-      payrollVariance: f.varianceAccount,
-    }));
+    const configured = await PUT(
+      putRequest({
+        settings: {},
+        laborWip: f.wipAccount,
+        laborClearing: f.clearingAccount,
+        payrollVariance: f.varianceAccount,
+      }),
+    );
     assert.equal(configured.status, 200);
 
     // An A-only setup actor: B employees, B rates, B reconcile and B posting
@@ -975,19 +1173,31 @@ test("out-of-scope compensation is 404 to a restricted setup actor; variance pos
       permissions: new Set(["admin.setup.manage", "gl.post"]),
       allowedSubsidiaryIds: new Set([f.subsidiaryId]),
     };
-    const readB = await GET(new Request(`http://localhost/api/admin/setup/labor-costing?employee=${employeeB}`));
+    const readB = await GET(
+      new Request(`http://localhost/api/admin/setup/labor-costing?employee=${employeeB}`),
+    );
     assert.equal(readB.status, 404);
     const saveEmployeeB = await POST(postRequest(saveRateBody({ employeePartyId: employeeB })));
     assert.equal(saveEmployeeB.status, 404);
     const saveSubB = await POST(postRequest(saveRateBody({ subsidiaryId: subsidiaryB })));
     assert.equal(saveSubB.status, 404);
-    const reconcileB = await POST(postRequest({
-      action: "reconcile", periodStart: "2026-01-01", periodEnd: "2026-01-31", subsidiaryId: subsidiaryB,
-    }));
+    const reconcileB = await POST(
+      postRequest({
+        action: "reconcile",
+        periodStart: "2026-01-01",
+        periodEnd: "2026-01-31",
+        subsidiaryId: subsidiaryB,
+      }),
+    );
     assert.equal(reconcileB.status, 404);
-    const postB = await POST(postRequest({
-      action: "post-variance", periodStart: "2026-01-01", periodEnd: "2026-01-31", subsidiaryId: subsidiaryB,
-    }));
+    const postB = await POST(
+      postRequest({
+        action: "post-variance",
+        periodStart: "2026-01-01",
+        periodEnd: "2026-01-31",
+        subsidiaryId: subsidiaryB,
+      }),
+    );
     assert.equal(postB.status, 404);
 
     // In scope, but without posting authority: 403 before any journal work.
@@ -996,17 +1206,25 @@ test("out-of-scope compensation is 404 to a restricted setup actor; variance pos
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: new Set([f.subsidiaryId]),
     };
-    const postWithoutAuthority = await POST(postRequest({
-      action: "post-variance", periodStart: "2026-01-01", periodEnd: "2026-01-31", subsidiaryId: f.subsidiaryId,
-    }));
+    const postWithoutAuthority = await POST(
+      postRequest({
+        action: "post-variance",
+        periodStart: "2026-01-01",
+        periodEnd: "2026-01-31",
+        subsidiaryId: f.subsidiaryId,
+      }),
+    );
     assert.equal(postWithoutAuthority.status, 403);
     assert.deepEqual(await postWithoutAuthority.json(), { error: "missing permission: gl.post" });
 
     // No wage row for B and no journal anywhere: the denials mutated nothing.
     const bRates = await storedRates(f.orgId);
     assert.equal(bRates.length, 0);
-    const journals = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${f.orgId}`, "objects");
+    const journals = await db.execute<{ n: number }>(
+      sql`
+      select count(*)::int as n from journal_entries where org_id = ${f.orgId}`,
+      "objects",
+    );
     assert.equal(journals[0]!.n, 0);
   } finally {
     routeState.authz = null;
@@ -1025,7 +1243,7 @@ test("save-rate rejects an impossible calendar date with a field error, not a dr
     };
     const res = await POST(postRequest(saveRateBody({ effectiveFrom: "2026-02-30" })));
     assert.equal(res.status, 422);
-    const body = await res.json() as { error: string };
+    const body = (await res.json()) as { error: string };
     // Exact documented client error — Drizzle's driver-error wrapper also
     // names the "effectiveFrom" column alias, so a substring match cannot
     // distinguish the two.
@@ -1049,9 +1267,11 @@ test("end-rate rejects an impossible calendar date with a field error, not a dri
     const saved = await POST(postRequest(saveRateBody()));
     assert.equal(saved.status, 200);
     const rateId = (await storedRates(f.orgId))[0]!.id;
-    const res = await POST(postRequest({ action: "end-rate", id: rateId, effectiveTo: "2026-02-30" }));
+    const res = await POST(
+      postRequest({ action: "end-rate", id: rateId, effectiveTo: "2026-02-30" }),
+    );
     assert.equal(res.status, 422);
-    const body = await res.json() as { error: string };
+    const body = (await res.json()) as { error: string };
     assert.equal(body.error, "invalid effectiveTo");
     assert.equal((await storedRates(f.orgId))[0]!.effectiveTo, null);
   } finally {
@@ -1069,18 +1289,25 @@ test("reconcile rejects an impossible calendar date with a 422, never a 500", as
       permissions: new Set(["admin.setup.manage"]),
       allowedSubsidiaryIds: null,
     };
-    const put = await PUT(putRequest({
-      settings: { mode: "post", hoursPerDay: "8", annualHours: "2000", components: [] },
-      laborWip: f.wipAccount,
-      laborClearing: f.clearingAccount,
-      payrollVariance: f.varianceAccount,
-    }));
+    const put = await PUT(
+      putRequest({
+        settings: { mode: "post", hoursPerDay: "8", annualHours: "2000", components: [] },
+        laborWip: f.wipAccount,
+        laborClearing: f.clearingAccount,
+        payrollVariance: f.varianceAccount,
+      }),
+    );
     assert.equal(put.status, 200);
-    const res = await POST(postRequest({
-      action: "reconcile", periodStart: "2026-02-30", periodEnd: "2026-03-31", subsidiaryId: f.subsidiaryId,
-    }));
+    const res = await POST(
+      postRequest({
+        action: "reconcile",
+        periodStart: "2026-02-30",
+        periodEnd: "2026-03-31",
+        subsidiaryId: f.subsidiaryId,
+      }),
+    );
     assert.equal(res.status, 422);
-    const body = await res.json() as { error: string };
+    const body = (await res.json()) as { error: string };
     assert.match(body.error, /periodStart\/periodEnd/);
   } finally {
     routeState.authz = null;
@@ -1104,12 +1331,18 @@ test("a backdated save-rate persists mid-timeline, capped the day before its suc
       allowedSubsidiaryIds: null,
     };
 
-    const current = await POST(postRequest(saveRateBody({ rate: "32.5", effectiveFrom: "2026-09-17" })));
+    const current = await POST(
+      postRequest(saveRateBody({ rate: "32.5", effectiveFrom: "2026-09-17" })),
+    );
     assert.equal(current.status, 200);
-    const future = await POST(postRequest(saveRateBody({ rate: "34", effectiveFrom: "2026-09-19" })));
+    const future = await POST(
+      postRequest(saveRateBody({ rate: "34", effectiveFrom: "2026-09-19" })),
+    );
     assert.equal(future.status, 200);
 
-    const backdated = await POST(postRequest(saveRateBody({ rate: "35", effectiveFrom: "2026-09-05" })));
+    const backdated = await POST(
+      postRequest(saveRateBody({ rate: "35", effectiveFrom: "2026-09-05" })),
+    );
     assert.equal(backdated.status, 200);
 
     const rates = await storedRates(f.orgId);
@@ -1148,38 +1381,74 @@ test("a same-start correction keeps the row's window instead of reopening past i
       allowedSubsidiaryIds: null,
     };
 
-    assert.equal((await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })))).status, 200);
-    assert.equal((await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })))).status, 200);
-    const backdated = await POST(postRequest(saveRateBody({ rate: "110", effectiveFrom: "2026-02-01", payrollRateScale: 2, payrollAmountRounding: "time_entry" })));
+    assert.equal(
+      (await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })))).status,
+      200,
+    );
+    assert.equal(
+      (await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })))).status,
+      200,
+    );
+    const backdated = await POST(
+      postRequest(
+        saveRateBody({
+          rate: "110",
+          effectiveFrom: "2026-02-01",
+          payrollRateScale: 2,
+          payrollAmountRounding: "time_entry",
+        }),
+      ),
+    );
     assert.equal(backdated.status, 200);
 
     let rates = await storedRates(f.orgId);
     assert.equal(rates.length, 3);
     assert.equal(rates[1]!.effectiveTo, "2026-02-28");
 
-    const correction = await POST(postRequest(saveRateBody({ rate: "115", effectiveFrom: "2026-02-01" })));
+    const correction = await POST(
+      postRequest(saveRateBody({ rate: "115", effectiveFrom: "2026-02-01" })),
+    );
     assert.equal(correction.status, 200);
     rates = await storedRates(f.orgId);
     assert.equal(rates.length, 3);
     assert.equal(rates[1]!.rate, "115.0000");
     assert.equal(rates[1]!.payrollRateScale, 2);
-    assert.equal(rates[1]!.payrollAmountRounding, "time_entry", "omitted correction inputs retain the dated policy");
+    assert.equal(
+      rates[1]!.payrollAmountRounding,
+      "time_entry",
+      "omitted correction inputs retain the dated policy",
+    );
     const audit = (await rateAudits(f.orgId)).at(-1)!;
     assert.equal((audit.changes.after as StoredRate).payrollRateScale, 2);
     assert.equal((audit.changes.after as StoredRate).payrollAmountRounding, "time_entry");
     const beforeInvalid = await storedRates(f.orgId);
     const auditCount = (await rateAudits(f.orgId)).length;
-    for (const invalid of [{ payrollRateScale: 5 }, { payrollRateScale: 1.5 }, { payrollAmountRounding: "day" }]) {
-      const response = await POST(postRequest(saveRateBody({ ...invalid, effectiveFrom: "2026-02-10" })));
+    for (const invalid of [
+      { payrollRateScale: 5 },
+      { payrollRateScale: 1.5 },
+      { payrollAmountRounding: "day" },
+    ]) {
+      const response = await POST(
+        postRequest(saveRateBody({ ...invalid, effectiveFrom: "2026-02-10" })),
+      );
       assert.equal(response.status, 400);
       assert.deepEqual(await storedRates(f.orgId), beforeInvalid);
       assert.equal((await rateAudits(f.orgId)).length, auditCount);
     }
     assert.equal(rates[1]!.effectiveTo, "2026-02-28");
-    assert.equal((await POST(postRequest(saveRateBody({ rate: "116", effectiveFrom: "2026-02-10" })))).status, 200);
-    const inherited = (await storedRates(f.orgId)).find((row) => row.effectiveFrom === "2026-02-10")!;
+    assert.equal(
+      (await POST(postRequest(saveRateBody({ rate: "116", effectiveFrom: "2026-02-10" })))).status,
+      200,
+    );
+    const inherited = (await storedRates(f.orgId)).find(
+      (row) => row.effectiveFrom === "2026-02-10",
+    )!;
     assert.equal(inherited.payrollRateScale, 2);
-    assert.equal(inherited.payrollAmountRounding, "time_entry", "new versions inherit prior policy when native callers omit rounding inputs");
+    assert.equal(
+      inherited.payrollAmountRounding,
+      "time_entry",
+      "new versions inherit prior policy when native callers omit rounding inputs",
+    );
   } finally {
     routeState.authz = null;
     const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
@@ -1198,14 +1467,23 @@ test("a storage refusal past validation never leaks driver text to the client", 
       allowedSubsidiaryIds: null,
     };
 
-    assert.equal((await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })))).status, 200);
+    assert.equal(
+      (await POST(postRequest(saveRateBody({ rate: "100", effectiveFrom: "2026-01-01" })))).status,
+      200,
+    );
 
-    routeState.fault = (text) => text.replaceAll(/\s+/g, " ").trim().startsWith("insert into labor_cost_rates");
-    const failed = await POST(postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })));
+    routeState.fault = (text) =>
+      text.replaceAll(/\s+/g, " ").trim().startsWith("insert into labor_cost_rates");
+    const failed = await POST(
+      postRequest(saveRateBody({ rate: "120", effectiveFrom: "2026-03-01" })),
+    );
     routeState.fault = null;
     assert.equal(failed.status, 422);
-    const body = await failed.json() as { error: string; errorCode: string };
-    assert.ok(body.errorCode === "overlap" || body.errorCode === "save", `unexpected code ${body.errorCode}`);
+    const body = (await failed.json()) as { error: string; errorCode: string };
+    assert.ok(
+      body.errorCode === "overlap" || body.errorCode === "save",
+      `unexpected code ${body.errorCode}`,
+    );
     assert.doesNotMatch(body.error, /insert into|params:|org_id/i);
     assert.doesNotMatch(JSON.stringify(body), new RegExp(f.orgId));
   } finally {
@@ -1237,8 +1515,12 @@ test("save-rate names WHICH wage scope is unavailable, with the supplied id", as
       const missing = "01234567-89ab-edef-4123-456789abcdef";
       const refused = await POST(postRequest(saveRateBody({ [field]: missing })));
       assert.equal(refused.status, 422, field);
-      const body = await refused.json() as { error: string };
-      assert.match(body.error, new RegExp(`${kind} wage scope "${missing}" is not available`), field);
+      const body = (await refused.json()) as { error: string };
+      assert.match(
+        body.error,
+        new RegExp(`${kind} wage scope "${missing}" is not available`),
+        field,
+      );
     }
     // No wage row from any refused save.
     assert.equal((await storedRates(f.orgId)).length, 0);
@@ -1265,25 +1547,29 @@ test("reconcile and post-variance name a subsidiary that is missing, inactive, o
       const refused = await POST(postRequest({ action, ...period, subsidiaryId: missing }));
       assert.equal(refused.status, 422, action);
       assert.match(
-        (await refused.json() as { error: string }).error,
+        ((await refused.json()) as { error: string }).error,
         new RegExp(`no subsidiary "${missing}" in this organization`),
         action,
       );
     }
     const dormant = await seedSubsidiary(f.orgId, f.subsidiaryId, "Dormant Co");
     await db.execute(sql`update subsidiaries set is_active = false where id = ${dormant}`);
-    const inactive = await POST(postRequest({ action: "reconcile", ...period, subsidiaryId: dormant }));
+    const inactive = await POST(
+      postRequest({ action: "reconcile", ...period, subsidiaryId: dormant }),
+    );
     assert.equal(inactive.status, 422);
     assert.match(
-      (await inactive.json() as { error: string }).error,
+      ((await inactive.json()) as { error: string }).error,
       new RegExp(`subsidiary "Dormant Co" is inactive`),
     );
     const wash = await seedSubsidiary(f.orgId, f.subsidiaryId, "Wash Co");
     await db.execute(sql`update subsidiaries set is_elimination = true where id = ${wash}`);
-    const elimination = await POST(postRequest({ action: "reconcile", ...period, subsidiaryId: wash }));
+    const elimination = await POST(
+      postRequest({ action: "reconcile", ...period, subsidiaryId: wash }),
+    );
     assert.equal(elimination.status, 422);
     assert.match(
-      (await elimination.json() as { error: string }).error,
+      ((await elimination.json()) as { error: string }).error,
       new RegExp(`subsidiary "Wash Co" is an elimination entity`),
     );
   } finally {

@@ -1,18 +1,18 @@
-'use client'
+"use client";
 
-import { useIdentityState } from '@/lib/use-identity-state'
+import { useIdentityState } from "@/lib/use-identity-state";
 
-import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { endOfMonth, startOfMonth } from '@openbooks/engine/platform/civil-date'
-import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { promptDialog } from '../../../../lib/prompt'
-import { useAppAction } from '../../../../lib/use-app-action'
-import { useDirtyClose } from '../../../../lib/use-dirty-close'
-import { ActionError } from '@braedonsaunders/appkit-errors'
-import { DateField } from '@/components/date-field'
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { endOfMonth, startOfMonth } from "@openbooks/engine/platform/civil-date";
+import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { promptDialog } from "../../../../lib/prompt";
+import { useAppAction } from "../../../../lib/use-app-action";
+import { useDirtyClose } from "../../../../lib/use-dirty-close";
+import { ActionError } from "@braedonsaunders/appkit-errors";
+import { DateField } from "@/components/date-field";
 
 /**
  * Leave filing and detail drawer. Opens blank for filing (employment, type,
@@ -33,38 +33,46 @@ import { DateField } from '@/components/date-field'
 
 interface Detail {
   request: {
-    id: string
-    employmentId: string
-    leaveTypeCode: string
-    startsOn: string
-    endsOn: string
-    hours: string
-    reason: string | null
-    status: string
-    attachmentId: string | null
-    requiresAttachment: boolean
-    decidedBy: string | null
-    decisionReason: string | null
-  }
-  timeBalance: { kind: 'time'; policyId: string | null; earned: string | null; carried: string; taken: string; balance: string | null; unlimited: boolean } | null
-  valueBalances: { kind: 'value'; planCode: string; planName: string; balance: string }[]
-  asOf: string
+    id: string;
+    employmentId: string;
+    leaveTypeCode: string;
+    startsOn: string;
+    endsOn: string;
+    hours: string;
+    reason: string | null;
+    status: string;
+    attachmentId: string | null;
+    requiresAttachment: boolean;
+    decidedBy: string | null;
+    decisionReason: string | null;
+  };
+  timeBalance: {
+    kind: "time";
+    policyId: string | null;
+    earned: string | null;
+    carried: string;
+    taken: string;
+    balance: string | null;
+    unlimited: boolean;
+  } | null;
+  valueBalances: { kind: "value"; planCode: string; planName: string; balance: string }[];
+  asOf: string;
 }
 
 interface AbsenceDetail {
   absence: {
-    id: string
-    employmentId: string
-    onDate: string
-    hours: string
-    leaveTypeCode: string
-    leaveTypeName: string
-    workerName: string
-    source: 'request' | 'recorded'
-    reason: string | null
-    leaveRequestId: string | null
-    recordedAt: string | null
-  }
+    id: string;
+    employmentId: string;
+    onDate: string;
+    hours: string;
+    leaveTypeCode: string;
+    leaveTypeName: string;
+    workerName: string;
+    source: "request" | "recorded";
+    reason: string | null;
+    leaveRequestId: string | null;
+    recordedAt: string | null;
+  };
 }
 
 export function LeaveDrawer({
@@ -74,122 +82,140 @@ export function LeaveDrawer({
   record = false,
   onClose,
 }: {
-  requestId: string | null
+  requestId: string | null;
   /** A calendar entry's absence day: the drawer shows the fact, never a form. */
-  absenceId?: string | null
+  absenceId?: string | null;
   /** Holds hrm.leave.request (mirrors the withdraw/cancel route guard). */
-  canWithdrawCancel: boolean
+  canWithdrawCancel: boolean;
   /**
    * Absence-recording mode for the manager ?record=1 action: the drawer
    * renders the record form, which posts the absence route instead of
    * filing a draft request. Only meaningful without a request id.
    */
-  record?: boolean
-  onClose: () => void
+  record?: boolean;
+  onClose: () => void;
 }) {
-  const t = useTranslations('hrm')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [detail, setDetail] = useState<Detail | null>(null)
-  const [absenceDetail, setAbsenceDetail] = useState<AbsenceDetail | null>(null)
-  const [loading, setLoading] = useState(requestId !== null || (requestId === null && absenceId !== null))
-  const [status, setStatus] = useState<string | undefined>(undefined)
-  const [filingDirty, setFilingDirty] = useState(false)
-  const [filingBusy, setFilingBusy] = useState(false)
+  const t = useTranslations("hrm");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [absenceDetail, setAbsenceDetail] = useState<AbsenceDetail | null>(null);
+  const [loading, setLoading] = useState(
+    requestId !== null || (requestId === null && absenceId !== null),
+  );
+  const [status, setStatus] = useState<string | undefined>(undefined);
+  const [filingDirty, setFilingDirty] = useState(false);
+  const [filingBusy, setFilingBusy] = useState(false);
   const filingClose = useDirtyClose({
     dirty: filingDirty,
     busy: filingBusy,
     onClose,
-    message: tCommon('feedback.unsavedChanges'),
-    confirmLabel: tCommon('confirm.discardChanges'),
-  })
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
 
   // A request id wins over an absence id; the loader never sets both.
   useEffect(() => {
     if (!requestId && absenceId) {
-      let live = true
-      fetch(`/api/hrm/leave-absences/${absenceId}`, { method: 'GET' })
+      let live = true;
+      fetch(`/api/hrm/leave-absences/${absenceId}`, { method: "GET" })
         .then(async (res) => {
-          if (!live) return
+          if (!live) return;
           if (!res.ok) {
-            setStatus(await readApiErrorMessage(res, t('leave.detailFailed')))
-            setLoading(false)
-            return
+            setStatus(await readApiErrorMessage(res, t("leave.detailFailed")));
+            setLoading(false);
+            return;
           }
-          setAbsenceDetail((await res.json().catch(() => null)) as AbsenceDetail | null)
-          setStatus(undefined)
-          setLoading(false)
+          setAbsenceDetail((await res.json().catch(() => null)) as AbsenceDetail | null);
+          setStatus(undefined);
+          setLoading(false);
         })
         .catch(() => {
-          if (!live) return
-          setStatus(t('leave.detailFailed'))
-          setLoading(false)
-        })
+          if (!live) return;
+          setStatus(t("leave.detailFailed"));
+          setLoading(false);
+        });
       return () => {
-        live = false
-      }
+        live = false;
+      };
     }
-    if (!requestId) return
-    let live = true
-    fetch(`/api/hrm/leave-requests/${requestId}`, { method: 'GET' })
+    if (!requestId) return;
+    let live = true;
+    fetch(`/api/hrm/leave-requests/${requestId}`, { method: "GET" })
       .then(async (res) => {
-        if (!live) return
+        if (!live) return;
         if (!res.ok) {
-          setStatus(await readApiErrorMessage(res, t('leave.detailFailed')))
-          setLoading(false)
-          return
+          setStatus(await readApiErrorMessage(res, t("leave.detailFailed")));
+          setLoading(false);
+          return;
         }
-        setDetail((await res.json().catch(() => null)) as Detail | null)
-        setStatus(undefined)
-        setLoading(false)
+        setDetail((await res.json().catch(() => null)) as Detail | null);
+        setStatus(undefined);
+        setLoading(false);
       })
       .catch(() => {
-        if (!live) return
-        setStatus(t('leave.detailFailed'))
-        setLoading(false)
-      })
+        if (!live) return;
+        setStatus(t("leave.detailFailed"));
+        setLoading(false);
+      });
     return () => {
-      live = false
-    }
-  }, [requestId, absenceId, t])
+      live = false;
+    };
+  }, [requestId, absenceId, t]);
 
   // A second click while the first action POST is in flight would
   // submit, withdraw or cancel twice: the ref drops re-entrant runs in
   // the same tick as the click.
-  const actingRef = useRef(false)
-  const runAction = async (action: 'submit' | 'withdraw' | 'cancel', reason?: string): Promise<void> => {
-    if (!requestId || actingRef.current) return
-    actingRef.current = true
+  const actingRef = useRef(false);
+  const runAction = async (
+    action: "submit" | "withdraw" | "cancel",
+    reason?: string,
+  ): Promise<void> => {
+    if (!requestId || actingRef.current) return;
+    actingRef.current = true;
     try {
       const res = await fetch(`/api/hrm/leave-requests/${requestId}/${action}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(action === 'submit' ? {} : { reason }),
-      })
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(action === "submit" ? {} : { reason }),
+      });
       if (!res.ok) {
-        setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
-        return
+        setStatus(await readApiErrorMessage(res, t("leave.actionFailed")));
+        return;
       }
-      router.refresh()
-      onClose()
+      router.refresh();
+      onClose();
     } catch {
-      setStatus(t('leave.actionFailed'))
+      setStatus(t("leave.actionFailed"));
     } finally {
-      actingRef.current = false
+      actingRef.current = false;
     }
-  }
+  };
 
   // An empty reason never posts: the routes refuse it (reason required),
   // so posting it would only turn a dismissed prompt into a 400.
   const askReason = async (title: string): Promise<string | null> => {
-    const reason = await promptDialog({ title, label: title })
-    if (reason !== null && reason.trim().length === 0) return null
-    return reason
-  }
+    const reason = await promptDialog({ title, label: title });
+    if (reason !== null && reason.trim().length === 0) return null;
+    return reason;
+  };
 
   return (
-    <Drawer open onClose={() => void filingClose.close()} size="md" title={requestId ? t('leave.drawerTitle') : absenceId ? t('leave.absenceTitle') : record ? t('leave.recordTitle') : t('leave.fileTitle')}>
-      {loading ? <p className="text-sm text-slate-500">{t('leave.detailLoading')}</p> : null}
+    <Drawer
+      open
+      onClose={() => void filingClose.close()}
+      size="md"
+      title={
+        requestId
+          ? t("leave.drawerTitle")
+          : absenceId
+            ? t("leave.absenceTitle")
+            : record
+              ? t("leave.recordTitle")
+              : t("leave.fileTitle")
+      }
+    >
+      {loading ? <p className="text-sm text-slate-500">{t("leave.detailLoading")}</p> : null}
       {status ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {status}
@@ -198,38 +224,44 @@ export function LeaveDrawer({
       {!loading && requestId && detail ? (
         <div className="space-y-4">
           <dl className="grid grid-cols-2 gap-2 text-sm">
-            <dt className="text-slate-500">{t('leave.columns.type')}</dt>
+            <dt className="text-slate-500">{t("leave.columns.type")}</dt>
             <dd className="font-medium">{detail.request.leaveTypeCode}</dd>
-            <dt className="text-slate-500">{t('leave.columns.range')}</dt>
+            <dt className="text-slate-500">{t("leave.columns.range")}</dt>
             <dd className="tabular-nums">
               {detail.request.startsOn} → {detail.request.endsOn}
             </dd>
-            <dt className="text-slate-500">{t('leave.columns.hours')}</dt>
+            <dt className="text-slate-500">{t("leave.columns.hours")}</dt>
             <dd className="tabular-nums">{detail.request.hours}</dd>
-            <dt className="text-slate-500">{t('leave.columns.status')}</dt>
-            <dd>{t.has(`leave.statusNames.${detail.request.status}`) ? t(`leave.statusNames.${detail.request.status}`) : detail.request.status}</dd>
+            <dt className="text-slate-500">{t("leave.columns.status")}</dt>
+            <dd>
+              {t.has(`leave.statusNames.${detail.request.status}`)
+                ? t(`leave.statusNames.${detail.request.status}`)
+                : detail.request.status}
+            </dd>
           </dl>
-          {detail.request.reason ? <p className="text-sm text-slate-600">{detail.request.reason}</p> : null}
+          {detail.request.reason ? (
+            <p className="text-sm text-slate-600">{detail.request.reason}</p>
+          ) : null}
           <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">
-            <p className="font-semibold">{t('leave.timeBalanceTitle', { date: detail.asOf })}</p>
+            <p className="font-semibold">{t("leave.timeBalanceTitle", { date: detail.asOf })}</p>
             {detail.timeBalance?.unlimited ? (
-              <p>{t('leave.unlimitedBalance')}</p>
+              <p>{t("leave.unlimitedBalance")}</p>
             ) : detail.timeBalance?.balance !== null && detail.timeBalance ? (
               <p className="tabular-nums">
-                {t('leave.timeBalanceValue', {
-                  balance: detail.timeBalance.balance ?? '',
-                  earned: detail.timeBalance.earned ?? '',
+                {t("leave.timeBalanceValue", {
+                  balance: detail.timeBalance.balance ?? "",
+                  earned: detail.timeBalance.earned ?? "",
                   carried: detail.timeBalance.carried,
                   taken: detail.timeBalance.taken,
                 })}
               </p>
             ) : (
-              <p>{t('leave.noPolicyBalance')}</p>
+              <p>{t("leave.noPolicyBalance")}</p>
             )}
           </div>
           {detail.valueBalances.length > 0 ? (
             <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">
-              <p className="font-semibold">{t('leave.valueBalanceTitle', { date: detail.asOf })}</p>
+              <p className="font-semibold">{t("leave.valueBalanceTitle", { date: detail.asOf })}</p>
               <ul>
                 {detail.valueBalances.map((bank) => (
                   <li key={bank.planCode} className="tabular-nums">
@@ -248,73 +280,93 @@ export function LeaveDrawer({
                 they ride the same gate as withdraw/cancel — a reader
                 without the grant sees the draft read-only, never a
                 hopeful Submit. */}
-            {canWithdrawCancel && detail.request.status === 'draft' ? (
+            {canWithdrawCancel && detail.request.status === "draft" ? (
               <div className="w-full space-y-2">
                 {detail.request.requiresAttachment ? (
                   <>
-                    <p className="text-sm text-amber-700 dark:text-amber-300">{t('leave.evidenceRequired')}</p>
+                    <p className="text-sm text-amber-700 dark:text-amber-300">
+                      {t("leave.evidenceRequired")}
+                    </p>
                     <LeaveAttachmentPicker
-                      value={detail.request.attachmentId ?? ''}
+                      value={detail.request.attachmentId ?? ""}
                       onChange={async (attachmentId) => {
-                        if (!attachmentId || actingRef.current) return
-                        actingRef.current = true
+                        if (!attachmentId || actingRef.current) return;
+                        actingRef.current = true;
                         try {
-                          const res = await fetch(`/api/hrm/leave-requests/${requestId}/attachment`, {
-                            method: 'POST',
-                            headers: { 'content-type': 'application/json' },
-                            body: JSON.stringify({ attachmentId }),
-                          })
+                          const res = await fetch(
+                            `/api/hrm/leave-requests/${requestId}/attachment`,
+                            {
+                              method: "POST",
+                              headers: { "content-type": "application/json" },
+                              body: JSON.stringify({ attachmentId }),
+                            },
+                          );
                           if (!res.ok) {
-                            setStatus(await readApiErrorMessage(res, t('leave.attachmentFailed')))
-                            return
+                            setStatus(await readApiErrorMessage(res, t("leave.attachmentFailed")));
+                            return;
                           }
-                          const payload = (await res.json().catch(() => null)) as { request?: Detail['request'] } | null
-                          if (payload?.request) setDetail((current) => current ? { ...current, request: { ...current.request, ...payload.request } } : current)
-                          setStatus(undefined)
+                          const payload = (await res.json().catch(() => null)) as {
+                            request?: Detail["request"];
+                          } | null;
+                          if (payload?.request)
+                            setDetail((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    request: { ...current.request, ...payload.request },
+                                  }
+                                : current,
+                            );
+                          setStatus(undefined);
                         } catch {
-                          setStatus(t('leave.attachmentFailed'))
+                          setStatus(t("leave.attachmentFailed"));
                         } finally {
-                          actingRef.current = false
+                          actingRef.current = false;
                         }
                       }}
-                      label={t('leave.evidenceLabel')}
+                      label={t("leave.evidenceLabel")}
                       disabled={false}
                     />
                   </>
                 ) : null}
-                <Button size="sm" disabled={detail.request.requiresAttachment && !detail.request.attachmentId} onClick={() => void runAction('submit')}>
-                  {t('leave.submitButton')}
+                <Button
+                  size="sm"
+                  disabled={detail.request.requiresAttachment && !detail.request.attachmentId}
+                  onClick={() => void runAction("submit")}
+                >
+                  {t("leave.submitButton")}
                 </Button>
               </div>
             ) : null}
-            {canWithdrawCancel && (detail.request.status === 'draft' || detail.request.status === 'submitted') ? (
+            {canWithdrawCancel &&
+            (detail.request.status === "draft" || detail.request.status === "submitted") ? (
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  void askReason(t('leave.withdrawReasonTitle')).then((reason) => {
-                    if (reason !== null) void runAction('withdraw', reason)
+                  void askReason(t("leave.withdrawReasonTitle")).then((reason) => {
+                    if (reason !== null) void runAction("withdraw", reason);
                   })
                 }
               >
-                {t('leave.withdrawButton')}
+                {t("leave.withdrawButton")}
               </Button>
             ) : null}
-            {canWithdrawCancel && detail.request.status === 'approved' ? (
+            {canWithdrawCancel && detail.request.status === "approved" ? (
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  void askReason(t('leave.cancelReasonTitle')).then((reason) => {
-                    if (reason !== null) void runAction('cancel', reason)
+                  void askReason(t("leave.cancelReasonTitle")).then((reason) => {
+                    if (reason !== null) void runAction("cancel", reason);
                   })
                 }
               >
-                {t('leave.cancelButton')}
+                {t("leave.cancelButton")}
               </Button>
             ) : null}
             <Button size="sm" variant="ghost" onClick={onClose}>
-              {tCommon('actions.close')}
+              {tCommon("actions.close")}
             </Button>
           </div>
         </div>
@@ -322,36 +374,46 @@ export function LeaveDrawer({
       {!loading && !requestId && absenceId && absenceDetail ? (
         <div className="space-y-4">
           <dl className="grid grid-cols-2 gap-2 text-sm">
-            <dt className="text-slate-500">{t('leave.columns.employee')}</dt>
+            <dt className="text-slate-500">{t("leave.columns.employee")}</dt>
             <dd className="font-medium">{absenceDetail.absence.workerName}</dd>
-            <dt className="text-slate-500">{t('leave.columns.type')}</dt>
+            <dt className="text-slate-500">{t("leave.columns.type")}</dt>
             <dd className="font-medium">
               {absenceDetail.absence.leaveTypeCode} — {absenceDetail.absence.leaveTypeName}
             </dd>
-            <dt className="text-slate-500">{t('leave.calendarFromLabel')}</dt>
+            <dt className="text-slate-500">{t("leave.calendarFromLabel")}</dt>
             <dd className="tabular-nums">{absenceDetail.absence.onDate}</dd>
-            <dt className="text-slate-500">{t('leave.columns.hours')}</dt>
+            <dt className="text-slate-500">{t("leave.columns.hours")}</dt>
             <dd className="tabular-nums">{absenceDetail.absence.hours}</dd>
-            <dt className="text-slate-500">{t('leave.columns.status')}</dt>
+            <dt className="text-slate-500">{t("leave.columns.status")}</dt>
             <dd>
-              {t.has(`leave.statusNames.${absenceDetail.absence.source === 'recorded' ? 'recorded' : 'approved'}`)
-                ? t(`leave.statusNames.${absenceDetail.absence.source === 'recorded' ? 'recorded' : 'approved'}`)
+              {t.has(
+                `leave.statusNames.${absenceDetail.absence.source === "recorded" ? "recorded" : "approved"}`,
+              )
+                ? t(
+                    `leave.statusNames.${absenceDetail.absence.source === "recorded" ? "recorded" : "approved"}`,
+                  )
                 : absenceDetail.absence.source}
             </dd>
           </dl>
-          {absenceDetail.absence.reason ? <p className="text-sm text-slate-600">{absenceDetail.absence.reason}</p> : null}
+          {absenceDetail.absence.reason ? (
+            <p className="text-sm text-slate-600">{absenceDetail.absence.reason}</p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             {absenceDetail.absence.leaveRequestId ? (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => router.push(`/hrm/leave?request=${encodeURIComponent(absenceDetail.absence.leaveRequestId ?? '')}` as never)}
+                onClick={() =>
+                  router.push(
+                    `/hrm/leave?request=${encodeURIComponent(absenceDetail.absence.leaveRequestId ?? "")}` as never,
+                  )
+                }
               >
-                {t('leave.openRequest')}
+                {t("leave.openRequest")}
               </Button>
             ) : null}
             <Button size="sm" variant="ghost" onClick={onClose}>
-              {tCommon('actions.close')}
+              {tCommon("actions.close")}
             </Button>
           </div>
         </div>
@@ -374,7 +436,7 @@ export function LeaveDrawer({
         )
       ) : null}
     </Drawer>
-  )
+  );
 }
 
 function LeaveFileForm({
@@ -384,75 +446,83 @@ function LeaveFileForm({
   onBusyChange,
   askReason,
 }: {
-  onCancel: () => void | Promise<void>
-  onSaved: () => void
-  onDirtyChange: (dirty: boolean) => void
-  onBusyChange: (busy: boolean) => void
-  askReason: (title: string) => Promise<string | null>
+  onCancel: () => void | Promise<void>;
+  onSaved: () => void;
+  onDirtyChange: (dirty: boolean) => void;
+  onBusyChange: (busy: boolean) => void;
+  askReason: (title: string) => Promise<string | null>;
 }) {
-  const t = useTranslations('hrm')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [employmentId, setEmploymentId] = useState('')
-  const [leaveTypeId, setLeaveTypeId] = useState('')
-  const [typeOptions, setTypeOptions] = useState<{ value: string; label: string; requiresAttachment: boolean }[]>([])
-  const [attachmentId, setAttachmentId] = useState('')
-  const [draftId, setDraftId] = useState<string | null>(null)
-  const [draftSnapshot, setDraftSnapshot] = useState<string | null>(null)
-  const [startsOn, setStartsOn] = useState('')
-  const [endsOn, setEndsOn] = useState('')
-  const [hours, setHours] = useState('')
-  const [reason, setReason] = useState('')
-  const [status, setStatus] = useState<string | undefined>(undefined)
-  const { busy: saving, execute } = useAppAction()
+  const t = useTranslations("hrm");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [employmentId, setEmploymentId] = useState("");
+  const [leaveTypeId, setLeaveTypeId] = useState("");
+  const [typeOptions, setTypeOptions] = useState<
+    { value: string; label: string; requiresAttachment: boolean }[]
+  >([]);
+  const [attachmentId, setAttachmentId] = useState("");
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftSnapshot, setDraftSnapshot] = useState<string | null>(null);
+  const [startsOn, setStartsOn] = useState("");
+  const [endsOn, setEndsOn] = useState("");
+  const [hours, setHours] = useState("");
+  const [reason, setReason] = useState("");
+  const [status, setStatus] = useState<string | undefined>(undefined);
+  const { busy: saving, execute } = useAppAction();
   // Manager on-behalf filing: the employments the actor may manage leave
   // for, listed through the same grant-plus-scope predicate the filing gate
   // enforces. A self-service actor holds none, so the mode never renders
   // for them — the capability probe, not a redefined permission check,
   // decides.
-  const [filingFor, setFilingFor] = useState<'self' | 'onBehalf'>('self')
-  const [manageOptions, setManageOptions] = useState<{ value: string; label: string }[]>([])
-  const [manageLoaded, setManageLoaded] = useState(false)
-  const [onBehalfEmploymentId, setOnBehalfEmploymentId] = useState('')
+  const [filingFor, setFilingFor] = useState<"self" | "onBehalf">("self");
+  const [manageOptions, setManageOptions] = useState<{ value: string; label: string }[]>([]);
+  const [manageLoaded, setManageLoaded] = useState(false);
+  const [onBehalfEmploymentId, setOnBehalfEmploymentId] = useState("");
   // Self-service employments: the actor's own employments behind the
   // request grant — the same ownership the filing gate enforces — so the
   // picker can never offer an employment the filing refusal would reject.
-  const [ownOptions, setOwnOptions] = useState<{ value: string; label: string }[]>([])
-  const [ownLoaded, setOwnLoaded] = useState(false)
-  const canFileOnBehalf = manageOptions.length > 0
-  const onBehalf = manageLoaded && canFileOnBehalf && filingFor === 'onBehalf'
+  const [ownOptions, setOwnOptions] = useState<{ value: string; label: string }[]>([]);
+  const [ownLoaded, setOwnLoaded] = useState(false);
+  const canFileOnBehalf = manageOptions.length > 0;
+  const onBehalf = manageLoaded && canFileOnBehalf && filingFor === "onBehalf";
 
   // Leave-type options ride the HRM options route with its refusals; the
   // drawer submits ids, never labels.
   useEffect(() => {
-    let live = true
-    fetch('/api/hrm/options?source=leave-types&limit=200', { method: 'GET' })
+    let live = true;
+    fetch("/api/hrm/options?source=leave-types&limit=200", { method: "GET" })
       .then(async (res) => {
-        if (!live) return
+        if (!live) return;
         if (!res.ok) {
-          setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
-          return
+          setStatus(await readApiErrorMessage(res, t("leave.fileFailed")));
+          return;
         }
         const payload = (await res.json().catch(() => ({}))) as {
-          options?: { id?: unknown; label?: unknown; requiresAttachment?: unknown }[]
-        }
-        if (!live) return
-        const page = Array.isArray(payload.options) ? payload.options : []
+          options?: { id?: unknown; label?: unknown; requiresAttachment?: unknown }[];
+        };
+        if (!live) return;
+        const page = Array.isArray(payload.options) ? payload.options : [];
         setTypeOptions(
           page.flatMap((row) =>
-            typeof row.id === 'string' && typeof row.label === 'string'
-              ? [{ value: row.id, label: row.label, requiresAttachment: row.requiresAttachment === true }]
+            typeof row.id === "string" && typeof row.label === "string"
+              ? [
+                  {
+                    value: row.id,
+                    label: row.label,
+                    requiresAttachment: row.requiresAttachment === true,
+                  },
+                ]
               : [],
           ),
-        )
+        );
       })
       .catch(() => {
-        if (live) setStatus(t('leave.fileFailed'))
-      })
+        if (live) setStatus(t("leave.fileFailed"));
+      });
     return () => {
-      live = false
-    }
-  }, [t])
+      live = false;
+    };
+  }, [t]);
 
   // On-behalf employments ride the same options route behind the manage
   // grant. A 403/404 is not an error here — it is the self-service shape:
@@ -460,78 +530,78 @@ function LeaveFileForm({
   // Anything else failing surfaces, so a manager is never stranded on a
   // silently empty picker.
   useEffect(() => {
-    let live = true
-    fetch('/api/hrm/options?source=leave-filing-employments&limit=100', { method: 'GET' })
+    let live = true;
+    fetch("/api/hrm/options?source=leave-filing-employments&limit=100", { method: "GET" })
       .then(async (res) => {
-        if (!live) return
+        if (!live) return;
         if (!res.ok) {
           if (res.status !== 403 && res.status !== 404) {
-            setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
+            setStatus(await readApiErrorMessage(res, t("leave.fileFailed")));
           }
-          setManageLoaded(true)
-          return
+          setManageLoaded(true);
+          return;
         }
         const payload = (await res.json().catch(() => ({}))) as {
-          options?: { id?: unknown; label?: unknown }[]
-        }
-        if (!live) return
-        const page = Array.isArray(payload.options) ? payload.options : []
+          options?: { id?: unknown; label?: unknown }[];
+        };
+        if (!live) return;
+        const page = Array.isArray(payload.options) ? payload.options : [];
         setManageOptions(
           page.flatMap((row) =>
-            typeof row.id === 'string' && typeof row.label === 'string'
+            typeof row.id === "string" && typeof row.label === "string"
               ? [{ value: row.id, label: row.label }]
               : [],
           ),
-        )
-        setManageLoaded(true)
+        );
+        setManageLoaded(true);
       })
       .catch(() => {
-        if (live) setManageLoaded(true)
-      })
+        if (live) setManageLoaded(true);
+      });
     return () => {
-      live = false
-    }
-  }, [t])
+      live = false;
+    };
+  }, [t]);
 
   // The actor's own employments ride the same options route behind the
   // request grant. A refusal surfaces with its message intact — it names
   // the missing grant, which is the remedy.
   useEffect(() => {
-    let live = true
-    fetch('/api/hrm/options?source=leave-own-employments&limit=100', { method: 'GET' })
+    let live = true;
+    fetch("/api/hrm/options?source=leave-own-employments&limit=100", { method: "GET" })
       .then(async (res) => {
-        if (!live) return
+        if (!live) return;
         if (!res.ok) {
-          setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
-          setOwnLoaded(true)
-          return
+          setStatus(await readApiErrorMessage(res, t("leave.fileFailed")));
+          setOwnLoaded(true);
+          return;
         }
         const payload = (await res.json().catch(() => ({}))) as {
-          options?: { id?: unknown; label?: unknown }[]
-        }
-        if (!live) return
-        const page = Array.isArray(payload.options) ? payload.options : []
+          options?: { id?: unknown; label?: unknown }[];
+        };
+        if (!live) return;
+        const page = Array.isArray(payload.options) ? payload.options : [];
         const list = page.flatMap((row) =>
-          typeof row.id === 'string' && typeof row.label === 'string'
+          typeof row.id === "string" && typeof row.label === "string"
             ? [{ value: row.id, label: row.label }]
             : [],
-        )
-        setOwnOptions(list)
+        );
+        setOwnOptions(list);
         // A single employment files without a choice: preselect it so the
         // common case never meets the required-field refusal.
-        if (list.length === 1 && list[0]) setEmploymentId(list[0].value)
-        setOwnLoaded(true)
+        if (list.length === 1 && list[0]) setEmploymentId(list[0].value);
+        setOwnLoaded(true);
       })
       .catch(() => {
         if (live) {
-          setStatus(t('leave.fileFailed'))
-          setOwnLoaded(true)
+          setStatus(t("leave.fileFailed"));
+          setOwnLoaded(true);
         }
-      })
+      });
     return () => {
-      live = false
-    }
-  }, [t])
+      live = false;
+    };
+  }, [t]);
 
   // The field values a draft POST carries. Snapshotted at creation: a
   // retry after a refused attachment reuses the draft id, so without the
@@ -545,156 +615,174 @@ function LeaveFileForm({
       endsOn,
       hours,
       reason: reason || null,
-    })
+    });
 
   const save = async (): Promise<void> => {
-    const selectedType = typeOptions.find((option) => option.value === leaveTypeId)
+    const selectedType = typeOptions.find((option) => option.value === leaveTypeId);
     if (selectedType?.requiresAttachment && !attachmentId && !draftId) {
-      setStatus(t('leave.evidenceRequired'))
-      return
+      setStatus(t("leave.evidenceRequired"));
+      return;
     }
     if (onBehalf && !onBehalfEmploymentId) {
-      setStatus(t('leave.onBehalfEmploymentRequired'))
-      return
+      setStatus(t("leave.onBehalfEmploymentRequired"));
+      return;
     }
     if (!onBehalf && !employmentId) {
-      setStatus(t('leave.fileEmploymentRequired'))
-      return
+      setStatus(t("leave.fileEmploymentRequired"));
+      return;
     }
     // The form moved on since the draft was saved: the stale draft is
     // withdrawn first (with the operator's own reason, through the
     // existing withdraw prompt) and re-filed below with the current
     // values — never silently kept beside edited fields. A dismissed
     // prompt abandons the save with the draft untouched.
-    let supersedeReason: string | null = null
+    let supersedeReason: string | null = null;
     if (draftId && draftSnapshot !== draftValues()) {
-      supersedeReason = await askReason(t('leave.withdrawReasonTitle'))
+      supersedeReason = await askReason(t("leave.withdrawReasonTitle"));
       if (supersedeReason === null) {
-        setStatus(t('leave.fileFailed'))
-        return
+        setStatus(t("leave.fileFailed"));
+        return;
       }
     }
-    setStatus(undefined)
-    onBusyChange(true)
+    setStatus(undefined);
+    onBusyChange(true);
     try {
-      await execute(async () => {
-      try {
-        let currentDraftId = draftId
-        if (currentDraftId && supersedeReason !== null) {
-          const withdrawRes = await fetch(`/api/hrm/leave-requests/${currentDraftId}/withdraw`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ reason: supersedeReason }),
-          })
-          if (!withdrawRes.ok) {
-            setStatus(await readApiErrorMessage(withdrawRes, t('leave.fileFailed')))
-            return { ok: true as const, status: withdrawRes.status, data: null }
+      await execute(
+        async () => {
+          try {
+            let currentDraftId = draftId;
+            if (currentDraftId && supersedeReason !== null) {
+              const withdrawRes = await fetch(
+                `/api/hrm/leave-requests/${currentDraftId}/withdraw`,
+                {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ reason: supersedeReason }),
+                },
+              );
+              if (!withdrawRes.ok) {
+                setStatus(await readApiErrorMessage(withdrawRes, t("leave.fileFailed")));
+                return { ok: true as const, status: withdrawRes.status, data: null };
+              }
+              currentDraftId = null;
+              setDraftId(null);
+              setDraftSnapshot(null);
+            }
+            if (!currentDraftId) {
+              const res = await fetch("/api/hrm/leave-requests", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: onBehalf
+                  ? JSON.stringify({
+                      employmentId: onBehalfEmploymentId,
+                      leaveTypeId,
+                      startsOn,
+                      endsOn,
+                      hours,
+                      reason: reason || null,
+                      onBehalf: true,
+                    })
+                  : JSON.stringify({
+                      employmentId,
+                      leaveTypeId,
+                      startsOn,
+                      endsOn,
+                      hours,
+                      reason: reason || null,
+                    }),
+              });
+              if (!res.ok) {
+                setStatus(await readApiErrorMessage(res, t("leave.fileFailed")));
+                return { ok: true as const, status: res.status, data: null };
+              }
+              const payload = (await res.json().catch(() => null)) as {
+                request?: { id?: unknown };
+              } | null;
+              if (typeof payload?.request?.id !== "string") {
+                setStatus(t("leave.fileFailed"));
+                return { ok: true as const, status: res.status, data: null };
+              }
+              currentDraftId = payload.request.id;
+              setDraftId(currentDraftId);
+              setDraftSnapshot(draftValues());
+            }
+            if (selectedType?.requiresAttachment && attachmentId) {
+              const attachmentRes = await fetch(
+                `/api/hrm/leave-requests/${currentDraftId}/attachment`,
+                {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ attachmentId }),
+                },
+              );
+              if (!attachmentRes.ok) {
+                setStatus(await readApiErrorMessage(attachmentRes, t("leave.attachmentFailed")));
+                return { ok: true as const, status: attachmentRes.status, data: null };
+              }
+            }
+            router.refresh();
+            onDirtyChange(false);
+            onSaved();
+            return { ok: true as const, status: 200, data: null };
+          } catch {
+            return {
+              ok: false as const,
+              error: new ActionError({ kind: "transport", serverMessage: t("leave.fileFailed") }),
+            };
           }
-          currentDraftId = null
-          setDraftId(null)
-          setDraftSnapshot(null)
-        }
-        if (!currentDraftId) {
-          const res = await fetch('/api/hrm/leave-requests', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: onBehalf
-              ? JSON.stringify({
-                  employmentId: onBehalfEmploymentId,
-                  leaveTypeId,
-                  startsOn,
-                  endsOn,
-                  hours,
-                  reason: reason || null,
-                  onBehalf: true,
-                })
-              : JSON.stringify({ employmentId, leaveTypeId, startsOn, endsOn, hours, reason: reason || null }),
-          })
-          if (!res.ok) {
-            setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
-            return { ok: true as const, status: res.status, data: null }
-          }
-          const payload = (await res.json().catch(() => null)) as { request?: { id?: unknown } } | null
-          if (typeof payload?.request?.id !== 'string') {
-            setStatus(t('leave.fileFailed'))
-            return { ok: true as const, status: res.status, data: null }
-          }
-          currentDraftId = payload.request.id
-          setDraftId(currentDraftId)
-          setDraftSnapshot(draftValues())
-        }
-        if (selectedType?.requiresAttachment && attachmentId) {
-          const attachmentRes = await fetch(`/api/hrm/leave-requests/${currentDraftId}/attachment`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ attachmentId }),
-          })
-          if (!attachmentRes.ok) {
-            setStatus(await readApiErrorMessage(attachmentRes, t('leave.attachmentFailed')))
-            return { ok: true as const, status: attachmentRes.status, data: null }
-          }
-        }
-        router.refresh()
-        onDirtyChange(false)
-        onSaved()
-        return { ok: true as const, status: 200, data: null }
-      } catch {
-        return {
-          ok: false as const,
-          error: new ActionError({ kind: 'transport', serverMessage: t('leave.fileFailed') }),
-        }
-      }
-      }, {
-        fallbackMessage: t('leave.fileFailed'),
-        onRefused: (error) => setStatus(error.displayMessage(t('leave.fileFailed'))),
-      })
+        },
+        {
+          fallbackMessage: t("leave.fileFailed"),
+          onRefused: (error) => setStatus(error.displayMessage(t("leave.fileFailed"))),
+        },
+      );
     } finally {
-      onBusyChange(false)
+      onBusyChange(false);
     }
-  }
+  };
 
   function markDirty<T>(update: (value: T) => void, value: T) {
-    update(value)
-    onDirtyChange(true)
+    update(value);
+    onDirtyChange(true);
   }
 
   return (
     <div className="space-y-3">
       {manageLoaded && canFileOnBehalf ? (
         <fieldset className="space-y-1">
-          <legend className="text-sm font-medium">{t('leave.onBehalfFilingForLabel')}</legend>
+          <legend className="text-sm font-medium">{t("leave.onBehalfFilingForLabel")}</legend>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="radio"
               name="leave-filing-for"
               className="accent-teal-700"
-              checked={filingFor === 'self'}
-              onChange={() => markDirty(setFilingFor, 'self')}
+              checked={filingFor === "self"}
+              onChange={() => markDirty(setFilingFor, "self")}
             />
-            {t('leave.onBehalfSelfLabel')}
+            {t("leave.onBehalfSelfLabel")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="radio"
               name="leave-filing-for"
               className="accent-teal-700"
-              checked={filingFor === 'onBehalf'}
-              onChange={() => markDirty(setFilingFor, 'onBehalf')}
+              checked={filingFor === "onBehalf"}
+              onChange={() => markDirty(setFilingFor, "onBehalf")}
             />
-            {t('leave.onBehalfOtherLabel')}
+            {t("leave.onBehalfOtherLabel")}
           </label>
-          <p className="text-xs text-slate-500">{t('leave.onBehalfHint')}</p>
+          <p className="text-xs text-slate-500">{t("leave.onBehalfHint")}</p>
         </fieldset>
       ) : null}
       {onBehalf ? (
         <div>
-          <Label htmlFor="leave-onbehalf-employment">{t('leave.onBehalfEmployeeLabel')}</Label>
+          <Label htmlFor="leave-onbehalf-employment">{t("leave.onBehalfEmployeeLabel")}</Label>
           <Select
             id="leave-onbehalf-employment"
             value={onBehalfEmploymentId}
             onChange={(event) => markDirty(setOnBehalfEmploymentId, event.target.value)}
           >
-            <option value="">{t('leave.onBehalfEmployeePlaceholder')}</option>
+            <option value="">{t("leave.onBehalfEmployeePlaceholder")}</option>
             {manageOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -703,16 +791,16 @@ function LeaveFileForm({
           </Select>
         </div>
       ) : ownLoaded && ownOptions.length === 0 ? (
-        <p className="text-sm text-slate-500">{t('leave.fileNoEmployment')}</p>
+        <p className="text-sm text-slate-500">{t("leave.fileNoEmployment")}</p>
       ) : (
         <div>
-          <Label htmlFor="leave-employment">{t('leave.fileEmploymentLabel')}</Label>
+          <Label htmlFor="leave-employment">{t("leave.fileEmploymentLabel")}</Label>
           <Select
             id="leave-employment"
             value={employmentId}
             onChange={(event) => markDirty(setEmploymentId, event.target.value)}
           >
-            <option value="">{t('leave.fileEmploymentPlaceholder')}</option>
+            <option value="">{t("leave.fileEmploymentPlaceholder")}</option>
             {ownOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -722,9 +810,13 @@ function LeaveFileForm({
         </div>
       )}
       <div>
-        <Label htmlFor="leave-type">{t('leave.fileTypeLabel')}</Label>
-        <Select id="leave-type" value={leaveTypeId} onChange={(event) => markDirty(setLeaveTypeId, event.target.value)}>
-          <option value="">{t('leave.fileTypePlaceholder')}</option>
+        <Label htmlFor="leave-type">{t("leave.fileTypeLabel")}</Label>
+        <Select
+          id="leave-type"
+          value={leaveTypeId}
+          onChange={(event) => markDirty(setLeaveTypeId, event.target.value)}
+        >
+          <option value="">{t("leave.fileTypePlaceholder")}</option>
           {typeOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -734,27 +826,52 @@ function LeaveFileForm({
       </div>
       {typeOptions.find((option) => option.value === leaveTypeId)?.requiresAttachment ? (
         <div className="space-y-1">
-          <p className="text-sm text-amber-700 dark:text-amber-300">{t('leave.evidenceRequired')}</p>
-          <LeaveAttachmentPicker value={attachmentId} onChange={setAttachmentId} label={t('leave.evidenceLabel')} disabled={saving} />
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            {t("leave.evidenceRequired")}
+          </p>
+          <LeaveAttachmentPicker
+            value={attachmentId}
+            onChange={setAttachmentId}
+            label={t("leave.evidenceLabel")}
+            disabled={saving}
+          />
         </div>
       ) : null}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <Label htmlFor="leave-starts">{t('leave.calendarFromLabel')}</Label>
-            <DateField id="leave-starts" value={startsOn} onChange={(value) => markDirty(setStartsOn, value)} />
+          <Label htmlFor="leave-starts">{t("leave.calendarFromLabel")}</Label>
+          <DateField
+            id="leave-starts"
+            value={startsOn}
+            onChange={(value) => markDirty(setStartsOn, value)}
+          />
         </div>
         <div>
-          <Label htmlFor="leave-ends">{t('leave.calendarToLabel')}</Label>
-            <DateField id="leave-ends" value={endsOn} onChange={(value) => markDirty(setEndsOn, value)} />
+          <Label htmlFor="leave-ends">{t("leave.calendarToLabel")}</Label>
+          <DateField
+            id="leave-ends"
+            value={endsOn}
+            onChange={(value) => markDirty(setEndsOn, value)}
+          />
         </div>
       </div>
       <div>
-        <Label htmlFor="leave-hours">{t('leave.fileHoursLabel')}</Label>
-          <Input id="leave-hours" inputMode="decimal" value={hours} onChange={(event) => markDirty(setHours, event.target.value)} placeholder="8" />
+        <Label htmlFor="leave-hours">{t("leave.fileHoursLabel")}</Label>
+        <Input
+          id="leave-hours"
+          inputMode="decimal"
+          value={hours}
+          onChange={(event) => markDirty(setHours, event.target.value)}
+          placeholder="8"
+        />
       </div>
       <div>
-        <Label htmlFor="leave-reason">{t('leave.fileReasonLabel')}</Label>
-          <Textarea id="leave-reason" value={reason} onChange={(event) => markDirty(setReason, event.target.value)} />
+        <Label htmlFor="leave-reason">{t("leave.fileReasonLabel")}</Label>
+        <Textarea
+          id="leave-reason"
+          value={reason}
+          onChange={(event) => markDirty(setReason, event.target.value)}
+        />
       </div>
       {status ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -763,14 +880,14 @@ function LeaveFileForm({
       ) : null}
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => void onCancel()}>
-          {tCommon('actions.cancel')}
+          {tCommon("actions.cancel")}
         </Button>
         <Button size="sm" disabled={saving} onClick={() => void save()}>
-          {t('leave.fileButton')}
+          {t("leave.fileButton")}
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
 /**
@@ -786,237 +903,254 @@ function LeaveRecordForm({
   onDirtyChange,
   onBusyChange,
 }: {
-  onCancel: () => void | Promise<void>
-  onDirtyChange: (dirty: boolean) => void
-  onBusyChange: (busy: boolean) => void
+  onCancel: () => void | Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
-  const t = useTranslations('hrm')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [employmentId, setEmploymentId] = useState('')
-  const [leaveTypeId, setLeaveTypeId] = useState('')
-  const [typeOptions, setTypeOptions] = useState<{ value: string; label: string }[]>([])
-  const [employmentOptions, setEmploymentOptions] = useState<{ value: string; label: string }[]>([])
-  const [employmentsLoaded, setEmploymentsLoaded] = useState(false)
-  const [onDate, setOnDate] = useState('')
-  const [hours, setHours] = useState('')
-  const [reason, setReason] = useState('')
-  const todayText = new Date().toISOString().slice(0, 10)
+  const t = useTranslations("hrm");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [employmentId, setEmploymentId] = useState("");
+  const [leaveTypeId, setLeaveTypeId] = useState("");
+  const [typeOptions, setTypeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [employmentOptions, setEmploymentOptions] = useState<{ value: string; label: string }[]>(
+    [],
+  );
+  const [employmentsLoaded, setEmploymentsLoaded] = useState(false);
+  const [onDate, setOnDate] = useState("");
+  const [hours, setHours] = useState("");
+  const [reason, setReason] = useState("");
+  const todayText = new Date().toISOString().slice(0, 10);
   const [balances, setBalances] = useIdentityState<{
-    rows: { leaveTypeId: string; code: string; remaining: string | null }[]
-    effect: { leaveTypeId: string; remainingAfter: string | null } | null
-  } | null>([employmentId, leaveTypeId, hours, onDate, todayText], null)
-  const [status, setStatus] = useState<string | undefined>(undefined)
-  const { busy: saving, execute } = useAppAction()
+    rows: { leaveTypeId: string; code: string; remaining: string | null }[];
+    effect: { leaveTypeId: string; remainingAfter: string | null } | null;
+  } | null>([employmentId, leaveTypeId, hours, onDate, todayText], null);
+  const [status, setStatus] = useState<string | undefined>(undefined);
+  const { busy: saving, execute } = useAppAction();
   // Client-side today only marks the reason required; the engine decides
   // from the org business day and the actor's employments, never this.
-  const reasonRequired = onDate !== '' && onDate < todayText
+  const reasonRequired = onDate !== "" && onDate < todayText;
 
   // Leave-type options ride the HRM options route with its refusals; the
   // form submits ids, never labels.
   useEffect(() => {
-    let live = true
-    fetch('/api/hrm/options?source=leave-types&limit=200', { method: 'GET' })
+    let live = true;
+    fetch("/api/hrm/options?source=leave-types&limit=200", { method: "GET" })
       .then(async (res) => {
-        if (!live) return
+        if (!live) return;
         if (!res.ok) {
-          setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
-          return
+          setStatus(await readApiErrorMessage(res, t("leave.actionFailed")));
+          return;
         }
         const payload = (await res.json().catch(() => ({}))) as {
-          options?: { id?: unknown; label?: unknown }[]
-        }
-        if (!live) return
-        const page = Array.isArray(payload.options) ? payload.options : []
+          options?: { id?: unknown; label?: unknown }[];
+        };
+        if (!live) return;
+        const page = Array.isArray(payload.options) ? payload.options : [];
         setTypeOptions(
           page.flatMap((row) =>
-            typeof row.id === 'string' && typeof row.label === 'string'
+            typeof row.id === "string" && typeof row.label === "string"
               ? [{ value: row.id, label: row.label }]
               : [],
           ),
-        )
+        );
       })
       .catch(() => {
-        if (live) setStatus(t('leave.actionFailed'))
-      })
+        if (live) setStatus(t("leave.actionFailed"));
+      });
     return () => {
-      live = false
-    }
-  }, [t])
+      live = false;
+    };
+  }, [t]);
 
   // Recording is manager-held (the route requires hrm.leave.manage), so
   // the employee picker lists the manageable employments behind that
   // grant. A refusal surfaces with its message intact — it names the
   // missing grant, which is the remedy.
   useEffect(() => {
-    let live = true
-    fetch('/api/hrm/options?source=leave-filing-employments&limit=100', { method: 'GET' })
+    let live = true;
+    fetch("/api/hrm/options?source=leave-filing-employments&limit=100", { method: "GET" })
       .then(async (res) => {
-        if (!live) return
+        if (!live) return;
         if (!res.ok) {
-          setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
-          setEmploymentsLoaded(true)
-          return
+          setStatus(await readApiErrorMessage(res, t("leave.actionFailed")));
+          setEmploymentsLoaded(true);
+          return;
         }
         const payload = (await res.json().catch(() => ({}))) as {
-          options?: { id?: unknown; label?: unknown }[]
-        }
-        if (!live) return
-        const page = Array.isArray(payload.options) ? payload.options : []
+          options?: { id?: unknown; label?: unknown }[];
+        };
+        if (!live) return;
+        const page = Array.isArray(payload.options) ? payload.options : [];
         setEmploymentOptions(
           page.flatMap((row) =>
-            typeof row.id === 'string' && typeof row.label === 'string'
+            typeof row.id === "string" && typeof row.label === "string"
               ? [{ value: row.id, label: row.label }]
               : [],
           ),
-        )
-        setEmploymentsLoaded(true)
+        );
+        setEmploymentsLoaded(true);
       })
       .catch(() => {
         if (live) {
-          setStatus(t('leave.actionFailed'))
-          setEmploymentsLoaded(true)
+          setStatus(t("leave.actionFailed"));
+          setEmploymentsLoaded(true);
         }
-      })
+      });
     return () => {
-      live = false
-    }
-  }, [t])
+      live = false;
+    };
+  }, [t]);
 
   // Remaining-balance effect before saving: the manager sees what the
   // recording costs while typing. Advisory only — the save still runs
   // through the engine, which re-prices the balance at write time. A
   // balances refusal never blocks the form; the engine refusal would.
   useEffect(() => {
-    if (!employmentId) return
-    const params = new URLSearchParams({ employmentId, asOf: onDate || todayText })
-    if (leaveTypeId && hours.trim() !== '') {
-      params.set('leaveTypeId', leaveTypeId)
-      params.set('hours', hours.trim())
+    if (!employmentId) return;
+    const params = new URLSearchParams({ employmentId, asOf: onDate || todayText });
+    if (leaveTypeId && hours.trim() !== "") {
+      params.set("leaveTypeId", leaveTypeId);
+      params.set("hours", hours.trim());
     }
-    let live = true
+    let live = true;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/hrm/leave-balances?${params}`, { method: 'GET' })
-        if (!live) return
-        if (!res.ok) return
+        const res = await fetch(`/api/hrm/leave-balances?${params}`, { method: "GET" });
+        if (!live) return;
+        if (!res.ok) return;
         const payload = (await res.json().catch(() => null)) as {
-          balances?: { leaveTypeId?: unknown; code?: unknown; remaining?: unknown }[]
-          effect?: { leaveTypeId?: unknown; remainingAfter?: unknown } | null
-        } | null
-        if (!live || !payload || !Array.isArray(payload.balances)) return
+          balances?: { leaveTypeId?: unknown; code?: unknown; remaining?: unknown }[];
+          effect?: { leaveTypeId?: unknown; remainingAfter?: unknown } | null;
+        } | null;
+        if (!live || !payload || !Array.isArray(payload.balances)) return;
         setBalances({
           rows: payload.balances.flatMap((row) =>
-            typeof row.leaveTypeId === 'string' && typeof row.code === 'string' &&
-            (row.remaining === null || typeof row.remaining === 'string')
+            typeof row.leaveTypeId === "string" &&
+            typeof row.code === "string" &&
+            (row.remaining === null || typeof row.remaining === "string")
               ? [{ leaveTypeId: row.leaveTypeId, code: row.code, remaining: row.remaining }]
               : [],
           ),
           effect:
-            payload.effect && typeof payload.effect.leaveTypeId === 'string' &&
-            (payload.effect.remainingAfter === null || typeof payload.effect.remainingAfter === 'string')
-              ? { leaveTypeId: payload.effect.leaveTypeId, remainingAfter: payload.effect.remainingAfter }
+            payload.effect &&
+            typeof payload.effect.leaveTypeId === "string" &&
+            (payload.effect.remainingAfter === null ||
+              typeof payload.effect.remainingAfter === "string")
+              ? {
+                  leaveTypeId: payload.effect.leaveTypeId,
+                  remainingAfter: payload.effect.remainingAfter,
+                }
               : null,
-        })
+        });
       } catch {
-        if (live) setBalances(null)
+        if (live) setBalances(null);
       }
-    }, 300)
+    }, 300);
     return () => {
-      live = false
-      clearTimeout(timer)
-    }
-  }, [employmentId, leaveTypeId, hours, onDate, todayText, setBalances])
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [employmentId, leaveTypeId, hours, onDate, todayText, setBalances]);
 
-  const balanceRow = leaveTypeId ? (balances?.rows.find((row) => row.leaveTypeId === leaveTypeId) ?? null) : null
+  const balanceRow = leaveTypeId
+    ? (balances?.rows.find((row) => row.leaveTypeId === leaveTypeId) ?? null)
+    : null;
 
   const save = async (): Promise<void> => {
-    if (saving) return
+    if (saving) return;
     // The engine owns the requirement; this only spares a round trip when
     // the basis is visibly missing for a back-dated day.
-    if (reasonRequired && reason.trim() === '') {
-      setStatus(t('leave.recordReasonHint'))
-      return
+    if (reasonRequired && reason.trim() === "") {
+      setStatus(t("leave.recordReasonHint"));
+      return;
     }
-    setStatus(undefined)
-    onBusyChange(true)
+    setStatus(undefined);
+    onBusyChange(true);
     try {
       await execute<{ id: string; onDate: string } | null>(
         async () => {
           try {
-            const res = await fetch('/api/hrm/leave-absences', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
+            const res = await fetch("/api/hrm/leave-absences", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
               body: JSON.stringify({
                 employmentId,
                 leaveTypeId,
                 onDate,
                 hours,
-                reason: reason.trim() === '' ? null : reason.trim(),
+                reason: reason.trim() === "" ? null : reason.trim(),
               }),
-            })
+            });
             if (!res.ok) {
-              setStatus(await readApiErrorMessage(res, t('leave.actionFailed')))
-              return { ok: true as const, status: res.status, data: null }
+              setStatus(await readApiErrorMessage(res, t("leave.actionFailed")));
+              return { ok: true as const, status: res.status, data: null };
             }
             const payload = (await res.json().catch(() => null)) as {
-              absence?: { id?: unknown; onDate?: unknown }
-            } | null
-            if (typeof payload?.absence?.id !== 'string' || typeof payload?.absence?.onDate !== 'string') {
-              setStatus(t('leave.actionFailed'))
-              return { ok: true as const, status: res.status, data: null }
+              absence?: { id?: unknown; onDate?: unknown };
+            } | null;
+            if (
+              typeof payload?.absence?.id !== "string" ||
+              typeof payload?.absence?.onDate !== "string"
+            ) {
+              setStatus(t("leave.actionFailed"));
+              return { ok: true as const, status: res.status, data: null };
             }
-            onDirtyChange(false)
-            return { ok: true as const, status: 200, data: { id: payload.absence.id, onDate: payload.absence.onDate } }
+            onDirtyChange(false);
+            return {
+              ok: true as const,
+              status: 200,
+              data: { id: payload.absence.id, onDate: payload.absence.onDate },
+            };
           } catch {
             return {
               ok: false as const,
-              error: new ActionError({ kind: 'transport', serverMessage: t('leave.actionFailed') }),
-            }
+              error: new ActionError({ kind: "transport", serverMessage: t("leave.actionFailed") }),
+            };
           }
         },
         {
-          fallbackMessage: t('leave.actionFailed'),
+          fallbackMessage: t("leave.actionFailed"),
           // The save confirms through the native mutation result: a toast
           // naming the day, then the drawer opens the saved record on the
           // calendar — visible and selected, never a silent close.
-          successMessage: t('leave.recordSaved', {
-            name: employmentOptions.find((option) => option.value === employmentId)?.label ?? '',
+          successMessage: t("leave.recordSaved", {
+            name: employmentOptions.find((option) => option.value === employmentId)?.label ?? "",
             date: onDate,
           }),
           onOk: (data) => {
-            if (!data) return
+            if (!data) return;
             router.push(
               `/hrm/leave?view=calendar&from=${startOfMonth(data.onDate)}&to=${endOfMonth(data.onDate)}&absence=${encodeURIComponent(data.id)}` as never,
-            )
-            router.refresh()
+            );
+            router.refresh();
           },
-          onRefused: (error) => setStatus(error.displayMessage(t('leave.actionFailed'))),
+          onRefused: (error) => setStatus(error.displayMessage(t("leave.actionFailed"))),
         },
-      )
+      );
     } finally {
-      onBusyChange(false)
+      onBusyChange(false);
     }
-  }
+  };
 
   function markDirty<T>(update: (value: T) => void, value: T) {
-    update(value)
-    onDirtyChange(true)
+    update(value);
+    onDirtyChange(true);
   }
 
   return (
     <div className="space-y-3">
       {employmentsLoaded && employmentOptions.length === 0 ? (
-        <p className="text-sm text-slate-500">{t('leave.onBehalfEmploymentRequired')}</p>
+        <p className="text-sm text-slate-500">{t("leave.onBehalfEmploymentRequired")}</p>
       ) : (
         <div>
-          <Label htmlFor="leave-record-employment">{t('leave.onBehalfEmployeeLabel')}</Label>
+          <Label htmlFor="leave-record-employment">{t("leave.onBehalfEmployeeLabel")}</Label>
           <Select
             id="leave-record-employment"
             value={employmentId}
             onChange={(event) => markDirty(setEmploymentId, event.target.value)}
           >
-            <option value="">{t('leave.onBehalfEmployeePlaceholder')}</option>
+            <option value="">{t("leave.onBehalfEmployeePlaceholder")}</option>
             {employmentOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -1026,9 +1160,13 @@ function LeaveRecordForm({
         </div>
       )}
       <div>
-        <Label htmlFor="leave-record-type">{t('leave.fileTypeLabel')}</Label>
-        <Select id="leave-record-type" value={leaveTypeId} onChange={(event) => markDirty(setLeaveTypeId, event.target.value)}>
-          <option value="">{t('leave.fileTypePlaceholder')}</option>
+        <Label htmlFor="leave-record-type">{t("leave.fileTypeLabel")}</Label>
+        <Select
+          id="leave-record-type"
+          value={leaveTypeId}
+          onChange={(event) => markDirty(setLeaveTypeId, event.target.value)}
+        >
+          <option value="">{t("leave.fileTypePlaceholder")}</option>
           {typeOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -1037,29 +1175,44 @@ function LeaveRecordForm({
         </Select>
       </div>
       <div>
-        <Label htmlFor="leave-record-date">{t('leave.calendarFromLabel')}</Label>
-        <DateField id="leave-record-date" value={onDate} onChange={(value) => markDirty(setOnDate, value)} />
+        <Label htmlFor="leave-record-date">{t("leave.calendarFromLabel")}</Label>
+        <DateField
+          id="leave-record-date"
+          value={onDate}
+          onChange={(value) => markDirty(setOnDate, value)}
+        />
       </div>
       <div>
-        <Label htmlFor="leave-record-hours">{t('leave.fileHoursLabel')}</Label>
-        <Input id="leave-record-hours" inputMode="decimal" value={hours} onChange={(event) => markDirty(setHours, event.target.value)} placeholder="8" />
+        <Label htmlFor="leave-record-hours">{t("leave.fileHoursLabel")}</Label>
+        <Input
+          id="leave-record-hours"
+          inputMode="decimal"
+          value={hours}
+          onChange={(event) => markDirty(setHours, event.target.value)}
+          placeholder="8"
+        />
       </div>
       {balanceRow ? (
         <p role="status" className="text-sm tabular-nums text-slate-600 dark:text-slate-300">
           {balanceRow.remaining === null
-            ? t('leave.unlimitedBalance')
-            : balances?.effect?.leaveTypeId === leaveTypeId && hours.trim() !== '' && balances.effect.remainingAfter !== null
-              ? t('leave.recordBalanceEffect', {
+            ? t("leave.unlimitedBalance")
+            : balances?.effect?.leaveTypeId === leaveTypeId &&
+                hours.trim() !== "" &&
+                balances.effect.remainingAfter !== null
+              ? t("leave.recordBalanceEffect", {
                   code: balanceRow.code,
                   remaining: balanceRow.remaining,
                   remainingAfter: balances.effect.remainingAfter,
                 })
-              : t('leave.recordBalanceRemaining', { code: balanceRow.code, remaining: balanceRow.remaining })}
+              : t("leave.recordBalanceRemaining", {
+                  code: balanceRow.code,
+                  remaining: balanceRow.remaining,
+                })}
         </p>
       ) : null}
       <div>
         <Label htmlFor="leave-record-reason">
-          {t('leave.recordReasonLabel')}
+          {t("leave.recordReasonLabel")}
           {reasonRequired ? <span aria-hidden="true"> *</span> : null}
         </Label>
         <Textarea
@@ -1069,7 +1222,7 @@ function LeaveRecordForm({
           required={reasonRequired}
           aria-required={reasonRequired}
         />
-        <p className="mt-1 text-xs text-slate-500">{t('leave.recordReasonHint')}</p>
+        <p className="mt-1 text-xs text-slate-500">{t("leave.recordReasonHint")}</p>
       </div>
       {status ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -1078,14 +1231,14 @@ function LeaveRecordForm({
       ) : null}
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => void onCancel()}>
-          {tCommon('actions.cancel')}
+          {tCommon("actions.cancel")}
         </Button>
         <Button size="sm" disabled={saving} onClick={() => void save()}>
-          {t('leave.recordButton')}
+          {t("leave.recordButton")}
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
 function LeaveAttachmentPicker({
@@ -1094,28 +1247,31 @@ function LeaveAttachmentPicker({
   label,
   disabled,
 }: {
-  value: string
-  onChange: (value: string) => void
-  label: string
-  disabled: boolean
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  disabled: boolean;
 }) {
-  const t = useTranslations('hrm')
-  const [query, setQuery] = useState('')
-  const [options, setOptions] = useState<{ value: string; label: string }[]>([])
+  const t = useTranslations("hrm");
+  const [query, setQuery] = useState("");
+  const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
   useEffect(() => {
-    if (query.length < 2) return
-    let cancelled = false
+    if (query.length < 2) return;
+    let cancelled = false;
     const timer = setTimeout(async () => {
-      const res = await fetch(`/api/file-cabinet/files?q=${encodeURIComponent(query)}&perPage=20`)
-      if (!res.ok || cancelled) return
-      const data = (await res.json().catch(() => ({}))) as { files?: { id: string; name?: string }[] }
-      if (!cancelled && Array.isArray(data.files)) setOptions(data.files.map((file) => ({ value: file.id, label: file.name ?? file.id })))
-    }, 250)
+      const res = await fetch(`/api/file-cabinet/files?q=${encodeURIComponent(query)}&perPage=20`);
+      if (!res.ok || cancelled) return;
+      const data = (await res.json().catch(() => ({}))) as {
+        files?: { id: string; name?: string }[];
+      };
+      if (!cancelled && Array.isArray(data.files))
+        setOptions(data.files.map((file) => ({ value: file.id, label: file.name ?? file.id })));
+    }, 250);
     return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [query])
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query]);
   return (
     <div>
       <Label htmlFor="leave-attachment">{label}</Label>
@@ -1129,10 +1285,10 @@ function LeaveAttachmentPicker({
         clearable
         searchable
         remote
-        emptyLabel={t('processes.attachmentUnset')}
+        emptyLabel={t("processes.attachmentUnset")}
         disabled={disabled}
         onSearchChange={setQuery}
       />
     </div>
-  )
+  );
 }

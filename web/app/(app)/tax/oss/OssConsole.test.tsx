@@ -3,15 +3,28 @@ import test from "node:test";
 
 // jsdom first: the workspace reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/tax/oss", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/tax/oss",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
-const { browserNavigationStubSource, stubModules } = await import('../../../../testing/stub-modules');
-stubModules({navigation: browserNavigationStubSource()});
+const { browserNavigationStubSource, stubModules } =
+  await import("../../../../testing/stub-modules");
+stubModules({ navigation: browserNavigationStubSource() });
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
-      return {shortCircuit:true,url:'data:text/javascript,'+encodeURIComponent("export default function Link(p){return globalThis.React.createElement('a',{href:p.href},p.children)}")};
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export default function Link(p){return globalThis.React.createElement('a',{href:p.href},p.children)}",
+          ),
+      };
     }
     return next(specifier, context);
   },
@@ -30,7 +43,9 @@ function tick(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: ReturnType<typeof createRoot>; restore: () => void }> {
+async function mount(
+  calls: string[],
+): Promise<{ host: HTMLDivElement; root: ReturnType<typeof createRoot>; restore: () => void }> {
   window.history.replaceState({}, "", "/tax/oss");
   const prior = globalThis.fetch;
   const restore = () => {
@@ -48,7 +63,16 @@ async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: Ret
           from: "2026-07-01",
           to: "2026-09-30",
           currency: "USD",
-          lines: [{ consumptionCountry: "FR", ratePercent: "20", baseAmount: "100.00", taxAmount: "20.00", kind: "supply", correctionQuarter: null }],
+          lines: [
+            {
+              consumptionCountry: "FR",
+              ratePercent: "20",
+              baseAmount: "100.00",
+              taxAmount: "20.00",
+              kind: "supply",
+              correctionQuarter: null,
+            },
+          ],
           totalBase: "100.00",
           totalTax: "20.00",
         },
@@ -91,7 +115,9 @@ async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: Ret
     if (url.startsWith("/api/tax/oss-returns/fx-evidence")) {
       return Response.json(
         {
-          rows: [{ currency: "USD", rate: "1.0842500000", rateAsOf: "2026-09-30", rateSource: "ECB" }],
+          rows: [
+            { currency: "USD", rate: "1.0842500000", rateAsOf: "2026-09-30", rateSource: "ECB" },
+          ],
         },
         { status: 200 },
       );
@@ -104,7 +130,9 @@ async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: Ret
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <BusinessDateProvider today="2026-08-15"><OssConsole setupHref="/admin/setup/tax-oss-registrations" /></BusinessDateProvider>
+        <BusinessDateProvider today="2026-08-15">
+          <OssConsole setupHref="/admin/setup/tax-oss-registrations" />
+        </BusinessDateProvider>
       </NextIntlClientProvider>,
     );
   });
@@ -113,7 +141,9 @@ async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: Ret
 }
 
 async function selectTab(host: HTMLElement, label: string) {
-  const button = [...host.querySelectorAll('button')].find(node => node.getAttribute('role') === 'tab' && node.textContent?.startsWith(label));
+  const button = [...host.querySelectorAll("button")].find(
+    (node) => node.getAttribute("role") === "tab" && node.textContent?.startsWith(label),
+  );
   assert.ok(button, `expected a reachable ${label} tab`);
   await act(async () => button.click());
 }
@@ -130,11 +160,21 @@ test("oss console shows the evidence-conflict queue with a document remedy link"
       for (let i = 0; i < 10; i++) await tick();
     });
     for (let i = 0; i < 10; i++) await tick();
-    assert.ok(calls.some((u) => u.startsWith("/api/tax/oss-returns/conflicts")), "expected a conflicts fetch");
-    assert.equal(host.querySelectorAll('table').length, 1, 'the prepared return must show only its lines table');
-    assert.ok(!host.textContent?.includes('INV-2041'), 'the independent conflict list must not stack below return lines');
+    assert.ok(
+      calls.some((u) => u.startsWith("/api/tax/oss-returns/conflicts")),
+      "expected a conflicts fetch",
+    );
+    assert.equal(
+      host.querySelectorAll("table").length,
+      1,
+      "the prepared return must show only its lines table",
+    );
+    assert.ok(
+      !host.textContent?.includes("INV-2041"),
+      "the independent conflict list must not stack below return lines",
+    );
     await selectTab(host, messages.tax.oss.tabs.conflicts);
-    assert.equal(host.querySelectorAll('table').length, 0, 'conflicts replace the return lines');
+    assert.equal(host.querySelectorAll("table").length, 0, "conflicts replace the return lines");
     const link = host.querySelector('a[href*="/ar/invoices?doc="]');
     assert.ok(link, "expected a remedy link into the invoice drawer");
     assert.match(host.textContent ?? "", /INV-2041/);
@@ -157,17 +197,31 @@ test("oss console shows the threshold monitor and the fx evidence rate", async (
       for (let i = 0; i < 10; i++) await tick();
     });
     for (let i = 0; i < 10; i++) await tick();
-    assert.ok(calls.some((u) => u.startsWith("/api/tax/oss-returns/turnover")), "expected a turnover fetch");
+    assert.ok(
+      calls.some((u) => u.startsWith("/api/tax/oss-returns/turnover")),
+      "expected a turnover fetch",
+    );
     await selectTab(host, messages.tax.oss.tabs.threshold);
-    assert.equal(host.querySelectorAll('table').length, 0, 'threshold summary replaces all other lists');
+    assert.equal(
+      host.querySelectorAll("table").length,
+      0,
+      "threshold summary replaces all other lists",
+    );
     assert.match(host.textContent ?? "", /4[,.]?200\.01/);
     await selectTab(host, messages.tax.oss.tabs.fx);
-    assert.equal(host.querySelectorAll('table').length, 1, 'translation evidence must show only its own table');
+    assert.equal(
+      host.querySelectorAll("table").length,
+      1,
+      "translation evidence must show only its own table",
+    );
     assert.match(host.textContent ?? "", /1\.0843/);
-    assert.ok(!host.textContent?.includes('INV-2041'));
+    assert.ok(!host.textContent?.includes("INV-2041"));
     await selectTab(host, messages.tax.oss.tabs.return);
-    assert.equal(host.querySelectorAll('table').length, 1);
-    assert.ok(host.querySelector('a[download]'), 'return export remains reachable after inspecting evidence');
+    assert.equal(host.querySelectorAll("table").length, 1);
+    assert.ok(
+      host.querySelector("a[download]"),
+      "return export remains reachable after inspecting evidence",
+    );
   } finally {
     restore();
     await act(async () => root.unmount());
@@ -178,15 +232,38 @@ test("oss console shows the threshold monitor and the fx evidence rate", async (
 test("OSS context refusals stay visible rather than reporting an empty conflict list", async () => {
   const { host, root, restore } = await mount([]);
   const seededFetch = globalThis.fetch;
-  globalThis.fetch = (async (input: unknown, init?: RequestInit) => String(input).includes('/conflicts')
-    ? Response.json({ error: 'Country evidence is unavailable — retry the request.' }, { status: 503 })
-    : seededFetch(input as RequestInfo, init)) as typeof fetch;
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) =>
+    String(input).includes("/conflicts")
+      ? Response.json(
+          { error: "Country evidence is unavailable — retry the request." },
+          { status: 503 },
+        )
+      : seededFetch(input as RequestInfo, init)) as typeof fetch;
   try {
-    const prepare = [...host.querySelectorAll('button')].find(node => node.textContent === messages.tax.oss.prepare)!;
-    await act(async () => { prepare.click(); for (let i = 0; i < 10; i++) await tick(); });
+    const prepare = [...host.querySelectorAll("button")].find(
+      (node) => node.textContent === messages.tax.oss.prepare,
+    )!;
+    await act(async () => {
+      prepare.click();
+      for (let i = 0; i < 10; i++) await tick();
+    });
     await selectTab(host, messages.tax.oss.tabs.conflicts);
-    assert.match(host.querySelector('[role="alert"]')?.textContent ?? '', /Country evidence is unavailable.*retry/);
-    assert.ok(!host.textContent?.includes(messages.tax.oss.conflicts.clearTitle), 'a refused read cannot assert no conflicts');
-    assert.ok([...host.querySelectorAll('button')].some(node => node.textContent === messages.common.actions.retry));
-  } finally { restore(); await act(async () => root.unmount()); host.remove(); }
+    assert.match(
+      host.querySelector('[role="alert"]')?.textContent ?? "",
+      /Country evidence is unavailable.*retry/,
+    );
+    assert.ok(
+      !host.textContent?.includes(messages.tax.oss.conflicts.clearTitle),
+      "a refused read cannot assert no conflicts",
+    );
+    assert.ok(
+      [...host.querySelectorAll("button")].some(
+        (node) => node.textContent === messages.common.actions.retry,
+      ),
+    );
+  } finally {
+    restore();
+    await act(async () => root.unmount());
+    host.remove();
+  }
 });

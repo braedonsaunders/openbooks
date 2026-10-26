@@ -6,9 +6,8 @@ test("tax detector parameter validation still refuses an overlong lookback", () 
   assert.throws(
     () =>
       normalizeContinuousCloseDetectors("tax", {
-        tax_missing_codes: { parameters: { lookbackDays: 366 } }
+        tax_missing_codes: { parameters: { lookbackDays: 366 } },
       }),
     /invalid detector parameter/,
   );
 });
-

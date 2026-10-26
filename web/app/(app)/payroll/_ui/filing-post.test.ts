@@ -1,12 +1,8 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import {
-  fetchFilingLifecycle,
-  fetchFilingSlip,
-  postFilingCorrection,
-} from './filing-amendments'
-import { recordFilingOriginal } from './filing-workspace'
-import { discardParallelRegister } from '../parallel-run/ParallelRunView'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { fetchFilingLifecycle, fetchFilingSlip, postFilingCorrection } from "./filing-amendments";
+import { recordFilingOriginal } from "./filing-workspace";
+import { discardParallelRegister } from "../parallel-run/ParallelRunView";
 
 // Record-as-filed, amendment preview/issue, parallel register discard,
 // and the slip-drawer / lifecycle fetches: every one
@@ -15,114 +11,159 @@ import { discardParallelRegister } from '../parallel-run/ParallelRunView'
 // the server's refusal. Each now checks the status first through the
 // canonical client helper. Driven through the extracted fetch functions
 // with scripted fetches — no source text is read.
-function stubFetch(responder: (url: string, init?: RequestInit) => Response | Promise<Response>): () => void {
-  const prior = globalThis.fetch
+function stubFetch(
+  responder: (url: string, init?: RequestInit) => Response | Promise<Response>,
+): () => void {
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) =>
-    responder(String(input), init)) as typeof fetch
+    responder(String(input), init)) as typeof fetch;
   return () => {
-    globalThis.fetch = prior
-  }
+    globalThis.fetch = prior;
+  };
 }
 
-const section = { country: 'CA', key: 't4', data: { rows: [], rowKey: 'id' } } as unknown as Parameters<
-  typeof recordFilingOriginal
->[0]
+const section = {
+  country: "CA",
+  key: "t4",
+  data: { rows: [], rowKey: "id" },
+} as unknown as Parameters<typeof recordFilingOriginal>[0];
 
 for (const [name, respond, call, message] of [
   [
-    'record-as-filed: a non-JSON 502 surfaces the fallback with the status',
-    () => new Response('<html>proxy page</html>', { status: 502, headers: { 'content-type': 'text/html' } }),
-    () => recordFilingOriginal(section, 2026, 'filed'),
-    'the filing could not be recorded (status 502)',
+    "record-as-filed: a non-JSON 502 surfaces the fallback with the status",
+    () =>
+      new Response("<html>proxy page</html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+    () => recordFilingOriginal(section, 2026, "filed"),
+    "the filing could not be recorded (status 502)",
   ],
   [
-    'slip fetch: a non-JSON 502 surfaces the fallback with the status',
+    "slip fetch: a non-JSON 502 surfaces the fallback with the status",
     () => new Response(null, { status: 502 }),
-    () => fetchFilingSlip('/api/payroll/year-end/slip?country=CA'),
-    'the slip could not be loaded (status 502)',
+    () => fetchFilingSlip("/api/payroll/year-end/slip?country=CA"),
+    "the slip could not be loaded (status 502)",
   ],
   [
-    'lifecycle fetch: a non-JSON 500 surfaces the fallback with the status',
-    () => new Response('<html>proxy page</html>', { status: 500, headers: { 'content-type': 'text/html' } }),
-    () => fetchFilingLifecycle('CA', 't4', 2026),
-    'the filing history could not be loaded (status 500)',
+    "lifecycle fetch: a non-JSON 500 surfaces the fallback with the status",
+    () =>
+      new Response("<html>proxy page</html>", {
+        status: 500,
+        headers: { "content-type": "text/html" },
+      }),
+    () => fetchFilingLifecycle("CA", "t4", 2026),
+    "the filing history could not be loaded (status 500)",
   ],
   [
-    'discard register: a non-JSON 502 surfaces the fallback with the status',
+    "discard register: a non-JSON 502 surfaces the fallback with the status",
     () => new Response(null, { status: 502 }),
-    () => discardParallelRegister('reg-1'),
-    'could not discard the register (status 502)',
+    () => discardParallelRegister("reg-1"),
+    "could not discard the register (status 502)",
   ],
 ] as Array<[string, () => Response, () => Promise<unknown>, string]>) {
   test(name, async () => {
-    const restore = stubFetch(respond)
+    const restore = stubFetch(respond);
     try {
       await assert.rejects(call(), (error: unknown) => {
-        assert.ok(error instanceof Error)
-        assert.equal(error.message, message)
-        return true
-      })
+        assert.ok(error instanceof Error);
+        assert.equal(error.message, message);
+        return true;
+      });
     } finally {
-      restore()
+      restore();
     }
-  })
+  });
 }
 
-test('record-as-filed: a named refusal surfaces, and a file refusal returns instead of throwing', async () => {
-  let restore = stubFetch(() => Response.json({ error: 'the year is not open' }, { status: 422 }))
+test("record-as-filed: a named refusal surfaces, and a file refusal returns instead of throwing", async () => {
+  let restore = stubFetch(() => Response.json({ error: "the year is not open" }, { status: 422 }));
   try {
-    await assert.rejects(recordFilingOriginal(section, 2026, 'filed'), /the year is not open/)
+    await assert.rejects(recordFilingOriginal(section, 2026, "filed"), /the year is not open/);
   } finally {
-    restore()
+    restore();
   }
-  restore = stubFetch(() => Response.json({ fileRefusal: 'no electronic file is declared' }))
+  restore = stubFetch(() => Response.json({ fileRefusal: "no electronic file is declared" }));
   try {
-    assert.equal(await recordFilingOriginal(section, 2026, 'filed'), 'no electronic file is declared')
+    assert.equal(
+      await recordFilingOriginal(section, 2026, "filed"),
+      "no electronic file is declared",
+    );
   } finally {
-    restore()
+    restore();
   }
-})
+});
 
-test('slip fetch: a body without a slip is refused by name', async () => {
-  const restore = stubFetch(() => Response.json({ error: 'the row is not in the population' }))
+test("slip fetch: a body without a slip is refused by name", async () => {
+  const restore = stubFetch(() => Response.json({ error: "the row is not in the population" }));
   try {
-    await assert.rejects(fetchFilingSlip('/api/payroll/year-end/slip?country=CA'), /not in the population/)
+    await assert.rejects(
+      fetchFilingSlip("/api/payroll/year-end/slip?country=CA"),
+      /not in the population/,
+    );
   } finally {
-    restore()
+    restore();
   }
-})
+});
 
-test('issue correction: a named refusal surfaces, and a file refusal returns instead of throwing', async () => {
-  let restore = stubFetch(() => Response.json({ error: 'the slip has not changed' }, { status: 422 }))
+test("issue correction: a named refusal surfaces, and a file refusal returns instead of throwing", async () => {
+  let restore = stubFetch(() =>
+    Response.json({ error: "the slip has not changed" }, { status: 422 }),
+  );
   const input = {
-    country: 'CA',
-    filing: 't4',
+    country: "CA",
+    filing: "t4",
     year: 2026,
-    revision: 'amended' as const,
-    rowIds: ['row-1'],
-  }
+    revision: "amended" as const,
+    rowIds: ["row-1"],
+  };
   try {
-    await assert.rejects(postFilingCorrection(input), /has not changed/)
+    await assert.rejects(postFilingCorrection(input), /has not changed/);
   } finally {
-    restore()
+    restore();
   }
-  restore = stubFetch(() => Response.json({ fileRefusal: 'no correction file is declared' }))
+  restore = stubFetch(() => Response.json({ fileRefusal: "no correction file is declared" }));
   try {
-    assert.equal(await postFilingCorrection(input), 'no correction file is declared')
+    assert.equal(await postFilingCorrection(input), "no correction file is declared");
   } finally {
-    restore()
+    restore();
   }
-})
+});
 
-
-test('recording an event original sends the exact selected event, reason and encoded comment',async()=>{
-  const employee='00000000-0000-4000-8000-000000000001',event='00000000-0000-4000-8000-000000000002'
-  const params={employees:employee+'~'+event+':K:'+encodeURIComponent('Original interruption: seasonal closure')}
-  const restore=stubFetch((url,init)=>{
-    assert.equal(url,'/api/payroll/year-end/amendments')
-    assert.deepEqual(JSON.parse(String(init?.body)),{country:'CA',filing:'roe',year:2026,revision:'original',note:'Original declared event',params})
-    return Response.json({fileRefusal:null})
-  })
-  try{assert.equal(await recordFilingOriginal({...section,key:'roe'},2026,'Original declared event',params),null)}
-  finally{restore()}
-})
+test("recording an event original sends the exact selected event, reason and encoded comment", async () => {
+  const employee = "00000000-0000-4000-8000-000000000001",
+    event = "00000000-0000-4000-8000-000000000002";
+  const params = {
+    employees:
+      employee +
+      "~" +
+      event +
+      ":K:" +
+      encodeURIComponent("Original interruption: seasonal closure"),
+  };
+  const restore = stubFetch((url, init) => {
+    assert.equal(url, "/api/payroll/year-end/amendments");
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      country: "CA",
+      filing: "roe",
+      year: 2026,
+      revision: "original",
+      note: "Original declared event",
+      params,
+    });
+    return Response.json({ fileRefusal: null });
+  });
+  try {
+    assert.equal(
+      await recordFilingOriginal(
+        { ...section, key: "roe" },
+        2026,
+        "Original declared event",
+        params,
+      ),
+      null,
+    );
+  } finally {
+    restore();
+  }
+});

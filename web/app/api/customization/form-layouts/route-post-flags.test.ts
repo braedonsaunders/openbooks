@@ -11,7 +11,7 @@ interface DbState {
   txCalls: number;
 }
 const dbState: DbState = { txCalls: 0 };
-;(globalThis as Record<symbol, unknown>)[stateKey] = dbState;
+(globalThis as Record<symbol, unknown>)[stateKey] = dbState;
 
 const mockAuthz = `
   export async function guardPermission() {
@@ -22,10 +22,8 @@ const mockAuthz = `
 const mockGates = `
   export async function refuseDisabledRecordType() { return null }
 `;
-const schemaUrl = new URL(
-  '../../../../../packages/customization/src/schema.ts',
-  import.meta.url,
-).href;
+const schemaUrl = new URL("../../../../../packages/customization/src/schema.ts", import.meta.url)
+  .href;
 const mockCustomization = `
   export { defaultFormLayout, lockedFormEntriesUnchanged } from '${schemaUrl}'
   export const RECORD_TYPE_BY_KEY = { vendor_bill: { key: 'vendor_bill' } }
@@ -35,20 +33,32 @@ const mockCustomization = `
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = context.parentURL ?? "";
-    if (specifier === "@openbooks/engine/platform/db" && parent.includes("customization/form-layouts/route")) {
+    if (
+      specifier === "@openbooks/engine/platform/db" &&
+      parent.includes("customization/form-layouts/route")
+    ) {
       return {
         shortCircuit: true,
         format: "module",
         url: 'data:text/javascript,export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === "objects" ? result.rows : result)), transaction: async (fn) => { globalThis[Symbol.for("openbooks.form-layout-post-bool-unit")].txCalls++; return fn({ execute: async (_query, mode) => Promise.resolve({ rows: [{ id: "form-1", name: "n" }] }).then((result) => (mode === "objects" ? result.rows : result)) }) } }',
       };
     }
-    if (specifier === "@/lib/authz" || (specifier === "../../../../lib/authz" && parent.includes("customization/form-layouts/route"))) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier === "../../../../lib/authz" && parent.includes("customization/form-layouts/route"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier.endsWith("lib/customization/gates") && parent.includes("customization/form-layouts/route")) {
+    if (
+      specifier.endsWith("lib/customization/gates") &&
+      parent.includes("customization/form-layouts/route")
+    ) {
       return { url: "mock:gates", shortCircuit: true };
     }
-    if (specifier === "@openbooks/customization" && parent.includes("customization/form-layouts/route")) {
+    if (
+      specifier === "@openbooks/customization" &&
+      parent.includes("customization/form-layouts/route")
+    ) {
       return { url: "mock:customization", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -56,21 +66,21 @@ const _hooks = registerHooks({
   load(url, context, nextLoad) {
     if (url === "mock:authz") return { format: "module", source: mockAuthz, shortCircuit: true };
     if (url === "mock:gates") return { format: "module", source: mockGates, shortCircuit: true };
-    if (url === "mock:customization") return { format: "module", source: mockCustomization, shortCircuit: true };
+    if (url === "mock:customization")
+      return { format: "module", source: mockCustomization, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
 
-const form_layout_post_bool_unitUrl = './route.ts?form-layout-post-bool-unit'
-const { POST } = (await import(form_layout_post_bool_unitUrl)) as typeof import('./route.ts');
+const form_layout_post_bool_unitUrl = "./route.ts?form-layout-post-bool-unit";
+const { POST } = (await import(form_layout_post_bool_unitUrl)) as typeof import("./route.ts");
 
 // A bare { schemaVersion, recordType } layout drops locked built-in fields,
 // which POST now refuses before the flags logic. The vehicle layout carries
 // the live default's placements so these tests still exercise the boolean
 // handling they were written for.
-const { defaultFormLayout: liveDefaultFormLayout } = await import(
-  "../../../../../packages/customization/src/schema.ts"
-);
+const { defaultFormLayout: liveDefaultFormLayout } =
+  await import("../../../../../packages/customization/src/schema.ts");
 const layout = { ...liveDefaultFormLayout("vendor_bill") };
 
 function postRequest(body: unknown): Request {

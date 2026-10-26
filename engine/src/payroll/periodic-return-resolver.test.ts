@@ -26,39 +26,86 @@ test("a non-employer pack resolves under the stub account, untouched", async () 
   assert.equal(resolve(null, "subsidiary-1", "2026-07-01"), null);
 });
 
-
 test("US periodic filing resolves each retained date and refuses an unqualified owner or date", async (t) => {
   const employerA = "00000000-0000-4000-8000-000000000001";
   const employerB = "00000000-0000-4000-8000-000000000002";
   const state = "00000000-0000-4000-8000-000000000003";
   const einA = "00000000-0000-4000-8000-000000000004";
   const einB = "00000000-0000-4000-8000-000000000005";
-  const dialect = (db as unknown as {
-    dialect: { sqlToQuery(query: Parameters<typeof db.execute>[0]): { sql: string } };
-  }).dialect;
+  const dialect = (
+    db as unknown as {
+      dialect: { sqlToQuery(query: Parameters<typeof db.execute>[0]): { sql: string } };
+    }
+  ).dialect;
   t.mock.method(db, "execute", async (query: Parameters<typeof db.execute>[0], mode?: string) => {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     const built = dialect.sqlToQuery(query);
-    if (built.sql.includes("from payroll_filing_accounts")) return inMode({ rows: [
-      { id: state, name: "Transferred state registration", program_type: "us_state_sui",
-        subsidiary_id: null, state_code: "NJ", is_active: true, account_number: "NJ-123" },
-      { id: einA, name: "Original EIN A", program_type: "us_ein", subsidiary_id: employerA,
-        state_code: null, is_active: false, account_number: "12-3456789" },
-      { id: einB, name: "Successor EIN B", program_type: "us_ein", subsidiary_id: employerB,
-        state_code: null, is_active: true, account_number: "98-7654321" },
-    ] });
-    if (built.sql.includes("from payroll_us_filing_account_employer_lineage")) return inMode({ rows: [
-      { id: "lineage-a", filingAccountId: state, federalAccountId: einA, subsidiaryId: employerA,
-        effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", sourceReference: "Original registration A" },
-      { id: "lineage-b", filingAccountId: state, federalAccountId: einB, subsidiaryId: employerB,
-        effectiveFrom: "2026-07-01", effectiveTo: null, sourceReference: "Successor registration B" },
-    ] });
+    if (built.sql.includes("from payroll_filing_accounts"))
+      return inMode({
+        rows: [
+          {
+            id: state,
+            name: "Transferred state registration",
+            program_type: "us_state_sui",
+            subsidiary_id: null,
+            state_code: "NJ",
+            is_active: true,
+            account_number: "NJ-123",
+          },
+          {
+            id: einA,
+            name: "Original EIN A",
+            program_type: "us_ein",
+            subsidiary_id: employerA,
+            state_code: null,
+            is_active: false,
+            account_number: "12-3456789",
+          },
+          {
+            id: einB,
+            name: "Successor EIN B",
+            program_type: "us_ein",
+            subsidiary_id: employerB,
+            state_code: null,
+            is_active: true,
+            account_number: "98-7654321",
+          },
+        ],
+      });
+    if (built.sql.includes("from payroll_us_filing_account_employer_lineage"))
+      return inMode({
+        rows: [
+          {
+            id: "lineage-a",
+            filingAccountId: state,
+            federalAccountId: einA,
+            subsidiaryId: employerA,
+            effectiveFrom: "2026-01-01",
+            effectiveTo: "2026-06-30",
+            sourceReference: "Original registration A",
+          },
+          {
+            id: "lineage-b",
+            filingAccountId: state,
+            federalAccountId: einB,
+            subsidiaryId: employerB,
+            effectiveFrom: "2026-07-01",
+            effectiveTo: null,
+            sourceReference: "Successor registration B",
+          },
+        ],
+      });
     assert.fail("Unexpected periodic resolver database boundary");
   });
   const resolve = await periodicReturnAccountResolver("00000000-0000-4000-8000-000000000099", "US");
   assert.equal(resolve(state, employerA, "2026-06-30"), einA);
   assert.equal(resolve(state, employerB, "2026-07-01"), einB);
-  assert.equal(resolve(einA, employerA, "2026-08-01"), einA, "an inactive explicit EIN retains its identity");
+  assert.equal(
+    resolve(einA, employerA, "2026-08-01"),
+    einA,
+    "an inactive explicit EIN retains its identity",
+  );
   assert.throws(() => resolve(state, employerB, "2026-06-30"), /another original legal employer/);
   assert.throws(() => resolve(state, employerA, "2025-12-31"), /unknown.*Employer EIN history/);
   assert.throws(() => resolve(state, employerA, "2026-02-30"), /actual payroll source date/);

@@ -10,7 +10,12 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import { seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 import { US_PACK_RATES } from "./us/rates.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
@@ -55,7 +60,11 @@ async function usPayrollOrg(): Promise<Fixture> {
   const netPayable = await account("2300", "Wages payable", "liability_current");
   const irsPayable = await account("2330", "Federal payroll taxes payable", "liability_current");
   const statePayable = await account("2360", "State income tax payable", "liability_current");
-  const ettPayable = await account("2365", "CA employment training tax payable", "liability_current");
+  const ettPayable = await account(
+    "2365",
+    "CA employment training tax payable",
+    "liability_current",
+  );
   await db.execute(sql`
     update orgs set settings = settings || ${JSON.stringify({
       payroll: {
@@ -112,15 +121,22 @@ async function usPayrollOrg(): Promise<Fixture> {
 /** The employer's SUI account for a state — the box-15 ID number's source. */
 async function suiAccount(fx: Fixture, state: string, accountNumber: string): Promise<void> {
   const filingAccountId = randomUUID();
-  const inserted = await db.execute(sql`
+  const inserted = await db.execute(
+    sql`
     insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
                                          subsidiary_id, state_code, is_default, created_by, updated_by)
     values (${filingAccountId}, ${fx.orgId}, 'US', 'us_state_sui', ${accountNumber}, ${`${state} SUI`},
-            ${fx.subsidiaryId}, ${state}, false, ${fx.actorId}, ${fx.actorId}) returning id`, "objects");
+            ${fx.subsidiaryId}, ${state}, false, ${fx.actorId}, ${fx.actorId}) returning id`,
+    "objects",
+  );
   assert.equal(inserted.length, 1, "the declared numbered state registration must be created");
   await seedUsSuiAccount(fx.orgId, fx.actorId, state, {
-    filingAccountId, federalAccountId: fx.einAccountId, subsidiaryId: fx.subsidiaryId,
-    effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: `${state} original employer registration`,
+    filingAccountId,
+    federalAccountId: fx.einAccountId,
+    subsidiaryId: fx.subsidiaryId,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
+    sourceReference: `${state} original employer registration`,
   });
 }
 
@@ -129,7 +145,12 @@ interface EmployeeOptions {
   certificates?: { key: string; region?: string | null; answers?: Record<string, string> }[];
 }
 
-async function usEmployee(fx: Fixture, subsidiaryId: string, name: string, opts: EmployeeOptions): Promise<string> {
+async function usEmployee(
+  fx: Fixture,
+  subsidiaryId: string,
+  name: string,
+  opts: EmployeeOptions,
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
@@ -147,13 +168,24 @@ async function usEmployee(fx: Fixture, subsidiaryId: string, name: string, opts:
   const employmentId = await seedWorkerEmployment(fx.orgId, id, subsidiaryId);
   // Reuse the work state's account so box 15 keeps the asserted number.
   const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state, {
-    federalAccountId: fx.einAccountId, subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    federalAccountId: fx.einAccountId,
+    subsidiaryId,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
     sourceReference: `${opts.state} original employer registration`,
   });
-  await upsertStatutoryRate({ orgId: fx.orgId, actorId: fx.actorId, rates: US_PACK_RATES,
-    rateKey: "us_sui", region: opts.state, filingAccountId: suiAccountId, taxYear: 2026,
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
-    values: { rate: "0.03", wageBase: "7000" } });
+  await upsertStatutoryRate({
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    rates: US_PACK_RATES,
+    rateKey: "us_sui",
+    region: opts.state,
+    filingAccountId: suiAccountId,
+    taxYear: 2026,
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
+    values: { rate: "0.03", wageBase: "7000" },
+  });
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, pay_basis, filing_status,
@@ -184,19 +216,30 @@ async function usEmployee(fx: Fixture, subsidiaryId: string, name: string, opts:
 
 async function runAndCommit(fx: Fixture, periodStart: string, periodEnd: string): Promise<string> {
   const run = await createPayRun({
-    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-    periodStart, periodEnd,
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    payScheduleId: fx.scheduleId,
+    periodStart,
+    periodEnd,
   });
-  assert.deepEqual((await calculatePayRun({
-    orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
-  })).errors, []);
+  assert.deepEqual(
+    (
+      await calculatePayRun({
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
+      })
+    ).errors,
+    [],
+  );
   await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
   return run.documentId;
 }
 
 /** Every deduction line on committed stubs, by component system key. */
 async function committedDeductions(fx: Fixture, systemKey: string, province?: string) {
-  return await db.execute<{ amount: string; description: string; province: string }>(sql`
+  return await db.execute<{ amount: string; description: string; province: string }>(
+    sql`
     select l.amount::text as amount, l.description, s.province
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -204,7 +247,9 @@ async function committedDeductions(fx: Fixture, systemKey: string, province?: st
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${fx.orgId} and r.run_status = 'committed'
        and c.system_key = ${systemKey}
-       and (${province ?? null}::text is null or s.province = ${province ?? null})`, "objects");
+       and (${province ?? null}::text is null or s.province = ${province ?? null})`,
+    "objects",
+  );
 }
 
 async function w2SlipFor(fx: Fixture, employeeName: string) {
@@ -224,9 +269,13 @@ test(
       await suiAccount(fx, "NY", "NY-0099887");
       // The employer's EIN: the profile names the New York SUI account, yet
       // the W-2 is the EIN's slip while box 15 keeps the New York number.
-      const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
-        .subsidiary_id;
+      const subsidiary = (
+        await db.execute<{ subsidiary_id: string }>(
+          sql`
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`,
+          "objects",
+        )
+      )[0]!.subsidiary_id;
       // New York City reaches residents only: without the IT-2104 answer the
       // city tax is silently zero and boxes 18-20 would prove nothing.
       await usEmployee(fx, subsidiary, "Gotham Gil", {
@@ -250,10 +299,14 @@ test(
       const byCode = (code: string) => slip.boxes.filter((box) => box.code === code);
 
       assert.equal(
-        slip.headerFields.find((field) => field.label === "Employer identification number (EIN)")?.value,
+        slip.headerFields.find((field) => field.label === "Employer identification number (EIN)")
+          ?.value,
         "12-3456789",
       );
-      assert.deepEqual(byCode("15").map((box) => box.value), ["NY-0099887"]);
+      assert.deepEqual(
+        byCode("15").map((box) => box.value),
+        ["NY-0099887"],
+      );
       assert.match(byCode("15")[0]!.label, /NY/);
       // Single-state wages reconcile to box 1; the tax reconciles to the stub.
       assert.equal(byCode("16").length, 1);
@@ -262,9 +315,18 @@ test(
         federal.find((box) => box.code === "1")!.value,
         "single-state box 16 equals box 1",
       );
-      assert.deepEqual(byCode("17").map((box) => box.value), [stateLines[0]!.amount]);
-      assert.deepEqual(byCode("19").map((box) => box.value), [localLines[0]!.amount]);
-      assert.deepEqual(byCode("20").map((box) => box.value), ["New York City resident income tax"]);
+      assert.deepEqual(
+        byCode("17").map((box) => box.value),
+        [stateLines[0]!.amount],
+      );
+      assert.deepEqual(
+        byCode("19").map((box) => box.value),
+        [localLines[0]!.amount],
+      );
+      assert.deepEqual(
+        byCode("20").map((box) => box.value),
+        ["New York City resident income tax"],
+      );
       assert.equal(byCode("18").length, 1, "local wages ride the locality that withheld");
       assert.ok(Number(byCode("18")[0]!.value) > 0);
     } finally {
@@ -284,15 +346,27 @@ test(
     try {
       await suiAccount(fx, "AZ", "AZ-0011223");
       // No SUI account for California: its box 15 names the state with no ID.
-      const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
-        .subsidiary_id;
+      const subsidiary = (
+        await db.execute<{ subsidiary_id: string }>(
+          sql`
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`,
+          "objects",
+        )
+      )[0]!.subsidiary_id;
       const employee = await usEmployee(fx, subsidiary, "Mover Max", { state: "AZ" });
       await runAndCommit(fx, "2026-07-05", "2026-07-18");
-      await upsertStatutoryRate({ orgId: fx.orgId, actorId: fx.actorId, rates: US_PACK_RATES,
-        rateKey: "us_sui", region: "CA", filingAccountId: null, taxYear: 2026,
-        sourceCitation: "Test rate notice", reason: "test fixture rate",
-        values: { rate: "0.03", wageBase: "7000" } });
+      await upsertStatutoryRate({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        rates: US_PACK_RATES,
+        rateKey: "us_sui",
+        region: "CA",
+        filingAccountId: null,
+        taxYear: 2026,
+        sourceCitation: "Test rate notice",
+        reason: "test fixture rate",
+        values: { rate: "0.03", wageBase: "7000" },
+      });
       await db.execute(sql`
         update employee_payroll_profiles set province = 'CA', updated_by = ${fx.actorId}
          where org_id = ${fx.orgId} and employee_party_id = ${employee}`);
@@ -304,10 +378,19 @@ test(
       assert.equal(caTax.length, 1, "California withheld on the second stub");
 
       const slip = await w2SlipFor(fx, "Mover Max");
-      assert.match(String(slip.headerFields.find((field) => field.label === "State(s) of employment")!.value), /AZ \/ CA/);
+      assert.match(
+        String(slip.headerFields.find((field) => field.label === "State(s) of employment")!.value),
+        /AZ \/ CA/,
+      );
       const byCode = (code: string) => slip.boxes.filter((box) => box.code === code);
-      assert.deepEqual(byCode("15").map((box) => box.value), ["AZ-0011223", "Unassigned"]);
-      assert.deepEqual(byCode("17").map((box) => box.value), [azTax[0]!.amount, caTax[0]!.amount]);
+      assert.deepEqual(
+        byCode("15").map((box) => box.value),
+        ["AZ-0011223", "Unassigned"],
+      );
+      assert.deepEqual(
+        byCode("17").map((box) => box.value),
+        [azTax[0]!.amount, caTax[0]!.amount],
+      );
       // The two states' wages add up to the one federal wage set — split, not smashed.
       const box1 = slip.boxes.find((box) => box.code === "1")!.value;
       const box16s = byCode("16");
@@ -322,29 +405,32 @@ test(
   },
 );
 
-test(
-  "a no-state-tax employee's W-2 has empty boxes 15-17, not zeros",
-  { skip: !DB },
-  async () => {
-    const fx = await usPayrollOrg();
-    try {
-      // Texas levies no wage income tax: the stub withholds nothing at either
-      // level, so there is nothing to file in boxes 15-20.
-      const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
-        .subsidiary_id;
-      await usEmployee(fx, subsidiary, "Lone Star Lou", { state: "TX" });
-      await runAndCommit(fx, "2026-07-05", "2026-07-18");
-      assert.equal((await committedDeductions(fx, "state_income_tax")).length, 0);
-      assert.equal((await committedDeductions(fx, "local_income_tax")).length, 0);
+test("a no-state-tax employee's W-2 has empty boxes 15-17, not zeros", { skip: !DB }, async () => {
+  const fx = await usPayrollOrg();
+  try {
+    // Texas levies no wage income tax: the stub withholds nothing at either
+    // level, so there is nothing to file in boxes 15-20.
+    const subsidiary = (
+      await db.execute<{ subsidiary_id: string }>(
+        sql`
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`,
+        "objects",
+      )
+    )[0]!.subsidiary_id;
+    await usEmployee(fx, subsidiary, "Lone Star Lou", { state: "TX" });
+    await runAndCommit(fx, "2026-07-05", "2026-07-18");
+    assert.equal((await committedDeductions(fx, "state_income_tax")).length, 0);
+    assert.equal((await committedDeductions(fx, "local_income_tax")).length, 0);
 
-      const slip = await w2SlipFor(fx, "Lone Star Lou");
-      assert.deepEqual(slip.boxes.map((box) => box.code), ["1", "2", "3", "4", "5", "6"]);
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+    const slip = await w2SlipFor(fx, "Lone Star Lou");
+    assert.deepEqual(
+      slip.boxes.map((box) => box.code),
+      ["1", "2", "3", "4", "5", "6"],
+    );
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
   "a stub that withheld state tax but carries no work state refuses the W-2 by name",
@@ -359,61 +445,67 @@ test(
     const fx = await usPayrollOrg();
     try {
       await suiAccount(fx, "CA", "CA-0011223");
-      const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
-        .subsidiary_id;
+      const subsidiary = (
+        await db.execute<{ subsidiary_id: string }>(
+          sql`
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`,
+          "objects",
+        )
+      )[0]!.subsidiary_id;
       await usEmployee(fx, subsidiary, "Stateless Sam", { state: "CA" });
       await runAndCommit(fx, "2026-07-05", "2026-07-18");
       const stateLines = await committedDeductions(fx, "state_income_tax");
       assert.equal(stateLines.length, 1);
       assert.ok(Number(stateLines[0]!.amount) > 0, "California tax is withheld on the stub");
-      const stubId = (await db.execute<{ id: string }>(sql`
-        select id from pay_stubs where org_id = ${fx.orgId}`, "objects"))[0]!.id;
+      const stubId = (
+        await db.execute<{ id: string }>(
+          sql`
+        select id from pay_stubs where org_id = ${fx.orgId}`,
+          "objects",
+        )
+      )[0]!.id;
       await db.execute(sql`update pay_stubs set province = '' where id = ${stubId}`);
 
-      await assert.rejects(
-        w2Slips(fx.orgId, 2026),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.match(error.message, /Stateless Sam/);
-          assert.match(error.message, new RegExp(String(stubId)));
-          assert.match(error.message, /no work state/);
-          return true;
-        },
-      );
+      await assert.rejects(w2Slips(fx.orgId, 2026), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /Stateless Sam/);
+        assert.match(error.message, new RegExp(String(stubId)));
+        assert.match(error.message, /no work state/);
+        return true;
+      });
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
   },
 );
 
-test(
-  "a stub with no work state and no withholding stays federal-only",
-  { skip: !DB },
-  async () => {
-    // The refusal above fires on unattributable TAX, not on an unattributable
-    // stub: Texas withholds nothing, so blanking the work state leaves wages
-    // that are genuinely federal-only.
-    const fx = await usPayrollOrg();
-    try {
-      const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
-        .subsidiary_id;
-      await usEmployee(fx, subsidiary, "Nowhere Nora", { state: "TX" });
-      await runAndCommit(fx, "2026-07-05", "2026-07-18");
-      assert.equal((await committedDeductions(fx, "state_income_tax")).length, 0);
-      await db.execute(sql`update pay_stubs set province = '' where org_id = ${fx.orgId}`);
+test("a stub with no work state and no withholding stays federal-only", { skip: !DB }, async () => {
+  // The refusal above fires on unattributable TAX, not on an unattributable
+  // stub: Texas withholds nothing, so blanking the work state leaves wages
+  // that are genuinely federal-only.
+  const fx = await usPayrollOrg();
+  try {
+    const subsidiary = (
+      await db.execute<{ subsidiary_id: string }>(
+        sql`
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`,
+        "objects",
+      )
+    )[0]!.subsidiary_id;
+    await usEmployee(fx, subsidiary, "Nowhere Nora", { state: "TX" });
+    await runAndCommit(fx, "2026-07-05", "2026-07-18");
+    assert.equal((await committedDeductions(fx, "state_income_tax")).length, 0);
+    await db.execute(sql`update pay_stubs set province = '' where org_id = ${fx.orgId}`);
 
-      const slips = await w2Slips(fx.orgId, 2026);
-      assert.equal(slips.length, 1);
-      assert.equal(slips[0]!.employeeName, "Nowhere Nora");
-      assert.ok(Number(slips[0]!.box1Wages) > 0, "wages stay in the federal boxes");
-      assert.deepEqual(slips[0]!.stateLines, []);
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+    const slips = await w2Slips(fx.orgId, 2026);
+    assert.equal(slips.length, 1);
+    assert.equal(slips[0]!.employeeName, "Nowhere Nora");
+    assert.ok(Number(slips[0]!.box1Wages) > 0, "wages stay in the federal boxes");
+    assert.deepEqual(slips[0]!.stateLines, []);
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
   "the W-2 gap names only the state-ID residual, and the EFW2 refusal stays",

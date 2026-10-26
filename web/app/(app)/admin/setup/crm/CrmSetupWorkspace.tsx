@@ -25,21 +25,12 @@ import {
 } from "@openbooks/ui";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { InteractiveTableRow } from "@/components/interactive-table-row";
 
-export type CrmSetupTab =
-  | "accountStatuses"
-  | "opportunityStatuses"
-  | "sources";
+export type CrmSetupTab = "accountStatuses" | "opportunityStatuses" | "sources";
 
 const COLUMNS: Record<CrmSetupTab, string[]> = {
-  accountStatuses: [
-    "name",
-    "lifecycle_stage",
-    "sequence",
-    "is_qualified",
-    "is_active",
-  ],
+  accountStatuses: ["name", "lifecycle_stage", "sequence", "is_qualified", "is_active"],
   opportunityStatuses: [
     "name",
     "probability",
@@ -52,27 +43,57 @@ const COLUMNS: Record<CrmSetupTab, string[]> = {
 
 type CrmTranslator = ReturnType<typeof useTranslations>;
 interface CrmSetupRecord extends Record<string, unknown> {
-  id?: string; name?: string; description?: string;
-  lifecycle_stage?: string; sequence?: number; is_qualified?: boolean; is_closed?: boolean;
-  is_default?: boolean; is_active?: boolean; probability?: number;
-  default_forecast_category?: string; is_won?: boolean;
-  requires_lines?: boolean; requires_primary_contact?: boolean;
-  requires_positive_amount?: boolean; requires_win_loss_reason?: boolean;
+  id?: string;
+  name?: string;
+  description?: string;
+  lifecycle_stage?: string;
+  sequence?: number;
+  is_qualified?: boolean;
+  is_closed?: boolean;
+  is_default?: boolean;
+  is_active?: boolean;
+  probability?: number;
+  default_forecast_category?: string;
+  is_won?: boolean;
+  requires_lines?: boolean;
+  requires_primary_contact?: boolean;
+  requires_positive_amount?: boolean;
+  requires_win_loss_reason?: boolean;
 }
 interface CrmForm extends Record<string, unknown> {
-  name: string; description: string; lifecycleStage: string; sequence: string | number;
-  isQualified: boolean; isClosed: boolean; isDefault: boolean; isActive: boolean;
-  probability: string | number; defaultForecastCategory: string; isWon: boolean;
-  requiresLines: boolean; requiresPrimaryContact: boolean;
-  requiresPositiveAmount: boolean; requiresWinLossReason: boolean;
+  name: string;
+  description: string;
+  lifecycleStage: string;
+  sequence: string | number;
+  isQualified: boolean;
+  isClosed: boolean;
+  isDefault: boolean;
+  isActive: boolean;
+  probability: string | number;
+  defaultForecastCategory: string;
+  isWon: boolean;
+  requiresLines: boolean;
+  requiresPrimaryContact: boolean;
+  requiresPositiveAmount: boolean;
+  requiresWinLossReason: boolean;
 }
 const EMPTY_CRM_FORM: CrmForm = {
-  name: "", description: "", lifecycleStage: "lead", sequence: 10,
-  isQualified: false, isClosed: false, isDefault: false, isActive: true,
-  probability: 0, defaultForecastCategory: "upside", isWon: false,
-  requiresLines: false, requiresPrimaryContact: false,
-  requiresPositiveAmount: false, requiresWinLossReason: false,
-}
+  name: "",
+  description: "",
+  lifecycleStage: "lead",
+  sequence: 10,
+  isQualified: false,
+  isClosed: false,
+  isDefault: false,
+  isActive: true,
+  probability: 0,
+  defaultForecastCategory: "upside",
+  isWon: false,
+  requiresLines: false,
+  requiresPrimaryContact: false,
+  requiresPositiveAmount: false,
+  requiresWinLossReason: false,
+};
 
 export function CrmSetupWorkspace({
   tab,
@@ -227,10 +248,8 @@ function renderCell(column: string, row: CrmSetupRecord, t: CrmTranslator) {
   if (["is_qualified", "is_closed"].includes(column))
     return t(`setup.states.${value ? "yes" : "no"}`);
   if (column === "lifecycle_stage") return t(`stages.${value}`);
-  if (column === "default_forecast_category")
-    return t(`forecastCategories.${value}`);
-  if (column === "probability")
-    return t("setup.percent", { value: Number(value) });
+  if (column === "default_forecast_category") return t(`forecastCategories.${value}`);
+  if (column === "probability") return t("setup.percent", { value: Number(value) });
   return value == null || value === "" ? "—" : String(value);
 }
 
@@ -249,11 +268,8 @@ function CrmSetupDrawer({
   const creating = !row;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<CrmForm>(() =>
-    initialForm(tab, row),
-  );
-  const set = (key: string, value: unknown) =>
-    setForm((current) => ({ ...current, [key]: value }));
+  const [form, setForm] = useState<CrmForm>(() => initialForm(tab, row));
+  const set = (key: string, value: unknown) => setForm((current) => ({ ...current, [key]: value }));
 
   async function save() {
     if (!String(form.name ?? "").trim()) {
@@ -263,24 +279,23 @@ function CrmSetupDrawer({
     setBusy(true);
     setError(null);
     try {
-      await apiJson("/api/crm/setup", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: actionFor(tab),
-          id: row?.id,
-          ...form,
-        }),
-      },
+      await apiJson(
+        "/api/crm/setup",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: actionFor(tab),
+            id: row?.id,
+            ...form,
+          }),
+        },
         tc("feedback.saveFailed"),
       );
       toast.success(t(creating ? "setup.created" : "setup.updated"));
       router.push(closeHref);
     } catch (error) {
-      const message =
-        error instanceof ApiResponseError
-          ? error.message
-          : tc("feedback.saveFailed");
+      const message = error instanceof ApiResponseError ? error.message : tc("feedback.saveFailed");
       setError(message);
       toast.error(message);
     } finally {
@@ -297,11 +312,7 @@ function CrmSetupDrawer({
       description={t(`setup.drawer.description.${tab}`)}
       headerActions={
         <Button disabled={busy} onClick={save}>
-          {busy
-            ? tc("actions.saving")
-            : creating
-              ? tc("actions.create")
-              : tc("actions.save")}
+          {busy ? tc("actions.saving") : creating ? tc("actions.create") : tc("actions.save")}
         </Button>
       }
     >
@@ -311,24 +322,17 @@ function CrmSetupDrawer({
             {error}
           </p>
         ) : null}
-        {tab === "accountStatuses" ? (
-          <AccountStatusFields form={form} set={set} t={t} />
-        ) : null}
+        {tab === "accountStatuses" ? <AccountStatusFields form={form} set={set} t={t} /> : null}
         {tab === "opportunityStatuses" ? (
           <OpportunityStatusFields form={form} set={set} t={t} />
         ) : null}
-        {tab === "sources" ? (
-          <SourceFields form={form} set={set} t={t} />
-        ) : null}
+        {tab === "sources" ? <SourceFields form={form} set={set} t={t} /> : null}
       </div>
     </UrlDrawer>
   );
 }
 
-function initialForm(
-  tab: CrmSetupTab,
-  row: CrmSetupRecord | null,
-): CrmForm {
+function initialForm(tab: CrmSetupTab, row: CrmSetupRecord | null): CrmForm {
   if (tab === "accountStatuses")
     return {
       ...EMPTY_CRM_FORM,
@@ -442,9 +446,10 @@ function OpportunityStatusFields({ form, set, t }: FieldProps) {
         label={t("fields.forecastCategory")}
         value={form.defaultForecastCategory}
         onChange={(v) => set("defaultForecastCategory", v)}
-        options={["omitted", "worst_case", "most_likely", "upside"].map(
-          (value) => ({ value, label: t(`forecastCategories.${value}`) }),
-        )}
+        options={["omitted", "worst_case", "most_likely", "upside"].map((value) => ({
+          value,
+          label: t(`forecastCategories.${value}`),
+        }))}
       />
       <TextAreaField
         label={t("fields.description")}
@@ -508,11 +513,7 @@ function TextField({
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <Input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      <Input type={type} value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }
@@ -542,9 +543,7 @@ function TextAreaField({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
-      {hint ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>
-      ) : null}
+      {hint ? <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p> : null}
     </div>
   );
 }

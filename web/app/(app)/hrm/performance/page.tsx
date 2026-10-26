@@ -1,11 +1,11 @@
-import { redirect } from 'next/navigation'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadPerformancePage, performanceSpec, performanceTitle } from './view'
+import { redirect } from "next/navigation";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadPerformancePage, performanceSpec, performanceTitle } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await performanceTitle() }
+  return { title: await performanceTitle() };
 }
 
 /**
@@ -20,16 +20,16 @@ export async function generateMetadata() {
 export default async function PerformancePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  if (sp.tab === 'templates') redirect('/hrm/performance/templates')
-  if (sp.tab === 'settings') redirect('/admin/setup/performance')
-  if (sp.tab === 'talent' && sp.talentView === 'succession') {
-    const query = new URLSearchParams({ tab: 'succession' })
-    if (sp.plan) query.set('plan', sp.plan)
-    redirect(`/hrm/performance?${query}`)
+  const sp = await searchParams;
+  if (sp.tab === "templates") redirect("/hrm/performance/templates");
+  if (sp.tab === "settings") redirect("/admin/setup/performance");
+  if (sp.tab === "talent" && sp.talentView === "succession") {
+    const query = new URLSearchParams({ tab: "succession" });
+    if (sp.plan) query.set("plan", sp.plan);
+    redirect(`/hrm/performance?${query}`);
   }
-  const data = await loadPerformancePage(sp)
-  return <ModuleView spec={performanceSpec(data)} data={data} searchParams={sp} trusted />
+  const data = await loadPerformancePage(sp);
+  return <ModuleView spec={performanceSpec(data)} data={data} searchParams={sp} trusted />;
 }

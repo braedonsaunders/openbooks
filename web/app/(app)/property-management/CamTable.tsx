@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
+import {
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@openbooks/ui";
 import { PagedTable } from "../../../components/paged-table";
 import { compareDecimal } from "../../../lib/exact-decimal";
 import { confirmDialog } from "@/lib/confirm";
@@ -57,185 +65,142 @@ export function CamTable({
       .join(" ");
   };
   const poolCard = (pool: CamPool) => {
-        const property = data.properties.find(
-          (item) => item.id === pool.propertyId,
-        );
-        const allocations = data.camAllocations.filter(
-          (item) => item.poolId === pool.id,
-        );
-        const moneyOptions = camMoneyOptions(property?.currency);
-        return (
-          <div className="space-y-3 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="font-medium">
-                  {pool.name} · {pool.fiscalYear}
-                </div>
-                <div className="mt-1 text-xs text-slate-500">
-                  {property?.name} · {pool.periodStartsOn}–{pool.periodEndsOn} ·{" "}
-                  {pool.allocationBasis.replaceAll("_", " ")}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Status value={pool.status} />
-                {permissions.manage &&
-                ["draft", "open"].includes(pool.status) ? (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => onEdit?.(pool)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={async () => {
-                        if (
-                          !(await confirmDialog(
-                            `Cancel ${pool.name}? The pool will remain in CAM history.`,
-                          ))
-                        )
-                          return
-                        void act(
-                          { action: "cancelCamPool", poolId: pool.id },
-                          "CAM pool cancelled",
-                        );
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </>
-                ) : null}
-                {permissions.account &&
-                ["draft", "open"].includes(pool.status) ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={async () => {
-                      setPoolError(null);
-                      const result = await act(
-                        { action: "finalizeCam", poolId: pool.id },
-                        "CAM actuals finalized",
-                        (message) => setPoolError({ poolId: pool.id, message }),
-                      );
-                      if (result) setPoolError(null);
-                    }}
-                  >
-                    Finalize
-                  </Button>
-                ) : null}
-                {permissions.account && pool.status === "finalized" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => onReopen?.(pool)}
-                  >
-                    Reopen for correction
-                  </Button>
-                ) : null}
-                {permissions.bill && (pool.status === "finalized" || (pool.status === "invoiced" && allocations.some(
-                  allocation => !allocation.invoiceDocumentId && allocation.reconciliationAmount != null && compareDecimal(allocation.reconciliationAmount, "0") !== 0,
-                ))) ? (
-                  <Button
-                    size="sm"
-                    disabled={busy}
-                    onClick={() =>
-                      act(
-                        { action: "billCam", poolId: pool.id },
-                        "CAM reconciliations created",
-                      )
-                    }
-                  >
-                    Create true-ups
-                  </Button>
-                ) : null}
-              </div>
+    const property = data.properties.find((item) => item.id === pool.propertyId);
+    const allocations = data.camAllocations.filter((item) => item.poolId === pool.id);
+    const moneyOptions = camMoneyOptions(property?.currency);
+    return (
+      <div className="space-y-3 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="font-medium">
+              {pool.name} · {pool.fiscalYear}
             </div>
-            {poolError?.poolId === pool.id ? (
-              <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-                {poolError.message}
-              </p>
+            <div className="mt-1 text-xs text-slate-500">
+              {property?.name} · {pool.periodStartsOn}–{pool.periodEndsOn} ·{" "}
+              {pool.allocationBasis.replaceAll("_", " ")}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Status value={pool.status} />
+            {permissions.manage && ["draft", "open"].includes(pool.status) ? (
+              <>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => onEdit?.(pool)}>
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (
+                      !(await confirmDialog(
+                        `Cancel ${pool.name}? The pool will remain in CAM history.`,
+                      ))
+                    )
+                      return;
+                    void act({ action: "cancelCamPool", poolId: pool.id }, "CAM pool cancelled");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </>
             ) : null}
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Small
-                label="Budget"
-                value={money(pool.budgetAmount, moneyOptions)}
-              />
-              <Small
-                label="Actual"
-                value={
-                  pool.actualAmount == null
-                    ? "—"
-                    : money(pool.actualAmount, moneyOptions)
+            {permissions.account && ["draft", "open"].includes(pool.status) ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={async () => {
+                  setPoolError(null);
+                  const result = await act(
+                    { action: "finalizeCam", poolId: pool.id },
+                    "CAM actuals finalized",
+                    (message) => setPoolError({ poolId: pool.id, message }),
+                  );
+                  if (result) setPoolError(null);
+                }}
+              >
+                Finalize
+              </Button>
+            ) : null}
+            {permissions.account && pool.status === "finalized" ? (
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => onReopen?.(pool)}>
+                Reopen for correction
+              </Button>
+            ) : null}
+            {permissions.bill &&
+            (pool.status === "finalized" ||
+              (pool.status === "invoiced" &&
+                allocations.some(
+                  (allocation) =>
+                    !allocation.invoiceDocumentId &&
+                    allocation.reconciliationAmount != null &&
+                    compareDecimal(allocation.reconciliationAmount, "0") !== 0,
+                ))) ? (
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  act({ action: "billCam", poolId: pool.id }, "CAM reconciliations created")
                 }
-              />
-              <Small
-                label="Lease allocations"
-                value={String(allocations.length)}
-              />
-            </div>
-            {allocations.length ? (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Lease</TableHead>
-                      <TableHead className="text-right">Share</TableHead>
-                      <TableHead className="text-right">Actual</TableHead>
-                      <TableHead className="text-right">
-                        Previously billed
-                      </TableHead>
-                      <TableHead className="text-right">True-up</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {allocations.map((allocation) => (
-                      <TableRow key={allocation.id}>
-                        <TableCell>
-                          {
-                            data.leases.find(
-                              (lease) => lease.id === allocation.leaseId,
-                            )?.leaseNumber
-                          }
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {allocation.sharePercent}%
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCamAmount(
-                            allocation.actualAllocation,
-                            money,
-                            property?.currency,
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCamAmount(
-                            allocation.billedEstimate,
-                            money,
-                            property?.currency,
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCamAmount(
-                            allocation.reconciliationAmount,
-                            money,
-                            property?.currency,
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              >
+                Create true-ups
+              </Button>
             ) : null}
           </div>
-        );
+        </div>
+        {poolError?.poolId === pool.id ? (
+          <p
+            role="alert"
+            className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+          >
+            {poolError.message}
+          </p>
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Small label="Budget" value={money(pool.budgetAmount, moneyOptions)} />
+          <Small
+            label="Actual"
+            value={pool.actualAmount == null ? "—" : money(pool.actualAmount, moneyOptions)}
+          />
+          <Small label="Lease allocations" value={String(allocations.length)} />
+        </div>
+        {allocations.length ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Lease</TableHead>
+                  <TableHead className="text-right">Share</TableHead>
+                  <TableHead className="text-right">Actual</TableHead>
+                  <TableHead className="text-right">Previously billed</TableHead>
+                  <TableHead className="text-right">True-up</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allocations.map((allocation) => (
+                  <TableRow key={allocation.id}>
+                    <TableCell>
+                      {data.leases.find((lease) => lease.id === allocation.leaseId)?.leaseNumber}
+                    </TableCell>
+                    <TableCell className="text-right">{allocation.sharePercent}%</TableCell>
+                    <TableCell className="text-right">
+                      {formatCamAmount(allocation.actualAllocation, money, property?.currency)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCamAmount(allocation.billedEstimate, money, property?.currency)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCamAmount(allocation.reconciliationAmount, money, property?.currency)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : null}
+      </div>
+    );
   };
   return (
     <PagedTable
@@ -243,14 +208,16 @@ export function CamTable({
       rows={pools}
       rowKey={(pool) => pool.id}
       searchable
-      empty={(
+      empty={
         <Empty
           title="No CAM pools yet"
-          detail={propertyId
-            ? "Create this property's first operating-expense pool and tenant reconciliation."
-            : "Create an annual operating-expense pool, allocate actual GL costs, and invoice tenant true-ups."}
+          detail={
+            propertyId
+              ? "Create this property's first operating-expense pool and tenant reconciliation."
+              : "Create an annual operating-expense pool, allocate actual GL costs, and invoice tenant true-ups."
+          }
         />
-      )}
+      }
       columns={[
         {
           key: "pool",

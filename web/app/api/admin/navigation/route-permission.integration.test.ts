@@ -18,7 +18,7 @@ interface PermState {
   } | null;
 }
 const permState: PermState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = permState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = permState;
 
 const mockAuthz = `
   import { NextResponse } from 'next/server';
@@ -38,7 +38,10 @@ registerHooks({
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("admin/navigation")) {
       return { url: "mock:nav-permission-authz", shortCircuit: true };
     }
-    if (context.parentURL?.startsWith("mock:") && (specifier.startsWith("@openbooks/") || specifier === "next/server")) {
+    if (
+      context.parentURL?.startsWith("mock:") &&
+      (specifier.startsWith("@openbooks/") || specifier === "next/server")
+    ) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }
     return nextResolve(specifier, context);
@@ -54,9 +57,8 @@ registerHooks({
 const routeUrl = "./route.ts?nav-permission-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const CONFIG = {
   version: 2,
@@ -86,7 +88,11 @@ async function freshOrgWithUser(): Promise<{ orgId: string; userId: string }> {
 }
 
 function asUser(orgId: string, userId: string, permissions: string[]): void {
-  permState.authz = { user: { orgId, id: userId }, permissions: new Set(permissions), allowedSubsidiaryIds: null };
+  permState.authz = {
+    user: { orgId, id: userId },
+    permissions: new Set(permissions),
+    allowedSubsidiaryIds: null,
+  };
 }
 
 test("a holder of admin.nav.manage can save the nav config", async () => {
@@ -98,8 +104,11 @@ test("a holder of admin.nav.manage can save the nav config", async () => {
     const saved = (await res.json()) as { ok: boolean; revision: string };
     assert.equal(saved.ok, true);
     assert.match(saved.revision, /^\d{4}-\d{2}-\d{2}T/);
-    const stored = (await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from org_nav_configs where org_id = ${orgId}`, "objects"));
+    const stored = await db.execute<{ count: number }>(
+      sql`
+      select count(*)::int as count from org_nav_configs where org_id = ${orgId}`,
+      "objects",
+    );
     assert.equal(stored[0]!.count, 1);
   } finally {
     permState.authz = null;
@@ -125,8 +134,11 @@ test("a user with neither admin key is refused without persisting anything", asy
     asUser(orgId, userId, ["reports.read"]);
     const res = await PUT(putRequest(CONFIG));
     assert.equal(res.status, 403);
-    const stored = (await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from org_nav_configs where org_id = ${orgId}`, "objects"));
+    const stored = await db.execute<{ count: number }>(
+      sql`
+      select count(*)::int as count from org_nav_configs where org_id = ${orgId}`,
+      "objects",
+    );
     assert.equal(stored[0]!.count, 0);
   } finally {
     permState.authz = null;

@@ -5,17 +5,10 @@
  * applies to the current history, the requester no longer holds the duty,
  * a self decision — rolls the gate decision back with it.
  */
-import {
-  applyEquityAccountPolicy,
-  type RecordAccountPolicyInput,
-} from "./account-policy.ts";
+import { applyEquityAccountPolicy, type RecordAccountPolicyInput } from "./account-policy.ts";
 import { applyCompensationRun } from "./compensation-run.ts";
 import { applySecurityEvent, type RecordEventInput } from "./events.ts";
-import {
-  releaseEquityAction,
-  type EquityAction,
-  type EquityActionApplier,
-} from "./governance.ts";
+import { releaseEquityAction, type EquityAction, type EquityActionApplier } from "./governance.ts";
 import { applyInterestRun } from "./interest-run.ts";
 import {
   applyMfnElection,

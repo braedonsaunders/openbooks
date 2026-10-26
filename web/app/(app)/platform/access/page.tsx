@@ -1,18 +1,18 @@
-import { platformListSources } from '../../../../lib/list/platform-sources'
-import { platformGrantOptions } from '../../../../lib/platform-admin'
-import { AccessList } from './sections'
+import { platformListSources } from "../../../../lib/list/platform-sources";
+import { platformGrantOptions } from "../../../../lib/platform-admin";
+import { AccessList } from "./sections";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export default async function PlatformAccessPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const source = platformListSources.access
-  const { params, filter: status, result } = await source.read(sp)
-  const options = await platformGrantOptions()
+  const sp = await searchParams;
+  const source = platformListSources.access;
+  const { params, filter: status, result } = await source.read(sp);
+  const options = await platformGrantOptions();
   return (
     <AccessList
       grants={result.rows}
@@ -29,5 +29,5 @@ export default async function PlatformAccessPage({
       organizations={options.organizations}
       actingUsers={options.actingUsers}
     />
-  )
+  );
 }

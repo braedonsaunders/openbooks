@@ -23,7 +23,6 @@ const hrmCatalog = JSON.parse(
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
     const parent = context.parentURL ?? "";
     const owned = parent.endsWith("/web/lib/hrm/leave.ts");
     if (owned && specifier === "next-intl/server") {
@@ -121,13 +120,18 @@ registerHooks({
       };
     }
     if (owned && specifier === "../scoped-options") {
-      return { shortCircuit: true, url: "data:text/javascript,export async function listScopedDepartmentOptions(){return globalThis.__leaveQueueDepartments ?? []}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function listScopedDepartmentOptions(){return globalThis.__leaveQueueDepartments ?? []}",
+      };
     }
     // The sibling change-request label lookup runs through the same stubbed
     // database client: with no labelled rows it resolves to the
     // not-available fallback, which these tests never assert on.
     if (
-      (owned || parent.endsWith("/web/lib/hrm/change-requests.ts") || parent.endsWith("/web/lib/scoped-options.ts")) &&
+      (owned ||
+        parent.endsWith("/web/lib/hrm/change-requests.ts") ||
+        parent.endsWith("/web/lib/scoped-options.ts")) &&
       specifier === "@openbooks/engine/platform/db"
     ) {
       return {
@@ -141,9 +145,7 @@ registerHooks({
 });
 
 const { loadLeaveQueue } = await import("../../../../lib/hrm/leave.ts");
-const { HrmAuthorizationError } = await import(
-  "@openbooks/engine/hrm/authorization"
-);
+const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
 const { LeaveError } = await import("@openbooks/engine/hrm/leave-errors");
 
 const gap = globalThis as Record<string, unknown>;
@@ -158,7 +160,10 @@ function authzWith(permissions: string[]) {
 
 const HR_READER = authzWith(["hrm.leave.read", "hrm.leave.request", "hrm.leave.manage"]);
 
-function stubReads(rows: Array<Record<string, unknown>> | { error: unknown }, onLeave: Array<Record<string, unknown>> = []) {
+function stubReads(
+  rows: Array<Record<string, unknown>> | { error: unknown },
+  onLeave: Array<Record<string, unknown>> = [],
+) {
   gap.__leaveQueueList = Array.isArray(rows) ? { rows } : rows;
   gap.__leaveQueueOnLeave = onLeave;
   gap.__leaveCalendarState = null;
@@ -198,7 +203,10 @@ test("an unknown segment refuses naming the segment, never an empty table", asyn
   const data = await loadLeaveQueue(HR_READER, { segment: "bogus" });
   assert.ok(data.refusal, "the refusal travels as data the page renders");
   assert.equal(data.refusal.title, "Unknown segment", "the refusal carries the catalogued title");
-  assert.ok(data.refusal.message.includes("bogus"), "the refusal names the segment the URL asked for");
+  assert.ok(
+    data.refusal.message.includes("bogus"),
+    "the refusal names the segment the URL asked for",
+  );
   assert.equal(data.hasContent, false, "no rows render beside the refusal");
   assert.deepEqual(data.rows, [], "no rows leak through a refused segment");
 });
@@ -229,7 +237,11 @@ test("the queue counts per segment and filters to the active one", async () => {
     "the pending segment shows submitted requests only",
   );
   const row = pending.rows[0]!;
-  assert.equal(row.rangeLabel, "2026-10-20 → 2026-10-21", "the range renders verbatim, never through Date");
+  assert.equal(
+    row.rangeLabel,
+    "2026-10-20 → 2026-10-21",
+    "the range renders verbatim, never through Date",
+  );
   assert.equal(row.statusVariant, "warning", "the loader resolves the badge variant");
   assert.ok(row.requestHref.includes("request=lr-pending"), "each row opens its own request");
 });
@@ -270,7 +282,12 @@ test("recorded days list in their own segment and open by absence id", async () 
 
 test("a recorded day covering today lists in the today segment", async () => {
   stubReads(
-    [leaveRow("ab-today", "recorded", "2026-09-22", "2026-09-22", { source: "recorded", absenceId: "absence-today" })],
+    [
+      leaveRow("ab-today", "recorded", "2026-09-22", "2026-09-22", {
+        source: "recorded",
+        absenceId: "absence-today",
+      }),
+    ],
     [],
   );
   const today = await loadLeaveQueue(HR_READER, { segment: "today" });
@@ -282,7 +299,8 @@ test("a recorded day covering today lists in the today segment", async () => {
 });
 
 test("a subsidiary-scope denial refuses with the remedy, never a partial list", async () => {
-  const remedy = "a role restricted to specific subsidiaries cannot read the org-wide leave queue — ask an administrator for access";
+  const remedy =
+    "a role restricted to specific subsidiaries cannot read the org-wide leave queue — ask an administrator for access";
   stubReads({ error: new HrmAuthorizationError(remedy) });
   const data = await loadLeaveQueue(HR_READER, {});
   assert.ok(data.refusal, "the denial travels as data");
@@ -309,7 +327,10 @@ test("requests and the calendar are alternative views, never stacked", async () 
   assert.equal(calendar.view, "calendar", "the calendar is its own view");
   assert.equal(calendar.onRequests, false, "the requests table stays off the calendar tab");
   assert.equal(calendar.onCalendar, true, "the calendar renders on its own tab");
-  assert.ok(calendar.fileHref.includes("view=calendar"), "filing from the calendar closes back onto it");
+  assert.ok(
+    calendar.fileHref.includes("view=calendar"),
+    "filing from the calendar closes back onto it",
+  );
   assert.ok(requests.fileHref.includes("file=1"), "filing opens through the file param");
   assert.ok(!requests.fileHref.includes("view="), "the requests view adds no view param");
 });
@@ -323,118 +344,115 @@ test("an unexpected system failure propagates instead of an empty queue", async 
   );
 });
 
-test('the calendar defaults to all departments and the full business month even without absences', async () => {
-  stubReads([])
-  const data = await loadLeaveQueue(HR_READER, { view: 'calendar' })
+test("the calendar defaults to all departments and the full business month even without absences", async () => {
+  stubReads([]);
+  const data = await loadLeaveQueue(HR_READER, { view: "calendar" });
   assert.deepEqual(gap.__leaveCalendarArgs, [
-    'org-leave',
-    'actor-leave',
+    "org-leave",
+    "actor-leave",
     null,
-    '2026-09-01',
-    '2026-09-30',
-  ])
-  assert.equal(data.calendarFrom, '2026-09-01')
-  assert.equal(data.calendarTo, '2026-09-30')
-  assert.equal(data.calendarToday, '2026-09-22')
-  assert.equal(data.calendarTitle, 'Calendar')
-  assert.equal(data.hasContent, true)
-  assert.deepEqual(data.calendarDays, [])
-  assert.equal(data.calendarEmpty, 'No absences in this window.')
-})
+    "2026-09-01",
+    "2026-09-30",
+  ]);
+  assert.equal(data.calendarFrom, "2026-09-01");
+  assert.equal(data.calendarTo, "2026-09-30");
+  assert.equal(data.calendarToday, "2026-09-22");
+  assert.equal(data.calendarTitle, "Calendar");
+  assert.equal(data.hasContent, true);
+  assert.deepEqual(data.calendarDays, []);
+  assert.equal(data.calendarEmpty, "No absences in this window.");
+});
 
-test('all departments resolves employees together and preserves the selected range through dialogs', async () => {
-  stubReads([])
+test("all departments resolves employees together and preserves the selected range through dialogs", async () => {
+  stubReads([]);
   gap.__leaveCalendarState = {
     days: [
       {
-        employmentId: 'employment-sales',
-        workerName: 'Ada',
-        onDate: '2026-10-02',
-        hours: '8.00',
-        leaveTypeCode: 'VAC',
+        employmentId: "employment-sales",
+        workerName: "Ada",
+        onDate: "2026-10-02",
+        hours: "8.00",
+        leaveTypeCode: "VAC",
       },
       {
-        employmentId: 'employment-operations',
-        workerName: 'Grace',
-        onDate: '2026-10-02',
-        hours: '4.00',
-        leaveTypeCode: 'SICK',
+        employmentId: "employment-operations",
+        workerName: "Grace",
+        onDate: "2026-10-02",
+        hours: "4.00",
+        leaveTypeCode: "SICK",
       },
     ],
-  }
+  };
   const data = await loadLeaveQueue(HR_READER, {
-    view: 'calendar',
-    from: '2026-10-01',
-    to: '2026-10-31',
-  })
-  assert.equal(data.calendarDays.length, 1)
+    view: "calendar",
+    from: "2026-10-01",
+    to: "2026-10-31",
+  });
+  assert.equal(data.calendarDays.length, 1);
   assert.deepEqual(
     data.calendarDays[0]?.entries.map((entry) => entry.workerName),
-    ['Ada', 'Grace'],
-  )
-  const close = new URL(data.dialogCloseHref, 'https://openbooks.test')
-  assert.equal(close.searchParams.get('from'), '2026-10-01')
-  assert.equal(close.searchParams.get('to'), '2026-10-31')
-})
+    ["Ada", "Grace"],
+  );
+  const close = new URL(data.dialogCloseHref, "https://openbooks.test");
+  assert.equal(close.searchParams.get("from"), "2026-10-01");
+  assert.equal(close.searchParams.get("to"), "2026-10-31");
+});
 
-test('calendar failures reach the page with their remedy and requests never read the calendar', async () => {
-  stubReads([])
+test("calendar failures reach the page with their remedy and requests never read the calendar", async () => {
+  stubReads([]);
   const requests = await loadLeaveQueue(HR_READER, {
-    department: 'stale-filter',
-  })
-  assert.equal(gap.__leaveCalendarArgs, null)
-  assert.equal(requests.refusal, null)
-  const remedy =
-    'calendar access denied — ask an administrator to grant leave read access'
-  gap.__leaveCalendarState = { error: new HrmAuthorizationError(remedy) }
-  const denied = await loadLeaveQueue(HR_READER, { view: 'calendar' })
-  assert.equal(denied.refusal?.message, remedy)
-  assert.equal(denied.hasContent, false)
-})
+    department: "stale-filter",
+  });
+  assert.equal(gap.__leaveCalendarArgs, null);
+  assert.equal(requests.refusal, null);
+  const remedy = "calendar access denied — ask an administrator to grant leave read access";
+  gap.__leaveCalendarState = { error: new HrmAuthorizationError(remedy) };
+  const denied = await loadLeaveQueue(HR_READER, { view: "calendar" });
+  assert.equal(denied.refusal?.message, remedy);
+  assert.equal(denied.hasContent, false);
+});
 
-test('invalid dates and unavailable department filters refuse before a calendar read', async () => {
+test("invalid dates and unavailable department filters refuse before a calendar read", async () => {
   for (const params of [
-    { from: '2026-02-30' },
-    { from: '2026-10-20', to: '2026-10-01' },
-    { from: '2025-01-01', to: '2026-10-01' },
-    { department: 'unavailable' },
+    { from: "2026-02-30" },
+    { from: "2026-10-20", to: "2026-10-01" },
+    { from: "2025-01-01", to: "2026-10-01" },
+    { department: "unavailable" },
   ]) {
-    stubReads([])
+    stubReads([]);
     const data = await loadLeaveQueue(HR_READER, {
-      view: 'calendar',
+      view: "calendar",
       ...params,
-    })
-    assert.ok(data.refusal?.message)
-    assert.equal(data.hasContent, false)
-    assert.equal(gap.__leaveCalendarArgs, null)
+    });
+    assert.ok(data.refusal?.message);
+    assert.equal(data.hasContent, false);
+    assert.equal(gap.__leaveCalendarArgs, null);
   }
-})
+});
 
-test('the optional department filter reads only the selected visible department', async () => {
-  stubReads([])
+test("the optional department filter reads only the selected visible department", async () => {
+  stubReads([]);
   gap.__leaveQueueDepartments = [
-    { id: 'sales', name: 'Sales' },
-    { id: 'operations', name: 'Operations' },
-  ]
+    { id: "sales", name: "Sales" },
+    { id: "operations", name: "Operations" },
+  ];
   const data = await loadLeaveQueue(HR_READER, {
-    view: 'calendar',
-    department: 'sales',
-    from: '2026-10-01',
-    to: '2026-10-31',
-  })
-  assert.equal(data.refusal, null)
+    view: "calendar",
+    department: "sales",
+    from: "2026-10-01",
+    to: "2026-10-31",
+  });
+  assert.equal(data.refusal, null);
   assert.deepEqual(gap.__leaveCalendarArgs, [
-    'org-leave',
-    'actor-leave',
-    'sales',
-    '2026-10-01',
-    '2026-10-31',
-  ])
-  assert.equal(data.calendarScopeLabel, 'Sales')
+    "org-leave",
+    "actor-leave",
+    "sales",
+    "2026-10-01",
+    "2026-10-31",
+  ]);
+  assert.equal(data.calendarScopeLabel, "Sales");
   assert.equal(
-    new URL(data.dialogCloseHref, 'https://openbooks.test').searchParams.get(
-      'department',
-    ),
-    'sales',
-  )
-})
+    new URL(data.dialogCloseHref, "https://openbooks.test").searchParams.get("department"),
+    "sales",
+  );
+});

@@ -32,7 +32,8 @@ export const POST = defineRoute({
         }),
       );
     } catch (error) {
-      if (error instanceof CommerceError && error.code === "channel_order_unknown") return notFound("record");
+      if (error instanceof CommerceError && error.code === "channel_order_unknown")
+        return notFound("record");
       throw error;
     }
   },

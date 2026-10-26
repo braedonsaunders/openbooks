@@ -64,7 +64,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveAbsenceRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmLeaveAbsenceRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
@@ -84,7 +86,9 @@ const hooks = registerHooks({
     return nextLoad(url);
   },
 });
-const absenceRoute: typeof import("./route.ts") | undefined = (await import(new URL("./route.ts?hrm-leave-absence", import.meta.url).href)) as typeof import("./route.ts");
+const absenceRoute: typeof import("./route.ts") | undefined = (await import(
+  new URL("./route.ts?hrm-leave-absence", import.meta.url).href
+)) as typeof import("./route.ts");
 test.after(() => hooks.deregister());
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
@@ -108,7 +112,13 @@ function jsonRequest(body: unknown): Request {
 test("POST forwards the basis to the engine and returns the saved record", async () => {
   reset();
   const res = await absenceRoute!.POST(
-    jsonRequest({ employmentId: EMPLOYMENT_ID, leaveTypeId: TYPE_ID, onDate: "2026-08-03", hours: "8", reason: "approved verbally by the owner" }),
+    jsonRequest({
+      employmentId: EMPLOYMENT_ID,
+      leaveTypeId: TYPE_ID,
+      onDate: "2026-08-03",
+      hours: "8",
+      reason: "approved verbally by the owner",
+    }),
   );
   assert.equal(res.status, 200);
   const body = (await res.json()) as { absence: Record<string, unknown> };
@@ -130,7 +140,12 @@ test("POST forwards the basis to the engine and returns the saved record", async
 test("POST without a basis passes it through — the engine decides the requirement", async () => {
   reset();
   const res = await absenceRoute!.POST(
-    jsonRequest({ employmentId: EMPLOYMENT_ID, leaveTypeId: TYPE_ID, onDate: "2026-08-03", hours: "8" }),
+    jsonRequest({
+      employmentId: EMPLOYMENT_ID,
+      leaveTypeId: TYPE_ID,
+      onDate: "2026-08-03",
+      hours: "8",
+    }),
   );
   assert.equal(res.status, 200);
   assert.equal((routeState.calls[0]!.args as Record<string, unknown>)["reason"], undefined);
@@ -138,9 +153,17 @@ test("POST without a basis passes it through — the engine decides the requirem
 
 test("POST maps the engine basis refusal with message intact — status first, body second", async () => {
   reset();
-  routeState.serviceThrow = new LeaveError("INVALID_INPUT", "absence 2026-08-03 is back-dated — record the basis in the reason");
+  routeState.serviceThrow = new LeaveError(
+    "INVALID_INPUT",
+    "absence 2026-08-03 is back-dated — record the basis in the reason",
+  );
   const res = await absenceRoute!.POST(
-    jsonRequest({ employmentId: EMPLOYMENT_ID, leaveTypeId: TYPE_ID, onDate: "2026-08-03", hours: "8" }),
+    jsonRequest({
+      employmentId: EMPLOYMENT_ID,
+      leaveTypeId: TYPE_ID,
+      onDate: "2026-08-03",
+      hours: "8",
+    }),
   );
   assert.equal(res.status, 400);
   const body = (await res.json()) as { error: string };
@@ -149,7 +172,9 @@ test("POST maps the engine basis refusal with message intact — status first, b
 
 test("POST refuses a malformed body with 400 and never calls the service", async () => {
   reset();
-  const res = await absenceRoute!.POST(jsonRequest({ employmentId: "nope", leaveTypeId: TYPE_ID, onDate: "2026-08-03", hours: "8" }));
+  const res = await absenceRoute!.POST(
+    jsonRequest({ employmentId: "nope", leaveTypeId: TYPE_ID, onDate: "2026-08-03", hours: "8" }),
+  );
   assert.equal(res.status, 400);
   assert.equal(routeState.calls.length, 0, "the service never runs on a rejected boundary");
 });
@@ -158,7 +183,13 @@ test("POST without the manage grant is forbidden before the service", async () =
   reset();
   routeState.deniedPermissions = ["hrm.leave.manage"];
   const res = await absenceRoute!.POST(
-    jsonRequest({ employmentId: EMPLOYMENT_ID, leaveTypeId: TYPE_ID, onDate: "2026-08-03", hours: "8", reason: "x" }),
+    jsonRequest({
+      employmentId: EMPLOYMENT_ID,
+      leaveTypeId: TYPE_ID,
+      onDate: "2026-08-03",
+      hours: "8",
+      reason: "x",
+    }),
   );
   assert.equal(res.status, 403);
   assert.equal(routeState.calls.length, 0, "the service runs only past the boundary");

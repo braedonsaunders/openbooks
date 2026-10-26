@@ -1,4 +1,4 @@
-import { decodeAttachmentBase64 } from './attachment-content.ts';
+import { decodeAttachmentBase64 } from "./attachment-content.ts";
 /**
  * Microsoft Dynamics 365 Business Central client — OAuth2 (Entra ID / Azure AD,
  * authorization-code) + the Business Central REST API v2.0. Per-tenant like
@@ -49,7 +49,11 @@ class DynamicsOriginRefused extends Error {}
  * one), so any redirect with a Location is refused outright rather than
  * followed.
  */
-async function dynamicsFetch(url: string | URL, init: RequestInit = {}, transport: typeof fetch = guardedFetch): Promise<Response> {
+async function dynamicsFetch(
+  url: string | URL,
+  init: RequestInit = {},
+  transport: typeof fetch = guardedFetch,
+): Promise<Response> {
   const res = await transport(url, { ...init, redirect: "manual" });
   const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
   if (location !== null) {
@@ -82,7 +86,11 @@ export function authorizeUrl(app: DynamicsApp, state: string): string {
   return `${authBase(app.aadTenantId)}/authorize?${params.toString()}`;
 }
 
-interface TokenResponse { access_token: string; refresh_token: string; expires_in: number }
+interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
 
 function toTokens(r: TokenResponse): DynamicsTokens {
   return {
@@ -92,20 +100,31 @@ function toTokens(r: TokenResponse): DynamicsTokens {
   };
 }
 
-export async function exchangeCode(app: DynamicsApp, code: string, transport: typeof fetch = guardedFetch): Promise<DynamicsTokens> {
-  const res = await dynamicsFetch(`${authBase(app.aadTenantId)}/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: app.clientId,
-      client_secret: app.clientSecret,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: app.redirectUri,
-      scope: SCOPE,
-    }),
-  }, transport);
-  if (!res.ok) throw new Error(`Dynamics token exchange HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+export async function exchangeCode(
+  app: DynamicsApp,
+  code: string,
+  transport: typeof fetch = guardedFetch,
+): Promise<DynamicsTokens> {
+  const res = await dynamicsFetch(
+    `${authBase(app.aadTenantId)}/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: app.redirectUri,
+        scope: SCOPE,
+      }),
+    },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(
+      `Dynamics token exchange HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`,
+    );
   return toTokens((await res.json()) as TokenResponse);
 }
 
@@ -115,39 +134,68 @@ export async function exchangeCode(app: DynamicsApp, code: string, transport: ty
  * to have an APPLICATION permission (admin-consented) and to be enabled inside
  * BC (Microsoft Entra Applications, with permission sets).
  */
-export async function clientCredentialsToken(app: DynamicsApp, transport: typeof fetch = guardedFetch): Promise<DynamicsTokens> {
-  const res = await dynamicsFetch(`${authBase(app.aadTenantId)}/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: app.clientId,
-      client_secret: app.clientSecret,
-      grant_type: "client_credentials",
-      scope: `${RESOURCE}/.default`,
-    }),
-  }, transport);
-  if (!res.ok) throw new Error(`Dynamics client-credentials HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+export async function clientCredentialsToken(
+  app: DynamicsApp,
+  transport: typeof fetch = guardedFetch,
+): Promise<DynamicsTokens> {
+  const res = await dynamicsFetch(
+    `${authBase(app.aadTenantId)}/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
+        grant_type: "client_credentials",
+        scope: `${RESOURCE}/.default`,
+      }),
+    },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(
+      `Dynamics client-credentials HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`,
+    );
   const r = (await res.json()) as TokenResponse;
-  return { accessToken: r.access_token, refreshToken: "", expiresAt: new Date(Date.now() + (r.expires_in - 60) * 1000).toISOString() };
+  return {
+    accessToken: r.access_token,
+    refreshToken: "",
+    expiresAt: new Date(Date.now() + (r.expires_in - 60) * 1000).toISOString(),
+  };
 }
 
-export async function refreshTokens(app: DynamicsApp, refreshToken: string, transport: typeof fetch = guardedFetch): Promise<DynamicsTokens> {
-  const res = await dynamicsFetch(`${authBase(app.aadTenantId)}/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: app.clientId,
-      client_secret: app.clientSecret,
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      scope: SCOPE,
-    }),
-  }, transport);
-  if (!res.ok) throw new Error(`Dynamics token refresh HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+export async function refreshTokens(
+  app: DynamicsApp,
+  refreshToken: string,
+  transport: typeof fetch = guardedFetch,
+): Promise<DynamicsTokens> {
+  const res = await dynamicsFetch(
+    `${authBase(app.aadTenantId)}/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        scope: SCOPE,
+      }),
+    },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(
+      `Dynamics token refresh HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`,
+    );
   return toTokens((await res.json()) as TokenResponse);
 }
 
-export interface DynamicsCompany { id: string; name: string; displayName?: string }
+export interface DynamicsCompany {
+  id: string;
+  name: string;
+  displayName?: string;
+}
 
 /** The BC companies visible to this token in one environment (post-consent). */
 export async function listCompanies(
@@ -157,8 +205,13 @@ export async function listCompanies(
   transport: typeof fetch = guardedFetch,
 ): Promise<DynamicsCompany[]> {
   const url = `${API_ROOT}/${aadTenantId}/${environment}/api/v2.0/companies`;
-  const res = await dynamicsFetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }, transport);
-  if (!res.ok) throw new Error(`Dynamics companies HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const res = await dynamicsFetch(
+    url,
+    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(`Dynamics companies HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return ((await res.json()) as { value: DynamicsCompany[] }).value ?? [];
 }
 
@@ -187,11 +240,14 @@ export class DynamicsClient {
     // refuse by name — never fall through to client-credentials, which would
     // run as the app's service principal instead of the consented user.
     if (!this.tokens.refreshToken) {
-      throw new Error("Dynamics connection has no delegated refresh token — reconnect to grant access");
+      throw new Error(
+        "Dynamics connection has no delegated refresh token — reconnect to grant access",
+      );
     }
     if (!this.tokens.accessToken || new Date(this.tokens.expiresAt).getTime() <= Date.now()) {
       const consumed = this.tokens;
-      const refresh = (refreshToken: string) => refreshTokens(this.app, refreshToken, this.transport);
+      const refresh = (refreshToken: string) =>
+        refreshTokens(this.app, refreshToken, this.transport);
       this.tokens = this.onRefresh
         ? await this.onRefresh(consumed, refresh)
         : await refresh(consumed.refreshToken);
@@ -213,10 +269,14 @@ export class DynamicsClient {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 30_000);
       try {
-        const res = await dynamicsFetch(parsedUrl, {
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-          signal: ctrl.signal,
-        }, this.transport);
+        const res = await dynamicsFetch(
+          parsedUrl,
+          {
+            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+            signal: ctrl.signal,
+          },
+          this.transport,
+        );
         if ((res.status === 429 || res.status >= 500) && attempt < 4) {
           const ra = Number(res.headers.get("Retry-After"));
           await new Promise((r) => setTimeout(r, ra > 0 ? ra * 1000 : attempt * 2000));
@@ -255,11 +315,15 @@ export class DynamicsClient {
   }
 
   /** GET one company-scoped entity (raw OData, no auto-paging). */
-  private async raw<T>(path: string, params: Record<string, string> = {}): Promise<{ value: T[]; nextLink?: string }> {
+  private async raw<T>(
+    path: string,
+    params: Record<string, string> = {},
+  ): Promise<{ value: T[]; nextLink?: string }> {
     const url = new URL(`${this.base}/companies(${this.companyId})/${path}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
     const res = await this.send(url.toString());
-    if (!res.ok) throw new Error(`Dynamics ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok)
+      throw new Error(`Dynamics ${path} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const body = (await res.json()) as { value?: T[]; "@odata.nextLink"?: string };
     return { value: body.value ?? [], nextLink: body["@odata.nextLink"] };
   }
@@ -279,13 +343,48 @@ export class DynamicsClient {
     return out;
   }
 
-  async attachmentContent(id: string): Promise<{ id: string; fileName: string; parentId: string; parentType: string; bytes: Buffer }> {
-    if (!/^[a-z0-9-]+$/i.test(id)) throw new Error("Business Central attachment identity is invalid");
-    const response = await this.send(`${this.base}/companies(${this.companyId})/documentAttachments(${id})`);
-    if (!response.ok) throw new Error(`Business Central attachment HTTP ${response.status}; grant document attachment read access and retry`);
-    const row = await response.json() as { id?: string; fileName?: string; attachmentContent?: string; parentId?: string; parentType?: string };
-    if (row.id !== id || typeof row.attachmentContent !== "string" || typeof row.fileName !== "string" || typeof row.parentId !== "string" || typeof row.parentType !== "string") throw new Error("Business Central attachment returned incomplete content or a different identity");
-    return { id: row.id, fileName: row.fileName, parentId: row.parentId, parentType: row.parentType, bytes: decodeAttachmentBase64(row.attachmentContent) };
+  async attachmentContent(
+    id: string,
+  ): Promise<{
+    id: string;
+    fileName: string;
+    parentId: string;
+    parentType: string;
+    bytes: Buffer;
+  }> {
+    if (!/^[a-z0-9-]+$/i.test(id))
+      throw new Error("Business Central attachment identity is invalid");
+    const response = await this.send(
+      `${this.base}/companies(${this.companyId})/documentAttachments(${id})`,
+    );
+    if (!response.ok)
+      throw new Error(
+        `Business Central attachment HTTP ${response.status}; grant document attachment read access and retry`,
+      );
+    const row = (await response.json()) as {
+      id?: string;
+      fileName?: string;
+      attachmentContent?: string;
+      parentId?: string;
+      parentType?: string;
+    };
+    if (
+      row.id !== id ||
+      typeof row.attachmentContent !== "string" ||
+      typeof row.fileName !== "string" ||
+      typeof row.parentId !== "string" ||
+      typeof row.parentType !== "string"
+    )
+      throw new Error(
+        "Business Central attachment returned incomplete content or a different identity",
+      );
+    return {
+      id: row.id,
+      fileName: row.fileName,
+      parentId: row.parentId,
+      parentType: row.parentType,
+      bytes: decodeAttachmentBase64(row.attachmentContent),
+    };
   }
 
   /** ISO instant → OData $filter clause on lastModifiedDateTime (incremental). */

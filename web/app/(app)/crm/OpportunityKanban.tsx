@@ -1,114 +1,99 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import {
-  AlertTriangle,
-  Calendar,
-  User,
-  Search,
-  Building,
-} from 'lucide-react'
-import {
-  Badge,
-  Button,
-  Card,
-  Input,
-  Label,
-  Select,
-  Textarea,
-  cn,
-} from '@openbooks/ui'
-import { toast } from 'sonner'
-import { displayOpportunityStatusName } from '../../../lib/crm-status-display'
-import { isPositiveKanbanAmount, sumKanbanColumnByCurrency } from '../../../lib/crm-kanban-totals'
-import { createMoneyFormatter } from '../../../lib/money-format'
-import { useBusinessToday } from '../../../components/business-date-provider'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { AlertTriangle, Calendar, User, Search, Building } from "lucide-react";
+import { Badge, Button, Card, Input, Label, Select, Textarea, cn } from "@openbooks/ui";
+import { toast } from "sonner";
+import { displayOpportunityStatusName } from "../../../lib/crm-status-display";
+import { isPositiveKanbanAmount, sumKanbanColumnByCurrency } from "../../../lib/crm-kanban-totals";
+import { createMoneyFormatter } from "../../../lib/money-format";
+import { useBusinessToday } from "../../../components/business-date-provider";
 
 export interface KanbanStatus {
-  id: string
-  key: string
-  name: string
-  sequence: number
-  probability: number
-  defaultForecastCategory: string
-  isClosed: boolean
-  isWon: boolean
-  requiresLines?: boolean
-  requiresPrimaryContact?: boolean
-  requiresPositiveAmount?: boolean
-  requiresWinLossReason?: boolean
+  id: string;
+  key: string;
+  name: string;
+  sequence: number;
+  probability: number;
+  defaultForecastCategory: string;
+  isClosed: boolean;
+  isWon: boolean;
+  requiresLines?: boolean;
+  requiresPrimaryContact?: boolean;
+  requiresPositiveAmount?: boolean;
+  requiresWinLossReason?: boolean;
 }
 
 export interface KanbanOpportunity {
-  id: string
-  opportunityNumber: string
-  title: string
-  partyId: string | null
-  partyName: string | null
-  primaryContactId: string | null
-  contactName: string | null
-  ownerUserId: string | null
-  ownerName: string | null
-  salesTeamName: string | null
-  statusId: string
-  forecastCategory: string
-  probability: number
-  currency: string
-  projectedAmount: string
-  weightedAmount: string
-  expectedCloseDate: string | null
-  nextStep: string | null
-  winLossReason: string | null
-  updatedAt: string
-  isStagnant: boolean
-  linesCount: number
+  id: string;
+  opportunityNumber: string;
+  title: string;
+  partyId: string | null;
+  partyName: string | null;
+  primaryContactId: string | null;
+  contactName: string | null;
+  ownerUserId: string | null;
+  ownerName: string | null;
+  salesTeamName: string | null;
+  statusId: string;
+  forecastCategory: string;
+  probability: number;
+  currency: string;
+  projectedAmount: string;
+  weightedAmount: string;
+  expectedCloseDate: string | null;
+  nextStep: string | null;
+  winLossReason: string | null;
+  updatedAt: string;
+  isStagnant: boolean;
+  linesCount: number;
 }
 
-export function OpportunityViewSwitcher({ view = 'list' }: { view?: 'board' | 'list' }) {
-  const router = useRouter()
-  const t = useTranslations('crm')
+export function OpportunityViewSwitcher({ view = "list" }: { view?: "board" | "list" }) {
+  const router = useRouter();
+  const t = useTranslations("crm");
   return (
     <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1 text-xs font-medium dark:border-slate-800 dark:bg-slate-900">
       <button
         type="button"
-        onClick={() => router.push('/crm/opportunities?view=list')}
+        onClick={() => router.push("/crm/opportunities?view=list")}
         className={cn(
-          'flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors',
-          view === 'list'
-            ? 'bg-white shadow-sm dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200',
+          "flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors",
+          view === "list"
+            ? "bg-white shadow-sm dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold"
+            : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200",
         )}
       >
-        <span>{t('opportunities.kanban.listView')}</span>
+        <span>{t("opportunities.kanban.listView")}</span>
       </button>
       <button
         type="button"
-        onClick={() => router.push('/crm/opportunities?view=board')}
+        onClick={() => router.push("/crm/opportunities?view=board")}
         className={cn(
-          'flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors',
-          view === 'board'
-            ? 'bg-white shadow-sm dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold'
-            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200',
+          "flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors",
+          view === "board"
+            ? "bg-white shadow-sm dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-semibold"
+            : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200",
         )}
       >
-        <span>{t('opportunities.kanban.boardView')}</span>
+        <span>{t("opportunities.kanban.boardView")}</span>
       </button>
     </div>
-  )
+  );
 }
 
-const moneyFormatters = new Map<string, (amount: string) => string>()
+const moneyFormatters = new Map<string, (amount: string) => string>();
 
 function formatMoney(amount: string, currency: string, locale: string): string {
-  const key = `${locale}|${currency}`
-  let format = moneyFormatters.get(key)
+  const key = `${locale}|${currency}`;
+  let format = moneyFormatters.get(key);
   if (!format) {
-    format = (value: string) => createMoneyFormatter(locale, currency).money(value)
-    moneyFormatters.set(key, format)
+    format = (value: string) => createMoneyFormatter(locale, currency).money(value);
+    moneyFormatters.set(key, format);
   }
-  return format(amount)
+  return format(amount);
 }
 
 export function OpportunityKanbanBoard({
@@ -117,47 +102,47 @@ export function OpportunityKanbanBoard({
   canManage,
   drawerSlot,
   undatedOnly = false,
-  undatedLabel = '',
-  showAllLabel = '',
+  undatedLabel = "",
+  showAllLabel = "",
 }: {
-  statuses: KanbanStatus[]
-  opportunities: KanbanOpportunity[]
-  canManage: boolean
-  drawerSlot?: React.ReactNode
+  statuses: KanbanStatus[];
+  opportunities: KanbanOpportunity[];
+  canManage: boolean;
+  drawerSlot?: React.ReactNode;
   /** Server-side `undated=1` filter from the forecast exclusion note. */
-  undatedOnly?: boolean
-  undatedLabel?: string
-  showAllLabel?: string
+  undatedOnly?: boolean;
+  undatedLabel?: string;
+  showAllLabel?: string;
 }) {
-  const t = useTranslations('crm')
-  const tc = useTranslations('common')
-  const locale = useLocale()
-  const router = useRouter()
+  const t = useTranslations("crm");
+  const tc = useTranslations("common");
+  const locale = useLocale();
+  const router = useRouter();
   // Overdue compares calendar days in the org's business day: `new
   // Date('YYYY-MM-DD')` is UTC midnight, so anything due today read as
   // overdue for the whole day. YYYY-MM-DD strings compare lexically.
-  const today = useBusinessToday()
+  const today = useBusinessToday();
 
-  const [search, setSearch] = useState('')
-  const [movingId, setMovingId] = useState<string | null>(null)
+  const [search, setSearch] = useState("");
+  const [movingId, setMovingId] = useState<string | null>(null);
   const [lossPrompt, setLossPrompt] = useState<{
-    opportunityId: string
-    targetStatusId: string
-    revision: string
-    reason: string
-  } | null>(null)
+    opportunityId: string;
+    targetStatusId: string;
+    revision: string;
+    reason: string;
+  } | null>(null);
 
   const filteredOpportunities = opportunities.filter((op) => {
-    if (!search.trim()) return true
-    const q = search.toLowerCase()
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
     return (
       op.title.toLowerCase().includes(q) ||
       op.opportunityNumber.toLowerCase().includes(q) ||
       (op.partyName && op.partyName.toLowerCase().includes(q)) ||
       (op.ownerName && op.ownerName.toLowerCase().includes(q)) ||
       (op.contactName && op.contactName.toLowerCase().includes(q))
-    )
-  })
+    );
+  });
 
   async function executeStageChange(
     opportunityId: string,
@@ -165,69 +150,72 @@ export function OpportunityKanbanBoard({
     revision: string,
     winLossReason?: string | null,
   ) {
-    setMovingId(opportunityId)
+    setMovingId(opportunityId);
     try {
       const response = await fetch(`/api/crm/opportunities/${opportunityId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           statusId: targetStatusId,
           winLossReason: winLossReason || null,
           expectedUpdatedAt: revision,
         }),
-      })
+      });
 
-      const result = (await response.json().catch(() => null)) as { error?: string } | null
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) {
-        toast.error(result?.error ?? tc('feedback.saveFailed'))
-        return
+        toast.error(result?.error ?? tc("feedback.saveFailed"));
+        return;
       }
 
-      toast.success(tc('feedback.saved'))
-      router.refresh()
+      toast.success(tc("feedback.saved"));
+      router.refresh();
     } catch {
-      toast.error(tc('feedback.saveFailed'))
+      toast.error(tc("feedback.saveFailed"));
     } finally {
-      setMovingId(null)
-      setLossPrompt(null)
+      setMovingId(null);
+      setLossPrompt(null);
     }
   }
 
   function handleStageChange(opportunity: KanbanOpportunity, newStatusId: string) {
-    if (newStatusId === opportunity.statusId) return
-    const targetStatus = statuses.find((s) => s.id === newStatusId)
-    if (!targetStatus) return
+    if (newStatusId === opportunity.statusId) return;
+    const targetStatus = statuses.find((s) => s.id === newStatusId);
+    if (!targetStatus) return;
 
     // Stage-gating validation
     if (targetStatus.requiresLines && opportunity.linesCount === 0) {
-      toast.error(t('opportunities.kanban.requiresLines'))
-      return
+      toast.error(t("opportunities.kanban.requiresLines"));
+      return;
     }
 
     if (targetStatus.requiresPrimaryContact && !opportunity.primaryContactId) {
-      toast.error(t('opportunities.kanban.requiresPrimaryContact'))
-      return
+      toast.error(t("opportunities.kanban.requiresPrimaryContact"));
+      return;
     }
 
-    if (targetStatus.requiresPositiveAmount && !isPositiveKanbanAmount(opportunity.projectedAmount)) {
-      toast.error(t('opportunities.kanban.requiresPositiveAmount'))
-      return
+    if (
+      targetStatus.requiresPositiveAmount &&
+      !isPositiveKanbanAmount(opportunity.projectedAmount)
+    ) {
+      toast.error(t("opportunities.kanban.requiresPositiveAmount"));
+      return;
     }
 
     const needsLossReason =
-      targetStatus.requiresWinLossReason || (targetStatus.isClosed && !targetStatus.isWon)
+      targetStatus.requiresWinLossReason || (targetStatus.isClosed && !targetStatus.isWon);
 
     if (needsLossReason) {
       setLossPrompt({
         opportunityId: opportunity.id,
         targetStatusId: newStatusId,
         revision: opportunity.updatedAt,
-        reason: opportunity.winLossReason || '',
-      })
-      return
+        reason: opportunity.winLossReason || "",
+      });
+      return;
     }
 
-    executeStageChange(opportunity.id, newStatusId, opportunity.updatedAt)
+    executeStageChange(opportunity.id, newStatusId, opportunity.updatedAt);
   }
 
   return (
@@ -235,7 +223,11 @@ export function OpportunityKanbanBoard({
       {undatedOnly ? (
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{undatedLabel}</Badge>
-          <Button variant="ghost" size="sm" onClick={() => router.push('/crm/opportunities?view=board')}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push("/crm/opportunities?view=board")}
+          >
             {showAllLabel}
           </Button>
         </div>
@@ -244,14 +236,14 @@ export function OpportunityKanbanBoard({
         <div className="relative w-full max-w-sm">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <Input
-            placeholder={t('opportunities.kanban.filterPlaceholder')}
+            placeholder={t("opportunities.kanban.filterPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <div className="text-xs text-slate-500">
-          {t('opportunities.kanban.showingCount', {
+          {t("opportunities.kanban.showingCount", {
             shown: filteredOpportunities.length,
             total: opportunities.length,
           })}
@@ -261,10 +253,10 @@ export function OpportunityKanbanBoard({
       {/* Kanban Horizontal Board */}
       <div className="flex gap-4 overflow-x-auto pb-6 pt-1">
         {statuses.map((status) => {
-          const colOpps = filteredOpportunities.filter((op) => op.statusId === status.id)
+          const colOpps = filteredOpportunities.filter((op) => op.statusId === status.id);
           // Exact per-currency totals: a stage holding CAD 100 and USD 100
           // reports one line per currency, never a converted-looking blend.
-          const colTotals = sumKanbanColumnByCurrency(colOpps)
+          const colTotals = sumKanbanColumnByCurrency(colOpps);
 
           return (
             <div
@@ -276,9 +268,14 @@ export function OpportunityKanbanBoard({
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 truncate font-semibold text-slate-800 dark:text-slate-100">
                     <span className="truncate">
-                      {displayOpportunityStatusName(status.name, (key) => t(`opportunities.statuses.${key}`))}
+                      {displayOpportunityStatusName(status.name, (key) =>
+                        t(`opportunities.statuses.${key}`),
+                      )}
                     </span>
-                    <Badge variant={status.isWon ? 'default' : status.isClosed ? 'secondary' : 'outline'} className="text-[10px]">
+                    <Badge
+                      variant={status.isWon ? "default" : status.isClosed ? "secondary" : "outline"}
+                      className="text-[10px]"
+                    >
                       {status.probability}%
                     </Badge>
                   </div>
@@ -292,11 +289,13 @@ export function OpportunityKanbanBoard({
                       <span className="font-medium text-slate-900 dark:text-slate-200">
                         {formatMoney(total.projected, total.currency, locale)}
                       </span>
-                      {isPositiveKanbanAmount(total.weighted) && total.weighted !== total.projected && (
-                        <span className="text-[11px] text-slate-400">
-                          {t('opportunities.kanban.weighted')}: {formatMoney(total.weighted, total.currency, locale)}
-                        </span>
-                      )}
+                      {isPositiveKanbanAmount(total.weighted) &&
+                        total.weighted !== total.projected && (
+                          <span className="text-[11px] text-slate-400">
+                            {t("opportunities.kanban.weighted")}:{" "}
+                            {formatMoney(total.weighted, total.currency, locale)}
+                          </span>
+                        )}
                     </div>
                   ))}
                 </div>
@@ -305,19 +304,19 @@ export function OpportunityKanbanBoard({
               {/* Column Cards */}
               <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto">
                 {colOpps.map((op) => {
-                  const isBusy = movingId === op.id
+                  const isBusy = movingId === op.id;
                   const isOverdue =
                     op.expectedCloseDate != null &&
-                    op.expectedCloseDate !== '' &&
+                    op.expectedCloseDate !== "" &&
                     !status.isClosed &&
-                    op.expectedCloseDate < today
+                    op.expectedCloseDate < today;
 
                   return (
                     <Card
                       key={op.id}
                       className={cn(
-                        'group relative flex flex-col gap-2.5 rounded-lg border border-slate-200/90 bg-white p-3.5 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 dark:hover:border-slate-700',
-                        isBusy && 'opacity-60 pointer-events-none',
+                        "group relative flex flex-col gap-2.5 rounded-lg border border-slate-200/90 bg-white p-3.5 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 dark:hover:border-slate-700",
+                        isBusy && "opacity-60 pointer-events-none",
                       )}
                     >
                       {/* Deal ID & Badges */}
@@ -333,10 +332,10 @@ export function OpportunityKanbanBoard({
                             <Badge
                               variant="outline"
                               className="border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
-                              title={t('opportunities.kanban.stagnantTitle', { days: 14 })}
+                              title={t("opportunities.kanban.stagnantTitle", { days: 14 })}
                             >
                               <AlertTriangle className="mr-1 h-3 w-3" />
-                              {t('opportunities.kanban.stagnantDays', { days: 14 })}
+                              {t("opportunities.kanban.stagnantDays", { days: 14 })}
                             </Badge>
                           )}
                           <Badge variant="secondary" className="px-1.5 py-0 text-[10px] capitalize">
@@ -379,10 +378,10 @@ export function OpportunityKanbanBoard({
                         {op.expectedCloseDate && (
                           <div
                             className={cn(
-                              'flex items-center gap-1 text-[11px]',
+                              "flex items-center gap-1 text-[11px]",
                               isOverdue
-                                ? 'font-medium text-rose-600 dark:text-rose-400'
-                                : 'text-slate-500',
+                                ? "font-medium text-rose-600 dark:text-rose-400"
+                                : "text-slate-500",
                             )}
                           >
                             <Calendar className="h-3 w-3" />
@@ -394,7 +393,7 @@ export function OpportunityKanbanBoard({
                       {/* Owner & Stage Quick Switch */}
                       <div className="flex items-center justify-between gap-2 pt-1">
                         <span className="truncate text-[11px] text-slate-500">
-                          {op.ownerName || t('fields.unassigned')}
+                          {op.ownerName || t("fields.unassigned")}
                         </span>
                         {canManage && (
                           <Select
@@ -412,17 +411,17 @@ export function OpportunityKanbanBoard({
                         )}
                       </div>
                     </Card>
-                  )
+                  );
                 })}
 
                 {colOpps.length === 0 && (
                   <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400 dark:border-slate-800">
-                    <p>{t('opportunities.kanban.noOpportunities')}</p>
+                    <p>{t("opportunities.kanban.noOpportunities")}</p>
                   </div>
                 )}
               </div>
             </div>
-          )
+          );
         })}
       </div>
 
@@ -431,47 +430,41 @@ export function OpportunityKanbanBoard({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              {t('opportunities.kanban.lossReasonTitle')}
+              {t("opportunities.kanban.lossReasonTitle")}
             </h3>
             <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-              {t('opportunities.kanban.lossReasonDescription')}
+              {t("opportunities.kanban.lossReasonDescription")}
             </p>
             <div className="mt-4 space-y-1.5">
-              <Label className="text-xs">{t('opportunities.kanban.reasonDetails')}</Label>
+              <Label className="text-xs">{t("opportunities.kanban.reasonDetails")}</Label>
               <Textarea
                 rows={4}
-                placeholder={t('opportunities.kanban.reasonPlaceholder')}
+                placeholder={t("opportunities.kanban.reasonPlaceholder")}
                 value={lossPrompt.reason}
-                onChange={(e) =>
-                  setLossPrompt({ ...lossPrompt, reason: e.target.value })
-                }
+                onChange={(e) => setLossPrompt({ ...lossPrompt, reason: e.target.value })}
                 autoFocus
               />
             </div>
             <div className="mt-5 flex justify-end gap-2.5">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setLossPrompt(null)}
-              >
-                {t('opportunities.kanban.cancel')}
+              <Button variant="outline" size="sm" onClick={() => setLossPrompt(null)}>
+                {t("opportunities.kanban.cancel")}
               </Button>
               <Button
                 size="sm"
                 onClick={() => {
                   if (!lossPrompt.reason.trim()) {
-                    toast.error(t('opportunities.kanban.lossReasonRequired'))
-                    return
+                    toast.error(t("opportunities.kanban.lossReasonRequired"));
+                    return;
                   }
                   executeStageChange(
                     lossPrompt.opportunityId,
                     lossPrompt.targetStatusId,
                     lossPrompt.revision,
                     lossPrompt.reason,
-                  )
+                  );
                 }}
               >
-                {t('opportunities.kanban.confirmStageChange')}
+                {t("opportunities.kanban.confirmStageChange")}
               </Button>
             </div>
           </div>
@@ -480,5 +473,5 @@ export function OpportunityKanbanBoard({
 
       {drawerSlot}
     </div>
-  )
+  );
 }

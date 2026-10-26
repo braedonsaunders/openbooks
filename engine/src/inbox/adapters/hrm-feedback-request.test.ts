@@ -21,8 +21,7 @@ const adapterState: FeedbackAdapterState = {
   service: "requests",
   serviceCalls: 0,
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  adapterState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = adapterState;
 
 const mockSources = new Map<string, string>([
   [
@@ -96,11 +95,14 @@ const hooks = registerHooks({
 // hand copy) so the adapter is judged by the rule the product applies.
 // Assigned onto the live state object (never replaced) so reset() below
 // keeps steering the same object the mocks read.
-const { HrmAuthorizationError } = (await import("../../hrm/authorization.ts")) as typeof import("../../hrm/authorization.ts");
+const { HrmAuthorizationError } =
+  (await import("../../hrm/authorization.ts")) as typeof import("../../hrm/authorization.ts");
 Object.assign(adapterState, { HrmAuthorizationError });
 
 const adapterUrl = "./hrm-feedback-request.ts?hrm-feedback-adapter-test";
-const { hrmFeedbackRequestAdapter } = (await import(adapterUrl)) as typeof import("./hrm-feedback-request.ts");
+const { hrmFeedbackRequestAdapter } = (await import(
+  adapterUrl
+)) as typeof import("./hrm-feedback-request.ts");
 hooks.deregister();
 
 const CTX = { orgId: "org-1", actorId: "user-1", asOf: "2026-08-01T00:00:00Z" };

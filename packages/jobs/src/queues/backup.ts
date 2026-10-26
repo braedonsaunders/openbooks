@@ -1,7 +1,7 @@
-import { Queue, type JobsOptions } from 'bullmq'
-import { getConnection } from '../connection'
+import { Queue, type JobsOptions } from "bullmq";
+import { getConnection } from "../connection";
 
-export const BACKUP_QUEUE = 'backup'
+export const BACKUP_QUEUE = "backup";
 
 /**
  * One backup execution, run asynchronously so an export of a large tenant
@@ -10,12 +10,12 @@ export const BACKUP_QUEUE = 'backup'
  * executes it. jobId = runId — a run can only ever be queued once.
  */
 export type BackupJobData = {
-  op: 'run'
-  runId: string
-  orgId: string
-}
+  op: "run";
+  runId: string;
+  orgId: string;
+};
 
-let backupQueue: Queue<BackupJobData> | undefined
+let backupQueue: Queue<BackupJobData> | undefined;
 
 export function getBackupQueue(): Queue<BackupJobData> {
   backupQueue ??= new Queue<BackupJobData>(BACKUP_QUEUE, {
@@ -27,10 +27,10 @@ export function getBackupQueue(): Queue<BackupJobData> {
       removeOnComplete: { age: 7 * 24 * 3600 },
       removeOnFail: { age: 30 * 24 * 3600 },
     },
-  })
-  return backupQueue
+  });
+  return backupQueue;
 }
 
 export async function enqueueBackupRun(data: BackupJobData, options?: JobsOptions) {
-  return getBackupQueue().add(data.op, data, options)
+  return getBackupQueue().add(data.op, data, options);
 }

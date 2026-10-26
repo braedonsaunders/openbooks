@@ -27,9 +27,9 @@ export const FR_TAX_YEARS: PayrollTaxYearSupport = {
       label: "BOI-BAREME-000037-20250410 (grilles à compter du 1er mai 2025)",
       effectiveFrom: "2026-01-01",
       citation:
-        "DGFiP, BOI-BAREME-000037-20250410 (bofip.impots.gouv.fr), "
-        + "grille I métropole; PASS via service-public.gouv.fr A15386 "
-        + "(arrêté du 22 décembre 2025)",
+        "DGFiP, BOI-BAREME-000037-20250410 (bofip.impots.gouv.fr), " +
+        "grille I métropole; PASS via service-public.gouv.fr A15386 " +
+        "(arrêté du 22 décembre 2025)",
       status: "published",
     },
     {
@@ -37,8 +37,8 @@ export const FR_TAX_YEARS: PayrollTaxYearSupport = {
       label: "BOI-BAREME-000037-20260407 (grilles à compter du 1er mai 2026)",
       effectiveFrom: "2026-05-01",
       citation:
-        "DGFiP, BOI-BAREME-000037-20260407 (bofip.impots.gouv.fr; figures "
-        + "unchanged in -20260706), grille I métropole",
+        "DGFiP, BOI-BAREME-000037-20260407 (bofip.impots.gouv.fr; figures " +
+        "unchanged in -20260706), grille I métropole",
       status: "published",
     },
   ],
@@ -56,7 +56,7 @@ export const FR_TAX_YEARS: PayrollTaxYearSupport = {
     steps: [
       "Transcribe the PAS grille de taux par défaut from the loi de finances pour {year} (impots.gouv.fr).",
       "Transcribe the year's URSSAF contribution parameters and plafond de la sécurité sociale (urssaf.fr; ceiling arrêté).",
-      "Add the edition to FR_TAX_YEARS with status \"published\" and the agency citation.",
+      'Add the edition to FR_TAX_YEARS with status "published" and the agency citation.',
       "Add a golden stub test proving the transcribed figures calculate.",
     ],
   },

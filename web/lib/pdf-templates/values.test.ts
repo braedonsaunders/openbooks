@@ -1,98 +1,137 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 interface StubRow {
-  id: string
-  employee_party_id: string
-  currency_code: string
-  tax_year: number
-  pay_date: string
-  gross: string
-  net_pay: string
-  vacation_accrued: string
-  province: string
-  employee_name: string
-  employee_email: string
-  document_number: string
-  period_start: string
-  period_end: string
+  id: string;
+  employee_party_id: string;
+  currency_code: string;
+  tax_year: number;
+  pay_date: string;
+  gross: string;
+  net_pay: string;
+  vacation_accrued: string;
+  province: string;
+  employee_name: string;
+  employee_email: string;
+  document_number: string;
+  period_start: string;
+  period_end: string;
 }
 
 const state = {
   nonCashBenefit: false,
-  ytdQuery: '',
+  ytdQuery: "",
   ytdValues: [] as unknown[],
   stub: {
-    id: 'stub-us-1',
-    employee_party_id: 'employee-1',
-    currency_code: 'USD',
+    id: "stub-us-1",
+    employee_party_id: "employee-1",
+    currency_code: "USD",
     tax_year: 2026,
-    pay_date: '2026-07-21',
-    gross: '4000.0000',
-    net_pay: '3281.6900',
-    vacation_accrued: '0.0000',
-    province: 'TX',
-    employee_name: 'US Employee',
-    employee_email: 'employee@example.test',
-    document_number: 'PAY-0001',
-    period_start: '2026-07-05',
-    period_end: '2026-07-18',
+    pay_date: "2026-07-21",
+    gross: "4000.0000",
+    net_pay: "3281.6900",
+    vacation_accrued: "0.0000",
+    province: "TX",
+    employee_name: "US Employee",
+    employee_email: "employee@example.test",
+    document_number: "PAY-0001",
+    period_start: "2026-07-05",
+    period_end: "2026-07-18",
   } satisfies StubRow,
-}
+};
 
 const flattenValues = (values: unknown[]): unknown[] =>
   values.flatMap((v) =>
-    v !== null && typeof v === 'object' && 'values' in (v as Record<string, unknown>)
+    v !== null && typeof v === "object" && "values" in (v as Record<string, unknown>)
       ? flattenValues((v as { values: unknown[] }).values ?? [])
       : [v],
-  )
+  );
 
 const harness = {
   async execute(query: { text?: string; values?: unknown[] }, mode?: string) {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
-    const text = String(query.text ?? '')
-    if (text.includes('select s.*, r.period_start')) {
-      return inMode({ rows: [state.stub] })
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
+    const text = String(query.text ?? "");
+    if (text.includes("select s.*, r.period_start")) {
+      return inMode({ rows: [state.stub] });
     }
-    if (text.includes('select l.kind, coalesce(c.name, l.description) as description')) {
+    if (text.includes("select l.kind, coalesce(c.name, l.description) as description")) {
       return inMode({
         rows: [
-          { kind: 'earning', component_id: 'regular', description: 'Regular', hours: '80', rate: '50', amount: '4000.0000', taxable: true },
-          { kind: 'deduction', component_id: 'fit', system_key: 'fit', description: 'Federal income tax', hours: null, rate: null, amount: '312.3100' },
-          ...(state.nonCashBenefit ? [{ kind: 'earning', description: 'Gift card', hours: null, rate: null, amount: '100.0000', payment_kind: 'non_cash' }] : []),
+          {
+            kind: "earning",
+            component_id: "regular",
+            description: "Regular",
+            hours: "80",
+            rate: "50",
+            amount: "4000.0000",
+            taxable: true,
+          },
+          {
+            kind: "deduction",
+            component_id: "fit",
+            system_key: "fit",
+            description: "Federal income tax",
+            hours: null,
+            rate: null,
+            amount: "312.3100",
+          },
+          ...(state.nonCashBenefit
+            ? [
+                {
+                  kind: "earning",
+                  description: "Gift card",
+                  hours: null,
+                  rate: null,
+                  amount: "100.0000",
+                  payment_kind: "non_cash",
+                },
+              ]
+            : []),
         ],
-      })
+      });
     }
-    if (text.includes('select l.component_id, l.kind')) {
+    if (text.includes("select l.component_id, l.kind")) {
       // Earlier committed stubs of the year, one aggregated row per component.
       return inMode({
         rows: [
-          { component_id: 'regular', kind: 'earning', payment_kind: 'cash', description: 'Regular', system_key: null, taxable: true, amount: '28000.0000', hours: '560' },
+          {
+            component_id: "regular",
+            kind: "earning",
+            payment_kind: "cash",
+            description: "Regular",
+            system_key: null,
+            taxable: true,
+            amount: "28000.0000",
+            hours: "560",
+          },
         ],
-      })
+      });
     }
-    if (text.includes('select coalesce(sum(s.gross)')) {
-      state.ytdQuery = text
-      state.ytdValues = flattenValues(query.values ?? [])
+    if (text.includes("select coalesce(sum(s.gross)")) {
+      state.ytdQuery = text;
+      state.ytdValues = flattenValues(query.values ?? []);
       // YTD income tax aggregates the persisted income-tax component lines
       // (never an enumerated factor list): without the lines join the stub's
       // federal withholding reads as 0.
-      const tax = text.includes('pay_stub_lines') && text.includes('system_key') ? '312.3100' : '0'
-      return inMode({ rows: [{ gross: '4000.0000', net: '3281.6900', tax }] })
+      const tax = text.includes("pay_stub_lines") && text.includes("system_key") ? "312.3100" : "0";
+      return inMode({ rows: [{ gross: "4000.0000", net: "3281.6900", tax }] });
     }
-    if (text.includes('select name, base_currency')) {
-      return inMode({ rows: [{ name: 'Example Org', base_currency: 'USD', brand_primary: null }] })
+    if (text.includes("select name, base_currency")) {
+      return inMode({ rows: [{ name: "Example Org", base_currency: "USD", brand_primary: null }] });
     }
-    throw new Error(`unexpected query in pay-stub values test: ${text}`)
+    throw new Error(`unexpected query in pay-stub values test: ${text}`);
   },
-}
+};
 
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for('openbooks.pay-stub-values-test')] = harness
+(globalThis as typeof globalThis & Record<symbol, unknown>)[
+  Symbol.for("openbooks.pay-stub-values-test")
+] = harness;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:drizzle-orm',
+    "mock:drizzle-orm",
     `
       export function sql(strings, ...values) {
         return { text: strings.join('?'), values }
@@ -104,7 +143,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:packs',
+    "mock:packs",
     `
       // The registry derivation, stood in: the old five keys plus one novel
       // pack key. The assertions below prove values.ts interpolates THIS
@@ -115,7 +154,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const harness = globalThis[Symbol.for('openbooks.pay-stub-values-test')]
       export const db = { execute: (query, mode) => harness.execute(query, mode) }
@@ -131,7 +170,7 @@ const mockSources = new Map<string, string>([
     // values.ts uses for field-ticket day iteration): pure date math with
     // nothing to isolate, so a hand copy could only drift. businessToday
     // stays pinned — the explicit export shadows the re-exported one.
-    'mock:business-date',
+    "mock:business-date",
     `export * from "@openbooks/engine/platform/business-date/module"
       export async function businessToday() { return '2026-07-22' }`,
   ],
@@ -140,11 +179,11 @@ const mockSources = new Map<string, string>([
   // kernel refuses on principle, so the assertions below used to pin
   // float-shaped behavior. The real bigint kernel loads through tsx.
   [
-    'mock:payroll-cheques',
+    "mock:payroll-cheques",
     `export { amountInWords, issuedChequeBank } from '@openbooks/engine/payroll/cheques'`,
   ],
   [
-    'mock:money-format',
+    "mock:money-format",
     `
       export function createMoneyFormatter(locale, currency) {
         return {
@@ -158,12 +197,9 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  ["mock:locale", `export async function resolveLocale() { return 'en-US' }`],
   [
-    'mock:locale',
-    `export async function resolveLocale() { return 'en-US' }`,
-  ],
-  [
-    'mock:catalog',
+    "mock:catalog",
     `
       export const PDF_RECORD_TYPE_BY_KEY = {
         pay_stub: { key: 'pay_stub', docKind: null, docTitle: 'Pay Stub' },
@@ -172,10 +208,10 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:field-tickets',
+    "mock:field-tickets",
     `export async function loadFieldTicket() { throw new Error('not used in pay-stub test') }`,
   ],
-])
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -183,86 +219,102 @@ registerHooks({
     // import must resolve past this hook to the real file instead of looping
     // back into the mock. Re-based to this file so the workspace alias
     // resolves through node_modules like any other real import.
-    if (context.parentURL?.startsWith('mock:')) {
-      return nextResolve(specifier, { ...context, parentURL: import.meta.url })
+    if (context.parentURL?.startsWith("mock:")) {
+      return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }
     const mocks: Record<string, string> = {
-      'drizzle-orm': 'mock:drizzle-orm',
-      '@openbooks/engine/platform/db': 'mock:db',
-      '@openbooks/engine/payroll/packs': 'mock:packs',
-      '@openbooks/engine/platform/business-date/module': 'mock:business-date',
-      '@openbooks/engine/payroll/cheques': 'mock:payroll-cheques',
-      '../money-format': 'mock:money-format',
-      '../locale': 'mock:locale',
-      './catalog': 'mock:catalog',
-      '../field-tickets': 'mock:field-tickets',
-    }
-    const url = mocks[specifier]
-    if (url) return { url, shortCircuit: true }
-    return nextResolve(specifier, context)
+      "drizzle-orm": "mock:drizzle-orm",
+      "@openbooks/engine/platform/db": "mock:db",
+      "@openbooks/engine/payroll/packs": "mock:packs",
+      "@openbooks/engine/platform/business-date/module": "mock:business-date",
+      "@openbooks/engine/payroll/cheques": "mock:payroll-cheques",
+      "../money-format": "mock:money-format",
+      "../locale": "mock:locale",
+      "./catalog": "mock:catalog",
+      "../field-tickets": "mock:field-tickets",
+    };
+    const url = mocks[specifier];
+    if (url) return { url, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const valuesUrl = new URL('./values.ts?us-ytd-tax-test', import.meta.url).href
-const { loadPdfRecordValues } = (await import(valuesUrl)) as typeof import('./values.ts')
+const valuesUrl = new URL("./values.ts?us-ytd-tax-test", import.meta.url).href;
+const { loadPdfRecordValues } = (await import(valuesUrl)) as typeof import("./values.ts");
 
-test('US pay-stub YTD income tax aggregates persisted income-tax lines and preserves pay totals', async () => {
-  const record = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id, null)
+test("US pay-stub YTD income tax aggregates persisted income-tax lines and preserves pay totals", async () => {
+  const record = await loadPdfRecordValues("pay_stub", "org-1", state.stub.id, null);
 
-  assert.ok(record)
+  assert.ok(record);
   // The YTD subquery joins the persisted lines and binds the registry-derived
   // component set — never a literal key list, never factor names.
-  assert.match(state.ytdQuery, /pay_stub_lines/)
-  assert.match(state.ytdQuery, /system_key/)
-  for (const key of ['fit', 'income_tax', 'qc_income_tax', 'state_income_tax', 'local_income_tax']) {
-    assert.ok(state.ytdValues.includes(key), `YTD tax counts ${key}`)
+  assert.match(state.ytdQuery, /pay_stub_lines/);
+  assert.match(state.ytdQuery, /system_key/);
+  for (const key of [
+    "fit",
+    "income_tax",
+    "qc_income_tax",
+    "state_income_tax",
+    "local_income_tax",
+  ]) {
+    assert.ok(state.ytdValues.includes(key), `YTD tax counts ${key}`);
   }
   // payg_withholding comes from the derivation mock, not from any literal in
   // values.ts: its presence proves the query interpolates the helper's list.
-  assert.ok(state.ytdValues.includes('payg_withholding'), 'YTD tax counts the derived pack key')
-  assert.doesNotMatch(state.ytdQuery, /factors->>/)
-  assert.equal(record.values.ytd_tax, '$312.31')
-  assert.equal(record.values.ytd_gross, '$4,000.00')
-  assert.equal(record.values.ytd_net, '$3,281.69')
+  assert.ok(state.ytdValues.includes("payg_withholding"), "YTD tax counts the derived pack key");
+  assert.doesNotMatch(state.ytdQuery, /factors->>/);
+  assert.equal(record.values.ytd_tax, "$312.31");
+  assert.equal(record.values.ytd_gross, "$4,000.00");
+  assert.equal(record.values.ytd_net, "$3,281.69");
   // Every statement row carries its own year-to-date: earlier committed
   // stubs plus this one, and the income-tax line lands under withholdings.
   assert.deepEqual(
-    (record.values.earnings_detail as Array<Record<string, string>>).map((row) => [row.description, row.current, row.ytd_amount]),
-    [['Regular', '$4,000.00', '$32,000.00']],
-  )
+    (record.values.earnings_detail as Array<Record<string, string>>).map((row) => [
+      row.description,
+      row.current,
+      row.ytd_amount,
+    ]),
+    [["Regular", "$4,000.00", "$32,000.00"]],
+  );
   assert.deepEqual(
-    (record.values.withholdings as Array<Record<string, string>>).map((row) => [row.description, row.ytd_amount]),
-    [['Federal income tax', '$312.31']],
-  )
-})
+    (record.values.withholdings as Array<Record<string, string>>).map((row) => [
+      row.description,
+      row.ytd_amount,
+    ]),
+    [["Federal income tax", "$312.31"]],
+  );
+});
 
-
-test('pay-stub benefits reconcile reported gross to cash earnings without increasing the persisted cash payment', async () => {
-  state.nonCashBenefit = true
-  const previousGross = state.stub.gross
-  state.stub.gross = '4100.0000'
+test("pay-stub benefits reconcile reported gross to cash earnings without increasing the persisted cash payment", async () => {
+  state.nonCashBenefit = true;
+  const previousGross = state.stub.gross;
+  state.stub.gross = "4100.0000";
   try {
-    const record = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id, null)
-    assert.ok(record)
-    assert.equal(record.values.gross, '$4,100.00')
-    assert.equal(record.values.non_cash_earnings, '$100.00')
-    assert.equal(record.values.cash_gross, '$4,000.00')
-    assert.equal(record.values.net_pay, '$3,281.69', 'the PDF uses persisted cash net rather than paying the benefit again')
-    assert.equal(record.values.has_non_cash_earnings, true)
-    const earnings = record.values.earnings as Array<{ description: string; non_cash: boolean }>
-    assert.equal(earnings.find(line => line.description === 'Gift card')?.non_cash, true)
+    const record = await loadPdfRecordValues("pay_stub", "org-1", state.stub.id, null);
+    assert.ok(record);
+    assert.equal(record.values.gross, "$4,100.00");
+    assert.equal(record.values.non_cash_earnings, "$100.00");
+    assert.equal(record.values.cash_gross, "$4,000.00");
+    assert.equal(
+      record.values.net_pay,
+      "$3,281.69",
+      "the PDF uses persisted cash net rather than paying the benefit again",
+    );
+    assert.equal(record.values.has_non_cash_earnings, true);
+    const earnings = record.values.earnings as Array<{ description: string; non_cash: boolean }>;
+    assert.equal(earnings.find((line) => line.description === "Gift card")?.non_cash, true);
   } finally {
-    state.nonCashBenefit = false
-    state.stub.gross = previousGross
+    state.nonCashBenefit = false;
+    state.stub.gross = previousGross;
   }
-  const cashRecord = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id, null)
-  assert.ok(cashRecord)
-  assert.equal(cashRecord.values.non_cash_earnings, '$0.00')
-  assert.equal(cashRecord.values.cash_gross, cashRecord.values.gross)
-  assert.equal(cashRecord.values.has_non_cash_earnings, false)
-})
+  const cashRecord = await loadPdfRecordValues("pay_stub", "org-1", state.stub.id, null);
+  assert.ok(cashRecord);
+  assert.equal(cashRecord.values.non_cash_earnings, "$0.00");
+  assert.equal(cashRecord.values.cash_gross, cashRecord.values.gross);
+  assert.equal(cashRecord.values.has_non_cash_earnings, false);
+});

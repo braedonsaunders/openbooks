@@ -17,7 +17,11 @@ registerHooks({
     // The route factory imports the gate by @/ alias at request time, from
     // web/lib/api/route.ts rather than the route directory; serve it the
     // same intended session as the route's own import.
-    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/compliance/lien-waivers/"))) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") &&
+        context.parentURL?.includes("/api/compliance/lien-waivers/"))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -32,7 +36,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST: create } = await import("./route");
 
 const json = (body: unknown) =>
@@ -44,14 +49,20 @@ const json = (body: unknown) =>
 
 async function directionOf(orgId: string, id: string): Promise<string | undefined> {
   const r = await withBypassContext(() =>
-    db.execute<{ direction: string }>(sql`select direction from lien_waivers where id = ${id} and org_id = ${orgId}`, "objects"),
+    db.execute<{ direction: string }>(
+      sql`select direction from lien_waivers where id = ${id} and org_id = ${orgId}`,
+      "objects",
+    ),
   );
   return r[0]?.direction;
 }
 
 async function waiverCount(orgId: string): Promise<number> {
   const r = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from lien_waivers where org_id = ${orgId}`, "objects"),
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from lien_waivers where org_id = ${orgId}`,
+      "objects",
+    ),
   );
   return r[0]!.n;
 }
@@ -59,16 +70,25 @@ async function waiverCount(orgId: string): Promise<number> {
 test("lien-waiver creation rejects an unrecognised direction", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
     await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true, "projects": true}}'::jsonb where id = ${org.orgId}`),
+      db.execute(
+        sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true, "projects": true}}'::jsonb where id = ${org.orgId}`,
+      ),
     );
     const partyId = randomUUID();
     const projectId = randomUUID();
-    await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-      values (${partyId},${org.orgId},'vendor','Waiver vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
-    await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
-      values (${projectId},${org.orgId},${org.subsidiaryId},'WAIVER','Waiver project',${org.customerId},'active',true,'{}'::jsonb)`));
+    await withBypassContext(() =>
+      db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+      values (${partyId},${org.orgId},'vendor','Waiver vendor',${org.subsidiaryId},true,'{}'::jsonb)`),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+      values (${projectId},${org.orgId},${org.subsidiaryId},'WAIVER','Waiver project',${org.customerId},'active',true,'{}'::jsonb)`),
+    );
     const base = {
       partyId,
       projectId,
@@ -80,13 +100,21 @@ test("lien-waiver creation rejects an unrecognised direction", async () => {
 
     // Controls: the two documented directions keep working, omission still
     // defaults to received.
-    for (const [direction, expected] of [["received", "received"], ["issued", "issued"], [undefined, "received"]] as const) {
+    for (const [direction, expected] of [
+      ["received", "received"],
+      ["issued", "issued"],
+      [undefined, "received"],
+    ] as const) {
       const body = { ...base };
       if (direction !== undefined) Object.assign(body, { direction });
       // The route's feature gate reads org settings through the ambient
       // scope, as the middleware provides in production.
       const created = await withOrgContext(org.orgId, () => create(json(body)));
-      assert.equal(created.status, 200, `direction ${String(direction)}: ${JSON.stringify(await created.clone().json())}`);
+      assert.equal(
+        created.status,
+        200,
+        `direction ${String(direction)}: ${JSON.stringify(await created.clone().json())}`,
+      );
       const { id } = (await created.json()) as { id: string };
       assert.equal(await directionOf(org.orgId, id), expected);
     }

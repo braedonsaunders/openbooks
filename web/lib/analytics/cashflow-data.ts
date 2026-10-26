@@ -72,7 +72,10 @@ export interface CashflowData {
    * flattening every week's transactions in the browser, which is the only
    * reason the page had to ship them.
    */
-  partyTotals: { ar: { name: string; amount: string; count: number }[]; ap: { name: string; amount: string; count: number }[] };
+  partyTotals: {
+    ar: { name: string; amount: string; count: number }[];
+    ap: { name: string; amount: string; count: number }[];
+  };
   summary: {
     startingCash: string;
     projectedEnd: string;
@@ -117,22 +120,25 @@ export async function cashflowData(
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, apCfg, fiscalStart, accountRows] = await Promise.all([
-    openItems(orgId, "ar", asOfIso, subIds),
-    openItems(orgId, "ap", asOfIso, subIds),
-    paymentStats("ar", asOfIso, subIds, orgId),
-    paymentStats("ap", asOfIso, subIds, orgId),
-    bankBalances(asOfIso, subIds, orgId),
-    loadCategories(orgId),
-    analyticsConfig(orgId, "cashflow"),
-    fiscalStartMonth(orgId),
-    (analyticsSection('cashflow', []) ? analyticsQuery<AccountOptionRow>(sql`
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, apCfg, fiscalStart, accountRows] =
+    await Promise.all([
+      openItems(orgId, "ar", asOfIso, subIds),
+      openItems(orgId, "ap", asOfIso, subIds),
+      paymentStats("ar", asOfIso, subIds, orgId),
+      paymentStats("ap", asOfIso, subIds, orgId),
+      bankBalances(asOfIso, subIds, orgId),
+      loadCategories(orgId),
+      analyticsConfig(orgId, "cashflow"),
+      fiscalStartMonth(orgId),
+      analyticsSection("cashflow", [])
+        ? analyticsQuery<AccountOptionRow>(sql`
       select id, number, name from accounts
       where org_id = ${orgId} and is_summary = false
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
       order by number nulls last, name
-    `) : Promise.resolve({rows:[]})),
-  ]);
+    `)
+        : Promise.resolve({ rows: [] }),
+    ]);
   const weeklyCap = normalizeMoneyValue(String(apCfg.weeklyApCap ?? 0));
   const restrictToSafe = (apCfg.restrictToSafe ?? 0) >= 1;
   // The forecast-model knobs ride the config already read above — no second
@@ -146,14 +152,27 @@ export async function cashflowData(
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model, true);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
-    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart };
+    Object.fromEntries(
+      [...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]),
+    );
+  const catContext = {
+    arWeekly: weekTotals(ar.byWeek),
+    apWeekly: weekTotals(ap.byWeek),
+    cashStart: startingCash,
+    model,
+    subIds,
+    fiscalStartMonth: fiscalStart,
+  };
   const visibleCategoryConfigs = catConfigs.filter((category) =>
     isCategoryVisibleInScope(category, subIds, allowedSubsidiaryIds),
   );
   // A refusing category contributes zeros and names its reason; the rest of
   // the forecast still renders. Anything else still throws.
-  const categories = await Promise.all(visibleCategoryConfigs.map((c) => forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
+  const categories = await Promise.all(
+    visibleCategoryConfigs.map((c) =>
+      forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale),
+    ),
+  );
 
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
@@ -181,15 +200,27 @@ export async function cashflowData(
   const projectedEnd = weeks.length ? weeks[weeks.length - 1]!.endingCash : startingCash;
   const burnRate = weeks.length ? divideMoney(totalOut, String(weeks.length)) : ZERO_MONEY;
   // Runway: weeks of cash at the current burn rate (net of inflows if positive).
-  const netBurn = subtractMoney(burnRate, weeks.length ? divideMoney(totalIn, String(weeks.length)) : ZERO_MONEY);
-  const runwayWeeks = compareMoney(netBurn, ZERO_MONEY) > 0 && compareMoney(startingCash, ZERO_MONEY) > 0 ? divideMoney(startingCash, netBurn) : compareMoney(startingCash, ZERO_MONEY) > 0 ? null : ZERO_MONEY;
+  const netBurn = subtractMoney(
+    burnRate,
+    weeks.length ? divideMoney(totalIn, String(weeks.length)) : ZERO_MONEY,
+  );
+  const runwayWeeks =
+    compareMoney(netBurn, ZERO_MONEY) > 0 && compareMoney(startingCash, ZERO_MONEY) > 0
+      ? divideMoney(startingCash, netBurn)
+      : compareMoney(startingCash, ZERO_MONEY) > 0
+        ? null
+        : ZERO_MONEY;
   // Same single caution read as cashPosition: the config already fetched
   // above, or the spec default for a legacy config row without the key.
   const cautionWeeks = String(
     apCfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
   );
   const runwayStatus: "healthy" | "caution" | "critical" =
-    compareMoney(lowestCash, ZERO_MONEY) < 0 ? "critical" : runwayWeeks !== null && compareMoney(runwayWeeks, cautionWeeks) < 0 ? "caution" : "healthy";
+    compareMoney(lowestCash, ZERO_MONEY) < 0
+      ? "critical"
+      : runwayWeeks !== null && compareMoney(runwayWeeks, cautionWeeks) < 0
+        ? "caution"
+        : "healthy";
 
   const arSummary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg, ar.unplaced);
   const apSummary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg, ap.unplaced);
@@ -213,7 +244,9 @@ export async function cashflowData(
     startingCash,
     bankAccounts: banks,
     weeks,
-    partyTotals: analyticsSection('cashflow', ['category']) ? { ar: partyTotalsFor("ar"), ap: partyTotalsFor("ap") } : {ar: [], ap: []},
+    partyTotals: analyticsSection("cashflow", ["category"])
+      ? { ar: partyTotalsFor("ar"), ap: partyTotalsFor("ap") }
+      : { ar: [], ap: [] },
     summary: {
       startingCash,
       projectedEnd,
@@ -226,17 +259,36 @@ export async function cashflowData(
       runwayWeeks,
       runwayStatus,
       // Coverage formula: (starting cash + AR outstanding) / AP outstanding.
-      arCoverage: compareMoney(apSummary.outstanding, ZERO_MONEY) > 0 ? divideMoney(addMoney(startingCash, arSummary.outstanding), apSummary.outstanding) : null,
+      arCoverage:
+        compareMoney(apSummary.outstanding, ZERO_MONEY) > 0
+          ? divideMoney(addMoney(startingCash, arSummary.outstanding), apSummary.outstanding)
+          : null,
       dso: arStats.globalAvg,
       dpo: apStats.globalAvg,
     },
     ar: arSummary,
-    arNotForecast: { horizonDays: model.collectibilityHorizonDays, count: ar.notForecast.count, total: ar.notForecast.total },
+    arNotForecast: {
+      horizonDays: model.collectibilityHorizonDays,
+      count: ar.notForecast.count,
+      total: ar.notForecast.total,
+    },
     ap: apSummary,
     categories,
     apSettings: { weeklyCap, restrictToSafe },
     deferredBeyondHorizon: timeline.deferredBeyondHorizon,
-    vendorOptions: analyticsSection('cashflow', []) ? [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)) : [],
-    accountOptions: accountRows.rows.map((a) => ({ id: a.id, number: a.number ?? null, name: a.name })),
+    vendorOptions: analyticsSection("cashflow", [])
+      ? [
+          ...new Map(
+            apItems
+              .filter((i) => i.partyId)
+              .map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }]),
+          ).values(),
+        ].sort((a, b) => a.name.localeCompare(b.name))
+      : [],
+    accountOptions: accountRows.rows.map((a) => ({
+      id: a.id,
+      number: a.number ?? null,
+      name: a.name,
+    })),
   };
 }

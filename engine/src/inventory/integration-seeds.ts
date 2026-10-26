@@ -39,7 +39,9 @@ export async function receiveTen(org: StockCountSeedOrg): Promise<void> {
   });
 }
 
-export async function openCountingLine(org: StockCountSeedOrg): Promise<{ countId: string; lineId: string }> {
+export async function openCountingLine(
+  org: StockCountSeedOrg,
+): Promise<{ countId: string; lineId: string }> {
   await receiveTen(org);
   const count = await createStockCount(org.orgId, null, {
     locationId: org.locationId,
@@ -48,23 +50,38 @@ export async function openCountingLine(org: StockCountSeedOrg): Promise<{ countI
     lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
   });
   await startStockCount(org.orgId, null, count.id);
-  const lineId = (await db.execute<{ id: string }>(sql`
-    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`, "objects"))[0]!.id;
+  const lineId = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`,
+      "objects",
+    )
+  )[0]!.id;
   return { countId: count.id, lineId };
 }
 
 export async function deactivateItem(orgId: string, itemId: string): Promise<void> {
-  const r = await db.execute<{ id: string }>(sql`
+  const r = await db.execute<{ id: string }>(
+    sql`
     update items set is_active = false, updated_at = now()
      where org_id = ${orgId} and id = ${itemId}
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   assert.equal(r.length, 1, "deactivation must match exactly one row");
 }
 
-export async function postedCounts(orgId: string): Promise<{ movements: number; entries: number; layers: number }> {
-  return (await db.execute<{ movements: number; entries: number; layers: number }>(sql`
+export async function postedCounts(
+  orgId: string,
+): Promise<{ movements: number; entries: number; layers: number }> {
+  return (
+    await db.execute<{ movements: number; entries: number; layers: number }>(
+      sql`
     select (select count(*)::int from inventory_movements where org_id = ${orgId}) as movements,
            (select count(*)::int from journal_entries where org_id = ${orgId}) as entries,
            (select count(*)::int from cost_layers where org_id = ${orgId}) as layers
-  `, "objects"))[0]!;
+  `,
+      "objects",
+    )
+  )[0]!;
 }

@@ -26,9 +26,13 @@ export async function warehousePositions(
   opts: { kinds?: readonly string[] } = {},
 ): Promise<WarehousePosition[]> {
   const kindFilter = opts.kinds?.length
-    ? sql`and t.kind in (${sql.join(opts.kinds.map((kind) => sql`${kind}`), sql`, `)})`
+    ? sql`and t.kind in (${sql.join(
+        opts.kinds.map((kind) => sql`${kind}`),
+        sql`, `,
+      )})`
     : sql``;
-  const r = await runner.execute<WarehousePosition>(sql`
+  const r = await runner.execute<WarehousePosition>(
+    sql`
     with recursive tree as (
       select id, kind, 0 as depth from stock_locations where org_id = ${orgId} and id = ${warehouseId}
       union all
@@ -47,7 +51,9 @@ export async function warehousePositions(
           join inventory_movements mv on mv.id = pc.issue_movement_id and mv.org_id = pc.org_id
          where pc.org_id = ${orgId} and pc.remaining_quantity <> 0 and pc.stock_location_id in (select id from scoped)
       ) p
-     order by 1, 2, 3`, "objects");
+     order by 1, 2, 3`,
+    "objects",
+  );
   return r;
 }
 
@@ -61,7 +67,8 @@ export async function assertStockLocationDeletionAllowed(
   orgId: string,
   stockLocationId: string,
 ): Promise<void> {
-  const locations = await tx.execute<StockLocationTreeRow>(sql`
+  const locations = await tx.execute<StockLocationTreeRow>(
+    sql`
     with recursive subtree as (
       select id, parent_id, code, 0 as depth
         from stock_locations where org_id = ${orgId} and id = ${stockLocationId}
@@ -73,23 +80,35 @@ export async function assertStockLocationDeletionAllowed(
     select location.id, location.parent_id, location.code, subtree.depth
       from subtree join stock_locations location on location.id = subtree.id and location.org_id = ${orgId}
      order by location.id
-     for update of location`, "objects");
+     for update of location`,
+    "objects",
+  );
   if (locations.length === 0) {
-    throw new WarehouseRefusal("stock location was not found", "stock_location_not_found", "choose an existing stock location", 422);
+    throw new WarehouseRefusal(
+      "stock location was not found",
+      "stock_location_not_found",
+      "choose an existing stock location",
+      422,
+    );
   }
 
   const root = locations.find((location) => location.id === stockLocationId)!;
   const locationById = new Map(locations.map((location) => [location.id, location]));
   const ids = uuidArray(locations.map((location) => location.id));
 
-  const reservation = (await tx.execute<PickLocationReservation>(sql`
+  const reservation = (
+    await tx.execute<PickLocationReservation>(
+      sql`
     with ${pickReservationsCte(orgId)}
     select reservations.pick_list_number, location.code as bin_code
       from pick_reservations reservations
       join stock_locations location on location.id = reservations.bin_id and location.org_id = ${orgId}
      where reservations.reserved > 0 and reservations.bin_id = any(${ids}::uuid[])
      order by reservations.pick_list_number, location.code
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (reservation) {
     const remedy = `ship or void pick list ${reservation.pick_list_number} first`;
     throw new WarehouseRefusal(
@@ -105,7 +124,8 @@ export async function assertStockLocationDeletionAllowed(
       subsidiaryId: position.subsidiaryId,
     });
     if (isZero(onHand.quantity)) continue;
-    const blockerLocation = locationById.get(position.stockLocationId)?.code ?? position.stockLocationId;
+    const blockerLocation =
+      locationById.get(position.stockLocationId)?.code ?? position.stockLocationId;
     const remedy = "transfer or issue the remaining stock first";
     throw new WarehouseRefusal(
       `Stock location ${root.code} cannot be deleted because ${onHand.quantity} remains on hand at ${blockerLocation}.`,
@@ -114,7 +134,9 @@ export async function assertStockLocationDeletionAllowed(
     );
   }
 
-  const history = (await tx.execute<StockLocationHistory>(sql`
+  const history = (
+    await tx.execute<StockLocationHistory>(
+      sql`
     select location.code, refs.blocker
       from (
         select stock_location_id as location_id, 'inventory movement history' as blocker from inventory_movements where org_id = ${orgId}
@@ -134,7 +156,10 @@ export async function assertStockLocationDeletionAllowed(
       join stock_locations location on location.id = refs.location_id and location.org_id = ${orgId}
      where location.id = any(${ids}::uuid[])
      order by location.code, refs.blocker
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (history) {
     throw new WarehouseRefusal(
       `Stock location ${root.code} cannot be deleted because ${history.blocker} at ${history.code} preserves its audit history.`,
@@ -154,7 +179,11 @@ export async function assertStockLocationDeletionAllowed(
 }
 
 /** Retirement refuses while anything is on hand, naming each item and quantity. */
-export async function assertWarehouseEmpty(tx: Runner, orgId: string, warehouse: WarehouseRecord): Promise<void> {
+export async function assertWarehouseEmpty(
+  tx: Runner,
+  orgId: string,
+  warehouse: WarehouseRecord,
+): Promise<void> {
   const byItem = new Map<string, string>();
   for (const position of await warehousePositions(tx, orgId, warehouse.id)) {
     const onHand = await getOnHandWith(tx, orgId, position.itemId, position.stockLocationId, {
@@ -166,9 +195,15 @@ export async function assertWarehouseEmpty(tx: Runner, orgId: string, warehouse:
   }
   const remaining = [...byItem].filter(([, quantity]) => !isZero(quantity));
   if (remaining.length === 0) return;
-  const labels = await tx.execute<{ id: string; label: string }>(sql`
+  const labels = await tx.execute<{ id: string; label: string }>(
+    sql`
     select id, coalesce(nullif(code, ''), name) as label from items
-     where org_id = ${orgId} and id in (${sql.join(remaining.map(([id]) => sql`${id}`), sql`, `)})`, "objects");
+     where org_id = ${orgId} and id in (${sql.join(
+       remaining.map(([id]) => sql`${id}`),
+       sql`, `,
+     )})`,
+    "objects",
+  );
   const labelOf = new Map(labels.map((row) => [row.id, row.label]));
   const listed = remaining
     .map(([itemId, quantity]) => ({ label: labelOf.get(itemId) ?? itemId, quantity }))
@@ -216,8 +251,12 @@ export async function warehouseStockTieOut(
       ? sql``
       : subsidiaryIds.length === 0
         ? sql`and false`
-        : sql`and ${column} in (${sql.join(subsidiaryIds.map((id) => sql`${id}::uuid`), sql`, `)})`;
-  const positions = await runner.execute<WarehousePosition & { warehouseId: string | null }>(sql`
+        : sql`and ${column} in (${sql.join(
+            subsidiaryIds.map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`;
+  const positions = await runner.execute<WarehousePosition & { warehouseId: string | null }>(
+    sql`
     select p.item_id as "itemId", p.stock_location_id as "stockLocationId", p.subsidiary_id as "subsidiaryId",
            stock_location_warehouse(${orgId}::uuid, p.stock_location_id) as "warehouseId"
       from (
@@ -229,7 +268,9 @@ export async function warehouseStockTieOut(
           join inventory_movements mv on mv.id = pc.issue_movement_id and mv.org_id = pc.org_id
          where pc.org_id = ${orgId} and pc.remaining_quantity <> 0 ${subsidiaryFilter(sql.raw("mv.subsidiary_id"))}
       ) p
-     order by 1, 2, 3`, "objects");
+     order by 1, 2, 3`,
+    "objects",
+  );
   const valueByWarehouse = new Map<string | null, string[]>();
   for (const position of positions) {
     const onHand = await getOnHandWith(runner, orgId, position.itemId, position.stockLocationId, {
@@ -239,11 +280,19 @@ export async function warehouseStockTieOut(
     values.push(onHand.value);
     valueByWarehouse.set(position.warehouseId, values);
   }
-  const warehouses = await runner.execute<{ id: string; code: string; name: string; status: WarehouseStatus }>(sql`
+  const warehouses = await runner.execute<{
+    id: string;
+    code: string;
+    name: string;
+    status: WarehouseStatus;
+  }>(
+    sql`
     select w.stock_location_id as id, sl.code, w.name, w.status
       from warehouses w join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id
      where w.org_id = ${orgId}
-     order by sl.code`, "objects");
+     order by sl.code`,
+    "objects",
+  );
   const rows: WarehouseTieOutRow[] = warehouses.map((w) => ({
     warehouseId: w.id,
     code: w.code,
@@ -252,23 +301,41 @@ export async function warehouseStockTieOut(
     value: sum(valueByWarehouse.get(w.id) ?? []),
   }));
   const unassigned = valueByWarehouse.get(null);
-  if (unassigned) rows.push({ warehouseId: null, code: null, name: null, status: null, value: sum(unassigned) });
-  const accounts = await runner.execute<{ id: string }>(sql`
-    select distinct asset_account_id as id from item_inventory_profiles where org_id = ${orgId} order by 1`, "objects");
+  if (unassigned)
+    rows.push({ warehouseId: null, code: null, name: null, status: null, value: sum(unassigned) });
+  const accounts = await runner.execute<{ id: string }>(
+    sql`
+    select distinct asset_account_id as id from item_inventory_profiles where org_id = ${orgId} order by 1`,
+    "objects",
+  );
   const controlAccountIds = accounts.map((a) => a.id);
   let controlBalance = "0";
   if (controlAccountIds.length > 0) {
-    const balance = (await runner.execute<{ balance: string }>(sql`
+    const balance = (
+      await runner.execute<{ balance: string }>(
+        sql`
       select coalesce(sum(l.amount), 0)::text as balance
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounting_books b on b.id = e.book_id and b.org_id = e.org_id and b.is_primary
        where l.org_id = ${orgId}
          and e.status in ('posted', 'reversed')
-         and l.account_id in (${sql.join(controlAccountIds.map((id) => sql`${id}::uuid`), sql`, `)})
-         ${subsidiaryFilter(sql.raw("e.subsidiary_id"))}`, "objects"))[0];
+         and l.account_id in (${sql.join(
+           controlAccountIds.map((id) => sql`${id}::uuid`),
+           sql`, `,
+         )})
+         ${subsidiaryFilter(sql.raw("e.subsidiary_id"))}`,
+        "objects",
+      )
+    )[0];
     controlBalance = sum([balance?.balance ?? "0"]);
   }
   const layerTotal = sum(rows.map((row) => row.value));
-  return { rows, layerTotal, controlBalance, difference: sum([layerTotal, neg(controlBalance)]), controlAccountIds };
+  return {
+    rows,
+    layerTotal,
+    controlBalance,
+    difference: sum([layerTotal, neg(controlBalance)]),
+    controlAccountIds,
+  };
 }

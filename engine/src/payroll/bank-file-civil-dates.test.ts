@@ -48,8 +48,13 @@ const SINGLE: PayRunBankFileInputs = {
   population: { entries: [], total: "2500.0000", excludedCheque: [], excludedTotal: "0.0000" },
   credits: [
     {
-      stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIRED", amount: "2500.0000",
-      employeeNumber: "EMP-0001", routing: {}, accountNumber: "000123456789",
+      stubId: "s1",
+      employeePartyId: "p1",
+      employeeName: "ADA WIRED",
+      amount: "2500.0000",
+      employeeNumber: "EMP-0001",
+      routing: {},
+      accountNumber: "000123456789",
     },
   ],
 };
@@ -91,12 +96,17 @@ interface RailCase {
 const CASES: RailCase[] = [
   {
     format: "bacs",
-    inputs: withCreditRouting("bacs", { sortCode: "20-45-12" }, {
-      sortCode: "20-45-12",
-      accountNumber: "12345678",
-    }),
+    inputs: withCreditRouting(
+      "bacs",
+      { sortCode: "20-45-12" },
+      {
+        sortCode: "20-45-12",
+        accountNumber: "12345678",
+      },
+    ),
     build: {
-      bacsVolSerial: "000007", bacsFileNumber: "007",
+      bacsVolSerial: "000007",
+      bacsFileNumber: "007",
       bacs: {
         serviceUserNumber: "123456",
         originatingSortCode: "60-16-13",
@@ -155,10 +165,14 @@ const CASES: RailCase[] = [
   },
   {
     format: "sepa",
-    inputs: withCreditRouting("sepa", {}, {
-      iban: "FR1420041010050500013M02606",
-      bic: "AGRIFRPPXXX",
-    }),
+    inputs: withCreditRouting(
+      "sepa",
+      {},
+      {
+        iban: "FR1420041010050500013M02606",
+        bic: "AGRIFRPPXXX",
+      },
+    ),
     build: {
       messageId: "PBF-000007",
       sepa: {
@@ -174,10 +188,14 @@ const CASES: RailCase[] = [
   },
   {
     format: "cemtex",
-    inputs: withCreditRouting("cemtex", { bsb: "062-692" }, {
-      bsb: "062-692",
-      accountNumber: "43214321",
-    }),
+    inputs: withCreditRouting(
+      "cemtex",
+      { bsb: "062-692" },
+      {
+        bsb: "062-692",
+        accountNumber: "43214321",
+      },
+    ),
     build: {
       cemtex: {
         bankAbbreviation: "CBA",
@@ -197,13 +215,17 @@ const CASES: RailCase[] = [
   },
   {
     format: "zengin",
-    inputs: withCreditRouting("zengin", { bankCode: "0005", branchCode: "110", depositType: "1" }, {
-      bankCode: "0005",
-      branchCode: "110",
-      depositType: "1",
-      payeeKana: "ｴｲﾃﾞｨｰ",
-      accountNumber: "8000001",
-    }),
+    inputs: withCreditRouting(
+      "zengin",
+      { bankCode: "0005", branchCode: "110", depositType: "1" },
+      {
+        bankCode: "0005",
+        branchCode: "110",
+        depositType: "1",
+        payeeKana: "ｴｲﾃﾞｨｰ",
+        accountNumber: "8000001",
+      },
+    ),
     build: {
       zengin: {
         clientCode: "2012345678",
@@ -287,9 +309,21 @@ function renderUnderHostTz(
   // The rail's originator settings ride under their settings key; the
   // bank-allocated numbers (file creation number, modifier, serials) ride
   // alongside as build args — split them back out for the build input.
-  const settingsKeys = new Set(["cpa005", "nacha", "sepa", "cemtex", "bacs", "zengin", "cnab240bb"]);
-  const settings = Object.fromEntries(Object.entries(rail.build).filter(([key]) => settingsKeys.has(key)));
-  const buildArgs = Object.fromEntries(Object.entries(rail.build).filter(([key]) => !settingsKeys.has(key)));
+  const settingsKeys = new Set([
+    "cpa005",
+    "nacha",
+    "sepa",
+    "cemtex",
+    "bacs",
+    "zengin",
+    "cnab240bb",
+  ]);
+  const settings = Object.fromEntries(
+    Object.entries(rail.build).filter(([key]) => settingsKeys.has(key)),
+  );
+  const buildArgs = Object.fromEntries(
+    Object.entries(rail.build).filter(([key]) => !settingsKeys.has(key)),
+  );
   const payload = JSON.stringify({
     format: rail.format,
     inputs: rail.inputs,
@@ -349,8 +383,12 @@ for (const rail of CASES) {
   test(`${rail.format}: instants straddling org-zone midnight land on their own civil days`, () => {
     // 03:59Z is Sep 22nd 23:59 in Toronto; 04:01Z is Sep 23rd 00:01. A
     // host-local renderer under Kiritimati dates BOTH Sep 23rd.
-    const before = decode(renderUnderHostTz(rail, HOST_TZ_A, "America/Toronto", INSTANT_BEFORE_MIDNIGHT));
-    const after = decode(renderUnderHostTz(rail, HOST_TZ_A, "America/Toronto", INSTANT_AFTER_MIDNIGHT));
+    const before = decode(
+      renderUnderHostTz(rail, HOST_TZ_A, "America/Toronto", INSTANT_BEFORE_MIDNIGHT),
+    );
+    const after = decode(
+      renderUnderHostTz(rail, HOST_TZ_A, "America/Toronto", INSTANT_AFTER_MIDNIGHT),
+    );
     for (const label of rail.beforeMidnight) {
       assert.ok(
         before.includes(label),

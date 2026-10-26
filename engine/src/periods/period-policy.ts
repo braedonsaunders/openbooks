@@ -41,7 +41,10 @@ const LABEL_SEPARATOR = " · ";
 const SPAN_SEPARATOR = " – ";
 
 /** `Dec 2026`, or `Dec 2025 – Jan 2026` for a period spanning calendar months. */
-export function periodMonthSpan(input: Pick<PeriodDisplayInput, "startsOn" | "endsOn">, locale: string): string {
+export function periodMonthSpan(
+  input: Pick<PeriodDisplayInput, "startsOn" | "endsOn">,
+  locale: string,
+): string {
   const first = civilDateLabel(input.startsOn, locale, "monthYear");
   const last = civilDateLabel(input.endsOn, locale, "monthYear");
   return first === last ? first : `${first}${SPAN_SEPARATOR}${last}`;
@@ -115,14 +118,7 @@ export function periodClosedDetailsOf(error: unknown): PeriodClosedDetails | und
   return error instanceof PeriodClosedError ? error.details : undefined;
 }
 
-export const CLOSE_MODULES = [
-  "ar",
-  "ap",
-  "banking",
-  "assets",
-  "tax",
-  "gl",
-] as const;
+export const CLOSE_MODULES = ["ar", "ap", "banking", "assets", "tax", "gl"] as const;
 export type CloseModule = (typeof CLOSE_MODULES)[number];
 
 export type PeriodLockView = {
@@ -141,8 +137,9 @@ export function periodLockRequiresApprovedReopen(
   now = new Date(),
 ): boolean {
   if (!lock) return false;
-  return lock.state === "closed" || (
-    lock.state === "open" && lock.reopenExpiresAt != null && new Date(lock.reopenExpiresAt) <= now
+  return (
+    lock.state === "closed" ||
+    (lock.state === "open" && lock.reopenExpiresAt != null && new Date(lock.reopenExpiresAt) <= now)
   );
 }
 
@@ -185,7 +182,8 @@ export async function readEffectivePeriodLock(
     module: CloseModule;
   },
 ): Promise<EffectivePeriodLock | undefined> {
-  const result = await executor.execute<EffectivePeriodLock>(sql`
+  const result = await executor.execute<EffectivePeriodLock>(
+    sql`
     select id, subsidiary_id as "subsidiaryId", state, reason,
            reopen_expires_at as "reopenExpiresAt", version
       from period_locks
@@ -193,7 +191,9 @@ export async function readEffectivePeriodLock(
        and book_id = ${args.bookId} and module = ${args.module}
        and (subsidiary_id is not distinct from ${args.subsidiaryId} or subsidiary_id is null)
      order by (subsidiary_id is not null) desc
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   return result[0];
 }
 
@@ -264,7 +264,15 @@ export const DOCUMENT_KINDS: readonly string[] = Object.keys(DOCUMENT_CLOSE_MODU
  * open orders otherwise sees a permanent critical blocker it can never
  * clear.
  */
-export const NON_POSTING_DOCUMENT_KINDS: readonly string[] = ["quote", "sales_order", "purchase_order", "pick_list", "shipment", "rma", "field_ticket"];
+export const NON_POSTING_DOCUMENT_KINDS: readonly string[] = [
+  "quote",
+  "sales_order",
+  "purchase_order",
+  "pick_list",
+  "shipment",
+  "rma",
+  "field_ticket",
+];
 
 export function closeModuleForDocument(kind: string): CloseModule {
   const decided = (DOCUMENT_CLOSE_MODULES as Record<string, CloseModule>)[kind];
@@ -337,21 +345,32 @@ export async function assertPeriodModulesOpen(
  */
 async function assertPeriodNotSealed(
   executor: SqlExecutor,
-  args: { orgId: string; periodId: string; bookId: string; subsidiaryIds: string[]; reversesEntryId?: string | null },
+  args: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryIds: string[];
+    reversesEntryId?: string | null;
+  },
 ): Promise<void> {
   const subsidiaryIds = [...new Set(args.subsidiaryIds)];
-  const seal = (await executor.execute<{
-    fiscal_year: number;
-    closing_period_id: string;
-    closing_period_label: string;
-    subsidiary_id: string;
-  }>(sql`
+  const seal = (
+    await executor.execute<{
+      fiscal_year: number;
+      closing_period_id: string;
+      closing_period_label: string;
+      subsidiary_id: string;
+    }>(
+      sql`
     select s.fiscal_year, s.closing_period_id, ${canonicalPeriodLabelSql()} as closing_period_label, s.subsidiary_id
       from period_end_journal_seal(
              ${args.orgId}, ${args.bookId}, ${args.periodId},
              ${subsidiaryIds.length ? `{${subsidiaryIds.join(",")}}` : null}::uuid[],
              ${args.reversesEntryId ?? null}::uuid) s
-      join accounting_periods p on p.org_id = ${args.orgId} and p.id = s.closing_period_id`, "objects"))[0];
+      join accounting_periods p on p.org_id = ${args.orgId} and p.id = s.closing_period_id`,
+      "objects",
+    )
+  )[0];
   if (!seal) return;
   throw new PeriodClosedError(
     `GL is closed for this period and accounting book by the period-end journals of fiscal year ${seal.fiscal_year} — request a controlled reopen of ${seal.closing_period_label}, whose approval reverses them, to post here`,
@@ -380,7 +399,9 @@ async function closedPeriodRoute(
   module: CloseModule,
   subsidiaryId: string | null,
 ): Promise<string> {
-  const adjustment = (await executor.execute<{ id: string; label: string; fiscal_year: number }>(sql`
+  const adjustment = (
+    await executor.execute<{ id: string; label: string; fiscal_year: number }>(
+      sql`
     select p2.id, ${canonicalPeriodLabelSql("p2")} as label, p2.fiscal_year
       from accounting_periods p2
       join accounting_periods p1
@@ -389,7 +410,10 @@ async function closedPeriodRoute(
        and p2.fiscal_calendar_id = p1.fiscal_calendar_id
        and p2.fiscal_year = p1.fiscal_year
        and p2.is_adjustment
-     order by p2.period_number limit 1`, "objects"))[0];
+     order by p2.period_number limit 1`,
+      "objects",
+    )
+  )[0];
   if (adjustment) {
     // The adjustment period must be open for the same effective gate the
     // posting just failed: the refused module plus GL, under the same

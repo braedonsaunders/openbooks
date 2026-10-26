@@ -1,27 +1,26 @@
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { guardSubsidiaryScope } from '@/lib/authz'
-import { NextResponse } from 'next/server'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { guardSubsidiaryScope } from "@/lib/authz";
+import { NextResponse } from "next/server";
 import {
   ConsolidationError,
   deriveConsolidatedRates,
   runAutoElimination,
   runCombinedConsolidation,
   runOwnershipConsolidation,
-} from '@openbooks/engine/consolidation/consolidation'
-import { withOrgTransaction } from '@openbooks/engine/platform/db'
-import { isUuid } from '../../../lib/list-params'
-const POSTBodySchema1 = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('derive-rates'), periodId: uuidString() }),
-  z.object({ action: z.literal('ownership'), periodId: uuidString() }),
-  z.object({ action: z.literal('eliminate'), periodId: uuidString() }),
-  z.object({ action: z.literal('consolidate'), periodId: uuidString() }),
+} from "@openbooks/engine/consolidation/consolidation";
+import { withOrgTransaction } from "@openbooks/engine/platform/db";
+import { isUuid } from "../../../lib/list-params";
+const POSTBodySchema1 = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("derive-rates"), periodId: uuidString() }),
+  z.object({ action: z.literal("ownership"), periodId: uuidString() }),
+  z.object({ action: z.literal("eliminate"), periodId: uuidString() }),
+  z.object({ action: z.literal("consolidate"), periodId: uuidString() }),
 ]);
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Consolidation actions, run from the Period Close page (multi-subsidiary orgs
@@ -34,58 +33,66 @@ export const runtime = 'nodejs'
  * disabled consolidation module cannot be driven through this API.
  */
 export const POST = defineRoute({
-  permission: 'close.run',
-  feature: 'multiSubsidiary',
+  permission: "close.run",
+  feature: "multiSubsidiary",
   body: POSTBodySchema1,
   handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
-    const scopeDenied = guardSubsidiaryScope(gate, null)
-    if (scopeDenied) return scopeDenied
-    const user = gate.user
+    const scopeDenied = guardSubsidiaryScope(gate, null);
+    if (scopeDenied) return scopeDenied;
+    const user = gate.user;
 
-    const { action, periodId } = (routeBody) as {
-        action?: string
-        periodId?: string
-      }
-    if (!periodId || !isUuid(periodId) || !['derive-rates', 'ownership', 'eliminate', 'consolidate'].includes(action ?? '')) {
-        return NextResponse.json(
-          { error: 'periodId and action (derive-rates|ownership|eliminate|consolidate) required' },
-          { status: 400 },
-        )
-      }
+    const { action, periodId } = routeBody as {
+      action?: string;
+      periodId?: string;
+    };
+    if (
+      !periodId ||
+      !isUuid(periodId) ||
+      !["derive-rates", "ownership", "eliminate", "consolidate"].includes(action ?? "")
+    ) {
+      return NextResponse.json(
+        { error: "periodId and action (derive-rates|ownership|eliminate|consolidate) required" },
+        { status: 400 },
+      );
+    }
     try {
-        if (action === 'derive-rates') {
-          // Derivation writes one row per currency pair; run it as ONE atomic unit
-          // so a missing spot rate for any needed pair aborts the whole refresh
-          // instead of leaving earlier pairs' derived rows committed over a stale
-          // remainder (a partially refreshed period). The engine refuses a period
-          // whose GL is closed (422) and audits every changed rate to this actor.
-          const written = await withOrgTransaction(user.orgId, () =>
-            deriveConsolidatedRates(user.orgId, periodId, user.id),
-          )
-          return NextResponse.json({ ok: true, written })
-        }
-        if (action === 'ownership') {
-          const result = await runOwnershipConsolidation(user.orgId, periodId, user.id)
-          return NextResponse.json({ ok: true, ...result })
-        }
-        if (action === 'consolidate') {
-          // One atomic unit: rates, ownership, and elimination commit together or
-          // not at all. A residual elimination failure must not leave derived
-          // rates and POSTED ownership journals durable while the client is told
-          // the command failed.
-          const { ratesWritten, ownership, elimination } = await runCombinedConsolidation(user.orgId, periodId, user.id)
-          return NextResponse.json({ ok: true, ratesWritten, ownership, elimination })
-        }
-        const result = await runAutoElimination(user.orgId, periodId, user.id)
-        return NextResponse.json({ ok: true, ...result })
-      } catch (e) {
-        if (e instanceof ConsolidationError) {
-          // Typed refusal: the close task persists the message
-          // inline and maps the code, instead of swallowing a bare 422.
-          return apiErrorResponse(e, { safeStatus: 422, details: { code: e.code } })
-        }
-        throw e
+      if (action === "derive-rates") {
+        // Derivation writes one row per currency pair; run it as ONE atomic unit
+        // so a missing spot rate for any needed pair aborts the whole refresh
+        // instead of leaving earlier pairs' derived rows committed over a stale
+        // remainder (a partially refreshed period). The engine refuses a period
+        // whose GL is closed (422) and audits every changed rate to this actor.
+        const written = await withOrgTransaction(user.orgId, () =>
+          deriveConsolidatedRates(user.orgId, periodId, user.id),
+        );
+        return NextResponse.json({ ok: true, written });
       }
+      if (action === "ownership") {
+        const result = await runOwnershipConsolidation(user.orgId, periodId, user.id);
+        return NextResponse.json({ ok: true, ...result });
+      }
+      if (action === "consolidate") {
+        // One atomic unit: rates, ownership, and elimination commit together or
+        // not at all. A residual elimination failure must not leave derived
+        // rates and POSTED ownership journals durable while the client is told
+        // the command failed.
+        const { ratesWritten, ownership, elimination } = await runCombinedConsolidation(
+          user.orgId,
+          periodId,
+          user.id,
+        );
+        return NextResponse.json({ ok: true, ratesWritten, ownership, elimination });
+      }
+      const result = await runAutoElimination(user.orgId, periodId, user.id);
+      return NextResponse.json({ ok: true, ...result });
+    } catch (e) {
+      if (e instanceof ConsolidationError) {
+        // Typed refusal: the close task persists the message
+        // inline and maps the code, instead of swallowing a bare 422.
+        return apiErrorResponse(e, { safeStatus: 422, details: { code: e.code } });
+      }
+      throw e;
+    }
   },
 });

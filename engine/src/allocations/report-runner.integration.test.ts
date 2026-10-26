@@ -20,11 +20,17 @@ async function seedReportsReader(orgId: string): Promise<string> {
   return actor;
 }
 
-async function seedTimesheetSource(orgId: string, subsidiaryId: string, workedOn: string): Promise<string> {
+async function seedTimesheetSource(
+  orgId: string,
+  subsidiaryId: string,
+  workedOn: string,
+): Promise<string> {
   const deptId = randomUUID();
   const projectId = randomUUID();
   const employeeId = randomUUID();
-  await db.execute(sql`insert into departments (id, org_id, name) values (${deptId}, ${orgId}, 'Crew A')`);
+  await db.execute(
+    sql`insert into departments (id, org_id, name) values (${deptId}, ${orgId}, 'Crew A')`,
+  );
   await db.execute(sql`
     insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom)
     values (${projectId}, ${orgId}, ${subsidiaryId}, 'JOB-TS', 'Timesheet job', 'active', true, '{}'::jsonb)`);
@@ -118,7 +124,8 @@ test("report runner refuses evidence that reaches the query row cap instead of t
         actorId: actor,
         temporalMode: "balance_as_of",
       }),
-      (error: unknown) => error instanceof DriverNotAvailableError && /driver_evidence_truncated/.test(error.message),
+      (error: unknown) =>
+        error instanceof DriverNotAvailableError && /driver_evidence_truncated/.test(error.message),
     );
     // The same evidence under a roomy limit resolves normally.
     const roomyId = randomUUID();
@@ -160,7 +167,10 @@ test("report-backed drivers apply the requested period instead of all history", 
     // window must weigh the early one only, though the saved definition
     // carries no dates. (Scratch orgs own only the July 2026 period, so the
     // window narrows within it rather than across months.)
-    for (const [date, amount] of [["2026-07-05", "1000.0000"], ["2026-07-25", "500.0000"]] as const) {
+    for (const [date, amount] of [
+      ["2026-07-05", "1000.0000"],
+      ["2026-07-25", "500.0000"],
+    ] as const) {
       await postProjectGlEntry({
         orgId: org.orgId,
         actorId: actor,
@@ -172,7 +182,10 @@ test("report-backed drivers apply the requested period instead of all history", 
         currency: "CAD",
         lines: [
           { accountId: org.accounts.adjustment, amount },
-          { accountId: org.accounts.bank, amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}` },
+          {
+            accountId: org.accounts.bank,
+            amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}`,
+          },
         ],
       });
     }
@@ -215,7 +228,10 @@ test("fixed_query and balance_as_of weigh the report scope with the contract ech
   const org = await createScratchOrg();
   try {
     const actor = await seedReportsReader(org.orgId);
-    for (const [date, amount] of [["2026-07-05", "1000.0000"], ["2026-07-25", "500.0000"]] as const) {
+    for (const [date, amount] of [
+      ["2026-07-05", "1000.0000"],
+      ["2026-07-25", "500.0000"],
+    ] as const) {
       await postProjectGlEntry({
         orgId: org.orgId,
         actorId: actor,
@@ -227,7 +243,10 @@ test("fixed_query and balance_as_of weigh the report scope with the contract ech
         currency: "CAD",
         lines: [
           { accountId: org.accounts.adjustment, amount },
-          { accountId: org.accounts.bank, amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}` },
+          {
+            accountId: org.accounts.bank,
+            amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}`,
+          },
         ],
       });
     }
@@ -256,7 +275,12 @@ test("fixed_query and balance_as_of weigh the report scope with the contract ech
     // echo says no period was bound.
     const fixed = await runDriverReport({ ...base, temporalMode: "fixed_query" });
     assert.deepEqual(fixed.temporal, { mode: "fixed_query", from: null, to: null, field: null });
-    assert.equal(new Map(fixed.rows.map((r) => [r.dimension, r.value] as [string, string])).get(org.accounts.adjustment), "1500.0000");
+    assert.equal(
+      new Map(fixed.rows.map((r) => [r.dimension, r.value] as [string, string])).get(
+        org.accounts.adjustment,
+      ),
+      "1500.0000",
+    );
     // balance_as_of (the historical behavior for undeclared drivers): the
     // snapshot at to governs, echoed with its date.
     const balanced = await runDriverReport({ ...base, temporalMode: "balance_as_of" });
@@ -266,7 +290,12 @@ test("fixed_query and balance_as_of weigh the report scope with the contract ech
       to: "2026-07-10",
       field: null,
     });
-    assert.equal(new Map(balanced.rows.map((r) => [r.dimension, r.value] as [string, string])).get(org.accounts.adjustment), "1500.0000");
+    assert.equal(
+      new Map(balanced.rows.map((r) => [r.dimension, r.value] as [string, string])).get(
+        org.accounts.adjustment,
+      ),
+      "1500.0000",
+    );
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -276,7 +305,10 @@ test("fixed_query allocation evidence resolves stored period presets", async () 
   const org = await createScratchOrg();
   try {
     const actor = await seedReportsReader(org.orgId);
-    for (const [date, amount] of [["2026-07-05", "1000.0000"], ["2026-07-25", "500.0000"]] as const) {
+    for (const [date, amount] of [
+      ["2026-07-05", "1000.0000"],
+      ["2026-07-25", "500.0000"],
+    ] as const) {
       await postProjectGlEntry({
         orgId: org.orgId,
         actorId: actor,
@@ -350,7 +382,8 @@ test("report runner refuses time evidence when Time tracking is disabled", async
         actorId: actor,
         temporalMode: "balance_as_of",
       }),
-      (error: unknown) => error instanceof DriverNotAvailableError && /feature is disabled/.test(error.message),
+      (error: unknown) =>
+        error instanceof DriverNotAvailableError && /feature is disabled/.test(error.message),
     );
   } finally {
     await dropScratchOrgReporting(org.orgId);

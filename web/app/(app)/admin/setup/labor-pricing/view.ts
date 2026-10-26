@@ -1,18 +1,18 @@
-import 'server-only'
+import "server-only";
 
-import { sql, type SQL } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
-import { requireProjectsFeature } from '../../../../../lib/projects-gate'
-import { isUuid, parseListParams, pickString } from '../../../../../lib/list-params'
-import { resolveFormLayout } from '../../../../../lib/customization/resolve'
-import { loadFieldDefs } from '../../../../../lib/custom-fields'
-import type { BillCardDetail, BillCardRow } from '../labor-costing/LaborBillRateCards'
-import type { LaborPricingViewProps } from './sections'
+import { sql, type SQL } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import { grid, page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../../lib/authz";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";
+import { requireProjectsFeature } from "../../../../../lib/projects-gate";
+import { isUuid, parseListParams, pickString } from "../../../../../lib/list-params";
+import { resolveFormLayout } from "../../../../../lib/customization/resolve";
+import { loadFieldDefs } from "../../../../../lib/custom-fields";
+import type { BillCardDetail, BillCardRow } from "../labor-costing/LaborBillRateCards";
+import type { LaborPricingViewProps } from "./sections";
 
 /**
  * Labor pricing (bill rate cards), split into a loader and a spec.
@@ -34,63 +34,78 @@ import type { LaborPricingViewProps } from './sections'
  */
 
 export interface LaborPricingHeadingData {
-  title: string
-  description: string
-  docsHref: string
-  docsLabel: string
+  title: string;
+  description: string;
+  docsHref: string;
+  docsLabel: string;
 }
 
 export interface LaborPricingData {
-  canManage: boolean
-  heading: LaborPricingHeadingData
-  view: LaborPricingViewProps
+  canManage: boolean;
+  heading: LaborPricingHeadingData;
+  view: LaborPricingViewProps;
 }
 
 export async function loadLaborPricing(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<LaborPricingData | null> {
-  const authz = await requirePermission('admin.setup.manage')
+  const authz = await requirePermission("admin.setup.manage");
   // Projects-gated surface: without the feature this path redirects to the
   // features page rather than rendering an empty shell.
-  await requireProjectsFeature(authz.user.orgId)
-  const orgId = authz.user.orgId
+  await requireProjectsFeature(authz.user.orgId);
+  const orgId = authz.user.orgId;
   const [today, subsidiaryUiEnabled, multiCurrency, t] = await Promise.all([
     businessToday(orgId),
     subsidiaryFeatureEnabled(orgId),
-    isFeatureEnabled(orgId, 'multiCurrency'),
-    getTranslations('laborPricing'),
-  ])
+    isFeatureEnabled(orgId, "multiCurrency"),
+    getTranslations("laborPricing"),
+  ]);
   const list = parseListParams(sp, {
-    sort: 'effective',
-    allowedSorts: ['effective'] as const,
-    dir: 'desc',
+    sort: "effective",
+    allowedSorts: ["effective"] as const,
+    dir: "desc",
     perPage: 25,
-  })
-  const cardParam = pickString(sp.card)
-  const selectedId =
-    cardParam && cardParam !== 'new' && isUuid(cardParam) ? cardParam : null
+  });
+  const cardParam = pickString(sp.card);
+  const selectedId = cardParam && cardParam !== "new" && isUuid(cardParam) ? cardParam : null;
   // Editing options are consumed only by the selected-card drawer. Creation
   // uses the native command and navigates to that card before editing it.
-  const drawerQuery = (query: SQL) => selectedId
-    ? db.execute(query)
-    : Promise.resolve({ rows: [] })
-  const timeParam = pickString(sp.time)
-  const timeFilter = timeParam === 'scheduled' || timeParam === 'expired' || timeParam === 'all' ? timeParam : 'active'
-  const dimensionParam = pickString(sp.dimension)
-  const dimensionTypes = ['department', ...(subsidiaryUiEnabled ? ['subsidiary'] : []), 'location', 'class', 'trade', 'job_title', 'other'] as const
-  const dimensionFilter = dimensionParam === 'unscoped' || (dimensionTypes as readonly string[]).includes(dimensionParam ?? '') ? dimensionParam! : 'all'
-  const effectiveFilter = timeFilter === 'active'
-    ? sql`and v.status = 'active' and v.effective_from <= ${today} and (v.effective_to is null or v.effective_to >= ${today})`
-    : timeFilter === 'scheduled'
-      ? sql`and v.status <> 'retired' and v.effective_from > ${today}`
-      : timeFilter === 'expired'
-        ? sql`and (v.status = 'retired' or v.effective_to < ${today})`
-        : sql``
-  const scopeFilter = dimensionFilter === 'all'
-    ? sql``
-    : dimensionFilter === 'unscoped'
-      ? sql`and not exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.org_id = v.org_id)`
-      : sql`and exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.org_id = v.org_id and fs.scope_type = ${dimensionFilter})`
+  const drawerQuery = (query: SQL) =>
+    selectedId ? db.execute(query) : Promise.resolve({ rows: [] });
+  const timeParam = pickString(sp.time);
+  const timeFilter =
+    timeParam === "scheduled" || timeParam === "expired" || timeParam === "all"
+      ? timeParam
+      : "active";
+  const dimensionParam = pickString(sp.dimension);
+  const dimensionTypes = [
+    "department",
+    ...(subsidiaryUiEnabled ? ["subsidiary"] : []),
+    "location",
+    "class",
+    "trade",
+    "job_title",
+    "other",
+  ] as const;
+  const dimensionFilter =
+    dimensionParam === "unscoped" ||
+    (dimensionTypes as readonly string[]).includes(dimensionParam ?? "")
+      ? dimensionParam!
+      : "all";
+  const effectiveFilter =
+    timeFilter === "active"
+      ? sql`and v.status = 'active' and v.effective_from <= ${today} and (v.effective_to is null or v.effective_to >= ${today})`
+      : timeFilter === "scheduled"
+        ? sql`and v.status <> 'retired' and v.effective_from > ${today}`
+        : timeFilter === "expired"
+          ? sql`and (v.status = 'retired' or v.effective_to < ${today})`
+          : sql``;
+  const scopeFilter =
+    dimensionFilter === "all"
+      ? sql``
+      : dimensionFilter === "unscoped"
+        ? sql`and not exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.org_id = v.org_id)`
+        : sql`and exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.org_id = v.org_id and fs.scope_type = ${dimensionFilter})`;
 
   const [
     cardsRes,
@@ -111,7 +126,8 @@ export async function loadLaborPricing(
     txnTypesRes,
     orgRes,
   ] = await Promise.all([
-    db.execute<BillCardRow>(sql`
+    db.execute<BillCardRow>(
+      sql`
       select v.id, v.rate_book_id, b.code, b.name, b.currency, v.effective_from::text,
              v.effective_to::text, v.status, p.derivation_policy,
              (select count(*)::int from item_rate_lines l where l.version_id=v.id and l.org_id=v.org_id) as line_count,
@@ -123,16 +139,22 @@ export async function loadLaborPricing(
          ${effectiveFilter} ${scopeFilter}
          ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}
        order by v.effective_from desc,b.name
-       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects'),
-    db.execute<{ n: number }>(sql`
+       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`,
+      "objects",
+    ),
+    db.execute<{ n: number }>(
+      sql`
       select count(*)::int n from item_rate_versions v
       join item_rate_books b on b.id=v.rate_book_id and b.org_id=v.org_id
       join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
       where v.org_id=${orgId}
         ${effectiveFilter} ${scopeFilter}
-        ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}`, 'objects'),
+        ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}`,
+      "objects",
+    ),
     selectedId
-      ? db.execute<BillCardDetail>(sql`
+      ? db.execute<BillCardDetail>(
+          sql`
       select v.id,v.rate_book_id,b.code,b.name,b.currency,v.effective_from::text,v.effective_to::text,
              v.status,p.derivation_policy,v.custom,
         coalesce((select jsonb_agg(jsonb_build_object(
@@ -170,7 +192,9 @@ export async function loadLaborPricing(
       from item_rate_versions v
       join item_rate_books b on b.id=v.rate_book_id and b.org_id=v.org_id
       join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
-      where v.id=${selectedId} and v.org_id=${orgId}`, 'objects')
+      where v.id=${selectedId} and v.org_id=${orgId}`,
+          "objects",
+        )
       : Promise.resolve([]),
     drawerQuery(
       sql`select id,name,kind,category from items where org_id=${orgId} and is_active order by name`,
@@ -187,12 +211,8 @@ export async function loadLaborPricing(
     drawerQuery(
       sql`select id,name from locations where org_id=${orgId} and is_active order by name`,
     ),
-    drawerQuery(
-      sql`select id,name from classes where org_id=${orgId} and is_active order by name`,
-    ),
-    drawerQuery(
-      sql`select id,name from trades where org_id=${orgId} and is_active order by name`,
-    ),
+    drawerQuery(sql`select id,name from classes where org_id=${orgId} and is_active order by name`),
+    drawerQuery(sql`select id,name from trades where org_id=${orgId} and is_active order by name`),
     drawerQuery(
       sql`select distinct trim(job_title) name from employee_roles where org_id=${orgId} and is_active and nullif(trim(job_title),'') is not null order by name`,
     ),
@@ -212,33 +232,32 @@ export async function loadLaborPricing(
       sql`select distinct kind value from documents where org_id=${orgId} order by value`,
     ),
     db.execute<{ base_currency: string; currencies: string[] | null }>(
-      sql`select base_currency, settings->'currencies' as currencies from orgs where id=${orgId}`, 'objects',
+      sql`select base_currency, settings->'currencies' as currencies from orgs where id=${orgId}`,
+      "objects",
     ),
-  ])
+  ]);
 
-  const selected =
-    selectedRes[0] ?? null
-  const headerDefs = selected ? await loadFieldDefs('item_rate_versions') : []
+  const selected = selectedRes[0] ?? null;
+  const headerDefs = selected ? await loadFieldDefs("item_rate_versions") : [];
   const resolvedForm = selected
     ? await resolveFormLayout({
         orgId,
         userId: authz.user.id,
-        recordType: 'labor_rate_card',
+        recordType: "labor_rate_card",
         userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs,
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),
       })
-    : null
-  const named = (rows: unknown) =>
-    (rows as { rows: { id: string; name: string }[] }).rows
-  const org = orgRes[0]
+    : null;
+  const named = (rows: unknown) => (rows as { rows: { id: string; name: string }[] }).rows;
+  const org = orgRes[0];
   const subsidiaryRows = (
     subsidiariesRes as unknown as {
-      rows: { id: string; name: string; currency: string }[]
+      rows: { id: string; name: string; currency: string }[];
     }
-  ).rows
-  const baseCurrency = org?.base_currency ?? 'CAD'
+  ).rows;
+  const baseCurrency = org?.base_currency ?? "CAD";
   const currencies = [
     baseCurrency,
     ...Array.from(
@@ -249,23 +268,21 @@ export async function loadLaborPricing(
     )
       .filter((code) => code !== baseCurrency)
       .sort(),
-  ]
+  ];
 
   return {
-    canManage: can(authz, 'admin.setup.manage'),
+    canManage: can(authz, "admin.setup.manage"),
     heading: {
-      title: t('title'),
-      description: t('description'),
-      docsHref: '/docs/labor-pricing',
-      docsLabel: t('docs'),
+      title: t("title"),
+      description: t("description"),
+      docsHref: "/docs/labor-pricing",
+      docsLabel: t("docs"),
     },
     view: {
       cards: cardsRes,
       selected,
-      creating: cardParam === 'new',
-      total: Number(
-        countRes[0]?.n ?? 0,
-      ),
+      creating: cardParam === "new",
+      total: Number(countRes[0]?.n ?? 0),
       page: list.page,
       perPage: list.perPage,
       currentParams: sp,
@@ -274,16 +291,16 @@ export async function loadLaborPricing(
       items: (
         itemsRes as unknown as {
           rows: {
-            id: string
-            name: string
-            kind: string
-            category: string | null
-          }[]
+            id: string;
+            name: string;
+            kind: string;
+            category: string | null;
+          }[];
         }
       ).rows,
       timeTypes: (
         timeTypesRes as unknown as {
-          rows: { id: string; name: string; bill_multiplier: string }[]
+          rows: { id: string; name: string; bill_multiplier: string }[];
         }
       ).rows,
       options: {
@@ -292,20 +309,22 @@ export async function loadLaborPricing(
         location: named(locationsRes),
         class: named(classesRes),
         trade: named(tradesRes),
-        job_title: (
-          jobTitlesRes as unknown as { rows: { name: string }[] }
-        ).rows.map((x) => ({ id: x.name, name: x.name })),
+        job_title: (jobTitlesRes as unknown as { rows: { name: string }[] }).rows.map((x) => ({
+          id: x.name,
+          name: x.name,
+        })),
         project: named(projectsRes),
         customer: named(customersRes),
-        item_kind: (
-          kindsRes as unknown as { rows: { value: string }[] }
-        ).rows.map((x) => ({ id: x.value, name: x.value })),
-        item_category: (
-          categoriesRes as unknown as { rows: { value: string }[] }
-        ).rows.map((x) => ({ id: x.value, name: x.value })),
-        transaction_type: (
-          txnTypesRes as unknown as { rows: { value: string }[] }
-        ).rows.map((x) => ({ id: x.value, name: x.value })),
+        item_kind: (kindsRes as unknown as { rows: { value: string }[] }).rows.map((x) => ({
+          id: x.value,
+          name: x.value,
+        })),
+        item_category: (categoriesRes as unknown as { rows: { value: string }[] }).rows.map(
+          (x) => ({ id: x.value, name: x.value }),
+        ),
+        transaction_type: (txnTypesRes as unknown as { rows: { value: string }[] }).rows.map(
+          (x) => ({ id: x.value, name: x.value }),
+        ),
       },
       currencies,
       multiCurrency,
@@ -313,28 +332,28 @@ export async function loadLaborPricing(
       forms: resolvedForm?.available ?? [],
       currentFormId: resolvedForm?.row?.id ?? null,
       customFieldDefs:
-        headerDefs as unknown as import('../../../../../components/custom-field-inputs').CustomFieldDefClient[],
-      canCustomize: can(authz, 'admin.customization.manage'),
+        headerDefs as unknown as import("../../../../../components/custom-field-inputs").CustomFieldDefClient[],
+      canCustomize: can(authz, "admin.customization.manage"),
     },
-  }
+  };
 }
 
 export function laborPricingSpec(data: LaborPricingData): PageSpec {
   return page({
-    route: '/admin/setup/labor-pricing',
+    route: "/admin/setup/labor-pricing",
     // A setup-workspace child: the setup layout's header, tab rail and
     // centered container wrap the page and the widget registry, so the spec draws no chrome.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      grid('space-y-4', [
-        widgetBlock('labor-pricing-heading', {
+      grid("space-y-4", [
+        widgetBlock("labor-pricing-heading", {
           title: data.heading.title,
           description: data.heading.description,
           docsHref: data.heading.docsHref,
           docsLabel: data.heading.docsLabel,
         }),
-        widgetBlock('labor-pricing-view', {
+        widgetBlock("labor-pricing-view", {
           cards: data.view.cards,
           selected: data.view.selected,
           creating: data.view.creating,
@@ -357,5 +376,5 @@ export function laborPricingSpec(data: LaborPricingData): PageSpec {
         }),
       ]),
     ],
-  })
+  });
 }

@@ -49,12 +49,8 @@ const { readApplicationPeriodLocks } = await import("../../../../lib/application
 const { ApplicationError } = await import("../../../../lib/application/errors");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-  grantScratchPermissions,
-} = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -89,9 +85,16 @@ function contextFor(orgId: string, actorId: string, subsidiaryId: string): Appli
   return {
     authz: {
       user: {
-        id: actorId, orgId, name: "Lock Reader", email: "lock@scratch.test", roles: [],
-        isSuperAdmin: false, envKind: "production", productionOrgId: orgId,
-        homeOrgId: orgId, homeUserId: actorId,
+        id: actorId,
+        orgId,
+        name: "Lock Reader",
+        email: "lock@scratch.test",
+        roles: [],
+        isSuperAdmin: false,
+        envKind: "production",
+        productionOrgId: orgId,
+        homeOrgId: orgId,
+        homeUserId: actorId,
       },
       permissions: new Set(["close.read"]),
       allowedSubsidiaryIds: new Set([subsidiaryId]),
@@ -104,79 +107,91 @@ function contextFor(orgId: string, actorId: string, subsidiaryId: string): Appli
 
 const upper = (value: string) => value.toUpperCase();
 
-test("route canonicalizes an uppercase exact scope for a scoped reader, and still refuses unknown and foreign scopes", { skip: !DB }, async () => {
-  const { org, otherId } = await fixture();
-  try {
-    const get = (query: string) =>
-      withOrgContext(org.orgId, () =>
-        GET(new Request(`http://close.test/api/close/locks?${query}`)));
+test(
+  "route canonicalizes an uppercase exact scope for a scoped reader, and still refuses unknown and foreign scopes",
+  { skip: !DB },
+  async () => {
+    const { org, otherId } = await fixture();
+    try {
+      const get = (query: string) =>
+        withOrgContext(org.orgId, () =>
+          GET(new Request(`http://close.test/api/close/locks?${query}`)),
+        );
 
-    const own = await get(
-      `periodId=${upper(org.periodId)}&bookId=${upper(org.bookId)}&subsidiaryId=${upper(org.subsidiaryId)}`,
-    );
-    assert.equal(own.status, 200);
-    const body = (await own.json()) as {
-      locks: {
-        periodId: string;
-        subsidiaryId: string;
-        modules: { module: string; state: string }[];
+      const own = await get(
+        `periodId=${upper(org.periodId)}&bookId=${upper(org.bookId)}&subsidiaryId=${upper(org.subsidiaryId)}`,
+      );
+      assert.equal(own.status, 200);
+      const body = (await own.json()) as {
+        locks: {
+          periodId: string;
+          subsidiaryId: string;
+          modules: { module: string; state: string }[];
+        };
       };
-    };
-    assert.equal(body.locks.periodId, org.periodId);
-    assert.equal(body.locks.subsidiaryId, org.subsidiaryId);
-    assert.equal(body.locks.modules.find((entry) => entry.module === "gl")?.state, "closed");
+      assert.equal(body.locks.periodId, org.periodId);
+      assert.equal(body.locks.subsidiaryId, org.subsidiaryId);
+      assert.equal(body.locks.modules.find((entry) => entry.module === "gl")?.state, "closed");
 
-    const foreign = await get(
-      `periodId=${upper(org.periodId)}&bookId=${upper(org.bookId)}&subsidiaryId=${upper(otherId)}`,
-    );
-    assert.equal(foreign.status, 403);
+      const foreign = await get(
+        `periodId=${upper(org.periodId)}&bookId=${upper(org.bookId)}&subsidiaryId=${upper(otherId)}`,
+      );
+      assert.equal(foreign.status, 403);
 
-    const unknown = await get(
-      `periodId=${upper(randomUUID())}&bookId=${upper(org.bookId)}&subsidiaryId=${upper(org.subsidiaryId)}`,
-    );
-    assert.equal(unknown.status, 422);
+      const unknown = await get(
+        `periodId=${upper(randomUUID())}&bookId=${upper(org.bookId)}&subsidiaryId=${upper(org.subsidiaryId)}`,
+      );
+      assert.equal(unknown.status, 422);
 
-    const malformed = await get(
-      `periodId=not-a-uuid&bookId=${org.bookId}&subsidiaryId=${org.subsidiaryId}`,
-    );
-    assert.equal(malformed.status, 400);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const malformed = await get(
+        `periodId=not-a-uuid&bookId=${org.bookId}&subsidiaryId=${org.subsidiaryId}`,
+      );
+      assert.equal(malformed.status, 400);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("application canonicalizes an uppercase exact scope before its scope check, and still refuses unknown and foreign scopes", { skip: !DB }, async () => {
-  const { org, actorId, otherId } = await fixture();
-  try {
-    const context = contextFor(org.orgId, actorId, org.subsidiaryId);
-    const result = await withOrgContext(org.orgId, () =>
-      readApplicationPeriodLocks(context, {
-        periodId: upper(org.periodId),
-        bookId: upper(org.bookId),
-        subsidiaryId: upper(org.subsidiaryId),
-      }));
-    assert.equal(result.periodId, org.periodId);
-    assert.equal(result.subsidiaryId, org.subsidiaryId);
-
-    await assert.rejects(
-      withOrgContext(org.orgId, () =>
+test(
+  "application canonicalizes an uppercase exact scope before its scope check, and still refuses unknown and foreign scopes",
+  { skip: !DB },
+  async () => {
+    const { org, actorId, otherId } = await fixture();
+    try {
+      const context = contextFor(org.orgId, actorId, org.subsidiaryId);
+      const result = await withOrgContext(org.orgId, () =>
         readApplicationPeriodLocks(context, {
           periodId: upper(org.periodId),
           bookId: upper(org.bookId),
-          subsidiaryId: upper(otherId),
-        })),
-      (error: unknown) => error instanceof ApplicationError && error.status === 403,
-    );
-    await assert.rejects(
-      withOrgContext(org.orgId, () =>
-        readApplicationPeriodLocks(context, {
-          periodId: upper(randomUUID()),
-          bookId: upper(org.bookId),
           subsidiaryId: upper(org.subsidiaryId),
-        })),
-      (error: unknown) => error instanceof ApplicationError && error.status === 422,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        }),
+      );
+      assert.equal(result.periodId, org.periodId);
+      assert.equal(result.subsidiaryId, org.subsidiaryId);
+
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          readApplicationPeriodLocks(context, {
+            periodId: upper(org.periodId),
+            bookId: upper(org.bookId),
+            subsidiaryId: upper(otherId),
+          }),
+        ),
+        (error: unknown) => error instanceof ApplicationError && error.status === 403,
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          readApplicationPeriodLocks(context, {
+            periodId: upper(randomUUID()),
+            bookId: upper(org.bookId),
+            subsidiaryId: upper(org.subsidiaryId),
+          }),
+        ),
+        (error: unknown) => error instanceof ApplicationError && error.status === 422,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -8,12 +8,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  certificateDeclarationProblem, packCertificates, payrollCertificate,
+  certificateDeclarationProblem,
+  packCertificates,
+  payrollCertificate,
   resolveCertificate,
 } from "../../certificates.ts";
 import { reciprocityAgreement, reciprocityPartners } from "../../reciprocity.ts";
 import {
-  packWithholding, regionWithholding, subRegionLevy,
+  packWithholding,
+  regionWithholding,
+  subRegionLevy,
 } from "../../withholding-jurisdictions.ts";
 import { resolveWithholding } from "../../withholding-resolution.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "../rates.ts";
@@ -23,8 +27,12 @@ import { money } from "./conformance-support.ts";
 // The PACK publishes the US declarations now — see the note in conformance.test.ts.
 import "../../packs.ts";
 import {
-  implementedUsStates, requireUsStateWithholding, supportedUsStates,
-  unimplementedUsStates, usStatePublication, usStateWithholdingEngines,
+  implementedUsStates,
+  requireUsStateWithholding,
+  supportedUsStates,
+  unimplementedUsStates,
+  usStatePublication,
+  usStateWithholdingEngines,
 } from "./index.ts";
 
 /* --------------------------------------------------------------------- */
@@ -37,13 +45,54 @@ test("the pack now withholds state income tax somewhere", () => {
   // with nothing to withhold and refused every state that actually taxes wages.
   // Reported in US_STATES order, not delivery order, so the list reads the same
   // everywhere it is printed.
-  assert.deepEqual(
-    implementedUsStates(),
-    ["AL", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "UT", "VT", "VA", "WV", "WI"],
-  );
+  assert.deepEqual(implementedUsStates(), [
+    "AL",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "DC",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "UT",
+    "VT",
+    "VA",
+    "WV",
+    "WI",
+  ]);
   for (const state of implementedUsStates()) {
     assert.equal(
-      NO_WITHHOLDING_STATES.has(state), false,
+      NO_WITHHOLDING_STATES.has(state),
+      false,
       `${state} is claimed as implemented but levies no income tax — that is not coverage`,
     );
   }
@@ -52,9 +101,51 @@ test("the pack now withholds state income tax somewhere", () => {
 test("supported states are the implemented ones PLUS the genuinely no-tax ones", () => {
   const supported = supportedUsStates();
   assert.equal(supported.length, 51); // 42 implemented + 9 no-tax
-  for (const state of ["CA", "CO", "CT", "DE", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "MD", "ME", "GA", "HI", "NC",
-    "AL", "AR", "AZ", "ID", "IN", "KS", "KY", "LA", "VA", "VT", "WV", "IA", "MN", "MS", "MO", "MT", "NE", "ND", "OK", "WI", "UT", "OR", "RI", "SC",
-    "TX", "FL", "WA"]) {
+  for (const state of [
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "NY",
+    "PA",
+    "IL",
+    "NJ",
+    "OH",
+    "MI",
+    "MA",
+    "MD",
+    "ME",
+    "GA",
+    "HI",
+    "NC",
+    "AL",
+    "AR",
+    "AZ",
+    "ID",
+    "IN",
+    "KS",
+    "KY",
+    "LA",
+    "VA",
+    "VT",
+    "WV",
+    "IA",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "ND",
+    "OK",
+    "WI",
+    "UT",
+    "OR",
+    "RI",
+    "SC",
+    "TX",
+    "FL",
+    "WA",
+  ]) {
     assert.ok(supported.includes(state), state);
   }
   // Derived, never a second hand-maintained literal: the old list was a literal
@@ -62,8 +153,9 @@ test("supported states are the implemented ones PLUS the genuinely no-tax ones",
   // states.
   assert.deepEqual(
     supported,
-    US_STATES.filter((state) =>
-      implementedUsStates().includes(state) || NO_WITHHOLDING_STATES.has(state)),
+    US_STATES.filter(
+      (state) => implementedUsStates().includes(state) || NO_WITHHOLDING_STATES.has(state),
+    ),
   );
 });
 
@@ -117,7 +209,10 @@ test("every engine refuses a year it has not transcribed", () => {
 
 test("every declared region is covered, and every implemented one has an engine", () => {
   const declared = packWithholding("US").regions;
-  assert.deepEqual(declared.map((region) => region.region), [...US_STATES]);
+  assert.deepEqual(
+    declared.map((region) => region.region),
+    [...US_STATES],
+  );
   for (const region of declared) {
     if (!region.implemented) {
       assert.ok(region.unimplementedReason, `${region.region} refuses without saying why`);
@@ -150,8 +245,10 @@ test("the W-4 reads through profile COLUMNS — one interface, two storages", ()
   const resolved = resolveCertificate({
     certificate: w4,
     profile: {
-      filing_status: "married_joint", multiple_jobs: true,
-      dependent_credits: "4400.0000", additional_tax_per_period: "25.0000",
+      filing_status: "married_joint",
+      multiple_jobs: true,
+      dependent_credits: "4400.0000",
+      additional_tax_per_period: "25.0000",
     },
   });
   assert.equal(resolved.onFile, true);
@@ -161,19 +258,53 @@ test("the W-4 reads through profile COLUMNS — one interface, two storages", ()
   // An untouched profile does not look like a signed W-4.
   assert.equal(resolveCertificate({ certificate: w4, profile: {} }).onFile, false);
   // …but the statutory defaults still apply, because a missing W-4 has a rule.
-  assert.equal(resolveCertificate({ certificate: w4, profile: {} }).answers.filing_status, "single");
+  assert.equal(
+    resolveCertificate({ certificate: w4, profile: {} }).answers.filing_status,
+    "single",
+  );
 });
 
 test("state certificates store answers in ROWS, never in a new column", () => {
   for (const key of [
-    "us_ca_de4", "us_ny_it2104", "us_il_ilw4", "us_pa_rev419", "us_co_dr0004", "us_ct_ctw4", "us_dc_d4",
-    "us_md_mw507", "us_md_mw507_nr", "us_or_orw4", "us_de_sdw4a",
-    "us_al_a4", "us_sc_scw4", "us_ar_ar4ec", "us_me_w4me", "us_ri_riw4", "us_vt_w4vt", "us_hi_hw4",
-    "us_id_idw4", "us_ks_k4", "us_la_l4",
-    "us_mo_mow4", "us_ms_89350", "us_mt_mw4", "us_nd_w4", "us_ne_w4n", "us_ok_okw4",
-    "us_az_a4", "us_in_wh4", "us_ky_k4", "us_va_va4", "us_wv_it104",
-    "us_ut_w4", "us_mn_w4mn", "us_mn_mwr", "us_wi_wt4", "us_wi_w220",
-    "us_ia_iaw4", "us_ia_44016",
+    "us_ca_de4",
+    "us_ny_it2104",
+    "us_il_ilw4",
+    "us_pa_rev419",
+    "us_co_dr0004",
+    "us_ct_ctw4",
+    "us_dc_d4",
+    "us_md_mw507",
+    "us_md_mw507_nr",
+    "us_or_orw4",
+    "us_de_sdw4a",
+    "us_al_a4",
+    "us_sc_scw4",
+    "us_ar_ar4ec",
+    "us_me_w4me",
+    "us_ri_riw4",
+    "us_vt_w4vt",
+    "us_hi_hw4",
+    "us_id_idw4",
+    "us_ks_k4",
+    "us_la_l4",
+    "us_mo_mow4",
+    "us_ms_89350",
+    "us_mt_mw4",
+    "us_nd_w4",
+    "us_ne_w4n",
+    "us_ok_okw4",
+    "us_az_a4",
+    "us_in_wh4",
+    "us_ky_k4",
+    "us_va_va4",
+    "us_wv_it104",
+    "us_ut_w4",
+    "us_mn_w4mn",
+    "us_mn_mwr",
+    "us_wi_wt4",
+    "us_wi_w220",
+    "us_ia_iaw4",
+    "us_ia_44016",
   ]) {
     const certificate = payrollCertificate("US", key);
     assert.equal(certificate.storage, "certificate_rows", key);
@@ -184,10 +315,22 @@ test("state certificates store answers in ROWS, never in a new column", () => {
 });
 
 test("pack-declared certificate renewal dates stop stale statutory exemptions", () => {
-  const stored = (certificateKey: string, answers: Record<string, string>, effectiveFrom: string) => [{
-    certificateKey, answers, effectiveFrom, region: certificateKey.includes("_az_") ? "AZ" :
-      certificateKey.includes("_ct_") ? "CT" : "GA",
-  }];
+  const stored = (
+    certificateKey: string,
+    answers: Record<string, string>,
+    effectiveFrom: string,
+  ) => [
+    {
+      certificateKey,
+      answers,
+      effectiveFrom,
+      region: certificateKey.includes("_az_")
+        ? "AZ"
+        : certificateKey.includes("_ct_")
+          ? "CT"
+          : "GA",
+    },
+  ];
 
   const az = payrollCertificate("US", "us_az_a4");
   const azBefore = resolveCertificate({
@@ -237,13 +380,20 @@ test("pack-declared certificate renewal dates stop stale statutory exemptions", 
 
 test("Oregon and California withholding exemptions lapse after February 15", () => {
   const cases: Array<[string, string, Record<string, string>]> = [
-    ["us_ca_de4", "CA", { filing_status: "head_household", regular_allowances: "2", exempt: "true" }],
+    [
+      "us_ca_de4",
+      "CA",
+      { filing_status: "head_household", regular_allowances: "2", exempt: "true" },
+    ],
     ["us_or_orw4", "OR", { marital_status: "married", allowances: "4", exempt: "true" }],
   ];
   for (const [key, region, answers] of cases) {
     const certificate = payrollCertificate("US", key);
     const row = { certificateKey: key, region, effectiveFrom: "2025-02-16", answers };
-    assert.equal(resolveCertificate({ certificate, stored: [row], asOf: "2026-02-15" }).answers.exempt, "true");
+    assert.equal(
+      resolveCertificate({ certificate, stored: [row], asOf: "2026-02-15" }).answers.exempt,
+      "true",
+    );
     const expired = resolveCertificate({ certificate, stored: [row], asOf: "2026-02-16" });
     assert.equal(expired.onFile, false);
     assert.equal(expired.answers.exempt, null);
@@ -302,8 +452,16 @@ test("Wisconsin WT-4 complete exemption expires after the April 30 renewal deadl
     effectiveFrom: "2025-01-01",
     answers: { marital_status: "married", exemptions: "4", exempt: "true" },
   };
-  const throughDeadline = resolveCertificate({ certificate, stored: [exemptRow], asOf: "2026-04-30" });
-  const afterDeadline = resolveCertificate({ certificate, stored: [exemptRow], asOf: "2026-05-01" });
+  const throughDeadline = resolveCertificate({
+    certificate,
+    stored: [exemptRow],
+    asOf: "2026-04-30",
+  });
+  const afterDeadline = resolveCertificate({
+    certificate,
+    stored: [exemptRow],
+    asOf: "2026-05-01",
+  });
   const ordinaryCertificate = resolveCertificate({
     certificate,
     stored: [{ ...exemptRow, answers: { ...exemptRow.answers, exempt: "false" } }],
@@ -341,10 +499,7 @@ test("Virginia VA-4 exemption expires at the end of its calendar year", () => {
 /* --------------------------------------------------------------------- */
 
 test("Pennsylvania's six reciprocal partners, on REV-419", () => {
-  assert.deepEqual(
-    reciprocityPartners("US", "PA").sort(),
-    ["IN", "MD", "NJ", "OH", "VA", "WV"],
-  );
+  assert.deepEqual(reciprocityPartners("US", "PA").sort(), ["IN", "MD", "NJ", "OH", "VA", "WV"]);
   const nj = reciprocityAgreement("US", "PA", "NJ")!;
   assert.equal(nj.taxedBy, "residence");
   assert.equal(nj.certificateKey, "us_pa_rev419");
@@ -363,10 +518,15 @@ test("NEW YORK HAS NO RECIPROCITY — the canonical NJ/NY case withholds NY in f
   assert.deepEqual(reciprocityPartners("US", "NY"), []);
   assert.equal(reciprocityAgreement("US", "NY", "NJ"), null);
   const resolved = resolveWithholding({
-    country: "US", workRegion: "NY", residenceRegion: "NJ",
+    country: "US",
+    workRegion: "NY",
+    residenceRegion: "NJ",
   });
   const regions = resolved.levies.filter((levy) => levy.level === "region");
-  assert.deepEqual(regions.map((levy) => levy.region), ["NY"]);
+  assert.deepEqual(
+    regions.map((levy) => levy.region),
+    ["NY"],
+  );
   assert.equal(regions[0]!.basis, "nonresident");
   // New Jersey's own claim is now DECLARED — NJ-WT requires the employer to
   // withhold New Jersey tax on a resident's out-of-state wages net of a credit
@@ -384,7 +544,9 @@ test("NEW YORK HAS NO RECIPROCITY — the canonical NJ/NY case withholds NY in f
 
 test("a New Jersey resident working in PA: reciprocity, with and without REV-419", () => {
   const withForm = resolveWithholding({
-    country: "US", workRegion: "PA", residenceRegion: "NJ",
+    country: "US",
+    workRegion: "PA",
+    residenceRegion: "NJ",
     certificatesOnFile: ["us_pa_rev419"],
   });
   // THE PAIR IS NOW CLOSED. Pennsylvania is relieved and NEW JERSEY IS
@@ -393,14 +555,19 @@ test("a New Jersey resident working in PA: reciprocity, with and without REV-419
   // same call produced no levy at all and a blocking gap saying somebody had to
   // withhold New Jersey tax and this engine could not.
   const withFormRegions = withForm.levies.filter((levy) => levy.level === "region");
-  assert.deepEqual(withFormRegions.map((levy) => levy.region), ["NJ"]);
+  assert.deepEqual(
+    withFormRegions.map((levy) => levy.region),
+    ["NJ"],
+  );
   assert.equal(withFormRegions[0]!.basis, "reciprocity");
   assert.equal(withFormRegions[0]!.certificateKey, "us_nj_njw4");
   assert.deepEqual(withForm.gaps, []);
   assert.match(withForm.trace.join("\n"), /agreement in force/);
 
   const withoutForm = resolveWithholding({
-    country: "US", workRegion: "PA", residenceRegion: "NJ",
+    country: "US",
+    workRegion: "PA",
+    residenceRegion: "NJ",
   });
   assert.deepEqual(
     withoutForm.levies.filter((levy) => levy.level === "region").map((levy) => levy.region),
@@ -418,7 +585,9 @@ test("reciprocity does NOT relieve the Philadelphia wage tax", () => {
   // Pennsylvania employer from withholding local wage taxes imposed by cities,
   // towns, or other localities in Pennsylvania."
   const resolved = resolveWithholding({
-    country: "US", workRegion: "PA", residenceRegion: "NJ",
+    country: "US",
+    workRegion: "PA",
+    residenceRegion: "NJ",
     certificatesOnFile: ["us_pa_rev419"],
     workSubRegions: ["PHILADELPHIA"],
   });
@@ -459,9 +628,7 @@ test("Ohio's five reciprocal partners, on the IT 4's own waiver", () => {
 test("Michigan's SIX reciprocal partners, on a certificate the state does not print", () => {
   // Illinois, Indiana, Kentucky, Minnesota, Ohio and Wisconsin. Minnesota and
   // Illinois are the two most often dropped from a half-remembered list.
-  assert.deepEqual(
-    reciprocityPartners("US", "MI").sort(), ["IL", "IN", "KY", "MN", "OH", "WI"],
-  );
+  assert.deepEqual(reciprocityPartners("US", "MI").sort(), ["IL", "IN", "KY", "MN", "OH", "WI"]);
   const ohio = reciprocityAgreement("US", "MI", "OH")!;
   assert.equal(ohio.taxedBy, "residence");
   // Form 446: "Treasury does not furnish nonresidency certificates. The
@@ -481,17 +648,34 @@ test("North Dakota reciprocity covers both directions with Minnesota", () => {
   // Minnesota's agreement with North Dakota is real. With Form MWR on file
   // Minnesota is relieved and North Dakota is withheld — the pair is closed.
   const resolved = resolveWithholding({
-    country: "US", workRegion: "MN", residenceRegion: "ND",
+    country: "US",
+    workRegion: "MN",
+    residenceRegion: "ND",
     certificatesOnFile: ["us_mn_mwr"],
   });
   const regions = resolved.levies.filter((levy) => levy.level === "region");
-  assert.deepEqual(regions.map((levy) => levy.region), ["ND"]);
-  assert.deepEqual(resolveWithholding({ country: "US", workRegion: "ND", residenceRegion: "MN", certificatesOnFile: ["us_nd_ndwr"] }).levies.filter((levy) => levy.level === "region").map((levy) => levy.region), ["MN"]);
+  assert.deepEqual(
+    regions.map((levy) => levy.region),
+    ["ND"],
+  );
+  assert.deepEqual(
+    resolveWithholding({
+      country: "US",
+      workRegion: "ND",
+      residenceRegion: "MN",
+      certificatesOnFile: ["us_nd_ndwr"],
+    })
+      .levies.filter((levy) => levy.level === "region")
+      .map((levy) => levy.region),
+    ["MN"],
+  );
   assert.deepEqual(resolved.gaps, []);
 
   // Without the affidavit, Minnesota withholds — correctly — and says why.
   const withoutWaiver = resolveWithholding({
-    country: "US", workRegion: "MN", residenceRegion: "ND",
+    country: "US",
+    workRegion: "MN",
+    residenceRegion: "ND",
   });
   assert.deepEqual(
     withoutWaiver.levies.filter((levy) => levy.level === "region").map((levy) => levy.region),
@@ -502,11 +686,16 @@ test("North Dakota reciprocity covers both directions with Minnesota", () => {
 
 test("an Indiana resident working in Ohio is withheld INDIANA, both engines present", () => {
   const resolved = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "IN",
+    country: "US",
+    workRegion: "OH",
+    residenceRegion: "IN",
     certificatesOnFile: ["us_oh_it4"],
   });
   const regions = resolved.levies.filter((levy) => levy.level === "region");
-  assert.deepEqual(regions.map((levy) => levy.region), ["IN"]);
+  assert.deepEqual(
+    regions.map((levy) => levy.region),
+    ["IN"],
+  );
   assert.equal(regions[0]!.basis, "reciprocity");
   assert.deepEqual(resolved.gaps, []);
 });
@@ -533,11 +722,16 @@ test("a Michigan resident working in Ohio is withheld MICHIGAN, both engines pre
   // Both ends of this pair are implemented, so it resolves to a computable
   // answer rather than a refusal — the same thing NJ/PA now does.
   const resolved = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "MI",
+    country: "US",
+    workRegion: "OH",
+    residenceRegion: "MI",
     certificatesOnFile: ["us_oh_it4"],
   });
   const regions = resolved.levies.filter((levy) => levy.level === "region");
-  assert.deepEqual(regions.map((levy) => levy.region), ["MI"]);
+  assert.deepEqual(
+    regions.map((levy) => levy.region),
+    ["MI"],
+  );
   assert.equal(regions[0]!.basis, "reciprocity");
   assert.deepEqual(resolved.gaps, []);
 });
@@ -550,13 +744,22 @@ test("New York City reaches residents only — a commuter owes nothing", () => {
   const nyc = subRegionLevy("US", "NY", "NYC")!;
   assert.deepEqual(nyc.reaches, ["resident"]);
   const commuter = resolveWithholding({
-    country: "US", workRegion: "NY", residenceRegion: "NY",
-    workSubRegions: ["NYC"], residenceSubRegions: [],
+    country: "US",
+    workRegion: "NY",
+    residenceRegion: "NY",
+    workSubRegions: ["NYC"],
+    residenceSubRegions: [],
   });
-  assert.equal(commuter.levies.some((levy) => levy.subRegion === "NYC"), false);
+  assert.equal(
+    commuter.levies.some((levy) => levy.subRegion === "NYC"),
+    false,
+  );
   const resident = resolveWithholding({
-    country: "US", workRegion: "NY", residenceRegion: "NY",
-    workSubRegions: [], residenceSubRegions: ["NYC"],
+    country: "US",
+    workRegion: "NY",
+    residenceRegion: "NY",
+    workSubRegions: [],
+    residenceSubRegions: ["NYC"],
   });
   assert.ok(resident.levies.some((levy) => levy.subRegion === "NYC"));
 });
@@ -565,13 +768,20 @@ test("Yonkers reaches BOTH — two different taxes on two populations", () => {
   assert.deepEqual(subRegionLevy("US", "NY", "YONKERS")!.reaches, ["resident", "nonresident"]);
   // A New York City resident working in Yonkers owes both, independently.
   const both = resolveWithholding({
-    country: "US", workRegion: "NY", residenceRegion: "NY",
-    workSubRegions: ["YONKERS"], residenceSubRegions: ["NYC"],
+    country: "US",
+    workRegion: "NY",
+    residenceRegion: "NY",
+    workSubRegions: ["YONKERS"],
+    residenceSubRegions: ["NYC"],
   });
   assert.deepEqual(
-    both.levies.filter((levy) => levy.level === "sub_region")
+    both.levies
+      .filter((levy) => levy.level === "sub_region")
       .map((levy) => [levy.subRegion, levy.reach]),
-    [["NYC", "resident"], ["YONKERS", "nonresident"]],
+    [
+      ["NYC", "resident"],
+      ["YONKERS", "nonresident"],
+    ],
   );
 });
 
@@ -581,11 +791,15 @@ test("a Yonkers resident working in Yonkers is withheld ONCE, not priced twice",
   // the resident one, once; the work-side reach of the same code is not a
   // second levy.
   const resolved = resolveWithholding({
-    country: "US", workRegion: "NY", residenceRegion: "NY",
-    workSubRegions: ["YONKERS"], residenceSubRegions: ["YONKERS"],
+    country: "US",
+    workRegion: "NY",
+    residenceRegion: "NY",
+    workSubRegions: ["YONKERS"],
+    residenceSubRegions: ["YONKERS"],
   });
   assert.deepEqual(
-    resolved.levies.filter((levy) => levy.level === "sub_region")
+    resolved.levies
+      .filter((levy) => levy.level === "sub_region")
       .map((levy) => [levy.subRegion, levy.reach, levy.basis]),
     [["YONKERS", "resident", "resident"]],
   );
@@ -598,12 +812,16 @@ test("an Ohio same-city employee is withheld the municipal tax ONCE", () => {
   // the municipal return, not a withholding offset — so living and working in
   // the same city is one levy, withheld once.
   const resolved = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "OH",
-    workSubRegions: ["COLUMBUS"], residenceSubRegions: ["COLUMBUS"],
+    country: "US",
+    workRegion: "OH",
+    residenceRegion: "OH",
+    workSubRegions: ["COLUMBUS"],
+    residenceSubRegions: ["COLUMBUS"],
     subRegionRates: { "COLUMBUS:nonresident": "0.025", "COLUMBUS:resident": "0.025" },
   });
   assert.deepEqual(
-    resolved.levies.filter((levy) => levy.level === "sub_region")
+    resolved.levies
+      .filter((levy) => levy.level === "sub_region")
       .map((levy) => [levy.subRegion, levy.reach, levy.basis]),
     [["COLUMBUS", "resident", "resident"]],
   );
@@ -614,7 +832,10 @@ test("Pennsylvania admits any six-digit PSD code, and refuses anything else", ()
   assert.ok(subRegionLevy("US", "PA", "390101"));
   assert.equal(subRegionLevy("US", "PA", "39010")?.code, undefined);
   const resolved = resolveWithholding({
-    country: "US", workRegion: "PA", residenceRegion: "PA", workSubRegions: ["ALLENTOWN"],
+    country: "US",
+    workRegion: "PA",
+    residenceRegion: "PA",
+    workSubRegions: ["ALLENTOWN"],
   });
   assert.match(resolved.gaps[0]!.message, /Act 32 taxing jurisdiction by a code matching/);
 });
@@ -623,8 +844,11 @@ test("Act 32 higher-of, on DCED's own worked case", () => {
   // Bethlehem resident (total resident 1.000%, PSD 480202) working in Allentown
   // (nonresident 1.280%, PSD 390101). DCED's application computes "EIT 1.280%".
   const resolved = resolveWithholding({
-    country: "US", workRegion: "PA", residenceRegion: "PA",
-    workSubRegions: ["390101"], residenceSubRegions: ["480202"],
+    country: "US",
+    workRegion: "PA",
+    residenceRegion: "PA",
+    workSubRegions: ["390101"],
+    residenceSubRegions: ["480202"],
     subRegionRates: { "390101:nonresident": "0.0128", "480202:resident": "0.0100" },
   });
   const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
@@ -638,8 +862,11 @@ test("Philadelphia follows RESIDENCE even for a job elsewhere in Pennsylvania", 
   // outside of Philadelphia." So it must not be weighed against the work
   // municipality's Act 32 rate — it overrides it.
   const resolved = resolveWithholding({
-    country: "US", workRegion: "PA", residenceRegion: "PA",
-    workSubRegions: ["700102"], residenceSubRegions: ["PHILADELPHIA"],
+    country: "US",
+    workRegion: "PA",
+    residenceRegion: "PA",
+    workSubRegions: ["700102"],
+    residenceSubRegions: ["PHILADELPHIA"],
     subRegionRates: { "700102:nonresident": "0.0100" },
   });
   const subs = resolved.levies.filter((levy) => levy.level === "sub_region");
@@ -656,18 +883,30 @@ test("Ohio's school districts follow RESIDENCE, and an unknown code is refused b
   // A commuter INTO a taxing district owes it nothing; a resident owes it on
   // wages earned anywhere.
   const commuter = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "OH", workSubRegions: ["0303"],
+    country: "US",
+    workRegion: "OH",
+    residenceRegion: "OH",
+    workSubRegions: ["0303"],
   });
-  assert.equal(commuter.levies.some((levy) => levy.subRegion === "0303"), false);
+  assert.equal(
+    commuter.levies.some((levy) => levy.subRegion === "0303"),
+    false,
+  );
   const resident = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "OH", residenceSubRegions: ["0303"],
+    country: "US",
+    workRegion: "OH",
+    residenceRegion: "OH",
+    residenceSubRegions: ["0303"],
   });
   assert.ok(resident.levies.some((levy) => levy.subRegion === "0303"));
 
   // A four-digit code that is not a taxing district is not admitted by the
   // municipal pattern either, so it is refused rather than silently ignored.
   const wrong = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "OH", residenceSubRegions: ["9999"],
+    country: "US",
+    workRegion: "OH",
+    residenceRegion: "OH",
+    residenceSubRegions: ["9999"],
   });
   assert.equal(wrong.gaps.length, 1);
   assert.match(wrong.gaps[0]!.message, /"9999" is not a sub-region the US pack declares inside OH/);
@@ -686,13 +925,20 @@ test("Ohio admits any municipality by name, and school district plus city both a
   // residence side. They are different taxes levied by different authorities:
   // both are withheld, and neither is settled against the other.
   const resolved = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "OH",
-    workSubRegions: ["COLUMBUS"], residenceSubRegions: ["2514"],
+    country: "US",
+    workRegion: "OH",
+    residenceRegion: "OH",
+    workSubRegions: ["COLUMBUS"],
+    residenceSubRegions: ["2514"],
   });
   assert.deepEqual(
-    resolved.levies.filter((levy) => levy.level === "sub_region")
+    resolved.levies
+      .filter((levy) => levy.level === "sub_region")
       .map((levy) => [levy.subRegion, levy.reach]),
-    [["2514", "resident"], ["COLUMBUS", "nonresident"]],
+    [
+      ["2514", "resident"],
+      ["COLUMBUS", "nonresident"],
+    ],
   );
 });
 
@@ -702,12 +948,17 @@ test("Ohio reciprocity relieves the STATE, and leaves the city standing", () => 
   // Cincinnati in full — the same shape as Philadelphia under Pennsylvania's
   // agreements, and the same reason `relievesSubRegionLevies` exists.
   const resolved = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "KY",
+    country: "US",
+    workRegion: "OH",
+    residenceRegion: "KY",
     certificatesOnFile: ["us_oh_it4"],
     workSubRegions: ["CINCINNATI"],
   });
   const regions = resolved.levies.filter((levy) => levy.level === "region");
-  assert.deepEqual(regions.map((levy) => levy.region), ["KY"]);
+  assert.deepEqual(
+    regions.map((levy) => levy.region),
+    ["KY"],
+  );
   assert.equal(regions[0]!.basis, "reciprocity");
   assert.ok(resolved.levies.some((levy) => levy.subRegion === "CINCINNATI"));
 });
@@ -718,7 +969,10 @@ test("Michigan's city list is CLOSED — an unlisted city is not a jurisdiction"
   assert.equal(subRegionLevy("US", "MI", "DETROIT")!.rateSource.kind, "pack");
   assert.equal(subRegionLevy("US", "MI", "LANSING")!.rateSource.kind, "tenant");
   const resolved = resolveWithholding({
-    country: "US", workRegion: "MI", residenceRegion: "MI", workSubRegions: ["ANN_ARBOR"],
+    country: "US",
+    workRegion: "MI",
+    residenceRegion: "MI",
+    workSubRegions: ["ANN_ARBOR"],
   });
   assert.equal(resolved.gaps.length, 1);
   assert.match(
@@ -740,12 +994,53 @@ test("an employee with no residence recorded resolves exactly as before", () => 
   // Every profile row written before the residence attribute existed carries
   // null. Those employees must keep calculating identically.
   for (const state of [
-    "CA", "CO", "CT", "DE", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "MD", "ME", "GA", "HI", "NC",
-    "AL", "AR", "AZ", "ID", "IN", "KS", "KY", "LA", "VA", "VT", "WV", "IA", "MN", "MS", "MO", "MT", "NE", "ND", "OK", "WI", "UT", "OR", "RI", "SC",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "NY",
+    "PA",
+    "IL",
+    "NJ",
+    "OH",
+    "MI",
+    "MA",
+    "MD",
+    "ME",
+    "GA",
+    "HI",
+    "NC",
+    "AL",
+    "AR",
+    "AZ",
+    "ID",
+    "IN",
+    "KS",
+    "KY",
+    "LA",
+    "VA",
+    "VT",
+    "WV",
+    "IA",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "ND",
+    "OK",
+    "WI",
+    "UT",
+    "OR",
+    "RI",
+    "SC",
   ]) {
     const resolved = resolveWithholding({ country: "US", workRegion: state });
     assert.equal(resolved.residenceSource, "assumed");
-    assert.deepEqual(resolved.levies.map((levy) => levy.region), [state]);
+    assert.deepEqual(
+      resolved.levies.map((levy) => levy.region),
+      [state],
+    );
     assert.deepEqual(resolved.gaps, []);
   }
   // And a no-tax state still withholds nothing, with no complaint.
@@ -777,25 +1072,37 @@ test("every implemented pack-sourced sub-region levy computes through the dispat
       }
       if (levy.computedByParent) {
         assert.throws(
-          () => computeUsWithholding({
-            levy: {
-              level: "sub_region", region: region.region, subRegion: levy.code,
-              label: levy.label, basis: "resident", side: "residence", reach: "resident",
-              certificateKey: levy.certificateKey ?? region.certificateKey ?? null,
-            },
-            payDate: "2026-07-21", periodEnd: "2026-07-18", periodsPerYear: 26,
-            wages: "2000.00", federalIncomeTax: "100.00",
-            certificateFor: () => null, tenantRates: () => undefined,
-          }),
+          () =>
+            computeUsWithholding({
+              levy: {
+                level: "sub_region",
+                region: region.region,
+                subRegion: levy.code,
+                label: levy.label,
+                basis: "resident",
+                side: "residence",
+                reach: "resident",
+                certificateKey: levy.certificateKey ?? region.certificateKey ?? null,
+              },
+              payDate: "2026-07-21",
+              periodEnd: "2026-07-18",
+              periodsPerYear: 26,
+              wages: "2000.00",
+              federalIncomeTax: "100.00",
+              certificateFor: () => null,
+              tenantRates: () => undefined,
+            }),
           new RegExp(
-            `computed inside ${levy.computedByParent.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
-            + ".*would withhold the same tax twice",
+            `computed inside ${levy.computedByParent.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` +
+              ".*would withhold the same tax twice",
           ),
           `${region.region}:${levy.code} must refuse a separate posting`,
         );
         continue;
       }
-      const reach = levy.reaches.includes("resident") ? "resident" as const : "nonresident" as const;
+      const reach = levy.reaches.includes("resident")
+        ? ("resident" as const)
+        : ("nonresident" as const);
       const certificateKey = levy.certificateKey ?? region.certificateKey ?? null;
       const certificateFor = (key: string) => {
         if (key !== certificateKey) return null;
@@ -808,14 +1115,22 @@ test("every implemented pack-sourced sub-region levy computes through the dispat
       try {
         computeUsWithholding({
           levy: {
-            level: "sub_region", region: region.region, subRegion: levy.code,
-            label: levy.label, basis: reach,
-            side: reach === "resident" ? "residence" : "work", reach,
+            level: "sub_region",
+            region: region.region,
+            subRegion: levy.code,
+            label: levy.label,
+            basis: reach,
+            side: reach === "resident" ? "residence" : "work",
+            reach,
             certificateKey,
           },
-          payDate: "2026-07-21", periodEnd: "2026-07-18", periodsPerYear: 26,
-          wages: "2000.00", federalIncomeTax: "100.00",
-          certificateFor, tenantRates: () => undefined,
+          payDate: "2026-07-21",
+          periodEnd: "2026-07-18",
+          periodsPerYear: 26,
+          wages: "2000.00",
+          federalIncomeTax: "100.00",
+          certificateFor,
+          tenantRates: () => undefined,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -838,19 +1153,26 @@ test("a Maryland residence county moves SIT_MD and produces no separate levy", (
   // computation. And the resolver produces no county levy for either code,
   // because the local tax is inside SIT_MD, not beside it: a separate
   // posting would withhold the same tax twice.
-  const certificateFor = (county: string) => resolveCertificate({
-    certificate: payrollCertificate("US", "us_md_mw507"),
-    stored: [{
-      certificateKey: "us_md_mw507",
-      answers: { filing_status: "single", exemptions: "1", residence_county: county },
-      effectiveFrom: "2026-01-01",
-    }],
-    asOf: "2026-03-06",
-  });
-  const compute = (county: string) => MD_WITHHOLDING.compute({
-    payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "resident",
-    certificate: certificateFor(county),
-  });
+  const certificateFor = (county: string) =>
+    resolveCertificate({
+      certificate: payrollCertificate("US", "us_md_mw507"),
+      stored: [
+        {
+          certificateKey: "us_md_mw507",
+          answers: { filing_status: "single", exemptions: "1", residence_county: county },
+          effectiveFrom: "2026-01-01",
+        },
+      ],
+      asOf: "2026-03-06",
+    });
+  const compute = (county: string) =>
+    MD_WITHHOLDING.compute({
+      payDate: "2026-03-06",
+      periodsPerYear: 52,
+      wages: "1000.00",
+      basis: "resident",
+      certificate: certificateFor(county),
+    });
   const montgomery = compute("16");
   const carroll = compute("07");
   assert.equal(montgomery.factors.MD_LOCAL_TABLE, "3.20");
@@ -860,8 +1182,11 @@ test("a Maryland residence county moves SIT_MD and produces no separate levy", (
 
   for (const code of ["16", "07"]) {
     const resolved = resolveWithholding({
-      country: "US", workRegion: "MD", residenceRegion: "MD",
-      workSubRegions: [], residenceSubRegions: [code],
+      country: "US",
+      workRegion: "MD",
+      residenceRegion: "MD",
+      workSubRegions: [],
+      residenceSubRegions: [code],
     });
     assert.deepEqual(
       resolved.levies.filter((levy) => levy.level === "sub_region"),
@@ -882,8 +1207,11 @@ test("every implemented sub-region levy posts to the pocket its declaration stat
   // pocket (tenant-sourced levies run on stub rates shaped like the declaration —
   // only the figure is employer-entered, so an arbitrary valid figure proves the routing).
   const stubRates = () => ({
-    rate: "0.008", residentRate: "0.008", nonresidentRate: "0.008",
-    exemptionPerYear: "600.00", small_employer: "false",
+    rate: "0.008",
+    residentRate: "0.008",
+    nonresidentRate: "0.008",
+    exemptionPerYear: "600.00",
+    small_employer: "false",
   });
   const failures: string[] = [];
   for (const region of packWithholding("US").regions) {
@@ -900,26 +1228,49 @@ test("every implemented sub-region levy posts to the pocket its declaration stat
         }
       };
       const resolution = {
-        level: "sub_region", region: region.region, subRegion: levy.code,
-        label: levy.label, basis: "nonresident", side: "work", reach: "nonresident",
+        level: "sub_region",
+        region: region.region,
+        subRegion: levy.code,
+        label: levy.label,
+        basis: "nonresident",
+        side: "work",
+        reach: "nonresident",
         certificateKey,
       } as const;
       if (pocket === "employer") {
         assert.throws(
-          () => computeUsWithholding({
-            levy: { ...resolution }, payDate: "2026-07-21", periodEnd: "2026-07-18",
-            periodsPerYear: 26, wages: "2000.00", federalIncomeTax: "100.00",
-            certificateFor,
-            tenantRates: (_rateKey, _subRegion) => stubRates(),
-          }),
+          () =>
+            computeUsWithholding({
+              levy: { ...resolution },
+              payDate: "2026-07-21",
+              periodEnd: "2026-07-18",
+              periodsPerYear: 26,
+              wages: "2000.00",
+              federalIncomeTax: "100.00",
+              certificateFor,
+              tenantRates: (_rateKey, _subRegion) => stubRates(),
+            }),
           /never as a stub deduction/,
           `${region.region}:${levy.code} must refuse the deduction path`,
         );
         const employer = computeUsEmployerWithholding({
-          levy: { ...resolution }, payDate: "2026-07-21", wages: "2000.00",
+          levy: { ...resolution },
+          payDate: "2026-07-21",
+          wages: "2000.00",
           wageAllocations: [
-            { region: region.region, subRegion: null, workShare: "1", source: "registry pocket probe" },
-            { region: region.region, subRegion: levy.code, workShare: "1", source: "registry pocket probe", sourceWagesCurrentPeriod: "2000.00" },
+            {
+              region: region.region,
+              subRegion: null,
+              workShare: "1",
+              source: "registry pocket probe",
+            },
+            {
+              region: region.region,
+              subRegion: levy.code,
+              workShare: "1",
+              source: "registry pocket probe",
+              sourceWagesCurrentPeriod: "2000.00",
+            },
           ],
           ytdWages: "0",
           tenantRates: (_rateKey, _subRegion) => stubRates(),
@@ -928,17 +1279,23 @@ test("every implemented sub-region levy posts to the pocket its declaration stat
         continue;
       }
       assert.throws(
-        () => computeUsEmployerWithholding({
-          levy: { ...resolution }, wages: "2000.00",
-          tenantRates: (_rateKey, _subRegion) => stubRates(),
-        }),
+        () =>
+          computeUsEmployerWithholding({
+            levy: { ...resolution },
+            wages: "2000.00",
+            tenantRates: (_rateKey, _subRegion) => stubRates(),
+          }),
         /not declared as an employer payroll tax/,
         `${region.region}:${levy.code} must refuse the employer path`,
       );
       try {
         computeUsWithholding({
-          levy: { ...resolution }, payDate: "2026-07-21", periodEnd: "2026-07-18",
-          periodsPerYear: 26, wages: "2000.00", federalIncomeTax: "100.00",
+          levy: { ...resolution },
+          payDate: "2026-07-21",
+          periodEnd: "2026-07-18",
+          periodsPerYear: 26,
+          wages: "2000.00",
+          federalIncomeTax: "100.00",
           certificateFor,
           tenantRates: (_rateKey, _subRegion) => stubRates(),
         });

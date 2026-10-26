@@ -32,10 +32,7 @@ export const GET = defineRoute({
     }
     const { id } = routeParams;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "request id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
     try {
       const request = can(authz, "hrm.leave.read")
         ? await getLeaveRequest({
@@ -56,11 +53,7 @@ export const GET = defineRoute({
         request.leaveTypeId,
         asOf,
       );
-      const value = await payrollBankBalances(
-        authz.user.orgId,
-        request.workerPartyId,
-        { asOf },
-      );
+      const value = await payrollBankBalances(authz.user.orgId, request.workerPartyId, { asOf });
       return NextResponse.json({
         request,
         timeBalance: time,

@@ -4,7 +4,11 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
 
 // Invite-user vertical slice: POST action=invite → user row with an
 // unusable credential + role assignment + audit evidence → set-password link
@@ -32,9 +36,10 @@ registerHooks({
     });
     const parent = String(context.parentURL ?? "");
     if (
-      (specifier === "../../../../lib/authz"
-        && (parent.includes("/api/admin/users/route.ts") || parent.includes("/admin/users/view.ts")))
-      || (specifier === "@/lib/authz" && parent.includes("/web/lib/api/route.ts"))
+      (specifier === "../../../../lib/authz" &&
+        (parent.includes("/api/admin/users/route.ts") ||
+          parent.includes("/admin/users/view.ts"))) ||
+      (specifier === "@/lib/authz" && parent.includes("/web/lib/api/route.ts"))
     ) {
       return virtual(`
         export { subsidiaryScopeAllows } from '${pathToFileURL(process.cwd() + "/").href}engine/src/organization/subsidiary-scope.ts';
@@ -70,7 +75,10 @@ registerHooks({
         }
       `);
     }
-    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
+    if (
+      parent.includes("auth-reset.ts") &&
+      specifier === "@openbooks/engine/delivery/email-config/module"
+    ) {
       return virtual(`
         const state = globalThis[Symbol.for('openbooks.admin-invite-integration')];
         export async function resolveOrgEmailTransport() { return { provider: 'isolated' }; }
@@ -97,8 +105,13 @@ async function seed(rolePermissions: string[] = []) {
   const { org, actorId, roleId } = await withBypassContext(async () => {
     const scratch = await createScratchOrg();
     const actor = await createScratchUser(scratch.orgId, "Invite actor", "invite_actor");
-    const role = (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-        values (${scratch.orgId}, 'invitable', 'Invitable', false, ${JSON.stringify(rolePermissions)}::jsonb) returning id`, "objects"))[0]!.id;
+    const role = (
+      await db.execute<{ id: string }>(
+        sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+        values (${scratch.orgId}, 'invitable', 'Invitable', false, ${JSON.stringify(rolePermissions)}::jsonb) returning id`,
+        "objects",
+      )
+    )[0]!.id;
     await db.execute(sql`update orgs set env_kind = 'production' where id = ${scratch.orgId}`);
     return { org: scratch, actorId: actor, roleId: role };
   });
@@ -125,15 +138,22 @@ const invite = (body: object) =>
 
 async function userRow(f: Fixture, email: string = NEW_EMAIL) {
   // Reads stay tenant-scoped via withOrgContext — the production read path.
-  return (await withOrgContext(f.orgId, () => db.execute<{
-      id: string;
-      name: string;
-      email: string;
-      password_hash: string;
-      is_active: boolean;
-      last_login_at: string | null;
-    }>(sql`select id, name, email, password_hash, is_active, last_login_at
-      from users where org_id = ${f.orgId} and lower(email) = ${email}`, "objects")))[0];
+  return (
+    await withOrgContext(f.orgId, () =>
+      db.execute<{
+        id: string;
+        name: string;
+        email: string;
+        password_hash: string;
+        is_active: boolean;
+        last_login_at: string | null;
+      }>(
+        sql`select id, name, email, password_hash, is_active, last_login_at
+      from users where org_id = ${f.orgId} and lower(email) = ${email}`,
+        "objects",
+      ),
+    )
+  )[0];
 }
 
 test("invite creates the user, assigns the role, and issues a working set-password link", async () => {
@@ -141,7 +161,11 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
   try {
     const response = await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId });
     assert.equal(response.status, 200);
-    const payload = (await response.json()) as { ok: boolean; userId: string; emailQueued: boolean };
+    const payload = (await response.json()) as {
+      ok: boolean;
+      userId: string;
+      emailQueued: boolean;
+    };
     assert.equal(payload.ok, true);
     assert.equal(payload.emailQueued, true);
 
@@ -153,26 +177,61 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
     assert.equal(user.last_login_at, null);
     assert.equal(user.password_hash, "unusable");
 
-    const assignment = (await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from role_assignments
-        where org_id = ${f.orgId} and user_id = ${user!.id} and role_id = ${f.roleId}`, "objects")))[0]!.n;
+    const assignment = (
+      await withOrgContext(f.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from role_assignments
+        where org_id = ${f.orgId} and user_id = ${user!.id} and role_id = ${f.roleId}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(assignment, 1);
-    const userAudit = (await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log
-        where org_id = ${f.orgId} and table_name = 'users' and row_id = ${user!.id} and action = 'insert'`, "objects")))[0]!.n;
-    const assignmentAudit = (await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log
+    const userAudit = (
+      await withOrgContext(f.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from audit_log
+        where org_id = ${f.orgId} and table_name = 'users' and row_id = ${user!.id} and action = 'insert'`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
+    const assignmentAudit = (
+      await withOrgContext(f.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from audit_log
         where org_id = ${f.orgId} and table_name = 'role_assignments' and action = 'insert'
-          and row_id in (select id from role_assignments where org_id = ${f.orgId} and user_id = ${user!.id})`, "objects")))[0]!.n;
+          and row_id in (select id from role_assignments where org_id = ${f.orgId} and user_id = ${user!.id})`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(userAudit, 1, "user creation is audited");
     assert.equal(assignmentAudit, 1, "role assignment is audited");
 
     // auth_password_resets carries no org_id, so this read keeps the
     // bypass CI runs under rather than a tenant scope it cannot express.
-    const resets = (await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from auth_password_resets
-        where user_id = ${user!.id} and used_at is null and expires_at > now()`, "objects")))[0]!.n;
+    const resets = (
+      await withBypassContext(() =>
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from auth_password_resets
+        where user_id = ${user!.id} and used_at is null and expires_at > now()`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(resets, 1);
     // An invitation outlives a self-service reset: it must still work when
     // opened on another working day.
-    const lifetime = (await withBypassContext(() => db.execute<{ hours: number }>(sql`select extract(epoch from expires_at - created_at)::float / 3600 as hours
-        from auth_password_resets where user_id = ${user!.id} and used_at is null`, "objects")))[0]!.hours;
+    const lifetime = (
+      await withBypassContext(() =>
+        db.execute<{ hours: number }>(
+          sql`select extract(epoch from expires_at - created_at)::float / 3600 as hours
+        from auth_password_resets where user_id = ${user!.id} and used_at is null`,
+          "objects",
+        ),
+      )
+    )[0]!.hours;
     assert.ok(Math.abs(lifetime - 7 * 24) < 0.1, `invitation link lives 7 days, got ${lifetime}h`);
     assert.equal(state.deliveries.length, 1);
     assert.equal(state.deliveries[0]!.to, NEW_EMAIL);
@@ -194,10 +253,14 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
 
     // The emailed link genuinely sets a password: the full circle closes.
     // Consuming the link ends the pending state even before first sign-in.
-    const token = new URL(state.deliveries[0]!.text, "https://books.example.test").searchParams.get("token")!;
+    const token = new URL(state.deliveries[0]!.text, "https://books.example.test").searchParams.get(
+      "token",
+    )!;
     assert.deepEqual(await completePasswordReset(token, "A brand new password 1042"), { ok: true });
 
-    await withBypassContext(() => db.execute(sql`update users set last_login_at = now() where id = ${user!.id}`));
+    await withBypassContext(() =>
+      db.execute(sql`update users set last_login_at = now() where id = ${user!.id}`),
+    );
     const settled = await withOrgContext(f.orgId, () => loadAdminUsers({}));
     const settledRow = settled.users.find((row) => row.email === NEW_EMAIL);
     assert.equal(settledRow!.isPending, false);
@@ -214,7 +277,10 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
 test("invite rejects a malformed address, an unknown role, and a grant above the inviter's ceiling", async () => {
   const f = await seed(["gl.post"]);
   try {
-    assert.equal((await invite({ action: "invite", email: "not-an-address", roleId: f.roleId })).status, 400);
+    assert.equal(
+      (await invite({ action: "invite", email: "not-an-address", roleId: f.roleId })).status,
+      400,
+    );
     assert.equal(
       (
         await invite({
@@ -227,7 +293,10 @@ test("invite rejects a malformed address, an unknown role, and a grant above the
     );
     assert.equal((await invite({ action: "invite", email: NEW_EMAIL })).status, 400);
     // The seeded role carries gl.post, which the inviter does not hold.
-    assert.equal((await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId })).status, 403);
+    assert.equal(
+      (await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId })).status,
+      403,
+    );
     assert.equal(await userRow(f), undefined);
   } finally {
     state.authz = null;
@@ -242,13 +311,24 @@ test("a second invite for the same pending address re-issues instead of conflict
     assert.equal(first.status, 200);
     const firstPayload = (await first.json()) as { userId: string };
     // A retry for the same still-pending user resumes: same user, fresh link.
-    const retry = await invite({ action: "invite", email: "New.Member@scratch.test", roleId: f.roleId });
+    const retry = await invite({
+      action: "invite",
+      email: "New.Member@scratch.test",
+      roleId: f.roleId,
+    });
     assert.equal(retry.status, 200);
     const retryPayload = (await retry.json()) as { userId: string; emailQueued: boolean };
     assert.equal(retryPayload.userId, firstPayload.userId);
     assert.equal(retryPayload.emailQueued, true);
-    const count = (await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from users
-        where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`, "objects")))[0]!.n;
+    const count = (
+      await withOrgContext(f.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from users
+        where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(count, 1);
     assert.equal(state.deliveries.length, 2, "the retry issued a fresh link");
   } finally {
@@ -265,7 +345,11 @@ test("a retry for an address owned by a real account still conflicts", async () 
     ).json()) as { userId: string };
     // The mailbox owner completes signup: the address now belongs to a real
     // account, so a further invite is a conflict, not a re-issue.
-    await withBypassContext(() => db.execute(sql`update users set password_hash = 'scrypt:activated' where id = ${first.userId}`));
+    await withBypassContext(() =>
+      db.execute(
+        sql`update users set password_hash = 'scrypt:activated' where id = ${first.userId}`,
+      ),
+    );
     const retry = await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId });
     assert.equal(retry.status, 409);
   } finally {
@@ -282,10 +366,19 @@ test("an invite cannot claim an address that already signs in to another organiz
   const f = await seed();
   try {
     const taken = "member.elsewhere@scratch.test";
-    await withBypassContext(() => createScratchUser(owner.orgId, "Existing member", "existing_member").then(id => db.execute(sql`update users set email=${taken},password_hash='scrypt:activated' where org_id=${owner.orgId} and id=${id}`)));
+    await withBypassContext(() =>
+      createScratchUser(owner.orgId, "Existing member", "existing_member").then((id) =>
+        db.execute(
+          sql`update users set email=${taken},password_hash='scrypt:activated' where org_id=${owner.orgId} and id=${id}`,
+        ),
+      ),
+    );
     const refused = await invite({ action: "invite", email: taken, roleId: f.roleId });
     assert.equal(refused.status, 409);
-    assert.match(((await refused.json()) as { error: string }).error, /already signs in to another organization.*Platform → Access/);
+    assert.match(
+      ((await refused.json()) as { error: string }).error,
+      /already signs in to another organization.*Platform → Access/,
+    );
     assert.equal(await userRow(f, taken), undefined);
   } finally {
     state.authz = null;
@@ -304,8 +397,15 @@ test("concurrent invites for one address create a single user", async () => {
     // The loser resumes the winner's pending row instead of conflicting:
     // one user, two issuances, the later link superseding the earlier.
     assert.deepEqual([first.status, second.status].sort(), [200, 200]);
-    const count = (await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from users
-        where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`, "objects")))[0]!.n;
+    const count = (
+      await withOrgContext(f.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`select count(*)::int as n from users
+        where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(count, 1);
   } finally {
     state.authz = null;

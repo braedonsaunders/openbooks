@@ -22,7 +22,25 @@ import {
   Textarea,
   cn,
 } from "@openbooks/ui";
-import { AlertTriangle, ArrowLeft, Bot, Check, CheckCircle2, Clock3, Download, ExternalLink, FileCheck2, FilePlus2, GitBranch, LockKeyhole, Play, RefreshCw, Send, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Bot,
+  Check,
+  CheckCircle2,
+  Clock3,
+  Download,
+  ExternalLink,
+  FileCheck2,
+  FilePlus2,
+  GitBranch,
+  LockKeyhole,
+  Play,
+  RefreshCw,
+  Send,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import { WizardLayout } from "../../../components/page-layout";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { UnbilledAccrualPanel } from "./UnbilledAccrualPanel";
@@ -161,14 +179,7 @@ type Props = {
   periodEndJournals?: boolean;
 };
 
-const STAGES = [
-  "scope",
-  "readiness",
-  "execute",
-  "review",
-  "lock",
-  "publish",
-] as const;
+const STAGES = ["scope", "readiness", "execute", "review", "lock", "publish"] as const;
 type Stage = (typeof STAGES)[number];
 
 async function call(url: string, body: Record<string, unknown>, fallback: string) {
@@ -190,9 +201,10 @@ export function CloseWizard(props: Props) {
   // readonly Stage[] not the narrowed filter type: the published/advanced
   // branch serves every stage including publish, and a requested publish stage
   // is legitimate.
-  const visibleStages: readonly Stage[] = props.advancedClose || props.run.status === "published"
-    ? STAGES
-    : STAGES.filter((stage) => stage !== "publish");
+  const visibleStages: readonly Stage[] =
+    props.advancedClose || props.run.status === "published"
+      ? STAGES
+      : STAGES.filter((stage) => stage !== "publish");
   const requested: Stage =
     STAGES.find((stage) => stage === props.stage) ??
     STAGES.find((stage) => stage === props.run.current_stage) ??
@@ -201,15 +213,9 @@ export function CloseWizard(props: Props) {
   const completed = props.tasks.filter((task) =>
     ["complete", "waived"].includes(task.status),
   ).length;
-  const progress = props.tasks.length
-    ? Math.round((completed / props.tasks.length) * 100)
-    : 0;
+  const progress = props.tasks.length ? Math.round((completed / props.tasks.length) * 100) : 0;
   const critical = props.tasks
-    .filter(
-      (task) =>
-        !["complete", "waived"].includes(task.status) &&
-        task.predicted_days != null,
-    )
+    .filter((task) => !["complete", "waived"].includes(task.status) && task.predicted_days != null)
     .sort((a, b) => (b.predicted_days ?? 0) - (a.predicted_days ?? 0))[0];
   const [busy, setBusy] = useState(false);
 
@@ -269,9 +275,7 @@ export function CloseWizard(props: Props) {
           ) : null}
           {props.canReopen ? (
             <Button variant="outline" size="sm" asChild>
-              <Link href="/accounting/reopen-requests">
-                {t("actions.viewReopenRequests")}
-              </Link>
+              <Link href="/accounting/reopen-requests">{t("actions.viewReopenRequests")}</Link>
             </Button>
           ) : null}
         </div>
@@ -300,10 +304,7 @@ export function CloseWizard(props: Props) {
           }
         />
       </div>
-      <nav
-        className="flex gap-1 overflow-x-auto"
-        aria-label={t("stageNavigation")}
-      >
+      <nav className="flex gap-1 overflow-x-auto" aria-label={t("stageNavigation")}>
         {visibleStages.map((stage, index) => (
           <Link
             key={stage}
@@ -323,7 +324,7 @@ export function CloseWizard(props: Props) {
         ))}
       </nav>
     </div>
-  )
+  );
 
   return (
     <WizardLayout wide header={header}>
@@ -342,71 +343,44 @@ export function CloseWizard(props: Props) {
       ) : null}
       {selected === "scope" ? <ScopeStage {...props} /> : null}
       {selected === "readiness" ? (
-        <ReadinessStage
-          {...props}
-          busy={busy}
-          onRefresh={() => runAction("refresh")}
-        />
+        <ReadinessStage {...props} busy={busy} onRefresh={() => runAction("refresh")} />
       ) : null}
       {selected === "execute" ? (
         <TaskStage
           {...props}
           tasks={props.tasks.filter(
             (task) =>
-              !["review", "publish"].includes(task.workstream) &&
-              !task.key.startsWith("lock-"),
+              !["review", "publish"].includes(task.workstream) && !task.key.startsWith("lock-"),
           )}
         />
       ) : null}
       {selected === "review" ? (
-        <TaskStage
-          {...props}
-          tasks={props.tasks.filter((task) => task.workstream === "review")}
-        />
+        <TaskStage {...props} tasks={props.tasks.filter((task) => task.workstream === "review")} />
       ) : null}
-      {selected === "lock" ? (
-        <LockStage {...props} busy={busy} onAction={runAction} />
-      ) : null}
-      {selected === "publish" ? (
-        <PublishStage {...props} busy={busy} onAction={runAction} />
-      ) : null}
+      {selected === "lock" ? <LockStage {...props} busy={busy} onAction={runAction} /> : null}
+      {selected === "publish" ? <PublishStage {...props} busy={busy} onAction={runAction} /> : null}
     </WizardLayout>
   );
 }
 
-function taskText(
-  t: ReturnType<typeof useTranslations>,
-  value: string | null | undefined,
-): string {
-  if (!value) return ''
-  return value.startsWith('close.') ? t(value.slice(6)) : value
+function taskText(t: ReturnType<typeof useTranslations>, value: string | null | undefined): string {
+  if (!value) return "";
+  return value.startsWith("close.") ? t(value.slice(6)) : value;
 }
 
-function Metric({
-  label,
-  value,
-  note,
-}: {
-  label: string;
-  value: string;
-  note: string;
-}) {
+function Metric({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-        {label}
-      </p>
-      <p className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
-        {value}
-      </p>
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{value}</p>
       <p className="truncate text-xs text-slate-400">{note}</p>
     </div>
   );
 }
 
 function ScopeStage(props: Props) {
-  const t = useTranslations('close')
-  const locale = useLocale()
+  const t = useTranslations("close");
+  const locale = useLocale();
   const subsidiaryIds = props.run.scope?.subsidiaryIds ?? [];
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_.8fr]">
@@ -425,10 +399,7 @@ function ScopeStage(props: Props) {
             label={t("scope.blueprint")}
             value={`${taskText(t, props.run.blueprint_name)} v${props.run.blueprint_version}`}
           />
-          <Detail
-            label={t("scope.target")}
-            value={props.run.target_close_date}
-          />
+          <Detail label={t("scope.target")} value={props.run.target_close_date} />
           {props.subsidiaryEnabled ? (
             <Detail
               label={t("scope.entities")}
@@ -454,9 +425,7 @@ function ScopeStage(props: Props) {
           <CardDescription>{t("rehearsal.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Link
-            href={`/admin/sandboxes?new=1&mode=as_of&periodId=${props.run.period_id}`}
-          >
+          <Link href={`/admin/sandboxes?new=1&mode=as_of&periodId=${props.run.period_id}`}>
             <Button variant="outline">
               <Play size={15} />
               {t("rehearsal.action")}
@@ -466,23 +435,19 @@ function ScopeStage(props: Props) {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-        {label}
-      </p>
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-sm text-slate-900 dark:text-slate-100">{value}</p>
     </div>
   );
 }
 
-function ReadinessStage(
-  props: Props & { busy: boolean; onRefresh: () => void },
-) {
+function ReadinessStage(props: Props & { busy: boolean; onRefresh: () => void }) {
   const t = useTranslations("close");
   const open = props.exceptions.filter((item) => item.status === "open");
   return (
@@ -500,9 +465,7 @@ function ReadinessStage(
                 <span className="text-3xl font-semibold tabular-nums">
                   {props.run.readiness_score}%
                 </span>
-                <span className="text-xs text-slate-500">
-                  {t("readiness.score")}
-                </span>
+                <span className="text-xs text-slate-500">{t("readiness.score")}</span>
               </div>
             </div>
             <Button
@@ -541,8 +504,16 @@ function ReadinessStage(
   );
 }
 
-function ExceptionRow({ item, run, canRun }: { item: CloseExceptionRow; run: Props["run"]; canRun: boolean }) {
-  const t = useTranslations('close')
+function ExceptionRow({
+  item,
+  run,
+  canRun,
+}: {
+  item: CloseExceptionRow;
+  run: Props["run"];
+  canRun: boolean;
+}) {
+  const t = useTranslations("close");
   const critical = ["critical", "error"].includes(item.severity);
   // Posting periods are maintained by close operators: a viewer without the
   // close run permission is told who can act instead of being sent to a
@@ -550,12 +521,10 @@ function ExceptionRow({ item, run, canRun }: { item: CloseExceptionRow; run: Pro
   const periodRemedyWithheld = item.code === "posting-period-missing" && !canRun;
   const actionHref = periodRemedyWithheld ? null : closeExceptionActionHref(item.code, run);
   const values = { count: Number(item.details?.count ?? 0) };
-  const title = item.title?.startsWith('close.')
-    ? t(item.title.slice(6), values)
-    : item.title
-  const message = item.message?.startsWith('close.')
+  const title = item.title?.startsWith("close.") ? t(item.title.slice(6), values) : item.title;
+  const message = item.message?.startsWith("close.")
     ? t(item.message.slice(6), values)
-    : item.message
+    : item.message;
   return (
     <div
       className={cn(
@@ -571,16 +540,12 @@ function ExceptionRow({ item, run, canRun }: { item: CloseExceptionRow; run: Pro
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-medium text-slate-900 dark:text-slate-100">
-            {title}
-          </p>
+          <p className="font-medium text-slate-900 dark:text-slate-100">{title}</p>
           <Badge variant={critical ? "destructive" : "warning"}>
             {t(`severity.${item.severity}`)}
           </Badge>
         </div>
-        <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
-          {message}
-        </p>
+        <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">{message}</p>
         {Array.isArray(item.details?.documents) && item.details.documents.length > 0 ? (
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
             {t("readiness.affectedDocuments", {
@@ -603,7 +568,7 @@ function ExceptionRow({ item, run, canRun }: { item: CloseExceptionRow; run: Pro
         ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 function closeExceptionActionHref(code: string, run: CloseRunRow): string | null {
@@ -637,7 +602,7 @@ function closeExceptionActionHref(code: string, run: CloseRunRow): string | null
 }
 
 function TaskStage(props: Props & { tasks: CloseTaskRow[] }) {
-  const t = useTranslations('close')
+  const t = useTranslations("close");
   const groups = useMemo(
     () => Array.from(new Set(props.tasks.map((task) => task.workstream))),
     [props.tasks],
@@ -662,17 +627,15 @@ function TaskStage(props: Props & { tasks: CloseTaskRow[] }) {
         </section>
       ))}
     </div>
-  )
+  );
 }
 
 function TaskCard(props: Props & { task: CloseTaskRow }) {
-  const t = useTranslations('close')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState('')
-  const taskEvidence = props.evidence.filter(
-    (item) => item.task_id === props.task.id,
-  );
+  const t = useTranslations("close");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const taskEvidence = props.evidence.filter((item) => item.task_id === props.task.id);
   const openException = props.exceptions.find(
     (item) => item.task_id === props.task.id && item.status === "open",
   );
@@ -693,7 +656,11 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
   async function revalidateTask() {
     setBusy(true);
     try {
-      await call(`/api/close/runs/${props.run.id}`, { action: "refresh" }, t("errors.actionFailed"));
+      await call(
+        `/api/close/runs/${props.run.id}`,
+        { action: "refresh" },
+        t("errors.actionFailed"),
+      );
       toast.success(t("messages.refresh"));
       router.refresh();
     } catch (error) {
@@ -705,10 +672,14 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
   async function action(actionName: string) {
     setBusy(true);
     try {
-      await call(`/api/close/runs/${props.run.id}/tasks/${props.task.id}`, {
-        action: actionName,
-        notes: note || undefined,
-      }, t("errors.actionFailed"));
+      await call(
+        `/api/close/runs/${props.run.id}/tasks/${props.task.id}`,
+        {
+          action: actionName,
+          notes: note || undefined,
+        },
+        t("errors.actionFailed"),
+      );
       toast.success(t("messages.taskUpdated"));
       setNote("");
       router.refresh();
@@ -722,12 +693,16 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
     if (!note.trim()) return;
     setBusy(true);
     try {
-      await call(`/api/close/runs/${props.run.id}/evidence`, {
-        taskId: props.task.id,
-        evidenceType: "note",
-        label: note.trim(),
-        snapshot: { note: note.trim() },
-      }, t("errors.actionFailed"));
+      await call(
+        `/api/close/runs/${props.run.id}/evidence`,
+        {
+          taskId: props.task.id,
+          evidenceType: "note",
+          label: note.trim(),
+          snapshot: { note: note.trim() },
+        },
+        t("errors.actionFailed"),
+      );
       toast.success(t("messages.evidenceAdded"));
       setNote("");
       router.refresh();
@@ -740,36 +715,44 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
   async function runRevaluation() {
     setBusy(true);
     try {
-      const result = await call("/api/close/run-revaluation", {
-        periodId: props.run.period_id,
-        bookId: props.run.book_id,
-        subsidiaryIds: props.run.scope?.subsidiaryIds?.length ? props.run.scope.subsidiaryIds : undefined,
-      }, t("errors.actionFailed"));
+      const result = await call(
+        "/api/close/run-revaluation",
+        {
+          periodId: props.run.period_id,
+          bookId: props.run.book_id,
+          subsidiaryIds: props.run.scope?.subsidiaryIds?.length
+            ? props.run.scope.subsidiaryIds
+            : undefined,
+        },
+        t("errors.actionFailed"),
+      );
       // Partial problems arrive with stable codes plus structured subsidiary
       // parameters and render through the close catalog; the legacy English
       // strings stay as the fallback when details are absent.
-      const problemDetails = (Array.isArray(result.problemDetails) ? result.problemDetails : []) as Array<{
-        code?: string
-        subsidiaryId?: unknown
-        subsidiaryName?: unknown
-        detail?: unknown
-      }>
+      const problemDetails = (
+        Array.isArray(result.problemDetails) ? result.problemDetails : []
+      ) as Array<{
+        code?: string;
+        subsidiaryId?: unknown;
+        subsidiaryName?: unknown;
+        detail?: unknown;
+      }>;
       const problemMessages =
         problemDetails.length > 0
           ? problemDetails.map((problem) =>
               problem.code === "subsidiary_missing"
-                ? t("problems.subsidiaryMissing", { subsidiaryId: String(problem.subsidiaryId ?? "") })
+                ? t("problems.subsidiaryMissing", {
+                    subsidiaryId: String(problem.subsidiaryId ?? ""),
+                  })
                 : t("problems.entityFailed", {
                     name: String(problem.subsidiaryName ?? problem.subsidiaryId ?? ""),
                     detail: String(problem.detail ?? ""),
                   }),
             )
-          : (result.problems as string[])
+          : (result.problems as string[]);
       if (result.problems.length > 0) {
         toast.error(problemMessages.join("\n"), {
-          description: result.posted.length > 0
-            ? t("messages.revaluationPosted")
-            : undefined,
+          description: result.posted.length > 0 ? t("messages.revaluationPosted") : undefined,
         });
       } else if (result.posted.length > 0) {
         toast.success(t("messages.revaluationPosted"));
@@ -793,10 +776,14 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
     setBusy(true);
     setTaskError(null);
     try {
-      const result = (await call("/api/consolidation", {
-        action: "consolidate",
-        periodId: props.run.period_id,
-      }, t("errors.actionFailed"))) as { elimination?: { status?: string } };
+      const result = (await call(
+        "/api/consolidation",
+        {
+          action: "consolidate",
+          periodId: props.run.period_id,
+        },
+        t("errors.actionFailed"),
+      )) as { elimination?: { status?: string } };
       // A re-run that only reverses a prior elimination posts no effective
       // elimination entry: saying "posted" would present the reversal as
       // effective, so the reversed state gets its own message.
@@ -827,9 +814,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
             <StatusIcon status={props.task.status} />
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-base">
-                  {taskText(t, props.task.title)}
-                </CardTitle>
+                <CardTitle className="text-base">{taskText(t, props.task.title)}</CardTitle>
                 <Badge
                   variant={
                     props.task.gate_type === "hard"
@@ -842,9 +827,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
                   {t(`gates.${props.task.gate_type}`)}
                 </Badge>
               </div>
-              <CardDescription>
-                {taskText(t, props.task.description)}
-              </CardDescription>
+              <CardDescription>{taskText(t, props.task.description)}</CardDescription>
             </div>
           </div>
           <div className="text-right text-xs text-slate-500">
@@ -917,7 +900,11 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
           <UnbilledAccrualPanel periodId={props.run.period_id} canPost={props.canPostGl === true} />
         ) : null}
         {props.periodEndJournals && props.task.key === "period-end-journals" ? (
-          <PeriodEndJournalsPanel periodId={props.run.period_id} bookId={props.run.book_id} canRun={props.canRun} />
+          <PeriodEndJournalsPanel
+            periodId={props.run.period_id}
+            bookId={props.run.book_id}
+            canRun={props.canRun}
+          />
         ) : null}
         {props.canRun &&
         props.subsidiaryEnabled &&
@@ -940,30 +927,31 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
         ) : null}
         {actionHref &&
         !["complete", "waived"].includes(props.task.status) &&
-        !["fx-revalued", "consolidation", "unbilled-revenue-accrued", "period-end-journals"].includes(props.task.key) ? (
+        ![
+          "fx-revalued",
+          "consolidation",
+          "unbilled-revenue-accrued",
+          "period-end-journals",
+        ].includes(props.task.key) ? (
           <Button variant="outline" size="sm" asChild>
             <Link href={actionHref}>
               <ExternalLink size={14} />
-              {t('actions.takeAction')}
+              {t("actions.takeAction")}
             </Link>
           </Button>
         ) : null}
         {props.canRun &&
         !["complete", "waived"].includes(props.task.status) &&
         props.task.completion_mode !== "manual" ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={revalidateTask}
-          >
+          <Button variant="outline" size="sm" disabled={busy} onClick={revalidateTask}>
             <RefreshCw size={14} />
             {t("actions.revalidate")}
           </Button>
         ) : null}
         {props.canRun &&
         !["complete", "waived"].includes(props.task.status) &&
-        props.task.completion_mode === "manual" && props.task.task_type !== "approval" ? (
+        props.task.completion_mode === "manual" &&
+        props.task.task_type !== "approval" ? (
           <div className="flex flex-wrap items-center gap-2">
             <Input
               className="min-w-52 flex-1"
@@ -982,33 +970,28 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
                 {t("actions.addEvidence")}
               </Button>
             ) : null}
-            {["ready", "invalidated", "changes_requested"].includes(
-              props.task.status,
-            ) ? (
+            {["ready", "invalidated", "changes_requested"].includes(props.task.status) ? (
               <Button size="sm" disabled={busy} onClick={() => action("start")}>
                 <Play size={14} />
                 {t("actions.startTask")}
               </Button>
             ) : null}
             {props.task.status === "in_progress" ? (
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => action("complete")}
-              >
+              <Button size="sm" disabled={busy} onClick={() => action("complete")}>
                 <Send size={14} />
                 {t("actions.complete")}
               </Button>
             ) : null}
-
           </div>
         ) : null}
-        {props.task.completion_mode === "manual" && props.task.task_type !== "approval" && props.task.status === "submitted" ? (
+        {props.task.completion_mode === "manual" &&
+        props.task.task_type !== "approval" &&
+        props.task.status === "submitted" ? (
           <ApprovalActions subjectKind="close_task" subjectId={props.task.id} />
         ) : null}
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function closeTaskActionHref(task: CloseTaskRow, run: CloseRunRow): string | null {
@@ -1082,7 +1065,7 @@ function LockStage(
     onAction: (action: string, comment?: string) => void;
   },
 ) {
-  const t = useTranslations('close')
+  const t = useTranslations("close");
   const rootLocks = props.locks.filter((lock) => !lock.subsidiary_id);
   const blockers = props.tasks.filter(
     (task) =>
@@ -1139,33 +1122,33 @@ function LockStage(
       ) : null}
       <Card>
         <CardHeader>
-          <CardTitle>{t('lock.approvalTitle')}</CardTitle>
-          <CardDescription>{t('lock.approvalDescription')}</CardDescription>
+          <CardTitle>{t("lock.approvalTitle")}</CardTitle>
+          <CardDescription>{t("lock.approvalDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            {props.run.status === 'in_progress' ? (
+            {props.run.status === "in_progress" ? (
               <Button
-              disabled={props.busy || blockers.length > 0 || !props.canRun}
-              onClick={() => props.onAction("request_approval")}
-            >
+                disabled={props.busy || blockers.length > 0 || !props.canRun}
+                onClick={() => props.onAction("request_approval")}
+              >
                 <ShieldCheck size={15} />
-                {t('actions.requestApproval')}
+                {t("actions.requestApproval")}
               </Button>
             ) : null}
-            {props.run.status === 'review' ? (
+            {props.run.status === "review" ? (
               <ApprovalActions subjectKind="close_run" subjectId={props.run.id} />
             ) : null}
-            {props.run.status === 'approved' ? (
+            {props.run.status === "approved" ? (
               <Button
-              disabled={props.busy || !props.canApprove}
-              onClick={async () => {
-                if (!(await confirmDialog(t("lock.confirmLock")))) return
-                props.onAction("close")
-              }}
-            >
+                disabled={props.busy || !props.canApprove}
+                onClick={async () => {
+                  if (!(await confirmDialog(t("lock.confirmLock")))) return;
+                  props.onAction("close");
+                }}
+              >
                 <LockKeyhole size={15} />
-                {t('actions.lockPeriod')}
+                {t("actions.lockPeriod")}
               </Button>
             ) : null}
             {props.run.status === "closed" || props.run.status === "published" ? (
@@ -1178,21 +1161,21 @@ function LockStage(
               <Button variant="ghost" asChild>
                 <Link href="/admin/flows?subject=close_run">
                   <GitBranch size={15} />
-                  {t('actions.configureApprovalFlow')}
+                  {t("actions.configureApprovalFlow")}
                 </Link>
               </Button>
             ) : null}
             <Button variant="ghost" asChild>
               <Link href="/docs/period-close">
                 <FileCheck2 size={15} />
-                {t('actions.documentation')}
+                {t("actions.documentation")}
               </Link>
             </Button>
           </div>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 export function PublishStage(
@@ -1201,8 +1184,8 @@ export function PublishStage(
     onAction: (action: string, comment?: string) => void;
   },
 ) {
-  const t = useTranslations('close')
-  const [note, setNote] = useState('')
+  const t = useTranslations("close");
+  const [note, setNote] = useState("");
   // A re-publication after a controlled reopen is a restatement: the engine
   // refuses it without a note, so the button stays disabled until the
   // operator writes one. First publications keep the note optional.
@@ -1220,9 +1203,7 @@ export function PublishStage(
       <div className="space-y-5">
         <Card>
           <CardHeader>
-            <CardTitle>
-              {taskText(t, props.run.package_name) || t("publish.package")}
-            </CardTitle>
+            <CardTitle>{taskText(t, props.run.package_name) || t("publish.package")}</CardTitle>
             <CardDescription>{t("publish.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -1236,18 +1217,16 @@ export function PublishStage(
               return (
                 <Link
                   key={code || JSON.stringify(report)}
-                  href={reportHref[code] ?? '/reports'}
+                  href={reportHref[code] ?? "/reports"}
                   className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-sm font-medium hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
                 >
                   <span className="flex items-center gap-2">
                     <FileCheck2 size={15} className="text-teal-600" />
-                    {code && t.has(`reports.${code}`)
-                      ? t(`reports.${code}`)
-                      : code}
+                    {code && t.has(`reports.${code}`) ? t(`reports.${code}`) : code}
                   </span>
                   <ExternalLink size={13} />
                 </Link>
-              )
+              );
             })}
           </CardContent>
         </Card>
@@ -1270,8 +1249,8 @@ export function PublishStage(
             <Button
               disabled={props.busy || !props.canRun || props.run.status !== "closed" || !noteReady}
               onClick={async () => {
-                if (!(await confirmDialog(t("publish.confirm")))) return
-                props.onAction("publish", note.trim() || undefined)
+                if (!(await confirmDialog(t("publish.confirm")))) return;
+                props.onAction("publish", note.trim() || undefined);
               }}
             >
               <Send size={15} />
@@ -1329,8 +1308,7 @@ export function PublishStage(
                     : event.event_type}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {event.actor_name ?? t("timeline.system")} ·{" "}
-                  {formatCloseTimestamp(event.at)}
+                  {event.actor_name ?? t("timeline.system")} · {formatCloseTimestamp(event.at)}
                 </p>
               </div>
             ))}
@@ -1338,7 +1316,7 @@ export function PublishStage(
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 function formatCloseTimestamp(value: string): string {

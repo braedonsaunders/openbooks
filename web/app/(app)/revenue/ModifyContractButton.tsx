@@ -3,15 +3,7 @@ import { cloneElement, isValidElement, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import {
-  Button,
-  Drawer,
-  Input,
-  Label,
-  SearchSelect,
-  Select,
-  Textarea,
-} from "@openbooks/ui";
+import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { readApiErrorMessage } from "@/lib/api-error";
 import type {
@@ -19,15 +11,9 @@ import type {
   RevenueModificationPromise,
 } from "@openbooks/engine/revenue/contract-modifications";
 import type { ContractPayload, RevenueModificationOptions } from "./_lib";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 type Group = RevenueModificationInput["groups"][number];
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   const controlId = useId();
   const control = isValidElement<{ id?: string }>(children)
     ? cloneElement(children, { id: children.props.id ?? controlId })
@@ -53,13 +39,7 @@ export function ModifyContractButton({
       <Button variant="outline" onClick={() => setOpen(true)}>
         {t("modify.trigger")}
       </Button>
-      {open ? (
-        <Form
-          payload={payload}
-          options={options}
-          close={() => setOpen(false)}
-        />
-      ) : null}
+      {open ? <Form payload={payload} options={options} close={() => setOpen(false)} /> : null}
     </>
   );
 }
@@ -81,10 +61,8 @@ function Form({
     return {
       existingId: id,
       description: o?.description ?? "",
-      standaloneSellingPrice:
-        o?.standalone_selling_price ?? o?.allocated_price ?? "",
-      recognitionRuleId:
-        o?.recognition_rule_id ?? options.rules[0]?.value ?? "",
+      standaloneSellingPrice: o?.standalone_selling_price ?? o?.allocated_price ?? "",
+      recognitionRuleId: o?.recognition_rule_id ?? options.rules[0]?.value ?? "",
       recognitionEndsOn: o?.recognition_ends_on ?? null,
       percentComplete: o?.percent_complete ?? "0",
       deferredAccountId: o?.deferred_account_id ?? "",
@@ -103,9 +81,7 @@ function Form({
     {
       ...empty(),
       existingObligationIds: existing.map((o) => o.id),
-      promises: existing.length
-        ? existing.map((o) => initial(o.id))
-        : [initial()],
+      promises: existing.length ? existing.map((o) => initial(o.id)) : [initial()],
     },
   ]);
   const [date, setDate] = useState(today),
@@ -121,15 +97,9 @@ function Form({
   const [rates, setRates] = useState<Record<string, string>>({});
   const patch = (i: number, patch: Partial<Group>) =>
     setGroups((old) => old.map((g, n) => (n === i ? { ...g, ...patch } : g)));
-  const promise = (
-    i: number,
-    n: number,
-    patchValue: Partial<RevenueModificationPromise>,
-  ) =>
+  const promise = (i: number, n: number, patchValue: Partial<RevenueModificationPromise>) =>
     patch(i, {
-      promises: groups[i]!.promises.map((p, k) =>
-        k === n ? { ...p, ...patchValue } : p,
-      ),
+      promises: groups[i]!.promises.map((p, k) => (k === n ? { ...p, ...patchValue } : p)),
     });
   async function save() {
     setBusy(true);
@@ -147,24 +117,17 @@ function Form({
           bookId: b.value,
           fxRate:
             rates[b.value] ??
-            (!payload.contract.currency ||
-            payload.contract.currency === owner?.currency
+            (!payload.contract.currency || payload.contract.currency === owner?.currency
               ? "1"
               : ""),
         })),
       };
-      const res = await fetch(
-        `/api/revenue/contracts/${payload.contract.id}/modifications`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      );
-      if (!res.ok)
-        throw new Error(
-          await readApiErrorMessage(res, t("modify.proposeFailed")),
-        );
+      const res = await fetch(`/api/revenue/contracts/${payload.contract.id}/modifications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("modify.proposeFailed")));
       const result = (await res.json()) as { changeId: string };
       close();
       router.push(`/accounting/changes?change=${result.changeId}`);
@@ -186,10 +149,7 @@ function Form({
     >
       <div className="space-y-5 p-4">
         <Field label={t("modify.fieldEffectiveDate")}>
-          <DateField
-            value={date}
-            onChange={(value) => setDate(value)}
-          />
+          <DateField value={date} onChange={(value) => setDate(value)} />
         </Field>
         <Field label={t("modify.fieldEntity")}>
           <SearchSelect
@@ -206,29 +166,22 @@ function Form({
                 rates[b.value] ??
                 (!payload.contract.currency ||
                 payload.contract.currency ===
-                  options.subsidiaries.find((s) => s.value === subsidiaryId)
-                    ?.currency
+                  options.subsidiaries.find((s) => s.value === subsidiaryId)?.currency
                   ? "1"
                   : "")
               }
-              onChange={(e) =>
-                setRates((old) => ({ ...old, [b.value]: e.target.value }))
-              }
+              onChange={(e) => setRates((old) => ({ ...old, [b.value]: e.target.value }))}
             />
           </Field>
         ))}
         {groups.map((g, i) => (
           <section className="space-y-3 rounded-lg border p-3" key={i}>
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">
-                {t("modify.groupTitle", { index: i + 1 })}
-              </h3>
+              <h3 className="font-semibold">{t("modify.groupTitle", { index: i + 1 })}</h3>
               {groups.length > 1 ? (
                 <Button
                   variant="ghost"
-                  onClick={() =>
-                    setGroups((old) => old.filter((_, n) => n !== i))
-                  }
+                  onClick={() => setGroups((old) => old.filter((_, n) => n !== i))}
                 >
                   {t("modify.removeGroup")}
                 </Button>
@@ -237,9 +190,7 @@ function Form({
             <Field label={t("modify.treatment")}>
               <Select
                 value={g.treatment}
-                onChange={(e) =>
-                  patch(i, { treatment: e.target.value as Group["treatment"] })
-                }
+                onChange={(e) => patch(i, { treatment: e.target.value as Group["treatment"] })}
               >
                 {[
                   {
@@ -264,18 +215,14 @@ function Form({
             <Field label={t("modify.consideration")}>
               <Input
                 value={g.considerationChange}
-                onChange={(e) =>
-                  patch(i, { considerationChange: e.target.value })
-                }
+                onChange={(e) => patch(i, { considerationChange: e.target.value })}
               />
             </Field>
             <label className="flex gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={g.remainingDistinct}
-                onChange={(e) =>
-                  patch(i, { remainingDistinct: e.target.checked })
-                }
+                onChange={(e) => patch(i, { remainingDistinct: e.target.checked })}
               />
               {t("modify.distinct")}
             </label>
@@ -283,9 +230,7 @@ function Form({
               <input
                 type="checkbox"
                 checked={g.additionsAtStandalonePrice}
-                onChange={(e) =>
-                  patch(i, { additionsAtStandalonePrice: e.target.checked })
-                }
+                onChange={(e) => patch(i, { additionsAtStandalonePrice: e.target.checked })}
               />
               {t("modify.commensurate")}
             </label>
@@ -306,9 +251,7 @@ function Form({
                 {o.description}
               </label>
             ))}
-            <p className="text-xs text-muted-foreground">
-              {t("modify.omittedHint")}
-            </p>
+            <p className="text-xs text-muted-foreground">{t("modify.omittedHint")}</p>
             {g.promises.map((p, n) => (
               <div className="space-y-3 rounded border p-3" key={n}>
                 <Field label={t("modify.promiseAfter")}>
@@ -324,11 +267,7 @@ function Form({
                     onChange={(v) =>
                       patch(i, {
                         promises: g.promises.map((old, k) =>
-                          k === n
-                            ? initial(
-                                v === "new" ? undefined : (v ?? undefined),
-                              )
-                            : old,
+                          k === n ? initial(v === "new" ? undefined : (v ?? undefined)) : old,
                         ),
                       })
                     }
@@ -338,26 +277,20 @@ function Form({
                 <Field label={t("modify.fieldDescription")}>
                   <Input
                     value={p.description}
-                    onChange={(e) =>
-                      promise(i, n, { description: e.target.value })
-                    }
+                    onChange={(e) => promise(i, n, { description: e.target.value })}
                   />
                 </Field>
                 <Field label={t("modify.ssp")}>
                   <Input
                     value={p.standaloneSellingPrice}
-                    onChange={(e) =>
-                      promise(i, n, { standaloneSellingPrice: e.target.value })
-                    }
+                    onChange={(e) => promise(i, n, { standaloneSellingPrice: e.target.value })}
                   />
                 </Field>
                 <Field label={t("modify.rule")}>
                   <SearchSelect
                     value={p.recognitionRuleId}
                     options={options.rules}
-                    onChange={(v) =>
-                      promise(i, n, { recognitionRuleId: v ?? "" })
-                    }
+                    onChange={(v) => promise(i, n, { recognitionRuleId: v ?? "" })}
                     ariaLabel={t("modify.ruleAria")}
                   />
                 </Field>
@@ -374,18 +307,14 @@ function Form({
                 <Field label={t("modify.progress")}>
                   <Input
                     value={p.percentComplete}
-                    onChange={(e) =>
-                      promise(i, n, { percentComplete: e.target.value })
-                    }
+                    onChange={(e) => promise(i, n, { percentComplete: e.target.value })}
                   />
                 </Field>
                 <Field label={t("modify.deferred")}>
                   <SearchSelect
                     value={p.deferredAccountId}
                     options={options.accounts}
-                    onChange={(v) =>
-                      promise(i, n, { deferredAccountId: v ?? "" })
-                    }
+                    onChange={(v) => promise(i, n, { deferredAccountId: v ?? "" })}
                     ariaLabel={t("modify.deferredAria")}
                   />
                 </Field>
@@ -393,15 +322,12 @@ function Form({
                   <SearchSelect
                     value={p.recognizedAccountId}
                     options={options.accounts}
-                    onChange={(v) =>
-                      promise(i, n, { recognizedAccountId: v ?? "" })
-                    }
+                    onChange={(v) => promise(i, n, { recognizedAccountId: v ?? "" })}
                     ariaLabel={t("modify.recognizedAria")}
                   />
                 </Field>
                 {["milestone", "usage"].includes(
-                  options.rules.find((r) => r.value === p.recognitionRuleId)
-                    ?.method ?? "",
+                  options.rules.find((r) => r.value === p.recognitionRuleId)?.method ?? "",
                 ) ? (
                   <div className="space-y-2">
                     {(p.events ?? []).map((event, ei) => (
@@ -429,9 +355,7 @@ function Form({
                           onChange={(e) =>
                             promise(i, n, {
                               events: p.events!.map((row, k) =>
-                                k === ei
-                                  ? { ...row, amount: e.target.value }
-                                  : row,
+                                k === ei ? { ...row, amount: e.target.value } : row,
                               ),
                             })
                           }
@@ -442,9 +366,7 @@ function Form({
                           onChange={(e) =>
                             promise(i, n, {
                               events: p.events!.map((row, k) =>
-                                k === ei
-                                  ? { ...row, description: e.target.value }
-                                  : row,
+                                k === ei ? { ...row, description: e.target.value } : row,
                               ),
                             })
                           }
@@ -492,29 +414,17 @@ function Form({
             </Button>
           </section>
         ))}
-        <Button
-          variant="outline"
-          onClick={() => setGroups((old) => [...old, empty()])}
-        >
+        <Button variant="outline" onClick={() => setGroups((old) => [...old, empty()])}>
           {t("modify.addGroup")}
         </Button>
         <Field label={t("modify.rights")}>
-          <Textarea
-            value={rights}
-            onChange={(e) => setRights(e.target.value)}
-          />
+          <Textarea value={rights} onChange={(e) => setRights(e.target.value)} />
         </Field>
         <Field label={t("modify.assessment")}>
-          <Textarea
-            value={assessment}
-            onChange={(e) => setAssessment(e.target.value)}
-          />
+          <Textarea value={assessment} onChange={(e) => setAssessment(e.target.value)} />
         </Field>
         <Field label={t("modify.reason")}>
-          <Textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
+          <Textarea value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
         <Button disabled={busy} onClick={save}>
           {t("modify.propose")}

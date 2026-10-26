@@ -1,4 +1,4 @@
-import 'server-only'
+import "server-only";
 
 export {
   listAccountGroups,
@@ -7,4 +7,4 @@ export {
   type AccountGroup,
   type GroupRef,
   type ResolvedGroups,
-} from '@openbooks/engine/records/account-groups'
+} from "@openbooks/engine/records/account-groups";

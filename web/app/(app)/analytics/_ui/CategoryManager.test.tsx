@@ -10,9 +10,17 @@ import test from "node:test";
 
 // jsdom first: the manager reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/banking/cash", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/banking/cash",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__cmRouter}export function usePathname(){return '/banking/cash'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__cmRouter}export function usePathname(){return '/banking/cash'}export function useSearchParams(){return new URLSearchParams()}",
+});
 
 const React = await import("react");
 Object.assign(globalThis, { React });
@@ -36,7 +44,9 @@ let capturedPut: { categories: ForecastCategory[]; expectedRevision: unknown } |
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -61,7 +71,10 @@ function buttonNamed(name: string): HTMLButtonElement {
 }
 
 function setNativeValue(el: HTMLInputElement | HTMLSelectElement, value: string, event: string) {
-  const proto = el instanceof window.HTMLSelectElement ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
+  const proto =
+    el instanceof window.HTMLSelectElement
+      ? window.HTMLSelectElement.prototype
+      : window.HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
   el.dispatchEvent(new window.Event(event, { bubbles: true }));
 }
@@ -103,7 +116,12 @@ test("subsidiary attribution round-trips through the category editor", async () 
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           <MoneyProvider currency="USD">
             <BusinessDateProvider today="2026-09-01">
-              <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={SUBSIDIARIES} initialCategories={[]} />
+              <CategoryManager
+                vendorOptions={[]}
+                accountOptions={[]}
+                subsidiaryOptions={SUBSIDIARIES}
+                initialCategories={[]}
+              />
             </BusinessDateProvider>
           </MoneyProvider>
         </NextIntlClientProvider>,
@@ -116,10 +134,17 @@ test("subsidiary attribution round-trips through the category editor", async () 
     assert.ok(host.textContent?.includes("Branch rent"), "the fetched category must render");
     // Open the editor: the attribution field appears for manual_recurring.
     await click(host.querySelector('button[title="Edit"]')!);
-    assert.ok(host.textContent?.includes("Subsidiaries"), "manual categories must offer subsidiary attribution");
+    assert.ok(
+      host.textContent?.includes("Subsidiaries"),
+      "manual categories must offer subsidiary attribution",
+    );
     // The server-side attribution arrives pre-selected in the draft...
     const branchOption = buttonNamed("Branch");
-    assert.equal(branchOption.querySelector("input")?.checked, true, "the attributed subsidiary must start selected");
+    assert.equal(
+      branchOption.querySelector("input")?.checked,
+      true,
+      "the attributed subsidiary must start selected",
+    );
     // ...toggling HQ on and saving sends both ids with the read revision.
     await click(buttonNamed("HQ"));
     await click(buttonNamed("Save category"));
@@ -163,7 +188,12 @@ test("a new draft names its frequency explicitly instead of showing one and savi
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           <MoneyProvider currency="USD">
             <BusinessDateProvider today="2026-09-01">
-              <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={[]} initialCategories={[]} />
+              <CategoryManager
+                vendorOptions={[]}
+                accountOptions={[]}
+                subsidiaryOptions={[]}
+                initialCategories={[]}
+              />
             </BusinessDateProvider>
           </MoneyProvider>
         </NextIntlClientProvider>,
@@ -235,7 +265,12 @@ test("a legacy row without frequency shows the placeholder and must choose", asy
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           <MoneyProvider currency="USD">
             <BusinessDateProvider today="2026-09-01">
-              <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={[]} initialCategories={[]} />
+              <CategoryManager
+                vendorOptions={[]}
+                accountOptions={[]}
+                subsidiaryOptions={[]}
+                initialCategories={[]}
+              />
             </BusinessDateProvider>
           </MoneyProvider>
         </NextIntlClientProvider>,
@@ -249,7 +284,11 @@ test("a legacy row without frequency shows the placeholder and must choose", asy
       [...s.options].some((o) => o.value === "monthly"),
     ) as HTMLSelectElement;
     assert.ok(freqSelect, "a manual draft must offer a frequency select");
-    assert.equal(freqSelect.value, "", "an unset frequency must show the placeholder, never Weekly");
+    assert.equal(
+      freqSelect.value,
+      "",
+      "an unset frequency must show the placeholder, never Weekly",
+    );
     await act(async () => {
       setNativeValue(freqSelect, "monthly", "change");
       await tick();
@@ -286,7 +325,12 @@ test("no subsidiary UI without visible subsidiaries", async () => {
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           <MoneyProvider currency="USD">
             <BusinessDateProvider today="2026-09-01">
-              <CategoryManager vendorOptions={[]} accountOptions={[]} subsidiaryOptions={[]} initialCategories={[]} />
+              <CategoryManager
+                vendorOptions={[]}
+                accountOptions={[]}
+                subsidiaryOptions={[]}
+                initialCategories={[]}
+              />
             </BusinessDateProvider>
           </MoneyProvider>
         </NextIntlClientProvider>,
@@ -296,7 +340,10 @@ test("no subsidiary UI without visible subsidiaries", async () => {
     await tick();
     await tick();
     await click(host.querySelector('button[title="Edit"]')!);
-    assert.ok(!host.textContent?.includes("Subsidiaries"), "single-subsidiary orgs must not see the attribution field");
+    assert.ok(
+      !host.textContent?.includes("Subsidiaries"),
+      "single-subsidiary orgs must not see the attribution field",
+    );
   } finally {
     await act(async () => {
       root.unmount();

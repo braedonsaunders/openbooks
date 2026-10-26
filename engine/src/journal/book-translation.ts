@@ -69,7 +69,9 @@ export interface TranslationOutcome<T extends TranslatableLine> {
 }
 
 /** A basis is an identity when the book shares the subsidiary's functional currency. */
-export function isIdentityBasis(basis: Pick<BookSubsidiaryBasis, "functionalCurrency" | "bookCurrency">): boolean {
+export function isIdentityBasis(
+  basis: Pick<BookSubsidiaryBasis, "functionalCurrency" | "bookCurrency">,
+): boolean {
   return basis.functionalCurrency === basis.bookCurrency;
 }
 
@@ -85,7 +87,11 @@ export function translateLinesIntoBook<T extends TranslatableLine>(
   lines: readonly T[],
   bases: ReadonlyMap<string, BookSubsidiaryBasis>,
   rates: ReadonlyMap<string, string>,
-  makeDifferenceLine: (args: { subsidiaryId: string; bookCurrency: string; amount: string }) => T | null,
+  makeDifferenceLine: (args: {
+    subsidiaryId: string;
+    bookCurrency: string;
+    amount: string;
+  }) => T | null,
   context: { bookLabel: string; entryLabel: string },
 ): TranslationOutcome<T> {
   const out: T[] = [];
@@ -104,7 +110,10 @@ export function translateLinesIntoBook<T extends TranslatableLine>(
     const txn = toUnits(line.txnAmount);
     const functional = toUnits(line.amount);
     // A zero monetary value carries no foreign exposure, including statistical measurements.
-    if (txn===0n && functional===0n) { out.push(line); continue; }
+    if (txn === 0n && functional === 0n) {
+      out.push(line);
+      continue;
+    }
     let translated: T;
     if (line.currency === basis.bookCurrency) {
       translated = { ...line, amount: fromUnits(txn) as Money, fxRate: "1" };
@@ -137,14 +146,21 @@ export function translateLinesIntoBook<T extends TranslatableLine>(
     const currencies = new Set(group.map((line) => line.currency));
     const transactional = group.reduce((sum, line) => sum + toUnits(line.txnAmount), 0n);
     const magnitude = total < 0n ? -total : total;
-    const rounding = currencies.size === 1 && transactional === 0n && 2n * magnitude <= BigInt(group.length)
-      && group.some((line) => !line.taxCodeId && !line.isOpenItem);
+    const rounding =
+      currencies.size === 1 &&
+      transactional === 0n &&
+      2n * magnitude <= BigInt(group.length) &&
+      group.some((line) => !line.taxCodeId && !line.isOpenItem);
     if (rounding) {
       absorbFxRoundingResidual(group);
       absorbed.push({ subsidiaryId, amount: fromUnits(total) });
       continue;
     }
-    const difference = makeDifferenceLine({ subsidiaryId, bookCurrency: basis.bookCurrency, amount: fromUnits(-total) });
+    const difference = makeDifferenceLine({
+      subsidiaryId,
+      bookCurrency: basis.bookCurrency,
+      amount: fromUnits(-total),
+    });
     if (!difference) {
       throw new BookTranslationError(
         `${context.entryLabel}: translating into book ${context.bookLabel} leaves a ${basis.bookCurrency} currency difference of ${fromUnits(total)} for subsidiary ${subsidiaryId} and the book has no currency difference account — set one on the book's multi-book settings and post again`,

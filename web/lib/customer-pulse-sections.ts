@@ -16,9 +16,9 @@
  * nulled with data-shaped defaults, which would read as genuine zeros.
  */
 export interface CustomerPulseSections {
-  ar: boolean
-  crm: boolean
-  projects: boolean
+  ar: boolean;
+  crm: boolean;
+  projects: boolean;
 }
 
 /**
@@ -30,12 +30,12 @@ export function pulseSectionsFor(
   covers: (permission: string) => boolean,
 ): CustomerPulseSections | null {
   const sections: CustomerPulseSections = {
-    ar: covers('ar.read'),
-    crm: covers('crm.accounts.read'),
-    projects: covers('projects.read'),
-  }
-  if (!sections.ar && !sections.crm && !sections.projects) return null
-  return sections
+    ar: covers("ar.read"),
+    crm: covers("crm.accounts.read"),
+    projects: covers("projects.read"),
+  };
+  if (!sections.ar && !sections.crm && !sections.projects) return null;
+  return sections;
 }
 
 /** Apply organization feature switches to the sections granted by permissions. */
@@ -43,12 +43,12 @@ export function pulseSectionsForEnabledFeatures(
   sections: CustomerPulseSections | undefined,
   enabled: { crm: boolean; projects: boolean },
 ): CustomerPulseSections | null {
-  if (!sections) return null
+  if (!sections) return null;
   const effective: CustomerPulseSections = {
     ar: sections.ar,
     crm: sections.crm && enabled.crm,
     projects: sections.projects && enabled.projects,
-  }
-  if (!effective.ar && !effective.crm && !effective.projects) return null
-  return effective
+  };
+  if (!effective.ar && !effective.crm && !effective.projects) return null;
+  return effective;
 }

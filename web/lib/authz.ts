@@ -23,7 +23,6 @@ export {
 import { accessDeniedHref } from "./gate-targets";
 import { notFound } from "@/lib/api/responses";
 
-
 export {
   subsidiaryScopeAllows,
   type SubsidiaryScopeOptions,
@@ -163,12 +162,17 @@ export function guardUnrestrictedScope(authz: Authz): NextResponse | null {
  */
 export async function guardRootSubsidiaryScope(authz: Authz): Promise<NextResponse | null> {
   if (authz.allowedSubsidiaryIds === null) return null;
-  const root = (await db.execute<{ id: string }>(sql`
+  const root =
+    (
+      await db.execute<{ id: string }>(
+        sql`
     select id
       from subsidiaries
      where org_id = ${authz.user.orgId} and parent_id is null and is_active
      order by created_at
-     limit 1`, "objects"))[0]?.id ?? null;
+     limit 1`,
+        "objects",
+      )
+    )[0]?.id ?? null;
   return guardSubsidiaryScope(authz, root);
 }
-

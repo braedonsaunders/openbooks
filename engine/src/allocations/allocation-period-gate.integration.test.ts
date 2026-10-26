@@ -13,10 +13,7 @@ import {
   seedFlowActors,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import {
-  postAllocationRun,
-  previewAllocationRun,
-} from "./period-run.ts";
+import { postAllocationRun, previewAllocationRun } from "./period-run.ts";
 import { enableAllocations, negate, seedDepartment } from "./integration-seeds.ts";
 
 /**
@@ -92,7 +89,10 @@ async function seedSweepRule(org: ScratchOrg, tag: string): Promise<string> {
        'explicit', '{}'::jsonb, 'reclass', 'largest_share', 'sequential',
        'manual', 0, 'Allocation {{rule.name}} for {{period.name}}', now())`);
   let sequence = 1;
-  for (const [dept, percent, label] of [[deptA, "60.0000", "Dept A"], [deptB, "40.0000", "Dept B"]] as const) {
+  for (const [dept, percent, label] of [
+    [deptA, "60.0000", "Dept A"],
+    [deptB, "40.0000", "Dept B"],
+  ] as const) {
     await db.execute(sql`
       insert into allocation_rule_targets
         (id, org_id, version_id, sequence, target_account_id, department_id,
@@ -145,19 +145,23 @@ async function previewOpenRun(org: ScratchOrg, actorId: string, tag: string): Pr
   return preview.id;
 }
 
-test("open period: the sweep still posts (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  await enableAllocations(org.orgId);
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const runId = await previewOpenRun(org, actorId, "open");
-    const posted = await postAllocationRun(runId, actorId, "Post monthly cost sweep");
-    assert.equal(posted.status, "posted");
-    assert.ok(posted.journalEntryId);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "open period: the sweep still posts (setup can post, refusal is load-bearing)",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const runId = await previewOpenRun(org, actorId, "open");
+      const posted = await postAllocationRun(runId, actorId, "Post monthly cost sweep");
+      assert.equal(posted.status, "posted");
+      assert.ok(posted.journalEntryId);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("allocation posting refuses a user-closed GL period", { skip: !DB }, async () => {
   const org = await createScratchOrg();

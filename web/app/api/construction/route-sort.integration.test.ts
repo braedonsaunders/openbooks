@@ -13,11 +13,17 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __sovSortState: state });
-const realAuthz = new URL('../../../lib/authz.ts', import.meta.url).href;
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const realAuthz = new URL("../../../lib/authz.ts", import.meta.url).href;
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export * from ${JSON.stringify(realAuthz)};
@@ -28,14 +34,16 @@ registerHooks({
         export async function getAuthz() { return guardPermission(); }
         export function guardSubsidiaryScope() { return null; }
       `);
-    if (specifier.endsWith("/lib/projects-gate")) return virtual("export async function guardProjectsFeature() { return null }");
+    if (specifier.endsWith("/lib/projects-gate"))
+      return virtual("export async function guardProjectsFeature() { return null }");
     return next(specifier, context);
   },
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 async function fixture() {
@@ -46,27 +54,39 @@ async function fixture() {
   const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === "schedule_of_values")!;
   const typeId = randomUUID();
   const projectId = randomUUID();
-  await withBypassContext(() => db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
-    values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`));
-  await withBypassContext(() => db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
-    values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'sov sort fixture')`));
-  await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
-    values (${projectId},${org.orgId},${org.subsidiaryId},'SOVSORT','SOV sort job',${org.customerId},${typeId},'active',true)`));
+  await withBypassContext(() =>
+    db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+    values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+    values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'sov sort fixture')`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
+    values (${projectId},${org.orgId},${org.subsidiaryId},'SOVSORT','SOV sort job',${org.customerId},${typeId},'active',true)`),
+  );
   return { org, projectId };
 }
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new Request("http://construction.test/api/construction", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new Request("http://construction.test/api/construction", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 async function lineCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from sov_lines where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from sov_lines where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -74,13 +94,25 @@ test("addSov refuses an out-of-int32 sort order without writing", async () => {
   const { org, projectId } = await fixture();
   try {
     const response = await post({
-      action: "addSov", projectId, description: "Probe line", scheduledValue: "1000",
-      incomeAccountId: org.accounts.revenue, sortOrder: 99999999999999999999,
+      action: "addSov",
+      projectId,
+      description: "Probe line",
+      scheduledValue: "1000",
+      incomeAccountId: org.accounts.revenue,
+      sortOrder: 99999999999999999999,
     });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.notEqual(response.status, 500, `expected a named error, got 500: ${JSON.stringify(json)}`);
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.match(json?.error ?? '', /sortOrder must fit a 32-bit integer/);
+    assert.notEqual(
+      response.status,
+      500,
+      `expected a named error, got 500: ${JSON.stringify(json)}`,
+    );
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
+    assert.match(json?.error ?? "", /sortOrder must fit a 32-bit integer/);
     assert.equal(await lineCount(org.orgId), 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -91,8 +123,12 @@ test("addSov still files an ordinarily sorted line", async () => {
   const { org, projectId } = await fixture();
   try {
     const response = await post({
-      action: "addSov", projectId, description: "Probe line", scheduledValue: "1000",
-      incomeAccountId: org.accounts.revenue, sortOrder: 3,
+      action: "addSov",
+      projectId,
+      description: "Probe line",
+      scheduledValue: "1000",
+      incomeAccountId: org.accounts.revenue,
+      sortOrder: 3,
     });
     assert.equal(response.status, 201, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(await lineCount(org.orgId), 1);

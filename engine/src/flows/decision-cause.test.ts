@@ -27,15 +27,24 @@ test("a storage failure renders one stable message with no internals", () => {
 });
 
 test("curated domain and adapter refusals render intact", () => {
-  assert.equal(sanitizeDecisionCause(new Error("no recipients resolved")), "no recipients resolved");
+  assert.equal(
+    sanitizeDecisionCause(new Error("no recipients resolved")),
+    "no recipients resolved",
+  );
   assert.equal(
     sanitizeDecisionCause(new Error("simulated release failure after partial write")),
     "simulated release failure after partial write",
   );
-  assert.equal(sanitizeDecisionCause("subject record no longer exists"), "subject record no longer exists");
+  assert.equal(
+    sanitizeDecisionCause("subject record no longer exists"),
+    "subject record no longer exists",
+  );
 });
 
 test("defect-shaped throws keep their defect-reporting path", () => {
   const cause = sanitizeDecisionCause(new TypeError("Cannot read properties of undefined"));
-  assert.ok(cause.includes("Cannot read properties"), "a programming error still reports its message above");
+  assert.ok(
+    cause.includes("Cannot read properties"),
+    "a programming error still reports its message above",
+  );
 });

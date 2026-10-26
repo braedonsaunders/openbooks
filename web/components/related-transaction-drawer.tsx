@@ -1,60 +1,78 @@
 import { sourceAmortizationOptions } from "@/lib/amortization-options";
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import { loadPaymentDocument, openItemsForParty } from "@openbooks/engine/payments/payment-queries";
 import { PAYMENT_KIND_SIDE, type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
-import type { OpenItemClient } from '../app/(app)/payments/PaymentDrawer'
+import type { OpenItemClient } from "../app/(app)/payments/PaymentDrawer";
 import {
   RelatedTransactionDrawerClient,
   type RelatedTransactionDrawerData,
-} from './related-transaction-drawer-client'
-import { loadOrder } from '../app/api/_order/lib'
-import type { OrderKind } from '../lib/order-kinds'
-import { can, type Authz } from '../lib/authz'
-import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from '../lib/payroll-confidentiality'
-import { loadFieldDefs } from '../lib/custom-fields'
-import { resolveFormLayout } from '../lib/customization/resolve'
-import { isFeatureEnabled } from '../lib/features'
-import { loadFieldTicketDrawerData } from '../lib/field-ticket-drawer-data'
-import { loadFulfillmentDrawerData } from '../lib/fulfillment-drawer-data'
-import { DOC_KINDS, createPermission, postPermission, readPermission } from "../lib/document-kinds.ts";
+} from "./related-transaction-drawer-client";
+import { loadOrder } from "../app/api/_order/lib";
+import type { OrderKind } from "../lib/order-kinds";
+import { can, type Authz } from "../lib/authz";
+import {
+  PAYROLL_RESTRICTED_PARTY_LABEL,
+  collapseRestrictedPayrollLines,
+} from "../lib/payroll-confidentiality";
+import { loadFieldDefs } from "../lib/custom-fields";
+import { resolveFormLayout } from "../lib/customization/resolve";
+import { isFeatureEnabled } from "../lib/features";
+import { loadFieldTicketDrawerData } from "../lib/field-ticket-drawer-data";
+import { loadFulfillmentDrawerData } from "../lib/fulfillment-drawer-data";
+import {
+  DOC_KINDS,
+  createPermission,
+  postPermission,
+  readPermission,
+} from "../lib/document-kinds.ts";
 import { isDocKindEnabled, taxCodeOptions, taxGroupOptions } from "../lib/documents.ts";
-import { listScopedAccountOptions, listScopedCardOptions, listScopedPartyOptions } from '../lib/scoped-options'
-import { dimensionOptions as reportDimensionOptions } from '../lib/reports/filters'
+import {
+  listScopedAccountOptions,
+  listScopedCardOptions,
+  listScopedPartyOptions,
+} from "../lib/scoped-options";
+import { dimensionOptions as reportDimensionOptions } from "../lib/reports/filters";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
-import { canRecallExpenseReport, loadExpenseReport } from '../lib/expenses'
-import { loadJournalDoc } from '../lib/journals'
-import { customSegmentOptions } from '../lib/segments'
-import { isMultiSubsidiary, subsidiaryOptions } from '../lib/subsidiaries'
-import { creditApplicationsDrawer } from '../lib/credit-applications-drawer'
+import { canRecallExpenseReport, loadExpenseReport } from "../lib/expenses";
+import { loadJournalDoc } from "../lib/journals";
+import { customSegmentOptions } from "../lib/segments";
+import { isMultiSubsidiary, subsidiaryOptions } from "../lib/subsidiaries";
+import { creditApplicationsDrawer } from "../lib/credit-applications-drawer";
 
-const PAYMENT_KINDS = new Set(['vendor_payment', 'customer_payment'])
-const ORDER_KINDS = new Set(['quote', 'sales_order', 'purchase_order'])
+const PAYMENT_KINDS = new Set(["vendor_payment", "customer_payment"]);
+const ORDER_KINDS = new Set(["quote", "sales_order", "purchase_order"]);
 
-type DrawerProps<T extends RelatedTransactionDrawerData['type']> = Extract<
+type DrawerProps<T extends RelatedTransactionDrawerData["type"]> = Extract<
   RelatedTransactionDrawerData,
   { type: T }
->['props']
-type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
-type OrderProps = DrawerProps<'order'>
-type ExpenseProps = DrawerProps<'expense'>
-type JournalProps = DrawerProps<'journal'>
+>["props"];
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never;
+type OrderProps = DrawerProps<"order">;
+type ExpenseProps = DrawerProps<"expense">;
+type JournalProps = DrawerProps<"journal">;
 
 async function scopedAccountOptions(
   orgId: string,
-  allowedSubsidiaryIds: Authz['allowedSubsidiaryIds'],
+  allowedSubsidiaryIds: Authz["allowedSubsidiaryIds"],
   options: Parameters<typeof listScopedAccountOptions>[2] = {},
 ) {
-  const rows = await listScopedAccountOptions(orgId, allowedSubsidiaryIds, options)
-  return rows.map(({ number, ...account }) => ({ ...account, number: number ?? undefined }))
+  const rows = await listScopedAccountOptions(orgId, allowedSubsidiaryIds, options);
+  return rows.map(({ number, ...account }) => ({ ...account, number: number ?? undefined }));
 }
-type DocumentProps = DrawerProps<'document'>
+type DocumentProps = DrawerProps<"document">;
 
-function canSeeDocument(doc: Record<string, unknown>, partyId: string | undefined, authz: Authz): boolean {
-  return String(doc.org_id) === authz.user.orgId
-    && (!partyId || String(doc.party_id) === partyId)
-    && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(doc.subsidiary_id)))
+function canSeeDocument(
+  doc: Record<string, unknown>,
+  partyId: string | undefined,
+  authz: Authz,
+): boolean {
+  return (
+    String(doc.org_id) === authz.user.orgId &&
+    (!partyId || String(doc.party_id) === partyId) &&
+    (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(doc.subsidiary_id)))
+  );
 }
 
 /**
@@ -70,13 +88,16 @@ async function maskPayRunDrawerLines(
   documentId: string,
   lines: Record<string, unknown>[],
 ): Promise<Record<string, unknown>[]> {
-  const refs = (await db.execute<{ id: string; account_id: string; party_id: string | null }>(sql`
+  const refs = await db.execute<{ id: string; account_id: string; party_id: string | null }>(
+    sql`
     select id, account_id, party_id from document_lines
      where org_id = ${orgId} and document_id = ${documentId}
-  `, 'objects'))
-  const byId = new Map(refs.map((row) => [row.id, row]))
+  `,
+    "objects",
+  );
+  const byId = new Map(refs.map((row) => [row.id, row]));
   const mapped = lines.map((line) => {
-    const ref = byId.get(String(line.id))
+    const ref = byId.get(String(line.id));
     return {
       ...line,
       entryId: documentId,
@@ -84,25 +105,31 @@ async function maskPayRunDrawerLines(
       partyId: (ref?.party_id ?? null) as string | null,
       payrollOrigin: true,
       amount: String(line.amount ?? 0),
-    }
-  })
+    };
+  });
   const collapsed = collapseRestrictedPayrollLines(mapped, (first, total) => ({
     ...first,
     description: PAYROLL_RESTRICTED_PARTY_LABEL,
     amount: total,
-  }))
+  }));
   return collapsed.map((row) => {
-    const { entryId: _entryId, accountId: _accountId, partyId: _partyId, payrollOrigin: _payrollOrigin, ...rest } = row
-    return rest
-  })
+    const {
+      entryId: _entryId,
+      accountId: _accountId,
+      partyId: _partyId,
+      payrollOrigin: _payrollOrigin,
+      ...rest
+    } = row;
+    return rest;
+  });
 }
 
 async function visibleSubsidiaries(authz: Authz) {
-  if (!(await isMultiSubsidiary(authz.user.orgId))) return undefined
-  const options = await subsidiaryOptions()
+  if (!(await isMultiSubsidiary(authz.user.orgId))) return undefined;
+  const options = await subsidiaryOptions();
   return authz.allowedSubsidiaryIds
     ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-    : options
+    : options;
 }
 
 /**
@@ -118,21 +145,22 @@ export async function loadRelatedTransactionDrawerData({
   authz,
   formLayoutId,
 }: {
-  id: string
-  kind: string
-  partyId?: string
-  projectId?: string
-  authz: Authz
-  formLayoutId?: string
+  id: string;
+  kind: string;
+  partyId?: string;
+  projectId?: string;
+  authz: Authz;
+  formLayoutId?: string;
 }): Promise<RelatedTransactionDrawerData | null> {
-  if (!(await isDocKindEnabled(authz.user.orgId, kind))) return null
+  if (!(await isDocKindEnabled(authz.user.orgId, kind))) return null;
   const [inventoryEnabled, equipmentEnabled, allocationsEntryEnabled] = await Promise.all([
-    isFeatureEnabled(authz.user.orgId, 'inventory'),
-    isFeatureEnabled(authz.user.orgId, 'equipment'),
-    isFeatureEnabled(authz.user.orgId, 'allocationsAtEntry'),
-  ])
+    isFeatureEnabled(authz.user.orgId, "inventory"),
+    isFeatureEnabled(authz.user.orgId, "equipment"),
+    isFeatureEnabled(authz.user.orgId, "allocationsAtEntry"),
+  ]);
   if (projectId) {
-    const related = (await db.execute<{ id: string }>(sql`
+    const related = await db.execute<{ id: string }>(
+      sql`
       select d.id
         from documents d
        where d.id = ${id}
@@ -146,34 +174,52 @@ export async function loadRelatedTransactionDrawerData({
                 and line.project_id = ${projectId}
            )
          )
-         ${authz.allowedSubsidiaryIds
-           ? authz.allowedSubsidiaryIds.size > 0
-             ? sql`and d.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
-             : sql`and false`
-           : sql``}
-    `, 'objects'))
-    if (!related[0]) return null
+         ${
+           authz.allowedSubsidiaryIds
+             ? authz.allowedSubsidiaryIds.size > 0
+               ? sql`and d.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
+               : sql`and false`
+             : sql``
+         }
+    `,
+      "objects",
+    );
+    if (!related[0]) return null;
   }
-  if (kind === 'field_ticket') {
-    const props = await loadFieldTicketDrawerData({ authz, ticketId: id, formLayoutId })
-    return props ? { type: 'fieldTicket', props } : null
+  if (kind === "field_ticket") {
+    const props = await loadFieldTicketDrawerData({ authz, ticketId: id, formLayoutId });
+    return props ? { type: "fieldTicket", props } : null;
   }
-  if (kind === 'pick_list' || kind === 'shipment') {
-    const data = await loadFulfillmentDrawerData({ authz, kind, id, formLayoutId })
-    if (!data || (partyId && data.document.customer?.id !== partyId)) return null
-    return kind === 'pick_list' ? { type: 'pickList', props: { data } } : { type: 'shipment', props: { data } }
+  if (kind === "pick_list" || kind === "shipment") {
+    const data = await loadFulfillmentDrawerData({ authz, kind, id, formLayoutId });
+    if (!data || (partyId && data.document.customer?.id !== partyId)) return null;
+    return kind === "pick_list"
+      ? { type: "pickList", props: { data } }
+      : { type: "shipment", props: { data } };
   }
   if (PAYMENT_KINDS.has(kind)) {
-    const permission = kind === 'vendor_payment' ? 'ap.read' : 'ar.read'
-    if (!can(authz, permission)) return null
-    const paymentKind = kind as PaymentKind
-    const payment = await loadPaymentDocument(id, paymentKind, authz.user.orgId, authz.allowedSubsidiaryIds)
-    if (!payment || !canSeeDocument((payment.doc), partyId, authz)) return null
+    const permission = kind === "vendor_payment" ? "ap.read" : "ar.read";
+    if (!can(authz, permission)) return null;
+    const paymentKind = kind as PaymentKind;
+    const payment = await loadPaymentDocument(
+      id,
+      paymentKind,
+      authz.user.orgId,
+      authz.allowedSubsidiaryIds,
+    );
+    if (!payment || !canSeeDocument(payment.doc, partyId, authz)) return null;
 
-    const side = PAYMENT_KIND_SIDE[paymentKind]
+    const side = PAYMENT_KIND_SIDE[paymentKind];
     const [parties, banks, resolvedForm] = await Promise.all([
-      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: side === 'ap' ? 'vendor' : 'customer', activeOnly: true }).then((rows) => ({ rows })),
-      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['asset_bank'], activeOnly: true, postingOnly: true }).then((rows) => ({ rows })),
+      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+        role: side === "ap" ? "vendor" : "customer",
+        activeOnly: true,
+      }).then((rows) => ({ rows })),
+      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+        types: ["asset_bank"],
+        activeOnly: true,
+        postingOnly: true,
+      }).then((rows) => ({ rows })),
       resolveFormLayout({
         orgId: authz.user.orgId,
         userId: authz.user.id,
@@ -183,34 +229,57 @@ export async function loadRelatedTransactionDrawerData({
         lineDefs: [],
         explicitLayoutId: formLayoutId,
       }),
-    ])
-    const openItems: OpenItemClient[] = payment.doc.status === 'draft'
-      ? await openItemsForParty(String(payment.doc.party_id), side, authz.user.orgId, authz.allowedSubsidiaryIds)
-      : []
+    ]);
+    const openItems: OpenItemClient[] =
+      payment.doc.status === "draft"
+        ? await openItemsForParty(
+            String(payment.doc.party_id),
+            side,
+            authz.user.orgId,
+            authz.allowedSubsidiaryIds,
+          )
+        : [];
     return {
-      type: 'payment',
+      type: "payment",
       props: {
-        payment: (payment),
+        payment: payment,
         initialOpenItems: openItems,
         parties: parties.rows,
         bankAccounts: banks.rows,
         side,
-        basePath: side === 'ap' ? '/payments' : '/receipts',
+        basePath: side === "ap" ? "/payments" : "/receipts",
         layout: resolvedForm.layout,
       },
-    }
+    };
   }
 
   if (ORDER_KINDS.has(kind)) {
-    const orderKind = kind as OrderKind
-    const permission = orderKind === 'purchase_order' ? 'purchase_orders.read' : 'ar.read'
-    if (!can(authz, permission)) return null
-    const order = await loadOrder(id, authz.user.orgId, orderKind, authz.allowedSubsidiaryIds)
-    if (!order || !canSeeDocument((order.doc), partyId, authz)) return null
-    const [parties, accounts, items, taxCodes, taxGroups, dimensions, segments, subsidiaries, resolvedForm] = await Promise.all([
-      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: orderKind === 'purchase_order' ? 'vendor' : 'customer', activeOnly: true }).then((rows) => ({ rows })),
-      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }).then((rows) => ({ rows })),
-      db.execute<ElementOf<OrderProps['items']>>(sql`
+    const orderKind = kind as OrderKind;
+    const permission = orderKind === "purchase_order" ? "purchase_orders.read" : "ar.read";
+    if (!can(authz, permission)) return null;
+    const order = await loadOrder(id, authz.user.orgId, orderKind, authz.allowedSubsidiaryIds);
+    if (!order || !canSeeDocument(order.doc, partyId, authz)) return null;
+    const [
+      parties,
+      accounts,
+      items,
+      taxCodes,
+      taxGroups,
+      dimensions,
+      segments,
+      subsidiaries,
+      resolvedForm,
+    ] = await Promise.all([
+      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+        role: orderKind === "purchase_order" ? "vendor" : "customer",
+        activeOnly: true,
+      }).then((rows) => ({ rows })),
+      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+        activeOnly: true,
+        postingOnly: true,
+      }).then((rows) => ({ rows })),
+      db.execute<ElementOf<OrderProps["items"]>>(
+        sql`
         select id, code, name, default_rate, default_cost, income_account_id, expense_account_id, tax_code_id, unit from items
          where org_id = ${authz.user.orgId} and is_active
            and (
@@ -221,7 +290,9 @@ export async function loadRelatedTransactionDrawerData({
                 where org_id = ${authz.user.orgId} and document_id = ${id} and item_id is not null
              )
            )
-         order by name limit 2000`, 'objects'),
+         order by name limit 2000`,
+        "objects",
+      ),
       taxCodeOptions(),
       taxGroupOptions(),
       reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
@@ -236,148 +307,195 @@ export async function loadRelatedTransactionDrawerData({
         lineDefs: [],
         explicitLayoutId: formLayoutId,
       }),
-    ])
+    ]);
     return {
-      type: 'order',
+      type: "order",
       props: {
-        order: order as unknown as OrderProps['order'],
+        order: order as unknown as OrderProps["order"],
         kind: orderKind,
         parties: parties.rows,
         accounts: accounts.rows,
         items,
-        taxCodes: (taxCodes),
-        taxGroups: (taxGroups),
+        taxCodes: taxCodes,
+        taxGroups: taxGroups,
         departments: dimensions.departments,
         projects: dimensions.projects,
         segments,
         subsidiaries: (subsidiaries ?? []).map((subsidiary) => ({
           id: subsidiary.id,
-          name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}`,
+          name: `${"  ".repeat(subsidiary.depth)}${subsidiary.name}`,
         })),
-        canManage: can(authz, orderKind === 'purchase_order' ? 'purchase_orders.create' : 'ar.create'),
+        canManage: can(
+          authz,
+          orderKind === "purchase_order" ? "purchase_orders.create" : "ar.create",
+        ),
         layout: resolvedForm.layout,
         quoteToCashEnabled:
-          orderKind === 'quote' ? await isFeatureEnabled(authz.user.orgId, 'quoteToCash') : false,
-        quoteAwardEnabled: orderKind === 'quote' && can(authz, 'projects.manage'),
+          orderKind === "quote" ? await isFeatureEnabled(authz.user.orgId, "quoteToCash") : false,
+        quoteAwardEnabled: orderKind === "quote" && can(authz, "projects.manage"),
         quoteAwardAvailable:
-          orderKind === 'quote' &&
-          (await isFeatureEnabled(authz.user.orgId, 'projects')) &&
-          (await isFeatureEnabled(authz.user.orgId, 'orders')),
+          orderKind === "quote" &&
+          (await isFeatureEnabled(authz.user.orgId, "projects")) &&
+          (await isFeatureEnabled(authz.user.orgId, "orders")),
       },
-    }
+    };
   }
 
-  if (kind === 'expense_report') {
-    if (!can(authz, 'expenses.read')) return null
-    const report = await loadExpenseReport(id, authz.user.orgId, authz.allowedSubsidiaryIds)
-    if (!report || !canSeeDocument((report.doc), partyId, authz)) return null
-    const [employees, accounts, taxCodes, taxGroups, dimensions, headerDefs, lineDefs, segments] = await Promise.all([
-      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: 'employee', activeOnly: true }).then((rows) => ({ rows })),
-      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['expense', 'expense_other', 'cogs'], activeOnly: true, postingOnly: true }).then((rows) => ({ rows })),
-      taxCodeOptions(),
-      taxGroupOptions(),
-      reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
-      loadFieldDefs('documents', 'expense_report'),
-      loadFieldDefs('document_lines', 'expense_report'),
-      customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
-    ])
+  if (kind === "expense_report") {
+    if (!can(authz, "expenses.read")) return null;
+    const report = await loadExpenseReport(id, authz.user.orgId, authz.allowedSubsidiaryIds);
+    if (!report || !canSeeDocument(report.doc, partyId, authz)) return null;
+    const [employees, accounts, taxCodes, taxGroups, dimensions, headerDefs, lineDefs, segments] =
+      await Promise.all([
+        listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+          role: "employee",
+          activeOnly: true,
+        }).then((rows) => ({ rows })),
+        scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+          types: ["expense", "expense_other", "cogs"],
+          activeOnly: true,
+          postingOnly: true,
+        }).then((rows) => ({ rows })),
+        taxCodeOptions(),
+        taxGroupOptions(),
+        reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
+        loadFieldDefs("documents", "expense_report"),
+        loadFieldDefs("document_lines", "expense_report"),
+        customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
+      ]);
     const resolvedForm = await resolveFormLayout({
       orgId: authz.user.orgId,
       userId: authz.user.id,
       recordType: kind,
       userRoles: authz.user.roles.map(({ key }) => key),
-      headerDefs: (headerDefs),
-      lineDefs: (lineDefs),
+      headerDefs: headerDefs,
+      lineDefs: lineDefs,
       explicitLayoutId: formLayoutId,
-    })
+    });
     return {
-      type: 'expense',
+      type: "expense",
       props: {
-        report: (report),
+        report: report,
         amortizationTemplates: await sourceAmortizationOptions(authz.user.orgId, report),
         employees: employees.rows,
         accounts: accounts.rows,
-        taxCodes: (taxCodes),
-        taxGroups: (taxGroups),
-        departments: (dimensions.departments),
-        projects: (dimensions.projects),
-        segments: (segments),
-        headerDefs: headerDefs as ExpenseProps['headerDefs'],
-        lineDefs: lineDefs as ExpenseProps['lineDefs'],
-        canSubmit: can(authz, 'expenses.create'),
-        canPost: can(authz, 'ap.post'),
-        canRecall: canRecallExpenseReport(report.doc as Parameters<typeof canRecallExpenseReport>[0], authz.user),
+        taxCodes: taxCodes,
+        taxGroups: taxGroups,
+        departments: dimensions.departments,
+        projects: dimensions.projects,
+        segments: segments,
+        headerDefs: headerDefs as ExpenseProps["headerDefs"],
+        lineDefs: lineDefs as ExpenseProps["lineDefs"],
+        canSubmit: can(authz, "expenses.create"),
+        canPost: can(authz, "ap.post"),
+        canRecall: canRecallExpenseReport(
+          report.doc as Parameters<typeof canRecallExpenseReport>[0],
+          authz.user,
+        ),
         layout: resolvedForm.layout,
       },
-    }
+    };
   }
 
-  if (kind === 'journal') {
-    if (!can(authz, 'gl.read')) return null
-    const journal = await loadJournalDoc(id, authz.user.orgId, authz.allowedSubsidiaryIds)
-    if (!journal || !canSeeDocument((journal.doc), partyId, authz)) return null
-    const [parties, accounts, dimensions, headerDefs, lineDefs, subsidiaries, segments] = await Promise.all([
-      listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { activeOnly: true }).then((rows) => ({ rows })),
-      scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }).then((rows) => ({ rows })),
-      reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
-      loadFieldDefs('documents', 'journal'),
-      loadFieldDefs('document_lines', 'journal'),
-      visibleSubsidiaries(authz),
-      customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
-    ])
+  if (kind === "journal") {
+    if (!can(authz, "gl.read")) return null;
+    const journal = await loadJournalDoc(id, authz.user.orgId, authz.allowedSubsidiaryIds);
+    if (!journal || !canSeeDocument(journal.doc, partyId, authz)) return null;
+    const [parties, accounts, dimensions, headerDefs, lineDefs, subsidiaries, segments] =
+      await Promise.all([
+        listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+          activeOnly: true,
+        }).then((rows) => ({ rows })),
+        scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+          activeOnly: true,
+          postingOnly: true,
+        }).then((rows) => ({ rows })),
+        reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
+        loadFieldDefs("documents", "journal"),
+        loadFieldDefs("document_lines", "journal"),
+        visibleSubsidiaries(authz),
+        customSegmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds),
+      ]);
     const resolvedForm = await resolveFormLayout({
       orgId: authz.user.orgId,
       userId: authz.user.id,
       recordType: kind,
       userRoles: authz.user.roles.map(({ key }) => key),
-      headerDefs: (headerDefs),
-      lineDefs: (lineDefs),
+      headerDefs: headerDefs,
+      lineDefs: lineDefs,
       explicitLayoutId: formLayoutId,
-    })
+    });
     return {
-      type: 'journal',
+      type: "journal",
       props: {
-        journal: (journal),
+        journal: journal,
         amortizationTemplates: await sourceAmortizationOptions(authz.user.orgId, journal),
         parties: parties.rows,
         accounts: accounts.rows,
-        departments: (dimensions.departments),
-        projects: (dimensions.projects),
+        departments: dimensions.departments,
+        projects: dimensions.projects,
         subsidiaries,
-        segments: (segments),
+        segments: segments,
         // The drawer hides every mutation (save, post, delete, void)
         // without gl.post — the related flyout must carry the same flag
         // the journal page's own loader passes.
-        canPost: can(authz, 'gl.post'),
-        headerDefs: headerDefs as JournalProps['headerDefs'],
-        lineDefs: lineDefs as JournalProps['lineDefs'],
+        canPost: can(authz, "gl.post"),
+        headerDefs: headerDefs as JournalProps["headerDefs"],
+        lineDefs: lineDefs as JournalProps["lineDefs"],
         layout: resolvedForm.layout,
       },
-    }
+    };
   }
 
-  const config = DOC_KINDS[kind]
-  const readPerm = kind === 'project_charge' ? 'projects.read' : readPermission(kind)
-  if (!config || !can(authz, readPerm)) return null
-  const loaded = await loadDocument(id, authz.user.orgId)
-  if (!loaded || !canSeeDocument((loaded.doc), partyId, authz)) return null
+  const config = DOC_KINDS[kind];
+  const readPerm = kind === "project_charge" ? "projects.read" : readPermission(kind);
+  if (!config || !can(authz, readPerm)) return null;
+  const loaded = await loadDocument(id, authz.user.orgId);
+  if (!loaded || !canSeeDocument(loaded.doc, partyId, authz)) return null;
   // A pay_run drawer without payroll.read shows collapsed restricted lines
   // (see maskPayRunDrawerLines); payroll.read holders see full detail.
-  const payload = kind === 'pay_run' && !can(authz, 'payroll.read')
-    ? { doc: loaded.doc, lines: await maskPayRunDrawerLines(authz.user.orgId, id, loaded.lines) }
-    : loaded
+  const payload =
+    kind === "pay_run" && !can(authz, "payroll.read")
+      ? { doc: loaded.doc, lines: await maskPayRunDrawerLines(authz.user.orgId, id, loaded.lines) }
+      : loaded;
   const [headerDefs, lineDefs] = await Promise.all([
-    loadFieldDefs('documents', kind),
-    loadFieldDefs('document_lines', kind),
-  ])
-  const [parties, accounts, taxCodes, dimensions, items, cards, cardAccounts, banks, subsidiaries, resolvedForm] = await Promise.all([
-    config.partyRole ? listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: config.partyRole, activeOnly: true }) : Promise.resolve(undefined),
-    scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: config.accountTypes ?? undefined, activeOnly: true, postingOnly: true }),
+    loadFieldDefs("documents", kind),
+    loadFieldDefs("document_lines", kind),
+  ]);
+  const [
+    parties,
+    accounts,
+    taxCodes,
+    dimensions,
+    items,
+    cards,
+    cardAccounts,
+    banks,
+    subsidiaries,
+    resolvedForm,
+  ] = await Promise.all([
+    config.partyRole
+      ? listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+          role: config.partyRole,
+          activeOnly: true,
+        })
+      : Promise.resolve(undefined),
+    scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+      types: config.accountTypes ?? undefined,
+      activeOnly: true,
+      postingOnly: true,
+    }),
     config.hasTax
-      ? taxCodeOptions(undefined, typeof (loaded.doc as Record<string, unknown>).document_date === 'string' ? (loaded.doc as Record<string, unknown>).document_date as string : undefined)
+      ? taxCodeOptions(
+          undefined,
+          typeof (loaded.doc as Record<string, unknown>).document_date === "string"
+            ? ((loaded.doc as Record<string, unknown>).document_date as string)
+            : undefined,
+        )
       : Promise.resolve(undefined),
     reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
-    db.execute(sql`
+    db.execute(
+      sql`
       select id, code, name from items
        where org_id = ${authz.user.orgId} and is_active
          and (
@@ -388,13 +506,27 @@ export async function loadRelatedTransactionDrawerData({
               where org_id = ${authz.user.orgId} and document_id = ${id} and item_id is not null
            )
          )
-       order by coalesce(code, name), name limit 2000`, 'objects'),
-    config.fundingSource === 'card' ? listScopedCardOptions(authz.user.orgId, authz.allowedSubsidiaryIds) : Promise.resolve(undefined),
-    config.fundingSource === 'card'
-      ? scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['liability_card'], activeOnly: true, postingOnly: true, reconcilableOnly: true })
+       order by coalesce(code, name), name limit 2000`,
+      "objects",
+    ),
+    config.fundingSource === "card"
+      ? listScopedCardOptions(authz.user.orgId, authz.allowedSubsidiaryIds)
       : Promise.resolve(undefined),
-    config.fundingSource === 'bank' || kind === 'transfer'
-      ? scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['asset_bank'], activeOnly: true, postingOnly: true, reconcilableOnly: true })
+    config.fundingSource === "card"
+      ? scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+          types: ["liability_card"],
+          activeOnly: true,
+          postingOnly: true,
+          reconcilableOnly: true,
+        })
+      : Promise.resolve(undefined),
+    config.fundingSource === "bank" || kind === "transfer"
+      ? scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
+          types: ["asset_bank"],
+          activeOnly: true,
+          postingOnly: true,
+          reconcilableOnly: true,
+        })
       : Promise.resolve(undefined),
     visibleSubsidiaries(authz),
     resolveFormLayout({
@@ -402,58 +534,68 @@ export async function loadRelatedTransactionDrawerData({
       userId: authz.user.id,
       recordType: kind,
       userRoles: authz.user.roles.map(({ key }) => key),
-      headerDefs: (headerDefs),
-      lineDefs: (lineDefs),
+      headerDefs: headerDefs,
+      lineDefs: lineDefs,
       explicitLayoutId: formLayoutId,
     }),
-  ])
+  ]);
   return {
-    type: 'document',
+    type: "document",
     props: {
-      payload: (payload),
+      payload: payload,
       config,
-      basePath: kind === 'project_charge' ? '/projects' : config.family === 'ap' ? '/ap/bills' : config.family === 'ar' ? '/ar/invoices' : '/banking/transactions',
+      basePath:
+        kind === "project_charge"
+          ? "/projects"
+          : config.family === "ap"
+            ? "/ap/bills"
+            : config.family === "ar"
+              ? "/ar/invoices"
+              : "/banking/transactions",
       relatedNavigation: true,
-      parties: (parties),
-      accounts: (accounts),
-      taxCodes: (taxCodes),
-      cards: (cards),
-      cardAccounts: (cardAccounts),
-      bankAccounts: (banks),
-      departments: (dimensions.departments),
-      projects: (dimensions.projects),
-      locations: (dimensions.locations),
-      classes: (dimensions.classes),
-      segments: (dimensions.segments),
-      builtinSegments: (dimensions.builtinSegments),
-      items: items as DocumentProps['items'],
+      parties: parties,
+      accounts: accounts,
+      taxCodes: taxCodes,
+      cards: cards,
+      cardAccounts: cardAccounts,
+      bankAccounts: banks,
+      departments: dimensions.departments,
+      projects: dimensions.projects,
+      locations: dimensions.locations,
+      classes: dimensions.classes,
+      segments: dimensions.segments,
+      builtinSegments: dimensions.builtinSegments,
+      items: items as DocumentProps["items"],
       subsidiaries,
-      headerDefs: headerDefs as DocumentProps['headerDefs'],
-      lineDefs: lineDefs as DocumentProps['lineDefs'],
+      headerDefs: headerDefs as DocumentProps["headerDefs"],
+      lineDefs: lineDefs as DocumentProps["lineDefs"],
       // A project charge uses the same explicit Edit cycle as every native
       // transaction. Its rate-aware line snapshot remains read-only in the
       // universal drawer; governed header amendments preserve that evidence.
-      canCreate: kind === 'project_charge' ? can(authz, 'projects.manage') : can(authz, createPermission(kind)),
-      canPost: kind === 'project_charge' ? false : can(authz, postPermission(kind)),
+      canCreate:
+        kind === "project_charge"
+          ? can(authz, "projects.manage")
+          : can(authz, createPermission(kind)),
+      canPost: kind === "project_charge" ? false : can(authz, postPermission(kind)),
       // A posted credit memo settles its open items from every drawer that
       // opens it (party, report and global flyouts), not only the list pages.
       creditApplications: creditApplicationsDrawer(loaded.doc, {
-        ar: can(authz, 'ar.pay'),
-        ap: can(authz, 'ap.pay'),
+        ar: can(authz, "ar.pay"),
+        ap: can(authz, "ap.pay"),
       }),
       allocationsEntryEnabled,
       layout: resolvedForm.layout,
       availableLayouts: resolvedForm.available,
       currentLayoutId: resolvedForm.row?.id ?? null,
       recordType: kind,
-      canCustomize: can(authz, 'admin.customization.manage'),
+      canCustomize: can(authz, "admin.customization.manage"),
     },
-  }
+  };
 }
 
 export async function RelatedTransactionDrawer(
   props: Parameters<typeof loadRelatedTransactionDrawerData>[0],
 ) {
-  const data = await loadRelatedTransactionDrawerData(props)
-  return data ? <RelatedTransactionDrawerClient data={data} /> : null
+  const data = await loadRelatedTransactionDrawerData(props);
+  return data ? <RelatedTransactionDrawerClient data={data} /> : null;
 }

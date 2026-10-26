@@ -31,10 +31,15 @@ const placeholders = {
   transactionCode: "460", // CPA transaction code (460 = accounts payable)
 };
 
-export async function seedEftSettings(orgIdArg: string | undefined): Promise<{ id: string; name: string }> {
-  const orgs = await db.execute<{ id: string; name: string }>(sql`
+export async function seedEftSettings(
+  orgIdArg: string | undefined,
+): Promise<{ id: string; name: string }> {
+  const orgs = await db.execute<{ id: string; name: string }>(
+    sql`
     select id, name from orgs order by created_at
-  `, "objects");
+  `,
+    "objects",
+  );
   const orgId = requireExplicitOrgId(orgIdArg, orgs, "seed-eft-settings.ts");
   const org = orgs.find((candidate) => candidate.id.toLowerCase() === orgId.toLowerCase());
   if (!org) {
@@ -75,8 +80,10 @@ export function isSeedEftSettingsCli(entrypoint: string | undefined): boolean {
 }
 
 if (isSeedEftSettingsCli(process.argv[1])) {
-  void main().then(() => process.exit(0)).catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exit(1);
-  });
+  void main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : error);
+      process.exit(1);
+    });
 }

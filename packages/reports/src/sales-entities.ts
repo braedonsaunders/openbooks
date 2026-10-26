@@ -158,13 +158,7 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
         label: "Lifecycle",
         kind: "enum",
         expr: "q.lifecycle",
-        options: [
-          "draft",
-          "pending_approval",
-          "approved",
-          "superseded",
-          "closed",
-        ],
+        options: ["draft", "pending_approval", "approved", "superseded", "closed"],
       },
       {
         key: "metric",
@@ -200,8 +194,7 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
     ...promotionShared,
     key: "promotion_performance",
     label: "Promotion performance",
-    description:
-      "Promotion discounts with gross and net revenue, by period and promotion.",
+    description: "Promotion discounts with gross and net revenue, by period and promotion.",
     // One row per promotion discount line. The lateral attachment prices the
     // parent document once: gross is the positively priced non-promotion
     // lines, net is gross plus every discount on the document.
@@ -213,7 +206,13 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
     columns: [
       { key: "promotion_code", label: "Promotion code", kind: "text", expr: "p.code" },
       { key: "promotion_name", label: "Promotion", kind: "text", expr: "p.name" },
-      { key: "promotion_kind", label: "Promotion kind", kind: "enum", expr: "p.kind", options: ["percent", "amount", "free_shipping", "buy_x_get_y"] },
+      {
+        key: "promotion_kind",
+        label: "Promotion kind",
+        kind: "enum",
+        expr: "p.kind",
+        options: ["percent", "amount", "free_shipping", "buy_x_get_y"],
+      },
       { key: "document_date", label: "Document date", kind: "date", expr: "d.document_date" },
       { key: "document_number", label: "Document", kind: "text", expr: "d.document_number" },
       {
@@ -223,7 +222,12 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
         expr: "d.kind",
         options: ["quote", "sales_order", "customer_invoice"],
       },
-      { key: "customer", label: "Customer", kind: "text", expr: "coalesce(c.display_name,'Unattributed')" },
+      {
+        key: "customer",
+        label: "Customer",
+        kind: "text",
+        expr: "coalesce(c.display_name,'Unattributed')",
+      },
       { key: "currency", label: "Currency", kind: "text", expr: "d.currency" },
       {
         key: "discount_given",
@@ -279,7 +283,12 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
         expr: "d.status",
         options: ["draft", "pending_approval", "approved", "posted", "voided"],
       },
-      { key: "customer", label: "Customer", kind: "text", expr: "coalesce(c.display_name,'Walk-in')" },
+      {
+        key: "customer",
+        label: "Customer",
+        kind: "text",
+        expr: "coalesce(c.display_name,'Walk-in')",
+      },
       {
         key: "method",
         label: "Method",
@@ -330,7 +339,12 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
       { key: "channel", label: "Channel", kind: "text", expr: "c.name" },
       { key: "ordered_day", label: "Ordered day", kind: "date", expr: "o.ordered_at::date" },
       { key: "order_number", label: "Order", kind: "text", expr: "o.external_number" },
-      { key: "customer", label: "Customer", kind: "text", expr: "coalesce(nullif(o.customer_email, ''), o.customer_name, '')" },
+      {
+        key: "customer",
+        label: "Customer",
+        kind: "text",
+        expr: "coalesce(nullif(o.customer_email, ''), o.customer_name, '')",
+      },
       { key: "currency", label: "Currency", kind: "text", expr: "o.shop_currency" },
       { key: "item", label: "Item", kind: "text", expr: "li.title" },
       { key: "sku", label: "Item code", kind: "text", expr: "li.sku" },
@@ -442,14 +456,34 @@ export const SALES_REPORT_ENTITIES: ReportEntity[] = [
         label: "Cost component",
         kind: "enum",
         expr: "f.component",
-        options: ["net_revenue", "discount", "cogs", "processor_fee", "shipping_label", "marketplace_fee", "stored_value_funding", "returns", "restocking_fee", "ad_spend"],
+        options: [
+          "net_revenue",
+          "discount",
+          "cogs",
+          "processor_fee",
+          "shipping_label",
+          "marketplace_fee",
+          "stored_value_funding",
+          "returns",
+          "restocking_fee",
+          "ad_spend",
+        ],
       },
       {
         key: "source",
         label: "Cost source",
         kind: "enum",
         expr: "f.source_kind",
-        options: ["posting", "fulfilment", "label", "payout", "refund", "estimate", "import", "manual"],
+        options: [
+          "posting",
+          "fulfilment",
+          "label",
+          "payout",
+          "refund",
+          "estimate",
+          "import",
+          "manual",
+        ],
       },
       {
         key: "costing",

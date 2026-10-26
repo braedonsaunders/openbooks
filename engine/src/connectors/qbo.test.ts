@@ -13,7 +13,8 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -89,7 +90,10 @@ test("QBO token exchange, refresh, and API calls refuse redirects without forwar
 
   try {
     await assert.rejects(exchangeCode(app, "auth-code", mockedTransport), /fetch failed|redirect/i);
-    await assert.rejects(refreshTokens(app, liveTokens.refreshToken, mockedTransport), /fetch failed|redirect/i);
+    await assert.rejects(
+      refreshTokens(app, liveTokens.refreshToken, mockedTransport),
+      /fetch failed|redirect/i,
+    );
 
     const client = new QboClient(app, REALM_ID, liveTokens, undefined, mockedTransport);
     await assert.rejects(client.queryAll("Account"), /fetch failed|redirect/i);
@@ -130,7 +134,9 @@ test("a 429 retries then succeeds; a persistent 5xx refuses by name after the bo
     }
     if (tokenRequests <= 2) {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ access_token: "at-retry", refresh_token: "rt-retry", expires_in: 3600 }));
+      res.end(
+        JSON.stringify({ access_token: "at-retry", refresh_token: "rt-retry", expires_in: 3600 }),
+      );
       return;
     }
     res.writeHead(500, { "content-type": "text/plain" });
@@ -147,7 +153,10 @@ test("a 429 retries then succeeds; a persistent 5xx refuses by name after the bo
     assert.equal(tokenRequests, 2, "one retry after the 429, then success");
 
     // Persistent 500: four bounded attempts, then a named refusal.
-    await assert.rejects(refreshTokens(app, "rt-old", mockedTransport), /QBO token refresh HTTP 500/);
+    await assert.rejects(
+      refreshTokens(app, "rt-old", mockedTransport),
+      /QBO token refresh HTTP 500/,
+    );
     assert.equal(tokenRequests, 6, "four bounded attempts for the failing refresh, then refusal");
   } finally {
     globalThis.fetch = originalFetch;
@@ -170,17 +179,28 @@ test("normal Intuit responses pass: token exchange, refresh rotation, and bearer
       seen.push({
         path,
         authorization: req.headers.authorization ?? "",
-        grantType: path.startsWith("/oauth2/") ? (new URLSearchParams(raw).get("grant_type") ?? undefined) : undefined,
+        grantType: path.startsWith("/oauth2/")
+          ? (new URLSearchParams(raw).get("grant_type") ?? undefined)
+          : undefined,
       });
       if (path.startsWith("/oauth2/v1/tokens/bearer")) {
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ access_token: "at-new", refresh_token: "rt-new", expires_in: 3600 }));
+        res.end(
+          JSON.stringify({ access_token: "at-new", refresh_token: "rt-new", expires_in: 3600 }),
+        );
         return;
       }
       if (path.includes("/query")) {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
-          JSON.stringify({ QueryResponse: { Account: [{ Id: "1", Name: "Checking" }, { Id: "2", Name: "Savings" }] } }),
+          JSON.stringify({
+            QueryResponse: {
+              Account: [
+                { Id: "1", Name: "Checking" },
+                { Id: "2", Name: "Savings" },
+              ],
+            },
+          }),
         );
         return;
       }
@@ -198,15 +218,27 @@ test("normal Intuit responses pass: token exchange, refresh rotation, and bearer
     assert.equal(exchanged.refreshToken, "rt-new");
     // The -60s safety skew keeps expiry strictly inside the real window.
     const expiresInMs = new Date(exchanged.expiresAt).getTime() - Date.now();
-    assert.ok(expiresInMs > 3_500_000 && expiresInMs <= 3_600_000, "expiry must be ISO and ~59 minutes out");
+    assert.ok(
+      expiresInMs > 3_500_000 && expiresInMs <= 3_600_000,
+      "expiry must be ISO and ~59 minutes out",
+    );
 
     const rotated = await refreshTokens(app, "rt-old", mockedTransport);
     assert.equal(rotated.accessToken, "at-new");
     assert.equal(rotated.refreshToken, "rt-new");
 
-    const client = new QboClient(app, REALM_ID, { ...exchanged, accessToken: "access-token" }, undefined, mockedTransport);
+    const client = new QboClient(
+      app,
+      REALM_ID,
+      { ...exchanged, accessToken: "access-token" },
+      undefined,
+      mockedTransport,
+    );
     const accounts = await client.queryAll<{ Id: string; Name: string }>("Account");
-    assert.deepEqual(accounts.map((a) => a.Name), ["Checking", "Savings"]);
+    assert.deepEqual(
+      accounts.map((a) => a.Name),
+      ["Checking", "Savings"],
+    );
 
     const trialBalance = await client.report<{ Rows: unknown[] }>("TrialBalance");
     assert.deepEqual(trialBalance, { Rows: [] });

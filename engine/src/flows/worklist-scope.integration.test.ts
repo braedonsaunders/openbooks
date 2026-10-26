@@ -59,10 +59,24 @@ async function seedTimesheetGate(
       (${headerId}, ${orgId}, ${employeeId}, '2026-07-12',
        'submitted', ${actorId}, ${actorId})
   `);
-  await seedApprovalFlow(orgId, { subjectKind: "timesheet_week", mode: "any", assignees: [{ type: "user", userId: assigneeId }] });
-  await routeSubjectSubmission({ orgId, actorId, subjectKind: "timesheet_week", subjectId: headerId });
-  const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
-    where org_id=${orgId} and subject_kind='timesheet_week' and subject_id=${headerId} and status='pending'`, "objects"))[0];
+  await seedApprovalFlow(orgId, {
+    subjectKind: "timesheet_week",
+    mode: "any",
+    assignees: [{ type: "user", userId: assigneeId }],
+  });
+  await routeSubjectSubmission({
+    orgId,
+    actorId,
+    subjectKind: "timesheet_week",
+    subjectId: headerId,
+  });
+  const gate = (
+    await db.execute<{ id: string }>(
+      sql`select id from flow_gates
+    where org_id=${orgId} and subject_kind='timesheet_week' and subject_id=${headerId} and status='pending'`,
+      "objects",
+    )
+  )[0];
   assert.ok(gate);
   return gate.id;
 }
@@ -84,16 +98,25 @@ async function seedWorkOrderGates(
     values
       (${inScopeOrderId}, ${orgId}, 'WO-WORKLIST-A', ${itemId}, 1, 'ea', ${subsidiaryId}, ${makerId}),
       (${outOfScopeOrderId}, ${orgId}, 'WO-WORKLIST-B', ${itemId}, 1, 'ea', ${otherSubsidiaryId}, ${makerId})`);
-  await seedApprovalFlow(orgId, { subjectKind: "work_order", mode: "all", assignees: [
-    { type: "user", userId: firstApproverId }, { type: "user", userId: secondApproverId },
-  ] });
+  await seedApprovalFlow(orgId, {
+    subjectKind: "work_order",
+    mode: "all",
+    assignees: [
+      { type: "user", userId: firstApproverId },
+      { type: "user", userId: secondApproverId },
+    ],
+  });
   for (const subjectId of [inScopeOrderId, outOfScopeOrderId])
     await routeSubjectSubmission({ orgId, actorId: makerId, subjectKind: "work_order", subjectId });
-  const gates = await db.execute<{ id: string; subject_id: string }>(sql`select id,subject_id from flow_gates
-    where org_id=${orgId} and subject_kind='work_order' and assignee_user_id=${firstApproverId} and status='pending'`, "objects");
-  const inScope = gates.find(gate => gate.subject_id === inScopeOrderId);
-  const outOfScope = gates.find(gate => gate.subject_id === outOfScopeOrderId);
-  assert.ok(inScope); assert.ok(outOfScope);
+  const gates = await db.execute<{ id: string; subject_id: string }>(
+    sql`select id,subject_id from flow_gates
+    where org_id=${orgId} and subject_kind='work_order' and assignee_user_id=${firstApproverId} and status='pending'`,
+    "objects",
+  );
+  const inScope = gates.find((gate) => gate.subject_id === inScopeOrderId);
+  const outOfScope = gates.find((gate) => gate.subject_id === outOfScopeOrderId);
+  assert.ok(inScope);
+  assert.ok(outOfScope);
   return { inScopeGateId: inScope.id, outOfScopeGateId: outOfScope.id };
 }
 
@@ -134,7 +157,11 @@ test("a restricted worklist hides gates from other subsidiaries", { skip: !DB },
     assert.ok(unrestricted.some((g) => g.id === workOrderGates.inScopeGateId));
     assert.ok(unrestricted.some((g) => g.id === workOrderGates.outOfScopeGateId));
     const exposed = unrestricted.find((g) => g.id === gateId)!;
-    assert.equal(exposed.subsidiaryId, otherSubsidiary, "the gate carries its legal entity for callers");
+    assert.equal(
+      exposed.subsidiaryId,
+      otherSubsidiary,
+      "the gate carries its legal entity for callers",
+    );
 
     const hidden = await withOrg(org.orgId, () =>
       worklistGates(org.orgId, actors.approver1Id, undefined, new Set([org.subsidiaryId])),
@@ -181,9 +208,16 @@ test("a restricted worklist hides gates from other subsidiaries", { skip: !DB },
 test("every table-backed subject scope names real tables and columns", { skip: !DB }, async () => {
   // The scope interpreter builds its SQL from these identifiers; a typo would
   // only surface when a restricted caller first meets that kind.
-  const catalog = new Set((await db.execute<{ name: string }>(sql`
+  const catalog = new Set(
+    (
+      await db.execute<{ name: string }>(
+        sql`
     select table_name || '.' || column_name as name from information_schema.columns where table_schema = 'public'
-  `, "objects")).map((row) => row.name));
+  `,
+        "objects",
+      )
+    ).map((row) => row.name),
+  );
   const defects = listFlowSubjectProfiles().flatMap(({ subjectKind }) => {
     const scope = getFlowAdapter(subjectKind)?.scope;
     if (!scope || !("table" in scope)) return [];
@@ -192,5 +226,9 @@ test("every table-backed subject scope names real tables and columns", { skip: !
       .filter((name) => !catalog.has(name))
       .map((name) => `${subjectKind}: ${name} does not exist`);
   });
-  assert.deepEqual(defects, [], `subject scopes naming missing columns:\n  ${defects.join("\n  ")}`);
+  assert.deepEqual(
+    defects,
+    [],
+    `subject scopes naming missing columns:\n  ${defects.join("\n  ")}`,
+  );
 });

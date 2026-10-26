@@ -14,12 +14,14 @@ export const runtime = "nodejs";
  */
 export const POST = defineRoute({
   permission: "assistant.use",
-  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
+  feature: {
+    none: "Assistant access is controlled by assistant permissions and provider configuration.",
+  },
   params: z.object({ runId: uuidString() }),
   handler: async ({ authz, params }) => {
-  const { runId } = params;
-  const aborted = await createDbOwnedRunStore(authz).requestAbort(runId);
-  if (!aborted) return notFound("record");
-  return NextResponse.json({ ok: true });
+    const { runId } = params;
+    const aborted = await createDbOwnedRunStore(authz).requestAbort(runId);
+    if (!aborted) return notFound("record");
+    return NextResponse.json({ ok: true });
   },
 });

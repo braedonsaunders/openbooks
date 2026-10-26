@@ -156,14 +156,16 @@ function assertPasswordStrength(segments: Segment[], catalog: PasswordTokenCatal
 
 function parseToken(body: string, catalog: PasswordTokenCatalog): TokenSegment {
   const [head, ...modifierParts] = body.split("|");
-  if (modifierParts.length > 1) throw new PasswordExpressionError(`too many modifiers in "${body}"`);
+  if (modifierParts.length > 1)
+    throw new PasswordExpressionError(`too many modifiers in "${body}"`);
   const modifier = modifierParts[0]?.trim() ?? null;
   if (modifier !== null && !MODIFIERS.has(modifier)) {
     throw new PasswordExpressionError(`unknown modifier "${modifier}" (use upper or lower)`);
   }
   const [rawToken, ...argumentParts] = (head ?? "").split(":");
   const token = (rawToken ?? "").trim();
-  if (argumentParts.length > 1) throw new PasswordExpressionError(`too many arguments in "${body}"`);
+  if (argumentParts.length > 1)
+    throw new PasswordExpressionError(`too many arguments in "${body}"`);
   const argument = argumentParts.length === 1 ? argumentParts[0]!.trim() : null;
   const kind = catalog[token];
   if (!kind) {
@@ -173,9 +175,7 @@ function parseToken(body: string, catalog: PasswordTokenCatalog): TokenSegment {
   }
   if (kind === "date") {
     if (argument === null) {
-      throw new PasswordExpressionError(
-        `"${token}" needs a date format, e.g. {${token}:MMDDYYYY}`,
-      );
+      throw new PasswordExpressionError(`"${token}" needs a date format, e.g. {${token}:MMDDYYYY}`);
     }
     if (!DATE_FORMATS[argument]) {
       throw new PasswordExpressionError(
@@ -223,7 +223,8 @@ export function renderPasswordExpression(
     }
     out += renderToken(segment, catalog[segment.token]!, String(raw));
   }
-  if (out.length === 0) throw new PasswordExpressionError("the password expression produced nothing");
+  if (out.length === 0)
+    throw new PasswordExpressionError("the password expression produced nothing");
   // Length needs no second check here: the save-time floor lower-bounds every
   // derivation (each component yields at least its counted minimum), so a
   // rule that passed saving always derives at least the minimum — including
@@ -247,8 +248,12 @@ function renderToken(segment: TokenSegment, kind: PasswordTokenKind, raw: string
   } else {
     // Diacritics and punctuation are dropped so a name types the same way the
     // employer's published rule reads it ("O'Brien" → OBrien).
-    const clean = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]/g, "");
-    if (clean === "") throw new PasswordExpressionError(`"${segment.token}" has no usable characters`);
+    const clean = raw
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]/g, "");
+    if (clean === "")
+      throw new PasswordExpressionError(`"${segment.token}" has no usable characters`);
     value = segment.argument === null ? clean : clean.slice(0, Number(segment.argument));
   }
   if (segment.modifier === "upper") return value.toUpperCase();

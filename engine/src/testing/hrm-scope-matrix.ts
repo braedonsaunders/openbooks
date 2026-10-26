@@ -20,8 +20,22 @@ export { refusal } from "./refusal.ts";
 import { test } from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "./fixtures.ts";
-import { DB, enableFeatures, grantPermissions, linkPerson, mkSecondSubsidiary, refusalOf, scopeRole, type Refusal } from "./hrm-harness.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "./fixtures.ts";
+import {
+  DB,
+  enableFeatures,
+  grantPermissions,
+  linkPerson,
+  mkSecondSubsidiary,
+  refusalOf,
+  scopeRole,
+  type Refusal,
+} from "./hrm-harness.ts";
 
 /**
  * How an actor's lens is set. `all`, `A` and `B` restrict the actor's own
@@ -110,7 +124,11 @@ async function buildWorld(row: MatrixRow): Promise<World & { orgId: string }> {
       if (spec.overrides) await grantPermissions(orgId, userId, permissions);
     }
     if (spec.link) {
-      party[key] = await linkPerson(orgId, userId, typeof spec.link === "string" ? spec.link : undefined);
+      party[key] = await linkPerson(
+        orgId,
+        userId,
+        typeof spec.link === "string" ? spec.link : undefined,
+      );
     }
     ids[key] = userId;
   }
@@ -152,7 +170,11 @@ export async function refusesLikeUnknown<E extends abstract new (...args: never[
   expected?: E,
 ): Promise<Refusal> {
   const seen = await refusalOf(hidden(), expected);
-  assert.deepEqual(seen, await refusalOf(unknown(), expected), "the hidden target must refuse identically to an unknown one");
+  assert.deepEqual(
+    seen,
+    await refusalOf(unknown(), expected),
+    "the hidden target must refuse identically to an unknown one",
+  );
   return seen;
 }
 

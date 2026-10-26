@@ -34,11 +34,9 @@ const routeState: RouteState = {
   splitPayrollDimensions: false,
   journalDocument: false,
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksReportsEntryNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksReportsEntryNextResponse =
+  NextResponse;
 
 const reportsEntryAuthzStub = `
   const state = globalThis[Symbol.for('openbooks.reports-entry-route-test')]
@@ -74,15 +72,12 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks)
-        return sqlText(chunk);
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })
     .join("");
 }
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksReportsEntrySqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksReportsEntrySqlText = sqlText;
 
 stubModules({
   navigation: false,
@@ -102,7 +97,7 @@ stubModules({
       }
     `,
     "@openbooks/engine/platform/db": `
-      export * as schema from '${import.meta.resolve('@openbooks/schema')}'
+      export * as schema from '${import.meta.resolve("@openbooks/schema")}'
       export function currentRequestOrgResolver() { return undefined }
       export function registerRequestOrgResolver() {}
       export function ambientTenantOrgId() { return 'org-1' }
@@ -240,9 +235,17 @@ stubModules({
 });
 
 // Engine custom-field, segment and feature-state readers import the transport relatively.
-const ENGINE_READERS = /\/engine\/src\/(records\/custom-fields|organization\/(segments|feature-state))\.ts$/;
-registerHooks({ resolve: (specifier, context, next) => next(specifier === "../platform/db.ts" &&
-  ENGINE_READERS.test(context.parentURL ?? "") ? "@openbooks/engine/platform/db" : specifier, context) });
+const ENGINE_READERS =
+  /\/engine\/src\/(records\/custom-fields|organization\/(segments|feature-state))\.ts$/;
+registerHooks({
+  resolve: (specifier, context, next) =>
+    next(
+      specifier === "../platform/db.ts" && ENGINE_READERS.test(context.parentURL ?? "")
+        ? "@openbooks/engine/platform/db"
+        : specifier,
+      context,
+    ),
+});
 const routeUrl = "./route.ts?reports-entry-subsidiary-scope-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 
@@ -250,7 +253,11 @@ function reset(
   allowedSubsidiaryIds: Set<string> | null,
   permissions: string[] | null = null,
   payrollLines = false,
-  options: { headerPayRun?: boolean; missingLinePayrollMarkers?: boolean; splitPayrollDimensions?: boolean } = {},
+  options: {
+    headerPayRun?: boolean;
+    missingLinePayrollMarkers?: boolean;
+    splitPayrollDimensions?: boolean;
+  } = {},
 ): void {
   routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
   routeState.permissions = permissions;
@@ -263,9 +270,12 @@ function reset(
 }
 
 function get(journal = false): Promise<Response> {
-  return GET(new Request(`http://openbooks.test/api/reports/entry/entry-1${journal ? '?journal=1' : ''}`), {
-    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
-  });
+  return GET(
+    new Request(`http://openbooks.test/api/reports/entry/entry-1${journal ? "?journal=1" : ""}`),
+    {
+      params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
+    },
+  );
 }
 
 test("restricted callers receive only lines from allowed subsidiaries", async () => {
@@ -281,9 +291,7 @@ test("restricted callers receive only lines from allowed subsidiaries", async ()
   );
   assert.ok(
     routeState.queries.some(
-      (query) =>
-        query.includes("from journal_lines l") &&
-        query.includes("l.subsidiary_id in"),
+      (query) => query.includes("from journal_lines l") && query.includes("l.subsidiary_id in"),
     ),
     "the journal-line query must constrain each line to the caller subsidiary scope",
   );
@@ -326,13 +334,24 @@ test("gl.read-only roles keep access", async () => {
   const native = await get(true);
   assert.equal(native.status, 200);
   const body = await native.json();
-  assert.equal(body.sourceJournal.doc.updated_at, '42');
-  assert.deepEqual(body.sourceJournal.lines, [], 'native detail never substitutes editable source lines for posted GL evidence');
-  assert.equal(body.canPost, false, 'read-only access does not expose lifecycle mutations');
-  assert.equal(body.headerDefs[0].key, 'native_note');
-  assert.equal(body.lineDefs[0].key, 'native_note');
-  assert.match(JSON.stringify(body.layout), /cf_native_note/, 'the standard form resolver includes native custom fields');
-  assert.ok(routeState.queries.some((query) => query.includes('source.posted_entry_id = e.id')), 'legacy journal documents are resolved through their current posted entry');
+  assert.equal(body.sourceJournal.doc.updated_at, "42");
+  assert.deepEqual(
+    body.sourceJournal.lines,
+    [],
+    "native detail never substitutes editable source lines for posted GL evidence",
+  );
+  assert.equal(body.canPost, false, "read-only access does not expose lifecycle mutations");
+  assert.equal(body.headerDefs[0].key, "native_note");
+  assert.equal(body.lineDefs[0].key, "native_note");
+  assert.match(
+    JSON.stringify(body.layout),
+    /cf_native_note/,
+    "the standard form resolver includes native custom fields",
+  );
+  assert.ok(
+    routeState.queries.some((query) => query.includes("source.posted_entry_id = e.id")),
+    "legacy journal documents are resolved through their current posted entry",
+  );
 });
 
 test("callers with neither gl.read nor reports.read are refused", async () => {
@@ -356,9 +375,7 @@ test("unrestricted callers retain every journal line", async () => {
   );
   assert.ok(
     !routeState.queries.some(
-      (query) =>
-        query.includes("from journal_lines l") &&
-        query.includes("l.subsidiary_id in"),
+      (query) => query.includes("from journal_lines l") && query.includes("l.subsidiary_id in"),
     ),
     "unrestricted callers must not receive a narrowed query",
   );
@@ -386,14 +403,20 @@ test("reports.read-only roles see one restricted payroll line per account, never
 });
 
 test("header pay-run origin protects lines when the line document join is null", async () => {
-  reset(null, ["reports.read", "gl.read"], true, { headerPayRun: true, missingLinePayrollMarkers: true });
+  reset(null, ["reports.read", "gl.read"], true, {
+    headerPayRun: true,
+    missingLinePayrollMarkers: true,
+  });
 
   const response = await get();
 
   assert.equal(response.status, 200);
   const body = (await response.json()) as { lines: Array<Record<string, unknown>> };
   const text = JSON.stringify(body.lines);
-  assert.ok(!text.includes("Alice Anderson") && !text.includes("Bob Brown"), "the header's pay-run kind protects employee detail");
+  assert.ok(
+    !text.includes("Alice Anderson") && !text.includes("Bob Brown"),
+    "the header's pay-run kind protects employee detail",
+  );
   const pay = body.lines.find((line) => line.account_number === "2000") as Record<string, unknown>;
   assert.equal(pay.party, "Payroll (restricted)");
   assert.equal(pay.amount, "4000.0000");
@@ -408,10 +431,13 @@ test("restricted payroll lines collapse separately by subsidiary and functional 
   const body = (await response.json()) as { lines: Array<Record<string, unknown>> };
   const pay = body.lines.filter((line) => line.account_number === "2000");
   assert.equal(pay.length, 2, "separate entity currencies keep separate aggregates");
-  assert.deepEqual(pay.map((line) => [line.subsidiary_id, line.functional_currency, line.amount]), [
-    ["sub-visible", "USD", "1500.0000"],
-    ["sub-eu", "EUR", "2500.0000"],
-  ]);
+  assert.deepEqual(
+    pay.map((line) => [line.subsidiary_id, line.functional_currency, line.amount]),
+    [
+      ["sub-visible", "USD", "1500.0000"],
+      ["sub-eu", "EUR", "2500.0000"],
+    ],
+  );
 });
 
 test("payroll.read roles keep full per-employee entry detail", async () => {

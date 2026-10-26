@@ -1,10 +1,10 @@
-'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Camera } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { toast } from 'sonner'
-import { useTranslations } from 'next-intl'
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Camera } from "lucide-react";
+import { Button } from "@openbooks/ui";
+import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 
 export function ForecastSnapshotButton({
   periodStart,
@@ -12,33 +12,38 @@ export function ForecastSnapshotButton({
   ownerUserId,
   salesTeamId,
 }: {
-  periodStart: string
-  periodEnd: string
-  ownerUserId?: string | null
-  salesTeamId?: string | null
+  periodStart: string;
+  periodEnd: string;
+  ownerUserId?: string | null;
+  salesTeamId?: string | null;
 }) {
-  const t = useTranslations('crm')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("crm");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
 
   async function create() {
-    setBusy(true)
+    setBusy(true);
     try {
       // The snapshot must file the scope the summary displays: an unfiltered
       // page sends explicit nulls (an organization snapshot), never the
       // key-absent personal default.
-      const response = await fetch('/api/crm/forecasts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ periodStart, periodEnd, ownerUserId: ownerUserId ?? null, salesTeamId: salesTeamId ?? null }),
-      })
-      if (!response.ok) throw new Error()
-      toast.success(t('forecasts.snapshotCreated'))
-      router.refresh()
+      const response = await fetch("/api/crm/forecasts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          periodStart,
+          periodEnd,
+          ownerUserId: ownerUserId ?? null,
+          salesTeamId: salesTeamId ?? null,
+        }),
+      });
+      if (!response.ok) throw new Error();
+      toast.success(t("forecasts.snapshotCreated"));
+      router.refresh();
     } catch {
-      toast.error(t('forecasts.snapshotFailed'))
+      toast.error(t("forecasts.snapshotFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -46,10 +51,12 @@ export function ForecastSnapshotButton({
     <Button
       onClick={create}
       disabled={busy}
-      aria-label={busy ? t('forecasts.savingSnapshot') : t('forecasts.saveSnapshot')}
+      aria-label={busy ? t("forecasts.savingSnapshot") : t("forecasts.saveSnapshot")}
     >
       <Camera size={15} />
-      <span className="hidden sm:inline">{busy ? t('forecasts.savingSnapshot') : t('forecasts.saveSnapshot')}</span>
+      <span className="hidden sm:inline">
+        {busy ? t("forecasts.savingSnapshot") : t("forecasts.saveSnapshot")}
+      </span>
     </Button>
-  )
+  );
 }

@@ -35,11 +35,12 @@ export async function assertItemsActive(
   const ids = [...new Set(itemIds)].sort();
   const names = new Map<string, string>();
   if (ids.length === 0) return names;
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     id: string;
     name: string | null;
     is_active: boolean;
-  }>(sql`
+  }>(
+    sql`
     select id, name, is_active
       from items
      where org_id = ${orgId}
@@ -48,7 +49,9 @@ export async function assertItemsActive(
          sql`, `,
        )})
      order by id
-     for share`, "objects"));
+     for share`,
+    "objects",
+  );
   // A write that matches zero rows is a failure, not a success: under RLS an
   // unscoped read resolves to nothing, so a short count refuses here rather
   // than posting against an item resolution cannot see.
@@ -58,9 +61,7 @@ export async function assertItemsActive(
   for (const row of rows) names.set(row.id, row.name ?? row.id);
   for (const row of rows) {
     if (!row.is_active) {
-      throw new InventoryError(
-        `${names.get(row.id)} is inactive — ${messages.inactiveRemedy}`,
-      );
+      throw new InventoryError(`${names.get(row.id)} is inactive — ${messages.inactiveRemedy}`);
     }
   }
   return names;

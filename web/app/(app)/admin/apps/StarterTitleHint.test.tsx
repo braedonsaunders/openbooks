@@ -1,16 +1,16 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
-const React = await import('react')
+const React = await import("react");
 // Classic-JSX fallback: the shared tsx cache can serve a classic transform,
 // which resolves bare React from the global scope, not the module scope.
-Object.assign(globalThis, { React })
-import { NextIntlClientProvider } from 'next-intl'
-import enMessages from '../../../../messages/en'
-import { createAppStarter } from '../../../../lib/apps/starter'
-import { StarterTitleHint } from './StarterTitleHint'
+Object.assign(globalThis, { React });
+import { NextIntlClientProvider } from "next-intl";
+import enMessages from "../../../../messages/en";
+import { createAppStarter } from "../../../../lib/apps/starter";
+import { StarterTitleHint } from "./StarterTitleHint";
 
 /**
  * the package editor guides the author from the General name field to
@@ -19,66 +19,64 @@ import { StarterTitleHint } from './StarterTitleHint'
  */
 
 function render(
-  renderer: 'native' | 'sandbox',
+  renderer: "native" | "sandbox",
   mutate?: (files: { path: string; content: string }[]) => void,
 ): string {
-  const starter = createAppStarter(renderer)
-  const files = starter.files.map((file) => ({ ...file }))
-  mutate?.(files)
+  const starter = createAppStarter(renderer);
+  const files = starter.files.map((file) => ({ ...file }));
+  mutate?.(files);
   const manifest = {
     ...(starter.manifest as Record<string, unknown>),
     frontend: {
       renderer,
-      entry: renderer === 'native' ? 'frontend/ui.json' : 'frontend/index.html',
+      entry: renderer === "native" ? "frontend/ui.json" : "frontend/index.html",
     },
-  }
+  };
   // The provider's overloads only accept children inside the props object.
   /* eslint-disable react/no-children-prop */
   return renderToStaticMarkup(
     createElement(NextIntlClientProvider, {
-      locale: 'en',
+      locale: "en",
       messages: enMessages,
-      timeZone: 'UTC',
+      timeZone: "UTC",
       children: createElement(StarterTitleHint, {
         files,
         manifest: manifest as never,
       }),
     }),
     /* eslint-enable react/no-children-prop */
-  )
+  );
 }
 
-test('a fresh native starter hints that the heading follows the app name', () => {
-  const html = render('native')
-  assert.match(html, /follows the app name/)
-  assert.match(html, /under Screens/)
-})
+test("a fresh native starter hints that the heading follows the app name", () => {
+  const html = render("native");
+  assert.match(html, /follows the app name/);
+  assert.match(html, /under Screens/);
+});
 
-test('a fresh sandbox starter hints at the marker binding', () => {
-  const html = render('sandbox')
-  assert.match(html, /follows the app name/)
-  assert.match(html, /data-app-title/)
-})
+test("a fresh sandbox starter hints at the marker binding", () => {
+  const html = render("sandbox");
+  assert.match(html, /follows the app name/);
+  assert.match(html, /data-app-title/);
+});
 
-test('a customized title hints that renaming leaves it unchanged', () => {
-  const html = render('native', (files) => {
-    const ui = files.find((file) => file.path === 'frontend/ui.json')!
+test("a customized title hints that renaming leaves it unchanged", () => {
+  const html = render("native", (files) => {
+    const ui = files.find((file) => file.path === "frontend/ui.json")!;
     const parsed = JSON.parse(ui.content) as {
-      screens: { spec: { header: { title: unknown }[] } }[]
-    }
-    parsed.screens[0]!.spec.header[0]!.title = 'Acme dashboard'
-    ui.content = JSON.stringify(parsed)
-  })
-  assert.match(html, /custom text/)
-  assert.match(html, /leaves the heading unchanged/)
-})
+      screens: { spec: { header: { title: unknown }[] } }[];
+    };
+    parsed.screens[0]!.spec.header[0]!.title = "Acme dashboard";
+    ui.content = JSON.stringify(parsed);
+  });
+  assert.match(html, /custom text/);
+  assert.match(html, /leaves the heading unchanged/);
+});
 
-test('no hint renders when the entry cannot be recognized', () => {
-  const html = render('native', (files) => {
-    const index = files.findIndex(
-      (file) => file.path === 'frontend/ui.json',
-    )
-    files.splice(index, 1)
-  })
-  assert.equal(html, '')
-})
+test("no hint renders when the entry cannot be recognized", () => {
+  const html = render("native", (files) => {
+    const index = files.findIndex((file) => file.path === "frontend/ui.json");
+    files.splice(index, 1);
+  });
+  assert.equal(html, "");
+});

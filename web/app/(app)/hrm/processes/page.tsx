@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadProcessesRoute, processesSpec, processesTitle } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadProcessesRoute, processesSpec, processesTitle } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await processesTitle() }
+  return { title: await processesTitle() };
 }
 
 /**
@@ -16,9 +16,9 @@ export async function generateMetadata() {
 export default async function ProcessesPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadProcessesRoute(sp)
-  return <ModuleView spec={processesSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadProcessesRoute(sp);
+  return <ModuleView spec={processesSpec(data)} data={data} searchParams={sp} trusted />;
 }

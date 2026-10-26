@@ -5,8 +5,19 @@ import { db } from "../platform/db.ts";
 /** Native draft → lines → posting order shared by benefit source and settlement fixtures. */
 export async function seedBenefitIncentivePosting(
   h: { org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string } },
-  lines: ReadonlyArray<{ account: string; amount: string; department?: string | null; project?: string | null }>,
-  opts: { date?: string; status?: string; currency?: string; subsidiary?: string; periodId?: string } = {},
+  lines: ReadonlyArray<{
+    account: string;
+    amount: string;
+    department?: string | null;
+    project?: string | null;
+  }>,
+  opts: {
+    date?: string;
+    status?: string;
+    currency?: string;
+    subsidiary?: string;
+    periodId?: string;
+  } = {},
 ): Promise<string> {
   const entry = randomUUID();
   await db.transaction(async (tx) => {
@@ -27,7 +38,9 @@ export async function seedBenefitIncentivePosting(
       `);
     }
     if ((opts.status ?? "posted") === "posted") {
-      await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`);
+      await tx.execute(
+        sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`,
+      );
     }
   });
   return entry;

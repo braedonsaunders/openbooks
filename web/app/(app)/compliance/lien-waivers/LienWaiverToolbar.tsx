@@ -1,21 +1,21 @@
-'use client'
+"use client";
 
-import { useState, useTransition } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
-import { useBusinessToday } from '../../../../components/business-date-provider'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { DateField } from '../../../../components/date-field'
+import { useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Button, Drawer, Input, Label, Select } from "@openbooks/ui";
+import { useBusinessToday } from "../../../../components/business-date-provider";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { DateField } from "../../../../components/date-field";
 
 const WAIVER_TYPES = [
-  'conditional_progress',
-  'unconditional_progress',
-  'conditional_final',
-  'unconditional_final',
-] as const
+  "conditional_progress",
+  "unconditional_progress",
+  "conditional_final",
+  "unconditional_final",
+] as const;
 
-const STATUSES = ['draft', 'requested', 'received', 'signed', 'rejected', 'void'] as const
+const STATUSES = ["draft", "requested", "received", "signed", "rejected", "void"] as const;
 
 /**
  * Filters plus the create form. The operator chooses the waiver type
@@ -28,53 +28,53 @@ export function LienWaiverToolbar({
   vendors,
   canManage,
 }: {
-  direction: string
-  status: string
-  projects: { id: string; label: string }[]
-  vendors: { id: string; label: string; defaultType: string }[]
-  canManage: boolean
+  direction: string;
+  status: string;
+  projects: { id: string; label: string }[];
+  vendors: { id: string; label: string; defaultType: string }[];
+  canManage: boolean;
 }) {
-  const t = useTranslations('compliance')
-  const router = useRouter()
-  const params = useSearchParams()
-  const [open, setOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
+  const t = useTranslations("compliance");
+  const router = useRouter();
+  const params = useSearchParams();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
   const [form, setForm] = useState({
-    direction: 'received',
-    partyId: '',
-    projectId: '',
-    waiverType: '',
+    direction: "received",
+    partyId: "",
+    projectId: "",
+    waiverType: "",
     throughDate: useBusinessToday(),
-    amount: '',
-    jurisdiction: '',
-  })
+    amount: "",
+    jurisdiction: "",
+  });
 
   function setParam(key: string, value: string) {
-    const next = new URLSearchParams(params.toString())
-    if (value) next.set(key, value)
-    else next.delete(key)
-    next.delete('waiver')
-    router.push(`/compliance/lien-waivers${next.toString() ? `?${next}` : ''}`)
+    const next = new URLSearchParams(params.toString());
+    if (value) next.set(key, value);
+    else next.delete(key);
+    next.delete("waiver");
+    router.push(`/compliance/lien-waivers${next.toString() ? `?${next}` : ""}`);
   }
 
   function pickVendor(partyId: string) {
-    setForm({ ...form, partyId, waiverType: '' })
+    setForm({ ...form, partyId, waiverType: "" });
   }
 
   async function create() {
-    setError(null)
+    setError(null);
     if (!form.waiverType) {
-      setError(t('lienWaivers.errors.typeRequired'))
-      return
+      setError(t("lienWaivers.errors.typeRequired"));
+      return;
     }
     if (!form.partyId || !form.projectId) {
-      setError(t('lienWaivers.errors.partyAndProject'))
-      return
+      setError(t("lienWaivers.errors.partyAndProject"));
+      return;
     }
-    const res = await fetch('/api/compliance/lien-waivers', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    const res = await fetch("/api/compliance/lien-waivers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
         direction: form.direction,
         partyId: form.partyId,
@@ -84,37 +84,37 @@ export function LienWaiverToolbar({
         amount: form.amount || null,
         jurisdiction: form.jurisdiction || null,
       }),
-    })
+    });
     // The refusal reads through the shared helper so message, remedy and
     // code render instead of a bare fallback.
     if (!res.ok) {
-      setError(await readApiErrorMessage(res, t('errors.saveFailed')))
-      return
+      setError(await readApiErrorMessage(res, t("errors.saveFailed")));
+      return;
     }
-    const created = (await res.json()) as { id: string }
-    setOpen(false)
-    startTransition(() => router.push(`/compliance/lien-waivers?waiver=${created.id}`))
+    const created = (await res.json()) as { id: string };
+    setOpen(false);
+    startTransition(() => router.push(`/compliance/lien-waivers?waiver=${created.id}`));
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Select
-        aria-label={t('lienWaivers.filters.direction')}
+        aria-label={t("lienWaivers.filters.direction")}
         value={direction}
-        onChange={(event) => setParam('direction', event.target.value)}
+        onChange={(event) => setParam("direction", event.target.value)}
         className="w-44"
       >
-        <option value="">{t('lienWaivers.filters.allDirections')}</option>
-        <option value="received">{t('direction.received')}</option>
-        <option value="issued">{t('direction.issued')}</option>
+        <option value="">{t("lienWaivers.filters.allDirections")}</option>
+        <option value="received">{t("direction.received")}</option>
+        <option value="issued">{t("direction.issued")}</option>
       </Select>
       <Select
-        aria-label={t('lienWaivers.filters.status')}
+        aria-label={t("lienWaivers.filters.status")}
         value={status}
-        onChange={(event) => setParam('status', event.target.value)}
+        onChange={(event) => setParam("status", event.target.value)}
         className="w-44"
       >
-        <option value="">{t('lienWaivers.filters.allStatuses')}</option>
+        <option value="">{t("lienWaivers.filters.allStatuses")}</option>
         {STATUSES.map((value) => (
           <option key={value} value={value}>
             {t(`waiverStatus.${value}`)}
@@ -123,28 +123,34 @@ export function LienWaiverToolbar({
       </Select>
       {canManage ? (
         <Button className="ml-auto" onClick={() => setOpen(true)}>
-          {t('lienWaivers.new')}
+          {t("lienWaivers.new")}
         </Button>
       ) : null}
 
-      <Drawer open={open} onClose={() => setOpen(false)} title={t('lienWaivers.new')} size="md">
+      <Drawer open={open} onClose={() => setOpen(false)} title={t("lienWaivers.new")} size="md">
         <div className="grid gap-3">
           {error ? (
-            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+            <p
+              role="alert"
+              className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300"
+            >
               {error}
             </p>
           ) : null}
           <div>
-            <Label>{t('lienWaivers.columns.direction')}</Label>
-            <Select value={form.direction} onChange={(event) => setForm({ ...form, direction: event.target.value })}>
-              <option value="received">{t('direction.received')}</option>
-              <option value="issued">{t('direction.issued')}</option>
+            <Label>{t("lienWaivers.columns.direction")}</Label>
+            <Select
+              value={form.direction}
+              onChange={(event) => setForm({ ...form, direction: event.target.value })}
+            >
+              <option value="received">{t("direction.received")}</option>
+              <option value="issued">{t("direction.issued")}</option>
             </Select>
           </div>
           <div>
-            <Label>{t('lienWaivers.columns.party')}</Label>
+            <Label>{t("lienWaivers.columns.party")}</Label>
             <Select value={form.partyId} onChange={(event) => pickVendor(event.target.value)}>
-              <option value="">{t('fields.select')}</option>
+              <option value="">{t("fields.select")}</option>
               {vendors.map((vendor) => (
                 <option key={vendor.id} value={vendor.id}>
                   {vendor.label}
@@ -153,9 +159,12 @@ export function LienWaiverToolbar({
             </Select>
           </div>
           <div>
-            <Label>{t('lienWaivers.columns.project')}</Label>
-            <Select value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })}>
-              <option value="">{t('fields.select')}</option>
+            <Label>{t("lienWaivers.columns.project")}</Label>
+            <Select
+              value={form.projectId}
+              onChange={(event) => setForm({ ...form, projectId: event.target.value })}
+            >
+              <option value="">{t("fields.select")}</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.label}
@@ -164,9 +173,12 @@ export function LienWaiverToolbar({
             </Select>
           </div>
           <div>
-            <Label>{t('lienWaivers.columns.type')}</Label>
-            <Select value={form.waiverType} onChange={(event) => setForm({ ...form, waiverType: event.target.value })}>
-              <option value="">{t('fields.select')}</option>
+            <Label>{t("lienWaivers.columns.type")}</Label>
+            <Select
+              value={form.waiverType}
+              onChange={(event) => setForm({ ...form, waiverType: event.target.value })}
+            >
+              <option value="">{t("fields.select")}</option>
               {WAIVER_TYPES.map((value) => (
                 <option key={value} value={value}>
                   {t(`waiverType.${value}`)}
@@ -181,14 +193,14 @@ export function LienWaiverToolbar({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>{t('lienWaivers.columns.through')}</Label>
+              <Label>{t("lienWaivers.columns.through")}</Label>
               <DateField
                 value={form.throughDate}
                 onChange={(value) => setForm({ ...form, throughDate: value })}
               />
             </div>
             <div>
-              <Label>{t('lienWaivers.columns.amount')}</Label>
+              <Label>{t("lienWaivers.columns.amount")}</Label>
               <Input
                 inputMode="decimal"
                 className="text-right tabular-nums"
@@ -198,19 +210,21 @@ export function LienWaiverToolbar({
             </div>
           </div>
           <div>
-            <Label>{t('lienWaivers.columns.jurisdiction')}</Label>
+            <Label>{t("lienWaivers.columns.jurisdiction")}</Label>
             <Input
               placeholder="US-CA"
               value={form.jurisdiction}
               onChange={(event) => setForm({ ...form, jurisdiction: event.target.value })}
             />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('lienWaivers.jurisdictionHint')}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {t("lienWaivers.jurisdictionHint")}
+            </p>
           </div>
           <Button disabled={pending} onClick={create}>
-            {t('lienWaivers.create')}
+            {t("lienWaivers.create")}
           </Button>
         </div>
       </Drawer>
     </div>
-  )
+  );
 }

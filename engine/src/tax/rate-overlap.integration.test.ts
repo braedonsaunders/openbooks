@@ -39,9 +39,7 @@ const ARBITRATION_WINDOW_MS = 5_000;
 
 type PgError = Error & { code?: string; constraint?: string };
 
-type Outcome =
-  | { kind: "ok"; result: QueryResult }
-  | { kind: "error"; error: PgError };
+type Outcome = { kind: "ok"; result: QueryResult } | { kind: "error"; error: PgError };
 
 const insertRate = `
   insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, effective_to)
@@ -56,8 +54,8 @@ const insertRate = `
  */
 function raceWrite(text: string, params: unknown[]): Promise<Outcome> {
   return pool.query(text, params).then(
-    (result) => ({ kind: "ok", result } satisfies Outcome),
-    (error) => ({ kind: "error", error: error as PgError } satisfies Outcome),
+    (result) => ({ kind: "ok", result }) satisfies Outcome,
+    (error) => ({ kind: "error", error: error as PgError }) satisfies Outcome,
   );
 }
 
@@ -94,23 +92,27 @@ async function rateCount(client: PoolClient | typeof pool, taxCodeId: string): P
   return Number(result.rows[0]!.count);
 }
 
-test("concurrent tax-rate writes may not commit overlapping effective windows", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const clientA = await pool.connect();
-  let aTxnOpen = false;
+test(
+  "concurrent tax-rate writes may not commit overlapping effective windows",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const clientA = await pool.connect();
+    let aTxnOpen = false;
 
-  // An explicit-transaction session must never rejoin the pool while its
-  // transaction survived an assertion failure mid-scenario.
-  async function settleWriterA(): Promise<void> {
-    if (!aTxnOpen) return;
-    aTxnOpen = false;
-    await clientA.query("rollback").catch(() => {});
-  }
+    // An explicit-transaction session must never rejoin the pool while its
+    // transaction survived an assertion failure mid-scenario.
+    async function settleWriterA(): Promise<void> {
+      if (!aTxnOpen) return;
+      aTxnOpen = false;
+      await clientA.query("rollback").catch(() => {});
+    }
 
-  try {
-    // One code per scenario keeps evidence unambiguous: every violation below
-    // can only belong to that scenario's own identity lane.
-    const laneRows = await db.execute<{ code: string; id: string }>(sql`
+    try {
+      // One code per scenario keeps evidence unambiguous: every violation below
+      // can only belong to that scenario's own identity lane.
+      const laneRows = await db.execute<{ code: string; id: string }>(
+        sql`
       insert into tax_codes (id, org_id, code, name)
       values (${randomUUID()}, ${org.orgId}, 'OV-ADJ', 'Adjacent-window probe'),
              (${randomUUID()}, ${org.orgId}, 'OV-CC', 'Concurrent-create probe'),
@@ -118,156 +120,203 @@ test("concurrent tax-rate writes may not commit overlapping effective windows", 
              (${randomUUID()}, ${org.orgId}, 'OV-UC', 'Update-then-create probe'),
              (${randomUUID()}, ${org.orgId}, 'OV-UA', 'Abort-releases-loser probe'),
              (${randomUUID()}, ${org.orgId}, 'OV-TRG', 'Preflight-message probe')
-      returning code, id`, "objects");
-    const laneByCode = new Map(laneRows.map((row) => [row.code, row.id]));
-    function lane(code: string): string {
-      const taxCodeId = laneByCode.get(code);
-      assert.ok(taxCodeId, `identity lane ${code} was seeded`);
-      return taxCodeId!;
-    }
+      returning code, id`,
+        "objects",
+      );
+      const laneByCode = new Map(laneRows.map((row) => [row.code, row.id]));
+      function lane(code: string): string {
+        const taxCodeId = laneByCode.get(code);
+        assert.ok(taxCodeId, `identity lane ${code} was seeded`);
+        return taxCodeId!;
+      }
 
-    // ------------------------------------------------------------------
-    // Control: two ADJACENT inclusive windows under the same held-open
-    // interleaving must BOTH land. Without this, a constraint that rejects
-    // every write would also look fixed.
-    // ------------------------------------------------------------------
-    await clientA.query("begin");
-    aTxnOpen = true;
-    await clientA.query(insertRate, [org.orgId, lane("OV-ADJ"), "13.0000", "2026-01-01", "2026-06-30"]);
-    const adjacentB = raceWrite(insertRate, [org.orgId, lane("OV-ADJ"), "5.0000", "2026-07-01", "2026-12-31"]);
-    assert.equal(
-      await stillPending(adjacentB, ARBITRATION_WINDOW_MS),
-      false,
-      "an adjacent window must not be arbitrated against the held-open writer",
-    );
-    const adjacentOutcome = await adjacentB;
-    assert.equal(adjacentOutcome.kind, "ok", "adjacent non-overlapping windows are product-valid");
-    await clientA.query("commit");
-    aTxnOpen = false;
-    assert.equal(await rateCount(clientA, lane("OV-ADJ")), 2);
+      // ------------------------------------------------------------------
+      // Control: two ADJACENT inclusive windows under the same held-open
+      // interleaving must BOTH land. Without this, a constraint that rejects
+      // every write would also look fixed.
+      // ------------------------------------------------------------------
+      await clientA.query("begin");
+      aTxnOpen = true;
+      await clientA.query(insertRate, [
+        org.orgId,
+        lane("OV-ADJ"),
+        "13.0000",
+        "2026-01-01",
+        "2026-06-30",
+      ]);
+      const adjacentB = raceWrite(insertRate, [
+        org.orgId,
+        lane("OV-ADJ"),
+        "5.0000",
+        "2026-07-01",
+        "2026-12-31",
+      ]);
+      assert.equal(
+        await stillPending(adjacentB, ARBITRATION_WINDOW_MS),
+        false,
+        "an adjacent window must not be arbitrated against the held-open writer",
+      );
+      const adjacentOutcome = await adjacentB;
+      assert.equal(
+        adjacentOutcome.kind,
+        "ok",
+        "adjacent non-overlapping windows are product-valid",
+      );
+      await clientA.query("commit");
+      aTxnOpen = false;
+      assert.equal(await rateCount(clientA, lane("OV-ADJ")), 2);
 
-    // ------------------------------------------------------------------
-    // CREATE + CREATE of overlapping windows. Exactly one row survives; the
-    // loser parks on the index until A commits, then fails with 23P01. A
-    // different tax code holding the identical window is a different
-    // identity lane and must not be collateral damage of that arbitration.
-    // ------------------------------------------------------------------
-    await clientA.query("begin");
-    aTxnOpen = true;
-    await clientA.query(insertRate, [org.orgId, lane("OV-CC"), "13.0000", "2026-01-01", "2026-06-30"]);
-    const createLoser = raceWrite(insertRate, [org.orgId, lane("OV-CC"), "13.0000", "2026-03-01", "2026-12-31"]);
-    const foreignLane = raceWrite(insertRate, [org.orgId, lane("OV-LANE"), "13.0000", "2026-01-01", "2026-06-30"]);
-    assert.equal(
-      await stillPending(createLoser, ARBITRATION_WINDOW_MS),
-      true,
-      "the overlapping create was accepted while the first window's transaction was still open",
-    );
-    assert.equal(
-      await stillPending(foreignLane, ARBITRATION_WINDOW_MS),
-      false,
-      "a foreign identity lane must not be arbitrated against another lane's window",
-    );
-    const foreignLaneOutcome = await foreignLane;
-    assert.equal(foreignLaneOutcome.kind, "ok", "a foreign identity lane must not be collateral damage");
-    await clientA.query("commit");
-    aTxnOpen = false;
+      // ------------------------------------------------------------------
+      // CREATE + CREATE of overlapping windows. Exactly one row survives; the
+      // loser parks on the index until A commits, then fails with 23P01. A
+      // different tax code holding the identical window is a different
+      // identity lane and must not be collateral damage of that arbitration.
+      // ------------------------------------------------------------------
+      await clientA.query("begin");
+      aTxnOpen = true;
+      await clientA.query(insertRate, [
+        org.orgId,
+        lane("OV-CC"),
+        "13.0000",
+        "2026-01-01",
+        "2026-06-30",
+      ]);
+      const createLoser = raceWrite(insertRate, [
+        org.orgId,
+        lane("OV-CC"),
+        "13.0000",
+        "2026-03-01",
+        "2026-12-31",
+      ]);
+      const foreignLane = raceWrite(insertRate, [
+        org.orgId,
+        lane("OV-LANE"),
+        "13.0000",
+        "2026-01-01",
+        "2026-06-30",
+      ]);
+      assert.equal(
+        await stillPending(createLoser, ARBITRATION_WINDOW_MS),
+        true,
+        "the overlapping create was accepted while the first window's transaction was still open",
+      );
+      assert.equal(
+        await stillPending(foreignLane, ARBITRATION_WINDOW_MS),
+        false,
+        "a foreign identity lane must not be arbitrated against another lane's window",
+      );
+      const foreignLaneOutcome = await foreignLane;
+      assert.equal(
+        foreignLaneOutcome.kind,
+        "ok",
+        "a foreign identity lane must not be collateral damage",
+      );
+      await clientA.query("commit");
+      aTxnOpen = false;
 
-    const createLoserOutcome = await createLoser;
-    assertExcluded("a second overlapping create", createLoserOutcome);
-    assert.equal(await rateCount(clientA, lane("OV-CC")), 1);
-    assert.equal(await rateCount(clientA, lane("OV-LANE")), 1);
+      const createLoserOutcome = await createLoser;
+      assertExcluded("a second overlapping create", createLoserOutcome);
+      assert.equal(await rateCount(clientA, lane("OV-CC")), 1);
+      assert.equal(await rateCount(clientA, lane("OV-LANE")), 1);
 
-    // ------------------------------------------------------------------
-    // UPDATE extends a committed row to be open-ended while a CREATE races
-    // what would have been an ADJACENT window against the old snapshot. The
-    // preflight reads only committed rows (no overlap there); storage
-    // arbitrates against the in-flight extension instead.
-    // ------------------------------------------------------------------
-    const extendedRow = (
-      await clientA.query<{ id: string }>(insertRate, [
+      // ------------------------------------------------------------------
+      // UPDATE extends a committed row to be open-ended while a CREATE races
+      // what would have been an ADJACENT window against the old snapshot. The
+      // preflight reads only committed rows (no overlap there); storage
+      // arbitrates against the in-flight extension instead.
+      // ------------------------------------------------------------------
+      const extendedRow = (
+        await clientA.query<{ id: string }>(insertRate, [
+          org.orgId,
+          lane("OV-UC"),
+          "13.0000",
+          "2026-01-01",
+          "2026-06-30",
+        ])
+      ).rows[0]!.id;
+      await clientA.query("begin");
+      aTxnOpen = true;
+      await clientA.query("update tax_rates set effective_to = null where id = $1", [extendedRow]);
+      const updateCreateLoser = raceWrite(insertRate, [
         org.orgId,
         lane("OV-UC"),
-        "13.0000",
-        "2026-01-01",
-        "2026-06-30",
-      ])
-    ).rows[0]!.id;
-    await clientA.query("begin");
-    aTxnOpen = true;
-    await clientA.query("update tax_rates set effective_to = null where id = $1", [extendedRow]);
-    const updateCreateLoser = raceWrite(insertRate, [
-      org.orgId,
-      lane("OV-UC"),
-      "5.0000",
-      "2026-07-01",
-      "2026-12-31",
-    ]);
-    assert.equal(
-      await stillPending(updateCreateLoser, ARBITRATION_WINDOW_MS),
-      true,
-      "the racing create did not observe the in-flight open-ended extension",
-    );
-    await clientA.query("commit");
-    aTxnOpen = false;
+        "5.0000",
+        "2026-07-01",
+        "2026-12-31",
+      ]);
+      assert.equal(
+        await stillPending(updateCreateLoser, ARBITRATION_WINDOW_MS),
+        true,
+        "the racing create did not observe the in-flight open-ended extension",
+      );
+      await clientA.query("commit");
+      aTxnOpen = false;
 
-    assertExcluded(
-      "a create shadowed by an extended open-ended rate",
-      await updateCreateLoser,
-    );
-    assert.equal(await rateCount(clientA, lane("OV-UC")), 1);
+      assertExcluded("a create shadowed by an extended open-ended rate", await updateCreateLoser);
+      assert.equal(await rateCount(clientA, lane("OV-UC")), 1);
 
-    // Mirror image of the same arbitration: when the first writer ABORTS,
-    // the blocked window becomes representable and commits immediately.
-    const doomedRow = (
-      await clientA.query<{ id: string }>(insertRate, [
+      // Mirror image of the same arbitration: when the first writer ABORTS,
+      // the blocked window becomes representable and commits immediately.
+      const doomedRow = (
+        await clientA.query<{ id: string }>(insertRate, [
+          org.orgId,
+          lane("OV-UA"),
+          "13.0000",
+          "2026-01-01",
+          "2026-06-30",
+        ])
+      ).rows[0]!.id;
+      await clientA.query("begin");
+      aTxnOpen = true;
+      await clientA.query("update tax_rates set effective_to = null where id = $1", [doomedRow]);
+      const releasedWinner = raceWrite(insertRate, [
         org.orgId,
         lane("OV-UA"),
+        "5.0000",
+        "2026-07-01",
+        "2026-12-31",
+      ]);
+      assert.equal(
+        await stillPending(releasedWinner, ARBITRATION_WINDOW_MS),
+        true,
+        "the racing create should have parked on the uncommitted extension",
+      );
+      await clientA.query("rollback");
+      aTxnOpen = false;
+      const releasedOutcome = await releasedWinner;
+      assert.equal(
+        releasedOutcome.kind,
+        "ok",
+        "an aborted first writer must release the loser's window",
+      );
+      assert.equal(await rateCount(clientA, lane("OV-UA")), 2);
+
+      // ------------------------------------------------------------------
+      // The preflight trigger stays authoritative where it CAN see the
+      // conflict: a serial duplicate reaches it before storage and still
+      // answers with the product's readable message rather than a bare
+      // constraint name.
+      // ------------------------------------------------------------------
+      await pool.query(insertRate, [
+        org.orgId,
+        lane("OV-TRG"),
         "13.0000",
         "2026-01-01",
         "2026-06-30",
-      ])
-    ).rows[0]!.id;
-    await clientA.query("begin");
-    aTxnOpen = true;
-    await clientA.query("update tax_rates set effective_to = null where id = $1", [doomedRow]);
-    const releasedWinner = raceWrite(insertRate, [
-      org.orgId,
-      lane("OV-UA"),
-      "5.0000",
-      "2026-07-01",
-      "2026-12-31",
-    ]);
-    assert.equal(
-      await stillPending(releasedWinner, ARBITRATION_WINDOW_MS),
-      true,
-      "the racing create should have parked on the uncommitted extension",
-    );
-    await clientA.query("rollback");
-    aTxnOpen = false;
-    const releasedOutcome = await releasedWinner;
-    assert.equal(releasedOutcome.kind, "ok", "an aborted first writer must release the loser's window");
-    assert.equal(await rateCount(clientA, lane("OV-UA")), 2);
-
-    // ------------------------------------------------------------------
-    // The preflight trigger stays authoritative where it CAN see the
-    // conflict: a serial duplicate reaches it before storage and still
-    // answers with the product's readable message rather than a bare
-    // constraint name.
-    // ------------------------------------------------------------------
-    await pool.query(insertRate, [org.orgId, lane("OV-TRG"), "13.0000", "2026-01-01", "2026-06-30"]);
-    const serialDuplicateError = await pool
-      .query(insertRate, [org.orgId, lane("OV-TRG"), "13.0000", "2026-01-01", "2026-06-30"])
-      .then(
-        () => null as PgError | null,
-        (error) => error as PgError,
-      );
-    assert.ok(serialDuplicateError, "a duplicate overlapping window must still be rejected");
-    assert.equal(serialDuplicateError.code, "23P01");
-    assert.match(serialDuplicateError.message, /tax rates overlap for tax code/);
-  } finally {
-    await settleWriterA();
-    clientA.release();
-    await dropScratchOrg(org.orgId);
-  }
-});
-
+      ]);
+      const serialDuplicateError = await pool
+        .query(insertRate, [org.orgId, lane("OV-TRG"), "13.0000", "2026-01-01", "2026-06-30"])
+        .then(
+          () => null as PgError | null,
+          (error) => error as PgError,
+        );
+      assert.ok(serialDuplicateError, "a duplicate overlapping window must still be rejected");
+      assert.equal(serialDuplicateError.code, "23P01");
+      assert.match(serialDuplicateError.message, /tax rates overlap for tax code/);
+    } finally {
+      await settleWriterA();
+      clientA.release();
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

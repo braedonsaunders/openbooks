@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 
 type JsonPrimitive = string | number | boolean | null;
-export type JsonValue =
-  | JsonPrimitive
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export class NonJsonValueError extends Error {
   readonly name = "NonJsonValueError";
@@ -40,6 +37,9 @@ export function requestHash(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
 }
 
-export function withContentDigest<T extends Record<string, unknown>>(request: T, content: Uint8Array | string): T & { contentHash: string } {
+export function withContentDigest<T extends Record<string, unknown>>(
+  request: T,
+  content: Uint8Array | string,
+): T & { contentHash: string } {
   return { ...request, contentHash: createHash("sha256").update(content).digest("hex") };
 }

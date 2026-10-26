@@ -25,8 +25,13 @@ const stateKey = Symbol.for("openbooks.backup-policy-route-test");
 };
 
 const mockSources = new Map<string, string>([
-  ["mock:authz", `export { guardUnrestrictedScope } from ${JSON.stringify(new URL("../../../../../lib/authz.ts", import.meta.url).href)}; export async function guardPermission(){return {user:{id:'${USER_ID}',orgId:'${ORG_ID}'},allowedSubsidiaryIds:null}}`],
-  ["mock:db", `
+  [
+    "mock:authz",
+    `export { guardUnrestrictedScope } from ${JSON.stringify(new URL("../../../../../lib/authz.ts", import.meta.url).href)}; export async function guardPermission(){return {user:{id:'${USER_ID}',orgId:'${ORG_ID}'},allowedSubsidiaryIds:null}}`,
+  ],
+  [
+    "mock:db",
+    `
       export function pinnedTransactionExecutor() { throw new Error('unexpected pinned transaction in boundary test') }
       export function inExecutorTransaction() { throw new Error('unexpected inExecutorTransaction in route boundary test') }
       export function withTransactionSavepoint() { throw new Error('unexpected withTransactionSavepoint in route boundary test') }
@@ -59,7 +64,8 @@ const mockSources = new Map<string, string>([
     }
     export async function withOrgContext(_orgId, fn) { return fn() }
     export async function withBypassContext(fn) { return fn() }
-  `],
+  `,
+  ],
 ]);
 const jsonUrl = new URL("../../../../../lib/api/json.ts", import.meta.url).href;
 const backupUrl = new URL("../../../../../../engine/src/backup/backup.ts", import.meta.url).href;
@@ -70,7 +76,8 @@ registerHooks({
     if (specifier === "@openbooks/engine/platform/db" || specifier.endsWith("/platform/db.ts")) {
       return { url: "mock:db", shortCircuit: true };
     }
-    if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") return { url: "mock:authz", shortCircuit: true };
+    if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz")
+      return { url: "mock:authz", shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -80,7 +87,7 @@ registerHooks({
   },
 });
 const backupPolicyRouteUrl: string = "./route.ts?backup-policy-test";
-const { PUT } = await import(backupPolicyRouteUrl) as typeof import("./route.ts");
+const { PUT } = (await import(backupPolicyRouteUrl)) as typeof import("./route.ts");
 function reset(): void {
   state.calls = [];
   state.auditWasTransactional = [];
@@ -92,14 +99,23 @@ function putRequest(): Request {
   return new Request("http://openbooks.test/api/admin/backups/policy", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ enabled: true, frequency: "weekly", hourUtc: 3, dayOfWeek: 2, dayOfMonth: 15, maxKeep: 4 }),
+    body: JSON.stringify({
+      enabled: true,
+      frequency: "weekly",
+      hourUtc: 3,
+      dayOfWeek: 2,
+      dayOfMonth: 15,
+      maxKeep: 4,
+    }),
   });
 }
 
 test("backup policy updates commit and await audit evidence in the organization transaction", async () => {
   reset();
   let releaseAudit!: () => void;
-  state.auditGate = new Promise<void>((resolve) => { releaseAudit = resolve; });
+  state.auditGate = new Promise<void>((resolve) => {
+    releaseAudit = resolve;
+  });
   let settled = false;
   const responsePromise = PUT(putRequest()).then((response) => {
     settled = true;
@@ -110,13 +126,17 @@ test("backup policy updates commit and await audit evidence in the organization 
     assert.ok(state.calls.some((text) => text.includes("insert into backup_policies")));
     assert.ok(state.calls.some((text) => text.includes("insert into audit_log")));
     assert.deepEqual(state.auditWasTransactional, [true]);
-    assert.equal(settled, false, "the policy change is not acknowledged before audit evidence commits");
+    assert.equal(
+      settled,
+      false,
+      "the policy change is not acknowledged before audit evidence commits",
+    );
   } finally {
     releaseAudit();
   }
   const response = await responsePromise;
   assert.equal(response.status, 200);
-  const body = await response.json() as { ok: boolean; nextRunAt: string };
+  const body = (await response.json()) as { ok: boolean; nextRunAt: string };
   assert.equal(body.ok, true);
   assert.ok(Date.parse(body.nextRunAt) > Date.now());
 });

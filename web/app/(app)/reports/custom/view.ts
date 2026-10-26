@@ -1,9 +1,9 @@
-import { reportEntityCatalog } from '@/lib/custom-record-report-catalog'
-import 'server-only'
+import { reportEntityCatalog } from "@/lib/custom-record-report-catalog";
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
 import {
   badge,
   column,
@@ -20,12 +20,12 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { type ReportCustomQuery } from '@openbooks/reports'
-import { can, requirePermission } from '../../../../lib/authz'
-import { hiddenReportEntityKeys, hiddenReportStatementKinds } from '../../../../lib/report-authz'
-import { parseListParams, pickString } from '../../../../lib/list-params'
-import type { NlAskLabels } from './NlAskPanel'
+} from "@braedonsaunders/appkit-viewspec";
+import { type ReportCustomQuery } from "@openbooks/reports";
+import { can, requirePermission } from "../../../../lib/authz";
+import { hiddenReportEntityKeys, hiddenReportStatementKinds } from "../../../../lib/report-authz";
+import { parseListParams, pickString } from "../../../../lib/list-params";
+import type { NlAskLabels } from "./NlAskPanel";
 
 /**
  * The report catalog, split into a loader and a spec. No new vocabulary.
@@ -41,102 +41,106 @@ const SORT_COLUMNS = {
   name: sql`name`,
   kind: sql`kind`,
   updated: sql`updated_at`,
-} as const
+} as const;
 
-const KIND_VARIANT: Record<string, 'secondary' | 'outline'> = {
-  built_in: 'secondary',
-  custom: 'outline',
-}
+const KIND_VARIANT: Record<string, "secondary" | "outline"> = {
+  built_in: "secondary",
+  custom: "outline",
+};
 
 export interface ReportDefRow {
-  id: string
-  name: string
-  href: string
-  summary: string
-  description: string
-  kindLabel: string
-  kindVariant: 'secondary' | 'outline'
-  updated: string
-  kind: string
+  id: string;
+  name: string;
+  href: string;
+  summary: string;
+  description: string;
+  kindLabel: string;
+  kindVariant: "secondary" | "outline";
+  updated: string;
+  kind: string;
 }
 
 export interface CustomReportsData {
-  title: string
-  description: string
-  searchPlaceholder: string
-  kindFilterLabel: string
-  kindOptions: { value: string; label: string; count: number }[]
-  currentParams: Record<string, string | string[] | undefined>
-  emptyTitle: string
-  emptyDescription: string
-  isEmpty: boolean
-  hasRows: boolean
-  columnName: string
-  columnDescription: string
-  columnKind: string
-  columnUpdated: string
-  columnActions: string
-  rows: ReportDefRow[]
-  total: number
-  currentPage: number
-  perPage: number
-  sort: string
-  dir: string
-  canCreate: boolean
+  title: string;
+  description: string;
+  searchPlaceholder: string;
+  kindFilterLabel: string;
+  kindOptions: { value: string; label: string; count: number }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  emptyTitle: string;
+  emptyDescription: string;
+  isEmpty: boolean;
+  hasRows: boolean;
+  columnName: string;
+  columnDescription: string;
+  columnKind: string;
+  columnUpdated: string;
+  columnActions: string;
+  rows: ReportDefRow[];
+  total: number;
+  currentPage: number;
+  perPage: number;
+  sort: string;
+  dir: string;
+  canCreate: boolean;
   /** Ask box labels. The box hands off to the assistant, so it follows the
    *  assistant's gate: null (no panel) without `assistant.use`. */
-  nlAsk: NlAskLabels | null
+  nlAsk: NlAskLabels | null;
 }
 
 export async function loadCustomReports(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<CustomReportsData> {
-  const t = await getTranslations('reports.custom')
-  const tc = await getTranslations('common')
-  const tReports = await getTranslations('reports')
-  const authz = await requirePermission('reports.read')
-  const canCreate = can(authz, 'reports.create')
+  const t = await getTranslations("reports.custom");
+  const tc = await getTranslations("common");
+  const tReports = await getTranslations("reports");
+  const authz = await requirePermission("reports.read");
+  const canCreate = can(authz, "reports.create");
   const params = parseListParams(sp, {
-    sort: 'name',
-    dir: 'asc',
+    sort: "name",
+    dir: "asc",
     perPage: 25,
-    allowedSorts: ['name', 'kind', 'updated'] as const,
-  })
-  const kind = pickString(sp.kind)
+    allowedSorts: ["name", "kind", "updated"] as const,
+  });
+  const kind = pickString(sp.kind);
 
   /** One-line human summary of what a plan does, for the list. Entity labels
    *  resolve through the reports.catalog.* message catalog at render time. */
-  const entityMap = await reportEntityCatalog(authz)
+  const entityMap = await reportEntityCatalog(authz);
   function summarizePlan(query: ReportCustomQuery | null): string {
     // Statement definitions intentionally store their governed statement plan
     // in `statement`, not the entity-query column used by custom reports.
-    if (!query) return t('kind.builtIn')
-    const entity = entityMap[query.entity]
-    const source = entity ? (entity.key.startsWith('custom:') ? entity.label : tReports(`catalog.entities.${entity.key}.label`)) : query.entity
-    if (query.mode === 'summarize') {
-      return t('list.summarySummarize', {
+    if (!query) return t("kind.builtIn");
+    const entity = entityMap[query.entity];
+    const source = entity
+      ? entity.key.startsWith("custom:")
+        ? entity.label
+        : tReports(`catalog.entities.${entity.key}.label`)
+      : query.entity;
+    if (query.mode === "summarize") {
+      return t("list.summarySummarize", {
         source,
         groups: (query.breakouts ?? []).length,
         measures: (query.measures ?? []).length || 1,
-      })
+      });
     }
-    return t('list.summaryRows', { source, columns: (query.columns ?? []).length })
+    return t("list.summaryRows", { source, columns: (query.columns ?? []).length });
   }
 
   /** Built-in definitions localize by slug; custom slugs fall back to stored text. */
   function definitionName(d: { kind: string; slug: string; name: string }): string {
-    return d.kind === 'built_in' && tReports.has(`builtIns.${d.slug}.name`)
+    return d.kind === "built_in" && tReports.has(`builtIns.${d.slug}.name`)
       ? tReports(`builtIns.${d.slug}.name`)
-      : d.name
+      : d.name;
   }
   function definitionDescription(d: {
-    kind: string
-    slug: string
-    description: string | null
+    kind: string;
+    slug: string;
+    description: string | null;
   }): string | null {
-    return d.kind === 'built_in' && tReports.has(`builtIns.${d.slug}.description`)
+    return d.kind === "built_in" && tReports.has(`builtIns.${d.slug}.description`)
       ? tReports(`builtIns.${d.slug}.description`)
-      : d.description
+      : d.description;
   }
 
   // Entities / statement kinds this reader may not run. The catalog page lists
@@ -148,25 +152,26 @@ export async function loadCustomReports(
   const [deniedEntities, deniedStatementKinds] = await Promise.all([
     hiddenReportEntityKeys(authz),
     hiddenReportStatementKinds(authz),
-  ])
+  ]);
 
   const visibleEntity =
     deniedEntities.length > 0
-      ? sql` and (query is null or coalesce(query->>'entity', '') <> all(${`{${deniedEntities.join(',')}}`}::text[]))`
-      : sql``
+      ? sql` and (query is null or coalesce(query->>'entity', '') <> all(${`{${deniedEntities.join(",")}}`}::text[]))`
+      : sql``;
   const visibleStatement =
     deniedStatementKinds.length > 0
-      ? sql` and (statement is null or coalesce(statement->>'kind', '') <> all(${`{${deniedStatementKinds.join(',')}}`}::text[]))`
-      : sql``
-  const visible = sql`${visibleEntity}${visibleStatement}`
+      ? sql` and (statement is null or coalesce(statement->>'kind', '') <> all(${`{${deniedStatementKinds.join(",")}}`}::text[]))`
+      : sql``;
+  const visible = sql`${visibleEntity}${visibleStatement}`;
 
   // Archived definitions hide from the catalog everywhere it is listed.
   const where = sql`org_id = ${authz.user.orgId} and archived_at is null${visible}
-    ${kind && kind !== 'all' ? sql` and kind = ${kind}` : sql``}
-    ${params.q ? sql` and (name ilike ${'%' + params.q + '%'} or description ilike ${'%' + params.q + '%'})` : sql``}`
+    ${kind && kind !== "all" ? sql` and kind = ${kind}` : sql``}
+    ${params.q ? sql` and (name ilike ${"%" + params.q + "%"} or description ilike ${"%" + params.q + "%"})` : sql``}`;
 
   const [defs, counts, filtered] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select id, kind, slug, name, description, query, updated_at
         from report_definitions
        where ${where}
@@ -177,49 +182,63 @@ export async function loadCustomReports(
        -- you already saw it on page one, or never show up at all. The
        -- conformance harness caught it as two runs disagreeing about which
        -- report came first.
-       order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, id asc
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
-    db.execute<{ kind: string; n: string }>(sql`
+       order by ${SORT_COLUMNS[params.sort]} ${params.dir === "asc" ? sql`asc` : sql`desc`} nulls last, id asc
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`,
+      "objects",
+    ),
+    db.execute<{ kind: string; n: string }>(
+      sql`
       select kind, count(*) as n from report_definitions
-       where org_id = ${authz.user.orgId} and archived_at is null${visible} group by kind`, 'objects'),
-    db.execute<{ n: string }>(sql`select count(*) as n from report_definitions where ${where}`, 'objects'),
-  ])
+       where org_id = ${authz.user.orgId} and archived_at is null${visible} group by kind`,
+      "objects",
+    ),
+    db.execute<{ n: string }>(
+      sql`select count(*) as n from report_definitions where ${where}`,
+      "objects",
+    ),
+  ]);
 
-  const total = counts.reduce((a, r) => a + Number(r.n), 0)
+  const total = counts.reduce((a, r) => a + Number(r.n), 0);
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
-    searchPlaceholder: t('list.searchPlaceholder'),
-    kindFilterLabel: t('list.kindFilterLabel'),
+    title: t("list.title"),
+    description: t("list.description"),
+    searchPlaceholder: t("list.searchPlaceholder"),
+    kindFilterLabel: t("list.kindFilterLabel"),
     kindOptions: counts.map((r) => ({
       value: r.kind,
-      label: r.kind === 'built_in' ? t('kind.builtIn') : t('kind.custom'),
+      label: r.kind === "built_in" ? t("kind.builtIn") : t("kind.custom"),
       count: Number(r.n),
     })),
     currentParams: sp,
-    emptyTitle: t('list.emptyTitle'),
-    emptyDescription: t('list.emptyDescription'),
+    emptyTitle: t("list.emptyTitle"),
+    emptyDescription: t("list.emptyDescription"),
     isEmpty: total === 0,
     hasRows: total > 0,
-    columnName: t('list.columns.report'),
-    columnDescription: tc('labels.description'),
-    columnKind: t('list.columns.kind'),
-    columnUpdated: tc('labels.updated'),
-    columnActions: tc('labels.actions'),
+    columnName: t("list.columns.report"),
+    columnDescription: tc("labels.description"),
+    columnKind: t("list.columns.kind"),
+    columnUpdated: tc("labels.updated"),
+    columnActions: tc("labels.actions"),
     rows: defs.map((d) => {
-      const row = d as { id: string; kind: string; slug: string; name: string; description: string | null }
+      const row = d as {
+        id: string;
+        kind: string;
+        slug: string;
+        name: string;
+        description: string | null;
+      };
       return {
         id: String(d.id),
         kind: row.kind,
         name: definitionName(row),
         href: `/reports/custom/run/${d.id}`,
         summary: summarizePlan(d.query as ReportCustomQuery | null),
-        description: definitionDescription(row) ?? '—',
-        kindLabel: row.kind === 'built_in' ? t('kind.builtIn') : t('kind.custom'),
-        kindVariant: KIND_VARIANT[row.kind] ?? 'outline',
+        description: definitionDescription(row) ?? "—",
+        kindLabel: row.kind === "built_in" ? t("kind.builtIn") : t("kind.custom"),
+        kindVariant: KIND_VARIANT[row.kind] ?? "outline",
         updated: String(d.updated_at).slice(0, 10),
-      }
+      };
     }),
     total: Number(filtered[0]?.n ?? 0),
     currentPage: params.page,
@@ -227,51 +246,51 @@ export async function loadCustomReports(
     sort: params.sort,
     dir: params.dir,
     canCreate,
-    nlAsk: can(authz, 'assistant.use')
+    nlAsk: can(authz, "assistant.use")
       ? {
-          title: t('nl.title'),
-          description: t('nl.description'),
-          placeholder: t('nl.placeholder'),
-          ask: t('nl.ask'),
-          draftsTitle: t('nl.draftsTitle'),
-          empty: t('nl.empty'),
-          question: t('nl.question'),
-          entity: t('nl.entity'),
-          status: t('nl.status'),
-          created: t('nl.created'),
-          saveAsView: t('nl.saveAsView'),
-          discard: t('nl.discard'),
-          failed: t('nl.failed'),
+          title: t("nl.title"),
+          description: t("nl.description"),
+          placeholder: t("nl.placeholder"),
+          ask: t("nl.ask"),
+          draftsTitle: t("nl.draftsTitle"),
+          empty: t("nl.empty"),
+          question: t("nl.question"),
+          entity: t("nl.entity"),
+          status: t("nl.status"),
+          created: t("nl.created"),
+          saveAsView: t("nl.saveAsView"),
+          discard: t("nl.discard"),
+          failed: t("nl.failed"),
           statuses: {
-            drafted: t('nl.statuses.drafted'),
-            saved: t('nl.statuses.saved'),
-            discarded: t('nl.statuses.discarded'),
+            drafted: t("nl.statuses.drafted"),
+            saved: t("nl.statuses.saved"),
+            discarded: t("nl.statuses.discarded"),
           },
         }
       : null,
-  }
+  };
 }
 
-const f = ref<CustomReportsData>()
-const item = field
-const rootF = rootRef<CustomReportsData>()
+const f = ref<CustomReportsData>();
+const item = field;
+const rootF = rootRef<CustomReportsData>();
 
 export function customReportsSpec(data: CustomReportsData): PageSpec {
   return page({
-    route: '/reports/custom',
-    layout: 'list',
+    route: "/reports/custom",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('new-report', {}, f('canCreate'))],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("new-report", {}, f("canCreate"))],
       }),
-      grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-        widgetBlock('filter-chips', {
-          basePath: '/reports/custom',
+      grid("flex flex-wrap items-center gap-2", [
+        widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+        widgetBlock("filter-chips", {
+          basePath: "/reports/custom",
           currentParams: data.currentParams,
-          paramKey: 'kind',
+          paramKey: "kind",
           label: data.kindFilterLabel,
           options: data.kindOptions,
         }),
@@ -280,63 +299,67 @@ export function customReportsSpec(data: CustomReportsData): PageSpec {
     body: [
       // Ask box: the island renders nothing without assistant access
       // (nlAsk null), so no `when` gate is needed.
-      widgetBlock('reports-nl-ask', { ask: data.nlAsk, canCreate: data.canCreate }),
+      widgetBlock("reports-nl-ask", { ask: data.nlAsk, canCreate: data.canCreate }),
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.emptyTitle,
           description: data.emptyDescription,
-          action: data.canCreate ? 'new-report' : null,
+          action: data.canCreate ? "new-report" : null,
         }),
-        when: f('isEmpty'),
+        when: f("isEmpty"),
       },
       {
         ...table({
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
-          sorting: { basePath: '/reports/custom', sort: f('sort'), dir: f('dir') },
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
+          sorting: { basePath: "/reports/custom", sort: f("sort"), dir: f("dir") },
           columns: [
             column(
-              rootF('columnName'),
-              widgetCell('report-name-cell', {
-                name: item('name'),
-                href: item('href'),
-                summary: item('summary'),
+              rootF("columnName"),
+              widgetCell("report-name-cell", {
+                name: item("name"),
+                href: item("href"),
+                summary: item("summary"),
               }),
-              { sort: 'name' },
+              { sort: "name" },
             ),
-            column(rootF('columnDescription'), text(item('description')), {
-              className: 'max-w-md text-sm text-slate-600 dark:text-slate-300',
-            }),
-            column(rootF('columnKind'), badge(item('kindLabel'), { variant: item('kindVariant') }), {
-              sort: 'kind',
-            }),
-            column(rootF('columnUpdated'), text(item('updated')), {
-              sort: 'updated',
-              className: 'text-sm text-slate-500 tabular-nums dark:text-slate-400',
+            column(rootF("columnDescription"), text(item("description")), {
+              className: "max-w-md text-sm text-slate-600 dark:text-slate-300",
             }),
             column(
-              rootF('columnActions'),
-              widgetCell('custom-report-actions', {
-                id: item('id'),
-                kind: item('kind'),
-                canCreate: rootF('canCreate'),
+              rootF("columnKind"),
+              badge(item("kindLabel"), { variant: item("kindVariant") }),
+              {
+                sort: "kind",
+              },
+            ),
+            column(rootF("columnUpdated"), text(item("updated")), {
+              sort: "updated",
+              className: "text-sm text-slate-500 tabular-nums dark:text-slate-400",
+            }),
+            column(
+              rootF("columnActions"),
+              widgetCell("custom-report-actions", {
+                id: item("id"),
+                kind: item("kind"),
+                canCreate: rootF("canCreate"),
               }),
-              { align: 'right' },
+              { align: "right" },
             ),
           ],
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
       {
         ...pagination({
-          basePath: '/reports/custom',
-          total: f('total'),
-          page: f('currentPage'),
-          perPage: f('perPage'),
+          basePath: "/reports/custom",
+          total: f("total"),
+          page: f("currentPage"),
+          perPage: f("perPage"),
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
     ],
-  })
+  });
 }

@@ -1,19 +1,30 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
+import Link from "next/link";
 import { ApiResponseError } from "@/lib/api-error";
-import { useState } from 'react'
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useViewerFormat } from "../../../../../lib/viewer-format";
-import { toast } from 'sonner'
-import { ReopenDecision } from '@/app/(app)/accounting/reopen-requests/ReopenDecision'
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, UrlDrawer } from "@openbooks/ui";
+import { toast } from "sonner";
+import { ReopenDecision } from "@/app/(app)/accounting/reopen-requests/ReopenDecision";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Textarea,
+  UrlDrawer,
+} from "@openbooks/ui";
 import { ChevronRight } from "lucide-react";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
 import { ReopenDecisionEvidence } from "../../../../../components/reopen-decision-evidence";
-import { BASE, Field, MODULES, drawerHref, post } from './close-setup-shared'
+import { BASE, Field, MODULES, drawerHref, post } from "./close-setup-shared";
 import type { Props, ReopenRow } from "./close-setup-types";
 
 export function ReopenList(props: Props) {
@@ -21,9 +32,7 @@ export function ReopenList(props: Props) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">
-          {t("periods.reopenRequests")}
-        </CardTitle>
+        <CardTitle className="text-base">{t("periods.reopenRequests")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -41,20 +50,14 @@ export function ReopenList(props: Props) {
           {props.reopenRequests.map((item) => (
             <Link
               key={item.id}
-              href={drawerHref(
-                props.currentParams,
-                "periods",
-                "reopen",
-                item.id,
-              )}
+              href={drawerHref(props.currentParams, "periods", "reopen", item.id)}
               className="flex items-center justify-between gap-3 py-3 text-sm hover:text-teal-700 dark:hover:text-teal-300"
             >
               <div>
                 <span className="font-medium">{item.period_name}</span>
                 <span className="text-slate-500">
                   {" "}
-                  · {item.book_name} ·{" "}
-                  {t(`modules.${item.modules?.[0] ?? "gl"}`)}
+                  · {item.book_name} · {t(`modules.${item.modules?.[0] ?? "gl"}`)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -80,11 +83,11 @@ export function ReopenList(props: Props) {
 }
 
 export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
-  const t = useTranslations('close.setup')
-  const viewerFormat = useViewerFormat()
-  const router = useRouter()
+  const t = useTranslations("close.setup");
+  const viewerFormat = useViewerFormat();
+  const router = useRouter();
   const closeHref = drawerHref(props.currentParams, "periods", "reopen", null);
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [endReason, setEndReason] = useState("");
   const [extendReason, setExtendReason] = useState("");
@@ -111,10 +114,7 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
       router.push(closeHref);
       router.refresh();
     } catch (error) {
-      const message =
-        error instanceof ApiResponseError
-          ? error.message
-          : t("errors.actionFailed");
+      const message = error instanceof ApiResponseError ? error.message : t("errors.actionFailed");
       setActionError(message);
       toast.error(message);
     } finally {
@@ -143,15 +143,14 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         t("errors.actionFailed"),
       );
       toast.success(t("messages.reopenRequested"));
-      router.push(typeof result.requestId === "string"
-        ? drawerHref(props.currentParams, "periods", "reopen", result.requestId)
-        : closeHref);
+      router.push(
+        typeof result.requestId === "string"
+          ? drawerHref(props.currentParams, "periods", "reopen", result.requestId)
+          : closeHref,
+      );
       router.refresh();
     } catch (error) {
-      const message =
-        error instanceof ApiResponseError
-          ? error.message
-          : t("errors.actionFailed");
+      const message = error instanceof ApiResponseError ? error.message : t("errors.actionFailed");
       setActionError(message);
       toast.error(message);
     } finally {
@@ -163,14 +162,11 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
       open
       closeHref={closeHref}
       size="md"
-      title={t('periods.reopenTitle')}
+      title={t("periods.reopenTitle")}
       description={`${row.period_name} · ${row.book_name}`}
       footer={
         row.status === "requested" && props.canReopen ? (
-          <ReopenDecision
-            requestId={row.id}
-            ownRequest={row.requested_by === props.viewerId}
-          />
+          <ReopenDecision requestId={row.id} ownRequest={row.requested_by === props.viewerId} />
         ) : undefined
       }
     >
@@ -182,14 +178,10 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         ) : null}
         <div>
           <Label>{t("fields.reason")}</Label>
-          <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
-            {row.reason}
-          </p>
+          <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{row.reason}</p>
         </div>
         <div>
-          <Label>
-            {t("periods.requestedBy", { name: row.requester_name })}
-          </Label>
+          <Label>{t("periods.requestedBy", { name: row.requester_name })}</Label>
         </div>
         <ReopenDecisionEvidence
           source={{
@@ -216,27 +208,26 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         </Badge>
         {row.status === "approved" && typeof row.expires_at === "string" ? (
           <p className="mt-1 text-sm text-slate-500">
-            {t("periods.reopenActiveUntil", { date: viewerFormat.dateTime(new Date(row.expires_at)) })}
+            {t("periods.reopenActiveUntil", {
+              date: viewerFormat.dateTime(new Date(row.expires_at)),
+            })}
           </p>
         ) : null}
         {row.status === "requested" && row.impact_snapshot?.amendment ? (
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {t("periods.reopenRequestedUntil", { date: viewerFormat.dateTime(new Date(row.impact_snapshot.amendment.expiresAt)) })}
+            {t("periods.reopenRequestedUntil", {
+              date: viewerFormat.dateTime(new Date(row.impact_snapshot.amendment.expiresAt)),
+            })}
           </p>
         ) : null}
         {row.status === "approved" && props.canReopen ? (
           <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             <div>
               <h4 className="font-medium">{t("periods.endReopenTitle")}</h4>
-              <p className="text-sm text-slate-500">
-                {t("periods.endReopenHint")}
-              </p>
+              <p className="text-sm text-slate-500">{t("periods.endReopenHint")}</p>
             </div>
             <Field label={t("fields.reason")}>
-              <Textarea
-                value={endReason}
-                onChange={(e) => setEndReason(e.target.value)}
-              />
+              <Textarea value={endReason} onChange={(e) => setEndReason(e.target.value)} />
             </Field>
             <div className="flex justify-end">
               <Button
@@ -253,9 +244,7 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
           <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             <div>
               <h4 className="font-medium">{t("periods.extendReopenTitle")}</h4>
-              <p className="text-sm text-slate-500">
-                {t("periods.extendReopenHint")}
-              </p>
+              <p className="text-sm text-slate-500">{t("periods.extendReopenHint")}</p>
             </div>
             <Field label={t("periods.extendHoursLabel")}>
               <Input
@@ -269,10 +258,9 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             </Field>
             <div className="space-y-1">
               <Label>{t("periods.extendModulesLabel")}</Label>
-              {MODULES.filter((module) => !includedModules.has(module)).map(
-                (module) => (
-                  <label key={module} className="flex items-center gap-2 text-sm">
-                    <input
+              {MODULES.filter((module) => !includedModules.has(module)).map((module) => (
+                <label key={module} className="flex items-center gap-2 text-sm">
+                  <input
                     type="checkbox"
                     checked={extendModules.includes(module)}
                     onChange={(e) =>
@@ -283,10 +271,9 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
                       )
                     }
                   />
-                    {t(`modules.${module}`)}
-                  </label>
-                ),
-              )}
+                  {t(`modules.${module}`)}
+                </label>
+              ))}
             </div>
             <Field label={t("fields.reason")}>
               <Textarea
@@ -298,9 +285,14 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             <div className="flex justify-end">
               <Button
                 variant="outline"
-                disabled={busy || extendReason.trim().length < 10 ||
+                disabled={
+                  busy ||
+                  extendReason.trim().length < 10 ||
                   (!extendModules.length && Number(extendHours) === 0) ||
-                  !Number.isInteger(Number(extendHours)) || Number(extendHours) < 0 || Number(extendHours) > 168}
+                  !Number.isInteger(Number(extendHours)) ||
+                  Number(extendHours) < 0 ||
+                  Number(extendHours) > 168
+                }
                 onClick={extendReopen}
               >
                 {t("actions.extendReopen")}
@@ -310,5 +302,5 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         ) : null}
       </div>
     </UrlDrawer>
-  )
+  );
 }

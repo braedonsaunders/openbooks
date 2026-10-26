@@ -18,33 +18,44 @@ async function entryCount(
   orgId: string,
   viewFilters: { key: string; operator: string; value?: string | null; to?: string | null }[] = [],
 ): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
-      where ${journalEntryWhere({ ...defaultListView("journal"), filters: viewFilters as never }, {}, orgId, null)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
+      where ${journalEntryWhere({ ...defaultListView("journal"), filters: viewFilters as never }, {}, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
-test("malformed journal posting-date filters match nothing instead of throwing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    assert.equal(await entryCount(org.orgId), 0, "empty org starts empty");
-    assert.equal(
-      await entryCount(org.orgId, [{ key: "posting_date", operator: "gte", value: "not-a-date" }]),
-      0,
-      "malformed date filter matches nothing",
-    );
-    assert.equal(
-      await entryCount(org.orgId, [
-        { key: "posting_date", operator: "between", value: "2026-01-01", to: "2026-02-30" },
-      ]),
-      0,
-      "malformed between-upper matches nothing",
-    );
-    assert.equal(
-      await entryCount(org.orgId, [{ key: "posting_date", operator: "gte", value: "2020-01-01" }]),
-      0,
-      "well-formed date filter stays empty without throwing",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "malformed journal posting-date filters match nothing instead of throwing",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      assert.equal(await entryCount(org.orgId), 0, "empty org starts empty");
+      assert.equal(
+        await entryCount(org.orgId, [
+          { key: "posting_date", operator: "gte", value: "not-a-date" },
+        ]),
+        0,
+        "malformed date filter matches nothing",
+      );
+      assert.equal(
+        await entryCount(org.orgId, [
+          { key: "posting_date", operator: "between", value: "2026-01-01", to: "2026-02-30" },
+        ]),
+        0,
+        "malformed between-upper matches nothing",
+      );
+      assert.equal(
+        await entryCount(org.orgId, [
+          { key: "posting_date", operator: "gte", value: "2020-01-01" },
+        ]),
+        0,
+        "well-formed date filter stays empty without throwing",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

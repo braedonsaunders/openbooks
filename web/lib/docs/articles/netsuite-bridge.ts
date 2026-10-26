@@ -1,15 +1,28 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const netSuiteBridge: DocArticle = {
-  slug: 'netsuite-extraction-bridge',
-  title: 'NetSuite Extraction Bridge',
-  category: 'integrations',
+  slug: "netsuite-extraction-bridge",
+  title: "NetSuite Extraction Bridge",
+  category: "integrations",
   order: 3,
   summary:
-    'Install and operate the pull-based extraction bridge for exact migrations, daily mirrors, and proof-gated reconciliation.',
-  updated: '2026-07-20',
-  keywords: ['NetSuite', 'RESTlet', 'Map Reduce', 'SuiteCloud', 'SuiteQL', 'migration', 'mirror', 'trial balance'],
-  related: ['migration-and-cutover', 'reconciliation-before-cutover', 'switching-from-enterprise-systems'],
+    "Install and operate the pull-based extraction bridge for exact migrations, daily mirrors, and proof-gated reconciliation.",
+  updated: "2026-07-20",
+  keywords: [
+    "NetSuite",
+    "RESTlet",
+    "Map Reduce",
+    "SuiteCloud",
+    "SuiteQL",
+    "migration",
+    "mirror",
+    "trial balance",
+  ],
+  related: [
+    "migration-and-cutover",
+    "reconciliation-before-cutover",
+    "switching-from-enterprise-systems",
+  ],
   body: `# NetSuite Extraction Bridge
 
 The connector uses an account-installed, read-only extraction bridge. It does
@@ -98,4 +111,4 @@ If any proof fails, the connection remains on its previous successful cursor.
 The failed run retains diagnostics so the next attempt can be corrected and
 replayed idempotently.
 `,
-}
+};

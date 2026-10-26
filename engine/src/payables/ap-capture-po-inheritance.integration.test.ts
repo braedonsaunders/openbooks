@@ -16,7 +16,11 @@ import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fi
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-function normalized(invoiceNumber: string, accountId: string, currency: string | null): NormalizedCapture {
+function normalized(
+  invoiceNumber: string,
+  accountId: string,
+  currency: string | null,
+): NormalizedCapture {
   return {
     vendorName: "Acme Vendor",
     vendorTaxId: null,
@@ -29,19 +33,21 @@ function normalized(invoiceNumber: string, accountId: string, currency: string |
     taxTotal: "0.0000",
     total: "10.0000",
     memo: null,
-    lines: [{
-      description: "PO inheritance line",
-      productCode: null,
-      quantity: "1.0000",
-      unit: "ea",
-      unitPrice: "10.0000",
-      amount: "10.0000",
-      taxAmount: "0.0000",
-      accountId,
-      itemId: null,
-      purchaseOrderLineId: null,
-      confidence: "1.0000",
-    }],
+    lines: [
+      {
+        description: "PO inheritance line",
+        productCode: null,
+        quantity: "1.0000",
+        unit: "ea",
+        unitPrice: "10.0000",
+        amount: "10.0000",
+        taxAmount: "0.0000",
+        accountId,
+        itemId: null,
+        purchaseOrderLineId: null,
+        confidence: "1.0000",
+      },
+    ],
   };
 }
 
@@ -59,7 +65,12 @@ async function seedVendorAndFile(org: ScratchOrg): Promise<string> {
   return fileId;
 }
 
-async function addSubsidiary(orgId: string, rootId: string, name: string, currency: string): Promise<string> {
+async function addSubsidiary(
+  orgId: string,
+  rootId: string,
+  name: string,
+  currency: string,
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
@@ -67,7 +78,12 @@ async function addSubsidiary(orgId: string, rootId: string, name: string, curren
   return id;
 }
 
-async function insertApprovedPo(org: ScratchOrg, subsidiaryId: string | null, currency: string, documentNumber: string): Promise<string> {
+async function insertApprovedPo(
+  org: ScratchOrg,
+  subsidiaryId: string | null,
+  currency: string,
+  documentNumber: string,
+): Promise<string> {
   const poId = randomUUID();
   await db.execute(sql`
     insert into documents
@@ -95,8 +111,13 @@ async function insertCapture(
   const captureId = randomUUID();
   const capture = normalized(invoiceNumber, org.accounts.cogs, currency);
   if (purchaseOrderId) {
-    const line = (await db.execute<{ id: string }>(sql`
-      select id from document_lines where org_id=${org.orgId} and document_id=${purchaseOrderId} and line_number=1`, "objects"))[0];
+    const line = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from document_lines where org_id=${org.orgId} and document_id=${purchaseOrderId} and line_number=1`,
+        "objects",
+      )
+    )[0];
     assert.ok(line, "the selected purchase order has its matched source line");
     capture.lines[0]!.purchaseOrderLineId = line.id;
   }
@@ -113,101 +134,211 @@ async function insertCapture(
   return captureId;
 }
 
-async function billOf(orgId: string, documentId: string): Promise<{ subsidiaryId: string | null; currency: string }> {
-  const rows = await db.execute<{ subsidiaryId: string | null; currency: string }>(sql`
+async function billOf(
+  orgId: string,
+  documentId: string,
+): Promise<{ subsidiaryId: string | null; currency: string }> {
+  const rows = await db.execute<{ subsidiaryId: string | null; currency: string }>(
+    sql`
     select subsidiary_id as "subsidiaryId", currency from documents
-     where id = ${documentId} and org_id = ${orgId}`, "objects");
+     where id = ${documentId} and org_id = ${orgId}`,
+    "objects",
+  );
   return { subsidiaryId: rows[0]!.subsidiaryId, currency: rows[0]!.currency };
 }
 
-test("a null-currency capture matched to a EUR order books the bill in the order entity and currency", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const fileId = await seedVendorAndFile(org);
-    const euId = await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
-    const poId = await insertApprovedPo(org, euId, "EUR", "PO-EU-1");
-    const captureId = await insertCapture(org, fileId, `PO-EU-INV-${randomUUID().slice(0, 8)}`, null, poId);
-    const { documentId } = await materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null });
-    assert.deepEqual(await billOf(org.orgId, documentId), { subsidiaryId: euId, currency: "EUR" });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a null-currency capture matched to a EUR order books the bill in the order entity and currency",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const fileId = await seedVendorAndFile(org);
+      const euId = await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
+      const poId = await insertApprovedPo(org, euId, "EUR", "PO-EU-1");
+      const captureId = await insertCapture(
+        org,
+        fileId,
+        `PO-EU-INV-${randomUUID().slice(0, 8)}`,
+        null,
+        poId,
+      );
+      const { documentId } = await materializeCapture({
+        orgId: org.orgId,
+        captureItemId: captureId,
+        actorId: null,
+        allowedSubsidiaryIds: null,
+      });
+      assert.deepEqual(await billOf(org.orgId, documentId), {
+        subsidiaryId: euId,
+        currency: "EUR",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a capture currency that conflicts with the order currency refuses by name", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const fileId = await seedVendorAndFile(org);
-    const euId = await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
-    const poId = await insertApprovedPo(org, euId, "EUR", "PO-EU-2");
-    const captureId = await insertCapture(org, fileId, `PO-EU-INV-${randomUUID().slice(0, 8)}`, "CAD", poId);
-    await assert.rejects(
-      materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null }),
-      /does not match purchase order currency EUR/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a capture currency that conflicts with the order currency refuses by name",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const fileId = await seedVendorAndFile(org);
+      const euId = await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
+      const poId = await insertApprovedPo(org, euId, "EUR", "PO-EU-2");
+      const captureId = await insertCapture(
+        org,
+        fileId,
+        `PO-EU-INV-${randomUUID().slice(0, 8)}`,
+        "CAD",
+        poId,
+      );
+      await assert.rejects(
+        materializeCapture({
+          orgId: org.orgId,
+          captureItemId: captureId,
+          actorId: null,
+          allowedSubsidiaryIds: null,
+        }),
+        /does not match purchase order currency EUR/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an unmatched capture in a single-entity org keeps the root default", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const fileId = await seedVendorAndFile(org);
-    const captureId = await insertCapture(org, fileId, `PO-ROOT-INV-${randomUUID().slice(0, 8)}`, "CAD", null);
-    const { documentId } = await materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null });
-    assert.deepEqual(await billOf(org.orgId, documentId), { subsidiaryId: org.subsidiaryId, currency: "CAD" });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "an unmatched capture in a single-entity org keeps the root default",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const fileId = await seedVendorAndFile(org);
+      const captureId = await insertCapture(
+        org,
+        fileId,
+        `PO-ROOT-INV-${randomUUID().slice(0, 8)}`,
+        "CAD",
+        null,
+      );
+      const { documentId } = await materializeCapture({
+        orgId: org.orgId,
+        captureItemId: captureId,
+        actorId: null,
+        allowedSubsidiaryIds: null,
+      });
+      assert.deepEqual(await billOf(org.orgId, documentId), {
+        subsidiaryId: org.subsidiaryId,
+        currency: "CAD",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an unmatched capture in a multi-entity org refuses instead of defaulting to root", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const fileId = await seedVendorAndFile(org);
-    await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
-    const captureId = await insertCapture(org, fileId, `PO-MULTI-INV-${randomUUID().slice(0, 8)}`, "CAD", null);
-    await assert.rejects(
-      materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null }),
-      /Cannot determine the billing entity.*match it to a purchase order/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "an unmatched capture in a multi-entity org refuses instead of defaulting to root",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const fileId = await seedVendorAndFile(org);
+      await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
+      const captureId = await insertCapture(
+        org,
+        fileId,
+        `PO-MULTI-INV-${randomUUID().slice(0, 8)}`,
+        "CAD",
+        null,
+      );
+      await assert.rejects(
+        materializeCapture({
+          orgId: org.orgId,
+          captureItemId: captureId,
+          actorId: null,
+          allowedSubsidiaryIds: null,
+        }),
+        /Cannot determine the billing entity.*match it to a purchase order/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 async function billCount(orgId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from documents where org_id = ${orgId} and kind = 'vendor_bill'`, "objects"))[0]!.n;
+  return (
+    await db.execute<{ n: number }>(
+      sql`
+    select count(*)::int as n from documents where org_id = ${orgId} and kind = 'vendor_bill'`,
+      "objects",
+    )
+  )[0]!.n;
 }
 
-test("a null-subsidiary order in a multi-entity org is refused by name with no bill inserted", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const fileId = await seedVendorAndFile(org);
-    await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
-    const poId = await insertApprovedPo(org, null, "EUR", "PO-NOSUB-1");
-    const captureId = await insertCapture(org, fileId, `PO-NOSUB-INV-${randomUUID().slice(0, 8)}`, null, poId);
-    await assert.rejects(
-      materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null }),
-      /purchase order has no subsidiary.*set it on the purchase order/,
-    );
-    assert.equal(await billCount(org.orgId), 0, "a refused materialize inserts no bill");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a null-subsidiary order in a multi-entity org is refused by name with no bill inserted",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const fileId = await seedVendorAndFile(org);
+      await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
+      const poId = await insertApprovedPo(org, null, "EUR", "PO-NOSUB-1");
+      const captureId = await insertCapture(
+        org,
+        fileId,
+        `PO-NOSUB-INV-${randomUUID().slice(0, 8)}`,
+        null,
+        poId,
+      );
+      await assert.rejects(
+        materializeCapture({
+          orgId: org.orgId,
+          captureItemId: captureId,
+          actorId: null,
+          allowedSubsidiaryIds: null,
+        }),
+        /purchase order has no subsidiary.*set it on the purchase order/,
+      );
+      assert.equal(await billCount(org.orgId), 0, "a refused materialize inserts no bill");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a null-subsidiary order in a single-entity org takes the root default with the order currency", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const fileId = await seedVendorAndFile(org);
-    const poId = await insertApprovedPo(org, null, "EUR", "PO-NOSUB-2");
-    const captureId = await insertCapture(org, fileId, `PO-NOSUB-INV-${randomUUID().slice(0, 8)}`, null, poId);
-    const { documentId } = await materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null });
-    assert.deepEqual(await billOf(org.orgId, documentId), { subsidiaryId: org.subsidiaryId, currency: "EUR" });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a null-subsidiary order in a single-entity org takes the root default with the order currency",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const fileId = await seedVendorAndFile(org);
+      const poId = await insertApprovedPo(org, null, "EUR", "PO-NOSUB-2");
+      const captureId = await insertCapture(
+        org,
+        fileId,
+        `PO-NOSUB-INV-${randomUUID().slice(0, 8)}`,
+        null,
+        poId,
+      );
+      const { documentId } = await materializeCapture({
+        orgId: org.orgId,
+        captureItemId: captureId,
+        actorId: null,
+        allowedSubsidiaryIds: null,
+      });
+      assert.deepEqual(await billOf(org.orgId, documentId), {
+        subsidiaryId: org.subsidiaryId,
+        currency: "EUR",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

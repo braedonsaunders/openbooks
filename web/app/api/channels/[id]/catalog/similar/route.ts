@@ -21,9 +21,12 @@ export const GET = defineRoute({
     const entryId = new URL(request.url).searchParams.get("entryId") ?? "";
     if (!isUuid(entryId)) return notFound("record");
     try {
-      return NextResponse.json({ entryIds: await similarCatalogEntries(gate.user.orgId, id, entryId) });
+      return NextResponse.json({
+        entryIds: await similarCatalogEntries(gate.user.orgId, id, entryId),
+      });
     } catch (error) {
-      if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+      if (error instanceof CommerceError && error.code === "channel_not_found")
+        return notFound("channel");
       throw error;
     }
   },

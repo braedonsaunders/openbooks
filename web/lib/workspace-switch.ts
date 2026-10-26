@@ -42,7 +42,9 @@ export function workspaceSwitchMessageKey(error: unknown): "switchUnavailable" |
 
 /** Same-origin, single-slash paths only; anything else lands on the home page. */
 export function safeWorkspaceReturnTo(returnTo: string): string {
-  return returnTo.startsWith("/") && !returnTo.startsWith("//") && !/[\\\r\n]/.test(returnTo) ? returnTo : "/";
+  return returnTo.startsWith("/") && !returnTo.startsWith("//") && !/[\\\r\n]/.test(returnTo)
+    ? returnTo
+    : "/";
 }
 
 /** A workspace boundary discards the entire document and its previous tenant's client state. */
@@ -61,7 +63,8 @@ export async function switchWorkspace(orgId: string, returnTo = "/"): Promise<vo
   if (!response.ok) {
     let refusal: WorkspaceSwitchRefusal = "failed";
     const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
-    if (body?.error === "invalid_workspace" || body?.error === "workspace_unavailable") refusal = body.error;
+    if (body?.error === "invalid_workspace" || body?.error === "workspace_unavailable")
+      refusal = body.error;
     throw new WorkspaceSwitchError(refusal, response.status);
   }
   const switched = (await response.json()) as { orgId: string };

@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadPurchasing, purchasingSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadPurchasing, purchasingSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('purchasing')
-  return { title: t('home.title') }
+  const t = await getTranslations("purchasing");
+  return { title: t("home.title") };
 }
 
 /**
@@ -20,10 +20,9 @@ export async function generateMetadata() {
 export default async function PurchasingHomePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const spec = await searchParams
-  const data = await loadPurchasing(spec)
-  return <ModuleView spec={purchasingSpec(data)} data={data} searchParams={spec} trusted />
+  const spec = await searchParams;
+  const data = await loadPurchasing(spec);
+  return <ModuleView spec={purchasingSpec(data)} data={data} searchParams={spec} trusted />;
 }
-

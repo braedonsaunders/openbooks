@@ -1,7 +1,7 @@
-import { pathToFileURL } from 'node:url'
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { randomUUID } from 'node:crypto'
+import { pathToFileURL } from "node:url";
+import assert from "node:assert/strict";
+import test from "node:test";
+import { randomUUID } from "node:crypto";
 
 /**
  * The Journal list shows journal-kind documents plus GL-native engine
@@ -11,295 +11,396 @@ import { randomUUID } from 'node:crypto'
  * breaks the ledger's audit trail (reports tie, the journal does not show
  * the entry).
  */
-const root = pathToFileURL(process.cwd() + '/').href
-const { db, withBypassContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
-const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
-const { JOURNAL_ENTRY_TABLE } = (await import(root + 'web/lib/customization/entity-list-query/journal-entries.ts')) as typeof import('./customization/entity-list-query/journal-entries.ts')
-const { journalScopeWhere } = (await import(root + 'web/lib/customization/entity-list-query/journal-entries.ts')) as typeof import('./customization/entity-list-query/journal-entries.ts')
+const root = pathToFileURL(process.cwd() + "/").href;
+const { db, withBypassContext } =
+  (await import("@openbooks/engine/platform/db")) as typeof import("@openbooks/engine/platform/db");
+const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  (await import("@openbooks/engine/testing/fixtures")) as typeof import("@openbooks/engine/testing/fixtures");
+const { JOURNAL_ENTRY_TABLE } = (await import(
+  root + "web/lib/customization/entity-list-query/journal-entries.ts"
+)) as typeof import("./customization/entity-list-query/journal-entries.ts");
+const { journalScopeWhere } = (await import(
+  root + "web/lib/customization/entity-list-query/journal-entries.ts"
+)) as typeof import("./customization/entity-list-query/journal-entries.ts");
 
 /** GL-native standalone origins posted by the engines (no source document). */
 const NATIVE_ORIGINS = [
-  'manual',
-  'revaluation',
-  'fx_revaluation',
-  'intercompany',
-  'disposal',
-  'inventory',
-  'lease',
-  'tax_provision',
-  'overhead_applied',
-  'payroll_variance',
-  'labor_burden',
-  'depreciation',
-  'revenue_recognition',
-  'revenue_accrual',
-  'expense_amortization',
-  'fx_settlement',
-  'translation',
+  "manual",
+  "revaluation",
+  "fx_revaluation",
+  "intercompany",
+  "disposal",
+  "inventory",
+  "lease",
+  "tax_provision",
+  "overhead_applied",
+  "payroll_variance",
+  "labor_burden",
+  "depreciation",
+  "revenue_recognition",
+  "revenue_accrual",
+  "expense_amortization",
+  "fx_settlement",
+  "translation",
   // Migration true-ups (TRUEUP-*) are standalone engine journals:
   // posted but invisible in /journal while Origin=All.
-  'migration',
-  'account_merge',
-]
+  "migration",
+  "account_merge",
+];
 
-test('journal list shows every GL-native engine origin', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    await withBypassContext(async () => {
-      const actorId = (await seedFlowActors(org.orgId)).adminId
-      for (const origin of NATIVE_ORIGINS) {
-        const entryId = randomUUID()
-        const tag = `NATIVE-${origin.replace(/_/g, '-').toUpperCase()}`
-        await db.execute(sql`
+test(
+  "journal list shows every GL-native engine origin",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await withBypassContext(async () => {
+        const actorId = (await seedFlowActors(org.orgId)).adminId;
+        for (const origin of NATIVE_ORIGINS) {
+          const entryId = randomUUID();
+          const tag = `NATIVE-${origin.replace(/_/g, "-").toUpperCase()}`;
+          await db.execute(sql`
           insert into journal_entries
             (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
           values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${tag}, ${org.date}, ${org.periodId},
-                  ${tag}, 'draft', ${origin}, ${actorId}, ${actorId})`)
-        await db.execute(sql`
+                  ${tag}, 'draft', ${origin}, ${actorId}, ${actorId})`);
+          await db.execute(sql`
           insert into journal_lines
             (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, is_open_item)
           values
             (${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, 10.00, 'CAD', 10.00, 1, false),
-            (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing}, ${org.subsidiaryId}, -10.00, 'CAD', -10.00, 1, false)`)
-        await db.execute(sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`)
-      }
-    })
-    const visible = await withBypassContext(async () => db.execute<{ entry_number: string; origin: string }>(sql`
+            (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing}, ${org.subsidiaryId}, -10.00, 'CAD', -10.00, 1, false)`);
+          await db.execute(
+            sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`,
+          );
+        }
+      });
+      const visible = await withBypassContext(async () =>
+        db.execute<{ entry_number: string; origin: string }>(
+          sql`
       select e.entry_number, e.origin from ${sql.raw(JOURNAL_ENTRY_TABLE)} as e
-       where e.org_id = ${org.orgId} and e.entry_number like 'NATIVE-%'`, 'objects'))
-    const seen = new Map(visible.map((row) => [row.entry_number, row.origin]))
-    const missing: string[] = []
-    for (const origin of NATIVE_ORIGINS) {
-      const tag = `NATIVE-${origin.replace(/_/g, '-').toUpperCase()}`
-      if (seen.get(tag) !== origin) missing.push(origin)
+       where e.org_id = ${org.orgId} and e.entry_number like 'NATIVE-%'`,
+          "objects",
+        ),
+      );
+      const seen = new Map(visible.map((row) => [row.entry_number, row.origin]));
+      const missing: string[] = [];
+      for (const origin of NATIVE_ORIGINS) {
+        const tag = `NATIVE-${origin.replace(/_/g, "-").toUpperCase()}`;
+        if (seen.get(tag) !== origin) missing.push(origin);
+      }
+      assert.deepEqual(missing, [], `journal list hides GL-native origins: ${missing.join(", ")}`);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
-    assert.deepEqual(missing, [], `journal list hides GL-native origins: ${missing.join(', ')}`)
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
+  },
+);
 
-test('the journal list exposes a pay-run entry only inside the caller subsidiary lens', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    const entryId = randomUUID()
-    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
-    const entryNumber = `PAY-RUN-JOURNAL-${entryId.slice(0, 8)}`
-    await withBypassContext(async () => {
-      await db.execute(sql`
+test(
+  "the journal list exposes a pay-run entry only inside the caller subsidiary lens",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const entryId = randomUUID();
+      const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+      const entryNumber = `PAY-RUN-JOURNAL-${entryId.slice(0, 8)}`;
+      await withBypassContext(async () => {
+        await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
         values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entryNumber}, ${org.date}, ${org.periodId},
-                ${entryNumber}, 'draft', 'payroll', ${actorId}, ${actorId})`)
-      await db.execute(sql`
+                ${entryNumber}, 'draft', 'payroll', ${actorId}, ${actorId})`);
+        await db.execute(sql`
         insert into journal_lines
           (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, is_open_item)
         values
           (${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, 10.00, 'CAD', 10.00, 1, false),
-          (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing}, ${org.subsidiaryId}, -10.00, 'CAD', -10.00, 1, false)`)
-      await db.execute(sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`)
-      await db.execute(sql`
+          (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing}, ${org.subsidiaryId}, -10.00, 'CAD', -10.00, 1, false)`);
+        await db.execute(
+          sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`,
+        );
+        await db.execute(sql`
         insert into documents
           (org_id, kind, document_number, document_date, currency, subsidiary_id, status, posted_entry_id, posting_period_id)
-        values (${org.orgId}, 'pay_run', ${entryNumber}, ${org.date}, 'CAD', ${org.subsidiaryId}, 'posted', ${entryId}, ${org.periodId})`)
-    })
+        values (${org.orgId}, 'pay_run', ${entryNumber}, ${org.date}, 'CAD', ${org.subsidiaryId}, 'posted', ${entryId}, ${org.periodId})`);
+      });
 
-    const visibleToEntity = await withBypassContext(() => db.execute<{ entry_number: string }>(sql`
+      const visibleToEntity = await withBypassContext(() =>
+        db.execute<{ entry_number: string }>(
+          sql`
       select e.entry_number from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
-       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set([org.subsidiaryId]))}`, 'objects'))
-    assert.ok(visibleToEntity.some((row) => row.entry_number === entryNumber))
+       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set([org.subsidiaryId]))}`,
+          "objects",
+        ),
+      );
+      assert.ok(visibleToEntity.some((row) => row.entry_number === entryNumber));
 
-    const visibleToNoSubsidiaries = await withBypassContext(() => db.execute<{ entry_number: string }>(sql`
+      const visibleToNoSubsidiaries = await withBypassContext(() =>
+        db.execute<{ entry_number: string }>(
+          sql`
       select e.entry_number from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
-       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set<string>())}`, 'objects'))
-    assert.equal(visibleToNoSubsidiaries.some((row) => row.entry_number === entryNumber), false)
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
+       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set<string>())}`,
+          "objects",
+        ),
+      );
+      assert.equal(
+        visibleToNoSubsidiaries.some((row) => row.entry_number === entryNumber),
+        false,
+      );
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 const consolidatedRows = [
-  { label: "journal warnings", register: async () => {
-        /**
-         * A manual journal that posts AR/AP-control legs with no party
-         * (JE-00005: CA$100 to 1100 with the party left empty) must not go through
-         * silently. The posting stays legitimate — party-less control legs are real
-         * GL activity — but the post response must carry the warning so the drawer
-         * can pin it on the record, instead of widening the aging gap unannounced.
-         */
-        const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
-        const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
-        const { partylessControlLines } = (await import(root + 'web/lib/journal-warnings.ts')) as typeof import('./journal-warnings')
+  {
+    label: "journal warnings",
+    register: async () => {
+      /**
+       * A manual journal that posts AR/AP-control legs with no party
+       * (JE-00005: CA$100 to 1100 with the party left empty) must not go through
+       * silently. The posting stays legitimate — party-less control legs are real
+       * GL activity — but the post response must carry the warning so the drawer
+       * can pin it on the record, instead of widening the aging gap unannounced.
+       */
+      const root = pathToFileURL(process.cwd() + "/").href;
+      const { db, withBypassContext } =
+        (await import("@openbooks/engine/platform/db")) as typeof import("@openbooks/engine/platform/db");
+      const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
+      const { createScratchOrg, dropScratchOrg } =
+        (await import("@openbooks/engine/testing/fixtures")) as typeof import("@openbooks/engine/testing/fixtures");
+      const { partylessControlLines } = (await import(
+        root + "web/lib/journal-warnings.ts"
+      )) as typeof import("./journal-warnings");
 
-        type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
+      type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
 
-        async function postManualEntry(org: ScratchOrg, tag: string, arParty: string | null): Promise<string> {
-          const entry = randomUUID()
-          await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
-            values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${tag}, '2026-07-14', ${org.periodId}, ${tag}, 'draft', 'manual')`)
-          await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate, is_open_item)
+      async function postManualEntry(
+        org: ScratchOrg,
+        tag: string,
+        arParty: string | null,
+      ): Promise<string> {
+        const entry = randomUUID();
+        await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+            values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${tag}, '2026-07-14', ${org.periodId}, ${tag}, 'draft', 'manual')`);
+        await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate, is_open_item)
             values (${org.orgId}, ${entry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${arParty}, '100.0000', 'CAD', '100.0000', '1', ${arParty !== null}),
-                   (${org.orgId}, ${entry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, null, '-100.0000', 'CAD', '-100.0000', '1', false)`)
-          await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`)
-          return entry
-        }
+                   (${org.orgId}, ${entry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, null, '-100.0000', 'CAD', '-100.0000', '1', false)`);
+        await db.execute(
+          sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`,
+        );
+        return entry;
+      }
 
-        test('a partyless AR leg is reported with its account', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-          const org = await withBypassContext(() => createScratchOrg())
+      test(
+        "a partyless AR leg is reported with its account",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
+          const org = await withBypassContext(() => createScratchOrg());
           try {
-            const entry = await withBypassContext(() => postManualEntry(org, 'JE-NOPARTY', null))
-            const warnings = await withBypassContext(() => partylessControlLines(org.orgId, entry))
-            assert.equal(warnings.length, 1)
-            assert.equal(warnings[0]?.accountNumber, '1100')
-            assert.equal(warnings[0]?.accountName, 'Accounts Receivable')
+            const entry = await withBypassContext(() => postManualEntry(org, "JE-NOPARTY", null));
+            const warnings = await withBypassContext(() => partylessControlLines(org.orgId, entry));
+            assert.equal(warnings.length, 1);
+            assert.equal(warnings[0]?.accountNumber, "1100");
+            assert.equal(warnings[0]?.accountName, "Accounts Receivable");
           } finally {
-            await withBypassContext(() => dropScratchOrg(org.orgId))
+            await withBypassContext(() => dropScratchOrg(org.orgId));
           }
-        })
+        },
+      );
 
-        test('a partied control leg stays silent', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-          const org = await withBypassContext(() => createScratchOrg())
+      test(
+        "a partied control leg stays silent",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
+          const org = await withBypassContext(() => createScratchOrg());
           try {
-            const entry = await withBypassContext(() => postManualEntry(org, 'JE-PARTY', org.customerId))
-            const warnings = await withBypassContext(() => partylessControlLines(org.orgId, entry))
-            assert.deepEqual(warnings, [])
+            const entry = await withBypassContext(() =>
+              postManualEntry(org, "JE-PARTY", org.customerId),
+            );
+            const warnings = await withBypassContext(() => partylessControlLines(org.orgId, entry));
+            assert.deepEqual(warnings, []);
           } finally {
-            await withBypassContext(() => dropScratchOrg(org.orgId))
+            await withBypassContext(() => dropScratchOrg(org.orgId));
           }
-        })
-  } },
+        },
+      );
+    },
+  },
 ] as const;
 
 for (const row of consolidatedRows) await row.register();
 
-
 const journalSearchCases = [
-  { label: "search journal exact", register: async () => {
-        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
-        const test = (await import("node:test")).default;
-        const { sql } = await import("drizzle-orm");
-        type Authz = import("./authz").Authz;
-        type SessionUser = import("./auth").SessionUser;
-        // Exact JE numbers for entries outside the journal-list
-        // scope (subledger postings like origin='document' linked to a payment, or
-        // orphaned origin='payroll' with no document link) searched total zero even
-        // though the dashboard shows them. An exact entry number must always
-        // resolve its entry — the same bypass the documents legs already have.
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
-        const { globalSearch } = await import("./search");
+  {
+    label: "search journal exact",
+    register: async () => {
+      const assert: typeof import("node:assert/strict") = (await import("node:assert/strict"))
+        .default;
+      const test = (await import("node:test")).default;
+      const { sql } = await import("drizzle-orm");
+      type Authz = import("./authz").Authz;
+      type SessionUser = import("./auth").SessionUser;
+      // Exact JE numbers for entries outside the journal-list
+      // scope (subledger postings like origin='document' linked to a payment, or
+      // orphaned origin='payroll' with no document link) searched total zero even
+      // though the dashboard shows them. An exact entry number must always
+      // resolve its entry — the same bypass the documents legs already have.
+      const { db, withBypassContext, withOrgContext } =
+        await import("@openbooks/engine/platform/db");
+      const { createScratchOrg, dropScratchOrg } =
+        await import("@openbooks/engine/testing/fixtures");
+      const { globalSearch } = await import("./search");
 
-        const skip = !process.env.OPENBOOKS_DB_URL;
-        const DATE = "2026-07-15";
+      const skip = !process.env.OPENBOOKS_DB_URL;
+      const DATE = "2026-07-15";
 
-        async function seed() {
-          // Fixture seeding runs under bypass (exactly what the pooled fixture path
-          // does): the shared cluster enforces RLS and CI's superuser role hides it.
-          return withBypassContext(async () => {
-            const org = await createScratchOrg();
-            // Posted entries must balance (je_check_posted_balance): draft first,
-            // two offsetting lines, then post.
-            const balanced = async (entryNumber: string, origin: string, memo: string) => {
-              const id = (await db.execute<{ id: string }>(sql`insert into journal_entries
+      async function seed() {
+        // Fixture seeding runs under bypass (exactly what the pooled fixture path
+        // does): the shared cluster enforces RLS and CI's superuser role hides it.
+        return withBypassContext(async () => {
+          const org = await createScratchOrg();
+          // Posted entries must balance (je_check_posted_balance): draft first,
+          // two offsetting lines, then post.
+          const balanced = async (entryNumber: string, origin: string, memo: string) => {
+            const id = (
+              await db.execute<{ id: string }>(
+                sql`insert into journal_entries
                 (org_id, book_id, entry_number, posting_date, period_id, subsidiary_id, origin, status, memo)
                 values (${org.orgId}, ${org.bookId}, ${entryNumber}, ${DATE}, ${org.periodId}, ${org.subsidiaryId},
                   ${origin}, 'draft', ${memo})
-                returning id`, 'objects'))[0]!.id;
-              await db.execute(sql`insert into journal_lines
+                returning id`,
+                "objects",
+              )
+            )[0]!.id;
+            await db.execute(sql`insert into journal_lines
                 (org_id, entry_id, line_number, account_id, amount, txn_amount, currency, subsidiary_id, posting_date)
                 values (${org.orgId}, ${id}, 1, ${org.accounts.bank}, '100.00', '100.00', 'CAD', ${org.subsidiaryId}, ${DATE}),
                        (${org.orgId}, ${id}, 2, ${org.accounts.cogs}, '-100.00', '-100.00', 'CAD', ${org.subsidiaryId}, ${DATE})`);
-              await db.execute(sql`update journal_entries set status = 'posted' where id = ${id}`);
-              return id;
-            };
-            await balanced("JE-90000001", "payroll", "orphaned payroll posting");
-            await balanced("JE-91772283", "document", "vendor payment posting");
-            const entry = (await db.execute<{ id: string }>(sql`select id from journal_entries
-              where org_id = ${org.orgId} and entry_number = 'JE-91772283'`, 'objects'))[0]!.id;
-            await db.execute(sql`insert into documents
+            await db.execute(sql`update journal_entries set status = 'posted' where id = ${id}`);
+            return id;
+          };
+          await balanced("JE-90000001", "payroll", "orphaned payroll posting");
+          await balanced("JE-91772283", "document", "vendor payment posting");
+          const entry = (
+            await db.execute<{ id: string }>(
+              sql`select id from journal_entries
+              where org_id = ${org.orgId} and entry_number = 'JE-91772283'`,
+              "objects",
+            )
+          )[0]!.id;
+          await db.execute(sql`insert into documents
               (org_id, kind, document_number, document_date, currency, subsidiary_id, status, posted_entry_id, posting_period_id)
               values (${org.orgId}, 'vendor_payment', 'VPMT-9000001', ${DATE}, 'CAD', ${org.subsidiaryId},
                 'posted', ${entry}, ${org.periodId})`);
-            return org;
-          });
-        }
-
-        function authzFor(orgId: string): Authz {
-          const user: SessionUser = {
-            id: "00000000-0000-4000-8000-000000000001",
-            email: "searcher@scratch.test",
-            name: "Searcher",
-            roles: [],
-            orgId,
-            envKind: "production",
-            productionOrgId: orgId,
-            homeUserId: "00000000-0000-4000-8000-000000000001",
-            homeOrgId: orgId,
-            isSuperAdmin: false,
-          };
-          // gl.read gates the journal/accounts legs; the vendor-payment document leg
-          // needs its own module permission, exactly like the SIM admin holds both.
-          return { user, permissions: new Set(["gl.read", "payments.read", "ap.pay"]), allowedSubsidiaryIds: null };
-        }
-
-        function glReadOnlyAuthzFor(orgId: string): Authz {
-          return { ...authzFor(orgId), permissions: new Set(["gl.read"]) };
-        }
-
-        test("exact JE number resolves an unlinked non-native entry", { skip }, async () => {
-          const org = await seed();
-          try {
-            // Reads run tenant-scoped (the production read path — in prod the
-            // request resolver supplies this); bare reads see zero rows on the
-            // cluster under deny-by-default RLS.
-            const found = await withOrgContext(org.orgId, () => globalSearch(authzFor(org.orgId), "JE-90000001"));
-            assert.ok(found.total >= 1, "orphaned payroll entry resolves by exact number");
-            assert.equal(found.groups[0]!.hits[0]!.title, "Journal JE-90000001", "exact entry orders first");
-          } finally {
-            await dropScratchOrg(org.orgId);
-          }
+          return org;
         });
+      }
 
-        test("exact JE number resolves a subledger-posted entry first", { skip }, async () => {
-          const org = await seed();
-          try {
-            const found = await withOrgContext(org.orgId, () => globalSearch(authzFor(org.orgId), "JE-91772283"));
-            const txn = found.groups.find((group) => group.type === "transaction")!;
-            assert.ok(txn, "transaction group present");
-            assert.equal(txn.hits[0]!.title, "Journal JE-91772283", "exact entry tops the merged group");
-          } finally {
-            await dropScratchOrg(org.orgId);
-          }
-        });
+      function authzFor(orgId: string): Authz {
+        const user: SessionUser = {
+          id: "00000000-0000-4000-8000-000000000001",
+          email: "searcher@scratch.test",
+          name: "Searcher",
+          roles: [],
+          orgId,
+          envKind: "production",
+          productionOrgId: orgId,
+          homeUserId: "00000000-0000-4000-8000-000000000001",
+          homeOrgId: orgId,
+          isSuperAdmin: false,
+        };
+        // gl.read gates the journal/accounts legs; the vendor-payment document leg
+        // needs its own module permission, exactly like the SIM admin holds both.
+        return {
+          user,
+          permissions: new Set(["gl.read", "payments.read", "ap.pay"]),
+          allowedSubsidiaryIds: null,
+        };
+      }
 
-        // fnd_muddg674: the exact JE-number arm bypassed the posting module's own
-        // gate — a gl.read-only caller who guessed a subledger JE number read its
-        // memo despite holding no permission on the posting module. The exact arm
-        // now carries the same per-kind allowlist as the documents legs.
-        test("exact JE number hides a subledger posting from a gl.read-only caller", async () => {
-          const org = await seed();
-          try {
-            const hidden = await withOrgContext(org.orgId, () => globalSearch(glReadOnlyAuthzFor(org.orgId), "JE-91772283"));
-            assert.equal(hidden.total, 0, "vendor-payment posting resolves nothing without its module permission");
-            assert.ok(
-              !JSON.stringify(hidden).includes("vendor payment posting"),
-              "the subledger memo must not leak by number",
-            );
-            // Boundary pinned deliberately: an entry with NO posting document has
-            // no owning module to gate through, so it still resolves under the
-            // journal gate alone.
-            const orphan = await withOrgContext(org.orgId, () => globalSearch(glReadOnlyAuthzFor(org.orgId), "JE-90000001"));
-            assert.ok(orphan.total >= 1, "orphaned entry still resolves under the journal gate");
-            assert.equal(orphan.groups[0]!.hits[0]!.title, "Journal JE-90000001", "exact entry orders first");
-          } finally {
-            await dropScratchOrg(org.orgId);
-          }
-        });
-  } },
+      function glReadOnlyAuthzFor(orgId: string): Authz {
+        return { ...authzFor(orgId), permissions: new Set(["gl.read"]) };
+      }
+
+      test("exact JE number resolves an unlinked non-native entry", { skip }, async () => {
+        const org = await seed();
+        try {
+          // Reads run tenant-scoped (the production read path — in prod the
+          // request resolver supplies this); bare reads see zero rows on the
+          // cluster under deny-by-default RLS.
+          const found = await withOrgContext(org.orgId, () =>
+            globalSearch(authzFor(org.orgId), "JE-90000001"),
+          );
+          assert.ok(found.total >= 1, "orphaned payroll entry resolves by exact number");
+          assert.equal(
+            found.groups[0]!.hits[0]!.title,
+            "Journal JE-90000001",
+            "exact entry orders first",
+          );
+        } finally {
+          await dropScratchOrg(org.orgId);
+        }
+      });
+
+      test("exact JE number resolves a subledger-posted entry first", { skip }, async () => {
+        const org = await seed();
+        try {
+          const found = await withOrgContext(org.orgId, () =>
+            globalSearch(authzFor(org.orgId), "JE-91772283"),
+          );
+          const txn = found.groups.find((group) => group.type === "transaction")!;
+          assert.ok(txn, "transaction group present");
+          assert.equal(
+            txn.hits[0]!.title,
+            "Journal JE-91772283",
+            "exact entry tops the merged group",
+          );
+        } finally {
+          await dropScratchOrg(org.orgId);
+        }
+      });
+
+      // fnd_muddg674: the exact JE-number arm bypassed the posting module's own
+      // gate — a gl.read-only caller who guessed a subledger JE number read its
+      // memo despite holding no permission on the posting module. The exact arm
+      // now carries the same per-kind allowlist as the documents legs.
+      test("exact JE number hides a subledger posting from a gl.read-only caller", async () => {
+        const org = await seed();
+        try {
+          const hidden = await withOrgContext(org.orgId, () =>
+            globalSearch(glReadOnlyAuthzFor(org.orgId), "JE-91772283"),
+          );
+          assert.equal(
+            hidden.total,
+            0,
+            "vendor-payment posting resolves nothing without its module permission",
+          );
+          assert.ok(
+            !JSON.stringify(hidden).includes("vendor payment posting"),
+            "the subledger memo must not leak by number",
+          );
+          // Boundary pinned deliberately: an entry with NO posting document has
+          // no owning module to gate through, so it still resolves under the
+          // journal gate alone.
+          const orphan = await withOrgContext(org.orgId, () =>
+            globalSearch(glReadOnlyAuthzFor(org.orgId), "JE-90000001"),
+          );
+          assert.ok(orphan.total >= 1, "orphaned entry still resolves under the journal gate");
+          assert.equal(
+            orphan.groups[0]!.hits[0]!.title,
+            "Journal JE-90000001",
+            "exact entry orders first",
+          );
+        } finally {
+          await dropScratchOrg(org.orgId);
+        }
+      });
+    },
+  },
 ] as const;
 
 for (const row of journalSearchCases) await row.register();

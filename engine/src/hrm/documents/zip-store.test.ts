@@ -9,8 +9,18 @@ test("crc32 matches the known vector", () => {
 });
 
 test("duplicate and absolute entry names are refused", () => {
-  assert.throws(() => buildStoredZip([{ name: "a.json", data: new Uint8Array([1]) }, { name: "a.json", data: new Uint8Array([2]) }]), /duplicated/);
-  assert.throws(() => buildStoredZip([{ name: "/etc/passwd", data: new Uint8Array([1]) }]), /portable/);
+  assert.throws(
+    () =>
+      buildStoredZip([
+        { name: "a.json", data: new Uint8Array([1]) },
+        { name: "a.json", data: new Uint8Array([2]) },
+      ]),
+    /duplicated/,
+  );
+  assert.throws(
+    () => buildStoredZip([{ name: "/etc/passwd", data: new Uint8Array([1]) }]),
+    /portable/,
+  );
 });
 
 test("the emitted zip unzips with the platform unzipper (independent oracle)", async () => {

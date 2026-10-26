@@ -62,7 +62,8 @@ export async function trueUpResidualGl(
   // Carried balances predating a bounded history window. A company with no
   // in-range activity still needs its opening journal, so the early return
   // below requires BOTH populations to be empty.
-  const openingRows = typeof source.openingBalances === "function" ? await source.openingBalances() : [];
+  const openingRows =
+    typeof source.openingBalances === "function" ? await source.openingBalances() : [];
   if (srcRows.length === 0 && openingRows.length === 0) return empty;
 
   return withOrg(orgId, async () => {
@@ -71,11 +72,14 @@ export async function trueUpResidualGl(
         hashtextextended(${`migration-gl-trueup:${orgId}:${source.name}`}, 0)
       )
     `);
-    const org = (await db.execute<{ base_currency: string }>(sql`
+    const org = await db.execute<{ base_currency: string }>(
+      sql`
       select base_currency
         from orgs
        where id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!org[0]) throw new Error("true-up organization not found");
     if (org[0].base_currency !== source.baseCurrency) {
       throw new Error(
@@ -86,29 +90,31 @@ export async function trueUpResidualGl(
     // the posting run writes, never a deactivated primary.
     const bookId = await activePostingPrimaryBookId(orgId);
     if (!bookId) throw new Error("true-up requires a primary accounting book");
-    const subRow = (await db.execute<{ id: string }>(sql`
+    const subRow = await db.execute<{ id: string }>(
+      sql`
       select id
         from subsidiaries
        where org_id = ${orgId} and parent_id is null
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     const subsidiaryId = subRow[0]?.id;
     if (!subsidiaryId) throw new Error("true-up requires a root subsidiary");
 
-    const accRows = (await db.execute<{ id: string; ref: string }>(sql`
+    const accRows = await db.execute<{ id: string; ref: string }>(
+      sql`
       select id, custom->>${refKey} as ref
         from accounts
        where org_id = ${orgId}
          and custom->>${refKey} is not null
-    `, "objects"));
-    const idByRef = new Map(
-      accRows.map((row) => [row.ref, row.id] as const),
+    `,
+      "objects",
     );
+    const idByRef = new Map(accRows.map((row) => [row.ref, row.id] as const));
     const missingRefs = [
       ...new Set(
-        srcRows
-          .map((row) => row.accountRef)
-          .filter((accountRef) => !idByRef.has(accountRef)),
+        srcRows.map((row) => row.accountRef).filter((accountRef) => !idByRef.has(accountRef)),
       ),
     ].sort();
     if (missingRefs.length > 0) {
@@ -132,11 +138,19 @@ export async function trueUpResidualGl(
       ),
     ];
     if (touchedAccountIds.length > 0) {
-      const inactive = (await db.execute<{ id: string }>(sql`
+      const inactive = (
+        await db.execute<{ id: string }>(
+          sql`
           select id from accounts
            where org_id = ${orgId}
-             and id in (${sql.join(touchedAccountIds.map((id) => sql`${id}::uuid`), sql`, `)})
-             and is_active is distinct from true`, "objects")).map((row) => row.id);
+             and id in (${sql.join(
+               touchedAccountIds.map((id) => sql`${id}::uuid`),
+               sql`, `,
+             )})
+             and is_active is distinct from true`,
+          "objects",
+        )
+      ).map((row) => row.id);
       if (inactive.length > 0) {
         throw new Error(
           `true-up account ${inactive.sort().join(", ")} is inactive; reactivate the account before re-syncing ${source.name}`,
@@ -160,14 +174,20 @@ export async function trueUpResidualGl(
     // when it differs.
     const openingDates = [...new Set(openingRows.map((row) => row.openingDate))];
     if (openingDates.length > 1) {
-      throw new Error(`true-up cannot post opening balances for multiple dates: ${openingDates.sort().join(", ")}`);
+      throw new Error(
+        `true-up cannot post opening balances for multiple dates: ${openingDates.sort().join(", ")}`,
+      );
     }
     const openingDate = openingDates[0];
     if (openingDate !== undefined) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(openingDate)) {
         throw new Error(`invalid true-up opening date ${openingDate}`);
       }
-      const openingRefs = [...new Set(openingRows.map((row) => row.accountRef).filter((accountRef) => !idByRef.has(accountRef)))].sort();
+      const openingRefs = [
+        ...new Set(
+          openingRows.map((row) => row.accountRef).filter((accountRef) => !idByRef.has(accountRef)),
+        ),
+      ].sort();
       if (openingRefs.length > 0) {
         throw new Error(
           `true-up cannot silently omit ${openingRefs.length} unmapped opening-balance account(s): ${openingRefs.join(", ")}`,
@@ -187,7 +207,8 @@ export async function trueUpResidualGl(
             `source opening balance for ${openingDate} is unbalanced by ${fromUnits(openingNet)}; true-up refused instead of posting an unbalanced opening journal`,
           );
         }
-        const existing = (await db.execute<{ id: string }>(sql`
+        const existing = await db.execute<{ id: string }>(
+          sql`
           select id from journal_entries
            -- Live entries only: a reversed opening journal no longer stands, so a re-sync may post its replacement.
            where org_id = ${orgId} and status = 'posted'
@@ -195,19 +216,32 @@ export async function trueUpResidualGl(
              and custom->'sourceProjection'->>'sourceName' = ${source.name}
              and custom->'sourceProjection'->>'refKey' = ${refKey}
              and coalesce(custom->'sourceProjection'->>'openingBalance', 'false') = 'true'
-        `, "objects"));
+        `,
+          "objects",
+        );
         if (existing.length > 0) {
-          const have = (await db.execute<{ account_id: string; amount: string }>(sql`
+          const have = await db.execute<{ account_id: string; amount: string }>(
+            sql`
             select jl.account_id, sum(jl.amount)::text as amount
               from journal_lines jl
               join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
              where jl.org_id = ${orgId}
-               and e.id in (${sql.join(existing.map((row) => sql`${row.id}`), sql`, `)})
+               and e.id in (${sql.join(
+                 existing.map((row) => sql`${row.id}`),
+                 sql`, `,
+               )})
              group by jl.account_id
-          `, "objects"));
-          const haveByAccount = new Map(have.map((row) => [row.account_id, toUnits(row.amount)] as const));
-          const ties = haveByAccount.size === openingUnits.size
-            && [...openingUnits.entries()].every(([accountId, units]) => haveByAccount.get(accountId) === units);
+          `,
+            "objects",
+          );
+          const haveByAccount = new Map(
+            have.map((row) => [row.account_id, toUnits(row.amount)] as const),
+          );
+          const ties =
+            haveByAccount.size === openingUnits.size &&
+            [...openingUnits.entries()].every(
+              ([accountId, units]) => haveByAccount.get(accountId) === units,
+            );
           if (!ties) {
             throw new Error(
               `a posted opening-balance journal for ${source.name} already exists with different lines; reverse it before re-syncing the opening balance for ${openingDate}`,
@@ -278,7 +312,8 @@ export async function trueUpResidualGl(
       }
     }
 
-    const oursRows = (await db.execute<{ account_id: string; month: string; amount: string }>(sql`
+    const oursRows = await db.execute<{ account_id: string; month: string; amount: string }>(
+      sql`
       select jl.account_id, to_char(e.posting_date, 'YYYY-MM') as month,
              sum(jl.amount)::text as amount
         from journal_lines jl
@@ -306,21 +341,19 @@ export async function trueUpResidualGl(
          -- balance as same-month activity and residual it away.
          and coalesce(e.custom->'sourceProjection'->>'openingBalance', 'false') <> 'true'
        group by jl.account_id, to_char(e.posting_date, 'YYYY-MM')
-    `, "objects"));
+    `,
+      "objects",
+    );
     const ours = new Map<string, bigint>();
     for (const row of oursRows) {
-      ours.set(
-        `${row.account_id}|${row.month}`,
-        toUnits(row.amount),
-      );
+      ours.set(`${row.account_id}|${row.month}`, toUnits(row.amount));
     }
 
     const residualByMonth = new Map<string, Map<string, bigint>>();
     const seen = new Set<string>();
     const bump = (month: string, accountId: string, units: bigint) => {
       if (units === 0n) return;
-      const monthRows =
-        residualByMonth.get(month) ?? new Map<string, bigint>();
+      const monthRows = residualByMonth.get(month) ?? new Map<string, bigint>();
       monthRows.set(accountId, (monthRows.get(accountId) ?? 0n) + units);
       residualByMonth.set(month, monthRows);
     };
@@ -329,12 +362,8 @@ export async function trueUpResidualGl(
       const key = `${accountId}|${sourceRow.month}`;
       // Multiple source rows for one account/month contribute to one source
       // total. Subtract our total once, after source aggregation.
-      const monthRows =
-        residualByMonth.get(sourceRow.month) ?? new Map<string, bigint>();
-      monthRows.set(
-        accountId,
-        (monthRows.get(accountId) ?? 0n) + toUnits(sourceRow.amount),
-      );
+      const monthRows = residualByMonth.get(sourceRow.month) ?? new Map<string, bigint>();
+      monthRows.set(accountId, (monthRows.get(accountId) ?? 0n) + toUnits(sourceRow.amount));
       residualByMonth.set(sourceRow.month, monthRows);
       seen.add(key);
     }
@@ -356,14 +385,9 @@ export async function trueUpResidualGl(
     // exactly the misconfiguration (a deactivated account) the operator
     // must see.
     for (const [month, accounts] of [...residualByMonth.entries()].sort()) {
-      const entryLines = [...accounts.entries()].filter(
-        ([, units]) => units !== 0n,
-      );
+      const entryLines = [...accounts.entries()].filter(([, units]) => units !== 0n);
       if (entryLines.length === 0) continue;
-      const net = entryLines.reduce(
-        (total, [, units]) => total + units,
-        0n,
-      );
+      const net = entryLines.reduce((total, [, units]) => total + units, 0n);
       if (net !== 0n) {
         throw new Error(
           `source residual for ${month} is unbalanced by ${fromUnits(net)}; true-up refused instead of silently changing a source amount`,
@@ -425,13 +449,9 @@ export async function trueUpResidualGl(
           amount: fromUnits(units),
         })),
       });
-      if (postedTrueup.entryId !== entryId)
-        throw new Error("true-up residual was not posted");
+      if (postedTrueup.entryId !== entryId) throw new Error("true-up residual was not posted");
       for (const [accountId, units] of entryLines) {
-        byAccountTotal.set(
-          accountId,
-          (byAccountTotal.get(accountId) ?? 0n) + units,
-        );
+        byAccountTotal.set(accountId, (byAccountTotal.get(accountId) ?? 0n) + units);
         lines++;
       }
       entries++;

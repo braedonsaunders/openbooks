@@ -28,20 +28,35 @@ describe("normalizeHrmCompensationInput", () => {
         ],
       },
     );
-    const normalized = normalizeHrmCompensationInput('hrm-job-levels', { code: 'IC3', name: 'Level three', rank: '3', skillsWeight: '3', workingConditionsWeight: '1.5' });
-    const built = buildRow(JOB_LEVELS_ENTITY, normalized, { forCreate: true, coverFoldedSlots: true });
-    assert.ok(!('error' in built));
-    const persisted = applyRuleSlotColumns('hrm-job-levels', normalized, built.cols);
-    assert.ok(!('error' in persisted));
-    assert.deepEqual(persisted.cols.find((col) => col.column === 'equal_value_criteria')?.value, normalized.equalValueCriteria);
-    assert.ok(persisted.cols.every((col) => !col.column.endsWith('_weight')));
+    const normalized = normalizeHrmCompensationInput("hrm-job-levels", {
+      code: "IC3",
+      name: "Level three",
+      rank: "3",
+      skillsWeight: "3",
+      workingConditionsWeight: "1.5",
+    });
+    const built = buildRow(JOB_LEVELS_ENTITY, normalized, {
+      forCreate: true,
+      coverFoldedSlots: true,
+    });
+    assert.ok(!("error" in built));
+    const persisted = applyRuleSlotColumns("hrm-job-levels", normalized, built.cols);
+    assert.ok(!("error" in persisted));
+    assert.deepEqual(
+      persisted.cols.find((col) => col.column === "equal_value_criteria")?.value,
+      normalized.equalValueCriteria,
+    );
+    assert.ok(persisted.cols.every((col) => !col.column.endsWith("_weight")));
   });
 
   test("empty slots preserve an undeclared assessment basis", () => {
-    assert.deepEqual(normalizeHrmCompensationInput("hrm-job-levels", { code: "IC3", skillsWeight: "" }), {
-      code: "IC3",
-      equalValueCriteria: [],
-    });
+    assert.deepEqual(
+      normalizeHrmCompensationInput("hrm-job-levels", { code: "IC3", skillsWeight: "" }),
+      {
+        code: "IC3",
+        equalValueCriteria: [],
+      },
+    );
   });
 
   test("no slots leaves the body alone", () => {

@@ -51,18 +51,24 @@ const US_OH_MUNICIPAL_SLOT: PayrollStatutoryRateSlot = {
   whenUnconfigured: "refuse",
   citation: "Ohio Rev. Code Chapter 718; the municipality's own income tax ordinance",
   variesBecause:
-    "Every Ohio municipality sets its own income tax rate by ordinance and changes it on its own "
-    + "schedule. The Department of Taxation publishes no annual municipal withholding rate table, "
-    + "so a rate carried in a payroll release would be wrong for whichever municipality changed "
-    + "after it, with nothing able to tell.",
+    "Every Ohio municipality sets its own income tax rate by ordinance and changes it on its own " +
+    "schedule. The Department of Taxation publishes no annual municipal withholding rate table, " +
+    "so a rate carried in a payroll release would be wrong for whichever municipality changed " +
+    "after it, with nothing able to tell.",
   fields: [
     {
-      key: "rate", label: "Municipal income tax rate", kind: "rate", decimals: 6,
-      min: "0", max: "0.05", required: true,
-      help: "As a decimal, from the municipality's ordinance or The Finder at tax.ohio.gov: "
-        + "0.025 is 2.5%. Ohio municipalities apply one rate to residents and nonresidents alike "
-        + "— the difference between them is the residence credit, which is claimed on the "
-        + "municipal return, not withheld.",
+      key: "rate",
+      label: "Municipal income tax rate",
+      kind: "rate",
+      decimals: 6,
+      min: "0",
+      max: "0.05",
+      required: true,
+      help:
+        "As a decimal, from the municipality's ordinance or The Finder at tax.ohio.gov: " +
+        "0.025 is 2.5%. Ohio municipalities apply one rate to residents and nonresidents alike " +
+        "— the difference between them is the residence credit, which is claimed on the " +
+        "municipal return, not withheld.",
     },
   ],
 };
@@ -94,28 +100,46 @@ const US_MI_CITY_SLOT: PayrollStatutoryRateSlot = {
   citation:
     "Michigan City Income Tax Act, MCL 141.501 et seq.; the city's own income tax ordinance",
   variesBecause:
-    "Each of the twenty-four Michigan cities that levy an income tax sets its own rate and "
-    + "exemption value. Only Detroit's are published by the Department of Treasury; the rest are "
-    + "published by the city, and the aggregated lists that circulate disagree with each other.",
+    "Each of the twenty-four Michigan cities that levy an income tax sets its own rate and " +
+    "exemption value. Only Detroit's are published by the Department of Treasury; the rest are " +
+    "published by the city, and the aggregated lists that circulate disagree with each other.",
   fields: [
     {
-      key: "residentRate", label: "Resident rate", kind: "rate", decimals: 6,
-      min: "0", max: "0.05", required: true,
-      help: "As a decimal: 0.01 is the 1% most Michigan cities levy on residents. Detroit is "
-        + "0.024 and is carried by the pack, so it does not need entering.",
+      key: "residentRate",
+      label: "Resident rate",
+      kind: "rate",
+      decimals: 6,
+      min: "0",
+      max: "0.05",
+      required: true,
+      help:
+        "As a decimal: 0.01 is the 1% most Michigan cities levy on residents. Detroit is " +
+        "0.024 and is carried by the pack, so it does not need entering.",
     },
     {
-      key: "nonresidentRate", label: "Non-resident rate", kind: "rate", decimals: 6,
-      min: "0", max: "0.05", required: true,
-      help: "As a decimal. The City Income Tax Act sets it at half the resident rate, so it is "
-        + "0.005 where the resident rate is 0.01 — but enter the city's own figure rather than "
-        + "halving, because the statute caps rather than defines it.",
+      key: "nonresidentRate",
+      label: "Non-resident rate",
+      kind: "rate",
+      decimals: 6,
+      min: "0",
+      max: "0.05",
+      required: true,
+      help:
+        "As a decimal. The City Income Tax Act sets it at half the resident rate, so it is " +
+        "0.005 where the resident rate is 0.01 — but enter the city's own figure rather than " +
+        "halving, because the statute caps rather than defines it.",
     },
     {
-      key: "exemptionPerYear", label: "Annual exemption value", kind: "amount", decimals: 2,
-      min: "0", max: "10000", required: true,
-      help: "The ANNUAL value of one exemption, from the city's ordinance: $600 in Detroit, $750 "
-        + "in Saginaw. The engine divides it by the pay periods in the year.",
+      key: "exemptionPerYear",
+      label: "Annual exemption value",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      max: "10000",
+      required: true,
+      help:
+        "The ANNUAL value of one exemption, from the city's ordinance: $600 in Detroit, $750 " +
+        "in Saginaw. The engine divides it by the pay periods in the year.",
     },
   ],
 };
@@ -144,19 +168,25 @@ const US_OR_TRIMET_SLOT: PayrollStatutoryRateSlot = {
   // declaration records that refusal here.
   whenUnconfigured: "refuse",
   citation:
-    "Oregon Department of Revenue, Form OQ (Oregon Combined Payroll Tax Report); "
-    + "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25), which publishes no district rate",
+    "Oregon Department of Revenue, Form OQ (Oregon Combined Payroll Tax Report); " +
+    "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25), which publishes no district rate",
   variesBecause:
-    "Each transit district sets its own payroll-tax rate on its own schedule. No Department "
-    + "publication carries it, so a rate carried in a payroll release would be wrong for whichever "
-    + "district moved after it, with nothing able to tell.",
+    "Each transit district sets its own payroll-tax rate on its own schedule. No Department " +
+    "publication carries it, so a rate carried in a payroll release would be wrong for whichever " +
+    "district moved after it, with nothing able to tell.",
   fields: [
     {
-      key: "rate", label: "Transit payroll-tax rate", kind: "rate", decimals: 6,
-      min: "0", max: "0.05", required: true,
-      help: "As a decimal, from the district's own notice: 0.008 is 0.8%. The rate is "
-        + "employer-entered because no Department publication carries it — never copy a "
-        + "circulating figure without checking the district.",
+      key: "rate",
+      label: "Transit payroll-tax rate",
+      kind: "rate",
+      decimals: 6,
+      min: "0",
+      max: "0.05",
+      required: true,
+      help:
+        "As a decimal, from the district's own notice: 0.008 is 0.8%. The rate is " +
+        "employer-entered because no Department publication carries it — never copy a " +
+        "circulating figure without checking the district.",
     },
   ],
 };
@@ -169,19 +199,25 @@ const US_OR_LTD_SLOT: PayrollStatutoryRateSlot = {
   regions: ["OR"],
   whenUnconfigured: "refuse",
   citation:
-    "Oregon Department of Revenue, Form OQ (Oregon Combined Payroll Tax Report); "
-    + "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25), which publishes no district rate",
+    "Oregon Department of Revenue, Form OQ (Oregon Combined Payroll Tax Report); " +
+    "Oregon Withholding Tax Formulas, 150-206-436 (Rev. 12-31-25), which publishes no district rate",
   variesBecause:
-    "Each transit district sets its own payroll-tax rate on its own schedule. No Department "
-    + "publication carries it, so a rate carried in a payroll release would be wrong for whichever "
-    + "district moved after it, with nothing able to tell.",
+    "Each transit district sets its own payroll-tax rate on its own schedule. No Department " +
+    "publication carries it, so a rate carried in a payroll release would be wrong for whichever " +
+    "district moved after it, with nothing able to tell.",
   fields: [
     {
-      key: "rate", label: "Transit payroll-tax rate", kind: "rate", decimals: 6,
-      min: "0", max: "0.05", required: true,
-      help: "As a decimal, from the district's own notice. The rate is employer-entered "
-        + "because no Department publication carries it — never copy a circulating figure "
-        + "without checking the district.",
+      key: "rate",
+      label: "Transit payroll-tax rate",
+      kind: "rate",
+      decimals: 6,
+      min: "0",
+      max: "0.05",
+      required: true,
+      help:
+        "As a decimal, from the district's own notice. The rate is employer-entered " +
+        "because no Department publication carries it — never copy a circulating figure " +
+        "without checking the district.",
     },
   ],
 };
@@ -204,18 +240,24 @@ const US_VT_CCCE_SLOT: PayrollStatutoryRateSlot = {
   regions: ["VT"],
   whenUnconfigured: "zero",
   citation:
-    "Vermont Department of Taxes, Child Care Contribution: employers may withhold a maximum of "
-    + "25% of the required 0.44% contribution (0.11%) from employee wages (Form WHT-436 instructions)",
+    "Vermont Department of Taxes, Child Care Contribution: employers may withhold a maximum of " +
+    "25% of the required 0.44% contribution (0.11%) from employee wages (Form WHT-436 instructions)",
   variesBecause:
-    "Each employer elects its own employee share (or none) for its own workforce. No publication "
-    + "carries that election, so a release-carried figure would withhold one employer's choice from "
-    + "another employer's people.",
+    "Each employer elects its own employee share (or none) for its own workforce. No publication " +
+    "carries that election, so a release-carried figure would withhold one employer's choice from " +
+    "another employer's people.",
   fields: [
     {
-      key: "rate", label: "Employee share of the contribution", kind: "rate", decimals: 6,
-      min: "0", max: "0.0011", required: false,
-      help: "As a decimal: 0.0011 withholds the 25% maximum (0.11%) from employee wages. Leave it "
-        + "empty and the employer pays the whole 0.44% levy with no employee withholding.",
+      key: "rate",
+      label: "Employee share of the contribution",
+      kind: "rate",
+      decimals: 6,
+      min: "0",
+      max: "0.0011",
+      required: false,
+      help:
+        "As a decimal: 0.0011 withholds the 25% maximum (0.11%) from employee wages. Leave it " +
+        "empty and the employer pays the whole 0.44% levy with no employee withholding.",
     },
   ],
 };
@@ -237,26 +279,38 @@ const US_MN_PL_SLOT: PayrollStatutoryRateSlot = {
   regions: ["MN"],
   whenUnconfigured: "refuse",
   citation:
-    "Minnesota DEED, 2026 Small Employer Premium Rate Designation; quarterly wage detail and "
-    + "premium (UIMN Taxes and Premiums)",
+    "Minnesota DEED, 2026 Small Employer Premium Rate Designation; quarterly wage detail and " +
+    "premium (UIMN Taxes and Premiums)",
   variesBecause:
-    "DEED designates the premium per employer (standard versus small-employer rate). No "
-    + "publication carries an individual employer's designation, so a release-carried figure would "
-    + "price one employer's designation onto another employer's payroll.",
+    "DEED designates the premium per employer (standard versus small-employer rate). No " +
+    "publication carries an individual employer's designation, so a release-carried figure would " +
+    "price one employer's designation onto another employer's payroll.",
   fields: [
     {
-      key: "rate", label: "Assessed premium rate", kind: "rate", decimals: 6,
-      min: "0", max: "0.02", required: true,
-      help: "As a decimal from the DEED designation: 0.0088 is the 2026 standard 0.88% premium, "
-        + "0.0066 the small-employer 0.66%. The employer pays at least half; the rest is the "
-        + "elected employee share below.",
+      key: "rate",
+      label: "Assessed premium rate",
+      kind: "rate",
+      decimals: 6,
+      min: "0",
+      max: "0.02",
+      required: true,
+      help:
+        "As a decimal from the DEED designation: 0.0088 is the 2026 standard 0.88% premium, " +
+        "0.0066 the small-employer 0.66%. The employer pays at least half; the rest is the " +
+        "elected employee share below.",
     },
     {
-      key: "small_employer", label: "DEED-notified small employer", kind: "flag", decimals: 0,
-      min: "0", max: "1", required: true,
-      help: "Whether DEED notified the employer as a small employer for Paid Leave (30 or fewer "
-        + "employees and average wages under the threshold). Record the notice: the quarterly "
-        + "wage-detail report prices the reduced rate off it.",
+      key: "small_employer",
+      label: "DEED-notified small employer",
+      kind: "flag",
+      decimals: 0,
+      min: "0",
+      max: "1",
+      required: true,
+      help:
+        "Whether DEED notified the employer as a small employer for Paid Leave (30 or fewer " +
+        "employees and average wages under the threshold). Record the notice: the quarterly " +
+        "wage-detail report prices the reduced rate off it.",
     },
   ],
 };
@@ -277,18 +331,24 @@ const US_MN_PLE_SLOT: PayrollStatutoryRateSlot = {
   regions: ["MN"],
   whenUnconfigured: "refuse",
   citation:
-    "Minnesota Paid Leave (Minn. Stat. ch. 268B): the employer pays at least half the premium "
-    + "and deducts at most 0.44% from employee wages",
+    "Minnesota Paid Leave (Minn. Stat. ch. 268B): the employer pays at least half the premium " +
+    "and deducts at most 0.44% from employee wages",
   variesBecause:
-    "Each employer elects its own employee share (or nothing) for its own workforce. No "
-    + "publication carries that election, so a release-carried figure would withhold one "
-    + "employer's choice from another employer's people.",
+    "Each employer elects its own employee share (or nothing) for its own workforce. No " +
+    "publication carries that election, so a release-carried figure would withhold one " +
+    "employer's choice from another employer's people.",
   fields: [
     {
-      key: "rate", label: "Employee share of the premium", kind: "rate", decimals: 6,
-      min: "0", max: "0.0044", required: true,
-      help: "As a decimal: 0.0044 deducts the 0.44% maximum from employee wages. Enter 0 when the "
-        + "employer pays the whole premium.",
+      key: "rate",
+      label: "Employee share of the premium",
+      kind: "rate",
+      decimals: 6,
+      min: "0",
+      max: "0.0044",
+      required: true,
+      help:
+        "As a decimal: 0.0044 deducts the 0.44% maximum from employee wages. Enter 0 when the " +
+        "employer pays the whole premium.",
     },
   ],
 };
@@ -319,21 +379,27 @@ const US_PA_LST_SLOT: PayrollStatutoryRateSlot = {
   regions: ["PA"],
   whenUnconfigured: "zero",
   citation:
-    "PA DCED, Local Services Tax (employer withholding, annual rate, installment/rounding, "
-    + "exemptions and priority); PA DCED official tax register (Find Your Withholding Rates by Address)",
+    "PA DCED, Local Services Tax (employer withholding, annual rate, installment/rounding, " +
+    "exemptions and priority); PA DCED official tax register (Find Your Withholding Rates by Address)",
   variesBecause:
-    "Each Pennsylvania municipality and school district sets its own annual LST amount — $52 in "
-    + "most of the Commonwealth, $156.00 in Scranton with a $15,600 low-income exemption — and "
-    + "revises it on its own schedule. DCED's register is authoritative per PSD code; a carried "
-    + "constant would be wrong for whichever jurisdiction moved after it, with nothing able to tell.",
+    "Each Pennsylvania municipality and school district sets its own annual LST amount — $52 in " +
+    "most of the Commonwealth, $156.00 in Scranton with a $15,600 low-income exemption — and " +
+    "revises it on its own schedule. DCED's register is authoritative per PSD code; a carried " +
+    "constant would be wrong for whichever jurisdiction moved after it, with nothing able to tell.",
   fields: [
     {
-      key: "annualAmount", label: "Combined annual LST amount", kind: "amount", decimals: 2,
-      min: "0", max: "10000", required: true,
-      help: "The worksite jurisdiction's combined annual LST from DCED's register, in dollars: 52 "
-        + "is the common $52 levy. Amounts of $10 or less are collected as a lump sum, not "
-        + "prorated — the run refuses them by name so they are recorded as a one-time deduction "
-        + "instead. A worksite with no amount on file assesses no LST.",
+      key: "annualAmount",
+      label: "Combined annual LST amount",
+      kind: "amount",
+      decimals: 2,
+      min: "0",
+      max: "10000",
+      required: true,
+      help:
+        "The worksite jurisdiction's combined annual LST from DCED's register, in dollars: 52 " +
+        "is the common $52 levy. Amounts of $10 or less are collected as a lump sum, not " +
+        "prorated — the run refuses them by name so they are recorded as a one-time deduction " +
+        "instead. A worksite with no amount on file assesses no LST.",
     },
   ],
 };

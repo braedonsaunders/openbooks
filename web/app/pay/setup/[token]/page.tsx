@@ -30,7 +30,9 @@ export default async function PaySetupPage({ params }: { params: Promise<{ token
   if (!view || unknownToken) {
     return (
       <SetupShell title={t("invalidTitle")}>
-        <p className="text-center text-sm text-slate-500 dark:text-slate-400">{t("invalidDetail")}</p>
+        <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+          {t("invalidDetail")}
+        </p>
       </SetupShell>
     );
   }
@@ -50,13 +52,18 @@ export default async function PaySetupPage({ params }: { params: Promise<{ token
   if (view.status !== "pending") {
     return (
       <SetupShell title={t("withdrawnTitle")}>
-        <p className="text-center text-sm text-slate-500 dark:text-slate-400">{t("withdrawnDetail")}</p>
+        <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+          {t("withdrawnDetail")}
+        </p>
       </SetupShell>
     );
   }
 
   return (
-    <SetupShell title={view.orgName} subtitle={t("intro", { party: view.partyName, org: view.orgName })}>
+    <SetupShell
+      title={view.orgName}
+      subtitle={t("intro", { party: view.partyName, org: view.orgName })}
+    >
       <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
         <p>{t("noChargeToday")}</p>
         <p className="mt-2">{t("singleUse")}</p>
@@ -69,12 +76,22 @@ export default async function PaySetupPage({ params }: { params: Promise<{ token
   );
 }
 
-function SetupShell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function SetupShell({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="grid min-h-screen place-items-center bg-gradient-to-b from-white to-slate-100 p-4 dark:from-slate-950 dark:to-slate-900">
       <div className="w-full max-w-md rounded-3xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/30">
         <div className="mb-6 text-center">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">{title}</h1>
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+            {title}
+          </h1>
           {subtitle ? (
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
           ) : null}

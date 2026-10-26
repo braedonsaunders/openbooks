@@ -43,7 +43,12 @@ async function scopedDraft(
   over: { sources?: string[]; targetSub?: string | null; key?: string } = {},
 ): Promise<{ ruleId: string; versionId: string }> {
   const created = await createRule(
-    { orgId, key: over.key ?? `scope-${Math.random().toString(36).slice(2, 8)}`, name: "Scoped", mode: "period" },
+    {
+      orgId,
+      key: over.key ?? `scope-${Math.random().toString(36).slice(2, 8)}`,
+      name: "Scoped",
+      mode: "period",
+    },
     AUDIT,
   );
   const draft = await createDraftVersion(
@@ -52,7 +57,9 @@ async function scopedDraft(
       orgId,
       effectiveFrom: "2026-01-01",
       dimensionFilters: { subsidiaryIds: over.sources ?? [subA] },
-      targets: [{ fixedPercent: "100", subsidiaryId: over.targetSub === undefined ? subA : over.targetSub }],
+      targets: [
+        { fixedPercent: "100", subsidiaryId: over.targetSub === undefined ? subA : over.targetSub },
+      ],
       allowedSubsidiaryIds: null,
     },
     AUDIT,
@@ -61,7 +68,10 @@ async function scopedDraft(
 }
 
 function deniedMessage(error: unknown): string {
-  assert.ok(error instanceof AllocationRuleError, `refusal is an AllocationRuleError, got ${String(error)}`);
+  assert.ok(
+    error instanceof AllocationRuleError,
+    `refusal is an AllocationRuleError, got ${String(error)}`,
+  );
   assert.equal((error as AllocationRuleError).code, "NOT_FOUND");
   return (error as Error).message;
 }
@@ -72,12 +82,22 @@ test("publish needs scope over the rule's sources and targets", { skip: !DB }, a
     const other = await subB(scratch.orgId, scratch.subsidiaryId);
     const { versionId } = await scopedDraft(scratch.orgId, scratch.subsidiaryId);
     const scopeB = new Set([other]);
-    const message = await publishVersion(versionId, { orgId: scratch.orgId, ...AUDIT, allowedSubsidiaryIds: scopeB }).then(
-      () => { throw new Error("expected the scope refusal"); },
+    const message = await publishVersion(versionId, {
+      orgId: scratch.orgId,
+      ...AUDIT,
+      allowedSubsidiaryIds: scopeB,
+    }).then(
+      () => {
+        throw new Error("expected the scope refusal");
+      },
       (error) => deniedMessage(error),
     );
     assert.equal(message, "not found");
-    const published = await publishVersion(versionId, { orgId: scratch.orgId, ...AUDIT, allowedSubsidiaryIds: new Set([scratch.subsidiaryId]) });
+    const published = await publishVersion(versionId, {
+      orgId: scratch.orgId,
+      ...AUDIT,
+      allowedSubsidiaryIds: new Set([scratch.subsidiaryId]),
+    });
     assert.equal(published.version.status, "published");
   } finally {
     await dropScratchOrg(scratch.orgId);
@@ -92,26 +112,52 @@ test("retire and rule edits refuse uniformly", { skip: !DB }, async () => {
     await publishVersion(versionId, { orgId: scratch.orgId, ...AUDIT, allowedSubsidiaryIds: null });
     const scopeB = new Set([other]);
     assert.equal(
-      await retireVersion(versionId, { orgId: scratch.orgId, ...AUDIT, allowedSubsidiaryIds: scopeB }).then(
-        () => { throw new Error("expected the scope refusal"); },
+      await retireVersion(versionId, {
+        orgId: scratch.orgId,
+        ...AUDIT,
+        allowedSubsidiaryIds: scopeB,
+      }).then(
+        () => {
+          throw new Error("expected the scope refusal");
+        },
         (error) => deniedMessage(error),
       ),
       "not found",
     );
     assert.equal(
-      await updateRule(ruleId, { orgId: scratch.orgId, name: "Renamed", expectedRevision: null, allowedSubsidiaryIds: scopeB }, AUDIT).then(
-        () => { throw new Error("expected the scope refusal"); },
+      await updateRule(
+        ruleId,
+        {
+          orgId: scratch.orgId,
+          name: "Renamed",
+          expectedRevision: null,
+          allowedSubsidiaryIds: scopeB,
+        },
+        AUDIT,
+      ).then(
+        () => {
+          throw new Error("expected the scope refusal");
+        },
         (error) => deniedMessage(error),
       ),
       "not found",
     );
     const renamed = await updateRule(
       ruleId,
-      { orgId: scratch.orgId, name: "Renamed", expectedRevision: null, allowedSubsidiaryIds: new Set([scratch.subsidiaryId]) },
+      {
+        orgId: scratch.orgId,
+        name: "Renamed",
+        expectedRevision: null,
+        allowedSubsidiaryIds: new Set([scratch.subsidiaryId]),
+      },
       AUDIT,
     );
     assert.equal(renamed.rule.name, "Renamed");
-    await retireVersion(versionId, { orgId: scratch.orgId, ...AUDIT, allowedSubsidiaryIds: new Set([scratch.subsidiaryId]) });
+    await retireVersion(versionId, {
+      orgId: scratch.orgId,
+      ...AUDIT,
+      allowedSubsidiaryIds: new Set([scratch.subsidiaryId]),
+    });
   } finally {
     await dropScratchOrg(scratch.orgId);
   }
@@ -128,10 +174,17 @@ test("widening sources or retargeting past the caller's scope refuses", { skip: 
     assert.equal(
       await updateDraftVersion(
         versionId,
-        { orgId: scratch.orgId, dimensionFilters: { subsidiaryIds: [scratch.subsidiaryId, other] }, expectedRevision: null, allowedSubsidiaryIds: scopeA },
+        {
+          orgId: scratch.orgId,
+          dimensionFilters: { subsidiaryIds: [scratch.subsidiaryId, other] },
+          expectedRevision: null,
+          allowedSubsidiaryIds: scopeA,
+        },
         AUDIT,
       ).then(
-        () => { throw new Error("expected the scope refusal"); },
+        () => {
+          throw new Error("expected the scope refusal");
+        },
         (error) => deniedMessage(error),
       ),
       "not found",
@@ -140,17 +193,29 @@ test("widening sources or retargeting past the caller's scope refuses", { skip: 
     assert.equal(
       await replaceTargets(
         versionId,
-        { orgId: scratch.orgId, targets: [{ fixedPercent: "100", subsidiaryId: other }], expectedRevision: null, allowedSubsidiaryIds: scopeA },
+        {
+          orgId: scratch.orgId,
+          targets: [{ fixedPercent: "100", subsidiaryId: other }],
+          expectedRevision: null,
+          allowedSubsidiaryIds: scopeA,
+        },
         AUDIT,
       ).then(
-        () => { throw new Error("expected the scope refusal"); },
+        () => {
+          throw new Error("expected the scope refusal");
+        },
         (error) => deniedMessage(error),
       ),
       "not found",
     );
     const kept = await replaceTargets(
       versionId,
-      { orgId: scratch.orgId, targets: [{ fixedPercent: "100", subsidiaryId: scratch.subsidiaryId }], expectedRevision: null, allowedSubsidiaryIds: scopeA },
+      {
+        orgId: scratch.orgId,
+        targets: [{ fixedPercent: "100", subsidiaryId: scratch.subsidiaryId }],
+        expectedRevision: null,
+        allowedSubsidiaryIds: scopeA,
+      },
       AUDIT,
     );
     assert.equal(kept.targets.length, 1);
@@ -163,22 +228,42 @@ test("org-wide rules need unrestricted scope", { skip: !DB }, async () => {
   const scratch = await createScratchOrg();
   try {
     const created = await createRule(
-      { orgId: scratch.orgId, key: `orgwide-${Math.random().toString(36).slice(2, 8)}`, name: "Org wide", mode: "period" },
+      {
+        orgId: scratch.orgId,
+        key: `orgwide-${Math.random().toString(36).slice(2, 8)}`,
+        name: "Org wide",
+        mode: "period",
+      },
       AUDIT,
     );
     const draft = await createDraftVersion(
       created.rule.id,
-      { orgId: scratch.orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }], allowedSubsidiaryIds: null },
+      {
+        orgId: scratch.orgId,
+        effectiveFrom: "2026-01-01",
+        targets: [{ fixedPercent: "100" }],
+        allowedSubsidiaryIds: null,
+      },
       AUDIT,
     );
     assert.equal(
-      await publishVersion(draft.version.id, { orgId: scratch.orgId, ...AUDIT, allowedSubsidiaryIds: new Set([scratch.subsidiaryId]) }).then(
-        () => { throw new Error("expected the scope refusal"); },
+      await publishVersion(draft.version.id, {
+        orgId: scratch.orgId,
+        ...AUDIT,
+        allowedSubsidiaryIds: new Set([scratch.subsidiaryId]),
+      }).then(
+        () => {
+          throw new Error("expected the scope refusal");
+        },
         (error) => deniedMessage(error),
       ),
       "not found",
     );
-    const published = await publishVersion(draft.version.id, { orgId: scratch.orgId, ...AUDIT, allowedSubsidiaryIds: null });
+    const published = await publishVersion(draft.version.id, {
+      orgId: scratch.orgId,
+      ...AUDIT,
+      allowedSubsidiaryIds: null,
+    });
     assert.equal(published.version.status, "published");
   } finally {
     await dropScratchOrg(scratch.orgId);

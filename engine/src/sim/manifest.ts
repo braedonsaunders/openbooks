@@ -59,11 +59,7 @@ export function writeManifest(runDir: string, manifest: RunManifest): void {
 }
 
 /** Record a successfully exercised capability in the durable run manifest. */
-export function recordCoverage(
-  manifest: RunManifest,
-  capability: string,
-  count = 1,
-): void {
+export function recordCoverage(manifest: RunManifest, capability: string, count = 1): void {
   if (!manifest.coverage.includes(capability)) {
     manifest.coverage.push(capability);
     manifest.coverage.sort();

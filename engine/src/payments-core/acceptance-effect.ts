@@ -18,17 +18,18 @@ import { cmp } from "../money/money.ts";
 export async function finalizePaymentAcceptanceForDocument(
   paymentDocumentId: string,
 ): Promise<void> {
-  const result = (await db.execute<{
-      attempt_id: string;
-      org_id: string;
-      amount: string | null;
-      surcharge_amount: string | null;
-      link_id: string;
-      invoice_id: string;
-      invoice_number: string;
-      open_balance: string;
-      posted_entry_id: string;
-    }>(sql`
+  const result = await db.execute<{
+    attempt_id: string;
+    org_id: string;
+    amount: string | null;
+    surcharge_amount: string | null;
+    link_id: string;
+    invoice_id: string;
+    invoice_number: string;
+    open_balance: string;
+    posted_entry_id: string;
+  }>(
+    sql`
     select attempt.id as attempt_id,
            attempt.org_id,
            attempt.amount,
@@ -49,17 +50,22 @@ export async function finalizePaymentAcceptanceForDocument(
        and attempt.journal_entry_id is null
        and payment.status = 'posted'
      for update of attempt
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = result[0];
   if (!row) return;
-  const closed = (await db.execute<{ id: string }>(sql`
+  const closed = await db.execute<{ id: string }>(
+    sql`
     update payment_attempts
        set status = 'succeeded',
            journal_entry_id = ${row.posted_entry_id},
            updated_at = now()
      where id = ${row.attempt_id} and org_id = ${row.org_id} and journal_entry_id is null
      returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!closed[0]) return;
   if (cmp(row.open_balance ?? "0", "0") <= 0) {
     await db.execute(sql`

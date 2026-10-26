@@ -30,10 +30,7 @@ registerHooks({
     if (specifier === "@openbooks/engine/consolidation/loss-of-control")
       return { shortCircuit: true, url: "mock:control-loss-reversal-command" };
     if (specifier === "@/lib/api/json")
-      return next(
-        new URL("../../../../../../lib/api/json.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../../../../lib/api/json.ts", import.meta.url).href, context);
     return next(specifier, context);
   },
   load(url, context, next) {
@@ -103,9 +100,7 @@ test("enabled reversal retains subject authorization and the real reason schema"
   const response = await route.POST(request(body), context);
   assert.equal(response.status, 200);
   assert.deepEqual(state.authorizations, [id]);
-  assert.deepEqual(state.calls, [
-    ["org", id, "actor", body.reason, body.idempotencyKey],
-  ]);
+  assert.deepEqual(state.calls, [["org", id, "actor", body.reason, body.idempotencyKey]]);
   for (const invalid of [
     { ...body, reason: "no" },
     { ...body, idempotencyKey: "" },

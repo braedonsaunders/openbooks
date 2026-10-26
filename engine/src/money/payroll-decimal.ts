@@ -19,8 +19,8 @@ export function rate6(value: string | number): bigint {
   const raw = String(value).trim();
   if (!/^[-+]?(\d+(\.\d*)?|\.\d+)$/.test(raw)) {
     throw new PayrollError(
-      `not a decimal rate: "${value}" — enter a plain decimal without grouping separators or `
-      + "exponent notation",
+      `not a decimal rate: "${value}" — enter a plain decimal without grouping separators or ` +
+        "exponent notation",
     );
   }
   const negative = raw.startsWith("-");
@@ -28,8 +28,8 @@ export function rate6(value: string | number): bigint {
   const [whole = "0", fraction = ""] = unsigned.split(".");
   if (fraction.length > 6 && /[1-9]/.test(fraction.slice(6))) {
     throw new PayrollError(
-      `rate loses precision beyond 6 decimal places: "${value}" — check the transcribed rate; `
-      + "this parser accepts exact rates through six decimal places and never rounds",
+      `rate loses precision beyond 6 decimal places: "${value}" — check the transcribed rate; ` +
+        "this parser accepts exact rates through six decimal places and never rounds",
     );
   }
   const units = BigInt(whole || "0") * RATE6 + BigInt((fraction + "000000").slice(0, 6));

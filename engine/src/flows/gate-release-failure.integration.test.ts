@@ -64,11 +64,18 @@ async function seedDraftFieldTicket(orgId: string, createdBy: string): Promise<s
 }
 
 /** A flow whose approve branch carries one send_email action past the gate. */
-function branchGraph(approverId: string, mailTo: Array<{ type: "email"; email: string }>): Record<string, unknown> {
+function branchGraph(
+  approverId: string,
+  mailTo: Array<{ type: "email"; email: string }>,
+): Record<string, unknown> {
   return {
     schemaVersion: 1,
     nodes: [
-      { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+      {
+        id: "trigger",
+        position: { x: 0, y: 0 },
+        data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+      },
       {
         id: "gate",
         position: { x: 220, y: 0 },
@@ -99,7 +106,12 @@ function branchGraph(approverId: string, mailTo: Array<{ type: "email"; email: s
         position: { x: 660, y: 0 },
         data: {
           kind: "action",
-          action: { action: "send_email", to: mailTo, subject: "post-approval note", body: "hello" },
+          action: {
+            action: "send_email",
+            to: mailTo,
+            subject: "post-approval note",
+            body: "hello",
+          },
         },
       },
     ],
@@ -124,25 +136,33 @@ async function seedBranchFlow(orgId: string, approverId: string): Promise<{ flow
 async function repairBranchFlow(flowId: string, approverId: string): Promise<void> {
   const seeded = branchGraph(approverId, [{ type: "email", email: "not-an-address" }]);
   const nodes = (seeded.nodes as Array<Record<string, unknown>>).filter((n) => n.id !== "doomed");
-  const edges = (seeded.edges as Array<Record<string, unknown>>).filter((e) => e.target !== "doomed");
+  const edges = (seeded.edges as Array<Record<string, unknown>>).filter(
+    (e) => e.target !== "doomed",
+  );
   await db.execute(sql`
     update flows set graph = ${JSON.stringify({ ...seeded, nodes, edges })}::jsonb where id = ${flowId}`);
 }
 
 async function decisionNotifyCount(runId: string, gateId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from scheduler_outbox
      where kind = 'flow_email' and occurrence_key = ${`${runId}:decision-notify:${gateId}`}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]?.n ?? 0;
 }
 
 /** In-app rows written by the branch's first (successful) notify action. */
 async function branchPingCount(orgId: string, userId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from notifications
      where org_id = ${orgId} and user_id = ${userId} and kind = 'flow' and title = 'Branch ping'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]?.n ?? 0;
 }
 
@@ -152,49 +172,66 @@ async function branchPingCount(orgId: string, userId: string): Promise<number> {
  * so this counts only branch-action completions.
  */
 async function branchCheckpointCount(runId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from flow_run_effects
      where run_id = ${runId} and effect_key like '%:action:%'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]?.n ?? 0;
 }
 
 type GateRow = { id: string; status: string; runId: string };
 
 async function gateRows(subjectId: string): Promise<GateRow[]> {
-  const r = (await db.execute<GateRow>(sql`
+  const r = await db.execute<GateRow>(
+    sql`
     select id, status, run_id as "runId" from flow_gates
      where subject_id = ${subjectId} order by created_at
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r;
 }
 
 async function docStatus(id: string): Promise<string | null> {
-  const r = (await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`, "objects"));
+  const r = await db.execute<{ status: string }>(
+    sql`select status from documents where id = ${id}`,
+    "objects",
+  );
   return r[0]?.status ?? null;
 }
 
 async function runRow(id: string): Promise<{ status: string; error: string | null }> {
-  const r = (await db.execute<{ status: string; error: string | null }>(sql`
+  const r = await db.execute<{ status: string; error: string | null }>(
+    sql`
     select status, error from flow_runs where id = ${id}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]!;
 }
 
 async function decisionAuditCount(gateId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from audit_log
      where table_name = 'flow_gates' and row_id = ${gateId} and action = 'update'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]?.n ?? 0;
 }
 
-async function withOrgFixture(fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>): Promise<void> {
+async function withOrgFixture(
+  fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>,
+): Promise<void> {
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
-    await grantScratchPermissions(org.orgId,actors.approver1Id,["time.manage"]);
-    await grantScratchPermissions(org.orgId,actors.approver2Id,["time.manage"]);
+    await grantScratchPermissions(org.orgId, actors.approver1Id, ["time.manage"]);
+    await grantScratchPermissions(org.orgId, actors.approver2Id, ["time.manage"]);
     await fn(org, actors);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -206,162 +243,231 @@ function restoreBenignReleaseHandler(): void {
   registerFlowApprovalReleaseHandler(FIELD_TICKET_SUBJECT_KIND, async () => {});
 }
 
-test("a write-before-throw release rolls back the whole decision and the same decision recovers", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    registerFlowApprovalReleaseHandler(FIELD_TICKET_SUBJECT_KIND, async ({ subjectId, ctx }) => {
-      // A material partial effect: move the ticket toward released, then crash.
-      await db.execute(sql`update documents set status = 'approved' where id = ${subjectId} and org_id = ${ctx.orgId}`);
-      throw new Error("simulated release failure after partial write");
-    });
-    try {
-      await seedApprovalFlow(org.orgId, {
-        subjectKind: FIELD_TICKET_SUBJECT_KIND,
-        assignees: [{ type: "user", userId: actors.approver1Id }],
-        mode: "any",
+test(
+  "a write-before-throw release rolls back the whole decision and the same decision recovers",
+  { skip: !DB },
+  async () => {
+    await withOrgFixture(async (org, actors) => {
+      registerFlowApprovalReleaseHandler(FIELD_TICKET_SUBJECT_KIND, async ({ subjectId, ctx }) => {
+        // A material partial effect: move the ticket toward released, then crash.
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${subjectId} and org_id = ${ctx.orgId}`,
+        );
+        throw new Error("simulated release failure after partial write");
       });
-      const ticketId = await seedDraftFieldTicket(org.orgId, actors.submitterId);
-      const submit = await submitForApproval("field_ticket", ticketId, actors.submitterId);
+      try {
+        await seedApprovalFlow(org.orgId, {
+          subjectKind: FIELD_TICKET_SUBJECT_KIND,
+          assignees: [{ type: "user", userId: actors.approver1Id }],
+          mode: "any",
+        });
+        const ticketId = await seedDraftFieldTicket(org.orgId, actors.submitterId);
+        const submit = await submitForApproval("field_ticket", ticketId, actors.submitterId);
+        assert.equal(submit.gated, true, "submit created a gate");
+        const [gate] = await gateRows(ticketId);
+
+        await assert.rejects(
+          decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }),
+          (e: unknown) => {
+            assert.ok(e instanceof ReleaseError, `expected ReleaseError, got ${String(e)}`);
+            assert.match(e.message, /simulated release failure after partial write/);
+            assert.match(
+              e.message,
+              /was not recorded/,
+              "the refusal states the decision was not recorded",
+            );
+            assert.match(e.message, /retry your decision/, "the refusal names the truthful remedy");
+            return true;
+          },
+          "a release failure must throw ReleaseError, not resolve to success",
+        );
+
+        // This attempt recorded nothing: gate still pending, subject untouched,
+        // run NOT failed, no decision evidence — not conflated with any earlier
+        // separate decision.
+        assert.equal((await gateRows(ticketId))[0]!.status, "pending");
+        assert.equal(await docStatus(ticketId), "pending_approval");
+        const run = await runRow(gate!.runId);
+        assert.notEqual(run.status, "failed", "a rolled-back attempt must not mark the run failed");
+        assert.equal(await decisionAuditCount(gate!.id), 0, "no decision evidence may persist");
+
+        // Repair the cause and retry the SAME decision: it completes normally.
+        restoreBenignReleaseHandler();
+        const retry = await decideGate({
+          gateId: gate!.id,
+          decision: "approved",
+          userId: actors.approver1Id,
+        });
+        assert.equal(retry.ok, true);
+        assert.equal(retry.resumed, "approve");
+        assert.equal(retry.runStatus, "completed");
+        assert.equal((await gateRows(ticketId))[0]!.status, "approved");
+        assert.equal(
+          await decisionAuditCount(gate!.id),
+          1,
+          "exactly one decision evidence row exists",
+        );
+      } finally {
+        restoreBenignReleaseHandler();
+      }
+    });
+  },
+);
+
+test(
+  "an outer caller that swallows ReleaseError and commits still records nothing",
+  { skip: !DB },
+  async () => {
+    await withOrgFixture(async (org, actors) => {
+      registerFlowApprovalReleaseHandler(FIELD_TICKET_SUBJECT_KIND, async ({ subjectId, ctx }) => {
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${subjectId} and org_id = ${ctx.orgId}`,
+        );
+        throw new Error("simulated release failure after partial write");
+      });
+      try {
+        await seedApprovalFlow(org.orgId, {
+          subjectKind: FIELD_TICKET_SUBJECT_KIND,
+          assignees: [{ type: "user", userId: actors.approver1Id }],
+          mode: "any",
+        });
+        const ticketId = await seedDraftFieldTicket(org.orgId, actors.submitterId);
+        await submitForApproval("field_ticket", ticketId, actors.submitterId);
+        const [gate] = await gateRows(ticketId);
+
+        // The exact swallowed-error topology this slice must handle: withOrg
+        // joins the outer ambient transaction, the outer scope catches the
+        // refusal, and the outer transaction commits anyway.
+        await withOrgTransaction(org.orgId, async () => {
+          await assert.rejects(
+            decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }),
+            (e: unknown) => e instanceof ReleaseError,
+            "a release failure must throw ReleaseError",
+          );
+        });
+
+        // The whole-decision savepoint already removed the attempt's writes, so
+        // the outer commit preserved nothing from it.
+        assert.equal((await gateRows(ticketId))[0]!.status, "pending");
+        assert.equal(await docStatus(ticketId), "pending_approval");
+        assert.equal(await decisionAuditCount(gate!.id), 0, "no decision evidence may persist");
+        const run = await runRow(gate!.runId);
+        assert.notEqual(run.status, "failed", "a rolled-back attempt must not mark the run failed");
+
+        restoreBenignReleaseHandler();
+        const retry = await decideGate({
+          gateId: gate!.id,
+          decision: "approved",
+          userId: actors.approver1Id,
+        });
+        assert.equal(retry.ok, true);
+        assert.equal(retry.runStatus, "completed");
+        assert.equal((await gateRows(ticketId))[0]!.status, "approved");
+      } finally {
+        restoreBenignReleaseHandler();
+      }
+    });
+  },
+);
+
+test(
+  "a branch failure rolls back every effect and a corrected Flow requires a fresh submission",
+  { skip: !DB },
+  async () => {
+    await withOrgFixture(async (org, actors) => {
+      // vendor_bill uses the real documents release (no test handler): the
+      // pre-action release genuinely lands, then the approve branch runs a
+      // successful notify followed by a send_email that resolves to zero
+      // recipients and throws.
+      const { flowId } = await seedBranchFlow(org.orgId, actors.approver1Id);
+      const docId = await seedDraftDocument(org.orgId, {
+        kind: "vendor_bill",
+        createdBy: actors.submitterId,
+      });
+      const submit = await submitForApproval("vendor_bill", docId, actors.submitterId);
       assert.equal(submit.gated, true, "submit created a gate");
-      const [gate] = await gateRows(ticketId);
+      const [gate] = await gateRows(docId);
 
       await assert.rejects(
         decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }),
         (e: unknown) => {
-          assert.ok(e instanceof ReleaseError, `expected ReleaseError, got ${String(e)}`);
-          assert.match(e.message, /simulated release failure after partial write/);
-          assert.match(e.message, /was not recorded/, "the refusal states the decision was not recorded");
+          assert.ok(
+            e instanceof DecisionFailedError,
+            `expected DecisionFailedError, got ${String(e)}`,
+          );
+          assert.match(e.message, /no recipients resolved/);
+          assert.match(
+            e.message,
+            /was not recorded/,
+            "the refusal states the decision was not recorded",
+          );
           assert.match(e.message, /retry your decision/, "the refusal names the truthful remedy");
           return true;
         },
-        "a release failure must throw ReleaseError, not resolve to success",
+        "a branch failure must throw, not resolve to success",
       );
 
-      // This attempt recorded nothing: gate still pending, subject untouched,
-      // run NOT failed, no decision evidence — not conflated with any earlier
-      // separate decision.
-      assert.equal((await gateRows(ticketId))[0]!.status, "pending");
-      assert.equal(await docStatus(ticketId), "pending_approval");
+      // The whole unit rolled back — including the pre-action release that had
+      // already landed, the first action's notification row and checkpoint,
+      // and the retracted submitter email, which never reached the outbox.
+      assert.equal((await gateRows(docId))[0]!.status, "pending");
+      assert.equal(await docStatus(docId), "pending_approval");
+      assert.equal(await decisionAuditCount(gate!.id), 0, "no decision evidence may persist");
       const run = await runRow(gate!.runId);
       assert.notEqual(run.status, "failed", "a rolled-back attempt must not mark the run failed");
-      assert.equal(await decisionAuditCount(gate!.id), 0, "no decision evidence may persist");
+      assert.equal(
+        await decisionNotifyCount(gate!.runId, gate!.id),
+        0,
+        "no submitter email may be queued",
+      );
+      assert.equal(
+        await branchPingCount(org.orgId, actors.approver1Id),
+        0,
+        "the first action's effect rolled back",
+      );
+      assert.equal(
+        await branchCheckpointCount(gate!.runId),
+        0,
+        "the first action's checkpoint rolled back",
+      );
 
-      // Repair the cause and retry the SAME decision: it completes normally.
-      restoreBenignReleaseHandler();
-      const retry = await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id });
+      await repairBranchFlow(flowId, actors.approver1Id);
+      await assert.rejects(
+        decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }),
+        (error: unknown) =>
+          error instanceof DecisionFailedError && /no recipients resolved/.test(error.message),
+        "editing the live Flow cannot change the submitted branch",
+      );
+      await withdrawDocumentSubmission({
+        orgId: org.orgId,
+        documentId: docId,
+        actorId: actors.submitterId,
+        actorIsApprover: false,
+        reason: "Submit the corrected notification policy",
+      });
+      await submitForApproval("vendor_bill", docId, actors.submitterId);
+      const replacement = (await gateRows(docId)).find((row) => row.status === "pending")!;
+      const retry = await decideGate({
+        gateId: replacement.id,
+        decision: "approved",
+        userId: actors.approver1Id,
+      });
       assert.equal(retry.ok, true);
       assert.equal(retry.resumed, "approve");
       assert.equal(retry.runStatus, "completed");
-      assert.equal((await gateRows(ticketId))[0]!.status, "approved");
-      assert.equal(await decisionAuditCount(gate!.id), 1, "exactly one decision evidence row exists");
-    } finally {
-      restoreBenignReleaseHandler();
-    }
-  });
-});
-
-test("an outer caller that swallows ReleaseError and commits still records nothing", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    registerFlowApprovalReleaseHandler(FIELD_TICKET_SUBJECT_KIND, async ({ subjectId, ctx }) => {
-      await db.execute(sql`update documents set status = 'approved' where id = ${subjectId} and org_id = ${ctx.orgId}`);
-      throw new Error("simulated release failure after partial write");
+      assert.equal(await docStatus(docId), "approved");
+      assert.equal(
+        await decisionAuditCount(gate!.id),
+        0,
+        "the recalled gate has no invented decision",
+      );
+      assert.equal(await decisionAuditCount(replacement.id), 1);
+      assert.equal(await decisionNotifyCount(replacement.runId, replacement.id), 1);
+      assert.equal(await branchPingCount(org.orgId, actors.approver1Id), 1);
+      assert.equal(await branchCheckpointCount(replacement.runId), 1);
     });
-    try {
-      await seedApprovalFlow(org.orgId, {
-        subjectKind: FIELD_TICKET_SUBJECT_KIND,
-        assignees: [{ type: "user", userId: actors.approver1Id }],
-        mode: "any",
-      });
-      const ticketId = await seedDraftFieldTicket(org.orgId, actors.submitterId);
-      await submitForApproval("field_ticket", ticketId, actors.submitterId);
-      const [gate] = await gateRows(ticketId);
-
-      // The exact swallowed-error topology this slice must handle: withOrg
-      // joins the outer ambient transaction, the outer scope catches the
-      // refusal, and the outer transaction commits anyway.
-      await withOrgTransaction(org.orgId, async () => {
-        await assert.rejects(
-          decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }),
-          (e: unknown) => e instanceof ReleaseError,
-          "a release failure must throw ReleaseError",
-        );
-      });
-
-      // The whole-decision savepoint already removed the attempt's writes, so
-      // the outer commit preserved nothing from it.
-      assert.equal((await gateRows(ticketId))[0]!.status, "pending");
-      assert.equal(await docStatus(ticketId), "pending_approval");
-      assert.equal(await decisionAuditCount(gate!.id), 0, "no decision evidence may persist");
-      const run = await runRow(gate!.runId);
-      assert.notEqual(run.status, "failed", "a rolled-back attempt must not mark the run failed");
-
-      restoreBenignReleaseHandler();
-      const retry = await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id });
-      assert.equal(retry.ok, true);
-      assert.equal(retry.runStatus, "completed");
-      assert.equal((await gateRows(ticketId))[0]!.status, "approved");
-    } finally {
-      restoreBenignReleaseHandler();
-    }
-  });
-});
-
-test("a branch failure rolls back every effect and a corrected Flow requires a fresh submission", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    // vendor_bill uses the real documents release (no test handler): the
-    // pre-action release genuinely lands, then the approve branch runs a
-    // successful notify followed by a send_email that resolves to zero
-    // recipients and throws.
-    const { flowId } = await seedBranchFlow(org.orgId, actors.approver1Id);
-    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    const submit = await submitForApproval("vendor_bill", docId, actors.submitterId);
-    assert.equal(submit.gated, true, "submit created a gate");
-    const [gate] = await gateRows(docId);
-
-    await assert.rejects(
-      decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }),
-      (e: unknown) => {
-        assert.ok(e instanceof DecisionFailedError, `expected DecisionFailedError, got ${String(e)}`);
-        assert.match(e.message, /no recipients resolved/);
-        assert.match(e.message, /was not recorded/, "the refusal states the decision was not recorded");
-        assert.match(e.message, /retry your decision/, "the refusal names the truthful remedy");
-        return true;
-      },
-      "a branch failure must throw, not resolve to success",
-    );
-
-    // The whole unit rolled back — including the pre-action release that had
-    // already landed, the first action's notification row and checkpoint,
-    // and the retracted submitter email, which never reached the outbox.
-    assert.equal((await gateRows(docId))[0]!.status, "pending");
-    assert.equal(await docStatus(docId), "pending_approval");
-    assert.equal(await decisionAuditCount(gate!.id), 0, "no decision evidence may persist");
-    const run = await runRow(gate!.runId);
-    assert.notEqual(run.status, "failed", "a rolled-back attempt must not mark the run failed");
-    assert.equal(await decisionNotifyCount(gate!.runId, gate!.id), 0, "no submitter email may be queued");
-    assert.equal(await branchPingCount(org.orgId, actors.approver1Id), 0, "the first action's effect rolled back");
-    assert.equal(await branchCheckpointCount(gate!.runId), 0, "the first action's checkpoint rolled back");
-
-    await repairBranchFlow(flowId, actors.approver1Id);
-    await assert.rejects(decideGate({gateId:gate!.id,decision:"approved",userId:actors.approver1Id}),
-      (error:unknown)=>error instanceof DecisionFailedError && /no recipients resolved/.test(error.message),
-      "editing the live Flow cannot change the submitted branch");
-    await withdrawDocumentSubmission({orgId:org.orgId,documentId:docId,actorId:actors.submitterId,
-      actorIsApprover:false,reason:"Submit the corrected notification policy"});
-    await submitForApproval("vendor_bill",docId,actors.submitterId);
-    const replacement=(await gateRows(docId)).find(row=>row.status==="pending")!;
-    const retry=await decideGate({gateId:replacement.id,decision:"approved",userId:actors.approver1Id});
-    assert.equal(retry.ok,true);
-    assert.equal(retry.resumed,"approve");
-    assert.equal(retry.runStatus,"completed");
-    assert.equal(await docStatus(docId),"approved");
-    assert.equal(await decisionAuditCount(gate!.id),0,"the recalled gate has no invented decision");
-    assert.equal(await decisionAuditCount(replacement.id),1);
-    assert.equal(await decisionNotifyCount(replacement.runId,replacement.id),1);
-    assert.equal(await branchPingCount(org.orgId,actors.approver1Id),1);
-    assert.equal(await branchCheckpointCount(replacement.runId),1);
-
-  });
-});
+  },
+);
 
 test("a successful field-ticket approval still resolves ok:true", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
@@ -375,7 +481,11 @@ test("a successful field-ticket approval still resolves ok:true", { skip: !DB },
     await submitForApproval("field_ticket", ticketId, actors.submitterId);
     const [gate] = await gateRows(ticketId);
 
-    const res = await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id });
+    const res = await decideGate({
+      gateId: gate!.id,
+      decision: "approved",
+      userId: actors.approver1Id,
+    });
     assert.equal(res.ok, true);
     assert.equal(res.resumed, "approve");
     assert.equal(res.runStatus, "completed");
@@ -395,7 +505,12 @@ test("a field-ticket rejection still resolves ok:true", { skip: !DB }, async () 
     await submitForApproval("field_ticket", ticketId, actors.submitterId);
     const [gate] = await gateRows(ticketId);
 
-    const res = await decideGate({ gateId: gate!.id, decision: "rejected", userId: actors.approver1Id, comment: "hours wrong" });
+    const res = await decideGate({
+      gateId: gate!.id,
+      decision: "rejected",
+      userId: actors.approver1Id,
+      comment: "hours wrong",
+    });
     assert.equal(res.ok, true);
     assert.equal(res.resumed, "reject");
     assert.equal(res.runStatus, "completed");
@@ -420,6 +535,10 @@ test("an unauthorized decider is still refused before any branch runs", { skip: 
       (e: unknown) => e instanceof GateError && /not an approver/.test(e.message),
       "a non-approver must be refused with a GateError",
     );
-    assert.equal((await gateRows(ticketId))[0]!.status, "pending", "the refused gate stays pending");
+    assert.equal(
+      (await gateRows(ticketId))[0]!.status,
+      "pending",
+      "the refused gate stays pending",
+    );
   });
 });

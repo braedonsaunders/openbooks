@@ -87,13 +87,12 @@ async function seedPostedBill(
   return documentId;
 }
 
-async function seedPeriod(
-  org: ScratchOrg,
-  year: number,
-  month: number,
-): Promise<string> {
-  const cal = await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, "objects");
+async function seedPeriod(org: ScratchOrg, year: number, month: number): Promise<string> {
+  const cal = await db.execute<{ id: string }>(
+    sql`
+    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`,
+    "objects",
+  );
   const periodId = randomUUID();
   const mm = String(month).padStart(2, "0");
   const lastDay = utcDateFromParts(year, month, 0).getUTCDate();
@@ -125,109 +124,156 @@ function check(cp: Awaited<ReturnType<typeof runScenario>>, name: string) {
   return c;
 }
 
-test("subledger-gl-tieout holds across governed voids on both sides of the cutoff", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Void Tieout Controller", "admin");
-    await seedPeriod(org, 2026, 8);
-    await seedPeriod(org, 2026, 9);
-    const octPeriodId = await seedPeriod(org, 2026, 10);
+test(
+  "subledger-gl-tieout holds across governed voids on both sides of the cutoff",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Void Tieout Controller", "admin");
+      await seedPeriod(org, 2026, 8);
+      await seedPeriod(org, 2026, 9);
+      const octPeriodId = await seedPeriod(org, 2026, 10);
 
-    // Bill A: posted and voided inside the coming cutoff window.
-    const billA = await seedPostedBill(org, actorId, "BILL-VOID-TIE-A", "2026-07-15", "222.22");
-    const voidA = await requestDocumentVoid({
-      documentId: billA,
-      orgId: org.orgId,
-      actorId,
-      reason: "Void/recreate tie-out regression: bill A",
-      reversalDate: "2026-07-20",
-      source: "api",
-    });
-    assert.equal(voidA.status, "voided");
-    assert.ok(voidA.reversalEntryId, "bill A void must post its mirror entry");
+      // Bill A: posted and voided inside the coming cutoff window.
+      const billA = await seedPostedBill(org, actorId, "BILL-VOID-TIE-A", "2026-07-15", "222.22");
+      const voidA = await requestDocumentVoid({
+        documentId: billA,
+        orgId: org.orgId,
+        actorId,
+        reason: "Void/recreate tie-out regression: bill A",
+        reversalDate: "2026-07-20",
+        source: "api",
+      });
+      assert.equal(voidA.status, "voided");
+      assert.ok(voidA.reversalEntryId, "bill A void must post its mirror entry");
 
-    // Bill B: posted inside the window, voided after it — still open as-of it.
-    const billB = await seedPostedBill(org, actorId, "BILL-VOID-TIE-B", "2026-07-15", "222.22");
-    const voidB = await requestDocumentVoid({
-      documentId: billB,
-      orgId: org.orgId,
-      actorId,
-      reason: "Void/recreate tie-out regression: bill B",
-      reversalDate: "2026-10-03",
-      source: "api",
-    });
-    assert.equal(voidB.status, "voided");
-    assert.ok(voidB.reversalEntryId, "bill B void must post its mirror entry");
+      // Bill B: posted inside the window, voided after it — still open as-of it.
+      const billB = await seedPostedBill(org, actorId, "BILL-VOID-TIE-B", "2026-07-15", "222.22");
+      const voidB = await requestDocumentVoid({
+        documentId: billB,
+        orgId: org.orgId,
+        actorId,
+        reason: "Void/recreate tie-out regression: bill B",
+        reversalDate: "2026-10-03",
+        source: "api",
+      });
+      assert.equal(voidB.status, "voided");
+      assert.ok(voidB.reversalEntryId, "bill B void must post its mirror entry");
 
-    // Invoice A: posted and voided inside the window for a second customer.
-    const customer2 = randomUUID();
-    await db.execute(sql`
+      // Invoice A: posted and voided inside the window for a second customer.
+      const customer2 = randomUUID();
+      await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${customer2}, ${org.orgId}, 'customer', 'Void Tieout Second Customer', true, '{}'::jsonb)`);
-    const invoiceA = await seedPostedBill(org, actorId, "INV-VOID-TIE-A", "2026-07-15", "444.44", "customer_invoice", customer2);
-    const voidInvA = await requestDocumentVoid({
-      documentId: invoiceA,
-      orgId: org.orgId,
-      actorId,
-      reason: "As-of aging regression: invoice A",
-      reversalDate: "2026-07-20",
-      source: "api",
-    });
-    assert.equal(voidInvA.status, "voided");
+      const invoiceA = await seedPostedBill(
+        org,
+        actorId,
+        "INV-VOID-TIE-A",
+        "2026-07-15",
+        "444.44",
+        "customer_invoice",
+        customer2,
+      );
+      const voidInvA = await requestDocumentVoid({
+        documentId: invoiceA,
+        orgId: org.orgId,
+        actorId,
+        reason: "As-of aging regression: invoice A",
+        reversalDate: "2026-07-20",
+        source: "api",
+      });
+      assert.equal(voidInvA.status, "voided");
 
-    // Invoice C: receivable twin of bill B for the as-of AR aging bench.
-    const invoiceC = await seedPostedBill(org, actorId, "INV-VOID-TIE-C", "2026-07-15", "333.33", "customer_invoice");
-    const voidC = await requestDocumentVoid({
-      documentId: invoiceC,
-      orgId: org.orgId,
-      actorId,
-      reason: "As-of aging regression: invoice C",
-      reversalDate: "2026-10-03",
-      source: "api",
-    });
-    assert.equal(voidC.status, "voided");
+      // Invoice C: receivable twin of bill B for the as-of AR aging bench.
+      const invoiceC = await seedPostedBill(
+        org,
+        actorId,
+        "INV-VOID-TIE-C",
+        "2026-07-15",
+        "333.33",
+        "customer_invoice",
+      );
+      const voidC = await requestDocumentVoid({
+        documentId: invoiceC,
+        orgId: org.orgId,
+        actorId,
+        reason: "As-of aging regression: invoice C",
+        reversalDate: "2026-10-03",
+        source: "api",
+      });
+      assert.equal(voidC.status, "voided");
 
-    // October decoy pins the cutoff to 2026-09-30.
-    await seedDecoy(org, octPeriodId, "2026-10-20");
+      // October decoy pins the cutoff to 2026-09-30.
+      await seedDecoy(org, octPeriodId, "2026-10-20");
 
-    const cp = await runScenario(org.orgId, { at: org.date });
-    assert.equal(cp.cutoff.slice(0, 10), "2026-09-30", "decoy must pin the cutoff past both voids' business dates");
-    const tie = check(cp, "subledger-gl-tieout");
-    assert.equal(tie.ok, true, `void mirrors must not break the tie: ${tie.detail}`);
-    assert.match(tie.detail, /worst \|GL − subledger − directJE\| = 0\.0000/, "residual must be exactly zero");
-    assert.equal(cp.timings.find((t) => t.report === "ar_aging")?.rows, 1,
-      "the as-of AR aging must retain invoice C (reversal posts 2026-10-03, after the 2026-09-30 cutoff) and hide invoice A (reversal posts 2026-07-20, on/before it)");
-    for (const other of cp.checks.filter((c) => c.name !== "subledger-gl-tieout")) {
-      assert.equal(other.ok, true, `${other.name} must stay green here — only the tie-out is under test`);
-    }
+      const cp = await runScenario(org.orgId, { at: org.date });
+      assert.equal(
+        cp.cutoff.slice(0, 10),
+        "2026-09-30",
+        "decoy must pin the cutoff past both voids' business dates",
+      );
+      const tie = check(cp, "subledger-gl-tieout");
+      assert.equal(tie.ok, true, `void mirrors must not break the tie: ${tie.detail}`);
+      assert.match(
+        tie.detail,
+        /worst \|GL − subledger − directJE\| = 0\.0000/,
+        "residual must be exactly zero",
+      );
+      assert.equal(
+        cp.timings.find((t) => t.report === "ar_aging")?.rows,
+        1,
+        "the as-of AR aging must retain invoice C (reversal posts 2026-10-03, after the 2026-09-30 cutoff) and hide invoice A (reversal posts 2026-07-20, on/before it)",
+      );
+      for (const other of cp.checks.filter((c) => c.name !== "subledger-gl-tieout")) {
+        assert.equal(
+          other.ok,
+          true,
+          `${other.name} must stay green here — only the tie-out is under test`,
+        );
+      }
 
-    // Red-proof for the void-mirror backstop: hiding the pair must not hide a
-    // mis-posted reversal. Post a follow-on correction against bill A's
-    // mirror that shifts 100 onto AP and off expense: the entry still
-    // balances (every balance guard stays green) but the chain no longer
-    // nets to zero on AP, so only the backstop can see it. Posted lines are
-    // immutable since 0380 with no amend escape, so the corruption is staged
-    // as its own posted entry, never an edit.
-    const mirrorPeriod = (await db.execute<{ period_id: string }>(sql`
-      select period_id from journal_entries where id = ${voidA.reversalEntryId} and org_id = ${org.orgId}`, "objects"))[0]!.period_id;
-    const corruptId = randomUUID();
-    await db.execute(sql`
+      // Red-proof for the void-mirror backstop: hiding the pair must not hide a
+      // mis-posted reversal. Post a follow-on correction against bill A's
+      // mirror that shifts 100 onto AP and off expense: the entry still
+      // balances (every balance guard stays green) but the chain no longer
+      // nets to zero on AP, so only the backstop can see it. Posted lines are
+      // immutable since 0380 with no amend escape, so the corruption is staged
+      // as its own posted entry, never an edit.
+      const mirrorPeriod = (
+        await db.execute<{ period_id: string }>(
+          sql`
+      select period_id from journal_entries where id = ${voidA.reversalEntryId} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.period_id;
+      const corruptId = randomUUID();
+      await db.execute(sql`
       insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, custom, reverses_entry_id)
       values (${corruptId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`TIE-VOID-R2-${corruptId.slice(0, 8)}`},
               '2026-07-20', ${mirrorPeriod}, 'mis-posted follow-on', 'draft', 'manual', '{}'::jsonb, ${voidA.reversalEntryId})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into journal_lines
         (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
       values (${org.orgId}, ${corruptId}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, '100.0000', 'CAD', '100.0000', 1, 'mis-posted'),
              (${org.orgId}, ${corruptId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', 1, 'mis-posted')`);
-    await db.execute(sql`
+      await db.execute(sql`
       update journal_entries set status = 'posted', posted_at = now() where id = ${corruptId}`);
-    const corrupt = await runScenario(org.orgId, { at: org.date });
-    const corruptTie = check(corrupt, "subledger-gl-tieout");
-    assert.equal(corruptTie.ok, false, `a mis-posted void mirror must fail the tie-out: ${corruptTie.detail}`);
-    assert.match(corruptTie.detail, /void mirrors net 100\.0000/, "failure must name the void-mirror residual");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const corrupt = await runScenario(org.orgId, { at: org.date });
+      const corruptTie = check(corrupt, "subledger-gl-tieout");
+      assert.equal(
+        corruptTie.ok,
+        false,
+        `a mis-posted void mirror must fail the tie-out: ${corruptTie.detail}`,
+      );
+      assert.match(
+        corruptTie.detail,
+        /void mirrors net 100\.0000/,
+        "failure must name the void-mirror residual",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

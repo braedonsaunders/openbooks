@@ -1,11 +1,11 @@
-import '@xyflow/react/dist/style.css'
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadOrgChartPage, orgChartSpec, orgChartTitle } from './view'
+import "@xyflow/react/dist/style.css";
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadOrgChartPage, orgChartSpec, orgChartTitle } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await orgChartTitle() }
+  return { title: await orgChartTitle() };
 }
 
 /**
@@ -16,9 +16,9 @@ export async function generateMetadata() {
 export default async function OrgChartPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadOrgChartPage(sp)
-  return <ModuleView spec={orgChartSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadOrgChartPage(sp);
+  return <ModuleView spec={orgChartSpec(data)} data={data} searchParams={sp} trusted />;
 }

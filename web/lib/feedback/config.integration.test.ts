@@ -35,8 +35,11 @@ const TOKEN = "ghp_integration_example_token";
 
 async function storedFeedback(): Promise<Record<string, unknown>> {
   const rows = await withBypass(() =>
-    db.execute<{ feedback: Record<string, unknown> | null }>(sql`
-      select settings -> 'feedback' as feedback from platform_settings where id = 'platform'`, "objects"),
+    db.execute<{ feedback: Record<string, unknown> | null }>(
+      sql`
+      select settings -> 'feedback' as feedback from platform_settings where id = 'platform'`,
+      "objects",
+    ),
   );
   return rows[0]?.feedback ?? {};
 }
@@ -59,7 +62,7 @@ test("the deployment's issue destination is installation state, sealed and bypas
       (error: unknown) => {
         const text = JSON.stringify({
           message: (error as Error)?.message,
-          cause: ((error as { cause?: Error })?.cause)?.message,
+          cause: (error as { cause?: Error })?.cause?.message,
         });
         assert.match(text, /platform_settings_singleton/);
         return true;
@@ -104,14 +107,19 @@ test("the deployment's issue destination is installation state, sealed and bypas
     // enc:v2:<active key id>:<12-byte nonce>:<ciphertext>:<16-byte tag>, base64 parts.
     assert.match(
       String(raw.token),
-      new RegExp(`^enc:v2:${requireDataKey()}:[A-Za-z0-9+/]{16}:[A-Za-z0-9+/]+={0,2}:[A-Za-z0-9+/]{22}==$`),
+      new RegExp(
+        `^enc:v2:${requireDataKey()}:[A-Za-z0-9+/]{16}:[A-Za-z0-9+/]+={0,2}:[A-Za-z0-9+/]{22}==$`,
+      ),
       "the token is sealed under the active data key in the v2 wire format",
     );
     assert.equal(await getFeedbackToken(), TOKEN);
 
     const actor = await withBypass(() =>
-      db.execute<{ updatedBy: string | null }>(sql`
-        select updated_by as "updatedBy" from platform_settings where id = 'platform'`, "objects"),
+      db.execute<{ updatedBy: string | null }>(
+        sql`
+        select updated_by as "updatedBy" from platform_settings where id = 'platform'`,
+        "objects",
+      ),
     );
     assert.equal(actor[0]?.updatedBy, ACTOR, "who changed the destination is recorded");
   });
@@ -144,17 +152,23 @@ test("the deployment's issue destination is installation state, sealed and bypas
     // privileges rather than on the policy this migration ships. What the
     // deployment relies on is the policy text, so that is what is pinned.
     const table = await withBypass(() =>
-      db.execute<{ enabled: boolean; forced: boolean }>(sql`
+      db.execute<{ enabled: boolean; forced: boolean }>(
+        sql`
         select relrowsecurity as enabled, relforcerowsecurity as forced
-          from pg_class where relname = 'platform_settings'`, "objects"),
+          from pg_class where relname = 'platform_settings'`,
+        "objects",
+      ),
     );
     assert.equal(table[0]?.enabled, true, "row-level security is on");
     assert.equal(table[0]?.forced, true, "and forced, so the owner is not exempt");
 
     const policies = await withBypass(() =>
-      db.execute<{ policyname: string; cmd: string; qual: string; withCheck: string | null }>(sql`
+      db.execute<{ policyname: string; cmd: string; qual: string; withCheck: string | null }>(
+        sql`
         select policyname, cmd, qual, with_check as "withCheck"
-          from pg_policies where tablename = 'platform_settings'`, "objects"),
+          from pg_policies where tablename = 'platform_settings'`,
+        "objects",
+      ),
     );
     assert.equal(policies.length, 1, "exactly one way in");
     const policy = policies[0]!;
@@ -170,9 +184,12 @@ test("the deployment's issue destination is installation state, sealed and bypas
 
   await t.test("the row is org-less, so no tenant archive or clone carries it", async () => {
     const columns = await withBypass(() =>
-      db.execute<{ column_name: string }>(sql`
+      db.execute<{ column_name: string }>(
+        sql`
         select column_name from information_schema.columns
-         where table_schema = 'public' and table_name = 'platform_settings'`, "objects"),
+         where table_schema = 'public' and table_name = 'platform_settings'`,
+        "objects",
+      ),
     );
     const names = columns.map((row) => row.column_name);
     assert.ok(

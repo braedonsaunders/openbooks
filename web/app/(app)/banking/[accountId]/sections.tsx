@@ -1,5 +1,5 @@
-import Link from 'next/link'
-import { Badge, Button } from '@openbooks/ui'
+import Link from "next/link";
+import { Badge, Button } from "@openbooks/ui";
 
 /**
  * Composite cells for the bank account page.
@@ -10,20 +10,22 @@ import { Badge, Button } from '@openbooks/ui'
  * in one implementation shared by the native page and the spec path.
  */
 
-const STAT = 'rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900'
-const STAT_LABEL = 'text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400'
+const STAT =
+  "rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900";
+const STAT_LABEL =
+  "text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400";
 
 export interface AccountStatsProps {
-  glBalanceLabel: string
-  glBalanceValue: string
-  reconciledThroughLabel: string
-  reconciledThrough: string | null
-  neverLabel: string
-  unmatchedLinesLabel: string
-  unmatchedLinesValue: string
-  reconciliationLabel: string
-  reconBadgeLabel: string
-  reconBadgeVariant: 'warning' | 'secondary'
+  glBalanceLabel: string;
+  glBalanceValue: string;
+  reconciledThroughLabel: string;
+  reconciledThrough: string | null;
+  neverLabel: string;
+  unmatchedLinesLabel: string;
+  unmatchedLinesValue: string;
+  reconciliationLabel: string;
+  reconBadgeLabel: string;
+  reconBadgeVariant: "warning" | "secondary";
 }
 
 /** The four header stat tiles: plain bordered divs, not cockpit tiles. */
@@ -64,28 +66,28 @@ export function AccountStats({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /** A statement's unmatched-line count: plain when nonzero, green zero when clean. */
 export function UnmatchedCountCell({ display, isZero }: { display: string; isZero: boolean }) {
-  if (isZero) return <span className="text-green-600 dark:text-green-400">0</span>
-  return <>{display}</>
+  if (isZero) return <span className="text-green-600 dark:text-green-400">0</span>;
+  return <>{display}</>;
 }
 
 /** The reconcile workspace action: an outline small button wrapping a link. */
 export function ReconActionCell({ href, label }: { href: string; label: string }) {
   return (
     <Button variant="outline" size="sm" asChild>
-      <Link href={(href)}>{label}</Link>
+      <Link href={href}>{label}</Link>
     </Button>
-  )
+  );
 }
 
 /** A signed-off session's staleness: a warning badge once late in-period
  *  postings or a reversal moved the ledger under the sign-off, nothing
  *  while the sign-off still stands. */
 export function StaleBadgeCell({ label }: { label: string | null }) {
-  if (!label) return null
-  return <Badge variant="warning">{label}</Badge>
+  if (!label) return null;
+  return <Badge variant="warning">{label}</Badge>;
 }

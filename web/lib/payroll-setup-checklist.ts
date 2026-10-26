@@ -17,19 +17,20 @@ export interface MissingPayrollControlAccount {
    * Label key suffix under payroll.settingsPage, e.g.
    * 'fields.wageExpenseAccountId' or 'packAccounts.US.slots.fit'.
    */
-  labelKey: string
+  labelKey: string;
 }
 
 export function missingPayrollControlAccounts(input: {
-  wageExpenseAccountId: string | null
-  netPayAccountId: string | null
-  slots: readonly { country: string; key: string; accountId: string | null }[]
+  wageExpenseAccountId: string | null;
+  netPayAccountId: string | null;
+  slots: readonly { country: string; key: string; accountId: string | null }[];
 }): MissingPayrollControlAccount[] {
-  const missing: MissingPayrollControlAccount[] = []
-  if (!input.wageExpenseAccountId) missing.push({ labelKey: 'fields.wageExpenseAccountId' })
-  if (!input.netPayAccountId) missing.push({ labelKey: 'fields.netPayAccountId' })
+  const missing: MissingPayrollControlAccount[] = [];
+  if (!input.wageExpenseAccountId) missing.push({ labelKey: "fields.wageExpenseAccountId" });
+  if (!input.netPayAccountId) missing.push({ labelKey: "fields.netPayAccountId" });
   for (const slot of input.slots) {
-    if (!slot.accountId) missing.push({ labelKey: `packAccounts.${slot.country}.slots.${slot.key}` })
+    if (!slot.accountId)
+      missing.push({ labelKey: `packAccounts.${slot.country}.slots.${slot.key}` });
   }
-  return missing
+  return missing;
 }

@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { permissionSetCovers } from '@openbooks/engine/organization/permissions'
-import type { CustomFieldViewer } from '@openbooks/engine/records/custom-fields'
+import { permissionSetCovers } from "@openbooks/engine/organization/permissions";
+import type { CustomFieldViewer } from "@openbooks/engine/records/custom-fields";
 
-export * from '@openbooks/engine/records/custom-fields'
+export * from "@openbooks/engine/records/custom-fields";
 
 /**
  * The custom-field viewer for an authorized actor. Managers (holders of
@@ -13,11 +13,11 @@ export * from '@openbooks/engine/records/custom-fields'
  * authority, never from a saved permission set.
  */
 export function customFieldViewerFor(authz: {
-  user: { roles: ReadonlyArray<{ key: string }> }
-  permissions: ReadonlySet<string>
+  user: { roles: ReadonlyArray<{ key: string }> };
+  permissions: ReadonlySet<string>;
 }): CustomFieldViewer {
   return {
     roleKeys: authz.user.roles.map(({ key }) => key),
-    canManageCustomFields: permissionSetCovers(authz.permissions, 'admin.custom_fields.manage'),
-  }
+    canManageCustomFields: permissionSetCovers(authz.permissions, "admin.custom_fields.manage"),
+  };
 }

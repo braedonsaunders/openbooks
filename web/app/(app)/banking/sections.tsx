@@ -1,5 +1,5 @@
-import Link from 'next/link'
-import { cn } from '@openbooks/ui'
+import Link from "next/link";
+import { cn } from "@openbooks/ui";
 
 /**
  * The banking cockpit's bespoke rail sections, extracted from the page.
@@ -21,10 +21,10 @@ import { cn } from '@openbooks/ui'
  */
 
 export type BankingAttentionItem = {
-  tone: 'negative' | 'warning' | 'neutral'
-  text: string
-  href: string
-}
+  tone: "negative" | "warning" | "neutral";
+  text: string;
+  href: string;
+};
 
 /**
  * The needs-attention queue, INCLUDING its empty state.
@@ -40,11 +40,13 @@ export function BankingAttentionList({
   items,
   allClear,
 }: {
-  items: BankingAttentionItem[]
-  allClear: string
+  items: BankingAttentionItem[];
+  allClear: string;
 }) {
   if (items.length === 0) {
-    return <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">{allClear}</p>
+    return (
+      <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">{allClear}</p>
+    );
   }
   return (
     <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
@@ -56,8 +58,12 @@ export function BankingAttentionList({
           >
             <span
               className={cn(
-                'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-                item.tone === 'negative' ? 'bg-red-500' : item.tone === 'warning' ? 'bg-amber-500' : 'bg-teal-500',
+                "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                item.tone === "negative"
+                  ? "bg-red-500"
+                  : item.tone === "warning"
+                    ? "bg-amber-500"
+                    : "bg-teal-500",
               )}
             />
             <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-300">{item.text}</span>
@@ -65,5 +71,5 @@ export function BankingAttentionList({
         </li>
       ))}
     </ul>
-  )
+  );
 }

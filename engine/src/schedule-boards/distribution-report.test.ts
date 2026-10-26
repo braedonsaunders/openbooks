@@ -99,9 +99,7 @@ test("native PDF grid keeps same-name people separate, literal multiple assignme
 });
 
 test("unified renderer creates real Tabloid and A4 PDFs with native pagination and preserves date-only semantics", async () => {
-  const tabloid = await PDFDocument.load(
-    await renderSchedulePdf(preview, recipient),
-  );
+  const tabloid = await PDFDocument.load(await renderSchedulePdf(preview, recipient));
   assert.ok(tabloid.getPageCount() > 0);
   assert.deepEqual(tabloid.getPage(0).getSize(), { width: 1224, height: 792 });
   const a4 = await PDFDocument.load(
@@ -130,9 +128,7 @@ test("unified renderer creates real Tabloid and A4 PDFs with native pagination a
 test("an exact evidence PDF refuses unprintable rows without silently dropping the requested attachment", async () => {
   const huge = {
     ...recipient,
-    lines: [
-      { ...recipient.lines[0]!, assignment: "LONG SOURCE\n".repeat(300) },
-    ],
+    lines: [{ ...recipient.lines[0]!, assignment: "LONG SOURCE\n".repeat(300) }],
   };
   await assert.rejects(
     renderSchedulePdf(
@@ -211,10 +207,7 @@ test("only current-board published bookings enter the addressed report; linked s
     ],
   } as unknown as BoardWindow;
   const lines = scheduleRecipientLines(window, new Set(["person"]));
-  assert.deepEqual(lines.map((line) => line.assignment).sort(), [
-    "0205",
-    "OWN",
-  ]);
+  assert.deepEqual(lines.map((line) => line.assignment).sort(), ["0205", "OWN"]);
   assert.ok(lines.every((line) => line.subjectId === "person"));
   const serialized = serializeSchedulePreview(preview);
   assert.deepEqual(serialized.sharedLines, recipient.lines);
@@ -222,32 +215,79 @@ test("only current-board published bookings enter the addressed report; linked s
   assert.deepEqual(recipient.lines, preview.recipients[0]!.lines);
 });
 
-
 test("populated shared PDF layouts paginate readable people/date grids with repeated identity and bounded exact evidence", async () => {
   const { mkdir, writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
-  const lines = Array.from({ length: 85 }, (_, person) => Array.from({ length: 14 }, (_, day) => ({
-    subjectId: `native-example-${person}`,
-    subject: person === 0 ? "Alexandra Example - Field Services and Equipment Coordination" : `Example Person ${String(person + 1).padStart(2, "0")}`,
-    date: `2026-10-${String(11 + day).padStart(2, "0")}`,
-    color: person % 3 === 0 ? "#fde68a" : person % 3 === 1 ? "#1d4ed8" : "#99f6e4",
-    assignment: day % 7 === 0 || day % 7 === 6 ? "" : person % 3 === 0 ? "SON/ N" : person % 3 === 1 ? "SERVICE / East" : "0205",
-    hours: day % 7 === 0 || day % 7 === 6 ? "" : "Hours unknown",
-    status: day % 7 === 0 || day % 7 === 6 ? "No schedule evidence" : "Source date observation",
-  }))).flat();
+  const lines = Array.from({ length: 85 }, (_, person) =>
+    Array.from({ length: 14 }, (_, day) => ({
+      subjectId: `native-example-${person}`,
+      subject:
+        person === 0
+          ? "Alexandra Example - Field Services and Equipment Coordination"
+          : `Example Person ${String(person + 1).padStart(2, "0")}`,
+      date: `2026-10-${String(11 + day).padStart(2, "0")}`,
+      color: person % 3 === 0 ? "#fde68a" : person % 3 === 1 ? "#1d4ed8" : "#99f6e4",
+      assignment:
+        day % 7 === 0 || day % 7 === 6
+          ? ""
+          : person % 3 === 0
+            ? "SON/ N"
+            : person % 3 === 1
+              ? "SERVICE / East"
+              : "0205",
+      hours: day % 7 === 0 || day % 7 === 6 ? "" : "Hours unknown",
+      status: day % 7 === 0 || day % 7 === 6 ? "No schedule evidence" : "Source date observation",
+    })),
+  ).flat();
   const sample = { ...recipient, lines };
   const layouts = [
-    { name: "two-week-tabloid", layout: { paperSize: "tabloid" as const, orientation: "landscape" as const, marginMm: 8, density: "compact" as const, daysPerSection: 14 as const, detail: "assignments" as const } },
-    { name: "weekly-a4-detail", layout: { paperSize: "a4" as const, orientation: "landscape" as const, marginMm: 10, density: "standard" as const, daysPerSection: 7 as const, detail: "full" as const } },
-    { name: "empty-personal-letter", layout: { paperSize: "letter" as const, orientation: "landscape" as const, marginMm: 10, density: "standard" as const, daysPerSection: 7 as const, detail: "assignments" as const }, empty: true },
+    {
+      name: "two-week-tabloid",
+      layout: {
+        paperSize: "tabloid" as const,
+        orientation: "landscape" as const,
+        marginMm: 8,
+        density: "compact" as const,
+        daysPerSection: 14 as const,
+        detail: "assignments" as const,
+      },
+    },
+    {
+      name: "weekly-a4-detail",
+      layout: {
+        paperSize: "a4" as const,
+        orientation: "landscape" as const,
+        marginMm: 10,
+        density: "standard" as const,
+        daysPerSection: 7 as const,
+        detail: "full" as const,
+      },
+    },
+    {
+      name: "empty-personal-letter",
+      layout: {
+        paperSize: "letter" as const,
+        orientation: "landscape" as const,
+        marginMm: 10,
+        density: "standard" as const,
+        daysPerSection: 7 as const,
+        detail: "assignments" as const,
+      },
+      empty: true,
+    },
   ];
   for (const variant of layouts) {
-    const report = { ...preview, recipients: [sample], audience: { ...preview.audience, pdfLayout: variant.layout } };
+    const report = {
+      ...preview,
+      recipients: [sample],
+      audience: { ...preview.audience, pdfLayout: variant.layout },
+    };
     const pdf = await renderSchedulePdf(report, variant.empty ? { ...sample, lines: [] } : sample);
     const parsed = await PDFDocument.load(pdf);
     assert.ok(parsed.getPageCount() >= (variant.empty ? 1 : 2));
-    assert.ok(parsed.getPages().every(page => page.getWidth() > page.getHeight()));
-    const group = schedulePdfInput(report, variant.empty ? { ...sample, lines: [] } : sample).groups[0]!;
+    assert.ok(parsed.getPages().every((page) => page.getWidth() > page.getHeight()));
+    const group = schedulePdfInput(report, variant.empty ? { ...sample, lines: [] } : sample)
+      .groups[0]!;
     assert.equal(group.rows.length, variant.empty ? 0 : 85);
     assert.match(group.columns[1]!, /Sun/);
     assert.deepEqual(group.columnWeights, [2.5, ...Array(variant.layout.daysPerSection).fill(1)]);
@@ -259,36 +299,67 @@ test("populated shared PDF layouts paginate readable people/date grids with repe
   }
 });
 
-test('configured colors survive weekend tint and same-day multi-assignment segments, with bounded optional keys and tenant presentation', () => {
-  const colored = { ...recipient, lines: [
-    { ...recipient.lines[0]!, date: '2026-10-11', color: '#fde68a' },
-    { ...recipient.lines[1]!, date: '2026-10-11', color: '#1d4ed8' },
-    { ...recipient.lines[2]!, date: '2026-10-11', color: '#99f6e4' },
-  ] };
+test("configured colors survive weekend tint and same-day multi-assignment segments, with bounded optional keys and tenant presentation", () => {
+  const colored = {
+    ...recipient,
+    lines: [
+      { ...recipient.lines[0]!, date: "2026-10-11", color: "#fde68a" },
+      { ...recipient.lines[1]!, date: "2026-10-11", color: "#1d4ed8" },
+      { ...recipient.lines[2]!, date: "2026-10-11", color: "#99f6e4" },
+    ],
+  };
   const input = schedulePdfInput({ ...preview, weekendDays: [0] }, colored);
   const cell = input.groups[0]!.rows[0]![1];
-  assert.ok(cell && typeof cell === 'object');
-  assert.deepEqual(cell.segments?.map(segment => segment.backgroundColor), ['#fde68a', '#1d4ed8']);
-  assert.equal(cell.text, 'SON/ N *\n\n0205 *');
-  assert.equal(input.groups[0]!.columnStyles?.[1]?.body?.backgroundColor, '#f1f5f9');
+  assert.ok(cell && typeof cell === "object");
+  assert.deepEqual(
+    cell.segments?.map((segment) => segment.backgroundColor),
+    ["#fde68a", "#1d4ed8"],
+  );
+  assert.equal(cell.text, "SON/ N *\n\n0205 *");
+  assert.equal(input.groups[0]!.columnStyles?.[1]?.body?.backgroundColor, "#f1f5f9");
   const single = input.groups[0]!.rows[1]![1];
-  assert.ok(single && typeof single === 'object');
-  assert.equal(single.backgroundColor, '#99f6e4');
+  assert.ok(single && typeof single === "object");
+  assert.equal(single.backgroundColor, "#99f6e4");
   assert.equal(input.legend?.items.length, 3);
-  assert.equal(input.design, 'modern');
-  assert.equal(input.colorTreatment, 'subtle');
+  assert.equal(input.design, "modern");
+  assert.equal(input.colorTreatment, "subtle");
   assert.equal(input.colorIntensity, 8);
-  const classic = schedulePdfInput({ ...preview, audience: { ...preview.audience, pdfLayout: {
-    paperSize: 'a4', orientation: 'landscape', marginMm: 10, density: 'standard', daysPerSection: 7, detail: 'assignments',
-    style: 'classic', accentColor: '#7c3aed', showLegend: false, shadeWeekends: false, colorTreatment: 'strong',
-  } } }, colored);
-  assert.equal(classic.design, 'classic');
-  assert.equal(classic.colorTreatment, 'strong');
-  assert.equal(classic.branding.primaryColor, '#7c3aed');
+  const classic = schedulePdfInput(
+    {
+      ...preview,
+      audience: {
+        ...preview.audience,
+        pdfLayout: {
+          paperSize: "a4",
+          orientation: "landscape",
+          marginMm: 10,
+          density: "standard",
+          daysPerSection: 7,
+          detail: "assignments",
+          style: "classic",
+          accentColor: "#7c3aed",
+          showLegend: false,
+          shadeWeekends: false,
+          colorTreatment: "strong",
+        },
+      },
+    },
+    colored,
+  );
+  assert.equal(classic.design, "classic");
+  assert.equal(classic.colorTreatment, "strong");
+  assert.equal(classic.branding.primaryColor, "#7c3aed");
   assert.equal(classic.legend, undefined);
   assert.equal(classic.groups[0]!.columnStyles?.[1]?.body, undefined);
-  assert.equal(pdfCellText(classic.groups[0]!.rows[0]![1]), 'SON/ N *\n\n0205 *');
-  const many = { ...recipient, lines: Array.from({ length: 40 }, (_, i) => ({ ...recipient.lines[0]!, assignment: `Literal ${i}`, color: `#${(i + 1).toString(16).padStart(6, '0')}` })) };
+  assert.equal(pdfCellText(classic.groups[0]!.rows[0]![1]), "SON/ N *\n\n0205 *");
+  const many = {
+    ...recipient,
+    lines: Array.from({ length: 40 }, (_, i) => ({
+      ...recipient.lines[0]!,
+      assignment: `Literal ${i}`,
+      color: `#${(i + 1).toString(16).padStart(6, "0")}`,
+    })),
+  };
   const bounded = schedulePdfInput(preview, many);
   assert.equal(bounded.legend?.items.length, 12);
   assert.match(bounded.legend!.title, /28 additional colors shown in cells/);

@@ -15,8 +15,11 @@ import { postAllocationRun } from "./period-run.ts";
 async function loadReleaseGuard(
   subjectId: string,
 ): Promise<{ org_id: string; status: string } | null> {
-  const result = await db.execute<{ org_id: string; status: string }>(sql`
-    select org_id, status from allocation_runs where id = ${subjectId}`, "objects");
+  const result = await db.execute<{ org_id: string; status: string }>(
+    sql`
+    select org_id, status from allocation_runs where id = ${subjectId}`,
+    "objects",
+  );
   return result[0] ?? null;
 }
 
@@ -41,9 +44,7 @@ export async function releaseAllocationRunApproval(args: {
   // that unit (inDbTransaction participates rather than nesting).
   const run = await loadReleaseGuard(subjectId);
   if (!run || run.org_id !== ctx.orgId) {
-    throw new Error(
-      `allocation run ${subjectId} does not belong to this organization`,
-    );
+    throw new Error(`allocation run ${subjectId} does not belong to this organization`);
   }
   if (run.status !== "pending_approval") return;
   if (

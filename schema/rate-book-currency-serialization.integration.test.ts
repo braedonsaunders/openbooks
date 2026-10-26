@@ -4,7 +4,11 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient, QueryResult } from "pg";
 import { db, pool } from "@openbooks/engine/platform/db";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+} from "@openbooks/engine/testing/fixtures";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -90,7 +94,8 @@ async function insertFirstVersion(
   );
 }
 
-test("a currency change cannot pass the history check while first-version creation is in flight",
+test(
+  "a currency change cannot pass the history check while first-version creation is in flight",
   { skip: !DB },
   async () => {
     const fixture = await seedBook("RACE");
@@ -129,8 +134,8 @@ test("a currency change cannot pass the history check while first-version creati
       await currencyPatch.client.query("rollback");
       patchOpen = false;
 
-      const book = (await db.execute<{ currency: string }>(sql`
-        select currency from item_rate_books where id = ${fixture.bookId}`));
+      const book = await db.execute<{ currency: string }>(sql`
+        select currency from item_rate_books where id = ${fixture.bookId}`);
       assert.equal(
         book.rows[0]?.currency,
         "CAD",
@@ -157,8 +162,8 @@ test("a currency change cannot pass the history check while first-version creati
         setupShapedPatch.client.release();
       }
 
-      const finalBook = (await db.execute<{ currency: string }>(sql`
-        select currency from item_rate_books where id = ${fixture.bookId}`));
+      const finalBook = await db.execute<{ currency: string }>(sql`
+        select currency from item_rate_books where id = ${fixture.bookId}`);
       assert.equal(finalBook.rows[0]?.currency, "CAD");
     } finally {
       if (creationOpen) await creation.client.query("rollback").catch(() => undefined);
@@ -170,7 +175,8 @@ test("a currency change cannot pass the history check while first-version creati
   },
 );
 
-test("version, lines, and audit stay atomic, so a rolled-back creation leaves the book relabelable",
+test(
+  "version, lines, and audit stay atomic, so a rolled-back creation leaves the book relabelable",
   { skip: !DB },
   async () => {
     const fixture = await seedBook("ATOMIC");
@@ -183,11 +189,11 @@ test("version, lines, and audit stay atomic, so a rolled-back creation leaves th
       creation.client.release();
     }
 
-    const counts = (await db.execute<{ versions: number; lines: number; audit: number }>(sql`
+    const counts = await db.execute<{ versions: number; lines: number; audit: number }>(sql`
       select
         (select count(*)::int from item_rate_versions where org_id = ${fixture.orgId} and rate_book_id = ${fixture.bookId}) as versions,
         (select count(*)::int from item_rate_lines where org_id = ${fixture.orgId} and version_id = ${versionId}) as lines,
-        (select count(*)::int from audit_log where org_id = ${fixture.orgId} and table_name = 'item_rate_versions' and row_id = ${versionId}) as audit`));
+        (select count(*)::int from audit_log where org_id = ${fixture.orgId} and table_name = 'item_rate_versions' and row_id = ${versionId}) as audit`);
     assert.equal(counts.rows[0]?.versions, 0);
     assert.equal(counts.rows[0]?.lines, 0);
     assert.equal(counts.rows[0]?.audit, 0);
@@ -195,33 +201,30 @@ test("version, lines, and audit stay atomic, so a rolled-back creation leaves th
     // No version history exists, so a currency change is a plain rename again.
     await db.execute(sql`
       update item_rate_books set currency = 'USD' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`);
-    const book = (await db.execute<{ currency: string }>(sql`
-      select currency from item_rate_books where id = ${fixture.bookId}`));
+    const book = await db.execute<{ currency: string }>(sql`
+      select currency from item_rate_books where id = ${fixture.bookId}`);
     assert.equal(book.rows[0]?.currency, "USD");
     await dropScratchOrgReporting(fixture.orgId);
   },
 );
 
-test("a version insert must reference a tenant-owned rate book",
-  { skip: !DB },
-  async () => {
-    const fixture = await seedBook("TENANT");
-    const otherOrg = await seedBook("OTHER");
-    try {
-      // Drizzle wraps driver errors, so match the whole rendered chain.
-      await assert.rejects(
-        db.execute(sql`
+test("a version insert must reference a tenant-owned rate book", { skip: !DB }, async () => {
+  const fixture = await seedBook("TENANT");
+  const otherOrg = await seedBook("OTHER");
+  try {
+    // Drizzle wraps driver errors, so match the whole rendered chain.
+    await assert.rejects(
+      db.execute(sql`
           insert into item_rate_versions (org_id, id, rate_book_id, effective_from, status, custom, created_by, updated_by)
           values (${otherOrg.orgId}, ${randomUUID()}, ${fixture.bookId}, '2026-07-01', 'draft', '{}'::jsonb, ${otherOrg.actorId}, ${otherOrg.actorId})`),
-        (error: unknown) =>
-          String(error).includes("rate version must reference a tenant-owned rate book")
-          || String((error as { cause?: unknown }).cause ?? "").includes(
-            "rate version must reference a tenant-owned rate book",
-          ),
-      );
-    } finally {
-      await dropScratchOrgReporting(fixture.orgId);
-      await dropScratchOrgReporting(otherOrg.orgId);
-    }
-  },
-);
+      (error: unknown) =>
+        String(error).includes("rate version must reference a tenant-owned rate book") ||
+        String((error as { cause?: unknown }).cause ?? "").includes(
+          "rate version must reference a tenant-owned rate book",
+        ),
+    );
+  } finally {
+    await dropScratchOrgReporting(fixture.orgId);
+    await dropScratchOrgReporting(otherOrg.orgId);
+  }
+});

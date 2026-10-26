@@ -3,7 +3,12 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  grantScratchPermissions,
+  dropScratchOrg,
+} from "../testing/fixtures.ts";
 import { scriptOccurrenceKey } from "../scheduling/scheduler.ts";
 import { bulkRunIdempotencyScope } from "../scripting/bulk-run-claim.ts";
 import { processScriptJobData, scheduledScopeFromJob } from "./scripts-worker.ts";
@@ -34,7 +39,11 @@ function postingSource(date: string): string {
 
 async function seedPostingScript(orgId: string, date: string): Promise<string> {
   const scriptId = randomUUID();
-  const runAsUserId = await createScratchUser(orgId, "Scheduled journal operator", "scheduled_journal_operator");
+  const runAsUserId = await createScratchUser(
+    orgId,
+    "Scheduled journal operator",
+    "scheduled_journal_operator",
+  );
   await grantScratchPermissions(orgId, runAsUserId, ["gl.post"]);
   await db.execute(sql`
     update orgs
@@ -50,49 +59,58 @@ async function seedPostingScript(orgId: string, date: string): Promise<string> {
 }
 
 async function journalDocCount(orgId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
+  return (
+    await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from documents where org_id = ${orgId} and kind = 'journal'
-    `, "objects"))[0]!.n;
+    `,
+      "objects",
+    )
+  )[0]!.n;
 }
 
-test("the same occurrence run twice across a clock gap posts exactly one journal", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scriptId = await seedPostingScript(org.orgId, org.date);
-    // One immutable tick identity, executed twice the way a lost first
-    // dispatch + recovery retry would — far apart in wall-clock terms, but
-    // the scope never derives from the clock.
-    const scheduledFor = new Date(Date.now() - 30 * 60_000);
-    const occurrenceKey = scriptOccurrenceKey(scriptId, scheduledFor);
+test(
+  "the same occurrence run twice across a clock gap posts exactly one journal",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scriptId = await seedPostingScript(org.orgId, org.date);
+      // One immutable tick identity, executed twice the way a lost first
+      // dispatch + recovery retry would — far apart in wall-clock terms, but
+      // the scope never derives from the clock.
+      const scheduledFor = new Date(Date.now() - 30 * 60_000);
+      const occurrenceKey = scriptOccurrenceKey(scriptId, scheduledFor);
 
-    const first = await processScriptJobData({
-      orgId: org.orgId,
-      scriptId,
-      kind: "scheduled",
-      occurrenceKey,
-    });
-    assert.equal(first.status, "ok", `first run errored: ${first.abortReason}`);
-    const firstId = (first.returned as { id: string } | undefined)?.id;
-    assert.ok(firstId, "first run returns the created document");
-    assert.equal(await journalDocCount(org.orgId), 1);
+      const first = await processScriptJobData({
+        orgId: org.orgId,
+        scriptId,
+        kind: "scheduled",
+        occurrenceKey,
+      });
+      assert.equal(first.status, "ok", `first run errored: ${first.abortReason}`);
+      const firstId = (first.returned as { id: string } | undefined)?.id;
+      assert.ok(firstId, "first run returns the created document");
+      assert.equal(await journalDocCount(org.orgId), 1);
 
-    const retried = await processScriptJobData({
-      orgId: org.orgId,
-      scriptId,
-      kind: "scheduled",
-      occurrenceKey,
-    });
-    assert.equal(retried.status, "ok", `retry errored: ${retried.abortReason}`);
-    assert.equal(
-      (retried.returned as { id: string } | undefined)?.id,
-      firstId,
-      "the retry replays the first execution's document",
-    );
-    assert.equal(await journalDocCount(org.orgId), 1, "no duplicate journal across the retry");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const retried = await processScriptJobData({
+        orgId: org.orgId,
+        scriptId,
+        kind: "scheduled",
+        occurrenceKey,
+      });
+      assert.equal(retried.status, "ok", `retry errored: ${retried.abortReason}`);
+      assert.equal(
+        (retried.returned as { id: string } | undefined)?.id,
+        firstId,
+        "the retry replays the first execution's document",
+      );
+      assert.equal(await journalDocCount(org.orgId), 1, "no duplicate journal across the retry");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("the worker links its run row to the occurrence ledger row", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -107,10 +125,15 @@ test("the worker links its run row to the occurrence ledger row", { skip: !DB },
       occurrenceRunId,
     });
     assert.equal(outcome.status, "ok", `run errored: ${outcome.abortReason}`);
-    const run = (await db.execute<{ targetId: string | null }>(sql`
+    const run = (
+      await db.execute<{ targetId: string | null }>(
+        sql`
         select target_id as "targetId" from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled'
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     assert.equal(run?.targetId, occurrenceRunId, "recovery matches evidence on this identity");
 
     // Manual runs belong to no occurrence and must never absorb one.
@@ -120,10 +143,15 @@ test("the worker links its run row to the occurrence ledger row", { skip: !DB },
       kind: "scheduled",
     });
     assert.equal(manual.status, "ok", `manual run errored: ${manual.abortReason}`);
-    const unattributed = (await db.execute<{ n: number }>(sql`
+    const unattributed = (
+      await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled' and target_id is null
-      `, "objects"))[0]!.n;
+      `,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(unattributed, 1, "exactly the manual run stays unattributed");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -143,7 +171,11 @@ test("two different occurrences still post two journals", { skip: !DB }, async (
       });
       assert.equal(outcome.status, "ok", `run errored: ${outcome.abortReason}`);
     }
-    assert.equal(await journalDocCount(org.orgId), 2, "distinct ticks must not collapse onto one journal");
+    assert.equal(
+      await journalDocCount(org.orgId),
+      2,
+      "distinct ticks must not collapse onto one journal",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -152,7 +184,11 @@ test("two different occurrences still post two journals", { skip: !DB }, async (
 test("scheduledScopeFromJob prefers the payload key and adopts scheduler-minted job ids", () => {
   const key = "sched|script-id|2026-01-01T00:00:00.000Z";
   assert.equal(
-    scheduledScopeFromJob("scheduled", { occurrenceKey: key }, "sched|other|2026-01-01T00:05:00.000Z"),
+    scheduledScopeFromJob(
+      "scheduled",
+      { occurrenceKey: key },
+      "sched|other|2026-01-01T00:05:00.000Z",
+    ),
     key,
     "payload key wins over the job id",
   );

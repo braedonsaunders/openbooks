@@ -11,10 +11,7 @@ export function createPushStatutory(input: {
   need: (systemKey: string, kind: string) => Record<string, unknown>;
 }): PushStatutoryFn {
   const { country, lines, emittedEarningsAssessed, need } = input;
-  return (
-    systemKey, kind, description, amount, sequence,
-    options = {},
-  ) => {
+  return (systemKey, kind, description, amount, sequence, options = {}) => {
     if (cmp(amount, "0") === 0) return;
     const assessedOn = statutoryAssessment(country, systemKey, kind);
     const slot = `${systemKey}:${kind}`;
@@ -26,8 +23,11 @@ export function createPushStatutory(input: {
       // The choke point every pack statutory pass flows through: parse once
       // here (fail closed) so no pack can push unvalidated text at the stub.
       lines.push({
-        componentId: c.id as string, kind, description,
-        amount: parseMoney(allocation.amount), sequence,
+        componentId: c.id as string,
+        kind,
+        description,
+        amount: parseMoney(allocation.amount),
+        sequence,
         projectId: allocation.projectId ?? null,
         departmentId: allocation.departmentId ?? null,
         assessedOn,

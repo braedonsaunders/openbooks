@@ -1,4 +1,4 @@
-import { RECORD_FIELD_TYPES } from '@openbooks/forms-core'
+import { RECORD_FIELD_TYPES } from "@openbooks/forms-core";
 // Pure helpers shared by the record-type builder, the generated module UI,
 // and the /api/records routes — client-safe (no db / server-only imports).
 //
@@ -29,61 +29,61 @@ import {
   type FormSection,
   type SchemaIssue,
   type ValidationError,
-} from '@openbooks/forms-core'
-import { formatDecimal } from './money-format'
+} from "@openbooks/forms-core";
+import { formatDecimal } from "./money-format";
 
 /**
  * Field types offered by the record-type builder. The forms-core registry
  * minus `signature` and `file`: records are master data, not attested
  * submissions, and file metadata without storage is meaningless on a record.
  */
-export { RECORD_FIELD_TYPES } from '@openbooks/forms-core'
+export { RECORD_FIELD_TYPES } from "@openbooks/forms-core";
 
-const RECORD_FIELD_TYPE_SET: ReadonlySet<string> = new Set(RECORD_FIELD_TYPES)
+const RECORD_FIELD_TYPE_SET: ReadonlySet<string> = new Set(RECORD_FIELD_TYPES);
 
 /** Statuses shared with schema/src/custom-records.ts (kept in lockstep). */
-export const RECORD_TYPE_STATUSES = ['draft', 'published', 'archived'] as const
-export const RECORD_STATUSES = ['draft', 'active', 'inactive'] as const
-export type RecordTypeStatus = (typeof RECORD_TYPE_STATUSES)[number]
-export type RecordStatus = (typeof RECORD_STATUSES)[number]
+export const RECORD_TYPE_STATUSES = ["draft", "published", "archived"] as const;
+export const RECORD_STATUSES = ["draft", "active", "inactive"] as const;
+export type RecordTypeStatus = (typeof RECORD_TYPE_STATUSES)[number];
+export type RecordStatus = (typeof RECORD_STATUSES)[number];
 
 /**
  * Type keys are URL segments (/records/<key>) and number-sequence kinds
  * ('custrec:'+key): lowercase slugs, letter-first, 2–64 chars.
  */
-export const TYPE_KEY_RE = /^[a-z][a-z0-9-]{1,63}$/
+export const TYPE_KEY_RE = /^[a-z][a-z0-9-]{1,63}$/;
 
 /**
  * Slugs that collide with static /records/* and /api/records/* segments —
  * a type keyed `types` would shadow the builder itself.
  */
-export const RESERVED_TYPE_KEYS: ReadonlySet<string> = new Set(['types', 'new'])
+export const RESERVED_TYPE_KEYS: ReadonlySet<string> = new Set(["types", "new"]);
 
 export function typeKeyError(key: string): string | null {
   if (!TYPE_KEY_RE.test(key)) {
-    return 'Key must be 2–64 characters: lowercase letters, numbers, and hyphens, starting with a letter'
+    return "Key must be 2–64 characters: lowercase letters, numbers, and hyphens, starting with a letter";
   }
-  if (RESERVED_TYPE_KEYS.has(key)) return `"${key}" is a reserved key`
-  return null
+  if (RESERVED_TYPE_KEYS.has(key)) return `"${key}" is a reserved key`;
+  return null;
 }
 
 /** "Purchase Orders" → "purchase-orders" (best-effort; user can edit). */
 export function slugifyTypeKey(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^[^a-z]+/, '')
-    .replace(/-+$/, '')
-    .slice(0, 64)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^[^a-z]+/, "")
+    .replace(/-+$/, "")
+    .slice(0, 64);
 }
 
 /** "Serial number" → "serial_number" — field ids obey forms-core identifiers. */
 export function slugifyFieldId(label: string): string {
   return label
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 64)
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
 }
 
 /**
@@ -93,40 +93,43 @@ export function slugifyFieldId(label: string): string {
  * (only possible while the type is a draft, before any allocation) are safe.
  */
 export function recordNumberPrefix(typeKey: string): string {
-  const letters = typeKey.replace(/[^a-z0-9]/gi, '').slice(0, 3).toUpperCase()
-  return `${letters || 'REC'}-`
+  const letters = typeKey
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(0, 3)
+    .toUpperCase();
+  return `${letters || "REC"}-`;
 }
 
 // --- Section normalization ----------------------------------------------------
 
 /** Ceilings for a record type's definition (belt-and-braces around forms-core). */
-export const MAX_RECORD_SECTIONS = 50
-export const MAX_RECORD_FIELDS = 200
+export const MAX_RECORD_SECTIONS = 50;
+export const MAX_RECORD_FIELDS = 200;
 
 /**
  * Return the stored section array without changing its model. Structural
  * validation remains the responsibility of `lintRecordFields`.
  */
 export function normalizeSectionsInput(input: unknown): unknown[] {
-  if (input == null) return []
-  return Array.isArray(input) ? input : [input]
+  if (input == null) return [];
+  return Array.isArray(input) ? input : [input];
 }
 
 /** Every field across all sections (header + repeating), definition order. */
 export function flattenFields(sections: FormSection[]): FormField[] {
-  return sections.flatMap((s) => s.fields)
+  return sections.flatMap((s) => s.fields);
 }
 
 /** Fields of the non-repeating (header) sections only. */
 export function headerFields(sections: FormSection[]): FormField[] {
-  return sections.filter((s) => !s.repeating).flatMap((s) => s.fields)
+  return sections.filter((s) => !s.repeating).flatMap((s) => s.fields);
 }
 
 // --- Field definition validation --------------------------------------------
 
 /** Wrap a record type's sections in a FormSchemaV1 for forms-core validation. */
 export function recordFormSchema(sections: FormSection[], title: string): FormSchemaV1 {
-  return { schemaVersion: 1, title: title || 'Record', sections }
+  return { schemaVersion: 1, title: title || "Record", sections };
 }
 
 /**
@@ -137,64 +140,73 @@ export function recordFormSchema(sections: FormSection[], title: string): FormSc
  * RECORD_FIELD_TYPES. Returns the validated `sections`, a flattened `fields`
  * list (for id-keyed operations), and the current issue list.
  */
-export function lintRecordFields(input: unknown, typeName: string):
+export function lintRecordFields(
+  input: unknown,
+  typeName: string,
+):
   | { success: true; sections: FormSection[]; fields: FormField[]; issues: SchemaIssue[] }
   | { success: false; issues: SchemaIssue[] } {
-  const raw = normalizeSectionsInput(input)
+  const raw = normalizeSectionsInput(input);
   if (raw.length > MAX_RECORD_SECTIONS) {
-    return { success: false, issues: [{ path: [], message: `No more than ${MAX_RECORD_SECTIONS} sections` }] }
+    return {
+      success: false,
+      issues: [{ path: [], message: `No more than ${MAX_RECORD_SECTIONS} sections` }],
+    };
   }
   // Structural validation per section via the forms-core zod schema (web
   // deliberately has no direct zod dependency — forms-core owns the shapes).
-  const sections: FormSection[] = []
-  const structuralIssues: SchemaIssue[] = []
+  const sections: FormSection[] = [];
+  const structuralIssues: SchemaIssue[] = [];
   raw.forEach((candidate, index) => {
-    const parsed = formSectionSchema.safeParse(candidate)
+    const parsed = formSectionSchema.safeParse(candidate);
     if (parsed.success) {
-      sections.push(parsed.data)
+      sections.push(parsed.data);
     } else {
       for (const i of parsed.error.issues) {
         structuralIssues.push({
           path: [
-            'sections',
+            "sections",
             index,
             ...i.path.filter(
-              (p): p is string | number => typeof p === 'string' || typeof p === 'number',
+              (p): p is string | number => typeof p === "string" || typeof p === "number",
             ),
           ],
           message: i.message,
-        })
+        });
       }
     }
-  })
-  if (structuralIssues.length > 0) return { success: false, issues: structuralIssues }
+  });
+  if (structuralIssues.length > 0) return { success: false, issues: structuralIssues };
 
-  const fields = flattenFields(sections)
+  const fields = flattenFields(sections);
   if (fields.length > MAX_RECORD_FIELDS) {
-    return { success: false, issues: [{ path: [], message: `No more than ${MAX_RECORD_FIELDS} fields` }] }
+    return {
+      success: false,
+      issues: [{ path: [], message: `No more than ${MAX_RECORD_FIELDS} fields` }],
+    };
   }
 
-  const issues: SchemaIssue[] = []
+  const issues: SchemaIssue[] = [];
   sections.forEach((section, si) => {
     section.fields.forEach((f, fi) => {
       if (!RECORD_FIELD_TYPE_SET.has(f.type)) {
         issues.push({
-          path: ['sections', si, 'fields', fi, 'type'],
+          path: ["sections", si, "fields", fi, "type"],
           message: `"${f.type}" fields are not available on custom records`,
-        })
+        });
       }
-    })
-  })
-  for (const issue of lintFormSchema(recordFormSchema(sections, typeName))) issues.push(issue)
-  return { success: true, sections, fields, issues }
+    });
+  });
+  for (const issue of lintFormSchema(recordFormSchema(sections, typeName))) issues.push(issue);
+  return { success: true, sections, fields, issues };
 }
 
 /** Human-readable "fields[2].label: …" line for toast/issue lists. */
 export function describeIssue(issue: SchemaIssue): string {
   const path = issue.path
-    .map((p, i) => (typeof p === 'number' ? `[${p}]` : `${i === 0 ? '' : '.'}${p}`))
-    .join('')
-  return path ? `${path}: ${issue.message}` : issue.message
+    .map((p, i) => (typeof p === "number" ? `[${p}]` : `${i === 0 ? "" : "."}${p}`))
+    .join("");
+  return path ? `${path}: ${issue.message}` : issue.message;
 }
 
 // --- Record value shape (merged data ⇄ values/rows) ---------------------------
@@ -204,7 +216,7 @@ export function describeIssue(issue: SchemaIssue): string {
  * forms-core evaluators/validator expect: repeating-section ids become
  * `rows[sectionId]` (coerced to an array); everything else is a header value.
  */
-export { splitRecordData, mergeRecordData, withComputedFormulas } from '@openbooks/forms-core'
+export { splitRecordData, mergeRecordData, withComputedFormulas } from "@openbooks/forms-core";
 
 /**
  * Drop anything not declared by the current sections: unknown header keys,
@@ -214,31 +226,31 @@ export { splitRecordData, mergeRecordData, withComputedFormulas } from '@openboo
  * tripping the validator's unknown-key rejection on stale data.
  */
 export function stripUnknownData(sections: FormSection[], data: FieldValueMap): FieldValueMap {
-  const headerIds = new Set<string>()
-  const repeating = new Map<string, Set<string>>()
+  const headerIds = new Set<string>();
+  const repeating = new Map<string, Set<string>>();
   for (const s of sections) {
-    if (s.repeating) repeating.set(s.id, new Set(s.fields.map((f) => f.id)))
-    else for (const f of s.fields) headerIds.add(f.id)
+    if (s.repeating) repeating.set(s.id, new Set(s.fields.map((f) => f.id)));
+    else for (const f of s.fields) headerIds.add(f.id);
   }
-  const out: FieldValueMap = {}
+  const out: FieldValueMap = {};
   for (const [k, v] of Object.entries(data)) {
     if (headerIds.has(k)) {
-      out[k] = v
+      out[k] = v;
     } else if (repeating.has(k)) {
-      const rowIds = repeating.get(k)!
-      const arr = Array.isArray(v) ? v : []
+      const rowIds = repeating.get(k)!;
+      const arr = Array.isArray(v) ? v : [];
       out[k] = arr.map((row) => {
-        if (!row || typeof row !== 'object' || Array.isArray(row)) return {}
-        const nextRow: FieldValueMap = {}
+        if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+        const nextRow: FieldValueMap = {};
         for (const [rk, rv] of Object.entries(row as FieldValueMap)) {
-          if (rowIds.has(rk)) nextRow[rk] = rv
+          if (rowIds.has(rk)) nextRow[rk] = rv;
         }
-        return nextRow
-      })
+        return nextRow;
+      });
     }
     // unknown key dropped
   }
-  return out
+  return out;
 }
 
 // --- Record value validation + formulas --------------------------------------
@@ -252,31 +264,31 @@ export function stripUnknownData(sections: FormSection[], data: FieldValueMap): 
  * their strip path; only newly supplied data is refused here.
  */
 export function findUnknownDataKeys(sections: FormSection[], data: FieldValueMap): string[] {
-  const headerIds = new Set<string>()
-  const repeating = new Map<string, Set<string>>()
+  const headerIds = new Set<string>();
+  const repeating = new Map<string, Set<string>>();
   for (const s of sections) {
-    if (s.repeating) repeating.set(s.id, new Set(s.fields.map((f) => f.id)))
-    else for (const f of s.fields) headerIds.add(f.id)
+    if (s.repeating) repeating.set(s.id, new Set(s.fields.map((f) => f.id)));
+    else for (const f of s.fields) headerIds.add(f.id);
   }
-  const unknown: string[] = []
+  const unknown: string[] = [];
   for (const [k, v] of Object.entries(data)) {
-    if (headerIds.has(k)) continue
-    const rowIds = repeating.get(k)
+    if (headerIds.has(k)) continue;
+    const rowIds = repeating.get(k);
     if (rowIds === undefined) {
-      unknown.push(k)
-      continue
+      unknown.push(k);
+      continue;
     }
     // A non-array under a repeating id is a shape error for the validator,
     // not an unknown key.
-    if (!Array.isArray(v)) continue
+    if (!Array.isArray(v)) continue;
     v.forEach((row, i) => {
-      if (!row || typeof row !== 'object' || Array.isArray(row)) return
+      if (!row || typeof row !== "object" || Array.isArray(row)) return;
       for (const rk of Object.keys(row as FieldValueMap)) {
-        if (!rowIds.has(rk)) unknown.push(`${k}[${i}].${rk}`)
+        if (!rowIds.has(rk)) unknown.push(`${k}[${i}].${rk}`);
       }
-    })
+    });
   }
-  return unknown
+  return unknown;
 }
 
 /**
@@ -289,10 +301,10 @@ export function findUnknownDataKeys(sections: FormSection[], data: FieldValueMap
 export function validateRecordData(
   sections: FormSection[],
   data: FieldValueMap,
-  stage: 'draft' | 'submit',
+  stage: "draft" | "submit",
 ): ValidationError[] {
-  const { values, rows } = splitRecordData(sections, data)
-  return validateResponse(recordFormSchema(sections, 'Record'), values, rows, stage)
+  const { values, rows } = splitRecordData(sections, data);
+  return validateResponse(recordFormSchema(sections, "Record"), values, rows, stage);
 }
 
 /**
@@ -302,69 +314,73 @@ export function validateRecordData(
  * renders `issues`, never on message text.
  */
 export function recordDataValidationBody(
-  stage: 'draft' | 'submit',
+  stage: "draft" | "submit",
   errors: ValidationError[],
 ): { error: string; errors: ValidationError[]; issues: { path: string; message: string }[] } {
   return {
     error:
-      stage === 'submit' && errors.some((e) => e.message === 'Required')
-        ? 'Fill every required field before activating'
+      stage === "submit" && errors.some((e) => e.message === "Required")
+        ? "Fill every required field before activating"
         : errors[0]!.message,
     errors,
     issues: errors.map((e) => ({ path: e.fieldId, message: e.message })),
-  }
+  };
 }
 
 /**
  * 422 body for record TYPE definition failures (designer-side lint).
  * Same reasoning as above: the mapping lives here, not in a route body.
  */
-export function recordTypeLintBody(
-  issues: SchemaIssue[],
-): { error: string; issues: SchemaIssue[] } {
+export function recordTypeLintBody(issues: SchemaIssue[]): {
+  error: string;
+  issues: SchemaIssue[];
+} {
   return {
-    error: `Invalid fields: ${issues.slice(0, 3).map((i) => i.message).join('; ')}`,
+    error: `Invalid fields: ${issues
+      .slice(0, 3)
+      .map((i) => i.message)
+      .join("; ")}`,
     issues,
-  }
+  };
 }
 
 // --- Display formatting -------------------------------------------------------
 
 export type EntityLabelMaps = {
   /** parties.id → display_name */
-  parties?: ReadonlyMap<string, string>
+  parties?: ReadonlyMap<string, string>;
   /** accounts.id → "1000 Cash" */
-  accounts?: ReadonlyMap<string, string>
-}
+  accounts?: ReadonlyMap<string, string>;
+};
 
 export type FieldDisplayFormat = {
-  locale: string
-  money: (value: string | number) => string
-}
+  locale: string;
+  money: (value: string | number) => string;
+};
 
 // Ledger decimals arrive as exact numeric STRINGS. Coercing them through
 // Number() first silently loses precision past 2^53, so a displayed record
 // value could disagree with the ledger. formatDecimal sends exact decimal
 // text to Intl's mathematical-value parser without building a double.
-function formatAmount(n: string | number, decimals: number, locale = 'en-CA'): string {
+function formatAmount(n: string | number, decimals: number, locale = "en-CA"): string {
   return formatDecimal(locale, n, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
-  })
+  });
 }
 
 function formatDateValue(v: string): string {
-  return v // yyyy-mm-dd is already the canonical, sortable display
+  return v; // yyyy-mm-dd is already the canonical, sortable display
 }
 
-function formatDateTimeValue(v: string, locale = 'en-CA'): string {
-  const d = new Date(v)
-  if (Number.isNaN(d.getTime())) return v
-  return d.toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })
+function formatDateTimeValue(v: string, locale = "en-CA"): string {
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return d.toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function choiceLabel(field: FormField, value: string): string {
-  return field.validation?.options?.find((o) => o.value === value)?.label ?? value
+  return field.validation?.options?.find((o) => o.value === value)?.label ?? value;
 }
 
 /**
@@ -379,60 +395,65 @@ export function formatFieldValue(
   labels: EntityLabelMaps = {},
   display?: FieldDisplayFormat,
 ): string {
-  if (value === null || value === undefined || value === '') return ''
+  if (value === null || value === undefined || value === "") return "";
   switch (field.type) {
-    case 'currency':
-      return display?.money(String(value)) ?? formatAmount(String(value), 2)
-    case 'percentage':
-      return `${formatAmount(String(value), 2, display?.locale).replace(/[.,]00$/, '')}%`
-    case 'number': {
-      const unit = typeof field.config?.unit === 'string' ? field.config.unit : ''
-      const text = Number(value).toLocaleString(display?.locale ?? 'en-CA', { maximumFractionDigits: 6 })
-      return unit ? `${text} ${unit}` : text
+    case "currency":
+      return display?.money(String(value)) ?? formatAmount(String(value), 2);
+    case "percentage":
+      return `${formatAmount(String(value), 2, display?.locale).replace(/[.,]00$/, "")}%`;
+    case "number": {
+      const unit = typeof field.config?.unit === "string" ? field.config.unit : "";
+      const text = Number(value).toLocaleString(display?.locale ?? "en-CA", {
+        maximumFractionDigits: 6,
+      });
+      return unit ? `${text} ${unit}` : text;
     }
-    case 'rating': {
+    case "rating": {
       const max =
-        typeof field.config?.max === 'number' && Number.isInteger(field.config.max)
+        typeof field.config?.max === "number" && Number.isInteger(field.config.max)
           ? field.config.max
-          : 5
-      return `${Number(value)}/${max}`
+          : 5;
+      return `${Number(value)}/${max}`;
     }
-    case 'date':
-      return typeof value === 'string' ? formatDateValue(value) : String(value)
-    case 'datetime':
-      return typeof value === 'string' ? formatDateTimeValue(value, display?.locale) : String(value)
-    case 'select':
-    case 'radio':
-      return typeof value === 'string' ? choiceLabel(field, value) : String(value)
-    case 'multi_select':
+    case "date":
+      return typeof value === "string" ? formatDateValue(value) : String(value);
+    case "datetime":
+      return typeof value === "string"
+        ? formatDateTimeValue(value, display?.locale)
+        : String(value);
+    case "select":
+    case "radio":
+      return typeof value === "string" ? choiceLabel(field, value) : String(value);
+    case "multi_select":
       return Array.isArray(value)
-        ? value.map((v) => choiceLabel(field, String(v))).join(', ')
-        : String(value)
-    case 'party':
-      return labels.parties?.get(String(value)) ?? ''
-    case 'gl_account':
-      return labels.accounts?.get(String(value)) ?? ''
-    case 'formula': {
-      const format = typeof field.config?.format === 'string' ? field.config.format : 'number'
-      if (typeof value === 'number') {
-        if (format === 'currency') return display?.money(value) ?? formatAmount(value, 2)
-        if (format === 'percentage') return `${formatAmount(value, 2, display?.locale).replace(/[.,]00$/, '')}%`
-        return value.toLocaleString(display?.locale ?? 'en-CA', { maximumFractionDigits: 6 })
+        ? value.map((v) => choiceLabel(field, String(v))).join(", ")
+        : String(value);
+    case "party":
+      return labels.parties?.get(String(value)) ?? "";
+    case "gl_account":
+      return labels.accounts?.get(String(value)) ?? "";
+    case "formula": {
+      const format = typeof field.config?.format === "string" ? field.config.format : "number";
+      if (typeof value === "number") {
+        if (format === "currency") return display?.money(value) ?? formatAmount(value, 2);
+        if (format === "percentage")
+          return `${formatAmount(value, 2, display?.locale).replace(/[.,]00$/, "")}%`;
+        return value.toLocaleString(display?.locale ?? "en-CA", { maximumFractionDigits: 6 });
       }
-      return String(value)
+      return String(value);
     }
     default:
-      return typeof value === 'string' ? value : String(value)
+      return typeof value === "string" ? value : String(value);
   }
 }
 
 /** Right-aligned tabular-nums treatment for money-ish columns. */
 export function isNumericField(field: FormField): boolean {
-  if (field.type === 'formula') {
-    const format = typeof field.config?.format === 'string' ? field.config.format : 'number'
-    return format !== 'text'
+  if (field.type === "formula") {
+    const format = typeof field.config?.format === "string" ? field.config.format : "number";
+    return format !== "text";
   }
-  return field.type === 'number' || field.type === 'currency' || field.type === 'percentage'
+  return field.type === "number" || field.type === "currency" || field.type === "percentage";
 }
 
 /**
@@ -441,5 +462,5 @@ export function isNumericField(field: FormField): boolean {
  * list) fields are excluded: a sublist can't collapse to a single cell.
  */
 export function listableFields(sections: FormSection[]): FormField[] {
-  return headerFields(sections).filter((f) => f.type !== 'long_text')
+  return headerFields(sections).filter((f) => f.type !== "long_text");
 }

@@ -90,7 +90,11 @@ const FINISH_RETRY_DELAYS_MS = [250, 1_000, 4_000] as const;
  * deleted) needs nothing further; a failed write is retried, and a run that
  * still cannot be finished is reported rather than left silently "running".
  */
-async function persistFinish(store: OwnedRunStore, runId: string, outcome: OwnedRunOutcome): Promise<void> {
+async function persistFinish(
+  store: OwnedRunStore,
+  runId: string,
+  outcome: OwnedRunOutcome,
+): Promise<void> {
   for (let attempt = 0; ; attempt += 1) {
     try {
       await store.finishRun(runId, outcome);
@@ -112,7 +116,10 @@ export async function executeOwnedRun(opts: {
   userText: string;
   /** The model turn. Receives ONLY the run-owned signal: a dropped client
    *  connection must never reach it. Reports assembled parts per chunk. */
-  run: (ctx: { signal: AbortSignal; onChunk: (parts: unknown[]) => void }) => Promise<OwnedRunOutcome>;
+  run: (ctx: {
+    signal: AbortSignal;
+    onChunk: (parts: unknown[]) => void;
+  }) => Promise<OwnedRunOutcome>;
   onBroadcast?: (snapshot: OwnedRunSnapshot) => void;
   progressIntervalMs?: number;
 }): Promise<OwnedRunSnapshot> {
@@ -126,7 +133,10 @@ export async function trackOwnedRun(opts: {
   conversationId: string;
   /** The model turn. Receives ONLY the run-owned signal: a dropped client
    *  connection must never reach it. Reports assembled parts per chunk. */
-  run: (ctx: { signal: AbortSignal; onChunk: (parts: unknown[]) => void }) => Promise<OwnedRunOutcome>;
+  run: (ctx: {
+    signal: AbortSignal;
+    onChunk: (parts: unknown[]) => void;
+  }) => Promise<OwnedRunOutcome>;
   onBroadcast?: (snapshot: OwnedRunSnapshot) => void;
   progressIntervalMs?: number;
 }): Promise<OwnedRunSnapshot> {
@@ -199,14 +209,23 @@ export async function trackOwnedRun(opts: {
     // A stopped turn resolves with no assembled parts of its own: the live
     // progress written so far is the transcript, not an empty bubble.
     if (outcome.parts.length > 0) latestParts = outcome.parts;
-    const terminal: OwnedRunStatus = stopped || controller.signal.aborted ? "stopped" : outcome.status;
+    const terminal: OwnedRunStatus =
+      stopped || controller.signal.aborted ? "stopped" : outcome.status;
     revision += 1;
     // A deleted conversation is a false return, not an error; a failed write
     // is retried so the run never stays "running" after its turn ended.
     await persistFinish(store, runId, { ...outcome, parts: latestParts, status: terminal });
     return snapshot(terminal);
   } catch {
-    latestParts = latestParts.length > 0 ? latestParts : [{ type: "text", text: "The assistant could not complete this response. Please try again." }];
+    latestParts =
+      latestParts.length > 0
+        ? latestParts
+        : [
+            {
+              type: "text",
+              text: "The assistant could not complete this response. Please try again.",
+            },
+          ];
     revision += 1;
     await persistFinish(store, runId, {
       status: "failed",
@@ -245,7 +264,14 @@ export function createMemoryOwnedRunStore(): OwnedRunStore & {
     },
     async startRun(conversationId: string) {
       const runId = `run-${(counter += 1)}`;
-      rows.set(runId, { runId, conversationId, status: "running", parts: [], revision: 0, aborted: false });
+      rows.set(runId, {
+        runId,
+        conversationId,
+        status: "running",
+        parts: [],
+        revision: 0,
+        aborted: false,
+      });
       return { runId };
     },
     async writeProgress(runId: string, parts: unknown[], revision: number) {

@@ -24,10 +24,7 @@ export function hrmDocumentsErrorResponse(e: unknown): NextResponse {
   // message. It must reach the caller intact — the generic branch below would
   // bury it as a bare 500 'internal error' no operator has ever seen.
   if (isMaskedFileContentError(e)) {
-    return NextResponse.json(
-      { error: (e as Error).message },
-      { status: 403 },
-    );
+    return NextResponse.json({ error: (e as Error).message }, { status: 403 });
   }
   if (
     e instanceof HrmDocumentsError ||

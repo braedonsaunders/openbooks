@@ -1,9 +1,9 @@
-import { notFound } from 'next/navigation'
-import 'server-only'
+import { notFound } from "next/navigation";
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   page,
   pageHeader,
@@ -11,24 +11,41 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
 import { AP_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
-import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import {
+  accountOptions,
+  createDocumentSeed,
+  dimensionOptions,
+  taxCodeOptions,
+  taxGroupOptions,
+} from "../../../../lib/documents.ts";
 import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import { postedDocumentControlAccount } from "@openbooks/engine/ledger/posting-control-account";
-import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
-import { contractorWithholdingScheme } from '@openbooks/engine/country-tax-packs'
-import { sourceAmortizationOptions } from '@/lib/amortization-options'
+import {
+  customFieldViewerFor,
+  loadFieldDefs,
+  visibleCustomFieldDefs,
+} from "../../../../lib/custom-fields";
+import { isFeatureEnabled } from "../../../../lib/features";
+import {
+  isMultiSubsidiary,
+  subsidiaryOptions,
+  subsidiaryVisibleFilter,
+} from "../../../../lib/subsidiaries";
+import { contractorWithholdingScheme } from "@openbooks/engine/country-tax-packs";
+import { sourceAmortizationOptions } from "@/lib/amortization-options";
 
-import { returnableBillLines } from '@openbooks/engine/inventory/vendor-credit-prefill'
-import { isUuid, pickString } from '../../../../lib/list-params'
-import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { documentSettlementHref } from '../../../../lib/settlement-href'
-import { creditApplicationsDrawer, type CreditApplicationsDrawer } from '../../../../lib/credit-applications-drawer'
+import { returnableBillLines } from "@openbooks/engine/inventory/vendor-credit-prefill";
+import { isUuid, pickString } from "../../../../lib/list-params";
+import { resolveFormLayout } from "../../../../lib/customization/resolve";
+import { documentSettlementHref } from "../../../../lib/settlement-href";
+import {
+  creditApplicationsDrawer,
+  type CreditApplicationsDrawer,
+} from "../../../../lib/credit-applications-drawer";
 
 /**
  * Vendor bills + credits — the AP document list, split into a loader and a spec.
@@ -49,158 +66,190 @@ import { creditApplicationsDrawer, type CreditApplicationsDrawer } from '../../.
  */
 
 export interface ApBillsDrawer {
-  remountKey: string
+  remountKey: string;
   /** Posted vendor credits carry the cash-free credit-application panel. */
-  creditApplications?: CreditApplicationsDrawer | null
-  basePath: string
-  payload: unknown
+  creditApplications?: CreditApplicationsDrawer | null;
+  basePath: string;
+  payload: unknown;
   /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
-  createMode: boolean
+  createMode: boolean;
   /** Allocations → entry distributions on (parent gate resolved). */
-  allocationsEntryEnabled: boolean
-  config: unknown
-  parties: unknown
-  accounts: unknown
-  taxCodes: unknown
-  taxGroups: unknown
-  departments: unknown
-  projects: unknown
-  locations: unknown
-  classes: unknown
-  segments: unknown
-  builtinSegments: unknown
-  items: unknown
-  subsidiaries: unknown
-  headerDefs: unknown
-  lineDefs: unknown
-  canCreate: boolean
-  canPost: boolean
+  allocationsEntryEnabled: boolean;
+  config: unknown;
+  parties: unknown;
+  accounts: unknown;
+  taxCodes: unknown;
+  taxGroups: unknown;
+  departments: unknown;
+  projects: unknown;
+  locations: unknown;
+  classes: unknown;
+  segments: unknown;
+  builtinSegments: unknown;
+  items: unknown;
+  subsidiaries: unknown;
+  headerDefs: unknown;
+  lineDefs: unknown;
+  canCreate: boolean;
+  canPost: boolean;
   /** Active contractor-withholding scheme codes covering the bill's scope.
    *  Empty hides the drawer's withholding line columns and scheme guidance. */
-  withholdingSchemes: { code: string }[]
+  withholdingSchemes: { code: string }[];
   /** Current amortization templates for the bill line columns; absent while
    *  Expense amortization is off. */
-  amortizationTemplates?: { id: string; label: string }[]
-  initialMode: 'edit' | 'view'
-  layout: unknown
-  availableLayouts: unknown
-  currentLayoutId: string | null
-  recordType: string
-  canCustomize: boolean
+  amortizationTemplates?: { id: string; label: string }[];
+  initialMode: "edit" | "view";
+  layout: unknown;
+  availableLayouts: unknown;
+  currentLayoutId: string | null;
+  recordType: string;
+  canCustomize: boolean;
   /** Pay this posted bill (vendor + bill preselected). */
-  settlementHref: string | null
+  settlementHref: string | null;
   /** New vendor credit prefilled from this posted bill. */
-  creditHref: string | null
+  creditHref: string | null;
 }
 
 export interface ApBillsData {
-  title: string
-  description: string
-  currentParams: Record<string, string | string[] | undefined>
-  captureHref: string
-  captureLabel: string
-  canCreate: boolean
+  title: string;
+  description: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  captureHref: string;
+  captureLabel: string;
+  canCreate: boolean;
   /** Loader-resolved post capability, threaded into the row actions so a
    *  preparer never sees an enabled Post (the drawer reads the same value). */
-  canPost: boolean
-  newItems: { kind: string; label: string; href?: string }[]
-  newBasePath: string
-  newTriggerLabel: string
-  drawerOpen: boolean
-  drawer: ApBillsDrawer | null
+  canPost: boolean;
+  newItems: { kind: string; label: string; href?: string }[];
+  newBasePath: string;
+  newTriggerLabel: string;
+  drawerOpen: boolean;
+  drawer: ApBillsDrawer | null;
 }
 
-const BASE_PATH = '/ap/bills'
+const BASE_PATH = "/ap/bills";
 
 export async function loadApBills(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ApBillsData> {
-  const authz = await requirePermission('ap.read')
-  const canCreate = can(authz, 'ap.create')
+  const authz = await requirePermission("ap.read");
+  const canCreate = can(authz, "ap.create");
   const [inventoryEnabled, equipmentEnabled, allocationsEntryEnabled] = await Promise.all([
-    isFeatureEnabled(authz.user.orgId, 'inventory'),
-    isFeatureEnabled(authz.user.orgId, 'equipment'),
-    isFeatureEnabled(authz.user.orgId, 'allocationsAtEntry'),
-  ])
-  const t = await getTranslations('ap')
-  const rawDocId = typeof sp.doc === 'string' ? sp.doc : undefined
+    isFeatureEnabled(authz.user.orgId, "inventory"),
+    isFeatureEnabled(authz.user.orgId, "equipment"),
+    isFeatureEnabled(authz.user.orgId, "allocationsAtEntry"),
+  ]);
+  const t = await getTranslations("ap");
+  const rawDocId = typeof sp.doc === "string" ? sp.doc : undefined;
   // Only a real document id (or 'new') reaches the loader: a malformed
   // ?doc= must never bind to a uuid column and render a 500.
-  const docId = rawDocId === 'new' || (typeof rawDocId === 'string' && isUuid(rawDocId)) ? rawDocId : undefined
+  const docId =
+    rawDocId === "new" || (typeof rawDocId === "string" && isUuid(rawDocId)) ? rawDocId : undefined;
 
-  const tBatch = await getTranslations('batchEntry')
+  const tBatch = await getTranslations("batchEntry");
   const newItems = [
-    { kind: 'vendor_bill', label: t('actions.newBill') },
-    { kind: 'vendor_credit', label: t('actions.newCredit') ?? t('actions.newBill') },
+    { kind: "vendor_bill", label: t("actions.newBill") },
+    { kind: "vendor_credit", label: t("actions.newCredit") ?? t("actions.newBill") },
     // Many bills keyed on one grid, saved through the same create path.
-    { kind: 'vendor_bill', label: tBatch('menuLabel'), href: '/ap/bills/batch' },
-  ]
+    { kind: "vendor_bill", label: tBatch("menuLabel"), href: "/ap/bills/batch" },
+  ];
 
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
-  const fieldViewer = customFieldViewerFor(authz)
-  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId, fieldViewer) : null
+  const fieldViewer = customFieldViewerFor(authz);
+  const loadedDoc =
+    docId && docId !== "new" ? await loadDocument(docId, authz.user.orgId, fieldViewer) : null;
   const openDoc =
     loadedDoc &&
     (loadedDoc.doc as Record<string, unknown>).org_id === authz.user.orgId &&
     (!authz.allowedSubsidiaryIds ||
-      authz.allowedSubsidiaryIds.has(String((loadedDoc.doc as Record<string, unknown>).subsidiary_id)))
+      authz.allowedSubsidiaryIds.has(
+        String((loadedDoc.doc as Record<string, unknown>).subsidiary_id),
+      ))
       ? loadedDoc
-      : null
+      : null;
   // Narrow the drawer's reference options to the open document's subsidiary:
   // a subsidiary-A caller opening a
   // subsidiary-A bill must not see subsidiary-B accounts or dimensions.
-  const requestedCreateEntity = rawDocId === 'new' && canCreate ? pickString(sp.subsidiaryId) : undefined
-  let createEntity: string | null = null
+  const requestedCreateEntity =
+    rawDocId === "new" && canCreate ? pickString(sp.subsidiaryId) : undefined;
+  let createEntity: string | null = null;
   if (requestedCreateEntity !== undefined) {
-    if (!isUuid(requestedCreateEntity) || authz.allowedSubsidiaryIds !== null && !authz.allowedSubsidiaryIds.has(requestedCreateEntity)) notFound()
-    if (!(await db.execute(sql`select id from subsidiaries where org_id=${authz.user.orgId} and id=${requestedCreateEntity} and is_active and not is_elimination`, 'objects')).length) notFound()
-    createEntity = requestedCreateEntity
+    if (
+      !isUuid(requestedCreateEntity) ||
+      (authz.allowedSubsidiaryIds !== null &&
+        !authz.allowedSubsidiaryIds.has(requestedCreateEntity))
+    )
+      notFound();
+    if (
+      !(
+        await db.execute(
+          sql`select id from subsidiaries where org_id=${authz.user.orgId} and id=${requestedCreateEntity} and is_active and not is_elimination`,
+          "objects",
+        )
+      ).length
+    )
+      notFound();
+    createEntity = requestedCreateEntity;
   }
   const documentOptionScope = openDoc
     ? new Set([String((openDoc.doc as Record<string, unknown>).subsidiary_id)])
-    : createEntity ? new Set([createEntity]) : authz.allowedSubsidiaryIds
-  const openKind = (openDoc?.doc as Record<string, unknown> | undefined)?.kind as string | undefined
+    : createEntity
+      ? new Set([createEntity])
+      : authz.allowedSubsidiaryIds;
+  const openKind = (openDoc?.doc as Record<string, unknown> | undefined)?.kind as
+    string | undefined;
   // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
   // over a blank in-memory payload. The kind must belong to this page, the
   // caller must hold its create permission, and nothing is read or written
   // for an id — the document exists only after an explicit Save.
-  const createKind = typeof sp.kind === 'string' && (AP_KINDS as readonly string[]).includes(sp.kind)
-    && isDocumentCreateKind(sp.kind) ? sp.kind : undefined
-  const isCreate = docId === 'new' && !!createKind && canCreate
-  const drawerKind = openKind ?? createKind
-  const drawerOpen = !!(openDoc && openKind && (AP_KINDS as readonly string[]).includes(openKind)) || isCreate
+  const createKind =
+    typeof sp.kind === "string" &&
+    (AP_KINDS as readonly string[]).includes(sp.kind) &&
+    isDocumentCreateKind(sp.kind)
+      ? sp.kind
+      : undefined;
+  const isCreate = docId === "new" && !!createKind && canCreate;
+  const drawerKind = openKind ?? createKind;
+  const drawerOpen =
+    !!(openDoc && openKind && (AP_KINDS as readonly string[]).includes(openKind)) || isCreate;
   const [loadedHeaderDefs, loadedLineDefs] = drawerOpen
     ? await Promise.all([
-        loadFieldDefs('documents', drawerKind!),
-        loadFieldDefs('document_lines', drawerKind!),
+        loadFieldDefs("documents", drawerKind!),
+        loadFieldDefs("document_lines", drawerKind!),
       ])
-    : [[], []]
-  const headerDefs = visibleCustomFieldDefs(loadedHeaderDefs, fieldViewer)
-  const lineDefs = visibleCustomFieldDefs(loadedLineDefs, fieldViewer)
+    : [[], []];
+  const headerDefs = visibleCustomFieldDefs(loadedHeaderDefs, fieldViewer);
+  const lineDefs = visibleCustomFieldDefs(loadedLineDefs, fieldViewer);
   // The create seed carries no lines, so the keep-existing-items clause
   // matches nothing — the same items list a blank draft would see.
-  const existingDocId = openDoc ? docId : null
+  const existingDocId = openDoc ? docId : null;
   // Tax choices price as of the open document's own date, so a draft dated
   // before a rate change keeps the rate its amounts were entered at.
-  const openDocumentFields = openDoc?.doc as Record<string, unknown> | undefined
-  const openDocumentDate = typeof openDocumentFields?.document_date === 'string' ? openDocumentFields.document_date : undefined
+  const openDocumentFields = openDoc?.doc as Record<string, unknown> | undefined;
+  const openDocumentDate =
+    typeof openDocumentFields?.document_date === "string"
+      ? openDocumentFields.document_date
+      : undefined;
   const [pickers, resolvedForm] = await Promise.all([
     drawerOpen
       ? Promise.all([
           listScopedPartyOptionsWithCurrent(
             authz.user.orgId,
             documentOptionScope,
-            'vendor',
+            "vendor",
             (openDoc?.doc as Record<string, unknown> | undefined)?.party_id as string | undefined,
           ),
-          accountOptions(DOC_KINDS[drawerKind as 'vendor_bill']!, authz.user.orgId, documentOptionScope),
+          accountOptions(
+            DOC_KINDS[drawerKind as "vendor_bill"]!,
+            authz.user.orgId,
+            documentOptionScope,
+          ),
           taxCodeOptions(undefined, openDocumentDate),
           taxGroupOptions(undefined, openDocumentDate),
           dimensionOptions(authz.user.orgId, undefined, documentOptionScope),
-          db
-            .execute(
-              sql`
+          db.execute(
+            sql`
             select id, code, name,
                    exists (select 1 from item_inventory_profiles p where p.org_id = items.org_id and p.item_id = items.id) as has_inventory_profile
              from items
@@ -213,15 +262,16 @@ export async function loadApBills(
                     where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                  )
                )
-             order by coalesce(code, name), name limit 2000`, 'objects',
-            ),
+             order by coalesce(code, name), name limit 2000`,
+            "objects",
+          ),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
           isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
-            if (!multi) return null
-            const options = await subsidiaryOptions()
+            if (!multi) return null;
+            const options = await subsidiaryOptions();
             return authz.allowedSubsidiaryIds
               ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-              : options
+              : options;
           }),
         ])
       : null,
@@ -236,45 +286,64 @@ export async function loadApBills(
           explicitLayoutId: pickString(sp.form),
         })
       : null,
-  ])
+  ]);
   // Blank in-memory payload for unsaved create. The subsidiary defaults to
   // the first in-scope option in multi-subsidiary orgs so the form opens
   // submittable; unrestricted orgs keep the factory root default.
-  const createSeed = isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null
+  const createSeed =
+    isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null;
   // Credit prefill: `?doc=new&kind=vendor_credit&creditFrom=<bill>` proposes a
   // credit for review — bill lines at their original amounts with return
   // evidence on the still-unreturned stocked receipts. Nothing is written;
   // Save creates the draft. An invisible, voided, or non-bill id behaves like
   // no prefill: the blank create still opens.
-  const creditFromId = isCreate && createKind === 'vendor_credit' && typeof sp.creditFrom === 'string' && isUuid(sp.creditFrom)
-    ? sp.creditFrom
-    : null
+  const creditFromId =
+    isCreate &&
+    createKind === "vendor_credit" &&
+    typeof sp.creditFrom === "string" &&
+    isUuid(sp.creditFrom)
+      ? sp.creditFrom
+      : null;
   const creditSource = creditFromId
-    ? (await db.execute<{ partyId: string | null; partyName: string | null; subsidiaryId: string | null }>(sql`
+    ? ((
+        await db.execute<{
+          partyId: string | null;
+          partyName: string | null;
+          subsidiaryId: string | null;
+        }>(
+          sql`
         select d.party_id as "partyId", p.display_name as "partyName", d.subsidiary_id as "subsidiaryId"
           from documents d
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${authz.user.orgId} and d.id = ${creditFromId} and d.kind = 'vendor_bill' and d.status <> 'voided'
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, documentOptionScope ?? null)}
-         limit 1`, 'objects'))[0] ?? null
-    : null
-  const creditLines = creditFromId && creditSource ? await returnableBillLines(db, authz.user.orgId, creditFromId) : []
+         limit 1`,
+          "objects",
+        )
+      )[0] ?? null)
+    : null;
+  const creditLines =
+    creditFromId && creditSource
+      ? await returnableBillLines(db, authz.user.orgId, creditFromId)
+      : [];
   // The credit settles the bill it corrects, so it carries the bill's payable
   // account rather than the vendor's current default: posting stamps each
   // document's account once, and a later default change must not split the
   // pair (applications refuse a credit and bill on different control accounts).
-  const creditSourceControlAccountId = creditFromId && creditSource
-    ? await postedDocumentControlAccount(db, authz.user.orgId, creditFromId)
-    : null
+  const creditSourceControlAccountId =
+    creditFromId && creditSource
+      ? await postedDocumentControlAccount(db, authz.user.orgId, creditFromId)
+      : null;
   if (createSeed && creditSource) {
-    const seed = createSeed.doc as Record<string, unknown>
-    seed.party_id = creditSource.partyId
-    if (creditSource.partyName) seed.party_name = creditSource.partyName
+    const seed = createSeed.doc as Record<string, unknown>;
+    seed.party_id = creditSource.partyId;
+    if (creditSource.partyName) seed.party_name = creditSource.partyName;
     // The credit returns this bill's receipts, so it belongs to the bill's
     // legal entity — the receipt scope the save validates against.
-    if (creditSource.subsidiaryId) seed.subsidiary_id = creditSource.subsidiaryId
-    if (creditSourceControlAccountId) seed.custom = { controlAccountId: creditSourceControlAccountId }
-    ;(createSeed as { lines: Record<string, unknown>[] }).lines = creditLines.map((line) => ({
+    if (creditSource.subsidiaryId) seed.subsidiary_id = creditSource.subsidiaryId;
+    if (creditSourceControlAccountId)
+      seed.custom = { controlAccountId: creditSourceControlAccountId };
+    (createSeed as { lines: Record<string, unknown>[] }).lines = creditLines.map((line) => ({
       item_id: line.itemId,
       account_id: line.accountId,
       quantity: line.quantity,
@@ -287,28 +356,34 @@ export async function loadApBills(
       ...(line.receiptMovementId
         ? { custom: { inventoryReturn: { sourceReceiptMovementId: line.receiptMovementId } } }
         : {}),
-    }))
+    }));
   }
   const createSubsidiaryDefault = (() => {
-    if (!createSeed || !pickers) return null
-    const options = (pickers[6] ?? []) as { id: string }[]
-    if (options.length === 0) return null
+    if (!createSeed || !pickers) return null;
+    const options = (pickers[6] ?? []) as { id: string }[];
+    if (options.length === 0) return null;
     const inScope = authz.allowedSubsidiaryIds
       ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-      : options
-    return createEntity ?? inScope[0]?.id ?? null
-  })()
+      : options;
+    return createEntity ?? inScope[0]?.id ?? null;
+  })();
   // The bill's legal entity (set above) wins over the form default: the
   // credit must live where its receipts live.
-  if (createSeed && createSubsidiaryDefault && !(creditSource?.subsidiaryId)) {
-    (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
+  if (createSeed && createSubsidiaryDefault && !creditSource?.subsidiaryId) {
+    (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault;
   }
-  const requestedCreateParty = isCreate ? pickString(sp.partyId) : undefined
+  const requestedCreateParty = isCreate ? pickString(sp.partyId) : undefined;
   if (createSeed && requestedCreateParty !== undefined) {
-    if (!isUuid(requestedCreateParty) || !(pickers?.[0] as Array<{id:string}> | undefined)?.some(party=>party.id===requestedCreateParty)) notFound()
-    ;(createSeed.doc as Record<string, unknown>).party_id = requestedCreateParty
+    if (
+      !isUuid(requestedCreateParty) ||
+      !(pickers?.[0] as Array<{ id: string }> | undefined)?.some(
+        (party) => party.id === requestedCreateParty,
+      )
+    )
+      notFound();
+    (createSeed.doc as Record<string, unknown>).party_id = requestedCreateParty;
   }
-  const drawerPayload = openDoc ?? createSeed
+  const drawerPayload = openDoc ?? createSeed;
   // Contractor-withholding line classification is registration-gated: the
   // drawer offers its treatment and direct-materials columns only when an
   // active enrollment covers the bill's scope. Entry classification needs
@@ -316,35 +391,43 @@ export async function loadApBills(
   // date-checks effectiveness — and unknown scheme codes never reach the
   // drawer, so only pack-declared schemes qualify.
   const withholdingSchemes = drawerOpen
-    ? (await db.execute<{ schemeCode: string }>(sql`
+    ? (
+        await db.execute<{ schemeCode: string }>(
+          sql`
         select distinct e.scheme_code as "schemeCode" from withholding_enrollments e
          where e.org_id = ${authz.user.orgId} and e.is_active
            ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, documentOptionScope)}
-         order by 1`, 'objects'))
-      .map((row) => row.schemeCode)
-      .filter((code) => contractorWithholdingScheme(code) !== undefined)
-      .map((code) => ({ code }))
-    : []
+         order by 1`,
+          "objects",
+        )
+      )
+        .map((row) => row.schemeCode)
+        .filter((code) => contractorWithholdingScheme(code) !== undefined)
+        .map((code) => ({ code }))
+    : [];
 
-  const amortizationTemplates = drawerPayload && drawerKind === 'vendor_bill'
-    ? await sourceAmortizationOptions(authz.user.orgId, drawerPayload)
-    : undefined
+  const amortizationTemplates =
+    drawerPayload && drawerKind === "vendor_bill"
+      ? await sourceAmortizationOptions(authz.user.orgId, drawerPayload)
+      : undefined;
 
   const dimensions = pickers?.[4] as
     | {
-        departments: unknown
-        projects: unknown
-        locations: unknown
-        classes: unknown
-        segments: unknown
-        builtinSegments: unknown
+        departments: unknown;
+        projects: unknown;
+        locations: unknown;
+        classes: unknown;
+        segments: unknown;
+        builtinSegments: unknown;
       }
-    | undefined
+    | undefined;
   const drawer: ApBillsDrawer | null =
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
-          basePath: '/ap/bills',
-          remountKey: openDoc ? String((openDoc.doc as Record<string, unknown>).id) : `new:${drawerKind}:${createEntity ?? ""}:${requestedCreateParty ?? ""}:${creditFromId ?? ""}`,
+          basePath: "/ap/bills",
+          remountKey: openDoc
+            ? String((openDoc.doc as Record<string, unknown>).id)
+            : `new:${drawerKind}:${createEntity ?? ""}:${requestedCreateParty ?? ""}:${creditFromId ?? ""}`,
           payload: drawerPayload,
           createMode: isCreate,
           config: DOC_KINDS[drawerKind]!,
@@ -363,78 +446,86 @@ export async function loadApBills(
           headerDefs,
           lineDefs,
           canCreate,
-          canPost: can(authz, 'ap.post'),
+          canPost: can(authz, "ap.post"),
           withholdingSchemes,
           ...(amortizationTemplates ? { amortizationTemplates } : {}),
           allocationsEntryEnabled,
-          initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
+          initialMode: (isCreate || pickString(sp.mode) === "edit" ? "edit" : "view") as
+            "edit" | "view",
           layout: resolvedForm.layout,
           availableLayouts: resolvedForm.available,
           currentLayoutId: resolvedForm.row?.id ?? null,
           recordType: drawerKind,
-          canCustomize: can(authz, 'admin.customization.manage'),
-          settlementHref: documentSettlementHref(openDoc?.doc as Record<string, unknown> | undefined, {
-            ar: false,
-            ap: can(authz, 'ap.pay'),
-          }),
+          canCustomize: can(authz, "admin.customization.manage"),
+          settlementHref: documentSettlementHref(
+            openDoc?.doc as Record<string, unknown> | undefined,
+            {
+              ar: false,
+              ap: can(authz, "ap.pay"),
+            },
+          ),
           // A posted bill proposes its credit: the prefill copies its lines
           // with return evidence on the still-unreturned receipts.
           creditHref:
-            openDoc && drawerKind === 'vendor_bill'
-              && String((openDoc.doc as Record<string, unknown>).status) === 'posted'
+            openDoc &&
+            drawerKind === "vendor_bill" &&
+            String((openDoc.doc as Record<string, unknown>).status) === "posted"
               ? `${BASE_PATH}?doc=new&kind=vendor_credit&creditFrom=${(openDoc.doc as Record<string, unknown>).id}`
               : null,
           // Only a posted vendor credit can settle a bill without cash. The
           // panel reads its own state; the loader supplies identity and the
           // permission, mirroring the customer-credit side.
           creditApplications:
-            openDoc && drawerKind === 'vendor_credit'
-              ? creditApplicationsDrawer(openDoc.doc as Record<string, unknown>, { ar: false, ap: can(authz, 'ap.pay') })
+            openDoc && drawerKind === "vendor_credit"
+              ? creditApplicationsDrawer(openDoc.doc as Record<string, unknown>, {
+                  ar: false,
+                  ap: can(authz, "ap.pay"),
+                })
               : null,
         }
-      : null
+      : null;
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
+    title: t("list.title"),
+    description: t("list.description"),
     currentParams: sp,
-    captureHref: '/ap/capture',
-    captureLabel: t('actions.capture'),
+    captureHref: "/ap/capture",
+    captureLabel: t("actions.capture"),
     canCreate,
-    canPost: can(authz, 'ap.post'),
+    canPost: can(authz, "ap.post"),
     newItems,
-    newBasePath: '/ap/bills',
-    newTriggerLabel: t('actions.newBill'),
+    newBasePath: "/ap/bills",
+    newTriggerLabel: t("actions.newBill"),
     drawerOpen: Boolean(drawer),
     drawer,
-  }
+  };
 }
 
-const f = ref<ApBillsData>()
+const f = ref<ApBillsData>();
 
 export function apBillsSpec(data: ApBillsData): PageSpec {
   const newBill = {
-    widget: 'new-document',
+    widget: "new-document",
     props: {
       items: data.newItems,
       basePath: data.newBasePath,
       triggerLabel: data.newTriggerLabel,
     },
-  }
+  };
   return page({
-    route: '/ap/bills',
-    layout: 'list',
+    route: "/ap/bills",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-2',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-2",
         actions: [
-          widget('ap-capture-link', {
+          widget("ap-capture-link", {
             href: data.captureHref,
             label: data.captureLabel,
           }),
-          widget(newBill.widget, newBill.props, f('canCreate')),
+          widget(newBill.widget, newBill.props, f("canCreate")),
         ],
       }),
     ],
@@ -444,13 +535,13 @@ export function apBillsSpec(data: ApBillsData): PageSpec {
       // list renders the drawer itself (after the table, inside the slot) —
       // the page places nothing else here, the same arrangement the native
       // page has.
-      widgetBlock('record-list-view', {
-        recordType: 'vendor_bill',
-        basePath: '/ap/bills',
+      widgetBlock("record-list-view", {
+        recordType: "vendor_bill",
+        basePath: "/ap/bills",
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer ? { widget: "document-drawer", props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newBill : null,
       }),
     ],
-  })
+  });
 }

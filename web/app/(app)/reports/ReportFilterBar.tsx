@@ -1,77 +1,101 @@
-'use client'
+"use client";
 
-import { useIdentityState } from '@/lib/use-identity-state'
+import { useIdentityState } from "@/lib/use-identity-state";
 
-import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { ChevronsDown, ChevronsUp, SlidersHorizontal } from 'lucide-react'
-import { Button, Popover, Select, cn } from '@openbooks/ui'
-import { PERIOD_PRESETS, type PeriodPresetGroup } from '@openbooks/reports'
-import { SearchInput } from '../../../components/search-input'
-import { DEFAULT_SEGMENT_ALL_KEY, isDefaultSegmentName, type BuiltinSegmentKey } from '../../../lib/segment-labels'
-import { setAllReportSections } from './report-section-events'
-import { isOverlayOnlyHrefChange, stripReportOverlay } from '../../../lib/report-overlay'
-import { useReportOverlayOptional } from '../../../components/navigation-provider'
-import { DateField } from '@/components/date-field'
+import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { ChevronsDown, ChevronsUp, SlidersHorizontal } from "lucide-react";
+import { Button, Popover, Select, cn } from "@openbooks/ui";
+import { PERIOD_PRESETS, type PeriodPresetGroup } from "@openbooks/reports";
+import { SearchInput } from "../../../components/search-input";
+import {
+  DEFAULT_SEGMENT_ALL_KEY,
+  isDefaultSegmentName,
+  type BuiltinSegmentKey,
+} from "../../../lib/segment-labels";
+import { setAllReportSections } from "./report-section-events";
+import { isOverlayOnlyHrefChange, stripReportOverlay } from "../../../lib/report-overlay";
+import { useReportOverlayOptional } from "../../../components/navigation-provider";
+import { DateField } from "@/components/date-field";
 
-type DimOption = { id: string; name: string }
-type SegmentOption = { key: string; name: string; pluralName: string; showInReports: boolean; values: DimOption[] }
-type BuiltinSegmentOption = { key: string; name: string; pluralName: string; showInReports: boolean }
+type DimOption = { id: string; name: string };
+type SegmentOption = {
+  key: string;
+  name: string;
+  pluralName: string;
+  showInReports: boolean;
+  values: DimOption[];
+};
+type BuiltinSegmentOption = {
+  key: string;
+  name: string;
+  pluralName: string;
+  showInReports: boolean;
+};
 /** Picker rows are pre-labelled server-side (tree indent + "(consolidated)"). */
-export type SubsidiaryPickerOption = { id: string; label: string }
+export type SubsidiaryPickerOption = { id: string; label: string };
 
 /** Which controls a given report exposes. */
 export type ReportControls = {
-  search?: boolean
-  period?: boolean
+  search?: boolean;
+  period?: boolean;
   /** Always-visible explicit From/To fields rather than the period preset. */
-  dateRange?: boolean
+  dateRange?: boolean;
   /** Balance-style: custom period collapses to a single "as of" date. */
-  asOf?: boolean
-  breakout?: boolean
-  breakoutOptions?: ('department' | 'project' | 'location' | 'class' | 'month' | 'quarter')[]
-  compare?: boolean
-  basis?: boolean
-  dimensions?: boolean
-  customer?: boolean
+  asOf?: boolean;
+  breakout?: boolean;
+  breakoutOptions?: ("department" | "project" | "location" | "class" | "month" | "quarter")[];
+  compare?: boolean;
+  basis?: boolean;
+  dimensions?: boolean;
+  customer?: boolean;
   /** Subsidiary context dropdown (multi-subsidiary orgs only). */
-  subsidiary?: boolean
-  showZero?: boolean
-  scale?: boolean
-  sections?: boolean
-}
+  subsidiary?: boolean;
+  showZero?: boolean;
+  scale?: boolean;
+  sections?: boolean;
+};
 
-type ReportFilterOption = { value: string; label: string }
-export type ReportPrimaryFilter = { paramKey: string; label: string; value: string; options: ReportFilterOption[] }
+type ReportFilterOption = { value: string; label: string };
+export type ReportPrimaryFilter = {
+  paramKey: string;
+  label: string;
+  value: string;
+  options: ReportFilterOption[];
+};
 
 /** A concrete named window (e.g. one pay period) offered atop the presets;
  *  selecting one compiles to period=custom with its exact bounds. */
-export type ExtraPeriodOption = { id: string; label: string; from: string; to: string }
+export type ExtraPeriodOption = { id: string; label: string; from: string; to: string };
 
 const PRESET_GROUP_ORDER: PeriodPresetGroup[] = [
-  'fiscal_year',
-  'fiscal_quarter',
-  'fiscal_half',
-  'period',
-  'calendar',
-  'rolling',
-  'days',
-  'custom',
-]
+  "fiscal_year",
+  "fiscal_quarter",
+  "fiscal_half",
+  "period",
+  "calendar",
+  "rolling",
+  "days",
+  "custom",
+];
 
-const SELECT = 'h-8 w-auto min-w-0 shrink-0 border-0 bg-transparent px-1.5 text-sm font-medium shadow-none hover:bg-slate-100 dark:hover:bg-slate-800'
-const DATE = 'h-8 w-36 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950'
-const EMPTY_RESET_KEYS: readonly string[] = []
+const SELECT =
+  "h-8 w-auto min-w-0 shrink-0 border-0 bg-transparent px-1.5 text-sm font-medium shadow-none hover:bg-slate-100 dark:hover:bg-slate-800";
+const DATE =
+  "h-8 w-36 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950";
+const EMPTY_RESET_KEYS: readonly string[] = [];
 
 /** A compact inline control: tiny uppercase label + the control, on one line. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex shrink-0 items-center gap-1.5">
-      <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">{label}</span>
+      <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+        {label}
+      </span>
       {children}
     </label>
-  )
+  );
 }
 
 /**
@@ -89,154 +113,208 @@ export function ReportFilterBar({
   leading,
   subsidiaries,
   actions,
-  defaultPeriod = 'this_fiscal_year',
+  defaultPeriod = "this_fiscal_year",
   periodPresets,
   extraPeriods,
   extraPeriodsLabel,
-  periodParamKey = 'period',
-  fromParamKey = 'from',
-  toParamKey = 'to',
+  periodParamKey = "period",
+  fromParamKey = "from",
+  toParamKey = "to",
   resetParamKeys,
   compact = false,
 }: {
-  controls: ReportControls
-  dimensions?: { departments: DimOption[]; projects: DimOption[]; locations: DimOption[]; classes: DimOption[]; segments?: SegmentOption[]; builtinSegments?: BuiltinSegmentOption[] }
-  customers?: DimOption[]
+  controls: ReportControls;
+  dimensions?: {
+    departments: DimOption[];
+    projects: DimOption[];
+    locations: DimOption[];
+    classes: DimOption[];
+    segments?: SegmentOption[];
+    builtinSegments?: BuiltinSegmentOption[];
+  };
+  customers?: DimOption[];
   /** Resolved dates displayed until an explicit URL value is selected. */
-  dateRange?: { from: string; to: string }
-  searchPlaceholder?: string
+  dateRange?: { from: string; to: string };
+  searchPlaceholder?: string;
   /** A report-specific select rendered with the same compact P&L field chrome. */
   /** Leading selects (accounting book, accounting context); one or several. */
-  primaryFilter?: ReportPrimaryFilter | ReportPrimaryFilter[]
+  primaryFilter?: ReportPrimaryFilter | ReportPrimaryFilter[];
   /** Compact report mode controls that belong inside, never beside, the bar. */
-  leading?: ReactNode
+  leading?: ReactNode;
   /** First entry is the default context (the root, consolidated). */
-  subsidiaries?: SubsidiaryPickerOption[]
-  actions?: ReactNode
+  subsidiaries?: SubsidiaryPickerOption[];
+  actions?: ReactNode;
   /** Preset shown when no `period` param is set (aging defaults to `today`). */
-  defaultPeriod?: string
+  defaultPeriod?: string;
   /** Restrict the picker to these PERIOD_PRESET ids (e.g. an as-of report
    *  offering only point-in-time presets). Absent = the full catalog. */
-  periodPresets?: readonly string[]
+  periodPresets?: readonly string[];
   /** Domain-specific windows (pay periods…) listed before the fiscal presets. */
-  extraPeriods?: ExtraPeriodOption[]
-  extraPeriodsLabel?: string
+  extraPeriods?: ExtraPeriodOption[];
+  extraPeriodsLabel?: string;
   /** Override URL keys so a flyout can keep the page's period intact. */
-  periodParamKey?: string
-  fromParamKey?: string
-  toParamKey?: string
+  periodParamKey?: string;
+  fromParamKey?: string;
+  toParamKey?: string;
   /** Drop these keys on every change (e.g. reset a drawer page). */
-  resetParamKeys?: readonly string[]
+  resetParamKeys?: readonly string[];
   /** Fit the shared period control into a page-header action row. */
-  compact?: boolean
+  compact?: boolean;
 }) {
-  const t = useTranslations('reports.filterBar')
-  const tPeriods = useTranslations('periodLabels')
-  const router = useRouter()
-  const pathname = usePathname()
-  const nextParams = useSearchParams()
-  const overlay = useReportOverlayOptional()
-  const liveSearch = overlay?.search ?? nextParams.toString()
-  const params = useMemo(() => new URLSearchParams(liveSearch), [liveSearch])
-  const [optionsOpen, setOptionsOpen] = useState(false)
+  const t = useTranslations("reports.filterBar");
+  const tPeriods = useTranslations("periodLabels");
+  const router = useRouter();
+  const pathname = usePathname();
+  const nextParams = useSearchParams();
+  const overlay = useReportOverlayOptional();
+  const liveSearch = overlay?.search ?? nextParams.toString();
+  const params = useMemo(() => new URLSearchParams(liveSearch), [liveSearch]);
+  const [optionsOpen, setOptionsOpen] = useState(false);
 
-  const resetKeys = resetParamKeys ?? EMPTY_RESET_KEYS
+  const resetKeys = resetParamKeys ?? EMPTY_RESET_KEYS;
   const setParams = useCallback(
     (updates: Record<string, string | null>) => {
-      const next = new URLSearchParams(liveSearch)
+      const next = new URLSearchParams(liveSearch);
       for (const [k, v] of Object.entries(updates)) {
-        const key = k === 'period' ? periodParamKey : k === 'from' ? fromParamKey : k === 'to' ? toParamKey : k
-        if (v === null || v === '') next.delete(key)
-        else next.set(key, v)
+        const key =
+          k === "period"
+            ? periodParamKey
+            : k === "from"
+              ? fromParamKey
+              : k === "to"
+                ? toParamKey
+                : k;
+        if (v === null || v === "") next.delete(key);
+        else next.set(key, v);
       }
-      for (const key of resetKeys) next.delete(key)
-      const currentHref = `${pathname}${liveSearch ? `?${liveSearch}` : ''}`
-      const nextHref = `${pathname}?${next.toString()}`
+      for (const key of resetKeys) next.delete(key);
+      const currentHref = `${pathname}${liveSearch ? `?${liveSearch}` : ""}`;
+      const nextHref = `${pathname}?${next.toString()}`;
       if (overlay && isOverlayOnlyHrefChange(currentHref, nextHref)) {
-        overlay.replace(nextHref)
-        return
+        overlay.replace(nextHref);
+        return;
       }
-      const stripped = stripReportOverlay(next)
-      overlay?.beginReload()
-      router.replace(`${pathname}?${stripped.toString()}`)
+      const stripped = stripReportOverlay(next);
+      overlay?.beginReload();
+      router.replace(`${pathname}?${stripped.toString()}`);
     },
     [fromParamKey, liveSearch, overlay, pathname, periodParamKey, resetKeys, router, toParamKey],
-  )
+  );
 
-  const periodFrom = params.get(fromParamKey)
-  const periodTo = params.get(toParamKey)
-  const rawPeriod = params.get(periodParamKey) ?? defaultPeriod
-  const [customDraft, setCustomDraft] = useIdentityState([pathname, liveSearch], false)
+  const periodFrom = params.get(fromParamKey);
+  const periodTo = params.get(toParamKey);
+  const rawPeriod = params.get(periodParamKey) ?? defaultPeriod;
+  const [customDraft, setCustomDraft] = useIdentityState([pathname, liveSearch], false);
   // A hand-edited URL can carry a preset the page doesn't offer (e.g. a range
   // preset on an as-of report); show the page default rather than an option
   // that isn't in the list. The server re-clamps the param authoritatively.
-  const period = customDraft ? 'custom' : periodPresets && !periodPresets.includes(rawPeriod) ? defaultPeriod : rawPeriod
+  const period = customDraft
+    ? "custom"
+    : periodPresets && !periodPresets.includes(rawPeriod)
+      ? defaultPeriod
+      : rawPeriod;
   // An extra window is stored as period=custom + its exact bounds; keep the
   // select showing the named entry rather than the anonymous Custom row.
-  const activeExtra = !customDraft && period === 'custom'
-    ? extraPeriods?.find((x) => x.from === periodFrom && x.to === periodTo)
-    : undefined
-  const selectValue = activeExtra ? `x:${activeExtra.id}` : period
-  const breakout = params.get('breakout') ?? 'none'
-  const compare = params.get('compare') ?? 'none'
-  const basis = params.get('basis') ?? 'accrual'
-  const scale = params.get('scale') ?? 'actual'
-  const showZero = params.get('zero') === '1'
-  const isCustom = period === 'custom' && !activeExtra
+  const activeExtra =
+    !customDraft && period === "custom"
+      ? extraPeriods?.find((x) => x.from === periodFrom && x.to === periodTo)
+      : undefined;
+  const selectValue = activeExtra ? `x:${activeExtra.id}` : period;
+  const breakout = params.get("breakout") ?? "none";
+  const compare = params.get("compare") ?? "none";
+  const basis = params.get("basis") ?? "accrual";
+  const scale = params.get("scale") ?? "actual";
+  const showZero = params.get("zero") === "1";
+  const isCustom = period === "custom" && !activeExtra;
   // Custom From/To stage locally until the operator applies them: committing
   // per change re-ran the report on half-typed ranges, and typed dates never
   // had an explicit moment to take effect (Enter and blur included).
-  const [rangeDraft, setRangeDraft] = useIdentityState<{ from: string; to: string } | null>([pathname, liveSearch], null)
+  const [rangeDraft, setRangeDraft] = useIdentityState<{ from: string; to: string } | null>(
+    [pathname, liveSearch],
+    null,
+  );
   // An outside change (preset pick, another control) discards the draft, so a
   // staged range can never leak into a navigation it was not applied to.
-  const rangeBaseFrom = periodFrom ?? (controls.dateRange ? dateRange?.from : undefined) ?? ''
-  const rangeBaseTo = periodTo ?? (controls.dateRange ? dateRange?.to : undefined) ?? ''
-  const shownFrom = rangeDraft?.from ?? rangeBaseFrom
-  const shownTo = rangeDraft?.to ?? rangeBaseTo
-  const rangeDirty = customDraft || (rangeDraft !== null && (rangeDraft.from !== rangeBaseFrom || rangeDraft.to !== rangeBaseTo))
+  const rangeBaseFrom = periodFrom ?? (controls.dateRange ? dateRange?.from : undefined) ?? "";
+  const rangeBaseTo = periodTo ?? (controls.dateRange ? dateRange?.to : undefined) ?? "";
+  const shownFrom = rangeDraft?.from ?? rangeBaseFrom;
+  const shownTo = rangeDraft?.to ?? rangeBaseTo;
+  const rangeDirty =
+    customDraft ||
+    (rangeDraft !== null && (rangeDraft.from !== rangeBaseFrom || rangeDraft.to !== rangeBaseTo));
   // A custom window commits only with both bounds and From on or before To;
   // a half-typed range would otherwise reach the report, its exports and any
   // saved view with no window to resolve.
-  const rangeComplete = shownFrom !== '' && shownTo !== '' && shownFrom <= shownTo
+  const rangeComplete = shownFrom !== "" && shownTo !== "" && shownFrom <= shownTo;
   const applyRange = useCallback(() => {
-    if (!rangeDirty || !rangeComplete) return
-    setParams({ period: 'custom', from: shownFrom, to: shownTo })
-  }, [rangeComplete, rangeDirty, setParams, shownFrom, shownTo])
-  const applyRangeOnEnter = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') applyRange()
-  }, [applyRange])
-  const applyRangeButton = (isCustom || controls.dateRange) ? (
-    <Button type="button" size="sm" onClick={applyRange} disabled={!rangeDirty || !rangeComplete} className="h-8 shrink-0 text-xs">
-      {t('apply')}
-    </Button>
-  ) : null
-  const breakoutOpts = controls.breakoutOptions ?? ['department', 'project', 'location', 'class', 'month', 'quarter']
-  const builtinByKey = new Map((dimensions?.builtinSegments ?? []).map((segment) => [segment.key, segment]))
+    if (!rangeDirty || !rangeComplete) return;
+    setParams({ period: "custom", from: shownFrom, to: shownTo });
+  }, [rangeComplete, rangeDirty, setParams, shownFrom, shownTo]);
+  const applyRangeOnEnter = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") applyRange();
+    },
+    [applyRange],
+  );
+  const applyRangeButton =
+    isCustom || controls.dateRange ? (
+      <Button
+        type="button"
+        size="sm"
+        onClick={applyRange}
+        disabled={!rangeDirty || !rangeComplete}
+        className="h-8 shrink-0 text-xs"
+      >
+        {t("apply")}
+      </Button>
+    ) : null;
+  const breakoutOpts = controls.breakoutOptions ?? [
+    "department",
+    "project",
+    "location",
+    "class",
+    "month",
+    "quarter",
+  ];
+  const builtinByKey = new Map(
+    (dimensions?.builtinSegments ?? []).map((segment) => [segment.key, segment]),
+  );
 
   // A renamed built-in is tenant data and renders verbatim; a default one
   // resolves to the catalog translation so the toolbar reads naturally in
   // every locale.
   const builtinBreakoutLabel = (key: string) => {
-    const seg = builtinByKey.get(key)
-    return seg && !isDefaultSegmentName(seg) ? seg.name : t(`breakoutOpts.${key}`)
-  }
+    const seg = builtinByKey.get(key);
+    return seg && !isDefaultSegmentName(seg) ? seg.name : t(`breakoutOpts.${key}`);
+  };
   const segText = (key: BuiltinSegmentKey, labelKey: string) => {
-    const seg = builtinByKey.get(key)
+    const seg = builtinByKey.get(key);
     if (seg && !isDefaultSegmentName(seg)) {
-      return { label: seg.name, all: t('allSegment', { name: seg.pluralName }) }
+      return { label: seg.name, all: t("allSegment", { name: seg.pluralName }) };
     }
-    return { label: t(labelKey), all: t(DEFAULT_SEGMENT_ALL_KEY[key]) }
-  }
-  const deptText = segText('department', 'department')
-  const projectText = segText('project', 'project')
-  const locationText = segText('location', 'location')
-  const classText = segText('class', 'class')
+    return { label: t(labelKey), all: t(DEFAULT_SEGMENT_ALL_KEY[key]) };
+  };
+  const deptText = segText("department", "department");
+  const projectText = segText("project", "project");
+  const locationText = segText("location", "location");
+  const classText = segText("class", "class");
 
   // Dimension filters carry no inline label — the value ("All departments", a
   // department name, …) is self-describing, which keeps the toolbar on one row.
-  const dimSelect = (key: string, label: string, options: DimOption[] | undefined, allLabel: string) =>
+  const dimSelect = (
+    key: string,
+    label: string,
+    options: DimOption[] | undefined,
+    allLabel: string,
+  ) =>
     options && options.length ? (
-      <Select key={key} value={params.get(key) ?? ''} onChange={(e) => setParams({ [key]: e.target.value })} className={SELECT} aria-label={label}>
+      <Select
+        key={key}
+        value={params.get(key) ?? ""}
+        onChange={(e) => setParams({ [key]: e.target.value })}
+        className={SELECT}
+        aria-label={label}
+      >
         <option value="">{allLabel}</option>
         {options.map((o) => (
           <option key={o.id} value={o.id}>
@@ -244,54 +322,73 @@ export function ReportFilterBar({
           </option>
         ))}
       </Select>
-    ) : null
+    ) : null;
 
   return (
-    <div className={cn('flex flex-nowrap items-center gap-x-1 overflow-x-auto border border-slate-200 dark:border-slate-800', compact ? 'h-[var(--page-control-height,2.25rem)] rounded-md bg-white px-2 dark:bg-slate-950' : 'rounded-xl bg-slate-50/60 px-2 py-1.5 dark:bg-slate-900/40')}>
+    <div
+      className={cn(
+        "flex flex-nowrap items-center gap-x-1 overflow-x-auto border border-slate-200 dark:border-slate-800",
+        compact
+          ? "h-[var(--page-control-height,2.25rem)] rounded-md bg-white px-2 dark:bg-slate-950"
+          : "rounded-xl bg-slate-50/60 px-2 py-1.5 dark:bg-slate-900/40",
+      )}
+    >
       {leading ? <div className="flex shrink-0 items-center gap-2">{leading}</div> : null}
 
       {controls.search ? (
         <SearchInput placeholder={searchPlaceholder} className="w-40 shrink-0 sm:w-44" />
       ) : null}
 
-      {(Array.isArray(primaryFilter) ? primaryFilter : primaryFilter ? [primaryFilter] : []).map((filter) => (
-        <Field key={filter.paramKey} label={filter.label}>
-          <Select
-            value={filter.value}
-            onChange={(e) => setParams({ [filter.paramKey]: e.target.value })}
-            className={cn(SELECT, 'font-semibold')}
-            aria-label={filter.label}
-          >
-            {filter.options.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </Select>
-        </Field>
-      ))}
+      {(Array.isArray(primaryFilter) ? primaryFilter : primaryFilter ? [primaryFilter] : []).map(
+        (filter) => (
+          <Field key={filter.paramKey} label={filter.label}>
+            <Select
+              value={filter.value}
+              onChange={(e) => setParams({ [filter.paramKey]: e.target.value })}
+              className={cn(SELECT, "font-semibold")}
+              aria-label={filter.label}
+            >
+              {filter.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ),
+      )}
       {controls.period !== false && !controls.dateRange && (
-        <Field label={controls.asOf ? t('asOf') : t('period')}>
+        <Field label={controls.asOf ? t("asOf") : t("period")}>
           <Select
             value={selectValue}
             onChange={(e) => {
               // Custom selection opens editable bounds without issuing an
               // incomplete report request. Apply commits the complete window.
-              if (e.target.value === 'custom') {
-                setCustomDraft(true)
-                return
+              if (e.target.value === "custom") {
+                setCustomDraft(true);
+                return;
               }
-              setCustomDraft(false)
-              setRangeDraft(null)
-              const extra = e.target.value.startsWith('x:')
+              setCustomDraft(false);
+              setRangeDraft(null);
+              const extra = e.target.value.startsWith("x:")
                 ? extraPeriods?.find((x) => `x:${x.id}` === e.target.value)
-                : undefined
-              if (extra) setParams({ period: 'custom', from: extra.from, to: extra.to })
-              else setParams({ period: e.target.value, ...(e.target.value === 'custom' ? {} : { from: null, to: null }) })
+                : undefined;
+              if (extra) setParams({ period: "custom", from: extra.from, to: extra.to });
+              else
+                setParams({
+                  period: e.target.value,
+                  ...(e.target.value === "custom" ? {} : { from: null, to: null }),
+                });
             }}
-            className={cn(SELECT, 'font-semibold', compact && 'h-[var(--page-control-height,2.25rem)]')}
-            aria-label={t('period')}
+            className={cn(
+              SELECT,
+              "font-semibold",
+              compact && "h-[var(--page-control-height,2.25rem)]",
+            )}
+            aria-label={t("period")}
           >
             {extraPeriods && extraPeriods.length > 0 ? (
-              <optgroup label={extraPeriodsLabel ?? t('payPeriods')}>
+              <optgroup label={extraPeriodsLabel ?? t("payPeriods")}>
                 {extraPeriods.map((x) => (
                   <option key={x.id} value={`x:${x.id}`}>
                     {x.label}
@@ -300,8 +397,9 @@ export function ReportFilterBar({
               </optgroup>
             ) : null}
             {PRESET_GROUP_ORDER.map((group) => {
-              const groupPresets = PERIOD_PRESETS.filter((p) => p.group === group
-                && (!periodPresets || periodPresets.includes(p.id)))
+              const groupPresets = PERIOD_PRESETS.filter(
+                (p) => p.group === group && (!periodPresets || periodPresets.includes(p.id)),
+              );
               return groupPresets.length ? (
                 <optgroup key={group} label={tPeriods(`groups.${group}`)}>
                   {groupPresets.map((p) => (
@@ -310,7 +408,7 @@ export function ReportFilterBar({
                     </option>
                   ))}
                 </optgroup>
-              ) : null
+              ) : null;
             })}
           </Select>
         </Field>
@@ -318,38 +416,56 @@ export function ReportFilterBar({
 
       {isCustom && controls.asOf && (
         <>
-          <DateField value={shownTo} onChange={(value) => setRangeDraft({ from: value, to: value })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('asOf')} />
+          <DateField
+            value={shownTo}
+            onChange={(value) => setRangeDraft({ from: value, to: value })}
+            onKeyDown={applyRangeOnEnter}
+            className={DATE}
+            aria-label={t("asOf")}
+          />
           {applyRangeButton}
         </>
       )}
       {isCustom && !controls.asOf && !controls.dateRange && (
         <>
-          <DateField value={shownFrom} onChange={(value) => setRangeDraft({ from: value, to: shownTo })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('from')} />
+          <DateField
+            value={shownFrom}
+            onChange={(value) => setRangeDraft({ from: value, to: shownTo })}
+            onKeyDown={applyRangeOnEnter}
+            className={DATE}
+            aria-label={t("from")}
+          />
           <span className="text-slate-400">–</span>
-          <DateField value={shownTo} onChange={(value) => setRangeDraft({ from: shownFrom, to: value })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('to')} />
+          <DateField
+            value={shownTo}
+            onChange={(value) => setRangeDraft({ from: shownFrom, to: value })}
+            onKeyDown={applyRangeOnEnter}
+            className={DATE}
+            aria-label={t("to")}
+          />
           {applyRangeButton}
         </>
       )}
 
       {controls.dateRange && (
         <>
-          <Field label={t('from')}>
+          <Field label={t("from")}>
             <DateField
               value={shownFrom}
               onChange={(value) => setRangeDraft({ from: value, to: shownTo })}
               onKeyDown={applyRangeOnEnter}
               className={DATE}
-              aria-label={t('from')}
+              aria-label={t("from")}
             />
           </Field>
           <span className="text-slate-400">–</span>
-          <Field label={t('to')}>
+          <Field label={t("to")}>
             <DateField
               value={shownTo}
               onChange={(value) => setRangeDraft({ from: shownFrom, to: value })}
               onKeyDown={applyRangeOnEnter}
               className={DATE}
-              aria-label={t('to')}
+              aria-label={t("to")}
             />
           </Field>
           {applyRangeButton}
@@ -357,43 +473,62 @@ export function ReportFilterBar({
       )}
 
       {controls.breakout && (
-        <Field label={t('breakout')}>
-          <Select value={breakout} onChange={(e) => setParams({ breakout: e.target.value })} className={SELECT} aria-label={t('breakout')}>
-            <option value="none">{t('breakoutNone')}</option>
-            {breakoutOpts.filter((b) => b === 'month' || b === 'quarter' || builtinByKey.get(b)?.showInReports !== false).map((b) => (
-              <option key={b} value={b}>
-                {b === 'month' || b === 'quarter' ? t(`breakoutOpts.${b}`) : builtinBreakoutLabel(b)}
-              </option>
-            ))}
-            {(dimensions?.segments ?? []).filter((segment) => segment.showInReports).map((segment) => (
-              <option key={segment.key} value={`segment:${segment.key}`}>
-                {segment.name}
-              </option>
-            ))}
+        <Field label={t("breakout")}>
+          <Select
+            value={breakout}
+            onChange={(e) => setParams({ breakout: e.target.value })}
+            className={SELECT}
+            aria-label={t("breakout")}
+          >
+            <option value="none">{t("breakoutNone")}</option>
+            {breakoutOpts
+              .filter(
+                (b) =>
+                  b === "month" || b === "quarter" || builtinByKey.get(b)?.showInReports !== false,
+              )
+              .map((b) => (
+                <option key={b} value={b}>
+                  {b === "month" || b === "quarter"
+                    ? t(`breakoutOpts.${b}`)
+                    : builtinBreakoutLabel(b)}
+                </option>
+              ))}
+            {(dimensions?.segments ?? [])
+              .filter((segment) => segment.showInReports)
+              .map((segment) => (
+                <option key={segment.key} value={`segment:${segment.key}`}>
+                  {segment.name}
+                </option>
+              ))}
           </Select>
         </Field>
       )}
 
       {controls.compare && (
-        <Field label={t('compare')}>
-          <Select value={compare} onChange={(e) => setParams({ compare: e.target.value })} className={SELECT} aria-label={t('compare')}>
-            <option value="none">{t('compareNone')}</option>
-            <option value="prior_period">{t('comparePriorPeriod')}</option>
-            <option value="prior_year">{t('comparePriorYear')}</option>
+        <Field label={t("compare")}>
+          <Select
+            value={compare}
+            onChange={(e) => setParams({ compare: e.target.value })}
+            className={SELECT}
+            aria-label={t("compare")}
+          >
+            <option value="none">{t("compareNone")}</option>
+            <option value="prior_period">{t("comparePriorPeriod")}</option>
+            <option value="prior_year">{t("comparePriorYear")}</option>
           </Select>
         </Field>
       )}
 
       {controls.subsidiary && subsidiaries && subsidiaries.length > 1 && (
-        <Field label={t('subsidiary')}>
+        <Field label={t("subsidiary")}>
           <Select
-            value={params.get('sub') ?? ''}
+            value={params.get("sub") ?? ""}
             onChange={(e) => setParams({ sub: e.target.value || null })}
             className={SELECT}
-            aria-label={t('subsidiary')}
+            aria-label={t("subsidiary")}
           >
             {subsidiaries.map((s, i) => (
-              <option key={s.id} value={i === 0 ? '' : s.id}>
+              <option key={s.id} value={i === 0 ? "" : s.id}>
                 {s.label}
               </option>
             ))}
@@ -403,27 +538,44 @@ export function ReportFilterBar({
 
       {controls.customer && customers && customers.length > 0 && (
         <Select
-          value={params.get('customer') ?? ''}
+          value={params.get("customer") ?? ""}
           onChange={(e) => setParams({ customer: e.target.value || null })}
           className={SELECT}
-          aria-label={t('customer')}
+          aria-label={t("customer")}
         >
-          <option value="">{t('allCustomers')}</option>
+          <option value="">{t("allCustomers")}</option>
           {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>{customer.name}</option>
+            <option key={customer.id} value={customer.id}>
+              {customer.name}
+            </option>
           ))}
         </Select>
       )}
 
       {controls.dimensions && dimensions && (
         <>
-          {builtinByKey.get('department')?.showInReports !== false ? dimSelect('dept', deptText.label, dimensions.departments, deptText.all) : null}
-          {builtinByKey.get('project')?.showInReports !== false ? dimSelect('project', projectText.label, dimensions.projects, projectText.all) : null}
-          {builtinByKey.get('location')?.showInReports !== false ? dimSelect('location', locationText.label, dimensions.locations, locationText.all) : null}
-          {builtinByKey.get('class')?.showInReports !== false ? dimSelect('class', classText.label, dimensions.classes, classText.all) : null}
-          {(dimensions.segments ?? []).filter((segment) => segment.showInReports).map((segment) =>
-            dimSelect(`seg_${segment.key}`, segment.name, segment.values, t('allSegment', { name: segment.pluralName })),
-          )}
+          {builtinByKey.get("department")?.showInReports !== false
+            ? dimSelect("dept", deptText.label, dimensions.departments, deptText.all)
+            : null}
+          {builtinByKey.get("project")?.showInReports !== false
+            ? dimSelect("project", projectText.label, dimensions.projects, projectText.all)
+            : null}
+          {builtinByKey.get("location")?.showInReports !== false
+            ? dimSelect("location", locationText.label, dimensions.locations, locationText.all)
+            : null}
+          {builtinByKey.get("class")?.showInReports !== false
+            ? dimSelect("class", classText.label, dimensions.classes, classText.all)
+            : null}
+          {(dimensions.segments ?? [])
+            .filter((segment) => segment.showInReports)
+            .map((segment) =>
+              dimSelect(
+                `seg_${segment.key}`,
+                segment.name,
+                segment.values,
+                t("allSegment", { name: segment.pluralName }),
+              ),
+            )}
         </>
       )}
 
@@ -440,7 +592,7 @@ export function ReportFilterBar({
               onClick={() => setOptionsOpen((o) => !o)}
               className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             >
-              <SlidersHorizontal size={14} /> {t('options')}
+              <SlidersHorizontal size={14} /> {t("options")}
             </button>
           }
         >
@@ -450,48 +602,63 @@ export function ReportFilterBar({
                 <button
                   type="button"
                   onClick={() => {
-                    setAllReportSections('expand')
-                    setOptionsOpen(false)
+                    setAllReportSections("expand");
+                    setOptionsOpen(false);
                   }}
                   className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  <ChevronsDown size={15} /> {t('expandAll')}
+                  <ChevronsDown size={15} /> {t("expandAll")}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setAllReportSections('collapse')
-                    setOptionsOpen(false)
+                    setAllReportSections("collapse");
+                    setOptionsOpen(false);
                   }}
                   className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  <ChevronsUp size={15} /> {t('collapseAll')}
+                  <ChevronsUp size={15} /> {t("collapseAll")}
                 </button>
               </div>
             ) : null}
             {controls.basis && (
               <label className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-slate-500 dark:text-slate-400">{t('basis')}</span>
-                <Select value={basis} onChange={(e) => setParams({ basis: e.target.value })} className="h-8 w-32" aria-label={t('basis')}>
-                  <option value="accrual">{t('basisAccrual')}</option>
-                  <option value="cash">{t('basisCash')}</option>
+                <span className="text-slate-500 dark:text-slate-400">{t("basis")}</span>
+                <Select
+                  value={basis}
+                  onChange={(e) => setParams({ basis: e.target.value })}
+                  className="h-8 w-32"
+                  aria-label={t("basis")}
+                >
+                  <option value="accrual">{t("basisAccrual")}</option>
+                  <option value="cash">{t("basisCash")}</option>
                 </Select>
               </label>
             )}
             {controls.scale && (
               <label className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-slate-500 dark:text-slate-400">{t('scale')}</span>
-                <Select value={scale} onChange={(e) => setParams({ scale: e.target.value })} className="h-8 w-32" aria-label={t('scale')}>
-                  <option value="actual">{t('scaleActual')}</option>
-                  <option value="thousands">{t('scaleThousands')}</option>
-                  <option value="millions">{t('scaleMillions')}</option>
+                <span className="text-slate-500 dark:text-slate-400">{t("scale")}</span>
+                <Select
+                  value={scale}
+                  onChange={(e) => setParams({ scale: e.target.value })}
+                  className="h-8 w-32"
+                  aria-label={t("scale")}
+                >
+                  <option value="actual">{t("scaleActual")}</option>
+                  <option value="thousands">{t("scaleThousands")}</option>
+                  <option value="millions">{t("scaleMillions")}</option>
                 </Select>
               </label>
             )}
             {controls.showZero && (
               <label className="flex cursor-pointer items-center justify-between gap-2 text-sm">
-                <span className="text-slate-500 dark:text-slate-400">{t('showZeros')}</span>
-                <input type="checkbox" checked={showZero} onChange={() => setParams({ zero: showZero ? null : '1' })} className="h-4 w-4 accent-teal-600" />
+                <span className="text-slate-500 dark:text-slate-400">{t("showZeros")}</span>
+                <input
+                  type="checkbox"
+                  checked={showZero}
+                  onChange={() => setParams({ zero: showZero ? null : "1" })}
+                  className="h-4 w-4 accent-teal-600"
+                />
               </label>
             )}
           </div>
@@ -500,5 +667,5 @@ export function ReportFilterBar({
 
       {actions && <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>}
     </div>
-  )
+  );
 }

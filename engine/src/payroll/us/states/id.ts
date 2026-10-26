@@ -24,13 +24,19 @@ import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 import {
   evaluateUsNonresidentThreshold,
   roundUsFinalWithholding,
@@ -65,13 +71,17 @@ const DOLLAR = 10_000n;
  */
 const ID_SUNSET_EDITION_FROM = "2026-07-31";
 
-export type IdPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly" | "annual" | "daily";
+export type IdPeriod = "weekly" | "biweekly" | "semimonthly" | "monthly" | "annual" | "daily";
 
 export type IdFilingStatus = "single" | "married" | "married_single_rate";
 
 const ID_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "annual",
+  "daily",
 ];
 
 export interface IdPeriodThresholds {
@@ -109,29 +119,31 @@ export const ID_RATES_2026_07_23: IdYearRates = {
   effectiveFrom: ID_SUNSET_EDITION_FROM,
 };
 
-export const ID_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Idaho Table for Percentage Computation Method of Withholding (Rev. 07-23-2026)",
-  effectiveFrom: ID_SUNSET_EDITION_FROM,
-  citation:
-    "Idaho State Tax Commission, Table for Percentage Computation Method of "
-    + "Withholding, revised 07-23-2026 — child-tax-credit sunset, $0 ICTCAT "
-    + "allowance, 5.3% over the printed per-period threshold, $1,212 biweekly "
-    + "unmarried 4-allowance example ($31); effective from the Commission's "
-    + "July 31, 2026 announcement directing use going forward from issuance",
-  status: "published",
-  region: "ID",
-}];
+export const ID_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Idaho Table for Percentage Computation Method of Withholding (Rev. 07-23-2026)",
+    effectiveFrom: ID_SUNSET_EDITION_FROM,
+    citation:
+      "Idaho State Tax Commission, Table for Percentage Computation Method of " +
+      "Withholding, revised 07-23-2026 — child-tax-credit sunset, $0 ICTCAT " +
+      "allowance, 5.3% over the printed per-period threshold, $1,212 biweekly " +
+      "unmarried 4-allowance example ($31); effective from the Commission's " +
+      "July 31, 2026 announcement directing use going forward from issuance",
+    status: "published",
+    region: "ID",
+  },
+];
 
 function requireIdEditionEffective(payDate: string): void {
   if (payDate < ID_SUNSET_EDITION_FROM) {
     throw new PayrollError(
-      `Idaho income tax withholding for pay dates before ${ID_SUNSET_EDITION_FROM} is not loaded — `
-      + "the April 2025 Table for Percentage Computation Method still subtracted Idaho Child Tax "
-      + `Credit allowances. Contact support if a `
-      + "pre-July-31-2026 pay date must be calculated. Never apply the revised "
-      + "zero-allowance tables to an earlier pay date: the July 31, 2026 announcement directs "
-      + "their use going forward from issuance, and no operative date before that is established.",
+      `Idaho income tax withholding for pay dates before ${ID_SUNSET_EDITION_FROM} is not loaded — ` +
+        "the April 2025 Table for Percentage Computation Method still subtracted Idaho Child Tax " +
+        `Credit allowances. Contact support if a ` +
+        "pre-July-31-2026 pay date must be calculated. Never apply the revised " +
+        "zero-allowance tables to an earlier pay date: the July 31, 2026 announcement directs " +
+        "their use going forward from issuance, and no operative date before that is established.",
     );
   }
 }
@@ -144,8 +156,15 @@ export function idUsesMarriedTable(status: IdFilingStatus): boolean {
   return status === "married";
 }
 
-export function idPeriodTax(wages: bigint, period: IdPeriod, married: boolean, rates: IdYearRates): bigint {
-  const threshold = U(married ? ID_THRESHOLDS_2026_07_23[period].married : ID_THRESHOLDS_2026_07_23[period].single);
+export function idPeriodTax(
+  wages: bigint,
+  period: IdPeriod,
+  married: boolean,
+  rates: IdYearRates,
+): bigint {
+  const threshold = U(
+    married ? ID_THRESHOLDS_2026_07_23[period].married : ID_THRESHOLDS_2026_07_23[period].single,
+  );
   const excess = max0(wages - threshold);
   if (excess === 0n) return 0n;
   return idRoundToDollar(mulRateCents(excess, rates.rate));
@@ -164,7 +183,8 @@ function compute(
   const exempt = context.exemptResult({ factorKey: "ID_EXEMPT", factorFormat: "decimal" });
   if (exempt) return exempt;
 
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as IdFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single") as IdFilingStatus;
   const married = idUsesMarriedTable(status);
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   const reportedWages = U(input.wages) + U(input.supplemental ?? "0");
@@ -174,7 +194,11 @@ function compute(
   if (input.basis === "nonresident") {
     const allocation = requireUsWageAllocation(input.wageAllocations, "ID", null);
     wages = U(requireUsSourceWages(input.wageAllocations, "ID", null));
-    const thresholdResult = evaluateUsNonresidentThreshold(allocation, ID_NONRESIDENT_EARNINGS_RULE, input.periodsPerYear);
+    const thresholdResult = evaluateUsNonresidentThreshold(
+      allocation,
+      ID_NONRESIDENT_EARNINGS_RULE,
+      input.periodsPerYear,
+    );
     factors.ID_NONRESIDENT_SOURCE_WAGES = D(wages);
     factors.ID_NONRESIDENT_SOURCE_WAGES_YTD = D(U(allocation.sourceWagesYearToDate ?? "0"));
     if (!thresholdResult.crossed) {
@@ -196,7 +220,9 @@ function compute(
   trace("ID_TAXABLE", taxable);
 
   const threshold = U(
-    married ? ID_THRESHOLDS_2026_07_23[published].married : ID_THRESHOLDS_2026_07_23[published].single,
+    married
+      ? ID_THRESHOLDS_2026_07_23[published].married
+      : ID_THRESHOLDS_2026_07_23[published].single,
   );
   trace("ID_THRESHOLD", threshold);
 
@@ -210,7 +236,10 @@ function compute(
     factors.ID_CATCHUP_TAX = D(catchUpTax);
   }
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const total = roundUsFinalWithholding(periodTax + catchUpTax + extra, ID_WITHHOLDING.finalRounding);
+  const total = roundUsFinalWithholding(
+    periodTax + catchUpTax + extra,
+    ID_WITHHOLDING.finalRounding,
+  );
   trace("ID_WITHHELD", total);
 
   return {
@@ -278,13 +307,13 @@ export const ID_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "ID" },
   purpose: "withholding",
   citation:
-    "Idaho State Tax Commission, Table for Percentage Computation Method of "
-    + "Withholding, revised 07-23-2026; Computing Withholding; Form ID W-4 "
-    + "(EFO00307 04-28-2025)",
+    "Idaho State Tax Commission, Table for Percentage Computation Method of " +
+    "Withholding, revised 07-23-2026; Computing Withholding; Form ID W-4 " +
+    "(EFO00307 04-28-2025)",
   summary:
-    "Sets Idaho withholding status A/B/C, allowances, and extra withholding. "
-    + "After the Idaho Child Tax Credit sunset the allowance amount is zero; "
-    + "status still selects the Single or Married percentage table.",
+    "Sets Idaho withholding status A/B/C, allowances, and extra withholding. " +
+    "After the Idaho Child Tax Credit sunset the allowance amount is zero; " +
+    "status still selects the Single or Married percentage table.",
   storage: "certificate_rows",
   fields: [
     {
@@ -301,8 +330,8 @@ export const ID_CERTIFICATE: PayrollCertificate = {
         },
       ],
       help:
-        "Status A and C use the Single Persons table. Status B uses the Married "
-        + "Persons table. Default Single is the higher-withholding ID W-4 box A.",
+        "Status A and C use the Single Persons table. Status B uses the Married " +
+        "Persons table. Default Single is the higher-withholding ID W-4 box A.",
     },
     {
       key: "allowances",
@@ -312,10 +341,10 @@ export const ID_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "After the July 23 2026 sunset the ICTCAT amount is zero, so each "
-        + "allowance subtracts $0 from wages. The field is still collected "
-        + "because Form ID W-4 line 1 is still filed. Write Exempt instead of "
-        + "a count by setting the exempt flag.",
+        "After the July 23 2026 sunset the ICTCAT amount is zero, so each " +
+        "allowance subtracts $0 from wages. The field is still collected " +
+        "because Form ID W-4 line 1 is still filed. Write Exempt instead of " +
+        "a count by setting the exempt flag.",
     },
     {
       key: "additional_per_period",
@@ -324,17 +353,17 @@ export const ID_CERTIFICATE: PayrollCertificate = {
       decimals: 0,
       min: "0",
       help:
-        "Whole dollars on Form ID W-4. Added AFTER the percentage method is "
-        + "rounded to the nearest whole dollar.",
+        "Whole dollars on Form ID W-4. Added AFTER the percentage method is " +
+        "rounded to the nearest whole dollar.",
     },
     {
       key: "exempt",
       label: "Line 1 — Exempt from Idaho withholding",
       kind: "flag",
       help:
-        "Form ID W-4 lets the employee write Exempt on line 1 when last year "
-        + "had no Idaho income-tax liability and none is expected this year. "
-        + "A current exempt flag withholds zero.",
+        "Form ID W-4 lets the employee write Exempt on line 1 when last year " +
+        "had no Idaho income-tax liability and none is expected this year. " +
+        "A current exempt flag withholds zero.",
     },
   ],
 };
@@ -353,6 +382,6 @@ export const ID_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Idaho State Tax Commission, Table for Percentage Computation Method of "
-    + "Withholding, revised 07-23-2026; Form ID W-4",
+    "Idaho State Tax Commission, Table for Percentage Computation Method of " +
+    "Withholding, revised 07-23-2026; Form ID W-4",
 };

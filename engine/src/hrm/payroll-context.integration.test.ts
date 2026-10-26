@@ -34,7 +34,11 @@ async function setup(): Promise<Ctx> {
   const { db } = await import("../platform/db.ts");
   const { createScratchOrg, createScratchUser } = await import("../testing/fixtures.ts");
   const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Payroll context actor", "payroll_context_actor");
+  const actorId = await createScratchUser(
+    org.orgId,
+    "Payroll context actor",
+    "payroll_context_actor",
+  );
   await db.execute(sql`
     insert into user_permission_overrides (org_id, user_id, permission, effect)
     values (${org.orgId}, ${actorId}, 'payroll.run', 'grant')`);
@@ -67,7 +71,15 @@ async function setup(): Promise<Ctx> {
                           tax_year, run_status, created_by, updated_by)
     values (${runId}, ${org.orgId}, ${scheduleId}, '2026-06-15', '2026-06-28', '2026-07-01',
             2026, 'calculated', ${actorId}, ${actorId})`);
-  return { orgId: org.orgId, subId: org.subsidiaryId, actorId, scheduleId, componentId, planId, runId };
+  return {
+    orgId: org.orgId,
+    subId: org.subsidiaryId,
+    actorId,
+    scheduleId,
+    componentId,
+    planId,
+    runId,
+  };
 }
 
 async function teardown(orgId: string): Promise<void> {
@@ -75,18 +87,36 @@ async function teardown(orgId: string): Promise<void> {
   await dropScratchOrgReporting(orgId);
 }
 
-async function mkPerson(ctx: Ctx, name: string, subsidiaryId: string | null = ctx.subId): Promise<string> {
+async function mkPerson(
+  ctx: Ctx,
+  name: string,
+  subsidiaryId: string | null = ctx.subId,
+): Promise<string> {
   const { db } = await import("../platform/db.ts");
-  return (await db.execute<{ id: string }>(sql`
+  return (
+    await db.execute<{ id: string }>(
+      sql`
     insert into parties (org_id, kind, display_name, subsidiary_id, custom)
-    values (${ctx.orgId}, 'person', ${name}, ${subsidiaryId}, '{}'::jsonb) returning id`, "objects"))[0]!.id;
+    values (${ctx.orgId}, 'person', ${name}, ${subsidiaryId}, '{}'::jsonb) returning id`,
+      "objects",
+    )
+  )[0]!.id;
 }
 
-async function mkEmployment(ctx: Ctx, workerId: string, subId: string = ctx.subId): Promise<string> {
+async function mkEmployment(
+  ctx: Ctx,
+  workerId: string,
+  subId: string = ctx.subId,
+): Promise<string> {
   const { db } = await import("../platform/db.ts");
-  return (await db.execute<{ id: string }>(sql`
+  return (
+    await db.execute<{ id: string }>(
+      sql`
     insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${ctx.orgId}, ${workerId}, ${subId}) returning id`, "objects"))[0]!.id;
+    values (${ctx.orgId}, ${workerId}, ${subId}) returning id`,
+      "objects",
+    )
+  )[0]!.id;
 }
 
 async function mkVersion(
@@ -162,7 +192,10 @@ async function seedPersonRow(
     case "payroll_retro_settlements": {
       const retroId = randomUUID();
       const sourceId = randomUUID();
-      for (const [id, status] of [[retroId, "draft"], [sourceId, "approved"]] as const) {
+      for (const [id, status] of [
+        [retroId, "draft"],
+        [sourceId, "approved"],
+      ] as const) {
         await db.execute(sql`
           insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
                                  currency, status, created_by, updated_by)
@@ -216,11 +249,18 @@ const TABLES = [
   "pay_run_holiday_assertions",
 ] as const;
 
-async function employmentOf(table: string, orgId: string, personId: string): Promise<string | null> {
+async function employmentOf(
+  table: string,
+  orgId: string,
+  personId: string,
+): Promise<string | null> {
   const { db } = await import("../platform/db.ts");
-  const rows = await db.execute<{ employmentId: string | null }>(sql`
+  const rows = await db.execute<{ employmentId: string | null }>(
+    sql`
     select employment_id as "employmentId" from ${sql.identifier(table)}
-     where org_id = ${orgId} and employee_party_id = ${personId}`, "objects");
+     where org_id = ${orgId} and employee_party_id = ${personId}`,
+    "objects",
+  );
   assert.equal(rows.length, 1);
   return rows[0]!.employmentId;
 }
@@ -228,464 +268,608 @@ async function employmentOf(table: string, orgId: string, personId: string): Pro
 /** updated_at of the person's stub: proves a stamp run counted without rewriting. */
 async function stubUpdatedAt(orgId: string, personId: string): Promise<string> {
   const { db } = await import("../platform/db.ts");
-  const rows = await db.execute<{ updatedAt: string }>(sql`
+  const rows = await db.execute<{ updatedAt: string }>(
+    sql`
     select updated_at::text as "updatedAt" from pay_stubs
-     where org_id = ${orgId} and employee_party_id = ${personId}`, "objects");
+     where org_id = ${orgId} and employee_party_id = ${personId}`,
+    "objects",
+  );
   assert.equal(rows.length, 1);
   return rows[0]!.updatedAt;
 }
 
 async function personRowCount(table: string, orgId: string, personId: string): Promise<number> {
   const { db } = await import("../platform/db.ts");
-  return Number((await db.execute<{ n: string }>(sql`
+  return Number(
+    (
+      await db.execute<{ n: string }>(
+        sql`
     select count(*)::text as n from ${sql.identifier(table)}
-     where org_id = ${orgId} and employee_party_id = ${personId}`, "objects"))[0]!.n);
+     where org_id = ${orgId} and employee_party_id = ${personId}`,
+        "objects",
+      )
+    )[0]!.n,
+  );
 }
 
-test("every 0186 FK refuses a cross-org employment id", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const other = await setup();
-  t.after(() => teardown(other.orgId));
-  const foreignWorker = await mkPerson(other, "Foreign worker");
-  const foreignEmployment = await mkEmployment(other, foreignWorker);
-  for (const table of TABLES) {
-    const person = await mkPerson(ctx, `Cross-org ${table}`);
-    await assert.rejects(
-      seedPersonRow(ctx, table, person, foreignEmployment),
-      (error: unknown) => {
-        const text = refusalText(error);
-        assert.match(text, new RegExp(`${table}_employment_tenant_fkey`),
-          `${table}: cross-org refusal must name the tenant FK`);
-        return true;
-      },
-      `${table}: cross-org employment id must be refused`,
-    );
-    assert.equal(await personRowCount(table, ctx.orgId, person), 0,
-      `${table}: the refused INSERT wrote nothing`);
-  }
-});
-
-test("the coherence trigger refuses a same-org employment of another worker, naming both ids", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const workerA = await mkPerson(ctx, "Worker A");
-  const workerB = await mkPerson(ctx, "Worker B");
-  const employmentA = await mkEmployment(ctx, workerA);
-  for (const table of TABLES) {
-    await assert.rejects(
-      seedPersonRow(ctx, table, workerB, employmentA),
-      (error: unknown) => {
-        // PostgreSQL trigger exceptions carry the message, not the function
-        // name — the contract phrase plus both ids is the stable assertion.
-        const text = refusalText(error);
-        assert.match(text, /names an employment of worker/);
-        assert.match(text, new RegExp(employmentA), `${table}: refusal must name the employment id`);
-        assert.match(text, new RegExp(workerB), `${table}: refusal must name the employee id`);
-        return true;
-      },
-      `${table}: cross-person employment id must be refused`,
-    );
-    assert.equal(await personRowCount(table, ctx.orgId, workerB), 0,
-      `${table}: the refused INSERT wrote nothing`);
-  }
-});
-
-test("profiles carry a partial unique on employment; the legacy per-person unique stays", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../platform/db.ts");
-  const worker = await mkPerson(ctx, "Profile worker");
-  const employment = await mkEmployment(ctx, worker);
-  await seedPersonRow(ctx, "employee_payroll_profiles", worker);
-  await db.execute(sql`
-    update employee_payroll_profiles set employment_id = ${employment}
-     where org_id = ${ctx.orgId} and employee_party_id = ${worker}`);
-  // Legacy unique still holds on unstamped rows.
-  await assert.rejects(
-    db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province, created_by, updated_by)
-      values (${ctx.orgId}, ${worker}, ${ctx.scheduleId}, 'CA', 'BC', ${ctx.actorId}, ${ctx.actorId})`),
-    (error: unknown) => {
-      assert.match(refusalText(error), /employee_payroll_profiles_employee/);
-      return true;
-    },
-    "the legacy per-person unique must stay",
-  );
-  // Partial unique refuses a second profile on the same employment. The
-  // coherence trigger would fire first on a cross-person write (it owns that
-  // refusal), so the backstop is proven with the trigger dropped inside a
-  // rolled-back transaction — the committed schema is never touched.
-  const twin = await mkPerson(ctx, "Twin worker");
-  await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province, created_by, updated_by)
-    values (${ctx.orgId}, ${twin}, ${ctx.scheduleId}, 'CA', 'BC', ${ctx.actorId}, ${ctx.actorId})`);
-  class ProbeRollback extends Error {}
-  await assert.rejects(
-    db.transaction(async (tx) => {
-      await tx.execute(sql`
-        drop trigger employee_payroll_profiles_employment_coherence on employee_payroll_profiles`);
+test(
+  "every 0186 FK refuses a cross-org employment id",
+  { skip: !DB, timeout: 120_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const other = await setup();
+    t.after(() => teardown(other.orgId));
+    const foreignWorker = await mkPerson(other, "Foreign worker");
+    const foreignEmployment = await mkEmployment(other, foreignWorker);
+    for (const table of TABLES) {
+      const person = await mkPerson(ctx, `Cross-org ${table}`);
       await assert.rejects(
-        tx.execute(sql`
-          update employee_payroll_profiles set employment_id = ${employment}
-           where org_id = ${ctx.orgId} and employee_party_id = ${twin}`),
+        seedPersonRow(ctx, table, person, foreignEmployment),
         (error: unknown) => {
-          assert.match(refusalText(error), /employee_payroll_profiles_employment_unique/);
+          const text = refusalText(error);
+          assert.match(
+            text,
+            new RegExp(`${table}_employment_tenant_fkey`),
+            `${table}: cross-org refusal must name the tenant FK`,
+          );
           return true;
         },
-        "two profiles on one employment must be refused",
+        `${table}: cross-org employment id must be refused`,
       );
-      throw new ProbeRollback();
-    }),
-    (error: unknown) => error instanceof ProbeRollback,
-    "the backstop probe rolled back",
-  );
-});
+      assert.equal(
+        await personRowCount(table, ctx.orgId, person),
+        0,
+        `${table}: the refused INSERT wrote nothing`,
+      );
+    }
+  },
+);
 
-test("plan limits refuse an employment link on non-person scopes", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../platform/db.ts");
-  const worker = await mkPerson(ctx, "Limit worker");
-  const employment = await mkEmployment(ctx, worker);
-  await assert.rejects(
-    db.execute(sql`
+test(
+  "the coherence trigger refuses a same-org employment of another worker, naming both ids",
+  { skip: !DB, timeout: 120_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const workerA = await mkPerson(ctx, "Worker A");
+    const workerB = await mkPerson(ctx, "Worker B");
+    const employmentA = await mkEmployment(ctx, workerA);
+    for (const table of TABLES) {
+      await assert.rejects(
+        seedPersonRow(ctx, table, workerB, employmentA),
+        (error: unknown) => {
+          // PostgreSQL trigger exceptions carry the message, not the function
+          // name — the contract phrase plus both ids is the stable assertion.
+          const text = refusalText(error);
+          assert.match(text, /names an employment of worker/);
+          assert.match(
+            text,
+            new RegExp(employmentA),
+            `${table}: refusal must name the employment id`,
+          );
+          assert.match(text, new RegExp(workerB), `${table}: refusal must name the employee id`);
+          return true;
+        },
+        `${table}: cross-person employment id must be refused`,
+      );
+      assert.equal(
+        await personRowCount(table, ctx.orgId, workerB),
+        0,
+        `${table}: the refused INSERT wrote nothing`,
+      );
+    }
+  },
+);
+
+test(
+  "profiles carry a partial unique on employment; the legacy per-person unique stays",
+  { skip: !DB, timeout: 120_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const { db } = await import("../platform/db.ts");
+    const worker = await mkPerson(ctx, "Profile worker");
+    const employment = await mkEmployment(ctx, worker);
+    await seedPersonRow(ctx, "employee_payroll_profiles", worker);
+    await db.execute(sql`
+    update employee_payroll_profiles set employment_id = ${employment}
+     where org_id = ${ctx.orgId} and employee_party_id = ${worker}`);
+    // Legacy unique still holds on unstamped rows.
+    await assert.rejects(
+      db.execute(sql`
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province, created_by, updated_by)
+      values (${ctx.orgId}, ${worker}, ${ctx.scheduleId}, 'CA', 'BC', ${ctx.actorId}, ${ctx.actorId})`),
+      (error: unknown) => {
+        assert.match(refusalText(error), /employee_payroll_profiles_employee/);
+        return true;
+      },
+      "the legacy per-person unique must stay",
+    );
+    // Partial unique refuses a second profile on the same employment. The
+    // coherence trigger would fire first on a cross-person write (it owns that
+    // refusal), so the backstop is proven with the trigger dropped inside a
+    // rolled-back transaction — the committed schema is never touched.
+    const twin = await mkPerson(ctx, "Twin worker");
+    await db.execute(sql`
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province, created_by, updated_by)
+    values (${ctx.orgId}, ${twin}, ${ctx.scheduleId}, 'CA', 'BC', ${ctx.actorId}, ${ctx.actorId})`);
+    class ProbeRollback extends Error {}
+    await assert.rejects(
+      db.transaction(async (tx) => {
+        await tx.execute(sql`
+        drop trigger employee_payroll_profiles_employment_coherence on employee_payroll_profiles`);
+        await assert.rejects(
+          tx.execute(sql`
+          update employee_payroll_profiles set employment_id = ${employment}
+           where org_id = ${ctx.orgId} and employee_party_id = ${twin}`),
+          (error: unknown) => {
+            assert.match(refusalText(error), /employee_payroll_profiles_employment_unique/);
+            return true;
+          },
+          "two profiles on one employment must be refused",
+        );
+        throw new ProbeRollback();
+      }),
+      (error: unknown) => error instanceof ProbeRollback,
+      "the backstop probe rolled back",
+    );
+  },
+);
+
+test(
+  "plan limits refuse an employment link on non-person scopes",
+  { skip: !DB, timeout: 120_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const { db } = await import("../platform/db.ts");
+    const worker = await mkPerson(ctx, "Limit worker");
+    const employment = await mkEmployment(ctx, worker);
+    await assert.rejects(
+      db.execute(sql`
       insert into entitlement_plan_limits (org_id, plan_id, subsidiary_id, employment_id, max_balance,
                                            effective_from, created_by, updated_by)
       values (${ctx.orgId}, ${ctx.planId}, ${ctx.subId}, ${employment}, '80.00', '2026-01-01',
               ${ctx.actorId}, ${ctx.actorId})`),
-    (error: unknown) => {
-      assert.match(refusalText(error), /entitlement_plan_limits_employment_scope/);
-      return true;
-    },
-    "subsidiary-scope limits must not carry an employment link",
-  );
-});
+      (error: unknown) => {
+        assert.match(refusalText(error), /entitlement_plan_limits_employment_scope/);
+        return true;
+      },
+      "subsidiary-scope limits must not carry an employment link",
+    );
+  },
+);
 
-test("stamp dry-run writes nothing; the real stamp fills every table and is idempotent", { skip: !DB, timeout: 180_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const mod = await import("./payroll-context.ts");
-  const worker = await mkPerson(ctx, "Stamp worker");
-  const employment = await mkEmployment(ctx, worker);
-  await mkVersion(ctx, employment);
-  for (const table of TABLES) {
-    // pay_stubs.employment_id is NOT NULL: the stub arrives pre-linked and
-    // the stamp only ever counts it.
-    await seedPersonRow(ctx, table, worker, table === "pay_stubs" ? employment : null);
-  }
-  const stubTouchedAt = await stubUpdatedAt(ctx.orgId, worker);
-  const dry = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: true });
-  assert.equal(dry.dryRun, true);
-  assert.deepEqual(dry.requiresReview, []);
-  for (const table of TABLES) {
-    if (table === "entitlement_ledger") {
-      // Append-only: reported, never written, never refused over.
-      assert.equal(dry.stamped[table], 0);
-      assert.equal(dry.unstampable[table], 1, "ledger history must be reported as unstampable");
-    } else if (table === "pay_stubs") {
-      // Pre-linked by schema force: nothing to stamp, and the dry run must
-      // not touch the row it only counted.
-      assert.equal(dry.stamped[table], 0);
+test(
+  "stamp dry-run writes nothing; the real stamp fills every table and is idempotent",
+  { skip: !DB, timeout: 180_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const mod = await import("./payroll-context.ts");
+    const worker = await mkPerson(ctx, "Stamp worker");
+    const employment = await mkEmployment(ctx, worker);
+    await mkVersion(ctx, employment);
+    for (const table of TABLES) {
+      // pay_stubs.employment_id is NOT NULL: the stub arrives pre-linked and
+      // the stamp only ever counts it.
+      await seedPersonRow(ctx, table, worker, table === "pay_stubs" ? employment : null);
+    }
+    const stubTouchedAt = await stubUpdatedAt(ctx.orgId, worker);
+    const dry = await mod.stampEmploymentContext({
+      orgId: ctx.orgId,
+      actorId: ctx.actorId,
+      dryRun: true,
+    });
+    assert.equal(dry.dryRun, true);
+    assert.deepEqual(dry.requiresReview, []);
+    for (const table of TABLES) {
+      if (table === "entitlement_ledger") {
+        // Append-only: reported, never written, never refused over.
+        assert.equal(dry.stamped[table], 0);
+        assert.equal(dry.unstampable[table], 1, "ledger history must be reported as unstampable");
+      } else if (table === "pay_stubs") {
+        // Pre-linked by schema force: nothing to stamp, and the dry run must
+        // not touch the row it only counted.
+        assert.equal(dry.stamped[table], 0);
+        assert.equal(await employmentOf(table, ctx.orgId, worker), employment);
+        assert.equal(
+          await stubUpdatedAt(ctx.orgId, worker),
+          stubTouchedAt,
+          "dry-run must not rewrite the counted stub",
+        );
+      } else {
+        assert.equal(dry.stamped[table], 1, `${table}: dry-run must report one stamp`);
+        assert.equal(
+          await employmentOf(table, ctx.orgId, worker),
+          null,
+          `${table}: dry-run wrote nothing`,
+        );
+      }
+    }
+    const first = await mod.stampEmploymentContext({
+      orgId: ctx.orgId,
+      actorId: ctx.actorId,
+      dryRun: false,
+    });
+    assert.equal(first.dryRun, false);
+    assert.equal(first.unstampable["entitlement_ledger"], 1);
+    for (const table of TABLES) {
+      if (table === "entitlement_ledger") continue;
+      if (table === "pay_stubs") {
+        assert.equal(
+          first.stamped[table],
+          0,
+          "pay_stubs arrives linked: the real stamp counts it, never writes it",
+        );
+        assert.equal(first.alreadyStamped[table], 1);
+        assert.equal(
+          await stubUpdatedAt(ctx.orgId, worker),
+          stubTouchedAt,
+          "real stamp must not rewrite the counted stub",
+        );
+      } else {
+        assert.equal(first.stamped[table], 1, `${table}: real stamp must write one row`);
+      }
       assert.equal(await employmentOf(table, ctx.orgId, worker), employment);
-      assert.equal(await stubUpdatedAt(ctx.orgId, worker), stubTouchedAt, "dry-run must not rewrite the counted stub");
-    } else {
-      assert.equal(dry.stamped[table], 1, `${table}: dry-run must report one stamp`);
-      assert.equal(await employmentOf(table, ctx.orgId, worker), null, `${table}: dry-run wrote nothing`);
     }
-  }
-  const first = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false });
-  assert.equal(first.dryRun, false);
-  assert.equal(first.unstampable["entitlement_ledger"], 1);
-  for (const table of TABLES) {
-    if (table === "entitlement_ledger") continue;
-    if (table === "pay_stubs") {
-      assert.equal(first.stamped[table], 0, "pay_stubs arrives linked: the real stamp counts it, never writes it");
-      assert.equal(first.alreadyStamped[table], 1);
-      assert.equal(await stubUpdatedAt(ctx.orgId, worker), stubTouchedAt, "real stamp must not rewrite the counted stub");
-    } else {
-      assert.equal(first.stamped[table], 1, `${table}: real stamp must write one row`);
+    assert.equal(await employmentOf("entitlement_ledger", ctx.orgId, worker), null);
+    const second = await mod.stampEmploymentContext({
+      orgId: ctx.orgId,
+      actorId: ctx.actorId,
+      dryRun: false,
+    });
+    for (const table of TABLES) {
+      if (table === "entitlement_ledger") continue;
+      assert.equal(second.stamped[table], 0, `${table}: re-stamp must write nothing`);
+      assert.equal(
+        second.alreadyStamped[table],
+        1,
+        `${table}: re-stamp must report the stamped row`,
+      );
     }
-    assert.equal(await employmentOf(table, ctx.orgId, worker), employment);
-  }
-  assert.equal(await employmentOf("entitlement_ledger", ctx.orgId, worker), null);
-  const second = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false });
-  for (const table of TABLES) {
-    if (table === "entitlement_ledger") continue;
-    assert.equal(second.stamped[table], 0, `${table}: re-stamp must write nothing`);
-    assert.equal(second.alreadyStamped[table], 1, `${table}: re-stamp must report the stamped row`);
-  }
-});
+  },
+);
 
-test("stamp refuses the org on ambiguity without allowPartial; allowPartial stamps the clean and lists the rest", { skip: !DB, timeout: 180_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../platform/db.ts");
-  const mod = await import("./payroll-context.ts");
-  const clean = await mkPerson(ctx, "Clean worker");
-  const cleanEmployment = await mkEmployment(ctx, clean);
-  await mkVersion(ctx, cleanEmployment);
-  await seedPersonRow(ctx, "employee_payroll_profiles", clean);
-  const ambiguous = await mkPerson(ctx, "Ambiguous worker");
-  await mkEmployment(ctx, ambiguous);
-  await mkEmployment(ctx, ambiguous);
-  await seedPersonRow(ctx, "employee_payroll_profiles", ambiguous);
-  const sub2 = randomUUID();
-  await db.execute(sql`
+test(
+  "stamp refuses the org on ambiguity without allowPartial; allowPartial stamps the clean and lists the rest",
+  { skip: !DB, timeout: 180_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const { db } = await import("../platform/db.ts");
+    const mod = await import("./payroll-context.ts");
+    const clean = await mkPerson(ctx, "Clean worker");
+    const cleanEmployment = await mkEmployment(ctx, clean);
+    await mkVersion(ctx, cleanEmployment);
+    await seedPersonRow(ctx, "employee_payroll_profiles", clean);
+    const ambiguous = await mkPerson(ctx, "Ambiguous worker");
+    await mkEmployment(ctx, ambiguous);
+    await mkEmployment(ctx, ambiguous);
+    await seedPersonRow(ctx, "employee_payroll_profiles", ambiguous);
+    const sub2 = randomUUID();
+    await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, created_by, updated_by)
     values (${sub2}, ${ctx.orgId}, ${ctx.subId}, 'Mismatch sub', 'USD', 'US', ${ctx.actorId}, ${ctx.actorId})`);
-  const mismatched = await mkPerson(ctx, "Mismatched worker");
-  await mkEmployment(ctx, mismatched, sub2);
-  await seedPersonRow(ctx, "employee_payroll_profiles", mismatched);
-  const missing = await mkPerson(ctx, "Missing worker");
-  await seedPersonRow(ctx, "employee_payroll_profiles", missing);
-  await assert.rejects(
-    mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false }),
-    (error: unknown) => {
-      assert.ok(error instanceof mod.StampRefusedError);
-      const reasons = [...error.requiresReview].map((entry) => entry.reason).sort();
-      assert.deepEqual(reasons, ["ambiguous_employment", "employer_mismatch", "no_employment"]);
-      return true;
-    },
-    "a dirty org refuses without allowPartial",
-  );
-  assert.equal(
-    await employmentOf("employee_payroll_profiles", ctx.orgId, clean),
-    null,
-    "the refused org wrote nothing, including the clean person",
-  );
-  const partial = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false, allowPartial: true });
-  assert.equal(await employmentOf("employee_payroll_profiles", ctx.orgId, clean), cleanEmployment);
-  assert.deepEqual(
-    [...partial.requiresReview].map((entry) => `${entry.partyId}:${entry.reason}`).sort(),
-    [ambiguous, mismatched, missing].map((id) => `${id}:${
-      id === ambiguous ? "ambiguous_employment" : id === mismatched ? "employer_mismatch" : "no_employment"
-    }`).sort(),
-  );
-});
-
-test("stamp refuses a stamped row that disagrees with the resolver, even under allowPartial", { skip: !DB, timeout: 180_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const mod = await import("./payroll-context.ts");
-  const worker = await mkPerson(ctx, "Rehire worker");
-  const first = await mkEmployment(ctx, worker);
-  await mkVersion(ctx, first);
-  await seedPersonRow(ctx, "employee_payroll_profiles", worker);
-  await seedPersonRow(ctx, "payroll_opening_balances", worker);
-  const stamped = await mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false });
-  assert.equal(stamped.stamped["employee_payroll_profiles"], 1);
-  // A later rehire leaves the worker with two employments: the stamped row
-  // no longer has an unambiguous resolver answer.
-  await mkEmployment(ctx, worker);
-  await assert.rejects(
-    mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false, allowPartial: true }),
-    (error: unknown) => {
-      assert.ok(error instanceof mod.StampRefusedError);
-      assert.match(error.message, new RegExp(first), "refusal must name the stamped employment");
-      assert.ok(error.requiresReview.some((entry) => entry.reason === "conflicting_stamp"));
-      return true;
-    },
-    "contradicting history refuses instead of overwriting",
-  );
-});
-
-test("the stamp writer refuses an actor without payroll.run, dry-run included, writing nothing", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const mod = await import("./payroll-context.ts");
-  const { createScratchUser } = await import("../testing/fixtures.ts");
-  const worker = await mkPerson(ctx, "Ungranted worker");
-  const employment = await mkEmployment(ctx, worker);
-  await mkVersion(ctx, employment);
-  for (const table of TABLES) {
-    await seedPersonRow(ctx, table, worker, table === "pay_stubs" ? employment : null);
-  }
-  const stubTouchedAt = await stubUpdatedAt(ctx.orgId, worker);
-  // No grant: this actor holds no payroll.run duty (setup grants only ctx.actorId).
-  const outsider = await createScratchUser(ctx.orgId, "Stamp outsider", "stamp_outsider");
-  for (const dryRun of [false, true] as const) {
+    const mismatched = await mkPerson(ctx, "Mismatched worker");
+    await mkEmployment(ctx, mismatched, sub2);
+    await seedPersonRow(ctx, "employee_payroll_profiles", mismatched);
+    const missing = await mkPerson(ctx, "Missing worker");
+    await seedPersonRow(ctx, "employee_payroll_profiles", missing);
     await assert.rejects(
-      mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: outsider, dryRun }),
+      mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: ctx.actorId, dryRun: false }),
+      (error: unknown) => {
+        assert.ok(error instanceof mod.StampRefusedError);
+        const reasons = [...error.requiresReview].map((entry) => entry.reason).sort();
+        assert.deepEqual(reasons, ["ambiguous_employment", "employer_mismatch", "no_employment"]);
+        return true;
+      },
+      "a dirty org refuses without allowPartial",
+    );
+    assert.equal(
+      await employmentOf("employee_payroll_profiles", ctx.orgId, clean),
+      null,
+      "the refused org wrote nothing, including the clean person",
+    );
+    const partial = await mod.stampEmploymentContext({
+      orgId: ctx.orgId,
+      actorId: ctx.actorId,
+      dryRun: false,
+      allowPartial: true,
+    });
+    assert.equal(
+      await employmentOf("employee_payroll_profiles", ctx.orgId, clean),
+      cleanEmployment,
+    );
+    assert.deepEqual(
+      [...partial.requiresReview].map((entry) => `${entry.partyId}:${entry.reason}`).sort(),
+      [ambiguous, mismatched, missing]
+        .map(
+          (id) =>
+            `${id}:${
+              id === ambiguous
+                ? "ambiguous_employment"
+                : id === mismatched
+                  ? "employer_mismatch"
+                  : "no_employment"
+            }`,
+        )
+        .sort(),
+    );
+  },
+);
+
+test(
+  "stamp refuses a stamped row that disagrees with the resolver, even under allowPartial",
+  { skip: !DB, timeout: 180_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const mod = await import("./payroll-context.ts");
+    const worker = await mkPerson(ctx, "Rehire worker");
+    const first = await mkEmployment(ctx, worker);
+    await mkVersion(ctx, first);
+    await seedPersonRow(ctx, "employee_payroll_profiles", worker);
+    await seedPersonRow(ctx, "payroll_opening_balances", worker);
+    const stamped = await mod.stampEmploymentContext({
+      orgId: ctx.orgId,
+      actorId: ctx.actorId,
+      dryRun: false,
+    });
+    assert.equal(stamped.stamped["employee_payroll_profiles"], 1);
+    // A later rehire leaves the worker with two employments: the stamped row
+    // no longer has an unambiguous resolver answer.
+    await mkEmployment(ctx, worker);
+    await assert.rejects(
+      mod.stampEmploymentContext({
+        orgId: ctx.orgId,
+        actorId: ctx.actorId,
+        dryRun: false,
+        allowPartial: true,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof mod.StampRefusedError);
+        assert.match(error.message, new RegExp(first), "refusal must name the stamped employment");
+        assert.ok(error.requiresReview.some((entry) => entry.reason === "conflicting_stamp"));
+        return true;
+      },
+      "contradicting history refuses instead of overwriting",
+    );
+  },
+);
+
+test(
+  "the stamp writer refuses an actor without payroll.run, dry-run included, writing nothing",
+  { skip: !DB, timeout: 120_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const mod = await import("./payroll-context.ts");
+    const { createScratchUser } = await import("../testing/fixtures.ts");
+    const worker = await mkPerson(ctx, "Ungranted worker");
+    const employment = await mkEmployment(ctx, worker);
+    await mkVersion(ctx, employment);
+    for (const table of TABLES) {
+      await seedPersonRow(ctx, table, worker, table === "pay_stubs" ? employment : null);
+    }
+    const stubTouchedAt = await stubUpdatedAt(ctx.orgId, worker);
+    // No grant: this actor holds no payroll.run duty (setup grants only ctx.actorId).
+    const outsider = await createScratchUser(ctx.orgId, "Stamp outsider", "stamp_outsider");
+    for (const dryRun of [false, true] as const) {
+      await assert.rejects(
+        mod.stampEmploymentContext({ orgId: ctx.orgId, actorId: outsider, dryRun }),
+        (error: unknown) => {
+          assert.ok(error instanceof mod.PayrollContextAuthorizationError);
+          assert.match(error.message, /payroll\.run/);
+          assert.match(error.message, /\/admin\/roles/);
+          return true;
+        },
+        `unpermitted stamp must refuse (dryRun ${dryRun})`,
+      );
+    }
+    // Asserted against row counts, not the error alone: the refused writer
+    // stamped nothing on any of the nine writable tables. The stub arrives
+    // pre-linked by schema force, so "nothing" there means the link and the
+    // row timestamp are exactly as seeded.
+    for (const table of TABLES) {
+      if (table === "entitlement_ledger") continue;
+      if (table === "pay_stubs") {
+        assert.equal(await employmentOf(table, ctx.orgId, worker), employment);
+        assert.equal(
+          await stubUpdatedAt(ctx.orgId, worker),
+          stubTouchedAt,
+          "the refused stamp left the counted stub untouched",
+        );
+        continue;
+      }
+      assert.equal(
+        await employmentOf(table, ctx.orgId, worker),
+        null,
+        `${table}: the refused stamp wrote nothing`,
+      );
+    }
+  },
+);
+
+test(
+  "the resolver returns the single employment and refuses the three coded cases",
+  { skip: !DB, timeout: 120_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const { db } = await import("../platform/db.ts");
+    const mod = await import("./payroll-context.ts");
+    const base = { orgId: ctx.orgId, actorId: ctx.actorId, asOf: "2026-03-01" };
+    const worker = await mkPerson(ctx, "Resolved worker");
+    const employment = await mkEmployment(ctx, worker);
+    await mkVersion(ctx, employment);
+    const resolved = await mod.resolveEmploymentForPayroll({
+      ...base,
+      partyId: worker,
+      subsidiaryId: ctx.subId,
+    });
+    assert.equal(resolved.employmentId, employment);
+    assert.equal(resolved.employerSubsidiaryId, ctx.subId);
+    assert.equal(resolved.status, "active");
+    assert.equal(resolved.revision, 1);
+    const stranger = await mkPerson(ctx, "Stranger");
+    await assert.rejects(
+      mod.resolveEmploymentForPayroll({ ...base, partyId: stranger, subsidiaryId: ctx.subId }),
+      (error: unknown) => {
+        assert.ok(error instanceof mod.PayrollContextError);
+        assert.equal(error.code, "no_employment");
+        assert.match(error.message, /HRM employment change request/);
+        assert.match(error.message, /Admin → Users/);
+        return true;
+      },
+    );
+    const doubled = await mkPerson(ctx, "Doubled worker");
+    const firstDup = await mkEmployment(ctx, doubled);
+    const secondDup = await mkEmployment(ctx, doubled);
+    await assert.rejects(
+      mod.resolveEmploymentForPayroll({ ...base, partyId: doubled, subsidiaryId: ctx.subId }),
+      (error: unknown) => {
+        assert.ok(error instanceof mod.PayrollContextError);
+        assert.equal(error.code, "ambiguous_employment");
+        assert.match(error.message, new RegExp(firstDup));
+        assert.match(error.message, new RegExp(secondDup));
+        return true;
+      },
+      "two employments never silently pick one",
+    );
+    const sub2 = randomUUID();
+    await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, created_by, updated_by)
+    values (${sub2}, ${ctx.orgId}, ${ctx.subId}, 'Other sub', 'USD', 'US', ${ctx.actorId}, ${ctx.actorId})`);
+    const transferred = await mkPerson(ctx, "Transferred worker");
+    const transferredEmployment = await mkEmployment(ctx, transferred, sub2);
+    await assert.rejects(
+      mod.resolveEmploymentForPayroll({ ...base, partyId: transferred, subsidiaryId: ctx.subId }),
+      (error: unknown) => {
+        assert.ok(error instanceof mod.PayrollContextError);
+        assert.equal(error.code, "employer_mismatch");
+        assert.match(error.message, new RegExp(transferredEmployment));
+        assert.match(error.message, new RegExp(ctx.subId));
+        return true;
+      },
+    );
+    // An employment with no recorded state covering the date fails closed too.
+    const future = await mkPerson(ctx, "Future worker");
+    const futureEmployment = await mkEmployment(ctx, future);
+    await mkVersion(ctx, futureEmployment, { from: "2026-06-01" });
+    await assert.rejects(
+      mod.resolveEmploymentForPayroll({ ...base, partyId: future, subsidiaryId: ctx.subId }),
+      (error: unknown) => {
+        assert.ok(error instanceof mod.PayrollContextError);
+        assert.equal(error.code, "no_employment");
+        assert.match(error.message, /no recorded state as of 2026-03-01/);
+        return true;
+      },
+    );
+    // No payroll.run grant: the boundary refuses before reading.
+    const outsider = await (
+      await import("../testing/fixtures.ts")
+    ).createScratchUser(ctx.orgId, "No grant", "no_grant");
+    await assert.rejects(
+      mod.resolveEmploymentForPayroll({
+        ...base,
+        actorId: outsider,
+        partyId: worker,
+        subsidiaryId: ctx.subId,
+      }),
       (error: unknown) => {
         assert.ok(error instanceof mod.PayrollContextAuthorizationError);
         assert.match(error.message, /payroll\.run/);
         assert.match(error.message, /\/admin\/roles/);
         return true;
       },
-      `unpermitted stamp must refuse (dryRun ${dryRun})`,
     );
-  }
-  // Asserted against row counts, not the error alone: the refused writer
-  // stamped nothing on any of the nine writable tables. The stub arrives
-  // pre-linked by schema force, so "nothing" there means the link and the
-  // row timestamp are exactly as seeded.
-  for (const table of TABLES) {
-    if (table === "entitlement_ledger") continue;
-    if (table === "pay_stubs") {
-      assert.equal(await employmentOf(table, ctx.orgId, worker), employment);
-      assert.equal(await stubUpdatedAt(ctx.orgId, worker), stubTouchedAt,
-        "the refused stamp left the counted stub untouched");
-      continue;
-    }
-    assert.equal(await employmentOf(table, ctx.orgId, worker), null,
-      `${table}: the refused stamp wrote nothing`);
-  }
-});
+  },
+);
 
-test("the resolver returns the single employment and refuses the three coded cases", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../platform/db.ts");
-  const mod = await import("./payroll-context.ts");
-  const base = { orgId: ctx.orgId, actorId: ctx.actorId, asOf: "2026-03-01" };
-  const worker = await mkPerson(ctx, "Resolved worker");
-  const employment = await mkEmployment(ctx, worker);
-  await mkVersion(ctx, employment);
-  const resolved = await mod.resolveEmploymentForPayroll({ ...base, partyId: worker, subsidiaryId: ctx.subId });
-  assert.equal(resolved.employmentId, employment);
-  assert.equal(resolved.employerSubsidiaryId, ctx.subId);
-  assert.equal(resolved.status, "active");
-  assert.equal(resolved.revision, 1);
-  const stranger = await mkPerson(ctx, "Stranger");
-  await assert.rejects(
-    mod.resolveEmploymentForPayroll({ ...base, partyId: stranger, subsidiaryId: ctx.subId }),
-    (error: unknown) => {
-      assert.ok(error instanceof mod.PayrollContextError);
-      assert.equal(error.code, "no_employment");
-      assert.match(error.message, /HRM employment change request/);
-      assert.match(error.message, /Admin → Users/);
-      return true;
-    },
-  );
-  const doubled = await mkPerson(ctx, "Doubled worker");
-  const firstDup = await mkEmployment(ctx, doubled);
-  const secondDup = await mkEmployment(ctx, doubled);
-  await assert.rejects(
-    mod.resolveEmploymentForPayroll({ ...base, partyId: doubled, subsidiaryId: ctx.subId }),
-    (error: unknown) => {
-      assert.ok(error instanceof mod.PayrollContextError);
-      assert.equal(error.code, "ambiguous_employment");
-      assert.match(error.message, new RegExp(firstDup));
-      assert.match(error.message, new RegExp(secondDup));
-      return true;
-    },
-    "two employments never silently pick one",
-  );
-  const sub2 = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, created_by, updated_by)
-    values (${sub2}, ${ctx.orgId}, ${ctx.subId}, 'Other sub', 'USD', 'US', ${ctx.actorId}, ${ctx.actorId})`);
-  const transferred = await mkPerson(ctx, "Transferred worker");
-  const transferredEmployment = await mkEmployment(ctx, transferred, sub2);
-  await assert.rejects(
-    mod.resolveEmploymentForPayroll({ ...base, partyId: transferred, subsidiaryId: ctx.subId }),
-    (error: unknown) => {
-      assert.ok(error instanceof mod.PayrollContextError);
-      assert.equal(error.code, "employer_mismatch");
-      assert.match(error.message, new RegExp(transferredEmployment));
-      assert.match(error.message, new RegExp(ctx.subId));
-      return true;
-    },
-  );
-  // An employment with no recorded state covering the date fails closed too.
-  const future = await mkPerson(ctx, "Future worker");
-  const futureEmployment = await mkEmployment(ctx, future);
-  await mkVersion(ctx, futureEmployment, { from: "2026-06-01" });
-  await assert.rejects(
-    mod.resolveEmploymentForPayroll({ ...base, partyId: future, subsidiaryId: ctx.subId }),
-    (error: unknown) => {
-      assert.ok(error instanceof mod.PayrollContextError);
-      assert.equal(error.code, "no_employment");
-      assert.match(error.message, /no recorded state as of 2026-03-01/);
-      return true;
-    },
-  );
-  // No payroll.run grant: the boundary refuses before reading.
-  const outsider = await (await import("../testing/fixtures.ts")).createScratchUser(
-    ctx.orgId, "No grant", "no_grant",
-  );
-  await assert.rejects(
-    mod.resolveEmploymentForPayroll({ ...base, actorId: outsider, partyId: worker, subsidiaryId: ctx.subId }),
-    (error: unknown) => {
-      assert.ok(error instanceof mod.PayrollContextAuthorizationError);
-      assert.match(error.message, /payroll\.run/);
-      assert.match(error.message, /\/admin\/roles/);
-      return true;
-    },
-  );
-});
-
-test("manager routing resolves the line, falls back to the supervisor, and reports no one", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../platform/db.ts");
-  const mod = await import("./payroll-context.ts");
-  const base = { orgId: ctx.orgId, actorId: ctx.actorId, asOf: "2026-03-01" };
-  const worker = await mkPerson(ctx, "Routed worker");
-  const employment = await mkEmployment(ctx, worker);
-  const boss = await mkPerson(ctx, "Boss");
-  const bossEmployment = await mkEmployment(ctx, boss);
-  await db.execute(sql`
+test(
+  "manager routing resolves the line, falls back to the supervisor, and reports no one",
+  { skip: !DB, timeout: 120_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const { db } = await import("../platform/db.ts");
+    const mod = await import("./payroll-context.ts");
+    const base = { orgId: ctx.orgId, actorId: ctx.actorId, asOf: "2026-03-01" };
+    const worker = await mkPerson(ctx, "Routed worker");
+    const employment = await mkEmployment(ctx, worker);
+    const boss = await mkPerson(ctx, "Boss");
+    const bossEmployment = await mkEmployment(ctx, boss);
+    await db.execute(sql`
     insert into reporting_relationships (org_id, employment_id, manager_employment_id, kind, relationship_id, effective_from)
     values (${ctx.orgId}, ${employment}, ${bossEmployment}, 'line', ${randomUUID()}::uuid, '2024-01-01'::date)`);
-  const routed = await mod.resolveManagerForRouting({ ...base, partyId: worker });
-  assert.equal(routed.source, "reporting");
-  assert.equal(routed.managerEmploymentId, bossEmployment);
-  assert.equal(routed.managerPartyId, boss);
-  // Supervisor fallback: no reporting relationship at all.
-  const legacy = await mkPerson(ctx, "Legacy worker");
-  await mkEmployment(ctx, legacy);
-  const supervisor = await mkPerson(ctx, "Supervisor");
-  await db.execute(sql`
+    const routed = await mod.resolveManagerForRouting({ ...base, partyId: worker });
+    assert.equal(routed.source, "reporting");
+    assert.equal(routed.managerEmploymentId, bossEmployment);
+    assert.equal(routed.managerPartyId, boss);
+    // Supervisor fallback: no reporting relationship at all.
+    const legacy = await mkPerson(ctx, "Legacy worker");
+    await mkEmployment(ctx, legacy);
+    const supervisor = await mkPerson(ctx, "Supervisor");
+    await db.execute(sql`
     insert into employee_roles (org_id, party_id, supervisor_id, is_active, created_by, updated_by)
     values (${ctx.orgId}, ${legacy}, ${supervisor}, true, ${ctx.actorId}, ${ctx.actorId})`);
-  const fallen = await mod.resolveManagerForRouting({ ...base, partyId: legacy });
-  assert.equal(fallen.source, "supervisor");
-  assert.equal(fallen.managerPartyId, supervisor);
-  assert.equal(fallen.managerEmploymentId, null);
-  // Reporting governs with a null answer when history exists but nothing is
-  // active: a live-asserted line whose effective window ended before asOf.
-  const closed = await mkPerson(ctx, "Closed-line worker");
-  const closedEmployment = await mkEmployment(ctx, closed);
-  await db.execute(sql`
+    const fallen = await mod.resolveManagerForRouting({ ...base, partyId: legacy });
+    assert.equal(fallen.source, "supervisor");
+    assert.equal(fallen.managerPartyId, supervisor);
+    assert.equal(fallen.managerEmploymentId, null);
+    // Reporting governs with a null answer when history exists but nothing is
+    // active: a live-asserted line whose effective window ended before asOf.
+    const closed = await mkPerson(ctx, "Closed-line worker");
+    const closedEmployment = await mkEmployment(ctx, closed);
+    await db.execute(sql`
     insert into reporting_relationships (org_id, employment_id, manager_employment_id, kind, relationship_id,
                                          effective_from, effective_to)
     values (${ctx.orgId}, ${closedEmployment}, ${bossEmployment}, 'line', ${randomUUID()}::uuid,
             '2024-01-01'::date, '2025-01-01'::date)`);
-  const none = await mod.resolveManagerForRouting({ ...base, partyId: closed });
-  assert.equal(none.source, "reporting");
-  assert.equal(none.managerEmploymentId, null);
-  assert.equal(none.managerPartyId, null);
-});
+    const none = await mod.resolveManagerForRouting({ ...base, partyId: closed });
+    assert.equal(none.source, "reporting");
+    assert.equal(none.managerEmploymentId, null);
+    assert.equal(none.managerPartyId, null);
+  },
+);
 
-test("the single_line exclusion keeps two live lines unseedable, so ambiguity cannot persist", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const ctx = await setup();
-  t.after(() => teardown(ctx.orgId));
-  const { db } = await import("../platform/db.ts");
-  const worker = await mkPerson(ctx, "Single-line worker");
-  const employment = await mkEmployment(ctx, worker);
-  const bossA = await mkEmployment(ctx, await mkPerson(ctx, "Boss A"));
-  const bossB = await mkEmployment(ctx, await mkPerson(ctx, "Boss B"));
-  await db.execute(sql`
+test(
+  "the single_line exclusion keeps two live lines unseedable, so ambiguity cannot persist",
+  { skip: !DB, timeout: 120_000 },
+  async (t) => {
+    const ctx = await setup();
+    t.after(() => teardown(ctx.orgId));
+    const { db } = await import("../platform/db.ts");
+    const worker = await mkPerson(ctx, "Single-line worker");
+    const employment = await mkEmployment(ctx, worker);
+    const bossA = await mkEmployment(ctx, await mkPerson(ctx, "Boss A"));
+    const bossB = await mkEmployment(ctx, await mkPerson(ctx, "Boss B"));
+    await db.execute(sql`
     insert into reporting_relationships (org_id, employment_id, manager_employment_id, kind, relationship_id, effective_from)
     values (${ctx.orgId}, ${employment}, ${bossA}, 'line', ${randomUUID()}::uuid, '2024-01-01'::date)`);
-  await assert.rejects(
-    db.execute(sql`
+    await assert.rejects(
+      db.execute(sql`
       insert into reporting_relationships (org_id, employment_id, manager_employment_id, kind, relationship_id, effective_from)
       values (${ctx.orgId}, ${employment}, ${bossB}, 'line', ${randomUUID()}::uuid, '2024-01-01'::date)`),
-    (error: unknown) => {
-      assert.match(refusalText(error), /reporting_relationships_single_line/);
-      return true;
-    },
-    "storage refuses the second live line; the picker unit test proves the coded refusal",
-  );
-});
+      (error: unknown) => {
+        assert.match(refusalText(error), /reporting_relationships_single_line/);
+        return true;
+      },
+      "storage refuses the second live line; the picker unit test proves the coded refusal",
+    );
+  },
+);
 
-test("every party foreign key has an explicit merge or identity-preservation policy", { skip: !DB, timeout: 120_000 }, async () => {
-  const { db } = await import("../platform/db.ts");
-  const { PARTY_MERGE_REF_COVERAGE } = await import("../sync/party-merges.ts");
-  const catalog = await db.execute<{ tbl: string; col: string }>(sql`
+test(
+  "every party foreign key has an explicit merge or identity-preservation policy",
+  { skip: !DB, timeout: 120_000 },
+  async () => {
+    const { db } = await import("../platform/db.ts");
+    const { PARTY_MERGE_REF_COVERAGE } = await import("../sync/party-merges.ts");
+    const catalog = await db.execute<{ tbl: string; col: string }>(
+      sql`
     select distinct tc.table_name as tbl, kcu.column_name as col
       from information_schema.table_constraints tc
       join information_schema.key_column_usage kcu
@@ -693,8 +877,11 @@ test("every party foreign key has an explicit merge or identity-preservation pol
       join information_schema.constraint_column_usage ccu
         on ccu.constraint_name = tc.constraint_name and ccu.constraint_schema = tc.constraint_schema
      where tc.constraint_type = 'FOREIGN KEY' and ccu.table_name = 'parties' and ccu.column_name = 'id'
-       and kcu.column_name <> 'org_id'`, "objects");
-  const inCatalog = new Set(catalog.map((r) => `${r.tbl}.${r.col}`));
-  const covered = new Set(PARTY_MERGE_REF_COVERAGE.map(([tbl, col]) => `${tbl}.${col}`));
-  assert.deepEqual([...inCatalog].sort(), [...covered].sort());
-});
+       and kcu.column_name <> 'org_id'`,
+      "objects",
+    );
+    const inCatalog = new Set(catalog.map((r) => `${r.tbl}.${r.col}`));
+    const covered = new Set(PARTY_MERGE_REF_COVERAGE.map(([tbl, col]) => `${tbl}.${col}`));
+    assert.deepEqual([...inCatalog].sort(), [...covered].sort());
+  },
+);

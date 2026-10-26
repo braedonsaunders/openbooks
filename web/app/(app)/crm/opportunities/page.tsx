@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadOpportunities, opportunitiesSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadOpportunities, opportunitiesSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Opportunities use the universal entity-list renderer. This page owns only
@@ -10,9 +10,9 @@ export const dynamic = 'force-dynamic'
 export default async function Opportunities({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadOpportunities(sp)
-  return <ModuleView spec={opportunitiesSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadOpportunities(sp);
+  return <ModuleView spec={opportunitiesSpec(data)} data={data} searchParams={sp} trusted />;
 }

@@ -25,10 +25,7 @@ export class DepreciationRefusalError extends Error {
 export const POSTABLE_DEPRECIATION_STATUSES = ["in_service", "fully_depreciated"] as const;
 
 export function assertPostableDepreciationStatus(status: string, assetNumber: string): void {
-  if (
-    status !== "in_service" &&
-    status !== "fully_depreciated"
-  ) {
+  if (status !== "in_service" && status !== "fully_depreciated") {
     throw new DepreciationRefusalError(
       `asset ${assetNumber} must be in service before depreciation can be scheduled or posted (status: ${status}) — place it in service first`,
     );

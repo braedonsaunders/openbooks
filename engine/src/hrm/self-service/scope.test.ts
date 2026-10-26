@@ -37,7 +37,8 @@ interface Fixtures {
 function fakeExec(fx: Fixtures): SqlExecutor {
   return {
     execute: (async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
       let text = "";
       const params: unknown[] = [];
@@ -83,7 +84,11 @@ function fakeExec(fx: Fixtures): SqlExecutor {
           if (!managers.has(rel.managerEmploymentId)) continue;
           if (!allowedKinds.has(rel.kind)) continue;
           if (rel.recordedUntil !== null) continue;
-          if (!(rel.effectiveFrom <= today && (rel.effectiveTo === null || rel.effectiveTo > today))) continue;
+          if (!(
+            rel.effectiveFrom <= today &&
+            (rel.effectiveTo === null || rel.effectiveTo > today)
+          ))
+            continue;
           seen.add(rel.employmentId);
         }
         return inMode({ rows: [...seen].sort().map((id) => ({ id })) });
@@ -129,16 +134,65 @@ function teamFixtures(): { fx: Fixtures; ids: FixtureIds } {
     ]),
     relationships: [
       // Two live line reports of the manager.
-      { employmentId: ids.reportA, managerEmploymentId: ids.managerEmployment, kind: "line", recordedUntil: null, effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: ids.reportB, managerEmploymentId: ids.managerEmployment, kind: "line", recordedUntil: null, effectiveFrom: "2026-02-01", effectiveTo: "2027-02-01" },
+      {
+        employmentId: ids.reportA,
+        managerEmploymentId: ids.managerEmployment,
+        kind: "line",
+        recordedUntil: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: ids.reportB,
+        managerEmploymentId: ids.managerEmployment,
+        kind: "line",
+        recordedUntil: null,
+        effectiveFrom: "2026-02-01",
+        effectiveTo: "2027-02-01",
+      },
       // C reports to A: transitive in v1, never the manager's team.
-      { employmentId: ids.reportC, managerEmploymentId: ids.reportA, kind: "line", recordedUntil: null, effectiveFrom: "2026-03-01", effectiveTo: null },
+      {
+        employmentId: ids.reportC,
+        managerEmploymentId: ids.reportA,
+        kind: "line",
+        recordedUntil: null,
+        effectiveFrom: "2026-03-01",
+        effectiveTo: null,
+      },
       // Dotted lines never confer team visibility.
-      { employmentId: ids.matrixOnly, managerEmploymentId: ids.managerEmployment, kind: "matrix", recordedUntil: null, effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: ids.matrixOnly,
+        managerEmploymentId: ids.managerEmployment,
+        kind: "matrix",
+        recordedUntil: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
       // Closed windows are history, not structure.
-      { employmentId: ids.expired, managerEmploymentId: ids.managerEmployment, kind: "line", recordedUntil: null, effectiveFrom: "2025-01-01", effectiveTo: "2026-09-19" },
-      { employmentId: ids.superseded, managerEmploymentId: ids.managerEmployment, kind: "line", recordedUntil: "2026-06-01T00:00:00Z", effectiveFrom: "2026-01-01", effectiveTo: null },
-      { employmentId: ids.future, managerEmploymentId: ids.managerEmployment, kind: "line", recordedUntil: null, effectiveFrom: "2026-09-21", effectiveTo: null },
+      {
+        employmentId: ids.expired,
+        managerEmploymentId: ids.managerEmployment,
+        kind: "line",
+        recordedUntil: null,
+        effectiveFrom: "2025-01-01",
+        effectiveTo: "2026-09-19",
+      },
+      {
+        employmentId: ids.superseded,
+        managerEmploymentId: ids.managerEmployment,
+        kind: "line",
+        recordedUntil: "2026-06-01T00:00:00Z",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+      {
+        employmentId: ids.future,
+        managerEmploymentId: ids.managerEmployment,
+        kind: "line",
+        recordedUntil: null,
+        effectiveFrom: "2026-09-21",
+        effectiveTo: null,
+      },
     ],
   };
   return { fx, ids };
@@ -148,23 +202,32 @@ test("actorPartyOf resolves the linked person and refuses an unlinked login by n
   const { fx, ids } = teamFixtures();
   const exec = fakeExec(fx);
   assert.equal(await actorPartyOf(exec, ORG, ids.managerUser), ids.managerParty);
-  await assert.rejects(() => actorPartyOf(exec, ORG, "user-ghost"), (error: unknown) => {
-    assert.ok(error instanceof SelfServiceError);
-    assert.equal(error.code, "NO_LINK");
-    assert.match(error.message, /Admin → Users → Link person/);
-    return true;
-  });
+  await assert.rejects(
+    () => actorPartyOf(exec, ORG, "user-ghost"),
+    (error: unknown) => {
+      assert.ok(error instanceof SelfServiceError);
+      assert.equal(error.code, "NO_LINK");
+      assert.match(error.message, /Admin → Users → Link person/);
+      return true;
+    },
+  );
   fx.userParty.set("user-unlinked", null);
-  await assert.rejects(() => actorPartyOf(exec, ORG, "user-unlinked"), (error: unknown) => {
-    assert.ok(error instanceof SelfServiceError);
-    assert.equal(error.code, "NO_LINK");
-    return true;
-  });
-  await assert.rejects(() => actorPartyOf(exec, "", ids.managerUser), (error: unknown) => {
-    assert.ok(error instanceof SelfServiceError);
-    assert.equal((error as InstanceType<typeof SelfServiceError>).code, "REFUSED");
-    return true;
-  });
+  await assert.rejects(
+    () => actorPartyOf(exec, ORG, "user-unlinked"),
+    (error: unknown) => {
+      assert.ok(error instanceof SelfServiceError);
+      assert.equal(error.code, "NO_LINK");
+      return true;
+    },
+  );
+  await assert.rejects(
+    () => actorPartyOf(exec, "", ids.managerUser),
+    (error: unknown) => {
+      assert.ok(error instanceof SelfServiceError);
+      assert.equal((error as InstanceType<typeof SelfServiceError>).code, "REFUSED");
+      return true;
+    },
+  );
 });
 
 test("team scope is exactly the live line reports: one level, no matrix, no history", async () => {
@@ -188,24 +251,50 @@ test("team scope excludes the transitive report, the matrix-only edge, and close
     userParty: new Map([["user-dotted", "party-dotted"]]),
     partyEmployments: new Map([["party-dotted", ["employment-dotted-mgr"]]]),
     relationships: [
-      { employmentId: "employment-dotted-report", managerEmploymentId: "employment-dotted-mgr", kind: "matrix", recordedUntil: null, effectiveFrom: "2026-01-01", effectiveTo: null },
+      {
+        employmentId: "employment-dotted-report",
+        managerEmploymentId: "employment-dotted-mgr",
+        kind: "matrix",
+        recordedUntil: null,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
     ],
   };
-  assert.deepEqual(await resolveTeamEmploymentIds(fakeExec(matrixFx), ORG, "user-dotted", TODAY), []);
+  assert.deepEqual(
+    await resolveTeamEmploymentIds(fakeExec(matrixFx), ORG, "user-dotted", TODAY),
+    [],
+  );
 });
 
 test("profile proposals validate field by field", () => {
   const parsed = validateProfileChange({ kind: "profile_change", phone: "+1 555 0100" });
   assert.equal(parsed.phone, "+1 555 0100");
-  assert.throws(() => validateProfileChange({ kind: "profile_change" }), /at least one of phone, email, address, or emergencyContact/);
-  assert.throws(() => validateProfileChange({ kind: "profile_change", phone: "   " }), /phone must not be blank/);
-  assert.throws(() => validateProfileChange({ kind: "profile_change", email: "not-an-address" }), /email must be a deliverable address/);
+  assert.throws(
+    () => validateProfileChange({ kind: "profile_change" }),
+    /at least one of phone, email, address, or emergencyContact/,
+  );
+  assert.throws(
+    () => validateProfileChange({ kind: "profile_change", phone: "   " }),
+    /phone must not be blank/,
+  );
+  assert.throws(
+    () => validateProfileChange({ kind: "profile_change", email: "not-an-address" }),
+    /email must be a deliverable address/,
+  );
   assert.throws(
     () => validateProfileChange({ kind: "profile_change", emergencyContact: {} }),
     /at least one of name, relationship, or phone/,
   );
-  assert.throws(() => validateProfileChange({ kind: "profile_change", address: { line1: "  " } }), /address\.line1/);
-  const cleared = validateProfileChange({ kind: "profile_change", phone: null, emergencyContact: null });
+  assert.throws(
+    () => validateProfileChange({ kind: "profile_change", address: { line1: "  " } }),
+    /address\.line1/,
+  );
+  const cleared = validateProfileChange({
+    kind: "profile_change",
+    phone: null,
+    emergencyContact: null,
+  });
   assert.equal(cleared.phone, null);
   assert.equal(cleared.emergencyContact, null);
 });
@@ -214,11 +303,17 @@ test("a submit refusal keeps curated remedies and sanitizes driver failures", ()
   const draft = "draft-id-1";
   const curated = profileSubmitRefusal(
     draft,
-    new HrmChangeRequestError("REFUSED", "the employment changed while the approval was applying — file again"),
+    new HrmChangeRequestError(
+      "REFUSED",
+      "the employment changed while the approval was applying — file again",
+    ),
   );
   assert.ok(curated instanceof SelfServiceError);
   assert.equal(curated.code, "REFUSED");
-  assert.match(curated.message, new RegExp(`the profile draft ${draft} is saved but submission was refused`));
+  assert.match(
+    curated.message,
+    new RegExp(`the profile draft ${draft} is saved but submission was refused`),
+  );
   assert.match(curated.message, /file again/, "the curated remedy travels intact");
 
   const raw = profileSubmitRefusal(
@@ -234,7 +329,13 @@ test("a submit refusal keeps curated remedies and sanitizes driver failures", ()
   assert.equal(raw.code, "REFUSED");
   assert.match(raw.message, new RegExp(`the profile draft ${draft} is saved`));
   assert.match(raw.message, /could not be filed/);
-  for (const leaked of ["insert into", "params:", "employment_changes", "profile_changed", "org-1"]) {
+  for (const leaked of [
+    "insert into",
+    "params:",
+    "employment_changes",
+    "profile_changed",
+    "org-1",
+  ]) {
     assert.ok(!raw.message.includes(leaked), `the sanitized refusal must not leak ${leaked}`);
   }
 });

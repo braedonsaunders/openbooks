@@ -13,7 +13,8 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -123,18 +124,29 @@ test("valid same-origin ERPNext responses pass with the token Authorization head
       return;
     }
     if (pathname === "/api/resource/Sales Order/SO-0001") {
-      res.end(JSON.stringify({ data: { name: "SO-0001", customer: "Acme Ltd", grand_total: 123.45 } }));
+      res.end(
+        JSON.stringify({ data: { name: "SO-0001", customer: "Acme Ltd", grand_total: 123.45 } }),
+      );
       return;
     }
-    res.end(JSON.stringify({ data: [{ name: "SO-0001" }, { name: "SO-0002" }, { name: "SO-0003" }] }));
+    res.end(
+      JSON.stringify({ data: [{ name: "SO-0001" }, { name: "SO-0002" }, { name: "SO-0003" }] }),
+    );
   });
   const erpnextOrigin = await listen(erpnext);
   const redirectModes: Array<RequestRedirect | undefined> = [];
 
   try {
     const client = clientAt(erpnextOrigin, recordingTransport(redirectModes));
-    const rows = await client.listAll<{ name: string }>("Sales Order", ["name"], [["customer", "=", "Acme Ltd"]]);
-    assert.deepEqual(rows.map((r) => r.name), ["SO-0001", "SO-0002", "SO-0003"]);
+    const rows = await client.listAll<{ name: string }>(
+      "Sales Order",
+      ["name"],
+      [["customer", "=", "Acme Ltd"]],
+    );
+    assert.deepEqual(
+      rows.map((r) => r.name),
+      ["SO-0001", "SO-0002", "SO-0003"],
+    );
 
     const doc = await client.getDoc<{ name: string; customer: string; grand_total: number }>(
       "Sales Order",
@@ -148,11 +160,14 @@ test("valid same-origin ERPNext responses pass with the token Authorization head
     // Credentials travel only inside requests to the operator-configured
     // origin, and every request still opts out of redirect-following.
     assert.deepEqual(redirectModes, ["error", "error", "error"]);
-    assert.deepEqual(seen.map((r) => r.pathname), [
-      "/api/resource/Sales Order",
-      "/api/resource/Sales Order/SO-0001",
-      "/api/method/frappe.auth.get_logged_user",
-    ]);
+    assert.deepEqual(
+      seen.map((r) => r.pathname),
+      [
+        "/api/resource/Sales Order",
+        "/api/resource/Sales Order/SO-0001",
+        "/api/method/frappe.auth.get_logged_user",
+      ],
+    );
     for (const request of seen) {
       assert.equal(request.authorization, `token ${creds.apiKey}:${creds.apiSecret}`);
     }

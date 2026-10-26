@@ -47,8 +47,9 @@ export interface NonprofitFrameworkRecord {
 }
 
 function isFrameworkKey(value: unknown): value is NonprofitFrameworkKey {
-  return typeof value === "string" &&
-    Object.prototype.hasOwnProperty.call(NONPROFIT_FRAMEWORKS, value);
+  return (
+    typeof value === "string" && Object.prototype.hasOwnProperty.call(NONPROFIT_FRAMEWORKS, value)
+  );
 }
 
 export function frameworkPack(key: NonprofitFrameworkKey): NonprofitFrameworkPack {
@@ -69,17 +70,22 @@ async function loadFramework(
   executor: SqlExecutor,
   orgId: string,
 ): Promise<NonprofitFrameworkRecord | null> {
-  const row = (await executor.execute<{
-    org_id: string;
-    framework: string;
-    set_at: string;
-    set_by: string;
-    reason: string;
-  }>(sql`
+  const row = (
+    await executor.execute<{
+      org_id: string;
+      framework: string;
+      set_at: string;
+      set_by: string;
+      reason: string;
+    }>(
+      sql`
     select org_id, framework, set_at::text, set_by::text, reason
       from nonprofit_frameworks
      where org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   if (!isFrameworkKey(row.framework)) {
     throw new NonprofitError({
@@ -126,15 +132,18 @@ function frameworkHistoryRefusal(lineCount: number): NonprofitError {
     message: `The nonprofit framework cannot change while ${lineCount} posted fund-tagged journal line${lineCount === 1 ? "" : "s"} exist.`,
     status: 409,
     code: "nonprofit_framework_has_posted_history",
-    remedy: "Continue with this framework, or use a separate organization for activity under another framework.",
+    remedy:
+      "Continue with this framework, or use a separate organization for activity under another framework.",
   });
 }
 
 function frameworkGuardMessage(error: unknown): string | null {
   if (typeof error !== "object" || error === null) return null;
   const candidate = error as { message?: unknown; cause?: unknown };
-  if (typeof candidate.message === "string" &&
-    candidate.message.includes("nonprofit framework cannot change or be removed while")) {
+  if (
+    typeof candidate.message === "string" &&
+    candidate.message.includes("nonprofit framework cannot change or be removed while")
+  ) {
     return candidate.message;
   }
   return frameworkGuardMessage(candidate.cause);
@@ -184,7 +193,10 @@ export async function setFramework(input: {
 
         const existing = await loadFramework(tx, input.orgId);
         if (existing && existing.framework !== input.framework) {
-          const count = (await tx.execute<{ line_count: string }>(sql`
+          const count =
+            (
+              await tx.execute<{ line_count: string }>(
+                sql`
             select count(*)::text as line_count
               from journal_lines jl
               join journal_entries je
@@ -192,18 +204,23 @@ export async function setFramework(input: {
              where jl.org_id = ${input.orgId}
                and jl.extra_dims ? 'fund'
                and je.status is distinct from 'draft'
-          `, "objects"))[0]?.line_count ?? "0";
+          `,
+                "objects",
+              )
+            )[0]?.line_count ?? "0";
           const lineCount = Number(count);
           if (lineCount > 0) throw frameworkHistoryRefusal(lineCount);
         }
 
-        const saved = (await tx.execute<{
-          id: string;
-          framework: string;
-          set_at: string;
-          set_by: string;
-          reason: string;
-        }>(sql`
+        const saved = (
+          await tx.execute<{
+            id: string;
+            framework: string;
+            set_at: string;
+            set_by: string;
+            reason: string;
+          }>(
+            sql`
           insert into nonprofit_frameworks
             (org_id, framework, set_at, set_by, reason, created_by, updated_by)
           values (
@@ -219,7 +236,10 @@ export async function setFramework(input: {
                 updated_at = now(),
                 updated_by = excluded.updated_by
           returning id, framework, set_at::text, set_by::text, reason
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (!saved) {
           throw new NonprofitError({
             message: "The nonprofit framework was not saved.",
@@ -260,9 +280,7 @@ export async function setFramework(input: {
   } catch (error) {
     const guardMessage = frameworkGuardMessage(error);
     if (guardMessage) {
-      const count = Number(
-        guardMessage.match(/while\s+(\d+)/)?.[1] ?? 0,
-      );
+      const count = Number(guardMessage.match(/while\s+(\d+)/)?.[1] ?? 0);
       throw frameworkHistoryRefusal(count);
     }
     throw error;

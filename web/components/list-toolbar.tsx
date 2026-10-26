@@ -1,15 +1,15 @@
-import type { ReactNode } from 'react'
-import { SearchInput } from './search-input'
-import { DateParamFilter, FilterChips } from './filter-bar'
+import type { ReactNode } from "react";
+import { SearchInput } from "./search-input";
+import { DateParamFilter, FilterChips } from "./filter-bar";
 
 export type ListToolbarFilter = {
-  paramKey: string
-  label: string
-  options: { value: string; label: string; count?: number }[]
-  allLabel?: string
-  defaultValue?: string
-  hideAll?: boolean
-}
+  paramKey: string;
+  label: string;
+  options: { value: string; label: string; count?: number }[];
+  allLabel?: string;
+  defaultValue?: string;
+  hideAll?: boolean;
+};
 
 /**
  * The list toolbar — one row, search first, then filters, in the order the
@@ -36,19 +36,19 @@ export function ListToolbar({
   date,
   extra,
 }: {
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
-  search?: { paramKey?: string; placeholder: string } | null
-  filters?: ListToolbarFilter[]
+  basePath: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  search?: { paramKey?: string; placeholder: string } | null;
+  filters?: ListToolbarFilter[];
   /** An as-of date the whole list is read at. Rendered with the filters. */
-  date?: { paramKey: string; label: string; max?: string; resolved?: string } | null
-  extra?: ReactNode
+  date?: { paramKey: string; label: string; max?: string; resolved?: string } | null;
+  extra?: ReactNode;
 }) {
-  if (!search && filters.length === 0 && !date && !extra) return null
+  if (!search && filters.length === 0 && !date && !extra) return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
       {search ? (
-        <SearchInput placeholder={search.placeholder} paramKey={search.paramKey ?? 'q'} />
+        <SearchInput placeholder={search.placeholder} paramKey={search.paramKey ?? "q"} />
       ) : null}
       {filters.map((filter) => (
         <FilterChips
@@ -73,5 +73,5 @@ export function ListToolbar({
       ) : null}
       {extra}
     </div>
-  )
+  );
 }

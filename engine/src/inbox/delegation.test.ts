@@ -30,6 +30,12 @@ test("parseDelegationReason trims the note and allows an empty one", () => {
 
 test("parseDelegationReason refuses a missing recipient by name", () => {
   assert.throws(() => parseDelegationReason(null), /delegation needs a recipient/);
-  assert.throws(() => parseDelegationReason("just a note, no recipient"), /delegation needs a recipient/);
-  assert.throws(() => parseDelegationReason("user:not-a-uuid: note"), /delegation needs a recipient/);
+  assert.throws(
+    () => parseDelegationReason("just a note, no recipient"),
+    /delegation needs a recipient/,
+  );
+  assert.throws(
+    () => parseDelegationReason("user:not-a-uuid: note"),
+    /delegation needs a recipient/,
+  );
 });

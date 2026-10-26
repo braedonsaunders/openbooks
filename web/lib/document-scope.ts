@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { guardSubsidiaryScope, type Authz } from './authz'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { guardSubsidiaryScope, type Authz } from "./authz";
 import { notFound } from "@/lib/api/responses";
 
 /**
@@ -24,11 +24,14 @@ export async function lockedDocumentScopeDenied(
   authz: Authz,
   id: string,
 ): Promise<NextResponse | null> {
-  const relocked = (await db.execute<{ subsidiaryId: string | null }>(sql`
+  const relocked = await db.execute<{ subsidiaryId: string | null }>(
+    sql`
     select subsidiary_id as "subsidiaryId" from documents
      where id = ${id} and org_id = ${authz.user.orgId} for update
-  `, 'objects'))
-  const row = relocked[0]
-  if (!row) return notFound("record")
-  return guardSubsidiaryScope(authz, row.subsidiaryId)
+  `,
+    "objects",
+  );
+  const row = relocked[0];
+  if (!row) return notFound("record");
+  return guardSubsidiaryScope(authz, row.subsidiaryId);
 }

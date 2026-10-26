@@ -35,26 +35,35 @@ test("driver CRUD round trip with audit + slug conflict", { skip: !DB }, async (
     assert.equal(created.isActive, true);
 
     await assert.rejects(
-      () => createDriver(org.orgId, actorId, {
-        key: "fte-headcount",
-        name: "Duplicate",
-        dimension: "department",
-        sourceKind: "manual",
-      }),
+      () =>
+        createDriver(org.orgId, actorId, {
+          key: "fte-headcount",
+          name: "Duplicate",
+          dimension: "department",
+          sourceKind: "manual",
+        }),
       (error: unknown) => error instanceof DriverAdminError && error.code === "conflict",
     );
 
     const listed = await listDrivers(org.orgId);
     assert.ok(listed.some((d) => d.id === created.id));
 
-    const updated = await updateDriver(org.orgId, actorId, created.id, { name: "Headcount FTE v2" });
+    const updated = await updateDriver(org.orgId, actorId, created.id, {
+      name: "Headcount FTE v2",
+    });
     assert.equal(updated.name, "Headcount FTE v2");
 
-    const audits = await db.execute<{ action: string }>(sql`
+    const audits = await db.execute<{ action: string }>(
+      sql`
       select action from audit_log
        where org_id = ${org.orgId} and table_name = 'allocation_drivers' and row_id = ${created.id}
-       order by at`, "objects");
-    assert.deepEqual(audits.map((r) => r.action), ["insert", "update"]);
+       order by at`,
+      "objects",
+    );
+    assert.deepEqual(
+      audits.map((r) => r.action),
+      ["insert", "update"],
+    );
 
     await deleteDriver(org.orgId, actorId, created.id);
     assert.equal(await getDriver(org.orgId, created.id), null);
@@ -80,8 +89,10 @@ test("driver delete is refused while a rule version references it", { skip: !DB 
     await db.execute(sql`
       insert into allocation_rule_versions (org_id, rule_id, version_no, effective_from, driver_id, basis_kind, created_by, updated_by)
       values (${org.orgId}, ${ruleId}, 1, '2026-01-01', ${driver.id}, 'driver', ${actorId}, ${actorId})`);
-    await assert.rejects(() => deleteDriver(org.orgId, actorId, driver.id),
-      (error: unknown) => error instanceof DriverAdminError && error.code === "referenced");
+    await assert.rejects(
+      () => deleteDriver(org.orgId, actorId, driver.id),
+      (error: unknown) => error instanceof DriverAdminError && error.code === "referenced",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -93,13 +104,14 @@ test("gl_activity driver refuses cross-org accounts", { skip: !DB }, async () =>
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await assert.rejects(
-      () => createDriver(org.orgId, actorId, {
-        key: "xorg",
-        name: "Cross org",
-        dimension: "department",
-        sourceKind: "gl_activity",
-        config: { accountScope: { kind: "accounts", accountIds: [other.accounts.revenue] } },
-      }),
+      () =>
+        createDriver(org.orgId, actorId, {
+          key: "xorg",
+          name: "Cross org",
+          dimension: "department",
+          sourceKind: "gl_activity",
+          config: { accountScope: { kind: "accounts", accountIds: [other.accounts.revenue] } },
+        }),
       (error: unknown) => error instanceof DriverAdminError && error.code === "validation",
     );
     const ok = await createDriver(org.orgId, actorId, {
@@ -116,201 +128,259 @@ test("gl_activity driver refuses cross-org accounts", { skip: !DB }, async () =>
   }
 });
 
-test("scoped driver list and detail redact foreign subsidiary account references consistently", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const foreignSubsidiaryId = randomUUID();
-    const foreignAccountId = randomUUID();
-    await db.execute(sql`
+test(
+  "scoped driver list and detail redact foreign subsidiary account references consistently",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const foreignSubsidiaryId = randomUUID();
+      const foreignAccountId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${foreignSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Foreign entity', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, subsidiary_id)
       values (${foreignAccountId}, ${org.orgId}, '9900', 'Foreign expense', 'expense', ${foreignSubsidiaryId})`);
-    const glDriver = await createDriver(org.orgId, actorId, {
-      key: "scoped-gl-account", name: "Scoped GL", dimension: "department", sourceKind: "gl_activity",
-      config: { accountScope: { kind: "accounts", accountIds: [org.accounts.revenue, foreignAccountId] } },
-    });
-    const statisticalDriver = await createDriver(org.orgId, actorId, {
-      key: "scoped-stat-account", name: "Scoped statistical", dimension: "department", sourceKind: "statistical_journal",
-      config: { unit: "entries", accountIds: [org.accounts.revenue, foreignAccountId] },
-    });
-    const scope = new Set([org.subsidiaryId]);
-    const listed = await listDrivers(org.orgId, { allowedSubsidiaryIds: scope });
-    const listedGl = listed.find(({ id }) => id === glDriver.id)!;
-    const listedStatistical = listed.find(({ id }) => id === statisticalDriver.id)!;
-    assert.deepEqual((listedGl.config.accountScope as { accountIds: string[] }).accountIds, [org.accounts.revenue]);
-    assert.deepEqual(listedStatistical.config.accountIds, [org.accounts.revenue]);
-    assert.deepEqual((await getDriver(org.orgId, glDriver.id, undefined, scope))?.config, listedGl.config);
-    assert.deepEqual((await getDriver(org.orgId, statisticalDriver.id, undefined, scope))?.config, listedStatistical.config);
-    assert.deepEqual((await listDrivers(org.orgId, { allowedSubsidiaryIds: new Set() })).find(({ id }) => id === glDriver.id)?.config.accountScope,
-      { kind: "accounts", accountIds: [org.accounts.revenue] });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const glDriver = await createDriver(org.orgId, actorId, {
+        key: "scoped-gl-account",
+        name: "Scoped GL",
+        dimension: "department",
+        sourceKind: "gl_activity",
+        config: {
+          accountScope: { kind: "accounts", accountIds: [org.accounts.revenue, foreignAccountId] },
+        },
+      });
+      const statisticalDriver = await createDriver(org.orgId, actorId, {
+        key: "scoped-stat-account",
+        name: "Scoped statistical",
+        dimension: "department",
+        sourceKind: "statistical_journal",
+        config: { unit: "entries", accountIds: [org.accounts.revenue, foreignAccountId] },
+      });
+      const scope = new Set([org.subsidiaryId]);
+      const listed = await listDrivers(org.orgId, { allowedSubsidiaryIds: scope });
+      const listedGl = listed.find(({ id }) => id === glDriver.id)!;
+      const listedStatistical = listed.find(({ id }) => id === statisticalDriver.id)!;
+      assert.deepEqual((listedGl.config.accountScope as { accountIds: string[] }).accountIds, [
+        org.accounts.revenue,
+      ]);
+      assert.deepEqual(listedStatistical.config.accountIds, [org.accounts.revenue]);
+      assert.deepEqual(
+        (await getDriver(org.orgId, glDriver.id, undefined, scope))?.config,
+        listedGl.config,
+      );
+      assert.deepEqual(
+        (await getDriver(org.orgId, statisticalDriver.id, undefined, scope))?.config,
+        listedStatistical.config,
+      );
+      assert.deepEqual(
+        (await listDrivers(org.orgId, { allowedSubsidiaryIds: new Set() })).find(
+          ({ id }) => id === glDriver.id,
+        )?.config.accountScope,
+        { kind: "accounts", accountIds: [org.accounts.revenue] },
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("manual values: exact decimals, overlap guard, end-dating, onDate read", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const driver = await createDriver(org.orgId, actorId, {
-      key: "manual-fte",
-      name: "Manual FTE",
-      dimension: "subsidiary",
-      sourceKind: "manual",
-    });
-    const v1 = await createDriverValue(org.orgId, actorId, driver.id, {
-      dimensionValueId: org.subsidiaryId,
-      effectiveFrom: "2026-01-01",
-      value: "12.5",
-    });
-    assert.equal(v1.value, "12.5000");
+test(
+  "manual values: exact decimals, overlap guard, end-dating, onDate read",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const driver = await createDriver(org.orgId, actorId, {
+        key: "manual-fte",
+        name: "Manual FTE",
+        dimension: "subsidiary",
+        sourceKind: "manual",
+      });
+      const v1 = await createDriverValue(org.orgId, actorId, driver.id, {
+        dimensionValueId: org.subsidiaryId,
+        effectiveFrom: "2026-01-01",
+        value: "12.5",
+      });
+      assert.equal(v1.value, "12.5000");
 
-    await assert.rejects(
-      () => createDriverValue(org.orgId, actorId, driver.id, {
+      await assert.rejects(
+        () =>
+          createDriverValue(org.orgId, actorId, driver.id, {
+            dimensionValueId: org.subsidiaryId,
+            effectiveFrom: "2026-06-01",
+            value: "3",
+          }),
+        (error: unknown) => error instanceof DriverAdminError && error.code === "conflict",
+      );
+      await assert.rejects(
+        () =>
+          createDriverValue(org.orgId, actorId, driver.id, {
+            dimensionValueId: org.subsidiaryId,
+            effectiveFrom: "2026-07-01",
+            value: "-2",
+          }),
+        (error: unknown) => error instanceof DriverAdminError && error.code === "validation",
+      );
+
+      // End-date the first row, then the second window fits.
+      const ended = await updateDriverValue(org.orgId, actorId, v1.id, {
+        effectiveTo: "2026-05-31",
+      });
+      assert.equal(ended.effectiveTo, "2026-05-31");
+      const v2 = await createDriverValue(org.orgId, actorId, driver.id, {
         dimensionValueId: org.subsidiaryId,
         effectiveFrom: "2026-06-01",
         value: "3",
-      }),
-      (error: unknown) => error instanceof DriverAdminError && error.code === "conflict",
-    );
-    await assert.rejects(
-      () => createDriverValue(org.orgId, actorId, driver.id, {
+      });
+      assert.equal(v2.value, "3.0000");
+
+      const jan = await listDriverValues(org.orgId, driver.id, { onDate: "2026-03-15" });
+      assert.deepEqual(
+        jan.map((v) => v.value),
+        ["12.5000"],
+      );
+      const jul = await listDriverValues(org.orgId, driver.id, { onDate: "2026-07-01" });
+      assert.deepEqual(
+        jul.map((v) => v.value),
+        ["3.0000"],
+      );
+
+      // effectiveFrom is immutable: the unique key is (driver, value, from).
+      await deleteDriverValue(org.orgId, actorId, v1.id);
+      await deleteDriverValue(org.orgId, actorId, v2.id);
+      assert.deepEqual(await listDriverValues(org.orgId, driver.id), []);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "manual value update maps an exclusion violation raised by the database",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const triggerName = `allocation_update_overlap_${randomUUID().replaceAll("-", "")}`;
+    const functionName = `${triggerName}_fn`;
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const driver = await createDriver(org.orgId, actorId, {
+        key: "manual-update-overlap",
+        name: "Manual update overlap",
+        dimension: "subsidiary",
+        sourceKind: "manual",
+      });
+      const value = await createDriverValue(org.orgId, actorId, driver.id, {
         dimensionValueId: org.subsidiaryId,
-        effectiveFrom: "2026-07-01",
-        value: "-2",
-      }),
-      (error: unknown) => error instanceof DriverAdminError && error.code === "validation",
-    );
-
-    // End-date the first row, then the second window fits.
-    const ended = await updateDriverValue(org.orgId, actorId, v1.id, { effectiveTo: "2026-05-31" });
-    assert.equal(ended.effectiveTo, "2026-05-31");
-    const v2 = await createDriverValue(org.orgId, actorId, driver.id, {
-      dimensionValueId: org.subsidiaryId,
-      effectiveFrom: "2026-06-01",
-      value: "3",
-    });
-    assert.equal(v2.value, "3.0000");
-
-    const jan = await listDriverValues(org.orgId, driver.id, { onDate: "2026-03-15" });
-    assert.deepEqual(jan.map((v) => v.value), ["12.5000"]);
-    const jul = await listDriverValues(org.orgId, driver.id, { onDate: "2026-07-01" });
-    assert.deepEqual(jul.map((v) => v.value), ["3.0000"]);
-
-    // effectiveFrom is immutable: the unique key is (driver, value, from).
-    await deleteDriverValue(org.orgId, actorId, v1.id);
-    await deleteDriverValue(org.orgId, actorId, v2.id);
-    assert.deepEqual(await listDriverValues(org.orgId, driver.id), []);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("manual value update maps an exclusion violation raised by the database", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const triggerName = `allocation_update_overlap_${randomUUID().replaceAll("-", "")}`;
-  const functionName = `${triggerName}_fn`;
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const driver = await createDriver(org.orgId, actorId, {
-      key: "manual-update-overlap",
-      name: "Manual update overlap",
-      dimension: "subsidiary",
-      sourceKind: "manual",
-    });
-    const value = await createDriverValue(org.orgId, actorId, driver.id, {
-      dimensionValueId: org.subsidiaryId,
-      effectiveFrom: "2026-01-01",
-      value: "1",
-    });
-    // Model the exclusion constraint winning a concurrent-write race after the
-    // service's overlap read but while its UPDATE is executing.
-    await db.execute(sql.raw(`create function public."${functionName}"() returns trigger
+        effectiveFrom: "2026-01-01",
+        value: "1",
+      });
+      // Model the exclusion constraint winning a concurrent-write race after the
+      // service's overlap read but while its UPDATE is executing.
+      await db.execute(
+        sql.raw(`create function public."${functionName}"() returns trigger
       language plpgsql as $$ begin
         if old.id = '${value.id}'::uuid then
           raise exception 'overlapping allocation driver value'
             using errcode = '23P01', constraint = 'allocation_driver_values_no_overlap';
         end if;
         return new;
-      end $$`));
-    await db.execute(sql.raw(`create trigger "${triggerName}" before update on public.allocation_driver_values
-      for each row execute function public."${functionName}"()`));
+      end $$`),
+      );
+      await db.execute(
+        sql.raw(`create trigger "${triggerName}" before update on public.allocation_driver_values
+      for each row execute function public."${functionName}"()`),
+      );
 
-    await assert.rejects(
-      () => updateDriverValue(org.orgId, actorId, value.id, { value: "2" }),
-      (error: unknown) => error instanceof DriverAdminError && error.code === "conflict",
-    );
-  } finally {
-    await db.execute(sql.raw(`drop trigger if exists "${triggerName}" on public.allocation_driver_values`));
-    await db.execute(sql.raw(`drop function if exists public."${functionName}"()`));
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        () => updateDriverValue(org.orgId, actorId, value.id, { value: "2" }),
+        (error: unknown) => error instanceof DriverAdminError && error.code === "conflict",
+      );
+    } finally {
+      await db.execute(
+        sql.raw(`drop trigger if exists "${triggerName}" on public.allocation_driver_values`),
+      );
+      await db.execute(sql.raw(`drop function if exists public."${functionName}"()`));
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("manual values must reference an active value in the driver's dimension", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const driver = await createDriver(org.orgId, actorId, {
-      key: "department-headcount",
-      name: "Department headcount",
-      dimension: "department",
-      sourceKind: "manual",
-    });
-    await assert.rejects(
-      createDriverValue(org.orgId, actorId, driver.id, {
-        dimensionValueId: org.subsidiaryId,
-        effectiveFrom: "2026-01-01",
-        value: "1",
-      }),
-      (error: unknown) => error instanceof DriverAdminError && error.code === "validation",
-    );
-    const inactiveDepartment = randomUUID();
-    await db.execute(sql`insert into departments (id, org_id, name, is_active)
+test(
+  "manual values must reference an active value in the driver's dimension",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const driver = await createDriver(org.orgId, actorId, {
+        key: "department-headcount",
+        name: "Department headcount",
+        dimension: "department",
+        sourceKind: "manual",
+      });
+      await assert.rejects(
+        createDriverValue(org.orgId, actorId, driver.id, {
+          dimensionValueId: org.subsidiaryId,
+          effectiveFrom: "2026-01-01",
+          value: "1",
+        }),
+        (error: unknown) => error instanceof DriverAdminError && error.code === "validation",
+      );
+      const inactiveDepartment = randomUUID();
+      await db.execute(sql`insert into departments (id, org_id, name, is_active)
       values (${inactiveDepartment}, ${org.orgId}, 'Inactive department', false)`);
-    await assert.rejects(
-      createDriverValue(org.orgId, actorId, driver.id, {
-        dimensionValueId: inactiveDepartment,
-        effectiveFrom: "2026-01-01",
-        value: "1",
-      }),
-      (error: unknown) => error instanceof DriverAdminError && error.code === "validation",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        createDriverValue(org.orgId, actorId, driver.id, {
+          dimensionValueId: inactiveDepartment,
+          effectiveFrom: "2026-01-01",
+          value: "1",
+        }),
+        (error: unknown) => error instanceof DriverAdminError && error.code === "validation",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("manual driver windows stay non-overlapping under concurrent inserts", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const driver = await createDriver(org.orgId, actorId, {
-      key: "concurrent-window",
-      name: "Concurrent window",
-      dimension: "subsidiary",
-      sourceKind: "manual",
-    });
-    const writes = await Promise.allSettled(["2026-01-01", "2026-06-01"].map((effectiveFrom) =>
-      createDriverValue(org.orgId, actorId, driver.id, {
-        dimensionValueId: org.subsidiaryId,
-        effectiveFrom,
-        value: "1",
-      }),
-    ));
-    assert.equal(writes.filter((write) => write.status === "fulfilled").length, 1);
-    const refusal = writes.find((write) => write.status === "rejected");
-    assert.ok(refusal && refusal.status === "rejected");
-    assert.ok(refusal.reason instanceof DriverAdminError);
-    assert.equal(refusal.reason.code, "conflict");
-    assert.match(refusal.reason.message, /overlaps an existing value/);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "manual driver windows stay non-overlapping under concurrent inserts",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const driver = await createDriver(org.orgId, actorId, {
+        key: "concurrent-window",
+        name: "Concurrent window",
+        dimension: "subsidiary",
+        sourceKind: "manual",
+      });
+      const writes = await Promise.allSettled(
+        ["2026-01-01", "2026-06-01"].map((effectiveFrom) =>
+          createDriverValue(org.orgId, actorId, driver.id, {
+            dimensionValueId: org.subsidiaryId,
+            effectiveFrom,
+            value: "1",
+          }),
+        ),
+      );
+      assert.equal(writes.filter((write) => write.status === "fulfilled").length, 1);
+      const refusal = writes.find((write) => write.status === "rejected");
+      assert.ok(refusal && refusal.status === "rejected");
+      assert.ok(refusal.reason instanceof DriverAdminError);
+      assert.equal(refusal.reason.code, "conflict");
+      assert.match(refusal.reason.message, /overlaps an existing value/);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("revision tokens round-trip; stale tokens refused", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -329,17 +399,19 @@ test("revision tokens round-trip; stale tokens refused", { skip: !DB }, async ()
     });
     assert.equal(renamed.name, "Fresh");
     await assert.rejects(
-      () => updateDriver(org.orgId, actorId, driver.id, {
-        name: "Stale edit",
-        expectedUpdatedAt: driver.updatedAt ?? undefined,
-      }),
+      () =>
+        updateDriver(org.orgId, actorId, driver.id, {
+          name: "Stale edit",
+          expectedUpdatedAt: driver.updatedAt ?? undefined,
+        }),
       (error: unknown) => error instanceof DriverAdminError && error.code === "stale",
     );
     await assert.rejects(
-      () => updateDriver(org.orgId, actorId, driver.id, {
-        name: "Stale edit",
-        expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
-      }),
+      () =>
+        updateDriver(org.orgId, actorId, driver.id, {
+          name: "Stale edit",
+          expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
+        }),
       (error: unknown) => error instanceof DriverAdminError && error.code === "stale",
     );
   } finally {

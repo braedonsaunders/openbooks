@@ -82,9 +82,7 @@ const ZERO_ASSESSMENT: AggregateStubAssessment = {
 };
 
 /** Every levy in a pack's declaration list, cross-checked. */
-export function assertAggregateLeviesValid(
-  levies: readonly PayrollEmployerAggregateLevy[],
-): void {
+export function assertAggregateLeviesValid(levies: readonly PayrollEmployerAggregateLevy[]): void {
   const keys = new Set<string>();
   const factors = new Set<string>();
   for (const levy of levies) {
@@ -98,8 +96,8 @@ export function assertAggregateLeviesValid(
     for (const factor of [levy.factorKey, `${levy.factorKey}_EARN`]) {
       if (factors.has(factor)) {
         throw new PayrollPackError(
-          `employer-aggregate levy "${levy.key}" reuses factor "${factor}" — `
-          + "year-to-date would accumulate two levies into one",
+          `employer-aggregate levy "${levy.key}" reuses factor "${factor}" — ` +
+            "year-to-date would accumulate two levies into one",
         );
       }
       factors.add(factor);
@@ -113,20 +111,24 @@ function assertAggregateLevyValid(levy: PayrollEmployerAggregateLevy): void {
   }
   if (!FACTOR_KEY.test(levy.factorKey ?? "")) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" declares factor key "${levy.factorKey ?? ""}" — `
-      + "factor keys are uppercase letters, digits and underscores",
+      `employer-aggregate levy "${levy.key}" declares factor key "${levy.factorKey ?? ""}" — ` +
+        "factor keys are uppercase letters, digits and underscores",
     );
   }
   if (!levy.systemKey) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" declares no system key — `
-      + "the levy must point at a seeded employer-contribution component",
+      `employer-aggregate levy "${levy.key}" declares no system key — ` +
+        "the levy must point at a seeded employer-contribution component",
     );
   }
-  if (levy.base?.source !== "gross" && levy.base?.source !== "taxable" && levy.base?.source !== "pensionable") {
+  if (
+    levy.base?.source !== "gross" &&
+    levy.base?.source !== "taxable" &&
+    levy.base?.source !== "pensionable"
+  ) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" declares base source "${levy.base?.source ?? "none"}" — `
-      + 'the generic layer accumulates "gross", "taxable" or "pensionable" earnings, nothing else',
+      `employer-aggregate levy "${levy.key}" declares base source "${levy.base?.source ?? "none"}" — ` +
+        'the generic layer accumulates "gross", "taxable" or "pensionable" earnings, nothing else',
     );
   }
   if (levy.base?.source === "pensionable") {
@@ -134,22 +136,22 @@ function assertAggregateLevyValid(levy: PayrollEmployerAggregateLevy): void {
       const floor = levy.base.periodFloor?.[period];
       if (floor === undefined || canonicalNonNegativeDecimal(floor, Infinity) === null) {
         throw new PayrollPackError(
-          `employer-aggregate levy "${levy.key}" prices a pensionable base with no ${period} `
-          + "period floor — declare the year's weekly, monthly and annual floors",
+          `employer-aggregate levy "${levy.key}" prices a pensionable base with no ${period} ` +
+            "period floor — declare the year's weekly, monthly and annual floors",
         );
       }
     }
   }
   if (levy.base?.scope !== "org" && levy.base?.scope !== "region") {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" declares base scope "${levy.base?.scope ?? "none"}" — `
-      + 'an employer aggregate is "org"-wide or per-"region"',
+      `employer-aggregate levy "${levy.key}" declares base scope "${levy.base?.scope ?? "none"}" — ` +
+        'an employer aggregate is "org"-wide or per-"region"',
     );
   }
   if (levy.timing !== "per_run" && levy.timing !== "annual") {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" declares timing "${levy.timing ?? "none"}" — `
-      + 'a levy is assessed "per_run" or settled "annual"',
+      `employer-aggregate levy "${levy.key}" declares timing "${levy.timing ?? "none"}" — ` +
+        'a levy is assessed "per_run" or settled "annual"',
     );
   }
   assertRateValid(levy);
@@ -157,56 +159,61 @@ function assertAggregateLevyValid(levy: PayrollEmployerAggregateLevy): void {
   if (levy.offset !== undefined) {
     if (levy.timing !== "annual") {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" pairs a spend offset with per-run assessment — `
-        + "spend is only knowable at year end, so an offset levy settles annually",
+        `employer-aggregate levy "${levy.key}" pairs a spend offset with per-run assessment — ` +
+          "spend is only knowable at year end, so an offset levy settles annually",
       );
     }
     if (levy.allowance?.kind !== "employer_allowance") {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" offsets spend against "${levy.allowance?.kind ?? "none"}" — `
-        + "a spend offset reduces the base above an employer allowance, nothing else",
+        `employer-aggregate levy "${levy.key}" offsets spend against "${levy.allowance?.kind ?? "none"}" — ` +
+          "a spend offset reduces the base above an employer allowance, nothing else",
       );
     }
     if (!levy.offset.slotKey || !levy.offset.amountField) {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" declares a spend offset with no slot or field — `
-        + "name the org-scope slot holding the qualifying spend",
+        `employer-aggregate levy "${levy.key}" declares a spend offset with no slot or field — ` +
+          "name the org-scope slot holding the qualifying spend",
       );
     }
   }
-  if (levy.excludedBy !== undefined
-    && (!levy.excludedBy.slotKey || !levy.excludedBy.flagField)) {
+  if (levy.excludedBy !== undefined && (!levy.excludedBy.slotKey || !levy.excludedBy.flagField)) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" declares an employer exclusion with no slot or flag — `
-      + "name the org-scope slot flag holding the exempt class",
+      `employer-aggregate levy "${levy.key}" declares an employer exclusion with no slot or flag — ` +
+        "name the org-scope slot flag holding the exempt class",
     );
   }
   if (levy.timing === "annual" && levy.allowance?.kind === "per_employee_cap") {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" settles annually against a per-employee cap — `
-      + "a personal cap is enforced stub by stub, per run",
+      `employer-aggregate levy "${levy.key}" settles annually against a per-employee cap — ` +
+        "a personal cap is enforced stub by stub, per run",
     );
   }
   if (levy.allowance?.kind === "accruing_allowance") {
     if (levy.rate?.kind !== "flat_percent") {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" accrues its allowance at rate kind `
-        + `"${(levy.rate as { kind?: unknown } | null | undefined)?.kind ?? "none"}" — `
-        + "an accruing allowance prices the cumulative base at a flat percent",
+        `employer-aggregate levy "${levy.key}" accrues its allowance at rate kind ` +
+          `"${(levy.rate as { kind?: unknown } | null | undefined)?.kind ?? "none"}" — ` +
+          "an accruing allowance prices the cumulative base at a flat percent",
       );
     }
     if (levy.timing !== "per_run") {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" accrues its allowance annually — `
-        + "an accruing allowance prices stub by stub against the months elapsed",
+        `employer-aggregate levy "${levy.key}" accrues its allowance annually — ` +
+          "an accruing allowance prices stub by stub against the months elapsed",
       );
     }
     const { yearStartMonth: month, yearStartDay: day } = levy.allowance;
-    if (!Number.isInteger(month) || month < 1 || month > 12
-      || !Number.isInteger(day) || day < 1 || day > 31) {
+    if (
+      !Number.isInteger(month) ||
+      month < 1 ||
+      month > 12 ||
+      !Number.isInteger(day) ||
+      day < 1 ||
+      day > 31
+    ) {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" accrues from tax-year start ${month}/${day} — `
-        + "declare the month 1–12 and the day 1–31 the agency's year opens on",
+        `employer-aggregate levy "${levy.key}" accrues from tax-year start ${month}/${day} — ` +
+          "declare the month 1–12 and the day 1–31 the agency's year opens on",
       );
     }
   }
@@ -221,8 +228,8 @@ function assertRateValid(levy: PayrollEmployerAggregateLevy): void {
   if (rate?.kind === "tenant_slot") {
     if (!rate.slotKey || !rate.percentField) {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" reads its rate from a slot with no slot or field — `
-        + "name the tenant-entered slot holding the percent",
+        `employer-aggregate levy "${levy.key}" reads its rate from a slot with no slot or field — ` +
+          "name the tenant-entered slot holding the percent",
       );
     }
     return;
@@ -230,36 +237,39 @@ function assertRateValid(levy: PayrollEmployerAggregateLevy): void {
   if (rate?.kind === "marginal_bands") {
     if ((rate.bands ?? []).length === 0 && (rate.classBands ?? []).length === 0) {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" declares marginal bands with no bands — `
-        + "declare at least one band",
+        `employer-aggregate levy "${levy.key}" declares marginal bands with no bands — ` +
+          "declare at least one band",
       );
     }
     for (const bands of [
       ...(rate.bands ? [rate.bands] : []),
       ...(rate.classBands ?? []).map((entry) => entry.bands),
     ]) {
-      assertBands(levy.key, bands.map((band) => ({ upTo: band.upTo, rate: band.percent })));
+      assertBands(
+        levy.key,
+        bands.map((band) => ({ upTo: band.upTo, rate: band.percent })),
+      );
     }
     for (const entry of rate.classBands ?? []) {
       if (!entry.flag) {
         throw new PayrollPackError(
-          `employer-aggregate levy "${levy.key}" declares a class band set with no flag — `
-          + "name the employer-class flag selecting it",
+          `employer-aggregate levy "${levy.key}" declares a class band set with no flag — ` +
+            "name the employer-class flag selecting it",
         );
       }
     }
     if ((rate.classBands ?? []).length > 0 && !levy.classSlotKey) {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" declares class bands with no class slot — `
-        + "name the org-scope slot holding the employer-class flags, or the classes can never match",
+        `employer-aggregate levy "${levy.key}" declares class bands with no class slot — ` +
+          "name the org-scope slot holding the employer-class flags, or the classes can never match",
       );
     }
     return;
   }
   const kind = (rate as { kind?: unknown } | null | undefined)?.kind;
   throw new PayrollPackError(
-    `employer-aggregate levy "${levy.key}" declares rate kind "${kind ?? "none"}" — `
-    + 'the generic layer resolves "flat_percent", "marginal_bands" or "tenant_slot", nothing else',
+    `employer-aggregate levy "${levy.key}" declares rate kind "${kind ?? "none"}" — ` +
+      'the generic layer resolves "flat_percent", "marginal_bands" or "tenant_slot", nothing else',
   );
 }
 
@@ -273,24 +283,24 @@ function assertBands(
     if (band.upTo === null) {
       if (index !== bands.length - 1) {
         throw new PayrollPackError(
-          `employer-aggregate levy "${levyKey}" ends a band table mid-table — `
-          + "only the top band is open-ended",
+          `employer-aggregate levy "${levyKey}" ends a band table mid-table — ` +
+            "only the top band is open-ended",
         );
       }
       return;
     }
     if (cmp(band.upTo, floor) <= 0) {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levyKey}" band ${index + 1} ends at ${band.upTo} — `
-        + "band ceilings must rise",
+        `employer-aggregate levy "${levyKey}" band ${index + 1} ends at ${band.upTo} — ` +
+          "band ceilings must rise",
       );
     }
     floor = band.upTo;
   });
   if (bands.length > 0 && bands[bands.length - 1]!.upTo !== null) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levyKey}" has no open top band — `
-      + "base above the top ceiling would be priced by nothing; declare the top band open",
+      `employer-aggregate levy "${levyKey}" has no open top band — ` +
+        "base above the top ceiling would be priced by nothing; declare the top band open",
     );
   }
 }
@@ -302,8 +312,8 @@ function assertAllowanceValid(levy: PayrollEmployerAggregateLevy): void {
     const amount = levy.allowance.amount;
     if (amount === undefined || cmp(amount, "0") < 0) {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" declares a negative allowance — `
-        + "an allowance is money already sheltered, never less than zero",
+        `employer-aggregate levy "${levy.key}" declares a negative allowance — ` +
+          "an allowance is money already sheltered, never less than zero",
       );
     }
     return;
@@ -311,15 +321,15 @@ function assertAllowanceValid(levy: PayrollEmployerAggregateLevy): void {
   if (kind === "accruing_allowance") {
     if (!levy.allowance.factKey) {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" accrues an allowance with no fact — `
-        + "name the subsidiary-scoped employer fact holding the annual allocated share",
+        `employer-aggregate levy "${levy.key}" accrues an allowance with no fact — ` +
+          "name the subsidiary-scoped employer fact holding the annual allocated share",
       );
     }
     return;
   }
   throw new PayrollPackError(
-    `employer-aggregate levy "${levy.key}" declares allowance "${kind ?? "none"}" — `
-    + 'an allowance is "none", "employer_allowance", "per_employee_cap" or "accruing_allowance"',
+    `employer-aggregate levy "${levy.key}" declares allowance "${kind ?? "none"}" — ` +
+      'an allowance is "none", "employer_allowance", "per_employee_cap" or "accruing_allowance"',
   );
 }
 
@@ -365,9 +375,10 @@ export function assessAggregateLevyStub(
   // remaining exempt slice, the ceiling prices what fits BELOW the remaining
   // headroom. Confusing them prices the exempt slice — the exact inversion
   // the threshold unit test pins.
-  const prior = levy.allowance?.kind === "per_employee_cap"
-    ? priors.employeePriorBase
-    : priors.employerPriorBase;
+  const prior =
+    levy.allowance?.kind === "per_employee_cap"
+      ? priors.employeePriorBase
+      : priors.employerPriorBase;
   const { priceFrom, priceBase: priced } = pricedSlice(levy, stubBase, prior);
   // Past a shelter the FULL stub base counts toward the total even when none
   // of it prices: without the stamp, the next stub's room would forget this
@@ -412,15 +423,15 @@ function assessAccruingAllowance(
   const accruing = priors.accruing;
   if (!accruing) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" prices an accruing allowance with no resolved `
-      + "accrual inputs — engine defect",
+      `employer-aggregate levy "${levy.key}" prices an accruing allowance with no resolved ` +
+        "accrual inputs — engine defect",
     );
   }
   if (levy.rate.kind !== "flat_percent") {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" prices an accruing allowance at rate kind `
-      + `"${(levy.rate as { kind?: unknown }).kind ?? "none"}" — an accruing allowance prices `
-      + "the cumulative base at a flat percent",
+      `employer-aggregate levy "${levy.key}" prices an accruing allowance at rate kind ` +
+        `"${(levy.rate as { kind?: unknown }).kind ?? "none"}" — an accruing allowance prices ` +
+        "the cumulative base at a flat percent",
     );
   }
   const billIncl = add(priors.employerPriorBase, stubBase);
@@ -448,7 +459,11 @@ function assessAccruingAllowance(
  * month, a date before it belongs to the prior tax month (April 5 is month
  * 12 of the year that opened the previous April 6).
  */
-export function taxMonthsElapsed(payDate: string, yearStartMonth: number, yearStartDay: number): number {
+export function taxMonthsElapsed(
+  payDate: string,
+  yearStartMonth: number,
+  yearStartDay: number,
+): number {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(payDate);
   if (!match) {
     throw new PayrollPackError(`cannot count elapsed tax months for pay date "${payDate}"`);
@@ -458,7 +473,9 @@ export function taxMonthsElapsed(payDate: string, yearStartMonth: number, yearSt
   const sinceStart = (month - yearStartMonth + 12) % 12;
   const elapsed = day >= yearStartDay ? sinceStart + 1 : sinceStart || 12;
   if (elapsed < 1 || elapsed > 12) {
-    throw new PayrollPackError(`elapsed tax months fell outside 1–12 for pay date "${payDate}" — engine defect`);
+    throw new PayrollPackError(
+      `elapsed tax months fell outside 1–12 for pay date "${payDate}" — engine defect`,
+    );
   }
   return elapsed;
 }
@@ -491,15 +508,12 @@ function pricedSlice(
   // branches it to the cumulative method before the slice below. Reaching
   // here is an engine defect, refused rather than mispriced.
   throw new PayrollPackError(
-    `employer-aggregate levy "${levy.key}" prices allowance kind "${allowance.kind}" marginally — `
-    + "engine defect",
+    `employer-aggregate levy "${levy.key}" prices allowance kind "${allowance.kind}" marginally — ` +
+      "engine defect",
   );
 }
 
-function isExcluded(
-  levy: PayrollEmployerAggregateLevy,
-  priors: AggregateStubPriors,
-): boolean {
+function isExcluded(levy: PayrollEmployerAggregateLevy, priors: AggregateStubPriors): boolean {
   if (!levy.excludedBy) return false;
   return priors.tenantValues[levy.excludedBy.slotKey]?.[levy.excludedBy.flagField] === "true";
 }
@@ -519,8 +533,8 @@ function priceBase(
     const raw = priors.tenantValues[rate.slotKey]?.[rate.percentField];
     if (raw === undefined || raw === "") {
       throw new PayrollPackError(
-        `employer-aggregate levy "${levy.key}" reads its rate from slot "${rate.slotKey}" — `
-        + "the employer has configured no rate for this year",
+        `employer-aggregate levy "${levy.key}" reads its rate from slot "${rate.slotKey}" — ` +
+          "the employer has configured no rate for this year",
       );
     }
     assertPercent(`employer-aggregate levy "${levy.key}" tenant rate`, raw);
@@ -535,24 +549,22 @@ function selectBands(
 ): readonly { upTo: string | null; percent: string }[] {
   const { rate } = levy;
   if (rate.kind !== "marginal_bands") {
-    throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" has no bands to price from`,
-    );
+    throw new PayrollPackError(`employer-aggregate levy "${levy.key}" has no bands to price from`);
   }
   const matches = (rate.classBands ?? []).filter(
     (entry) => priors.tenantValues[levy.classSlotKey ?? ""]?.[entry.flag] === "true",
   );
   if (matches.length > 1) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" matches ${matches.length} employer classes — `
-      + "one employer holds one class for this levy",
+      `employer-aggregate levy "${levy.key}" matches ${matches.length} employer classes — ` +
+        "one employer holds one class for this levy",
     );
   }
   if (matches.length === 1) return matches[0]!.bands;
   if (!rate.bands) {
     throw new PayrollPackError(
-      `employer-aggregate levy "${levy.key}" matches no employer class and declares no default bands — `
-      + "refusing to price an unclassifiable employer",
+      `employer-aggregate levy "${levy.key}" matches no employer class and declares no default bands — ` +
+        "refusing to price an unclassifiable employer",
     );
   }
   return rate.bands;

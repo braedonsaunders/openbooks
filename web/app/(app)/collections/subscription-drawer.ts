@@ -1,12 +1,12 @@
-import 'server-only'
-import { subscriptionPaidThrough } from '@openbooks/engine/billing/cadence'
+import "server-only";
+import { subscriptionPaidThrough } from "@openbooks/engine/billing/cadence";
 
-import { isFeatureEnabled } from '../../../lib/features'
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/database'
-import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, mergeHref } from '../../../lib/list-params'
-import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { isFeatureEnabled } from "../../../lib/features";
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/database";
+import { can, requirePermission } from "../../../lib/authz";
+import { isUuid, mergeHref } from "../../../lib/list-params";
+import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
 
 /**
  * Minimal subscription record for the subscription drawer (list-drawer
@@ -16,81 +16,82 @@ import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
  * subscriptions API the collections table already uses.
  */
 export interface SubscriptionDrawerData {
-  id: string
-  remountKey: string
-  planName: string
-  customer: { id: string; name: string }
-  status: 'active' | 'paused' | 'suspended' | 'canceled'
-  startOn: string
-  nextBillOn: string
-  interval: string
-  intervalCount: number
-  quantity: string
-  paidThroughOn: string
-  advancedLifecycle: boolean
-  amount: string
-  currency: string
-  autoPost: boolean
-  billTo: { id: string; name: string } | null
-  payer: { id: string; name: string } | null
-  lastInvoice: { id: string; number: string } | null
-  contract: { id: string; number: string } | null
-  lastError: string | null
-  canManage: boolean
-  renewalEnabled?: boolean
-  renewalDocument?: {documentId:string;kind:string}|null
-  canAcceptRenewal?: boolean
-  closeHref: string
+  id: string;
+  remountKey: string;
+  planName: string;
+  customer: { id: string; name: string };
+  status: "active" | "paused" | "suspended" | "canceled";
+  startOn: string;
+  nextBillOn: string;
+  interval: string;
+  intervalCount: number;
+  quantity: string;
+  paidThroughOn: string;
+  advancedLifecycle: boolean;
+  amount: string;
+  currency: string;
+  autoPost: boolean;
+  billTo: { id: string; name: string } | null;
+  payer: { id: string; name: string } | null;
+  lastInvoice: { id: string; number: string } | null;
+  contract: { id: string; number: string } | null;
+  lastError: string | null;
+  canManage: boolean;
+  renewalEnabled?: boolean;
+  renewalDocument?: { documentId: string; kind: string } | null;
+  canAcceptRenewal?: boolean;
+  closeHref: string;
   /** Active customers for the bill-to/payer pickers (empty without manage). */
-  customers: { id: string; name: string }[]
+  customers: { id: string; name: string }[];
 }
 
 type SubscriptionDrawerRow = {
-  id: string
-  status: string
-  startOn: string
-  nextBillOn: string
-  interval: string
-  intervalCount: number
-  quantity: string
-  guardedThrough: string | null
-  advancedLifecycle: boolean
-  amount: string
-  currency: string
-  autoPost: boolean
-  planName: string
-  customerId: string
-  customerName: string
-  billToId: string | null
-  billToName: string | null
-  payerId: string | null
-  payerName: string | null
-  lastInvoiceId: string | null
-  lastInvoiceNumber: string | null
-  lastError: string | null
-  contractId: string | null
-  contractNumber: string | null
-}
+  id: string;
+  status: string;
+  startOn: string;
+  nextBillOn: string;
+  interval: string;
+  intervalCount: number;
+  quantity: string;
+  guardedThrough: string | null;
+  advancedLifecycle: boolean;
+  amount: string;
+  currency: string;
+  autoPost: boolean;
+  planName: string;
+  customerId: string;
+  customerName: string;
+  billToId: string | null;
+  billToName: string | null;
+  payerId: string | null;
+  payerName: string | null;
+  lastInvoiceId: string | null;
+  lastInvoiceNumber: string | null;
+  lastError: string | null;
+  contractId: string | null;
+  contractNumber: string | null;
+};
 
 export async function loadSubscriptionDrawer(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<{ drawer: SubscriptionDrawerData | null }> {
-  const authz = await requirePermission('ar.read')
-  const orgId = authz.user.orgId
-  const rawId = typeof sp.subscription === 'string' ? sp.subscription : undefined
-  const id = rawId && isUuid(rawId) ? rawId : undefined
-  if (!id) return { drawer: null }
+  const authz = await requirePermission("ar.read");
+  const orgId = authz.user.orgId;
+  const rawId = typeof sp.subscription === "string" ? sp.subscription : undefined;
+  const id = rawId && isUuid(rawId) ? rawId : undefined;
+  if (!id) return { drawer: null };
   // A subscription belongs to its customer's legal entity, and customers are
   // master data: an unassigned customer is org-wide. The drawer applies the
   // same customer fence as the subscriptions list, so a restricted reader
   // cannot open another entity's subscription (or browse its customers) by
   // id; a reader with no subsidiaries sees none.
-  const allowed = authz.allowedSubsidiaryIds
+  const allowed = authz.allowedSubsidiaryIds;
   const customerScope = (column: SQL) =>
     allowed !== null && allowed.size === 0
       ? sql` and false`
-      : subsidiaryVisibleFilter(column, allowed, { orgWideNull: true })
-  const rows = await db.execute<SubscriptionDrawerRow>(sql`
+      : subsidiaryVisibleFilter(column, allowed, { orgWideNull: true });
+  const rows = await db.execute<SubscriptionDrawerRow>(
+    sql`
       select s.id, s.status, s.start_on::text as "startOn", s.next_bill_on::text as "nextBillOn",
              p.interval, p.interval_count as "intervalCount", s.quantity::text as quantity,
              coalesce(s.price_override, p.amount)::text as amount,
@@ -111,37 +112,56 @@ export async function loadSubscriptionDrawer(
         left join documents d on d.id = s.last_invoice_id and d.org_id = s.org_id
         left join revenue_contracts rc on rc.subscription_id = s.id and rc.org_id = s.org_id
        where s.org_id = ${orgId} and s.id = ${id}${customerScope(sql`c.subsidiary_id`)}
-       limit 1`, 'objects')
-  const row = rows[0]
-  if (!row) return { drawer: null }
+       limit 1`,
+    "objects",
+  );
+  const row = rows[0];
+  if (!row) return { drawer: null };
   // The override editor shares the subscriptions write right (ar.create),
   // never a second gate: whoever edits subscriptions edits overrides.
-  const canManage = can(authz, 'ar.create')
+  const canManage = can(authz, "ar.create");
   const customers = canManage
-    ? (await db.execute<{ id: string; name: string }>(sql`
+    ? await db.execute<{ id: string; name: string }>(
+        sql`
           select p.id, p.display_name as name from parties p
            where p.org_id = ${orgId} and p.is_active${customerScope(sql`p.subsidiary_id`)}
              and exists (select 1 from customer_roles cr
                           where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
-           order by p.display_name limit 500`, 'objects'))
-    : []
-  const renewalEnabled=await isFeatureEnabled(orgId,'advancedSubscriptions');
-  const renewalDocument=renewalEnabled?(await db.execute<{documentId:string;kind:string}>(sql`select o.document_id as "documentId",d.kind from subscription_renewal_occurrences o join documents d on d.org_id=o.org_id and d.id=o.document_id where o.org_id=${orgId} and o.subscription_id=${row.id} and o.occurrence='document' and not exists(select 1 from subscription_renewal_occurrences accepted where accepted.org_id=o.org_id and accepted.subscription_id=o.subscription_id and accepted.term_ends_on=o.term_ends_on and accepted.occurrence='acceptance') order by o.term_ends_on desc limit 1`, 'objects'))[0]??null:null;
+           order by p.display_name limit 500`,
+        "objects",
+      )
+    : [];
+  const renewalEnabled = await isFeatureEnabled(orgId, "advancedSubscriptions");
+  const renewalDocument = renewalEnabled
+    ? ((
+        await db.execute<{ documentId: string; kind: string }>(
+          sql`select o.document_id as "documentId",d.kind from subscription_renewal_occurrences o join documents d on d.org_id=o.org_id and d.id=o.document_id where o.org_id=${orgId} and o.subscription_id=${row.id} and o.occurrence='document' and not exists(select 1 from subscription_renewal_occurrences accepted where accepted.org_id=o.org_id and accepted.subscription_id=o.subscription_id and accepted.term_ends_on=o.term_ends_on and accepted.occurrence='acceptance') order by o.term_ends_on desc limit 1`,
+          "objects",
+        )
+      )[0] ?? null)
+    : null;
   return {
     drawer: {
       id: row.id,
       remountKey: row.id,
       planName: row.planName,
       customer: { id: row.customerId, name: row.customerName ?? row.customerId },
-      status: (['active', 'paused', 'suspended', 'canceled'] as const).includes(row.status as 'active')
-        ? (row.status as SubscriptionDrawerData['status'])
-        : 'active',
+      status: (["active", "paused", "suspended", "canceled"] as const).includes(
+        row.status as "active",
+      )
+        ? (row.status as SubscriptionDrawerData["status"])
+        : "active",
       startOn: row.startOn,
       nextBillOn: row.nextBillOn,
       interval: row.interval,
       intervalCount: row.intervalCount,
       quantity: row.quantity,
-      paidThroughOn: subscriptionPaidThrough({ startOn: row.startOn, nextBillOn: row.nextBillOn, billed: row.lastInvoiceId != null || row.guardedThrough != null, guardedThrough: row.guardedThrough }),
+      paidThroughOn: subscriptionPaidThrough({
+        startOn: row.startOn,
+        nextBillOn: row.nextBillOn,
+        billed: row.lastInvoiceId != null || row.guardedThrough != null,
+        guardedThrough: row.guardedThrough,
+      }),
       advancedLifecycle: row.advancedLifecycle,
       amount: row.amount,
       currency: row.currency,
@@ -155,9 +175,16 @@ export async function loadSubscriptionDrawer(
         ? { id: row.contractId, number: row.contractNumber ?? row.contractId.slice(0, 8) }
         : null,
       lastError: row.lastError,
-      canManage,renewalEnabled,renewalDocument,canAcceptRenewal:can(authz,'ar.post'),
-      closeHref: mergeHref('/collections', sp, { subscription: undefined, mode: undefined, form: undefined }),
+      canManage,
+      renewalEnabled,
+      renewalDocument,
+      canAcceptRenewal: can(authz, "ar.post"),
+      closeHref: mergeHref("/collections", sp, {
+        subscription: undefined,
+        mode: undefined,
+        form: undefined,
+      }),
       customers,
     },
-  }
+  };
 }

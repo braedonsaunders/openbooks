@@ -16,11 +16,15 @@ async function handleV1GET(
   return withV1Request(request, "api/v1/apps/:key", async (_auth, context) => {
     const { key } = await params;
     const versionId = new URL(request.url).searchParams.get("versionId") ?? undefined;
-    return { status: 200, body: { ok: true, ...(await getExtensionPackage(context, { key, versionId })) } };
+    return {
+      status: 200,
+      body: { ok: true, ...(await getExtensionPackage(context, { key, versionId })) },
+    };
   });
 }
 
 export const GET = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1GET(request, { params: Promise.resolve(params as never) } as never),
 });

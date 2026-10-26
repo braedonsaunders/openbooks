@@ -1,9 +1,18 @@
 import { sql } from "drizzle-orm";
 import { fromUnits, toUnits } from "../../money/money.ts";
-import { loadOwnEmploymentIds, requireHrmBenefitsRead, requireOwnEmploymentSubject, requireHrmSelfRead } from "../authorization.ts";
+import {
+  loadOwnEmploymentIds,
+  requireHrmBenefitsRead,
+  requireOwnEmploymentSubject,
+  requireHrmSelfRead,
+} from "../authorization.ts";
 import { parseCivilDate } from "../temporal.ts";
 import { BenefitsError } from "./errors.ts";
-import { enrollmentContributionProjection, type EnrollmentSummary, type EnrollmentContributionSummary } from "./benefits-read.ts";
+import {
+  enrollmentContributionProjection,
+  type EnrollmentSummary,
+  type EnrollmentContributionSummary,
+} from "./benefits-read.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import type { BenefitAward } from "./program-types.ts";
 import {
@@ -57,7 +66,15 @@ export interface StatementStub {
   readonly lines: readonly StatementStubLine[];
 }
 
-export interface StatementAward extends Omit<BenefitAward, "flowRunId" | "submittedBy" | "submittedAt" | "decisionSnapshot" | "approvalHref" | "payrollProcessed"> {
+export interface StatementAward extends Omit<
+  BenefitAward,
+  | "flowRunId"
+  | "submittedBy"
+  | "submittedAt"
+  | "decisionSnapshot"
+  | "approvalHref"
+  | "payrollProcessed"
+> {
   /** The employer-facing policy title frozen when this award was recorded. */
   readonly programName: string;
   readonly deliveryState: "pending" | "delivered" | "reversed";
@@ -99,9 +116,13 @@ async function authorizeSubject(
 }
 
 /** Own-subject enrollment rows: one employment, no aggregate list. */
-async function readOwnEnrollments(orgId: string, employmentId: string): Promise<EnrollmentSummary[]> {
+async function readOwnEnrollments(
+  orgId: string,
+  employmentId: string,
+): Promise<EnrollmentSummary[]> {
   const asOf = await businessToday(orgId);
-  const rows = await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select e.id, e.employment_id as "employmentId", e.window_id as "windowId",
            p.display_name as "employeeName",
            plan.code as "planCode", plan.name as "planName",
@@ -120,7 +141,9 @@ async function readOwnEnrollments(orgId: string, employmentId: string): Promise<
         on cls.org_id = e.org_id and cls.plan_id = e.plan_id and cls.class_key = e.class_key
      where e.org_id = ${orgId} and e.employment_id = ${employmentId}
      order by e.effective_from desc
-  `, "objects");
+  `,
+    "objects",
+  );
   const textOrNull = (value: unknown): string | null =>
     value === null || value === undefined ? null : String(value);
   return rows.map((row) => ({
@@ -148,13 +171,18 @@ export function statementEvidence(value: unknown): Record<string, unknown> | nul
   const input = value as Record<string, unknown>;
   const safe: Record<string, unknown> = {};
   if (typeof input.kind === "string") safe.kind = input.kind;
-  if (input.kind === "source-evidenced-first-obligation"
-    && (input.sourceEvidenceClass === "missing-source-identity" || input.sourceEvidenceClass === "source-paid-above-native-measure")) {
+  if (
+    input.kind === "source-evidenced-first-obligation" &&
+    (input.sourceEvidenceClass === "missing-source-identity" ||
+      input.sourceEvidenceClass === "source-paid-above-native-measure")
+  ) {
     safe.sourceEvidenceClass = input.sourceEvidenceClass;
   }
   if (typeof input.programRevision === "number") safe.programRevision = input.programRevision;
   if (typeof input.payableAfter === "string") {
-    try { safe.payableAfter = parseCivilDate(input.payableAfter); } catch {
+    try {
+      safe.payableAfter = parseCivilDate(input.payableAfter);
+    } catch {
       // Malformed optional display metadata is withheld; it never supplies
       // policy or eligibility inputs, which their source services validate.
     }
@@ -168,7 +196,8 @@ export function statementEvidence(value: unknown): Record<string, unknown> | nul
  * without selecting confidential source or policy objects.
  */
 async function readOwnAwards(orgId: string, employmentId: string): Promise<StatementAward[]> {
-  const rows = await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select r.run_status as "runStatus", doc.status as "runDocumentStatus",
            a.id, a.program_snapshot->>'name' as "programName", a.program_id as "programId", a.employment_id as "employmentId",
            a.period_from::text as "periodFrom", a.period_to::text as "periodTo",
@@ -184,11 +213,17 @@ async function readOwnAwards(orgId: string, employmentId: string): Promise<State
       left join documents doc on doc.org_id = a.org_id and doc.id = a.pay_run_document_id
      where a.org_id = ${orgId} and a.employment_id = ${employmentId}
      order by a.period_from desc, a.created_at desc
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: String(row.id),
-    deliveryState: row.status !== "delivered" ? "pending"
-      : row.runStatus === "voided" || row.runDocumentStatus === "voided" ? "reversed" : "delivered",
+    deliveryState:
+      row.status !== "delivered"
+        ? "pending"
+        : row.runStatus === "voided" || row.runDocumentStatus === "voided"
+          ? "reversed"
+          : "delivered",
     programId: String(row.programId),
     programName: typeof row.programName === "string" ? row.programName : "",
     employmentId: String(row.employmentId),
@@ -218,9 +253,13 @@ async function employmentStatement(
   await authorizeSubject(orgId, actorId, employmentId);
   const enrollments = await readOwnEnrollments(orgId, employmentId);
   const awards = await readOwnAwards(orgId, employmentId);
-  const paidAwards = awards.filter((a) => a.status === "delivered" && a.deliveryState === "delivered");
+  const paidAwards = awards.filter(
+    (a) => a.status === "delivered" && a.deliveryState === "delivered",
+  );
   const reversedAwards = awards.filter((a) => a.deliveryState === "reversed");
-  const pendingAwards = awards.filter((a) => ["draft", "pending", "approved", "queued"].includes(a.status));
+  const pendingAwards = awards.filter((a) =>
+    ["draft", "pending", "approved", "queued"].includes(a.status),
+  );
   const rejectedAwards = awards.filter((a) => a.status === "rejected");
   const totals = new Map<string, bigint>();
   for (const award of paidAwards) {
@@ -231,8 +270,13 @@ async function employmentStatement(
     .map(([currency, units]) => ({ currency, total: fromUnits(units) }));
 
   const stubRows = await db.execute<{
-    id: string; pay_date: string; currency: string; gross: string; net_pay: string;
-  }>(sql`
+    id: string;
+    pay_date: string;
+    currency: string;
+    gross: string;
+    net_pay: string;
+  }>(
+    sql`
     select s.id::text as id, s.pay_date::text as pay_date, s.currency_code as currency,
            s.gross::text as gross, s.net_pay::text as net_pay
       from pay_stubs s
@@ -241,18 +285,26 @@ async function employmentStatement(
      where s.org_id = ${orgId} and s.employment_id = ${employmentId}
        and r.run_status = 'committed' and d.status <> 'voided'
      order by s.pay_date desc
-  `, "objects");
+  `,
+    "objects",
+  );
   const payrollRecords: StatementStub[] = [];
   for (const stub of stubRows) {
     const lineRows = await db.execute<{
-      component_code: string | null; kind: string; description: string; amount: string;
-    }>(sql`
+      component_code: string | null;
+      kind: string;
+      description: string;
+      amount: string;
+    }>(
+      sql`
       select c.code as component_code, l.kind, l.description, l.amount::text as amount
         from pay_stub_lines l
         left join pay_components c on c.org_id = l.org_id and c.id = l.component_id
        where l.org_id = ${orgId} and l.stub_id = ${stub.id}::uuid
        order by l.sequence, l.id
-    `, "objects");
+    `,
+      "objects",
+    );
     payrollRecords.push({
       payDate: stub.pay_date.slice(0, 10),
       currency: stub.currency,
@@ -266,7 +318,16 @@ async function employmentStatement(
       })),
     });
   }
-  return { employmentId, enrollments, paidAwards, pendingAwards, rejectedAwards, reversedAwards, paidTotals, payrollRecords };
+  return {
+    employmentId,
+    enrollments,
+    paidAwards,
+    pendingAwards,
+    rejectedAwards,
+    reversedAwards,
+    paidTotals,
+    payrollRecords,
+  };
 }
 
 /** One employment's statement (the employee themself, or a manager with scope). */

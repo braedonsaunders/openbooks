@@ -1,23 +1,23 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
-const stateKey = Symbol.for('openbooks.document-draft-scope-test')
+const stateKey = Symbol.for("openbooks.document-draft-scope-test");
 interface Gate {
-  user: { orgId: string; id: string }
-  permissions: Set<string>
-  allowedSubsidiaryIds: Set<string> | null
+  user: { orgId: string; id: string };
+  permissions: Set<string>;
+  allowedSubsidiaryIds: Set<string> | null;
 }
-const routeState: { gate: Gate | null } = { gate: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+const routeState: { gate: Gate | null } = { gate: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const module_ = (source: string): { shortCircuit: true; format: 'module'; url: string } => ({
+const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
   shortCircuit: true,
-  format: 'module',
+  format: "module",
   url: `data:text/javascript,${encodeURIComponent(source)}`,
-})
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -30,11 +30,13 @@ const hooks = registerHooks({
     // @/lib/authz alias at request time, so the hook must cover that alias
     // too — serving the same fixture session through getAuthz, which is the
     // gate the public-session factory path calls.
-    if (specifier === '../../../../lib/authz' ||
-        (specifier === '@/lib/authz' && (context.parentURL ?? '').includes('/lib/api/route')) ||
-        (specifier === './authz' && (context.parentURL ?? '').includes('/web/lib/'))) {
-      const real = nextResolve(specifier, context).url
-      const nextServer = nextResolve('next/server', context).url
+    if (
+      specifier === "../../../../lib/authz" ||
+      (specifier === "@/lib/authz" && (context.parentURL ?? "").includes("/lib/api/route")) ||
+      (specifier === "./authz" && (context.parentURL ?? "").includes("/web/lib/"))
+    ) {
+      const real = nextResolve(specifier, context).url;
+      const nextServer = nextResolve("next/server", context).url;
       return module_(`
         export * from ${JSON.stringify(real)};
         const state = globalThis[Symbol.for('openbooks.document-draft-scope-test')];
@@ -46,81 +48,87 @@ const hooks = registerHooks({
         export async function getAuthz() {
           return state.gate;
         }
-      `)
+      `);
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
-})
+});
 
-const { withBypassContext, db } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
-const { POST } = await import('./route.ts')
+const { withBypassContext, db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { POST } = await import("./route.ts");
 // The factory's lazy session-gate import runs on every request, so the hook
 // must stay registered until the file's tests finish.
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 
 async function setup() {
-  const org = await withBypassContext(() => (createScratchOrg()))
-  const actor = await withBypassContext(() => (createScratchUser(org.orgId, 'Document drafter', 'reviewer')))
-  const other = randomUUID()
-  await withBypassContext(() => (db.execute(sql`
+  const org = await withBypassContext(() => createScratchOrg());
+  const actor = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Document drafter", "reviewer"),
+  );
+  const other = randomUUID();
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (${other}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')
-  `)))
+  `),
+  );
   const gate = (scope: Set<string> | null) => {
     routeState.gate = {
       user: { orgId: org.orgId, id: actor },
-      permissions: new Set(['ap.create']),
+      permissions: new Set(["ap.create"]),
       allowedSubsidiaryIds: scope,
-    }
-  }
+    };
+  };
   const post = () =>
     POST(
-      new Request('http://openbooks.test/api/documents/draft', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ kind: 'vendor_bill' }),
+      new Request("http://openbooks.test/api/documents/draft", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "vendor_bill" }),
       }),
-    )
-  return { org, other, gate, post }
+    );
+  return { org, other, gate, post };
 }
 
 async function billDrafts(orgId: string) {
-  return await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  return await db.execute<{ id: string; subsidiary_id: string | null }>(
+    sql`
     select id, subsidiary_id from documents
      where org_id = ${orgId} and kind = 'vendor_bill'
-  `, 'objects')
+  `,
+    "objects",
+  );
 }
 
-test('a restricted document draft lands in their own subsidiary, never the root', async () => {
-  const { org, gate, post } = await setup()
+test("a restricted document draft lands in their own subsidiary, never the root", async () => {
+  const { org, gate, post } = await setup();
   try {
-    gate(new Set([org.subsidiaryId]))
-    const res = await post()
-    assert.equal(res.status, 200)
-    const created = (await res.json()) as { id: string }
-    const drafts = await billDrafts(org.orgId)
-    assert.equal(drafts.length, 1)
-    assert.equal(drafts[0]!.id, created.id)
-    assert.equal(drafts[0]!.subsidiary_id, org.subsidiaryId)
+    gate(new Set([org.subsidiaryId]));
+    const res = await post();
+    assert.equal(res.status, 200);
+    const created = (await res.json()) as { id: string };
+    const drafts = await billDrafts(org.orgId);
+    assert.equal(drafts.length, 1);
+    assert.equal(drafts[0]!.id, created.id);
+    assert.equal(drafts[0]!.subsidiary_id, org.subsidiaryId);
   } finally {
-    routeState.gate = null
-    await dropScratchOrg(org.orgId)
+    routeState.gate = null;
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('a document draft with no assignable subsidiary refuses by name and stores nothing', async () => {
-  const { org, other, gate, post } = await setup()
+test("a document draft with no assignable subsidiary refuses by name and stores nothing", async () => {
+  const { org, other, gate, post } = await setup();
   try {
-    gate(new Set([org.subsidiaryId, other]))
-    const res = await post()
-    assert.equal(res.status, 422)
-    assert.deepEqual(await res.json(), { error: 'subsidiary_required' })
-    assert.deepEqual(await billDrafts(org.orgId), [])
+    gate(new Set([org.subsidiaryId, other]));
+    const res = await post();
+    assert.equal(res.status, 422);
+    assert.deepEqual(await res.json(), { error: "subsidiary_required" });
+    assert.deepEqual(await billDrafts(org.orgId), []);
   } finally {
-    routeState.gate = null
-    await dropScratchOrg(org.orgId)
+    routeState.gate = null;
+    await dropScratchOrg(org.orgId);
   }
-})
+});

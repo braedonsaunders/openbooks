@@ -7,12 +7,24 @@ import { assertUuid } from "./catalog.ts";
 import { withSandboxRefreshLock } from "./lifecycle.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { actorAllowedSubsidiaryIds, grantedRestrictionWithinCoverage, grantedScopeSetWithinCoverage, loadSubsidiaryGrantCoverage, resolveRestrictionEditScopes } from "../organization/actor-subsidiaries.ts";
+import {
+  actorAllowedSubsidiaryIds,
+  grantedRestrictionWithinCoverage,
+  grantedScopeSetWithinCoverage,
+  loadSubsidiaryGrantCoverage,
+  resolveRestrictionEditScopes,
+} from "../organization/actor-subsidiaries.ts";
 import { assertUnrestrictedScope } from "../organization/subsidiary-scope.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { computeScheduledScriptNextRunAt, scriptSaveRefusal } from "../scripting/scripting.ts";
 import { validateScriptConfiguration } from "../scripting/script-config.ts";
-import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permissionsOutsideCeiling, resolveEffectivePermissions } from "../organization/permissions.ts";
+import {
+  isCataloguePermission,
+  PERMISSION_CATALOGUE,
+  permissionSetCovers,
+  permissionsOutsideCeiling,
+  resolveEffectivePermissions,
+} from "../organization/permissions.ts";
 
 /**
  * Promotion — config flows UP (sandbox → production) as a reviewable change set;
@@ -49,7 +61,14 @@ const PROMOTABLE = Object.keys(PROMOTION_PERMISSIONS);
 // table identifiers, so the literal needs no escaping).
 const PROMOTABLE_ARRAY = `{${PROMOTABLE.join(",")}}`;
 
-const STRUCTURAL = new Set(["id", "org_id", "created_at", "updated_at", "created_by", "updated_by"]);
+const STRUCTURAL = new Set([
+  "id",
+  "org_id",
+  "created_at",
+  "updated_at",
+  "created_by",
+  "updated_by",
+]);
 // Execution evidence, scheduler cursors and the run-as identity belong to
 // their environment. They are neither configuration differences nor reasons
 // to invalidate a review; promotion makes the promoting user the run-as user.
@@ -76,7 +95,11 @@ export function refuseInactivePromotedDefault(
   const flag = (row: Record<string, unknown> | null, field: string, fallback: boolean): boolean =>
     row && Object.hasOwn(row, field) ? row[field] === true : fallback;
   const isDefault = flag(payload, "is_default", existing?.is_default === true);
-  const isActive = flag(payload, "is_active", existing == null ? true : existing.is_active === true);
+  const isActive = flag(
+    payload,
+    "is_active",
+    existing == null ? true : existing.is_active === true,
+  );
   if (isDefault && !isActive) {
     throw new Error(
       `An inactive ${kind} cannot be the default — activate it, or unset default before deactivating; recapture the change set`,
@@ -84,20 +107,41 @@ export function refuseInactivePromotedDefault(
   }
 }
 
-function mappedUserReference(value: unknown, ids: ReadonlyMap<string, string>, label: string): string | null {
+function mappedUserReference(
+  value: unknown,
+  ids: ReadonlyMap<string, string>,
+  label: string,
+): string | null {
   if (value === null) return null;
   const mapped = typeof value === "string" ? ids.get(value.toLowerCase()) : undefined;
-  if (!mapped) throw new Error(`${label}: user reference has no counterpart in the production organization; recapture after correcting ownership`);
+  if (!mapped)
+    throw new Error(
+      `${label}: user reference has no counterpart in the production organization; recapture after correcting ownership`,
+    );
   return mapped;
 }
 
-interface SandboxTargetRow extends Record<string, unknown> { org_id: string; production_org_id: string; status: string }
-interface SandboxSeedRow extends Record<string, unknown> { sandbox_seed: string }
-interface TableNameRow extends Record<string, unknown> { table_name: string }
-interface ChangeDiffRow extends Record<string, unknown> {
-  sbx_id: string; prod_id: string | null; sbx_row: Record<string, unknown>; prod_row: Record<string, unknown> | null;
+interface SandboxTargetRow extends Record<string, unknown> {
+  org_id: string;
+  production_org_id: string;
+  status: string;
 }
-interface IdRow extends Record<string, unknown> { id: string; expected_before: Record<string, unknown> }
+interface SandboxSeedRow extends Record<string, unknown> {
+  sandbox_seed: string;
+}
+interface TableNameRow extends Record<string, unknown> {
+  table_name: string;
+}
+interface ChangeDiffRow extends Record<string, unknown> {
+  sbx_id: string;
+  prod_id: string | null;
+  sbx_row: Record<string, unknown>;
+  prod_row: Record<string, unknown> | null;
+}
+interface IdRow extends Record<string, unknown> {
+  id: string;
+  expected_before: Record<string, unknown>;
+}
 interface ChangeSetRow extends Record<string, unknown> {
   org_id: string;
   sandbox_org_id: string | null;
@@ -109,8 +153,12 @@ interface ChangeSetRow extends Record<string, unknown> {
   approved_by: string | null;
 }
 interface ChangeSetItemRow extends Record<string, unknown> {
-  table_name: string; target_id: string; op: "insert" | "update" | "delete"; payload: Record<string, unknown> | null;
-  expected_before: Record<string, unknown> | null; base_captured: boolean;
+  table_name: string;
+  target_id: string;
+  op: "insert" | "update" | "delete";
+  payload: Record<string, unknown> | null;
+  expected_before: Record<string, unknown> | null;
+  base_captured: boolean;
 }
 
 /** Every lifecycle transition must carry a real, active production user. */
@@ -132,9 +180,14 @@ async function auditChangeSetTransition(
   operation: "review" | "approve" | "apply",
   before: ChangeSetRow,
 ): Promise<void> {
-  const after = (await db.execute<ChangeSetRow>(sql`
+  const after = (
+    await db.execute<ChangeSetRow>(
+      sql`
     select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
-      from change_sets where id = ${id}`, "objects"))[0];
+      from change_sets where id = ${id}`,
+      "objects",
+    )
+  )[0];
   if (!after) throw new Error(`change set disappeared during ${operation}: ${id}`);
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -143,38 +196,75 @@ async function auditChangeSetTransition(
 }
 
 async function assertActiveActor(actorId: string, orgId: string): Promise<void> {
-  const actor = await db.execute<{ id: string }>(sql`
-    select id from users where id = ${actorId} and org_id = ${orgId} and is_active`, "objects");
-  if (!actor[0]) throw new Error(`actor ${actorId} is not an active user of the production organization`);
+  const actor = await db.execute<{ id: string }>(
+    sql`
+    select id from users where id = ${actorId} and org_id = ${orgId} and is_active`,
+    "objects",
+  );
+  if (!actor[0])
+    throw new Error(`actor ${actorId} is not an active user of the production organization`);
 }
 
-async function assertCapturedSandboxReady(sandboxOrgId: string | null, productionOrgId: string): Promise<void> {
-  if (!sandboxOrgId) throw new Error("change set has no source sandbox — recapture from a live sandbox");
-  const sandbox = (await db.execute<{ status: string }>(sql`
-    select status from sandboxes where org_id = ${sandboxOrgId} and production_org_id = ${productionOrgId} for share`, "objects"))[0];
-  if (!sandbox) throw new Error("change set's sandbox is gone — recapture from a live sandbox before reviewing or applying");
+async function assertCapturedSandboxReady(
+  sandboxOrgId: string | null,
+  productionOrgId: string,
+): Promise<void> {
+  if (!sandboxOrgId)
+    throw new Error("change set has no source sandbox — recapture from a live sandbox");
+  const sandbox = (
+    await db.execute<{ status: string }>(
+      sql`
+    select status from sandboxes where org_id = ${sandboxOrgId} and production_org_id = ${productionOrgId} for share`,
+      "objects",
+    )
+  )[0];
+  if (!sandbox)
+    throw new Error(
+      "change set's sandbox is gone — recapture from a live sandbox before reviewing or applying",
+    );
   if (sandbox.status !== "ready") {
-    throw new Error(`change set's sandbox is ${sandbox.status}, not ready — wait until it is ready and recapture before reviewing or applying`);
+    throw new Error(
+      `change set's sandbox is ${sandbox.status}, not ready — wait until it is ready and recapture before reviewing or applying`,
+    );
   }
 }
 
 /** Resolve the lock key before each change-set transition, then revalidate the
  * sandbox under that lock and inside the transition transaction. Deletion and
  * refresh use this same key, so a vanished sandbox cannot race review/apply. */
-async function withChangeSetSandboxLock<T>(changeSetId: string, work: (productionOrgId: string) => Promise<T>): Promise<T> {
+async function withChangeSetSandboxLock<T>(
+  changeSetId: string,
+  work: (productionOrgId: string) => Promise<T>,
+): Promise<T> {
   // bypass: cross-org-by-design — a change set links a production organization to its sandbox copy.
   const target = await withBypassContext(async () => {
-    const changeSet = (await db.execute<{ org_id: string; sandbox_org_id: string | null }>(sql`
-      select org_id, sandbox_org_id from change_sets where id = ${changeSetId}`, "objects"))[0];
+    const changeSet = (
+      await db.execute<{ org_id: string; sandbox_org_id: string | null }>(
+        sql`
+      select org_id, sandbox_org_id from change_sets where id = ${changeSetId}`,
+        "objects",
+      )
+    )[0];
     if (!changeSet) throw new Error(`change set not found: ${changeSetId}`);
-    if (!changeSet.sandbox_org_id) throw new Error("change set has no source sandbox — recapture from a live sandbox");
-    const sandbox = (await db.execute<{ id: string }>(sql`
+    if (!changeSet.sandbox_org_id)
+      throw new Error("change set has no source sandbox — recapture from a live sandbox");
+    const sandbox = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from sandboxes
-       where org_id = ${changeSet.sandbox_org_id} and production_org_id = ${changeSet.org_id}`, "objects"))[0];
-    if (!sandbox) throw new Error("change set's sandbox is gone — recapture from a live sandbox before reviewing or applying");
+       where org_id = ${changeSet.sandbox_org_id} and production_org_id = ${changeSet.org_id}`,
+        "objects",
+      )
+    )[0];
+    if (!sandbox)
+      throw new Error(
+        "change set's sandbox is gone — recapture from a live sandbox before reviewing or applying",
+      );
     return { sandboxId: sandbox.id, productionOrgId: changeSet.org_id };
   });
-  return withSandboxRefreshLock(assertUuid(target.sandboxId), () => work(assertUuid(target.productionOrgId)));
+  return withSandboxRefreshLock(assertUuid(target.sandboxId), () =>
+    work(assertUuid(target.productionOrgId)),
+  );
 }
 
 /** Freeze the lifecycle actor's sandbox-management authority. Review and
@@ -188,25 +278,54 @@ interface PromotionAuthority {
 }
 
 async function promotionAuthority(actorId: string, orgId: string): Promise<PromotionAuthority> {
-  const actor = (await db.execute<{ is_super_admin: boolean; is_active: boolean }>(sql`
-    select is_super_admin,is_active from users where id=${actorId} and org_id=${orgId} for share`, "objects"))[0];
+  const actor = (
+    await db.execute<{ is_super_admin: boolean; is_active: boolean }>(
+      sql`
+    select is_super_admin,is_active from users where id=${actorId} and org_id=${orgId} for share`,
+      "objects",
+    )
+  )[0];
   if (!actor?.is_active) throw new Error("promotion requires an active production actor");
-  await db.execute(sql`select id from role_assignments where org_id=${orgId} and user_id=${actorId} order by id for share`);
-  const roles = await db.execute<{ permissions: string[] }>(sql`
+  await db.execute(
+    sql`select id from role_assignments where org_id=${orgId} and user_id=${actorId} order by id for share`,
+  );
+  const roles = await db.execute<{ permissions: string[] }>(
+    sql`
     select r.permissions from app_roles r where r.org_id=${orgId}
       and exists(select 1 from role_assignments a where a.org_id=${orgId} and a.user_id=${actorId} and a.role_id=r.id)
-     order by r.id for share`, "objects");
-  const overrides = await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
-    select permission,effect from user_permission_overrides where org_id=${orgId} and user_id=${actorId} order by id for share`, "objects");
-  const permissions = actor.is_super_admin ? new Set(["*"]) : resolveEffectivePermissions({ rolePermissionSets: roles.map(row => row.permissions), overrides });
-  if (!permissionSetCovers(permissions, "admin.sandboxes.manage")) throw new Error("promotion requires admin.sandboxes.manage");
+     order by r.id for share`,
+    "objects",
+  );
+  const overrides = await db.execute<{ permission: string; effect: "grant" | "deny" }>(
+    sql`
+    select permission,effect from user_permission_overrides where org_id=${orgId} and user_id=${actorId} order by id for share`,
+    "objects",
+  );
+  const permissions = actor.is_super_admin
+    ? new Set(["*"])
+    : resolveEffectivePermissions({
+        rolePermissionSets: roles.map((row) => row.permissions),
+        overrides,
+      });
+  if (!permissionSetCovers(permissions, "admin.sandboxes.manage"))
+    throw new Error("promotion requires admin.sandboxes.manage");
   assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
   return { permissions, isSuperAdmin: actor.is_super_admin };
 }
 
 function promotedRolePermissions(value: unknown): string[] {
-  if (!Array.isArray(value) || value.some(key => typeof key !== "string" ||
-    !(isCataloguePermission(key) || key === "*" || (key.endsWith(".*") && PERMISSION_CATALOGUE.some(p => p.startsWith(key.slice(0, -1))))))) {
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (key) =>
+        typeof key !== "string" ||
+        !(
+          isCataloguePermission(key) ||
+          key === "*" ||
+          (key.endsWith(".*") && PERMISSION_CATALOGUE.some((p) => p.startsWith(key.slice(0, -1))))
+        ),
+    )
+  ) {
     throw new Error("promotion role permissions must contain valid permission keys");
   }
   return [...new Set(value as string[])];
@@ -216,19 +335,26 @@ function promotedRolePermissions(value: unknown): string[] {
  * Check both sides so an ownership/scope edit cannot authorize itself. A
  * legacy sandbox owner is accepted only through its proven actor mapping. */
 async function assertPromotionOwner(
-  table: string, row: Record<string, unknown> | null, actor: string,
-  authority: ReadonlySet<string>, sandboxOrgId: string | null, legacy: boolean,
+  table: string,
+  row: Record<string, unknown> | null,
+  actor: string,
+  authority: ReadonlySet<string>,
+  sandboxOrgId: string | null,
+  legacy: boolean,
 ): Promise<void> {
   const field = USER_REFERENCE_COLUMNS[table];
   if (!row || !field) return;
   if (table === "list_views" ? row.scope !== "user" : authority.has("*")) return;
   if (row[field] === actor) return;
   if (legacy && sandboxOrgId && typeof row[field] === "string") {
-    const counterpart = await db.execute(sql`
+    const counterpart = await db.execute(
+      sql`
       select u.id from users u join orgs o on o.id=u.org_id
        where o.id=${sandboxOrgId} and o.env_kind='sandbox'
          and u.id=${row[field]} and u.id=ob_rebase(${actor}::uuid,o.sandbox_seed)
-       for share of u,o`, "objects");
+       for share of u,o`,
+      "objects",
+    );
     if (counterpart.length) return;
   }
   throw new Error(`${table} promotion requires the record owner`);
@@ -259,142 +385,208 @@ export async function buildChangeSet(
   // capture holds the same-sandbox lock refresh uses, so a refresh can
   // neither wipe rows under the diff nor commit a new clone under it.
   const sid = assertUuid(sandboxId);
-  return withSandboxRefreshLock(sid, () => withMaintenanceTransaction(null, async () => {
-    await db.execute(sql`set local time zone 'UTC'`);
-    const s = await db.execute<SandboxTargetRow>(sql`
-      select org_id, production_org_id, status from sandboxes where id = ${sandboxId}`, "objects");
-    const row = s[0];
-    if (!row) throw new Error(`sandbox not found: ${sandboxId}`);
-    // Only a ready sandbox has a complete, quiescent customization layer to
-    // diff. A failed/provisioning sandbox is missing rows (every production
-    // customization without a counterpart reads as a DELETE), and a
-    // refreshing/deleting one is mid-rewrite — either way the change set
-    // would propose mass production deletions for sandbox absence.
-    if (row.status !== "ready") {
-      throw new Error(
-        `cannot capture a change set: sandbox is ${row.status}, not ready — ` +
-          `wait for provisioning or refresh to finish (or resolve the failure and refresh), then recapture`,
+  return withSandboxRefreshLock(sid, () =>
+    withMaintenanceTransaction(null, async () => {
+      await db.execute(sql`set local time zone 'UTC'`);
+      const s = await db.execute<SandboxTargetRow>(
+        sql`
+      select org_id, production_org_id, status from sandboxes where id = ${sandboxId}`,
+        "objects",
       );
-    }
-    const sbx = assertUuid(row.org_id);
-    const prod = assertUuid(row.production_org_id);
-    if (creator) await assertActiveActor(creator, prod);
-    const seedRes = await db.execute<SandboxSeedRow>(sql`select sandbox_seed from orgs where id = ${row.org_id}`, "objects");
-    const seedRow = seedRes[0];
-    if (!seedRow) throw new Error(`sandbox organization not found: ${row.org_id}`);
-    const seed = assertUuid(seedRow.sandbox_seed);
-    const subsidiaryMap = await sandboxSubsidiaryMap(prod, sbx, seed);
-    const productionSubsidiaries = new Map([...subsidiaryMap.keys()].map(id => [id, id]));
-    const toProduction = new Map([...subsidiaryMap].map(([source, target]) => [target, source]));
-    const users = await db.execute<{ production_id: string; sandbox_id: string | null }>(sql`
+      const row = s[0];
+      if (!row) throw new Error(`sandbox not found: ${sandboxId}`);
+      // Only a ready sandbox has a complete, quiescent customization layer to
+      // diff. A failed/provisioning sandbox is missing rows (every production
+      // customization without a counterpart reads as a DELETE), and a
+      // refreshing/deleting one is mid-rewrite — either way the change set
+      // would propose mass production deletions for sandbox absence.
+      if (row.status !== "ready") {
+        throw new Error(
+          `cannot capture a change set: sandbox is ${row.status}, not ready — ` +
+            `wait for provisioning or refresh to finish (or resolve the failure and refresh), then recapture`,
+        );
+      }
+      const sbx = assertUuid(row.org_id);
+      const prod = assertUuid(row.production_org_id);
+      if (creator) await assertActiveActor(creator, prod);
+      const seedRes = await db.execute<SandboxSeedRow>(
+        sql`select sandbox_seed from orgs where id = ${row.org_id}`,
+        "objects",
+      );
+      const seedRow = seedRes[0];
+      if (!seedRow) throw new Error(`sandbox organization not found: ${row.org_id}`);
+      const seed = assertUuid(seedRow.sandbox_seed);
+      const subsidiaryMap = await sandboxSubsidiaryMap(prod, sbx, seed);
+      const productionSubsidiaries = new Map([...subsidiaryMap.keys()].map((id) => [id, id]));
+      const toProduction = new Map([...subsidiaryMap].map(([source, target]) => [target, source]));
+      const users = await db.execute<{ production_id: string; sandbox_id: string | null }>(
+        sql`
       select p.id as production_id, s.id as sandbox_id from users p
       left join users s on s.org_id=${sbx} and s.id=ob_rebase(p.id,${seed}::uuid)
-       where p.org_id=${prod}`, "objects");
-    const toProductionUser = new Map(users.flatMap(row => row.sandbox_id ? [[row.sandbox_id, row.production_id] as const] : []));
-    // A previously corrupted production owner can be repaired through its
-    // proven origin, but only as an explicit reviewed change-set item.
-    const productionUser = new Map([...users.map(row => [row.production_id, row.production_id] as const), ...toProductionUser]);
+       where p.org_id=${prod}`,
+        "objects",
+      );
+      const toProductionUser = new Map(
+        users.flatMap((row) =>
+          row.sandbox_id ? [[row.sandbox_id, row.production_id] as const] : [],
+        ),
+      );
+      // A previously corrupted production owner can be repaired through its
+      // proven origin, but only as an explicit reviewed change-set item.
+      const productionUser = new Map([
+        ...users.map((row) => [row.production_id, row.production_id] as const),
+        ...toProductionUser,
+      ]);
 
-    const cs = (await db
-      .insert(schema.changeSets)
-      .values({
-        orgId: prod,
-        sandboxOrgId: sbx,
-        name,
-        status: "draft",
-        captureComplete: false,
-        itemCount: 0,
-        createdBy: creator,
-      })
-      .returning({ id: schema.changeSets.id }))[0]!;
+      const cs = (
+        await db
+          .insert(schema.changeSets)
+          .values({
+            orgId: prod,
+            sandboxOrgId: sbx,
+            name,
+            status: "draft",
+            captureComplete: false,
+            itemCount: 0,
+            createdBy: creator,
+          })
+          .returning({ id: schema.changeSets.id })
+      )[0]!;
 
-    // Which promotable tables actually exist and carry org_id + id.
-    const present = await db.execute<TableNameRow>(sql`
+      // Which promotable tables actually exist and carry org_id + id.
+      const present = await db.execute<TableNameRow>(
+        sql`
       select table_name from information_schema.columns
        where table_schema = 'public' and column_name = 'org_id'
-         and table_name = any(${PROMOTABLE_ARRAY}::text[])`, "objects");
-    const tables = present.map((r) => r.table_name);
+         and table_name = any(${PROMOTABLE_ARRAY}::text[])`,
+        "objects",
+      );
+      const tables = present.map((r) => r.table_name);
 
-    let itemCount = 0;
-    for (const t of tables) {
-      // Inserts + updates: every sandbox row, matched to its production origin.
-      // Table names cannot travel as bound parameters; values always can, so
-      // the org ids and seed below are bound while the table stays raw.
-      const diff = await db.execute<ChangeDiffRow>(sql`
+      let itemCount = 0;
+      for (const t of tables) {
+        // Inserts + updates: every sandbox row, matched to its production origin.
+        // Table names cannot travel as bound parameters; values always can, so
+        // the org ids and seed below are bound while the table stays raw.
+        const diff = await db.execute<ChangeDiffRow>(
+          sql`
         select s.id as sbx_id, p.id as prod_id, row_to_json(s) as sbx_row, row_to_json(p) as prod_row
           from ${sql.raw(`"${t}"`)} s
           left join ${sql.raw(`"${t}"`)} p on p.org_id = ${prod} and ob_rebase(p.id, ${seed}) = s.id
-         where s.org_id = ${sbx}`, "objects");
-      for (const d of diff) {
-        // Keep the raw production record before normalizing reference identities
-        // for comparison. A reviewed repair must still match that actual base.
-        const expectedBefore = d.prod_row ? structuredClone(d.prod_row) : null;
-        const userField = USER_REFERENCE_COLUMNS[t];
-        let repairsProductionReference = false;
-        if (userField) {
-          d.sbx_row[userField] = mappedUserReference(d.sbx_row[userField], toProductionUser, `promotion ${t}/${d.sbx_id}`);
-          if (d.prod_row) {
-            const original = d.prod_row[userField];
-            d.prod_row[userField] = mappedUserReference(original, productionUser, `production ${t}/${d.prod_id}`);
-            repairsProductionReference = original !== d.prod_row[userField];
+         where s.org_id = ${sbx}`,
+          "objects",
+        );
+        for (const d of diff) {
+          // Keep the raw production record before normalizing reference identities
+          // for comparison. A reviewed repair must still match that actual base.
+          const expectedBefore = d.prod_row ? structuredClone(d.prod_row) : null;
+          const userField = USER_REFERENCE_COLUMNS[t];
+          let repairsProductionReference = false;
+          if (userField) {
+            d.sbx_row[userField] = mappedUserReference(
+              d.sbx_row[userField],
+              toProductionUser,
+              `promotion ${t}/${d.sbx_id}`,
+            );
+            if (d.prod_row) {
+              const original = d.prod_row[userField];
+              d.prod_row[userField] = mappedUserReference(
+                original,
+                productionUser,
+                `production ${t}/${d.prod_id}`,
+              );
+              repairsProductionReference = original !== d.prod_row[userField];
+            }
           }
+          if (t === "app_roles") {
+            d.sbx_row.subsidiary_restriction = remapRoleRestriction(
+              d.sbx_row.subsidiary_restriction,
+              toProduction,
+              `promotion role ${d.sbx_id}`,
+            );
+            if (d.prod_row)
+              d.prod_row.subsidiary_restriction = remapRoleRestriction(
+                d.prod_row.subsidiary_restriction,
+                productionSubsidiaries,
+                `production role ${d.prod_id}`,
+              );
+          }
+          if (!repairsProductionReference && contentSig(t, d.sbx_row) === contentSig(t, d.prod_row))
+            continue; // unchanged
+          const targetId = d.prod_id ?? randomUUID();
+          const payload = {
+            ...d.sbx_row,
+            id: targetId,
+            org_id: prod,
+            created_by: null,
+            updated_by: null,
+          };
+          refuseInactivePromotedDefault(t, payload, null);
+          await db.insert(schema.changeSetItems).values({
+            orgId: prod,
+            changeSetId: cs.id,
+            tableName: t,
+            targetId,
+            op: d.prod_id ? "update" : "insert",
+            payload,
+            expectedBefore,
+            baseCaptured: true,
+          });
+          itemCount++;
         }
-        if (t === "app_roles") {
-          d.sbx_row.subsidiary_restriction = remapRoleRestriction(d.sbx_row.subsidiary_restriction, toProduction, `promotion role ${d.sbx_id}`);
-          if (d.prod_row) d.prod_row.subsidiary_restriction = remapRoleRestriction(d.prod_row.subsidiary_restriction, productionSubsidiaries, `production role ${d.prod_id}`);
-        }
-        if (!repairsProductionReference && contentSig(t, d.sbx_row) === contentSig(t, d.prod_row)) continue; // unchanged
-        const targetId = d.prod_id ?? randomUUID();
-        const payload = { ...d.sbx_row, id: targetId, org_id: prod, created_by: null, updated_by: null };
-        refuseInactivePromotedDefault(t, payload, null);
-        await db.insert(schema.changeSetItems).values({
-          orgId: prod,
-          changeSetId: cs.id,
-          tableName: t,
-          targetId,
-          op: d.prod_id ? "update" : "insert",
-          payload,
-          expectedBefore,
-          baseCaptured: true,
-        });
-        itemCount++;
-      }
-      // Deletes: production rows with no sandbox counterpart.
-      const dels = await db.execute<IdRow>(sql`
+        // Deletes: production rows with no sandbox counterpart.
+        const dels = await db.execute<IdRow>(
+          sql`
         select p.id, row_to_json(p) as expected_before from ${sql.raw(`"${t}"`)} p
          where p.org_id = ${prod}
-           and not exists (select 1 from ${sql.raw(`"${t}"`)} s where s.org_id = ${sbx} and s.id = ob_rebase(p.id, ${seed}))`, "objects");
-      for (const dr of dels) {
-        await db.insert(schema.changeSetItems).values({
-          orgId: prod,
-          changeSetId: cs.id,
-          tableName: t,
-          targetId: dr.id,
-          op: "delete",
-          payload: null,
-          expectedBefore: dr.expected_before,
-          baseCaptured: true,
-        });
-        itemCount++;
+           and not exists (select 1 from ${sql.raw(`"${t}"`)} s where s.org_id = ${sbx} and s.id = ob_rebase(p.id, ${seed}))`,
+          "objects",
+        );
+        for (const dr of dels) {
+          await db.insert(schema.changeSetItems).values({
+            orgId: prod,
+            changeSetId: cs.id,
+            tableName: t,
+            targetId: dr.id,
+            op: "delete",
+            payload: null,
+            expectedBefore: dr.expected_before,
+            baseCaptured: true,
+          });
+          itemCount++;
+        }
       }
-    }
-    const finalSandbox = (await db.execute<{ id: string }>(sql`
+      const finalSandbox = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from sandboxes
        where id = ${sid} and org_id = ${sbx} and production_org_id = ${prod} and status = 'ready'
-       for update`, "objects"))[0];
-    if (!finalSandbox) {
-      throw new Error("sandbox changed or was deleted during capture; no change set was published — wait for a ready sandbox and recapture");
-    }
-    // The marker is written only after all item inserts have succeeded.  The
-    // count is checked again by review and apply to detect any tampering.
-    const completed = await db.execute<{ id: string }>(sql`
+       for update`,
+          "objects",
+        )
+      )[0];
+      if (!finalSandbox) {
+        throw new Error(
+          "sandbox changed or was deleted during capture; no change set was published — wait for a ready sandbox and recapture",
+        );
+      }
+      // The marker is written only after all item inserts have succeeded.  The
+      // count is checked again by review and apply to detect any tampering.
+      const completed = await db.execute<{ id: string }>(
+        sql`
       update change_sets
          set capture_complete = true, item_count = ${itemCount}, updated_at = now(), updated_by = ${creator}
        where id = ${cs.id} and org_id = ${prod} and capture_complete = false
-       returning id`, "objects");
-    if (!completed[0]) throw new Error("change-set capture completion matched no row; the draft was not published");
-    return { changeSetId: cs.id, itemCount };
-  }));
+       returning id`,
+        "objects",
+      );
+      if (!completed[0])
+        throw new Error(
+          "change-set capture completion matched no row; the draft was not published",
+        );
+      return { changeSetId: cs.id, itemCount };
+    }),
+  );
 }
 
 /** Validate a complete capture and submit it through the production tenant’s Flow policy. */
@@ -406,14 +598,20 @@ export async function reviewChangeSet(
   const actor = requireActor(reviewerId, "change-set review");
   await withChangeSetSandboxLock(id, (productionOrgId) =>
     withMaintenanceTransaction(productionOrgId, async () => {
-      const identity = (await db.execute<{ org_id: string }>(
-          sql`select org_id from change_sets where id=${id}`, "objects",
-        ))[0];
+      const identity = (
+        await db.execute<{ org_id: string }>(
+          sql`select org_id from change_sets where id=${id}`,
+          "objects",
+        )
+      )[0];
       if (!identity) throw new Error("The change set is unavailable.");
       await lockApprovalSubject(identity.org_id, "sandbox_change_set", id);
-      const result = await db.execute<ChangeSetRow>(sql`
+      const result = await db.execute<ChangeSetRow>(
+        sql`
       select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
-        from change_sets where id = ${id} for update`, "objects");
+        from change_sets where id = ${id} for update`,
+        "objects",
+      );
       const c = result[0];
       if (!c) throw new Error(`change set not found: ${id}`);
       const prod = assertUuid(c.org_id);
@@ -422,15 +620,21 @@ export async function reviewChangeSet(
       if (c.status !== "draft") throw new Error(`change set is ${c.status}, not draft`);
       if (!c.capture_complete) throw new Error("change set capture is incomplete");
       await assertCapturedSandboxReady(c.sandbox_org_id, prod);
-      const count = await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`, "objects");
+      const count = await db.execute<{ count: string }>(
+        sql`
+      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`,
+        "objects",
+      );
       if (Number(count[0]?.count ?? -1) !== Number(c.item_count)) {
-      throw new Error("change set item count does not match its captured snapshot");
-    }
-      const reviewed = await db.execute(sql`
+        throw new Error("change set item count does not match its captured snapshot");
+      }
+      const reviewed = await db.execute(
+        sql`
       update change_sets
          set status = 'reviewed', reviewed_at = now(), reviewed_by = ${actor}, updated_at = now(), updated_by = ${actor}
-       where id = ${id} and org_id = ${prod} and status = 'draft' returning id`, "objects");
+       where id = ${id} and org_id = ${prod} and status = 'draft' returning id`,
+        "objects",
+      );
       if (reviewed.length !== 1)
         throw new Error("The capture changed during submission. Reload it.");
       await auditChangeSetTransition(id, prod, actor, "review", c);
@@ -444,14 +648,20 @@ async function approveChangeSetInTransaction(
   actor: string,
   approvalRunId?: string,
 ): Promise<void> {
-  const identity = (await db.execute<{ org_id: string }>(
-      sql`select org_id from change_sets where id=${id}`, "objects",
-    ))[0];
+  const identity = (
+    await db.execute<{ org_id: string }>(
+      sql`select org_id from change_sets where id=${id}`,
+      "objects",
+    )
+  )[0];
   if (!identity) throw new Error("The change set is unavailable.");
   await lockApprovalSubject(identity.org_id, "sandbox_change_set", id);
-  const result = await db.execute<ChangeSetRow>(sql`
+  const result = await db.execute<ChangeSetRow>(
+    sql`
       select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
-        from change_sets where id = ${id} for update`, "objects");
+        from change_sets where id = ${id} for update`,
+    "objects",
+  );
   const c = result[0];
   if (!c) throw new Error(`change set not found: ${id}`);
   const prod = assertUuid(c.org_id);
@@ -459,11 +669,14 @@ async function approveChangeSetInTransaction(
   await promotionAuthority(actor, prod);
   if (c.status !== "reviewed") throw new Error(`change set is ${c.status}, not reviewed`);
   if (!c.capture_complete) throw new Error("change set capture is incomplete");
-  const count = await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`, "objects");
+  const count = await db.execute<{ count: string }>(
+    sql`
+      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`,
+    "objects",
+  );
   if (Number(count[0]?.count ?? -1) !== Number(c.item_count)) {
-      throw new Error("change set item count does not match its captured snapshot");
-    }
+    throw new Error("change set item count does not match its captured snapshot");
+  }
   if (
     await requestNativeCommandApproval({
       orgId: prod,
@@ -475,14 +688,15 @@ async function approveChangeSetInTransaction(
     })
   )
     return;
-  const approved = await db.execute(sql`
+  const approved = await db.execute(
+    sql`
       update change_sets
          set status = 'approved', approved_at = now(), approved_by = ${actor}, updated_at = now(), updated_by = ${actor}
-       where id = ${id} and org_id = ${prod} and status = 'reviewed' returning id`, "objects");
+       where id = ${id} and org_id = ${prod} and status = 'reviewed' returning id`,
+    "objects",
+  );
   if (approved.length !== 1)
-    throw new Error(
-      "The capture changed before release. Reload its Flow state.",
-    );
+    throw new Error("The capture changed before release. Reload its Flow state.");
   await auditChangeSetTransition(id, prod, actor, "approve", c);
 }
 
@@ -495,16 +709,15 @@ export async function releasePromotionApproval(args: {
 }): Promise<void> {
   if (args.outcome !== "approved") return;
   const actor = requireActor(args.ctx.userId, "change-set approval");
-  const row = (await db.execute<{ id: string }>(
-      sql`select id from change_sets where org_id=${args.ctx.orgId} and id=${args.subjectId} for update`, "objects",
-    ))[0];
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`select id from change_sets where org_id=${args.ctx.orgId} and id=${args.subjectId} for update`,
+      "objects",
+    )
+  )[0];
   if (!row || !args.approvalRunId)
     throw new Error("The native promotion submission is unavailable.");
-  await approveChangeSetInTransaction(
-    args.subjectId,
-    actor,
-    args.approvalRunId,
-  );
+  await approveChangeSetInTransaction(args.subjectId, actor, args.approvalRunId);
 }
 
 /** Apply an approved change set to production in one transaction. */
@@ -517,9 +730,12 @@ export async function applyChangeSet(
   await withChangeSetSandboxLock(id, () =>
     withMaintenanceTransaction(null, async () => {
       await db.execute(sql`set local time zone 'UTC'`);
-      const result = await db.execute<ChangeSetRow>(sql`
+      const result = await db.execute<ChangeSetRow>(
+        sql`
       select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
-        from change_sets where id = ${id} for update`, "objects");
+        from change_sets where id = ${id} for update`,
+        "objects",
+      );
       const c = result[0];
       if (!c) throw new Error(`change set not found: ${id}`);
       const prod = assertUuid(c.org_id);
@@ -532,28 +748,34 @@ export async function applyChangeSet(
       // between two ready states; this guards the mid-rewrite window itself.
       await assertCapturedSandboxReady(c.sandbox_org_id, prod);
 
-      const items = await db.execute<ChangeSetItemRow>(sql`
+      const items = await db.execute<ChangeSetItemRow>(
+        sql`
       select table_name, target_id, op, payload, expected_before, base_captured from change_set_items
-       where change_set_id = ${id} and org_id = ${prod} order by created_at, id`, "objects");
+       where change_set_id = ${id} and org_id = ${prod} order by created_at, id`,
+        "objects",
+      );
       if (items.length !== Number(c.item_count)) {
-      throw new Error("change set item count does not match its captured snapshot");
-    }
-      if (items.some(item => !item.base_captured)) {
-      throw new Error("change set has no captured production base; recapture and review it before applying");
-    }
+        throw new Error("change set item count does not match its captured snapshot");
+      }
+      if (items.some((item) => !item.base_captured)) {
+        throw new Error(
+          "change set has no captured production base; recapture and review it before applying",
+        );
+      }
 
       const authority = await promotionAuthority(actor, prod);
 
       for (const it of items) {
         const t = it.table_name;
-        if (!PROMOTABLE.includes(t)) throw new Error(`change set contains non-promotable table: ${t}`);
+        if (!PROMOTABLE.includes(t))
+          throw new Error(`change set contains non-promotable table: ${t}`);
         const requiredPermission = PROMOTION_PERMISSIONS[t]!;
         if (!permissionSetCovers(authority.permissions, requiredPermission)) {
-        throw new Error(`${t} promotion requires ${requiredPermission}`);
-      }
+          throw new Error(`${t} promotion requires ${requiredPermission}`);
+        }
         if (t === "user_scripts" && !(await lockAndCheckOrgFeature(db, prod, "scripts"))) {
-        throw new Error("scripts feature is disabled");
-      }
+          throw new Error("scripts feature is disabled");
+        }
         const target = assertUuid(it.target_id);
         const table = sql`public.${sql.identifier(t)}`;
         const runtimeColumns = t === "user_scripts" ? `{${[...SCRIPT_RUNTIME].join(",")}}` : "{}";
@@ -561,161 +783,266 @@ export async function applyChangeSet(
         // non-objects — strip runtime cursors only from object bases so new
         // scripts can still promote.
         const expectedBefore = JSON.stringify(it.expected_before);
-        const prior = await db.execute<{ row: Record<string, unknown>; matches_base: boolean }>(sql`
+        const prior = await db.execute<{ row: Record<string, unknown>; matches_base: boolean }>(
+          sql`
         select to_jsonb(existing) as row,
                (to_jsonb(existing) - ${runtimeColumns}::text[]) is not distinct from
                (case when jsonb_typeof(${expectedBefore}::jsonb) = 'object'
                      then ${expectedBefore}::jsonb - ${runtimeColumns}::text[]
                      else ${expectedBefore}::jsonb end) as matches_base
           from ${table} existing
-         where id = ${target} and org_id = ${prod} for update`, "objects");
+         where id = ${target} and org_id = ${prod} for update`,
+          "objects",
+        );
         const before = prior[0]?.row ?? null;
         if (it.op === "insert" ? before !== null : before === null) {
-        throw new Error(`promotion target ${t}/${target} ${it.op === "insert" ? "already exists" : "no longer exists"}; recapture the change set`);
-      }
+          throw new Error(
+            `promotion target ${t}/${target} ${it.op === "insert" ? "already exists" : "no longer exists"}; recapture the change set`,
+          );
+        }
         if (it.op !== "insert" && !prior[0]!.matches_base) {
-        throw new Error(`promotion target ${t}/${target} changed since capture; recapture and review the change set`);
-      }
+          throw new Error(
+            `promotion target ${t}/${target} changed since capture; recapture and review the change set`,
+          );
+        }
         await assertPromotionOwner(t, before, actor, authority.permissions, c.sandbox_org_id, true);
         let after: Record<string, unknown> | null = null;
         if (it.op === "delete") {
-        if (t === "user_scripts") {
-          const history = await db.execute(sql`select id from script_runs where org_id = ${prod} and script_id = ${target} limit 1`, "objects");
-          if (history.length) throw new Error("This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.");
-        }
-        if (t === "report_definitions" && (before!.kind === "built_in" || before!.system)) {
-          throw new Error("built-in reports cannot be deleted by promotion");
-        }
-        if (t === "app_roles") {
-          if (before!.is_built_in) throw new Error("built-in roles cannot be deleted by promotion");
-          const held = await db.execute(sql`select id from role_assignments where org_id = ${prod} and role_id = ${target} limit 1`, "objects");
-          if (held.length) throw new Error("an assigned role cannot be deleted by promotion; reassign its users first");
-        }
-        await db.execute(sql`delete from ${table} where id = ${target} and org_id = ${prod}`);
-      } else {
+          if (t === "user_scripts") {
+            const history = await db.execute(
+              sql`select id from script_runs where org_id = ${prod} and script_id = ${target} limit 1`,
+              "objects",
+            );
+            if (history.length)
+              throw new Error(
+                "This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.",
+              );
+          }
+          if (t === "report_definitions" && (before!.kind === "built_in" || before!.system)) {
+            throw new Error("built-in reports cannot be deleted by promotion");
+          }
+          if (t === "app_roles") {
+            if (before!.is_built_in)
+              throw new Error("built-in roles cannot be deleted by promotion");
+            const held = await db.execute(
+              sql`select id from role_assignments where org_id = ${prod} and role_id = ${target} limit 1`,
+              "objects",
+            );
+            if (held.length)
+              throw new Error(
+                "an assigned role cannot be deleted by promotion; reassign its users first",
+              );
+          }
+          await db.execute(sql`delete from ${table} where id = ${target} and org_id = ${prod}`);
+        } else {
           const payload = it.payload;
-          if (!payload || typeof payload !== "object" || Array.isArray(payload)
-          || typeof payload.id !== "string" || payload.id.toLowerCase() !== target.toLowerCase()
-          || typeof payload.org_id !== "string" || payload.org_id.toLowerCase() !== prod.toLowerCase()) {
-          throw new Error(`promotion payload identity does not match ${t}/${target}`);
-        }
+          if (
+            !payload ||
+            typeof payload !== "object" ||
+            Array.isArray(payload) ||
+            typeof payload.id !== "string" ||
+            payload.id.toLowerCase() !== target.toLowerCase() ||
+            typeof payload.org_id !== "string" ||
+            payload.org_id.toLowerCase() !== prod.toLowerCase()
+          ) {
+            throw new Error(`promotion payload identity does not match ${t}/${target}`);
+          }
           if (t === "user_scripts") {
             const invalid = validateScriptConfiguration({
-            name: payload.name, triggerPoint: payload.trigger_point, source: payload.source,
-            documentKind: payload.document_kind, endpointSlug: payload.endpoint_slug,
-            cron: payload.cron, timeoutMs: payload.timeout_ms, sortOrder: payload.sort_order,
-            isActive: payload.is_active,
-          });
+              name: payload.name,
+              triggerPoint: payload.trigger_point,
+              source: payload.source,
+              documentKind: payload.document_kind,
+              endpointSlug: payload.endpoint_slug,
+              cron: payload.cron,
+              timeoutMs: payload.timeout_ms,
+              sortOrder: payload.sort_order,
+              isActive: payload.is_active,
+            });
             if (invalid) throw new Error(`script promotion: ${invalid.message}`);
             // Ignore even legacy captures' runtime values. Preserve the current
             // production cursor unless scheduling policy itself is changing.
             for (const field of SCRIPT_RUNTIME) delete payload[field];
-            const next = payload.trigger_point === "scheduled"
-            ? computeScheduledScriptNextRunAt(typeof payload.cron === "string" ? payload.cron : null)
-            : null;
-            const schedulingChanged = !before || ["trigger_point", "cron", "is_active"].some(field => payload[field] !== before[field]);
-            if (schedulingChanged)
-              payload.next_run_at = payload.is_active
-                ? (next?.toISOString() ?? null)
+            const next =
+              payload.trigger_point === "scheduled"
+                ? computeScheduledScriptNextRunAt(
+                    typeof payload.cron === "string" ? payload.cron : null,
+                  )
                 : null;
+            const schedulingChanged =
+              !before ||
+              ["trigger_point", "cron", "is_active"].some(
+                (field) => payload[field] !== before[field],
+              );
+            if (schedulingChanged)
+              payload.next_run_at = payload.is_active ? (next?.toISOString() ?? null) : null;
             if (!before) payload.last_run_at = null;
             // Unattended runs act under this user's live permissions, so the
             // promoter must hold what the script calls, like any saver.
             const refusal = await scriptSaveRefusal(prod, actor, String(payload.source ?? ""));
-            if (refusal && payload.trigger_point !== "endpoint") throw new Error(`script promotion: ${refusal}`);
+            if (refusal && payload.trigger_point !== "endpoint")
+              throw new Error(`script promotion: ${refusal}`);
             payload.run_as_user_id = actor;
           }
           const userField = USER_REFERENCE_COLUMNS[t];
           if (userField && payload[userField] !== null) {
-          const ownerId = typeof payload[userField] === "string" ? assertUuid(payload[userField]) : null;
-          const owner = (await db.execute(sql`select id from users where org_id=${prod} and id=${ownerId} for key share`, "objects"))[0];
-          if (!owner) throw new Error(`promotion ${t}/${target}: user reference must belong to production; recapture the change set`);
-        }
-          await assertPromotionOwner(t, payload, actor, authority.permissions, c.sandbox_org_id, false);
+            const ownerId =
+              typeof payload[userField] === "string" ? assertUuid(payload[userField]) : null;
+            const owner = (
+              await db.execute(
+                sql`select id from users where org_id=${prod} and id=${ownerId} for key share`,
+                "objects",
+              )
+            )[0];
+            if (!owner)
+              throw new Error(
+                `promotion ${t}/${target}: user reference must belong to production; recapture the change set`,
+              );
+          }
+          await assertPromotionOwner(
+            t,
+            payload,
+            actor,
+            authority.permissions,
+            c.sandbox_org_id,
+            false,
+          );
           if (t === "report_definitions") {
-          if (!before && (payload.kind !== "custom" || payload.system)) {
-            throw new Error("built-in report identity is managed by setup, not promotion");
+            if (!before && (payload.kind !== "custom" || payload.system)) {
+              throw new Error("built-in report identity is managed by setup, not promotion");
+            }
+            if (
+              before &&
+              ["kind", "system", "report_type"].some((field) => payload[field] !== before[field])
+            ) {
+              throw new Error(
+                "promotion cannot change report identity (kind, system, or report type)",
+              );
+            }
           }
-          if (before && ["kind", "system", "report_type"].some(field => payload[field] !== before[field])) {
-            throw new Error("promotion cannot change report identity (kind, system, or report type)");
-          }
-        }
           if (t === "app_roles") {
             const requested = promotedRolePermissions(payload.permissions);
             const current = new Set(before ? promotedRolePermissions(before.permissions) : []);
-            const missing = permissionsOutsideCeiling(authority.permissions, requested.filter(key => !current.has(key)));
-            if (missing.length) throw new Error(`cannot grant permissions you do not hold: ${missing.join(", ")}`);
+            const missing = permissionsOutsideCeiling(
+              authority.permissions,
+              requested.filter((key) => !current.has(key)),
+            );
+            if (missing.length)
+              throw new Error(`cannot grant permissions you do not hold: ${missing.join(", ")}`);
             payload.permissions = requested;
             // Revalidate a captured scope against live, locked production rows;
             // the target entity can disappear between capture and application.
-            const subsidiaries = await db.execute<{ id: string }>(sql`
-            select id from subsidiaries where org_id=${prod} order by id for share`, "objects");
-            const nextRestriction = remapRoleRestriction(payload.subsidiary_restriction,
-            new Map(subsidiaries.map(row => [row.id, row.id])), `promotion role ${target}`);
+            const subsidiaries = await db.execute<{ id: string }>(
+              sql`
+            select id from subsidiaries where org_id=${prod} order by id for share`,
+              "objects",
+            );
+            const nextRestriction = remapRoleRestriction(
+              payload.subsidiary_restriction,
+              new Map(subsidiaries.map((row) => [row.id, row.id])),
+              `promotion role ${target}`,
+            );
             const coverage = await loadSubsidiaryGrantCoverage(db, prod, actor);
             if (!authority.isSuperAdmin) {
               const previousRestriction: SubsidiaryRestriction | null = before
                 ? (before.subsidiary_restriction as SubsidiaryRestriction | null)
                 : { mode: "list", subsidiaryIds: [] };
-              const edit = await resolveRestrictionEditScopes(db, prod, previousRestriction, nextRestriction);
-              const outsideCoverage = edit.additions === undefined
-              ? true
-              : edit.additions === null
-                ? !grantedRestrictionWithinCoverage(coverage, nextRestriction)
-                : edit.additions.size > 0 && !grantedScopeSetWithinCoverage(coverage, edit.additions);
+              const edit = await resolveRestrictionEditScopes(
+                db,
+                prod,
+                previousRestriction,
+                nextRestriction,
+              );
+              const outsideCoverage =
+                edit.additions === undefined
+                  ? true
+                  : edit.additions === null
+                    ? !grantedRestrictionWithinCoverage(coverage, nextRestriction)
+                    : edit.additions.size > 0 &&
+                      !grantedScopeSetWithinCoverage(coverage, edit.additions);
               if (outsideCoverage) {
-              throw new Error("cannot grant subsidiary access beyond your scope: ask an administrator whose scope covers the requested entities to make this change");
-            }
+                throw new Error(
+                  "cannot grant subsidiary access beyond your scope: ask an administrator whose scope covers the requested entities to make this change",
+                );
+              }
             }
             payload.subsidiary_restriction = nextRestriction;
-            if (!before && payload.is_built_in) throw new Error("built-in roles are managed by setup, not promotion");
+            if (!before && payload.is_built_in)
+              throw new Error("built-in roles are managed by setup, not promotion");
             if (before) {
-            if (before.is_built_in && before.key === "admin") throw new Error("the Administrator role cannot be edited by promotion");
-            if (payload.key !== before.key || payload.is_built_in !== before.is_built_in) {
-              throw new Error("promotion cannot change a role's key or built-in identity");
+              if (before.is_built_in && before.key === "admin")
+                throw new Error("the Administrator role cannot be edited by promotion");
+              if (payload.key !== before.key || payload.is_built_in !== before.is_built_in) {
+                throw new Error("promotion cannot change a role's key or built-in identity");
+              }
+              if (
+                before.is_built_in &&
+                (payload.name !== before.name || payload.description !== before.description)
+              ) {
+                throw new Error(
+                  "only permissions and subsidiary restrictions can change on a built-in role",
+                );
+              }
             }
-            if (before.is_built_in && (payload.name !== before.name || payload.description !== before.description)) {
-              throw new Error("only permissions and subsidiary restrictions can change on a built-in role");
-            }
-          }
           }
           // The payload was captured with row_to_json, so it carries GENERATED
           // ALWAYS projections too. They are known columns (never "obsolete") but
           // are recomputed by the target row and can never be SET or inserted.
-          const catalog = await db.execute<{ column_name: string; is_generated: string }>(sql`
+          const catalog = await db.execute<{ column_name: string; is_generated: string }>(
+            sql`
           select column_name, is_generated from information_schema.columns
-           where table_schema = 'public' and table_name = ${t} order by ordinal_position`, "objects");
+           where table_schema = 'public' and table_name = ${t} order by ordinal_position`,
+            "objects",
+          );
           const known = catalog.map((row) => row.column_name);
-          const columns = catalog.filter((row) => row.is_generated === "NEVER").map((row) => row.column_name);
+          const columns = catalog
+            .filter((row) => row.is_generated === "NEVER")
+            .map((row) => row.column_name);
           if (Object.keys(payload).some((key) => !known.includes(key))) {
-          throw new Error(`promotion payload contains obsolete or unknown columns for ${t}; recapture the change set`);
-        }
+            throw new Error(
+              `promotion payload contains obsolete or unknown columns for ${t}; recapture the change set`,
+            );
+          }
           refuseInactivePromotedDefault(t, payload, before);
-          const fields = columns.filter((column) => !STRUCTURAL.has(column) && Object.hasOwn(payload, column));
+          const fields = columns.filter(
+            (column) => !STRUCTURAL.has(column) && Object.hasOwn(payload, column),
+          );
           const incoming = sql`jsonb_populate_record(null::${table}, ${JSON.stringify(payload)}::jsonb) incoming`;
           if (it.op === "update") {
-          const sets = fields.map((column) => sql`${sql.identifier(column)} = incoming.${sql.identifier(column)}`);
-          if (columns.includes("updated_at")) sets.push(sql`updated_at = clock_timestamp()`);
-          if (columns.includes("updated_by")) sets.push(sql`updated_by = ${actor}`);
-          if (!sets.length) throw new Error(`promotion has no updatable fields for ${t}/${target}`);
-          const updated = await db.execute<{ row: Record<string, unknown> }>(sql`
+            const sets = fields.map(
+              (column) => sql`${sql.identifier(column)} = incoming.${sql.identifier(column)}`,
+            );
+            if (columns.includes("updated_at")) sets.push(sql`updated_at = clock_timestamp()`);
+            if (columns.includes("updated_by")) sets.push(sql`updated_by = ${actor}`);
+            if (!sets.length)
+              throw new Error(`promotion has no updatable fields for ${t}/${target}`);
+            const updated = await db.execute<{ row: Record<string, unknown> }>(
+              sql`
             update ${table} existing set ${sql.join(sets, sql`, `)} from ${incoming}
-             where existing.id = ${target} and existing.org_id = ${prod} returning to_jsonb(existing) as row`, "objects");
-          after = updated[0]!.row;
-        } else {
-          const names = [...fields, ...columns.filter((column) => STRUCTURAL.has(column))];
-          const values = names.map((column) => {
-            if (column === "id") return sql`${target}::uuid`;
-            if (column === "org_id") return sql`${prod}::uuid`;
-            if (column === "created_at" || column === "updated_at") return sql`clock_timestamp()`;
-            if (column === "created_by" || column === "updated_by") return sql`${actor}::uuid`;
-            return sql`incoming.${sql.identifier(column)}`;
-          });
-          const inserted = await db.execute<{ row: Record<string, unknown> }>(sql`
-            insert into ${table} as inserted (${sql.join(names.map((name) => sql.identifier(name)), sql`, `)})
-            select ${sql.join(values, sql`, `)} from ${incoming} returning to_jsonb(inserted) as row`, "objects");
-          after = inserted[0]!.row;
-        }
+             where existing.id = ${target} and existing.org_id = ${prod} returning to_jsonb(existing) as row`,
+              "objects",
+            );
+            after = updated[0]!.row;
+          } else {
+            const names = [...fields, ...columns.filter((column) => STRUCTURAL.has(column))];
+            const values = names.map((column) => {
+              if (column === "id") return sql`${target}::uuid`;
+              if (column === "org_id") return sql`${prod}::uuid`;
+              if (column === "created_at" || column === "updated_at") return sql`clock_timestamp()`;
+              if (column === "created_by" || column === "updated_by") return sql`${actor}::uuid`;
+              return sql`incoming.${sql.identifier(column)}`;
+            });
+            const inserted = await db.execute<{ row: Record<string, unknown> }>(
+              sql`
+            insert into ${table} as inserted (${sql.join(
+              names.map((name) => sql.identifier(name)),
+              sql`, `,
+            )})
+            select ${sql.join(values, sql`, `)} from ${incoming} returning to_jsonb(inserted) as row`,
+              "objects",
+            );
+            after = inserted[0]!.row;
+          }
         }
         await db.execute(sql`insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
         values (${prod}, ${t}, ${target}, ${it.op},

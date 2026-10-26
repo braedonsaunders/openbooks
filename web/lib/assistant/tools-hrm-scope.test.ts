@@ -30,37 +30,51 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   byName.get("hrm_employment_as_of")!.inputSchema.parse({});
   byName.get("hrm_employment_as_of")!.inputSchema.parse({ employmentId: UUID });
   byName.get("hrm_employment_as_of")!.inputSchema.parse({ partyId: UUID, asOf: "2026-06-15" });
-  assert.throws(() => byName.get("hrm_employment_as_of")!.inputSchema.parse({ employmentId: "nope" }));
+  assert.throws(() =>
+    byName.get("hrm_employment_as_of")!.inputSchema.parse({ employmentId: "nope" }),
+  );
   assert.throws(() => byName.get("hrm_employment_as_of")!.inputSchema.parse({ asOf: "2026-6-5" }));
   byName.get("hrm_change_requests")!.inputSchema.parse({});
   byName.get("hrm_change_requests")!.inputSchema.parse({ employmentId: UUID });
   byName.get("hrm_change_requests")!.inputSchema.parse({ status: "approved", limit: 10 });
-  assert.throws(() => byName.get("hrm_change_requests")!.inputSchema.parse({ status: "posted_draft" }));
+  assert.throws(() =>
+    byName.get("hrm_change_requests")!.inputSchema.parse({ status: "posted_draft" }),
+  );
   assert.throws(() => byName.get("hrm_change_requests")!.inputSchema.parse({ limit: 0 }));
   byName.get("hrm_positions_as_of")!.inputSchema.parse({});
   byName.get("hrm_positions_as_of")!.inputSchema.parse({ asOf: "2026-06-15", status: "open" });
   byName.get("hrm_positions_as_of")!.inputSchema.parse({ period: "this_fiscal_year_to_date" });
-  assert.throws(() => byName.get("hrm_positions_as_of")!.inputSchema.parse({ status: "recruiting" }));
+  assert.throws(() =>
+    byName.get("hrm_positions_as_of")!.inputSchema.parse({ status: "recruiting" }),
+  );
   assert.throws(() => byName.get("hrm_positions_as_of")!.inputSchema.parse({ asOf: "tomorrow" }));
   byName.get("hrm_processes")!.inputSchema.parse({});
   byName.get("hrm_processes")!.inputSchema.parse({ processId: UUID });
-  byName.get("hrm_processes")!.inputSchema.parse({ segment: "overdue", employmentId: UUID, limit: 10 });
+  byName
+    .get("hrm_processes")!
+    .inputSchema.parse({ segment: "overdue", employmentId: UUID, limit: 10 });
   assert.throws(() => byName.get("hrm_processes")!.inputSchema.parse({ segment: "someday" }));
   assert.throws(() => byName.get("hrm_processes")!.inputSchema.parse({ processId: "nope" }));
   byName.get("hrm_leave")!.inputSchema.parse({});
   byName.get("hrm_leave")!.inputSchema.parse({ employmentId: UUID });
-  byName.get("hrm_leave")!.inputSchema.parse({ status: "cancelled", includeBalances: true, limit: 10 });
+  byName
+    .get("hrm_leave")!
+    .inputSchema.parse({ status: "cancelled", includeBalances: true, limit: 10 });
   byName.get("hrm_leave")!.inputSchema.parse({ employmentId: UUID, asOf: "2026-06-15" });
   assert.throws(() => byName.get("hrm_leave")!.inputSchema.parse({ status: "taken" }));
   assert.throws(() => byName.get("hrm_leave")!.inputSchema.parse({ limit: 0 }));
   byName.get("hrm_performance_cycles")!.inputSchema.parse({});
   byName.get("hrm_performance_cycles")!.inputSchema.parse({ cycleId: UUID });
   byName.get("hrm_performance_cycles")!.inputSchema.parse({ status: "calibrating", limit: 10 });
-  assert.throws(() => byName.get("hrm_performance_cycles")!.inputSchema.parse({ status: "archived" }));
+  assert.throws(() =>
+    byName.get("hrm_performance_cycles")!.inputSchema.parse({ status: "archived" }),
+  );
   assert.throws(() => byName.get("hrm_performance_cycles")!.inputSchema.parse({ cycleId: "nope" }));
   byName.get("hrm_turnover")!.inputSchema.parse({});
   byName.get("hrm_turnover")!.inputSchema.parse({ departmentId: UUID });
-  byName.get("hrm_turnover")!.inputSchema.parse({ periods: [{ start: "2026-01-01", end: "2026-01-31" }] });
+  byName
+    .get("hrm_turnover")!
+    .inputSchema.parse({ periods: [{ start: "2026-01-01", end: "2026-01-31" }] });
   assert.throws(() => byName.get("hrm_turnover")!.inputSchema.parse({ periods: [] }));
   assert.throws(() => byName.get("hrm_turnover")!.inputSchema.parse({ departmentId: "nope" }));
   byName.get("hrm_recruiting")!.inputSchema.parse({});
@@ -73,10 +87,19 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   // runtime-enforced with stable codes); genuinely invalid values throw.
   byName.get("hrm_qualifications")!.inputSchema.parse({});
   byName.get("hrm_qualifications")!.inputSchema.parse({ employmentId: UUID, status: "expiring" });
-  assert.throws(() => byName.get("hrm_qualifications")!.inputSchema.parse({ employmentId: "nope" }));
+  assert.throws(() =>
+    byName.get("hrm_qualifications")!.inputSchema.parse({ employmentId: "nope" }),
+  );
   assert.throws(() => byName.get("hrm_qualifications")!.inputSchema.parse({ status: "lapsed" }));
   byName.get("hrm_dispatch_check")!.inputSchema.parse({});
-  byName.get("hrm_dispatch_check")!.inputSchema.parse({ employmentId: UUID, subjectKind: "equipment", subjectId: UUID, on: "2026-09-01" });
+  byName
+    .get("hrm_dispatch_check")!
+    .inputSchema.parse({
+      employmentId: UUID,
+      subjectKind: "equipment",
+      subjectId: UUID,
+      on: "2026-09-01",
+    });
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectKind: "crew" }));
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectId: "nope" }));
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ on: "tomorrow" }));
@@ -122,31 +145,49 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
     error: "gate is off: enable it first",
   });
   assert.deepEqual(
-    hrmRefusal(new HrmAuthorizationError("Employment is not visible in this organization and legal-entity scope.")),
+    hrmRefusal(
+      new HrmAuthorizationError(
+        "Employment is not visible in this organization and legal-entity scope.",
+      ),
+    ),
     { ok: false, error: "Employment is not visible in this organization and legal-entity scope." },
   );
-  assert.deepEqual(hrmRefusal(new HrmPerformanceError("REFUSED", "review cycle has no required question")), {
-    ok: false,
-    error: "review cycle has no required question",
-  });
+  assert.deepEqual(
+    hrmRefusal(new HrmPerformanceError("REFUSED", "review cycle has no required question")),
+    {
+      ok: false,
+      error: "review cycle has no required question",
+    },
+  );
   // HR-14 begin: a computed qualification refusal names the remedy and
   // reaches the caller intact — never a parse error, never silence.
   // (Message quoted verbatim from recordQualification.)
   assert.deepEqual(
-    hrmRefusal(new HrmQualificationError('Qualification type "CPSA-1" requires evidence — attach the certificate or license file before recording.')),
+    hrmRefusal(
+      new HrmQualificationError(
+        'Qualification type "CPSA-1" requires evidence — attach the certificate or license file before recording.',
+      ),
+    ),
     {
       ok: false,
-      error: 'Qualification type "CPSA-1" requires evidence — attach the certificate or license file before recording.',
+      error:
+        'Qualification type "CPSA-1" requires evidence — attach the certificate or license file before recording.',
     },
   );
   // HR-14 end
   // HR-19 begin: a computed documents refusal (undeclared category)
   // reaches the caller intact — never a parse error, never silence.
   assert.deepEqual(
-    hrmRefusal(new HrmDocumentsError("VALIDATION", 'category "offer" is not declared — declare it under Setup → Workforce → Document Categories first')),
+    hrmRefusal(
+      new HrmDocumentsError(
+        "VALIDATION",
+        'category "offer" is not declared — declare it under Setup → Workforce → Document Categories first',
+      ),
+    ),
     {
       ok: false,
-      error: 'category "offer" is not declared — declare it under Setup → Workforce → Document Categories first',
+      error:
+        'category "offer" is not declared — declare it under Setup → Workforce → Document Categories first',
     },
   );
   // HR-19 end
@@ -154,10 +195,15 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
   // unknown/foreign/hidden employments, the named-remedy refusal for
   // grant-less callers) reach the assistant caller with their message
   // intact — never empty results, never a throw.
-  assert.deepEqual(hrmRefusal(new CompensationError("NOT_FOUND", "employment is not visible in this organization")), {
-    ok: false,
-    error: "employment is not visible in this organization",
-  });
+  assert.deepEqual(
+    hrmRefusal(
+      new CompensationError("NOT_FOUND", "employment is not visible in this organization"),
+    ),
+    {
+      ok: false,
+      error: "employment is not visible in this organization",
+    },
+  );
   assert.deepEqual(
     hrmRefusal(
       new CompensationError(
@@ -194,7 +240,6 @@ test("hrm_recruiting depth inputs accept valid IDs and reject malformed IDs", ()
   recruiting.inputSchema.parse({ requisitionId: UUID, includePostings: true });
   assert.throws(() => recruiting.inputSchema.parse({ interviewId: "nope" }));
   assert.throws(() => recruiting.inputSchema.parse({ offerId: "nope" }));
-
 });
 // HR-18 end
 test("HR-21 tool inputs parse; refusals stay tool errors, never throws", () => {
@@ -203,7 +248,9 @@ test("HR-21 tool inputs parse; refusals stay tool errors, never throws", () => {
   byName.get("payroll_anomalies")!.inputSchema.parse({ action: "list", status: "open" });
   assert.throws(() => byName.get("payroll_anomalies")!.inputSchema.parse({ action: "levitate" }));
   byName.get("ai_draft")!.inputSchema.parse({ kind: "review_self", subjectId: UUID });
-  assert.throws(() => byName.get("ai_draft")!.inputSchema.parse({ kind: "sonnet", subjectId: UUID }));
+  assert.throws(() =>
+    byName.get("ai_draft")!.inputSchema.parse({ kind: "sonnet", subjectId: UUID }),
+  );
   byName.get("nl_report")!.inputSchema.parse({
     action: "preview",
     question: "total net pay by month",

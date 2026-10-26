@@ -8,7 +8,8 @@ import { fromMinorUnits, THREE_DECIMAL_CURRENCIES } from "./minor-units.ts";
  * are evidence-backed settlement_lines. Idempotent on (org, provider, externalRef).
  */
 
-export type PspProvider = "stripe" | "recurly" | "chargebee" | "shopify_payments" | "paypal" | "square";
+export type PspProvider =
+  "stripe" | "recurly" | "chargebee" | "shopify_payments" | "paypal" | "square";
 
 /** Every provider the settlement importer accepts. Adding a provider is one entry here, one parser below, and the CHECK widening in the migration. */
 export const PSP_PROVIDERS: readonly PspProvider[] = [
@@ -204,9 +205,7 @@ export function fromPspMinorUnits(
   currency = "USD",
 ): string {
   if (!Number.isSafeInteger(amount)) {
-    throw new PspSettlementError(
-      `${field} must be a safe integer in provider minor units`,
-    );
+    throw new PspSettlementError(`${field} must be a safe integer in provider minor units`);
   }
   const code = currency.toUpperCase();
   const units = BigInt(amount);
@@ -225,9 +224,7 @@ export function fromChargebeeMinorUnits(
   currency = "USD",
 ): string {
   if (!Number.isSafeInteger(amount)) {
-    throw new PspSettlementError(
-      `${field} must be a safe integer in provider minor units`,
-    );
+    throw new PspSettlementError(`${field} must be a safe integer in provider minor units`);
   }
   const code = currency.toUpperCase();
   rejectThreeDecimal(field, code);
@@ -316,10 +313,7 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
  * widening). The settlements route dispatches through this instead of
  * branching per provider, so a new provider cannot strand the route.
  */
-export const SETTLEMENT_PARSERS: Record<
-  PspProvider,
-  { label: string; kinds: string }
-> = {
+export const SETTLEMENT_PARSERS: Record<PspProvider, { label: string; kinds: string }> = {
   stripe: { label: "Stripe", kinds: "balance transactions" },
   recurly: { label: "Recurly", kinds: "settlement payload" },
   chargebee: { label: "Chargebee", kinds: "settlement payload" },

@@ -4,7 +4,10 @@ import { cmp } from "../money/money.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
-import { assertPostableDepreciationStatus, DepreciationRefusalError } from "./depreciation-errors.ts";
+import {
+  assertPostableDepreciationStatus,
+  DepreciationRefusalError,
+} from "./depreciation-errors.ts";
 import { resolveAssetAccounts } from "./depreciation-schedule-math.ts";
 
 export interface LinkManualDepreciationEntryResult {
@@ -46,7 +49,7 @@ export async function linkManualDepreciationEntry(
   },
 ): Promise<LinkManualDepreciationEntryResult> {
   return withOrgTransaction(orgId, async () => {
-    const lines = (await db.execute<{
+    const lines = await db.execute<{
       id: string;
       custom: unknown;
       asset_id: string;
@@ -70,7 +73,8 @@ export async function linkManualDepreciationEntry(
       cat_accum: string | null;
       cat_expense: string | null;
       book_id: string;
-    }>(sql`
+    }>(
+      sql`
       select l.id, a.custom, s.asset_id::text as asset_id, a.asset_number, a.name as asset_name, a.status as asset_status,
              a.subsidiary_id::text as asset_subsidiary_id, l.period_id::text as period_id,
              p.fiscal_year, p.period_number, p.is_adjustment,
@@ -88,7 +92,9 @@ export async function linkManualDepreciationEntry(
         left join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
        where l.org_id = ${orgId} and l.id = ${input.lineId} and s.asset_id = ${assetId}
        ${input.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(input.allowedSubsidiaryIds)}::uuid[])` : sql``}
-       for update of l`, "objects"));
+       for update of l`,
+      "objects",
+    );
     const line = lines[0];
     if (!line) {
       throw new DepreciationRefusalError("that schedule line does not belong to this asset");
@@ -120,13 +126,17 @@ export async function linkManualDepreciationEntry(
         depreciationExpenseAccountId: line.cat_expense ?? "",
       },
     );
-    if (!accounts.assetAccountId || !accounts.accumulatedDepreciationAccountId || !accounts.depreciationExpenseAccountId) {
+    if (
+      !accounts.assetAccountId ||
+      !accounts.accumulatedDepreciationAccountId ||
+      !accounts.depreciationExpenseAccountId
+    ) {
       throw new DepreciationRefusalError(
         `${line.asset_number} has no complete depreciation accounts; set the category or override accounts first`,
       );
     }
 
-    const entries = (await db.execute<{
+    const entries = await db.execute<{
       id: string;
       entry_number: string;
       status: string;
@@ -135,13 +145,16 @@ export async function linkManualDepreciationEntry(
       book_id: string;
       period_id: string;
       subsidiary_id: string;
-    }>(sql`
+    }>(
+      sql`
       select id::text as id, entry_number, status, origin,
              reverses_entry_id::text as reverses_entry_id,
              book_id::text as book_id, period_id::text as period_id, subsidiary_id::text as subsidiary_id
         from journal_entries
        where org_id = ${orgId} and id = ${input.entryId}
-       for update`, "objects"));
+       for update`,
+      "objects",
+    );
     const entry = entries[0];
     if (!entry) {
       throw new DepreciationRefusalError("that journal entry does not exist in this organization");
@@ -161,27 +174,42 @@ export async function linkManualDepreciationEntry(
         `journal entry ${entry.entry_number} is itself a reversal; link the surviving entry instead`,
       );
     }
-    const alreadyLinked = (await db.execute<{ id: string }>(sql`
+    const alreadyLinked = (
+      await db.execute<{ id: string }>(
+        sql`
       select id::text as id from depreciation_schedule_lines
-       where org_id = ${orgId} and journal_entry_id = ${entry.id} limit 1`, "objects"))[0];
+       where org_id = ${orgId} and journal_entry_id = ${entry.id} limit 1`,
+        "objects",
+      )
+    )[0];
     if (alreadyLinked) {
       throw new DepreciationRefusalError(
         `journal entry ${entry.entry_number} already evidences another schedule line; one entry evidences one line`,
       );
     }
-    if (entry.book_id !== line.book_id || entry.period_id !== line.period_id || entry.subsidiary_id !== line.asset_subsidiary_id) {
+    if (
+      entry.book_id !== line.book_id ||
+      entry.period_id !== line.period_id ||
+      entry.subsidiary_id !== line.asset_subsidiary_id
+    ) {
       throw new DepreciationRefusalError(
         `journal entry ${entry.entry_number} is not in this line's book, period, and subsidiary; only the matching entry can evidence ${line.asset_number} ${periodLabel}`,
       );
     }
-    const legs = (await db.execute<{ debit_total: string; credit_total: string }>(sql`
+    const legs = await db.execute<{ debit_total: string; credit_total: string }>(
+      sql`
       select coalesce(sum(amount) filter (where account_id = ${accounts.depreciationExpenseAccountId}), 0)::text as debit_total,
              coalesce(sum(amount) filter (where account_id = ${accounts.accumulatedDepreciationAccountId}), 0)::text as credit_total
         from journal_lines
-       where org_id = ${orgId} and entry_id = ${entry.id} and subsidiary_id = ${line.asset_subsidiary_id}`, "objects"));
+       where org_id = ${orgId} and entry_id = ${entry.id} and subsidiary_id = ${line.asset_subsidiary_id}`,
+      "objects",
+    );
     const debitTotal = legs[0]!.debit_total;
     const creditTotal = legs[0]!.credit_total;
-    if (cmp(debitTotal, line.planned_amount) !== 0 || cmp(creditTotal, `-${line.planned_amount}`) !== 0) {
+    if (
+      cmp(debitTotal, line.planned_amount) !== 0 ||
+      cmp(creditTotal, `-${line.planned_amount}`) !== 0
+    ) {
       throw new DepreciationRefusalError(
         `journal entry ${entry.entry_number} posts ${debitTotal} / ${creditTotal} to the depreciation accounts; ${line.asset_number} ${periodLabel} plans ${line.planned_amount}, so this entry cannot be its depreciation`,
       );

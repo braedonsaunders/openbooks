@@ -16,8 +16,11 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  * the billed cover and the variance entries back.
  * Runs in a child with React's server condition like its siblings.
  */
-test("a hand-coded bill for received stock auto-matches on post and refuses duplicate receipt claims", { skip: !DB }, () => {
-  const source = `
+test(
+  "a hand-coded bill for received stock auto-matches on post and refuses duplicate receipt claims",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -306,23 +309,24 @@ test("a hand-coded bill for received stock auto-matches on post and refuses dupl
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /M27-HAND-CODED-BILL-AUTO-MATCHES/);
-  assert.match(result.stdout, /M27-MATCHED-BILL-POSTS/);
-  assert.match(result.stdout, /M27-AMBIGUOUS-BILL-REFUSES/);
-  assert.match(result.stdout, /M27-MATCHED-BILL-VOID-RESTORES/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /M27-HAND-CODED-BILL-AUTO-MATCHES/);
+    assert.match(result.stdout, /M27-MATCHED-BILL-POSTS/);
+    assert.match(result.stdout, /M27-AMBIGUOUS-BILL-REFUSES/);
+    assert.match(result.stdout, /M27-MATCHED-BILL-VOID-RESTORES/);
+  },
+);

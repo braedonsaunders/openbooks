@@ -2,11 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
-import {
-  declineOffer,
-  sendOffer,
-  withdrawOffer,
-} from "@openbooks/engine/hrm/recruiting/offers";
+import { declineOffer, sendOffer, withdrawOffer } from "@openbooks/engine/hrm/recruiting/offers";
 import { acceptOfferAsHire } from "@openbooks/engine/hrm/recruiting/hire";
 import { getOfferDetail } from "@openbooks/engine/hrm/recruiting/recruiting-read";
 
@@ -30,8 +26,7 @@ export const GET = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid offer" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid offer" }, { status: 400 });
     try {
       const offer = await getOfferDetail({
         orgId: gate.user.orgId,
@@ -50,14 +45,9 @@ export const PATCH = defineRoute({
   feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: patchOfferBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid offer" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid offer" }, { status: 400 });
 
     try {
       if (body.action === "send") {

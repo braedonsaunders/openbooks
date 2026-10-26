@@ -1,17 +1,25 @@
-import 'server-only'
+import "server-only";
 
-import { getMoneyFormatter } from '@/lib/money-server'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { grid, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
-import { loadEquipment } from '../../../api/equipment/_lib'
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
-import type { EquipmentDrawer } from './EquipmentDrawer'
-import { loadAssetWorkspaceTabs } from '../tabs-loader'
+import { getMoneyFormatter } from "@/lib/money-server";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  grid,
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { isUuid, mergeHref, pickString } from "../../../../lib/list-params";
+import { loadEquipment } from "../../../api/equipment/_lib";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../lib/features";
+import type { EquipmentDrawer } from "./EquipmentDrawer";
+import { loadAssetWorkspaceTabs } from "../tabs-loader";
 
 /**
  * The equipment register, split into a loader and a spec.
@@ -33,78 +41,82 @@ import { loadAssetWorkspaceTabs } from '../tabs-loader'
  * KPI strip remains a widget because KpiStrip markup is not stat-tile.
  */
 
-type EquipmentDrawerProps = Parameters<typeof EquipmentDrawer>[0]
-type LoadedEquipment = NonNullable<Awaited<ReturnType<typeof loadEquipment>>>
+type EquipmentDrawerProps = Parameters<typeof EquipmentDrawer>[0];
+type LoadedEquipment = NonNullable<Awaited<ReturnType<typeof loadEquipment>>>;
 
 export interface EquipmentDrawerData {
   /** Remount key: switching units must reset the drawer's client state. */
-  remountKey: string
-  payload: LoadedEquipment
-  items: EquipmentDrawerProps['items']
-  assets: EquipmentDrawerProps['assets']
-  books: EquipmentDrawerProps['books']
-  subsidiaries: EquipmentDrawerProps['subsidiaries']
-  canManage: boolean
-  closeHref: string
-  fixedAssetsEnabled: boolean
-  projectsEnabled: boolean
+  remountKey: string;
+  payload: LoadedEquipment;
+  items: EquipmentDrawerProps["items"];
+  assets: EquipmentDrawerProps["assets"];
+  books: EquipmentDrawerProps["books"];
+  subsidiaries: EquipmentDrawerProps["subsidiaries"];
+  canManage: boolean;
+  closeHref: string;
+  fixedAssetsEnabled: boolean;
+  projectsEnabled: boolean;
   /**
    * Unsaved create: the loader passes an in-memory unit on no record, so
    * the drawer renders identically to edit. Allocation happens on Save in
    * POST /api/equipment, which routes back to ?equipment=<persisted id>.
    */
-  createMode?: boolean
+  createMode?: boolean;
 }
 
 export interface EquipmentData {
-  title: string
-  description: string
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
-  kpis: { label: string; value: string }[]
-  tabs: { key: string; href: string; label: string; active: boolean }[]
+  title: string;
+  description: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
+  kpis: { label: string; value: string }[];
+  tabs: { key: string; href: string; label: string; active: boolean }[];
   /** Compatibility data for tenant PageSpecs saved before the shared tabs. */
-  fixedAssetsLabel: string
-  taxDepreciationLabel: string
-  documentationLabel: string
-  showFixedAssetsLinks: boolean
-  drawer: EquipmentDrawerData | null
+  fixedAssetsLabel: string;
+  taxDepreciationLabel: string;
+  documentationLabel: string;
+  showFixedAssetsLinks: boolean;
+  drawer: EquipmentDrawerData | null;
 }
 
 /** Equipment KPI aggregates: `count(*)` arrives as a string, sums as numerics. */
 type EquipmentSummaryRow = {
-  purchase: string
-  active: string
-  recovery: string
-  billable: string
-}
+  purchase: string;
+  active: string;
+  recovery: string;
+  billable: string;
+};
 
 /** Picker rows for the drawer (`Opt`): charge items and rate books carry
  *  `code`, fixed assets carry `number`, subsidiaries are id + name. */
-type EquipmentItemRow = { id: string; code: string | null; name: string }
-type EquipmentAssetRow = { id: string; number: string | null; name: string }
-type EquipmentSubsidiaryRow = { id: string; name: string }
+type EquipmentItemRow = { id: string; code: string | null; name: string };
+type EquipmentAssetRow = { id: string; number: string | null; name: string };
+type EquipmentSubsidiaryRow = { id: string; name: string };
 
 export async function loadEquipmentPage(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<EquipmentData> {
-  const { money } = await getMoneyFormatter()
+  const { money } = await getMoneyFormatter();
   const [t, ta] = await Promise.all([
-    getTranslations('assets.equipment'),
-    getTranslations('assets'),
-  ])
-  const authz = await requirePermission('assets.read')
-  await requireFeatureEnabled(authz.user.orgId, 'equipment')
-  const canManage = can(authz, 'assets.manage')
-  const equipmentId = typeof sp.equipment === 'string' ? sp.equipment : undefined
+    getTranslations("assets.equipment"),
+    getTranslations("assets"),
+  ]);
+  const authz = await requirePermission("assets.read");
+  await requireFeatureEnabled(authz.user.orgId, "equipment");
+  const canManage = can(authz, "assets.manage");
+  const equipmentId = typeof sp.equipment === "string" ? sp.equipment : undefined;
   // Unsaved create: ?equipmentNew=1 opens an editable drawer on NO record.
   // The loader performs only picker reads here — no draft row, no EQ-####
   // number, no audit row. Allocation happens on Save in POST /api/equipment,
   // which routes back to ?equipment=<persisted id>.
-  const creating = pickString(sp.equipmentNew) === '1' && canManage
-  const allowed = authz.allowedSubsidiaryIds ? sql`and e.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``
-  const [summary, open, pickers, subsidiaryUiEnabled, fixedAssetsEnabled, projectsEnabled] = await Promise.all([
-    db.execute<EquipmentSummaryRow>(sql`
+  const creating = pickString(sp.equipmentNew) === "1" && canManage;
+  const allowed = authz.allowedSubsidiaryIds
+    ? sql`and e.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
+    : sql``;
+  const [summary, open, pickers, subsidiaryUiEnabled, fixedAssetsEnabled, projectsEnabled] =
+    await Promise.all([
+      db.execute<EquipmentSummaryRow>(
+        sql`
       select coalesce(sum(e.purchase_price),0) purchase,
              count(*) filter(where e.status='active') active,
              coalesce(sum((select sum(dl.cost_amount) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id
@@ -114,22 +126,38 @@ export async function loadEquipmentPage(
                where dl.equipment_unit_id=e.id and dl.org_id=e.org_id and d.kind='project_charge' and d.status in ('approved','posted') -- Live entries only: equipment totals include currently approved and posted charges
              )),0) billable
         from equipment_units e where e.org_id=${authz.user.orgId} ${allowed}
-    `, 'objects'),
-    equipmentId && isUuid(equipmentId) ? loadEquipment(equipmentId, authz.user.orgId, authz.allowedSubsidiaryIds) : null,
-    equipmentId || creating ? Promise.all([
-      db.execute<EquipmentItemRow>(sql`select id,code,name from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`),
-      db.execute<EquipmentAssetRow>(sql`select id,asset_number as number,name from fixed_assets where org_id=${authz.user.orgId} ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``} order by asset_number`),
-      db.execute<EquipmentItemRow>(sql`select id,code,name from item_rate_books where org_id=${authz.user.orgId} and is_active order by name`),
-      db.execute<EquipmentSubsidiaryRow>(sql`select id,name from subsidiaries where org_id=${authz.user.orgId} and is_active and not is_elimination ${authz.allowedSubsidiaryIds ? sql`and id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``} order by name`),
-    ]) : null,
-    subsidiaryFeatureEnabled(authz.user.orgId),
-    isFeatureEnabled(authz.user.orgId, 'fixedAssets'),
-    isFeatureEnabled(authz.user.orgId, 'projects'),
-  ])
-  const requestedReturn = pickString(sp.drawerReturn)
+    `,
+        "objects",
+      ),
+      equipmentId && isUuid(equipmentId)
+        ? loadEquipment(equipmentId, authz.user.orgId, authz.allowedSubsidiaryIds)
+        : null,
+      equipmentId || creating
+        ? Promise.all([
+            db.execute<EquipmentItemRow>(
+              sql`select id,code,name from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`,
+            ),
+            db.execute<EquipmentAssetRow>(
+              sql`select id,asset_number as number,name from fixed_assets where org_id=${authz.user.orgId} ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``} order by asset_number`,
+            ),
+            db.execute<EquipmentItemRow>(
+              sql`select id,code,name from item_rate_books where org_id=${authz.user.orgId} and is_active order by name`,
+            ),
+            db.execute<EquipmentSubsidiaryRow>(
+              sql`select id,name from subsidiaries where org_id=${authz.user.orgId} and is_active and not is_elimination ${authz.allowedSubsidiaryIds ? sql`and id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``} order by name`,
+            ),
+          ])
+        : null,
+      subsidiaryFeatureEnabled(authz.user.orgId),
+      isFeatureEnabled(authz.user.orgId, "fixedAssets"),
+      isFeatureEnabled(authz.user.orgId, "projects"),
+    ]);
+  const requestedReturn = pickString(sp.drawerReturn);
   // Subsidiary guard, verbatim: a unit outside the reader's scope never opens.
-  const drawer: EquipmentData['drawer'] =
-    open && pickers && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(open.unit.subsidiary_id)))
+  const drawer: EquipmentData["drawer"] =
+    open &&
+    pickers &&
+    (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(open.unit.subsidiary_id)))
       ? {
           remountKey: String(open.unit.id),
           payload: open,
@@ -138,34 +166,35 @@ export async function loadEquipmentPage(
           books: projectsEnabled ? pickers[2].rows : [],
           subsidiaries: subsidiaryUiEnabled ? pickers[3].rows : [],
           canManage,
-          closeHref: requestedReturn?.startsWith('/assets/equipment') ? requestedReturn : '/assets/equipment',
+          closeHref: requestedReturn?.startsWith("/assets/equipment")
+            ? requestedReturn
+            : "/assets/equipment",
           fixedAssetsEnabled,
           projectsEnabled,
         }
-      : null
-  const createCloseHref = requestedReturn?.startsWith('/assets/equipment')
+      : null;
+  const createCloseHref = requestedReturn?.startsWith("/assets/equipment")
     ? requestedReturn
-    : mergeHref('/assets/equipment', sp, {
+    : mergeHref("/assets/equipment", sp, {
         equipment: undefined,
         equipmentNew: undefined,
         drawerReturn: undefined,
-      })
+      });
   // The visible picker is multi-subsidiary configuration, but the in-memory
   // subsidiary rides along regardless so single-subsidiary orgs still save.
-  const createSubsidiaryId =
-    pickers && pickers[3].rows[0] ? String(pickers[3].rows[0].id) : null
-  const createPayload: EquipmentDrawerProps['payload'] = {
+  const createSubsidiaryId = pickers && pickers[3].rows[0] ? String(pickers[3].rows[0].id) : null;
+  const createPayload: EquipmentDrawerProps["payload"] = {
     unit: {
-      id: '',
-      subsidiary_id: createSubsidiaryId ?? '',
-      unit_number: '',
-      name: '',
+      id: "",
+      subsidiary_id: createSubsidiaryId ?? "",
+      unit_number: "",
+      name: "",
       description: null,
-      status: 'draft',
+      status: "draft",
       charge_item_id: null,
       fixed_asset_id: null,
       rate_book_id: null,
-      purchase_price: '0',
+      purchase_price: "0",
       acquired_on: null,
       in_service_on: null,
       serial_number: null,
@@ -178,18 +207,18 @@ export async function loadEquipmentPage(
       fixed_asset_cost: null,
     },
     metrics: {
-      usage: '0',
-      recovery: '0',
-      billable: '0',
-      billed_revenue: '0',
-      direct_costs: '0',
-      depreciation: '0',
+      usage: "0",
+      recovery: "0",
+      billable: "0",
+      billed_revenue: "0",
+      direct_costs: "0",
+      depreciation: "0",
     },
-  }
-  const createDrawer: EquipmentData['drawer'] =
+  };
+  const createDrawer: EquipmentData["drawer"] =
     creating && pickers
       ? {
-          remountKey: 'new-equipment',
+          remountKey: "new-equipment",
           payload: createPayload as unknown as LoadedEquipment,
           items: pickers[0].rows,
           assets: fixedAssetsEnabled ? pickers[1].rows : [],
@@ -201,75 +230,77 @@ export async function loadEquipmentPage(
           projectsEnabled,
           createMode: true,
         }
-      : null
+      : null;
   return {
-    title: t('title'),
-    description: t('pageDescription'),
+    title: t("title"),
+    description: t("pageDescription"),
     currentParams: sp,
     canManage,
     kpis: [
-      { label: t('metrics.active'), value: String(summary[0]?.active ?? 0) },
-      { label: t('metrics.purchaseBasis'), value: money(summary[0]?.purchase) },
-      { label: t('metrics.recovery'), value: money(summary[0]?.recovery) },
-      { label: t('metrics.billable'), value: money(summary[0]?.billable) },
+      { label: t("metrics.active"), value: String(summary[0]?.active ?? 0) },
+      { label: t("metrics.purchaseBasis"), value: money(summary[0]?.purchase) },
+      { label: t("metrics.recovery"), value: money(summary[0]?.recovery) },
+      { label: t("metrics.billable"), value: money(summary[0]?.billable) },
     ],
-    tabs: await loadAssetWorkspaceTabs(authz.user.orgId, 'equipment', {
-      register: ta('tabs.register'),
-      taxDepreciation: ta('tabs.taxDepreciation'),
-      equipment: t('title'),
-      proposals: ta('proposals.title'),
-      construction: ta('construction.title'),
-      leases: ta('leases.pageTitle'),
-      maintenance: ta('maintenance.title'),
-      insurance: ta('insurance.title'),
+    tabs: await loadAssetWorkspaceTabs(authz.user.orgId, "equipment", {
+      register: ta("tabs.register"),
+      taxDepreciation: ta("tabs.taxDepreciation"),
+      equipment: t("title"),
+      proposals: ta("proposals.title"),
+      construction: ta("construction.title"),
+      leases: ta("leases.pageTitle"),
+      maintenance: ta("maintenance.title"),
+      insurance: ta("insurance.title"),
     }),
-    fixedAssetsLabel: t('fixedAssets'),
-    taxDepreciationLabel: t('taxDepreciation'),
-    documentationLabel: t('documentation'),
+    fixedAssetsLabel: t("fixedAssets"),
+    taxDepreciationLabel: t("taxDepreciation"),
+    documentationLabel: t("documentation"),
     showFixedAssetsLinks: fixedAssetsEnabled,
     // An explicit record id wins over createMode when both are present.
     drawer: drawer ?? createDrawer,
-  }
+  };
 }
 
-const f = ref<EquipmentData>()
+const f = ref<EquipmentData>();
 
 export function equipmentSpec(data: EquipmentData): PageSpec {
   const newEquipment = {
-    widget: 'new-equipment',
+    widget: "new-equipment",
     props: { currentParams: data.currentParams },
-  }
+  };
   return page({
-    route: '/assets/equipment',
-    layout: 'list',
+    route: "/assets/equipment",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center justify-end gap-2',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center justify-end gap-2",
         actions: [
-          widget('link-button', {
-            href: '/docs/item-rates',
+          widget("link-button", {
+            href: "/docs/item-rates",
             label: data.documentationLabel,
-            variant: 'outline',
+            variant: "outline",
           }),
-          widget(newEquipment.widget, newEquipment.props, f('canManage')),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget(newEquipment.widget, newEquipment.props, f("canManage")),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     // The native body wraps the KPI strip and the list in a `space-y-5` div;
     // the ListPageLayout body has no such spacing, so the spec owns it.
     body: [
-      grid('space-y-5', [
-        widgetBlock('equipment-kpi-strip', { items: data.kpis }),
-        widgetBlock('entity-list-view', {
-          recordType: 'equipment_unit',
+      grid("space-y-5", [
+        widgetBlock("equipment-kpi-strip", { items: data.kpis }),
+        widgetBlock("entity-list-view", {
+          recordType: "equipment_unit",
           sp: data.currentParams,
-          drawer: data.drawer ? { widget: 'equipment-drawer', props: { drawer: data.drawer } } : null,
+          drawer: data.drawer
+            ? { widget: "equipment-drawer", props: { drawer: data.drawer } }
+            : null,
           emptyAction: data.canManage ? newEquipment : null,
         }),
       ]),
     ],
-  })
+  });
 }

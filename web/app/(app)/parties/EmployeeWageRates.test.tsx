@@ -16,7 +16,10 @@ declare global {
 }
 
 // jsdom first: the panel reads browser globals at render.
-await bootJsdomEnvironment({ url: "http://localhost:4800/entities/employees", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/entities/employees",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: false,
@@ -61,11 +64,17 @@ interface PostedRate {
   body: Record<string, unknown>;
 }
 
-async function renderRates(posted: PostedRate[], postQueue: Response[], rates: Record<string, unknown>[] = []) {
+async function renderRates(
+  posted: PostedRate[],
+  postQueue: Response[],
+  rates: Record<string, unknown>[] = [],
+) {
   globalThis.__wageToasts = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.startsWith("/api/admin/setup/labor-costing")) {
       if (init?.method === "POST") {
         posted.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
@@ -117,7 +126,11 @@ async function enabledButton(label: string): Promise<HTMLButtonElement> {
 /** The rate form lives in the Add rate drawer, opened from the list's top-right action. */
 /** A match outside any drawer still playing its exit animation. */
 function live<T extends Element>(selector: string): T | null {
-  return ([...document.querySelectorAll(selector)] as T[]).find((node) => !node.closest("[data-overlay-exiting]")) ?? null;
+  return (
+    ([...document.querySelectorAll(selector)] as T[]).find(
+      (node) => !node.closest("[data-overlay-exiting]"),
+    ) ?? null
+  );
 }
 
 async function openRateDrawer() {
@@ -158,8 +171,10 @@ async function setRate(value: string) {
 }
 
 async function setYearlyBasis(annualHours: string) {
-  const basis = [...document.querySelectorAll("select")].find((candidate) =>
-    !candidate.closest("[data-overlay-exiting]") && [...candidate.options].some((option) => option.value === "year"),
+  const basis = [...document.querySelectorAll("select")].find(
+    (candidate) =>
+      !candidate.closest("[data-overlay-exiting]") &&
+      [...candidate.options].some((option) => option.value === "year"),
   ) as HTMLSelectElement | undefined;
   assert.ok(basis, "the form must offer an hour/year basis");
   await act(async () => {
@@ -188,11 +203,25 @@ async function clickAdd() {
 
 test("adding a rate preserves decimal text and leaves the dated payroll policy to the native command", async (t) => {
   const posted: PostedRate[] = [];
-  const { done } = await renderRates(posted, [], [{
-    id: "existing-rate", rate: "11.125", currency: "CAD", basis: "hour",
-    annual_hours: "2080", effective_from: "2026-01-01", effective_to: null,
-    notes: null, is_current: true, payroll_rate_scale: 2, payroll_amount_rounding: "time_entry",
-  }]);
+  const { done } = await renderRates(
+    posted,
+    [],
+    [
+      {
+        id: "existing-rate",
+        rate: "11.125",
+        currency: "CAD",
+        basis: "hour",
+        annual_hours: "2080",
+        effective_from: "2026-01-01",
+        effective_to: null,
+        notes: null,
+        is_current: true,
+        payroll_rate_scale: 2,
+        payroll_amount_rounding: "time_entry",
+      },
+    ],
+  );
   t.after(done);
   assert.equal(document.getElementById("employee-wage-precision"), null);
   assert.equal(document.getElementById("employee-wage-rounding"), null);
@@ -204,14 +233,26 @@ test("adding a rate preserves decimal text and leaves the dated payroll policy t
   const body = posted[0]?.body;
   assert.ok(body, "the post must carry a payload");
   assert.equal(body.action, "save-rate");
-  assert.equal(Object.hasOwn(body, "payrollRateScale"), false, "a basic save must not reset the inherited rate precision");
-  assert.equal(Object.hasOwn(body, "payrollAmountRounding"), false, "a basic save must not reset the inherited amount rounding");
+  assert.equal(
+    Object.hasOwn(body, "payrollRateScale"),
+    false,
+    "a basic save must not reset the inherited rate precision",
+  );
+  assert.equal(
+    Object.hasOwn(body, "payrollAmountRounding"),
+    false,
+    "a basic save must not reset the inherited amount rounding",
+  );
   assert.equal(body.rate, "12.3456");
   assert.equal(typeof body.rate, "string", "the rate must stay decimal text, never a float");
   assert.equal(body.annualHours, "2080.125");
   assert.equal(typeof body.annualHours, "string");
   await openRateDrawer();
-  assert.equal(live<HTMLInputElement>("#employee-wage-rate")?.value, "", "a saved rate must clear the form");
+  assert.equal(
+    live<HTMLInputElement>("#employee-wage-rate")?.value,
+    "",
+    "a saved rate must clear the form",
+  );
   const toasts = globalThis.__wageToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "success" && toast.message === WAGES.saved),
@@ -234,17 +275,23 @@ test("large decimal text posts exactly, never rounded through Number", async (t)
 
 test("displayed wage rates preserve decimal precision through localized currency formatting", async (t) => {
   const posted: PostedRate[] = [];
-  const { done } = await renderRates(posted, [], [{
-    id: "rate-1",
-    rate: "12345678901234.1255",
-    currency: "CAD",
-    basis: "hour",
-    annual_hours: "2080",
-    effective_from: "2026-01-01",
-    effective_to: null,
-    notes: null,
-    is_current: true,
-  }]);
+  const { done } = await renderRates(
+    posted,
+    [],
+    [
+      {
+        id: "rate-1",
+        rate: "12345678901234.1255",
+        currency: "CAD",
+        basis: "hour",
+        annual_hours: "2080",
+        effective_from: "2026-01-01",
+        effective_to: null,
+        notes: null,
+        is_current: true,
+      },
+    ],
+  );
   t.after(done);
 
   const { createMoneyFormatter } = await import("../../../lib/money-format");
@@ -254,7 +301,10 @@ test("displayed wage rates preserve decimal precision through localized currency
     minimumFractionDigits: 2,
     maximumFractionDigits: 4,
   });
-  assert.match(document.body.textContent ?? "", new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(
+    document.body.textContent ?? "",
+    new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  );
 });
 
 test("exponent, NaN, and infinite input never posts", async (t) => {
@@ -279,7 +329,9 @@ test("exponent, NaN, and infinite input never posts", async (t) => {
     assert.equal(posted.length, 0, `${invalid} annual hours must not post`);
     const hourToasts = globalThis.__wageToasts ?? [];
     assert.ok(
-      hourToasts.some((toast) => toast.kind === "error" && toast.message === WAGES.annualHoursRequired),
+      hourToasts.some(
+        (toast) => toast.kind === "error" && toast.message === WAGES.annualHoursRequired,
+      ),
       `${invalid} must explain the annual hours are invalid`,
     );
   }
@@ -301,13 +353,25 @@ test("a refused save pins the server reason until the next attempt", async (t) =
 
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the refusal must pin as an alert, not vanish with the toast");
-  assert.match(alert.textContent ?? "", /Rate overlaps an existing rate/, "the alert must carry the server reason");
-  assert.match(alert.textContent ?? "", new RegExp(WAGES.saveFailed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "the alert keeps the familiar heading");
+  assert.match(
+    alert.textContent ?? "",
+    /Rate overlaps an existing rate/,
+    "the alert must carry the server reason",
+  );
+  assert.match(
+    alert.textContent ?? "",
+    new RegExp(WAGES.saveFailed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    "the alert keeps the familiar heading",
+  );
   const add = await addButton();
   assert.equal(add.disabled, false, "busy must release after the refusal");
 
   await clickAdd();
-  assert.equal(document.querySelector('[role="alert"]'), null, "the next attempt must clear the pinned refusal");
+  assert.equal(
+    document.querySelector('[role="alert"]'),
+    null,
+    "the next attempt must clear the pinned refusal",
+  );
   const toasts = globalThis.__wageToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "success" && toast.message === WAGES.saved),

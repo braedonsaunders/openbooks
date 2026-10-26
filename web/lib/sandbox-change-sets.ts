@@ -29,9 +29,15 @@ export interface ChangeSetDetail extends PromotionState {
 }
 
 /** Caller authenticates the manager; every read is pinned to that production org. */
-export async function loadChangeSetDetail(orgId: string, id: string): Promise<ChangeSetDetail | null> {
+export async function loadChangeSetDetail(
+  orgId: string,
+  id: string,
+): Promise<ChangeSetDetail | null> {
   if (!isUuid(id)) return null;
-  const result = await db.execute<Omit<ChangeSetDetail, "items" | "capturedCount" | "baseComplete">>(sql`
+  const result = await db.execute<
+    Omit<ChangeSetDetail, "items" | "capturedCount" | "baseComplete">
+  >(
+    sql`
     select c.id,c.name,c.status,c.capture_complete as "captureComplete",c.item_count as "itemCount",
       c.created_by as "createdBy",c.reviewed_by as "reviewedBy",c.approved_by as "approvedBy",
       c.created_at::text as "createdAt",c.reviewed_at::text as "reviewedAt",c.approved_at::text as "approvedAt",c.applied_at::text as "appliedAt",
@@ -42,12 +48,22 @@ export async function loadChangeSetDetail(orgId: string, id: string): Promise<Ch
     left join users reviewer on reviewer.id=c.reviewed_by and reviewer.org_id=c.org_id
     left join users approver on approver.id=c.approved_by and approver.org_id=c.org_id
     left join users applier on applier.id=c.applied_by and applier.org_id=c.org_id
-    where c.id=${id} and c.org_id=${orgId}`, "objects");
+    where c.id=${id} and c.org_id=${orgId}`,
+    "objects",
+  );
   const header = result[0];
   if (!header) return null;
-  const items = await db.execute<ChangeSetItem>(sql`
+  const items = await db.execute<ChangeSetItem>(
+    sql`
     select id,table_name as "tableName",target_id as "targetId",op,payload,
       expected_before as "expectedBefore",base_captured as "baseCaptured"
-    from change_set_items where change_set_id=${id} and org_id=${orgId} order by created_at,id`, "objects");
-  return { ...header, items, capturedCount: items.length, baseComplete: items.every(item => item.baseCaptured) };
+    from change_set_items where change_set_id=${id} and org_id=${orgId} order by created_at,id`,
+    "objects",
+  );
+  return {
+    ...header,
+    items,
+    capturedCount: items.length,
+    baseComplete: items.every((item) => item.baseCaptured),
+  };
 }

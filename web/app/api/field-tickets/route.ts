@@ -1,23 +1,33 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { parseJsonBody } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { db } from '@openbooks/engine/platform/db'
-import { guardSubsidiaryScope } from '../../../lib/authz'
-import { isUuid } from '../../../lib/list-params'
-import { createFieldTicket, FieldTicketError, FieldTicketNotFoundError, TICKET_PERIODS, type TicketPeriod } from '../../../lib/field-tickets'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { db } from "@openbooks/engine/platform/db";
+import { guardSubsidiaryScope } from "../../../lib/authz";
+import { isUuid } from "../../../lib/list-params";
+import {
+  createFieldTicket,
+  FieldTicketError,
+  FieldTicketNotFoundError,
+  TICKET_PERIODS,
+  type TicketPeriod,
+} from "../../../lib/field-tickets";
 import { notFound, unprocessable } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
-const createBody = z.object({
-  projectId: uuidString().optional(),
-  period: z.enum(TICKET_PERIODS).optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-}).strict()
+export const runtime = "nodejs";
+const createBody = z
+  .object({
+    projectId: uuidString().optional(),
+    period: z.enum(TICKET_PERIODS).optional(),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+  })
+  .strict();
 
 /**
  * GET → ticket list (filters: status, project).
@@ -26,28 +36,35 @@ const createBody = z.object({
  * returns the same ticket (200) instead of minting a second number (201).
  */
 export const GET = defineRoute({
-  permission: 'time.read',
-  feature: 'fieldTickets',
+  permission: "time.read",
+  feature: "fieldTickets",
   handler: async ({ request: req, authz: gate }) => {
-  const orgId = gate.user.orgId
+    const orgId = gate.user.orgId;
 
-  const url = new URL(req.url)
-  const status = url.searchParams.get('status')
-  const projectId = url.searchParams.get('project')
-  // The caller's subsidiary visibility narrows the list exactly like every
-  // other documents list (documentWhere): a restricted caller sees only their
-  // subsidiaries, and an empty scope sees nothing. A null subsidiary fails
-  // closed, mirroring the [id] route's record gate.
-  const scope = gate.allowedSubsidiaryIds
-  const filters = sql.join(
-    [
-      status && ['draft', 'pending_approval', 'approved', 'voided'].includes(status) ? sql` and d.status = ${status}` : sql``,
-      projectId && isUuid(projectId) ? sql` and d.project_id = ${projectId}` : sql``,
-      scope ? (scope.size ? sql` and d.subsidiary_id = any(${`{${[...scope].join(',')}}`}::uuid[])` : sql` and false`) : sql``,
-    ],
-    sql``,
-  )
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+    const url = new URL(req.url);
+    const status = url.searchParams.get("status");
+    const projectId = url.searchParams.get("project");
+    // The caller's subsidiary visibility narrows the list exactly like every
+    // other documents list (documentWhere): a restricted caller sees only their
+    // subsidiaries, and an empty scope sees nothing. A null subsidiary fails
+    // closed, mirroring the [id] route's record gate.
+    const scope = gate.allowedSubsidiaryIds;
+    const filters = sql.join(
+      [
+        status && ["draft", "pending_approval", "approved", "voided"].includes(status)
+          ? sql` and d.status = ${status}`
+          : sql``,
+        projectId && isUuid(projectId) ? sql` and d.project_id = ${projectId}` : sql``,
+        scope
+          ? scope.size
+            ? sql` and d.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[])`
+            : sql` and false`
+          : sql``,
+      ],
+      sql``,
+    );
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
     select d.id, d.document_number, d.status, d.document_date::text as document_date, d.total,
            ft.period, ft.period_start::text as period_start,
            ft.period_end::text as period_end,
@@ -72,50 +89,64 @@ export const GET = defineRoute({
       left join parties fm on fm.id = ft.foreman_party_id and fm.org_id = ft.org_id
      where d.org_id = ${orgId} and d.kind = 'field_ticket'${filters}
      order by d.document_date desc, d.created_at desc
-     limit 200`, 'objects'))
-  return NextResponse.json({ tickets: rows })
+     limit 200`,
+      "objects",
+    );
+    return NextResponse.json({ tickets: rows });
   },
-})
+});
 
 export const POST = defineRoute({
-  permission: 'time.manage',
-  feature: 'fieldTickets',
+  permission: "time.manage",
+  feature: "fieldTickets",
   handler: async ({ request: req, authz: gate }) => {
-  const orgId = gate.user.orgId
+    const orgId = gate.user.orgId;
 
-  const requestId = req.headers.get('Idempotency-Key')?.trim() ?? ''
-  if (!isUuid(requestId)) {
-    return unprocessable('invalid_idempotency_key', { status: 400 })
-  }
-  const parsedBody = await parseJsonBody(req, createBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
-  if (typeof body.projectId === 'string') {
-    // Creating under a project is itself a subsidiary boundary — the ticket
-    // inherits the job's legal entity. A projectless draft has no subsidiary
-    // yet and receives the same scope check when its project is selected.
-    const scopedProject = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    const requestId = req.headers.get("Idempotency-Key")?.trim() ?? "";
+    if (!isUuid(requestId)) {
+      return unprocessable("invalid_idempotency_key", { status: 400 });
+    }
+    const parsedBody = await parseJsonBody(req, createBody);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data;
+    if (typeof body.projectId === "string") {
+      // Creating under a project is itself a subsidiary boundary — the ticket
+      // inherits the job's legal entity. A projectless draft has no subsidiary
+      // yet and receives the same scope check when its project is selected.
+      const scopedProject = await db.execute<{ subsidiaryId: string | null }>(
+        sql`
       select p.subsidiary_id as "subsidiaryId"
         from projects p
        where p.id = ${body.projectId} and p.org_id = ${orgId} and p.is_active
-    `, 'objects'))
-    if (!scopedProject[0]) return notFound("record")
-    const projectDenied = guardSubsidiaryScope(
-      gate.allowedSubsidiaryIds === undefined ? { ...gate, allowedSubsidiaryIds: null } : gate,
-      scopedProject[0].subsidiaryId,
-    )
-    if (projectDenied) return projectDenied
-  }
-  const period = body.period as TicketPeriod | undefined
-  const date = body.date
-  try {
-    const created = await createFieldTicket(orgId, gate.user.id, { projectId: body.projectId, date, period, allowedSubsidiaryIds: gate.allowedSubsidiaryIds, requestId })
-    return NextResponse.json({ id: created.id, documentNumber: created.documentNumber }, { status: created.created ? 201 : 200 })
-  } catch (e) {
-    if (e instanceof FieldTicketError && !(e instanceof FieldTicketNotFoundError)) {
-      return apiErrorResponse(e, { safeStatus: 422 })
+    `,
+        "objects",
+      );
+      if (!scopedProject[0]) return notFound("record");
+      const projectDenied = guardSubsidiaryScope(
+        gate.allowedSubsidiaryIds === undefined ? { ...gate, allowedSubsidiaryIds: null } : gate,
+        scopedProject[0].subsidiaryId,
+      );
+      if (projectDenied) return projectDenied;
     }
-    return apiErrorResponse(e)
-  }
+    const period = body.period as TicketPeriod | undefined;
+    const date = body.date;
+    try {
+      const created = await createFieldTicket(orgId, gate.user.id, {
+        projectId: body.projectId,
+        date,
+        period,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        requestId,
+      });
+      return NextResponse.json(
+        { id: created.id, documentNumber: created.documentNumber },
+        { status: created.created ? 201 : 200 },
+      );
+    } catch (e) {
+      if (e instanceof FieldTicketError && !(e instanceof FieldTicketNotFoundError)) {
+        return apiErrorResponse(e, { safeStatus: 422 });
+      }
+      return apiErrorResponse(e);
+    }
   },
-})
+});

@@ -16,7 +16,13 @@ import {
 // a stored alias never silently becomes UTC.
 
 test("canonical zones are accepted as-is", () => {
-  for (const zone of ["UTC", "America/Toronto", "America/New_York", "Pacific/Auckland", "Etc/GMT+5"]) {
+  for (const zone of [
+    "UTC",
+    "America/Toronto",
+    "America/New_York",
+    "Pacific/Auckland",
+    "Etc/GMT+5",
+  ]) {
     assert.equal(isKnownTimeZone(zone), true, zone);
     assert.equal(canonicalTimeZone(zone), zone, zone);
   }
@@ -61,15 +67,33 @@ test("the picker list offers UTC first, then sorted canonical names", () => {
 });
 
 test("civil date-times resolve in their named zone without interpreting local input as UTC", () => {
-  assert.equal(civilDateTimeToInstant("2026-07-01T09:30", "America/Toronto").toISOString(), "2026-07-01T13:30:00.000Z");
-  assert.equal(civilDateTimeToInstant("2026-07-01T09:30", "UTC").toISOString(), "2026-07-01T09:30:00.000Z");
-  assert.equal(civilDateTimeToInstant("2026-07-01T09:30", "+05:30").toISOString(), "2026-07-01T04:00:00.000Z");
+  assert.equal(
+    civilDateTimeToInstant("2026-07-01T09:30", "America/Toronto").toISOString(),
+    "2026-07-01T13:30:00.000Z",
+  );
+  assert.equal(
+    civilDateTimeToInstant("2026-07-01T09:30", "UTC").toISOString(),
+    "2026-07-01T09:30:00.000Z",
+  );
+  assert.equal(
+    civilDateTimeToInstant("2026-07-01T09:30", "+05:30").toISOString(),
+    "2026-07-01T04:00:00.000Z",
+  );
 });
 
 test("civil date-time conversion refuses nonexistent and repeated daylight-saving times", () => {
-  assert.throws(() => civilDateTimeToInstant("2026-03-08T02:30", "America/Toronto"), /does not exist/);
-  assert.throws(() => civilDateTimeToInstant("2026-11-01T01:30", "America/Toronto"), /occurs twice/);
-  assert.throws(() => civilDateTimeToInstant("2026-02-31T09:30", "America/Toronto"), /valid local date/);
+  assert.throws(
+    () => civilDateTimeToInstant("2026-03-08T02:30", "America/Toronto"),
+    /does not exist/,
+  );
+  assert.throws(
+    () => civilDateTimeToInstant("2026-11-01T01:30", "America/Toronto"),
+    /occurs twice/,
+  );
+  assert.throws(
+    () => civilDateTimeToInstant("2026-02-31T09:30", "America/Toronto"),
+    /valid local date/,
+  );
 });
 
 test("a country's zones come from the runtime and its primary zone is one of them", () => {
@@ -88,9 +112,27 @@ test("a country's zones come from the runtime and its primary zone is one of the
 
 test("every multi-zone country resolves to a representative zone it actually contains", () => {
   const offered = new Set(listCanonicalTimeZones());
-  for (const country of ["AR", "AU", "BR", "CA", "CL", "CN", "ES", "ID", "KZ", "MX", "NZ", "PT", "RU", "US"]) {
+  for (const country of [
+    "AR",
+    "AU",
+    "BR",
+    "CA",
+    "CL",
+    "CN",
+    "ES",
+    "ID",
+    "KZ",
+    "MX",
+    "NZ",
+    "PT",
+    "RU",
+    "US",
+  ]) {
     const primary = primaryCountryTimeZone(country);
-    assert.ok(primary && countryTimeZones(country).includes(primary), `${country} primary ${primary}`);
+    assert.ok(
+      primary && countryTimeZones(country).includes(primary),
+      `${country} primary ${primary}`,
+    );
     assert.ok(offered.has(primary!), `${country} primary must be offered by the picker`);
   }
   const directory = countryTimeZoneDirectory(["US", "ZZ"]);

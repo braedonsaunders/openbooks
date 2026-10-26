@@ -21,37 +21,50 @@ async function quietly(statement: string): Promise<void> {
   }
 }
 
-test(
-  "planned scrap is included in assembly component consumption",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const updated = await db.execute(sql`
+test("planned scrap is included in assembly component consumption", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const updated = await db.execute(
+      sql`
         update bom_components
            set quantity_per = '2', scrap_pct = '5'
          where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}
-         returning component_item_id`, "objects");
-      assert.equal(updated.length, 1, "the fixture BOM line must be present");
-      await receiveInventory(org.orgId, null, {
-        itemId: org.items.component, stockLocationId: org.stockLocationId, quantity: "21", unitCost: "1",
-        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-      });
+         returning component_item_id`,
+      "objects",
+    );
+    assert.equal(updated.length, 1, "the fixture BOM line must be present");
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.component,
+      stockLocationId: org.stockLocationId,
+      quantity: "21",
+      unitCost: "1",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+    });
 
-      const built = await buildAssembly(org.orgId, null, {
-        assemblyItemId: org.items.assembly, quantity: "10", stockLocationId: org.stockLocationId,
-        subsidiaryId: org.subsidiaryId, date: org.date,
-      });
-      const consumed = await db.execute<{ quantity: string }>(sql`
+    const built = await buildAssembly(org.orgId, null, {
+      assemblyItemId: org.items.assembly,
+      quantity: "10",
+      stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+    });
+    const consumed = await db.execute<{ quantity: string }>(
+      sql`
         select quantity::text as quantity from inventory_movements
          where org_id = ${org.orgId} and journal_entry_id = ${built.entryId} and kind = 'assembly_consume'
-      `, "objects");
-      assert.deepEqual(consumed.map((row) => row.quantity), ["-21.0000"]);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      `,
+      "objects",
+    );
+    assert.deepEqual(
+      consumed.map((row) => row.quantity),
+      ["-21.0000"],
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "duplicate BOM rows aggregate before checking component availability",
@@ -59,11 +72,14 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const updated = await db.execute(sql`
+      const updated = await db.execute(
+        sql`
         update bom_components
            set quantity_per = '5', operation_seq = 10
          where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}
-         returning component_item_id`, "objects");
+         returning component_item_id`,
+        "objects",
+      );
       assert.equal(updated.length, 1, "the fixture BOM line must be present");
       await db.execute(sql`
         insert into bom_components
@@ -90,11 +106,19 @@ test(
         }),
         /insufficient component .* need 10\.0000, on hand 6\.0000/,
       );
-      assert.deepEqual(await getOnHand(org.orgId, org.items.component, org.stockLocationId), before);
+      assert.deepEqual(
+        await getOnHand(org.orgId, org.items.component, org.stockLocationId),
+        before,
+      );
       assert.equal(
-        (await db.execute<{ count: number }>(sql`
+        (
+          await db.execute<{ count: number }>(
+            sql`
           select count(*)::int as count from inventory_movements
-           where org_id = ${org.orgId} and kind = 'assembly_consume'`, "objects"))[0]!.count,
+           where org_id = ${org.orgId} and kind = 'assembly_consume'`,
+            "objects",
+          )
+        )[0]!.count,
         0,
       );
     } finally {
@@ -103,41 +127,37 @@ test(
   },
 );
 
-test(
-  "assembly builds cannot consume stock from a quarantine location",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const quarantineLocationId = randomUUID();
-      await db.execute(sql`
+test("assembly builds cannot consume stock from a quarantine location", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const quarantineLocationId = randomUUID();
+    await db.execute(sql`
         insert into stock_locations (id, org_id, location_id, code, kind, is_active)
         values (${quarantineLocationId}, ${org.orgId}, ${org.locationId}, 'QUARANTINE', 'quarantine', true)`);
-      await receiveInventory(org.orgId, null, {
-        itemId: org.items.component,
-        stockLocationId: quarantineLocationId,
-        quantity: "10",
-        unitCost: "1",
-        subsidiaryId: org.subsidiaryId,
-        offsetAccountId: org.accounts.clearing,
-        date: org.date,
-      });
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.component,
+      stockLocationId: quarantineLocationId,
+      quantity: "10",
+      unitCost: "1",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+    });
 
-      await assert.rejects(
-        buildAssembly(org.orgId, null, {
-          assemblyItemId: org.items.assembly,
-          quantity: "1",
-          stockLocationId: quarantineLocationId,
-          subsidiaryId: org.subsidiaryId,
-          date: org.date,
-        }),
-        /Stock is held, unavailable, externally owned, or in vendor custody/,
-      );
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    await assert.rejects(
+      buildAssembly(org.orgId, null, {
+        assemblyItemId: org.items.assembly,
+        quantity: "1",
+        stockLocationId: quarantineLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+      }),
+      /Stock is held, unavailable, externally owned, or in vendor custody/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "assembly builds cannot date component consumption before the stock receipt",
@@ -217,7 +237,9 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
-    const editor = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
+    const editor = new pg.Client({
+      connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+    });
     await editor.connect();
     let editorCommitted = false;
     let pendingBuild: ReturnType<typeof buildAssembly> | undefined;
@@ -257,7 +279,9 @@ test(
 
       let queuedOnBom = false;
       for (let waited = 0; waited < 10_000 && !queuedOnBom; waited += 25) {
-        const waiting = (await db.execute<{ waiting: boolean }>(sql`
+        const waiting = (
+          await db.execute<{ waiting: boolean }>(
+            sql`
           select exists(
             select 1
               from pg_locks
@@ -265,7 +289,10 @@ test(
                and mode = 'ShareLock'
                and granted = false
           ) as waiting
-        `, "objects"))[0]?.waiting;
+        `,
+            "objects",
+          )
+        )[0]?.waiting;
         queuedOnBom = waiting === true;
         if (!queuedOnBom) await new Promise((resolve) => setTimeout(resolve, 25));
       }
@@ -280,10 +307,12 @@ test(
       const built = await pendingBuild;
       assert.equal(built.value, "6.0000", "the committed quantity-per revision must drive cost");
 
-      const operation = (await db.execute<{
-        custom: { assemblyBuild?: AssemblyBomRevisionEvidence };
-        consumed_quantity: string;
-      }>(sql`
+      const operation = (
+        await db.execute<{
+          custom: { assemblyBuild?: AssemblyBomRevisionEvidence };
+          consumed_quantity: string;
+        }>(
+          sql`
         select entry.custom,
                (select quantity
                   from inventory_movements consumed
@@ -299,7 +328,10 @@ test(
            and entry.id = movement.journal_entry_id
          where layer.org_id = ${org.orgId}
            and layer.source_movement_id = ${built.movementId}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       assert.ok(operation, "the finished layer must resolve to its build operation");
       assert.equal(operation.consumed_quantity, "-6.0000");
       assert.deepEqual(operation.custom.assemblyBuild, {
@@ -317,14 +349,26 @@ test(
       });
       assert.match(built.bomRevision, /^sha256:[0-9a-f]{64}$/);
       await receiveInventory(org.orgId, null, {
-        itemId: org.items.component, stockLocationId: org.stockLocationId, quantity: "6", unitCost: "1",
-        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+        itemId: org.items.component,
+        stockLocationId: org.stockLocationId,
+        quantity: "6",
+        unitCost: "1",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
       });
       const repeated = await buildAssembly(org.orgId, null, {
-        assemblyItemId: org.items.assembly, quantity: "2", stockLocationId: org.stockLocationId,
-        subsidiaryId: org.subsidiaryId, date: org.date,
+        assemblyItemId: org.items.assembly,
+        quantity: "2",
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
       });
-      assert.equal(repeated.bomRevision, built.bomRevision, "an unchanged effective BOM keeps identical revision evidence");
+      assert.equal(
+        repeated.bomRevision,
+        built.bomRevision,
+        "an unchanged effective BOM keeps identical revision evidence",
+      );
     } finally {
       if (!editorCommitted) await editor.query("rollback").catch(() => undefined);
       await editor.end().catch(() => undefined);
@@ -350,32 +394,41 @@ test(
         offsetAccountId: org.accounts.clearing,
         date: org.date,
       });
-      const beforeComponent = await getOnHand(
-        org.orgId,
-        org.items.component,
-        org.stockLocationId,
-      );
-      const beforeCounts = (await db.execute<{
-        movements: number;
-        entries: number;
-        layers: number;
-      }>(sql`
+      const beforeComponent = await getOnHand(org.orgId, org.items.component, org.stockLocationId);
+      const beforeCounts = (
+        await db.execute<{
+          movements: number;
+          entries: number;
+          layers: number;
+        }>(
+          sql`
         select (select count(*)::int from inventory_movements where org_id = ${org.orgId}) as movements,
                (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
                (select count(*)::int from cost_layers where org_id = ${org.orgId}) as layers
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
 
-      await db.execute(sql`update bom_components set is_byproduct = true where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`);
+      await db.execute(
+        sql`update bom_components set is_byproduct = true where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`,
+      );
       await assert.rejects(
         buildAssembly(org.orgId, null, {
-          assemblyItemId: org.items.assembly, quantity: "2", stockLocationId: org.stockLocationId,
-          subsidiaryId: org.subsidiaryId, date: org.date,
+          assemblyItemId: org.items.assembly,
+          quantity: "2",
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
         }),
         /by-product .*build it through a work order/,
       );
-      await db.execute(sql`update bom_components set is_byproduct = false where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`);
+      await db.execute(
+        sql`update bom_components set is_byproduct = false where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`,
+      );
 
-      await db.execute(sql.raw(`
+      await db.execute(
+        sql.raw(`
         create function "${guard}"() returns trigger language plpgsql as $fn$
         begin
           if new.org_id = '${org.orgId}'::uuid and new.kind = 'assembly_build' then
@@ -383,11 +436,14 @@ test(
           end if;
           return new;
         end
-        $fn$`));
-      await db.execute(sql.raw(`
+        $fn$`),
+      );
+      await db.execute(
+        sql.raw(`
         create trigger "${guard}_trg"
           before insert on inventory_movements
-          for each row execute function "${guard}"()`));
+          for each row execute function "${guard}"()`),
+      );
 
       await assert.rejects(
         buildAssembly(org.orgId, null, {
@@ -400,15 +456,20 @@ test(
         (error: unknown) => errorChainMatches(error, /forced late assembly build failure/),
       );
 
-      const afterCounts = (await db.execute<{
-        movements: number;
-        entries: number;
-        layers: number;
-      }>(sql`
+      const afterCounts = (
+        await db.execute<{
+          movements: number;
+          entries: number;
+          layers: number;
+        }>(
+          sql`
         select (select count(*)::int from inventory_movements where org_id = ${org.orgId}) as movements,
                (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
                (select count(*)::int from cost_layers where org_id = ${org.orgId}) as layers
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.deepEqual(afterCounts, beforeCounts);
       assert.deepEqual(
         await getOnHand(org.orgId, org.items.component, org.stockLocationId),

@@ -1,4 +1,4 @@
-import { DEFAULT_VIEW_NAME } from '@openbooks/engine/provisioning/default-view-name'
+import { DEFAULT_VIEW_NAME } from "@openbooks/engine/provisioning/default-view-name";
 
 /**
  * Display names for resolved customization rows.
@@ -13,6 +13,6 @@ export function displayListViewName(
   storedName: string | null | undefined,
   translatedDefault: string,
 ): string {
-  if (!storedName || storedName === DEFAULT_VIEW_NAME) return translatedDefault
-  return storedName
+  if (!storedName || storedName === DEFAULT_VIEW_NAME) return translatedDefault;
+  return storedName;
 }

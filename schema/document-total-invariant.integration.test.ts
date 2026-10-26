@@ -107,7 +107,8 @@ async function insertProgressInvoice(
   return id;
 }
 
-test("a header that ignores the retainage line is rejected at commit, not stored",
+test(
+  "a header that ignores the retainage line is rejected at commit, not stored",
   { skip: !DB, timeout: 120_000 },
   async () => {
     const h = await ctx();
@@ -125,7 +126,8 @@ test("a header that ignores the retainage line is rejected at commit, not stored
   },
 );
 
-test("the correct net header commits, posts through the kernel, and ties to the open item",
+test(
+  "the correct net header commits, posts through the kernel, and ties to the open item",
   { skip: !DB, timeout: 120_000 },
   async () => {
     const h = await ctx();

@@ -1,4 +1,4 @@
-import { payScheduleOwnerSql } from './schedule-owner.ts';
+import { payScheduleOwnerSql } from "./schedule-owner.ts";
 import { clearCalculatedHolidayAllocations } from "./holiday-obligation-source.ts";
 /**
  * Pay-run period lifecycle: create, discard, and subsidiary re-scoping.
@@ -47,8 +47,12 @@ const SCOPED_RUN_TYPES = new Set<string>(["termination", "retro"]);
  * else, which is the scope machinery the run already has.
  */
 export async function createPayRun(input: {
-  orgId: string; actorId: string; payScheduleId: string;
-  periodStart?: string; periodEnd?: string; payDate?: string;
+  orgId: string;
+  actorId: string;
+  payScheduleId: string;
+  periodStart?: string;
+  periodEnd?: string;
+  payDate?: string;
   /** Regular follows the schedule; bonus/termination are off-cycle. */
   runType?: PayRunType;
   /** Employees this run pays; required for `termination`, ignored otherwise. */
@@ -71,12 +75,16 @@ export async function createPayRun(input: {
     throw new PayrollError("periodEnd must not precede periodStart");
   }
   return await db.transaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
-    const s = (await tx.execute<(ScheduleRow & { subsidiary_id: string | null })>(sql`
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll")))
+      throw new PayrollError("Payroll feature is disabled");
+    const s = await tx.execute<ScheduleRow & { subsidiary_id: string | null }>(
+      sql`
       select id, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, subsidiary_id
         from pay_schedules where org_id = ${orgId} and id = ${input.payScheduleId} and is_active
       for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const schedule = s[0];
     if (!schedule) throw new PayrollError("pay schedule not found");
 
@@ -87,19 +95,25 @@ export async function createPayRun(input: {
       // off-cycle bonus, retro or final-pay run landing mid-span must not drag
       // max(period_end) forward, or the next regular run silently skips the
       // period the off-cycle run interrupted.
-      const last = (await tx.execute<{ last_end: string | null }>(sql`
+      const last = await tx.execute<{ last_end: string | null }>(
+        sql`
         select max(period_end) as last_end from pay_runs
          where org_id = ${orgId} and pay_schedule_id = ${schedule.id}
            and run_type = 'regular'
-      `, "objects"));
+      `,
+        "objects",
+      );
       const next = nextPeriodAfter(schedule, last[0]?.last_end ?? null);
       periodStart = next.periodStart;
       periodEnd = next.periodEnd;
     }
-    const payDate = input.payDate ??
-      iso(new Date(at(periodEnd).getTime() + schedule.pay_date_offset_days * DAY));
-    if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd)
-        || !isIsoCalendarDate(payDate)) {
+    const payDate =
+      input.payDate ?? iso(new Date(at(periodEnd).getTime() + schedule.pay_date_offset_days * DAY));
+    if (
+      !isIsoCalendarDate(periodStart) ||
+      !isIsoCalendarDate(periodEnd) ||
+      !isIsoCalendarDate(payDate)
+    ) {
       throw new PayrollError("pay schedule produced a date outside the supported calendar");
     }
     if (payDate < periodEnd) throw new PayrollError("payDate must not precede periodEnd");
@@ -113,14 +127,19 @@ export async function createPayRun(input: {
     // wrong for any jurisdiction whose statutory year is not the calendar one,
     // and silently so: every YTD accumulator and every year-end slip keys on
     // `tax_year`.
-    const sub = await tx.execute<{ id: string; name: string; country: string | null; currency_code: string | null }>(
-      payScheduleOwnerSql(orgId, sql`${schedule.subsidiary_id}`), "objects",
-    );
+    const sub = await tx.execute<{
+      id: string;
+      name: string;
+      country: string | null;
+      currency_code: string | null;
+    }>(payScheduleOwnerSql(orgId, sql`${schedule.subsidiary_id}`), "objects");
     const subsidiary = sub[0];
     if (!subsidiary) {
-      throw new PayrollError(schedule.subsidiary_id
-        ? "the pay schedule's subsidiary is missing or inactive"
-        : "no active root subsidiary");
+      throw new PayrollError(
+        schedule.subsidiary_id
+          ? "the pay schedule's subsidiary is missing or inactive"
+          : "no active root subsidiary",
+      );
     }
     if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, subsidiary.id)) {
       // Match the schedule lookup's not-found response and leave the
@@ -130,8 +149,10 @@ export async function createPayRun(input: {
     const runContext = resolvePayrollRunContext({
       payDate,
       subsidiary: {
-        id: subsidiary.id, name: subsidiary.name,
-        country: subsidiary.country, baseCurrency: subsidiary.currency_code,
+        id: subsidiary.id,
+        name: subsidiary.name,
+        country: subsidiary.country,
+        baseCurrency: subsidiary.currency_code,
       },
     });
     const taxYear = runContext.taxYear;
@@ -143,8 +164,8 @@ export async function createPayRun(input: {
     const runType: PayRunType = input.runType ?? "regular";
     if (runType === "supplemental" && (input.periodStart == null || input.periodEnd == null)) {
       throw new PayrollError(
-        "a supplemental run must name its pay period explicitly (periodStart and periodEnd) — "
-        + "it pays inside an already-open period, so choose the period it belongs to",
+        "a supplemental run must name its pay period explicitly (periodStart and periodEnd) — " +
+          "it pays inside an already-open period, so choose the period it belongs to",
       );
     }
 
@@ -154,7 +175,8 @@ export async function createPayRun(input: {
     // exempt — landing inside an already-paid period is exactly what they
     // are for.
     if (runType === "regular") {
-      const overlap = (await tx.execute<{ document_number: string }>(sql`
+      const overlap = await tx.execute<{ document_number: string }>(
+        sql`
         select d.document_number from pay_runs r
           join documents d on d.id = r.document_id and d.org_id = r.org_id
          where r.org_id = ${orgId} and r.pay_schedule_id = ${schedule.id}
@@ -165,11 +187,13 @@ export async function createPayRun(input: {
            -- VOIDED regular run go on blocking its own replacement.
            and d.status <> 'voided'
          limit 1
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (overlap[0]) {
         throw new PayrollError(
-          `pay run ${overlap[0].document_number} already covers ${periodStart} to ${periodEnd} — `
-          + "a second regular run would pay the period twice; create a supplemental run for the same period instead",
+          `pay run ${overlap[0].document_number} already covers ${periodStart} to ${periodEnd} — ` +
+            "a second regular run would pay the period twice; create a supplemental run for the same period instead",
         );
       }
     }
@@ -180,9 +204,7 @@ export async function createPayRun(input: {
     // statutory amounts from time that cannot exist yet.
     const today = await businessToday(orgId);
     if (periodStart > today) {
-      throw new PayrollError(
-        `pay period starts ${periodStart}, which has not begun yet`,
-      );
+      throw new PayrollError(`pay period starts ${periodStart}, which has not begun yet`);
     }
 
     // Guard 3 — a scoped run must NAME the employees it pays. Resolved before
@@ -195,11 +217,11 @@ export async function createPayRun(input: {
       if (scopedEmployeeIds.length === 0) {
         throw new PayrollError(
           runType === "termination"
-            ? "a final pay run must name the employees it pays — it pays out and clears "
-              + "every accrued bank, so it may never run against the whole schedule"
-            : "a retroactive pay run must name the employees it pays — it settles the "
-              + "differences quantified for those people, so it may never run against "
-              + "the whole schedule",
+            ? "a final pay run must name the employees it pays — it pays out and clears " +
+                "every accrued bank, so it may never run against the whole schedule"
+            : "a retroactive pay run must name the employees it pays — it settles the " +
+                "differences quantified for those people, so it may never run against " +
+                "the whole schedule",
         );
       }
       // The route's precheck can become stale while a party is being rehomed.
@@ -223,14 +245,17 @@ export async function createPayRun(input: {
         if (!(error instanceof ScopeNotFoundError)) throw error;
         scopeLockFailed = error;
       }
-      const onSchedule = (await tx.execute<{ employee_party_id: string }>(sql`
+      const onSchedule = await tx.execute<{ employee_party_id: string }>(
+        sql`
         select prof.employee_party_id
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${schedule.id} and prof.is_active
            and (${schedule.subsidiary_id}::uuid is null
                 or p.subsidiary_id = ${schedule.subsidiary_id}::uuid)
-      `, "objects"));
+      `,
+        "objects",
+      );
       const roster = new Set(onSchedule.map((row) => row.employee_party_id));
       const strangers = scopedEmployeeIds.filter((id) => !roster.has(id));
       if (strangers.length > 0) {
@@ -241,24 +266,30 @@ export async function createPayRun(input: {
       if (scopeLockFailed) throw scopeLockFailed;
     }
 
-    const seq = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
+    const seq = await tx.execute<{ prefix: string; next_number: number; padding: number }>(
+      sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
       values (${orgId}, 'pay_run', null, 'PR-')
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
       where number_sequences.org_id = ${orgId}
       returning prefix, next_number, padding
-    `, "objects"));
+    `,
+      "objects",
+    );
     const number = `${seq[0]!.prefix}${String(seq[0]!.next_number).padStart(seq[0]!.padding, "0")}`;
 
-    const doc = (await tx.execute<{ id: string }>(sql`
+    const doc = await tx.execute<{ id: string }>(
+      sql`
       insert into documents (org_id, kind, document_number, subsidiary_id, document_date,
                              currency, status, memo, created_by, updated_by)
       values (${orgId}, 'pay_run', ${number}, ${runContext.subsidiaryId}, ${payDate},
               ${runContext.currency}, 'draft',
               ${`${RUN_TYPE_MEMO[runType]} ${periodStart} – ${periodEnd}`}, ${actorId}, ${actorId})
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     const documentId = doc[0]!.id;
     await tx.execute(sql`
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
@@ -304,20 +335,28 @@ export async function payScheduleSubsidiaryProblem(
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<string | null> {
   if (subsidiaryId) {
-    const sub = (await runner.execute<{ id: string }>(sql`
+    const sub = await runner.execute<{ id: string }>(
+      sql`
       select id from subsidiaries
        where org_id = ${orgId} and id = ${subsidiaryId}
-         and is_active and not is_elimination`, "objects"));
+         and is_active and not is_elimination`,
+      "objects",
+    );
     if (!sub[0]) return "Choose an active subsidiary from this organization";
     return null;
   }
-  const count = (await runner.execute<{ n: number }>(sql`
+  const count = await runner.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from subsidiaries
-     where org_id = ${orgId} and is_active and not is_elimination`, "objects"));
+     where org_id = ${orgId} and is_active and not is_elimination`,
+    "objects",
+  );
   if ((count[0]?.n ?? 0) > 1) {
-    return "Choose the subsidiary this schedule pays for — this organization runs more than "
-      + "one legal entity, and a pay run freezes its paying entity and currency when it is "
-      + "created, so a schedule with no subsidiary pays from the wrong entity";
+    return (
+      "Choose the subsidiary this schedule pays for — this organization runs more than " +
+      "one legal entity, and a pay run freezes its paying entity and currency when it is " +
+      "created, so a schedule with no subsidiary pays from the wrong entity"
+    );
   }
   return null;
 }
@@ -352,7 +391,10 @@ export async function payScheduleSubsidiaryProblem(
  * route boundary, so attribution is an org-wide act.
  */
 export async function attributePayRunEntity(input: {
-  orgId: string; documentId: string; actorId: string; subsidiaryId: string;
+  orgId: string;
+  documentId: string;
+  actorId: string;
+  subsidiaryId: string;
   /** Caller role scope; null/undefined is unrestricted. */
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ documentNumber: string; reclassedLines: number }> {
@@ -364,18 +406,24 @@ export async function attributePayRunEntity(input: {
     throw new PayrollError("pay run not found");
   }
   return await db.transaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
-    const runRows = (await tx.execute<{
-      run_status: string; document_number: string; doc_status: string;
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll")))
+      throw new PayrollError("Payroll feature is disabled");
+    const runRows = await tx.execute<{
+      run_status: string;
+      document_number: string;
+      doc_status: string;
       doc_subsidiary_id: string | null;
-    }>(sql`
+    }>(
+      sql`
       select r.run_status, d.document_number, d.status as doc_status,
              d.subsidiary_id as doc_subsidiary_id
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
-    `, "objects"));
+    `,
+      "objects",
+    );
     const run = runRows[0];
     if (!run) throw new PayrollError("pay run not found");
     const number = run.document_number;
@@ -387,14 +435,17 @@ export async function attributePayRunEntity(input: {
       );
     }
     if (run.doc_subsidiary_id !== null) {
-      throw new PayrollError(
-        `pay run ${number} is already attributed and cannot be re-attributed`,
-      );
+      throw new PayrollError(`pay run ${number} is already attributed and cannot be re-attributed`);
     }
-    const target = (await tx.execute<{ id: string; name: string | null }>(sql`
+    const target = (
+      await tx.execute<{ id: string; name: string | null }>(
+        sql`
       select id::text as id, name from subsidiaries
        where org_id = ${orgId} and id = ${subsidiaryId} and is_active
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!target) {
       throw new PayrollError("the subsidiary is missing or inactive — choose an active subsidiary");
     }
@@ -404,7 +455,8 @@ export async function attributePayRunEntity(input: {
     // move). Lines naming any other entity are live books elsewhere — void
     // the run and re-issue it under the right entity. No posted row is
     // written here, so the journal immutability guard is never engaged.
-    const posted = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+    const posted = await tx.execute<{ subsidiary_id: string | null }>(
+      sql`
       select l.subsidiary_id::text as subsidiary_id
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -412,7 +464,9 @@ export async function attributePayRunEntity(input: {
          -- Live entries only: reversed lines are no longer books in any entity.
          and e.status = 'posted'
        for update of l
-    `, "objects"));
+    `,
+      "objects",
+    );
     const foreign = posted.filter((line) => line.subsidiary_id !== subsidiaryId);
     if (foreign.length > 0) {
       throw new PayrollError(
@@ -427,10 +481,14 @@ export async function attributePayRunEntity(input: {
        where org_id = ${orgId} and id = ${documentId}`);
     const after = await captureTransactionAuditSnapshot(tx, documentId, orgId);
     await recordTransactionAudit(tx, {
-      orgId, documentId, action: "update", actorId,
+      orgId,
+      documentId,
+      action: "update",
+      actorId,
       source: "payroll_legacy_attribution",
       reason: `legacy attribution of a committed run with no subsidiary to ${target.name ?? subsidiaryId}`,
-      before, after,
+      before,
+      after,
     });
     // No posted row moves: the header aligns to books that already name the
     // target (or to no books yet, for an unposted run). The count stays in
@@ -440,21 +498,37 @@ export async function attributePayRunEntity(input: {
 }
 
 export async function discardPayRun(input: {
-  orgId: string; documentId: string; actorId: string;
+  orgId: string;
+  documentId: string;
+  actorId: string;
   reason?: string;
   /** Caller role scope; null/undefined is unrestricted. */
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ documentNumber: string }> {
   const { orgId, documentId, actorId } = input;
-  const reason = input.reason === undefined ? undefined : typeof input.reason === "string" ? input.reason.trim() : "";
-  if (reason !== undefined && (!reason || reason.length > 2000)) throw new PayrollError("Provide a discard reason of 1–2000 characters for the audit trail");
-  return await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
-    const runRows = (await tx.execute<{
-      run_status: string; paid_at: string | null; paid_entry_id: string | null;
-      document_number: string; doc_status: string; doc_subsidiary_id: string | null;
-      has_lines: boolean; has_links: boolean;
-    }>(sql`
+  const reason =
+    input.reason === undefined
+      ? undefined
+      : typeof input.reason === "string"
+        ? input.reason.trim()
+        : "";
+  if (reason !== undefined && (!reason || reason.length > 2000))
+    throw new PayrollError("Provide a discard reason of 1–2000 characters for the audit trail");
+  return await withOrgTransaction(orgId, () =>
+    db.transaction(async (tx) => {
+      if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll")))
+        throw new PayrollError("Payroll feature is disabled");
+      const runRows = await tx.execute<{
+        run_status: string;
+        paid_at: string | null;
+        paid_entry_id: string | null;
+        document_number: string;
+        doc_status: string;
+        doc_subsidiary_id: string | null;
+        has_lines: boolean;
+        has_links: boolean;
+      }>(
+        sql`
       select r.run_status, r.paid_at::text as paid_at, r.paid_entry_id::text as paid_entry_id,
              d.document_number, d.status as doc_status, d.subsidiary_id as doc_subsidiary_id,
              exists (select 1 from document_lines l
@@ -466,68 +540,88 @@ export async function discardPayRun(input: {
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
-    `, "objects"));
-    const run = runRows[0];
-    if (!run) throw new PayrollError("pay run not found");
-    try {
-      const liveScope = await lockActorCommandAuthority(tx, orgId, actorId, run.doc_subsidiary_id, "payroll.run");
-      if (!payrollSubsidiaryInScope(liveScope, run.doc_subsidiary_id)) throw new ScopeNotFoundError();
-    } catch (error) {
-      if (error instanceof ScopeNotFoundError) throw new PayrollError("pay run not found");
-      throw error;
-    }
-    if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.doc_subsidiary_id)) {
-      throw new PayrollError("pay run not found");
-    }
-    const number = run.document_number;
-    if (run.run_status === "committed") {
-      throw new PayrollError(
-        `pay run ${number} is committed and cannot be discarded — void it to reverse the posted payroll`,
+    `,
+        "objects",
       );
-    }
-    if (run.doc_status !== "draft") {
-      throw new PayrollError(
-        `pay run ${number} is ${run.doc_status} and cannot be discarded — only a draft run can be discarded`,
+      const run = runRows[0];
+      if (!run) throw new PayrollError("pay run not found");
+      try {
+        const liveScope = await lockActorCommandAuthority(
+          tx,
+          orgId,
+          actorId,
+          run.doc_subsidiary_id,
+          "payroll.run",
+        );
+        if (!payrollSubsidiaryInScope(liveScope, run.doc_subsidiary_id))
+          throw new ScopeNotFoundError();
+      } catch (error) {
+        if (error instanceof ScopeNotFoundError) throw new PayrollError("pay run not found");
+        throw error;
+      }
+      if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.doc_subsidiary_id)) {
+        throw new PayrollError("pay run not found");
+      }
+      const number = run.document_number;
+      if (run.run_status === "committed") {
+        throw new PayrollError(
+          `pay run ${number} is committed and cannot be discarded — void it to reverse the posted payroll`,
+        );
+      }
+      if (run.doc_status !== "draft") {
+        throw new PayrollError(
+          `pay run ${number} is ${run.doc_status} and cannot be discarded — only a draft run can be discarded`,
+        );
+      }
+      if (run.has_lines) {
+        throw new PayrollError(
+          `pay run ${number} already has general-ledger lines — void it to reverse them`,
+        );
+      }
+      if (run.paid_at || run.paid_entry_id) {
+        throw new PayrollError(
+          `pay run ${number} is already paid and cannot be discarded — void it to reverse the payment`,
+        );
+      }
+      if (run.has_links) {
+        throw new PayrollError(
+          `pay run ${number} is linked to other documents and cannot be discarded`,
+        );
+      }
+      await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
+      await releaseAllowancePayrollInputs(tx, { orgId, runDocumentId: documentId });
+      await tx.execute(
+        sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`,
       );
-    }
-    if (run.has_lines) {
-      throw new PayrollError(
-        `pay run ${number} already has general-ledger lines — void it to reverse them`,
-      );
-    }
-    if (run.paid_at || run.paid_entry_id) {
-      throw new PayrollError(
-        `pay run ${number} is already paid and cannot be discarded — void it to reverse the payment`,
-      );
-    }
-    if (run.has_links) {
-      throw new PayrollError(
-        `pay run ${number} is linked to other documents and cannot be discarded`,
-      );
-    }
-    await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
-    await releaseAllowancePayrollInputs(tx, { orgId, runDocumentId: documentId });
-    await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
-    await clearCalculatedHolidayAllocations(tx, orgId, documentId);
-    // Explicit deletes first: the ledger nulls its run link when the document
-    // goes (ON DELETE SET NULL) and bank files restrict it — neither may
-    // survive a discarded run. Deleting the document then cascades to the run,
-    // its stubs and lines, its adjustments, and any retro/parallel traces.
-    // The ledger guard permits these deletes while the run is uncommitted.
-    await tx.execute(sql`
+      await clearCalculatedHolidayAllocations(tx, orgId, documentId);
+      // Explicit deletes first: the ledger nulls its run link when the document
+      // goes (ON DELETE SET NULL) and bank files restrict it — neither may
+      // survive a discarded run. Deleting the document then cascades to the run,
+      // its stubs and lines, its adjustments, and any retro/parallel traces.
+      // The ledger guard permits these deletes while the run is uncommitted.
+      await tx.execute(sql`
       delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
-    await tx.execute(sql`
+      await tx.execute(sql`
       delete from pay_run_bank_files where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
-    const deleted = await tx.execute(sql`delete from documents where org_id = ${orgId} and id = ${documentId} returning id`, "objects");
-    if (deleted.length !== 1) throw new PayrollError("The draft pay run was not discarded; reload it before retrying");
-    const audited = await tx.execute(sql`
+      const deleted = await tx.execute(
+        sql`delete from documents where org_id = ${orgId} and id = ${documentId} returning id`,
+        "objects",
+      );
+      if (deleted.length !== 1)
+        throw new PayrollError("The draft pay run was not discarded; reload it before retrying");
+      const audited = await tx.execute(
+        sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'documents', ${documentId}, 'delete',
               ${JSON.stringify({ operation: "discard_pay_run", documentNumber: number, ...(reason === undefined ? {} : { reason }) })}::jsonb,
-              ${actorId}) returning id`, "objects");
-    if (audited.length !== 1) throw new PayrollError("The draft pay run discard audit was not recorded");
-    return { documentNumber: number };
-  }));
+              ${actorId}) returning id`,
+        "objects",
+      );
+      if (audited.length !== 1)
+        throw new PayrollError("The draft pay run discard audit was not recorded");
+      return { documentNumber: number };
+    }),
+  );
 }
 
 /**
@@ -549,11 +643,15 @@ export async function invalidateCalculatedRun(
   const { orgId, actorId, documentId } = input;
   await releaseLeavePayrollInputs(tx, { orgId, runDocumentId: documentId });
   await releaseAllowancePayrollInputs(tx, { orgId, runDocumentId: documentId });
-  await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+  await tx.execute(
+    sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`,
+  );
   await clearCalculatedHolidayAllocations(tx, orgId, documentId);
   // Derived bank movements must go before their stub lines; clearing a line
   // reference would rewrite append-only entitlement evidence.
-  await tx.execute(sql`delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+  await tx.execute(
+    sql`delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`,
+  );
   await tx.execute(sql`
     delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
   await tx.execute(sql`
@@ -582,16 +680,22 @@ export async function reresolveRunToSubsidiary(
   input: { orgId: string; actorId: string; documentId: string; subsidiaryId: string },
 ): Promise<{ currency: string; taxYear: number }> {
   const { orgId, actorId, documentId, subsidiaryId } = input;
-  const sub = (await tx.execute<{
-    id: string; name: string; country: string | null; currency_code: string | null;
-  }>(sql`
+  const sub = await tx.execute<{
+    id: string;
+    name: string;
+    country: string | null;
+    currency_code: string | null;
+  }>(
+    sql`
     select id, name, country, base_currency as currency_code from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`, "objects"));
+     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`,
+    "objects",
+  );
   const subsidiary = sub[0];
   if (!subsidiary) {
     throw new PayrollError(
-      "the pay schedule is scoped to a subsidiary that is missing or inactive — choose an "
-      + "active subsidiary on the pay schedule, or discard this run and open a new one",
+      "the pay schedule is scoped to a subsidiary that is missing or inactive — choose an " +
+        "active subsidiary on the pay schedule, or discard this run and open a new one",
     );
   }
   // Defence in depth: hold the run's own row lock and re-assert it is still
@@ -601,18 +705,25 @@ export async function reresolveRunToSubsidiary(
   // committed run to draft and orphaning its GL lines, even if they checked
   // the status earlier in their own transaction. The commit path takes this
   // same row lock first, so a commit racing a rescope serializes here.
-  const runRow = (await tx.execute<{ pay_date: string; document_number: string; run_status: string }>(sql`
+  const runRow = await tx.execute<{
+    pay_date: string;
+    document_number: string;
+    run_status: string;
+  }>(
+    sql`
     select r.pay_date::text as pay_date, d.document_number, r.run_status
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-     for update of r, d`, "objects"));
+     for update of r, d`,
+    "objects",
+  );
   const run = runRow[0];
   if (!run) throw new PayrollError("pay run not found");
   if (run.run_status === "committed") {
     throw new PayrollError(
-      `pay run ${run.document_number} committed while its schedule was being re-scoped — `
-      + "it stays on its frozen entity; void it to move it",
+      `pay run ${run.document_number} committed while its schedule was being re-scoped — ` +
+        "it stays on its frozen entity; void it to move it",
     );
   }
   let runContext;
@@ -620,15 +731,17 @@ export async function reresolveRunToSubsidiary(
     runContext = resolvePayrollRunContext({
       payDate: run.pay_date,
       subsidiary: {
-        id: subsidiary.id, name: subsidiary.name,
-        country: subsidiary.country, baseCurrency: subsidiary.currency_code,
+        id: subsidiary.id,
+        name: subsidiary.name,
+        country: subsidiary.country,
+        baseCurrency: subsidiary.currency_code,
       },
     });
   } catch (error) {
     throw new PayrollError(
-      `pay run ${run.document_number} cannot follow its schedule to ${subsidiary.name}: `
-      + `${error instanceof Error ? error.message : String(error)} — fix the subsidiary, `
-      + "then re-save the schedule",
+      `pay run ${run.document_number} cannot follow its schedule to ${subsidiary.name}: ` +
+        `${error instanceof Error ? error.message : String(error)} — fix the subsidiary, ` +
+        "then re-save the schedule",
     );
   }
   await tx.execute(sql`
@@ -649,7 +762,9 @@ export async function reresolveRunToSubsidiary(
     values (${orgId}, 'pay_runs', ${documentId}, 'update',
             ${JSON.stringify({
               operation: "rescope_pay_run",
-              subsidiaryId: subsidiary.id, currency: runContext.currency, taxYear: runContext.taxYear,
+              subsidiaryId: subsidiary.id,
+              currency: runContext.currency,
+              taxYear: runContext.taxYear,
             })}::jsonb, ${actorId})`);
   return { currency: runContext.currency, taxYear: runContext.taxYear };
 }
@@ -674,16 +789,22 @@ export async function rescopePayScheduleRuns(
   input: { orgId: string; payScheduleId: string; actorId: string },
 ): Promise<{ reresolved: number; untouched: number; skipped: RescopedRunSkipped[] }> {
   const { orgId, payScheduleId, actorId } = input;
-  const s = (await runner.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${payScheduleId}`, "objects"));
+  const s = await runner.execute<{ subsidiary_id: string | null }>(
+    sql`
+    select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${payScheduleId}`,
+    "objects",
+  );
   const schedule = s[0];
   if (!schedule) throw new PayrollError("pay schedule not found");
   if (!schedule.subsidiary_id) return { reresolved: 0, untouched: 0, skipped: [] };
-  const runs = (await runner.execute<{ document_id: string }>(sql`
+  const runs = await runner.execute<{ document_id: string }>(
+    sql`
     select r.document_id::text as document_id
       from pay_runs r
      where r.org_id = ${orgId} and r.pay_schedule_id = ${payScheduleId}
-     order by r.document_id`, "objects"));
+     order by r.document_id`,
+    "objects",
+  );
   let reresolved = 0;
   let untouched = 0;
   const skipped: RescopedRunSkipped[] = [];
@@ -694,10 +815,15 @@ export async function rescopePayScheduleRuns(
     // deleted and its status reset to draft below, orphaning GL lines and
     // time-entry claims. The commit path takes this same row lock first, so
     // the two serialize — the loser of the race sees the winner's status.
-    const locked = (await runner.execute<{
-      run_status: string; doc_status: string; document_number: string | null;
-      paid_at: string | null; paid_entry_id: string | null; has_lines: boolean;
-    }>(sql`
+    const locked = await runner.execute<{
+      run_status: string;
+      doc_status: string;
+      document_number: string | null;
+      paid_at: string | null;
+      paid_entry_id: string | null;
+      has_lines: boolean;
+    }>(
+      sql`
       select r.run_status, d.status as doc_status, d.document_number,
              r.paid_at::text as paid_at, r.paid_entry_id::text as paid_entry_id,
              exists (select 1 from document_lines l
@@ -705,7 +831,9 @@ export async function rescopePayScheduleRuns(
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${candidate.document_id}
-       for update of r, d`, "objects"));
+       for update of r, d`,
+      "objects",
+    );
     const run = locked[0];
     if (!run) {
       untouched += 1;
@@ -717,22 +845,25 @@ export async function rescopePayScheduleRuns(
       continue;
     }
     const discardable =
-      (run.run_status === "draft" || run.run_status === "calculated")
-      && run.doc_status === "draft"
-      && !run.has_lines && !run.paid_at && !run.paid_entry_id;
+      (run.run_status === "draft" || run.run_status === "calculated") &&
+      run.doc_status === "draft" &&
+      !run.has_lines &&
+      !run.paid_at &&
+      !run.paid_entry_id;
     if (!discardable) {
       untouched += 1;
       // A run that stopped being discardable after the snapshot is not an
       // error — history stays frozen — but it must be reported BY NAME, or
       // the operator believes the whole schedule followed.
       const number = run.document_number ?? candidate.document_id;
-      const why = run.run_status === "committed"
-        ? "it committed"
-        : run.has_lines
-          ? "it has general-ledger lines"
-          : run.paid_at || run.paid_entry_id
-            ? "it is paid"
-            : `its document is ${run.doc_status}`;
+      const why =
+        run.run_status === "committed"
+          ? "it committed"
+          : run.has_lines
+            ? "it has general-ledger lines"
+            : run.paid_at || run.paid_entry_id
+              ? "it is paid"
+              : `its document is ${run.doc_status}`;
       skipped.push({
         documentId: candidate.document_id,
         documentNumber: run.document_number,
@@ -741,7 +872,10 @@ export async function rescopePayScheduleRuns(
       continue;
     }
     await reresolveRunToSubsidiary(runner, {
-      orgId, actorId, documentId: candidate.document_id, subsidiaryId: schedule.subsidiary_id,
+      orgId,
+      actorId,
+      documentId: candidate.document_id,
+      subsidiaryId: schedule.subsidiary_id,
     });
     reresolved += 1;
   }

@@ -61,11 +61,14 @@ async function checkAccounts(orgId: string, spec: ReferenceSpec): Promise<string
   // House array idiom (see web/lib/billing.ts): a Postgres array literal,
   // never a bare JS array (drizzle binds those as row constructors). Safe to
   // interpolate: every id passed the UUID shape above (hex and dashes only).
-  const rows = await db.execute<AccountRow>(sql`
+  const rows = await db.execute<AccountRow>(
+    sql`
     select id::text as id, type, is_summary, subsidiary_id::text as subsidiary_id
       from accounts
      where org_id = ${orgId} and id = any(${`{${spec.ids.join(",")}}`}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   const found = new Map(rows.map((row) => [row.id.toLowerCase(), row]));
   for (const id of spec.ids) {
     const row = found.get(id.toLowerCase());
@@ -80,7 +83,8 @@ async function checkAccounts(orgId: string, spec: ReferenceSpec): Promise<string
       return `${spec.field} "${id}" is outside your subsidiaries`;
     }
     if (spec.expectAccountType !== undefined && row.type !== spec.expectAccountType) {
-      const label = spec.expectAccountType === BANK_ACCOUNT_TYPE ? "a bank account" : "a card account";
+      const label =
+        spec.expectAccountType === BANK_ACCOUNT_TYPE ? "a bank account" : "a card account";
       return `${spec.field} "${id}" must be ${label} (${spec.expectAccountType}), got "${row.type}"`;
     }
     if (spec.expectPostable === true && row.is_summary) {
@@ -98,13 +102,16 @@ async function checkParties(orgId: string, spec: ReferenceSpec): Promise<string 
   // parties.kind is only the PRIMARY kind: a customer-kind party can still
   // hold a vendor role, so role membership (not kind) decides. Same join as
   // the compliance loader: vendor_roles on (org_id, party_id).
-  const rows = await db.execute<PartyRow>(sql`
+  const rows = await db.execute<PartyRow>(
+    sql`
     select p.id::text as id,
            exists(select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id) as is_vendor,
            p.subsidiary_id::text as subsidiary_id
       from parties p
      where p.org_id = ${orgId} and p.id = any(${`{${spec.ids.join(",")}}`}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   const found = new Map(rows.map((row) => [row.id.toLowerCase(), row]));
   for (const id of spec.ids) {
     const row = found.get(id.toLowerCase());
@@ -136,14 +143,18 @@ async function checkSubsidiaries(orgId: string, spec: ReferenceSpec): Promise<st
     if (!isUuid(id)) return `${spec.field} "${id}" is not a valid UUID`;
   }
   if (!spec.ids.length) return null;
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id::text as id
       from subsidiaries
      where org_id = ${orgId} and id = any(${`{${spec.ids.join(",")}}`}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   const found = new Set(rows.map((row) => row.id.toLowerCase()));
   for (const id of spec.ids) {
-    if (!found.has(id.toLowerCase())) return `${spec.field} "${id}" is not ${spec.kind} in this organization`;
+    if (!found.has(id.toLowerCase()))
+      return `${spec.field} "${id}" is not ${spec.kind} in this organization`;
     // A subsidiary attribution names the subsidiary itself: restricted
     // callers may only attribute to subsidiaries they can see.
     if (spec.allowedSubsidiaryIds !== null && !spec.allowedSubsidiaryIds.has(id.toLowerCase())) {
@@ -153,7 +164,10 @@ async function checkSubsidiaries(orgId: string, spec: ReferenceSpec): Promise<st
   return null;
 }
 
-export async function validateReferences(orgId: string, specs: ReferenceSpec[]): Promise<string | null> {
+export async function validateReferences(
+  orgId: string,
+  specs: ReferenceSpec[],
+): Promise<string | null> {
   for (const spec of specs) {
     const error =
       spec.table === "accounts"

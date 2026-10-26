@@ -41,7 +41,10 @@ export interface SandboxRow {
   createdAt: string;
 }
 
-const STATUS_VARIANT: Record<string, "default" | "warning" | "destructive" | "success" | "secondary"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "warning" | "destructive" | "success" | "secondary"
+> = {
   ready: "success",
   provisioning: "warning",
   refreshing: "warning",
@@ -88,21 +91,31 @@ export function SandboxManager({
   // stays in the actions cell with its existing guards and confirmations.
   const sandboxColumns: PagedColumn<SandboxRow>[] = [
     {
-      key: 'environment',
+      key: "environment",
       header: t("name"),
       cell: (s) => (
         <>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-900 dark:text-slate-100">{s.name}</span>
-            <Badge variant={STATUS_VARIANT[s.status] ?? "secondary"}>{t.has(`statuses.${s.status}`) ? t(`statuses.${s.status}`) : t("statuses.unknown")}</Badge>
-            <Badge variant="outline">{t.has(`tiers.${s.tier}`) ? t(`tiers.${s.tier}`) : t("tiers.unknown")}</Badge>
+            <Badge variant={STATUS_VARIANT[s.status] ?? "secondary"}>
+              {t.has(`statuses.${s.status}`) ? t(`statuses.${s.status}`) : t("statuses.unknown")}
+            </Badge>
+            <Badge variant="outline">
+              {t.has(`tiers.${s.tier}`) ? t(`tiers.${s.tier}`) : t("tiers.unknown")}
+            </Badge>
             {s.masked && <Badge variant="secondary">{t("masked")}</Badge>}
           </div>
           <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             {t("storageSummary", {
               records: number(s.storageRows),
-              refreshed: s.lastRefreshAt ? t("refreshed", { when: dateTime(new Date(s.lastRefreshAt)) }) : t("neverRefreshed"),
-              schedule: s.refreshSchedule ? t.has(`schedule.${s.refreshSchedule}`) ? t(`schedule.${s.refreshSchedule}`) : t("schedule.unknown") : "none",
+              refreshed: s.lastRefreshAt
+                ? t("refreshed", { when: dateTime(new Date(s.lastRefreshAt)) })
+                : t("neverRefreshed"),
+              schedule: s.refreshSchedule
+                ? t.has(`schedule.${s.refreshSchedule}`)
+                  ? t(`schedule.${s.refreshSchedule}`)
+                  : t("schedule.unknown")
+                : "none",
             })}
           </div>
           {s.lastError && (
@@ -113,22 +126,24 @@ export function SandboxManager({
       search: (s) => `${s.name} ${s.tier} ${s.status}`,
     },
     {
-      key: 'actions',
+      key: "actions",
       header: <span className="sr-only">{t("enter")}</span>,
-      className: 'text-right',
+      className: "text-right",
       cell: (s) => (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             variant="default"
             size="sm"
             disabled={s.status !== "ready"}
-            onClick={() => start(async () => {
-              try {
-                await switchWorkspace(s.orgId);
-              } catch (error) {
-                toast.error(tSwitch(workspaceSwitchMessageKey(error)));
-              }
-            })}
+            onClick={() =>
+              start(async () => {
+                try {
+                  await switchWorkspace(s.orgId);
+                } catch (error) {
+                  toast.error(tSwitch(workspaceSwitchMessageKey(error)));
+                }
+              })
+            }
           >
             {t("enter")}
           </Button>
@@ -166,7 +181,9 @@ export function SandboxManager({
             aria-label={t("autoRefresh")}
             className="h-8 w-28"
             value={s.refreshSchedule ?? ""}
-            onChange={(e) => start(async () => void (await setScheduleAction(s.id, e.target.value || null)))}
+            onChange={(e) =>
+              start(async () => void (await setScheduleAction(s.id, e.target.value || null)))
+            }
           >
             <option value="">{t("schedule.manual")}</option>
             <option value="hourly">{t("schedule.hourly")}</option>
@@ -196,10 +213,10 @@ export function SandboxManager({
   return (
     <div className="space-y-6">
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("newEnvironment")}</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          {t("description")}
-        </p>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t("newEnvironment")}
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("description")}</p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <div className="grow">
             <Label htmlFor="sbx-name">{t("name")}</Label>
@@ -230,7 +247,11 @@ export function SandboxManager({
                 <option value="">{t("choosePeriod")}</option>
                 {periods.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {t("periodOption", { name: p.name, endsOn: p.endsOn, calendar: p.calendarName })}
+                    {t("periodOption", {
+                      name: p.name,
+                      endsOn: p.endsOn,
+                      calendar: p.calendarName,
+                    })}
                   </option>
                 ))}
               </Select>
@@ -266,7 +287,9 @@ export function SandboxManager({
       </Card>
 
       <div className="space-y-3">
-        <Button asChild variant="outline"><Link href="/admin/sandboxes/change-sets">{t("reviewChanges")}</Link></Button>
+        <Button asChild variant="outline">
+          <Link href="/admin/sandboxes/change-sets">{t("reviewChanges")}</Link>
+        </Button>
         <PagedTable
           source="admin_sandboxes"
           rows={sandboxes}
@@ -286,16 +309,40 @@ function PromoteButton({ sandboxId, disabled }: { sandboxId: string; disabled: b
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  return <div className="space-y-1">
-    <Button variant="secondary" size="sm" disabled={disabled || pending} onClick={() => start(async () => {
-      const name = await promptDialog({ title: t("changeSetName"), initialValue: t("changeSetDefaultName"), confirmLabel: t("captureChanges") });
-      if (!name) return;
-      setError(null);
-      try {
-        const result = await promoteSandboxAction(sandboxId, name);
-        router.push(`/admin/sandboxes/change-sets?changeSet=${encodeURIComponent(result.changeSetId)}`);
-      } catch { setError(t("captureFailed")); }
-    })} title={t("captureTitle")}>{t("captureChanges")}</Button>
-    {error && <p role="alert" className="text-xs text-red-700 dark:text-red-400">{error}</p>}
-  </div>;
+  return (
+    <div className="space-y-1">
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={disabled || pending}
+        onClick={() =>
+          start(async () => {
+            const name = await promptDialog({
+              title: t("changeSetName"),
+              initialValue: t("changeSetDefaultName"),
+              confirmLabel: t("captureChanges"),
+            });
+            if (!name) return;
+            setError(null);
+            try {
+              const result = await promoteSandboxAction(sandboxId, name);
+              router.push(
+                `/admin/sandboxes/change-sets?changeSet=${encodeURIComponent(result.changeSetId)}`,
+              );
+            } catch {
+              setError(t("captureFailed"));
+            }
+          })
+        }
+        title={t("captureTitle")}
+      >
+        {t("captureChanges")}
+      </Button>
+      {error && (
+        <p role="alert" className="text-xs text-red-700 dark:text-red-400">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }

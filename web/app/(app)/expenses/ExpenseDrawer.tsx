@@ -1,27 +1,36 @@
-'use client'
+"use client";
 
-import { amortizationLineColumns } from '@/components/transaction-form/amortization-columns'
+import { amortizationLineColumns } from "@/components/transaction-form/amortization-columns";
 
-import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '@/lib/segment-assignments'
+import {
+  CLEAR_SEGMENT,
+  INHERIT_SEGMENT,
+  segmentCellValue,
+  segmentAssignmentsFromCells,
+} from "@/lib/segment-assignments";
 
-import { useMoney } from '@/components/money-provider'
-import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
-import { MoneyInput } from '../../../components/money-input'
-import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
-import { TransactionDrawer } from '../../../components/transaction-drawer'
-import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
-import { CustomFieldInput } from '../../../components/custom-field-input'
-import { HeaderFields } from '../../../components/transaction-form/header-fields'
-import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
-import { JournalEntryLink } from '../../../components/journal-entry-link'
-import { PdfButton } from '../../../components/pdf-button'
-import { add, cmp } from '@openbooks/engine/money/money'
-import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/tax/tax'
+import { useMoney } from "@/components/money-provider";
+import { initialDrawerMode, type DrawerMode } from "@/lib/drawer-mode";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Badge, Button, Input, Label, SearchSelect } from "@openbooks/ui";
+import { MoneyInput } from "../../../components/money-input";
+import { LineGrid, type LineGridColumn } from "../../../components/line-grid";
+import { TransactionDrawer } from "../../../components/transaction-drawer";
+import {
+  CustomFieldInputs,
+  customFieldColumns,
+  type CustomFieldDefClient,
+} from "../../../components/custom-field-inputs";
+import { CustomFieldInput } from "../../../components/custom-field-input";
+import { HeaderFields } from "../../../components/transaction-form/header-fields";
+import { DocTypeBadge, docTypeMeta } from "../../../components/doc-type-badge";
+import { JournalEntryLink } from "../../../components/journal-entry-link";
+import { PdfButton } from "../../../components/pdf-button";
+import { add, cmp } from "@openbooks/engine/money/money";
+import { computeLineTaxes, type TaxComponentConfig } from "@openbooks/engine/tax/tax";
 import {
   DOCUMENT_CHANGED_AFTER_OPEN,
   buildDocumentSaveRequest,
@@ -30,121 +39,120 @@ import {
   reconcileCanonicalDraftRead,
   type FencedSaveResult,
   type PersistedDocumentSnapshot,
-} from '../../../components/document-drawer'
-import { confirmDialog } from '../../../lib/confirm'
-import { promptDialog } from '../../../lib/prompt'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import { promptVoidReversalPeriod } from '../../../lib/void-reversal-period'
-import { FlowManualButtons } from '../../../components/flow-manual-buttons'
-import { ApprovalActions } from '../../../components/approval-actions'
-import { ApprovalHistory } from '../../../components/approval-history'
-import { ReceiptScanPanel, type ReceiptLineFacts, type ReceiptLineInput } from './ReceiptScanPanel'
+} from "../../../components/document-drawer";
+import { confirmDialog } from "../../../lib/confirm";
+import { promptDialog } from "../../../lib/prompt";
+import { readApiErrorMessage } from "../../../lib/api-error";
+import { promptVoidReversalPeriod } from "../../../lib/void-reversal-period";
+import { FlowManualButtons } from "../../../components/flow-manual-buttons";
+import { ApprovalActions } from "../../../components/approval-actions";
+import { ApprovalHistory } from "../../../components/approval-history";
+import { ReceiptScanPanel, type ReceiptLineFacts, type ReceiptLineInput } from "./ReceiptScanPanel";
 import {
   blankForeignLine,
   convertForeignLine,
   ExpenseLineCurrency,
   foreignLinePayload,
   type ForeignLineState,
-} from './ExpenseLineCurrency'
-import { isExpenseFxMethod } from '@openbooks/engine/payables/expense-line-currency'
-import { canonicalDecimal } from '@openbooks/engine/money/decimal'
+} from "./ExpenseLineCurrency";
+import { isExpenseFxMethod } from "@openbooks/engine/payables/expense-line-currency";
+import { canonicalDecimal } from "@openbooks/engine/money/decimal";
 import {
   customFieldDefKey,
   isCustomFieldKey,
   type FormLayoutConfig,
   type HeaderFieldPlacement,
-} from '@openbooks/customization'
-import { DateField } from '@/components/date-field'
+} from "@openbooks/customization";
+import { DateField } from "@/components/date-field";
 type Opt = {
-  id: string
-  display_name?: string
-  number?: string
-  name?: string
-  code?: string
-  rate?: string
-  tax_components?: TaxComponentConfig[]
+  id: string;
+  display_name?: string;
+  number?: string;
+  name?: string;
+  code?: string;
+  rate?: string;
+  tax_components?: TaxComponentConfig[];
 };
 interface SegmentOpt {
-  key: string
-  name: string
-  showOnHeader: boolean
-  showOnLines: boolean
-  values: { id: string; code: string | null; name: string }[]
+  key: string;
+  name: string;
+  showOnHeader: boolean;
+  showOnLines: boolean;
+  values: { id: string; code: string | null; name: string }[];
 }
 interface LineRow extends Record<string, unknown> {
-  accountId: string
-  amortizationTemplateId: string
-  amortizationStartOn: string
-  amortizationEndOn: string
-  description: string
-  departmentId: string
-  projectId: string
-  taxProfileId: string
-  amount: string
-  taxOverridden: boolean
-  taxAmount: string
+  accountId: string;
+  amortizationTemplateId: string;
+  amortizationStartOn: string;
+  amortizationEndOn: string;
+  description: string;
+  departmentId: string;
+  projectId: string;
+  taxProfileId: string;
+  amount: string;
+  taxOverridden: boolean;
+  taxAmount: string;
   /** Who fronted the money (0171). Never empty in the editor: historical NULL
    * lines display as out_of_pocket — the legacy behavior they posted under —
    * and the clerk sees the value and can change it before saving, which is
    * exactly the reclassification moment. The save API still requires it. */
-  settlementType: string
+  settlementType: string;
   /** The scanned receipt this unsaved row came from; confirmed when the report saves. */
-  receiptCaptureId: string
+  receiptCaptureId: string;
   /**
    * A line spent in another currency than the report: how it converts, and
    * its original amounts. `amount` and `taxAmount` then hold the converted
    * report-currency figures, which the server recomputes on save.
    */
-  foreign: ForeignLineState | null
-  originalAmount: string
-  originalTaxAmount: string
+  foreign: ForeignLineState | null;
+  originalAmount: string;
+  originalTaxAmount: string;
 }
 interface ExpensePayload {
-  doc: Record<string, unknown>
-  lines: Record<string, unknown>[]
+  doc: Record<string, unknown>;
+  lines: Record<string, unknown>[];
 }
 
 /** The expense-report header: `documents` plus the loader's joins. Dates,
  *  uuids and numerics arrive from the driver as strings; nullable columns
  *  and left-join columns stay nullable. Column nullability per schema. */
 export interface ExpenseDoc extends Record<string, unknown> {
-  id: string
-  status: string
-  currency: string
-  payment_card_id: string | null
-  memo: string | null
-  employee_name: string | null
-  document_date: string | null
-  updated_at: string
-  subtotal: string
-  tax_total: string
-  total: string
-  party_id: string | null
-  entry_id: string | null
-  document_number: string | null
-  custom: Record<string, unknown>
-  extra_dims: Record<string, string | null>
+  id: string;
+  status: string;
+  currency: string;
+  payment_card_id: string | null;
+  memo: string | null;
+  employee_name: string | null;
+  document_date: string | null;
+  updated_at: string;
+  subtotal: string;
+  tax_total: string;
+  total: string;
+  party_id: string | null;
+  entry_id: string | null;
+  document_number: string | null;
+  custom: Record<string, unknown>;
+  extra_dims: Record<string, string | null>;
 }
 
 /** Narrow the engine loader's untyped document row to the header fields
  *  this drawer reads. Loader rows always carry strings (or string maps for
  *  custom/extra_dims) here, so valid payloads pass through unchanged. */
 export function asExpenseDoc(raw: Record<string, unknown>): ExpenseDoc {
-  const text = (value: unknown): string | null =>
-    typeof value === 'string' ? value : null
+  const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
   return {
     ...raw,
-    id: text(raw.id) ?? '',
-    status: text(raw.status) ?? '',
-    currency: text(raw.currency) ?? '',
+    id: text(raw.id) ?? "",
+    status: text(raw.status) ?? "",
+    currency: text(raw.currency) ?? "",
     payment_card_id: text(raw.payment_card_id),
     memo: text(raw.memo),
     employee_name: text(raw.employee_name),
     document_date: text(raw.document_date),
-    updated_at: text(raw.updated_at) ?? '',
-    subtotal: text(raw.subtotal) ?? '0',
-    tax_total: text(raw.tax_total) ?? '0',
-    total: text(raw.total) ?? '0',
+    updated_at: text(raw.updated_at) ?? "",
+    subtotal: text(raw.subtotal) ?? "0",
+    tax_total: text(raw.tax_total) ?? "0",
+    total: text(raw.total) ?? "0",
     party_id: text(raw.party_id),
     entry_id: text(raw.entry_id),
     document_number: text(raw.document_number),
@@ -152,58 +160,59 @@ export function asExpenseDoc(raw: Record<string, unknown>): ExpenseDoc {
     extra_dims: isLineMap(raw.extra_dims)
       ? Object.fromEntries(
           Object.entries(raw.extra_dims).filter(
-            (entry): entry is [string, string | null] => entry[1] === null || typeof entry[1] === 'string',
+            (entry): entry is [string, string | null] =>
+              entry[1] === null || typeof entry[1] === "string",
           ),
         )
       : {},
-  }
+  };
 }
 
-const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
-  posted: 'success',
-  approved: 'success',
-  pending_approval: 'warning',
-  draft: 'secondary',
-  voided: 'outline',
-}
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "warning" | "outline"> = {
+  posted: "success",
+  approved: "success",
+  pending_approval: "warning",
+  draft: "secondary",
+  voided: "outline",
+};
 
 // Built-in expense_report statuses → common.status.* message keys. Unknown
 // (custom) statuses render verbatim with underscores humanized.
 const STATUS_LABEL_KEYS: Record<string, string> = {
-  draft: 'draft',
-  pending_approval: 'pendingApproval',
-  approved: 'approved',
-  posted: 'posted',
-  voided: 'voided',
-}
+  draft: "draft",
+  pending_approval: "pendingApproval",
+  approved: "approved",
+  posted: "posted",
+  voided: "voided",
+};
 
 /** The settlement every fresh row carries: a default, not user content. */
-const DEFAULT_SETTLEMENT_TYPE = 'out_of_pocket'
+const DEFAULT_SETTLEMENT_TYPE = "out_of_pocket";
 
 const emptyLine = (): LineRow => ({
-  accountId: '',
-  amortizationTemplateId: '',
-  amortizationStartOn: '',
-  amortizationEndOn: '',
-  description: '',
-  departmentId: '',
-  projectId: '',
-  taxProfileId: '',
-  amount: '',
+  accountId: "",
+  amortizationTemplateId: "",
+  amortizationStartOn: "",
+  amortizationEndOn: "",
+  description: "",
+  departmentId: "",
+  projectId: "",
+  taxProfileId: "",
+  amount: "",
   taxOverridden: false,
-  taxAmount: '',
+  taxAmount: "",
   settlementType: DEFAULT_SETTLEMENT_TYPE,
-  receiptCaptureId: '',
+  receiptCaptureId: "",
   foreign: null,
-  originalAmount: '',
-  originalTaxAmount: '',
-})
+  originalAmount: "",
+  originalTaxAmount: "",
+});
 
 /** A single expense grid cell carries user content when it is anything but blank. */
 function isBlankExpenseCell(value: unknown): boolean {
-  if (value === '' || value == null || value === false) return true
-  if (typeof value === 'string') return value.trim() === ''
-  return false
+  if (value === "" || value == null || value === false) return true;
+  if (typeof value === "string") return value.trim() === "";
+  return false;
 }
 
 /**
@@ -217,32 +226,33 @@ function isBlankExpenseCell(value: unknown): boolean {
  */
 export function isBlankExpenseLine(row: Record<string, unknown>): boolean {
   for (const key of [
-    'accountId',
-    'amortizationTemplateId',
-    'amortizationStartOn',
-    'amortizationEndOn',
-    'description',
-    'departmentId',
-    'projectId',
-    'taxProfileId',
-    'amount',
-    'taxAmount',
+    "accountId",
+    "amortizationTemplateId",
+    "amortizationStartOn",
+    "amortizationEndOn",
+    "description",
+    "departmentId",
+    "projectId",
+    "taxProfileId",
+    "amount",
+    "taxAmount",
   ]) {
-    if (!isBlankExpenseCell(row[key])) return false
+    if (!isBlankExpenseCell(row[key])) return false;
   }
-  if (row.taxOverridden === true) return false
-  if (row.foreign != null) return false
-  const settlement = row.settlementType
-  if (typeof settlement === 'string') {
-    if (settlement !== '' && settlement !== DEFAULT_SETTLEMENT_TYPE) return false
+  if (row.taxOverridden === true) return false;
+  if (row.foreign != null) return false;
+  const settlement = row.settlementType;
+  if (typeof settlement === "string") {
+    if (settlement !== "" && settlement !== DEFAULT_SETTLEMENT_TYPE) return false;
   } else if (!isBlankExpenseCell(settlement)) {
-    return false
+    return false;
   }
   for (const [key, value] of Object.entries(row)) {
-    if (key.startsWith('seg_') && (value === INHERIT_SEGMENT || value === CLEAR_SEGMENT)) continue
-    if ((key.startsWith('cf_') || key.startsWith('seg_')) && !isBlankExpenseCell(value)) return false
+    if (key.startsWith("seg_") && (value === INHERIT_SEGMENT || value === CLEAR_SEGMENT)) continue;
+    if ((key.startsWith("cf_") || key.startsWith("seg_")) && !isBlankExpenseCell(value))
+      return false;
   }
-  return true
+  return true;
 }
 
 /**
@@ -255,51 +265,63 @@ export function findMissingExpenseAccountLine(
   rows: readonly Record<string, unknown>[],
 ): { index: number; lineNumber: number } | null {
   for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]!
-    if (!isBlankExpenseLine(row) && String(row.accountId ?? '').trim() === '') {
-      return { index: i, lineNumber: i + 1 }
+    const row = rows[i]!;
+    if (!isBlankExpenseLine(row) && String(row.accountId ?? "").trim() === "") {
+      return { index: i, lineNumber: i + 1 };
     }
   }
-  return null
+  return null;
 }
 
 function positiveAmount(value: unknown): boolean {
-  try { return cmp(String(value ?? ''), '0') > 0 } catch { return false }
+  try {
+    return cmp(String(value ?? ""), "0") > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** Line text columns are uuids/text-or-null; numerics are handled with String(). */
 function lineText(v: unknown): string {
-  return typeof v === 'string' ? v : v == null ? '' : String(v)
+  return typeof v === "string" ? v : v == null ? "" : String(v);
 }
 
 function isLineMap(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
+  return typeof v === "object" && v !== null;
 }
 
 /** The stored conversion of a foreign-currency line, as the editor's state. */
 function foreignFromLine(l: Record<string, unknown>): ForeignLineState | null {
-  if (typeof l.original_currency !== 'string' || !l.original_currency) return null
-  const evidence = isLineMap(l.original_fx_evidence) ? l.original_fx_evidence : {}
-  const method = isExpenseFxMethod(evidence.method) ? evidence.method : 'rate_table'
-  const rate = l.original_fx_rate != null ? String(l.original_fx_rate) : ''
+  if (typeof l.original_currency !== "string" || !l.original_currency) return null;
+  const evidence = isLineMap(l.original_fx_evidence) ? l.original_fx_evidence : {};
+  const method = isExpenseFxMethod(evidence.method) ? evidence.method : "rate_table";
+  const rate = l.original_fx_rate != null ? String(l.original_fx_rate) : "";
   return {
-    ...blankForeignLine(l.original_currency, typeof evidence.rateDate === 'string' ? evidence.rateDate : ''),
+    ...blankForeignLine(
+      l.original_currency,
+      typeof evidence.rateDate === "string" ? evidence.rateDate : "",
+    ),
     method,
-    rate: method === 'override' ? rate : '',
-    reason: typeof evidence.reason === 'string' ? evidence.reason : '',
-    billedAmount: typeof evidence.billedAmount === 'string' ? evidence.billedAmount : '',
-    quotedRate: method === 'rate_table' ? rate : null,
-  }
+    rate: method === "override" ? rate : "",
+    reason: typeof evidence.reason === "string" ? evidence.reason : "",
+    billedAmount: typeof evidence.billedAmount === "string" ? evidence.billedAmount : "",
+    quotedRate: method === "rate_table" ? rate : null,
+  };
 }
 
 /** A row's original amounts in canonical form, for conversion. */
 function foreignOriginal(row: LineRow) {
-  const amount = canonicalDecimal(row.originalAmount.trim(), 4)
-  const tax = row.originalTaxAmount.trim() === '' ? null : canonicalDecimal(row.originalTaxAmount.trim(), 4)
-  return { amount, taxAmount: tax }
+  const amount = canonicalDecimal(row.originalAmount.trim(), 4);
+  const tax =
+    row.originalTaxAmount.trim() === "" ? null : canonicalDecimal(row.originalTaxAmount.trim(), 4);
+  return { amount, taxAmount: tax };
 }
 
-function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
+function toRow(
+  l: Record<string, unknown>,
+  lineDefs: CustomFieldDefClient[],
+  segments: SegmentOpt[],
+): LineRow {
   const row: LineRow = {
     accountId: lineText(l.account_id),
     amortizationTemplateId: lineText(l.amortization_template_id),
@@ -308,30 +330,35 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     description: lineText(l.description),
     departmentId: lineText(l.department_id),
     projectId: lineText(l.project_id),
-    taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
-    amount: l.amount != null ? String(l.amount) : '',
+    taxProfileId: l.tax_group_id
+      ? `group:${l.tax_group_id}`
+      : l.tax_code_id
+        ? `code:${l.tax_code_id}`
+        : "",
+    amount: l.amount != null ? String(l.amount) : "",
     taxOverridden: l.tax_overridden === true,
-    taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
+    taxAmount: l.tax_amount != null ? String(l.tax_amount) : "",
     settlementType: lineText(l.settlement_type ?? DEFAULT_SETTLEMENT_TYPE),
-    receiptCaptureId: '',
+    receiptCaptureId: "",
     foreign: foreignFromLine(l),
-    originalAmount: l.original_amount != null ? String(l.original_amount) : '',
-    originalTaxAmount: l.original_tax_amount != null ? String(l.original_tax_amount) : '',
-  }
-  const custom = isLineMap(l.custom) ? l.custom : null
-  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
-  for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? ''
-  for (const segment of segments) row[`seg_${segment.key}`] = segmentCellValue(extraDims, segment.key)
-  return row
+    originalAmount: l.original_amount != null ? String(l.original_amount) : "",
+    originalTaxAmount: l.original_tax_amount != null ? String(l.original_tax_amount) : "",
+  };
+  const custom = isLineMap(l.custom) ? l.custom : null;
+  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null;
+  for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? "";
+  for (const segment of segments)
+    row[`seg_${segment.key}`] = segmentCellValue(extraDims, segment.key);
+  return row;
 }
 
 export type ExpenseReportSaveInput = {
-  documentId: string
-  revision: string
-  payload: Record<string, unknown>
-  fallbackMessage: string
-  transport?: typeof fetch
-}
+  documentId: string;
+  revision: string;
+  payload: Record<string, unknown>;
+  fallbackMessage: string;
+  transport?: typeof fetch;
+};
 
 /**
  * One revision-fenced expense-report save — the exact routine the drawer's
@@ -340,26 +367,28 @@ export type ExpenseReportSaveInput = {
  * token from the save response, and a stale token surfaces as an explicit
  * conflict for the caller's reload flow.
  */
-export async function saveExpenseReport(input: ExpenseReportSaveInput): Promise<FencedSaveResult<ExpensePayload>> {
+export async function saveExpenseReport(
+  input: ExpenseReportSaveInput,
+): Promise<FencedSaveResult<ExpensePayload>> {
   const outcome = await executeDocumentSave(
     buildDocumentSaveRequest(input.documentId, input.revision, input.payload, false, undefined, {
-      basePath: '/api/expenses',
+      basePath: "/api/expenses",
     }),
     input.fallbackMessage,
     input.transport ?? fetch,
-  )
+  );
   if (!outcome.ok) {
     return outcome.isConflict
-      ? { status: 'conflict', message: outcome.message }
-      : { status: 'error', message: outcome.message }
+      ? { status: "conflict", message: outcome.message }
+      : { status: "error", message: outcome.message };
   }
-  return { status: 'saved', saved: outcome.data as ExpensePayload, revision: outcome.revision }
+  return { status: "saved", saved: outcome.data as ExpensePayload, revision: outcome.revision };
 }
 
 export function ExpenseDrawer({
   report,
   amortizationTemplates,
-  initialMode = 'view',
+  initialMode = "view",
   employees,
   accounts,
   cards = [],
@@ -374,43 +403,43 @@ export function ExpenseDrawer({
   canPost,
   canRecall,
   layout,
-  closeHref = '/expenses/reports',
+  closeHref = "/expenses/reports",
   createMode = false,
 }: {
-  report: ExpensePayload
-  amortizationTemplates?: { id: string; label: string }[]
-  initialMode?: DrawerMode
-  employees: Opt[]
-  accounts: Opt[]
+  report: ExpensePayload;
+  amortizationTemplates?: { id: string; label: string }[];
+  initialMode?: DrawerMode;
+  employees: Opt[];
+  accounts: Opt[];
   /** Active corporate cards backing company-paid/personal lines (0171). */
-  cards?: Opt[]
-  taxCodes: Opt[]
-  taxGroups: Opt[]
-  departments: Opt[]
-  projects: Opt[]
-  segments?: SegmentOpt[]
-  headerDefs: CustomFieldDefClient[]
-  lineDefs: CustomFieldDefClient[]
-  canSubmit: boolean
-  canPost: boolean
+  cards?: Opt[];
+  taxCodes: Opt[];
+  taxGroups: Opt[];
+  departments: Opt[];
+  projects: Opt[];
+  segments?: SegmentOpt[];
+  headerDefs: CustomFieldDefClient[];
+  lineDefs: CustomFieldDefClient[];
+  canSubmit: boolean;
+  canPost: boolean;
   /** The open report is recallable to draft by this viewer. */
-  canRecall: boolean
-  layout?: FormLayoutConfig
-  closeHref?: string
+  canRecall: boolean;
+  layout?: FormLayoutConfig;
+  closeHref?: string;
   /** Unsaved create: `report` is a blank seed and Save POSTs a new report. */
-  createMode?: boolean
+  createMode?: boolean;
 }) {
-  const { money } = useMoney()
-  const t = useTranslations('expenses')
-  const tAmortization = useTranslations('amortization.billLine')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const doc = asExpenseDoc(report.doc)
-  const statusKey = STATUS_LABEL_KEYS[String(doc.status)]
-  const isDraft = doc.status === 'draft'
-  const isPendingApproval = doc.status === 'pending_approval'
-  const isApproved = doc.status === 'approved'
-  const isPosted = doc.status === 'posted'
+  const { money } = useMoney();
+  const t = useTranslations("expenses");
+  const tAmortization = useTranslations("amortization.billLine");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const doc = asExpenseDoc(report.doc);
+  const statusKey = STATUS_LABEL_KEYS[String(doc.status)];
+  const isDraft = doc.status === "draft";
+  const isPendingApproval = doc.status === "pending_approval";
+  const isApproved = doc.status === "approved";
+  const isPosted = doc.status === "posted";
   // Existing records default to read-only; newly created drafts can explicitly
   // request edit mode. Drafts edit in place. pending_approval and
   // approved-but-unposted reports edit via recall — Edit cancels the open
@@ -422,49 +451,65 @@ export function ExpenseDrawer({
   const canEditStatus =
     (isDraft && canSubmit) ||
     ((isPendingApproval || isApproved) && canRecall && canSubmit) ||
-    (isPosted && canSubmit && canPost)
-  const isCreate = createMode === true
+    (isPosted && canSubmit && canPost);
+  const isCreate = createMode === true;
   const [mode, setMode] = useState<DrawerMode>(
-    isCreate ? 'edit' : initialDrawerMode(initialMode, canEditStatus),
-  )
+    isCreate ? "edit" : initialDrawerMode(initialMode, canEditStatus),
+  );
   // One key per unsaved-create session: a repeated Save replays the report the
   // first Save created instead of numbering a second one.
-  const [createKey] = useState(() => crypto.randomUUID())
-  const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
-  const [paymentCardId, setPaymentCardId] = useState<string>(doc.payment_card_id ?? '')
-  const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
-  const [memo, setMemo] = useState<string>(doc.memo ?? '')
-  const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {})
-  const [extraDims, setExtraDims] = useState<Record<string, string | null>>(doc.extra_dims ?? {})
+  const [createKey] = useState(() => crypto.randomUUID());
+  const [partyId, setPartyId] = useState<string>(doc.party_id ?? "");
+  const [paymentCardId, setPaymentCardId] = useState<string>(doc.payment_card_id ?? "");
+  const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? "");
+  const [memo, setMemo] = useState<string>(doc.memo ?? "");
+  const [customValues, setCustomValues] = useState<Record<string, unknown>>(doc.custom ?? {});
+  const [extraDims, setExtraDims] = useState<Record<string, string | null>>(doc.extra_dims ?? {});
   const [rows, setRows] = useState<LineRow[]>(
     report.lines.length > 0 ? report.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()],
-  )
-  const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const [busy, setBusy] = useState(false)
-  const editable = mode === 'edit' && canEditStatus && !busy
+  );
+  const [totals, setTotals] = useState({
+    subtotal: doc.subtotal,
+    taxTotal: doc.tax_total,
+    total: doc.total,
+  });
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty" | "error">("saved");
+  const [busy, setBusy] = useState(false);
+  const editable = mode === "edit" && canEditStatus && !busy;
   // Receipt facts the reviewer confirmed for rows added from scanned
   // receipts, keyed by capture; they ride with the next save.
-  const [receiptFacts, setReceiptFacts] = useState<Record<string, ReceiptLineFacts>>({})
-  const [receiptsRefreshKey, setReceiptsRefreshKey] = useState('')
+  const [receiptFacts, setReceiptFacts] = useState<Record<string, ReceiptLineFacts>>({});
+  const [receiptsRefreshKey, setReceiptsRefreshKey] = useState("");
   // The line whose foreign-currency conversion is open beneath the grid.
-  const [currencyLine, setCurrencyLine] = useState<number | null>(null)
-  const searchParams = useSearchParams()
+  const [currencyLine, setCurrencyLine] = useState<number | null>(null);
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
-    const requested = searchParams.get('transactionTab') ?? ''
-    return ['receipts', 'approvals', 'attachments', 'audit'].includes(requested) && !isCreate ? requested : 'details'
-  })
-  const canScanReceipts = !isCreate && isDraft && canSubmit
+    const requested = searchParams.get("transactionTab") ?? "";
+    return ["receipts", "approvals", "attachments", "audit"].includes(requested) && !isCreate
+      ? requested
+      : "details";
+  });
+  const canScanReceipts = !isCreate && isDraft && canSubmit;
 
-  const taxProfiles = useMemo(() => [
-    ...taxCodes.map((profile) => ({ ...profile, value: `code:${profile.id}` })),
-    ...taxGroups.map((profile) => ({ ...profile, value: `group:${profile.id}` })),
-  ], [taxCodes, taxGroups])
-  const taxByProfile = useMemo(() => new Map(taxProfiles.map((profile) => [profile.value, profile.tax_components ?? []])), [taxProfiles])
+  const taxProfiles = useMemo(
+    () => [
+      ...taxCodes.map((profile) => ({ ...profile, value: `code:${profile.id}` })),
+      ...taxGroups.map((profile) => ({ ...profile, value: `group:${profile.id}` })),
+    ],
+    [taxCodes, taxGroups],
+  );
+  const taxByProfile = useMemo(
+    () => new Map(taxProfiles.map((profile) => [profile.value, profile.tax_components ?? []])),
+    [taxProfiles],
+  );
   const lineTax = (row: LineRow) => {
-    try { return computeLineTaxes(String(row.amount || '0'), taxByProfile.get(row.taxProfileId) ?? []).taxTotal }
-    catch { return '0.0000' }
-  }
+    try {
+      return computeLineTaxes(String(row.amount || "0"), taxByProfile.get(row.taxProfileId) ?? [])
+        .taxTotal;
+    } catch {
+      return "0.0000";
+    }
+  };
 
   // Settlement split (0171, owner Q4): the clerk sees what the company owes
   // the employee (reimbursable) beside what the employee owes the company
@@ -474,33 +519,40 @@ export function ExpenseDrawer({
   // instead of silently excluding. Unparseable rows contribute nothing until
   // fixed; the save-time validators still name them.
   const splits = useMemo(() => {
-    let oop = '0'
-    let card = '0'
-    let personal = '0'
+    let oop = "0";
+    let card = "0";
+    let personal = "0";
     for (const row of rows) {
       try {
-        if (isBlankExpenseLine(row)) continue
-        const gross = add(String(row.amount || '0'), lineTax(row))
-        if (row.settlementType === 'company_paid') card = add(card, gross)
-        else if (row.settlementType === 'personal') personal = add(personal, gross)
-        else oop = add(oop, gross)
-      } catch { /* contributes nothing until the row parses */ }
+        if (isBlankExpenseLine(row)) continue;
+        const gross = add(String(row.amount || "0"), lineTax(row));
+        if (row.settlementType === "company_paid") card = add(card, gross);
+        else if (row.settlementType === "personal") personal = add(personal, gross);
+        else oop = add(oop, gross);
+      } catch {
+        /* contributes nothing until the row parses */
+      }
     }
-    return { oop, card, personal }
+    return { oop, card, personal };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows])
+  }, [rows]);
 
   // -- explicit save (no autosave) -----------------------------------------
   const receiptLines = useMemo(() => {
-    const seen = new Set<string>()
-    return rows.filter((r) => !isBlankExpenseLine(r)).flatMap((r, lineIndex) => {
-      const facts = r.receiptCaptureId ? receiptFacts[r.receiptCaptureId] : undefined
-      if (!facts || seen.has(r.receiptCaptureId)) return []
-      seen.add(r.receiptCaptureId)
-      return [{ captureId: r.receiptCaptureId, lineIndex, ...facts }]
-    })
-  }, [rows, receiptFacts])
-  const pendingReceiptIds = useMemo(() => new Set(receiptLines.map((line) => line.captureId)), [receiptLines])
+    const seen = new Set<string>();
+    return rows
+      .filter((r) => !isBlankExpenseLine(r))
+      .flatMap((r, lineIndex) => {
+        const facts = r.receiptCaptureId ? receiptFacts[r.receiptCaptureId] : undefined;
+        if (!facts || seen.has(r.receiptCaptureId)) return [];
+        seen.add(r.receiptCaptureId);
+        return [{ captureId: r.receiptCaptureId, lineIndex, ...facts }];
+      });
+  }, [rows, receiptFacts]);
+  const pendingReceiptIds = useMemo(
+    () => new Set(receiptLines.map((line) => line.captureId)),
+    [receiptLines],
+  );
   const payload = useMemo(
     () => ({
       partyId: partyId || null,
@@ -522,50 +574,66 @@ export function ExpenseDrawer({
           amortizationEndOn: r.amortizationTemplateId ? r.amortizationEndOn || null : null,
           description: r.description,
           amount: r.amount,
-          taxCodeId: r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
-          taxGroupId: r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
+          taxCodeId: r.taxProfileId.startsWith("code:") ? r.taxProfileId.slice(5) : null,
+          taxGroupId: r.taxProfileId.startsWith("group:") ? r.taxProfileId.slice(6) : null,
           taxOverridden: r.taxOverridden,
           taxAmount: r.taxOverridden ? r.taxAmount : null,
           settlementType: r.settlementType,
-          ...(r.foreign ? { foreignCurrency: foreignLinePayload(r.foreign, foreignOriginal(r)) } : {}),
+          ...(r.foreign
+            ? { foreignCurrency: foreignLinePayload(r.foreign, foreignOriginal(r)) }
+            : {}),
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
-          extraDims: segmentAssignmentsFromCells(r, segments.map(segment => segment.key)),
+          extraDims: segmentAssignmentsFromCells(
+            r,
+            segments.map((segment) => segment.key),
+          ),
           custom: Object.fromEntries(
-            lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
+            lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== "" && v != null),
           ),
         })),
       // Receipt confirmations commit with the lines they back.
       ...(receiptLines.length > 0 ? { receiptLines } : {}),
     }),
-    [partyId, paymentCardId, documentDate, memo, customValues, extraDims, rows, lineDefs, segments, receiptLines],
-  )
+    [
+      partyId,
+      paymentCardId,
+      documentDate,
+      memo,
+      customValues,
+      extraDims,
+      rows,
+      lineDefs,
+      segments,
+      receiptLines,
+    ],
+  );
   // Track unsaved edits (no autosave — Save is an explicit button).
-  const [dirty, setDirty] = useState(false)
-  const first = useRef(true)
+  const [dirty, setDirty] = useState(false);
+  const first = useRef(true);
   useEffect(() => {
     if (first.current) {
-      first.current = false
-      return
+      first.current = false;
+      return;
     }
-    if (editable) setDirty(true)
+    if (editable) setDirty(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payload])
+  }, [payload]);
 
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
   async function confirmDiscard() {
-    if (mode !== 'edit' || !dirty) return true
+    if (mode !== "edit" || !dirty) return true;
     return confirmDialog({
-      message: tCommon('feedback.unsavedChanges'),
-      confirmLabel: tCommon('confirm.discardChanges'),
-      tone: 'danger',
-    })
+      message: tCommon("feedback.unsavedChanges"),
+      confirmLabel: tCommon("confirm.discardChanges"),
+      tone: "danger",
+    });
   }
 
   async function cancelWithConfirm() {
-    if (!(await confirmDiscard())) return
-    cancel()
+    if (!(await confirmDiscard())) return;
+    cancel();
   }
 
   // -- optimistic-concurrency fence -----------------------------------------
@@ -574,42 +642,50 @@ export function ExpenseDrawer({
   // contract, so the canonical read below mints this editor's first usable
   // token; every later token comes from a save response. Until one exists,
   // saving fails closed instead of 409-ing.
-  const [, setDocumentRevisionState] = useState<string | null>(null)
-  const documentRevisionRef = useRef<string | null>(null)
-  const seenPersistedRevisions = useRef(new Set<string>())
+  const [, setDocumentRevisionState] = useState<string | null>(null);
+  const documentRevisionRef = useRef<string | null>(null);
+  const seenPersistedRevisions = useRef(new Set<string>());
   const draftBaseline = useRef<PersistedDocumentSnapshot<ExpensePayload>>({
     documentId: String(doc.id),
-    revision: '',
+    revision: "",
     payload: report,
-  })
-  const dirtyRef = useRef(dirty)
+  });
+  const dirtyRef = useRef(dirty);
   useEffect(() => {
-    dirtyRef.current = dirty
-  }, [dirty])
+    dirtyRef.current = dirty;
+  }, [dirty]);
   function setDocumentRevision(revision: string | null) {
-    documentRevisionRef.current = revision
-    setDocumentRevisionState(revision)
+    documentRevisionRef.current = revision;
+    setDocumentRevisionState(revision);
   }
 
   /** Reset every field back to an explicit persisted payload (used by Cancel). */
   function resetForm(source: ExpensePayload) {
-    const sourceDoc = asExpenseDoc(source.doc)
-    setPartyId(sourceDoc.party_id ?? '')
-    setPaymentCardId(sourceDoc.payment_card_id ?? '')
-    setDocumentDate(sourceDoc.document_date ?? '')
-    setMemo(sourceDoc.memo ?? '')
-    setCustomValues(sourceDoc.custom ?? {})
-    setExtraDims(sourceDoc.extra_dims ?? {})
-    setRows(source.lines.length > 0 ? source.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()])
-    setTotals({ subtotal: sourceDoc.subtotal, taxTotal: sourceDoc.tax_total, total: sourceDoc.total })
-    setReceiptFacts({})
+    const sourceDoc = asExpenseDoc(source.doc);
+    setPartyId(sourceDoc.party_id ?? "");
+    setPaymentCardId(sourceDoc.payment_card_id ?? "");
+    setDocumentDate(sourceDoc.document_date ?? "");
+    setMemo(sourceDoc.memo ?? "");
+    setCustomValues(sourceDoc.custom ?? {});
+    setExtraDims(sourceDoc.extra_dims ?? {});
+    setRows(
+      source.lines.length > 0
+        ? source.lines.map((l) => toRow(l, lineDefs, segments))
+        : [emptyLine()],
+    );
+    setTotals({
+      subtotal: sourceDoc.subtotal,
+      taxTotal: sourceDoc.tax_total,
+      total: sourceDoc.total,
+    });
+    setReceiptFacts({});
   }
 
   /** Add a confirmed receipt reading as an unsaved line; Save confirms the receipt. */
   function addReceiptLine(captureId: string, line: ReceiptLineInput, facts: ReceiptLineFacts) {
-    if (!canScanReceipts) return
-    setMode('edit')
-    const { foreign, ...amounts } = line
+    if (!canScanReceipts) return;
+    setMode("edit");
+    const { foreign, ...amounts } = line;
     setRows((current) => [
       ...current.filter((row) => !isBlankExpenseLine(row) && row.receiptCaptureId !== captureId),
       {
@@ -617,24 +693,24 @@ export function ExpenseDrawer({
         ...amounts,
         receiptCaptureId: captureId,
         foreign: foreign?.state ?? null,
-        originalAmount: foreign?.original.amount ?? '',
-        originalTaxAmount: foreign?.original.taxAmount ?? '',
+        originalAmount: foreign?.original.amount ?? "",
+        originalTaxAmount: foreign?.original.taxAmount ?? "",
       },
-    ])
-    setReceiptFacts((current) => ({ ...current, [captureId]: facts }))
-    setActiveTab('details')
-    toast.success(t('receipts.toasts.added'))
+    ]);
+    setReceiptFacts((current) => ({ ...current, [captureId]: facts }));
+    setActiveTab("details");
+    toast.success(t("receipts.toasts.added"));
   }
 
   /** Adopt a reloaded snapshot as the editor's baseline (drops edits). */
   function adoptReload(incoming: PersistedDocumentSnapshot<ExpensePayload>) {
-    draftBaseline.current = incoming
-    seenPersistedRevisions.current.add(incoming.revision)
-    resetForm(incoming.payload)
-    setDocumentRevision(incoming.revision)
-    setDirty(false)
-    setSaveState('saved')
-    setMode('view')
+    draftBaseline.current = incoming;
+    seenPersistedRevisions.current.add(incoming.revision);
+    resetForm(incoming.payload);
+    setDocumentRevision(incoming.revision);
+    setDirty(false);
+    setSaveState("saved");
+    setMode("view");
   }
 
   /** Apply one canonical read: adopt when clean, pin the newer exact token
@@ -642,182 +718,182 @@ export function ExpenseDrawer({
   function applyCanonicalRead(
     incoming: PersistedDocumentSnapshot<ExpensePayload>,
     notifyOnConflict = true,
-  ): ReturnType<typeof reconcileCanonicalDraftRead>['action'] {
+  ): ReturnType<typeof reconcileCanonicalDraftRead>["action"] {
     const decision = reconcileCanonicalDraftRead({
       current: draftBaseline.current,
       incoming,
       isDirty: dirtyRef.current,
-    })
-    if (decision.action === 'adopt') {
-      draftBaseline.current = decision.snapshot
-      seenPersistedRevisions.current.add(decision.snapshot.revision)
-      resetForm(decision.snapshot.payload)
-      setDocumentRevision(decision.snapshot.revision)
-    } else if (decision.action === 'pin') {
-      seenPersistedRevisions.current.add(decision.revision)
-      draftBaseline.current = { ...draftBaseline.current, revision: decision.revision }
-      setDocumentRevision(decision.revision)
+    });
+    if (decision.action === "adopt") {
+      draftBaseline.current = decision.snapshot;
+      seenPersistedRevisions.current.add(decision.snapshot.revision);
+      resetForm(decision.snapshot.payload);
+      setDocumentRevision(decision.snapshot.revision);
+    } else if (decision.action === "pin") {
+      seenPersistedRevisions.current.add(decision.revision);
+      draftBaseline.current = { ...draftBaseline.current, revision: decision.revision };
+      setDocumentRevision(decision.revision);
     } else {
       // Dropping stale edits beats blessing them with the newer token — that
       // would recreate the silent last-write-wins this fence exists to stop.
-      adoptReload(decision.snapshot)
-      if (notifyOnConflict) toast.error(DOCUMENT_CHANGED_AFTER_OPEN)
+      adoptReload(decision.snapshot);
+      if (notifyOnConflict) toast.error(DOCUMENT_CHANGED_AFTER_OPEN);
     }
-    return decision.action
+    return decision.action;
   }
 
   async function refreshFromServer(
     notifyOnConflict = true,
-  ): Promise<ReturnType<typeof reconcileCanonicalDraftRead>['action']> {
+  ): Promise<ReturnType<typeof reconcileCanonicalDraftRead>["action"]> {
     return applyCanonicalRead(
-      await loadDraftDocumentSnapshot(`/api/expenses/${doc.id}`, t('toasts.actionFailed')),
+      await loadDraftDocumentSnapshot(`/api/expenses/${doc.id}`, t("toasts.actionFailed")),
       notifyOnConflict,
-    )
+    );
   }
 
   useEffect(() => {
-    if (isCreate) return
-    let active = true
-    loadDraftDocumentSnapshot(`/api/expenses/${doc.id}`, t('toasts.actionFailed'))
+    if (isCreate) return;
+    let active = true;
+    loadDraftDocumentSnapshot(`/api/expenses/${doc.id}`, t("toasts.actionFailed"))
       .then((incoming) => {
-        if (active) applyCanonicalRead(incoming)
+        if (active) applyCanonicalRead(incoming);
       })
       .catch(() => {
         // Saves stay fenced off until a canonical read lands; the next save
         // attempt retries it.
-      })
+      });
     return () => {
-      active = false
-    }
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc.id])
+  }, [doc.id]);
 
   /** First Save of an unsaved create: one POST writes the numbered draft and its lines. */
   async function saveNewReport() {
-    const missingAccount = findMissingExpenseAccountLine(rows)
+    const missingAccount = findMissingExpenseAccountLine(rows);
     if (missingAccount) {
-      setSaveState('error')
-      toast.error(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }))
-      return
+      setSaveState("error");
+      toast.error(t("drawer.lineMissingAccount", { line: missingAccount.lineNumber }));
+      return;
     }
-    setBusy(true)
-    setSaveState('saving')
+    setBusy(true);
+    setSaveState("saving");
     try {
-      const res = await fetch('/api/expenses', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'Idempotency-Key': createKey },
+      const res = await fetch("/api/expenses", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": createKey },
         body: JSON.stringify(payload),
-      })
+      });
       if (!res.ok) {
-        setSaveState('error')
-        toast.error(await readApiErrorMessage(res, t('toasts.actionFailed')))
-        return
+        setSaveState("error");
+        toast.error(await readApiErrorMessage(res, t("toasts.actionFailed")));
+        return;
       }
-      const created = (await res.json().catch(() => null)) as { doc?: { id?: unknown } } | null
-      const createdId = typeof created?.doc?.id === 'string' ? created.doc.id : ''
+      const created = (await res.json().catch(() => null)) as { doc?: { id?: unknown } } | null;
+      const createdId = typeof created?.doc?.id === "string" ? created.doc.id : "";
       if (!createdId) {
-        setSaveState('error')
-        toast.error(t('toasts.actionFailed'))
-        return
+        setSaveState("error");
+        toast.error(t("toasts.actionFailed"));
+        return;
       }
-      setDirty(false)
-      setSaveState('saved')
-      router.replace(`/expenses/reports?expense=${createdId}&mode=edit`)
-      router.refresh()
+      setDirty(false);
+      setSaveState("saved");
+      router.replace(`/expenses/reports?expense=${createdId}&mode=edit`);
+      router.refresh();
     } catch {
-      setSaveState('error')
-      toast.error(t('toasts.actionFailed'))
+      setSaveState("error");
+      toast.error(t("toasts.actionFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function save() {
     if (isCreate) {
-      await saveNewReport()
-      return
+      await saveNewReport();
+      return;
     }
     // A posted report never saves in place — it corrects (bill parity).
     if (isPosted) {
-      await savePostedCorrection()
-      return
+      await savePostedCorrection();
+      return;
     }
-    setBusy(true)
-    setSaveState('saving')
+    setBusy(true);
+    setSaveState("saving");
     if (documentRevisionRef.current == null) {
-      const refreshAction = await refreshFromServer().catch(() => null)
+      const refreshAction = await refreshFromServer().catch(() => null);
       // A canonical read can rehydrate the form or drop conflicting edits.
       // Never pair the payload captured by this render with that newly adopted
       // revision; only a pin proves the local edit buffer is still current.
-      if (refreshAction !== 'pin') {
+      if (refreshAction !== "pin") {
         if (refreshAction == null) {
-          setSaveState('error')
-          toast.error(t('toasts.actionFailed'))
+          setSaveState("error");
+          toast.error(t("toasts.actionFailed"));
         } else {
-          setSaveState('saved')
+          setSaveState("saved");
         }
-        setBusy(false)
-        return
+        setBusy(false);
+        return;
       }
     }
-    const revision = documentRevisionRef.current
+    const revision = documentRevisionRef.current;
     if (revision == null) {
-      setSaveState('error')
-      toast.error(t('toasts.actionFailed'))
-      setBusy(false)
-      return
+      setSaveState("error");
+      toast.error(t("toasts.actionFailed"));
+      setBusy(false);
+      return;
     }
     // A contentful row without an account can never book: the server names
     // the line and refuses. Refuse up front with the grid line named and
     // keep every entered row in place — dropping the row here used to book
     // a total the operator never reviewed (OM-09b).
-    const missingAccount = findMissingExpenseAccountLine(rows)
+    const missingAccount = findMissingExpenseAccountLine(rows);
     if (missingAccount) {
-      setSaveState('error')
-      toast.error(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }))
-      setBusy(false)
-      return
+      setSaveState("error");
+      toast.error(t("drawer.lineMissingAccount", { line: missingAccount.lineNumber }));
+      setBusy(false);
+      return;
     }
     const outcome = await saveExpenseReport({
       documentId: String(doc.id),
       revision,
       payload,
-      fallbackMessage: t('toasts.actionFailed'),
-    })
-    if (outcome.status === 'saved') {
-      const savedReport = outcome.saved
+      fallbackMessage: t("toasts.actionFailed"),
+    });
+    if (outcome.status === "saved") {
+      const savedReport = outcome.saved;
       draftBaseline.current = {
         documentId: String(savedReport.doc.id),
         revision: outcome.revision,
         payload: savedReport,
-      }
-      seenPersistedRevisions.current.add(outcome.revision)
-      resetForm(savedReport)
-      setDocumentRevision(outcome.revision)
-      setSaveState('saved')
-      setDirty(false)
-      setMode('view')
-      setReceiptsRefreshKey(outcome.revision)
-      router.refresh()
+      };
+      seenPersistedRevisions.current.add(outcome.revision);
+      resetForm(savedReport);
+      setDocumentRevision(outcome.revision);
+      setSaveState("saved");
+      setDirty(false);
+      setMode("view");
+      setReceiptsRefreshKey(outcome.revision);
+      router.refresh();
     } else {
-      setSaveState('error')
-      toast.error(outcome.message)
-      if (outcome.status === 'conflict') await refreshFromServer(false).catch(() => {})
+      setSaveState("error");
+      toast.error(outcome.message);
+      if (outcome.status === "conflict") await refreshFromServer(false).catch(() => {});
     }
-    setBusy(false)
+    setBusy(false);
   }
 
   function cancel() {
     // Unsaved create holds nothing persisted: closing navigates away.
     if (isCreate) {
-      router.push(closeHref)
-      router.refresh()
-      return
+      router.push(closeHref);
+      router.refresh();
+      return;
     }
-    resetForm(draftBaseline.current.payload)
-    setDirty(false)
-    setSaveState('saved')
-    setMode('view')
+    resetForm(draftBaseline.current.payload);
+    setDirty(false);
+    setSaveState("saved");
+    setMode("view");
   }
 
   /**
@@ -827,48 +903,48 @@ export function ExpenseDrawer({
    */
   async function beginEdit() {
     if (isDraft || isPosted) {
-      setMode('edit')
-      return
+      setMode("edit");
+      return;
     }
     const confirmed = await confirmDialog({
-      title: t('drawer.recallTitle'),
-      message: t(isPendingApproval ? 'drawer.recallBodyPending' : 'drawer.recallBodyApproved'),
-      confirmLabel: tCommon('actions.edit'),
-      tone: 'danger',
-    })
-    if (!confirmed) return
-    setBusy(true)
+      title: t("drawer.recallTitle"),
+      message: t(isPendingApproval ? "drawer.recallBodyPending" : "drawer.recallBodyApproved"),
+      confirmLabel: tCommon("actions.edit"),
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    setBusy(true);
     try {
       if (documentRevisionRef.current == null) {
-        const refreshed = await refreshFromServer().catch(() => null)
-        if (refreshed !== 'pin' && documentRevisionRef.current == null) {
-          toast.error(t('toasts.actionFailed'))
-          return
+        const refreshed = await refreshFromServer().catch(() => null);
+        if (refreshed !== "pin" && documentRevisionRef.current == null) {
+          toast.error(t("toasts.actionFailed"));
+          return;
         }
       }
-      const res = await fetch('/api/expenses/actions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const res = await fetch("/api/expenses/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          action: 'recall',
+          action: "recall",
           documentId: doc.id,
           expectedUpdatedAt: documentRevisionRef.current,
         }),
-      })
-      const data = (await res.json().catch(() => null)) as { error?: string } | null
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
       if (!res.ok) {
         if (res.status === 409) {
-          await refreshFromServer().catch(() => {})
+          await refreshFromServer().catch(() => {});
         }
-        toast.error(data?.error ?? t('toasts.actionFailed'))
-        return
+        toast.error(data?.error ?? t("toasts.actionFailed"));
+        return;
       }
-      toast.success(t('toasts.recalled'))
+      toast.success(t("toasts.recalled"));
       // Adopt the fresh draft baseline (resets the form, clears dirty), then edit it.
-      await refreshFromServer(false).catch(() => {})
-      setMode('edit')
+      await refreshFromServer(false).catch(() => {});
+      setMode("edit");
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -879,149 +955,152 @@ export function ExpenseDrawer({
    */
   async function savePostedCorrection() {
     const reason = await promptDialog({
-      title: tCommon('amendment.title'),
-      label: tCommon('amendment.reason'),
-      placeholder: tCommon('amendment.placeholder'),
-      confirmLabel: tCommon('actions.save'),
-    })
-    if (reason == null) return
+      title: tCommon("amendment.title"),
+      label: tCommon("amendment.reason"),
+      placeholder: tCommon("amendment.placeholder"),
+      confirmLabel: tCommon("actions.save"),
+    });
+    if (reason == null) return;
     if (documentRevisionRef.current == null) {
-      const refreshAction = await refreshFromServer().catch(() => null)
-      if (refreshAction !== 'pin' && documentRevisionRef.current == null) {
-        toast.error(t('toasts.actionFailed'))
-        return
+      const refreshAction = await refreshFromServer().catch(() => null);
+      if (refreshAction !== "pin" && documentRevisionRef.current == null) {
+        toast.error(t("toasts.actionFailed"));
+        return;
       }
     }
-    setBusy(true)
-    setSaveState('saving')
+    setBusy(true);
+    setSaveState("saving");
     // Same up-front refusal as save: the correction carries the same lines.
-    const missingCorrectionAccount = findMissingExpenseAccountLine(rows)
+    const missingCorrectionAccount = findMissingExpenseAccountLine(rows);
     if (missingCorrectionAccount) {
-      setSaveState('error')
-      toast.error(t('drawer.lineMissingAccount', { line: missingCorrectionAccount.lineNumber }))
-      setBusy(false)
-      return
+      setSaveState("error");
+      toast.error(t("drawer.lineMissingAccount", { line: missingCorrectionAccount.lineNumber }));
+      setBusy(false);
+      return;
     }
     try {
       const res = await fetch(`/api/expenses/${doc.id}/correct`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...payload,
           expectedUpdatedAt: documentRevisionRef.current,
           amendmentReason: reason,
         }),
-      })
+      });
       const data = (await res.json().catch(() => null)) as {
-        error?: string
-        correctionId?: string
-        voidStatus?: string
-      } | null
+        error?: string;
+        correctionId?: string;
+        voidStatus?: string;
+      } | null;
       if (!res.ok) {
         // No partial state exists server-side (the replacement and the void
         // are one atomic unit), so a plain failure toast is exact — except a
         // 409, where the drawer adopts the latest revision like saves do.
         if (res.status === 409) {
-          await refreshFromServer().catch(() => {})
+          await refreshFromServer().catch(() => {});
         }
-        toast.error(data?.error ?? t('toasts.actionFailed'))
-        setSaveState('error')
-        return
+        toast.error(data?.error ?? t("toasts.actionFailed"));
+        setSaveState("error");
+        return;
       }
       toast.success(
-        data?.voidStatus === 'pending_approval' ? t('toasts.submitted') : tCommon('amendment.correctionCreated'),
-      )
-      router.push(`/expenses/reports?expense=${data?.correctionId}&mode=edit`)
-      router.refresh()
+        data?.voidStatus === "pending_approval"
+          ? t("toasts.submitted")
+          : tCommon("amendment.correctionCreated"),
+      );
+      router.push(`/expenses/reports?expense=${data?.correctionId}&mode=edit`);
+      router.refresh();
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
-  async function act(action: 'submit' | 'post') {
-    setBusy(true)
+  async function act(action: "submit" | "post") {
+    setBusy(true);
     try {
-      const res = await fetch('/api/expenses/actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/expenses/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, documentId: doc.id }),
-      })
+      });
       // The status is checked before the body parses: a non-JSON 502 page
       // must toast the translated fallback, never a SyntaxError.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('toasts.actionFailed')))
-      const data = (await res.json()) as { pendingApproval?: boolean; autoApproved?: boolean }
-      if (data.pendingApproval || (action === 'submit' && !data.autoApproved)) toast.success(t('toasts.submitted'))
-      else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("toasts.actionFailed")));
+      const data = (await res.json()) as { pendingApproval?: boolean; autoApproved?: boolean };
+      if (data.pendingApproval || (action === "submit" && !data.autoApproved))
+        toast.success(t("toasts.submitted"));
+      else toast.success(action === "submit" ? t("toasts.submitted") : t("toasts.posted"));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('toasts.actionFailed'))
+      toast.error(e instanceof Error ? e.message : t("toasts.actionFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-    router.refresh()
+    router.refresh();
   }
 
   async function remove() {
     if (
       !(await confirmDialog({
-        title: t('drawer.deleteTitle'),
-        message: t('drawer.deleteDraftBody'),
-        confirmLabel: tCommon('actions.delete'),
-        tone: 'danger',
+        title: t("drawer.deleteTitle"),
+        message: t("drawer.deleteDraftBody"),
+        confirmLabel: tCommon("actions.delete"),
+        tone: "danger",
       }))
     )
-      return
-    setBusy(true)
+      return;
+    setBusy(true);
     try {
       const res = await fetch(`/api/expenses/${doc.id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
         // The delete API fences on the exact revision like the documents
         // delete contract: without it a stale drawer silently discards a
         // newer draft.
         body: JSON.stringify({ expectedUpdatedAt: documentRevisionRef.current }),
-      })
+      });
       // A refusal (423 locked, 409 stale revision) rides in the body, so the
       // status is checked first and the named error toasted — never a parse
       // error, and the row only navigates away on a real delete.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('toasts.deleteFailed')))
-      await res.json().catch(() => null)
-      toast.success(t('toasts.deleted'))
-      router.push('/expenses/reports')
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("toasts.deleteFailed")));
+      await res.json().catch(() => null);
+      toast.success(t("toasts.deleted"));
+      router.push("/expenses/reports");
+      router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('toasts.deleteFailed'))
+      toast.error(e instanceof Error ? e.message : t("toasts.deleteFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function voidExpense() {
     const reason = await promptDialog({
-      title: tCommon('amendment.voidTitle'),
-      label: tCommon('amendment.reason'),
-      placeholder: tCommon('amendment.voidPlaceholder'),
-      confirmLabel: tCommon('actions.void'),
-    })
-    if (!reason) return
+      title: tCommon("amendment.voidTitle"),
+      label: tCommon("amendment.reason"),
+      placeholder: tCommon("amendment.voidPlaceholder"),
+      confirmLabel: tCommon("actions.void"),
+    });
+    if (!reason) return;
     const reversal = await promptVoidReversalPeriod(doc.id, {
-      title: tCommon('amendment.voidReversalPeriodTitle'),
-      dateLabel: tCommon('amendment.voidReversalDateLabel'),
-      summaryOriginal: tCommon('amendment.voidReversalSummaryOriginal'),
-      summaryReversal: tCommon('amendment.voidReversalSummaryReversal'),
-      fiscalYear: tCommon('amendment.voidReversalFiscalYear'),
-      fallbackNotice: tCommon('amendment.voidReversalFallbackNotice'),
-      closedNotice: tCommon('amendment.voidReversalClosedNotice'),
-      label: tCommon('amendment.voidReversalPeriodLabel'),
-      regularOption: tCommon('amendment.voidReversalPeriodRegular'),
-      confirm: tCommon('actions.void'),
-      cancel: tCommon('confirm.cancel'),
-    })
-    if (reversal.cancelled) return
-    setBusy(true)
+      title: tCommon("amendment.voidReversalPeriodTitle"),
+      dateLabel: tCommon("amendment.voidReversalDateLabel"),
+      summaryOriginal: tCommon("amendment.voidReversalSummaryOriginal"),
+      summaryReversal: tCommon("amendment.voidReversalSummaryReversal"),
+      fiscalYear: tCommon("amendment.voidReversalFiscalYear"),
+      fallbackNotice: tCommon("amendment.voidReversalFallbackNotice"),
+      closedNotice: tCommon("amendment.voidReversalClosedNotice"),
+      label: tCommon("amendment.voidReversalPeriodLabel"),
+      regularOption: tCommon("amendment.voidReversalPeriodRegular"),
+      confirm: tCommon("actions.void"),
+      cancel: tCommon("confirm.cancel"),
+    });
+    if (reversal.cancelled) return;
+    setBusy(true);
     try {
       const res = await fetch(`/api/documents/${doc.id}/void`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         // The void API fences on the exact revision like every other document
         // write: without it every void answers 409 and the button is dead.
         body: JSON.stringify({
@@ -1030,212 +1109,376 @@ export function ExpenseDrawer({
           ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
           ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
         }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('toasts.actionFailed')))
-      const data = (await res.json().catch(() => ({}))) as { status?: string }
-      if (data.status === 'pending_approval') toast.success(t('toasts.submitted'))
-      else toast.success(tCommon('status.voided'))
+      });
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("toasts.actionFailed")));
+      const data = (await res.json().catch(() => ({}))) as { status?: string };
+      if (data.status === "pending_approval") toast.success(t("toasts.submitted"));
+      else toast.success(tCommon("status.voided"));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('toasts.actionFailed'))
+      toast.error(e instanceof Error ? e.message : t("toasts.actionFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-    router.refresh()
+    router.refresh();
   }
 
   // -- foreign-currency lines -----------------------------------------------
   /** Apply a change to a line's conversion and refresh its converted amounts. */
-  function updateForeign(index: number, patch: Partial<Pick<LineRow, 'foreign' | 'originalAmount' | 'originalTaxAmount'>>) {
-    setRows((current) => current.map((row, j) => {
-      if (j !== index) return row
-      const next = { ...row, ...patch }
-      if (!next.foreign) return next
-      const conversion = convertForeignLine(next.foreign, foreignOriginal(next), doc.currency)
-      return {
-        ...next,
-        amount: conversion?.amount ?? '',
-        taxOverridden: conversion?.taxAmount != null,
-        taxAmount: conversion?.taxAmount ?? '',
-      }
-    }))
+  function updateForeign(
+    index: number,
+    patch: Partial<Pick<LineRow, "foreign" | "originalAmount" | "originalTaxAmount">>,
+  ) {
+    setRows((current) =>
+      current.map((row, j) => {
+        if (j !== index) return row;
+        const next = { ...row, ...patch };
+        if (!next.foreign) return next;
+        const conversion = convertForeignLine(next.foreign, foreignOriginal(next), doc.currency);
+        return {
+          ...next,
+          amount: conversion?.amount ?? "",
+          taxOverridden: conversion?.taxAmount != null,
+          taxAmount: conversion?.taxAmount ?? "",
+        };
+      }),
+    );
   }
 
   function startForeign(index: number) {
-    const row = rows[index]
-    if (!row) return
-    const currency = doc.currency === 'USD' ? 'EUR' : 'USD'
+    const row = rows[index];
+    if (!row) return;
+    const currency = doc.currency === "USD" ? "EUR" : "USD";
     updateForeign(index, {
       foreign: blankForeignLine(currency, documentDate),
       originalAmount: row.amount,
-      originalTaxAmount: row.taxOverridden ? row.taxAmount : '',
-    })
+      originalTaxAmount: row.taxOverridden ? row.taxAmount : "",
+    });
   }
 
   function clearForeign(index: number) {
-    setRows((current) => current.map((row, j) => (j === index
-      ? { ...row, foreign: null, originalAmount: '', originalTaxAmount: '' }
-      : row)))
+    setRows((current) =>
+      current.map((row, j) =>
+        j === index ? { ...row, foreign: null, originalAmount: "", originalTaxAmount: "" } : row,
+      ),
+    );
   }
 
   // -- grid columns ----------------------------------------------------------
-  const hasReceiptRows = rows.some((row) => row.receiptCaptureId !== '')
-  const hasForeignRows = rows.some((row) => row.foreign !== null)
+  const hasReceiptRows = rows.some((row) => row.receiptCaptureId !== "");
+  const hasForeignRows = rows.some((row) => row.foreign !== null);
   const columns = useMemo<LineGridColumn<LineRow>[]>(
     () => {
       const builtIn: Record<string, LineGridColumn<LineRow>> = {
-      account_id:
-      {
-        key: 'accountId',
-        label: tCommon('labels.account'),
-        width: 'minmax(200px,2fr)',
-        type: 'search-select',
-        required: true,
-        options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
-        placeholder: t('drawer.accountPlaceholder'),
-      },
-      description: { key: 'description', label: tCommon('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
-      department_id: {
-        key: 'departmentId',
-        label: tCommon('labels.department'),
-        width: '140px',
-        type: 'select',
-        options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
-      },
-      project_id: {
-        key: 'projectId',
-        label: tCommon('labels.project'),
-        width: 'minmax(150px,1.2fr)',
-        type: 'search-select',
-        options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
-        placeholder: '—',
-      },
-      tax_code_id: {
-        key: 'taxProfileId',
-        label: tCommon('labels.tax'),
-        width: '110px',
-        type: 'select',
-        options: [{ value: '', label: t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
-      },
-      // A foreign-currency line's amount is its conversion, not typed here.
-      amount: {
-        key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true,
-        isCellEditable: (row) => row.foreign === null,
-        lockedRender: (row) => (row.amount ? money(row.amount, { currency: doc.currency }) : '—'),
-      },
-      // Who fronted the money (0171). Required on every line: the save API
-      // refuses a line without one, so an unsettled line can never be saved
-      // by leaving the cell alone.
-      settlement_type: {
-        key: 'settlementType',
-        label: t('drawer.settlement.label'),
-        width: '150px',
-        type: 'select',
-        required: true,
-        options: [
-          { value: 'out_of_pocket', label: t('drawer.settlement.outOfPocket') },
-          { value: 'company_paid', label: t('drawer.settlement.companyPaid') },
-          { value: 'personal', label: t('drawer.settlement.personal') },
-        ],
-      },
-      tax_amount: {
-        key: 'taxAmount',
-        label: t('drawer.columns.taxAmount'),
-        width: '120px',
-        type: 'tax',
-        align: 'right',
-        computeTax: lineTax,
-        isCellEditable: (row) => row.foreign === null,
-        lockedRender: (row) => money(row.taxOverridden ? row.taxAmount || '0' : lineTax(row), { currency: doc.currency }),
-        onTaxChange: (index, next) =>
-          setRows((prev) =>
-            prev.map((r, j) =>
-              j === index ? { ...r, taxOverridden: next.overridden, taxAmount: next.taxAmount } : r,
+        account_id: {
+          key: "accountId",
+          label: tCommon("labels.account"),
+          width: "minmax(200px,2fr)",
+          type: "search-select",
+          required: true,
+          options: accounts.map((a) => ({
+            value: a.id,
+            label: `${a.number ?? ""} ${a.name ?? ""}`.trim(),
+          })),
+          placeholder: t("drawer.accountPlaceholder"),
+        },
+        description: {
+          key: "description",
+          label: tCommon("labels.description"),
+          width: "minmax(160px,1.6fr)",
+          type: "text",
+        },
+        department_id: {
+          key: "departmentId",
+          label: tCommon("labels.department"),
+          width: "140px",
+          type: "select",
+          options: [
+            { value: "", label: "—" },
+            ...departments.map((d) => ({ value: d.id, label: d.name ?? "" })),
+          ],
+        },
+        project_id: {
+          key: "projectId",
+          label: tCommon("labels.project"),
+          width: "minmax(150px,1.2fr)",
+          type: "search-select",
+          options: projects.map((p) => ({ value: p.id, label: p.name ?? "" })),
+          placeholder: "—",
+        },
+        tax_code_id: {
+          key: "taxProfileId",
+          label: tCommon("labels.tax"),
+          width: "110px",
+          type: "select",
+          options: [
+            { value: "", label: t("drawer.noTax") },
+            ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? "" })),
+          ],
+        },
+        // A foreign-currency line's amount is its conversion, not typed here.
+        amount: {
+          key: "amount",
+          label: tCommon("labels.amount"),
+          width: "120px",
+          type: "amount",
+          align: "right",
+          required: true,
+          isCellEditable: (row) => row.foreign === null,
+          lockedRender: (row) => (row.amount ? money(row.amount, { currency: doc.currency }) : "—"),
+        },
+        // Who fronted the money (0171). Required on every line: the save API
+        // refuses a line without one, so an unsettled line can never be saved
+        // by leaving the cell alone.
+        settlement_type: {
+          key: "settlementType",
+          label: t("drawer.settlement.label"),
+          width: "150px",
+          type: "select",
+          required: true,
+          options: [
+            { value: "out_of_pocket", label: t("drawer.settlement.outOfPocket") },
+            { value: "company_paid", label: t("drawer.settlement.companyPaid") },
+            { value: "personal", label: t("drawer.settlement.personal") },
+          ],
+        },
+        tax_amount: {
+          key: "taxAmount",
+          label: t("drawer.columns.taxAmount"),
+          width: "120px",
+          type: "tax",
+          align: "right",
+          computeTax: lineTax,
+          isCellEditable: (row) => row.foreign === null,
+          lockedRender: (row) =>
+            money(row.taxOverridden ? row.taxAmount || "0" : lineTax(row), {
+              currency: doc.currency,
+            }),
+          onTaxChange: (index, next) =>
+            setRows((prev) =>
+              prev.map((r, j) =>
+                j === index
+                  ? { ...r, taxOverridden: next.overridden, taxAmount: next.taxAmount }
+                  : r,
+              ),
             ),
-          ),
-      },
-      }
-      const custom = new Map(customFieldColumns<LineRow>(lineDefs).map((column) => [column.key, column]))
-      const segmentColumns: LineGridColumn<LineRow>[] = segments.filter((segment) => segment.showOnLines).map((segment) => ({
-        key: `seg_${segment.key}`, label: segment.name, width: '150px', type: 'search-select',
-        options: [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))], placeholder: '—',
-      }))
-      const prepaidColumns = amortizationLineColumns<LineRow>(amortizationTemplates, tAmortization)
-      const receiptColumns: LineGridColumn<LineRow>[] = hasReceiptRows ? [{
-        key: 'receiptCaptureId',
-        label: t('receipts.sourceColumn'),
-        width: '110px',
-        type: 'readonly',
-        render: (row) => row.receiptCaptureId ? <Badge variant="outline">{t('receipts.fromReceipt')}</Badge> : null,
-      }] : []
+        },
+      };
+      const custom = new Map(
+        customFieldColumns<LineRow>(lineDefs).map((column) => [column.key, column]),
+      );
+      const segmentColumns: LineGridColumn<LineRow>[] = segments
+        .filter((segment) => segment.showOnLines)
+        .map((segment) => ({
+          key: `seg_${segment.key}`,
+          label: segment.name,
+          width: "150px",
+          type: "search-select",
+          options: [
+            { value: INHERIT_SEGMENT, label: tCommon("labels.inheritHeader") },
+            { value: CLEAR_SEGMENT, label: tCommon("labels.noDimensionValue") },
+            ...segment.values.map((value) => ({
+              value: value.id,
+              label: `${value.code ? `${value.code} · ` : ""}${value.name}`,
+            })),
+          ],
+          placeholder: "—",
+        }));
+      const prepaidColumns = amortizationLineColumns<LineRow>(amortizationTemplates, tAmortization);
+      const receiptColumns: LineGridColumn<LineRow>[] = hasReceiptRows
+        ? [
+            {
+              key: "receiptCaptureId",
+              label: t("receipts.sourceColumn"),
+              width: "110px",
+              type: "readonly",
+              render: (row) =>
+                row.receiptCaptureId ? (
+                  <Badge variant="outline">{t("receipts.fromReceipt")}</Badge>
+                ) : null,
+            },
+          ]
+        : [];
       // Original currency of each line, with the conversion opened beneath the grid.
-      const currencyColumns: LineGridColumn<LineRow>[] = hasForeignRows || editable ? [{
-        key: 'foreign',
-        label: t('currency.column'),
-        width: '170px',
-        type: 'readonly',
-        render: (row, index) => (
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className={row.foreign ? 'truncate tabular-nums' : 'text-slate-400 dark:text-slate-500'}>
-              {row.foreign && row.originalAmount
-                ? money(row.originalAmount, { currency: row.foreign.currency, currencyDisplay: 'code' })
-                : row.foreign ? row.foreign.currency : doc.currency}
-            </span>
-            {editable ? (
-              <button type="button" className="shrink-0 text-xs font-medium text-sky-700 underline dark:text-sky-300"
-                onClick={() => setCurrencyLine(index)}>
-                {row.foreign ? t('currency.edit') : t('currency.change')}
-              </button>
-            ) : null}
-          </span>
-        ),
-      }] : []
-      if (!layout) return [...receiptColumns, ...Object.values(builtIn), ...currencyColumns, ...segmentColumns, ...custom.values(), ...prepaidColumns]
+      const currencyColumns: LineGridColumn<LineRow>[] =
+        hasForeignRows || editable
+          ? [
+              {
+                key: "foreign",
+                label: t("currency.column"),
+                width: "170px",
+                type: "readonly",
+                render: (row, index) => (
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span
+                      className={
+                        row.foreign ? "truncate tabular-nums" : "text-slate-400 dark:text-slate-500"
+                      }
+                    >
+                      {row.foreign && row.originalAmount
+                        ? money(row.originalAmount, {
+                            currency: row.foreign.currency,
+                            currencyDisplay: "code",
+                          })
+                        : row.foreign
+                          ? row.foreign.currency
+                          : doc.currency}
+                    </span>
+                    {editable ? (
+                      <button
+                        type="button"
+                        className="shrink-0 text-xs font-medium text-sky-700 underline dark:text-sky-300"
+                        onClick={() => setCurrencyLine(index)}
+                      >
+                        {row.foreign ? t("currency.edit") : t("currency.change")}
+                      </button>
+                    ) : null}
+                  </span>
+                ),
+              },
+            ]
+          : [];
+      if (!layout)
+        return [
+          ...receiptColumns,
+          ...Object.values(builtIn),
+          ...currencyColumns,
+          ...segmentColumns,
+          ...custom.values(),
+          ...prepaidColumns,
+        ];
       const configured = layout.lines.columns.flatMap((placement) => {
-        if (!placement.visible) return []
-        const base = isCustomFieldKey(placement.key) ? custom.get(placement.key) : builtIn[placement.key]
-        if (!base) return []
-        return [{
-          ...base,
-          width: placement.width ?? base.width,
-          label: placement.labelOverride?.trim() || base.label,
-        }]
-      })
-      return [...receiptColumns, ...configured, ...currencyColumns, ...segmentColumns, ...prepaidColumns]
+        if (!placement.visible) return [];
+        const base = isCustomFieldKey(placement.key)
+          ? custom.get(placement.key)
+          : builtIn[placement.key];
+        if (!base) return [];
+        return [
+          {
+            ...base,
+            width: placement.width ?? base.width,
+            label: placement.labelOverride?.trim() || base.label,
+          },
+        ];
+      });
+      return [
+        ...receiptColumns,
+        ...configured,
+        ...currencyColumns,
+        ...segmentColumns,
+        ...prepaidColumns,
+      ];
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, departments, projects, taxProfiles, lineDefs, segments, layout, t, tCommon, amortizationTemplates, tAmortization, hasReceiptRows, hasForeignRows, editable, doc.currency],
-  )
+    [
+      accounts,
+      departments,
+      projects,
+      taxProfiles,
+      lineDefs,
+      segments,
+      layout,
+      t,
+      tCommon,
+      amortizationTemplates,
+      tAmortization,
+      hasReceiptRows,
+      hasForeignRows,
+      editable,
+      doc.currency,
+    ],
+  );
 
-  const field = 'space-y-1.5'
-  const headerDefByKey = new Map(headerDefs.map((def) => [def.key, def]))
+  const field = "space-y-1.5";
+  const headerDefByKey = new Map(headerDefs.map((def) => [def.key, def]));
   const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
-    const override = placement.labelOverride?.trim()
+    const override = placement.labelOverride?.trim();
     if (isCustomFieldKey(placement.key)) {
-      const def = headerDefByKey.get(customFieldDefKey(placement.key))
+      const def = headerDefByKey.get(customFieldDefKey(placement.key));
       return def ? (
         <CustomFieldInput
-          def={{ ...def, label: override || def.label, isRequired: placement.required ?? def.isRequired }}
+          def={{
+            ...def,
+            label: override || def.label,
+            isRequired: placement.required ?? def.isRequired,
+          }}
           value={customValues[def.key]}
           onChange={(value) => setCustomValues((current) => ({ ...current, [def.key]: value }))}
           readOnly={!isEditable}
         />
-      ) : null
+      ) : null;
     }
     switch (placement.key) {
-      case 'party_id':
-        return <><Label>{override || tCommon('labels.employee')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <SearchSelect options={employees.map((employee) => ({ value: employee.id, label: employee.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('drawer.selectEmployeePlaceholder')} /> : <p className="text-sm">{doc.employee_name}</p>}</>
-      case 'payment_card_id': {
-        const cardLabel = cards.find((card) => card.id === (paymentCardId || doc.payment_card_id))?.display_name
-        return <><Label>{override || t('drawer.cardLabel')}</Label>{isEditable ? <SearchSelect options={[{ value: '', label: t('drawer.noCard') }, ...cards.map((card) => ({ value: card.id, label: card.display_name ?? '' }))]} value={paymentCardId} onChange={(value) => setPaymentCardId(value ?? '')} placeholder={t('drawer.cardPlaceholder')} /> : <p className="text-sm">{cardLabel ?? '—'}</p>}</>
+      case "party_id":
+        return (
+          <>
+            <Label>
+              {override || tCommon("labels.employee")}
+              {isEditable ? <span className="text-red-500"> *</span> : null}
+            </Label>
+            {isEditable ? (
+              <SearchSelect
+                options={employees.map((employee) => ({
+                  value: employee.id,
+                  label: employee.display_name ?? "",
+                }))}
+                value={partyId}
+                onChange={(value) => setPartyId(value ?? "")}
+                placeholder={t("drawer.selectEmployeePlaceholder")}
+              />
+            ) : (
+              <p className="text-sm">{doc.employee_name}</p>
+            )}
+          </>
+        );
+      case "payment_card_id": {
+        const cardLabel = cards.find(
+          (card) => card.id === (paymentCardId || doc.payment_card_id),
+        )?.display_name;
+        return (
+          <>
+            <Label>{override || t("drawer.cardLabel")}</Label>
+            {isEditable ? (
+              <SearchSelect
+                options={[
+                  { value: "", label: t("drawer.noCard") },
+                  ...cards.map((card) => ({ value: card.id, label: card.display_name ?? "" })),
+                ]}
+                value={paymentCardId}
+                onChange={(value) => setPaymentCardId(value ?? "")}
+                placeholder={t("drawer.cardPlaceholder")}
+              />
+            ) : (
+              <p className="text-sm">{cardLabel ?? "—"}</p>
+            )}
+          </>
+        );
       }
-      case 'document_date':
-        return <><Label>{override || t('drawer.reportDate')}</Label>{isEditable ? <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
-      case 'memo':
-        return <><Label>{override || tCommon('labels.memo')}</Label>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
+      case "document_date":
+        return (
+          <>
+            <Label>{override || t("drawer.reportDate")}</Label>
+            {isEditable ? (
+              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
+            ) : (
+              <p className="text-sm">{doc.document_date}</p>
+            )}
+          </>
+        );
+      case "memo":
+        return (
+          <>
+            <Label>{override || tCommon("labels.memo")}</Label>
+            {isEditable ? (
+              <Input value={memo} onChange={(event) => setMemo(event.target.value)} />
+            ) : (
+              <p className="text-sm">{doc.memo ?? "—"}</p>
+            )}
+          </>
+        );
       default:
-        return null
+        return null;
     }
-  }
+  };
 
   return (
     <TransactionDrawer
@@ -1246,36 +1489,44 @@ export function ExpenseDrawer({
       showEvidenceTabs={!isCreate}
       activeTab={activeTab}
       onActiveTabChange={setActiveTab}
-      keepRecordTabsMounted={['receipts']}
-      panelClassName={docTypeMeta('expense_report').surfaceCls}
+      keepRecordTabsMounted={["receipts"]}
+      panelClassName={docTypeMeta("expense_report").surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind="expense_report" />
           <span className="font-mono">{doc.document_number}</span>
-          <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
-            {statusKey ? tCommon(`status.${statusKey}`) : String(doc.status).replace('_', ' ')}
+          <Badge variant={STATUS_VARIANT[doc.status] ?? "secondary"}>
+            {statusKey ? tCommon(`status.${statusKey}`) : String(doc.status).replace("_", " ")}
           </Badge>
         </span>
       }
-      description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.employee_name ?? undefined)}
+      description={
+        mode === "edit" ? tCommon("feedback.editingHint") : (doc.employee_name ?? undefined)
+      }
       primaryAction={
         canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancelWithConfirm() : void beginEdit()}>
-            {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2.5 text-xs"
+            disabled={busy}
+            onClick={() => (mode === "edit" ? cancelWithConfirm() : void beginEdit())}
+          >
+            {mode === "edit" ? tCommon("actions.cancel") : tCommon("actions.edit")}
           </Button>
         ) : null
       }
       actions={
         <>
           {canScanReceipts ? (
-            <Button variant="outline" disabled={busy} onClick={() => setActiveTab('receipts')}>
-              {t('receipts.scan')}
+            <Button variant="outline" disabled={busy} onClick={() => setActiveTab("receipts")}>
+              {t("receipts.scan")}
             </Button>
           ) : null}
-          {mode === 'edit' ? (
+          {mode === "edit" ? (
             <>
               <Button disabled={busy} onClick={save}>
-                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
+                {busy ? tCommon("actions.saving") : tCommon("actions.save")}
               </Button>
             </>
           ) : (
@@ -1284,78 +1535,111 @@ export function ExpenseDrawer({
               <FlowManualButtons subjectKind="expense_report" subjectId={String(doc.id)} />
               <ApprovalActions subjectKind="expense_report" subjectId={String(doc.id)} />
               {isDraft && canSubmit ? (
-                <Button disabled={busy || !partyId || !positiveAmount(totals.total)} onClick={() => act('submit')}>
-                  {t('actions.submitForApproval')}
+                <Button
+                  disabled={busy || !partyId || !positiveAmount(totals.total)}
+                  onClick={() => act("submit")}
+                >
+                  {t("actions.submitForApproval")}
                 </Button>
               ) : null}
-              {doc.status === 'approved' && canPost ? (
-                <Button disabled={busy} onClick={() => act('post')}>
-                  {tCommon('actions.post')}
+              {doc.status === "approved" && canPost ? (
+                <Button disabled={busy} onClick={() => act("post")}>
+                  {tCommon("actions.post")}
                 </Button>
               ) : null}
               {doc.entry_id ? (
                 <Button variant="outline" asChild>
-                  <JournalEntryLink entryId={doc.entry_id}>{t('drawer.viewGlImpact')}</JournalEntryLink>
+                  <JournalEntryLink entryId={doc.entry_id}>
+                    {t("drawer.viewGlImpact")}
+                  </JournalEntryLink>
                 </Button>
               ) : null}
-              {(doc.status === 'approved' || doc.status === 'posted') && canPost ? (
-                <Button variant="ghost" disabled={busy} onClick={voidExpense} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
-                  {tCommon('actions.void')}
+              {(doc.status === "approved" || doc.status === "posted") && canPost ? (
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={voidExpense}
+                  className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                >
+                  {tCommon("actions.void")}
                 </Button>
               ) : null}
-              {doc.status === 'draft' && canSubmit ? (
-                <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
-                  {tCommon('actions.delete')}
+              {doc.status === "draft" && canSubmit ? (
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={remove}
+                  className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                >
+                  {tCommon("actions.delete")}
                 </Button>
               ) : null}
             </>
           )}
         </>
       }
-      detailTabs={isCreate ? [] : [
-        {
-          key: 'receipts',
-          label: t('receipts.tab'),
-          content: (
-            <ReceiptScanPanel
-              documentId={String(doc.id)}
-              canAdd={canScanReceipts && !busy}
-              accounts={accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
-              taxProfiles={taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))}
-              pendingCaptureIds={pendingReceiptIds}
-              refreshKey={receiptsRefreshKey}
-              onAddLine={addReceiptLine}
-            />
-          ),
-        },
-        {
-          key: 'approvals',
-          label: tCommon('approvalFlow.historyTitle'),
-          content: <ApprovalHistory subjectKind="expense_report" subjectId={String(doc.id)} showEmptyState />,
-        },
-      ]}
+      detailTabs={
+        isCreate
+          ? []
+          : [
+              {
+                key: "receipts",
+                label: t("receipts.tab"),
+                content: (
+                  <ReceiptScanPanel
+                    documentId={String(doc.id)}
+                    canAdd={canScanReceipts && !busy}
+                    accounts={accounts.map((a) => ({
+                      value: a.id,
+                      label: `${a.number ?? ""} ${a.name ?? ""}`.trim(),
+                    }))}
+                    taxProfiles={taxProfiles.map((profile) => ({
+                      value: profile.value,
+                      label: profile.code ?? "",
+                    }))}
+                    pendingCaptureIds={pendingReceiptIds}
+                    refreshKey={receiptsRefreshKey}
+                    onAddLine={addReceiptLine}
+                  />
+                ),
+              },
+              {
+                key: "approvals",
+                label: tCommon("approvalFlow.historyTitle"),
+                content: (
+                  <ApprovalHistory
+                    subjectKind="expense_report"
+                    subjectId={String(doc.id)}
+                    showEmptyState
+                  />
+                ),
+              },
+            ]
+      }
       footer={
         <div className="flex w-full items-center gap-3">
           <span
             className={
-              'text-xs ' +
-              (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+              "text-xs " +
+              (saveState === "error"
+                ? "text-red-600 dark:text-red-400"
+                : "text-slate-500 dark:text-slate-400")
             }
           >
-            {mode === 'edit'
-              ? saveState === 'saving'
-                ? tCommon('actions.saving')
-                : saveState === 'error'
-                  ? t('drawer.saveState.error')
+            {mode === "edit"
+              ? saveState === "saving"
+                ? tCommon("actions.saving")
+                : saveState === "error"
+                  ? t("drawer.saveState.error")
                   : dirty
-                    ? t('drawer.saveState.dirty')
+                    ? t("drawer.saveState.dirty")
                     : null
               : null}
           </span>
           <span className="flex-1" />
-          {(cmp(splits.card, '0') !== 0 || cmp(splits.personal, '0') !== 0) && (
+          {(cmp(splits.card, "0") !== 0 || cmp(splits.personal, "0") !== 0) && (
             <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-              {t('drawer.splits', {
+              {t("drawer.splits", {
                 oop: money(splits.oop),
                 card: money(splits.card),
                 personal: money(splits.personal),
@@ -1363,7 +1647,7 @@ export function ExpenseDrawer({
             </span>
           )}
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {t.rich('drawer.totals', {
+            {t.rich("drawer.totals", {
               subtotal: money(totals.subtotal),
               tax: money(totals.taxTotal),
               total: money(totals.total),
@@ -1376,72 +1660,107 @@ export function ExpenseDrawer({
       }
     >
       <div className="space-y-6 p-1">
-        {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className={`${field} lg:col-span-2`}>
-            <Label>{tCommon('labels.employee')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
-            {editable ? (
-              <SearchSelect
-                options={employees.map((e) => ({ value: e.id, label: e.display_name ?? '' }))}
-                value={partyId}
-                onChange={(v) => setPartyId(v ?? '')}
-                placeholder={t('drawer.selectEmployeePlaceholder')}
-              />
-            ) : (
-              <p className="text-sm">{doc.employee_name}</p>
-            )}
-          </div>
-          <div className={`${field} lg:col-span-2`}>
-            <Label>{t('drawer.cardLabel')}</Label>
-            {editable ? (
-              <SearchSelect
-                options={[{ value: '', label: t('drawer.noCard') }, ...cards.map((c) => ({ value: c.id, label: c.display_name ?? '' }))]}
-                value={paymentCardId}
-                onChange={(v) => setPaymentCardId(v ?? '')}
-                placeholder={t('drawer.cardPlaceholder')}
-              />
-            ) : (
-              <p className="text-sm">{cards.find((c) => c.id === (paymentCardId || doc.payment_card_id))?.display_name ?? '—'}</p>
-            )}
-          </div>
-          <div className={field}>
-            <Label>{t('drawer.reportDate')}</Label>
-            {editable ? (
-              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
-            ) : (
-              <p className="text-sm">{doc.document_date}</p>
-            )}
-          </div>
-          <div className={`${field} lg:col-span-4`}>
-            <Label>{tCommon('labels.memo')}</Label>
-            {editable ? (
-              <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
-            ) : (
-              <p className="text-sm">{doc.memo ?? '—'}</p>
-            )}
-          </div>
-        </div>
+        {layout ? (
+          <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} />
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className={`${field} lg:col-span-2`}>
+                <Label>
+                  {tCommon("labels.employee")}
+                  {editable ? <span className="text-red-500"> *</span> : null}
+                </Label>
+                {editable ? (
+                  <SearchSelect
+                    options={employees.map((e) => ({ value: e.id, label: e.display_name ?? "" }))}
+                    value={partyId}
+                    onChange={(v) => setPartyId(v ?? "")}
+                    placeholder={t("drawer.selectEmployeePlaceholder")}
+                  />
+                ) : (
+                  <p className="text-sm">{doc.employee_name}</p>
+                )}
+              </div>
+              <div className={`${field} lg:col-span-2`}>
+                <Label>{t("drawer.cardLabel")}</Label>
+                {editable ? (
+                  <SearchSelect
+                    options={[
+                      { value: "", label: t("drawer.noCard") },
+                      ...cards.map((c) => ({ value: c.id, label: c.display_name ?? "" })),
+                    ]}
+                    value={paymentCardId}
+                    onChange={(v) => setPaymentCardId(v ?? "")}
+                    placeholder={t("drawer.cardPlaceholder")}
+                  />
+                ) : (
+                  <p className="text-sm">
+                    {cards.find((c) => c.id === (paymentCardId || doc.payment_card_id))
+                      ?.display_name ?? "—"}
+                  </p>
+                )}
+              </div>
+              <div className={field}>
+                <Label>{t("drawer.reportDate")}</Label>
+                {editable ? (
+                  <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
+                ) : (
+                  <p className="text-sm">{doc.document_date}</p>
+                )}
+              </div>
+              <div className={`${field} lg:col-span-4`}>
+                <Label>{tCommon("labels.memo")}</Label>
+                {editable ? (
+                  <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
+                ) : (
+                  <p className="text-sm">{doc.memo ?? "—"}</p>
+                )}
+              </div>
+            </div>
 
-        <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} /></>}
+            <CustomFieldInputs
+              defs={headerDefs}
+              values={customValues}
+              onChange={setCustomValues}
+              readOnly={!editable}
+            />
+          </>
+        )}
 
         {segments.some((segment) => segment.showOnHeader) ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {segments.filter((segment) => segment.showOnHeader).map((segment) => {
-              const selected = extraDims[segment.key] ?? ''
-              return <div className={field} key={segment.key}>
-                <Label>{segment.name}</Label>
-                {editable ? <SearchSelect
-                  options={segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))}
-                  value={selected}
-                  onChange={(value) => setExtraDims((current) => ({ ...current, [segment.key]: value || null }))}
-                  placeholder="—"
-                /> : <p className="text-sm">{segment.values.find((value) => value.id === selected)?.name ?? '—'}</p>}
-              </div>
-            })}
+            {segments
+              .filter((segment) => segment.showOnHeader)
+              .map((segment) => {
+                const selected = extraDims[segment.key] ?? "";
+                return (
+                  <div className={field} key={segment.key}>
+                    <Label>{segment.name}</Label>
+                    {editable ? (
+                      <SearchSelect
+                        options={segment.values.map((value) => ({
+                          value: value.id,
+                          label: `${value.code ? `${value.code} · ` : ""}${value.name}`,
+                        }))}
+                        value={selected}
+                        onChange={(value) =>
+                          setExtraDims((current) => ({ ...current, [segment.key]: value || null }))
+                        }
+                        placeholder="—"
+                      />
+                    ) : (
+                      <p className="text-sm">
+                        {segment.values.find((value) => value.id === selected)?.name ?? "—"}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         ) : null}
 
         <div className="space-y-2">
-          <Label>{tCommon('labels.lines')}</Label>
+          <Label>{tCommon("labels.lines")}</Label>
           <LineGrid<LineRow>
             columns={columns}
             rows={rows}
@@ -1452,60 +1771,89 @@ export function ExpenseDrawer({
           />
         </div>
 
-        {editable && currencyLine !== null && rows[currencyLine] ? (() => {
-          const index = currencyLine
-          const row = rows[index]!
-          return (
-            <section className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800" aria-label={t('currency.panelTitle', { line: index + 1 })}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">{t('currency.panelTitle', { line: index + 1 })}</h3>
-                <span className="flex items-center gap-2">
-                  {row.foreign ? (
-                    <Button variant="ghost" size="sm" onClick={() => clearForeign(index)}>{t('currency.remove', { currency: doc.currency })}</Button>
-                  ) : null}
-                  <Button variant="outline" size="sm" onClick={() => setCurrencyLine(null)}>{t('currency.done')}</Button>
-                </span>
-              </div>
-              {row.foreign ? (
-                <>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label htmlFor={`line-${index}-original-amount`}>{t('currency.amountIn', { currency: row.foreign.currency })}</Label>
-                      <MoneyInput id={`line-${index}-original-amount`} value={row.originalAmount} required
-                        field={t('currency.amountIn', { currency: row.foreign.currency })}
-                        onChange={(value) => updateForeign(index, { originalAmount: value })} />
-                    </div>
-                    {row.taxProfileId ? (
-                      <div className="space-y-1">
-                        <Label htmlFor={`line-${index}-original-tax`}>{t('currency.taxIn', { currency: row.foreign.currency })}</Label>
-                        <MoneyInput id={`line-${index}-original-tax`} value={row.originalTaxAmount}
-                          field={t('currency.taxIn', { currency: row.foreign.currency })}
-                          onChange={(value) => updateForeign(index, { originalTaxAmount: value })} />
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{t('currency.taxHint', { currency: doc.currency })}</p>
-                      </div>
-                    ) : null}
+        {editable && currencyLine !== null && rows[currencyLine]
+          ? (() => {
+              const index = currencyLine;
+              const row = rows[index]!;
+              return (
+                <section
+                  className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+                  aria-label={t("currency.panelTitle", { line: index + 1 })}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold">
+                      {t("currency.panelTitle", { line: index + 1 })}
+                    </h3>
+                    <span className="flex items-center gap-2">
+                      {row.foreign ? (
+                        <Button variant="ghost" size="sm" onClick={() => clearForeign(index)}>
+                          {t("currency.remove", { currency: doc.currency })}
+                        </Button>
+                      ) : null}
+                      <Button variant="outline" size="sm" onClick={() => setCurrencyLine(null)}>
+                        {t("currency.done")}
+                      </Button>
+                    </span>
                   </div>
-                  <ExpenseLineCurrency
-                    idPrefix={`line-${index}-fx`}
-                    reportCurrency={doc.currency}
-                    reportId={isCreate ? undefined : String(doc.id)}
-                    state={row.foreign}
-                    original={foreignOriginal(row)}
-                    editable={editable}
-                    onChange={(next) => updateForeign(index, { foreign: next })}
-                  />
-                </>
-              ) : (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm text-slate-600 dark:text-slate-300">{t('currency.domestic', { currency: doc.currency })}</p>
-                  <Button size="sm" onClick={() => startForeign(index)}>{t('currency.start')}</Button>
-                </div>
-              )}
-            </section>
-          )
-        })() : null}
-
+                  {row.foreign ? (
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label htmlFor={`line-${index}-original-amount`}>
+                            {t("currency.amountIn", { currency: row.foreign.currency })}
+                          </Label>
+                          <MoneyInput
+                            id={`line-${index}-original-amount`}
+                            value={row.originalAmount}
+                            required
+                            field={t("currency.amountIn", { currency: row.foreign.currency })}
+                            onChange={(value) => updateForeign(index, { originalAmount: value })}
+                          />
+                        </div>
+                        {row.taxProfileId ? (
+                          <div className="space-y-1">
+                            <Label htmlFor={`line-${index}-original-tax`}>
+                              {t("currency.taxIn", { currency: row.foreign.currency })}
+                            </Label>
+                            <MoneyInput
+                              id={`line-${index}-original-tax`}
+                              value={row.originalTaxAmount}
+                              field={t("currency.taxIn", { currency: row.foreign.currency })}
+                              onChange={(value) =>
+                                updateForeign(index, { originalTaxAmount: value })
+                              }
+                            />
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {t("currency.taxHint", { currency: doc.currency })}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                      <ExpenseLineCurrency
+                        idPrefix={`line-${index}-fx`}
+                        reportCurrency={doc.currency}
+                        reportId={isCreate ? undefined : String(doc.id)}
+                        state={row.foreign}
+                        original={foreignOriginal(row)}
+                        editable={editable}
+                        onChange={(next) => updateForeign(index, { foreign: next })}
+                      />
+                    </>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        {t("currency.domestic", { currency: doc.currency })}
+                      </p>
+                      <Button size="sm" onClick={() => startForeign(index)}>
+                        {t("currency.start")}
+                      </Button>
+                    </div>
+                  )}
+                </section>
+              );
+            })()
+          : null}
       </div>
     </TransactionDrawer>
-  )
+  );
 }

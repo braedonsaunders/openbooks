@@ -55,15 +55,14 @@ export const IT_WITHHOLDING: PayrollPackWithholding = {
       reaches: ["resident"],
       rateSource: { kind: "tenant", rateKey: "it_addizionale_comunale" },
       certificateKey: "it_detrazioni",
-      citation:
-        "D.Lgs. 28 settembre 1998, n. 360; AdE Elenco addizionale comunale 2025",
+      citation: "D.Lgs. 28 settembre 1998, n. 360; AdE Elenco addizionale comunale 2025",
       implemented: true,
     },
     // One domicile, one comune: the residence comune's surcharge is the only
     // one withheld, so there is no work/residence comparison to settle.
     subRegionConflictRule: "residence_only",
     citation:
-      "DPR 29 settembre 1973, n. 600, art. 23; D.Lgs. 15 dicembre 1997, n. 446; "
-      + "D.Lgs. 28 settembre 1998, n. 360",
+      "DPR 29 settembre 1973, n. 600, art. 23; D.Lgs. 15 dicembre 1997, n. 446; " +
+      "D.Lgs. 28 settembre 1998, n. 360",
   })),
 };

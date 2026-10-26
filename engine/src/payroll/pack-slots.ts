@@ -1,10 +1,14 @@
 /** Contributory-base and slot assertions. Split from packs.ts (pure moves only). */
-import { type PayrollStatutorySlot } from "./pack-types"
-import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
-import { sql } from "drizzle-orm"
-import { assertValidControlAccountMappings, type ControlAccountRecord, type OrgControlAccounts } from "../records/control-accounts.ts"
-import { db } from "../platform/db.ts"
-import { PayrollPackError } from "./payroll-error.ts"
+import { type PayrollStatutorySlot } from "./pack-types";
+import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry";
+import { sql } from "drizzle-orm";
+import {
+  assertValidControlAccountMappings,
+  type ControlAccountRecord,
+  type OrgControlAccounts,
+} from "../records/control-accounts.ts";
+import { db } from "../platform/db.ts";
+import { PayrollPackError } from "./payroll-error.ts";
 
 /**
  * Seed-time assertion of the contributory-bases declaration. The field is
@@ -16,8 +20,8 @@ export function assertContributoryBasesDeclared(country: string): void {
   const { contributoryBases } = payrollPack(country);
   if (!contributoryBases?.pensionable?.trim() || !contributoryBases?.insurable?.trim()) {
     throw new PayrollPackError(
-      `the ${country} payroll pack does not declare its contributory bases — `
-      + `this pack cannot be seeded; contact support.`,
+      `the ${country} payroll pack does not declare its contributory bases — ` +
+        `this pack cannot be seeded; contact support.`,
     );
   }
 }
@@ -70,22 +74,36 @@ export async function packSlotState(
 ): Promise<PackSlotState[]> {
   const packs = installedCountries.map(payrollPack);
   if (packs.length === 0) return [];
-  const components = (await db.execute<{ country: string | null; code: string; liability_account_id: string | null }>(sql`
+  const components = await db.execute<{
+    country: string | null;
+    code: string;
+    liability_account_id: string | null;
+  }>(
+    sql`
     select country, code, liability_account_id from pay_components
      where org_id = ${orgId} and system_key is not null and is_active
-  `, "objects"));
+  `,
+    "objects",
+  );
   // Keyed by country as well as code: two packs may declare the same code
   // (Canada and Australia both use WCB), and a code-only map would
   // collapse them to whichever row was read last.
-  const byCountryCode = new Map(components.map((c) => [`${c.country ?? ""}:${c.code}`, c.liability_account_id]));
+  const byCountryCode = new Map(
+    components.map((c) => [`${c.country ?? ""}:${c.code}`, c.liability_account_id]),
+  );
   return packs.map((pack) => ({
     country: pack.country,
     name: pack.name,
     slots: pack.statutorySlots
       .filter((slot) => packSlotAppliesToPopulation(slot, pack.country, regionsByCountry))
       .map((slot) => {
-        const mapped = slot.components.map(component => byCountryCode.get(`${pack.country}:${component.code}`));
-        return { key: slot.key, accountId: mapped.every(account => account != null) ? mapped[0] ?? null : null };
+        const mapped = slot.components.map((component) =>
+          byCountryCode.get(`${pack.country}:${component.code}`),
+        );
+        return {
+          key: slot.key,
+          accountId: mapped.every((account) => account != null) ? (mapped[0] ?? null) : null,
+        };
       }),
   }));
 }
@@ -102,30 +120,42 @@ export async function packSlotState(
  * org configuration, not the pack's.
  */
 export async function uninstallPayrollPack(
-  orgId: string, actorId: string, country: string,
+  orgId: string,
+  actorId: string,
+  country: string,
 ): Promise<{ componentsRemoved: number }> {
   const pack = PAYROLL_COUNTRY_PACKS[country];
   if (!pack) throw new PayrollPackError(`unknown payroll country pack ${country}`);
 
-  const [profiles, stubRefs] = (await Promise.all([
-    db.execute<{ n: number }>(sql`
+  const [profiles, stubRefs] = await Promise.all([
+    db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from employee_payroll_profiles
-       where org_id = ${orgId} and country = ${country} and is_active`, "objects"),
-    db.execute<{ n: number }>(sql`
+       where org_id = ${orgId} and country = ${country} and is_active`,
+      "objects",
+    ),
+    db.execute<{ n: number }>(
+      sql`
       select count(distinct l.stub_id)::int as n
         from pay_stub_lines l
         join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-       where l.org_id = ${orgId} and c.country = ${country} and c.system_key is not null`, "objects"),
-  ]));
+       where l.org_id = ${orgId} and c.country = ${country} and c.system_key is not null`,
+      "objects",
+    ),
+  ]);
 
   const blockers: string[] = [];
   const profileCount = Number(profiles[0]?.n ?? 0);
   const stubCount = Number(stubRefs[0]?.n ?? 0);
   if (profileCount > 0) {
-    blockers.push(`${profileCount} active employee payroll profile(s) are set to ${country} — move or deactivate them first`);
+    blockers.push(
+      `${profileCount} active employee payroll profile(s) are set to ${country} — move or deactivate them first`,
+    );
   }
   if (stubCount > 0) {
-    blockers.push(`${stubCount} pay stub(s) reference this pack's statutory components — payroll records keep the pack installed`);
+    blockers.push(
+      `${stubCount} pay stub(s) reference this pack's statutory components — payroll records keep the pack installed`,
+    );
   }
   if (blockers.length > 0) {
     throw new PayrollPackError(`cannot uninstall the ${country} pack: ${blockers.join("; ")}`);
@@ -135,10 +165,13 @@ export async function uninstallPayrollPack(
     // Draft (uncommitted) stubs could still reference the components between
     // the check above and this delete; the FK makes that a loud failure, not
     // a silent orphan.
-    const removed = (await tx.execute<{ id: string }>(sql`
+    const removed = await tx.execute<{ id: string }>(
+      sql`
       delete from pay_components
        where org_id = ${orgId} and country = ${country} and system_key is not null
-       returning id`, "objects"));
+       returning id`,
+      "objects",
+    );
     await tx.execute(sql`
       update orgs
          set settings = jsonb_set(
@@ -179,8 +212,8 @@ export async function setPackSlotAccount(
   // were never seeded). Refuse rather than report ok.
   if ((updated.rowCount ?? 0) === 0) {
     throw new PayrollPackError(
-      `the ${country} "${slotKey}" slot has no seeded payroll components in this organization — `
-      + `install the ${country} payroll pack before mapping its accounts`,
+      `the ${country} "${slotKey}" slot has no seeded payroll components in this organization — ` +
+        `install the ${country} payroll pack before mapping its accounts`,
     );
   }
 }
@@ -210,8 +243,11 @@ export async function ensurePackSlotRoleAccounts(
   if (!pack) throw new PayrollPackError(`unknown payroll country pack ${country}`);
   const slots = pack.statutorySlots.filter((slot) => slot.liabilityAccountRole);
   if (slots.length === 0) return;
-  const settings = (await executor.execute<{ control: unknown }>(sql`
-    select settings->'controlAccounts' as control from orgs where id = ${orgId}`, "objects"));
+  const settings = await executor.execute<{ control: unknown }>(
+    sql`
+    select settings->'controlAccounts' as control from orgs where id = ${orgId}`,
+    "objects",
+  );
   const control = (settings[0]?.control ?? {}) as Record<string, unknown>;
   for (const slot of slots) {
     const role = slot.liabilityAccountRole!;
@@ -221,14 +257,17 @@ export async function ensurePackSlotRoleAccounts(
     if (accountId == null || accountId === "") continue;
     if (typeof accountId !== "string") {
       throw new PayrollPackError(
-        `the ${role} control account is not an account id — map it to the payroll-deductions `
-        + "account before installing payroll",
+        `the ${role} control account is not an account id — map it to the payroll-deductions ` +
+          "account before installing payroll",
       );
     }
-    const records = (await executor.execute<ControlAccountRecord>(sql`
+    const records = await executor.execute<ControlAccountRecord>(
+      sql`
       select id, type, is_active as "isActive", is_summary as "isSummary"
         from accounts
-       where org_id = ${orgId} and id = ${accountId}`, "objects"));
+       where org_id = ${orgId} and id = ${accountId}`,
+      "objects",
+    );
     assertValidControlAccountMappings({ [role]: accountId } as OrgControlAccounts, records);
     await executor.execute(sql`
       update pay_components

@@ -12,7 +12,14 @@ import {
 } from "./types.ts";
 
 export const US_STATE_PAY_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly", "quarterly", "semiannual", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "semiannual",
+  "annual",
+  "daily",
 ];
 
 export interface StateRateEdition<Rates extends { year: number; status: "published" | "draft" }> {
@@ -21,10 +28,9 @@ export interface StateRateEdition<Rates extends { year: number; status: "publish
   edition: PayrollTaxYearEdition;
 }
 
-export function pairStateRateEditions<Rates extends { year: number; status: "published" | "draft" }>(
-  rates: readonly Rates[],
-  editions: readonly PayrollTaxYearEdition[],
-): StateRateEdition<Rates>[] {
+export function pairStateRateEditions<
+  Rates extends { year: number; status: "published" | "draft" },
+>(rates: readonly Rates[], editions: readonly PayrollTaxYearEdition[]): StateRateEdition<Rates>[] {
   return rates.map((yearRates) => {
     const matching = editions.filter((edition) => edition.year === yearRates.year);
     if (matching.length !== 1) {
@@ -65,14 +71,18 @@ export interface StateEngineContext<Rates> {
     aliases?: Readonly<Record<number, UsStatePayPeriod>>,
   ): UsStatePayPeriod | null;
   isExempt(options?: StateExemptOptions): boolean;
-  exemptResult(options?: StateExemptOptions & {
-    statutoryTax?: boolean;
-    additionalWithholding?: boolean;
-  }): UsStateWithholdingResult | null;
+  exemptResult(
+    options?: StateExemptOptions & {
+      statutoryTax?: boolean;
+      additionalWithholding?: boolean;
+    },
+  ): UsStateWithholdingResult | null;
 }
 
 /** Build the shared lifecycle around a jurisdiction's published formula. */
-export function defineStateEngine<Rates extends { year: number; status: "published" | "draft" }>(input: {
+export function defineStateEngine<
+  Rates extends { year: number; status: "published" | "draft" },
+>(input: {
   state: {
     state: string;
     label: string;
@@ -103,7 +113,9 @@ export function defineStateEngine<Rates extends { year: number; status: "publish
   compute(input: UsStateWithholdingInput): UsStateWithholdingResult;
 } {
   if (input.state.fixedPeriodsOnly && input.state.printedPeriods === null) {
-    throw new PayrollError(`${input.state.label} requires a printed-period declaration for fixed-frequency withholding`);
+    throw new PayrollError(
+      `${input.state.label} requires a printed-period declaration for fixed-frequency withholding`,
+    );
   }
   const byYear = new Map<number, StateRateEdition<Rates>>();
   for (const edition of input.editions) {
@@ -111,7 +123,9 @@ export function defineStateEngine<Rates extends { year: number; status: "publish
       throw new PayrollError(`${input.state.label} has an inconsistent year edition declaration`);
     }
     if (byYear.has(edition.year)) {
-      throw new PayrollError(`${input.state.label} has more than one rate edition for ${edition.year}`);
+      throw new PayrollError(
+        `${input.state.label} has more than one rate edition for ${edition.year}`,
+      );
     }
     byYear.set(edition.year, edition);
   }
@@ -119,19 +133,28 @@ export function defineStateEngine<Rates extends { year: number; status: "publish
   const ratesForPayDate = (payDate: string): Rates => {
     const year = Number(payDate.slice(0, 4));
     const edition = byYear.get(year);
-    if (!edition || edition.rates.status !== "published" || edition.edition.status !== "published") {
-      refuseUntranscribedYear({
-        state: input.state.state,
-        label: input.state.label,
-        editions: input.editions.map((entry) => entry.edition),
-      }, year);
+    if (
+      !edition ||
+      edition.rates.status !== "published" ||
+      edition.edition.status !== "published"
+    ) {
+      refuseUntranscribedYear(
+        {
+          state: input.state.state,
+          label: input.state.label,
+          editions: input.editions.map((entry) => entry.edition),
+        },
+        year,
+      );
     }
     return edition.rates;
   };
 
   const requirePeriodsPerYear = (periodsPerYear: number): number => {
     if (!Number.isInteger(periodsPerYear) || periodsPerYear < 1 || periodsPerYear > 2000) {
-      throw new PayrollError(`invalid pay periods per year for ${input.state.label}: ${periodsPerYear}`);
+      throw new PayrollError(
+        `invalid pay periods per year for ${input.state.label}: ${periodsPerYear}`,
+      );
     }
     return periodsPerYear;
   };
@@ -142,7 +165,8 @@ export function defineStateEngine<Rates extends { year: number; status: "publish
     aliases: Readonly<Record<number, UsStatePayPeriod>> = {},
   ): UsStatePayPeriod => {
     const period = printedPeriod(periodsPerYear, printedPeriods, dailyPeriods, aliases);
-    if (!period) refuseUnprintedPeriod({ label: input.state.label, printedPeriods }, periodsPerYear);
+    if (!period)
+      refuseUnprintedPeriod({ label: input.state.label, printedPeriods }, periodsPerYear);
     return period;
   };
   const printedPeriod = (
@@ -154,9 +178,11 @@ export function defineStateEngine<Rates extends { year: number; status: "publish
     const period = aliases[periodsPerYear] ?? payPeriodFor(periodsPerYear);
     const validDailyPeriods = typeof dailyPeriods === "number" ? [dailyPeriods] : dailyPeriods;
     if (
-      !period || !printedPeriods.includes(period)
-      || (period === "daily" && !validDailyPeriods.includes(periodsPerYear))
-    ) return null;
+      !period ||
+      !printedPeriods.includes(period) ||
+      (period === "daily" && !validDailyPeriods.includes(periodsPerYear))
+    )
+      return null;
     return period;
   };
 
@@ -171,21 +197,26 @@ export function defineStateEngine<Rates extends { year: number; status: "publish
         ? requirePrintedPeriod(payrollInput.periodsPerYear, input.state.printedPeriods!)
         : null;
       const factors: Record<string, string> = {};
-      const trace = (key: string, value: bigint) => { factors[key] = D(value); };
-      const requirePeriodsPerYearForInput = (periodsPerYear = payrollInput.periodsPerYear): number =>
-        requirePeriodsPerYear(periodsPerYear);
+      const trace = (key: string, value: bigint) => {
+        factors[key] = D(value);
+      };
+      const requirePeriodsPerYearForInput = (
+        periodsPerYear = payrollInput.periodsPerYear,
+      ): number => requirePeriodsPerYear(periodsPerYear);
       const requirePrintedPeriodForInput = (
         periodsPerYear = payrollInput.periodsPerYear,
         printedPeriods = input.state.printedPeriods ?? [],
         dailyPeriods: number | readonly number[] = 260,
         aliases: Readonly<Record<number, UsStatePayPeriod>> = {},
-      ): UsStatePayPeriod => requirePrintedPeriod(periodsPerYear, printedPeriods, dailyPeriods, aliases);
+      ): UsStatePayPeriod =>
+        requirePrintedPeriod(periodsPerYear, printedPeriods, dailyPeriods, aliases);
       const printedPeriodForInput = (
         periodsPerYear = payrollInput.periodsPerYear,
         printedPeriods = input.state.printedPeriods ?? [],
         dailyPeriods: number | readonly number[] = 260,
         aliases: Readonly<Record<number, UsStatePayPeriod>> = {},
-      ): UsStatePayPeriod | null => printedPeriod(periodsPerYear, printedPeriods, dailyPeriods, aliases);
+      ): UsStatePayPeriod | null =>
+        printedPeriod(periodsPerYear, printedPeriods, dailyPeriods, aliases);
       const isExempt: StateEngineContext<Rates>["isExempt"] = (options = {}) => {
         const certificate = options.certificate ?? payrollInput.certificate;
         const flagKeys = options.flagKeys ?? [options.flagKey ?? "exempt"];

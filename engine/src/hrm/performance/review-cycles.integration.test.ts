@@ -2,185 +2,254 @@ import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { db } from "../../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg
-} from "../../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../../testing/fixtures.ts";
 import {
   enableHrm,
-  grant, performanceRefusal, setupPerformanceHarness, withHarness
+  grant,
+  performanceRefusal,
+  setupPerformanceHarness,
+  withHarness,
 } from "../../testing/hrm-harness.ts";
 import { HrmPerformanceError } from "./errors.ts";
-import {
-  closeCycle,
-  createCycle,
-  moveToCalibrating,
-  openCycle,
-} from "./review-cycles.ts";
+import { closeCycle, createCycle, moveToCalibrating, openCycle } from "./review-cycles.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-const setupCyclesHarness = () => setupPerformanceHarness({ users: false, template: { name: "Annual review" }, launch: false });
+const setupCyclesHarness = () =>
+  setupPerformanceHarness({ users: false, template: { name: "Annual review" }, launch: false });
 
-test("0196 migration exposes ten org-isolated tables with the review unique", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await enableHrm(org.orgId);
-    const tables = (await db.execute<{ name: string }>(sql`
+test(
+  "0196 migration exposes ten org-isolated tables with the review unique",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await enableHrm(org.orgId);
+      const tables = (
+        await db.execute<{ name: string }>(
+          sql`
       select tablename as name from pg_tables
        where schemaname = 'public'
          and tablename in ('hrm_review_templates', 'hrm_review_template_sections',
            'hrm_review_template_questions', 'hrm_review_cycles', 'hrm_reviews',
            'hrm_review_answers', 'hrm_review_events', 'hrm_goals',
            'hrm_goal_updates', 'hrm_exit_records')
-       order by 1`, "objects")).map((row) => row.name);
-    assert.deepEqual(tables, [
-      "hrm_exit_records",
-      "hrm_goal_updates",
-      "hrm_goals",
-      "hrm_review_answers",
-      "hrm_review_cycles",
-      "hrm_review_events",
-      "hrm_review_template_questions",
-      "hrm_review_template_sections",
-      "hrm_review_templates",
-      "hrm_reviews",
-    ]);
-    const policies = (await db.execute<{ n: string }>(sql`
+       order by 1`,
+          "objects",
+        )
+      ).map((row) => row.name);
+      assert.deepEqual(tables, [
+        "hrm_exit_records",
+        "hrm_goal_updates",
+        "hrm_goals",
+        "hrm_review_answers",
+        "hrm_review_cycles",
+        "hrm_review_events",
+        "hrm_review_template_questions",
+        "hrm_review_template_sections",
+        "hrm_review_templates",
+        "hrm_reviews",
+      ]);
+      const policies = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from pg_policies
        where schemaname = 'public' and policyname = 'org_isolation'
-         and tablename like 'hrm_review%' or tablename like 'hrm_goal%' or tablename = 'hrm_exit_records'`, "objects"))[0]!.n;
-    assert.ok(Number(policies) >= 10, `all ten tables carry org_isolation, got ${policies}`);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+         and tablename like 'hrm_review%' or tablename like 'hrm_goal%' or tablename = 'hrm_exit_records'`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.ok(Number(policies) >= 10, `all ten tables carry org_isolation, got ${policies}`);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("open instantiates self and manager reviews with snapshots in one transaction", { skip: !DB }, async () => {
-  await withHarness(() => setupCyclesHarness(), async (h) => {
-    const cycle = await createCycle({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      templateId: h.templateId,
-      name: "FY26 annual",
-      periodStartOn: "2026-01-01",
-      periodEndOn: "2026-06-30",
-    });
-    assert.equal(cycle.status, "draft");
-    const opened = await openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
-    // Two in-service employments: worker (self + manager) and manager (self
-    // only — nobody manages the manager). Read back from storage.
-    assert.equal(opened.instantiated, 2);
-    assert.equal(opened.managerReviews, 1);
-    assert.equal(opened.gaps, 1);
-    assert.equal(opened.cycle.managerGapCount, 1);
-    const reviews = await db.execute<{ kind: string; status: string }>(sql`
+test(
+  "open instantiates self and manager reviews with snapshots in one transaction",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupCyclesHarness(),
+      async (h) => {
+        const cycle = await createCycle({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          templateId: h.templateId,
+          name: "FY26 annual",
+          periodStartOn: "2026-01-01",
+          periodEndOn: "2026-06-30",
+        });
+        assert.equal(cycle.status, "draft");
+        const opened = await openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
+        // Two in-service employments: worker (self + manager) and manager (self
+        // only — nobody manages the manager). Read back from storage.
+        assert.equal(opened.instantiated, 2);
+        assert.equal(opened.managerReviews, 1);
+        assert.equal(opened.gaps, 1);
+        assert.equal(opened.cycle.managerGapCount, 1);
+        const reviews = await db.execute<{ kind: string; status: string }>(
+          sql`
       select kind, status from hrm_reviews
-       where org_id = ${h.org.orgId} and cycle_id = ${cycle.id}`, "objects");
-    assert.equal(reviews.length, 3);
-    const answers = (await db.execute<{ n: string }>(sql`
+       where org_id = ${h.org.orgId} and cycle_id = ${cycle.id}`,
+          "objects",
+        );
+        assert.equal(reviews.length, 3);
+        const answers = (
+          await db.execute<{ n: string }>(
+            sql`
       select count(*)::text as n from hrm_review_answers a
       join hrm_reviews r on r.org_id = a.org_id and r.id = a.review_id
-     where a.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id}`, "objects"))[0]!.n;
-    assert.equal(answers, "3", "each of the 3 reviews snapshots the 1 template question");
-    const events = (await db.execute<{ n: string }>(sql`
+     where a.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id}`,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(answers, "3", "each of the 3 reviews snapshots the 1 template question");
+        const events = (
+          await db.execute<{ n: string }>(
+            sql`
       select count(*)::text as n from hrm_review_events e
       join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
-     where e.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} and e.kind = 'instantiated'`, "objects"))[0]!.n;
-    assert.equal(events, "3");
-    const prompt = (await db.execute<{ prompt: string }>(sql`
+     where e.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} and e.kind = 'instantiated'`,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(events, "3");
+        const prompt = (
+          await db.execute<{ prompt: string }>(
+            sql`
       select a.question_prompt as prompt from hrm_review_answers a
       join hrm_reviews r on r.org_id = a.org_id and r.id = a.review_id
-     where a.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} limit 1`, "objects"))[0]!.prompt;
-    assert.equal(prompt, "Customer impact");
-  });
-});
-
-test("open refuses a template with no required question and an inverted period", { skip: !DB }, async () => {
-  await withHarness(() => setupCyclesHarness(), async (h) => {
-    await assert.rejects(
-      createCycle({
-        orgId: h.org.orgId,
-        actorId: h.hrId,
-        templateId: h.templateId,
-        name: "Bad period",
-        periodStartOn: "2026-06-30",
-        periodEndOn: "2026-01-01",
-      }),
-      performanceRefusal("REFUSED", /ends 2026-01-01 before it starts 2026-06-30/),
-    );
-    const bareId = (await db.execute<{ id: string }>(sql`
-      insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
-      values (${h.org.orgId}, 'Bare', '{"min": 1, "max": 3}'::jsonb, ${h.hrId}, ${h.hrId})
-      returning id`, "objects"))[0]!.id;
-    const cycle = await createCycle({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      templateId: bareId,
-      name: "No questions",
-      periodStartOn: "2026-01-01",
-      periodEndOn: "2026-06-30",
-    });
-    await assert.rejects(
-      openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.equal(e.code, "NO_REQUIRED_QUESTION");
-        assert.match(e.message, /no required question/);
-        assert.match(e.message, /add a required question to the template under Performance → Templates/);
-        return true;
+     where a.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} limit 1`,
+            "objects",
+          )
+        )[0]!.prompt;
+        assert.equal(prompt, "Customer impact");
       },
     );
-    // Nothing instantiated: the refusal precedes every write.
-    const count = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from hrm_reviews where org_id = ${h.org.orgId} and cycle_id = ${cycle.id}`, "objects"))[0]!.n;
-    assert.equal(count, "0");
-  });
-});
+  },
+);
 
-test("a second open is refused and a calibrating move needs pending reviews resolved or forced", { skip: !DB }, async () => {
-  await withHarness(() => setupCyclesHarness(), async (h) => {
-    const cycle = await createCycle({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      templateId: h.templateId,
-      name: "FY26 annual",
-      periodStartOn: "2026-01-01",
-      periodEndOn: "2026-06-30",
-    });
-    await openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
-    await assert.rejects(
-      openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id }),
-      performanceRefusal("BAD_STATE", /only a draft cycle opens/),
+test(
+  "open refuses a template with no required question and an inverted period",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupCyclesHarness(),
+      async (h) => {
+        await assert.rejects(
+          createCycle({
+            orgId: h.org.orgId,
+            actorId: h.hrId,
+            templateId: h.templateId,
+            name: "Bad period",
+            periodStartOn: "2026-06-30",
+            periodEndOn: "2026-01-01",
+          }),
+          performanceRefusal("REFUSED", /ends 2026-01-01 before it starts 2026-06-30/),
+        );
+        const bareId = (
+          await db.execute<{ id: string }>(
+            sql`
+      insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
+      values (${h.org.orgId}, 'Bare', '{"min": 1, "max": 3}'::jsonb, ${h.hrId}, ${h.hrId})
+      returning id`,
+            "objects",
+          )
+        )[0]!.id;
+        const cycle = await createCycle({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          templateId: bareId,
+          name: "No questions",
+          periodStartOn: "2026-01-01",
+          periodEndOn: "2026-06-30",
+        });
+        await assert.rejects(
+          openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id }),
+          (e: unknown) => {
+            assert.ok(e instanceof HrmPerformanceError);
+            assert.equal(e.code, "NO_REQUIRED_QUESTION");
+            assert.match(e.message, /no required question/);
+            assert.match(
+              e.message,
+              /add a required question to the template under Performance → Templates/,
+            );
+            return true;
+          },
+        );
+        // Nothing instantiated: the refusal precedes every write.
+        const count = (
+          await db.execute<{ n: string }>(
+            sql`
+      select count(*)::text as n from hrm_reviews where org_id = ${h.org.orgId} and cycle_id = ${cycle.id}`,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(count, "0");
+      },
     );
-    await assert.rejects(
-      moveToCalibrating({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id }),
-      performanceRefusal("REFUSED", /1 pending manager reviews with required answers/),
-    );
-    await assert.rejects(
-      moveToCalibrating({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id, force: true }),
-      performanceRefusal("REFUSED", /needs a reason/),
-    );
-    const moved = await moveToCalibrating({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      cycleId: cycle.id,
-      force: true,
-      forceReason: "manager on leave, calibrating without them",
-    });
-    assert.equal(moved.status, "calibrating");
-    // The reason is recorded as a calibration event on the pending review.
-    const events = await db.execute<{ reason: string }>(sql`
+  },
+);
+
+test(
+  "a second open is refused and a calibrating move needs pending reviews resolved or forced",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupCyclesHarness(),
+      async (h) => {
+        const cycle = await createCycle({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          templateId: h.templateId,
+          name: "FY26 annual",
+          periodStartOn: "2026-01-01",
+          periodEndOn: "2026-06-30",
+        });
+        await openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
+        await assert.rejects(
+          openCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id }),
+          performanceRefusal("BAD_STATE", /only a draft cycle opens/),
+        );
+        await assert.rejects(
+          moveToCalibrating({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id }),
+          performanceRefusal("REFUSED", /1 pending manager reviews with required answers/),
+        );
+        await assert.rejects(
+          moveToCalibrating({
+            orgId: h.org.orgId,
+            actorId: h.hrId,
+            cycleId: cycle.id,
+            force: true,
+          }),
+          performanceRefusal("REFUSED", /needs a reason/),
+        );
+        const moved = await moveToCalibrating({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          cycleId: cycle.id,
+          force: true,
+          forceReason: "manager on leave, calibrating without them",
+        });
+        assert.equal(moved.status, "calibrating");
+        // The reason is recorded as a calibration event on the pending review.
+        const events = await db.execute<{ reason: string }>(
+          sql`
       select e.reason from hrm_review_events e
       join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
-     where e.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} and e.kind = 'calibrated'`, "objects");
-    assert.equal(events.length, 1);
-    assert.match(events[0]!.reason, /manager on leave/);
-    const closed = await closeCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
-    assert.equal(closed.status, "closed");
-  });
-});
+     where e.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} and e.kind = 'calibrated'`,
+          "objects",
+        );
+        assert.equal(events.length, 1);
+        assert.match(events[0]!.reason, /manager on leave/);
+        const closed = await closeCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });
+        assert.equal(closed.status, "closed");
+      },
+    );
+  },
+);
 
 test("cycles are invisible from a second organization", { skip: !DB }, async () => {
   const h = await setupCyclesHarness();

@@ -1,6 +1,6 @@
-import type { Authz } from '@/lib/authz'
+import type { Authz } from "@/lib/authz";
 
-export type RoleTier = 'admin' | 'controller' | 'accountant' | 'approver' | 'viewer'
+export type RoleTier = "admin" | "controller" | "accountant" | "approver" | "viewer";
 
 export const TIER_RANK: Record<RoleTier, number> = {
   admin: 0,
@@ -8,28 +8,30 @@ export const TIER_RANK: Record<RoleTier, number> = {
   accountant: 2,
   approver: 3,
   viewer: 4,
-}
+};
 
-export type RoleTierLabelKey = `roleNames.${RoleTier}`
+export type RoleTierLabelKey = `roleNames.${RoleTier}`;
 
 export const ROLE_TIER_LABEL_KEYS: Record<RoleTier, RoleTierLabelKey> = {
-  admin: 'roleNames.admin',
-  controller: 'roleNames.controller',
-  accountant: 'roleNames.accountant',
-  approver: 'roleNames.approver',
-  viewer: 'roleNames.viewer',
-}
+  admin: "roleNames.admin",
+  controller: "roleNames.controller",
+  accountant: "roleNames.accountant",
+  approver: "roleNames.approver",
+  viewer: "roleNames.viewer",
+};
 
 export function inferRoleTier(roleKeys: readonly string[]): RoleTier {
-  return (Object.keys(TIER_RANK) as RoleTier[])
-    .filter((tier) => roleKeys.includes(tier))
-    .sort((a, b) => TIER_RANK[a] - TIER_RANK[b])[0] ?? 'viewer'
+  return (
+    (Object.keys(TIER_RANK) as RoleTier[])
+      .filter((tier) => roleKeys.includes(tier))
+      .sort((a, b) => TIER_RANK[a] - TIER_RANK[b])[0] ?? "viewer"
+  );
 }
 
 export function getUserRoleTier(authz: Authz): RoleTier {
-  return inferRoleTier(authz.user.roles.map(({ key }) => key))
+  return inferRoleTier(authz.user.roles.map(({ key }) => key));
 }
 
 export function dashboardSourceKeyForRole(roleKey: string): string {
-  return `role:${roleKey}`
+  return `role:${roleKey}`;
 }

@@ -81,9 +81,11 @@ test("utilization entries preserve exact cost-rate times hours decimals", async 
 
 test("utilization item drill treats the unassigned group as null item id", async () => {
   state.queries.length = 0;
-  const response = await GET(new Request(
-    "https://books.example.test/api/analytics/utilization/entries?item=0&from=2026-01-01&to=2026-01-31",
-  ));
+  const response = await GET(
+    new Request(
+      "https://books.example.test/api/analytics/utilization/entries?item=0&from=2026-01-01&to=2026-01-31",
+    ),
+  );
 
   assert.equal(response.status, 200);
   assert.ok(state.queries.some((query) => query.includes("t.item_id is null")));
@@ -91,9 +93,11 @@ test("utilization item drill treats the unassigned group as null item id", async
 
 test("utilization item drill refuses malformed item UUIDs before querying", async () => {
   state.queries.length = 0;
-  const response = await GET(new Request(
-    "https://books.example.test/api/analytics/utilization/entries?item=not-a-uuid&from=2026-01-01&to=2026-01-31",
-  ));
+  const response = await GET(
+    new Request(
+      "https://books.example.test/api/analytics/utilization/entries?item=not-a-uuid&from=2026-01-01&to=2026-01-31",
+    ),
+  );
 
   assert.equal(response.status, 400);
   assert.equal(state.queries.length, 0);

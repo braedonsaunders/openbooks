@@ -1,12 +1,12 @@
 // Provider-neutral email delivery input validation.
-import { normalizeEmailSubject } from './subject'
+import { normalizeEmailSubject } from "./subject";
 
 export type EmailAttachmentPayload = {
-  filename: string
+  filename: string;
   /** Base64-encoded file contents. */
-  content: string
-  contentType?: string
-}
+  content: string;
+  contentType?: string;
+};
 
 /**
  * An attachment stored outside the queue payload: either an object-storage
@@ -16,33 +16,33 @@ export type EmailAttachmentPayload = {
  */
 export type EmailAttachmentRef =
   | { filename: string; contentType?: string; storageKey: string }
-  | { filename: string; contentType?: string; sealed: string }
+  | { filename: string; contentType?: string; sealed: string };
 
-export type EmailAttachment = EmailAttachmentPayload | EmailAttachmentRef
+export type EmailAttachment = EmailAttachmentPayload | EmailAttachmentRef;
 
 /** True for references; inline payloads carry `content`. */
 export function isEmailAttachmentRef(
   attachment: EmailAttachment,
 ): attachment is EmailAttachmentRef {
-  return !('content' in attachment)
+  return !("content" in attachment);
 }
 
 export type EmailDeliveryInput = {
-  to: string | string[]
-  subject: string
-  html: string
-  text: string
-  attachments?: EmailAttachment[]
+  to: string | string[];
+  subject: string;
+  html: string;
+  text: string;
+  attachments?: EmailAttachment[];
   /**
    * Per-message Reply-To, overriding the org transport default for this send
    * only (dunning policies, approval flows). Absent means the default.
    */
-  replyTo?: string
-}
+  replyTo?: string;
+};
 
-export type NormalizedEmailDeliveryInput = Omit<EmailDeliveryInput, 'to'> & {
-  to: string[]
-}
+export type NormalizedEmailDeliveryInput = Omit<EmailDeliveryInput, "to"> & {
+  to: string[];
+};
 
 /**
  * Provider wire input: every attachment materialized to inline bytes. The
@@ -50,9 +50,9 @@ export type NormalizedEmailDeliveryInput = Omit<EmailDeliveryInput, 'to'> & {
  * still reaches this layer means the worker was bypassed, and sendVia
  * refuses it rather than transmitting a filename with no content.
  */
-export type TransmittableEmailInput = Omit<NormalizedEmailDeliveryInput, 'attachments'> & {
-  attachments?: EmailAttachmentPayload[]
-}
+export type TransmittableEmailInput = Omit<NormalizedEmailDeliveryInput, "attachments"> & {
+  attachments?: EmailAttachmentPayload[];
+};
 
 /**
  * Provider-neutral ceilings applied before a provider request is allocated. The
@@ -68,10 +68,10 @@ const EMAIL_DELIVERY_LIMITS = {
   totalAttachmentBytes: 10 * 1024 * 1024,
   filenameBytes: 255,
   contentTypeBytes: 255,
-} as const
+} as const;
 
-const MAX_EMAIL_ADDRESS_LENGTH = 254
-const BASE64_QUANTUM = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+const MAX_EMAIL_ADDRESS_LENGTH = 254;
+const BASE64_QUANTUM = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 /**
  * Provider-compatible ASCII mailbox validation for envelope/sender addresses.
@@ -80,36 +80,41 @@ const BASE64_QUANTUM = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/
  */
 export function isValidEmailAddress(value: string): boolean {
   if (!value || value.length > MAX_EMAIL_ADDRESS_LENGTH || !/^[\x21-\x7e]+$/.test(value)) {
-    return false
+    return false;
   }
-  const at = value.indexOf('@')
-  if (at < 1 || at !== value.lastIndexOf('@')) return false
-  const local = value.slice(0, at)
-  const domain = value.slice(at + 1)
+  const at = value.indexOf("@");
+  if (at < 1 || at !== value.lastIndexOf("@")) return false;
+  const local = value.slice(0, at);
+  const domain = value.slice(at + 1);
   if (
     local.length > 64 ||
-    local.startsWith('.') ||
-    local.endsWith('.') ||
-    local.includes('..') ||
+    local.startsWith(".") ||
+    local.endsWith(".") ||
+    local.includes("..") ||
     !/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local)
   ) {
-    return false
+    return false;
   }
-  if (domain.length > 253 || !domain.includes('.')) return false
-  const labels = domain.split('.')
-  if (labels.some((label) => !label || label.length > 63 || !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label))) {
-    return false
+  if (domain.length > 253 || !domain.includes(".")) return false;
+  const labels = domain.split(".");
+  if (
+    labels.some(
+      (label) =>
+        !label || label.length > 63 || !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label),
+    )
+  ) {
+    return false;
   }
-  const topLevel = labels.at(-1)!
-  return topLevel.length >= 2 && !/^\d+$/.test(topLevel)
+  const topLevel = labels.at(-1)!;
+  return topLevel.length >= 2 && !/^\d+$/.test(topLevel);
 }
 
 function byteLength(value: string): number {
-  let bytes = 0
+  let bytes = 0;
   for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index)
-    if (codeUnit <= 0x7f) bytes += 1
-    else if (codeUnit <= 0x7ff) bytes += 2
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit <= 0x7f) bytes += 1;
+    else if (codeUnit <= 0x7ff) bytes += 2;
     else if (
       codeUnit >= 0xd800 &&
       codeUnit <= 0xdbff &&
@@ -117,27 +122,27 @@ function byteLength(value: string): number {
       value.charCodeAt(index + 1) >= 0xdc00 &&
       value.charCodeAt(index + 1) <= 0xdfff
     ) {
-      bytes += 4
-      index += 1
-    } else bytes += 3
+      bytes += 4;
+      index += 1;
+    } else bytes += 3;
   }
-  return bytes
+  return bytes;
 }
 
 function decodedBase64Bytes(value: string): number {
-  if (value.length === 0) return 0
-  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
-  return (value.length / 4) * 3 - padding
+  if (value.length === 0) return 0;
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return (value.length / 4) * 3 - padding;
 }
 
 function validateAttachmentName(attachment: EmailAttachment, index: number): void {
-  const label = `Email attachment ${index + 1}`
+  const label = `Email attachment ${index + 1}`;
   if (
     !attachment.filename ||
     byteLength(attachment.filename) > EMAIL_DELIVERY_LIMITS.filenameBytes ||
     /[\x00-\x1f\x7f/\\]/.test(attachment.filename)
   ) {
-    throw new Error(`${label} has an invalid filename.`)
+    throw new Error(`${label} has an invalid filename.`);
   }
   if (
     attachment.contentType !== undefined &&
@@ -145,36 +150,36 @@ function validateAttachmentName(attachment: EmailAttachment, index: number): voi
       byteLength(attachment.contentType) > EMAIL_DELIVERY_LIMITS.contentTypeBytes ||
       /[\x00-\x1f\x7f]/.test(attachment.contentType))
   ) {
-    throw new Error(`${label} has an invalid content type.`)
+    throw new Error(`${label} has an invalid content type.`);
   }
 }
 
 function validateAttachment(attachment: EmailAttachment, index: number): number {
-  validateAttachmentName(attachment, index)
+  validateAttachmentName(attachment, index);
   if (isEmailAttachmentRef(attachment)) {
     // References were byte-validated when stored; the queue boundary
     // re-checks only the addressing metadata, never the bytes it no longer
     // carries. A non-empty locator is required — an empty storage key or
     // sealed blob would fail closed at fetch time with no message.
-    const label = `Email attachment ${index + 1}`
-    if ('storageKey' in attachment && !attachment.storageKey) {
-      throw new Error(`${label} has an empty storage reference.`)
+    const label = `Email attachment ${index + 1}`;
+    if ("storageKey" in attachment && !attachment.storageKey) {
+      throw new Error(`${label} has an empty storage reference.`);
     }
-    if ('sealed' in attachment && !attachment.sealed) {
-      throw new Error(`${label} has an empty sealed blob.`)
+    if ("sealed" in attachment && !attachment.sealed) {
+      throw new Error(`${label} has an empty sealed blob.`);
     }
-    return 0
+    return 0;
   }
-  const label = `Email attachment ${index + 1}`
-  const maxEncodedChars = Math.ceil(EMAIL_DELIVERY_LIMITS.attachmentBytes / 3) * 4
+  const label = `Email attachment ${index + 1}`;
+  const maxEncodedChars = Math.ceil(EMAIL_DELIVERY_LIMITS.attachmentBytes / 3) * 4;
   if (attachment.content.length > maxEncodedChars || !BASE64_QUANTUM.test(attachment.content)) {
-    throw new Error(`${label} is not valid bounded base64 content.`)
+    throw new Error(`${label} is not valid bounded base64 content.`);
   }
-  const decodedBytes = decodedBase64Bytes(attachment.content)
+  const decodedBytes = decodedBase64Bytes(attachment.content);
   if (decodedBytes > EMAIL_DELIVERY_LIMITS.attachmentBytes) {
-    throw new Error(`${label} exceeds the ${EMAIL_DELIVERY_LIMITS.attachmentBytes}-byte limit.`)
+    throw new Error(`${label} exceeds the ${EMAIL_DELIVERY_LIMITS.attachmentBytes}-byte limit.`);
   }
-  return decodedBytes
+  return decodedBytes;
 }
 
 /**
@@ -184,16 +189,20 @@ function validateAttachment(attachment: EmailAttachment, index: number): number 
  */
 export function assertValidEmailAttachmentPayloads(attachments: EmailAttachmentPayload[]): void {
   if (attachments.length > EMAIL_DELIVERY_LIMITS.attachments) {
-    throw new Error(`Email delivery exceeds the ${EMAIL_DELIVERY_LIMITS.attachments}-attachment limit.`)
+    throw new Error(
+      `Email delivery exceeds the ${EMAIL_DELIVERY_LIMITS.attachments}-attachment limit.`,
+    );
   }
-  let totalAttachmentBytes = 0
+  let totalAttachmentBytes = 0;
   for (const [index, attachment] of attachments.entries()) {
     if (isEmailAttachmentRef(attachment)) {
-      throw new Error(`Email attachment ${index + 1} is already stored; pass inline bytes.`)
+      throw new Error(`Email attachment ${index + 1} is already stored; pass inline bytes.`);
     }
-    totalAttachmentBytes += validateAttachment(attachment, index)
+    totalAttachmentBytes += validateAttachment(attachment, index);
     if (totalAttachmentBytes > EMAIL_DELIVERY_LIMITS.totalAttachmentBytes) {
-      throw new Error(`Email attachments exceed the ${EMAIL_DELIVERY_LIMITS.totalAttachmentBytes}-byte total limit.`)
+      throw new Error(
+        `Email attachments exceed the ${EMAIL_DELIVERY_LIMITS.totalAttachmentBytes}-byte total limit.`,
+      );
     }
   }
 }
@@ -206,50 +215,66 @@ export function normalizeEmailDeliveryInput(
   input: EmailDeliveryInput,
   options: { requireSingleRecipient?: boolean } = {},
 ): NormalizedEmailDeliveryInput {
-  const rawRecipients = Array.isArray(input.to) ? input.to : [input.to]
-  if (rawRecipients.length === 0) throw new Error('At least one email recipient is required.')
+  const rawRecipients = Array.isArray(input.to) ? input.to : [input.to];
+  if (rawRecipients.length === 0) throw new Error("At least one email recipient is required.");
   if (rawRecipients.length > EMAIL_DELIVERY_LIMITS.recipientsPerEnqueue) {
-    throw new Error(`Email delivery exceeds the ${EMAIL_DELIVERY_LIMITS.recipientsPerEnqueue}-recipient limit.`)
+    throw new Error(
+      `Email delivery exceeds the ${EMAIL_DELIVERY_LIMITS.recipientsPerEnqueue}-recipient limit.`,
+    );
   }
 
-  const seen = new Set<string>()
-  const to: string[] = []
+  const seen = new Set<string>();
+  const to: string[] = [];
   for (const raw of rawRecipients) {
-    const recipient = raw.trim()
-    if (!isValidEmailAddress(recipient)) throw new Error('Email delivery contains an invalid recipient address.')
-    const key = recipient.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    to.push(recipient)
+    const recipient = raw.trim();
+    if (!isValidEmailAddress(recipient))
+      throw new Error("Email delivery contains an invalid recipient address.");
+    const key = recipient.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    to.push(recipient);
   }
-  if (to.length === 0) throw new Error('At least one email recipient is required.')
+  if (to.length === 0) throw new Error("At least one email recipient is required.");
   if (options.requireSingleRecipient && to.length !== 1) {
-    throw new Error('Provider delivery requires exactly one recipient per message.')
+    throw new Error("Provider delivery requires exactly one recipient per message.");
   }
 
-  let replyTo: string | undefined
+  let replyTo: string | undefined;
   if (input.replyTo !== undefined) {
-    replyTo = input.replyTo.trim()
-    if (!isValidEmailAddress(replyTo)) throw new Error('Email reply-to address is invalid.')
+    replyTo = input.replyTo.trim();
+    if (!isValidEmailAddress(replyTo)) throw new Error("Email reply-to address is invalid.");
   }
 
-  const subject = normalizeEmailSubject(input.subject)
-  if (!subject) throw new Error('Email subject is required.')
-  if (byteLength(input.html) > EMAIL_DELIVERY_LIMITS.htmlBytes) throw new Error(`Email HTML exceeds the ${EMAIL_DELIVERY_LIMITS.htmlBytes}-byte limit.`)
-  if (byteLength(input.text) > EMAIL_DELIVERY_LIMITS.textBytes) throw new Error(`Email text exceeds the ${EMAIL_DELIVERY_LIMITS.textBytes}-byte limit.`)
-  if (!input.html && !input.text) throw new Error('Email HTML or text content is required.')
+  const subject = normalizeEmailSubject(input.subject);
+  if (!subject) throw new Error("Email subject is required.");
+  if (byteLength(input.html) > EMAIL_DELIVERY_LIMITS.htmlBytes)
+    throw new Error(`Email HTML exceeds the ${EMAIL_DELIVERY_LIMITS.htmlBytes}-byte limit.`);
+  if (byteLength(input.text) > EMAIL_DELIVERY_LIMITS.textBytes)
+    throw new Error(`Email text exceeds the ${EMAIL_DELIVERY_LIMITS.textBytes}-byte limit.`);
+  if (!input.html && !input.text) throw new Error("Email HTML or text content is required.");
 
-  const attachments = input.attachments
+  const attachments = input.attachments;
   if (attachments && attachments.length > EMAIL_DELIVERY_LIMITS.attachments) {
-    throw new Error(`Email delivery exceeds the ${EMAIL_DELIVERY_LIMITS.attachments}-attachment limit.`)
+    throw new Error(
+      `Email delivery exceeds the ${EMAIL_DELIVERY_LIMITS.attachments}-attachment limit.`,
+    );
   }
-  let totalAttachmentBytes = 0
+  let totalAttachmentBytes = 0;
   for (const [index, attachment] of (attachments ?? []).entries()) {
-    totalAttachmentBytes += validateAttachment(attachment, index)
+    totalAttachmentBytes += validateAttachment(attachment, index);
     if (totalAttachmentBytes > EMAIL_DELIVERY_LIMITS.totalAttachmentBytes) {
-      throw new Error(`Email attachments exceed the ${EMAIL_DELIVERY_LIMITS.totalAttachmentBytes}-byte total limit.`)
+      throw new Error(
+        `Email attachments exceed the ${EMAIL_DELIVERY_LIMITS.totalAttachmentBytes}-byte total limit.`,
+      );
     }
   }
 
-  return { to, subject, html: input.html, text: input.text, ...(attachments ? { attachments } : {}), ...(replyTo ? { replyTo } : {}) }
+  return {
+    to,
+    subject,
+    html: input.html,
+    text: input.text,
+    ...(attachments ? { attachments } : {}),
+    ...(replyTo ? { replyTo } : {}),
+  };
 }

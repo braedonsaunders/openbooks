@@ -16,11 +16,8 @@ export type { JournalCreateBody };
 
 function journalFailure(error: unknown): never {
   if (error instanceof JournalCreateError) {
-    const code = error.status === 404
-      ? "not_found"
-      : error.status === 409
-        ? "conflict"
-        : "invalid_input";
+    const code =
+      error.status === 404 ? "not_found" : error.status === 409 ? "conflict" : "invalid_input";
     throw new ApplicationError(code, error.message, error.status, error.payload);
   }
   throw error;
@@ -61,6 +58,7 @@ export function parseJournalCreateBody(body: Record<string, unknown>): JournalCr
 }
 
 export function requireUuidIdempotencyKey(key: string): string {
-  if (!isUuid(key)) throw invalidInput("Idempotency-Key must be a UUID — it becomes the journal id");
+  if (!isUuid(key))
+    throw invalidInput("Idempotency-Key must be a UUID — it becomes the journal id");
   return key;
 }

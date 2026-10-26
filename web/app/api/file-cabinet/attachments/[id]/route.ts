@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  detachAttachment,
-  getAttachmentLink,
-} from "../../../../../lib/file-cabinet";
+import { detachAttachment, getAttachmentLink } from "../../../../../lib/file-cabinet";
 import { isUuid } from "../../../../../lib/list-params";
 import {
   attachmentReadPermission,
@@ -35,22 +32,15 @@ export const DELETE = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
 
     const link = await getAttachmentLink(gate.user.orgId, id);
-    if (!link)
-      return notFound("record");
-    const target = await loadAttachmentTarget(
-      gate.user.orgId,
-      link.targetTable,
-      link.targetId,
-    );
+    if (!link) return notFound("record");
+    const target = await loadAttachmentTarget(gate.user.orgId, link.targetTable, link.targetId);
     if (!target || !attachmentTargetInScope(gate, target)) {
       return notFound("record");
     }
-    if (!attachmentReadPermission(link.targetTable, target.kind))
-      return notFound("record");
+    if (!attachmentReadPermission(link.targetTable, target.kind)) return notFound("record");
     if (
       !(await canReadAttachmentTarget(gate, target)) ||
       !(await canMutateAttachmentTarget(gate, target))
@@ -63,12 +53,7 @@ export const DELETE = defineRoute({
       result = await detachAttachment(gate.user.orgId, id, {
         actorId: gate.user.id,
         authorizeAttachmentTarget: (tx, target) =>
-          authorizeAttachmentTargetMutation(
-            gate,
-            target.targetTable,
-            target.targetId,
-            tx,
-          ),
+          authorizeAttachmentTargetMutation(gate, target.targetTable, target.targetId, tx),
       });
     } catch (error) {
       const refusal = attachmentMutationRefusal(error);

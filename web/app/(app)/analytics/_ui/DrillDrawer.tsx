@@ -1,16 +1,27 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
-import { useEffect, useMemo, useState } from 'react'
-import { Search } from 'lucide-react'
-import { cn, Drawer, Input } from '@openbooks/ui'
-import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney } from '@openbooks/engine/money/money'
-import { TxnLink } from '../../reports/TxnLink'
-import { GroupedBar } from './charts'
-import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
-import { refusalMessage } from './fetch-refusal'
-import { useLocale } from 'next-intl'
-import { dateLabel, monthYearLabel } from '@/lib/format'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "../../reports/ReportTable";
+import { useEffect, useMemo, useState } from "react";
+import { Search } from "lucide-react";
+import { cn, Drawer, Input } from "@openbooks/ui";
+import {
+  abs as absoluteMoney,
+  cmp as compareMoney,
+  div as divideMoney,
+} from "@openbooks/engine/money/money";
+import { TxnLink } from "../../reports/TxnLink";
+import { GroupedBar } from "./charts";
+import { formatExactPercent, toChartNumber, useAnalyticsMoney } from "./format";
+import { refusalMessage } from "./fetch-refusal";
+import { useLocale } from "next-intl";
+import { dateLabel, monthYearLabel } from "@/lib/format";
 
 /**
  * Shared analytics drill-down drawer — the openbooks implementation of'
@@ -20,146 +31,180 @@ import { dateLabel, monthYearLabel } from '@/lib/format'
  * preloaded window.
  */
 export interface DrillReconRow {
-  label: string
+  label: string;
   /** Waterfall-signed exact decimal: recognized = invoiced + every row. */
-  amount: string
+  amount: string;
 }
 
 export interface DrillTarget {
-  kind: 'account' | 'party'
-  id: string
-  name: string
+  kind: "account" | "party";
+  id: string;
+  name: string;
   /** Optional context line under the title (e.g. account number, tier). */
-  sub?: string
+  sub?: string;
   /**
    * Optional invoiced→recognized bridge (customer drill only). Labels arrive
    * translated from the caller so this shared drawer stays namespace-dumb;
    * rendered as a reconciliation section above the transaction list.
    */
   recon?: {
-    title: string
-    invoicedLabel: string
-    invoiced: string
-    recognizedLabel: string
-    recognized: string
-    rows: DrillReconRow[]
-  } | null
+    title: string;
+    invoicedLabel: string;
+    invoiced: string;
+    recognizedLabel: string;
+    recognized: string;
+    rows: DrillReconRow[];
+  } | null;
 }
 
 interface DrillEntry {
-  date: string
-  entryId: string | null
-  docId: string | null
-  docKind: string | null
-  docNumber: string
-  label: string
-  memo: string
-  amount: string
+  date: string;
+  entryId: string | null;
+  docId: string | null;
+  docKind: string | null;
+  docNumber: string;
+  label: string;
+  memo: string;
+  amount: string;
 }
 
 interface DrillData {
-  mode: 'account' | 'party'
-  total: string
-  count: number
-  entries: DrillEntry[]
-  monthly: { month: string; amount: string }[]
-  breakdown: { name: string; amount: string; count: number }[]
+  mode: "account" | "party";
+  total: string;
+  count: number;
+  entries: DrillEntry[];
+  monthly: { month: string; amount: string }[];
+  breakdown: { name: string; amount: string; count: number }[];
 }
 
-const PAGE = 50
+const PAGE = 50;
 const KIND_LABEL: Record<string, string> = {
-  vendor_bill: 'Bill',
-  vendor_credit: 'Vendor Credit',
-  vendor_payment: 'Payment',
-  customer_invoice: 'Invoice',
-  customer_credit: 'Credit Memo',
-  customer_payment: 'Customer Payment',
-  expense_report: 'Expense Report',
-  purchase_order: 'PO',
-  sales_order: 'SO',
-  check: 'Check',
-  journal: 'Journal',
-  deposit: 'Deposit',
-  transfer: 'Transfer',
-  card_charge: 'Card Charge',
-  card_refund: 'Card Refund',
-}
-const kindLabel = (k: string | null) => (k ? (KIND_LABEL[k] ?? k.replace(/_/g, ' ')) : 'Journal')
+  vendor_bill: "Bill",
+  vendor_credit: "Vendor Credit",
+  vendor_payment: "Payment",
+  customer_invoice: "Invoice",
+  customer_credit: "Credit Memo",
+  customer_payment: "Customer Payment",
+  expense_report: "Expense Report",
+  purchase_order: "PO",
+  sales_order: "SO",
+  check: "Check",
+  journal: "Journal",
+  deposit: "Deposit",
+  transfer: "Transfer",
+  card_charge: "Card Charge",
+  card_refund: "Card Refund",
+};
+const kindLabel = (k: string | null) => (k ? (KIND_LABEL[k] ?? k.replace(/_/g, " ")) : "Journal");
 
-export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget | null; from: string; to: string; onClose: () => void }) {
-  const locale = useLocale()
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string | number) => fmtMoney(n, { compact: true })
-  const [data, setData] = useState<DrillData | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [view, setView] = useState<'txns' | 'breakdown' | 'trend'>('txns')
-  const [query, setQuery] = useState('')
-  const [page, setPage] = useState(1)
+export function DrillDrawer({
+  target,
+  from,
+  to,
+  onClose,
+}: {
+  target: DrillTarget | null;
+  from: string;
+  to: string;
+  onClose: () => void;
+}) {
+  const locale = useLocale();
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: string | number) => fmtMoney(n, { compact: true });
+  const [data, setData] = useState<DrillData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"txns" | "breakdown" | "trend">("txns");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
 
   // Reset the drill state when its inputs change, during render (same
   // committed values, no extra render — and no one-commit flash of the
   // previous target's rows while the new fetch is in flight).
-  const [prevTarget, setPrevTarget] = useState(target)
-  const [prevFrom, setPrevFrom] = useState(from)
-  const [prevTo, setPrevTo] = useState(to)
+  const [prevTarget, setPrevTarget] = useState(target);
+  const [prevFrom, setPrevFrom] = useState(from);
+  const [prevTo, setPrevTo] = useState(to);
   if (prevTarget !== target || prevFrom !== from || prevTo !== to) {
-    setPrevTarget(target)
-    setPrevFrom(from)
-    setPrevTo(to)
-    setData(null)
-    setError(null)
-    setView('txns')
-    setQuery('')
-    setPage(1)
+    setPrevTarget(target);
+    setPrevFrom(from);
+    setPrevTo(to);
+    setData(null);
+    setError(null);
+    setView("txns");
+    setQuery("");
+    setPage(1);
   }
 
   useEffect(() => {
-    if (!target) return
-    const ctrl = new AbortController()
-    fetch(`/api/analytics/drill?${target.kind}=${target.id}&from=${from}&to=${to}`, { signal: ctrl.signal })
+    if (!target) return;
+    const ctrl = new AbortController();
+    fetch(`/api/analytics/drill?${target.kind}=${target.id}&from=${from}&to=${to}`, {
+      signal: ctrl.signal,
+    })
       .then(async (r) => {
         // The drill route refuses with a NAMED 422 (e.g. "no spot rate for
         // EUR→USD on or before DATE — add it at Setup → Exchange Rates"):
         // surface the refusal body, not just
         // the status, or the drawer reports a generic load failure.
-        if (!r.ok) throw new Error(await refusalMessage(r))
-        return r.json()
+        if (!r.ok) throw new Error(await refusalMessage(r));
+        return r.json();
       })
       .then(setData)
-      .catch((e) => { if (e.name !== 'AbortError') setError(String(e.message ?? e)) })
-    return () => ctrl.abort()
-  }, [target, from, to])
+      .catch((e) => {
+        if (e.name !== "AbortError") setError(String(e.message ?? e));
+      });
+    return () => ctrl.abort();
+  }, [target, from, to]);
 
   const filtered = useMemo(() => {
-    if (!data) return []
-    const needle = query.trim().toLowerCase()
-    if (!needle) return data.entries
-    return data.entries.filter((e) => e.label.toLowerCase().includes(needle) || e.memo.toLowerCase().includes(needle) || e.docNumber.toLowerCase().includes(needle))
-  }, [data, query])
+    if (!data) return [];
+    const needle = query.trim().toLowerCase();
+    if (!needle) return data.entries;
+    return data.entries.filter(
+      (e) =>
+        e.label.toLowerCase().includes(needle) ||
+        e.memo.toLowerCase().includes(needle) ||
+        e.docNumber.toLowerCase().includes(needle),
+    );
+  }, [data, query]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE))
-  const pageNo = Math.min(page, totalPages)
-  const pageRows = filtered.slice((pageNo - 1) * PAGE, pageNo * PAGE)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE));
+  const pageNo = Math.min(page, totalPages);
+  const pageRows = filtered.slice((pageNo - 1) * PAGE, pageNo * PAGE);
 
-  if (!target) return null
+  if (!target) return null;
   const monthLabel = (ym: string) => {
-    const [y, m] = ym.split('-').map(Number)
-    return monthYearLabel(new Date(Date.UTC(y!, m! - 1, 1)), locale)
-  }
-  const fmtDate = (d: string) => dateLabel(new Date(d + 'T00:00:00Z'), locale)
+    const [y, m] = ym.split("-").map(Number);
+    return monthYearLabel(new Date(Date.UTC(y!, m! - 1, 1)), locale);
+  };
+  const fmtDate = (d: string) => dateLabel(new Date(d + "T00:00:00Z"), locale);
 
   return (
-    <Drawer open onClose={onClose} size="lg" title={target.name} description={target.sub ?? `${from} – ${to}`} bodyClassName="overflow-hidden flex flex-col p-0">
+    <Drawer
+      open
+      onClose={onClose}
+      size="lg"
+      title={target.name}
+      description={target.sub ?? `${from} – ${to}`}
+      bodyClassName="overflow-hidden flex flex-col p-0"
+    >
       {/* Stat strip */}
       <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-100 dark:divide-slate-800 dark:border-slate-800">
         {[
-          { label: 'Total', value: data ? money(data.total) : '…' },
-          { label: 'Transactions', value: data ? String(data.count) : '…' },
-          { label: 'Avg', value: data && data.count > 0 ? money(divideMoney(data.total, String(data.count))) : '…' },
+          { label: "Total", value: data ? money(data.total) : "…" },
+          { label: "Transactions", value: data ? String(data.count) : "…" },
+          {
+            label: "Avg",
+            value:
+              data && data.count > 0 ? money(divideMoney(data.total, String(data.count))) : "…",
+          },
         ].map((s) => (
           <div key={s.label} className="px-5 py-3 text-center">
-            <p className="text-lg font-semibold text-slate-800 tabular-nums dark:text-slate-100">{s.value}</p>
-            <p className="text-[10px] font-medium tracking-wider text-slate-400 uppercase dark:text-slate-500">{s.label}</p>
+            <p className="text-lg font-semibold text-slate-800 tabular-nums dark:text-slate-100">
+              {s.value}
+            </p>
+            <p className="text-[10px] font-medium tracking-wider text-slate-400 uppercase dark:text-slate-500">
+              {s.label}
+            </p>
           </div>
         ))}
       </div>
@@ -167,23 +212,40 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
       {/* Revenue reconciliation (customer drill carries the bridge) */}
       {target.recon ? (
         <div className="border-b border-slate-100 px-5 py-3 dark:border-slate-800">
-          <p className="mb-1.5 text-[10px] font-medium tracking-wider text-slate-400 uppercase dark:text-slate-500">{target.recon.title}</p>
+          <p className="mb-1.5 text-[10px] font-medium tracking-wider text-slate-400 uppercase dark:text-slate-500">
+            {target.recon.title}
+          </p>
           <dl className="space-y-1 text-xs">
             <div className="flex items-center justify-between">
               <dt className="text-slate-500 dark:text-slate-400">{target.recon.invoicedLabel}</dt>
-              <dd className="font-medium text-slate-700 tabular-nums dark:text-slate-200">{money(target.recon.invoiced)}</dd>
+              <dd className="font-medium text-slate-700 tabular-nums dark:text-slate-200">
+                {money(target.recon.invoiced)}
+              </dd>
             </div>
             {target.recon.rows.map((row) => (
               <div key={row.label} className="flex items-center justify-between">
                 <dt className="text-slate-500 dark:text-slate-400">{row.label}</dt>
-                <dd className={cn('tabular-nums', compareMoney(row.amount, '0') < 0 ? 'text-slate-500 dark:text-slate-400' : 'text-slate-700 dark:text-slate-200')}>
-                  {compareMoney(row.amount, '0') < 0 ? `−${money(absoluteMoney(row.amount))}` : `+${money(row.amount)}`}
+                <dd
+                  className={cn(
+                    "tabular-nums",
+                    compareMoney(row.amount, "0") < 0
+                      ? "text-slate-500 dark:text-slate-400"
+                      : "text-slate-700 dark:text-slate-200",
+                  )}
+                >
+                  {compareMoney(row.amount, "0") < 0
+                    ? `−${money(absoluteMoney(row.amount))}`
+                    : `+${money(row.amount)}`}
                 </dd>
               </div>
             ))}
             <div className="flex items-center justify-between border-t border-slate-100 pt-1 dark:border-slate-800">
-              <dt className="font-medium text-slate-700 dark:text-slate-200">{target.recon.recognizedLabel}</dt>
-              <dd className="font-semibold text-slate-800 tabular-nums dark:text-slate-100">{money(target.recon.recognized)}</dd>
+              <dt className="font-medium text-slate-700 dark:text-slate-200">
+                {target.recon.recognizedLabel}
+              </dt>
+              <dd className="font-semibold text-slate-800 tabular-nums dark:text-slate-100">
+                {money(target.recon.recognized)}
+              </dd>
             </div>
           </dl>
         </div>
@@ -193,9 +255,9 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
       <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
         {(
           [
-            ['txns', 'Transactions'],
-            ['breakdown', data?.mode === 'account' ? 'By Party' : 'By Type'],
-            ['trend', 'Monthly Trend'],
+            ["txns", "Transactions"],
+            ["breakdown", data?.mode === "account" ? "By Party" : "By Type"],
+            ["trend", "Monthly Trend"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -203,17 +265,30 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
             type="button"
             onClick={() => setView(k)}
             className={cn(
-              'rounded-full border px-2.5 py-1 text-xs font-medium',
-              view === k ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400',
+              "rounded-full border px-2.5 py-1 text-xs font-medium",
+              view === k
+                ? "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300"
+                : "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400",
             )}
           >
             {label}
           </button>
         ))}
-        {view === 'txns' ? (
+        {view === "txns" ? (
           <div className="relative ml-auto w-48">
-            <Search size={13} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" />
-            <Input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1) }} placeholder="Search…" className="h-7 pl-8 text-xs" />
+            <Search
+              size={13}
+              className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
+            />
+            <Input
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search…"
+              className="h-7 pl-8 text-xs"
+            />
           </div>
         ) : null}
       </div>
@@ -223,60 +298,130 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
           <p className="px-6 py-8 text-center text-sm text-red-500">Failed to load: {error}</p>
         ) : !data ? (
           <p className="px-6 py-8 text-center text-sm text-slate-400">Loading…</p>
-        ) : view === 'trend' ? (
+        ) : view === "trend" ? (
           <div className="p-4">
-            <GroupedBar labels={data.monthly.map((m) => monthLabel(m.month))} height={260} series={[{ name: 'Amount', data: data.monthly.map((m) => toChartNumber(m.amount)), color: '#0d9488' }]} />
+            <GroupedBar
+              labels={data.monthly.map((m) => monthLabel(m.month))}
+              height={260}
+              series={[
+                {
+                  name: "Amount",
+                  data: data.monthly.map((m) => toChartNumber(m.amount)),
+                  color: "#0d9488",
+                },
+              ]}
+            />
           </div>
-        ) : view === 'breakdown' ? (
+        ) : view === "breakdown" ? (
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="px-6 py-2 text-left font-medium">{data.mode === 'account' ? 'Party' : 'Document Type'}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2 text-right font-medium">Count</SharedTableHead>
-                <SharedTableHead className="px-3 py-2 text-right font-medium">Amount</SharedTableHead>
-                <SharedTableHead className="px-6 py-2 text-right font-medium">Share</SharedTableHead>
+                <SharedTableHead className="px-6 py-2 text-left font-medium">
+                  {data.mode === "account" ? "Party" : "Document Type"}
+                </SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right font-medium">
+                  Count
+                </SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right font-medium">
+                  Amount
+                </SharedTableHead>
+                <SharedTableHead className="px-6 py-2 text-right font-medium">
+                  Share
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
               {data.breakdown.map((b) => (
-                <SharedTableRow key={b.name} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                  <SharedTableCell className="px-6 py-2.5 text-slate-700 dark:text-slate-300">{data.mode === 'party' ? kindLabel(b.name) : b.name}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{b.count}</SharedTableCell>
-                  <SharedTableCell className="px-3 py-2.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(b.amount)}</SharedTableCell>
-                  <SharedTableCell className="px-6 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">{compareMoney(absoluteMoney(data.total), '0.0000') > 0 ? formatExactPercent(divideMoney(absoluteMoney(b.amount), absoluteMoney(data.total)), 1) : '—'}</SharedTableCell>
+                <SharedTableRow
+                  key={b.name}
+                  className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
+                >
+                  <SharedTableCell className="px-6 py-2.5 text-slate-700 dark:text-slate-300">
+                    {data.mode === "party" ? kindLabel(b.name) : b.name}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                    {b.count}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-3 py-2.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">
+                    {money(b.amount)}
+                  </SharedTableCell>
+                  <SharedTableCell className="px-6 py-2.5 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                    {compareMoney(absoluteMoney(data.total), "0.0000") > 0
+                      ? formatExactPercent(
+                          divideMoney(absoluteMoney(b.amount), absoluteMoney(data.total)),
+                          1,
+                        )
+                      : "—"}
+                  </SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
           </SharedTable>
         ) : filtered.length === 0 ? (
-          <p className="px-6 py-8 text-center text-sm text-slate-400">{query ? 'No transactions match your search.' : 'No transactions in this period.'}</p>
+          <p className="px-6 py-8 text-center text-sm text-slate-400">
+            {query ? "No transactions match your search." : "No transactions in this period."}
+          </p>
         ) : (
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
                 <SharedTableHead className="px-6 py-2 text-left font-medium">Date</SharedTableHead>
-                <SharedTableHead className="px-3 py-2 text-left font-medium">Document</SharedTableHead>
-                <SharedTableHead className="px-3 py-2 text-left font-medium">{data.mode === 'account' ? 'Party' : 'Type'}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-left font-medium">
+                  Document
+                </SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-left font-medium">
+                  {data.mode === "account" ? "Party" : "Type"}
+                </SharedTableHead>
                 <SharedTableHead className="px-3 py-2 text-left font-medium">Memo</SharedTableHead>
-                <SharedTableHead className="px-6 py-2 text-right font-medium">Amount</SharedTableHead>
+                <SharedTableHead className="px-6 py-2 text-right font-medium">
+                  Amount
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
               {pageRows.map((e, i) => (
-                <SharedTableRow key={`${e.entryId ?? e.docId}-${i}`} className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
-                  <SharedTableCell className="px-6 py-2 text-xs whitespace-nowrap tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(e.date)}</SharedTableCell>
+                <SharedTableRow
+                  key={`${e.entryId ?? e.docId}-${i}`}
+                  className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
+                >
+                  <SharedTableCell className="px-6 py-2 text-xs whitespace-nowrap tabular-nums text-slate-500 dark:text-slate-400">
+                    {fmtDate(e.date)}
+                  </SharedTableCell>
                   <SharedTableCell className="px-3 py-2">
                     {e.entryId || e.docId ? (
-                      <TxnLink entryId={e.entryId ?? ''} docKind={e.docKind} docId={e.docId} className="font-medium text-slate-700 group-hover:text-teal-700 dark:text-slate-200 dark:group-hover:text-teal-300">
+                      <TxnLink
+                        entryId={e.entryId ?? ""}
+                        docKind={e.docKind}
+                        docId={e.docId}
+                        className="font-medium text-slate-700 group-hover:text-teal-700 dark:text-slate-200 dark:group-hover:text-teal-300"
+                      >
                         {e.docNumber || kindLabel(e.docKind)}
                       </TxnLink>
                     ) : (
-                      <span className="text-slate-500 dark:text-slate-400">{e.docNumber || '—'}</span>
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {e.docNumber || "—"}
+                      </span>
                     )}
                   </SharedTableCell>
-                  <SharedTableCell className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{data.mode === 'account' ? e.label : kindLabel(e.docKind)}</SharedTableCell>
-                  <SharedTableCell className="max-w-48 truncate px-3 py-2 text-xs text-slate-400 dark:text-slate-500" title={e.memo}>{e.memo || '—'}</SharedTableCell>
-                  <SharedTableCell className={cn('px-6 py-2 text-right font-medium tabular-nums', compareMoney(e.amount, '0.0000') < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200')}>{money(e.amount)}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+                    {data.mode === "account" ? e.label : kindLabel(e.docKind)}
+                  </SharedTableCell>
+                  <SharedTableCell
+                    className="max-w-48 truncate px-3 py-2 text-xs text-slate-400 dark:text-slate-500"
+                    title={e.memo}
+                  >
+                    {e.memo || "—"}
+                  </SharedTableCell>
+                  <SharedTableCell
+                    className={cn(
+                      "px-6 py-2 text-right font-medium tabular-nums",
+                      compareMoney(e.amount, "0.0000") < 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-slate-800 dark:text-slate-200",
+                    )}
+                  >
+                    {money(e.amount)}
+                  </SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
@@ -285,21 +430,40 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
       </div>
 
       {/* Footer: pagination + truncation note */}
-      {data && view === 'txns' && (filtered.length > PAGE || data.count > data.entries.length) ? (
+      {data && view === "txns" && (filtered.length > PAGE || data.count > data.entries.length) ? (
         <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
           <span>
-            Showing {(pageNo - 1) * PAGE + 1}–{Math.min(pageNo * PAGE, filtered.length)} of {filtered.length}
-            {data.count > data.entries.length ? ` (detail capped at ${data.entries.length} of ${data.count})` : ''}
+            Showing {(pageNo - 1) * PAGE + 1}–{Math.min(pageNo * PAGE, filtered.length)} of{" "}
+            {filtered.length}
+            {data.count > data.entries.length
+              ? ` (detail capped at ${data.entries.length} of ${data.count})`
+              : ""}
           </span>
           {totalPages > 1 ? (
             <div className="flex items-center gap-1">
-              <button type="button" disabled={pageNo <= 1} onClick={() => setPage(pageNo - 1)} className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Prev</button>
-              <span className="px-2 tabular-nums">{pageNo} / {totalPages}</span>
-              <button type="button" disabled={pageNo >= totalPages} onClick={() => setPage(pageNo + 1)} className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Next</button>
+              <button
+                type="button"
+                disabled={pageNo <= 1}
+                onClick={() => setPage(pageNo - 1)}
+                className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                Prev
+              </button>
+              <span className="px-2 tabular-nums">
+                {pageNo} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={pageNo >= totalPages}
+                onClick={() => setPage(pageNo + 1)}
+                className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                Next
+              </button>
             </div>
           ) : null}
         </div>
       ) : null}
     </Drawer>
-  )
+  );
 }

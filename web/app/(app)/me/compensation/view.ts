@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import {
   column,
   field as item,
@@ -14,9 +14,9 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { getAuthz } from '../../../../lib/authz'
-import { loadMyCompensation, myCompRefusal } from '../../../../lib/hrm/compensation'
+} from "@braedonsaunders/appkit-viewspec";
+import { getAuthz } from "../../../../lib/authz";
+import { loadMyCompensation, myCompRefusal } from "../../../../lib/hrm/compensation";
 
 /**
  * My compensation — band placement, statements with PDFs, and the
@@ -27,19 +27,21 @@ import { loadMyCompensation, myCompRefusal } from '../../../../lib/hrm/compensat
  * refusal — neither is an ambiguous 404.
  */
 
-const f = item
+const f = item;
 
-export function myCompSpec(data: NonNullable<Awaited<ReturnType<typeof loadMyCompensation>>>): PageSpec {
+export function myCompSpec(
+  data: NonNullable<Awaited<ReturnType<typeof loadMyCompensation>>>,
+): PageSpec {
   return page({
-    route: '/me/compensation',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/me/compensation",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
+        actions: [widget("module-home-tabs", { tabs: data.tabs })],
       }),
     ],
     body: [
@@ -47,64 +49,78 @@ export function myCompSpec(data: NonNullable<Awaited<ReturnType<typeof loadMyCom
       // (the shared mechanism, same as /me, documents, surveys and the
       // clock).
       widgetBlock(
-        'empty-state',
+        "empty-state",
         {
-          title: data.refusal?.title ?? '',
+          title: data.refusal?.title ?? "",
           description: data.refusal?.message,
         },
-        f('refusal'),
+        f("refusal"),
       ),
       // Linked but no band and no statement: the explicit empty state —
       // the pay-information request below is the next step.
       widgetBlock(
-        'empty-state',
+        "empty-state",
         {
           title: data.emptyTitle,
           description: data.emptyDescription,
         },
-        f('showEmpty'),
+        f("showEmpty"),
       ),
       {
         ...panel({
-          title: f('placementLabel'),
-          blocks: [widgetBlock('hrm-placement-summary', { placement: f('placement'), compaRatio: f('compaRatio'), bandRange: f('bandRange') })],
+          title: f("placementLabel"),
+          blocks: [
+            widgetBlock("hrm-placement-summary", {
+              placement: f("placement"),
+              compaRatio: f("compaRatio"),
+              bandRange: f("bandRange"),
+            }),
+          ],
         }),
-        when: f('hasContent'),
+        when: f("hasContent"),
       },
       // Statements render as a direct list under a house heading; the
       // placement panel above stays — it is the summary, not a list.
       {
-        ...heading(2, f('statementsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-        when: f('hasContent'),
+        ...heading(
+          2,
+          f("statementsTitle"),
+          "text-sm font-semibold text-slate-900 dark:text-slate-100",
+        ),
+        when: f("hasContent"),
       },
       {
-        ...registeredListTable('me_compensation_statements', {
-          variant: 'app',
-          rows: f('statements'),
-          rowKey: item('id'),
-          empty: { title: f('statementsEmpty') },
+        ...registeredListTable("me_compensation_statements", {
+          variant: "app",
+          rows: f("statements"),
+          rowKey: item("id"),
+          empty: { title: f("statementsEmpty") },
           columns: [
-            column(f('statementsColumns.period'), text(item('period'))),
-            column(f('statementsColumns.generated'), text(item('generated'))),
+            column(f("statementsColumns.period"), text(item("period"))),
+            column(f("statementsColumns.generated"), text(item("generated"))),
           ],
         }),
-        when: f('hasContent'),
+        when: f("hasContent"),
       },
-      widgetBlock('hrm-pay-info-request', {
-        employmentId: f('employmentId'),
-        requestLabel: f('requestLabel'),
-        requestStatus: f('requestStatus'),
-        failed: f('requestFailed'),
-        submit: f('requestSubmit'),
-        cancel: f('requestCancel'),
-      }, f('canRequest')),
+      widgetBlock(
+        "hrm-pay-info-request",
+        {
+          employmentId: f("employmentId"),
+          requestLabel: f("requestLabel"),
+          requestStatus: f("requestStatus"),
+          failed: f("requestFailed"),
+          submit: f("requestSubmit"),
+          cancel: f("requestCancel"),
+        },
+        f("canRequest"),
+      ),
     ],
-  })
+  });
 }
 
 export async function myCompTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('myComp.title')
+  const t = await getTranslations("hrm");
+  return t("myComp.title");
 }
 
 export async function loadMyCompPage(sp: Record<string, string | undefined>) {
@@ -116,10 +132,10 @@ export async function loadMyCompPage(sp: Record<string, string | undefined>) {
   // employment arrives as a refusal-carrying row (the noEmployment
   // remedy), and a linked person with no band and no statement returns
   // its row with hasContent false, and the spec renders the empty state.
-  const authz = await getAuthz()
-  if (!authz) notFound()
-  const data = await loadMyCompensation(authz)
-  if (!data) return myCompRefusal(authz)
-  void sp
-  return data
+  const authz = await getAuthz();
+  if (!authz) notFound();
+  const data = await loadMyCompensation(authz);
+  if (!data) return myCompRefusal(authz);
+  void sp;
+  return data;
 }

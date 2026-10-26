@@ -4,7 +4,12 @@ import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../records/open-item-kin
 import { apOpenAccountScope, openItemsAsOfSql } from "../records/open-item-scopes.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { excludePeriodEndJournals, statementMonthActivity } from "../records/period-end-origins.ts";
-import { addCalendarDays, businessToday, calendarDaysBetween, parseIsoDate } from "../platform/business-date.ts";
+import {
+  addCalendarDays,
+  businessToday,
+  calendarDaysBetween,
+  parseIsoDate,
+} from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
@@ -42,11 +47,15 @@ const businessDay = (iso: string): string => {
 
 /** The org's base (functional) currency — the consolidated presentation currency. */
 async function cashBaseCurrency(orgId: string): Promise<string> {
-  const res = await db.execute<{ baseCurrency: string | null }>(sql`
+  const res = await db.execute<{ baseCurrency: string | null }>(
+    sql`
     select base_currency as "baseCurrency" from orgs where id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const base = res[0]?.baseCurrency;
-  if (typeof base !== "string" || !base) throw new Error(`organization ${orgId} has no base currency`);
+  if (typeof base !== "string" || !base)
+    throw new Error(`organization ${orgId} has no base currency`);
   return base;
 }
 
@@ -65,7 +74,8 @@ async function closingSpotRates(
   const needed = [...new Set(froms.map((c) => c ?? base))].filter((c) => c !== base);
   const rates = new Map<string, string>([[base, "1"]]);
   if (needed.length === 0) return rates;
-  const res = await db.execute<{ from_currency: string; rate: string }>(sql`
+  const res = await db.execute<{ from_currency: string; rate: string }>(
+    sql`
     select distinct on (s.from_currency) s.from_currency, s.rate::text as rate
       from (
         select from_currency, rate, as_of, 0 as priority from fx_rates
@@ -79,7 +89,9 @@ async function closingSpotRates(
            and as_of <= ${refDate}::date
       ) s
      order by s.from_currency, s.as_of desc, s.priority asc
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const row of res) rates.set(row.from_currency, row.rate);
   const missing = needed.filter((c) => !rates.has(c));
   if (missing.length > 0) {
@@ -105,7 +117,8 @@ async function bankAccountBalances(
   base: string,
   asOf: string,
 ): Promise<{ id: string; name: string; number: string | null; balance: string }[]> {
-  const res = await db.execute<Record<string, unknown>>(sql`
+  const res = await db.execute<Record<string, unknown>>(
+    sql`
     with bank_accounts as (
       select id from accounts
        where org_id = ${orgId} and type = 'asset_bank' and is_summary = false and is_active
@@ -138,7 +151,9 @@ async function bankAccountBalances(
       left join movement m on m.account_id = a.id
      where a.org_id = ${orgId} and a.type = 'asset_bank' and a.is_summary = false and a.is_active
      group by a.id, a.name, a.number, m.func
-  `, "objects");
+  `,
+    "objects",
+  );
   const legs = res.map((row) => ({
     id: String(row.id),
     name: String(row.name),
@@ -152,9 +167,17 @@ async function bankAccountBalances(
     legs.map((leg) => leg.func),
     asOf,
   );
-  const byAccount = new Map<string, { id: string; name: string; number: string | null; legs: string[] }>();
+  const byAccount = new Map<
+    string,
+    { id: string; name: string; number: string | null; legs: string[] }
+  >();
   for (const leg of legs) {
-    const cur = byAccount.get(leg.id) ?? { id: leg.id, name: leg.name, number: leg.number, legs: [] };
+    const cur = byAccount.get(leg.id) ?? {
+      id: leg.id,
+      name: leg.name,
+      number: leg.number,
+      legs: [],
+    };
     cur.legs.push(mulDecimal(leg.balance, rates.get(lineFunctional(leg.func, base))!));
     byAccount.set(leg.id, cur);
   }
@@ -201,7 +224,8 @@ async function sideOpenItems(
     creditKind: side === "ap" ? "vendor_credit" : "customer_credit",
     normalSign: side === "ap" ? "credit" : "debit",
   });
-  const res = await db.execute<Record<string, unknown>>(sql`
+  const res = await db.execute<Record<string, unknown>>(
+    sql`
     with oi as materialized (${items})
     select oi.id::text as id, oi.party_id::text as party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
@@ -211,7 +235,9 @@ async function sideOpenItems(
       from oi
       left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
       left join subsidiaries sub on sub.id = oi.subsidiary_id and sub.org_id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const rows = res.map((row) => ({
     id: String(row.id),
     partyId: (row.party_id as string | null) ?? null,
@@ -237,11 +263,16 @@ async function sideOpenItems(
     partyName: row.partyName,
     tranDate: row.tranDate,
     dueDate: row.dueDate,
-    remaining: normalizeMoney(mulDecimal(row.remaining, rates.get(lineFunctional(row.func, base))!)),
+    remaining: normalizeMoney(
+      mulDecimal(row.remaining, rates.get(lineFunctional(row.func, base))!),
+    ),
   }));
 }
 
-export type SettlementStats = { map: Map<string, { avg: number; sd: number }>; globalAvg: number | null };
+export type SettlementStats = {
+  map: Map<string, { avg: number; sd: number }>;
+  globalAvg: number | null;
+};
 
 /**
  * The prediction knobs behind predictItem — the same ladder the cockpit's
@@ -294,7 +325,8 @@ async function settlementStats(
   historyDays = 365,
 ): Promise<SettlementStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
-  const res = await db.execute<{ id: string; avg_days: string; sd_days: string; n: string }>(sql`
+  const res = await db.execute<{ id: string; avg_days: string; sd_days: string; n: string }>(
+    sql`
     with stats as (
       select party_id, settled_on, n, sum_days, sum_days_sq
         from party_payment_stats
@@ -311,7 +343,9 @@ async function settlementStats(
       from stats
      group by party_id
     having sum(n) > 0
-  `, "objects");
+  `,
+    "objects",
+  );
   const map = new Map<string, { avg: number; sd: number }>();
   let total = 0;
   let count = 0;
@@ -372,11 +406,12 @@ export function predictItem(
   // Overdue → push forward on the configured ladder.
   if (date < asOf) {
     const overdue = calendarDaysBetween(date, asOf);
-    const push = overdue > model.overdueLongThresholdDays
-      ? model.overduePushLongDays
-      : overdue > model.overdueMidThresholdDays
-        ? model.overduePushMidDays
-        : model.overduePushShortDays;
+    const push =
+      overdue > model.overdueLongThresholdDays
+        ? model.overduePushLongDays
+        : overdue > model.overdueMidThresholdDays
+          ? model.overduePushMidDays
+          : model.overduePushShortDays;
     date = addCalendarDays(asOf, push);
     method = "Overdue push";
   }
@@ -389,8 +424,15 @@ export function predictItem(
  * else posting date). Unapplied credits (negative balances) never qualify:
  * they net against future receipts.
  */
-export function beyondCollectibilityHorizon(item: OpenItem, asOf: string, model: CashPredictionModel): boolean {
-  return cmp(item.remaining, "0.0000") > 0 && calendarDaysBetween(item.dueDate ?? item.tranDate, asOf) > model.collectibilityHorizonDays;
+export function beyondCollectibilityHorizon(
+  item: OpenItem,
+  asOf: string,
+  model: CashPredictionModel,
+): boolean {
+  return (
+    cmp(item.remaining, "0.0000") > 0 &&
+    calendarDaysBetween(item.dueDate ?? item.tranDate, asOf) > model.collectibilityHorizonDays
+  );
 }
 
 /**
@@ -520,9 +562,12 @@ async function cashflowSettings(orgId: string): Promise<{
   model: CashPredictionModel;
   historyMonths: number;
 }> {
-  const res = await db.execute<{ cfg: unknown }>(sql`
+  const res = await db.execute<{ cfg: unknown }>(
+    sql`
     select settings -> 'analytics' -> 'cashflow' as cfg from orgs where id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const stored = (res[0]?.cfg ?? {}) as {
     weeklyApCap?: unknown;
     restrictToSafe?: unknown;
@@ -545,20 +590,68 @@ async function cashflowSettings(orgId: string): Promise<{
   const restrictRaw = Number(stored.restrictToSafe ?? 0);
   const restrictToSafe = Number.isFinite(restrictRaw) && Math.min(1, Math.max(0, restrictRaw)) >= 1;
   // Clamp ranges mirror the config surface (config-spec cashflow knobs).
-  const num = (v: unknown, min: number, max: number, fallback: number, integer: boolean): number => {
+  const num = (
+    v: unknown,
+    min: number,
+    max: number,
+    fallback: number,
+    integer: boolean,
+  ): number => {
     const n = Number(v ?? fallback);
     if (!Number.isFinite(n)) return fallback;
     const clamped = Math.min(max, Math.max(min, n));
     return integer ? Math.round(clamped) : clamped;
   };
   const model: CashPredictionModel = {
-    settleBufferSigma: num(stored.settleBufferSigma, 0, 2, DEFAULT_PREDICTION_MODEL.settleBufferSigma, false),
-    overduePushShortDays: num(stored.overduePushShortDays, 0, 90, DEFAULT_PREDICTION_MODEL.overduePushShortDays, true),
-    overduePushMidDays: num(stored.overduePushMidDays, 0, 90, DEFAULT_PREDICTION_MODEL.overduePushMidDays, true),
-    overduePushLongDays: num(stored.overduePushLongDays, 0, 90, DEFAULT_PREDICTION_MODEL.overduePushLongDays, true),
-    overdueMidThresholdDays: num(stored.overdueMidThresholdDays, 1, 180, DEFAULT_PREDICTION_MODEL.overdueMidThresholdDays, true),
-    overdueLongThresholdDays: num(stored.overdueLongThresholdDays, 1, 180, DEFAULT_PREDICTION_MODEL.overdueLongThresholdDays, true),
-    collectibilityHorizonDays: num(stored.collectibilityHorizonDays, 1, 730, DEFAULT_PREDICTION_MODEL.collectibilityHorizonDays, true),
+    settleBufferSigma: num(
+      stored.settleBufferSigma,
+      0,
+      2,
+      DEFAULT_PREDICTION_MODEL.settleBufferSigma,
+      false,
+    ),
+    overduePushShortDays: num(
+      stored.overduePushShortDays,
+      0,
+      90,
+      DEFAULT_PREDICTION_MODEL.overduePushShortDays,
+      true,
+    ),
+    overduePushMidDays: num(
+      stored.overduePushMidDays,
+      0,
+      90,
+      DEFAULT_PREDICTION_MODEL.overduePushMidDays,
+      true,
+    ),
+    overduePushLongDays: num(
+      stored.overduePushLongDays,
+      0,
+      90,
+      DEFAULT_PREDICTION_MODEL.overduePushLongDays,
+      true,
+    ),
+    overdueMidThresholdDays: num(
+      stored.overdueMidThresholdDays,
+      1,
+      180,
+      DEFAULT_PREDICTION_MODEL.overdueMidThresholdDays,
+      true,
+    ),
+    overdueLongThresholdDays: num(
+      stored.overdueLongThresholdDays,
+      1,
+      180,
+      DEFAULT_PREDICTION_MODEL.overdueLongThresholdDays,
+      true,
+    ),
+    collectibilityHorizonDays: num(
+      stored.collectibilityHorizonDays,
+      1,
+      730,
+      DEFAULT_PREDICTION_MODEL.collectibilityHorizonDays,
+      true,
+    ),
   };
   const historyMonths = num(stored.paymentHistoryMonths, 3, 36, 12, true);
   return { weeklyCap, restrictToSafe, model, historyMonths };
@@ -576,7 +669,8 @@ export async function cashFindings(
   const balancePolicy = byKey.get("cash_low_balance");
   const crunchPolicy = byKey.get("cash_bill_crunch");
   const forecastPolicy = byKey.get("cash_forecast_shortfall");
-  if (!balancePolicy?.enabled && !crunchPolicy?.enabled && !forecastPolicy?.enabled) return findings;
+  if (!balancePolicy?.enabled && !crunchPolicy?.enabled && !forecastPolicy?.enabled)
+    return findings;
 
   const base = await cashBaseCurrency(orgId);
   const banks = await bankAccountBalances(orgId, base, today);
@@ -604,7 +698,12 @@ export async function cashFindings(
           shortfall,
           base,
           asOf: today,
-          accounts: banks.map((b) => ({ id: b.id, name: b.name, number: b.number, balance: b.balance })),
+          accounts: banks.map((b) => ({
+            id: b.id,
+            name: b.name,
+            number: b.number,
+            balance: b.balance,
+          })),
           href: CASH_HREF,
         },
         evidence: [
@@ -618,7 +717,9 @@ export async function cashFindings(
   }
 
   const apItems =
-    crunchPolicy?.enabled || forecastPolicy?.enabled ? await sideOpenItems(orgId, base, "ap", today) : [];
+    crunchPolicy?.enabled || forecastPolicy?.enabled
+      ? await sideOpenItems(orgId, base, "ap", today)
+      : [];
   const arItems = forecastPolicy?.enabled ? await sideOpenItems(orgId, base, "ar", today) : [];
 
   if (crunchPolicy?.enabled) {
@@ -705,7 +806,10 @@ export async function cashFindings(
       restrictToSafe: settings.restrictToSafe,
     });
     // The cockpit's own signal: the timeline's lowest point.
-    if (cmp(timeline.lowestCash, "0.0000") < 0 && cmp(moneyAbs(timeline.lowestCash), threshold) >= 0) {
+    if (
+      cmp(timeline.lowestCash, "0.0000") < 0 &&
+      cmp(moneyAbs(timeline.lowestCash), threshold) >= 0
+    ) {
       findings.push({
         agentKey: "cash",
         findingType: "cash_forecast_shortfall",

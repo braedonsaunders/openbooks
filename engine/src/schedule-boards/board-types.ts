@@ -48,34 +48,67 @@ const PEOPLE_VIEWS = ["grid", "targets", "timeline", "calendar"] as const;
 
 export const SCHEDULE_BOARD_TYPES: readonly ScheduleBoardTypeDefinition[] = [
   {
-    key: "people", rowKind: "people", capabilities: ["bookings"], views: PEOPLE_VIEWS, defaultViews: PEOPLE_VIEWS, defaultView: "grid", defaultGrain: "day",
-    publishPolicies: ["live", "staged"], defaultPublishPolicy: "live",
+    key: "people",
+    rowKind: "people",
+    capabilities: ["bookings"],
+    views: PEOPLE_VIEWS,
+    defaultViews: PEOPLE_VIEWS,
+    defaultView: "grid",
+    defaultGrain: "day",
+    publishPolicies: ["live", "staged"],
+    defaultPublishPolicy: "live",
   },
   {
-    key: "tasks", rowKind: "tasks", capabilities: [], views: ["gantt", "progress"], defaultViews: ["gantt", "progress"], defaultView: "gantt", defaultGrain: "day",
-    publishPolicies: ["live", "staged"], defaultPublishPolicy: "live",
+    key: "tasks",
+    rowKind: "tasks",
+    capabilities: [],
+    views: ["gantt", "progress"],
+    defaultViews: ["gantt", "progress"],
+    defaultView: "gantt",
+    defaultGrain: "day",
+    publishPolicies: ["live", "staged"],
+    defaultPublishPolicy: "live",
   },
   {
-    key: "resources", rowKind: "resources", capabilities: ["bookings"], views: PEOPLE_VIEWS, defaultViews: PEOPLE_VIEWS, defaultView: "grid", defaultGrain: "day",
-    publishPolicies: ["live", "staged"], defaultPublishPolicy: "live",
+    key: "resources",
+    rowKind: "resources",
+    capabilities: ["bookings"],
+    views: PEOPLE_VIEWS,
+    defaultViews: PEOPLE_VIEWS,
+    defaultView: "grid",
+    defaultGrain: "day",
+    publishPolicies: ["live", "staged"],
+    defaultPublishPolicy: "live",
   },
   {
-    key: "shift_roster", rowKind: "people",
+    key: "shift_roster",
+    rowKind: "people",
     capabilities: ["bookings", "patterns", "shift_requests", "attendance", "closing"],
-    views: PEOPLE_VIEWS, defaultViews: ["timeline", "grid", "calendar"], defaultView: "timeline", defaultGrain: "timed",
-    publishPolicies: ["live", "staged"], defaultPublishPolicy: "staged",
+    views: PEOPLE_VIEWS,
+    defaultViews: ["timeline", "grid", "calendar"],
+    defaultView: "timeline",
+    defaultGrain: "timed",
+    publishPolicies: ["live", "staged"],
+    defaultPublishPolicy: "staged",
   },
   {
     // Dispatch boards publish each assignment at once so technicians see it.
-    key: "dispatch", rowKind: "people",
+    key: "dispatch",
+    rowKind: "people",
     capabilities: ["bookings", "dispatch"],
-    views: ["dispatch", "timeline", "grid", "calendar"], defaultViews: ["dispatch", "timeline", "calendar"], defaultView: "dispatch", defaultGrain: "timed",
-    publishPolicies: ["live"], defaultPublishPolicy: "live",
+    views: ["dispatch", "timeline", "grid", "calendar"],
+    defaultViews: ["dispatch", "timeline", "calendar"],
+    defaultView: "dispatch",
+    defaultGrain: "timed",
+    publishPolicies: ["live"],
+    defaultPublishPolicy: "live",
   },
 ];
 
 /** Feature switches a capability needs in addition to its board family (Scheduling or Project Scheduling). */
-export const SCHEDULE_CAPABILITY_FEATURES: Readonly<Record<ScheduleBoardCapability, readonly string[]>> = {
+export const SCHEDULE_CAPABILITY_FEATURES: Readonly<
+  Record<ScheduleBoardCapability, readonly string[]>
+> = {
   bookings: [],
   patterns: [],
   shift_requests: [],
@@ -91,7 +124,10 @@ export function scheduleBoardType(key: string): ScheduleBoardTypeDefinition | nu
 }
 
 /** Whether a board's type declares a capability. Unknown types declare none. */
-export function boardHasCapability(board: { readonly boardType: string }, capability: ScheduleBoardCapability): boolean {
+export function boardHasCapability(
+  board: { readonly boardType: string },
+  capability: ScheduleBoardCapability,
+): boolean {
   return BY_KEY.get(board.boardType)?.capabilities.includes(capability) ?? false;
 }
 
@@ -102,10 +138,14 @@ export function boardHasCapability(board: { readonly boardType: string }, capabi
  * dispatch board exists only for service dispatch.
  */
 export function boardTypeRequiredFeatures(boardType: string): readonly string[] {
-  return BY_KEY.get(boardType)?.capabilities.includes("dispatch") ? SCHEDULE_CAPABILITY_FEATURES.dispatch : [];
+  return BY_KEY.get(boardType)?.capabilities.includes("dispatch")
+    ? SCHEDULE_CAPABILITY_FEATURES.dispatch
+    : [];
 }
 
 /** The board types that schedule a row kind, in registry order. */
-export function boardTypesFor(rowKind: ScheduleBoardRowKind): readonly ScheduleBoardTypeDefinition[] {
+export function boardTypesFor(
+  rowKind: ScheduleBoardRowKind,
+): readonly ScheduleBoardTypeDefinition[] {
   return SCHEDULE_BOARD_TYPES.filter((type) => type.rowKind === rowKind);
 }

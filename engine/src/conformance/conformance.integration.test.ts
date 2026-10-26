@@ -27,7 +27,11 @@ test("the conformance register is well formed", () => {
 
 for (const kase of CONFORMANCE_CORPUS.filter((c) => c.support === "not-implemented")) {
   test(`gap ${kase.id} is still a declared gap`, () => {
-    assert.equal(kase.run, undefined, `${kase.id} now has a run function — reclassify its support level`);
+    assert.equal(
+      kase.run,
+      undefined,
+      `${kase.id} now has a run function — reclassify its support level`,
+    );
     assert.ok(kase.gap && kase.gap.length > 0);
   });
 }

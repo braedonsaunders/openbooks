@@ -41,7 +41,8 @@ function compareValues(op: string, field: string, actual: unknown, expected: unk
       }
       return expected.includes(actual);
     case "contains":
-      if (typeof actual === "string" && typeof expected === "string") return actual.includes(expected);
+      if (typeof actual === "string" && typeof expected === "string")
+        return actual.includes(expected);
       if (Array.isArray(actual)) return actual.includes(expected);
       throw new ConditionRefusal(
         `condition on '${field}' uses 'contains' over a non-string, non-array value — fix the automation's when-clause`,

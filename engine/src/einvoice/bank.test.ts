@@ -9,7 +9,8 @@ test("payment identifiers detect an IBAN typo without excluding domestic account
   assert.match(paymentAccountRefusal("DE89370400440532013001")!, /check digits/);
   assert.match(paymentAccountRefusal("123456789", "58")!, /IBAN/);
   assert.equal(paymentAccountRefusal("123-456789", "30"), null);
-  for (const identifier of ["021000021", "123456789012", "HDFC0001234", "COBADEFFXXX"]) assert.equal(paymentProviderRefusal(identifier), null);
+  for (const identifier of ["021000021", "123456789012", "HDFC0001234", "COBADEFFXXX"])
+    assert.equal(paymentProviderRefusal(identifier), null);
   assert.equal(validPaymentIban("DE89370400440532013000"), true);
   assert.equal(validPaymentIban("DE275001051754073249311000"), false);
   assert.match(paymentAccountRefusal("123/456789")!, /identifier/);

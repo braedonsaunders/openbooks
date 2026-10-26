@@ -6,11 +6,7 @@ import { db, withBypassContext } from "../platform/db.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { postDocument } from "./posting-document.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -48,7 +44,9 @@ test(
           (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
         values (${org.orgId}, ${id}, 1, ${org.accounts.adjustment},
                 '1', '100.0000', '100.0000', '0', '100.0000')`);
-        await db.execute(sql`update documents set status = 'approved' where id = ${id} and org_id = ${org.orgId}`);
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${id} and org_id = ${org.orgId}`,
+        );
         await setPeriodLockState({
           orgId: org.orgId,
           periodId: org.periodId,
@@ -68,11 +66,14 @@ test(
           /AP is closed for this period and accounting book/.test(error.message),
       );
       const untouched = await withBypassContext(() =>
-        db.execute<{ status: string; entries: number }>(sql`
+        db.execute<{ status: string; entries: number }>(
+          sql`
       select status,
              (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
         from documents where id = ${id} and org_id = ${org.orgId}
-    `, "objects"),
+    `,
+          "objects",
+        ),
       );
       assert.deepEqual(untouched[0], { status: "approved", entries: 0 });
     } finally {

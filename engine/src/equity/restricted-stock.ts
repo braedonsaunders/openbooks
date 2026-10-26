@@ -56,7 +56,12 @@ const maxRational = (a: Rational, b: Rational): Rational => (compareRational(a, 
  * `on`) issues, and how many of its shares are vested on issue. Null when
  * every exercised unit is already vested.
  */
-export function earlyExerciseSchedule(book: EquityBook, option: SecurityRecord, units: bigint, on: string): { tranches: VestingTranche[]; vestedOnIssue: bigint } | null {
+export function earlyExerciseSchedule(
+  book: EquityBook,
+  option: SecurityRecord,
+  units: bigint,
+  on: string,
+): { tranches: VestingTranche[]; vestedOnIssue: bigint } | null {
   const terms = vestingTermsOf(option);
   if (!hasVestingSchedule(terms) || !option.shareClassId || option.quantity === null) return null;
   const state = holdingState(book, option, on);
@@ -74,12 +79,16 @@ export function earlyExerciseSchedule(book: EquityBook, option: SecurityRecord, 
     const lo = maxRational(start, end);
     const hi = minRational(finish, stop);
     if (compareRational(hi, lo) <= 0) continue;
-    portions.push({ date: installment.date <= on ? on : installment.date, end: subtractRational(hi, end) });
+    portions.push({
+      date: installment.date <= on ? on : installment.date,
+      end: subtractRational(hi, end),
+    });
   }
   const tranches: VestingTranche[] = [];
   let previous = 0n;
   portions.forEach((portion, index) => {
-    const cumulative = index === portions.length - 1 ? units : floorShares(multiplyRational(portion.end, factor));
+    const cumulative =
+      index === portions.length - 1 ? units : floorShares(multiplyRational(portion.end, factor));
     const quantity = cumulative - previous;
     previous = cumulative;
     if (quantity <= 0n) return;
@@ -92,16 +101,28 @@ export function earlyExerciseSchedule(book: EquityBook, option: SecurityRecord, 
 }
 
 /** The option an early-exercise certificate came from, or null for any other security. */
-export function earlyExerciseSource(book: Pick<EquityBook, "securities" | "events">, certificate: SecurityRecord): SecurityRecord | null {
-  if (certificate.kind !== "share" || !certificate.vestingTranches || !certificate.sourceSecurityId) return null;
+export function earlyExerciseSource(
+  book: Pick<EquityBook, "securities" | "events">,
+  certificate: SecurityRecord,
+): SecurityRecord | null {
+  if (certificate.kind !== "share" || !certificate.vestingTranches || !certificate.sourceSecurityId)
+    return null;
   const option = book.securities.find((row) => row.id === certificate.sourceSecurityId);
   if (!option || option.kind !== "option") return null;
-  const exercised = book.events.some((event) => event.kind === "exercise" && event.securityId === option.id && event.resultingSecurityId === certificate.id);
+  const exercised = book.events.some(
+    (event) =>
+      event.kind === "exercise" &&
+      event.securityId === option.id &&
+      event.resultingSecurityId === certificate.id,
+  );
   return exercised ? option : null;
 }
 
 /** Shares of a restricted certificate vested on issue, and its restricted remainder. */
-export function restrictedPortion(certificate: SecurityRecord): { vestedOnIssue: bigint; restricted: bigint } {
+export function restrictedPortion(certificate: SecurityRecord): {
+  vestedOnIssue: bigint;
+  restricted: bigint;
+} {
   const quantity = certificate.quantity ?? 0n;
   const first = certificate.vestingTranches?.[0];
   const vestedOnIssue = first && first.date === certificate.issueDate ? first.quantity : 0n;
@@ -109,7 +130,11 @@ export function restrictedPortion(certificate: SecurityRecord): { vestedOnIssue:
 }
 
 /** Restricted units (issue units) of a certificate that have vested and are still held on `through`. */
-export function releasedUnits(book: EquityBook, certificate: SecurityRecord, through: string): Rational {
+export function releasedUnits(
+  book: EquityBook,
+  certificate: SecurityRecord,
+  through: string,
+): Rational {
   if (through < certificate.issueDate) return ZERO;
   const state = holdingState(book, certificate, through);
   if (state.status === "void") return ZERO;
@@ -121,10 +146,19 @@ export function releasedUnits(book: EquityBook, certificate: SecurityRecord, thr
 }
 
 /** Functional deposit for restricted units [from, to) at the exercise-date rate. */
-export function depositSlice(certificate: SecurityRecord, from: Rational, to: Rational, exponent: number): bigint {
+export function depositSlice(
+  certificate: SecurityRecord,
+  from: Rational,
+  to: Rational,
+  exponent: number,
+): bigint {
   const { vestedOnIssue } = restrictedPortion(certificate);
   const price = parsePrice(certificate.pricePerShare ?? "0", "exercisePrice");
-  const at = (count: Rational): bigint => functionalUnits(ledgerUnits(multiplyRational(price, addRational(rational(vestedOnIssue), count)), exponent), certificate.fxRate);
+  const at = (count: Rational): bigint =>
+    functionalUnits(
+      ledgerUnits(multiplyRational(price, addRational(rational(vestedOnIssue), count)), exponent),
+      certificate.fxRate,
+    );
   return at(to) - at(from);
 }
 
@@ -134,11 +168,19 @@ export function depositSlice(certificate: SecurityRecord, from: Rational, to: Ra
  * and are still held (releases come from the front of the restricted
  * portion, repurchases from the back). Zero before issue and once void.
  */
-export function unreleasedDeposit(book: EquityBook, certificate: SecurityRecord, asOf: string, exponent: number): bigint {
+export function unreleasedDeposit(
+  book: EquityBook,
+  certificate: SecurityRecord,
+  asOf: string,
+  exponent: number,
+): bigint {
   if (asOf < certificate.issueDate) return 0n;
   const state = holdingState(book, certificate, asOf);
   if (state.status === "void") return 0n;
-  const held = subtractRational(rational(restrictedPortion(certificate).restricted), state.exact.removedUnvested);
+  const held = subtractRational(
+    rational(restrictedPortion(certificate).restricted),
+    state.exact.removedUnvested,
+  );
   const released = releasedUnits(book, certificate, asOf);
   if (compareRational(held, released) <= 0) return 0n;
   return depositSlice(certificate, released, held, exponent);
@@ -166,18 +208,37 @@ export function measureRelease(
   const released = releasedUnits(book, certificate, through);
   const deposit = depositSlice(certificate, ZERO, released, exponents.certificate);
   const toOption = splitFactor(book.splits, shareClass.id, option.issueDate, certificate.issueDate);
-  const fairValue = option.fairValuePerUnit ? parsePrice(option.fairValuePerUnit, "fairValuePerUnit") : ZERO;
-  const reclass = ledgerUnits(restate(multiplyRational(divideRational(released, toOption), fairValue), option.fxRate), exponents.functional);
-  const parValue = restatePrice(book.splits, shareClass.id, parsePrice(shareClass.parValue, "parValue"), shareClass.effectiveOn, certificate.issueDate);
+  const fairValue = option.fairValuePerUnit
+    ? parsePrice(option.fairValuePerUnit, "fairValuePerUnit")
+    : ZERO;
+  const reclass = ledgerUnits(
+    restate(multiplyRational(divideRational(released, toOption), fairValue), option.fxRate),
+    exponents.functional,
+  );
+  const parValue = restatePrice(
+    book.splits,
+    shareClass.id,
+    parsePrice(shareClass.parValue, "parValue"),
+    shareClass.effectiveOn,
+    certificate.issueDate,
+  );
   const par = ledgerUnits(multiplyRational(parValue, released), exponents.functional);
   return { securityId: certificate.id, shares: floorShares(released), deposit, reclass, par };
 }
 
 /** Restricted units [from, to) a repurchase of `units` (stated on `on`) takes from the back of the restricted portion. */
-export function repurchasedRange(book: EquityBook, certificate: SecurityRecord, units: bigint, on: string): { from: Rational; to: Rational } {
+export function repurchasedRange(
+  book: EquityBook,
+  certificate: SecurityRecord,
+  units: bigint,
+  on: string,
+): { from: Rational; to: Rational } {
   const state = holdingState(book, certificate, on);
   const { restricted } = restrictedPortion(certificate);
-  const issueUnits = divideRational(rational(units), splitFactor(book.splits, certificate.shareClassId!, certificate.issueDate, on));
+  const issueUnits = divideRational(
+    rational(units),
+    splitFactor(book.splits, certificate.shareClassId!, certificate.issueDate, on),
+  );
   const to = subtractRational(rational(restricted), state.exact.removedUnvested);
   return { from: subtractRational(to, issueUnits), to };
 }
@@ -194,21 +255,45 @@ export function needs83b(security: SecurityRecord): boolean {
   return security.kind === "share" && hasVestingSchedule(vestingTermsOf(security));
 }
 
-export const election83bDeadline = (security: SecurityRecord): string => addCalendarDays(security.issueDate, ELECTION_83B_DAYS);
+export const election83bDeadline = (security: SecurityRecord): string =>
+  addCalendarDays(security.issueDate, ELECTION_83B_DAYS);
 
 /** The certificate's live 83(b) election on `asOf`, if one is recorded. */
-export function liveElection(book: Pick<EquityBook, "events">, security: SecurityRecord, asOf: string): { id: string; effectiveOn: string } | null {
+export function liveElection(
+  book: Pick<EquityBook, "events">,
+  security: SecurityRecord,
+  asOf: string,
+): { id: string; effectiveOn: string } | null {
   const reversed = reversedEvents(book, asOf);
-  const election = book.events.find((event) => event.securityId === security.id && event.kind === "election_83b" && event.effectiveOn <= asOf && !reversed.has(event.id));
+  const election = book.events.find(
+    (event) =>
+      event.securityId === security.id &&
+      event.kind === "election_83b" &&
+      event.effectiveOn <= asOf &&
+      !reversed.has(event.id),
+  );
   return election ? { id: election.id, effectiveOn: election.effectiveOn } : null;
 }
 
 /** Where a certificate stands with its 83(b) election on `asOf` (null when none is called for). */
-export function election83bStatus(book: Pick<EquityBook, "events">, security: SecurityRecord, asOf: string): Election83b | null {
+export function election83bStatus(
+  book: Pick<EquityBook, "events">,
+  security: SecurityRecord,
+  asOf: string,
+): Election83b | null {
   if (!needs83b(security)) return null;
   const deadline = election83bDeadline(security);
   const filed = liveElection(book, security, "9999-12-31");
   if (filed) return { state: "filed", deadline, filedOn: filed.effectiveOn, daysLeft: null };
-  if (asOf <= deadline) return { state: "open", deadline, filedOn: null, daysLeft: calendarDaysBetween(asOf < security.issueDate ? security.issueDate : asOf, deadline) };
+  if (asOf <= deadline)
+    return {
+      state: "open",
+      deadline,
+      filedOn: null,
+      daysLeft: calendarDaysBetween(
+        asOf < security.issueDate ? security.issueDate : asOf,
+        deadline,
+      ),
+    };
   return { state: "missed", deadline, filedOn: null, daysLeft: null };
 }

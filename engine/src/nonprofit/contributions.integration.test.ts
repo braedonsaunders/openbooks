@@ -10,7 +10,16 @@ import { installEngineSeams } from "../composition/install.ts";
 import { toUnits } from "../money/money.ts";
 import { createFund } from "./funds.ts";
 import { provisionFundAccounting } from "./provision.ts";
-import { bookPledge, cancelPledge, collectPledgeInstallments, createPledge, getPledgeSchedule, runPledgeDiscountAmortization, topUpPledgeAllowance, writeOffPledge } from "./pledges.ts";
+import {
+  bookPledge,
+  cancelPledge,
+  collectPledgeInstallments,
+  createPledge,
+  getPledgeSchedule,
+  runPledgeDiscountAmortization,
+  topUpPledgeAllowance,
+  writeOffPledge,
+} from "./pledges.ts";
 import { createGift, receiptGift } from "./gifts.ts";
 import { NonprofitError } from "./errors.ts";
 
@@ -23,180 +32,266 @@ async function addAccount(
   type: "asset_current_other" | "liability_current_other",
 ): Promise<string> {
   const number = "G" + randomUUID().replaceAll("-", "").slice(0, 12);
-  const inserted = await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into accounts
       (org_id, number, name, type, is_summary, is_active, required_dimensions, created_by, updated_by)
     values (${orgId}, ${number}, ${name}, ${type}, false, true, '[]'::jsonb, ${actorId}, ${actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   assert.equal(inserted.length, 1);
   return inserted[0]!.id;
 }
 
-test("pledges book and reverse through the ledger while gifts receive engine numbers", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Contribution Controller", "admin"));
-    await withOrgContext(org.orgId, async () => {
-      const changed = await db.execute<{ id: string }>(sql`
+test(
+  "pledges book and reverse through the ledger while gifts receive engine numbers",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Contribution Controller", "admin"),
+      );
+      await withOrgContext(org.orgId, async () => {
+        const changed = await db.execute<{ id: string }>(
+          sql`
         update orgs set settings = jsonb_set(
           coalesce(settings, '{}'::jsonb), '{features}',
           coalesce(settings->'features', '{}'::jsonb) ||
             '{"nonprofit":true,"fundAccounting":true,"pledges":false}'::jsonb,
           true)
          where id = ${org.orgId}
-        returning id`, "objects");
-      assert.equal(changed.length, 1);
-    });
-    await provisionFundAccounting({
-      orgId: org.orgId,
-      defaultFund: { code: "OPERATING", name: "Operating Fund" },
-      classifications: {
-        OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" },
-      },
-      actorId,
-    });
-    const fund = await createFund({
-      orgId: org.orgId,
-      code: "PLEDGES",
-      name: "Pledges Fund",
-      kind: "operating",
-      restrictionClass: "without_donor_restrictions",
-      actorId,
-    });
-    const accounts = await withOrgContext(org.orgId, async () => ({
-      receivable: await addAccount(org.orgId, actorId, "Contributions receivable", "asset_current_other"),
-      discount: await addAccount(org.orgId, actorId, "Discount on contributions receivable", "asset_current_other"),
-      allowance: await addAccount(org.orgId, actorId, "Allowance for uncollectible contributions", "asset_current_other"),
-    }));
-    installEngineSeams();
+        returning id`,
+          "objects",
+        );
+        assert.equal(changed.length, 1);
+      });
+      await provisionFundAccounting({
+        orgId: org.orgId,
+        defaultFund: { code: "OPERATING", name: "Operating Fund" },
+        classifications: {
+          OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" },
+        },
+        actorId,
+      });
+      const fund = await createFund({
+        orgId: org.orgId,
+        code: "PLEDGES",
+        name: "Pledges Fund",
+        kind: "operating",
+        restrictionClass: "without_donor_restrictions",
+        actorId,
+      });
+      const accounts = await withOrgContext(org.orgId, async () => ({
+        receivable: await addAccount(
+          org.orgId,
+          actorId,
+          "Contributions receivable",
+          "asset_current_other",
+        ),
+        discount: await addAccount(
+          org.orgId,
+          actorId,
+          "Discount on contributions receivable",
+          "asset_current_other",
+        ),
+        allowance: await addAccount(
+          org.orgId,
+          actorId,
+          "Allowance for uncollectible contributions",
+          "asset_current_other",
+        ),
+      }));
+      installEngineSeams();
 
-    const pledgeInput = {
-      orgId: org.orgId,
-      subsidiaryId: org.subsidiaryId,
-      donorPartyId: org.customerId,
-      fundId: fund.id,
-      totalAmount: "5000.0000",
-      discountRate: "5",
-      reason: "Record the signed promise",
-      installments: Array.from({ length: 5 }, (_, index) => ({
-        dueOn: String(2027 + index) + "-07-15",
-        amount: "1000.0000",
-      })),
-      actorId,
-    };
-    await assert.rejects(
-      createPledge(pledgeInput),
-      (error) => error instanceof NonprofitError &&
-        error.code === "feature_off" && error.message.includes("pledges") &&
-        error.remedy.includes("Company Settings → Features"),
-    );
-    await withOrgContext(org.orgId, async () => {
-      const changed = await db.execute<{ id: string }>(sql`
+      const pledgeInput = {
+        orgId: org.orgId,
+        subsidiaryId: org.subsidiaryId,
+        donorPartyId: org.customerId,
+        fundId: fund.id,
+        totalAmount: "5000.0000",
+        discountRate: "5",
+        reason: "Record the signed promise",
+        installments: Array.from({ length: 5 }, (_, index) => ({
+          dueOn: String(2027 + index) + "-07-15",
+          amount: "1000.0000",
+        })),
+        actorId,
+      };
+      await assert.rejects(
+        createPledge(pledgeInput),
+        (error) =>
+          error instanceof NonprofitError &&
+          error.code === "feature_off" &&
+          error.message.includes("pledges") &&
+          error.remedy.includes("Company Settings → Features"),
+      );
+      await withOrgContext(org.orgId, async () => {
+        const changed = await db.execute<{ id: string }>(
+          sql`
         update orgs set settings = jsonb_set(
           settings, '{features}', settings->'features' || '{"pledges":true}'::jsonb, true)
          where id = ${org.orgId}
-        returning id`, "objects");
-      assert.equal(changed.length, 1);
-    });
+        returning id`,
+          "objects",
+        );
+        assert.equal(changed.length, 1);
+      });
 
-    const pledge = await createPledge(pledgeInput);
-    const booking = await bookPledge({
-      orgId: org.orgId,
-      pledgeId: pledge.id,
-      postingDate: org.date,
-      receivableAccountId: accounts.receivable,
-      discountAccountId: accounts.discount,
-      contributionsAccountId: org.accounts.revenue,
-      reason: "Recognize the unconditional pledge",
-      actorId,
-    });
-    const stored = await withOrgContext(org.orgId, () =>
-      db.execute<{ present_value: string; status: string }>(sql`
-        select present_value::text as present_value, status
-          from pledges where org_id = ${org.orgId} and id = ${pledge.id}`, "objects"),
-    );
-    assert.equal(stored[0]?.present_value, booking.presentValue);
-    assert.equal(stored[0]?.status, "booked");
-    const bookingLines = await withOrgContext(org.orgId, () =>
-      db.execute<{ account_id: string; amount: string }>(sql`
-        select account_id, amount::text as amount from journal_lines
-         where org_id = ${org.orgId} and entry_id = ${booking.entryId}
-         order by line_number`, "objects"),
-    );
-    const bookedByAccount = new Map(bookingLines.map((row) => [row.account_id, row.amount]));
-    assert.equal(bookedByAccount.get(accounts.receivable), "5000.0000");
-    assert.equal(bookedByAccount.get(accounts.discount), "-" + booking.discount);
-    assert.equal(bookedByAccount.get(org.accounts.revenue), "-" + booking.presentValue);
-    assert.equal(
-      bookingLines.reduce((sum, row) => sum + toUnits(row.amount), 0n),
-      0n,
-    );
-
-    await assert.rejects(
-      writeOffPledge({
+      const pledge = await createPledge(pledgeInput);
+      const booking = await bookPledge({
         orgId: org.orgId,
         pledgeId: pledge.id,
-        amount: "1.0000",
         postingDate: org.date,
+        receivableAccountId: accounts.receivable,
+        discountAccountId: accounts.discount,
+        contributionsAccountId: org.accounts.revenue,
+        reason: "Recognize the unconditional pledge",
+        actorId,
+      });
+      const stored = await withOrgContext(org.orgId, () =>
+        db.execute<{ present_value: string; status: string }>(
+          sql`
+        select present_value::text as present_value, status
+          from pledges where org_id = ${org.orgId} and id = ${pledge.id}`,
+          "objects",
+        ),
+      );
+      assert.equal(stored[0]?.present_value, booking.presentValue);
+      assert.equal(stored[0]?.status, "booked");
+      const bookingLines = await withOrgContext(org.orgId, () =>
+        db.execute<{ account_id: string; amount: string }>(
+          sql`
+        select account_id, amount::text as amount from journal_lines
+         where org_id = ${org.orgId} and entry_id = ${booking.entryId}
+         order by line_number`,
+          "objects",
+        ),
+      );
+      const bookedByAccount = new Map(bookingLines.map((row) => [row.account_id, row.amount]));
+      assert.equal(bookedByAccount.get(accounts.receivable), "5000.0000");
+      assert.equal(bookedByAccount.get(accounts.discount), "-" + booking.discount);
+      assert.equal(bookedByAccount.get(org.accounts.revenue), "-" + booking.presentValue);
+      assert.equal(
+        bookingLines.reduce((sum, row) => sum + toUnits(row.amount), 0n),
+        0n,
+      );
+
+      await assert.rejects(
+        writeOffPledge({
+          orgId: org.orgId,
+          pledgeId: pledge.id,
+          amount: "1.0000",
+          postingDate: org.date,
+          receivableAccountId: accounts.receivable,
+          discountAccountId: accounts.discount,
+          allowanceAccountId: accounts.allowance,
+          contributionsAccountId: org.accounts.revenue,
+          reason: "Write off an uncollectible pledge",
+          actorId,
+        }),
+        (error) =>
+          error instanceof NonprofitError &&
+          error.code === "pledge_writeoff_exceeds_allowance" &&
+          error.message.includes("allowance balance of 0.0000") &&
+          error.remedy.includes("allowance top-up"),
+      );
+
+      const activityPledge = await createPledge({
+        ...pledgeInput,
+        totalAmount: "1000.0000",
+        installments: [{ dueOn: "2027-07-15", amount: "1000.0000" }],
+      });
+      await bookPledge({
+        orgId: org.orgId,
+        pledgeId: activityPledge.id,
+        postingDate: org.date,
+        receivableAccountId: accounts.receivable,
+        discountAccountId: accounts.discount,
+        contributionsAccountId: org.accounts.revenue,
+        reason: "Recognize the collection test promise",
+        actorId,
+      });
+      const scheduleBeforeCollection = await getPledgeSchedule({
+        orgId: org.orgId,
+        pledgeId: activityPledge.id,
+        asOfDate: org.date,
+      });
+      const firstInstallment = scheduleBeforeCollection.installments[0]!;
+      const betweenCollectionAndReversal = addCalendarDays(org.date, 2);
+      const reversalDate = addCalendarDays(org.date, 3);
+      assert.equal(firstInstallment.collectedAmount, "0.0000");
+      const collection = await collectPledgeInstallments({
+        orgId: org.orgId,
+        pledgeId: activityPledge.id,
+        allocations: [{ installmentId: firstInstallment.id, amount: "100.0000" }],
+        postingDate: org.date,
+        bankAccountId: org.accounts.bank,
+        receivableAccountId: accounts.receivable,
+        idempotencyKey: randomUUID(),
+        reason: "Record the donor receipt",
+        actorId,
+      });
+      const scheduleAfterCollection = await getPledgeSchedule({
+        orgId: org.orgId,
+        pledgeId: activityPledge.id,
+        asOfDate: org.date,
+      });
+      assert.equal(scheduleAfterCollection.installments[0]!.collectedAmount, "100.0000");
+      const reversalId = await withOrgTransaction(org.orgId, () =>
+        reverseProjectGlEntry(
+          org.orgId,
+          actorId,
+          collection.entryId,
+          "Correct the recorded receipt",
+          reversalDate,
+        ),
+      );
+      assert.ok(reversalId);
+      const scheduleBetween = await getPledgeSchedule({
+        orgId: org.orgId,
+        pledgeId: activityPledge.id,
+        asOfDate: betweenCollectionAndReversal,
+      });
+      assert.equal(scheduleBetween.installments[0]!.collectedAmount, "100.0000");
+      const scheduleOnReversal = await getPledgeSchedule({
+        orgId: org.orgId,
+        pledgeId: activityPledge.id,
+        asOfDate: reversalDate,
+      });
+      assert.equal(scheduleOnReversal.installments[0]!.collectedAmount, "0.0000");
+      await topUpPledgeAllowance({
+        orgId: org.orgId,
+        pledgeId: activityPledge.id,
+        amount: "1000.0000",
+        postingDate: reversalDate,
+        contributionsAccountId: org.accounts.revenue,
+        allowanceAccountId: accounts.allowance,
+        reason: "Reserve the doubtful promise",
+        actorId,
+      });
+      const writeOff = await writeOffPledge({
+        orgId: org.orgId,
+        pledgeId: activityPledge.id,
+        amount: "1000.0000",
+        postingDate: reversalDate,
         receivableAccountId: accounts.receivable,
         discountAccountId: accounts.discount,
         allowanceAccountId: accounts.allowance,
         contributionsAccountId: org.accounts.revenue,
-        reason: "Write off an uncollectible pledge",
+        reason: "The donor cannot pay",
         actorId,
-      }),
-      (error) => error instanceof NonprofitError &&
-        error.code === "pledge_writeoff_exceeds_allowance" &&
-        error.message.includes("allowance balance of 0.0000") &&
-        error.remedy.includes("allowance top-up"),
-    );
-
-    const activityPledge = await createPledge({ ...pledgeInput, totalAmount: "1000.0000", installments: [{ dueOn: "2027-07-15", amount: "1000.0000" }] });
-    await bookPledge({ orgId: org.orgId, pledgeId: activityPledge.id, postingDate: org.date,
-      receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
-      contributionsAccountId: org.accounts.revenue, reason: "Recognize the collection test promise", actorId });
-    const scheduleBeforeCollection = await getPledgeSchedule({
-      orgId: org.orgId, pledgeId: activityPledge.id, asOfDate: org.date,
-    });
-    const firstInstallment = scheduleBeforeCollection.installments[0]!;
-    const betweenCollectionAndReversal = addCalendarDays(org.date, 2);
-    const reversalDate = addCalendarDays(org.date, 3);
-    assert.equal(firstInstallment.collectedAmount, "0.0000");
-    const collection = await collectPledgeInstallments({
-      orgId: org.orgId, pledgeId: activityPledge.id,
-      allocations: [{ installmentId: firstInstallment.id, amount: "100.0000" }],
-      postingDate: org.date, bankAccountId: org.accounts.bank,
-      receivableAccountId: accounts.receivable, idempotencyKey: randomUUID(),
-      reason: "Record the donor receipt", actorId,
-    });
-    const scheduleAfterCollection = await getPledgeSchedule({
-      orgId: org.orgId, pledgeId: activityPledge.id, asOfDate: org.date,
-    });
-    assert.equal(scheduleAfterCollection.installments[0]!.collectedAmount, "100.0000");
-    const reversalId = await withOrgTransaction(org.orgId, () => reverseProjectGlEntry(
-      org.orgId, actorId, collection.entryId, "Correct the recorded receipt", reversalDate,
-    ));
-    assert.ok(reversalId);
-    const scheduleBetween = await getPledgeSchedule({
-      orgId: org.orgId, pledgeId: activityPledge.id, asOfDate: betweenCollectionAndReversal,
-    });
-    assert.equal(scheduleBetween.installments[0]!.collectedAmount, "100.0000");
-    const scheduleOnReversal = await getPledgeSchedule({
-      orgId: org.orgId, pledgeId: activityPledge.id, asOfDate: reversalDate,
-    });
-    assert.equal(scheduleOnReversal.installments[0]!.collectedAmount, "0.0000");
-    await topUpPledgeAllowance({ orgId: org.orgId, pledgeId: activityPledge.id, amount: "1000.0000",
-      postingDate: reversalDate, contributionsAccountId: org.accounts.revenue, allowanceAccountId: accounts.allowance,
-      reason: "Reserve the doubtful promise", actorId });
-    const writeOff = await writeOffPledge({ orgId: org.orgId, pledgeId: activityPledge.id, amount: "1000.0000",
-      postingDate: reversalDate, receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
-      allowanceAccountId: accounts.allowance, contributionsAccountId: org.accounts.revenue,
-      reason: "The donor cannot pay", actorId });
-    assert.ok(toUnits(writeOff.discountWrittenOff) > 0n);
-    assert.deepEqual([writeOff.status, writeOff.allowanceBalance, writeOff.allowanceReleased],
-      ["written_off", "0.0000", writeOff.discountWrittenOff],
-      "a closing write-off charges the allowance its net carrying amount and releases the rest");
-    const pledgeBalances = await withOrgContext(org.orgId, () => db.execute<{ account_id: string; amount: string }>(sql`
+      });
+      assert.ok(toUnits(writeOff.discountWrittenOff) > 0n);
+      assert.deepEqual(
+        [writeOff.status, writeOff.allowanceBalance, writeOff.allowanceReleased],
+        ["written_off", "0.0000", writeOff.discountWrittenOff],
+        "a closing write-off charges the allowance its net carrying amount and releases the rest",
+      );
+      const pledgeBalances = await withOrgContext(org.orgId, () =>
+        db.execute<{ account_id: string; amount: string }>(
+          sql`
       select jl.account_id, sum(jl.amount)::text as amount from journal_lines jl
         join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
        where jl.org_id = ${org.orgId} and je.status in ('posted', 'reversed')
@@ -205,141 +300,292 @@ test("pledges book and reverse through the ledger while gifts receive engine num
               and (e.custom #>> '{nonprofitPledge,pledgeId}' = ${activityPledge.id}
                 or e.id = (select booking_entry_id from pledges where org_id = ${org.orgId} and id = ${activityPledge.id})))
          and jl.account_id in (${accounts.receivable}, ${accounts.discount}, ${accounts.allowance})
-       group by jl.account_id`, "objects"));
-    assert.deepEqual(pledgeBalances.map((row) => row.amount), ["0.0000", "0.0000", "0.0000"],
-      "a written-off pledge leaves no receivable, discount or allowance balance standing");
+       group by jl.account_id`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(
+        pledgeBalances.map((row) => row.amount),
+        ["0.0000", "0.0000", "0.0000"],
+        "a written-off pledge leaves no receivable, discount or allowance balance standing",
+      );
 
-    const collectible = await createPledge({ ...pledgeInput, discountRate: "0", totalAmount: "1000.0000",
-      installments: [{ dueOn: "2027-07-15", amount: "1000.0000" }] });
-    await bookPledge({ orgId: org.orgId, pledgeId: collectible.id, postingDate: org.date,
-      receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
-      contributionsAccountId: org.accounts.revenue, reason: "Recognize the reserved promise", actorId });
-    await topUpPledgeAllowance({ orgId: org.orgId, pledgeId: collectible.id, amount: "200.0000",
-      postingDate: org.date, contributionsAccountId: org.accounts.revenue, allowanceAccountId: accounts.allowance,
-      reason: "Reserve the doubtful balance", actorId });
-    const collectibleSchedule = await getPledgeSchedule({ orgId: org.orgId, pledgeId: collectible.id, asOfDate: org.date });
-    const pledgeReceipt = { orgId: org.orgId, pledgeId: collectible.id,
-      allocations: [{ installmentId: collectibleSchedule.installments[0]!.id, amount: "900.0000" }],
-      postingDate: org.date, bankAccountId: org.accounts.bank, receivableAccountId: accounts.receivable,
-      idempotencyKey: randomUUID(), reason: "Record the donor receipt and release excess allowance", actorId };
-    await assert.rejects(collectPledgeInstallments(pledgeReceipt), (error) => error instanceof NonprofitError &&
-      error.code === "pledge_collection_allowance_accounts_required" && error.message.includes("100.0000") &&
-      error.remedy.includes("allowance and contributions accounts"));
-    await assert.rejects(collectPledgeInstallments({ ...pledgeReceipt, allowanceAccountId: org.accounts.bank,
-      contributionsAccountId: org.accounts.revenue }), (error) => error instanceof NonprofitError &&
-      error.code === "pledge_collection_allowance_accounts_mismatch");
-    const partial = await collectPledgeInstallments({ ...pledgeReceipt, allowanceAccountId: accounts.allowance,
-      contributionsAccountId: org.accounts.revenue });
-    assert.deepEqual([partial.status, partial.allowanceReleased, partial.allowanceBalance],
-      ["collecting", "100.0000", "100.0000"]);
-    await withOrgTransaction(org.orgId, () => reverseProjectGlEntry(
-      org.orgId, actorId, partial.entryId, "Correct the donor receipt", reversalDate));
-    const finalReceipt = await collectPledgeInstallments({ ...pledgeReceipt, postingDate: reversalDate,
-      allocations: [{ installmentId: pledgeReceipt.allocations[0]!.installmentId, amount: "1000.0000" }],
-      idempotencyKey: randomUUID(), allowanceAccountId: accounts.allowance, contributionsAccountId: org.accounts.revenue });
-    assert.deepEqual([finalReceipt.status, finalReceipt.allowanceReleased, finalReceipt.allowanceBalance],
-      ["fulfilled", "200.0000", "0.0000"], "a corrected collection restores the full active allowance before closing");
-    const remainingAllowance = (await withOrgContext(org.orgId, () => db.execute<{ amount: string }>(sql`
+      const collectible = await createPledge({
+        ...pledgeInput,
+        discountRate: "0",
+        totalAmount: "1000.0000",
+        installments: [{ dueOn: "2027-07-15", amount: "1000.0000" }],
+      });
+      await bookPledge({
+        orgId: org.orgId,
+        pledgeId: collectible.id,
+        postingDate: org.date,
+        receivableAccountId: accounts.receivable,
+        discountAccountId: accounts.discount,
+        contributionsAccountId: org.accounts.revenue,
+        reason: "Recognize the reserved promise",
+        actorId,
+      });
+      await topUpPledgeAllowance({
+        orgId: org.orgId,
+        pledgeId: collectible.id,
+        amount: "200.0000",
+        postingDate: org.date,
+        contributionsAccountId: org.accounts.revenue,
+        allowanceAccountId: accounts.allowance,
+        reason: "Reserve the doubtful balance",
+        actorId,
+      });
+      const collectibleSchedule = await getPledgeSchedule({
+        orgId: org.orgId,
+        pledgeId: collectible.id,
+        asOfDate: org.date,
+      });
+      const pledgeReceipt = {
+        orgId: org.orgId,
+        pledgeId: collectible.id,
+        allocations: [
+          { installmentId: collectibleSchedule.installments[0]!.id, amount: "900.0000" },
+        ],
+        postingDate: org.date,
+        bankAccountId: org.accounts.bank,
+        receivableAccountId: accounts.receivable,
+        idempotencyKey: randomUUID(),
+        reason: "Record the donor receipt and release excess allowance",
+        actorId,
+      };
+      await assert.rejects(
+        collectPledgeInstallments(pledgeReceipt),
+        (error) =>
+          error instanceof NonprofitError &&
+          error.code === "pledge_collection_allowance_accounts_required" &&
+          error.message.includes("100.0000") &&
+          error.remedy.includes("allowance and contributions accounts"),
+      );
+      await assert.rejects(
+        collectPledgeInstallments({
+          ...pledgeReceipt,
+          allowanceAccountId: org.accounts.bank,
+          contributionsAccountId: org.accounts.revenue,
+        }),
+        (error) =>
+          error instanceof NonprofitError &&
+          error.code === "pledge_collection_allowance_accounts_mismatch",
+      );
+      const partial = await collectPledgeInstallments({
+        ...pledgeReceipt,
+        allowanceAccountId: accounts.allowance,
+        contributionsAccountId: org.accounts.revenue,
+      });
+      assert.deepEqual(
+        [partial.status, partial.allowanceReleased, partial.allowanceBalance],
+        ["collecting", "100.0000", "100.0000"],
+      );
+      await withOrgTransaction(org.orgId, () =>
+        reverseProjectGlEntry(
+          org.orgId,
+          actorId,
+          partial.entryId,
+          "Correct the donor receipt",
+          reversalDate,
+        ),
+      );
+      const finalReceipt = await collectPledgeInstallments({
+        ...pledgeReceipt,
+        postingDate: reversalDate,
+        allocations: [
+          { installmentId: pledgeReceipt.allocations[0]!.installmentId, amount: "1000.0000" },
+        ],
+        idempotencyKey: randomUUID(),
+        allowanceAccountId: accounts.allowance,
+        contributionsAccountId: org.accounts.revenue,
+      });
+      assert.deepEqual(
+        [finalReceipt.status, finalReceipt.allowanceReleased, finalReceipt.allowanceBalance],
+        ["fulfilled", "200.0000", "0.0000"],
+        "a corrected collection restores the full active allowance before closing",
+      );
+      const remainingAllowance = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ amount: string }>(
+            sql`
       select sum(l.amount)::text as amount from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
        where l.org_id = ${org.orgId} and l.account_id = ${accounts.allowance}
          and e.status in ('posted', 'reversed') and coalesce(e.reverses_entry_id, e.id) in (
            select j.id from journal_entries j where j.org_id = ${org.orgId}
-             and j.custom #>> '{nonprofitPledge,pledgeId}' = ${collectible.id})`, "objects")))[0]!.amount;
-    assert.equal(remainingAllowance, "0.0000", "a collected pledge leaves no allowance standing in the ledger");
+             and j.custom #>> '{nonprofitPledge,pledgeId}' = ${collectible.id})`,
+            "objects",
+          ),
+        )
+      )[0]!.amount;
+      assert.equal(
+        remainingAllowance,
+        "0.0000",
+        "a collected pledge leaves no allowance standing in the ledger",
+      );
 
-    const cancelled = await cancelPledge({
-      orgId: org.orgId,
-      pledgeId: pledge.id,
-      reversalDate: org.date,
-      reason: "Donor withdrew the pledge",
-      actorId,
-    });
-    const lifecycle = await withOrgContext(org.orgId, () =>
-      db.execute<{ pledge_status: string; original_status: string; reversal_status: string }>(sql`
+      const cancelled = await cancelPledge({
+        orgId: org.orgId,
+        pledgeId: pledge.id,
+        reversalDate: org.date,
+        reason: "Donor withdrew the pledge",
+        actorId,
+      });
+      const lifecycle = await withOrgContext(org.orgId, () =>
+        db.execute<{ pledge_status: string; original_status: string; reversal_status: string }>(
+          sql`
         select p.status as pledge_status, original.status as original_status, reversal.status as reversal_status
           from pledges p
           join journal_entries original on original.org_id = p.org_id and original.id = p.booking_entry_id
           join journal_entries reversal on reversal.org_id = p.org_id and reversal.id = ${cancelled.reversalEntryId}
-         where p.org_id = ${org.orgId} and p.id = ${pledge.id}`, "objects"),
-    );
-    assert.deepEqual(lifecycle[0], {
-      pledge_status: "cancelled",
-      original_status: "reversed",
-      reversal_status: "posted",
-    });
+         where p.org_id = ${org.orgId} and p.id = ${pledge.id}`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(lifecycle[0], {
+        pledge_status: "cancelled",
+        original_status: "reversed",
+        reversal_status: "posted",
+      });
 
-    const reversedPledge = await createPledge({ ...pledgeInput, totalAmount: "2000.0000",
-      installments: [{ dueOn: "2027-07-15", amount: "2000.0000" }] });
-    const reversedBooking = await bookPledge({ orgId: org.orgId, pledgeId: reversedPledge.id, postingDate: org.date,
-      receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
-      contributionsAccountId: org.accounts.revenue, reason: "Recognize the promise later corrected", actorId });
-    await withOrgTransaction(org.orgId, () => reverseProjectGlEntry(
-      org.orgId, actorId, reversedBooking.entryId, "Correct the erroneous pledge booking", reversalDate));
-    const reversedStateConflict = (error: unknown) =>
-      error instanceof NonprofitError && error.code === "pledge_state_conflict";
-    await assert.rejects(topUpPledgeAllowance({ orgId: org.orgId, pledgeId: reversedPledge.id, amount: "10.0000",
-      postingDate: reversalDate, contributionsAccountId: org.accounts.revenue, allowanceAccountId: accounts.allowance,
-      reason: "Reserve the doubtful promise", actorId }), reversedStateConflict,
-      "a reversed booking cannot authorize an allowance top-up");
-    await assert.rejects(writeOffPledge({ orgId: org.orgId, pledgeId: reversedPledge.id, amount: "10.0000",
-      postingDate: reversalDate, receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
-      allowanceAccountId: accounts.allowance, contributionsAccountId: org.accounts.revenue,
-      reason: "The donor cannot pay", actorId }), reversedStateConflict,
-      "a reversed booking cannot authorize a write-off");
-    await assert.rejects(getPledgeSchedule({ orgId: org.orgId, pledgeId: reversedPledge.id, asOfDate: reversalDate }),
-      (error) => error instanceof NonprofitError && error.code === "pledge_schedule_booking_reversed",
-      "a reversed booking has no active amortization schedule");
-    await runPledgeDiscountAmortization({ orgId: org.orgId, periodEnd: addCalendarDays(org.date, 62),
-      discountAccountId: accounts.discount, contributionsAccountId: org.accounts.revenue, actorId });
-    const reversedAmortization = await withOrgContext(org.orgId, () => db.execute<{ n: string }>(sql`
+      const reversedPledge = await createPledge({
+        ...pledgeInput,
+        totalAmount: "2000.0000",
+        installments: [{ dueOn: "2027-07-15", amount: "2000.0000" }],
+      });
+      const reversedBooking = await bookPledge({
+        orgId: org.orgId,
+        pledgeId: reversedPledge.id,
+        postingDate: org.date,
+        receivableAccountId: accounts.receivable,
+        discountAccountId: accounts.discount,
+        contributionsAccountId: org.accounts.revenue,
+        reason: "Recognize the promise later corrected",
+        actorId,
+      });
+      await withOrgTransaction(org.orgId, () =>
+        reverseProjectGlEntry(
+          org.orgId,
+          actorId,
+          reversedBooking.entryId,
+          "Correct the erroneous pledge booking",
+          reversalDate,
+        ),
+      );
+      const reversedStateConflict = (error: unknown) =>
+        error instanceof NonprofitError && error.code === "pledge_state_conflict";
+      await assert.rejects(
+        topUpPledgeAllowance({
+          orgId: org.orgId,
+          pledgeId: reversedPledge.id,
+          amount: "10.0000",
+          postingDate: reversalDate,
+          contributionsAccountId: org.accounts.revenue,
+          allowanceAccountId: accounts.allowance,
+          reason: "Reserve the doubtful promise",
+          actorId,
+        }),
+        reversedStateConflict,
+        "a reversed booking cannot authorize an allowance top-up",
+      );
+      await assert.rejects(
+        writeOffPledge({
+          orgId: org.orgId,
+          pledgeId: reversedPledge.id,
+          amount: "10.0000",
+          postingDate: reversalDate,
+          receivableAccountId: accounts.receivable,
+          discountAccountId: accounts.discount,
+          allowanceAccountId: accounts.allowance,
+          contributionsAccountId: org.accounts.revenue,
+          reason: "The donor cannot pay",
+          actorId,
+        }),
+        reversedStateConflict,
+        "a reversed booking cannot authorize a write-off",
+      );
+      await assert.rejects(
+        getPledgeSchedule({
+          orgId: org.orgId,
+          pledgeId: reversedPledge.id,
+          asOfDate: reversalDate,
+        }),
+        (error) =>
+          error instanceof NonprofitError && error.code === "pledge_schedule_booking_reversed",
+        "a reversed booking has no active amortization schedule",
+      );
+      await runPledgeDiscountAmortization({
+        orgId: org.orgId,
+        periodEnd: addCalendarDays(org.date, 62),
+        discountAccountId: accounts.discount,
+        contributionsAccountId: org.accounts.revenue,
+        actorId,
+      });
+      const reversedAmortization = await withOrgContext(org.orgId, () =>
+        db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from journal_entries
        where org_id = ${org.orgId}
          and custom #>> '{nonprofitPledge,pledgeId}' = ${reversedPledge.id}
-         and custom #>> '{nonprofitPledge,operation}' = 'discount_amortization'`, "objects"));
-    assert.equal(reversedAmortization[0]!.n, "0",
-      "a reversed booking earns no discount amortization");
+         and custom #>> '{nonprofitPledge,operation}' = 'discount_amortization'`,
+          "objects",
+        ),
+      );
+      assert.equal(
+        reversedAmortization[0]!.n,
+        "0",
+        "a reversed booking earns no discount amortization",
+      );
 
-    await assert.rejects(
-      createGift({
+      await assert.rejects(
+        createGift({
+          orgId: org.orgId,
+          subsidiaryId: org.subsidiaryId,
+          donorPartyId: org.customerId,
+          fundId: fund.id,
+          amount: "125.5000",
+          kind: "in_kind_goods",
+          receivedOn: org.date,
+          reason: "Record donated equipment",
+          actorId,
+        }),
+        (error) =>
+          error instanceof NonprofitError &&
+          error.code === "gift_fair_value_basis_required" &&
+          error.remedy.includes("fair-value basis"),
+      );
+      const gift = await createGift({
         orgId: org.orgId,
         subsidiaryId: org.subsidiaryId,
         donorPartyId: org.customerId,
         fundId: fund.id,
         amount: "125.5000",
-        kind: "in_kind_goods",
+        kind: "cash",
         receivedOn: org.date,
-        reason: "Record donated equipment",
+        reason: "Record the cash contribution",
         actorId,
-      }),
-      (error) => error instanceof NonprofitError &&
-        error.code === "gift_fair_value_basis_required" &&
-        error.remedy.includes("fair-value basis"),
-    );
-    const gift = await createGift({
-      orgId: org.orgId,
-      subsidiaryId: org.subsidiaryId,
-      donorPartyId: org.customerId,
-      fundId: fund.id,
-      amount: "125.5000",
-      kind: "cash",
-      receivedOn: org.date,
-      reason: "Record the cash contribution",
-      actorId,
-    });
-    const receipt = await receiptGift({
-      orgId: org.orgId,
-      giftId: gift.id,
-      reason: "Issue the donor's contribution receipt",
-      actorId,
-    });
-    assert.equal(receipt.status, "receipted");
-    assert.equal(receipt.receiptNumber, "RCPT-00001");
-    const storedGift = await withOrgContext(org.orgId, () =>
-      db.execute<{ receipt_number: string; status: string }>(sql`
-        select receipt_number, status from gifts where org_id = ${org.orgId} and id = ${gift.id}`, "objects"),
-    );
-    assert.deepEqual(storedGift[0], { receipt_number: receipt.receiptNumber, status: "receipted" });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      });
+      const receipt = await receiptGift({
+        orgId: org.orgId,
+        giftId: gift.id,
+        reason: "Issue the donor's contribution receipt",
+        actorId,
+      });
+      assert.equal(receipt.status, "receipted");
+      assert.equal(receipt.receiptNumber, "RCPT-00001");
+      const storedGift = await withOrgContext(org.orgId, () =>
+        db.execute<{ receipt_number: string; status: string }>(
+          sql`
+        select receipt_number, status from gifts where org_id = ${org.orgId} and id = ${gift.id}`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(storedGift[0], {
+        receipt_number: receipt.receiptNumber,
+        status: "receipted",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -1,18 +1,29 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
-import { isUuid, pickString } from '../../../lib/list-params'
-import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
-import { resolveFormLayout } from '../../../lib/customization/resolve'
-import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
-import { loadItem } from '../../api/items/_lib'
-import { itemsWorkspaceTabs } from './tabs'
-import type { ItemDrawer } from './ItemDrawer'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../lib/authz";
+import { isFeatureEnabled } from "../../../lib/features";
+import { isUuid, pickString } from "../../../lib/list-params";
+import {
+  customFieldViewerFor,
+  loadFieldDefs,
+  visibleCustomFieldDefs,
+} from "../../../lib/custom-fields";
+import { resolveFormLayout } from "../../../lib/customization/resolve";
+import { SETUP_ENTITY_BY_KEY } from "../../../lib/setup/registry";
+import { loadItem } from "../../api/items/_lib";
+import { itemsWorkspaceTabs } from "./tabs";
+import type { ItemDrawer } from "./ItemDrawer";
 
 /**
  * The item catalog, split into a loader and a spec.
@@ -38,50 +49,62 @@ import type { ItemDrawer } from './ItemDrawer'
  * so switching items resets its client form state.
  */
 
-type ItemDrawerProps = Parameters<typeof ItemDrawer>[0]
+type ItemDrawerProps = Parameters<typeof ItemDrawer>[0];
 
 export interface ItemsData {
-  title: string
-  description: string
-  canManage: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  onRateBooks: boolean
-  onCatalog: boolean
+  title: string;
+  description: string;
+  canManage: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  onRateBooks: boolean;
+  onCatalog: boolean;
   // Header actions, identical on both views: the Catalog ↔ Rate Books
   // switcher (empty unless the user can manage configuration with projects
   // on), extended with Families while the Item variants gate is on, plus the
   // New button on the catalog view.
-  tabs: { href: string; label: string; active: boolean }[]
-  drawer: (Record<string, unknown> & { remountKey: string }) | null
+  tabs: { href: string; label: string; active: boolean }[];
+  drawer: (Record<string, unknown> & { remountKey: string }) | null;
 }
 
 export async function loadItems(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ItemsData> {
-  const t = await getTranslations('items')
+  const t = await getTranslations("items");
 
-  const authz = await requirePermission('items.read')
-  const canManage = can(authz, 'items.manage')
+  const authz = await requirePermission("items.read");
+  const canManage = can(authz, "items.manage");
   // Rate Books are shared billing configuration re-homed onto the catalog module
   // as a tab; managing them keeps the admin.setup.manage gate.
-  const canSetup = can(authz, 'admin.setup.manage')
-  const orgId = authz.user.orgId
-  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled, timeTrackingEnabled, equipmentEnabled, subscriptionPricingEnabled, variantsEnabled, shippingHubEnabled, promotionsEnabled] = await Promise.all([
-    isFeatureEnabled(orgId, 'projects'),
-    isFeatureEnabled(orgId, 'inventory'),
-    isFeatureEnabled(orgId, 'revenueRecognition'),
-    isFeatureEnabled(orgId, 'timeTracking'),
-    isFeatureEnabled(orgId, 'equipment'),
-    isFeatureEnabled(orgId, 'subscriptionBilling'),
-    isFeatureEnabled(orgId, 'itemVariants'),
-    isFeatureEnabled(orgId, 'shippingHub'),
-    isFeatureEnabled(orgId, 'promotions'),
-  ])
+  const canSetup = can(authz, "admin.setup.manage");
+  const orgId = authz.user.orgId;
+  const [
+    projectsEnabled,
+    inventoryEnabled,
+    revenueRecognitionEnabled,
+    timeTrackingEnabled,
+    equipmentEnabled,
+    subscriptionPricingEnabled,
+    variantsEnabled,
+    shippingHubEnabled,
+    promotionsEnabled,
+  ] = await Promise.all([
+    isFeatureEnabled(orgId, "projects"),
+    isFeatureEnabled(orgId, "inventory"),
+    isFeatureEnabled(orgId, "revenueRecognition"),
+    isFeatureEnabled(orgId, "timeTracking"),
+    isFeatureEnabled(orgId, "equipment"),
+    isFeatureEnabled(orgId, "subscriptionBilling"),
+    isFeatureEnabled(orgId, "itemVariants"),
+    isFeatureEnabled(orgId, "shippingHub"),
+    isFeatureEnabled(orgId, "promotions"),
+  ]);
 
-  const itemId = typeof sp.item === 'string' ? sp.item : undefined
-  const createMode = itemId === 'new' && canManage
-  const view = canSetup && projectsEnabled && pickString(sp.view) === 'rate-books' ? 'rate-books' : 'catalog'
-  const rateBooksEntity = view === 'rate-books' ? SETUP_ENTITY_BY_KEY.get('item-rate-books') ?? null : null
+  const itemId = typeof sp.item === "string" ? sp.item : undefined;
+  const createMode = itemId === "new" && canManage;
+  const view =
+    canSetup && projectsEnabled && pickString(sp.view) === "rate-books" ? "rate-books" : "catalog";
+  const rateBooksEntity =
+    view === "rate-books" ? (SETUP_ENTITY_BY_KEY.get("item-rate-books") ?? null) : null;
 
   // Catalog ↔ Rate Books switcher — visible tabs shown on both views when the
   // user can manage configuration, defined once and reused. Empty when every
@@ -89,31 +112,33 @@ export async function loadItems(
   // matches the native `{viewChips}` (null when the gate fails) exactly.
   // Product families ride the same strip while the Item variants gate is on,
   // so the family list stays one click from the catalog in every configuration.
-  const showTabs = canSetup && projectsEnabled
+  const showTabs = canSetup && projectsEnabled;
   const tabs = itemsWorkspaceTabs({
-    active: view === 'rate-books' ? 'rate-books' : 'catalog',
-    catalogLabel: t('list.viewCatalog'),
-    rateBooksLabel: t('list.viewRateBooks'),
-    familiesLabel: t('list.viewFamilies'),
+    active: view === "rate-books" ? "rate-books" : "catalog",
+    catalogLabel: t("list.viewCatalog"),
+    rateBooksLabel: t("list.viewRateBooks"),
+    familiesLabel: t("list.viewFamilies"),
     showRateBooks: showTabs,
     showFamilies: variantsEnabled,
-  })
+  });
 
   if (rateBooksEntity) {
     return {
-      title: t('list.title'),
-      description: t('list.description'),
+      title: t("list.title"),
+      description: t("list.description"),
       canManage,
       currentParams: sp,
       onRateBooks: true,
       onCatalog: false,
       tabs,
       drawer: null,
-    }
+    };
   }
 
   const [openItem, pickers, pricingState] = await Promise.all([
-    itemId && itemId !== 'new' && isUuid(itemId) ? loadItem(itemId, orgId, { customFieldViewer: customFieldViewerFor(authz) }) : null,
+    itemId && itemId !== "new" && isUuid(itemId)
+      ? loadItem(itemId, orgId, { customFieldViewer: customFieldViewerFor(authz) })
+      : null,
     itemId
       ? Promise.all([
           db.execute<{ id: string; number: string | null; name: string; type: string }>(
@@ -122,7 +147,7 @@ export async function loadItems(
           db.execute<{ id: string; code: string; name: string }>(
             sql`select id, code, name from tax_codes where org_id = ${orgId} and is_active order by code`,
           ),
-          loadFieldDefs('items'),
+          loadFieldDefs("items"),
           revenueRecognitionEnabled
             ? db.execute<{ id: string; code: string; name: string }>(
                 sql`select id, code, name from recognition_rules where org_id = ${orgId} and is_active and not is_forecast order by code`,
@@ -130,13 +155,14 @@ export async function loadItems(
             : Promise.resolve({ rows: [] }),
         ])
       : null,
-    itemId && itemId !== 'new' && isUuid(itemId)
+    itemId && itemId !== "new" && isUuid(itemId)
       ? db.execute<{
-          has_customer: boolean
-          has_cost_formula: boolean
-          has_matrix: boolean
-          has_contract: boolean
-        }>(sql`
+          has_customer: boolean;
+          has_cost_formula: boolean;
+          has_matrix: boolean;
+          has_contract: boolean;
+        }>(
+          sql`
           select
             exists(
               select 1 from item_price_schedules schedule
@@ -160,68 +186,77 @@ export async function loadItems(
               join item_rate_versions version on version.org_id=line.org_id and version.id=line.version_id
                where line.org_id=${orgId} and line.item_id=${itemId} and version.status <> 'retired'
             ) as has_contract
-        `, 'objects')
+        `,
+          "objects",
+        )
       : null,
-  ])
+  ]);
 
-  const pricing = pricingState?.[0]
-  const initialPricingView: ItemDrawerProps['initialPricingView'] = createMode
-    ? 'landing'
+  const pricing = pricingState?.[0];
+  const initialPricingView: ItemDrawerProps["initialPricingView"] = createMode
+    ? "landing"
     : pricing?.has_customer
-      ? 'customer'
+      ? "customer"
       : pricing?.has_cost_formula
-        ? 'cost'
+        ? "cost"
         : pricing?.has_matrix
-          ? 'matrix'
+          ? "matrix"
           : pricing?.has_contract
-            ? 'contract'
+            ? "contract"
             : openItem && (openItem.item.default_rate != null || openItem.item.default_cost != null)
-              ? 'simple'
-              : 'landing'
+              ? "simple"
+              : "landing";
 
   // Which pricing modes this item ACTUALLY has data in. Choosing a pricing
   // mode is an edit, so a read-only drawer must not offer the chooser; it may
   // still open a mode that already holds data, because that is reading.
-  const configuredPricingViews: ItemDrawerProps['configuredPricingViews'] = [
+  const configuredPricingViews: ItemDrawerProps["configuredPricingViews"] = [
     ...(openItem && (openItem.item.default_rate != null || openItem.item.default_cost != null)
-      ? (['simple'] as const)
+      ? (["simple"] as const)
       : []),
-    ...(pricing?.has_matrix ? (['matrix'] as const) : []),
-    ...(pricing?.has_customer ? (['customer'] as const) : []),
-    ...(pricing?.has_cost_formula ? (['cost'] as const) : []),
-    ...(pricing?.has_contract ? (['contract'] as const) : []),
-  ]
+    ...(pricing?.has_matrix ? (["matrix"] as const) : []),
+    ...(pricing?.has_customer ? (["customer"] as const) : []),
+    ...(pricing?.has_cost_formula ? (["cost"] as const) : []),
+    ...(pricing?.has_contract ? (["contract"] as const) : []),
+  ];
 
-  const resolvedForm = itemId && pickers
-    ? await resolveFormLayout({
-        orgId,
-        userId: authz.user.id,
-        recordType: 'item',
-        userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: visibleCustomFieldDefs(pickers[2], customFieldViewerFor(authz)),
-        lineDefs: [],
-        explicitLayoutId: pickString(sp.form),
-      })
-    : null
+  const resolvedForm =
+    itemId && pickers
+      ? await resolveFormLayout({
+          orgId,
+          userId: authz.user.id,
+          recordType: "item",
+          userRoles: authz.user.roles.map(({ key }) => key),
+          headerDefs: visibleCustomFieldDefs(pickers[2], customFieldViewerFor(authz)),
+          lineDefs: [],
+          explicitLayoutId: pickString(sp.form),
+        })
+      : null;
 
-  const requestedReturn = pickString(sp.drawerReturn)
-  const openFamilyId = !createMode && variantsEnabled && openItem?.item.family_id
-    ? String(openItem.item.family_id)
-    : null
+  const requestedReturn = pickString(sp.drawerReturn);
+  const openFamilyId =
+    !createMode && variantsEnabled && openItem?.item.family_id
+      ? String(openItem.item.family_id)
+      : null;
   const openFamily = openFamilyId
-    ? (await db.execute<{ code: string }>(sql`select code from item_families where org_id = ${orgId} and id = ${openFamilyId}`, 'objects'))[0] ?? null
-    : null
+    ? ((
+        await db.execute<{ code: string }>(
+          sql`select code from item_families where org_id = ${orgId} and id = ${openFamilyId}`,
+          "objects",
+        )
+      )[0] ?? null)
+    : null;
   const drawer =
     pickers && (openItem || createMode)
       ? {
-          remountKey: createMode ? 'new' : String(openItem!.item.id),
+          remountKey: createMode ? "new" : String(openItem!.item.id),
           createMode,
           payload: (openItem ?? {
             item: {
-              id: 'new',
-              kind: 'service',
+              id: "new",
+              kind: "service",
               code: null,
-              name: '',
+              name: "",
               category: null,
               income_account_id: null,
               expense_account_id: null,
@@ -237,22 +272,25 @@ export async function loadItems(
               description: null,
               show_on_timesheet: false,
               is_active: true,
-              create_plans_on: 'billing',
-              revenue_allocation: 'normal',
+              create_plans_on: "billing",
+              revenue_allocation: "normal",
               custom: {},
             },
             incomeAccountName: null,
             expenseAccountName: null,
             payrollCostingAccountName: null,
             taxCodeName: null,
-          }) as unknown as ItemDrawerProps['payload'],
+          }) as unknown as ItemDrawerProps["payload"],
           accounts: pickers[0].rows,
           taxCodes: pickers[1].rows,
-          fieldDefs: visibleCustomFieldDefs(pickers[2], customFieldViewerFor(authz)) as unknown as ItemDrawerProps['fieldDefs'],
+          fieldDefs: visibleCustomFieldDefs(
+            pickers[2],
+            customFieldViewerFor(authz),
+          ) as unknown as ItemDrawerProps["fieldDefs"],
           layout: resolvedForm?.layout,
           recognitionRules: pickers[3].rows,
           canManage,
-          basePath: requestedReturn?.startsWith('/items') ? requestedReturn : '/items',
+          basePath: requestedReturn?.startsWith("/items") ? requestedReturn : "/items",
           laborPricing: projectsEnabled,
           inventoryCosting: inventoryEnabled,
           fairValuePrices: revenueRecognitionEnabled,
@@ -266,36 +304,36 @@ export async function loadItems(
           variantsEnabled,
           family: openFamily && openFamilyId ? { id: openFamilyId, code: openFamily.code } : null,
         }
-      : null
+      : null;
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
+    title: t("list.title"),
+    description: t("list.description"),
     canManage,
     currentParams: sp,
     onRateBooks: false,
     onCatalog: true,
     tabs,
     drawer,
-  }
+  };
 }
 
-const f = ref<ItemsData>()
+const f = ref<ItemsData>();
 
 export function itemsSpec(data: ItemsData): PageSpec {
-  const newItem = { widget: 'new-item', props: {} }
+  const newItem = { widget: "new-item", props: {} };
   return page({
-    route: '/items',
-    layout: 'list',
+    route: "/items",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         // The native page wraps the New button (on the catalog view) and the
         // tabs in a flex div inside the header actions container, primary
         // action first and the tab strip last.
         actions: [
-          widget('items-header-actions', {
+          widget("items-header-actions", {
             tabs: data.tabs,
             showNew: data.onCatalog && data.canManage,
             // The native catalog view wraps tabs + button in a flex div;
@@ -307,22 +345,24 @@ export function itemsSpec(data: ItemsData): PageSpec {
     ],
     body: [
       {
-        ...widgetBlock('entity-list-view', {
-          recordType: 'item',
+        ...widgetBlock("entity-list-view", {
+          recordType: "item",
           sp: data.currentParams,
           emptyAction: data.canManage ? newItem : null,
-          drawer: data.drawer ? { widget: 'item-drawer', props: { drawer: data.drawer, sp: data.currentParams } } : null,
+          drawer: data.drawer
+            ? { widget: "item-drawer", props: { drawer: data.drawer, sp: data.currentParams } }
+            : null,
         }),
-        when: f('onCatalog'),
+        when: f("onCatalog"),
       },
       {
-        ...widgetBlock('setup-section', {
-          entityKey: 'item-rate-books',
-          basePath: '/items',
+        ...widgetBlock("setup-section", {
+          entityKey: "item-rate-books",
+          basePath: "/items",
           sp: data.currentParams,
         }),
-        when: f('onRateBooks'),
+        when: f("onRateBooks"),
       },
     ],
-  })
+  });
 }

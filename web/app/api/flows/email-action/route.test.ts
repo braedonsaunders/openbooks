@@ -5,7 +5,12 @@ import { EMAIL_TOKEN_TTL_MS } from "@openbooks/engine/flows/email-tokens";
 
 interface EmailActionState {
   token: string;
-  claims: { gateId: string; decision: "approved" | "rejected"; assigneeUserId: string; expiresAt: number } | null;
+  claims: {
+    gateId: string;
+    decision: "approved" | "rejected";
+    assigneeUserId: string;
+    expiresAt: number;
+  } | null;
   summary: {
     id: string;
     orgId: string;
@@ -147,7 +152,8 @@ registerHooks({
     // helper must load from web/lib/authz.ts so a permissive rewrite fails.
     if (context.parentURL?.includes("/lib/authz")) {
       if (specifier === "./auth") return { url: "mock:auth-session", shortCircuit: true };
-      if (specifier === "./subsidiaries") return { url: "mock:authz-subsidiaries", shortCircuit: true };
+      if (specifier === "./subsidiaries")
+        return { url: "mock:authz-subsidiaries", shortCircuit: true };
     }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
@@ -164,7 +170,8 @@ registerHooks({
 // honoured; kept in a variable so the type checker resolves "./route.ts".
 const routeUrl = "./route.ts?email-action-refusal";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-const { subsidiaryScopeAllows } = (await import("../../../../lib/authz.ts")) as typeof import("../../../../lib/authz");
+const { subsidiaryScopeAllows } =
+  (await import("../../../../lib/authz.ts")) as typeof import("../../../../lib/authz");
 function reset(allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.claims = {
     gateId: "gate-1",

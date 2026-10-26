@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
+import { useEffect } from "react";
 
 /**
  * Keeps the browser tab aligned with the title already rendered by a page.
@@ -12,9 +12,9 @@ import { useEffect } from 'react'
  */
 export function DocumentTitle({ title }: { title: string }) {
   useEffect(() => {
-    const applicationName = document.documentElement.dataset.applicationName
-    document.title = applicationName ? `${title} · ${applicationName}` : title
-  }, [title])
+    const applicationName = document.documentElement.dataset.applicationName;
+    document.title = applicationName ? `${title} · ${applicationName}` : title;
+  }, [title]);
 
-  return null
+  return null;
 }

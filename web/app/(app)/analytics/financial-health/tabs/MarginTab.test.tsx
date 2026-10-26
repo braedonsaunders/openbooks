@@ -8,11 +8,19 @@ import test from "node:test";
 // stand-in. Drives the real tab in jsdom (charts stubbed).
 
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/analytics/financial-health", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/analytics/financial-health",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__mgRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__mgRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier.endsWith("/_ui/charts")) {
@@ -59,12 +67,40 @@ function marginData(priorRevenue: string, priorGP: string): Record<string, unkno
       operating: [],
     },
     pnlSummary: [
-      { key: "revenue", label: "Revenue", current: "1000000.0000", prior: priorRevenue, change: "200000.0000", changePct: "0.2500", strong: true },
-      { key: "grossProfit", label: "Gross Profit", current: "400000.0000", prior: priorGP, change: "80000.0000", changePct: "0.2500", strong: true },
+      {
+        key: "revenue",
+        label: "Revenue",
+        current: "1000000.0000",
+        prior: priorRevenue,
+        change: "200000.0000",
+        changePct: "0.2500",
+        strong: true,
+      },
+      {
+        key: "grossProfit",
+        label: "Gross Profit",
+        current: "400000.0000",
+        prior: priorGP,
+        change: "80000.0000",
+        changePct: "0.2500",
+        strong: true,
+      },
     ],
     marginFlow: [
-      { key: "revenue", label: "Revenue", amount: "1000000.0000", pctOfRevenue: "1.0000", kind: "start" },
-      { key: "netIncome", label: "Net Income", amount: "140000.0000", pctOfRevenue: "0.1400", kind: "total" },
+      {
+        key: "revenue",
+        label: "Revenue",
+        amount: "1000000.0000",
+        pctOfRevenue: "1.0000",
+        kind: "start",
+      },
+      {
+        key: "netIncome",
+        label: "Net Income",
+        amount: "140000.0000",
+        pctOfRevenue: "0.1400",
+        kind: "total",
+      },
     ],
     monthly: [],
   };
@@ -133,9 +169,26 @@ test("the bridge reconciles in exact decimals, or names its residual", () => {
   );
   assert.equal(dusty?.residual, "0.0001");
   // No prior revenue, no prior margin, no current margin: no bridge.
-  assert.equal(buildMarginBridge({ revenue: "1000000.0000", grossProfit: "400000.0000" }, { revenue: "0.0000", grossProfit: "0.0000" }, "0.4000"), null);
-  assert.equal(buildMarginBridge({ revenue: "1000000.0000", grossProfit: "400000.0000" }, null, "0.4000"), null);
-  assert.equal(buildMarginBridge({ revenue: "1000000.0000", grossProfit: "400000.0000" }, { revenue: "800000.0000", grossProfit: "320000.0000" }, null), null);
+  assert.equal(
+    buildMarginBridge(
+      { revenue: "1000000.0000", grossProfit: "400000.0000" },
+      { revenue: "0.0000", grossProfit: "0.0000" },
+      "0.4000",
+    ),
+    null,
+  );
+  assert.equal(
+    buildMarginBridge({ revenue: "1000000.0000", grossProfit: "400000.0000" }, null, "0.4000"),
+    null,
+  );
+  assert.equal(
+    buildMarginBridge(
+      { revenue: "1000000.0000", grossProfit: "400000.0000" },
+      { revenue: "800000.0000", grossProfit: "320000.0000" },
+      null,
+    ),
+    null,
+  );
 });
 
 test("KPIs read the engine ratios and the bridge carries exact margins", async () => {
@@ -146,7 +199,11 @@ test("KPIs read the engine ratios and the bridge carries exact margins", async (
     assert.match(text, /40%/, "gross margin reads the engine ratio, never revenue || 1");
     assert.match(text, /15%/, "operating margin reads the engine ratio");
     assert.match(text, /60%/, "the COGS ratio reads the engine ratio");
-    assert.match(text, /\(40% → 40%\)/, "the bridge hint carries the exact prior and current margins");
+    assert.match(
+      text,
+      /\(40% → 40%\)/,
+      "the bridge hint carries the exact prior and current margins",
+    );
     assert.doesNotMatch(text, /split volume and rate effects/, "an exact bridge shows no refusal");
   } finally {
     await unmount();
@@ -159,7 +216,11 @@ test("no prior revenue refuses the bridge instead of dividing by a stand-in", as
   try {
     const text = host.textContent ?? "";
     assert.match(text, /split volume and rate effects/, "the refusal names what is missing");
-    assert.doesNotMatch(text, /Volume Effect/, "no bridge fabricates effects without a prior margin");
+    assert.doesNotMatch(
+      text,
+      /Volume Effect/,
+      "no bridge fabricates effects without a prior margin",
+    );
   } finally {
     await unmount();
   }

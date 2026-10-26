@@ -1,7 +1,11 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { computeTaxReturn, filterTaxReturnFormsByFeatures, TaxReturnError } from "@openbooks/engine/tax-returns/return";
+import {
+  computeTaxReturn,
+  filterTaxReturnFormsByFeatures,
+  TaxReturnError,
+} from "@openbooks/engine/tax-returns/return";
 import { normalizeMoneyValue } from "../cash/core";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
@@ -24,13 +28,16 @@ export async function listApplicationTaxReturnForms(context: ApplicationContext)
     submission_channel: string;
     is_active: boolean;
     registrations: number;
-  }>(sql`
+  }>(
+    sql`
     select f.code, f.name, f.country, f.submission_channel, f.is_active,
            (select count(*)::int from tax_registrations r
              where r.org_id = f.org_id and r.return_form_code = f.code) as registrations
       from tax_return_forms f
      where f.org_id = ${context.authz.user.orgId}
-    order by f.is_active desc, f.country, f.code`, "objects");
+    order by f.is_active desc, f.country, f.code`,
+    "objects",
+  );
   const visibleRows = await filterTaxReturnFormsByFeatures(context.authz.user.orgId, rows);
   return {
     total: visibleRows.length,
@@ -63,7 +70,10 @@ export interface TaxReturnReadInput {
  * registration-aware, one repeatable-read snapshot). Box values are exact
  * decimal strings via `normalizeMoneyValue` — never floats.
  */
-export async function getApplicationTaxReturn(context: ApplicationContext, input: TaxReturnReadInput) {
+export async function getApplicationTaxReturn(
+  context: ApplicationContext,
+  input: TaxReturnReadInput,
+) {
   assertApplicationPermission(context, "reports.read");
   const formCode = (input.formCode ?? "").trim();
   if (!formCode || formCode.length > 40) {

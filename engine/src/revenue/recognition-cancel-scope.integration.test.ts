@@ -7,11 +7,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { cancelRevenueRecognitionForInvoice } from "../ledger/revenue-recognition-cancellation.ts";
 import { runRevenueRecognition } from "./recognition.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 /**
  * Recognition cancellation locks the invoice and rechecks the caller scope
@@ -25,10 +21,13 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedRecognitionTermPeriods(
   org: Awaited<ReturnType<typeof createScratchOrg>>,
 ): Promise<void> {
-  const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
+  const calendar = await db.execute<{ fiscal_calendar_id: string }>(
+    sql`
     select fiscal_calendar_id
       from accounting_periods
-     where id = ${org.periodId} and org_id = ${org.orgId}`, "objects");
+     where id = ${org.periodId} and org_id = ${org.orgId}`,
+    "objects",
+  );
   const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
@@ -101,8 +100,13 @@ async function seedScopedRecognition(org: Awaited<ReturnType<typeof createScratc
 }
 
 async function invoiceStatus(orgId: string, documentId: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`
-    select status from documents where org_id = ${orgId} and id = ${documentId}`, "objects"))[0]!.status;
+  return (
+    await db.execute<{ status: string }>(
+      sql`
+    select status from documents where org_id = ${orgId} and id = ${documentId}`,
+      "objects",
+    )
+  )[0]!.status;
 }
 
 test(
@@ -125,7 +129,11 @@ test(
         }),
         (error: unknown) => error instanceof ScopeNotFoundError,
       );
-      assert.equal(await invoiceStatus(org.orgId, documentId), "posted", "a refused cancel leaves the invoice posted");
+      assert.equal(
+        await invoiceStatus(org.orgId, documentId),
+        "posted",
+        "a refused cancel leaves the invoice posted",
+      );
       const done = await cancelRevenueRecognitionForInvoice({
         documentId,
         orgId: org.orgId,

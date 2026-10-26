@@ -1,10 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import {
-  listFeedback,
-  writeFeedback,
-} from "@openbooks/engine/hrm/performance/feedback";
+import { listFeedback, writeFeedback } from "@openbooks/engine/hrm/performance/feedback";
 
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
@@ -15,8 +12,7 @@ export const runtime = "nodejs";
 
 async function gated(orgId: string): Promise<boolean> {
   return (
-    (await isFeatureEnabled(orgId, "hrm")) &&
-    (await isFeatureEnabled(orgId, "hrmPerformance"))
+    (await isFeatureEnabled(orgId, "hrm")) && (await isFeatureEnabled(orgId, "hrmPerformance"))
   );
 }
 
@@ -32,14 +28,9 @@ export const GET = defineRoute({
     if (!(await gated(authz.user.orgId))) {
       return notFound("record");
     }
-    const subjectEmploymentId = new URL(req.url).searchParams.get(
-      "subjectEmploymentId",
-    );
+    const subjectEmploymentId = new URL(req.url).searchParams.get("subjectEmploymentId");
     if (subjectEmploymentId !== null && !isUuid(subjectEmploymentId)) {
-      return NextResponse.json(
-        { error: "subjectEmploymentId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "subjectEmploymentId must be a uuid" }, { status: 400 });
     }
     try {
       const rows = await listFeedback({

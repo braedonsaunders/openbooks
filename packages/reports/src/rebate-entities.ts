@@ -1,24 +1,88 @@
-import type { ReportEntity } from './entities';
+import type { ReportEntity } from "./entities";
 
-export const REBATE_REPORT_ENTITIES: ReportEntity[] = (['customer','vendor'] as const).flatMap(side => [
- {
-  key:`${side}_rebate_accruals`,label:`${side==='customer'?'Customer':'Vendor'} rebate accruals`,category:'orders',
-  description:'Append-only earned rebates, retrospective tier adjustments and journal provenance.',featureKey:'rebateManagement',requiredPermission:side==='customer'?'ar.read':'ap.read',
-  from:`rebate_accruals f join rebate_agreements a on a.org_id=f.org_id and a.id=f.agreement_id and a.side='${side}' join parties p on p.org_id=f.org_id and p.id=f.party_id join documents d on d.org_id=f.org_id and d.id=(select document_id from document_lines where org_id=f.org_id and id=f.document_line_id)`,
-  orgColumn:'f.org_id',subsidiaryScope:{column:'a.subsidiary_id'},currencyColumn:'currency',timeKey:'accrued_on',
-  columns:[{key:'id',label:'Accrual',kind:'uuid',expr:'f.id'},{key:'agreement',label:'Agreement',kind:'text',expr:'a.code'},{key:'counterparty',label:'Counterparty',kind:'text',expr:'p.display_name'},
-   {key:'source_document',label:'Source transaction',kind:'text',expr:'d.document_number'},{key:'accrued_on',label:'Accrued on',kind:'date',expr:'f.accrued_on'},
-   {key:'currency',label:'Currency',kind:'text',expr:'a.currency'},{key:'earned',label:'Earned adjustment',kind:'money',expr:'f.amount',txnCurrency:true},
-   {key:'revision',label:'Assessment revision',kind:'number',expr:'f.revision'},{key:'journal_entry_id',label:'Journal entry',kind:'uuid',expr:'f.journal_entry_id'}],
- },
- {
-  key:`${side}_rebate_claims`,label:`${side==='customer'?'Customer':'Vendor'} rebate claims`,category:'orders',
-  description:'Earned claims, tenant Flow approvals and native settlement instruments.',featureKey:'rebateManagement',requiredPermission:side==='customer'?'ar.read':'ap.read',
-  from:`rebate_claims c join rebate_agreements a on a.org_id=c.org_id and a.id=c.agreement_id and a.side='${side}' join parties p on p.org_id=c.org_id and p.id=c.party_id`,
-  orgColumn:'c.org_id',subsidiaryScope:{column:'a.subsidiary_id'},currencyColumn:'currency',timeKey:'cutoff_on',
-  columns:[{key:'id',label:'Claim',kind:'uuid',expr:'c.id'},{key:'agreement',label:'Agreement',kind:'text',expr:'a.code'},{key:'counterparty',label:'Counterparty',kind:'text',expr:'p.display_name'},
-   {key:'cutoff_on',label:'Earned through',kind:'date',expr:'c.cutoff_on'},{key:'status',label:'Status',kind:'enum',expr:'c.status',options:['draft','approved','document_pending','settled','cancelled']},
-   {key:'currency',label:'Currency',kind:'text',expr:'a.currency'},{key:'amount',label:'Claim amount',kind:'money',expr:'c.amount',txnCurrency:true},
-   {key:'settlement_on',label:'Settled on',kind:'date',expr:'c.settlement_on'},{key:'document_id',label:'Settlement document',kind:'uuid',expr:'c.settlement_document_id'}],
- }
-]);
+export const REBATE_REPORT_ENTITIES: ReportEntity[] = (["customer", "vendor"] as const).flatMap(
+  (side) => [
+    {
+      key: `${side}_rebate_accruals`,
+      label: `${side === "customer" ? "Customer" : "Vendor"} rebate accruals`,
+      category: "orders",
+      description:
+        "Append-only earned rebates, retrospective tier adjustments and journal provenance.",
+      featureKey: "rebateManagement",
+      requiredPermission: side === "customer" ? "ar.read" : "ap.read",
+      from: `rebate_accruals f join rebate_agreements a on a.org_id=f.org_id and a.id=f.agreement_id and a.side='${side}' join parties p on p.org_id=f.org_id and p.id=f.party_id join documents d on d.org_id=f.org_id and d.id=(select document_id from document_lines where org_id=f.org_id and id=f.document_line_id)`,
+      orgColumn: "f.org_id",
+      subsidiaryScope: { column: "a.subsidiary_id" },
+      currencyColumn: "currency",
+      timeKey: "accrued_on",
+      columns: [
+        { key: "id", label: "Accrual", kind: "uuid", expr: "f.id" },
+        { key: "agreement", label: "Agreement", kind: "text", expr: "a.code" },
+        { key: "counterparty", label: "Counterparty", kind: "text", expr: "p.display_name" },
+        {
+          key: "source_document",
+          label: "Source transaction",
+          kind: "text",
+          expr: "d.document_number",
+        },
+        { key: "accrued_on", label: "Accrued on", kind: "date", expr: "f.accrued_on" },
+        { key: "currency", label: "Currency", kind: "text", expr: "a.currency" },
+        {
+          key: "earned",
+          label: "Earned adjustment",
+          kind: "money",
+          expr: "f.amount",
+          txnCurrency: true,
+        },
+        { key: "revision", label: "Assessment revision", kind: "number", expr: "f.revision" },
+        {
+          key: "journal_entry_id",
+          label: "Journal entry",
+          kind: "uuid",
+          expr: "f.journal_entry_id",
+        },
+      ],
+    },
+    {
+      key: `${side}_rebate_claims`,
+      label: `${side === "customer" ? "Customer" : "Vendor"} rebate claims`,
+      category: "orders",
+      description: "Earned claims, tenant Flow approvals and native settlement instruments.",
+      featureKey: "rebateManagement",
+      requiredPermission: side === "customer" ? "ar.read" : "ap.read",
+      from: `rebate_claims c join rebate_agreements a on a.org_id=c.org_id and a.id=c.agreement_id and a.side='${side}' join parties p on p.org_id=c.org_id and p.id=c.party_id`,
+      orgColumn: "c.org_id",
+      subsidiaryScope: { column: "a.subsidiary_id" },
+      currencyColumn: "currency",
+      timeKey: "cutoff_on",
+      columns: [
+        { key: "id", label: "Claim", kind: "uuid", expr: "c.id" },
+        { key: "agreement", label: "Agreement", kind: "text", expr: "a.code" },
+        { key: "counterparty", label: "Counterparty", kind: "text", expr: "p.display_name" },
+        { key: "cutoff_on", label: "Earned through", kind: "date", expr: "c.cutoff_on" },
+        {
+          key: "status",
+          label: "Status",
+          kind: "enum",
+          expr: "c.status",
+          options: ["draft", "approved", "document_pending", "settled", "cancelled"],
+        },
+        { key: "currency", label: "Currency", kind: "text", expr: "a.currency" },
+        {
+          key: "amount",
+          label: "Claim amount",
+          kind: "money",
+          expr: "c.amount",
+          txnCurrency: true,
+        },
+        { key: "settlement_on", label: "Settled on", kind: "date", expr: "c.settlement_on" },
+        {
+          key: "document_id",
+          label: "Settlement document",
+          kind: "uuid",
+          expr: "c.settlement_document_id",
+        },
+      ],
+    },
+  ],
+);

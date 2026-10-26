@@ -1,40 +1,46 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMoney } from '@/components/money-provider'
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { shortDateLabel } from '@/lib/format'
-import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openbooks/engine/money/money'
-import { ArrowRight, ShieldCheck, Gauge, TriangleAlert } from 'lucide-react'
-import { Badge, Button, cn } from '@openbooks/ui'
-import { toChartNumber } from '../../analytics/_ui/format'
-import { InteractiveTableRow } from '@/components/interactive-table-row'
+import {
+  Table as SharedTable,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { shortDateLabel } from "@/lib/format";
+import {
+  cmp as compareMoney,
+  div as divideMoney,
+  sum as sumMoney,
+} from "@openbooks/engine/money/money";
+import { ArrowRight, ShieldCheck, Gauge, TriangleAlert } from "lucide-react";
+import { Badge, Button, cn } from "@openbooks/ui";
+import { toChartNumber } from "../../analytics/_ui/format";
+import { InteractiveTableRow } from "@/components/interactive-table-row";
 
 export interface PlannerEntry {
-  id: string
-  docId: string | null
-  docKind: string | null
-  partyName: string
-  amount: string
-  dueDate: string | null
-  daysOverdue: number
-  method: string
+  id: string;
+  docId: string | null;
+  docKind: string | null;
+  partyName: string;
+  amount: string;
+  dueDate: string | null;
+  daysOverdue: number;
+  method: string;
 }
 
 export interface PayRunPlannerProps {
-  recommended: PlannerEntry[]
-  capacity: string | null
-  startingCash: string
-  restrictToSafe: boolean
-  deferredThisWeek: string
+  recommended: PlannerEntry[];
+  capacity: string | null;
+  startingCash: string;
+  restrictToSafe: boolean;
+  deferredThisWeek: string;
   /** ap.pay — gates the pay-run handoff, as the AR twin gates on canCollect.
    * Optional so existing renders stay compiling; absent hides the button. */
-  canPay?: boolean
+  canPay?: boolean;
 }
-
-
 
 /**
  * The AP pay-run planner: the capacity-scheduled recommendation for this week.
@@ -44,34 +50,38 @@ export interface PayRunPlannerProps {
  * the cockpit's forecast-config flyout — see the gear on this panel.
  */
 export function PayRunPlanner(props: PayRunPlannerProps) {
-  const { money, moneyCompact } = useMoney()
-  const locale = useLocale()
-  const t = useTranslations('ap.cockpit.payRun')
-  const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
-  const router = useRouter()
-  const payable = useMemo(() => props.recommended.filter((e) => e.docId), [props.recommended])
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(payable.map((e) => e.id)))
+  const { money, moneyCompact } = useMoney();
+  const locale = useLocale();
+  const t = useTranslations("ap.cockpit.payRun");
+  const fmtDate = (d: string) => shortDateLabel(new Date(d + "T00:00:00Z"), locale);
+  const router = useRouter();
+  const payable = useMemo(() => props.recommended.filter((e) => e.docId), [props.recommended]);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(payable.map((e) => e.id)));
 
-  const selectedEntries = payable.filter((e) => selected.has(e.id))
-  const total = sumMoney(selectedEntries.map((e) => e.amount))
-  const cap = props.capacity
-  const overCap = cap !== null && compareMoney(total, cap) > 0
-  const pct = cap !== null && compareMoney(cap, '0.0000') > 0
-    ? Math.min(100, Math.max(0, toChartNumber(divideMoney(total, cap)) * 100))
-    : compareMoney(total, '0.0000') > 0 ? 100 : 0
+  const selectedEntries = payable.filter((e) => selected.has(e.id));
+  const total = sumMoney(selectedEntries.map((e) => e.amount));
+  const cap = props.capacity;
+  const overCap = cap !== null && compareMoney(total, cap) > 0;
+  const pct =
+    cap !== null && compareMoney(cap, "0.0000") > 0
+      ? Math.min(100, Math.max(0, toChartNumber(divideMoney(total, cap)) * 100))
+      : compareMoney(total, "0.0000") > 0
+        ? 100
+        : 0;
 
   const toggle = (id: string) =>
     setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const build = () => {
-    const ids = selectedEntries.map((e) => e.docId!).filter(Boolean)
-    if (!ids.length) return
-    router.push((`/payments?view=runs&newRun=1&preselect=${ids.join(',')}`))
-  }
+    const ids = selectedEntries.map((e) => e.docId!).filter(Boolean);
+    if (!ids.length) return;
+    router.push(`/payments?view=runs&newRun=1&preselect=${ids.join(",")}`);
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -80,7 +90,7 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
         <div className="mb-1.5 flex items-center justify-between text-xs">
           <span className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400">
             {props.restrictToSafe ? <ShieldCheck size={13} /> : <Gauge size={13} />}
-            {cap === null ? t('noCap') : props.restrictToSafe ? t('safeCapacity') : t('weeklyCap')}
+            {cap === null ? t("noCap") : props.restrictToSafe ? t("safeCapacity") : t("weeklyCap")}
           </span>
           <span className="tabular-nums text-slate-600 dark:text-slate-300">
             {money(total)}
@@ -88,14 +98,27 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
           </span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-          <div className={cn('h-full rounded-full transition-all', overCap ? 'bg-red-500' : 'bg-teal-500')} style={{ width: `${pct}%` }} />
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              overCap ? "bg-red-500" : "bg-teal-500",
+            )}
+            style={{ width: `${pct}%` }}
+          />
         </div>
         <div className="mt-1.5 flex items-center justify-between text-[11px]">
-          <span className="text-slate-400 dark:text-slate-500">{t('startingCash', { amount: money(props.startingCash) })}</span>
+          <span className="text-slate-400 dark:text-slate-500">
+            {t("startingCash", { amount: money(props.startingCash) })}
+          </span>
           {overCap ? (
-            <span className="flex items-center gap-1 font-medium text-red-600 dark:text-red-400"><TriangleAlert size={11} />{t('overCap')}</span>
-          ) : compareMoney(props.deferredThisWeek, '0.0000') > 0 ? (
-            <span className="text-amber-600 dark:text-amber-400">{t('deferred', { amount: moneyCompact(props.deferredThisWeek) })}</span>
+            <span className="flex items-center gap-1 font-medium text-red-600 dark:text-red-400">
+              <TriangleAlert size={11} />
+              {t("overCap")}
+            </span>
+          ) : compareMoney(props.deferredThisWeek, "0.0000") > 0 ? (
+            <span className="text-amber-600 dark:text-amber-400">
+              {t("deferred", { amount: moneyCompact(props.deferredThisWeek) })}
+            </span>
           ) : null}
         </div>
       </div>
@@ -103,29 +126,48 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
       {/* recommended bills — fills the panel height, scrolls internally */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {payable.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">{t('empty')}</p>
+          <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">
+            {t("empty")}
+          </p>
         ) : (
           <SharedTable className="w-full text-sm">
             <SharedTableBody>
               {payable.map((e) => {
-                const on = selected.has(e.id)
+                const on = selected.has(e.id);
                 return (
                   <InteractiveTableRow
                     key={e.id}
                     className="group cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
-                    onClick={() => toggle(e.id)} noAnimate
+                    onClick={() => toggle(e.id)}
+                    noAnimate
                   >
                     <SharedTableCell className="w-9 py-2 pl-4">
-                      <input type="checkbox" readOnly checked={on} className="h-4 w-4 accent-teal-600" aria-label={e.partyName} />
+                      <input
+                        type="checkbox"
+                        readOnly
+                        checked={on}
+                        className="h-4 w-4 accent-teal-600"
+                        aria-label={e.partyName}
+                      />
                     </SharedTableCell>
                     <SharedTableCell className="py-2">
-                      <span className="font-medium text-slate-700 dark:text-slate-200">{e.partyName}</span>
-                      {e.daysOverdue > 0 ? <Badge variant="warning" className="ml-1.5 text-[10px]">{e.daysOverdue}d</Badge> : null}
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        {e.partyName}
+                      </span>
+                      {e.daysOverdue > 0 ? (
+                        <Badge variant="warning" className="ml-1.5 text-[10px]">
+                          {e.daysOverdue}d
+                        </Badge>
+                      ) : null}
                     </SharedTableCell>
-                    <SharedTableCell className="py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">{e.dueDate ? fmtDate(e.dueDate) : '—'}</SharedTableCell>
-                    <SharedTableCell className="py-2 pr-4 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(e.amount)}</SharedTableCell>
+                    <SharedTableCell className="py-2 text-right text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                      {e.dueDate ? fmtDate(e.dueDate) : "—"}
+                    </SharedTableCell>
+                    <SharedTableCell className="py-2 pr-4 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">
+                      {money(e.amount)}
+                    </SharedTableCell>
                   </InteractiveTableRow>
-                )
+                );
               })}
             </SharedTableBody>
           </SharedTable>
@@ -134,14 +176,16 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
 
       {/* action bar */}
       <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 dark:border-slate-800">
-        <span className="text-xs text-slate-500 dark:text-slate-400">{t('selected', { count: selectedEntries.length })}</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {t("selected", { count: selectedEntries.length })}
+        </span>
         {props.canPay ? (
           <Button size="sm" disabled={selectedEntries.length === 0} onClick={build}>
-            {t('build')}
+            {t("build")}
             <ArrowRight size={15} />
           </Button>
         ) : null}
       </div>
     </div>
-  )
+  );
 }

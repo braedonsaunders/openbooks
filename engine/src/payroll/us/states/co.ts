@@ -31,14 +31,25 @@
  *
  * All arithmetic is exact bigint. No floats.
  */
-import { D, divIntCents, max0, mulInt, mulRateCents, rate6, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateFlag, type PayrollCertificate,
-} from "../../certificates.ts";
+  D,
+  divIntCents,
+  max0,
+  mulInt,
+  mulRateCents,
+  rate6,
+  U,
+} from "../../../money/payroll-decimal.ts";
+import { certificateAmount, certificateFlag, type PayrollCertificate } from "../../certificates.ts";
 import { PayrollError } from "../../error.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext, US_STATE_PAY_PERIODS } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+  US_STATE_PAY_PERIODS,
+} from "./state-engine.ts";
 import {
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
@@ -85,16 +96,18 @@ const CO_EDITIONS_BY_YEAR: Record<number, CoYearRates> = {
   [CO_RATES_2026.year]: CO_RATES_2026,
 };
 
-export const CO_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "DR 1098 (10/21/25)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Colorado Department of Revenue, 2026 DR 1098 Colorado Withholding Worksheet for Employers "
-    + "(rev. 10/21/25), lines 1c–2f; Form DR 0004",
-  status: "published",
-  region: "CO",
-}];
+export const CO_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "DR 1098 (10/21/25)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Colorado Department of Revenue, 2026 DR 1098 Colorado Withholding Worksheet for Employers " +
+      "(rev. 10/21/25), lines 1c–2f; Form DR 0004",
+    status: "published",
+    region: "CO",
+  },
+];
 
 function compute(
   input: UsStateWithholdingInput,
@@ -108,11 +121,27 @@ function compute(
   if (militarySpouseCertificate?.onFile) {
     requireMilitarySpouseEligibility(militarySpouseCertificate, "Colorado", [
       { key: "spouse_is_nonresident", description: "the spouse is not a Colorado resident" },
-      { key: "servicemember_is_member", description: "the spouse is a qualifying U.S. servicemember" },
-      { key: "servicemember_is_nonresident", description: "the servicemember is not a Colorado resident" },
-      { key: "spouse_present_to_accompany", description: "the spouse is in Colorado solely to be with the servicemember" },
-      { key: "servicemember_serving_under_orders", description: "the servicemember is serving in compliance with military orders" },
-      { key: "notify_if_residency_changes", description: "the employee will notify the employer immediately if they become a Colorado resident" },
+      {
+        key: "servicemember_is_member",
+        description: "the spouse is a qualifying U.S. servicemember",
+      },
+      {
+        key: "servicemember_is_nonresident",
+        description: "the servicemember is not a Colorado resident",
+      },
+      {
+        key: "spouse_present_to_accompany",
+        description: "the spouse is in Colorado solely to be with the servicemember",
+      },
+      {
+        key: "servicemember_serving_under_orders",
+        description: "the servicemember is serving in compliance with military orders",
+      },
+      {
+        key: "notify_if_residency_changes",
+        description:
+          "the employee will notify the employer immediately if they become a Colorado resident",
+      },
     ]);
     return {
       state: "CO",
@@ -133,7 +162,10 @@ function compute(
   const airCarrierCertificate = input.supportingCertificates?.us_co_air_carrier;
   if (airCarrierCertificate?.onFile) {
     for (const [key, description] of [
-      ["is_air_carrier_employee", "the employee performs regularly assigned duties on aircraft in more than one state for an air carrier"],
+      [
+        "is_air_carrier_employee",
+        "the employee performs regularly assigned duties on aircraft in more than one state for an air carrier",
+      ],
       ["is_nonresident", "the employee is not a Colorado resident"],
     ] as const) {
       if (!certificateFlag(airCarrierCertificate, key)) {
@@ -144,9 +176,9 @@ function compute(
     }
     if (input.basis !== "nonresident") {
       throw new PayrollError(
-        "Colorado air-carrier withholding exemption contradicts this run's resident basis — "
-        + "the 49 U.S.C. §40116(f) exemption never applies to the residence state. Correct the "
-        + "basis or remove the air-carrier certificate",
+        "Colorado air-carrier withholding exemption contradicts this run's resident basis — " +
+          "the 49 U.S.C. §40116(f) exemption never applies to the residence state. Correct the " +
+          "basis or remove the air-carrier certificate",
       );
     }
     const allocation = requireUsWageAllocation(input.wageAllocations, "CO", null);
@@ -200,11 +232,14 @@ function compute(
   trace("CO_ANNUAL_WAGES", annualWages);
 
   const enteredAllowance = certificateAmount(input.certificate, "annual_allowance");
-  const annualAllowance = enteredAllowance != null
-    ? U(enteredAllowance)
-    : U(input.federalFilingStatus === "married_joint"
-      ? rates.jointAllowance
-      : rates.otherAllowance);
+  const annualAllowance =
+    enteredAllowance != null
+      ? U(enteredAllowance)
+      : U(
+          input.federalFilingStatus === "married_joint"
+            ? rates.jointAllowance
+            : rates.otherAllowance,
+        );
   trace("CO_ANNUAL_ALLOWANCE", annualAllowance);
 
   const taxable = max0(annualWages - annualAllowance);
@@ -237,7 +272,8 @@ function compute(
  * Computed beside DR 1098 income tax, never folded into it.
  */
 export function coFamliWithholding(
-  payDate: string, coveredWages: string,
+  payDate: string,
+  coveredWages: string,
 ): { employee: string; employer: string } {
   const rates = CO_STATE_ENGINE.ratesForPayDate(payDate);
   return {
@@ -250,7 +286,8 @@ export const CO_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CO_MILITARY_SPOUSE_EXEMPT: "Colorado qualifying military-spouse wages exempt from withholding",
   CO_FAMLI_EMPLOYEE: "Colorado FAMLI employee premium",
   CO_FAMLI_EMPLOYER: "Colorado FAMLI employer contribution",
-  CO_AIR_CARRIER_EXEMPT: "Colorado air-carrier wages exempt under 49 U.S.C. §40116(f) (≤50% earned in Colorado)",
+  CO_AIR_CARRIER_EXEMPT:
+    "Colorado air-carrier wages exempt under 49 U.S.C. §40116(f) (≤50% earned in Colorado)",
   CO_EXEMPT_CARRIER_WAGES: "Colorado federally exempt nonresident rail/motor carrier wages",
   CO_NONRESIDENT_WAGES: "Colorado apportioned nonresident wages",
   CO_ANNUAL_WAGES: "Colorado annualized wages",
@@ -289,11 +326,11 @@ export const CO_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "CO" },
   purpose: "withholding",
   citation:
-    "Colorado Form DR 0004; 2026 DR 1098 (rev. 10/21/25) lines 2a and 2e; "
-    + "tax.colorado.gov/withholding-FAQ",
+    "Colorado Form DR 0004; 2026 DR 1098 (rev. 10/21/25) lines 2a and 2e; " +
+    "tax.colorado.gov/withholding-FAQ",
   summary:
-    "Optional Colorado certificate. When line 2 is blank or no DR 0004 is on file, DR 1098 "
-    + "uses the employee's federal W-4 Step 1(c) filing status and withholds no extra amount.",
+    "Optional Colorado certificate. When line 2 is blank or no DR 0004 is on file, DR 1098 " +
+    "uses the employee's federal W-4 Step 1(c) filing status and withholds no extra amount.",
   storage: "certificate_rows",
   fields: [
     {
@@ -303,9 +340,9 @@ export const CO_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "If filled, this is DR 1098 line 2a in full. If blank — or no DR 0004 is on file — "
-        + "line 2a is $11,000 for married filing jointly or qualifying surviving spouse, "
-        + "and $5,500 otherwise, exactly as the 2026 worksheet prints.",
+        "If filled, this is DR 1098 line 2a in full. If blank — or no DR 0004 is on file — " +
+        "line 2a is $11,000 for married filing jointly or qualifying surviving spouse, " +
+        "and $5,500 otherwise, exactly as the 2026 worksheet prints.",
     },
     {
       key: "additional_per_period",
@@ -314,8 +351,8 @@ export const CO_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "Added after the 4.40% calculation (DR 1098 line 2e). A pre-2022 extra-withholding "
-        + "request stays in force until the employee files a new certificate.",
+        "Added after the 4.40% calculation (DR 1098 line 2e). A pre-2022 extra-withholding " +
+        "request stays in force until the employee files a new certificate.",
     },
   ],
 };
@@ -334,12 +371,42 @@ export const CO_DR1059_CERTIFICATE: PayrollCertificate = {
     "A calendar-year affidavit. The spouse must be a nonresident and in Colorado solely to be with a servicemember serving in compliance with military orders.",
   storage: "certificate_rows",
   fields: [
-    { key: "spouse_is_nonresident", label: "Spouse is not a Colorado resident", kind: "flag", help: "Required DR 1059 attestation 1." },
-    { key: "servicemember_is_member", label: "Spouse is a U.S. servicemember", kind: "flag", help: "Required DR 1059 attestation 2." },
-    { key: "servicemember_is_nonresident", label: "Servicemember is not a Colorado resident", kind: "flag", help: "Required DR 1059 attestation 3." },
-    { key: "spouse_present_to_accompany", label: "Spouse is in Colorado solely to be with the servicemember", kind: "flag", help: "Required DR 1059 attestation 4." },
-    { key: "servicemember_serving_under_orders", label: "Servicemember is serving in compliance with military orders", kind: "flag", help: "Required DR 1059 attestation 4." },
-    { key: "notify_if_residency_changes", label: "Employee will notify employer immediately if they become a Colorado resident", kind: "flag", help: "Required DR 1059 attestation 5." },
+    {
+      key: "spouse_is_nonresident",
+      label: "Spouse is not a Colorado resident",
+      kind: "flag",
+      help: "Required DR 1059 attestation 1.",
+    },
+    {
+      key: "servicemember_is_member",
+      label: "Spouse is a U.S. servicemember",
+      kind: "flag",
+      help: "Required DR 1059 attestation 2.",
+    },
+    {
+      key: "servicemember_is_nonresident",
+      label: "Servicemember is not a Colorado resident",
+      kind: "flag",
+      help: "Required DR 1059 attestation 3.",
+    },
+    {
+      key: "spouse_present_to_accompany",
+      label: "Spouse is in Colorado solely to be with the servicemember",
+      kind: "flag",
+      help: "Required DR 1059 attestation 4.",
+    },
+    {
+      key: "servicemember_serving_under_orders",
+      label: "Servicemember is serving in compliance with military orders",
+      kind: "flag",
+      help: "Required DR 1059 attestation 4.",
+    },
+    {
+      key: "notify_if_residency_changes",
+      label: "Employee will notify employer immediately if they become a Colorado resident",
+      kind: "flag",
+      help: "Required DR 1059 attestation 5.",
+    },
   ],
 };
 
@@ -357,15 +424,26 @@ export const CO_AIR_CARRIER_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "CO" },
   purpose: "withholding",
   citation:
-    "49 U.S.C. §40116(f); Colorado Department of Revenue, 2026 Wage Withholding Tax Guide "
-    + "(Jan. 2026), Part 2 “Exempt Wages for Nonresident Employees,” air carrier row",
+    "49 U.S.C. §40116(f); Colorado Department of Revenue, 2026 Wage Withholding Tax Guide " +
+    "(Jan. 2026), Part 2 “Exempt Wages for Nonresident Employees,” air carrier row",
   summary:
-    "An air-carrier employee performing duties in more than one state is exempt from Colorado "
-    + "income tax when no more than 50% of compensation is earned in Colorado.",
+    "An air-carrier employee performing duties in more than one state is exempt from Colorado " +
+    "income tax when no more than 50% of compensation is earned in Colorado.",
   storage: "certificate_rows",
   fields: [
-    { key: "is_air_carrier_employee", label: "Employee performs regularly assigned duties on aircraft in more than one state for an air carrier", kind: "flag", help: "Required §40116(f) attestation 1." },
-    { key: "is_nonresident", label: "Employee is not a Colorado resident", kind: "flag", help: "Required attestation 2: the exemption never applies to the residence state." },
+    {
+      key: "is_air_carrier_employee",
+      label:
+        "Employee performs regularly assigned duties on aircraft in more than one state for an air carrier",
+      kind: "flag",
+      help: "Required §40116(f) attestation 1.",
+    },
+    {
+      key: "is_nonresident",
+      label: "Employee is not a Colorado resident",
+      kind: "flag",
+      help: "Required attestation 2: the exemption never applies to the residence state.",
+    },
   ],
 };
 

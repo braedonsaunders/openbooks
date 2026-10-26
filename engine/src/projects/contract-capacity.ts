@@ -1,7 +1,7 @@
-import { sql } from "drizzle-orm"
-import type { SqlExecutor } from "../platform/db.ts"
-import { normalizeMoney } from "../money/money.ts"
-import { pgTextArrayLiteral } from "../platform/pg-array.ts"
+import { sql } from "drizzle-orm";
+import type { SqlExecutor } from "../platform/db.ts";
+import { normalizeMoney } from "../money/money.ts";
+import { pgTextArrayLiteral } from "../platform/pg-array.ts";
 
 /** Reserved capacity includes non-voided invoices less credits and unconverted open prebilling worksheets. */
 export async function projectContractCapacityUsed(
@@ -11,11 +11,16 @@ export async function projectContractCapacityUsed(
   invoicedToDate: { docKinds: string[]; creditKinds: string[] },
   options: { excludePrebillId?: string } = {},
 ): Promise<string> {
-  const invoiceKinds = invoicedToDate.docKinds.length ? invoicedToDate.docKinds : ['customer_invoice']
-  const creditKinds = invoicedToDate.creditKinds.length ? invoicedToDate.creditKinds : ['customer_credit']
-  const allKinds = [...new Set([...invoiceKinds, ...creditKinds])]
-  const excludePrebillId = options.excludePrebillId ?? null
-  const used = (await executor.execute<{ used: string }>(sql`
+  const invoiceKinds = invoicedToDate.docKinds.length
+    ? invoicedToDate.docKinds
+    : ["customer_invoice"];
+  const creditKinds = invoicedToDate.creditKinds.length
+    ? invoicedToDate.creditKinds
+    : ["customer_credit"];
+  const allKinds = [...new Set([...invoiceKinds, ...creditKinds])];
+  const excludePrebillId = options.excludePrebillId ?? null;
+  const used = await executor.execute<{ used: string }>(
+    sql`
     select coalesce((
              select sum(case when document.kind = any(${pgTextArrayLiteral(creditKinds)}::text[])
                              then -line.amount else line.amount end)
@@ -33,6 +38,8 @@ export async function projectContractCapacityUsed(
                 and worksheet.status in ('draft', 'review', 'approved')
                 and (${excludePrebillId}::uuid is null or worksheet.id <> ${excludePrebillId})
            ), 0) as used
-  `, "objects"))
-  return normalizeMoney(used[0]?.used ?? '0')
+  `,
+    "objects",
+  );
+  return normalizeMoney(used[0]?.used ?? "0");
 }

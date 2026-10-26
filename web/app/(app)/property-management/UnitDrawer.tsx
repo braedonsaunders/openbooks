@@ -5,7 +5,19 @@ import { UrlDrawer, Button, Input } from "@openbooks/ui";
 import { Field } from "./workspace-ui";
 import type { SaveAction } from "./types";
 
-export function UnitDrawer({ propertyId, closeHref, onClose, busy, onSave }: { propertyId: string | null; closeHref: string; onClose: () => void; busy: boolean; onSave: SaveAction }) {
+export function UnitDrawer({
+  propertyId,
+  closeHref,
+  onClose,
+  busy,
+  onSave,
+}: {
+  propertyId: string | null;
+  closeHref: string;
+  onClose: () => void;
+  busy: boolean;
+  onSave: SaveAction;
+}) {
   const [form, setForm] = useState({
     code: "",
     name: "",
@@ -55,16 +67,10 @@ export function UnitDrawer({ propertyId, closeHref, onClose, busy, onSave }: { p
     >
       <div className="space-y-4 p-1">
         <Field label="Unit code">
-          <Input
-            value={form.code}
-            onChange={(e) => setForm({ ...form, code: e.target.value })}
-          />
+          <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
         </Field>
         <Field label="Display name">
-          <Input
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Unit type">
@@ -78,9 +84,7 @@ export function UnitDrawer({ propertyId, closeHref, onClose, busy, onSave }: { p
               type="number"
               min="0"
               value={form.rentableArea}
-              onChange={(e) =>
-                setForm({ ...form, rentableArea: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, rentableArea: e.target.value })}
             />
           </Field>
           <Field label="Bedrooms">

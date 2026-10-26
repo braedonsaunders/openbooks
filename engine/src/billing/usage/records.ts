@@ -1,5 +1,10 @@
 import { sql, type SQL } from "drizzle-orm";
-import { USAGE_AGGREGATIONS, USAGE_RECORD_SOURCES, type usageMeters, type usageRecords } from "@openbooks/schema";
+import {
+  USAGE_AGGREGATIONS,
+  USAGE_RECORD_SOURCES,
+  type usageMeters,
+  type usageRecords,
+} from "@openbooks/schema";
 import { cmp, neg, wholeDigits } from "../../money/money.ts";
 import { parseQuantity } from "../../money/brands.ts";
 import { assertPeriodModulesOpen, CloseError } from "../../periods/period-policy.ts";
@@ -9,7 +14,11 @@ import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../../organization/org-feature-lock.ts";
-import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
+import {
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+} from "../../organization/subsidiary-scope.ts";
 import { db, withOrg } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { UsageBillingError } from "./errors.ts";
@@ -74,7 +83,11 @@ function refuse(
 }
 
 function featureOff(): never {
-  return refuse("feature_off", "Usage billing is turned off for this organization.", FEATURE_REMEDY);
+  return refuse(
+    "feature_off",
+    "Usage billing is turned off for this organization.",
+    FEATURE_REMEDY,
+  );
 }
 
 async function lockAndRequireUsageBilling(orgId: string): Promise<void> {
@@ -96,7 +109,12 @@ function requiredText(value: unknown, field: string): string {
 function uuidText(value: unknown, field: string): string {
   const candidate = requiredText(value, field);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate)) {
-    refuse("usage_uuid_invalid", `${field} must be a UUID.`, `Provide a valid ${field} from this organization.`, field);
+    refuse(
+      "usage_uuid_invalid",
+      `${field} must be a UUID.`,
+      `Provide a valid ${field} from this organization.`,
+      field,
+    );
   }
   return candidate;
 }
@@ -108,7 +126,12 @@ function dateText(value: unknown, field = "occurred_on"): string {
     Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) ||
     new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value
   ) {
-    refuse("usage_date_invalid", `${field} must be a real calendar date in YYYY-MM-DD form.`, `Provide a valid ${field} in YYYY-MM-DD form.`, field);
+    refuse(
+      "usage_date_invalid",
+      `${field} must be a real calendar date in YYYY-MM-DD form.`,
+      `Provide a valid ${field} in YYYY-MM-DD form.`,
+      field,
+    );
   }
   return value;
 }
@@ -153,8 +176,13 @@ function uniqueViolationFor(error: unknown, constraint: string): boolean {
 async function validateMeterItem(orgId: string, itemId: string | null | undefined): Promise<void> {
   if (itemId == null) return;
   const safeItemId = uuidText(itemId, "item_id");
-  const item = (await db.execute<{ id: string }>(sql`
-    select id from items where org_id = ${orgId} and id = ${safeItemId}`, "objects"))[0];
+  const item = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from items where org_id = ${orgId} and id = ${safeItemId}`,
+      "objects",
+    )
+  )[0];
   if (!item) {
     refuse(
       "usage_meter_item_unavailable",
@@ -176,19 +204,27 @@ export async function createUsageMeter(
     const name = requiredText(input.name, "name");
     const unit = requiredText(input.unit, "unit");
     if (!USAGE_AGGREGATIONS.includes(input.aggregation)) {
-      refuse("usage_aggregation_invalid", "The usage aggregation is not supported.", "Choose a supported meter aggregation.", "aggregation");
+      refuse(
+        "usage_aggregation_invalid",
+        "The usage aggregation is not supported.",
+        "Choose a supported meter aggregation.",
+        "aggregation",
+      );
     }
     await validateMeterItem(orgId, input.itemId);
 
     // A key collision is an expected unique-index outcome; turn the no-row insert into a named refusal.
-    const inserted = await db.execute<UsageMeter>(sql`
+    const inserted = await db.execute<UsageMeter>(
+      sql`
       insert into usage_meters
         (org_id, key, name, unit, aggregation, item_id, is_active, created_by, updated_by)
       values
         (${orgId}, ${key}, ${name}, ${unit}, ${input.aggregation}, ${input.itemId ?? null}, true, ${actor}, ${actor})
       -- A key collision returns no row and raises the named key-in-use refusal below.
       on conflict (org_id, key) do nothing
-      returning ${METER_COLUMNS}`, "objects");
+      returning ${METER_COLUMNS}`,
+      "objects",
+    );
     if (inserted.length === 1) return inserted[0]!;
     if (inserted.length !== 0) {
       throw new Error("usage meter insert returned an unexpected number of rows");
@@ -212,12 +248,22 @@ export async function updateUsageMeter(
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const safeMeterId = uuidText(meterId, "meter_id");
-    const current = (await db.execute<UsageMeter>(sql`
+    const current = (
+      await db.execute<UsageMeter>(
+        sql`
       select ${METER_COLUMNS} from usage_meters
        where org_id = ${orgId} and id = ${safeMeterId}
-       for update`, "objects"))[0];
+       for update`,
+        "objects",
+      )
+    )[0];
     if (!current) {
-      refuse("usage_meter_not_found", "The usage meter does not exist in this organization.", "Choose a usage meter from this organization.", "meter_id");
+      refuse(
+        "usage_meter_not_found",
+        "The usage meter does not exist in this organization.",
+        "Choose a usage meter from this organization.",
+        "meter_id",
+      );
     }
 
     const changes: SQL[] = [];
@@ -225,13 +271,24 @@ export async function updateUsageMeter(
     const name = input.name === undefined ? undefined : requiredText(input.name, "name");
     const unit = input.unit === undefined ? undefined : requiredText(input.unit, "unit");
     if (input.aggregation !== undefined && !USAGE_AGGREGATIONS.includes(input.aggregation)) {
-      refuse("usage_aggregation_invalid", "The usage aggregation is not supported.", "Choose a supported meter aggregation.", "aggregation");
+      refuse(
+        "usage_aggregation_invalid",
+        "The usage aggregation is not supported.",
+        "Choose a supported meter aggregation.",
+        "aggregation",
+      );
     }
     const keyChanged = key !== undefined && key !== current.key;
-    const aggregationChanged = input.aggregation !== undefined && input.aggregation !== current.aggregation;
+    const aggregationChanged =
+      input.aggregation !== undefined && input.aggregation !== current.aggregation;
     if (keyChanged || aggregationChanged) {
-      const priorRecord = (await db.execute<{ id: string }>(sql`
-        select id from usage_records where org_id = ${orgId} and meter_id = ${safeMeterId} limit 1`, "objects"))[0];
+      const priorRecord = (
+        await db.execute<{ id: string }>(
+          sql`
+        select id from usage_records where org_id = ${orgId} and meter_id = ${safeMeterId} limit 1`,
+          "objects",
+        )
+      )[0];
       if (priorRecord) {
         refuse(
           "usage_meter_identity_locked",
@@ -252,23 +309,41 @@ export async function updateUsageMeter(
       changes.push(sql`item_id = ${input.itemId}`);
     }
     if (changes.length === 0) {
-      refuse("usage_meter_update_empty", "No meter changes were supplied.", "Change at least one meter field.");
+      refuse(
+        "usage_meter_update_empty",
+        "No meter changes were supplied.",
+        "Change at least one meter field.",
+      );
     }
     changes.push(sql`updated_at = now()`, sql`updated_by = ${actor}`);
 
     try {
-      const updated = await db.execute<UsageMeter>(sql`
+      const updated = await db.execute<UsageMeter>(
+        sql`
         update usage_meters set ${sql.join(changes, sql`, `)}
          where org_id = ${orgId} and id = ${safeMeterId}
-        returning ${METER_COLUMNS}`, "objects");
+        returning ${METER_COLUMNS}`,
+        "objects",
+      );
       if (updated.length !== 1) {
-        refuse("usage_meter_not_found", "The usage meter could not be updated.", "Choose a usage meter from this organization.", "meter_id");
+        refuse(
+          "usage_meter_not_found",
+          "The usage meter could not be updated.",
+          "Choose a usage meter from this organization.",
+          "meter_id",
+        );
       }
       return updated[0]!;
     } catch (error) {
       if (error instanceof UsageBillingError) throw error;
       if (uniqueViolationFor(error, "usage_meters_org_key_unique")) {
-        refuse("usage_meter_key_in_use", `A usage meter with key ${key} already exists in this organization.`, "Choose a different meter key.", "key", 409);
+        refuse(
+          "usage_meter_key_in_use",
+          `A usage meter with key ${key} already exists in this organization.`,
+          "Choose a different meter key.",
+          "key",
+          409,
+        );
       }
       throw error;
     }
@@ -284,23 +359,39 @@ async function setMeterActive(
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const safeMeterId = uuidText(meterId, "meter_id");
-    const changed = await db.execute<UsageMeter>(sql`
+    const changed = await db.execute<UsageMeter>(
+      sql`
       update usage_meters
          set is_active = ${isActive}, updated_at = now(), updated_by = ${actor}
        where org_id = ${orgId} and id = ${safeMeterId}
-      returning ${METER_COLUMNS}`, "objects");
+      returning ${METER_COLUMNS}`,
+      "objects",
+    );
     if (changed.length !== 1) {
-      refuse("usage_meter_not_found", "The usage meter does not exist in this organization.", "Choose a usage meter from this organization.", "meter_id");
+      refuse(
+        "usage_meter_not_found",
+        "The usage meter does not exist in this organization.",
+        "Choose a usage meter from this organization.",
+        "meter_id",
+      );
     }
     return changed[0]!;
   });
 }
 
-export function deactivateUsageMeter(orgId: string, actor: string, meterId: string): Promise<UsageMeter> {
+export function deactivateUsageMeter(
+  orgId: string,
+  actor: string,
+  meterId: string,
+): Promise<UsageMeter> {
   return setMeterActive(orgId, actor, meterId, false);
 }
 
-export function reactivateUsageMeter(orgId: string, actor: string, meterId: string): Promise<UsageMeter> {
+export function reactivateUsageMeter(
+  orgId: string,
+  actor: string,
+  meterId: string,
+): Promise<UsageMeter> {
   return setMeterActive(orgId, actor, meterId, true);
 }
 
@@ -318,10 +409,13 @@ async function requireOpenArPeriod(
       "occurred_on",
     );
   }
-  const books = await db.execute<{ id: string }>(sql`
+  const books = await db.execute<{ id: string }>(
+    sql`
     select id from accounting_books
      where org_id = ${orgId} and is_active and is_primary and posts_gl
-     order by id limit 2`, "objects");
+     order by id limit 2`,
+    "objects",
+  );
   if (books.length !== 1) {
     refuse(
       "usage_primary_book_unavailable",
@@ -353,11 +447,20 @@ async function customerSubsidiary(
   customerId: string,
   allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<string | null> {
-  const customer = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const customer = (
+    await db.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`
     select id, subsidiary_id from parties p where org_id = ${orgId} and id = ${customerId}
       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-      for share`, "objects"))[0];
-  if (!customer || !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiary_id, { orgWideNull: true })) throw new ScopeNotFoundError();
+      for share`,
+      "objects",
+    )
+  )[0];
+  if (
+    !customer ||
+    !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiary_id, { orgWideNull: true })
+  )
+    throw new ScopeNotFoundError();
   return customer.subsidiary_id;
 }
 
@@ -367,9 +470,14 @@ async function validateSubscriptionCustomer(
   customerId: string,
 ): Promise<void> {
   if (subscriptionId == null) return;
-  const subscription = (await db.execute<{ id: string }>(sql`
+  const subscription = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from subscriptions
-     where org_id = ${orgId} and id = ${subscriptionId} and customer_id = ${customerId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${subscriptionId} and customer_id = ${customerId}`,
+      "objects",
+    )
+  )[0];
   if (!subscription) {
     refuse(
       "usage_subscription_customer_mismatch",
@@ -380,7 +488,10 @@ async function validateSubscriptionCustomer(
   }
 }
 
-function validateDistinctKey(aggregation: UsageAggregation, value: string | null | undefined): string | null {
+function validateDistinctKey(
+  aggregation: UsageAggregation,
+  value: string | null | undefined,
+): string | null {
   const supplied = value !== null && value !== undefined;
   if (aggregation === "unique_count") {
     if (typeof value !== "string" || !value.trim()) {
@@ -418,14 +529,19 @@ export async function ingestUsageRecords(
       const idempotencyKey = requiredText(input.idempotencyKey, "idempotency_key");
       const customerId = uuidText(input.customerId, "customer_id");
       const subsidiaryId = await customerSubsidiary(orgId, customerId, allowedSubsidiaryIds);
-      const meter = (await db.execute<{
-        id: string;
-        aggregation: UsageAggregation;
-        is_active: boolean;
-      }>(sql`
+      const meter = (
+        await db.execute<{
+          id: string;
+          aggregation: UsageAggregation;
+          is_active: boolean;
+        }>(
+          sql`
         select id, aggregation, is_active from usage_meters
          where org_id = ${orgId} and key = ${meterKey}
-         for share`, "objects"))[0];
+         for share`,
+          "objects",
+        )
+      )[0];
       if (!meter) {
         refuse(
           "usage_meter_unknown",
@@ -435,11 +551,16 @@ export async function ingestUsageRecords(
         );
       }
 
-      const replay = (await db.execute<UsageRecord>(sql`
+      const replay = (
+        await db.execute<UsageRecord>(
+          sql`
         select ${RECORD_COLUMNS} from usage_records
          where org_id = ${orgId} and meter_id = ${meter.id} and idempotency_key = ${idempotencyKey}
            and exists (select 1 from parties c where c.org_id = usage_records.org_id and c.id = usage_records.customer_id
-             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})`, "objects"))[0];
+             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})`,
+          "objects",
+        )
+      )[0];
       if (replay) {
         insertedRecords.push(replay);
         continue;
@@ -457,15 +578,22 @@ export async function ingestUsageRecords(
       const quantity = normalizeQuantity(input.quantity);
       const distinctKey = validateDistinctKey(meter.aggregation, input.distinctKey);
       if (!USAGE_RECORD_SOURCES.includes(input.source)) {
-        refuse("usage_source_invalid", "The usage record source is not supported.", "Choose a supported usage record source.", "source");
+        refuse(
+          "usage_source_invalid",
+          "The usage record source is not supported.",
+          "Choose a supported usage record source.",
+          "source",
+        );
       }
       const sourceRef = input.sourceRef ?? null;
-      const subscriptionId = input.subscriptionId == null ? null : uuidText(input.subscriptionId, "subscription_id");
+      const subscriptionId =
+        input.subscriptionId == null ? null : uuidText(input.subscriptionId, "subscription_id");
       await validateSubscriptionCustomer(orgId, subscriptionId, customerId);
       await requireOpenArPeriod(orgId, subsidiaryId, occurredOn);
 
       // The unique key makes simultaneous sender retries converge on one immutable evidence row.
-      const inserted = await db.execute<UsageRecord>(sql`
+      const inserted = await db.execute<UsageRecord>(
+        sql`
         insert into usage_records
           (org_id, meter_id, customer_id, subscription_id, occurred_on, quantity,
            distinct_key, source, source_ref, idempotency_key, created_by)
@@ -474,7 +602,9 @@ export async function ingestUsageRecords(
            ${distinctKey}, ${input.source}, ${sourceRef}, ${idempotencyKey}, ${actor})
         -- A concurrent sender retry reuses the visible immutable usage record selected below.
         on conflict (org_id, meter_id, idempotency_key) do nothing
-        returning ${RECORD_COLUMNS}`, "objects");
+        returning ${RECORD_COLUMNS}`,
+        "objects",
+      );
       if (inserted.length === 1) {
         insertedRecords.push(inserted[0]!);
         continue;
@@ -482,11 +612,16 @@ export async function ingestUsageRecords(
       if (inserted.length !== 0) {
         throw new Error("usage record insert returned an unexpected number of rows");
       }
-      const racedReplay = (await db.execute<UsageRecord>(sql`
+      const racedReplay = (
+        await db.execute<UsageRecord>(
+          sql`
         select ${RECORD_COLUMNS} from usage_records
          where org_id = ${orgId} and meter_id = ${meter.id} and idempotency_key = ${idempotencyKey}
            and exists (select 1 from parties c where c.org_id = usage_records.org_id and c.id = usage_records.customer_id
-             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})`, "objects"))[0];
+             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})`,
+          "objects",
+        )
+      )[0];
       if (!racedReplay) {
         refuse(
           "usage_idempotency_result_missing",
@@ -513,24 +648,33 @@ export async function reverseUsageRecord(
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const safeRecordId = uuidText(recordId, "record_id");
-    const original = (await db.execute<{
-      id: string;
-      meter_id: string;
-      customer_id: string;
-      subscription_id: string | null;
-      occurred_on: string;
-      quantity: string;
-      distinct_key: string | null;
-      reverses_id: string | null;
-      subsidiary_id: string | null;
-    }>(sql`
+    const original = (
+      await db.execute<{
+        id: string;
+        meter_id: string;
+        customer_id: string;
+        subscription_id: string | null;
+        occurred_on: string;
+        quantity: string;
+        distinct_key: string | null;
+        reverses_id: string | null;
+        subsidiary_id: string | null;
+      }>(
+        sql`
       select r.id, r.meter_id, r.customer_id, r.subscription_id, r.occurred_on::text as occurred_on,
              r.quantity::text as quantity, r.distinct_key, r.reverses_id, c.subsidiary_id
         from usage_records r join parties c on c.org_id = r.org_id and c.id = r.customer_id
        where r.org_id = ${orgId} and r.id = ${safeRecordId}
          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-       for update of r, c`, "objects"))[0];
-    if (!original || !subsidiaryScopeAllows(allowedSubsidiaryIds, original.subsidiary_id, { orgWideNull: true })) throw new ScopeNotFoundError();
+       for update of r, c`,
+        "objects",
+      )
+    )[0];
+    if (
+      !original ||
+      !subsidiaryScopeAllows(allowedSubsidiaryIds, original.subsidiary_id, { orgWideNull: true })
+    )
+      throw new ScopeNotFoundError();
     if (original.reverses_id !== null) {
       refuse(
         "usage_reversal_not_reversible",
@@ -540,8 +684,13 @@ export async function reverseUsageRecord(
         409,
       );
     }
-    const priorReversal = (await db.execute<{ id: string }>(sql`
-      select id from usage_records where org_id = ${orgId} and reverses_id = ${safeRecordId} limit 1`, "objects"))[0];
+    const priorReversal = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from usage_records where org_id = ${orgId} and reverses_id = ${safeRecordId} limit 1`,
+        "objects",
+      )
+    )[0];
     if (priorReversal) {
       refuse(
         "usage_record_already_reversed",
@@ -556,7 +705,8 @@ export async function reverseUsageRecord(
     await requireOpenArPeriod(orgId, original.subsidiary_id, reversalDate);
     const reversedQuantity = neg(parseQuantity(original.quantity));
 
-    const inserted = await db.execute<UsageRecord>(sql`
+    const inserted = await db.execute<UsageRecord>(
+      sql`
       insert into usage_records
         (org_id, meter_id, customer_id, subscription_id, occurred_on, quantity,
          distinct_key, source, idempotency_key, reverses_id, reversal_reason, created_by)
@@ -564,7 +714,9 @@ export async function reverseUsageRecord(
         (${orgId}, ${original.meter_id}, ${original.customer_id}, ${original.subscription_id},
          ${reversalDate}, ${reversedQuantity}, ${original.distinct_key}, 'manual',
          ${`reversal:${safeRecordId}`}, ${safeRecordId}, ${reversalReason}, ${actor})
-      returning ${RECORD_COLUMNS}`, "objects");
+      returning ${RECORD_COLUMNS}`,
+      "objects",
+    );
     if (inserted.length !== 1) {
       refuse(
         "usage_reversal_insert_missing",
@@ -592,16 +744,23 @@ export async function listUsageRecordsForWindow(
     const fromDate = dateText(from, "from");
     const toDate = dateText(to, "to");
     if (fromDate > toDate) {
-      refuse("usage_window_invalid", "The usage window start must not be after its end.", "Choose a window with from on or before to.");
+      refuse(
+        "usage_window_invalid",
+        "The usage window start must not be after its end.",
+        "Choose a window with from on or before to.",
+      );
     }
     await customerSubsidiary(orgId, safeCustomerId, allowedSubsidiaryIds);
-    const rows = await db.execute<UsageRecord>(sql`
+    const rows = await db.execute<UsageRecord>(
+      sql`
       select ${RECORD_COLUMNS} from usage_records
        where org_id = ${orgId} and meter_id = ${safeMeterId} and customer_id = ${safeCustomerId}
          and occurred_on >= ${fromDate} and occurred_on <= ${toDate}
          and exists (select 1 from parties c where c.org_id = usage_records.org_id and c.id = usage_records.customer_id
            ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
-       order by occurred_on, id`, "objects");
+       order by occurred_on, id`,
+      "objects",
+    );
     return rows;
   });
 }
@@ -609,36 +768,52 @@ export async function listUsageRecordsForWindow(
 export async function listUsageMeters(orgId: string): Promise<UsageMeter[]> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
-    return await db.execute<UsageMeter>(sql`
-      select ${METER_COLUMNS} from usage_meters where org_id = ${orgId} order by key, id`, "objects");
+    return await db.execute<UsageMeter>(
+      sql`
+      select ${METER_COLUMNS} from usage_meters where org_id = ${orgId} order by key, id`,
+      "objects",
+    );
   });
 }
 
-export async function listUsageRecords(orgId: string, filters: {
-  from: string;
-  to: string;
-  meterId?: string;
-  customerId?: string;
-  limit?: number;
-  offset?: number;
-}, allowedSubsidiaryIds: UsageSubsidiaryScope = null): Promise<UsageRecord[]> {
+export async function listUsageRecords(
+  orgId: string,
+  filters: {
+    from: string;
+    to: string;
+    meterId?: string;
+    customerId?: string;
+    limit?: number;
+    offset?: number;
+  },
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
+): Promise<UsageRecord[]> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
     const from = dateText(filters.from, "from");
     const to = dateText(filters.to, "to");
-    if (from > to) refuse("usage_window_invalid", "The usage window start must not be after its end.", "Choose a window with from on or before to.");
+    if (from > to)
+      refuse(
+        "usage_window_invalid",
+        "The usage window start must not be after its end.",
+        "Choose a window with from on or before to.",
+      );
     const meterId = filters.meterId === undefined ? null : uuidText(filters.meterId, "meter_id");
-    const customerId = filters.customerId === undefined ? null : uuidText(filters.customerId, "customer_id");
+    const customerId =
+      filters.customerId === undefined ? null : uuidText(filters.customerId, "customer_id");
     if (customerId !== null) await customerSubsidiary(orgId, customerId, allowedSubsidiaryIds);
     const limit = Math.min(Math.max(filters.limit ?? 100, 1), 500);
     const offset = Math.max(filters.offset ?? 0, 0);
-    return await db.execute<UsageRecord>(sql`
+    return await db.execute<UsageRecord>(
+      sql`
       select ${RECORD_COLUMNS} from usage_records
        where org_id = ${orgId} and occurred_on >= ${from} and occurred_on <= ${to}
          and (${meterId}::uuid is null or meter_id = ${meterId})
          and (${customerId}::uuid is null or customer_id = ${customerId})
          and exists (select 1 from parties c where c.org_id = usage_records.org_id and c.id = usage_records.customer_id
            ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
-       order by occurred_on desc, id limit ${limit} offset ${offset}`, "objects");
+       order by occurred_on desc, id limit ${limit} offset ${offset}`,
+      "objects",
+    );
   });
 }

@@ -1,15 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const accountingModel: DocArticle = {
-  slug: 'accounting-model',
-  title: 'How Accounting Works in OpenBooks',
-  category: 'accounting',
+  slug: "accounting-model",
+  title: "How Accounting Works in OpenBooks",
+  category: "accounting",
   order: 1,
   summary:
-    'Understand business transactions, ledger entries, books, periods, subledgers, and immutable accounting evidence.',
-  updated: '2026-07-22',
-  keywords: ['double entry', 'ledger', 'journal entry', 'subledger', 'book', 'period', 'posting', 'immutability'],
-  related: ['transaction-lifecycle', 'chart-of-accounts-and-dimensions', 'period-close'],
+    "Understand business transactions, ledger entries, books, periods, subledgers, and immutable accounting evidence.",
+  updated: "2026-07-22",
+  keywords: [
+    "double entry",
+    "ledger",
+    "journal entry",
+    "subledger",
+    "book",
+    "period",
+    "posting",
+    "immutability",
+  ],
+  related: ["transaction-lifecycle", "chart-of-accounts-and-dimensions", "period-close"],
   body: `# How Accounting Works in OpenBooks
 
 OpenBooks keeps the business record separate from its general-ledger projection.
@@ -85,17 +94,18 @@ They never silently fall back to straight-line. Existing configurations using
 either method must be changed to a supported method before a schedule can be
 built.
 `,
-}
+};
 
 export const transactionLifecycle: DocArticle = {
-  slug: 'transaction-lifecycle',
-  title: 'Transaction Lifecycle: Draft to Posted',
-  category: 'accounting',
+  slug: "transaction-lifecycle",
+  title: "Transaction Lifecycle: Draft to Posted",
+  category: "accounting",
   order: 2,
-  summary: 'Follow a transaction through draft, approval, posting, amendment, reversal, and deletion controls.',
-  updated: '2026-07-19',
-  keywords: ['draft', 'submit', 'approve', 'post', 'amend', 'delete', 'reverse', 'void', 'status'],
-  related: ['navigation-and-records', 'accounting-model', 'audit-log'],
+  summary:
+    "Follow a transaction through draft, approval, posting, amendment, reversal, and deletion controls.",
+  updated: "2026-07-19",
+  keywords: ["draft", "submit", "approve", "post", "amend", "delete", "reverse", "void", "status"],
+  related: ["navigation-and-records", "accounting-model", "audit-log"],
   body: `# Transaction Lifecycle: Draft to Posted
 
 ## Draft
@@ -156,17 +166,26 @@ Do not filter a financial report to the literal **posted** journal status.
 the ledger-history population is **posted** plus **reversed**; drafts remain
 excluded.
 `,
-}
+};
 
 export const chartOfAccountsAndDimensions: DocArticle = {
-  slug: 'chart-of-accounts-and-dimensions',
-  title: 'Chart of Accounts and Dimensions',
-  category: 'accounting',
+  slug: "chart-of-accounts-and-dimensions",
+  title: "Chart of Accounts and Dimensions",
+  category: "accounting",
   order: 3,
-  summary: 'Design accounts and reporting dimensions that stay usable as the organization grows.',
-  updated: '2026-07-19',
-  keywords: ['chart of accounts', 'account', 'department', 'location', 'class', 'dimension', 'subsidiary', 'segment'],
-  related: ['accounting-model', 'quick-start', 'financial-reports'],
+  summary: "Design accounts and reporting dimensions that stay usable as the organization grows.",
+  updated: "2026-07-19",
+  keywords: [
+    "chart of accounts",
+    "account",
+    "department",
+    "location",
+    "class",
+    "dimension",
+    "subsidiary",
+    "segment",
+  ],
+  related: ["accounting-model", "quick-start", "financial-reports"],
   body: `# Chart of Accounts and Dimensions
 
 ## Use accounts for economic nature
@@ -213,17 +232,27 @@ open transactions, control-account configuration, reports, rules, or imports.
 Test account and dimension changes with a small posted transaction and review the
 trial balance, general ledger, and relevant management report.
 `,
-}
+};
 
 export const partiesItemsAndProjects: DocArticle = {
-  slug: 'parties-items-and-projects',
-  title: 'Customers, Vendors, Items, and Projects',
-  category: 'accounting',
+  slug: "parties-items-and-projects",
+  title: "Customers, Vendors, Items, and Projects",
+  category: "accounting",
   order: 4,
-  summary: 'Understand the shared master records used by sales, purchases, projects, inventory, and reporting.',
-  updated: '2026-07-20',
-  keywords: ['customer', 'vendor', 'employee', 'party', 'item', 'service', 'project', 'master data'],
-  related: ['sales-workflow', 'purchasing-workflow', 'project-types'],
+  summary:
+    "Understand the shared master records used by sales, purchases, projects, inventory, and reporting.",
+  updated: "2026-07-20",
+  keywords: [
+    "customer",
+    "vendor",
+    "employee",
+    "party",
+    "item",
+    "service",
+    "project",
+    "master data",
+  ],
+  related: ["sales-workflow", "purchasing-workflow", "project-types"],
   body: `# Customers, Vendors, Items, and Projects
 
 ## Parties and roles
@@ -285,4 +314,4 @@ Before importing transactions:
 Controlled master data prevents duplicate parties, unmapped items, inconsistent aging,
 and misleading project reports later.
 `,
-}
+};

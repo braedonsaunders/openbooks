@@ -28,8 +28,7 @@ export const POST = defineRoute({
           { status: 400 },
         );
       }
-      let deliveries: Awaited<ReturnType<typeof remindDocument>>["deliveries"] =
-        [];
+      let deliveries: Awaited<ReturnType<typeof remindDocument>>["deliveries"] = [];
       const outcome = await executeIdempotent({
         context: applicationContextFromSession(
           gate,
@@ -53,8 +52,7 @@ export const POST = defineRoute({
         },
       });
       const { document } = outcome.value;
-      if (outcome.replayed)
-        return NextResponse.json({ document, deliveries: [] });
+      if (outcome.replayed) return NextResponse.json({ document, deliveries: [] });
       const results = await deliverSignatureInvitations({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
@@ -69,10 +67,8 @@ export const POST = defineRoute({
           signerId: d.signerId,
           partyId: d.partyId,
           signUrl: `${resolveAppBaseUrl(req).replace(/\/$/, "")}/sign/${d.token}`,
-          notified:
-            results.find((r) => r.partyId === d.partyId)?.notified ?? false,
-          emailed:
-            results.find((r) => r.partyId === d.partyId)?.emailed ?? false,
+          notified: results.find((r) => r.partyId === d.partyId)?.notified ?? false,
+          emailed: results.find((r) => r.partyId === d.partyId)?.emailed ?? false,
         })),
       });
     } catch (e) {

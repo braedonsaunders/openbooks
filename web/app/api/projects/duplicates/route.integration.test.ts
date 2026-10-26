@@ -1,4 +1,4 @@
-import { resolveEngineSpecifier } from '../../../../testing/engine-resolve-hooks.ts'
+import { resolveEngineSpecifier } from "../../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -16,8 +16,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.project-merge-route-test')]
@@ -42,8 +41,11 @@ const mockFeatureGates = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      (specifier === "../../../../lib/authz" || specifier === "@/lib/authz" || specifier === "../../../../lib/projects-gate")
-      && (context.parentURL?.includes("projects/duplicates") || context.parentURL?.includes("projects/merge"))
+      (specifier === "../../../../lib/authz" ||
+        specifier === "@/lib/authz" ||
+        specifier === "../../../../lib/projects-gate") &&
+      (context.parentURL?.includes("projects/duplicates") ||
+        context.parentURL?.includes("projects/merge"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -70,13 +72,13 @@ const hooks = registerHooks({
 const duplicatesUrl = "./route.ts?project-duplicates-route-test";
 const mergeUrl = "../merge/route.ts?project-merge-route-test";
 const { GET: listDuplicates } = (await import(duplicatesUrl)) as typeof import("./route.ts");
-const { GET: previewMerge, POST: commitMerge } =
-  (await import(mergeUrl)) as typeof import("../merge/route.ts");
+const { GET: previewMerge, POST: commitMerge } = (await import(
+  mergeUrl
+)) as typeof import("../merge/route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
-
 
 function authorize(orgId: string, actorId: string): void {
   routeState.authz = {
@@ -105,7 +107,7 @@ async function seedProject(
   return id;
 }
 
-test.after(() => hooks.deregister())
+test.after(() => hooks.deregister());
 test("project duplicates list, preview, and merge through the routes", async () => {
   const org = await createScratchOrg();
   try {
@@ -120,7 +122,9 @@ test("project duplicates list, preview, and merge through the routes", async () 
       nsId: "7",
     });
 
-    const listRes = await listDuplicates(new Request("http://openbooks.test/api/projects/duplicates"));
+    const listRes = await listDuplicates(
+      new Request("http://openbooks.test/api/projects/duplicates"),
+    );
     assert.equal(listRes.status, 200);
     const listed = (await listRes.json()) as {
       groups: { kind: string; projects: { id: string }[] }[];
@@ -128,9 +132,9 @@ test("project duplicates list, preview, and merge through the routes", async () 
     assert.ok(
       listed.groups.some(
         (group) =>
-          group.kind === "job_number"
-          && group.projects.some((p) => p.id === duplicate)
-          && group.projects.some((p) => p.id === survivor),
+          group.kind === "job_number" &&
+          group.projects.some((p) => p.id === duplicate) &&
+          group.projects.some((p) => p.id === survivor),
       ),
     );
 
@@ -151,11 +155,16 @@ test("project duplicates list, preview, and merge through the routes", async () 
       }),
     );
     assert.equal(commitRes.status, 200);
-    const committed = (await commitRes.json()) as { alreadyMerged: boolean; auditId: string | null };
+    const committed = (await commitRes.json()) as {
+      alreadyMerged: boolean;
+      auditId: string | null;
+    };
     assert.equal(committed.alreadyMerged, false);
     assert.ok(committed.auditId);
 
-    const relistRes = await listDuplicates(new Request("http://openbooks.test/api/projects/duplicates"));
+    const relistRes = await listDuplicates(
+      new Request("http://openbooks.test/api/projects/duplicates"),
+    );
     const relisted = (await relistRes.json()) as {
       groups: { kind: string; projects: { id: string }[] }[];
     };

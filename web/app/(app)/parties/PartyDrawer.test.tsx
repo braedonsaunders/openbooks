@@ -1,7 +1,7 @@
 // The native party drawer retains edits and enforces each confidential panel grant.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
+import { LOCALE_CODES as LOCALES } from "../../../i18n/config";
 import { employeeBenefitAssignments } from "../../../lib/hrm/employee-benefits-types";
 import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
@@ -25,7 +25,8 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "next/link": "export default function Link(p){return globalThis.React.createElement('a',{href:p.href},p.children)}",
+    "next/link":
+      "export default function Link(p){return globalThis.React.createElement('a',{href:p.href},p.children)}",
     sonner:
       "export const toast={success(m){(globalThis.__partyToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__partyToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__partyToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
   },
@@ -122,7 +123,10 @@ const EMPLOYEE_ROW = {
   hired_on: null,
 };
 
-function employeePayload(kind: string, roles: { customer?: boolean; vendor?: boolean; employee?: boolean }) {
+function employeePayload(
+  kind: string,
+  roles: { customer?: boolean; vendor?: boolean; employee?: boolean },
+) {
   return {
     party: { ...VENDOR_PAYLOAD.party, id: EMPLOYEE_ID, display_name: "Ava Employee", kind },
     customer: roles.customer ? { is_active: true } : null,
@@ -174,13 +178,16 @@ const BANK_ROW = {
 };
 
 function routeFetch(routes: Record<string, () => Response>) {
-  return (url: string) => Object.entries(routes).find(([prefix]) => url.startsWith(prefix))?.[1]() ?? null;
+  return (url: string) =>
+    Object.entries(routes).find(([prefix]) => url.startsWith(prefix))?.[1]() ?? null;
 }
 
 function stubFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -207,7 +214,18 @@ function employeeRoutes(): Record<string, () => Response> {
         derivedProfileColumns: {},
         defaultCountry: "US",
       }),
-    "/api/hrm/employee-benefits": () => Response.json({ employments: [{ value: "employment-1", label: "Employer" }], assignments: [], programs: [], enrollments: [], vacation: [], service: [], payroll: true, canManage: true, canReadBanks: true }),
+    "/api/hrm/employee-benefits": () =>
+      Response.json({
+        employments: [{ value: "employment-1", label: "Employer" }],
+        assignments: [],
+        programs: [],
+        enrollments: [],
+        vacation: [],
+        service: [],
+        payroll: true,
+        canManage: true,
+        canReadBanks: true,
+      }),
     "/api/payroll/entitlements": () =>
       Response.json({ currency: "USD", balances: [BALANCE_ROW], movements: [MOVEMENT_ROW] }),
   };
@@ -240,7 +258,11 @@ async function renderDrawer(options: {
   };
   await act(async () => {
     root.render(
-      <NextIntlClientProvider locale={options.locale ?? "en"} messages={options.messages ?? enMessages} timeZone="UTC">
+      <NextIntlClientProvider
+        locale={options.locale ?? "en"}
+        messages={options.messages ?? enMessages}
+        timeZone="UTC"
+      >
         <MoneyProvider currency="USD">
           <BusinessDateProvider today="2026-09-17">
             <PartyDrawer
@@ -279,20 +301,37 @@ async function renderDrawer(options: {
 }
 
 function renderEmployeeDrawer(options: Parameters<typeof renderDrawer>[0] = {}) {
-  return renderDrawer({ payload: employeePayload("employee", { employee: true }), role: "employee", recordType: "employee", fetchHandler: routeFetch(employeeRoutes()), ...options });
+  return renderDrawer({
+    payload: employeePayload("employee", { employee: true }),
+    role: "employee",
+    recordType: "employee",
+    fetchHandler: routeFetch(employeeRoutes()),
+    ...options,
+  });
 }
 
 function renderPayrollDrawer(options: Parameters<typeof renderDrawer>[0] = {}) {
-  return renderEmployeeDrawer({ initialTab: "payroll", grants: { canManageWages: true, canManagePayroll: true }, ...options });
+  return renderEmployeeDrawer({
+    initialTab: "payroll",
+    grants: { canManageWages: true, canManagePayroll: true },
+    ...options,
+  });
 }
 
-function railTabs(scope: ParentNode = document, tree: Record<string, unknown> = enMessages): HTMLButtonElement[] {
+function railTabs(
+  scope: ParentNode = document,
+  tree: Record<string, unknown> = enMessages,
+): HTMLButtonElement[] {
   const rail = scope.querySelector(`nav[aria-label="${msg(tree, "common.auditTrail.ariaLabel")}"]`);
   assert.ok(rail, "the flyout must render its tab rail");
-  return [...rail.querySelectorAll('button[aria-pressed]')] as HTMLButtonElement[];
+  return [...rail.querySelectorAll("button[aria-pressed]")] as HTMLButtonElement[];
 }
 
-function railTabNamed(name: string, scope: ParentNode = document, tree: Record<string, unknown> = enMessages): HTMLButtonElement | undefined {
+function railTabNamed(
+  name: string,
+  scope: ParentNode = document,
+  tree: Record<string, unknown> = enMessages,
+): HTMLButtonElement | undefined {
   return railTabs(scope, tree).find((button) => button.textContent?.trim() === name);
 }
 
@@ -309,9 +348,10 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
   // The setter must come from the element's own prototype: the input
   // setter throws on a textarea (and vice versa), which is exactly how the
   // Hire reason fill broke.
-  const proto = input instanceof window.HTMLTextAreaElement
-    ? window.HTMLTextAreaElement.prototype
-    : window.HTMLInputElement.prototype;
+  const proto =
+    input instanceof window.HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!;
   setter.call(input, value);
   input.dispatchEvent(new window.Event("change", { bubbles: true }));
@@ -330,7 +370,12 @@ function kindSelect(): HTMLSelectElement | undefined {
 }
 
 test("credit-limit formatting preserves large decimals, rounds exact cents and permits an empty value", () => {
-  for (const [value, expected] of [["9007199254740993.0000", "9007199254740993.00"], ["86.6150", "86.62"], [null, ""]] as const) assert.equal(formatCreditLimit(value), expected);
+  for (const [value, expected] of [
+    ["9007199254740993.0000", "9007199254740993.00"],
+    ["86.6150", "86.62"],
+    [null, ""],
+  ] as const)
+    assert.equal(formatCreditLimit(value), expected);
 });
 
 test("remembering a visited drawer tab keeps it without mutating the set", () => {
@@ -383,15 +428,30 @@ test("a failed photo removal keeps the photo and allows retry", async (t) => {
     },
   });
   t.after(done);
-  const remove = () => document.querySelector<HTMLButtonElement>(`button[aria-label="${en("parties.drawer.photo.remove")}"]`);
+  const remove = () =>
+    document.querySelector<HTMLButtonElement>(
+      `button[aria-label="${en("parties.drawer.photo.remove")}"]`,
+    );
   assert.ok(remove());
-  await act(async () => { remove()!.click(); await tick(); });
-  assert.deepEqual(globalThis.__partyToasts, [{ kind: "error", message: en("parties.drawer.photo.removeFailed") }]);
+  await act(async () => {
+    remove()!.click();
+    await tick();
+  });
+  assert.deepEqual(globalThis.__partyToasts, [
+    { kind: "error", message: en("parties.drawer.photo.removeFailed") },
+  ]);
   assert.ok(remove(), "a failed request must retain the current photo");
   assert.equal(remove()!.disabled, false, "the operator must be able to retry");
-  await act(async () => { remove()!.click(); await tick(); });
+  await act(async () => {
+    remove()!.click();
+    await tick();
+  });
   assert.equal(attempts, 2);
-  assert.equal(remove(), null, "the successful retry must clear the photo through the drawer state");
+  assert.equal(
+    remove(),
+    null,
+    "the successful retry must clear the photo through the drawer state",
+  );
 });
 
 test("the rail lists every panel once with overview first", async (t) => {
@@ -399,7 +459,11 @@ test("the rail lists every panel once with overview first", async (t) => {
   t.after(done);
   const labels = railTabs().map((button) => button.textContent?.trim() ?? "");
   assert.ok(labels.length > 0, "the rail must list the drawer panels");
-  assert.equal(labels[0], en("parties.drawer.tabs.overview"), "the leading slot reads Overview, not Details");
+  assert.equal(
+    labels[0],
+    en("parties.drawer.tabs.overview"),
+    "the leading slot reads Overview, not Details",
+  );
   assert.ok(!labels.includes("Details"), "the party must not nest a second Details strip");
   for (const key of ["attachments", "audit"] as const) {
     const label = en(`common.auditTrail.tabs.${key}`);
@@ -422,7 +486,9 @@ function wagesSection(): HTMLElement {
 }
 
 function payrollPanel(): HTMLElement {
-  const strip = document.querySelector(`nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`);
+  const strip = document.querySelector(
+    `nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`,
+  );
   assert.ok(strip, "the payroll tab must render its sub-tab strip");
   const panel = strip.closest("[hidden], .space-y-6");
   assert.ok(panel, "the payroll sub-tab strip must sit inside the payroll panel");
@@ -449,10 +515,7 @@ test("a visited compensation tab stays mounted while another shows", async (t) =
   assert.ok(payroll, "the payroll tab must ride the same rail");
   await clickTab(payroll);
   const wages = wagesSection();
-  assert.ok(
-    wages.closest("[hidden]") !== null,
-    "the wages panel must hide instead of unmounting",
-  );
+  assert.ok(wages.closest("[hidden]") !== null, "the wages panel must hide instead of unmounting");
   assert.equal(
     (document.querySelector("#employee-wage-rate") as HTMLInputElement | null)?.value,
     "42.50",
@@ -462,11 +525,7 @@ test("a visited compensation tab stays mounted while another shows", async (t) =
   const compensationTab = railTabNamed(en("parties.drawer.tabs.compensation"));
   assert.ok(compensationTab, "the compensation tab must still ride the rail");
   await clickTab(compensationTab);
-  assert.equal(
-    wages.closest("[hidden]"),
-    null,
-    "returning must show the same mounted panel",
-  );
+  assert.equal(wages.closest("[hidden]"), null, "returning must show the same mounted panel");
   assert.equal(
     (document.querySelector("#employee-wage-rate") as HTMLInputElement | null)?.value,
     "42.50",
@@ -495,31 +554,61 @@ test("each confidential tab needs its own grant", async (t) => {
   };
 
   const ungranted = await names({});
-  assert.ok(!ungranted.includes(labels.compensation), "compensation stays hidden without a wage or compensation grant");
+  assert.ok(
+    !ungranted.includes(labels.compensation),
+    "compensation stays hidden without a wage or compensation grant",
+  );
   assert.ok(!ungranted.includes(labels.payroll), "payroll stays hidden without the payroll grant");
-  assert.ok(!ungranted.includes(labels.employment), "employment stays hidden without the HRM read surface");
+  assert.ok(
+    !ungranted.includes(labels.employment),
+    "employment stays hidden without the HRM read surface",
+  );
 
   const waged = await names({ canManageWages: true });
-  assert.ok(waged.includes(labels.compensation), "the setup grant opens compensation for wage rates");
+  assert.ok(
+    waged.includes(labels.compensation),
+    "the setup grant opens compensation for wage rates",
+  );
   assert.ok(!waged.includes(labels.payroll), "the setup grant must not open payroll");
 
   const paid = await names({ canManageWages: true, canManagePayroll: true });
   assert.ok(paid.includes(labels.payroll), "the payroll grant opens payroll");
 
   const employed = await names({
-    hrm: { employmentIds: ["emp-1"], canManageHrm: false, canReadExits: false, canRecordExit: false },
+    hrm: {
+      employmentIds: ["emp-1"],
+      canManageHrm: false,
+      canReadExits: false,
+      canRecordExit: false,
+    },
   });
   assert.ok(employed.includes(labels.employment), "the HRM read surface opens employment");
-  assert.ok(!employed.includes(labels.compensation), "the HRM read surface must not open compensation");
+  assert.ok(
+    !employed.includes(labels.compensation),
+    "the HRM read surface must not open compensation",
+  );
 
   const compensated = await names({ canReadCompensation: true });
-  assert.ok(compensated.includes(labels.compensation), "the compensation read grant opens compensation");
-  assert.ok(!compensated.includes(labels.payroll), "the compensation read grant must not open payroll");
+  assert.ok(
+    compensated.includes(labels.compensation),
+    "the compensation read grant opens compensation",
+  );
+  assert.ok(
+    !compensated.includes(labels.payroll),
+    "the compensation read grant must not open payroll",
+  );
   if (prior) t.after(prior);
 });
 
 function equivalents(annual: string, hourly: string): Record<string, string> {
-  return { hour: hourly, week: "0.00", biweekly: "0.00", semimonth: "0.00", month: "0.00", year: annual };
+  return {
+    hour: hourly,
+    week: "0.00",
+    biweekly: "0.00",
+    semimonth: "0.00",
+    month: "0.00",
+    year: annual,
+  };
 }
 
 const TOTAL_COMPENSATION = {
@@ -528,13 +617,59 @@ const TOTAL_COMPENSATION = {
   employments: [{ id: "employment-1", employer: "Employer", status: "active" }],
   annualHours: "2080",
   annualHoursSource: "rate",
-  payroll: { enabled: true, payBasis: "salary", schedule: { name: "Biweekly", frequency: "biweekly", periodsPerYear: 26 } },
-  base: { rateId: "rate-1", rate: "6500.0000", basis: "month", currency: "USD", effectiveFrom: "2026-01-01", scope: "employee", equivalents: equivalents("78000.00", "37.50") },
+  payroll: {
+    enabled: true,
+    payBasis: "salary",
+    schedule: { name: "Biweekly", frequency: "biweekly", periodsPerYear: 26 },
+  },
+  base: {
+    rateId: "rate-1",
+    rate: "6500.0000",
+    basis: "month",
+    currency: "USD",
+    effectiveFrom: "2026-01-01",
+    scope: "employee",
+    equivalents: equivalents("78000.00", "37.50"),
+  },
   history: [],
   recurring: [
-    { key: "benefit:1", source: "benefit", category: "retirement", name: "Pension match", program: "Group RRSP", paidBy: "employer", currency: "USD", annual: "3900.00", equivalents: equivalents("3900.00", "1.88"), refusal: null },
-    { key: "benefit:2", source: "benefit", category: "health", name: "Dental premium", program: "Dental", paidBy: "employer", currency: "USD", annual: null, equivalents: null, refusal: "This contribution is priced per pay period — assign the employee a payroll pay schedule to project it for a year." },
-    { key: "benefit:3", source: "benefit", category: "retirement", name: "Employee pension deduction", program: "Group RRSP", paidBy: "employee", currency: "USD", annual: "3900.00", equivalents: equivalents("3900.00", "1.88"), refusal: null },
+    {
+      key: "benefit:1",
+      source: "benefit",
+      category: "retirement",
+      name: "Pension match",
+      program: "Group RRSP",
+      paidBy: "employer",
+      currency: "USD",
+      annual: "3900.00",
+      equivalents: equivalents("3900.00", "1.88"),
+      refusal: null,
+    },
+    {
+      key: "benefit:2",
+      source: "benefit",
+      category: "health",
+      name: "Dental premium",
+      program: "Dental",
+      paidBy: "employer",
+      currency: "USD",
+      annual: null,
+      equivalents: null,
+      refusal:
+        "This contribution is priced per pay period — assign the employee a payroll pay schedule to project it for a year.",
+    },
+    {
+      key: "benefit:3",
+      source: "benefit",
+      category: "retirement",
+      name: "Employee pension deduction",
+      program: "Group RRSP",
+      paidBy: "employee",
+      currency: "USD",
+      annual: "3900.00",
+      equivalents: equivalents("3900.00", "1.88"),
+      refusal: null,
+    },
   ],
   actualsWindow: { from: "2025-09-18", to: "2026-09-17" },
   statutory: [{ key: "cpp", name: "Pension plan (employer)", currency: "USD", amount: "4000.00" }],
@@ -542,12 +677,32 @@ const TOTAL_COMPENSATION = {
   variableHistory: [],
   awards: [],
   totals: {
-    currency: "USD", base: "78000.00", variable: "0.00", benefits: "3900.00", statutory: "4000.00", total: "85900.00",
+    currency: "USD",
+    base: "78000.00",
+    variable: "0.00",
+    benefits: "3900.00",
+    statutory: "4000.00",
+    total: "85900.00",
     equivalents: equivalents("85900.00", "41.30"),
     byCategory: [
-      { category: "base", annual: "78000.00", equivalents: equivalents("78000.00", "37.50"), share: "90.8" },
-      { category: "retirement", annual: "3900.00", equivalents: equivalents("3900.00", "1.88"), share: "4.5" },
-      { category: "statutory", annual: "4000.00", equivalents: equivalents("4000.00", "1.92"), share: "4.7" },
+      {
+        category: "base",
+        annual: "78000.00",
+        equivalents: equivalents("78000.00", "37.50"),
+        share: "90.8",
+      },
+      {
+        category: "retirement",
+        annual: "3900.00",
+        equivalents: equivalents("3900.00", "1.88"),
+        share: "4.5",
+      },
+      {
+        category: "statutory",
+        annual: "4000.00",
+        equivalents: equivalents("4000.00", "1.92"),
+        share: "4.7",
+      },
     ],
   },
 };
@@ -556,7 +711,9 @@ test("total compensation restates the employer total and names what it cannot pr
   const { done } = await renderEmployeeDrawer({
     initialTab: "compensation",
     grants: { canReadCompensation: true },
-    fetchHandler: routeFetch({ "/api/hrm/employee-compensation": () => Response.json(TOTAL_COMPENSATION) }),
+    fetchHandler: routeFetch({
+      "/api/hrm/employee-compensation": () => Response.json(TOTAL_COMPENSATION),
+    }),
   });
   t.after(done);
   const text = () => document.body.textContent ?? "";
@@ -566,7 +723,10 @@ test("total compensation restates the employer total and names what it cannot pr
     text().includes("assign the employee a payroll pay schedule"),
     "a term payroll cannot price shows its refusal and remedy instead of a zero",
   );
-  assert.ok(text().includes(en("parties.drawer.compensation.employeePaid.title")), "employee-paid contributions sit apart from the employer total");
+  assert.ok(
+    text().includes(en("parties.drawer.compensation.employeePaid.title")),
+    "employee-paid contributions sit apart from the employer total",
+  );
 
   const hourly = [...document.querySelectorAll('button[role="radio"]')].find(
     (button) => button.textContent?.trim() === en("parties.drawer.compensation.basis.short.hour"),
@@ -649,14 +809,20 @@ test("the customer rail gains a payment-methods tab only with the autopay read s
   };
 
   const ungranted = await names({});
-  assert.ok(!ungranted.includes(label), "the methods tab stays hidden without the autopay read surface");
+  assert.ok(
+    !ungranted.includes(label),
+    "the methods tab stays hidden without the autopay read surface",
+  );
 
   const granted = await names({ grants: AUTOPAY_GRANTS });
   assert.ok(granted.includes(label), "the read surface opens the methods tab");
   const tab = railTabNamed(label);
   assert.ok(tab, "the methods tab must ride the customer rail");
   await clickTab(tab);
-  assert.ok(await waitForText(en("parties.drawer.autopay.description")), "clicking the rail must open the methods panel");
+  assert.ok(
+    await waitForText(en("parties.drawer.autopay.description")),
+    "clicking the rail must open the methods panel",
+  );
 
   const vendor = await names({
     payload: VENDOR_PAYLOAD,
@@ -669,12 +835,21 @@ test("the customer rail gains a payment-methods tab only with the autopay read s
 });
 
 test("the payment-methods tab lists stored methods with the default badge", async (t) => {
-  const { done } = await renderCustomerDrawer({ grants: AUTOPAY_GRANTS, initialTab: "paymentMethods" });
+  const { done } = await renderCustomerDrawer({
+    grants: AUTOPAY_GRANTS,
+    initialTab: "paymentMethods",
+  });
   t.after(done);
-  assert.ok(await waitForText("Visa •••• 4242"), "the stored method must read brand plus last four");
+  assert.ok(
+    await waitForText("Visa •••• 4242"),
+    "the stored method must read brand plus last four",
+  );
   const body = document.body.textContent ?? "";
   assert.ok(body.includes("Visa •••• 4242"), "the stored method must read brand plus last four");
-  assert.ok(body.includes(en("parties.drawer.autopay.defaultBadge")), "the default method wears its badge");
+  assert.ok(
+    body.includes(en("parties.drawer.autopay.defaultBadge")),
+    "the default method wears its badge",
+  );
   assert.ok(
     !body.includes(en("parties.drawer.autopay.setDefault")),
     "the default method offers no make-default action",
@@ -704,7 +879,9 @@ test("removing a method asks first and detaches on confirm", async (t) => {
   await tick();
   await tick();
   assert.ok(
-    seen.some((request) => request.url === "/api/autopay/methods/method-1" && request.method === "DELETE"),
+    seen.some(
+      (request) => request.url === "/api/autopay/methods/method-1" && request.method === "DELETE",
+    ),
     "confirming removal must detach the method",
   );
 });
@@ -718,7 +895,10 @@ test("payroll read mode shows values with no editors", async (t) => {
     0,
     "read mode must render payroll values with no editors",
   );
-  assert.ok(!panel.textContent?.includes(en("parties.drawer.addBankAccount")), "read mode must not offer a bank add");
+  assert.ok(
+    !panel.textContent?.includes(en("parties.drawer.addBankAccount")),
+    "read mode must not offer a bank add",
+  );
   assert.ok(
     panel.textContent?.includes(en("common.approvalFlow.historyTitle")),
     "history reads, so it stays in read mode",
@@ -730,7 +910,10 @@ test("payroll edit mode restores every editor", async (t) => {
   t.after(done);
   const panel = payrollPanel();
   assert.ok(panel.querySelector("#pp-schedule"), "edit mode must offer the pay-schedule editor");
-  assert.ok(!panel.textContent?.includes(en("payroll.entitlements.title")), "Benefits owns entitlement balances");
+  assert.ok(
+    !panel.textContent?.includes(en("payroll.entitlements.title")),
+    "Benefits owns entitlement balances",
+  );
   assert.ok(
     panel.textContent?.includes(en("parties.drawer.addBankAccount")),
     "edit mode must offer the bank add",
@@ -740,22 +923,27 @@ test("payroll edit mode restores every editor", async (t) => {
 test("payroll sub-tabs keep every section mounted", async (t) => {
   const { done } = await renderPayrollDrawer({ initialMode: "edit" });
   t.after(done);
-  const strip = document.querySelector(`nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`);
+  const strip = document.querySelector(
+    `nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`,
+  );
   assert.ok(strip, "the payroll tab must render its sub-tab strip");
   const subTab = (label: string): HTMLButtonElement => {
-    const button = [...strip.querySelectorAll('button[aria-pressed]')].find(
+    const button = [...strip.querySelectorAll("button[aria-pressed]")].find(
       (candidate) => candidate.textContent?.trim() === label,
     ) as HTMLButtonElement | undefined;
     assert.ok(button, `the payroll strip must offer ${label}`);
     return button;
   };
-  const editorWrap = (document.querySelector("#pp-schedule") as HTMLElement).parentElement as HTMLElement;
-  const editorHidden = () =>
-    (editorWrap.closest("div[hidden]") as HTMLElement | null) !== null;
+  const editorWrap = (document.querySelector("#pp-schedule") as HTMLElement)
+    .parentElement as HTMLElement;
+  const editorHidden = () => (editorWrap.closest("div[hidden]") as HTMLElement | null) !== null;
 
   await clickTab(subTab("Bank accounts"));
   assert.ok(editorHidden(), "the profile editor must hide behind the accounts tab");
-  assert.ok(document.body.textContent?.includes(en("parties.drawer.addBankAccount")), "bank accounts remain in Payroll");
+  assert.ok(
+    document.body.textContent?.includes(en("parties.drawer.addBankAccount")),
+    "bank accounts remain in Payroll",
+  );
 
   await clickTab(subTab("General"));
   assert.equal(editorHidden(), false, "returning must show the same mounted editor");
@@ -763,7 +951,10 @@ test("payroll sub-tabs keep every section mounted", async (t) => {
 });
 
 test("general and tax share one profile editor", async (t) => {
-  const { done } = await renderPayrollDrawer({ initialMode: "edit", grants: { canManagePayroll: true } });
+  const { done } = await renderPayrollDrawer({
+    initialMode: "edit",
+    grants: { canManagePayroll: true },
+  });
   t.after(done);
   const nativeSchedule = (): HTMLSelectElement => {
     const matches = [...document.querySelectorAll("select")].filter((candidate) =>
@@ -781,14 +972,16 @@ test("general and tax share one profile editor", async (t) => {
   });
   await tick();
   assert.equal(nativeSchedule().value, "sched-2", "the schedule change must land");
-  const strip = document.querySelector(`nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`);
+  const strip = document.querySelector(
+    `nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`,
+  );
   assert.ok(strip, "the payroll tab must render its sub-tab strip");
-  const tax = [...strip.querySelectorAll('button[aria-pressed]')].find(
+  const tax = [...strip.querySelectorAll("button[aria-pressed]")].find(
     (candidate) => candidate.textContent?.trim() === "Tax and withholding",
   ) as HTMLButtonElement;
   assert.ok(tax, "the payroll strip must offer the tax half");
   await clickTab(tax);
-  const general = [...strip.querySelectorAll('button[aria-pressed]')].find(
+  const general = [...strip.querySelectorAll("button[aria-pressed]")].find(
     (candidate) => candidate.textContent?.trim() === "General",
   ) as HTMLButtonElement;
   assert.ok(general, "the payroll strip must offer the general half");
@@ -823,7 +1016,10 @@ test("a vendor kind without a vendor row hides compliance and reads as company",
   await rowless.done();
 
   const rowed = await renderDrawer({
-    payload: { ...employeePayload("vendor", { employee: false }), vendor: { ...VENDOR_PAYLOAD.vendor } },
+    payload: {
+      ...employeePayload("vendor", { employee: false }),
+      vendor: { ...VENDOR_PAYLOAD.vendor },
+    },
     role: "vendor",
     recordType: "vendor",
     grants,
@@ -838,7 +1034,10 @@ test("a vendor kind without a vendor row hides compliance and reads as company",
 
 for (const locale of LOCALES) {
   test(`the drawer renders translated text with no key paths in ${locale}`, async (t) => {
-    const messages = (await import(`../../../messages/${locale}/index.ts`)).default as Record<string, unknown>;
+    const messages = (await import(`../../../messages/${locale}/index.ts`)).default as Record<
+      string,
+      unknown
+    >;
     const { done } = await renderDrawer({ messages, locale });
     t.after(done);
     const text = document.body.textContent ?? "";
@@ -849,7 +1048,10 @@ for (const locale of LOCALES) {
     for (const button of railTabs(document, messages)) {
       const label = button.textContent?.trim() ?? "";
       assert.ok(label.length > 0, `${locale} must translate every rail label`);
-      assert.ok(!label.includes("."), `${locale} rail label must be text, not a key path: ${label}`);
+      assert.ok(
+        !label.includes("."),
+        `${locale} rail label must be text, not a key path: ${label}`,
+      );
     }
   });
 }
@@ -896,7 +1098,13 @@ test("relationship edits survive a tab round-trip", async (t) => {
   const industry = [...panel.querySelectorAll("input")].find(
     (input) => (input as HTMLInputElement).type === "text",
   ) as HTMLInputElement | undefined;
-  assert.ok(industry && panel.querySelector(`label[for="${industry.id}"][id="${industry.getAttribute("aria-labelledby")}"]`), "the shared party renderer associates the visible label with the input");
+  assert.ok(
+    industry &&
+      panel.querySelector(
+        `label[for="${industry.id}"][id="${industry.getAttribute("aria-labelledby")}"]`,
+      ),
+    "the shared party renderer associates the visible label with the input",
+  );
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
   await act(async () => {
     setter.call(industry!, "Software");
@@ -914,13 +1122,20 @@ test("relationship edits survive a tab round-trip", async (t) => {
   const revivedIndustry = [...(revived ?? [])].find(
     (input) => (input as HTMLInputElement).type === "text",
   ) as HTMLInputElement | undefined;
-  assert.equal(revivedIndustry?.value, "Software", "the typed industry must survive the tab round-trip");
+  assert.equal(
+    revivedIndustry?.value,
+    "Software",
+    "the typed industry must survive the tab round-trip",
+  );
 });
 
 test("bank-account approval history names the empty state in the host drawer", async (t) => {
   const emptyApprovalState = {
     approvalState: { status: "approved", pendingWith: [], myActions: null },
-    canRetry: false, failedRun: null, neverSubmitted: false, submittedByViewer: false,
+    canRetry: false,
+    failedRun: null,
+    neverSubmitted: false,
+    submittedByViewer: false,
     history: [],
   };
   const { done } = await renderDrawer({
@@ -960,8 +1175,7 @@ test("an open bank account draft survives a tab round-trip", async (t) => {
   await clickTab(add);
   const bankName = [...document.querySelectorAll("input")].find(
     (input) =>
-      (input as HTMLInputElement).type === "text" &&
-      (input as HTMLInputElement).value === "",
+      (input as HTMLInputElement).type === "text" && (input as HTMLInputElement).value === "",
   ) as HTMLInputElement | undefined;
   assert.ok(bankName, "the draft bank name input must render");
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
@@ -1023,7 +1237,9 @@ const ORPHAN_PAYLOAD = {
   employee: null,
 };
 
-async function saveWithKind(kind: "customer" | "vendor" | "employee"): Promise<Record<string, unknown>> {
+async function saveWithKind(
+  kind: "customer" | "vendor" | "employee",
+): Promise<Record<string, unknown>> {
   const bodies: Record<string, unknown>[] = [];
   const { done } = await renderDrawer({
     generic: true,
@@ -1074,28 +1290,94 @@ for (const kind of ["vendor", "customer", "employee"] as const) {
   });
 }
 
-test("employee Benefits owns program assignments, credited service and entitlement balances with its own grant", async t => {
-  const ui = await renderEmployeeDrawer({ initialTab: "benefits", grants: { canReadBenefits: true }, fetchHandler: routeFetch(employeeRoutes()) }); t.after(ui.done);
+test("employee Benefits owns program assignments, credited service and entitlement balances with its own grant", async (t) => {
+  const ui = await renderEmployeeDrawer({
+    initialTab: "benefits",
+    grants: { canReadBenefits: true },
+    fetchHandler: routeFetch(employeeRoutes()),
+  });
+  t.after(ui.done);
   assert.ok(document.body.textContent?.includes(en("hrm.employeeBenefits.programs")));
   assert.ok(document.body.textContent?.includes(en("hrm.benefitPolicies.service")));
-  const balances = [...document.querySelectorAll('button')].find(node => node.textContent?.trim() === en("hrm.benefitPolicies.balances")); assert.ok(balances); await clickTab(balances);
-  assert.ok(document.body.textContent?.includes("40")); assert.ok(document.body.textContent?.includes(en("payroll.entitlements.title")));
+  const balances = [...document.querySelectorAll("button")].find(
+    (node) => node.textContent?.trim() === en("hrm.benefitPolicies.balances"),
+  );
+  assert.ok(balances);
+  await clickTab(balances);
+  assert.ok(document.body.textContent?.includes("40"));
+  assert.ok(document.body.textContent?.includes(en("payroll.entitlements.title")));
 });
 
-
-test("employee Benefits presents native program and assignment destinations for every relationship", async t => {
-  const assignments = employeeBenefitAssignments([{ id: 'rrsp', name: 'Retirement savings', type: 'retirement' }, { id: 'vac', name: 'Vacation', type: 'time_off' }, { id: 'recognition', name: 'Recognition', type: 'reward' }],
-    ['enrollment', 'vacation_terms', 'membership'].map((nativeKind, index) => ({ id: `assignment-${index}`, nativeKind: nativeKind as 'enrollment' | 'vacation_terms' | 'membership', programId: ['rrsp', 'vac', 'recognition'][index]!, employmentId: 'employment', employeePartyId: EMPLOYEE_ID, employeeName: 'Nadia', status: 'active', effectiveFrom: '2026-01-01', effectiveTo: null })), { type: value => value, status: () => 'Active' });
-  const routes = employeeRoutes(); routes['/api/hrm/employee-benefits'] = () => Response.json({ assignments, programs: [], employments: [], enrollments: [], vacation: [], service: [], payroll: false, canManage: false, canReadBanks: false });
-  const ui = await renderEmployeeDrawer({ initialTab: 'benefits', grants: { canReadBenefits: true }, fetchHandler: routeFetch(routes) }); t.after(ui.done);
-  const navigation: string[] = []; globalThis.__partyRouter!.push = href => navigation.push(href);
-  const rows = [...document.querySelectorAll('tbody tr')]; assert.equal(rows.length, 3);
-  assert.deepEqual(new Set([...document.querySelectorAll('a[href^="/hrm/benefits?view=programs&program="]')].map(link => link.getAttribute('href'))), new Set(assignments.map(row => row.programHref)));
-  for (const name of ['Retirement savings', 'Recognition', 'Vacation']) assert.ok(document.body.textContent?.includes(name));
-  const programsRail = [...document.querySelectorAll('nav')].find(nav => nav.querySelector('button')?.textContent === en('hrm.employeeBenefits.programs'));
-  assert.equal(programsRail?.querySelectorAll('button[aria-pressed]').length, 1, 'only Programs is available without Payroll and bank permissions');
-  for (const [name, expected] of [['Retirement savings', '/parties?benefitPolicyKind=coverage&benefitPolicyRow=assignment-0'], ['Recognition', '/hrm/benefits?view=programs&program=recognition&transactionTab=participants']]) {
-    await act(async () => rows.find(row => row.textContent?.includes(name!))!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+test("employee Benefits presents native program and assignment destinations for every relationship", async (t) => {
+  const assignments = employeeBenefitAssignments(
+    [
+      { id: "rrsp", name: "Retirement savings", type: "retirement" },
+      { id: "vac", name: "Vacation", type: "time_off" },
+      { id: "recognition", name: "Recognition", type: "reward" },
+    ],
+    ["enrollment", "vacation_terms", "membership"].map((nativeKind, index) => ({
+      id: `assignment-${index}`,
+      nativeKind: nativeKind as "enrollment" | "vacation_terms" | "membership",
+      programId: ["rrsp", "vac", "recognition"][index]!,
+      employmentId: "employment",
+      employeePartyId: EMPLOYEE_ID,
+      employeeName: "Nadia",
+      status: "active",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+    })),
+    { type: (value) => value, status: () => "Active" },
+  );
+  const routes = employeeRoutes();
+  routes["/api/hrm/employee-benefits"] = () =>
+    Response.json({
+      assignments,
+      programs: [],
+      employments: [],
+      enrollments: [],
+      vacation: [],
+      service: [],
+      payroll: false,
+      canManage: false,
+      canReadBanks: false,
+    });
+  const ui = await renderEmployeeDrawer({
+    initialTab: "benefits",
+    grants: { canReadBenefits: true },
+    fetchHandler: routeFetch(routes),
+  });
+  t.after(ui.done);
+  const navigation: string[] = [];
+  globalThis.__partyRouter!.push = (href) => navigation.push(href);
+  const rows = [...document.querySelectorAll("tbody tr")];
+  assert.equal(rows.length, 3);
+  assert.deepEqual(
+    new Set(
+      [...document.querySelectorAll('a[href^="/hrm/benefits?view=programs&program="]')].map(
+        (link) => link.getAttribute("href"),
+      ),
+    ),
+    new Set(assignments.map((row) => row.programHref)),
+  );
+  for (const name of ["Retirement savings", "Recognition", "Vacation"])
+    assert.ok(document.body.textContent?.includes(name));
+  const programsRail = [...document.querySelectorAll("nav")].find(
+    (nav) => nav.querySelector("button")?.textContent === en("hrm.employeeBenefits.programs"),
+  );
+  assert.equal(
+    programsRail?.querySelectorAll("button[aria-pressed]").length,
+    1,
+    "only Programs is available without Payroll and bank permissions",
+  );
+  for (const [name, expected] of [
+    ["Retirement savings", "/parties?benefitPolicyKind=coverage&benefitPolicyRow=assignment-0"],
+    ["Recognition", "/hrm/benefits?view=programs&program=recognition&transactionTab=participants"],
+  ]) {
+    await act(async () =>
+      rows
+        .find((row) => row.textContent?.includes(name!))!
+        .dispatchEvent(new window.MouseEvent("click", { bubbles: true })),
+    );
     assert.equal(navigation.at(-1), expected);
   }
 });
@@ -1150,7 +1432,10 @@ test("the customer rail gains a billing tab only with the consolidated-billing r
   };
 
   const ungranted = await names({});
-  assert.ok(!ungranted.includes(label), "the billing tab stays hidden without the consolidated-billing read surface");
+  assert.ok(
+    !ungranted.includes(label),
+    "the billing tab stays hidden without the consolidated-billing read surface",
+  );
 
   const granted = await names({ grants: BILLING_GRANTS });
   assert.ok(granted.includes(label), "the read surface opens the billing tab");
@@ -1186,15 +1471,28 @@ const MANDATE_ROW = {
   expiresOn: null,
 };
 
-function mandateFetch(seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }>, mandates: Record<string, unknown>[]) {
+function mandateFetch(
+  seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }>,
+  mandates: Record<string, unknown>[],
+) {
   return (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
-    seen.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+    seen.push({
+      url,
+      method,
+      body:
+        typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : null,
+    });
     if (url === `/api/parties/${PARTY_ID}/debit-mandates`) {
-      return Response.json({ mandates, bankAccounts: [{ id: "bank-1", label: "First Bank · ••••1234" }] });
+      return Response.json({
+        mandates,
+        bankAccounts: [{ id: "bank-1", label: "First Bank · ••••1234" }],
+      });
     }
     if (url.startsWith("/api/admin/payment-operations/mandates")) {
-      return Response.json(method === "POST" ? { id: "mandate-2" } : { ok: true }, { status: method === "POST" ? 201 : 200 });
+      return Response.json(method === "POST" ? { id: "mandate-2" } : { ok: true }, {
+        status: method === "POST" ? 201 : 200,
+      });
     }
     return null;
   };
@@ -1208,7 +1506,9 @@ function nativeSelect(id: string): HTMLSelectElement {
 }
 
 async function clickButton(name: string) {
-  const button = [...document.querySelectorAll("button")].find((element) => element.textContent?.trim() === name) as HTMLButtonElement | undefined;
+  const button = [...document.querySelectorAll("button")].find(
+    (element) => element.textContent?.trim() === name,
+  ) as HTMLButtonElement | undefined;
   assert.ok(button, `the ${name} button must render`);
   await act(async () => {
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -1231,19 +1531,42 @@ test("the debit-mandates tab rides only a granted customer record and a stale de
     prior = done;
     return railTabs();
   };
-  const pressed = (tabs: HTMLButtonElement[]) => tabs.find((button) => button.getAttribute("aria-pressed") === "true")?.textContent?.trim();
+  const pressed = (tabs: HTMLButtonElement[]) =>
+    tabs.find((button) => button.getAttribute("aria-pressed") === "true")?.textContent?.trim();
 
   const ungranted = await render({ initialTab: "debitMandates" });
-  assert.ok(!ungranted.map((button) => button.textContent?.trim()).includes(label), "the tab stays hidden without the mandate grant");
-  assert.equal(pressed(ungranted), en("parties.drawer.tabs.overview"), "a stale deep link lands on overview");
+  assert.ok(
+    !ungranted.map((button) => button.textContent?.trim()).includes(label),
+    "the tab stays hidden without the mandate grant",
+  );
+  assert.equal(
+    pressed(ungranted),
+    en("parties.drawer.tabs.overview"),
+    "a stale deep link lands on overview",
+  );
 
-  const roleless = await render({ initialTab: "debitMandates", payload: VENDOR_PAYLOAD, generic: true, grants: MANDATE_GRANTS });
-  assert.ok(!roleless.map((button) => button.textContent?.trim()).includes(label), "a party without the customer role never shows mandates");
-  assert.equal(pressed(roleless), en("parties.drawer.tabs.overview"), "the deep link falls back when the customer role is missing");
+  const roleless = await render({
+    initialTab: "debitMandates",
+    payload: VENDOR_PAYLOAD,
+    generic: true,
+    grants: MANDATE_GRANTS,
+  });
+  assert.ok(
+    !roleless.map((button) => button.textContent?.trim()).includes(label),
+    "a party without the customer role never shows mandates",
+  );
+  assert.equal(
+    pressed(roleless),
+    en("parties.drawer.tabs.overview"),
+    "the deep link falls back when the customer role is missing",
+  );
 
   const granted = await render({ initialTab: "debitMandates", grants: MANDATE_GRANTS });
   assert.equal(pressed(granted), label, "the granted customer deep link opens the mandates tab");
-  assert.ok(await waitForText(en("parties.drawer.debitMandates.empty")), "the tab body is the mandates panel");
+  assert.ok(
+    await waitForText(en("parties.drawer.debitMandates.empty")),
+    "the tab body is the mandates panel",
+  );
   if (prior) t.after(prior);
 });
 
@@ -1268,23 +1591,34 @@ test("a new mandate is issued to the drawer's party and an edit sends only the m
   });
   await clickButton(en("common.actions.save"));
   const created = seen.find((request) => request.method === "POST");
-  assert.deepEqual(created?.body, {
-    partyId: PARTY_ID,
-    partyBankAccountId: "bank-1",
-    scheme: "nacha",
-    mandateReference: "MND-0002",
-    status: "pending",
-  }, "the create carries the drawer's party and the scheme the form displays");
+  assert.deepEqual(
+    created?.body,
+    {
+      partyId: PARTY_ID,
+      partyBankAccountId: "bank-1",
+      scheme: "nacha",
+      mandateReference: "MND-0002",
+      status: "pending",
+    },
+    "the create carries the drawer's party and the scheme the form displays",
+  );
 
-  const row = [...document.querySelectorAll("tr")].find((element) => element.textContent?.includes("MND-0001"));
-  const edit = [...(row?.querySelectorAll("button") ?? [])].find((button) => button.textContent?.trim() === en("common.actions.edit"));
+  const row = [...document.querySelectorAll("tr")].find((element) =>
+    element.textContent?.includes("MND-0001"),
+  );
+  const edit = [...(row?.querySelectorAll("button") ?? [])].find(
+    (button) => button.textContent?.trim() === en("common.actions.edit"),
+  );
   assert.ok(edit, "each mandate row offers an edit");
   await act(async () => {
     edit.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await tick();
   });
   await tick();
-  assert.ok((document.getElementById("debit-mandate-reference") as HTMLInputElement).disabled, "the reference is fixed after create");
+  assert.ok(
+    (document.getElementById("debit-mandate-reference") as HTMLInputElement).disabled,
+    "the reference is fixed after create",
+  );
   await act(async () => {
     setSelectValue(nativeSelect("debit-mandate-status"), "active");
     await tick();
@@ -1292,12 +1626,19 @@ test("a new mandate is issued to the drawer's party and an edit sends only the m
   await clickButton(en("common.actions.save"));
   const updated = seen.find((request) => request.method === "PATCH");
   assert.equal(updated?.url, "/api/admin/payment-operations/mandates/mandate-1");
-  assert.deepEqual(updated?.body, { status: "active", signedOn: "2026-09-01", validFrom: "", expiresOn: "" },
-    "an edit never resends the party, bank account, scheme or reference the route refuses");
+  assert.deepEqual(
+    updated?.body,
+    { status: "active", signedOn: "2026-09-01", validFrom: "", expiresOn: "" },
+    "an edit never resends the party, bank account, scheme or reference the route refuses",
+  );
 });
 
 test("the unified drawer shows roles on the overview tab", async (t) => {
-  const { done } = await renderDrawer({ generic: true, initialTab: "overview", initialMode: "view" });
+  const { done } = await renderDrawer({
+    generic: true,
+    initialTab: "overview",
+    initialMode: "view",
+  });
   t.after(done);
   const overview = railTabNamed(en("parties.drawer.tabs.overview"));
   assert.ok(overview, "the overview tab must render");
@@ -1310,7 +1651,11 @@ test("the unified drawer shows roles on the overview tab", async (t) => {
 });
 
 test("the unified drawer offers role checkboxes on overview in edit mode", async (t) => {
-  const { done } = await renderDrawer({ generic: true, initialTab: "overview", initialMode: "edit" });
+  const { done } = await renderDrawer({
+    generic: true,
+    initialTab: "overview",
+    initialMode: "edit",
+  });
   t.after(done);
   const overview = railTabNamed(en("parties.drawer.tabs.overview"));
   assert.ok(overview, "the overview tab must render");
@@ -1325,11 +1670,25 @@ test("the unified drawer offers role checkboxes on overview in edit mode", async
 
 test("the relationship tab reads as values until Edit, and the drawer's single Save persists it", async (t) => {
   const profile = {
-    lifecycle_stage: "lead", status_id: "s1", owner_user_id: null, territory_id: null, lead_source_id: null,
-    industry: null, category: null, annual_revenue: null, employee_count: null, qualification_score: null,
-    next_action_at: null, updated_at: "2026-09-17T12:00:00.000000Z",
+    lifecycle_stage: "lead",
+    status_id: "s1",
+    owner_user_id: null,
+    territory_id: null,
+    lead_source_id: null,
+    industry: null,
+    category: null,
+    annual_revenue: null,
+    employee_count: null,
+    qualification_score: null,
+    next_action_at: null,
+    updated_at: "2026-09-17T12:00:00.000000Z",
   };
-  const options = { statuses: [{ id: "s1", name: "New", lifecycle_stage: "lead", is_default: true }], owners: [], territories: [], sources: [] };
+  const options = {
+    statuses: [{ id: "s1", name: "New", lifecycle_stage: "lead", is_default: true }],
+    owners: [],
+    territories: [],
+    sources: [],
+  };
   const seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
   const { done } = await renderDrawer({
     role: "customer",
@@ -1338,24 +1697,50 @@ test("the relationship tab reads as values until Edit, and the drawer's single S
     grants: { canReadCrmAccounts: true, canManageCrmAccounts: true },
     fetchHandler: (url, init) => {
       const method = init?.method ?? "GET";
-      seen.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      seen.push({
+        url,
+        method,
+        body:
+          typeof init?.body === "string"
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : null,
+      });
       if (url === `/api/crm/accounts/${PARTY_ID}`) {
-        return method === "PATCH" ? Response.json({ ok: true }) : Response.json({ account: { profile, opportunities: [] }, options });
+        return method === "PATCH"
+          ? Response.json({ ok: true })
+          : Response.json({ account: { profile, opportunities: [] }, options });
       }
-      if (url === `/api/parties/${PARTY_ID}` && method === "PATCH") return Response.json({ party: { is_active: true } });
+      if (url === `/api/parties/${PARTY_ID}` && method === "PATCH")
+        return Response.json({ party: { is_active: true } });
       return null;
     },
   });
   t.after(done);
   await clickTab(railTabNamed(en("parties.drawer.tabs.relationship"))!);
-  const panel = () => [...document.querySelectorAll("section")].find((section) => section.textContent?.includes("Relationship profile"));
+  const panel = () =>
+    [...document.querySelectorAll("section")].find((section) =>
+      section.textContent?.includes("Relationship profile"),
+    );
   assert.ok(await waitForText("Relationship profile"), "the relationship panel must render");
-  assert.equal(panel()!.querySelectorAll("input, select").length, 0, "view mode renders the relationship as values");
-  const saveButtons = () => [...document.querySelectorAll("button")].filter((button) => button.textContent?.trim() === en("common.actions.save"));
-  assert.equal(saveButtons().length, 0, "view mode offers no Save anywhere — the section has none of its own");
+  assert.equal(
+    panel()!.querySelectorAll("input, select").length,
+    0,
+    "view mode renders the relationship as values",
+  );
+  const saveButtons = () =>
+    [...document.querySelectorAll("button")].filter(
+      (button) => button.textContent?.trim() === en("common.actions.save"),
+    );
+  assert.equal(
+    saveButtons().length,
+    0,
+    "view mode offers no Save anywhere — the section has none of its own",
+  );
 
   await clickButton(en("common.actions.edit"));
-  const industry = [...panel()!.querySelectorAll("input")].find((input) => (input as HTMLInputElement).type === "text") as HTMLInputElement | undefined;
+  const industry = [...panel()!.querySelectorAll("input")].find(
+    (input) => (input as HTMLInputElement).type === "text",
+  ) as HTMLInputElement | undefined;
   assert.ok(industry, "edit mode opens the relationship fields");
   assert.equal(saveButtons().length, 1, "edit mode has exactly one Save: the record's");
   await act(async () => {
@@ -1364,12 +1749,26 @@ test("the relationship tab reads as values until Edit, and the drawer's single S
   });
   await clickButton(en("common.actions.save"));
   await tick();
-  const relationshipPatch = seen.find((request) => request.url === `/api/crm/accounts/${PARTY_ID}` && request.method === "PATCH");
-  assert.equal(relationshipPatch?.body?.industry, "Software", "the record Save persists the relationship edits");
-  assert.ok(seen.some((request) => request.url === `/api/parties/${PARTY_ID}` && request.method === "PATCH"), "the party itself saves in the same Save");
-  assert.equal(panel()!.querySelectorAll("input, select").length, 0, "a successful Save returns the relationship to view mode");
+  const relationshipPatch = seen.find(
+    (request) => request.url === `/api/crm/accounts/${PARTY_ID}` && request.method === "PATCH",
+  );
+  assert.equal(
+    relationshipPatch?.body?.industry,
+    "Software",
+    "the record Save persists the relationship edits",
+  );
+  assert.ok(
+    seen.some(
+      (request) => request.url === `/api/parties/${PARTY_ID}` && request.method === "PATCH",
+    ),
+    "the party itself saves in the same Save",
+  );
+  assert.equal(
+    panel()!.querySelectorAll("input, select").length,
+    0,
+    "a successful Save returns the relationship to view mode",
+  );
 });
-
 
 test("removing a mistaken role posts to the remove endpoint and clears the card", async (t) => {
   const seen: Array<{ url: string; method: string; body: Record<string, unknown> | null }> = [];
@@ -1378,7 +1777,14 @@ test("removing a mistaken role posts to the remove endpoint and clears the card"
     initialTab: "overview",
     initialMode: "edit",
     fetchHandler: (url, init) => {
-      seen.push({ url, method: init?.method ?? "GET", body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      seen.push({
+        url,
+        method: init?.method ?? "GET",
+        body:
+          typeof init?.body === "string"
+            ? (JSON.parse(init.body) as Record<string, unknown>)
+            : null,
+      });
       if (url.endsWith("/roles/remove")) return Response.json({ removed: true, kind: "company" });
       return null;
     },
@@ -1398,17 +1804,23 @@ test("removing a mistaken role posts to the remove endpoint and clears the card"
   assert.ok(post, "removal posts to the role remove endpoint");
   assert.equal(post?.method, "POST");
   assert.deepEqual(post?.body, { role: "vendor" });
-  const cards = [...document.querySelectorAll("div.rounded-lg")].filter((element) =>
-    element.textContent?.includes(en("parties.drawer.rolesHeading")) ||
-    element.closest("section")?.textContent?.includes(en("parties.drawer.rolesHeading")),
+  const cards = [...document.querySelectorAll("div.rounded-lg")].filter(
+    (element) =>
+      element.textContent?.includes(en("parties.drawer.rolesHeading")) ||
+      element.closest("section")?.textContent?.includes(en("parties.drawer.rolesHeading")),
   );
-  const vendorCard = cards.find((element) =>
-    element.textContent?.includes(en("common.labels.vendor")) &&
-    !element.textContent?.includes(en("common.labels.customer")),
+  const vendorCard = cards.find(
+    (element) =>
+      element.textContent?.includes(en("common.labels.vendor")) &&
+      !element.textContent?.includes(en("common.labels.customer")),
   );
   const vendorBox = vendorCard?.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
   assert.ok(vendorBox, "the vendor card keeps its enable checkbox");
-  assert.equal(vendorBox?.checked, false, "the removed role's checkbox clears without a save round-trip");
+  assert.equal(
+    vendorBox?.checked,
+    false,
+    "the removed role's checkbox clears without a save round-trip",
+  );
 });
 
 test("flipping kind to employee routes into Hire instead of leaving an employment-less employee", async (t) => {
@@ -1458,7 +1870,9 @@ test("flipping kind to employee routes into Hire instead of leaving an employmen
   });
   await tick();
   await clickButton("Save");
-  const patch = seen.find((request) => request.url.startsWith("/api/parties/") && request.method === "PATCH");
+  const patch = seen.find(
+    (request) => request.url.startsWith("/api/parties/") && request.method === "PATCH",
+  );
   assert.ok(patch, "the flip persists through the parties PATCH");
   assert.equal(
     (patch?.body as { roles?: { employee?: { enabled?: boolean } } })?.roles?.employee?.enabled,
@@ -1479,7 +1893,9 @@ test("flipping kind to employee routes into Hire instead of leaving an employmen
   });
   await tick();
   await clickButton(en("hrm.employment.hire.submit"));
-  const hire = seen.find((request) => request.url === "/api/hrm/employments" && request.method === "POST");
+  const hire = seen.find(
+    (request) => request.url === "/api/hrm/employments" && request.method === "POST",
+  );
   assert.ok(hire, "the Hire step posts the first employment");
   assert.equal(
     (hire?.body as { workerPartyId?: string })?.workerPartyId,

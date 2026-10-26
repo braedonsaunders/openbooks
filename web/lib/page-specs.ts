@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import type { PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { validateAgainstRegistries, type SpecRejection } from './page-spec-validate'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import type { PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { validateAgainstRegistries, type SpecRejection } from "./page-spec-validate";
 
 /**
  * Tenant-authored page layouts.
@@ -38,13 +38,13 @@ import { validateAgainstRegistries, type SpecRejection } from './page-spec-valid
  */
 
 export interface StoredPageSpec {
-  id: string
-  route: string
-  spec: PageSpec
-  note: string | null
-  updatedAt: string
+  id: string;
+  route: string;
+  spec: PageSpec;
+  note: string | null;
+  updatedAt: string;
   /** The one person this layout is for, or null for the whole org. */
-  userId: string | null
+  userId: string | null;
 }
 
 /**
@@ -54,7 +54,7 @@ export interface StoredPageSpec {
  * else, which is the whole point: someone who wants one panel gone should not
  * have to take it away from their colleagues to get it.
  */
-export type LayoutScope = 'org' | 'user'
+export type LayoutScope = "org" | "user";
 
 /**
  * One active `page_specs` row competing to render a route.
@@ -66,13 +66,13 @@ export type LayoutScope = 'org' | 'user'
  * read it as false and never consult it).
  */
 type PageSpecCandidate = {
-  id: string
-  spec: unknown
-  user_id: string | null
-  extension_version_id: string | null
-  is_current: boolean
-  updated_at: string | Date
-}
+  id: string;
+  spec: unknown;
+  user_id: string | null;
+  extension_version_id: string | null;
+  is_current: boolean;
+  updated_at: string | Date;
+};
 
 /**
  * Lower wins: the reader's own layout, then the org's, then an installed
@@ -81,15 +81,15 @@ type PageSpecCandidate = {
  * projection but still beats built-in.
  */
 function pageSpecRank(row: PageSpecCandidate): number {
-  if (row.user_id !== null) return 0
-  if (row.extension_version_id === null) return 1
-  return row.is_current ? 2 : 3
+  if (row.user_id !== null) return 0;
+  if (row.extension_version_id === null) return 1;
+  return row.is_current ? 2 : 3;
 }
 
 // node-postgres parses timestamptz into a Date; canned rows in tests carry
 // ISO strings. Normalize before comparing so both order the same way.
 function pageSpecStamp(value: string | Date): string {
-  return value instanceof Date ? value.toISOString() : String(value)
+  return value instanceof Date ? value.toISOString() : String(value);
 }
 
 /**
@@ -105,14 +105,14 @@ function pageSpecStamp(value: string | Date): string {
  * literals, never over a mocked transport.
  */
 export function pickPageSpecRow(rows: PageSpecCandidate[]): PageSpecCandidate | null {
-  if (rows.length === 0) return null
+  if (rows.length === 0) return null;
   const ordered = [...rows].sort(
     (a, b) =>
       pageSpecRank(a) - pageSpecRank(b) ||
       pageSpecStamp(b.updated_at).localeCompare(pageSpecStamp(a.updated_at)) ||
       a.id.localeCompare(b.id),
-  )
-  return ordered[0] ?? null
+  );
+  return ordered[0] ?? null;
 }
 
 /**
@@ -138,7 +138,12 @@ export async function loadPageSpec(
   registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> },
   /** When given, this reader's personal layout is preferred over the org's. */
   userId?: string,
-): Promise<{ spec: PageSpec; id: string; scope: LayoutScope; extensionVersionId: string | null } | null> {
+): Promise<{
+  spec: PageSpec;
+  id: string;
+  scope: LayoutScope;
+  extensionVersionId: string | null;
+} | null> {
   // Every candidate, not just the winner. Two round trips would be a second
   // chance to get the precedence wrong, and LIMIT 1 would split the decision
   // between SQL and `pickPageSpecRow`; the ORDER BY lists the static layers
@@ -146,7 +151,8 @@ export async function loadPageSpec(
   // applies version currency on top. `is_current` resolves through the
   // module's own active_version_id chain, so a superseded version's row
   // ranks below the current projection even when both are active.
-  const rows = await db.execute<PageSpecCandidate>(sql`
+  const rows = await db.execute<PageSpecCandidate>(
+    sql`
     select p.id, p.spec, p.user_id, p.extension_version_id, p.updated_at,
            (case when p.extension_version_id is null then false
                  else m.active_version_id is not distinct from p.extension_version_id end) as is_current
@@ -156,19 +162,21 @@ export async function loadPageSpec(
      where p.org_id = ${orgId} and p.route = ${route} and p.is_active
        and (p.extension_version_id is null or (m.status = 'installed' and (select settings->'features'->'apps' from orgs where id=${orgId}) is distinct from 'false'::jsonb and mv.status = 'active' and m.active_version_id = mv.id))
        and (p.user_id is null ${userId ? sql`or p.user_id = ${userId}` : sql``})
-     order by p.user_id nulls last, p.extension_version_id nulls first, p.updated_at desc, p.id`, 'objects')
-  const winner = pickPageSpecRow(rows)
-  if (!winner) return null
+     order by p.user_id nulls last, p.extension_version_id nulls first, p.updated_at desc, p.id`,
+    "objects",
+  );
+  const winner = pickPageSpecRow(rows);
+  if (!winner) return null;
 
   // Validation gates the WINNER only, as it always has: an invalid winner
   // resolves to null (the built-in renders) rather than promoting a lower
   // layer the tenant did not choose.
-  const checked = validateAgainstRegistries(winner.spec, registries)
+  const checked = validateAgainstRegistries(winner.spec, registries);
   if (!checked.ok) {
     console.warn(
-      `[page-specs] ignoring stored spec ${winner.id} for ${route}: ${checked.errors.slice(0, 3).join('; ')}`,
-    )
-    return null
+      `[page-specs] ignoring stored spec ${winner.id} for ${route}: ${checked.errors.slice(0, 3).join("; ")}`,
+    );
+    return null;
   }
   // A spec stored under one route must not render another. The row's own
   // `route` column is authoritative; a mismatched `spec.route` means the
@@ -176,17 +184,17 @@ export async function loadPageSpec(
   if (checked.spec.route && checked.spec.route !== route) {
     console.warn(
       `[page-specs] ignoring stored spec ${winner.id}: declares route ${checked.spec.route}, stored under ${route}`,
-    )
-    return null
+    );
+    return null;
   }
   return {
     spec: checked.spec,
     id: winner.id,
     // A module customizes the org, never one person, so a extension row reads as
     // 'org'; `extensionVersionId` carries whose module it is.
-    scope: winner.user_id ? 'user' : 'org',
+    scope: winner.user_id ? "user" : "org",
     extensionVersionId: winner.extension_version_id,
-  }
+  };
 }
 
 /**
@@ -198,17 +206,20 @@ export async function loadPageSpec(
  */
 export async function listPageSpecs(orgId: string, userId?: string): Promise<StoredPageSpec[]> {
   const rows = await db.execute<{
-    id: string
-    route: string
-    spec: PageSpec
-    note: string | null
-    updated_at: string
-    user_id: string | null
-  }>(sql`
+    id: string;
+    route: string;
+    spec: PageSpec;
+    note: string | null;
+    updated_at: string;
+    user_id: string | null;
+  }>(
+    sql`
     select id, route, spec, note, updated_at, user_id from page_specs
      where org_id = ${orgId} and is_active
        and (user_id is null ${userId ? sql`or user_id = ${userId}` : sql``})
-     order by route, user_id nulls first`, 'objects')
+     order by route, user_id nulls first`,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     route: row.route,
@@ -216,7 +227,7 @@ export async function listPageSpecs(orgId: string, userId?: string): Promise<Sto
     note: row.note,
     updatedAt: String(row.updated_at),
     userId: row.user_id,
-  }))
+  }));
 }
 
 /**
@@ -230,25 +241,28 @@ export async function listPageSpecs(orgId: string, userId?: string): Promise<Sto
  * question anyone opens it to ask.
  */
 export async function savePageSpec(opts: {
-  orgId: string
-  actorId: string
-  route: string
-  spec: PageSpec
-  note?: string | null
-  registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> }
+  orgId: string;
+  actorId: string;
+  route: string;
+  spec: PageSpec;
+  note?: string | null;
+  registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> };
   /** `'user'` stores it for the actor alone; `'org'` for everyone. */
-  scope?: LayoutScope
+  scope?: LayoutScope;
 }): Promise<{ ok: true; id: string } | SpecRejection> {
-  const checked = validateAgainstRegistries(opts.spec, opts.registries)
-  if (!checked.ok) return checked
+  const checked = validateAgainstRegistries(opts.spec, opts.registries);
+  if (!checked.ok) return checked;
   if (checked.spec.route && checked.spec.route !== opts.route) {
-    return { ok: false, errors: [`spec declares route ${checked.spec.route}, saved under ${opts.route}`] }
+    return {
+      ok: false,
+      errors: [`spec declares route ${checked.spec.route}, saved under ${opts.route}`],
+    };
   }
 
   // The owner of the row being written. A personal save must supersede only
   // the actor's own layout: scoping this wrongly would let one person's
   // preference switch off the layout their whole org is using.
-  const owner = opts.scope === 'user' ? opts.actorId : null
+  const owner = opts.scope === "user" ? opts.actorId : null;
   return await db.transaction(async (tx) => {
     // Tenant rows only. The new row shadows any module projection by
     // precedence — the two provenances coexist while both are active, so a
@@ -257,44 +271,50 @@ export async function savePageSpec(opts: {
     // The supersession is audited too, not just the new row. Without it the
     // trail shows two inserts for one route and no record of which replaced
     // which — which is the question anyone reading the trail is asking.
-    const superseded = await tx.execute<{ id: string }>(sql`
+    const superseded = await tx.execute<{ id: string }>(
+      sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
          and user_id is not distinct from ${owner}
          and extension_version_id is null
-      returning id`, 'objects')
+      returning id`,
+      "objects",
+    );
     for (const row of superseded) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${opts.orgId}, 'page_specs', ${row.id}, 'update',
-                ${JSON.stringify({ route: opts.route, is_active: false, reason: 'superseded' })},
-                ${opts.actorId})`)
+                ${JSON.stringify({ route: opts.route, is_active: false, reason: "superseded" })},
+                ${opts.actorId})`);
     }
-    const inserted = await tx.execute<{ id: string }>(sql`
+    const inserted = await tx.execute<{ id: string }>(
+      sql`
       insert into page_specs (org_id, user_id, route, spec, note, created_by, updated_by)
       values (${opts.orgId}, ${owner}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
               ${opts.note ?? null}, ${opts.actorId}, ${opts.actorId})
-      returning id`, 'objects')
-    const id = inserted[0]!.id
+      returning id`,
+      "objects",
+    );
+    const id = inserted[0]!.id;
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${opts.orgId}, 'page_specs', ${id}, 'insert',
-              ${JSON.stringify({ route: opts.route, note: opts.note ?? null, scope: opts.scope ?? 'org' })}, ${opts.actorId})`)
-    return { ok: true as const, id }
-  })
+              ${JSON.stringify({ route: opts.route, note: opts.note ?? null, scope: opts.scope ?? "org" })}, ${opts.actorId})`);
+    return { ok: true as const, id };
+  });
 }
 
 export interface PageSpecVersion {
-  id: string
+  id: string;
   /** The layer this version belongs to, so restore republishes in that layer. */
-  scope: LayoutScope
+  scope: LayoutScope;
   /** The layout this org renders for the route right now. */
-  active: boolean
-  note: string | null
-  savedAt: string
+  active: boolean;
+  note: string | null;
+  savedAt: string;
   /** The user who saved it, if the row recorded one. */
-  savedBy: string | null
-  authorName: string | null
+  savedBy: string | null;
+  authorName: string | null;
 }
 
 /**
@@ -309,25 +329,32 @@ export interface PageSpecVersion {
  * like the layout list itself. A personal layout is nobody else's business,
  * and its history (notes, authors, timing) is nobody else's either.
  */
-export async function listPageSpecHistory(orgId: string, route: string, userId?: string): Promise<PageSpecVersion[]> {
+export async function listPageSpecHistory(
+  orgId: string,
+  route: string,
+  userId?: string,
+): Promise<PageSpecVersion[]> {
   const rows = await db.execute<{
-    id: string
-    is_active: boolean
-    note: string | null
-    created_at: string
-    created_by: string | null
-    author: string | null
-    user_id: string | null
-  }>(sql`
+    id: string;
+    is_active: boolean;
+    note: string | null;
+    created_at: string;
+    created_by: string | null;
+    author: string | null;
+    user_id: string | null;
+  }>(
+    sql`
     select s.id, s.is_active, s.note, s.created_at, s.created_by, s.user_id, u.name as author
       from page_specs s
       left join users u on u.id = s.created_by and u.org_id = s.org_id
      where s.org_id = ${orgId} and s.route = ${route}
        and (s.user_id is null ${userId ? sql`or s.user_id = ${userId}` : sql``})
-     order by s.created_at desc`, 'objects')
+     order by s.created_at desc`,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
-    scope: row.user_id === null ? 'org' : 'user',
+    scope: row.user_id === null ? "org" : "user",
     active: row.is_active,
     note: row.note,
     // `created_at`, not `updated_at`. A superseded row's `updated_at` is when
@@ -337,7 +364,7 @@ export async function listPageSpecHistory(orgId: string, route: string, userId?:
     savedAt: String(row.created_at),
     savedBy: row.created_by,
     authorName: row.author,
-  }))
+  }));
 }
 
 /**
@@ -355,33 +382,36 @@ export async function listPageSpecHistory(orgId: string, route: string, userId?:
  * layout someone wants back the one they cannot have.
  */
 export async function restorePageSpec(opts: {
-  orgId: string
-  actorId: string
-  route: string
-  versionId: string
-  registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> }
+  orgId: string;
+  actorId: string;
+  route: string;
+  versionId: string;
+  registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> };
   /** `'user'` restores the actor's personal layer; `'org'` (default) the org layer. */
-  scope?: LayoutScope
+  scope?: LayoutScope;
 }): Promise<{ ok: true; id: string } | SpecRejection> {
   // The layer being restored. A restore supersedes and republishes within one
   // layer only — like save and clear, it must never switch off a layer it
   // does not republish, and a version from another layer is not restorable
   // into this one.
-  const owner = opts.scope === 'user' ? opts.actorId : null
-  const rows = await db.execute<{ spec: unknown; note: string | null; is_active: boolean }>(sql`
+  const owner = opts.scope === "user" ? opts.actorId : null;
+  const rows = await db.execute<{ spec: unknown; note: string | null; is_active: boolean }>(
+    sql`
     select spec, note, is_active from page_specs
      where org_id = ${opts.orgId} and route = ${opts.route} and id = ${opts.versionId}
        and user_id is not distinct from ${owner}
-     limit 1`, 'objects')
-  const row = rows[0]
+     limit 1`,
+    "objects",
+  );
+  const row = rows[0];
   // Scoped to the org AND the route: a version id is not a capability, and a
   // row from another route would publish a layout under a page it was never
   // written for.
-  if (!row) return { ok: false, errors: ['no such version for this route'] }
-  if (row.is_active) return { ok: false, errors: ['that version is already the active layout'] }
+  if (!row) return { ok: false, errors: ["no such version for this route"] };
+  if (row.is_active) return { ok: false, errors: ["that version is already the active layout"] };
 
-  const checked = validateAgainstRegistries(row.spec, opts.registries)
-  if (!checked.ok) return checked
+  const checked = validateAgainstRegistries(row.spec, opts.registries);
+  if (!checked.ok) return checked;
 
   return await db.transaction(async (tx) => {
     // Tenant rows of this layer only, as in the save path: a restore
@@ -389,31 +419,37 @@ export async function restorePageSpec(opts: {
     // module row stays active underneath, so a later clear falls back to it.
     // Every other layer — the org layout when restoring personal, personal
     // layouts when restoring org — keeps rendering untouched.
-    const superseded = await tx.execute<{ id: string }>(sql`
+    const superseded = await tx.execute<{ id: string }>(
+      sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
          and user_id is not distinct from ${owner}
          and extension_version_id is null
-      returning id`, 'objects')
+      returning id`,
+      "objects",
+    );
     for (const previous of superseded) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${opts.orgId}, 'page_specs', ${previous.id}, 'update',
-                ${JSON.stringify({ route: opts.route, is_active: false, reason: 'superseded' })},
-                ${opts.actorId})`)
+                ${JSON.stringify({ route: opts.route, is_active: false, reason: "superseded" })},
+                ${opts.actorId})`);
     }
-    const inserted = await tx.execute<{ id: string }>(sql`
+    const inserted = await tx.execute<{ id: string }>(
+      sql`
       insert into page_specs (org_id, user_id, route, spec, note, created_by, updated_by)
       values (${opts.orgId}, ${owner}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
               ${row.note}, ${opts.actorId}, ${opts.actorId})
-      returning id`, 'objects')
-    const id = inserted[0]!.id
+      returning id`,
+      "objects",
+    );
+    const id = inserted[0]!.id;
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${opts.orgId}, 'page_specs', ${id}, 'insert',
-              ${JSON.stringify({ route: opts.route, restoredFrom: opts.versionId })}, ${opts.actorId})`)
-    return { ok: true as const, id }
-  })
+              ${JSON.stringify({ route: opts.route, restoredFrom: opts.versionId })}, ${opts.actorId})`);
+    return { ok: true as const, id };
+  });
 }
 
 /**
@@ -425,7 +461,7 @@ export async function restorePageSpec(opts: {
  * applying even if nothing has swept it yet — a draft that outlived its
  * sweep must not quietly keep rendering.
  */
-export const DRAFT_TTL_MINUTES = 30
+export const DRAFT_TTL_MINUTES = 30;
 
 /**
  * Store an author's unpublished layout so they can see it before anyone else.
@@ -439,16 +475,19 @@ export const DRAFT_TTL_MINUTES = 30
  * trail with keystrokes would bury the entries that do matter.
  */
 export async function savePageSpecDraft(opts: {
-  orgId: string
-  userId: string
-  route: string
-  spec: PageSpec
-  registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> }
+  orgId: string;
+  userId: string;
+  route: string;
+  spec: PageSpec;
+  registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> };
 }): Promise<{ ok: true } | SpecRejection> {
-  const checked = validateAgainstRegistries(opts.spec, opts.registries)
-  if (!checked.ok) return checked
+  const checked = validateAgainstRegistries(opts.spec, opts.registries);
+  if (!checked.ok) return checked;
   if (checked.spec.route && checked.spec.route !== opts.route) {
-    return { ok: false, errors: [`spec declares route ${checked.spec.route}, previewed as ${opts.route}`] }
+    return {
+      ok: false,
+      errors: [`spec declares route ${checked.spec.route}, previewed as ${opts.route}`],
+    };
   }
 
   // Sweep this author's expired drafts on the way past. A background job for
@@ -458,13 +497,13 @@ export async function savePageSpecDraft(opts: {
   await db.execute(sql`
     delete from page_spec_drafts
      where org_id = ${opts.orgId} and user_id = ${opts.userId}
-       and created_at < now() - ${`${DRAFT_TTL_MINUTES} minutes`}::interval`)
+       and created_at < now() - ${`${DRAFT_TTL_MINUTES} minutes`}::interval`);
   await db.execute(sql`
     insert into page_spec_drafts (org_id, user_id, route, spec)
     values (${opts.orgId}, ${opts.userId}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb)
     on conflict (org_id, user_id, route)
-    do update set spec = excluded.spec, created_at = now()`)
-  return { ok: true as const }
+    do update set spec = excluded.spec, created_at = now()`);
+  return { ok: true as const };
 }
 
 /**
@@ -480,20 +519,25 @@ export async function loadPageSpecDraft(
   route: string,
   registries: { widgets: ReadonlySet<string>; frames: ReadonlySet<string> },
 ): Promise<PageSpec | null> {
-  const rows = await db.execute<{ spec: unknown }>(sql`
+  const rows = await db.execute<{ spec: unknown }>(
+    sql`
     select spec from page_spec_drafts
      where org_id = ${orgId} and user_id = ${userId} and route = ${route}
        and created_at >= now() - ${`${DRAFT_TTL_MINUTES} minutes`}::interval
-     limit 1`, 'objects')
-  const row = rows[0]
-  if (!row) return null
-  const checked = validateAgainstRegistries(row.spec, registries)
+     limit 1`,
+    "objects",
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const checked = validateAgainstRegistries(row.spec, registries);
   if (!checked.ok) {
-    console.warn(`[page-specs] ignoring draft for ${route}: ${checked.errors.slice(0, 3).join('; ')}`)
-    return null
+    console.warn(
+      `[page-specs] ignoring draft for ${route}: ${checked.errors.slice(0, 3).join("; ")}`,
+    );
+    return null;
   }
-  if (checked.spec.route && checked.spec.route !== route) return null
-  return checked.spec
+  if (checked.spec.route && checked.spec.route !== route) return null;
+  return checked.spec;
 }
 
 /**
@@ -505,25 +549,28 @@ export async function loadPageSpecDraft(
  * that was always there.
  */
 export async function clearPageSpec(opts: {
-  orgId: string
-  actorId: string
-  route: string
-  scope?: LayoutScope
+  orgId: string;
+  actorId: string;
+  route: string;
+  scope?: LayoutScope;
 }): Promise<{ cleared: number }> {
-  const owner = opts.scope === 'user' ? opts.actorId : null
+  const owner = opts.scope === "user" ? opts.actorId : null;
   return await db.transaction(async (tx) => {
-    const rows = await tx.execute<{ id: string }>(sql`
+    const rows = await tx.execute<{ id: string }>(
+      sql`
       update page_specs set is_active = false, updated_at = now(), updated_by = ${opts.actorId}
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
          and user_id is not distinct from ${owner}
          and extension_version_id is null
-      returning id`, 'objects')
+      returning id`,
+      "objects",
+    );
     for (const row of rows) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${opts.orgId}, 'page_specs', ${row.id}, 'update',
-                ${JSON.stringify({ route: opts.route, is_active: false })}, ${opts.actorId})`)
+                ${JSON.stringify({ route: opts.route, is_active: false })}, ${opts.actorId})`);
     }
-    return { cleared: rows.length }
-  })
+    return { cleared: rows.length };
+  });
 }

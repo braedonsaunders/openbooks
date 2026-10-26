@@ -92,7 +92,9 @@ export function isSftpTempName(p: string): boolean {
  */
 export class SftpDirectoryNotEmptyError extends Error {
   constructor(virtualPath: string) {
-    super(`sftp folder '${cleanPath(virtualPath)}' is not empty — move or delete its contents before removing it`);
+    super(
+      `sftp folder '${cleanPath(virtualPath)}' is not empty — move or delete its contents before removing it`,
+    );
     this.name = "SftpDirectoryNotEmptyError";
   }
 }
@@ -106,7 +108,10 @@ export class SftpDirectoryNotEmptyError extends Error {
  * Backend-agnostic: the SFTP daemon enforces this for every backend, and the
  * folders come from the login's own configuration, never a hardcoded list.
  */
-export function isProtectedSftpPath(protectedDirs: readonly string[] | undefined, p: string): boolean {
+export function isProtectedSftpPath(
+  protectedDirs: readonly string[] | undefined,
+  p: string,
+): boolean {
   if (!protectedDirs?.length) return false;
   const cp = cleanPath(p);
   for (const dir of protectedDirs) {
@@ -126,7 +131,8 @@ export function localBackend(rootDir: string): SftpBackend {
   const abs = (p: string) => {
     const rel = cleanPath(p).replace(/^\//, "");
     const full = path.resolve(rootDir, rel);
-    if (full !== rootDir && !full.startsWith(rootDir + path.sep)) throw new Error("path escapes root");
+    if (full !== rootDir && !full.startsWith(rootDir + path.sep))
+      throw new Error("path escapes root");
     return full;
   };
   return {
@@ -226,7 +232,10 @@ function client(): S3Client {
       endpoint: env.S3_ENDPOINT,
       region: env.S3_REGION || "us-east-1",
       // Credentials are read live: db.ts snapshots the environment at module evaluation.
-      credentials: { accessKeyId: process.env.S3_ACCESS_KEY_ID!, secretAccessKey: process.env.S3_SECRET_ACCESS_KEY! },
+      credentials: {
+        accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+      },
       forcePathStyle: true,
     });
   }
@@ -280,7 +289,9 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
       // one folder lists once no matter how many pages it spans.
       const seenDirs = new Set<string>();
       do {
-        const res = await client().send(new ListObjectsV2Command({ Bucket: bucket, Prefix, Delimiter: "/", ContinuationToken }));
+        const res = await client().send(
+          new ListObjectsV2Command({ Bucket: bucket, Prefix, Delimiter: "/", ContinuationToken }),
+        );
         for (const c of res.CommonPrefixes ?? []) {
           const name = c.Prefix!.slice(Prefix.length).replace(/\/$/, "");
           if (name && !seenDirs.has(name)) {
@@ -291,7 +302,12 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
         for (const o of res.Contents ?? []) {
           const name = o.Key!.slice(Prefix.length);
           if (!name || name.endsWith("/")) continue; // skip the folder marker itself
-          out.push({ name, isDir: false, size: o.Size ?? 0, mtimeMs: (o.LastModified ?? new Date()).getTime() });
+          out.push({
+            name,
+            isDir: false,
+            size: o.Size ?? 0,
+            mtimeMs: (o.LastModified ?? new Date()).getTime(),
+          });
         }
         ContinuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
       } while (ContinuationToken);
@@ -302,10 +318,16 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
       if (cp === "/") return { isDir: true, size: 0, mtimeMs: Date.now() };
       try {
         const h = await client().send(new HeadObjectCommand({ Bucket: bucket, Key: key(p) }));
-        return { isDir: false, size: h.ContentLength ?? 0, mtimeMs: (h.LastModified ?? new Date()).getTime() };
+        return {
+          isDir: false,
+          size: h.ContentLength ?? 0,
+          mtimeMs: (h.LastModified ?? new Date()).getTime(),
+        };
       } catch {
         // maybe a directory: any object under prefix?
-        const res = await client().send(new ListObjectsV2Command({ Bucket: bucket, Prefix: dirKey(p), MaxKeys: 1 }));
+        const res = await client().send(
+          new ListObjectsV2Command({ Bucket: bucket, Prefix: dirKey(p), MaxKeys: 1 }),
+        );
         if ((res.KeyCount ?? 0) > 0) return { isDir: true, size: 0, mtimeMs: Date.now() };
         return null;
       }
@@ -321,7 +343,9 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
       await client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key(p) }));
     },
     async mkdir(p) {
-      await client().send(new PutObjectCommand({ Bucket: bucket, Key: dirKey(p), Body: Buffer.alloc(0) }));
+      await client().send(
+        new PutObjectCommand({ Bucket: bucket, Key: dirKey(p), Body: Buffer.alloc(0) }),
+      );
     },
     async rmdir(p) {
       // S3 has no directories: deleting only the zero-byte folder marker
@@ -329,13 +353,21 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
       // Match fs.rmdir — refuse a non-empty prefix by name, and delete the
       // marker only when nothing sits under it.
       const marker = dirKey(p);
-      const listed = await client().send(new ListObjectsV2Command({ Bucket: bucket, Prefix: marker, MaxKeys: 2 }));
+      const listed = await client().send(
+        new ListObjectsV2Command({ Bucket: bucket, Prefix: marker, MaxKeys: 2 }),
+      );
       const hasChild = (listed.Contents ?? []).some((o) => o.Key !== marker);
       if (hasChild) throw new SftpDirectoryNotEmptyError(p);
       await client().send(new DeleteObjectCommand({ Bucket: bucket, Key: marker }));
     },
     async rename(from, to) {
-      await client().send(new CopyObjectCommand({ Bucket: bucket, CopySource: encodeS3CopySource(bucket, key(from)), Key: key(to) }));
+      await client().send(
+        new CopyObjectCommand({
+          Bucket: bucket,
+          CopySource: encodeS3CopySource(bucket, key(from)),
+          Key: key(to),
+        }),
+      );
       await client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key(from) }));
     },
   };
@@ -346,7 +378,12 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
  * All four set means S3; none set means local disk; anything in between is a
  * misconfiguration and refuses by name — never a silent local fallback.
  */
-const SFTP_S3_VARS = ["S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET"] as const;
+const SFTP_S3_VARS = [
+  "S3_ENDPOINT",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+  "S3_BUCKET",
+] as const;
 
 /**
  * Live read of one storage setting: process.env wins (values assigned after
@@ -485,8 +522,10 @@ export class SftpPrefixError extends Error {
 export function assertSafeRootPrefix(rootPrefix: string): string {
   const raw = typeof rootPrefix === "string" ? rootPrefix : "";
   if (raw === "") throw new SftpPrefixError("sftp root prefix must not be empty");
-  if (raw.includes("\\")) throw new SftpPrefixError("sftp root prefix must not contain backslashes");
-  if (raw.includes("%")) throw new SftpPrefixError("sftp root prefix must not contain percent-encoding");
+  if (raw.includes("\\"))
+    throw new SftpPrefixError("sftp root prefix must not contain backslashes");
+  if (raw.includes("%"))
+    throw new SftpPrefixError("sftp root prefix must not contain percent-encoding");
   if (raw.startsWith("/")) throw new SftpPrefixError("sftp root prefix must be a relative path");
   if (raw.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
     throw new SftpPrefixError("sftp root prefix must not contain empty or dot segments");

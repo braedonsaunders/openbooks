@@ -1,4 +1,4 @@
-import 'server-only'
+import "server-only";
 
 /**
  * One shared mechanism for "a known domain refusal during page load renders
@@ -16,32 +16,32 @@ import 'server-only'
 
 /** Where the refusal's remedy is performed, when the caller may go there. */
 export interface RefusalAction {
-  href: string
-  label: string
+  href: string;
+  label: string;
 }
 
 export interface PageRefusal {
-  title: string
-  message: string
+  title: string;
+  message: string;
   /** The remedy's destination (for example the setup page), if any. */
-  action?: RefusalAction
+  action?: RefusalAction;
 }
 
 export interface KnownRefusal {
-  error: new (...args: never[]) => Error
-  code: string
+  error: new (...args: never[]) => Error;
+  code: string;
   /**
    * Narrow a shared code to one refusal text. HrmDocumentsError and
    * HrmSurveysError both refuse as REFUSED; only the no-link text
    * ("... is not linked to a person record ...") converts — a grant
    * refusal from the same call still throws.
    */
-  messageIncludes?: string
+  messageIncludes?: string;
   /** Link to the remedy, rendered beside the refusal (omit when the caller cannot act). */
-  action?: RefusalAction
+  action?: RefusalAction;
 }
 
-export type LoadOutcome<T> = { ok: true; data: T } | { ok: false; refusal: PageRefusal }
+export type LoadOutcome<T> = { ok: true; data: T } | { ok: false; refusal: PageRefusal };
 
 /** Run a page loader, converting only the listed refusals to page state. */
 export async function loadOrRefuse<T>(
@@ -49,15 +49,15 @@ export async function loadOrRefuse<T>(
   opts: { refusals: readonly KnownRefusal[]; title: string },
 ): Promise<LoadOutcome<T>> {
   try {
-    return { ok: true, data: await load() }
+    return { ok: true, data: await load() };
   } catch (e) {
-    const code = (e as { code?: unknown }).code
+    const code = (e as { code?: unknown }).code;
     for (const known of opts.refusals) {
       if (
-        e instanceof known.error
-        && code === known.code
-        && (known.messageIncludes === undefined
-          || (e instanceof Error && e.message.includes(known.messageIncludes)))
+        e instanceof known.error &&
+        code === known.code &&
+        (known.messageIncludes === undefined ||
+          (e instanceof Error && e.message.includes(known.messageIncludes)))
       ) {
         return {
           ok: false,
@@ -66,9 +66,9 @@ export async function loadOrRefuse<T>(
             message: e instanceof Error ? e.message : String(e),
             ...(known.action ? { action: known.action } : {}),
           },
-        }
+        };
       }
     }
-    throw e
+    throw e;
   }
 }

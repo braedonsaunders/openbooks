@@ -9,20 +9,60 @@ const IT_LIPE_2026: TaxReturnPack = {
   defaultFrequency: "quarterly",
   submissionChannel: "file_upload",
   governmentFormat: "certified_file",
-  submissionUrl: "https://www1.agenziaentrate.gov.it/servizi/scadenzario/main.php?chi=1595&come=518&cosa=11479&entroil=02-03-2026&op=4",
-  watermark: "Working copy — LIPE transmission is exclusively telematic; validate all credits, advances, interest, and special cases before submission",
+  submissionUrl:
+    "https://www1.agenziaentrate.gov.it/servizi/scadenzario/main.php?chi=1595&come=518&cosa=11479&entroil=02-03-2026&op=4",
+  watermark:
+    "Working copy — LIPE transmission is exclusively telematic; validate all credits, advances, interest, and special cases before submission",
   boxes: [
-    { lineCode: "VP2", label: "Totale operazioni attive, al netto dell'IVA", sign: 1, sequence: 10, basis: "taxable_base", glMap: "sales" },
-    { lineCode: "VP3", label: "Totale operazioni passive, al netto dell'IVA", sign: 1, sequence: 20, basis: "taxable_base", glMap: "purchases" },
-    { lineCode: "VP4", label: "IVA esigibile", sign: -1, sequence: 30, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "VP5", label: "IVA detratta", sign: 1, sequence: 40, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "VP2",
+      label: "Totale operazioni attive, al netto dell'IVA",
+      sign: 1,
+      sequence: 10,
+      basis: "taxable_base",
+      glMap: "sales",
+    },
+    {
+      lineCode: "VP3",
+      label: "Totale operazioni passive, al netto dell'IVA",
+      sign: 1,
+      sequence: 20,
+      basis: "taxable_base",
+      glMap: "purchases",
+    },
+    {
+      lineCode: "VP4",
+      label: "IVA esigibile",
+      sign: -1,
+      sequence: 30,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "VP5",
+      label: "IVA detratta",
+      sign: 1,
+      sequence: 40,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
     { lineCode: "VP6", label: "IVA dovuta o a credito", sign: 1, sequence: 50 },
-    { lineCode: "VP7", label: "Debito del periodo precedente non superiore a €25,82", sign: 1, sequence: 60 },
+    {
+      lineCode: "VP7",
+      label: "Debito del periodo precedente non superiore a €25,82",
+      sign: 1,
+      sequence: 60,
+    },
     { lineCode: "VP8", label: "Credito del periodo precedente", sign: 1, sequence: 70 },
     { lineCode: "VP9", label: "Credito dell'anno precedente", sign: 1, sequence: 80 },
     { lineCode: "VP10", label: "Versamenti auto UE", sign: 1, sequence: 90 },
     { lineCode: "VP11", label: "Crediti d'imposta", sign: 1, sequence: 100 },
-    { lineCode: "VP12", label: "Interessi dovuti per liquidazioni trimestrali", sign: 1, sequence: 110 },
+    {
+      lineCode: "VP12",
+      label: "Interessi dovuti per liquidazioni trimestrali",
+      sign: 1,
+      sequence: 110,
+    },
     { lineCode: "VP13", label: "Acconto dovuto", sign: 1, sequence: 120 },
     { lineCode: "VP14", label: "IVA da versare o a credito", sign: 1, sequence: 130 },
   ],
@@ -49,7 +89,8 @@ export const ITALY_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "italy_vat_22_from_2013",
-      title: "Gazzetta Ufficiale — statutory record of the standard VAT increase to 22% from 1 October 2013",
+      title:
+        "Gazzetta Ufficiale — statutory record of the standard VAT increase to 22% from 1 October 2013",
       url: "https://www.gazzettaufficiale.it/do/gazzetta/downloadPdf?dataPubblicazioneGazzetta=20251017&edizione=0&estensione=pdf&numeroGazzetta=242&numeroSupplemento=0&progressivo=0&tipoSerie=SG&tipoSupplemento=GU",
       asOf: "2026-08-01",
     },
@@ -67,7 +108,8 @@ export const ITALY_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "ade_vat_rates_applicability_2026",
-      title: "Agenzia delle Entrate — applicability of the 4% and 10% reduced VAT rates (current rates page; no statutory start date stated)",
+      title:
+        "Agenzia delle Entrate — applicability of the 4% and 10% reduced VAT rates (current rates page; no statutory start date stated)",
       url: "https://www.agenziaentrate.gov.it/portale/web/english/general-vat-rules-and-rates",
       asOf: "2026-09-18",
     },
@@ -80,14 +122,22 @@ export const ITALY_TAX_PACK: CountryTaxPackDefinition = {
         code: "IT-VAT-STD",
         name: "Italy standard VAT",
         ratePercent: "22",
-        rates: [{ ratePercent: "22", effectiveFrom: "2013-10-01", sourceId: "italy_vat_22_from_2013" }],
+        rates: [
+          { ratePercent: "22", effectiveFrom: "2013-10-01", sourceId: "italy_vat_22_from_2013" },
+        ],
       },
       {
         code: "IT-VAT-RED10",
         name: "Italy reduced VAT 10%",
         ratePercent: "10",
         role: "reduced",
-        rates: [{ ratePercent: "10", effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
+        rates: [
+          {
+            ratePercent: "10",
+            effectiveFrom: "2026-09-18",
+            sourceId: "ade_vat_rates_applicability_2026",
+          },
+        ],
         truncatedScheduleReason:
           "10% opens at AdE applicability (2026-09-18): the rates page states no statutory start date, so the band is applicability-dated by review.",
       },
@@ -96,7 +146,13 @@ export const ITALY_TAX_PACK: CountryTaxPackDefinition = {
         name: "Italy minimum VAT 4%",
         ratePercent: "4",
         role: "reduced",
-        rates: [{ ratePercent: "4", effectiveFrom: "2026-09-18", sourceId: "ade_vat_rates_applicability_2026" }],
+        rates: [
+          {
+            ratePercent: "4",
+            effectiveFrom: "2026-09-18",
+            sourceId: "ade_vat_rates_applicability_2026",
+          },
+        ],
         truncatedScheduleReason:
           "4% opens at AdE applicability (2026-09-18): the rates page states no statutory start date, so the band is applicability-dated by review.",
       },

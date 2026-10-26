@@ -1,8 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadRecordModule, recordModuleSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadRecordModule, recordModuleSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
-
+export const dynamic = "force-dynamic";
 
 /**
  * The auto-generated module for one published record type: a full list view
@@ -13,11 +12,11 @@ export default async function RecordModule({
   params,
   searchParams,
 }: {
-  params: Promise<{ typeKey: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  params: Promise<{ typeKey: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const { typeKey } = await params
-  const data = await loadRecordModule(sp, typeKey)
-  return <ModuleView spec={recordModuleSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const { typeKey } = await params;
+  const data = await loadRecordModule(sp, typeKey);
+  return <ModuleView spec={recordModuleSpec(data)} data={data} searchParams={sp} trusted />;
 }

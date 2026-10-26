@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { Select } from '@openbooks/ui'
-import { mergeHref, pickString } from '../lib/list-params'
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Select } from "@openbooks/ui";
+import { mergeHref, pickString } from "../lib/list-params";
 
 /**
  * Shared enum filter for list toolbars: a small labelled select, blank = no
@@ -19,25 +19,25 @@ export function ListFilterSelect({
   label,
   allLabel,
   options,
-  pageParamKey = 'page',
+  pageParamKey = "page",
   value,
   onValueChange,
 }: {
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
-  paramKey: string
-  label: string
+  basePath: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  paramKey: string;
+  label: string;
   /** The blank choice; omit it for a filter that always has a value. */
-  allLabel?: string
-  options: { value: string; label: string }[]
+  allLabel?: string;
+  options: { value: string; label: string }[];
   /** The page parameter a change resets; null for a loaded list that pages on the client. */
-  pageParamKey?: string | null
-  value?: string
-  onValueChange?: (value: string) => void
+  pageParamKey?: string | null;
+  value?: string;
+  onValueChange?: (value: string) => void;
 }) {
-  const router = useRouter()
-  const [pending, startTransition] = useTransition()
-  const current = value ?? pickString(currentParams[paramKey]) ?? ''
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const current = value ?? pickString(currentParams[paramKey]) ?? "";
 
   return (
     <label className="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -47,16 +47,16 @@ export function ListFilterSelect({
         disabled={pending}
         className="h-8 w-auto min-w-32"
         onChange={(event) => {
-          const next = event.target.value
+          const next = event.target.value;
           if (onValueChange) {
-            onValueChange(next)
-            return
+            onValueChange(next);
+            return;
           }
           const href = mergeHref(basePath, currentParams, {
             [paramKey]: next || undefined,
             ...(pageParamKey ? { [pageParamKey]: 1 } : {}),
-          })
-          startTransition(() => router.push(href as never))
+          });
+          startTransition(() => router.push(href as never));
         }}
       >
         {allLabel !== undefined ? <option value="">{allLabel}</option> : null}
@@ -67,5 +67,5 @@ export function ListFilterSelect({
         ))}
       </Select>
     </label>
-  )
+  );
 }

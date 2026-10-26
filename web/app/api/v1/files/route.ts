@@ -10,16 +10,34 @@ import { listApplicationFiles, uploadCabinetFile } from "../../../../lib/applica
 import { executeIdempotent } from "../../../../lib/application/idempotency";
 import { withContentDigest } from "../../../../lib/application/idempotency-core";
 
-const uploadFileBody = z.looseObject({
-  folderId: z.string().min(1),
-  filename: z.string().trim().min(1),
-  contentType: z.string().trim().min(1),
-  contentBase64: z.string().min(1),
-  sourceSystem: z.string().min(1).max(100).refine(value => value.trim().length > 0).optional(),
-  sourceId: z.string().min(1).max(1000).refine(value => value.trim().length > 0).optional(),
-  auditReason: z.string().trim().min(1).max(2000).optional(),
-}).refine(body => (body.sourceSystem === undefined) === (body.sourceId === undefined), 'Supply both sourceSystem and sourceId')
-  .refine(body => body.sourceSystem === undefined || body.auditReason !== undefined, 'Source uploads require an adoption reason');
+const uploadFileBody = z
+  .looseObject({
+    folderId: z.string().min(1),
+    filename: z.string().trim().min(1),
+    contentType: z.string().trim().min(1),
+    contentBase64: z.string().min(1),
+    sourceSystem: z
+      .string()
+      .min(1)
+      .max(100)
+      .refine((value) => value.trim().length > 0)
+      .optional(),
+    sourceId: z
+      .string()
+      .min(1)
+      .max(1000)
+      .refine((value) => value.trim().length > 0)
+      .optional(),
+    auditReason: z.string().trim().min(1).max(2000).optional(),
+  })
+  .refine(
+    (body) => (body.sourceSystem === undefined) === (body.sourceId === undefined),
+    "Supply both sourceSystem and sourceId",
+  )
+  .refine(
+    (body) => body.sourceSystem === undefined || body.auditReason !== undefined,
+    "Source uploads require an adoption reason",
+  );
 
 export const runtime = "nodejs";
 
@@ -50,7 +68,9 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
     const contentType = body.contentType;
     const contentBase64 = body.contentBase64;
     const source = {
-      ...(body.sourceSystem === undefined ? {} : { sourceSystem: body.sourceSystem, sourceId: body.sourceId }),
+      ...(body.sourceSystem === undefined
+        ? {}
+        : { sourceSystem: body.sourceSystem, sourceId: body.sourceId }),
       ...(body.auditReason === undefined ? {} : { auditReason: body.auditReason }),
     };
     const outcome = await executeIdempotent({
@@ -65,9 +85,14 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
         const { assertCabinetUploadAccess } = await import("../../../../lib/application/files");
         await assertCabinetUploadAccess(context.authz, folderId);
       },
-      execute: async () => uploadCabinetFile(context.authz, {
-        folderId, filename, contentType, contentBase64, ...source,
-      }),
+      execute: async () =>
+        uploadCabinetFile(context.authz, {
+          folderId,
+          filename,
+          contentType,
+          contentBase64,
+          ...source,
+        }),
     });
     return { status: 201, body: outcome.value, replayed: outcome.replayed };
   });

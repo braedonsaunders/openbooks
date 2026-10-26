@@ -24,7 +24,9 @@ export function beginInboxRead(ctx: InboxListContext): InboxListContext {
     readCtx.scope = {
       ...ctx.scope,
       ...(ctx.scope.roles ? { roles: [...ctx.scope.roles] } : {}),
-      ...(ctx.scope.allowedSubsidiaryIds ? { allowedSubsidiaryIds: [...ctx.scope.allowedSubsidiaryIds] } : {}),
+      ...(ctx.scope.allowedSubsidiaryIds
+        ? { allowedSubsidiaryIds: [...ctx.scope.allowedSubsidiaryIds] }
+        : {}),
     };
   }
   readMemos.set(readCtx, new Map());
@@ -37,7 +39,11 @@ export function beginInboxRead(ctx: InboxListContext): InboxListContext {
  * time; a failed read fails every source that depends on it, exactly as if
  * each had read it itself. Outside a read the loader runs every time.
  */
-export function memoizeForRead<T>(ctx: InboxListContext, key: string, load: () => Promise<T>): Promise<T> {
+export function memoizeForRead<T>(
+  ctx: InboxListContext,
+  key: string,
+  load: () => Promise<T>,
+): Promise<T> {
   const memo = readMemos.get(ctx);
   if (!memo) return load();
   const known = memo.get(key);

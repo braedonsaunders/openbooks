@@ -33,7 +33,7 @@ import { fetchAppAction, readApiErrorMessage } from "../../../lib/api-error";
 import { ActionError, fetchAction } from "@braedonsaunders/appkit-errors";
 import { useAppAction } from "../../../lib/use-app-action";
 import { z } from "zod";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 
 interface Schedule {
   id: string;
@@ -74,14 +74,7 @@ interface Policy {
   finalAction?: string;
 }
 
-const CADENCES = [
-  "weekly",
-  "biweekly",
-  "monthly",
-  "quarterly",
-  "annually",
-  "custom_cron",
-];
+const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "custom_cron"];
 const INTERVALS = ["weekly", "monthly", "quarterly", "annually"];
 type Opt = { id: string; name?: string; label?: string };
 
@@ -164,28 +157,22 @@ export function CollectionsClient({
   const t = useTranslations("ar.collections");
   const newAction = useTranslations("ar.collections.actions");
   const requested =
-    initialView ??
-    search?.get("view") ??
-    (worklistEnabled ? "worklist" : "policies");
+    initialView ?? search?.get("view") ?? (worklistEnabled ? "worklist" : "policies");
   const available: CollectionsView[] = [
     ...(autopayOn ? (["recovery", "attempts"] as const) : []),
     ...(worklistEnabled ? ["worklist" as const] : []),
     "policies",
     "recurring",
-    ...(subscriptionsEnabled
-      ? ["subscriptions" as const, "plans" as const]
-      : []),
+    ...(subscriptionsEnabled ? ["subscriptions" as const, "plans" as const] : []),
     ...(advancedSubscriptionsEnabled
       ? ["versions" as const, "contracts" as const, "amendments" as const]
       : []),
   ];
-  const view =
-    available.find((candidate) => candidate === requested) ?? available[0]!;
+  const view = available.find((candidate) => candidate === requested) ?? available[0]!;
   // Recovery and attempts own their page views with the server blocks: the
   // shell renders its header and tab strip there, never an operational
   // panel beside them.
-  const panelView =
-    view === "recovery" || view === "attempts" ? null : view;
+  const panelView = view === "recovery" || view === "attempts" ? null : view;
   const [creatingFor, setCreatingFor] = useState<CollectionsView | null>(null);
   const router = useRouter();
   const editor = {
@@ -225,9 +212,7 @@ export function CollectionsClient({
           incomeAccounts={incomeAccounts}
         />
       )}
-      {(view === "versions" ||
-        view === "contracts" ||
-        view === "amendments") && (
+      {(view === "versions" || view === "contracts" || view === "amendments") && (
         <AdvancedSubscriptionsPanel key={view} view={view} {...editor} />
       )}
       {view === "policies" && <DunningPanel />}
@@ -284,7 +269,13 @@ function SubscriptionsPanel({
     incomeAccountId: "",
   });
   const resetPlanForm = () =>
-    setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" });
+    setPlanForm({
+      name: "",
+      amount: "",
+      interval: "monthly",
+      intervalCount: "1",
+      incomeAccountId: "",
+    });
   // Plan editing reuses the create drawer: the row's stored values prefill
   // the form, and save posts updatePlan with the row's unexposed fields
   // (description, tax code, active flag) carried through, so editing never
@@ -310,7 +301,11 @@ function SubscriptionsPanel({
   const [subSelectedPeriods, setSubSelectedPeriods] = useState<string[]>([]);
 
   const reportSubCatchUp = (data: unknown) => {
-    const outcome = (data as { catchUp?: { results?: { status?: string }[]; stopped?: string; error?: string } } | null)?.catchUp;
+    const outcome = (
+      data as {
+        catchUp?: { results?: { status?: string }[]; stopped?: string; error?: string };
+      } | null
+    )?.catchUp;
     if (!outcome) return;
     if (outcome.stopped === "failed") {
       setError(outcome.error ?? tErrors("actionFailed"));
@@ -367,14 +362,14 @@ function SubscriptionsPanel({
   }, [tErrors, view]);
   useEffect(() => {
     void Promise.resolve().then(load);
-    const changed = () => { void load(); };
-    window.addEventListener('openbooks:subscriptions-changed', changed);
-    return () => window.removeEventListener('openbooks:subscriptions-changed', changed);
+    const changed = () => {
+      void load();
+    };
+    window.addEventListener("openbooks:subscriptions-changed", changed);
+    return () => window.removeEventListener("openbooks:subscriptions-changed", changed);
   }, [load]);
 
-  const post = async (
-    payload: Record<string, unknown>,
-  ): Promise<SubscriptionActionBody | null> => {
+  const post = async (payload: Record<string, unknown>): Promise<SubscriptionActionBody | null> => {
     setError(null);
     setMsg(null);
     // Assigned inside the execute task below, which execute awaits before it
@@ -383,21 +378,17 @@ function SubscriptionsPanel({
     let body: SubscriptionActionBody | null = null;
     const ok = await action.execute(
       async () => {
-        const result = await fetchAction<SubscriptionActionBody>(
-          "/api/subscriptions",
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payload),
-          },
-        );
+        const result = await fetchAction<SubscriptionActionBody>("/api/subscriptions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
         if (result.ok) body = result.data ?? {};
         return result;
       },
       {
         fallbackMessage: tErrors("actionFailed"),
-        onRefused: (refusal) =>
-          setError(refusal.displayMessage(tErrors("actionFailed"))),
+        onRefused: (refusal) => setError(refusal.displayMessage(tErrors("actionFailed"))),
         onOk: () => {
           void load();
         },
@@ -409,10 +400,7 @@ function SubscriptionsPanel({
   return (
     <div className="space-y-6">
       {loadError && (
-        <div
-          role="alert"
-          className="flex items-center gap-3 text-sm text-red-600"
-        >
+        <div role="alert" className="flex items-center gap-3 text-sm text-red-600">
           {loadError}
           <Button variant="outline" onClick={() => void load()}>
             {tCommonActions("retry")}
@@ -440,13 +428,40 @@ function SubscriptionsPanel({
           </div>
           <KpiStrip
             items={[
-              { label: t("retentionArr"), value: retention.rows[0]!.values.arr ?? "—", suffix: retention.rows[0]!.currency },
-              { label: t("retentionNrr"), value: retention.rows[0]!.values.nrr ?? "—", suffix: "%" },
-              { label: t("retentionGrr"), value: retention.rows[0]!.values.grr ?? "—", suffix: "%" },
-              { label: t("retentionRevenueChurn"), value: retention.rows[0]!.values.revenue_churn ?? "—", suffix: "%" },
-              { label: t("retentionLogoChurn"), value: retention.rows[0]!.values.logo_churn ?? "—", suffix: "%" },
-              { label: t("retentionArpa"), value: retention.rows[0]!.values.arpa ?? "—", suffix: retention.rows[0]!.currency },
-              { label: t("retentionQuickRatio"), value: retention.rows[0]!.values.quick_ratio ?? "—" },
+              {
+                label: t("retentionArr"),
+                value: retention.rows[0]!.values.arr ?? "—",
+                suffix: retention.rows[0]!.currency,
+              },
+              {
+                label: t("retentionNrr"),
+                value: retention.rows[0]!.values.nrr ?? "—",
+                suffix: "%",
+              },
+              {
+                label: t("retentionGrr"),
+                value: retention.rows[0]!.values.grr ?? "—",
+                suffix: "%",
+              },
+              {
+                label: t("retentionRevenueChurn"),
+                value: retention.rows[0]!.values.revenue_churn ?? "—",
+                suffix: "%",
+              },
+              {
+                label: t("retentionLogoChurn"),
+                value: retention.rows[0]!.values.logo_churn ?? "—",
+                suffix: "%",
+              },
+              {
+                label: t("retentionArpa"),
+                value: retention.rows[0]!.values.arpa ?? "—",
+                suffix: retention.rows[0]!.currency,
+              },
+              {
+                label: t("retentionQuickRatio"),
+                value: retention.rows[0]!.values.quick_ratio ?? "—",
+              },
             ]}
           />
         </div>
@@ -458,12 +473,7 @@ function SubscriptionsPanel({
       {error && !creating && (
         <p role="alert" className="text-sm text-red-600">
           {error}{" "}
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={action.busy}
-            onClick={() => void load()}
-          >
+          <Button size="sm" variant="ghost" disabled={action.busy} onClick={() => void load()}>
             {tc("actions.retry")}
           </Button>
         </p>
@@ -487,9 +497,7 @@ function SubscriptionsPanel({
                   <>
                     {p.name}
                     {!p.isActive && (
-                      <span className="ml-1 text-xs text-slate-400">
-                        {t("archived")}
-                      </span>
+                      <span className="ml-1 text-xs text-slate-400">{t("archived")}</span>
                     )}
                   </>
                 ),
@@ -498,9 +506,7 @@ function SubscriptionsPanel({
               {
                 key: "amount",
                 header: <>{t("plansTable.price")}</>,
-                cell: (p) => (
-                  <>{money(p.amount, { currency: p.currency ?? undefined })}</>
-                ),
+                cell: (p) => <>{money(p.amount, { currency: p.currency ?? undefined })}</>,
               },
               {
                 key: "interval",
@@ -509,10 +515,7 @@ function SubscriptionsPanel({
                   <>
                     {t("every", {
                       count: p.intervalCount > 1 ? `${p.intervalCount} ` : "",
-                      unit: p.interval.replace(
-                        "ly",
-                        p.intervalCount > 1 ? "s" : "",
-                      ),
+                      unit: p.interval.replace("ly", p.intervalCount > 1 ? "s" : ""),
                     })}
                   </>
                 ),
@@ -605,9 +608,7 @@ function SubscriptionsPanel({
                 <Field label={t("plansTable.plan")} required>
                   <Input
                     value={planForm.name}
-                    onChange={(e) =>
-                      setPlanForm({ ...planForm, name: e.target.value })
-                    }
+                    onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
                   />
                 </Field>
               </InspectorPanel>
@@ -617,9 +618,7 @@ function SubscriptionsPanel({
                     <Input
                       inputMode="decimal"
                       value={planForm.amount}
-                      onChange={(e) =>
-                        setPlanForm({ ...planForm, amount: e.target.value })
-                      }
+                      onChange={(e) => setPlanForm({ ...planForm, amount: e.target.value })}
                     />
                   </Field>
                   <Field label={forms("incomeAccount")}>
@@ -627,9 +626,7 @@ function SubscriptionsPanel({
                       searchable
                       clearable
                       value={planForm.incomeAccountId}
-                      onChange={(value) =>
-                        setPlanForm({ ...planForm, incomeAccountId: value })
-                      }
+                      onChange={(value) => setPlanForm({ ...planForm, incomeAccountId: value })}
                       options={incomeAccounts.map((a) => ({
                         value: a.id,
                         label: a.label ?? a.name ?? a.id,
@@ -640,9 +637,7 @@ function SubscriptionsPanel({
                   <Field label={forms("interval")}>
                     <Select
                       value={planForm.interval}
-                      onChange={(e) =>
-                        setPlanForm({ ...planForm, interval: e.target.value })
-                      }
+                      onChange={(e) => setPlanForm({ ...planForm, interval: e.target.value })}
                     >
                       {INTERVALS.map((i) => (
                         <option key={i} value={i}>
@@ -676,7 +671,17 @@ function SubscriptionsPanel({
         <>
           <PagedTable
             source="collections_subscriptions"
-            onRowClick={row => window.history.pushState(null, '', (() => { const next = new URL(window.location.href); next.searchParams.set('subscription', row.id); return next.pathname + next.search + next.hash; })())}
+            onRowClick={(row) =>
+              window.history.pushState(
+                null,
+                "",
+                (() => {
+                  const next = new URL(window.location.href);
+                  next.searchParams.set("subscription", row.id);
+                  return next.pathname + next.search + next.hash;
+                })(),
+              )
+            }
             searchable
             rows={subs}
             rowKey={(s) => s.id}
@@ -729,9 +734,7 @@ function SubscriptionsPanel({
                 header: <>{t("subsTable.status")}</>,
                 cell: (s) => (
                   <>
-                    <Badge
-                      variant={s.status === "active" ? "default" : "secondary"}
-                    >
+                    <Badge variant={s.status === "active" ? "default" : "secondary"}>
                       {enumLabel(
                         s.status,
                         subscriptionStatusLabels,
@@ -741,7 +744,6 @@ function SubscriptionsPanel({
                   </>
                 ),
               },
-
             ]}
           />
           <Drawer
@@ -771,13 +773,9 @@ function SubscriptionsPanel({
                       planId: subForm.planId,
                       nextBillOn: subForm.firstBillOn,
                       quantity: subForm.quantity || "1",
-                      ...(subForm.priceOverride
-                        ? { priceOverride: subForm.priceOverride }
-                        : {}),
+                      ...(subForm.priceOverride ? { priceOverride: subForm.priceOverride } : {}),
                     });
-                    const res = await fetch(
-                      `/api/subscriptions/preview?${params.toString()}`,
-                    );
+                    const res = await fetch(`/api/subscriptions/preview?${params.toString()}`);
                     if (res.ok) {
                       const previewed = (await res.json()) as SubCatchUpPreview;
                       if (previewed.periods.length >= 2) {
@@ -835,9 +833,7 @@ function SubscriptionsPanel({
                   <SearchSelect
                     searchable
                     value={subForm.customerId}
-                    onChange={(value) =>
-                      setSubForm({ ...subForm, customerId: value })
-                    }
+                    onChange={(value) => setSubForm({ ...subForm, customerId: value })}
                     options={customers.map((c) => ({
                       value: c.id,
                       label: c.name ?? c.label ?? c.id,
@@ -849,9 +845,7 @@ function SubscriptionsPanel({
                   <SearchSelect
                     searchable
                     value={subForm.planId}
-                    onChange={(value) =>
-                      setSubForm({ ...subForm, planId: value })
-                    }
+                    onChange={(value) => setSubForm({ ...subForm, planId: value })}
                     options={plans
                       .filter((p) => p.isActive)
                       .map((p) => ({
@@ -871,9 +865,7 @@ function SubscriptionsPanel({
                     <Input
                       inputMode="decimal"
                       value={subForm.quantity}
-                      onChange={(e) =>
-                        setSubForm({ ...subForm, quantity: e.target.value })
-                      }
+                      onChange={(e) => setSubForm({ ...subForm, quantity: e.target.value })}
                     />
                   </Field>
                   <Field label={forms("priceOverride")}>
@@ -892,17 +884,13 @@ function SubscriptionsPanel({
                   <Field label={forms("startOn")}>
                     <DateField
                       value={subForm.startOn}
-                      onChange={(value) =>
-                        setSubForm({ ...subForm, startOn: value })
-                      }
+                      onChange={(value) => setSubForm({ ...subForm, startOn: value })}
                     />
                   </Field>
                   <Field label={t("firstFullBill")}>
                     <DateField
                       value={subForm.firstBillOn}
-                      onChange={(value) =>
-                        setSubForm({ ...subForm, firstBillOn: value })
-                      }
+                      onChange={(value) => setSubForm({ ...subForm, firstBillOn: value })}
                     />
                   </Field>
                 </div>
@@ -920,9 +908,7 @@ function SubscriptionsPanel({
                 <SwitchField
                   label={t("autoPostInvoices")}
                   on={subForm.autoPost}
-                  onToggle={() =>
-                    setSubForm({ ...subForm, autoPost: !subForm.autoPost })
-                  }
+                  onToggle={() => setSubForm({ ...subForm, autoPost: !subForm.autoPost })}
                 />
               </InspectorPanel>
               {subPreview !== null && subPreview.periods.length >= 2 && (
@@ -958,9 +944,7 @@ function SubscriptionsPanel({
                   <Field label={t("catchUpLabel")}>
                     <Select
                       value={subCatchUpMode ?? ""}
-                      onChange={(e) =>
-                        setSubCatchUpMode(e.target.value as CatchUpChoice)
-                      }
+                      onChange={(e) => setSubCatchUpMode(e.target.value as CatchUpChoice)}
                     >
                       <option value="">{t("catchUpChoose")}</option>
                       <option value="post_all">{t("catchUpPostAll")}</option>
@@ -976,7 +960,6 @@ function SubscriptionsPanel({
           </Drawer>
         </>
       )}
-
     </div>
   );
 }
@@ -987,7 +970,13 @@ const catchUpPreviewSchema = z.object({
   templateTotal: z.string(),
   currency: z.string(),
   estimatedTotal: z.string(),
-  sample: z.object({ occurrenceOn: z.string(), description: z.string().nullable(), memo: z.string().nullable() }).nullable(),
+  sample: z
+    .object({
+      occurrenceOn: z.string(),
+      description: z.string().nullable(),
+      memo: z.string().nullable(),
+    })
+    .nullable(),
   maxOccurrences: z.number().int().nonnegative().nullable(),
   skippedRunOns: z.array(z.string()),
 });
@@ -1020,9 +1009,7 @@ function catchUpRequestBody(choice: CatchUpChoice, selectedDates: string[]): unk
 function RecurringPanel({ creating, onClose }: EditorProps) {
   const forms = useTranslations("ar.collections.forms");
   const [rows, setRows] = useState<Schedule[]>([]);
-  const [loadState, setLoadState] = useState<"loading" | "loaded" | "failed">(
-    "loading",
-  );
+  const [loadState, setLoadState] = useState<"loading" | "loaded" | "failed">("loading");
   const action = useAppAction();
   const busy = action.busy;
   const blankForm = {
@@ -1044,7 +1031,9 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
   const [catchUpMode, setCatchUpMode] = useState<CatchUpChoice | null>(null);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [skipDateInput, setSkipDateInput] = useState("");
-  const [schedPicker, setSchedPicker] = useState<{ id: string; preview: CatchUpPreview } | null>(null);
+  const [schedPicker, setSchedPicker] = useState<{ id: string; preview: CatchUpPreview } | null>(
+    null,
+  );
   const [tokenSample, setTokenSample] = useState<CatchUpPreview["sample"]>(null);
   const t = useTranslations("ar.collections.recurring");
   const tErrors = useTranslations("ar.collections.errors");
@@ -1056,21 +1045,14 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
     setLoadState("loading");
     return fetch("/api/recurring")
       .then(async (r) => {
-        if (!r.ok)
-          throw new Error(
-            await readApiErrorMessage(r, common("feedback.loadFailed")),
-          );
+        if (!r.ok) throw new Error(await readApiErrorMessage(r, common("feedback.loadFailed")));
         const body = await r.json();
         setRows(body.schedules ?? []);
         setLoadState("loaded");
       })
       .catch((cause: unknown) => {
         setLoadState("failed");
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : common("feedback.loadFailed"),
-        );
+        setError(cause instanceof Error ? cause.message : common("feedback.loadFailed"));
       });
   }, [common]);
   useEffect(() => {
@@ -1126,10 +1108,21 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
             ...(form.maxOccurrences.trim() ? { maxOccurrences: form.maxOccurrences.trim() } : {}),
           });
           for (const skipped of form.skippedRunOns) params.append("skippedRunOn", skipped);
-          const result = await fetchAppAction(`/api/recurring/preview?${params.toString()}`, undefined, { fallback: tErrors("couldNotCreate") });
+          const result = await fetchAppAction(
+            `/api/recurring/preview?${params.toString()}`,
+            undefined,
+            { fallback: tErrors("couldNotCreate") },
+          );
           if (!result.ok) return result;
           const parsed = catchUpPreviewSchema.safeParse(result.data);
-          if (!parsed.success) return { ok: false as const, error: new ActionError({ kind: "unexpected", serverMessage: tErrors("couldNotCreate") }) };
+          if (!parsed.success)
+            return {
+              ok: false as const,
+              error: new ActionError({
+                kind: "unexpected",
+                serverMessage: tErrors("couldNotCreate"),
+              }),
+            };
           return { ...result, data: parsed.data };
         },
         {
@@ -1142,8 +1135,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
               needsCatchUpReview = true;
             }
           },
-          onRefused: (refusal) =>
-            setError(refusal.displayMessage(tErrors("couldNotCreate"))),
+          onRefused: (refusal) => setError(refusal.displayMessage(tErrors("couldNotCreate"))),
         },
       );
       if (!previewed || needsCatchUpReview) return;
@@ -1223,8 +1215,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
         }),
       {
         fallbackMessage: tErrors("couldNotCreate"),
-        onRefused: (refusal) =>
-          setError(refusal.displayMessage(tErrors("couldNotCreate"))),
+        onRefused: (refusal) => setError(refusal.displayMessage(tErrors("couldNotCreate"))),
         onOk: () => {
           closeDrawer();
           setForm(blankForm);
@@ -1269,8 +1260,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
         }),
       {
         fallbackMessage: tErrors("actionFailed"),
-        onRefused: (refusal) =>
-          setError(refusal.displayMessage(tErrors("actionFailed"))),
+        onRefused: (refusal) => setError(refusal.displayMessage(tErrors("actionFailed"))),
         onOk: (data) => {
           setSchedPicker(null);
           reportCatchUp(data);
@@ -1283,7 +1273,11 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
   const [notice, setNotice] = useState<string | null>(null);
 
   const reportCatchUp = (data: unknown) => {
-    const outcome = (data as { catchUp?: { results?: { status?: string }[]; stopped?: string; error?: string } } | null)?.catchUp;
+    const outcome = (
+      data as {
+        catchUp?: { results?: { status?: string }[]; stopped?: string; error?: string };
+      } | null
+    )?.catchUp;
     if (!outcome) return;
     if (outcome.stopped === "failed") {
       setError(outcome.error ?? tErrors("actionFailed"));
@@ -1313,11 +1307,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
     );
   };
 
-  const act = async (
-    id: string,
-    method: "PATCH" | "DELETE" | "POST",
-    body?: unknown,
-  ) => {
+  const act = async (id: string, method: "PATCH" | "DELETE" | "POST", body?: unknown) => {
     setError(null);
     await action.execute(
       async () => {
@@ -1340,8 +1330,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
       },
       {
         fallbackMessage: t("actionFailed"),
-        onRefused: (refusal) =>
-          setError(refusal.displayMessage(t("actionFailed"))),
+        onRefused: (refusal) => setError(refusal.displayMessage(t("actionFailed"))),
         onOk: () => {
           void load();
         },
@@ -1365,8 +1354,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
               (preview !== null &&
                 preview.occurrences.length >= 2 &&
                 (catchUpMode === null ||
-                  ((catchUpMode === "selected_post" ||
-                    catchUpMode === "selected_drafts") &&
+                  ((catchUpMode === "selected_post" || catchUpMode === "selected_drafts") &&
                     selectedDates.length === 0)))
             }
           >
@@ -1386,9 +1374,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
                 <Input
                   placeholder={t("templateDocPlaceholder")}
                   value={form.templateDocumentNumber}
-                  onChange={(e) =>
-                    setForm({ ...form, templateDocumentNumber: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, templateDocumentNumber: e.target.value })}
                 />
               </Field>
             </InspectorPanel>
@@ -1398,9 +1384,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
               <Field label={t("cadenceLabel")}>
                 <Select
                   value={form.cadence}
-                  onChange={(e) =>
-                    setForm({ ...form, cadence: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, cadence: e.target.value })}
                 >
                   {CADENCES.map((c) => (
                     <option key={c} value={c}>
@@ -1412,17 +1396,13 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
               <Field label={t("firstRunLabel")}>
                 <DateField
                   value={form.nextRunOn}
-                  onChange={(value) =>
-                    setForm({ ...form, nextRunOn: value })
-                  }
+                  onChange={(value) => setForm({ ...form, nextRunOn: value })}
                 />
               </Field>
               <Field label={t("endsOnLabel")}>
                 <DateField
                   value={form.endsOn}
-                  onChange={(value) =>
-                    setForm({ ...form, endsOn: value })
-                  }
+                  onChange={(value) => setForm({ ...form, endsOn: value })}
                 />
               </Field>
               <Field label={t("maxOccurrencesLabel")}>
@@ -1437,11 +1417,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
                 />
               </Field>
               {form.cadence === "custom_cron" && (
-                <Field
-                  label={t("cronLabel")}
-                  className="sm:col-span-2"
-                  required
-                >
+                <Field label={t("cronLabel")} className="sm:col-span-2" required>
                   <Input
                     placeholder="0 9 1 * *"
                     value={form.cron}
@@ -1460,16 +1436,16 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
             <p className="text-sm text-muted-foreground">{t("skippedDatesHint")}</p>
             <div className="flex items-end gap-2">
               <Field label={t("skippedDatesLabel")}>
-                <DateField
-                  value={skipDateInput}
-                  onChange={(value) => setSkipDateInput(value)}
-                />
+                <DateField value={skipDateInput} onChange={(value) => setSkipDateInput(value)} />
               </Field>
               <Button
                 variant="outline"
                 disabled={!skipDateInput || form.skippedRunOns.includes(skipDateInput)}
                 onClick={() => {
-                  setForm({ ...form, skippedRunOns: [...form.skippedRunOns, skipDateInput].sort() });
+                  setForm({
+                    ...form,
+                    skippedRunOns: [...form.skippedRunOns, skipDateInput].sort(),
+                  });
                   setSkipDateInput("");
                 }}
               >
@@ -1485,7 +1461,10 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
                       size="sm"
                       variant="ghost"
                       onClick={() =>
-                        setForm({ ...form, skippedRunOns: form.skippedRunOns.filter((d) => d !== date) })
+                        setForm({
+                          ...form,
+                          skippedRunOns: form.skippedRunOns.filter((d) => d !== date),
+                        })
                       }
                     >
                       {common("actions.remove")}
@@ -1496,13 +1475,10 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
             )}
           </InspectorPanel>
           <InspectorPanel title={t("tokensTitle")}>
-            <p className="whitespace-pre-line text-sm text-muted-foreground">
-              {t("tokensHelp")}
-            </p>
+            <p className="whitespace-pre-line text-sm text-muted-foreground">{t("tokensHelp")}</p>
             {tokenSample?.description ? (
               <p className="text-sm">
-                {t("tokensPreview")}:{" "}
-                <span className="font-medium">{tokenSample.description}</span>
+                {t("tokensPreview")}: <span className="font-medium">{tokenSample.description}</span>
               </p>
             ) : null}
           </InspectorPanel>
@@ -1524,9 +1500,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
                         checked={selectedDates.includes(date)}
                         onChange={() =>
                           setSelectedDates((prev) =>
-                            prev.includes(date)
-                              ? prev.filter((d) => d !== date)
-                              : [...prev, date],
+                            prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date],
                           )
                         }
                         className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
@@ -1539,9 +1513,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
               <Field label={t("catchUpLabel")}>
                 <Select
                   value={catchUpMode ?? ""}
-                  onChange={(e) =>
-                    setCatchUpMode(e.target.value as CatchUpChoice)
-                  }
+                  onChange={(e) => setCatchUpMode(e.target.value as CatchUpChoice)}
                 >
                   <option value="">{t("catchUpChoose")}</option>
                   <option value="post_all">{t("catchUpPostAll")}</option>
@@ -1583,9 +1555,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
             headerClassName: "whitespace-nowrap",
             header: t("table.template"),
             search: (s) => s.templateNumber,
-            cell: (s) => (
-              <span className="font-medium">{s.templateNumber}</span>
-            ),
+            cell: (s) => <span className="font-medium">{s.templateNumber}</span>,
           },
           {
             key: "customer",
@@ -1648,12 +1618,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
             header: "",
             cell: (s) => (
               <div className="flex justify-end gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => act(s.id, "POST")}
-                >
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(s.id, "POST")}>
                   {t("runNow")}
                 </Button>
                 <Button
@@ -1740,9 +1705,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
   );
 }
 
-const policyEntity = BILLING_ENTITIES.find(
-  (entity) => entity.key === "dunning-policies",
-)!;
+const policyEntity = BILLING_ENTITIES.find((entity) => entity.key === "dunning-policies")!;
 
 function DunningPanel() {
   const { money } = useMoney();
@@ -1771,17 +1734,13 @@ function DunningPanel() {
   }, [load, policyId]);
   const remove = async (id: string) => {
     setError(null);
-    await action.execute(
-      () => fetchAction(`/api/dunning/${id}`, { method: "DELETE" }),
-      {
-        fallbackMessage: errors("couldNotDelete"),
-        onRefused: (refusal) =>
-          setError(refusal.displayMessage(errors("couldNotDelete"))),
-        onOk: () => {
-          void load();
-        },
+    await action.execute(() => fetchAction(`/api/dunning/${id}`, { method: "DELETE" }), {
+      fallbackMessage: errors("couldNotDelete"),
+      onRefused: (refusal) => setError(refusal.displayMessage(errors("couldNotDelete"))),
+      onOk: () => {
+        void load();
       },
-    );
+    });
   };
   const selected = policies.find((policy) => policy.id === policyId);
   // The native editor owns its dialog. It mounts only when the full policy
@@ -1794,7 +1753,7 @@ function DunningPanel() {
         reply_to: (selected as Policy & { replyTo?: string | null }).replyTo,
         is_active: selected.isActive,
         retryOffsetsDays: selected.retryOffsetsDays ?? [],
-        finalAction: selected.finalAction ?? 'none',
+        finalAction: selected.finalAction ?? "none",
       }
     : null;
   return (
@@ -1813,9 +1772,7 @@ function DunningPanel() {
         rows={policies}
         rowKey={(p) => p.id}
         onRowClick={(p) =>
-          router.push(
-            `/collections?view=policies&policy=${encodeURIComponent(p.id)}`,
-          )
+          router.push(`/collections?view=policies&policy=${encodeURIComponent(p.id)}`)
         }
         empty={loaded ? t("noneYet") : common("feedback.loading")}
         columns={[
@@ -1875,11 +1832,7 @@ function DunningPanel() {
           members={[]}
           refOptions={{}}
           closeHref="/collections?view=policies"
-          fixedValues={
-            selected?.updatedAt
-              ? { expectedUpdatedAt: selected.updatedAt }
-              : undefined
-          }
+          fixedValues={selected?.updatedAt ? { expectedUpdatedAt: selected.updatedAt } : undefined}
           initialValues={
             policyId === "new"
               ? {

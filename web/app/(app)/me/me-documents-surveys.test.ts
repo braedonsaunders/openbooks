@@ -43,25 +43,58 @@ function surveysData(): Record<string, unknown> {
 
 test("an unlinked login reads the refusal state on both surfaces", () => {
   const documents = documentsData();
-  documents.refusal = { title: "No documents", message: "ask an administrator for a linked employment" };
+  documents.refusal = {
+    title: "No documents",
+    message: "ask an administrator for a linked employment",
+  };
   const documentsJson = JSON.stringify(meDocumentsSpec(documents as never));
-  assert.ok(documentsJson.includes("\"empty-state\""), "the documents refusal renders through the empty-state block");
-  assert.ok(documentsJson.includes("ask an administrator for a linked employment"), "the documents remedy reaches the page");
+  assert.ok(
+    documentsJson.includes('"empty-state"'),
+    "the documents refusal renders through the empty-state block",
+  );
+  assert.ok(
+    documentsJson.includes("ask an administrator for a linked employment"),
+    "the documents remedy reaches the page",
+  );
 
   const surveys = surveysData();
-  surveys.refusal = { title: "No surveys", message: "ask an administrator for a linked employment" };
+  surveys.refusal = {
+    title: "No surveys",
+    message: "ask an administrator for a linked employment",
+  };
   const surveysJson = JSON.stringify(meSurveysSpec(surveys as never));
-  assert.ok(surveysJson.includes("\"empty-state\""), "the surveys refusal renders through the empty-state block");
-  assert.ok(surveysJson.includes("ask an administrator for a linked employment"), "the surveys remedy reaches the page");
+  assert.ok(
+    surveysJson.includes('"empty-state"'),
+    "the surveys refusal renders through the empty-state block",
+  );
+  assert.ok(
+    surveysJson.includes("ask an administrator for a linked employment"),
+    "the surveys remedy reaches the page",
+  );
 });
 
 test("each page carries its action surfaces through the shared widgets", () => {
   const documentsJson = JSON.stringify(meDocumentsSpec(documentsData() as never));
-  assert.ok(documentsJson.includes("\"hrm-me-document-actions\""), "sign and acknowledge ride the shared actions widget");
-  assert.ok(documentsJson.includes("\"hrm-me-export-dialog\""), "the export dialog renders with the party scope");
-  assert.ok(documentsJson.includes("party-1"), "the export dialog carries the party it exports for");
+  assert.ok(
+    documentsJson.includes('"hrm-me-document-actions"'),
+    "sign and acknowledge ride the shared actions widget",
+  );
+  assert.ok(
+    documentsJson.includes('"hrm-me-export-dialog"'),
+    "the export dialog renders with the party scope",
+  );
+  assert.ok(
+    documentsJson.includes("party-1"),
+    "the export dialog carries the party it exports for",
+  );
 
   const surveysJson = JSON.stringify(meSurveysSpec(surveysData() as never));
-  assert.ok(surveysJson.includes("\"hrm-me-survey-respond\""), "responding rides the shared respond widget");
-  assert.ok(surveysJson.includes("Respond"), "the respond surface resolves its label from its data");
+  assert.ok(
+    surveysJson.includes('"hrm-me-survey-respond"'),
+    "responding rides the shared respond widget",
+  );
+  assert.ok(
+    surveysJson.includes("Respond"),
+    "the respond surface resolves its label from its data",
+  );
 });

@@ -48,12 +48,7 @@ test("single tracking modes keep refusing extra evidence", () => {
     InventoryError,
   );
   assert.throws(
-    () =>
-      assertTracking(
-        { tracking: "none" },
-        { quantity: "1", lotId: "lot" },
-        "receipt",
-      ),
+    () => assertTracking({ tracking: "none" }, { quantity: "1", lotId: "lot" }, "receipt"),
     InventoryError,
   );
   assert.equal(parseTrackingMode("both"), null);
@@ -65,10 +60,7 @@ test("second counts are required strictly above the absolute base-unit tolerance
   assert.equal(requiresSecondCount("10", "8", "2"), false);
   assert.equal(requiresSecondCount("0", "0", "0"), false);
   assert.equal(requiresSecondCount("0", "0.0001", "0"), true);
-  assert.equal(
-    requiresSecondCount("999999999999999.9999", "999999999999999.9998", "0"),
-    true,
-  );
+  assert.equal(requiresSecondCount("999999999999999.9999", "999999999999999.9998", "0"), true);
   assert.equal(requiresSecondCount("10", null, "0"), false);
   assert.equal(
     requiresSecondCount("10", "12", null),

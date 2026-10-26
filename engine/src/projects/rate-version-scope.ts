@@ -1,4 +1,4 @@
-import { sql, type SQL } from 'drizzle-orm'
+import { sql, type SQL } from "drizzle-orm";
 
 /** Match a version scope to a work dimension, including descendants when the
  * scope explicitly opts into child values. The scope tables are hierarchical
@@ -8,10 +8,10 @@ import { sql, type SQL } from 'drizzle-orm'
 export function versionScopePredicate(
   orgId: string,
   input: {
-    departmentId?: string | null
-    subsidiaryId?: string | null | SQL
-    locationId?: string | null
-    classId?: string | null
+    departmentId?: string | null;
+    subsidiaryId?: string | null | SQL;
+    locationId?: string | null;
+    classId?: string | null;
   },
 ) {
   return sql`(
@@ -63,5 +63,5 @@ export function versionScopePredicate(
         select 1 from descendants where id = ${input.classId ?? null}
       ))
     ))
-  )`
+  )`;
 }

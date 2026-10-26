@@ -52,12 +52,10 @@ const postRouteUrl = "./route.ts?projects-manager-integration";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors, seedActiveEmployment } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-const { listInternalPersonOptions } = await import(
-  "@openbooks/engine/organization/internal-person"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors, seedActiveEmployment } =
+  await import("@openbooks/engine/testing/fixtures");
+const { listInternalPersonOptions } =
+  await import("@openbooks/engine/organization/internal-person");
 
 function postRequest(key: string, body: unknown): Request {
   return new Request("http://localhost/api/projects", {
@@ -99,12 +97,20 @@ test("projects POST accepts a non-employee internal person as manager", async ()
   try {
     const { adminId } = await seedFlowActors(org.orgId);
     await enableProjects(org.orgId);
-    routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      allowedSubsidiaryIds: null,
+    };
 
     const partner = await seedParty(org.orgId, "person", "Dana Partner", org.subsidiaryId);
-    const created = await POST(postRequest(randomUUID(), { name: "Studio Loft", managerId: partner }));
+    const created = await POST(
+      postRequest(randomUUID(), { name: "Studio Loft", managerId: partner }),
+    );
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
-    const payload = (await created.json()) as { project: { manager_id: string }; managerName: string | null };
+    const payload = (await created.json()) as {
+      project: { manager_id: string };
+      managerName: string | null;
+    };
     assert.equal(payload.project.manager_id, partner);
     assert.equal(payload.managerName, "Dana Partner");
   } finally {
@@ -118,16 +124,27 @@ test("projects POST accepts an employed employee and refuses customers, vendors,
   try {
     const { adminId } = await seedFlowActors(org.orgId);
     await enableProjects(org.orgId);
-    routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      allowedSubsidiaryIds: null,
+    };
 
     const employee = await seedParty(org.orgId, "employee", "Erin Employee", org.subsidiaryId);
     await seedActiveEmployment(org.orgId, employee);
-    const employed = await POST(postRequest(randomUUID(), { name: "Employed Job", managerId: employee }));
+    const employed = await POST(
+      postRequest(randomUUID(), { name: "Employed Job", managerId: employee }),
+    );
     assert.equal(employed.status, 201, JSON.stringify(await employed.clone().json()));
 
-    for (const [kind, name] of [["customer", "Acme Customer"], ["vendor", "Vera Vendor"], ["company", "C-Corp"]] as const) {
+    for (const [kind, name] of [
+      ["customer", "Acme Customer"],
+      ["vendor", "Vera Vendor"],
+      ["company", "C-Corp"],
+    ] as const) {
       const outsider = await seedParty(org.orgId, kind, name, org.subsidiaryId);
-      const refused = await POST(postRequest(randomUUID(), { name: `Refused ${name}`, managerId: outsider }));
+      const refused = await POST(
+        postRequest(randomUUID(), { name: `Refused ${name}`, managerId: outsider }),
+      );
       assert.equal(refused.status, 422);
       const body = (await refused.json()) as { error: string; field?: string };
       assert.match(body.error, /must be an active employee or internal person/);
@@ -135,13 +152,20 @@ test("projects POST accepts an employed employee and refuses customers, vendors,
     }
 
     const unhired = await seedParty(org.orgId, "employee", "Uma Unhired", org.subsidiaryId);
-    const unhiredRefused = await POST(postRequest(randomUUID(), { name: "Unhired Job", managerId: unhired }));
+    const unhiredRefused = await POST(
+      postRequest(randomUUID(), { name: "Unhired Job", managerId: unhired }),
+    );
     assert.equal(unhiredRefused.status, 422);
     assert.equal(((await unhiredRefused.json()) as { field?: string }).field, "managerId");
 
-    const stored = (await db.execute<{ n: number }>(sql`
+    const stored = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from projects where org_id = ${org.orgId} and manager_id = ${unhired}
-    `, "objects"))[0]?.n;
+    `,
+        "objects",
+      )
+    )[0]?.n;
     assert.equal(stored, 0, "a refused manager persists no project row");
   } finally {
     routeState.authz = null;
@@ -155,15 +179,22 @@ test("projects POST still refuses another org's person and an inactive person as
   try {
     const { adminId } = await seedFlowActors(org.orgId);
     await enableProjects(org.orgId);
-    routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      allowedSubsidiaryIds: null,
+    };
 
     const foreign = await seedParty(other.orgId, "person", "Farah Foreign", null);
-    const foreignRefused = await POST(postRequest(randomUUID(), { name: "Foreign Job", managerId: foreign }));
+    const foreignRefused = await POST(
+      postRequest(randomUUID(), { name: "Foreign Job", managerId: foreign }),
+    );
     assert.equal(foreignRefused.status, 422);
     assert.match(((await foreignRefused.json()) as { error: string }).error, /Manager not found/);
 
     const inactive = await seedParty(org.orgId, "person", "Ina Inactive", org.subsidiaryId, false);
-    const inactiveRefused = await POST(postRequest(randomUUID(), { name: "Inactive Job", managerId: inactive }));
+    const inactiveRefused = await POST(
+      postRequest(randomUUID(), { name: "Inactive Job", managerId: inactive }),
+    );
     assert.equal(inactiveRefused.status, 422);
   } finally {
     routeState.authz = null;

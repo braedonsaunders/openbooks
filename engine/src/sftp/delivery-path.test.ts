@@ -18,7 +18,16 @@ test("a traversal artifact name never reaches the backend — refused at deliver
 });
 
 test("absolute, backslash, NUL and overlong names are refused at delivery", () => {
-  for (const hostile of ["/inbound/x.ofx", "..\\inbound\\x.ofx", "x\0.ofx", `x${"y".repeat(300)}.ofx`]) {
-    assert.throws(() => resolveOutboundPath("outbound", hostile), PaymentError, JSON.stringify(hostile.slice(0, 20)));
+  for (const hostile of [
+    "/inbound/x.ofx",
+    "..\\inbound\\x.ofx",
+    "x\0.ofx",
+    `x${"y".repeat(300)}.ofx`,
+  ]) {
+    assert.throws(
+      () => resolveOutboundPath("outbound", hostile),
+      PaymentError,
+      JSON.stringify(hostile.slice(0, 20)),
+    );
   }
 });

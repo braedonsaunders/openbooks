@@ -1,1 +1,1 @@
-export * from '@openbooks/engine/records/document-kinds'
+export * from "@openbooks/engine/records/document-kinds";

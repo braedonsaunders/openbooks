@@ -58,8 +58,9 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SELF = basename(fileURLToPath(import.meta.url));
 const SELF_FILES = new Set([SELF, SELF.replace(/\.mjs$/, ".test.mjs")]);
-const GLOBS = ["engine", "web", "packages", "scripts", "schema", "e2e", "deploy"]
-  .flatMap((root) => ["ts", "tsx", "js", "mjs"].map((ext) => `${root}/**/*.${ext}`));
+const GLOBS = ["engine", "web", "packages", "scripts", "schema", "e2e", "deploy"].flatMap((root) =>
+  ["ts", "tsx", "js", "mjs"].map((ext) => `${root}/**/*.${ext}`),
+);
 
 /** Strip line/block comments while respecting string literals. */
 export function stripComments(source) {
@@ -206,7 +207,11 @@ export function findRfcUuidValidators(source) {
 /** Git-tracked paths, so local untracked or ignored scratch files never gate CI. */
 function trackedFiles(root) {
   try {
-    return new Set(execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean));
+    return new Set(
+      execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" })
+        .split("\0")
+        .filter(Boolean),
+    );
   } catch {
     return null;
   }
@@ -225,7 +230,8 @@ export function scanTree(root = ROOT) {
   const violations = [];
   for (const file of files) {
     const source = stripComments(readFileSync(join(root, file), "utf8"));
-    for (const hit of findWeakUuidShapes(source)) violations.push(`${file}:${hit.line}: weak 36-char UUID shape ${hit.text}`);
+    for (const hit of findWeakUuidShapes(source))
+      violations.push(`${file}:${hit.line}: weak 36-char UUID shape ${hit.text}`);
     for (const hit of findRfcUuidValidators(source)) {
       violations.push(
         hit.kind === "zod"

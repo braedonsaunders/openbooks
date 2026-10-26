@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import type { ReactNode } from 'react'
-import { useIsPresent } from 'framer-motion'
+import type { ReactNode } from "react";
+import { useIsPresent } from "framer-motion";
 
 /**
  * Wraps the child of an `AnimatePresence` that renders a floating overlay — a
@@ -17,5 +17,5 @@ import { useIsPresent } from 'framer-motion'
  * transition is running (see "Route transitions" in `web/app/globals.css`).
  */
 export function OverlayExit({ children }: { children: (exiting: boolean) => ReactNode }) {
-  return children(!useIsPresent())
+  return children(!useIsPresent());
 }

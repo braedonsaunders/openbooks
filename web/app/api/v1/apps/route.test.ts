@@ -79,19 +79,23 @@ const hooks = registerHooks({
 });
 
 const main = (await import("./route.ts")) as typeof import("./route.ts");
-const vocabulary = (await import("./vocabulary/route.ts")) as typeof import("./vocabulary/route.ts");
+const vocabulary =
+  (await import("./vocabulary/route.ts")) as typeof import("./vocabulary/route.ts");
 const drafts = (await import("./drafts/route.ts")) as typeof import("./drafts/route.ts");
 const draft = (await import("./drafts/[id]/route.ts")) as typeof import("./drafts/[id]/route.ts");
-const activate = (await import("./drafts/[id]/activate/route.ts")) as typeof import("./drafts/[id]/activate/route.ts");
-const discard = (await import("./drafts/[id]/discard/route.ts")) as typeof import("./drafts/[id]/discard/route.ts");
+const activate =
+  (await import("./drafts/[id]/activate/route.ts")) as typeof import("./drafts/[id]/activate/route.ts");
+const discard =
+  (await import("./drafts/[id]/discard/route.ts")) as typeof import("./drafts/[id]/discard/route.ts");
 const pkg = (await import("./[key]/route.ts")) as typeof import("./[key]/route.ts");
 hooks.deregister();
 
-const jsonRequest = (url: string, method: string, body?: unknown) => new Request(url, {
-  method,
-  headers: { "content-type": "application/json" },
-  body: body === undefined ? undefined : JSON.stringify(body),
-});
+const jsonRequest = (url: string, method: string, body?: unknown) =>
+  new Request(url, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 const lastCall = () => routeState.calls[routeState.calls.length - 1];
 const draftParams = { params: Promise.resolve({ id: "draft-1" }) };
 const packageParams = { params: Promise.resolve({ key: "shop" }) };
@@ -103,16 +107,20 @@ test("GET /api/v1/apps lists through listExtensions", async () => {
 });
 
 test("GET /api/v1/apps/vocabulary describes through describeExtensionVocabulary", async () => {
-  const response = await vocabulary.GET(new Request("http://openbooks.test/api/v1/apps/vocabulary"));
+  const response = await vocabulary.GET(
+    new Request("http://openbooks.test/api/v1/apps/vocabulary"),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, preferredRenderer: "native" });
 });
 
 test("POST /api/v1/apps/drafts drafts through draftExtension", async () => {
-  const response = await drafts.POST(jsonRequest("http://openbooks.test/api/v1/apps/drafts", "POST", {
-    bundle: { manifest: {}, files: [] },
-    reason: "first revision",
-  }));
+  const response = await drafts.POST(
+    jsonRequest("http://openbooks.test/api/v1/apps/drafts", "POST", {
+      bundle: { manifest: {}, files: [] },
+      reason: "first revision",
+    }),
+  );
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { ok: true, draft: true });
   assert.deepEqual(lastCall(), {
@@ -127,12 +135,20 @@ test("POST /api/v1/apps/drafts drafts through draftExtension", async () => {
 });
 
 test("POST /api/v1/apps/drafts refuses a missing reason", async () => {
-  const response = await drafts.POST(jsonRequest("http://openbooks.test/api/v1/apps/drafts", "POST", { bundle: {} }));
-  assert.deepEqual([response.status, await response.json()], [422, { error: "reason is required", code: "invalid_input" }]);
+  const response = await drafts.POST(
+    jsonRequest("http://openbooks.test/api/v1/apps/drafts", "POST", { bundle: {} }),
+  );
+  assert.deepEqual(
+    [response.status, await response.json()],
+    [422, { error: "reason is required", code: "invalid_input" }],
+  );
 });
 
 test("GET /api/v1/apps/drafts/[id] reads through getExtensionDraft", async () => {
-  const response = await draft.GET(new Request("http://openbooks.test/api/v1/apps/drafts/draft-1"), draftParams);
+  const response = await draft.GET(
+    new Request("http://openbooks.test/api/v1/apps/drafts/draft-1"),
+    draftParams,
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, draft: { id: "draft-1" } });
   assert.deepEqual(lastCall(), { fn: "getDraft", input: "draft-1" });
@@ -140,31 +156,50 @@ test("GET /api/v1/apps/drafts/[id] reads through getExtensionDraft", async () =>
 
 test("POST /api/v1/apps/drafts/[id]/activate binds the path draft id", async () => {
   const response = await activate.POST(
-    jsonRequest("http://openbooks.test/api/v1/apps/drafts/draft-1/activate", "POST", { contentHash: "abc" }),
+    jsonRequest("http://openbooks.test/api/v1/apps/drafts/draft-1/activate", "POST", {
+      contentHash: "abc",
+    }),
     draftParams,
   );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, activate: true });
-  assert.deepEqual(lastCall(), { fn: "activate", input: { draftId: "draft-1", contentHash: "abc" } });
+  assert.deepEqual(lastCall(), {
+    fn: "activate",
+    input: { draftId: "draft-1", contentHash: "abc" },
+  });
 });
 
 test("POST /api/v1/apps/drafts/[id]/activate refuses a missing contentHash", async () => {
-  const response = await activate.POST(jsonRequest("http://openbooks.test/api/v1/apps/drafts/draft-1/activate", "POST", {}), draftParams);
-  assert.deepEqual([response.status, await response.json()], [422, { error: "contentHash is required", code: "invalid_input" }]);
+  const response = await activate.POST(
+    jsonRequest("http://openbooks.test/api/v1/apps/drafts/draft-1/activate", "POST", {}),
+    draftParams,
+  );
+  assert.deepEqual(
+    [response.status, await response.json()],
+    [422, { error: "contentHash is required", code: "invalid_input" }],
+  );
 });
 
 test("POST /api/v1/apps/drafts/[id]/discard binds the path draft id", async () => {
   const response = await discard.POST(
-    jsonRequest("http://openbooks.test/api/v1/apps/drafts/draft-1/discard", "POST", { contentHash: "abc" }),
+    jsonRequest("http://openbooks.test/api/v1/apps/drafts/draft-1/discard", "POST", {
+      contentHash: "abc",
+    }),
     draftParams,
   );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, discard: true });
-  assert.deepEqual(lastCall(), { fn: "discard", input: { draftId: "draft-1", contentHash: "abc" } });
+  assert.deepEqual(lastCall(), {
+    fn: "discard",
+    input: { draftId: "draft-1", contentHash: "abc" },
+  });
 });
 
 test("GET /api/v1/apps/[key] reads through getExtensionPackage", async () => {
-  const response = await pkg.GET(new Request("http://openbooks.test/api/v1/apps/shop?versionId=version-1"), packageParams);
+  const response = await pkg.GET(
+    new Request("http://openbooks.test/api/v1/apps/shop?versionId=version-1"),
+    packageParams,
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, package: true });
   assert.deepEqual(lastCall(), { fn: "package", input: { key: "shop", versionId: "version-1" } });

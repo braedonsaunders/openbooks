@@ -21,14 +21,8 @@ test("a group valuation preserves service earned before its effective cutover", 
     },
   ]);
   assert.equal(result.accumulatedDelta, "100.0000");
-  assert.equal(
-    splitDepreciationPlan(result.plan, "2026-08-16").accrued,
-    "150.0000",
-  );
-  assert.equal(
-    splitDepreciationPlan(result.plan, "2026-10-01").accrued,
-    "510.0000",
-  );
+  assert.equal(splitDepreciationPlan(result.plan, "2026-08-16").accrued, "150.0000");
+  assert.equal(splitDepreciationPlan(result.plan, "2026-10-01").accrued, "510.0000");
   assert.deepEqual(original[0], {
     startsOn: "2026-08-01",
     date: "2026-08-31",
@@ -47,12 +41,6 @@ test("a valuation after posted month-end depreciation changes only subsequent se
       fullPlan: [{ startsOn: "2026-09-01", date: "2026-09-30", amount: "200" }],
     },
   ]);
-  assert.equal(
-    splitDepreciationPlan(result.plan, "2026-09-01").accrued,
-    "310.0000",
-  );
-  assert.equal(
-    splitDepreciationPlan(result.plan, "2026-10-01").accrued,
-    "510.0000",
-  );
+  assert.equal(splitDepreciationPlan(result.plan, "2026-09-01").accrued, "310.0000");
+  assert.equal(splitDepreciationPlan(result.plan, "2026-10-01").accrued, "510.0000");
 });

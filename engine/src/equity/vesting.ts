@@ -19,7 +19,11 @@ import { equityError, fig } from "./errors.ts";
 import { floorShares, multiplyRational, parsePercent, rational } from "./quantities.ts";
 import type { Acceleration, VestingFrequency, VestingTranche } from "./types.ts";
 
-export const VESTING_STEP_MONTHS: Readonly<Record<VestingFrequency, number>> = { monthly: 1, quarterly: 3, annual: 12 };
+export const VESTING_STEP_MONTHS: Readonly<Record<VestingFrequency, number>> = {
+  monthly: 1,
+  quarterly: 3,
+  annual: 12,
+};
 
 export interface VestingTerms {
   issueDate: string;
@@ -64,12 +68,20 @@ export function completedMonths(from: string, to: string): number {
   return Math.max(0, months);
 }
 
-export function hasVestingSchedule(terms: Pick<VestingTerms, "vestingMonths" | "vestingTranches">): boolean {
+export function hasVestingSchedule(
+  terms: Pick<VestingTerms, "vestingMonths" | "vestingTranches">,
+): boolean {
   return (terms.vestingMonths ?? 0) > 0 || (terms.vestingTranches?.length ?? 0) > 0;
 }
 
 /** Vested at a count of completed months on a time-based schedule. */
-function timeBasedVested(quantity: bigint, months: number, cliff: number, total: number, step: number): bigint {
+function timeBasedVested(
+  quantity: bigint,
+  months: number,
+  cliff: number,
+  total: number,
+  step: number,
+): bigint {
   if (months < cliff) return 0n;
   if (months >= total) return quantity;
   const stepped = Math.max(cliff, Math.floor(months / step) * step);
@@ -83,41 +95,80 @@ function timeBasedVested(quantity: bigint, months: number, cliff: number, total:
  */
 export function validateVestingTerms(terms: VestingTerms): void {
   if (terms.vestingTranches && terms.vestingTranches.length > 0) {
-    if (terms.vestingMonths !== null || terms.cliffMonths !== null || terms.vestingFrequency !== null) {
+    if (
+      terms.vestingMonths !== null ||
+      terms.cliffMonths !== null ||
+      terms.vestingFrequency !== null
+    ) {
       throw equityError("vestingShapesMixed", {}, { field: "vesting" });
     }
     let previous = "";
     let total = 0n;
     for (const tranche of terms.vestingTranches) {
-      if (!isIsoCalendarDate(tranche.date)) throw equityError("vestingTrancheDateInvalid", {}, { field: "vesting" });
-      if (tranche.date <= previous) throw equityError("vestingTranchesUnordered", {}, { field: "vesting" });
-      if (tranche.quantity <= 0n) throw equityError("vestingTrancheEmpty", {}, { field: "vesting" });
+      if (!isIsoCalendarDate(tranche.date))
+        throw equityError("vestingTrancheDateInvalid", {}, { field: "vesting" });
+      if (tranche.date <= previous)
+        throw equityError("vestingTranchesUnordered", {}, { field: "vesting" });
+      if (tranche.quantity <= 0n)
+        throw equityError("vestingTrancheEmpty", {}, { field: "vesting" });
       previous = tranche.date;
       total += tranche.quantity;
     }
     if (total !== terms.quantity) {
-      throw equityError("vestingTranchesTotalMismatch", { total: fig.shares(total), quantity: fig.shares(terms.quantity) }, { field: "vesting" });
+      throw equityError(
+        "vestingTranchesTotalMismatch",
+        { total: fig.shares(total), quantity: fig.shares(terms.quantity) },
+        { field: "vesting" },
+      );
     }
     return;
   }
   if (terms.vestingMonths === null) {
     if (terms.cliffMonths !== null || terms.vestingFrequency !== null) {
-      throw equityError("vestingCliffWithoutTerm", { months: fig.term("vestingMonths"), cliff: fig.term("cliffMonths"), frequency: fig.term("vestingFrequency") }, { field: "vesting" });
+      throw equityError(
+        "vestingCliffWithoutTerm",
+        {
+          months: fig.term("vestingMonths"),
+          cliff: fig.term("cliffMonths"),
+          frequency: fig.term("vestingFrequency"),
+        },
+        { field: "vesting" },
+      );
     }
     return;
   }
-  if (!Number.isInteger(terms.vestingMonths) || terms.vestingMonths < 1 || terms.vestingMonths > 600) {
-    throw equityError("vestingMonthsOutOfRange", { field: fig.term("vestingMonths"), min: fig.count(1), max: fig.count(600) }, { field: "vesting" });
+  if (
+    !Number.isInteger(terms.vestingMonths) ||
+    terms.vestingMonths < 1 ||
+    terms.vestingMonths > 600
+  ) {
+    throw equityError(
+      "vestingMonthsOutOfRange",
+      { field: fig.term("vestingMonths"), min: fig.count(1), max: fig.count(600) },
+      { field: "vesting" },
+    );
   }
   const cliff = terms.cliffMonths ?? 0;
   if (!Number.isInteger(cliff) || cliff < 0 || cliff > (terms.vestingMonths ?? 0)) {
-    throw equityError("vestingCliffOutOfRange", { field: fig.term("cliffMonths"), term: fig.term("vestingMonths"), min: fig.count(0) }, { field: "vesting" });
+    throw equityError(
+      "vestingCliffOutOfRange",
+      { field: fig.term("cliffMonths"), term: fig.term("vestingMonths"), min: fig.count(0) },
+      { field: "vesting" },
+    );
   }
   if (!terms.vestingFrequency || !(terms.vestingFrequency in VESTING_STEP_MONTHS)) {
-    throw equityError("vestingFrequencyRequired", { field: fig.term("vestingFrequency") }, { field: "vesting" });
+    throw equityError(
+      "vestingFrequencyRequired",
+      { field: fig.term("vestingFrequency") },
+      { field: "vesting" },
+    );
   }
   if (!terms.vestingStart || !isIsoCalendarDate(terms.vestingStart)) {
-    throw equityError("vestingStartRequired", { field: fig.term("vestingStart") }, { field: "vesting" });
+    throw equityError(
+      "vestingStartRequired",
+      { field: fig.term("vestingStart") },
+      { field: "vesting" },
+    );
   }
 }
 
@@ -131,7 +182,10 @@ export function vestingInstallments(terms: VestingTerms): VestingInstallment[] {
     });
   }
   const total = terms.vestingMonths ?? 0;
-  if (total <= 0) return terms.quantity > 0n ? [{ date: terms.issueDate, quantity: terms.quantity, cumulative: terms.quantity }] : [];
+  if (total <= 0)
+    return terms.quantity > 0n
+      ? [{ date: terms.issueDate, quantity: terms.quantity, cumulative: terms.quantity }]
+      : [];
   const start = terms.vestingStart ?? terms.issueDate;
   const cliff = terms.cliffMonths ?? 0;
   const step = VESTING_STEP_MONTHS[terms.vestingFrequency ?? "monthly"];
@@ -140,7 +194,11 @@ export function vestingInstallments(terms: VestingTerms): VestingInstallment[] {
   for (let month = 1; month <= total; month += 1) {
     const vested = timeBasedVested(terms.quantity, month, cliff, total, step);
     if (vested > previous) {
-      out.push({ date: addMonthsClamped(start, month), quantity: vested - previous, cumulative: vested });
+      out.push({
+        date: addMonthsClamped(start, month),
+        quantity: vested - previous,
+        cumulative: vested,
+      });
       previous = vested;
     }
   }
@@ -152,14 +210,21 @@ export function scheduledVested(terms: VestingTerms, asOf: string): bigint {
   if (asOf < terms.issueDate) return 0n;
   if (terms.vestingTranches && terms.vestingTranches.length > 0) {
     let vested = 0n;
-    for (const tranche of terms.vestingTranches) if (tranche.date <= asOf) vested += tranche.quantity;
+    for (const tranche of terms.vestingTranches)
+      if (tranche.date <= asOf) vested += tranche.quantity;
     return vested < terms.quantity ? vested : terms.quantity;
   }
   const total = terms.vestingMonths ?? 0;
   if (total <= 0) return terms.quantity;
   const start = terms.vestingStart ?? terms.issueDate;
   const step = VESTING_STEP_MONTHS[terms.vestingFrequency ?? "monthly"];
-  return timeBasedVested(terms.quantity, completedMonths(start, asOf), terms.cliffMonths ?? 0, total, step);
+  return timeBasedVested(
+    terms.quantity,
+    completedMonths(start, asOf),
+    terms.cliffMonths ?? 0,
+    total,
+    step,
+  );
 }
 
 /** The date the schedule completes (the issue date when nothing vests later). */
@@ -187,8 +252,9 @@ export function acceleratedVested(
   terms: { acceleration: Acceleration; accelerationPercent: string | null },
   trigger: AccelerationTrigger,
 ): bigint {
-  const fires = (terms.acceleration === "single" && trigger.changeOfControl)
-    || (terms.acceleration === "double" && trigger.changeOfControl && trigger.terminated);
+  const fires =
+    (terms.acceleration === "single" && trigger.changeOfControl) ||
+    (terms.acceleration === "double" && trigger.changeOfControl && trigger.terminated);
   const capped = vested < outstanding ? vested : outstanding;
   if (!fires) return capped;
   const percent = parsePercent(terms.accelerationPercent ?? "", "accelerationPercent");
@@ -207,9 +273,16 @@ export function parseVestingTranches(raw: unknown): VestingTranche[] | null {
     throw equityError("vestingStoredTranchesNotList");
   }
   return raw.map((entry) => {
-    const date = entry && typeof entry === "object" ? (entry as { date?: unknown }).date : undefined;
-    const quantity = entry && typeof entry === "object" ? (entry as { quantity?: unknown }).quantity : undefined;
-    const text = typeof quantity === "string" ? quantity : typeof quantity === "number" && Number.isSafeInteger(quantity) ? String(quantity) : "";
+    const date =
+      entry && typeof entry === "object" ? (entry as { date?: unknown }).date : undefined;
+    const quantity =
+      entry && typeof entry === "object" ? (entry as { quantity?: unknown }).quantity : undefined;
+    const text =
+      typeof quantity === "string"
+        ? quantity
+        : typeof quantity === "number" && Number.isSafeInteger(quantity)
+          ? String(quantity)
+          : "";
     if (typeof date !== "string" || !isIsoCalendarDate(date) || !/^\d+$/.test(text)) {
       throw equityError("vestingStoredTrancheInvalid");
     }

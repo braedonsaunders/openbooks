@@ -18,8 +18,18 @@ const answer = z.object({
 });
 
 export const patchReviewBody = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("save-draft"), revision:z.number().int().positive(), answers:z.array(answer), overallRating:decimal.nullable().optional() }),
-  z.object({ action: z.literal("submit"), revision:z.number().int().positive().optional(), answers: z.array(answer).min(1), overallRating: decimal.nullable().optional() }),
+  z.object({
+    action: z.literal("save-draft"),
+    revision: z.number().int().positive(),
+    answers: z.array(answer),
+    overallRating: decimal.nullable().optional(),
+  }),
+  z.object({
+    action: z.literal("submit"),
+    revision: z.number().int().positive().optional(),
+    answers: z.array(answer).min(1),
+    overallRating: decimal.nullable().optional(),
+  }),
   z.object({ action: z.literal("share") }),
   z.object({ action: z.literal("acknowledge") }),
   z.object({ action: z.literal("reopen"), reason }),

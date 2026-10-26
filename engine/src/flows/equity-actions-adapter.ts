@@ -2,11 +2,7 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
-import type {
-  FlowExecCtx,
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-} from "./types.ts";
+import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { tableScope } from "./subject-scope.ts";
@@ -121,12 +117,17 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
   // Adapter parity (documents, leave requests): the gate row scopes every
   // caller to its organization; findCandidateIds keeps the explicit boundary.
   return (
-    (await db.execute<RequestRow>(sql`
+    (
+      await db.execute<RequestRow>(
+        sql`
     select r.org_id, r.subsidiary_id, r.action, r.subject_id, r.subject_label, r.effective_on::text as effective_on,
            r.reason, r.summary, r.status, r.requested_by, s.name as legal_entity
       from equity_action_requests r
       left join subsidiaries s on s.org_id = r.org_id and s.id = r.subsidiary_id
-     where r.id = ${subjectId}`, "objects"))[0] ?? null
+     where r.id = ${subjectId}`,
+        "objects",
+      )
+    )[0] ?? null
   );
 }
 
@@ -143,9 +144,7 @@ const number = (value: unknown): number | null => {
  * pinned as a custom as-of: the pending action is listed on its view
  * whatever date the view reads, with its effective date beside it.
  */
-function deepLinkFor(
-  request: Pick<RequestRow, "action" | "subject_id" | "subsidiary_id">,
-): string {
+function deepLinkFor(request: Pick<RequestRow, "action" | "subject_id" | "subsidiary_id">): string {
   const base = `/equity?sub=${request.subsidiary_id}`;
   switch (request.action) {
     case "void":
@@ -175,102 +174,99 @@ function deepLinkFor(
   }
 }
 
-export const equityActionsFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: EQUITY_ACTION_SUBJECT_KIND,
-    // Recording an action is equity.manage; deciding one is the equity.approve grant.
-    permissions: {
-      read: "equity.read",
-      edit: "equity.manage",
-      approve: "equity.approve",
-    },
-    scope: tableScope("column", "equity_action_requests", "subsidiary_id"),
-    profile: equityActionSubjectProfile,
-    releaseViaHandler: true,
+export const equityActionsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: EQUITY_ACTION_SUBJECT_KIND,
+  // Recording an action is equity.manage; deciding one is the equity.approve grant.
+  permissions: {
+    read: "equity.read",
+    edit: "equity.manage",
+    approve: "equity.approve",
+  },
+  scope: tableScope("column", "equity_action_requests", "subsidiary_id"),
+  profile: equityActionSubjectProfile,
+  releaseViaHandler: true,
 
-    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-      const request = await loadRequest(subjectId);
-      if (!request) return null;
-      const summary = request.summary ?? {};
-      return {
-        values: {
-          id: subjectId,
-          action: request.action,
-          subjectLabel: request.subject_label,
-          securityKind: text(summary.securityKind),
-          holderName: text(summary.holderName),
-          shareClassCode: text(summary.shareClassCode),
-          quantity: number(summary.quantity),
-          amount: number(summary.amount),
-          currency: text(summary.currency),
-          effectiveOn: request.effective_on,
-          reason: request.reason,
-          legalEntity: request.legal_entity,
-          status: request.status,
-          requestedBy: request.requested_by,
-        },
-        submitterUserId: request.requested_by,
-        makerUserId: request.requested_by,
-      };
-    },
+  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+    const request = await loadRequest(subjectId);
+    if (!request) return null;
+    const summary = request.summary ?? {};
+    return {
+      values: {
+        id: subjectId,
+        action: request.action,
+        subjectLabel: request.subject_label,
+        securityKind: text(summary.securityKind),
+        holderName: text(summary.holderName),
+        shareClassCode: text(summary.shareClassCode),
+        quantity: number(summary.quantity),
+        amount: number(summary.amount),
+        currency: text(summary.currency),
+        effectiveOn: request.effective_on,
+        reason: request.reason,
+        legalEntity: request.legal_entity,
+        status: request.status,
+        requestedBy: request.requested_by,
+      },
+      submitterUserId: request.requested_by,
+      makerUserId: request.requested_by,
+    };
+  },
 
-    label(subjectId: string, values: Record<string, unknown>): string {
-      const action =
-        EQUITY_ACTION_KINDS.find((kind) => kind.value === values.action)
-          ?.label ?? "Equity action";
-      return `${action} · ${String(values.subjectLabel ?? subjectId)}`;
-    },
+  label(subjectId: string, values: Record<string, unknown>): string {
+    const action =
+      EQUITY_ACTION_KINDS.find((kind) => kind.value === values.action)?.label ?? "Equity action";
+    return `${action} · ${String(values.subjectLabel ?? subjectId)}`;
+  },
 
-    deepLink(subjectId: string): string {
-      return `/equity?request=${subjectId}`;
-    },
+  deepLink(subjectId: string): string {
+    return `/equity?request=${subjectId}`;
+  },
 
-    async getStatus(subjectId: string): Promise<string | null> {
-      return (await loadRequest(subjectId))?.status ?? null;
-    },
+  async getStatus(subjectId: string): Promise<string | null> {
+    return (await loadRequest(subjectId))?.status ?? null;
+  },
 
-    async changeStatus(): Promise<void> {
+  async changeStatus(): Promise<void> {
+    throw new Error("equity action status is released by the approval engine, not a flow action");
+  },
+
+  async releaseApproval(
+    subjectId: string,
+    outcome: "approved" | "rejected",
+    ctx: FlowExecCtx,
+    detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
+  ): Promise<void> {
+    await releaseFlowApproval({
+      subjectKind: EQUITY_ACTION_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      comment: detail?.comment,
+      ctx,
+      approvalRunId: run?.id,
+    });
+  },
+
+  async setField(): Promise<void> {
+    throw new Error("equity action requests are frozen when recorded; record a new action instead");
+  },
+
+  /** Requests awaiting a decision, for scheduled fan-out (reminders). */
+  async findCandidateIds(limit: number): Promise<string[]> {
+    const orgId = ambientTenantOrgId();
+    if (!orgId)
       throw new Error(
-        "equity action status is released by the approval engine, not a flow action",
+        `findCandidateIds for "${EQUITY_ACTION_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
       );
-    },
-
-    async releaseApproval(
-      subjectId: string,
-      outcome: "approved" | "rejected",
-      ctx: FlowExecCtx,
-      detail?: { comment?: string | null },
-      run?: { id: string; dispatchValues: Record<string, unknown> | null },
-    ): Promise<void> {
-      await releaseFlowApproval({
-        subjectKind: EQUITY_ACTION_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        comment: detail?.comment,
-        ctx,
-        approvalRunId: run?.id,
-      });
-    },
-
-    async setField(): Promise<void> {
-      throw new Error(
-        "equity action requests are frozen when recorded; record a new action instead",
-      );
-    },
-
-    /** Requests awaiting a decision, for scheduled fan-out (reminders). */
-    async findCandidateIds(limit: number): Promise<string[]> {
-      const orgId = ambientTenantOrgId();
-      if (!orgId)
-        throw new Error(
-          `findCandidateIds for "${EQUITY_ACTION_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
-        );
-      const rows = await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(
+      sql`
       select id::text as id from equity_action_requests
        where org_id = ${orgId} and status = 'pending_approval'
-       order by created_at desc limit ${limit}`, "objects");
-      return rows.map((row) => row.id);
-    },
-  });
+       order by created_at desc limit ${limit}`,
+      "objects",
+    );
+    return rows.map((row) => row.id);
+  },
+});
 
 export { deepLinkFor as equityActionDeepLink };

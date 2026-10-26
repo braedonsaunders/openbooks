@@ -1,4 +1,4 @@
-import { canonicalDecimal } from '@openbooks/engine/money/decimal'
+import { canonicalDecimal } from "@openbooks/engine/money/decimal";
 
 export {
   canonicalDecimal,
@@ -7,7 +7,7 @@ export {
   isPositiveDecimal,
   fixedDecimal,
   divideDecimal,
-} from '@openbooks/engine/money/decimal'
+} from "@openbooks/engine/money/decimal";
 
 /**
  * Editable spelling of a stored money amount. The stored text keeps its
@@ -18,12 +18,12 @@ export {
  * exactly what the server holds. No float is involved at any step.
  */
 export function editableMoneyDecimal(stored: string | null | undefined): string {
-  const text = stored?.trim() ?? ''
-  if (text === '') return ''
-  const canonical = canonicalDecimal(text, 4)
-  if (canonical == null) return text
-  const [whole = '0', fraction = ''] = canonical.split('.')
-  return `${whole}.${fraction.padEnd(2, '0')}`
+  const text = stored?.trim() ?? "";
+  if (text === "") return "";
+  const canonical = canonicalDecimal(text, 4);
+  if (canonical == null) return text;
+  const [whole = "0", fraction = ""] = canonical.split(".");
+  return `${whole}.${fraction.padEnd(2, "0")}`;
 }
 
 /**
@@ -35,11 +35,11 @@ export function sameMoneyDecimal(
   left: string | null | undefined,
   right: string | null | undefined,
 ): boolean {
-  return moneyKey(left) === moneyKey(right)
+  return moneyKey(left) === moneyKey(right);
 }
 
 function moneyKey(value: string | null | undefined): string | null {
-  const text = value?.trim() ?? ''
-  if (text === '') return null
-  return canonicalDecimal(text, 4) ?? text
+  const text = value?.trim() ?? "";
+  if (text === "") return null;
+  return canonicalDecimal(text, 4) ?? text;
 }

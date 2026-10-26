@@ -40,27 +40,47 @@ export async function applyBankDrawdown(
     entitlementMovements: EntitlementMovement[];
   },
 ): Promise<void> {
-  const { orgId, documentId, payDate, employeePartyId, employeeName, terminationRun, plans, lines, entitlementMovements } = args;
+  const {
+    orgId,
+    documentId,
+    payDate,
+    employeePartyId,
+    employeeName,
+    terminationRun,
+    plans,
+    lines,
+    entitlementMovements,
+  } = args;
   if (terminationRun) return;
   const settling = new Map<string, { plan: EntitlementPlan; role: "payout" | "deposit" }>();
   const settlePlans = new Map<string, string[]>();
   for (const plan of plans) {
     if (plan.payoutComponentId === plan.depositComponentId && plan.payoutComponentId !== null) {
-      throw new PayrollError(`Entitlement plan ${plan.code} names one component as both its payout and deposit component — choose distinct components so withdrawals and deposits stay attributable`);
+      throw new PayrollError(
+        `Entitlement plan ${plan.code} names one component as both its payout and deposit component — choose distinct components so withdrawals and deposits stay attributable`,
+      );
     }
     for (const componentId of [plan.payoutComponentId, plan.depositComponentId]) {
       if (componentId === null) continue;
       settlePlans.set(componentId, [...(settlePlans.get(componentId) ?? []), plan.code]);
     }
-    if (plan.payoutComponentId !== null) settling.set(plan.payoutComponentId, { plan, role: "payout" });
+    if (plan.payoutComponentId !== null)
+      settling.set(plan.payoutComponentId, { plan, role: "payout" });
     if (plan.depositComponentId !== null && !settling.has(plan.depositComponentId)) {
       settling.set(plan.depositComponentId, { plan, role: "deposit" });
     }
   }
   for (const [componentId, codes] of settlePlans) {
     if (codes.length > 1) {
-      const component = (await tx.execute<{ code: string }>(sql`select code from pay_components where id = ${componentId}`, "objects"))[0];
-      throw new PayrollError(`Payroll component ${component?.code ?? componentId} settles two entitlement plans (${codes.join(", ")}) — dedicate one payout component per plan so withdrawals stay attributable`);
+      const component = (
+        await tx.execute<{ code: string }>(
+          sql`select code from pay_components where id = ${componentId}`,
+          "objects",
+        )
+      )[0];
+      throw new PayrollError(
+        `Payroll component ${component?.code ?? componentId} settles two entitlement plans (${codes.join(", ")}) — dedicate one payout component per plan so withdrawals stay attributable`,
+      );
     }
   }
   if (settling.size === 0) return;
@@ -85,17 +105,25 @@ export async function applyBankDrawdown(
       // plan) while the guard on the available balance is unchanged.
       const split = line.bankCashFundingSplit;
       const valuation = line.bankCashValuation;
-      if (!valuation || cmp(split.bankFundedAmount, line.amount) !== 0
-        || cmp(add(split.bankFundedAmount, split.outsideBankAmount), split.totalAmount) !== 0
-        || line.hours == null || cmp(line.hours, "0") <= 0
-        || !bankCashSplitMatchesValuation(split, line.hours, valuation)) {
-        throw new PayrollError(`${employeeName}'s audited bank payout split on the ${payDate} run no longer balances to its issued amount at its frozen pay-date wage; correct it through the bank cash input before recalculating`);
+      if (
+        !valuation ||
+        cmp(split.bankFundedAmount, line.amount) !== 0 ||
+        cmp(add(split.bankFundedAmount, split.outsideBankAmount), split.totalAmount) !== 0 ||
+        line.hours == null ||
+        cmp(line.hours, "0") <= 0 ||
+        !bankCashSplitMatchesValuation(split, line.hours, valuation)
+      ) {
+        throw new PayrollError(
+          `${employeeName}'s audited bank payout split on the ${payDate} run no longer balances to its issued amount at its frozen pay-date wage; correct it through the bank cash input before recalculating`,
+        );
       }
     }
-    const value = entry.plan.unit === "hours" ? line.hours ?? null : line.amount;
+    const value = entry.plan.unit === "hours" ? (line.hours ?? null) : line.amount;
     if (value === null || cmp(value, "0") === 0) {
       if (entry.plan.unit === "hours" && line.hours == null && cmp(line.amount, "0") !== 0) {
-        throw new PayrollError(`${employeeName}'s ${entry.plan.name} payout on the ${payDate} run carries pay but no hours — enter the taken hours on the payout line so the hours bank settles exactly`);
+        throw new PayrollError(
+          `${employeeName}'s ${entry.plan.name} payout on the ${payDate} run carries pay but no hours — enter the taken hours on the payout line so the hours bank settles exactly`,
+        );
       }
       continue;
     }
@@ -113,13 +141,24 @@ export async function applyBankDrawdown(
     const inRun = entitlementMovements
       .filter((movement) => movement.planId === plan.id)
       .reduce((total, movement) => add(total, movement.amount), "0");
-    const opening = await planBalanceExcludingRun(tx, orgId, plan.id, employeePartyId, payDate, documentId);
+    const opening = await planBalanceExcludingRun(
+      tx,
+      orgId,
+      plan.id,
+      employeePartyId,
+      payDate,
+      documentId,
+    );
     const available = add(opening, inRun);
     if (cmp(net, "0") > 0) {
       if (cmp(net, available) > 0 && !plan.allowNegativeBalance) {
-        throw new PayrollError(`${employeeName}'s ${plan.name} payout of ${net} exceeds the available ${available} — pay no more than the bank holds, or allow negative balances on the plan`);
+        throw new PayrollError(
+          `${employeeName}'s ${plan.name} payout of ${net} exceeds the available ${available} — pay no more than the bank holds, or allow negative balances on the plan`,
+        );
       }
-      const existing = entitlementMovements.find((movement) => movement.planId === plan.id && movement.kind === "payout");
+      const existing = entitlementMovements.find(
+        (movement) => movement.planId === plan.id && movement.kind === "payout",
+      );
       // A cap auto-payout already queued a payout movement for this plan this
       // run: fold the voluntary withdrawal into it, since the ledger admits
       // one payout per (run, plan, employee).

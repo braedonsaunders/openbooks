@@ -25,14 +25,21 @@ const PORTAL: Record<OssMemberState, { portal: string; format: "csv" | "xml" }> 
 };
 
 function digestFor(oss: OssReturn): string {
-  return oss.fx.length === 0 ? "EUR" : oss.fx.map((entry) => `${entry.currency}@${entry.rateAsOf}#${entry.digest.slice(0, 12)}`).join("|");
+  return oss.fx.length === 0
+    ? "EUR"
+    : oss.fx
+        .map((entry) => `${entry.currency}@${entry.rateAsOf}#${entry.digest.slice(0, 12)}`)
+        .join("|");
 }
 
 /**
  * Semicolon CSV per member-state portal column order. Rates and amounts
  * carry two decimals as filed; corrections flag their original quarter.
  */
-export function ossReturnToMemberStateCsv(oss: OssReturn, state: Exclude<OssMemberState, "IE">): string {
+export function ossReturnToMemberStateCsv(
+  oss: OssReturn,
+  state: Exclude<OssMemberState, "IE">,
+): string {
   const digest = digestFor(oss);
   if (state === "DE") {
     const header =
@@ -52,7 +59,11 @@ export function ossReturnToMemberStateCsv(oss: OssReturn, state: Exclude<OssMemb
         digest,
       ].join(";"),
     );
-    return [`# OSS transport for ${PORTAL.DE.portal}; confirm the field mapping against the portal template before upload`, header, ...rows].join("\n");
+    return [
+      `# OSS transport for ${PORTAL.DE.portal}; confirm the field mapping against the portal template before upload`,
+      header,
+      ...rows,
+    ].join("\n");
   }
   if (state === "FR") {
     const header =
@@ -73,7 +84,11 @@ export function ossReturnToMemberStateCsv(oss: OssReturn, state: Exclude<OssMemb
         digest,
       ].join(";"),
     );
-    return [`# Transport OSS pour ${PORTAL.FR.portal} ; verifier la correspondance des champs avec le modele du portail avant televersement`, header, ...rows].join("\n");
+    return [
+      `# Transport OSS pour ${PORTAL.FR.portal} ; verifier la correspondance des champs avec le modele du portail avant televersement`,
+      header,
+      ...rows,
+    ].join("\n");
   }
   const header =
     "regeling;identificatiestaat;identificatienummer;tijdvak_van;tijdvak_tot;regel;verbruiksland;btw_tarief;grondslag;btw_bedrag;correctiekwartaal;bewijs";
@@ -93,11 +108,19 @@ export function ossReturnToMemberStateCsv(oss: OssReturn, state: Exclude<OssMemb
       digest,
     ].join(";"),
   );
-  return [`# OSS-transport voor ${PORTAL.NL.portal}; controleer de veldtoewijzing aan de hand van de portalsjabloon voor het uploaden`, header, ...rows].join("\n");
+  return [
+    `# OSS-transport voor ${PORTAL.NL.portal}; controleer de veldtoewijzing aan de hand van de portalsjabloon voor het uploaden`,
+    header,
+    ...rows,
+  ].join("\n");
 }
 
 function escapeXml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 /**
@@ -108,7 +131,9 @@ function escapeXml(value: string): string {
 export function ossReturnToIrelandXml(oss: OssReturn): string {
   const out: string[] = [];
   out.push(`<?xml version="1.0" encoding="UTF-8"?>`);
-  out.push(`<!-- OSS transport for ${PORTAL.IE.portal}; confirm the field mapping against the portal template before upload -->`);
+  out.push(
+    `<!-- OSS transport for ${PORTAL.IE.portal}; confirm the field mapping against the portal template before upload -->`,
+  );
   out.push(
     `<OssReturn scheme="${escapeXml(oss.scheme)}" identificationState="${escapeXml(oss.identificationState)}" registrationNumber="${escapeXml(oss.registrationNumber)}" periodFrom="${escapeXml(oss.from)}" periodTo="${escapeXml(oss.to)}" currency="EUR">`,
   );
@@ -117,7 +142,9 @@ export function ossReturnToIrelandXml(oss: OssReturn): string {
       `  <Supply kind="${line.kind}" consumptionCountry="${escapeXml(line.consumptionCountry)}" vatRate="${escapeXml(toFilingCents(line.ratePercent))}" baseAmount="${escapeXml(toFilingCents(line.baseAmount))}" vatAmount="${escapeXml(toFilingCents(line.taxAmount))}"${line.correctionQuarter ? ` correctionQuarter="${escapeXml(line.correctionQuarter)}"` : ""} />`,
     );
   }
-  out.push(`  <Totals baseAmount="${escapeXml(toFilingCents(oss.totalBase))}" vatAmount="${escapeXml(toFilingCents(oss.totalTax))}" />`);
+  out.push(
+    `  <Totals baseAmount="${escapeXml(toFilingCents(oss.totalBase))}" vatAmount="${escapeXml(toFilingCents(oss.totalTax))}" />`,
+  );
   if (oss.fx.length === 0) {
     out.push(`  <Translation native="EUR" />`);
   } else {

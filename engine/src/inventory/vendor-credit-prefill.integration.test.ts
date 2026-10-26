@@ -7,11 +7,7 @@ import { toUnits } from "../money/money.ts";
 import { receiveInventory } from "./movements.ts";
 import { returnableBillLines } from "./vendor-credit-prefill.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

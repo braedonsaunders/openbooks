@@ -25,7 +25,9 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, body }) => {
     // One channel answers to that channel's subsidiary; replaying every
     // channel spans subsidiaries outside a restricted caller's scope.
-    const scopeDenied = body.channelId ? await guardChannelScope(gate, body.channelId) : guardUnrestrictedScope(gate);
+    const scopeDenied = body.channelId
+      ? await guardChannelScope(gate, body.channelId)
+      : guardUnrestrictedScope(gate);
     if (scopeDenied) return scopeDenied;
     const outcome = await replayChannelExceptions(
       gate.user.orgId,

@@ -1,10 +1,10 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { formatCount, formatPercent01 } from '../../../../lib/format'
-import { db } from '@openbooks/engine/platform/db'
-import { orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
+import { sql } from "drizzle-orm";
+import { getLocale, getTranslations } from "next-intl/server";
+import { formatCount, formatPercent01 } from "../../../../lib/format";
+import { db } from "@openbooks/engine/platform/db";
+import { orderedNetOfCancelledSql } from "@openbooks/engine/records/order-line-remainders";
 import {
   column,
   drill,
@@ -16,15 +16,15 @@ import {
   text,
   textBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { orgInfo } from '../../../../lib/data'
-import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
-import { decimalSum } from '../../../../lib/statement-format'
-import { statementReportSpec } from '@/lib/reports/statement-report-spec'
+} from "@braedonsaunders/appkit-viewspec";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { orgInfo } from "../../../../lib/data";
+import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
+import type { ReportDrillTarget } from "../../../../lib/report-drill";
+import { decimalSum } from "../../../../lib/statement-format";
+import { statementReportSpec } from "@/lib/reports/statement-report-spec";
 
 /**
  * The order pipeline report, split into a loader and a spec.
@@ -37,7 +37,7 @@ import { statementReportSpec } from '@/lib/reports/statement-report-spec'
  * `openCountDrill`, and never reconstructs how they were derived.
  */
 
-const KINDS = ['quote', 'sales_order', 'purchase_order'] as const
+const KINDS = ["quote", "sales_order", "purchase_order"] as const;
 
 /** A non-voided order remains open while any line has unconverted quantity
  * (ordered less cancelled, not yet billed). */
@@ -48,52 +48,56 @@ const openOrderPredicate = sql`
       from document_lines line
      where line.org_id = d.org_id
        and line.document_id = d.id
-       and line.quantity_billed < ${orderedNetOfCancelledSql('line')}
-  )`
+       and line.quantity_billed < ${orderedNetOfCancelledSql("line")}
+  )`;
 
 export interface OrderRow {
-  kind: string
-  typeLabel: string
-  openCount: string
-  openCountDrill: ReportDrillTarget
-  openValue: string
-  openValueDrill: ReportDrillTarget
-  converted: string
-  convertedDrill: ReportDrillTarget
-  convRate: string
-  convRateDrill: ReportDrillTarget
-  voided: string
-  voidedDrill: ReportDrillTarget
+  kind: string;
+  typeLabel: string;
+  openCount: string;
+  openCountDrill: ReportDrillTarget;
+  openValue: string;
+  openValueDrill: ReportDrillTarget;
+  converted: string;
+  convertedDrill: ReportDrillTarget;
+  convRate: string;
+  convRateDrill: ReportDrillTarget;
+  voided: string;
+  voidedDrill: ReportDrillTarget;
 }
 
 export interface OrdersData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  company: string
-  note: string
-  columnType: string
-  columnOpen: string
-  columnOpenValue: string
-  columnConverted: string
-  columnConvRate: string
-  columnVoided: string
-  rows: OrderRow[]
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  company: string;
+  note: string;
+  columnType: string;
+  columnOpen: string;
+  columnOpenValue: string;
+  columnConverted: string;
+  columnConvRate: string;
+  columnVoided: string;
+  rows: OrderRow[];
 }
 
 export async function loadOrders(): Promise<OrdersData> {
-  const { money: formatMoney } = await getMoneyFormatter()
-  const authz = await requirePermission('reports.read')
-  await requireFeatureEnabled(authz.user.orgId, 'orders')
-  const t = await getTranslations('reports.orders')
-  const tr = await getTranslations('reports')
-  const locale = await getLocale()
-  const orgId = authz.user.orgId
-  const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)
+  const { money: formatMoney } = await getMoneyFormatter();
+  const authz = await requirePermission("reports.read");
+  await requireFeatureEnabled(authz.user.orgId, "orders");
+  const t = await getTranslations("reports.orders");
+  const tr = await getTranslations("reports");
+  const locale = await getLocale();
+  const orgId = authz.user.orgId;
+  const subsidiaryFilter = subsidiaryVisibleFilter(
+    sql`d.subsidiary_id`,
+    authz.allowedSubsidiaryIds,
+  );
 
   const [pipeline, converted, org] = await Promise.all([
-    db.execute(sql`
+    db.execute(
+      sql`
       -- Open values convert each row at its own document FX before summing:
       -- a cross-currency sum of raw totals is meaningless, and the column is
       -- labelled in base currency. Same round-per-row shape the analytics
@@ -103,125 +107,145 @@ export async function loadOrders(): Promise<OrdersData> {
              coalesce(sum(round(d.total * d.fx_rate, 4)) filter (where ${openOrderPredicate}), 0) as open_value
         from documents d
        where d.org_id = ${orgId}
-         and d.kind in (${sql.join(KINDS.map((k) => sql`${k}`), sql`, `)})
+         and d.kind in (${sql.join(
+           KINDS.map((k) => sql`${k}`),
+           sql`, `,
+         )})
          ${subsidiaryFilter}
-       group by d.kind, d.status`, 'objects'),
-    db.execute(sql`
+       group by d.kind, d.status`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select d.kind, count(distinct d.id)::int as converted
         from documents d
         join document_links dl on dl.from_document_id = d.id and dl.org_id = d.org_id
-       where d.org_id = ${orgId} and d.kind in (${sql.join(KINDS.map((k) => sql`${k}`), sql`, `)})
+       where d.org_id = ${orgId} and d.kind in (${sql.join(
+         KINDS.map((k) => sql`${k}`),
+         sql`, `,
+       )})
          ${subsidiaryFilter}
-       group by d.kind`, 'objects'),
+       group by d.kind`,
+      "objects",
+    ),
     orgInfo(orgId),
-  ])
+  ]);
 
   const convByKind = new Map<string, number>(
     converted.map((r) => [String(r.kind), Number(r.converted)]),
-  )
+  );
 
   const columnLabel = {
-    open: t('columns.open'),
-    openValue: t('columns.openValue'),
-    converted: t('columns.converted'),
-    convRate: t('columns.convRate'),
-    voided: t('columns.voided'),
-  }
+    open: t("columns.open"),
+    openValue: t("columns.openValue"),
+    converted: t("columns.converted"),
+    convRate: t("columns.convRate"),
+    voided: t("columns.voided"),
+  };
 
   return {
-    title: t('title'),
-    description: t('description'),
-    backHref: '/reports',
-    backLabel: tr('hub.title'),
-    company: org?.name ?? '',
-    note: t('note'),
-    columnType: t('columns.type'),
+    title: t("title"),
+    description: t("description"),
+    backHref: "/reports",
+    backLabel: tr("hub.title"),
+    company: org?.name ?? "",
+    note: t("note"),
+    columnType: t("columns.type"),
     columnOpen: columnLabel.open,
     columnOpenValue: columnLabel.openValue,
     columnConverted: columnLabel.converted,
     columnConvRate: columnLabel.convRate,
     columnVoided: columnLabel.voided,
     rows: KINDS.map((kind) => {
-      const forKind = pipeline.filter((r) => r.kind === kind)
-      const open = forKind.reduce((a: number, r) => a + Number(r.open_n ?? 0), 0)
-      const openValue = decimalSum(forKind.map((r) => String(r.open_value ?? '0')))
+      const forKind = pipeline.filter((r) => r.kind === kind);
+      const open = forKind.reduce((a: number, r) => a + Number(r.open_n ?? 0), 0);
+      const openValue = decimalSum(forKind.map((r) => String(r.open_value ?? "0")));
       const voided = forKind
-        .filter((r) => r.status === 'voided')
-        .reduce((a: number, r) => a + Number(r.n), 0)
-      const conv = convByKind.get(kind) ?? 0
-      const denom = open + conv
-      const rate = formatPercent01(denom > 0 ? conv / denom : 0, locale)
-      const typeLabel = t(`kinds.${kind}`)
+        .filter((r) => r.status === "voided")
+        .reduce((a: number, r) => a + Number(r.n), 0);
+      const conv = convByKind.get(kind) ?? 0;
+      const denom = open + conv;
+      const rate = formatPercent01(denom > 0 ? conv / denom : 0, locale);
+      const typeLabel = t(`kinds.${kind}`);
       const target = (
-        scope: 'open' | 'converted' | 'conversion' | 'voided',
+        scope: "open" | "converted" | "conversion" | "voided",
         label: string,
-      ): ReportDrillTarget => ({ kind: 'orders', orderKind: kind, scope, label: `${typeLabel} · ${label}` })
+      ): ReportDrillTarget => ({
+        kind: "orders",
+        orderKind: kind,
+        scope,
+        label: `${typeLabel} · ${label}`,
+      });
       return {
         kind,
         typeLabel,
         openCount: formatCount(open, locale),
-        openCountDrill: target('open', columnLabel.open),
+        openCountDrill: target("open", columnLabel.open),
         openValue: formatMoney(openValue),
-        openValueDrill: target('open', columnLabel.openValue),
+        openValueDrill: target("open", columnLabel.openValue),
         converted: formatCount(conv, locale),
-        convertedDrill: target('converted', columnLabel.converted),
+        convertedDrill: target("converted", columnLabel.converted),
         convRate: rate,
-        convRateDrill: target('conversion', columnLabel.convRate),
+        convRateDrill: target("conversion", columnLabel.convRate),
         voided: formatCount(voided, locale),
-        voidedDrill: target('voided', columnLabel.voided),
-      }
+        voidedDrill: target("voided", columnLabel.voided),
+      };
     }),
-  }
+  };
 }
 
-const f = ref<OrdersData>()
-const item = field
-const rootF = rootRef<OrdersData>()
+const f = ref<OrdersData>();
+const item = field;
+const rootF = rootRef<OrdersData>();
 
 export function ordersSpec(): PageSpec {
   return statementReportSpec({
-    route: '/reports/orders',
+    route: "/reports/orders",
     header: {
-      title: f('title'),
-      description: f('description'),
-      back: { href: f('backHref'), label: f('backLabel') },
+      title: f("title"),
+      description: f("description"),
+      back: { href: f("backHref"), label: f("backLabel") },
     },
     filters: [{ controls: { period: false } }],
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('description'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("description"),
       wide: true,
     },
     blocks: [
       table({
-        variant: 'report',
-        rows: f('rows'),
-        rowKey: item('kind'),
+        variant: "report",
+        rows: f("rows"),
+        rowKey: item("kind"),
         columns: [
-          column(rootF('columnType'), text(item('typeLabel')), { className: 'font-medium' }),
-          column(rootF('columnOpen'), drill(item('openCountDrill'), text(item('openCount'))), {
-            align: 'right',
-            className: 'tabular-nums',
+          column(rootF("columnType"), text(item("typeLabel")), { className: "font-medium" }),
+          column(rootF("columnOpen"), drill(item("openCountDrill"), text(item("openCount"))), {
+            align: "right",
+            className: "tabular-nums",
           }),
-          column(rootF('columnOpenValue'), drill(item('openValueDrill'), money(item('openValue'))), {
-            align: 'right',
+          column(
+            rootF("columnOpenValue"),
+            drill(item("openValueDrill"), money(item("openValue"))),
+            {
+              align: "right",
+            },
+          ),
+          column(rootF("columnConverted"), drill(item("convertedDrill"), text(item("converted"))), {
+            align: "right",
+            className: "tabular-nums",
           }),
-          column(rootF('columnConverted'), drill(item('convertedDrill'), text(item('converted'))), {
-            align: 'right',
-            className: 'tabular-nums',
+          column(rootF("columnConvRate"), drill(item("convRateDrill"), text(item("convRate"))), {
+            align: "right",
+            className: "tabular-nums",
           }),
-          column(rootF('columnConvRate'), drill(item('convRateDrill'), text(item('convRate'))), {
-            align: 'right',
-            className: 'tabular-nums',
-          }),
-          column(rootF('columnVoided'), drill(item('voidedDrill'), text(item('voided'))), {
-            align: 'right',
-            className: 'tabular-nums',
+          column(rootF("columnVoided"), drill(item("voidedDrill"), text(item("voided"))), {
+            align: "right",
+            className: "tabular-nums",
           }),
         ],
       }),
-      textBlock(f('note'), { tone: 'muted', className: 'mt-3' }),
+      textBlock(f("note"), { tone: "muted", className: "mt-3" }),
     ],
-  })
+  });
 }

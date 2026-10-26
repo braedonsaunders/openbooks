@@ -54,7 +54,13 @@ interface FakeState {
 }
 
 function emptyState(): FakeState {
-  return { users: new Map(), roleGrants: new Map(), denies: new Map(), restrictions: new Map(), employments: new Map() };
+  return {
+    users: new Map(),
+    roleGrants: new Map(),
+    denies: new Map(),
+    restrictions: new Map(),
+    employments: new Map(),
+  };
 }
 
 /** Literal SQL text from a drizzle query (same approach as revenue-recognition.test.ts). */
@@ -64,7 +70,7 @@ function sqlText(query: unknown): string {
   let out = "";
   for (const c of chunks) {
     if (c && typeof c === "object" && Array.isArray((c as { value?: unknown }).value)) {
-      out += ((c as { value: string[] }).value).join("");
+      out += (c as { value: string[] }).value.join("");
     }
   }
   return out;
@@ -100,7 +106,8 @@ function str(params: unknown[], index: number): string {
 function fakeExec(state: FakeState): SqlExecutor {
   return {
     execute: (async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const text = sqlText(query);
       const params = sqlParams(query);
       if (/from users/i.test(text)) {
@@ -109,7 +116,9 @@ function fakeExec(state: FakeState): SqlExecutor {
           return inMode({ rows: person ? [{ id: str(params, 1), partyId: person.partyId }] : [] });
         }
         const user = state.users.get(str(params, 0));
-        return inMode({ rows: user ? [{ isSuperAdmin: user.isSuperAdmin, isActive: user.isActive }] : [] });
+        return inMode({
+          rows: user ? [{ isSuperAdmin: user.isSuperAdmin, isActive: user.isActive }] : [],
+        });
       }
       if (/role_assignments/i.test(text)) {
         if (/subsidiary_restriction/i.test(text)) {
@@ -121,7 +130,9 @@ function fakeExec(state: FakeState): SqlExecutor {
       }
       if (/user_permission_overrides/i.test(text)) {
         const denyList = state.denies.get(str(params, 0)) ?? [];
-        return inMode({ rows: denyList.map((permission) => ({ permission, effect: "deny" as const })) });
+        return inMode({
+          rows: denyList.map((permission) => ({ permission, effect: "deny" as const })),
+        });
       }
       if (/from subsidiaries/i.test(text)) return inMode({ rows: [] });
       if (/from worker_employments/i.test(text)) {
@@ -129,7 +140,8 @@ function fakeExec(state: FakeState): SqlExecutor {
           const seen = new Set<string>();
           const rows: { employerSubsidiaryId: string }[] = [];
           for (const record of state.employments.values()) {
-            if (record.orgId !== str(params, 0) || record.workerPartyId !== str(params, 1)) continue;
+            if (record.orgId !== str(params, 0) || record.workerPartyId !== str(params, 1))
+              continue;
             if (seen.has(record.employerSubsidiaryId)) continue;
             seen.add(record.employerSubsidiaryId);
             rows.push({ employerSubsidiaryId: record.employerSubsidiaryId });
@@ -139,13 +151,15 @@ function fakeExec(state: FakeState): SqlExecutor {
         const record = state.employments.get(`${str(params, 0)}:${str(params, 1)}`);
         return inMode({
           rows: record
-            ? [{
-                id: record.id,
-                orgId: record.orgId,
-                workerPartyId: record.workerPartyId,
-                employerSubsidiaryId: record.employerSubsidiaryId,
-                revision: record.revision,
-              }]
+            ? [
+                {
+                  id: record.id,
+                  orgId: record.orgId,
+                  workerPartyId: record.workerPartyId,
+                  employerSubsidiaryId: record.employerSubsidiaryId,
+                  revision: record.revision,
+                },
+              ]
             : [],
         });
       }
@@ -170,7 +184,11 @@ function seedEmployment(state: FakeState, orgId = ORG, subsidiaryId = SUB_A): Fa
   return record;
 }
 
-function seedUser(state: FakeState, grants: string[], partyId: string | null = randomUUID()): string {
+function seedUser(
+  state: FakeState,
+  grants: string[],
+  partyId: string | null = randomUUID(),
+): string {
   const id = randomUUID();
   state.users.set(id, { isSuperAdmin: false, isActive: true, partyId });
   state.roleGrants.set(id, grants);
@@ -195,7 +213,10 @@ test("inactive actor is refused even with the grant", async () => {
   const record = seedEmployment(state);
   const actor = seedUser(state, ["hrm.employment.read"]);
   state.users.get(actor)!.isActive = false;
-  await assert.rejects(requireHrmEmploymentRead(exec, ORG, actor, record.id), HrmAuthorizationError);
+  await assert.rejects(
+    requireHrmEmploymentRead(exec, ORG, actor, record.id),
+    HrmAuthorizationError,
+  );
 });
 
 test("active actor without the grant is refused", async () => {
@@ -215,7 +236,10 @@ test("deny override wins over the role grant", async () => {
   const record = seedEmployment(state);
   const actor = seedUser(state, ["hrm.employment.read"]);
   state.denies.set(actor, ["hrm.employment.read"]);
-  await assert.rejects(requireHrmEmploymentRead(exec, ORG, actor, record.id), HrmAuthorizationError);
+  await assert.rejects(
+    requireHrmEmploymentRead(exec, ORG, actor, record.id),
+    HrmAuthorizationError,
+  );
 });
 
 test("employment from another org is not visible", async () => {
@@ -250,9 +274,15 @@ test("keys are strict: manage grants no read, read grants no approve", async () 
   const exec = fakeExec(state);
   const record = seedEmployment(state);
   const manager = seedUser(state, ["hrm.employment.manage"]);
-  await assert.rejects(requireHrmEmploymentRead(exec, ORG, manager, record.id), HrmAuthorizationError);
+  await assert.rejects(
+    requireHrmEmploymentRead(exec, ORG, manager, record.id),
+    HrmAuthorizationError,
+  );
   const reader = seedUser(state, ["hrm.employment.read"]);
-  await assert.rejects(requireHrmEmploymentApprove(exec, ORG, reader, record.id), HrmAuthorizationError);
+  await assert.rejects(
+    requireHrmEmploymentApprove(exec, ORG, reader, record.id),
+    HrmAuthorizationError,
+  );
   const approver = seedUser(state, ["hrm.employment.approve"]);
   const subject = await requireHrmEmploymentApprove(exec, ORG, approver, record.id);
   assert.equal(subject.id, record.id);
@@ -393,7 +423,10 @@ test("employment-row gate checks that employment, never the party's other employ
     requireEmploymentRowInScope(exec, ORG, actor, foreign.id),
     /not visible in this organization/,
   );
-  await assert.rejects(requireEmploymentRowInScope(exec, ORG, actor, randomUUID()), /not visible in this organization/);
+  await assert.rejects(
+    requireEmploymentRowInScope(exec, ORG, actor, randomUUID()),
+    /not visible in this organization/,
+  );
   state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A, SUB_B] });
   await requireEmploymentRowInScope(exec, ORG, actor, foreign.id);
 });
@@ -441,7 +474,9 @@ test("unrestricted-scope gate delegates to the canonical 403", async () => {
   state.restrictions.set(actor, { mode: "list", subsidiaryIds: [SUB_A] });
   await assert.rejects(
     requireUnrestrictedHrmScope(exec, ORG, actor),
-    (e: unknown) => e instanceof UnrestrictedScopeError && /requires unrestricted subsidiary access/.test(e.message),
+    (e: unknown) =>
+      e instanceof UnrestrictedScopeError &&
+      /requires unrestricted subsidiary access/.test(e.message),
   );
   state.restrictions.set(actor, { mode: "all" });
   await requireUnrestrictedHrmScope(exec, ORG, actor);

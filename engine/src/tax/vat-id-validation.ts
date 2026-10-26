@@ -58,7 +58,7 @@ type PartyTaxIdRow = {
   scheme: string;
   value: string;
   status: string;
-}
+};
 
 async function checkAuthority(
   scheme: VatAuthorityScheme,
@@ -67,7 +67,8 @@ async function checkAuthority(
   transport?: typeof fetch,
 ): Promise<VatAuthorityVerdict> {
   if (scheme === "vies") return checkViesVatId({ value }, transport);
-  if (scheme === "hmrc") return checkHmrcVatId({ value, accessToken: credentials.hmrcAccessToken }, transport);
+  if (scheme === "hmrc")
+    return checkHmrcVatId({ value, accessToken: credentials.hmrcAccessToken }, transport);
   if (scheme === "abn") return checkAbn({ value, guid: credentials.abnGuid }, transport);
   throw new VatValidationError(
     "no authority client covers GST registrations outside VIES, HMRC and ABN; verify the number manually and record the outcome",
@@ -85,11 +86,14 @@ export async function validatePartyTaxId(
   rowId: string,
   options: ValidateTaxIdOptions = {},
 ): Promise<TaxIdValidationOutcome> {
-  const rows = await tx.execute<PartyTaxIdRow>(sql`
+  const rows = await tx.execute<PartyTaxIdRow>(
+    sql`
       select id, party_id as "partyId", scheme, value, status
         from party_tax_ids
        where org_id = ${orgId} and id = ${rowId} and is_active
-    `, "objects");
+    `,
+    "objects",
+  );
   const row = rows[0];
   if (!row) {
     throw new CrossBorderTaxError(
@@ -113,7 +117,8 @@ export async function validatePartyTaxId(
   const consultationNumber = verdict.consultationNumber;
   const revalidateAfter = verdict.valid ? addCalendarDays(today, interval) : null;
   const excerpt = JSON.stringify(boundAuthorityExcerpt(verdict));
-  const saved = await tx.execute(sql`
+  const saved = await tx.execute(
+    sql`
     update party_tax_ids
        set status = ${status},
            checked_at = now(),
@@ -125,7 +130,9 @@ export async function validatePartyTaxId(
            updated_by = ${options.actorId ?? null}
      where org_id = ${orgId} and id = ${row.id}
      returning 1
-  `, "objects");
+  `,
+    "objects",
+  );
   if (saved.length !== 1) {
     throw new CrossBorderTaxError(
       "the tax ID validation could not be saved — reload the customer record before retrying",
@@ -152,7 +159,8 @@ async function markUnverified(
   today: string,
   cause: string,
 ): Promise<void> {
-  const saved = await tx.execute(sql`
+  const saved = await tx.execute(
+    sql`
     update party_tax_ids
        set status = 'unverified',
            checked_at = now(),
@@ -162,7 +170,9 @@ async function markUnverified(
            updated_by = ${options.actorId ?? null}
      where org_id = ${orgId} and id = ${row.id}
      returning 1
-  `, "objects");
+  `,
+    "objects",
+  );
   if (saved.length !== 1) {
     throw new CrossBorderTaxError(
       "the tax ID validation could not be saved — reload the customer record before retrying",
@@ -219,7 +229,8 @@ export async function runTaxIdRevalidationScan(
   // bypass: scheduler-tick — the unscoped scan discovers due rows in every
   // production organization, then works each row inside its own tenant scope.
   const due = await withBypass(() =>
-    db.execute<{ orgId: string }>(sql`
+    db.execute<{ orgId: string }>(
+      sql`
       select distinct t.org_id as "orgId"
         from party_tax_ids t
         join orgs o on o.id = t.org_id
@@ -228,7 +239,9 @@ export async function runTaxIdRevalidationScan(
          and t.status = 'valid'
          and t.revalidate_after <= ${today}::date
        limit ${limit}
-    `, "objects"),
+    `,
+      "objects",
+    ),
   );
   for (const { orgId } of due) {
     try {
@@ -262,7 +275,8 @@ export async function runTaxIdRevalidationScanForOrg(
     failed: 0,
     orgErrors: [],
   };
-  if (!orgId.trim()) throw new CrossBorderTaxError("orgId is required for an org-scoped tax ID revalidation scan");
+  if (!orgId.trim())
+    throw new CrossBorderTaxError("orgId is required for an org-scoped tax ID revalidation scan");
   await assertNotSandbox(orgId, "tax ID revalidation");
   if (!(await orgFeatureEnabled(orgId, "crossBorderTax"))) {
     result.skipped += 1;
@@ -277,7 +291,8 @@ export async function runTaxIdRevalidationScanForOrg(
     ? await options.credentialsForOrg(orgId)
     : await authorityCredentialsForOrg(db, orgId);
   await withOrgContext(orgId, async () => {
-    const due = await db.execute<PartyTaxIdRow>(sql`
+    const due = await db.execute<PartyTaxIdRow>(
+      sql`
         select id, party_id as "partyId", scheme, value, status
           from party_tax_ids
          where org_id = ${orgId}
@@ -287,7 +302,9 @@ export async function runTaxIdRevalidationScanForOrg(
          order by revalidate_after
          limit ${limit}
          for update skip locked
-      `, "objects");
+      `,
+      "objects",
+    );
     for (const row of due) {
       result.scanned += 1;
       try {

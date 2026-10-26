@@ -15,20 +15,28 @@ import {
 } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
 import { refuseInactiveDefault } from "../../../../lib/customization/active-default";
-const recordTypeBody = z.string().trim().min(1, "recordType is required").refine(
-  (value) => Object.hasOwn(RECORD_TYPE_BY_KEY, value),
-  "recordType must name a supported record type",
-);
-const layoutBody = z.json().refine(
-  (value) => parseFormLayout(value).success,
-  "layout must match the form layout schema",
-);
+const recordTypeBody = z
+  .string()
+  .trim()
+  .min(1, "recordType is required")
+  .refine(
+    (value) => Object.hasOwn(RECORD_TYPE_BY_KEY, value),
+    "recordType must name a supported record type",
+  );
+const layoutBody = z
+  .json()
+  .refine((value) => parseFormLayout(value).success, "layout must match the form layout schema");
 const postBodySchema0 = z.strictObject({
   recordType: recordTypeBody,
   name: z.string().trim().min(1, "name is required").max(200),
   description: z.string().trim().max(2000).nullable().optional(),
   layout: layoutBody.optional(),
-  allowedRoles: z.array(uuidString("allowedRoles must contain role UUIDs"), { error: "allowedRoles must be a list of UUID role ids" }).nullable().optional(),
+  allowedRoles: z
+    .array(uuidString("allowedRoles must contain role UUIDs"), {
+      error: "allowedRoles must be a list of UUID role ids",
+    })
+    .nullable()
+    .optional(),
   isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
   isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
 });
@@ -45,19 +53,19 @@ export const GET = defineRoute({
     const { user } = gate;
     const recordType = new URL(req.url).searchParams.get("recordType") ?? "";
     if (!RECORD_TYPE_BY_KEY[recordType])
-      return NextResponse.json(
-        { error: "unknown record type" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "unknown record type" }, { status: 400 });
     const refused = await refuseDisabledRecordType(user.orgId, recordType);
     if (refused) return refused;
-    const r = await db.execute(sql`
+    const r = await db.execute(
+      sql`
     select id, record_type as "recordType", name, description, is_default as "isDefault",
            is_active as "isActive", allowed_roles as "allowedRoles", layout
       from form_layouts
      where org_id = ${user.orgId} and record_type = ${recordType}
      order by is_default desc, name
-  `, "objects");
+  `,
+      "objects",
+    );
     return NextResponse.json({ rows: r });
   },
 });
@@ -83,27 +91,17 @@ export const POST = defineRoute({
       isActive?: boolean;
     };
     if (!body.recordType || !RECORD_TYPE_BY_KEY[body.recordType])
-      return NextResponse.json(
-        { error: "unknown record type" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "unknown record type" }, { status: 400 });
     const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
     if (refused) return refused;
-    if (!body.name?.trim())
-      return NextResponse.json({ error: "name required" }, { status: 400 });
+    if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
     // An explicit value outside the boolean domain is refused instead of
     // coercing isDefault with !! or riding isActive into the column (22P02 / silent coerce).
     if (body.isDefault !== undefined && typeof body.isDefault !== "boolean") {
-      return NextResponse.json(
-        { error: "isDefault must be a boolean" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
     }
     if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
-      return NextResponse.json(
-        { error: "isActive must be a boolean" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
     }
     // resolveFormLayout calls allowedRoles.some after a length check. A
     // truthy non-array jsonb value has no .some, so resolving any form for
@@ -131,18 +129,12 @@ export const POST = defineRoute({
       isActive,
     });
     if (!inactiveDefault.ok)
-      return NextResponse.json(
-        { error: inactiveDefault.error },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: inactiveDefault.error }, { status: 400 });
     const parsed = parseFormLayout(
       body.layout ?? { schemaVersion: 1, recordType: body.recordType },
     );
     if (!parsed.success)
-      return NextResponse.json(
-        { error: "invalid layout", issues: parsed.issues },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "invalid layout", issues: parsed.issues }, { status: 400 });
     const layout = parsed.data as FormLayoutConfig;
     if (layout.recordType !== body.recordType)
       return NextResponse.json(
@@ -172,14 +164,17 @@ export const POST = defineRoute({
           id: string;
           name: string;
           snapshot: Record<string, unknown>;
-        }>(sql`
+        }>(
+          sql`
         insert into form_layouts (org_id, record_type, name, description, is_default, is_active,
                                   allowed_roles, layout, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${body.description ?? null},
                 ${body.isDefault === true}, ${isActive},
                 ${body.allowedRoles ? JSON.stringify(body.allowedRoles) : null}, ${layout}, ${user.id}, ${user.id})
         returning id, name, to_jsonb(form_layouts) as snapshot
-      `, "objects");
+      `,
+          "objects",
+        );
         const inserted = result[0]!;
         // Insert evidence follows the {before, after} convention: the created
         // form's full row, so the audit shows what was designed — not just its

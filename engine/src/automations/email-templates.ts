@@ -31,9 +31,13 @@ function noticeBody(ctx: AutomationEmailContext): string {
   ].join("\n");
 }
 
-const TEMPLATES: Record<string, { describe: string; render: (ctx: AutomationEmailContext) => AutomationEmailDraft }> = {
+const TEMPLATES: Record<
+  string,
+  { describe: string; render: (ctx: AutomationEmailContext) => AutomationEmailDraft }
+> = {
   automation_notice: {
-    describe: "Short notice that an automation fired, naming the automation and the entity it fired for.",
+    describe:
+      "Short notice that an automation fired, naming the automation and the entity it fired for.",
     render: (ctx) => ({
       subject: `Automation: ${ctx.automationName}`,
       body: noticeBody(ctx),
@@ -52,7 +56,9 @@ export function renderAutomationEmailTemplate(
     );
   }
   if (!ctx.automationName.trim()) {
-    throw new AutomationContractError("email template needs the automation name it renders — reload the automation and try again");
+    throw new AutomationContractError(
+      "email template needs the automation name it renders — reload the automation and try again",
+    );
   }
   return template.render(ctx);
 }

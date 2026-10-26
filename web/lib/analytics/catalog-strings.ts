@@ -34,8 +34,18 @@ export const englishCatalogMessage: CatalogMessageFn = (key, values) =>
   englishCatalogTranslator(key, values as Record<string, string | number | Date> | undefined);
 
 export const MONTH_KEYS = [
-  "jan", "feb", "mar", "apr", "may", "jun",
-  "jul", "aug", "sep", "oct", "nov", "dec",
+  "jan",
+  "feb",
+  "mar",
+  "apr",
+  "may",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "oct",
+  "nov",
+  "dec",
 ] as const;
 
 /** 12 short month names, Jan→Dec, in the request language. */

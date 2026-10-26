@@ -55,9 +55,16 @@ export const contractCostPolicies = pgTable(
     capitalizeFulfilment: boolean("capitalize_fulfilment").notNull().default(false),
     practicalExpedient: boolean("practical_expedient").notNull().default(true),
     basis: text("basis", { enum: CONTRACT_COST_BASES }).notNull().default("contract_term"),
-    customerLifeSource: text("customer_life_source", { enum: CUSTOMER_LIFE_SOURCES }).notNull().default("manual"),
+    customerLifeSource: text("customer_life_source", { enum: CUSTOMER_LIFE_SOURCES })
+      .notNull()
+      .default("manual"),
     customerLifeMonths: integer("customer_life_months"),
-    renewalCommensurateThresholdPercent: numeric("renewal_commensurate_threshold_percent", { precision: 19, scale: 4 }).notNull().default("50.0000"),
+    renewalCommensurateThresholdPercent: numeric("renewal_commensurate_threshold_percent", {
+      precision: 19,
+      scale: 4,
+    })
+      .notNull()
+      .default("50.0000"),
     assetAccountId: uuid("asset_account_id"),
     amortizationExpenseAccountId: uuid("amortization_expense_account_id"),
     ...auditColumns,
@@ -65,7 +72,10 @@ export const contractCostPolicies = pgTable(
   (t) => [
     uniqueIndex("contract_cost_policies_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("contract_cost_policies_effective_unique").on(t.orgId, t.effectiveFrom),
-    check("contract_cost_policies_life_months_positive", sql`${t.customerLifeMonths} IS NULL OR ${t.customerLifeMonths} > 0`),
+    check(
+      "contract_cost_policies_life_months_positive",
+      sql`${t.customerLifeMonths} IS NULL OR ${t.customerLifeMonths} > 0`,
+    ),
     foreignKey({
       name: "contract_cost_policies_asset_account_fk",
       columns: [t.orgId, t.assetAccountId],

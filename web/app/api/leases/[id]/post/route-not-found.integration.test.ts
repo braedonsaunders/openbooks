@@ -13,10 +13,14 @@ const state: { orgId: string; actorId: string; allowedSubsidiaryIds: Set<string>
   allowedSubsidiaryIds: null,
 };
 Object.assign(globalThis, { __leasePostNotFoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "@/lib/feature-gates") return virtual(`
+    if (specifier === "@/lib/feature-gates")
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__leasePostNotFoundState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: s.allowedSubsidiaryIds };
@@ -26,11 +30,15 @@ registerHooks({
   },
 });
 const { withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, seedPostingAccount, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, seedPostingAccount, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createLeaseAgreement } = await import("@openbooks/engine/revenue/leases");
 const { POST } = await import("./route.ts");
 
-function post(id: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
+function post(
+  id: string,
+  body: unknown,
+): Promise<{ status: number; json: Record<string, unknown> }> {
   return withOrgContext(state.orgId, async () => {
     const response: Response = await POST(
       new Request(`http://leases.test/api/leases/${id}/post`, {
@@ -40,14 +48,17 @@ function post(id: string, body: unknown): Promise<{ status: number; json: Record
       }),
       { params: Promise.resolve({ id }) },
     );
-    return { status: response.status, json: (await response.json().catch(() => null)) as Record<string, unknown> };
+    return {
+      status: response.status,
+      json: (await response.json().catch(() => null)) as Record<string, unknown>,
+    };
   });
 }
 
 test("posting a valid-but-unknown lease id is a 404, not an empty success", async () => {
   const org = await createScratchOrg();
   state.orgId = org.orgId;
-  state.actorId = await createScratchUser(org.orgId,"Lease operator","admin");
+  state.actorId = await createScratchUser(org.orgId, "Lease operator", "admin");
   try {
     const missing = await post(randomUUID(), { asOfDate: "2026-07-31" });
     assert.equal(missing.status, 404, JSON.stringify(missing.json));
@@ -60,7 +71,7 @@ test("posting a valid-but-unknown lease id is a 404, not an empty success", asyn
 test("posting a known lease with nothing due still answers 200", async () => {
   const org = await createScratchOrg();
   state.orgId = org.orgId;
-  state.actorId = await createScratchUser(org.orgId,"Lease operator","admin");
+  state.actorId = await createScratchUser(org.orgId, "Lease operator", "admin");
   try {
     const leaseId = await seedLease(org);
     // Draft lease, nothing commenced: nothing due, empty run.
@@ -73,15 +84,35 @@ test("posting a known lease with nothing due still answers 200", async () => {
 });
 
 async function seedLease(org: Awaited<ReturnType<typeof createScratchOrg>>): Promise<string> {
-  const rouAsset = await seedPostingAccount(org.orgId,"1840","Lease right-of-use asset","asset_fixed");
-  const leaseLiability = await seedPostingAccount(org.orgId,"2440","Lease liability","liability_long_term");
+  const rouAsset = await seedPostingAccount(
+    org.orgId,
+    "1840",
+    "Lease right-of-use asset",
+    "asset_fixed",
+  );
+  const leaseLiability = await seedPostingAccount(
+    org.orgId,
+    "2440",
+    "Lease liability",
+    "liability_long_term",
+  );
   const { leaseId } = await createLeaseAgreement(org.orgId, state.actorId, {
     subsidiaryId: org.subsidiaryId,
     leaseNumber: `L-POST-SCOPE-${randomUUID().slice(0, 8)}`,
-    commencementOn: "2026-07-01", termPeriods: 3, paymentFrequency: "monthly",
-    paymentAmount: "1000", annualDiscountRatePercent: "6", classificationInputs: { transfersOwnership: true },
-    accounts: { rouAsset, leaseLiability, interestExpense: org.accounts.cogs,
-      amortizationExpense: org.accounts.cogs, leaseExpense: org.accounts.cogs, payment: org.accounts.bank },
+    commencementOn: "2026-07-01",
+    termPeriods: 3,
+    paymentFrequency: "monthly",
+    paymentAmount: "1000",
+    annualDiscountRatePercent: "6",
+    classificationInputs: { transfersOwnership: true },
+    accounts: {
+      rouAsset,
+      leaseLiability,
+      interestExpense: org.accounts.cogs,
+      amortizationExpense: org.accounts.cogs,
+      leaseExpense: org.accounts.cogs,
+      payment: org.accounts.bank,
+    },
   });
   return leaseId;
 }
@@ -89,7 +120,7 @@ async function seedLease(org: Awaited<ReturnType<typeof createScratchOrg>>): Pro
 test("posting an out-of-scope lease answers exactly like a missing one", async () => {
   const org = await createScratchOrg();
   state.orgId = org.orgId;
-  state.actorId = await createScratchUser(org.orgId,"Lease operator","admin");
+  state.actorId = await createScratchUser(org.orgId, "Lease operator", "admin");
   try {
     const leaseId = await seedLease(org);
     state.allowedSubsidiaryIds = new Set([randomUUID()]);
@@ -110,7 +141,7 @@ test("posting an out-of-scope lease answers exactly like a missing one", async (
 test("posting an in-scope lease still answers 200", async () => {
   const org = await createScratchOrg();
   state.orgId = org.orgId;
-  state.actorId = await createScratchUser(org.orgId,"Lease operator","admin");
+  state.actorId = await createScratchUser(org.orgId, "Lease operator", "admin");
   try {
     const leaseId = await seedLease(org);
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);

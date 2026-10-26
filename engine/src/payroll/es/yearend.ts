@@ -55,10 +55,10 @@ async function assertEsFilingYear(orgId: string, taxYear: number, filing: string
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
   if (!ES_PUBLISHED_YEARS.includes(taxYear)) {
     throw new PayrollError(
-      `the ES payroll pack cannot populate ${filing} for tax year ${taxYear}: `
-      + `${taxYear} statutory tables are not loaded for ES — loaded years: `
-      + `${ES_PUBLISHED_YEARS.join(", ")}. This year is not yet supported by the ES pack; `
-      + "contact support.",
+      `the ES payroll pack cannot populate ${filing} for tax year ${taxYear}: ` +
+        `${taxYear} statutory tables are not loaded for ES — loaded years: ` +
+        `${ES_PUBLISHED_YEARS.join(", ")}. This year is not yet supported by the ES pack; ` +
+        "contact support.",
     );
   }
 }
@@ -85,7 +85,8 @@ export interface Es190Slip {
  */
 export async function es190Slips(orgId: string, taxYear: number): Promise<Es190Slip[]> {
   await assertEsFilingYear(orgId, taxYear, "the Modelo 190");
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.employee_party_id, p.display_name,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
@@ -102,11 +103,13 @@ export async function es190Slips(orgId: string, taxYear: number): Promise<Es190S
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
      group by s.employee_party_id, p.display_name
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollError(
-      `no committed ES pay stubs for tax year ${taxYear} — the Modelo 190 reports amounts `
-      + "actually paid and withheld, so calculate and commit the year's pay runs first",
+      `no committed ES pay stubs for tax year ${taxYear} — the Modelo 190 reports amounts ` +
+        "actually paid and withheld, so calculate and commit the year's pay runs first",
     );
   }
   const domicilio = payrollCertificate("ES", "es_domicilio");
@@ -126,15 +129,19 @@ export async function es190Slips(orgId: string, taxYear: number): Promise<Es190S
     const province = resolveEmployeeFact(
       "ES",
       "es_provincia_domicilio",
-      empFact("ES", { es_provincia_domicilio: resolved.answers.provincia_domicilio ?? null }, "es_provincia_domicilio"),
+      empFact(
+        "ES",
+        { es_provincia_domicilio: resolved.answers.provincia_domicilio ?? null },
+        "es_provincia_domicilio",
+      ),
     );
     if (province == null) {
       throw new PayrollError(
-        `the ES payroll pack cannot populate the ${taxYear} Modelo 190 for ${employeeName}: no `
-        + "domicile province is on file — the 190 files each perceptor under their domicile "
-        + "province (Orden EHA/3127/2009, type-2 positions 76–77), never under the work "
-        + "community on the pay stub. Record the employee's Declaración de domicilio "
-        + "(es_domicilio) before filing.",
+        `the ES payroll pack cannot populate the ${taxYear} Modelo 190 for ${employeeName}: no ` +
+          "domicile province is on file — the 190 files each perceptor under their domicile " +
+          "province (Orden EHA/3127/2009, type-2 positions 76–77), never under the work " +
+          "community on the pay stub. Record the employee's Declaración de domicilio " +
+          "(es_domicilio) before filing.",
       );
     }
     slips.push({
@@ -176,7 +183,8 @@ export interface Es216Quarter {
  */
 export async function es216Quarters(orgId: string, taxYear: number): Promise<Es216Quarter[]> {
   await assertEsFilingYear(orgId, taxYear, "the Modelo 216");
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select extract(quarter from s.pay_date)::int as quarter,
            count(distinct s.employee_party_id) as perceptores,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -196,12 +204,14 @@ export async function es216Quarters(orgId: string, taxYear: number): Promise<Es2
                     where l2.org_id = ${orgId} and l2.stub_id = s.id and l2.kind = 'deduction'
                       and pc2.system_key = 'irnr')
      group by 1 order by 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollError(
-      `no committed ES IRNR withholding for tax year ${taxYear} — the Modelo 216 reports IRNR `
-      + "actually withheld each period, so a year with only resident payrolls files no 216; "
-      + "calculate and commit a nonresident pay run first",
+      `no committed ES IRNR withholding for tax year ${taxYear} — the Modelo 216 reports IRNR ` +
+        "actually withheld each period, so a year with only resident payrolls files no 216; " +
+        "calculate and commit a nonresident pay run first",
     );
   }
   return rows.map((row) => ({
@@ -219,7 +229,12 @@ export async function es216Population(orgId: string, taxYear: number): Promise<P
     columns: [
       { key: "quarter", label: "Trimestre" },
       { key: "perceptores", label: "N.º perceptores no residentes" },
-      { key: "percepciones", label: "Rentas satisfechas sujetas a IRNR", align: "right", money: true },
+      {
+        key: "percepciones",
+        label: "Rentas satisfechas sujetas a IRNR",
+        align: "right",
+        money: true,
+      },
       { key: "retenciones", label: "Retenciones IRNR practicadas", align: "right", money: true },
     ],
     rows: quarters.map((quarter) => ({
@@ -247,7 +262,8 @@ export interface Es296Slip {
  */
 export async function es296Slips(orgId: string, taxYear: number): Promise<Es296Slip[]> {
   await assertEsFilingYear(orgId, taxYear, "the Modelo 296");
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.employee_party_id, p.display_name,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
@@ -268,12 +284,14 @@ export async function es296Slips(orgId: string, taxYear: number): Promise<Es296S
                       and pc2.system_key = 'irnr')
      group by s.employee_party_id, p.display_name
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollError(
-      `no committed ES IRNR withholding for tax year ${taxYear} — the Modelo 296 summarises `
-      + "IRNR actually withheld per nonresident perceptor, so a year with only resident "
-      + "payrolls files no 296",
+      `no committed ES IRNR withholding for tax year ${taxYear} — the Modelo 296 summarises ` +
+        "IRNR actually withheld per nonresident perceptor, so a year with only resident " +
+        "payrolls files no 296",
     );
   }
   return rows.map((row) => ({
@@ -318,7 +336,8 @@ export interface Es111Month {
  */
 export async function es111Quarters(orgId: string, taxYear: number): Promise<Es111Quarter[]> {
   await assertEsFilingYear(orgId, taxYear, "the Modelo 111");
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select extract(quarter from s.pay_date)::int as quarter,
            count(distinct s.employee_party_id) as perceptores,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -334,12 +353,14 @@ export async function es111Quarters(orgId: string, taxYear: number): Promise<Es1
        and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
      group by 1 order by 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollError(
-      `no committed ES pay stubs for tax year ${taxYear} — the Modelo 111 reports amounts `
-      + "actually paid and withheld in each quarter, so calculate and commit the year's pay "
-      + "runs first",
+      `no committed ES pay stubs for tax year ${taxYear} — the Modelo 111 reports amounts ` +
+        "actually paid and withheld in each quarter, so calculate and commit the year's pay " +
+        "runs first",
     );
   }
   return rows.map((row) => ({
@@ -361,7 +382,8 @@ export async function es111Quarters(orgId: string, taxYear: number): Promise<Es1
  */
 export async function es111Months(orgId: string, taxYear: number): Promise<Es111Month[]> {
   await assertEsFilingYear(orgId, taxYear, "the Modelo 111");
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select extract(month from s.pay_date)::int as month,
            count(distinct s.employee_party_id) as perceptores,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -377,12 +399,14 @@ export async function es111Months(orgId: string, taxYear: number): Promise<Es111
        and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
      group by 1 order by 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollError(
-      `no committed ES pay stubs for tax year ${taxYear} — the Modelo 111 reports amounts `
-      + "actually paid and withheld in each month, so calculate and commit the year's pay "
-      + "runs first",
+      `no committed ES pay stubs for tax year ${taxYear} — the Modelo 111 reports amounts ` +
+        "actually paid and withheld in each month, so calculate and commit the year's pay " +
+        "runs first",
     );
   }
   return rows.map((row) => ({
@@ -435,7 +459,10 @@ export async function es111Population(orgId: string, taxYear: number): Promise<P
   };
 }
 
-export async function es111MonthlyPopulation(orgId: string, taxYear: number): Promise<PayrollFilingData> {
+export async function es111MonthlyPopulation(
+  orgId: string,
+  taxYear: number,
+): Promise<PayrollFilingData> {
   const months = await es111Months(orgId, taxYear);
   return {
     rowKey: "rowId",
@@ -456,26 +483,26 @@ export async function es111MonthlyPopulation(orgId: string, taxYear: number): Pr
 }
 
 const ES_GAPS = [
-  "NIF del perceptor: the payroll profile holds no DNI/NIE column, so the slip cannot print "
-    + "it — transcribe it from the employee's identity document before handing over the "
-    + "certificate (the pack validates DNI 8 digits + letter, NIE X/Y/Z + 7 digits + letter).",
-  "Datos de la persona o entidad pagadora (NIF, apellidos y nombre o razón social): the "
-    + "product holds no AEAT declarant identity — complete from the employer's AEAT "
-    + "registration (the pack's remittanceVendorSettingsKey is null until Orchestrate adds "
-    + "an AEAT remittance-party settings field).",
-  "Retribuciones en especie (valoración, ingresos a cuenta efectuados y repercutidos): the "
-    + "engine prices no in-kind remuneration — value especie from outside payroll.",
-  "Contribuciones empresariales a planes de pensiones, PPSE, mutualidades y seguros "
-    + "colectivos de dependencia: no channel transcribes them — add from the pension records.",
-  "Reducciones (LIRPF art. 18.2/3, DT 11.ª/12.ª) y gastos deducibles (LIRPF art. 19.2, "
-    + "incluidas las cuotas a la Seguridad Social): the stubs carry TGSS cuotas, not "
-    + "certificate gastos — transcribe from the payroll records, never by copying the SS lines.",
-  "Atrasos de ejercicios anteriores (LIRPF art. 14.2.b): the engine imputes by pay date "
-    + "(retroactivePayTreatment 'periodic', pack.ts) and cannot re-spread arrears to the year "
-    + "they became due — atrasos regularise on declaración complementaria outside payroll.",
-  "Reintegros, dietas exceptuadas (RIRPF art. 9) y rentas exentas (clave L): the engine "
-    + "tracks no reimbursed, per-diem or exempt amounts — they come from expense records; "
-    + "any excess over the exempt limits files under the matching non-L clave instead.",
+  "NIF del perceptor: the payroll profile holds no DNI/NIE column, so the slip cannot print " +
+    "it — transcribe it from the employee's identity document before handing over the " +
+    "certificate (the pack validates DNI 8 digits + letter, NIE X/Y/Z + 7 digits + letter).",
+  "Datos de la persona o entidad pagadora (NIF, apellidos y nombre o razón social): the " +
+    "product holds no AEAT declarant identity — complete from the employer's AEAT " +
+    "registration (the pack's remittanceVendorSettingsKey is null until Orchestrate adds " +
+    "an AEAT remittance-party settings field).",
+  "Retribuciones en especie (valoración, ingresos a cuenta efectuados y repercutidos): the " +
+    "engine prices no in-kind remuneration — value especie from outside payroll.",
+  "Contribuciones empresariales a planes de pensiones, PPSE, mutualidades y seguros " +
+    "colectivos de dependencia: no channel transcribes them — add from the pension records.",
+  "Reducciones (LIRPF art. 18.2/3, DT 11.ª/12.ª) y gastos deducibles (LIRPF art. 19.2, " +
+    "incluidas las cuotas a la Seguridad Social): the stubs carry TGSS cuotas, not " +
+    "certificate gastos — transcribe from the payroll records, never by copying the SS lines.",
+  "Atrasos de ejercicios anteriores (LIRPF art. 14.2.b): the engine imputes by pay date " +
+    "(retroactivePayTreatment 'periodic', pack.ts) and cannot re-spread arrears to the year " +
+    "they became due — atrasos regularise on declaración complementaria outside payroll.",
+  "Reintegros, dietas exceptuadas (RIRPF art. 9) y rentas exentas (clave L): the engine " +
+    "tracks no reimbursed, per-diem or exempt amounts — they come from expense records; " +
+    "any excess over the exempt limits files under the matching non-L clave instead.",
 ];
 
 /**
@@ -493,7 +520,9 @@ const ES_GAPS = [
  * section is a named gap above, never a zero the perceptor would file.
  */
 export async function es190Slip(
-  orgId: string, taxYear: number, rowId: string,
+  orgId: string,
+  taxYear: number,
+  rowId: string,
 ): Promise<PayrollFilingSlipData> {
   const slips = await es190Slips(orgId, taxYear);
   const slip = slips.find((s) => `${s.employeePartyId}:${s.province}` === rowId);
@@ -532,8 +561,8 @@ export async function es190Slip(
       },
     ],
     notes: [
-      "Percepción íntegra is the year's committed taxable earnings; retenciones practicadas "
-        + "is the year's committed IRPF lines — the slip ties to the pay runs to the cent.",
+      "Percepción íntegra is the year's committed taxable earnings; retenciones practicadas " +
+        "is the year's committed IRPF lines — the slip ties to the pay runs to the cent.",
       ...ES_GAPS,
     ],
   };
@@ -583,16 +612,18 @@ function es111SlipBody(input: {
     ],
     notes: [
       input.basisNote,
-      "Rendimientos en especie (casillas 04–06) and apartados II onward (actividades "
-        + "económicas, premios, cesión de imagen): the engine prices no especie and payroll "
-        + "never produces non-employment income — complete those apartados from outside payroll.",
+      "Rendimientos en especie (casillas 04–06) and apartados II onward (actividades " +
+        "económicas, premios, cesión de imagen): the engine prices no especie and payroll " +
+        "never produces non-employment income — complete those apartados from outside payroll.",
       input.deadlineNote,
     ],
   };
 }
 
 export async function es111Slip(
-  orgId: string, taxYear: number, rowId: string,
+  orgId: string,
+  taxYear: number,
+  rowId: string,
 ): Promise<PayrollFilingSlipData> {
   const quarters = await es111Quarters(orgId, taxYear);
   const quarter = quarters.find((q) => `Q${q.quarter}` === rowId);
@@ -603,12 +634,12 @@ export async function es111Slip(
     taxYear,
     periodLabel: `Trimestre ${quarter.quarter} (Q${quarter.quarter})`,
     basisNote:
-      "Cash-basis: percepciones satisfechas en el trimestre — the quarter comes from each "
-      + "committed stub's pay date, and the worksheet ties to the pay runs to the cent.",
+      "Cash-basis: percepciones satisfechas en el trimestre — the quarter comes from each " +
+      "committed stub's pay date, and the worksheet ties to the pay runs to the cent.",
     deadlineNote:
-      "Autoliquidación trimestral (20 primeros días de abril, julio, octubre y enero). A "
-      + "monthly filer — gran empresa o administración con presupuesto anual superior a 6 M€ "
-      + "(Instrucciones del Modelo 111) — files the mensual worksheet, not this quarter.",
+      "Autoliquidación trimestral (20 primeros días de abril, julio, octubre y enero). A " +
+      "monthly filer — gran empresa o administración con presupuesto anual superior a 6 M€ " +
+      "(Instrucciones del Modelo 111) — files the mensual worksheet, not this quarter.",
     perceptores: quarter.perceptores,
     percepciones: quarter.percepciones,
     retenciones: quarter.retenciones,
@@ -616,7 +647,9 @@ export async function es111Slip(
 }
 
 export async function es111MonthlySlip(
-  orgId: string, taxYear: number, rowId: string,
+  orgId: string,
+  taxYear: number,
+  rowId: string,
 ): Promise<PayrollFilingSlipData> {
   const months = await es111Months(orgId, taxYear);
   const month = months.find((m) => `M${m.month}` === rowId);
@@ -627,12 +660,12 @@ export async function es111MonthlySlip(
     taxYear,
     periodLabel: `Mes ${month.month} (M${month.month})`,
     basisNote:
-      "Cash-basis: percepciones satisfechas en el mes — the month comes from each committed "
-      + "stub's pay date, and the worksheet ties to the pay runs to the cent.",
+      "Cash-basis: percepciones satisfechas en el mes — the month comes from each committed " +
+      "stub's pay date, and the worksheet ties to the pay runs to the cent.",
     deadlineNote:
-      "Autoliquidación mensual para grandes empresas y administraciones obligadas "
-      + "(Instrucciones del Modelo 111): file each month separately. A trimestral filer uses "
-      + "the quarterly worksheet instead of summing these months.",
+      "Autoliquidación mensual para grandes empresas y administraciones obligadas " +
+      "(Instrucciones del Modelo 111): file each month separately. A trimestral filer uses " +
+      "the quarterly worksheet instead of summing these months.",
     perceptores: month.perceptores,
     percepciones: month.percepciones,
     retenciones: month.retenciones,
@@ -640,7 +673,9 @@ export async function es111MonthlySlip(
 }
 
 export async function es216Slip(
-  orgId: string, taxYear: number, rowId: string,
+  orgId: string,
+  taxYear: number,
+  rowId: string,
 ): Promise<PayrollFilingSlipData> {
   const quarters = await es216Quarters(orgId, taxYear);
   const quarter = quarters.find((q) => `Q${q.quarter}` === rowId);
@@ -675,20 +710,22 @@ export async function es216Slip(
       },
     ],
     notes: [
-      "Cash-basis: rentas satisfechas en el trimestre — the quarter comes from each "
-        + "committed stub's pay date, restricted to stubs carrying IRNR withholding, "
-        + "and the worksheet ties to the pay runs to the cent.",
-      "Only rendimientos del trabajo satisfechos a no residentes travel here: "
-        + "resident payrolls file the 111, never the 216.",
-      "Autoliquidación trimestral (20 primeros días de abril, julio, octubre y enero); "
-        + "grandes empresas autoliquidan mensualmente — regroup the same committed stubs by "
-        + "month from the pay dates above.",
+      "Cash-basis: rentas satisfechas en el trimestre — the quarter comes from each " +
+        "committed stub's pay date, restricted to stubs carrying IRNR withholding, " +
+        "and the worksheet ties to the pay runs to the cent.",
+      "Only rendimientos del trabajo satisfechos a no residentes travel here: " +
+        "resident payrolls file the 111, never the 216.",
+      "Autoliquidación trimestral (20 primeros días de abril, julio, octubre y enero); " +
+        "grandes empresas autoliquidan mensualmente — regroup the same committed stubs by " +
+        "month from the pay dates above.",
     ],
   };
 }
 
 export async function es296Slip(
-  orgId: string, taxYear: number, rowId: string,
+  orgId: string,
+  taxYear: number,
+  rowId: string,
 ): Promise<PayrollFilingSlipData> {
   const slips = await es296Slips(orgId, taxYear);
   const slip = slips.find((candidate) => candidate.employeePartyId === rowId);
@@ -718,10 +755,10 @@ export async function es296Slip(
       },
     ],
     notes: [
-      "Annual summary of the same committed IRNR lines the quarterly 216 autoliquidaciones "
-        + "settled — the perceptor row ties to the pay runs to the cent.",
-      "Claves/subclaves and treaty-country detail come from the percepciones classification "
-        + "outside payroll; this row carries the amounts, never the clave.",
+      "Annual summary of the same committed IRNR lines the quarterly 216 autoliquidaciones " +
+        "settled — the perceptor row ties to the pay runs to the cent.",
+      "Claves/subclaves and treaty-country detail come from the percepciones classification " +
+        "outside payroll; this row carries the amounts, never the clave.",
     ],
   };
 }
@@ -737,13 +774,17 @@ export async function es296Slip(
  * "Declaración complementaria o sustitutiva"). A filed quarter is never
  * withdrawn empty, so only `amended` is declared — there is no cancelled.
  */
-export async function es190CorrectionSlip(row: PayrollFilingCorrectionRow): Promise<PayrollFilingSlipData> {
+export async function es190CorrectionSlip(
+  row: PayrollFilingCorrectionRow,
+): Promise<PayrollFilingSlipData> {
   const boxes = row.changes
     .filter((change) => change.code != null)
     .flatMap((change) => [
       { code: change.code!, label: `${change.label} — declarado`, value: change.previous ?? "—" },
       {
-        code: change.code!, label: `${change.label} — rectificado`, value: change.current ?? "—",
+        code: change.code!,
+        label: `${change.label} — rectificado`,
+        value: change.current ?? "—",
         emphasis: true,
       },
     ]);
@@ -755,13 +796,14 @@ export async function es190CorrectionSlip(row: PayrollFilingCorrectionRow): Prom
     }));
   if (boxes.length === 0 && identity.length === 0) {
     throw new PayrollError(
-      `nothing on ${row.label}'s certificado changed — a complementaria/sustitutiva that `
-      + "restates the same figures tells the AEAT nothing and must not be filed",
+      `nothing on ${row.label}'s certificado changed — a complementaria/sustitutiva that ` +
+        "restates the same figures tells the AEAT nothing and must not be filed",
     );
   }
   return {
     formCode: "ES_CERT_RET",
-    formName: "Certificado de retenciones — rectificado (complementaria / sustitutiva del Modelo 190)",
+    formName:
+      "Certificado de retenciones — rectificado (complementaria / sustitutiva del Modelo 190)",
     headerFields: [
       ...row.current.headerFields,
       { label: "Clase de declaración", value: "Complementaria o sustitutiva del Modelo 190" },
@@ -769,11 +811,11 @@ export async function es190CorrectionSlip(row: PayrollFilingCorrectionRow): Prom
     ],
     boxes,
     notes: [
-      "Only the figures that moved are restated; every other figure on the original stands. "
-        + "The amounts are recomputed from committed pay stubs — a corrected certificate can "
-        + "never disagree with the payroll subledger it summarizes.",
-      "Quote the 13-digit justificante of the declaration being replaced, and file only the "
-        + "omitted percepciones on a complementaria, the full replacement on a sustitutiva.",
+      "Only the figures that moved are restated; every other figure on the original stands. " +
+        "The amounts are recomputed from committed pay stubs — a corrected certificate can " +
+        "never disagree with the payroll subledger it summarizes.",
+      "Quote the 13-digit justificante of the declaration being replaced, and file only the " +
+        "omitted percepciones on a complementaria, the full replacement on a sustitutiva.",
     ],
   };
 }

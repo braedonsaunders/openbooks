@@ -1,9 +1,16 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { documentRevisionSql } from '@openbooks/engine/records/revision'
-import { loadCustomFieldAccessDefs, loadFieldDefs, redactHiddenCustomValues, visibleCustomFieldDefs, type CustomFieldDef, type CustomFieldViewer } from '../../../lib/custom-fields'
-import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { documentRevisionSql } from "@openbooks/engine/records/revision";
+import {
+  loadCustomFieldAccessDefs,
+  loadFieldDefs,
+  redactHiddenCustomValues,
+  visibleCustomFieldDefs,
+  type CustomFieldDef,
+  type CustomFieldViewer,
+} from "../../../lib/custom-fields";
+import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
 
 /**
  * Project payload for the flyout + cockpit header: the project row (with the
@@ -12,35 +19,35 @@ import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
  * tasks that make up the cost budget.
  */
 export type ProjectTaskRow = {
-  id: string
-  code: string | null
-  name: string
-  status: string
-  estimated_hours: string | null
-  estimated_cost: string | null
-  estimated_price: string | null
-  budget_quantity: string | null
-  budget_unit: string | null
-  updated_at: string
-}
+  id: string;
+  code: string | null;
+  name: string;
+  status: string;
+  estimated_hours: string | null;
+  estimated_cost: string | null;
+  estimated_price: string | null;
+  budget_quantity: string | null;
+  budget_unit: string | null;
+  updated_at: string;
+};
 
 /** Client-safe custom field definition (drops server-only bits). */
 export interface ProjectCustomFieldDef {
-  key: string
-  label: string
-  fieldType: CustomFieldDef['fieldType']
-  config: CustomFieldDef['config']
-  isRequired: boolean
+  key: string;
+  label: string;
+  fieldType: CustomFieldDef["fieldType"];
+  config: CustomFieldDef["config"];
+  isRequired: boolean;
 }
 
 export interface ProjectPayload {
-  project: Record<string, unknown>
-  contractValue: string | null
-  customerName: string | null
-  foremanName: string | null
-  managerName: string | null
-  tasks: ProjectTaskRow[]
-  customFieldDefs: ProjectCustomFieldDef[]
+  project: Record<string, unknown>;
+  contractValue: string | null;
+  customerName: string | null;
+  foremanName: string | null;
+  managerName: string | null;
+  tasks: ProjectTaskRow[];
+  customFieldDefs: ProjectCustomFieldDef[];
 }
 
 /**
@@ -49,7 +56,10 @@ export interface ProjectPayload {
  * surface built on this loader — pages cannot forget to check. Unrestricted
  * callers (null) see the whole org.
  */
-const UNATTRIBUTED_CUSTOM_FIELD_VIEWER: CustomFieldViewer = { roleKeys: [], canManageCustomFields: false }
+const UNATTRIBUTED_CUSTOM_FIELD_VIEWER: CustomFieldViewer = {
+  roleKeys: [],
+  canManageCustomFields: false,
+};
 
 /**
  * Project payload. The custom bag and the custom-field definitions are limited
@@ -71,13 +81,16 @@ export async function loadProject(
   // update errors with 40001 instead of waiting.)
   const [bundle, fieldDefs] = await Promise.all([
     withOrgTransaction(orgId, async () => {
-      const proj = (await db.execute<Record<string, unknown>>(sql`
+      const proj = await db.execute<Record<string, unknown>>(
+        sql`
         select * from projects where id = ${id} and org_id = ${orgId}
           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
           for share
-      `, 'objects'))
-      if (!proj[0]) return null
-      const row = proj[0]
+      `,
+        "objects",
+      );
+      if (!proj[0]) return null;
+      const row = proj[0];
       const partyName = (partyId: unknown) =>
         partyId
           ? db.execute<Record<string, unknown>>(sql`
@@ -85,10 +98,10 @@ export async function loadProject(
                where id = ${partyId} and org_id = ${orgId}
                  ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
                for share`)
-          : Promise.resolve({ rows: [] as Record<string, unknown>[] })
-      const customer = await partyName(row.customer_id)
-      const foreman = await partyName(row.foreman_id)
-      const manager = await partyName(row.manager_id)
+          : Promise.resolve({ rows: [] as Record<string, unknown>[] });
+      const customer = await partyName(row.customer_id);
+      const foreman = await partyName(row.foreman_id);
+      const manager = await partyName(row.manager_id);
       // updated_at doubles as the optimistic-concurrency token: project it
       // in the lossless six-digit revision form, never raw, so the editor
       // can echo it back as expectedUpdatedAt (a 3-digit ISO round-trip
@@ -98,21 +111,28 @@ export async function loadProject(
           from project_tasks
          where project_id = ${id} and org_id = ${orgId}
          order by code nulls last, name
-      `)
-      return { row, customer, foreman, manager, tasks }
+      `);
+      return { row, customer, foreman, manager, tasks };
     }),
-    loadFieldDefs('projects'),
-  ])
-  if (!bundle) return null
-  const { row, customer, foreman, manager, tasks } = bundle
+    loadFieldDefs("projects"),
+  ]);
+  if (!bundle) return null;
+  const { row, customer, foreman, manager, tasks } = bundle;
 
-  const name = (r?: Record<string, unknown>) => (r ? ((r.display_name as string) ?? null) : null)
-  const contractValue = row.contract_value == null ? null : String(row.contract_value)
+  const name = (r?: Record<string, unknown>) => (r ? ((r.display_name as string) ?? null) : null);
+  const contractValue = row.contract_value == null ? null : String(row.contract_value);
 
-  const viewer = options.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER
-  const accessDefs = await loadCustomFieldAccessDefs('projects')
+  const viewer = options.customFieldViewer ?? UNATTRIBUTED_CUSTOM_FIELD_VIEWER;
+  const accessDefs = await loadCustomFieldAccessDefs("projects");
   return {
-    project: { ...row, custom: redactHiddenCustomValues(accessDefs, viewer, row.custom as Record<string, unknown> | null) },
+    project: {
+      ...row,
+      custom: redactHiddenCustomValues(
+        accessDefs,
+        viewer,
+        row.custom as Record<string, unknown> | null,
+      ),
+    },
     contractValue,
     customerName: name(customer.rows[0]),
     foremanName: name(foreman.rows[0]),
@@ -125,5 +145,5 @@ export async function loadProject(
       config: d.config,
       isRequired: d.isRequired,
     })),
-  }
+  };
 }

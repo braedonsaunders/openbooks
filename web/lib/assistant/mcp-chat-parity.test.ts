@@ -43,24 +43,46 @@ const advancedCloseOff: FeatureState = { ...allOn, advancedClose: false };
 test("feature-off tools vanish from the chat registry", () => {
   const bankingOp = authzWith(["assistant.use", "banking.read", "banking.reconcile"]);
   const offKeys = new Set(Object.keys(buildToolRegistry(bankingOp, bankingOff)));
-  for (const name of ["list_bank_reconciliations", "get_bank_reconciliation", "list_unmatched_bank_lines", "cash_position"]) {
+  for (const name of [
+    "list_bank_reconciliations",
+    "get_bank_reconciliation",
+    "list_unmatched_bank_lines",
+    "cash_position",
+  ]) {
     assert.ok(!offKeys.has(name), `banking-off must hide ${name}`);
   }
-  const setupAdmin = authzWith(["assistant.use", "assistant.write", "admin.setup.manage", "apps.use"]);
+  const setupAdmin = authzWith([
+    "assistant.use",
+    "assistant.write",
+    "admin.setup.manage",
+    "apps.use",
+  ]);
   const noApps = new Set(Object.keys(buildToolRegistry(setupAdmin, appsOff)));
   for (const name of ["list_app_packages", "describe_app_vocabulary", "draft_app"]) {
     assert.ok(!noApps.has(name), `apps-off must hide ${name}`);
   }
   const closer = authzWith(["assistant.use", "assistant.write", "close.run"]);
   const noAdvanced = new Set(Object.keys(buildToolRegistry(closer, advancedCloseOff)));
-  assert.ok(!noAdvanced.has("publish_close_package"), "advancedClose-off must hide publish_close_package");
+  assert.ok(
+    !noAdvanced.has("publish_close_package"),
+    "advancedClose-off must hide publish_close_package",
+  );
   assert.ok(noAdvanced.has("refresh_close_run"), "advancedClose-off must keep refresh_close_run");
 });
 
 test("gated tools refuse without executing (no throw, no DB touch)", async () => {
   const reader = authzWith(["assistant.use", "reports.read"]);
-  assert.deepEqual(await executeAssistantTool(reader, "draft_journal_entry", {}, allOn), { ok: false, error: "forbidden" });
-  assert.deepEqual(await executeAssistantTool(authzWith(["reports.read"]), "whoami", {}, allOn), { ok: false, error: "forbidden" });
+  assert.deepEqual(await executeAssistantTool(reader, "draft_journal_entry", {}, allOn), {
+    ok: false,
+    error: "forbidden",
+  });
+  assert.deepEqual(await executeAssistantTool(authzWith(["reports.read"]), "whoami", {}, allOn), {
+    ok: false,
+    error: "forbidden",
+  });
   const bankingOp = authzWith(["assistant.use", "banking.read"]);
-  assert.deepEqual(await executeAssistantTool(bankingOp, "list_bank_reconciliations", {}, bankingOff), { ok: false, error: "forbidden" });
+  assert.deepEqual(
+    await executeAssistantTool(bankingOp, "list_bank_reconciliations", {}, bankingOff),
+    { ok: false, error: "forbidden" },
+  );
 });

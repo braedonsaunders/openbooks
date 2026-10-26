@@ -1,13 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  boolean,
-  index,
-  jsonb,
-  pgTable,
-  text,
-  uniqueIndex,
-  uuid
-} from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, orgRef } from "./helpers";
 
 /**
@@ -41,7 +33,10 @@ export const subsidiaries = pgTable(
     taxIds: jsonb("tax_ids").$type<Record<string, string>>().notNull().default({}),
     /** Per-subsidiary control-account overrides; keys match
      *  orgs.settings.controlAccounts. Absent key ⇒ fall back to org default. */
-    controlAccounts: jsonb("control_accounts").$type<Record<string, string>>().notNull().default({}),
+    controlAccounts: jsonb("control_accounts")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
     /** Holds only elimination entries; visible only in consolidated views. */
     isElimination: boolean("is_elimination").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),

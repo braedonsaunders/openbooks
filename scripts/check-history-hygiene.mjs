@@ -35,7 +35,9 @@ for (const line of git("rev-list", "--objects", "--all").split("\n")) {
 
 // Whole messages and both identities: a body or an author address publishes
 // as much as a subject does.
-for (const record of git("log", "--all", "--format=%H%x1f%an <%ae>%x1f%cn <%ce>%x1f%B%x1e").split("\x1e")) {
+for (const record of git("log", "--all", "--format=%H%x1f%an <%ae>%x1f%cn <%ce>%x1f%B%x1e").split(
+  "\x1e",
+)) {
   const [commitId, author, committer, message] = record.replace(/^\n/, "").split("\x1f");
   if (!commitId || message === undefined) continue;
   if (containsPrivateIdentifier(message, fingerprints)) {
@@ -53,15 +55,12 @@ if (violations.length > 0) {
   for (const violation of [...new Set(violations)].slice(0, 100)) {
     process.stderr.write(`- ${violation}\n`);
   }
-  if (violations.length > 100)
-    process.stderr.write(`- and ${violations.length - 100} more\n`);
+  if (violations.length > 100) process.stderr.write(`- and ${violations.length - 100} more\n`);
   process.exitCode = 1;
 } else if (fingerprints.size === 0) {
   process.stdout.write(
     "Git history contains no prohibited private-data paths; identifier fingerprints are not configured, so identifiers were not checked.\n",
   );
 } else {
-  process.stdout.write(
-    "Git history contains no prohibited private-data paths or identifiers.\n",
-  );
+  process.stdout.write("Git history contains no prohibited private-data paths or identifiers.\n");
 }

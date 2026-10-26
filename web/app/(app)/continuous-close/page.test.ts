@@ -9,10 +9,16 @@ Object.assign(globalThis, { React });
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "./view" && context.parentURL?.endsWith("/continuous-close/page.tsx")) {
-      return { shortCircuit: true, url: "data:text/javascript,export async function loadContinuousClose(search){return {search}};export function continuousCloseSpec(data){return {route:'/continuous-close',search:data.search}}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function loadContinuousClose(search){return {search}};export function continuousCloseSpec(data){return {route:'/continuous-close',search:data.search}}",
+      };
     }
     if (specifier.endsWith("/components/viewspec/module-view")) {
-      return { shortCircuit: true, url: "data:text/javascript,export function ModuleView(){return null}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export function ModuleView(){return null}",
+      };
     }
     return next(specifier, context);
   },

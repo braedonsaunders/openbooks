@@ -41,8 +41,23 @@ const D = (u: bigint): string => fromUnits(u);
 
 /** AEAT-territory communities: everything except the foral NC/PV. */
 const ES_AEAT_REGIONS = [
-  "AN", "AR", "AS", "CN", "CB", "CL", "CM", "CT", "EX", "GA",
-  "IB", "RI", "MD", "MC", "VC", "CE", "ML",
+  "AN",
+  "AR",
+  "AS",
+  "CN",
+  "CB",
+  "CL",
+  "CM",
+  "CT",
+  "EX",
+  "GA",
+  "IB",
+  "RI",
+  "MD",
+  "MC",
+  "VC",
+  "CE",
+  "ML",
 ];
 
 function fail(message: string): never {
@@ -57,16 +72,15 @@ function fail(message: string): never {
 function treatyRateHundredths(raw: string | null | undefined): bigint {
   if (raw == null || raw.trim() === "") {
     fail(
-      "residencia is no_residente_convenio but tasa_convenio is unanswered: the treaty rate "
-      + "prices this run — record the applicable percent (0.00 when the treaty exempts "
-      + "employment income)",
+      "residencia is no_residente_convenio but tasa_convenio is unanswered: the treaty rate " +
+        "prices this run — record the applicable percent (0.00 when the treaty exempts " +
+        "employment income)",
     );
   }
   const canonical = canonicalNonNegativeDecimal(raw, 2);
   const [whole, fraction = ""] = canonical?.split(".") ?? [];
-  const hundredths = canonical === null
-    ? -1n
-    : BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
+  const hundredths =
+    canonical === null ? -1n : BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
   if (hundredths < 0n || hundredths > 10000n) {
     fail(`tasa_convenio "${raw}" is not a percent 0–100 with at most two decimals`);
   }
@@ -99,7 +113,8 @@ async function refuseIfPriorPayChanged(
   if (!orgId || !employeePartyId || !documentId) {
     fail("Article 87 change detection requires the organization, employee, and run identifiers");
   }
-  const prior = await tx.execute<{ changed: boolean }>(sql`
+  const prior = await tx.execute<{ changed: boolean }>(
+    sql`
     select exists (
       select 1
       from pay_stubs s
@@ -113,12 +128,14 @@ async function refuseIfPriorPayChanged(
         and d.status <> 'voided'
         and s.gross <> ${currentOrdinaryGross}::numeric
     ) as changed
-  `, "objects");
+  `,
+    "objects",
+  );
   if (prior[0]?.changed === true) {
     fail(
-      "prior committed pay in this tax year differs from current ordinary pay; the Article 87 "
-      + "regularization needs year-to-date retentions and remaining expected remuneration. "
-      + "Reconcile the employee's year-to-date and remaining annual pay before releasing this run",
+      "prior committed pay in this tax year differs from current ordinary pay; the Article 87 " +
+        "regularization needs year-to-date retentions and remaining expected remuneration. " +
+        "Reconcile the employee's year-to-date and remaining annual pay before releasing this run",
     );
   }
 }
@@ -162,8 +179,8 @@ function computeHogarStatutory(args: {
   const retribucion = empFact("ES", emp, "es_hogar_retribucion_mensual");
   if (retribucion == null || retribucion === "") {
     fail(
-      "employee es_hogar_retribucion_mensual is missing: the household band prices the monthly "
-      + "retribution including proportional extra pays (art. 147.1 LGSS)",
+      "employee es_hogar_retribucion_mensual is missing: the household band prices the monthly " +
+        "retribution including proportional extra pays (art. 147.1 LGSS)",
     );
   }
   const horasRaw = empFact("ES", emp, "es_hogar_horas_mes");
@@ -177,21 +194,31 @@ function computeHogarStatutory(args: {
     fail(`employee es_hogar_horas_mes "${horasRaw}" is not an integer 1–744`);
   }
   const porHorasRaw = empFact("ES", emp, "es_hogar_retribucion_por_horas");
-  if (porHorasRaw !== undefined && porHorasRaw !== null && porHorasRaw !== "" && porHorasRaw !== "true" && porHorasRaw !== "false") {
+  if (
+    porHorasRaw !== undefined &&
+    porHorasRaw !== null &&
+    porHorasRaw !== "" &&
+    porHorasRaw !== "true" &&
+    porHorasRaw !== "false"
+  ) {
     fail(`employee es_hogar_retribucion_por_horas "${porHorasRaw}" is not "true"/"false"`);
   }
   const beneficioRaw = empFact("ES", emp, "es_hogar_beneficio_cc");
-  if (beneficioRaw !== "alta_20" && beneficioRaw !== "familia_numerosa_45" && beneficioRaw !== "ninguno") {
+  if (
+    beneficioRaw !== "alta_20" &&
+    beneficioRaw !== "familia_numerosa_45" &&
+    beneficioRaw !== "ninguno"
+  ) {
     fail(
-      `employee es_hogar_beneficio_cc "${beneficioRaw ?? ""}" is not alta_20/familia_numerosa_45/ninguno: `
-      + "the employer CC quota needs its benefit (20% alta reduction, 45% single large-family caregiver, or none)",
+      `employee es_hogar_beneficio_cc "${beneficioRaw ?? ""}" is not alta_20/familia_numerosa_45/ninguno: ` +
+        "the employer CC quota needs its benefit (20% alta reduction, 45% single large-family caregiver, or none)",
     );
   }
   const atEpRate = empFact("ES", emp, "es_hogar_at_ep_rate");
   if (atEpRate == null || atEpRate === "") {
     fail(
-      "employee es_hogar_at_ep_rate is missing: professional-contingency premiums are activity-rated "
-      + "and tenant-entered — enter the TGSS-assigned tarifa rate",
+      "employee es_hogar_at_ep_rate is missing: professional-contingency premiums are activity-rated " +
+        "and tenant-entered — enter the TGSS-assigned tarifa rate",
     );
   }
 
@@ -233,11 +260,35 @@ function computeHogarStatutory(args: {
   pushStatutory("ss_cc", "deduction", "Seguridad Social (employee)", ss.ccTrabajador, 120);
   pushStatutory("ss_des", "deduction", "Desempleo (employee)", ss.desempleoTrabajador, 121);
   pushStatutory("ss_mei", "deduction", "MEI (employee)", ss.meiTrabajador, 123);
-  pushStatutory("ss_cc_er", "employer_contribution", "Seguridad Social (employer)", ss.ccEmpresa, 210);
-  pushStatutory("ss_des_er", "employer_contribution", "Desempleo (employer)", ss.desempleoEmpresa, 211);
-  pushStatutory("ss_fogasa_er", "employer_contribution", "FOGASA (employer)", ss.fogasaEmpresa, 212);
+  pushStatutory(
+    "ss_cc_er",
+    "employer_contribution",
+    "Seguridad Social (employer)",
+    ss.ccEmpresa,
+    210,
+  );
+  pushStatutory(
+    "ss_des_er",
+    "employer_contribution",
+    "Desempleo (employer)",
+    ss.desempleoEmpresa,
+    211,
+  );
+  pushStatutory(
+    "ss_fogasa_er",
+    "employer_contribution",
+    "FOGASA (employer)",
+    ss.fogasaEmpresa,
+    212,
+  );
   pushStatutory("ss_mei_er", "employer_contribution", "MEI (employer)", ss.meiEmpresa, 214);
-  pushStatutory("ss_atep_er", "employer_contribution", "AT/EP hogar (employer)", ss.atEpEmpresa, 215);
+  pushStatutory(
+    "ss_atep_er",
+    "employer_contribution",
+    "AT/EP hogar (employer)",
+    ss.atEpEmpresa,
+    215,
+  );
   return {
     ES_TIPO_IRPF: irpf.tipo,
     ES_IMPORTE_ANUAL: irpf.importeAnual,
@@ -251,19 +302,32 @@ function computeHogarStatutory(args: {
 export async function computeEsStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
-  const { taxYear, region, run, emp, income, nonPeriodic, pensionable, insurable, periodsPerYear, pushStatutory, certificateFor, assertRegionSupported } = ctx;
+  const {
+    taxYear,
+    region,
+    run,
+    emp,
+    income,
+    nonPeriodic,
+    pensionable,
+    insurable,
+    periodsPerYear,
+    pushStatutory,
+    certificateFor,
+    assertRegionSupported,
+  } = ctx;
   if (taxYear !== 2026) {
     fail(
-      `tax year ${taxYear} has not been transcribed — the ES payroll pack's only `
-      + "transcribed year is calendar 2026. This year is not yet supported by the ES pack; "
-      + "contact support.",
+      `tax year ${taxYear} has not been transcribed — the ES payroll pack's only ` +
+        "transcribed year is calendar 2026. This year is not yet supported by the ES pack; " +
+        "contact support.",
     );
   }
   if (region === "NC" || region === "PV") {
     fail(
-      `region "${region}" applies the foral IRPF regime (Hacienda Foral de Navarra / `
-      + "Haciendas Forales de Álava, Gipuzkoa y Bizkaia) — AEAT tables never cover it. These "
-      + "territories are not yet supported by the ES pack; contact support.",
+      `region "${region}" applies the foral IRPF regime (Hacienda Foral de Navarra / ` +
+        "Haciendas Forales de Álava, Gipuzkoa y Bizkaia) — AEAT tables never cover it. These " +
+        "territories are not yet supported by the ES pack; contact support.",
     );
   }
   assertRegionSupported(region);
@@ -272,13 +336,15 @@ export async function computeEsStatutory(
   }
   if (periodsPerYear !== 12) {
     fail(
-      `periodsPerYear ${periodsPerYear} is refused: the TGSS base is intrinsically monthly `
-      + "and the annual IRPF tipo hits each month's pay — monthly payroll only",
+      `periodsPerYear ${periodsPerYear} is refused: the TGSS base is intrinsically monthly ` +
+        "and the annual IRPF tipo hits each month's pay — monthly payroll only",
     );
   }
   const payDate = run["pay_date"];
   if (payDate === undefined || payDate === "") {
-    fail("the run has no pay date, so no 2026 edition resolves (1 January–9 September vs 10 September+)");
+    fail(
+      "the run has no pay date, so no 2026 edition resolves (1 January–9 September vs 10 September+)",
+    );
   }
 
   // Fiscal residence gates everything below, including the Modelo 145 reads:
@@ -289,59 +355,73 @@ export async function computeEsStatutory(
   // entirely: the IRNR rate hits the full period gross.
   const residenciaAnswers = certificateFor("es_residencia_fiscal")?.answers ?? {};
   const residencia = requireEsFiscalResidence(residenciaAnswers.residencia);
-  const irnrRateHundredths = residencia === "residente"
-    ? null
-    : residencia === "no_residente_ue_eee"
-      ? 1900n
-      : residencia === "no_residente_otros"
-        ? 2400n
-        : treatyRateHundredths(residenciaAnswers.tasa_convenio);
+  const irnrRateHundredths =
+    residencia === "residente"
+      ? null
+      : residencia === "no_residente_ue_eee"
+        ? 1900n
+        : residencia === "no_residente_otros"
+          ? 2400n
+          : treatyRateHundredths(residenciaAnswers.tasa_convenio);
 
   // Modelo 145 is an IRPF instrument: residents only. A nonresident's file
   // is never read for personal/family data the IRNR does not price.
-  const answers = irnrRateHundredths === null ? certificateFor("es_145")?.answers ?? {} : {};
+  const answers = irnrRateHundredths === null ? (certificateFor("es_145")?.answers ?? {}) : {};
   const situacion = answers["situacion_familiar"] ?? "3";
   if (situacion !== "1" && situacion !== "2" && situacion !== "3") {
     fail(`es_145 situacion_familiar "${situacion}" is not 1, 2 or 3`);
   }
   if (answers["hijos_descendientes"] !== undefined && answers["hijos_descendientes"] !== "0") {
     fail(
-      "es_145 declares hijos/descendientes: the per-descendiente rows (birth years, enteros, "
-      + "grados) the ALGORITMO prices have no certificate channel yet — price via "
-      + "calculateEsIrpf2026 directly, never via a guessed mínimo",
+      "es_145 declares hijos/descendientes: the per-descendiente rows (birth years, enteros, " +
+        "grados) the ALGORITMO prices have no certificate channel yet — price via " +
+        "calculateEsIrpf2026 directly, never via a guessed mínimo",
     );
   }
   if (answers["ascendientes"] !== undefined && answers["ascendientes"] !== "0") {
     fail(
-      "es_145 declares ascendientes: convivencia/grado rows have no certificate channel yet — "
-      + "price via calculateEsIrpf2026 directly",
+      "es_145 declares ascendientes: convivencia/grado rows have no certificate channel yet — " +
+        "price via calculateEsIrpf2026 directly",
     );
   }
   if (answers["discapacidad"] === "true" || answers["discapacidad"] === "S") {
     fail(
-      "es_145 declares discapacidad without a grado (33–65% vs 65%+, ayuda/movilidad) — "
-      + "the ALGORITMO prices grados, never a bare flag",
+      "es_145 declares discapacidad without a grado (33–65% vs 65%+, ayuda/movilidad) — " +
+        "the ALGORITMO prices grados, never a bare flag",
     );
   }
 
   // es_zona_irpf prices the IRPF zona reduction: residents only. The IRNR
   // leg never reads it, so nonresident runs carry the neutral answers.
-  const zoneAnswers = irnrRateHundredths === null
-    ? certificateFor("es_zona_irpf")?.answers
-    : { zona_residencia: "ninguna", rendimientos_en_zona: "false" };
+  const zoneAnswers =
+    irnrRateHundredths === null
+      ? certificateFor("es_zona_irpf")?.answers
+      : { zona_residencia: "ninguna", rendimientos_en_zona: "false" };
   const zona = zoneAnswers?.["zona_residencia"];
   if (zona !== "ninguna" && zona !== "ceuta-melilla" && zona !== "la-palma") {
-    fail("es_zona_irpf zona_residencia is missing or invalid; certify the employee's residence zone");
+    fail(
+      "es_zona_irpf zona_residencia is missing or invalid; certify the employee's residence zone",
+    );
   }
   const rendimientosEnZonaRaw = zoneAnswers?.["rendimientos_en_zona"];
-  const rendimientosEnZona = rendimientosEnZonaRaw === "true" || rendimientosEnZonaRaw === "1"
-    || rendimientosEnZonaRaw === "yes";
-  if (!rendimientosEnZona && rendimientosEnZonaRaw !== "false" && rendimientosEnZonaRaw !== "0"
-    && rendimientosEnZonaRaw !== "no") {
-    fail("es_zona_irpf rendimientos_en_zona is missing or invalid; certify where the income was obtained");
+  const rendimientosEnZona =
+    rendimientosEnZonaRaw === "true" ||
+    rendimientosEnZonaRaw === "1" ||
+    rendimientosEnZonaRaw === "yes";
+  if (
+    !rendimientosEnZona &&
+    rendimientosEnZonaRaw !== "false" &&
+    rendimientosEnZonaRaw !== "0" &&
+    rendimientosEnZonaRaw !== "no"
+  ) {
+    fail(
+      "es_zona_irpf rendimientos_en_zona is missing or invalid; certify where the income was obtained",
+    );
   }
   if (zona === "ninguna" && rendimientosEnZona) {
-    fail("es_zona_irpf declares income in Ceuta/Melilla/La Palma without residence in a qualifying zone");
+    fail(
+      "es_zona_irpf declares income in Ceuta/Melilla/La Palma without residence in a qualifying zone",
+    );
   }
 
   // Resolved through the pack's employeeFacts declaration (see the PL
@@ -353,14 +433,18 @@ export async function computeEsStatutory(
   const situacionLaboral = empFact("ES", emp, "es_situacion_laboral");
   if (situacionLaboral == null || situacionLaboral === "") {
     fail(
-      "employee es_situacion_laboral is missing: SITUPER was never supplied, "
-      + "and it moves gastos and REDU, so it is never defaulted",
+      "employee es_situacion_laboral is missing: SITUPER was never supplied, " +
+        "and it moves gastos and REDU, so it is never defaulted",
     );
   }
-  if (situacionLaboral !== "activo" && situacionLaboral !== "pensionista" && situacionLaboral !== "desempleado") {
+  if (
+    situacionLaboral !== "activo" &&
+    situacionLaboral !== "pensionista" &&
+    situacionLaboral !== "desempleado"
+  ) {
     fail(
-      `employee es_situacion_laboral "${situacionLaboral}" is not activo/pensionista/desempleado: `
-      + "SITUPER moves gastos and REDU, so it is never defaulted",
+      `employee es_situacion_laboral "${situacionLaboral}" is not activo/pensionista/desempleado: ` +
+        "SITUPER moves gastos and REDU, so it is never defaulted",
     );
   }
   // The régimen selects the contribution table before any group is read:
@@ -370,8 +454,8 @@ export async function computeEsStatutory(
   const regimen = regimenRaw == null || regimenRaw === "" ? "general" : regimenRaw;
   if (regimen !== "general" && regimen !== "hogar") {
     fail(
-      `employee es_regimen "${regimenRaw}" is not general/hogar: only the General Regime bands and `
-      + "the Sistema Especial de Empleados de Hogar table are transcribed",
+      `employee es_regimen "${regimenRaw}" is not general/hogar: only the General Regime bands and ` +
+        "the Sistema Especial de Empleados de Hogar table are transcribed",
     );
   }
   const esHogar = regimen === "hogar";
@@ -379,7 +463,9 @@ export async function computeEsStatutory(
   if (!esHogar) {
     const grupoRaw = empFact("ES", emp, "es_grupo_cotizacion");
     if (grupoRaw == null || grupoRaw === "") {
-      fail("employee es_grupo_cotizacion is missing: the TGSS contribution group 1–11 was never supplied");
+      fail(
+        "employee es_grupo_cotizacion is missing: the TGSS contribution group 1–11 was never supplied",
+      );
     }
     grupo = Number(grupoRaw);
     if (!Number.isInteger(grupo) || grupo < 1 || grupo > 11) {
@@ -400,9 +486,9 @@ export async function computeEsStatutory(
   const temporal = empFact("ES", emp, "es_contrato_temporal");
   if (temporal == null || temporal === "") {
     fail(
-      "employee es_contrato_temporal is missing: the temporal/indefinido contract type selects the "
-      + "desempleo rate split (7,05% indefinite vs 8,30% temporary, Orden PJC/297/2026 art. 33.2.a), "
-      + "so it is never defaulted to indefinite",
+      "employee es_contrato_temporal is missing: the temporal/indefinido contract type selects the " +
+        "desempleo rate split (7,05% indefinite vs 8,30% temporary, Orden PJC/297/2026 art. 33.2.a), " +
+        "so it is never defaulted to indefinite",
     );
   }
   if (temporal !== "true" && temporal !== "false") {
@@ -417,22 +503,28 @@ export async function computeEsStatutory(
     const duracionRaw = empFact("ES", emp, "es_contrato_duracion_dias");
     if (duracionRaw == null || duracionRaw === "") {
       fail(
-        "employee es_contrato_duracion_dias is missing: art. 28 prices only contracts under thirty "
-        + "days, so a temporal contract needs its effective duration in days",
+        "employee es_contrato_duracion_dias is missing: art. 28 prices only contracts under thirty " +
+          "days, so a temporal contract needs its effective duration in days",
       );
     }
     const duracion = Number(duracionRaw);
     if (!Number.isInteger(duracion) || duracion < 1) {
-      fail(`employee es_contrato_duracion_dias "${duracionRaw}" is not a positive integer number of days`);
+      fail(
+        `employee es_contrato_duracion_dias "${duracionRaw}" is not a positive integer number of days`,
+      );
     }
     const tipo = empFact("ES", emp, "es_contrato_tipo");
     if (tipo == null || tipo === "") {
       fail(
-        "employee es_contrato_tipo is missing: art. 28.2 excludes sustitución, formación, agrario, "
-        + "hogar, minería del carbón and artistas — file the contract class before calculating",
+        "employee es_contrato_tipo is missing: art. 28.2 excludes sustitución, formación, agrario, " +
+          "hogar, minería del carbón and artistas — file the contract class before calculating",
       );
     }
-    if (!["ordinario", "sustitucion", "formacion", "agrario", "hogar", "minero", "artista"].includes(tipo)) {
+    if (
+      !["ordinario", "sustitucion", "formacion", "agrario", "hogar", "minero", "artista"].includes(
+        tipo,
+      )
+    ) {
       fail(`employee es_contrato_tipo "${tipo}" is not a declared art. 28.2 contract class`);
     }
     const fin = empFact("ES", emp, "es_contrato_fin_periodo");
@@ -448,23 +540,38 @@ export async function computeEsStatutory(
   // absent reads as none of that class, and a supplied-but-unusable value
   // refuses through the shared gate. Validated here so a refusal names the
   // fact key, never a calculator argument.
-  const hexRestoRaw = resolveEmployeeFact("ES", "es_horas_extra_resto", empFact("ES", emp, "es_horas_extra_resto"));
-  const hexFmRaw = resolveEmployeeFact("ES", "es_horas_extra_fuerza_mayor", empFact("ES", emp, "es_horas_extra_fuerza_mayor"));
+  const hexRestoRaw = resolveEmployeeFact(
+    "ES",
+    "es_horas_extra_resto",
+    empFact("ES", emp, "es_horas_extra_resto"),
+  );
+  const hexFmRaw = resolveEmployeeFact(
+    "ES",
+    "es_horas_extra_fuerza_mayor",
+    empFact("ES", emp, "es_horas_extra_fuerza_mayor"),
+  );
   const hexResto = hexRestoRaw === null ? null : dec(hexRestoRaw, "es_horas_extra_resto");
   const hexFm = hexFmRaw === null ? null : dec(hexFmRaw, "es_horas_extra_fuerza_mayor");
-  if (hexResto !== null && hexResto < 0n) fail(`employee es_horas_extra_resto "${hexRestoRaw}" must be non-negative`);
-  if (hexFm !== null && hexFm < 0n) fail(`employee es_horas_extra_fuerza_mayor "${hexFmRaw}" must be non-negative`);
+  if (hexResto !== null && hexResto < 0n)
+    fail(`employee es_horas_extra_resto "${hexRestoRaw}" must be non-negative`);
+  if (hexFm !== null && hexFm < 0n)
+    fail(`employee es_horas_extra_fuerza_mayor "${hexFmRaw}" must be non-negative`);
   // Overtime lines carrying hours with no classified pay behind them: the
   // additional contribution is always owed on overtime worked, so the run
   // is refused by name instead of pricing ordinary contributions alone —
   // split the overtime pay across the two facts above, or correct the
   // earning lines if no overtime was worked.
   const extraHours = ctx.statutoryHours?.extra;
-  if ((hexResto ?? 0n) === 0n && (hexFm ?? 0n) === 0n && extraHours !== undefined && dec(extraHours, "extra hours") > 0n) {
+  if (
+    (hexResto ?? 0n) === 0n &&
+    (hexFm ?? 0n) === 0n &&
+    extraHours !== undefined &&
+    dec(extraHours, "extra hours") > 0n
+  ) {
     fail(
-      `the run records ${extraHours} extra hours on overtime-classified earning lines but no classified `
-      + "overtime pay (es_horas_extra_resto / es_horas_extra_fuerza_mayor) was supplied: the Orden "
-      + "PJC/297/2026 art. 5 additional contribution cannot price unclassified overtime",
+      `the run records ${extraHours} extra hours on overtime-classified earning lines but no classified ` +
+        "overtime pay (es_horas_extra_resto / es_horas_extra_fuerza_mayor) was supplied: the Orden " +
+        "PJC/297/2026 art. 5 additional contribution cannot price unclassified overtime",
     );
   }
 
@@ -475,28 +582,35 @@ export async function computeEsStatutory(
   // refuse too — they would otherwise sit ignored while the full-time floor
   // prices, hiding a misfiled fact.
   const tiempoParcial = empFact("ES", emp, "es_tiempo_parcial");
-  if (tiempoParcial !== undefined && tiempoParcial !== null && tiempoParcial !== "true" && tiempoParcial !== "false") {
+  if (
+    tiempoParcial !== undefined &&
+    tiempoParcial !== null &&
+    tiempoParcial !== "true" &&
+    tiempoParcial !== "false"
+  ) {
     fail(`employee es_tiempo_parcial "${tiempoParcial}" is not "true"/"false"`);
   }
   const horasParcialRaw = empFact("ES", emp, "es_horas_tiempo_parcial");
-  const horasParcial = horasParcialRaw === undefined || horasParcialRaw === null || horasParcialRaw === ""
-    ? undefined
-    : horasParcialRaw;
+  const horasParcial =
+    horasParcialRaw === undefined || horasParcialRaw === null || horasParcialRaw === ""
+      ? undefined
+      : horasParcialRaw;
   if (tiempoParcial === "true" && horasParcial === undefined) {
     fail(
-      "employee es_tiempo_parcial is \"true\" but es_horas_tiempo_parcial was never supplied: "
-      + "the art. 39.2 monthly minimum is the hours actually worked times the grupo hourly minimum, "
-      + "so a part-time contract cannot price without the month's hours",
+      'employee es_tiempo_parcial is "true" but es_horas_tiempo_parcial was never supplied: ' +
+        "the art. 39.2 monthly minimum is the hours actually worked times the grupo hourly minimum, " +
+        "so a part-time contract cannot price without the month's hours",
     );
   }
   if (tiempoParcial !== "true" && horasParcial !== undefined) {
     fail(
-      `employee es_horas_tiempo_parcial "${horasParcial}" was supplied but es_tiempo_parcial is not `
-      + "\"true\": declare the part-time contract or clear the hours",
+      `employee es_horas_tiempo_parcial "${horasParcial}" was supplied but es_tiempo_parcial is not ` +
+        '"true": declare the part-time contract or clear the hours',
     );
   }
 
-  const periodPay = dec(income, "income") + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
+  const periodPay =
+    dec(income, "income") + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
   if (periodPay < 0n) fail("period pay must be non-negative");
 
   // es_retribucion_anual forecasts the IRPF calendar year (RIRPF art. 83.2.1ª):
@@ -506,16 +620,23 @@ export async function computeEsStatutory(
   if (irnrRateHundredths === null) {
     const retribucionAnualCert = certificateFor("es_retribucion_anual");
     if (!retribucionAnualCert) {
-      fail("es_retribucion_anual is missing; certify remuneration expected from this payer this calendar year");
+      fail(
+        "es_retribucion_anual is missing; certify remuneration expected from this payer this calendar year",
+      );
     }
     const retribucionAnualRaw = certificateAmount(retribucionAnualCert, "importe_anual_previsto");
     if (retribucionAnualRaw == null) {
-      fail("es_retribucion_anual importe_anual_previsto is missing; certify the calendar-year total");
+      fail(
+        "es_retribucion_anual importe_anual_previsto is missing; certify the calendar-year total",
+      );
     }
     retribucionAnualUnits = dec(retribucionAnualRaw, "es_retribucion_anual importe_anual_previsto");
-    if (retribucionAnualUnits <= 0n) fail("es_retribucion_anual importe_anual_previsto must be positive");
+    if (retribucionAnualUnits <= 0n)
+      fail("es_retribucion_anual importe_anual_previsto must be positive");
     if (retribucionAnualUnits < periodPay) {
-      fail("es_retribucion_anual expected annual remuneration is below the current pay period total");
+      fail(
+        "es_retribucion_anual expected annual remuneration is below the current pay period total",
+      );
     }
     const periodos = certificateCount(retribucionAnualCert, "periodos_recurrentes_esperados");
     if (periodos == null || periodos < 1 || periodos > 12) {
@@ -538,14 +659,22 @@ export async function computeEsStatutory(
   if (esHogar) {
     if (irnrRateHundredths !== null) {
       fail(
-        "a non-resident household employee is refused by name: the Sistema Especial path prices "
-        + "resident IRPF only, and IRNR on household pay is not transcribed. Withhold IRNR outside "
-        + "this payroll or record the employee's Spanish tax residence if it applies",
+        "a non-resident household employee is refused by name: the Sistema Especial path prices " +
+          "resident IRPF only, and IRNR on household pay is not transcribed. Withhold IRNR outside " +
+          "this payroll or record the employee's Spanish tax residence if it applies",
       );
     }
     return computeHogarStatutory({
-      emp, payDate, situacion, situacionLaboral, ano, temporal,
-      periodPay, retribucionAnual: retribucionAnualUnits, periodosAnuales, pushStatutory,
+      emp,
+      payDate,
+      situacion,
+      situacionLaboral,
+      ano,
+      temporal,
+      periodPay,
+      retribucionAnual: retribucionAnualUnits,
+      periodosAnuales,
+      pushStatutory,
     });
   }
 
@@ -569,14 +698,15 @@ export async function computeEsStatutory(
   // the subsidiary, as the FR adapter requires.
   let atEpRate: string | undefined;
   if (ctx.subsidiaryId) {
-    atEpRate = await resolveStoredEmployerFact({
-      tx: ctx.tx,
-      orgId: ctx.orgId,
-      subsidiaryId: ctx.subsidiaryId,
-      country: "ES",
-      factKey: "es_atep_rate",
-      asOf: payDate,
-    }) ?? undefined;
+    atEpRate =
+      (await resolveStoredEmployerFact({
+        tx: ctx.tx,
+        orgId: ctx.orgId,
+        subsidiaryId: ctx.subsidiaryId,
+        country: "ES",
+        factKey: "es_atep_rate",
+        asOf: payDate,
+      })) ?? undefined;
   }
   const ss = calculateEsSeguridadSocial2026({
     payDate,
@@ -590,30 +720,33 @@ export async function computeEsStatutory(
     horasExtraResto: hexResto === null ? undefined : D(hexResto),
     horasExtraFuerzaMayor: hexFm === null ? undefined : D(hexFm),
   });
-  const ssRecurrente = pensionableNonPeriodicUnits === 0n
-    ? ss
-    : calculateEsSeguridadSocial2026({
-      payDate,
-      grupo,
-      base: D(pensionableUnits - pensionableNonPeriodicUnits),
-      retribucionMensual: D(insurableUnits - pensionableNonPeriodicUnits),
-      contratoTemporal: temporal === "true",
-      horasTiempoParcial: horasParcial,
-      atEpRate,
-      cortaDuracionAplicable,
-      horasExtraResto: hexResto === null ? undefined : D(hexResto),
-      horasExtraFuerzaMayor: hexFm === null ? undefined : D(hexFm),
-    });
+  const ssRecurrente =
+    pensionableNonPeriodicUnits === 0n
+      ? ss
+      : calculateEsSeguridadSocial2026({
+          payDate,
+          grupo,
+          base: D(pensionableUnits - pensionableNonPeriodicUnits),
+          retribucionMensual: D(insurableUnits - pensionableNonPeriodicUnits),
+          contratoTemporal: temporal === "true",
+          horasTiempoParcial: horasParcial,
+          atEpRate,
+          cortaDuracionAplicable,
+          horasExtraResto: hexResto === null ? undefined : D(hexResto),
+          horasExtraFuerzaMayor: hexFm === null ? undefined : D(hexFm),
+        });
   const cotizacionesAnual = D(
-    U(ssRecurrente.trabajadorTotal) * BigInt(periodosAnuales)
-      + U(ss.trabajadorTotal) - U(ssRecurrente.trabajadorTotal),
+    U(ssRecurrente.trabajadorTotal) * BigInt(periodosAnuales) +
+      U(ss.trabajadorTotal) -
+      U(ssRecurrente.trabajadorTotal),
   );
 
   // IRNR: the flat rate hits the full period gross — no annualisation, no
   // tipo, no personal or family minimums. Resident runs skip this leg.
-  const irnrMes = irnrRateHundredths === null
-    ? null
-    : roundDiv(currentGross * irnrRateHundredths, 10000n * 100n) * 100n;
+  const irnrMes =
+    irnrRateHundredths === null
+      ? null
+      : roundDiv(currentGross * irnrRateHundredths, 10000n * 100n) * 100n;
 
   // RIRPF art. 83.2.1ª prices the calendar-year amount normally expected,
   // not twelve copies of a check whose employee may have started midyear
@@ -628,28 +761,33 @@ export async function computeEsStatutory(
   if (irnrRateHundredths === null) {
     const contratoCert = certificateFor("es_contrato");
     if (!contratoCert) {
-      fail("es_contrato is missing; declare the contract category copied off the signed contrato so the IRPF minimum rate can be identified");
+      fail(
+        "es_contrato is missing; declare the contract category copied off the signed contrato so the IRPF minimum rate can be identified",
+      );
     }
     const read = certificateChoice(contratoCert, "categoria_contrato");
     if (read !== "general" && read !== "inferiorAno" && read !== "especial") {
-      fail("es_contrato categoria_contrato cannot be identified; declare general, inferiorAno (duration under one year), or especial (special employment relationship) copied off the signed contrato");
+      fail(
+        "es_contrato categoria_contrato cannot be identified; declare general, inferiorAno (duration under one year), or especial (special employment relationship) copied off the signed contrato",
+      );
     }
     categoria = read;
   }
-  const irpf = irnrMes === null
-    ? calculateEsIrpf2026({
-      payDate,
-      retribuciones: retribAnual,
-      cotizaciones: cotizacionesAnual,
-      situacionFamiliar: situacion as EsSituacionFamiliar,
-      birthYear: ano,
-      pensionista: situacionLaboral === "pensionista",
-      desempleado: situacionLaboral === "desempleado",
-      zona,
-      rendimientosZona: rendimientosEnZona,
-      contrato: categoria,
-    })
-    : null;
+  const irpf =
+    irnrMes === null
+      ? calculateEsIrpf2026({
+          payDate,
+          retribuciones: retribAnual,
+          cotizaciones: cotizacionesAnual,
+          situacionFamiliar: situacion as EsSituacionFamiliar,
+          birthYear: ano,
+          pensionista: situacionLaboral === "pensionista",
+          desempleado: situacionLaboral === "desempleado",
+          zona,
+          rendimientosZona: rendimientosEnZona,
+          contrato: categoria,
+        })
+      : null;
 
   // The annual tipo hits the month's pay, rounded half-up to the cent.
   // The tipo is exactly two decimals, parsed without floats.
@@ -664,34 +802,110 @@ export async function computeEsStatutory(
   }
   pushStatutory("ss_cc", "deduction", "Seguridad Social (employee)", ss.ccTrabajador, 120);
   pushStatutory("ss_des", "deduction", "Desempleo (employee)", ss.desempleoTrabajador, 121);
-  pushStatutory("ss_for", "deduction", "Formación profesional (employee)", ss.formacionTrabajador, 122);
+  pushStatutory(
+    "ss_for",
+    "deduction",
+    "Formación profesional (employee)",
+    ss.formacionTrabajador,
+    122,
+  );
   pushStatutory("ss_mei", "deduction", "MEI (employee)", ss.meiTrabajador, 123);
   // Art. 17.1 solidaridad above the tope máximo, per-tranche split priced
   // off retribución. Zero below the tope, so the push path skips it there
   // and below-tope goldens are untouched.
-  pushStatutory("ss_solidaridad", "deduction", "Solidaridad (employee)", ss.solidaridadTrabajador, 126);
-  pushStatutory("ss_cc_er", "employer_contribution", "Seguridad Social (employer)", ss.ccEmpresa, 210);
-  pushStatutory("ss_des_er", "employer_contribution", "Desempleo (employer)", ss.desempleoEmpresa, 211);
-  pushStatutory("ss_fogasa_er", "employer_contribution", "FOGASA (employer)", ss.fogasaEmpresa, 212);
-  pushStatutory("ss_for_er", "employer_contribution", "Formación profesional (employer)", ss.formacionEmpresa, 213);
+  pushStatutory(
+    "ss_solidaridad",
+    "deduction",
+    "Solidaridad (employee)",
+    ss.solidaridadTrabajador,
+    126,
+  );
+  pushStatutory(
+    "ss_cc_er",
+    "employer_contribution",
+    "Seguridad Social (employer)",
+    ss.ccEmpresa,
+    210,
+  );
+  pushStatutory(
+    "ss_des_er",
+    "employer_contribution",
+    "Desempleo (employer)",
+    ss.desempleoEmpresa,
+    211,
+  );
+  pushStatutory(
+    "ss_fogasa_er",
+    "employer_contribution",
+    "FOGASA (employer)",
+    ss.fogasaEmpresa,
+    212,
+  );
+  pushStatutory(
+    "ss_for_er",
+    "employer_contribution",
+    "Formación profesional (employer)",
+    ss.formacionEmpresa,
+    213,
+  );
   pushStatutory("ss_mei_er", "employer_contribution", "MEI (employer)", ss.meiEmpresa, 214);
   if (ss.atEpEmpresa != null) {
     pushStatutory("ss_atep_er", "employer_contribution", "AT/EP (employer)", ss.atEpEmpresa, 215);
   }
   if (ss.cortaDuracionEmpresa != null) {
-    pushStatutory("ss_corta_er", "employer_contribution", "Cotización adicional contratos corta duración (employer)", ss.cortaDuracionEmpresa, 216);
+    pushStatutory(
+      "ss_corta_er",
+      "employer_contribution",
+      "Cotización adicional contratos corta duración (employer)",
+      ss.cortaDuracionEmpresa,
+      216,
+    );
   }
   // Art. 17.1 solidaridad above the tope máximo (first tranche 0,96 %
   // empresa). Distinct systemKey from the employee share — the engine pushes
   // ss_solidaridad_er, never employer-side ss_solidaridad.
-  pushStatutory("ss_solidaridad_er", "employer_contribution", "Solidaridad (employer)", ss.solidaridadEmpresa, 219);
+  pushStatutory(
+    "ss_solidaridad_er",
+    "employer_contribution",
+    "Solidaridad (employer)",
+    ss.solidaridadEmpresa,
+    219,
+  );
   // Art. 5 additional contributions exist only when classified overtime pay
   // exists: pushed when nonzero, never as zero lines on ordinary runs (so
   // the no-overtime line set the adapter goldens enumerate stays stable).
-  if (U(ss.horasExtraRestoTrabajador) !== 0n) pushStatutory("ss_hex_resto", "deduction", "Horas extraordinarias (employee)", ss.horasExtraRestoTrabajador, 124);
-  if (U(ss.horasExtraFMTrabajador) !== 0n) pushStatutory("ss_hex_fm", "deduction", "Horas extraordinarias fuerza mayor (employee)", ss.horasExtraFMTrabajador, 125);
-  if (U(ss.horasExtraRestoEmpresa) !== 0n) pushStatutory("ss_hex_resto_er", "employer_contribution", "Horas extraordinarias (employer)", ss.horasExtraRestoEmpresa, 217);
-  if (U(ss.horasExtraFMEmpresa) !== 0n) pushStatutory("ss_hex_fm_er", "employer_contribution", "Horas extraordinarias fuerza mayor (employer)", ss.horasExtraFMEmpresa, 218);
+  if (U(ss.horasExtraRestoTrabajador) !== 0n)
+    pushStatutory(
+      "ss_hex_resto",
+      "deduction",
+      "Horas extraordinarias (employee)",
+      ss.horasExtraRestoTrabajador,
+      124,
+    );
+  if (U(ss.horasExtraFMTrabajador) !== 0n)
+    pushStatutory(
+      "ss_hex_fm",
+      "deduction",
+      "Horas extraordinarias fuerza mayor (employee)",
+      ss.horasExtraFMTrabajador,
+      125,
+    );
+  if (U(ss.horasExtraRestoEmpresa) !== 0n)
+    pushStatutory(
+      "ss_hex_resto_er",
+      "employer_contribution",
+      "Horas extraordinarias (employer)",
+      ss.horasExtraRestoEmpresa,
+      217,
+    );
+  if (U(ss.horasExtraFMEmpresa) !== 0n)
+    pushStatutory(
+      "ss_hex_fm_er",
+      "employer_contribution",
+      "Horas extraordinarias fuerza mayor (employer)",
+      ss.horasExtraFMEmpresa,
+      218,
+    );
   // Seguridad Social is shared: employment in Spain is TGSS-insured whatever
   // the fiscal residence (detachment regimes aside). Only the withholding leg
   // and its factors differ — IRNR runs carry no tipo, no importe, no edition.

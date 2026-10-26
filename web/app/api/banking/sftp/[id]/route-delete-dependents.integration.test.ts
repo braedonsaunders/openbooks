@@ -32,15 +32,11 @@ const routeState: RouteState = {
   identity: null,
   deny(permission) {
     return permission
-      ? NextResponse.json(
-          { error: `missing permission: ${permission}` },
-          { status: 403 },
-        )
+      ? NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
       : NextResponse.json({ error: "unauthorized" }, { status: 401 });
   },
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.sftp-delete-dependents-test')]
@@ -80,11 +76,9 @@ registerHooks({
 const itemUrl = "./route.ts?sftp-delete-dependents-test";
 const { DELETE } = (await import(itemUrl)) as typeof import("./route.ts");
 
-const { db, withBypass, withOrgContext } =
-  await import("@openbooks/engine/platform/db");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/testing/fixtures");
-
 
 interface Fixture {
   orgId: string;
@@ -96,11 +90,7 @@ interface Fixture {
 async function seed(): Promise<Fixture> {
   return withBypass(async () => {
     const org = await createScratchOrg();
-    const actorId = await createScratchUser(
-      org.orgId,
-      "SFTP Delete Admin",
-      "sftp_delete_admin",
-    );
+    const actorId = await createScratchUser(org.orgId, "SFTP Delete Admin", "sftp_delete_admin");
     await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,bankFeeds}', 'true'::jsonb)
@@ -127,10 +117,7 @@ function authorize(fixture: Fixture): void {
   };
 }
 
-async function createServer(
-  fixture: Fixture,
-  name: string,
-): Promise<string> {
+async function createServer(fixture: Fixture, name: string): Promise<string> {
   const id = randomUUID();
   await withBypass(async () => {
     await db.execute(sql`
@@ -140,10 +127,7 @@ async function createServer(
   return id;
 }
 
-async function attachBankProfile(
-  fixture: Fixture,
-  serverId: string,
-): Promise<void> {
+async function attachBankProfile(fixture: Fixture, serverId: string): Promise<void> {
   const format = randomUUID();
   const profile = randomUUID();
   await withBypass(async () => {
@@ -154,10 +138,7 @@ async function attachBankProfile(
   });
 }
 
-async function attachSchedule(
-  fixture: Fixture,
-  serverId: string,
-): Promise<string> {
+async function attachSchedule(fixture: Fixture, serverId: string): Promise<string> {
   const id = randomUUID();
   await withBypass(async () => {
     await db.execute(sql`insert into sftp_import_schedules(id,org_id,sftp_server_id,account_id,created_by)
@@ -188,118 +169,99 @@ async function deleteStatus(
 
 async function serverExists(serverId: string): Promise<boolean> {
   return withBypass(async () => {
-    const r = await db.execute(
-      sql`select 1 from sftp_servers where id = ${serverId}`, "objects",
-    );
+    const r = await db.execute(sql`select 1 from sftp_servers where id = ${serverId}`, "objects");
     return r.length === 1;
   });
 }
 
-test(
-  "sftp server delete refuses a server that delivers a payment bank profile",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture, "profile-feeder");
-      await attachBankProfile(fixture, serverId);
-      const outcome = await deleteStatus(fixture, serverId);
-      assert.equal(outcome.status, 409);
-      assert.match(
-        String(
-          (outcome.body as { error?: string } | null)?.error ?? "",
-        ),
-        /bank profile/i,
-      );
-      assert.equal(
-        await serverExists(serverId),
-        true,
-        "the refused delete must leave the server row untouched",
-      );
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("sftp server delete refuses a server that delivers a payment bank profile", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture, "profile-feeder");
+    await attachBankProfile(fixture, serverId);
+    const outcome = await deleteStatus(fixture, serverId);
+    assert.equal(outcome.status, 409);
+    assert.match(String((outcome.body as { error?: string } | null)?.error ?? ""), /bank profile/i);
+    assert.equal(
+      await serverExists(serverId),
+      true,
+      "the refused delete must leave the server row untouched",
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "sftp server delete refuses a server with import schedules instead of orphaning them",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture, "schedule-feeder");
-      const scheduleId = await attachSchedule(fixture, serverId);
-      const outcome = await deleteStatus(fixture, serverId);
-      assert.equal(outcome.status, 409);
-      assert.match(
-        String(
-          (outcome.body as { error?: string } | null)?.error ?? "",
-        ),
-        /import schedule/i,
-      );
-      assert.equal(
-        await serverExists(serverId),
-        true,
-        "the refused delete must leave the server row untouched",
-      );
-      const schedule = await withBypass(() =>
-        db.execute(
-          sql`select sftp_server_id from sftp_import_schedules where id = ${scheduleId}`, "objects",
-        ),
-      );
-      assert.equal(schedule[0]?.sftp_server_id, serverId);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("sftp server delete refuses a server with import schedules instead of orphaning them", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture, "schedule-feeder");
+    const scheduleId = await attachSchedule(fixture, serverId);
+    const outcome = await deleteStatus(fixture, serverId);
+    assert.equal(outcome.status, 409);
+    assert.match(
+      String((outcome.body as { error?: string } | null)?.error ?? ""),
+      /import schedule/i,
+    );
+    assert.equal(
+      await serverExists(serverId),
+      true,
+      "the refused delete must leave the server row untouched",
+    );
+    const schedule = await withBypass(() =>
+      db.execute(
+        sql`select sftp_server_id from sftp_import_schedules where id = ${scheduleId}`,
+        "objects",
+      ),
+    );
+    assert.equal(schedule[0]?.sftp_server_id, serverId);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "sftp server delete removes an unreferenced server with audit evidence",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await createServer(fixture, "lonely-server");
-      const outcome = await deleteStatus(fixture, serverId);
-      assert.equal(outcome.status, 200);
-      assert.equal(await serverExists(serverId), false);
-      const audits = await withOrgContext(fixture.orgId, () =>
-        db.execute(
-          sql`select action from audit_log where org_id = ${fixture.orgId} and table_name = 'sftp_servers' and row_id = ${serverId}`, "objects",
-        ),
-      );
-      assert.deepEqual(
-        audits.map((row) => (row as { action: string }).action),
-        ["delete"],
-      );
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("sftp server delete removes an unreferenced server with audit evidence", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await createServer(fixture, "lonely-server");
+    const outcome = await deleteStatus(fixture, serverId);
+    assert.equal(outcome.status, 200);
+    assert.equal(await serverExists(serverId), false);
+    const audits = await withOrgContext(fixture.orgId, () =>
+      db.execute(
+        sql`select action from audit_log where org_id = ${fixture.orgId} and table_name = 'sftp_servers' and row_id = ${serverId}`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(
+      audits.map((row) => (row as { action: string }).action),
+      ["delete"],
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "sftp server delete of another organization's id reads as not found",
-  async () => {
-    const fixture = await seed();
-    const other = await seed();
-    try {
-      authorize(fixture);
-      const serverId = await withBypass(async () => {
-        const id = randomUUID();
-        await db.execute(sql`
+test("sftp server delete of another organization's id reads as not found", async () => {
+  const fixture = await seed();
+  const other = await seed();
+  try {
+    authorize(fixture);
+    const serverId = await withBypass(async () => {
+      const id = randomUUID();
+      await db.execute(sql`
           insert into sftp_servers (id, org_id, name, username, root_prefix, created_by, updated_by)
           values (${id}, ${other.orgId}, 'foreign', 'foreign', 'fleet', ${other.actorId}, ${other.actorId})`);
-        return id;
-      });
-      const outcome = await deleteStatus(fixture, serverId);
-      assert.equal(outcome.status, 404);
-      assert.equal(await serverExists(serverId), true);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-      await withBypass(() => dropScratchOrg(other.orgId));
-    }
-  },
-);
+      return id;
+    });
+    const outcome = await deleteStatus(fixture, serverId);
+    assert.equal(outcome.status, 404);
+    assert.equal(await serverExists(serverId), true);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+    await withBypass(() => dropScratchOrg(other.orgId));
+  }
+});

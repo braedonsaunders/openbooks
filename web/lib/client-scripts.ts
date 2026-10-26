@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 /**
  * Client scripts — form-level validation hooks that run in the BROWSER, but
@@ -18,34 +18,34 @@
  */
 
 export interface ClientScriptGate {
-  ok: boolean
-  reason?: string
-  warnings: string[]
+  ok: boolean;
+  reason?: string;
+  warnings: string[];
 }
 
 interface DeliveredScript {
-  id: string
-  name: string
-  source: string
+  id: string;
+  name: string;
+  source: string;
 }
 
-const EVALUATOR_TIMEOUT_MS = 2000
-const cache = new Map<string, { at: number; scripts: DeliveredScript[] }>()
-const CACHE_MS = 30_000
+const EVALUATOR_TIMEOUT_MS = 2000;
+const cache = new Map<string, { at: number; scripts: DeliveredScript[] }>();
+const CACHE_MS = 30_000;
 
 async function fetchScripts(kind: string): Promise<DeliveredScript[]> {
-  const hit = cache.get(kind)
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.scripts
+  const hit = cache.get(kind);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.scripts;
   try {
     const res = await fetch(`/api/scripts/client?documentKind=${encodeURIComponent(kind)}`, {
-      credentials: 'same-origin',
-    })
-    if (!res.ok) return []
-    const json = (await res.json()) as { scripts: DeliveredScript[] }
-    cache.set(kind, { at: Date.now(), scripts: json.scripts ?? [] })
-    return json.scripts ?? []
+      credentials: "same-origin",
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { scripts: DeliveredScript[] };
+    cache.set(kind, { at: Date.now(), scripts: json.scripts ?? [] });
+    return json.scripts ?? [];
   } catch {
-    return []
+    return [];
   }
 }
 
@@ -68,48 +68,48 @@ window.addEventListener('message', function (e) {
   window.parent.postMessage({ __obClientScripts: true, results: out }, '*');
 });
 window.parent.postMessage({ __obClientScripts: true, ready: true }, '*');
-</script></body></html>`
+</script></body></html>`;
 
 interface EvalResult {
-  id: string
-  name: string
-  result?: unknown
-  error?: string
+  id: string;
+  name: string;
+  result?: unknown;
+  error?: string;
 }
 
 function runInSandbox(scripts: DeliveredScript[], ctx: unknown): Promise<EvalResult[] | null> {
   return new Promise((resolve) => {
-    const iframe = document.createElement('iframe')
-    iframe.setAttribute('sandbox', 'allow-scripts')
-    iframe.style.display = 'none'
-    iframe.srcdoc = EVALUATOR_HTML
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("sandbox", "allow-scripts");
+    iframe.style.display = "none";
+    iframe.srcdoc = EVALUATOR_HTML;
 
-    let done = false
+    let done = false;
     const finish = (v: EvalResult[] | null) => {
-      if (done) return
-      done = true
-      window.removeEventListener('message', onMessage)
-      iframe.remove()
-      resolve(v)
-    }
-    const timer = setTimeout(() => finish(null), EVALUATOR_TIMEOUT_MS)
+      if (done) return;
+      done = true;
+      window.removeEventListener("message", onMessage);
+      iframe.remove();
+      resolve(v);
+    };
+    const timer = setTimeout(() => finish(null), EVALUATOR_TIMEOUT_MS);
 
     function onMessage(e: MessageEvent) {
-      if (e.source !== iframe.contentWindow) return
-      const d = e.data as { __obClientScripts?: boolean; ready?: boolean; results?: EvalResult[] }
-      if (!d?.__obClientScripts) return
+      if (e.source !== iframe.contentWindow) return;
+      const d = e.data as { __obClientScripts?: boolean; ready?: boolean; results?: EvalResult[] };
+      if (!d?.__obClientScripts) return;
       if (d.ready) {
-        iframe.contentWindow?.postMessage({ scripts, ctx }, '*')
-        return
+        iframe.contentWindow?.postMessage({ scripts, ctx }, "*");
+        return;
       }
       if (Array.isArray(d.results)) {
-        clearTimeout(timer)
-        finish(d.results)
+        clearTimeout(timer);
+        finish(d.results);
       }
     }
-    window.addEventListener('message', onMessage)
-    document.body.appendChild(iframe)
-  })
+    window.addEventListener("message", onMessage);
+    document.body.appendChild(iframe);
+  });
 }
 
 /**
@@ -117,30 +117,30 @@ function runInSandbox(scripts: DeliveredScript[], ctx: unknown): Promise<EvalRes
  * payload. Returns the gate the form should honor before writing.
  */
 export async function runClientScripts(kind: string, doc: unknown): Promise<ClientScriptGate> {
-  const scripts = await fetchScripts(kind)
-  if (scripts.length === 0) return { ok: true, warnings: [] }
+  const scripts = await fetchScripts(kind);
+  if (scripts.length === 0) return { ok: true, warnings: [] };
 
-  const results = await runInSandbox(scripts, { kind, doc })
+  const results = await runInSandbox(scripts, { kind, doc });
   if (!results) {
-    console.warn('[client-scripts] evaluator timed out — save proceeds (fail-open)')
-    return { ok: true, warnings: [] }
+    console.warn("[client-scripts] evaluator timed out — save proceeds (fail-open)");
+    return { ok: true, warnings: [] };
   }
 
-  const warnings: string[] = []
+  const warnings: string[] = [];
   for (const r of results) {
     if (r.error) {
-      console.warn(`[client-scripts] "${r.name}" failed:`, r.error)
-      continue
+      console.warn(`[client-scripts] "${r.name}" failed:`, r.error);
+      continue;
     }
-    const out = r.result as { abort?: unknown; warnings?: unknown } | null
-    if (out && typeof out === 'object') {
-      if (typeof out.abort === 'string' && out.abort) {
-        return { ok: false, reason: `${r.name}: ${out.abort}`, warnings }
+    const out = r.result as { abort?: unknown; warnings?: unknown } | null;
+    if (out && typeof out === "object") {
+      if (typeof out.abort === "string" && out.abort) {
+        return { ok: false, reason: `${r.name}: ${out.abort}`, warnings };
       }
       if (Array.isArray(out.warnings)) {
-        for (const w of out.warnings) if (typeof w === 'string') warnings.push(`${r.name}: ${w}`)
+        for (const w of out.warnings) if (typeof w === "string") warnings.push(`${r.name}: ${w}`);
       }
     }
   }
-  return { ok: true, warnings }
+  return { ok: true, warnings };
 }

@@ -92,7 +92,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmMeRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmMeRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -102,29 +103,44 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/hrm/self-service/profile-changes", "mock:profile-changes"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const profileRouteUrl = "./profile/route.ts?hrm-me-profile";
-  const profileRoute: typeof import("./profile/route.ts") | undefined = (await import(profileRouteUrl)) as typeof import("./profile/route.ts");
-  const stepsRouteUrl = "./steps/route.ts?hrm-me-steps";
-  const stepsRoute: typeof import("./steps/route.ts") | undefined = (await import(stepsRouteUrl)) as typeof import("./steps/route.ts");
-  const requestsRouteUrl = "./requests/route.ts?hrm-me-requests";
-  const requestsRoute: typeof import("./requests/route.ts") | undefined = (await import(requestsRouteUrl)) as typeof import("./requests/route.ts");
-  const teamRouteUrl = "./team/route.ts?hrm-me-team";
-  const teamRoute: typeof import("./team/route.ts") | undefined = (await import(teamRouteUrl)) as typeof import("./team/route.ts");
-  const fileRouteUrl = "./profile-changes/route.ts?hrm-me-file";
-  const fileRoute: typeof import("./profile-changes/route.ts") | undefined = (await import(fileRouteUrl)) as typeof import("./profile-changes/route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "@/lib/authz" || specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "./features"
+          ? "mock:features"
+          : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const profileRouteUrl = "./profile/route.ts?hrm-me-profile";
+const profileRoute: typeof import("./profile/route.ts") | undefined = (await import(
+  profileRouteUrl
+)) as typeof import("./profile/route.ts");
+const stepsRouteUrl = "./steps/route.ts?hrm-me-steps";
+const stepsRoute: typeof import("./steps/route.ts") | undefined = (await import(
+  stepsRouteUrl
+)) as typeof import("./steps/route.ts");
+const requestsRouteUrl = "./requests/route.ts?hrm-me-requests";
+const requestsRoute: typeof import("./requests/route.ts") | undefined = (await import(
+  requestsRouteUrl
+)) as typeof import("./requests/route.ts");
+const teamRouteUrl = "./team/route.ts?hrm-me-team";
+const teamRoute: typeof import("./team/route.ts") | undefined = (await import(
+  teamRouteUrl
+)) as typeof import("./team/route.ts");
+const fileRouteUrl = "./profile-changes/route.ts?hrm-me-file";
+const fileRoute: typeof import("./profile-changes/route.ts") | undefined = (await import(
+  fileRouteUrl
+)) as typeof import("./profile-changes/route.ts");
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
 const readRequest = () => new Request("http://openbooks.test/api/hrm/me");
@@ -153,7 +169,11 @@ test("a missing feature flag 404s before any service runs", async () => {
   assert.equal((await requestsRoute!.GET(readRequest())).status, 404);
   assert.equal((await teamRoute!.GET(readRequest())).status, 404);
   assert.equal(
-    (await fileRoute!.POST(postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }))).status,
+    (
+      await fileRoute!.POST(
+        postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }),
+      )
+    ).status,
     404,
   );
   assert.deepEqual(routeState.calls, []);
@@ -165,7 +185,11 @@ test("an unauthenticated caller never reaches a service", async () => {
   assert.equal((await profileRoute!.GET(readRequest())).status, 401);
   assert.equal((await teamRoute!.GET(readRequest())).status, 401);
   assert.equal(
-    (await fileRoute!.POST(postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }))).status,
+    (
+      await fileRoute!.POST(
+        postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }),
+      )
+    ).status,
     401,
   );
   assert.deepEqual(routeState.calls, []);
@@ -188,7 +212,11 @@ test("reads forward org and actor and return the service payload", async () => {
 
 test("filing validates the body before the service runs, then 201s", async () => {
   reset();
-  const good = { employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change", phone: "x" }, reason: "moved" };
+  const good = {
+    employmentId: EMPLOYMENT_ID,
+    changes: { kind: "profile_change", phone: "x" },
+    reason: "moved",
+  };
   assert.equal((await fileRoute!.POST(postFile({}))).status, 400);
   assert.equal((await fileRoute!.POST(postFile({ ...good, employmentId: "nope" }))).status, 400);
   assert.equal((await fileRoute!.POST(postFile({ ...good, reason: "  " }))).status, 400);
@@ -196,21 +224,29 @@ test("filing validates the body before the service runs, then 201s", async () =>
   assert.deepEqual(routeState.calls, []);
   const response = await fileRoute!.POST(postFile(good));
   assert.equal(response.status, 201);
-  assert.deepEqual(await response.json(), { request: { id: "request-1", status: "pending_approval" } });
+  assert.deepEqual(await response.json(), {
+    request: { id: "request-1", status: "pending_approval" },
+  });
   assert.deepEqual(routeState.calls, [
     {
       fn: "file",
-      args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, changes: good.changes, reason: "moved" },
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        employmentId: EMPLOYMENT_ID,
+        changes: good.changes,
+        reason: "moved",
+      },
     },
   ]);
-  assert.ok(routeState.perms.length > 0 && routeState.perms.every((perm) => perm === "hrm.self.request"));
+  assert.ok(
+    routeState.perms.length > 0 && routeState.perms.every((perm) => perm === "hrm.self.request"),
+  );
 });
 
 test("a no-link refusal reaches the caller as a 403 with the remedy intact", async () => {
   reset();
-  const { SelfServiceError } = await import(
-    "@openbooks/engine/hrm/self-service/actor"
-  );
+  const { SelfServiceError } = await import("@openbooks/engine/hrm/self-service/actor");
   routeState.serviceThrow = new SelfServiceError(
     "NO_LINK",
     "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service",
@@ -222,10 +258,11 @@ test("a no-link refusal reaches the caller as a 403 with the remedy intact", asy
 
 test("a report-less team refusal reaches the caller as a 403", async () => {
   reset();
-  const { SelfServiceError } = await import(
-    "@openbooks/engine/hrm/self-service/actor"
+  const { SelfServiceError } = await import("@openbooks/engine/hrm/self-service/actor");
+  routeState.serviceThrow = new SelfServiceError(
+    "NO_TEAM",
+    "no direct reports as of 2026-09-20 — team visibility follows the current line",
   );
-  routeState.serviceThrow = new SelfServiceError("NO_TEAM", "no direct reports as of 2026-09-20 — team visibility follows the current line");
   const response = await teamRoute!.GET(readRequest());
   assert.equal(response.status, 403);
   assert.match((await response.json()).error as string, /no direct reports/);
@@ -233,21 +270,33 @@ test("a report-less team refusal reaches the caller as a 403", async () => {
 
 test("malformed proposals map to 400 and unknown rows to 404", async () => {
   reset();
-  const { SelfServiceError } = await import(
-    "@openbooks/engine/hrm/self-service/actor"
+  const { SelfServiceError } = await import("@openbooks/engine/hrm/self-service/actor");
+  routeState.serviceThrow = new SelfServiceError(
+    "REFUSED",
+    "profile change refused: phone must not be blank",
   );
-  routeState.serviceThrow = new SelfServiceError("REFUSED", "profile change refused: phone must not be blank");
   assert.equal((await stepsRoute!.GET(readRequest())).status, 400);
-  routeState.serviceThrow = new SelfServiceError("NOT_FOUND", "the person linked to this login has no party record in this organization");
+  routeState.serviceThrow = new SelfServiceError(
+    "NOT_FOUND",
+    "the person linked to this login has no party record in this organization",
+  );
   assert.equal((await profileRoute!.GET(readRequest())).status, 404);
 });
 
 test("a nested change-request refusal keeps the shared mapping", async () => {
   reset();
-  const { HrmChangeRequestError } = await import("@openbooks/engine/hrm/change-requests/operations");
-  routeState.serviceThrow = new HrmChangeRequestError("INVALID_PAYLOAD", "change payload invalid: foo");
+  const { HrmChangeRequestError } =
+    await import("@openbooks/engine/hrm/change-requests/operations");
+  routeState.serviceThrow = new HrmChangeRequestError(
+    "INVALID_PAYLOAD",
+    "change payload invalid: foo",
+  );
   const response = await fileRoute!.POST(
-    postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change", phone: "x" }, reason: "moved" }),
+    postFile({
+      employmentId: EMPLOYMENT_ID,
+      changes: { kind: "profile_change", phone: "x" },
+      reason: "moved",
+    }),
   );
   assert.equal(response.status, 400);
   assert.match((await response.json()).error as string, /change payload invalid/);

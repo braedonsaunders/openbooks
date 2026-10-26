@@ -1,16 +1,16 @@
-import { defineRoute } from '@/lib/api/route'
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { runEndpointScript } from '@openbooks/engine/scripting/scripting'
-import type { Authz } from '@/lib/authz'
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { runEndpointScript } from "@openbooks/engine/scripting/scripting";
+import type { Authz } from "@/lib/authz";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const ENDPOINT_POST_ONLY =
-  'endpoint scripts accept POST only; only POST executes — send POST /api/scripts/e/<slug>'
+  "endpoint scripts accept POST only; only POST executes — send POST /api/scripts/e/<slug>";
 
 function refuseNonPost() {
-  return NextResponse.json({ error: ENDPOINT_POST_ONLY }, { status: 405 })
+  return NextResponse.json({ error: ENDPOINT_POST_ONLY }, { status: 405 });
 }
 
 /**
@@ -32,34 +32,42 @@ function refuseNonPost() {
  * handle() also refuses any non-POST before auth or runEndpointScript. POST
  * remains origin-checked.
  */
-async function handle(req: Request, slug: string, user: Authz['user'], body: Record<string, unknown>) {
-  const url = new URL(req.url)
-  const query: Record<string, string> = {}
-  url.searchParams.forEach((v, k) => (query[k] = v))
+async function handle(
+  req: Request,
+  slug: string,
+  user: Authz["user"],
+  body: Record<string, unknown>,
+) {
+  const url = new URL(req.url);
+  const query: Record<string, string> = {};
+  url.searchParams.forEach((v, k) => (query[k] = v));
 
   const outcome = await runEndpointScript(
     slug,
     user.orgId,
     { id: user.id, name: user.name, roles: user.roles.map(({ key }) => key) },
     { method: req.method, query, body },
-  )
-  if (!outcome) return NextResponse.json({ error: 'no such endpoint script' }, { status: 404 })
-  if (outcome.status !== 'ok') {
-    const status = outcome.status === 'timeout' ? 504 : 422
-    return NextResponse.json({ error: outcome.abortReason ?? outcome.status, logs: outcome.logs }, { status })
+  );
+  if (!outcome) return NextResponse.json({ error: "no such endpoint script" }, { status: 404 });
+  if (outcome.status !== "ok") {
+    const status = outcome.status === "timeout" ? 504 : 422;
+    return NextResponse.json(
+      { error: outcome.abortReason ?? outcome.status, logs: outcome.logs },
+      { status },
+    );
   }
-  return NextResponse.json({ ok: true, result: outcome.returned ?? null })
+  return NextResponse.json({ ok: true, result: outcome.returned ?? null });
 }
 
 /** 405 names POST. Next.js maps HEAD onto GET, so neither executes the script. */
-const endpointBody = z.record(z.string(), z.json())
+const endpointBody = z.record(z.string(), z.json());
 
-export const GET = (_request: Request) => refuseNonPost()
+export const GET = (_request: Request) => refuseNonPost();
 
 export const POST = defineRoute({
-  permission: 'scripts.execute',
-  feature: 'scripts',
+  permission: "scripts.execute",
+  feature: "scripts",
   params: z.object({ slug: z.string() }),
   body: endpointBody,
   handler: ({ request, params, authz, body }) => handle(request, params.slug, authz.user, body),
-})
+});

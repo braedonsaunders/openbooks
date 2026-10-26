@@ -1,15 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const quickStart: DocArticle = {
-  slug: 'quick-start',
-  title: 'Quick Start for New Organizations',
-  category: 'getting-started',
+  slug: "quick-start",
+  title: "Quick Start for New Organizations",
+  category: "getting-started",
   order: 2,
   summary:
-    'A practical sequence for configuring an organization, entering opening data, and preparing the first live workflow.',
-  updated: '2026-07-19',
-  keywords: ['checklist', 'implementation', 'onboarding', 'first week', 'go live', 'setup'],
-  related: ['welcome', 'accounting-model', 'migration-and-cutover'],
+    "A practical sequence for configuring an organization, entering opening data, and preparing the first live workflow.",
+  updated: "2026-07-19",
+  keywords: ["checklist", "implementation", "onboarding", "first week", "go live", "setup"],
+  related: ["welcome", "accounting-model", "migration-and-cutover"],
   body: `# Quick Start for New Organizations
 
 Use this sequence whether you are starting fresh or moving from another system.
@@ -85,17 +85,30 @@ See [Migration and cutover](/docs/migration-and-cutover) for the full control
 plan and [Reconciliation before cutover](/docs/reconciliation-before-cutover)
 for the minimum proof package.
 `,
-}
+};
 
 export const navigationAndRecords: DocArticle = {
-  slug: 'navigation-and-records',
-  title: 'Navigation, Lists, and Record Drawers',
-  category: 'getting-started',
+  slug: "navigation-and-records",
+  title: "Navigation, Lists, and Record Drawers",
+  category: "getting-started",
   order: 3,
-  summary: 'Learn the shared interaction patterns used throughout the application.',
-  updated: '2026-10-05',
-  keywords: ['navigation', 'top navigation', 'sidebar', 'search', 'global search', 'recent', 'filter', 'pagination', 'drawer', 'draft', 'autosave', 'actions'],
-  related: ['quick-start', 'transaction-lifecycle'],
+  summary: "Learn the shared interaction patterns used throughout the application.",
+  updated: "2026-10-05",
+  keywords: [
+    "navigation",
+    "top navigation",
+    "sidebar",
+    "search",
+    "global search",
+    "recent",
+    "filter",
+    "pagination",
+    "drawer",
+    "draft",
+    "autosave",
+    "actions",
+  ],
+  related: ["quick-start", "transaction-lifecycle"],
   body: `# Navigation, Lists, and Record Drawers
 
 OpenBooks uses the same interaction model across accounting, sales, purchases,
@@ -188,17 +201,27 @@ that state and your permissions. When an action is absent, check the status,
 required fields, approval state, accounting period, and your role before treating
 it as an error.
 `,
-}
+};
 
 export const glossary: DocArticle = {
-  slug: 'glossary',
-  title: 'OpenBooks Glossary',
-  category: 'getting-started',
+  slug: "glossary",
+  title: "OpenBooks Glossary",
+  category: "getting-started",
   order: 4,
-  summary: 'Plain-language definitions for the accounting and product terms used throughout the documentation.',
-  updated: '2026-07-19',
-  keywords: ['definitions', 'terminology', 'document', 'transaction', 'posting', 'ledger', 'dimension', 'party'],
-  related: ['accounting-model', 'transaction-lifecycle'],
+  summary:
+    "Plain-language definitions for the accounting and product terms used throughout the documentation.",
+  updated: "2026-07-19",
+  keywords: [
+    "definitions",
+    "terminology",
+    "document",
+    "transaction",
+    "posting",
+    "ledger",
+    "dimension",
+    "party",
+  ],
+  related: ["accounting-model", "transaction-lifecycle"],
   body: `# OpenBooks Glossary
 
 ## Accounting terms
@@ -262,4 +285,4 @@ business events.
 **Source connection** — a per-organization integration used to import or mirror
 data from another system. Connection secrets are sealed and tenant-scoped.
 `,
-}
+};

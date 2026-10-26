@@ -7,16 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import {
-  createScratchUser,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
-import {
-  DB,
-  grantPermissions,
-  setupHarness,
-  withHarness,
-} from "../testing/hrm-harness.ts";
+import { createScratchUser, type ScratchOrg } from "../testing/fixtures.ts";
+import { DB, grantPermissions, setupHarness, withHarness } from "../testing/hrm-harness.ts";
 import { HrmDocumentsError } from "./documents/errors.ts";
 import { saveCategory } from "./documents/categories.ts";
 import { generateDocument, sendDocument, signTokenDocument } from "./documents/documents.ts";
@@ -27,8 +19,19 @@ import {
   runRetentionTick,
   saveSchedule,
 } from "./documents/retention.ts";
-import { buildExport, claimQueuedExport, downloadExport, listExports, requestExport } from "./documents/dsar.ts";
-import { createLeaveType, createLeavePolicy, fileLeaveRequest, submitLeaveRequest } from "./leave.ts";
+import {
+  buildExport,
+  claimQueuedExport,
+  downloadExport,
+  listExports,
+  requestExport,
+} from "./documents/dsar.ts";
+import {
+  createLeaveType,
+  createLeavePolicy,
+  fileLeaveRequest,
+  submitLeaveRequest,
+} from "./leave.ts";
 
 /**
  * HR-19 retention + DSAR DB coverage (integration partition): the
@@ -38,14 +41,23 @@ import { createLeaveType, createLeavePolicy, fileLeaveRequest, submitLeaveReques
  * read back from storage, never from service returns alone.
  */
 
-
 const RETENTION_FEATURES = ["hrm", "hrmDocuments"] as const;
 
 const RETENTION_SPEC = {
   features: RETENTION_FEATURES,
   users: [
-    { key: "hrId", name: "HR Admin", handle: "hr_admin", permissions: ["hrm.documents.read", "hrm.documents.manage"] },
-    { key: "employeeId", name: "Rita Retention", handle: "employee_self", permissions: ["hrm.self.read"] },
+    {
+      key: "hrId",
+      name: "HR Admin",
+      handle: "hr_admin",
+      permissions: ["hrm.documents.read", "hrm.documents.manage"],
+    },
+    {
+      key: "employeeId",
+      name: "Rita Retention",
+      handle: "employee_self",
+      permissions: ["hrm.self.read"],
+    },
   ],
 } as const;
 
@@ -60,12 +72,17 @@ async function setGraceDays(orgId: string, days: number): Promise<void> {
 
 async function waitForDocumentLockWaiters(expected: number): Promise<void> {
   for (let attempt = 0; attempt < 250; attempt += 1) {
-    const waiting = (await db.execute<{ n: number }>(sql`
+    const waiting = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n
         from pg_stat_activity
        where datname = current_database() and wait_event_type = 'Lock'
          and query ilike '%hrm_documents%'
-    `, "objects"))[0]!.n;
+    `,
+        "objects",
+      )
+    )[0]!.n;
     if (waiting >= expected) return;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
@@ -87,7 +104,14 @@ async function makeTemplate(org: ScratchOrg, hrId: string, category: string): Pr
   return tpl.id;
 }
 
-async function completeDocument(org: ScratchOrg, hrId: string, employmentId: string, partyId: string, templateId: string, title: string): Promise<string> {
+async function completeDocument(
+  org: ScratchOrg,
+  hrId: string,
+  employmentId: string,
+  partyId: string,
+  templateId: string,
+  title: string,
+): Promise<string> {
   const { document } = await generateDocument({
     orgId: org.orgId,
     actorId: hrId,
@@ -121,10 +145,17 @@ async function setupRetentionHarness() {
       insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
       values (${base.org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
     `);
-    await db.execute(sql`update users set party_id = ${partyId} where id = ${base.hrId} and org_id = ${base.org.orgId}`);
-    await db.execute(sql`update users set party_id = ${partyId} where id = ${base.employeeId} and org_id = ${base.org.orgId}`);
+    await db.execute(
+      sql`update users set party_id = ${partyId} where id = ${base.hrId} and org_id = ${base.org.orgId}`,
+    );
+    await db.execute(
+      sql`update users set party_id = ${partyId} where id = ${base.employeeId} and org_id = ${base.org.orgId}`,
+    );
     // The declared category vocabulary templates and schedules must name.
-    for (const [key, label] of [["contract", "Contracts"], ["letter", "Letters"]] as const) {
+    for (const [key, label] of [
+      ["contract", "Contracts"],
+      ["letter", "Letters"],
+    ] as const) {
       await saveCategory({ orgId: base.org.orgId, actorId: base.hrId, key, label });
     }
     return { partyId, employmentId };
@@ -132,347 +163,548 @@ async function setupRetentionHarness() {
 }
 
 test("retention due, grace, legal hold, delete, and anonymize matrix", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    const contractTpl = await makeTemplate(h.org, h.hrId, "contract");
-    const letterTpl = await makeTemplate(h.org, h.hrId, "letter");
-    await saveSchedule({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      categoryKey: "contract",
-      retainYears: 0,
-      fromEvent: "completion",
-      action: "delete",
-    });
-    await saveSchedule({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      categoryKey: "letter",
-      retainYears: 0,
-      fromEvent: "completion",
-      action: "anonymize",
-    });
-    const schedules = await listSchedules({ orgId: h.org.orgId, actorId: h.hrId });
-    assert.equal(schedules.length, 2);
-    // A second schedule for one category is refused as ambiguous deletion.
-    await assert.rejects(
-      saveSchedule({
+  await withHarness(
+    () => setupRetentionHarness(),
+    async (h) => {
+      const contractTpl = await makeTemplate(h.org, h.hrId, "contract");
+      const letterTpl = await makeTemplate(h.org, h.hrId, "letter");
+      await saveSchedule({
         orgId: h.org.orgId,
         actorId: h.hrId,
         categoryKey: "contract",
-        retainYears: 1,
+        retainYears: 0,
         fromEvent: "completion",
         action: "delete",
-      }),
-      /already has a schedule/,
-    );
+      });
+      await saveSchedule({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        categoryKey: "letter",
+        retainYears: 0,
+        fromEvent: "completion",
+        action: "anonymize",
+      });
+      const schedules = await listSchedules({ orgId: h.org.orgId, actorId: h.hrId });
+      assert.equal(schedules.length, 2);
+      // A second schedule for one category is refused as ambiguous deletion.
+      await assert.rejects(
+        saveSchedule({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          categoryKey: "contract",
+          retainYears: 1,
+          fromEvent: "completion",
+          action: "delete",
+        }),
+        /already has a schedule/,
+      );
 
-    const deleteId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, contractTpl, "Deletable contract");
-    const anonId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, letterTpl, "Anonymizable letter");
-    const heldDoc = await generateDocument({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      templateId: contractTpl,
-      employmentId: h.employmentId,
-      partyId: h.partyId,
-      title: "Held contract",
-      today: "2026-09-21",
-    });
-    const heldSent = await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: heldDoc.document.id });
-    await signTokenDocument({ token: heldSent.deliveries[0]!.token, name: "Rita Retention" });
-    const { setLegalHold } = await import("./documents/documents.ts");
-    await setLegalHold({ orgId: h.org.orgId, actorId: h.hrId, documentId: heldDoc.document.id, hold: true });
+      const deleteId = await completeDocument(
+        h.org,
+        h.hrId,
+        h.employmentId,
+        h.partyId,
+        contractTpl,
+        "Deletable contract",
+      );
+      const anonId = await completeDocument(
+        h.org,
+        h.hrId,
+        h.employmentId,
+        h.partyId,
+        letterTpl,
+        "Anonymizable letter",
+      );
+      const heldDoc = await generateDocument({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        templateId: contractTpl,
+        employmentId: h.employmentId,
+        partyId: h.partyId,
+        title: "Held contract",
+        today: "2026-09-21",
+      });
+      const heldSent = await sendDocument({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        documentId: heldDoc.document.id,
+      });
+      await signTokenDocument({ token: heldSent.deliveries[0]!.token, name: "Rita Retention" });
+      const { setLegalHold } = await import("./documents/documents.ts");
+      await setLegalHold({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        documentId: heldDoc.document.id,
+        hold: true,
+      });
 
-    // Signing stores the database's real completion time, independently of
-    // the template's "today" date. A zero-year schedule is due on that
-    // completion date; use the latest one so crossing midnight is safe.
-    const clocks = await db.execute<{ completed_on: string; retain_until: string }>(sql`
+      // Signing stores the database's real completion time, independently of
+      // the template's "today" date. A zero-year schedule is due on that
+      // completion date; use the latest one so crossing midnight is safe.
+      const clocks = await db.execute<{ completed_on: string; retain_until: string }>(
+        sql`
       select completed_at::date::text as completed_on, retain_until::text as retain_until
         from hrm_documents
        where org_id = ${h.org.orgId} and id in (${deleteId}, ${anonId}, ${heldDoc.document.id})
-    `, "objects");
-    assert.equal(clocks.length, 3);
-    for (const clock of clocks) {
-      assert.ok(clock.completed_on);
-      assert.equal(clock.retain_until, clock.completed_on);
-    }
-    const tickDay = clocks.map((clock) => clock.completed_on).sort().at(-1)!;
+    `,
+        "objects",
+      );
+      assert.equal(clocks.length, 3);
+      for (const clock of clocks) {
+        assert.ok(clock.completed_on);
+        assert.equal(clock.retain_until, clock.completed_on);
+      }
+      const tickDay = clocks
+        .map((clock) => clock.completed_on)
+        .sort()
+        .at(-1)!;
 
-    // Grace is 0, so one tick flags all three (retention_flagged events
-    // + action rows) and executes the two unheld in the same pass: delete
-    // purges bytes but keeps the row and events; anonymize clears title
-    // and party. The held one blocks with its reason named.
-    const first = await runRetentionTick(h.org.orgId, tickDay);
-    assert.equal(first.flagged, 3);
-    assert.equal(first.executed, 2);
-    assert.equal(first.blocked, 1);
-    const pending = await listRetentionActions({ orgId: h.org.orgId, actorId: h.hrId, pendingOnly: true });
-    assert.equal(pending.length, 1);
+      // Grace is 0, so one tick flags all three (retention_flagged events
+      // + action rows) and executes the two unheld in the same pass: delete
+      // purges bytes but keeps the row and events; anonymize clears title
+      // and party. The held one blocks with its reason named.
+      const first = await runRetentionTick(h.org.orgId, tickDay);
+      assert.equal(first.flagged, 3);
+      assert.equal(first.executed, 2);
+      assert.equal(first.blocked, 1);
+      const pending = await listRetentionActions({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        pendingOnly: true,
+      });
+      assert.equal(pending.length, 1);
 
-    // A re-run is idempotent: nothing new to flag or execute, and the
-    // held action stays open and blocked.
-    const second = await runRetentionTick(h.org.orgId, tickDay);
-    assert.equal(second.flagged, 0);
-    assert.equal(second.executed, 0);
-    assert.equal(second.blocked, 1);
+      // A re-run is idempotent: nothing new to flag or execute, and the
+      // held action stays open and blocked.
+      const second = await runRetentionTick(h.org.orgId, tickDay);
+      assert.equal(second.flagged, 0);
+      assert.equal(second.executed, 0);
+      assert.equal(second.blocked, 1);
 
-    const deleted = (await db.execute<{ status: string; file_id: string }>(sql`
+      const deleted = (
+        await db.execute<{ status: string; file_id: string }>(
+          sql`
       select status, file_id from hrm_documents where id = ${deleteId}
-    `, "objects"))[0]!;
-    assert.equal(deleted.status, "deleted");
-    const blobs = (await db.execute<{ n: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(deleted.status, "deleted");
+      const blobs = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*) as n from file_blobs
        where version_id in (select id from file_versions where file_id = ${deleted.file_id})
-    `, "objects"))[0]!.n;
-    assert.equal(blobs, "0");
-    const eventsKept = (await db.execute<{ n: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(blobs, "0");
+      const eventsKept = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*) as n from hrm_document_events where document_id = ${deleteId}
-    `, "objects"))[0]!.n;
-    assert.ok(Number(eventsKept) >= 3);
+    `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.ok(Number(eventsKept) >= 3);
 
-    const anon = (await db.execute<{ title: string; party_id: string | null; file_id: string | null }>(sql`
+      const anon = (
+        await db.execute<{ title: string; party_id: string | null; file_id: string | null }>(
+          sql`
       select title, party_id, file_id from hrm_documents where id = ${anonId}
-    `, "objects"))[0]!;
-    assert.equal(anon.title, "Anonymized document");
-    assert.equal(anon.party_id, null);
-    assert.equal(anon.file_id, null);
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(anon.title, "Anonymized document");
+      assert.equal(anon.party_id, null);
+      assert.equal(anon.file_id, null);
 
-    const blocked = (await db.execute<{ blocked_reason: string }>(sql`
+      const blocked = (
+        await db.execute<{ blocked_reason: string }>(
+          sql`
       select blocked_reason from hrm_retention_actions
        where document_id = ${heldDoc.document.id} and executed_at is null
-    `, "objects"))[0]!;
-    assert.match(blocked.blocked_reason, /legal hold/);
-    const held = (await db.execute<{ status: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.match(blocked.blocked_reason, /legal hold/);
+      const held = (
+        await db.execute<{ status: string }>(
+          sql`
       select status from hrm_documents where id = ${heldDoc.document.id}
-    `, "objects"))[0]!;
-    assert.equal(held.status, "signed");
-    await setLegalHold({ orgId: h.org.orgId, actorId: h.hrId, documentId: heldDoc.document.id, hold: false });
-    const releasedTick = await runRetentionTick(h.org.orgId, tickDay);
-    assert.equal(releasedTick.executed, 1, "releasing a legal hold unblocks the recorded retention action");
-    const released = (await db.execute<{ status: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(held.status, "signed");
+      await setLegalHold({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        documentId: heldDoc.document.id,
+        hold: false,
+      });
+      const releasedTick = await runRetentionTick(h.org.orgId, tickDay);
+      assert.equal(
+        releasedTick.executed,
+        1,
+        "releasing a legal hold unblocks the recorded retention action",
+      );
+      const released = (
+        await db.execute<{ status: string }>(
+          sql`
       select status from hrm_documents where org_id = ${h.org.orgId} and id = ${heldDoc.document.id}
-    `, "objects"))[0]!;
-    assert.equal(released.status, "deleted");
-  });
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(released.status, "deleted");
+    },
+  );
 });
 
-test("a missing termination anchor cannot execute retention or multiply blocked actions", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    const templateId = await makeTemplate(h.org, h.hrId, "contract");
-    await saveSchedule({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      categoryKey: "contract",
-      retainYears: 0,
-      fromEvent: "termination",
-      action: "delete",
-    });
-    const documentId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, templateId, "Termination anchored record");
+test(
+  "a missing termination anchor cannot execute retention or multiply blocked actions",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupRetentionHarness(),
+      async (h) => {
+        const templateId = await makeTemplate(h.org, h.hrId, "contract");
+        await saveSchedule({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          categoryKey: "contract",
+          retainYears: 0,
+          fromEvent: "termination",
+          action: "delete",
+        });
+        const documentId = await completeDocument(
+          h.org,
+          h.hrId,
+          h.employmentId,
+          h.partyId,
+          templateId,
+          "Termination anchored record",
+        );
 
-    for (let tick = 0; tick < 2; tick += 1) {
-      const result = await runRetentionTick(h.org.orgId, "2026-09-24");
-      assert.equal(result.executed, 0, "an unresolved termination date cannot authorize purge");
-    }
-    const beforeResolution = await withOrgTransaction(h.org.orgId, async () => ({
-      status: (await db.execute<{ status: string }>(sql`
-        select status from hrm_documents where org_id = ${h.org.orgId} and id = ${documentId}`, "objects"))[0]?.status,
-      actions: await db.execute<{ blocked_reason: string | null; executed_at: string | null }>(sql`
+        for (let tick = 0; tick < 2; tick += 1) {
+          const result = await runRetentionTick(h.org.orgId, "2026-09-24");
+          assert.equal(result.executed, 0, "an unresolved termination date cannot authorize purge");
+        }
+        const beforeResolution = await withOrgTransaction(h.org.orgId, async () => ({
+          status: (
+            await db.execute<{ status: string }>(
+              sql`
+        select status from hrm_documents where org_id = ${h.org.orgId} and id = ${documentId}`,
+              "objects",
+            )
+          )[0]?.status,
+          actions: await db.execute<{ blocked_reason: string | null; executed_at: string | null }>(
+            sql`
         select blocked_reason, executed_at::text as executed_at from hrm_retention_actions
-         where org_id = ${h.org.orgId} and document_id = ${documentId}`, "objects"),
-    }));
-    assert.equal(beforeResolution.status, "signed");
-    assert.equal(beforeResolution.actions.length, 1, "repeated ticks must preserve one blocked marker per rule");
-    assert.match(beforeResolution.actions[0]!.blocked_reason ?? "", /termination anchor/);
-    assert.equal(beforeResolution.actions[0]!.executed_at, null);
+         where org_id = ${h.org.orgId} and document_id = ${documentId}`,
+            "objects",
+          ),
+        }));
+        assert.equal(beforeResolution.status, "signed");
+        assert.equal(
+          beforeResolution.actions.length,
+          1,
+          "repeated ticks must preserve one blocked marker per rule",
+        );
+        assert.match(beforeResolution.actions[0]!.blocked_reason ?? "", /termination anchor/);
+        assert.equal(beforeResolution.actions[0]!.executed_at, null);
+      },
+    );
+  },
+);
 
-  });
-});
-
-test("a legal hold that races retention wins before destructive execution", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    const templateId = await makeTemplate(h.org, h.hrId, "contract");
-    await saveSchedule({
-      orgId: h.org.orgId, actorId: h.hrId, categoryKey: "contract",
-      retainYears: 0, fromEvent: "completion", action: "delete",
-    });
-    const documentId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, templateId, "Hold race document");
-    const completed = (await db.execute<{ tick_day: string }>(sql`
+test(
+  "a legal hold that races retention wins before destructive execution",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupRetentionHarness(),
+      async (h) => {
+        const templateId = await makeTemplate(h.org, h.hrId, "contract");
+        await saveSchedule({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          categoryKey: "contract",
+          retainYears: 0,
+          fromEvent: "completion",
+          action: "delete",
+        });
+        const documentId = await completeDocument(
+          h.org,
+          h.hrId,
+          h.employmentId,
+          h.partyId,
+          templateId,
+          "Hold race document",
+        );
+        const completed = (
+          await db.execute<{ tick_day: string }>(
+            sql`
       select retain_until::text as tick_day from hrm_documents
        where org_id = ${h.org.orgId} and id = ${documentId}
-    `, "objects"))[0]!.tick_day;
-    const { setLegalHold } = await import("./documents/documents.ts");
+    `,
+            "objects",
+          )
+        )[0]!.tick_day;
+        const { setLegalHold } = await import("./documents/documents.ts");
 
-    let releaseBlocker!: () => void;
-    let signalLocked!: () => void;
-    const release = new Promise<void>((resolve) => { releaseBlocker = resolve; });
-    const locked = new Promise<void>((resolve) => { signalLocked = resolve; });
-    const blocker = withOrgTransaction(h.org.orgId, async () => {
-      await db.execute(sql`
+        let releaseBlocker!: () => void;
+        let signalLocked!: () => void;
+        const release = new Promise<void>((resolve) => {
+          releaseBlocker = resolve;
+        });
+        const locked = new Promise<void>((resolve) => {
+          signalLocked = resolve;
+        });
+        const blocker = withOrgTransaction(h.org.orgId, async () => {
+          await db.execute(sql`
         select id from hrm_documents where org_id = ${h.org.orgId} and id = ${documentId} for update
       `);
-      signalLocked();
-      await release;
-    });
-    await locked;
+          signalLocked();
+          await release;
+        });
+        await locked;
 
-    const hold = setLegalHold({ orgId: h.org.orgId, actorId: h.hrId, documentId, hold: true });
-    let tick: Promise<Awaited<ReturnType<typeof runRetentionTick>>> | undefined;
-    try {
-      await waitForDocumentLockWaiters(1);
-      tick = runRetentionTick(h.org.orgId, completed);
-      // Let the tick traverse the flagging query and reach destructive
-      // execution while the hold setter is already queued on this row.
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    } finally {
-      releaseBlocker();
-    }
-    await blocker;
-    await hold;
-    assert.ok(tick);
-    const result = await tick;
-    assert.equal(result.blocked, 1);
-    assert.equal(result.executed, 0);
-    const state = (await db.execute<{ status: string; legal_hold: boolean }>(sql`
+        const hold = setLegalHold({ orgId: h.org.orgId, actorId: h.hrId, documentId, hold: true });
+        let tick: Promise<Awaited<ReturnType<typeof runRetentionTick>>> | undefined;
+        try {
+          await waitForDocumentLockWaiters(1);
+          tick = runRetentionTick(h.org.orgId, completed);
+          // Let the tick traverse the flagging query and reach destructive
+          // execution while the hold setter is already queued on this row.
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        } finally {
+          releaseBlocker();
+        }
+        await blocker;
+        await hold;
+        assert.ok(tick);
+        const result = await tick;
+        assert.equal(result.blocked, 1);
+        assert.equal(result.executed, 0);
+        const state = (
+          await db.execute<{ status: string; legal_hold: boolean }>(
+            sql`
       select status, legal_hold from hrm_documents where org_id = ${h.org.orgId} and id = ${documentId}
-    `, "objects"))[0]!;
-    assert.deepEqual(state, { status: "signed", legal_hold: true });
-    const pending = (await db.execute<{ executed_at: string | null; blocked_reason: string | null }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.deepEqual(state, { status: "signed", legal_hold: true });
+        const pending = (
+          await db.execute<{ executed_at: string | null; blocked_reason: string | null }>(
+            sql`
       select executed_at::text as executed_at, blocked_reason from hrm_retention_actions
        where org_id = ${h.org.orgId} and document_id = ${documentId}
-    `, "objects"))[0]!;
-    assert.equal(pending.executed_at, null);
-    assert.match(pending.blocked_reason ?? "", /legal hold/);
-  });
-});
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(pending.executed_at, null);
+        assert.match(pending.blocked_reason ?? "", /legal hold/);
+      },
+    );
+  },
+);
 
 test("the tick expires stale sends", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    const tpl = await makeTemplate(h.org, h.hrId, "contract");
-    const { document } = await generateDocument({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      templateId: tpl,
-      employmentId: h.employmentId,
-      partyId: h.partyId,
-      title: "Expiring",
-      today: "2026-09-21",
-      expiresAt: "2026-09-20T00:00:00Z",
-    });
-    await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id });
-    const tick = await runRetentionTick(h.org.orgId, "2026-09-21");
-    assert.equal(tick.expired, 1);
-    const row = (await db.execute<{ status: string }>(sql`
+  await withHarness(
+    () => setupRetentionHarness(),
+    async (h) => {
+      const tpl = await makeTemplate(h.org, h.hrId, "contract");
+      const { document } = await generateDocument({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        templateId: tpl,
+        employmentId: h.employmentId,
+        partyId: h.partyId,
+        title: "Expiring",
+        today: "2026-09-21",
+        expiresAt: "2026-09-20T00:00:00Z",
+      });
+      await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id });
+      const tick = await runRetentionTick(h.org.orgId, "2026-09-21");
+      assert.equal(tick.expired, 1);
+      const row = (
+        await db.execute<{ status: string }>(
+          sql`
       select status from hrm_documents where id = ${document.id}
-    `, "objects"))[0]!;
-    assert.equal(row.status, "expired");
-  });
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(row.status, "expired");
+    },
+  );
 });
 
 test("DSAR zip contents against a seeded person", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    // Leave, time, a pay stub, and an HR document for the subject.
-    const { installEngineSeams } = await import("../composition/install.ts");
-    installEngineSeams();
-    await grantPermissions(h.org.orgId, h.hrId, ["hrm.leave.manage", "hrm.leave.request"]);
-    const leaveType = await createLeaveType({ orgId: h.org.orgId, actorId: h.hrId,
-      code: "VAC", name: "Vacation", paid: true, valueCrossing: "none" });
-    await createLeavePolicy({ orgId: h.org.orgId, actorId: h.hrId, leaveTypeId: leaveType.id,
-      appliesTo: { employer_subsidiary_id: null, department_id: null },
-      accrualRule: { kind: "per_year", hours: "120" }, carryoverRule: { kind: "none" },
-      minimumNoticeDays: 0, effectiveFrom: "2020-01-01" });
-    const leave = await fileLeaveRequest({ orgId: h.org.orgId, actorId: h.hrId,
-      employmentId: h.employmentId, leaveTypeId: leaveType.id, startsOn: "2026-08-04",
-      endsOn: "2026-08-08", hours: "40", onBehalf: true, reason: "Record the employee's confirmed leave" });
-    assert.equal((await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.hrId, requestId: leave.id })).status, "approved");
-    await db.execute(sql`
+  await withHarness(
+    () => setupRetentionHarness(),
+    async (h) => {
+      // Leave, time, a pay stub, and an HR document for the subject.
+      const { installEngineSeams } = await import("../composition/install.ts");
+      installEngineSeams();
+      await grantPermissions(h.org.orgId, h.hrId, ["hrm.leave.manage", "hrm.leave.request"]);
+      const leaveType = await createLeaveType({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        code: "VAC",
+        name: "Vacation",
+        paid: true,
+        valueCrossing: "none",
+      });
+      await createLeavePolicy({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        leaveTypeId: leaveType.id,
+        appliesTo: { employer_subsidiary_id: null, department_id: null },
+        accrualRule: { kind: "per_year", hours: "120" },
+        carryoverRule: { kind: "none" },
+        minimumNoticeDays: 0,
+        effectiveFrom: "2020-01-01",
+      });
+      const leave = await fileLeaveRequest({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        employmentId: h.employmentId,
+        leaveTypeId: leaveType.id,
+        startsOn: "2026-08-04",
+        endsOn: "2026-08-08",
+        hours: "40",
+        onBehalf: true,
+        reason: "Record the employee's confirmed leave",
+      });
+      assert.equal(
+        (await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.hrId, requestId: leave.id }))
+          .status,
+        "approved",
+      );
+      await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status)
       values (${h.org.orgId}, ${h.partyId}, '2026-09-15'::date, '8.0000', 'approved')
     `);
-    const scheduleId = randomUUID();
-    await db.execute(sql`
+      const scheduleId = randomUUID();
+      await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end)
       values (${scheduleId}, ${h.org.orgId}, 'Weekly', 'weekly', 52, '2026-01-01'::date)
     `);
-    const runId = randomUUID();
-    await db.execute(sql`
+      const runId = randomUUID();
+      await db.execute(sql`
       insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date, currency, status, created_by, updated_by)
       values (${h.org.orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`}, ${h.org.subsidiaryId}, '2026-09-19'::date, 'USD', 'committed', ${h.hrId}, ${h.hrId})
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date, tax_year, run_status)
       values (${runId}, ${h.org.orgId}, ${scheduleId}, '2026-09-13'::date, '2026-09-19'::date, '2026-09-19'::date, 2026, 'committed')
     `);
-    // pay_stubs.employment_id is NOT NULL (0186): the stub carries the
-    // harness party's own employment.
-    await db.execute(sql`
+      // pay_stubs.employment_id is NOT NULL (0186): the stub carries the
+      // harness party's own employment.
+      await db.execute(sql`
       insert into pay_stubs (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
       values ('US', 'calculation', ${h.org.orgId}, ${runId}, ${h.partyId}, ${h.employmentId}, 'TX', 52, '2026-09-19'::date, 2026, 'USD', '900.0000', '700.0000')
     `);
-    const tpl = await makeTemplate(h.org, h.hrId, "contract");
-    await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, tpl, "My contract");
+      const tpl = await makeTemplate(h.org, h.hrId, "contract");
+      await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, tpl, "My contract");
 
-    // The subject requests their own export with the self grant alone.
-    const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
-    assert.equal(requested.status, "queued");
-    // A non-subject without manage is refused by name.
-    const stranger = await createScratchUser(h.org.orgId, "Stranger", "stranger_self");
-    await grantPermissions(h.org.orgId, stranger, ["hrm.self.read"]);
-    await assert.rejects(
-      requestExport({ orgId: h.org.orgId, actorId: stranger, partyId: h.partyId }),
-      (e: unknown) => e instanceof HrmDocumentsError && e.code === "FORBIDDEN",
-    );
+      // The subject requests their own export with the self grant alone.
+      const requested = await requestExport({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        partyId: h.partyId,
+      });
+      assert.equal(requested.status, "queued");
+      // A non-subject without manage is refused by name.
+      const stranger = await createScratchUser(h.org.orgId, "Stranger", "stranger_self");
+      await grantPermissions(h.org.orgId, stranger, ["hrm.self.read"]);
+      await assert.rejects(
+        requestExport({ orgId: h.org.orgId, actorId: stranger, partyId: h.partyId }),
+        (e: unknown) => e instanceof HrmDocumentsError && e.code === "FORBIDDEN",
+      );
 
-    await buildExport(h.org.orgId, requested.id);
-    const listed = await listExports({ orgId: h.org.orgId, actorId: h.hrId, partyId: h.partyId });
-    assert.equal(listed[0]!.status, "ready");
-    const scope = listed[0]!.scope as { module: string; status: string }[];
-    for (const module of ["party", "employments", "leave", "time", "documents", "payroll"]) {
-      assert.equal(scope.find((s) => s.module === module)?.status, "included", `${module} must be included`);
-    }
+      await buildExport(h.org.orgId, requested.id);
+      const listed = await listExports({ orgId: h.org.orgId, actorId: h.hrId, partyId: h.partyId });
+      assert.equal(listed[0]!.status, "ready");
+      const scope = listed[0]!.scope as { module: string; status: string }[];
+      for (const module of ["party", "employments", "leave", "time", "documents", "payroll"]) {
+        assert.equal(
+          scope.find((s) => s.module === module)?.status,
+          "included",
+          `${module} must be included`,
+        );
+      }
 
-    const { bytes } = await downloadExport({ orgId: h.org.orgId, actorId: h.employeeId, exportId: requested.id });
-    const dir = mkdtempSync(join(tmpdir(), "hrm-dsar-"));
-    const path = join(dir, "export.zip");
-    writeFileSync(path, bytes);
-    const listing = execFileSync("unzip", ["-l", path], { encoding: "utf8" });
-    assert.match(listing, /export\.json/);
-    assert.match(listing, /documents\/.*\.pdf/);
-    const raw = execFileSync("unzip", ["-p", path, "export.json"], { maxBuffer: 64 * 1024 * 1024 });
-    const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as Record<string, unknown>;
-    assert.equal((payload.party as { id: string }).id, h.partyId);
-    assert.ok(((payload.employments ?? []) as unknown[]).length >= 1);
-    assert.ok(((payload.leaveRequests ?? []) as unknown[]).length >= 1);
-    assert.ok(((payload.timeEntries ?? []) as unknown[]).length >= 1);
-    assert.ok(((payload.payStubs ?? []) as unknown[]).length >= 1);
-    assert.equal(((payload.payStubs ?? []) as { gross: string }[])[0]!.gross, "900.0000");
-    assert.ok(((payload.documents ?? []) as unknown[]).length >= 1);
-    // Download flips ready to delivered, read back from storage.
-    const status = (await db.execute<{ status: string }>(sql`
+      const { bytes } = await downloadExport({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        exportId: requested.id,
+      });
+      const dir = mkdtempSync(join(tmpdir(), "hrm-dsar-"));
+      const path = join(dir, "export.zip");
+      writeFileSync(path, bytes);
+      const listing = execFileSync("unzip", ["-l", path], { encoding: "utf8" });
+      assert.match(listing, /export\.json/);
+      assert.match(listing, /documents\/.*\.pdf/);
+      const raw = execFileSync("unzip", ["-p", path, "export.json"], {
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as Record<string, unknown>;
+      assert.equal((payload.party as { id: string }).id, h.partyId);
+      assert.ok(((payload.employments ?? []) as unknown[]).length >= 1);
+      assert.ok(((payload.leaveRequests ?? []) as unknown[]).length >= 1);
+      assert.ok(((payload.timeEntries ?? []) as unknown[]).length >= 1);
+      assert.ok(((payload.payStubs ?? []) as unknown[]).length >= 1);
+      assert.equal(((payload.payStubs ?? []) as { gross: string }[])[0]!.gross, "900.0000");
+      assert.ok(((payload.documents ?? []) as unknown[]).length >= 1);
+      // Download flips ready to delivered, read back from storage.
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
       select status from hrm_data_subject_exports where id = ${requested.id}
-    `, "objects"))[0]!;
-    assert.equal(status.status, "delivered");
-  });
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(status.status, "delivered");
+    },
+  );
 });
 
-test("DSAR exports paginate unbounded histories instead of truncating at 2000", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    // 2500 time entries: three keyset pages where the old
-    // ORDER BY worked_on LIMIT 2000 silently dropped 500 rows while the
-    // export still reported ready.
-    await db.execute(sql`
+test(
+  "DSAR exports paginate unbounded histories instead of truncating at 2000",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupRetentionHarness(),
+      async (h) => {
+        // 2500 time entries: three keyset pages where the old
+        // ORDER BY worked_on LIMIT 2000 silently dropped 500 rows while the
+        // export still reported ready.
+        await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status)
       select ${h.org.orgId}, ${h.partyId}, date '2020-01-01' + g, '8.0000', 'approved'
         from generate_series(0, 2499) g
     `);
-    // 510 stubs sharing one pay run, one line each: two stub pages plus
-    // chunked line fetches instead of one unbounded IN list.
-    const scheduleId = randomUUID();
-    await db.execute(sql`
+        // 510 stubs sharing one pay run, one line each: two stub pages plus
+        // chunked line fetches instead of one unbounded IN list.
+        const scheduleId = randomUUID();
+        await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end)
       values (${scheduleId}, ${h.org.orgId}, 'Weekly', 'weekly', 52, '2026-01-01'::date)
     `);
-    // One stub per (pay run, employee) — pay_stubs_run_employee — so the
-    // 510 stubs need 510 runs, built in one statement.
-    await db.execute(sql`
+        // One stub per (pay run, employee) — pay_stubs_run_employee — so the
+        // 510 stubs need 510 runs, built in one statement.
+        await db.execute(sql`
       with docs as (
         insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date, currency, status, created_by, updated_by)
         select ${h.org.orgId}, uuid_generate_v7(), 'pay_run', 'PAY-PG-' || g::text,
@@ -491,196 +723,327 @@ test("DSAR exports paginate unbounded histories instead of truncating at 2000", 
              date '2020-01-01' + ((row_number() over () - 1)::int), 2020, 'USD', '900.0000', '700.0000'
         from prs
     `);
-    await db.execute(sql`
+        await db.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, kind, description, amount)
       select ${h.org.orgId}, s.id, 'earning', 'Seeded wage', '900.0000'
         from pay_stubs s
        where s.org_id = ${h.org.orgId} and s.employee_party_id = ${h.partyId}
     `);
 
-    const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
-    await buildExport(h.org.orgId, requested.id);
-    const listed = await listExports({ orgId: h.org.orgId, actorId: h.hrId, partyId: h.partyId });
-    assert.equal(listed[0]!.status, "ready");
-    const scope = listed[0]!.scope as { module: string; status: string }[];
-    assert.equal(scope.find((s) => s.module === "time")?.status, "included");
-    assert.equal(scope.find((s) => s.module === "payroll")?.status, "included");
+        const requested = await requestExport({
+          orgId: h.org.orgId,
+          actorId: h.employeeId,
+          partyId: h.partyId,
+        });
+        await buildExport(h.org.orgId, requested.id);
+        const listed = await listExports({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          partyId: h.partyId,
+        });
+        assert.equal(listed[0]!.status, "ready");
+        const scope = listed[0]!.scope as { module: string; status: string }[];
+        assert.equal(scope.find((s) => s.module === "time")?.status, "included");
+        assert.equal(scope.find((s) => s.module === "payroll")?.status, "included");
 
-    const { bytes } = await downloadExport({ orgId: h.org.orgId, actorId: h.employeeId, exportId: requested.id });
-    const dir = mkdtempSync(join(tmpdir(), "hrm-dsar-page-"));
-    const path = join(dir, "export.zip");
-    writeFileSync(path, bytes);
-    const raw = execFileSync("unzip", ["-p", path, "export.json"], { maxBuffer: 128 * 1024 * 1024 });
-    const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as Record<string, unknown>;
-    // Every row survives: nothing truncated, nothing duplicated.
-    const timeEntries = (payload.timeEntries ?? []) as { id: string }[];
-    assert.equal(timeEntries.length, 2500);
-    assert.equal(new Set(timeEntries.map((e) => e.id)).size, 2500);
-    const payStubs = (payload.payStubs ?? []) as { id: string }[];
-    assert.equal(payStubs.length, 510);
-    const payStubLines = (payload.payStubLines ?? []) as { stub_id: string }[];
-    assert.equal(payStubLines.length, 510);
-    assert.equal(new Set(payStubLines.map((l) => l.stub_id)).size, 510);
-  });
-});
+        const { bytes } = await downloadExport({
+          orgId: h.org.orgId,
+          actorId: h.employeeId,
+          exportId: requested.id,
+        });
+        const dir = mkdtempSync(join(tmpdir(), "hrm-dsar-page-"));
+        const path = join(dir, "export.zip");
+        writeFileSync(path, bytes);
+        const raw = execFileSync("unzip", ["-p", path, "export.json"], {
+          maxBuffer: 128 * 1024 * 1024,
+        });
+        const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as Record<string, unknown>;
+        // Every row survives: nothing truncated, nothing duplicated.
+        const timeEntries = (payload.timeEntries ?? []) as { id: string }[];
+        assert.equal(timeEntries.length, 2500);
+        assert.equal(new Set(timeEntries.map((e) => e.id)).size, 2500);
+        const payStubs = (payload.payStubs ?? []) as { id: string }[];
+        assert.equal(payStubs.length, 510);
+        const payStubLines = (payload.payStubLines ?? []) as { stub_id: string }[];
+        assert.equal(payStubLines.length, 510);
+        assert.equal(new Set(payStubLines.map((l) => l.stub_id)).size, 510);
+      },
+    );
+  },
+);
 
-test("DSAR claims are durable: one worker wins and the loser cannot fail the export", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
-    // The first claim durably marks the row building with an owner + lease.
-    const ownerA = randomUUID();
-    const first = await claimQueuedExport(db, h.org.orgId, ownerA);
-    assert.ok(first);
-    assert.equal(first.id, requested.id);
-    assert.equal(first.claimedBy, ownerA);
-    const stored = (await db.execute<{ status: string; claimed_by: string; lease: string | null }>(sql`
+test(
+  "DSAR claims are durable: one worker wins and the loser cannot fail the export",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupRetentionHarness(),
+      async (h) => {
+        const requested = await requestExport({
+          orgId: h.org.orgId,
+          actorId: h.employeeId,
+          partyId: h.partyId,
+        });
+        // The first claim durably marks the row building with an owner + lease.
+        const ownerA = randomUUID();
+        const first = await claimQueuedExport(db, h.org.orgId, ownerA);
+        assert.ok(first);
+        assert.equal(first.id, requested.id);
+        assert.equal(first.claimedBy, ownerA);
+        const stored = (
+          await db.execute<{ status: string; claimed_by: string; lease: string | null }>(
+            sql`
       select status, claimed_by, lease_expires_at::text as lease
         from hrm_data_subject_exports where id = ${requested.id}
-    `, "objects"))[0]!;
-    assert.equal(stored.status, "building");
-    assert.equal(stored.claimed_by, ownerA);
-    assert.ok(stored.lease);
-    // A second worker with a live lease gets nothing — before the durable
-    // claim it re-returned the same row and both workers built.
-    assert.equal(await claimQueuedExport(db, h.org.orgId, randomUUID()), null);
-    // An intruder that never held the claim can neither build nor fail it.
-    await buildExport(h.org.orgId, requested.id, { owner: randomUUID() });
-    const held = (await db.execute<{ status: string; error: string | null }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(stored.status, "building");
+        assert.equal(stored.claimed_by, ownerA);
+        assert.ok(stored.lease);
+        // A second worker with a live lease gets nothing — before the durable
+        // claim it re-returned the same row and both workers built.
+        assert.equal(await claimQueuedExport(db, h.org.orgId, randomUUID()), null);
+        // An intruder that never held the claim can neither build nor fail it.
+        await buildExport(h.org.orgId, requested.id, { owner: randomUUID() });
+        const held = (
+          await db.execute<{ status: string; error: string | null }>(
+            sql`
       select status, error from hrm_data_subject_exports where id = ${requested.id}
-    `, "objects"))[0]!;
-    assert.equal(held.status, "building");
-    assert.equal(held.error, null);
-    // The owner builds to ready with no error.
-    await buildExport(h.org.orgId, requested.id, { owner: ownerA });
-    const ready = (await db.execute<{ status: string; error: string | null }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(held.status, "building");
+        assert.equal(held.error, null);
+        // The owner builds to ready with no error.
+        await buildExport(h.org.orgId, requested.id, { owner: ownerA });
+        const ready = (
+          await db.execute<{ status: string; error: string | null }>(
+            sql`
       select status, error from hrm_data_subject_exports where id = ${requested.id}
-    `, "objects"))[0]!;
-    assert.equal(ready.status, "ready");
-    assert.equal(ready.error, null);
-    // A stale loser arriving after ready changes nothing: the winner's
-    // ready export is never flipped to failed.
-    await buildExport(h.org.orgId, requested.id, { owner: randomUUID() });
-    const settled = (await db.execute<{ status: string; error: string | null }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(ready.status, "ready");
+        assert.equal(ready.error, null);
+        // A stale loser arriving after ready changes nothing: the winner's
+        // ready export is never flipped to failed.
+        await buildExport(h.org.orgId, requested.id, { owner: randomUUID() });
+        const settled = (
+          await db.execute<{ status: string; error: string | null }>(
+            sql`
       select status, error from hrm_data_subject_exports where id = ${requested.id}
-    `, "objects"))[0]!;
-    assert.equal(settled.status, "ready");
-    assert.equal(settled.error, null);
-  });
-});
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(settled.status, "ready");
+        assert.equal(settled.error, null);
+      },
+    );
+  },
+);
 
 test("DSAR reclaims expired leases oldest-first", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
-    // A worker claims then crashes: the row sits building with a dead lease.
-    await claimQueuedExport(db, h.org.orgId, randomUUID());
-    await db.execute(sql`
+  await withHarness(
+    () => setupRetentionHarness(),
+    async (h) => {
+      const requested = await requestExport({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        partyId: h.partyId,
+      });
+      // A worker claims then crashes: the row sits building with a dead lease.
+      await claimQueuedExport(db, h.org.orgId, randomUUID());
+      await db.execute(sql`
       update hrm_data_subject_exports
          set lease_expires_at = now() - interval '1 hour'
        where org_id = ${h.org.orgId} and id = ${requested.id}
     `);
-    // The next drain reclaims it under a new owner and finishes the export.
-    const ownerC = randomUUID();
-    const recovered = await claimQueuedExport(db, h.org.orgId, ownerC);
-    assert.ok(recovered);
-    assert.equal(recovered.id, requested.id);
-    assert.equal(recovered.claimedBy, ownerC);
-    await buildExport(h.org.orgId, requested.id, { owner: ownerC });
-    const done = (await db.execute<{ status: string }>(sql`
+      // The next drain reclaims it under a new owner and finishes the export.
+      const ownerC = randomUUID();
+      const recovered = await claimQueuedExport(db, h.org.orgId, ownerC);
+      assert.ok(recovered);
+      assert.equal(recovered.id, requested.id);
+      assert.equal(recovered.claimedBy, ownerC);
+      await buildExport(h.org.orgId, requested.id, { owner: ownerC });
+      const done = (
+        await db.execute<{ status: string }>(
+          sql`
       select status from hrm_data_subject_exports where id = ${requested.id}
-    `, "objects"))[0]!;
-    assert.equal(done.status, "ready");
-  });
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(done.status, "ready");
+    },
+  );
 });
 
-test("DSAR export with missing file bytes is incomplete with omission evidence", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    const tpl = await makeTemplate(h.org, h.hrId, "contract");
-    const docId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, tpl, "My contract");
-    // Lose the bytes the way retention delete does (file row survives, no
-    // retrievable version remains) so the documents join finds nothing.
-    const file = (await db.execute<{ file_id: string }>(sql`
+test(
+  "DSAR export with missing file bytes is incomplete with omission evidence",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupRetentionHarness(),
+      async (h) => {
+        const tpl = await makeTemplate(h.org, h.hrId, "contract");
+        const docId = await completeDocument(
+          h.org,
+          h.hrId,
+          h.employmentId,
+          h.partyId,
+          tpl,
+          "My contract",
+        );
+        // Lose the bytes the way retention delete does (file row survives, no
+        // retrievable version remains) so the documents join finds nothing.
+        const file = (
+          await db.execute<{ file_id: string }>(
+            sql`
       select file_id from hrm_documents where id = ${docId}
-    `, "objects"))[0]!;
-    const { purgeCabinetBytes } = await import("./documents/cabinet.ts");
-    await purgeCabinetBytes(db, h.org.orgId, file.file_id);
+    `,
+            "objects",
+          )
+        )[0]!;
+        const { purgeCabinetBytes } = await import("./documents/cabinet.ts");
+        await purgeCabinetBytes(db, h.org.orgId, file.file_id);
 
-    const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
-    await buildExport(h.org.orgId, requested.id);
-    // Never ready: the export is incomplete and says which file is missing.
-    const listed = await listExports({ orgId: h.org.orgId, actorId: h.hrId, partyId: h.partyId });
-    assert.equal(listed[0]!.status, "incomplete");
-    const scope = listed[0]!.scope as { module: string; status: string; detail?: string }[];
-    const documents = scope.find((s) => s.module === "documents")!;
-    assert.equal(documents.status, "incomplete");
-    assert.ok(documents.detail?.includes("My contract"), "manifest names the omitted document");
-    assert.ok(documents.detail?.includes(docId), "manifest names the omitted document id");
+        const requested = await requestExport({
+          orgId: h.org.orgId,
+          actorId: h.employeeId,
+          partyId: h.partyId,
+        });
+        await buildExport(h.org.orgId, requested.id);
+        // Never ready: the export is incomplete and says which file is missing.
+        const listed = await listExports({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          partyId: h.partyId,
+        });
+        assert.equal(listed[0]!.status, "incomplete");
+        const scope = listed[0]!.scope as { module: string; status: string; detail?: string }[];
+        const documents = scope.find((s) => s.module === "documents")!;
+        assert.equal(documents.status, "incomplete");
+        assert.ok(documents.detail?.includes("My contract"), "manifest names the omitted document");
+        assert.ok(documents.detail?.includes(docId), "manifest names the omitted document id");
 
-    // export.json carries the same per-document omission evidence.
-    const { bytes } = await downloadExport({ orgId: h.org.orgId, actorId: h.employeeId, exportId: requested.id });
-    const dir = mkdtempSync(join(tmpdir(), "hrm-dsar-omitted-"));
-    const path = join(dir, "export.zip");
-    writeFileSync(path, bytes);
-    const raw = execFileSync("unzip", ["-p", path, "export.json"], { maxBuffer: 64 * 1024 * 1024 });
-    const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as {
-      omittedDocuments: { id: string; title: string; reason: string }[];
-    };
-    assert.equal(payload.omittedDocuments.length, 1);
-    assert.equal(payload.omittedDocuments[0]!.id, docId);
-    assert.ok(payload.omittedDocuments[0]!.reason.length > 0);
-    // Download serves the partial zip but the incomplete status sticks —
-    // it never flips to delivered and hides the partiality.
-    const status = (await db.execute<{ status: string }>(sql`
+        // export.json carries the same per-document omission evidence.
+        const { bytes } = await downloadExport({
+          orgId: h.org.orgId,
+          actorId: h.employeeId,
+          exportId: requested.id,
+        });
+        const dir = mkdtempSync(join(tmpdir(), "hrm-dsar-omitted-"));
+        const path = join(dir, "export.zip");
+        writeFileSync(path, bytes);
+        const raw = execFileSync("unzip", ["-p", path, "export.json"], {
+          maxBuffer: 64 * 1024 * 1024,
+        });
+        const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as {
+          omittedDocuments: { id: string; title: string; reason: string }[];
+        };
+        assert.equal(payload.omittedDocuments.length, 1);
+        assert.equal(payload.omittedDocuments[0]!.id, docId);
+        assert.ok(payload.omittedDocuments[0]!.reason.length > 0);
+        // Download serves the partial zip but the incomplete status sticks —
+        // it never flips to delivered and hides the partiality.
+        const status = (
+          await db.execute<{ status: string }>(
+            sql`
       select status from hrm_data_subject_exports where id = ${requested.id}
-    `, "objects"))[0]!;
-    assert.equal(status.status, "incomplete");
-  });
-});
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(status.status, "incomplete");
+      },
+    );
+  },
+);
 
-test("retention action is frozen at completion: schedule edits govern only future documents", { skip: !DB }, async () => {
-  await withHarness(() => setupRetentionHarness(), async (h) => {
-    const tpl = await makeTemplate(h.org, h.hrId, "contract");
-    await saveSchedule({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      categoryKey: "contract",
-      retainYears: 0,
-      fromEvent: "completion",
-      action: "anonymize",
-    });
-    const docId = await completeDocument(h.org, h.hrId, h.employmentId, h.partyId, tpl, "Freezable contract");
-    // The completion snapshot froze the governing action alongside the date.
-    const snap = (await db.execute<{ retention_action: string | null }>(sql`
+test(
+  "retention action is frozen at completion: schedule edits govern only future documents",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupRetentionHarness(),
+      async (h) => {
+        const tpl = await makeTemplate(h.org, h.hrId, "contract");
+        await saveSchedule({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          categoryKey: "contract",
+          retainYears: 0,
+          fromEvent: "completion",
+          action: "anonymize",
+        });
+        const docId = await completeDocument(
+          h.org,
+          h.hrId,
+          h.employmentId,
+          h.partyId,
+          tpl,
+          "Freezable contract",
+        );
+        // The completion snapshot froze the governing action alongside the date.
+        const snap = (
+          await db.execute<{ retention_action: string | null }>(
+            sql`
       select retention_action from hrm_documents where id = ${docId}
-    `, "objects"))[0]!;
-    assert.equal(snap.retention_action, "anonymize");
-    // The rule is then edited anonymize → delete BEFORE the tick runs.
-    const sched = (await listSchedules({ orgId: h.org.orgId, actorId: h.hrId })).find(
-      (s) => s.categoryKey === "contract",
-    )!;
-    await saveSchedule({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      scheduleId: sched.id,
-      categoryKey: "contract",
-      retainYears: 0,
-      fromEvent: "completion",
-      action: "delete",
-    });
-    const completedOn = (await db.execute<{ d: string }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(snap.retention_action, "anonymize");
+        // The rule is then edited anonymize → delete BEFORE the tick runs.
+        const sched = (await listSchedules({ orgId: h.org.orgId, actorId: h.hrId })).find(
+          (s) => s.categoryKey === "contract",
+        )!;
+        await saveSchedule({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          scheduleId: sched.id,
+          categoryKey: "contract",
+          retainYears: 0,
+          fromEvent: "completion",
+          action: "delete",
+        });
+        const completedOn = (
+          await db.execute<{ d: string }>(
+            sql`
       select completed_at::date::text as d from hrm_documents where id = ${docId}
-    `, "objects"))[0]!.d;
-    const tick = await runRetentionTick(h.org.orgId, completedOn);
-    assert.equal(tick.executed, 1);
-    // Anonymized under the frozen rule — NOT deleted under the edited one.
-    const doc = (await db.execute<{ status: string; title: string; party_id: string | null }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!.d;
+        const tick = await runRetentionTick(h.org.orgId, completedOn);
+        assert.equal(tick.executed, 1);
+        // Anonymized under the frozen rule — NOT deleted under the edited one.
+        const doc = (
+          await db.execute<{ status: string; title: string; party_id: string | null }>(
+            sql`
       select status, title, party_id from hrm_documents where id = ${docId}
-    `, "objects"))[0]!;
-    assert.equal(doc.title, "Anonymized document");
-    assert.equal(doc.party_id, null);
-    assert.notEqual(doc.status, "deleted");
-    const action = (await db.execute<{ action: string }>(sql`
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(doc.title, "Anonymized document");
+        assert.equal(doc.party_id, null);
+        assert.notEqual(doc.status, "deleted");
+        const action = (
+          await db.execute<{ action: string }>(
+            sql`
       select action from hrm_retention_actions where document_id = ${docId}
-    `, "objects"))[0]!;
-    assert.equal(action.action, "anonymize");
-  });
-});
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(action.action, "anonymize");
+      },
+    );
+  },
+);

@@ -2,7 +2,12 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import type { Authz } from "../authz";
-import type { OwnedRunOutcome, OwnedRunSnapshot, OwnedRunStatus, OwnedRunStore } from "./owned-runs";
+import type {
+  OwnedRunOutcome,
+  OwnedRunSnapshot,
+  OwnedRunStatus,
+  OwnedRunStore,
+} from "./owned-runs";
 
 /**
  * Database adapter for server-owned assistant runs. Runs live in the
@@ -51,20 +56,24 @@ export function createDbOwnedRunStore(authz: Authz): OwnedRunStore {
 
   return {
     async startRun(conversationId: string) {
-      const rows = await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(
+        sql`
         insert into ai_messages (org_id, conversation_id, role, content, data, created_by, updated_by)
         select ${user.orgId}, ${conversationId}, 'assistant', '',
                ${JSON.stringify({ v: 1, kind: "agent-turn", status: "running", revision: 0, abortRequested: false, parts: [] })}::jsonb,
                ${user.id}, ${user.id}
          where exists (${ownedConversation(conversationId)})
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       const id = rows[0]?.id;
       if (!id) throw new Error("conversation not owned");
       return { runId: id };
     },
 
     async writeProgress(runId: string, parts: unknown[], revision: number) {
-      const rows = await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(
+        sql`
         update ai_messages m
            set data = jsonb_set(jsonb_set(${RUN_DATA}, '{parts}', ${JSON.stringify(parts)}::jsonb), '{revision}', ${JSON.stringify(revision)}::jsonb),
                updated_at = now(), updated_by = ${user.id}
@@ -73,12 +82,15 @@ export function createDbOwnedRunStore(authz: Authz): OwnedRunStore {
            and c.id = m.conversation_id
            and c.org_id = ${user.orgId} and c.user_id = ${user.id}
            and m.data ->> 'status' = 'running'
-        returning m.id`, "objects");
+        returning m.id`,
+        "objects",
+      );
       return rows.length > 0;
     },
 
     async finishRun(runId: string, outcome: OwnedRunOutcome) {
-      const rows = await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(
+        sql`
         update ai_messages m
            set content = ${outcome.content},
                data = jsonb_build_object(
@@ -94,12 +106,15 @@ export function createDbOwnedRunStore(authz: Authz): OwnedRunStore {
          where m.id = ${runId}
            and c.id = m.conversation_id
            and c.org_id = ${user.orgId} and c.user_id = ${user.id}
-        returning m.id`, "objects");
+        returning m.id`,
+        "objects",
+      );
       return rows.length > 0;
     },
 
     async readRun(runId: string) {
-      const rows = await db.execute<RunRow>(sql`
+      const rows = await db.execute<RunRow>(
+        sql`
         select m.id, m.conversation_id,
                m.data ->> 'status' as status,
                coalesce(m.data -> 'parts', '[]'::jsonb) as parts,
@@ -110,13 +125,16 @@ export function createDbOwnedRunStore(authz: Authz): OwnedRunStore {
           join ai_conversations c on c.id = m.conversation_id
          where m.id = ${runId}
            and c.org_id = ${user.orgId} and c.user_id = ${user.id}
-           and m.data ->> 'kind' = 'agent-turn'`, "objects");
+           and m.data ->> 'kind' = 'agent-turn'`,
+        "objects",
+      );
       const row = rows[0];
       return row ? toSnapshot(row) : null;
     },
 
     async activeRun(conversationId: string) {
-      const rows = await db.execute<RunRow>(sql`
+      const rows = await db.execute<RunRow>(
+        sql`
         select m.id, m.conversation_id,
                m.data ->> 'status' as status,
                coalesce(m.data -> 'parts', '[]'::jsonb) as parts,
@@ -130,7 +148,9 @@ export function createDbOwnedRunStore(authz: Authz): OwnedRunStore {
            and m.data ->> 'kind' = 'agent-turn'
            and m.data ->> 'status' = 'running'
          order by m.created_at desc
-         limit 1`, "objects");
+         limit 1`,
+        "objects",
+      );
       const row = rows[0];
       return row ? toSnapshot(row) : null;
     },
@@ -138,7 +158,8 @@ export function createDbOwnedRunStore(authz: Authz): OwnedRunStore {
     async requestAbort(runId: string) {
       const { abortOwnedRunNow } = await import("./owned-runs");
       abortOwnedRunNow(runId);
-      const rows = await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(
+        sql`
         update ai_messages m
            set data = jsonb_set(${RUN_DATA}, '{abortRequested}', 'true'::jsonb),
                updated_at = now(), updated_by = ${user.id}
@@ -147,17 +168,22 @@ export function createDbOwnedRunStore(authz: Authz): OwnedRunStore {
            and c.id = m.conversation_id
            and c.org_id = ${user.orgId} and c.user_id = ${user.id}
            and m.data ->> 'status' = 'running'
-        returning m.id`, "objects");
+        returning m.id`,
+        "objects",
+      );
       return rows.length > 0;
     },
 
     async abortRequested(runId: string) {
-      const rows = await db.execute<{ aborted: boolean }>(sql`
+      const rows = await db.execute<{ aborted: boolean }>(
+        sql`
         select coalesce((m.data ->> 'abortRequested')::boolean, false) as aborted
           from ai_messages m
           join ai_conversations c on c.id = m.conversation_id
          where m.id = ${runId}
-           and c.org_id = ${user.orgId} and c.user_id = ${user.id}`, "objects");
+           and c.org_id = ${user.orgId} and c.user_id = ${user.id}`,
+        "objects",
+      );
       return rows[0]?.aborted === true;
     },
   };

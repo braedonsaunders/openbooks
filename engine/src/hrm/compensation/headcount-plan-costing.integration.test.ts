@@ -2,18 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
-import {
-} from "../../testing/fixtures.ts";
-import {
-  setCompensationSettings,
-  setupHarness,
-  withHarness,
-} from "../../testing/hrm-harness.ts";
+import {} from "../../testing/fixtures.ts";
+import { setCompensationSettings, setupHarness, withHarness } from "../../testing/hrm-harness.ts";
 import { CompensationError } from "./errors.ts";
-import {
-  createJobFamily,
-  createJobLevel,
-} from "./architecture.ts";
+import { createJobFamily, createJobLevel } from "./architecture.ts";
 import { createPayBand } from "./bands.ts";
 import {
   applyBurden,
@@ -69,7 +61,10 @@ test("F04: fractional fallback percents keep full precision to the fraction", ()
   assert.equal(applyBurden("60000.0000", composeFallbackBurdenRate(["0.005"])), "60003.0000");
   // Multiple fractional components compose exactly in percent space.
   assert.equal(composeFallbackBurdenRate([0.005, "0.015", 10]), "0.100200");
-  assert.equal(applyBurden("60000.0000", composeFallbackBurdenRate([0.005, "0.015", 10])), "66012.0000");
+  assert.equal(
+    applyBurden("60000.0000", composeFallbackBurdenRate([0.005, "0.015", 10])),
+    "66012.0000",
+  );
 });
 
 test("F04: high-precision fractions apply exactly, never silently rounded", () => {
@@ -81,35 +76,57 @@ test("F04: high-precision fractions apply exactly, never silently rounded", () =
 
 test("F04: invalid and overprecision burden rates refuse by name", () => {
   for (const bad of ["abc", "", "-0.14", "14%"]) {
-    assert.throws(() => requireBurdenRate(bad), (e: unknown) => {
+    assert.throws(
+      () => requireBurdenRate(bad),
+      (e: unknown) => {
+        assert.ok(e instanceof CompensationError);
+        assert.match(e.message, /not a decimal fraction/);
+        assert.match(e.message, /compensation settings/);
+        return true;
+      },
+    );
+  }
+  assert.throws(
+    () => requireBurdenRate("0.14123456789"),
+    (e: unknown) => {
       assert.ok(e instanceof CompensationError);
-      assert.match(e.message, /not a decimal fraction/);
+      assert.match(e.message, /more than 10 decimal places/);
       assert.match(e.message, /compensation settings/);
       return true;
-    });
-  }
-  assert.throws(() => requireBurdenRate("0.14123456789"), (e: unknown) => {
-    assert.ok(e instanceof CompensationError);
-    assert.match(e.message, /more than 10 decimal places/);
-    assert.match(e.message, /compensation settings/);
-    return true;
-  });
+    },
+  );
 });
 
 const HEADCOUNT_PLAN_COSTING_SPEC = {
   users: [
-    { key: "hrId", name: "F04 HR", handle: "f04_hr", permissions: ["hrm.compensation.read", "hrm.compensation.manage"] },
+    {
+      key: "hrId",
+      name: "F04 HR",
+      handle: "f04_hr",
+      permissions: ["hrm.compensation.read", "hrm.compensation.manage"],
+    },
   ],
 } as const;
 
-async function setLaborCostingComponents(orgId: string, components: Record<string, unknown>[]): Promise<void> {
-  const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
-    select settings from orgs where id = ${orgId}`, "objects"))[0]?.settings ?? {};
+async function setLaborCostingComponents(
+  orgId: string,
+  components: Record<string, unknown>[],
+): Promise<void> {
+  const current =
+    (
+      await db.execute<{ settings: Record<string, unknown> }>(
+        sql`
+    select settings from orgs where id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.settings ?? {};
   const next = {
     ...(current as Record<string, unknown>),
     laborCosting: { mode: "off", hoursPerDay: "8", annualHours: "2080", components },
   };
-  await db.execute(sql`update orgs set settings = ${JSON.stringify(next)}::jsonb where id = ${orgId}`);
+  await db.execute(
+    sql`update orgs set settings = ${JSON.stringify(next)}::jsonb where id = ${orgId}`,
+  );
 }
 
 async function seedBand(orgId: string, hrId: string, _subsidiaryId: string) {
@@ -144,127 +161,222 @@ async function seedBand(orgId: string, hrId: string, _subsidiaryId: string) {
 }
 
 test("F04: configured 14% burden costs end to end with audit evidence", async () => {
-  await withHarness(() => setupHarness(HEADCOUNT_PLAN_COSTING_SPEC), async (h) => {
-    const { org } = h;
-    const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
-    await setCompensationSettings(org.orgId, { burdenRate: "0.1400" });
-    const plan = await createPlan({
-      orgId: org.orgId, actorId: h.hrId, name: "FY26 plan",
-      fiscalPeriodFrom: "2026-01-01", fiscalPeriodTo: "2026-12-31",
-    });
-    const line = await createPlanLine({
-      orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "create",
-      title: "Engineer III", employerSubsidiaryId: org.subsidiaryId, jobLevelId: level.id,
-      plannedFte: "1", startOn: "2026-03-01", currency: "CAD", reason: "growth",
-    });
-    // 60000 target x 1.0 FTE x 1.14 burden, with its inputs explainable.
-    assert.equal(line.estAnnualCost, "68400.0000");
-    assert.deepEqual(line.costBasis, {
-      basis: "band_target", annual_target: "60000.0000", planned_fte: "1",
-      burden_rate: "0.1400", burden_source: "compensation_settings",
-    });
-    const stored = (await db.execute<{ est_annual_cost: string; cost_basis: Record<string, unknown> }>(sql`
+  await withHarness(
+    () => setupHarness(HEADCOUNT_PLAN_COSTING_SPEC),
+    async (h) => {
+      const { org } = h;
+      const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
+      await setCompensationSettings(org.orgId, { burdenRate: "0.1400" });
+      const plan = await createPlan({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        name: "FY26 plan",
+        fiscalPeriodFrom: "2026-01-01",
+        fiscalPeriodTo: "2026-12-31",
+      });
+      const line = await createPlanLine({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        planId: plan.id,
+        kind: "create",
+        title: "Engineer III",
+        employerSubsidiaryId: org.subsidiaryId,
+        jobLevelId: level.id,
+        plannedFte: "1",
+        startOn: "2026-03-01",
+        currency: "CAD",
+        reason: "growth",
+      });
+      // 60000 target x 1.0 FTE x 1.14 burden, with its inputs explainable.
+      assert.equal(line.estAnnualCost, "68400.0000");
+      assert.deepEqual(line.costBasis, {
+        basis: "band_target",
+        annual_target: "60000.0000",
+        planned_fte: "1",
+        burden_rate: "0.1400",
+        burden_source: "compensation_settings",
+      });
+      const stored = (
+        await db.execute<{ est_annual_cost: string; cost_basis: Record<string, unknown> }>(
+          sql`
       select est_annual_cost::text as est_annual_cost, cost_basis
-        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`, "objects"))[0];
-    assert.equal(stored?.est_annual_cost, "68400.0000");
-    assert.deepEqual(stored?.cost_basis, line.costBasis);
-    // Fractional FTE under the same burden.
-    const half = await createPlanLine({
-      orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "create",
-      title: "Engineer III half", employerSubsidiaryId: org.subsidiaryId, jobLevelId: level.id,
-      plannedFte: "0.5", startOn: "2026-03-01", currency: "CAD",
-    });
-    assert.equal(half.estAnnualCost, "34200.0000");
-    // Zero burden is the unloaded base.
-    await setCompensationSettings(org.orgId, { burdenRate: "0" });
-    const bare = await createPlanLine({
-      orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "create",
-      title: "Engineer III bare", employerSubsidiaryId: org.subsidiaryId, jobLevelId: level.id,
-      plannedFte: "1", startOn: "2026-03-01", currency: "CAD",
-    });
-    assert.equal(bare.estAnnualCost, "60000.0000");
-  });
+        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`,
+          "objects",
+        )
+      )[0];
+      assert.equal(stored?.est_annual_cost, "68400.0000");
+      assert.deepEqual(stored?.cost_basis, line.costBasis);
+      // Fractional FTE under the same burden.
+      const half = await createPlanLine({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        planId: plan.id,
+        kind: "create",
+        title: "Engineer III half",
+        employerSubsidiaryId: org.subsidiaryId,
+        jobLevelId: level.id,
+        plannedFte: "0.5",
+        startOn: "2026-03-01",
+        currency: "CAD",
+      });
+      assert.equal(half.estAnnualCost, "34200.0000");
+      // Zero burden is the unloaded base.
+      await setCompensationSettings(org.orgId, { burdenRate: "0" });
+      const bare = await createPlanLine({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        planId: plan.id,
+        kind: "create",
+        title: "Engineer III bare",
+        employerSubsidiaryId: org.subsidiaryId,
+        jobLevelId: level.id,
+        plannedFte: "1",
+        startOn: "2026-03-01",
+        currency: "CAD",
+      });
+      assert.equal(bare.estAnnualCost, "60000.0000");
+    },
+  );
 });
 
 test("F04: fallback labor-costing percents cost end to end, empty means zero", async () => {
-  await withHarness(() => setupHarness(HEADCOUNT_PLAN_COSTING_SPEC), async (h) => {
-    const { org } = h;
-    const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
-    await setCompensationSettings(org.orgId, { burdenRate: null });
-    await setLaborCostingComponents(org.orgId, [
-      { key: "stat", kind: "percent_of_wage", name: "Statutory", value: "10" },
-      { key: "wc", kind: "worker_comp", name: "Worker comp", value: "4" },
-      { key: "per_diem", kind: "per_day", name: "Per diem", value: "50" },
-    ]);
-    const plan = await createPlan({
-      orgId: org.orgId, actorId: h.hrId, name: "FY26 fallback plan",
-      fiscalPeriodFrom: "2026-01-01", fiscalPeriodTo: "2026-12-31",
-    });
-    // Only the wage-percentage kinds compose: (10 + 4)% = 0.14.
-    const line = await createPlanLine({
-      orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "create",
-      title: "Engineer III", employerSubsidiaryId: org.subsidiaryId, jobLevelId: level.id,
-      plannedFte: "1", startOn: "2026-03-01", currency: "CAD",
-    });
-    assert.equal(line.estAnnualCost, "68400.0000");
-    assert.deepEqual(line.costBasis, {
-      basis: "band_target", annual_target: "60000.0000", planned_fte: "1",
-      burden_rate: "0.140000", burden_source: "labor_costing_components",
-    });
-    const stored = (await db.execute<{ est_annual_cost: string }>(sql`
+  await withHarness(
+    () => setupHarness(HEADCOUNT_PLAN_COSTING_SPEC),
+    async (h) => {
+      const { org } = h;
+      const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
+      await setCompensationSettings(org.orgId, { burdenRate: null });
+      await setLaborCostingComponents(org.orgId, [
+        { key: "stat", kind: "percent_of_wage", name: "Statutory", value: "10" },
+        { key: "wc", kind: "worker_comp", name: "Worker comp", value: "4" },
+        { key: "per_diem", kind: "per_day", name: "Per diem", value: "50" },
+      ]);
+      const plan = await createPlan({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        name: "FY26 fallback plan",
+        fiscalPeriodFrom: "2026-01-01",
+        fiscalPeriodTo: "2026-12-31",
+      });
+      // Only the wage-percentage kinds compose: (10 + 4)% = 0.14.
+      const line = await createPlanLine({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        planId: plan.id,
+        kind: "create",
+        title: "Engineer III",
+        employerSubsidiaryId: org.subsidiaryId,
+        jobLevelId: level.id,
+        plannedFte: "1",
+        startOn: "2026-03-01",
+        currency: "CAD",
+      });
+      assert.equal(line.estAnnualCost, "68400.0000");
+      assert.deepEqual(line.costBasis, {
+        basis: "band_target",
+        annual_target: "60000.0000",
+        planned_fte: "1",
+        burden_rate: "0.140000",
+        burden_source: "labor_costing_components",
+      });
+      const stored = (
+        await db.execute<{ est_annual_cost: string }>(
+          sql`
       select est_annual_cost::text as est_annual_cost
-        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`, "objects"))[0];
-    assert.equal(stored?.est_annual_cost, "68400.0000");
-    // No wage-percentage components: zero burden, unloaded base.
-    await setLaborCostingComponents(org.orgId, []);
-    const bare = await createPlanLine({
-      orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "create",
-      title: "Engineer III bare", employerSubsidiaryId: org.subsidiaryId, jobLevelId: level.id,
-      plannedFte: "1", startOn: "2026-03-01", currency: "CAD",
-    });
-    assert.equal(bare.estAnnualCost, "60000.0000");
-    assert.equal((bare.costBasis as Record<string, unknown>).burden_rate, "0");
-    // A fractional percent prices exactly through the service path too.
-    await setLaborCostingComponents(org.orgId, [
-      { key: "micro", kind: "percent_of_wage", name: "Micro levy", value: "0.005" },
-    ]);
-    const micro = await createPlanLine({
-      orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "create",
-      title: "Engineer III micro", employerSubsidiaryId: org.subsidiaryId, jobLevelId: level.id,
-      plannedFte: "1", startOn: "2026-03-01", currency: "CAD",
-    });
-    assert.equal(micro.estAnnualCost, "60003.0000");
-    assert.deepEqual(micro.costBasis, {
-      basis: "band_target", annual_target: "60000.0000", planned_fte: "1",
-      burden_rate: "0.000050", burden_source: "labor_costing_components",
-    });
-    const microStored = (await db.execute<{ est_annual_cost: string }>(sql`
+        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`,
+          "objects",
+        )
+      )[0];
+      assert.equal(stored?.est_annual_cost, "68400.0000");
+      // No wage-percentage components: zero burden, unloaded base.
+      await setLaborCostingComponents(org.orgId, []);
+      const bare = await createPlanLine({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        planId: plan.id,
+        kind: "create",
+        title: "Engineer III bare",
+        employerSubsidiaryId: org.subsidiaryId,
+        jobLevelId: level.id,
+        plannedFte: "1",
+        startOn: "2026-03-01",
+        currency: "CAD",
+      });
+      assert.equal(bare.estAnnualCost, "60000.0000");
+      assert.equal((bare.costBasis as Record<string, unknown>).burden_rate, "0");
+      // A fractional percent prices exactly through the service path too.
+      await setLaborCostingComponents(org.orgId, [
+        { key: "micro", kind: "percent_of_wage", name: "Micro levy", value: "0.005" },
+      ]);
+      const micro = await createPlanLine({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        planId: plan.id,
+        kind: "create",
+        title: "Engineer III micro",
+        employerSubsidiaryId: org.subsidiaryId,
+        jobLevelId: level.id,
+        plannedFte: "1",
+        startOn: "2026-03-01",
+        currency: "CAD",
+      });
+      assert.equal(micro.estAnnualCost, "60003.0000");
+      assert.deepEqual(micro.costBasis, {
+        basis: "band_target",
+        annual_target: "60000.0000",
+        planned_fte: "1",
+        burden_rate: "0.000050",
+        burden_source: "labor_costing_components",
+      });
+      const microStored = (
+        await db.execute<{ est_annual_cost: string }>(
+          sql`
       select est_annual_cost::text as est_annual_cost
-        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${micro.id}`, "objects"))[0];
-    assert.equal(microStored?.est_annual_cost, "60003.0000");
-  });
+        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${micro.id}`,
+          "objects",
+        )
+      )[0];
+      assert.equal(microStored?.est_annual_cost, "60003.0000");
+    },
+  );
 });
 
 test("F04: undeclared burden rate refuses by name and writes nothing", async () => {
-  await withHarness(() => setupHarness(HEADCOUNT_PLAN_COSTING_SPEC), async (h) => {
-    const { org } = h;
-    const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
-    await setCompensationSettings(org.orgId, { burdenRate: "fourteen-percent" });
-    const plan = await createPlan({
-      orgId: org.orgId, actorId: h.hrId, name: "FY26 refused plan",
-      fiscalPeriodFrom: "2026-01-01", fiscalPeriodTo: "2026-12-31",
-    });
-    await assert.rejects(
-      createPlanLine({
-        orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "create",
-        title: "Engineer III refused", employerSubsidiaryId: org.subsidiaryId, jobLevelId: level.id,
-        plannedFte: "1", startOn: "2026-03-01", currency: "CAD",
-      }),
-      /not a decimal fraction/,
-    );
-    const rows = await db.execute<{ id: string }>(sql`
+  await withHarness(
+    () => setupHarness(HEADCOUNT_PLAN_COSTING_SPEC),
+    async (h) => {
+      const { org } = h;
+      const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
+      await setCompensationSettings(org.orgId, { burdenRate: "fourteen-percent" });
+      const plan = await createPlan({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        name: "FY26 refused plan",
+        fiscalPeriodFrom: "2026-01-01",
+        fiscalPeriodTo: "2026-12-31",
+      });
+      await assert.rejects(
+        createPlanLine({
+          orgId: org.orgId,
+          actorId: h.hrId,
+          planId: plan.id,
+          kind: "create",
+          title: "Engineer III refused",
+          employerSubsidiaryId: org.subsidiaryId,
+          jobLevelId: level.id,
+          plannedFte: "1",
+          startOn: "2026-03-01",
+          currency: "CAD",
+        }),
+        /not a decimal fraction/,
+      );
+      const rows = await db.execute<{ id: string }>(
+        sql`
       select id from hrm_headcount_plan_lines
-       where org_id = ${org.orgId} and plan_id = ${plan.id}`, "objects");
-    assert.equal(rows.length, 0);
-  });
+       where org_id = ${org.orgId} and plan_id = ${plan.id}`,
+        "objects",
+      );
+      assert.equal(rows.length, 0);
+    },
+  );
 });

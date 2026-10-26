@@ -47,7 +47,12 @@ export interface SpendVelocityStrings {
   zombies(count: number, annualCost: string): SpendVelocityInsightText;
   fragmentation(categories: number): SpendVelocityInsightText;
   opexRatio(pct: number): SpendVelocityInsightText;
-  cliff(po: number | null, so: number | null, gap: number | null, ratio: number | null): SpendVelocityInsightText;
+  cliff(
+    po: number | null,
+    so: number | null,
+    gap: number | null,
+    ratio: number | null,
+  ): SpendVelocityInsightText;
   /** `monthsToCliff` 0 means the ratio already breaches the target. */
   cliffAction(monthsToCliff: number | null): string;
   seasonalHigh(monthNames: string[]): string;
@@ -61,7 +66,6 @@ export interface SpendVelocityStrings {
   /** Named reason when no sales-order spend leaves PO coverage unknowable. */
   cliffNoSalesBase: string;
 }
-
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
 export function spendVelocityStrings(t: CatalogMessageFn, locale: string): SpendVelocityStrings {
@@ -77,7 +81,8 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
     shortMonths: MONTH_KEYS.map((k) => t(`common.monthsShort.${k}`)),
     monthYear: (month, yy) => t("common.monthYear", { month, yy }),
     monthLabel: catalogMonthLabel(t),
-    displayPartyName: (name) => (name === "Unknown" ? t("spendVelocity.labels.unknownParty") : name),
+    displayPartyName: (name) =>
+      name === "Unknown" ? t("spendVelocity.labels.unknownParty") : name,
     displayAccountName: (name, id) =>
       name && name !== "" ? name : t("spendVelocity.labels.accountFallback", { id }),
     highGrowth: (count, alertAt) => ({
@@ -88,7 +93,9 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
     typeImbalance: (faster, gapPct) => ({
       title: t("spendVelocity.insights.typeImbalance.title"),
       message: t("spendVelocity.insights.typeImbalance.message", {
-        faster: t(`spendVelocity.insights.typeImbalance.${faster === "bills" ? "fasterBills" : "fasterExpenses"}`),
+        faster: t(
+          `spendVelocity.insights.typeImbalance.${faster === "bills" ? "fasterBills" : "fasterExpenses"}`,
+        ),
         pct: gapPct,
       }),
       action: t("spendVelocity.insights.typeImbalance.action"),
@@ -129,8 +136,21 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
       // (or the unknown dash), so it renders through the request locale here.
       message:
         po === null || so === null || gap === null
-          ? t("spendVelocity.insights.cliff.messageNoVelocity", { ratio: ratio === null ? "—" : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(ratio) })
-          : t("spendVelocity.insights.cliff.message", { po, so, gap, ratio: ratio === null ? "—" : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(ratio) }),
+          ? t("spendVelocity.insights.cliff.messageNoVelocity", {
+              ratio:
+                ratio === null
+                  ? "—"
+                  : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(ratio),
+            })
+          : t("spendVelocity.insights.cliff.message", {
+              po,
+              so,
+              gap,
+              ratio:
+                ratio === null
+                  ? "—"
+                  : new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(ratio),
+            }),
       action: "",
     }),
     cliffAction: (monthsToCliff) =>
@@ -139,8 +159,10 @@ export function spendVelocityStrings(t: CatalogMessageFn, locale: string): Spend
         : monthsToCliff === 0
           ? t("spendVelocity.insights.cliff.actionBreached")
           : t("spendVelocity.insights.cliff.actionWithMonths", { months: monthsToCliff }),
-    seasonalHigh: (monthNames) => t("spendVelocity.insights.seasonalHigh", { months: list(monthNames) }),
-    seasonalLow: (monthNames) => t("spendVelocity.insights.seasonalLow", { months: list(monthNames) }),
+    seasonalHigh: (monthNames) =>
+      t("spendVelocity.insights.seasonalHigh", { months: list(monthNames) }),
+    seasonalLow: (monthNames) =>
+      t("spendVelocity.insights.seasonalLow", { months: list(monthNames) }),
     shadowItReason: t("spendVelocity.insights.shadowItReason"),
     fragmentationUnconfigured: t("spendVelocity.insights.fragmentationUnconfigured"),
     cliffUnconfigured: t("spendVelocity.insights.cliffUnconfigured"),

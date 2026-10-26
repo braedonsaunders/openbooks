@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // PATCH on payment-operations config must enforce the same value domains as
 // POST: POST coerces mandate status to pending/active/suspended/revoked/expired
@@ -11,31 +11,31 @@ import test from 'node:test'
 // direct-debit builder requires, silently dropping the mandate reference from
 // payment files).
 
-const stateKey = Symbol.for('openbooks.payment-patch-validation-test')
+const stateKey = Symbol.for("openbooks.payment-patch-validation-test");
 interface RouteState {
-  updates: string[]
+  updates: string[];
 }
-const state: RouteState = { updates: [] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const state: RouteState = { updates: [] };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextPaymentPatch = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextPaymentPatch = sqlText;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.payment-patch-validation-test')]
       const sqlText = globalThis.openbooksSqlTextPaymentPatch
@@ -70,91 +70,100 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:authz', `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }`],
-  ['mock:features', `export async function isFeatureEnabled() { return true }`],
-  ['mock:countries', `export function normalizeCountryCode(value) { return String(value).trim().toUpperCase() }`],
-  ['mock:payment-operations', `export async function updatePaymentBankProfile() {}`],
-  ['mock:scripting', `export function computeNextRunAt() { return new Date('2026-01-01T09:00:00Z') }`],
-  ['mock:audit', `export async function auditConfigChange() {}`],
-])
+  [
+    "mock:authz",
+    `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }`,
+  ],
+  ["mock:features", `export async function isFeatureEnabled() { return true }`],
+  [
+    "mock:countries",
+    `export function normalizeCountryCode(value) { return String(value).trim().toUpperCase() }`,
+  ],
+  ["mock:payment-operations", `export async function updatePaymentBankProfile() {}`],
+  [
+    "mock:scripting",
+    `export function computeNextRunAt() { return new Date('2026-01-01T09:00:00Z') }`,
+  ],
+  ["mock:audit", `export async function auditConfigChange() {}`],
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/authz', 'mock:authz'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@openbooks/engine/payments/operations', 'mock:payment-operations'],
-  ['@openbooks/engine/scripting/scripting', 'mock:scripting'],
-  ['../../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../../lib/features', 'mock:features'],
-  ['../../../../../../lib/countries', 'mock:countries'],
-  ['../../_lib', 'mock:audit'],
-])
+  ["@/lib/authz", "mock:authz"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/payments/operations", "mock:payment-operations"],
+  ["@openbooks/engine/scripting/scripting", "mock:scripting"],
+  ["../../../../../../lib/authz", "mock:authz"],
+  ["../../../../../../lib/features", "mock:features"],
+  ["../../../../../../lib/countries", "mock:countries"],
+  ["../../_lib", "mock:audit"],
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?payment-patch-validation'
-const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-const MANDATE_ID = '00000000-0000-4000-8000-000000000001'
-const SCHEDULE_ID = '00000000-0000-4000-8000-000000000002'
+const routeUrl = "./route.ts?payment-patch-validation";
+const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
+const MANDATE_ID = "00000000-0000-4000-8000-000000000001";
+const SCHEDULE_ID = "00000000-0000-4000-8000-000000000002";
 
 function patch(resource: string, id: string, body: Record<string, unknown>): Promise<Response> {
   return PATCH(
     new Request(`http://openbooks.test/api/admin/payment-operations/${resource}/${id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ resource, id }) },
-  )
+  );
 }
 
-test('mandate PATCH refuses a status outside the POST value domain', async () => {
-  state.updates = []
-  const response = await patch('mandates', MANDATE_ID, { status: 'bogus' })
-  assert.equal(response.status, 422)
-  assert.match(String((await response.json()).error), /status/)
-  assert.deepEqual(state.updates, [], 'no mandate write may run for an invalid status')
-})
+test("mandate PATCH refuses a status outside the POST value domain", async () => {
+  state.updates = [];
+  const response = await patch("mandates", MANDATE_ID, { status: "bogus" });
+  assert.equal(response.status, 422);
+  assert.match(String((await response.json()).error), /status/);
+  assert.deepEqual(state.updates, [], "no mandate write may run for an invalid status");
+});
 
-test('mandate PATCH refuses a wrong-case status POST would never store', async () => {
-  state.updates = []
-  const response = await patch('mandates', MANDATE_ID, { status: 'Active' })
-  assert.equal(response.status, 422)
-  assert.deepEqual(state.updates, [], 'no mandate write may run for a wrong-case status')
-})
+test("mandate PATCH refuses a wrong-case status POST would never store", async () => {
+  state.updates = [];
+  const response = await patch("mandates", MANDATE_ID, { status: "Active" });
+  assert.equal(response.status, 422);
+  assert.deepEqual(state.updates, [], "no mandate write may run for a wrong-case status");
+});
 
-test('mandate PATCH still accepts every POST status', async () => {
-  for (const status of ['pending', 'active', 'suspended', 'revoked', 'expired']) {
-    state.updates = []
-    const response = await patch('mandates', MANDATE_ID, { status })
-    assert.equal(response.status, 200, `status ${status} must stay accepted`)
-    assert.deepEqual(state.updates, ['mandates'])
+test("mandate PATCH still accepts every POST status", async () => {
+  for (const status of ["pending", "active", "suspended", "revoked", "expired"]) {
+    state.updates = [];
+    const response = await patch("mandates", MANDATE_ID, { status });
+    assert.equal(response.status, 200, `status ${status} must stay accepted`);
+    assert.deepEqual(state.updates, ["mandates"]);
   }
-})
+});
 
-test('schedule PATCH refuses an action outside the POST value domain', async () => {
-  state.updates = []
-  const response = await patch('schedules', SCHEDULE_ID, { action: 'auto_pay' })
-  assert.equal(response.status, 422)
-  assert.match(String((await response.json()).error), /action/)
-  assert.deepEqual(state.updates, [], 'no schedule write may run for an invalid action')
-})
+test("schedule PATCH refuses an action outside the POST value domain", async () => {
+  state.updates = [];
+  const response = await patch("schedules", SCHEDULE_ID, { action: "auto_pay" });
+  assert.equal(response.status, 422);
+  assert.match(String((await response.json()).error), /action/);
+  assert.deepEqual(state.updates, [], "no schedule write may run for an invalid action");
+});
 
-test('schedule PATCH still accepts both POST actions', async () => {
-  for (const action of ['create_draft', 'submit_for_approval']) {
-    state.updates = []
-    const response = await patch('schedules', SCHEDULE_ID, { action })
-    assert.equal(response.status, 200, `action ${action} must stay accepted`)
-    assert.deepEqual(state.updates, ['schedules'])
+test("schedule PATCH still accepts both POST actions", async () => {
+  for (const action of ["create_draft", "submit_for_approval"]) {
+    state.updates = [];
+    const response = await patch("schedules", SCHEDULE_ID, { action });
+    assert.equal(response.status, 200, `action ${action} must stay accepted`);
+    assert.deepEqual(state.updates, ["schedules"]);
   }
-})
+});

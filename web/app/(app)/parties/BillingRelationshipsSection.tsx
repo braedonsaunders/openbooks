@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Button,
   Drawer,
@@ -14,86 +14,86 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@openbooks/ui'
-import { ActionError, kindForStatus, transportError } from '@braedonsaunders/appkit-errors'
-import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
-import { DrawerSublist, SublistAddButton, SublistEmpty } from '../../../components/drawer-sublist'
-import { useAppAction } from '@/lib/use-app-action'
-import { confirmDialog } from '@/lib/confirm'
-import { refusalMessageFromBody } from '@/lib/api-error'
-import { toast } from 'sonner'
-import { DateField } from '@/components/date-field'
+} from "@openbooks/ui";
+import { ActionError, kindForStatus, transportError } from "@braedonsaunders/appkit-errors";
+import { DrawerTabStrip } from "../../../components/drawer-tab-strip";
+import { DrawerSublist, SublistAddButton, SublistEmpty } from "../../../components/drawer-sublist";
+import { useAppAction } from "@/lib/use-app-action";
+import { confirmDialog } from "@/lib/confirm";
+import { refusalMessageFromBody } from "@/lib/api-error";
+import { toast } from "sonner";
+import { DateField } from "@/components/date-field";
 
 type Relationship = {
-  id: string
-  billToPartyId: string
-  billToName: string
-  payerPartyId: string
-  payerName: string
-  groupId: string | null
-  groupCode: string | null
-  groupName: string | null
-  effectiveFrom: string
-  effectiveTo: string | null
-}
+  id: string;
+  billToPartyId: string;
+  billToName: string;
+  payerPartyId: string;
+  payerName: string;
+  groupId: string | null;
+  groupCode: string | null;
+  groupName: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+};
 
 type ChildRow = {
-  childPartyId: string
-  childName: string
-  billToPartyId: string
-  payerPartyId: string
-  effectiveFrom: string
-  effectiveTo: string | null
-  groupCode: string | null
-}
+  childPartyId: string;
+  childName: string;
+  billToPartyId: string;
+  payerPartyId: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  groupCode: string | null;
+};
 
 type Group = {
-  id: string
-  code: string
-  name: string
-  payerPartyId: string
-  cadence: 'weekly' | 'monthly'
-  cutoffDay: number
-  grouping: 'by_child' | 'by_subscription' | 'by_product'
-  billingSubsidiaryName: string | null
-}
+  id: string;
+  code: string;
+  name: string;
+  payerPartyId: string;
+  cadence: "weekly" | "monthly";
+  cutoffDay: number;
+  grouping: "by_child" | "by_subscription" | "by_product";
+  billingSubsidiaryName: string | null;
+};
 
 type Summary = {
-  billToPartyId: string
-  billToName: string
-  payerPartyId: string
-  payerName: string
-  consolidationGroupId: string | null
-  groupCode: string | null
-  groupName: string | null
-  groupCadence: string | null
-}
+  billToPartyId: string;
+  billToName: string;
+  payerPartyId: string;
+  payerName: string;
+  consolidationGroupId: string | null;
+  groupCode: string | null;
+  groupName: string | null;
+  groupCadence: string | null;
+};
 
 type Payload = {
-  summary: Summary
-  relationships: Relationship[]
-  children: ChildRow[]
-  groups: Group[]
-  parties: { id: string; name: string }[]
-  canManage: boolean
-}
+  summary: Summary;
+  relationships: Relationship[];
+  children: ChildRow[];
+  groups: Group[];
+  parties: { id: string; name: string }[];
+  canManage: boolean;
+};
 
 type Draft = {
-  id?: string
-  billTo: string
-  payer: string
-  group: string
-  from: string
-  to: string
-}
+  id?: string;
+  billTo: string;
+  payer: string;
+  group: string;
+  from: string;
+  to: string;
+};
 
-const EMPTY_DRAFT: Draft = { billTo: '', payer: '', group: '', from: '', to: '' }
+const EMPTY_DRAFT: Draft = { billTo: "", payer: "", group: "", from: "", to: "" };
 
 const GROUPING_KEYS = {
-  by_child: 'byChild',
-  by_subscription: 'bySubscription',
-  by_product: 'byProduct',
-} as const
+  by_child: "byChild",
+  by_subscription: "bySubscription",
+  by_product: "byProduct",
+} as const;
 
 /**
  * Customer drawer Billing tab: who the invoices go to, who owns the
@@ -107,350 +107,422 @@ export function BillingRelationshipsSection({
   partyId,
   editable,
 }: {
-  partyId: string
-  editable: boolean
+  partyId: string;
+  editable: boolean;
 }) {
-  const t = useTranslations('parties.billingRelationships')
-  const tc = useTranslations('common')
-  const ta = useTranslations('admin')
-  const [payload, setPayload] = useState<Payload | null>(null)
-  const [hidden, setHidden] = useState(false)
-  const [loadError, setLoadError] = useState(false)
-  const [draft, setDraft] = useState<Draft | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [panel, setPanel] = useState<'children' | 'relationships' | 'groups'>('relationships')
-  const { busy, execute } = useAppAction()
-  const loadGeneration = useRef(0)
+  const t = useTranslations("parties.billingRelationships");
+  const tc = useTranslations("common");
+  const ta = useTranslations("admin");
+  const [payload, setPayload] = useState<Payload | null>(null);
+  const [hidden, setHidden] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [panel, setPanel] = useState<"children" | "relationships" | "groups">("relationships");
+  const { busy, execute } = useAppAction();
+  const loadGeneration = useRef(0);
 
   async function relationshipAction(url: string, init: RequestInit) {
     try {
-      const res = await fetch(url, init)
+      const res = await fetch(url, init);
       // Unmapped refusals read through the shared helper so the server's
       // message, remedy and code reach the toast instead of the generic save
       // failure; mapped codes keep their localized copy.
       if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { errorCode?: unknown; error?: unknown }
-        const code = typeof body.errorCode === 'string' ? body.errorCode : 'save'
-        const serverMessage = refusalMessageFromBody(body, { fallback: t('errors.save') }) ?? t('errors.save')
+        const body = (await res.json().catch(() => ({}))) as {
+          errorCode?: unknown;
+          error?: unknown;
+        };
+        const code = typeof body.errorCode === "string" ? body.errorCode : "save";
+        const serverMessage =
+          refusalMessageFromBody(body, { fallback: t("errors.save") }) ?? t("errors.save");
         return {
           ok: false as const,
           error: new ActionError({
             kind: kindForStatus(res.status),
             status: res.status,
             code,
-            serverMessage: t.has(`errors.${code}` as never) ? t(`errors.${code}` as never) : serverMessage,
+            serverMessage: t.has(`errors.${code}` as never)
+              ? t(`errors.${code}` as never)
+              : serverMessage,
           }),
-        }
+        };
       }
-      return { ok: true as const, status: res.status, data: await res.json().catch(() => ({})) }
+      return { ok: true as const, status: res.status, data: await res.json().catch(() => ({})) };
     } catch (err) {
-      return { ok: false as const, error: transportError(err instanceof Error ? err.message : String(err)) }
+      return {
+        ok: false as const,
+        error: transportError(err instanceof Error ? err.message : String(err)),
+      };
     }
   }
 
   const load = useCallback(async () => {
-    const generation = ++loadGeneration.current
+    const generation = ++loadGeneration.current;
     try {
-      const res = await fetch(`/api/billing-relationships?childPartyId=${encodeURIComponent(partyId)}`)
-      if (generation !== loadGeneration.current) return
+      const res = await fetch(
+        `/api/billing-relationships?childPartyId=${encodeURIComponent(partyId)}`,
+      );
+      if (generation !== loadGeneration.current) return;
       // A refused read is a refused tab, not stale data: an unconfigured
       // feature answers 404 and a missing grant 403, and neither may render
       // the previous customer's billing here.
       if (res.status === 403 || res.status === 404) {
-        setPayload(null)
-        setHidden(true)
-        setLoadError(false)
-        return
+        setPayload(null);
+        setHidden(true);
+        setLoadError(false);
+        return;
       }
-      if (!res.ok) throw new Error('billing relationships could not be loaded')
-      const data = (await res.json()) as Payload
-      if (generation !== loadGeneration.current) return
-      setPayload(data)
-      setHidden(false)
-      setLoadError(false)
+      if (!res.ok) throw new Error("billing relationships could not be loaded");
+      const data = (await res.json()) as Payload;
+      if (generation !== loadGeneration.current) return;
+      setPayload(data);
+      setHidden(false);
+      setLoadError(false);
     } catch {
-      if (generation === loadGeneration.current) setLoadError(true)
+      if (generation === loadGeneration.current) setLoadError(true);
     }
-  }, [partyId])
+  }, [partyId]);
 
   useEffect(() => {
     // Deferred like the pricing section's load: setting state synchronously
     // in the effect body trips the hooks lint and a second fetch on
     // party switches would race the first without the generation guard.
-    const timer = window.setTimeout(() => void load(), 0)
-    return () => window.clearTimeout(timer)
-  }, [load])
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
-  const canManage = editable && (payload?.canManage ?? false)
+  const canManage = editable && (payload?.canManage ?? false);
 
   // A read-only viewer must never hold the form open. Adjusted during render
   // (same committed value, no extra render).
-  if (!canManage && draft !== null) setDraft(null)
+  if (!canManage && draft !== null) setDraft(null);
   // A panel whose rows just emptied falls back to relationships, so the
   // strip never strands the reader on a hollow body.
-  if (payload && panel === 'children' && payload.children.length === 0) setPanel('relationships')
-  if (payload && panel === 'groups' && payload.groups.length === 0) setPanel('relationships')
+  if (payload && panel === "children" && payload.children.length === 0) setPanel("relationships");
+  if (payload && panel === "groups" && payload.groups.length === 0) setPanel("relationships");
 
   // A refused read hides the panel rather than rendering another
   // customer's billing; any other load failure says so in plain language.
-  if (hidden) return null
+  if (hidden) return null;
   if (loadError || !payload) {
-    return loadError ? <p className="text-sm text-destructive">{t('loadFailed')}</p> : null
+    return loadError ? <p className="text-sm text-destructive">{t("loadFailed")}</p> : null;
   }
 
-  const { summary } = payload
-  const consolidated = summary.consolidationGroupId != null
-  const partyOptions = payload.parties.map((p) => ({ value: p.id, label: p.name }))
-  const partyName = (id: string) => payload.parties.find((p) => p.id === id)?.name ?? id
+  const { summary } = payload;
+  const consolidated = summary.consolidationGroupId != null;
+  const partyOptions = payload.parties.map((p) => ({ value: p.id, label: p.name }));
+  const partyName = (id: string) => payload.parties.find((p) => p.id === id)?.name ?? id;
 
   const save = async () => {
-    if (!draft) return
-    const wasEdit = draft.id != null
-    const fallbackMessage = t('errors.save')
-    await execute(() => relationshipAction('/api/billing-relationships', {
-      method: draft.id ? 'PATCH' : 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ...(draft.id ? { id: draft.id } : {}),
-        childPartyId: partyId,
-        billToPartyId: draft.billTo,
-        payerPartyId: draft.payer,
-        effectiveFrom: draft.from,
-        effectiveTo: draft.to || null,
-        consolidationGroupId: draft.group || null,
-      }),
-    }), {
-      fallbackMessage,
-      onRefused: (err) => setError(err.displayMessage(fallbackMessage)),
-      onOk: () => {
-        setDraft(null)
-        setError(null)
-        toast.success(t(wasEdit ? 'updated' : 'created'))
-        load()
+    if (!draft) return;
+    const wasEdit = draft.id != null;
+    const fallbackMessage = t("errors.save");
+    await execute(
+      () =>
+        relationshipAction("/api/billing-relationships", {
+          method: draft.id ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...(draft.id ? { id: draft.id } : {}),
+            childPartyId: partyId,
+            billToPartyId: draft.billTo,
+            payerPartyId: draft.payer,
+            effectiveFrom: draft.from,
+            effectiveTo: draft.to || null,
+            consolidationGroupId: draft.group || null,
+          }),
+        }),
+      {
+        fallbackMessage,
+        onRefused: (err) => setError(err.displayMessage(fallbackMessage)),
+        onOk: () => {
+          setDraft(null);
+          setError(null);
+          toast.success(t(wasEdit ? "updated" : "created"));
+          load();
+        },
       },
-    })
-  }
+    );
+  };
 
   const remove = (row: Relationship) => {
     confirmDialog({
-      title: t('confirmTitle'),
-      message: t('confirmDelete'),
-      confirmLabel: tc('actions.remove'),
-      tone: 'danger',
+      title: t("confirmTitle"),
+      message: t("confirmDelete"),
+      confirmLabel: tc("actions.remove"),
+      tone: "danger",
     }).then((confirmed) => {
-      if (!confirmed) return
-      const fallbackMessage = t('errors.save')
+      if (!confirmed) return;
+      const fallbackMessage = t("errors.save");
       execute(
-        () => relationshipAction(`/api/billing-relationships?id=${encodeURIComponent(row.id)}`, { method: 'DELETE' }),
+        () =>
+          relationshipAction(`/api/billing-relationships?id=${encodeURIComponent(row.id)}`, {
+            method: "DELETE",
+          }),
         {
           fallbackMessage,
           onRefused: (err) => setError(err.displayMessage(fallbackMessage)),
           onOk: () => {
-            toast.success(t('removed'))
-            load()
+            toast.success(t("removed"));
+            load();
           },
         },
-      )
-    })
-  }
+      );
+    });
+  };
 
-  const billToName = draft?.billTo ? partyName(draft.billTo) : ''
-  const eligibleGroups = payload.groups.filter((g) => !draft?.payer || g.payerPartyId === draft.payer)
+  const billToName = draft?.billTo ? partyName(draft.billTo) : "";
+  const eligibleGroups = payload.groups.filter(
+    (g) => !draft?.payer || g.payerPartyId === draft.payer,
+  );
 
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold">{t('heading')}</h3>
+        <h3 className="text-sm font-semibold">{t("heading")}</h3>
         {consolidated ? (
           <div className="mt-1 text-sm">
-            <p>{t('invoicesGoTo', { name: summary.billToName })}</p>
+            <p>{t("invoicesGoTo", { name: summary.billToName })}</p>
             <p className="text-muted-foreground">
-              {t('consolidatedLine', {
+              {t("consolidatedLine", {
                 cadence: summary.groupCadence
                   ? ta(`setup.options.consolidationCadence.${summary.groupCadence}`)
-                  : '',
+                  : "",
                 payer: summary.payerName,
               })}
             </p>
           </div>
         ) : (
-          <p className="mt-1 text-sm text-muted-foreground">{t('standalone')}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("standalone")}</p>
         )}
       </div>
 
       <DrawerTabStrip
         tabs={[
           ...(payload.children.length > 0
-            ? [{
-                key: 'children' as const,
-                label: t('childrenHeading'),
-                count: payload.children.length,
-              }]
+            ? [
+                {
+                  key: "children" as const,
+                  label: t("childrenHeading"),
+                  count: payload.children.length,
+                },
+              ]
             : []),
           {
-            key: 'relationships' as const,
-            label: t('relationshipsHeading'),
+            key: "relationships" as const,
+            label: t("relationshipsHeading"),
             count: payload.relationships.length,
           },
           ...(payload.groups.length > 0
-            ? [{
-                key: 'groups' as const,
-                label: t('advancedHeading'),
-                count: payload.groups.length,
-              }]
+            ? [
+                {
+                  key: "groups" as const,
+                  label: t("advancedHeading"),
+                  count: payload.groups.length,
+                },
+              ]
             : []),
         ]}
         activeKey={panel}
         onSelect={(key) => setPanel(key)}
-        ariaLabel={t('heading')}
+        ariaLabel={t("heading")}
       />
 
-      <div hidden={panel !== 'children'} className="space-y-2">
-      {payload.children.length > 0 ? (
-        <div>
-          <h4 className="text-sm font-semibold">{t('childrenHeading')}</h4>
-          <SharedTable>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('child')}</TableHead>
-                <TableHead>{t('window')}</TableHead>
-                <TableHead>{t('group')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payload.children.map((child) => (
-                <TableRow key={`${child.childPartyId}-${child.effectiveFrom}`}>
-                  <TableCell>{child.childName}</TableCell>
-                  <TableCell>
-                    {child.effectiveFrom} → {child.effectiveTo ?? t('openEnded')}
-                  </TableCell>
-                  <TableCell>{child.groupCode ?? '—'}</TableCell>
+      <div hidden={panel !== "children"} className="space-y-2">
+        {payload.children.length > 0 ? (
+          <div>
+            <h4 className="text-sm font-semibold">{t("childrenHeading")}</h4>
+            <SharedTable>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("child")}</TableHead>
+                  <TableHead>{t("window")}</TableHead>
+                  <TableHead>{t("group")}</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </SharedTable>
-        </div>
-      ) : null}
+              </TableHeader>
+              <TableBody>
+                {payload.children.map((child) => (
+                  <TableRow key={`${child.childPartyId}-${child.effectiveFrom}`}>
+                    <TableCell>{child.childName}</TableCell>
+                    <TableCell>
+                      {child.effectiveFrom} → {child.effectiveTo ?? t("openEnded")}
+                    </TableCell>
+                    <TableCell>{child.groupCode ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </SharedTable>
+          </div>
+        ) : null}
       </div>
 
-      <div hidden={panel !== 'relationships'}>
-      <DrawerSublist
-        title={t('relationshipsHeading')}
-        action={canManage ? <SublistAddButton label={t('new')} onClick={() => { setDraft(EMPTY_DRAFT); setError(null) }} /> : undefined}
-        alert={!draft && error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-      >
-        {payload.relationships.length === 0 ? (
-          <SublistEmpty text={t('empty')} />
-        ) : (
-          <SharedTable>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('billTo')}</TableHead>
-                <TableHead>{t('payer')}</TableHead>
-                <TableHead>{t('group')}</TableHead>
-                <TableHead>{t('window')}</TableHead>
-                {canManage ? <TableHead className="text-right">{tc('labels.actions')}</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payload.relationships.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>{row.billToName}</TableCell>
-                  <TableCell>{row.payerName}</TableCell>
-                  <TableCell>{row.groupCode ?? '—'}</TableCell>
-                  <TableCell>
-                    {row.effectiveFrom} → {row.effectiveTo ?? t('openEnded')}
-                  </TableCell>
+      <div hidden={panel !== "relationships"}>
+        <DrawerSublist
+          title={t("relationshipsHeading")}
+          action={
+            canManage ? (
+              <SublistAddButton
+                label={t("new")}
+                onClick={() => {
+                  setDraft(EMPTY_DRAFT);
+                  setError(null);
+                }}
+              />
+            ) : undefined
+          }
+          alert={
+            !draft && error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null
+          }
+        >
+          {payload.relationships.length === 0 ? (
+            <SublistEmpty text={t("empty")} />
+          ) : (
+            <SharedTable>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("billTo")}</TableHead>
+                  <TableHead>{t("payer")}</TableHead>
+                  <TableHead>{t("group")}</TableHead>
+                  <TableHead>{t("window")}</TableHead>
                   {canManage ? (
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy}
-                          onClick={() => {
-                            setDraft({
-                              id: row.id,
-                              billTo: row.billToPartyId,
-                              payer: row.payerPartyId,
-                              group: row.groupId ?? '',
-                              from: row.effectiveFrom,
-                              to: row.effectiveTo ?? '',
-                            })
-                            setError(null)
-                          }}
-                        >
-                          {tc('actions.edit')}
-                        </Button>
-                        <Button size="sm" variant="ghost" disabled={busy} onClick={() => remove(row)}>
-                          {tc('actions.remove')}
-                        </Button>
-                      </div>
-                    </TableCell>
+                    <TableHead className="text-right">{tc("labels.actions")}</TableHead>
                   ) : null}
                 </TableRow>
-              ))}
-            </TableBody>
-          </SharedTable>
-        )}
-      </DrawerSublist>
+              </TableHeader>
+              <TableBody>
+                {payload.relationships.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>{row.billToName}</TableCell>
+                    <TableCell>{row.payerName}</TableCell>
+                    <TableCell>{row.groupCode ?? "—"}</TableCell>
+                    <TableCell>
+                      {row.effectiveFrom} → {row.effectiveTo ?? t("openEnded")}
+                    </TableCell>
+                    {canManage ? (
+                      <TableCell>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => {
+                              setDraft({
+                                id: row.id,
+                                billTo: row.billToPartyId,
+                                payer: row.payerPartyId,
+                                group: row.groupId ?? "",
+                                from: row.effectiveFrom,
+                                to: row.effectiveTo ?? "",
+                              });
+                              setError(null);
+                            }}
+                          >
+                            {tc("actions.edit")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={() => remove(row)}
+                          >
+                            {tc("actions.remove")}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    ) : null}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </SharedTable>
+          )}
+        </DrawerSublist>
       </div>
 
       <Drawer
         open={draft !== null && canManage}
-        onClose={() => { if (!busy) { setDraft(null); setError(null) } }}
+        onClose={() => {
+          if (!busy) {
+            setDraft(null);
+            setError(null);
+          }
+        }}
         stacked
         size="md"
-        title={draft?.id ? t('editTitle') : t('new')}
-        footer={draft ? (
-          <>
-            <Button variant="outline" disabled={busy} onClick={() => { setDraft(null); setError(null) }}>
-              {tc('actions.cancel')}
-            </Button>
-            <Button disabled={busy || !draft.billTo || !draft.payer || !draft.from} onClick={save}>
-              {busy ? tc('actions.saving') : tc('actions.save')}
-            </Button>
-          </>
-        ) : undefined}
+        title={draft?.id ? t("editTitle") : t("new")}
+        footer={
+          draft ? (
+            <>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  setDraft(null);
+                  setError(null);
+                }}
+              >
+                {tc("actions.cancel")}
+              </Button>
+              <Button
+                disabled={busy || !draft.billTo || !draft.payer || !draft.from}
+                onClick={save}
+              >
+                {busy ? tc("actions.saving") : tc("actions.save")}
+              </Button>
+            </>
+          ) : undefined
+        }
       >
         {draft ? (
           <div className="space-y-4">
-            {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+            {error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <Label>{t('billTo')}</Label>
+                <Label>{t("billTo")}</Label>
                 <SearchSelect
                   value={draft.billTo}
                   onChange={(billTo) => setDraft({ ...draft, billTo })}
                   options={partyOptions}
-                  sheetTitle={t('billTo')}
-                  ariaLabel={t('billTo')}
+                  sheetTitle={t("billTo")}
+                  ariaLabel={t("billTo")}
                 />
               </div>
               <div>
-                <Label>{t('payer')}</Label>
+                <Label>{t("payer")}</Label>
                 <SearchSelect
                   value={draft.payer}
-                  onChange={(payer) => setDraft({
-                    ...draft,
-                    payer,
-                    group: draft.group && payload.groups.some((g) => g.id === draft.group && g.payerPartyId === payer)
-                      ? draft.group
-                      : '',
-                  })}
+                  onChange={(payer) =>
+                    setDraft({
+                      ...draft,
+                      payer,
+                      group:
+                        draft.group &&
+                        payload.groups.some((g) => g.id === draft.group && g.payerPartyId === payer)
+                          ? draft.group
+                          : "",
+                    })
+                  }
                   options={partyOptions}
-                  sheetTitle={t('payer')}
-                  ariaLabel={t('payer')}
+                  sheetTitle={t("payer")}
+                  ariaLabel={t("payer")}
                 />
               </div>
               <div>
-                <Label>{t('group')}</Label>
+                <Label>{t("group")}</Label>
                 <Select
                   value={draft.group}
                   onChange={(e) => setDraft({ ...draft, group: e.target.value })}
-                  aria-label={t('group')}
+                  aria-label={t("group")}
                 >
-                  <option value="">{t('groupNone')}</option>
+                  <option value="">{t("groupNone")}</option>
                   {eligibleGroups.map((g) => (
                     <option key={g.id} value={g.id}>{`${g.code} · ${g.name}`}</option>
                   ))}
@@ -458,48 +530,54 @@ export function BillingRelationshipsSection({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>{t('effectiveFrom')}</Label>
-                  <DateField value={draft.from} onChange={(value) => setDraft({ ...draft, from: value })} />
+                  <Label>{t("effectiveFrom")}</Label>
+                  <DateField
+                    value={draft.from}
+                    onChange={(value) => setDraft({ ...draft, from: value })}
+                  />
                 </div>
                 <div>
-                  <Label>{t('effectiveTo')}</Label>
-                  <DateField value={draft.to} onChange={(value) => setDraft({ ...draft, to: value })} />
+                  <Label>{t("effectiveTo")}</Label>
+                  <DateField
+                    value={draft.to}
+                    onChange={(value) => setDraft({ ...draft, to: value })}
+                  />
                 </div>
               </div>
             </div>
             {draft.billTo && draft.from ? (
               <p className="text-sm text-muted-foreground">
-                {t('consequence', { from: draft.from, billTo: billToName })}
+                {t("consequence", { from: draft.from, billTo: billToName })}
               </p>
             ) : null}
           </div>
         ) : null}
       </Drawer>
 
-      <div hidden={panel !== 'groups'} className="space-y-2">
-      {payload.groups.length > 0 ? (
-        <div>
-          <h4 className="text-sm font-semibold">{t('advancedHeading')}</h4>
-          <p className="text-sm text-muted-foreground">{t('advancedSummary')}</p>
-          <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-3 text-sm">
-            {payload.groups.map((group) => (
-              <div key={group.id}>
-                <dt className="font-medium">
-                  {t('groupDetail', { code: group.code, name: group.name, day: group.cutoffDay })}
-                </dt>
-                <dd className="text-muted-foreground">
-                  {ta(`setup.options.consolidationGrouping.${GROUPING_KEYS[group.grouping]}`)}
-                  {' · '}
-                  {group.billingSubsidiaryName
-                    ? t('billingEntity', { name: group.billingSubsidiaryName })
-                    : t('billingEntityFallback')}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      ) : null}
+      <div hidden={panel !== "groups"} className="space-y-2">
+        {payload.groups.length > 0 ? (
+          <div>
+            <h4 className="text-sm font-semibold">{t("advancedHeading")}</h4>
+            <p className="text-sm text-muted-foreground">{t("advancedSummary")}</p>
+            <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-3 text-sm">
+              {payload.groups.map((group) => (
+                <div key={group.id}>
+                  <dt className="font-medium">
+                    {t("groupDetail", { code: group.code, name: group.name, day: group.cutoffDay })}
+                  </dt>
+                  <dd className="text-muted-foreground">
+                    {ta(`setup.options.consolidationGrouping.${GROUPING_KEYS[group.grouping]}`)}
+                    {" · "}
+                    {group.billingSubsidiaryName
+                      ? t("billingEntity", { name: group.billingSubsidiaryName })
+                      : t("billingEntityFallback")}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ) : null}
       </div>
     </div>
-  )
+  );
 }

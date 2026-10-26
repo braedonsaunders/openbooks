@@ -71,12 +71,16 @@ const fixtureSourcePattern =
   /(?:^|\/)(?:__tests__|fixtures?|tests?)(?:\/|$)|\.(?:test|spec)\.[cm]?[jt]sx?$/i;
 
 // Country packs declare; conformance cases name the pack they verify.
-const packPaths = [
-  /^engine\/src\/country-tax-packs\//,
-  /^engine\/src\/conformance\//,
-];
+const packPaths = [/^engine\/src\/country-tax-packs\//, /^engine\/src\/conformance\//];
 
-const scopedRoots = ["web/app", "web/lib", "web/components", "engine/src", "packages", "schema/src"];
+const scopedRoots = [
+  "web/app",
+  "web/lib",
+  "web/components",
+  "engine/src",
+  "packages",
+  "schema/src",
+];
 
 // The indirect-tax layer, held to zero country branches (Rule 2).
 const taxLayerPaths = [
@@ -90,10 +94,7 @@ const taxLayerPaths = [
 // The shared payroll layer (Rule 2): files DIRECTLY under engine/src/payroll/
 // (a subdirectory is a country pack and may name its own country) plus the
 // payroll API routes.
-const payrollSharedLayerPaths = [
-  /^engine\/src\/payroll\/[^/]+\.ts$/,
-  /^web\/app\/api\/payroll\//,
-];
+const payrollSharedLayerPaths = [/^engine\/src\/payroll\/[^/]+\.ts$/, /^web\/app\/api\/payroll\//];
 
 // Rule 2 applies to the tax layer and the shared payroll layer together.
 const countryLiteralLayerPaths = [...taxLayerPaths, ...payrollSharedLayerPaths];
@@ -111,7 +112,7 @@ export const PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS = [
   // file route now read pack DECLARATIONS — remittanceRegionalCalendars,
   // QPIP_PROVINCE, and the filing's own `issue` block — instead of comparing
   // against a country. An entry added here must name its removal plan.
-]
+];
 
 export function isPackPath(filePath) {
   return packPaths.some((pattern) => pattern.test(filePath));
@@ -164,7 +165,9 @@ export function staleCountryLiteralExemptions(
       continue;
     }
     if (!firstViolationLine(source, [countryComparison, countryCase])) {
-      stale.push(`${entry.path}: no longer names a country — remove it from PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS`);
+      stale.push(
+        `${entry.path}: no longer names a country — remove it from PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS`,
+      );
     }
   }
   return stale;
@@ -295,8 +298,8 @@ function main() {
   }
 
   console.log(
-    `Country-neutrality audit passed (${PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS.length} `
-      + "shared-payroll exemption(s) tracked for F-f7).",
+    `Country-neutrality audit passed (${PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS.length} ` +
+      "shared-payroll exemption(s) tracked for F-f7).",
   );
 }
 

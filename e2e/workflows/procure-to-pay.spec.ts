@@ -1,4 +1,12 @@
-import { expect, request, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  request,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import { createHash } from "node:crypto";
 import { authedContext, dismissSetupWizard } from "../auth";
 import { withIdempotencyKey } from "./idempotency";
@@ -53,7 +61,9 @@ import { withIdempotencyKey } from "./idempotency";
  */
 
 const RUN = process.env.E2E_RUN ?? "";
-const TAG = (RUN || `e${Math.random().toString(36).slice(2, 8)}`).replace(/[^a-z0-9]/gi, "").slice(0, 10) || "e2e";
+const TAG =
+  (RUN || `e${Math.random().toString(36).slice(2, 8)}`).replace(/[^a-z0-9]/gi, "").slice(0, 10) ||
+  "e2e";
 const APPROVER_EMAIL = process.env.E2E_APPROVER_EMAIL ?? "approver@openbooks.test";
 const APPROVER_PASSWORD = process.env.E2E_APPROVER_PASSWORD ?? "approver-test-password-123";
 // Date anchor: the suite floats on the current UTC month. Execute-now engines
@@ -112,10 +122,19 @@ function fmtUSD(cents: bigint): string {
   return neg ? `(${text})` : text;
 }
 type Json = Record<string, unknown>;
-interface ApiResult { status: number; body: Json }
+interface ApiResult {
+  status: number;
+  body: Json;
+}
 
 /** Real product API call from inside the page (authenticated session). */
-async function api(page: Page, method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<ApiResult> {
+async function api(
+  page: Page,
+  method: string,
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<ApiResult> {
   // Transport-level retry lives INSIDE the browser call: a cold dev server
   // (or a worker respawn under load) can reset a connection while compiling
   // a route. Retried ONLY for GET: replaying a mutation after a lost response
@@ -134,7 +153,11 @@ async function api(page: Page, method: string, path: string, body?: unknown, hea
           });
           const text = await res.text();
           let parsed: unknown = {};
-          try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = { raw: text.slice(0, 500) }; }
+          try {
+            parsed = text ? JSON.parse(text) : {};
+          } catch {
+            parsed = { raw: text.slice(0, 500) };
+          }
           return { status: res.status, body: parsed as Json };
         } catch (error) {
           lastError = error;
@@ -162,11 +185,15 @@ async function apiText(page: Page, path: string): Promise<{ status: number; text
   }, path);
 }
 function req(result: ApiResult, url: string): Json {
-  expect(result.status, `${url}: HTTP ${result.status} ${JSON.stringify(result.body).slice(0, 400)}`).toBeLessThan(300);
+  expect(
+    result.status,
+    `${url}: HTTP ${result.status} ${JSON.stringify(result.body).slice(0, 400)}`,
+  ).toBeLessThan(300);
   return result.body;
 }
 function str(value: unknown, what = "id"): string {
-  if (typeof value !== "string" || !value) throw new Error(`expected ${what} string, got ${JSON.stringify(value)?.slice(0, 80)}`);
+  if (typeof value !== "string" || !value)
+    throw new Error(`expected ${what} string, got ${JSON.stringify(value)?.slice(0, 80)}`);
   return value;
 }
 /** Optimistic-concurrency revision, wherever the payload carries it. */
@@ -208,7 +235,10 @@ async function reportRows(page: Page): Promise<string[][]> {
     const table = document.querySelectorAll("table")[0];
     if (!table) return [];
     return [...table.querySelectorAll("tr")].map((tr) =>
-      [...tr.querySelectorAll("th,td")].map((c) => (c.textContent ?? "").trim().replace(/\s+/g, " ")));
+      [...tr.querySelectorAll("th,td")].map((c) =>
+        (c.textContent ?? "").trim().replace(/\s+/g, " "),
+      ),
+    );
   });
 }
 function findRow(rows: string[][], needle: string): string[] {
@@ -233,7 +263,9 @@ function parseNacha(text: string, expectedCents: bigint, expectedCount: number) 
   expect(entries.length, "entry count").toBe(expectedCount);
   expect(batchControls.length, "one batch control").toBe(1);
   expect(fileControls.length, "one file control").toBe(1);
-  expect(lines.length, "header + batch + entries + controls + fillers").toBe(4 + expectedCount + fillers.length);
+  expect(lines.length, "header + batch + entries + controls + fillers").toBe(
+    4 + expectedCount + fillers.length,
+  );
   // Entry hash: sum of the first-8 routing digits mod 10^10, echoed in both controls.
   let hash = 0n;
   let total = 0n;
@@ -243,25 +275,32 @@ function parseNacha(text: string, expectedCents: bigint, expectedCount: number) 
     total += BigInt(e.slice(29, 39));
   }
   const hashMod = (hash % 10_000_000_000n).toString().padStart(10, "0");
-  expect(total.toString(), "entry amounts sum to the expected cents").toBe(expectedCents.toString());
+  expect(total.toString(), "entry amounts sum to the expected cents").toBe(
+    expectedCents.toString(),
+  );
   const batch = batchControls[0]!;
   // Batch control layout (matches the product formatter in engine/src/payments/payments.ts):
   // '8' + service-class(3) + entry-count(6) + hash(10) + debit(12) + credit(12).
   expect(batch.slice(4, 10), "batch entry count").toBe(String(expectedCount).padStart(6, "0"));
   expect(batch.slice(10, 20), "batch entry hash").toBe(hashMod);
-  expect(batch.slice(32, 44), "batch credit total").toBe(expectedCents.toString().padStart(12, "0"));
+  expect(batch.slice(32, 44), "batch credit total").toBe(
+    expectedCents.toString().padStart(12, "0"),
+  );
   const control = fileControls[0]!;
   expect(control.slice(1, 7), "file batch count").toBe("000001");
   expect(control.slice(13, 21), "file entry count").toBe(String(expectedCount).padStart(8, "0"));
   expect(control.slice(21, 31), "file entry hash").toBe(hashMod);
-  expect(control.slice(43, 55), "file credit total").toBe(expectedCents.toString().padStart(12, "0"));
+  expect(control.slice(43, 55), "file credit total").toBe(
+    expectedCents.toString().padStart(12, "0"),
+  );
   return { lines, entries, hashMod, total };
 }
 
 test.describe("procure-to-pay workflows", () => {
   test.describe.configure({ mode: "serial", timeout: 300_000, retries: 0 });
 
-  const shared: { profileId: string; terms210: string; rootSub: string; stockLocationId: string } = { profileId: "", terms210: "", rootSub: "", stockLocationId: "" };
+  const shared: { profileId: string; terms210: string; rootSub: string; stockLocationId: string } =
+    { profileId: "", terms210: "", rootSub: "", stockLocationId: "" };
   const acct: Record<string, string> = {};
   let itemId = "";
 
@@ -300,7 +339,12 @@ test.describe("procure-to-pay workflows", () => {
       //    for the reconcilable settlement bank's currency restriction
       //    (and matches what quote-to-cash needs for its own banks later).
       const features = await api(page, "PUT", "/api/admin/setup/features", {
-        features: { subcontractorCompliance: true, subcontracts: true, multiSubsidiary: true, multiCurrency: true },
+        features: {
+          subcontractorCompliance: true,
+          subcontracts: true,
+          multiSubsidiary: true,
+          multiCurrency: true,
+        },
       });
       req(features, "PUT /api/admin/setup/features");
 
@@ -308,18 +352,30 @@ test.describe("procure-to-pay workflows", () => {
       //     fresh journal draft defaults to root. The probe draft must not
       //     survive (an unposted draft is a close-readiness exception).
       {
-        const probeId = str(req(await api(page, "POST", "/api/journals/draft", {}), "POST journals/draft probe").id, "probe draft id");
-        const probeDoc = req(await api(page, "GET", `/api/journals/${probeId}`), "GET probe draft").doc as Json;
+        const probeId = str(
+          req(await api(page, "POST", "/api/journals/draft", {}), "POST journals/draft probe").id,
+          "probe draft id",
+        );
+        const probeDoc = req(await api(page, "GET", `/api/journals/${probeId}`), "GET probe draft")
+          .doc as Json;
         shared.rootSub = str(probeDoc.subsidiary_id, "root subsidiary id");
-        req(await api(page, "DELETE", `/api/journals/${probeId}`, { expectedUpdatedAt: str(probeDoc.updated_at, "probe revision") }), "DELETE probe draft");
+        req(
+          await api(page, "DELETE", `/api/journals/${probeId}`, {
+            expectedUpdatedAt: str(probeDoc.updated_at, "probe revision"),
+          }),
+          "DELETE probe draft",
+        );
       }
 
       // 3. Resolve seeded accounts through the header search (the UI's own API).
       async function accountId(number: string): Promise<string> {
         const res = await api(page, "GET", `/api/search?q=${number}`);
         const body = req(res, `GET /api/search?q=${number}`);
-        const groups = body.groups as Array<{ hits?: Array<{ id?: string; title?: string; subtitle?: string }> }>;
-        const hit = (groups ?? []).flatMap((g) => g.hits ?? [])
+        const groups = body.groups as Array<{
+          hits?: Array<{ id?: string; title?: string; subtitle?: string }>;
+        }>;
+        const hit = (groups ?? [])
+          .flatMap((g) => g.hits ?? [])
           .find((h) => `${h.title ?? ""} ${h.subtitle ?? ""}`.includes(number));
         expect(hit?.id, `account ${number} resolvable via search`).toBeTruthy();
         return hit!.id!;
@@ -337,9 +393,21 @@ test.describe("procure-to-pay workflows", () => {
         [INV_ASSET_ID, "1210", "Materials Inventory", "asset_current_other", {}],
         // Reconcilable bank accounts must carry a settlement currency
         // (storage constraint); USD matches the suite's org currency.
-        [SETTLE_ID, "1099", "P2P Settlement Account", "asset_bank", { reconcilable: true, currencyRestriction: "USD" }],
+        [
+          SETTLE_ID,
+          "1099",
+          "P2P Settlement Account",
+          "asset_bank",
+          { reconcilable: true, currencyRestriction: "USD" },
+        ],
       ] as const) {
-        const created = await api(page, "POST", "/api/accounts", { name, number, type, ...extra }, { "Idempotency-Key": id });
+        const created = await api(
+          page,
+          "POST",
+          "/api/accounts",
+          { name, number, type, ...extra },
+          { "Idempotency-Key": id },
+        );
         if (created.status !== 201 && created.status !== 200) {
           // Already exists from an earlier run: resolve it by number.
           const existing = await accountId(number);
@@ -354,7 +422,9 @@ test.describe("procure-to-pay workflows", () => {
       //    (zero or 2+ active warehouses — ORDER_LINE_WAREHOUSE_REQUIRED),
       //    so the suite names its warehouse explicitly on every stocked PO
       //    line instead of relying on the single-warehouse silent fallback.
-      const loc = await api(page, "POST", "/api/admin/setup/locations", { name: `P2P Warehouse ${TAG}` });
+      const loc = await api(page, "POST", "/api/admin/setup/locations", {
+        name: `P2P Warehouse ${TAG}`,
+      });
       const locationId = str(req(loc, "POST setup/locations").id, "location id");
       const sloc = await api(page, "POST", "/api/admin/setup/stock-locations", {
         locationId,
@@ -365,22 +435,31 @@ test.describe("procure-to-pay workflows", () => {
       shared.stockLocationId = str(req(sloc, "POST setup/stock-locations").id, "stock location id");
 
       // 5. Stock item with a FIFO costing profile (asset/cogs/RNB).
-      const createdItem = await api(page, "POST", "/api/items", {
-        kind: "inventory",
-        name: `P2P Widget ${TAG}`,
-        isActive: true,
-      }, { "Idempotency-Key": crypto.randomUUID() });
+      const createdItem = await api(
+        page,
+        "POST",
+        "/api/items",
+        {
+          kind: "inventory",
+          name: `P2P Widget ${TAG}`,
+          isActive: true,
+        },
+        { "Idempotency-Key": crypto.randomUUID() },
+      );
       itemId = str((req(createdItem, "POST /api/items").item as Json).id, "item id");
-      req(await api(page, "PUT", `/api/items/${itemId}/costing`, {
-        costingMethod: "fifo",
-        tracking: "none",
-        assetAccountId: acct["1210"],
-        cogsAccountId: acct["5000"],
-        adjustmentAccountId: acct["5000"],
-        receivedNotBilledAccountId: acct["2150"],
-        baseUnit: "ea",
-        expectedUpdatedAt: null,
-      }), "PUT /api/items/[id]/costing");
+      req(
+        await api(page, "PUT", `/api/items/${itemId}/costing`, {
+          costingMethod: "fifo",
+          tracking: "none",
+          assetAccountId: acct["1210"],
+          cogsAccountId: acct["5000"],
+          adjustmentAccountId: acct["5000"],
+          receivedNotBilledAccountId: acct["2150"],
+          baseUnit: "ea",
+          expectedUpdatedAt: null,
+        }),
+        "PUT /api/items/[id]/costing",
+      );
 
       // 6. Approval policies: vendor bills gate on submit; vendor bank details
       //    gate on create. Both route to the approver role (a different human
@@ -389,31 +468,45 @@ test.describe("procure-to-pay workflows", () => {
         return {
           schemaVersion: 1,
           nodes: [
-            { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger } } },
+            {
+              id: "trigger",
+              position: { x: 0, y: 0 },
+              data: { kind: "trigger", trigger: { trigger } },
+            },
             {
               id: "gate",
               position: { x: 220, y: 0 },
               data: {
                 kind: "gate",
-                gate: { title: "P2P approval", assignees: [{ type: "role", role: "approver" }], mode: "any" },
+                gate: {
+                  title: "P2P approval",
+                  assignees: [{ type: "role", role: "approver" }],
+                  mode: "any",
+                },
               },
             },
           ],
           edges: [{ id: "e1", source: "trigger", target: "gate", sourceHandle: "next" }],
         };
       }
-      for (const [subjectKind, trigger] of [["vendor_bill", "on_submit"], ["party_bank_account", "on_create"]] as const) {
+      for (const [subjectKind, trigger] of [
+        ["vendor_bill", "on_submit"],
+        ["party_bank_account", "on_create"],
+      ] as const) {
         const created = await api(page, "POST", "/api/admin/flows", {
           name: `P2P ${subjectKind} approval ${TAG}`,
           subjectKind,
         });
         const flowId = str(req(created, "POST /api/admin/flows").id, "flow id");
         const read = await api(page, "GET", `/api/admin/flows/${flowId}`);
-        req(await api(page, "PATCH", `/api/admin/flows/${flowId}`, {
-          graph: approvalGraph(trigger),
-          enabled: true,
-          expectedUpdatedAt: revOf(req(read, "GET /api/admin/flows/[id]")),
-        }), `PATCH flow ${subjectKind}`);
+        req(
+          await api(page, "PATCH", `/api/admin/flows/${flowId}`, {
+            graph: approvalGraph(trigger),
+            enabled: true,
+            expectedUpdatedAt: revOf(req(read, "GET /api/admin/flows/[id]")),
+          }),
+          `PATCH flow ${subjectKind}`,
+        );
       }
 
       // 7. Payment terms 2/10 net-30 (discount scenario). Explicit isActive:
@@ -422,7 +515,7 @@ test.describe("procure-to-pay workflows", () => {
         name: `P2P 2-10 Net 30 ${TAG}`,
         netDays: 30,
         discountDays: 10,
-        discountPercent: '2.5',
+        discountPercent: "2.5",
         isActive: true,
       });
       shared.terms210 = str(req(d210, "POST payment-terms 2/10").id, "terms id");
@@ -433,7 +526,10 @@ test.describe("procure-to-pay workflows", () => {
       //    account set. Currency falls back to the format's USD, so no
       //    multi-currency switch is needed.
       const formats = await api(page, "GET", "/api/admin/payment-operations/formats");
-      const rows = req(formats, "GET payment-operations/formats").rows as Array<{ id: string; code: string }>;
+      const rows = req(formats, "GET payment-operations/formats").rows as Array<{
+        id: string;
+        code: string;
+      }>;
       const nacha = rows.find((r) => r.code === "NACHA-CREDIT");
       expect(nacha?.id, "built-in NACHA-CREDIT format seeded").toBeTruthy();
       const profile = await api(page, "POST", "/api/admin/payment-operations/profiles", {
@@ -461,20 +557,31 @@ test.describe("procure-to-pay workflows", () => {
 
   // --- scenario helpers -------------------------------------------------------
   async function createVendor(page: Page, displayName: string, extra?: Json): Promise<string> {
-    const draft = await api(page, "POST", "/api/parties", { displayName, isActive: false, roles: { vendor: { enabled: true } } });
+    const draft = await api(page, "POST", "/api/parties", {
+      displayName,
+      isActive: false,
+      roles: { vendor: { enabled: true } },
+    });
     const id = str((req(draft, "POST /api/parties").party as Json).id, "vendor id");
     const got = await api(page, "GET", `/api/parties/${id}`);
-    req(await api(page, "PATCH", `/api/parties/${id}`, {
-      displayName,
-      isActive: true,
-      expectedUpdatedAt: revOf(req(got, "GET /api/parties/[id]")),
-      changeReason: "P2P E2E: activate test vendor",
-      ...extra,
-    }), "PATCH /api/parties/[id]");
+    req(
+      await api(page, "PATCH", `/api/parties/${id}`, {
+        displayName,
+        isActive: true,
+        expectedUpdatedAt: revOf(req(got, "GET /api/parties/[id]")),
+        changeReason: "P2P E2E: activate test vendor",
+        ...extra,
+      }),
+      "PATCH /api/parties/[id]",
+    );
     return id;
   }
 
-  async function addBankAccount(page: Page, partyId: string, accountNumber: string): Promise<string> {
+  async function addBankAccount(
+    page: Page,
+    partyId: string,
+    accountNumber: string,
+  ): Promise<string> {
     const created = await api(page, "POST", `/api/parties/${partyId}/bank-accounts`, {
       bankName: "First Bank of E2E",
       country: "US",
@@ -505,7 +612,11 @@ test.describe("procure-to-pay workflows", () => {
         headers: { Origin: origin },
       });
       if (!res.ok()) throw new Error(`approver login failed: ${res.status()} ${await res.text()}`);
-      return await browser.newContext({ baseURL, storageState: await apiCtx.storageState(), ignoreHTTPSErrors });
+      return await browser.newContext({
+        baseURL,
+        storageState: await apiCtx.storageState(),
+        ignoreHTTPSErrors,
+      });
     } finally {
       await apiCtx.dispose();
     }
@@ -519,7 +630,11 @@ test.describe("procure-to-pay workflows", () => {
    * older test gates first. decideGate refuses non-assignees and the
    * submitter server-side, so resolution proves a second identity approved.
    */
-  async function approveSubjectViaUi(browser: Browser, baseURL: string | undefined, subjectId: string) {
+  async function approveSubjectViaUi(
+    browser: Browser,
+    baseURL: string | undefined,
+    subjectId: string,
+  ) {
     const ctx = await approverContext(browser, baseURL);
     const approverPage = await ctx.newPage();
     try {
@@ -528,7 +643,9 @@ test.describe("procure-to-pay workflows", () => {
         const isPending = await approverPage.evaluate(async (subjectId) => {
           const res = await fetch("/api/flows/gates");
           if (!res.ok) return true;
-          const body = (await res.json()) as { gates?: Array<{ subjectId?: string; subject_id?: string }> };
+          const body = (await res.json()) as {
+            gates?: Array<{ subjectId?: string; subject_id?: string }>;
+          };
           return (body.gates ?? []).some((g) => (g.subjectId ?? g.subject_id) === subjectId);
         }, subjectId);
         if (!isPending) return;
@@ -541,7 +658,9 @@ test.describe("procure-to-pay workflows", () => {
         const stillPending = await approverPage.evaluate(async (subjectId) => {
           const res = await fetch("/api/flows/gates");
           if (!res.ok) return true;
-          const body = (await res.json()) as { gates?: Array<{ subjectId?: string; subject_id?: string }> };
+          const body = (await res.json()) as {
+            gates?: Array<{ subjectId?: string; subject_id?: string }>;
+          };
           return (body.gates ?? []).some((g) => (g.subjectId ?? g.subject_id) === subjectId);
         }, subjectId);
         if (!stillPending) return;
@@ -555,28 +674,43 @@ test.describe("procure-to-pay workflows", () => {
 
   /** Post a service-amount vendor bill through submit → UI approval → post. */
   async function postServiceBill(
-    page: Page, browser: Browser, baseURL: string | undefined,
-    vendorId: string, amount: string, accountId: string,
+    page: Page,
+    browser: Browser,
+    baseURL: string | undefined,
+    vendorId: string,
+    amount: string,
+    accountId: string,
   ): Promise<string> {
     const draft = await api(page, "POST", "/api/documents/draft", { kind: "vendor_bill" });
     const billId = str(req(draft, "POST documents/draft bill").id, "bill id");
     const got = await api(page, "GET", `/api/documents/${billId}`);
-    req(await api(page, "PATCH", `/api/documents/${billId}`, {
-      partyId: vendorId,
-      subsidiaryId: shared.rootSub,
-      documentDate: DAY,
-      lines: [{ accountId, description: `P2P services ${TAG}`, amount }],
-      expectedUpdatedAt: revOf(req(got, "GET bill draft")),
-    }), "PATCH bill lines");
-    req(await api(page, "POST", "/api/documents/actions", { action: "submit", documentId: billId }), "POST bill submit");
+    req(
+      await api(page, "PATCH", `/api/documents/${billId}`, {
+        partyId: vendorId,
+        subsidiaryId: shared.rootSub,
+        documentDate: DAY,
+        lines: [{ accountId, description: `P2P services ${TAG}`, amount }],
+        expectedUpdatedAt: revOf(req(got, "GET bill draft")),
+      }),
+      "PATCH bill lines",
+    );
+    req(
+      await api(page, "POST", "/api/documents/actions", { action: "submit", documentId: billId }),
+      "POST bill submit",
+    );
     await approveSubjectViaUi(browser, baseURL, billId);
-    req(await api(page, "POST", "/api/documents/actions", { action: "post", documentId: billId }), "POST bill post");
+    req(
+      await api(page, "POST", "/api/documents/actions", { action: "post", documentId: billId }),
+      "POST bill post",
+    );
     return billId;
   }
 
   /** Create a pay run over posted bills, submit, generate the file, post it. */
   async function postRunToPaid(
-    page: Page, billDocumentIds: string[], scheduledFor?: string,
+    page: Page,
+    billDocumentIds: string[],
+    scheduledFor?: string,
   ): Promise<{ runId: string; fileText: string; filename: string }> {
     const runCreate = await api(page, "POST", "/api/payments/runs", {
       paymentBankProfileId: shared.profileId,
@@ -585,7 +719,10 @@ test.describe("procure-to-pay workflows", () => {
     });
     const runId = str(req(runCreate, "POST /api/payments/runs").id, "run id");
     req(await api(page, "POST", `/api/payments/runs/${runId}/submit`, {}), "POST run submit");
-    const fileInfo = req(await api(page, "POST", `/api/payments/runs/${runId}/file`, {}), "POST run file");
+    const fileInfo = req(
+      await api(page, "POST", `/api/payments/runs/${runId}/file`, {}),
+      "POST run file",
+    );
     const fileRes = await apiText(page, `/api/payments/runs/${runId}/file`);
     expect(fileRes.status, "GET run file bytes").toBe(200);
     const runPost = await api(page, "POST", `/api/payments/runs/${runId}/post`, {});
@@ -595,13 +732,19 @@ test.describe("procure-to-pay workflows", () => {
 
   async function apOpenSum(page: Page, partyId: string): Promise<bigint> {
     const open = await api(page, "GET", `/api/payments/open-items?partyId=${partyId}&side=ap`);
-    const items = req(open, "GET open-items").items as Array<{ open?: string; transactionOpen?: string }>;
+    const items = req(open, "GET open-items").items as Array<{
+      open?: string;
+      transactionOpen?: string;
+    }>;
     return items.reduce((n, i) => n + toUnits(String(i.transactionOpen ?? i.open ?? "0")), 0n);
   }
 
   const MONTH = `period=custom&from=${MONTH_FROM}&to=${MONTH_TO}`;
 
-  test("core flow: approve, order, receive, bill, pay, NACHA, reconcile, tie out", async ({ browser, baseURL }) => {
+  test("core flow: approve, order, receive, bill, pay, NACHA, reconcile, tie out", async ({
+    browser,
+    baseURL,
+  }) => {
     const unitPrice = "25.0000";
     const qty = "100";
     const billTotal = fromUnits(toUnits(unitPrice) * BigInt(qty)); // 2500.0000
@@ -623,46 +766,65 @@ test.describe("procure-to-pay workflows", () => {
       await approveSubjectViaUi(browser, baseURL, bankAccountId);
       const party = await api(page, "GET", `/api/parties/${vendorId}`);
       const bankAccounts = req(party, "GET party after approval").bankAccounts as Array<{
-        id: string; approval_status?: string; approved_by?: string; submitted_by?: string;
+        id: string;
+        approval_status?: string;
+        approved_by?: string;
+        submitted_by?: string;
       }>;
       const approved = bankAccounts.find((b) => b.id === bankAccountId);
       expect(approved?.approval_status, "bank details approved by second user").toBe("approved");
       // Separation of duties, straight from the row: the submitter cannot be
       // the approver (decideGate refuses both non-assignees and submitters).
       expect(approved?.approved_by, "approver recorded").toBeTruthy();
-      expect(approved?.approved_by, "approver differs from submitter").not.toBe(approved?.submitted_by);
+      expect(approved?.approved_by, "approver differs from submitter").not.toBe(
+        approved?.submitted_by,
+      );
 
       // Vendor workspace renders the new vendor.
       await page.goto("/parties");
       await expect(page.locator("main")).toContainText(vendorName);
 
       // Purchase order: 100 widgets @ $25 on the stock item.
-      const poDraft = await api(page, "POST", "/api/purchase-orders/draft", {}, { "Idempotency-Key": crypto.randomUUID() });
+      const poDraft = await api(
+        page,
+        "POST",
+        "/api/purchase-orders/draft",
+        {},
+        { "Idempotency-Key": crypto.randomUUID() },
+      );
       const poId = str(req(poDraft, "POST /api/purchase-orders/draft").id, "PO id");
       const poGet = await api(page, "GET", `/api/purchase-orders/${poId}`);
       const poEdit = await api(page, "PATCH", `/api/purchase-orders/${poId}`, {
         partyId: vendorId,
         subsidiaryId: shared.rootSub,
         documentDate: DAY,
-        lines: [{
-          itemId,
-          accountId: acct["1210"],
-          description: "Industrial widgets",
-          quantity: qty,
-          unit: "ea",
-          unitPrice,
-          // Explicit warehouse: the receipt refuses a warehouseless stocked
-          // line whenever the org's warehouse choice is ambiguous.
-          stockLocationId: shared.stockLocationId,
-        }],
+        lines: [
+          {
+            itemId,
+            accountId: acct["1210"],
+            description: "Industrial widgets",
+            quantity: qty,
+            unit: "ea",
+            unitPrice,
+            // Explicit warehouse: the receipt refuses a warehouseless stocked
+            // line whenever the org's warehouse choice is ambiguous.
+            stockLocationId: shared.stockLocationId,
+          },
+        ],
         expectedUpdatedAt: revOf(req(poGet, "GET PO")),
       });
       const poEdited = req(poEdit, "PATCH PO lines");
-      const poNumber = str(docOf(poEdited).documentNumber ?? docOf(poEdited).document_number, "PO number");
-      req(await api(page, "PATCH", `/api/purchase-orders/${poId}`, {
-        status: "approved",
-        expectedUpdatedAt: revOf(poEdited),
-      }), "PATCH PO issue");
+      const poNumber = str(
+        docOf(poEdited).documentNumber ?? docOf(poEdited).document_number,
+        "PO number",
+      );
+      req(
+        await api(page, "PATCH", `/api/purchase-orders/${poId}`, {
+          status: "approved",
+          expectedUpdatedAt: revOf(poEdited),
+        }),
+        "PATCH PO issue",
+      );
       await page.goto("/purchase-orders");
       await expect(page.locator("main")).toContainText(poNumber);
 
@@ -701,20 +863,39 @@ test.describe("procure-to-pay workflows", () => {
       await expect(page.locator("main")).toContainText(String(bill.documentNumber ?? ""));
 
       // Submit -> pending_approval (the vendor_bill flow gates it).
-      req(await api(page, "POST", "/api/documents/actions", { action: "submit", documentId: billId }), "POST bill submit");
+      req(
+        await api(page, "POST", "/api/documents/actions", { action: "submit", documentId: billId }),
+        "POST bill submit",
+      );
       const billPending = await api(page, "GET", `/api/documents/${billId}`);
-      expect(String(docOf(req(billPending, "GET bill pending")).status), "bill gated to pending_approval").toBe("pending_approval");
+      expect(
+        String(docOf(req(billPending, "GET bill pending")).status),
+        "bill gated to pending_approval",
+      ).toBe("pending_approval");
 
       // Second user approves through the real approvals UI.
       await approveSubjectViaUi(browser, baseURL, billId);
       const billApproved = await api(page, "GET", `/api/documents/${billId}`);
-      expect(String(docOf(req(billApproved, "GET bill approved")).status), "bill approved by second user").toBe("approved");
+      expect(
+        String(docOf(req(billApproved, "GET bill approved")).status),
+        "bill approved by second user",
+      ).toBe("approved");
 
       // Post: DR received-not-billed / CR AP 2500. Exact legs via the entry API.
-      req(await api(page, "POST", "/api/documents/actions", { action: "post", documentId: billId }), "POST bill post");
+      req(
+        await api(page, "POST", "/api/documents/actions", { action: "post", documentId: billId }),
+        "POST bill post",
+      );
       const billPosted = await api(page, "GET", `/api/documents/${billId}`);
-      const billEntry = await api(page, "GET", `/api/reports/entry/${str(docOf(req(billPosted, "GET bill posted")).posted_entry_id, "bill entry id")}`);
-      const billLegs = (req(billEntry, "GET bill entry").lines ?? []) as Array<{ account_number?: string; amount?: string }>;
+      const billEntry = await api(
+        page,
+        "GET",
+        `/api/reports/entry/${str(docOf(req(billPosted, "GET bill posted")).posted_entry_id, "bill entry id")}`,
+      );
+      const billLegs = (req(billEntry, "GET bill entry").lines ?? []) as Array<{
+        account_number?: string;
+        amount?: string;
+      }>;
       const billLeg = (number: string) => billLegs.find((l) => l.account_number === number)?.amount;
       expect(billLeg("2150"), "receipt clears through RNB").toBe("2500.0000");
       expect(billLeg("2000"), "AP credited $2,500").toBe("-2500.0000");
@@ -745,7 +926,9 @@ test.describe("procure-to-pay workflows", () => {
       const fileRes = await apiText(page, `/api/payments/runs/${runId}/file`);
       expect(fileRes.status, "GET run file bytes").toBe(200);
       const parsed = parseNacha(fileRes.text, BigInt(billCents), 1);
-      expect(parsed.entries[0], "payee entry carries the vendor").toContain(vendorName.slice(0, 22).trim());
+      expect(parsed.entries[0], "payee entry carries the vendor").toContain(
+        vendorName.slice(0, 22).trim(),
+      );
       const sha = createHash("sha256").update(fileRes.text, "utf8").digest("hex");
       expect(sha.length, "sha256 recorded over the exact downloaded bytes").toBe(64);
 
@@ -758,19 +941,30 @@ test.describe("procure-to-pay workflows", () => {
       await page.goto(`/reports/aging?${MONTH}&side=ap`);
       {
         const rows = await reportRows(page);
-        expect(rows.some((r) => r.some((c) => c.includes(vendorName))), "paid vendor absent from AP aging").toBe(false);
+        expect(
+          rows.some((r) => r.some((c) => c.includes(vendorName))),
+          "paid vendor absent from AP aging",
+        ).toBe(false);
       }
 
       // Automatic remittance: the profile arms it (the queue has no vendor-run
       // read surface; delivery is covered by payment-remittance-queue tests).
       const profiles = await api(page, "GET", "/api/admin/payment-operations/profiles");
-      const profileRows = req(profiles, "GET payment-operations/profiles").rows as Array<{ id: string; auto_remittance?: boolean }>;
-      expect(profileRows.find((p) => p.id === shared.profileId)?.auto_remittance, "profile queues automatic remittance").toBe(true);
+      const profileRows = req(profiles, "GET payment-operations/profiles").rows as Array<{
+        id: string;
+        auto_remittance?: boolean;
+      }>;
+      expect(
+        profileRows.find((p) => p.id === shared.profileId)?.auto_remittance,
+        "profile queues automatic remittance",
+      ).toBe(true);
 
       // This financial saga owns a pristine database and runs without retries;
       // statement history keeps its actual dates and remains immutable.
       const rec = await api(page, "POST", "/api/banking/reconciliations", {
-        accountId: acct["1099"], throughDate: CUTOFF, statementBalance: "-2500.00",
+        accountId: acct["1099"],
+        throughDate: CUTOFF,
+        statementBalance: "-2500.00",
       });
       const recId = str(req(rec, "POST reconciliations").id, "reconciliation id");
       const imp = await api(page, "POST", "/api/banking/import", {
@@ -783,16 +977,28 @@ test.describe("procure-to-pay workflows", () => {
       expect(req(imp, "POST banking/import").imported, "one statement line imported").toBe(1);
       const payNumber = await (async () => {
         const detail = await api(page, "GET", `/api/payments/runs/${runId}`);
-        const instructions = req(detail, "GET run detail").instructions as Array<{ document_number?: string }>;
+        const instructions = req(detail, "GET run detail").instructions as Array<{
+          document_number?: string;
+        }>;
         return str(instructions[0]?.document_number, "payment number");
       })();
       await page.goto(`/banking/match?account=${acct["1099"]}`);
       await dismissSetupWizard(page);
-      await page.locator("tr", { hasText: `P2P NACHA ${TAG}` }).first().locator('input[type="checkbox"]').check();
-      await page.locator("tr", { hasText: payNumber }).first().locator('input[type="checkbox"]').check();
+      await page
+        .locator("tr", { hasText: `P2P NACHA ${TAG}` })
+        .first()
+        .locator('input[type="checkbox"]')
+        .check();
+      await page
+        .locator("tr", { hasText: payNumber })
+        .first()
+        .locator('input[type="checkbox"]')
+        .check();
       {
         const matched = page.waitForResponse(
-          (r) => r.url().endsWith(`/api/banking/reconciliations/${recId}/matches`) && r.request().method() === "POST",
+          (r) =>
+            r.url().endsWith(`/api/banking/reconciliations/${recId}/matches`) &&
+            r.request().method() === "POST",
         );
         await page.getByRole("button", { name: "Match selected", exact: true }).click();
         const res = await matched;
@@ -801,10 +1007,16 @@ test.describe("procure-to-pay workflows", () => {
       await page.getByRole("link", { name: "Open reconciliation workspace", exact: true }).click();
       {
         const signed = page.waitForResponse(
-          (r) => r.url().endsWith(`/api/banking/reconciliations/${recId}/sign-off`) && r.request().method() === "POST",
+          (r) =>
+            r.url().endsWith(`/api/banking/reconciliations/${recId}/sign-off`) &&
+            r.request().method() === "POST",
         );
         await page.getByRole("button", { name: "Sign off", exact: true }).click();
-        await page.locator('[role="dialog"]', { hasText: "Confirm" }).last().getByRole("button", { name: "Confirm", exact: true }).click();
+        await page
+          .locator('[role="dialog"]', { hasText: "Confirm" })
+          .last()
+          .getByRole("button", { name: "Confirm", exact: true })
+          .click();
         const res = await signed;
         expect(res.status(), await res.text()).toBe(200);
       }
@@ -858,7 +1070,10 @@ test.describe("procure-to-pay workflows", () => {
     }
   });
 
-  test("early-payment discount settles $1,000 for $975 cash (total-as-cash)", async ({ browser, baseURL }) => {
+  test("early-payment discount settles $1,000 for $975 cash (total-as-cash)", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       // "/" redirects to the canonical /dashboard home (UX-17); land there
@@ -876,7 +1091,14 @@ test.describe("procure-to-pay workflows", () => {
       const bankAccountId = await addBankAccount(page, vendorId, "2003004");
       await approveSubjectViaUi(browser, baseURL, bankAccountId);
 
-      const billId = await postServiceBill(page, browser, baseURL, vendorId, "1000.0000", str(acct["6000"], "6000 account"));
+      const billId = await postServiceBill(
+        page,
+        browser,
+        baseURL,
+        vendorId,
+        "1000.0000",
+        str(acct["6000"], "6000 account"),
+      );
       // scheduledFor pins the payment date inside the discount window whatever
       // the real today is (deadline = document date + 10 days).
       const { fileText, filename, runId } = await postRunToPaid(page, [billId], DAY);
@@ -886,19 +1108,35 @@ test.describe("procure-to-pay workflows", () => {
 
       // Total-as-cash contract: the payment header pins the $975 cash frame…
       const detail = await api(page, "GET", `/api/payments/runs/${runId}`);
-      const instructions = req(detail, "GET run detail").instructions as Array<{ payment_document_id?: string }>;
+      const instructions = req(detail, "GET run detail").instructions as Array<{
+        payment_document_id?: string;
+      }>;
       expect(instructions.length, "one instruction").toBe(1);
-      const paymentGet = await api(page, "GET", `/api/payments/${String(instructions[0]!.payment_document_id)}`);
+      const paymentGet = await api(
+        page,
+        "GET",
+        `/api/payments/${String(instructions[0]!.payment_document_id)}`,
+      );
       const payment = docOf(req(paymentGet, "GET payment doc"));
       expect(String(payment.total), "payment header pins cash $975").toBe("975.0000");
       // …while its legs relieve the gross $1,000 AP and book the $25 discount.
-      const entry = await api(page, "GET", `/api/reports/entry/${str(payment.posted_entry_id, "payment entry id")}`);
-      const legs = (req(entry, "GET payment entry").lines ?? []) as Array<{ account_number?: string; amount?: string }>;
+      const entry = await api(
+        page,
+        "GET",
+        `/api/reports/entry/${str(payment.posted_entry_id, "payment entry id")}`,
+      );
+      const legs = (req(entry, "GET payment entry").lines ?? []) as Array<{
+        account_number?: string;
+        amount?: string;
+      }>;
       const leg = (number: string) => legs.find((l) => l.account_number === number)?.amount;
       expect(leg("2000"), "AP leg relieves gross $1,000").toBe("1000.0000");
       expect(leg("1099"), "bank leg moves $975 cash").toBe("-975.0000");
       expect(leg("5000"), "discount leg books $25").toBe("-25.0000");
-      expect(fromUnits(await apOpenSum(page, vendorId)), "AP aging 0 after discounted payment").toBe("0.0000");
+      expect(
+        fromUnits(await apOpenSum(page, vendorId)),
+        "AP aging 0 after discounted payment",
+      ).toBe("0.0000");
       await page.goto(`/reports/aging?${MONTH}&side=ap`);
       await expect(page.locator("main")).toContainText(/\S/);
     } finally {
@@ -906,7 +1144,10 @@ test.describe("procure-to-pay workflows", () => {
     }
   });
 
-  test("vendor credit netted with an expense reimbursement inside one pay run", async ({ browser, baseURL }) => {
+  test("vendor credit netted with an expense reimbursement inside one pay run", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       // "/" redirects to the canonical /dashboard home (UX-17); land there
@@ -920,52 +1161,111 @@ test.describe("procure-to-pay workflows", () => {
       const vendorId = await createVendor(page, `Credit Vendor ${TAG}`);
       const vendorBank = await addBankAccount(page, vendorId, "3004005");
       await approveSubjectViaUi(browser, baseURL, vendorBank);
-      const billId = await postServiceBill(page, browser, baseURL, vendorId, "800.0000", str(acct["6000"], "6000 account"));
-      const creditDraft = await api(page, "POST", "/api/documents/draft", { kind: "vendor_credit" });
+      const billId = await postServiceBill(
+        page,
+        browser,
+        baseURL,
+        vendorId,
+        "800.0000",
+        str(acct["6000"], "6000 account"),
+      );
+      const creditDraft = await api(page, "POST", "/api/documents/draft", {
+        kind: "vendor_credit",
+      });
       const creditId = str(req(creditDraft, "POST documents/draft credit").id, "credit id");
       const creditGet = await api(page, "GET", `/api/documents/${creditId}`);
-      req(await api(page, "PATCH", `/api/documents/${creditId}`, {
-        partyId: vendorId,
-        subsidiaryId: shared.rootSub,
-        documentDate: DAY,
-        lines: [{ accountId: acct["6000"], description: `P2P return ${TAG}`, amount: "200.0000" }],
-        expectedUpdatedAt: revOf(req(creditGet, "GET credit draft")),
-      }), "PATCH credit lines");
-      req(await api(page, "POST", "/api/documents/actions", { action: "submit", documentId: creditId }), "POST credit submit");
-      req(await api(page, "POST", "/api/documents/actions", { action: "post", documentId: creditId }), "POST credit post");
+      req(
+        await api(page, "PATCH", `/api/documents/${creditId}`, {
+          partyId: vendorId,
+          subsidiaryId: shared.rootSub,
+          documentDate: DAY,
+          lines: [
+            { accountId: acct["6000"], description: `P2P return ${TAG}`, amount: "200.0000" },
+          ],
+          expectedUpdatedAt: revOf(req(creditGet, "GET credit draft")),
+        }),
+        "PATCH credit lines",
+      );
+      req(
+        await api(page, "POST", "/api/documents/actions", {
+          action: "submit",
+          documentId: creditId,
+        }),
+        "POST credit submit",
+      );
+      req(
+        await api(page, "POST", "/api/documents/actions", { action: "post", documentId: creditId }),
+        "POST credit post",
+      );
 
       // Employee with an approved bank account and a $150 expense report.
-      const empDraft = await api(page, "POST", "/api/parties", { displayName: `P2P Field Tech ${TAG}`, kind: "person", isActive: false, roles: { employee: { enabled: true } } });
-      const employeeId = str((req(empDraft, "POST parties employee").party as Json).id, "employee id");
-      const empGet = await api(page, "GET", `/api/parties/${employeeId}`);
-      req(await api(page, "PATCH", `/api/parties/${employeeId}`, {
+      const empDraft = await api(page, "POST", "/api/parties", {
         displayName: `P2P Field Tech ${TAG}`,
-        isActive: true,
-        expectedUpdatedAt: revOf(req(empGet, "GET employee")),
-        changeReason: "P2P E2E: activate test employee",
-      }), "PATCH employee");
+        kind: "person",
+        isActive: false,
+        roles: { employee: { enabled: true } },
+      });
+      const employeeId = str(
+        (req(empDraft, "POST parties employee").party as Json).id,
+        "employee id",
+      );
+      const empGet = await api(page, "GET", `/api/parties/${employeeId}`);
+      req(
+        await api(page, "PATCH", `/api/parties/${employeeId}`, {
+          displayName: `P2P Field Tech ${TAG}`,
+          isActive: true,
+          expectedUpdatedAt: revOf(req(empGet, "GET employee")),
+          changeReason: "P2P E2E: activate test employee",
+        }),
+        "PATCH employee",
+      );
       const empBank = await addBankAccount(page, employeeId, "4005006");
       await approveSubjectViaUi(browser, baseURL, empBank);
       // One create carries the header and lines: the report is numbered only
       // by this Save, so no empty draft precedes it.
-      const expCreate = await api(page, "POST", "/api/expenses", {
-        partyId: employeeId,
-        documentDate: DAY,
-        memo: `P2P site visit ${TAG}`,
-        // out_of_pocket: the employee fronted the money and the pay run
-        // reimburses them. company_paid would require a corporate card and
-        // pay the issuer (owed nothing to the employee); personal is a
-        // receivable from the employee. Only out_of_pocket belongs in a
-        // reimbursement run — the drawer defaults new lines the same way.
-        lines: [{ accountId: acct["6000"], description: "Mileage and meals", amount: "150.0000", settlementType: "out_of_pocket" }],
-      }, { "Idempotency-Key": crypto.randomUUID() });
-      const expenseId = str((req(expCreate, "POST expenses").doc as { id?: unknown }).id, "expense id");
+      const expCreate = await api(
+        page,
+        "POST",
+        "/api/expenses",
+        {
+          partyId: employeeId,
+          documentDate: DAY,
+          memo: `P2P site visit ${TAG}`,
+          // out_of_pocket: the employee fronted the money and the pay run
+          // reimburses them. company_paid would require a corporate card and
+          // pay the issuer (owed nothing to the employee); personal is a
+          // receivable from the employee. Only out_of_pocket belongs in a
+          // reimbursement run — the drawer defaults new lines the same way.
+          lines: [
+            {
+              accountId: acct["6000"],
+              description: "Mileage and meals",
+              amount: "150.0000",
+              settlementType: "out_of_pocket",
+            },
+          ],
+        },
+        { "Idempotency-Key": crypto.randomUUID() },
+      );
+      const expenseId = str(
+        (req(expCreate, "POST expenses").doc as { id?: unknown }).id,
+        "expense id",
+      );
       // No subsidiaryId: the expense create has no such field by product
       // design. The reimbursement still resolves — the pay-run planner scopes
       // by the caller's allowance and books root-scoped lines — so the
       // explicit scoping above covers every document kind that accepts one.
-      req(await api(page, "POST", "/api/expenses/actions", { action: "submit", documentId: expenseId }), "POST expense submit");
-      req(await api(page, "POST", "/api/expenses/actions", { action: "post", documentId: expenseId }), "POST expense post");
+      req(
+        await api(page, "POST", "/api/expenses/actions", {
+          action: "submit",
+          documentId: expenseId,
+        }),
+        "POST expense submit",
+      );
+      req(
+        await api(page, "POST", "/api/expenses/actions", { action: "post", documentId: expenseId }),
+        "POST expense post",
+      );
       await page.goto("/expenses");
       await expect(page.locator("main")).toContainText(/\S/);
 
@@ -974,11 +1274,19 @@ test.describe("procure-to-pay workflows", () => {
       const { fileText, runId } = await postRunToPaid(page, [billId, expenseId]);
       parseNacha(fileText, 75000n, 2);
       const detail = await api(page, "GET", `/api/payments/runs/${runId}`);
-      const instructions = req(detail, "GET run detail").instructions as Array<{ payee?: string; amount?: string }>;
+      const instructions = req(detail, "GET run detail").instructions as Array<{
+        payee?: string;
+        amount?: string;
+      }>;
       const byPayee = new Map(instructions.map((i) => [i.payee, i.amount]));
-      expect(byPayee.get(`Credit Vendor ${TAG}`), "vendor instruction net of credit").toBe("600.0000");
+      expect(byPayee.get(`Credit Vendor ${TAG}`), "vendor instruction net of credit").toBe(
+        "600.0000",
+      );
       expect(byPayee.get(`P2P Field Tech ${TAG}`), "employee reimbursed in full").toBe("150.0000");
-      expect(fromUnits(await apOpenSum(page, vendorId)), "vendor AP 0 (bill + credit consumed)").toBe("0.0000");
+      expect(
+        fromUnits(await apOpenSum(page, vendorId)),
+        "vendor AP 0 (bill + credit consumed)",
+      ).toBe("0.0000");
       expect(fromUnits(await apOpenSum(page, employeeId)), "employee advance 0").toBe("0.0000");
       await page.goto("/payments");
       await expect(page.locator("main")).toContainText(/\S/);
@@ -987,7 +1295,10 @@ test.describe("procure-to-pay workflows", () => {
     }
   });
 
-  test("subcontractor blocked by missing compliance evidence, then released", async ({ browser, baseURL }) => {
+  test("subcontractor blocked by missing compliance evidence, then released", async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       // "/" redirects to the canonical /dashboard home (UX-17); land there
@@ -1000,7 +1311,9 @@ test.describe("procure-to-pay workflows", () => {
       // a lapse blocks payment (not posting). Setup rows default inactive, so
       // activation is explicit.
       const cls = await api(page, "POST", "/api/admin/setup/compliance-classes", {
-        code: `SUB-${TAG}`, name: `P2P Subcontractors ${TAG}`, isActive: true,
+        code: `SUB-${TAG}`,
+        name: `P2P Subcontractors ${TAG}`,
+        isActive: true,
       });
       const classId = str(req(cls, "POST compliance-classes").id, "class id");
       const reqt = await api(page, "POST", "/api/admin/setup/compliance-requirements", {
@@ -1016,8 +1329,20 @@ test.describe("procure-to-pay workflows", () => {
       const vendorId = await createVendor(page, `Subcontractor ${TAG}`);
       const vendorBank = await addBankAccount(page, vendorId, "5006007");
       await approveSubjectViaUi(browser, baseURL, vendorBank);
-      req(await api(page, "PATCH", `/api/compliance/vendors/${vendorId}`, { complianceClassId: classId }), "PATCH vendor class");
-      const billId = await postServiceBill(page, browser, baseURL, vendorId, "300.0000", str(acct["6000"], "6000 account"));
+      req(
+        await api(page, "PATCH", `/api/compliance/vendors/${vendorId}`, {
+          complianceClassId: classId,
+        }),
+        "PATCH vendor class",
+      );
+      const billId = await postServiceBill(
+        page,
+        browser,
+        baseURL,
+        vendorId,
+        "300.0000",
+        str(acct["6000"], "6000 account"),
+      );
       await page.goto("/compliance/vendors");
       await expect(page.locator("main")).toContainText(/\S/);
 
@@ -1029,7 +1354,9 @@ test.describe("procure-to-pay workflows", () => {
         billDocumentIds: [billId],
       });
       expect(blocked.status, "blocked run HTTP status").toBe(422);
-      expect(JSON.stringify(blocked.body), "compliance blocks the run").toContain("subcontractor compliance blocks payment");
+      expect(JSON.stringify(blocked.body), "compliance blocks the run").toContain(
+        "subcontractor compliance blocks payment",
+      );
 
       // No certificate Flow is configured for this tenant, so the authorized
       // recorder's native verification releases without another approver.
@@ -1042,20 +1369,27 @@ test.describe("procure-to-pay workflows", () => {
         expiresOn: CERT_EXPIRES,
       });
       const recordId = str(req(recorded, "POST compliance/records").id, "record id");
-      const verified = req(await api(page, "PATCH", `/api/compliance/records/${recordId}`, {
-        action: "verify", revision: 1,
-      }), "verify certificate through the tenant policy");
+      const verified = req(
+        await api(page, "PATCH", `/api/compliance/records/${recordId}`, {
+          action: "verify",
+          revision: 1,
+        }),
+        "verify certificate through the tenant policy",
+      );
       expect(verified.status).toBe("active");
       expect(verified.revision).toBe(2);
       const stale = await api(page, "PATCH", `/api/compliance/records/${recordId}`, {
-        action: "verify", revision: 1,
+        action: "verify",
+        revision: 1,
       });
       expect(stale.status, "the released certificate retains its revision fence").toBe(409);
 
       // Released: the same selection now pays in full through the file.
       const { fileText } = await postRunToPaid(page, [billId]);
       parseNacha(fileText, 30000n, 1);
-      expect(fromUnits(await apOpenSum(page, vendorId)), "subcontractor AP 0 after release").toBe("0.0000");
+      expect(fromUnits(await apOpenSum(page, vendorId)), "subcontractor AP 0 after release").toBe(
+        "0.0000",
+      );
       await page.goto("/payments");
       await expect(page.locator("main")).toContainText(/\S/);
     } finally {

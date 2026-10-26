@@ -1,4 +1,4 @@
-import { type ComponentProps } from 'react'
+import { type ComponentProps } from "react";
 import {
   AccountsRosterPanel,
   MatchWorkspace,
@@ -20,66 +20,76 @@ import {
   ImportAccountPicker,
   StartReconciliationButton,
   BankFeedPanel,
-} from './native-widgets.client'
-import { BankingAttentionList } from '../../app/(app)/banking/sections'
-import { ListChecks } from 'lucide-react'
-import { ReconcileStats, ReconcileStatusBadge } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections'
-import { ReconcileHistory, SupportingStatements } from '../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileEvidence'
-import { PaymentsSectionSlot, RunsSectionSlot } from './payments-slots'
-import { ViewTabs as PaymentsViewTabs } from '../../app/(app)/payments/sections'
-import { ReceiptsViewTabs } from '../../app/(app)/receipts/sections'
-import { Plus } from 'lucide-react'
-import { AccountStats, UnmatchedCountCell, ReconActionCell, StaleBadgeCell } from '../../app/(app)/banking/[accountId]/sections'
-import { StatementDeleteCell } from '../../app/(app)/banking/[accountId]/StatementDeleteCell'
-import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
-import { Button } from '@openbooks/ui'
-import Link from 'next/link'
-import { num, str, type WidgetRenderer } from './widget-props'
-import { toUnits } from '@openbooks/engine/money/money'
+} from "./native-widgets.client";
+import { BankingAttentionList } from "../../app/(app)/banking/sections";
+import { ListChecks } from "lucide-react";
+import {
+  ReconcileStats,
+  ReconcileStatusBadge,
+} from "../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/sections";
+import {
+  ReconcileHistory,
+  SupportingStatements,
+} from "../../app/(app)/banking/[accountId]/reconcile/[reconciliationId]/ReconcileEvidence";
+import { PaymentsSectionSlot, RunsSectionSlot } from "./payments-slots";
+import { ViewTabs as PaymentsViewTabs } from "../../app/(app)/payments/sections";
+import { ReceiptsViewTabs } from "../../app/(app)/receipts/sections";
+import { Plus } from "lucide-react";
+import {
+  AccountStats,
+  UnmatchedCountCell,
+  ReconActionCell,
+  StaleBadgeCell,
+} from "../../app/(app)/banking/[accountId]/sections";
+import { StatementDeleteCell } from "../../app/(app)/banking/[accountId]/StatementDeleteCell";
+import { StatementDrawer } from "../../app/(app)/banking/[accountId]/StatementDrawer";
+import { Button } from "@openbooks/ui";
+import Link from "next/link";
+import { num, str, type WidgetRenderer } from "./widget-props";
+import { toUnits } from "@openbooks/engine/money/money";
 
 function moneyString(props: Record<string, unknown>, key: string): string {
-  const value = str(props, key)
-  if (value === undefined) return '0'
+  const value = str(props, key);
+  if (value === undefined) return "0";
   try {
-    toUnits(value)
-    return value
+    toUnits(value);
+    return value;
   } catch {
-    return '0'
+    return "0";
   }
 }
 
 /** Banking adapters. Compose native components without changing their props or boundaries. */
 export const BANKING_WIDGETS = {
-
   /* --- banking cockpit ------------------------------------------------------- */
   /** A widget, not a slot: the LOADER already did the roster's server work and
    *  passes the prefs through as data, so no org id, user id or Authz crosses
    *  the spec. Persistence rides the session cookie inside the component. */
-  'banking-roster': (props) => (
+  "banking-roster": (props) => (
     <AccountsRosterPanel
-      accounts={props.accounts as ComponentProps<typeof AccountsRosterPanel>['accounts']}
-      totalCash={moneyString(props, 'totalCash')}
-      totalCards={moneyString(props, 'totalCards')}
-      layoutPrefs={props.layoutPrefs as ComponentProps<typeof AccountsRosterPanel>['layoutPrefs']}
+      accounts={props.accounts as ComponentProps<typeof AccountsRosterPanel>["accounts"]}
+      totalCash={moneyString(props, "totalCash")}
+      totalCards={moneyString(props, "totalCards")}
+      layoutPrefs={props.layoutPrefs as ComponentProps<typeof AccountsRosterPanel>["layoutPrefs"]}
     />
   ),
   /** A conditional PAIR — a count label when there is unmatched activity, a
    *  plain one when clean — so the choice lives here, not in the spec. */
-  'banking-match': (props) => (
+  "banking-match": (props) => (
     <Button
-      variant={(str(props, 'variant') ?? 'outline') as ComponentProps<typeof Button>['variant']}
+      variant={(str(props, "variant") ?? "outline") as ComponentProps<typeof Button>["variant"]}
       asChild
     >
-      <Link href={(str(props, 'href') ?? '/banking/match') as never}>
+      <Link href={(str(props, "href") ?? "/banking/match") as never}>
         <ListChecks size={14} />
-        {props.showCount === true ? (str(props, 'countLabel') ?? '') : (str(props, 'label') ?? '')}
+        {props.showCount === true ? (str(props, "countLabel") ?? "") : (str(props, "label") ?? "")}
       </Link>
     </Button>
   ),
-  'banking-attention-list': (props) => (
+  "banking-attention-list": (props) => (
     <BankingAttentionList
-      items={(props.items as ComponentProps<typeof BankingAttentionList>['items']) ?? []}
-      allClear={str(props, 'allClear') ?? ''}
+      items={(props.items as ComponentProps<typeof BankingAttentionList>["items"]) ?? []}
+      allClear={str(props, "allClear") ?? ""}
     />
   ),
 
@@ -87,87 +97,99 @@ export const BANKING_WIDGETS = {
   /** `link-button`'s closed icon map has no `plus`, and this action carries
    *  one — so it gets its own entry rather than widening that map for a
    *  single caller. */
-  'new-setup-record': (props) => (
-    <NewSetupRecordButton href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
+  "new-setup-record": (props) => (
+    <NewSetupRecordButton href={str(props, "href") ?? ""} label={str(props, "label") ?? ""} />
   ),
   /** The native row formats this timestamp CLIENT-side, in the browser's
    *  locale and timezone. The loader must not format it, so the raw ISO
    *  string travels and the cell runs the identical expression. */
-  'payment-schedule-next-run': (props) => (
+  "payment-schedule-next-run": (props) => (
     <PaymentScheduleNextRun value={(props.value as string | null) ?? null} />
   ),
-  'payment-operations-editor': (props) => {
-    const editor = props.editor as ComponentProps<typeof PaymentOperationsEditor>['editor'] | null
-    if (!editor) return null
-    return <PaymentOperationsEditor editor={editor} />
+  "payment-operations-editor": (props) => {
+    const editor = props.editor as ComponentProps<typeof PaymentOperationsEditor>["editor"] | null;
+    if (!editor) return null;
+    return <PaymentOperationsEditor editor={editor} />;
   },
 
   /* --- reconciliation workspace ------------------------------------------------ */
-  'reconcile-status-badge': (props) => (
+  "reconcile-status-badge": (props) => (
     <ReconcileStatusBadge
-      label={str(props, 'label') ?? ''}
-      variant={(str(props, 'variant') ?? 'secondary') as 'success' | 'warning' | 'secondary'}
+      label={str(props, "label") ?? ""}
+      variant={(str(props, "variant") ?? "secondary") as "success" | "warning" | "secondary"}
     />
   ),
   /** One widget, not four stat tiles: the native tiles are plain bordered
    *  divs, and the difference tile holds a conditional pair (green zero vs
    *  amber nonzero) that a spec must not express. */
-  'reconcile-stats': (props) => (
+  "reconcile-stats": (props) => (
     <ReconcileStats
-      statementBalanceLabel={str(props, 'statementBalanceLabel') ?? ''}
-      statementBalanceValue={str(props, 'statementBalanceValue') ?? ''}
-      clearedBalanceLabel={str(props, 'clearedBalanceLabel') ?? ''}
-      clearedBalanceValue={str(props, 'clearedBalanceValue') ?? ''}
-      differenceLabel={str(props, 'differenceLabel') ?? ''}
-      difference={str(props, 'difference') ?? '0'}
-      differenceCurrency={str(props, 'differenceCurrency') ?? ''}
-      matchedLabel={str(props, 'matchedLabel') ?? ''}
-      matchedValue={str(props, 'matchedValue') ?? ''}
+      statementBalanceLabel={str(props, "statementBalanceLabel") ?? ""}
+      statementBalanceValue={str(props, "statementBalanceValue") ?? ""}
+      clearedBalanceLabel={str(props, "clearedBalanceLabel") ?? ""}
+      clearedBalanceValue={str(props, "clearedBalanceValue") ?? ""}
+      differenceLabel={str(props, "differenceLabel") ?? ""}
+      difference={str(props, "difference") ?? "0"}
+      differenceCurrency={str(props, "differenceCurrency") ?? ""}
+      matchedLabel={str(props, "matchedLabel") ?? ""}
+      matchedValue={str(props, "matchedValue") ?? ""}
     />
   ),
   /** Read-only evidence tabs. Each replaces the workspace body; the loader
    *  supplies formatted display rows only. */
-  'reconcile-supporting-statements': (props) => (
+  "reconcile-supporting-statements": (props) => (
     <SupportingStatements
-      accountPath={str(props, 'accountPath') ?? ''}
+      accountPath={str(props, "accountPath") ?? ""}
       sourceEvidence={props.sourceEvidence === true}
-      windowStart={str(props, 'windowStart') ?? null}
-      throughDate={str(props, 'throughDate') ?? ''}
-      statements={(props.statements as ComponentProps<typeof SupportingStatements>['statements']) ?? []}
+      windowStart={str(props, "windowStart") ?? null}
+      throughDate={str(props, "throughDate") ?? ""}
+      statements={
+        (props.statements as ComponentProps<typeof SupportingStatements>["statements"]) ?? []
+      }
     />
   ),
-  'reconcile-history': (props) => (
-    <ReconcileHistory rows={(props.rows as ComponentProps<typeof ReconcileHistory>['rows']) ?? []} />
+  "reconcile-history": (props) => (
+    <ReconcileHistory
+      rows={(props.rows as ComponentProps<typeof ReconcileHistory>["rows"]) ?? []}
+    />
   ),
   /** Whole, like `match-workspace`: selection state across three prefixed
    *  panes plus every mutation. `canReconcile` is a loader-resolved boolean,
    *  never an Authz. */
-  'reconcile-workspace': (props) => (
+  "reconcile-workspace": (props) => (
     <ReconcileWorkspace
-      basePath={str(props, 'basePath') ?? ''}
-      accountPath={str(props, 'accountPath') ?? ''}
+      basePath={str(props, "basePath") ?? ""}
+      accountPath={str(props, "accountPath") ?? ""}
       currentParams={
-        (props.currentParams as ComponentProps<typeof ReconcileWorkspace>['currentParams']) ?? {}
+        (props.currentParams as ComponentProps<typeof ReconcileWorkspace>["currentParams"]) ?? {}
       }
-      reconciliation={props.reconciliation as ComponentProps<typeof ReconcileWorkspace>['reconciliation']}
-      difference={str(props, 'difference') ?? '0'}
+      reconciliation={
+        props.reconciliation as ComponentProps<typeof ReconcileWorkspace>["reconciliation"]
+      }
+      difference={str(props, "difference") ?? "0"}
       canReconcile={props.canReconcile === true}
       canReviewSignOff={props.canReviewSignOff === true}
-      stmtRows={(props.stmtRows as ComponentProps<typeof ReconcileWorkspace>['stmtRows']) ?? []}
-      stmtTotal={num(props, 'stmtTotal') ?? 0}
-      stmtOutstandingTotal={str(props, 'stmtOutstandingTotal') ?? '0'}
-      stmtParams={props.stmtParams as ComponentProps<typeof ReconcileWorkspace>['stmtParams']}
-      glRows={(props.glRows as ComponentProps<typeof ReconcileWorkspace>['glRows']) ?? []}
-      glTotal={num(props, 'glTotal') ?? 0}
-      glOutstandingTotal={str(props, 'glOutstandingTotal') ?? '0'}
-      glParams={props.glParams as ComponentProps<typeof ReconcileWorkspace>['glParams']}
-      matchedRows={(props.matchedRows as ComponentProps<typeof ReconcileWorkspace>['matchedRows']) ?? []}
-      matchedTotal={num(props, 'matchedTotal') ?? 0}
-      mParams={props.mParams as ComponentProps<typeof ReconcileWorkspace>['mParams']}
-      glClearings={(props.glClearings as ComponentProps<typeof ReconcileWorkspace>['glClearings']) ?? []}
-      stale={(props.stale as ComponentProps<typeof ReconcileWorkspace>['stale']) ?? null}
-      priorEffects={(props.priorEffects as ComponentProps<typeof ReconcileWorkspace>['priorEffects']) ?? []}
-      opening={(props.opening as ComponentProps<typeof ReconcileWorkspace>['opening']) ?? null}
+      stmtRows={(props.stmtRows as ComponentProps<typeof ReconcileWorkspace>["stmtRows"]) ?? []}
+      stmtTotal={num(props, "stmtTotal") ?? 0}
+      stmtOutstandingTotal={str(props, "stmtOutstandingTotal") ?? "0"}
+      stmtParams={props.stmtParams as ComponentProps<typeof ReconcileWorkspace>["stmtParams"]}
+      glRows={(props.glRows as ComponentProps<typeof ReconcileWorkspace>["glRows"]) ?? []}
+      glTotal={num(props, "glTotal") ?? 0}
+      glOutstandingTotal={str(props, "glOutstandingTotal") ?? "0"}
+      glParams={props.glParams as ComponentProps<typeof ReconcileWorkspace>["glParams"]}
+      matchedRows={
+        (props.matchedRows as ComponentProps<typeof ReconcileWorkspace>["matchedRows"]) ?? []
+      }
+      matchedTotal={num(props, "matchedTotal") ?? 0}
+      mParams={props.mParams as ComponentProps<typeof ReconcileWorkspace>["mParams"]}
+      glClearings={
+        (props.glClearings as ComponentProps<typeof ReconcileWorkspace>["glClearings"]) ?? []
+      }
+      stale={(props.stale as ComponentProps<typeof ReconcileWorkspace>["stale"]) ?? null}
+      priorEffects={
+        (props.priorEffects as ComponentProps<typeof ReconcileWorkspace>["priorEffects"]) ?? []
+      }
+      opening={(props.opening as ComponentProps<typeof ReconcileWorkspace>["opening"]) ?? null}
     />
   ),
 
@@ -175,11 +197,13 @@ export const BANKING_WIDGETS = {
   /** A widget, not a slot: the LOADER already did the server work, so no user
    *  id, org id or Authz crosses the spec. Layout persistence rides the
    *  session cookie inside the component. */
-  'cash-cockpit': (props) => (
+  "cash-cockpit": (props) => (
     <CashCockpit
-      data={props.data as ComponentProps<typeof CashCockpit>['data']}
-      selectedSubsidiaryIds={props.selectedSubsidiaryIds as ComponentProps<typeof CashCockpit>['selectedSubsidiaryIds']}
-      layoutPrefs={props.layoutPrefs as ComponentProps<typeof CashCockpit>['layoutPrefs']}
+      data={props.data as ComponentProps<typeof CashCockpit>["data"]}
+      selectedSubsidiaryIds={
+        props.selectedSubsidiaryIds as ComponentProps<typeof CashCockpit>["selectedSubsidiaryIds"]
+      }
+      layoutPrefs={props.layoutPrefs as ComponentProps<typeof CashCockpit>["layoutPrefs"]}
       canConfigure={props.canConfigure === true}
       canPayRun={props.canPayRun === true}
       canCollectionRun={props.canCollectionRun === true}
@@ -189,29 +213,35 @@ export const BANKING_WIDGETS = {
   /* --- banking reconciliations ------------------------------------------------------ */
   /** The empty-state action. The native page passes it unconditionally (no
    *  permission gate), so the spec does too — it is data, not a branch. */
-  'choose-recon-account': (props) => (
+  "choose-recon-account": (props) => (
     <Button asChild>
-      <Link href={(str(props, 'href') ?? '/banking') as never}>{str(props, 'label') ?? ''}</Link>
+      <Link href={(str(props, "href") ?? "/banking") as never}>{str(props, "label") ?? ""}</Link>
     </Button>
   ),
   /** The zero-reconcilable-account empty-state action on /banking/imports: a
    *  Button-as-child Link to the Chart of Accounts — the same setup path the
    *  bank-feeds setup names for the same prerequisite, never a second path. */
-  'open-chart-of-accounts': (props) => (
+  "open-chart-of-accounts": (props) => (
     <Button asChild>
-      <Link href={(str(props, 'href') ?? '/accounts') as never}>{str(props, 'label') ?? ''}</Link>
+      <Link href={(str(props, "href") ?? "/accounts") as never}>{str(props, "label") ?? ""}</Link>
     </Button>
   ),
 
   /* --- bank feeds setup --------------------------------------------------------- */
   /** Five FLAT props, spread exactly as the page passed them. */
-  'bank-feeds-workspace': (props) => (
+  "bank-feeds-workspace": (props) => (
     <BankFeedsClient
-      connections={(props.connections as ComponentProps<typeof BankFeedsClient>['connections']) ?? []}
-      sftpServers={(props.sftpServers as ComponentProps<typeof BankFeedsClient>['sftpServers']) ?? []}
-      sftpSchedules={(props.sftpSchedules as ComponentProps<typeof BankFeedsClient>['sftpSchedules']) ?? []}
-      accounts={(props.accounts as ComponentProps<typeof BankFeedsClient>['accounts']) ?? []}
-      daemon={props.daemon as ComponentProps<typeof BankFeedsClient>['daemon']}
+      connections={
+        (props.connections as ComponentProps<typeof BankFeedsClient>["connections"]) ?? []
+      }
+      sftpServers={
+        (props.sftpServers as ComponentProps<typeof BankFeedsClient>["sftpServers"]) ?? []
+      }
+      sftpSchedules={
+        (props.sftpSchedules as ComponentProps<typeof BankFeedsClient>["sftpSchedules"]) ?? []
+      }
+      accounts={(props.accounts as ComponentProps<typeof BankFeedsClient>["accounts"]) ?? []}
+      daemon={props.daemon as ComponentProps<typeof BankFeedsClient>["daemon"]}
     />
   ),
 
@@ -219,123 +249,133 @@ export const BANKING_WIDGETS = {
   /** Whole: it owns selection state across three paginated lists plus the
    *  match/unmatch calls and an add-journal form. Decomposing it would strand
    *  the selection from the actions it drives. */
-  'match-workspace': (props) => (
+  "match-workspace": (props) => (
     <MatchWorkspace
-      key={str(props, 'selectionKey') ?? ''}
-      accounts={(props.accounts as ComponentProps<typeof MatchWorkspace>['accounts']) ?? []}
+      key={str(props, "selectionKey") ?? ""}
+      accounts={(props.accounts as ComponentProps<typeof MatchWorkspace>["accounts"]) ?? []}
       offsetAccounts={
-        (props.offsetAccounts as ComponentProps<typeof MatchWorkspace>['offsetAccounts']) ?? []
+        (props.offsetAccounts as ComponentProps<typeof MatchWorkspace>["offsetAccounts"]) ?? []
       }
-      account={(props.account as ComponentProps<typeof MatchWorkspace>['account']) ?? null}
-      session={(props.session as ComponentProps<typeof MatchWorkspace>['session']) ?? null}
-      data={(props.data as ComponentProps<typeof MatchWorkspace>['data']) ?? null}
-      totals={(props.totals as ComponentProps<typeof MatchWorkspace>['totals']) ?? null}
-      currentParams={(props.currentParams as ComponentProps<typeof MatchWorkspace>['currentParams']) ?? {}}
-      tab={(str(props, 'tab') ?? 'match') as ComponentProps<typeof MatchWorkspace>['tab']}
+      account={(props.account as ComponentProps<typeof MatchWorkspace>["account"]) ?? null}
+      session={(props.session as ComponentProps<typeof MatchWorkspace>["session"]) ?? null}
+      data={(props.data as ComponentProps<typeof MatchWorkspace>["data"]) ?? null}
+      totals={(props.totals as ComponentProps<typeof MatchWorkspace>["totals"]) ?? null}
+      currentParams={
+        (props.currentParams as ComponentProps<typeof MatchWorkspace>["currentParams"]) ?? {}
+      }
+      tab={(str(props, "tab") ?? "match") as ComponentProps<typeof MatchWorkspace>["tab"]}
     />
   ),
 
   /** The review queue's row drawer: the loader resolves the full review, the
    *  drawer only decides it. Approve/reject POST through the review endpoint
    *  with banking.reconcile; readers see the same drawer without decisions. */
-  'psp-dispute-review-drawer': (props) => (
+  "psp-dispute-review-drawer": (props) => (
     <PspDisputeReviewDrawer
-      key={(props.review as ComponentProps<typeof PspDisputeReviewDrawer>['review']).id}
-      review={props.review as ComponentProps<typeof PspDisputeReviewDrawer>['review']}
+      key={(props.review as ComponentProps<typeof PspDisputeReviewDrawer>["review"]).id}
+      review={props.review as ComponentProps<typeof PspDisputeReviewDrawer>["review"]}
     />
   ),
   /** The unmatched queue's row drawer: the loader resolves the line, the
    *  drawer proposes the native document with evidence and links it. */
-  'psp-settlement-line-drawer': (props) => (
+  "psp-settlement-line-drawer": (props) => (
     <PayoutLineDrawer
-      key={(props.line as ComponentProps<typeof PayoutLineDrawer>['line']).id}
-      line={props.line as ComponentProps<typeof PayoutLineDrawer>['line']}
+      key={(props.line as ComponentProps<typeof PayoutLineDrawer>["line"]).id}
+      line={props.line as ComponentProps<typeof PayoutLineDrawer>["line"]}
     />
   ),
-  'psp-settlements': (props) => (
+  "psp-settlements": (props) => (
     <PspSettlementsWorkspace
       canReconcile={props.canReconcile === true}
       canSetup={props.canSetup === true}
-      strings={props.strings as ComponentProps<typeof PspSettlementsWorkspace>['strings']}
+      strings={props.strings as ComponentProps<typeof PspSettlementsWorkspace>["strings"]}
       initialRows={
-        (props.initialRows as ComponentProps<typeof PspSettlementsWorkspace>['initialRows']) ?? null
+        (props.initialRows as ComponentProps<typeof PspSettlementsWorkspace>["initialRows"]) ?? null
       }
       initialSubsidiaries={
-        (props.initialSubsidiaries as ComponentProps<typeof PspSettlementsWorkspace>['initialSubsidiaries']) ?? null
+        (props.initialSubsidiaries as ComponentProps<
+          typeof PspSettlementsWorkspace
+        >["initialSubsidiaries"]) ?? null
       }
       initialAccounts={
-        (props.initialAccounts as ComponentProps<typeof PspSettlementsWorkspace>['initialAccounts']) ?? []
+        (props.initialAccounts as ComponentProps<
+          typeof PspSettlementsWorkspace
+        >["initialAccounts"]) ?? []
       }
       initialConfigs={
-        (props.initialConfigs as ComponentProps<typeof PspSettlementsWorkspace>['initialConfigs']) ?? []
+        (props.initialConfigs as ComponentProps<
+          typeof PspSettlementsWorkspace
+        >["initialConfigs"]) ?? []
       }
     />
   ),
   /** One widget, not three: tiles, queue, batches and the payout drawer
    *  share one state graph (the drawer refreshes the queue after every
    *  match), so the renderer passes the console whole. */
-  'payouts-console': (props) => (
+  "payouts-console": (props) => (
     <PayoutsWorkspace
       canReconcile={props.canReconcile === true}
-      tiles={props.tiles as ComponentProps<typeof PayoutsWorkspace>['tiles']}
-      queue={props.queue as ComponentProps<typeof PayoutsWorkspace>['queue']}
-      batches={props.batches as ComponentProps<typeof PayoutsWorkspace>['batches']}
-      reportHref={str(props, 'reportHref') ?? null}
-      queueAllHref={str(props, 'queueAllHref') ?? '/banking/payouts/unmatched'}
-      strings={props.strings as ComponentProps<typeof PayoutsWorkspace>['strings']}
-      emptyTitle={str(props, 'emptyTitle') ?? ''}
-      emptyDescription={str(props, 'emptyDescription') ?? ''}
+      tiles={props.tiles as ComponentProps<typeof PayoutsWorkspace>["tiles"]}
+      queue={props.queue as ComponentProps<typeof PayoutsWorkspace>["queue"]}
+      batches={props.batches as ComponentProps<typeof PayoutsWorkspace>["batches"]}
+      reportHref={str(props, "reportHref") ?? null}
+      queueAllHref={str(props, "queueAllHref") ?? "/banking/payouts/unmatched"}
+      strings={props.strings as ComponentProps<typeof PayoutsWorkspace>["strings"]}
+      emptyTitle={str(props, "emptyTitle") ?? ""}
+      emptyDescription={str(props, "emptyDescription") ?? ""}
     />
   ),
 
   /* --- payments ------------------------------------------------------------- */
-  'new-payment': (props) => (
+  "new-payment": (props) => (
     <NewPaymentButton
-      kind={(str(props, 'kind') ?? 'vendor_payment') as ComponentProps<typeof NewPaymentButton>['kind']}
-      basePath={str(props, 'basePath') ?? '/payments'}
-      label={str(props, 'label') ?? ''}
+      kind={
+        (str(props, "kind") ?? "vendor_payment") as ComponentProps<typeof NewPaymentButton>["kind"]
+      }
+      basePath={str(props, "basePath") ?? "/payments"}
+      label={str(props, "label") ?? ""}
     />
   ),
   /** The create-run action is a plain link button, not the payment button —
    *  the two are a conditional pair the loader chooses between. */
-  'new-payment-run': (props) => {
-    const href = str(props, 'href')
-    if (!href) return null
+  "new-payment-run": (props) => {
+    const href = str(props, "href");
+    if (!href) return null;
     return (
       <Button asChild>
         <Link href={href as never}>
           <Plus size={16} />
-          {str(props, 'label') ?? ''}
+          {str(props, "label") ?? ""}
         </Link>
       </Button>
-    )
+    );
   },
-  'payments-view-tabs': (props) => (
+  "payments-view-tabs": (props) => (
     <PaymentsViewTabs
-      view={(str(props, 'view') ?? 'payments') as 'payments' | 'runs'}
-      labels={props.labels as ComponentProps<typeof PaymentsViewTabs>['labels']}
+      view={(str(props, "view") ?? "payments") as "payments" | "runs"}
+      labels={props.labels as ComponentProps<typeof PaymentsViewTabs>["labels"]}
     />
   ),
   /** Not the payments strip: this one carries no hover treatment and no
    *  transition class, and the harness compares class strings exactly. */
-  'receipts-view-tabs': (props) => (
+  "receipts-view-tabs": (props) => (
     <ReceiptsViewTabs
-      view={(str(props, 'view') ?? 'receipts') as 'receipts' | 'runs'}
-      labels={props.labels as ComponentProps<typeof ReceiptsViewTabs>['labels']}
+      view={(str(props, "view") ?? "receipts") as "receipts" | "runs"}
+      labels={props.labels as ComponentProps<typeof ReceiptsViewTabs>["labels"]}
     />
   ),
-  'payments-section': (props) => (
+  "payments-section": (props) => (
     <PaymentsSectionSlot
       sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
-      basePath={str(props, 'basePath') ?? '/payments'}
-      kind={str(props, 'kind') === 'customer_payment' ? 'customer_payment' : 'vendor_payment'}
+      basePath={str(props, "basePath") ?? "/payments"}
+      kind={str(props, "kind") === "customer_payment" ? "customer_payment" : "vendor_payment"}
     />
   ),
-  'payment-runs-section': (props) => (
+  "payment-runs-section": (props) => (
     <RunsSectionSlot
       sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
-      basePath={str(props, 'basePath') === '/receipts' ? '/receipts' : '/payments'}
-      direction={str(props, 'direction') === 'inbound' ? 'inbound' : 'outbound'}
+      basePath={str(props, "basePath") === "/receipts" ? "/receipts" : "/payments"}
+      direction={str(props, "direction") === "inbound" ? "inbound" : "outbound"}
     />
   ),
 
@@ -343,96 +383,97 @@ export const BANKING_WIDGETS = {
   /** One widget, not a table: every row is a bundle of conditional pairs (a
    *  last-attempt date or nothing, an error line or nothing, a paused marker
    *  or nothing), and a spec must never express those. */
-  'bank-feed-panel': (props) => (
+  "bank-feed-panel": (props) => (
     <BankFeedPanel
-      title={str(props, 'title') ?? ''}
-      manageLabel={str(props, 'manageLabel') ?? ''}
-      emptyMessage={str(props, 'emptyMessage') ?? ''}
-      lastSyncLabel={str(props, 'lastSyncLabel') ?? ''}
-      lastAttemptLabel={str(props, 'lastAttemptLabel') ?? ''}
-      neverLabel={str(props, 'neverLabel') ?? ''}
-      feeds={(props.feeds as ComponentProps<typeof BankFeedPanel>['feeds']) ?? []}
+      title={str(props, "title") ?? ""}
+      manageLabel={str(props, "manageLabel") ?? ""}
+      emptyMessage={str(props, "emptyMessage") ?? ""}
+      lastSyncLabel={str(props, "lastSyncLabel") ?? ""}
+      lastAttemptLabel={str(props, "lastAttemptLabel") ?? ""}
+      neverLabel={str(props, "neverLabel") ?? ""}
+      feeds={(props.feeds as ComponentProps<typeof BankFeedPanel>["feeds"]) ?? []}
     />
   ),
 
   /* --- bank rules ----------------------------------------------------------- */
-  'new-bank-rule': () => <NewRuleButton />,
-  'run-bank-rules': (props) => (
+  "new-bank-rule": () => <NewRuleButton />,
+  "run-bank-rules": (props) => (
     <RunRulesButton
-      accounts={(props.accounts as ComponentProps<typeof RunRulesButton>['accounts']) ?? []}
+      accounts={(props.accounts as ComponentProps<typeof RunRulesButton>["accounts"]) ?? []}
     />
   ),
-  'bank-rule-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof RuleDrawer> & { remountKey: string }) | null
-    if (!drawer) return null
-    const { remountKey, ...rest } = drawer
-    return <RuleDrawer key={remountKey} {...rest} />
+  "bank-rule-drawer": (props) => {
+    const drawer = props.drawer as
+      (ComponentProps<typeof RuleDrawer> & { remountKey: string }) | null;
+    if (!drawer) return null;
+    const { remountKey, ...rest } = drawer;
+    return <RuleDrawer key={remountKey} {...rest} />;
   },
 
   /* --- bank account workspace ---------------------------------------------- */
   /** One widget, not four stat tiles: the native tiles are plain bordered divs
    *  with conditional content, while `stat-tile` renders the cockpit tile. */
-  'account-stats': (props) => (
+  "account-stats": (props) => (
     <AccountStats
-      glBalanceLabel={str(props, 'glBalanceLabel') ?? ''}
-      glBalanceValue={str(props, 'glBalanceValue') ?? ''}
-      reconciledThroughLabel={str(props, 'reconciledThroughLabel') ?? ''}
+      glBalanceLabel={str(props, "glBalanceLabel") ?? ""}
+      glBalanceValue={str(props, "glBalanceValue") ?? ""}
+      reconciledThroughLabel={str(props, "reconciledThroughLabel") ?? ""}
       reconciledThrough={(props.reconciledThrough as string | null) ?? null}
-      neverLabel={str(props, 'neverLabel') ?? ''}
-      unmatchedLinesLabel={str(props, 'unmatchedLinesLabel') ?? ''}
-      unmatchedLinesValue={str(props, 'unmatchedLinesValue') ?? ''}
-      reconciliationLabel={str(props, 'reconciliationLabel') ?? ''}
-      reconBadgeLabel={str(props, 'reconBadgeLabel') ?? ''}
-      reconBadgeVariant={(props.reconBadgeVariant as 'warning' | 'secondary') ?? 'secondary'}
+      neverLabel={str(props, "neverLabel") ?? ""}
+      unmatchedLinesLabel={str(props, "unmatchedLinesLabel") ?? ""}
+      unmatchedLinesValue={str(props, "unmatchedLinesValue") ?? ""}
+      reconciliationLabel={str(props, "reconciliationLabel") ?? ""}
+      reconBadgeLabel={str(props, "reconBadgeLabel") ?? ""}
+      reconBadgeVariant={(props.reconBadgeVariant as "warning" | "secondary") ?? "secondary"}
     />
   ),
-  'unmatched-count-cell': (props) => (
-    <UnmatchedCountCell display={str(props, 'display') ?? ''} isZero={props.isZero === true} />
+  "unmatched-count-cell": (props) => (
+    <UnmatchedCountCell display={str(props, "display") ?? ""} isZero={props.isZero === true} />
   ),
-  'statement-delete-cell': (props) => (
+  "statement-delete-cell": (props) => (
     <StatementDeleteCell
-      statementId={str(props, 'statementId') ?? ''}
-      lineCount={typeof props.lineCount === 'number' ? props.lineCount : 0}
+      statementId={str(props, "statementId") ?? ""}
+      lineCount={typeof props.lineCount === "number" ? props.lineCount : 0}
       blockedReason={(props.blockedReason as string | null) ?? null}
-      confirmMessage={str(props, 'confirmMessage') ?? ''}
+      confirmMessage={str(props, "confirmMessage") ?? ""}
       showDelete={props.showDelete === true}
-      matchedCount={typeof props.matchedCount === 'number' ? props.matchedCount : 0}
-      unmatchAllConfirmMessage={str(props, 'unmatchAllConfirmMessage') ?? ''}
+      matchedCount={typeof props.matchedCount === "number" ? props.matchedCount : 0}
+      unmatchAllConfirmMessage={str(props, "unmatchAllConfirmMessage") ?? ""}
     />
   ),
-  'recon-action-cell': (props) => (
-    <ReconActionCell href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
+  "recon-action-cell": (props) => (
+    <ReconActionCell href={str(props, "href") ?? ""} label={str(props, "label") ?? ""} />
   ),
   /** Null while the sign-off stands, so the column stays empty for fresh
    *  sessions and carries the "Stale since <date>" badge once stale. */
-  'stale-badge-cell': (props) => (
-    <StaleBadgeCell label={(props.label as string | null) ?? null} />
+  "stale-badge-cell": (props) => <StaleBadgeCell label={(props.label as string | null) ?? null} />,
+  "import-statement": (props) => (
+    <ImportStatementButton accountId={str(props, "accountId") ?? ""} />
   ),
-  'import-statement': (props) => <ImportStatementButton accountId={str(props, 'accountId') ?? ''} />,
   /** The cross-account history page cannot name an account up front, so the
    *  picker carries the bank context: an account select beside the canonical
    *  per-account import dialog. One widget serves the header CTA and the
    *  empty-state action alike. */
-  'import-statement-picker': (props) => (
+  "import-statement-picker": (props) => (
     <ImportAccountPicker
-      accounts={(props.accounts as ComponentProps<typeof ImportAccountPicker>['accounts']) ?? []}
-      selectLabel={str(props, 'selectLabel') ?? ''}
-      placeholder={str(props, 'placeholder') ?? ''}
+      accounts={(props.accounts as ComponentProps<typeof ImportAccountPicker>["accounts"]) ?? []}
+      selectLabel={str(props, "selectLabel") ?? ""}
+      placeholder={str(props, "placeholder") ?? ""}
     />
   ),
-  'start-reconciliation': (props) => (
+  "start-reconciliation": (props) => (
     <StartReconciliationButton
-      accountId={str(props, 'accountId') ?? ''}
+      accountId={str(props, "accountId") ?? ""}
       openReconciliationId={(props.openReconciliationId as string | null) ?? null}
-      glBalance={str(props, 'glBalance') ?? ''}
-      currency={str(props, 'currency')}
+      glBalance={str(props, "glBalance") ?? ""}
+      currency={str(props, "currency")}
     />
   ),
   /** The statement drawer owns its own sl* search/sort/pagination internally,
    *  so the whole payload passes through — the api-key-drawer precedent. */
-  'statement-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof StatementDrawer> | null
-    if (!drawer) return null
-    return <StatementDrawer {...drawer} />
+  "statement-drawer": (props) => {
+    const drawer = props.drawer as ComponentProps<typeof StatementDrawer> | null;
+    if (!drawer) return null;
+    return <StatementDrawer {...drawer} />;
   },
-} satisfies Record<string, WidgetRenderer>
+} satisfies Record<string, WidgetRenderer>;

@@ -25,7 +25,9 @@
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
@@ -37,7 +39,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/me.ts";
 const DOLLAR = 10_000n;
 
@@ -85,18 +91,20 @@ const ME_EDITIONS_BY_YEAR: Record<number, MeYearRates> = {
   [ME_RATES_2026.year]: ME_RATES_2026,
 };
 
-export const ME_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Maine Withholding Tables for Individual Income Tax (2026)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Maine Revenue Services, Withholding Tables for Individual Income Tax, "
-    + "Revised August 2026 — 2026 percentage method Steps 1–6, $5,300 "
-    + "allowance, $12,850 / $28,550 withholding standard deduction, 2% "
-    + "surcharge above $1M single / $1.5M married, Examples 1–3",
-  status: "published",
-  region: "ME",
-}];
+export const ME_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Maine Withholding Tables for Individual Income Tax (2026)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Maine Revenue Services, Withholding Tables for Individual Income Tax, " +
+      "Revised August 2026 — 2026 percentage method Steps 1–6, $5,300 " +
+      "allowance, $12,850 / $28,550 withholding standard deduction, 2% " +
+      "surcharge above $1M single / $1.5M married, Examples 1–3",
+    status: "published",
+    region: "ME",
+  },
+];
 
 export function meRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
@@ -109,7 +117,11 @@ export function meRoundToDollar(units: bigint): bigint {
  * product is $22,944.68, rounded to the nearest dollar. That is the
  * booklet's own arithmetic, not an engine guess.
  */
-export function meStandardDeduction(annualWages: bigint, married: boolean, rates: MeYearRates): bigint {
+export function meStandardDeduction(
+  annualWages: bigint,
+  married: boolean,
+  rates: MeYearRates,
+): bigint {
   const full = U(married ? rates.marriedStandardDeduction : rates.singleStandardDeduction);
   const start = U(married ? rates.marriedPhaseStart : rates.singlePhaseStart);
   const end = U(married ? rates.marriedPhaseEnd : rates.singlePhaseEnd);
@@ -148,7 +160,8 @@ function compute(
 
   // Invalid / missing W-4ME: "withhold as if the employee or payee were
   // single and claiming no allowances."
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as MeFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single") as MeFilingStatus;
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -166,7 +179,9 @@ function compute(
   // August 2026 surcharge: 2% of annualized withholding
   // income above the filing-status threshold, added to the annual tax
   // before de-annualizing and rounding — one rounded annual figure.
-  const surchargeThreshold = U(married ? rates.marriedSurchargeThreshold : rates.singleSurchargeThreshold);
+  const surchargeThreshold = U(
+    married ? rates.marriedSurchargeThreshold : rates.singleSurchargeThreshold,
+  );
   const surchargeExcess = annualWages > surchargeThreshold ? annualWages - surchargeThreshold : 0n;
   const surcharge = mulRateCents(surchargeExcess, rates.surchargeRate);
   trace("ME_SURCHARGE", surcharge);
@@ -238,12 +253,12 @@ export const ME_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "ME" },
   purpose: "withholding",
   citation:
-    "Maine Revenue Services, Withholding Tables for Individual Income Tax, "
-    + "Revised August 2026 (2026 booklet); Form W-4ME (2026); MRS Rule 803",
+    "Maine Revenue Services, Withholding Tables for Individual Income Tax, " +
+    "Revised August 2026 (2026 booklet); Form W-4ME (2026); MRS Rule 803",
   summary:
-    "Sets Maine marital status and withholding allowances. If the employee "
-    + "does not provide a valid W-4ME, MRS requires withholding as single "
-    + "with no allowances.",
+    "Sets Maine marital status and withholding allowances. If the employee " +
+    "does not provide a valid W-4ME, MRS requires withholding as single " +
+    "with no allowances.",
   storage: "certificate_rows",
   fields: [
     {
@@ -252,14 +267,17 @@ export const ME_CERTIFICATE: PayrollCertificate = {
       kind: "choice",
       default: "single",
       choices: [
-        { value: "single", label: "Single or head of household, or married withholding at the single rate" },
+        {
+          value: "single",
+          label: "Single or head of household, or married withholding at the single rate",
+        },
         { value: "married", label: "Married" },
       ],
       help:
-        "Use the married percentage schedule only when Married is checked. "
-        + "\"Married, but withholding at higher single rate\" and Single / "
-        + "Head of Household both use the single schedule. Default Single is "
-        + "MRS's own rule when no valid W-4ME is on file.",
+        "Use the married percentage schedule only when Married is checked. " +
+        '"Married, but withholding at higher single rate" and Single / ' +
+        "Head of Household both use the single schedule. Default Single is " +
+        "MRS's own rule when no valid W-4ME is on file.",
     },
     {
       key: "allowances",
@@ -269,9 +287,9 @@ export const ME_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "Each allowance is $5,300 a year. Claiming more than the W-4ME "
-        + "worksheet allows requires a Personal Withholding Allowance "
-        + "Variance Certificate. Default zero is MRS's missing-form rule.",
+        "Each allowance is $5,300 a year. Claiming more than the W-4ME " +
+        "worksheet allows requires a Personal Withholding Allowance " +
+        "Variance Certificate. Default zero is MRS's missing-form rule.",
     },
     {
       key: "additional_per_period",
@@ -280,17 +298,17 @@ export const ME_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "A flat dollar amount requested on W-4ME. Added AFTER the percentage "
-        + "method is de-annualized and rounded to the nearest dollar.",
+        "A flat dollar amount requested on W-4ME. Added AFTER the percentage " +
+        "method is de-annualized and rounded to the nearest dollar.",
     },
     {
       key: "exempt",
       label: "Line 6 — Exempt from Maine withholding",
       kind: "flag",
       help:
-        "Federal exempt, Form W-4P no-withholding, or resident with no Maine "
-        + "liability last year and none expected this year. A current exempt "
-        + "flag withholds zero. The resident exemption expires December 31.",
+        "Federal exempt, Form W-4P no-withholding, or resident with no Maine " +
+        "liability last year and none expected this year. A current exempt " +
+        "flag withholds zero. The resident exemption expires December 31.",
     },
   ],
 };
@@ -310,6 +328,6 @@ export const ME_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "MRS, Withholding Tables for Individual Income Tax, Revised December 2025; "
-    + "Form W-4ME (2026); MRS Rule 803",
+    "MRS, Withholding Tables for Individual Income Tax, Revised December 2025; " +
+    "Form W-4ME (2026); MRS Rule 803",
 };

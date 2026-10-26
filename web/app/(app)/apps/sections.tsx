@@ -1,7 +1,7 @@
-import Link from 'next/link'
-import { ArrowUpRight, BookOpen, Boxes, Library } from 'lucide-react'
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@openbooks/ui'
-import { NavIcon } from '@/components/sidebar-nav'
+import Link from "next/link";
+import { ArrowUpRight, BookOpen, Boxes, Library } from "lucide-react";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@openbooks/ui";
+import { NavIcon } from "@/components/sidebar-nav";
 
 /**
  * Shared presentational cells for /apps, used by the native page and the
@@ -18,13 +18,13 @@ export function AppLauncherCard({
   description,
   openLabel,
 }: {
-  href: string
-  ariaLabel: string
-  iconKey: string
-  name: string
-  versionLine: string
-  description: string
-  openLabel: string
+  href: string;
+  ariaLabel: string;
+  iconKey: string;
+  name: string;
+  versionLine: string;
+  description: string;
+  openLabel: string;
 }) {
   return (
     <Link href={href} aria-label={ariaLabel}>
@@ -46,7 +46,7 @@ export function AppLauncherCard({
         </CardContent>
       </Card>
     </Link>
-  )
+  );
 }
 
 /**
@@ -59,7 +59,7 @@ export function AppsEmptyIcon() {
     <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
       <Boxes size={21} aria-hidden />
     </span>
-  )
+  );
 }
 
 /**
@@ -78,19 +78,19 @@ export function AppsLauncherButton({
   size,
   className,
 }: {
-  href: string
-  label: string
-  icon: 'book' | 'library'
-  variant?: 'outline'
-  size?: 'sm'
-  className?: string
+  href: string;
+  label: string;
+  icon: "book" | "library";
+  variant?: "outline";
+  size?: "sm";
+  className?: string;
 }) {
-  const Icon = icon === 'book' ? BookOpen : Library
+  const Icon = icon === "book" ? BookOpen : Library;
   return (
     <Button variant={variant} size={size} asChild className={className}>
       <Link href={href as never}>
         <Icon size={15} /> {label}
       </Link>
     </Button>
-  )
+  );
 }

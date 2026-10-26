@@ -93,12 +93,18 @@ type CsvImportInput = Omit<Parameters<typeof importStatement>[0], "source" | "so
  */
 function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement>[1]) {
   const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
-  const content = [
-    "date,amount,description,bank_transaction_id",
-    ...input.lines.map((line) =>
-      [line.postedOn, line.amount, quote(line.description ?? ""), line.bankTransactionId ?? ""].join(","),
-    ),
-  ].join("\n") + "\n";
+  const content =
+    [
+      "date,amount,description,bank_transaction_id",
+      ...input.lines.map((line) =>
+        [
+          line.postedOn,
+          line.amount,
+          quote(line.description ?? ""),
+          line.bankTransactionId ?? "",
+        ].join(","),
+      ),
+    ].join("\n") + "\n";
   return importStatement(
     {
       ...input,
@@ -126,10 +132,15 @@ async function setup() {
 }
 
 async function lineIdByRef(orgId: string, statementId: string, ref: string): Promise<string> {
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId} and bank_transaction_id = ${ref}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   assert.ok(row, `imported line ${ref} must exist`);
   return row.id;
 }
@@ -141,39 +152,57 @@ async function lineIdByContent(
   amount: string,
   description: string,
 ): Promise<string> {
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId}
        and posted_on = ${postedOn} and amount = ${amount} and description = ${description}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   assert.ok(row, `imported line ${postedOn} ${amount} ${description} must exist`);
   return row.id;
 }
 
 async function lineRow(lineId: string, orgId: string) {
-  return (await db.execute<{
-    amount: string;
-    posted_on: string;
-    description: string | null;
-    match_status: string;
-  }>(sql`
+  return (
+    await db.execute<{
+      amount: string;
+      posted_on: string;
+      description: string | null;
+      match_status: string;
+    }>(
+      sql`
     select amount::text as amount, posted_on::text as posted_on, description, match_status
       from bank_statement_lines where id = ${lineId} and org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
 }
 
 async function auditRows(table: string, rowId: string, orgId: string) {
-  return await db.execute<{ action: string; changes: unknown }>(sql`
+  return await db.execute<{ action: string; changes: unknown }>(
+    sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = ${table} and row_id = ${rowId}
      order by id
-  `, "objects");
+  `,
+    "objects",
+  );
 }
 
 async function journalEntryCount(orgId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
+  return (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from journal_entries where org_id = ${orgId}
-  `, "objects"))[0]!.n;
+  `,
+      "objects",
+    )
+  )[0]!.n;
 }
 
 test(
@@ -189,7 +218,12 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "-100", description: "Deposit recorded backwards", bankTransactionId: "sign-flip-100" },
+            {
+              postedOn: org.date,
+              amount: "-100",
+              description: "Deposit recorded backwards",
+              bankTransactionId: "sign-flip-100",
+            },
           ],
         },
         ctx,
@@ -203,13 +237,25 @@ test(
 
       const row = await lineRow(lineId, org.orgId);
       assert.equal(row!.amount, "100.0000");
-      assert.equal(await journalEntryCount(org.orgId), entriesBefore, "a correction posts no journal entry");
+      assert.equal(
+        await journalEntryCount(org.orgId),
+        entriesBefore,
+        "a correction posts no journal entry",
+      );
       const audits = await auditRows("bank_statement_lines", lineId, org.orgId);
       assert.equal(audits.length, 1, "one audit row records the correction");
       const changes = audits[0]!.changes as { operation: string; before: unknown; after: unknown };
       assert.equal(changes.operation, "correct_line");
-      assert.deepEqual(changes.before, { amount: "-100.0000", postedOn: org.date, description: "Deposit recorded backwards" });
-      assert.deepEqual(changes.after, { amount: "100.0000", postedOn: org.date, description: "Deposit recorded backwards" });
+      assert.deepEqual(changes.before, {
+        amount: "-100.0000",
+        postedOn: org.date,
+        description: "Deposit recorded backwards",
+      });
+      assert.deepEqual(changes.after, {
+        amount: "100.0000",
+        postedOn: org.date,
+        description: "Deposit recorded backwards",
+      });
 
       // Repeating the identical correction is idempotent success, not a
       // second audit row.
@@ -236,8 +282,18 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "40", description: "To match", bankTransactionId: "guard-40" },
-            { postedOn: org.date, amount: "7", description: "To exclude", bankTransactionId: "guard-7" },
+            {
+              postedOn: org.date,
+              amount: "40",
+              description: "To match",
+              bankTransactionId: "guard-40",
+            },
+            {
+              postedOn: org.date,
+              amount: "7",
+              description: "To exclude",
+              bankTransactionId: "guard-7",
+            },
           ],
         },
         ctx,
@@ -248,7 +304,10 @@ test(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "40" },
         ctx,
       );
-      await createMatch({ reconciliationId: recon.id, statementLineIds: [matchedId], journalLineIds: journals }, ctx);
+      await createMatch(
+        { reconciliationId: recon.id, statementLineIds: [matchedId], journalLineIds: journals },
+        ctx,
+      );
       await excludeStatementLine(excludedId, "Fee the bookkeeper records directly", ctx);
 
       await assert.rejects(
@@ -286,7 +345,14 @@ test(
           source: "csv" as const,
           statementDate: org.date,
           currency: "CAD",
-          lines: [{ postedOn: org.date, amount: "25", description: "Signed period", bankTransactionId: "signoff-25" }],
+          lines: [
+            {
+              postedOn: org.date,
+              amount: "25",
+              description: "Signed period",
+              bankTransactionId: "signoff-25",
+            },
+          ],
         },
         ctx,
       );
@@ -295,7 +361,10 @@ test(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "25" },
         ctx,
       );
-      await createMatch({ reconciliationId: recon.id, statementLineIds: [signedId], journalLineIds: journals }, ctx);
+      await createMatch(
+        { reconciliationId: recon.id, statementLineIds: [signedId], journalLineIds: journals },
+        ctx,
+      );
       await markReconciled(recon.id, ctx);
 
       // A later import is fenced to dates after the cutoff; moving one back
@@ -309,16 +378,28 @@ test(
           source: "csv" as const,
           statementDate: afterCutoff,
           currency: "CAD",
-          lines: [{ postedOn: afterCutoff, amount: "-9", description: "After cutoff", bankTransactionId: "after-cutoff-9" }],
+          lines: [
+            {
+              postedOn: afterCutoff,
+              amount: "-9",
+              description: "After cutoff",
+              bankTransactionId: "after-cutoff-9",
+            },
+          ],
         },
         ctx,
       );
       const laterId = await lineIdByRef(org.orgId, second.statementId!, "after-cutoff-9");
       await assert.rejects(
         correctStatementLine(laterId, { postedOn: org.date }, ctx),
-        (error: unknown) => error instanceof BankingError && /signed-off history is immutable/.test(error.message),
+        (error: unknown) =>
+          error instanceof BankingError && /signed-off history is immutable/.test(error.message),
       );
-      await correctStatementLine(laterId, { amount: "-10", description: "After cutoff, fixed" }, ctx);
+      await correctStatementLine(
+        laterId,
+        { amount: "-10", description: "After cutoff, fixed" },
+        ctx,
+      );
       const row = await lineRow(laterId, org.orgId);
       assert.equal(row!.amount, "-10.0000");
       assert.equal(row!.description, "After cutoff, fixed");
@@ -340,8 +421,18 @@ test(
         statementDate: org.date,
         currency: "CAD",
         lines: [
-          { postedOn: org.date, amount: "60", description: "Wrong file", bankTransactionId: "doomed-60" },
-          { postedOn: org.date, amount: "-11", description: "Wrong file fee", bankTransactionId: "doomed-11" },
+          {
+            postedOn: org.date,
+            amount: "60",
+            description: "Wrong file",
+            bankTransactionId: "doomed-60",
+          },
+          {
+            postedOn: org.date,
+            amount: "-11",
+            description: "Wrong file fee",
+            bankTransactionId: "doomed-11",
+          },
         ],
       };
       const imported = await importCsv(input, ctx);
@@ -351,18 +442,25 @@ test(
       const result = await deleteStatementImport(statementId, ctx);
       assert.deepEqual(result, { deletedLines: 2 });
 
-      const remaining = await db.execute<{ n: number }>(sql`
+      const remaining = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from bank_statement_lines where org_id = ${org.orgId} and statement_id = ${statementId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(remaining[0]!.n, 0, "every imported line goes with the import");
-      const header = await db.execute<{ n: number }>(sql`
+      const header = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from bank_statements where org_id = ${org.orgId} and id = ${statementId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(header[0]!.n, 0, "the statement header goes too");
       assert.equal(await journalEntryCount(org.orgId), entriesBefore, "a delete posts nothing");
 
       const headerAudits = await auditRows("bank_statements", statementId, org.orgId);
-      const headerChanges = headerAudits.map((row) => row.changes as { operation: string; before: { lineCount: number } })
+      const headerChanges = headerAudits
+        .map((row) => row.changes as { operation: string; before: { lineCount: number } })
         .find((changes) => changes.operation === "delete_import");
       assert.ok(headerChanges, "the import delete is audited on the statement");
       assert.equal(headerChanges.before.lineCount, 2);
@@ -392,7 +490,12 @@ test(
           currency: "CAD",
           lines: [
             { postedOn: org.date, amount: "33", description: "To match" },
-            { postedOn: org.date, amount: "4", description: "To exclude", bankTransactionId: "del-guard-4" },
+            {
+              postedOn: org.date,
+              amount: "4",
+              description: "To exclude",
+              bankTransactionId: "del-guard-4",
+            },
           ],
         },
         ctx,
@@ -404,17 +507,22 @@ test(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "33" },
         ctx,
       );
-      await createMatch({ reconciliationId: recon.id, statementLineIds: [matchedId], journalLineIds: journals }, ctx);
+      await createMatch(
+        { reconciliationId: recon.id, statementLineIds: [matchedId], journalLineIds: journals },
+        ctx,
+      );
       await excludeStatementLine(excludedId, "Duplicate confirmed by the counterparty advice", ctx);
 
       await assert.rejects(
         deleteStatementImport(statementId, ctx),
-        (error: unknown) => error instanceof BankingError && /unmatch them first/.test(error.message),
+        (error: unknown) =>
+          error instanceof BankingError && /unmatch them first/.test(error.message),
       );
       await unmatchStatementLine({ reconciliationId: recon.id, statementLineId: matchedId }, ctx);
       await assert.rejects(
         deleteStatementImport(statementId, ctx),
-        (error: unknown) => error instanceof BankingError && /restore them first/.test(error.message),
+        (error: unknown) =>
+          error instanceof BankingError && /restore them first/.test(error.message),
       );
       await restoreStatementLine(excludedId, ctx);
 
@@ -433,14 +541,26 @@ test(
         ctx,
       );
       assert.equal(later.possibleDuplicates, 1, "the repeated id-less line flags, not dedupes");
-      const flaggedId = await lineIdByContent(org.orgId, later.statementId!, org.date, "33", "To match");
-      const flag = (await db.execute<{ possible_duplicate_of: string | null }>(sql`
+      const flaggedId = await lineIdByContent(
+        org.orgId,
+        later.statementId!,
+        org.date,
+        "33",
+        "To match",
+      );
+      const flag = (
+        await db.execute<{ possible_duplicate_of: string | null }>(
+          sql`
         select possible_duplicate_of from bank_statement_lines where id = ${flaggedId} and org_id = ${org.orgId}
-      `, "objects"))[0]!.possible_duplicate_of;
+      `,
+          "objects",
+        )
+      )[0]!.possible_duplicate_of;
       assert.equal(flag, matchedId, "the flag points at this import's line");
       await assert.rejects(
         deleteStatementImport(statementId, ctx),
-        (error: unknown) => error instanceof BankingError && /clear those flags first/.test(error.message),
+        (error: unknown) =>
+          error instanceof BankingError && /clear those flags first/.test(error.message),
       );
       await clearPossibleDuplicateFlag(flaggedId, ctx);
 
@@ -452,31 +572,33 @@ test(
   },
 );
 
-test(
-  "correction and delete stay tenant-scoped",
-  { skip: !DB },
-  async () => {
-    const { org, ctx } = await setup();
-    const other = await createScratchOrg();
-    try {
-      const imported = await importCsv(
-        {
-          accountId: org.accounts.bank,
-          source: "csv" as const,
-          statementDate: org.date,
-          currency: "CAD",
-          lines: [{ postedOn: org.date, amount: "12", description: "Mine", bankTransactionId: "scoped-12" }],
-        },
-        ctx,
-      );
-      const lineId = await lineIdByRef(org.orgId, imported.statementId!, "scoped-12");
-      const foreign = { orgId: other.orgId, userId: ctx.userId, allowedSubsidiaryIds: null };
-      await assert.rejects(correctStatementLine(lineId, { amount: "13" }, foreign));
-      await assert.rejects(deleteStatementImport(imported.statementId!, foreign));
-      assert.equal((await lineRow(lineId, org.orgId))!.amount, "12.0000", "the foreign attempt changes nothing");
-    } finally {
-      await dropScratchOrg(org.orgId);
-      await dropScratchOrg(other.orgId);
-    }
-  },
-);
+test("correction and delete stay tenant-scoped", { skip: !DB }, async () => {
+  const { org, ctx } = await setup();
+  const other = await createScratchOrg();
+  try {
+    const imported = await importCsv(
+      {
+        accountId: org.accounts.bank,
+        source: "csv" as const,
+        statementDate: org.date,
+        currency: "CAD",
+        lines: [
+          { postedOn: org.date, amount: "12", description: "Mine", bankTransactionId: "scoped-12" },
+        ],
+      },
+      ctx,
+    );
+    const lineId = await lineIdByRef(org.orgId, imported.statementId!, "scoped-12");
+    const foreign = { orgId: other.orgId, userId: ctx.userId, allowedSubsidiaryIds: null };
+    await assert.rejects(correctStatementLine(lineId, { amount: "13" }, foreign));
+    await assert.rejects(deleteStatementImport(imported.statementId!, foreign));
+    assert.equal(
+      (await lineRow(lineId, org.orgId))!.amount,
+      "12.0000",
+      "the foreign attempt changes nothing",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+    await dropScratchOrg(other.orgId);
+  }
+});

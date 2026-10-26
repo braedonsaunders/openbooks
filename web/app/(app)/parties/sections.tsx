@@ -1,4 +1,4 @@
-import { Badge } from '@openbooks/ui'
+import { Badge } from "@openbooks/ui";
 
 /**
  * The role chips on a party row. Three optional badges in one wrapper is a
@@ -8,7 +8,7 @@ import { Badge } from '@openbooks/ui'
 export function PartyRolesCell({
   badges,
 }: {
-  badges: { label: string; variant: 'default' | 'secondary' | 'outline' }[]
+  badges: { label: string; variant: "default" | "secondary" | "outline" }[];
 }) {
   return (
     <span className="flex flex-wrap gap-1">
@@ -18,5 +18,5 @@ export function PartyRolesCell({
         </Badge>
       ))}
     </span>
-  )
+  );
 }

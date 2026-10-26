@@ -38,8 +38,7 @@ type LoadState =
   | { status: "failed"; message: string }
   | { status: "ready"; exposures: Exposure[] };
 
-const exposureKey = (row: Exposure) =>
-  [row.subsidiaryId, row.accountId, row.currency].join(":");
+const exposureKey = (row: Exposure) => [row.subsidiaryId, row.accountId, row.currency].join(":");
 
 /**
  * Recorded closing rates for the close run's own FX exposures. The list is
@@ -78,16 +77,21 @@ export function RevaluationEvidencePanel(props: {
 
   useEffect(() => {
     let live = true;
-    load().then(exposures => {
-      if (live) setLoaded({ key: loadKey, state: { status: "ready", exposures } });
-    }).catch((error: unknown) => {
-      if (live) {
-        setLoaded({ key: loadKey, state: {
-          status: "failed",
-          message: error instanceof Error ? error.message : t("loadFailed"),
-        } });
-      }
-    });
+    load()
+      .then((exposures) => {
+        if (live) setLoaded({ key: loadKey, state: { status: "ready", exposures } });
+      })
+      .catch((error: unknown) => {
+        if (live) {
+          setLoaded({
+            key: loadKey,
+            state: {
+              status: "failed",
+              message: error instanceof Error ? error.message : t("loadFailed"),
+            },
+          });
+        }
+      });
     return () => {
       live = false;
     };
@@ -154,7 +158,9 @@ export function RevaluationEvidencePanel(props: {
       {state.status === "loading" ? (
         <p className="text-sm text-slate-500">{t("loading")}</p>
       ) : state.status === "failed" ? (
-        <p role="alert" className="text-sm text-red-700 dark:text-red-300">{state.message}</p>
+        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+          {state.message}
+        </p>
       ) : exposures.length === 0 ? (
         <p className="text-sm text-slate-500">{t("empty")}</p>
       ) : (
@@ -163,7 +169,8 @@ export function RevaluationEvidencePanel(props: {
             <li key={exposureKey(row)} className="flex flex-wrap items-center gap-2 px-3 py-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {row.accountNumber ? `${row.accountNumber} · ` : ""}{row.accountName}
+                  {row.accountNumber ? `${row.accountNumber} · ` : ""}
+                  {row.accountName}
                   <span className="text-slate-500"> — {row.subsidiaryName}</span>
                 </p>
                 <p className="text-xs text-slate-500">
@@ -179,10 +186,15 @@ export function RevaluationEvidencePanel(props: {
               </div>
               {row.rateEvidence ? (
                 <Badge variant="outline">
-                  {t("recordedRate", { rate: row.rateEvidence.rate, version: row.rateEvidence.version })}
+                  {t("recordedRate", {
+                    rate: row.rateEvidence.rate,
+                    version: row.rateEvidence.version,
+                  })}
                 </Badge>
               ) : row.periodEndRate ? (
-                <Badge variant="outline">{t("organizationRate", { rate: row.periodEndRate })}</Badge>
+                <Badge variant="outline">
+                  {t("organizationRate", { rate: row.periodEndRate })}
+                </Badge>
               ) : (
                 <Badge variant="warning">{t("rateMissing")}</Badge>
               )}
@@ -200,23 +212,28 @@ export function RevaluationEvidencePanel(props: {
         open={selected !== null}
         onClose={() => setSelectedKey(null)}
         title={t("drawerTitle")}
-        description={selected
-          ? t("position", {
-              foreign: `${selected.foreignBalance} ${selected.currency}`,
-              carrying: `${selected.carryingBase} ${selected.measurementCurrency}`,
-              date: selected.rateDate,
-            })
-          : undefined}
-        footer={(
+        description={
+          selected
+            ? t("position", {
+                foreign: `${selected.foreignBalance} ${selected.currency}`,
+                carrying: `${selected.carryingBase} ${selected.measurementCurrency}`,
+                date: selected.rateDate,
+              })
+            : undefined
+        }
+        footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" disabled={busy} onClick={() => setSelectedKey(null)}>
               {t("cancel")}
             </Button>
-            <Button disabled={busy || !rate.trim() || !source.trim() || reason.trim().length < 8} onClick={record}>
+            <Button
+              disabled={busy || !rate.trim() || !source.trim() || reason.trim().length < 8}
+              onClick={record}
+            >
               {t("recordRate")}
             </Button>
           </div>
-        )}
+        }
       >
         {selected ? (
           <div className="space-y-4">
@@ -228,12 +245,15 @@ export function RevaluationEvidencePanel(props: {
               <div>
                 <dt className="text-slate-500">{t("account")}</dt>
                 <dd className="font-medium">
-                  {selected.accountNumber ? `${selected.accountNumber} · ` : ""}{selected.accountName}
+                  {selected.accountNumber ? `${selected.accountNumber} · ` : ""}
+                  {selected.accountName}
                 </dd>
               </div>
               <div>
                 <dt className="text-slate-500">{t("conversion")}</dt>
-                <dd className="font-medium">{selected.currency} → {selected.measurementCurrency}</dd>
+                <dd className="font-medium">
+                  {selected.currency} → {selected.measurementCurrency}
+                </dd>
               </div>
               <div>
                 <dt className="text-slate-500">{t("rateDate")}</dt>
@@ -251,15 +271,28 @@ export function RevaluationEvidencePanel(props: {
             ) : null}
             <label className="block space-y-1 text-sm">
               <span className="font-medium">{t("rate")}</span>
-              <Input value={rate} onChange={(event) => setRate(event.target.value)} inputMode="decimal" />
+              <Input
+                value={rate}
+                onChange={(event) => setRate(event.target.value)}
+                inputMode="decimal"
+              />
             </label>
             <label className="block space-y-1 text-sm">
               <span className="font-medium">{t("source")}</span>
-              <Input value={source} onChange={(event) => setSource(event.target.value)} maxLength={120} />
+              <Input
+                value={source}
+                onChange={(event) => setSource(event.target.value)}
+                maxLength={120}
+              />
             </label>
             <label className="block space-y-1 text-sm">
               <span className="font-medium">{t("reason")}</span>
-              <Textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} rows={3} />
+              <Textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                maxLength={500}
+                rows={3}
+              />
             </label>
           </div>
         ) : null}

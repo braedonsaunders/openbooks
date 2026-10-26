@@ -42,7 +42,9 @@ function labelTemplates(locale: string, style: CivilDateLabelStyle): LabelTempla
   const months = Array.from({ length: 12 }, (_, index) =>
     formatter
       .formatToParts(new Date(`2001-${String(index + 1).padStart(2, "0")}-15T12:00:00Z`))
-      .map((part) => (part.type === "year" ? YEAR_TOKEN : part.type === "day" ? DAY_TOKEN : part.value))
+      .map((part) =>
+        part.type === "year" ? YEAR_TOKEN : part.type === "day" ? DAY_TOKEN : part.value,
+      )
       .join(""),
   );
   const numbers = new Intl.NumberFormat(locale, {
@@ -56,7 +58,9 @@ function labelTemplates(locale: string, style: CivilDateLabelStyle): LabelTempla
 }
 
 function localizedNumber(value: string, digits: string): string {
-  return [...value.replace(/^0+(?=\d)/, "")].map((digit) => digits[Number(digit)] ?? digit).join("");
+  return [...value.replace(/^0+(?=\d)/, "")]
+    .map((digit) => digits[Number(digit)] ?? digit)
+    .join("");
 }
 
 /**
@@ -64,25 +68,38 @@ function localizedNumber(value: string, digits: string): string {
  * `YYYY-MM-DD` civil date in the given locale. A timestamp suffix is ignored;
  * anything that does not start with a civil date is refused.
  */
-export function civilDateLabel(isoDate: string, locale: string, style: CivilDateLabelStyle = "date"): string {
+export function civilDateLabel(
+  isoDate: string,
+  locale: string,
+  style: CivilDateLabelStyle = "date",
+): string {
   const match = CIVIL_DATE.exec(isoDate);
   const month = match ? Number(match[2]) : 0;
   if (!match || month < 1 || month > 12) {
     throw new RangeError(`a civil date must be YYYY-MM-DD, received "${isoDate}"`);
   }
   const templates = labelTemplates(locale, style);
-  return templates.months[month - 1]!
-    .replace(DAY_TOKEN, localizedNumber(match[3]!, templates.digits))
-    .replace(YEAR_TOKEN, localizedNumber(match[1]!, templates.digits));
+  return templates.months[month - 1]!.replace(
+    DAY_TOKEN,
+    localizedNumber(match[3]!, templates.digits),
+  ).replace(YEAR_TOKEN, localizedNumber(match[1]!, templates.digits));
 }
 
 /**
  * SQL form of civilDateLabel over a `date`-typed expression. Null in, null
  * out, so the expression composes into `ilike` searches without coalescing.
  */
-export function civilDateLabelSql(date: SQL, locale: string, style: CivilDateLabelStyle = "date"): SQL {
+export function civilDateLabelSql(
+  date: SQL,
+  locale: string,
+  style: CivilDateLabelStyle = "date",
+): SQL {
   const templates = labelTemplates(locale, style);
-  const months = sql`array[${sql.join(templates.months.map((template) => sql`${template}`), sql`, `)}]::text[]`;
-  const digits = (part: SQL) => sql`translate(${part}::int::text, '0123456789', ${templates.digits})`;
+  const months = sql`array[${sql.join(
+    templates.months.map((template) => sql`${template}`),
+    sql`, `,
+  )}]::text[]`;
+  const digits = (part: SQL) =>
+    sql`translate(${part}::int::text, '0123456789', ${templates.digits})`;
   return sql`replace(replace((${months})[extract(month from ${date})::int], ${DAY_TOKEN}, ${digits(sql`extract(day from ${date})`)}), ${YEAR_TOKEN}, ${digits(sql`extract(year from ${date})`)})`;
 }

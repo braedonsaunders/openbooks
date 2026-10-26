@@ -20,9 +20,13 @@ export interface DocumentActionFacts {
   submittedByViewer?: boolean;
 }
 
-export type DocumentLifecycleAction = "submit" | "post" | "void" | "delete" | "returnToDraft" | "withdraw";
+export type DocumentLifecycleAction =
+  "submit" | "post" | "void" | "delete" | "returnToDraft" | "withdraw";
 
-export function documentActionAvailable(action: DocumentLifecycleAction, facts: DocumentActionFacts): boolean {
+export function documentActionAvailable(
+  action: DocumentLifecycleAction,
+  facts: DocumentActionFacts,
+): boolean {
   const { status, directPost, canCreate, canPost, submittedByViewer = false } = facts;
   // Terminal states: a posted or voided record offers no lifecycle transition
   // other than a governed void of a posted record.

@@ -46,7 +46,10 @@ export interface SeededViewRow {
   updatedAt?: Date | string | null;
 }
 
-function timestampsEqual(createdAt: SeededViewRow["createdAt"], updatedAt: SeededViewRow["updatedAt"]): boolean {
+function timestampsEqual(
+  createdAt: SeededViewRow["createdAt"],
+  updatedAt: SeededViewRow["updatedAt"],
+): boolean {
   if (createdAt == null || updatedAt == null) return false;
   const created = createdAt instanceof Date ? createdAt.getTime() : Date.parse(createdAt);
   const updated = updatedAt instanceof Date ? updatedAt.getTime() : Date.parse(updatedAt);
@@ -81,7 +84,8 @@ export function configMatchesSeedShape(
   if (!Array.isArray(view.columns)) return false;
   const registry = new Map(meta.listColumns.map((column) => [column.key, column]));
   for (const placement of view.columns) {
-    if (placement == null || typeof placement !== "object" || Array.isArray(placement)) return false;
+    if (placement == null || typeof placement !== "object" || Array.isArray(placement))
+      return false;
     const stored = placement as Record<string, unknown>;
     const registered = registry.get(stored.key as string);
     // Extra columns are registry drift (custom fields, retired built-ins),
@@ -90,7 +94,12 @@ export function configMatchesSeedShape(
     // A legal-entity column's default depends on the organization's
     // Multi-subsidiary state, so its stored visibility is not evidence of
     // an edit either way.
-    if (!registered.legalEntity && !registered.accountingBook && stored.visible !== !registered.defaultHidden) return false;
+    if (
+      !registered.legalEntity &&
+      !registered.accountingBook &&
+      stored.visible !== !registered.defaultHidden
+    )
+      return false;
     if ((stored.width ?? null) !== (registered.defaultWidth ?? null)) return false;
     if (stored.labelOverride != null) return false;
   }
@@ -104,7 +113,10 @@ export function configMatchesSeedShape(
  * meta are the only inputs, so unit tests pin the rule without a database.
  * Without registry meta there is no shape evidence, so it fails closed.
  */
-export function isUntouchedSeededView(row: SeededViewRow, meta?: Pick<RecordTypeMeta, "listColumns"> | null): boolean {
+export function isUntouchedSeededView(
+  row: SeededViewRow,
+  meta?: Pick<RecordTypeMeta, "listColumns"> | null,
+): boolean {
   if (row.scope !== "org") return false;
   if (!meta) return false;
   return metadataUntouched(row) && configMatchesSeedShape(row.config, meta);

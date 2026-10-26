@@ -1,15 +1,18 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Project PATCH validates contractValue to 4dp but never bounds its
 // magnitude, so a pasted 20-digit figure sails through validation and dies in
 // Postgres as a raw numeric(19,4) overflow (HTTP 500 — the verb has no catch)
 // instead of failing closed with a named 422.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __projectPatchMagnitudeState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __projectPatchMagnitudeState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 // The test session both the route and the real feature gate authenticate
 // against: the gate reads only the identity from `./authz` and keeps its
 // own feature check against the database.
@@ -18,83 +21,102 @@ const sessionSource = `
     const s = globalThis.__projectPatchMagnitudeState;
     return { user: { roles: [], orgId: s.orgId, id: s.actorId }, permissions: new Set(), allowedSubsidiaryIds: null };
   }
-`
+`;
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return virtual('export function redirect() {}')
-    if (specifier === '../../../../lib/authz') return virtual(`
+    if (specifier === "next/navigation") return virtual("export function redirect() {}");
+    if (specifier === "../../../../lib/authz")
+      return virtual(`
       ${sessionSource}
       export function guardSubsidiaryScope() { return null }
       export function subsidiariesInScope() { return true }
-    `)
+    `);
     // The factory authenticates string-feature routes inside the real
     // feature gate, which reads its session from `./authz`: without this
     // edge the gate loads the real cookie session instead of the test
     // session.
-    if (specifier === './authz' && (context.parentURL ?? '').includes('web/lib/feature-gates.ts')) return virtual(sessionSource)
-    return next(specifier, context)
+    if (specifier === "./authz" && (context.parentURL ?? "").includes("web/lib/feature-gates.ts"))
+      return virtual(sessionSource);
+    return next(specifier, context);
   },
-})
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { PATCH } = await import('./route.ts')
+});
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { PATCH } = await import("./route.ts");
 
 async function fixture() {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
   await db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"projects": true}'::jsonb)
-     where id = ${org.orgId}`)
-  const projectId = (await db.execute<{ id: string }>(sql`
+     where id = ${org.orgId}`);
+  const projectId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into projects (org_id, name, is_active, contract_value)
     values (${org.orgId}, 'Magnitude Project', true, '100.0000')
-    returning id`, 'objects'))[0]!.id
-  return { org, projectId }
+    returning id`,
+      "objects",
+    )
+  )[0]!.id;
+  return { org, projectId };
 }
 
 async function patch(id: string, body: unknown): Promise<{ status: number; json: unknown }> {
   try {
-    const response = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://projects.test/api/projects/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
+    const response = await withOrgContext(state.orgId, () =>
+      PATCH(
+        new Request(`http://projects.test/api/projects/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id }) },
+      ),
+    );
+    return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function contractValue(projectId: string): Promise<string | null> {
-  const rows = await db.execute<{ contract_value: string | null }>(sql`
-    select contract_value::text as contract_value from projects where id = ${projectId}`, 'objects')
-  return rows[0]!.contract_value
+  const rows = await db.execute<{ contract_value: string | null }>(
+    sql`
+    select contract_value::text as contract_value from projects where id = ${projectId}`,
+    "objects",
+  );
+  return rows[0]!.contract_value;
 }
 
-test('PATCH refuses a contract value wider than numeric(19,4) without writing', async () => {
-  const { org, projectId } = await fixture()
+test("PATCH refuses a contract value wider than numeric(19,4) without writing", async () => {
+  const { org, projectId } = await fixture();
   try {
-    const result = await patch(projectId, { contractValue: '99999999999999999999' })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.equal(await contractValue(projectId), '100.0000')
+    const result = await patch(projectId, { contractValue: "99999999999999999999" });
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
+    assert.equal(await contractValue(projectId), "100.0000");
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH still saves a column-maximum contract value with identical read-back', async () => {
-  const { org, projectId } = await fixture()
+test("PATCH still saves a column-maximum contract value with identical read-back", async () => {
+  const { org, projectId } = await fixture();
   try {
-    const result = await patch(projectId, { contractValue: '999999999999999.9999' })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.equal(await contractValue(projectId), '999999999999999.9999')
+    const result = await patch(projectId, { contractValue: "999999999999999.9999" });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.equal(await contractValue(projectId), "999999999999999.9999");
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

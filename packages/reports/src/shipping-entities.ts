@@ -47,7 +47,16 @@ export const SHIPPING_REPORT_ENTITIES: ReportEntity[] = [
         label: "Tracking state",
         kind: "enum",
         expr: "l.tracking_status",
-        options: ["unknown", "pre_transit", "in_transit", "out_for_delivery", "delivered", "exception", "returned", "cancelled"],
+        options: [
+          "unknown",
+          "pre_transit",
+          "in_transit",
+          "out_for_delivery",
+          "delivered",
+          "exception",
+          "returned",
+          "cancelled",
+        ],
       },
       {
         key: "status",
@@ -69,11 +78,13 @@ export const SHIPPING_REPORT_ENTITIES: ReportEntity[] = [
       { key: "voided_at", label: "Voided", kind: "timestamp", expr: "l.voided_at" },
       { key: "cost_entry_id", label: "Cost journal (id)", kind: "uuid", expr: "l.cost_entry_id" },
     ],
-    cellLinks: [{
-      column: "tracking_number",
-      kind: "transaction",
-      entryIdColumn: "cost_entry_id",
-    }],
+    cellLinks: [
+      {
+        column: "tracking_number",
+        kind: "transaction",
+        entryIdColumn: "cost_entry_id",
+      },
+    ],
     defaultSort: { column: "purchased_at", direction: "desc" },
   },
   {
@@ -102,7 +113,14 @@ export const SHIPPING_REPORT_ENTITIES: ReportEntity[] = [
         label: "Reason",
         kind: "enum",
         expr: "a.kind",
-        options: ["weight_correction", "dimension_correction", "address_correction", "fuel", "duplicate", "other"],
+        options: [
+          "weight_correction",
+          "dimension_correction",
+          "address_correction",
+          "fuel",
+          "duplicate",
+          "other",
+        ],
       },
       {
         key: "amount",
@@ -123,11 +141,13 @@ export const SHIPPING_REPORT_ENTITIES: ReportEntity[] = [
       { key: "occurred_at", label: "Occurred", kind: "timestamp", expr: "a.occurred_at" },
       { key: "entry_id", label: "Adjustment journal (id)", kind: "uuid", expr: "a.entry_id" },
     ],
-    cellLinks: [{
-      column: "shipment_number",
-      kind: "transaction",
-      entryIdColumn: "entry_id",
-    }],
+    cellLinks: [
+      {
+        column: "shipment_number",
+        kind: "transaction",
+        entryIdColumn: "entry_id",
+      },
+    ],
     defaultSort: { column: "occurred_at", direction: "desc" },
   },
 ];

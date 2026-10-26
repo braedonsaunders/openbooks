@@ -16,8 +16,11 @@ const gate: { permissions: string[] } = { permissions: ["reports.read"] };
 Object.assign(globalThis, { __drillGate: gate });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz")
-      && (context.parentURL?.includes("/api/analytics/drill/") || context.parentURL?.includes("/lib/api/route"))) {
+    if (
+      specifier.endsWith("/lib/authz") &&
+      (context.parentURL?.includes("/api/analytics/drill/") ||
+        context.parentURL?.includes("/lib/api/route"))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -38,10 +41,14 @@ registerHooks({
   },
 });
 const { GET } = await import("./route.ts");
-const { db, withBypassContext } = (await import("@openbooks/engine/platform/db")) as typeof import("@openbooks/engine/platform/db");
+const { db, withBypassContext } =
+  (await import("@openbooks/engine/platform/db")) as typeof import("@openbooks/engine/platform/db");
 const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
-const { createScratchOrg, dropScratchOrg } = (await import("@openbooks/engine/testing/fixtures")) as typeof import("@openbooks/engine/testing/fixtures");
-const { PAYROLL_RESTRICTED_PARTY_LABEL } = (await import(root + "web/lib/payroll-confidentiality.ts")) as typeof import("@/lib/payroll-confidentiality.ts");
+const { createScratchOrg, dropScratchOrg } =
+  (await import("@openbooks/engine/testing/fixtures")) as typeof import("@openbooks/engine/testing/fixtures");
+const { PAYROLL_RESTRICTED_PARTY_LABEL } = (await import(
+  root + "web/lib/payroll-confidentiality.ts"
+)) as typeof import("@/lib/payroll-confidentiality.ts");
 
 const NET_A = "4842.17";
 const NET_B = "5210.44";
@@ -64,7 +71,9 @@ async function seedPayroll(org: Awaited<ReturnType<typeof createScratchOrg>>) {
     values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${empA}, true, -4842.17, 'USD', -4842.17, 1, ${org.date}),
            (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.ap}, ${org.subsidiaryId}, ${empB}, true, -5210.44, 'USD', -5210.44, 1, ${org.date}),
            (${randomUUID()}, ${org.orgId}, ${entryId}, 3, ${org.accounts.cogs}, ${org.subsidiaryId}, null, false, 10052.61, 'USD', 10052.61, 1, ${org.date})`);
-  await db.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+  await db.execute(
+    sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`,
+  );
 }
 
 function leakedIdentity(payload: unknown): string | null {
@@ -84,7 +93,11 @@ function leakedAmount(payload: unknown): string | null {
 }
 
 async function drill(orgId: string, account: string, date: string) {
-  const res = await GET(new Request(`http://audit.local/api/analytics/drill?mode=account&account=${account}&from=${date}&to=${date}`));
+  const res = await GET(
+    new Request(
+      `http://audit.local/api/analytics/drill?mode=account&account=${account}&from=${date}&to=${date}`,
+    ),
+  );
   assert.equal(res.status, 200, `drill answered ${res.status}: ${await res.clone().text()}`);
   return res.json() as Promise<Record<string, unknown>>;
 }
@@ -114,8 +127,15 @@ test("account drill ties out with the grant and shows full detail", async () => 
     gate.permissions = ["reports.read", "payroll.read"];
     const shown = await drill(org.orgId, org.accounts.ap, org.date);
     const text = JSON.stringify(shown);
-    assert.ok(text.includes(NET_A) && text.includes(NAME_B), "granted drill must show both employees");
-    assert.equal((hidden as { total: string }).total, (shown as { total: string }).total, "restricted totals must tie to granted totals");
+    assert.ok(
+      text.includes(NET_A) && text.includes(NAME_B),
+      "granted drill must show both employees",
+    );
+    assert.equal(
+      (hidden as { total: string }).total,
+      (shown as { total: string }).total,
+      "restricted totals must tie to granted totals",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

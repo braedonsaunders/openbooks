@@ -8,10 +8,19 @@ import { canonicalDecimal, compareDecimal } from "@openbooks/engine/money/decima
 import { flowRates } from "../fx-presentation";
 import { defaultFiscalCalendarPeriods } from "../fiscal";
 import type { FiscalPeriod } from "@openbooks/reports";
-import { excludePeriodEndJournals, statementMonthActivity } from "@openbooks/engine/records/period-end-origins";
+import {
+  excludePeriodEndJournals,
+  statementMonthActivity,
+} from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
-import { financialHealth, priorFiscalWindow, type FinancialHealth, type HealthFigures, type HealthPnlFigures } from "./financial-health";
+import {
+  financialHealth,
+  priorFiscalWindow,
+  type FinancialHealth,
+  type HealthFigures,
+  type HealthPnlFigures,
+} from "./financial-health";
 import { healthStrings, type HealthStrings } from "./health-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { evaluateAnalyticsRatio } from "./analytics-ratio";
@@ -21,7 +30,7 @@ import { isFeatureEnabled } from "../features";
 import { OPERATING_EXPENSE_TYPES } from "./operating-expenses";
 import { decimalRatio } from "../reports/decimals";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
-import { getMoneyFormatter } from '../money-server'
+import { getMoneyFormatter } from "../money-server";
 import { fiscalPeriodLabel } from "../fiscal-period-label";
 
 /** The canonical operating-expense type list as a SQL `IN` fragment (one definition). */
@@ -219,7 +228,13 @@ export interface HealthData extends FinancialHealth {
   marginFlow: MarginStage[];
   segments: { department: SegmentRow[]; class: SegmentRow[]; location: SegmentRow[] };
   drivers: { revenue: DriverRow[]; cost: DriverRow[] };
-  items: { rows: ItemRow[]; gainers: ItemRow[]; decliners: ItemRow[]; totalCurrent: string; totalChange: string };
+  items: {
+    rows: ItemRow[];
+    gainers: ItemRow[];
+    decliners: ItemRow[];
+    totalCurrent: string;
+    totalChange: string;
+  };
   insights: Insight[];
   budget: BudgetVariance;
   bands: HealthBands;
@@ -272,7 +287,6 @@ interface HealthItemSqlRow {
   current: SqlNumeric;
   prior: SqlNumeric;
 }
-
 
 interface BudgetScenarioSqlRow {
   id: string;
@@ -363,7 +377,7 @@ async function monthlySeries(
   // A per-month P&L series is the exact shape gl_month_activity stores, so the
   // whole months read straight from it; only the final (possibly partial)
   // month falls back to the lines. The window always starts on a first-of-month.
-  const r = ((await analyticsQuery(sql`
+  const r = await analyticsQuery(sql`
     with movement as (
       select g.account_id, to_char(g.month, 'YYYY-MM') as month,
              sub.base_currency as func,
@@ -400,13 +414,17 @@ async function monthlySeries(
     join accounts a on a.id = m.account_id and a.org_id = ${orgId}
     where a.type in (${PNL_TYPES_SQL})
     group by 1, 2
-  `)));
+  `);
   const monthRows = r.rows as unknown as HealthMonthSqlRow[];
   // One shared flow context over every (month, functional) leg; each type
   // bucket translates at its leg's latest date, then merges per month.
-  const monthCtx = await flowRates(orgId, monthRows.map((x) => ({
-    func: x.func ?? null, date: String(x.late ?? to).slice(0, 10),
-  })));
+  const monthCtx = await flowRates(
+    orgId,
+    monthRows.map((x) => ({
+      func: x.func ?? null,
+      date: String(x.late ?? to).slice(0, 10),
+    })),
+  );
   const rateAt = (func: string | null, date: string) => monthCtx.rateAt(func, date);
   const by = new Map<string, HealthMonthSqlRow>();
   for (const x of monthRows) {
@@ -489,9 +507,14 @@ async function fiscalPeriodSeries(
   // lexicographically, so the clamp is a plain string minimum.
   const endOf = (p: FiscalPeriod) => (p.to <= to ? p.to : to);
   const bucket = (i: number) => `period_${i}`;
-  const whens = trailing.map((p, i) => sql`when l.posting_date >= ${p.from}::date and l.posting_date <= ${endOf(p)}::date then ${bucket(i)}`);
-  const ranges = trailing.map((p) => sql`(l.posting_date >= ${p.from}::date and l.posting_date <= ${endOf(p)}::date)`);
-  const r = ((await analyticsQuery(sql`
+  const whens = trailing.map(
+    (p, i) =>
+      sql`when l.posting_date >= ${p.from}::date and l.posting_date <= ${endOf(p)}::date then ${bucket(i)}`,
+  );
+  const ranges = trailing.map(
+    (p) => sql`(l.posting_date >= ${p.from}::date and l.posting_date <= ${endOf(p)}::date)`,
+  );
+  const r = await analyticsQuery(sql`
     select (case ${sql.join(whens, sql` `)} end) as month,
       sub.base_currency as func,
       max(l.posting_date)::text as late,
@@ -511,27 +534,41 @@ async function fiscalPeriodSeries(
       and a.type in (${PNL_TYPES_SQL})
       and (${sql.join(ranges, sql` or `)})
     group by 1, 2
-  `)));
+  `);
   const rows = r.rows as unknown as (HealthMonthSqlRow & { month: string })[];
-  const ctx = await flowRates(orgId, rows.map((x) => ({
-    func: x.func ?? null, date: String(x.late ?? to).slice(0, 10),
-  })));
+  const ctx = await flowRates(
+    orgId,
+    rows.map((x) => ({
+      func: x.func ?? null,
+      date: String(x.late ?? to).slice(0, 10),
+    })),
+  );
   const rateAt = (func: string | null, date: string) => ctx.rateAt(func, date);
   const by = new Map<string, HealthMonthSqlRow>();
   for (const x of rows) {
     const prior = by.get(x.month);
     const date = String(x.late ?? to).slice(0, 10);
     const t = (v: SqlNumeric) => translateAmount(String(v ?? 0), x.func ?? null, date, rateAt);
-    by.set(x.month, prior
-      ? {
-        ...prior,
-        revenue: add(String(prior.revenue ?? 0), t(x.revenue)),
-        operating_revenue: add(String(prior.operating_revenue ?? 0), t(x.operating_revenue)),
-        cogs: add(String(prior.cogs ?? 0), t(x.cogs)),
-        opex: add(String(prior.opex ?? 0), t(x.opex)),
-        other_exp: add(String(prior.other_exp ?? 0), t(x.other_exp)),
-      }
-      : { ...x, revenue: t(x.revenue), operating_revenue: t(x.operating_revenue), cogs: t(x.cogs), opex: t(x.opex), other_exp: t(x.other_exp) });
+    by.set(
+      x.month,
+      prior
+        ? {
+            ...prior,
+            revenue: add(String(prior.revenue ?? 0), t(x.revenue)),
+            operating_revenue: add(String(prior.operating_revenue ?? 0), t(x.operating_revenue)),
+            cogs: add(String(prior.cogs ?? 0), t(x.cogs)),
+            opex: add(String(prior.opex ?? 0), t(x.opex)),
+            other_exp: add(String(prior.other_exp ?? 0), t(x.other_exp)),
+          }
+        : {
+            ...x,
+            revenue: t(x.revenue),
+            operating_revenue: t(x.operating_revenue),
+            cogs: t(x.cogs),
+            opex: t(x.opex),
+            other_exp: t(x.other_exp),
+          },
+    );
   }
   return trailing.map((p, i) => {
     const row = by.get(bucket(i));
@@ -572,7 +609,10 @@ export interface SegmentHealthPolicy {
  * to grade, so the segment carries no health — never a stand-in dot.
  * Exported for unit tests.
  */
-export function gradeSegmentHealth(opMargin: string | null, policy: SegmentHealthPolicy): SegmentRow["health"] {
+export function gradeSegmentHealth(
+  opMargin: string | null,
+  policy: SegmentHealthPolicy,
+): SegmentRow["health"] {
   if (opMargin === null) return null;
   if (cmp(opMargin, policy.target) >= 0) return "good";
   if (cmp(opMargin, mulDecimal(policy.target, policy.warningShare)) >= 0) return "warn";
@@ -600,7 +640,7 @@ async function segmentsBy(
   // dropping lines with no dimension.
   // Keep the date predicate on the line for selectivity; the entry controls
   // posted status and the primary accounting book, just as the headline does.
-  const r = ((await analyticsQuery(sql`
+  const r = await analyticsQuery(sql`
     select coalesce(d.id::text, 'unassigned') as id, coalesce(d.name, 'Unassigned') as name,
       sub.base_currency as func,
       max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
@@ -624,24 +664,45 @@ async function segmentsBy(
     group by 1, 2, 3
     having abs(-sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
         or abs(sum(case when a.type in (${PNL_COST_TYPES_SQL}) and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
-  `)));
+  `);
   const segLegs = r.rows as unknown as HealthSegmentSqlRow[];
   // Current-window legs translate at their latest current date, prior legs
   // at their latest prior date, then merge per segment in presentation.
   const segCtx = await flowRates(orgId, [
     ...segLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_cur ?? to).slice(0, 10) })),
-    ...segLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_prior ?? pTo).slice(0, 10) })),
+    ...segLegs.map((x) => ({
+      func: x.func ?? null,
+      date: String(x.late_prior ?? pTo).slice(0, 10),
+    })),
   ]);
-  const segById = new Map<string, {
-    id: string; name: string; revenue: string; operating_revenue: string;
-    cogs: string; opex: string; prior_revenue: string;
-  }>();
+  const segById = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      revenue: string;
+      operating_revenue: string;
+      cogs: string;
+      opex: string;
+      prior_revenue: string;
+    }
+  >();
   const segRateAt = (func: string | null, date: string) => segCtx.rateAt(func, date);
   for (const x of segLegs) {
     const cur = (v: SqlNumeric) =>
-      translateAmount(String(v ?? 0), x.func ?? null, String(x.late_cur ?? to).slice(0, 10), segRateAt);
+      translateAmount(
+        String(v ?? 0),
+        x.func ?? null,
+        String(x.late_cur ?? to).slice(0, 10),
+        segRateAt,
+      );
     const prior = (v: SqlNumeric) =>
-      translateAmount(String(v ?? 0), x.func ?? null, String(x.late_prior ?? pTo).slice(0, 10), segRateAt);
+      translateAmount(
+        String(v ?? 0),
+        x.func ?? null,
+        String(x.late_prior ?? pTo).slice(0, 10),
+        segRateAt,
+      );
     const prev = segById.get(x.id);
     const merged = {
       id: x.id,
@@ -671,7 +732,8 @@ async function segmentsBy(
       const revPositive = cmp(revenue, "0") > 0;
       const gmPct = revPositive ? amountRatio(grossProfit, revenue) : null;
       const opPct = revPositive ? amountRatio(operatingIncome, revenue) : null;
-      const yoyPct = cmp(priorRev, "0") > 0 ? amountRatio(sum([revenue, neg(priorRev)]), priorRev) : null;
+      const yoyPct =
+        cmp(priorRev, "0") > 0 ? amountRatio(sum([revenue, neg(priorRev)]), priorRev) : null;
       const opMargin = revPositive ? decimalRatio(operatingIncome, revenue) : null;
       const health = gradeSegmentHealth(opMargin, healthPolicy);
       return {
@@ -691,12 +753,17 @@ async function segmentsBy(
 }
 
 /** Top account-level movers vs prior year, split into revenue and cost. */
-async function drivers(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<{ revenue: DriverRow[]; cost: DriverRow[] }> {
+async function drivers(
+  orgId: string,
+  from: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+): Promise<{ revenue: DriverRow[]; cost: DriverRow[] }> {
   // The comparison window is the same window one fiscal year earlier on
   // the organization's own calendar, never calendar −12 months.
   const { from: pFrom, to: pTo } = await priorFiscalWindow(orgId, from, to);
   // Retain the selective line-date predicate while enforcing ledger status/book.
-  const r = ((await analyticsQuery(sql`
+  const r = await analyticsQuery(sql`
     select a.id, a.name, a.type, sub.base_currency as func,
       max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
       max(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.posting_date end)::text as late_prior,
@@ -713,23 +780,39 @@ async function drivers(orgId: string, from: string, to: string, allowed: Readonl
       and a.type in (${PNL_TYPES_SQL})
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by a.id, a.name, a.type, sub.base_currency
-  `)));
+  `);
   const drvLegs = r.rows as unknown as HealthDriverSqlRow[];
   const drvCtx = await flowRates(orgId, [
     ...drvLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_cur ?? to).slice(0, 10) })),
-    ...drvLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_prior ?? pTo).slice(0, 10) })),
+    ...drvLegs.map((x) => ({
+      func: x.func ?? null,
+      date: String(x.late_prior ?? pTo).slice(0, 10),
+    })),
   ]);
-  const drvByAccount = new Map<string, { name: string; type: string; current: string; prior: string }>();
+  const drvByAccount = new Map<
+    string,
+    { name: string; type: string; current: string; prior: string }
+  >();
   const drvRateAt = (func: string | null, date: string) => drvCtx.rateAt(func, date);
   for (const x of drvLegs) {
     const prev = drvByAccount.get(x.id) ?? { name: x.name, type: x.type, current: "0", prior: "0" };
     prev.current = add(
       prev.current,
-      translateAmount(String(x.cur_raw ?? 0), x.func ?? null, String(x.late_cur ?? to).slice(0, 10), drvRateAt),
+      translateAmount(
+        String(x.cur_raw ?? 0),
+        x.func ?? null,
+        String(x.late_cur ?? to).slice(0, 10),
+        drvRateAt,
+      ),
     );
     prev.prior = add(
       prev.prior,
-      translateAmount(String(x.prior_raw ?? 0), x.func ?? null, String(x.late_prior ?? pTo).slice(0, 10), drvRateAt),
+      translateAmount(
+        String(x.prior_raw ?? 0),
+        x.func ?? null,
+        String(x.late_prior ?? pTo).slice(0, 10),
+        drvRateAt,
+      ),
     );
     drvByAccount.set(x.id, prev);
   }
@@ -768,11 +851,16 @@ async function drivers(orgId: string, from: string, to: string, allowed: Readonl
  * invoice lines, so the GL-native equivalent is revenue by income/service
  * account — each revenue account is the "line item". Current vs prior year.
  */
-async function itemAnalysis(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<HealthData["items"]> {
+async function itemAnalysis(
+  orgId: string,
+  from: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+): Promise<HealthData["items"]> {
   // The comparison window is the same window one fiscal year earlier on
   // the organization's own calendar, never calendar −12 months.
   const { from: pFrom, to: pTo } = await priorFiscalWindow(orgId, from, to);
-  const r = ((await analyticsQuery(sql`
+  const r = await analyticsQuery(sql`
     select a.id, a.name, sub.base_currency as func,
       max(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.posting_date end)::text as late_cur,
       max(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.posting_date end)::text as late_prior,
@@ -789,11 +877,14 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
       and a.type in ('income','income_other')
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by a.id, a.name, sub.base_currency
-  `)));
+  `);
   const itemLegs = r.rows as unknown as HealthItemSqlRow[];
   const itemCtx = await flowRates(orgId, [
     ...itemLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_cur ?? to).slice(0, 10) })),
-    ...itemLegs.map((x) => ({ func: x.func ?? null, date: String(x.late_prior ?? pTo).slice(0, 10) })),
+    ...itemLegs.map((x) => ({
+      func: x.func ?? null,
+      date: String(x.late_prior ?? pTo).slice(0, 10),
+    })),
   ]);
   const itemByAccount = new Map<string, { name: string; current: string; prior: string }>();
   const itemRateAt = (func: string | null, date: string) => itemCtx.rateAt(func, date);
@@ -801,18 +892,28 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
     const prev = itemByAccount.get(x.id) ?? { name: x.name, current: "0", prior: "0" };
     prev.current = add(
       prev.current,
-      translateAmount(String(x.current ?? 0), x.func ?? null, String(x.late_cur ?? to).slice(0, 10), itemRateAt),
+      translateAmount(
+        String(x.current ?? 0),
+        x.func ?? null,
+        String(x.late_cur ?? to).slice(0, 10),
+        itemRateAt,
+      ),
     );
     prev.prior = add(
       prev.prior,
-      translateAmount(String(x.prior ?? 0), x.func ?? null, String(x.late_prior ?? pTo).slice(0, 10), itemRateAt),
+      translateAmount(
+        String(x.prior ?? 0),
+        x.func ?? null,
+        String(x.late_prior ?? pTo).slice(0, 10),
+        itemRateAt,
+      ),
     );
     itemByAccount.set(x.id, prev);
   }
   const totalChangeAbs = sum(
     [...itemByAccount.values()].map((x) => abs(sum([x.current, neg(x.prior)]))),
   );
-  const rows = ([...itemByAccount.entries()])
+  const rows = [...itemByAccount.entries()]
     .map(([id, v]): ItemRow => {
       const current = v.current;
       const prior = v.prior;
@@ -829,8 +930,14 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
     })
     .filter((x) => cmp(x.current, "0") !== 0 || cmp(x.prior, "0") !== 0)
     .sort((a, b) => cmp(b.current, a.current));
-  const gainers = [...rows].filter((x) => cmp(x.change, "0") > 0).sort((a, b) => cmp(b.change, a.change)).slice(0, 5);
-  const decliners = [...rows].filter((x) => cmp(x.change, "0") < 0).sort((a, b) => cmp(a.change, b.change)).slice(0, 5);
+  const gainers = [...rows]
+    .filter((x) => cmp(x.change, "0") > 0)
+    .sort((a, b) => cmp(b.change, a.change))
+    .slice(0, 5);
+  const decliners = [...rows]
+    .filter((x) => cmp(x.change, "0") < 0)
+    .sort((a, b) => cmp(a.change, b.change))
+    .slice(0, 5);
   return {
     rows,
     gainers,
@@ -845,7 +952,12 @@ function buildPnlSummary(
   prior: HealthPnlFigures,
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): PnlLine[] {
-  const line = (key: Parameters<HealthStrings["pnlLine"]>[0], current: string, priorV: string, strong?: boolean): PnlLine => ({
+  const line = (
+    key: Parameters<HealthStrings["pnlLine"]>[0],
+    current: string,
+    priorV: string,
+    strong?: boolean,
+  ): PnlLine => ({
     key,
     label: strings.pnlLine(key),
     current,
@@ -865,14 +977,30 @@ function buildPnlSummary(
   ];
 }
 
-function buildMarginFlow(f: HealthFigures, strings: HealthStrings = healthStrings(englishCatalogMessage, "en")): MarginStage[] {
+function buildMarginFlow(
+  f: HealthFigures,
+  strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
+): MarginStage[] {
   // With no revenue a share of revenue does not exist — never divide by a stand-in.
-  const share = (n: string): string | null => (cmp(f.revenue, "0") > 0 ? decimalRatio(n, f.revenue) : null);
-  const stage = (key: Parameters<HealthStrings["marginStage"]>[0], amount: string, kind: MarginStage["kind"]): MarginStage =>
-    ({ key, label: strings.marginStage(key), amount, pctOfRevenue: share(amount), kind });
+  const share = (n: string): string | null =>
+    cmp(f.revenue, "0") > 0 ? decimalRatio(n, f.revenue) : null;
+  const stage = (
+    key: Parameters<HealthStrings["marginStage"]>[0],
+    amount: string,
+    kind: MarginStage["kind"],
+  ): MarginStage => ({
+    key,
+    label: strings.marginStage(key),
+    amount,
+    pctOfRevenue: share(amount),
+    kind,
+  });
   // Operating income here is the engine's: income tax booked to an operating
   // account is excluded, so the tax line sits with the non-operating items.
-  const reconcilingTax = add(f.netIncome, neg(add(add(f.operatingIncome, f.otherIncome), neg(f.otherExpense))));
+  const reconcilingTax = add(
+    f.netIncome,
+    neg(add(add(f.operatingIncome, f.otherIncome), neg(f.otherExpense))),
+  );
   return [
     stage("revenue", f.revenue, "start"),
     stage("cogs", neg(f.cogs), "deduct"),
@@ -925,43 +1053,70 @@ function buildInsights(
   const out: Insight[] = [];
   const f = base.figures;
   const T = base.benchmarks.targets;
-  const ratio = (id: string) => Object.values(base.ratios).flat().find((r) => r.id === id)?.value ?? null;
+  const ratio = (id: string) =>
+    Object.values(base.ratios)
+      .flat()
+      .find((r) => r.id === id)?.value ?? null;
   // Percentage points rendered in the request locale for the finding sentences.
   const points = (fraction: string) =>
-    new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 1 }).format(mulDecimal(fraction, "100") as unknown as number);
-  const below = (value: string, target: string, share: string) => cmp(value, mulDecimal(target, share)) < 0;
+    new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 1 }).format(
+      mulDecimal(fraction, "100") as unknown as number,
+    );
+  const below = (value: string, target: string, share: string) =>
+    cmp(value, mulDecimal(target, share)) < 0;
 
   const gm = ratio("gross_margin");
   const opm = ratio("operating_margin");
   if (cmp(f.operatingIncome, "0") < 0) out.push(strings.operatingLoss(money(f.operatingIncome)));
   if (gm !== null && T.gross_margin !== null) {
-    if (below(gm, T.gross_margin, policy.critical)) out.push(strings.gmCritical(points(gm), points(T.gross_margin)));
-    else if (below(gm, T.gross_margin, policy.warning)) out.push(strings.gmWellBelow(points(gm), points(T.gross_margin)));
-    else if (cmp(gm, T.gross_margin) < 0) out.push(strings.gmBelow(points(gm), points(T.gross_margin)));
+    if (below(gm, T.gross_margin, policy.critical))
+      out.push(strings.gmCritical(points(gm), points(T.gross_margin)));
+    else if (below(gm, T.gross_margin, policy.warning))
+      out.push(strings.gmWellBelow(points(gm), points(T.gross_margin)));
+    else if (cmp(gm, T.gross_margin) < 0)
+      out.push(strings.gmBelow(points(gm), points(T.gross_margin)));
   }
   if (opm !== null && T.operating_margin !== null && cmp(opm, "0") >= 0) {
-    if (below(opm, T.operating_margin, policy.critical)) out.push(strings.opmCritical(points(opm), points(T.operating_margin)));
-    else if (cmp(opm, T.operating_margin) < 0) out.push(strings.opmBelow(points(opm), points(T.operating_margin)));
+    if (below(opm, T.operating_margin, policy.critical))
+      out.push(strings.opmCritical(points(opm), points(T.operating_margin)));
+    else if (cmp(opm, T.operating_margin) < 0)
+      out.push(strings.opmBelow(points(opm), points(T.operating_margin)));
   }
   if (cmp(f.netIncome, "0") < 0) out.push(strings.netLoss(money(f.netIncome)));
   if (f.revenueGrowth !== null) {
-    if (cmp(f.revenueGrowth, neg(policy.revenueDecline)) < 0) out.push(strings.revFalling(points(abs(f.revenueGrowth))));
-    else if (cmp(f.revenueGrowth, "0") < 0) out.push(strings.revDeclined(points(abs(f.revenueGrowth))));
+    if (cmp(f.revenueGrowth, neg(policy.revenueDecline)) < 0)
+      out.push(strings.revFalling(points(abs(f.revenueGrowth))));
+    else if (cmp(f.revenueGrowth, "0") < 0)
+      out.push(strings.revDeclined(points(abs(f.revenueGrowth))));
   }
   // Trend rules over the trailing three periods: revenue slope and margin
   // compression. On non-monthly calendars the series holds fiscal periods,
   // never calendar months — the rule counts periods either way.
   const recent = monthly
-    .filter((m): m is MonthPoint & { grossMarginPct: number } => cmp(m.revenue, "0") > 0 && m.grossMarginPct !== null)
+    .filter(
+      (m): m is MonthPoint & { grossMarginPct: number } =>
+        cmp(m.revenue, "0") > 0 && m.grossMarginPct !== null,
+    )
     .slice(-3);
   if (recent.length === 3) {
     const [a, b, c] = recent;
     const floor = mulDecimal(a!.revenue, add("1", neg(policy.revenueTrend)));
     if (cmp(c!.revenue, floor) < 0) {
-      out.push(strings.revTrendingDown(points(decimalRatio(add(a!.revenue, neg(c!.revenue)), abs(a!.revenue))!)));
+      out.push(
+        strings.revTrendingDown(
+          points(decimalRatio(add(a!.revenue, neg(c!.revenue)), abs(a!.revenue))!),
+        ),
+      );
     }
-    if (a!.grossMarginPct - c!.grossMarginPct > policy.marginCompression && b!.grossMarginPct <= a!.grossMarginPct)
-      out.push(strings.marginCompression(points(String((a!.grossMarginPct - c!.grossMarginPct).toFixed(4)))));
+    if (
+      a!.grossMarginPct - c!.grossMarginPct > policy.marginCompression &&
+      b!.grossMarginPct <= a!.grossMarginPct
+    )
+      out.push(
+        strings.marginCompression(
+          points(String((a!.grossMarginPct - c!.grossMarginPct).toFixed(4))),
+        ),
+      );
   }
   // Safety margin: how far the period's revenue sits above its breakeven.
   if (f.breakevenRevenue !== null && cmp(f.revenue, "0") > 0) {
@@ -973,18 +1128,43 @@ function buildInsights(
   if (opexShare !== null && T.opex_ratio !== null && cmp(opexShare, T.opex_ratio) > 0)
     out.push(strings.heavyOverhead(points(opexShare)));
 
-  if (gm !== null && T.gross_margin !== null && cmp(gm, T.gross_margin) >= 0) out.push(strings.healthyGM);
-  if (gm !== null && opm !== null && T.gross_margin !== null && T.operating_margin !== null
-    && cmp(opm, T.operating_margin) < 0 && !below(gm, T.gross_margin, policy.warning)) out.push(strings.trimOpex);
-  if (f.operatingLeverage !== null && T.operating_leverage !== null && cmp(f.operatingLeverage, T.operating_leverage) >= 0)
-    out.push(strings.posLeverage(new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 1 }).format(f.operatingLeverage as unknown as number)));
+  if (gm !== null && T.gross_margin !== null && cmp(gm, T.gross_margin) >= 0)
+    out.push(strings.healthyGM);
+  if (
+    gm !== null &&
+    opm !== null &&
+    T.gross_margin !== null &&
+    T.operating_margin !== null &&
+    cmp(opm, T.operating_margin) < 0 &&
+    !below(gm, T.gross_margin, policy.warning)
+  )
+    out.push(strings.trimOpex);
+  if (
+    f.operatingLeverage !== null &&
+    T.operating_leverage !== null &&
+    cmp(f.operatingLeverage, T.operating_leverage) >= 0
+  )
+    out.push(
+      strings.posLeverage(
+        new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 1 }).format(
+          f.operatingLeverage as unknown as number,
+        ),
+      ),
+    );
   if (f.rule40 !== null && T.rule_of_40 !== null && cmp(f.rule40, T.rule_of_40) >= 0)
-    out.push(strings.rule40(new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 0 }).format(f.rule40 as unknown as number)));
+    out.push(
+      strings.rule40(
+        new Intl.NumberFormat(strings.locale, { maximumFractionDigits: 0 }).format(
+          f.rule40 as unknown as number,
+        ),
+      ),
+    );
 
   // Anomalies: periods deviating beyond the configured number of standard
   // deviations. Dimensionless statistics read the bounded display projection.
   const withRev = monthly.filter(
-    (m): m is MonthPoint & { grossMarginPct: number } => cmp(m.revenue, "0") > 0 && m.grossMarginPct !== null,
+    (m): m is MonthPoint & { grossMarginPct: number } =>
+      cmp(m.revenue, "0") > 0 && m.grossMarginPct !== null,
   );
   if (withRev.length >= 4) {
     const margins = withRev.map((m) => m.grossMarginPct);
@@ -992,7 +1172,13 @@ function buildInsights(
     const sd = Math.sqrt(margins.reduce((a, x) => a + (x - mean) ** 2, 0) / margins.length);
     for (const m of withRev) {
       if (sd > 0 && Math.abs(m.grossMarginPct - mean) > policy.anomalySigma * sd) {
-        out.push(strings.marginOutlier(m.label, points(m.grossMarginPct.toFixed(4)), points(mean.toFixed(4))));
+        out.push(
+          strings.marginOutlier(
+            m.label,
+            points(m.grossMarginPct.toFixed(4)),
+            points(mean.toFixed(4)),
+          ),
+        );
       }
     }
     const revs = withRev.map((m) => insightNumber(m.revenue));
@@ -1033,8 +1219,8 @@ export async function healthData(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Promise<HealthData> {
-  const { money: formatMoney } = await getMoneyFormatter(orgId)
-  const money = (value: string) => formatMoney(value, { maximumFractionDigits: 0 })
+  const { money: formatMoney } = await getMoneyFormatter(orgId);
+  const money = (value: string) => formatMoney(value, { maximumFractionDigits: 0 });
   const { from, to } = period;
 
   const budgetsOn = await isFeatureEnabled(orgId, "budgets");
@@ -1043,19 +1229,66 @@ export async function healthData(
   // keeps its own copy. The forecast parameters and the insight policy read
   // their own slices beside it.
   const configured = await healthBands(orgId);
-  const emptyBudget = (tolerance: BudgetTolerance): BudgetVariance =>
-    ({ scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance });
+  const emptyBudget = (tolerance: BudgetTolerance): BudgetVariance => ({
+    scenario: null,
+    rows: [],
+    totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" },
+    tolerance,
+  });
 
   const [base, monthly, forecast, dept, cls, loc, drv, items, budget, policy] = await Promise.all([
     financialHealth(period, orgId, allowedSubsidiaryIds, strings),
     monthlySeries(orgId, to, allowedSubsidiaryIds, 12, strings),
     forecastParams(orgId, to, strings.locale),
-    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "department_id", "departments", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
-    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "class_id", "classes", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
-    analyticsSection('financial-health', ['segments']) ? segmentsBy(orgId, "location_id", "locations", from, to, allowedSubsidiaryIds, configured.segment, strings) : Promise.resolve([]),
-    analyticsSection('financial-health', ['drivers']) ? drivers(orgId, from, to, allowedSubsidiaryIds) : Promise.resolve({ revenue: [], cost: [] }),
-    analyticsSection('financial-health', ['items']) ? itemAnalysis(orgId, from, to, allowedSubsidiaryIds) : Promise.resolve({ rows: [], gainers: [], decliners: [], totalCurrent: '0', totalChange: '0' }),
-    budgetsOn && analyticsSection('financial-health', ['budget'])
+    analyticsSection("financial-health", ["segments"])
+      ? segmentsBy(
+          orgId,
+          "department_id",
+          "departments",
+          from,
+          to,
+          allowedSubsidiaryIds,
+          configured.segment,
+          strings,
+        )
+      : Promise.resolve([]),
+    analyticsSection("financial-health", ["segments"])
+      ? segmentsBy(
+          orgId,
+          "class_id",
+          "classes",
+          from,
+          to,
+          allowedSubsidiaryIds,
+          configured.segment,
+          strings,
+        )
+      : Promise.resolve([]),
+    analyticsSection("financial-health", ["segments"])
+      ? segmentsBy(
+          orgId,
+          "location_id",
+          "locations",
+          from,
+          to,
+          allowedSubsidiaryIds,
+          configured.segment,
+          strings,
+        )
+      : Promise.resolve([]),
+    analyticsSection("financial-health", ["drivers"])
+      ? drivers(orgId, from, to, allowedSubsidiaryIds)
+      : Promise.resolve({ revenue: [], cost: [] }),
+    analyticsSection("financial-health", ["items"])
+      ? itemAnalysis(orgId, from, to, allowedSubsidiaryIds)
+      : Promise.resolve({
+          rows: [],
+          gainers: [],
+          decliners: [],
+          totalCurrent: "0",
+          totalChange: "0",
+        }),
+    budgetsOn && analyticsSection("financial-health", ["budget"])
       ? budgetVariance(orgId, from, to, allowedSubsidiaryIds, configured.tolerance)
       : Promise.resolve(emptyBudget(configured.tolerance)),
     insightPolicy(orgId),
@@ -1064,7 +1297,9 @@ export async function healthData(
   return {
     ...base,
     monthly,
-    pnlSummary: analyticsSection('financial-health', ['overview', 'margin']) ? buildPnlSummary(base.figures, base.priorFigures, strings) : [],
+    pnlSummary: analyticsSection("financial-health", ["overview", "margin"])
+      ? buildPnlSummary(base.figures, base.priorFigures, strings)
+      : [],
     marginFlow: buildMarginFlow(base.figures, strings),
     segments: { department: dept, class: cls, location: loc },
     drivers: drv,
@@ -1096,7 +1331,10 @@ export function budgetLineStatus(
   budget: string,
   tolerance: BudgetTolerance,
 ): BudgetRow["status"] {
-  const favorable = type === "income" || type === "income_other" ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
+  const favorable =
+    type === "income" || type === "income_other"
+      ? cmp(variance, "0") >= 0
+      : cmp(variance, "0") <= 0;
   if (isZero(budget)) return "no-budget";
   if (favorable) return "on-track";
   const scaled = mulDecimal(abs(variance), "100");
@@ -1116,7 +1354,10 @@ async function fiscalPeriodsPerYear(orgId: string, asOf: string): Promise<number
   // The year always comes from a declared period, so zero is unreachable —
   // but falling back to 12 would silently price a non-monthly calendar as
   // monthly. Refuse by name instead.
-  if (count === 0) throw new Error(`fiscal calendar declares no periods for fiscal year ${year} — declare the year's periods in the fiscal calendar`);
+  if (count === 0)
+    throw new Error(
+      `fiscal calendar declares no periods for fiscal year ${year} — declare the year's periods in the fiscal calendar`,
+    );
   return count;
 }
 
@@ -1143,7 +1384,12 @@ export function forecastAdjustmentValue(code: string): number {
  * non-monthly calendar declares no future periods, which the tab refuses
  * by name instead of labelling buckets it cannot reconcile.
  */
-async function upcomingFiscalPeriodNames(orgId: string, asOf: string, need: number, locale: string): Promise<string[] | null> {
+async function upcomingFiscalPeriodNames(
+  orgId: string,
+  asOf: string,
+  need: number,
+  locale: string,
+): Promise<string[] | null> {
   const declared = await defaultFiscalCalendarPeriods(orgId);
   if (!declared || declared.cadence === "monthly" || declared.periods.length === 0) return null;
   return declared.periods
@@ -1154,7 +1400,11 @@ async function upcomingFiscalPeriodNames(orgId: string, asOf: string, need: numb
 }
 
 /** The forecast model as configured, with offered choices from the threshold spec. */
-async function forecastParams(orgId: string, asOf: string, locale: string): Promise<HealthForecastParams> {
+async function forecastParams(
+  orgId: string,
+  asOf: string,
+  locale: string,
+): Promise<HealthForecastParams> {
   const [c, periodsPerYear] = await Promise.all([
     analyticsConfig(orgId, "financialHealth"),
     fiscalPeriodsPerYear(orgId, asOf),
@@ -1172,7 +1422,10 @@ async function forecastParams(orgId: string, asOf: string, locale: string): Prom
     seasonalities: codes("forecastSeasonality"),
     horizons,
     confidences: codes("forecastConfidence").map(Number),
-    adjustments: codes("forecastAdjustment").map((code) => ({ code, value: forecastAdjustmentValue(code) })),
+    adjustments: codes("forecastAdjustment").map((code) => ({
+      code,
+      value: forecastAdjustmentValue(code),
+    })),
     defaultAdjustment: String(c.forecastAdjustment),
     futurePeriodNames: await upcomingFiscalPeriodNames(orgId, asOf, Math.max(...horizons), locale),
     model: {
@@ -1188,16 +1441,24 @@ async function forecastParams(orgId: string, asOf: string, locale: string): Prom
 }
 
 /** The organization's configured budget tolerance, HHI and scenario bands. */
-async function healthBands(orgId: string): Promise<{ tolerance: BudgetTolerance; bands: HealthBands; segment: SegmentHealthPolicy }> {
+async function healthBands(
+  orgId: string,
+): Promise<{ tolerance: BudgetTolerance; bands: HealthBands; segment: SegmentHealthPolicy }> {
   const c = await analyticsConfig(orgId, "financialHealth");
   const fraction = (pct: number) => decimalRatio(String(pct), "100")!;
   return {
     tolerance: { onTrack: c.budgetOnTrackPercent, watch: c.budgetWatchPercent },
     bands: {
       hhi: { warning: c.segmentHhiWarning, critical: c.segmentHhiCritical },
-      scenario: { safety: fraction(c.breakevenSafetyPercent), comfort: fraction(c.breakevenComfortPercent) },
+      scenario: {
+        safety: fraction(c.breakevenSafetyPercent),
+        comfort: fraction(c.breakevenComfortPercent),
+      },
     },
-    segment: { target: fraction(c.operatingMarginTarget), warningShare: fraction(c.insightWarningPercent) },
+    segment: {
+      target: fraction(c.operatingMarginTarget),
+      warningShare: fraction(c.insightWarningPercent),
+    },
   };
 }
 
@@ -1206,7 +1467,10 @@ async function healthBands(orgId: string): Promise<{ tolerance: BudgetTolerance;
  * stays an exact string and its share of the budget an exact fraction —
  * never a float the status bands would misread at an edge.
  */
-export function exactBudgetVariance(budget: string, actual: string): { variance: string; variancePct: string | null } {
+export function exactBudgetVariance(
+  budget: string,
+  actual: string,
+): { variance: string; variancePct: string | null } {
   const variance = add(actual, neg(budget));
   if (isZero(budget)) return { variance, variancePct: null };
   const variancePct = decimalRatio(variance, abs(budget));
@@ -1246,12 +1510,18 @@ export async function budgetVariance(
     limit 1
   `)) as unknown as { rows: BudgetScenarioSqlRow[] };
   const s = scen.rows[0];
-  if (!s) return { scenario: null, rows: [], totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" }, tolerance: bands };
+  if (!s)
+    return {
+      scenario: null,
+      rows: [],
+      totals: { budget: "0.0000", actual: "0.0000", variance: "0.0000" },
+      tolerance: bands,
+    };
 
   // Both sides arrive per (account, functional) and translate to
   // presentation before the variance compares them — the same second leg as
   // the budget-vs-actual report (see budget-report.ts).
-  const r = ((await analyticsQuery(sql`
+  const r = await analyticsQuery(sql`
     with b as (
       select bl.account_id, sub.base_currency as func,
         max(p.ends_on)::text as late,
@@ -1285,9 +1555,12 @@ export async function budgetVariance(
     left join a on a.account_id = acc.id
     where acc.org_id = ${orgId} and acc.type in (${PNL_TYPES_SQL})
       and (b.budget is not null or abs(coalesce(a.actual, 0)) > 0)
-  `)));
+  `);
   const bvaRows = r.rows as unknown as (BudgetAccountSqlRow & {
-    b_func: string | null; b_late: string | null; a_func: string | null; a_late: string | null;
+    b_func: string | null;
+    b_late: string | null;
+    a_func: string | null;
+    a_late: string | null;
   })[];
   // The account × side join fans legs out one row per (account, side,
   // functional); translate each side at its own latest date, then merge.
@@ -1295,7 +1568,10 @@ export async function budgetVariance(
     ...bvaRows.map((x) => ({ func: x.a_func ?? null, date: String(x.a_late ?? to).slice(0, 10) })),
     ...bvaRows.map((x) => ({ func: x.b_func ?? null, date: String(x.b_late ?? to).slice(0, 10) })),
   ]);
-  const bvaByAccount = new Map<string, { name: string; type: string; budget: string; actual: string }>();
+  const bvaByAccount = new Map<
+    string,
+    { name: string; type: string; budget: string; actual: string }
+  >();
   // The account × side join repeats each side's leg once per leg on the
   // other side; each CTE already yields one row per (account, functional),
   // so an identical (account, side, func, date, amount) repeat is join
@@ -1310,7 +1586,12 @@ export async function budgetVariance(
       seenLeg.add(aKey);
       prev.actual = add(
         prev.actual,
-        translateAmount(String(x.actual ?? 0), x.a_func ?? null, String(x.a_late ?? to).slice(0, 10), bvaRateAt),
+        translateAmount(
+          String(x.actual ?? 0),
+          x.a_func ?? null,
+          String(x.a_late ?? to).slice(0, 10),
+          bvaRateAt,
+        ),
       );
     }
     const bKey = `${x.id}|b|${x.b_func}|${x.b_late}|${x.budget}`;
@@ -1318,7 +1599,12 @@ export async function budgetVariance(
       seenLeg.add(bKey);
       prev.budget = add(
         prev.budget,
-        translateAmount(String(x.budget ?? 0), x.b_func ?? null, String(x.b_late ?? to).slice(0, 10), bvaRateAt),
+        translateAmount(
+          String(x.budget ?? 0),
+          x.b_func ?? null,
+          String(x.b_late ?? to).slice(0, 10),
+          bvaRateAt,
+        ),
       );
     }
     bvaByAccount.set(x.id, prev);
@@ -1334,7 +1620,17 @@ export async function budgetVariance(
       const { variance, variancePct } = exactBudgetVariance(budget, actual);
       const favorable = isIncome(v.type) ? cmp(variance, "0") >= 0 : cmp(variance, "0") <= 0;
       const status = budgetLineStatus(v.type, variance, budget, bands);
-      return { accountId, name: v.name, type: v.type, budget, actual, variance, variancePct, favorable, status };
+      return {
+        accountId,
+        name: v.name,
+        type: v.type,
+        budget,
+        actual,
+        variance,
+        variancePct,
+        favorable,
+        status,
+      };
     })
     .sort((a, b) => cmp(abs(b.variance), abs(a.variance)));
   return {

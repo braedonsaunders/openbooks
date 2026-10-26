@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import type { ReactNode } from 'react'
-import { can, getAuthz } from '../../lib/authz'
-import { RecordListView } from '../record-list-view'
-import type { NativeListDrawerData } from '../../lib/list/drawer-routes'
+import type { ReactNode } from "react";
+import { can, getAuthz } from "../../lib/authz";
+import { RecordListView } from "../record-list-view";
+import type { NativeListDrawerData } from "../../lib/list/drawer-routes";
 
 /**
  * Slot for the universal record list — the documents twin of EntityListSlot.
@@ -28,24 +28,24 @@ export async function RecordListSlot({
   emptyDescription,
   emptyAction,
 }: {
-  recordType: string
-  basePath: string
-  sp: Record<string, string | string[] | undefined>
-  drawer?: ReactNode
-  nativeDrawer?: NativeListDrawerData | null
-  emptyTitle?: string
-  emptyDescription?: string
-  emptyAction?: ReactNode
+  recordType: string;
+  basePath: string;
+  sp: Record<string, string | string[] | undefined>;
+  drawer?: ReactNode;
+  nativeDrawer?: NativeListDrawerData | null;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  emptyAction?: ReactNode;
 }) {
-  const authz = await getAuthz()
-  if (!authz) return null
+  const authz = await getAuthz();
+  if (!authz) return null;
   return (
     <RecordListView
       recordType={recordType}
       basePath={basePath}
       orgId={authz.user.orgId}
       userId={authz.user.id}
-      canManage={can(authz, 'admin.customization.manage')}
+      canManage={can(authz, "admin.customization.manage")}
       sp={sp}
       drawer={drawer}
       nativeDrawer={nativeDrawer}
@@ -53,5 +53,5 @@ export async function RecordListSlot({
       emptyDescription={emptyDescription}
       emptyAction={emptyAction}
     />
-  )
+  );
 }

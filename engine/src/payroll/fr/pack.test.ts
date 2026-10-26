@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { certificateDeclarationProblem } from "../certificates.ts";
-import { EMPTY_EMPLOYER_LEVY_FACTORS, type PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import {
+  EMPTY_EMPLOYER_LEVY_FACTORS,
+  type PayrollStatutoryComputeContext,
+} from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { FR_PAYROLL_PACK } from "./pack.ts";
 import {
@@ -11,17 +14,18 @@ import {
 } from "../packs.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 import { frPasEditionForVersement } from "./tables-2026.ts";
-import {
-  jurisdictionKey,
-  payrollJurisdictionDeclared,
-} from "../packs.ts";
+import { jurisdictionKey, payrollJurisdictionDeclared } from "../packs.ts";
 import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
 /** Minimal adapter context: no certificates answered, June versement. */
 function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
   return {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     tx: null as never,
     orgId: "org",
     documentId: "doc",
@@ -84,7 +88,21 @@ test("FR statutory slots are named, assessed, and routable", () => {
   );
   // PAS moves with pre-tax deductions; everything else is rate × salary.
   assert.equal(bySystemKey.get("pas|deduction")?.assessedOn, "taxable_income");
-  for (const key of ["vieillesse|deduction", "csg|deduction", "arrco|deduction", "ceg|deduction", "cet|deduction", "atmp|employer_contribution", "versement_mobilite_er|employer_contribution", "vieillesse_er|employer_contribution", "ags_er|employer_contribution", "cdn_er|employer_contribution", "arrco|employer_contribution", "ceg|employer_contribution", "cet|employer_contribution"]) {
+  for (const key of [
+    "vieillesse|deduction",
+    "csg|deduction",
+    "arrco|deduction",
+    "ceg|deduction",
+    "cet|deduction",
+    "atmp|employer_contribution",
+    "versement_mobilite_er|employer_contribution",
+    "vieillesse_er|employer_contribution",
+    "ags_er|employer_contribution",
+    "cdn_er|employer_contribution",
+    "arrco|employer_contribution",
+    "ceg|employer_contribution",
+    "cet|employer_contribution",
+  ]) {
     assert.equal(bySystemKey.get(key)?.assessedOn, "earnings", key);
   }
   assert.equal(bySystemKey.get("ceg|deduction")?.remittance, "external");
@@ -154,7 +172,10 @@ test("FR 2026 is transcribed, with both edition boundaries and citations", () =>
   assert.equal(published.length, 2);
   assert.deepEqual(
     published.map((edition) => [edition.year, edition.effectiveFrom]),
-    [[2026, "2026-01-01"], [2026, "2026-05-01"]],
+    [
+      [2026, "2026-01-01"],
+      [2026, "2026-05-01"],
+    ],
   );
   for (const edition of published) {
     assert.match(edition.citation, /BOI-BAREME-000037/);
@@ -196,10 +217,7 @@ test("FR edition resolution: May-2025 grids Jan–Apr, May-2026 grids from May",
 
 test("FR computeStatutory refuses untranscribed years and undeclared domiciles", async () => {
   // No domicile may fall through to grille I: the adapter refuses first.
-  await assert.rejects(
-    () => FR_PAYROLL_PACK.computeStatutory(makeCtx(2026)),
-    /domicile/,
-  );
+  await assert.rejects(() => FR_PAYROLL_PACK.computeStatutory(makeCtx(2026)), /domicile/);
   await assert.rejects(
     () => FR_PAYROLL_PACK.computeStatutory(makeCtx(2027)),
     /has not been transcribed/,
@@ -224,10 +242,11 @@ test("FR employment calendars: 11 national holidays, 13 in Alsace-Moselle", () =
   const byKey = new Map(FR_PAYROLL_PACK.jurisdictions.map((j) => [j.key, j]));
   assert.equal(byKey.get("FR-FR")?.holidays.length, 11);
   assert.equal(byKey.get("FR-AM")?.holidays.length, 13);
-  assert.ok(
-    byKey.get("FR-AM")?.holidays.some((h) => h.key === "fr_good_friday"),
+  assert.ok(byKey.get("FR-AM")?.holidays.some((h) => h.key === "fr_good_friday"));
+  assert.equal(
+    FR_PAYROLL_PACK.jurisdictions.every((j) => j.holidayPay === null),
+    true,
   );
-  assert.equal(FR_PAYROLL_PACK.jurisdictions.every((j) => j.holidayPay === null), true);
 });
 
 test("FR profile jurisdiction resolves to a declared employment calendar", () => {

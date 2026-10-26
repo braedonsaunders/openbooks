@@ -38,21 +38,14 @@
  * is already read through the pack registry by generic code.
  */
 
-import type {
-  PayrollCountryPack,
-  PayrollStatutorySlot,
-} from "../pack-types.ts";
+import type { PayrollCountryPack, PayrollStatutorySlot } from "../pack-types.ts";
 import { GB_PACK_RATES, GB_TAX_YEARS } from "./rates.ts";
 import { computeGbStatutory, GB_FACTOR_LABELS } from "./compute-statutory.ts";
 import { GB_EMPLOYER_FACTS } from "./employer-facts.ts";
 import { gbEmployerAggregateLevies } from "./employer-levies.ts";
 import { gbPackFilings } from "./filings.ts";
 import { GB_EMPLOYEE_FACTS } from "./employee-facts.ts";
-import {
-  GB_CERTIFICATES,
-  GB_REGIONS,
-  GB_WITHHOLDING,
-} from "./jurisdictions.ts";
+import { GB_CERTIFICATES, GB_REGIONS, GB_WITHHOLDING } from "./jurisdictions.ts";
 
 /** The GB pack's registry key, once `PayrollCountry` opens to it. */
 const GB_COUNTRY_CODE = "GB" as const;
@@ -216,7 +209,8 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
     example: "QQ 12 34 56 C",
     requiredForPayroll: true,
     neededFor: "RTI",
-    citation: "HMRC NIM39110: 'A NINO is made up of 2 letters, 6 numbers and a final letter, which is always A, B, C, or D'",
+    citation:
+      "HMRC NIM39110: 'A NINO is made up of 2 letters, 6 numbers and a final letter, which is always A, B, C, or D'",
     numericEntry: false,
   },
   // 2024/25, 2025/26 and 2026/27 rUK + SCT editions transcribed
@@ -239,9 +233,9 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   contributoryBases: {
     pensionable: "Class 1 National Insurance-able earnings (primary and secondary)",
     insurable:
-      "unused by the GB pack: employee and employer Class 1 NIC plus student-loan and "
-      + "postgraduate-loan deductions use the Class 1 NIC-able earnings basis named under "
-      + "pensionable",
+      "unused by the GB pack: employee and employer Class 1 NIC plus student-loan and " +
+      "postgraduate-loan deductions use the Class 1 NIC-able earnings basis named under " +
+      "pensionable",
   },
   // PAYE gives employee-paid union dues no T4127-U1-style deduction from
   // taxable pay.

@@ -3,7 +3,13 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg, grantScratchPermissions, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  grantScratchPermissions,
+  seedFlowActors,
+  seedPostingAccount,
+} from "../testing/fixtures.ts";
 import { AssetRefusal } from "./asset-refusal.ts";
 import {
   attachAssetComponent,
@@ -34,9 +40,24 @@ async function setup(org: Org) {
         coalesce(settings->'features', '{}'::jsonb) || '{"assetComponents": true}'::jsonb)
        where id = ${org.orgId}`);
     const vehicles = await seedPostingAccount(org.orgId, "1620", "Vehicles", "asset_fixed");
-    const accumulated = await seedPostingAccount(org.orgId, "1629", "Accumulated depreciation — vehicles", "asset_fixed");
-    const depreciation = await seedPostingAccount(org.orgId, "6120", "Depreciation — vehicles", "expense");
-    const gainLoss = await seedPostingAccount(org.orgId, "7100", "Gain or loss on disposal", "expense_other");
+    const accumulated = await seedPostingAccount(
+      org.orgId,
+      "1629",
+      "Accumulated depreciation — vehicles",
+      "asset_fixed",
+    );
+    const depreciation = await seedPostingAccount(
+      org.orgId,
+      "6120",
+      "Depreciation — vehicles",
+      "expense",
+    );
+    const gainLoss = await seedPostingAccount(
+      org.orgId,
+      "7100",
+      "Gain or loss on disposal",
+      "expense_other",
+    );
     const categoryId = randomUUID();
     await db.execute(sql`
       insert into asset_categories
@@ -69,36 +90,97 @@ test(
       const truck = await asset("TRUCK", "60000");
       const engine = await asset("ENGINE", "15000");
       const crane = await asset("CRANE", "25000");
-      await attachAssetComponent(org.orgId, { parentAssetId: truck, componentAssetId: engine, actorId: actors.adminId });
-      await attachAssetComponent(org.orgId, { parentAssetId: truck, componentAssetId: engine, actorId: actors.adminId });
-      await refusedWith("component_self", () => attachAssetComponent(org.orgId, { parentAssetId: crane, componentAssetId: crane, actorId: actors.adminId }));
-      await refusedWith("component_cycle", () => attachAssetComponent(org.orgId, { parentAssetId: engine, componentAssetId: truck, actorId: actors.adminId }));
-      await refusedWith("component_nesting", () => attachAssetComponent(org.orgId, { parentAssetId: engine, componentAssetId: crane, actorId: actors.adminId }));
-      await refusedWith("permission_required", () => attachAssetComponent(org.orgId, { parentAssetId: truck, componentAssetId: crane, actorId: actors.outsiderId }));
+      await attachAssetComponent(org.orgId, {
+        parentAssetId: truck,
+        componentAssetId: engine,
+        actorId: actors.adminId,
+      });
+      await attachAssetComponent(org.orgId, {
+        parentAssetId: truck,
+        componentAssetId: engine,
+        actorId: actors.adminId,
+      });
+      await refusedWith("component_self", () =>
+        attachAssetComponent(org.orgId, {
+          parentAssetId: crane,
+          componentAssetId: crane,
+          actorId: actors.adminId,
+        }),
+      );
+      await refusedWith("component_cycle", () =>
+        attachAssetComponent(org.orgId, {
+          parentAssetId: engine,
+          componentAssetId: truck,
+          actorId: actors.adminId,
+        }),
+      );
+      await refusedWith("component_nesting", () =>
+        attachAssetComponent(org.orgId, {
+          parentAssetId: engine,
+          componentAssetId: crane,
+          actorId: actors.adminId,
+        }),
+      );
+      await refusedWith("permission_required", () =>
+        attachAssetComponent(org.orgId, {
+          parentAssetId: truck,
+          componentAssetId: crane,
+          actorId: actors.outsiderId,
+        }),
+      );
 
       const otherSubsidiary = randomUUID();
-      await withOrgContext(org.orgId, () => db.execute(sql`
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${otherSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
+        values (${otherSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`),
+      );
       const foreign = await asset("FOREIGN", "1000", otherSubsidiary);
-      await refusedWith("component_cross_subsidiary", () => attachAssetComponent(org.orgId, { parentAssetId: truck, componentAssetId: foreign, actorId: actors.adminId }));
+      await refusedWith("component_cross_subsidiary", () =>
+        attachAssetComponent(org.orgId, {
+          parentAssetId: truck,
+          componentAssetId: foreign,
+          actorId: actors.adminId,
+        }),
+      );
       // The database refuses the same shape even for a direct write.
-      await assert.rejects(withOrgContext(org.orgId, () => db.execute(sql`
-        update fixed_assets set parent_asset_id = ${truck} where org_id = ${org.orgId} and id = ${foreign}`)));
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.execute(sql`
+        update fixed_assets set parent_asset_id = ${truck} where org_id = ${org.orgId} and id = ${foreign}`),
+        ),
+      );
 
       const created = await createAssetComponent(org.orgId, {
-        parentAssetId: truck, actorId: actors.adminId, name: "Liftgate", categoryId, acquisitionCost: "5000.00",
+        parentAssetId: truck,
+        actorId: actors.adminId,
+        name: "Liftgate",
+        categoryId,
+        acquisitionCost: "5000.00",
       });
       const view = await loadCompoundAsset(org.orgId, engine);
       assert.ok(view);
       assert.equal(view.parent.id, truck, "a component's view is its parent's family");
-      assert.deepEqual(view.members.map((member) => member.assetNumber).sort(), [created.assetNumber, "ENGINE", "TRUCK"].sort());
+      assert.deepEqual(
+        view.members.map((member) => member.assetNumber).sort(),
+        [created.assetNumber, "ENGINE", "TRUCK"].sort(),
+      );
       const primary = view.rollup.find((book) => book.isPrimary);
       assert.equal(primary?.cost, "80000.0000");
       assert.equal(primary?.assets, 3);
 
-      await refusedWith("reason_required", () => detachAssetComponent(org.orgId, { componentAssetId: engine, reason: " ", actorId: actors.adminId }));
-      await detachAssetComponent(org.orgId, { componentAssetId: engine, reason: "Engine sold separately", actorId: actors.adminId });
+      await refusedWith("reason_required", () =>
+        detachAssetComponent(org.orgId, {
+          componentAssetId: engine,
+          reason: " ",
+          actorId: actors.adminId,
+        }),
+      );
+      await detachAssetComponent(org.orgId, {
+        componentAssetId: engine,
+        reason: "Engine sold separately",
+        actorId: actors.adminId,
+      });
       const after = await loadCompoundAsset(org.orgId, truck);
       assert.equal(after?.members.length, 2);
     } finally {
@@ -116,26 +198,67 @@ test(
       const { actors, asset, categoryId, vehicles } = await setup(org);
       const truck = await asset("TRUCK-2", "60000");
       const engine = await asset("ENGINE-2", "15000");
-      await attachAssetComponent(org.orgId, { parentAssetId: truck, componentAssetId: engine, actorId: actors.adminId });
-      const draft = await createAssetComponent(org.orgId, {
-        parentAssetId: truck, actorId: actors.adminId, name: "Unplaced toolbox", categoryId, acquisitionCost: "500",
+      await attachAssetComponent(org.orgId, {
+        parentAssetId: truck,
+        componentAssetId: engine,
+        actorId: actors.adminId,
       });
-      await refusedWith("component_draft", () => disposeCompoundAsset(org.orgId, {
-        parentAssetId: truck, date: "2026-07-01", writeOff: true, reason: "Total loss", actorId: actors.adminId,
-      }));
-      const statuses = await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
-        select distinct status from fixed_assets where org_id = ${org.orgId} and id in (${truck}, ${engine})`, "objects"));
+      const draft = await createAssetComponent(org.orgId, {
+        parentAssetId: truck,
+        actorId: actors.adminId,
+        name: "Unplaced toolbox",
+        categoryId,
+        acquisitionCost: "500",
+      });
+      await refusedWith("component_draft", () =>
+        disposeCompoundAsset(org.orgId, {
+          parentAssetId: truck,
+          date: "2026-07-01",
+          writeOff: true,
+          reason: "Total loss",
+          actorId: actors.adminId,
+        }),
+      );
+      const statuses = await withOrgContext(org.orgId, () =>
+        db.execute<{ status: string }>(
+          sql`
+        select distinct status from fixed_assets where org_id = ${org.orgId} and id in (${truck}, ${engine})`,
+          "objects",
+        ),
+      );
       assert.deepEqual(statuses, [{ status: "in_service" }], "a refusal disposes nothing");
 
-      await detachAssetComponent(org.orgId, { componentAssetId: draft.id, reason: "Not part of the truck", actorId: actors.adminId });
-      const result = await disposeCompoundAsset(org.orgId, {
-        parentAssetId: truck, date: "2026-07-01", writeOff: true, reason: "Total loss", actorId: actors.adminId,
+      await detachAssetComponent(org.orgId, {
+        componentAssetId: draft.id,
+        reason: "Not part of the truck",
+        actorId: actors.adminId,
       });
-      assert.deepEqual(result.disposals.map((disposal) => disposal.status), ["written_off", "written_off"]);
+      const result = await disposeCompoundAsset(org.orgId, {
+        parentAssetId: truck,
+        date: "2026-07-01",
+        writeOff: true,
+        reason: "Total loss",
+        actorId: actors.adminId,
+      });
+      assert.deepEqual(
+        result.disposals.map((disposal) => disposal.status),
+        ["written_off", "written_off"],
+      );
       assert.equal(result.disposals.at(-1)?.assetId, truck, "the parent closes last");
-      const vehiclesBalance = (await withOrgContext(org.orgId, () => db.execute<{ total: string }>(sql`
-        select coalesce(sum(amount), 0)::numeric(19,4)::text as total from journal_lines where org_id = ${org.orgId} and account_id = ${vehicles}`, "objects")))[0]!.total;
-      assert.equal(vehiclesBalance, "-75000.0000", "both costs are derecognized from the vehicles account");
+      const vehiclesBalance = (
+        await withOrgContext(org.orgId, () =>
+          db.execute<{ total: string }>(
+            sql`
+        select coalesce(sum(amount), 0)::numeric(19,4)::text as total from journal_lines where org_id = ${org.orgId} and account_id = ${vehicles}`,
+            "objects",
+          ),
+        )
+      )[0]!.total;
+      assert.equal(
+        vehiclesBalance,
+        "-75000.0000",
+        "both costs are derecognized from the vehicles account",
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }

@@ -32,7 +32,8 @@ export const hrmReviewAdapter: InboxAdapter = {
         id: inboxItemId("hrm_review", `write:${review.id}`),
         kind: "hrm_review",
         title: "Review to write",
-        subtitle: "a report's review waits for your assessment — write it in the performance review",
+        subtitle:
+          "a report's review waits for your assessment — write it in the performance review",
         dueAt: null,
         createdAt: ctx.asOf,
         priority: "normal",
@@ -52,7 +53,9 @@ export const hrmReviewAdapter: InboxAdapter = {
           createdAt: ctx.asOf,
           priority: "due_soon",
           subjectHref: `/hrm/performance?review=${review.id}`,
-          actions: [{ key: "acknowledge", label: "Acknowledge", style: "primary", needsReason: false }],
+          actions: [
+            { key: "acknowledge", label: "Acknowledge", style: "primary", needsReason: false },
+          ],
           source: { kind: "hrm_review", id: review.id },
         });
       } else if (review.status === "pending") {
@@ -74,7 +77,11 @@ export const hrmReviewAdapter: InboxAdapter = {
   },
   async act(ctx, sourceId, actionKey): Promise<void> {
     if (sourceId.startsWith("ack:") && actionKey === "acknowledge") {
-      await acknowledgeReview({ orgId: ctx.orgId, actorId: ctx.actorId, reviewId: sourceId.slice("ack:".length) });
+      await acknowledgeReview({
+        orgId: ctx.orgId,
+        actorId: ctx.actorId,
+        reviewId: sourceId.slice("ack:".length),
+      });
       return;
     }
     throw new Error(

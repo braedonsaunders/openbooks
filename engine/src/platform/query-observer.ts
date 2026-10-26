@@ -44,10 +44,17 @@ export function activeQueryObserver(): QueryObserver | null {
  * Deliver one observation. A failing observer is reported and otherwise
  * ignored: diagnostics must never change the outcome of the statement.
  */
-export function notifyQueryObserver(observer: QueryObserver, statement: string, durationMs: number): void {
+export function notifyQueryObserver(
+  observer: QueryObserver,
+  statement: string,
+  durationMs: number,
+): void {
   try {
     observer(statement, durationMs);
   } catch (error) {
-    console.error("[query observer] observer failed; statement unaffected:", (error as Error).message);
+    console.error(
+      "[query observer] observer failed; statement unaffected:",
+      (error as Error).message,
+    );
   }
 }

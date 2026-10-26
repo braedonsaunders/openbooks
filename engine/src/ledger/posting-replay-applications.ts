@@ -91,10 +91,7 @@ export async function transferCorrectionApplications(
   if (activeApplications.length > 0) {
     const outsideIds = [
       ...new Set(
-        activeApplications.flatMap((application) => [
-          application.fromLineId,
-          application.toLineId,
-        ]),
+        activeApplications.flatMap((application) => [application.fromLineId, application.toLineId]),
       ),
     ].filter((id) => !priorLineIds.has(id));
     const outsideRows =
@@ -110,13 +107,10 @@ export async function transferCorrectionApplications(
               ),
             );
     const outsideById = new Map(outsideRows.map((line) => [line.id, line]));
-    const replacementById = new Map(
-      replacementLines.map((line) => [line.id, line]),
-    );
+    const replacementById = new Map(replacementLines.map((line) => [line.id, line]));
     const endpointOf = (lineId: string) => {
       const replacementId = replacementEndpoint(lineId);
-      const line =
-        replacementById.get(replacementId) ?? outsideById.get(replacementId);
+      const line = replacementById.get(replacementId) ?? outsideById.get(replacementId);
       if (!line) {
         throw new PostingError(
           `cannot transfer application endpoint ${lineId}: the settlement line is missing`,
@@ -163,7 +157,7 @@ export async function transferCorrectionApplications(
         );
       }
       const fromSign = toUnits(from.amount) > 0n;
-      if ((toUnits(to.amount) > 0n) === fromSign) {
+      if (toUnits(to.amount) > 0n === fromSign) {
         throw new PostingError(
           `source correction of ${documentNumber} cannot transfer application ${application.id}: the replacement endpoints no longer have opposite debit/credit signs — unapply the settlements before correcting`,
         );
@@ -217,32 +211,32 @@ export async function transferCorrectionApplications(
       )
       .returning({ id: schema.applications.id });
     if (released.length !== 1) {
-      throw new PostingError(
-        `application ${application.id} changed during source correction`,
-      );
+      throw new PostingError(`application ${application.id} changed during source correction`);
     }
-    const replacementApplication = (await tx
-      .insert(schema.applications)
-      .values({
-        orgId: application.orgId,
-        fromLineId,
-        toLineId,
-        amount: application.amount,
-        sourceAmount: application.sourceAmount,
-        sourceTransactionAmount: application.sourceTransactionAmount,
-        sourceTransactionCurrency: application.sourceTransactionCurrency,
-        targetTransactionAmount: application.targetTransactionAmount,
-        targetTransactionCurrency: application.targetTransactionCurrency,
-        settlementRate: application.settlementRate,
-        settlementRateSource: application.settlementRateSource,
-        settlementRateReference: application.settlementRateReference,
-        settlementFxRateId: application.settlementFxRateId,
-        appliedOn: application.appliedOn,
-        fxGainLossEntryId: application.fxGainLossEntryId,
-        createdBy: opts.actorId,
-        updatedBy: opts.actorId,
-      })
-      .returning({ id: schema.applications.id }))[0]!;
+    const replacementApplication = (
+      await tx
+        .insert(schema.applications)
+        .values({
+          orgId: application.orgId,
+          fromLineId,
+          toLineId,
+          amount: application.amount,
+          sourceAmount: application.sourceAmount,
+          sourceTransactionAmount: application.sourceTransactionAmount,
+          sourceTransactionCurrency: application.sourceTransactionCurrency,
+          targetTransactionAmount: application.targetTransactionAmount,
+          targetTransactionCurrency: application.targetTransactionCurrency,
+          settlementRate: application.settlementRate,
+          settlementRateSource: application.settlementRateSource,
+          settlementRateReference: application.settlementRateReference,
+          settlementFxRateId: application.settlementFxRateId,
+          appliedOn: application.appliedOn,
+          fxGainLossEntryId: application.fxGainLossEntryId,
+          createdBy: opts.actorId,
+          updatedBy: opts.actorId,
+        })
+        .returning({ id: schema.applications.id })
+    )[0]!;
     transferredApplications.push({
       priorApplicationId: application.id,
       replacementApplicationId: replacementApplication.id,

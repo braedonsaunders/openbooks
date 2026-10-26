@@ -70,7 +70,10 @@ export function isTaxClassification(value: unknown): value is TaxClassification 
 }
 
 /** The tax classifications open to a legal form in a country. */
-export function taxClassificationsFor(form: LegalForm | null, country: string): TaxClassification[] {
+export function taxClassificationsFor(
+  form: LegalForm | null,
+  country: string,
+): TaxClassification[] {
   const allowed = form ? CLASSIFICATIONS_BY_FORM[form] : TAX_CLASSIFICATIONS;
   return allowed.filter((classification) => {
     const countries = COUNTRY_ONLY_CLASSIFICATIONS[classification];
@@ -110,7 +113,10 @@ export function readCompanyAddress(value: unknown): CompanyAddress | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const address = Object.fromEntries(
-    ADDRESS_FIELDS.map((field) => [field, typeof record[field] === "string" ? (record[field] as string) : ""]),
+    ADDRESS_FIELDS.map((field) => [
+      field,
+      typeof record[field] === "string" ? (record[field] as string) : "",
+    ]),
   ) as unknown as CompanyAddress;
   return ADDRESS_FIELDS.some((field) => address[field]) ? address : null;
 }
@@ -137,13 +143,15 @@ export function normalizeCompanyAddress(
   for (const field of ADDRESS_FIELDS) {
     const raw = record[field];
     const text = typeof raw === "string" ? raw.trim().replace(/\s+/g, " ") : "";
-    if (text.length > ADDRESS_FIELD_MAX) return { ok: false, problem: { field, reason: "too_long" } };
+    if (text.length > ADDRESS_FIELD_MAX)
+      return { ok: false, problem: { field, reason: "too_long" } };
     address[field] = field === "country" || field === "postalCode" ? text.toUpperCase() : text;
   }
   if (ADDRESS_FIELDS.every((field) => !address[field])) return { ok: true, address: null };
   if (!address.line1) return { ok: false, problem: { field: "line1", reason: "required" } };
   if (!address.city) return { ok: false, problem: { field: "city", reason: "required" } };
-  if (!isCountry(address.country)) return { ok: false, problem: { field: "country", reason: "invalid_country" } };
+  if (!isCountry(address.country))
+    return { ok: false, problem: { field: "country", reason: "invalid_country" } };
   return { ok: true, address };
 }
 
@@ -161,8 +169,33 @@ export function formatCompanyAddress(address: CompanyAddress | null): string {
 // ---------------------------------------------------------------------------
 
 export const EU_VAT_COUNTRIES = [
-  "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR", "HU",
-  "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK",
+  "AT",
+  "BE",
+  "BG",
+  "CY",
+  "CZ",
+  "DE",
+  "DK",
+  "EE",
+  "ES",
+  "FI",
+  "FR",
+  "GR",
+  "HR",
+  "HU",
+  "IE",
+  "IT",
+  "LT",
+  "LU",
+  "LV",
+  "MT",
+  "NL",
+  "PL",
+  "PT",
+  "RO",
+  "SE",
+  "SI",
+  "SK",
 ] as const;
 
 /** VAT number prefix per EU member state (Greece files under EL). */
@@ -283,7 +316,9 @@ export const TAX_ID_SCHEMES: readonly TaxIdScheme[] = [
       const prefix = euVatPrefix(country);
       const value = compact(raw);
       const withPrefix = /^[A-Z]{2}/.test(value) ? value : `${prefix}${value}`;
-      return withPrefix.startsWith(prefix) && /^[A-Z]{2}[A-Z0-9]{2,12}$/.test(withPrefix) ? withPrefix : null;
+      return withPrefix.startsWith(prefix) && /^[A-Z]{2}[A-Z0-9]{2,12}$/.test(withPrefix)
+        ? withPrefix
+        : null;
     },
   },
   {
@@ -339,12 +374,16 @@ export function taxIdSchemesFor(country: string): TaxIdScheme[] {
   const ownVat = own.some((scheme) => VAT_SCHEMES.has(scheme.key));
   const ownRegistration = own.some((scheme) => REGISTRATION_SCHEMES.has(scheme.key));
   const generic = TAX_ID_SCHEMES.filter(
-    (scheme) => (scheme.key === "tax_id" && !ownVat) || (scheme.key === "registration" && !ownRegistration),
+    (scheme) =>
+      (scheme.key === "tax_id" && !ownVat) || (scheme.key === "registration" && !ownRegistration),
   );
   return [...own, ...generic];
 }
 
-export type TaxIdProblem = { scheme: string; reason: "unknown_scheme" | "not_in_country" | "invalid" };
+export type TaxIdProblem = {
+  scheme: string;
+  reason: "unknown_scheme" | "not_in_country" | "invalid";
+};
 
 /**
  * Validate a full identifier map for a company in `country`. Blank values
@@ -362,7 +401,8 @@ export function normalizeTaxIds(
   for (const [key, raw] of Object.entries(input)) {
     const scheme = taxIdScheme(key);
     if (!scheme) return { ok: false, problem: { scheme: key, reason: "unknown_scheme" } };
-    if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) continue;
+    if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === ""))
+      continue;
     if (typeof raw !== "string") return { ok: false, problem: { scheme: key, reason: "invalid" } };
     if (!allowed.has(key)) {
       if (stored[key] === raw) {
@@ -383,7 +423,8 @@ export function readTaxIds(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).filter(
-      (entry): entry is [string, string] => SCHEME_BY_KEY.has(entry[0]) && typeof entry[1] === "string" && entry[1] !== "",
+      (entry): entry is [string, string] =>
+        SCHEME_BY_KEY.has(entry[0]) && typeof entry[1] === "string" && entry[1] !== "",
     ),
   );
 }
@@ -398,5 +439,10 @@ export function formatTaxIds(taxIds: Readonly<Record<string, string>>): string {
 /** The identifier an information return names its payer by: the federal
  *  employer or business number, else the first identifier on file. */
 export function payerTaxIdentifier(taxIds: Readonly<Record<string, string>>): string | null {
-  return taxIds.us_ein ?? taxIds.ca_bn ?? TAX_ID_SCHEMES.map((scheme) => taxIds[scheme.key]).find(Boolean) ?? null;
+  return (
+    taxIds.us_ein ??
+    taxIds.ca_bn ??
+    TAX_ID_SCHEMES.map((scheme) => taxIds[scheme.key]).find(Boolean) ??
+    null
+  );
 }

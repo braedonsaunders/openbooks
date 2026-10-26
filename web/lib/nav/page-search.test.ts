@@ -1,126 +1,179 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import type { SidebarNavGroup } from '../../components/sidebar-nav'
-import { buildPageIndex, searchPages } from './page-search.ts'
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { SidebarNavGroup } from "../../components/sidebar-nav";
+import { buildPageIndex, searchPages } from "./page-search.ts";
 
 const MENU: SidebarNavGroup[] = [
   {
-    id: 'accounting',
-    label: 'Accounting',
-    iconKey: 'book',
-    groupHref: '/accounting',
+    id: "accounting",
+    label: "Accounting",
+    iconKey: "book",
+    groupHref: "/accounting",
     items: [
-      { href: '/journal', label: 'Journal Entries', iconKey: 'book' },
-      { href: '/close', label: 'Period Close', iconKey: 'lock', subgroup: 'Close', subgroupHref: '/close/hub' },
+      { href: "/journal", label: "Journal Entries", iconKey: "book" },
       {
-        href: '/accounting/reopen-requests',
-        label: 'Reopen Requests',
-        iconKey: 'history',
-        subgroup: 'Close',
-        subgroupHref: '/close/hub',
-        keywords: ['reopen', 'reopening', 'reopen request', 'controlled reopening'],
+        href: "/close",
+        label: "Period Close",
+        iconKey: "lock",
+        subgroup: "Close",
+        subgroupHref: "/close/hub",
+      },
+      {
+        href: "/accounting/reopen-requests",
+        label: "Reopen Requests",
+        iconKey: "history",
+        subgroup: "Close",
+        subgroupHref: "/close/hub",
+        keywords: ["reopen", "reopening", "reopen request", "controlled reopening"],
       },
     ],
   },
   {
-    id: 'hrm',
-    label: 'People',
-    iconKey: 'users',
-    items: [{ href: '/payroll/runs', label: 'Payroll', iconKey: 'wallet' }],
+    id: "hrm",
+    label: "People",
+    iconKey: "users",
+    items: [{ href: "/payroll/runs", label: "Payroll", iconKey: "wallet" }],
   },
   {
-    id: 'operations',
-    label: 'Operations',
-    iconKey: 'grid',
-    items: [{ href: '/banking/feeds', label: 'Bank Connections', iconKey: 'bank' }],
+    id: "operations",
+    label: "Operations",
+    iconKey: "grid",
+    items: [{ href: "/banking/feeds", label: "Bank Connections", iconKey: "bank" }],
   },
-]
+];
 
 const TABS = [
   [
-    { href: '/payroll/runs', label: 'Pay Runs' },
-    { href: '/payroll/settings', label: 'Settings' },
+    { href: "/payroll/runs", label: "Pay Runs" },
+    { href: "/payroll/settings", label: "Settings" },
   ],
-  [{ href: '/admin/setup?tab=tax', label: 'Settings' }],
-]
+  [{ href: "/admin/setup?tab=tax", label: "Settings" }],
+];
 
-const index = buildPageIndex(MENU, TABS)
-const hrefs = (query: string) => searchPages(index, query).map((hit) => hit.href)
+const index = buildPageIndex(MENU, TABS);
+const hrefs = (query: string) => searchPages(index, query).map((hit) => hit.href);
 
-test('menu entries, sub-menu homes and workspace homes are all searchable pages', () => {
-  assert.deepEqual(hrefs('journal'), ['/journal'])
-  assert.deepEqual(hrefs('close'), ['/close/hub', '/close'])
-  assert.deepEqual(hrefs('accounting'), ['/accounting'], 'a workspace name finds its home, not every page under it')
-})
+test("menu entries, sub-menu homes and workspace homes are all searchable pages", () => {
+  assert.deepEqual(hrefs("journal"), ["/journal"]);
+  assert.deepEqual(hrefs("close"), ["/close/hub", "/close"]);
+  assert.deepEqual(
+    hrefs("accounting"),
+    ["/accounting"],
+    "a workspace name finds its home, not every page under it",
+  );
+});
 
-test('a renamed menu entry is found by its displayed name only', () => {
-  assert.deepEqual(hrefs('bank connections'), ['/banking/feeds'])
-  assert.deepEqual(hrefs('bank feeds'), [])
-})
+test("a renamed menu entry is found by its displayed name only", () => {
+  assert.deepEqual(hrefs("bank connections"), ["/banking/feeds"]);
+  assert.deepEqual(hrefs("bank feeds"), []);
+});
 
-test('a page the resolved menu does not contain is never offered', () => {
-  const restricted = buildPageIndex(MENU.filter((group) => group.id !== 'hrm'), [])
-  assert.deepEqual(searchPages(restricted, 'payroll'), [])
-})
+test("a page the resolved menu does not contain is never offered", () => {
+  const restricted = buildPageIndex(
+    MENU.filter((group) => group.id !== "hrm"),
+    [],
+  );
+  assert.deepEqual(searchPages(restricted, "payroll"), []);
+});
 
-test('workspace tabs carry the menu trail of the entry that opens them', () => {
-  const settings = searchPages(index, 'settings')
-  assert.deepEqual(settings.map((hit) => [hit.href, hit.trail.join(' › ')]), [
-    ['/payroll/settings', 'People › Payroll'],
-    ['/admin/setup?tab=tax', ''],
-  ])
-  assert.deepEqual(hrefs('payroll settings'), ['/payroll/settings'], 'trail words narrow a generic tab name')
-})
-
-test('a tab that is also a menu entry appears once, under its menu name', () => {
-  const payroll = searchPages(index, 'payroll')
-  assert.equal(payroll.filter((hit) => hit.href === '/payroll/runs').length, 1)
-  assert.equal(payroll.find((hit) => hit.href === '/payroll/runs')?.title, 'Payroll')
-})
-
-test('ranking prefers an exact name, then a prefix, then a word inside the name', () => {
-  const menu: SidebarNavGroup[] = [{
-    id: 'g',
-    label: 'Group',
-    iconKey: 'grid',
-    items: [
-      { href: '/a', label: 'Vendor Invoices', iconKey: 'grid' },
-      { href: '/b', label: 'Invoices to Approve', iconKey: 'grid' },
-      { href: '/c', label: 'Invoices', iconKey: 'grid' },
-      { href: '/d', label: 'Reinvoices', iconKey: 'grid' },
+test("workspace tabs carry the menu trail of the entry that opens them", () => {
+  const settings = searchPages(index, "settings");
+  assert.deepEqual(
+    settings.map((hit) => [hit.href, hit.trail.join(" › ")]),
+    [
+      ["/payroll/settings", "People › Payroll"],
+      ["/admin/setup?tab=tax", ""],
     ],
-  }]
-  assert.deepEqual(searchPages(buildPageIndex(menu), 'invoices').map((hit) => hit.href), ['/c', '/b', '/a', '/d'])
-})
+  );
+  assert.deepEqual(
+    hrefs("payroll settings"),
+    ["/payroll/settings"],
+    "trail words narrow a generic tab name",
+  );
+});
 
-test('matching ignores case and accents', () => {
-  const menu: SidebarNavGroup[] = [{ id: 'g', label: 'Comptabilité', iconKey: 'grid', items: [{ href: '/e', label: 'Écritures de journal', iconKey: 'grid' }] }]
-  assert.deepEqual(searchPages(buildPageIndex(menu), 'ecritures').map((hit) => hit.href), ['/e'])
-})
+test("a tab that is also a menu entry appears once, under its menu name", () => {
+  const payroll = searchPages(index, "payroll");
+  assert.equal(payroll.filter((hit) => hit.href === "/payroll/runs").length, 1);
+  assert.equal(payroll.find((hit) => hit.href === "/payroll/runs")?.title, "Payroll");
+});
 
-test('a page is also found by its localized synonyms, after pages its words name directly', () => {
-  const menu: SidebarNavGroup[] = [{
-    id: 'customers',
-    label: 'Customers',
-    iconKey: 'users',
-    items: [
-      { href: '/receipts', label: 'Customer Payments', iconKey: 'check', keywords: ['receipt', 'receive payment'] },
-      { href: '/payments', label: 'Vendor Payments', iconKey: 'check' },
-      { href: '/receivables', label: 'Receivables', iconKey: 'grid' },
-    ],
-  }]
-  const found = (query: string) => searchPages(buildPageIndex(menu), query).map((hit) => hit.href)
-  assert.deepEqual(found('receipt'), ['/receipts'])
-  assert.deepEqual(found('receive payment'), ['/receipts'])
-  assert.deepEqual(found('rece'), ['/receivables', '/receipts'], 'a page named by the query outranks a synonym hit')
-  assert.deepEqual(searchPages(buildPageIndex(menu), 'receipt')[0], {
-    href: '/receipts', title: 'Customer Payments', trail: ['Customers'], iconKey: 'check',
-  }, 'synonyms never leak into the hit')
-})
+test("ranking prefers an exact name, then a prefix, then a word inside the name", () => {
+  const menu: SidebarNavGroup[] = [
+    {
+      id: "g",
+      label: "Group",
+      iconKey: "grid",
+      items: [
+        { href: "/a", label: "Vendor Invoices", iconKey: "grid" },
+        { href: "/b", label: "Invoices to Approve", iconKey: "grid" },
+        { href: "/c", label: "Invoices", iconKey: "grid" },
+        { href: "/d", label: "Reinvoices", iconKey: "grid" },
+      ],
+    },
+  ];
+  assert.deepEqual(
+    searchPages(buildPageIndex(menu), "invoices").map((hit) => hit.href),
+    ["/c", "/b", "/a", "/d"],
+  );
+});
 
-test('the reopen requests surface is found by its task names', () => {
+test("matching ignores case and accents", () => {
+  const menu: SidebarNavGroup[] = [
+    {
+      id: "g",
+      label: "Comptabilité",
+      iconKey: "grid",
+      items: [{ href: "/e", label: "Écritures de journal", iconKey: "grid" }],
+    },
+  ];
+  assert.deepEqual(
+    searchPages(buildPageIndex(menu), "ecritures").map((hit) => hit.href),
+    ["/e"],
+  );
+});
+
+test("a page is also found by its localized synonyms, after pages its words name directly", () => {
+  const menu: SidebarNavGroup[] = [
+    {
+      id: "customers",
+      label: "Customers",
+      iconKey: "users",
+      items: [
+        {
+          href: "/receipts",
+          label: "Customer Payments",
+          iconKey: "check",
+          keywords: ["receipt", "receive payment"],
+        },
+        { href: "/payments", label: "Vendor Payments", iconKey: "check" },
+        { href: "/receivables", label: "Receivables", iconKey: "grid" },
+      ],
+    },
+  ];
+  const found = (query: string) => searchPages(buildPageIndex(menu), query).map((hit) => hit.href);
+  assert.deepEqual(found("receipt"), ["/receipts"]);
+  assert.deepEqual(found("receive payment"), ["/receipts"]);
+  assert.deepEqual(
+    found("rece"),
+    ["/receivables", "/receipts"],
+    "a page named by the query outranks a synonym hit",
+  );
+  assert.deepEqual(
+    searchPages(buildPageIndex(menu), "receipt")[0],
+    {
+      href: "/receipts",
+      title: "Customer Payments",
+      trail: ["Customers"],
+      iconKey: "check",
+    },
+    "synonyms never leak into the hit",
+  );
+});
+
+test("the reopen requests surface is found by its task names", () => {
   // The permission-gated reopen page must stay discoverable through global
   // search under every name an operator would type for it.
-  assert.deepEqual(hrefs('reopen'), ['/accounting/reopen-requests'])
-  assert.deepEqual(hrefs('reopening'), ['/accounting/reopen-requests'])
-})
+  assert.deepEqual(hrefs("reopen"), ["/accounting/reopen-requests"]);
+  assert.deepEqual(hrefs("reopening"), ["/accounting/reopen-requests"]);
+});

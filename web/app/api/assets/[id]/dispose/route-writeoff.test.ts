@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 
 // A contradictory { writeOff: true, proceeds: 500 } must reach the engine
 // untouched so its write-off-takes-no-proceeds refusal fires. The route used
@@ -9,16 +9,16 @@ import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/modu
 // as success and masking the contradiction.
 
 interface RouteState {
-  isIsoCalendarDate: typeof isIsoCalendarDate
+  isIsoCalendarDate: typeof isIsoCalendarDate;
 }
 
-const stateKey = Symbol.for('openbooks.asset-disposal-writeoff-test')
-const routeState: RouteState = { isIsoCalendarDate }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+const stateKey = Symbol.for("openbooks.asset-disposal-writeoff-test");
+const routeState: RouteState = { isIsoCalendarDate };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:feature-gates',
+    "mock:feature-gates",
     `
       export async function guardFeaturePermission() {
         return { user: { orgId: 'org-1', id: 'user-1' } }
@@ -26,7 +26,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:business-date',
+    "mock:business-date",
     `
       const state = globalThis[Symbol.for('openbooks.asset-disposal-writeoff-test')]
       export async function businessToday(orgId) {
@@ -35,46 +35,46 @@ const mockSources = new Map<string, string>([
       export const isIsoCalendarDate = state.isIsoCalendarDate
     `,
   ],
-])
+]);
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if ((specifier === '@/lib/feature-gates' || specifier === '../../../../../lib/feature-gates')) {
-      return { url: 'mock:feature-gates', shortCircuit: true }
+    if (specifier === "@/lib/feature-gates" || specifier === "../../../../../lib/feature-gates") {
+      return { url: "mock:feature-gates", shortCircuit: true };
     }
-    if (specifier === '@openbooks/engine/platform/business-date/module') {
-      return { url: 'mock:business-date', shortCircuit: true }
+    if (specifier === "@openbooks/engine/platform/business-date/module") {
+      return { url: "mock:business-date", shortCircuit: true };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?asset-disposal-writeoff-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?asset-disposal-writeoff-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const ASSET_ID = '00000000-0000-4000-8000-00000000a002'
+const ASSET_ID = "00000000-0000-4000-8000-00000000a002";
 
 function post(body: unknown): Promise<Response> {
   return POST(
     new Request(`http://openbooks.test/api/assets/${ASSET_ID}/dispose`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: ASSET_ID }) },
-  )
+  );
 }
 
-test('a write-off with proceeds is refused, not coerced to zero', async () => {
-  const response = await post({ writeOff: true, proceeds: '500.0000', date: '2026-08-31' })
-  const body = (await response.json()) as { error?: string }
+test("a write-off with proceeds is refused, not coerced to zero", async () => {
+  const response = await post({ writeOff: true, proceeds: "500.0000", date: "2026-08-31" });
+  const body = (await response.json()) as { error?: string };
   // No disposal target exists here, but the refusal must be the engine's
   // write-off economics refusal — never a success, and never a masked zero.
-  assert.equal(response.status, 422)
-  assert.match(body.error ?? '', /write-off takes no proceeds/)
-})
+  assert.equal(response.status, 422);
+  assert.match(body.error ?? "", /write-off takes no proceeds/);
+});

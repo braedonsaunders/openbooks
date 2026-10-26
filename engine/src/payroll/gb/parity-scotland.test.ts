@@ -140,15 +140,29 @@ test("hand-worked: full 2026/27 on £27,000 S1257L telescopes to £2,844.33", ()
   let priorPaid = "0.0000";
   let total = 0n;
   const payDates = [
-    "2026-04-06", "2026-05-06", "2026-06-06", "2026-07-06", "2026-08-06",
-    "2026-09-06", "2026-10-06", "2026-11-06", "2026-12-06", "2027-01-06",
-    "2027-02-06", "2027-03-06",
+    "2026-04-06",
+    "2026-05-06",
+    "2026-06-06",
+    "2026-07-06",
+    "2026-08-06",
+    "2026-09-06",
+    "2026-10-06",
+    "2026-11-06",
+    "2026-12-06",
+    "2027-01-06",
+    "2027-02-06",
+    "2027-03-06",
   ];
   payDates.forEach((payDate, index) => {
     const result = calculateGbPaye({
-      code, payDate, periodsPerYear: 12,
-      periodPay: "2250", priorTaxablePay: priorTaxable, priorAddedPay: "0",
-      priorTaxPaid: priorPaid, periodGrossPay: "2250",
+      code,
+      payDate,
+      periodsPerYear: 12,
+      periodPay: "2250",
+      priorTaxablePay: priorTaxable,
+      priorAddedPay: "0",
+      priorTaxPaid: priorPaid,
+      periodGrossPay: "2250",
     });
     // Month 1 prices Formula 2 on the exact month-1 starter threshold
     // (3,967/12 = £330.5833) and threshold tax (753.73/12 = £62.8108):
@@ -305,9 +319,14 @@ test("sweep: Scottish PAYE never decreases as pay rises, 0 to £20,000 monthly",
   for (let pence = 0; pence <= 2_000_000; pence += 25_000) {
     const pay = (pence / 100).toFixed(2);
     const paye = calculateGbPaye({
-      code, payDate: "2026-07-06", periodsPerYear: 12,
-      periodPay: pay, priorTaxablePay: "0", priorAddedPay: "0",
-      priorTaxPaid: "0", periodGrossPay: pay,
+      code,
+      payDate: "2026-07-06",
+      periodsPerYear: 12,
+      periodPay: pay,
+      priorTaxablePay: "0",
+      priorAddedPay: "0",
+      priorTaxPaid: "0",
+      periodGrossPay: pay,
     });
     assert.ok(toUnits(paye.tax) >= toUnits(lastTax), `${pay}: ${paye.tax} < ${lastTax}`);
     lastTax = paye.tax;

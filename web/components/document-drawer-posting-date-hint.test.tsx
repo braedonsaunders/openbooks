@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -15,7 +15,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ar/invoices\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ar/invoices'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -61,13 +69,21 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const LAYOUT = {
   header: {
-    groups: [{
-      id: "primary",
-      label: null,
-      fields: [
-        { key: "posting_date", visible: true, required: null, labelOverride: null, colSpan: null },
-      ],
-    }],
+    groups: [
+      {
+        id: "primary",
+        label: null,
+        fields: [
+          {
+            key: "posting_date",
+            visible: true,
+            required: null,
+            labelOverride: null,
+            colSpan: null,
+          },
+        ],
+      },
+    ],
   },
   lines: { columns: [] },
   actions: [],
@@ -101,7 +117,8 @@ async function mountInvoice(doc: Record<string, unknown>) {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <DocumentDrawer canPost={false}
+          <DocumentDrawer
+            canPost={false}
             payload={{ doc, lines: [] }}
             config={DOC_KINDS["customer_invoice"]!}
             basePath="/ar/invoices"

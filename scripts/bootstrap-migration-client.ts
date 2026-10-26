@@ -21,7 +21,9 @@
 import pg from "pg";
 import { connectBypassLongClient, longPool } from "@openbooks/engine/platform/db";
 
-export async function connectMigrationClient(options?: { bypass?: boolean }): Promise<pg.PoolClient> {
+export async function connectMigrationClient(options?: {
+  bypass?: boolean;
+}): Promise<pg.PoolClient> {
   const client = options?.bypass ? await connectBypassLongClient() : await longPool.connect();
   try {
     await client.query(
@@ -83,12 +85,7 @@ export const DEFAULT_MIGRATION_LOCK_RETRY_BASE_MS = 1_000;
 /** SQLSTATE for lock_not_available — the bounded lock_timeout firing. */
 export const LOCK_NOT_AVAILABLE_SQLSTATE = "55P03";
 
-function boundedInt(
-  raw: string | undefined,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
+function boundedInt(raw: string | undefined, fallback: number, min: number, max: number): number {
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < min || parsed > max) return fallback;
   return parsed;
@@ -119,10 +116,7 @@ export function migrationLockConfig(
   };
 }
 
-export function migrationRetryDelayMs(
-  config: MigrationLockConfig,
-  failedAttempt: number,
-): number {
+export function migrationRetryDelayMs(config: MigrationLockConfig, failedAttempt: number): number {
   return Math.min(config.retryBaseMs * 2 ** (failedAttempt - 1), 30_000);
 }
 
@@ -148,9 +142,7 @@ export function isLockNotAvailable(error: unknown): boolean {
  * own INVALID indexes up front (see 0261 for the pattern).
  */
 export function migrationRunsWithoutTransaction(content: string): boolean {
-  return content
-    .split("\n")
-    .some((line) => /^\s*--\s*openbooks:\s*no-transaction\s*$/i.test(line));
+  return content.split("\n").some((line) => /^\s*--\s*openbooks:\s*no-transaction\s*$/i.test(line));
 }
 
 /**
@@ -171,7 +163,8 @@ export function sanitizeMigrationContent(content: string): string {
   // Sticky (`y`): the match must start exactly at `i`. The previous global
   // pattern searched the whole remaining suffix on every code character and
   // only kept matches at `i`, which is quadratic on large baselines.
-  const pattern = /set(?:\s+(?:session|local))?\s+lock_timeout\s*(?:=|to\b)\s*[^\n;]*;?|reset\s+lock_timeout\s*;?/giy;
+  const pattern =
+    /set(?:\s+(?:session|local))?\s+lock_timeout\s*(?:=|to\b)\s*[^\n;]*;?|reset\s+lock_timeout\s*;?/giy;
   // Sticky dollar-quote opener: matches the tag exactly at `i` without
   // copying the remaining suffix via content.slice(i) on every `$`.
   const tagPattern = /\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/y;
@@ -473,11 +466,7 @@ export type MigrationAttempt = {
   beforeBody?: (client: pg.PoolClient) => Promise<void>;
   /** Business schema owner to apply as when this privileged session is not it. */
   schemaOwnerRole?: string;
-  executeBody: (
-    client: pg.PoolClient,
-    body: string,
-    step: MigrationBodyStep,
-  ) => Promise<void>;
+  executeBody: (client: pg.PoolClient, body: string, step: MigrationBodyStep) => Promise<void>;
 };
 
 /** The standard body executor: one transactional query, or one query per
@@ -509,9 +498,9 @@ export async function executeMigrationBody(
       if (isLockNotAvailable(error)) throw error;
       const raw = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `[bootstrap] ${step.filename} step ${index + 1}/${statements.length} failed (${raw}). `
-          + "Statements before this step are committed — fix the cause and re-run the migration, "
-          + "which replays its steps idempotently.",
+        `[bootstrap] ${step.filename} step ${index + 1}/${statements.length} failed (${raw}). ` +
+          "Statements before this step are committed — fix the cause and re-run the migration, " +
+          "which replays its steps idempotently.",
         { cause: error },
       );
     }
@@ -522,8 +511,10 @@ export async function executeMigrationAttempt(
   client: pg.PoolClient,
   attempt: MigrationAttempt,
 ): Promise<void> {
-  const { filename, body, transactional, lock, digest, schemaOwnerRole, executeBody, beforeBody } = attempt;
-  if (beforeBody && !transactional) throw new Error("atomic migration preflight requires a transactional migration");
+  const { filename, body, transactional, lock, digest, schemaOwnerRole, executeBody, beforeBody } =
+    attempt;
+  if (beforeBody && !transactional)
+    throw new Error("atomic migration preflight requires a transactional migration");
   const ownerRole = schemaOwnerRole ? pg.escapeIdentifier(schemaOwnerRole) : null;
   if (transactional) {
     await client.query("begin");
@@ -570,34 +561,34 @@ export function describeBootstrapMigrationFailure(
   const elapsed = `${(elapsedMs / 1000).toFixed(1)}s`;
   if (code === LOCK_NOT_AVAILABLE_SQLSTATE || /could not obtain lock/i.test(raw)) {
     return (
-      `[bootstrap] ${filename} failed after ${elapsed}: the migration could not `
-      + `acquire a table lock within its bounded lock_timeout (${raw}). Another `
-      + `session is holding a conflicting lock — find the blocker in `
-      + `pg_stat_activity (a pid whose query started long ago on the same table, `
-      + `with this migration waiting behind it), cancel the blocker or redeploy `
-      + `in a quieter window. The wait is bounded by `
-      + `OPENBOOKS_MIGRATION_LOCK_TIMEOUT_MS and retried up to `
-      + `OPENBOOKS_MIGRATION_LOCK_MAX_ATTEMPTS times; raising either only papers `
-      + `over sustained contention, so treat a repeat as a scheduling problem, `
-      + `not a timeout to tune away.`
+      `[bootstrap] ${filename} failed after ${elapsed}: the migration could not ` +
+      `acquire a table lock within its bounded lock_timeout (${raw}). Another ` +
+      `session is holding a conflicting lock — find the blocker in ` +
+      `pg_stat_activity (a pid whose query started long ago on the same table, ` +
+      `with this migration waiting behind it), cancel the blocker or redeploy ` +
+      `in a quieter window. The wait is bounded by ` +
+      `OPENBOOKS_MIGRATION_LOCK_TIMEOUT_MS and retried up to ` +
+      `OPENBOOKS_MIGRATION_LOCK_MAX_ATTEMPTS times; raising either only papers ` +
+      `over sustained contention, so treat a repeat as a scheduling problem, ` +
+      `not a timeout to tune away.`
     );
   }
   if (raw.includes("Query read timeout")) {
     return (
-      `[bootstrap] ${filename} failed after ${elapsed}: the PostgreSQL client's `
-      + `query_timeout fired before the server answered (${raw}). This is a `
-      + `client-side timer, not a schema error — the database may still have been `
-      + `working. Schema migrations run on the timeout-free maintenance pool, so a `
-      + `recurrence means the server itself is stuck: look for a blocking lock in `
-      + `pg_stat_activity, then check server logs and host CPU, memory, and disk.`
+      `[bootstrap] ${filename} failed after ${elapsed}: the PostgreSQL client's ` +
+      `query_timeout fired before the server answered (${raw}). This is a ` +
+      `client-side timer, not a schema error — the database may still have been ` +
+      `working. Schema migrations run on the timeout-free maintenance pool, so a ` +
+      `recurrence means the server itself is stuck: look for a blocking lock in ` +
+      `pg_stat_activity, then check server logs and host CPU, memory, and disk.`
     );
   }
   if (code === "57014" || /statement timeout/i.test(raw)) {
     return (
-      `[bootstrap] ${filename} failed after ${elapsed}: the server-side `
-      + `statement_timeout cancelled the statement (${raw}). The client kept `
-      + `waiting but the server refused to run longer — check for lock contention `
-      + `in pg_stat_activity and for a statement_timeout set on the role or database.`
+      `[bootstrap] ${filename} failed after ${elapsed}: the server-side ` +
+      `statement_timeout cancelled the statement (${raw}). The client kept ` +
+      `waiting but the server refused to run longer — check for lock contention ` +
+      `in pg_stat_activity and for a statement_timeout set on the role or database.`
     );
   }
   return `[bootstrap] ${filename} failed after ${elapsed}: ${raw}`;

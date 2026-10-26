@@ -85,10 +85,29 @@ export interface AnalyticsConfigSpec {
 }
 
 const pct = (key: string, labelKey: string, min = 0, max = 100, step = 1): ConfigField => ({
-  key, kind: "percent", labelKey: `${labelKey}.label`, helpKey: `${labelKey}.help`, min, max, step,
+  key,
+  kind: "percent",
+  labelKey: `${labelKey}.label`,
+  helpKey: `${labelKey}.help`,
+  min,
+  max,
+  step,
 });
-const num = (key: string, labelKey: string, min: number, max: number, step = 1, int = false): ConfigField => ({
-  key, kind: "number", labelKey: `${labelKey}.label`, helpKey: `${labelKey}.help`, min, max, step,
+const num = (
+  key: string,
+  labelKey: string,
+  min: number,
+  max: number,
+  step = 1,
+  int = false,
+): ConfigField => ({
+  key,
+  kind: "number",
+  labelKey: `${labelKey}.label`,
+  helpKey: `${labelKey}.help`,
+  min,
+  max,
+  step,
   ...(int ? { int: true as const } : {}),
 });
 
@@ -109,7 +128,13 @@ export const FORECAST_ADJUSTMENTS: ReadonlyArray<{ code: string; factor: number 
 export const ANALYTICS_CONFIG = {
   receivables: {
     slug: "receivables-intelligence",
-    defaults: { baselineDays: 90, minObservations: 3, deteriorationDays: 7, severeDays: 90, reminderDays: 30 },
+    defaults: {
+      baselineDays: 90,
+      minObservations: 3,
+      deteriorationDays: 7,
+      severeDays: 90,
+      reminderDays: 30,
+    },
     fields: [
       num("baselineDays", "analytics.receivables.config.baselineDays", 7, 365, 1, true),
       num("minObservations", "analytics.receivables.config.minObservations", 2, 100, 1, true),
@@ -185,17 +210,73 @@ export const ANALYTICS_CONFIG = {
       pct("roeTarget", "analytics.financialHealth.config.fields.roeTarget"),
       pct("roicTarget", "analytics.financialHealth.config.fields.roicTarget"),
       pct("roceTarget", "analytics.financialHealth.config.fields.roceTarget"),
-      num("currentRatioTarget", "analytics.financialHealth.config.fields.currentRatioTarget", 0.1, 20, 0.1),
-      num("quickRatioTarget", "analytics.financialHealth.config.fields.quickRatioTarget", 0.1, 20, 0.1),
-      num("debtToEquityTarget", "analytics.financialHealth.config.fields.debtToEquityTarget", 0.1, 20, 0.1),
-      num("liabilitiesToEquityTarget", "analytics.financialHealth.config.fields.liabilitiesToEquityTarget", 0.1, 50, 0.1),
-      num("interestCoverageTarget", "analytics.financialHealth.config.fields.interestCoverageTarget", 0.1, 100, 0.1),
-      { key: "revenuePerEmployee", kind: "money", optional: true, labelKey: "analytics.financialHealth.config.fields.revenuePerEmployee.label", helpKey: "analytics.financialHealth.config.fields.revenuePerEmployee.help", maxAmount: "100000000000" },
-      { key: "gpPerEmployee", kind: "money", optional: true, labelKey: "analytics.financialHealth.config.fields.gpPerEmployee.label", helpKey: "analytics.financialHealth.config.fields.gpPerEmployee.help", maxAmount: "100000000000" },
-      num("assetTurnoverTarget", "analytics.financialHealth.config.fields.assetTurnoverTarget", 0.1, 50, 0.1),
+      num(
+        "currentRatioTarget",
+        "analytics.financialHealth.config.fields.currentRatioTarget",
+        0.1,
+        20,
+        0.1,
+      ),
+      num(
+        "quickRatioTarget",
+        "analytics.financialHealth.config.fields.quickRatioTarget",
+        0.1,
+        20,
+        0.1,
+      ),
+      num(
+        "debtToEquityTarget",
+        "analytics.financialHealth.config.fields.debtToEquityTarget",
+        0.1,
+        20,
+        0.1,
+      ),
+      num(
+        "liabilitiesToEquityTarget",
+        "analytics.financialHealth.config.fields.liabilitiesToEquityTarget",
+        0.1,
+        50,
+        0.1,
+      ),
+      num(
+        "interestCoverageTarget",
+        "analytics.financialHealth.config.fields.interestCoverageTarget",
+        0.1,
+        100,
+        0.1,
+      ),
+      {
+        key: "revenuePerEmployee",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.financialHealth.config.fields.revenuePerEmployee.label",
+        helpKey: "analytics.financialHealth.config.fields.revenuePerEmployee.help",
+        maxAmount: "100000000000",
+      },
+      {
+        key: "gpPerEmployee",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.financialHealth.config.fields.gpPerEmployee.label",
+        helpKey: "analytics.financialHealth.config.fields.gpPerEmployee.help",
+        maxAmount: "100000000000",
+      },
+      num(
+        "assetTurnoverTarget",
+        "analytics.financialHealth.config.fields.assetTurnoverTarget",
+        0.1,
+        50,
+        0.1,
+      ),
       pct("cogsRatioTarget", "analytics.financialHealth.config.fields.cogsRatioTarget", 1, 100),
       pct("opexRatioTarget", "analytics.financialHealth.config.fields.opexRatioTarget", 1, 100),
-      num("operatingLeverageTarget", "analytics.financialHealth.config.fields.operatingLeverageTarget", 0.1, 20, 0.1),
+      num(
+        "operatingLeverageTarget",
+        "analytics.financialHealth.config.fields.operatingLeverageTarget",
+        0.1,
+        20,
+        0.1,
+      ),
       num("ruleOf40Target", "analytics.financialHealth.config.fields.ruleOf40Target", 1, 200),
       pct("gradeDPercent", "analytics.financialHealth.config.fields.gradeDPercent", 1, 500),
       pct("gradeCPercent", "analytics.financialHealth.config.fields.gradeCPercent", 1, 500),
@@ -204,51 +285,165 @@ export const ANALYTICS_CONFIG = {
       num("scoreAverage", "analytics.financialHealth.config.fields.scoreAverage", 1, 100),
       num("scoreGood", "analytics.financialHealth.config.fields.scoreGood", 1, 100),
       num("scoreExcellent", "analytics.financialHealth.config.fields.scoreExcellent", 1, 100),
-      pct("insightCriticalPercent", "analytics.financialHealth.config.fields.insightCriticalPercent", 1, 100),
-      pct("insightWarningPercent", "analytics.financialHealth.config.fields.insightWarningPercent", 1, 100),
-      pct("revenueDeclineAlertPercent", "analytics.financialHealth.config.fields.revenueDeclineAlertPercent", 1, 100),
-      pct("revenueTrendAlertPercent", "analytics.financialHealth.config.fields.revenueTrendAlertPercent", 1, 100),
-      num("marginCompressionPoints", "analytics.financialHealth.config.fields.marginCompressionPoints", 0.1, 50, 0.1),
-      pct("breakevenSafetyPercent", "analytics.financialHealth.config.fields.breakevenSafetyPercent", 1, 100),
-      pct("breakevenComfortPercent", "analytics.financialHealth.config.fields.breakevenComfortPercent", 1, 100),
+      pct(
+        "insightCriticalPercent",
+        "analytics.financialHealth.config.fields.insightCriticalPercent",
+        1,
+        100,
+      ),
+      pct(
+        "insightWarningPercent",
+        "analytics.financialHealth.config.fields.insightWarningPercent",
+        1,
+        100,
+      ),
+      pct(
+        "revenueDeclineAlertPercent",
+        "analytics.financialHealth.config.fields.revenueDeclineAlertPercent",
+        1,
+        100,
+      ),
+      pct(
+        "revenueTrendAlertPercent",
+        "analytics.financialHealth.config.fields.revenueTrendAlertPercent",
+        1,
+        100,
+      ),
+      num(
+        "marginCompressionPoints",
+        "analytics.financialHealth.config.fields.marginCompressionPoints",
+        0.1,
+        50,
+        0.1,
+      ),
+      pct(
+        "breakevenSafetyPercent",
+        "analytics.financialHealth.config.fields.breakevenSafetyPercent",
+        1,
+        100,
+      ),
+      pct(
+        "breakevenComfortPercent",
+        "analytics.financialHealth.config.fields.breakevenComfortPercent",
+        1,
+        100,
+      ),
       {
-        key: "forecastMethod", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastMethod.label", helpKey: "analytics.financialHealth.config.fields.forecastMethod.help",
-        options: ["ets", "ets_damped", "linear", "seasonal", "moving_avg", "arima"], optionsKey: "analytics.financialHealth.config.options.forecastMethod",
+        key: "forecastMethod",
+        kind: "select",
+        labelKey: "analytics.financialHealth.config.fields.forecastMethod.label",
+        helpKey: "analytics.financialHealth.config.fields.forecastMethod.help",
+        options: ["ets", "ets_damped", "linear", "seasonal", "moving_avg", "arima"],
+        optionsKey: "analytics.financialHealth.config.options.forecastMethod",
       },
       {
-        key: "forecastHorizon", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastHorizon.label", helpKey: "analytics.financialHealth.config.fields.forecastHorizon.help",
-        options: ["3", "6", "12", "24"], optionsKey: "analytics.financialHealth.config.options.forecastHorizon",
+        key: "forecastHorizon",
+        kind: "select",
+        labelKey: "analytics.financialHealth.config.fields.forecastHorizon.label",
+        helpKey: "analytics.financialHealth.config.fields.forecastHorizon.help",
+        options: ["3", "6", "12", "24"],
+        optionsKey: "analytics.financialHealth.config.options.forecastHorizon",
       },
       {
-        key: "forecastConfidence", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastConfidence.label", helpKey: "analytics.financialHealth.config.fields.forecastConfidence.help",
+        key: "forecastConfidence",
+        kind: "select",
+        labelKey: "analytics.financialHealth.config.fields.forecastConfidence.label",
+        helpKey: "analytics.financialHealth.config.fields.forecastConfidence.help",
         // The offered levels are the engine's own band table: a level the
         // model cannot band can never be offered, and a new level is offered
         // everywhere the moment the engine learns it. Labels format in the
         // viewer's locale (percent), never from hard-coded catalog text.
-        options: FORECAST_CONFIDENCE_LEVELS.map(String), optionsFormat: "percent",
+        options: FORECAST_CONFIDENCE_LEVELS.map(String),
+        optionsFormat: "percent",
       },
       {
-        key: "forecastSeasonality", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastSeasonality.label", helpKey: "analytics.financialHealth.config.fields.forecastSeasonality.help",
-        options: ["auto", "none", "monthly", "quarterly"], optionsKey: "analytics.financialHealth.config.options.forecastSeasonality",
+        key: "forecastSeasonality",
+        kind: "select",
+        labelKey: "analytics.financialHealth.config.fields.forecastSeasonality.label",
+        helpKey: "analytics.financialHealth.config.fields.forecastSeasonality.help",
+        options: ["auto", "none", "monthly", "quarterly"],
+        optionsKey: "analytics.financialHealth.config.options.forecastSeasonality",
       },
       // Adjustment codes carry no dots: option labels resolve through the
       // catalog path, which splits on dots, so dotted numbers would not look
       // up. The server maps each code to its exact adjustment factor.
       {
-        key: "forecastAdjustment", kind: "select", labelKey: "analytics.financialHealth.config.fields.forecastAdjustment.label", helpKey: "analytics.financialHealth.config.fields.forecastAdjustment.help",
-        options: FORECAST_ADJUSTMENTS.map((a) => a.code), optionsKey: "analytics.financialHealth.config.options.forecastAdjustment",
+        key: "forecastAdjustment",
+        kind: "select",
+        labelKey: "analytics.financialHealth.config.fields.forecastAdjustment.label",
+        helpKey: "analytics.financialHealth.config.fields.forecastAdjustment.help",
+        options: FORECAST_ADJUSTMENTS.map((a) => a.code),
+        optionsKey: "analytics.financialHealth.config.options.forecastAdjustment",
       },
-      num("forecastEtsAlpha", "analytics.financialHealth.config.fields.forecastEtsAlpha", 0.05, 0.95, 0.05),
-      num("forecastEtsBeta", "analytics.financialHealth.config.fields.forecastEtsBeta", 0.05, 0.95, 0.05),
-      num("forecastEtsGamma", "analytics.financialHealth.config.fields.forecastEtsGamma", 0.05, 0.95, 0.05),
-      num("forecastDampedPhi", "analytics.financialHealth.config.fields.forecastDampedPhi", 0.5, 1, 0.05),
+      num(
+        "forecastEtsAlpha",
+        "analytics.financialHealth.config.fields.forecastEtsAlpha",
+        0.05,
+        0.95,
+        0.05,
+      ),
+      num(
+        "forecastEtsBeta",
+        "analytics.financialHealth.config.fields.forecastEtsBeta",
+        0.05,
+        0.95,
+        0.05,
+      ),
+      num(
+        "forecastEtsGamma",
+        "analytics.financialHealth.config.fields.forecastEtsGamma",
+        0.05,
+        0.95,
+        0.05,
+      ),
+      num(
+        "forecastDampedPhi",
+        "analytics.financialHealth.config.fields.forecastDampedPhi",
+        0.5,
+        1,
+        0.05,
+      ),
       num("forecastMa1", "analytics.financialHealth.config.fields.forecastMa1", -0.9, 0.9, 0.05),
-      num("forecastSeasonalityMinCorr", "analytics.financialHealth.config.fields.forecastSeasonalityMinCorr", 0, 1, 0.05),
-      num("forecastSeasonalityMinPeriods", "analytics.financialHealth.config.fields.forecastSeasonalityMinPeriods", 4, 120, 1),
-      pct("budgetOnTrackPercent", "analytics.financialHealth.config.fields.budgetOnTrackPercent", 1, 100),
-      pct("budgetWatchPercent", "analytics.financialHealth.config.fields.budgetWatchPercent", 1, 100),
-      num("segmentHhiWarning", "analytics.financialHealth.config.fields.segmentHhiWarning", 0, 10_000, 100),
-      num("segmentHhiCritical", "analytics.financialHealth.config.fields.segmentHhiCritical", 0, 10_000, 100),
+      num(
+        "forecastSeasonalityMinCorr",
+        "analytics.financialHealth.config.fields.forecastSeasonalityMinCorr",
+        0,
+        1,
+        0.05,
+      ),
+      num(
+        "forecastSeasonalityMinPeriods",
+        "analytics.financialHealth.config.fields.forecastSeasonalityMinPeriods",
+        4,
+        120,
+        1,
+      ),
+      pct(
+        "budgetOnTrackPercent",
+        "analytics.financialHealth.config.fields.budgetOnTrackPercent",
+        1,
+        100,
+      ),
+      pct(
+        "budgetWatchPercent",
+        "analytics.financialHealth.config.fields.budgetWatchPercent",
+        1,
+        100,
+      ),
+      num(
+        "segmentHhiWarning",
+        "analytics.financialHealth.config.fields.segmentHhiWarning",
+        0,
+        10_000,
+        100,
+      ),
+      num(
+        "segmentHhiCritical",
+        "analytics.financialHealth.config.fields.segmentHhiCritical",
+        0,
+        10_000,
+        100,
+      ),
       num("anomalySigma", "analytics.financialHealth.config.fields.anomalySigma", 1, 6, 0.1),
     ],
     ordered: [
@@ -260,14 +455,91 @@ export const ANALYTICS_CONFIG = {
       ["segmentHhiWarning", "segmentHhiCritical"],
     ],
     groups: [
-      { labelKey: "analytics.financialHealth.config.groups.profitability", fields: ["grossMarginTarget", "operatingMarginTarget", "ebitdaMarginTarget", "netMarginTarget", "roaTarget", "roeTarget", "roicTarget", "roceTarget"] },
-      { labelKey: "analytics.financialHealth.config.groups.liquiditySolvency", fields: ["currentRatioTarget", "quickRatioTarget", "debtToEquityTarget", "liabilitiesToEquityTarget", "interestCoverageTarget"] },
-      { labelKey: "analytics.financialHealth.config.groups.efficiencyOperating", fields: ["revenuePerEmployee", "gpPerEmployee", "assetTurnoverTarget", "cogsRatioTarget", "opexRatioTarget", "operatingLeverageTarget", "ruleOf40Target"] },
-      { labelKey: "analytics.financialHealth.config.groups.grading", fields: ["gradeDPercent", "gradeCPercent", "gradeBPercent", "gradeAPercent", "scoreAverage", "scoreGood", "scoreExcellent"] },
-      { labelKey: "analytics.financialHealth.config.groups.budget", fields: ["budgetOnTrackPercent", "budgetWatchPercent"] },
-      { labelKey: "analytics.financialHealth.config.groups.segments", fields: ["segmentHhiWarning", "segmentHhiCritical"] },
-      { labelKey: "analytics.financialHealth.config.groups.findings", fields: ["insightCriticalPercent", "insightWarningPercent", "revenueDeclineAlertPercent", "revenueTrendAlertPercent", "marginCompressionPoints", "breakevenSafetyPercent", "breakevenComfortPercent", "anomalySigma"] },
-      { labelKey: "analytics.financialHealth.config.groups.model", fields: ["forecastMethod", "forecastHorizon", "forecastConfidence", "forecastSeasonality", "forecastAdjustment", "forecastEtsAlpha", "forecastEtsBeta", "forecastEtsGamma", "forecastDampedPhi", "forecastMa1", "forecastSeasonalityMinCorr", "forecastSeasonalityMinPeriods"] },
+      {
+        labelKey: "analytics.financialHealth.config.groups.profitability",
+        fields: [
+          "grossMarginTarget",
+          "operatingMarginTarget",
+          "ebitdaMarginTarget",
+          "netMarginTarget",
+          "roaTarget",
+          "roeTarget",
+          "roicTarget",
+          "roceTarget",
+        ],
+      },
+      {
+        labelKey: "analytics.financialHealth.config.groups.liquiditySolvency",
+        fields: [
+          "currentRatioTarget",
+          "quickRatioTarget",
+          "debtToEquityTarget",
+          "liabilitiesToEquityTarget",
+          "interestCoverageTarget",
+        ],
+      },
+      {
+        labelKey: "analytics.financialHealth.config.groups.efficiencyOperating",
+        fields: [
+          "revenuePerEmployee",
+          "gpPerEmployee",
+          "assetTurnoverTarget",
+          "cogsRatioTarget",
+          "opexRatioTarget",
+          "operatingLeverageTarget",
+          "ruleOf40Target",
+        ],
+      },
+      {
+        labelKey: "analytics.financialHealth.config.groups.grading",
+        fields: [
+          "gradeDPercent",
+          "gradeCPercent",
+          "gradeBPercent",
+          "gradeAPercent",
+          "scoreAverage",
+          "scoreGood",
+          "scoreExcellent",
+        ],
+      },
+      {
+        labelKey: "analytics.financialHealth.config.groups.budget",
+        fields: ["budgetOnTrackPercent", "budgetWatchPercent"],
+      },
+      {
+        labelKey: "analytics.financialHealth.config.groups.segments",
+        fields: ["segmentHhiWarning", "segmentHhiCritical"],
+      },
+      {
+        labelKey: "analytics.financialHealth.config.groups.findings",
+        fields: [
+          "insightCriticalPercent",
+          "insightWarningPercent",
+          "revenueDeclineAlertPercent",
+          "revenueTrendAlertPercent",
+          "marginCompressionPoints",
+          "breakevenSafetyPercent",
+          "breakevenComfortPercent",
+          "anomalySigma",
+        ],
+      },
+      {
+        labelKey: "analytics.financialHealth.config.groups.model",
+        fields: [
+          "forecastMethod",
+          "forecastHorizon",
+          "forecastConfidence",
+          "forecastSeasonality",
+          "forecastAdjustment",
+          "forecastEtsAlpha",
+          "forecastEtsBeta",
+          "forecastEtsGamma",
+          "forecastDampedPhi",
+          "forecastMa1",
+          "forecastSeasonalityMinCorr",
+          "forecastSeasonalityMinPeriods",
+        ],
+      },
     ],
   },
   customerIntelligence: {
@@ -416,68 +688,180 @@ export const ANALYTICS_CONFIG = {
       num("churnHighDays", "analytics.customer.config.fields.churnHighDays", 1, 730),
       num("churnMediumDays", "analytics.customer.config.fields.churnMediumDays", 1, 365),
       num("churnInactiveLowDays", "analytics.customer.config.fields.churnInactiveLowDays", 1, 365),
-      num("churnInactiveCriticalPoints", "analytics.customer.config.fields.churnInactiveCriticalPoints", 0, 100),
-      num("churnInactiveHighPoints", "analytics.customer.config.fields.churnInactiveHighPoints", 0, 100),
-      num("churnInactiveLowPoints", "analytics.customer.config.fields.churnInactiveLowPoints", 0, 100),
-      num("churnCadenceHighMultiple", "analytics.customer.config.fields.churnCadenceHighMultiple", 1, 10, 0.1),
-      num("churnCadenceLowMultiple", "analytics.customer.config.fields.churnCadenceLowMultiple", 1, 10, 0.1),
-      num("churnCadenceHighPoints", "analytics.customer.config.fields.churnCadenceHighPoints", 0, 100),
-      num("churnCadenceLowPoints", "analytics.customer.config.fields.churnCadenceLowPoints", 0, 100),
+      num(
+        "churnInactiveCriticalPoints",
+        "analytics.customer.config.fields.churnInactiveCriticalPoints",
+        0,
+        100,
+      ),
+      num(
+        "churnInactiveHighPoints",
+        "analytics.customer.config.fields.churnInactiveHighPoints",
+        0,
+        100,
+      ),
+      num(
+        "churnInactiveLowPoints",
+        "analytics.customer.config.fields.churnInactiveLowPoints",
+        0,
+        100,
+      ),
+      num(
+        "churnCadenceHighMultiple",
+        "analytics.customer.config.fields.churnCadenceHighMultiple",
+        1,
+        10,
+        0.1,
+      ),
+      num(
+        "churnCadenceLowMultiple",
+        "analytics.customer.config.fields.churnCadenceLowMultiple",
+        1,
+        10,
+        0.1,
+      ),
+      num(
+        "churnCadenceHighPoints",
+        "analytics.customer.config.fields.churnCadenceHighPoints",
+        0,
+        100,
+      ),
+      num(
+        "churnCadenceLowPoints",
+        "analytics.customer.config.fields.churnCadenceLowPoints",
+        0,
+        100,
+      ),
       num("churnSingleMaxTxns", "analytics.customer.config.fields.churnSingleMaxTxns", 1, 10),
       num("churnFewMaxTxns", "analytics.customer.config.fields.churnFewMaxTxns", 2, 20),
       num("churnSinglePoints", "analytics.customer.config.fields.churnSinglePoints", 0, 100),
       num("churnFewPoints", "analytics.customer.config.fields.churnFewPoints", 0, 100),
       num("clvMinYears", "analytics.customer.config.fields.clvMinYears", 0.05, 5, 0.05),
       pct("clvRetentionBase", "analytics.customer.config.fields.clvRetentionBase", 1, 100),
-      num("clvRetentionDecayDays", "analytics.customer.config.fields.clvRetentionDecayDays", 1, 730),
+      num(
+        "clvRetentionDecayDays",
+        "analytics.customer.config.fields.clvRetentionDecayDays",
+        1,
+        730,
+      ),
       pct("clvRetentionMinPct", "analytics.customer.config.fields.clvRetentionMinPct"),
       pct("clvRetentionMaxPct", "analytics.customer.config.fields.clvRetentionMaxPct"),
       pct("tierPlatinumPct", "analytics.customer.config.fields.tierPlatinumPct", 1, 100),
       pct("tierGoldPct", "analytics.customer.config.fields.tierGoldPct", 1, 100),
       pct("tierSilverPct", "analytics.customer.config.fields.tierSilverPct", 1, 100),
-      pct("concentrationCriticalShare", "analytics.customer.config.fields.concentrationCriticalShare"),
+      pct(
+        "concentrationCriticalShare",
+        "analytics.customer.config.fields.concentrationCriticalShare",
+      ),
       pct("concentrationHighShare", "analytics.customer.config.fields.concentrationHighShare"),
       pct("concentrationMediumShare", "analytics.customer.config.fields.concentrationMediumShare"),
-      pct("concentrationCoverageShare", "analytics.customer.config.fields.concentrationCoverageShare", 1, 100),
+      pct(
+        "concentrationCoverageShare",
+        "analytics.customer.config.fields.concentrationCoverageShare",
+        1,
+        100,
+      ),
       num("topSharePct", "analytics.customer.config.fields.topSharePct", 1, 100),
       pct("concentrationHealthHigh", "analytics.customer.config.fields.concentrationHealthHigh"),
-      pct("concentrationHealthModerate", "analytics.customer.config.fields.concentrationHealthModerate"),
+      pct(
+        "concentrationHealthModerate",
+        "analytics.customer.config.fields.concentrationHealthModerate",
+      ),
       pct("concentrationHealthLow", "analytics.customer.config.fields.concentrationHealthLow"),
-      num("velocityUrgencyHighMultiple", "analytics.customer.config.fields.velocityUrgencyHighMultiple", 0.1, 0.9, 0.05),
+      num(
+        "velocityUrgencyHighMultiple",
+        "analytics.customer.config.fields.velocityUrgencyHighMultiple",
+        0.1,
+        0.9,
+        0.05,
+      ),
       num("velocityDueSoonDays", "analytics.customer.config.fields.velocityDueSoonDays", 0, 30),
-      num("frictionPointsPerCredit", "analytics.customer.config.fields.frictionPointsPerCredit", 1, 10),
-      num("frictionCriticalPoints", "analytics.customer.config.fields.frictionCriticalPoints", 0, 100),
+      num(
+        "frictionPointsPerCredit",
+        "analytics.customer.config.fields.frictionPointsPerCredit",
+        1,
+        10,
+      ),
+      num(
+        "frictionCriticalPoints",
+        "analytics.customer.config.fields.frictionCriticalPoints",
+        0,
+        100,
+      ),
       num("frictionHighPoints", "analytics.customer.config.fields.frictionHighPoints", 0, 100),
       num("frictionMediumPoints", "analytics.customer.config.fields.frictionMediumPoints", 0, 100),
-      num("frictionPenaltyCritical", "analytics.customer.config.fields.frictionPenaltyCritical", 0, 100),
+      num(
+        "frictionPenaltyCritical",
+        "analytics.customer.config.fields.frictionPenaltyCritical",
+        0,
+        100,
+      ),
       num("frictionPenaltyHigh", "analytics.customer.config.fields.frictionPenaltyHigh", 0, 100),
-      num("frictionPenaltyMedium", "analytics.customer.config.fields.frictionPenaltyMedium", 0, 100),
+      num(
+        "frictionPenaltyMedium",
+        "analytics.customer.config.fields.frictionPenaltyMedium",
+        0,
+        100,
+      ),
       pct("frictionCriticalRate", "analytics.customer.config.fields.frictionCriticalRate"),
       pct("frictionHighRate", "analytics.customer.config.fields.frictionHighRate"),
       pct("frictionMediumRate", "analytics.customer.config.fields.frictionMediumRate"),
       num("paymentDsoHighDays", "analytics.customer.config.fields.paymentDsoHighDays", 1, 180),
-      num("paymentDsoHighPenalty", "analytics.customer.config.fields.paymentDsoHighPenalty", 0, 100),
+      num(
+        "paymentDsoHighPenalty",
+        "analytics.customer.config.fields.paymentDsoHighPenalty",
+        0,
+        100,
+      ),
       num("paymentDsoMediumDays", "analytics.customer.config.fields.paymentDsoMediumDays", 1, 180),
-      num("paymentDsoMediumPenalty", "analytics.customer.config.fields.paymentDsoMediumPenalty", 0, 100),
+      num(
+        "paymentDsoMediumPenalty",
+        "analytics.customer.config.fields.paymentDsoMediumPenalty",
+        0,
+        100,
+      ),
       num("paymentDsoLowDays", "analytics.customer.config.fields.paymentDsoLowDays", 1, 180),
       num("paymentDsoLowPenalty", "analytics.customer.config.fields.paymentDsoLowPenalty", 0, 100),
-      num("paymentOverduePerInvoice", "analytics.customer.config.fields.paymentOverduePerInvoice", 0, 100),
+      num(
+        "paymentOverduePerInvoice",
+        "analytics.customer.config.fields.paymentOverduePerInvoice",
+        0,
+        100,
+      ),
       num("paymentOverdueCap", "analytics.customer.config.fields.paymentOverdueCap", 0, 100),
-      num("paymentRatingExcellent", "analytics.customer.config.fields.paymentRatingExcellent", 1, 100),
+      num(
+        "paymentRatingExcellent",
+        "analytics.customer.config.fields.paymentRatingExcellent",
+        1,
+        100,
+      ),
       num("paymentRatingGood", "analytics.customer.config.fields.paymentRatingGood", 1, 100),
       num("paymentRatingFair", "analytics.customer.config.fields.paymentRatingFair", 1, 100),
       pct("profitHighMargin", "analytics.customer.config.fields.profitHighMargin", -100, 100),
       pct("profitMediumMargin", "analytics.customer.config.fields.profitMediumMargin", -100, 100),
       pct("profitLowMargin", "analytics.customer.config.fields.profitLowMargin", -100, 100),
-      pct("profitLeakMarginTarget", "analytics.customer.config.fields.profitLeakMarginTarget", -100, 100),
-      pct("profitLeakRevenueSharePct", "analytics.customer.config.fields.profitLeakRevenueSharePct"),
+      pct(
+        "profitLeakMarginTarget",
+        "analytics.customer.config.fields.profitLeakMarginTarget",
+        -100,
+        100,
+      ),
+      pct(
+        "profitLeakRevenueSharePct",
+        "analytics.customer.config.fields.profitLeakRevenueSharePct",
+      ),
       num("nurtureMinHealth", "analytics.customer.config.fields.nurtureMinHealth", 1, 100),
       pct("nurtureClvPercentile", "analytics.customer.config.fields.nurtureClvPercentile", 1, 100),
       pct("growthMaturityFloorPct", "analytics.customer.config.fields.growthMaturityFloorPct"),
       num("growthMomCapUp", "analytics.customer.config.fields.growthMomCapUp", 0, 1000),
       num("growthMomCapDown", "analytics.customer.config.fields.growthMomCapDown", 0, 1000),
       pct("growthTrendPct", "analytics.customer.config.fields.growthTrendPct"),
-      num("growthTrendWindowMonths", "analytics.customer.config.fields.growthTrendWindowMonths", 2, 12),
+      num(
+        "growthTrendWindowMonths",
+        "analytics.customer.config.fields.growthTrendWindowMonths",
+        2,
+        12,
+      ),
       num("yoyRecentMonths", "analytics.customer.config.fields.yoyRecentMonths", 1, 12),
       num("cohortActiveMonths", "analytics.customer.config.fields.cohortActiveMonths", 1, 24),
       num("overdueInsightCount", "analytics.customer.config.fields.overdueInsightCount", 1, 1000),
@@ -507,25 +891,155 @@ export const ANALYTICS_CONFIG = {
     ],
     sumsTo: [
       {
-        keys: ["healthWeightRecency", "healthWeightFrequency", "healthWeightMonetary", "healthWeightPayment"],
+        keys: [
+          "healthWeightRecency",
+          "healthWeightFrequency",
+          "healthWeightMonetary",
+          "healthWeightPayment",
+        ],
         total: 100,
       },
       {
-        keys: ["intelWeightChampions", "intelWeightRetention", "intelWeightConcentration", "intelWeightPayment"],
+        keys: [
+          "intelWeightChampions",
+          "intelWeightRetention",
+          "intelWeightConcentration",
+          "intelWeightPayment",
+        ],
         total: 100,
       },
     ],
     groups: [
-      { labelKey: "analytics.customer.config.groups.scores", fields: ["healthWeightRecency", "healthWeightFrequency", "healthWeightMonetary", "healthWeightPayment", "intelWeightChampions", "intelWeightRetention", "intelWeightConcentration", "intelWeightPayment"] },
-      { labelKey: "analytics.customer.config.groups.grades", fields: ["gradeAPlus", "gradeA", "gradeB", "gradeC", "gradeD"] },
-      { labelKey: "analytics.customer.config.groups.recency", fields: ["recencyGoodDays", "recencyWarningDays", "recencyCriticalDays"] },
-      { labelKey: "analytics.customer.config.groups.churn", fields: ["churnCriticalScore", "churnHighScore", "churnMediumScore", "churnHighDays", "churnMediumDays", "churnInactiveLowDays", "churnInactiveHighPoints", "churnInactiveCriticalPoints", "churnInactiveLowPoints", "churnCadenceHighMultiple", "churnCadenceLowMultiple", "churnCadenceHighPoints", "churnCadenceLowPoints", "churnSingleMaxTxns", "churnFewMaxTxns", "churnSinglePoints", "churnFewPoints", "velocityUrgencyHighMultiple", "velocityDueSoonDays"] },
-      { labelKey: "analytics.customer.config.groups.payment", fields: ["paymentDsoHighDays", "paymentDsoHighPenalty", "paymentDsoMediumDays", "paymentDsoMediumPenalty", "paymentDsoLowDays", "paymentDsoLowPenalty", "paymentOverduePerInvoice", "paymentOverdueCap", "paymentRatingExcellent", "paymentRatingGood", "paymentRatingFair"] },
-      { labelKey: "analytics.customer.config.groups.clv", fields: ["clvMinYears", "clvYears", "clvRetentionBase", "clvRetentionDecayDays", "clvRetentionMinPct", "clvRetentionMaxPct", "tierPlatinumPct", "tierGoldPct", "tierSilverPct", "nurtureMinHealth", "nurtureClvPercentile"] },
-      { labelKey: "analytics.customer.config.groups.concentration", fields: ["hhiWarning", "hhiCritical", "concentrationCriticalShare", "concentrationHighShare", "concentrationMediumShare", "concentrationCoverageShare", "topSharePct", "concentrationHealthHigh", "concentrationHealthModerate", "concentrationHealthLow"] },
-      { labelKey: "analytics.customer.config.groups.friction", fields: ["frictionPointsPerCredit", "frictionCriticalPoints", "frictionHighPoints", "frictionMediumPoints", "frictionPenaltyCritical", "frictionPenaltyHigh", "frictionPenaltyMedium", "frictionCriticalRate", "frictionHighRate", "frictionMediumRate"] },
-      { labelKey: "analytics.customer.config.groups.profit", fields: ["profitHighMargin", "profitMediumMargin", "profitLowMargin", "profitLeakMarginTarget", "profitLeakRevenueSharePct"] },
-      { labelKey: "analytics.customer.config.groups.growth", fields: ["growthMaturityFloorPct", "growthMomCapUp", "growthMomCapDown", "growthTrendPct", "growthTrendWindowMonths", "yoyRecentMonths", "cohortActiveMonths", "overdueInsightCount"] },
+      {
+        labelKey: "analytics.customer.config.groups.scores",
+        fields: [
+          "healthWeightRecency",
+          "healthWeightFrequency",
+          "healthWeightMonetary",
+          "healthWeightPayment",
+          "intelWeightChampions",
+          "intelWeightRetention",
+          "intelWeightConcentration",
+          "intelWeightPayment",
+        ],
+      },
+      {
+        labelKey: "analytics.customer.config.groups.grades",
+        fields: ["gradeAPlus", "gradeA", "gradeB", "gradeC", "gradeD"],
+      },
+      {
+        labelKey: "analytics.customer.config.groups.recency",
+        fields: ["recencyGoodDays", "recencyWarningDays", "recencyCriticalDays"],
+      },
+      {
+        labelKey: "analytics.customer.config.groups.churn",
+        fields: [
+          "churnCriticalScore",
+          "churnHighScore",
+          "churnMediumScore",
+          "churnHighDays",
+          "churnMediumDays",
+          "churnInactiveLowDays",
+          "churnInactiveHighPoints",
+          "churnInactiveCriticalPoints",
+          "churnInactiveLowPoints",
+          "churnCadenceHighMultiple",
+          "churnCadenceLowMultiple",
+          "churnCadenceHighPoints",
+          "churnCadenceLowPoints",
+          "churnSingleMaxTxns",
+          "churnFewMaxTxns",
+          "churnSinglePoints",
+          "churnFewPoints",
+          "velocityUrgencyHighMultiple",
+          "velocityDueSoonDays",
+        ],
+      },
+      {
+        labelKey: "analytics.customer.config.groups.payment",
+        fields: [
+          "paymentDsoHighDays",
+          "paymentDsoHighPenalty",
+          "paymentDsoMediumDays",
+          "paymentDsoMediumPenalty",
+          "paymentDsoLowDays",
+          "paymentDsoLowPenalty",
+          "paymentOverduePerInvoice",
+          "paymentOverdueCap",
+          "paymentRatingExcellent",
+          "paymentRatingGood",
+          "paymentRatingFair",
+        ],
+      },
+      {
+        labelKey: "analytics.customer.config.groups.clv",
+        fields: [
+          "clvMinYears",
+          "clvYears",
+          "clvRetentionBase",
+          "clvRetentionDecayDays",
+          "clvRetentionMinPct",
+          "clvRetentionMaxPct",
+          "tierPlatinumPct",
+          "tierGoldPct",
+          "tierSilverPct",
+          "nurtureMinHealth",
+          "nurtureClvPercentile",
+        ],
+      },
+      {
+        labelKey: "analytics.customer.config.groups.concentration",
+        fields: [
+          "hhiWarning",
+          "hhiCritical",
+          "concentrationCriticalShare",
+          "concentrationHighShare",
+          "concentrationMediumShare",
+          "concentrationCoverageShare",
+          "topSharePct",
+          "concentrationHealthHigh",
+          "concentrationHealthModerate",
+          "concentrationHealthLow",
+        ],
+      },
+      {
+        labelKey: "analytics.customer.config.groups.friction",
+        fields: [
+          "frictionPointsPerCredit",
+          "frictionCriticalPoints",
+          "frictionHighPoints",
+          "frictionMediumPoints",
+          "frictionPenaltyCritical",
+          "frictionPenaltyHigh",
+          "frictionPenaltyMedium",
+          "frictionCriticalRate",
+          "frictionHighRate",
+          "frictionMediumRate",
+        ],
+      },
+      {
+        labelKey: "analytics.customer.config.groups.profit",
+        fields: [
+          "profitHighMargin",
+          "profitMediumMargin",
+          "profitLowMargin",
+          "profitLeakMarginTarget",
+          "profitLeakRevenueSharePct",
+        ],
+      },
+      {
+        labelKey: "analytics.customer.config.groups.growth",
+        fields: [
+          "growthMaturityFloorPct",
+          "growthMomCapUp",
+          "growthMomCapDown",
+          "growthTrendPct",
+          "growthTrendWindowMonths",
+          "yoyRecentMonths",
+          "cohortActiveMonths",
+          "overdueInsightCount",
+        ],
+      },
     ],
   },
   utilization: {
@@ -533,13 +1047,31 @@ export const ANALYTICS_CONFIG = {
     // The spike threshold is money in the presentation currency: it starts
     // unset (no alert) so no figure is ever read in the wrong currency.
     defaults: {
-      targetBillablePct: 70, costSpikeThreshold: "", minHours: 10, reallocWarnPp: 15, reallocActionPp: 20,
-      watchBandPp: 10, warnBandPp: 20, anomalyDropPp: 15, overtimeBillableGapPp: 20, titleDriftPp: 5,
-      peerOutlierSigma: 1.5, peerSpreadWarnPp: 20, peerSpreadActionPp: 30, peerMinCount: 2,
+      targetBillablePct: 70,
+      costSpikeThreshold: "",
+      minHours: 10,
+      reallocWarnPp: 15,
+      reallocActionPp: 20,
+      watchBandPp: 10,
+      warnBandPp: 20,
+      anomalyDropPp: 15,
+      overtimeBillableGapPp: 20,
+      titleDriftPp: 5,
+      peerOutlierSigma: 1.5,
+      peerSpreadWarnPp: 20,
+      peerSpreadActionPp: 30,
+      peerMinCount: 2,
     },
     fields: [
       pct("targetBillablePct", "analytics.utilization.config.fields.targetBillable", 10, 100),
-      { key: "costSpikeThreshold", kind: "money", optional: true, labelKey: "analytics.utilization.config.fields.costSpike.label", helpKey: "analytics.utilization.config.fields.costSpike.help", maxAmount: "100000000" },
+      {
+        key: "costSpikeThreshold",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.utilization.config.fields.costSpike.label",
+        helpKey: "analytics.utilization.config.fields.costSpike.help",
+        maxAmount: "100000000",
+      },
       num("minHours", "analytics.utilization.config.fields.minHours", 0, 500),
       num("reallocWarnPp", "analytics.utilization.config.fields.reallocWarn", 1, 50),
       num("reallocActionPp", "analytics.utilization.config.fields.reallocAction", 1, 50),
@@ -548,17 +1080,46 @@ export const ANALYTICS_CONFIG = {
       num("anomalyDropPp", "analytics.utilization.config.fields.anomalyDrop", 1, 50),
       num("overtimeBillableGapPp", "analytics.utilization.config.fields.overtimeGap", 1, 50),
       num("titleDriftPp", "analytics.utilization.config.fields.titleDrift", 1, 50),
-      { key: "peerOutlierSigma", kind: "number", labelKey: "analytics.utilization.config.fields.peerSigma.label", helpKey: "analytics.utilization.config.fields.peerSigma.help", min: 0.5, max: 5, step: 0.1 },
+      {
+        key: "peerOutlierSigma",
+        kind: "number",
+        labelKey: "analytics.utilization.config.fields.peerSigma.label",
+        helpKey: "analytics.utilization.config.fields.peerSigma.help",
+        min: 0.5,
+        max: 5,
+        step: 0.1,
+      },
       num("peerSpreadWarnPp", "analytics.utilization.config.fields.peerSpreadWarn", 1, 50),
       num("peerSpreadActionPp", "analytics.utilization.config.fields.peerSpreadAction", 1, 50),
       num("peerMinCount", "analytics.utilization.config.fields.peerMin", 1, 10),
     ],
-    ordered: [["reallocWarnPp", "reallocActionPp"], ["watchBandPp", "warnBandPp"], ["peerSpreadWarnPp", "peerSpreadActionPp"]],
+    ordered: [
+      ["reallocWarnPp", "reallocActionPp"],
+      ["watchBandPp", "warnBandPp"],
+      ["peerSpreadWarnPp", "peerSpreadActionPp"],
+    ],
     groups: [
       { labelKey: "analytics.utilization.config.groups.targets", fields: ["targetBillablePct"] },
-      { labelKey: "analytics.utilization.config.groups.floors", fields: ["costSpikeThreshold", "minHours"] },
-      { labelKey: "analytics.utilization.config.groups.scenarioBands", fields: ["reallocWarnPp", "reallocActionPp", "watchBandPp", "warnBandPp"] },
-      { labelKey: "analytics.utilization.config.groups.anomalyBands", fields: ["anomalyDropPp", "overtimeBillableGapPp", "titleDriftPp", "peerOutlierSigma", "peerSpreadWarnPp", "peerSpreadActionPp", "peerMinCount"] },
+      {
+        labelKey: "analytics.utilization.config.groups.floors",
+        fields: ["costSpikeThreshold", "minHours"],
+      },
+      {
+        labelKey: "analytics.utilization.config.groups.scenarioBands",
+        fields: ["reallocWarnPp", "reallocActionPp", "watchBandPp", "warnBandPp"],
+      },
+      {
+        labelKey: "analytics.utilization.config.groups.anomalyBands",
+        fields: [
+          "anomalyDropPp",
+          "overtimeBillableGapPp",
+          "titleDriftPp",
+          "peerOutlierSigma",
+          "peerSpreadWarnPp",
+          "peerSpreadActionPp",
+          "peerMinCount",
+        ],
+      },
     ],
   },
   trueCost: {
@@ -568,7 +1129,10 @@ export const ANALYTICS_CONFIG = {
       num("matrixUnderperformPct", "analytics.trueCost.config.fields.matrixUnderperform", 1, 100),
     ],
     groups: [
-      { labelKey: "analytics.trueCost.config.groups.performance", fields: ["matrixUnderperformPct"] },
+      {
+        labelKey: "analytics.trueCost.config.groups.performance",
+        fields: ["matrixUnderperformPct"],
+      },
     ],
   },
   vendorPerformance: {
@@ -619,13 +1183,41 @@ export const ANALYTICS_CONFIG = {
       pct("onTimeGoodRate", "analytics.vendor.config.fields.onTimeGoodRate", 0, 100),
       num("slowPayDays", "analytics.vendor.config.fields.slowPayDays", 0, 365),
     ],
-    ordered: [["gradeD", "gradeC", "gradeB", "gradeA"], ["tierStrategicPct", "tierCorePct", "tierTacticalPct"], ["hhiWarning", "hhiCritical"]],
+    ordered: [
+      ["gradeD", "gradeC", "gradeB", "gradeA"],
+      ["tierStrategicPct", "tierCorePct", "tierTacticalPct"],
+      ["hhiWarning", "hhiCritical"],
+    ],
     groups: [
-      { labelKey: "analytics.vendor.config.groups.grading", fields: ["gradeA", "gradeB", "gradeC", "gradeD"] },
-      { labelKey: "analytics.vendor.config.groups.tiers", fields: ["tierStrategicPct", "tierCorePct", "tierTacticalPct"] },
-      { labelKey: "analytics.vendor.config.groups.scorecard", fields: ["significanceStrategic", "significanceCore", "significanceTactical", "significanceTail", "engagementCapBills", "engagementMaxPoints", "stabilityMaxPoints", "neutralStabilityScore"] },
-      { labelKey: "analytics.vendor.config.groups.concentration", fields: ["highSpendPercentile", "highPerformanceScore", "hhiWarning", "hhiCritical"] },
-      { labelKey: "analytics.vendor.config.groups.paymentMarks", fields: ["onTimeGoodRate", "slowPayDays"] },
+      {
+        labelKey: "analytics.vendor.config.groups.grading",
+        fields: ["gradeA", "gradeB", "gradeC", "gradeD"],
+      },
+      {
+        labelKey: "analytics.vendor.config.groups.tiers",
+        fields: ["tierStrategicPct", "tierCorePct", "tierTacticalPct"],
+      },
+      {
+        labelKey: "analytics.vendor.config.groups.scorecard",
+        fields: [
+          "significanceStrategic",
+          "significanceCore",
+          "significanceTactical",
+          "significanceTail",
+          "engagementCapBills",
+          "engagementMaxPoints",
+          "stabilityMaxPoints",
+          "neutralStabilityScore",
+        ],
+      },
+      {
+        labelKey: "analytics.vendor.config.groups.concentration",
+        fields: ["highSpendPercentile", "highPerformanceScore", "hhiWarning", "hhiCritical"],
+      },
+      {
+        labelKey: "analytics.vendor.config.groups.paymentMarks",
+        fields: ["onTimeGoodRate", "slowPayDays"],
+      },
     ],
   },
   sentinel: {
@@ -668,23 +1260,89 @@ export const ANALYTICS_CONFIG = {
     },
     fields: [
       num("duplicateDays", "analytics.sentinel.config.fields.duplicateDays", 1, 90),
-      { key: "duplicateMinAmount", kind: "money", optional: true, labelKey: "analytics.sentinel.config.fields.duplicateMinAmount.label", helpKey: "analytics.sentinel.config.fields.duplicateMinAmount.help", maxAmount: "100000000" },
+      {
+        key: "duplicateMinAmount",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.sentinel.config.fields.duplicateMinAmount.label",
+        helpKey: "analytics.sentinel.config.fields.duplicateMinAmount.help",
+        maxAmount: "100000000",
+      },
       num("sequentialMinCount", "analytics.sentinel.config.fields.sequentialMinCount", 2, 50),
       num("sequentialMinDays", "analytics.sentinel.config.fields.sequentialMinDays", 1, 365),
-      num("summaryFlaggedMedium", "analytics.sentinel.config.fields.summaryFlaggedMedium", 1, 10000),
+      num(
+        "summaryFlaggedMedium",
+        "analytics.sentinel.config.fields.summaryFlaggedMedium",
+        1,
+        10000,
+      ),
       num("summaryFlaggedHigh", "analytics.sentinel.config.fields.summaryFlaggedHigh", 2, 100000),
-      { key: "moderateRiskAmount", kind: "money", optional: true, labelKey: "analytics.sentinel.config.fields.moderateRiskAmount.label", helpKey: "analytics.sentinel.config.fields.moderateRiskAmount.help", maxAmount: "100000000" },
-      { key: "highRiskAmount", kind: "money", optional: true, labelKey: "analytics.sentinel.config.fields.highRiskAmount.label", helpKey: "analytics.sentinel.config.fields.highRiskAmount.help", maxAmount: "100000000" },
-      { key: "criticalRiskAmount", kind: "money", optional: true, labelKey: "analytics.sentinel.config.fields.criticalRiskAmount.label", helpKey: "analytics.sentinel.config.fields.criticalRiskAmount.help", maxAmount: "100000000" },
-      { key: "aggregateHighAmount", kind: "money", optional: true, labelKey: "analytics.sentinel.config.fields.aggregateHighAmount.label", helpKey: "analytics.sentinel.config.fields.aggregateHighAmount.help", maxAmount: "1000000000" },
-      { key: "aggregateCriticalAmount", kind: "money", optional: true, labelKey: "analytics.sentinel.config.fields.aggregateCriticalAmount.label", helpKey: "analytics.sentinel.config.fields.aggregateCriticalAmount.help", maxAmount: "1000000000" },
-      { key: "rsfBaselineFloor", kind: "money", optional: true, labelKey: "analytics.sentinel.config.fields.rsfBaselineFloor.label", helpKey: "analytics.sentinel.config.fields.rsfBaselineFloor.help", maxAmount: "100000000" },
-      { key: "zscoreSigmaFloor", kind: "money", optional: true, labelKey: "analytics.sentinel.config.fields.zscoreSigmaFloor.label", helpKey: "analytics.sentinel.config.fields.zscoreSigmaFloor.help", maxAmount: "100000000" },
+      {
+        key: "moderateRiskAmount",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.sentinel.config.fields.moderateRiskAmount.label",
+        helpKey: "analytics.sentinel.config.fields.moderateRiskAmount.help",
+        maxAmount: "100000000",
+      },
+      {
+        key: "highRiskAmount",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.sentinel.config.fields.highRiskAmount.label",
+        helpKey: "analytics.sentinel.config.fields.highRiskAmount.help",
+        maxAmount: "100000000",
+      },
+      {
+        key: "criticalRiskAmount",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.sentinel.config.fields.criticalRiskAmount.label",
+        helpKey: "analytics.sentinel.config.fields.criticalRiskAmount.help",
+        maxAmount: "100000000",
+      },
+      {
+        key: "aggregateHighAmount",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.sentinel.config.fields.aggregateHighAmount.label",
+        helpKey: "analytics.sentinel.config.fields.aggregateHighAmount.help",
+        maxAmount: "1000000000",
+      },
+      {
+        key: "aggregateCriticalAmount",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.sentinel.config.fields.aggregateCriticalAmount.label",
+        helpKey: "analytics.sentinel.config.fields.aggregateCriticalAmount.help",
+        maxAmount: "1000000000",
+      },
+      {
+        key: "rsfBaselineFloor",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.sentinel.config.fields.rsfBaselineFloor.label",
+        helpKey: "analytics.sentinel.config.fields.rsfBaselineFloor.help",
+        maxAmount: "100000000",
+      },
+      {
+        key: "zscoreSigmaFloor",
+        kind: "money",
+        optional: true,
+        labelKey: "analytics.sentinel.config.fields.zscoreSigmaFloor.label",
+        helpKey: "analytics.sentinel.config.fields.zscoreSigmaFloor.help",
+        maxAmount: "100000000",
+      },
       num("zscoreThreshold", "analytics.sentinel.config.fields.zscoreThreshold", 1, 10, 0.1),
       num("zscoreMinBaseline", "analytics.sentinel.config.fields.zscoreMinBaseline", 3, 36),
       num("rsfThreshold", "analytics.sentinel.config.fields.rsfThreshold", 2, 100, 0.5),
       num("baselineMonths", "analytics.sentinel.config.fields.baselineMonths", 3, 120),
-      num("sequentialHighRiskDays", "analytics.sentinel.config.fields.sequentialHighRiskDays", 7, 365),
+      num(
+        "sequentialHighRiskDays",
+        "analytics.sentinel.config.fields.sequentialHighRiskDays",
+        7,
+        365,
+      ),
       num("benfordMinSample", "analytics.sentinel.config.fields.benfordMinSample", 10, 1000),
       pct("trapBandPercent", "analytics.sentinel.config.fields.trapBandPercent", 0, 50),
       num("duplicateAreaMin", "analytics.sentinel.config.fields.duplicateAreaMin", 1, 100),
@@ -699,10 +1357,45 @@ export const ANALYTICS_CONFIG = {
     // presentation-currency floors, summary scoring bands, then the
     // statistical windows the detectors run on.
     groups: [
-      { labelKey: "analytics.sentinel.config.groups.detection", fields: ["duplicateDays", "duplicateMinAmount", "duplicateAreaMin", "sequentialMinCount", "sequentialMinDays", "sequentialHighRiskDays", "trapBandPercent", "ghostNameMinLength"] },
-      { labelKey: "analytics.sentinel.config.groups.moneyFloors", fields: ["moderateRiskAmount", "highRiskAmount", "criticalRiskAmount", "aggregateHighAmount", "aggregateCriticalAmount", "rsfBaselineFloor", "zscoreSigmaFloor"] },
-      { labelKey: "analytics.sentinel.config.groups.scoringBands", fields: ["summaryFlaggedMedium", "summaryFlaggedHigh"] },
-      { labelKey: "analytics.sentinel.config.groups.modelParameters", fields: ["zscoreThreshold", "zscoreMinBaseline", "rsfThreshold", "baselineMonths", "benfordMinSample"] },
+      {
+        labelKey: "analytics.sentinel.config.groups.detection",
+        fields: [
+          "duplicateDays",
+          "duplicateMinAmount",
+          "duplicateAreaMin",
+          "sequentialMinCount",
+          "sequentialMinDays",
+          "sequentialHighRiskDays",
+          "trapBandPercent",
+          "ghostNameMinLength",
+        ],
+      },
+      {
+        labelKey: "analytics.sentinel.config.groups.moneyFloors",
+        fields: [
+          "moderateRiskAmount",
+          "highRiskAmount",
+          "criticalRiskAmount",
+          "aggregateHighAmount",
+          "aggregateCriticalAmount",
+          "rsfBaselineFloor",
+          "zscoreSigmaFloor",
+        ],
+      },
+      {
+        labelKey: "analytics.sentinel.config.groups.scoringBands",
+        fields: ["summaryFlaggedMedium", "summaryFlaggedHigh"],
+      },
+      {
+        labelKey: "analytics.sentinel.config.groups.modelParameters",
+        fields: [
+          "zscoreThreshold",
+          "zscoreMinBaseline",
+          "rsfThreshold",
+          "baselineMonths",
+          "benfordMinSample",
+        ],
+      },
     ],
   },
   cashflow: {
@@ -736,34 +1429,168 @@ export const ANALYTICS_CONFIG = {
       cardStalePaymentDays: 30,
     },
     fields: [
-      { key: "weeklyApCap", kind: "money", labelKey: "ap.cockpit.config.weeklyCapLabel", helpKey: "ap.cockpit.config.weeklyCapHelp", maxAmount: "100000000" },
-      { key: "restrictToSafe", kind: "toggle", labelKey: "ap.cockpit.config.restrictLabel", helpKey: "ap.cockpit.config.restrictHelp" },
-      num("defaultHorizonWeeks", "analytics.cashflow.config.fields.defaultHorizonWeeks", 1, 52, 1, true),
-      num("runwayCautionWeeks", "analytics.cashflow.config.fields.runwayCautionWeeks", 1, 52, 1, true),
-      num("paymentHistoryMonths", "analytics.cashflow.config.fields.paymentHistoryMonths", 3, 36, 1, true),
+      {
+        key: "weeklyApCap",
+        kind: "money",
+        labelKey: "ap.cockpit.config.weeklyCapLabel",
+        helpKey: "ap.cockpit.config.weeklyCapHelp",
+        maxAmount: "100000000",
+      },
+      {
+        key: "restrictToSafe",
+        kind: "toggle",
+        labelKey: "ap.cockpit.config.restrictLabel",
+        helpKey: "ap.cockpit.config.restrictHelp",
+      },
+      num(
+        "defaultHorizonWeeks",
+        "analytics.cashflow.config.fields.defaultHorizonWeeks",
+        1,
+        52,
+        1,
+        true,
+      ),
+      num(
+        "runwayCautionWeeks",
+        "analytics.cashflow.config.fields.runwayCautionWeeks",
+        1,
+        52,
+        1,
+        true,
+      ),
+      num(
+        "paymentHistoryMonths",
+        "analytics.cashflow.config.fields.paymentHistoryMonths",
+        3,
+        36,
+        1,
+        true,
+      ),
       num("settleBufferSigma", "analytics.cashflow.config.fields.settleBufferSigma", 0, 2, 0.1),
-      num("overduePushShortDays", "analytics.cashflow.config.fields.overduePushShortDays", 0, 90, 1, true),
-      num("overduePushMidDays", "analytics.cashflow.config.fields.overduePushMidDays", 0, 90, 1, true),
-      num("overduePushLongDays", "analytics.cashflow.config.fields.overduePushLongDays", 0, 90, 1, true),
-      num("overdueMidThresholdDays", "analytics.cashflow.config.fields.overdueMidThresholdDays", 1, 180, 1, true),
-      num("overdueLongThresholdDays", "analytics.cashflow.config.fields.overdueLongThresholdDays", 1, 180, 1, true),
-      num("collectibilityHorizonDays", "analytics.cashflow.config.fields.collectibilityHorizonDays", 1, 730, 1, true),
-      num("cardTrajectoryTolerance", "analytics.cashflow.config.fields.cardTrajectoryTolerance", 0, 1, 0.05),
-      num("cardMedianBlendWeight", "analytics.cashflow.config.fields.cardMedianBlendWeight", 0, 1, 0.05),
+      num(
+        "overduePushShortDays",
+        "analytics.cashflow.config.fields.overduePushShortDays",
+        0,
+        90,
+        1,
+        true,
+      ),
+      num(
+        "overduePushMidDays",
+        "analytics.cashflow.config.fields.overduePushMidDays",
+        0,
+        90,
+        1,
+        true,
+      ),
+      num(
+        "overduePushLongDays",
+        "analytics.cashflow.config.fields.overduePushLongDays",
+        0,
+        90,
+        1,
+        true,
+      ),
+      num(
+        "overdueMidThresholdDays",
+        "analytics.cashflow.config.fields.overdueMidThresholdDays",
+        1,
+        180,
+        1,
+        true,
+      ),
+      num(
+        "overdueLongThresholdDays",
+        "analytics.cashflow.config.fields.overdueLongThresholdDays",
+        1,
+        180,
+        1,
+        true,
+      ),
+      num(
+        "collectibilityHorizonDays",
+        "analytics.cashflow.config.fields.collectibilityHorizonDays",
+        1,
+        730,
+        1,
+        true,
+      ),
+      num(
+        "cardTrajectoryTolerance",
+        "analytics.cashflow.config.fields.cardTrajectoryTolerance",
+        0,
+        1,
+        0.05,
+      ),
+      num(
+        "cardMedianBlendWeight",
+        "analytics.cashflow.config.fields.cardMedianBlendWeight",
+        0,
+        1,
+        0.05,
+      ),
       num("vendorOutlierSigma", "analytics.cashflow.config.fields.vendorOutlierSigma", 0.5, 6, 0.1),
-      num("cardStatementCloseDays", "analytics.cashflow.config.fields.cardStatementCloseDays", 1, 60, 1, true),
-      num("cardDefaultPayDay", "analytics.cashflow.config.fields.cardDefaultPayDay", 1, 31, 1, true),
-      num("cardStalePaymentDays", "analytics.cashflow.config.fields.cardStalePaymentDays", 0, 365, 1, true),
+      num(
+        "cardStatementCloseDays",
+        "analytics.cashflow.config.fields.cardStatementCloseDays",
+        1,
+        60,
+        1,
+        true,
+      ),
+      num(
+        "cardDefaultPayDay",
+        "analytics.cashflow.config.fields.cardDefaultPayDay",
+        1,
+        31,
+        1,
+        true,
+      ),
+      num(
+        "cardStalePaymentDays",
+        "analytics.cashflow.config.fields.cardStalePaymentDays",
+        0,
+        365,
+        1,
+        true,
+      ),
     ],
     ordered: [
       ["overduePushShortDays", "overduePushMidDays", "overduePushLongDays"],
       ["overdueMidThresholdDays", "overdueLongThresholdDays"],
     ],
     groups: [
-      { labelKey: "analytics.cashflow.config.groups.forecast", fields: ["defaultHorizonWeeks", "runwayCautionWeeks", "paymentHistoryMonths"] },
-      { labelKey: "analytics.cashflow.config.groups.scheduling", fields: ["weeklyApCap", "restrictToSafe"] },
-      { labelKey: "analytics.cashflow.config.groups.prediction", fields: ["settleBufferSigma", "overduePushShortDays", "overduePushMidDays", "overduePushLongDays", "overdueMidThresholdDays", "overdueLongThresholdDays", "collectibilityHorizonDays", "vendorOutlierSigma"] },
-      { labelKey: "analytics.cashflow.config.groups.cards", fields: ["cardTrajectoryTolerance", "cardMedianBlendWeight", "cardStatementCloseDays", "cardDefaultPayDay", "cardStalePaymentDays"] },
+      {
+        labelKey: "analytics.cashflow.config.groups.forecast",
+        fields: ["defaultHorizonWeeks", "runwayCautionWeeks", "paymentHistoryMonths"],
+      },
+      {
+        labelKey: "analytics.cashflow.config.groups.scheduling",
+        fields: ["weeklyApCap", "restrictToSafe"],
+      },
+      {
+        labelKey: "analytics.cashflow.config.groups.prediction",
+        fields: [
+          "settleBufferSigma",
+          "overduePushShortDays",
+          "overduePushMidDays",
+          "overduePushLongDays",
+          "overdueMidThresholdDays",
+          "overdueLongThresholdDays",
+          "collectibilityHorizonDays",
+          "vendorOutlierSigma",
+        ],
+      },
+      {
+        labelKey: "analytics.cashflow.config.groups.cards",
+        fields: [
+          "cardTrajectoryTolerance",
+          "cardMedianBlendWeight",
+          "cardStatementCloseDays",
+          "cardDefaultPayDay",
+          "cardStalePaymentDays",
+        ],
+      },
     ],
   },
   spendVelocity: {
@@ -826,57 +1653,226 @@ export const ANALYTICS_CONFIG = {
     fields: [
       pct("velocityHighThreshold", "analytics.spendVelocity.config.fields.highVelocity", 1, 100),
       pct("velocityMediumThreshold", "analytics.spendVelocity.config.fields.mediumVelocity", 0, 50),
-      num("anomalyStdDevThreshold", "analytics.spendVelocity.config.fields.anomalySigma", 1, 6, 0.1),
-      num("anomalyCriticalOffset", "analytics.spendVelocity.config.fields.anomalyCriticalOffset", 0, 5, 0.1),
+      num(
+        "anomalyStdDevThreshold",
+        "analytics.spendVelocity.config.fields.anomalySigma",
+        1,
+        6,
+        0.1,
+      ),
+      num(
+        "anomalyCriticalOffset",
+        "analytics.spendVelocity.config.fields.anomalyCriticalOffset",
+        0,
+        5,
+        0.1,
+      ),
       num("accelStrong", "analytics.spendVelocity.config.fields.accelStrong", 0, 20, 0.5),
       num("accelMild", "analytics.spendVelocity.config.fields.accelMild", 0, 20, 0.5),
       num("topVendorsCount", "analytics.spendVelocity.config.fields.topVendorsCount", 1, 200),
       num("boilingFrogMonths", "analytics.spendVelocity.config.fields.boilingFrogMonths", 3, 24),
-      num("boilingFrogMinIncrease", "analytics.spendVelocity.config.fields.boilingFrogMinIncrease", 0, 100, 0.5),
-      num("boilingFrogStepCap", "analytics.spendVelocity.config.fields.boilingFrogStepCap", 0, 100, 0.5),
-      num("boilingFrogMonotonicRatio", "analytics.spendVelocity.config.fields.boilingFrogMonotonicRatio", 0, 100),
-      num("boilingFrogWarningCreep", "analytics.spendVelocity.config.fields.boilingFrogWarningCreep", 0, 500),
-      num("boilingFrogCriticalCreep", "analytics.spendVelocity.config.fields.boilingFrogCriticalCreep", 0, 500),
+      num(
+        "boilingFrogMinIncrease",
+        "analytics.spendVelocity.config.fields.boilingFrogMinIncrease",
+        0,
+        100,
+        0.5,
+      ),
+      num(
+        "boilingFrogStepCap",
+        "analytics.spendVelocity.config.fields.boilingFrogStepCap",
+        0,
+        100,
+        0.5,
+      ),
+      num(
+        "boilingFrogMonotonicRatio",
+        "analytics.spendVelocity.config.fields.boilingFrogMonotonicRatio",
+        0,
+        100,
+      ),
+      num(
+        "boilingFrogWarningCreep",
+        "analytics.spendVelocity.config.fields.boilingFrogWarningCreep",
+        0,
+        500,
+      ),
+      num(
+        "boilingFrogCriticalCreep",
+        "analytics.spendVelocity.config.fields.boilingFrogCriticalCreep",
+        0,
+        500,
+      ),
       num("zombieMinMonths", "analytics.spendVelocity.config.fields.zombieMonths", 3, 24),
-      num("zombieMaxDeviation", "analytics.spendVelocity.config.fields.zombieMaxDeviation", 0, 10, 0.1),
-      num("zombieCriticalMonths", "analytics.spendVelocity.config.fields.zombieCriticalMonths", 1, 60),
-      num("fragmentationMinTxns", "analytics.spendVelocity.config.fields.fragmentationTxns", 5, 500, 5),
-      { key: "fragmentationMaxAvgSize", kind: "money", labelKey: "analytics.spendVelocity.config.fields.fragmentationAvgSize.label", helpKey: "analytics.spendVelocity.config.fields.fragmentationAvgSize.help", maxAmount: "100000000", optional: true },
-      num("fragmentationHighTxns", "analytics.spendVelocity.config.fields.fragmentationHighTxns", 5, 500, 5),
-      { key: "minBaseAmount", kind: "money", labelKey: "analytics.spendVelocity.config.fields.minBaseAmount.label", helpKey: "analytics.spendVelocity.config.fields.minBaseAmount.help", maxAmount: "100000000", optional: true },
+      num(
+        "zombieMaxDeviation",
+        "analytics.spendVelocity.config.fields.zombieMaxDeviation",
+        0,
+        10,
+        0.1,
+      ),
+      num(
+        "zombieCriticalMonths",
+        "analytics.spendVelocity.config.fields.zombieCriticalMonths",
+        1,
+        60,
+      ),
+      num(
+        "fragmentationMinTxns",
+        "analytics.spendVelocity.config.fields.fragmentationTxns",
+        5,
+        500,
+        5,
+      ),
+      {
+        key: "fragmentationMaxAvgSize",
+        kind: "money",
+        labelKey: "analytics.spendVelocity.config.fields.fragmentationAvgSize.label",
+        helpKey: "analytics.spendVelocity.config.fields.fragmentationAvgSize.help",
+        maxAmount: "100000000",
+        optional: true,
+      },
+      num(
+        "fragmentationHighTxns",
+        "analytics.spendVelocity.config.fields.fragmentationHighTxns",
+        5,
+        500,
+        5,
+      ),
+      {
+        key: "minBaseAmount",
+        kind: "money",
+        labelKey: "analytics.spendVelocity.config.fields.minBaseAmount.label",
+        helpKey: "analytics.spendVelocity.config.fields.minBaseAmount.help",
+        maxAmount: "100000000",
+        optional: true,
+      },
       num("seasonalBand", "analytics.spendVelocity.config.fields.seasonalBand", 0, 100),
-      num("seasonalCriticalDeviation", "analytics.spendVelocity.config.fields.seasonalCriticalDeviation", 0, 100),
+      num(
+        "seasonalCriticalDeviation",
+        "analytics.spendVelocity.config.fields.seasonalCriticalDeviation",
+        0,
+        100,
+      ),
       num("hhiWarning", "analytics.spendVelocity.config.fields.hhiWarning", 0, 10_000, 100),
       num("hhiCritical", "analytics.spendVelocity.config.fields.hhiCritical", 0, 10_000, 100),
-      num("concentrationShareThreshold", "analytics.spendVelocity.config.fields.concentrationShareThreshold", 0, 100, 0.5),
-      num("concentrationHighShare", "analytics.spendVelocity.config.fields.concentrationHighShare", 0, 100, 0.5),
-      num("concentrationTop1Warning", "analytics.spendVelocity.config.fields.concentrationTop1Warning", 0, 100),
+      num(
+        "concentrationShareThreshold",
+        "analytics.spendVelocity.config.fields.concentrationShareThreshold",
+        0,
+        100,
+        0.5,
+      ),
+      num(
+        "concentrationHighShare",
+        "analytics.spendVelocity.config.fields.concentrationHighShare",
+        0,
+        100,
+        0.5,
+      ),
+      num(
+        "concentrationTop1Warning",
+        "analytics.spendVelocity.config.fields.concentrationTop1Warning",
+        0,
+        100,
+      ),
       num("cliffWarningGap", "analytics.spendVelocity.config.fields.cliffWarningGap", 0, 200),
       num("cliffCriticalGap", "analytics.spendVelocity.config.fields.cliffCriticalGap", 0, 200),
-      num("cliffWarningRatio", "analytics.spendVelocity.config.fields.cliffWarningRatio", 0, 10, 0.1),
-      num("cliffCriticalRatio", "analytics.spendVelocity.config.fields.cliffCriticalRatio", 0, 10, 0.1),
-      num("projectionCapAccount", "analytics.spendVelocity.config.fields.projectionCapAccount", 0, 100),
+      num(
+        "cliffWarningRatio",
+        "analytics.spendVelocity.config.fields.cliffWarningRatio",
+        0,
+        10,
+        0.1,
+      ),
+      num(
+        "cliffCriticalRatio",
+        "analytics.spendVelocity.config.fields.cliffCriticalRatio",
+        0,
+        10,
+        0.1,
+      ),
+      num(
+        "projectionCapAccount",
+        "analytics.spendVelocity.config.fields.projectionCapAccount",
+        0,
+        100,
+      ),
       num("projectionCapTotal", "analytics.spendVelocity.config.fields.projectionCapTotal", 0, 100),
-      num("categoryIncreaseThreshold", "analytics.spendVelocity.config.fields.categoryIncreaseThreshold", 0, 1000),
-      num("spenderIncreaseThreshold", "analytics.spendVelocity.config.fields.spenderIncreaseThreshold", 0, 1000),
+      num(
+        "categoryIncreaseThreshold",
+        "analytics.spendVelocity.config.fields.categoryIncreaseThreshold",
+        0,
+        1000,
+      ),
+      num(
+        "spenderIncreaseThreshold",
+        "analytics.spendVelocity.config.fields.spenderIncreaseThreshold",
+        0,
+        1000,
+      ),
       num("highVelocityAlert", "analytics.spendVelocity.config.fields.highVelocityAlert", 0, 200),
       num("typeImbalanceGap", "analytics.spendVelocity.config.fields.typeImbalanceGap", 0, 200),
       num("opexRatioAlert", "analytics.spendVelocity.config.fields.opexRatioAlert", 0, 100),
-      num("alertBannerThreshold", "analytics.spendVelocity.config.fields.alertBannerThreshold", 0, 100),
-      num("accountFilterChange", "analytics.spendVelocity.config.fields.accountFilterChange", 0, 100),
-      num("accountFilterHighVel", "analytics.spendVelocity.config.fields.accountFilterHighVel", 0, 200),
+      num(
+        "alertBannerThreshold",
+        "analytics.spendVelocity.config.fields.alertBannerThreshold",
+        0,
+        100,
+      ),
+      num(
+        "accountFilterChange",
+        "analytics.spendVelocity.config.fields.accountFilterChange",
+        0,
+        100,
+      ),
+      num(
+        "accountFilterHighVel",
+        "analytics.spendVelocity.config.fields.accountFilterHighVel",
+        0,
+        200,
+      ),
       num("healthGradeA", "analytics.spendVelocity.config.fields.healthGradeA", 0, 100),
       num("healthGradeB", "analytics.spendVelocity.config.fields.healthGradeB", 0, 100),
       num("healthGradeC", "analytics.spendVelocity.config.fields.healthGradeC", 0, 100),
       num("healthGradeD", "analytics.spendVelocity.config.fields.healthGradeD", 0, 100),
       num("structuralTop1High", "analytics.spendVelocity.config.fields.structuralTop1High", 0, 100),
-      num("structuralTop1Medium", "analytics.spendVelocity.config.fields.structuralTop1Medium", 0, 100),
+      num(
+        "structuralTop1Medium",
+        "analytics.spendVelocity.config.fields.structuralTop1Medium",
+        0,
+        100,
+      ),
       num("structuralTop1Low", "analytics.spendVelocity.config.fields.structuralTop1Low", 0, 100),
-      num("savingsRatioWatch", "analytics.spendVelocity.config.fields.savingsRatioWatch", 0, 100, 0.1),
+      num(
+        "savingsRatioWatch",
+        "analytics.spendVelocity.config.fields.savingsRatioWatch",
+        0,
+        100,
+        0.1,
+      ),
       num("savingsRatioLow", "analytics.spendVelocity.config.fields.savingsRatioLow", 0, 100, 0.1),
-      num("savingsRatioMedium", "analytics.spendVelocity.config.fields.savingsRatioMedium", 0, 100, 0.1),
-      num("savingsRatioHigh", "analytics.spendVelocity.config.fields.savingsRatioHigh", 0, 100, 0.1),
-      num("savingsRatioCritical", "analytics.spendVelocity.config.fields.savingsRatioCritical", 0, 100, 0.1),
+      num(
+        "savingsRatioMedium",
+        "analytics.spendVelocity.config.fields.savingsRatioMedium",
+        0,
+        100,
+        0.1,
+      ),
+      num(
+        "savingsRatioHigh",
+        "analytics.spendVelocity.config.fields.savingsRatioHigh",
+        0,
+        100,
+        0.1,
+      ),
+      num(
+        "savingsRatioCritical",
+        "analytics.spendVelocity.config.fields.savingsRatioCritical",
+        0,
+        100,
+        0.1,
+      ),
     ],
     ordered: [
       ["velocityMediumThreshold", "velocityHighThreshold"],
@@ -887,21 +1883,101 @@ export const ANALYTICS_CONFIG = {
       ["healthGradeD", "healthGradeC", "healthGradeB", "healthGradeA"],
       ["accelMild", "accelStrong"],
       ["structuralTop1Low", "structuralTop1Medium", "structuralTop1High"],
-      ["savingsRatioWatch", "savingsRatioLow", "savingsRatioMedium", "savingsRatioHigh", "savingsRatioCritical"],
+      [
+        "savingsRatioWatch",
+        "savingsRatioLow",
+        "savingsRatioMedium",
+        "savingsRatioHigh",
+        "savingsRatioCritical",
+      ],
     ],
     groups: [
-      { labelKey: "analytics.spendVelocity.config.groups.growth", fields: ["velocityHighThreshold", "velocityMediumThreshold", "accelStrong", "accelMild", "minBaseAmount", "topVendorsCount"] },
-      { labelKey: "analytics.spendVelocity.config.groups.anomalyDetection", fields: ["anomalyStdDevThreshold", "anomalyCriticalOffset"] },
-      { labelKey: "analytics.spendVelocity.config.groups.creepAndZombies", fields: ["boilingFrogMonths", "boilingFrogMinIncrease", "boilingFrogStepCap", "boilingFrogMonotonicRatio", "boilingFrogWarningCreep", "boilingFrogCriticalCreep", "zombieMinMonths", "zombieMaxDeviation", "zombieCriticalMonths"] },
-      { labelKey: "analytics.spendVelocity.config.groups.fragmentation", fields: ["fragmentationMinTxns", "fragmentationMaxAvgSize", "fragmentationHighTxns"] },
-      { labelKey: "analytics.spendVelocity.config.groups.seasonal", fields: ["seasonalBand", "seasonalCriticalDeviation"] },
-      { labelKey: "analytics.spendVelocity.config.groups.concentration", fields: ["hhiWarning", "hhiCritical", "concentrationShareThreshold", "concentrationHighShare", "concentrationTop1Warning"] },
-      { labelKey: "analytics.spendVelocity.config.groups.cliff", fields: ["cliffWarningGap", "cliffCriticalGap", "cliffWarningRatio", "cliffCriticalRatio"] },
-      { labelKey: "analytics.spendVelocity.config.groups.projections", fields: ["projectionCapAccount", "projectionCapTotal"] },
-      { labelKey: "analytics.spendVelocity.config.groups.insightTriggers", fields: ["categoryIncreaseThreshold", "spenderIncreaseThreshold", "highVelocityAlert", "typeImbalanceGap", "opexRatioAlert", "alertBannerThreshold", "accountFilterChange", "accountFilterHighVel"] },
-      { labelKey: "analytics.spendVelocity.config.groups.grading", fields: ["healthGradeA", "healthGradeB", "healthGradeC", "healthGradeD"] },
-      { labelKey: "analytics.spendVelocity.config.groups.structuralBands", fields: ["structuralTop1High", "structuralTop1Medium", "structuralTop1Low"] },
-      { labelKey: "analytics.spendVelocity.config.groups.savingsBands", fields: ["savingsRatioWatch", "savingsRatioLow", "savingsRatioMedium", "savingsRatioHigh", "savingsRatioCritical"] },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.growth",
+        fields: [
+          "velocityHighThreshold",
+          "velocityMediumThreshold",
+          "accelStrong",
+          "accelMild",
+          "minBaseAmount",
+          "topVendorsCount",
+        ],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.anomalyDetection",
+        fields: ["anomalyStdDevThreshold", "anomalyCriticalOffset"],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.creepAndZombies",
+        fields: [
+          "boilingFrogMonths",
+          "boilingFrogMinIncrease",
+          "boilingFrogStepCap",
+          "boilingFrogMonotonicRatio",
+          "boilingFrogWarningCreep",
+          "boilingFrogCriticalCreep",
+          "zombieMinMonths",
+          "zombieMaxDeviation",
+          "zombieCriticalMonths",
+        ],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.fragmentation",
+        fields: ["fragmentationMinTxns", "fragmentationMaxAvgSize", "fragmentationHighTxns"],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.seasonal",
+        fields: ["seasonalBand", "seasonalCriticalDeviation"],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.concentration",
+        fields: [
+          "hhiWarning",
+          "hhiCritical",
+          "concentrationShareThreshold",
+          "concentrationHighShare",
+          "concentrationTop1Warning",
+        ],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.cliff",
+        fields: ["cliffWarningGap", "cliffCriticalGap", "cliffWarningRatio", "cliffCriticalRatio"],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.projections",
+        fields: ["projectionCapAccount", "projectionCapTotal"],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.insightTriggers",
+        fields: [
+          "categoryIncreaseThreshold",
+          "spenderIncreaseThreshold",
+          "highVelocityAlert",
+          "typeImbalanceGap",
+          "opexRatioAlert",
+          "alertBannerThreshold",
+          "accountFilterChange",
+          "accountFilterHighVel",
+        ],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.grading",
+        fields: ["healthGradeA", "healthGradeB", "healthGradeC", "healthGradeD"],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.structuralBands",
+        fields: ["structuralTop1High", "structuralTop1Medium", "structuralTop1Low"],
+      },
+      {
+        labelKey: "analytics.spendVelocity.config.groups.savingsBands",
+        fields: [
+          "savingsRatioWatch",
+          "savingsRatioLow",
+          "savingsRatioMedium",
+          "savingsRatioHigh",
+          "savingsRatioCritical",
+        ],
+      },
     ],
   },
 } satisfies Record<string, AnalyticsConfigSpec>;
@@ -971,8 +2047,14 @@ export function mergeConfig<D extends AnalyticsDashboard>(
         if (typeof raw === "string" && field.options?.includes(raw)) out[field.key] = raw;
         break;
       default: {
-        const n = typeof raw === "number" ? raw : typeof raw === "string" && /^-?\d+(\.\d+)?$/.test(raw.trim()) ? Number(raw) : NaN;
-        if (Number.isFinite(n) && n >= (field.min ?? -Infinity) && n <= (field.max ?? Infinity)) out[field.key] = n;
+        const n =
+          typeof raw === "number"
+            ? raw
+            : typeof raw === "string" && /^-?\d+(\.\d+)?$/.test(raw.trim())
+              ? Number(raw)
+              : NaN;
+        if (Number.isFinite(n) && n >= (field.min ?? -Infinity) && n <= (field.max ?? Infinity))
+          out[field.key] = n;
       }
     }
   }
@@ -1007,23 +2089,46 @@ function cleanValue(field: ConfigField, value: unknown): AnalyticsConfigValue {
     case "money": {
       if (value === "" && field.optional) return "";
       if (value === "") {
-        throw new InvalidConfigValue(field.key, `threshold ${fieldName(field)} is required — enter an amount (0 or more)`);
+        throw new InvalidConfigValue(
+          field.key,
+          `threshold ${fieldName(field)} is required — enter an amount (0 or more)`,
+        );
       }
       const exact = canonicalDecimal(value, 4);
-      if (exact === null) throw new InvalidConfigValue(field.key, moneyRefusal(`threshold ${fieldName(field)}`, value));
+      if (exact === null)
+        throw new InvalidConfigValue(
+          field.key,
+          moneyRefusal(`threshold ${fieldName(field)}`, value),
+        );
       if (compareDecimal(exact, "0") < 0) {
-        throw new InvalidConfigValue(field.key, `threshold ${fieldName(field)} must not be negative`);
+        throw new InvalidConfigValue(
+          field.key,
+          `threshold ${fieldName(field)} must not be negative`,
+        );
       }
       if (field.maxAmount && compareDecimal(exact, field.maxAmount) > 0) {
-        throw new InvalidConfigValue(field.key, `threshold ${fieldName(field)} must be at most ${field.maxAmount}`);
+        throw new InvalidConfigValue(
+          field.key,
+          `threshold ${fieldName(field)} must be at most ${field.maxAmount}`,
+        );
       }
       return normalizeMoney(exact);
     }
     case "toggle":
-      if (value === 0 || value === 1 || value === "0" || value === "1" || value === true || value === false) {
+      if (
+        value === 0 ||
+        value === 1 ||
+        value === "0" ||
+        value === "1" ||
+        value === true ||
+        value === false
+      ) {
         return value === true ? 1 : value === false ? 0 : Number(value);
       }
-      throw new InvalidConfigValue(field.key, `threshold ${fieldName(field)} must be on (1) or off (0)`);
+      throw new InvalidConfigValue(
+        field.key,
+        `threshold ${fieldName(field)} must be on (1) or off (0)`,
+      );
     case "select":
       if (typeof value === "string" && field.options?.includes(value)) return value;
       throw new InvalidConfigValue(
@@ -1032,7 +2137,11 @@ function cleanValue(field: ConfigField, value: unknown): AnalyticsConfigValue {
       );
     default: {
       const parsed = strictNumber(value);
-      if (parsed === null || parsed < (field.min ?? -Infinity) || parsed > (field.max ?? Infinity)) {
+      if (
+        parsed === null ||
+        parsed < (field.min ?? -Infinity) ||
+        parsed > (field.max ?? Infinity)
+      ) {
         throw new InvalidConfigValue(
           field.key,
           `threshold ${fieldName(field)} must be a number between ${field.min} and ${field.max} (received ${String(value).slice(0, 60)})`,
@@ -1102,22 +2211,34 @@ export function checkSumsTo(
  * mergeConfig: that reader exists for legacy blobs, and using it at write
  * would persist something other than what was requested.
  */
-export function cleanConfigValues(dashboard: AnalyticsDashboard, raw: unknown): AnalyticsConfigValues {
+export function cleanConfigValues(
+  dashboard: AnalyticsDashboard,
+  raw: unknown,
+): AnalyticsConfigValues {
   const spec: AnalyticsConfigSpec = ANALYTICS_CONFIG[dashboard];
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new InvalidConfigValue("", `threshold values for the ${dashboard} configuration must be an object of per-threshold values`);
+    throw new InvalidConfigValue(
+      "",
+      `threshold values for the ${dashboard} configuration must be an object of per-threshold values`,
+    );
   }
   const input = raw as Record<string, unknown>;
   const known = new Set(spec.fields.map((field) => field.key));
   for (const key of Object.keys(input)) {
     if (!known.has(key)) {
-      throw new InvalidConfigValue(key, `unknown threshold '${key}' for the ${dashboard} configuration — remove it and retry`);
+      throw new InvalidConfigValue(
+        key,
+        `unknown threshold '${key}' for the ${dashboard} configuration — remove it and retry`,
+      );
     }
   }
   const out: AnalyticsConfigValues = {};
   for (const field of spec.fields) {
     if (!(field.key in input)) {
-      throw new InvalidConfigValue(field.key, `threshold ${fieldName(field)} is required — send every threshold on each save`);
+      throw new InvalidConfigValue(
+        field.key,
+        `threshold ${fieldName(field)} is required — send every threshold on each save`,
+      );
     }
     out[field.key] = cleanValue(field, input[field.key]);
   }

@@ -42,13 +42,16 @@ export async function countConversationAssistantTurns(
   authz: Authz,
   conversationId: string,
 ): Promise<number> {
-  const r = await db.execute<{ count: string }>(sql`
+  const r = await db.execute<{ count: string }>(
+    sql`
     select count(*) as count
       from ai_messages m
       join ai_conversations c on c.id = m.conversation_id
      where m.conversation_id = ${conversationId} and m.role = 'assistant'
        and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
-  `, "objects");
+  `,
+    "objects",
+  );
   return Number(r[0]?.count ?? 0);
 }
 
@@ -69,7 +72,9 @@ export function isMissingMetadataColumn(error: unknown): boolean {
   const missing = code === "42703" && /\bmetadata\b/.test(message);
   if (missing && !warnedMissingMetadata) {
     warnedMissingMetadata = true;
-    console.warn("[assistant/memory] ai_conversations.metadata is missing (migration 0152 not applied); conversation memory disabled until it is");
+    console.warn(
+      "[assistant/memory] ai_conversations.metadata is missing (migration 0152 not applied); conversation memory disabled until it is",
+    );
   }
   return missing;
 }

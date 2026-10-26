@@ -11,7 +11,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 import { operatingProfileVersions } from "./operating-profiles";
@@ -57,15 +57,31 @@ export const currencies = pgTable("currencies", {
 });
 
 /** Fiscal calendar identity and cadence used by effective legal-entity posting preferences. */
-export const fiscalCalendars=pgTable("fiscal_calendars",{
- id:id(),orgId:orgRef(),name:text("name").notNull(),cadence:text("cadence").notNull().default("monthly"),
- yearStartMonth:integer("year_start_month").notNull().default(1),weekStartsOn:integer("week_starts_on").notNull().default(1),
- anchorDate:date("anchor_date"),timeZone:text("time_zone").notNull().default("UTC"),
- adjustmentPeriodEnabled:boolean("adjustment_period_enabled").notNull().default(false),
- isDefault:boolean("is_default").notNull().default(false),isActive:boolean("is_active").notNull().default(true),
- config:jsonb("config").notNull().default({}),...auditColumns,
-},t=>[uniqueIndex("fiscal_calendars_org_id_id_unique").on(t.orgId,t.id),uniqueIndex("fiscal_calendars_org_name").on(t.orgId,t.name),
- uniqueIndex("fiscal_calendars_one_default").on(t.orgId).where(sql`${t.isDefault}`)]);
+export const fiscalCalendars = pgTable(
+  "fiscal_calendars",
+  {
+    id: id(),
+    orgId: orgRef(),
+    name: text("name").notNull(),
+    cadence: text("cadence").notNull().default("monthly"),
+    yearStartMonth: integer("year_start_month").notNull().default(1),
+    weekStartsOn: integer("week_starts_on").notNull().default(1),
+    anchorDate: date("anchor_date"),
+    timeZone: text("time_zone").notNull().default("UTC"),
+    adjustmentPeriodEnabled: boolean("adjustment_period_enabled").notNull().default(false),
+    isDefault: boolean("is_default").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    config: jsonb("config").notNull().default({}),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("fiscal_calendars_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("fiscal_calendars_org_name").on(t.orgId, t.name),
+    uniqueIndex("fiscal_calendars_one_default")
+      .on(t.orgId)
+      .where(sql`${t.isDefault}`),
+  ],
+);
 
 /**
  * Accounting periods with per-module close — closing AP doesn't block GL
@@ -93,7 +109,12 @@ export const accountingPeriods = pgTable(
   },
   (t) => [
     uniqueIndex("accounting_periods_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("periods_calendar_year_num").on(t.orgId, t.fiscalCalendarId, t.fiscalYear, t.periodNumber),
+    uniqueIndex("periods_calendar_year_num").on(
+      t.orgId,
+      t.fiscalCalendarId,
+      t.fiscalYear,
+      t.periodNumber,
+    ),
   ],
 );
 
@@ -127,16 +148,12 @@ export const departments = pgTable(
   },
   (t) => [uniqueIndex("departments_org_id_id_unique").on(t.orgId, t.id)],
 );
-export const locations = pgTable(
-  "locations",
-  dimensionColumns,
-  (t) => [uniqueIndex("locations_org_id_id_unique").on(t.orgId, t.id)],
-);
-export const classes = pgTable(
-  "classes",
-  dimensionColumns,
-  (t) => [uniqueIndex("classes_org_id_id_unique").on(t.orgId, t.id)],
-);
+export const locations = pgTable("locations", dimensionColumns, (t) => [
+  uniqueIndex("locations_org_id_id_unique").on(t.orgId, t.id),
+]);
+export const classes = pgTable("classes", dimensionColumns, (t) => [
+  uniqueIndex("classes_org_id_id_unique").on(t.orgId, t.id),
+]);
 
 /**
  * Projects (jobs) are a core dimension supporting job costing, WIP, and
@@ -187,17 +204,23 @@ export const projects = pgTable(
     awardedBy: uuid("awarded_by"),
   },
   (t): PgTableExtraConfigValue[] => [
-    foreignKey({name:"projects_operating_profile_version_fk",columns:[t.orgId,t.operatingProfileVersionId],foreignColumns:[operatingProfileVersions.orgId,operatingProfileVersions.id]}),
-    foreignKey({name:"projects_operating_department_fk",columns:[t.orgId,t.operatingDepartmentId],foreignColumns:[departments.orgId,departments.id]}),
+    foreignKey({
+      name: "projects_operating_profile_version_fk",
+      columns: [t.orgId, t.operatingProfileVersionId],
+      foreignColumns: [operatingProfileVersions.orgId, operatingProfileVersions.id],
+    }),
+    foreignKey({
+      name: "projects_operating_department_fk",
+      columns: [t.orgId, t.operatingDepartmentId],
+      foreignColumns: [departments.orgId, departments.id],
+    }),
     uniqueIndex("projects_org_id_id_unique").on(t.orgId, t.id),
     index("projects_customer").on(t.customerId),
-    uniqueIndex("projects_org_source_identity")
-      .on(
-        t.orgId,
-        sql`(${t.custom}->'source'->>'system')`,
-        sql`(${t.custom}->'source'->>'externalId')`,
-      )
-      .where(sql`
+    uniqueIndex("projects_org_source_identity").on(
+      t.orgId,
+      sql`(${t.custom}->'source'->>'system')`,
+      sql`(${t.custom}->'source'->>'externalId')`,
+    ).where(sql`
         ${t.custom}->'source'->>'system' is not null
         and ${t.custom}->'source'->>'externalId' is not null
       `),

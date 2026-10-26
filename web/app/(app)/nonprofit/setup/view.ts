@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 import {
   page,
   pageHeader,
@@ -9,13 +9,13 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { getAuthz, assertCan } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
-import { mergeHref, setupSectionParams } from '../../../../lib/list-params'
-import { nonprofitGroupTabs } from '../../../../components/module-home/group-tabs'
+} from "@braedonsaunders/appkit-viewspec";
+import { getAuthz, assertCan } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../../lib/features";
+import { SETUP_ENTITY_BY_KEY } from "../../../../lib/setup/registry";
+import { mergeHref, setupSectionParams } from "../../../../lib/list-params";
+import { nonprofitGroupTabs } from "../../../../components/module-home/group-tabs";
 
 /**
  * Nonprofit setup — the re-homed restriction framework, interfund pairs, and
@@ -29,103 +29,117 @@ import { nonprofitGroupTabs } from '../../../../components/module-home/group-tab
  */
 
 export interface NonprofitSetupData {
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof nonprofitGroupTabs>>
-  showFramework: boolean
-  showPairs: boolean
-  showMappings: boolean
-  frameworkHint: string
-  pairsHint: string
-  mappingsHint: string
-  sectionParams: Record<string, string>
-  activeSection: 'framework' | 'pairs' | 'mappings' | null
-  sectionTabs: { href: string; label: string; active?: boolean }[]
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof nonprofitGroupTabs>>;
+  showFramework: boolean;
+  showPairs: boolean;
+  showMappings: boolean;
+  frameworkHint: string;
+  pairsHint: string;
+  mappingsHint: string;
+  sectionParams: Record<string, string>;
+  activeSection: "framework" | "pairs" | "mappings" | null;
+  sectionTabs: { href: string; label: string; active?: boolean }[];
 }
 
-export async function loadNonprofitSetup(sp: Record<string, string | string[] | undefined>): Promise<NonprofitSetupData> {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'nonprofit')
+export async function loadNonprofitSetup(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<NonprofitSetupData> {
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "nonprofit");
   // Reading setup requires funds.read unconditionally: admin.setup.manage
   // never substitutes, and every reader sees every section whose governing
   // feature is on. Mutations stay behind funds.manage, derived from each
   // descriptor's command marker by the shared command route.
-  assertCan(authz, 'funds.read')
-  const t = await getTranslations('nonprofit')
-  const tabs = await nonprofitGroupTabs(authz, '/nonprofit/setup')
+  assertCan(authz, "funds.read");
+  const t = await getTranslations("nonprofit");
+  const tabs = await nonprofitGroupTabs(authz, "/nonprofit/setup");
 
   // Registry lookups happen in the loader: a section renders only when its
   // entry is registered and its governing feature is on, otherwise the spec
   // falls back to the sibling sections exactly as the native setup rail does.
   const [frameworkOn, pairsOn, mappingsOn] = await Promise.all([
-    isFeatureEnabled(orgId, 'fundAccounting'),
-    isFeatureEnabled(orgId, 'fundAccounting'),
-    isFeatureEnabled(orgId, 'functionalExpenses'),
-  ])
-  const showFramework = frameworkOn && SETUP_ENTITY_BY_KEY.get('nonprofit-frameworks') !== undefined
-  const showPairs = pairsOn && SETUP_ENTITY_BY_KEY.get('fund-pairs') !== undefined
-  const showMappings = mappingsOn && SETUP_ENTITY_BY_KEY.get('functional-mappings') !== undefined
+    isFeatureEnabled(orgId, "fundAccounting"),
+    isFeatureEnabled(orgId, "fundAccounting"),
+    isFeatureEnabled(orgId, "functionalExpenses"),
+  ]);
+  const showFramework =
+    frameworkOn && SETUP_ENTITY_BY_KEY.get("nonprofit-frameworks") !== undefined;
+  const showPairs = pairsOn && SETUP_ENTITY_BY_KEY.get("fund-pairs") !== undefined;
+  const showMappings = mappingsOn && SETUP_ENTITY_BY_KEY.get("functional-mappings") !== undefined;
   const availableSections = [
-    ...(showFramework ? [{ key: 'framework' as const, label: t('setup.frameworkTitle') }] : []),
-    ...(showPairs ? [{ key: 'pairs' as const, label: t('setup.pairsTitle') }] : []),
-    ...(showMappings ? [{ key: 'mappings' as const, label: t('setup.mappingsTitle') }] : []),
-  ]
-  const requestedSection = typeof sp.section === 'string' ? sp.section : undefined
-  const activeSection = availableSections.find(({ key }) => key === requestedSection)?.key
-    ?? availableSections[0]?.key
-    ?? null
-  const sectionParams = setupSectionParams(sp, ['frow', 'prow', 'mrow'])
-  if (activeSection) sectionParams.section = activeSection
+    ...(showFramework ? [{ key: "framework" as const, label: t("setup.frameworkTitle") }] : []),
+    ...(showPairs ? [{ key: "pairs" as const, label: t("setup.pairsTitle") }] : []),
+    ...(showMappings ? [{ key: "mappings" as const, label: t("setup.mappingsTitle") }] : []),
+  ];
+  const requestedSection = typeof sp.section === "string" ? sp.section : undefined;
+  const activeSection =
+    availableSections.find(({ key }) => key === requestedSection)?.key ??
+    availableSections[0]?.key ??
+    null;
+  const sectionParams = setupSectionParams(sp, ["frow", "prow", "mrow"]);
+  if (activeSection) sectionParams.section = activeSection;
   const sectionTabs = availableSections.map(({ key, label }) => ({
-    href: mergeHref('/nonprofit/setup', setupSectionParams(sp, ['frow', 'prow', 'mrow']), { section: key }),
+    href: mergeHref("/nonprofit/setup", setupSectionParams(sp, ["frow", "prow", "mrow"]), {
+      section: key,
+    }),
     label,
     active: key === activeSection,
-  }))
+  }));
 
   return {
-    title: t('setup.title'),
-    description: `${t('setup.description')} ${t('setup.grantsHint')}`,
+    title: t("setup.title"),
+    description: `${t("setup.description")} ${t("setup.grantsHint")}`,
     tabs,
     showFramework,
     showPairs,
     showMappings,
-    frameworkHint: t('setup.frameworkHint'),
-    pairsHint: t('setup.pairsHint'),
-    mappingsHint: t('setup.mappingsHint'),
+    frameworkHint: t("setup.frameworkHint"),
+    pairsHint: t("setup.pairsHint"),
+    mappingsHint: t("setup.mappingsHint"),
     sectionParams,
     activeSection,
     sectionTabs,
-  }
+  };
 }
 
-const f = ref<NonprofitSetupData>()
+const f = ref<NonprofitSetupData>();
 
 export function nonprofitSetupSpec(data: NonprofitSetupData): PageSpec {
   return page({
-    route: '/nonprofit/setup',
-    layout: 'list',
+    route: "/nonprofit/setup",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-3",
+        actions: [widget("module-home-tabs", { tabs: data.tabs })],
       }),
     ],
-    body: data.activeSection ? [
-      widgetBlock('module-home-tabs', { tabs: data.sectionTabs, placement: 'local' }),
-      widgetBlock('setup-section', {
-        entityKey: data.activeSection === 'framework'
-          ? 'nonprofit-frameworks'
-          : data.activeSection === 'pairs'
-            ? 'fund-pairs'
-            : 'functional-mappings',
-        basePath: '/nonprofit/setup',
-        sp: data.sectionParams,
-        rowParam: data.activeSection === 'framework' ? 'frow' : data.activeSection === 'pairs' ? 'prow' : 'mrow',
-      }),
-    ] : [],
-  })
+    body: data.activeSection
+      ? [
+          widgetBlock("module-home-tabs", { tabs: data.sectionTabs, placement: "local" }),
+          widgetBlock("setup-section", {
+            entityKey:
+              data.activeSection === "framework"
+                ? "nonprofit-frameworks"
+                : data.activeSection === "pairs"
+                  ? "fund-pairs"
+                  : "functional-mappings",
+            basePath: "/nonprofit/setup",
+            sp: data.sectionParams,
+            rowParam:
+              data.activeSection === "framework"
+                ? "frow"
+                : data.activeSection === "pairs"
+                  ? "prow"
+                  : "mrow",
+          }),
+        ]
+      : [],
+  });
 }

@@ -37,7 +37,11 @@ async function ensureOpenPeriod(orgId: string, periodId: string): Promise<void> 
 }
 
 /** A posted USD receipt for a USD invoice, booked at fxRate into CAD books. */
-async function usdReceipt(org: Awaited<ReturnType<typeof createScratchOrg>>, userId: string, fxRate: string): Promise<{ invoiceId: string; receiptId: string }> {
+async function usdReceipt(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  userId: string,
+  fxRate: string,
+): Promise<{ invoiceId: string; receiptId: string }> {
   await db.execute(sql`
     insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
     values (${org.orgId}, 'USD', 'CAD', ${org.date}, 'spot', ${fxRate}, 'test')`);
@@ -53,8 +57,12 @@ async function usdReceipt(org: Awaited<ReturnType<typeof createScratchOrg>>, use
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
-  await db.execute(sql`update documents set status = 'approved', updated_at = now() where id = ${invoiceId} and org_id = ${org.orgId}`);
-  await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  await db.execute(
+    sql`update documents set status = 'approved', updated_at = now() where id = ${invoiceId} and org_id = ${org.orgId}`,
+  );
+  await postDocument(invoiceId, {
+    control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+  });
 
   const payment = await createPaymentDocument({
     orgId: org.orgId,
@@ -72,7 +80,13 @@ async function usdReceipt(org: Awaited<ReturnType<typeof createScratchOrg>>, use
   const item = openItems.find((i) => i.documentId === invoiceId);
   assert.ok(item, "invoice open item exists");
   const allocations = [sameCurrencyAllocation(item.lineId, "100")];
-  await updateDraftPayment(payment.id, { allocations, referenceNumber: "fx-receipt" }, userId, org.orgId, { allowedSubsidiaryIds: null });
+  await updateDraftPayment(
+    payment.id,
+    { allocations, referenceNumber: "fx-receipt" },
+    userId,
+    org.orgId,
+    { allowedSubsidiaryIds: null },
+  );
   const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, userId);
   assert.equal(submission.gated, false);
   await postPaymentWithApplications(payment.id, allocations, userId, "api");
@@ -85,7 +99,15 @@ function eurBatch(receiptId: string, fx: ParsedSettlement["fx"]): ParsedSettleme
     externalRef: `po_fx_${randomUUID().slice(0, 8)}`,
     settlementDate: "2026-07-10",
     currency: "EUR",
-    lines: [{ kind: "charge", amount: "100", currency: "USD", documentId: receiptId, externalRef: "txn_fx_1" }],
+    lines: [
+      {
+        kind: "charge",
+        amount: "100",
+        currency: "USD",
+        documentId: receiptId,
+        externalRef: "txn_fx_1",
+      },
+    ],
     fx,
     memo: "EUR payout of USD charges",
   };
@@ -124,13 +146,16 @@ test("a EUR payout of USD charges posts balanced with realized FX", { skip: !DB 
     const posted = await postSettlementBatch(org.orgId, batchId, userId, null);
     assert.ok(posted.entryId);
 
-    const lines = await db.execute<{ name: string; amount: string }>(sql`
+    const lines = await db.execute<{ name: string; amount: string }>(
+      sql`
       select a.name, jl.amount::text as amount
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
        where jl.org_id = ${org.orgId} and je.id = ${posted.entryId}
-       order by a.name`, "objects");
+       order by a.name`,
+      "objects",
+    );
     const total = lines.reduce((sum, l) => sum + BigInt(Math.round(Number(l.amount) * 10_000)), 0n);
     assert.equal(total, 0n);
     const byName = new Map(lines.map((l) => [l.name, l.amount]));
@@ -143,71 +168,96 @@ test("a EUR payout of USD charges posts balanced with realized FX", { skip: !DB 
   }
 });
 
-test("equal foreign charges and refunds offset realized FX in the settlement currency", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "FX Tester", "admin");
-    await db.execute(sql`
+test(
+  "equal foreign charges and refunds offset realized FX in the settlement currency",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "FX Tester", "admin");
+      await db.execute(sql`
       update orgs set settings = settings || '{"features":{"banking":true}}'::jsonb where id = ${org.orgId}`);
-    await ensureOpenPeriod(org.orgId, org.periodId);
-    const accounts = {
-      bankAccountId: org.accounts.bank,
-      feeAccountId: org.accounts.adjustment,
-      disputeAccountId: org.accounts.adjustment,
-      fxAccountId: org.accounts.fxGainLoss,
-      clearingAccountId: org.accounts.clearing,
-    };
-    const { batchId } = await importSettlementBatch(org.orgId, userId, {
-      provider: "stripe",
-      externalRef: `po_fx_pair_${randomUUID().slice(0, 8)}`,
-      settlementDate: org.date,
-      currency: "EUR",
-      lines: [
-        { kind: "charge", amount: "100", currency: "EUR", meta: { bookedAmount: "120" } },
-        { kind: "refund", amount: "100", currency: "EUR", meta: { bookedAmount: "120" } },
-      ],
-      fx: {
-        sourceCurrency: "USD",
-        rate: "0.9200000000",
-        rateSource: "stripe:balance_transaction",
-        payoutRate: "1.3000000000",
-        payoutRateSource: "test:evidenced",
-      },
-    } satisfies ParsedSettlement, accounts, null);
-    const posted = await postSettlementBatch(org.orgId, batchId, userId, null);
-    const lines = await db.execute<{ accountId: string; amount: string }>(sql`
+      await ensureOpenPeriod(org.orgId, org.periodId);
+      const accounts = {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.adjustment,
+        disputeAccountId: org.accounts.adjustment,
+        fxAccountId: org.accounts.fxGainLoss,
+        clearingAccountId: org.accounts.clearing,
+      };
+      const { batchId } = await importSettlementBatch(
+        org.orgId,
+        userId,
+        {
+          provider: "stripe",
+          externalRef: `po_fx_pair_${randomUUID().slice(0, 8)}`,
+          settlementDate: org.date,
+          currency: "EUR",
+          lines: [
+            { kind: "charge", amount: "100", currency: "EUR", meta: { bookedAmount: "120" } },
+            { kind: "refund", amount: "100", currency: "EUR", meta: { bookedAmount: "120" } },
+          ],
+          fx: {
+            sourceCurrency: "USD",
+            rate: "0.9200000000",
+            rateSource: "stripe:balance_transaction",
+            payoutRate: "1.3000000000",
+            payoutRateSource: "test:evidenced",
+          },
+        } satisfies ParsedSettlement,
+        accounts,
+        null,
+      );
+      const posted = await postSettlementBatch(org.orgId, batchId, userId, null);
+      const lines = await db.execute<{ accountId: string; amount: string }>(
+        sql`
       select account_id as "accountId", sum(amount)::text as amount
         from journal_lines
        where org_id = ${org.orgId} and entry_id = ${posted.entryId}
-       group by account_id`, "objects");
-    assert.equal(lines.reduce((sum, line) => sum + toUnits(line.amount), 0n), 0n);
-    assert.equal(lines.find((line) => line.accountId === org.accounts.fxGainLoss)?.amount, undefined);
-    const clearing = lines.find((line) => line.accountId === org.accounts.clearing);
-    assert.equal(clearing ? toUnits(clearing.amount) : 0n, 0n);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       group by account_id`,
+        "objects",
+      );
+      assert.equal(
+        lines.reduce((sum, line) => sum + toUnits(line.amount), 0n),
+        0n,
+      );
+      assert.equal(
+        lines.find((line) => line.accountId === org.accounts.fxGainLoss)?.amount,
+        undefined,
+      );
+      const clearing = lines.find((line) => line.accountId === org.accounts.clearing);
+      assert.equal(clearing ? toUnits(clearing.amount) : 0n, 0n);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a foreign-currency batch without rate evidence refuses naming the field", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "FX Tester", "admin");
-    await db.execute(sql`
+test(
+  "a foreign-currency batch without rate evidence refuses naming the field",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "FX Tester", "admin");
+      await db.execute(sql`
       update orgs set settings = settings || '{"features":{"banking":true}}'::jsonb where id = ${org.orgId}`);
-    const { receiptId } = await usdReceipt(org, userId, "1.3500000000");
-    const accounts = {
-      bankAccountId: org.accounts.bank,
-      feeAccountId: org.accounts.adjustment,
-      disputeAccountId: org.accounts.adjustment,
-      fxAccountId: org.accounts.fxGainLoss,
-      clearingAccountId: org.accounts.clearing,
-    };
-    await assert.rejects(
-      () => importSettlementBatch(org.orgId, userId, eurBatch(receiptId, null), accounts, null),
-      (error) => error instanceof PspSettlementError && /conversion_rate|exchange_rate/.test(error.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const { receiptId } = await usdReceipt(org, userId, "1.3500000000");
+      const accounts = {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.adjustment,
+        disputeAccountId: org.accounts.adjustment,
+        fxAccountId: org.accounts.fxGainLoss,
+        clearingAccountId: org.accounts.clearing,
+      };
+      await assert.rejects(
+        () => importSettlementBatch(org.orgId, userId, eurBatch(receiptId, null), accounts, null),
+        (error) =>
+          error instanceof PspSettlementError &&
+          /conversion_rate|exchange_rate/.test(error.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

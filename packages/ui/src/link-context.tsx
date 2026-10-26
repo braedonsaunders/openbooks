@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // @openbooks/ui stays framework-agnostic: it cannot import next/link directly.
 // (a second module instance of next's router context in the transpiled
@@ -13,15 +13,15 @@ import {
   type AnchorHTMLAttributes,
   type ComponentType,
   type ReactNode,
-} from 'react'
+} from "react";
 
-type LinkLike = ComponentType<AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }>
+type LinkLike = ComponentType<AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }>;
 
-const UiLinkContext = createContext<LinkLike | null>(null)
+const UiLinkContext = createContext<LinkLike | null>(null);
 
 /** Mount once in the app shell with the framework's Link (e.g. next/link). */
 export function UiLinkProvider({ link, children }: { link: LinkLike; children: ReactNode }) {
-  return <UiLinkContext.Provider value={link}>{children}</UiLinkContext.Provider>
+  return <UiLinkContext.Provider value={link}>{children}</UiLinkContext.Provider>;
 }
 
 /** In-app anchor: client-side navigation when a Link is provided, <a> otherwise. */
@@ -31,8 +31,8 @@ export function UiLink({
 }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
   // createElement, not a <Link>-style JSX alias: a capitalised alias created
   // during render gets a fresh identity every render (remounting children).
-  const link = useContext(UiLinkContext) ?? 'a'
-  return createElement(link, { href, ...rest })
+  const link = useContext(UiLinkContext) ?? "a";
+  return createElement(link, { href, ...rest });
 }
 
 // ---------------------------------------------------------------------------
@@ -47,14 +47,14 @@ export function UiLink({
 
 /** The `back` fallback plus styling; the impl upgrades `href`/`label` at render. */
 export type BackLinkProps = {
-  href: string
-  label: string
-  className?: string
-  onClick?: AnchorHTMLAttributes<HTMLAnchorElement>['onClick']
-}
-export type BackLinkLike = ComponentType<BackLinkProps>
+  href: string;
+  label: string;
+  className?: string;
+  onClick?: AnchorHTMLAttributes<HTMLAnchorElement>["onClick"];
+};
+export type BackLinkLike = ComponentType<BackLinkProps>;
 
-const UiBackLinkContext = createContext<BackLinkLike | null>(null)
+const UiBackLinkContext = createContext<BackLinkLike | null>(null);
 
 /**
  * Renders the injected smart back link when one is provided, otherwise a plain
@@ -62,12 +62,12 @@ const UiBackLinkContext = createContext<BackLinkLike | null>(null)
  * component that reads context at render time).
  */
 export function UiBackLink({ href, label, className, onClick }: BackLinkProps) {
-  const impl = useContext(UiBackLinkContext)
+  const impl = useContext(UiBackLinkContext);
   // createElement, not a <Impl>-style JSX alias (see UiLink above).
-  if (impl) return createElement(impl, { href, label, className, onClick })
+  if (impl) return createElement(impl, { href, label, className, onClick });
   return (
     <UiLink href={href} className={className} onClick={onClick}>
       ← {label}
     </UiLink>
-  )
+  );
 }

@@ -1,5 +1,5 @@
-import { Badge } from '@openbooks/ui'
-import { DifferenceBadge } from './DifferenceBadge'
+import { Badge } from "@openbooks/ui";
+import { DifferenceBadge } from "./DifferenceBadge";
 
 /**
  * Composite header pieces for the reconciliation session page.
@@ -11,30 +11,32 @@ import { DifferenceBadge } from './DifferenceBadge'
  * the spec path.
  */
 
-const STAT = 'rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900'
-const STAT_LABEL = 'text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400'
+const STAT =
+  "rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900";
+const STAT_LABEL =
+  "text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400";
 
 /** The status badge in the page-header actions slot. */
 export function ReconcileStatusBadge({
   label,
   variant,
 }: {
-  label: string
-  variant: 'success' | 'warning' | 'secondary'
+  label: string;
+  variant: "success" | "warning" | "secondary";
 }) {
-  return <Badge variant={variant}>{label}</Badge>
+  return <Badge variant={variant}>{label}</Badge>;
 }
 
 export interface ReconcileStatsProps {
-  statementBalanceLabel: string
-  statementBalanceValue: string
-  clearedBalanceLabel: string
-  clearedBalanceValue: string
-  differenceLabel: string
-  difference: string
-  differenceCurrency: string
-  matchedLabel: string
-  matchedValue: string
+  statementBalanceLabel: string;
+  statementBalanceValue: string;
+  clearedBalanceLabel: string;
+  clearedBalanceValue: string;
+  differenceLabel: string;
+  difference: string;
+  differenceCurrency: string;
+  matchedLabel: string;
+  matchedValue: string;
 }
 
 /** The four header stat tiles: plain bordered divs, not cockpit tiles. */
@@ -68,5 +70,5 @@ export function ReconcileStats({
         <div className="text-sm font-semibold tabular-nums">{matchedValue}</div>
       </div>
     </div>
-  )
+  );
 }

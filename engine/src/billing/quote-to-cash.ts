@@ -48,7 +48,10 @@ import { SYSTEM_ACTOR_ID as SYSTEM_ACTOR_ID_VALUE } from "../banking/banking.ts"
 
 export class QuoteToCashError extends Error {
   readonly name = "QuoteToCashError";
-  constructor(message: string, readonly status = 422) {
+  constructor(
+    message: string,
+    readonly status = 422,
+  ) {
     super(message);
   }
 }
@@ -97,15 +100,20 @@ export async function getQuoteToCashSettings(
   orgId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<QuoteToCashSettings> {
-  const row = (await (runner as SqlExecutor).execute<{
+  const row = (
+    await (runner as SqlExecutor).execute<{
       auto_activate_on_sign: boolean;
       default_billing_timing: string;
       default_start_rule: string;
       signature_expiry_days: number;
-    }>(sql`
+    }>(
+      sql`
       select auto_activate_on_sign,
              default_billing_timing, default_start_rule, signature_expiry_days
-        from quote_to_cash_settings where org_id = ${orgId}`, "objects"))[0];
+        from quote_to_cash_settings where org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!row) return { ...SETTINGS_DEFAULTS };
   return {
     autoActivateOnSign: row.auto_activate_on_sign,
@@ -149,7 +157,8 @@ async function loadQuote(
   requestedScope: QuoteSubsidiaryScope | undefined,
 ): Promise<QuoteRow> {
   const allowedSubsidiaryIds = requireQuoteScope(requestedScope);
-  const row = (await runner.execute<{
+  const row = (
+    await runner.execute<{
       id: string;
       document_number: string;
       status: string;
@@ -159,10 +168,14 @@ async function loadQuote(
       document_date: string;
       total: string;
       kind: string;
-    }>(sql`
+    }>(
+      sql`
       select id, document_number, status, party_id, subsidiary_id, currency,
              document_date::text as document_date, total::text as total, kind
-        from documents where id = ${quoteId} and org_id = ${orgId} for update`, "objects"))[0];
+        from documents where id = ${quoteId} and org_id = ${orgId} for update`,
+      "objects",
+    )
+  )[0];
   // Row-level security and subsidiary scope both hide inaccessible quotes as missing.
   if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)) {
     throw new QuoteToCashError("Quote not found", 404);
@@ -224,7 +237,8 @@ export function resolveRampSchedule(termMonths: number, steps: RampStepInput[]):
   if (!Number.isSafeInteger(termMonths) || termMonths < 1 || termMonths > 120) {
     throw new QuoteToCashError("Term length must be between 1 and 120 months");
   }
-  if (!steps.length) throw new QuoteToCashError("A subscription term needs at least one ramp period");
+  if (!steps.length)
+    throw new QuoteToCashError("A subscription term needs at least one ramp period");
   const ordered = [...steps].sort((a, b) => a.periodIndex - b.periodIndex);
   ordered.forEach((step, i) => {
     if (step.periodIndex !== i) {
@@ -323,23 +337,24 @@ export async function loadQuoteTerms(
   quoteId: string,
 ): Promise<QuoteTerm[]> {
   const rows = await runner.execute<{
-      id: string;
-      quote_line_id: string;
-      plan_id: string;
-      plan_name: string;
-      plan_amount: string;
-      plan_currency: string | null;
-      plan_interval: string;
-      plan_interval_count: number;
-      plan_income_account_id: string | null;
-      plan_item_id: string | null;
-      plan_tax_code_id: string | null;
-      plan_version_id: string | null;
-      term_months: number;
-      start_rule: string;
-      billing_timing: string;
-      coterm_subscription_id: string | null;
-    }>(sql`
+    id: string;
+    quote_line_id: string;
+    plan_id: string;
+    plan_name: string;
+    plan_amount: string;
+    plan_currency: string | null;
+    plan_interval: string;
+    plan_interval_count: number;
+    plan_income_account_id: string | null;
+    plan_item_id: string | null;
+    plan_tax_code_id: string | null;
+    plan_version_id: string | null;
+    term_months: number;
+    start_rule: string;
+    billing_timing: string;
+    coterm_subscription_id: string | null;
+  }>(
+    sql`
       select t.id, t.quote_line_id, t.plan_id, p.name as plan_name, p.amount::text as plan_amount,
              p.currency_code as plan_currency, p.interval as plan_interval, p.interval_count as plan_interval_count,
              p.income_account_id as plan_income_account_id, p.item_id as plan_item_id, p.tax_code_id as plan_tax_code_id,
@@ -347,22 +362,29 @@ export async function loadQuoteTerms(
         from quote_subscription_terms t
         join subscription_plans p on p.id = t.plan_id and p.org_id = t.org_id
        where t.org_id = ${orgId} and t.quote_id = ${quoteId}
-       order by t.created_at, t.id`, "objects");
+       order by t.created_at, t.id`,
+    "objects",
+  );
   const terms: QuoteTerm[] = [];
   for (const row of rows) {
-    const steps = (await runner.execute<{
+    const steps = (
+      await runner.execute<{
         id: string;
         period_index: number;
         starts_after_months: number;
         unit_price: string;
         quantity: string;
         escalator_percent: string | null;
-      }>(sql`
+      }>(
+        sql`
         select id, period_index, starts_after_months, unit_price::text as unit_price,
                quantity::text as quantity, escalator_percent::text as escalator_percent
           from quote_ramp_steps
          where org_id = ${orgId} and term_id = ${row.id}
-         order by period_index`, "objects")).map((s) => ({
+         order by period_index`,
+        "objects",
+      )
+    ).map((s) => ({
       id: s.id,
       periodIndex: s.period_index,
       startsAfterMonths: s.starts_after_months,
@@ -370,11 +392,19 @@ export async function loadQuoteTerms(
       quantity: s.quantity,
       escalatorPercent: s.escalator_percent,
     }));
-    if (row.start_rule !== "quote_date" && row.start_rule !== "first_of_next_month" && row.start_rule !== "custom") {
-      throw new QuoteToCashError(`Term ${row.id} names an unknown start rule — fix it to quote_date, first_of_next_month or custom`);
+    if (
+      row.start_rule !== "quote_date" &&
+      row.start_rule !== "first_of_next_month" &&
+      row.start_rule !== "custom"
+    ) {
+      throw new QuoteToCashError(
+        `Term ${row.id} names an unknown start rule — fix it to quote_date, first_of_next_month or custom`,
+      );
     }
     if (row.billing_timing !== "advance" && row.billing_timing !== "arrears") {
-      throw new QuoteToCashError(`Term ${row.id} names an unknown billing timing — fix it to advance or arrears`);
+      throw new QuoteToCashError(
+        `Term ${row.id} names an unknown billing timing — fix it to advance or arrears`,
+      );
     }
     terms.push({
       id: row.id,
@@ -440,10 +470,18 @@ export async function quotePresentationHash(
   allowedSubsidiaryIds: QuoteSubsidiaryScope,
 ): Promise<string> {
   const quote = await loadQuote(runner, orgId, quoteId, allowedSubsidiaryIds);
-  const lines = await runner.execute<{ line_number: number; amount: string; quantity: string; unit_price: string }>(sql`
+  const lines = await runner.execute<{
+    line_number: number;
+    amount: string;
+    quantity: string;
+    unit_price: string;
+  }>(
+    sql`
       select line_number, amount::text as amount, quantity::text as quantity, unit_price::text as unit_price
         from document_lines where org_id = ${orgId} and document_id = ${quoteId}
-        order by line_number`, "objects");
+        order by line_number`,
+    "objects",
+  );
   const terms = await loadQuoteTerms(runner, orgId, quoteId);
   const canonical = JSON.stringify({
     quote: {
@@ -465,7 +503,13 @@ export async function quotePresentationHash(
       start: t.startRule,
       timing: t.billingTiming,
       coterm: t.cotermSubscriptionId,
-      steps: t.steps.map((s) => [s.periodIndex, s.startsAfterMonths, s.unitPrice, s.quantity, s.escalatorPercent]),
+      steps: t.steps.map((s) => [
+        s.periodIndex,
+        s.startsAfterMonths,
+        s.unitPrice,
+        s.quantity,
+        s.escalatorPercent,
+      ]),
     })),
   });
   return createHash("sha256").update(canonical, "utf8").digest("hex");
@@ -488,7 +532,8 @@ export async function latestSignatureRequest(
   subjectTable: string,
   subjectId: string,
 ): Promise<SignatureRequestRow | null> {
-  const row = (await runner.execute<{
+  const row = (
+    await runner.execute<{
       id: string;
       status: string;
       signer_name: string;
@@ -496,7 +541,8 @@ export async function latestSignatureRequest(
       expires_at: Date | string;
       document_hash: string;
       consent_text: string | null;
-    }>(sql`
+    }>(
+      sql`
       select id, status, signer_name, signer_email, expires_at, document_hash, consent_text
         from signature_requests r
        where r.org_id = ${orgId} and r.subject_table = ${subjectTable} and r.subject_id = ${subjectId}
@@ -504,7 +550,10 @@ export async function latestSignatureRequest(
            select 1 from service_quotes sq
             where sq.org_id = r.org_id and sq.signature_request_id = r.id
          )
-       order by sent_at desc, id desc limit 1`, "objects"))[0];
+       order by sent_at desc, id desc limit 1`,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return {
     id: row.id,
@@ -531,9 +580,7 @@ export async function ensureQuoteSubmissionReleased(
   try {
     const result = await submitAndReleaseIfUngated("quote", quote.id, actorId);
     if (result.flowError)
-      throw new QuoteToCashError(
-        `Quote submission could not be routed: ${result.flowError}`,
-      );
+      throw new QuoteToCashError(`Quote submission could not be routed: ${result.flowError}`);
     return !result.gated;
   } catch (error) {
     if (error instanceof SubmitError)
@@ -561,8 +608,7 @@ export interface SentQuoteSignatureResult {
   documentHash: string;
 }
 
-export type RequestSignatureResult =
-  SentQuoteSignatureResult | { status: "pending_approval" };
+export type RequestSignatureResult = SentQuoteSignatureResult | { status: "pending_approval" };
 
 /**
  * Send a quote for signature after its native Flow submission releases,
@@ -584,14 +630,21 @@ export async function requestQuoteSignature(
     await lockApprovalSubject(input.orgId, "quote", input.quoteId);
     await assertQuoteToCashEnabled(db, input.orgId);
     const quote = await loadQuote(db, input.orgId, input.quoteId, input.allowedSubsidiaryIds);
-    if (quote.status !== "draft" && quote.status !== "approved" && quote.status !== "pending_approval") {
+    if (
+      quote.status !== "draft" &&
+      quote.status !== "approved" &&
+      quote.status !== "pending_approval"
+    ) {
       throw new QuoteToCashError(
         `This quote is ${quote.status} — only draft or approved quotes go for signature`,
       );
     }
-    const placement = (await db.execute<{ subsidiary_id: string | null }>(
-        sql`select subsidiary_id from documents where org_id=${input.orgId} and id=${input.quoteId}`, "objects",
-      ))[0];
+    const placement = (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`select subsidiary_id from documents where org_id=${input.orgId} and id=${input.quoteId}`,
+        "objects",
+      )
+    )[0];
     if (!placement) throw new QuoteToCashError("Quote not found", 404);
     await lockActorCommandAuthority(
       db,
@@ -608,19 +661,24 @@ export async function requestQuoteSignature(
       );
     }
     valueQuoteTerms(terms);
-    const expiresInDays =
-      input.expiresInDays ?? settings.signatureExpiryDays;
+    const expiresInDays = input.expiresInDays ?? settings.signatureExpiryDays;
     if (!Number.isSafeInteger(expiresInDays) || expiresInDays < 1 || expiresInDays > 90) {
       throw new QuoteToCashError("Signature expiry must be between 1 and 90 days");
     }
     if (!(await ensureQuoteSubmissionReleased(quote, input.actorId)))
       return { status: "pending_approval" as const };
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
-    const documentHash = await quotePresentationHash(db, input.orgId, input.quoteId, input.allowedSubsidiaryIds);
+    const documentHash = await quotePresentationHash(
+      db,
+      input.orgId,
+      input.quoteId,
+      input.allowedSubsidiaryIds,
+    );
     const requestId = randomUUID();
     const token = mintPossessionToken(QUOTE_SIGN_DOMAIN, input.orgId, requestId, expiresAt);
     try {
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into signature_requests
           (id, org_id, subject_table, subject_id, signer_name, signer_email, token_hash,
            status, expires_at, sent_at, document_hash, consent_text, created_by, updated_by)
@@ -628,7 +686,9 @@ export async function requestQuoteSignature(
                 ${signerName}, ${signerEmail}, ${hashPossessionToken(token)},
                 'sent', ${expiresAt}, now(), ${documentHash}, ${QUOTE_SIGNATURE_CONSENT},
                 ${input.actorId}, ${input.actorId})
-        returning id`, "objects");
+        returning id`,
+        "objects",
+      );
       if (!inserted[0]) throw new QuoteToCashError("The signature request was not recorded");
     } catch (error) {
       // The open-subject uniqueness is the concurrency authority: a twin
@@ -681,9 +741,12 @@ interface OpenSignatureRow {
 async function loadRequestByToken(runner: SqlExecutor, token: string): Promise<OpenSignatureRow> {
   const claims = verifyPossessionToken(QUOTE_SIGN_DOMAIN, token);
   if (!claims) {
-    throw new QuoteToCashError("This signing link is invalid or expired — ask the sender to re-send it");
+    throw new QuoteToCashError(
+      "This signing link is invalid or expired — ask the sender to re-send it",
+    );
   }
-  const row = (await runner.execute<{
+  const row = (
+    await runner.execute<{
       id: string;
       org_id: string;
       subject_id: string;
@@ -693,11 +756,17 @@ async function loadRequestByToken(runner: SqlExecutor, token: string): Promise<O
       expires_at: Date | string;
       document_hash: string;
       consent_text: string | null;
-    }>(sql`
+    }>(
+      sql`
       select id, org_id, subject_id, status, signer_name, signer_email, expires_at, document_hash, consent_text
-        from signature_requests where token_hash = ${hashPossessionToken(token)} for update`, "objects"))[0];
+        from signature_requests where token_hash = ${hashPossessionToken(token)} for update`,
+      "objects",
+    )
+  )[0];
   if (!row || row.org_id !== claims.orgId || row.id !== claims.rowId) {
-    throw new QuoteToCashError("This signing link is invalid or expired — ask the sender to re-send it");
+    throw new QuoteToCashError(
+      "This signing link is invalid or expired — ask the sender to re-send it",
+    );
   }
   return {
     id: row.id,
@@ -719,11 +788,15 @@ async function loadRequestByToken(runner: SqlExecutor, token: string): Promise<O
 async function expireIfLapsed(runner: SqlExecutor, request: OpenSignatureRow): Promise<boolean> {
   if (request.status !== "sent" && request.status !== "viewed") return false;
   if (request.expiresAt.getTime() >= Date.now()) return false;
-  const updated = await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(
+    sql`
       update signature_requests set status = 'expired', updated_at = now()
        where id = ${request.id} and org_id = ${request.orgId} and status in ('sent', 'viewed')
-      returning id`, "objects");
-  if (updated.length !== 1) throw new QuoteToCashError("The signature request changed under its expiry");
+      returning id`,
+    "objects",
+  );
+  if (updated.length !== 1)
+    throw new QuoteToCashError("The signature request changed under its expiry");
   return true;
 }
 
@@ -742,7 +815,9 @@ export interface SignatureView {
 export async function viewQuoteSignature(token: string): Promise<SignatureView> {
   const claims = verifyPossessionToken(QUOTE_SIGN_DOMAIN, token);
   if (!claims) {
-    throw new QuoteToCashError("This signing link is invalid or expired — ask the sender to re-send it");
+    throw new QuoteToCashError(
+      "This signing link is invalid or expired — ask the sender to re-send it",
+    );
   }
   return withOrgTransaction(claims.orgId, async () => {
     const runner = db;
@@ -751,11 +826,15 @@ export async function viewQuoteSignature(token: string): Promise<SignatureView> 
       throw new QuoteToCashError("This signing link expired — ask the sender to re-send it");
     }
     if (request.status === "sent") {
-      const updated = await runner.execute<{ id: string }>(sql`
+      const updated = await runner.execute<{ id: string }>(
+        sql`
           update signature_requests set status = 'viewed', viewed_at = now(), updated_at = now()
            where id = ${request.id} and org_id = ${request.orgId} and status = 'sent'
-          returning id`, "objects");
-      if (updated.length !== 1) throw new QuoteToCashError("The signature request changed while opening");
+          returning id`,
+        "objects",
+      );
+      if (updated.length !== 1)
+        throw new QuoteToCashError("The signature request changed while opening");
       request.status = "viewed";
     }
     return {
@@ -800,7 +879,9 @@ export async function signQuoteSignature(input: SignQuoteInput): Promise<SignQuo
   if (!name) throw new QuoteToCashError("Your name is required to sign");
   const claims = verifyPossessionToken(QUOTE_SIGN_DOMAIN, input.token);
   if (!claims) {
-    throw new QuoteToCashError("This signing link is invalid or expired — ask the sender to re-send it");
+    throw new QuoteToCashError(
+      "This signing link is invalid or expired — ask the sender to re-send it",
+    );
   }
   return withOrgTransaction(claims.orgId, async () => {
     const runner = db;
@@ -810,22 +891,32 @@ export async function signQuoteSignature(input: SignQuoteInput): Promise<SignQuo
     // quote into live subscriptions) must refuse while quote-to-cash is
     // off, in the signer's words rather than the operator's.
     if (!(await lockAndCheckOrgFeature(runner, request.orgId, "quoteToCash"))) {
-      throw new QuoteToCashError("This signing link is no longer available — ask the sender to re-send it");
+      throw new QuoteToCashError(
+        "This signing link is no longer available — ask the sender to re-send it",
+      );
     }
     if (await expireIfLapsed(runner, request)) {
       throw new QuoteToCashError("This signing link expired — ask the sender to re-send it");
     }
     if (request.status === "signed") {
-      throw new QuoteToCashError("This link already recorded a signature — a signature is recorded once and never replayed");
+      throw new QuoteToCashError(
+        "This link already recorded a signature — a signature is recorded once and never replayed",
+      );
     }
     if (request.status === "declined") {
-      throw new QuoteToCashError("This link recorded a decline — ask the sender to re-issue the quote to sign");
+      throw new QuoteToCashError(
+        "This link recorded a decline — ask the sender to re-issue the quote to sign",
+      );
     }
     if (request.status === "voided") {
-      throw new QuoteToCashError("This request was voided when the quote changed — ask the sender to re-send it");
+      throw new QuoteToCashError(
+        "This request was voided when the quote changed — ask the sender to re-send it",
+      );
     }
     if (request.status !== "sent" && request.status !== "viewed") {
-      throw new QuoteToCashError("This signing link is no longer open — ask the sender to re-send it");
+      throw new QuoteToCashError(
+        "This signing link is no longer open — ask the sender to re-send it",
+      );
     }
     const currentHash = await quotePresentationHash(runner, request.orgId, request.subjectId, null);
     if (currentHash !== request.documentHash) {
@@ -834,17 +925,22 @@ export async function signQuoteSignature(input: SignQuoteInput): Promise<SignQuo
       );
     }
     const signedAt = new Date();
-    const updated = await runner.execute<{ id: string }>(sql`
+    const updated = await runner.execute<{ id: string }>(
+      sql`
         update signature_requests
            set status = 'signed', signed_at = ${signedAt}, signer_ip = ${input.ip ?? null},
                signer_user_agent = ${input.userAgent ?? null},
                signature_svg = ${input.signatureSvg ?? null}, updated_at = now()
          where id = ${request.id} and org_id = ${request.orgId} and status in ('sent', 'viewed')
-        returning id`, "objects");
+        returning id`,
+      "objects",
+    );
     // The conditional update is the replay authority: a twin signature
     // converges on one signed row, and the loser finds zero rows.
     if (updated.length !== 1) {
-      throw new QuoteToCashError("This link already recorded a signature — a signature is recorded once and never replayed");
+      throw new QuoteToCashError(
+        "This link already recorded a signature — a signature is recorded once and never replayed",
+      );
     }
     // The invited identity stays on signer_name/signer_email; the typed name,
     // the tendered consent and the hashed terms land in the audit trail, so
@@ -857,19 +953,30 @@ export async function signQuoteSignature(input: SignQuoteInput): Promise<SignQuo
     const settings = await getQuoteToCashSettings(request.orgId, runner);
     let subscriptionIds: string[] = [];
     if (settings.autoActivateOnSign) {
-      ({ subscriptionIds } = await activateQuoteLocked(runner, request.orgId, null, request.subjectId, { allowedSubsidiaryIds: null }));
+      ({ subscriptionIds } = await activateQuoteLocked(
+        runner,
+        request.orgId,
+        null,
+        request.subjectId,
+        { allowedSubsidiaryIds: null },
+      ));
     }
     return { requestId: request.id, quoteId: request.subjectId, signedAt, subscriptionIds };
   });
 }
 
 /** Decline the quote on the hosted page: records who declined and when. */
-export async function declineQuoteSignature(input: { token: string; name: string }): Promise<{ requestId: string }> {
+export async function declineQuoteSignature(input: {
+  token: string;
+  name: string;
+}): Promise<{ requestId: string }> {
   const name = input.name.trim().slice(0, 120);
   if (!name) throw new QuoteToCashError("Your name is required to decline");
   const claims = verifyPossessionToken(QUOTE_SIGN_DOMAIN, input.token);
   if (!claims) {
-    throw new QuoteToCashError("This signing link is invalid or expired — ask the sender to re-send it");
+    throw new QuoteToCashError(
+      "This signing link is invalid or expired — ask the sender to re-send it",
+    );
   }
   return withOrgTransaction(claims.orgId, async () => {
     const runner = db;
@@ -877,17 +984,23 @@ export async function declineQuoteSignature(input: { token: string; name: string
     // Same switched-off fence as signing: the decline is a quote-to-cash
     // write, and the remedy (re-send after re-enabling) is the sender's.
     if (!(await lockAndCheckOrgFeature(runner, request.orgId, "quoteToCash"))) {
-      throw new QuoteToCashError("This signing link is no longer available — ask the sender to re-send it");
+      throw new QuoteToCashError(
+        "This signing link is no longer available — ask the sender to re-send it",
+      );
     }
     if (request.status !== "sent" && request.status !== "viewed") {
       throw new QuoteToCashError("This signing link is no longer open");
     }
-    const updated = await runner.execute<{ id: string }>(sql`
+    const updated = await runner.execute<{ id: string }>(
+      sql`
         update signature_requests
            set status = 'declined', declined_at = now(), updated_at = now()
          where id = ${request.id} and org_id = ${request.orgId} and status in ('sent', 'viewed')
-        returning id`, "objects");
-    if (updated.length !== 1) throw new QuoteToCashError("The signature request changed while declining");
+        returning id`,
+      "objects",
+    );
+    if (updated.length !== 1)
+      throw new QuoteToCashError("The signature request changed while declining");
     // The decline records who declined and when: the typed name lands in the
     // audit trail while the invited identity stays on the row. No sender
     // notice is enqueued here — the sender sees the declined state.
@@ -916,11 +1029,14 @@ export async function voidSignatureRequestsForSubject(
   if (subjectTable === QUOTE_SUBJECT_TABLE) {
     await loadQuote(runner, orgId, subjectId, allowedSubsidiaryIds);
   }
-  const updated = await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(
+    sql`
     update signature_requests set status = 'voided', voided_at = now(), updated_at = now()
      where org_id = ${orgId} and subject_table = ${subjectTable} and subject_id = ${subjectId}
        and status in ('sent', 'viewed')
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   // Zero rows is the normal no-op (most subjects have nothing open to
   // void); the count is returned for the caller's audit trail.
   return { voided: updated.length };
@@ -959,13 +1075,13 @@ function exactMoneyInput(value: string, label: string, min: "zero" | "positive")
   try {
     units = toUnits(value);
   } catch {
-    throw new QuoteToCashError(`${label} is not a readable amount — enter it as digits with up to four decimals`);
+    throw new QuoteToCashError(
+      `${label} is not a readable amount — enter it as digits with up to four decimals`,
+    );
   }
   if (min === "positive" ? units <= 0n : units < 0n) {
     throw new QuoteToCashError(
-      min === "positive"
-        ? `${label} must be more than zero`
-        : `${label} cannot be negative`,
+      min === "positive" ? `${label} must be more than zero` : `${label} cannot be negative`,
     );
   }
   return value;
@@ -974,7 +1090,9 @@ function exactMoneyInput(value: string, label: string, min: "zero" | "positive")
 function exactPercentInput(value: string | null | undefined, label: string): string | null {
   if (value === null || value === undefined || value === "") return null;
   if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(value.trim())) {
-    throw new QuoteToCashError(`${label} is not a readable percent — enter it as digits, for example 7.5 for seven and a half percent`);
+    throw new QuoteToCashError(
+      `${label} is not a readable percent — enter it as digits, for example 7.5 for seven and a half percent`,
+    );
   }
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric < -100 || numeric > 100) {
@@ -999,10 +1117,13 @@ export async function saveQuoteTerm(
   if (!Number.isSafeInteger(input.termMonths) || input.termMonths < 1 || input.termMonths > 120) {
     throw new QuoteToCashError("Term length must be between 1 and 120 months");
   }
-  if (!input.steps.length) throw new QuoteToCashError("A subscription term needs at least one ramp period");
+  if (!input.steps.length)
+    throw new QuoteToCashError("A subscription term needs at least one ramp period");
   const steps: RampStepInput[] = input.steps.map((step, index) => {
     if (!Number.isSafeInteger(step.startsAfterMonths) || step.startsAfterMonths < 0) {
-      throw new QuoteToCashError(`Ramp period ${index} must start a whole number of months into the term`);
+      throw new QuoteToCashError(
+        `Ramp period ${index} must start a whole number of months into the term`,
+      );
     }
     return {
       id: "",
@@ -1025,61 +1146,113 @@ export async function saveQuoteTerm(
         `This quote is ${quote.status} — only draft quotes re-price their subscription terms; void and re-draft to change them`,
       );
     }
-    const line = (await db.execute<{ id: string }>(sql`
+    const line = (
+      await db.execute<{ id: string }>(
+        sql`
         select id from document_lines
-         where id = ${input.quoteLineId} and org_id = ${orgId} and document_id = ${quoteId}`, "objects"))[0];
+         where id = ${input.quoteLineId} and org_id = ${orgId} and document_id = ${quoteId}`,
+        "objects",
+      )
+    )[0];
     if (!line) {
-      throw new QuoteToCashError("That quote line is not on this quote — refresh the quote and try again");
+      throw new QuoteToCashError(
+        "That quote line is not on this quote — refresh the quote and try again",
+      );
     }
-    const plan = (await db.execute<{ id: string }>(sql`
-        select id from subscription_plans where id = ${input.planId} and org_id = ${orgId} and is_active`, "objects"))[0];
-    if (!plan) throw new QuoteToCashError("That plan is not an active plan — pick an active subscription plan");
+    const plan = (
+      await db.execute<{ id: string }>(
+        sql`
+        select id from subscription_plans where id = ${input.planId} and org_id = ${orgId} and is_active`,
+        "objects",
+      )
+    )[0];
+    if (!plan)
+      throw new QuoteToCashError(
+        "That plan is not an active plan — pick an active subscription plan",
+      );
     if (input.planVersionId) {
-      const version = (await db.execute<{ id: string }>(sql`
+      const version = (
+        await db.execute<{ id: string }>(
+          sql`
           select id from subscription_plan_versions
-           where id = ${input.planVersionId} and org_id = ${orgId} and plan_id = ${input.planId}`, "objects"))[0];
-      if (!version) throw new QuoteToCashError("That plan version is not on this plan — re-price from the plan's versions");
+           where id = ${input.planVersionId} and org_id = ${orgId} and plan_id = ${input.planId}`,
+          "objects",
+        )
+      )[0];
+      if (!version)
+        throw new QuoteToCashError(
+          "That plan version is not on this plan — re-price from the plan's versions",
+        );
     }
     if (input.cotermSubscriptionId) {
-      const anchor = (await db.execute<{ id: string }>(sql`
-          select id from subscriptions where id = ${input.cotermSubscriptionId} and org_id = ${orgId}`, "objects"))[0];
+      const anchor = (
+        await db.execute<{ id: string }>(
+          sql`
+          select id from subscriptions where id = ${input.cotermSubscriptionId} and org_id = ${orgId}`,
+          "objects",
+        )
+      )[0];
       if (!anchor) {
-        throw new QuoteToCashError("That co-term subscription is not in this organization — pick a live subscription");
+        throw new QuoteToCashError(
+          "That co-term subscription is not in this organization — pick a live subscription",
+        );
       }
     }
     const startRule = input.startRule ?? settings.defaultStartRule;
     const billingTiming = input.billingTiming ?? settings.defaultBillingTiming;
     let termId = input.termId ?? null;
     if (termId) {
-      const updated = (await db.execute<{ id: string }>(sql`
+      const updated = (
+        await db.execute<{ id: string }>(
+          sql`
           update quote_subscription_terms
              set plan_id = ${input.planId}, plan_version_id = ${input.planVersionId ?? null},
                  term_months = ${input.termMonths}, start_rule = ${startRule},
                  billing_timing = ${billingTiming}, coterm_subscription_id = ${input.cotermSubscriptionId ?? null},
                  updated_at = now(), updated_by = ${actorId}
            where id = ${termId} and org_id = ${orgId} and quote_id = ${quoteId}
-          returning id`, "objects"))[0];
+          returning id`,
+          "objects",
+        )
+      )[0];
       // Under row-level security an unscoped update silently matches nothing,
       // so zero rows is raised, never treated as a saved term.
-      if (!updated) throw new QuoteToCashError("That subscription term is not on this quote — refresh the quote and try again");
-      await db.execute(sql`delete from quote_ramp_steps where org_id = ${orgId} and term_id = ${termId}`);
+      if (!updated)
+        throw new QuoteToCashError(
+          "That subscription term is not on this quote — refresh the quote and try again",
+        );
+      await db.execute(
+        sql`delete from quote_ramp_steps where org_id = ${orgId} and term_id = ${termId}`,
+      );
     } else {
       try {
-        termId = (await db.execute<{ id: string }>(sql`
+        termId =
+          (
+            await db.execute<{ id: string }>(
+              sql`
             insert into quote_subscription_terms
               (org_id, quote_id, quote_line_id, plan_id, plan_version_id, term_months,
                start_rule, billing_timing, coterm_subscription_id, created_by, updated_by)
             values (${orgId}, ${quoteId}, ${input.quoteLineId}, ${input.planId}, ${input.planVersionId ?? null},
                     ${input.termMonths}, ${startRule}, ${billingTiming}, ${input.cotermSubscriptionId ?? null},
                     ${actorId}, ${actorId})
-            returning id`, "objects"))[0]?.id ?? null;
+            returning id`,
+              "objects",
+            )
+          )[0]?.id ?? null;
       } catch (error) {
         // One term per quote line: a twin save converges on the existing
         // term instead of pricing the line twice.
         if (!isUniqueViolation(error)) throw error;
-        termId = (await db.execute<{ id: string }>(sql`
+        termId =
+          (
+            await db.execute<{ id: string }>(
+              sql`
             select id from quote_subscription_terms
-             where org_id = ${orgId} and quote_id = ${quoteId} and quote_line_id = ${input.quoteLineId}`, "objects"))[0]?.id ?? null;
+             where org_id = ${orgId} and quote_id = ${quoteId} and quote_line_id = ${input.quoteLineId}`,
+              "objects",
+            )
+          )[0]?.id ?? null;
       }
       if (!termId) throw new QuoteToCashError("The subscription term was not recorded");
     }
@@ -1095,7 +1268,13 @@ export async function saveQuoteTerm(
       values (${orgId}, 'quote_subscription_terms', ${termId}, ${input.termId ? "update" : "insert"},
               ${JSON.stringify({ after: { quote: quoteId, plan: input.planId, months: input.termMonths } })}::jsonb,
               ${actorId})`);
-    const { voided } = await voidSignatureRequestsForSubject(db, orgId, QUOTE_SUBJECT_TABLE, quoteId, allowedSubsidiaryIds);
+    const { voided } = await voidSignatureRequestsForSubject(
+      db,
+      orgId,
+      QUOTE_SUBJECT_TABLE,
+      quoteId,
+      allowedSubsidiaryIds,
+    );
     if (voided > 0) {
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -1122,21 +1301,34 @@ export async function deleteQuoteTerm(
     await assertQuoteToCashEnabled(db, orgId);
     const quote = await loadQuote(db, orgId, quoteId, allowedSubsidiaryIds);
     if (quote.status !== "draft") {
-      throw new QuoteToCashError(`This quote is ${quote.status} — only draft quotes shed subscription terms`);
+      throw new QuoteToCashError(
+        `This quote is ${quote.status} — only draft quotes shed subscription terms`,
+      );
     }
-    const deleted = await db.execute<{ id: string }>(sql`
+    const deleted = await db.execute<{ id: string }>(
+      sql`
         delete from quote_subscription_terms
          where id = ${termId} and org_id = ${orgId} and quote_id = ${quoteId}
-        returning id`, "objects");
+        returning id`,
+      "objects",
+    );
     if (deleted.length !== 1) {
-      throw new QuoteToCashError("That subscription term is not on this quote — refresh the quote and try again");
+      throw new QuoteToCashError(
+        "That subscription term is not on this quote — refresh the quote and try again",
+      );
     }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'quote_subscription_terms', ${termId}, 'delete',
               ${JSON.stringify({ before: { quote: quoteId } })}::jsonb,
               ${actorId})`);
-    const { voided } = await voidSignatureRequestsForSubject(db, orgId, QUOTE_SUBJECT_TABLE, quoteId, allowedSubsidiaryIds);
+    const { voided } = await voidSignatureRequestsForSubject(
+      db,
+      orgId,
+      QUOTE_SUBJECT_TABLE,
+      quoteId,
+      allowedSubsidiaryIds,
+    );
     return { voided };
   });
 }
@@ -1170,7 +1362,9 @@ function policyEvidence(row: QuoteToCashPolicyRow) {
 
 /** Serialize singleton creation, replacement and reset before taking org locks. */
 async function lockQuoteToCashPolicy(orgId: string) {
-  await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'quote-to-cash-policy:' + orgId}, 0))`);
+  await db.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${"quote-to-cash-policy:" + orgId}, 0))`,
+  );
 }
 
 /**
@@ -1183,30 +1377,50 @@ export async function saveQuoteToCashSettings(
   actorId: string,
   input: SaveQuoteToCashSettingsInput,
 ): Promise<QuoteToCashSettings> {
-  if (!Number.isSafeInteger(input.signatureExpiryDays) || input.signatureExpiryDays < 1 || input.signatureExpiryDays > 90) {
+  if (
+    !Number.isSafeInteger(input.signatureExpiryDays) ||
+    input.signatureExpiryDays < 1 ||
+    input.signatureExpiryDays > 90
+  ) {
     throw new QuoteToCashError("Signature expiry must be between 1 and 90 days");
   }
   if (input.orderFormTemplateId !== undefined && input.orderFormTemplateId !== null) {
     if (!isUuid(input.orderFormTemplateId)) {
-      throw new QuoteToCashError("That order-form template is not a template id — pick one in the PDF template designer");
+      throw new QuoteToCashError(
+        "That order-form template is not a template id — pick one in the PDF template designer",
+      );
     }
   }
   return withOrgTransaction(orgId, async () => {
     await lockQuoteToCashPolicy(orgId);
     await assertQuoteToCashEnabled(db, orgId);
     if (input.orderFormTemplateId) {
-      const template = (await db.execute<{ id: string }>(sql`
+      const template = (
+        await db.execute<{ id: string }>(
+          sql`
           select id from pdf_templates
-           where id = ${input.orderFormTemplateId} and org_id = ${orgId} and is_active`, "objects"))[0];
+           where id = ${input.orderFormTemplateId} and org_id = ${orgId} and is_active`,
+          "objects",
+        )
+      )[0];
       if (!template) {
-        throw new QuoteToCashError("That order-form template is not an active template of this organization — pick one in the PDF template designer");
+        throw new QuoteToCashError(
+          "That order-form template is not an active template of this organization — pick one in the PDF template designer",
+        );
       }
     }
-    const before = (await db.execute<QuoteToCashPolicyRow>(sql`
+    const before = (
+      await db.execute<QuoteToCashPolicyRow>(
+        sql`
       select id, auto_activate_on_sign,
              default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id
-        from quote_to_cash_settings where org_id = ${orgId} for update`, "objects"))[0];
-    const row = (await db.execute<QuoteToCashPolicyRow>(sql`
+        from quote_to_cash_settings where org_id = ${orgId} for update`,
+        "objects",
+      )
+    )[0];
+    const row = (
+      await db.execute<QuoteToCashPolicyRow>(
+        sql`
         insert into quote_to_cash_settings
           (org_id, auto_activate_on_sign, default_billing_timing,
            default_start_rule, signature_expiry_days, order_form_template_id, created_by, updated_by)
@@ -1222,13 +1436,16 @@ export async function saveQuoteToCashSettings(
                order_form_template_id = excluded.order_form_template_id,
                updated_at = now(), updated_by = excluded.updated_by
         returning id, auto_activate_on_sign,
-                  default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id`, "objects"))[0];
+                  default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id`,
+        "objects",
+      )
+    )[0];
     // The org-scoped upsert always writes exactly one row; zero rows is raised.
     if (!row) throw new QuoteToCashError("The quote-to-cash policy was not recorded");
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at)
       values (${orgId}, 'quote_to_cash_settings', ${row.id},
-              ${before ? 'update' : 'insert'}, ${JSON.stringify({ before: before ? policyEvidence(before) : null, after: policyEvidence(row) })}::jsonb, ${actorId}, clock_timestamp())`);
+              ${before ? "update" : "insert"}, ${JSON.stringify({ before: before ? policyEvidence(before) : null, after: policyEvidence(row) })}::jsonb, ${actorId}, clock_timestamp())`);
     return {
       autoActivateOnSign: row.auto_activate_on_sign,
       defaultBillingTiming: row.default_billing_timing as QuoteBillingTiming,
@@ -1250,12 +1467,17 @@ export async function clearQuoteToCashSettings(
   return withOrgTransaction(orgId, async () => {
     await lockQuoteToCashPolicy(orgId);
     await assertQuoteToCashEnabled(db, orgId);
-    const deleted = await db.execute<QuoteToCashPolicyRow>(sql`
+    const deleted = await db.execute<QuoteToCashPolicyRow>(
+      sql`
         delete from quote_to_cash_settings where org_id = ${orgId}
         returning id, auto_activate_on_sign,
-                  default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id`, "objects");
+                  default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id`,
+      "objects",
+    );
     if (deleted.length !== 1) {
-      throw new QuoteToCashError("No quote-to-cash policy is saved — the working defaults already apply");
+      throw new QuoteToCashError(
+        "No quote-to-cash policy is saved — the working defaults already apply",
+      );
     }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at)
@@ -1323,7 +1545,9 @@ export interface PublicQuoteSignView {
 export async function publicQuoteSignView(token: string): Promise<PublicQuoteSignView> {
   const claims = verifyPossessionToken(QUOTE_SIGN_DOMAIN, token);
   if (!claims) {
-    throw new QuoteToCashError("This signing link is invalid or expired — ask the sender to re-send it");
+    throw new QuoteToCashError(
+      "This signing link is invalid or expired — ask the sender to re-send it",
+    );
   }
   // One repeatable-read snapshot for the request and the terms: nested
   // helpers join the ambient transaction through the shared runner, so the
@@ -1336,7 +1560,9 @@ export async function publicQuoteSignView(token: string): Promise<PublicQuoteSig
       const view = await viewQuoteSignature(token);
       const preview = await quoteCashPreview(claims.orgId, view.quoteId, null);
       if (!view.consentText) {
-        throw new QuoteToCashError("This request predates the recorded consent — ask the sender to re-send it");
+        throw new QuoteToCashError(
+          "This request predates the recorded consent — ask the sender to re-send it",
+        );
       }
       return {
         quoteNumber: preview.quote.documentNumber,
@@ -1504,9 +1730,18 @@ async function activateQuoteLocked(
   // for a switched-off surface.
   await assertQuoteToCashEnabled(runner, orgId);
   const quote = await loadQuote(runner, orgId, quoteId, allowedSubsidiaryIds);
-  if ((await runner.execute(sql`select id from subscription_renewal_occurrences
-    where org_id=${orgId} and document_id=${quoteId} and occurrence='document' limit 1`, "objects"))[0]) {
-    throw new QuoteToCashError("This quote renews an existing subscription; accept the approved renewal in Collections to retain its billing history instead of creating another subscription");
+  if (
+    (
+      await runner.execute(
+        sql`select id from subscription_renewal_occurrences
+    where org_id=${orgId} and document_id=${quoteId} and occurrence='document' limit 1`,
+        "objects",
+      )
+    )[0]
+  ) {
+    throw new QuoteToCashError(
+      "This quote renews an existing subscription; accept the approved renewal in Collections to retain its billing history instead of creating another subscription",
+    );
   }
   if (quote.status === "voided" || quote.status === "posted") {
     throw new QuoteToCashError(`This quote is ${quote.status} and can no longer be activated`);
@@ -1525,9 +1760,12 @@ async function activateQuoteLocked(
   // Already activated: converge on the existing subscriptions. The row lock
   // in loadQuote serializes twins, so the second activation always observes
   // the first one's rows.
-  const prior = await runner.execute<{ id: string }>(sql`
+  const prior = await runner.execute<{ id: string }>(
+    sql`
       select id from subscriptions
-       where org_id = ${orgId} and source_quote_id = ${quoteId} order by created_at, id`, "objects");
+       where org_id = ${orgId} and source_quote_id = ${quoteId} order by created_at, id`,
+    "objects",
+  );
   if (prior.length > 0) {
     return { subscriptionIds: prior.map((r) => r.id), created: false, contractId: null };
   }
@@ -1587,33 +1825,38 @@ async function activateQuoteLocked(
       const first = groupTerms[0]!;
       const starts = groupTerms.map((t) => resolveTermStart(t, quote.documentDate, opts.startOn));
       const earliest = starts.sort()[0]!;
-      const versionId = await createPlanVersion(orgId, actor, {
-        planId: first.planId,
-        effectiveFrom: earliest,
-        name: first.planName,
-        currency: first.planCurrency,
-        interval: (["weekly", "monthly", "quarterly", "annually"].includes(first.planInterval)
-          ? first.planInterval
-          : "monthly") as "weekly" | "monthly" | "quarterly" | "annually",
-        intervalCount: first.planIntervalCount,
-        billingTiming: first.billingTiming,
-        changeSummary: `Quoted on ${quote.documentNumber}`,
-        components: groupTerms.map((term) => {
-          componentOrdinal += 1;
-          const componentKey = `quote-term-${componentOrdinal}`;
-          versionByGroup.set(term.id, { versionId: "", componentKey });
-          const schedule = resolveRampSchedule(term.termMonths, term.steps);
-          return {
-            componentKey,
-            name: term.planName,
-            quantity: schedule.periods[0]!.quantity,
-            unitPrice: schedule.periods[0]!.unitPrice,
-            incomeAccountId: term.planIncomeAccountId,
-            itemId: term.planItemId,
-            taxCodeId: term.planTaxCodeId,
-          };
-        }),
-      }, allowedSubsidiaryIds);
+      const versionId = await createPlanVersion(
+        orgId,
+        actor,
+        {
+          planId: first.planId,
+          effectiveFrom: earliest,
+          name: first.planName,
+          currency: first.planCurrency,
+          interval: (["weekly", "monthly", "quarterly", "annually"].includes(first.planInterval)
+            ? first.planInterval
+            : "monthly") as "weekly" | "monthly" | "quarterly" | "annually",
+          intervalCount: first.planIntervalCount,
+          billingTiming: first.billingTiming,
+          changeSummary: `Quoted on ${quote.documentNumber}`,
+          components: groupTerms.map((term) => {
+            componentOrdinal += 1;
+            const componentKey = `quote-term-${componentOrdinal}`;
+            versionByGroup.set(term.id, { versionId: "", componentKey });
+            const schedule = resolveRampSchedule(term.termMonths, term.steps);
+            return {
+              componentKey,
+              name: term.planName,
+              quantity: schedule.periods[0]!.quantity,
+              unitPrice: schedule.periods[0]!.unitPrice,
+              incomeAccountId: term.planIncomeAccountId,
+              itemId: term.planItemId,
+              taxCodeId: term.planTaxCodeId,
+            };
+          }),
+        },
+        allowedSubsidiaryIds,
+      );
       await publishPlanVersion(orgId, actor, versionId, allowedSubsidiaryIds);
       for (const term of groupTerms) versionByGroup.get(term.id)!.versionId = versionId;
     }
@@ -1627,8 +1870,11 @@ async function activateQuoteLocked(
     const schedule = resolveRampSchedule(term.termMonths, term.steps);
     const first = schedule.periods[0]!;
     const intervalMonths = term.billingTiming === "advance" ? 0 : planIntervalMonths(term);
-    const nextBillOn = intervalMonths === 0 ? termStart : addMonthsClamped(termStart, intervalMonths);
-    const inserted = (await runner.execute<{ id: string }>(sql`
+    const nextBillOn =
+      intervalMonths === 0 ? termStart : addMonthsClamped(termStart, intervalMonths);
+    const inserted = (
+      await runner.execute<{ id: string }>(
+        sql`
         insert into subscriptions
           (org_id, customer_id, plan_id, quantity, price_override, status, start_on, next_bill_on,
            current_period_start, auto_post, memo, source_quote_id, source_term_id, created_by, updated_by)
@@ -1638,14 +1884,22 @@ async function activateQuoteLocked(
                 ${quoteId}, ${term.id}, ${actor}, ${actor})
         -- An activation replay reuses the subscription selected below for this quote term.
         on conflict (org_id, source_quote_id, source_term_id) where source_quote_id is not null do nothing
-        returning id`, "objects"))[0];
+        returning id`,
+        "objects",
+      )
+    )[0];
     // The conflict above is expected and benign: a replayed activation
     // converges on the row its first attempt wrote.
     const subscriptionId =
       inserted?.id ??
-      (await runner.execute<{ id: string }>(sql`
+      (
+        await runner.execute<{ id: string }>(
+          sql`
           select id from subscriptions
-           where org_id = ${orgId} and source_quote_id = ${quoteId} and source_term_id = ${term.id}`, "objects"))[0]?.id;
+           where org_id = ${orgId} and source_quote_id = ${quoteId} and source_term_id = ${term.id}`,
+          "objects",
+        )
+      )[0]?.id;
     if (!subscriptionId) throw new QuoteToCashError("The subscription was not recorded");
     await runner.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -1656,41 +1910,62 @@ async function activateQuoteLocked(
 
     if (advanced) {
       const frozen = versionByGroup.get(term.id);
-      if (!frozen?.versionId) throw new QuoteToCashError("The agreed plan version was not recorded");
-      await activateLifecycle(orgId, actor, {
-        subscriptionId,
-        planVersionId: frozen.versionId,
-        componentKeys: [frozen.componentKey],
-        termStartsOn: termStart,
-        termEndsOn: termEnd,
-      }, allowedSubsidiaryIds);
+      if (!frozen?.versionId)
+        throw new QuoteToCashError("The agreed plan version was not recorded");
+      await activateLifecycle(
+        orgId,
+        actor,
+        {
+          subscriptionId,
+          planVersionId: frozen.versionId,
+          componentKeys: [frozen.componentKey],
+          termStartsOn: termStart,
+          termEndsOn: termEnd,
+        },
+        allowedSubsidiaryIds,
+      );
       for (const period of schedule.periods.slice(1)) {
         const effectiveOn = addMonthsClamped(termStart, period.startsAfterMonths);
-        await applyAmendment(orgId, systemSource ? SYSTEM_ACTOR_ID_VALUE : actor, {
-          subscriptionId,
-          type: "change_component",
-          effectiveOn,
-          idempotencyKey: `quote-activation:${quoteId}:${term.id}:p${period.periodIndex}`,
-          componentKey: frozen.componentKey,
-          quantity: period.quantity,
-          unitPrice: period.unitPrice,
-          reason: `Ramp period ${period.periodIndex} of quote ${quote.documentNumber}`,
-        }, systemSource ? { system: systemSource, allowedSubsidiaryIds } : { allowedSubsidiaryIds });
+        await applyAmendment(
+          orgId,
+          systemSource ? SYSTEM_ACTOR_ID_VALUE : actor,
+          {
+            subscriptionId,
+            type: "change_component",
+            effectiveOn,
+            idempotencyKey: `quote-activation:${quoteId}:${term.id}:p${period.periodIndex}`,
+            componentKey: frozen.componentKey,
+            quantity: period.quantity,
+            unitPrice: period.unitPrice,
+            reason: `Ramp period ${period.periodIndex} of quote ${quote.documentNumber}`,
+          },
+          systemSource ? { system: systemSource, allowedSubsidiaryIds } : { allowedSubsidiaryIds },
+        );
       }
       if (term.cotermSubscriptionId) {
-        await applyAmendment(orgId, systemSource ? SYSTEM_ACTOR_ID_VALUE : actor, {
-          subscriptionId,
-          type: "coterm",
-          effectiveOn: termStart,
-          idempotencyKey: `quote-activation:${quoteId}:${term.id}:coterm`,
-          anchorSubscriptionId: term.cotermSubscriptionId,
-          reason: `Co-term with subscription to quote ${quote.documentNumber}`,
-        }, systemSource ? { system: systemSource, allowedSubsidiaryIds } : { allowedSubsidiaryIds });
+        await applyAmendment(
+          orgId,
+          systemSource ? SYSTEM_ACTOR_ID_VALUE : actor,
+          {
+            subscriptionId,
+            type: "coterm",
+            effectiveOn: termStart,
+            idempotencyKey: `quote-activation:${quoteId}:${term.id}:coterm`,
+            anchorSubscriptionId: term.cotermSubscriptionId,
+            reason: `Co-term with subscription to quote ${quote.documentNumber}`,
+          },
+          systemSource ? { system: systemSource, allowedSubsidiaryIds } : { allowedSubsidiaryIds },
+        );
       }
     }
     ({ contractId } = await maybeCreateActivationRevenueContract(
-      runner, orgId, subscriptionId, `${quote.documentNumber} · ${term.planName}`,
-      quote.partyId, quote.currency, actor,
+      runner,
+      orgId,
+      subscriptionId,
+      `${quote.documentNumber} · ${term.planName}`,
+      quote.partyId,
+      quote.currency,
+      actor,
     ).then((r) => ({ contractId: r.contractId ?? contractId })));
   }
   await runner.execute(sql`
@@ -1722,10 +1997,15 @@ const REMINDER_WINDOW_HOURS = 72;
  * replaced instead of stranding two live links.
  */
 export async function runSignatureReminderScan(): Promise<SignatureReminderScanResult> {
-  const result: SignatureReminderScanResult = { scanned: 0, expired: 0, reminded: 0, orgErrors: [] };
-  const orgRows = (
-    // bypass: scheduler-tick — the unscoped run lists every production
-    // organization that switched quote-to-cash on.
+  const result: SignatureReminderScanResult = {
+    scanned: 0,
+    expired: 0,
+    reminded: 0,
+    orgErrors: [],
+  };
+  const orgRows = // bypass: scheduler-tick — the unscoped run lists every production
+  // organization that switched quote-to-cash on.
+  (
     await withBypass(async () => {
       return await db.execute<{ orgId: string }>(sql`
         select distinct organization.id as "orgId"
@@ -1753,23 +2033,30 @@ async function runOneOrgSignatureReminders(
   orgId: string,
 ): Promise<{ scanned: number; expired: number; reminded: number }> {
   return withOrgTransaction(orgId, async () => {
-    if (!(await lockAndCheckOrgFeature(db, orgId, "quoteToCash"))) return { scanned: 0, expired: 0, reminded: 0 };
-    const expired = (await db.execute<{ id: string }>(sql`
+    if (!(await lockAndCheckOrgFeature(db, orgId, "quoteToCash")))
+      return { scanned: 0, expired: 0, reminded: 0 };
+    const expired = (
+      await db.execute<{ id: string }>(
+        sql`
         update signature_requests r set status = 'expired', updated_at = now()
          where r.org_id = ${orgId} and r.status in ('sent', 'viewed') and r.expires_at < now()
            and not exists (
              select 1 from service_quotes sq
               where sq.org_id = r.org_id and sq.signature_request_id = r.id
            )
-        returning id`, "objects")).length;
+        returning id`,
+        "objects",
+      )
+    ).length;
     const due = await db.execute<{
-        id: string;
-        subject_id: string;
-        signer_name: string;
-        signer_email: string;
-        token_hash: string;
-        expires_at: Date | string;
-      }>(sql`
+      id: string;
+      subject_id: string;
+      signer_name: string;
+      signer_email: string;
+      token_hash: string;
+      expires_at: Date | string;
+    }>(
+      sql`
         select r.id, r.subject_id, r.signer_name, r.signer_email, r.token_hash, r.expires_at
           from signature_requests r
          where r.org_id = ${orgId} and r.status in ('sent', 'viewed')
@@ -1784,7 +2071,9 @@ async function runOneOrgSignatureReminders(
               where o.kind = 'flow_email'
                 and o.occurrence_key = ${"signature-reminder:"} || r.id::text
            )
-         order by r.expires_at`, "objects");
+         order by r.expires_at`,
+      "objects",
+    );
     let reminded = 0;
     // Sequential rotation keeps twin ticks ordered per request.
     for (const request of due) {
@@ -1805,17 +2094,26 @@ async function remindOneSignatureRequest(
     expires_at: Date | string;
   },
 ): Promise<boolean> {
-  const quote = (await db.execute<{ document_number: string }>(sql`
+  const quote = (
+    await db.execute<{ document_number: string }>(
+      sql`
       select document_number from documents
-       where id = ${request.subject_id} and org_id = ${orgId}`, "objects"))[0];
+       where id = ${request.subject_id} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!quote) return false;
-  const orgName = (await db.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`, "objects"))[0]?.name;
+  const orgName = (
+    await db.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`, "objects")
+  )[0]?.name;
   if (!orgName) return false;
-  const expiresAt = request.expires_at instanceof Date ? request.expires_at : new Date(request.expires_at);
+  const expiresAt =
+    request.expires_at instanceof Date ? request.expires_at : new Date(request.expires_at);
   // A fresh possession token over the same request and expiry: the emailed
   // link verifies through the signing page exactly like the original send.
   const fresh = mintPossessionToken(QUOTE_SIGN_DOMAIN, orgId, request.id, expiresAt);
-  const rotated = await db.execute<{ id: string }>(sql`
+  const rotated = await db.execute<{ id: string }>(
+    sql`
       update signature_requests
          set token_hash = ${hashPossessionToken(fresh)}, updated_at = now()
        where id = ${request.id} and org_id = ${orgId} and token_hash = ${request.token_hash}
@@ -1824,7 +2122,9 @@ async function remindOneSignatureRequest(
            select 1 from service_quotes sq
             where sq.org_id = signature_requests.org_id and sq.signature_request_id = signature_requests.id
          )
-      returning id`, "objects");
+      returning id`,
+    "objects",
+  );
   // A twin tick rotated first: its email carries the live link, so this
   // rotation loses and nothing is sent twice.
   if (rotated.length !== 1) return false;
@@ -1839,7 +2139,12 @@ async function remindOneSignatureRequest(
     orgId,
     runId: request.id,
     occurrenceKey: `signature-reminder:${request.id}`,
-    payload: { to: [request.signer_email], subject: email.subject, html: email.html, text: email.text },
+    payload: {
+      to: [request.signer_email],
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+    },
   });
   if (!enqueued) {
     // The reminder already left on an earlier tick: restore the hash it

@@ -41,7 +41,9 @@ export const paymentFormats = pgTable(
         "custom",
       ],
     }).notNull(),
-    direction: text("direction", { enum: ["credit", "debit", "both"] }).notNull().default("credit"),
+    direction: text("direction", { enum: ["credit", "debit", "both"] })
+      .notNull()
+      .default("credit"),
     country: text("country"),
     currency: currencyCode("currency"),
     fileExtension: text("file_extension").notNull().default("txt"),
@@ -94,8 +96,13 @@ export const paymentSchedules = pgTable(
     paymentBankProfileId: uuid("payment_bank_profile_id").notNull(),
     cron: text("cron").notNull(),
     timezone: text("timezone").notNull().default("UTC"),
-    selectionCriteria: jsonb("selection_criteria").$type<Record<string, unknown>>().notNull().default({}),
-    action: text("action", { enum: ["create_draft", "submit_for_approval"] }).notNull().default("create_draft"),
+    selectionCriteria: jsonb("selection_criteria")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    action: text("action", { enum: ["create_draft", "submit_for_approval"] })
+      .notNull()
+      .default("create_draft"),
     nextRunAt: timestamp("next_run_at", { withTimezone: true }),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
     lastPaymentRunId: uuid("last_payment_run_id"),
@@ -134,7 +141,9 @@ export const paymentRunItems = pgTable(
     withholdingAmount: money("withholding_amount").notNull().default("0"),
     creditAmount: money("credit_amount").notNull().default("0"),
     /** Exact target open lines and amounts for this source credit open line. */
-    creditTargetAllocations: jsonb("credit_target_allocations").$type<Array<{ toLineId: string; amount: string }>>(),
+    creditTargetAllocations: jsonb("credit_target_allocations").$type<
+      Array<{ toLineId: string; amount: string }>
+    >(),
     paymentAmount: money("payment_amount").notNull(),
     currency: currencyCode("currency").notNull(),
     fxRate: fxRate("fx_rate").notNull().default("1"),
@@ -174,8 +183,18 @@ export const paymentFiles = pgTable(
     totalAmount: money("total_amount").notNull(),
     currency: currencyCode("currency").notNull(),
     status: text("status", {
-      enum: ["generated", "pending_approval", "approved", "rejected", "delivered", "superseded", "voided"],
-    }).notNull().default("generated"),
+      enum: [
+        "generated",
+        "pending_approval",
+        "approved",
+        "rejected",
+        "delivered",
+        "superseded",
+        "voided",
+      ],
+    })
+      .notNull()
+      .default("generated"),
     generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
     generatedBy: uuid("generated_by"),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
@@ -279,7 +298,9 @@ export const pspPayoutAccruals = pgTable(
     subsidiaryId: uuid("subsidiary_id"),
     accrualEntryId: uuid("accrual_entry_id"),
     reversalEntryId: uuid("reversal_entry_id"),
-    status: text("status", { enum: ["accrued", "reversed"] }).notNull().default("accrued"),
+    status: text("status", { enum: ["accrued", "reversed"] })
+      .notNull()
+      .default("accrued"),
     ...auditColumns,
   },
   (t) => [

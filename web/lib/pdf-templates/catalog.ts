@@ -13,110 +13,140 @@
  * 'journal_entry', which lives outside the documents supertype.
  */
 
-export type PdfMergeField = { key: string; label: string; sample: string }
+export type PdfMergeField = { key: string; label: string; sample: string };
 export type PdfCollection = {
-  key: string
-  label: string
-  fields: PdfMergeField[]
-}
+  key: string;
+  label: string;
+  fields: PdfMergeField[];
+};
 export type PdfRecordTypeMeta = {
-  key: string
+  key: string;
   /** Stable message key resolved by the localized template management UI. */
-  labelKey: string
+  labelKey: string;
   /** documents.kind for supertype records; null for journal_entry. */
-  docKind: string | null
+  docKind: string | null;
   /** Title printed by the starter template ("Invoice", "Quote"…). */
-  docTitle: string
+  docTitle: string;
   /** Party column label in the starter ("Bill to" / "Vendor"…), null = none. */
-  partyHeading: string | null
+  partyHeading: string | null;
   /** Permission required to render this record type's PDF. */
-  readPermission: string
-  fields: PdfMergeField[]
-  collections: PdfCollection[]
-}
+  readPermission: string;
+  fields: PdfMergeField[];
+  collections: PdfCollection[];
+};
 
 /** The seller block, from Company & Accounting → Legal identity. */
 export const ORG_FIELDS: PdfMergeField[] = [
-  { key: 'org_name', label: 'Company name', sample: 'Northwind Industrial Ltd.' },
-  { key: 'org_legal_name', label: 'Company legal name', sample: 'Northwind Industrial Ltd.' },
-  { key: 'org_address', label: 'Company address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
-  { key: 'org_tax_ids', label: 'Company tax numbers', sample: 'BN 123456782 · GST/HST 123456782RT0001' },
-  { key: 'printed_date', label: 'Printed date', sample: 'Jul 16, 2026' },
-]
+  { key: "org_name", label: "Company name", sample: "Northwind Industrial Ltd." },
+  { key: "org_legal_name", label: "Company legal name", sample: "Northwind Industrial Ltd." },
+  {
+    key: "org_address",
+    label: "Company address",
+    sample: "400 King St W, Suite 300, Toronto, ON M5V 1K2, CA",
+  },
+  {
+    key: "org_tax_ids",
+    label: "Company tax numbers",
+    sample: "BN 123456782 · GST/HST 123456782RT0001",
+  },
+  { key: "printed_date", label: "Printed date", sample: "Jul 16, 2026" },
+];
 
 const DOC_COMMON: PdfMergeField[] = [
-  { key: 'document_number', label: 'Document number', sample: 'INV-000123' },
-  { key: 'document_date', label: 'Date', sample: 'Jul 16, 2026' },
-  { key: 'status', label: 'Status', sample: 'Posted' },
-  { key: 'memo', label: 'Memo', sample: 'Progress billing for June.' },
-  { key: 'currency', label: 'Currency', sample: 'CAD' },
-  { key: 'subtotal', label: 'Subtotal', sample: '$4,350.00' },
-  { key: 'tax_total', label: 'Tax total', sample: '$565.50' },
-  { key: 'total', label: 'Total', sample: '$4,915.50' },
+  { key: "document_number", label: "Document number", sample: "INV-000123" },
+  { key: "document_date", label: "Date", sample: "Jul 16, 2026" },
+  { key: "status", label: "Status", sample: "Posted" },
+  { key: "memo", label: "Memo", sample: "Progress billing for June." },
+  { key: "currency", label: "Currency", sample: "CAD" },
+  { key: "subtotal", label: "Subtotal", sample: "$4,350.00" },
+  { key: "tax_total", label: "Tax total", sample: "$565.50" },
+  { key: "total", label: "Total", sample: "$4,915.50" },
   ...ORG_FIELDS,
-]
+];
 
 const PARTY_FIELDS: PdfMergeField[] = [
-  { key: 'party_name', label: 'Party name', sample: 'Acme Construction Inc.' },
-  { key: 'party_email', label: 'Party email', sample: 'ap@acme.example' },
-  { key: 'party_phone', label: 'Party phone', sample: '(555) 010-0199' },
-  { key: 'party_address', label: 'Party address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2' },
-]
+  { key: "party_name", label: "Party name", sample: "Acme Construction Inc." },
+  { key: "party_email", label: "Party email", sample: "ap@acme.example" },
+  { key: "party_phone", label: "Party phone", sample: "(555) 010-0199" },
+  {
+    key: "party_address",
+    label: "Party address",
+    sample: "400 King St W, Suite 300, Toronto, ON M5V 1K2",
+  },
+];
 
 const DUE_FIELDS: PdfMergeField[] = [
-  { key: 'due_date', label: 'Due date', sample: 'Aug 15, 2026' },
-  { key: 'balance_due', label: 'Balance due', sample: '$4,915.50' },
-]
+  { key: "due_date", label: "Due date", sample: "Aug 15, 2026" },
+  { key: "balance_due", label: "Balance due", sample: "$4,915.50" },
+];
 
 const REFERENCE_FIELD: PdfMergeField = {
-  key: 'reference_number',
-  label: 'Reference',
-  sample: 'PO-2024-88',
-}
+  key: "reference_number",
+  label: "Reference",
+  sample: "PO-2024-88",
+};
 
 const INVOICE_FISCAL_FIELDS: PdfMergeField[] = [
-  { key: 'seller_address', label: 'Seller fiscal address', sample: 'Hauptstrasse 1, 10115 Berlin, DE' },
-  { key: 'seller_vat_id', label: 'Seller VAT identifier', sample: 'DE123456789' },
-  { key: 'seller_tax_number', label: 'Seller tax registration number', sample: '123/456/78901' },
-  { key: 'seller_legal_registration', label: 'Seller legal registration', sample: 'HRB 12345' },
-  { key: 'seller_contact', label: 'Seller contact', sample: 'Accounts · +49 30 123456 · billing@example.org' },
-  { key: 'seller_electronic_address', label: 'Seller electronic address', sample: '0088:1234567890123' },
-  { key: 'buyer_vat_id', label: 'Buyer VAT identifier', sample: 'FR12345678901' },
-  { key: 'buyer_legal_registration', label: 'Buyer legal registration', sample: '123456789' },
-  { key: 'buyer_electronic_address', label: 'Buyer electronic address', sample: '0204:991-12345-67' },
-  { key: 'payment_means', label: 'Payment means', sample: '30 · Credit transfer' },
-  { key: 'payee_account', label: 'Payee account / IBAN', sample: 'DE89370400440532013000' },
-  { key: 'payee_name', label: 'Payee account name', sample: 'Example GmbH' },
-  { key: 'payee_bic', label: 'Payee BIC / bank identifier', sample: 'COBADEFFXXX' },
-  { key: 'payment_reference', label: 'Payment reference', sample: 'INV-000123' },
-]
+  {
+    key: "seller_address",
+    label: "Seller fiscal address",
+    sample: "Hauptstrasse 1, 10115 Berlin, DE",
+  },
+  { key: "seller_vat_id", label: "Seller VAT identifier", sample: "DE123456789" },
+  { key: "seller_tax_number", label: "Seller tax registration number", sample: "123/456/78901" },
+  { key: "seller_legal_registration", label: "Seller legal registration", sample: "HRB 12345" },
+  {
+    key: "seller_contact",
+    label: "Seller contact",
+    sample: "Accounts · +49 30 123456 · billing@example.org",
+  },
+  {
+    key: "seller_electronic_address",
+    label: "Seller electronic address",
+    sample: "0088:1234567890123",
+  },
+  { key: "buyer_vat_id", label: "Buyer VAT identifier", sample: "FR12345678901" },
+  { key: "buyer_legal_registration", label: "Buyer legal registration", sample: "123456789" },
+  {
+    key: "buyer_electronic_address",
+    label: "Buyer electronic address",
+    sample: "0204:991-12345-67",
+  },
+  { key: "payment_means", label: "Payment means", sample: "30 · Credit transfer" },
+  { key: "payee_account", label: "Payee account / IBAN", sample: "DE89370400440532013000" },
+  { key: "payee_name", label: "Payee account name", sample: "Example GmbH" },
+  { key: "payee_bic", label: "Payee BIC / bank identifier", sample: "COBADEFFXXX" },
+  { key: "payment_reference", label: "Payment reference", sample: "INV-000123" },
+];
 
 const INVOICE_VAT_COLLECTION: PdfCollection = {
-  key: 'vat_breakdown', label: 'Invoice VAT breakdown', fields: [
-    { key: 'category', label: 'VAT category', sample: 'S' },
-    { key: 'rate', label: 'VAT rate', sample: '19%' },
-    { key: 'taxable_amount', label: 'Taxable amount', sample: 'EUR 100.00' },
-    { key: 'tax_amount', label: 'VAT amount', sample: 'EUR 19.00' },
-    { key: 'exemption_reason', label: 'Exemption reason', sample: 'Reverse charge' },
-    { key: 'exemption_reason_code', label: 'VATEX exemption reason code', sample: 'VATEX-EU-AE' },
+  key: "vat_breakdown",
+  label: "Invoice VAT breakdown",
+  fields: [
+    { key: "category", label: "VAT category", sample: "S" },
+    { key: "rate", label: "VAT rate", sample: "19%" },
+    { key: "taxable_amount", label: "Taxable amount", sample: "EUR 100.00" },
+    { key: "tax_amount", label: "VAT amount", sample: "EUR 19.00" },
+    { key: "exemption_reason", label: "Exemption reason", sample: "Reverse charge" },
+    { key: "exemption_reason_code", label: "VATEX exemption reason code", sample: "VATEX-EU-AE" },
   ],
-}
+};
 
 const LINE_FIELDS: PdfMergeField[] = [
-  { key: 'line_number', label: 'Line #', sample: '1' },
-  { key: 'item_name', label: 'Item', sample: 'Structural steel' },
-  { key: 'customer_sku', label: 'Customer part number', sample: 'ACME-STEEL-42' },
-  { key: 'account_name', label: 'Account', sample: '5010 Materials' },
-  { key: 'description', label: 'Description', sample: 'W12x26 beams — level 2 mezzanine' },
-  { key: 'quantity', label: 'Quantity', sample: '12' },
-  { key: 'unit', label: 'Unit', sample: 'ea' },
-  { key: 'unit_price', label: 'Unit price', sample: '$362.50' },
-  { key: 'tax_amount', label: 'Tax', sample: '$565.50' },
-  { key: 'amount', label: 'Amount', sample: '$4,350.00' },
-  { key: 'service_party_name', label: 'Service customer', sample: 'Child Co — Lyon Works' },
-]
+  { key: "line_number", label: "Line #", sample: "1" },
+  { key: "item_name", label: "Item", sample: "Structural steel" },
+  { key: "customer_sku", label: "Customer part number", sample: "ACME-STEEL-42" },
+  { key: "account_name", label: "Account", sample: "5010 Materials" },
+  { key: "description", label: "Description", sample: "W12x26 beams — level 2 mezzanine" },
+  { key: "quantity", label: "Quantity", sample: "12" },
+  { key: "unit", label: "Unit", sample: "ea" },
+  { key: "unit_price", label: "Unit price", sample: "$362.50" },
+  { key: "tax_amount", label: "Tax", sample: "$565.50" },
+  { key: "amount", label: "Amount", sample: "$4,350.00" },
+  { key: "service_party_name", label: "Service customer", sample: "Child Co — Lyon Works" },
+];
 
-const LINES_COLLECTION: PdfCollection = { key: 'lines', label: 'Line items', fields: LINE_FIELDS }
+const LINES_COLLECTION: PdfCollection = { key: "lines", label: "Line items", fields: LINE_FIELDS };
 
 /**
  * Lines that may be spent in another currency than their document (expense
@@ -125,28 +155,39 @@ const LINES_COLLECTION: PdfCollection = { key: 'lines', label: 'Line items', fie
  * document currency, so a template shows the block only where it applies.
  */
 export const FOREIGN_LINE_FIELDS: PdfMergeField[] = [
-  { key: 'original_currency', label: 'Original currency', sample: 'EUR' },
-  { key: 'original_amount', label: 'Original amount', sample: '€100.00' },
-  { key: 'fx_rate', label: 'Exchange rate', sample: '1 EUR = 1.4823 CAD' },
-  { key: 'fx_basis', label: 'Rate basis', sample: 'Dated rate of Sep 25, 2026' },
-]
-const FOREIGN_LINES_COLLECTION: PdfCollection = { ...LINES_COLLECTION, fields: [...LINE_FIELDS, ...FOREIGN_LINE_FIELDS] }
+  { key: "original_currency", label: "Original currency", sample: "EUR" },
+  { key: "original_amount", label: "Original amount", sample: "€100.00" },
+  { key: "fx_rate", label: "Exchange rate", sample: "1 EUR = 1.4823 CAD" },
+  { key: "fx_basis", label: "Rate basis", sample: "Dated rate of Sep 25, 2026" },
+];
+const FOREIGN_LINES_COLLECTION: PdfCollection = {
+  ...LINES_COLLECTION,
+  fields: [...LINE_FIELDS, ...FOREIGN_LINE_FIELDS],
+};
 
 /** True when a record type's lines carry the original-currency fields. */
 export function hasForeignLines(meta: PdfRecordTypeMeta): boolean {
-  return meta.collections.some((collection) => collection.key === 'lines' && collection.fields.some((field) => field.key === 'original_currency'))
+  return meta.collections.some(
+    (collection) =>
+      collection.key === "lines" &&
+      collection.fields.some((field) => field.key === "original_currency"),
+  );
 }
 
 /** Documents that bill work state when it was completed and each line's work period. */
-const WORK_COMPLETED_FIELD: PdfMergeField = { key: 'work_completed_on', label: 'Work completed', sample: 'Jul 31, 2026' }
+const WORK_COMPLETED_FIELD: PdfMergeField = {
+  key: "work_completed_on",
+  label: "Work completed",
+  sample: "Jul 31, 2026",
+};
 const WORK_LINES_COLLECTION: PdfCollection = {
   ...LINES_COLLECTION,
   fields: [
     ...LINE_FIELDS,
-    { key: 'work_from', label: 'Work from', sample: 'Jul 1, 2026' },
-    { key: 'work_to', label: 'Work to', sample: 'Jul 31, 2026' },
+    { key: "work_from", label: "Work from", sample: "Jul 1, 2026" },
+    { key: "work_to", label: "Work to", sample: "Jul 31, 2026" },
   ],
-}
+};
 
 /**
  * Grouped-by-service-party layout for consolidated invoices: one entry per
@@ -157,31 +198,31 @@ const WORK_LINES_COLLECTION: PdfCollection = {
  * `lines` only, so standalone invoices render no empty groups.
  */
 const LINE_GROUPS_COLLECTION: PdfCollection = {
-  key: 'line_groups',
-  label: 'Lines grouped by service customer',
+  key: "line_groups",
+  label: "Lines grouped by service customer",
   fields: [
-    { key: 'service_party_name', label: 'Service customer', sample: 'Child Co — Lyon Works' },
-    { key: 'group_subtotal', label: 'Group subtotal', sample: '$4,350.00' },
-    { key: 'group_tax', label: 'Group tax', sample: '$565.50' },
-    { key: 'group_total', label: 'Group total', sample: '$4,915.50' },
+    { key: "service_party_name", label: "Service customer", sample: "Child Co — Lyon Works" },
+    { key: "group_subtotal", label: "Group subtotal", sample: "$4,350.00" },
+    { key: "group_tax", label: "Group tax", sample: "$565.50" },
+    { key: "group_total", label: "Group total", sample: "$4,915.50" },
   ],
-}
+};
 
 function docType(meta: {
-  key: string
-  docTitle: string
-  partyHeading: string | null
-  readPermission: string
-  hasParty: boolean
-  hasDue: boolean
-  hasReference: boolean
-  extraFields?: PdfMergeField[]
-  groupedLines?: boolean
-  workPeriod?: boolean
+  key: string;
+  docTitle: string;
+  partyHeading: string | null;
+  readPermission: string;
+  hasParty: boolean;
+  hasDue: boolean;
+  hasReference: boolean;
+  extraFields?: PdfMergeField[];
+  groupedLines?: boolean;
+  workPeriod?: boolean;
   /** Lines may carry an original currency (expense reports). */
-  foreignLines?: boolean
+  foreignLines?: boolean;
 }): PdfRecordTypeMeta {
-  const invoiceFiscal = meta.key === 'customer_invoice' || meta.key === 'customer_credit'
+  const invoiceFiscal = meta.key === "customer_invoice" || meta.key === "customer_credit";
   return {
     key: meta.key,
     labelKey: meta.key,
@@ -199,117 +240,140 @@ function docType(meta: {
       ...(meta.hasDue ? DUE_FIELDS : []),
       ...DOC_COMMON.slice(4),
     ],
-    collections: [meta.workPeriod ? WORK_LINES_COLLECTION : meta.foreignLines ? FOREIGN_LINES_COLLECTION : LINES_COLLECTION, ...(meta.groupedLines ? [LINE_GROUPS_COLLECTION] : []), ...(invoiceFiscal ? [INVOICE_VAT_COLLECTION] : [])],
-  }
+    collections: [
+      meta.workPeriod
+        ? WORK_LINES_COLLECTION
+        : meta.foreignLines
+          ? FOREIGN_LINES_COLLECTION
+          : LINES_COLLECTION,
+      ...(meta.groupedLines ? [LINE_GROUPS_COLLECTION] : []),
+      ...(invoiceFiscal ? [INVOICE_VAT_COLLECTION] : []),
+    ],
+  };
 }
 
 const JOURNAL_ENTRY: PdfRecordTypeMeta = {
-  key: 'journal_entry',
-  labelKey: 'journal_entry',
+  key: "journal_entry",
+  labelKey: "journal_entry",
   docKind: null,
-  docTitle: 'Journal Entry',
+  docTitle: "Journal Entry",
   partyHeading: null,
-  readPermission: 'gl.read',
+  readPermission: "gl.read",
   fields: [
-    { key: 'entry_number', label: 'Entry number', sample: 'JE-000045' },
-    { key: 'posting_date', label: 'Posting date', sample: 'Jul 16, 2026' },
-    { key: 'status', label: 'Status', sample: 'Posted' },
-    { key: 'origin', label: 'Origin', sample: 'Manual' },
-    { key: 'memo', label: 'Memo', sample: 'June labour overhead allocation.' },
-    { key: 'total_debits', label: 'Total debits', sample: '$12,400.00' },
-    { key: 'total_credits', label: 'Total credits', sample: '$12,400.00' },
+    { key: "entry_number", label: "Entry number", sample: "JE-000045" },
+    { key: "posting_date", label: "Posting date", sample: "Jul 16, 2026" },
+    { key: "status", label: "Status", sample: "Posted" },
+    { key: "origin", label: "Origin", sample: "Manual" },
+    { key: "memo", label: "Memo", sample: "June labour overhead allocation." },
+    { key: "total_debits", label: "Total debits", sample: "$12,400.00" },
+    { key: "total_credits", label: "Total credits", sample: "$12,400.00" },
     ...ORG_FIELDS,
   ],
   collections: [
     {
-      key: 'lines',
-      label: 'Journal lines',
+      key: "lines",
+      label: "Journal lines",
       fields: [
-        { key: 'line_number', label: 'Line #', sample: '1' },
-        { key: 'account_number', label: 'Account #', sample: '5120' },
-        { key: 'account_name', label: 'Account', sample: 'Labour overhead' },
-        { key: 'memo', label: 'Line memo', sample: 'June allocation' },
-        { key: 'debit', label: 'Debit', sample: '$12,400.00' },
-        { key: 'credit', label: 'Credit', sample: '' },
+        { key: "line_number", label: "Line #", sample: "1" },
+        { key: "account_number", label: "Account #", sample: "5120" },
+        { key: "account_name", label: "Account", sample: "Labour overhead" },
+        { key: "memo", label: "Line memo", sample: "June allocation" },
+        { key: "debit", label: "Debit", sample: "$12,400.00" },
+        { key: "credit", label: "Credit", sample: "" },
       ],
     },
   ],
-}
-
+};
 
 /** Field ticket — the signed crew timesheet. Its merge surface is a superset
  * of what a weekly billable-timesheet PDF needs: per-crew-row
  * day columns (day1..day7 × reg/ot/dt) for exact grid replicas, plus the
  * summarized reg/OT/DT totals the modern starter uses. */
 const CREW_DAY_FIELDS: PdfMergeField[] = Array.from({ length: 7 }, (_, i) => [
-  { key: `day${i + 1}_reg`, label: `Day ${i + 1} regular`, sample: i === 2 ? '8' : '' },
-  { key: `day${i + 1}_ot`, label: `Day ${i + 1} overtime`, sample: i === 3 ? '2' : '' },
-  { key: `day${i + 1}_dt`, label: `Day ${i + 1} double`, sample: '' },
-]).flat()
+  { key: `day${i + 1}_reg`, label: `Day ${i + 1} regular`, sample: i === 2 ? "8" : "" },
+  { key: `day${i + 1}_ot`, label: `Day ${i + 1} overtime`, sample: i === 3 ? "2" : "" },
+  { key: `day${i + 1}_dt`, label: `Day ${i + 1} double`, sample: "" },
+]).flat();
 
 const FIELD_TICKET: PdfRecordTypeMeta = {
-  key: 'field_ticket',
-  labelKey: 'field_ticket',
-  docKind: 'field_ticket',
-  docTitle: 'Field Ticket',
-  partyHeading: 'Customer',
-  readPermission: 'time.read',
+  key: "field_ticket",
+  labelKey: "field_ticket",
+  docKind: "field_ticket",
+  docTitle: "Field Ticket",
+  partyHeading: "Customer",
+  readPermission: "time.read",
   fields: [
-    { key: 'document_number', label: 'Ticket number', sample: 'FT-000123' },
-    { key: 'document_date', label: 'Date', sample: 'Jul 18, 2026' },
-    { key: 'status', label: 'Status', sample: 'Approved' },
-    { key: 'period', label: 'Period kind', sample: 'Weekly' },
-    { key: 'period_start', label: 'Period start', sample: 'Jul 12, 2026' },
-    { key: 'period_end', label: 'Period end', sample: 'Jul 18, 2026' },
-    ...Array.from({ length: 7 }, (_, i) => ({ key: `day${i + 1}_label`, label: `Day ${i + 1} header`, sample: ['Sun 07-12', 'Mon 07-13', 'Tue 07-14', 'Wed 07-15', 'Thu 07-16', 'Fri 07-17', 'Sat 07-18'][i]! })),
-    { key: 'project_name', label: 'Project / job', sample: 'S26-0471 Splitter Box' },
-    { key: 'po_number', label: 'Customer PO', sample: 'PO-2024-88' },
-    { key: 'foreman_name', label: 'Foreman', sample: 'J. Martin' },
-    { key: 'work_description', label: 'Work description', sample: 'Mudroom splitter box tie-ins, levels 1–2.' },
+    { key: "document_number", label: "Ticket number", sample: "FT-000123" },
+    { key: "document_date", label: "Date", sample: "Jul 18, 2026" },
+    { key: "status", label: "Status", sample: "Approved" },
+    { key: "period", label: "Period kind", sample: "Weekly" },
+    { key: "period_start", label: "Period start", sample: "Jul 12, 2026" },
+    { key: "period_end", label: "Period end", sample: "Jul 18, 2026" },
+    ...Array.from({ length: 7 }, (_, i) => ({
+      key: `day${i + 1}_label`,
+      label: `Day ${i + 1} header`,
+      sample: [
+        "Sun 07-12",
+        "Mon 07-13",
+        "Tue 07-14",
+        "Wed 07-15",
+        "Thu 07-16",
+        "Fri 07-17",
+        "Sat 07-18",
+      ][i]!,
+    })),
+    { key: "project_name", label: "Project / job", sample: "S26-0471 Splitter Box" },
+    { key: "po_number", label: "Customer PO", sample: "PO-2024-88" },
+    { key: "foreman_name", label: "Foreman", sample: "J. Martin" },
+    {
+      key: "work_description",
+      label: "Work description",
+      sample: "Mudroom splitter box tie-ins, levels 1–2.",
+    },
     ...PARTY_FIELDS,
-    { key: 'labor_total', label: 'Labor total', sample: '$3,264.00' },
-    { key: 'lines_total', label: 'Equipment & materials total', sample: '$1,086.00' },
-    { key: 'grand_total', label: 'Grand total', sample: '$4,350.00' },
-    { key: 'total_hours', label: 'Total hours', sample: '32.0' },
-    { key: 'customer_signature_image', label: 'Customer signature (image)', sample: '' },
-    { key: 'customer_signature_name', label: 'Customer signed by', sample: 'D. Alvarez' },
-    { key: 'customer_signed_at', label: 'Customer signed on', sample: 'Jul 19, 2026' },
-    { key: 'customer_comment', label: 'Customer comment', sample: '' },
-    { key: 'foreman_signature_image', label: 'Foreman signature (image)', sample: '' },
+    { key: "labor_total", label: "Labor total", sample: "$3,264.00" },
+    { key: "lines_total", label: "Equipment & materials total", sample: "$1,086.00" },
+    { key: "grand_total", label: "Grand total", sample: "$4,350.00" },
+    { key: "total_hours", label: "Total hours", sample: "32.0" },
+    { key: "customer_signature_image", label: "Customer signature (image)", sample: "" },
+    { key: "customer_signature_name", label: "Customer signed by", sample: "D. Alvarez" },
+    { key: "customer_signed_at", label: "Customer signed on", sample: "Jul 19, 2026" },
+    { key: "customer_comment", label: "Customer comment", sample: "" },
+    { key: "foreman_signature_image", label: "Foreman signature (image)", sample: "" },
     ...ORG_FIELDS,
   ],
   collections: [
     {
-      key: 'crew',
-      label: 'Crew hours',
+      key: "crew",
+      label: "Crew hours",
       fields: [
-        { key: 'employee_name', label: 'Employee', sample: 'P. Benko' },
-        { key: 'labor_class', label: 'Labor class', sample: 'Journeyman Electrician' },
-        { key: 'class_code', label: 'Class code', sample: 'J' },
-        { key: 'reg_hours', label: 'Regular hours', sample: '24.0' },
-        { key: 'ot_hours', label: 'Overtime hours', sample: '6.0' },
-        { key: 'dt_hours', label: 'Double-time hours', sample: '2.0' },
-        { key: 'total_hours', label: 'Total hours', sample: '32.0' },
-        { key: 'reg_rate', label: 'Regular rate', sample: '$102.00' },
-        { key: 'ot_rate', label: 'Overtime rate', sample: '$130.00' },
-        { key: 'dt_rate', label: 'Double rate', sample: '$204.00' },
-        { key: 'amount', label: 'Amount', sample: '$3,264.00' },
+        { key: "employee_name", label: "Employee", sample: "P. Benko" },
+        { key: "labor_class", label: "Labor class", sample: "Journeyman Electrician" },
+        { key: "class_code", label: "Class code", sample: "J" },
+        { key: "reg_hours", label: "Regular hours", sample: "24.0" },
+        { key: "ot_hours", label: "Overtime hours", sample: "6.0" },
+        { key: "dt_hours", label: "Double-time hours", sample: "2.0" },
+        { key: "total_hours", label: "Total hours", sample: "32.0" },
+        { key: "reg_rate", label: "Regular rate", sample: "$102.00" },
+        { key: "ot_rate", label: "Overtime rate", sample: "$130.00" },
+        { key: "dt_rate", label: "Double rate", sample: "$204.00" },
+        { key: "amount", label: "Amount", sample: "$3,264.00" },
         ...CREW_DAY_FIELDS,
       ],
     },
     {
-      key: 'lines',
-      label: 'Equipment & materials',
+      key: "lines",
+      label: "Equipment & materials",
       fields: [
-        { key: 'item_name', label: 'Item', sample: 'Scissor lift 19ft' },
-        { key: 'description', label: 'Description', sample: 'Week rental' },
-        { key: 'quantity', label: 'Quantity', sample: '1' },
-        { key: 'unit_price', label: 'Rate', sample: '$1,086.00' },
-        { key: 'amount', label: 'Amount', sample: '$1,086.00' },
+        { key: "item_name", label: "Item", sample: "Scissor lift 19ft" },
+        { key: "description", label: "Description", sample: "Week rental" },
+        { key: "quantity", label: "Quantity", sample: "1" },
+        { key: "unit_price", label: "Rate", sample: "$1,086.00" },
+        { key: "amount", label: "Amount", sample: "$1,086.00" },
       ],
     },
   ],
-}
+};
 
 /**
  * Shipment — the packing slip that travels with the goods. It names what is
@@ -317,203 +381,247 @@ const FIELD_TICKET: PdfRecordTypeMeta = {
  * the header carries the ship-to address, carrier, service and tracking.
  */
 const SHIPMENT: PdfRecordTypeMeta = {
-  key: 'shipment',
-  labelKey: 'shipment',
-  docKind: 'shipment',
-  docTitle: 'Packing Slip',
-  partyHeading: 'Ship to',
-  readPermission: 'orders.fulfill',
+  key: "shipment",
+  labelKey: "shipment",
+  docKind: "shipment",
+  docTitle: "Packing Slip",
+  partyHeading: "Ship to",
+  readPermission: "orders.fulfill",
   fields: [
-    { key: 'document_number', label: 'Shipment number', sample: 'SHP-000042' },
-    { key: 'document_date', label: 'Ship date', sample: 'Jul 16, 2026' },
-    { key: 'status', label: 'Status', sample: 'Draft' },
-    { key: 'sales_order_number', label: 'Sales order', sample: 'SO-000118' },
-    { key: 'pick_list_number', label: 'Pick list', sample: 'PICK-000077' },
-    { key: 'party_name', label: 'Customer', sample: 'Acme Construction Inc.' },
-    { key: 'party_email', label: 'Customer email', sample: 'receiving@acme.example' },
-    { key: 'party_phone', label: 'Customer phone', sample: '(555) 010-0199' },
-    { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
-    { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
-    { key: 'warehouse_name', label: 'Ship from warehouse', sample: 'MAIN · Main warehouse' },
-    { key: 'carrier_name', label: 'Carrier', sample: 'Northline Freight' },
-    { key: 'carrier_service', label: 'Service', sample: 'Ground' },
-    { key: 'tracking_number', label: 'Tracking number', sample: '1Z999AA10123456784' },
-    { key: 'tracking_url', label: 'Tracking link', sample: 'https://track.example/1Z999AA10123456784' },
-    { key: 'carton_count', label: 'Cartons', sample: '2' },
-    { key: 'memo', label: 'Memo', sample: 'Deliver to the loading dock.' },
+    { key: "document_number", label: "Shipment number", sample: "SHP-000042" },
+    { key: "document_date", label: "Ship date", sample: "Jul 16, 2026" },
+    { key: "status", label: "Status", sample: "Draft" },
+    { key: "sales_order_number", label: "Sales order", sample: "SO-000118" },
+    { key: "pick_list_number", label: "Pick list", sample: "PICK-000077" },
+    { key: "party_name", label: "Customer", sample: "Acme Construction Inc." },
+    { key: "party_email", label: "Customer email", sample: "receiving@acme.example" },
+    { key: "party_phone", label: "Customer phone", sample: "(555) 010-0199" },
+    { key: "ship_to_name", label: "Ship-to name", sample: "Acme — Site 4 receiving" },
+    {
+      key: "ship_to_address",
+      label: "Ship-to address",
+      sample: "400 King St W, Suite 300, Toronto, ON M5V 1K2, CA",
+    },
+    { key: "warehouse_name", label: "Ship from warehouse", sample: "MAIN · Main warehouse" },
+    { key: "carrier_name", label: "Carrier", sample: "Northline Freight" },
+    { key: "carrier_service", label: "Service", sample: "Ground" },
+    { key: "tracking_number", label: "Tracking number", sample: "1Z999AA10123456784" },
+    {
+      key: "tracking_url",
+      label: "Tracking link",
+      sample: "https://track.example/1Z999AA10123456784",
+    },
+    { key: "carton_count", label: "Cartons", sample: "2" },
+    { key: "memo", label: "Memo", sample: "Deliver to the loading dock." },
     ...ORG_FIELDS,
   ],
   collections: [
     {
-      key: 'lines',
-      label: 'Packed lines',
+      key: "lines",
+      label: "Packed lines",
       fields: [
-        { key: 'line_number', label: 'Line #', sample: '1' },
-        { key: 'item_name', label: 'Item', sample: 'W12x26 beam' },
-        { key: 'customer_sku', label: 'Customer part number', sample: 'ACME-STEEL-42' },
-        { key: 'description', label: 'Description', sample: 'Structural steel — level 2 mezzanine' },
-        { key: 'quantity', label: 'Quantity', sample: '12' },
-        { key: 'unit', label: 'Unit', sample: 'ea' },
-        { key: 'carton', label: 'Carton', sample: 'C1' },
-        { key: 'bin', label: 'Bin', sample: 'A-01-03' },
-        { key: 'lot_serial', label: 'Lot / serial', sample: 'LOT-2407' },
+        { key: "line_number", label: "Line #", sample: "1" },
+        { key: "item_name", label: "Item", sample: "W12x26 beam" },
+        { key: "customer_sku", label: "Customer part number", sample: "ACME-STEEL-42" },
+        {
+          key: "description",
+          label: "Description",
+          sample: "Structural steel — level 2 mezzanine",
+        },
+        { key: "quantity", label: "Quantity", sample: "12" },
+        { key: "unit", label: "Unit", sample: "ea" },
+        { key: "carton", label: "Carton", sample: "C1" },
+        { key: "bin", label: "Bin", sample: "A-01-03" },
+        { key: "lot_serial", label: "Lot / serial", sample: "LOT-2407" },
       ],
     },
   ],
-}
+};
 
 const SHIPMENT_CARTON_LABEL: PdfRecordTypeMeta = {
   ...SHIPMENT,
-  key: 'shipment_carton_label',
-  labelKey: 'shipment_carton_label',
-  docTitle: 'Carton Label',
+  key: "shipment_carton_label",
+  labelKey: "shipment_carton_label",
+  docTitle: "Carton Label",
   fields: [
-    { key: 'document_number', label: 'Shipment number', sample: 'SHP-000042' },
-    { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
-    { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
-    { key: 'warehouse_name', label: 'Ship from warehouse', sample: 'MAIN · Main warehouse' },
-    { key: 'warehouse_address', label: 'Ship-from address', sample: '400 King St W, Toronto, ON M5V 1K2, CA' },
+    { key: "document_number", label: "Shipment number", sample: "SHP-000042" },
+    { key: "ship_to_name", label: "Ship-to name", sample: "Acme — Site 4 receiving" },
+    {
+      key: "ship_to_address",
+      label: "Ship-to address",
+      sample: "400 King St W, Suite 300, Toronto, ON M5V 1K2, CA",
+    },
+    { key: "warehouse_name", label: "Ship from warehouse", sample: "MAIN · Main warehouse" },
+    {
+      key: "warehouse_address",
+      label: "Ship-from address",
+      sample: "400 King St W, Toronto, ON M5V 1K2, CA",
+    },
   ],
   collections: [
     {
-      key: 'cartons',
-      label: 'Cartons',
+      key: "cartons",
+      label: "Cartons",
       fields: [
-        { key: 'carton', label: 'Carton', sample: 'C1' },
-        { key: 'carton_number', label: 'Carton number', sample: '1' },
-        { key: 'carton_total', label: 'Carton count', sample: '2' },
-        { key: 'barcode', label: 'Shipment and carton barcode', sample: 'SHP-000042-C1' },
+        { key: "carton", label: "Carton", sample: "C1" },
+        { key: "carton_number", label: "Carton number", sample: "1" },
+        { key: "carton_total", label: "Carton count", sample: "2" },
+        { key: "barcode", label: "Shipment and carton barcode", sample: "SHP-000042-C1" },
       ],
     },
   ],
-}
+};
 
 const SHIPMENT_SHIPPING_LABEL: PdfRecordTypeMeta = {
   ...SHIPMENT,
-  key: 'shipment_shipping_label',
-  labelKey: 'shipment_shipping_label',
-  docTitle: 'Shipping Label',
+  key: "shipment_shipping_label",
+  labelKey: "shipment_shipping_label",
+  docTitle: "Shipping Label",
   fields: [
-    { key: 'document_number', label: 'Shipment number', sample: 'SHP-000042' },
-    { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
-    { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
-    { key: 'warehouse_name', label: 'Ship-from warehouse', sample: 'MAIN · Main warehouse' },
-    { key: 'warehouse_address', label: 'Ship-from address', sample: '400 King St W, Toronto, ON M5V 1K2, CA' },
-    { key: 'carrier_name', label: 'Carrier', sample: 'Northline Freight' },
-    { key: 'carrier_service', label: 'Service', sample: 'Ground' },
-    { key: 'tracking_number', label: 'Tracking number', sample: '1Z999AA10123456784' },
+    { key: "document_number", label: "Shipment number", sample: "SHP-000042" },
+    { key: "ship_to_name", label: "Ship-to name", sample: "Acme — Site 4 receiving" },
+    {
+      key: "ship_to_address",
+      label: "Ship-to address",
+      sample: "400 King St W, Suite 300, Toronto, ON M5V 1K2, CA",
+    },
+    { key: "warehouse_name", label: "Ship-from warehouse", sample: "MAIN · Main warehouse" },
+    {
+      key: "warehouse_address",
+      label: "Ship-from address",
+      sample: "400 King St W, Toronto, ON M5V 1K2, CA",
+    },
+    { key: "carrier_name", label: "Carrier", sample: "Northline Freight" },
+    { key: "carrier_service", label: "Service", sample: "Ground" },
+    { key: "tracking_number", label: "Tracking number", sample: "1Z999AA10123456784" },
   ],
   collections: [],
-}
+};
 
 const PAY_STUB: PdfRecordTypeMeta = {
-  key: 'pay_stub',
-  labelKey: 'pay_stub',
+  key: "pay_stub",
+  labelKey: "pay_stub",
   docKind: null,
-  docTitle: 'Pay Stub',
-  partyHeading: 'Employee',
-  readPermission: 'payroll.read',
+  docTitle: "Pay Stub",
+  partyHeading: "Employee",
+  readPermission: "payroll.read",
   fields: [
-    { key: 'employee_name', label: 'Employee', sample: 'Jordan Sparks' },
-    { key: 'document_number', label: 'Pay run number', sample: 'PAY-000012' },
-    { key: 'period_start', label: 'Period start', sample: 'Jul 5, 2026' },
-    { key: 'period_end', label: 'Period end', sample: 'Jul 18, 2026' },
-    { key: 'pay_date', label: 'Pay date', sample: 'Jul 21, 2026' },
-    { key: 'province', label: 'Province / state', sample: 'ON' },
-    { key: 'currency', label: 'Currency', sample: 'CAD' },
-    { key: 'gross', label: 'Gross pay', sample: '$2,400.00' },
-    { key: 'non_cash_earnings', label: 'Non-cash benefits', sample: '$0.00' },
-    { key: 'cash_gross', label: 'Cash earnings', sample: '$2,400.00' },
-    { key: 'has_non_cash_earnings', label: 'Has non-cash benefits', sample: '' },
-    { key: 'total_deductions', label: 'Total deductions', sample: '$505.31' },
-    { key: 'net_pay', label: 'Net pay', sample: '$1,894.69' },
-    { key: 'vacation_accrued', label: 'Vacation accrued', sample: '$96.00' },
-    { key: 'ytd_gross', label: 'YTD gross', sample: '$33,600.00' },
-    { key: 'ytd_tax', label: 'YTD income tax', sample: '$4,120.10' },
-    { key: 'ytd_net', label: 'YTD net pay', sample: '$26,525.66' },
-    { key: 'cheque_number', label: 'Cheque number', sample: '10815' },
-    { key: 'employee_address', label: 'Employee address (one line)', sample: '18 Maple Ave, Toronto ON M4E 2T1' },
-    { key: 'employee_address_line1', label: 'Employee address line 1', sample: '18 Maple Ave' },
-    { key: 'employee_address_line2', label: 'Employee address line 2', sample: 'Unit 4' },
-    { key: 'employee_address_locality', label: 'Employee city, region and postal code', sample: 'Toronto ON M4E 2T1' },
-    { key: 'earnings_current_total', label: 'Earnings total (current)', sample: '$2,400.00' },
-    { key: 'earnings_ytd_total', label: 'Earnings total (YTD)', sample: '$33,600.00' },
-    { key: 'withholdings_current_total', label: 'Withholdings total (current)', sample: '$312.40' },
-    { key: 'withholdings_ytd_total', label: 'Withholdings total (YTD)', sample: '$4,120.10' },
-    { key: 'has_taxable_company_items', label: 'Has taxable company items', sample: '' },
-    { key: 'net_adjustments_current_total', label: 'Adjustments to net pay total (current)', sample: '-$192.91' },
-    { key: 'net_adjustments_ytd_total', label: 'Adjustments to net pay total (YTD)', sample: '-$2,954.24' },
+    { key: "employee_name", label: "Employee", sample: "Jordan Sparks" },
+    { key: "document_number", label: "Pay run number", sample: "PAY-000012" },
+    { key: "period_start", label: "Period start", sample: "Jul 5, 2026" },
+    { key: "period_end", label: "Period end", sample: "Jul 18, 2026" },
+    { key: "pay_date", label: "Pay date", sample: "Jul 21, 2026" },
+    { key: "province", label: "Province / state", sample: "ON" },
+    { key: "currency", label: "Currency", sample: "CAD" },
+    { key: "gross", label: "Gross pay", sample: "$2,400.00" },
+    { key: "non_cash_earnings", label: "Non-cash benefits", sample: "$0.00" },
+    { key: "cash_gross", label: "Cash earnings", sample: "$2,400.00" },
+    { key: "has_non_cash_earnings", label: "Has non-cash benefits", sample: "" },
+    { key: "total_deductions", label: "Total deductions", sample: "$505.31" },
+    { key: "net_pay", label: "Net pay", sample: "$1,894.69" },
+    { key: "vacation_accrued", label: "Vacation accrued", sample: "$96.00" },
+    { key: "ytd_gross", label: "YTD gross", sample: "$33,600.00" },
+    { key: "ytd_tax", label: "YTD income tax", sample: "$4,120.10" },
+    { key: "ytd_net", label: "YTD net pay", sample: "$26,525.66" },
+    { key: "cheque_number", label: "Cheque number", sample: "10815" },
+    {
+      key: "employee_address",
+      label: "Employee address (one line)",
+      sample: "18 Maple Ave, Toronto ON M4E 2T1",
+    },
+    { key: "employee_address_line1", label: "Employee address line 1", sample: "18 Maple Ave" },
+    { key: "employee_address_line2", label: "Employee address line 2", sample: "Unit 4" },
+    {
+      key: "employee_address_locality",
+      label: "Employee city, region and postal code",
+      sample: "Toronto ON M4E 2T1",
+    },
+    { key: "earnings_current_total", label: "Earnings total (current)", sample: "$2,400.00" },
+    { key: "earnings_ytd_total", label: "Earnings total (YTD)", sample: "$33,600.00" },
+    { key: "withholdings_current_total", label: "Withholdings total (current)", sample: "$312.40" },
+    { key: "withholdings_ytd_total", label: "Withholdings total (YTD)", sample: "$4,120.10" },
+    { key: "has_taxable_company_items", label: "Has taxable company items", sample: "" },
+    {
+      key: "net_adjustments_current_total",
+      label: "Adjustments to net pay total (current)",
+      sample: "-$192.91",
+    },
+    {
+      key: "net_adjustments_ytd_total",
+      label: "Adjustments to net pay total (YTD)",
+      sample: "-$2,954.24",
+    },
     ...ORG_FIELDS,
   ],
   collections: [
     {
-      key: 'earnings_detail',
-      label: 'Earnings and hours (with YTD)',
+      key: "earnings_detail",
+      label: "Earnings and hours (with YTD)",
       fields: [
-        { key: 'description', label: 'Earning', sample: 'Regular Wages' },
-        { key: 'hours', label: 'Qty', sample: '40.00' },
-        { key: 'rate', label: 'Rate', sample: '$30.00' },
-        { key: 'current', label: 'Current', sample: '$1,200.00' },
-        { key: 'ytd_amount', label: 'YTD amount', sample: '$16,800.00' },
-        { key: 'ytd_hours', label: 'YTD qty', sample: '560.00' },
+        { key: "description", label: "Earning", sample: "Regular Wages" },
+        { key: "hours", label: "Qty", sample: "40.00" },
+        { key: "rate", label: "Rate", sample: "$30.00" },
+        { key: "current", label: "Current", sample: "$1,200.00" },
+        { key: "ytd_amount", label: "YTD amount", sample: "$16,800.00" },
+        { key: "ytd_hours", label: "YTD qty", sample: "560.00" },
       ],
     },
     {
-      key: 'withholdings',
-      label: 'Withholdings (income tax, with YTD)',
+      key: "withholdings",
+      label: "Withholdings (income tax, with YTD)",
       fields: [
-        { key: 'description', label: 'Withholding', sample: 'Federal Income Tax' },
-        { key: 'current', label: 'Current', sample: '$170.64' },
-        { key: 'ytd_amount', label: 'YTD amount', sample: '$2,283.65' },
+        { key: "description", label: "Withholding", sample: "Federal Income Tax" },
+        { key: "current", label: "Current", sample: "$170.64" },
+        { key: "ytd_amount", label: "YTD amount", sample: "$2,283.65" },
       ],
     },
     {
-      key: 'taxable_company_items',
-      label: 'Taxable company items (with YTD)',
+      key: "taxable_company_items",
+      label: "Taxable company items (with YTD)",
       fields: [
-        { key: 'description', label: 'Item', sample: 'Group life insurance' },
-        { key: 'current', label: 'Current', sample: '$5.61' },
-        { key: 'ytd_amount', label: 'YTD amount', sample: '$78.54' },
+        { key: "description", label: "Item", sample: "Group life insurance" },
+        { key: "current", label: "Current", sample: "$5.61" },
+        { key: "ytd_amount", label: "YTD amount", sample: "$78.54" },
       ],
     },
     {
-      key: 'net_adjustments',
-      label: 'Adjustments to net pay (with YTD)',
+      key: "net_adjustments",
+      label: "Adjustments to net pay (with YTD)",
       fields: [
-        { key: 'description', label: 'Adjustment', sample: 'CPP/QPP' },
-        { key: 'current', label: 'Current', sample: '-$71.69' },
-        { key: 'ytd_amount', label: 'YTD amount', sample: '-$1,005.80' },
+        { key: "description", label: "Adjustment", sample: "CPP/QPP" },
+        { key: "current", label: "Current", sample: "-$71.69" },
+        { key: "ytd_amount", label: "YTD amount", sample: "-$1,005.80" },
       ],
     },
     {
-      key: 'earnings',
-      label: 'Earnings',
+      key: "earnings",
+      label: "Earnings",
       fields: [
-        { key: 'description', label: 'Earning', sample: 'Regular' },
-        { key: 'non_cash', label: 'Non-cash earning', sample: '' },
-        { key: 'hours', label: 'Hours', sample: '80.00' },
-        { key: 'rate', label: 'Rate', sample: '$30.00' },
-        { key: 'amount', label: 'Amount', sample: '$2,400.00' },
+        { key: "description", label: "Earning", sample: "Regular" },
+        { key: "non_cash", label: "Non-cash earning", sample: "" },
+        { key: "hours", label: "Hours", sample: "80.00" },
+        { key: "rate", label: "Rate", sample: "$30.00" },
+        { key: "amount", label: "Amount", sample: "$2,400.00" },
       ],
     },
     {
-      key: 'deductions',
-      label: 'Deductions',
+      key: "deductions",
+      label: "Deductions",
       fields: [
-        { key: 'description', label: 'Deduction', sample: 'CPP' },
-        { key: 'amount', label: 'Amount', sample: '$110.99' },
+        { key: "description", label: "Deduction", sample: "CPP" },
+        { key: "amount", label: "Amount", sample: "$110.99" },
       ],
     },
     {
-      key: 'employer_contributions',
-      label: 'Employer contributions',
+      key: "employer_contributions",
+      label: "Employer contributions",
       fields: [
-        { key: 'description', label: 'Contribution', sample: 'CPP (employer)' },
-        { key: 'amount', label: 'Amount', sample: '$110.99' },
+        { key: "description", label: "Contribution", sample: "CPP (employer)" },
+        { key: "amount", label: "Amount", sample: "$110.99" },
       ],
     },
   ],
-}
+};
 
 /**
  * The printed pay cheque. Keyed on the STUB, like the pay stub itself — one
@@ -521,85 +629,247 @@ const PAY_STUB: PdfRecordTypeMeta = {
  * on one page can put the earnings/deductions collections on the same sheet.
  */
 const PAYROLL_CHEQUE: PdfRecordTypeMeta = {
-  key: 'payroll_cheque',
-  labelKey: 'payroll_cheque',
+  key: "payroll_cheque",
+  labelKey: "payroll_cheque",
   docKind: null,
-  docTitle: 'Pay Cheque',
-  partyHeading: 'Pay to the order of',
-  readPermission: 'payroll.run',
+  docTitle: "Pay Cheque",
+  partyHeading: "Pay to the order of",
+  readPermission: "payroll.run",
   fields: [
-    { key: 'pay_date_iso', label: 'Cheque date (YYYY-MM-DD)', sample: '2026-07-21' },
-    { key: 'bank_name', label: 'Issuing bank', sample: 'Sample bank' },
-    { key: 'bank_branch_address', label: 'Issuing branch address', sample: '1 Sample Street' },
-    { key: 'bank_account', label: 'Issued bank account encoding', sample: '0000000' },
-    { key: 'micr_serial', label: 'MICR cheque serial', sample: '⑈000042⑈' },
-    { key: 'micr_transit', label: 'MICR transit', sample: '⑆00000⑉000⑆' },
-    { key: 'micr_account', label: 'MICR account', sample: '⑈0000000' },
-    { key: 'cheque_number', label: 'Cheque number', sample: 'CHQ-00042' },
-    { key: 'employee_name', label: 'Payee', sample: 'Jordan Sparks' },
-    { key: 'employee_address', label: 'Payee address', sample: '18 Maple Ave, Toronto, ON M4E 2T1' },
-    { key: 'pay_date', label: 'Date', sample: 'Jul 21, 2026' },
-    { key: 'amount', label: 'Amount', sample: '$1,894.69' },
-    { key: 'amount_in_words', label: 'Amount in words', sample: 'One thousand eight hundred ninety-four and 69/100' },
-    { key: 'currency', label: 'Currency', sample: 'CAD' },
-    { key: 'memo', label: 'Memo', sample: 'Pay period Jul 5 – Jul 18, 2026' },
-    { key: 'document_number', label: 'Pay run number', sample: 'PAY-000012' },
-    { key: 'period_start', label: 'Period start', sample: 'Jul 5, 2026' },
-    { key: 'period_end', label: 'Period end', sample: 'Jul 18, 2026' },
-    { key: 'gross', label: 'Gross pay', sample: '$2,400.00' },
-    { key: 'non_cash_earnings', label: 'Non-cash benefits', sample: '$0.00' },
-    { key: 'cash_gross', label: 'Cash earnings', sample: '$2,400.00' },
-    { key: 'has_non_cash_earnings', label: 'Has non-cash benefits', sample: '' },
-    { key: 'total_deductions', label: 'Total deductions', sample: '$505.31' },
-    { key: 'net_pay', label: 'Net pay', sample: '$1,894.69' },
+    { key: "pay_date_iso", label: "Cheque date (YYYY-MM-DD)", sample: "2026-07-21" },
+    { key: "bank_name", label: "Issuing bank", sample: "Sample bank" },
+    { key: "bank_branch_address", label: "Issuing branch address", sample: "1 Sample Street" },
+    { key: "bank_account", label: "Issued bank account encoding", sample: "0000000" },
+    { key: "micr_serial", label: "MICR cheque serial", sample: "⑈000042⑈" },
+    { key: "micr_transit", label: "MICR transit", sample: "⑆00000⑉000⑆" },
+    { key: "micr_account", label: "MICR account", sample: "⑈0000000" },
+    { key: "cheque_number", label: "Cheque number", sample: "CHQ-00042" },
+    { key: "employee_name", label: "Payee", sample: "Jordan Sparks" },
+    {
+      key: "employee_address",
+      label: "Payee address",
+      sample: "18 Maple Ave, Toronto, ON M4E 2T1",
+    },
+    { key: "pay_date", label: "Date", sample: "Jul 21, 2026" },
+    { key: "amount", label: "Amount", sample: "$1,894.69" },
+    {
+      key: "amount_in_words",
+      label: "Amount in words",
+      sample: "One thousand eight hundred ninety-four and 69/100",
+    },
+    { key: "currency", label: "Currency", sample: "CAD" },
+    { key: "memo", label: "Memo", sample: "Pay period Jul 5 – Jul 18, 2026" },
+    { key: "document_number", label: "Pay run number", sample: "PAY-000012" },
+    { key: "period_start", label: "Period start", sample: "Jul 5, 2026" },
+    { key: "period_end", label: "Period end", sample: "Jul 18, 2026" },
+    { key: "gross", label: "Gross pay", sample: "$2,400.00" },
+    { key: "non_cash_earnings", label: "Non-cash benefits", sample: "$0.00" },
+    { key: "cash_gross", label: "Cash earnings", sample: "$2,400.00" },
+    { key: "has_non_cash_earnings", label: "Has non-cash benefits", sample: "" },
+    { key: "total_deductions", label: "Total deductions", sample: "$505.31" },
+    { key: "net_pay", label: "Net pay", sample: "$1,894.69" },
     ...ORG_FIELDS,
   ],
   collections: [
     {
-      key: 'earnings',
-      label: 'Earnings (voucher)',
+      key: "earnings",
+      label: "Earnings (voucher)",
       fields: [
-        { key: 'description', label: 'Earning', sample: 'Regular' },
-        { key: 'non_cash', label: 'Non-cash earning', sample: '' },
-        { key: 'hours', label: 'Hours', sample: '80.00' },
-        { key: 'rate', label: 'Rate', sample: '$30.00' },
-        { key: 'amount', label: 'Amount', sample: '$2,400.00' },
+        { key: "description", label: "Earning", sample: "Regular" },
+        { key: "non_cash", label: "Non-cash earning", sample: "" },
+        { key: "hours", label: "Hours", sample: "80.00" },
+        { key: "rate", label: "Rate", sample: "$30.00" },
+        { key: "amount", label: "Amount", sample: "$2,400.00" },
       ],
     },
     {
-      key: 'deductions',
-      label: 'Deductions (voucher)',
+      key: "deductions",
+      label: "Deductions (voucher)",
       fields: [
-        { key: 'description', label: 'Deduction', sample: 'CPP' },
-        { key: 'amount', label: 'Amount', sample: '$110.99' },
+        { key: "description", label: "Deduction", sample: "CPP" },
+        { key: "amount", label: "Amount", sample: "$110.99" },
       ],
     },
   ],
-}
+};
 
 /** Every record type a PDF template can target, in nav order. */
 export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
-  docType({ key: 'customer_invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true, groupedLines: true, workPeriod: true }),
-  docType({ key: 'customer_credit', docTitle: 'Credit Memo', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true, workPeriod: true }),
-  docType({ key: 'cash_sale', docTitle: 'Sales Receipt', partyHeading: 'Sold to', readPermission: 'cash_sales.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'cash_refund', docTitle: 'Refund Receipt', partyHeading: 'Refunded to', readPermission: 'cash_sales.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'quote', docTitle: 'Quote', partyHeading: 'Prepared for', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'sales_order', docTitle: 'Sales Order', partyHeading: 'Sold to', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true, workPeriod: true }),
-  docType({ key: 'purchase_order', docTitle: 'Purchase Order', partyHeading: 'Vendor', readPermission: 'purchase_orders.read', hasParty: true, hasDue: false, hasReference: true, extraFields: [
-    { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
-    { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
-  ] }),
-  docType({ key: 'vendor_bill', docTitle: 'Bill', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: true, hasReference: true }),
-  docType({ key: 'vendor_credit', docTitle: 'Vendor Credit', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: true, hasReference: true }),
-  docType({ key: 'vendor_payment', docTitle: 'Payment Remittance', partyHeading: 'Paid to', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'customer_payment', docTitle: 'Payment Receipt', partyHeading: 'Received from', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'expense_report', docTitle: 'Expense Report', partyHeading: 'Employee', readPermission: 'expenses.read', hasParty: true, hasDue: false, hasReference: true, foreignLines: true }),
-  docType({ key: 'check', docTitle: 'Check', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: true }),
-  docType({ key: 'deposit', docTitle: 'Bank Deposit', partyHeading: null, readPermission: 'banking.read', hasParty: false, hasDue: false, hasReference: true }),
-  docType({ key: 'transfer', docTitle: 'Bank Transfer', partyHeading: null, readPermission: 'banking.read', hasParty: false, hasDue: false, hasReference: false }),
-  docType({ key: 'card_charge', docTitle: 'Card Charge', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
-  docType({ key: 'card_refund', docTitle: 'Card Refund', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
-  docType({ key: 'journal', docTitle: 'Journal Entry', partyHeading: null, readPermission: 'gl.read', hasParty: false, hasDue: false, hasReference: false }),
+  docType({
+    key: "customer_invoice",
+    docTitle: "Invoice",
+    partyHeading: "Bill to",
+    readPermission: "ar.read",
+    hasParty: true,
+    hasDue: true,
+    hasReference: true,
+    groupedLines: true,
+    workPeriod: true,
+  }),
+  docType({
+    key: "customer_credit",
+    docTitle: "Credit Memo",
+    partyHeading: "Bill to",
+    readPermission: "ar.read",
+    hasParty: true,
+    hasDue: true,
+    hasReference: true,
+    workPeriod: true,
+  }),
+  docType({
+    key: "cash_sale",
+    docTitle: "Sales Receipt",
+    partyHeading: "Sold to",
+    readPermission: "cash_sales.read",
+    hasParty: true,
+    hasDue: false,
+    hasReference: true,
+  }),
+  docType({
+    key: "cash_refund",
+    docTitle: "Refund Receipt",
+    partyHeading: "Refunded to",
+    readPermission: "cash_sales.read",
+    hasParty: true,
+    hasDue: false,
+    hasReference: true,
+  }),
+  docType({
+    key: "quote",
+    docTitle: "Quote",
+    partyHeading: "Prepared for",
+    readPermission: "ar.read",
+    hasParty: true,
+    hasDue: false,
+    hasReference: true,
+  }),
+  docType({
+    key: "sales_order",
+    docTitle: "Sales Order",
+    partyHeading: "Sold to",
+    readPermission: "ar.read",
+    hasParty: true,
+    hasDue: false,
+    hasReference: true,
+    workPeriod: true,
+  }),
+  docType({
+    key: "purchase_order",
+    docTitle: "Purchase Order",
+    partyHeading: "Vendor",
+    readPermission: "purchase_orders.read",
+    hasParty: true,
+    hasDue: false,
+    hasReference: true,
+    extraFields: [
+      { key: "ship_to_name", label: "Ship-to name", sample: "Acme — Site 4 receiving" },
+      {
+        key: "ship_to_address",
+        label: "Ship-to address",
+        sample: "400 King St W, Suite 300, Toronto, ON M5V 1K2, CA",
+      },
+    ],
+  }),
+  docType({
+    key: "vendor_bill",
+    docTitle: "Bill",
+    partyHeading: "Vendor",
+    readPermission: "ap.read",
+    hasParty: true,
+    hasDue: true,
+    hasReference: true,
+  }),
+  docType({
+    key: "vendor_credit",
+    docTitle: "Vendor Credit",
+    partyHeading: "Vendor",
+    readPermission: "ap.read",
+    hasParty: true,
+    hasDue: true,
+    hasReference: true,
+  }),
+  docType({
+    key: "vendor_payment",
+    docTitle: "Payment Remittance",
+    partyHeading: "Paid to",
+    readPermission: "ap.read",
+    hasParty: true,
+    hasDue: false,
+    hasReference: true,
+  }),
+  docType({
+    key: "customer_payment",
+    docTitle: "Payment Receipt",
+    partyHeading: "Received from",
+    readPermission: "ar.read",
+    hasParty: true,
+    hasDue: false,
+    hasReference: true,
+  }),
+  docType({
+    key: "expense_report",
+    docTitle: "Expense Report",
+    partyHeading: "Employee",
+    readPermission: "expenses.read",
+    hasParty: true,
+    hasDue: false,
+    hasReference: true,
+    foreignLines: true,
+  }),
+  docType({
+    key: "check",
+    docTitle: "Check",
+    partyHeading: null,
+    readPermission: "ap.read",
+    hasParty: false,
+    hasDue: false,
+    hasReference: true,
+  }),
+  docType({
+    key: "deposit",
+    docTitle: "Bank Deposit",
+    partyHeading: null,
+    readPermission: "banking.read",
+    hasParty: false,
+    hasDue: false,
+    hasReference: true,
+  }),
+  docType({
+    key: "transfer",
+    docTitle: "Bank Transfer",
+    partyHeading: null,
+    readPermission: "banking.read",
+    hasParty: false,
+    hasDue: false,
+    hasReference: false,
+  }),
+  docType({
+    key: "card_charge",
+    docTitle: "Card Charge",
+    partyHeading: null,
+    readPermission: "ap.read",
+    hasParty: false,
+    hasDue: false,
+    hasReference: false,
+  }),
+  docType({
+    key: "card_refund",
+    docTitle: "Card Refund",
+    partyHeading: null,
+    readPermission: "ap.read",
+    hasParty: false,
+    hasDue: false,
+    hasReference: false,
+  }),
+  docType({
+    key: "journal",
+    docTitle: "Journal Entry",
+    partyHeading: null,
+    readPermission: "gl.read",
+    hasParty: false,
+    hasDue: false,
+    hasReference: false,
+  }),
   SHIPMENT,
   SHIPMENT_CARTON_LABEL,
   SHIPMENT_SHIPPING_LABEL,
@@ -607,22 +877,22 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   JOURNAL_ENTRY,
   PAY_STUB,
   PAYROLL_CHEQUE,
-]
+];
 
 export const PDF_RECORD_TYPE_BY_KEY: Record<string, PdfRecordTypeMeta> = Object.fromEntries(
   PDF_RECORD_TYPES.map((t) => [t.key, t]),
-)
+);
 
 /** Sample value map for previewing a template with no real record. */
 export function sampleValues(meta: PdfRecordTypeMeta): Record<string, unknown> {
-  const values: Record<string, unknown> = {}
-  for (const f of meta.fields) values[f.key] = f.sample
+  const values: Record<string, unknown> = {};
+  for (const f of meta.fields) values[f.key] = f.sample;
   for (const c of meta.collections) {
     values[c.key] = [1, 2, 3].map((n) => {
-      const row: Record<string, unknown> = {}
-      for (const f of c.fields) row[f.key] = f.key === 'line_number' ? String(n) : f.sample
-      return row
-    })
+      const row: Record<string, unknown> = {};
+      for (const f of c.fields) row[f.key] = f.key === "line_number" ? String(n) : f.sample;
+      return row;
+    });
   }
-  return values
+  return values;
 }

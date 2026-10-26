@@ -21,7 +21,6 @@ import { PostingEffectsReplayError } from "@openbooks/engine/documents/posting-e
  * oracle hidden rows through existence.
  */
 
-
 export interface ApiErrorBody {
   error: string;
   code?: string;
@@ -123,7 +122,11 @@ interface RefusalFamily {
 
 const REFUSAL_FAMILIES: RefusalFamily[] = [
   { match: (error) => error instanceof CommerceError, code: "commerce_refused", pinCode: false },
-  { match: (error) => error instanceof PostingEffectsReplayError, code: "posting_effects_replay_refused", pinCode: true },
+  {
+    match: (error) => error instanceof PostingEffectsReplayError,
+    code: "posting_effects_replay_refused",
+    pinCode: true,
+  },
   { match: (error) => error instanceof PeriodClosedError, code: "period-closed", pinCode: true },
   {
     match: (error) => error instanceof ConsolidationError && error.code === "period-closed",
@@ -140,7 +143,8 @@ const REFUSAL_FAMILIES: RefusalFamily[] = [
 const CONFLICT_RE = /conflict/i;
 
 /** Storage guards name a merged account and its survivor; nothing else matches. */
-const MERGED_ACCOUNT_RE = /(?:^|\s)(?:[a-z_]+\.[a-z_]+ names )?account [0-9a-f-]{36},? (?:which )?was merged into account [0-9a-f-]{36}[^\n]*/i;
+const MERGED_ACCOUNT_RE =
+  /(?:^|\s)(?:[a-z_]+\.[a-z_]+ names )?account [0-9a-f-]{36},? (?:which )?was merged into account [0-9a-f-]{36}[^\n]*/i;
 
 /**
  * Every write path meets the storage refusal for a new reference to (or
@@ -157,7 +161,12 @@ function mergedAccountStorageRefusal(error: Error): NextResponse | null {
     const match = candidate.message.match(MERGED_ACCOUNT_RE);
     if (!match) continue;
     return NextResponse.json(
-      { error: match[0].trim(), code: "account_merged", remedy: "Choose the surviving account; a merged account accepts no new postings or references." },
+      {
+        error: match[0].trim(),
+        code: "account_merged",
+        remedy:
+          "Choose the surviving account; a merged account accepts no new postings or references.",
+      },
       { status: 422 },
     );
   }

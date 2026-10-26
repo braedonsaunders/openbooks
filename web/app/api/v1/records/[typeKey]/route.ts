@@ -1,5 +1,5 @@
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { parseJsonBody } from "@/lib/api/json";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -16,10 +16,7 @@ import {
 } from "../../../../../lib/application/api-key-audit";
 import { applicationContextFromApiKey } from "../../../../../lib/application/context";
 import { ApplicationError } from "../../../../../lib/application/errors";
-import {
-  createApplicationRecord,
-  listRecords,
-} from "../../../../../lib/application/records";
+import { createApplicationRecord, listRecords } from "../../../../../lib/application/records";
 import { clamp } from "../../../../../lib/list-params";
 import { z } from "zod";
 
@@ -34,14 +31,20 @@ const recordBodySchema = z.record(z.string(), z.json());
  * failing audit write fails the response closed instead of dropping the trail.
  * Returns a plain 500 to return directly when the event cannot be persisted.
  */
-async function emitExecutionEvent(status: number, auth: ApiKeyAuth, error?: string): Promise<NextResponse | null> {
+async function emitExecutionEvent(
+  status: number,
+  auth: ApiKeyAuth,
+  error?: string,
+): Promise<NextResponse | null> {
   try {
     if (!takeClaimedCommandEvidence(auth.audit)) {
-      await insertApiKeyEvent(transportEvent(
-        auth.audit,
-        { orgId: auth.user.orgId, keyId: auth.keyId },
-        { statusCode: status, error: error ?? null },
-      ));
+      await insertApiKeyEvent(
+        transportEvent(
+          auth.audit,
+          { orgId: auth.user.orgId, keyId: auth.keyId },
+          { statusCode: status, error: error ?? null },
+        ),
+      );
     }
     return null;
   } catch (cause) {
@@ -145,7 +148,12 @@ async function failure(auth: ApiKeyAuth, error: unknown): Promise<NextResponse> 
     // The versioned v1 failure shape keeps `error` as the machine-readable
     // code with the message beside it; the sanitizer carries both for
     // typed 4xx refusals and genericizes unexpected 500s.
-    return tail ?? apiErrorResponse(error, { details: { error: error.code, message: error.message, details: error.details } });
+    return (
+      tail ??
+      apiErrorResponse(error, {
+        details: { error: error.code, message: error.message, details: error.details },
+      })
+    );
   }
   console.error("[api/v1/records] application operation failed", error);
   const tail = await emitExecutionEvent(500, auth, "internal_error");
@@ -154,10 +162,12 @@ async function failure(auth: ApiKeyAuth, error: unknown): Promise<NextResponse> 
 
 export const GET = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1GET(request, { params: Promise.resolve(params as never) } as never),
 });
 
 export const POST = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1POST(request, { params: Promise.resolve(params as never) } as never),
 });

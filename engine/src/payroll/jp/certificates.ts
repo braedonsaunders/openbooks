@@ -17,10 +17,7 @@
  * channel). The 16歳未満扶養親族 detail lives inside the count the operator
  * copies off the filed form; the engine trusts the declared total.
  */
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 
 /**
  * The payer-held social-insurance facts the 月額表 engine prices: the
@@ -51,12 +48,12 @@ const JP_HYOJUN_CERTIFICATE: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "JPS 標準報酬決定通知書 after 定時決定/随時改定 (grade); 介護保険法: 第2号被保険者 "
-    + "(40–64) owes the 介護 premium this engine does not price",
+    "JPS 標準報酬決定通知書 after 定時決定/随時改定 (grade); 介護保険法: 第2号被保険者 " +
+    "(40–64) owes the 介護 premium this engine does not price",
   summary:
-    "The 標準報酬月額 grade pension and health price off, and whether the employee is a "
-    + "介護保険第2号被保険者. An undeclared grade never falls through to pricing on the month's "
-    + "wages; an undeclared status never defaults into the cheaper premium.",
+    "The 標準報酬月額 grade pension and health price off, and whether the employee is a " +
+    "介護保険第2号被保険者. An undeclared grade never falls through to pricing on the month's " +
+    "wages; an undeclared status never defaults into the cheaper premium.",
   storage: "profile_columns",
   fields: [
     {
@@ -71,8 +68,9 @@ const JP_HYOJUN_CERTIFICATE: PayrollCertificate = {
       // UNANSWERED profile still saves, so readiness names the gap before
       // calculation rather than the save refusing an incomplete setup.
       required: true,
-      help: "The published 厚生年金 grade value in whole yen, copied off the JPS notice — "
-        + "never the month's raw pay.",
+      help:
+        "The published 厚生年金 grade value in whole yen, copied off the JPS notice — " +
+        "never the month's raw pay.",
     },
     {
       key: "kaigo_dainigou",
@@ -80,9 +78,10 @@ const JP_HYOJUN_CERTIFICATE: PayrollCertificate = {
       kind: "flag",
       storage: { kind: "column", column: "jp_kaigo_dainigou" },
       required: true,
-      help: "Whether the employee is a 介護保険第2号被保険者 (40–64), who owes the 介護 premium "
-        + "this engine does not price. Unanswered refuses; it never defaults into "
-        + "health-without-介護.",
+      help:
+        "Whether the employee is a 介護保険第2号被保険者 (40–64), who owes the 介護 premium " +
+        "this engine does not price. Unanswered refuses; it never defaults into " +
+        "health-without-介護.",
     },
   ],
 };
@@ -93,11 +92,10 @@ const JP_EMPLOYMENT_INSURANCE_CERTIFICATE: PayrollCertificate = {
   label: "Employment insurance enrollment status",
   scope: { level: "country" },
   purpose: "withholding",
-  citation:
-    "MHLW 令和8年度雇用保険料率 (https://www.mhlw.go.jp/content/001672589.pdf)",
+  citation: "MHLW 令和8年度雇用保険料率 (https://www.mhlw.go.jp/content/001672589.pdf)",
   summary:
-    "Employer-recorded employment-insurance coverage status. Eligibility is determined from the "
-    + "employment facts and applicable MHLW rules; the payroll pack requires an explicit answer.",
+    "Employer-recorded employment-insurance coverage status. Eligibility is determined from the " +
+    "employment facts and applicable MHLW rules; the payroll pack requires an explicit answer.",
   storage: "certificate_rows",
   fields: [
     {
@@ -110,8 +108,8 @@ const JP_EMPLOYMENT_INSURANCE_CERTIFICATE: PayrollCertificate = {
         { value: "not_insured", label: "Not covered by employment insurance" },
       ],
       help:
-        "The employer establishes coverage from the applicable MHLW eligibility rules. Covered employees "
-        + "currently refuse because payroll does not yet calculate their contributions.",
+        "The employer establishes coverage from the applicable MHLW eligibility rules. Covered employees " +
+        "currently refuse because payroll does not yet calculate their contributions.",
     },
   ],
 };
@@ -123,29 +121,46 @@ const JP_TAX_RESIDENCY_CERTIFICATE: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "NTA No.12006 (https://www.nta.go.jp/english/taxes/individual/12006.htm); "
-    + "NTA No.12020 (https://www.nta.go.jp/english/taxes/individual/12020.htm)",
+    "NTA No.12006 (https://www.nta.go.jp/english/taxes/individual/12006.htm); " +
+    "NTA No.12020 (https://www.nta.go.jp/english/taxes/individual/12020.htm)",
   summary:
-    "Record the documented Japanese tax-residence and Japan-source status used to choose resident "
-    + "monthly-table withholding or the nonresident 20.42% method.",
+    "Record the documented Japanese tax-residence and Japan-source status used to choose resident " +
+    "monthly-table withholding or the nonresident 20.42% method.",
   storage: "certificate_rows",
-  fields: [{
-    key: "status",
-    label: "Tax residence and wage source for this pay",
-    kind: "choice",
-    required: true,
-    choices: [
-      { value: "resident", label: "Japanese tax resident" },
-      { value: "nonresident_japan_source", label: "Nonresident; all wages are Japan-source, no treaty or exemption" },
-      { value: "nonresident_foreign_source", label: "Nonresident; all services were performed outside Japan" },
-      { value: "nonresident_domestic_corporation_officer", label: "Nonresident officer of a Japanese corporation" },
-      { value: "nonresident_mixed_source", label: "Nonresident; wages include Japan-source and foreign-source services" },
-      { value: "nonresident_treaty_or_exemption", label: "Nonresident; treaty relief or another exemption applies" },
-    ],
-    help:
-      "Use the employee's documented tax-residence status and where the paid services were performed. "
-      + "Mixed-source wages and treaty/exemption cases refuse until their allocation or relief calculation is supported.",
-  }],
+  fields: [
+    {
+      key: "status",
+      label: "Tax residence and wage source for this pay",
+      kind: "choice",
+      required: true,
+      choices: [
+        { value: "resident", label: "Japanese tax resident" },
+        {
+          value: "nonresident_japan_source",
+          label: "Nonresident; all wages are Japan-source, no treaty or exemption",
+        },
+        {
+          value: "nonresident_foreign_source",
+          label: "Nonresident; all services were performed outside Japan",
+        },
+        {
+          value: "nonresident_domestic_corporation_officer",
+          label: "Nonresident officer of a Japanese corporation",
+        },
+        {
+          value: "nonresident_mixed_source",
+          label: "Nonresident; wages include Japan-source and foreign-source services",
+        },
+        {
+          value: "nonresident_treaty_or_exemption",
+          label: "Nonresident; treaty relief or another exemption applies",
+        },
+      ],
+      help:
+        "Use the employee's documented tax-residence status and where the paid services were performed. " +
+        "Mixed-source wages and treaty/exemption cases refuse until their allocation or relief calculation is supported.",
+    },
+  ],
 };
 
 export const JP_CERTIFICATES: PayrollPackCertificates = {
@@ -160,13 +175,13 @@ export const JP_CERTIFICATES: PayrollPackCertificates = {
       scope: { level: "country" },
       purpose: "withholding",
       citation:
-        "NTA No.2511 税額表の種類と使い方 "
-        + "(https://www.nta.go.jp/taxes/shiraberu/taxanswer/gensen/2511.htm); "
-        + "令和8年分 給与所得の源泉徴収税額表（月額表）備考",
+        "NTA No.2511 税額表の種類と使い方 " +
+        "(https://www.nta.go.jp/taxes/shiraberu/taxanswer/gensen/2511.htm); " +
+        "令和8年分 給与所得の源泉徴収税額表（月額表）備考",
       summary:
-        "Filed with the payer at hiring and whenever the family position changes. "
-        + "On file, the payer applies the 甲欄 at the declared dependent count; "
-        + "without it, the payer applies the 乙欄.",
+        "Filed with the payer at hiring and whenever the family position changes. " +
+        "On file, the payer applies the 甲欄 at the declared dependent count; " +
+        "without it, the payer applies the 乙欄.",
       storage: "certificate_rows",
       fields: [
         {
@@ -176,16 +191,18 @@ export const JP_CERTIFICATES: PayrollPackCertificates = {
           min: "0",
           max: "99",
           default: "0",
-          help: "源泉控除対象配偶者と源泉控除対象親族との合計数, copied off the filed "
-            + "declaration. Person-attribute additions below stack on top; a total "
-            + "above 7 is refused by name (the 1,610円 rule is not transcribed).",
+          help:
+            "源泉控除対象配偶者と源泉控除対象親族との合計数, copied off the filed " +
+            "declaration. Person-attribute additions below stack on top; a total " +
+            "above 7 is refused by name (the 1,610円 rule is not transcribed).",
         },
         {
           key: "honnin_shogai",
           label: "The employee is 障害者 (incl. 特別障害者)",
           kind: "flag",
-          help: "Adds one to the 扶養親族等の数 (No.2511: 障害者（特別障害者を含みます）"
-            + "に該当するごとに1人を加算).",
+          help:
+            "Adds one to the 扶養親族等の数 (No.2511: 障害者（特別障害者を含みます）" +
+            "に該当するごとに1人を加算).",
         },
         {
           key: "hitori_oya",
@@ -212,8 +229,9 @@ export const JP_CERTIFICATES: PayrollPackCertificates = {
           min: "0",
           max: "99",
           default: "0",
-          help: "同一生計配偶者・扶養親族のうち障害者又は同居特別障害者に該当する人数 "
-            + "— one added per person (No.2511).",
+          help:
+            "同一生計配偶者・扶養親族のうち障害者又は同居特別障害者に該当する人数 " +
+            "— one added per person (No.2511).",
         },
       ],
     },

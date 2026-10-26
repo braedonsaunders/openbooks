@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadMyLeavePage, myLeaveSpec, myLeaveTitle } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadMyLeavePage, myLeaveSpec, myLeaveTitle } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await myLeaveTitle() }
+  return { title: await myLeaveTitle() };
 }
 
 /**
@@ -15,9 +15,9 @@ export async function generateMetadata() {
 export default async function MyLeavePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadMyLeavePage(sp)
-  return <ModuleView spec={myLeaveSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadMyLeavePage(sp);
+  return <ModuleView spec={myLeaveSpec(data)} data={data} searchParams={sp} trusted />;
 }

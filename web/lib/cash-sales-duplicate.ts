@@ -89,7 +89,9 @@ export function buildDuplicateSeed(args: {
       kind: row.kind ?? "cash",
       ...(row.method_label ? { methodLabel: row.method_label } : {}),
       ...(isUuid(row.account_id) ? { accountId: row.account_id } : {}),
-      ...(isUuid(row.stored_value_account_id) ? { storedValueAccountId: row.stored_value_account_id } : {}),
+      ...(isUuid(row.stored_value_account_id)
+        ? { storedValueAccountId: row.stored_value_account_id }
+        : {}),
       amount: row.amount,
       ...(row.reference ? { reference: row.reference } : {}),
     });

@@ -92,7 +92,8 @@ export async function renderStatementBatchPdf(
     throw new Error(`statement render failed: HTTP ${res.status} ${detail}`.slice(0, 300));
   }
   const pdf = Buffer.from(await res.arrayBuffer());
-  if (pdf.length === 0) throw new Error("statement render returned an empty document — nothing was sent");
+  if (pdf.length === 0)
+    throw new Error("statement render returned an empty document — nothing was sent");
   const header = (name: string, fallback: string): string => {
     const raw = res.headers.get(name)?.trim();
     if (!raw) return fallback;
@@ -129,7 +130,10 @@ export async function transmitStatementBatchEmail(
     return { emailLogId: claim.id, alreadySent: true };
   }
   if (reconciliation.action === "suppress") {
-    await appendEmailAttemptEvent(input.orgId, claim.id, { outcome: "blocked", detail: reconciliation.reason });
+    await appendEmailAttemptEvent(input.orgId, claim.id, {
+      outcome: "blocked",
+      detail: reconciliation.reason,
+    });
     throw new StatementBatchSuppressed(reconciliation.reason, claim.id);
   }
   await appendEmailAttemptEvent(input.orgId, claim.id, { outcome: "started" });
@@ -154,7 +158,10 @@ export async function transmitStatementBatchEmail(
       return { emailLogId: claim.id, alreadySent: false };
     }
     await markEmailUncertain(input.orgId, claim.id, outcome.reason);
-    await appendEmailAttemptEvent(input.orgId, claim.id, { outcome: "uncertain", detail: outcome.reason });
+    await appendEmailAttemptEvent(input.orgId, claim.id, {
+      outcome: "uncertain",
+      detail: outcome.reason,
+    });
     throw new StatementBatchSuppressed(outcome.reason, claim.id);
   } catch (e) {
     if (e instanceof StatementBatchSuppressed) throw e;
@@ -194,17 +201,26 @@ export async function processStatementBatchJob(
   const { orgId, runId, partyId, senderId } = data;
   return await withOrgContext(orgId, async () => {
     const run = await getStatementBatchRun(orgId, runId);
-    if (!run) throw new Error(`statement batch run ${runId} was not found — nothing was rendered; re-create the run`);
+    if (!run)
+      throw new Error(
+        `statement batch run ${runId} was not found — nothing was rendered; re-create the run`,
+      );
     const claimed = await claimStatementBatchItem(orgId, runId, partyId);
     if (!claimed) {
-      throw new Error(`statement batch item for customer ${partyId} was not found — nothing was rendered`);
+      throw new Error(
+        `statement batch item for customer ${partyId} was not found — nothing was rendered`,
+      );
     }
     if (claimed.state === "already-sent") return { outcome: "already-sent" };
     if (claimed.state === "skipped") return { outcome: "skipped" };
     const item = claimed.item;
     const to = item.toEmail?.trim() || "";
     if (!to) {
-      await settleStatementBatchItemFailed(orgId, item.id, "no email on file — add an email address to the party first");
+      await settleStatementBatchItemFailed(
+        orgId,
+        item.id,
+        "no email on file — add an email address to the party first",
+      );
       return { outcome: "refused" };
     }
     const resolution = await resolveOrgEmailTransportDetailed(orgId);
@@ -260,13 +276,19 @@ export async function processStatementBatchJob(
         await settleStatementBatchItemFailed(orgId, item.id, e.message);
         return { outcome: "suppressed" };
       }
-      await settleStatementBatchItemFailed(orgId, item.id, e instanceof Error ? e.message : String(e));
+      await settleStatementBatchItemFailed(
+        orgId,
+        item.id,
+        e instanceof Error ? e.message : String(e),
+      );
       throw e;
     }
   });
 }
 
-export function createStatementBatchWorker(deps: StatementBatchDeps = {}): Worker<StatementBatchJobData> {
+export function createStatementBatchWorker(
+  deps: StatementBatchDeps = {},
+): Worker<StatementBatchJobData> {
   return new Worker<StatementBatchJobData>(
     STATEMENT_BATCH_QUEUE,
     async (job) => processStatementBatchJob(job.data, deps),

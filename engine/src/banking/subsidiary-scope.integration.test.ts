@@ -22,11 +22,7 @@ import {
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 /**
  * Banking subsidiary boundary (AUDIT-H): a bank account belongs to the
@@ -150,26 +146,39 @@ async function importLines(
         bankTransactionId: `${tag}-${nonce}-${i}`,
       })),
     },
-    { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scope }
+    { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scope },
   );
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from bank_statement_lines
      where org_id = ${fx.orgId} and account_id = ${account}
      order by line_number
-  `, "objects");
+  `,
+    "objects",
+  );
   return { statementId: result.statementId, lineIds: rows.map((r) => r.id) };
 }
 
 async function countReconciliations(fx: TwoEntity): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
+  return (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from reconciliations where org_id = ${fx.orgId}
-  `, "objects"))[0]!.n;
+  `,
+      "objects",
+    )
+  )[0]!.n;
 }
 
 async function matchStatus(fx: TwoEntity, lineId: string): Promise<string> {
-  return (await db.execute<{ s: string }>(sql`
+  return (
+    await db.execute<{ s: string }>(
+      sql`
     select match_status as s from bank_statement_lines where id = ${lineId} and org_id = ${fx.orgId}
-  `, "objects"))[0]!.s;
+  `,
+      "objects",
+    )
+  )[0]!.s;
 }
 
 function scopeOf(fx: TwoEntity, sub: "A" | "B"): ReadonlySet<string> {
@@ -194,7 +203,7 @@ test("start refuses an out-of-scope bank account and writes nothing", { skip: !D
       startReconciliation(
         { accountId: fx.bankA, throughDate: fx.date, statementBalance: "0" },
         { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "B") },
-      )
+      ),
     );
     assert.equal(await countReconciliations(fx), 0);
     // A shared account is reconcilable only with unrestricted scope.
@@ -202,18 +211,18 @@ test("start refuses an out-of-scope bank account and writes nothing", { skip: !D
       startReconciliation(
         { accountId: fx.bankShared, throughDate: fx.date, statementBalance: "0" },
         { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") },
-      )
+      ),
     );
     assert.equal(await countReconciliations(fx), 0);
     // In-scope callers proceed on both models.
     const owned = await startReconciliation(
       { accountId: fx.bankA, throughDate: fx.date, statementBalance: "0" },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") }
+      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") },
     );
     assert.ok(owned.id);
     const shared = await startReconciliation(
       { accountId: fx.bankShared, throughDate: fx.date, statementBalance: "0" },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN }
+      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN },
     );
     assert.ok(shared.id);
   } finally {
@@ -221,49 +230,97 @@ test("start refuses an out-of-scope bank account and writes nothing", { skip: !D
   }
 });
 
-test("statement-line edits and matching serialize against account rehome", { skip: !DB }, async () => {
-  const fx = await seedTwoEntity();
-  const { lineIds } = await importLines(fx, fx.bankA, "scope-line-rehome", ["10", "20"], OPEN);
-  const journalLineId = await postBankLine(fx, { account: fx.bankA, sub: fx.subA, amount: "20", tag: "rehome-match" });
-  const session = await startReconciliation(
-    { accountId: fx.bankA, throughDate: fx.date, statementBalance: "30" },
-    { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN },
-  );
-  const ctx = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
-  const holder: Client = new (await import("pg")).Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-  await holder.connect();
-  try {
-    const attempts = [
-      { id: lineIds[0]!, run: () => excludeStatementLine(lineIds[0]!, "reviewed duplicate", ctx) },
-      { id: lineIds[1]!, run: () => createMatch({ reconciliationId: session.id, statementLineIds: [lineIds[1]!], journalLineIds: [journalLineId] }, ctx) },
-    ];
-    for (const attempt of attempts) {
-      await db.execute(sql`update accounts set subsidiary_id=${fx.subA} where id=${fx.bankA} and org_id=${fx.orgId}`);
-      await holder.query("begin").then(() => holder.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)", [fx.orgId]));
-      await holder.query("select id from accounts where id=$1 and org_id=$2 for update", [fx.bankA, fx.orgId]);
-      await holder.query("update accounts set subsidiary_id=$1 where id=$2 and org_id=$3", [fx.subB, fx.bankA, fx.orgId]);
-      let settled = false; const pending = attempt.run().finally(() => { settled = true; });
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      assert.equal(settled, false, "statement work waits for the account ownership lock");
-      await holder.query("commit"); await assertNotFound(pending);
-      assert.equal(await matchStatus(fx, attempt.id), "unmatched");
+test(
+  "statement-line edits and matching serialize against account rehome",
+  { skip: !DB },
+  async () => {
+    const fx = await seedTwoEntity();
+    const { lineIds } = await importLines(fx, fx.bankA, "scope-line-rehome", ["10", "20"], OPEN);
+    const journalLineId = await postBankLine(fx, {
+      account: fx.bankA,
+      sub: fx.subA,
+      amount: "20",
+      tag: "rehome-match",
+    });
+    const session = await startReconciliation(
+      { accountId: fx.bankA, throughDate: fx.date, statementBalance: "30" },
+      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN },
+    );
+    const ctx = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
+    const holder: Client = new (await import("pg")).Client({
+      connectionString: process.env.OPENBOOKS_DB_URL,
+    });
+    await holder.connect();
+    try {
+      const attempts = [
+        {
+          id: lineIds[0]!,
+          run: () => excludeStatementLine(lineIds[0]!, "reviewed duplicate", ctx),
+        },
+        {
+          id: lineIds[1]!,
+          run: () =>
+            createMatch(
+              {
+                reconciliationId: session.id,
+                statementLineIds: [lineIds[1]!],
+                journalLineIds: [journalLineId],
+              },
+              ctx,
+            ),
+        },
+      ];
+      for (const attempt of attempts) {
+        await db.execute(
+          sql`update accounts set subsidiary_id=${fx.subA} where id=${fx.bankA} and org_id=${fx.orgId}`,
+        );
+        await holder
+          .query("begin")
+          .then(() =>
+            holder.query(
+              "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
+              [fx.orgId],
+            ),
+          );
+        await holder.query("select id from accounts where id=$1 and org_id=$2 for update", [
+          fx.bankA,
+          fx.orgId,
+        ]);
+        await holder.query("update accounts set subsidiary_id=$1 where id=$2 and org_id=$3", [
+          fx.subB,
+          fx.bankA,
+          fx.orgId,
+        ]);
+        let settled = false;
+        const pending = attempt.run().finally(() => {
+          settled = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        assert.equal(settled, false, "statement work waits for the account ownership lock");
+        await holder.query("commit");
+        await assertNotFound(pending);
+        assert.equal(await matchStatus(fx, attempt.id), "unmatched");
+      }
+    } finally {
+      await holder.query("rollback").catch(() => undefined);
+      await holder.end();
+      await dropScratchOrg(fx.orgId);
     }
-  } finally {
-    await holder.query("rollback").catch(() => undefined);
-    await holder.end();
-    await dropScratchOrg(fx.orgId);
-  }
-});
+  },
+);
 
 test("import refuses an out-of-scope bank account and writes nothing", { skip: !DB }, async () => {
   const fx = await seedTwoEntity();
   try {
-    await assertNotFound(
-      importLines(fx, fx.bankB, "scope-import-b", ["10"], scopeOf(fx, "A"))
-    );
-    const lines = (await db.execute<{ n: number }>(sql`
+    await assertNotFound(importLines(fx, fx.bankB, "scope-import-b", ["10"], scopeOf(fx, "A")));
+    const lines = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from bank_statement_lines where org_id = ${fx.orgId}
-    `, "objects"))[0]!.n;
+    `,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(lines, 0);
     const ok = await importLines(fx, fx.bankB, "scope-import-b", ["10"], scopeOf(fx, "B"));
     assert.ok(ok.statementId);
@@ -278,24 +335,31 @@ test(
   async () => {
     const fx = await seedTwoEntity();
     try {
-      const journalA = await postBankLine(fx, { account: fx.bankA, sub: fx.subA, amount: "100", tag: "a100" });
+      const journalA = await postBankLine(fx, {
+        account: fx.bankA,
+        sub: fx.subA,
+        amount: "100",
+        tag: "a100",
+      });
       const { lineIds } = await importLines(fx, fx.bankA, "scope-session", ["100"], OPEN);
       const session = await startReconciliation(
-      { accountId: fx.bankA, throughDate: fx.date, statementBalance: "100" },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") }
-    );
+        { accountId: fx.bankA, throughDate: fx.date, statementBalance: "100" },
+        { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") },
+      );
       const out = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "B") };
       await assertNotFound(reconciliationTotals(session.id, out));
       await assertNotFound(
-      createMatch(
-        { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalA] },
-        out,
-      )
-    );
+        createMatch(
+          {
+            reconciliationId: session.id,
+            statementLineIds: [lineIds[0]!],
+            journalLineIds: [journalA],
+          },
+          out,
+        ),
+      );
       await assertNotFound(autoMatch(session.id, out));
-      await assertNotFound(
-      adjustReconciliation(session.id, { statementBalance: "100" }, out)
-    );
+      await assertNotFound(adjustReconciliation(session.id, { statementBalance: "100" }, out));
       await assertNotFound(discardReconciliation(session.id, out));
       await assertNotFound(markReconciled(session.id, out));
       // Nothing was written or released by the refusals.
@@ -303,84 +367,116 @@ test(
       assert.equal(await matchStatus(fx, lineIds[0]!), "unmatched");
       // The in-scope caller still owns the session end to end.
       const totals = await createMatch(
-      { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalA] },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") }
-    );
+        {
+          reconciliationId: session.id,
+          statementLineIds: [lineIds[0]!],
+          journalLineIds: [journalA],
+        },
+        { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") },
+      );
       assert.equal(totals.difference, "0.0000");
       const signed = await markReconciled(session.id, {
-      orgId: fx.orgId,
-      userId: fx.actor,
-      allowedSubsidiaryIds: scopeOf(fx, "A"),
-    });
+        orgId: fx.orgId,
+        userId: fx.actor,
+        allowedSubsidiaryIds: scopeOf(fx, "A"),
+      });
       assert.equal(
         signed.status,
         "signed_off",
         "The zero-gate submission must complete its native outcome",
       );
       if (signed.status !== "signed_off")
-        throw new Error(
-          "The zero-gate submission unexpectedly awaits approval.",
-        );
+        throw new Error("The zero-gate submission unexpectedly awaits approval.");
       assert.equal(signed.journalLinesReconciled, 1);
     } finally {
-    await dropScratchOrg(fx.orgId);
-  }
+      await dropScratchOrg(fx.orgId);
+    }
   },
 );
 
-test("unmatch and discard refuse across the boundary without touching rows", { skip: !DB }, async () => {
-  const fx = await seedTwoEntity();
-  try {
-    const journalA = await postBankLine(fx, { account: fx.bankA, sub: fx.subA, amount: "40", tag: "a40" });
-    const { lineIds } = await importLines(fx, fx.bankA, "scope-unmatch", ["40"], OPEN);
-    const session = await startReconciliation(
-      { accountId: fx.bankA, throughDate: fx.date, statementBalance: "40" },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") }
-    );
-    const inScope = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
-    const out = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "B") };
-    await createMatch(
-      { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalA] },
-      inScope
-    );
-    assert.equal(await matchStatus(fx, lineIds[0]!), "matched");
-    await assertNotFound(
-      unmatchStatementLine({ reconciliationId: session.id, statementLineId: lineIds[0]! }, out)
-    );
-    assert.equal(await matchStatus(fx, lineIds[0]!), "matched");
-    await unmatchStatementLine({ reconciliationId: session.id, statementLineId: lineIds[0]! }, inScope);
-    assert.equal(await matchStatus(fx, lineIds[0]!), "unmatched");
-    await assertNotFound(discardReconciliation(session.id, out));
-    assert.equal(await countReconciliations(fx), 1);
-    await discardReconciliation(session.id, inScope);
-    assert.equal(await countReconciliations(fx), 0);
-  } finally {
-    await dropScratchOrg(fx.orgId);
-  }
-});
+test(
+  "unmatch and discard refuse across the boundary without touching rows",
+  { skip: !DB },
+  async () => {
+    const fx = await seedTwoEntity();
+    try {
+      const journalA = await postBankLine(fx, {
+        account: fx.bankA,
+        sub: fx.subA,
+        amount: "40",
+        tag: "a40",
+      });
+      const { lineIds } = await importLines(fx, fx.bankA, "scope-unmatch", ["40"], OPEN);
+      const session = await startReconciliation(
+        { accountId: fx.bankA, throughDate: fx.date, statementBalance: "40" },
+        { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") },
+      );
+      const inScope = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
+      const out = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "B") };
+      await createMatch(
+        {
+          reconciliationId: session.id,
+          statementLineIds: [lineIds[0]!],
+          journalLineIds: [journalA],
+        },
+        inScope,
+      );
+      assert.equal(await matchStatus(fx, lineIds[0]!), "matched");
+      await assertNotFound(
+        unmatchStatementLine({ reconciliationId: session.id, statementLineId: lineIds[0]! }, out),
+      );
+      assert.equal(await matchStatus(fx, lineIds[0]!), "matched");
+      await unmatchStatementLine(
+        { reconciliationId: session.id, statementLineId: lineIds[0]! },
+        inScope,
+      );
+      assert.equal(await matchStatus(fx, lineIds[0]!), "unmatched");
+      await assertNotFound(discardReconciliation(session.id, out));
+      assert.equal(await countReconciliations(fx), 1);
+      await discardReconciliation(session.id, inScope);
+      assert.equal(await countReconciliations(fx), 0);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
 
 test("manual match cannot claim another entity's journal line", { skip: !DB }, async () => {
   const fx = await seedTwoEntity();
   try {
-    const journalB = await postBankLine(fx, { account: fx.bankA, sub: fx.subB, amount: "25", tag: "b25" });
-    const journalA = await postBankLine(fx, { account: fx.bankA, sub: fx.subA, amount: "25", tag: "a25" });
+    const journalB = await postBankLine(fx, {
+      account: fx.bankA,
+      sub: fx.subB,
+      amount: "25",
+      tag: "b25",
+    });
+    const journalA = await postBankLine(fx, {
+      account: fx.bankA,
+      sub: fx.subA,
+      amount: "25",
+      tag: "a25",
+    });
     const { lineIds } = await importLines(fx, fx.bankA, "scope-claim", ["25"], OPEN);
     const session = await startReconciliation(
       { accountId: fx.bankA, throughDate: fx.date, statementBalance: "25" },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") }
+      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") },
     );
     const inScope = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
     // The foreign line reads as unavailable — never as another entity's row.
     await assert.rejects(
       createMatch(
-        { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalB] },
+        {
+          reconciliationId: session.id,
+          statementLineIds: [lineIds[0]!],
+          journalLineIds: [journalB],
+        },
         inScope,
-      )
+      ),
     );
     assert.equal(await matchStatus(fx, lineIds[0]!), "unmatched");
     const totals = await createMatch(
       { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalA] },
-      inScope
+      inScope,
     );
     assert.equal(totals.difference, "0.0000");
   } finally {
@@ -395,7 +491,7 @@ test("auto-match never claims out-of-scope journal lines", { skip: !DB }, async 
     await importLines(fx, fx.bankA, "scope-auto", ["50"], OPEN);
     const session = await startReconciliation(
       { accountId: fx.bankA, throughDate: fx.date, statementBalance: "50" },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") }
+      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") },
     );
     const scoped = await autoMatch(session.id, {
       orgId: fx.orgId,
@@ -404,7 +500,11 @@ test("auto-match never claims out-of-scope journal lines", { skip: !DB }, async 
     });
     assert.equal(scoped.matched, 0);
     // The line was matchable — only the scope filter held it back.
-    const open = await autoMatch(session.id, { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN });
+    const open = await autoMatch(session.id, {
+      orgId: fx.orgId,
+      userId: fx.actor,
+      allowedSubsidiaryIds: OPEN,
+    });
     assert.equal(open.matched, 1);
   } finally {
     await dropScratchOrg(fx.orgId);
@@ -414,15 +514,20 @@ test("auto-match never claims out-of-scope journal lines", { skip: !DB }, async 
 test("sign-off refuses a session holding out-of-scope matches", { skip: !DB }, async () => {
   const fx = await seedTwoEntity();
   try {
-    const journalB = await postBankLine(fx, { account: fx.bankA, sub: fx.subB, amount: "70", tag: "b70" });
+    const journalB = await postBankLine(fx, {
+      account: fx.bankA,
+      sub: fx.subB,
+      amount: "70",
+      tag: "b70",
+    });
     const { lineIds } = await importLines(fx, fx.bankA, "scope-signoff", ["70"], OPEN);
     const session = await startReconciliation(
       { accountId: fx.bankA, throughDate: fx.date, statementBalance: "70" },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN }
+      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN },
     );
     await createMatch(
       { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journalB] },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN }
+      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN },
     );
     // A restricted caller cannot attest to lines they cannot see.
     await assert.rejects(
@@ -430,11 +535,16 @@ test("sign-off refuses a session holding out-of-scope matches", { skip: !DB }, a
         orgId: fx.orgId,
         userId: fx.actor,
         allowedSubsidiaryIds: scopeOf(fx, "A"),
-      })
+      }),
     );
-    const status = (await db.execute<{ s: string }>(sql`
+    const status = (
+      await db.execute<{ s: string }>(
+        sql`
       select status as s from reconciliations where id = ${session.id} and org_id = ${fx.orgId}
-    `, "objects"))[0]!.s;
+    `,
+        "objects",
+      )
+    )[0]!.s;
     assert.notEqual(status, "signed_off");
   } finally {
     await dropScratchOrg(fx.orgId);
@@ -448,9 +558,7 @@ test("exclude and restore refuse out-of-scope statement lines", { skip: !DB }, a
     const lineId = lineIds[0]!;
     const out = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
     const inScope = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "B") };
-    await assertNotFound(
-      excludeStatementLine(lineId, "a sufficient reason", out)
-    );
+    await assertNotFound(excludeStatementLine(lineId, "a sufficient reason", out));
     assert.equal(await matchStatus(fx, lineId), "unmatched");
     await excludeStatementLine(lineId, "a sufficient reason", inScope);
     assert.equal(await matchStatus(fx, lineId), "excluded");
@@ -463,22 +571,24 @@ test("exclude and restore refuse out-of-scope statement lines", { skip: !DB }, a
   }
 });
 
-test("duplicate-flag verbs refuse out-of-scope lines without reading flags", { skip: !DB }, async () => {
-  const fx = await seedTwoEntity();
-  try {
-    const { lineIds } = await importLines(fx, fx.bankB, "scope-dupe", ["15"], OPEN);
-    const lineId = lineIds[0]!;
-    const out = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
-    // The gate fires before the flag check, so no flagged fixture is needed.
-    await assertNotFound(clearPossibleDuplicateFlag(lineId, out));
-    await assertNotFound(
-      excludePossibleDuplicates(fx.bankB, "a sufficient reason", out),
-    );
-    assert.equal(await matchStatus(fx, lineId), "unmatched");
-  } finally {
-    await dropScratchOrg(fx.orgId);
-  }
-});
+test(
+  "duplicate-flag verbs refuse out-of-scope lines without reading flags",
+  { skip: !DB },
+  async () => {
+    const fx = await seedTwoEntity();
+    try {
+      const { lineIds } = await importLines(fx, fx.bankB, "scope-dupe", ["15"], OPEN);
+      const lineId = lineIds[0]!;
+      const out = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "A") };
+      // The gate fires before the flag check, so no flagged fixture is needed.
+      await assertNotFound(clearPossibleDuplicateFlag(lineId, out));
+      await assertNotFound(excludePossibleDuplicates(fx.bankB, "a sufficient reason", out));
+      assert.equal(await matchStatus(fx, lineId), "unmatched");
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
 
 test("adjust of a missing session still returns null", { skip: !DB }, async () => {
   const fx = await seedTwoEntity();
@@ -486,7 +596,7 @@ test("adjust of a missing session still returns null", { skip: !DB }, async () =
     const missing = await adjustReconciliation(
       randomUUID(),
       { statementBalance: "1" },
-      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN }
+      { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN },
     );
     assert.equal(missing, null);
   } finally {
@@ -494,43 +604,42 @@ test("adjust of a missing session still returns null", { skip: !DB }, async () =
   }
 });
 
-test(
-  "unrestricted callers keep full access on shared accounts",
-  { skip: !DB },
-  async () => {
-    const fx = await seedTwoEntity();
-    try {
-      const ctx = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN };
-      const journal = await postBankLine(fx, { account: fx.bankShared, sub: fx.subA, amount: "90", tag: "s90" });
-      const { lineIds } = await importLines(fx, fx.bankShared, "scope-shared", ["90"], OPEN);
-      const session = await startReconciliation(
+test("unrestricted callers keep full access on shared accounts", { skip: !DB }, async () => {
+  const fx = await seedTwoEntity();
+  try {
+    const ctx = { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: OPEN };
+    const journal = await postBankLine(fx, {
+      account: fx.bankShared,
+      sub: fx.subA,
+      amount: "90",
+      tag: "s90",
+    });
+    const { lineIds } = await importLines(fx, fx.bankShared, "scope-shared", ["90"], OPEN);
+    const session = await startReconciliation(
       { accountId: fx.bankShared, throughDate: fx.date, statementBalance: "90" },
-      ctx
+      ctx,
     );
-      const totals = await createMatch(
+    const totals = await createMatch(
       { reconciliationId: session.id, statementLineIds: [lineIds[0]!], journalLineIds: [journal] },
-      ctx
+      ctx,
     );
-      assert.equal(totals.difference, "0.0000");
-      // An explicit null scope is unrestricted too.
-      const read = await reconciliationTotals(session.id, { ...ctx, allowedSubsidiaryIds: null });
-      assert.equal(read.difference, "0.0000");
-      const signed = await markReconciled(session.id, ctx);
-      assert.equal(
-        signed.status,
-        "signed_off",
-        "The zero-gate submission must complete its native outcome",
-      );
-      if (signed.status !== "signed_off")
-        throw new Error(
-          "The zero-gate submission unexpectedly awaits approval.",
-        );
-      assert.equal(signed.journalLinesReconciled, 1);
-    } finally {
+    assert.equal(totals.difference, "0.0000");
+    // An explicit null scope is unrestricted too.
+    const read = await reconciliationTotals(session.id, { ...ctx, allowedSubsidiaryIds: null });
+    assert.equal(read.difference, "0.0000");
+    const signed = await markReconciled(session.id, ctx);
+    assert.equal(
+      signed.status,
+      "signed_off",
+      "The zero-gate submission must complete its native outcome",
+    );
+    if (signed.status !== "signed_off")
+      throw new Error("The zero-gate submission unexpectedly awaits approval.");
+    assert.equal(signed.journalLinesReconciled, 1);
+  } finally {
     await dropScratchOrg(fx.orgId);
   }
-  },
-);
+});
 
 test("scope denials are the canonical uniform not-found", { skip: !DB }, async () => {
   const fx = await seedTwoEntity();
@@ -540,7 +649,7 @@ test("scope denials are the canonical uniform not-found", { skip: !DB }, async (
       { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: scopeOf(fx, "B") },
     ).then(
       () => null,
-      (error: unknown) => error
+      (error: unknown) => error,
     );
     // The canonical module's denial, which bankingErrorResponse maps to a
     // 404 with the bare "not found" body — identical to a missing account.

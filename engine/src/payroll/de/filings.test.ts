@@ -31,7 +31,10 @@ test("row grammar refuses everything that is not one of its rows", () => {
   assert.equal(parseLohnsteuerbescheinigungRowId(""), null);
   // Foreign grammars — the T4's employee:province:account — must not authorize a byte here.
   // A W-2 employee:account SHAPE parses (a well-formed DE slice too) yet matches no DE slip.
-  assert.deepEqual(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:${OTHER}`), { employees: [EMPLOYEE], accounts: [OTHER] });
+  assert.deepEqual(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:${OTHER}`), {
+    employees: [EMPLOYEE],
+    accounts: [OTHER],
+  });
   assert.equal(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:BY:${OTHER}`), null);
   assert.equal(parseLohnsteuerbescheinigungRowId(`${EMPLOYEE}:extra`), null);
   assert.equal(parseLohnsteuerbescheinigungRowId(` ${EMPLOYEE}`), null);
@@ -54,7 +57,10 @@ test("Bescheinigungszeitraum comes from the relationship, never pay dates", () =
   });
   // No recorded start refuses; ended-before-the-year refuses.
   assert.throws(() => bescheinigungszeitraum(null, null, 2026, "Maria Muster"), /hired_on/);
-  assert.throws(() => bescheinigungszeitraum("2024-01-01", "2025-12-31", 2026, "Maria Muster"), /before 2026/);
+  assert.throws(
+    () => bescheinigungszeitraum("2024-01-01", "2025-12-31", 2026, "Maria Muster"),
+    /before 2026/,
+  );
 });
 
 test("2026 is the only published Ausdruck year; any other year refuses by name", () => {
@@ -126,7 +132,9 @@ test("every printed box carries the Ausdruck's own Zeile citation", () => {
   const slip = lohnsteuerbescheinigungSlipData(sampleSlip());
   assert.ok(slip.boxes.length > 0);
   for (const box of slip.boxes) {
-    const citation = (LOHNSTEUERBESCHEINIGUNG_CITATIONS as Record<string, { zeile: string; source: string }>)[box.code];
+    const citation = (
+      LOHNSTEUERBESCHEINIGUNG_CITATIONS as Record<string, { zeile: string; source: string }>
+    )[box.code];
     assert.ok(citation, `Zeile ${box.code} (${box.label}) prints without a citation`);
     assert.ok(citation.source.includes("2026"), box.code);
     assert.ok(citation.zeile.includes(box.code.replace(/[a-z]/g, "")), box.code);

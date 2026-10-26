@@ -11,22 +11,31 @@ import { resolvePortalSetupCurrency } from "./workspace.ts";
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 async function enablePortalBilling(orgId: string): Promise<void> {
-  const result = await withBypassContext(() => db.execute(sql`
+  const result = await withBypassContext(() =>
+    db.execute(
+      sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-      || '{"customerPortal": true, "subscriptionBilling": true}'::jsonb) where id = ${orgId} returning id`, "objects"));
+      || '{"customerPortal": true, "subscriptionBilling": true}'::jsonb) where id = ${orgId} returning id`,
+      "objects",
+    ),
+  );
   assert.equal(result.length, 1);
 }
 
 async function seedPlanSubscription(orgId: string, customerId: string): Promise<string> {
   const planId = randomUUID();
   const subscriptionId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subscription_plans (id, org_id, name, amount, interval, interval_count, income_account_id)
     values (${planId}, ${orgId}, 'Portal plan', '100.0000', 'monthly', 1,
-      (select id from accounts where org_id = ${orgId} limit 1))`));
-  await withBypassContext(() => db.execute(sql`
+      (select id from accounts where org_id = ${orgId} limit 1))`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subscriptions (id, org_id, customer_id, plan_id, quantity, status, start_on, current_period_start, next_bill_on, auto_post)
-    values (${subscriptionId}, ${orgId}, ${customerId}, ${planId}, '1', 'active', '2026-07-01', '2026-07-01', '2026-08-01', false)`));
+    values (${subscriptionId}, ${orgId}, ${customerId}, ${planId}, '1', 'active', '2026-07-01', '2026-07-01', '2026-08-01', false)`),
+  );
   return subscriptionId;
 }
 
@@ -38,12 +47,14 @@ async function seedInvoice(
   createdAt?: string,
 ): Promise<void> {
   const documentId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into documents (id, org_id, kind, document_number, party_id, document_date, currency, status,
                            subtotal, tax_total, total, custom, created_at)
     values (${documentId}, ${orgId}, 'customer_invoice', ${`INV-${documentId.slice(0, 8)}`}, ${customerId},
             ${date}, ${currency}, 'draft', '100', '0', '100', '{}'::jsonb,
-            ${createdAt ?? "2026-07-10T10:00:00Z"}::timestamptz)`));
+            ${createdAt ?? "2026-07-10T10:00:00Z"}::timestamptz)`),
+  );
 }
 
 test("setup currency follows the latest invoice, else the org base", { skip: !DB }, async () => {
@@ -64,19 +75,27 @@ test("setup currency follows the latest invoice, else the org base", { skip: !DB
   }
 });
 
-test("same-day invoices resolve to the latest recorded, deterministically", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    await seedInvoice(org.orgId, org.customerId, "EUR", "2026-07-12", "2026-07-12T10:00:00Z");
-    await seedInvoice(org.orgId, org.customerId, "USD", "2026-07-12", "2026-07-12T11:00:00Z");
-    const first = await withOrgContext(org.orgId, () => resolvePortalSetupCurrency(org.orgId, org.customerId));
-    const second = await withOrgContext(org.orgId, () => resolvePortalSetupCurrency(org.orgId, org.customerId));
-    assert.equal(first, "USD");
-    assert.equal(second, first);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "same-day invoices resolve to the latest recorded, deterministically",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await seedInvoice(org.orgId, org.customerId, "EUR", "2026-07-12", "2026-07-12T10:00:00Z");
+      await seedInvoice(org.orgId, org.customerId, "USD", "2026-07-12", "2026-07-12T11:00:00Z");
+      const first = await withOrgContext(org.orgId, () =>
+        resolvePortalSetupCurrency(org.orgId, org.customerId),
+      );
+      const second = await withOrgContext(org.orgId, () =>
+        resolvePortalSetupCurrency(org.orgId, org.customerId),
+      );
+      assert.equal(first, "USD");
+      assert.equal(second, first);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("another party's invoices never leak into setup currency", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
@@ -114,7 +133,10 @@ test("an unreadable quantity is refused with its remedy, not stored", { skip: !D
     await enablePortalBilling(org.orgId);
     const subscriptionId = await seedPlanSubscription(org.orgId, org.customerId);
     await assert.rejects(
-      previewSubscriptionChange(org.orgId, org.customerId, { subscriptionId, quantity: "not-a-number" }),
+      previewSubscriptionChange(org.orgId, org.customerId, {
+        subscriptionId,
+        quantity: "not-a-number",
+      }),
       (error: unknown) =>
         error instanceof PortalRefusal &&
         error.code === "invalid_input" &&

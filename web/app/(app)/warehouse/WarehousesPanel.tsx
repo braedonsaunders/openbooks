@@ -1,37 +1,38 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Ban, CirclePlay, MoreHorizontal, Archive } from 'lucide-react'
-import { Badge, Button, ContextMenu, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
-import { PagedTable } from '@/components/paged-table'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { mergeHref } from '@/lib/list-params'
-import { promptDialog } from '@/lib/prompt'
-import type { ReportDrillTarget } from '@/lib/report-drill'
-import { ReportDrillLink } from '../reports/ReportDrillLink'
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Ban, CirclePlay, MoreHorizontal, Archive } from "lucide-react";
+import { Badge, Button, ContextMenu, useContextMenu, type ContextMenuEntry } from "@openbooks/ui";
+import { PagedTable } from "@/components/paged-table";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { mergeHref } from "@/lib/list-params";
+import { promptDialog } from "@/lib/prompt";
+import type { ReportDrillTarget } from "@/lib/report-drill";
+import { ReportDrillLink } from "../reports/ReportDrillLink";
 
-export type WarehouseStatus = 'draft' | 'active' | 'suspended' | 'retired'
+export type WarehouseStatus = "draft" | "active" | "suspended" | "retired";
 
 export interface WarehouseTieOutRowView {
-  warehouseId: string | null
-  code: string | null
-  name: string | null
-  status: WarehouseStatus | null
-  valueLabel: string
+  warehouseId: string | null;
+  code: string | null;
+  name: string | null;
+  status: WarehouseStatus | null;
+  valueLabel: string;
 }
 
-type Action = 'activate' | 'suspend' | 'retire'
+type Action = "activate" | "suspend" | "retire";
 
-const STATUS_VARIANT: Record<WarehouseStatus, 'success' | 'secondary' | 'outline' | 'destructive'> = {
-  active: 'success',
-  draft: 'secondary',
-  suspended: 'destructive',
-  retired: 'outline',
-}
+const STATUS_VARIANT: Record<WarehouseStatus, "success" | "secondary" | "outline" | "destructive"> =
+  {
+    active: "success",
+    draft: "secondary",
+    suspended: "destructive",
+    retired: "outline",
+  };
 
 /**
  * Warehouses with their lifecycle status and the on-hand value each holds,
@@ -50,115 +51,148 @@ export function WarehousesPanel({
   differenceLabel,
   differenceIsZero,
 }: {
-  rows: WarehouseTieOutRowView[]
-  canManage: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  layerTotalLabel: string
-  controlLabel: string
-  controlDrill: ReportDrillTarget | null
-  differenceLabel: string
-  differenceIsZero: boolean
+  rows: WarehouseTieOutRowView[];
+  canManage: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  layerTotalLabel: string;
+  controlLabel: string;
+  controlDrill: ReportDrillTarget | null;
+  differenceLabel: string;
+  differenceIsZero: boolean;
 }) {
-  const t = useTranslations('warehouse')
-  const router = useRouter()
-  const menu = useContextMenu()
-  const [menuRow, setMenuRow] = useState<WarehouseTieOutRowView | null>(null)
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("warehouse");
+  const router = useRouter();
+  const menu = useContextMenu();
+  const [menuRow, setMenuRow] = useState<WarehouseTieOutRowView | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function transition(row: WarehouseTieOutRowView, action: Action) {
-    if (!row.warehouseId) return
-    let reason: string | null = null
-    if (action !== 'activate') {
+    if (!row.warehouseId) return;
+    let reason: string | null = null;
+    if (action !== "activate") {
       reason = await promptDialog({
-        title: t(`lifecycle.${action}.title`, { code: row.code ?? '' }),
-        label: t('lifecycle.reason'),
+        title: t(`lifecycle.${action}.title`, { code: row.code ?? "" }),
+        label: t("lifecycle.reason"),
         confirmLabel: t(`lifecycle.${action}.confirm`),
-      })
-      if (reason === null) return
+      });
+      if (reason === null) return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/warehouses/${row.warehouseId}/lifecycle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, reason }),
-      })
+      });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('lifecycle.failed')))
-        return
+        toast.error(await readApiErrorMessage(res, t("lifecycle.failed")));
+        return;
       }
-      toast.success(t(`lifecycle.${action}.done`, { code: row.code ?? '' }))
-      router.refresh()
+      toast.success(t(`lifecycle.${action}.done`, { code: row.code ?? "" }));
+      router.refresh();
     } catch {
-      toast.error(t('lifecycle.failed'))
+      toast.error(t("lifecycle.failed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   const menuItems: ContextMenuEntry[] = menuRow?.status
     ? [
-        { key: 'activate', label: t('lifecycle.activate.action'), icon: CirclePlay, disabled: busy || !['draft', 'suspended'].includes(menuRow.status), onSelect: () => void transition(menuRow, 'activate') },
-        { key: 'suspend', label: t('lifecycle.suspend.action'), icon: Ban, disabled: busy || menuRow.status !== 'active', onSelect: () => void transition(menuRow, 'suspend') },
-        { key: 'separator', separator: true },
-        { key: 'retire', label: t('lifecycle.retire.action'), icon: Archive, danger: true, disabled: busy || !['active', 'suspended'].includes(menuRow.status), onSelect: () => void transition(menuRow, 'retire') },
+        {
+          key: "activate",
+          label: t("lifecycle.activate.action"),
+          icon: CirclePlay,
+          disabled: busy || !["draft", "suspended"].includes(menuRow.status),
+          onSelect: () => void transition(menuRow, "activate"),
+        },
+        {
+          key: "suspend",
+          label: t("lifecycle.suspend.action"),
+          icon: Ban,
+          disabled: busy || menuRow.status !== "active",
+          onSelect: () => void transition(menuRow, "suspend"),
+        },
+        { key: "separator", separator: true },
+        {
+          key: "retire",
+          label: t("lifecycle.retire.action"),
+          icon: Archive,
+          danger: true,
+          disabled: busy || !["active", "suspended"].includes(menuRow.status),
+          onSelect: () => void transition(menuRow, "retire"),
+        },
       ]
-    : []
+    : [];
 
   return (
     <div className="space-y-3">
       <PagedTable<WarehouseTieOutRowView>
         source="warehouse_list"
         rows={rows}
-        rowKey={(row) => row.warehouseId ?? 'unassigned'}
+        rowKey={(row) => row.warehouseId ?? "unassigned"}
         pageSize={15}
         searchable
         emptyAsRow
         empty={
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {t('warehouses.empty')}{' '}
+            {t("warehouses.empty")}{" "}
             {canManage ? (
               <Link
-                href={mergeHref('/warehouse', currentParams, { warehouseNew: '1', warehouse: null, rule: null })}
+                href={mergeHref("/warehouse", currentParams, {
+                  warehouseNew: "1",
+                  warehouse: null,
+                  rule: null,
+                })}
                 className="text-teal-700 underline hover:no-underline dark:text-teal-300"
               >
-                {t('create.new')}
+                {t("create.new")}
               </Link>
             ) : null}
           </p>
         }
         onRowClick={(row) => {
-          if (row.warehouseId) router.push(mergeHref('/warehouse', currentParams, { warehouse: row.warehouseId }) as never)
+          if (row.warehouseId)
+            router.push(
+              mergeHref("/warehouse", currentParams, { warehouse: row.warehouseId }) as never,
+            );
         }}
         columns={[
           {
-            key: 'code',
-            header: t('warehouses.columns.code'),
-            cell: (row) => <span className="font-medium">{row.code ?? t('warehouses.unassigned')}</span>,
-            search: (row) => `${row.code ?? ''} ${row.name ?? ''}`,
+            key: "code",
+            header: t("warehouses.columns.code"),
+            cell: (row) => (
+              <span className="font-medium">{row.code ?? t("warehouses.unassigned")}</span>
+            ),
+            search: (row) => `${row.code ?? ""} ${row.name ?? ""}`,
           },
           {
-            key: 'name',
-            header: t('warehouses.columns.name'),
-            cell: (row) => row.name ?? '—',
-            search: (row) => row.name ?? '',
+            key: "name",
+            header: t("warehouses.columns.name"),
+            cell: (row) => row.name ?? "—",
+            search: (row) => row.name ?? "",
           },
           {
-            key: 'status',
-            header: t('warehouses.columns.status'),
-            cell: (row) => (row.status ? <Badge variant={STATUS_VARIANT[row.status]}>{t(`status.${row.status}`)}</Badge> : '—'),
-            search: (row) => row.status ?? '',
+            key: "status",
+            header: t("warehouses.columns.status"),
+            cell: (row) =>
+              row.status ? (
+                <Badge variant={STATUS_VARIANT[row.status]}>{t(`status.${row.status}`)}</Badge>
+              ) : (
+                "—"
+              ),
+            search: (row) => row.status ?? "",
           },
           {
-            key: 'value',
-            header: t('warehouses.columns.value'),
-            align: 'right',
+            key: "value",
+            header: t("warehouses.columns.value"),
+            align: "right",
             cell: (row) =>
               row.warehouseId ? (
                 <Link
                   href={`/reports/availability?warehouse=${row.warehouseId}`}
                   onClick={(event) => event.stopPropagation()}
-                  aria-label={t('warehouses.availabilityFor', { code: row.code ?? '' })}
+                  aria-label={t("warehouses.availabilityFor", { code: row.code ?? "" })}
                   className="tabular-nums text-teal-700 hover:underline dark:text-teal-300"
                 >
                   {row.valueLabel}
@@ -168,48 +202,65 @@ export function WarehousesPanel({
               ),
           },
           ...(canManage
-            ? [{
-                key: 'actions',
-                header: <span className="sr-only">{t('warehouses.columns.actions')}</span>,
-                align: 'right' as const,
-                cell: (row: WarehouseTieOutRowView) =>
-                  row.warehouseId ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label={t('warehouses.actionsFor', { code: row.code ?? '' })}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setMenuRow(row)
-                        menu.openBelow(event.currentTarget)
-                      }}
-                    >
-                      <MoreHorizontal size={16} />
-                    </Button>
-                  ) : null,
-              }]
+            ? [
+                {
+                  key: "actions",
+                  header: <span className="sr-only">{t("warehouses.columns.actions")}</span>,
+                  align: "right" as const,
+                  cell: (row: WarehouseTieOutRowView) =>
+                    row.warehouseId ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={t("warehouses.actionsFor", { code: row.code ?? "" })}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setMenuRow(row);
+                          menu.openBelow(event.currentTarget);
+                        }}
+                      >
+                        <MoreHorizontal size={16} />
+                      </Button>
+                    ) : null,
+                },
+              ]
             : []),
         ]}
       />
       <dl className="grid grid-cols-1 gap-2 border-t border-slate-200 pt-3 text-sm sm:grid-cols-3 dark:border-slate-800">
         <div>
-          <dt className="text-slate-500 dark:text-slate-400">{t('tieOut.layers')}</dt>
+          <dt className="text-slate-500 dark:text-slate-400">{t("tieOut.layers")}</dt>
           <dd className="font-medium tabular-nums">{layerTotalLabel}</dd>
         </div>
         <div>
-          <dt className="text-slate-500 dark:text-slate-400">{t('tieOut.control')}</dt>
+          <dt className="text-slate-500 dark:text-slate-400">{t("tieOut.control")}</dt>
           <dd className="font-medium tabular-nums">
-            {controlDrill ? <ReportDrillLink target={controlDrill}>{controlLabel}</ReportDrillLink> : controlLabel}
+            {controlDrill ? (
+              <ReportDrillLink target={controlDrill}>{controlLabel}</ReportDrillLink>
+            ) : (
+              controlLabel
+            )}
           </dd>
         </div>
         <div>
-          <dt className="text-slate-500 dark:text-slate-400">{t('tieOut.difference')}</dt>
-          <dd className={differenceIsZero ? 'font-medium tabular-nums text-emerald-700 dark:text-emerald-300' : 'font-medium tabular-nums text-red-700 dark:text-red-300'}>
-            {differenceIsZero ? t('tieOut.tiesOut') : differenceLabel}
+          <dt className="text-slate-500 dark:text-slate-400">{t("tieOut.difference")}</dt>
+          <dd
+            className={
+              differenceIsZero
+                ? "font-medium tabular-nums text-emerald-700 dark:text-emerald-300"
+                : "font-medium tabular-nums text-red-700 dark:text-red-300"
+            }
+          >
+            {differenceIsZero ? t("tieOut.tiesOut") : differenceLabel}
           </dd>
         </div>
       </dl>
-      <ContextMenu open={menu.open} position={menu.position} items={menuItems} onClose={menu.close} />
+      <ContextMenu
+        open={menu.open}
+        position={menu.position}
+        items={menuItems}
+        onClose={menu.close}
+      />
     </div>
-  )
+  );
 }

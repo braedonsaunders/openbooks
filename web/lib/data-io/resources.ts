@@ -1,12 +1,17 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, type SetupEntity } from '../setup/registry'
-import { featureEnabled, resolvedFeatureState } from '../features'
-import { DOC_KINDS, docKindConfig } from '../document-kinds'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  SETUP_ENTITIES,
+  SETUP_ENTITY_BY_KEY,
+  resolveSetupEntityGate,
+  type SetupEntity,
+} from "../setup/registry";
+import { featureEnabled, resolvedFeatureState } from "../features";
+import { DOC_KINDS, docKindConfig } from "../document-kinds";
 import { isDocKindEnabled } from "../documents.ts";
-import type { CustomFieldViewer } from '@openbooks/engine/records/custom-fields'
-import { loadRecordTypeByKey } from '../records'
+import type { CustomFieldViewer } from "@openbooks/engine/records/custom-fields";
+import { loadRecordTypeByKey } from "../records";
 import {
   PAYROLL_OPENING_BALANCES_DESCRIPTOR,
   PAYROLL_OPENING_BALANCES_KEY,
@@ -14,25 +19,59 @@ import {
   PAYROLL_OPENING_ENTITLEMENTS_KEY,
   payrollOpeningBalancesResource,
   payrollOpeningEntitlementsResource,
-} from './payroll-opening-balances-resource'
+} from "./payroll-opening-balances-resource";
 import {
   PRIOR_PAYROLL_REGISTER_DESCRIPTOR,
   PRIOR_PAYROLL_REGISTER_KEY,
   priorPayrollRegisterResource,
-} from './prior-payroll-register-resource'
-import { PAYROLL_RUN_INPUTS_DESCRIPTOR, PAYROLL_RUN_INPUTS_KEY, payrollRunInputsResource } from './payroll-run-inputs-resource'
-import { PRIOR_PAYROLL_IDENTITIES_DESCRIPTOR, PRIOR_PAYROLL_IDENTITIES_KEY, priorPayrollIdentitiesResource } from './prior-payroll-identities-resource'
-import { PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_DESCRIPTOR, PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_KEY, payrollHistoricalEmployerAssignmentsResource } from './payroll-historical-employer-assignments-resource'
-import { PAYROLL_HISTORICAL_WITHHOLDING_DESCRIPTOR, PAYROLL_HISTORICAL_WITHHOLDING_KEY, payrollHistoricalWithholdingResource } from './payroll-historical-withholding-resource'
-import { PAYROLL_EMPLOYMENT_LINKS_DESCRIPTOR, PAYROLL_EMPLOYMENT_LINKS_KEY, payrollEmploymentLinksResource } from './payroll-employment-links-resource'
-import { ROE_PERIODS_DESCRIPTOR, ROE_PERIODS_KEY, ROE_LINES_DESCRIPTOR, ROE_LINES_KEY, payrollRoeReportingResource } from './payroll-roe-reporting-resource'
-import { PAYROLL_PERIOD_OPENINGS_DESCRIPTOR, PAYROLL_PERIOD_OPENINGS_KEY, payrollPeriodOpeningsResource } from './payroll-period-openings-resource'
-import { EMPLOYEE_WORKER_COMP_DESCRIPTOR, EMPLOYEE_WORKER_COMP_KEY, employeeWorkerCompResource } from './employee-worker-comp-resource'
+} from "./prior-payroll-register-resource";
+import {
+  PAYROLL_RUN_INPUTS_DESCRIPTOR,
+  PAYROLL_RUN_INPUTS_KEY,
+  payrollRunInputsResource,
+} from "./payroll-run-inputs-resource";
+import {
+  PRIOR_PAYROLL_IDENTITIES_DESCRIPTOR,
+  PRIOR_PAYROLL_IDENTITIES_KEY,
+  priorPayrollIdentitiesResource,
+} from "./prior-payroll-identities-resource";
+import {
+  PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_DESCRIPTOR,
+  PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_KEY,
+  payrollHistoricalEmployerAssignmentsResource,
+} from "./payroll-historical-employer-assignments-resource";
+import {
+  PAYROLL_HISTORICAL_WITHHOLDING_DESCRIPTOR,
+  PAYROLL_HISTORICAL_WITHHOLDING_KEY,
+  payrollHistoricalWithholdingResource,
+} from "./payroll-historical-withholding-resource";
+import {
+  PAYROLL_EMPLOYMENT_LINKS_DESCRIPTOR,
+  PAYROLL_EMPLOYMENT_LINKS_KEY,
+  payrollEmploymentLinksResource,
+} from "./payroll-employment-links-resource";
+import {
+  ROE_PERIODS_DESCRIPTOR,
+  ROE_PERIODS_KEY,
+  ROE_LINES_DESCRIPTOR,
+  ROE_LINES_KEY,
+  payrollRoeReportingResource,
+} from "./payroll-roe-reporting-resource";
+import {
+  PAYROLL_PERIOD_OPENINGS_DESCRIPTOR,
+  PAYROLL_PERIOD_OPENINGS_KEY,
+  payrollPeriodOpeningsResource,
+} from "./payroll-period-openings-resource";
+import {
+  EMPLOYEE_WORKER_COMP_DESCRIPTOR,
+  EMPLOYEE_WORKER_COMP_KEY,
+  employeeWorkerCompResource,
+} from "./employee-worker-comp-resource";
 import {
   PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR,
   PAYROLL_EMPLOYER_LEVY_OPENINGS_KEY,
   payrollEmployerLevyOpeningsResource,
-} from './payroll-employer-levy-openings-resource'
+} from "./payroll-employer-levy-openings-resource";
 import {
   SAAS_METRICS_FACTS_DESCRIPTOR,
   SAAS_METRICS_FACTS_KEY,
@@ -40,12 +79,12 @@ import {
   USAGE_RECORDS_KEY,
   saasMetricsFactsResource,
   usageRecordsResource,
-} from './usage-resources'
+} from "./usage-resources";
 import {
   FIXED_ASSETS_DESCRIPTOR,
   FIXED_ASSETS_KEY,
   fixedAssetsResource,
-} from './fixed-asset-resources'
+} from "./fixed-asset-resources";
 import {
   ASSIGNMENTS_DESCRIPTOR,
   ASSIGNMENTS_KEY,
@@ -53,29 +92,39 @@ import {
   RETAINER_BALANCES_KEY,
   assignmentPlanResource,
   retainerBalancesResource,
-} from './resourcing-resources'
+} from "./resourcing-resources";
 import {
   CHANNEL_AD_SPEND_DESCRIPTOR,
   CHANNEL_AD_SPEND_KEY,
   channelAdSpendResource,
-} from './commerce-resources'
-import { MASTER_ENTITIES, MASTER_BY_KEY, masterDescriptor, masterResource } from './master-data-resources'
-import { PROPERTY_DESCRIPTORS, PROPERTY_DESCRIPTOR_BY_KEY, propertyDataResource, propertyManagementEnabled } from './property-resources'
-import { recordSections, recordResource } from './record-resources'
-import { setupDescriptor, setupResource } from './setup-resources'
-import { transactionDescriptor, transactionResource } from './transaction-resources'
+} from "./commerce-resources";
+import {
+  MASTER_ENTITIES,
+  MASTER_BY_KEY,
+  masterDescriptor,
+  masterResource,
+} from "./master-data-resources";
+import {
+  PROPERTY_DESCRIPTORS,
+  PROPERTY_DESCRIPTOR_BY_KEY,
+  propertyDataResource,
+  propertyManagementEnabled,
+} from "./property-resources";
+import { recordSections, recordResource } from "./record-resources";
+import { setupDescriptor, setupResource } from "./setup-resources";
+import { transactionDescriptor, transactionResource } from "./transaction-resources";
 import {
   orgFeatureEnabled,
   subsidiaryReadFilter,
   type DataResource,
   type ReadCtx,
   type ReadResult,
-} from './resource-core'
-import { type ResourceDescriptor } from './types'
-import type { ResourceField } from './types'
+} from "./resource-core";
+import { type ResourceDescriptor } from "./types";
+import type { ResourceField } from "./types";
 
-export type { ReadResult, WriteCtx, DataResource, ReadCtx } from './resource-core'
-export { RefResolver } from './resource-core'
+export type { ReadResult, WriteCtx, DataResource, ReadCtx } from "./resource-core";
+export { RefResolver } from "./resource-core";
 
 /**
  * This file is the module's public surface: the org-scoped registry API plus a
@@ -100,10 +149,10 @@ export { RefResolver } from './resource-core'
 
 // One authoritative gate admits setup resources — never a local featureKey check.
 async function setupEntityEnabled(entity: SetupEntity, orgId: string): Promise<boolean> {
-  return resolveSetupEntityGate(entity, await resolvedFeatureState(orgId)).enabled
+  return resolveSetupEntityGate(entity, await resolvedFeatureState(orgId)).enabled;
 }
 
-type SubsidiaryScope = ReadonlySet<string> | null
+type SubsidiaryScope = ReadonlySet<string> | null;
 
 /**
  * Resolve the names used by export adapters for subsidiary references. Setup
@@ -111,21 +160,24 @@ type SubsidiaryScope = ReadonlySet<string> | null
  * already-shaped result must compare against the same names rather than UUIDs.
  */
 async function subsidiaryNames(orgId: string, scope: SubsidiaryScope): Promise<Set<string>> {
-  if (scope === null) return new Set()
-  const result = await db.execute<{ id: string; name: string }>(sql`
+  if (scope === null) return new Set();
+  const result = await db.execute<{ id: string; name: string }>(
+    sql`
     select id, name
       from subsidiaries
-     where org_id = ${orgId}${subsidiaryReadFilter(sql`id`, scope)}`, 'objects')
-  const names = new Set<string>()
+     where org_id = ${orgId}${subsidiaryReadFilter(sql`id`, scope)}`,
+    "objects",
+  );
+  const names = new Set<string>();
   for (const row of result) {
-    names.add(row.id)
-    names.add(row.name)
+    names.add(row.id);
+    names.add(row.name);
   }
-  return names
+  return names;
 }
 
 function scopeReferenceFields(result: ReadResult): ResourceField[] {
-  return result.fields.filter((field) => field.ref?.resource === 'subsidiaries')
+  return result.fields.filter((field) => field.ref?.resource === "subsidiaries");
 }
 
 function filterReferenceScopedRows(
@@ -133,34 +185,52 @@ function filterReferenceScopedRows(
   names: ReadonlySet<string>,
   scope: ReadonlySet<string>,
 ): ReadResult | null {
-  const fields = scopeReferenceFields(result)
-  if (fields.length === 0) return null
+  const fields = scopeReferenceFields(result);
+  if (fields.length === 0) return null;
   return {
     ...result,
-    rows: result.rows.filter((row) => fields.every((field) => {
-      const value = row[field.key]
-      if (value === null || value === undefined || value === '') return false
-      return names.has(String(value)) || scope.has(String(value))
-    })),
-  }
+    rows: result.rows.filter((row) =>
+      fields.every((field) => {
+        const value = row[field.key];
+        if (value === null || value === undefined || value === "") return false;
+        return names.has(String(value)) || scope.has(String(value));
+      }),
+    ),
+  };
 }
 
-async function propertyVisibleKeys(orgId: string, scope: SubsidiaryScope, page?: { field: string; keys: string[] }): Promise<{
-  propertyCodes: Set<string>
-  leaseNumbers: Set<string>
+async function propertyVisibleKeys(
+  orgId: string,
+  scope: SubsidiaryScope,
+  page?: { field: string; keys: string[] },
+): Promise<{
+  propertyCodes: Set<string>;
+  leaseNumbers: Set<string>;
 }> {
-  const propertyCodes = new Set<string>()
-  const leaseNumbers = new Set<string>()
-  const result = await db.execute<{ property_code: string; lease_number: string | null }>(sql`
+  const propertyCodes = new Set<string>();
+  const leaseNumbers = new Set<string>();
+  const result = await db.execute<{ property_code: string; lease_number: string | null }>(
+    sql`
     select p.code as property_code, l.lease_number
       from managed_properties p
       left join property_leases l on l.property_id = p.id and l.org_id = p.org_id
-     where p.org_id = ${orgId}${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}${page ? (page.keys.length ? sql` and ${page.field === 'leaseNumber' ? sql`l.lease_number` : sql`p.code`} in (${sql.join(page.keys.map((key) => sql`${key}`), sql`, `)})` : sql` and false`) : sql``}`, 'objects')
+     where p.org_id = ${orgId}${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}${
+       page
+         ? page.keys.length
+           ? sql` and ${page.field === "leaseNumber" ? sql`l.lease_number` : sql`p.code`} in (${sql.join(
+               page.keys.map((key) => sql`${key}`),
+               sql`, `,
+             )})`
+           : sql` and false`
+         : sql``
+     }`,
+    "objects",
+  );
   for (const row of result) {
-    propertyCodes.add(row.property_code)
-    if (row.lease_number) leaseNumbers.add(row.lease_number)
+    propertyCodes.add(row.property_code);
+    if (row.lease_number) leaseNumbers.add(row.lease_number);
   }
-  return { propertyCodes, leaseNumbers }
+  return { propertyCodes, leaseNumbers };
 }
 
 async function filterPropertyRows(
@@ -169,95 +239,123 @@ async function filterPropertyRows(
   result: ReadResult,
   scope: SubsidiaryScope,
 ): Promise<ReadResult | null> {
-  if (!['properties', 'property-units', 'property-leases', 'lease-charges', 'security-deposit-opening-balances'].includes(key)) {
-    return null
+  if (
+    ![
+      "properties",
+      "property-units",
+      "property-leases",
+      "lease-charges",
+      "security-deposit-opening-balances",
+    ].includes(key)
+  ) {
+    return null;
   }
-  if (key === 'properties') {
-    const names = await subsidiaryNames(orgId, scope)
+  if (key === "properties") {
+    const names = await subsidiaryNames(orgId, scope);
     return {
       ...result,
-      rows: result.rows.filter((row) => names.has(String(row.subsidiary ?? ''))),
-    }
+      rows: result.rows.filter((row) => names.has(String(row.subsidiary ?? ""))),
+    };
   }
-  const useLease = key === 'property-leases' || key === 'lease-charges' || key === 'security-deposit-opening-balances'
-  const field = useLease ? 'leaseNumber' : 'propertyCode'
-  const visible = await propertyVisibleKeys(orgId, scope, { field, keys: result.rows.map((row) => String(row[field] ?? '')) })
-  const keys = useLease ? visible.leaseNumbers : visible.propertyCodes
+  const useLease =
+    key === "property-leases" ||
+    key === "lease-charges" ||
+    key === "security-deposit-opening-balances";
+  const field = useLease ? "leaseNumber" : "propertyCode";
+  const visible = await propertyVisibleKeys(orgId, scope, {
+    field,
+    keys: result.rows.map((row) => String(row[field] ?? "")),
+  });
+  const keys = useLease ? visible.leaseNumbers : visible.propertyCodes;
   return {
     ...result,
-    rows: result.rows.filter((row) => keys.has(String(row[field] ?? ''))),
-  }
+    rows: result.rows.filter((row) => keys.has(String(row[field] ?? ""))),
+  };
 }
 
 /** Bind role-derived visibility to every resource returned by the registry. */
-function bindReadScope(resource: DataResource, orgId: string, scope?: SubsidiaryScope): DataResource {
-  if (scope === undefined) return resource
+function bindReadScope(
+  resource: DataResource,
+  orgId: string,
+  scope?: SubsidiaryScope,
+): DataResource {
+  if (scope === undefined) return resource;
   return {
     ...resource,
     async read(readCtx?: ReadCtx) {
-      const effectiveScope = readCtx ? readCtx.allowedSubsidiaryIds : scope
-      const forwardedActor = readCtx && Object.hasOwn(readCtx, 'actorId') ? readCtx.actorId : undefined
+      const effectiveScope = readCtx ? readCtx.allowedSubsidiaryIds : scope;
+      const forwardedActor =
+        readCtx && Object.hasOwn(readCtx, "actorId") ? readCtx.actorId : undefined;
       const result = await resource.read(
         forwardedActor === undefined
           ? { ...readCtx, allowedSubsidiaryIds: effectiveScope }
           : { ...readCtx, allowedSubsidiaryIds: effectiveScope, actorId: forwardedActor },
-      )
-      if (effectiveScope === null) return result
+      );
+      if (effectiveScope === null) return result;
 
       // Master and payroll resources enforce the scope in their source
       // queries by row identity (their natural keys are reusable display
       // labels, so a label post-filter leaks across legal entities). The
       // generic adapters below cover setup, property and custom records
       // whose legacy read methods expose natural keys instead.
-      const property = await filterPropertyRows(orgId, resource.descriptor.key, result, effectiveScope)
-      if (property) return property
-      const names = await subsidiaryNames(orgId, effectiveScope)
-      return filterReferenceScopedRows(result, names, effectiveScope) ?? result
+      const property = await filterPropertyRows(
+        orgId,
+        resource.descriptor.key,
+        result,
+        effectiveScope,
+      );
+      if (property) return property;
+      const names = await subsidiaryNames(orgId, effectiveScope);
+      return filterReferenceScopedRows(result, names, effectiveScope) ?? result;
     },
-  }
+  };
 }
 
 // --- Public registry API ------------------------------------------------------
 
 /** All resources visible to this org (records enumerated dynamically). */
 export async function listResources(orgId: string): Promise<ResourceDescriptor[]> {
-  const features = await resolvedFeatureState(orgId)
+  const features = await resolvedFeatureState(orgId);
   // Entities with a dedicated domain-owned resource keep that single import
   // path: the generic setup writer would store the row without the domain
   // effects (here, the margin restatement) the command performs.
-  const dedicatedKeys = new Set([CHANNEL_AD_SPEND_KEY])
-  const setup = SETUP_ENTITIES
-    .filter((entity) => resolveSetupEntityGate(entity, features).enabled)
+  const dedicatedKeys = new Set([CHANNEL_AD_SPEND_KEY]);
+  const setup = SETUP_ENTITIES.filter((entity) => resolveSetupEntityGate(entity, features).enabled)
     .filter((entity) => !dedicatedKeys.has(entity.key))
-    .map(setupDescriptor)
-  const master = MASTER_ENTITIES.map(masterDescriptor)
-  const recordTypes = await db.execute<{ key: string; plural_name: string }>(sql`
+    .map(setupDescriptor);
+  const master = MASTER_ENTITIES.map(masterDescriptor);
+  const recordTypes = await db.execute<{ key: string; plural_name: string }>(
+    sql`
     select key, plural_name from custom_record_types
-     where org_id = ${orgId} and status = 'published' order by sort_order, name`, 'objects')
+     where org_id = ${orgId} and status = 'published' order by sort_order, name`,
+    "objects",
+  );
   const records: ResourceDescriptor[] = recordTypes.map((t) => ({
     key: `record:${t.key}`,
     label: t.plural_name,
-    group: 'Records',
-    iconKey: 'clipboard-list',
-    readPermission: 'records.read',
-    writePermission: 'records.create',
+    group: "Records",
+    iconKey: "clipboard-list",
+    readPermission: "records.read",
+    writePermission: "records.create",
     supportsImport: true,
-    naturalKey: 'record_number',
-  }))
-  const transactions: ResourceDescriptor[] = []
+    naturalKey: "record_number",
+  }));
+  const transactions: ResourceDescriptor[] = [];
   for (const cfg of Object.values(DOC_KINDS)) {
-    if (await isDocKindEnabled(orgId, cfg.kind)) transactions.push(transactionDescriptor(cfg))
+    if (await isDocKindEnabled(orgId, cfg.kind)) transactions.push(transactionDescriptor(cfg));
   }
-  const propertyManagement = featureEnabled(features, 'propertyManagement') ? PROPERTY_DESCRIPTORS : []
+  const propertyManagement = featureEnabled(features, "propertyManagement")
+    ? PROPERTY_DESCRIPTORS
+    : [];
   // Mid-life fixed-asset onboarding — a whole register carried in from the
   // outgoing system, opening accumulated figures included. See
   // ./fixed-asset-resources.ts.
-  const fixedAssets = featureEnabled(features, 'fixedAssets') ? [FIXED_ASSETS_DESCRIPTOR] : []
+  const fixedAssets = featureEnabled(features, "fixedAssets") ? [FIXED_ASSETS_DESCRIPTOR] : [];
   // Mid-year adoption carry-in — a bulk load from the outgoing provider's
   // year-to-date report. See ./payroll-opening-balances-resource.ts.
   // Mid-year adoption carry-in, plus the prior provider's per-period register
   // for a parallel run. See ./prior-payroll-register-resource.ts.
-  const payroll = featureEnabled(features, 'payroll')
+  const payroll = featureEnabled(features, "payroll")
     ? [
         PAYROLL_OPENING_BALANCES_DESCRIPTOR,
         PAYROLL_PERIOD_OPENINGS_DESCRIPTOR,
@@ -273,15 +371,34 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
         PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_DESCRIPTOR,
         EMPLOYEE_WORKER_COMP_DESCRIPTOR,
       ]
-    : []
-  const usage = featureEnabled(features, 'usageBilling') ? [USAGE_RECORDS_DESCRIPTOR] : []
-  const saasMetrics = featureEnabled(features, 'saasMetrics') ? [SAAS_METRICS_FACTS_DESCRIPTOR] : []
-  const assignments = featureEnabled(features, 'resourcing') ? [ASSIGNMENTS_DESCRIPTOR] : []
-  const retainerBalances = featureEnabled(features, 'retainerBilling') ? [RETAINER_BALANCES_DESCRIPTOR] : []
+    : [];
+  const usage = featureEnabled(features, "usageBilling") ? [USAGE_RECORDS_DESCRIPTOR] : [];
+  const saasMetrics = featureEnabled(features, "saasMetrics")
+    ? [SAAS_METRICS_FACTS_DESCRIPTOR]
+    : [];
+  const assignments = featureEnabled(features, "resourcing") ? [ASSIGNMENTS_DESCRIPTOR] : [];
+  const retainerBalances = featureEnabled(features, "retainerBilling")
+    ? [RETAINER_BALANCES_DESCRIPTOR]
+    : [];
   // Daily marketing spend carried in from each ad platform's export. See
   // ./commerce-resources.ts.
-  const channelAdSpend = featureEnabled(features, 'salesChannels') ? [CHANNEL_AD_SPEND_DESCRIPTOR] : []
-  return [...setup, ...master, ...fixedAssets, ...records, ...propertyManagement, ...payroll, ...usage, ...saasMetrics, ...transactions, ...assignments, ...retainerBalances, ...channelAdSpend]
+  const channelAdSpend = featureEnabled(features, "salesChannels")
+    ? [CHANNEL_AD_SPEND_DESCRIPTOR]
+    : [];
+  return [
+    ...setup,
+    ...master,
+    ...fixedAssets,
+    ...records,
+    ...propertyManagement,
+    ...payroll,
+    ...usage,
+    ...saasMetrics,
+    ...transactions,
+    ...assignments,
+    ...retainerBalances,
+    ...channelAdSpend,
+  ];
 }
 
 /** Resolve one resource bound to the org and (for export reads) its visibility scope. */
@@ -292,104 +409,121 @@ export async function getResource(
   customFieldViewer?: CustomFieldViewer,
 ): Promise<DataResource | null> {
   if (PROPERTY_DESCRIPTOR_BY_KEY.has(key)) {
-    if (!(await propertyManagementEnabled(orgId))) return null
-    const resource = propertyDataResource(orgId, key)
-    return resource ? bindReadScope(resource, orgId, allowedSubsidiaryIds) : null
+    if (!(await propertyManagementEnabled(orgId))) return null;
+    const resource = propertyDataResource(orgId, key);
+    return resource ? bindReadScope(resource, orgId, allowedSubsidiaryIds) : null;
   }
   if (key === PRIOR_PAYROLL_REGISTER_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(priorPayrollRegisterResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(priorPayrollRegisterResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === PRIOR_PAYROLL_IDENTITIES_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(priorPayrollIdentitiesResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(priorPayrollIdentitiesResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === PAYROLL_RUN_INPUTS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(payrollRunInputsResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(payrollRunInputsResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(payrollHistoricalEmployerAssignmentsResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(
+      payrollHistoricalEmployerAssignmentsResource(orgId),
+      orgId,
+      allowedSubsidiaryIds,
+    );
   }
   if (key === PAYROLL_HISTORICAL_WITHHOLDING_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(payrollHistoricalWithholdingResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(payrollHistoricalWithholdingResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === PAYROLL_EMPLOYMENT_LINKS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(payrollEmploymentLinksResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(payrollEmploymentLinksResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === EMPLOYEE_WORKER_COMP_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(employeeWorkerCompResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(employeeWorkerCompResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === PAYROLL_OPENING_BALANCES_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(payrollOpeningBalancesResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(payrollOpeningBalancesResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === ROE_PERIODS_KEY || key === ROE_LINES_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(payrollRoeReportingResource(orgId, key === ROE_PERIODS_KEY ? 'period' : 'line'), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(
+      payrollRoeReportingResource(orgId, key === ROE_PERIODS_KEY ? "period" : "line"),
+      orgId,
+      allowedSubsidiaryIds,
+    );
   }
   if (key === PAYROLL_PERIOD_OPENINGS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(payrollPeriodOpeningsResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(payrollPeriodOpeningsResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === PAYROLL_OPENING_ENTITLEMENTS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(payrollOpeningEntitlementsResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(payrollOpeningEntitlementsResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === PAYROLL_EMPLOYER_LEVY_OPENINGS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
-    return bindReadScope(payrollEmployerLevyOpeningsResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "payroll"))) return null;
+    return bindReadScope(payrollEmployerLevyOpeningsResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === FIXED_ASSETS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'fixedAssets'))) return null
-    return bindReadScope(fixedAssetsResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "fixedAssets"))) return null;
+    return bindReadScope(fixedAssetsResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === USAGE_RECORDS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'usageBilling'))) return null
-    return bindReadScope(usageRecordsResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "usageBilling"))) return null;
+    return bindReadScope(usageRecordsResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === SAAS_METRICS_FACTS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'saasMetrics'))) return null
-    return bindReadScope(saasMetricsFactsResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "saasMetrics"))) return null;
+    return bindReadScope(saasMetricsFactsResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === ASSIGNMENTS_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'resourcing'))) return null
-    return bindReadScope(assignmentPlanResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "resourcing"))) return null;
+    return bindReadScope(assignmentPlanResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === RETAINER_BALANCES_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'retainerBilling'))) return null
-    return bindReadScope(retainerBalancesResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "retainerBilling"))) return null;
+    return bindReadScope(retainerBalancesResource(orgId), orgId, allowedSubsidiaryIds);
   }
   if (key === CHANNEL_AD_SPEND_KEY) {
-    if (!(await orgFeatureEnabled(orgId, 'salesChannels'))) return null
-    return bindReadScope(channelAdSpendResource(orgId), orgId, allowedSubsidiaryIds)
+    if (!(await orgFeatureEnabled(orgId, "salesChannels"))) return null;
+    return bindReadScope(channelAdSpendResource(orgId), orgId, allowedSubsidiaryIds);
   }
-  const setup = SETUP_ENTITY_BY_KEY.get(key)
+  const setup = SETUP_ENTITY_BY_KEY.get(key);
   if (setup) {
-    if (!(await setupEntityEnabled(setup, orgId))) return null
-    return bindReadScope(setupResource(setup, orgId), orgId, allowedSubsidiaryIds)
+    if (!(await setupEntityEnabled(setup, orgId))) return null;
+    return bindReadScope(setupResource(setup, orgId), orgId, allowedSubsidiaryIds);
   }
-  const master = MASTER_BY_KEY.get(key)
-  if (master) return bindReadScope(masterResource(master, orgId, customFieldViewer), orgId, allowedSubsidiaryIds)
-  if (key.startsWith('record:')) {
-    const typeKey = key.slice('record:'.length)
-    const sections = await recordSections(orgId, typeKey)
-    if (!sections) return null
-    const type = await loadRecordTypeByKey(orgId, typeKey)
+  const master = MASTER_BY_KEY.get(key);
+  if (master)
+    return bindReadScope(
+      masterResource(master, orgId, customFieldViewer),
+      orgId,
+      allowedSubsidiaryIds,
+    );
+  if (key.startsWith("record:")) {
+    const typeKey = key.slice("record:".length);
+    const sections = await recordSections(orgId, typeKey);
+    if (!sections) return null;
+    const type = await loadRecordTypeByKey(orgId, typeKey);
     return bindReadScope(
       recordResource(orgId, typeKey, sections, type?.plural_name ?? typeKey),
       orgId,
       allowedSubsidiaryIds,
-    )
+    );
   }
-  if (key.startsWith('txn:')) {
-    const cfg = docKindConfig(key.slice('txn:'.length))
-    if (!cfg || !(await isDocKindEnabled(orgId, cfg.kind))) return null
-    return bindReadScope(transactionResource(cfg, orgId, allowedSubsidiaryIds), orgId, allowedSubsidiaryIds)
+  if (key.startsWith("txn:")) {
+    const cfg = docKindConfig(key.slice("txn:".length));
+    if (!cfg || !(await isDocKindEnabled(orgId, cfg.kind))) return null;
+    return bindReadScope(
+      transactionResource(cfg, orgId, allowedSubsidiaryIds),
+      orgId,
+      allowedSubsidiaryIds,
+    );
   }
-  return null
+  return null;
 }

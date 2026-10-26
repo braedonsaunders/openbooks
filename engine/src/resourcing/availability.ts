@@ -114,10 +114,10 @@ export function computeAvailabilityForWeek(input: ComputeAvailabilityInput): Ava
       ? { tier: "labor-costing-standard", annualHours: input.annualHours }
       : distinctSchedules.size === 1 && !usedStandard
         ? {
-          tier: "schedule",
-          scheduleId: distinctSchedules.keys().next().value!,
-          scope: distinctSchedules.values().next().value!,
-        }
+            tier: "schedule",
+            scheduleId: distinctSchedules.keys().next().value!,
+            scope: distinctSchedules.values().next().value!,
+          }
         : { tier: "mixed", annualHours: usedStandard ? input.annualHours : null };
 
   const capacityHours = unknownSchedule
@@ -146,9 +146,10 @@ export function computeAvailabilityForWeek(input: ComputeAvailabilityInput): Ava
     (absence) => absence.onDate >= dates[0]! && absence.onDate <= dates[6]!,
   );
   const absenceHours = sum(weekAbsences.map((absence) => absence.hours));
-  const netBeforeFloor = capacityHours === null || holidayHours === null
-    ? null
-    : sum([capacityHours, neg(holidayHours), neg(absenceHours)]);
+  const netBeforeFloor =
+    capacityHours === null || holidayHours === null
+      ? null
+      : sum([capacityHours, neg(holidayHours), neg(absenceHours)]);
   const overage = netBeforeFloor === null ? null : cmp(netBeforeFloor, "0") < 0;
 
   return {
@@ -170,9 +171,12 @@ export function computeAvailabilityForWeek(input: ComputeAvailabilityInput): Ava
       hours: absenceHours,
       absenceRowIds: weekAbsences.map((absence) => absence.id),
     },
-    netCapacity: netBeforeFloor === null || cmp(netBeforeFloor, "0") < 0
-      ? (netBeforeFloor === null ? null : "0.0000")
-      : netBeforeFloor,
+    netCapacity:
+      netBeforeFloor === null || cmp(netBeforeFloor, "0") < 0
+        ? netBeforeFloor === null
+          ? null
+          : "0.0000"
+        : netBeforeFloor,
     overage,
   };
 }

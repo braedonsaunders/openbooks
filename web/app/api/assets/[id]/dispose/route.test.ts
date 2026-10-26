@@ -1,27 +1,27 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../testing/stub-modules'
-import test from 'node:test'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../testing/stub-modules";
+import test from "node:test";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 
 interface DisposalCall {
-  orgId: string
-  assetId: string
-  options: Record<string, unknown>
+  orgId: string;
+  assetId: string;
+  options: Record<string, unknown>;
 }
 
 interface RouteState {
-  isIsoCalendarDate: typeof isIsoCalendarDate
-  businessTodayCalls: string[]
-  disposeCalls: DisposalCall[]
+  isIsoCalendarDate: typeof isIsoCalendarDate;
+  businessTodayCalls: string[];
+  disposeCalls: DisposalCall[];
 }
 
-const stateKey = Symbol.for('openbooks.asset-disposal-route-test')
+const stateKey = Symbol.for("openbooks.asset-disposal-route-test");
 const routeState: RouteState = {
   isIsoCalendarDate,
   businessTodayCalls: [],
   disposeCalls: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 // Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
 // mocked: hand doubles cannot produce the refusals the real modules enforce.
@@ -58,66 +58,66 @@ stubModules({
       }
     `,
   },
-})
+});
 
-const routeUrl = './route.ts?asset-disposal-date-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?asset-disposal-date-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const ASSET_ID = '00000000-0000-4000-8000-00000000a001'
+const ASSET_ID = "00000000-0000-4000-8000-00000000a001";
 
 function reset(): void {
-  routeState.businessTodayCalls.length = 0
-  routeState.disposeCalls.length = 0
+  routeState.businessTodayCalls.length = 0;
+  routeState.disposeCalls.length = 0;
 }
 
 function post(body: unknown): Promise<Response> {
   return POST(
     new Request(`http://openbooks.test/api/assets/${ASSET_ID}/dispose`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: ASSET_ID }) },
-  )
+  );
 }
 
-test('an omitted disposal date alone defaults to the organization business day', async () => {
-  reset()
+test("an omitted disposal date alone defaults to the organization business day", async () => {
+  reset();
 
-  const response = await post({})
+  const response = await post({});
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(routeState.businessTodayCalls, ['org-1'])
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.businessTodayCalls, ["org-1"]);
   assert.deepEqual(routeState.disposeCalls, [
     {
-      orgId: 'org-1',
+      orgId: "org-1",
       assetId: ASSET_ID,
       options: {
-        proceeds: '0.0000',
+        proceeds: "0.0000",
         proceedsAccountId: null,
-        date: '2026-08-31',
-        actorId: 'user-1',
+        date: "2026-08-31",
+        actorId: "user-1",
         writeOff: false,
       },
     },
-  ])
-})
+  ]);
+});
 
-test('invalid disposal dates return 422 before reaching the disposal engine', async () => {
+test("invalid disposal dates return 422 before reaching the disposal engine", async () => {
   const cases: Array<{ label: string; date: unknown }> = [
-    { label: 'empty', date: '' },
-    { label: 'non-string', date: 20260831 },
-    { label: 'malformed format', date: '31-08-2026' },
-    { label: 'impossible calendar date', date: '2026-02-30' },
-  ]
+    { label: "empty", date: "" },
+    { label: "non-string", date: 20260831 },
+    { label: "malformed format", date: "31-08-2026" },
+    { label: "impossible calendar date", date: "2026-02-30" },
+  ];
 
   for (const { label, date } of cases) {
-    reset()
+    reset();
 
-    const response = await post({ date })
+    const response = await post({ date });
 
-    assert.equal(response.status, 422, label)
-    assert.deepEqual(routeState.businessTodayCalls, [], `${label} date must not default`)
-    assert.deepEqual(routeState.disposeCalls, [], `${label} date must not reach disposeAsset`)
+    assert.equal(response.status, 422, label);
+    assert.deepEqual(routeState.businessTodayCalls, [], `${label} date must not default`);
+    assert.deepEqual(routeState.disposeCalls, [], `${label} date must not reach disposeAsset`);
   }
-})
+});

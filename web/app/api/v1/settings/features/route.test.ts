@@ -5,8 +5,10 @@ import test from "node:test";
 const stateKey = Symbol.for("openbooks.v1-settings-features-route-test");
 interface RouteState {
   applied: { orgId: string; actorId: string; changes: unknown } | null;
-  appliedResult: { ok: true; before: unknown; after: unknown } | { ok: false; error: string; key?: string };
-  normalized: { ok: true; changes: Record<string, boolean> } | { ok: false; error: string; key?: string };
+  appliedResult:
+    { ok: true; before: unknown; after: unknown } | { ok: false; error: string; key?: string };
+  normalized:
+    { ok: true; changes: Record<string, boolean> } | { ok: false; error: string; key?: string };
   normalizedInput: unknown;
 }
 const routeState: RouteState = {
@@ -70,11 +72,12 @@ stubModules({
 
 const { GET, POST } = (await import("./route.ts")) as typeof import("./route.ts");
 
-const post = (body: unknown, headers: Record<string, string> = {}) => new Request("http://openbooks.test/api/v1/settings/features", {
-  method: "POST",
-  headers: { "content-type": "application/json", ...headers },
-  body: JSON.stringify(body),
-});
+const post = (body: unknown, headers: Record<string, string> = {}) =>
+  new Request("http://openbooks.test/api/v1/settings/features", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
 
 test("GET /api/v1/settings/features lists through listApplicationFeatures", async () => {
   const response = await GET(new Request("http://openbooks.test/api/v1/settings/features"));
@@ -86,14 +89,20 @@ test("POST /api/v1/settings/features applies normalized changes", async () => {
   routeState.normalized = { ok: true, changes: { projects: true } };
   routeState.appliedResult = { ok: true, before: { projects: false }, after: { projects: true } };
   routeState.applied = null;
-  const response = await POST(post({ features: { projects: true } }, { "idempotency-key": "key-1" }));
+  const response = await POST(
+    post({ features: { projects: true } }, { "idempotency-key": "key-1" }),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     before: { projects: false },
     after: { projects: true },
   });
   assert.equal(response.headers.get("idempotency-replayed"), "false");
-  assert.deepEqual(routeState.applied, { orgId: "org-1", actorId: "user-1", changes: { projects: true } });
+  assert.deepEqual(routeState.applied, {
+    orgId: "org-1",
+    actorId: "user-1",
+    changes: { projects: true },
+  });
 });
 
 test("POST /api/v1/settings/features also accepts a top-level feature map", async () => {
@@ -109,7 +118,11 @@ test("POST /api/v1/settings/features refuses unknown feature keys without applyi
   routeState.applied = null;
   const response = await POST(post({ features: { nope: true } }, { "idempotency-key": "key-1" }));
   assert.equal(response.status, 422);
-  assert.deepEqual(await response.json(), { error: "invalid-feature", code: "invalid_input", details: { key: "nope" } });
+  assert.deepEqual(await response.json(), {
+    error: "invalid-feature",
+    code: "invalid_input",
+    details: { key: "nope" },
+  });
   assert.equal(routeState.applied, null);
 });
 

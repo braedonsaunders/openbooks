@@ -50,7 +50,8 @@ export async function setupRemedyFor(
   },
 ): Promise<string> {
   const { actorHasPermission } = await import("../../organization/actor-permissions.ts");
-  if (await actorHasPermission(exec, args.orgId, args.actorId, args.setupPermission)) return args.setupRemedy;
+  if (await actorHasPermission(exec, args.orgId, args.actorId, args.setupPermission))
+    return args.setupRemedy;
   return args.selfServiceRemedy;
 }
 
@@ -61,7 +62,11 @@ export async function setupRemedyFor(
  * cannot do. The toggle wording stays identical for administrators with
  * the setup grant.
  */
-export async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string, actorId?: string): Promise<void> {
+export async function assertHrmFeatureOn(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId?: string,
+): Promise<void> {
   const { lockAndCheckOrgFeature } = await import("../../organization/org-feature-lock.ts");
   if (!(await lockAndCheckOrgFeature(exec, orgId, "hrm"))) {
     const remedy =
@@ -71,7 +76,8 @@ export async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string, actor
             orgId,
             actorId,
             setupPermission: "admin.setup.manage",
-            setupRemedy: "hrm feature is disabled: enable it on Company Settings → Features before using self-service",
+            setupRemedy:
+              "hrm feature is disabled: enable it on Company Settings → Features before using self-service",
             selfServiceRemedy:
               "human resources (HRM) isn't turned on for your employer — ask your administrator to turn it on under Company Settings → Features before using self-service",
           });
@@ -86,9 +92,14 @@ export async function actorPartyOf(
 ): Promise<string> {
   const org = requireId(orgId, "orgId");
   const user = requireId(userId, "userId");
-  const row = (await exec.execute<{ partyId: string | null }>(sql`
+  const row = (
+    await exec.execute<{ partyId: string | null }>(
+      sql`
     select party_id as "partyId" from users where org_id = ${org} and id = ${user}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row?.partyId) {
     throw new SelfServiceError(
       "NO_LINK",

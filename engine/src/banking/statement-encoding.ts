@@ -1,28 +1,32 @@
 /** Statement byte/text decoding. Split from banking.ts (pure moves only). */
-import { BankingError, type StatementSourceContent, type StatementTextSource } from "./banking-core"
+import {
+  BankingError,
+  type StatementSourceContent,
+  type StatementTextSource,
+} from "./banking-core";
 
 const STATEMENT_ENCODING_ALIASES: Readonly<Record<string, string>> = {
   "1252": "windows-1252",
-  "cp1252": "windows-1252",
+  cp1252: "windows-1252",
   "windows-1252": "windows-1252",
   "iso-8859-1": "windows-1252",
   "iso8859-1": "windows-1252",
-  "latin1": "windows-1252",
+  latin1: "windows-1252",
   "65001": "utf-8",
   "utf-8": "utf-8",
-  "utf8": "utf-8",
+  utf8: "utf-8",
   "1200": "utf-16le",
-  "unicode": "utf-16",
+  unicode: "utf-16",
   "utf-16": "utf-16",
   "utf-16le": "utf-16le",
-  "utf16": "utf-16",
-  "utf16le": "utf-16le",
+  utf16: "utf-16",
+  utf16le: "utf-16le",
   "1201": "utf-16be",
   "utf-16be": "utf-16be",
-  "utf16be": "utf-16be",
-  "ascii": "ascii",
-  "none": "",
-  "usascii": "ascii",
+  utf16be: "utf-16be",
+  ascii: "ascii",
+  none: "",
+  usascii: "ascii",
   "us-ascii": "ascii",
 };
 
@@ -44,9 +48,7 @@ function normalizeStatementEncoding(label: string): string | null {
 function statementEncodingLabel(text: string, source?: StatementTextSource): string | null {
   if (source !== "ofx" && source !== "camt053") return null;
   const withoutBom = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-  const xml = withoutBom.match(
-    /^[\t\r\n ]*<\?xml\b[^>]*\bencoding\s*=\s*["']\s*([^\s"']+)/i,
-  )?.[1];
+  const xml = withoutBom.match(/^[\t\r\n ]*<\?xml\b[^>]*\bencoding\s*=\s*["']\s*([^\s"']+)/i)?.[1];
   if (xml) return xml;
   if (source !== "ofx") return null;
 
@@ -116,7 +118,9 @@ function assertStatementEncoding(
 ): void {
   const decodedLabel = statementEncodingLabel(text, source);
   if (rawLabel && !decodedLabel) {
-    throw new BankingError(`Statement source encoding declaration "${rawLabel}" does not match its bytes`);
+    throw new BankingError(
+      `Statement source encoding declaration "${rawLabel}" does not match its bytes`,
+    );
   }
   const label = decodedLabel ?? rawLabel;
   if (!label) return;
@@ -150,8 +154,8 @@ export function decodeStatementSourceText(
   if (bytes.length === 0) return "";
 
   if (
-    (bytes[0] === 0xff && bytes[1] === 0xfe && bytes[2] === 0x00 && bytes[3] === 0x00)
-    || (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0xfe && bytes[3] === 0xff)
+    (bytes[0] === 0xff && bytes[1] === 0xfe && bytes[2] === 0x00 && bytes[3] === 0x00) ||
+    (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0xfe && bytes[3] === 0xff)
   ) {
     throw new BankingError("UTF-32 bank statements are not supported");
   }

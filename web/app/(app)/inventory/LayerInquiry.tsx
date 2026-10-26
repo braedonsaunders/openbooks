@@ -19,12 +19,7 @@ export function LayerInquiry({
       pending={false}
       size="xl"
     >
-      <StockControls
-        key={itemId}
-        view="layers"
-        itemId={itemId}
-        stockLocationId={stockLocationId}
-      />
+      <StockControls key={itemId} view="layers" itemId={itemId} stockLocationId={stockLocationId} />
     </AsyncUrlDrawer>
   );
 }

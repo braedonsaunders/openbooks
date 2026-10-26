@@ -1,7 +1,7 @@
-import type { NextResponse } from 'next/server'
-import { AllocationRuleError, AllocationRunError } from '@openbooks/engine/allocations/runtime'
-import { notFound } from '@/lib/api/responses'
-import { apiErrorResponse } from './api/error-response'
+import type { NextResponse } from "next/server";
+import { AllocationRuleError, AllocationRunError } from "@openbooks/engine/allocations/runtime";
+import { notFound } from "@/lib/api/responses";
+import { apiErrorResponse } from "./api/error-response";
 
 /**
  * Uniform record denial for allocation configuration writes: a missing
@@ -10,10 +10,10 @@ import { apiErrorResponse } from './api/error-response'
  * error keeps the standard mapping.
  */
 export async function allocationWriteErrorResponse(error: unknown): Promise<NextResponse> {
-  if (error instanceof AllocationRuleError && error.code === 'NOT_FOUND') {
-    return notFound('record')
+  if (error instanceof AllocationRuleError && error.code === "NOT_FOUND") {
+    return notFound("record");
   }
-  return allocationErrorResponse(error)
+  return allocationErrorResponse(error);
 }
 
 /**
@@ -24,17 +24,17 @@ export async function allocationWriteErrorResponse(error: unknown): Promise<Next
  */
 export async function allocationErrorResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof AllocationRuleError) {
-    if (error.code === 'NOT_FOUND') return notFound('record')
-    if (error.code === 'STALE') {
-      return apiErrorResponse(error, { safeStatus: 409, details: { code: 'STALE' } })
+    if (error.code === "NOT_FOUND") return notFound("record");
+    if (error.code === "STALE") {
+      return apiErrorResponse(error, { safeStatus: 409, details: { code: "STALE" } });
     }
     const details: Record<string, unknown> = {
       code: error.code,
-    }
-    if (error.problems) details.problems = error.problems
-    return apiErrorResponse(error, { safeStatus: 422, details })
+    };
+    if (error.problems) details.problems = error.problems;
+    return apiErrorResponse(error, { safeStatus: 422, details });
   }
-  return apiErrorResponse(error)
+  return apiErrorResponse(error);
 }
 
 /**
@@ -43,10 +43,13 @@ export async function allocationErrorResponse(error: unknown): Promise<NextRespo
  * Unexpected defects stay a generic 500 so a closed GL period never renders
  * as "posting failed".
  */
-export async function allocationRunErrorResponse(error: unknown, _fallback: string): Promise<NextResponse> {
+export async function allocationRunErrorResponse(
+  error: unknown,
+  _fallback: string,
+): Promise<NextResponse> {
   if (error instanceof AllocationRunError) {
-    if (error.code === 'NOT_FOUND') return notFound('record')
-    return apiErrorResponse(error, { safeStatus: 422 })
+    if (error.code === "NOT_FOUND") return notFound("record");
+    return apiErrorResponse(error, { safeStatus: 422 });
   }
-  return apiErrorResponse(error)
+  return apiErrorResponse(error);
 }

@@ -5,13 +5,26 @@ import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { commenceLease, createLeaseAgreement, LeaseError, postDueLeaseSchedules } from "./leases.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  commenceLease,
+  createLeaseAgreement,
+  LeaseError,
+  postDueLeaseSchedules,
+} from "./leases.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Force both requests past discovery, then release their competing writes. */
-async function raceBehindFence<T>(table: "lease_agreement_schedule_lines" | "journal_entries", work: () => Promise<T>) {
+async function raceBehindFence<T>(
+  table: "lease_agreement_schedule_lines" | "journal_entries",
+  work: () => Promise<T>,
+) {
   const fence = await pool.connect();
   let raced: Promise<PromiseSettledResult<T>[]> | undefined;
   try {
@@ -21,13 +34,21 @@ async function raceBehindFence<T>(table: "lease_agreement_schedule_lines" | "jou
     raced = Promise.allSettled([work(), work()]);
     let parked = false;
     for (let attempt = 0; attempt < 400; attempt++) {
-      const count = (await pool.query<{ n: number }>(`
+      const count = (
+        await pool.query<{ n: number }>(
+          `
         with recursive blocked(pid) as (
           select pid from pg_stat_activity where $1::int = any(pg_blocking_pids(pid))
           union
           select a.pid from pg_stat_activity a join blocked b on b.pid = any(pg_blocking_pids(a.pid))
-        ) select count(*)::int as n from blocked`, [pid])).rows[0]!.n;
-      if (count >= 2) { parked = true; break; }
+        ) select count(*)::int as n from blocked`,
+          [pid],
+        )
+      ).rows[0]!.n;
+      if (count >= 2) {
+        parked = true;
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     assert.ok(parked, "both requests must reach the controlled lock interleave");
@@ -71,93 +92,104 @@ async function seedLeaseAccounts(org: ScratchOrg): Promise<LeaseAccounts> {
 }
 
 async function glBalance(orgId: string, accountId: string): Promise<bigint> {
-  const r = (await db.execute<{ bal: string }>(sql`
+  const r = await db.execute<{ bal: string }>(
+    sql`
     select coalesce(sum(amount), 0) as bal from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-     where l.org_id = ${orgId} and l.account_id = ${accountId}`, "objects"));
+     where l.org_id = ${orgId} and l.account_id = ${accountId}`,
+    "objects",
+  );
   return toUnits(r[0]!.bal);
 }
 
-test("finance lease: commencement, payments, amortization — full lifecycle to zero", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    // Monthly lease inside the fixture's open period: 3 payments of 1,000 at
-    // 6% annual (0.5%/month exact), commencing 2026-07-01.
-    const { leaseId, classification } = await createLeaseAgreement(org.orgId, null, {
-      subsidiaryId: org.subsidiaryId,
-      leaseNumber: "L-FIN-1",
-      commencementOn: "2026-07-01",
-      termPeriods: 3,
-      paymentFrequency: "monthly",
-      paymentAmount: "1000",
-      annualDiscountRatePercent: "6",
-      classificationInputs: { transfersOwnership: true },
-      accounts,
-    });
-    assert.equal(classification.model, "finance");
+test(
+  "finance lease: commencement, payments, amortization — full lifecycle to zero",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      // Monthly lease inside the fixture's open period: 3 payments of 1,000 at
+      // 6% annual (0.5%/month exact), commencing 2026-07-01.
+      const { leaseId, classification } = await createLeaseAgreement(org.orgId, null, {
+        subsidiaryId: org.subsidiaryId,
+        leaseNumber: "L-FIN-1",
+        commencementOn: "2026-07-01",
+        termPeriods: 3,
+        paymentFrequency: "monthly",
+        paymentAmount: "1000",
+        annualDiscountRatePercent: "6",
+        classificationInputs: { transfersOwnership: true },
+        accounts,
+      });
+      assert.equal(classification.model, "finance");
 
-    const commenced = await commenceLease(org.orgId, leaseId, null);
-    // PV of 3×1000 at 0.5%: 2,970.2481
-    assert.equal(commenced.liability, "2970.2481");
-    assert.equal(await glBalance(org.orgId, accounts.rouAsset), toUnits("2970.2481"));
-    assert.equal(await glBalance(org.orgId, accounts.leaseLiability), -toUnits("2970.2481"));
+      const commenced = await commenceLease(org.orgId, leaseId, null);
+      // PV of 3×1000 at 0.5%: 2,970.2481
+      assert.equal(commenced.liability, "2970.2481");
+      assert.equal(await glBalance(org.orgId, accounts.rouAsset), toUnits("2970.2481"));
+      assert.equal(await glBalance(org.orgId, accounts.leaseLiability), -toUnits("2970.2481"));
 
-    // Idempotent commencement.
-    const again = await commenceLease(org.orgId, leaseId, null);
-    assert.equal(again.commencementEntryId, commenced.commencementEntryId);
-    assert.equal(await glBalance(org.orgId, accounts.rouAsset), toUnits("2970.2481"));
+      // Idempotent commencement.
+      const again = await commenceLease(org.orgId, leaseId, null);
+      assert.equal(again.commencementEntryId, commenced.commencementEntryId);
+      assert.equal(await glBalance(org.orgId, accounts.rouAsset), toUnits("2970.2481"));
 
-    // Fixture only opens July — post the July payment (due 7/31).
-    const run = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
-    assert.equal(run.posted, 1);
-    // Interest month 1 = round(2970.2481 × 0.005) = 14.8512
-    assert.equal(await glBalance(org.orgId, accounts.interestExpense), toUnits("14.8512"));
-    assert.equal(
-      await glBalance(org.orgId, accounts.leaseLiability),
-      -(toUnits("2970.2481") - (toUnits("1000") - toUnits("14.8512"))),
-    );
-    // Amortization month 1 = apportion(2970.2481 / 3) → 990.0827
-    assert.equal(await glBalance(org.orgId, accounts.amortizationExpense), toUnits("990.0827"));
+      // Fixture only opens July — post the July payment (due 7/31).
+      const run = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
+      assert.equal(run.posted, 1);
+      // Interest month 1 = round(2970.2481 × 0.005) = 14.8512
+      assert.equal(await glBalance(org.orgId, accounts.interestExpense), toUnits("14.8512"));
+      assert.equal(
+        await glBalance(org.orgId, accounts.leaseLiability),
+        -(toUnits("2970.2481") - (toUnits("1000") - toUnits("14.8512"))),
+      );
+      // Amortization month 1 = apportion(2970.2481 / 3) → 990.0827
+      assert.equal(await glBalance(org.orgId, accounts.amortizationExpense), toUnits("990.0827"));
 
-    // Idempotent: re-running as of the same date posts nothing further.
-    const rerun = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
-    assert.equal(rerun.posted, 0);
-    assert.equal(await glBalance(org.orgId, accounts.interestExpense), toUnits("14.8512"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Idempotent: re-running as of the same date posts nothing further.
+      const rerun = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
+      assert.equal(rerun.posted, 0);
+      assert.equal(await glBalance(org.orgId, accounts.interestExpense), toUnits("14.8512"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("short-term exempt lease stays off balance sheet; payments expense straight-line", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    const { leaseId } = await createLeaseAgreement(org.orgId, null, {
-      subsidiaryId: org.subsidiaryId,
-      leaseNumber: "L-ST-1",
-      commencementOn: "2026-07-01",
-      termPeriods: 1,
-      paymentFrequency: "monthly",
-      paymentAmount: "1000",
-      annualDiscountRatePercent: "6",
-      exemption: "short_term",
-      accounts,
-    });
-    const commenced = await commenceLease(org.orgId, leaseId, null);
-    assert.equal(commenced.liability, "0");
-    assert.equal(commenced.commencementEntryId, null);
-    assert.equal(await glBalance(org.orgId, accounts.rouAsset), 0n);
-    assert.equal(await glBalance(org.orgId, accounts.leaseLiability), 0n);
+test(
+  "short-term exempt lease stays off balance sheet; payments expense straight-line",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+        subsidiaryId: org.subsidiaryId,
+        leaseNumber: "L-ST-1",
+        commencementOn: "2026-07-01",
+        termPeriods: 1,
+        paymentFrequency: "monthly",
+        paymentAmount: "1000",
+        annualDiscountRatePercent: "6",
+        exemption: "short_term",
+        accounts,
+      });
+      const commenced = await commenceLease(org.orgId, leaseId, null);
+      assert.equal(commenced.liability, "0");
+      assert.equal(commenced.commencementEntryId, null);
+      assert.equal(await glBalance(org.orgId, accounts.rouAsset), 0n);
+      assert.equal(await glBalance(org.orgId, accounts.leaseLiability), 0n);
 
-    const run = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
-    assert.equal(run.posted, 1);
-    assert.equal(await glBalance(org.orgId, accounts.leaseExpense), toUnits("1000"));
-    assert.equal(await glBalance(org.orgId, accounts.rouAsset), 0n);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const run = await postDueLeaseSchedules(org.orgId, "2026-07-31", null);
+      assert.equal(run.posted, 1);
+      assert.equal(await glBalance(org.orgId, accounts.leaseExpense), toUnits("1000"));
+      assert.equal(await glBalance(org.orgId, accounts.rouAsset), 0n);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a 13-month lease cannot elect the short-term exemption", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -182,64 +214,120 @@ test("a 13-month lease cannot elect the short-term exemption", { skip: !DB }, as
   }
 });
 
-test("invalid lease inputs are refused as LeaseError with no rows written", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    const base = {
-      subsidiaryId: org.subsidiaryId,
-      commencementOn: "2026-07-01",
-      termPeriods: 3,
-      paymentFrequency: "monthly" as const,
-      paymentAmount: "1000",
-      annualDiscountRatePercent: "6",
-      accounts,
-    };
-    const counts = async () => {
-      const leases = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`, "objects"))[0]!.n;
-      const entries = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"))[0]!.n;
-      return { leases, entries };
-    };
-    const before = await counts();
-    // Every case previously fell through to a raw storage error
-    // (check-constraint violation / invalid date syntax) instead of a domain
-    // LeaseError; the over-horizon term would additionally hang commencement.
-    const cases: [string, Record<string, unknown>, RegExp][] = [
-      ["negative payment", { paymentAmount: "-500" }, /Payment amount must be positive/],
-      ["zero payment", { paymentAmount: "0" }, /Payment amount must be positive/],
-      ["zero term", { termPeriods: 0 }, /positive whole number of periods/],
-      ["negative term", { termPeriods: -3 }, /positive whole number of periods/],
-      ["fractional term", { termPeriods: 2.5 }, /positive whole number of periods/],
-      ["over-horizon term", { termPeriods: 1201 }, /100-year horizon/],
-      ["negative rate", { annualDiscountRatePercent: "-5" }, /non-negative/],
-      ["garbage date", { commencementOn: "not-a-date" }, /calendar date/],
-      ["impossible date", { commencementOn: "2026-02-30" }, /calendar date/],
-      ["bad frequency", { paymentFrequency: "fortnightly" }, /payment frequency/],
-      ["junk classification term", { classificationInputs: { leaseTermMonths: "abc", economicLifeMonths: 120 } }, /whole number of months/],
-      ["junk classification threshold", { classificationInputs: { pvOfPayments: "91000", fairValue: "100000", pvThresholdPercent: "ninety" } }, /exact decimal/],
-      ["negative term threshold", { classificationInputs: { termThresholdPercent: "-0.01" } }, /between 0 and 100 percent/],
-      ["excessive term threshold", { classificationInputs: { termThresholdPercent: "100.01" } }, /between 0 and 100 percent/],
-      ["negative PV threshold", { classificationInputs: { pvThresholdPercent: "-1" } }, /between 0 and 100 percent/],
-      ["excessive PV threshold", { classificationInputs: { pvThresholdPercent: "101" } }, /between 0 and 100 percent/],
-      ["oversized payment", { paymentAmount: "99999999999999999999999" }, /supported ledger magnitude/],
-      ["oversized rate", { annualDiscountRatePercent: "99999999999999999999999" }, /supported ledger magnitude/],
-    ];
-    let n = 0;
-    for (const [label, override, pattern] of cases) {
-      n++;
-      await assert.rejects(
-        createLeaseAgreement(org.orgId, null, { ...base, leaseNumber: `L-BAD-${n}`, ...override } as never),
-        (e) => e instanceof LeaseError && pattern.test((e as Error).message),
-        label,
-      );
-      assert.deepEqual(await counts(), before, `no rows written for ${label}`);
+test(
+  "invalid lease inputs are refused as LeaseError with no rows written",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      const base = {
+        subsidiaryId: org.subsidiaryId,
+        commencementOn: "2026-07-01",
+        termPeriods: 3,
+        paymentFrequency: "monthly" as const,
+        paymentAmount: "1000",
+        annualDiscountRatePercent: "6",
+        accounts,
+      };
+      const counts = async () => {
+        const leases = (
+          await db.execute<{ n: number }>(
+            sql`
+        select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`,
+            "objects",
+          )
+        )[0]!.n;
+        const entries = (
+          await db.execute<{ n: number }>(
+            sql`
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`,
+            "objects",
+          )
+        )[0]!.n;
+        return { leases, entries };
+      };
+      const before = await counts();
+      // Every case previously fell through to a raw storage error
+      // (check-constraint violation / invalid date syntax) instead of a domain
+      // LeaseError; the over-horizon term would additionally hang commencement.
+      const cases: [string, Record<string, unknown>, RegExp][] = [
+        ["negative payment", { paymentAmount: "-500" }, /Payment amount must be positive/],
+        ["zero payment", { paymentAmount: "0" }, /Payment amount must be positive/],
+        ["zero term", { termPeriods: 0 }, /positive whole number of periods/],
+        ["negative term", { termPeriods: -3 }, /positive whole number of periods/],
+        ["fractional term", { termPeriods: 2.5 }, /positive whole number of periods/],
+        ["over-horizon term", { termPeriods: 1201 }, /100-year horizon/],
+        ["negative rate", { annualDiscountRatePercent: "-5" }, /non-negative/],
+        ["garbage date", { commencementOn: "not-a-date" }, /calendar date/],
+        ["impossible date", { commencementOn: "2026-02-30" }, /calendar date/],
+        ["bad frequency", { paymentFrequency: "fortnightly" }, /payment frequency/],
+        [
+          "junk classification term",
+          { classificationInputs: { leaseTermMonths: "abc", economicLifeMonths: 120 } },
+          /whole number of months/,
+        ],
+        [
+          "junk classification threshold",
+          {
+            classificationInputs: {
+              pvOfPayments: "91000",
+              fairValue: "100000",
+              pvThresholdPercent: "ninety",
+            },
+          },
+          /exact decimal/,
+        ],
+        [
+          "negative term threshold",
+          { classificationInputs: { termThresholdPercent: "-0.01" } },
+          /between 0 and 100 percent/,
+        ],
+        [
+          "excessive term threshold",
+          { classificationInputs: { termThresholdPercent: "100.01" } },
+          /between 0 and 100 percent/,
+        ],
+        [
+          "negative PV threshold",
+          { classificationInputs: { pvThresholdPercent: "-1" } },
+          /between 0 and 100 percent/,
+        ],
+        [
+          "excessive PV threshold",
+          { classificationInputs: { pvThresholdPercent: "101" } },
+          /between 0 and 100 percent/,
+        ],
+        [
+          "oversized payment",
+          { paymentAmount: "99999999999999999999999" },
+          /supported ledger magnitude/,
+        ],
+        [
+          "oversized rate",
+          { annualDiscountRatePercent: "99999999999999999999999" },
+          /supported ledger magnitude/,
+        ],
+      ];
+      let n = 0;
+      for (const [label, override, pattern] of cases) {
+        n++;
+        await assert.rejects(
+          createLeaseAgreement(org.orgId, null, {
+            ...base,
+            leaseNumber: `L-BAD-${n}`,
+            ...override,
+          } as never),
+          (e) => e instanceof LeaseError && pattern.test((e as Error).message),
+          label,
+        );
+        assert.deepEqual(await counts(), before, `no rows written for ${label}`);
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 test("creation derives the classification term from the schedule, ignoring a misstated claim", async () => {
   // A 60-month lease declaring 1 month with a 72-month economic life is
@@ -261,24 +349,32 @@ test("creation derives the classification term from the schedule, ignoring a mis
     });
     assert.equal(classification.model, "finance");
     assert.deepEqual(classification.criteria, ["term-major-part-of-life"]);
-    const stored = (await db.execute<{ inputs: { leaseTermMonths: number } }>(sql`
-      select classification_inputs as inputs from lease_agreements where id = ${leaseId} and org_id = ${org.orgId}`, "objects"))[0]!;
+    const stored = (
+      await db.execute<{ inputs: { leaseTermMonths: number } }>(
+        sql`
+      select classification_inputs as inputs from lease_agreements where id = ${leaseId} and org_id = ${org.orgId}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(stored.inputs.leaseTermMonths, 60);
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("commencement refuses a legacy huge exempt term with no rows written", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    // Seeded directly, bypassing createLeaseAgreement: a row persisted before
-    // the creation guard (the database only checks term_periods > 0) can
-    // carry a horizon no commencement loop could ever finish — including on
-    // the exempt path, which never reaches the measurement guard.
-    const leaseId = randomUUID();
-    await db.execute(sql`
+test(
+  "commencement refuses a legacy huge exempt term with no rows written",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      // Seeded directly, bypassing createLeaseAgreement: a row persisted before
+      // the creation guard (the database only checks term_periods > 0) can
+      // carry a horizon no commencement loop could ever finish — including on
+      // the exempt path, which never reaches the measurement guard.
+      const leaseId = randomUUID();
+      await db.execute(sql`
       insert into lease_agreements
         (id, org_id, subsidiary_id, lease_number, status, commencement_on, term_periods,
          payment_frequency, payment_timing, payment_amount, annual_discount_rate_percent,
@@ -292,49 +388,97 @@ test("commencement refuses a legacy huge exempt term with no rows written", { sk
               ${accounts.rouAsset}, ${accounts.leaseLiability}, ${accounts.interestExpense},
               ${accounts.amortizationExpense}, ${accounts.leaseExpense}, ${accounts.payment},
               '{}'::jsonb, null, null)`);
-    await assert.rejects(
-      commenceLease(org.orgId, leaseId, null),
-      (e) => e instanceof LeaseError && /100-year horizon/.test(e.message),
-    );
-    // Refused before the boundary loop: no schedule rows, no entries, still draft.
-    const lines = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${leaseId}`, "objects"))[0]!.n;
-    const entries = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"))[0]!.n;
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`, "objects"))[0]!.status;
-    assert.equal(lines, 0);
-    assert.equal(entries, 0);
-    assert.equal(status, "draft");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        commenceLease(org.orgId, leaseId, null),
+        (e) => e instanceof LeaseError && /100-year horizon/.test(e.message),
+      );
+      // Refused before the boundary loop: no schedule rows, no entries, still draft.
+      const lines = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${leaseId}`,
+          "objects",
+        )
+      )[0]!.n;
+      const entries = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
+      select status from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`,
+          "objects",
+        )
+      )[0]!.status;
+      assert.equal(lines, 0);
+      assert.equal(entries, 0);
+      assert.equal(status, "draft");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 for (const exemption of [null, "short_term"] as const) {
-  test(`concurrent lease commencement replays one ${exemption ?? "finance"} result`, { skip: !DB }, async () => {
-    const org = await createScratchOrg();
-    try {
-      const accounts = await seedLeaseAccounts(org);
-      const { leaseId } = await createLeaseAgreement(org.orgId, null, {
-        subsidiaryId: org.subsidiaryId, leaseNumber: "LEASE-COMMENCE-RACE",
-        commencementOn: "2026-07-01", termPeriods: 3, paymentFrequency: "monthly",
-        paymentAmount: "1000", annualDiscountRatePercent: "6",
-        classificationInputs: { transfersOwnership: exemption === null }, exemption, accounts,
-      });
-      const results = await raceBehindFence("lease_agreement_schedule_lines", () => commenceLease(org.orgId, leaseId, null));
-      assert.deepEqual(results.map((result) => result.status === "fulfilled" ? "fulfilled" : result.reason?.cause?.message ?? String(result.reason)), ["fulfilled", "fulfilled"], "both commencement requests must succeed");
-      if (results[0]?.status !== "fulfilled" || results[1]?.status !== "fulfilled") return;
-      const canonical = (value: Awaited<ReturnType<typeof commenceLease>>) => ({
-        ...value, liability: toUnits(value.liability), rouAsset: toUnits(value.rouAsset),
-      });
-      assert.deepEqual(canonical(results[0].value), canonical(results[1].value));
-      const count = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${leaseId}`, "objects"))[0]!.n;
-      assert.equal(count, 3);
-      assert.equal(await glBalance(org.orgId, accounts.rouAsset), toUnits(results[0].value.rouAsset));
-    } finally { await dropScratchOrg(org.orgId); }
-  });
+  test(
+    `concurrent lease commencement replays one ${exemption ?? "finance"} result`,
+    { skip: !DB },
+    async () => {
+      const org = await createScratchOrg();
+      try {
+        const accounts = await seedLeaseAccounts(org);
+        const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+          subsidiaryId: org.subsidiaryId,
+          leaseNumber: "LEASE-COMMENCE-RACE",
+          commencementOn: "2026-07-01",
+          termPeriods: 3,
+          paymentFrequency: "monthly",
+          paymentAmount: "1000",
+          annualDiscountRatePercent: "6",
+          classificationInputs: { transfersOwnership: exemption === null },
+          exemption,
+          accounts,
+        });
+        const results = await raceBehindFence("lease_agreement_schedule_lines", () =>
+          commenceLease(org.orgId, leaseId, null),
+        );
+        assert.deepEqual(
+          results.map((result) =>
+            result.status === "fulfilled"
+              ? "fulfilled"
+              : (result.reason?.cause?.message ?? String(result.reason)),
+          ),
+          ["fulfilled", "fulfilled"],
+          "both commencement requests must succeed",
+        );
+        if (results[0]?.status !== "fulfilled" || results[1]?.status !== "fulfilled") return;
+        const canonical = (value: Awaited<ReturnType<typeof commenceLease>>) => ({
+          ...value,
+          liability: toUnits(value.liability),
+          rouAsset: toUnits(value.rouAsset),
+        });
+        assert.deepEqual(canonical(results[0].value), canonical(results[1].value));
+        const count = (
+          await db.execute<{ n: number }>(
+            sql`
+        select count(*)::int as n from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${leaseId}`,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(count, 3);
+        assert.equal(
+          await glBalance(org.orgId, accounts.rouAsset),
+          toUnits(results[0].value.rouAsset),
+        );
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }
 
 test("concurrent lease schedule runners claim a due payment once", { skip: !DB }, async () => {
@@ -342,26 +486,59 @@ test("concurrent lease schedule runners claim a due payment once", { skip: !DB }
   try {
     const accounts = await seedLeaseAccounts(org);
     const { leaseId } = await createLeaseAgreement(org.orgId, null, {
-      subsidiaryId: org.subsidiaryId, leaseNumber: "LEASE-PAYMENT-RACE",
-      commencementOn: "2026-07-01", termPeriods: 3, paymentFrequency: "monthly",
-      paymentAmount: "1000", annualDiscountRatePercent: "6",
-      classificationInputs: { transfersOwnership: true }, accounts,
+      subsidiaryId: org.subsidiaryId,
+      leaseNumber: "LEASE-PAYMENT-RACE",
+      commencementOn: "2026-07-01",
+      termPeriods: 3,
+      paymentFrequency: "monthly",
+      paymentAmount: "1000",
+      annualDiscountRatePercent: "6",
+      classificationInputs: { transfersOwnership: true },
+      accounts,
     });
     await commenceLease(org.orgId, leaseId, null);
-    const results = await raceBehindFence("journal_entries", () => postDueLeaseSchedules(org.orgId, "2026-07-31", null));
-    assert.deepEqual(results.map((result) => result.status === "fulfilled" ? "fulfilled" : result.reason?.cause?.message ?? String(result.reason)), ["fulfilled", "fulfilled"], "the losing retry must safely skip the claimed payment");
+    const results = await raceBehindFence("journal_entries", () =>
+      postDueLeaseSchedules(org.orgId, "2026-07-31", null),
+    );
+    assert.deepEqual(
+      results.map((result) =>
+        result.status === "fulfilled"
+          ? "fulfilled"
+          : (result.reason?.cause?.message ?? String(result.reason)),
+      ),
+      ["fulfilled", "fulfilled"],
+      "the losing retry must safely skip the claimed payment",
+    );
     if (results[0]?.status !== "fulfilled" || results[1]?.status !== "fulfilled") return;
-    assert.equal(results.reduce((n, result) => n + (result.status === "fulfilled" ? result.value.posted : 0), 0), 1);
+    assert.equal(
+      results.reduce(
+        (n, result) => n + (result.status === "fulfilled" ? result.value.posted : 0),
+        0,
+      ),
+      1,
+    );
     assert.equal(await glBalance(org.orgId, accounts.payment), -toUnits("1000"));
-    const posted = (await db.execute<{ n: number }>(sql`
+    const posted = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from lease_agreement_schedule_lines
-       where org_id=${org.orgId} and lease_id=${leaseId} and payment_entry_id is not null and amortization_entry_id is not null`, "objects"))[0]!.n;
+       where org_id=${org.orgId} and lease_id=${leaseId} and payment_entry_id is not null and amortization_entry_id is not null`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(posted, 1);
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
 
 for (const phase of ["commencement", "payment"] as const) {
-  for (const restriction of ["account", "location", "inactive entity", "allowed descendant"] as const) {
+  for (const restriction of [
+    "account",
+    "location",
+    "inactive entity",
+    "allowed descendant",
+  ] as const) {
     test(`lease ${phase} enforces ${restriction} posting scope`, { skip: !DB }, async () => {
       const org = await createScratchOrg();
       try {
@@ -371,12 +548,19 @@ for (const phase of ["commencement", "payment"] as const) {
           insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
           values(${branchId},${org.orgId},${org.subsidiaryId},'Lease branch','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
         const allowed = restriction === "allowed descendant";
-        const subsidiaryId = allowed || restriction === "inactive entity" ? branchId : org.subsidiaryId;
+        const subsidiaryId =
+          allowed || restriction === "inactive entity" ? branchId : org.subsidiaryId;
         const { leaseId } = await createLeaseAgreement(org.orgId, null, {
-          subsidiaryId, leaseNumber: "LEASE-SCOPE", commencementOn: "2026-07-01",
-          termPeriods: 3, paymentFrequency: "monthly", paymentAmount: "1000",
-          annualDiscountRatePercent: "6", classificationInputs: { transfersOwnership: true },
-          accounts, locationId: org.locationId,
+          subsidiaryId,
+          leaseNumber: "LEASE-SCOPE",
+          commencementOn: "2026-07-01",
+          termPeriods: 3,
+          paymentFrequency: "monthly",
+          paymentAmount: "1000",
+          annualDiscountRatePercent: "6",
+          classificationInputs: { transfersOwnership: true },
+          accounts,
+          locationId: org.locationId,
         });
         if (phase === "payment") await commenceLease(org.orgId, leaseId, null);
         const accountId = phase === "commencement" ? accounts.rouAsset : accounts.payment;
@@ -387,77 +571,129 @@ for (const phase of ["commencement", "payment"] as const) {
           await db.execute(sql`update locations set subsidiary_id=${branchId},subsidiary_include_children=false
             where org_id=${org.orgId} and id=${org.locationId}`);
         } else {
-          await db.execute(sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${subsidiaryId}`);
+          await db.execute(
+            sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${subsidiaryId}`,
+          );
         }
-        const run = () => phase === "commencement"
-          ? commenceLease(org.orgId, leaseId, null)
-          : postDueLeaseSchedules(org.orgId, "2026-07-31", null);
+        const run = () =>
+          phase === "commencement"
+            ? commenceLease(org.orgId, leaseId, null)
+            : postDueLeaseSchedules(org.orgId, "2026-07-31", null);
         if (allowed) {
           await run();
         } else {
           await assert.rejects(run, /restricted to another subsidiary|inactive/);
-          const count = (await db.execute<{ n: number }>(sql`
-            select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`, "objects"))[0]!.n;
-          assert.equal(count, phase === "commencement" ? 0 : 1, "refusal leaves no partial journal");
-          await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${accountId}`);
-          await db.execute(sql`update locations set subsidiary_id=null where org_id=${org.orgId} and id=${org.locationId}`);
-          await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${subsidiaryId}`);
+          const count = (
+            await db.execute<{ n: number }>(
+              sql`
+            select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`,
+              "objects",
+            )
+          )[0]!.n;
+          assert.equal(
+            count,
+            phase === "commencement" ? 0 : 1,
+            "refusal leaves no partial journal",
+          );
+          await db.execute(
+            sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${accountId}`,
+          );
+          await db.execute(
+            sql`update locations set subsidiary_id=null where org_id=${org.orgId} and id=${org.locationId}`,
+          );
+          await db.execute(
+            sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${subsidiaryId}`,
+          );
           await run();
         }
-        const lease = (await db.execute<{ status: string }>(sql`
-          select status from lease_agreements where org_id=${org.orgId} and id=${leaseId}`, "objects"))[0]!;
+        const lease = (
+          await db.execute<{ status: string }>(
+            sql`
+          select status from lease_agreements where org_id=${org.orgId} and id=${leaseId}`,
+            "objects",
+          )
+        )[0]!;
         assert.equal(lease.status, "active");
-      } finally { await dropScratchOrg(org.orgId); }
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
     });
   }
 }
 
-test("lease posting rechecks account scope after a concurrent restriction edit commits", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const writer = await pool.connect();
-  let pending: Promise<PromiseSettledResult<Awaited<ReturnType<typeof commenceLease>>>> | undefined;
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    const branchId = randomUUID();
-    await db.execute(sql`
+test(
+  "lease posting rechecks account scope after a concurrent restriction edit commits",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const writer = await pool.connect();
+    let pending:
+      Promise<PromiseSettledResult<Awaited<ReturnType<typeof commenceLease>>>> | undefined;
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      const branchId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
       values(${branchId},${org.orgId},${org.subsidiaryId},'Restriction owner','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
-    const { leaseId } = await createLeaseAgreement(org.orgId, null, {
-      subsidiaryId: org.subsidiaryId, leaseNumber: "LEASE-SCOPE-RACE", commencementOn: "2026-07-01",
-      termPeriods: 3, paymentFrequency: "monthly", paymentAmount: "1000", annualDiscountRatePercent: "6",
-      classificationInputs: { transfersOwnership: true }, accounts,
-    });
-    await writer.query("begin");
-    await writer.query("select set_config('app.bypass_rls','on',true)");
-    await writer.query("update accounts set subsidiary_id=$1,subsidiary_include_children=false where org_id=$2 and id=$3", [branchId, org.orgId, accounts.rouAsset]);
-    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
-    pending = commenceLease(org.orgId, leaseId, null).then(
-      (value) => ({ status: "fulfilled", value }),
-      (reason: unknown) => ({ status: "rejected", reason }),
-    );
-    let blocked = false;
-    for (let attempt = 0; attempt < 400; attempt++) {
-      const count = (await pool.query<{ n: number }>(
-        "select count(*)::int as n from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))", [pid],
-      )).rows[0]!.n;
-      if (count) { blocked = true; break; }
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+        subsidiaryId: org.subsidiaryId,
+        leaseNumber: "LEASE-SCOPE-RACE",
+        commencementOn: "2026-07-01",
+        termPeriods: 3,
+        paymentFrequency: "monthly",
+        paymentAmount: "1000",
+        annualDiscountRatePercent: "6",
+        classificationInputs: { transfersOwnership: true },
+        accounts,
+      });
+      await writer.query("begin");
+      await writer.query("select set_config('app.bypass_rls','on',true)");
+      await writer.query(
+        "update accounts set subsidiary_id=$1,subsidiary_include_children=false where org_id=$2 and id=$3",
+        [branchId, org.orgId, accounts.rouAsset],
+      );
+      const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+        .pid;
+      pending = commenceLease(org.orgId, leaseId, null).then(
+        (value) => ({ status: "fulfilled", value }),
+        (reason: unknown) => ({ status: "rejected", reason }),
+      );
+      let blocked = false;
+      for (let attempt = 0; attempt < 400; attempt++) {
+        const count = (
+          await pool.query<{ n: number }>(
+            "select count(*)::int as n from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))",
+            [pid],
+          )
+        ).rows[0]!.n;
+        if (count) {
+          blocked = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.ok(blocked, "posting must wait for the authoritative account edit");
+      await writer.query("commit");
+      const outcome = await pending;
+      assert.equal(outcome.status, "rejected");
+      if (outcome.status === "rejected")
+        assert.match(String(outcome.reason), /restricted to another subsidiary/);
+      const count = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(count, 0);
+    } finally {
+      await writer.query("rollback");
+      writer.release();
+      await pending;
+      await dropScratchOrg(org.orgId);
     }
-    assert.ok(blocked, "posting must wait for the authoritative account edit");
-    await writer.query("commit");
-    const outcome = await pending;
-    assert.equal(outcome.status, "rejected");
-    if (outcome.status === "rejected") assert.match(String(outcome.reason), /restricted to another subsidiary/);
-    const count = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`, "objects"))[0]!.n;
-    assert.equal(count, 0);
-  } finally {
-    await writer.query("rollback");
-    writer.release();
-    await pending;
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 for (const phase of ["commencement", "payment"] as const) {
   for (const flag of ["is_active", "posts_gl"] as const) {
@@ -466,122 +702,180 @@ for (const phase of ["commencement", "payment"] as const) {
       try {
         const accounts = await seedLeaseAccounts(org);
         const { leaseId } = await createLeaseAgreement(org.orgId, null, {
-          subsidiaryId: org.subsidiaryId, leaseNumber: "LEASE-BOOK-POLICY",
-          commencementOn: "2026-07-01", termPeriods: 3, paymentFrequency: "monthly",
-          paymentAmount: "1000", annualDiscountRatePercent: "6",
-          classificationInputs: { transfersOwnership: true }, accounts,
+          subsidiaryId: org.subsidiaryId,
+          leaseNumber: "LEASE-BOOK-POLICY",
+          commencementOn: "2026-07-01",
+          termPeriods: 3,
+          paymentFrequency: "monthly",
+          paymentAmount: "1000",
+          annualDiscountRatePercent: "6",
+          classificationInputs: { transfersOwnership: true },
+          accounts,
         });
         if (phase === "payment") await commenceLease(org.orgId, leaseId, null);
         await db.execute(sql`update accounting_books set ${sql.raw(flag)}=false
           where org_id=${org.orgId} and id=${org.bookId}`);
-        const run = () => phase === "commencement"
-          ? commenceLease(org.orgId, leaseId, null)
-          : postDueLeaseSchedules(org.orgId, "2026-07-31", null);
-        await assert.rejects(run(), (error: unknown) =>
-          error instanceof LeaseError &&
-          /lease posting book is no longer active or GL-posting/.test(error.message) &&
-          /authorized administrator.*originating book.*Accounting books/.test(error.message),
-          `${phase}/${flag}: refuse the originating book and name its authorized repair path`);
-        const state = (await db.execute<{ status: string; journals: number; claimed: number }>(sql`
+        const run = () =>
+          phase === "commencement"
+            ? commenceLease(org.orgId, leaseId, null)
+            : postDueLeaseSchedules(org.orgId, "2026-07-31", null);
+        await assert.rejects(
+          run(),
+          (error: unknown) =>
+            error instanceof LeaseError &&
+            /lease posting book is no longer active or GL-posting/.test(error.message) &&
+            /authorized administrator.*originating book.*Accounting books/.test(error.message),
+          `${phase}/${flag}: refuse the originating book and name its authorized repair path`,
+        );
+        const state = (
+          await db.execute<{ status: string; journals: number; claimed: number }>(
+            sql`
           select status,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
             (select count(*)::int from lease_agreement_schedule_lines where org_id=${org.orgId}
               and lease_id=${leaseId} and payment_entry_id is not null) as claimed
-          from lease_agreements where org_id=${org.orgId} and id=${leaseId}`, "objects"))[0]!;
-        assert.deepEqual(state,{status:phase === "payment" ? "active" : "draft",journals:phase === "payment" ? 1 : 0,claimed:0});
+          from lease_agreements where org_id=${org.orgId} and id=${leaseId}`,
+            "objects",
+          )
+        )[0]!;
+        assert.deepEqual(state, {
+          status: phase === "payment" ? "active" : "draft",
+          journals: phase === "payment" ? 1 : 0,
+          claimed: 0,
+        });
         await db.execute(sql`update accounting_books set ${sql.raw(flag)}=true
           where org_id=${org.orgId} and id=${org.bookId}`);
         await run();
-      } finally { await dropScratchOrg(org.orgId); }
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
     });
   }
 }
 
-test("createLeaseAgreement refuses unreadable discount rates before storing anything", { skip: !DB }, async () => {
-  // The annual rate persists at FX scale (10 places): a decimal comma, an
-  // ambiguous separator, or an 11th decimal place must refuse with the
-  // field-naming error, never coerce, and leave no lease row behind.
-  const org = await createScratchOrg();
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    const base = {
-      subsidiaryId: org.subsidiaryId,
-      leaseNumber: "L-REFUSE-1",
-      commencementOn: "2026-07-01",
-      termPeriods: 3,
-      paymentFrequency: "monthly" as const,
-      paymentAmount: "1000",
-      annualDiscountRatePercent: "6",
-      classificationInputs: { transfersOwnership: true },
-      accounts,
-    };
-    for (const bad of ["12,34", "1,234", "1.23456789012", "$6", "abc", "", "   ", null, undefined]) {
-      await assert.rejects(
-        createLeaseAgreement(org.orgId, null, { ...base, annualDiscountRatePercent: bad as string }),
-        (error: unknown) => error instanceof LeaseError && /annual discount rate must be an exact decimal/.test(error.message),
-        `rate ${String(bad)}`,
+test(
+  "createLeaseAgreement refuses unreadable discount rates before storing anything",
+  { skip: !DB },
+  async () => {
+    // The annual rate persists at FX scale (10 places): a decimal comma, an
+    // ambiguous separator, or an 11th decimal place must refuse with the
+    // field-naming error, never coerce, and leave no lease row behind.
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      const base = {
+        subsidiaryId: org.subsidiaryId,
+        leaseNumber: "L-REFUSE-1",
+        commencementOn: "2026-07-01",
+        termPeriods: 3,
+        paymentFrequency: "monthly" as const,
+        paymentAmount: "1000",
+        annualDiscountRatePercent: "6",
+        classificationInputs: { transfersOwnership: true },
+        accounts,
+      };
+      for (const bad of [
+        "12,34",
+        "1,234",
+        "1.23456789012",
+        "$6",
+        "abc",
+        "",
+        "   ",
+        null,
+        undefined,
+      ]) {
+        await assert.rejects(
+          createLeaseAgreement(org.orgId, null, {
+            ...base,
+            annualDiscountRatePercent: bad as string,
+          }),
+          (error: unknown) =>
+            error instanceof LeaseError &&
+            /annual discount rate must be an exact decimal/.test(error.message),
+          `rate ${String(bad)}`,
+        );
+      }
+      const rows = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`,
+        "objects",
       );
+      assert.equal(rows[0]!.n, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-    const rows = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`, "objects");
-    assert.equal(rows[0]!.n, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test("lease creation validates entity references and commencement hides missing or out-of-scope leases", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const accounts = await seedLeaseAccounts(org);
-    const branchId = randomUUID();
-    await db.execute(sql`
+test(
+  "lease creation validates entity references and commencement hides missing or out-of-scope leases",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const accounts = await seedLeaseAccounts(org);
+      const branchId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Lease Branch', 'CAD', 'CA')
     `);
-    const projectId = randomUUID();
-    await db.execute(sql`insert into projects (id, org_id, name, subsidiary_id, is_active)
+      const projectId = randomUUID();
+      await db.execute(sql`insert into projects (id, org_id, name, subsidiary_id, is_active)
       values (${projectId}, ${org.orgId}, 'Lease Branch Project', ${branchId}, true)`);
-    const base = {
-      subsidiaryId: org.subsidiaryId,
-      leaseNumber: "LEASE-ENTITY-REFS",
-      commencementOn: "2026-07-01",
-      termPeriods: 3,
-      paymentFrequency: "monthly" as const,
-      paymentAmount: "1000",
-      annualDiscountRatePercent: "6",
-      classificationInputs: { transfersOwnership: true },
-      accounts,
-    };
+      const base = {
+        subsidiaryId: org.subsidiaryId,
+        leaseNumber: "LEASE-ENTITY-REFS",
+        commencementOn: "2026-07-01",
+        termPeriods: 3,
+        paymentFrequency: "monthly" as const,
+        paymentAmount: "1000",
+        annualDiscountRatePercent: "6",
+        classificationInputs: { transfersOwnership: true },
+        accounts,
+      };
 
-    await db.execute(sql`update accounts set subsidiary_id = ${branchId}, subsidiary_include_children = false
+      await db.execute(sql`update accounts set subsidiary_id = ${branchId}, subsidiary_include_children = false
       where org_id = ${org.orgId} and id = ${accounts.rouAsset}`);
-    await assert.rejects(
-      createLeaseAgreement(org.orgId, null, base),
-      (error: unknown) => error instanceof LeaseError && /restricted to another subsidiary/.test(error.message),
-    );
-    await db.execute(sql`update accounts set subsidiary_id = null, subsidiary_include_children = true
+      await assert.rejects(
+        createLeaseAgreement(org.orgId, null, base),
+        (error: unknown) =>
+          error instanceof LeaseError && /restricted to another subsidiary/.test(error.message),
+      );
+      await db.execute(sql`update accounts set subsidiary_id = null, subsidiary_include_children = true
       where org_id = ${org.orgId} and id = ${accounts.rouAsset}`);
-    await assert.rejects(
-      createLeaseAgreement(org.orgId, null, { ...base, projectId }),
-      (error: unknown) => error instanceof LeaseError && /project is restricted to another legal entity/.test(error.message),
-    );
-    const { leaseId } = await createLeaseAgreement(org.orgId, null, { ...base, subsidiaryId: branchId });
-    await assert.rejects(
-      createLeaseAgreement(org.orgId, null, { ...base, subsidiaryId: branchId }),
-      (error: unknown) => error instanceof LeaseError && /lease number is already used/.test(error.message),
-    );
+      await assert.rejects(
+        createLeaseAgreement(org.orgId, null, { ...base, projectId }),
+        (error: unknown) =>
+          error instanceof LeaseError &&
+          /project is restricted to another legal entity/.test(error.message),
+      );
+      const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+        ...base,
+        subsidiaryId: branchId,
+      });
+      await assert.rejects(
+        createLeaseAgreement(org.orgId, null, { ...base, subsidiaryId: branchId }),
+        (error: unknown) =>
+          error instanceof LeaseError && /lease number is already used/.test(error.message),
+      );
 
-    const actorId = await createScratchUser(org.orgId, "Lease Controller", "lease_controller");
-    await db.execute(sql`update app_roles set permissions = '["assets.manage"]'::jsonb,
+      const actorId = await createScratchUser(org.orgId, "Lease Controller", "lease_controller");
+      await db.execute(sql`update app_roles set permissions = '["assets.manage"]'::jsonb,
       subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
       where org_id = ${org.orgId} and key = 'lease_controller'`);
-    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fixedAssets}', 'true'::jsonb, true)
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fixedAssets}', 'true'::jsonb, true)
       where id = ${org.orgId}`);
-    await assert.rejects(commenceLease(org.orgId, randomUUID(), actorId), ScopeNotFoundError);
-    await assert.rejects(commenceLease(org.orgId, leaseId, actorId), ScopeNotFoundError);
-    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`, "objects"))[0]!.n;
-    assert.equal(count, 1, "invalid references and duplicate numbers leave no extra lease rows");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(commenceLease(org.orgId, randomUUID(), actorId), ScopeNotFoundError);
+      await assert.rejects(commenceLease(org.orgId, leaseId, actorId), ScopeNotFoundError);
+      const count = (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(count, 1, "invalid references and duplicate numbers leave no extra lease rows");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

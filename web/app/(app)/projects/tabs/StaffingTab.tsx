@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { TieOutTable } from '../../resourcing/TieOutTable'
-import type { PlanVsActualRow } from '@/lib/resourcing/tie-out'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { TieOutTable } from "../../resourcing/TieOutTable";
+import type { PlanVsActualRow } from "@/lib/resourcing/tie-out";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /**
  * The project Staffing tab.
@@ -16,41 +16,49 @@ import { readApiErrorMessage } from '@/lib/api-error'
  * body.
  */
 export function StaffingTab({ projectId }: { projectId: string }) {
-  const t = useTranslations('resourcing.cockpit')
-  const tCommon = useTranslations('common')
-  const [rows, setRows] = useState<PlanVsActualRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const t = useTranslations("resourcing.cockpit");
+  const tCommon = useTranslations("common");
+  const [rows, setRows] = useState<PlanVsActualRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
-    return fetch(`/api/resourcing/projects/${encodeURIComponent(projectId)}/staffing`, { cache: 'no-store' })
+    return fetch(`/api/resourcing/projects/${encodeURIComponent(projectId)}/staffing`, {
+      cache: "no-store",
+    })
       .then(async (res) => {
         // The refusal reads through the shared helper, which joins message
         // and remedy the same way with wider sources and a status fallback.
         if (!res.ok) {
-          setError(await readApiErrorMessage(res, tCommon('feedback.loadFailed')))
-          setRows([])
-          return
+          setError(await readApiErrorMessage(res, tCommon("feedback.loadFailed")));
+          setRows([]);
+          return;
         }
-        const body = (await res.json()) as { rows: PlanVsActualRow[] }
-        setError(null)
-        setRows(body.rows)
+        const body = (await res.json()) as { rows: PlanVsActualRow[] };
+        setError(null);
+        setRows(body.rows);
       })
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : tCommon('feedback.loadFailed'))
-        setRows([])
-      })
-  }, [projectId, tCommon])
+        setError(reason instanceof Error ? reason.message : tCommon("feedback.loadFailed"));
+        setRows([]);
+      });
+  }, [projectId, tCommon]);
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void refresh();
+  }, [refresh]);
 
   if (!rows) {
-    return <div className="h-96 animate-pulse rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+    return (
+      <div className="h-96 animate-pulse rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
+    );
   }
 
   if (rows.length === 0 && !error) {
-    return <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">{t('tieout.empty')}</p>
+    return (
+      <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+        {t("tieout.empty")}
+      </p>
+    );
   }
 
   return (
@@ -63,23 +71,23 @@ export function StaffingTab({ projectId }: { projectId: string }) {
       <TieOutTable
         rows={rows}
         labels={{
-          person: t('tieout.person'),
-          week: t('tieout.week'),
-          planned: t('tieout.planned'),
-          approved: t('tieout.approved'),
-          variance: t('tieout.variance'),
-          capacity: t('tieout.capacity'),
-          evidence: t('tieout.evidence'),
-          empty: t('tieout.empty'),
-          noCapacity: t('tieout.noCapacity'),
-          overallocated: t('tieout.overallocated'),
-          assignments: t('tieout.assignments'),
-          absences: t('tieout.absences'),
-          leaveRequest: t('tieout.leaveRequest'),
-          holidays: t('tieout.holidays'),
-          scheduleTier: t('tieout.scheduleTier'),
+          person: t("tieout.person"),
+          week: t("tieout.week"),
+          planned: t("tieout.planned"),
+          approved: t("tieout.approved"),
+          variance: t("tieout.variance"),
+          capacity: t("tieout.capacity"),
+          evidence: t("tieout.evidence"),
+          empty: t("tieout.empty"),
+          noCapacity: t("tieout.noCapacity"),
+          overallocated: t("tieout.overallocated"),
+          assignments: t("tieout.assignments"),
+          absences: t("tieout.absences"),
+          leaveRequest: t("tieout.leaveRequest"),
+          holidays: t("tieout.holidays"),
+          scheduleTier: t("tieout.scheduleTier"),
         }}
       />
     </div>
-  )
+  );
 }

@@ -39,15 +39,11 @@ const routeState: RouteState = {
   runAlreadyRunning: false,
   deny(permission) {
     return permission
-      ? NextResponse.json(
-          { error: `missing permission: ${permission}` },
-          { status: 403 },
-        )
+      ? NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
       : NextResponse.json({ error: "unauthorized" }, { status: 401 });
   },
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.sftp-schedule-toggle-delete-test')]
@@ -81,10 +77,10 @@ const mockImportJob = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "./authz" &&
-      (context.parentURL?.includes("/lib/feature-gates") ||
-        context.parentURL?.includes("/lib/super-admin"))
-      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+      (specifier === "./authz" &&
+        (context.parentURL?.includes("/lib/feature-gates") ||
+          context.parentURL?.includes("/lib/super-admin"))) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -107,15 +103,12 @@ registerHooks({
 const itemUrl = "./route.ts?sftp-schedule-toggle-delete-test";
 const { PATCH, DELETE } = (await import(itemUrl)) as typeof import("./route.ts");
 
-const { db, pool, withBypass, withOrgContext } =
-  await import("@openbooks/engine/platform/db");
+const { db, pool, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 // The REAL notice identity (this specifier is not mocked): the route must
 // resolve exactly the rows the scheduler writes — a copy here would make
 // the test self-consistent and hollow.
-const {
-  SFTP_UNBOUND_SCHEDULE_NOTICE_KIND,
-  sftpUnboundScheduleNoticeHref,
-} = await import("@openbooks/engine/sftp/schedule-notice");
+const { SFTP_UNBOUND_SCHEDULE_NOTICE_KIND, sftpUnboundScheduleNoticeHref } =
+  await import("@openbooks/engine/sftp/schedule-notice");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/testing/fixtures");
 
@@ -198,12 +191,11 @@ async function createSchedule(fixture: Fixture): Promise<string> {
   return scheduleId;
 }
 
-async function scheduleState(
-  scheduleId: string,
-): Promise<{ isActive: boolean } | null> {
+async function scheduleState(scheduleId: string): Promise<{ isActive: boolean } | null> {
   return withBypass(async () => {
     const r = await db.execute<{ is_active: boolean }>(
-      sql`select is_active from sftp_import_schedules where id = ${scheduleId}`, "objects",
+      sql`select is_active from sftp_import_schedules where id = ${scheduleId}`,
+      "objects",
     );
     const row = r[0];
     return row ? { isActive: row.is_active } : null;
@@ -217,14 +209,11 @@ async function patchStatus(
 ): Promise<{ status: number; body: unknown }> {
   const res = (await withOrgContext(fixture.orgId, () =>
     PATCH(
-      new Request(
-        `http://openbooks.test/api/banking/sftp/schedules/${id}`,
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      ),
+      new Request(`http://openbooks.test/api/banking/sftp/schedules/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
       { params: Promise.resolve({ id }) },
     ),
   )) as NextResponse;
@@ -237,409 +226,395 @@ async function deleteStatus(
 ): Promise<{ status: number; body: unknown }> {
   const res = (await withOrgContext(fixture.orgId, () =>
     DELETE(
-      new Request(
-        `http://openbooks.test/api/banking/sftp/schedules/${id}`,
-        { method: "DELETE" },
-      ),
+      new Request(`http://openbooks.test/api/banking/sftp/schedules/${id}`, { method: "DELETE" }),
       { params: Promise.resolve({ id }) },
     ),
   )) as NextResponse;
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 
-test(
-  "schedule PATCH toggle flips is_active and reports success",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const scheduleId = await createSchedule(fixture);
-      const outcome = await patchStatus(fixture, scheduleId, {
-        isActive: false,
-      });
-      assert.equal(outcome.status, 200);
-      assert.deepEqual(outcome.body, { ok: true });
-      assert.deepEqual(await scheduleState(scheduleId), { isActive: false });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule PATCH toggle flips is_active and reports success", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const scheduleId = await createSchedule(fixture);
+    const outcome = await patchStatus(fixture, scheduleId, {
+      isActive: false,
+    });
+    assert.equal(outcome.status, 200);
+    assert.deepEqual(outcome.body, { ok: true });
+    assert.deepEqual(await scheduleState(scheduleId), { isActive: false });
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule PATCH toggle of a missing id refuses instead of reporting success",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const outcome = await patchStatus(fixture, randomUUID(), {
-        isActive: false,
-      });
+test("schedule PATCH toggle of a missing id refuses instead of reporting success", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const outcome = await patchStatus(fixture, randomUUID(), {
+      isActive: false,
+    });
+    assert.equal(outcome.status, 404);
+    assert.deepEqual(outcome.body, { error: "not_found" });
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
+
+test("schedule PATCH toggle of another organization's id reads as not found", async () => {
+  const fixture = await seed();
+  const other = await seed();
+  try {
+    authorize(fixture);
+    const foreignId = await createSchedule(other);
+    const foreign = await patchStatus(fixture, foreignId, {
+      isActive: false,
+    });
+    const missing = await patchStatus(fixture, randomUUID(), {
+      isActive: false,
+    });
+    assert.equal(foreign.status, 404);
+    // Tenant non-disclosure: a foreign id is indistinguishable from absent.
+    assert.deepEqual(foreign.body, missing.body);
+    assert.deepEqual(await scheduleState(foreignId), { isActive: true });
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+    await withBypass(() => dropScratchOrg(other.orgId));
+  }
+});
+
+test("schedule PATCH and DELETE refuse a malformed id without touching storage", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const scheduleId = await createSchedule(fixture);
+    for (const outcome of [
+      await patchStatus(fixture, "not-a-uuid", { isActive: false }),
+      await deleteStatus(fixture, "not-a-uuid"),
+    ]) {
       assert.equal(outcome.status, 404);
       assert.deepEqual(outcome.body, { error: "not_found" });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
     }
-  },
-);
+    assert.deepEqual(await scheduleState(scheduleId), { isActive: true });
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule PATCH toggle of another organization's id reads as not found",
-  async () => {
-    const fixture = await seed();
-    const other = await seed();
-    try {
-      authorize(fixture);
-      const foreignId = await createSchedule(other);
-      const foreign = await patchStatus(fixture, foreignId, {
-        isActive: false,
-      });
-      const missing = await patchStatus(fixture, randomUUID(), {
-        isActive: false,
-      });
-      assert.equal(foreign.status, 404);
-      // Tenant non-disclosure: a foreign id is indistinguishable from absent.
-      assert.deepEqual(foreign.body, missing.body);
-      assert.deepEqual(await scheduleState(foreignId), { isActive: true });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-      await withBypass(() => dropScratchOrg(other.orgId));
-    }
-  },
-);
+test("schedule PATCH refuses a non-object body through the real JSON boundary", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const scheduleId = await createSchedule(fixture);
+    const res = (await withOrgContext(fixture.orgId, () =>
+      PATCH(
+        new Request(`http://openbooks.test/api/banking/sftp/schedules/${scheduleId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify([]),
+        }),
+        { params: Promise.resolve({ id: scheduleId }) },
+      ),
+    )) as NextResponse;
+    assert.equal(res.status, 400);
+    assert.deepEqual(await scheduleState(scheduleId), { isActive: true });
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule PATCH and DELETE refuse a malformed id without touching storage",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const scheduleId = await createSchedule(fixture);
-      for (const outcome of [
-        await patchStatus(fixture, "not-a-uuid", { isActive: false }),
-        await deleteStatus(fixture, "not-a-uuid"),
-      ]) {
-        assert.equal(outcome.status, 404);
-        assert.deepEqual(outcome.body, { error: "not_found" });
-      }
-      assert.deepEqual(await scheduleState(scheduleId), { isActive: true });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule PATCH run keeps its contract: missing refuses, owned runs", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    routeState.runCalls.length = 0;
+    const missing = await patchStatus(fixture, randomUUID(), {
+      action: "run",
+    });
+    assert.equal(missing.status, 404);
+    assert.deepEqual(missing.body, { error: "not_found" });
+    assert.equal(routeState.runCalls.length, 0);
 
-test(
-  "schedule PATCH refuses a non-object body through the real JSON boundary",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const scheduleId = await createSchedule(fixture);
-      const res = (await withOrgContext(fixture.orgId, () =>
-        PATCH(
-          new Request(
-            `http://openbooks.test/api/banking/sftp/schedules/${scheduleId}`,
-            {
-              method: "PATCH",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify([]),
-            },
-          ),
-          { params: Promise.resolve({ id: scheduleId }) },
-        ),
-      )) as NextResponse;
-      assert.equal(res.status, 400);
-      assert.deepEqual(await scheduleState(scheduleId), { isActive: true });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+    const scheduleId = await createSchedule(fixture);
+    const ran = await patchStatus(fixture, scheduleId, { action: "run" });
+    assert.equal(ran.status, 200);
+    assert.deepEqual(ran.body, {
+      ok: true,
+      result: {
+        scheduleId,
+        filesSeen: 0,
+        imported: 0,
+        duplicates: 0,
+        errors: [],
+        files: [],
+      },
+    });
+    assert.deepEqual(routeState.runCalls, [{ orgId: fixture.orgId, scheduleId }]);
 
-test(
-  "schedule PATCH run keeps its contract: missing refuses, owned runs",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      routeState.runCalls.length = 0;
-      const missing = await patchStatus(fixture, randomUUID(), {
-        action: "run",
-      });
-      assert.equal(missing.status, 404);
-      assert.deepEqual(missing.body, { error: "not_found" });
-      assert.equal(routeState.runCalls.length, 0);
+    routeState.runAlreadyRunning = true;
+    const collision = await patchStatus(fixture, scheduleId, { action: "run" });
+    assert.equal(collision.status, 409);
+    assert.deepEqual(collision.body, {
+      error: "this SFTP import schedule is already running; wait for the active scan to finish",
+      code: "SFTP_IMPORT_ALREADY_RUNNING",
+    });
+  } finally {
+    routeState.runAlreadyRunning = false;
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-      const scheduleId = await createSchedule(fixture);
-      const ran = await patchStatus(fixture, scheduleId, { action: "run" });
-      assert.equal(ran.status, 200);
-      assert.deepEqual(ran.body, {
-        ok: true,
-        result: {
-          scheduleId,
-          filesSeen: 0,
-          imported: 0,
-          duplicates: 0,
-          errors: [],
-          files: [],
-        },
-      });
-      assert.deepEqual(routeState.runCalls, [
-        { orgId: fixture.orgId, scheduleId },
-      ]);
+test("schedule PATCH and DELETE enforce permission and feature gates", async () => {
+  const fixture = await seed();
+  const featureOff = await seed(false);
+  try {
+    const scheduleId = await createSchedule(fixture);
+    const gatedId = await createSchedule(featureOff);
 
-      routeState.runAlreadyRunning = true;
-      const collision = await patchStatus(fixture, scheduleId, { action: "run" });
-      assert.equal(collision.status, 409);
-      assert.deepEqual(collision.body, {
-        error: "this SFTP import schedule is already running; wait for the active scan to finish",
-        code: "SFTP_IMPORT_ALREADY_RUNNING",
-      });
-    } finally {
-      routeState.runAlreadyRunning = false;
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+    authorize(fixture, []);
+    assert.equal((await patchStatus(fixture, scheduleId, { isActive: false })).status, 403);
+    assert.equal((await deleteStatus(fixture, scheduleId)).status, 403);
+    assert.deepEqual(await scheduleState(scheduleId), { isActive: true });
 
-test(
-  "schedule PATCH and DELETE enforce permission and feature gates",
-  async () => {
-    const fixture = await seed();
-    const featureOff = await seed(false);
-    try {
-      const scheduleId = await createSchedule(fixture);
-      const gatedId = await createSchedule(featureOff);
+    authorize(fixture);
+    routeState.authz!.user.orgId = featureOff.orgId;
+    const toggleOff = await patchStatus(featureOff, gatedId, {
+      isActive: false,
+    });
+    assert.equal(toggleOff.status, 404);
+    const deleteOff = await deleteStatus(featureOff, gatedId);
+    assert.equal(deleteOff.status, 404);
+    assert.deepEqual(await scheduleState(gatedId), { isActive: true });
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+    await withBypass(() => dropScratchOrg(featureOff.orgId));
+  }
+});
 
-      authorize(fixture, []);
-      assert.equal(
-        (await patchStatus(fixture, scheduleId, { isActive: false })).status,
-        403,
-      );
-      assert.equal((await deleteStatus(fixture, scheduleId)).status, 403);
-      assert.deepEqual(await scheduleState(scheduleId), { isActive: true });
+test("schedule DELETE removes an owned schedule and reports success", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const scheduleId = await createSchedule(fixture);
+    const outcome = await deleteStatus(fixture, scheduleId);
+    assert.equal(outcome.status, 200);
+    assert.deepEqual(outcome.body, { ok: true });
+    assert.equal(await scheduleState(scheduleId), null);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-      authorize(fixture);
-      routeState.authz!.user.orgId = featureOff.orgId;
-      const toggleOff = await patchStatus(featureOff, gatedId, {
-        isActive: false,
-      });
-      assert.equal(toggleOff.status, 404);
-      const deleteOff = await deleteStatus(featureOff, gatedId);
-      assert.equal(deleteOff.status, 404);
-      assert.deepEqual(await scheduleState(gatedId), { isActive: true });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-      await withBypass(() => dropScratchOrg(featureOff.orgId));
-    }
-  },
-);
+test("schedule DELETE of a missing id refuses instead of reporting success", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const outcome = await deleteStatus(fixture, randomUUID());
+    assert.equal(outcome.status, 404);
+    assert.deepEqual(outcome.body, { error: "not_found" });
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule DELETE removes an owned schedule and reports success",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const scheduleId = await createSchedule(fixture);
-      const outcome = await deleteStatus(fixture, scheduleId);
-      assert.equal(outcome.status, 200);
-      assert.deepEqual(outcome.body, { ok: true });
-      assert.equal(await scheduleState(scheduleId), null);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule DELETE of another organization's id reads as not found", async () => {
+  const fixture = await seed();
+  const other = await seed();
+  try {
+    authorize(fixture);
+    const foreignId = await createSchedule(other);
+    const foreign = await deleteStatus(fixture, foreignId);
+    const missing = await deleteStatus(fixture, randomUUID());
+    assert.equal(foreign.status, 404);
+    // Tenant non-disclosure: a foreign id is indistinguishable from absent.
+    assert.deepEqual(foreign.body, missing.body);
+    assert.deepEqual(await scheduleState(foreignId), { isActive: true });
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+    await withBypass(() => dropScratchOrg(other.orgId));
+  }
+});
 
-test(
-  "schedule DELETE of a missing id refuses instead of reporting success",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const outcome = await deleteStatus(fixture, randomUUID());
-      assert.equal(outcome.status, 404);
-      assert.deepEqual(outcome.body, { error: "not_found" });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("schedule PATCH binds, rebinds, and clears the expected account", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const scheduleId = await createSchedule(fixture);
+    const bound = await patchStatus(fixture, scheduleId, {
+      expectedExternalAccountId: "br 001-77",
+    });
+    assert.equal(bound.status, 200);
+    assert.deepEqual(bound.body, { ok: true });
+    const stored = await withBypass(
+      async () =>
+        (
+          await db.execute<{ expected_external_account_id: string | null }>(
+            sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`,
+            "objects",
+          )
+        )[0]!.expected_external_account_id,
+    );
+    assert.equal(stored, "BR001-77");
+    // A non-string binding refuses before any write.
+    const bad = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: 42 });
+    assert.equal(bad.status, 400);
+    // An explicit null clears the binding (identified files then refuse
+    // until it is set again) — and still reports success, not a 500 from
+    // an empty SQL parameter.
+    const cleared = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: null });
+    assert.equal(cleared.status, 200);
+    const clearedStored = await withBypass(
+      async () =>
+        (
+          await db.execute<{ expected_external_account_id: string | null }>(
+            sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`,
+            "objects",
+          )
+        )[0]!.expected_external_account_id,
+    );
+    assert.equal(clearedStored, null);
+    // A missing id refuses instead of reporting success.
+    const missing = await patchStatus(fixture, randomUUID(), { expectedExternalAccountId: "x" });
+    assert.equal(missing.status, 404);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule DELETE of another organization's id reads as not found",
-  async () => {
-    const fixture = await seed();
-    const other = await seed();
-    try {
-      authorize(fixture);
-      const foreignId = await createSchedule(other);
-      const foreign = await deleteStatus(fixture, foreignId);
-      const missing = await deleteStatus(fixture, randomUUID());
-      assert.equal(foreign.status, 404);
-      // Tenant non-disclosure: a foreign id is indistinguishable from absent.
-      assert.deepEqual(foreign.body, missing.body);
-      assert.deepEqual(await scheduleState(foreignId), { isActive: true });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-      await withBypass(() => dropScratchOrg(other.orgId));
-    }
-  },
-);
-
-test(
-  "schedule PATCH binds, rebinds, and clears the expected account",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const scheduleId = await createSchedule(fixture);
-      const bound = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: "br 001-77" });
-      assert.equal(bound.status, 200);
-      assert.deepEqual(bound.body, { ok: true });
-      const stored = await withBypass(async () =>
-        (await db.execute<{ expected_external_account_id: string | null }>(
-          sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`, "objects",
-        ))[0]!.expected_external_account_id,
-      );
-      assert.equal(stored, "BR001-77");
-      // A non-string binding refuses before any write.
-      const bad = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: 42 });
-      assert.equal(bad.status, 400);
-      // An explicit null clears the binding (identified files then refuse
-      // until it is set again) — and still reports success, not a 500 from
-      // an empty SQL parameter.
-      const cleared = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: null });
-      assert.equal(cleared.status, 200);
-      const clearedStored = await withBypass(async () =>
-        (await db.execute<{ expected_external_account_id: string | null }>(
-          sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`, "objects",
-        ))[0]!.expected_external_account_id,
-      );
-      assert.equal(clearedStored, null);
-      // A missing id refuses instead of reporting success.
-      const missing = await patchStatus(fixture, randomUUID(), { expectedExternalAccountId: "x" });
-      assert.equal(missing.status, 404);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
-
-test(
-  "schedule binding changes refuse while a scan owns the schedule",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const scheduleId = await createSchedule(fixture);
-      const claim = randomUUID();
-      await withBypass(() => db.execute(sql`
+test("schedule binding changes refuse while a scan owns the schedule", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const scheduleId = await createSchedule(fixture);
+    const claim = randomUUID();
+    await withBypass(() =>
+      db.execute(sql`
         update sftp_import_schedules
            set run_claim_token = ${claim}, run_claimed_at = now()
          where id = ${scheduleId} and org_id = ${fixture.orgId}
-      `));
+      `),
+    );
 
-      const outcome = await patchStatus(fixture, scheduleId, {
-        expectedExternalAccountId: "BR001-77",
-      });
-      assert.equal(outcome.status, 409);
-      assert.match(String((outcome.body as { error?: string }).error), /wait for the scan to finish/);
-      const stored = await withBypass(async () =>
-        (await db.execute<{ expected_external_account_id: string | null; run_claim_token: string | null }>(sql`
+    const outcome = await patchStatus(fixture, scheduleId, {
+      expectedExternalAccountId: "BR001-77",
+    });
+    assert.equal(outcome.status, 409);
+    assert.match(String((outcome.body as { error?: string }).error), /wait for the scan to finish/);
+    const stored = await withBypass(
+      async () =>
+        (
+          await db.execute<{
+            expected_external_account_id: string | null;
+            run_claim_token: string | null;
+          }>(
+            sql`
           select expected_external_account_id, run_claim_token
             from sftp_import_schedules where id = ${scheduleId} and org_id = ${fixture.orgId}
-        `, "objects"))[0]!,
-      );
-      assert.equal(stored.expected_external_account_id, null);
-      assert.equal(stored.run_claim_token, claim);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+        `,
+            "objects",
+          )
+        )[0]!,
+    );
+    assert.equal(stored.expected_external_account_id, null);
+    assert.equal(stored.run_claim_token, claim);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "schedule binding and active-state changes append actor-attributed before/after audit evidence",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const scheduleId = await createSchedule(fixture);
-      const bound = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: "BR001-77" });
-      assert.equal(bound.status, 200);
-      const toggled = await patchStatus(fixture, scheduleId, { isActive: false });
-      assert.equal(toggled.status, 200);
-      const audits = await withBypass(() => db.execute<{
+test("schedule binding and active-state changes append actor-attributed before/after audit evidence", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const scheduleId = await createSchedule(fixture);
+    const bound = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: "BR001-77" });
+    assert.equal(bound.status, 200);
+    const toggled = await patchStatus(fixture, scheduleId, { isActive: false });
+    assert.equal(toggled.status, 200);
+    const audits = await withBypass(() =>
+      db.execute<{
         action: string;
         actor_id: string;
         request_id: string | null;
-        changes: { before?: { expected_external_account_id?: string | null; is_active?: boolean }; after?: { expected_external_account_id?: string | null; is_active?: boolean } };
-      }>(sql`
+        changes: {
+          before?: { expected_external_account_id?: string | null; is_active?: boolean };
+          after?: { expected_external_account_id?: string | null; is_active?: boolean };
+        };
+      }>(
+        sql`
         select action, actor_id, request_id, changes from audit_log
          where org_id = ${fixture.orgId} and table_name = 'sftp_import_schedules' and row_id = ${scheduleId}
          order by at
-      `, "objects"));
-      assert.equal(audits.length, 2);
-      assert.ok(audits.every((row) => row.action === "update" && row.actor_id === fixture.actorId && row.request_id));
-      assert.equal(audits[0]!.changes.before?.expected_external_account_id ?? null, null);
-      assert.equal(audits[0]!.changes.after?.expected_external_account_id, "BR001-77");
-      assert.equal(audits[1]!.changes.before?.is_active, true);
-      assert.equal(audits[1]!.changes.after?.is_active, false);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+      `,
+        "objects",
+      ),
+    );
+    assert.equal(audits.length, 2);
+    assert.ok(
+      audits.every(
+        (row) => row.action === "update" && row.actor_id === fixture.actorId && row.request_id,
+      ),
+    );
+    assert.equal(audits[0]!.changes.before?.expected_external_account_id ?? null, null);
+    assert.equal(audits[0]!.changes.after?.expected_external_account_id, "BR001-77");
+    assert.equal(audits[1]!.changes.before?.is_active, true);
+    assert.equal(audits[1]!.changes.after?.is_active, false);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "binding a schedule resolves its unbound notice; clearing does not, DELETE does",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const scheduleId = await createSchedule(fixture);
-      const href = sftpUnboundScheduleNoticeHref(scheduleId);
-      const seedNotice = () =>
-        withBypass(async () => {
-          await db.execute(sql`
+test("binding a schedule resolves its unbound notice; clearing does not, DELETE does", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const scheduleId = await createSchedule(fixture);
+    const href = sftpUnboundScheduleNoticeHref(scheduleId);
+    const seedNotice = () =>
+      withBypass(async () => {
+        await db.execute(sql`
             insert into notifications (org_id, user_id, kind, title, body, href)
             values (${fixture.orgId}, ${fixture.actorId}, ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND}, 'seed', 'seed', ${href})
           `);
-        });
-      const unreadCount = () =>
-        withBypass(async () =>
-          (await db.execute<{ n: number }>(sql`
+      });
+    const unreadCount = () =>
+      withBypass(
+        async () =>
+          (
+            await db.execute<{ n: number }>(
+              sql`
             select count(*)::int as n from notifications
              where org_id = ${fixture.orgId} and user_id = ${fixture.actorId}
                and kind = ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND} and href = ${href} and read_at is null
-          `, "objects"))[0]!.n,
-        );
-      await seedNotice();
-      assert.equal(await unreadCount(), 1);
+          `,
+              "objects",
+            )
+          )[0]!.n,
+      );
+    await seedNotice();
+    assert.equal(await unreadCount(), 1);
 
-      // RED before the fix: binding reported {ok:true} while the named
-      // notice stayed unread — the inbox claimed a requirement nobody
-      // needed to act on anymore.
-      const bound = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: "BR001-77" });
-      assert.equal(bound.status, 200);
-      assert.equal(await unreadCount(), 0, "binding resolves the schedule's unbound notice");
+    // RED before the fix: binding reported {ok:true} while the named
+    // notice stayed unread — the inbox claimed a requirement nobody
+    // needed to act on anymore.
+    const bound = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: "BR001-77" });
+    assert.equal(bound.status, 200);
+    assert.equal(await unreadCount(), 0, "binding resolves the schedule's unbound notice");
 
-      // Clearing re-arms the requirement on the next scheduler pass — it
-      // must not resolve anything, and resolving nothing is still success.
-      await seedNotice();
-      const cleared = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: null });
-      assert.equal(cleared.status, 200);
-      assert.equal(await unreadCount(), 1, "clearing the binding leaves the notice unread");
+    // Clearing re-arms the requirement on the next scheduler pass — it
+    // must not resolve anything, and resolving nothing is still success.
+    await seedNotice();
+    const cleared = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: null });
+    assert.equal(cleared.status, 200);
+    assert.equal(await unreadCount(), 1, "clearing the binding leaves the notice unread");
 
-      // A deleted schedule has no setting to visit: the notice goes with it.
-      const deleted = await deleteStatus(fixture, scheduleId);
-      assert.equal(deleted.status, 200);
-      assert.equal(await unreadCount(), 0, "deleting the schedule resolves its unbound notice");
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+    // A deleted schedule has no setting to visit: the notice goes with it.
+    const deleted = await deleteStatus(fixture, scheduleId);
+    assert.equal(deleted.status, 200);
+    assert.equal(await unreadCount(), 0, "deleting the schedule resolves its unbound notice");
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});

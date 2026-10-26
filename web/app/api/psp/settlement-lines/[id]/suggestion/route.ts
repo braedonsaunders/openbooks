@@ -25,7 +25,8 @@ export const GET = defineRoute({
       const suggestion = await suggestPayoutLineFix(gate.user.orgId, id, gate.allowedSubsidiaryIds);
       return NextResponse.json({ suggestion });
     } catch (error) {
-      if (error instanceof CommerceError && error.code === "payout_line_unknown") return notFound("record");
+      if (error instanceof CommerceError && error.code === "payout_line_unknown")
+        return notFound("record");
       throw error;
     }
   },

@@ -1,10 +1,10 @@
-import 'server-only'
+import "server-only";
 
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { adjacentArticles, getArticle, getCategory } from '../../../../lib/docs'
-import type { DocArticleContent } from './sections'
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { adjacentArticles, getArticle, getCategory } from "../../../../lib/docs";
+import type { DocArticleContent } from "./sections";
 
 /**
  * Documentation article, split into a loader and a spec.
@@ -32,47 +32,51 @@ import type { DocArticleContent } from './sections'
  */
 
 export interface DocArticleData {
-  content: DocArticleContent
+  content: DocArticleContent;
 }
 
 export async function loadDocArticle(slug: string): Promise<DocArticleData> {
-  const article = getArticle(slug)
-  if (!article) notFound()
+  const article = getArticle(slug);
+  if (!article) notFound();
 
-  const t = await getTranslations('docs')
-  const category = getCategory(article.category)
-  const related = (article.related ?? []).map(getArticle).filter((a): a is NonNullable<typeof a> => Boolean(a))
-  const adjacent = adjacentArticles(article.slug)
+  const t = await getTranslations("docs");
+  const category = getCategory(article.category);
+  const related = (article.related ?? [])
+    .map(getArticle)
+    .filter((a): a is NonNullable<typeof a> => Boolean(a));
+  const adjacent = adjacentArticles(article.slug);
 
   return {
     content: {
-      breadcrumbLabel: t('breadcrumb'),
-      breadcrumbTitle: t('title'),
+      breadcrumbLabel: t("breadcrumb"),
+      breadcrumbTitle: t("title"),
       categoryTitle: category ? category.title : null,
       body: article.body,
-      lastUpdated: t('lastUpdated', { date: article.updated }),
-      relatedTitle: t('related'),
+      lastUpdated: t("lastUpdated", { date: article.updated }),
+      relatedTitle: t("related"),
       related: related.map((r) => ({ slug: r.slug, title: r.title })),
-      articleNavLabel: t('articleNavigation'),
-      previous: adjacent.previous ? { slug: adjacent.previous.slug, title: adjacent.previous.title } : null,
+      articleNavLabel: t("articleNavigation"),
+      previous: adjacent.previous
+        ? { slug: adjacent.previous.slug, title: adjacent.previous.title }
+        : null,
       next: adjacent.next ? { slug: adjacent.next.slug, title: adjacent.next.title } : null,
-      previousLabel: t('previous'),
-      nextLabel: t('next'),
+      previousLabel: t("previous"),
+      nextLabel: t("next"),
     },
-  }
+  };
 }
 
 export function docArticleSpec(data: DocArticleData): PageSpec {
   return page({
-    route: '/docs/[slug]',
+    route: "/docs/[slug]",
     // The article owns its own centered container; a list layout would nest
     // it in a second shell (same reason as the docs home).
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      widgetBlock('doc-article', {
+      widgetBlock("doc-article", {
         content: data.content,
       }),
     ],
-  })
+  });
 }

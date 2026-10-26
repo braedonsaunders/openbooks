@@ -24,7 +24,9 @@ export function requireExplicitOrgId(
   }
   throw new Error(
     `unknown organization ${JSON.stringify(arg ?? null)}: pass the org id (uuid) as the first argument to ${scriptName} — ` +
-      (orgs.length === 0 ? "no orgs exist yet" : `available orgs: ${orgs.map((org) => `${org.name} (${org.id})`).join(", ")}`),
+      (orgs.length === 0
+        ? "no orgs exist yet"
+        : `available orgs: ${orgs.map((org) => `${org.name} (${org.id})`).join(", ")}`),
   );
 }
 
@@ -34,10 +36,7 @@ export function requireExplicitOrgId(
  * other population refuses with the orgs listed instead of picking whatever
  * sorts first.
  */
-export function selectOnlyOrg(
-  orgs: readonly ListedOrg[],
-  scriptName: string,
-): ListedOrg {
+export function selectOnlyOrg(orgs: readonly ListedOrg[], scriptName: string): ListedOrg {
   if (orgs.length === 1) return orgs[0]!;
   throw new Error(
     `${scriptName} runs against exactly one org but found ${orgs.length} — ` +

@@ -104,7 +104,9 @@ export async function resolveItSurtaxAssessed(
 ): Promise<ItSurtaxAssessed> {
   const { orgId, employeePartyId, taxYear } = input;
   const priorYear = taxYear - 1;
-  const december = (await tx.execute<{ regionale: string | null; comunale: string | null }>(sql`
+  const december = (
+    await tx.execute<{ regionale: string | null; comunale: string | null }>(
+      sql`
     select (s.factors->>${DECEMBER_ANNUAL_FACTORS.regionale})::numeric as regionale,
            (s.factors->>${DECEMBER_ANNUAL_FACTORS.comunale})::numeric as comunale
       from pay_stubs s
@@ -121,7 +123,10 @@ export async function resolveItSurtaxAssessed(
        and s.factors ? ${DECEMBER_ANNUAL_FACTORS.regionale}
        and s.factors ? ${DECEMBER_ANNUAL_FACTORS.comunale}
      order by s.pay_date desc, s.created_at desc
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (december?.regionale != null && december?.comunale != null) {
     return {
       regionale: String(december.regionale),
@@ -129,13 +134,18 @@ export async function resolveItSurtaxAssessed(
       source: "december_settlement",
     };
   }
-  const carried = (await tx.execute<{ regionale: string | null; comunale: string | null }>(sql`
+  const carried = (
+    await tx.execute<{ regionale: string | null; comunale: string | null }>(
+      sql`
     select regionale_saldo::text as regionale, comunale_saldo::text as comunale
       from it_addizionali_opening_balances
      where org_id = ${orgId}
        and employee_party_id = ${employeePartyId}
        and tax_year = ${taxYear}
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (carried?.regionale != null && carried?.comunale != null) {
     return {
       regionale: carried.regionale,
@@ -144,11 +154,11 @@ export async function resolveItSurtaxAssessed(
     };
   }
   throw new ItPayrollRefusal(
-    `IT ${taxYear} addizionali saldo is unassessable for this employee: no committed year ${priorYear} `
-    + "December settlement (CONG_ADDREG_ANNUAL) and no it_addizionali_opening_balances row for "
-    + `${taxYear} — record the prior-year assessed regionale/comunale in Payroll → Opening balances `
-    + "(0.00 when the worker had no prior-year Italian employment), or settle the prior December "
-    + "in OpenBooks first",
+    `IT ${taxYear} addizionali saldo is unassessable for this employee: no committed year ${priorYear} ` +
+      "December settlement (CONG_ADDREG_ANNUAL) and no it_addizionali_opening_balances row for " +
+      `${taxYear} — record the prior-year assessed regionale/comunale in Payroll → Opening balances ` +
+      "(0.00 when the worker had no prior-year Italian employment), or settle the prior December " +
+      "in OpenBooks first",
   );
 }
 
@@ -182,8 +192,8 @@ export function surtaxSaldoInstallment(
   }
   if (remainder < 0n) {
     throw new ItPayrollRefusal(
-      `IT saldo installments already exceed the assessed ${assessed} by ${fromUnits(-remainder)} — `
-      + "two runs moved one month's installment; void the duplicate run before recalculating",
+      `IT saldo installments already exceed the assessed ${assessed} by ${fromUnits(-remainder)} — ` +
+        "two runs moved one month's installment; void the duplicate run before recalculating",
     );
   }
   if (remainder === 0n) return "0.0000";
@@ -218,12 +228,14 @@ export async function itSurtaxInstallmentHistory(
 ): Promise<ItSurtaxInstallmentHistory> {
   const { orgId, employeePartyId, taxYear, payDate, excludeDocumentId } = input;
   const monthPrefix = payDate.slice(0, 7);
-  const rows = (await tx.execute<{
-    regionaleYtd: string | null;
-    comunaleYtd: string | null;
-    regionaleMonth: string | null;
-    comunaleMonth: string | null;
-  }>(sql`
+  const rows = (
+    await tx.execute<{
+      regionaleYtd: string | null;
+      comunaleYtd: string | null;
+      regionaleMonth: string | null;
+      comunaleMonth: string | null;
+    }>(
+      sql`
     select round(coalesce(sum((s.factors->>${IT_SALDO_INSTALLMENT_FACTORS.regionale})::numeric), 0), 4)::text as "regionaleYtd",
            round(coalesce(sum((s.factors->>${IT_SALDO_INSTALLMENT_FACTORS.comunale})::numeric), 0), 4)::text as "comunaleYtd",
            round(coalesce(sum((s.factors->>${IT_SALDO_INSTALLMENT_FACTORS.regionale})::numeric)
@@ -242,7 +254,10 @@ export async function itSurtaxInstallmentHistory(
        and s.country = 'IT'
        and s.tax_year = ${taxYear}
        and s.pay_date <= ${payDate}::date
-       and s.pay_run_document_id <> ${excludeDocumentId}`, "objects"))[0];
+       and s.pay_run_document_id <> ${excludeDocumentId}`,
+      "objects",
+    )
+  )[0];
   return {
     regionaleYtd: rows?.regionaleYtd ?? "0",
     comunaleYtd: rows?.comunaleYtd ?? "0",
@@ -256,8 +271,8 @@ export function itPayMonth(payDate: string | null | undefined, taxYear: number):
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(payDate ?? "");
   if (!match) {
     throw new ItPayrollRefusal(
-      `IT ${taxYear} saldo installments accrue against the run versement date (run pay_date), `
-      + "which the run did not resolve — engine defect",
+      `IT ${taxYear} saldo installments accrue against the run versement date (run pay_date), ` +
+        "which the run did not resolve — engine defect",
     );
   }
   return Number(match[2]);
@@ -288,7 +303,11 @@ export async function pushItSurtaxSaldoInstallments(input: {
   const assessed = await resolveItSurtaxAssessed(tx, { orgId, employeePartyId, taxYear });
   const remaining = itSaldolInstallmentRemaining(itPayMonth(payDate, taxYear));
   const history = await itSurtaxInstallmentHistory(tx, {
-    orgId, employeePartyId, taxYear, payDate, excludeDocumentId: documentId,
+    orgId,
+    employeePartyId,
+    taxYear,
+    payDate,
+    excludeDocumentId: documentId,
   });
   const factors: Record<string, string> = {};
   const legs = [

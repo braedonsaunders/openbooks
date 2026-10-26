@@ -13,48 +13,48 @@
  */
 
 export interface AuthorQuestionDraft {
-  kind: string
-  prompt: string
-  options: string
-  driverKey: string
+  kind: string;
+  prompt: string;
+  options: string;
+  driverKey: string;
 }
 
 export interface AuthorPayloadInput {
-  name: string
-  kind: string
-  anonymity: string
-  minGroup: string
-  questions: AuthorQuestionDraft[]
+  name: string;
+  kind: string;
+  anonymity: string;
+  minGroup: string;
+  questions: AuthorQuestionDraft[];
 }
 
 export type AuthorPayload =
   | {
-      ok: true
+      ok: true;
       body: {
-        name: string
-        kind: string
-        anonymity: string
-        minGroupSize: number
-        questions: { kind: string; prompt: string; options?: string[]; driverKey?: string }[]
-      }
+        name: string;
+        kind: string;
+        anonymity: string;
+        minGroupSize: number;
+        questions: { kind: string; prompt: string; options?: string[]; driverKey?: string }[];
+      };
     }
-  | { ok: false; error: 'minGroupInvalid' }
+  | { ok: false; error: "minGroupInvalid" };
 
 /** Valid group sizes are whole numbers from 2 to 1000 (the API's range). */
 export function parseMinGroupSize(raw: string): number | null {
-  const trimmed = raw.trim()
-  if (trimmed.length === 0) return null
-  const parsed = Number(trimmed)
-  if (!Number.isInteger(parsed) || parsed < 2 || parsed > 1000) return null
-  return parsed
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 2 || parsed > 1000) return null;
+  return parsed;
 }
 
 /** Split a multi-line options draft into non-blank choices. */
 export function splitOptions(raw: string): string[] {
   return raw
-    .split('\n')
+    .split("\n")
     .map((line) => line.trim())
-    .filter((line) => line.length > 0)
+    .filter((line) => line.length > 0);
 }
 
 /**
@@ -63,8 +63,8 @@ export function splitOptions(raw: string): string[] {
  * bad threshold into the default.
  */
 export function buildSurveyAuthorPayload(input: AuthorPayloadInput): AuthorPayload {
-  const minGroupSize = parseMinGroupSize(input.minGroup)
-  if (minGroupSize === null) return { ok: false, error: 'minGroupInvalid' }
+  const minGroupSize = parseMinGroupSize(input.minGroup);
+  if (minGroupSize === null) return { ok: false, error: "minGroupInvalid" };
   return {
     ok: true,
     body: {
@@ -75,9 +75,9 @@ export function buildSurveyAuthorPayload(input: AuthorPayloadInput): AuthorPaylo
       questions: input.questions.map((q) => ({
         kind: q.kind,
         prompt: q.prompt,
-        ...(q.kind === 'single' || q.kind === 'multi' ? { options: splitOptions(q.options) } : {}),
+        ...(q.kind === "single" || q.kind === "multi" ? { options: splitOptions(q.options) } : {}),
         ...(q.driverKey.trim() ? { driverKey: q.driverKey.trim() } : {}),
       })),
     },
-  }
+  };
 }

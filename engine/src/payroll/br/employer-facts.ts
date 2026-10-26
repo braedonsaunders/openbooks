@@ -46,9 +46,9 @@ export const BR_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
     kind: "choice",
     label: "Regime tributário do estabelecimento (Simples Nacional / geral)",
     refusalReason:
-      "Simples Nacional annexes I, II, III and V pay employer CPP inside the monthly DAS (LC 123/2006 art. 13 VI) "
-      + "while Annex IV and general-regime employers accrue it separately (art. 18 §5-C) — pricing without the "
-      + "regime charges a 20% CPP the establishment never owes, or omits one it does.",
+      "Simples Nacional annexes I, II, III and V pay employer CPP inside the monthly DAS (LC 123/2006 art. 13 VI) " +
+      "while Annex IV and general-regime employers accrue it separately (art. 18 §5-C) — pricing without the " +
+      "regime charges a 20% CPP the establishment never owes, or omits one it does.",
     legalBasis: "Lei Complementar nº 123/2006, art. 13 VI and art. 18 §5-C",
     required: true,
     effectivePeriod: "calendar_year",

@@ -63,7 +63,6 @@ test("midnight cron includes tomorrow and never skips an extra day", () => {
  * append-only outside a sandbox wipe", and "occurrence lineage rejects
  * cross-tenant schedule and document references". */
 
-
 test("pending occurrences list exactly the missed dates through asOf", () => {
   assert.deepEqual(
     pendingOccurrences(
@@ -72,8 +71,16 @@ test("pending occurrences list exactly the missed dates through asOf", () => {
     ),
     {
       occurrences: [
-        "2025-12-10", "2026-01-10", "2026-02-10", "2026-03-10", "2026-04-10",
-        "2026-05-10", "2026-06-10", "2026-07-10", "2026-08-10", "2026-09-10",
+        "2025-12-10",
+        "2026-01-10",
+        "2026-02-10",
+        "2026-03-10",
+        "2026-04-10",
+        "2026-05-10",
+        "2026-06-10",
+        "2026-07-10",
+        "2026-08-10",
+        "2026-09-10",
         "2026-10-10",
       ],
       truncated: false,
@@ -84,7 +91,13 @@ test("pending occurrences list exactly the missed dates through asOf", () => {
 test("pending occurrences stop at the schedule end date", () => {
   assert.deepEqual(
     pendingOccurrences(
-      { cadence: "monthly", cron: null, nextRunOn: "2025-12-10", endsOn: "2026-02-10", anchorDay: 10 },
+      {
+        cadence: "monthly",
+        cron: null,
+        nextRunOn: "2025-12-10",
+        endsOn: "2026-02-10",
+        anchorDay: 10,
+      },
       "2026-10-10",
     ).occurrences,
     ["2025-12-10", "2026-01-10", "2026-02-10"],
@@ -138,7 +151,11 @@ test("pending occurrences exclude standing seasonal skips", () => {
   assert.deepEqual(
     pendingOccurrences(
       {
-        cadence: "monthly", cron: null, nextRunOn: "2026-05-10", endsOn: null, anchorDay: 10,
+        cadence: "monthly",
+        cron: null,
+        nextRunOn: "2026-05-10",
+        endsOn: null,
+        anchorDay: 10,
         skippedRunOns: ["2026-06-10", "2026-07-10"],
       },
       "2026-08-10",
@@ -151,7 +168,11 @@ test("pending occurrences cap at the remaining occurrence limit", () => {
   assert.deepEqual(
     pendingOccurrences(
       {
-        cadence: "monthly", cron: null, nextRunOn: "2026-05-10", endsOn: null, anchorDay: 10,
+        cadence: "monthly",
+        cron: null,
+        nextRunOn: "2026-05-10",
+        endsOn: null,
+        anchorDay: 10,
         remaining: 2,
       },
       "2026-08-10",
@@ -161,7 +182,11 @@ test("pending occurrences cap at the remaining occurrence limit", () => {
   assert.deepEqual(
     pendingOccurrences(
       {
-        cadence: "monthly", cron: null, nextRunOn: "2026-05-10", endsOn: null, anchorDay: 10,
+        cadence: "monthly",
+        cron: null,
+        nextRunOn: "2026-05-10",
+        endsOn: null,
+        anchorDay: 10,
         remaining: 0,
       },
       "2026-08-10",
@@ -190,6 +215,8 @@ test("unknown brace-words and missing counters render verbatim or empty", () => 
     }),
     "See {appendix} for 2 of ",
   );
-  assert.deepEqual(findUnknownPeriodTokens("See {appendix} for {n} of {total} and {appendix}"), ["{appendix}"]);
+  assert.deepEqual(findUnknownPeriodTokens("See {appendix} for {n} of {total} and {appendix}"), [
+    "{appendix}",
+  ]);
   assert.deepEqual(findUnknownPeriodTokens("No braces here"), []);
 });

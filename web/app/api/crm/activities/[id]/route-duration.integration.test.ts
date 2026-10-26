@@ -1,111 +1,142 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Activity PATCH validates durationMinutes as non-negative minutes but never
 // bounds it as an integer, so an out-of-int32 figure sails through and dies
 // in Postgres as a raw integer failure (HTTP 500 — the verb has no catch for
 // it) instead of failing closed with a named 422 and nothing written.
 // duration_minutes is integer.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __activityDurationState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __activityDurationState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
-    if (specifier === '../../../../../lib/authz') return virtual(`
+    if (specifier === "next/navigation")
+      return virtual(
+        'export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }',
+      );
+    if (specifier === "../../../../../lib/authz")
+      return virtual(`
       export async function guardPermission() {
         const s = globalThis.__activityDurationState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
+    `);
     // The route factory resolves its session gate through the "@/lib/…"
     // spellings at request time; they must see the same test session as the
     // route file's relative imports. Identical sources share one module
     // instance across both spellings.
-    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
+    if (specifier === "../../../../../lib/feature-gates" || specifier === "@/lib/feature-gates")
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__activityDurationState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { PATCH } = await import('./route.ts')
-const { loadActivity } = await import('../../../../../lib/crm')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { PATCH } = await import("./route.ts");
+const { loadActivity } = await import("../../../../../lib/crm");
 
 async function fixture() {
-  const org = await withBypassContext(() => (createScratchOrg()))
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
+  const org = await withBypassContext(() => createScratchOrg());
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
   const activityId = await withBypassContext(async () => {
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
-       where id = ${org.orgId}`)
-    return (await db.execute<{ id: string }>(sql`
+       where id = ${org.orgId}`);
+    return (
+      await db.execute<{ id: string }>(
+        sql`
       insert into crm_activities (org_id, kind, status, subject, duration_minutes)
       values (${org.orgId}, 'call', 'open', 'Probe call', 30)
-      returning id`, 'objects'))[0]!.id
-  })
-  return { org, activityId }
+      returning id`,
+        "objects",
+      )
+    )[0]!.id;
+  });
+  return { org, activityId };
 }
 
 async function patch(id: string, body: unknown): Promise<{ status: number; json: unknown }> {
   try {
-    const response = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://crm.test/api/crm/activities/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
+    const response = await withOrgContext(state.orgId, () =>
+      PATCH(
+        new Request(`http://crm.test/api/crm/activities/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id }) },
+      ),
+    );
+    return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function duration(orgId: string, activityId: string): Promise<number | null> {
   return await withOrgContext(orgId, async () => {
-    const rows = await db.execute<{ duration_minutes: number | null }>(sql`
-      select duration_minutes from crm_activities where id = ${activityId}`, 'objects')
-    return rows[0]!.duration_minutes
-  })
+    const rows = await db.execute<{ duration_minutes: number | null }>(
+      sql`
+      select duration_minutes from crm_activities where id = ${activityId}`,
+      "objects",
+    );
+    return rows[0]!.duration_minutes;
+  });
 }
 
 // The loader-projected revision token every PATCH must echo back.
 async function token(activityId: string): Promise<string> {
   return await withOrgContext(state.orgId, async () => {
-    const loaded = await loadActivity(activityId, state.orgId, null)
-    return (loaded!.activity as Record<string, unknown>).updated_at as string
-  })
+    const loaded = await loadActivity(activityId, state.orgId, null);
+    return (loaded!.activity as Record<string, unknown>).updated_at as string;
+  });
 }
 
-test('PATCH refuses an out-of-int32 duration without writing', async () => {
-  const { org, activityId } = await fixture()
+test("PATCH refuses an out-of-int32 duration without writing", async () => {
+  const { org, activityId } = await fixture();
   try {
-    const result = await patch(activityId, { durationMinutes: '99999999999999999999', expectedUpdatedAt: await token(activityId) })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.equal(await duration(org.orgId, activityId), 30)
+    const result = await patch(activityId, {
+      durationMinutes: "99999999999999999999",
+      expectedUpdatedAt: await token(activityId),
+    });
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
+    assert.equal(await duration(org.orgId, activityId), 30);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH still saves an ordinary duration', async () => {
-  const { org, activityId } = await fixture()
+test("PATCH still saves an ordinary duration", async () => {
+  const { org, activityId } = await fixture();
   try {
-    const result = await patch(activityId, { durationMinutes: 45, expectedUpdatedAt: await token(activityId) })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.equal(await duration(org.orgId, activityId), 45)
+    const result = await patch(activityId, {
+      durationMinutes: 45,
+      expectedUpdatedAt: await token(activityId),
+    });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.equal(await duration(org.orgId, activityId), 45);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import type { ComponentProps } from 'react'
+import type { ComponentProps } from "react";
 import {
   AreaChart,
   ArrowLeftRight,
@@ -32,9 +32,9 @@ import {
   Users,
   Wallet,
   type LucideIcon,
-} from 'lucide-react'
-import { StatTile, CockpitPanel } from '../cockpit/ui'
-import type { HomeIconKey } from './icon-keys'
+} from "lucide-react";
+import { StatTile, CockpitPanel } from "../cockpit/ui";
+import type { HomeIconKey } from "./icon-keys";
 
 /**
  * Client shims for the module-home pages. The home pages are SERVER
@@ -45,46 +45,51 @@ import type { HomeIconKey } from './icon-keys'
  */
 const HOME_ICONS: Record<HomeIconKey, LucideIcon> = {
   landmark: Landmark,
-  'credit-card': CreditCard,
-  'list-checks': ListChecks,
-  'check-circle': CheckCircle2,
-  'arrow-left-right': ArrowLeftRight,
-  'badge-dollar': BadgeDollarSign,
+  "credit-card": CreditCard,
+  "list-checks": ListChecks,
+  "check-circle": CheckCircle2,
+  "arrow-left-right": ArrowLeftRight,
+  "badge-dollar": BadgeDollarSign,
   building: Building2,
   briefcase: Briefcase,
-  'area-chart': AreaChart,
-  'triangle-alert': TriangleAlert,
-  'circle-alert': CircleAlert,
-  'shield-check': ShieldCheck,
+  "area-chart": AreaChart,
+  "triangle-alert": TriangleAlert,
+  "circle-alert": CircleAlert,
+  "shield-check": ShieldCheck,
   wallet: Wallet,
   users: Users,
-  'trending-up': TrendingUp,
+  "trending-up": TrendingUp,
   timer: Timer,
   clipboard: ClipboardList,
-  'clipboard-check': ClipboardCheck,
-  'scroll-text': ScrollText,
+  "clipboard-check": ClipboardCheck,
+  "scroll-text": ScrollText,
   target: Target,
-  'calendar-clock': CalendarClock,
-  'heart-pulse': HeartPulse,
+  "calendar-clock": CalendarClock,
+  "heart-pulse": HeartPulse,
   gauge: Gauge,
   coins: Coins,
   flag: Flag,
   scale: Scale,
-  'trending-down': TrendingDown,
-  'pie-chart': PieChart,
+  "trending-down": TrendingDown,
+  "pie-chart": PieChart,
   history: History,
-}
+};
 
 export function HomeStatTile({
   icon,
   ...rest
-}: Omit<ComponentProps<typeof StatTile>, 'icon'> & { icon: string }) {
-  return <StatTile icon={HOME_ICONS[icon as HomeIconKey] ?? Landmark} {...rest} />
+}: Omit<ComponentProps<typeof StatTile>, "icon"> & { icon: string }) {
+  return <StatTile icon={HOME_ICONS[icon as HomeIconKey] ?? Landmark} {...rest} />;
 }
 
 export function HomePanel({
   icon,
   ...rest
-}: Omit<ComponentProps<typeof CockpitPanel>, 'icon'> & { icon?: string }) {
-  return <CockpitPanel icon={icon ? (HOME_ICONS[icon as HomeIconKey] ?? Building2) : undefined} {...rest} />
+}: Omit<ComponentProps<typeof CockpitPanel>, "icon"> & { icon?: string }) {
+  return (
+    <CockpitPanel
+      icon={icon ? (HOME_ICONS[icon as HomeIconKey] ?? Building2) : undefined}
+      {...rest}
+    />
+  );
 }

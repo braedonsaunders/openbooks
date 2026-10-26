@@ -1,17 +1,16 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { test } from 'node:test'
-import assert from 'node:assert/strict'
-import { BUILT_IN_REPORT_DEFINITIONS } from '@openbooks/reports'
-import { NONPROFIT_REPORTS } from '@openbooks/engine/testing/reports/catalog-reports'
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { BUILT_IN_REPORT_DEFINITIONS } from "@openbooks/reports";
+import { NONPROFIT_REPORTS } from "@openbooks/engine/testing/reports/catalog-reports";
 
 // The hub serves the seeded catalog: package built-ins plus the nonprofit
 // board reports seeded alongside them. Walking only the package half flags
 // every nonprofit message as an orphan.
-const SEEDED_DEFINITIONS = [...BUILT_IN_REPORT_DEFINITIONS, ...NONPROFIT_REPORTS]
-const SEEDED_DEFINITION_MAP: Record<string, { name: string; description: string }> = Object.fromEntries(
-  SEEDED_DEFINITIONS.map((definition) => [definition.slug, definition]),
-)
+const SEEDED_DEFINITIONS = [...BUILT_IN_REPORT_DEFINITIONS, ...NONPROFIT_REPORTS];
+const SEEDED_DEFINITION_MAP: Record<string, { name: string; description: string }> =
+  Object.fromEntries(SEEDED_DEFINITIONS.map((definition) => [definition.slug, definition]));
 
 /**
  * Hub card copy must fit the card — no mid-word clipping at 1280px.
@@ -37,85 +36,94 @@ const SEEDED_DEFINITION_MAP: Record<string, { name: string; description: string 
  * fit, in the same turn it is added.
  */
 
-const TITLE_BUDGET = 36
-const DESCRIPTION_BUDGET = 90
+const TITLE_BUDGET = 36;
+const DESCRIPTION_BUDGET = 90;
 
 const reports = JSON.parse(
-  readFileSync(join(import.meta.dirname, '..', '..', '..', 'messages', 'en', 'reports.json'), 'utf8'),
+  readFileSync(
+    join(import.meta.dirname, "..", "..", "..", "messages", "en", "reports.json"),
+    "utf8",
+  ),
 ) as {
   hub: {
-    cards: Record<string, string>
-    customStudio: { title: string; description: string }
-    savedViews: string
-  }
-  builtIns: Record<string, { name: string; description: string }>
-}
+    cards: Record<string, string>;
+    customStudio: { title: string; description: string };
+    savedViews: string;
+  };
+  builtIns: Record<string, { name: string; description: string }>;
+};
 const analytics = JSON.parse(
-  readFileSync(join(import.meta.dirname, '..', '..', '..', 'messages', 'en', 'analytics.json'), 'utf8'),
-) as { trueCost: { title: string; summary: { compositeRate: string } } }
+  readFileSync(
+    join(import.meta.dirname, "..", "..", "..", "messages", "en", "analytics.json"),
+    "utf8",
+  ),
+) as { trueCost: { title: string; summary: { compositeRate: string } } };
 
-test('every static hub card title and description fits the card', () => {
-  const over: string[] = []
+test("every static hub card title and description fits the card", () => {
+  const over: string[] = [];
   for (const [key, value] of Object.entries(reports.hub.cards)) {
-    if (key.endsWith('Title') && value.length > TITLE_BUDGET) over.push(`${key} (${value.length})`)
-    if (key.endsWith('Description') && value.length > DESCRIPTION_BUDGET) over.push(`${key} (${value.length})`)
+    if (key.endsWith("Title") && value.length > TITLE_BUDGET) over.push(`${key} (${value.length})`);
+    if (key.endsWith("Description") && value.length > DESCRIPTION_BUDGET)
+      over.push(`${key} (${value.length})`);
   }
-  assert.deepEqual(over, [], `hub card copy over budget:\n${over.join('\n')}`)
-})
+  assert.deepEqual(over, [], `hub card copy over budget:\n${over.join("\n")}`);
+});
 
-test('hub chrome copy (studio, saved views, true cost) fits the card', () => {
+test("hub chrome copy (studio, saved views, true cost) fits the card", () => {
   assert.ok(
     reports.hub.customStudio.title.length <= TITLE_BUDGET,
     `custom studio title (${reports.hub.customStudio.title.length}) must stay under ${TITLE_BUDGET}`,
-  )
+  );
   assert.ok(
     reports.hub.customStudio.description.length <= DESCRIPTION_BUDGET,
     `custom studio description (${reports.hub.customStudio.description.length}) must stay under ${DESCRIPTION_BUDGET}`,
-  )
+  );
   assert.ok(
     reports.hub.savedViews.length <= DESCRIPTION_BUDGET,
     `saved-views description (${reports.hub.savedViews.length}) must stay under ${DESCRIPTION_BUDGET}`,
-  )
+  );
   assert.ok(
     analytics.trueCost.title.length <= TITLE_BUDGET,
     `true-cost title (${analytics.trueCost.title.length}) must stay under ${TITLE_BUDGET}`,
-  )
+  );
   assert.ok(
     analytics.trueCost.summary.compositeRate.length <= DESCRIPTION_BUDGET,
     `true-cost description (${analytics.trueCost.summary.compositeRate.length}) must stay under ${DESCRIPTION_BUDGET}`,
-  )
-})
+  );
+});
 
-test('every built-in registry name and description fits the card', () => {
-  const over: string[] = []
+test("every built-in registry name and description fits the card", () => {
+  const over: string[] = [];
   for (const definition of SEEDED_DEFINITIONS) {
-    if (definition.name.length > TITLE_BUDGET) over.push(`${definition.slug} name (${definition.name.length})`)
+    if (definition.name.length > TITLE_BUDGET)
+      over.push(`${definition.slug} name (${definition.name.length})`);
     if (definition.description.length > DESCRIPTION_BUDGET) {
-      over.push(`${definition.slug} description (${definition.description.length})`)
+      over.push(`${definition.slug} description (${definition.description.length})`);
     }
   }
-  assert.deepEqual(over, [], `registry copy over budget:\n${over.join('\n')}`)
-})
+  assert.deepEqual(over, [], `registry copy over budget:\n${over.join("\n")}`);
+});
 
-test('localized built-ins say the same thing as the registry', () => {
+test("localized built-ins say the same thing as the registry", () => {
   // The hub renders the registry name/description while the custom list and
   // the runner prefer the `builtIns.<slug>` message — a card must not promise
   // one thing on the hub and another on its own page.
-  const drift: string[] = []
+  const drift: string[] = [];
   for (const [slug, entry] of Object.entries(reports.builtIns)) {
-    const definition = SEEDED_DEFINITION_MAP[slug]
-    assert.ok(definition, `builtIns message ${slug} has no registry definition`)
-    if (definition.name !== entry.name) drift.push(`${slug} name`)
-    if (definition.description !== entry.description) drift.push(`${slug} description`)
+    const definition = SEEDED_DEFINITION_MAP[slug];
+    assert.ok(definition, `builtIns message ${slug} has no registry definition`);
+    if (definition.name !== entry.name) drift.push(`${slug} name`);
+    if (definition.description !== entry.description) drift.push(`${slug} description`);
   }
-  assert.deepEqual(drift, [], `builtIns messages drifted from the registry:\n${drift.join('\n')}`)
-})
+  assert.deepEqual(drift, [], `builtIns messages drifted from the registry:\n${drift.join("\n")}`);
+});
 
-test('every localized built-in name and description fits the card', () => {
-  const over: string[] = []
+test("every localized built-in name and description fits the card", () => {
+  const over: string[] = [];
   for (const [slug, entry] of Object.entries(reports.builtIns)) {
-    if (entry.name.length > TITLE_BUDGET) over.push(`${slug} name (${entry.name.length})`)
-    if (entry.description.length > DESCRIPTION_BUDGET) over.push(`${slug} description (${entry.description.length})`)
+    if (entry.name.length > TITLE_BUDGET) over.push(`${slug} name (${entry.name.length})`);
+    if (entry.description.length > DESCRIPTION_BUDGET)
+      over.push(`${slug} description (${entry.description.length})`);
   }
-  assert.deepEqual(over, [], `builtIns message copy over budget:\n${over.join('\n')}`)
-})
+  assert.deepEqual(over, [], `builtIns message copy over budget:\n${over.join("\n")}`);
+});

@@ -2,7 +2,12 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { canonicalDecimal, compareDecimal, divideDecimal, multiplyDecimal } from "../money/exact-decimal.ts";
+import {
+  canonicalDecimal,
+  compareDecimal,
+  divideDecimal,
+  multiplyDecimal,
+} from "../money/exact-decimal.ts";
 import { normalizeMoney, sum, wholeDigits } from "../money/money.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import {
@@ -11,7 +16,10 @@ import {
   subsidiaryScopeAllows,
 } from "../organization/subsidiary-scope.ts";
 import { documentRevisionCounterSql } from "../records/revision.ts";
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "../records/transaction-audit.ts";
 import { submitAndReleaseIfUngated } from "../flows/index.ts";
 import { nextDocumentNumber } from "../ledger/document-totals.ts";
 import { controlDeps } from "../ledger/document-service.ts";
@@ -26,7 +34,11 @@ import {
   internalBillingReceiver,
   InternalBillingPolicyError,
 } from "../ledger/internal-billing-policy.ts";
-import { internalBillingRuleInEffect, loadInternalBillingAccount, type InternalBillingRuleRow } from "./rules.ts";
+import {
+  internalBillingRuleInEffect,
+  loadInternalBillingAccount,
+  type InternalBillingRuleRow,
+} from "./rules.ts";
 import {
   INTERNAL_BILLING_DISABLED,
   INTERNAL_BILLING_PROJECTS_DISABLED,
@@ -95,7 +107,8 @@ function refusal(error: unknown): never {
 
 function optionalId(value: unknown, label: string): string | null {
   if (value == null || value === "") return null;
-  if (typeof value !== "string" || !isUuid(value)) throw new InternalBillingError(`${label} is not a valid reference`);
+  if (typeof value !== "string" || !isUuid(value))
+    throw new InternalBillingError(`${label} is not a valid reference`);
   return value;
 }
 
@@ -103,7 +116,8 @@ function optionalText(value: unknown, label: string, max: number): string | null
   if (value == null) return null;
   if (typeof value !== "string") throw new InternalBillingError(`${label} must be text`);
   const trimmed = value.trim();
-  if (trimmed.length > max) throw new InternalBillingError(`${label} must be at most ${max} characters`);
+  if (trimmed.length > max)
+    throw new InternalBillingError(`${label} must be at most ${max} characters`);
   return trimmed || null;
 }
 
@@ -120,7 +134,9 @@ function moneyOrNull(value: unknown, label: string, lineNumber: number): string 
   if (value == null || value === "") return null;
   const exact = canonicalDecimal(value, 4);
   if (exact === null || wholeDigits(exact) > 15) {
-    throw new InternalBillingError(`line ${lineNumber}: ${label} must be an exact decimal with at most 4 places`);
+    throw new InternalBillingError(
+      `line ${lineNumber}: ${label} must be an exact decimal with at most 4 places`,
+    );
   }
   return normalizeMoney(exact);
 }
@@ -139,8 +155,13 @@ async function assertDimension(
   label: string,
 ): Promise<void> {
   if (!id) return;
-  const row = (await runner.execute<{ is_active: boolean }>(sql`
-    select is_active from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`, "objects"))[0];
+  const row = (
+    await runner.execute<{ is_active: boolean }>(
+      sql`
+    select is_active from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new InternalBillingError(`${label} was not found`);
   if (!row.is_active) throw new InternalBillingError(`${label} is inactive; choose an active one`);
 }
@@ -153,26 +174,48 @@ async function assertProject(
   label: string,
 ): Promise<void> {
   if (!projectId) return;
-  const row = (await runner.execute<{ subsidiary_id: string | null; status: string }>(sql`
-    select subsidiary_id, status from projects where org_id = ${orgId} and id = ${projectId}`, "objects"))[0];
+  const row = (
+    await runner.execute<{ subsidiary_id: string | null; status: string }>(
+      sql`
+    select subsidiary_id, status from projects where org_id = ${orgId} and id = ${projectId}`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new InternalBillingError(`${label} was not found`);
   if (row.subsidiary_id && row.subsidiary_id !== subsidiaryId) {
-    throw new InternalBillingError(`${label} belongs to another subsidiary; choose that subsidiary or another project`);
+    throw new InternalBillingError(
+      `${label} belongs to another subsidiary; choose that subsidiary or another project`,
+    );
   }
   if (row.status === "cancelled") throw new InternalBillingError(`${label} is cancelled`);
 }
 
-async function assertSubsidiary(runner: SqlExecutor, orgId: string, id: string, label: string): Promise<string> {
-  const row = (await runner.execute<{ base_currency: string; is_active: boolean }>(sql`
-    select base_currency, is_active from subsidiaries where org_id = ${orgId} and id = ${id}`, "objects"))[0];
+async function assertSubsidiary(
+  runner: SqlExecutor,
+  orgId: string,
+  id: string,
+  label: string,
+): Promise<string> {
+  const row = (
+    await runner.execute<{ base_currency: string; is_active: boolean }>(
+      sql`
+    select base_currency, is_active from subsidiaries where org_id = ${orgId} and id = ${id}`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new InternalBillingError(`${label} was not found`);
   if (!row.is_active) throw new InternalBillingError(`${label} is inactive`);
   return row.base_currency;
 }
 
 async function rootSubsidiaryId(runner: SqlExecutor, orgId: string): Promise<string> {
-  const id = (await runner.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1`, "objects"))[0]?.id;
+  const id = (
+    await runner.execute<{ id: string }>(
+      sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1`,
+      "objects",
+    )
+  )[0]?.id;
   if (!id) throw new InternalBillingError("the organization has no root subsidiary");
   return id;
 }
@@ -224,9 +267,11 @@ export async function saveInternalBillingDraft(args: {
   if (!Array.isArray(input.lines) || input.lines.length === 0) {
     throw new InternalBillingError("add at least one line");
   }
-  if (input.lines.length > 500) throw new InternalBillingError("a document holds at most 500 lines");
+  if (input.lines.length > 500)
+    throw new InternalBillingError("a document holds at most 500 lines");
   const documentDate = input.documentDate ?? (await businessToday(orgId));
-  if (!isIsoCalendarDate(documentDate)) throw new InternalBillingError("date must be a date (YYYY-MM-DD)");
+  if (!isIsoCalendarDate(documentDate))
+    throw new InternalBillingError("date must be a date (YYYY-MM-DD)");
   const header = {
     departmentId: optionalId(input.departmentId, "the providing department"),
     projectId: optionalId(input.projectId, "the providing project"),
@@ -240,31 +285,63 @@ export async function saveInternalBillingDraft(args: {
   return withOrgTransaction(orgId, async () => {
     await requireFeatures(orgId, referencesProject);
 
-    let existing: { id: string; documentNumber: string; status: string; subsidiaryId: string | null; revision: string } | null = null;
+    let existing: {
+      id: string;
+      documentNumber: string;
+      status: string;
+      subsidiaryId: string | null;
+      revision: string;
+    } | null = null;
     if (args.id) {
-      existing = (await db.execute<{ id: string; documentNumber: string; status: string; subsidiaryId: string | null; kind: string; revision: string }>(sql`
+      existing =
+        (
+          await db.execute<{
+            id: string;
+            documentNumber: string;
+            status: string;
+            subsidiaryId: string | null;
+            kind: string;
+            revision: string;
+          }>(
+            sql`
         select d.id, d.document_number as "documentNumber", d.status, d.subsidiary_id as "subsidiaryId", d.kind,
                ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as revision
           from documents d
          where d.org_id = ${orgId} and d.id = ${args.id}
-         for update`, "objects")).find((row) => row.kind === KIND) ?? null;
+         for update`,
+            "objects",
+          )
+        ).find((row) => row.kind === KIND) ?? null;
       if (!existing || !subsidiaryScopeAllows(args.allowedSubsidiaryIds, existing.subsidiaryId)) {
         throw new InternalBillingError("not found", 404);
       }
       if (existing.status !== "draft") {
-        throw new InternalBillingError(`this document is ${existing.status}; only a draft can be edited — void it and enter a new one`);
+        throw new InternalBillingError(
+          `this document is ${existing.status}; only a draft can be edited — void it and enter a new one`,
+        );
       }
       if (args.expectedRevision != null && args.expectedRevision !== existing.revision) {
-        throw new InternalBillingError("this document changed after you opened it; reload and review the latest version", 409);
+        throw new InternalBillingError(
+          "this document changed after you opened it; reload and review the latest version",
+          409,
+        );
       }
     }
 
     // The provider's legal entity.
     let providerSubsidiaryId: string;
     if (args.allowedSubsidiaryIds === null) {
-      providerSubsidiaryId = optionalId(input.subsidiaryId, "the providing subsidiary") ?? existing?.subsidiaryId ?? (await rootSubsidiaryId(db, orgId));
+      providerSubsidiaryId =
+        optionalId(input.subsidiaryId, "the providing subsidiary") ??
+        existing?.subsidiaryId ??
+        (await rootSubsidiaryId(db, orgId));
     } else {
-      const resolved = resolveDraftSubsidiary(args.allowedSubsidiaryIds, optionalId(input.subsidiaryId, "the providing subsidiary") ?? existing?.subsidiaryId ?? null);
+      const resolved = resolveDraftSubsidiary(
+        args.allowedSubsidiaryIds,
+        optionalId(input.subsidiaryId, "the providing subsidiary") ??
+          existing?.subsidiaryId ??
+          null,
+      );
       if (!resolved.ok || !resolved.subsidiaryId) {
         throw new InternalBillingError(
           resolved.ok || resolved.error === "subsidiary_required"
@@ -274,9 +351,19 @@ export async function saveInternalBillingDraft(args: {
       }
       providerSubsidiaryId = resolved.subsidiaryId;
     }
-    const currency = await assertSubsidiary(db, orgId, providerSubsidiaryId, "the providing subsidiary");
+    const currency = await assertSubsidiary(
+      db,
+      orgId,
+      providerSubsidiaryId,
+      "the providing subsidiary",
+    );
 
-    const rule: InternalBillingRuleRow | null = await internalBillingRuleInEffect(db, orgId, ruleCode, documentDate);
+    const rule: InternalBillingRuleRow | null = await internalBillingRuleInEffect(
+      db,
+      orgId,
+      ruleCode,
+      documentDate,
+    );
     if (!rule) {
       throw new InternalBillingError(
         `no version of internal billing rule ${ruleCode} is in effect on ${documentDate}; add one in Setup → Internal billing`,
@@ -284,7 +371,10 @@ export async function saveInternalBillingDraft(args: {
     }
     const debit = await loadInternalBillingAccount(db, orgId, rule.debitAccountId);
     const credit = await loadInternalBillingAccount(db, orgId, rule.creditAccountId);
-    if (!debit || !credit) throw new InternalBillingError(`internal billing rule ${rule.code} names an account that does not exist`);
+    if (!debit || !credit)
+      throw new InternalBillingError(
+        `internal billing rule ${rule.code} names an account that does not exist`,
+      );
     try {
       assertInternalBillingRuleAccounts(rule.method, debit, credit);
     } catch (error) {
@@ -292,7 +382,13 @@ export async function saveInternalBillingDraft(args: {
     }
     const multiSubsidiary = await lockAndCheckOrgFeature(db, orgId, "multiSubsidiary");
 
-    await assertDimension(db, orgId, "departments", header.departmentId, "the providing department");
+    await assertDimension(
+      db,
+      orgId,
+      "departments",
+      header.departmentId,
+      "the providing department",
+    );
     await assertDimension(db, orgId, "locations", header.locationId, "the providing location");
     await assertDimension(db, orgId, "classes", header.classId, "the providing class");
     await assertProject(db, orgId, header.projectId, providerSubsidiaryId, "the providing project");
@@ -301,7 +397,8 @@ export async function saveInternalBillingDraft(args: {
     const prepared: PreparedLine[] = [];
     for (const [index, raw] of input.lines.entries()) {
       const lineNumber = index + 1;
-      if (!raw || typeof raw !== "object") throw new InternalBillingError(`line ${lineNumber} is malformed`);
+      if (!raw || typeof raw !== "object")
+        throw new InternalBillingError(`line ${lineNumber} is malformed`);
       const quantity = positiveQuantity(raw.quantity, lineNumber);
       const enteredRate = moneyOrNull(raw.rate, "rate", lineNumber);
       const enteredAmount = moneyOrNull(raw.amount, "amount", lineNumber);
@@ -325,25 +422,47 @@ export async function saveInternalBillingDraft(args: {
       const receiver = internalBillingReceiver(provider, line);
       if (line.subsidiaryId) {
         if (!subsidiaryScopeAllows(args.allowedSubsidiaryIds, line.subsidiaryId)) {
-          throw new InternalBillingError(`line ${lineNumber}: the receiving subsidiary is outside your access`);
+          throw new InternalBillingError(
+            `line ${lineNumber}: the receiving subsidiary is outside your access`,
+          );
         }
         await assertSubsidiary(db, orgId, line.subsidiaryId, `line ${lineNumber} subsidiary`);
       }
-      await assertDimension(db, orgId, "departments", line.departmentId, `line ${lineNumber} department`);
+      await assertDimension(
+        db,
+        orgId,
+        "departments",
+        line.departmentId,
+        `line ${lineNumber} department`,
+      );
       await assertDimension(db, orgId, "locations", line.locationId, `line ${lineNumber} location`);
       await assertDimension(db, orgId, "classes", line.classId, `line ${lineNumber} class`);
-      await assertProject(db, orgId, line.projectId, receiver.subsidiaryId, `line ${lineNumber} project`);
+      await assertProject(
+        db,
+        orgId,
+        line.projectId,
+        receiver.subsidiaryId,
+        `line ${lineNumber} project`,
+      );
       const itemId = optionalId(raw.itemId, `line ${lineNumber} item`);
       let itemName: string | null = null;
       if (itemId) {
-        const item = (await db.execute<{ name: string }>(sql`
-          select name from items where org_id = ${orgId} and id = ${itemId}`, "objects"))[0];
+        const item = (
+          await db.execute<{ name: string }>(
+            sql`
+          select name from items where org_id = ${orgId} and id = ${itemId}`,
+            "objects",
+          )
+        )[0];
         if (!item) throw new InternalBillingError(`line ${lineNumber}: item was not found`);
         itemName = item.name;
       }
-      const isBillable = raw.isBillable == null
-        ? rule.billableByDefault && internalBillingAllowsBillable(rule.method) && line.projectId != null
-        : raw.isBillable === true;
+      const isBillable =
+        raw.isBillable == null
+          ? rule.billableByDefault &&
+            internalBillingAllowsBillable(rule.method) &&
+            line.projectId != null
+          : raw.isBillable === true;
       try {
         assertInternalBillingLine({
           method: rule.method,
@@ -357,17 +476,25 @@ export async function saveInternalBillingDraft(args: {
       } catch (error) {
         refusal(error);
       }
-      const billRate = isBillable ? moneyOrNull(raw.billRate, "bill rate", lineNumber) ?? rate : null;
+      const billRate = isBillable
+        ? (moneyOrNull(raw.billRate, "bill rate", lineNumber) ?? rate)
+        : null;
       prepared.push({
         itemId,
-        description: optionalText(raw.description, `line ${lineNumber} description`, 1000) ?? itemName,
+        description:
+          optionalText(raw.description, `line ${lineNumber} description`, 1000) ?? itemName,
         quantity,
         rate,
         amount,
         ...line,
         isBillable,
         billRate,
-        billAmount: billRate == null ? null : enteredRate == null && raw.billRate == null ? amount : extend(quantity, billRate),
+        billAmount:
+          billRate == null
+            ? null
+            : enteredRate == null && raw.billRate == null
+              ? amount
+              : extend(quantity, billRate),
       });
     }
     const total = sum(prepared.map((line) => line.amount));
@@ -376,7 +503,8 @@ export async function saveInternalBillingDraft(args: {
     let documentNumber: string;
     const before = existing ? await captureTransactionAuditSnapshot(db, existing.id, orgId) : null;
     if (existing) {
-      const updated = await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(
+        sql`
         update documents
            set document_date = ${documentDate}::date, currency = ${currency}, subsidiary_id = ${providerSubsidiaryId},
                department_id = ${header.departmentId}, project_id = ${header.projectId},
@@ -385,14 +513,24 @@ export async function saveInternalBillingDraft(args: {
                subtotal = ${total}, tax_total = '0', total = ${total},
                updated_at = now(), updated_by = ${args.actorId}
          where org_id = ${orgId} and id = ${existing.id} and status = 'draft'
-         returning id`, "objects");
-      if (!updated[0]) throw new InternalBillingError("this document changed while you were saving; reload and try again", 409);
-      await db.execute(sql`delete from document_lines where org_id = ${orgId} and document_id = ${existing.id}`);
+         returning id`,
+        "objects",
+      );
+      if (!updated[0])
+        throw new InternalBillingError(
+          "this document changed while you were saving; reload and try again",
+          409,
+        );
+      await db.execute(
+        sql`delete from document_lines where org_id = ${orgId} and document_id = ${existing.id}`,
+      );
       id = existing.id;
       documentNumber = existing.documentNumber;
     } else {
       documentNumber = await nextDocumentNumber(orgId, KIND, NUMBER_PREFIX, providerSubsidiaryId);
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into documents (org_id, kind, document_number, document_date, currency, status,
                                subsidiary_id, department_id, project_id, location_id, class_id,
                                internal_billing_rule_id, reference_number, memo,
@@ -401,7 +539,10 @@ export async function saveInternalBillingDraft(args: {
                 ${providerSubsidiaryId}, ${header.departmentId}, ${header.projectId}, ${header.locationId}, ${header.classId},
                 ${rule.id}, ${referenceNumber}, ${memo},
                 ${total}, '0', ${total}, ${args.actorId}, ${args.actorId})
-        returning id`, "objects"))[0];
+        returning id`,
+          "objects",
+        )
+      )[0];
       if (!inserted) throw new Error("internal billing insert returned no row");
       id = inserted.id;
     }
@@ -418,22 +559,34 @@ export async function saveInternalBillingDraft(args: {
     }
     const after = await captureTransactionAuditSnapshot(db, id, orgId);
     if (existing && before && after) {
-      await recordTransactionAudit(db, { orgId, documentId: id, action: "update", actorId: args.actorId, source: "internal_billing", before, after });
+      await recordTransactionAudit(db, {
+        orgId,
+        documentId: id,
+        action: "update",
+        actorId: args.actorId,
+        source: "internal_billing",
+        before,
+        after,
+      });
     } else if (after) {
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'documents', ${id}, 'insert', ${JSON.stringify({ after })}::jsonb, ${args.actorId})`);
     }
-    const revision = (await db.execute<{ revision: string }>(sql`
+    const revision = (
+      await db.execute<{ revision: string }>(
+        sql`
       select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision
-        from documents where org_id = ${orgId} and id = ${id}`, "objects"))[0]!.revision;
+        from documents where org_id = ${orgId} and id = ${id}`,
+        "objects",
+      )
+    )[0]!.revision;
     return { id, documentNumber, status: "draft", revision };
   });
 }
 
 export type InternalBillingPostOutcome =
-  | { status: "posted"; entryId: string }
-  | { status: "pending_approval"; requestId: string | null };
+  { status: "posted"; entryId: string } | { status: "pending_approval"; requestId: string | null };
 
 /**
  * Submit and post through the native lifecycle in one unit: an approval
@@ -449,11 +602,20 @@ export async function postInternalBilling(args: {
   const { orgId, actorId } = args;
   if (!isUuid(args.id)) throw new InternalBillingError("not found", 404);
   const outcome = await withOrgTransaction(orgId, async () => {
-    const current = (await db.execute<{ kind: string; status: string; subsidiaryId: string | null }>(sql`
+    const current = (
+      await db.execute<{ kind: string; status: string; subsidiaryId: string | null }>(
+        sql`
       select kind, status, subsidiary_id as "subsidiaryId" from documents
        where org_id = ${orgId} and id = ${args.id}
-       for update`, "objects"))[0];
-    if (!current || current.kind !== KIND || !subsidiaryScopeAllows(args.allowedSubsidiaryIds, current.subsidiaryId)) {
+       for update`,
+        "objects",
+      )
+    )[0];
+    if (
+      !current ||
+      current.kind !== KIND ||
+      !subsidiaryScopeAllows(args.allowedSubsidiaryIds, current.subsidiaryId)
+    ) {
       throw new InternalBillingError("not found", 404);
     }
     if (!(await lockAndCheckOrgFeature(db, orgId, "internalBilling"))) {
@@ -462,17 +624,24 @@ export async function postInternalBilling(args: {
     const previousStatus = current.status;
     if (previousStatus === "draft") {
       const submission = await submitAndReleaseIfUngated(KIND, args.id, actorId);
-      if (submission.flowError) throw new InternalBillingError(`approval could not be routed: ${submission.flowError}`);
+      if (submission.flowError)
+        throw new InternalBillingError(`approval could not be routed: ${submission.flowError}`);
       if (submission.gated) {
         await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'documents', ${args.id}, 'submit', ${JSON.stringify({ from: "draft", to: "pending_approval", run_id: submission.runId })}::jsonb, ${actorId})`);
-        return { status: "pending_approval" as const, requestId: submission.runId ?? null, previousStatus };
+        return {
+          status: "pending_approval" as const,
+          requestId: submission.runId ?? null,
+          previousStatus,
+        };
       }
       await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'documents', ${args.id}, 'submit', ${JSON.stringify({ from: "draft", to: "approved", auto_approved: true })}::jsonb, ${actorId}),
                (${orgId}, 'documents', ${args.id}, 'approve', ${JSON.stringify({ from: "draft", to: "approved", auto: true, reason: "released without approval: no approval flow configured" })}::jsonb, ${actorId})`);
     } else if (previousStatus !== "approved") {
-      throw new InternalBillingError(`this document is ${previousStatus}; only a draft or approved document can be posted`);
+      throw new InternalBillingError(
+        `this document is ${previousStatus}; only a draft or approved document can be posted`,
+      );
     }
     const entryId = await postDocument(args.id, await controlDeps(orgId), {
       deferEffects: true,
@@ -480,7 +649,8 @@ export async function postInternalBilling(args: {
     });
     return { status: "posted" as const, entryId, previousStatus };
   });
-  if (outcome.status === "pending_approval") return { status: "pending_approval", requestId: outcome.requestId };
+  if (outcome.status === "pending_approval")
+    return { status: "pending_approval", requestId: outcome.requestId };
   await runPostDocumentEffects(args.id, outcome.previousStatus, { actorId });
   return { status: "posted", entryId: outcome.entryId };
 }
@@ -501,9 +671,18 @@ export async function voidInternalBilling(args: {
 }): Promise<DocumentVoidResult> {
   const { orgId } = args;
   if (!isUuid(args.id)) throw new InternalBillingError("not found", 404);
-  const current = (await db.execute<{ kind: string; subsidiaryId: string | null }>(sql`
-    select kind, subsidiary_id as "subsidiaryId" from documents where org_id = ${orgId} and id = ${args.id}`, "objects"))[0];
-  if (!current || current.kind !== KIND || !subsidiaryScopeAllows(args.allowedSubsidiaryIds, current.subsidiaryId)) {
+  const current = (
+    await db.execute<{ kind: string; subsidiaryId: string | null }>(
+      sql`
+    select kind, subsidiary_id as "subsidiaryId" from documents where org_id = ${orgId} and id = ${args.id}`,
+      "objects",
+    )
+  )[0];
+  if (
+    !current ||
+    current.kind !== KIND ||
+    !subsidiaryScopeAllows(args.allowedSubsidiaryIds, current.subsidiaryId)
+  ) {
     throw new InternalBillingError("not found", 404);
   }
   try {
@@ -541,7 +720,10 @@ export interface InternalBillingDetail {
     postedEntryId: string | null;
     revision: string;
   };
-  rule: Pick<InternalBillingRuleRow, "id" | "code" | "name" | "method" | "effectiveFrom" | "effectiveTo"> | null;
+  rule: Pick<
+    InternalBillingRuleRow,
+    "id" | "code" | "name" | "method" | "effectiveFrom" | "effectiveTo"
+  > | null;
   lines: {
     id: string;
     lineNumber: number;
@@ -569,7 +751,9 @@ export async function loadInternalBilling(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<InternalBillingDetail | null> {
   if (!isUuid(id)) return null;
-  const document = (await db.execute<InternalBillingDetail["document"] & { kind: string; ruleId: string | null }>(sql`
+  const document = (
+    await db.execute<InternalBillingDetail["document"] & { kind: string; ruleId: string | null }>(
+      sql`
     select d.id, d.kind, d.document_number as "documentNumber", d.status, d.document_date::text as "documentDate",
            d.currency, d.subsidiary_id as "subsidiaryId", d.department_id as "departmentId",
            d.project_id as "projectId", d.location_id as "locationId", d.class_id as "classId",
@@ -577,14 +761,28 @@ export async function loadInternalBilling(
            d.posted_entry_id as "postedEntryId", d.internal_billing_rule_id as "ruleId",
            ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as revision
       from documents d
-     where d.org_id = ${orgId} and d.id = ${id}`, "objects"))[0];
-  if (!document || document.kind !== KIND || !subsidiaryScopeAllows(allowedSubsidiaryIds, document.subsidiaryId)) return null;
+     where d.org_id = ${orgId} and d.id = ${id}`,
+      "objects",
+    )
+  )[0];
+  if (
+    !document ||
+    document.kind !== KIND ||
+    !subsidiaryScopeAllows(allowedSubsidiaryIds, document.subsidiaryId)
+  )
+    return null;
   const rule = document.ruleId
-    ? (await db.execute<NonNullable<InternalBillingDetail["rule"]>>(sql`
+    ? ((
+        await db.execute<NonNullable<InternalBillingDetail["rule"]>>(
+          sql`
         select id, code, name, method, effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"
-          from internal_billing_rules where org_id = ${orgId} and id = ${document.ruleId}`, "objects"))[0] ?? null
+          from internal_billing_rules where org_id = ${orgId} and id = ${document.ruleId}`,
+          "objects",
+        )
+      )[0] ?? null)
     : null;
-  const lines = await db.execute<InternalBillingDetail["lines"][number]>(sql`
+  const lines = await db.execute<InternalBillingDetail["lines"][number]>(
+    sql`
     select id, line_number as "lineNumber", item_id as "itemId", description,
            quantity::text as quantity, unit_price::text as rate, amount::text as amount,
            subsidiary_id as "subsidiaryId", department_id as "departmentId", project_id as "projectId",
@@ -593,7 +791,9 @@ export async function loadInternalBilling(
            billed_by_line_id is not null as billed
       from document_lines
      where org_id = ${orgId} and document_id = ${id}
-     order by line_number`, "objects");
+     order by line_number`,
+    "objects",
+  );
   const { kind: _kind, ruleId: _ruleId, ...header } = document;
   return { document: header, rule, lines };
 }

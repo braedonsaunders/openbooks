@@ -1,7 +1,7 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { subsidiaryScopeAllows } from '@openbooks/engine/organization/authority'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { subsidiaryScopeAllows } from "@openbooks/engine/organization/authority";
 
 /**
  * Import-side subsidiary scope.
@@ -14,7 +14,7 @@ import { subsidiaryScopeAllows } from '@openbooks/engine/organization/authority'
  * helpers; the import route refuses restricted callers for every resource
  * that does not, so an unenforced write can never happen by omission.
  */
-export type WriteScope = ReadonlySet<string> | null | undefined
+export type WriteScope = ReadonlySet<string> | null | undefined;
 
 /** The employee (party) rows a restricted importer may write against. */
 export async function employeeWriteScopeError(
@@ -22,13 +22,18 @@ export async function employeeWriteScopeError(
   employeePartyId: string,
   scope: WriteScope,
 ): Promise<string | null> {
-  if (scope == null) return null
-  const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
+  if (scope == null) return null;
+  const row = (
+    await db.execute<{ subsidiaryId: string | null }>(
+      sql`
     select subsidiary_id as "subsidiaryId" from parties
-     where org_id = ${orgId} and id = ${employeePartyId}`, 'objects'))[0]
+     where org_id = ${orgId} and id = ${employeePartyId}`,
+      "objects",
+    )
+  )[0];
   // An unresolved employee is indistinguishable from an out-of-scope one.
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiaryId)) {
-    return "employee is outside the caller's subsidiary scope"
+    return "employee is outside the caller's subsidiary scope";
   }
-  return null
+  return null;
 }

@@ -18,5 +18,6 @@ export const PAYMENT_SYSTEM_CUSTOM_FIELDS = [
   "paymentCurrencyEvidence",
 ] as const;
 
-export const PAYMENT_SYSTEM_CUSTOM_FIELD_SET: ReadonlySet<string> =
-  new Set(PAYMENT_SYSTEM_CUSTOM_FIELDS);
+export const PAYMENT_SYSTEM_CUSTOM_FIELD_SET: ReadonlySet<string> = new Set(
+  PAYMENT_SYSTEM_CUSTOM_FIELDS,
+);

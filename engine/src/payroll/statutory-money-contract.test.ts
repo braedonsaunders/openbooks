@@ -79,15 +79,16 @@ test("the NL engine prices pipeline-shaped money", () => {
   );
   // Negatives stay refused by name at the pack boundary.
   assert.throws(
-    () => calculateNlStatutory({
-      income: "-1.0000",
-      periodsPerYear: 12,
-      applyKorting: false,
-      ageClass: "under_aow",
-      awfLow: true,
-      aofHigh: false,
-      whkPercent: "1.25",
-    }),
+    () =>
+      calculateNlStatutory({
+        income: "-1.0000",
+        periodsPerYear: 12,
+        applyKorting: false,
+        ageClass: "under_aow",
+        awfLow: true,
+        aofHigh: false,
+        whkPercent: "1.25",
+      }),
     /not a non-negative money amount/,
   );
 });
@@ -95,13 +96,29 @@ test("the NL engine prices pipeline-shaped money", () => {
 test("the SG engine prices pipeline-shaped money", () => {
   // The CPF Board's own example ($4,500 OW → $765 employer / $900
   // employee), priced identically through 4dp and 2dp inputs.
-  const four = calculateSgStatutory({ taxYear: 2026, cpfStatus: "citizen", ageBand: "le55", ordinaryWages: "4500.0000" });
-  const two = calculateSgStatutory({ taxYear: 2026, cpfStatus: "citizen", ageBand: "le55", ordinaryWages: "4500.00" });
+  const four = calculateSgStatutory({
+    taxYear: 2026,
+    cpfStatus: "citizen",
+    ageBand: "le55",
+    ordinaryWages: "4500.0000",
+  });
+  const two = calculateSgStatutory({
+    taxYear: 2026,
+    cpfStatus: "citizen",
+    ageBand: "le55",
+    ordinaryWages: "4500.00",
+  });
   assert.equal(four.employeeCents, 90000n);
   assert.equal(four.employerCents, 76500n);
   assert.deepEqual(four, two);
   assert.throws(
-    () => calculateSgStatutory({ taxYear: 2026, cpfStatus: "citizen", ageBand: "le55", ordinaryWages: "-1.0000" }),
+    () =>
+      calculateSgStatutory({
+        taxYear: 2026,
+        cpfStatus: "citizen",
+        ageBand: "le55",
+        ordinaryWages: "-1.0000",
+      }),
     /not a non-negative money amount/,
   );
 });

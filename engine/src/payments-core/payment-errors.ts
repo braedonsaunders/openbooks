@@ -33,9 +33,11 @@ export class PaymentRevisionConflictError extends PaymentError {
  */
 export class CreditApplicationConflictError extends PaymentError {
   constructor(reason: "changed-payload" | "foreign-key") {
-    super(reason === "foreign-key"
-      ? "This request key is already in use by another organization. Reload the credit panel to start a fresh request."
-      : "This credit application was already saved with different details. Reload the credit panel, review what settled, and start a fresh request.");
+    super(
+      reason === "foreign-key"
+        ? "This request key is already in use by another organization. Reload the credit panel to start a fresh request."
+        : "This credit application was already saved with different details. Reload the credit panel, review what settled, and start a fresh request.",
+    );
     this.name = "CreditApplicationConflictError";
   }
 }

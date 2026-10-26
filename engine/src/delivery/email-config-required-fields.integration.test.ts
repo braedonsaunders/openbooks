@@ -20,53 +20,83 @@ async function scratchOrg(): Promise<string> {
   return org.orgId;
 }
 
-test("a disabled SMTP selection without a host is refused with a typed reason", { skip: !DB }, async () => {
-  const orgId = await scratchOrg();
-  try {
-    await assert.rejects(
-      saveOrgEmailConfig(orgId, { enabled: false, provider: "smtp", fromEmail: "billing@example.test" }, actor),
-      /SMTP host/u,
-    );
-    const view = await withBypassContext(() => readOrgEmailConfigView(orgId));
-    assert.equal(view.provider, undefined, "refused save must persist nothing");
-  } finally {
-    await withBypassContext(() => dropScratchOrgReporting(orgId));
-  }
-});
+test(
+  "a disabled SMTP selection without a host is refused with a typed reason",
+  { skip: !DB },
+  async () => {
+    const orgId = await scratchOrg();
+    try {
+      await assert.rejects(
+        saveOrgEmailConfig(
+          orgId,
+          { enabled: false, provider: "smtp", fromEmail: "billing@example.test" },
+          actor,
+        ),
+        /SMTP host/u,
+      );
+      const view = await withBypassContext(() => readOrgEmailConfigView(orgId));
+      assert.equal(view.provider, undefined, "refused save must persist nothing");
+    } finally {
+      await withBypassContext(() => dropScratchOrgReporting(orgId));
+    }
+  },
+);
 
-test("a disabled SMTP selection without a sender is refused with a typed reason", { skip: !DB }, async () => {
-  const orgId = await scratchOrg();
-  try {
-    await assert.rejects(
-      saveOrgEmailConfig(orgId, { enabled: false, provider: "smtp", smtpHost: "smtp.example.test" }, actor),
-      /From email/u,
-    );
-  } finally {
-    await withBypassContext(() => dropScratchOrgReporting(orgId));
-  }
-});
+test(
+  "a disabled SMTP selection without a sender is refused with a typed reason",
+  { skip: !DB },
+  async () => {
+    const orgId = await scratchOrg();
+    try {
+      await assert.rejects(
+        saveOrgEmailConfig(
+          orgId,
+          { enabled: false, provider: "smtp", smtpHost: "smtp.example.test" },
+          actor,
+        ),
+        /From email/u,
+      );
+    } finally {
+      await withBypassContext(() => dropScratchOrgReporting(orgId));
+    }
+  },
+);
 
-test("a complete disabled SMTP selection still saves (credential only at enable)", { skip: !DB }, async () => {
-  const orgId = await scratchOrg();
-  try {
-    const saved = await saveOrgEmailConfig(
-      orgId,
-      { enabled: false, provider: "smtp", fromEmail: "billing@example.test", smtpHost: "smtp.example.test" },
-      actor,
-    );
-    assert.equal(saved.provider, "smtp");
-    assert.equal(saved.hasSecret, false);
-  } finally {
-    await withBypassContext(() => dropScratchOrgReporting(orgId));
-  }
-});
+test(
+  "a complete disabled SMTP selection still saves (credential only at enable)",
+  { skip: !DB },
+  async () => {
+    const orgId = await scratchOrg();
+    try {
+      const saved = await saveOrgEmailConfig(
+        orgId,
+        {
+          enabled: false,
+          provider: "smtp",
+          fromEmail: "billing@example.test",
+          smtpHost: "smtp.example.test",
+        },
+        actor,
+      );
+      assert.equal(saved.provider, "smtp");
+      assert.equal(saved.hasSecret, false);
+    } finally {
+      await withBypassContext(() => dropScratchOrgReporting(orgId));
+    }
+  },
+);
 
 test("clearing the provider still unconfigures delivery", { skip: !DB }, async () => {
   const orgId = await scratchOrg();
   try {
     await saveOrgEmailConfig(
       orgId,
-      { enabled: false, provider: "smtp", fromEmail: "billing@example.test", smtpHost: "smtp.example.test" },
+      {
+        enabled: false,
+        provider: "smtp",
+        fromEmail: "billing@example.test",
+        smtpHost: "smtp.example.test",
+      },
       actor,
     );
     const cleared = await saveOrgEmailConfig(orgId, { enabled: false, provider: null }, actor);

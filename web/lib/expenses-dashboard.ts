@@ -1,10 +1,14 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { activePostingPrimaryBookId } from '@openbooks/engine/platform/accounting-books'
-import { addMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
-import { fromUnits, roundDiv, toUnits } from '@openbooks/engine/money/money'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { activePostingPrimaryBookId } from "@openbooks/engine/platform/accounting-books";
+import {
+  addMonthsStart,
+  businessToday,
+  startOfMonth,
+} from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
+import { fromUnits, roundDiv, toUnits } from "@openbooks/engine/money/money";
 
 /**
  * Expense-reports dashboard — the /expenses cockpit's data. This is the
@@ -19,113 +23,113 @@ import { fromUnits, roundDiv, toUnits } from '@openbooks/engine/money/money'
  */
 
 export interface ExpenseSpender {
-  employeeId: string
-  employeeName: string
-  totalSpend: string
-  priorSpend: string
-  reportCount: number
-  changePct: number
+  employeeId: string;
+  employeeName: string;
+  totalSpend: string;
+  priorSpend: string;
+  reportCount: number;
+  changePct: number;
 }
 
 export interface ExpenseCategory {
-  categoryId: string
-  categoryName: string
-  currentAmount: string
-  priorAmount: string
-  changePct: number
+  categoryId: string;
+  categoryName: string;
+  currentAmount: string;
+  priorAmount: string;
+  changePct: number;
 }
 
 export interface ExpenseQueueItem {
-  id: string
-  documentNumber: string
-  employee: string | null
-  date: string
-  total: string
-  status: string
+  id: string;
+  documentNumber: string;
+  employee: string | null;
+  date: string;
+  total: string;
+  status: string;
 }
 
 export interface ExpensesDashboardData {
-  period: { from: string; to: string; priorFrom: string }
+  period: { from: string; to: string; priorFrom: string };
   pipeline: {
-    draftCount: number
-    draftTotal: string
-    pendingCount: number
-    pendingTotal: string
-    approvedCount: number
-    approvedTotal: string
-    postedMonthTotal: string
-    postedMonthCount: number
-  }
+    draftCount: number;
+    draftTotal: string;
+    pendingCount: number;
+    pendingTotal: string;
+    approvedCount: number;
+    approvedTotal: string;
+    postedMonthTotal: string;
+    postedMonthCount: number;
+  };
   summary: {
-    expenseReportTotal: string
-    vendorBillTotal: string
-    highSpenderCount: number
-    categoryIncreaseTotal: string
-  }
-  topSpenders: ExpenseSpender[]
-  categories: ExpenseCategory[]
-  monthlyTrends: { month: string; expenseAmount: string; billAmount: string }[]
-  queue: ExpenseQueueItem[]
+    expenseReportTotal: string;
+    vendorBillTotal: string;
+    highSpenderCount: number;
+    categoryIncreaseTotal: string;
+  };
+  topSpenders: ExpenseSpender[];
+  categories: ExpenseCategory[];
+  monthlyTrends: { month: string; expenseAmount: string; billAmount: string }[];
+  queue: ExpenseQueueItem[];
 }
 
-type MoneyInput = string | number
-type SqlNumber = MoneyInput | null
+type MoneyInput = string | number;
+type SqlNumber = MoneyInput | null;
 
 interface ExpenseTrendRow extends Record<string, unknown> {
-  month: string | null
-  expense_amount: SqlNumber
-  bill_amount: SqlNumber
+  month: string | null;
+  expense_amount: SqlNumber;
+  bill_amount: SqlNumber;
 }
 
 interface ExpenseSpenderRow extends Record<string, unknown> {
-  employee_id: string
-  employee_name: string
-  current_spend: SqlNumber
-  prior_spend: SqlNumber
-  report_count: string
+  employee_id: string;
+  employee_name: string;
+  current_spend: SqlNumber;
+  prior_spend: SqlNumber;
+  report_count: string;
 }
 
 interface ExpenseCategoryRow extends Record<string, unknown> {
-  category_id: string
-  category_name: string
-  current_amount: SqlNumber
-  prior_amount: SqlNumber
+  category_id: string;
+  category_name: string;
+  current_amount: SqlNumber;
+  prior_amount: SqlNumber;
 }
 
 interface ExpenseQueueRow extends Record<string, unknown> {
-  id: string
-  document_number: string | null
-  employee: string | null
-  date: string | null
-  total: SqlNumber
-  status: string
+  id: string;
+  document_number: string | null;
+  employee: string | null;
+  date: string | null;
+  total: SqlNumber;
+  status: string;
 }
 
 const moneyUnits = (value: unknown): bigint => {
-  if (value === null || value === undefined) return 0n
-  if (typeof value !== 'string' && typeof value !== 'number') {
-    throw new Error('money values must be decimal strings or numbers')
+  if (value === null || value === undefined) return 0n;
+  if (typeof value !== "string" && typeof value !== "number") {
+    throw new Error("money values must be decimal strings or numbers");
   }
-  return toUnits(value)
-}
+  return toUnits(value);
+};
 
-const canonicalMoney = (value: unknown): string => fromUnits(moneyUnits(value))
+const canonicalMoney = (value: unknown): string => fromUnits(moneyUnits(value));
 
 const sumMoney = (values: readonly MoneyInput[]): string =>
-  fromUnits(values.reduce((total, value) => total + toUnits(value), 0n))
+  fromUnits(values.reduce((total, value) => total + toUnits(value), 0n));
 
 /** Round an exact percentage change to one decimal place without floats. */
 const percentageChange = (current: bigint, prior: bigint): number => {
-  if (prior <= 0n) return 0
+  if (prior <= 0n) return 0;
   // (current - prior) / prior * 100, rounded to tenths of a percent.
-  return Number(roundDiv((current - prior) * 1000n, prior)) / 10
-}
+  return Number(roundDiv((current - prior) * 1000n, prior)) / 10;
+};
 
 export interface ExpenseSummaryInputs {
-  topSpenderTotals: readonly MoneyInput[]
-  vendorBillTotals: readonly MoneyInput[]
-  categoryIncreaseTotal: MoneyInput
-  highSpenderCount: number
+  topSpenderTotals: readonly MoneyInput[];
+  vendorBillTotals: readonly MoneyInput[];
+  categoryIncreaseTotal: MoneyInput;
+  highSpenderCount: number;
 }
 
 /**
@@ -137,28 +141,30 @@ export function aggregateExpenseSummary({
   vendorBillTotals,
   categoryIncreaseTotal,
   highSpenderCount,
-}: ExpenseSummaryInputs): ExpensesDashboardData['summary'] {
+}: ExpenseSummaryInputs): ExpensesDashboardData["summary"] {
   return {
     expenseReportTotal: sumMoney(topSpenderTotals),
     vendorBillTotal: sumMoney(vendorBillTotals),
     highSpenderCount,
     categoryIncreaseTotal: canonicalMoney(categoryIncreaseTotal),
-  }
+  };
 }
 
 export async function expensesDashboard(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ExpensesDashboardData> {
-  const to = await businessToday(orgId)
-  const primaryBookId = await activePostingPrimaryBookId(orgId)
-  const monthStart = startOfMonth(to)
-  const from = addMonthsStart(to, -11)
-  const priorFrom = addMonthsStart(to, -23)
+  const to = await businessToday(orgId);
+  const primaryBookId = await activePostingPrimaryBookId(orgId);
+  const monthStart = startOfMonth(to);
+  const from = addMonthsStart(to, -11);
+  const priorFrom = addMonthsStart(to, -23);
 
-  const [pipeRes, spenderRes, spenderKpiRes, catRes, categoryKpiRes, trendRes, queueRes] = (await Promise.all([
-    // Approval pipeline — live counts/values by status + posted this month.
-    db.execute(sql`
+  const [pipeRes, spenderRes, spenderKpiRes, catRes, categoryKpiRes, trendRes, queueRes] =
+    await Promise.all([
+      // Approval pipeline — live counts/values by status + posted this month.
+      db.execute(
+        sql`
       select
         count(*) filter (where status = 'draft') as draft_count,
         coalesce(sum(total) filter (where status = 'draft'), 0) as draft_total,
@@ -171,10 +177,13 @@ export async function expensesDashboard(
       from documents
       where org_id = ${orgId} and kind = 'expense_report' and voided_at is null
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-    `, 'objects'),
-    // Top spenders — expense reports by employee, current vs prior window
-    // (verbatim Spend Velocity query 7).
-    db.execute<ExpenseSpenderRow>(sql`
+    `,
+        "objects",
+      ),
+      // Top spenders — expense reports by employee, current vs prior window
+      // (verbatim Spend Velocity query 7).
+      db.execute<ExpenseSpenderRow>(
+        sql`
       select d.party_id as employee_id, coalesce(p.display_name, 'Unknown') as employee_name,
         sum(d.total) filter (where d.posting_date >= ${from}) as current_spend,
         sum(d.total) filter (where d.posting_date < ${from}) as prior_spend,
@@ -189,10 +198,13 @@ export async function expensesDashboard(
       having sum(d.total) > 0
       order by 3 desc nulls last
       limit 50
-    `, 'objects'),
-    // Spender KPIs aggregate the full population; the display query above is
-    // intentionally capped for the top-spenders table.
-    db.execute(sql`
+    `,
+        "objects",
+      ),
+      // Spender KPIs aggregate the full population; the display query above is
+      // intentionally capped for the top-spenders table.
+      db.execute(
+        sql`
       select
         coalesce(sum(s.current_spend), 0) as expense_report_total,
         count(*) filter (
@@ -212,9 +224,12 @@ export async function expensesDashboard(
         group by d.party_id, p.display_name
         having sum(d.total) > 0
       ) s
-    `, 'objects'),
-    // Expense categories (accounts on expense-report lines), current vs prior.
-    db.execute<ExpenseCategoryRow>(sql`
+    `,
+        "objects",
+      ),
+      // Expense categories (accounts on expense-report lines), current vs prior.
+      db.execute<ExpenseCategoryRow>(
+        sql`
       select l.account_id as category_id, a.name as category_name,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
         sum(l.amount) filter (where e.posting_date < ${from}) as prior_amount
@@ -232,10 +247,13 @@ export async function expensesDashboard(
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
       group by 1, 2
       order by 3 desc nulls last
-    `, 'objects'),
-    // Category KPI aggregates the full population; the display query above
-    // also returns the full category population.
-    db.execute(sql`
+    `,
+        "objects",
+      ),
+      // Category KPI aggregates the full population; the display query above
+      // also returns the full category population.
+      db.execute(
+        sql`
       select coalesce(sum(c.current_amount - c.prior_amount) filter (
         where c.prior_amount > 0
           and round(((c.current_amount - c.prior_amount) / nullif(c.prior_amount, 0)) * 100, 1) > 10
@@ -258,9 +276,12 @@ export async function expensesDashboard(
           and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
         group by l.account_id, a.name
       ) c
-    `, 'objects'),
-    // Monthly expense-report vs vendor-bill spend (the SV comparison chart).
-    db.execute(sql`
+    `,
+        "objects",
+      ),
+      // Monthly expense-report vs vendor-bill spend (the SV comparison chart).
+      db.execute(
+        sql`
       select to_char(e.posting_date, 'YYYY-MM') as month,
         coalesce(sum(l.amount) filter (where d.kind = 'expense_report'), 0) as expense_amount,
         coalesce(sum(l.amount) filter (where d.kind = 'vendor_bill'), 0) as bill_amount
@@ -278,9 +299,12 @@ export async function expensesDashboard(
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1
       order by 1
-    `, 'objects'),
-    // Approval queue — oldest unfinished reports first.
-    db.execute<ExpenseQueueRow>(sql`
+    `,
+        "objects",
+      ),
+      // Approval queue — oldest unfinished reports first.
+      db.execute<ExpenseQueueRow>(
+        sql`
       select d.id, d.document_number, d.document_date::text as date, d.total, d.status,
         p.display_name as employee
       from documents d
@@ -292,14 +316,16 @@ export async function expensesDashboard(
       order by case d.status when 'pending_approval' then 0 when 'approved' then 1 else 2 end,
         d.document_date asc
       limit 8
-    `, 'objects'),
-  ]))
+    `,
+        "objects",
+      ),
+    ]);
 
-  const pipe = pipeRes[0] ?? {}
+  const pipe = pipeRes[0] ?? {};
   const topSpenders: ExpenseSpender[] = spenderRes
     .map((r) => {
-      const current = toUnits(r.current_spend ?? 0)
-      const prior = toUnits(r.prior_spend ?? 0)
+      const current = toUnits(r.current_spend ?? 0);
+      const prior = toUnits(r.prior_spend ?? 0);
       return {
         employeeId: r.employee_id,
         employeeName: r.employee_name,
@@ -307,32 +333,32 @@ export async function expensesDashboard(
         priorSpend: fromUnits(prior),
         reportCount: Number(r.report_count ?? 0),
         changePct: percentageChange(current, prior),
-      }
+      };
     })
-    .filter((s) => toUnits(s.totalSpend) > 0n || toUnits(s.priorSpend) > 0n)
+    .filter((s) => toUnits(s.totalSpend) > 0n || toUnits(s.priorSpend) > 0n);
 
   const categories: ExpenseCategory[] = catRes
     .map((r) => {
-      const current = toUnits(r.current_amount ?? 0)
-      const prior = toUnits(r.prior_amount ?? 0)
-      const changePct = percentageChange(current, prior)
+      const current = toUnits(r.current_amount ?? 0);
+      const prior = toUnits(r.prior_amount ?? 0);
+      const changePct = percentageChange(current, prior);
       return {
         categoryId: r.category_id,
-        categoryName: r.category_name ?? '',
+        categoryName: r.category_name ?? "",
         currentAmount: fromUnits(current),
         priorAmount: fromUnits(prior),
         changePct,
-      }
+      };
     })
-    .filter((c) => toUnits(c.currentAmount) > 0n || toUnits(c.priorAmount) > 0n)
+    .filter((c) => toUnits(c.currentAmount) > 0n || toUnits(c.priorAmount) > 0n);
 
   const monthlyTrends = (trendRes as ExpenseTrendRow[]).map((r) => ({
     month: String(r.month),
     expenseAmount: canonicalMoney(r.expense_amount),
     billAmount: canonicalMoney(r.bill_amount),
-  }))
-  const spenderKpi = spenderKpiRes[0] ?? {}
-  const categoryKpi = categoryKpiRes[0] ?? {}
+  }));
+  const spenderKpi = spenderKpiRes[0] ?? {};
+  const categoryKpi = categoryKpiRes[0] ?? {};
 
   return {
     period: { from, to, priorFrom },
@@ -357,11 +383,11 @@ export async function expensesDashboard(
     monthlyTrends,
     queue: queueRes.map((r) => ({
       id: r.id,
-      documentNumber: r.document_number ?? '',
+      documentNumber: r.document_number ?? "",
       employee: r.employee ?? null,
-      date: String(r.date ?? ''),
+      date: String(r.date ?? ""),
       total: canonicalMoney(r.total),
       status: String(r.status),
     })),
-  }
+  };
 }

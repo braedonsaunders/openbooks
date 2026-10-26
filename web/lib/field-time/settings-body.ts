@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from "zod";
 
 /**
  * The transport shape of the field-time rules PUT body. Every key accepts an
@@ -17,17 +17,19 @@ export const fieldTimeSettingsBody = z.object({
   signatureRequired: z.boolean().nullable().optional(),
   equipmentToleranceHours: z.string().nullable().optional(),
   photoRequired: z.boolean().nullable().optional(),
-})
+});
 
-export type FieldTimeSettingsBody = z.output<typeof fieldTimeSettingsBody>
+export type FieldTimeSettingsBody = z.output<typeof fieldTimeSettingsBody>;
 
 /**
  * Normalize explicit nulls to absent before domain validation. Every rule
  * stays undeclared until supplied; a cleared rule receives the same named
  * refusal and remedy as a never-set rule.
  */
-export function normalizeFieldTimeSettingsBody(body: FieldTimeSettingsBody): Record<string, unknown> {
+export function normalizeFieldTimeSettingsBody(
+  body: FieldTimeSettingsBody,
+): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(body).map(([key, value]) => [key, value === null ? undefined : value]),
-  )
+  );
 }

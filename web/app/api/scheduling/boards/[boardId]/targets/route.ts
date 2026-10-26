@@ -1,25 +1,25 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { NextResponse } from 'next/server'
-import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
-import { defineRoute } from '@/lib/api/route'
-import { searchTargets } from '@openbooks/engine/schedule-boards/targets'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { NextResponse } from "next/server";
+import { schedulingBoardRouteAuthority } from "@/lib/scheduling/board-route-authority";
+import { defineRoute } from "@/lib/api/route";
+import { searchTargets } from "@openbooks/engine/schedule-boards/targets";
 
 /** Booking targets matching what the scheduler typed: codes, customers, projects and locations. */
 export const GET = defineRoute({
-  authorize: ({ params }) => schedulingBoardRouteAuthority(params, 'read'),
-  feature: { none: 'The addressed board is gated and authorized by its native family.' },
+  authorize: ({ params }) => schedulingBoardRouteAuthority(params, "read"),
+  feature: { none: "The addressed board is gated and authorized by its native family." },
   params: z.object({ boardId: uuidString() }),
   handler: async ({ request, authz, params }) => {
-    const url = new URL(request.url)
-    const limit = Number(url.searchParams.get('limit') ?? '12')
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get("limit") ?? "12");
     const targets = await searchTargets({
       orgId: authz.user.orgId,
       actorId: authz.user.id,
       boardId: params.boardId,
-      query: url.searchParams.get('q') ?? '',
+      query: url.searchParams.get("q") ?? "",
       limit: Number.isInteger(limit) ? limit : 12,
-    })
-    return NextResponse.json({ targets })
+    });
+    return NextResponse.json({ targets });
   },
-})
+});

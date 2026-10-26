@@ -1,7 +1,7 @@
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import type { Authz } from '@/lib/authz'
-import { onboardingStatus } from '@/lib/onboarding'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import type { Authz } from "@/lib/authz";
+import { onboardingStatus } from "@/lib/onboarding";
 
 /**
  * First-login wizard overlay. The app layout renders this only for users with
@@ -14,19 +14,22 @@ import { onboardingStatus } from '@/lib/onboarding'
  * organization whose onboarding is still required.
  */
 export async function OnboardingWizard({ authz }: { authz: Authz }) {
-  const org = (await db.execute<OnboardingOrg>(sql`
+  const org = await db.execute<OnboardingOrg>(
+    sql`
     select name, legal_name, base_currency, country, settings
-      from orgs where id = ${authz.user.orgId}`, 'objects'))
-  const row = org[0]
-  if (onboardingStatus(row?.settings ?? {}) !== 'required') return null
-  const { OnboardingSetupWizard } = await import('./onboarding-setup-wizard')
-  return <OnboardingSetupWizard authz={authz} org={row} />
+      from orgs where id = ${authz.user.orgId}`,
+    "objects",
+  );
+  const row = org[0];
+  if (onboardingStatus(row?.settings ?? {}) !== "required") return null;
+  const { OnboardingSetupWizard } = await import("./onboarding-setup-wizard");
+  return <OnboardingSetupWizard authz={authz} org={row} />;
 }
 
 export type OnboardingOrg = {
-  name: string
-  legal_name: string | null
-  base_currency: string
-  country: string
-  settings: Record<string, unknown>
-}
+  name: string;
+  legal_name: string | null;
+  base_currency: string;
+  country: string;
+  settings: Record<string, unknown>;
+};

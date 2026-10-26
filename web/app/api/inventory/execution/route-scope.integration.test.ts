@@ -3,20 +3,10 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  db,
-  withBypassContext,
-  withOrgContext,
-} from "@openbooks/engine/platform/db";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "@openbooks/engine/testing/fixtures";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 import { createWarehouseOperator } from "@openbooks/engine/testing/warehouse-execution";
-import {
-  createStockCount,
-  startStockCount,
-} from "@openbooks/engine/inventory/stock-counts";
+import { createStockCount, startStockCount } from "@openbooks/engine/inventory/stock-counts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const session = { orgId: "", actorId: "" };
@@ -58,9 +48,7 @@ test(
       foreign = await native(() => createScratchOrg());
     let scenarioError: unknown;
     try {
-      const actor = await native(() =>
-        createWarehouseOperator(org.orgId, "Counter"),
-      );
+      const actor = await native(() => createWarehouseOperator(org.orgId, "Counter"));
       const hidden = randomUUID();
       await native(async () => {
         await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)
@@ -75,26 +63,24 @@ test(
             subsidiaryId: entity,
             countedOn: org.date,
             blind: true,
-            lines: [
-              { itemId: org.items.fifo, stockLocationId: org.stockLocationId },
-            ],
+            lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
           }),
         );
         await native(() => startStockCount(org.orgId, actor, count.id));
-        return (await native(() =>
+        return (
+          await native(() =>
             db.execute<{ id: string }>(
-              sql`select id from stock_count_lines where org_id=${org.orgId} and stock_count_id=${count.id}`, "objects",
+              sql`select id from stock_count_lines where org_id=${org.orgId} and stock_count_id=${count.id}`,
+              "objects",
             ),
-          ))[0]!.id;
+          )
+        )[0]!.id;
       };
       const visible = await makeCount(org.subsidiaryId),
         invisible = await makeCount(hidden);
       session.orgId = org.orgId;
       session.actorId = actor;
-      const restrict = (
-        ids: string[],
-        permissions = ["items.read", "items.post"],
-      ) =>
+      const restrict = (ids: string[], permissions = ["items.read", "items.post"]) =>
         native(() =>
           db.execute(sql`update app_roles
       set permissions=${JSON.stringify(permissions)}::jsonb,subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: ids })}::jsonb
@@ -119,54 +105,38 @@ test(
       assert.equal((await suggest(invisible)).status, 404);
       await restrict([]);
       assert.equal((await suggest(visible)).status, 404);
-      assert.equal(
-        (await post({ action: "confirm", taskId: payload.task.id })).status,
-        404,
-      );
+      assert.equal((await post({ action: "confirm", taskId: payload.task.id })).status, 404);
       await restrict([org.subsidiaryId]);
       session.orgId = foreign.orgId;
-      assert.ok(
-        (await post({ action: "confirm", taskId: payload.task.id })).status >=
-          400,
-      );
+      assert.ok((await post({ action: "confirm", taskId: payload.task.id })).status >= 400);
       session.orgId = org.orgId;
       await native(() =>
         db.execute(
           sql`update orgs set settings=jsonb_set(settings,'{features,inventory}','false') where id=${org.orgId}`,
         ),
       );
-      assert.ok(
-        (await post({ action: "confirm", taskId: payload.task.id })).status >=
-          400,
-      );
+      assert.ok((await post({ action: "confirm", taskId: payload.task.id })).status >= 400);
       await native(() =>
         db.execute(
           sql`update orgs set settings=jsonb_set(settings,'{features,inventory}','true') where id=${org.orgId}`,
         ),
       );
       await restrict([org.subsidiaryId], []);
-      assert.equal(
-        (await post({ action: "confirm", taskId: payload.task.id })).status,
-        404,
-      );
+      assert.equal((await post({ action: "confirm", taskId: payload.task.id })).status, 404);
       await restrict([org.subsidiaryId]);
       const done = await post({ action: "confirm", taskId: payload.task.id });
       assert.equal(done.status, 200);
       assert.equal((await done.json()).status, "done");
       const before = await native(() =>
-          db.execute(
-            sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
-          ),
-        );
+        db.execute(sql`select id from inventory_movements where org_id=${org.orgId}`, "objects"),
+      );
       const replay = await post({ action: "confirm", taskId: payload.task.id });
       assert.equal(replay.status, 200);
       assert.equal((await replay.json()).replayed, true);
       assert.deepEqual(
         await native(() =>
-            db.execute(
-              sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
-            ),
-          ),
+          db.execute(sql`select id from inventory_movements where org_id=${org.orgId}`, "objects"),
+        ),
         before,
       );
     } catch (error) {

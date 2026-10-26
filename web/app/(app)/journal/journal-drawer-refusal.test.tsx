@@ -6,7 +6,8 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __journalToasts: { kind: string; message: string }[] | undefined;
-  var __journalRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
+  var __journalRouter:
+    { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
   var __journalGets: number | undefined;
   var __journalQuery: string | undefined;
   var __journalPathname: string | undefined;
@@ -67,7 +68,8 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../components/money-provider");
-const { JournalDrawer, isBlankJournalLine, findMissingJournalAccountLine } = await import("./JournalDrawer");
+const { JournalDrawer, isBlankJournalLine, findMissingJournalAccountLine } =
+  await import("./JournalDrawer");
 const { JournalEntryDrawer } = await import("./JournalEntryDrawer");
 const { EntryFlyout } = await import("../reports/EntryFlyout");
 const { NavigationProvider } = await import("../../../components/navigation-provider");
@@ -75,10 +77,14 @@ const { NavigationProvider } = await import("../../../components/navigation-prov
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const TOKEN = "2026-09-17T12:00:00.000000Z";
 
-function scriptFetch(handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null) {
+function scriptFetch(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response> | null,
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -114,7 +120,11 @@ function snapshotBody(id: string) {
   };
 }
 
-async function mountJournal(doc: Record<string, unknown>, initialMode?: string, lines: Record<string, unknown>[] = BALANCED_LINES) {
+async function mountJournal(
+  doc: Record<string, unknown>,
+  initialMode?: string,
+  lines: Record<string, unknown>[] = BALANCED_LINES,
+) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -142,7 +152,10 @@ async function mountJournal(doc: Record<string, unknown>, initialMode?: string, 
   await tick();
   await tick();
   return {
-    rerender: async (nextDoc: Record<string, unknown>, nextLines: Record<string, unknown>[] = BALANCED_LINES) => {
+    rerender: async (
+      nextDoc: Record<string, unknown>,
+      nextLines: Record<string, unknown>[] = BALANCED_LINES,
+    ) => {
       await act(async () => {
         root.render(
           <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -160,9 +173,9 @@ async function mountJournal(doc: Record<string, unknown>, initialMode?: string, 
               />
             </MoneyProvider>
           </NextIntlClientProvider>,
-        )
-        await tick()
-      })
+        );
+        await tick();
+      });
     },
     unmount: async () => {
       await act(async () => {
@@ -188,8 +201,28 @@ const DRAFT_DOC = () => ({
 // Balanced legs so Save/Post enable: the drawer disables both on invalid
 // amounts, and a disabled button cannot prove the refusal path.
 const BALANCED_LINES = [
-  { account_id: "a1", amount: "100.00", description: "leg one", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
-  { account_id: "a2", amount: "-100.00", description: "leg two", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
+  {
+    account_id: "a1",
+    amount: "100.00",
+    description: "leg one",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
+  {
+    account_id: "a2",
+    amount: "-100.00",
+    description: "leg two",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
 ];
 
 test("switching journals resets the editor without a false revision conflict", async (t) => {
@@ -197,7 +230,12 @@ test("switching journals resets the editor without a false revision conflict", a
   const first = DRAFT_DOC();
   const second = { ...DRAFT_DOC(), document_number: "JE-00013", memo: "second journal" };
   const restoreFetch = scriptFetch((url) => {
-    const doc = url === `/api/journals/${first.id}` ? first : url === `/api/journals/${second.id}` ? second : null;
+    const doc =
+      url === `/api/journals/${first.id}`
+        ? first
+        : url === `/api/journals/${second.id}`
+          ? second
+          : null;
     return doc ? Response.json({ doc, lines: BALANCED_LINES }) : null;
   });
   t.after(restoreFetch);
@@ -208,7 +246,12 @@ test("switching journals resets the editor without a false revision conflict", a
   await tick();
   assert.match(document.body.textContent ?? "", /JE-00013/);
   assert.match(document.body.textContent ?? "", /second journal/);
-  assert.equal((globalThis.__journalToasts ?? []).filter((toast) => /changed after you opened it/.test(toast.message)).length, 0);
+  assert.equal(
+    (globalThis.__journalToasts ?? []).filter((toast) =>
+      /changed after you opened it/.test(toast.message),
+    ).length,
+    0,
+  );
 });
 
 test("posted journal links use one native drawer with immutable ledger lines", async (t) => {
@@ -219,33 +262,98 @@ test("posted journal links use one native drawer with immutable ledger lines", a
   const requests: string[] = [];
   let entryReads = 0;
   let deliver!: (response: Response) => void;
-  const response = new Promise<Response>((resolve) => { deliver = resolve; });
+  const response = new Promise<Response>((resolve) => {
+    deliver = resolve;
+  });
   const restoreFetch = scriptFetch((url) => {
     requests.push(url);
     if (url === `/api/reports/entry/${entryId}?journal=1`) {
       entryReads += 1;
-      return entryReads === 1 ? response : Response.json({ ...loadedData, sourceJournal: {
-        ...loadedData.sourceJournal, doc: { ...loadedData.sourceJournal.doc, updated_at: '43', custom: { approval_reference: 'Reopened review' } },
-      } });
+      return entryReads === 1
+        ? response
+        : Response.json({
+            ...loadedData,
+            sourceJournal: {
+              ...loadedData.sourceJournal,
+              doc: {
+                ...loadedData.sourceJournal.doc,
+                updated_at: "43",
+                custom: { approval_reference: "Reopened review" },
+              },
+            },
+          });
     }
     return null;
   });
   const loadedData = {
-      entry: { id: entryId, entry_number: "JE-4080", date: "2026-09-17", status: "posted", origin: "manual", subsidiary_id: "sub-1" },
-      sourceJournal: { doc: { ...doc, updated_at: '42', custom: { approval_reference: "Reviewed September" } }, lines: [{ ...BALANCED_LINES[0], amount: "999.00", description: "source document line" }] },
-      canPost: true,
-      headerDefs: [{ id: "header-note", key: "approval_reference", label: "Approval reference", fieldType: "text", config: {}, isRequired: false }],
-      lineDefs: [{ id: "line-note", key: "posting_reference", label: "Posting reference", fieldType: "text", config: {}, isRequired: false }],
-      segments: [],
-      lines: BALANCED_LINES.map((line, index) => ({ ...line, line_number: index + 1, memo: "immutable ledger line", account_number: String(index + 1000), account_name: `Account ${index}`, subsidiary_id: "sub-1", subsidiary: "Main entity", functional_currency: "CAD", custom: { posting_reference: "Posted evidence" } })),
+    entry: {
+      id: entryId,
+      entry_number: "JE-4080",
+      date: "2026-09-17",
+      status: "posted",
+      origin: "manual",
+      subsidiary_id: "sub-1",
+    },
+    sourceJournal: {
+      doc: { ...doc, updated_at: "42", custom: { approval_reference: "Reviewed September" } },
+      lines: [{ ...BALANCED_LINES[0], amount: "999.00", description: "source document line" }],
+    },
+    canPost: true,
+    headerDefs: [
+      {
+        id: "header-note",
+        key: "approval_reference",
+        label: "Approval reference",
+        fieldType: "text",
+        config: {},
+        isRequired: false,
+      },
+    ],
+    lineDefs: [
+      {
+        id: "line-note",
+        key: "posting_reference",
+        label: "Posting reference",
+        fieldType: "text",
+        config: {},
+        isRequired: false,
+      },
+    ],
+    segments: [],
+    lines: BALANCED_LINES.map((line, index) => ({
+      ...line,
+      line_number: index + 1,
+      memo: "immutable ledger line",
+      account_number: String(index + 1000),
+      account_name: `Account ${index}`,
+      subsidiary_id: "sub-1",
+      subsidiary: "Main entity",
+      functional_currency: "CAD",
+      custom: { posting_reference: "Posted evidence" },
+    })),
   };
   t.after(restoreFetch);
-  t.after(() => { globalThis.__journalQuery = undefined; });
+  t.after(() => {
+    globalThis.__journalQuery = undefined;
+  });
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  t.after(async () => { await act(async () => root.unmount()); host.remove(); });
-  const render = () => root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="USD"><NavigationProvider><JournalEntryDrawer /><EntryFlyout /></NavigationProvider></MoneyProvider></NextIntlClientProvider>);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+  const render = () =>
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <NavigationProvider>
+            <JournalEntryDrawer />
+            <EntryFlyout />
+          </NavigationProvider>
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
   await act(async () => {
     render();
     await tick();
@@ -253,32 +361,78 @@ test("posted journal links use one native drawer with immutable ledger lines", a
   const loadingDialog = document.querySelector('[role="dialog"]');
   assert.ok(loadingDialog, "the shared drawer opens immediately while its record loads");
   assert.ok(loadingDialog.querySelector('[aria-busy="true"]'));
-  const fullscreen = loadingDialog.querySelector('button[aria-label*="ull screen"], button[aria-label*="ullscreen"]') as HTMLButtonElement | null;
+  const fullscreen = loadingDialog.querySelector(
+    'button[aria-label*="ull screen"], button[aria-label*="ullscreen"]',
+  ) as HTMLButtonElement | null;
   assert.ok(fullscreen, "the loading shell exposes the standard drawer controls");
   await click(fullscreen);
-  const fullscreenLabel = fullscreen.getAttribute('aria-label');
-  await act(async () => { deliver(Response.json(loadedData)); await tick(); });
+  const fullscreenLabel = fullscreen.getAttribute("aria-label");
+  await act(async () => {
+    deliver(Response.json(loadedData));
+    await tick();
+  });
   await tick();
-  assert.equal(document.querySelector('[role="dialog"]'), loadingDialog, "resolving the record must preserve the same dialog DOM node");
-  assert.equal(fullscreen.getAttribute('aria-label'), fullscreenLabel, "loading must retain the chosen drawer size");
-  assert.ok(buttonsNamed("Void")[0], "a current posted journal offers its lifecycle action directly in the header");
+  assert.equal(
+    document.querySelector('[role="dialog"]'),
+    loadingDialog,
+    "resolving the record must preserve the same dialog DOM node",
+  );
+  assert.equal(
+    fullscreen.getAttribute("aria-label"),
+    fullscreenLabel,
+    "loading must retain the chosen drawer size",
+  );
+  assert.ok(
+    buttonsNamed("Void")[0],
+    "a current posted journal offers its lifecycle action directly in the header",
+  );
   assert.match(document.body.textContent ?? "", /Approval reference|Posting reference/);
   assert.match(document.body.textContent ?? "", /Reviewed September/);
   assert.match(document.body.textContent ?? "", /Posted evidence/);
   assert.match(document.body.textContent ?? "", /JE-4080/);
-  assert.match(document.body.textContent ?? "", /Sep 17, 2026/, "the posting date reads in the viewer locale");
-  assert.doesNotMatch(document.body.textContent ?? "", /2026-09-17/, "the raw ISO posting date is not shown");
+  assert.match(
+    document.body.textContent ?? "",
+    /Sep 17, 2026/,
+    "the posting date reads in the viewer locale",
+  );
+  assert.doesNotMatch(
+    document.body.textContent ?? "",
+    /2026-09-17/,
+    "the raw ISO posting date is not shown",
+  );
   assert.match(document.body.textContent ?? "", /immutable ledger line/);
   assert.match(document.body.textContent ?? "", /CAD/);
   assert.doesNotMatch(document.body.textContent ?? "", /999\.00/);
-  assert.doesNotMatch(document.body.textContent ?? "", /source document line|Open full transaction/i);
+  assert.doesNotMatch(
+    document.body.textContent ?? "",
+    /source document line|Open full transaction/i,
+  );
   assert.equal(document.querySelectorAll('[role="dialog"]').length, 1);
-  assert.equal(requests.some((url) => url.includes('stale-payment')), false);
-  assert.equal(requests.some((url) => url === `/api/journals/${doc.id}`), false, "opening posted evidence does not reload editable source lines");
-  await act(async () => { globalThis.__journalQuery = ''; render(); await tick(); });
+  assert.equal(
+    requests.some((url) => url.includes("stale-payment")),
+    false,
+  );
+  assert.equal(
+    requests.some((url) => url === `/api/journals/${doc.id}`),
+    false,
+    "opening posted evidence does not reload editable source lines",
+  );
+  await act(async () => {
+    globalThis.__journalQuery = "";
+    render();
+    await tick();
+  });
   assert.equal(document.querySelector('[role="dialog"]'), null);
-  await act(async () => { globalThis.__journalQuery = `journalEntry=${entryId}`; render(); await tick(); });
-  assert.match(document.body.textContent ?? '', /Reopened review/, 'reopening a journal initializes from a fresh snapshot rather than a cached revision');
+  await act(async () => {
+    globalThis.__journalQuery = `journalEntry=${entryId}`;
+    render();
+    await tick();
+  });
+  assert.match(
+    document.body.textContent ?? "",
+    /Reopened review/,
+    "reopening a journal initializes from a fresh snapshot rather than a cached revision",
+  );
   assert.equal(entryReads, 2);
 });
 
@@ -287,27 +441,64 @@ test("the posted entry drawer subtitle reads its posting date in the viewer loca
   const entryId = randomUUID();
   globalThis.__journalPathname = "/reports/general-ledger";
   globalThis.__journalQuery = `txn=${entryId}`;
-  t.after(() => { globalThis.__journalPathname = undefined; globalThis.__journalQuery = undefined; });
-  const restoreFetch = scriptFetch((url) => url === `/api/reports/entry/${entryId}`
-    ? Response.json({
-        entry: { id: entryId, entry_number: "JE-4081", date: "2026-01-01", status: "posted", origin: "manual", memo: "Opening balances", subsidiary_id: "sub-1" },
-        lines: BALANCED_LINES.map((line, index) => ({ ...line, line_number: index + 1, memo: "opening line", account_number: String(index + 1000), account_name: `Account ${index}`, subsidiary_id: "sub-1", subsidiary: "Main entity", functional_currency: "USD" })),
-      })
-    : null);
+  t.after(() => {
+    globalThis.__journalPathname = undefined;
+    globalThis.__journalQuery = undefined;
+  });
+  const restoreFetch = scriptFetch((url) =>
+    url === `/api/reports/entry/${entryId}`
+      ? Response.json({
+          entry: {
+            id: entryId,
+            entry_number: "JE-4081",
+            date: "2026-01-01",
+            status: "posted",
+            origin: "manual",
+            memo: "Opening balances",
+            subsidiary_id: "sub-1",
+          },
+          lines: BALANCED_LINES.map((line, index) => ({
+            ...line,
+            line_number: index + 1,
+            memo: "opening line",
+            account_number: String(index + 1000),
+            account_name: `Account ${index}`,
+            subsidiary_id: "sub-1",
+            subsidiary: "Main entity",
+            functional_currency: "USD",
+          })),
+        })
+      : null,
+  );
   t.after(restoreFetch);
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  t.after(async () => { await act(async () => root.unmount()); host.remove(); });
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
   await act(async () => {
-    root.render(<NextIntlClientProvider locale="de" messages={messages} timeZone="Pacific/Pago_Pago"><MoneyProvider currency="USD"><NavigationProvider><EntryFlyout /></NavigationProvider></MoneyProvider></NextIntlClientProvider>);
+    root.render(
+      <NextIntlClientProvider locale="de" messages={messages} timeZone="Pacific/Pago_Pago">
+        <MoneyProvider currency="USD">
+          <NavigationProvider>
+            <EntryFlyout />
+          </NavigationProvider>
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
     await tick();
   });
   await tick();
   const dialog = document.querySelector('[role="dialog"]');
   assert.ok(dialog, "the entry drawer opens on its txn link");
   assert.match(dialog.textContent ?? "", /JE-4081/);
-  assert.match(dialog.textContent ?? "", /1\. Jan\. 2026 · /, "the civil posting date is localized and never shifted by the time zone");
+  assert.match(
+    dialog.textContent ?? "",
+    /1\. Jan\. 2026 · /,
+    "the civil posting date is localized and never shifted by the time zone",
+  );
   assert.doesNotMatch(dialog.textContent ?? "", /2026-01-01/);
 });
 
@@ -363,7 +554,10 @@ test("a stale-revision void reloads and pins translated copy", async (t) => {
     if (url === `/api/documents/${doc.id}/void` && init?.method === "POST") {
       voidPayload = JSON.parse(String(init.body)) as Record<string, unknown>;
       return Response.json(
-        { error: "Reload the document and supply its exact revision before voiding", code: "stale-revision" },
+        {
+          error: "Reload the document and supply its exact revision before voiding",
+          code: "stale-revision",
+        },
         { status: 409 },
       );
     }
@@ -445,7 +639,10 @@ test("a terminal posting-effect failure offers its retry beside Void", async (t)
   const { unmount } = await mountJournal(doc);
   t.after(unmount);
   const retry = buttonsNamed("Retry posting effects")[0];
-  assert.ok(retry, "a void blocked by a terminal posting failure must name a remedy the drawer can run");
+  assert.ok(
+    retry,
+    "a void blocked by a terminal posting failure must name a remedy the drawer can run",
+  );
   assert.equal(retry.disabled, false);
   assert.equal(buttonsNamed("Void")[0]?.disabled, false, "Void stays offered alongside the retry");
 });
@@ -475,7 +672,13 @@ test("a successful post refreshes the revision used by a later void", async (t) 
       return Response.json({ status: "voided" });
     }
     if (url.includes("/api/flows/record-state")) {
-      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+      return Response.json({
+        approvalState: { status: "none", pendingWith: [], myActions: null },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+        neverSubmitted: true,
+      });
     }
     return null;
   });
@@ -494,7 +697,10 @@ test("a successful post refreshes the revision used by a later void", async (t) 
   const voidButton = buttonsNamed("Void")[0];
   assert.ok(voidButton, "the posted journal offers Void");
   await click(voidButton);
-  assert.equal((voidPayload as Record<string, unknown> | null)?.expectedUpdatedAt, afterPostRevision);
+  assert.equal(
+    (voidPayload as Record<string, unknown> | null)?.expectedUpdatedAt,
+    afterPostRevision,
+  );
 });
 
 test("a posted journal keeps uploads available and explains why its evidence stays attached", async (t) => {
@@ -502,19 +708,29 @@ test("a posted journal keeps uploads available and explains why its evidence sta
   const doc = { ...DRAFT_DOC(), status: "posted" };
   const restoreFetch = scriptFetch((url) => {
     if (url.startsWith("/api/file-cabinet/attachments?")) {
-      return Response.json({ attachments: [{
-        id: "file-1",
-        name: "bank-statement.pdf",
-        fileType: "pdf",
-        contentType: "application/pdf",
-        sizeBytes: 1024,
-        createdAt: "2026-09-17T12:00:00.000Z",
-        createdBy: null,
-        attachmentId: "attachment-1",
-      }] });
+      return Response.json({
+        attachments: [
+          {
+            id: "file-1",
+            name: "bank-statement.pdf",
+            fileType: "pdf",
+            contentType: "application/pdf",
+            sizeBytes: 1024,
+            createdAt: "2026-09-17T12:00:00.000Z",
+            createdBy: null,
+            attachmentId: "attachment-1",
+          },
+        ],
+      });
     }
     if (url.includes("/api/flows/record-state")) {
-      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+      return Response.json({
+        approvalState: { status: "none", pendingWith: [], myActions: null },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+        neverSubmitted: true,
+      });
     }
     if (url === `/api/journals/${doc.id}`) return Response.json(snapshotBody(String(doc.id)));
     return null;
@@ -529,7 +745,10 @@ test("a posted journal keeps uploads available and explains why its evidence sta
   await tick();
 
   assert.match(document.body.textContent ?? "", /bank-statement\.pdf/);
-  assert.match(document.body.textContent ?? "", /Attachments of posted records are retained and cannot be removed\./);
+  assert.match(
+    document.body.textContent ?? "",
+    /Attachments of posted records are retained and cannot be removed\./,
+  );
   assert.ok(buttonsNamed("Add files").length > 0, "posted evidence can still be supplemented");
   assert.ok(document.querySelector('input[type="file"]'), "the upload control remains available");
   assert.equal(document.querySelector('button[aria-label="Remove bank-statement.pdf"]'), null);
@@ -539,12 +758,33 @@ test("a post warning names partyless control accounts in a persistent alert", as
   freshGlobals();
   const doc = DRAFT_DOC();
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) return Response.json(snapshotBody(String(doc.id)));
+    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET"))
+      return Response.json(snapshotBody(String(doc.id)));
     if (url === "/api/journals/actions" && init?.method === "POST") {
-      return Response.json({ warnings: [{ code: "partyless_control_lines", accounts: [{ accountId: "a1", accountNumber: "1100", accountName: "Accounts receivable", amount: "100.00" }] }] });
+      return Response.json({
+        warnings: [
+          {
+            code: "partyless_control_lines",
+            accounts: [
+              {
+                accountId: "a1",
+                accountNumber: "1100",
+                accountName: "Accounts receivable",
+                amount: "100.00",
+              },
+            ],
+          },
+        ],
+      });
     }
     if (url.includes("/api/flows/record-state")) {
-      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+      return Response.json({
+        approvalState: { status: "none", pendingWith: [], myActions: null },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+        neverSubmitted: true,
+      });
     }
     return null;
   });
@@ -627,7 +867,11 @@ test("any journal content makes the row non-blank — even without an account", 
     { partyId: "p1" },
     { cf_note: "keep me" },
   ]) {
-    assert.equal(isBlankJournalLine({ ...blankJournalRow(), ...content }), false, JSON.stringify(content));
+    assert.equal(
+      isBlankJournalLine({ ...blankJournalRow(), ...content }),
+      false,
+      JSON.stringify(content),
+    );
   }
 });
 
@@ -659,9 +903,39 @@ test("a contentful account-less journal leg survives to the save payload ( guard
 // credits 200, so Save enables and the refusal path — not the balance gate —
 // is what must fire.
 const ACCOUNTLESS_LINES = [
-  { account_id: "a1", amount: "100.00", description: "leg one", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
-  { account_id: "", amount: "100.00", description: "mystery leg", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
-  { account_id: "a2", amount: "-200.00", description: "leg three", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
+  {
+    account_id: "a1",
+    amount: "100.00",
+    description: "leg one",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
+  {
+    account_id: "",
+    amount: "100.00",
+    description: "mystery leg",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
+  {
+    account_id: "a2",
+    amount: "-200.00",
+    description: "leg three",
+    party_id: "",
+    department_id: "",
+    project_id: "",
+    subsidiary_id: "",
+    custom: {},
+    extra_dims: {},
+  },
 ];
 
 test(" journal: saving with a contentful account-less leg refuses by line name and keeps the row", async (t) => {
@@ -671,7 +945,13 @@ test(" journal: saving with a contentful account-less leg refuses by line name a
   const restoreFetch = scriptFetch((url, init) => {
     if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) {
       return Response.json({
-        doc: { id: doc.id, updated_at: TOKEN, document_date: "2026-09-17", memo: "", reference_number: "" },
+        doc: {
+          id: doc.id,
+          updated_at: TOKEN,
+          document_date: "2026-09-17",
+          memo: "",
+          reference_number: "",
+        },
         lines: ACCOUNTLESS_LINES,
       });
     }
@@ -694,23 +974,39 @@ test(" journal: saving with a contentful account-less leg refuses by line name a
   const { unmount } = await mountJournal(doc, "edit", ACCOUNTLESS_LINES);
   t.after(unmount);
   // The footer prices the account-less $100 leg: debits read 200, not 100.
-  assert.match(document.body.textContent ?? "", /200/, "the footer must include the account-less leg");
+  assert.match(
+    document.body.textContent ?? "",
+    /200/,
+    "the footer must include the account-less leg",
+  );
   const save = buttonsNamed("Save")[0];
   assert.ok(save, "a balanced journal must offer an enabled Save");
-  assert.equal(save.disabled, false, "Save must enable on balanced legs so the refusal path is what fires");
+  assert.equal(
+    save.disabled,
+    false,
+    "Save must enable on balanced legs so the refusal path is what fires",
+  );
   await click(save);
   await tick();
   assert.deepEqual(writes, [], "no journal write may fire while a contentful leg has no account");
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the missing account must pin as an alert, not only toast");
-  assert.match(alert.textContent ?? "", /Line 2: choose an account/, "the refusal must name the grid line and the remedy");
+  assert.match(
+    alert.textContent ?? "",
+    /Line 2: choose an account/,
+    "the refusal must name the grid line and the remedy",
+  );
   const toasts = globalThis.__journalToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "error" && /Line 2/.test(toast.message)),
     "the missing account must also toast with the line named",
   );
   // The entered leg stays in state: the footer still reads 200 debits.
-  assert.match(document.body.textContent ?? "", /200/, "the refused leg must stay in the drawer with its amount priced");
+  assert.match(
+    document.body.textContent ?? "",
+    /200/,
+    "the refused leg must stay in the drawer with its amount priced",
+  );
   assert.equal(save.disabled, false, "busy must release after the refusal");
 });
 
@@ -719,13 +1015,20 @@ test("deleting a draft journal sends the revision fence with the delete", async 
   const doc = DRAFT_DOC();
   const seen: { body: unknown }[] = [];
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) return Response.json(snapshotBody(String(doc.id)));
+    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET"))
+      return Response.json(snapshotBody(String(doc.id)));
     if (url === `/api/journals/${doc.id}` && init?.method === "DELETE") {
       seen.push({ body: init?.body ? JSON.parse(String(init.body)) : undefined });
       return Response.json({ ok: true });
     }
     if (url.includes("/api/flows/record-state")) {
-      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+      return Response.json({
+        approvalState: { status: "none", pendingWith: [], myActions: null },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+        neverSubmitted: true,
+      });
     }
     return null;
   });
@@ -737,14 +1040,19 @@ test("deleting a draft journal sends the revision fence with the delete", async 
   assert.ok(del, "a draft journal offers Delete");
   await click(del);
   assert.equal(seen.length, 1, "the delete reaches the API once");
-  assert.deepEqual(seen[0]?.body, { expectedUpdatedAt: TOKEN }, "the concurrency fence rides along");
+  assert.deepEqual(
+    seen[0]?.body,
+    { expectedUpdatedAt: TOKEN },
+    "the concurrency fence rides along",
+  );
 });
 
 test("a posted partyless journal names its control accounts, never undefined", async (t) => {
   freshGlobals();
   const doc = DRAFT_DOC();
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) return Response.json(snapshotBody(String(doc.id)));
+    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET"))
+      return Response.json(snapshotBody(String(doc.id)));
     if (url === "/api/journals/actions" && init?.method === "POST") {
       return Response.json({
         pendingApproval: false,
@@ -752,7 +1060,12 @@ test("a posted partyless journal names its control accounts, never undefined", a
           {
             code: "partyless_control_lines",
             accounts: [
-              { accountId: "a1", accountNumber: "1100", accountName: "Receivables", amount: "100.00" },
+              {
+                accountId: "a1",
+                accountNumber: "1100",
+                accountName: "Receivables",
+                amount: "100.00",
+              },
               { accountId: "a2", accountNumber: null, accountName: "Payables", amount: "-100.00" },
             ],
           },
@@ -760,7 +1073,13 @@ test("a posted partyless journal names its control accounts, never undefined", a
       });
     }
     if (url.includes("/api/flows/record-state")) {
-      return Response.json({ approvalState: { status: "none", pendingWith: [], myActions: null }, history: [], failedRun: null, canRetry: false, neverSubmitted: true });
+      return Response.json({
+        approvalState: { status: "none", pendingWith: [], myActions: null },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+        neverSubmitted: true,
+      });
     }
     return null;
   });

@@ -29,10 +29,7 @@ test("NetSuite auto-selects the sole posted accounting book", async () => {
 
 test("NetSuite multi-book accounts fail closed without an explicit book", async () => {
   const source = sourceWithQuery([{ id: "1" }, { id: "2" }]);
-  await assert.rejects(
-    source.accountingBookId(),
-    /multiple accounting books \(1, 2\)/,
-  );
+  await assert.rejects(source.accountingBookId(), /multiple accounting books \(1, 2\)/);
 });
 
 test("NetSuite verifies and uses an explicitly configured accounting book", async () => {

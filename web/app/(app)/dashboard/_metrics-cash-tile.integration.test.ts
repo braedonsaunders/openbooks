@@ -1,4 +1,4 @@
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -19,10 +19,11 @@ import test from "node:test";
 // single-subsidiary org, and MUST disagree in exactly the three fixed ways
 // (scope, account population, translation) on a complicated one.
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" });
+stubModules({
+  intl: "export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}",
+});
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
     // Worktree node_modules is a symlink to the main checkout's install, so
     // bare @openbooks self-imports would resolve to MAIN-checkout code (a
     // second db pool without the test bypass). Pin them to this checkout —
@@ -43,7 +44,8 @@ const { sql } = await import("drizzle-orm");
 // resolver the web import chain registered.
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { toUnits } = await import("@openbooks/engine/money/money");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 type Authz = import("@/lib/authz.ts").Authz;
@@ -55,10 +57,16 @@ const TODAY = "2026-07-15";
 function authzFor(orgId: string, userId: string, allowedSubsidiaryIds: Set<string> | null): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: "Cash Watcher", orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "Cash Watcher",
+      orgId,
       roles: [{ key: "staff", name: "staff" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(["dashboard.read", "gl.read", "ar.read", "ap.read"]),
     allowedSubsidiaryIds,
@@ -100,18 +108,32 @@ function legacyDashboardCashQuery(orgId: string, today: string) {
 }
 
 async function legacyCash(orgId: string): Promise<string> {
-  const r = await db.execute<{ cash_balance: string }>(legacyDashboardCashQuery(orgId, TODAY), "objects");
+  const r = await db.execute<{ cash_balance: string }>(
+    legacyDashboardCashQuery(orgId, TODAY),
+    "objects",
+  );
   return r[0]!.cash_balance;
 }
 
 // Fixture writes run under the bypass. Importing a web reader replaces the
 // test bypass with a resolver that returns undefined outside a request, so a
 // bare seed here fails RLS with an error that reads like a product defect.
-async function ensurePeriod(orgId: string, year: number, month: number, start: string, end: string): Promise<string> {
+async function ensurePeriod(
+  orgId: string,
+  year: number,
+  month: number,
+  start: string,
+  end: string,
+): Promise<string> {
   const id = randomUUID();
   return withBypass(async () => {
-    const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-      select fiscal_calendar_id from accounting_periods where org_id = ${orgId} and starts_on = '2026-07-01'`, "objects"))[0]!.fiscal_calendar_id;
+    const cal = (
+      await db.execute<{ fiscal_calendar_id: string }>(
+        sql`
+      select fiscal_calendar_id from accounting_periods where org_id = ${orgId} and starts_on = '2026-07-01'`,
+        "objects",
+      )
+    )[0]!.fiscal_calendar_id;
     await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${id}, ${orgId}, ${year}, ${month}, ${`${year}-0${month}`}, ${start}, ${end}, false, ${cal})`);
     return id;
@@ -121,8 +143,14 @@ async function ensurePeriod(orgId: string, year: number, month: number, start: s
 async function postBank(
   org: ScratchOrg,
   opts: {
-    book?: string; sub?: string; account?: string;
-    amount: string; currency?: string; date?: string; period?: string; label: string;
+    book?: string;
+    sub?: string;
+    account?: string;
+    amount: string;
+    currency?: string;
+    date?: string;
+    period?: string;
+    label: string;
   },
 ): Promise<void> {
   const entry = randomUUID();
@@ -131,42 +159,54 @@ async function postBank(
   // committed block (a nested transaction cannot see the caller's uncommitted
   // writes, and a context-only scope would escape to the pool).
   await withBypass(async () => {
-  await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+    await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
     values (${entry}, ${org.orgId}, ${opts.book ?? org.bookId}, ${opts.sub ?? org.subsidiaryId},
       ${`CASH-${opts.label}-${entry.slice(0, 8)}`}, ${opts.date ?? org.date}, ${opts.period ?? org.periodId}, 'draft', 'manual')`);
-  const amount = opts.amount;
-  const currency = opts.currency ?? "CAD";
-  await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+    const amount = opts.amount;
+    const currency = opts.currency ?? "CAD";
+    await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
     values (${randomUUID()}, ${org.orgId}, ${entry}, 1, ${opts.account ?? org.accounts.bank}, ${opts.sub ?? org.subsidiaryId},
         ${amount}, ${currency}, ${amount}, 1),
       (${randomUUID()}, ${org.orgId}, ${entry}, 2, ${org.accounts.adjustment}, ${opts.sub ?? org.subsidiaryId},
         ${"-" + amount}, ${currency}, ${"-" + amount}, 1)`);
-  await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
+    await db.execute(
+      sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`,
+    );
   });
 }
 
-test("dashboard cash tile agrees with the legacy reader on a simple org", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    await withBypass(() => postBank(org, { amount: "1000.0000", label: "simple" }));
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Cash Reader", "admin"));
-    await pinClock(TODAY, async () => {
-      await withOrgContext(org.orgId, async () => {
-        const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null), ["kpi-cash-balance"]);
-        assert.equal(metrics.asOfDate, TODAY, "tile is cut at the pinned business day");
-        assert.equal(metrics.baseCurrency, "CAD", "tile stays denominated in the org base");
-        assert.equal(toUnits(metrics.cashBalance), toUnits("1000.0000"), "tile reads the bank balance");
-        assert.equal(
-          toUnits(await legacyCash(org.orgId)),
-          toUnits(metrics.cashBalance),
-          "simple org: new reader agrees with the old query (no regression)",
-        );
+test(
+  "dashboard cash tile agrees with the legacy reader on a simple org",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await withBypass(() => postBank(org, { amount: "1000.0000", label: "simple" }));
+      const actor = await withBypass(() => createScratchUser(org.orgId, "Cash Reader", "admin"));
+      await pinClock(TODAY, async () => {
+        await withOrgContext(org.orgId, async () => {
+          const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null), [
+            "kpi-cash-balance",
+          ]);
+          assert.equal(metrics.asOfDate, TODAY, "tile is cut at the pinned business day");
+          assert.equal(metrics.baseCurrency, "CAD", "tile stays denominated in the org base");
+          assert.equal(
+            toUnits(metrics.cashBalance),
+            toUnits("1000.0000"),
+            "tile reads the bank balance",
+          );
+          assert.equal(
+            toUnits(await legacyCash(org.orgId)),
+            toUnits(metrics.cashBalance),
+            "simple org: new reader agrees with the old query (no regression)",
+          );
+        });
       });
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
@@ -192,7 +232,9 @@ test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !
                (${dormantBank}, ${org.orgId}, '1020', 'Dormant CAD', 'asset_bank', ${org.subsidiaryId}, false, true)`);
       await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
         values (${taxBook}, ${org.orgId}, 'TAX', 'Tax', false, true, true)`);
-      await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2) on conflict (code) do nothing`);
+      await db.execute(
+        sql`insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2) on conflict (code) do nothing`,
+      );
       await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
         values (${org.orgId}, 'USD', 'CAD', '2026-07-15'::date, 'spot', 1.35, 'manual')`);
     });
@@ -200,29 +242,79 @@ test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !
     // maintenance transaction, which cannot see this block's uncommitted
     // subsidiary/account rows — the journal subsidiary guard would raise.
     await withBypass(async () => {
-      const june = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-06-01'`, "objects"))[0]!.id;
-      const august = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-08-01'`, "objects"))[0]!.id;
-      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`, "objects"))[0]!.id;
-      const usdBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`, "objects"))[0]!.id;
-      const dormantBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1020'`, "objects"))[0]!.id;
-      const taxBook = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${org.orgId} and code = 'TAX'`, "objects"))[0]!.id;
+      const june = (
+        await db.execute<{ id: string }>(
+          sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-06-01'`,
+          "objects",
+        )
+      )[0]!.id;
+      const august = (
+        await db.execute<{ id: string }>(
+          sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-08-01'`,
+          "objects",
+        )
+      )[0]!.id;
+      const usSub = (
+        await db.execute<{ id: string }>(
+          sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`,
+          "objects",
+        )
+      )[0]!.id;
+      const usdBank = (
+        await db.execute<{ id: string }>(
+          sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`,
+          "objects",
+        )
+      )[0]!.id;
+      const dormantBank = (
+        await db.execute<{ id: string }>(
+          sql`select id from accounts where org_id = ${org.orgId} and number = '1020'`,
+          "objects",
+        )
+      )[0]!.id;
+      const taxBook = (
+        await db.execute<{ id: string }>(
+          sql`select id from accounting_books where org_id = ${org.orgId} and code = 'TAX'`,
+          "objects",
+        )
+      )[0]!.id;
       // Summary branch (June) + sliver branch (July) on the root bank.
-      await postBank(org, { amount: "500.0000", date: "2026-06-20", period: june, label: "root-jun" });
+      await postBank(org, {
+        amount: "500.0000",
+        date: "2026-06-20",
+        period: june,
+        label: "root-jun",
+      });
       await postBank(org, { amount: "1000.0000", label: "root-jul" });
       // USD 100 (June summary branch): translated 135 CAD by the tile, added
       // raw as 100 by the legacy sum.
-      await postBank(org, { sub: usSub, account: usdBank, amount: "100.0000", currency: "USD", date: "2026-06-20", period: june, label: "usd-jun" });
+      await postBank(org, {
+        sub: usSub,
+        account: usdBank,
+        amount: "100.0000",
+        currency: "USD",
+        date: "2026-06-20",
+        period: june,
+        label: "usd-jun",
+      });
       // Balance stranded on a later-deactivated account: the line trigger
       // forbids posting to an inactive account directly, so post while
       // active, then deactivate — the production lifecycle (deactivation
       // keeps history). Counted by the legacy sum, excluded by the tile
       // (the cockpit never showed it).
       await postBank(org, { account: dormantBank, amount: "200.0000", label: "dormant" });
-      await db.execute(sql`update accounts set is_active = false where id = ${dormantBank} and org_id = ${org.orgId}`);
+      await db.execute(
+        sql`update accounts set is_active = false where id = ${dormantBank} and org_id = ${org.orgId}`,
+      );
       // Secondary book + future-dated line: excluded by BOTH readers (the two
       // previously-fixed scope guards must survive the swap).
       await postBank(org, { book: taxBook, amount: "700.0000", label: "taxbook" });
-      await postBank(org, { amount: "900.0000", date: "2026-08-05", period: august, label: "future" });
+      await postBank(org, {
+        amount: "900.0000",
+        date: "2026-08-05",
+        period: august,
+        label: "future",
+      });
     });
     const actor = await withBypass(() => createScratchUser(org.orgId, "Cash Reader", "admin"));
     await pinClock(TODAY, async () => {
@@ -230,15 +322,32 @@ test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !
         // 500 + 1000 + 100(USD raw) + 200: the legacy sum mixes the USD leg
         // in raw and counts the dormant account. Asserting the exact wrong
         // total pins WHAT the tile no longer equals.
-        assert.equal(toUnits(await legacyCash(org.orgId)), toUnits("1800.0000"), "legacy reader sums raw mixed units plus dormant");
-        const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null), ["kpi-cash-balance"]);
+        assert.equal(
+          toUnits(await legacyCash(org.orgId)),
+          toUnits("1800.0000"),
+          "legacy reader sums raw mixed units plus dormant",
+        );
+        const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null), [
+          "kpi-cash-balance",
+        ]);
         assert.equal(metrics.asOfDate, TODAY, "tile is cut at the pinned business day");
         // 500 + 1000 + 100×1.35: dormant/summary excluded, USD translated.
-        assert.equal(toUnits(metrics.cashBalance), toUnits("1635.0000"), "tile ties the cockpit: scoped population, translated");
-        const restricted = await loadDashboardMetrics(authzFor(org.orgId, actor, new Set([org.subsidiaryId])), ["kpi-cash-balance"]);
+        assert.equal(
+          toUnits(metrics.cashBalance),
+          toUnits("1635.0000"),
+          "tile ties the cockpit: scoped population, translated",
+        );
+        const restricted = await loadDashboardMetrics(
+          authzFor(org.orgId, actor, new Set([org.subsidiaryId])),
+          ["kpi-cash-balance"],
+        );
         // The USD leg sits outside the caller's subsidiary view: same figure
         // the /banking cockpit shows that caller.
-        assert.equal(toUnits(restricted.cashBalance), toUnits("1500.0000"), "tile honors the caller subsidiary scope");
+        assert.equal(
+          toUnits(restricted.cashBalance),
+          toUnits("1500.0000"),
+          "tile honors the caller subsidiary scope",
+        );
       });
     });
   } finally {
@@ -246,35 +355,69 @@ test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !
   }
 });
 
-test("a missing exchange rate refuses the cash tile by name without failing the dashboard", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    await withBypass(async () => {
-      await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2) on conflict (code) do nothing`);
-      await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+test(
+  "a missing exchange rate refuses the cash tile by name without failing the dashboard",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await withBypass(async () => {
+        await db.execute(
+          sql`insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2) on conflict (code) do nothing`,
+        );
+        await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${randomUUID()}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US')`);
-    });
-    await withBypass(async () => {
-      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`, "objects"))[0]!.id;
-      await db.execute(sql`insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
-        values (${randomUUID()}, ${org.orgId}, '1010', 'USD Cash', 'asset_bank', ${usSub}, false, true)`);
-    });
-    await withBypass(async () => {
-      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`, "objects"))[0]!.id;
-      const usdBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`, "objects"))[0]!.id;
-      // No USD→CAD rate exists, so the USD leg cannot be translated.
-      await postBank(org, { sub: usSub, account: usdBank, amount: "100.0000", currency: "USD", label: "usd-unrated" });
-    });
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Cash Reader", "admin"));
-    await pinClock(TODAY, async () => {
-      await withOrgContext(org.orgId, async () => {
-        const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null), ["kpi-cash-balance", "kpi-ledger-balance"]);
-        assert.match(metrics.cashUnavailable ?? "", /USD→CAD/, "the tile names the missing rate");
-        assert.match(metrics.cashUnavailable ?? "", /Setup → Exchange Rates/, "the tile names the remedy");
-        assert.equal(metrics.baseCurrency, "CAD", "the rest of the dashboard still loads");
       });
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      await withBypass(async () => {
+        const usSub = (
+          await db.execute<{ id: string }>(
+            sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`,
+            "objects",
+          )
+        )[0]!.id;
+        await db.execute(sql`insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
+        values (${randomUUID()}, ${org.orgId}, '1010', 'USD Cash', 'asset_bank', ${usSub}, false, true)`);
+      });
+      await withBypass(async () => {
+        const usSub = (
+          await db.execute<{ id: string }>(
+            sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`,
+            "objects",
+          )
+        )[0]!.id;
+        const usdBank = (
+          await db.execute<{ id: string }>(
+            sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`,
+            "objects",
+          )
+        )[0]!.id;
+        // No USD→CAD rate exists, so the USD leg cannot be translated.
+        await postBank(org, {
+          sub: usSub,
+          account: usdBank,
+          amount: "100.0000",
+          currency: "USD",
+          label: "usd-unrated",
+        });
+      });
+      const actor = await withBypass(() => createScratchUser(org.orgId, "Cash Reader", "admin"));
+      await pinClock(TODAY, async () => {
+        await withOrgContext(org.orgId, async () => {
+          const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null), [
+            "kpi-cash-balance",
+            "kpi-ledger-balance",
+          ]);
+          assert.match(metrics.cashUnavailable ?? "", /USD→CAD/, "the tile names the missing rate");
+          assert.match(
+            metrics.cashUnavailable ?? "",
+            /Setup → Exchange Rates/,
+            "the tile names the remedy",
+          );
+          assert.equal(metrics.baseCurrency, "CAD", "the rest of the dashboard still loads");
+        });
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

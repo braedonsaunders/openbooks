@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { Component, type ReactNode } from 'react'
+import { Component, type ReactNode } from "react";
 
 /**
  * Render a tenant-authored layout; fall back to the built-in one if it throws.
@@ -25,20 +25,20 @@ export class SpecBoundary extends Component<
   { fallback: ReactNode; children: ReactNode },
   { failed: boolean }
 > {
-  state = { failed: false }
+  state = { failed: false };
 
   static getDerivedStateFromError() {
-    return { failed: true }
+    return { failed: true };
   }
 
   componentDidCatch(error: unknown) {
     // Logged, not swallowed. Someone has to be able to find out WHY their
     // layout did not render, and the reader is seeing the built-in page with
     // no indication anything was overridden.
-    console.error('[viewspec] tenant layout failed to render; using the built-in page', error)
+    console.error("[viewspec] tenant layout failed to render; using the built-in page", error);
   }
 
   render() {
-    return this.state.failed ? this.props.fallback : this.props.children
+    return this.state.failed ? this.props.fallback : this.props.children;
   }
 }

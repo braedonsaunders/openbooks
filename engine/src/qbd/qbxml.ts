@@ -37,45 +37,91 @@ export function qbxml(inner: string): string {
 }
 
 /** Use the highest qbXML version supported by both the app and this company. */
-export function negotiateQbxmlVersion(xml: string, supportedMajor?: number, supportedMinor?: number): string {
-  const major = Number.isInteger(supportedMajor) && supportedMajor! > 0
-    ? Math.min(Number(QBXML_VERSION.split(".")[0]), supportedMajor!)
-    : Number(QBXML_VERSION.split(".")[0]);
-  const minor = major === Number(QBXML_VERSION.split(".")[0])
-    ? Math.min(Number(QBXML_VERSION.split(".")[1]), Number.isInteger(supportedMinor) ? supportedMinor! : 0)
-    : 0;
+export function negotiateQbxmlVersion(
+  xml: string,
+  supportedMajor?: number,
+  supportedMinor?: number,
+): string {
+  const major =
+    Number.isInteger(supportedMajor) && supportedMajor! > 0
+      ? Math.min(Number(QBXML_VERSION.split(".")[0]), supportedMajor!)
+      : Number(QBXML_VERSION.split(".")[0]);
+  const minor =
+    major === Number(QBXML_VERSION.split(".")[0])
+      ? Math.min(
+          Number(QBXML_VERSION.split(".")[1]),
+          Number.isInteger(supportedMinor) ? supportedMinor! : 0,
+        )
+      : 0;
   return xml.replace(/<\?qbxml version="[^"]+"\?>/, `<?qbxml version="${major}.${minor}"?>`);
 }
 
 function listQuery(name: string): string {
-  return qbxml(`<${name}QueryRq iterator="Start"><MaxReturned>${QBD_PAGE_SIZE}</MaxReturned></${name}QueryRq>`);
+  return qbxml(
+    `<${name}QueryRq iterator="Start"><MaxReturned>${QBD_PAGE_SIZE}</MaxReturned></${name}QueryRq>`,
+  );
 }
 
-export function calendarMonths(from: string, through: Date): Array<{ month: string; from: string; to: string }> {
+export function calendarMonths(
+  from: string,
+  through: Date,
+): Array<{ month: string; from: string; to: string }> {
   const start = new Date(`${from}T00:00:00.000Z`);
-  if (Number.isNaN(start.getTime())) throw new Error(`invalid QuickBooks history start date: ${from}`);
-  const stop = utcDateFromParts(through.getUTCFullYear(), through.getUTCMonth(), through.getUTCDate());
+  if (Number.isNaN(start.getTime()))
+    throw new Error(`invalid QuickBooks history start date: ${from}`);
+  const stop = utcDateFromParts(
+    through.getUTCFullYear(),
+    through.getUTCMonth(),
+    through.getUTCDate(),
+  );
   if (start > stop) throw new Error("QuickBooks history start date is after the capture date");
   const out: Array<{ month: string; from: string; to: string }> = [];
-  for (let y = start.getUTCFullYear(), m = start.getUTCMonth(); y < stop.getUTCFullYear() || (y === stop.getUTCFullYear() && m <= stop.getUTCMonth()); ) {
+  for (
+    let y = start.getUTCFullYear(), m = start.getUTCMonth();
+    y < stop.getUTCFullYear() || (y === stop.getUTCFullYear() && m <= stop.getUTCMonth());
+  ) {
     const first = utcDateFromParts(y, m, 1);
     const last = utcDateFromParts(y, m + 1, 0);
     const rangeFrom = first < start ? start : first;
     const rangeTo = last > stop ? stop : last;
-    out.push({ month: isoDateOf(first).slice(0, 7), from: isoDateOf(rangeFrom), to: isoDateOf(rangeTo) });
+    out.push({
+      month: isoDateOf(first).slice(0, 7),
+      from: isoDateOf(rangeFrom),
+      to: isoDateOf(rangeTo),
+    });
     m += 1;
-    if (m === 12) { y += 1; m = 0; }
+    if (m === 12) {
+      y += 1;
+      m = 0;
+    }
   }
   return out;
 }
 
 function generalLedgerRequest(from: string, to: string): string {
-  const columns = ["TxnType", "Date", "RefNumber", "Name", "Memo", "Account", "SplitAccount", "Debit", "Credit", "Amount", "TxnID", "ModifiedTime"];
-  return qbxml(`<GeneralDetailReportQueryRq><GeneralDetailReportType>GeneralLedger</GeneralDetailReportType><ReportPeriod><FromReportDate>${from}</FromReportDate><ToReportDate>${to}</ToReportDate></ReportPeriod><ReportDetailLevelFilter>AllExceptSummary</ReportDetailLevelFilter><ReportPostingStatusFilter>Posting</ReportPostingStatusFilter>${columns.map((c) => `<IncludeColumn>${c}</IncludeColumn>`).join("")}<IncludeAccounts>All</IncludeAccounts><ReportBasis>Accrual</ReportBasis></GeneralDetailReportQueryRq>`);
+  const columns = [
+    "TxnType",
+    "Date",
+    "RefNumber",
+    "Name",
+    "Memo",
+    "Account",
+    "SplitAccount",
+    "Debit",
+    "Credit",
+    "Amount",
+    "TxnID",
+    "ModifiedTime",
+  ];
+  return qbxml(
+    `<GeneralDetailReportQueryRq><GeneralDetailReportType>GeneralLedger</GeneralDetailReportType><ReportPeriod><FromReportDate>${from}</FromReportDate><ToReportDate>${to}</ToReportDate></ReportPeriod><ReportDetailLevelFilter>AllExceptSummary</ReportDetailLevelFilter><ReportPostingStatusFilter>Posting</ReportPostingStatusFilter>${columns.map((c) => `<IncludeColumn>${c}</IncludeColumn>`).join("")}<IncludeAccounts>All</IncludeAccounts><ReportBasis>Accrual</ReportBasis></GeneralDetailReportQueryRq>`,
+  );
 }
 
 function trialBalanceRequest(through: Date): string {
-  return qbxml(`<GeneralSummaryReportQueryRq><GeneralSummaryReportType>TrialBalance</GeneralSummaryReportType><ReportPeriod><ToReportDate>${isoDateOf(through)}</ToReportDate></ReportPeriod><ReportBasis>Accrual</ReportBasis><SummarizeColumnsBy>TotalOnly</SummarizeColumnsBy><IncludeAccounts>All</IncludeAccounts></GeneralSummaryReportQueryRq>`);
+  return qbxml(
+    `<GeneralSummaryReportQueryRq><GeneralSummaryReportType>TrialBalance</GeneralSummaryReportType><ReportPeriod><ToReportDate>${isoDateOf(through)}</ToReportDate></ReportPeriod><ReportBasis>Accrual</ReportBasis><SummarizeColumnsBy>TotalOnly</SummarizeColumnsBy><IncludeAccounts>All</IncludeAccounts></GeneralSummaryReportQueryRq>`,
+  );
 }
 
 /**
@@ -86,17 +132,37 @@ function trialBalanceRequest(through: Date): string {
 export function buildCapturePlan(historyStartDate: string, through: Date): QbdRequestSpec[] {
   const requests: QbdRequestSpec[] = [
     { family: "company", requestKind: "CompanyQuery", requestXml: qbxml("<CompanyQueryRq/>") },
-    { family: "preferences", requestKind: "PreferencesQuery", requestXml: qbxml("<PreferencesQueryRq/>") },
+    {
+      family: "preferences",
+      requestKind: "PreferencesQuery",
+      requestXml: qbxml("<PreferencesQueryRq/>"),
+    },
   ];
-  for (const name of ["Account", "Customer", "Vendor", "Employee", "Item", "Terms", "SalesTaxCode"]) {
+  for (const name of [
+    "Account",
+    "Customer",
+    "Vendor",
+    "Employee",
+    "Item",
+    "Terms",
+    "SalesTaxCode",
+  ]) {
     // A complete list is intentional: ledger rows identify accounts/entities
     // by full name, so each capture needs the full ListID mapping even when the
     // transaction sweep is being used for a mirror.
-    requests.push({ family: name.toLowerCase(), requestKind: `${name}Query`, requestXml: listQuery(name) });
+    requests.push({
+      family: name.toLowerCase(),
+      requestKind: `${name}Query`,
+      requestXml: listQuery(name),
+    });
   }
   const months = calendarMonths(historyStartDate, through);
   for (const month of months) {
-    requests.push({ family: `ledger:${month.month}`, requestKind: "GeneralLedger", requestXml: generalLedgerRequest(month.from, month.to) });
+    requests.push({
+      family: `ledger:${month.month}`,
+      requestKind: "GeneralLedger",
+      requestXml: generalLedgerRequest(month.from, month.to),
+    });
   }
   // A dated opening trial balance as of the day before the history window.
   // Ledger months cover historyStartDate onward while the cumulative trial
@@ -110,7 +176,11 @@ export function buildCapturePlan(historyStartDate: string, through: Date): QbdRe
     requestKind: "TrialBalance",
     requestXml: trialBalanceRequest(new Date(windowStart.getTime() - 86_400_000)),
   });
-  requests.push({ family: "trial-balance", requestKind: "TrialBalance", requestXml: trialBalanceRequest(through) });
+  requests.push({
+    family: "trial-balance",
+    requestKind: "TrialBalance",
+    requestXml: trialBalanceRequest(through),
+  });
   return requests;
 }
 
@@ -204,12 +274,19 @@ export function parseQbdReportAmount(value: unknown, scope = "QuickBooks report"
   if (/^0+$/.test(body.replaceAll(".", "").replaceAll(",", ""))) {
     return { text: "0", decimal: null, grouping: null };
   }
-  const finish = (text: string, decimal: "." | "," | null, grouping: "." | "," | null): QbdReportAmount =>
-    ({ text: `${sign}${text}`, decimal, grouping });
+  const finish = (
+    text: string,
+    decimal: "." | "," | null,
+    grouping: "." | "," | null,
+  ): QbdReportAmount => ({ text: `${sign}${text}`, decimal, grouping });
   const validGrouping = (int: string, sep: "." | ","): boolean => {
     if (!int.includes(sep)) return false;
     const groups = int.split(sep);
-    return groups.length > 1 && /^\d{1,3}$/.test(groups[0]!) && groups.slice(1).every((g) => /^\d{3}$/.test(g));
+    return (
+      groups.length > 1 &&
+      /^\d{1,3}$/.test(groups[0]!) &&
+      groups.slice(1).every((g) => /^\d{3}$/.test(g))
+    );
   };
   const dots = (body.match(/\./g) ?? []).length;
   const commas = (body.match(/,/g) ?? []).length;
@@ -313,7 +390,9 @@ const QBD_SOAP_METHODS = [
  * needs only the opening element and the ticket element, which lead every
  * real envelope.
  */
-export function identifyQbdSoapCall(head: string): { method: string; ticket: string | null } | null {
+export function identifyQbdSoapCall(
+  head: string,
+): { method: string; ticket: string | null } | null {
   const method = QBD_SOAP_METHODS.find((name) => new RegExp(`<${name}(?=[\\s>/])`).test(head));
   if (!method) return null;
   const ticket = head.match(/<ticket>([^<]{1,200})<\/ticket>/)?.[1] ?? null;
@@ -332,7 +411,8 @@ export function assertSoapEnvelopeComplexity(
   text: string,
   limits: { maxTags: number; maxDepth: number } = { maxTags: 10_000_000, maxDepth: 128 },
 ): void {
-  if (/<!DOCTYPE|<!ENTITY/i.test(text)) throw new Error("QuickBooks SOAP envelope may not define a DTD or entity");
+  if (/<!DOCTYPE|<!ENTITY/i.test(text))
+    throw new Error("QuickBooks SOAP envelope may not define a DTD or entity");
   let depth = 0;
   let tags = 0;
   const token = /<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<[^<>]*>/g;
@@ -342,7 +422,9 @@ export function assertSoapEnvelopeComplexity(
     if (tag.startsWith("<![CDATA[") || tag.startsWith("<!--") || tag.startsWith("<?")) continue;
     tags += 1;
     if (tags > limits.maxTags) {
-      throw new Error(`QuickBooks SOAP envelope exceeds the ${limits.maxTags}-tag parser budget; the request was not parsed`);
+      throw new Error(
+        `QuickBooks SOAP envelope exceeds the ${limits.maxTags}-tag parser budget; the request was not parsed`,
+      );
     }
     if (tag.startsWith("</")) {
       depth = Math.max(0, depth - 1);
@@ -351,13 +433,16 @@ export function assertSoapEnvelopeComplexity(
     if (tag.endsWith("/>")) continue;
     depth += 1;
     if (depth > limits.maxDepth) {
-      throw new Error(`QuickBooks SOAP envelope nests deeper than ${limits.maxDepth} elements; the request was not parsed`);
+      throw new Error(
+        `QuickBooks SOAP envelope nests deeper than ${limits.maxDepth} elements; the request was not parsed`,
+      );
     }
   }
 }
 
 export function parseXml(xml: string): Record<string, unknown> {
-  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("QuickBooks XML declarations may not define a DTD or entity");
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml))
+    throw new Error("QuickBooks XML declarations may not define a DTD or entity");
   const parsed = parser.parse(xml) as unknown;
   if (!parsed || typeof parsed !== "object") throw new Error("QuickBooks returned invalid XML");
   return parsed as Record<string, unknown>;
@@ -370,12 +455,16 @@ function walk(value: unknown, visit: (key: string, value: Record<string, unknown
   }
   if (!value || typeof value !== "object") return;
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (child && typeof child === "object" && !Array.isArray(child)) visit(key, child as Record<string, unknown>);
+    if (child && typeof child === "object" && !Array.isArray(child))
+      visit(key, child as Record<string, unknown>);
     walk(child, visit);
   }
 }
 
-export function firstNode<T extends Record<string, unknown> = Record<string, unknown>>(parsed: unknown, suffix: string): T | null {
+export function firstNode<T extends Record<string, unknown> = Record<string, unknown>>(
+  parsed: unknown,
+  suffix: string,
+): T | null {
   let found: T | null = null;
   walk(parsed, (key, value) => {
     if (!found && key.endsWith(suffix)) found = value as T;
@@ -398,10 +487,16 @@ export function hasNode(parsed: unknown, suffix: string): boolean {
   );
 }
 
-export function nodes<T extends Record<string, unknown> = Record<string, unknown>>(parsed: unknown, suffix: string): T[] {
+export function nodes<T extends Record<string, unknown> = Record<string, unknown>>(
+  parsed: unknown,
+  suffix: string,
+): T[] {
   const out: T[] = [];
   const collect = (value: unknown): void => {
-    if (Array.isArray(value)) { for (const child of value) collect(child); return; }
+    if (Array.isArray(value)) {
+      for (const child of value) collect(child);
+      return;
+    }
     if (!value || typeof value !== "object") return;
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
       if (key.endsWith(suffix)) {
@@ -459,13 +554,20 @@ export function responseStatus(xml: string): {
   const parsed = parseXml(xml);
   let kind: string | null = null;
   let response: Record<string, unknown> | null = null;
-  walk(parsed, (key, value) => { if (!response && key.endsWith("Rs") && "statusCode" in value) { response = value; kind = key; } });
+  walk(parsed, (key, value) => {
+    if (!response && key.endsWith("Rs") && "statusCode" in value) {
+      response = value;
+      kind = key;
+    }
+  });
   if (!response) {
     // An Rs element with no statusCode at all is a malformed status, not an
     // absent response: refusing it here fails the capture with a named error
     // instead of leaving the request in flight.
     let bareKind: string | null = null;
-    walk(parsed, (key) => { if (!bareKind && key.endsWith("Rs")) bareKind = key; });
+    walk(parsed, (key) => {
+      if (!bareKind && key.endsWith("Rs")) bareKind = key;
+    });
     if (bareKind) throw new MalformedQbxmlResponseError("statusCode", "");
     throw new Error("QuickBooks response contains no status-bearing response node");
   }
@@ -487,7 +589,10 @@ export function responseStatus(xml: string): {
   if (node.iteratorRemainingCount != null) {
     const parsed = strictIntegerToken(node.iteratorRemainingCount, /^\d+$/);
     if (parsed === null) {
-      throw new MalformedQbxmlResponseError("iteratorRemainingCount", String(node.iteratorRemainingCount));
+      throw new MalformedQbxmlResponseError(
+        "iteratorRemainingCount",
+        String(node.iteratorRemainingCount),
+      );
     }
     iteratorRemaining = parsed;
   }
@@ -541,7 +646,11 @@ export function stampRequestId(requestXml: string, requestId: string): string {
 
 /** The `requestID` a stamped outgoing request carries, or null when unstamped (pre-correlation rows). */
 export function requestIdFromRequestXml(requestXml: string): string | null {
-  return requestXml.match(/<((?!QBXMLMsgsRq)[A-Za-z][A-Za-z0-9]*Rq)(?=[\s/>])[^>]*\srequestID="([^"]*)"/)?.[2] ?? null;
+  return (
+    requestXml.match(
+      /<((?!QBXMLMsgsRq)[A-Za-z][A-Za-z0-9]*Rq)(?=[\s/>])[^>]*\srequestID="([^"]*)"/,
+    )?.[2] ?? null
+  );
 }
 
 function asArray(value: unknown): unknown[] {
@@ -552,7 +661,10 @@ function exactNode(root: unknown, key: string): Record<string, unknown> | null {
   let found: Record<string, unknown> | null = null;
   const collect = (value: unknown): void => {
     if (found) return;
-    if (Array.isArray(value)) { for (const child of value) collect(child); return; }
+    if (Array.isArray(value)) {
+      for (const child of value) collect(child);
+      return;
+    }
     if (!value || typeof value !== "object") return;
     for (const [childKey, child] of Object.entries(value as Record<string, unknown>)) {
       if (childKey === key && child && typeof child === "object" && !Array.isArray(child)) {
@@ -567,7 +679,10 @@ function exactNode(root: unknown, key: string): Record<string, unknown> | null {
 }
 
 /** Response elements whose success payload is a column-based report. */
-const REPORT_RESPONSE_ELEMENTS = new Set(["GeneralDetailReportQueryRs", "GeneralSummaryReportQueryRs"]);
+const REPORT_RESPONSE_ELEMENTS = new Set([
+  "GeneralDetailReportQueryRs",
+  "GeneralSummaryReportQueryRs",
+]);
 
 /**
  * Structural payload check for a statusCode=0 response. A successful ledger
@@ -588,13 +703,17 @@ export function assertQbdResponsePayload(input: {
   const parsed = parseXml(input.responseXml);
   const rs = exactNode(parsed, input.expectedRs);
   if (!rs) {
-    throw new Error(`QuickBooks ${input.requestKind} capture for ${input.family} returned success but carries no ${input.expectedRs} payload; the response was not stored — resubmit the outstanding request and check the company file`);
+    throw new Error(
+      `QuickBooks ${input.requestKind} capture for ${input.family} returned success but carries no ${input.expectedRs} payload; the response was not stored — resubmit the outstanding request and check the company file`,
+    );
   }
   if (REPORT_RESPONSE_ELEMENTS.has(input.expectedRs)) {
     const report = exactNode(rs, "ReportRet");
     const columns = report ? asArray(report.ColDesc).filter((d) => d && typeof d === "object") : [];
     if (!report || columns.length === 0) {
-      throw new Error(`QuickBooks ${input.requestKind} capture for ${input.family} returned success but carries no report (ReportRet with column descriptors is absent); the response was not stored — a missing report is never an empty month, resubmit the outstanding request`);
+      throw new Error(
+        `QuickBooks ${input.requestKind} capture for ${input.family} returned success but carries no report (ReportRet with column descriptors is absent); the response was not stored — a missing report is never an empty month, resubmit the outstanding request`,
+      );
     }
   }
 }
@@ -612,7 +731,10 @@ export function parseReportRows(xml: string): QbdReportRow[] {
   }
   const rows: QbdReportRow[] = [];
   const collect = (value: unknown): void => {
-    if (Array.isArray(value)) { for (const v of value) collect(v); return; }
+    if (Array.isArray(value)) {
+      for (const v of value) collect(v);
+      return;
+    }
     if (!value || typeof value !== "object") return;
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
       if (/^(DataRow|SubtotalRow|TotalRow|TextRow)$/.test(key)) {

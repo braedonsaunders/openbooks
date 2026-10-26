@@ -1,29 +1,29 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const propertyManagement: DocArticle = {
-  slug: 'property-management',
-  title: 'Property Management',
-  category: 'transactions',
+  slug: "property-management",
+  title: "Property Management",
+  category: "transactions",
   order: 7,
   summary:
-    'Set up properties and units, activate tenant leases, bill recurring rent, account for security deposits, and reconcile common-area maintenance costs.',
-  updated: '2026-07-31',
+    "Set up properties and units, activate tenant leases, bill recurring rent, account for security deposits, and reconcile common-area maintenance costs.",
+  updated: "2026-07-31",
   keywords: [
-    'property management',
-    'property',
-    'unit',
-    'lease',
-    'tenant',
-    'rent',
-    'rent roll',
-    'escalation',
-    'late fee',
-    'security deposit',
-    'CAM',
-    'common area maintenance',
-    'reconciliation',
+    "property management",
+    "property",
+    "unit",
+    "lease",
+    "tenant",
+    "rent",
+    "rent roll",
+    "escalation",
+    "late fee",
+    "security deposit",
+    "CAM",
+    "common area maintenance",
+    "reconciliation",
   ],
-  related: ['sales-workflow', 'payments-and-applications', 'fixed-assets-depreciation'],
+  related: ["sales-workflow", "payments-and-applications", "fixed-assets-depreciation"],
   body: `# Property Management
 
 The Property Management module joins day-to-day lease operations to the native
@@ -170,4 +170,4 @@ property location coding, rentable-area dates, exclusions, and estimates billed
 before finalization. These checks preserve the line from lease terms through
 tenant activity to the financial statements.
 `,
-}
+};

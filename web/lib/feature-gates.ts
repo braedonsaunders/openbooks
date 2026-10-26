@@ -1,9 +1,9 @@
-import 'server-only'
-import { NextResponse } from 'next/server'
-import type { Authz } from './authz'
-import { guardPermission } from './authz'
-import { isFeatureEnabled } from './features'
-import { featureRequiredHref } from './gate-targets'
+import "server-only";
+import { NextResponse } from "next/server";
+import type { Authz } from "./authz";
+import { guardPermission } from "./authz";
+import { isFeatureEnabled } from "./features";
+import { featureRequiredHref } from "./gate-targets";
 import { notFound } from "@/lib/api/responses";
 
 /**
@@ -16,8 +16,8 @@ export async function requireFeatureEnabled(orgId: string, featureKey: string): 
   if (!(await isFeatureEnabled(orgId, featureKey))) {
     // Navigation belongs to the page boundary; API feature guards also run
     // in native background commands without a client router runtime.
-    const { redirect } = await import('next/navigation')
-    redirect(featureRequiredHref(featureKey))
+    const { redirect } = await import("next/navigation");
+    redirect(featureRequiredHref(featureKey));
   }
 }
 
@@ -26,12 +26,15 @@ export async function requireFeatureEnabled(orgId: string, featureKey: string): 
  * features can enable. When none is on, the redirect names the first key's
  * remedy, so the operator sees where to turn a feature on.
  */
-export async function requireAnyFeatureEnabled(orgId: string, featureKeys: readonly [string, ...string[]]): Promise<void> {
+export async function requireAnyFeatureEnabled(
+  orgId: string,
+  featureKeys: readonly [string, ...string[]],
+): Promise<void> {
   for (const featureKey of featureKeys) {
-    if (await isFeatureEnabled(orgId, featureKey)) return
+    if (await isFeatureEnabled(orgId, featureKey)) return;
   }
-  const { redirect } = await import('next/navigation')
-  redirect(featureRequiredHref(featureKeys[0]))
+  const { redirect } = await import("next/navigation");
+  redirect(featureRequiredHref(featureKeys[0]));
 }
 
 /**
@@ -42,10 +45,10 @@ export async function guardFeaturePermission(
   permission: string,
   featureKey: string,
 ): Promise<Authz | NextResponse> {
-  const gate = await guardPermission(permission)
-  if (gate instanceof NextResponse) return gate
+  const gate = await guardPermission(permission);
+  if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, featureKey))) {
-    return notFound("record")
+    return notFound("record");
   }
-  return gate
+  return gate;
 }

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/ai", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/ai",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -39,9 +43,12 @@ registerHooks({
 // the raw upstream body.
 globalThis.fetch = (async (url: unknown) => {
   if (String(url).endsWith("/api/admin/ai/models")) {
-    return new Response(JSON.stringify({ ok: false, models: [], code: "unauthorized", status: 401 }), {
-      headers: { "content-type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ ok: false, models: [], code: "unauthorized", status: 401 }),
+      {
+        headers: { "content-type": "application/json" },
+      },
+    );
   }
   return new Response(JSON.stringify({ ok: true, models: [] }), {
     headers: { "content-type": "application/json" },
@@ -95,7 +102,10 @@ test("provider auth failures classify without the raw body", () => {
     '401 Unauthorized — {"type":"error","error":{"type":"authentication_error","message":"API key is invalid."},"request_id":null}',
   );
   assert.deepEqual(classifyModelsError(raw), { code: "unauthorized", status: 401 });
-  assert.deepEqual(classifyModelsError(new Error("fetch failed")), { code: "failed", status: null });
+  assert.deepEqual(classifyModelsError(new Error("fetch failed")), {
+    code: "failed",
+    status: null,
+  });
 });
 
 test("load-models renders a human error, never the upstream blob", async () => {
@@ -130,7 +140,11 @@ test("load-models renders a human error, never the upstream blob", async () => {
   const bodyText = document.body.textContent ?? "";
   assert.ok(!bodyText.includes("authentication_error"), "no raw upstream JSON may render");
   assert.ok(!bodyText.includes("request_id"), "no raw upstream JSON may render");
-  assert.match(bodyText, /rejected.*401/i, "the human auth-rejected message must render with the status");
+  assert.match(
+    bodyText,
+    /rejected.*401/i,
+    "the human auth-rejected message must render with the status",
+  );
 
   await act(async () => {
     root.unmount();

@@ -24,12 +24,20 @@ export const MULTI_BOOK_DISABLED =
  */
 export function multiBookStorageRefusal(error: unknown): MultiBookError | null {
   const chain: unknown[] = [];
-  for (let cursor: unknown = error; cursor && chain.length < 5; cursor = (cursor as { cause?: unknown }).cause) chain.push(cursor);
+  for (
+    let cursor: unknown = error;
+    cursor && chain.length < 5;
+    cursor = (cursor as { cause?: unknown }).cause
+  )
+    chain.push(cursor);
   for (const item of chain) {
     const code = (item as { code?: string }).code;
     const message = (item as { message?: string }).message ?? "";
     if (code === "23P01") {
-      return new MultiBookError("another version already covers those dates; close its window first or start this one after it", 409);
+      return new MultiBookError(
+        "another version already covers those dates; close its window first or start this one after it",
+        409,
+      );
     }
     if (code === "23514" && message) return new MultiBookError(message);
   }

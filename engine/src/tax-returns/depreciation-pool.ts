@@ -24,7 +24,21 @@
  * Accelerated Investment Incentive).
  */
 
-import { add, cmp, formatMoney, fromUnits, mulDecimal, mulDecimalFactors, mulPercent, neg, normalizeMoney, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
+import {
+  add,
+  cmp,
+  formatMoney,
+  fromUnits,
+  mulDecimal,
+  mulDecimalFactors,
+  mulPercent,
+  neg,
+  normalizeMoney,
+  roundDiv,
+  roundMoney,
+  sum,
+  toUnits,
+} from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { taxConventionHalfMonths } from "../assets/depreciation-conventions.ts";
 
@@ -92,11 +106,17 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
       // $59,000 from 2022, then $61,000 from 2023 onward. The 2026 release
       // confirms $61,000 remains the 2026 cap:
       // https://www.canada.ca/en/department-finance/news/2026/01/government-announces-the-2026-automobile-deduction-limits-and-expense-benefit-rates-for-businesses.html
-      "54": ["0.3", "Zero-emission passenger vehicles", { costCapByAcquiredOn: [
-        { effectiveFrom: "2019-03-19", amount: 55000 },
-        { effectiveFrom: "2022-01-01", amount: 59000 },
-        { effectiveFrom: "2023-01-01", amount: 61000 },
-      ] }],
+      "54": [
+        "0.3",
+        "Zero-emission passenger vehicles",
+        {
+          costCapByAcquiredOn: [
+            { effectiveFrom: "2019-03-19", amount: 55000 },
+            { effectiveFrom: "2022-01-01", amount: 59000 },
+            { effectiveFrom: "2023-01-01", amount: 61000 },
+          ],
+        },
+      ],
       "55": ["0.4", "Zero-emission vehicles (Class 16 type)"],
       "56": ["0.3", "Zero-emission automotive equipment"],
       // Finance Canada acquisition-date ceilings: $30,000 from 2001, $34,000
@@ -105,14 +125,22 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
       // Canada publishes the 2026 increase:
       // https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-22900-other-employment-expenses/capital-cost-allowance.html
       // https://www.canada.ca/en/department-finance/news/2026/01/government-announces-the-2026-automobile-deduction-limits-and-expense-benefit-rates-for-businesses.html
-      "10.1": ["0.3", "Passenger vehicles (over ceiling)", { costCapByAcquiredOn: [
-        { effectiveFrom: "2001-01-01", amount: 30000 },
-        { effectiveFrom: "2022-01-01", amount: 34000 },
-        { effectiveFrom: "2023-01-01", amount: 36000 },
-        { effectiveFrom: "2024-01-01", amount: 37000 },
-        { effectiveFrom: "2025-01-01", amount: 38000 },
-        { effectiveFrom: "2026-01-01", amount: 39000 },
-      ], allowRecapture: false, allowTerminalLoss: false }],
+      "10.1": [
+        "0.3",
+        "Passenger vehicles (over ceiling)",
+        {
+          costCapByAcquiredOn: [
+            { effectiveFrom: "2001-01-01", amount: 30000 },
+            { effectiveFrom: "2022-01-01", amount: 34000 },
+            { effectiveFrom: "2023-01-01", amount: 36000 },
+            { effectiveFrom: "2024-01-01", amount: 37000 },
+            { effectiveFrom: "2025-01-01", amount: 38000 },
+            { effectiveFrom: "2026-01-01", amount: 39000 },
+          ],
+          allowRecapture: false,
+          allowTerminalLoss: false,
+        },
+      ],
     }),
   },
   uk_wda: {
@@ -124,7 +152,15 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
     classes: {
       main: fullYear("main", "0.18", "Main rate pool"),
       special: fullYear("special", "0.06", "Special rate pool"),
-      sba: { code: "sba", rate: "0.03", method: "straight_line", firstYearFraction: "1", allowRecapture: false, allowTerminalLoss: false, name: "Structures & buildings allowance" },
+      sba: {
+        code: "sba",
+        rate: "0.03",
+        method: "straight_line",
+        firstYearFraction: "1",
+        allowRecapture: false,
+        allowTerminalLoss: false,
+        name: "Structures & buildings allowance",
+      },
     },
   },
   au_pool: {
@@ -135,8 +171,24 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
     classAttribute: "tax_pool_class",
     classes: {
       // Diminishing-value pools: half the pool rate in the year of allocation.
-      sbp: { code: "sbp", rate: "0.3", method: "declining", firstYearFraction: "0.5", allowRecapture: true, allowTerminalLoss: true, name: "Small business pool (15% then 30%)" },
-      lvp: { code: "lvp", rate: "0.375", method: "declining", firstYearFraction: "0.5", allowRecapture: true, allowTerminalLoss: true, name: "Low-value pool (18.75% then 37.5%)" },
+      sbp: {
+        code: "sbp",
+        rate: "0.3",
+        method: "declining",
+        firstYearFraction: "0.5",
+        allowRecapture: true,
+        allowTerminalLoss: true,
+        name: "Small business pool (15% then 30%)",
+      },
+      lvp: {
+        code: "lvp",
+        rate: "0.375",
+        method: "declining",
+        firstYearFraction: "0.5",
+        allowRecapture: true,
+        allowTerminalLoss: true,
+        name: "Low-value pool (18.75% then 37.5%)",
+      },
     },
   },
   nz_pool: {
@@ -164,16 +216,42 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
       gds_10: macrs("gds_10", 10, "200_db", "half_year", "10-year property"),
       gds_15: macrs("gds_15", 15, "150_db", "half_year", "15-year property"),
       gds_20: macrs("gds_20", 20, "150_db", "half_year", "20-year property"),
-      residential_rental: macrs("residential_rental", 27.5, "straight_line", "mid_month", "Residential rental property"),
-      nonresidential_real: macrs("nonresidential_real", 39, "straight_line", "mid_month", "Nonresidential real property"),
+      residential_rental: macrs(
+        "residential_rental",
+        27.5,
+        "straight_line",
+        "mid_month",
+        "Residential rental property",
+      ),
+      nonresidential_real: macrs(
+        "nonresidential_real",
+        39,
+        "straight_line",
+        "mid_month",
+        "Nonresidential real property",
+      ),
       ads_5: macrs("ads_5", 5, "straight_line", "half_year", "ADS 5-year property", "ads"),
       ads_10: macrs("ads_10", 10, "straight_line", "half_year", "ADS 10-year property", "ads"),
       ads_12: macrs("ads_12", 12, "straight_line", "half_year", "ADS 12-year property", "ads"),
       ads_15: macrs("ads_15", 15, "straight_line", "half_year", "ADS 15-year property", "ads"),
       ads_20: macrs("ads_20", 20, "straight_line", "half_year", "ADS 20-year property", "ads"),
       ads_25: macrs("ads_25", 25, "straight_line", "half_year", "ADS 25-year property", "ads"),
-      ads_30_real: macrs("ads_30_real", 30, "straight_line", "mid_month", "ADS residential rental property", "ads"),
-      ads_40_real: macrs("ads_40_real", 40, "straight_line", "mid_month", "ADS nonresidential real property", "ads"),
+      ads_30_real: macrs(
+        "ads_30_real",
+        30,
+        "straight_line",
+        "mid_month",
+        "ADS residential rental property",
+        "ads",
+      ),
+      ads_40_real: macrs(
+        "ads_40_real",
+        40,
+        "straight_line",
+        "mid_month",
+        "ADS nonresidential real property",
+        "ads",
+      ),
     },
   },
 };
@@ -189,17 +267,35 @@ function macrs(
   return {
     // MACRS uses the method + recovery period below; this display/config rate
     // is deliberately not calculated with a JavaScript binary float.
-    code, name, rate: exactRatio(macrsMethod === "200_db" ? 2n : macrsMethod === "150_db" ? 3n : 1n, macrsMethod === "150_db" ? 2n : 1n, recoveryPeriodYears),
+    code,
+    name,
+    rate: exactRatio(
+      macrsMethod === "200_db" ? 2n : macrsMethod === "150_db" ? 3n : 1n,
+      macrsMethod === "150_db" ? 2n : 1n,
+      recoveryPeriodYears,
+    ),
     method: macrsMethod === "straight_line" ? "straight_line" : "declining",
     firstYearFraction: convention === "half_year" ? "0.5" : "1",
-    allowRecapture: false, allowTerminalLoss: false,
-    depreciationSystem, macrsMethod, recoveryPeriodYears, convention,
+    allowRecapture: false,
+    allowTerminalLoss: false,
+    depreciationSystem,
+    macrsMethod,
+    recoveryPeriodYears,
+    convention,
   };
 }
 
 /** A full-year regime class (no half-year rule): first-year fraction 1. */
 function fullYear(code: string, rate: ExactDecimal, name: string): PoolClassDef {
-  return { code, rate, method: "declining", firstYearFraction: "1", allowRecapture: true, allowTerminalLoss: true, name };
+  return {
+    code,
+    rate,
+    method: "declining",
+    firstYearFraction: "1",
+    allowRecapture: true,
+    allowTerminalLoss: true,
+    name,
+  };
 }
 
 /** Build Canada class defs with the half-year rule as the default first-year fraction. */
@@ -242,7 +338,9 @@ export function costCapForAcquisition(
     .filter((rule) => rule.effectiveFrom <= acquiredOn)
     .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0];
   if (!effective) {
-    throw new Error(`no acquisition-date cost cap is configured for ${classDef.name} acquired ${acquiredOn}`);
+    throw new Error(
+      `no acquisition-date cost cap is configured for ${classDef.name} acquired ${acquiredOn}`,
+    );
   }
   return effective.amount;
 }
@@ -268,7 +366,8 @@ export interface MacrsYearResult {
   remainingBasis: string;
 }
 
-export type MacrsMidQuarterTestAsset = Pick<MacrsYearInput,
+export type MacrsMidQuarterTestAsset = Pick<
+  MacrsYearInput,
   "basis" | "placedInServiceOn" | "section179" | "businessUsePercent"
 > & { disposedOn?: string | null };
 
@@ -335,7 +434,10 @@ function macrsBasisAfterSection179(
     throw new Error("business use percent must be between 0 and 100");
   }
   const originalBasis = mulPercent(persistMacrsBasis(input.basis), businessUsePercent);
-  const section179Cap = minMoney(originalBasis, nonnegative(persistMacrsSection179(input.section179 ?? "0")));
+  const section179Cap = minMoney(
+    originalBasis,
+    nonnegative(persistMacrsSection179(input.section179 ?? "0")),
+  );
   return { originalBasis, section179Cap, after179: add(originalBasis, neg(section179Cap)) };
 }
 
@@ -374,7 +476,10 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
   const disposed = input.disposedOn ? parseIsoDate(input.disposedOn) : null;
   if (!placed || input.taxYear < placed.year) return zeroMacrs("0");
   if (disposed && input.taxYear > disposed.year) return zeroMacrs("0");
-  const { originalBasis, section179Cap, after179 } = macrsBasisAfterSection179(input, businessUsePercent);
+  const { originalBasis, section179Cap, after179 } = macrsBasisAfterSection179(
+    input,
+    businessUsePercent,
+  );
   const elected179 = placed.year === input.taxYear ? section179Cap : "0.0000";
   const bonus = placed.year === input.taxYear ? mulPercent(after179, bonusPercent) : "0.0000";
   const macrsBasis = add(after179, neg(mulPercent(after179, bonusPercent)));
@@ -388,15 +493,23 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
     convention: input.convention,
   });
   const macrs = schedule.get(input.taxYear) ?? "0.0000";
-  const priorMacrs = sum([...schedule.entries()].filter(([year]) => year <= input.taxYear).map(([, amount]) => amount));
+  const priorMacrs = sum(
+    [...schedule.entries()].filter(([year]) => year <= input.taxYear).map(([, amount]) => amount),
+  );
   const used179 = input.taxYear >= placed.year ? section179Cap : "0.0000";
   const usedBonus = input.taxYear >= placed.year ? mulPercent(after179, bonusPercent) : "0.0000";
   return {
-    section179: formatMoney(elected179, 2), bonus: formatMoney(bonus, 2), macrs: formatMoney(macrs, 2),
+    section179: formatMoney(elected179, 2),
+    bonus: formatMoney(bonus, 2),
+    macrs: formatMoney(macrs, 2),
     allowance: formatMoney(sum([elected179, bonus, macrs]), 2),
-    remainingBasis: disposed?.year === input.taxYear
-      ? "0.00"
-      : formatMoney(nonnegative(sum([originalBasis, neg(used179), neg(usedBonus), neg(priorMacrs)])), 2),
+    remainingBasis:
+      disposed?.year === input.taxYear
+        ? "0.00"
+        : formatMoney(
+            nonnegative(sum([originalBasis, neg(used179), neg(usedBonus), neg(priorMacrs)])),
+            2,
+          ),
   };
 }
 
@@ -416,23 +529,41 @@ function macrsSchedule(args: {
   const first = conventionFraction(args.convention, args.placed.month, "placed");
   const yearsAfterPlacement = (recoveryPeriods - first + 23n) / 24n;
   const lastRecoveryYear = args.placed.year + Number(yearsAfterPlacement);
-  const lastYear = args.disposed ? Math.min(lastRecoveryYear, args.disposed.year) : lastRecoveryYear;
+  const lastYear = args.disposed
+    ? Math.min(lastRecoveryYear, args.disposed.year)
+    : lastRecoveryYear;
   const factorNumerator = args.method === "200_db" ? 2n : args.method === "150_db" ? 3n : 1n;
   const factorDenominator = args.method === "150_db" ? 2n : 1n;
 
   for (let year = args.placed.year; year <= lastYear && remaining > 0n; year++) {
-    let fraction = year === args.placed.year ? first : year === lastRecoveryYear ? maxBigInt(0n, recoveryPeriods - elapsedPeriods) : 24n;
-    if (args.disposed?.year === year) fraction = minBigInt(fraction, conventionFraction(args.convention, args.disposed.month, "disposed"));
+    let fraction =
+      year === args.placed.year
+        ? first
+        : year === lastRecoveryYear
+          ? maxBigInt(0n, recoveryPeriods - elapsedPeriods)
+          : 24n;
+    if (args.disposed?.year === year)
+      fraction = minBigInt(
+        fraction,
+        conventionFraction(args.convention, args.disposed.month, "disposed"),
+      );
     const lifeRemaining = maxBigInt(1n, recoveryPeriods - elapsedPeriods);
-    const straight = args.method === "straight_line"
-      ? { numerator: originalBasis * 24n, denominator: recoveryPeriods }
-      : { numerator: remaining * 24n, denominator: lifeRemaining };
+    const straight =
+      args.method === "straight_line"
+        ? { numerator: originalBasis * 24n, denominator: recoveryPeriods }
+        : { numerator: remaining * 24n, denominator: lifeRemaining };
     const declining = {
       numerator: remaining * factorNumerator * 24n,
       denominator: factorDenominator * recoveryPeriods,
     };
-    const annual = args.method === "straight_line" || compareRational(straight, declining) >= 0 ? straight : declining;
-    const amount = minBigInt(remaining, roundDiv(annual.numerator * fraction, annual.denominator * 24n));
+    const annual =
+      args.method === "straight_line" || compareRational(straight, declining) >= 0
+        ? straight
+        : declining;
+    const amount = minBigInt(
+      remaining,
+      roundDiv(annual.numerator * fraction, annual.denominator * 24n),
+    );
     out.set(year, fromUnits(amount));
     remaining -= amount;
     elapsedPeriods += fraction;
@@ -455,12 +586,19 @@ function parseIsoDate(value: string): { year: number; month: number } | null {
 }
 
 function zeroMacrs(basis: string): MacrsYearResult {
-  return { section179: "0.00", bonus: "0.00", macrs: "0.00", allowance: "0.00", remainingBasis: formatMoney(basis, 2) };
+  return {
+    section179: "0.00",
+    bonus: "0.00",
+    macrs: "0.00",
+    allowance: "0.00",
+    remainingBasis: formatMoney(basis, 2),
+  };
 }
 
 function exactPeriods(years: ExactDecimal): bigint {
   const periods = toUnits(String(years)) * 24n;
-  if (periods <= 0n || periods % 10_000n !== 0n) throw new Error("recovery period must resolve to complete half-month periods");
+  if (periods <= 0n || periods % 10_000n !== 0n)
+    throw new Error("recovery period must resolve to complete half-month periods");
   return periods / 10_000n;
 }
 
@@ -474,13 +612,16 @@ function exactRatio(numerator: bigint, denominator: bigint, divisor: ExactDecima
   return fraction ? `${whole}.${fraction}` : `${whole}`;
 }
 
-function compareRational(left: { numerator: bigint; denominator: bigint }, right: { numerator: bigint; denominator: bigint }): number {
+function compareRational(
+  left: { numerator: bigint; denominator: bigint },
+  right: { numerator: bigint; denominator: bigint },
+): number {
   const delta = left.numerator * right.denominator - right.numerator * left.denominator;
   return delta < 0n ? -1 : delta > 0n ? 1 : 0;
 }
 
-const minBigInt = (left: bigint, right: bigint) => left < right ? left : right;
-const maxBigInt = (left: bigint, right: bigint) => left > right ? left : right;
+const minBigInt = (left: bigint, right: bigint) => (left < right ? left : right);
+const maxBigInt = (left: bigint, right: bigint) => (left > right ? left : right);
 
 export interface PoolYearInput {
   /** Opening written-down value of the pool (decimal string). */
@@ -521,8 +662,8 @@ export interface PoolYearResult {
 }
 
 const zeroMoney = "0.0000";
-const nonnegative = (value: string) => cmp(value, zeroMoney) < 0 ? zeroMoney : value;
-const minMoney = (left: string, right: string) => cmp(left, right) <= 0 ? left : right;
+const nonnegative = (value: string) => (cmp(value, zeroMoney) < 0 ? zeroMoney : value);
+const minMoney = (left: string, right: string) => (cmp(left, right) <= 0 ? left : right);
 const s = (value: string) => formatMoney(value, 2);
 
 /** Persist pool opening balance through exact decimal then ledger money. Fail closed. */
@@ -598,7 +739,7 @@ function factorUnits(value: ExactDecimal, label: string): bigint {
   const canonical = canonicalDecimal(value, 10);
   if (canonical === null) {
     const raw = String(value ?? "").trim();
-    const fraction = raw.includes(".") ? raw.split(".")[1] ?? "" : "";
+    const fraction = raw.includes(".") ? (raw.split(".")[1] ?? "") : "";
     if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw) && fraction.length > 10) {
       throw new Error(`${label} loses precision beyond 10 decimal places`);
     }
@@ -606,7 +747,8 @@ function factorUnits(value: ExactDecimal, label: string): bigint {
   }
   const negative = canonical.startsWith("-");
   const [whole = "0", fraction = ""] = canonical.replace(/^[+-]/, "").split(".");
-  const units = BigInt(whole || "0") * FACTOR_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
+  const units =
+    BigInt(whole || "0") * FACTOR_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
   return negative ? -units : units;
 }
 
@@ -614,7 +756,9 @@ export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const opening = persistPoolOpeningBalance(input.openingBalance);
   const additions = persistPoolAdditions(input.additions);
   const dispositions = persistPoolDispositions(input.dispositions);
-  const requestedImmediateExpense = nonnegative(persistPoolImmediateExpense(input.immediateExpense ?? "0"));
+  const requestedImmediateExpense = nonnegative(
+    persistPoolImmediateExpense(input.immediateExpense ?? "0"),
+  );
   // Out-of-domain scaling knobs previously computed silently: a short-year
   // factor of 2 doubled the allowance, a negative one (or rate) claimed
   // nothing, and a first-year fraction above 1 deducted more than the
@@ -644,13 +788,26 @@ export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const balance = roundMoney(add(add(opening, additions), neg(dispositions)), 2);
 
   const zero = (over: Partial<PoolYearResult>): PoolYearResult => ({
-    openingBalance: s(opening), additions: s(additions), dispositions: s(dispositions),
-    netAdditions: s(netAdditions), immediateExpense: "0.00", base: "0.00",
-    allowance: "0.00", closingBalance: "0.00", recapture: "0.00", terminalLoss: "0.00", ...over,
+    openingBalance: s(opening),
+    additions: s(additions),
+    dispositions: s(dispositions),
+    netAdditions: s(netAdditions),
+    immediateExpense: "0.00",
+    base: "0.00",
+    allowance: "0.00",
+    closingBalance: "0.00",
+    recapture: "0.00",
+    terminalLoss: "0.00",
+    ...over,
   });
 
-  if (cmp(balance, zeroMoney) < 0 && (input.allowRecapture ?? true)) return zero({ recapture: s(neg(balance)) });
-  if (cmp(balance, zeroMoney) > 0 && input.poolHasAssetsAtYearEnd === false && (input.allowTerminalLoss ?? true)) {
+  if (cmp(balance, zeroMoney) < 0 && (input.allowRecapture ?? true))
+    return zero({ recapture: s(neg(balance)) });
+  if (
+    cmp(balance, zeroMoney) > 0 &&
+    input.poolHasAssetsAtYearEnd === false &&
+    (input.allowTerminalLoss ?? true)
+  ) {
     return zero({ terminalLoss: s(balance) });
   }
   if (cmp(balance, zeroMoney) <= 0) return zero({ closingBalance: "0.00" });
@@ -658,7 +815,9 @@ export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const immediateExpense = minMoney(requestedImmediateExpense, balance);
   const afterIei = add(balance, neg(immediateExpense));
   let base: string;
-  const enhancedMultiplier = persistPoolEnhancedMultiplier(input.enhancedFirstYearMultiplier ?? "1");
+  const enhancedMultiplier = persistPoolEnhancedMultiplier(
+    input.enhancedFirstYearMultiplier ?? "1",
+  );
   if (cmp(enhancedMultiplier, "1") > 0) {
     const enhancedAddition = add(mulDecimal(netAdditions, enhancedMultiplier), neg(netAdditions));
     base = add(afterIei, enhancedAddition);

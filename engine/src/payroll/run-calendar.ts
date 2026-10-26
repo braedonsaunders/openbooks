@@ -1,8 +1,11 @@
 import { PayrollError } from "./error.ts";
 import { daysInCivilMonth, utcDateFromParts } from "../platform/civil-date.ts";
 export type ScheduleRow = {
-  id: string; frequency: string; periods_per_year: number;
-  anchor_period_end: string; pay_date_offset_days: number;
+  id: string;
+  frequency: string;
+  periods_per_year: number;
+  anchor_period_end: string;
+  pay_date_offset_days: number;
 };
 
 export const DAY = 24 * 60 * 60 * 1000;
@@ -22,9 +25,6 @@ export interface SemiMonthlyBoundaries {
   /** Day-of-month the SECOND period ends on, or the month's last day. */
   secondDay: number | "month_end";
 }
-
-
-
 
 /**
  * Why an anchor cannot name a semi-monthly schedule, or null if it can.
@@ -55,17 +55,21 @@ export function semiMonthlyAnchorProblem(anchorPeriodEnd: string): string | null
   const day = anchor.getUTCDate();
   const monthLength = daysInCivilMonth(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1);
   if (day === 28 && monthLength === 28) {
-    return "a semi-monthly schedule anchored on the last day of February cannot be read: the 28th "
-      + "is both a day every month has (periods would end on the 13th and the 28th) and February's "
-      + "month end (periods would end on the 15th and the last day of the month), and those are "
-      + "different calendars — anchor it on the last day of a 30- or 31-day month for the "
-      + "15th-and-month-end schedule, or on the 28th of a longer month to mean the 28th";
+    return (
+      "a semi-monthly schedule anchored on the last day of February cannot be read: the 28th " +
+      "is both a day every month has (periods would end on the 13th and the 28th) and February's " +
+      "month end (periods would end on the 15th and the last day of the month), and those are " +
+      "different calendars — anchor it on the last day of a 30- or 31-day month for the " +
+      "15th-and-month-end schedule, or on the 28th of a longer month to mean the 28th"
+    );
   }
   if (day === 14) {
-    return "a semi-monthly schedule anchored on the 14th has no second period end: half a month "
-      + "later is the 29th, which February does not always have — anchor it on a day from 1 to 13 "
-      + "or 16 to 28 (its complement is then the same day ±15), on the 15th, or on the last day of "
-      + "a 30- or 31-day month (the 15th-and-month-end schedule)";
+    return (
+      "a semi-monthly schedule anchored on the 14th has no second period end: half a month " +
+      "later is the 29th, which February does not always have — anchor it on a day from 1 to 13 " +
+      "or 16 to 28 (its complement is then the same day ±15), on the 15th, or on the last day of " +
+      "a 30- or 31-day month (the 15th-and-month-end schedule)"
+    );
   }
   return null;
 }
@@ -93,20 +97,20 @@ const PERIODS_PER_YEAR_BY_FREQUENCY: Record<string, number[]> = {
   monthly: [12],
 };
 
-export function payPeriodsPerYearProblem(
-  frequency: string,
-  periodsPerYear: number,
-): string | null {
+export function payPeriodsPerYearProblem(frequency: string, periodsPerYear: number): string | null {
   const legal = PERIODS_PER_YEAR_BY_FREQUENCY[frequency];
   if (!legal) return null; // unknown frequency is the enum's refusal, not ours
   if (legal.includes(periodsPerYear)) return null;
-  const allowed = legal.length === 1
-    ? `${legal[0]}`
-    : `${legal.slice(0, -1).join(", ")} or ${legal[legal.length - 1]}`;
-  return `a ${frequency.replace(/_/g, "-")} schedule pays ${allowed} times a year, not `
-    + `${periodsPerYear} — the periods per year is what every statutory calculation annualizes `
-    + `with, so a count the schedule's own period boundaries cannot produce withholds the wrong `
-    + `tax on every pay`;
+  const allowed =
+    legal.length === 1
+      ? `${legal[0]}`
+      : `${legal.slice(0, -1).join(", ")} or ${legal[legal.length - 1]}`;
+  return (
+    `a ${frequency.replace(/_/g, "-")} schedule pays ${allowed} times a year, not ` +
+    `${periodsPerYear} — the periods per year is what every statutory calculation annualizes ` +
+    `with, so a count the schedule's own period boundaries cannot produce withholds the wrong ` +
+    `tax on every pay`
+  );
 }
 
 /**
@@ -125,18 +129,21 @@ export function semiMonthlyBoundaries(anchorPeriodEnd: string): SemiMonthlyBound
   // can only mean the month end; the month end's half-month partner is the
   // 15th, because the halves of a month are the 1st–15th and the 16th–last.
   if (day === 15 || day >= 29) return { firstDay: 15, secondDay: "month_end" };
-  return day < 15
-    ? { firstDay: day, secondDay: day + 15 }
-    : { firstDay: day - 15, secondDay: day };
+  return day < 15 ? { firstDay: day, secondDay: day + 15 } : { firstDay: day - 15, secondDay: day };
 }
 
 /** The two period-end dates the boundaries produce in one calendar month. */
 function semiMonthlyEndsIn(
-  boundaries: SemiMonthlyBoundaries, year: number, month: number,
+  boundaries: SemiMonthlyBoundaries,
+  year: number,
+  month: number,
 ): [Date, Date] {
   const lastDay = utcDateFromParts(year, month + 1, 0).getUTCDate();
   const second = boundaries.secondDay === "month_end" ? lastDay : boundaries.secondDay;
-  return [utcDateFromParts(year, month, boundaries.firstDay), utcDateFromParts(year, month, second)];
+  return [
+    utcDateFromParts(year, month, boundaries.firstDay),
+    utcDateFromParts(year, month, second),
+  ];
 }
 
 /** Period boundaries for a schedule: [start, end] containing/after `from`. */

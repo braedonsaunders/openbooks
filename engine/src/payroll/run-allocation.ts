@@ -77,9 +77,7 @@ export function allocateProportionally<T>(
   // Money units are 1e-4: a cent is 100 of them.
   const amountUnits = toUnits(amount);
   if (amountUnits % 100n !== 0n) {
-    throw new PayrollError(
-      `allocateProportionally needs a cent-exact amount, got ${amount}`,
-    );
+    throw new PayrollError(`allocateProportionally needs a cent-exact amount, got ${amount}`);
   }
   const cents = apportion(amountUnits / 100n, weights, { residual: "largest_remainder_last" });
   return buckets.map((bucket, index) => ({

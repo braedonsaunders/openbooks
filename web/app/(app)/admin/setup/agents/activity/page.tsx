@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../../../components/viewspec/module-view'
-import { agentsActivitySpec, loadAgentsActivity } from './view'
+import { ModuleView } from "../../../../../../components/viewspec/module-view";
+import { agentsActivitySpec, loadAgentsActivity } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Setup → Agents → Activity. Runs across packs with status, duration,
@@ -10,9 +10,9 @@ export const dynamic = 'force-dynamic'
 export default async function AgentsActivitySetup({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadAgentsActivity(sp)
-  return <ModuleView spec={agentsActivitySpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadAgentsActivity(sp);
+  return <ModuleView spec={agentsActivitySpec(data)} data={data} searchParams={sp} trusted />;
 }

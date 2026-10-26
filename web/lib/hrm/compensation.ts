@@ -1,55 +1,55 @@
-import 'server-only'
+import "server-only";
 
-import { getFormatter, getLocale, getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { compensationArchitectureSummary, compensationWageSummary, type CompensationWageSummary } from '@openbooks/engine/hrm/compensation'
-import { formatDecimal } from '../money-format'
-import { db } from '@openbooks/engine/platform/db'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { getFormatter, getLocale, getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import {
+  compensationArchitectureSummary,
+  compensationWageSummary,
+  type CompensationWageSummary,
+} from "@openbooks/engine/hrm/compensation";
+import { formatDecimal } from "../money-format";
+import { db } from "@openbooks/engine/platform/db";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   listCycles,
   listCycleLines,
   cyclePacing,
   getCycle,
-} from '@openbooks/engine/hrm/compensation/cycles'
-import {
-  compaRatioFor,
-} from '@openbooks/engine/hrm/compensation/bands'
-import {
-  compensationSettings,
-} from '@openbooks/engine/hrm/compensation/architecture'
+} from "@openbooks/engine/hrm/compensation/cycles";
+import { compaRatioFor } from "@openbooks/engine/hrm/compensation/bands";
+import { compensationSettings } from "@openbooks/engine/hrm/compensation/architecture";
 import {
   listPlans,
   listPlanLines,
   listPlanLinesForPlans,
   type PlanLineDTO,
-} from '@openbooks/engine/hrm/compensation/headcount-plans'
+} from "@openbooks/engine/hrm/compensation/headcount-plans";
+import { latestGapSnapshot } from "@openbooks/engine/hrm/compensation/pay-transparency";
+import { listStatements } from "@openbooks/engine/hrm/compensation/statements";
+import { CompensationError } from "@openbooks/engine/hrm/compensation/errors";
 import {
-  latestGapSnapshot,
-} from '@openbooks/engine/hrm/compensation/pay-transparency'
-import {
-  listStatements,
-} from '@openbooks/engine/hrm/compensation/statements'
-import { CompensationError } from '@openbooks/engine/hrm/compensation/errors'
-import { HrmAuthorizationError, loadApprovalPerson, loadOwnEmploymentIds } from '@openbooks/engine/hrm/authorization'
-import { can, getAuthz, type Authz } from '../authz'
-import { mergeHref } from '../list-params'
-import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import { isFeatureEnabled } from '../features'
-import { requireFeatureEnabled } from '../feature-gates'
-import { cmp } from '@openbooks/engine/money/money'
-import { planTotalCost } from './compensation-money'
-import type { PayRateBasis } from '@openbooks/engine/projects/pay-rate-basis'
+  HrmAuthorizationError,
+  loadApprovalPerson,
+  loadOwnEmploymentIds,
+} from "@openbooks/engine/hrm/authorization";
+import { can, getAuthz, type Authz } from "../authz";
+import { mergeHref } from "../list-params";
+import { hrmGroupTabs } from "../../components/module-home/group-tabs";
+import { isFeatureEnabled } from "../features";
+import { requireFeatureEnabled } from "../feature-gates";
+import { cmp } from "@openbooks/engine/money/money";
+import { planTotalCost } from "./compensation-money";
+import type { PayRateBasis } from "@openbooks/engine/projects/pay-rate-basis";
 
 /** One dashboard label per wage cadence: averages never mix cadences. */
 const AVERAGE_WAGE_LABEL_KEYS: Record<PayRateBasis, string> = {
-  hour: 'compensation.dashboard.averageHourly',
-  week: 'compensation.dashboard.averageWeekly',
-  biweekly: 'compensation.dashboard.averageBiweekly',
-  semimonth: 'compensation.dashboard.averageSemimonthly',
-  month: 'compensation.dashboard.averageMonthly',
-  year: 'compensation.dashboard.averageAnnual',
-}
+  hour: "compensation.dashboard.averageHourly",
+  week: "compensation.dashboard.averageWeekly",
+  biweekly: "compensation.dashboard.averageBiweekly",
+  semimonth: "compensation.dashboard.averageSemimonthly",
+  month: "compensation.dashboard.averageMonthly",
+  year: "compensation.dashboard.averageAnnual",
+};
 
 /**
  * Compensation workspace loaders — one read per surface behind the
@@ -66,48 +66,48 @@ const AVERAGE_WAGE_LABEL_KEYS: Record<PayRateBasis, string> = {
  */
 
 export interface CompStatTile {
-  iconKey: string
-  accent: string
-  label: string
-  value: string
-  sub?: string
-  tone: 'default' | 'positive' | 'warning' | 'negative'
+  iconKey: string;
+  accent: string;
+  label: string;
+  value: string;
+  sub?: string;
+  tone: "default" | "positive" | "warning" | "negative";
 }
 
 export interface CompBandRow {
-  id: string
-  levelCode: string
-  levelName: string
-  range: string
-  currency: string
-  headcount: string
-  belowMin: string
-  inRange: string
-  aboveMax: string
-  noBand: string
+  id: string;
+  levelCode: string;
+  levelName: string;
+  range: string;
+  currency: string;
+  headcount: string;
+  belowMin: string;
+  inRange: string;
+  aboveMax: string;
+  noBand: string;
 }
 
 export interface CompCycleRow {
-  id: string
-  name: string
-  kindLabel: string
-  status: string
-  statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
-  effectiveOn: string
-  effectiveDate: string | null
-  href: string
+  id: string;
+  name: string;
+  kindLabel: string;
+  status: string;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
+  effectiveOn: string;
+  effectiveDate: string | null;
+  href: string;
 }
 
 export interface CompPlanRow {
-  id: string
-  name: string
-  period: string
-  status: string
-  statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
-  totalCost: string
-  href: string
+  id: string;
+  name: string;
+  period: string;
+  status: string;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
+  totalCost: string;
+  href: string;
 }
 
 /**
@@ -117,277 +117,392 @@ export interface CompPlanRow {
  * never a silent close. Null when the dialog may render its form.
  */
 export interface CompDialogRefusal {
-  title: string
-  message: string
+  title: string;
+  message: string;
 }
 
 /** State for the new-cycle URL dialog (?cycle=new) on the compensation home. */
 export interface CompCycleDialogState {
-  open: boolean
-  closeHref: string
-  defaultCurrency: string
-  currencyOptions: { value: string; label: string; scopeValue: string | null }[]
-  employerOptions: { value: string; label: string }[]
-  defaultEmployer: string
-  canSelectOrgWide: boolean
-  orgWideLabel: string
-  employerLabel: string
-  currencyUnavailable: string
-  guidelineLabel: string
-  guidelineHelp: string
-  title: string
-  kinds: { value: string; label: string }[]
-  kindLabel: string
-  nameLabel: string
-  effectiveLabel: string
-  currencyLabel: string
-  failed: string
-  submit: string
-  cancel: string
-  refusal: CompDialogRefusal | null
+  open: boolean;
+  closeHref: string;
+  defaultCurrency: string;
+  currencyOptions: { value: string; label: string; scopeValue: string | null }[];
+  employerOptions: { value: string; label: string }[];
+  defaultEmployer: string;
+  canSelectOrgWide: boolean;
+  orgWideLabel: string;
+  employerLabel: string;
+  currencyUnavailable: string;
+  guidelineLabel: string;
+  guidelineHelp: string;
+  title: string;
+  kinds: { value: string; label: string }[];
+  kindLabel: string;
+  nameLabel: string;
+  effectiveLabel: string;
+  currencyLabel: string;
+  failed: string;
+  submit: string;
+  cancel: string;
+  refusal: CompDialogRefusal | null;
   /** Setup managers get the real switch: the Features switchboard href. */
-  remedyHref: string | null
-  remedyLabel: string | null
+  remedyHref: string | null;
+  remedyLabel: string | null;
 }
 
 /** State for the new-plan URL dialog (?plan=new) on the compensation home. */
 export interface CompPlanDialogState {
-  open: boolean
-  closeHref: string
-  title: string
-  nameLabel: string
-  fromLabel: string
-  toLabel: string
-  failed: string
-  submit: string
-  cancel: string
-  refusal: CompDialogRefusal | null
+  open: boolean;
+  closeHref: string;
+  title: string;
+  nameLabel: string;
+  fromLabel: string;
+  toLabel: string;
+  failed: string;
+  submit: string;
+  cancel: string;
+  refusal: CompDialogRefusal | null;
   /** Setup managers get the real switch: the Features switchboard href. */
-  remedyHref: string | null
-  remedyLabel: string | null
+  remedyHref: string | null;
+  remedyLabel: string | null;
 }
 
 /** State for the snapshot-generate URL dialog (?generate=1) on equity. */
 export interface CompEquityDialogState {
-  open: boolean
-  closeHref: string
-  title: string
-  asOfLabel: string
-  groupALabel: string
-  groupBLabel: string
-  groupOptions: { value: string; label: string }[]
-  failed: string
-  submit: string
-  cancel: string
-  refusal: CompDialogRefusal | null
-  remedyHref: string | null
-  remedyLabel: string | null
+  open: boolean;
+  closeHref: string;
+  title: string;
+  asOfLabel: string;
+  groupALabel: string;
+  groupBLabel: string;
+  groupOptions: { value: string; label: string }[];
+  failed: string;
+  submit: string;
+  cancel: string;
+  refusal: CompDialogRefusal | null;
+  remedyHref: string | null;
+  remedyLabel: string | null;
 }
 
-export type CompensationView = 'overview' | 'cycles' | 'plans' | 'families' | 'levels' | 'bands'
+export type CompensationView = "overview" | "cycles" | "plans" | "families" | "levels" | "bands";
 
 export interface CompHomeData {
-  overview: { wages: CompensationWageSummary; families: number; levels: number; bands: number; bandVersions: number; cycles: number; historicalCycles: number } | null
-  wageTiles: CompStatTile[]
-  activeView: CompensationView
-  workspaceTabs: { href: string; label: string; active: boolean }[]
-  currentParams: Record<string, string | string[] | undefined>
-  newItems: { key: string; label: string; href: string }[]
-  workspaceDescription: string
-  kindLabel: string
-  periodLabel: string
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  tiles: CompStatTile[]
-  bandsTitle: string
-  bandsColumns: { level: string; range: string; headcount: string; placement: string }
-  bands: CompBandRow[]
-  bandsEmpty: string
-  cyclesTitle: string
-  cyclesColumns: { name: string; status: string; effective: string }
-  cycles: CompCycleRow[]
-  cyclesEmpty: string
-  plansTitle: string
-  plansColumns: { name: string; status: string; cost: string }
-  plans: CompPlanRow[]
-  plansEmpty: string
-  plansAwaitingEmpty: string
-  canManage: boolean
-  canRunCycles: boolean
-  newCycleHref: string
-  newCycleLabel: string
-  newPlanHref: string
-  newPlanLabel: string
+  overview: {
+    wages: CompensationWageSummary;
+    families: number;
+    levels: number;
+    bands: number;
+    bandVersions: number;
+    cycles: number;
+    historicalCycles: number;
+  } | null;
+  wageTiles: CompStatTile[];
+  activeView: CompensationView;
+  workspaceTabs: { href: string; label: string; active: boolean }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  newItems: { key: string; label: string; href: string }[];
+  workspaceDescription: string;
+  kindLabel: string;
+  periodLabel: string;
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  tiles: CompStatTile[];
+  bandsTitle: string;
+  bandsColumns: { level: string; range: string; headcount: string; placement: string };
+  bands: CompBandRow[];
+  bandsEmpty: string;
+  cyclesTitle: string;
+  cyclesColumns: { name: string; status: string; effective: string };
+  cycles: CompCycleRow[];
+  cyclesEmpty: string;
+  plansTitle: string;
+  plansColumns: { name: string; status: string; cost: string };
+  plans: CompPlanRow[];
+  plansEmpty: string;
+  plansAwaitingEmpty: string;
+  canManage: boolean;
+  canRunCycles: boolean;
+  newCycleHref: string;
+  newCycleLabel: string;
+  newPlanHref: string;
+  newPlanLabel: string;
   /**
    * The shared return href for both create dialogs: the home route with
    * every dialog param navigated away (the change-request queue's
    * dialogCloseHref pattern).
    */
-  dialogCloseHref: string
+  dialogCloseHref: string;
   /** True while ?cycle=new is present — the spec renders the cycle dialog. */
-  cycleOpen: boolean
+  cycleOpen: boolean;
   /** Null unless ?cycle=new is present; carries the form or its refusal. */
-  cycleDialog: CompCycleDialogState | null
+  cycleDialog: CompCycleDialogState | null;
   /** True while ?plan=new is present — the spec renders the plan dialog. */
-  planOpen: boolean
+  planOpen: boolean;
   /** Null unless ?plan=new is present; carries the form or its refusal. */
-  planDialog: CompPlanDialogState | null
-  equityHref: string
-  equityLabel: string
-  architectureTitle: string
-  canSetup: boolean
+  planDialog: CompPlanDialogState | null;
+  equityHref: string;
+  equityLabel: string;
+  architectureTitle: string;
+  canSetup: boolean;
   /**
    * The search params the rehomed job-architecture sections
    * read (namespaced drawer keys open each section's New/edit drawer in
    * SetupEntitySection), including the current workspace view.
    */
-  setupParams: Record<string, string | string[] | undefined>
+  setupParams: Record<string, string | string[] | undefined>;
   /**
    * Named domain/auth refusal from the gap-snapshot read (a scoped reader
    * cannot read org-wide frozen aggregates). Renders as data beside the
    * tiles — never a zero joint-flag count pretending the read succeeded.
    * Null when the snapshot read succeeded (or genuinely found no snapshot).
    */
-  refusal: { title: string; message: string } | null
+  refusal: { title: string; message: string } | null;
   /**
    * The compensation settings form payload (gap threshold, burden rate,
    * FTE rounding, comparison attribute, response days). The workspace
    * leaves this null; Company Setup loads the policy form separately.
    */
   settings: {
-    refusal: string | null
-    initial: { comparisonAttributeKey: string; gapThresholdPct: string; responseDays: string; fteRounding: string; burdenRate: string }
-    title: string
-    attributeLabel: string
-    attributeOptions: { value: string; label: string }[]
-    thresholdLabel: string
-    responseDaysLabel: string
-    roundingLabel: string
-    roundingOptions: { value: string; label: string }[]
-    burdenLabel: string
-    failed: string
-    submit: string
-    cancel: string
-  } | null
+    refusal: string | null;
+    initial: {
+      comparisonAttributeKey: string;
+      gapThresholdPct: string;
+      responseDays: string;
+      fteRounding: string;
+      burdenRate: string;
+    };
+    title: string;
+    attributeLabel: string;
+    attributeOptions: { value: string; label: string }[];
+    thresholdLabel: string;
+    responseDaysLabel: string;
+    roundingLabel: string;
+    roundingOptions: { value: string; label: string }[];
+    burdenLabel: string;
+    failed: string;
+    submit: string;
+    cancel: string;
+  } | null;
 }
 
-function cycleStatusVariant(status: string): CompCycleRow['statusVariant'] {
-  if (status === 'draft') return 'secondary'
-  if (status === 'open' || status === 'in_review') return 'warning'
-  if (status === 'approved' || status === 'pushed') return 'success'
-  if (status === 'closed') return 'default'
-  return 'outline'
+function cycleStatusVariant(status: string): CompCycleRow["statusVariant"] {
+  if (status === "draft") return "secondary";
+  if (status === "open" || status === "in_review") return "warning";
+  if (status === "approved" || status === "pushed") return "success";
+  if (status === "closed") return "default";
+  return "outline";
 }
 
 async function workerNames(orgId: string, employmentIds: string[]): Promise<Map<string, string>> {
-  const names = new Map<string, string>()
-  if (employmentIds.length === 0) return names
-  const rows = await db.execute<{ employment_id: string; name: string }>(sql`
+  const names = new Map<string, string>();
+  if (employmentIds.length === 0) return names;
+  const rows = await db.execute<{ employment_id: string; name: string }>(
+    sql`
     select e.id as employment_id, p.display_name as name
       from worker_employments e
       join parties p on p.id = e.worker_party_id and p.org_id = e.org_id
-     where e.org_id = ${orgId} and e.id = any(${`{${employmentIds.join(',')}}`}::uuid[])`, 'objects')
-  for (const row of rows) names.set(row.employment_id, row.name)
-  return names
+     where e.org_id = ${orgId} and e.id = any(${`{${employmentIds.join(",")}}`}::uuid[])`,
+    "objects",
+  );
+  for (const row of rows) names.set(row.employment_id, row.name);
+  return names;
 }
 
 /** First of a search param that may repeat; Next hands arrays for ?x=a&x=b. */
 function firstParam(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value
+  return Array.isArray(value) ? value[0] : value;
 }
 
 export async function loadCompensationHome(
   authz: Authz,
   sp: Record<string, string | string[] | undefined> = {},
 ): Promise<CompHomeData | null> {
-  if (!can(authz, 'hrm.compensation.read')) return null
-  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
-  const t = await getTranslations('hrm')
-  const orgId = authz.user.orgId
-  const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
-  const canManage = can(authz, 'hrm.compensation.manage')
-  const canSetup = can(authz, 'admin.setup.manage') && authz.allowedSubsidiaryIds === null
-  const meritOn = await isFeatureEnabled(orgId, 'payroll')
-  const canRunCycles = canManage && meritOn
-  const views = ['overview', 'cycles', 'plans', 'families', 'levels', 'bands'] as const
-  const requestedView = firstParam(sp.view) ?? (firstParam(sp.family) ? 'families' : firstParam(sp.level) ? 'levels' : firstParam(sp.band) ? 'bands' : firstParam(sp.plan) ? 'plans' : firstParam(sp.cycle) ? 'cycles' : 'overview')
+  if (!can(authz, "hrm.compensation.read")) return null;
+  await requireFeatureEnabled(authz.user.orgId, "hrmCompensation");
+  const t = await getTranslations("hrm");
+  const orgId = authz.user.orgId;
+  const tabs = await hrmGroupTabs(authz, "/hrm/compensation");
+  const canManage = can(authz, "hrm.compensation.manage");
+  const canSetup = can(authz, "admin.setup.manage") && authz.allowedSubsidiaryIds === null;
+  const meritOn = await isFeatureEnabled(orgId, "payroll");
+  const canRunCycles = canManage && meritOn;
+  const views = ["overview", "cycles", "plans", "families", "levels", "bands"] as const;
+  const requestedView =
+    firstParam(sp.view) ??
+    (firstParam(sp.family)
+      ? "families"
+      : firstParam(sp.level)
+        ? "levels"
+        : firstParam(sp.band)
+          ? "bands"
+          : firstParam(sp.plan)
+            ? "plans"
+            : firstParam(sp.cycle)
+              ? "cycles"
+              : "overview");
   const activeView: CompensationView = views.includes(requestedView as CompensationView)
-    ? requestedView as CompensationView : 'overview'
+    ? (requestedView as CompensationView)
+    : "overview";
   // Each work area loads only its own authorized register. Architecture
   // lists use the shared registry reader and its server pagination.
   const [cycleRecords, plans] = await Promise.all([
-    activeView === 'cycles' || activeView === 'overview'
-      ? listCycles({ orgId, actorId: authz.user.id }) : Promise.resolve([]),
-    activeView === 'plans' || activeView === 'overview'
-      ? listPlans({ orgId, actorId: authz.user.id }) : Promise.resolve([]),
-  ])
-  const cycles = meritOn ? cycleRecords : cycleRecords.filter((cycle) => cycle.status === 'historical')
+    activeView === "cycles" || activeView === "overview"
+      ? listCycles({ orgId, actorId: authz.user.id })
+      : Promise.resolve([]),
+    activeView === "plans" || activeView === "overview"
+      ? listPlans({ orgId, actorId: authz.user.id })
+      : Promise.resolve([]),
+  ]);
+  const cycles = meritOn
+    ? cycleRecords
+    : cycleRecords.filter((cycle) => cycle.status === "historical");
   const workspaceTabs = views.map((view) => ({
-    href: view === 'overview' ? '/hrm/compensation' : `/hrm/compensation?view=${view}`,
+    href: view === "overview" ? "/hrm/compensation" : `/hrm/compensation?view=${view}`,
     label: t(`compensation.workspace.${view}`),
     active: view === activeView,
-  }))
+  }));
   const newItems = [
-    ...(canRunCycles ? [{ key: 'cycle', label: t('compensation.newCycle'), href: '/hrm/compensation?view=cycles&cycle=new' }] : []),
-    ...(canManage ? [{ key: 'plan', label: t('compensation.newPlan'), href: '/hrm/compensation?view=plans&plan=new' }] : []),
-    ...(canManage && authz.allowedSubsidiaryIds === null ? [{ key: 'snapshot', label: t('compensation.workspace.newSnapshot'), href: '/hrm/compensation/equity?generate=1' }] : []),
-    ...(canSetup ? [
-      { key: 'family', label: t('compensation.workspace.newFamily'), href: '/hrm/compensation?view=families&family=new' },
-      { key: 'level', label: t('compensation.workspace.newLevel'), href: '/hrm/compensation?view=levels&level=new' },
-      { key: 'band', label: t('compensation.workspace.newBand'), href: '/hrm/compensation?view=bands&band=new' },
-    ] : []),
-  ]
-  let tiles: CompStatTile[] = []
-  const bandRows: CompBandRow[] = []
-  const gapRefusal: CompHomeData['refusal'] = null
-  let overview: CompHomeData['overview'] = null
-  const wageTiles: CompStatTile[] = []
-  if (activeView === 'overview') {
-    const today = await businessToday(orgId)
+    ...(canRunCycles
+      ? [
+          {
+            key: "cycle",
+            label: t("compensation.newCycle"),
+            href: "/hrm/compensation?view=cycles&cycle=new",
+          },
+        ]
+      : []),
+    ...(canManage
+      ? [
+          {
+            key: "plan",
+            label: t("compensation.newPlan"),
+            href: "/hrm/compensation?view=plans&plan=new",
+          },
+        ]
+      : []),
+    ...(canManage && authz.allowedSubsidiaryIds === null
+      ? [
+          {
+            key: "snapshot",
+            label: t("compensation.workspace.newSnapshot"),
+            href: "/hrm/compensation/equity?generate=1",
+          },
+        ]
+      : []),
+    ...(canSetup
+      ? [
+          {
+            key: "family",
+            label: t("compensation.workspace.newFamily"),
+            href: "/hrm/compensation?view=families&family=new",
+          },
+          {
+            key: "level",
+            label: t("compensation.workspace.newLevel"),
+            href: "/hrm/compensation?view=levels&level=new",
+          },
+          {
+            key: "band",
+            label: t("compensation.workspace.newBand"),
+            href: "/hrm/compensation?view=bands&band=new",
+          },
+        ]
+      : []),
+  ];
+  let tiles: CompStatTile[] = [];
+  const bandRows: CompBandRow[] = [];
+  const gapRefusal: CompHomeData["refusal"] = null;
+  let overview: CompHomeData["overview"] = null;
+  const wageTiles: CompStatTile[] = [];
+  if (activeView === "overview") {
+    const today = await businessToday(orgId);
     const [architecture, wages, locale] = await Promise.all([
       compensationArchitectureSummary({ orgId, actorId: authz.user.id, asOf: today }),
       compensationWageSummary({ orgId, actorId: authz.user.id }),
       getLocale(),
-    ])
-    overview = { wages, ...architecture,
-      cycles: cycles.length, historicalCycles: cycles.filter((cycle) => cycle.status === 'historical').length }
+    ]);
+    overview = {
+      wages,
+      ...architecture,
+      cycles: cycles.length,
+      historicalCycles: cycles.filter((cycle) => cycle.status === "historical").length,
+    };
     tiles = [
-      { iconKey: 'users', accent: 'violet', label: t('compensation.dashboard.activeWorkers'), value: String(wages.workers), tone: 'default' },
-      { iconKey: 'briefcase', accent: 'blue', label: t('compensation.workspace.families'), value: String(architecture.families), tone: 'default' },
-      { iconKey: 'trending-up', accent: 'teal', label: t('compensation.workspace.levels'), value: String(architecture.levels), tone: 'default' },
-      { iconKey: 'scale', accent: 'amber', label: t('compensation.dashboard.activeBands'), value: String(architecture.bands),
-        sub: t('compensation.dashboard.bandHistoryCount', { count: architecture.bandVersions }), tone: 'default' },
-    ]
-    for (const group of wages.groups) wageTiles.push({
-      iconKey: 'coins', accent: 'teal', label: t(AVERAGE_WAGE_LABEL_KEYS[group.basis]),
-      value: `${formatDecimal(locale, group.average, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${group.currency}`,
-      sub: t('compensation.dashboard.wageGroupCount', { count: group.workers, date: wages.asOf }), tone: 'default',
-    })
+      {
+        iconKey: "users",
+        accent: "violet",
+        label: t("compensation.dashboard.activeWorkers"),
+        value: String(wages.workers),
+        tone: "default",
+      },
+      {
+        iconKey: "briefcase",
+        accent: "blue",
+        label: t("compensation.workspace.families"),
+        value: String(architecture.families),
+        tone: "default",
+      },
+      {
+        iconKey: "trending-up",
+        accent: "teal",
+        label: t("compensation.workspace.levels"),
+        value: String(architecture.levels),
+        tone: "default",
+      },
+      {
+        iconKey: "scale",
+        accent: "amber",
+        label: t("compensation.dashboard.activeBands"),
+        value: String(architecture.bands),
+        sub: t("compensation.dashboard.bandHistoryCount", { count: architecture.bandVersions }),
+        tone: "default",
+      },
+    ];
+    for (const group of wages.groups)
+      wageTiles.push({
+        iconKey: "coins",
+        accent: "teal",
+        label: t(AVERAGE_WAGE_LABEL_KEYS[group.basis]),
+        value: `${formatDecimal(locale, group.average, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${group.currency}`,
+        sub: t("compensation.dashboard.wageGroupCount", { count: group.workers, date: wages.asOf }),
+        tone: "default",
+      });
   }
-  const planRows: CompPlanRow[] = []
-  const linesByPlan = new Map<string, PlanLineDTO[]>()
+  const planRows: CompPlanRow[] = [];
+  const linesByPlan = new Map<string, PlanLineDTO[]>();
   if (plans.length > 0) {
-    const lines = await listPlanLinesForPlans({ orgId, actorId: authz.user.id, planIds: plans.map((plan) => plan.id) })
+    const lines = await listPlanLinesForPlans({
+      orgId,
+      actorId: authz.user.id,
+      planIds: plans.map((plan) => plan.id),
+    });
     for (const line of lines) {
-      const group = linesByPlan.get(line.planId) ?? []
-      group.push(line)
-      linesByPlan.set(line.planId, group)
+      const group = linesByPlan.get(line.planId) ?? [];
+      group.push(line);
+      linesByPlan.set(line.planId, group);
     }
   }
   for (const plan of plans) {
-    const lines = linesByPlan.get(plan.id) ?? []
-    const total = planTotalCost(lines)
+    const lines = linesByPlan.get(plan.id) ?? [];
+    const total = planTotalCost(lines);
     planRows.push({
       id: plan.id,
       name: plan.name,
       period: `${plan.fiscalPeriodFrom} – ${plan.fiscalPeriodTo}`,
       status: plan.status,
-      statusLabel: t.has(`compensation.planStatus.${plan.status}`) ? t(`compensation.planStatus.${plan.status}`) : plan.status,
-      statusVariant: plan.status === 'approved' ? 'success' : plan.status === 'submitted' ? 'warning' : 'default',
+      statusLabel: t.has(`compensation.planStatus.${plan.status}`)
+        ? t(`compensation.planStatus.${plan.status}`)
+        : plan.status,
+      statusVariant:
+        plan.status === "approved"
+          ? "success"
+          : plan.status === "submitted"
+            ? "warning"
+            : "default",
       totalCost: total,
       href: `/hrm/compensation/plans/${plan.id}`,
-    })
+    });
   }
   // The create dialogs (?cycle=new / ?plan=new): the loader owns the open
   // state and the return href, exactly like the change-request queue's
@@ -398,157 +513,188 @@ export async function loadCompensationHome(
   // The gate-explanation copy is shared with the feature-required and
   // access-denied pages (shell.routeState), and the feature display names
   // with the Features switchboard (admin.features) — no second source.
-  const dialogCloseHref = mergeHref('/hrm/compensation', sp, { cycle: null, plan: null })
-  const cycleOpen = firstParam(sp.cycle) === 'new'
-  const planOpen = firstParam(sp.plan) === 'new'
-  let cycleDialog: CompCycleDialogState | null = null
-  let planDialog: CompPlanDialogState | null = null
+  const dialogCloseHref = mergeHref("/hrm/compensation", sp, { cycle: null, plan: null });
+  const cycleOpen = firstParam(sp.cycle) === "new";
+  const planOpen = firstParam(sp.plan) === "new";
+  let cycleDialog: CompCycleDialogState | null = null;
+  let planDialog: CompPlanDialogState | null = null;
   const cycleCurrency = cycleOpen
-    ? (await db.execute<{ base_currency: string | null }>(sql`
+    ? ((
+        await db.execute<{ base_currency: string | null }>(
+          sql`
         select base_currency from orgs where id = ${orgId}
-      `, 'objects'))[0]?.base_currency ?? ''
-    : ''
-  let currencyOptions: CompCycleDialogState['currencyOptions'] = []
-  let employerOptions: CompCycleDialogState['employerOptions'] = []
+      `,
+          "objects",
+        )
+      )[0]?.base_currency ?? "")
+    : "";
+  let currencyOptions: CompCycleDialogState["currencyOptions"] = [];
+  let employerOptions: CompCycleDialogState["employerOptions"] = [];
   if (cycleOpen && canRunCycles) {
-    const { organizationCurrencyOptions } = await import('@openbooks/engine/organization/currencies')
-    const { loadEntityOptions } = await import('../setup/ref-options')
-    ;[currencyOptions, employerOptions] = await Promise.all([
+    const { organizationCurrencyOptions } =
+      await import("@openbooks/engine/organization/currencies");
+    const { loadEntityOptions } = await import("../setup/ref-options");
+    [currencyOptions, employerOptions] = await Promise.all([
       organizationCurrencyOptions(db, orgId, authz.allowedSubsidiaryIds),
-      loadEntityOptions('subsidiaries', orgId, authz.allowedSubsidiaryIds),
-    ])
+      loadEntityOptions("subsidiaries", orgId, authz.allowedSubsidiaryIds),
+    ]);
   }
   if (cycleOpen || planOpen) {
-    const g = await getTranslations('shell.routeState')
-    const adminT = await getTranslations('admin')
-    const canSetup = can(authz, 'admin.setup.manage')
+    const g = await getTranslations("shell.routeState");
+    const adminT = await getTranslations("admin");
+    const canSetup = can(authz, "admin.setup.manage");
     const manageRefusal = (): CompDialogRefusal => ({
-      title: g('deniedTitle'),
-      message: `${g('deniedDescription', { permission: 'hrm.compensation.manage' })} ${g('askAdministrator')}`,
-    })
-    const featureRefusal = (featureKey: 'payroll'): CompDialogRefusal => {
-      const nameKey = `features.${featureKey}.title`
-      const name = adminT.has(nameKey) ? adminT(nameKey) : featureKey
+      title: g("deniedTitle"),
+      message: `${g("deniedDescription", { permission: "hrm.compensation.manage" })} ${g("askAdministrator")}`,
+    });
+    const featureRefusal = (featureKey: "payroll"): CompDialogRefusal => {
+      const nameKey = `features.${featureKey}.title`;
+      const name = adminT.has(nameKey) ? adminT(nameKey) : featureKey;
       return {
-        title: g('featureOffTitle', { name }),
-        message: `${g('featureOffDescription', { name })}${canSetup ? '' : ` ${g('askAdministrator')}`}`,
-      }
-    }
+        title: g("featureOffTitle", { name }),
+        message: `${g("featureOffDescription", { name })}${canSetup ? "" : ` ${g("askAdministrator")}`}`,
+      };
+    };
     // Setup managers get the real switch beside a feature-off refusal; the
     // route is the switchboard the Features hierarchy owns (the
     // feature-required page links the same destination).
     const featureRemedy = canSetup
-      ? { remedyHref: '/admin/setup/features' as string | null, remedyLabel: g('turnOnFeature') as string | null }
-      : { remedyHref: null as string | null, remedyLabel: null as string | null }
+      ? {
+          remedyHref: "/admin/setup/features" as string | null,
+          remedyLabel: g("turnOnFeature") as string | null,
+        }
+      : { remedyHref: null as string | null, remedyLabel: null as string | null };
     if (cycleOpen) {
       // Permission first: without the grant the switch cannot help. The
       // Features link rides only the feature-off refusal (a person is the
       // remedy for a missing grant, never a link).
-      const refusal = !canManage ? manageRefusal() : !meritOn ? featureRefusal('payroll') : null
-      const featureOff = canManage && !meritOn
+      const refusal = !canManage ? manageRefusal() : !meritOn ? featureRefusal("payroll") : null;
+      const featureOff = canManage && !meritOn;
       cycleDialog = {
         open: true,
         closeHref: dialogCloseHref,
         defaultCurrency: cycleCurrency,
         currencyOptions,
         employerOptions,
-        defaultEmployer: authz.allowedSubsidiaryIds !== null && employerOptions.length === 1 ? employerOptions[0]!.value : '',
+        defaultEmployer:
+          authz.allowedSubsidiaryIds !== null && employerOptions.length === 1
+            ? employerOptions[0]!.value
+            : "",
         canSelectOrgWide: authz.allowedSubsidiaryIds === null,
-        orgWideLabel: t('compensation.workspace.organizationScope'),
-        employerLabel: t('compensation.workspace.employer'),
-        currencyUnavailable: t('compensation.workspace.currencyUnavailable'),
-        guidelineLabel: t('compensation.workspace.guidelinePercentage'),
-        guidelineHelp: t('compensation.workspace.guidelineHelp'),
-        title: t('compensation.newCycle'),
-        kinds: (['merit', 'promotion', 'adjustment', 'cola'] as const).map((kind) => ({
+        orgWideLabel: t("compensation.workspace.organizationScope"),
+        employerLabel: t("compensation.workspace.employer"),
+        currencyUnavailable: t("compensation.workspace.currencyUnavailable"),
+        guidelineLabel: t("compensation.workspace.guidelinePercentage"),
+        guidelineHelp: t("compensation.workspace.guidelineHelp"),
+        title: t("compensation.newCycle"),
+        kinds: (["merit", "promotion", "adjustment", "cola"] as const).map((kind) => ({
           value: kind,
-          label: t.has(`compensation.cycleKind.${kind}`) ? t(`compensation.cycleKind.${kind}`) : kind,
+          label: t.has(`compensation.cycleKind.${kind}`)
+            ? t(`compensation.cycleKind.${kind}`)
+            : kind,
         })),
-        kindLabel: t('compensation.columns.kind'),
-        nameLabel: t('compensation.columns.name'),
-        effectiveLabel: t('compensation.columns.effective'),
-        currencyLabel: t('recruiting.offerCard.currency'),
-        failed: t('compensation.drawer.failed'),
-        submit: t('compensation.drawer.submit'),
-        cancel: t('compensation.drawer.cancel'),
+        kindLabel: t("compensation.columns.kind"),
+        nameLabel: t("compensation.columns.name"),
+        effectiveLabel: t("compensation.columns.effective"),
+        currencyLabel: t("recruiting.offerCard.currency"),
+        failed: t("compensation.drawer.failed"),
+        submit: t("compensation.drawer.submit"),
+        cancel: t("compensation.drawer.cancel"),
         refusal,
         remedyHref: featureOff ? featureRemedy.remedyHref : null,
         remedyLabel: featureOff ? featureRemedy.remedyLabel : null,
-      }
+      };
     }
     if (planOpen) {
       planDialog = {
         open: true,
         closeHref: dialogCloseHref,
-        title: t('compensation.newPlan'),
-        nameLabel: t('compensation.columns.name'),
-        fromLabel: t('performance.periodStart'),
-        toLabel: t('performance.periodEnd'),
-        failed: t('compensation.drawer.failed'),
-        submit: t('compensation.drawer.submit'),
-        cancel: t('compensation.drawer.cancel'),
+        title: t("compensation.newPlan"),
+        nameLabel: t("compensation.columns.name"),
+        fromLabel: t("performance.periodStart"),
+        toLabel: t("performance.periodEnd"),
+        failed: t("compensation.drawer.failed"),
+        submit: t("compensation.drawer.submit"),
+        cancel: t("compensation.drawer.cancel"),
         refusal: canManage ? null : manageRefusal(),
         remedyHref: null,
         remedyLabel: null,
-      }
+      };
     }
   }
   return {
-    activeView, workspaceTabs, currentParams: sp, newItems, overview, wageTiles,
-    kindLabel: t('compensation.columns.kind'),
-    periodLabel: t('compensation.workspace.period'),
+    activeView,
+    workspaceTabs,
+    currentParams: sp,
+    newItems,
+    overview,
+    wageTiles,
+    kindLabel: t("compensation.columns.kind"),
+    periodLabel: t("compensation.workspace.period"),
     workspaceDescription: t(`compensation.workspace.${activeView}Description`),
-    title: t('compensation.title'),
-    description: t('compensation.description'),
+    title: t("compensation.title"),
+    description: t("compensation.description"),
     tabs,
     tiles,
-    bandsTitle: t('compensation.bandsTitle'),
+    bandsTitle: t("compensation.bandsTitle"),
     bandsColumns: {
-      level: t('compensation.columns.level'),
-      range: t('compensation.columns.range'),
-      headcount: t('compensation.columns.headcount'),
-      placement: t('compensation.columns.placement'),
+      level: t("compensation.columns.level"),
+      range: t("compensation.columns.range"),
+      headcount: t("compensation.columns.headcount"),
+      placement: t("compensation.columns.placement"),
     },
     bands: bandRows,
-    bandsEmpty: t('compensation.bandsEmpty'),
-    cyclesTitle: t('compensation.workspace.cycles'),
-    cyclesColumns: { name: t('compensation.columns.name'), status: t('compensation.columns.status'), effective: t('compensation.columns.effective') },
+    bandsEmpty: t("compensation.bandsEmpty"),
+    cyclesTitle: t("compensation.workspace.cycles"),
+    cyclesColumns: {
+      name: t("compensation.columns.name"),
+      status: t("compensation.columns.status"),
+      effective: t("compensation.columns.effective"),
+    },
     cycles: cycles.map((c) => ({
       id: c.id,
       name: c.name,
-      kindLabel: t.has(`compensation.cycleKind.${c.kind}`) ? t(`compensation.cycleKind.${c.kind}`) : c.kind,
+      kindLabel: t.has(`compensation.cycleKind.${c.kind}`)
+        ? t(`compensation.cycleKind.${c.kind}`)
+        : c.kind,
       status: c.status,
-      statusLabel: t.has(`compensation.cycleStatus.${c.status}`) ? t(`compensation.cycleStatus.${c.status}`) : c.status,
+      statusLabel: t.has(`compensation.cycleStatus.${c.status}`)
+        ? t(`compensation.cycleStatus.${c.status}`)
+        : c.status,
       statusVariant: cycleStatusVariant(c.status),
-      effectiveOn: c.effectiveOn ?? t('compensation.sourceCycle.unknownDate'),
+      effectiveOn: c.effectiveOn ?? t("compensation.sourceCycle.unknownDate"),
       effectiveDate: c.effectiveOn,
       href: `/hrm/compensation/cycles/${c.id}`,
     })),
-    cyclesEmpty: t('compensation.cyclesEmpty'),
-    plansTitle: t('compensation.plansTitle'),
-    plansColumns: { name: t('compensation.columns.name'), status: t('compensation.columns.status'), cost: t('compensation.columns.cost') },
+    cyclesEmpty: t("compensation.cyclesEmpty"),
+    plansTitle: t("compensation.plansTitle"),
+    plansColumns: {
+      name: t("compensation.columns.name"),
+      status: t("compensation.columns.status"),
+      cost: t("compensation.columns.cost"),
+    },
     plans: planRows,
-    plansEmpty: t('compensation.plansEmpty'),
-    plansAwaitingEmpty: t('compensation.workspace.noPlansAwaiting'),
+    plansEmpty: t("compensation.plansEmpty"),
+    plansAwaitingEmpty: t("compensation.workspace.noPlansAwaiting"),
     canManage,
     canRunCycles,
-    newCycleHref: '/hrm/compensation?view=cycles&cycle=new',
-    newCycleLabel: t('compensation.newCycle'),
-    newPlanHref: '/hrm/compensation?view=plans&plan=new',
-    newPlanLabel: t('compensation.newPlan'),
+    newCycleHref: "/hrm/compensation?view=cycles&cycle=new",
+    newCycleLabel: t("compensation.newCycle"),
+    newPlanHref: "/hrm/compensation?view=plans&plan=new",
+    newPlanLabel: t("compensation.newPlan"),
     dialogCloseHref,
     cycleOpen,
     cycleDialog,
     planOpen,
     planDialog,
-    equityHref: '/hrm/compensation/equity',
-    equityLabel: t('compensation.equity'),
-    architectureTitle: t('compensation.architectureTitle'),
+    equityHref: "/hrm/compensation/equity",
+    equityLabel: t("compensation.equity"),
+    architectureTitle: t("compensation.architectureTitle"),
     canSetup,
     setupParams: sp,
     refusal: gapRefusal,
     settings: null,
-  }
+  };
 }
 
 /** Load the single Company Setup policy form for unrestricted managers.
@@ -558,76 +704,87 @@ export async function loadCompensationSettingsBlock(
   orgId: string,
   editable: boolean,
   t: Awaited<ReturnType<typeof getTranslations>>,
-): Promise<CompHomeData['settings']> {
-  if (!editable) return null
-  let refusal: string | null = null
-  let initial = { comparisonAttributeKey: '', gapThresholdPct: '', responseDays: '', fteRounding: 'up_to_whole', burdenRate: '' }
+): Promise<CompHomeData["settings"]> {
+  if (!editable) return null;
+  let refusal: string | null = null;
+  let initial = {
+    comparisonAttributeKey: "",
+    gapThresholdPct: "",
+    responseDays: "",
+    fteRounding: "up_to_whole",
+    burdenRate: "",
+  };
   try {
-    const current = await compensationSettings(orgId)
+    const current = await compensationSettings(orgId);
     initial = {
-      comparisonAttributeKey: current.comparisonAttributeKey ?? '',
+      comparisonAttributeKey: current.comparisonAttributeKey ?? "",
       gapThresholdPct: current.gapThresholdPct,
-      responseDays: current.responseDays === null ? '' : String(current.responseDays),
+      responseDays: current.responseDays === null ? "" : String(current.responseDays),
       fteRounding: current.fteRounding,
-      burdenRate: current.burdenRate ?? '',
-    }
+      burdenRate: current.burdenRate ?? "",
+    };
   } catch (error) {
     // Preserve the refusal beside the repair form. Unexpected failures
     // propagate rather than becoming an apparently valid policy.
-    if (!(error instanceof CompensationError)) throw error
-    refusal = error.message
+    if (!(error instanceof CompensationError)) throw error;
+    refusal = error.message;
   }
   return {
     refusal,
     initial,
-    title: t('compensation.settings.title'),
-    attributeLabel: t('compensation.settings.attribute'),
-    attributeOptions: await db.execute<{ value: string; label: string }>(sql`
+    title: t("compensation.settings.title"),
+    attributeLabel: t("compensation.settings.attribute"),
+    attributeOptions: await db.execute<{ value: string; label: string }>(
+      sql`
       select key as value, label from custom_field_defs
        where org_id = ${orgId} and target_table = 'parties' and is_active
          and (target_kind is null or target_kind = 'employee')
          and field_type in ('text', 'select', 'boolean') order by sort_order, label
-    `, 'objects'),
-    thresholdLabel: t('compensation.settings.threshold'),
-    responseDaysLabel: t('compensation.settings.responseDays'),
-    roundingLabel: t('compensation.settings.roundingLabel'),
-    roundingOptions: (['up_to_whole', 'nearest_tenth', 'nearest_hundredth'] as const).map((value) => ({
-      value,
-      label:
-        value === 'up_to_whole'
-          ? t('compensation.settings.rounding.upToWhole')
-          : value === 'nearest_tenth'
-            ? t('compensation.settings.rounding.nearestTenth')
-            : t('compensation.settings.rounding.nearestHundredth'),
-    })),
-    burdenLabel: t('compensation.settings.burden'),
-    failed: t('compensation.drawer.failed'),
-    submit: t('compensation.drawer.submit'),
-    cancel: t('compensation.drawer.cancel'),
-  }
+    `,
+      "objects",
+    ),
+    thresholdLabel: t("compensation.settings.threshold"),
+    responseDaysLabel: t("compensation.settings.responseDays"),
+    roundingLabel: t("compensation.settings.roundingLabel"),
+    roundingOptions: (["up_to_whole", "nearest_tenth", "nearest_hundredth"] as const).map(
+      (value) => ({
+        value,
+        label:
+          value === "up_to_whole"
+            ? t("compensation.settings.rounding.upToWhole")
+            : value === "nearest_tenth"
+              ? t("compensation.settings.rounding.nearestTenth")
+              : t("compensation.settings.rounding.nearestHundredth"),
+      }),
+    ),
+    burdenLabel: t("compensation.settings.burden"),
+    failed: t("compensation.drawer.failed"),
+    submit: t("compensation.drawer.submit"),
+    cancel: t("compensation.drawer.cancel"),
+  };
 }
 
 export interface CompLineRow {
-  id: string
-  employeeName: string
-  lineHref: string
-  employeeHref: string | null
-  current: string
-  placement: 'below_min' | 'in_range' | 'above_max' | 'no_band'
-  placementLabel: string
-  placementMin: string | null
-  placementTarget: string | null
-  placementMax: string | null
-  placementRate: string | null
-  rating: string
-  guideline: string
-  proposedPct: string
-  proposedRate: string
-  status: string
-  statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
-  reason: string | null
-  department: string
+  id: string;
+  employeeName: string;
+  lineHref: string;
+  employeeHref: string | null;
+  current: string;
+  placement: "below_min" | "in_range" | "above_max" | "no_band";
+  placementLabel: string;
+  placementMin: string | null;
+  placementTarget: string | null;
+  placementMax: string | null;
+  placementRate: string | null;
+  rating: string;
+  guideline: string;
+  proposedPct: string;
+  proposedRate: string;
+  status: string;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
+  reason: string | null;
+  department: string;
 }
 
 /**
@@ -642,59 +799,67 @@ export function lineActionAvailability(
   cycleStatus: string,
   lineStatus: string | null,
 ): { canPropose: boolean; canDecideLine: boolean } {
-  const roundLive = cycleStatus === 'open' || cycleStatus === 'in_review';
+  const roundLive = cycleStatus === "open" || cycleStatus === "in_review";
   return {
-    canPropose: roundLive && (lineStatus === 'pending' || lineStatus === 'proposed'),
-    canDecideLine: (roundLive || cycleStatus === 'approved') && lineStatus === 'proposed',
+    canPropose: roundLive && (lineStatus === "pending" || lineStatus === "proposed"),
+    canDecideLine: (roundLive || cycleStatus === "approved") && lineStatus === "proposed",
   };
 }
 
 export interface CompCycleDetailData {
-  cycleId: string
-  title: string
-  cycleName: string
-  status: string
-  statusLabel: string
-  effectiveOn: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  pacingLabel: string
-  pacingPct: number | null
-  pacingOver: boolean
-  pacingNote: string
-  linesTitle: string
-  columns: { employee: string; current: string; placement: string; rating: string; guideline: string; proposed: string; status: string }
-  lines: CompLineRow[]
-  linesEmpty: string
-  departments: { value: string; label: string; count: number }[]
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
-  canDecide: boolean
-  backHref: string
-  backLabel: string
-  cycleHref: string
-  openLineId: string | null
-  openLine: CompLineRow | null
-  lineActions: { canPropose: boolean; canDecideLine: boolean }
-  openLineHistory: { kind: string; actor: string | null; reason: string | null; at: string }[]
-  drawerCloseHref: string
+  cycleId: string;
+  title: string;
+  cycleName: string;
+  status: string;
+  statusLabel: string;
+  effectiveOn: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  pacingLabel: string;
+  pacingPct: number | null;
+  pacingOver: boolean;
+  pacingNote: string;
+  linesTitle: string;
+  columns: {
+    employee: string;
+    current: string;
+    placement: string;
+    rating: string;
+    guideline: string;
+    proposed: string;
+    status: string;
+  };
+  lines: CompLineRow[];
+  linesEmpty: string;
+  departments: { value: string; label: string; count: number }[];
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
+  canDecide: boolean;
+  backHref: string;
+  backLabel: string;
+  cycleHref: string;
+  openLineId: string | null;
+  openLine: CompLineRow | null;
+  lineActions: { canPropose: boolean; canDecideLine: boolean };
+  openLineHistory: { kind: string; actor: string | null; reason: string | null; at: string }[];
+  drawerCloseHref: string;
   drawerLabels: {
-    proposeTitle: string
-    decideTitle: string
-    historyTitle: string
-    pctLabel: string
-    rateLabel: string
-    reasonLabel: string
-    pctInvalid: string
-    decideReasonLabel: string
-    failed: string
-    submit: string
-    cancel: string
-    approve: string
-    reject: string
-    reopen: string
-  }
-  historyColumns: { event: string; reason: string; at: string }
-  emptyHistory: string
+    proposeTitle: string;
+    decideTitle: string;
+    historyTitle: string;
+    pctLabel: string;
+    rateLabel: string;
+    reasonLabel: string;
+    pctInvalid: string;
+    decideReasonLabel: string;
+    failed: string;
+    submit: string;
+    cancel: string;
+    approve: string;
+    reject: string;
+    reopen: string;
+  };
+  historyColumns: { event: string; reason: string; at: string };
+  emptyHistory: string;
   /**
    * The cycle lifecycle block (open/submit/push/close/cancel). Present
    * only for compensation managers — the POST endpoint requires
@@ -703,18 +868,18 @@ export interface CompCycleDetailData {
    * the island; the service owns the transition table.
    */
   move: {
-    title: string
-    openLabel: string
-    submitLabel: string
-    pushLabel: string
-    closeLabel: string
-    cancelLabel: string
-    cancelReasonLabel: string
-    cancelReasonRequired: string
-    failed: string
-    submit: string
-    cancel: string
-  } | null
+    title: string;
+    openLabel: string;
+    submitLabel: string;
+    pushLabel: string;
+    closeLabel: string;
+    cancelLabel: string;
+    cancelReasonLabel: string;
+    cancelReasonRequired: string;
+    failed: string;
+    submit: string;
+    cancel: string;
+  } | null;
 }
 
 export async function loadCompCycleDetail(
@@ -722,67 +887,89 @@ export async function loadCompCycleDetail(
   cycleId: string,
   sp: Record<string, string | undefined>,
 ): Promise<CompCycleDetailData | null> {
-  if (!can(authz, 'hrm.compensation.read')) return null
+  if (!can(authz, "hrm.compensation.read")) return null;
   // Merit cycles ride Compensation and additionally need Payroll; the
   // feature-required page names whichever is off.
-  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
-  await requireFeatureEnabled(authz.user.orgId, 'payroll')
-  const t = await getTranslations('hrm')
-  const format = await getFormatter()
-  const orgId = authz.user.orgId
-  let cycle: Awaited<ReturnType<typeof getCycle>>
+  await requireFeatureEnabled(authz.user.orgId, "hrmCompensation");
+  await requireFeatureEnabled(authz.user.orgId, "payroll");
+  const t = await getTranslations("hrm");
+  const format = await getFormatter();
+  const orgId = authz.user.orgId;
+  let cycle: Awaited<ReturnType<typeof getCycle>>;
   try {
-    cycle = await getCycle({ orgId, actorId: authz.user.id, cycleId })
+    cycle = await getCycle({ orgId, actorId: authz.user.id, cycleId });
   } catch (error) {
-    if (error instanceof CompensationError && error.code === 'NOT_FOUND') return null
-    throw error
+    if (error instanceof CompensationError && error.code === "NOT_FOUND") return null;
+    throw error;
   }
-  const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
-  const lines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId })
-  const names = await workerNames(orgId, lines.map((l) => l.employmentId))
-  const departments = new Map<string, { label: string; count: number }>()
-  const deptOf = new Map<string, string>()
-  const deptRows = await db.execute<{ employment_id: string; department_id: string | null; name: string | null }>(sql`
+  const tabs = await hrmGroupTabs(authz, "/hrm/compensation");
+  const lines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId });
+  const names = await workerNames(
+    orgId,
+    lines.map((l) => l.employmentId),
+  );
+  const departments = new Map<string, { label: string; count: number }>();
+  const deptOf = new Map<string, string>();
+  const deptRows = await db.execute<{
+    employment_id: string;
+    department_id: string | null;
+    name: string | null;
+  }>(
+    sql`
     select aav.employment_id, aav.department_id, d.name
       from employment_assignment_versions aav
       left join departments d on d.id = aav.department_id and d.org_id = aav.org_id
      where aav.org_id = ${orgId} and aav.is_primary and aav.recorded_until is null
-       and aav.employment_id = any(${`{${lines.map((l) => l.employmentId).join(',')}}`}::uuid[])`, 'objects')
+       and aav.employment_id = any(${`{${lines.map((l) => l.employmentId).join(",")}}`}::uuid[])`,
+    "objects",
+  );
   for (const row of deptRows) {
-    deptOf.set(row.employment_id, row.department_id ?? '')
+    deptOf.set(row.employment_id, row.department_id ?? "");
     if (row.department_id) {
-      const entry = departments.get(row.department_id) ?? { label: row.name ?? row.department_id.slice(0, 8), count: 0 }
-      entry.count += 1
-      departments.set(row.department_id, entry)
+      const entry = departments.get(row.department_id) ?? {
+        label: row.name ?? row.department_id.slice(0, 8),
+        count: 0,
+      };
+      entry.count += 1;
+      departments.set(row.department_id, entry);
     }
   }
-  const segment = sp.department ?? ''
+  const segment = sp.department ?? "";
   const placementLabel = (p: string) =>
-    t.has(`compensation.placement.${p}`) ? t(`compensation.placement.${p}`) : p
+    t.has(`compensation.placement.${p}`) ? t(`compensation.placement.${p}`) : p;
   // Band edges for the lines' bands: placement derives here (the lines
   // freeze the ratio at open; the edges render the bar).
-  const bandIds = [...new Set(lines.map((l) => l.bandId).filter((b): b is string => b !== null))]
-  const bandEdges = new Map<string, { min: string; target: string | null; max: string }>()
+  const bandIds = [...new Set(lines.map((l) => l.bandId).filter((b): b is string => b !== null))];
+  const bandEdges = new Map<string, { min: string; target: string | null; max: string }>();
   if (bandIds.length > 0) {
-    const edgeRows = await db.execute<{ id: string; min: string; target: string | null; max: string }>(sql`
+    const edgeRows = await db.execute<{
+      id: string;
+      min: string;
+      target: string | null;
+      max: string;
+    }>(
+      sql`
       select id, min::text as min, target::text as target, max::text as max
         from hrm_pay_bands
-       where org_id = ${orgId} and id = any(${`{${bandIds.join(',')}}`}::uuid[])`, 'objects')
-    for (const row of edgeRows) bandEdges.set(row.id, { min: row.min, target: row.target, max: row.max })
+       where org_id = ${orgId} and id = any(${`{${bandIds.join(",")}}`}::uuid[])`,
+      "objects",
+    );
+    for (const row of edgeRows)
+      bandEdges.set(row.id, { min: row.min, target: row.target, max: row.max });
   }
   const rows: CompLineRow[] = lines
     .filter((l) => !segment || deptOf.get(l.employmentId) === segment)
     .map((l) => {
-      const edges = l.bandId ? bandEdges.get(l.bandId) ?? null : null
+      const edges = l.bandId ? (bandEdges.get(l.bandId) ?? null) : null;
       const placement =
         edges === null
-          ? ('no_band' as const)
+          ? ("no_band" as const)
           : cmp(l.currentRate, edges.min) < 0
-            ? ('below_min' as const)
+            ? ("below_min" as const)
             : cmp(l.currentRate, edges.max) > 0
-              ? ('above_max' as const)
-              : ('in_range' as const)
-      const href = `/hrm/compensation/cycles/${cycleId}?line=${l.id}${segment ? `&department=${segment}` : ''}`
+              ? ("above_max" as const)
+              : ("in_range" as const);
+      const href = `/hrm/compensation/cycles/${cycleId}?line=${l.id}${segment ? `&department=${segment}` : ""}`;
       return {
         id: l.id,
         employeeName: names.get(l.employmentId) ?? l.employmentId.slice(0, 8),
@@ -795,233 +982,295 @@ export async function loadCompCycleDetail(
         placementTarget: edges?.target ?? null,
         placementMax: edges?.max ?? null,
         placementRate: l.currentRate,
-        rating: l.ratingKey ?? '—',
+        rating: l.ratingKey ?? "—",
         guideline:
           l.guidelineMinPct !== null && l.guidelineMaxPct !== null
             ? `${l.guidelineMinPct}% – ${l.guidelineMaxPct}%`
-            : '—',
-        proposedPct: l.proposedPct !== null ? `${l.proposedPct}%` : '—',
-        proposedRate: l.proposedRate ?? '—',
+            : "—",
+        proposedPct: l.proposedPct !== null ? `${l.proposedPct}%` : "—",
+        proposedRate: l.proposedRate ?? "—",
         status: l.status,
-        statusLabel: t.has(`compensation.lineStatus.${l.status}`) ? t(`compensation.lineStatus.${l.status}`) : l.status,
-        statusVariant: l.status === 'approved' || l.status === 'pushed' ? 'success' : l.status === 'rejected' ? 'destructive' : l.status === 'proposed' ? 'warning' : 'default',
+        statusLabel: t.has(`compensation.lineStatus.${l.status}`)
+          ? t(`compensation.lineStatus.${l.status}`)
+          : l.status,
+        statusVariant:
+          l.status === "approved" || l.status === "pushed"
+            ? "success"
+            : l.status === "rejected"
+              ? "destructive"
+              : l.status === "proposed"
+                ? "warning"
+                : "default",
         reason: l.reason,
-        department: deptOf.get(l.employmentId) ?? '',
-      }
-    })
-  const pacing = await cyclePacing(orgId, authz.user.id, cycleId)
-  const openLineId = sp.line ?? null
-  const openLine = rows.find((r) => r.id === openLineId) ?? null
+        department: deptOf.get(l.employmentId) ?? "",
+      };
+    });
+  const pacing = await cyclePacing(orgId, authz.user.id, cycleId);
+  const openLineId = sp.line ?? null;
+  const openLine = rows.find((r) => r.id === openLineId) ?? null;
   const history = openLineId
-    ? (await db.execute<{ kind: string; actor: string | null; reason: string | null; at: string }>(sql`
+    ? await db.execute<{ kind: string; actor: string | null; reason: string | null; at: string }>(
+        sql`
       select kind, actor::text as actor, reason, recorded_at::text as at
         from hrm_comp_events
        where org_id = ${orgId} and cycle_id = ${cycleId} and (line_id = ${openLineId} or line_id is null)
-       order by recorded_at`, 'objects'))
-    : []
+       order by recorded_at`,
+        "objects",
+      )
+    : [];
   return {
     cycleId,
     title: cycle.name,
     cycleName: cycle.name,
     status: cycle.status,
-    statusLabel: t.has(`compensation.cycleStatus.${cycle.status}`) ? t(`compensation.cycleStatus.${cycle.status}`) : cycle.status,
-    effectiveOn: cycle.effectiveOn ?? t('compensation.sourceCycle.unknownDate'),
+    statusLabel: t.has(`compensation.cycleStatus.${cycle.status}`)
+      ? t(`compensation.cycleStatus.${cycle.status}`)
+      : cycle.status,
+    effectiveOn: cycle.effectiveOn ?? t("compensation.sourceCycle.unknownDate"),
     tabs,
-    pacingLabel: t('compensation.pacing'),
+    pacingLabel: t("compensation.pacing"),
     pacingPct: pacing.totalPct,
     pacingOver: pacing.overBudget,
-    pacingNote: pacing.totalPct === null
-      ? pacing.overBudget ? t('compensation.pacingOverNoPct') : t('compensation.pacingNone')
-      : pacing.overBudget
-        ? t('compensation.pacingOverNote', { pct: Math.round(pacing.totalPct) })
-        : t('compensation.pacingNote', { pct: Math.round(pacing.totalPct) }),
-    linesTitle: t('compensation.linesTitle'),
+    pacingNote:
+      pacing.totalPct === null
+        ? pacing.overBudget
+          ? t("compensation.pacingOverNoPct")
+          : t("compensation.pacingNone")
+        : pacing.overBudget
+          ? t("compensation.pacingOverNote", { pct: Math.round(pacing.totalPct) })
+          : t("compensation.pacingNote", { pct: Math.round(pacing.totalPct) }),
+    linesTitle: t("compensation.linesTitle"),
     columns: {
-      employee: t('compensation.columns.employee'),
-      current: t('compensation.columns.current'),
-      placement: t('compensation.columns.placement'),
-      rating: t('compensation.columns.rating'),
-      guideline: t('compensation.columns.guideline'),
-      proposed: t('compensation.columns.proposed'),
-      status: t('compensation.columns.status'),
+      employee: t("compensation.columns.employee"),
+      current: t("compensation.columns.current"),
+      placement: t("compensation.columns.placement"),
+      rating: t("compensation.columns.rating"),
+      guideline: t("compensation.columns.guideline"),
+      proposed: t("compensation.columns.proposed"),
+      status: t("compensation.columns.status"),
     },
     lines: rows,
-    linesEmpty: t('compensation.linesEmpty'),
-    departments: [...departments.entries()].map(([value, entry]) => ({ value, label: entry.label, count: entry.count })),
+    linesEmpty: t("compensation.linesEmpty"),
+    departments: [...departments.entries()].map(([value, entry]) => ({
+      value,
+      label: entry.label,
+      count: entry.count,
+    })),
     currentParams: { department: sp.department },
-    canManage: can(authz, 'hrm.compensation.manage'),
-    canDecide: can(authz, 'hrm.compensation.approve'),
-    backHref: '/hrm/compensation?view=cycles',
-    backLabel: t('compensation.back'),
+    canManage: can(authz, "hrm.compensation.manage"),
+    canDecide: can(authz, "hrm.compensation.approve"),
+    backHref: "/hrm/compensation?view=cycles",
+    backLabel: t("compensation.back"),
     cycleHref: `/hrm/compensation/cycles/${cycleId}`,
     openLineId,
     openLine,
     lineActions: lineActionAvailability(cycle.status, openLine?.status ?? null),
     openLineHistory: history.map((h) => ({
-      kind: t.has(`compensation.eventKind.${h.kind}`) ? t(`compensation.eventKind.${h.kind}`) : h.kind,
+      kind: t.has(`compensation.eventKind.${h.kind}`)
+        ? t(`compensation.eventKind.${h.kind}`)
+        : h.kind,
       actor: h.actor,
       reason: h.reason,
-      at: format.dateTime(new Date(h.at), { dateStyle: 'medium', timeStyle: 'short' }),
+      at: format.dateTime(new Date(h.at), { dateStyle: "medium", timeStyle: "short" }),
     })),
-    drawerCloseHref: `/hrm/compensation/cycles/${cycleId}${segment ? `?department=${segment}` : ''}`,
+    drawerCloseHref: `/hrm/compensation/cycles/${cycleId}${segment ? `?department=${segment}` : ""}`,
     drawerLabels: {
-      proposeTitle: t('compensation.drawer.proposeTitle'),
-      decideTitle: t('compensation.drawer.decideTitle'),
-      historyTitle: t('compensation.drawer.historyTitle'),
-      pctLabel: t('compensation.drawer.pctLabel'),
-      rateLabel: t('compensation.drawer.rateLabel'),
-      reasonLabel: t('compensation.drawer.reasonLabel'),
-      pctInvalid: t('compensation.drawer.pctInvalid'),
-      decideReasonLabel: t('compensation.drawer.decideReasonLabel'),
-      failed: t('compensation.drawer.failed'),
-      submit: t('compensation.drawer.submit'),
-      cancel: t('compensation.drawer.cancel'),
-      approve: t('compensation.drawer.approve'),
-      reject: t('compensation.drawer.reject'),
-      reopen: t('compensation.drawer.reopen'),
+      proposeTitle: t("compensation.drawer.proposeTitle"),
+      decideTitle: t("compensation.drawer.decideTitle"),
+      historyTitle: t("compensation.drawer.historyTitle"),
+      pctLabel: t("compensation.drawer.pctLabel"),
+      rateLabel: t("compensation.drawer.rateLabel"),
+      reasonLabel: t("compensation.drawer.reasonLabel"),
+      pctInvalid: t("compensation.drawer.pctInvalid"),
+      decideReasonLabel: t("compensation.drawer.decideReasonLabel"),
+      failed: t("compensation.drawer.failed"),
+      submit: t("compensation.drawer.submit"),
+      cancel: t("compensation.drawer.cancel"),
+      approve: t("compensation.drawer.approve"),
+      reject: t("compensation.drawer.reject"),
+      reopen: t("compensation.drawer.reopen"),
     },
     historyColumns: {
-      event: t('compensation.historyColumns.event'),
-      reason: t('compensation.historyColumns.reason'),
-      at: t('compensation.historyColumns.at'),
+      event: t("compensation.historyColumns.event"),
+      reason: t("compensation.historyColumns.reason"),
+      at: t("compensation.historyColumns.at"),
     },
-    emptyHistory: t('compensation.emptyHistory'),
-    move: can(authz, 'hrm.compensation.manage')
+    emptyHistory: t("compensation.emptyHistory"),
+    move: can(authz, "hrm.compensation.manage")
       ? {
-          title: t('compensation.move.title'),
-          openLabel: t('compensation.move.open'),
-          submitLabel: t('compensation.move.submit'),
-          pushLabel: t('compensation.move.push'),
-          closeLabel: t('compensation.move.close'),
-          cancelLabel: t('compensation.move.cancel'),
-          cancelReasonLabel: t('compensation.drawer.cancelReasonLabel'),
-          cancelReasonRequired: t('compensation.drawer.cancelReasonRequired'),
-          failed: t('compensation.drawer.failed'),
-          submit: t('compensation.drawer.submit'),
-          cancel: t('compensation.drawer.cancel'),
+          title: t("compensation.move.title"),
+          openLabel: t("compensation.move.open"),
+          submitLabel: t("compensation.move.submit"),
+          pushLabel: t("compensation.move.push"),
+          closeLabel: t("compensation.move.close"),
+          cancelLabel: t("compensation.move.cancel"),
+          cancelReasonLabel: t("compensation.drawer.cancelReasonLabel"),
+          cancelReasonRequired: t("compensation.drawer.cancelReasonRequired"),
+          failed: t("compensation.drawer.failed"),
+          submit: t("compensation.drawer.submit"),
+          cancel: t("compensation.drawer.cancel"),
         }
       : null,
-  }
+  };
 }
 
 export interface CompPlanLineRow {
-  id: string
-  title: string
-  kind: string
-  kindLabel: string
-  fte: string
-  startOn: string
-  cost: string
-  currency: string
-  status: string
-  statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
-  requisition: string | null
+  id: string;
+  title: string;
+  kind: string;
+  kindLabel: string;
+  fte: string;
+  startOn: string;
+  cost: string;
+  currency: string;
+  status: string;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
+  requisition: string | null;
 }
 
 export interface CompPlanDetailData {
-  planId: string
-  title: string
-  planName: string
-  status: string
-  statusLabel: string
-  period: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  totalLabel: string
-  totalCost: string
-  linesTitle: string
-  columns: { title: string; kind: string; fte: string; start: string; cost: string; status: string; action: string }
-  lines: CompPlanLineRow[]
-  linesEmpty: string
-  canManage: boolean
-  backHref: string
-  backLabel: string
-  approveLabel: string
+  planId: string;
+  title: string;
+  planName: string;
+  status: string;
+  statusLabel: string;
+  period: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  totalLabel: string;
+  totalCost: string;
+  linesTitle: string;
+  columns: {
+    title: string;
+    kind: string;
+    fte: string;
+    start: string;
+    cost: string;
+    status: string;
+    action: string;
+  };
+  lines: CompPlanLineRow[];
+  linesEmpty: string;
+  canManage: boolean;
+  backHref: string;
+  backLabel: string;
+  approveLabel: string;
   /** Whether the viewer may submit a proposed line to its tenant Flow. */
-  lineApprove: boolean
+  lineApprove: boolean;
 }
 
 export async function loadHeadcountPlanDetail(
   authz: Authz,
   planId: string,
 ): Promise<CompPlanDetailData | null> {
-  if (!can(authz, 'hrm.compensation.read')) return null
-  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
-  const t = await getTranslations('hrm')
-  const orgId = authz.user.orgId
-  const plans = await listPlans({ orgId, actorId: authz.user.id })
-  const plan = plans.find((p) => p.id === planId) ?? null
-  if (!plan) return null
-  const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
-  const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId })
-  const total = planTotalCost(lines)
+  if (!can(authz, "hrm.compensation.read")) return null;
+  await requireFeatureEnabled(authz.user.orgId, "hrmCompensation");
+  const t = await getTranslations("hrm");
+  const orgId = authz.user.orgId;
+  const plans = await listPlans({ orgId, actorId: authz.user.id });
+  const plan = plans.find((p) => p.id === planId) ?? null;
+  if (!plan) return null;
+  const tabs = await hrmGroupTabs(authz, "/hrm/compensation");
+  const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId });
+  const total = planTotalCost(lines);
   return {
     planId,
     title: plan.name,
     planName: plan.name,
     status: plan.status,
-    statusLabel: t.has(`compensation.planStatus.${plan.status}`) ? t(`compensation.planStatus.${plan.status}`) : plan.status,
+    statusLabel: t.has(`compensation.planStatus.${plan.status}`)
+      ? t(`compensation.planStatus.${plan.status}`)
+      : plan.status,
     period: `${plan.fiscalPeriodFrom} – ${plan.fiscalPeriodTo}`,
     tabs,
-    totalLabel: t('compensation.totalCost'),
+    totalLabel: t("compensation.totalCost"),
     totalCost: total,
-    linesTitle: t('compensation.planLinesTitle'),
+    linesTitle: t("compensation.planLinesTitle"),
     columns: {
-      title: t('compensation.columns.title'),
-      kind: t('compensation.columns.kind'),
-      fte: t('compensation.columns.fte'),
-      start: t('compensation.columns.start'),
-      cost: t('compensation.columns.cost'),
-      status: t('compensation.columns.status'),
-      action: t('compensation.columns.action'),
+      title: t("compensation.columns.title"),
+      kind: t("compensation.columns.kind"),
+      fte: t("compensation.columns.fte"),
+      start: t("compensation.columns.start"),
+      cost: t("compensation.columns.cost"),
+      status: t("compensation.columns.status"),
+      action: t("compensation.columns.action"),
     },
     lines: lines.map((l) => ({
       id: l.id,
       title: l.title,
       kind: l.kind,
-      kindLabel: t.has(`compensation.lineKind.${l.kind}`) ? t(`compensation.lineKind.${l.kind}`) : l.kind,
+      kindLabel: t.has(`compensation.lineKind.${l.kind}`)
+        ? t(`compensation.lineKind.${l.kind}`)
+        : l.kind,
       fte: l.plannedFte,
       startOn: l.startOn,
       cost: `${l.estAnnualCost} ${l.currency}`,
       currency: l.currency,
       status: l.status,
-      statusLabel: t.has(`compensation.planLineStatus.${l.status}`) ? t(`compensation.planLineStatus.${l.status}`) : l.status,
-      statusVariant: l.status === 'filled' || l.status === 'approved' ? 'success' : l.status === 'rejected' ? 'destructive' : 'default',
+      statusLabel: t.has(`compensation.planLineStatus.${l.status}`)
+        ? t(`compensation.planLineStatus.${l.status}`)
+        : l.status,
+      statusVariant:
+        l.status === "filled" || l.status === "approved"
+          ? "success"
+          : l.status === "rejected"
+            ? "destructive"
+            : "default",
       requisition: l.requisitionId,
     })),
-    linesEmpty: t('compensation.planLinesEmpty'),
-    canManage: can(authz, 'hrm.compensation.manage'),
-    backHref: '/hrm/compensation?view=plans',
-    backLabel: t('compensation.back'),
-    approveLabel: t('compensation.approveLine'),
-    lineApprove: can(authz, 'hrm.compensation.manage'),
-  }
+    linesEmpty: t("compensation.planLinesEmpty"),
+    canManage: can(authz, "hrm.compensation.manage"),
+    backHref: "/hrm/compensation?view=plans",
+    backLabel: t("compensation.back"),
+    approveLabel: t("compensation.approveLine"),
+    lineApprove: can(authz, "hrm.compensation.manage"),
+  };
 }
 
 export interface EquityData {
-  currentParams: Record<string, string | string[] | undefined>
-  reportHref: string | null
-  reportLabel: string
-  snapshotLabel: string
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  hasSnapshot: boolean
-  asOf: string
-  tiles: CompStatTile[]
-  categoriesTitle: string
-  categoriesColumns: { category: string; counts: string; mean: string; median: string; unexplained: string; flag: string }
-  categories: { id: string; level: string; countA: number; meanValue: number | null; medianValue: number | null; unexplainedValue: number | null; counts: string; mean: string; median: string; unexplained: string; flag: string; flagTone: 'default' | 'warning' }[]
-  categoriesEmpty: string
-  canManage: boolean
-  generateHref: string
-  generateLabel: string
+  currentParams: Record<string, string | string[] | undefined>;
+  reportHref: string | null;
+  reportLabel: string;
+  snapshotLabel: string;
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  hasSnapshot: boolean;
+  asOf: string;
+  tiles: CompStatTile[];
+  categoriesTitle: string;
+  categoriesColumns: {
+    category: string;
+    counts: string;
+    mean: string;
+    median: string;
+    unexplained: string;
+    flag: string;
+  };
+  categories: {
+    id: string;
+    level: string;
+    countA: number;
+    meanValue: number | null;
+    medianValue: number | null;
+    unexplainedValue: number | null;
+    counts: string;
+    mean: string;
+    median: string;
+    unexplained: string;
+    flag: string;
+    flagTone: "default" | "warning";
+  }[];
+  categoriesEmpty: string;
+  canManage: boolean;
+  generateHref: string;
+  generateLabel: string;
   /** True while ?generate is present — the spec renders the generate dialog. */
-  generateOpen: boolean
+  generateOpen: boolean;
   /** Null unless ?generate is present; carries the form or its refusal. */
-  generateDialog: CompEquityDialogState | null
-  emptyTitle: string
-  emptyDescription: string
+  generateDialog: CompEquityDialogState | null;
+  emptyTitle: string;
+  emptyDescription: string;
   /**
    * Named domain/auth refusal from the snapshot read (a scoped reader
    * cannot read org-wide frozen aggregates). Renders as data with the
@@ -1029,277 +1278,327 @@ export interface EquityData {
    * no snapshot was ever computed. Null when the read succeeded,
    * including a genuine no-snapshot empty state.
    */
-  refusal: { title: string; message: string } | null
+  refusal: { title: string; message: string } | null;
   /**
    * False only while a snapshot refusal is present, suppressing the
    * snapshot-specific grid and table (the leave-queue `hasContent`
    * pattern). Genuine no-snapshot emptiness still renders its table.
    */
-  hasContent: boolean
+  hasContent: boolean;
 }
 
 export async function loadEquity(
   authz: Authz,
   sp: Record<string, string | string[] | undefined> = {},
 ): Promise<EquityData | null> {
-  if (!can(authz, 'hrm.compensation.read')) return null
-  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
-  const t = await getTranslations('hrm')
-  const orgId = authz.user.orgId
-  const hasManagePermission = can(authz, 'hrm.compensation.manage')
-  const canManage = hasManagePermission && authz.allowedSubsidiaryIds === null
+  if (!can(authz, "hrm.compensation.read")) return null;
+  await requireFeatureEnabled(authz.user.orgId, "hrmCompensation");
+  const t = await getTranslations("hrm");
+  const orgId = authz.user.orgId;
+  const hasManagePermission = can(authz, "hrm.compensation.manage");
+  const canManage = hasManagePermission && authz.allowedSubsidiaryIds === null;
   // The generate dialog (?generate=1): the loader owns the open state and
   // the return href, like the home create dialogs. A requested dialog ALWAYS
   // resolves — the form for managers, a NAMED permission refusal otherwise.
   // The feature switch cannot be off here (this loader redirects above), so
   // no feature-off refusal exists on this surface.
-  const generateOpen = firstParam(sp.generate) !== undefined
-  let generateDialog: CompEquityDialogState | null = null
+  const generateOpen = firstParam(sp.generate) !== undefined;
+  let generateDialog: CompEquityDialogState | null = null;
   if (generateOpen) {
-    const g = await getTranslations('shell.routeState')
-    let groupOptions: CompEquityDialogState['groupOptions'] = []
-    let groupRefusal: CompDialogRefusal | null = null
-    let groupRemedyHref: string | null = null
-    let groupRemedyLabel: string | null = null
+    const g = await getTranslations("shell.routeState");
+    let groupOptions: CompEquityDialogState["groupOptions"] = [];
+    let groupRefusal: CompDialogRefusal | null = null;
+    let groupRemedyHref: string | null = null;
+    let groupRemedyLabel: string | null = null;
     if (canManage) {
       try {
-        const settings = await compensationSettings(orgId)
+        const settings = await compensationSettings(orgId);
         if (!settings.comparisonAttributeKey) {
-          groupRefusal = { title: t('equity.generate'), message: t('compensation.workspace.comparisonRequired') }
-          groupRemedyHref = '/admin/setup/compensation'
-          groupRemedyLabel = t('compensation.settings.title')
+          groupRefusal = {
+            title: t("equity.generate"),
+            message: t("compensation.workspace.comparisonRequired"),
+          };
+          groupRemedyHref = "/admin/setup/compensation";
+          groupRemedyLabel = t("compensation.settings.title");
         } else {
-          groupOptions = await db.execute<{ value: string; label: string }>(sql`
+          groupOptions = await db.execute<{ value: string; label: string }>(
+            sql`
             select distinct p.custom->>${settings.comparisonAttributeKey} as value,
               p.custom->>${settings.comparisonAttributeKey} as label
               from parties p join worker_employments e on e.org_id = p.org_id and e.worker_party_id = p.id
              where p.org_id = ${orgId} and coalesce(p.custom->>${settings.comparisonAttributeKey}, '') <> ''
              order by value
-          `, 'objects')
+          `,
+            "objects",
+          );
           if (groupOptions.length < 2) {
-            groupRefusal = { title: t('equity.generate'), message: t('compensation.workspace.comparisonGroupsRequired') }
-            groupRemedyHref = '/entities/employees'
-            groupRemedyLabel = t('compensation.workspace.employeeRecords')
+            groupRefusal = {
+              title: t("equity.generate"),
+              message: t("compensation.workspace.comparisonGroupsRequired"),
+            };
+            groupRemedyHref = "/entities/employees";
+            groupRemedyLabel = t("compensation.workspace.employeeRecords");
           }
         }
       } catch (error) {
-        if (!(error instanceof CompensationError)) throw error
-        groupRefusal = { title: t('compensation.settings.title'), message: error.message }
-        groupRemedyHref = '/admin/setup/compensation'
-        groupRemedyLabel = t('compensation.settings.title')
+        if (!(error instanceof CompensationError)) throw error;
+        groupRefusal = { title: t("compensation.settings.title"), message: error.message };
+        groupRemedyHref = "/admin/setup/compensation";
+        groupRemedyLabel = t("compensation.settings.title");
       }
     }
     generateDialog = {
       open: true,
-      closeHref: '/hrm/compensation/equity',
-      title: t('equity.generate'),
-      asOfLabel: t('orgChart.asOf'),
-      groupALabel: t('equity.groupA'),
-      groupBLabel: t('equity.groupB'),
+      closeHref: "/hrm/compensation/equity",
+      title: t("equity.generate"),
+      asOfLabel: t("orgChart.asOf"),
+      groupALabel: t("equity.groupA"),
+      groupBLabel: t("equity.groupB"),
       groupOptions,
-      failed: t('compensation.drawer.failed'),
-      submit: t('compensation.drawer.submit'),
-      cancel: t('compensation.drawer.cancel'),
+      failed: t("compensation.drawer.failed"),
+      submit: t("compensation.drawer.submit"),
+      cancel: t("compensation.drawer.cancel"),
       refusal: canManage
         ? groupRefusal
         : {
-            title: g('deniedTitle'),
+            title: g("deniedTitle"),
             message: hasManagePermission
-              ? t('compensation.workspace.unrestrictedRequired')
-              : `${g('deniedDescription', { permission: 'hrm.compensation.manage' })} ${g('askAdministrator')}`,
+              ? t("compensation.workspace.unrestrictedRequired")
+              : `${g("deniedDescription", { permission: "hrm.compensation.manage" })} ${g("askAdministrator")}`,
           },
       remedyHref: groupRemedyHref,
       remedyLabel: groupRemedyLabel,
-    }
+    };
   }
-  const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
+  const tabs = await hrmGroupTabs(authz, "/hrm/compensation");
   // A refused snapshot read travels as data with its remedy intact — never
   // an empty page pretending no snapshot exists. A genuinely absent
   // snapshot keeps the empty state. Unexpected DB/system failures
   // propagate — never an empty page or a misleading business refusal.
-  let snapshot: Awaited<ReturnType<typeof latestGapSnapshot>> = null
-  let refusal: EquityData['refusal'] = null
+  let snapshot: Awaited<ReturnType<typeof latestGapSnapshot>> = null;
+  let refusal: EquityData["refusal"] = null;
   try {
-    snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id })
+    snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id });
   } catch (error) {
     if (error instanceof CompensationError || error instanceof HrmAuthorizationError) {
-      refusal = { title: t('equity.title'), message: error.message }
+      refusal = { title: t("equity.title"), message: error.message };
     } else {
-      throw error
+      throw error;
     }
   }
-  const flags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
+  const flags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0;
   const tiles: CompStatTile[] = snapshot
     ? [
-        { iconKey: 'scale', accent: 'blue', label: t('equity.meanGap'), value: fmtPct(snapshot.metrics.meanGapPct), tone: 'default' },
-        { iconKey: 'scale', accent: 'violet', label: t('equity.medianGap'), value: fmtPct(snapshot.metrics.medianGapPct), tone: 'default' },
-        { iconKey: 'coins', accent: 'amber', label: t('equity.variableGap'), value: fmtPct(snapshot.metrics.variablePayGapPct), tone: 'default' },
-        { iconKey: 'flag', accent: 'rose', label: t('equity.jointFlags'), value: String(flags), tone: flags > 0 ? 'warning' : 'default' },
+        {
+          iconKey: "scale",
+          accent: "blue",
+          label: t("equity.meanGap"),
+          value: fmtPct(snapshot.metrics.meanGapPct),
+          tone: "default",
+        },
+        {
+          iconKey: "scale",
+          accent: "violet",
+          label: t("equity.medianGap"),
+          value: fmtPct(snapshot.metrics.medianGapPct),
+          tone: "default",
+        },
+        {
+          iconKey: "coins",
+          accent: "amber",
+          label: t("equity.variableGap"),
+          value: fmtPct(snapshot.metrics.variablePayGapPct),
+          tone: "default",
+        },
+        {
+          iconKey: "flag",
+          accent: "rose",
+          label: t("equity.jointFlags"),
+          value: String(flags),
+          tone: flags > 0 ? "warning" : "default",
+        },
       ]
-    : []
-  let reportId: string | null = null
-  if (authz.allowedSubsidiaryIds === null && can(authz, 'reports.read')) {
-    const { canRunReportEntity } = await import('../report-authz')
-    if (await canRunReportEntity(authz, { entity: 'hrm_pay_gap_snapshots' })) {
-      const { builtInReportDefinitionId } = await import('../custom-reports')
-      reportId = await builtInReportDefinitionId(orgId, 'workforce-pay-gap-snapshots')
+    : [];
+  let reportId: string | null = null;
+  if (authz.allowedSubsidiaryIds === null && can(authz, "reports.read")) {
+    const { canRunReportEntity } = await import("../report-authz");
+    if (await canRunReportEntity(authz, { entity: "hrm_pay_gap_snapshots" })) {
+      const { builtInReportDefinitionId } = await import("../custom-reports");
+      reportId = await builtInReportDefinitionId(orgId, "workforce-pay-gap-snapshots");
     }
   }
   return {
     currentParams: sp,
     reportHref: reportId ? `/reports/custom/run/${reportId}` : null,
-    reportLabel: t('compensation.workspace.snapshotReport'),
-    snapshotLabel: t('compensation.workspace.latestSnapshot'),
-    title: t('equity.title'),
-    description: t('equity.description'),
+    reportLabel: t("compensation.workspace.snapshotReport"),
+    snapshotLabel: t("compensation.workspace.latestSnapshot"),
+    title: t("equity.title"),
+    description: t("equity.description"),
     tabs,
     hasSnapshot: snapshot !== null,
-    asOf: snapshot?.asOf ?? '',
+    asOf: snapshot?.asOf ?? "",
     tiles,
-    categoriesTitle: t('equity.categoriesTitle'),
+    categoriesTitle: t("equity.categoriesTitle"),
     categoriesColumns: {
-      category: t('equity.columns.category'),
-      counts: t('equity.columns.counts'),
-      mean: t('equity.columns.mean'),
-      median: t('equity.columns.median'),
-      unexplained: t('equity.columns.unexplained'),
-      flag: t('equity.columns.flag'),
+      category: t("equity.columns.category"),
+      counts: t("equity.columns.counts"),
+      mean: t("equity.columns.mean"),
+      median: t("equity.columns.median"),
+      unexplained: t("equity.columns.unexplained"),
+      flag: t("equity.columns.flag"),
     },
     categories: (snapshot?.categories ?? []).map((c) => ({
       id: c.levelId,
       level: c.levelCode,
-      countA: c.countA, meanValue: c.meanGapPct, medianValue: c.medianGapPct, unexplainedValue: c.unexplainedGapPct,
+      countA: c.countA,
+      meanValue: c.meanGapPct,
+      medianValue: c.medianGapPct,
+      unexplainedValue: c.unexplainedGapPct,
       counts: `${c.countA} / ${c.countB}`,
       mean: fmtPct(c.meanGapPct),
       median: fmtPct(c.medianGapPct),
       unexplained: fmtPct(c.unexplainedGapPct),
-      flag: c.jointAssessmentDue ? t('equity.jointDue') : '—',
-      flagTone: (c.jointAssessmentDue ? 'warning' : 'default') as 'default' | 'warning',
+      flag: c.jointAssessmentDue ? t("equity.jointDue") : "—",
+      flagTone: (c.jointAssessmentDue ? "warning" : "default") as "default" | "warning",
     })),
-    categoriesEmpty: t('equity.categoriesEmpty'),
+    categoriesEmpty: t("equity.categoriesEmpty"),
     canManage,
-    generateHref: '/hrm/compensation/equity?generate=1',
-    generateLabel: t('compensation.workspace.newSnapshot'),
+    generateHref: "/hrm/compensation/equity?generate=1",
+    generateLabel: t("compensation.workspace.newSnapshot"),
     generateOpen,
     generateDialog,
-    emptyTitle: t('equity.emptyTitle'),
-    emptyDescription: t('equity.emptyDescription'),
+    emptyTitle: t("equity.emptyTitle"),
+    emptyDescription: t("equity.emptyDescription"),
     refusal,
     hasContent: refusal === null,
-  }
+  };
 }
 
 function fmtPct(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return '—'
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
+  if (value === null || !Number.isFinite(value)) return "—";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
 
 export interface MyCompData {
-  title: string
-  description: string
-  employmentId: string
-  tabs: { href: string; label: string; active: boolean }[]
-  hasContent: boolean
+  title: string;
+  description: string;
+  employmentId: string;
+  tabs: { href: string; label: string; active: boolean }[];
+  hasContent: boolean;
   /**
    * True when the person is linked but holds no band and no statement: the
    * page renders its explicit empty state with the pay-information request
    * as the next step instead of an ambiguous 404.
    */
-  showEmpty: boolean
+  showEmpty: boolean;
   /** The pay-information request applies only while an employment resolves. */
-  canRequest: boolean
-  emptyTitle: string
-  emptyDescription: string
+  canRequest: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
   /**
    * Named no-link refusal (the /me documents/surveys shape): set only by
    * myCompRefusal for a login with no employment — the page renders the
    * house empty-state block with the remedy, never notFound(). Null on
    * every loadMyCompensation row.
    */
-  refusal: { title: string; message: string } | null
-  placementLabel: string
-  placement: string
-  compaRatio: string | null
-  bandRange: string | null
-  statementsTitle: string
-  statementsColumns: { period: string; generated: string }
-  statements: { id: string; period: string; generated: string; pdfHref: string | null }[]
-  statementsEmpty: string
-  requestLabel: string
-  requestHref: string
-  requestFailed: string
-  requestSubmit: string
-  requestCancel: string
-  requestStatus: string | null
+  refusal: { title: string; message: string } | null;
+  placementLabel: string;
+  placement: string;
+  compaRatio: string | null;
+  bandRange: string | null;
+  statementsTitle: string;
+  statementsColumns: { period: string; generated: string };
+  statements: { id: string; period: string; generated: string; pdfHref: string | null }[];
+  statementsEmpty: string;
+  requestLabel: string;
+  requestHref: string;
+  requestFailed: string;
+  requestSubmit: string;
+  requestCancel: string;
+  requestStatus: string | null;
 }
 
 export async function loadMyCompensation(authz: Authz): Promise<MyCompData | null> {
-  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
-  const t = await getTranslations('hrm')
-  const orgId = authz.user.orgId
+  await requireFeatureEnabled(authz.user.orgId, "hrmCompensation");
+  const t = await getTranslations("hrm");
+  const orgId = authz.user.orgId;
   // A linked person with no employment is a different state from no
   // linked person — and a missing user row is neither. The person read
   // throws when the identity is not established (never a refusal), an
   // unlinked login returns null (the notLinked refusal), and a linked
   // login with no employment returns the noEmployment refusal below.
-  const person = await loadApprovalPerson(db, orgId, authz.user.id)
-  if (!person.partyId) return null
-  const own = await loadOwnEmploymentIds(db, orgId, authz.user.id)
-  if (own.length === 0) return myCompRefusal(authz, 'no-employment')
-  const employmentId = own[0]!
-  const today = await businessToday(orgId)
-  let placement = 'no_band'
-  let compaRatio: string | null = null
-  let bandRange: string | null = null
-  const placed = await compaRatioFor(orgId, authz.user.id, employmentId, today)
+  const person = await loadApprovalPerson(db, orgId, authz.user.id);
+  if (!person.partyId) return null;
+  const own = await loadOwnEmploymentIds(db, orgId, authz.user.id);
+  if (own.length === 0) return myCompRefusal(authz, "no-employment");
+  const employmentId = own[0]!;
+  const today = await businessToday(orgId);
+  let placement = "no_band";
+  let compaRatio: string | null = null;
+  let bandRange: string | null = null;
+  const placed = await compaRatioFor(orgId, authz.user.id, employmentId, today);
   if (placed.band) {
-    placement = placed.placement
-    compaRatio = placed.compaRatio
-    bandRange = `${placed.band.min} – ${placed.band.max} ${placed.band.currency}`
+    placement = placed.placement;
+    compaRatio = placed.compaRatio;
+    bandRange = `${placed.band.min} – ${placed.band.max} ${placed.band.currency}`;
   }
-  const statements = await listStatements({ orgId, actorId: authz.user.id, employmentId })
-  const { meTabs } = await import('./self-service')
-  const tabs = (await meTabs(authz, '/me/compensation')).map((t) => ({ href: t.href, label: t.label, active: t.active === true }))
-  const openRequest = (await db.execute<{ status: string }>(sql`
+  const statements = await listStatements({ orgId, actorId: authz.user.id, employmentId });
+  const { meTabs } = await import("./self-service");
+  const tabs = (await meTabs(authz, "/me/compensation")).map((t) => ({
+    href: t.href,
+    label: t.label,
+    active: t.active === true,
+  }));
+  const openRequest = (
+    await db.execute<{ status: string }>(
+      sql`
     select status from hrm_pay_information_requests
      where org_id = ${orgId} and employment_id = ${employmentId} and status = 'open'
-     order by requested_at desc limit 1`, 'objects'))[0]
-  const hasContent = placement !== 'no_band' || statements.length > 0
+     order by requested_at desc limit 1`,
+      "objects",
+    )
+  )[0];
+  const hasContent = placement !== "no_band" || statements.length > 0;
   return {
-    title: t('myComp.title'),
-    description: t('myComp.description'),
+    title: t("myComp.title"),
+    description: t("myComp.description"),
     employmentId,
     tabs,
     hasContent,
     showEmpty: !hasContent,
     canRequest: true,
-    emptyTitle: t('myComp.emptyTitle'),
-    emptyDescription: t('myComp.emptyDescription'),
+    emptyTitle: t("myComp.emptyTitle"),
+    emptyDescription: t("myComp.emptyDescription"),
     refusal: null,
-    placementLabel: t('myComp.placement'),
-    placement: t.has(`compensation.placement.${placement}`) ? t(`compensation.placement.${placement}`) : placement,
+    placementLabel: t("myComp.placement"),
+    placement: t.has(`compensation.placement.${placement}`)
+      ? t(`compensation.placement.${placement}`)
+      : placement,
     compaRatio,
     bandRange,
-    statementsTitle: t('myComp.statementsTitle'),
-    statementsColumns: { period: t('myComp.columns.period'), generated: t('myComp.columns.generated') },
+    statementsTitle: t("myComp.statementsTitle"),
+    statementsColumns: {
+      period: t("myComp.columns.period"),
+      generated: t("myComp.columns.generated"),
+    },
     statements: statements.map((s) => ({
       id: s.id,
       period: `${s.periodFrom} – ${s.periodTo}`,
       generated: s.generatedAt.slice(0, 10),
       pdfHref: s.fileId ? `/api/hrm/comp-statements?pdf=${s.id}` : null,
     })),
-    statementsEmpty: t('myComp.statementsEmpty'),
-    requestLabel: t('myComp.requestPayInfo'),
-    requestHref: '/me/compensation?request=1',
-    requestFailed: t('myComp.requestFailed'),
-    requestSubmit: t('myComp.requestSubmit'),
-    requestCancel: t('myComp.requestCancel'),
+    statementsEmpty: t("myComp.statementsEmpty"),
+    requestLabel: t("myComp.requestPayInfo"),
+    requestHref: "/me/compensation?request=1",
+    requestFailed: t("myComp.requestFailed"),
+    requestSubmit: t("myComp.requestSubmit"),
+    requestCancel: t("myComp.requestCancel"),
     requestStatus: openRequest
       ? t.has(`myComp.requestStatus.${openRequest.status}`)
         ? t(`myComp.requestStatus.${openRequest.status}`)
         : openRequest.status
       : null,
-  }
+  };
 }
 
 /**
@@ -1312,45 +1611,51 @@ export async function loadMyCompensation(authz: Authz): Promise<MyCompData | nul
  * request widget stays off (canRequest false): with no employment there
  * is nothing to file against.
  */
-export async function myCompRefusal(authz: Authz, cause: 'no-link' | 'no-employment' = 'no-link'): Promise<MyCompData> {
-  const t = await getTranslations('hrm')
-  const { meTabs } = await import('./self-service')
-  const tabs = (await meTabs(authz, '/me/compensation')).map((tab) => ({
+export async function myCompRefusal(
+  authz: Authz,
+  cause: "no-link" | "no-employment" = "no-link",
+): Promise<MyCompData> {
+  const t = await getTranslations("hrm");
+  const { meTabs } = await import("./self-service");
+  const tabs = (await meTabs(authz, "/me/compensation")).map((tab) => ({
     href: tab.href,
     label: tab.label,
     active: tab.active === true,
-  }))
+  }));
   return {
-    title: t('myComp.title'),
-    description: t('myComp.description'),
-    employmentId: '',
+    title: t("myComp.title"),
+    description: t("myComp.description"),
+    employmentId: "",
     tabs,
     hasContent: false,
     showEmpty: false,
     canRequest: false,
-    emptyTitle: t('myComp.emptyTitle'),
-    emptyDescription: t('myComp.emptyDescription'),
+    emptyTitle: t("myComp.emptyTitle"),
+    emptyDescription: t("myComp.emptyDescription"),
     refusal: {
-      title: t('me.refusedTitle'),
-      message: t(cause === 'no-employment' ? 'myComp.noEmployment' : 'myComp.notLinked'),
+      title: t("me.refusedTitle"),
+      message: t(cause === "no-employment" ? "myComp.noEmployment" : "myComp.notLinked"),
     },
-    placementLabel: t('myComp.placement'),
-    placement: '',
+    placementLabel: t("myComp.placement"),
+    placement: "",
     compaRatio: null,
     bandRange: null,
-    statementsTitle: t('myComp.statementsTitle'),
-    statementsColumns: { period: t('myComp.columns.period'), generated: t('myComp.columns.generated') },
+    statementsTitle: t("myComp.statementsTitle"),
+    statementsColumns: {
+      period: t("myComp.columns.period"),
+      generated: t("myComp.columns.generated"),
+    },
     statements: [],
-    statementsEmpty: t('myComp.statementsEmpty'),
-    requestLabel: t('myComp.requestPayInfo'),
-    requestHref: '',
-    requestFailed: t('myComp.requestFailed'),
-    requestSubmit: t('myComp.requestSubmit'),
-    requestCancel: t('myComp.requestCancel'),
+    statementsEmpty: t("myComp.statementsEmpty"),
+    requestLabel: t("myComp.requestPayInfo"),
+    requestHref: "",
+    requestFailed: t("myComp.requestFailed"),
+    requestSubmit: t("myComp.requestSubmit"),
+    requestCancel: t("myComp.requestCancel"),
     requestStatus: null,
-  }
+  };
 }
 
 export async function compensationAuthz(): Promise<Authz | null> {
-  return getAuthz()
+  return getAuthz();
 }

@@ -16,6 +16,11 @@ export const PATCH = defineRoute({
   invalidBodyStatus: 422,
   handler: async ({ authz: gate, params, body: input }) => {
     const { id: scheduleId } = await params;
-    return NextResponse.json(await updateMaintenanceSchedule(gate.user.orgId, scheduleId, input, { actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) }));
+    return NextResponse.json(
+      await updateMaintenanceSchedule(gate.user.orgId, scheduleId, input, {
+        actorId: gate.user.id,
+        allowedSubsidiaryIds: scopeOf(gate),
+      }),
+    );
   },
 });

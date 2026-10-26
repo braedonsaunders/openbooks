@@ -36,10 +36,7 @@ import { provisionOrg, type SimOrg } from "../sim/world.ts";
 import { releaseDraftIfUngated } from "../sim/activities/documents.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { sum } from "../money/money.ts";
-import {
-  createPaymentDocument,
-  updateDraftPayment,
-} from "../payments/payment-documents.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
 import { postPaymentWithApplications } from "../payments/payment-posting.ts";
 import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import { runRevaluation } from "../close/fx-revaluation.ts";
@@ -117,13 +114,17 @@ async function createDraft(
 
 async function postDraft(world: SimOrg, documentId: string): Promise<string> {
   const actorId = await releaseDraftIfUngated(world, documentId);
-  return postDocument(documentId, {
-    control: {
-      ar: world.accounts.ar!,
-      ap: world.accounts.ap!,
-      bank: world.accounts.bank!,
+  return postDocument(
+    documentId,
+    {
+      control: {
+        ar: world.accounts.ar!,
+        ap: world.accounts.ap!,
+        bank: world.accounts.bank!,
+      },
     },
-  }, { audit: { actorId, source: "upgrade-rehearsal-seed" } });
+    { audit: { actorId, source: "upgrade-rehearsal-seed" } },
+  );
 }
 
 async function approvePayment(paymentId: string, actorId: string, orgId: string): Promise<void> {
@@ -176,7 +177,12 @@ async function main(): Promise<void> {
         -- Global ISO currency identities may already exist from another rehearsal; preserve them.
         on conflict (code) do nothing`);
     }
-    const mk = async (name: string, currency: string, country: string, elim: boolean): Promise<string> => {
+    const mk = async (
+      name: string,
+      currency: string,
+      country: string,
+      elim: boolean,
+    ): Promise<string> => {
       const id = randomUUID();
       await db.execute(sql`
         insert into subsidiaries
@@ -207,10 +213,29 @@ async function main(): Promise<void> {
     ["CAD", "USD", 0.74],
     ["EUR", "CAD", 1.4595],
   ];
-  const monthEnds = ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"];
-  const spotDates = ["2026-01-01", "2026-01-15", "2026-01-31", "2026-02-15", "2026-02-28",
-    "2026-03-15", "2026-03-31", "2026-04-15", "2026-04-30", "2026-05-15", "2026-05-31",
-    "2026-06-15", "2026-06-30"];
+  const monthEnds = [
+    "2026-01-31",
+    "2026-02-28",
+    "2026-03-31",
+    "2026-04-30",
+    "2026-05-31",
+    "2026-06-30",
+  ];
+  const spotDates = [
+    "2026-01-01",
+    "2026-01-15",
+    "2026-01-31",
+    "2026-02-15",
+    "2026-02-28",
+    "2026-03-15",
+    "2026-03-31",
+    "2026-04-15",
+    "2026-04-30",
+    "2026-05-15",
+    "2026-05-31",
+    "2026-06-15",
+    "2026-06-30",
+  ];
   const spotOf = new Map<string, string>();
   await withOrgContext(orgId, async () => {
     for (const [from, to, base] of pairs) {
@@ -244,7 +269,11 @@ async function main(): Promise<void> {
 
   // -- Parties, IC plumbing, consolidation accounts --------------------------
   const parties = await scoped(async () => {
-    const mk = async (kind: "customer" | "vendor", name: string, subsidiaryId: string): Promise<string> => {
+    const mk = async (
+      kind: "customer" | "vendor",
+      name: string,
+      subsidiaryId: string,
+    ): Promise<string> => {
       const id = randomUUID();
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
@@ -276,7 +305,12 @@ async function main(): Promise<void> {
   });
 
   const accts = await scoped(async () => {
-    const mk = async (number: string, name: string, type: string, eliminate: boolean): Promise<string> => {
+    const mk = async (
+      number: string,
+      name: string,
+      type: string,
+      eliminate: boolean,
+    ): Promise<string> => {
       const id = randomUUID();
       await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -295,7 +329,10 @@ async function main(): Promise<void> {
       nciEquity: await mk("3400", "Non-Controlling Interest", "equity", false),
       nciIncome: await mk("4930", "NCI Share of Earnings", "income_other", false),
     };
-    for (const [from, to] of [[world.subsidiaryId, subs.eur], [world.subsidiaryId, subs.cad]] as const) {
+    for (const [from, to] of [
+      [world.subsidiaryId, subs.eur],
+      [world.subsidiaryId, subs.cad],
+    ] as const) {
       await db.execute(sql`
         insert into intercompany_pairs
           (id, org_id, from_subsidiary_id, to_subsidiary_id, due_from_account_id, due_to_account_id, is_active)
@@ -308,9 +345,14 @@ async function main(): Promise<void> {
   // -- Capitalize the subsidiaries + parent investments (kernel journals) -----
   await scoped(async () => {
     const capEur = await createDraft(world, {
-      kind: "journal", documentNumber: "ME-CAP-EUR-01", partyId: null,
-      documentDate: "2026-01-05", currency: "EUR", fxRate: "1",
-      subsidiaryId: subs.eur, memo: "Capitalize EU Sub Co",
+      kind: "journal",
+      documentNumber: "ME-CAP-EUR-01",
+      partyId: null,
+      documentDate: "2026-01-05",
+      currency: "EUR",
+      fxRate: "1",
+      subsidiaryId: subs.eur,
+      memo: "Capitalize EU Sub Co",
       lines: [
         { accountId: world.accounts.bank!, description: "Seed capital", amount: "200000" },
         { accountId: world.accounts.commonStock!, description: "Share capital", amount: "-200000" },
@@ -318,9 +360,14 @@ async function main(): Promise<void> {
     });
     await postDraft(world, capEur);
     const capCad = await createDraft(world, {
-      kind: "journal", documentNumber: "ME-CAP-CAD-01", partyId: null,
-      documentDate: "2026-01-05", currency: "CAD", fxRate: "1",
-      subsidiaryId: subs.cad, memo: "Capitalize CA Sub Co",
+      kind: "journal",
+      documentNumber: "ME-CAP-CAD-01",
+      partyId: null,
+      documentDate: "2026-01-05",
+      currency: "CAD",
+      fxRate: "1",
+      subsidiaryId: subs.cad,
+      memo: "Capitalize CA Sub Co",
       lines: [
         { accountId: world.accounts.bank!, description: "Seed capital", amount: "150000" },
         { accountId: world.accounts.commonStock!, description: "Share capital", amount: "-150000" },
@@ -331,9 +378,14 @@ async function main(): Promise<void> {
     const eurCost = "216000";
     const cadCost = "111000";
     const invEur = await createDraft(world, {
-      kind: "journal", documentNumber: "ME-INV-EUR-01", partyId: null,
-      documentDate: "2026-01-15", currency: "USD", fxRate: "1",
-      subsidiaryId: world.subsidiaryId, memo: "Acquire EU Sub Co (100%)",
+      kind: "journal",
+      documentNumber: "ME-INV-EUR-01",
+      partyId: null,
+      documentDate: "2026-01-15",
+      currency: "USD",
+      fxRate: "1",
+      subsidiaryId: world.subsidiaryId,
+      memo: "Acquire EU Sub Co (100%)",
       lines: [
         { accountId: accts.investment, description: "Investment in EU Sub Co", amount: eurCost },
         { accountId: world.accounts.bank!, description: "Acquisition cash", amount: `-${eurCost}` },
@@ -341,9 +393,14 @@ async function main(): Promise<void> {
     });
     await postDraft(world, invEur);
     const invCad = await createDraft(world, {
-      kind: "journal", documentNumber: "ME-INV-CAD-01", partyId: null,
-      documentDate: "2026-01-15", currency: "USD", fxRate: "1",
-      subsidiaryId: world.subsidiaryId, memo: "Acquire CA Sub Co (100%)",
+      kind: "journal",
+      documentNumber: "ME-INV-CAD-01",
+      partyId: null,
+      documentDate: "2026-01-15",
+      currency: "USD",
+      fxRate: "1",
+      subsidiaryId: world.subsidiaryId,
+      memo: "Acquire CA Sub Co (100%)",
       lines: [
         { accountId: accts.investment, description: "Investment in CA Sub Co", amount: cadCost },
         { accountId: world.accounts.bank!, description: "Acquisition cash", amount: `-${cadCost}` },
@@ -356,22 +413,40 @@ async function main(): Promise<void> {
     // this the subsidiaries only hold same-currency capital plus translated
     // IC legs on non-monetary accounts, and revaluation skips them.
     const fundEur = await createDraft(world, {
-      kind: "journal", documentNumber: "ME-FUND-EUR-01", partyId: null,
-      documentDate: "2026-02-20", currency: "USD", fxRate: "1",
-      subsidiaryId: subs.eur, memo: "Downstream USD funding to EU Sub Co",
+      kind: "journal",
+      documentNumber: "ME-FUND-EUR-01",
+      partyId: null,
+      documentDate: "2026-02-20",
+      currency: "USD",
+      fxRate: "1",
+      subsidiaryId: subs.eur,
+      memo: "Downstream USD funding to EU Sub Co",
       lines: [
         { accountId: world.accounts.bank!, description: "USD funds received", amount: "20000" },
-        { accountId: world.accounts.commonStock!, description: "Additional paid-in capital", amount: "-20000" },
+        {
+          accountId: world.accounts.commonStock!,
+          description: "Additional paid-in capital",
+          amount: "-20000",
+        },
       ],
     });
     await postDraft(world, fundEur);
     const fundCad = await createDraft(world, {
-      kind: "journal", documentNumber: "ME-FUND-CAD-01", partyId: null,
-      documentDate: "2026-02-20", currency: "USD", fxRate: "1",
-      subsidiaryId: subs.cad, memo: "Downstream USD funding to CA Sub Co",
+      kind: "journal",
+      documentNumber: "ME-FUND-CAD-01",
+      partyId: null,
+      documentDate: "2026-02-20",
+      currency: "USD",
+      fxRate: "1",
+      subsidiaryId: subs.cad,
+      memo: "Downstream USD funding to CA Sub Co",
       lines: [
         { accountId: world.accounts.bank!, description: "USD funds received", amount: "15000" },
-        { accountId: world.accounts.commonStock!, description: "Additional paid-in capital", amount: "-15000" },
+        {
+          accountId: world.accounts.commonStock!,
+          description: "Additional paid-in capital",
+          amount: "-15000",
+        },
       ],
     });
     await postDraft(world, fundCad);
@@ -415,12 +490,24 @@ async function main(): Promise<void> {
   const cadBillRate = spot("CAD", "USD", "2026-02-15");
   const invoices = await scoped(async () => {
     const mk = async (
-      n: string, kind: string, partyId: string, date: string, currency: string,
-      fxRate: string, revenueAccount: string, amounts: string[],
+      n: string,
+      kind: string,
+      partyId: string,
+      date: string,
+      currency: string,
+      fxRate: string,
+      revenueAccount: string,
+      amounts: string[],
     ): Promise<{ documentId: string; entryId: string }> => {
       const documentId = await createDraft(world, {
-        kind, documentNumber: n, partyId, documentDate: date,
-        currency, fxRate, subsidiaryId: world.subsidiaryId, memo: `rehearsal ${n}`,
+        kind,
+        documentNumber: n,
+        partyId,
+        documentDate: date,
+        currency,
+        fxRate,
+        subsidiaryId: world.subsidiaryId,
+        memo: `rehearsal ${n}`,
         lines: amounts.map((amount, i) => ({
           accountId: revenueAccount,
           description: `Line ${i + 1}`,
@@ -433,20 +520,76 @@ async function main(): Promise<void> {
     const usd = world.customers[0]!;
     const usdVendor = world.vendors[0]!;
     return {
-      usdInvoice: await mk("ME-INV-USD-01", "customer_invoice", usd.id, "2026-01-20", "USD", "1",
-        world.accounts.revenueService!, ["15000", "10000"]),
-      eurInvoice1: await mk("ME-INV-EUR-01", "customer_invoice", parties.eurCustomer, "2026-01-22",
-        "EUR", eur1Rate, world.accounts.revenueProduct!, ["25000", "15000"]),
-      eurInvoice2: await mk("ME-INV-EUR-02", "customer_invoice", parties.eurCustomer, "2026-02-10",
-        "EUR", eur2Rate, world.accounts.revenueService!, ["18500"]),
-      cadInvoice: await mk("ME-INV-CAD-01", "customer_invoice", parties.cadCustomer, "2026-02-12",
-        "CAD", cad1Rate, world.accounts.revenueProduct!, ["30000"]),
-      eurBill: await mk("ME-BILL-EUR-01", "vendor_bill", parties.eurVendor, "2026-01-28",
-        "EUR", spot("EUR", "USD", "2026-01-15"), world.accounts.materials!, ["22000"]),
-      cadBill: await mk("ME-BILL-CAD-01", "vendor_bill", parties.cadVendor, "2026-02-05",
-        "CAD", cadBillRate, world.accounts.materials!, ["12000"]),
-      usdBill: await mk("ME-BILL-USD-01", "vendor_bill", usdVendor.id, "2026-02-08",
-        "USD", "1", world.accounts.office!, ["9500"]),
+      usdInvoice: await mk(
+        "ME-INV-USD-01",
+        "customer_invoice",
+        usd.id,
+        "2026-01-20",
+        "USD",
+        "1",
+        world.accounts.revenueService!,
+        ["15000", "10000"],
+      ),
+      eurInvoice1: await mk(
+        "ME-INV-EUR-01",
+        "customer_invoice",
+        parties.eurCustomer,
+        "2026-01-22",
+        "EUR",
+        eur1Rate,
+        world.accounts.revenueProduct!,
+        ["25000", "15000"],
+      ),
+      eurInvoice2: await mk(
+        "ME-INV-EUR-02",
+        "customer_invoice",
+        parties.eurCustomer,
+        "2026-02-10",
+        "EUR",
+        eur2Rate,
+        world.accounts.revenueService!,
+        ["18500"],
+      ),
+      cadInvoice: await mk(
+        "ME-INV-CAD-01",
+        "customer_invoice",
+        parties.cadCustomer,
+        "2026-02-12",
+        "CAD",
+        cad1Rate,
+        world.accounts.revenueProduct!,
+        ["30000"],
+      ),
+      eurBill: await mk(
+        "ME-BILL-EUR-01",
+        "vendor_bill",
+        parties.eurVendor,
+        "2026-01-28",
+        "EUR",
+        spot("EUR", "USD", "2026-01-15"),
+        world.accounts.materials!,
+        ["22000"],
+      ),
+      cadBill: await mk(
+        "ME-BILL-CAD-01",
+        "vendor_bill",
+        parties.cadVendor,
+        "2026-02-05",
+        "CAD",
+        cadBillRate,
+        world.accounts.materials!,
+        ["12000"],
+      ),
+      usdBill: await mk(
+        "ME-BILL-USD-01",
+        "vendor_bill",
+        usdVendor.id,
+        "2026-02-08",
+        "USD",
+        "1",
+        world.accounts.office!,
+        ["9500"],
+      ),
     };
   });
   log("trade documents posted");
@@ -469,60 +612,83 @@ async function main(): Promise<void> {
       return id;
     };
     const pay = async (
-      kind: "customer_payment" | "vendor_payment", partyId: string, date: string, currency: string,
+      kind: "customer_payment" | "vendor_payment",
+      partyId: string,
+      date: string,
+      currency: string,
       fxRate: string,
       allocations: Parameters<typeof updateDraftPayment>[1]["allocations"],
     ): Promise<void> => {
       const doc = await createPaymentDocument({
-        orgId, kind,
-        createdBy: admin, partyId, bankAccountId: world.accounts.bank!,
+        orgId,
+        kind,
+        createdBy: admin,
+        partyId,
+        bankAccountId: world.accounts.bank!,
         allowedSubsidiaryIds: new Set([world.subsidiaryId]),
-        documentDate: date, subsidiaryId: world.subsidiaryId, currency, fxRate,
+        documentDate: date,
+        subsidiaryId: world.subsidiaryId,
+        currency,
+        fxRate,
       });
-      await updateDraftPayment(doc.id, { allocations, bankAccountId: world.accounts.bank! }, admin, orgId, {
-        allowedSubsidiaryIds: new Set([world.subsidiaryId]),
-      });
+      await updateDraftPayment(
+        doc.id,
+        { allocations, bankAccountId: world.accounts.bank! },
+        admin,
+        orgId,
+        {
+          allowedSubsidiaryIds: new Set([world.subsidiaryId]),
+        },
+      );
       await approvePayment(doc.id, admin, orgId);
       await postPaymentWithApplications(doc.id, undefined, admin);
     };
-    await pay("customer_payment", world.customers[0]!.id, "2026-02-20", "USD", "1",
-      [sameCurrencyAllocation(
-        await openLine(invoices.usdInvoice.entryId, world.accounts.ar!), "25000")]);
-    await pay("customer_payment", parties.eurCustomer, "2026-03-05", "EUR", eur2Rate,
-      [sameCurrencyAllocation(
-        await openLine(invoices.eurInvoice2.entryId, world.accounts.ar!), "18500")]);
-    await pay("customer_payment", parties.eurCustomer, "2026-03-10", "USD", "1",
-      [{
+    await pay("customer_payment", world.customers[0]!.id, "2026-02-20", "USD", "1", [
+      sameCurrencyAllocation(
+        await openLine(invoices.usdInvoice.entryId, world.accounts.ar!),
+        "25000",
+      ),
+    ]);
+    await pay("customer_payment", parties.eurCustomer, "2026-03-05", "EUR", eur2Rate, [
+      sameCurrencyAllocation(
+        await openLine(invoices.eurInvoice2.entryId, world.accounts.ar!),
+        "18500",
+      ),
+    ]);
+    await pay("customer_payment", parties.eurCustomer, "2026-03-10", "USD", "1", [
+      {
         openLineId: await openLine(invoices.eurInvoice1.entryId, world.accounts.ar!),
         sourceTransactionAmount: "5425",
         targetTransactionAmount: "5000",
         settlementRate: "0.9216589862",
         settlementRateSource: "manual",
         settlementRateReference: "BANK-ADVICE-ME-01",
-      }]);
-    await pay("vendor_payment", parties.cadVendor, "2026-03-12", "CAD", cadBillRate,
-      [sameCurrencyAllocation(
-        await openLine(invoices.cadBill.entryId, world.accounts.ap!), "12000")]);
-    await pay("customer_payment", parties.cadCustomer, "2026-03-14", "USD", "1",
-      [{
+      },
+    ]);
+    await pay("vendor_payment", parties.cadVendor, "2026-03-12", "CAD", cadBillRate, [
+      sameCurrencyAllocation(await openLine(invoices.cadBill.entryId, world.accounts.ap!), "12000"),
+    ]);
+    await pay("customer_payment", parties.cadCustomer, "2026-03-14", "USD", "1", [
+      {
         openLineId: await openLine(invoices.cadInvoice.entryId, world.accounts.ar!),
         sourceTransactionAmount: "5400",
         targetTransactionAmount: "7200",
         settlementRate: "1.3333333333",
         settlementRateSource: "manual",
         settlementRateReference: "BANK-ADVICE-ME-02",
-      }]);
+      },
+    ]);
   });
   log("payments posted (same-currency in full, two cross-currency partials with realized FX)");
 
   // -- Month-end FX revaluation (March; reversal lands in April) ---------------
-  const reval = await scoped(async () =>
-    runRevaluation(orgId, period("2026-03"), admin));
+  const reval = await scoped(async () => runRevaluation(orgId, period("2026-03"), admin));
   if (reval.problems.length > 0 || reval.posted.length < 2) {
     throw new Error(
       `multi-entity seeder: revaluation posted ${reval.posted.length} with ` +
-      `${reval.problems.length} problem(s): ${JSON.stringify(reval.problems.slice(0, 3))} ` +
-      `skipped=${JSON.stringify(reval.skipped)}`);
+        `${reval.problems.length} problem(s): ${JSON.stringify(reval.problems.slice(0, 3))} ` +
+        `skipped=${JSON.stringify(reval.skipped)}`,
+    );
   }
   log(`revaluation posted ${reval.posted.length} entries (skipped ${reval.skipped.length})`);
 
@@ -531,22 +697,50 @@ async function main(): Promise<void> {
   // injects the due-to/due-from legs from the configured pairs. -------------
   await scoped(async () => {
     const icEur = await createDraft(world, {
-      kind: "journal", documentNumber: "ME-IC-EUR-01", partyId: null,
-      documentDate: "2026-03-18", currency: "USD", fxRate: "1",
-      subsidiaryId: world.subsidiaryId, memo: "Management fee to EU Sub Co",
+      kind: "journal",
+      documentNumber: "ME-IC-EUR-01",
+      partyId: null,
+      documentDate: "2026-03-18",
+      currency: "USD",
+      fxRate: "1",
+      subsidiaryId: world.subsidiaryId,
+      memo: "Management fee to EU Sub Co",
       lines: [
-        { accountId: world.accounts.revenueService!, description: "Management fee income", amount: "-8000" },
-        { accountId: world.accounts.professionalFees!, description: "Management fee expense", amount: "8000", subsidiaryId: subs.eur },
+        {
+          accountId: world.accounts.revenueService!,
+          description: "Management fee income",
+          amount: "-8000",
+        },
+        {
+          accountId: world.accounts.professionalFees!,
+          description: "Management fee expense",
+          amount: "8000",
+          subsidiaryId: subs.eur,
+        },
       ],
     });
     await postDraft(world, icEur);
     const icCad = await createDraft(world, {
-      kind: "journal", documentNumber: "ME-IC-CAD-01", partyId: null,
-      documentDate: "2026-03-18", currency: "USD", fxRate: "1",
-      subsidiaryId: world.subsidiaryId, memo: "Management fee to CA Sub Co",
+      kind: "journal",
+      documentNumber: "ME-IC-CAD-01",
+      partyId: null,
+      documentDate: "2026-03-18",
+      currency: "USD",
+      fxRate: "1",
+      subsidiaryId: world.subsidiaryId,
+      memo: "Management fee to CA Sub Co",
       lines: [
-        { accountId: world.accounts.revenueService!, description: "Management fee income", amount: "-4000" },
-        { accountId: world.accounts.professionalFees!, description: "Management fee expense", amount: "4000", subsidiaryId: subs.cad },
+        {
+          accountId: world.accounts.revenueService!,
+          description: "Management fee income",
+          amount: "-4000",
+        },
+        {
+          accountId: world.accounts.professionalFees!,
+          description: "Management fee expense",
+          amount: "4000",
+          subsidiaryId: subs.cad,
+        },
       ],
     });
     await postDraft(world, icCad);
@@ -560,7 +754,10 @@ async function main(): Promise<void> {
   // are the historical rates for their equity; February carries them as the
   // manual basis March derives from.
   await scoped(async () => {
-    for (const [from, base] of [["EUR", "1.08"], ["CAD", "0.74"]] as const) {
+    for (const [from, base] of [
+      ["EUR", "1.08"],
+      ["CAD", "0.74"],
+    ] as const) {
       await db.execute(sql`
         insert into consolidated_fx_rates
           (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source, created_by)
@@ -569,13 +766,17 @@ async function main(): Promise<void> {
     }
   });
   const consol = await scoped(async () =>
-    runCombinedConsolidation(orgId, period("2026-03"), admin));
+    runCombinedConsolidation(orgId, period("2026-03"), admin),
+  );
   if (consol.ownership.entryIds.length === 0 || (consol.elimination.lineCount ?? 0) === 0) {
     throw new Error(
-      `multi-entity seeder: consolidation came back empty: ${JSON.stringify(consol)}`);
+      `multi-entity seeder: consolidation came back empty: ${JSON.stringify(consol)}`,
+    );
   }
-  log(`consolidation: rates=${consol.ratesWritten} ownershipEntries=${consol.ownership.entryIds.length} ` +
-    `eliminationLines=${consol.elimination.lineCount}`);
+  log(
+    `consolidation: rates=${consol.ratesWritten} ownershipEntries=${consol.ownership.entryIds.length} ` +
+      `eliminationLines=${consol.elimination.lineCount}`,
+  );
 
   // -- Close Jan-Mar (harness cutoff becomes a stable, posted quarter-end) -----
   await scoped(async () => {

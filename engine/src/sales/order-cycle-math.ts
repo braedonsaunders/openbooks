@@ -1,15 +1,15 @@
-import { fromUnits, toUnits } from '../money/money.ts'
+import { fromUnits, toUnits } from "../money/money.ts";
 
-export {QUANTITY_SCALE,fromQuantityUnits,toQuantityUnits} from '../money/quantity.ts'
-import {fromQuantityUnits,toQuantityUnits} from '../money/quantity.ts'
+export { QUANTITY_SCALE, fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
+import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
 
 function roundedDivide(numerator: bigint, denominator: bigint): bigint {
-  if (denominator === 0n) throw new Error('quantity cannot be zero')
-  const negative = (numerator < 0n) !== (denominator < 0n)
-  const top = numerator < 0n ? -numerator : numerator
-  const bottom = denominator < 0n ? -denominator : denominator
-  const rounded = (top + bottom / 2n) / bottom
-  return negative ? -rounded : rounded
+  if (denominator === 0n) throw new Error("quantity cannot be zero");
+  const negative = numerator < 0n !== denominator < 0n;
+  const top = numerator < 0n ? -numerator : numerator;
+  const bottom = denominator < 0n ? -denominator : denominator;
+  const rounded = (top + bottom / 2n) / bottom;
+  return negative ? -rounded : rounded;
 }
 
 /** Exact eight-decimal quantity remainder and four-decimal amount/tax for
@@ -17,27 +17,34 @@ function roundedDivide(numerator: bigint, denominator: bigint): bigint {
  * converts at most `quantity − quantityCancelled`
  * (engine/src/records/order-line-remainders.ts). */
 export function remainingOrderLine(input: {
-  quantity: string
-  quantityBilled: string
-  quantityCancelled: string
-  unitPrice: string
-  taxAmount: string
+  quantity: string;
+  quantityBilled: string;
+  quantityCancelled: string;
+  unitPrice: string;
+  taxAmount: string;
 }): { quantity: string; amount: string; taxAmount: string } | null {
-  const original = toQuantityUnits(input.quantity)
-  const remaining = original - toQuantityUnits(input.quantityCancelled) - toQuantityUnits(input.quantityBilled)
-  if (remaining <= 0n) return null
+  const original = toQuantityUnits(input.quantity);
+  const remaining =
+    original - toQuantityUnits(input.quantityCancelled) - toQuantityUnits(input.quantityBilled);
+  if (remaining <= 0n) return null;
   // Quantity and unit price are both numeric(28,8), while the converted line
   // amount is ledger money (numeric(19,4)). Convert the exact product to money
   // units in one integer operation so neither operand is truncated to 4dp.
-  const amount = roundedDivide(remaining * toQuantityUnits(input.unitPrice), 1_000_000_000_000n)
-  const tax = original === 0n ? 0n : roundedDivide(toUnits(input.taxAmount) * remaining, original)
-  return { quantity: fromQuantityUnits(remaining), amount: fromUnits(amount), taxAmount: fromUnits(tax) }
+  const amount = roundedDivide(remaining * toQuantityUnits(input.unitPrice), 1_000_000_000_000n);
+  const tax = original === 0n ? 0n : roundedDivide(toUnits(input.taxAmount) * remaining, original);
+  return {
+    quantity: fromQuantityUnits(remaining),
+    amount: fromUnits(amount),
+    taxAmount: fromUnits(tax),
+  };
 }
 
 /** Exact ledger-money extension of a numeric(28,8) quantity by a numeric(28,8)
  * unit price, in one integer operation (the rule remainingOrderLine applies). */
 export function orderLineAmount(quantity: string, unitPrice: string): string {
-  return fromUnits(roundedDivide(toQuantityUnits(quantity) * toQuantityUnits(unitPrice), 1_000_000_000_000n))
+  return fromUnits(
+    roundedDivide(toQuantityUnits(quantity) * toQuantityUnits(unitPrice), 1_000_000_000_000n),
+  );
 }
 
 /**
@@ -46,17 +53,19 @@ export function orderLineAmount(quantity: string, unitPrice: string): string {
  * net of any cancelled quantity.
  */
 export function billableRemainderQuantityUnits(input: {
-  orderedQuantity: string
-  billedQuantity: string
-  cancelledQuantity: string
-  fulfilledQuantity: string
-  requiresReceipt: boolean
+  orderedQuantity: string;
+  billedQuantity: string;
+  cancelledQuantity: string;
+  fulfilledQuantity: string;
+  requiresReceipt: boolean;
 }): bigint {
   const remaining =
-    toQuantityUnits(input.orderedQuantity) - toQuantityUnits(input.cancelledQuantity) - toQuantityUnits(input.billedQuantity)
-  if (remaining <= 0n) return 0n
-  if (!input.requiresReceipt) return remaining
-  const cover = toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity)
-  if (cover <= 0n) return 0n
-  return cover < remaining ? cover : remaining
+    toQuantityUnits(input.orderedQuantity) -
+    toQuantityUnits(input.cancelledQuantity) -
+    toQuantityUnits(input.billedQuantity);
+  if (remaining <= 0n) return 0n;
+  if (!input.requiresReceipt) return remaining;
+  const cover = toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity);
+  if (cover <= 0n) return 0n;
+  return cover < remaining ? cover : remaining;
 }

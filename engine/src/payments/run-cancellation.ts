@@ -51,7 +51,10 @@ export async function cancelPaymentRun(
   const trimmedReason = reason.trim();
   if (!trimmedReason) throw new PaymentError("a cancellation reason is required");
   const systemInitiated = actorId === PAYMENT_RUN_SYSTEM_ACTOR_ID;
-  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  const [run] = await db
+    .select()
+    .from(schema.paymentRuns)
+    .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
   if (!CANCELLABLE_RUN_STATUSES.includes(run.status)) {
     throw new PaymentError(`a ${run.status} run cannot be cancelled`);
@@ -61,12 +64,17 @@ export async function cancelPaymentRun(
     // The run row is the cancellation claim: lock it before judging or
     // mutating anything, serializing against posters, generators, and
     // settlement writers in their shared lock order.
-    const locked = (await tx.execute<{ status: string }>(sql`
+    const locked = (
+      await tx.execute<{ status: string }>(
+        sql`
       select status
         from payment_runs
        where id = ${runId} and org_id = ${orgId}
         for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!locked) throw new PaymentError("payment run not found");
     if (!CANCELLABLE_RUN_STATUSES.includes(locked.status)) {
       throw new PaymentError(`a ${locked.status} run cannot be cancelled`);
@@ -74,35 +82,56 @@ export async function cancelPaymentRun(
     const instructions = await tx
       .select()
       .from(schema.paymentInstructions)
-      .where(and(eq(schema.paymentInstructions.paymentRunId, runId), eq(schema.paymentInstructions.orgId, orgId)));
+      .where(
+        and(
+          eq(schema.paymentInstructions.paymentRunId, runId),
+          eq(schema.paymentInstructions.orgId, orgId),
+        ),
+      );
 
     for (const ins of instructions) {
       // Release the FK to the draft payment before deleting it.
       await tx
         .update(schema.paymentInstructions)
         .set({ status: "cancelled", paymentDocumentId: null, updatedAt: new Date() })
-        .where(and(eq(schema.paymentInstructions.id, ins.id), eq(schema.paymentInstructions.orgId, orgId)));
+        .where(
+          and(
+            eq(schema.paymentInstructions.id, ins.id),
+            eq(schema.paymentInstructions.orgId, orgId),
+          ),
+        );
       if (ins.paymentDocumentId) {
         const [doc] = await tx
           .select({ status: schema.documents.status })
           .from(schema.documents)
-          .where(and(eq(schema.documents.id, ins.paymentDocumentId), eq(schema.documents.orgId, orgId)));
+          .where(
+            and(eq(schema.documents.id, ins.paymentDocumentId), eq(schema.documents.orgId, orgId)),
+          );
         if (doc && doc.status !== "draft") {
-          throw new PaymentError("run has payments that are no longer drafts — it cannot be cancelled");
+          throw new PaymentError(
+            "run has payments that are no longer drafts — it cannot be cancelled",
+          );
         }
-        await tx.execute(sql`delete from document_lines where document_id = ${ins.paymentDocumentId} and org_id = ${orgId}`);
-        await tx.execute(sql`delete from documents where id = ${ins.paymentDocumentId} and org_id = ${orgId}`);
+        await tx.execute(
+          sql`delete from document_lines where document_id = ${ins.paymentDocumentId} and org_id = ${orgId}`,
+        );
+        await tx.execute(
+          sql`delete from documents where id = ${ins.paymentDocumentId} and org_id = ${orgId}`,
+        );
       }
     }
     // Predicated on the same statuses judged under the lock above: a run that
     // changed state while this transaction worked cannot become `cancelled`.
-    const cancelled = await tx.execute<{ id: string }>(sql`
+    const cancelled = await tx.execute<{ id: string }>(
+      sql`
       update payment_runs
          set status = 'cancelled', updated_at = now(), updated_by = ${actorId}
         where id = ${runId} and org_id = ${orgId}
           and status in ('draft', 'rejected', 'rolled_back')
         returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!cancelled[0]) {
       throw new PaymentError("the run changed state while it was being cancelled");
     }

@@ -91,7 +91,14 @@ test("the SFTP daemon hides an in-flight publish from bank clients", async () =>
   const tempName = `.payment.xml${SFTP_TEMP_WRITE_MARKER}999-deadbeef`;
   writeFileSync(join(rawDir(), "outbound-bank", tempName), Buffer.from("<trunc"));
 
-  const config = { id: "atomic-test", orgId: ORG, username: "atomic-bank", backend: "local", bucket: null as null, rootPrefix: ROOT };
+  const config = {
+    id: "atomic-test",
+    orgId: ORG,
+    username: "atomic-bank",
+    backend: "local",
+    bucket: null as null,
+    rootPrefix: ROOT,
+  };
   const server = await startSftpServer({
     port: 0,
     hostKey: generateHostKey(),
@@ -102,7 +109,13 @@ test("the SFTP daemon hides an in-flight publish from bank clients", async () =>
       const c = new ssh2.Client();
       c.on("error", reject);
       c.once("ready", () => resolve(c));
-      c.connect({ host: "127.0.0.1", port: server.port, username: "atomic-bank", password: "secret", hostVerifier: () => true });
+      c.connect({
+        host: "127.0.0.1",
+        port: server.port,
+        username: "atomic-bank",
+        password: "secret",
+        hostVerifier: () => true,
+      });
     });
     try {
       const sftp = await new Promise<ssh2.SFTPWrapper>((resolve, reject) => {
@@ -113,11 +126,19 @@ test("the SFTP daemon hides an in-flight publish from bank clients", async () =>
       });
       assert.deepEqual(listed.map((e) => e.filename).sort(), ["payment.xml"]);
       await assert.rejects(
-        new Promise((_, reject) => sftp.stat(`outbound-bank/${tempName}`, (e) => (e ? reject(e) : reject(new Error("stat succeeded"))))),
+        new Promise((_, reject) =>
+          sftp.stat(`outbound-bank/${tempName}`, (e) =>
+            e ? reject(e) : reject(new Error("stat succeeded")),
+          ),
+        ),
         "stat of an in-flight temp must fail",
       );
       await assert.rejects(
-        new Promise((_, reject) => sftp.open(`outbound-bank/${tempName}`, "r", (e) => (e ? reject(e) : reject(new Error("open succeeded"))))),
+        new Promise((_, reject) =>
+          sftp.open(`outbound-bank/${tempName}`, "r", (e) =>
+            e ? reject(e) : reject(new Error("open succeeded")),
+          ),
+        ),
         "open of an in-flight temp must fail",
       );
       const final = await new Promise<Buffer>((resolve, reject) => {

@@ -29,7 +29,7 @@ import {
   type EntityAdhoc,
 } from "../customization/entity-list-query.ts";
 import { entityListSource, entityOrderClause, plannedPageClauses } from "./entity-sources.ts";
-import { readExportWindow, type ExportPage } from '../data-io/export-page';
+import { readExportWindow, type ExportPage } from "../data-io/export-page";
 
 /**
  * The single bounded server reader for entity lists. `EntityListView` and
@@ -130,9 +130,19 @@ export async function readResolvedEntityListPageForView(
   );
 }
 
-const SAFE_QUERY_KEYS = new Set(["cursor",
-  "recordType", "orgId", "actorId", "allowedSubsidiaryIds", "filters",
-  "q", "showInactive", "sort", "dir", "page", "perPage",
+const SAFE_QUERY_KEYS = new Set([
+  "cursor",
+  "recordType",
+  "orgId",
+  "actorId",
+  "allowedSubsidiaryIds",
+  "filters",
+  "q",
+  "showInactive",
+  "sort",
+  "dir",
+  "page",
+  "perPage",
 ]);
 
 function refuse(error: string, remedy: string, field?: string): EntityReaderRefusal {
@@ -165,8 +175,14 @@ function sameScope(left: EntityReaderScope, right: EntityReaderScope): boolean {
  * plus the resolved grants — no caller-authored capability booleans exist on
  * this input.
  */
-export async function readEntityListPage(query: RegisteredEntityListQuery): Promise<EntityReaderResult> {
-  if (!query || !Object.hasOwn(query, "allowedSubsidiaryIds") || query.allowedSubsidiaryIds === undefined) {
+export async function readEntityListPage(
+  query: RegisteredEntityListQuery,
+): Promise<EntityReaderResult> {
+  if (
+    !query ||
+    !Object.hasOwn(query, "allowedSubsidiaryIds") ||
+    query.allowedSubsidiaryIds === undefined
+  ) {
     return refuse(
       "missing_scope",
       "pass allowedSubsidiaryIds explicitly with every call; use null only when the caller is unrestricted",
@@ -189,8 +205,17 @@ export async function readEntityListPage(query: RegisteredEntityListQuery): Prom
       "allowedSubsidiaryIds",
     );
   }
-  if (query.cursor && (typeof query.cursor !== 'object' || !Object.hasOwn(query.cursor, 'afterId') || (query.cursor.afterId !== null && !isUuid(query.cursor.afterId)))) {
-    return refuse('invalid_cursor', 'pass a null starting cursor or the UUID of the last returned row', 'cursor');
+  if (
+    query.cursor &&
+    (typeof query.cursor !== "object" ||
+      !Object.hasOwn(query.cursor, "afterId") ||
+      (query.cursor.afterId !== null && !isUuid(query.cursor.afterId)))
+  ) {
+    return refuse(
+      "invalid_cursor",
+      "pass a null starting cursor or the UUID of the last returned row",
+      "cursor",
+    );
   }
   const authz = await resolveAuthzByUserId(query.orgId, query.actorId);
   if (!authz) {
@@ -218,14 +243,18 @@ export async function readEntityListPage(query: RegisteredEntityListQuery): Prom
   ]);
   const features: ResolvedListFeatures = {
     inventory,
-    crm: query.recordType === "customer" ? crmFeature && can(authz, "crm.accounts.read") : crmFeature,
-    hrm: query.recordType === "employee" ? hrmFeature && can(authz, "hrm.employment.read") : hrmFeature,
+    crm:
+      query.recordType === "customer" ? crmFeature && can(authz, "crm.accounts.read") : crmFeature,
+    hrm:
+      query.recordType === "employee"
+        ? hrmFeature && can(authz, "hrm.employment.read")
+        : hrmFeature,
   };
   let view: ListViewConfig;
   try {
     const defaults = defaultListView(query.recordType, {
       multiSubsidiary: await subsidiaryFeatureEnabled(query.orgId),
-      multiBook: await isFeatureEnabled(query.orgId, 'multiBookAccounting'),
+      multiBook: await isFeatureEnabled(query.orgId, "multiBookAccounting"),
     });
     view = { ...defaults, filters: [...defaults.filters, ...(query.filters ?? [])] };
   } catch {
@@ -326,10 +355,7 @@ async function executeEntityListPage(
     // re-resolves here, and the page-owned trusted path never resolves.
     const grantAuthz = input.authz ?? (await resolveAuthzByUserId(input.orgId, input.actorId));
     if (!grantAuthz || !can(grantAuthz, source.readPermission)) {
-      return refuse(
-        "forbidden",
-        `this list requires the ${source.readPermission} grant`,
-      );
+      return refuse("forbidden", `this list requires the ${source.readPermission} grant`);
     }
   }
   // The record type's Features switch refuses by name before compiling: a
@@ -402,16 +428,25 @@ async function executeEntityListPage(
       "sort",
     );
   }
-  if (input.dir !== undefined && input.dir !== null && input.dir !== "asc" && input.dir !== "desc") {
+  if (
+    input.dir !== undefined &&
+    input.dir !== null &&
+    input.dir !== "asc" &&
+    input.dir !== "desc"
+  ) {
     return refuse("invalid_dir", `direction must be "asc" or "desc"`, "dir");
   }
-  const viewSortKey = view.sort ? listColumnMeta(input.recordType, view.sort.column)?.sortKey : undefined;
-  const viewSort = viewSortKey && allowedSorts.includes(viewSortKey) && view.sort
-    ? { sortKey: viewSortKey, dir: view.sort.dir }
+  const viewSortKey = view.sort
+    ? listColumnMeta(input.recordType, view.sort.column)?.sortKey
     : undefined;
-  const metaDefault = effectiveMeta.defaultSort && allowedSorts.includes(effectiveMeta.defaultSort.sortKey)
-    ? effectiveMeta.defaultSort
-    : undefined;
+  const viewSort =
+    viewSortKey && allowedSorts.includes(viewSortKey) && view.sort
+      ? { sortKey: viewSortKey, dir: view.sort.dir }
+      : undefined;
+  const metaDefault =
+    effectiveMeta.defaultSort && allowedSorts.includes(effectiveMeta.defaultSort.sortKey)
+      ? effectiveMeta.defaultSort
+      : undefined;
   const sort = input.sort ?? viewSort?.sortKey ?? metaDefault?.sortKey ?? allowedSorts[0] ?? "name";
   const dir = input.dir ?? viewSort?.dir ?? metaDefault?.dir ?? "asc";
   if (input.page !== undefined && !Number.isInteger(input.page)) {
@@ -455,11 +490,12 @@ async function executeEntityListPage(
     let accepted = acceptedCache.get(key);
     let backed = statics.length > 0 || loader !== undefined;
     if (accepted === undefined) {
-      accepted = statics.length > 0
-        ? statics
-        : loader
-          ? (await loader(input.orgId, input.allowedSubsidiaryIds)).map((option) => option.value)
-          : [];
+      accepted =
+        statics.length > 0
+          ? statics
+          : loader
+            ? (await loader(input.orgId, input.allowedSubsidiaryIds)).map((option) => option.value)
+            : [];
       acceptedCache.set(key, accepted);
     } else {
       backed = true;
@@ -507,20 +543,29 @@ async function executeEntityListPage(
   }
   const labels = input.labels ?? {};
   const headerDefs = source.customFieldTable
-    ? (await loadFieldDefs(source.customFieldTable, source.customFieldKind)).filter((d) => d.config.showInList)
+    ? (await loadFieldDefs(source.customFieldTable, source.customFieldKind)).filter(
+        (d) => d.config.showInList,
+      )
     : [];
-  const builtInExpr = input.recordType === "customer"
-    ? customerBuiltInExpr(features.crm)
-    : input.recordType === "employee"
-      ? employeeBuiltInExpr(features.hrm)
-      : source.builtInExpr;
-  const sorts = input.recordType === "customer"
-    ? customerSorts(features.crm)
-    : input.recordType === "employee"
-      ? employeeSorts(features.hrm)
-      : source.sorts;
+  const builtInExpr =
+    input.recordType === "customer"
+      ? customerBuiltInExpr(features.crm)
+      : input.recordType === "employee"
+        ? employeeBuiltInExpr(features.hrm)
+        : source.builtInExpr;
+  const sorts =
+    input.recordType === "customer"
+      ? customerSorts(features.crm)
+      : input.recordType === "employee"
+        ? employeeSorts(features.hrm)
+        : source.sorts;
   const cols = columnDescriptors(
-    input.recordType, view, headerDefs, builtInExpr, labels, source.customFieldAlias ?? source.alias,
+    input.recordType,
+    view,
+    headerDefs,
+    builtInExpr,
+    labels,
+    source.customFieldAlias ?? source.alias,
   );
   const selectCols = sql.join(
     cols.filter((c) => c.expr).map((c) => sql`${c.expr} as ${sql.raw(`"${c.key}"`)}`),
@@ -534,31 +579,48 @@ async function executeEntityListPage(
     crmEnabled: input.recordType === "customer" ? features.crm : undefined,
     hrmEnabled: input.recordType === "employee" ? features.hrm : undefined,
   };
-  const narrow = (predicate: SQL) => scopePredicate ? sql`(${predicate}) and (${scopePredicate})` : predicate;
+  const narrow = (predicate: SQL) =>
+    scopePredicate ? sql`(${predicate}) and (${scopePredicate})` : predicate;
   const where = narrow(source.where(view, adhoc, input.orgId, input.allowedSubsidiaryIds));
   const orderExpr = sorts[sort] ?? source.defaultSort;
   const aliasSql = sql.raw(source.alias);
   const idExpr = source.idExpr ?? sql`${aliasSql}.id`;
-  const tableSql = typeof source.table === "function"
-    ? sql`${source.table(input.orgId)} ${sql.raw(source.alias)}`
-    : sql.raw(`${source.table} ${source.alias}`);
-  const baseJoins = input.recordType === "customer"
-    ? customerBaseJoins(features.crm)
-    : input.recordType === "employee"
-      ? employeeBaseJoins(features.hrm, today, input.allowedSubsidiaryIds)
-      : (typeof source.baseJoins === "function" ? source.baseJoins(input.allowedSubsidiaryIds, today) : source.baseJoins);
+  const tableSql =
+    typeof source.table === "function"
+      ? sql`${source.table(input.orgId)} ${sql.raw(source.alias)}`
+      : sql.raw(`${source.table} ${source.alias}`);
+  const baseJoins =
+    input.recordType === "customer"
+      ? customerBaseJoins(features.crm)
+      : input.recordType === "employee"
+        ? employeeBaseJoins(features.hrm, today, input.allowedSubsidiaryIds)
+        : typeof source.baseJoins === "function"
+          ? source.baseJoins(input.allowedSubsidiaryIds, today)
+          : source.baseJoins;
   const countJoinsSource = source.countJoins ?? source.baseJoins;
-  const countJoins = input.recordType === "customer"
-    ? customerBaseJoins(features.crm)
-    : input.recordType === "employee"
-      ? employeeBaseJoins(features.hrm, today, input.allowedSubsidiaryIds)
-      : (typeof countJoinsSource === "function" ? countJoinsSource(input.allowedSubsidiaryIds, today) : countJoinsSource);
-  const plannedIds = !input.cursor && source.orderedPageIds
-    ? await source.orderedPageIds({ orgId: input.orgId, sort, dir, tableSql, baseJoins, where })
-    : null;
+  const countJoins =
+    input.recordType === "customer"
+      ? customerBaseJoins(features.crm)
+      : input.recordType === "employee"
+        ? employeeBaseJoins(features.hrm, today, input.allowedSubsidiaryIds)
+        : typeof countJoinsSource === "function"
+          ? countJoinsSource(input.allowedSubsidiaryIds, today)
+          : countJoinsSource;
+  const plannedIds =
+    !input.cursor && source.orderedPageIds
+      ? await source.orderedPageIds({ orgId: input.orgId, sort, dir, tableSql, baseJoins, where })
+      : null;
   const planned = plannedIds ? plannedPageClauses(plannedIds, idExpr) : null;
-  const pageWhere = input.cursor?.afterId ? sql`(${where}) and ${idExpr}>${input.cursor.afterId}::uuid` : planned ? planned.where : where;
-  const pageOrder = input.cursor ? sql`${idExpr} asc` : planned ? planned.order : entityOrderClause(source, orderExpr, dir);
+  const pageWhere = input.cursor?.afterId
+    ? sql`(${where}) and ${idExpr}>${input.cursor.afterId}::uuid`
+    : planned
+      ? planned.where
+      : where;
+  const pageOrder = input.cursor
+    ? sql`${idExpr} asc`
+    : planned
+      ? planned.order
+      : entityOrderClause(source, orderExpr, dir);
   const earlyPage = !input.cursor && source.pageBeforeJoins?.sorts.includes(sort) && !planned;
   const select = sql`${idExpr} as id${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}`;
   // Header sorts need only the visibility/filter joins. Hydrate aggregates
@@ -575,13 +637,31 @@ async function executeEntityListPage(
     : sql`select ${select} from ${tableSql} ${baseJoins}
        where ${pageWhere} order by ${pageOrder}
        limit ${perPage} offset ${input.cursor ? 0 : (page - 1) * perPage}`;
-  const exportPage: ExportPage | undefined = input.cursor ? { size: perPage, after: input.cursor.afterId, next: null, done: false } : undefined;
+  const exportPage: ExportPage | undefined = input.cursor
+    ? { size: perPage, after: input.cursor.afterId, next: null, done: false }
+    : undefined;
   const [rowsRes, totalRow] = await Promise.all([
-    readExportWindow(db, rowQuery, exportPage ? { page: exportPage, allowedSubsidiaryIds: input.allowedSubsidiaryIds, actorId: input.actorId } : undefined, 'id'),
-    input.cursor ? Promise.resolve([{ n: "0" }]) : db.execute<{ n: string }>(sql`
+    readExportWindow(
+      db,
+      rowQuery,
+      exportPage
+        ? {
+            page: exportPage,
+            allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+            actorId: input.actorId,
+          }
+        : undefined,
+      "id",
+    ),
+    input.cursor
+      ? Promise.resolve([{ n: "0" }])
+      : db.execute<{ n: string }>(
+          sql`
       select count(*) as n from ${tableSql}
         ${countJoins}
-       where ${where}`, "objects"),
+       where ${where}`,
+          "objects",
+        ),
   ]);
   const rows = rowsRes.rows as EntityReaderRow[];
   // Server-computed display values run only on returned page rows; SQL serves

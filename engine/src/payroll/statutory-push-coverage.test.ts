@@ -47,9 +47,11 @@ const PACK_DIRS: Record<string, string> = {
 /** Key expr never spans calls: a dynamic site cannot swallow its neighbour's kind literal. */
 const PUSH_CALL = /pushStatutory\(\s*((?:(?!pushStatutory\()[\s\S])*?),\s*"([^"]+)"\s*,/g;
 /** The levy dispatch key and its kind default, both pinned exactly. */
-const DISPATCH_CALL = /pushStatutory\(\s*levy\.statutoryComponent\?\.systemKey\s*\?\?\s*\(\s*[\s\S]*?\?\s*"([^"]+)"\s*:\s*"([^"]+)"\s*\)\s*,\s*levy\.statutoryComponent\?\.kind\s*\?\?\s*"([^"]+)"\s*,/g;
+const DISPATCH_CALL =
+  /pushStatutory\(\s*levy\.statutoryComponent\?\.systemKey\s*\?\?\s*\(\s*[\s\S]*?\?\s*"([^"]+)"\s*:\s*"([^"]+)"\s*\)\s*,\s*levy\.statutoryComponent\?\.kind\s*\?\?\s*"([^"]+)"\s*,/g;
 /** `statutoryComponent: { systemKey: "x", kind: "y" }` in a jurisdiction declaration. */
-const COMPONENT_DECL = /statutoryComponent:\s*\{\s*systemKey:\s*"([^"]+)"\s*,\s*kind:\s*"([^"]+)"\s*\}/g;
+const COMPONENT_DECL =
+  /statutoryComponent:\s*\{\s*systemKey:\s*"([^"]+)"\s*,\s*kind:\s*"([^"]+)"\s*\}/g;
 /** `"key"` and nothing else. */
 const SINGLE_KEY = /^\s*"([^"]+)"\s*$/;
 
@@ -69,8 +71,8 @@ function pushedKeys(source: string, path: string, componentTargets: PushTarget[]
     const single = SINGLE_KEY.exec(keyExpr);
     assert.ok(
       single,
-      `${path}: non-literal pushStatutory key has no declared shape `
-        + `(only "literal" and the levy dispatch are covered): ${keyExpr.trim().slice(0, 120)}`,
+      `${path}: non-literal pushStatutory key has no declared shape ` +
+        `(only "literal" and the levy dispatch are covered): ${keyExpr.trim().slice(0, 120)}`,
     );
     found.push({ systemKey: single[1] ?? "", kind });
   }
@@ -82,7 +84,10 @@ function sourcesUnder(dir: string): string[] {
   const walk = (at: string): void => {
     for (const entry of readdirSync(at, { withFileTypes: true })) {
       const path = join(at, entry.name);
-      if (entry.isDirectory()) { walk(path); continue; }
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
       if (!/\.[cm]?tsx?$/.test(entry.name)) continue;
       // Test files push through recording stubs with arbitrary keys — they
       // exercise nothing production consults, so they are out of scope.
@@ -101,8 +106,10 @@ test("every pushed (systemKey, kind) is declared, for every pack", () => {
     assert.ok(dirName, `no source directory mapped for pack ${country} — extend PACK_DIRS`);
     const declared = new Map<string, string>(
       pack.statutorySlots.flatMap((slot) =>
-        slot.components.map((component) =>
-          [`${component.systemKey}|${component.kind}`, component.assessedOn] as const),
+        slot.components.map(
+          (component) =>
+            [`${component.systemKey}|${component.kind}`, component.assessedOn] as const,
+        ),
       ),
     );
     const paths = sourcesUnder(join("engine", "src", "payroll", dirName));
@@ -120,16 +127,13 @@ test("every pushed (systemKey, kind) is declared, for every pack", () => {
       for (const pushed of pushedKeys(source, path, componentTargets)) {
         const assessedOn = declared.get(`${pushed.systemKey}|${pushed.kind}`);
         if (assessedOn === "earnings" || assessedOn === "taxable_income") continue;
-        undeclared.push(
-          `${country}: ${path} pushes undeclared ${pushed.systemKey}/${pushed.kind}`,
-        );
+        undeclared.push(`${country}: ${path} pushes undeclared ${pushed.systemKey}/${pushed.kind}`);
       }
     }
   }
   assert.deepEqual(
     undeclared,
     [],
-    "pushed lines with no pack declaration throw in statutoryAssessment:\n"
-      + undeclared.join("\n"),
+    "pushed lines with no pack declaration throw in statutoryAssessment:\n" + undeclared.join("\n"),
   );
 });

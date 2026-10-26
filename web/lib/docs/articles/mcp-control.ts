@@ -1,27 +1,27 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const mcpControl: DocArticle = {
-  slug: 'mcp-control',
-  title: 'Model Context Protocol (MCP)',
-  category: 'apps',
+  slug: "mcp-control",
+  title: "Model Context Protocol (MCP)",
+  category: "apps",
   order: 8,
   summary:
-    'Connect an authorized AI or automation client to OpenBooks through the first-class MCP endpoint, with tenant, permission, workflow, and accounting controls preserved.',
-  updated: '2026-07-31',
+    "Connect an authorized AI or automation client to OpenBooks through the first-class MCP endpoint, with tenant, permission, workflow, and accounting controls preserved.",
+  updated: "2026-07-31",
   keywords: [
-    'MCP',
-    'Model Context Protocol',
-    'AI client',
-    'Codex',
-    'tools',
-    'automation',
-    'idempotency',
-    'audit',
-    'bearer token',
-    'assistant',
-    'confirmation',
+    "MCP",
+    "Model Context Protocol",
+    "AI client",
+    "Codex",
+    "tools",
+    "automation",
+    "idempotency",
+    "audit",
+    "bearer token",
+    "assistant",
+    "confirmation",
   ],
-  related: ['rest-api', 'roles-and-permissions', 'flows', 'audit-log', 'transaction-lifecycle'],
+  related: ["rest-api", "roles-and-permissions", "flows", "audit-log", "transaction-lifecycle"],
   body: `# Model Context Protocol (MCP)
 
 OpenBooks exposes a first-class, Streamable HTTP Model Context Protocol endpoint
@@ -231,4 +231,4 @@ least successful, invalid, unauthorized, duplicate-retry, concurrent-retry,
 approval-gated, closed-period, and subsidiary-restricted cases before promoting
 the client configuration to production.
 `,
-}
+};

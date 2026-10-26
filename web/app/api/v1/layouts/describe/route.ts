@@ -12,15 +12,27 @@ function readStringRecord(value: string | null, name: string): Record<string, st
   try {
     parsed = JSON.parse(value);
   } catch {
-    throw new ApplicationError("invalid_input", `${name} must be a JSON object of string values`, 422);
+    throw new ApplicationError(
+      "invalid_input",
+      `${name} must be a JSON object of string values`,
+      422,
+    );
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new ApplicationError("invalid_input", `${name} must be a JSON object of string values`, 422);
+    throw new ApplicationError(
+      "invalid_input",
+      `${name} must be a JSON object of string values`,
+      422,
+    );
   }
   const record: Record<string, string> = {};
   for (const [key, entry] of Object.entries(parsed as Record<string, unknown>)) {
     if (typeof entry !== "string") {
-      throw new ApplicationError("invalid_input", `${name} must be a JSON object of string values`, 422);
+      throw new ApplicationError(
+        "invalid_input",
+        `${name} must be a JSON object of string values`,
+        422,
+      );
     }
     record[key] = entry;
   }

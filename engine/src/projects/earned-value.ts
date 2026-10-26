@@ -120,7 +120,8 @@ export async function loadEarnedValue(
       ? sql`and p.id = any(${uuidList(input.projectIds)})`
       : sql`and false`
     : sql``;
-  const projects = await executor.execute<{ id: string; code: string | null; name: string }>(sql`
+  const projects = await executor.execute<{ id: string; code: string | null; name: string }>(
+    sql`
     select p.id, p.code, p.name
       from projects p
      where p.org_id = ${orgId}
@@ -128,13 +129,16 @@ export async function loadEarnedValue(
        ${input.activeOnly ? sql`and p.is_active` : sql``}
        ${subsidiaryFilter(input.allowedSubsidiaryIds)}
      order by p.code nulls last, p.name, p.id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (projects.length === 0) return [];
   const ids = uuidList(projects.map((project) => project.id));
   const asOf = input.asOf;
   const windowStart = sql`(${asOf}::date - ${BURN_WINDOW_WEEKS * 7 - 1}::int)`;
 
-  const tasks = await executor.execute<TaskRow>(sql`
+  const tasks = await executor.execute<TaskRow>(
+    sql`
     select t.id, t.project_id, t.code, t.name, t.status,
            t.estimated_cost::text as estimated_cost, t.estimated_hours::text as estimated_hours,
            t.budget_quantity::text as budget_quantity, t.budget_unit,
@@ -143,9 +147,16 @@ export async function loadEarnedValue(
       from project_tasks t
      where t.org_id = ${orgId} and t.project_id = any(${ids})
      order by t.code nulls last, t.name, t.id
-  `, "objects");
+  `,
+    "objects",
+  );
 
-  const installed = await executor.execute<{ task_id: string; quantity: string; other_units: string }>(sql`
+  const installed = await executor.execute<{
+    task_id: string;
+    quantity: string;
+    other_units: string;
+  }>(
+    sql`
     select e.project_task_id as task_id,
            coalesce(sum(e.quantity) filter (where e.unit = t.budget_unit), 0)::text as quantity,
            count(*) filter (where t.budget_unit is null or e.unit <> t.budget_unit)::text as other_units
@@ -153,11 +164,14 @@ export async function loadEarnedValue(
       join project_tasks t on t.id = e.project_task_id and t.org_id = e.org_id and t.project_id = e.project_id
      where e.org_id = ${orgId} and e.project_id = any(${ids}) and e.entry_date <= ${asOf}::date
      group by e.project_task_id
-  `, "objects");
+  `,
+    "objects",
+  );
 
   // Labor: approved hours at their cost rate. A task of another project
   // never attributes cost here; such time reads as unassigned.
-  const labor = await executor.execute<ActualRow & { missing_rates: number }>(sql`
+  const labor = await executor.execute<ActualRow & { missing_rates: number }>(
+    sql`
     select te.project_id, pt.id as task_id,
            coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0)::text as cost,
            coalesce(sum(te.hours), 0)::text as hours,
@@ -170,7 +184,9 @@ export async function loadEarnedValue(
      where te.org_id = ${orgId} and te.project_id = any(${ids})
        and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`, sql`${asOf}`)} and te.worked_on <= ${asOf}::date
      group by te.project_id, pt.id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (labor.some((row) => row.missing_rates > 0)) {
     throw new ProjectProgressError(
       "Earned value cannot be calculated because approved time entries have no cost rate",
@@ -180,10 +196,17 @@ export async function loadEarnedValue(
     );
   }
 
-  const kinds = sql.join(EARNED_VALUE_COST_DOCUMENT_KINDS.map((kind) => sql`${kind}`), sql`, `);
-  const lineAmount = signedDocumentAmount(sql`d.kind`, sql`round(dl.amount * coalesce(d.fx_rate, 1), 4)`);
+  const kinds = sql.join(
+    EARNED_VALUE_COST_DOCUMENT_KINDS.map((kind) => sql`${kind}`),
+    sql`, `,
+  );
+  const lineAmount = signedDocumentAmount(
+    sql`d.kind`,
+    sql`round(dl.amount * coalesce(d.fx_rate, 1), 4)`,
+  );
   const lineDate = sql`coalesce(d.posting_date, d.document_date)`;
-  const nonLabor = await executor.execute<ActualRow>(sql`
+  const nonLabor = await executor.execute<ActualRow>(
+    sql`
     select coalesce(dl.project_id, d.project_id) as project_id, pt.id as task_id,
            coalesce(sum(${lineAmount}), 0)::text as cost,
            '0'::text as hours,
@@ -199,13 +222,16 @@ export async function loadEarnedValue(
        and d.status = 'posted' and d.kind in (${kinds})
        and ${lineDate} <= ${asOf}::date
      group by coalesce(dl.project_id, d.project_id), pt.id
-  `, "objects");
+  `,
+    "objects",
+  );
 
   // Internal billing has two project sides. Its posted cost legs are the
   // authority: line/header fallback would lose the provider recovery and
   // department revenue credits must never become job cost. Include reversal
   // legs by posting date so historical earned value retains the original cost.
-  const internalCost = await executor.execute<ActualRow>(sql`
+  const internalCost = await executor.execute<ActualRow>(
+    sql`
     select l.project_id, null::uuid as task_id,
            sum(l.amount)::text as cost, '0'::text as hours,
            coalesce(sum(l.amount) filter (where e.posting_date >= ${windowStart}), 0)::text as trailing_cost,
@@ -221,7 +247,9 @@ export async function loadEarnedValue(
        and a.type in ('cogs', 'expense', 'expense_other')
        and e.posting_date <= ${asOf}::date
      group by l.project_id
-  `, "objects");
+  `,
+    "objects",
+  );
 
   const forecasts = await executor.execute<{
     task_id: string;
@@ -229,14 +257,17 @@ export async function loadEarnedValue(
     as_of_date: string;
     cost_to_complete: string;
     hours_to_complete: string | null;
-  }>(sql`
+  }>(
+    sql`
     select distinct on (f.project_task_id)
            f.project_task_id as task_id, f.method, f.as_of_date::text as as_of_date,
            f.cost_to_complete::text as cost_to_complete, f.hours_to_complete::text as hours_to_complete
       from project_forecasts f
      where f.org_id = ${orgId} and f.project_id = any(${ids}) and f.as_of_date <= ${asOf}::date
      order by f.project_task_id, f.as_of_date desc, f.created_at desc, f.id desc
-  `, "objects");
+  `,
+    "objects",
+  );
 
   const installedByTask = new Map(installed.map((row) => [row.task_id, row]));
   const forecastByTask = new Map(forecasts.map((row) => [row.task_id, row]));
@@ -245,16 +276,29 @@ export async function loadEarnedValue(
   for (const row of [...labor, ...nonLabor, ...internalCost]) {
     const key = actualKey(row.project_id, row.task_id);
     const prior = actuals.get(key);
-    actuals.set(key, prior
-      ? {
-          actualCost: addDecimal(prior.actualCost, row.cost, 8),
-          actualHours: addDecimal(prior.actualHours, row.hours, 8),
-          trailingCost: addDecimal(prior.trailingCost, row.trailing_cost, 8),
-          trailingHours: addDecimal(prior.trailingHours, row.trailing_hours, 8),
-        }
-      : { actualCost: row.cost, actualHours: row.hours, trailingCost: row.trailing_cost, trailingHours: row.trailing_hours });
+    actuals.set(
+      key,
+      prior
+        ? {
+            actualCost: addDecimal(prior.actualCost, row.cost, 8),
+            actualHours: addDecimal(prior.actualHours, row.hours, 8),
+            trailingCost: addDecimal(prior.trailingCost, row.trailing_cost, 8),
+            trailingHours: addDecimal(prior.trailingHours, row.trailing_hours, 8),
+          }
+        : {
+            actualCost: row.cost,
+            actualHours: row.hours,
+            trailingCost: row.trailing_cost,
+            trailingHours: row.trailing_hours,
+          },
+    );
   }
-  const none: UnassignedActuals = { actualCost: "0", actualHours: "0", trailingCost: "0", trailingHours: "0" };
+  const none: UnassignedActuals = {
+    actualCost: "0",
+    actualHours: "0",
+    trailingCost: "0",
+    trailingHours: "0",
+  };
 
   return projects.map((project) => {
     const projectTasks = tasks.filter((task) => task.project_id === project.id);
@@ -270,7 +314,7 @@ export async function loadEarnedValue(
         budgetQuantity: task.budget_quantity,
         budgetUnit: task.budget_unit,
         installedQuantity: installedByTask.get(task.id)?.quantity ?? "0",
-        scheduleProgress: task.scheduled ? task.schedule_progress ?? "0" : null,
+        scheduleProgress: task.scheduled ? (task.schedule_progress ?? "0") : null,
         actualCost: actual.actualCost,
         actualHours: actual.actualHours,
         trailingCost: actual.trailingCost,
@@ -318,10 +362,13 @@ export async function projectEarnedValue(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ProjectEarnedValue | null> {
   const run = async () =>
-    (await loadEarnedValue(db, orgId, { asOf, projectIds: [projectId], allowedSubsidiaryIds }))[0] ?? null;
+    (
+      await loadEarnedValue(db, orgId, { asOf, projectIds: [projectId], allowedSubsidiaryIds })
+    )[0] ?? null;
   const active = orgContext.getStore();
   if (active?.txDb && !active.bypass) {
-    if (orgId !== active.orgId) throw new Error("cannot change organization inside an active tenant transaction");
+    if (orgId !== active.orgId)
+      throw new Error("cannot change organization inside an active tenant transaction");
     return run();
   }
   return withOrgTransaction(orgId, run, { isolationLevel: "REPEATABLE READ", readOnly: true });
@@ -330,11 +377,17 @@ export async function projectEarnedValue(
 /** Earned value for many projects (the report), as one committed generation. */
 export async function earnedValueByProject(
   orgId: string,
-  input: { asOf: string; projectIds?: readonly string[]; allowedSubsidiaryIds: ReadonlySet<string> | null; activeOnly?: boolean },
+  input: {
+    asOf: string;
+    projectIds?: readonly string[];
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+    activeOnly?: boolean;
+  },
 ): Promise<ProjectEarnedValue[]> {
   const active = orgContext.getStore();
   if (active?.txDb && !active.bypass) {
-    if (orgId !== active.orgId) throw new Error("cannot change organization inside an active tenant transaction");
+    if (orgId !== active.orgId)
+      throw new Error("cannot change organization inside an active tenant transaction");
     return loadEarnedValue(db, orgId, input);
   }
   return withOrgTransaction(orgId, () => loadEarnedValue(db, orgId, input), {

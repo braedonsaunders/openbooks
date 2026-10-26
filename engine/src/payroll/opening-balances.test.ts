@@ -1,18 +1,35 @@
 import { assessedCanadianWages } from "../testing/payroll-canadian-wages.ts";
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
-import { seedPayrollLine } from '../testing/fixtures.ts';
-import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
+import { seedPayrollLine } from "../testing/fixtures.ts";
+import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
-  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
+  seedPayrollSchedule,
+  seedPayrollEmployeeRole,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../platform/db.ts";
-import { qualifyOpeningEmployerAuthority, readOpeningEmployerContext } from "./opening-employer-authority.ts";
-import { qualifyOpeningLevySourceAuthority, readOpeningLevySourceContext, type OpeningLevySourceAllocationInput } from "./opening-levy-source-authority.ts";
+import {
+  qualifyOpeningEmployerAuthority,
+  readOpeningEmployerContext,
+} from "./opening-employer-authority.ts";
+import {
+  qualifyOpeningLevySourceAuthority,
+  readOpeningLevySourceContext,
+  type OpeningLevySourceAllocationInput,
+} from "./opening-levy-source-authority.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { add, cmp, mulPercent } from "../money/money.ts";
 import { calculateT4127 } from "./canada/t4127.ts";
@@ -59,8 +76,11 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("opening balance amounts are exact money, never negative, never a transposed column", () => {
   const clean = normalizeOpeningBalance({
-    pensionableYtd: "40000.00", insurableYtd: "40000", cppYtd: "2380.50",
-    taxableYtd: "40000", taxYtd: "6000",
+    pensionableYtd: "40000.00",
+    insurableYtd: "40000",
+    cppYtd: "2380.50",
+    taxableYtd: "40000",
+    taxYtd: "6000",
   });
   assert.equal(clean.pensionableYtd, "40000.0000");
   assert.equal(clean.insurableYtd, "40000.0000");
@@ -89,7 +109,8 @@ test("opening balance amounts are exact money, never negative, never a transpose
   assert.throws(() => normalizeOpeningBalance({ cppYtd: "lots" }), /is not a number/);
   // The realistic import error: CPP dollars pasted into pensionable earnings.
   assert.throws(
-    () => normalizeOpeningBalance({ pensionableYtd: "2380.50", insurableYtd: "0", cppYtd: "40000" }),
+    () =>
+      normalizeOpeningBalance({ pensionableYtd: "2380.50", insurableYtd: "0", cppYtd: "40000" }),
     /exceed pensionable earnings/,
   );
   assert.throws(
@@ -198,15 +219,36 @@ async function seedEmployee(
 ): Promise<{ employeeId: string; employmentId: string }> {
   const employeeId = randomUUID();
   await seedPayrollPerson(fx.orgId, employeeId, options.name);
-  await seedPayrollEmployeeRole(fx.orgId, employeeId, { hiredOn: options.hiredOn ?? "2020-01-06", isActive: true, createdBy: fx.actorId, updatedBy: fx.actorId });
+  await seedPayrollEmployeeRole(fx.orgId, employeeId, {
+    hiredOn: options.hiredOn ?? "2020-01-06",
+    isActive: true,
+    createdBy: fx.actorId,
+    updatedBy: fx.actorId,
+  });
   const employmentId = await seedWorkerEmployment(fx.orgId, employeeId, fx.subsidiaryId);
   await seedPayrollWage(fx.orgId, employeeId, fx.actorId, {
-    currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2020-01-01',
+    currency: "CAD",
+    rate: "30",
+    basis: "hour",
+    effectiveFrom: "2020-01-01",
   });
-  await seedPayrollProfile(fx.orgId, employeeId, employmentId, fx.scheduleId, fx.actorId, {
-    province: 'ON', payBasis: 'hourly', country: 'CA', federalClaimCode: 1, provincialClaimCode: 1,
-    wcbExempt: true, wcbExemptReason: 'opening fixture: workers-compensation coverage out of scope',
-  }, { percentFloor: '4', method: 'accrue' });
+  await seedPayrollProfile(
+    fx.orgId,
+    employeeId,
+    employmentId,
+    fx.scheduleId,
+    fx.actorId,
+    {
+      province: "ON",
+      payBasis: "hourly",
+      country: "CA",
+      federalClaimCode: 1,
+      provincialClaimCode: 1,
+      wcbExempt: true,
+      wcbExemptReason: "opening fixture: workers-compensation coverage out of scope",
+    },
+    { percentFloor: "4", method: "accrue" },
+  );
 
   return { employeeId, employmentId };
 }
@@ -223,13 +265,21 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
   const craPayable = await account("2310", "CRA remittances payable", "liability_current_other");
   const vacationPayable = await account("2320", "Vacation payable", "liability_current_other");
   await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
+    slotAccounts: {
+      CA: {
+        cpp: craPayable,
+        ei: craPayable,
+        qpip: craPayable,
+        income_tax: craPayable,
+        vacation: vacationPayable,
+      },
+    },
+    wageExpenseAccountId: wageExpense,
+    burdenExpenseAccountId: burdenExpense,
+    netPayAccountId: netPayable,
 
-        wagesTo: "expense",
-      });
+    wagesTo: "expense",
+  });
   await seedPayrollComponents(org.orgId, actorId, "CA");
   // The ON hire calculates, so its EHT leg resolves (never asserted here).
   await seedOntarioEhtFixture(org.orgId, actorId);
@@ -249,7 +299,10 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
 
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+    name: "Biweekly",
+    frequency: "biweekly",
+    periodsPerYear: 26,
+    anchorPeriodEnd: "2026-07-18",
     payDateOffsetDays: 3,
   });
 
@@ -260,26 +313,52 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
   );
 
   return {
-    orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId, scheduleId, employeeId, employmentId, employeeName,
+    orgId: org.orgId,
+    actorId,
+    subsidiaryId: org.subsidiaryId,
+    scheduleId,
+    employeeId,
+    employmentId,
+    employeeName,
   };
 }
 
 /** Retain the fixture's complete original report through native Cabinet qualification. */
-async function qualifyOriginalOpening(fx: AdoptionFixture, options: {
-  completeSource?: boolean; originalCountry?: 'CA' | 'GB'; coverageEnd?: string;
-  allocations?: OpeningLevySourceAllocationInput[];
-} = {}): Promise<void> {
-  const originalCountry = options.originalCountry ?? 'CA';
-  const facts = { originalCountry, originalCurrency: originalCountry === 'GB' ? 'GBP' : 'CAD',
-    coverageStart: originalCountry === 'GB' ? '2026-04-06' : '2026-01-01',
-    coverageEnd: options.coverageEnd ?? '2026-07-04', coverageComplete: true as const };
-  const allocations: OpeningLevySourceAllocationInput[] = options.allocations ?? (originalCountry === 'GB' ? [] : [
-    ...['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(region =>
-      ({ programKey: 'ca_wcb', region, federalAccountId: null, amount: '0' })),
-    ...['BC','MB','NL','ON'].map(region => ({ programKey: 'ca_eht', region, federalAccountId: null, amount: '0' })),
-    { programKey: 'ca_cnt', region: 'QC', federalAccountId: null, amount: '0' },
-  ]);
-  const original = await db.execute<{ report: string }>(sql`
+async function qualifyOriginalOpening(
+  fx: AdoptionFixture,
+  options: {
+    completeSource?: boolean;
+    originalCountry?: "CA" | "GB";
+    coverageEnd?: string;
+    allocations?: OpeningLevySourceAllocationInput[];
+  } = {},
+): Promise<void> {
+  const originalCountry = options.originalCountry ?? "CA";
+  const facts = {
+    originalCountry,
+    originalCurrency: originalCountry === "GB" ? "GBP" : "CAD",
+    coverageStart: originalCountry === "GB" ? "2026-04-06" : "2026-01-01",
+    coverageEnd: options.coverageEnd ?? "2026-07-04",
+    coverageComplete: true as const,
+  };
+  const allocations: OpeningLevySourceAllocationInput[] =
+    options.allocations ??
+    (originalCountry === "GB"
+      ? []
+      : [
+          ...["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"].map(
+            (region) => ({ programKey: "ca_wcb", region, federalAccountId: null, amount: "0" }),
+          ),
+          ...["BC", "MB", "NL", "ON"].map((region) => ({
+            programKey: "ca_eht",
+            region,
+            federalAccountId: null,
+            amount: "0",
+          })),
+          { programKey: "ca_cnt", region: "QC", federalAccountId: null, amount: "0" },
+        ]);
+  const original = await db.execute<{ report: string }>(
+    sql`
     select jsonb_build_object('legalEmployerId', ${fx.subsidiaryId}::text,
       'originalOpening', to_jsonb(b),
       'openingChildren', public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year),
@@ -287,12 +366,16 @@ async function qualifyOriginalOpening(fx: AdoptionFixture, options: {
       from payroll_opening_balances b
      where b.org_id = ${fx.orgId} and b.employee_party_id = ${fx.employeeId}
        and b.tax_year = 2026
-  `, "objects");
+  `,
+    "objects",
+  );
   assert.equal(original.length, 1);
   const bytes = Buffer.from(original[0]!.report);
-  const sha = createHash('sha256').update(bytes).digest('hex');
-  const folderId = randomUUID(), fileId = randomUUID(), versionId = randomUUID();
-  await grantScratchPermissions(fx.orgId, fx.actorId, ['payroll.read', 'payroll.run']);
+  const sha = createHash("sha256").update(bytes).digest("hex");
+  const folderId = randomUUID(),
+    fileId = randomUUID(),
+    versionId = randomUUID();
+  await grantScratchPermissions(fx.orgId, fx.actorId, ["payroll.read", "payroll.run"]);
   await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
     values(${folderId},${fx.orgId},'Original payroll reports',true,${fx.actorId},${fx.actorId},${fx.actorId})`);
   await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
@@ -300,33 +383,69 @@ async function qualifyOriginalOpening(fx: AdoptionFixture, options: {
   await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
     values(${versionId},${fileId},1,${bytes.length},'application/json',${sha},${fx.actorId})`);
   await db.execute(sql`insert into file_blobs(version_id,bytes) values(${versionId},${bytes})`);
-  await db.execute(sql`update files set current_version_id=${versionId} where org_id=${fx.orgId} and id=${fileId}`);
+  await db.execute(
+    sql`update files set current_version_id=${versionId} where org_id=${fx.orgId} and id=${fileId}`,
+  );
   await withOrgContext(fx.orgId, async () => {
-    const context = await readOpeningEmployerContext({orgId:fx.orgId,actorId:fx.actorId,
-      employeePartyId:fx.employeeId,taxYear:2026,allowedSubsidiaryIds:null});
+    const context = await readOpeningEmployerContext({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      employeePartyId: fx.employeeId,
+      taxYear: 2026,
+      allowedSubsidiaryIds: null,
+    });
     assert.ok(context.record);
-    await qualifyOpeningEmployerAuthority({orgId:fx.orgId,actorId:fx.actorId,
-      openingBalanceId:context.record.id,subsidiaryId:fx.subsidiaryId,
-      expectedOpeningSha256:context.record.openingSha256,
-      sourceFileId:fileId,sourceVersionId:versionId,sourceSha256:sha,
-      sourceReference:'Original legal employer employee YTD report',
-      reason:'Retain original employer authority for payroll carry-ins',allowedSubsidiaryIds:null});
+    await qualifyOpeningEmployerAuthority({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      openingBalanceId: context.record.id,
+      subsidiaryId: fx.subsidiaryId,
+      expectedOpeningSha256: context.record.openingSha256,
+      sourceFileId: fileId,
+      sourceVersionId: versionId,
+      sourceSha256: sha,
+      sourceReference: "Original legal employer employee YTD report",
+      reason: "Retain original employer authority for payroll carry-ins",
+      allowedSubsidiaryIds: null,
+    });
     if (options.completeSource) {
-      await assert.rejects(componentYearToDate(db, {
-        orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId: randomUUID(),
-      }), /no complete statutory levy source allocation/);
-      const source = await readOpeningLevySourceContext({ orgId: fx.orgId, actorId: fx.actorId,
-        employeePartyId: fx.employeeId, taxYear: 2026, sourceFileId: fileId, allowedSubsidiaryIds: null });
-      assert.ok(source.record); assert.ok(source.source);
+      await assert.rejects(
+        componentYearToDate(db, {
+          orgId: fx.orgId,
+          employeePartyId: fx.employeeId,
+          taxYear: 2026,
+          componentId: randomUUID(),
+        }),
+        /no complete statutory levy source allocation/,
+      );
+      const source = await readOpeningLevySourceContext({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        employeePartyId: fx.employeeId,
+        taxYear: 2026,
+        sourceFileId: fileId,
+        allowedSubsidiaryIds: null,
+      });
+      assert.ok(source.record);
+      assert.ok(source.source);
       assert.equal(source.record.openingBalanceId, context.record.id);
-      assert.equal(source.source.versionId, versionId); assert.equal(source.source.sha256, sha);
-      await qualifyOpeningLevySourceAuthority({ orgId: fx.orgId, actorId: fx.actorId,
-        openingBalanceId: context.record.id, expectedOpeningSha256: context.record.openingSha256,
+      assert.equal(source.source.versionId, versionId);
+      assert.equal(source.source.sha256, sha);
+      await qualifyOpeningLevySourceAuthority({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        openingBalanceId: context.record.id,
+        expectedOpeningSha256: context.record.openingSha256,
         expectedOpeningChildrenSha256: source.record.openingChildrenSha256,
-        sourceFileId: fileId, sourceVersionId: versionId, sourceSha256: sha,
-        sourceReference: 'Complete original employer component and statutory year-to-date report',
-        reason: 'Certify original country, coverage and component carry-ins', allowedSubsidiaryIds: null,
-        ...facts, allocations });
+        sourceFileId: fileId,
+        sourceVersionId: versionId,
+        sourceSha256: sha,
+        sourceReference: "Complete original employer component and statutory year-to-date report",
+        reason: "Certify original country, coverage and component carry-ins",
+        allowedSubsidiaryIds: null,
+        ...facts,
+        allocations,
+      });
     }
   });
 }
@@ -335,8 +454,12 @@ async function qualifyOriginalOpening(fx: AdoptionFixture, options: {
 async function seedRun(
   fx: AdoptionFixture,
   options: {
-    periodStart?: string; periodEnd?: string; payDate?: string; taxYear?: number;
-    runStatus?: string; calculated?: boolean;
+    periodStart?: string;
+    periodEnd?: string;
+    payDate?: string;
+    taxYear?: number;
+    runStatus?: string;
+    calculated?: boolean;
   } = {},
 ): Promise<string> {
   const documentId = randomUUID();
@@ -344,8 +467,14 @@ async function seedRun(
   const periodEnd = options.periodEnd ?? "2026-07-18";
   const payDate = options.payDate ?? "2026-07-21";
   await seedPayrollDocument(fx.orgId, documentId, {
-    kind: 'pay_run', documentNumber: `PAY-${documentId.slice(0, 8)}`, subsidiaryId: fx.subsidiaryId,
-    documentDate: payDate, currency: 'CAD', status: 'draft', createdBy: fx.actorId, updatedBy: fx.actorId,
+    kind: "pay_run",
+    documentNumber: `PAY-${documentId.slice(0, 8)}`,
+    subsidiaryId: fx.subsidiaryId,
+    documentDate: payDate,
+    currency: "CAD",
+    status: "draft",
+    createdBy: fx.actorId,
+    updatedBy: fx.actorId,
   });
   await db.execute(sql`
     insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
@@ -377,57 +506,93 @@ test(
     try {
       // Everything the prior provider withheld to 4 July, one row.
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{
-          employeePartyId: fx.employeeId,
-          amounts: {
-            pensionableYtd: "84000.00", insurableYtd: "68000.00",
-            cppYtd: "4400.00", cpp2Ytd: "0", eiYtd: "1050.00",
-            taxableYtd: "84000.00", taxYtd: "21000.00",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: {
+              pensionableYtd: "84000.00",
+              insurableYtd: "68000.00",
+              cppYtd: "4400.00",
+              cpp2Ytd: "0",
+              eiYtd: "1050.00",
+              taxableYtd: "84000.00",
+              taxYtd: "21000.00",
+            },
           },
-        }],
+        ],
       });
 
       await qualifyOriginalOpening(fx, { completeSource: true });
 
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
-          workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-          costingBasis: 'actual',
+          workedOn: workedOn,
+          hours: 20,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       }
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       const result = await calculatePayRun({
-        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
       });
       assert.deepEqual(result.errors, []);
 
-      const stub = (await db.execute<{ gross: string; net_pay: string; factors: Record<string, string> }>(sql`
+      const stub = (
+        await db.execute<{ gross: string; net_pay: string; factors: Record<string, string> }>(
+          sql`
         select gross, net_pay, factors from pay_stubs
          where org_id = ${fx.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(stub.gross, "2400.0000"); // 80h × $30
 
       // The T4127 engine, called directly with the SAME carry-in, is the oracle.
-      const withCarryIn = calculateT4127(assessedCanadianWages({
-        payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
-        income: "2400.00", pensionable: "2400.00", insurable: "2400.00",
-        federalClaimCode: 1, provincialClaimCode: 1,
-        ytd: { cpp: "4400.0000", cpp2: "0.0000", ei: "1050.0000", pensionable: "84000.0000" },
-      }));
+      const withCarryIn = calculateT4127(
+        assessedCanadianWages({
+          payDate: "2026-07-21",
+          province: "ON",
+          periodsPerYear: 26,
+          income: "2400.00",
+          pensionable: "2400.00",
+          insurable: "2400.00",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          ytd: { cpp: "4400.0000", cpp2: "0.0000", ei: "1050.0000", pensionable: "84000.0000" },
+        }),
+      );
       assert.equal(stub.factors.C, withCarryIn.cpp);
       assert.equal(stub.factors.EI, withCarryIn.ei);
 
       // And the carry-in must actually BITE — the same period with no opening
       // balance withholds strictly more.
-      const fresh = calculateT4127(assessedCanadianWages({
-        payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
-        income: "2400.00", pensionable: "2400.00", insurable: "2400.00",
-        federalClaimCode: 1, provincialClaimCode: 1,
-      }));
+      const fresh = calculateT4127(
+        assessedCanadianWages({
+          payDate: "2026-07-21",
+          province: "ON",
+          periodsPerYear: 26,
+          income: "2400.00",
+          pensionable: "2400.00",
+          insurable: "2400.00",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+        }),
+      );
       assert.ok(
         cmp(add(fresh.cpp, fresh.ei), add(withCarryIn.cpp, withCarryIn.ei)) > 0,
         "an employee already at the ceiling must not be charged the full period amount again",
@@ -448,23 +613,41 @@ test(
     const fx = await seedAdoption();
     try {
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{
-          employeePartyId: fx.employeeId,
-          amounts: {
-            pensionableYtd: "60000", insurableYtd: "0", taxableYtd: "60000", nonPeriodicYtd: "5000",
-            cpp2BonusYtd: "120.50", qcCsbYtd: "85", ficaWithheldYtd: "4000",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: {
+              pensionableYtd: "60000",
+              insurableYtd: "0",
+              taxableYtd: "60000",
+              nonPeriodicYtd: "5000",
+              cpp2BonusYtd: "120.50",
+              qcCsbYtd: "85",
+              ficaWithheldYtd: "4000",
+            },
           },
-        }],
+        ],
       });
 
-      await qualifyOriginalOpening(fx, { completeSource: true, coverageEnd: '2026-06-06' });
+      await qualifyOriginalOpening(fx, { completeSource: true, coverageEnd: "2026-06-06" });
 
-      const currentDocumentId = await seedRun(fx, {runStatus: "draft", calculated: false,
-        periodStart: "2026-06-07", periodEnd: "2026-06-20", payDate: "2026-06-23"});
+      const currentDocumentId = await seedRun(fx, {
+        runStatus: "draft",
+        calculated: false,
+        periodStart: "2026-06-07",
+        periodEnd: "2026-06-20",
+        payDate: "2026-06-23",
+      });
       const ca = await employeeYtd({
-        tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
-        taxYear: 2026, documentId: currentDocumentId, subsidiaryId: fx.subsidiaryId,
+        tx: db,
+        orgId: fx.orgId,
+        employeePartyId: fx.employeeId,
+        taxYear: 2026,
+        documentId: currentDocumentId,
+        subsidiaryId: fx.subsidiaryId,
       });
       assert.equal(ca.f5b, "120.5000");
       assert.equal(ca.qc_csb, "85.0000");
@@ -472,10 +655,19 @@ test(
       // not the contents of a neighbouring YTD column.
       assert.equal(ca.qpip_employer, "0.0000");
 
-      await assert.rejects(usEmployeeYtd({
-        tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
-        taxYear: 2026, documentId: currentDocumentId,
-      }, "ON"), /US.*(currency|dollar)|USD/);
+      await assert.rejects(
+        usEmployeeYtd(
+          {
+            tx: db,
+            orgId: fx.orgId,
+            employeePartyId: fx.employeeId,
+            taxYear: 2026,
+            documentId: currentDocumentId,
+          },
+          "ON",
+        ),
+        /US.*(currency|dollar)|USD/,
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -509,51 +701,98 @@ test(
         update employee_roles set worker_comp_group_id = ${groupId}
          where org_id = ${fx.orgId} and party_id = ${fx.employeeId}`);
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{
-          employeePartyId: fx.employeeId,
-          amounts: {
-            pensionableYtd: "60000", insurableYtd: "60000",
-            cppYtd: "2800", cpp2Ytd: "200", eiYtd: "900", qpipYtd: "442.90",
-            taxableYtd: "60000", taxYtd: "8000",
-            qpipEmployerYtd: "620.06", wcbAssessableYtd: "1000",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: {
+              pensionableYtd: "60000",
+              insurableYtd: "60000",
+              cppYtd: "2800",
+              cpp2Ytd: "200",
+              eiYtd: "900",
+              qpipYtd: "442.90",
+              taxableYtd: "60000",
+              taxYtd: "8000",
+              qpipEmployerYtd: "620.06",
+              wcbAssessableYtd: "1000",
+            },
           },
-        }],
+        ],
       });
 
-      await qualifyOriginalOpening(fx, { completeSource: true, coverageEnd: '2026-06-06', allocations: [
-        ...['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(region =>
-          ({ programKey: 'ca_wcb', region, federalAccountId: null, amount: region === 'QC' ? '1000' : '0' })),
-        ...['BC','MB','NL','ON'].map(region => ({ programKey: 'ca_eht', region, federalAccountId: null, amount: '0' })),
-        { programKey: 'ca_cnt', region: 'QC', federalAccountId: null, amount: '0' },
-      ] });
+      await qualifyOriginalOpening(fx, {
+        completeSource: true,
+        coverageEnd: "2026-06-06",
+        allocations: [
+          ...["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"].map(
+            (region) => ({
+              programKey: "ca_wcb",
+              region,
+              federalAccountId: null,
+              amount: region === "QC" ? "1000" : "0",
+            }),
+          ),
+          ...["BC", "MB", "NL", "ON"].map((region) => ({
+            programKey: "ca_eht",
+            region,
+            federalAccountId: null,
+            amount: "0",
+          })),
+          { programKey: "ca_cnt", region: "QC", federalAccountId: null, amount: "0" },
+        ],
+      });
 
-      const currentDocumentId = await seedRun(fx, {runStatus: "draft", calculated: false,
-        periodStart: "2026-06-07", periodEnd: "2026-06-20", payDate: "2026-06-23"});
+      const currentDocumentId = await seedRun(fx, {
+        runStatus: "draft",
+        calculated: false,
+        periodStart: "2026-06-07",
+        periodEnd: "2026-06-20",
+        payDate: "2026-06-23",
+      });
       const ytd = await employeeYtd({
-        tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
-        taxYear: 2026, documentId: currentDocumentId, subsidiaryId: fx.subsidiaryId,
+        tx: db,
+        orgId: fx.orgId,
+        employeePartyId: fx.employeeId,
+        taxYear: 2026,
+        documentId: currentDocumentId,
+        subsidiaryId: fx.subsidiaryId,
       });
       assert.equal(ytd.qpip_employer, "620.0600");
 
       for (const day of ["2026-07-06", "2026-07-13"]) {
         await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
-          workedOn: day, hours: '40', status: 'approved', isBillable: false, billingStatus: 'unbilled',
-          costingBasis: 'actual',
+          workedOn: day,
+          hours: "40",
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       }
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate: "2026-07-21",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
+        payDate: "2026-07-21",
       });
       const calculated = await calculatePayRun({
-        orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
       });
       assert.deepEqual(calculated.errors, []);
-      const stub = (await db.execute<{ factors: Record<string, string> }>(sql`
+      const stub = await db.execute<{ factors: Record<string, string> }>(
+        sql`
         select factors from pay_stubs
          where org_id = ${fx.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       const factors = stub[0]!.factors;
       assert.equal(factors.QPIP_ER, "0.0000");
       // A reached ceiling retains a known zero basis for later history reads.
@@ -576,9 +815,16 @@ async function seedCappedComponent(
 ): Promise<string> {
   const componentId = randomUUID();
   await seedPayrollComponent(fx.orgId, componentId, {
-    code: options.code ?? "RRSP", name: 'RRSP employee contribution', kind: 'deduction', basis: 'percent_of_gross',
-    value: options.percent ?? "5", basisCapAmountPerYear: options.capPerYear ?? "23500", taxTreatment: 'pension_f',
-    isActive: true, createdBy: fx.actorId, updatedBy: fx.actorId,
+    code: options.code ?? "RRSP",
+    name: "RRSP employee contribution",
+    kind: "deduction",
+    basis: "percent_of_gross",
+    value: options.percent ?? "5",
+    basisCapAmountPerYear: options.capPerYear ?? "23500",
+    taxTreatment: "pension_f",
+    isActive: true,
+    createdBy: fx.actorId,
+    updatedBy: fx.actorId,
   });
   if (options.assign !== false) {
     await db.execute(sql`
@@ -604,21 +850,34 @@ test(
 
       // What the prior provider already deferred this year.
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{
-          employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "84000", insurableYtd: "0", taxableYtd: "84000" },
-          components: { RRSP: "23000.00" },
-        }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "84000", insurableYtd: "0", taxableYtd: "84000" },
+            components: { RRSP: "23000.00" },
+          },
+        ],
       });
 
-      await assert.rejects(componentYearToDate(db, {
-        orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
-      }), /opening payer is not source-qualified/);
+      await assert.rejects(
+        componentYearToDate(db, {
+          orgId: fx.orgId,
+          employeePartyId: fx.employeeId,
+          taxYear: 2026,
+          componentId,
+        }),
+        /opening payer is not source-qualified/,
+      );
       await qualifyOriginalOpening(fx, { completeSource: true });
 
       const ytd = await componentYearToDate(db, {
-        orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+        orgId: fx.orgId,
+        employeePartyId: fx.employeeId,
+        taxYear: 2026,
+        componentId,
       });
       assert.equal(ytd, "23000.0000");
 
@@ -643,20 +902,40 @@ test(
 
       // Committed stub lines and the opening are ONE year-to-date, summed.
       const documentId = await seedRun(fx, {
-        periodStart: "2026-08-02", periodEnd: "2026-08-15", payDate: "2026-08-18",
+        periodStart: "2026-08-02",
+        periodEnd: "2026-08-15",
+        payDate: "2026-08-18",
         runStatus: "committed",
       });
       const stubId = randomUUID();
-      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
-        id: stubId, province: 'ON', periodsPerYear: 26, payDate: '2026-08-18', taxYear: 2026, currency: 'CAD',
-        gross: '2400', netPay: '1900', factors: {}, createdBy: fx.actorId, updatedBy: fx.actorId,
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+        country: "CA",
+        countrySource: "calculation",
+        id: stubId,
+        province: "ON",
+        periodsPerYear: 26,
+        payDate: "2026-08-18",
+        taxYear: 2026,
+        currency: "CAD",
+        gross: "2400",
+        netPay: "1900",
+        factors: {},
+        createdBy: fx.actorId,
+        updatedBy: fx.actorId,
       });
       await seedPayrollLine(fx.orgId, stubId, componentId, {
-        kind: 'deduction', description: 'RRSP', amount: '120.0001', createdBy: fx.actorId, updatedBy: fx.actorId,
+        kind: "deduction",
+        description: "RRSP",
+        amount: "120.0001",
+        createdBy: fx.actorId,
+        updatedBy: fx.actorId,
       });
       assert.equal(
         await componentYearToDate(db, {
-          orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+          orgId: fx.orgId,
+          employeePartyId: fx.employeeId,
+          taxYear: 2026,
+          componentId,
         }),
         "23120.0001",
       );
@@ -664,72 +943,166 @@ test(
       // down on every pass.
       assert.equal(
         await componentYearToDate(db, {
-          orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+          orgId: fx.orgId,
+          employeePartyId: fx.employeeId,
+          taxYear: 2026,
+          componentId,
           excludeRunDocumentId: documentId,
         }),
         "23000.0000",
       );
-      assert.equal((await db.execute(sql`update documents set status='voided', void_reason='Retired annual-room fixture', voided_at=now(), voided_by=${fx.actorId}
-        where org_id=${fx.orgId} and id=${documentId} returning id`, "objects")).length, 1);
-      assert.equal(await componentYearToDate(db, {
-        orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
-      }), "23000.0000", "voided documents do not consume annual room");
+      assert.equal(
+        (
+          await db.execute(
+            sql`update documents set status='voided', void_reason='Retired annual-room fixture', voided_at=now(), voided_by=${fx.actorId}
+        where org_id=${fx.orgId} and id=${documentId} returning id`,
+            "objects",
+          )
+        ).length,
+        1,
+      );
+      assert.equal(
+        await componentYearToDate(db, {
+          orgId: fx.orgId,
+          employeePartyId: fx.employeeId,
+          taxYear: 2026,
+          componentId,
+        }),
+        "23000.0000",
+        "voided documents do not consume annual room",
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
   },
 );
 
-test("a sealed GB component-only original remains in the employee-year cap after a legal-employer and country move", { skip: !DB }, async () => {
-  const fx = await seedAdoption();
-  try {
-    const componentId = await seedCappedComponent(fx);
-    const otherComponentId = await seedCappedComponent(fx, { code: 'OTHER', assign: false });
-    assert.deepEqual((await saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-      rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: '12345.6789' } }] })).errors, []);
-    const read = (componentId: string) => componentYearToDate(db, {
-      orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
-    });
-    await assert.rejects(read(componentId), /opening payer is not source-qualified/);
-    await assert.rejects(read(otherComponentId), /opening payer is not source-qualified/);
-    assert.equal((await db.execute(sql`update subsidiaries set country='GB',base_currency='GBP'
-      where org_id=${fx.orgId} and id=${fx.subsidiaryId} returning id`, "objects")).length, 1);
-    await qualifyOriginalOpening(fx, { completeSource: true, originalCountry: 'GB' });
-    assert.equal(await read(componentId), '12345.6789');
-    assert.equal(await read(otherComponentId), '0.0000', 'carry-in belongs to the exact configured component');
-    const successor = randomUUID();
-    assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-      values(${successor},${fx.orgId},${fx.subsidiaryId},'Successor legal employer','CAD','CA') returning id`, "objects")).length, 1);
-    await seedWorkerEmployment(fx.orgId, fx.employeeId, successor);
-    assert.equal((await db.execute(sql`update parties set subsidiary_id=${successor}
-      where org_id=${fx.orgId} and id=${fx.employeeId} returning id`, "objects")).length, 1);
-    assert.equal((await db.execute(sql`delete from employee_payroll_profiles
-      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`, "objects")).length, 1);
-    assert.equal(await read(componentId), '12345.6789');
-    assert.equal(await read(otherComponentId), '0.0000');
-  } finally {
-    await dropScratchOrgReporting(fx.orgId);
-  }
-});
+test(
+  "a sealed GB component-only original remains in the employee-year cap after a legal-employer and country move",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      const componentId = await seedCappedComponent(fx);
+      const otherComponentId = await seedCappedComponent(fx, { code: "OTHER", assign: false });
+      assert.deepEqual(
+        (
+          await saveOpeningBalances({
+            orgId: fx.orgId,
+            actorId: fx.actorId,
+            taxYear: 2026,
+            rows: [
+              { employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: "12345.6789" } },
+            ],
+          })
+        ).errors,
+        [],
+      );
+      const read = (componentId: string) =>
+        componentYearToDate(db, {
+          orgId: fx.orgId,
+          employeePartyId: fx.employeeId,
+          taxYear: 2026,
+          componentId,
+        });
+      await assert.rejects(read(componentId), /opening payer is not source-qualified/);
+      await assert.rejects(read(otherComponentId), /opening payer is not source-qualified/);
+      assert.equal(
+        (
+          await db.execute(
+            sql`update subsidiaries set country='GB',base_currency='GBP'
+      where org_id=${fx.orgId} and id=${fx.subsidiaryId} returning id`,
+            "objects",
+          )
+        ).length,
+        1,
+      );
+      await qualifyOriginalOpening(fx, { completeSource: true, originalCountry: "GB" });
+      assert.equal(await read(componentId), "12345.6789");
+      assert.equal(
+        await read(otherComponentId),
+        "0.0000",
+        "carry-in belongs to the exact configured component",
+      );
+      const successor = randomUUID();
+      assert.equal(
+        (
+          await db.execute(
+            sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+      values(${successor},${fx.orgId},${fx.subsidiaryId},'Successor legal employer','CAD','CA') returning id`,
+            "objects",
+          )
+        ).length,
+        1,
+      );
+      await seedWorkerEmployment(fx.orgId, fx.employeeId, successor);
+      assert.equal(
+        (
+          await db.execute(
+            sql`update parties set subsidiary_id=${successor}
+      where org_id=${fx.orgId} and id=${fx.employeeId} returning id`,
+            "objects",
+          )
+        ).length,
+        1,
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`delete from employee_payroll_profiles
+      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`,
+            "objects",
+          )
+        ).length,
+        1,
+      );
+      assert.equal(await read(componentId), "12345.6789");
+      assert.equal(await read(otherComponentId), "0.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
 
-test("an unsigned retained all-zero opening and component child consume no annual room", { skip: !DB }, async () => {
-  const fx = await seedAdoption();
-  try {
-    const componentId = await seedCappedComponent(fx);
-    const opening = await db.execute<{ id: string }>(sql`insert into payroll_opening_balances
+test(
+  "an unsigned retained all-zero opening and component child consume no annual room",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      const componentId = await seedCappedComponent(fx);
+      const opening = await db.execute<{ id: string }>(
+        sql`insert into payroll_opening_balances
       (org_id,employee_party_id,tax_year,created_by,updated_by)
-      values(${fx.orgId},${fx.employeeId},2026,${fx.actorId},${fx.actorId}) returning id`, "objects");
-    assert.equal(opening.length, 1);
-    assert.equal((await db.execute(sql`insert into payroll_opening_balance_components
+      values(${fx.orgId},${fx.employeeId},2026,${fx.actorId},${fx.actorId}) returning id`,
+        "objects",
+      );
+      assert.equal(opening.length, 1);
+      assert.equal(
+        (
+          await db.execute(
+            sql`insert into payroll_opening_balance_components
       (org_id,opening_balance_id,component_id,ytd_amount,created_by,updated_by)
-      values(${fx.orgId},${opening[0]!.id},${componentId},'0',${fx.actorId},${fx.actorId}) returning component_id`, "objects")).length, 1);
-    assert.equal(await componentYearToDate(db, {
-      orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
-    }), '0.0000');
-  } finally {
-    await dropScratchOrgReporting(fx.orgId);
-  }
-});
+      values(${fx.orgId},${opening[0]!.id},${componentId},'0',${fx.actorId},${fx.actorId}) returning component_id`,
+            "objects",
+          )
+        ).length,
+        1,
+      );
+      assert.equal(
+        await componentYearToDate(db, {
+          orgId: fx.orgId,
+          employeePartyId: fx.employeeId,
+          taxYear: 2026,
+          componentId,
+        }),
+        "0.0000",
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
 
 test(
   "a carry-in whose only content is a component year-to-date survives, and clearing takes both",
@@ -739,35 +1112,49 @@ test(
     try {
       const componentId = await seedCappedComponent(fx);
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
         rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: "1000" } }],
       });
       const stored = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(stored.entered, 1, "an all-zero statutory row must not delete the components");
       assert.equal(stored.rows[0]!.componentAmounts[componentId], "1000.0000");
-      assert.deepEqual(stored.components.map((c) => c.code), ["RRSP"]);
+      assert.deepEqual(
+        stored.components.map((c) => c.code),
+        ["RRSP"],
+      );
 
       // A caller that says nothing about components keeps them: silence is not
       // an instruction to delete a deferral year-to-date.
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50", insurableYtd: "0" } }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50", insurableYtd: "0" } },
+        ],
       });
       const kept = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(kept.rows[0]!.componentAmounts[componentId], "1000.0000");
 
       // Clearing everything is a delete, and takes the children with it.
       const cleared = await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
         rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: {} }],
       });
       assert.equal(cleared.deleted, 1);
       const after = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(after.entered, 0);
       assert.deepEqual(after.rows[0]!.componentAmounts, {});
-      const orphans = (await db.execute<{ n: number }>(sql`
+      const orphans = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from payroll_opening_balance_components
-         where org_id = ${fx.orgId}`, "objects"));
+         where org_id = ${fx.orgId}`,
+        "objects",
+      );
       assert.equal(orphans[0]!.n, 0, "the child rows must cascade with their parent");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -786,19 +1173,32 @@ test(
     try {
       const componentId = await seedCappedComponent(fx);
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
         rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: "1000" } }],
       });
       await db.execute(sql`
         update pay_components set basis_cap_amount_per_year = null where id = ${componentId}`);
 
       const fields = await openingComponentFields(fx.orgId, 2026);
-      assert.deepEqual(fields.map((f) => [f.code, f.capped]), [["RRSP", false]]);
+      assert.deepEqual(
+        fields.map((f) => [f.code, f.capped]),
+        [["RRSP", false]],
+      );
 
       // A save that names nothing must not clear it.
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50", insurableYtd: "0" }, components: {} }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "50", insurableYtd: "0" },
+            components: {},
+          },
+        ],
       });
       const after = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(after.rows[0]!.componentAmounts[componentId], "1000.0000");
@@ -806,7 +1206,9 @@ test(
       // And it cannot be re-entered while the cap is gone.
       await assert.rejects(
         saveOpeningBalances({
-          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          taxYear: 2026,
           rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: "2000" } }],
         }),
         /has no annual basis cap/,
@@ -825,28 +1227,46 @@ test(
     try {
       const componentId = await seedCappedComponent(fx);
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{
-          employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "84000", insurableYtd: "0", taxableYtd: "84000" },
-          components: { RRSP: "23000" },
-        }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "84000", insurableYtd: "0", taxableYtd: "84000" },
+            components: { RRSP: "23000" },
+          },
+        ],
       });
 
       const documentId = await seedRun(fx, { runStatus: "committed" });
-      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
-        province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD', gross: '2400',
-        netPay: '1900', factors: {}, createdBy: fx.actorId, updatedBy: fx.actorId,
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+        country: "CA",
+        countrySource: "calculation",
+        province: "ON",
+        periodsPerYear: 26,
+        payDate: "2026-07-21",
+        taxYear: 2026,
+        currency: "CAD",
+        gross: "2400",
+        netPay: "1900",
+        factors: {},
+        createdBy: fx.actorId,
+        updatedBy: fx.actorId,
       });
 
       await assert.rejects(
         saveOpeningBalances({
-          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-          rows: [{
-            employeePartyId: fx.employeeId,
-            amounts: { pensionableYtd: "84000", insurableYtd: "0", taxableYtd: "84000" },
-            components: { RRSP: "1" },
-          }],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          taxYear: 2026,
+          rows: [
+            {
+              employeePartyId: fx.employeeId,
+              amounts: { pensionableYtd: "84000", insurableYtd: "0", taxableYtd: "84000" },
+              components: { RRSP: "1" },
+            },
+          ],
         }),
         (error: unknown) => {
           assert.ok(error instanceof OpeningBalanceSaveError);
@@ -877,25 +1297,39 @@ test(
       assert.ok(warned, "expected a component carry-in warning");
       assert.equal(warned.severity, "warning");
       assert.equal(warned.detail, "RRSP");
-      assert.deepEqual(warned.employees.map((e) => e.name), [fx.employeeName]);
+      assert.deepEqual(
+        warned.employees.map((e) => e.name),
+        [fx.employeeName],
+      );
 
       // A statutory row alone does NOT answer the component question — this is
       // exactly the hole: the row warning goes quiet and the cap still restarts.
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0" } }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "84000", insurableYtd: "0" },
+          },
+        ],
       });
       assert.equal(openingItem(await payRunReadiness(fx.orgId, documentId)), undefined);
       assert.ok(item(await payRunReadiness(fx.orgId, documentId)));
 
       // Entering the component year-to-date settles it.
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{
-          employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "84000", insurableYtd: "0" },
-          components: { RRSP: "23000" },
-        }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "84000", insurableYtd: "0" },
+            components: { RRSP: "23000" },
+          },
+        ],
       });
       assert.equal(item(await payRunReadiness(fx.orgId, documentId)), undefined);
     } finally {
@@ -920,7 +1354,10 @@ test(
 
       // Assigned to somebody this employer first hired inside the period: they
       // cannot have consumed any of the limit HERE earlier in the year.
-      const { employeeId: newHire } = await seedEmployee(fx, { name: "Newly Hired", hiredOn: "2026-07-06" });
+      const { employeeId: newHire } = await seedEmployee(fx, {
+        name: "Newly Hired",
+        hiredOn: "2026-07-06",
+      });
       const componentId = await seedCappedComponent(fx, { code: "RRSP2" });
       await db.execute(sql`
         insert into employee_pay_components (org_id, employee_party_id, component_id, value,
@@ -929,7 +1366,10 @@ test(
                 ${fx.actorId}, ${fx.actorId})`);
       const warned = item(await payRunReadiness(fx.orgId, documentId));
       assert.ok(warned, "the assigned long-tenured employee is still warned about");
-      assert.deepEqual(warned.employees.map((e) => e.name), [fx.employeeName]);
+      assert.deepEqual(
+        warned.employees.map((e) => e.name),
+        [fx.employeeName],
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -950,8 +1390,15 @@ test(
     const fx = await seedAdoption();
     try {
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", insurableYtd: "0", cppYtd: "2000" } }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "40000", insurableYtd: "0", cppYtd: "2000" },
+          },
+        ],
       });
       const before = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(before.rows[0]!.locked, false);
@@ -959,9 +1406,20 @@ test(
 
       // A committed run consumes the carry-in.
       const documentId = await seedRun(fx, { runStatus: "committed" });
-      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
-        province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD', gross: '2400',
-        netPay: '1900', pensionableEarnings: '2400', insurableEarnings: '2400', factors: {}, createdBy: fx.actorId,
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+        country: "CA",
+        countrySource: "calculation",
+        province: "ON",
+        periodsPerYear: 26,
+        payDate: "2026-07-21",
+        taxYear: 2026,
+        currency: "CAD",
+        gross: "2400",
+        netPay: "1900",
+        pensionableEarnings: "2400",
+        insurableEarnings: "2400",
+        factors: {},
+        createdBy: fx.actorId,
         updatedBy: fx.actorId,
       });
 
@@ -971,8 +1429,15 @@ test(
 
       await assert.rejects(
         saveOpeningBalances({
-          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-          rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "1", insurableYtd: "0", cppYtd: "1" } }],
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          taxYear: 2026,
+          rows: [
+            {
+              employeePartyId: fx.employeeId,
+              amounts: { pensionableYtd: "1", insurableYtd: "0", cppYtd: "1" },
+            },
+          ],
         }),
         (error: unknown) => {
           assert.ok(error instanceof OpeningBalanceSaveError);
@@ -988,8 +1453,12 @@ test(
 
       // A different tax year is a different fact and stays editable.
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2027,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "10", insurableYtd: "0" } }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2027,
+        rows: [
+          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "10", insurableYtd: "0" } },
+        ],
       });
       assert.equal(
         (await openingBalancesForYear(fx.orgId, 2027)).rows[0]!.amounts?.pensionableYtd,
@@ -1013,26 +1482,54 @@ test(
     try {
       const { employeeId: second } = await seedEmployee(fx, { name: "Alex Second" });
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
         rows: [
-          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", insurableYtd: "0", cppYtd: "2000" } },
-          { employeePartyId: second, amounts: { pensionableYtd: "30000", insurableYtd: "0", cppYtd: "1500" } },
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "40000", insurableYtd: "0", cppYtd: "2000" },
+          },
+          {
+            employeePartyId: second,
+            amounts: { pensionableYtd: "30000", insurableYtd: "0", cppYtd: "1500" },
+          },
         ],
       });
 
       // A committed run consumes only the first employee's carry-in.
       const documentId = await seedRun(fx, { runStatus: "committed" });
-      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, { country: 'CA', countrySource: 'calculation',
-        province: 'ON', periodsPerYear: 26, payDate: '2026-07-21', taxYear: 2026, currency: 'CAD', gross: '2400',
-        netPay: '1900', pensionableEarnings: '2400', insurableEarnings: '2400', factors: {}, createdBy: fx.actorId,
+      await seedPayrollStub(fx.orgId, documentId, fx.employeeId, fx.employmentId, {
+        country: "CA",
+        countrySource: "calculation",
+        province: "ON",
+        periodsPerYear: 26,
+        payDate: "2026-07-21",
+        taxYear: 2026,
+        currency: "CAD",
+        gross: "2400",
+        netPay: "1900",
+        pensionableEarnings: "2400",
+        insurableEarnings: "2400",
+        factors: {},
+        createdBy: fx.actorId,
         updatedBy: fx.actorId,
       });
 
       const result = await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, strictLocks: false,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        strictLocks: false,
         rows: [
-          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "1", insurableYtd: "0", cppYtd: "1" } },
-          { employeePartyId: second, amounts: { pensionableYtd: "31000", insurableYtd: "0", cppYtd: "1600" } },
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "1", insurableYtd: "0", cppYtd: "1" },
+          },
+          {
+            employeePartyId: second,
+            amounts: { pensionableYtd: "31000", insurableYtd: "0", cppYtd: "1600" },
+          },
         ],
       });
       assert.equal(result.errors.length, 0, "a skip is not a failure");
@@ -1053,32 +1550,36 @@ test(
   },
 );
 
-test(
-  "a rejected bulk load writes nothing at all",
-  { skip: !DB },
-  async () => {
-    // Half a workforce carried in and half restarted at zero is harder to find
-    // than an outright failure, so a single bad row aborts the whole load.
-    const fx = await seedAdoption();
-    try {
-      const { employeeId: second } = await seedEmployee(fx, { name: "Alex Second" });
-      await assert.rejects(
-        saveOpeningBalances({
-          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-          rows: [
-            { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", insurableYtd: "0" } },
-            { employeePartyId: second, amounts: { pensionableYtd: "100", insurableYtd: "0", cppYtd: "40000" } },
-          ],
-        }),
-        OpeningBalanceSaveError,
-      );
-      const after = await openingBalancesForYear(fx.orgId, 2026);
-      assert.equal(after.entered, 0, "the valid row must not survive the rejected load");
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+test("a rejected bulk load writes nothing at all", { skip: !DB }, async () => {
+  // Half a workforce carried in and half restarted at zero is harder to find
+  // than an outright failure, so a single bad row aborts the whole load.
+  const fx = await seedAdoption();
+  try {
+    const { employeeId: second } = await seedEmployee(fx, { name: "Alex Second" });
+    await assert.rejects(
+      saveOpeningBalances({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "40000", insurableYtd: "0" },
+          },
+          {
+            employeePartyId: second,
+            amounts: { pensionableYtd: "100", insurableYtd: "0", cppYtd: "40000" },
+          },
+        ],
+      }),
+      OpeningBalanceSaveError,
+    );
+    const after = await openingBalancesForYear(fx.orgId, 2026);
+    assert.equal(after.entered, 0, "the valid row must not survive the rejected load");
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
   "an all-zero row clears the carry-in rather than storing a row of zeros",
@@ -1089,13 +1590,22 @@ test(
     const fx = await seedAdoption();
     try {
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "40000", insurableYtd: "0" } }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "40000", insurableYtd: "0" },
+          },
+        ],
       });
       assert.equal((await openingBalancesForYear(fx.orgId, 2026)).entered, 1);
 
       const cleared = await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
         rows: [{ employeePartyId: fx.employeeId, amounts: {} }],
       });
       assert.equal(cleared.deleted, 1);
@@ -1122,8 +1632,15 @@ test(
       const readiness = await payRunReadiness(fx.orgId, documentId);
       const item = openingItem(readiness);
       assert.ok(item, `expected a mid-year adoption warning, got ${codes(readiness).join(", ")}`);
-      assert.equal(item.severity, "warning", "a new employer legitimately has none — never a blocker");
-      assert.deepEqual(item.employees.map((e) => e.name), [fx.employeeName]);
+      assert.equal(
+        item.severity,
+        "warning",
+        "a new employer legitimately has none — never a blocker",
+      );
+      assert.deepEqual(
+        item.employees.map((e) => e.name),
+        [fx.employeeName],
+      );
       assert.equal(item.detail, "2026");
       assert.equal(item.href, "/payroll/opening-balances?year=2026");
     } finally {
@@ -1132,24 +1649,27 @@ test(
   },
 );
 
-test(
-  "the adoption warning stays silent once the carry-in is entered",
-  { skip: !DB },
-  async () => {
-    const fx = await seedAdoption();
-    try {
-      const documentId = await seedRun(fx);
-      assert.ok(openingItem(await payRunReadiness(fx.orgId, documentId)));
-      await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000", insurableYtd: "0", cppYtd: "4400" } }],
-      });
-      assert.equal(openingItem(await payRunReadiness(fx.orgId, documentId)), undefined);
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+test("the adoption warning stays silent once the carry-in is entered", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const documentId = await seedRun(fx);
+    assert.ok(openingItem(await payRunReadiness(fx.orgId, documentId)));
+    await saveOpeningBalances({
+      orgId: fx.orgId,
+      actorId: fx.actorId,
+      taxYear: 2026,
+      rows: [
+        {
+          employeePartyId: fx.employeeId,
+          amounts: { pensionableYtd: "84000", insurableYtd: "0", cppYtd: "4400" },
+        },
+      ],
+    });
+    assert.equal(openingItem(await payRunReadiness(fx.orgId, documentId)), undefined);
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
   "a period that starts in January is the start of the year, so it never warns",
@@ -1158,7 +1678,9 @@ test(
     const fx = await seedAdoption();
     try {
       const documentId = await seedRun(fx, {
-        periodStart: "2026-01-04", periodEnd: "2026-01-17", payDate: "2026-01-20",
+        periodStart: "2026-01-04",
+        periodEnd: "2026-01-17",
+        payDate: "2026-01-20",
       });
       assert.equal(openingItem(await payRunReadiness(fx.orgId, documentId)), undefined);
     } finally {
@@ -1167,34 +1689,32 @@ test(
   },
 );
 
-test(
-  "only the FIRST committed run of the tax year asks the question",
-  { skip: !DB },
-  async () => {
-    const fx = await seedAdoption();
-    try {
-      const documentId = await seedRun(fx);
-      assert.ok(openingItem(await payRunReadiness(fx.orgId, documentId)));
+test("only the FIRST committed run of the tax year asks the question", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const documentId = await seedRun(fx);
+    assert.ok(openingItem(await payRunReadiness(fx.orgId, documentId)));
 
-      // An earlier run in the same year has already committed: the answer is
-      // settled, and repeating the warning on every payday is noise the
-      // operator learns to click past.
-      await seedRun(fx, {
-        periodStart: "2026-06-07", periodEnd: "2026-06-20", payDate: "2026-06-23",
-        runStatus: "committed",
-      });
-      assert.equal(openingItem(await payRunReadiness(fx.orgId, documentId)), undefined);
+    // An earlier run in the same year has already committed: the answer is
+    // settled, and repeating the warning on every payday is noise the
+    // operator learns to click past.
+    await seedRun(fx, {
+      periodStart: "2026-06-07",
+      periodEnd: "2026-06-20",
+      payDate: "2026-06-23",
+      runStatus: "committed",
+    });
+    assert.equal(openingItem(await payRunReadiness(fx.orgId, documentId)), undefined);
 
-      // A committed run in a DIFFERENT tax year does not settle this year.
-      await db.execute(sql`
+    // A committed run in a DIFFERENT tax year does not settle this year.
+    await db.execute(sql`
         update pay_runs set tax_year = 2025
          where org_id = ${fx.orgId} and document_id <> ${documentId}`);
-      assert.ok(openingItem(await payRunReadiness(fx.orgId, documentId)));
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+    assert.ok(openingItem(await payRunReadiness(fx.orgId, documentId)));
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
   "someone hired inside this period has nothing to carry in and is not named",
@@ -1209,7 +1729,10 @@ test(
       const documentId = await seedRun(fx);
       const item = openingItem(await payRunReadiness(fx.orgId, documentId));
       assert.ok(item);
-      assert.deepEqual(item.employees.map((e) => e.name), [fx.employeeName]);
+      assert.deepEqual(
+        item.employees.map((e) => e.name),
+        [fx.employeeName],
+      );
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -1220,63 +1743,68 @@ test(
 /* A WCB rate change can never leave a run "fresh"                     */
 /* ------------------------------------------------------------------ */
 
-test(
-  "changing a WCB class rate makes a calculated run stale",
-  { skip: !DB },
-  async () => {
-    // worker_comp_groups had NO audit columns, so a changed WSIB rate was
-    // undetectable: the run reported itself fresh and committed the premium at
-    // the old rate. This test fails outright (column does not exist) against
-    // the table as it stood.
-    const fx = await seedAdoption();
-    try {
-      const columns = (await db.execute<{ column_name: string }>(sql`
+test("changing a WCB class rate makes a calculated run stale", { skip: !DB }, async () => {
+  // worker_comp_groups had NO audit columns, so a changed WSIB rate was
+  // undetectable: the run reported itself fresh and committed the premium at
+  // the old rate. This test fails outright (column does not exist) against
+  // the table as it stood.
+  const fx = await seedAdoption();
+  try {
+    const columns = await db.execute<{ column_name: string }>(
+      sql`
         select column_name from information_schema.columns
          where table_schema = 'public' and table_name = 'worker_comp_groups'
-      `, "objects"));
-      const present = new Set(columns.map((r) => r.column_name));
-      for (const column of ["created_at", "created_by", "updated_at", "updated_by"]) {
-        assert.ok(present.has(column), `worker_comp_groups is missing ${column}`);
-      }
+      `,
+      "objects",
+    );
+    const present = new Set(columns.map((r) => r.column_name));
+    for (const column of ["created_at", "created_by", "updated_at", "updated_by"]) {
+      assert.ok(present.has(column), `worker_comp_groups is missing ${column}`);
+    }
 
-      const groupId = randomUUID();
-      await db.execute(sql`
+    const groupId = randomUUID();
+    await db.execute(sql`
         insert into worker_comp_groups (id, org_id, code, name, rate_percent, is_active,
                                         created_by, updated_by)
         values (${groupId}, ${fx.orgId}, 'WSIB 704', 'Electrical', '3.5000', true,
                 ${fx.actorId}, ${fx.actorId})`);
-      await db.execute(sql`
+    await db.execute(sql`
         update employee_roles set worker_comp_group_id = ${groupId}
          where org_id = ${fx.orgId} and party_id = ${fx.employeeId}`);
 
-      const documentId = await seedRun(fx);
-      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors, []);
-      assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
+    const documentId = await seedRun(fx);
+    assert.deepEqual(
+      (await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors,
+      [],
+    );
+    assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
 
-      // The premium is rate × assessable earnings. Move the rate.
-      await db.execute(sql`
+    // The premium is rate × assessable earnings. Move the rate.
+    await db.execute(sql`
         update worker_comp_groups set rate_percent = '5.2000', updated_at = now(),
                updated_by = ${fx.actorId}
          where id = ${groupId}`);
-      const stale = await payRunStaleness(fx.orgId, documentId);
-      assert.equal(stale.stale, true);
-      assert.ok(
-        stale.reasons.includes("workerComp"),
-        `expected a workerComp reason, got ${stale.reasons.join(", ") || "none"}`,
-      );
+    const stale = await payRunStaleness(fx.orgId, documentId);
+    assert.equal(stale.stale, true);
+    assert.ok(
+      stale.reasons.includes("workerComp"),
+      `expected a workerComp reason, got ${stale.reasons.join(", ") || "none"}`,
+    );
 
-      // The assessable MAXIMUM moves money too, and is caught the same way.
-      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors, []);
-      assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
-      await db.execute(sql`
+    // The assessable MAXIMUM moves money too, and is caught the same way.
+    assert.deepEqual(
+      (await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors,
+      [],
+    );
+    assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
+    await db.execute(sql`
         update worker_comp_groups set max_assessable = '112500.0000', updated_at = now()
          where id = ${groupId}`);
-      assert.ok((await payRunStaleness(fx.orgId, documentId)).reasons.includes("workerComp"));
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-    }
-  },
-);
+    assert.ok((await payRunStaleness(fx.orgId, documentId)).reasons.includes("workerComp"));
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
   "a WCB edit that forgets to stamp updated_at is still caught through the audit trail",
@@ -1295,7 +1823,10 @@ test(
         values (${groupId}, ${fx.orgId}, 'WSIB 704', 'Electrical', '3.5000', true,
                 ${fx.actorId}, ${fx.actorId})`);
       const documentId = await seedRun(fx);
-      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors, []);
+      assert.deepEqual(
+        (await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors,
+        [],
+      );
       assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
 
       await db.execute(sql`
@@ -1311,27 +1842,26 @@ test(
   },
 );
 
-test(
-  "an unrelated org's WCB rate change does not make this run stale",
-  { skip: !DB },
-  async () => {
-    const fx = await seedAdoption();
-    const other = await seedAdoption();
-    try {
-      const documentId = await seedRun(fx);
-      assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors, []);
-      await db.execute(sql`
+test("an unrelated org's WCB rate change does not make this run stale", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  const other = await seedAdoption();
+  try {
+    const documentId = await seedRun(fx);
+    assert.deepEqual(
+      (await calculatePayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId })).errors,
+      [],
+    );
+    await db.execute(sql`
         insert into worker_comp_groups (org_id, code, name, rate_percent, is_active,
                                         created_by, updated_by)
         values (${other.orgId}, 'WSIB 704', 'Electrical', '3.5000', true,
                 ${other.actorId}, ${other.actorId})`);
-      assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
-    } finally {
-      await dropScratchOrgReporting(fx.orgId);
-      await dropScratchOrgReporting(other.orgId);
-    }
-  },
-);
+    assert.deepEqual((await payRunStaleness(fx.orgId, documentId)).reasons, []);
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+    await dropScratchOrgReporting(other.orgId);
+  }
+});
 
 test(
   "a calculated stub takes only the remaining annual room, not a second full limit",
@@ -1347,60 +1877,91 @@ test(
     try {
       const componentId = await seedCappedComponent(fx, { capPerYear: "23500", percent: "5" });
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{
-          employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "84000.00", insurableYtd: "0", taxableYtd: "84000.00" },
-          // $100 of room left against the $23,500 ceiling.
-          components: { RRSP: "23400.00" },
-        }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "84000.00", insurableYtd: "0", taxableYtd: "84000.00" },
+            // $100 of room left against the $23,500 ceiling.
+            components: { RRSP: "23400.00" },
+          },
+        ],
       });
 
       await qualifyOriginalOpening(fx, { completeSource: true });
 
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
-          workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-          costingBasis: 'actual',
+          workedOn: workedOn,
+          hours: 20,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       }
       const run = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
       assert.deepEqual(
-        (await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId }))
-          .errors,
+        (
+          await calculatePayRun({
+            orgId: fx.orgId,
+            documentId: run.documentId,
+            actorId: fx.actorId,
+          })
+        ).errors,
         [],
       );
 
       const deduction = async (documentId: string) =>
-        (await db.execute<{ amount: string }>(sql`
+        (
+          await db.execute<{ amount: string }>(
+            sql`
           select l.amount from pay_stub_lines l
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${documentId}
              and l.component_id = ${componentId}
-        `, "objects"))[0]?.amount ?? null;
+        `,
+            "objects",
+          )
+        )[0]?.amount ?? null;
 
       // 5% of $2,400 is $120; only $100 of annual room remains.
       assert.equal(await deduction(run.documentId), "100.0000");
 
       // Certified carry-ins cannot be removed to restart the annual ceiling.
-      await assert.rejects(db.execute(sql`
+      await assert.rejects(
+        db.execute(sql`
         delete from payroll_opening_balance_components oc
           using payroll_opening_balances b
          where b.id = oc.opening_balance_id and oc.org_id = ${fx.orgId}
            and b.employee_party_id = ${fx.employeeId}`),
-        error => errorChainMatches(error, /immutable|sealed|certified|qualified/));
+        (error) => errorChainMatches(error, /immutable|sealed|certified|qualified/),
+      );
       assert.equal(
         await componentYearToDate(db, {
-          orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+          orgId: fx.orgId,
+          employeePartyId: fx.employeeId,
+          taxYear: 2026,
+          componentId,
         }),
         "23400.0000",
       );
       assert.deepEqual(
-        (await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId }))
-          .errors,
+        (
+          await calculatePayRun({
+            orgId: fx.orgId,
+            documentId: run.documentId,
+            actorId: fx.actorId,
+          })
+        ).errors,
         [],
       );
       assert.equal(await deduction(run.documentId), "100.0000");
@@ -1424,7 +1985,10 @@ test("blank insurable / unemployment wages beside earned wages refuse instead of
     /Insurable \/ unemployment wages is blank/,
   );
   // An exempt employee states the zero; nothing earned needs no statement.
-  assert.equal(normalizeOpeningBalance({ pensionableYtd: "40000", insurableYtd: "0" }).insurableYtd, "0.0000");
+  assert.equal(
+    normalizeOpeningBalance({ pensionableYtd: "40000", insurableYtd: "0" }).insurableYtd,
+    "0.0000",
+  );
   assert.equal(normalizeOpeningBalance({ taxableYtd: "100" }).insurableYtd, "0.0000");
 });
 
@@ -1436,8 +2000,13 @@ test("second-order opening amounts normalize, refuse transpositions, and keep a 
   // TP-1015's CSB1 (additional-QPP attributed to bonuses), and the FICA
   // dollars behind Massachusetts' $2,000 retirement-contribution subtraction.
   const clean = normalizeOpeningBalance({
-    pensionableYtd: "60000", insurableYtd: "0", taxableYtd: "60000", nonPeriodicYtd: "5000",
-    cpp2BonusYtd: "120.50", qcCsbYtd: "85", ficaWithheldYtd: "4000",
+    pensionableYtd: "60000",
+    insurableYtd: "0",
+    taxableYtd: "60000",
+    nonPeriodicYtd: "5000",
+    cpp2BonusYtd: "120.50",
+    qcCsbYtd: "85",
+    ficaWithheldYtd: "4000",
   });
   assert.equal(clean.cpp2BonusYtd, "120.5000");
   assert.equal(clean.qcCsbYtd, "85.0000");
@@ -1448,8 +2017,10 @@ test("second-order opening amounts normalize, refuse transpositions, and keep a 
   // move, so only exact money and never-negative apply. The EHT carry-in
   // joins them: the exemption moves too, so it is ceiling-less as well.
   const employer = normalizeOpeningBalance({
-    pensionableYtd: "60000", insurableYtd: "60000",
-    qpipEmployerYtd: "620.06", wcbAssessableYtd: "1000",
+    pensionableYtd: "60000",
+    insurableYtd: "60000",
+    qpipEmployerYtd: "620.06",
+    wcbAssessableYtd: "1000",
     ehtRemunerationYtd: "500000",
   });
   assert.equal(employer.qpipEmployerYtd, "620.0600");
@@ -1464,7 +2035,12 @@ test("second-order opening amounts normalize, refuse transpositions, and keep a 
   // Part-to-whole, like every other cross-field check: bonus-attributed
   // history cannot exceed the bonuses, FICA dollars cannot exceed the wages.
   assert.throws(
-    () => normalizeOpeningBalance({ taxableYtd: "5000", nonPeriodicYtd: "5000", cpp2BonusYtd: "5000.01" }),
+    () =>
+      normalizeOpeningBalance({
+        taxableYtd: "5000",
+        nonPeriodicYtd: "5000",
+        cpp2BonusYtd: "5000.01",
+      }),
     /exceeds/,
   );
   assert.throws(
@@ -1472,16 +2048,18 @@ test("second-order opening amounts normalize, refuse transpositions, and keep a 
     /exceeds/,
   );
   assert.throws(
-    () => normalizeOpeningBalance({ pensionableYtd: "60000", insurableYtd: "0", ficaWithheldYtd: "60000.01" }),
+    () =>
+      normalizeOpeningBalance({
+        pensionableYtd: "60000",
+        insurableYtd: "0",
+        ficaWithheldYtd: "60000.01",
+      }),
     /exceeds/,
   );
 
   // A row carrying ONLY second-order history is a carry-in, not an empty row
   // the saver may delete.
-  assert.equal(
-    isEmptyOpeningBalance({ cpp2BonusYtd: "120.5000" }, {}),
-    false,
-  );
+  assert.equal(isEmptyOpeningBalance({ cpp2BonusYtd: "120.5000" }, {}), false);
 });
 
 test("the pack-declared second-order fields are wired to every consumer", () => {
@@ -1504,50 +2082,63 @@ test("the pack-declared second-order fields are wired to every consumer", () => 
   assert.deepEqual(byKey.get("ehtRemunerationYtd")?.packs, ["CA"]);
 });
 
-test(
-  "component carry-ins stay in their tenant across re-saves",
-  { skip: !DB },
-  async () => {
-    // The component upsert keys on (opening_balance_id, component_id) and
-    // pins the tenant on the conflict write: a bare org_id there is
-    // ambiguous (42702) and every re-save fails. Two orgs carry the same
-    // component code; re-saving one org's year-to-date through the
-    // conflict branch must leave the other's untouched.
-    const fxA = await seedAdoption();
-    const fxB = await seedAdoption();
-    try {
-      const componentA = await seedCappedComponent(fxA);
-      const componentB = await seedCappedComponent(fxB);
-      for (const [fx, amount] of [[fxA, "1000"], [fxB, "2000"]] as const) {
-        const saved = await saveOpeningBalances({
-          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-          rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: amount } }],
-        });
-        assert.deepEqual(saved.errors, []);
-      }
-      // Same employee, same year: the component row already exists, so this
-      // save takes the ON CONFLICT DO UPDATE branch.
-      const resaved = await saveOpeningBalances({
-        orgId: fxA.orgId, actorId: fxA.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fxA.employeeId, amounts: {}, components: { RRSP: "3000" } }],
+test("component carry-ins stay in their tenant across re-saves", { skip: !DB }, async () => {
+  // The component upsert keys on (opening_balance_id, component_id) and
+  // pins the tenant on the conflict write: a bare org_id there is
+  // ambiguous (42702) and every re-save fails. Two orgs carry the same
+  // component code; re-saving one org's year-to-date through the
+  // conflict branch must leave the other's untouched.
+  const fxA = await seedAdoption();
+  const fxB = await seedAdoption();
+  try {
+    const componentA = await seedCappedComponent(fxA);
+    const componentB = await seedCappedComponent(fxB);
+    for (const [fx, amount] of [
+      [fxA, "1000"],
+      [fxB, "2000"],
+    ] as const) {
+      const saved = await saveOpeningBalances({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: amount } }],
       });
-      assert.deepEqual(resaved.errors, []);
-      await qualifyOriginalOpening(fxA, { completeSource: true });
-      await qualifyOriginalOpening(fxB, { completeSource: true });
-      assert.equal(
-        await componentYearToDate(db, { orgId: fxA.orgId, employeePartyId: fxA.employeeId, taxYear: 2026, componentId: componentA }),
-        "3000.0000",
-      );
-      assert.equal(
-        await componentYearToDate(db, { orgId: fxB.orgId, employeePartyId: fxB.employeeId, taxYear: 2026, componentId: componentB }),
-        "2000.0000",
-      );
-    } finally {
-      await dropScratchOrgReporting(fxA.orgId);
-      await dropScratchOrgReporting(fxB.orgId);
+      assert.deepEqual(saved.errors, []);
     }
-  },
-);
+    // Same employee, same year: the component row already exists, so this
+    // save takes the ON CONFLICT DO UPDATE branch.
+    const resaved = await saveOpeningBalances({
+      orgId: fxA.orgId,
+      actorId: fxA.actorId,
+      taxYear: 2026,
+      rows: [{ employeePartyId: fxA.employeeId, amounts: {}, components: { RRSP: "3000" } }],
+    });
+    assert.deepEqual(resaved.errors, []);
+    await qualifyOriginalOpening(fxA, { completeSource: true });
+    await qualifyOriginalOpening(fxB, { completeSource: true });
+    assert.equal(
+      await componentYearToDate(db, {
+        orgId: fxA.orgId,
+        employeePartyId: fxA.employeeId,
+        taxYear: 2026,
+        componentId: componentA,
+      }),
+      "3000.0000",
+    );
+    assert.equal(
+      await componentYearToDate(db, {
+        orgId: fxB.orgId,
+        employeePartyId: fxB.employeeId,
+        taxYear: 2026,
+        componentId: componentB,
+      }),
+      "2000.0000",
+    );
+  } finally {
+    await dropScratchOrgReporting(fxA.orgId);
+    await dropScratchOrgReporting(fxB.orgId);
+  }
+});
 
 /* ------------------------------------------------------------------ */
 /* Per-program insurable-earnings carry-in (0342, C-13)                 */
@@ -1561,10 +2152,9 @@ const QPIP_PROGRAM: DeclaredProgramBaseField = {
 };
 
 test("program carry-ins are exact money, and an undeclared program key is refused by name", () => {
-  assert.deepEqual(
-    normalizeOpeningProgramBases({ qpip: "12000.00" }, [QPIP_PROGRAM]),
-    { qpip: "12000.0000" },
-  );
+  assert.deepEqual(normalizeOpeningProgramBases({ qpip: "12000.00" }, [QPIP_PROGRAM]), {
+    qpip: "12000.0000",
+  });
   // Blank is omitted, not zero-stored: the saver replaces the set, so an
   // explicit zero and an absence must stay distinguishable upstream.
   assert.deepEqual(normalizeOpeningProgramBases({ qpip: "" }, [QPIP_PROGRAM]), {});
@@ -1604,7 +2194,9 @@ test(
     const fx = await seedAdoption();
     try {
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
         rows: [{ employeePartyId: fx.employeeId, amounts: {}, programs: { qpip: "12000" } }],
       });
       const stored = await openingBalancesForYear(fx.orgId, 2026);
@@ -1616,8 +2208,12 @@ test(
       // Silence keeps the stored base: the grid omits programs for hidden
       // packs, and omission must not clear a carry-in the operator cannot see.
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50", insurableYtd: "0" } }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50", insurableYtd: "0" } },
+        ],
       });
       const kept = await openingBalancesForYear(fx.orgId, 2026);
       assert.deepEqual(kept.rows[0]!.programAmounts, { qpip: "12000.0000" });
@@ -1625,27 +2221,41 @@ test(
       // Replacing the set and clearing everything behave like the components:
       // {} clears the base but keeps a row other amounts still need...
       await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{
-          employeePartyId: fx.employeeId,
-          amounts: { pensionableYtd: "50", insurableYtd: "0" }, programs: {},
-        }],
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [
+          {
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "50", insurableYtd: "0" },
+            programs: {},
+          },
+        ],
       });
       const clearedBase = await openingBalancesForYear(fx.orgId, 2026);
       assert.deepEqual(clearedBase.rows[0]!.programAmounts, {});
-      assert.equal(clearedBase.entered, 1, "the statutory row survives its program base being cleared");
+      assert.equal(
+        clearedBase.entered,
+        1,
+        "the statutory row survives its program base being cleared",
+      );
 
       // ...while clearing everything deletes the row and cascades the sidecar.
       const cleared = await saveOpeningBalances({
-        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
         rows: [{ employeePartyId: fx.employeeId, amounts: {}, programs: {} }],
       });
       assert.equal(cleared.deleted, 1);
       const after = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(after.entered, 0);
-      const orphans = (await db.execute<{ n: number }>(sql`
+      const orphans = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from payroll_opening_program_bases
-         where org_id = ${fx.orgId}`, "objects"));
+         where org_id = ${fx.orgId}`,
+        "objects",
+      );
       assert.equal(orphans[0]!.n, 0, "the sidecar rows must cascade with their parent");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -1661,7 +2271,9 @@ test(
     try {
       await assert.rejects(
         saveOpeningBalances({
-          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          taxYear: 2026,
           rows: [{ employeePartyId: fx.employeeId, amounts: {}, programs: { qpiq: "100" } }],
         }),
         /"qpiq" is not a declared contribution program/,

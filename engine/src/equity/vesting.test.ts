@@ -49,9 +49,16 @@ test("installments land on each step and sum to the quantity", () => {
   const installments = vestingInstallments(terms({ quantity: 1000n }));
   assert.equal(installments.length, 37);
   assert.deepEqual(installments[0], { date: "2025-01-15", quantity: 250n, cumulative: 250n });
-  assert.equal(installments.reduce((sum, item) => sum + item.quantity, 0n), 1000n);
+  assert.equal(
+    installments.reduce((sum, item) => sum + item.quantity, 0n),
+    1000n,
+  );
   assert.equal(installments.at(-1)!.date, "2028-01-15");
-  for (const installment of installments) assert.equal(scheduledVested(terms({ quantity: 1000n }), installment.date), installment.cumulative);
+  for (const installment of installments)
+    assert.equal(
+      scheduledVested(terms({ quantity: 1000n }), installment.date),
+      installment.cumulative,
+    );
   assert.equal(finalVestingDate(terms()), "2028-01-15");
 });
 
@@ -63,7 +70,12 @@ test("quarterly steps keep the full cliff catch-up and then step every three mon
 });
 
 test("a cliff between steps vests its whole catch-up on the cliff date", () => {
-  const schedule = terms({ quantity: 1200n, vestingMonths: 12, cliffMonths: 4, vestingFrequency: "quarterly" });
+  const schedule = terms({
+    quantity: 1200n,
+    vestingMonths: 12,
+    cliffMonths: 4,
+    vestingFrequency: "quarterly",
+  });
   assert.equal(scheduledVested(schedule, "2024-05-15"), 400n);
   assert.equal(scheduledVested(schedule, "2024-06-15"), 400n);
   assert.equal(scheduledVested(schedule, "2024-07-15"), 600n);
@@ -71,8 +83,14 @@ test("a cliff between steps vests its whole catch-up on the cliff date", () => {
 
 test("dated tranches vest on their dates", () => {
   const schedule = terms({
-    quantity: 300n, vestingMonths: null, cliffMonths: null, vestingFrequency: null,
-    vestingTranches: [{ date: "2024-06-30", quantity: 100n }, { date: "2025-06-30", quantity: 200n }],
+    quantity: 300n,
+    vestingMonths: null,
+    cliffMonths: null,
+    vestingFrequency: null,
+    vestingTranches: [
+      { date: "2024-06-30", quantity: 100n },
+      { date: "2025-06-30", quantity: 200n },
+    ],
   });
   validateVestingTerms(schedule);
   assert.equal(scheduledVested(schedule, "2024-06-29"), 0n);
@@ -81,34 +99,77 @@ test("dated tranches vest on their dates", () => {
 });
 
 test("no schedule means fully vested from the issue date", () => {
-  const schedule = terms({ vestingMonths: null, cliffMonths: null, vestingFrequency: null, vestingStart: null });
+  const schedule = terms({
+    vestingMonths: null,
+    cliffMonths: null,
+    vestingFrequency: null,
+    vestingStart: null,
+  });
   assert.equal(scheduledVested(schedule, "2024-01-14"), 0n);
   assert.equal(scheduledVested(schedule, "2024-01-15"), 4800n);
-  assert.deepEqual(vestingInstallments(schedule), [{ date: "2024-01-15", quantity: 4800n, cumulative: 4800n }]);
+  assert.deepEqual(vestingInstallments(schedule), [
+    { date: "2024-01-15", quantity: 4800n, cumulative: 4800n },
+  ]);
 });
 
 test("schedules the math cannot honour refuse by name", () => {
   const refuses = (overrides: Partial<VestingTerms>) =>
-    assert.throws(() => validateVestingTerms(terms(overrides)), (error: unknown) => error instanceof EquityError && error.code === "equity_vesting_invalid");
+    assert.throws(
+      () => validateVestingTerms(terms(overrides)),
+      (error: unknown) => error instanceof EquityError && error.code === "equity_vesting_invalid",
+    );
   refuses({ cliffMonths: 60 });
   refuses({ vestingFrequency: null });
   refuses({ vestingStart: null });
-  refuses({ vestingMonths: null, cliffMonths: null, vestingFrequency: null, vestingTranches: [{ date: "2024-06-30", quantity: 100n }] });
   refuses({
-    quantity: 300n, vestingMonths: null, cliffMonths: null, vestingFrequency: null,
-    vestingTranches: [{ date: "2025-06-30", quantity: 200n }, { date: "2024-06-30", quantity: 100n }],
+    vestingMonths: null,
+    cliffMonths: null,
+    vestingFrequency: null,
+    vestingTranches: [{ date: "2024-06-30", quantity: 100n }],
+  });
+  refuses({
+    quantity: 300n,
+    vestingMonths: null,
+    cliffMonths: null,
+    vestingFrequency: null,
+    vestingTranches: [
+      { date: "2025-06-30", quantity: 200n },
+      { date: "2024-06-30", quantity: 100n },
+    ],
   });
   assert.throws(() => parseVestingTranches([{ date: "2024-02-30", quantity: "10" }]), EquityError);
   assert.throws(() => parseVestingTranches([{ date: "2024-02-03", quantity: "1.5" }]), EquityError);
-  assert.deepEqual(parseVestingTranches([{ date: "2024-02-03", quantity: "10" }]), [{ date: "2024-02-03", quantity: 10n }]);
+  assert.deepEqual(parseVestingTranches([{ date: "2024-02-03", quantity: "10" }]), [
+    { date: "2024-02-03", quantity: 10n },
+  ]);
 });
 
 test("acceleration fires only on its trigger and vests a share of the unvested remainder", () => {
   const single = { acceleration: "single" as const, accelerationPercent: "50" };
   const double = { acceleration: "double" as const, accelerationPercent: "100" };
-  assert.equal(acceleratedVested(1200n, 4800n, single, { changeOfControl: false, terminated: false }), 1200n);
-  assert.equal(acceleratedVested(1200n, 4800n, single, { changeOfControl: true, terminated: false }), 3000n);
-  assert.equal(acceleratedVested(1200n, 4800n, double, { changeOfControl: true, terminated: false }), 1200n);
-  assert.equal(acceleratedVested(1200n, 4800n, double, { changeOfControl: true, terminated: true }), 4800n);
-  assert.equal(acceleratedVested(1201n, 4800n, { acceleration: "single", accelerationPercent: "33.3333" }, { changeOfControl: true, terminated: false }), 2400n);
+  assert.equal(
+    acceleratedVested(1200n, 4800n, single, { changeOfControl: false, terminated: false }),
+    1200n,
+  );
+  assert.equal(
+    acceleratedVested(1200n, 4800n, single, { changeOfControl: true, terminated: false }),
+    3000n,
+  );
+  assert.equal(
+    acceleratedVested(1200n, 4800n, double, { changeOfControl: true, terminated: false }),
+    1200n,
+  );
+  assert.equal(
+    acceleratedVested(1200n, 4800n, double, { changeOfControl: true, terminated: true }),
+    4800n,
+  );
+  assert.equal(
+    acceleratedVested(
+      1201n,
+      4800n,
+      { acceleration: "single", accelerationPercent: "33.3333" },
+      { changeOfControl: true, terminated: false },
+    ),
+    2400n,
+  );
 });

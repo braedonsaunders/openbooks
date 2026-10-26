@@ -15,9 +15,9 @@ export const ACCOUNT_CLASS_EXPR = sql`case
   when a.type in ('liability_payable','liability_card','liability_current_other','liability_long_term') then 'liability'
   when a.type = 'equity' then 'equity'
   when a.type in ('income','income_other') then 'income'
-  else 'expense' end`
+  else 'expense' end`;
 
-export const ACCOUNT_STATUS_EXPR = sql`case when a.is_active then 'active' else 'inactive' end`
+export const ACCOUNT_STATUS_EXPR = sql`case when a.is_active then 'active' else 'inactive' end`;
 
 /**
  * Each account's balance including its subtree. Months before the current one
@@ -27,21 +27,29 @@ export const ACCOUNT_STATUS_EXPR = sql`case when a.is_active then 'active' else 
  * ran a recursive descendant roll-up over the raw lines once per listed
  * account, which scanned the ledger dozens of times per page.
  */
-export function accountBaseJoins(today: string, allowedSubsidiaryIds?: ReadonlySet<string> | null): SQL {
-  const ids = allowedSubsidiaryIds == null ? [] : [...allowedSubsidiaryIds]
-  const glSubsidiaryScope = allowedSubsidiaryIds == null
-    ? sql``
-    : ids.length
-      ? sql`and g.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])`
-      : sql`and false`
-  const lineSubsidiaryScope = allowedSubsidiaryIds == null
-    ? sql``
-    : ids.length
-      ? sql`and l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])`
-      : sql`and false`
-  const parentSubsidiaryScope = allowedSubsidiaryIds === undefined
-    ? sql``
-    : subsidiaryVisibleFilter(sql`parent.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })
+export function accountBaseJoins(
+  today: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+): SQL {
+  const ids = allowedSubsidiaryIds == null ? [] : [...allowedSubsidiaryIds];
+  const glSubsidiaryScope =
+    allowedSubsidiaryIds == null
+      ? sql``
+      : ids.length
+        ? sql`and g.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])`
+        : sql`and false`;
+  const lineSubsidiaryScope =
+    allowedSubsidiaryIds == null
+      ? sql``
+      : ids.length
+        ? sql`and l.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])`
+        : sql`and false`;
+  const parentSubsidiaryScope =
+    allowedSubsidiaryIds === undefined
+      ? sql``
+      : subsidiaryVisibleFilter(sql`parent.subsidiary_id`, allowedSubsidiaryIds, {
+          orgWideNull: true,
+        });
   return sql`
   left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id ${parentSubsidiaryScope}
   left join lateral (
@@ -95,7 +103,7 @@ export function accountBaseJoins(today: string, allowedSubsidiaryIds?: ReadonlyS
       from movement m, fy
      where a.type not in ('income','income_other','cogs','expense','expense_other','expense_deferred')
         or m.d >= fy.starts_on
-  ) account_balance on true`
+  ) account_balance on true`;
 }
 
 export const ACCOUNT_BUILT_IN_EXPR: Record<string, SQL> = {
@@ -107,7 +115,7 @@ export const ACCOUNT_BUILT_IN_EXPR: Record<string, SQL> = {
   balance: sql`account_balance.amount`,
   is_summary: sql`case when a.is_summary then 'Yes' else 'No' end`,
   status: ACCOUNT_STATUS_EXPR,
-}
+};
 
 export const ACCOUNT_SORTS: Record<string, SQL> = {
   number: sql`a.number`,
@@ -117,31 +125,40 @@ export const ACCOUNT_SORTS: Record<string, SQL> = {
   parent: sql`parent.name`,
   balance: sql`account_balance.amount`,
   status: sql`a.is_active`,
-}
+};
 
 function accountFilterPredicate(clause: FilterClause): SQL | null {
-  const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+  const value = Array.isArray(clause.value)
+    ? String(clause.value[0] ?? "")
+    : String(clause.value ?? "");
   const select = (column: SQL) => {
-    if (clause.operator === 'eq') return sql`${column} = ${value}`
-    if (clause.operator === 'ne') return sql`${column} <> ${value}`
-    if (clause.operator === 'in' || clause.operator === 'not_in') {
-      const values = (Array.isArray(clause.value) ? clause.value : [value]).map(String).filter(Boolean)
-      if (!values.length) return clause.operator === 'in' ? sql`false` : sql`true`
-      const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
-      return clause.operator === 'in' ? sql`${column} in (${list})` : sql`${column} not in (${list})`
+    if (clause.operator === "eq") return sql`${column} = ${value}`;
+    if (clause.operator === "ne") return sql`${column} <> ${value}`;
+    if (clause.operator === "in" || clause.operator === "not_in") {
+      const values = (Array.isArray(clause.value) ? clause.value : [value])
+        .map(String)
+        .filter(Boolean);
+      if (!values.length) return clause.operator === "in" ? sql`false` : sql`true`;
+      const list = sql.join(
+        values.map((item) => sql`${item}`),
+        sql`, `,
+      );
+      return clause.operator === "in"
+        ? sql`${column} in (${list})`
+        : sql`${column} not in (${list})`;
     }
-    return null
+    return null;
+  };
+  if (clause.key === "class") return select(ACCOUNT_CLASS_EXPR);
+  if (clause.key === "type") return select(sql`a.type`);
+  if (clause.key === "status") return select(ACCOUNT_STATUS_EXPR);
+  if (clause.key === "parent_id") {
+    const refused = uuidOrFalse(value);
+    if (refused) return refused;
+    if (clause.operator === "eq") return sql`a.parent_id = ${value}`;
+    if (clause.operator === "ne") return sql`a.parent_id <> ${value}`;
   }
-  if (clause.key === 'class') return select(ACCOUNT_CLASS_EXPR)
-  if (clause.key === 'type') return select(sql`a.type`)
-  if (clause.key === 'status') return select(ACCOUNT_STATUS_EXPR)
-  if (clause.key === 'parent_id') {
-    const refused = uuidOrFalse(value)
-    if (refused) return refused
-    if (clause.operator === 'eq') return sql`a.parent_id = ${value}`
-    if (clause.operator === 'ne') return sql`a.parent_id <> ${value}`
-  }
-  return null
+  return null;
 }
 
 export function accountWhere(
@@ -150,23 +167,29 @@ export function accountWhere(
   orgId: string,
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
-  const parts: SQL[] = [sql`a.org_id = ${orgId}`]
-  const savedViewOwnsActivity = view.filters.some((filter) => filter.key === 'status')
-  if (!adhoc.showInactive && !savedViewOwnsActivity) parts.push(sql`and a.is_active`)
+  const parts: SQL[] = [sql`a.org_id = ${orgId}`];
+  const savedViewOwnsActivity = view.filters.some((filter) => filter.key === "status");
+  if (!adhoc.showInactive && !savedViewOwnsActivity) parts.push(sql`and a.is_active`);
   if (allowedSubsidiaryIds) {
-    const ids = [...allowedSubsidiaryIds]
-    parts.push(ids.length ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
+    const ids = [...allowedSubsidiaryIds];
+    parts.push(
+      ids.length
+        ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[]))`
+        : sql`and false`,
+    );
   }
   for (const filter of view.filters) {
-    if (pushCustomFieldFilter(parts, filter, "a")) continue
-    const predicate = accountFilterPredicate(filter)
-    if (predicate) parts.push(sql`and ${predicate}`)
+    if (pushCustomFieldFilter(parts, filter, "a")) continue;
+    const predicate = accountFilterPredicate(filter);
+    if (predicate) parts.push(sql`and ${predicate}`);
   }
-  if (adhoc.filters?.class) parts.push(sql`and ${ACCOUNT_CLASS_EXPR} = ${adhoc.filters.class}`)
-  if (adhoc.filters?.type) parts.push(sql`and a.type = ${adhoc.filters.type}`)
+  if (adhoc.filters?.class) parts.push(sql`and ${ACCOUNT_CLASS_EXPR} = ${adhoc.filters.class}`);
+  if (adhoc.filters?.type) parts.push(sql`and a.type = ${adhoc.filters.type}`);
   if (adhoc.q) {
-    const query = `%${adhoc.q}%`
-    parts.push(sql`and (a.name ilike ${query} or a.number ilike ${query} or a.description ilike ${query})`)
+    const query = `%${adhoc.q}%`;
+    parts.push(
+      sql`and (a.name ilike ${query} or a.number ilike ${query} or a.description ilike ${query})`,
+    );
   }
-  return sql.join(parts, sql` `)
+  return sql.join(parts, sql` `);
 }

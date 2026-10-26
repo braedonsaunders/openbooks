@@ -245,12 +245,14 @@ export function residentWaivedWages(
 ): string {
   if (method?.kind !== "waive_when_work_region_withheld") return "0.0000";
   const taxByRegion = new Map(workRegionTaxes.map((tax) => [tax.region, toUnits(tax.amount)]));
-  return fromUnits(workRegionWages.reduce((covered, wages) => {
-    const isCoveredRegion = method.regions === undefined || method.regions.includes(wages.region);
-    return isCoveredRegion && (taxByRegion.get(wages.region) ?? 0n) > 0n
-      ? covered + toUnits(wages.amount)
-      : covered;
-  }, 0n));
+  return fromUnits(
+    workRegionWages.reduce((covered, wages) => {
+      const isCoveredRegion = method.regions === undefined || method.regions.includes(wages.region);
+      return isCoveredRegion && (taxByRegion.get(wages.region) ?? 0n) > 0n
+        ? covered + toUnits(wages.amount)
+        : covered;
+    }, 0n),
+  );
 }
 
 /** A levy the pack DECLARES and the engine cannot compute. Never silent. */
@@ -293,8 +295,8 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
   const workRegion = input.workRegion;
   if (!workRegion) {
     throw new PayrollWithholdingResolutionError(
-      "withholding cannot be resolved without a work region — the region an employee works in is "
-      + "the one fact every jurisdiction's rule starts from",
+      "withholding cannot be resolved without a work region — the region an employee works in is " +
+        "the one fact every jurisdiction's rule starts from",
     );
   }
 
@@ -304,9 +306,8 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
   const onFile = new Set(input.certificatesOnFile ?? []);
 
   // --- Step 0: normalize residence -----------------------------------------
-  const recorded = input.residenceRegion && input.residenceRegion !== ""
-    ? input.residenceRegion
-    : null;
+  const recorded =
+    input.residenceRegion && input.residenceRegion !== "" ? input.residenceRegion : null;
   const residenceRegion = recorded ?? workRegion;
   const residenceSource: "recorded" | "assumed" = recorded ? "recorded" : "assumed";
   trace.push(
@@ -316,9 +317,8 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
   );
 
   const work = regionWithholding(country, workRegion);
-  const residence = residenceRegion === workRegion
-    ? work
-    : regionWithholding(country, residenceRegion);
+  const residence =
+    residenceRegion === workRegion ? work : regionWithholding(country, residenceRegion);
 
   // --- Steps 1-3: the region level -----------------------------------------
   const sameRegion = residenceRegion === workRegion;
@@ -342,9 +342,9 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
       reciprocityUnclaimed = !claimed;
       if (claimed) {
         trace.push(
-          `reciprocity: ${workRegion}/${residenceRegion} agreement in force`
-          + (certificateKey ? ` on ${certificateKey}` : " (no certificate required)")
-          + ` — taxed by the ${agreement.taxedBy} region`,
+          `reciprocity: ${workRegion}/${residenceRegion} agreement in force` +
+            (certificateKey ? ` on ${certificateKey}` : " (no certificate required)") +
+            ` — taxed by the ${agreement.taxedBy} region`,
         );
         if (agreement.taxedBy === "residence") {
           workRegionRelieved = true;
@@ -358,33 +358,37 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
         }
       } else if (agreement.withoutCertificate === "refuse") {
         gaps.push({
-          region: workRegion, subRegion: null, severity: "blocking",
+          region: workRegion,
+          subRegion: null,
+          severity: "blocking",
           message:
-            `the employee resides in ${residenceRegion} and works in ${workRegion}, which have a `
-            + `reciprocity agreement, but ${agreement.certificateKey} is not on file and the `
-            + `${country} pack does not state which region withholds in that case. File the `
-            + "certificate, or correct the residence region.",
+            `the employee resides in ${residenceRegion} and works in ${workRegion}, which have a ` +
+            `reciprocity agreement, but ${agreement.certificateKey} is not on file and the ` +
+            `${country} pack does not state which region withholds in that case. File the ` +
+            "certificate, or correct the residence region.",
         });
       } else if (agreement.withoutCertificate === "residence_region") {
         workRegionRelieved = true;
         trace.push(
-          `reciprocity: ${agreement.certificateKey} is not on file, but the agreement applies `
-          + "without it",
+          `reciprocity: ${agreement.certificateKey} is not on file, but the agreement applies ` +
+            "without it",
         );
         pushRegionLevy(residence, "resident", "residence", "reciprocity", agreement);
       } else {
         trace.push(
-          `reciprocity: ${residenceRegion} residents working in ${workRegion} may be relieved of `
-          + `${workRegion} tax, but ${agreement.certificateKey} is NOT on file — ${workRegion} tax `
-          + "is withheld",
+          `reciprocity: ${residenceRegion} residents working in ${workRegion} may be relieved of ` +
+            `${workRegion} tax, but ${agreement.certificateKey} is NOT on file — ${workRegion} tax ` +
+            "is withheld",
         );
         gaps.push({
-          region: workRegion, subRegion: null, severity: "advisory",
+          region: workRegion,
+          subRegion: null,
+          severity: "advisory",
           message:
-            `${workRegion} income tax is being withheld from an employee who resides in `
-            + `${residenceRegion}. The two regions have a reciprocity agreement, but it only takes `
-            + `effect once the employee files ${agreement.certificateKey} with the employer. `
-            + "Collect the form to stop withholding to the wrong region.",
+            `${workRegion} income tax is being withheld from an employee who resides in ` +
+            `${residenceRegion}. The two regions have a reciprocity agreement, but it only takes ` +
+            `effect once the employee files ${agreement.certificateKey} with the employer. ` +
+            "Collect the form to stop withholding to the wrong region.",
         });
         pushRegionLevy(work, "nonresident", "work");
       }
@@ -406,13 +410,23 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
   // --- Steps 4-5: sub-region levies ----------------------------------------
   const workSubs = collectSubRegions(work, input.workSubRegions ?? [], "nonresident", "work");
   const residenceSubs = collectSubRegions(
-    residence, input.residenceSubRegions ?? [], "resident", "residence",
+    residence,
+    input.residenceSubRegions ?? [],
+    "resident",
+    "residence",
   );
   settleSubRegions(workSubs, residenceSubs);
 
   return {
-    country, workRegion, residenceRegion, residenceSource,
-    agreement, reciprocityUnclaimed, levies, gaps, trace,
+    country,
+    workRegion,
+    residenceRegion,
+    residenceSource,
+    agreement,
+    reciprocityUnclaimed,
+    levies,
+    gaps,
+    trace,
   };
 
   // -------------------------------------------------------------------------
@@ -434,17 +448,26 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
     }
     if (!region.implemented) {
       gaps.push({
-        region: region.region, subRegion: null, severity: "blocking",
+        region: region.region,
+        subRegion: null,
+        severity: "blocking",
         message:
-          `${region.label} withholding is not implemented — `
-          + (region.unimplementedReason
-            ?? `the ${country} pack has not transcribed ${region.region}'s tables`),
+          `${region.label} withholding is not implemented — ` +
+          (region.unimplementedReason ??
+            `the ${country} pack has not transcribed ${region.region}'s tables`),
       });
       return;
     }
     levies.push({
-      level: "region", region: region.region, subRegion: null, label: region.label,
-      basis, side, reach, certificateKey: region.certificateKey ?? null, agreement: from,
+      level: "region",
+      region: region.region,
+      subRegion: null,
+      label: region.label,
+      basis,
+      side,
+      reach,
+      certificateKey: region.certificateKey ?? null,
+      agreement: from,
     });
     trace.push(`${region.label} applies on a ${basis} basis`);
   }
@@ -457,8 +480,8 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
         return;
       case "not_required":
         trace.push(
-          `${residenceRegion} taxes its residents on out-of-region wages but does not require the `
-          + "employer to withhold",
+          `${residenceRegion} taxes its residents on out-of-region wages but does not require the ` +
+            "employer to withhold",
         );
         return;
       case "unknown": {
@@ -467,21 +490,24 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
         // answer for them is exactly the guess this whole module exists to
         // prevent.
         gaps.push({
-          region: residenceRegion, subRegion: null, severity: "blocking",
+          region: residenceRegion,
+          subRegion: null,
+          severity: "blocking",
           message:
-            `the employee resides in ${residenceRegion} and works in ${workRegion}, and the `
-            + `${country} pack has not established whether ${residenceRegion} requires an employer `
-            + "to withhold on wages earned outside it. Withholding only "
-            + `${workRegion} might under-withhold and withholding both might over-withhold, so `
-            + `neither is assumed. Establish ${residenceRegion}'s rule in the pack's withholding `
-            + "declaration, or correct the residence region if it is wrong.",
+            `the employee resides in ${residenceRegion} and works in ${workRegion}, and the ` +
+            `${country} pack has not established whether ${residenceRegion} requires an employer ` +
+            "to withhold on wages earned outside it. Withholding only " +
+            `${workRegion} might under-withhold and withholding both might over-withhold, so ` +
+            `neither is assumed. Establish ${residenceRegion}'s rule in the pack's withholding ` +
+            "declaration, or correct the residence region if it is wrong.",
         });
         return;
       }
       case "required":
       case "required_net_of_credit": {
-        const method = residence.residentWithholdingMethod
-          ?? (residence.residentWithholding === "required_net_of_credit"
+        const method =
+          residence.residentWithholdingMethod ??
+          (residence.residentWithholding === "required_net_of_credit"
             ? { kind: "net_of_work_region_tax" as const }
             : { kind: "full" as const });
         const netOfCredit = method.kind === "net_of_work_region_tax";
@@ -491,15 +517,16 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
           // residence region waives instead of levying alongside it. Any doubt
           // (no work levy, or a work region outside the waiver's eligible
           // regions) falls through to the levy below — never to silence.
-          const coversWorkRegion = method.regions === undefined || method.regions.includes(workRegion);
+          const coversWorkRegion =
+            method.regions === undefined || method.regions.includes(workRegion);
           const workWithholds = levies.some(
             (levy) => levy.level === "region" && levy.region === workRegion && levy.side === "work",
           );
           if (coversWorkRegion && workWithholds) {
             trace.push(
-              `${residence.label} waives its claim on these out-of-region wages: ${workRegion} `
-              + "withholds them and the waiver covers that work region — no "
-              + `${residenceRegion} levy`,
+              `${residence.label} waives its claim on these out-of-region wages: ${workRegion} ` +
+                "withholds them and the waiver covers that work region — no " +
+                `${residenceRegion} levy`,
             );
             return;
           }
@@ -509,28 +536,37 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
           // employee by the whole residence-region liability, and nothing
           // downstream can detect it.
           gaps.push({
-            region: residenceRegion, subRegion: null, severity: "blocking",
+            region: residenceRegion,
+            subRegion: null,
+            severity: "blocking",
             message:
-              `the employee resides in ${residenceRegion} and works in ${workRegion}. `
-              + `${residence.label} requires the employer to withhold on wages earned outside `
-              + (netOfCredit ? "the region, net of a credit for the work region's tax, " : "the region ")
-              + `and this engine does not compute it (${residence.citation}). Withholding only `
-              + `${workRegion} would under-withhold. Correct the residence region if it is wrong, `
-              + `or pay this employee outside the system until ${residenceRegion} resident `
-              + "withholding is implemented.",
+              `the employee resides in ${residenceRegion} and works in ${workRegion}. ` +
+              `${residence.label} requires the employer to withhold on wages earned outside ` +
+              (netOfCredit
+                ? "the region, net of a credit for the work region's tax, "
+                : "the region ") +
+              `and this engine does not compute it (${residence.citation}). Withholding only ` +
+              `${workRegion} would under-withhold. Correct the residence region if it is wrong, ` +
+              `or pay this employee outside the system until ${residenceRegion} resident ` +
+              "withholding is implemented.",
           });
           return;
         }
         levies.push({
-          level: "region", region: residenceRegion, subRegion: null, label: residence.label,
-          basis: "resident_out_of_region", side: "residence", reach: "resident",
+          level: "region",
+          region: residenceRegion,
+          subRegion: null,
+          label: residence.label,
+          basis: "resident_out_of_region",
+          side: "residence",
+          reach: "resident",
           certificateKey: residence.certificateKey ?? null,
           ...(netOfCredit ? { creditAgainstRegion: workRegion } : {}),
           residentWithholdingMethod: method,
         });
         trace.push(
-          `${residence.label} also applies to its resident's out-of-region wages`
-          + (netOfCredit ? `, net of a credit for ${workRegion} withholding` : ""),
+          `${residence.label} also applies to its resident's out-of-region wages` +
+            (netOfCredit ? `, net of a credit for ${workRegion} withholding` : ""),
         );
         return;
       }
@@ -549,14 +585,16 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
       if (!levy) {
         const open = region.openSubRegions;
         gaps.push({
-          region: region.region, subRegion: code, severity: "blocking",
+          region: region.region,
+          subRegion: code,
+          severity: "blocking",
           message:
-            `"${code}" is not a sub-region the ${country} pack declares inside ${region.region} — `
-            + (open
-              ? `${region.region} identifies each ${open.kind} by a code matching `
-                + `${open.codePattern}, and "${code}" does not. `
-              : "")
-            + "Correct the employee's work or residence location, or declare the levy in the pack.",
+            `"${code}" is not a sub-region the ${country} pack declares inside ${region.region} — ` +
+            (open
+              ? `${region.region} identifies each ${open.kind} by a code matching ` +
+                `${open.codePattern}, and "${code}" does not. `
+              : "") +
+            "Correct the employee's work or residence location, or declare the levy in the pack.",
         });
         continue;
       }
@@ -575,8 +613,8 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
         // Explicit: reciprocity relieved the STATE tax, and the agreement says
         // it does not reach the city. The levy stands.
         trace.push(
-          `${levy.label} is NOT relieved by the ${workRegion}/${residenceRegion} agreement `
-          + "— a reciprocal agreement between regions does not bind a sub-region",
+          `${levy.label} is NOT relieved by the ${workRegion}/${residenceRegion} agreement ` +
+            "— a reciprocal agreement between regions does not bind a sub-region",
         );
       } else if (workRegionRelieved && side === "work" && agreement?.relievesSubRegionLevies) {
         trace.push(`${levy.label} is relieved by the ${workRegion}/${residenceRegion} agreement`);
@@ -584,17 +622,25 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
       }
       if (!levy.implemented) {
         gaps.push({
-          region: region.region, subRegion: code, severity: "blocking",
+          region: region.region,
+          subRegion: code,
+          severity: "blocking",
           message:
-            `${levy.label} levies its own income tax (${levy.citation}) and this engine does not `
-            + `compute it. It is declared, not forgotten: withholding nothing for ${levy.label} `
-            + "would under-withhold every employee it reaches.",
+            `${levy.label} levies its own income tax (${levy.citation}) and this engine does not ` +
+            `compute it. It is declared, not forgotten: withholding nothing for ${levy.label} ` +
+            "would under-withhold every employee it reaches.",
         });
         continue;
       }
       found.push({
-        level: "sub_region", region: region.region, subRegion: code, label: levy.label,
-        basis: reach, side, reach, certificateKey: levy.certificateKey ?? null,
+        level: "sub_region",
+        region: region.region,
+        subRegion: code,
+        label: levy.label,
+        basis: reach,
+        side,
+        reach,
+        certificateKey: levy.certificateKey ?? null,
         statutoryComponent: levy.statutoryComponent,
         withholdingMethod: levy.withholdingMethod,
       });
@@ -642,8 +688,10 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
       for (const levy of [...residenceSubs, ...workSubs]) {
         const key = `${levy.region}:${levy.subRegion}`;
         if (seen.has(key)) {
-          trace.push(`${levy.label} reaches this employee as a resident and as a worker — `
-            + "withheld once, on the resident basis");
+          trace.push(
+            `${levy.label} reaches this employee as a resident and as a worker — ` +
+              "withheld once, on the resident basis",
+          );
           continue;
         }
         seen.add(key);
@@ -653,8 +701,10 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
     }
     switch (rule) {
       case "both":
-        trace.push(`${work.region} withholds work-side and residence-side sub-region levies `
-          + "independently");
+        trace.push(
+          `${work.region} withholds work-side and residence-side sub-region levies ` +
+            "independently",
+        );
         levies.push(...residenceSubs, ...workSubs);
         return;
       case "work_only":
@@ -678,9 +728,7 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
    * way, and those are two levies, not one counted twice.
    */
   function sameRegionSubs(): boolean {
-    const residenceKeys = new Set(
-      residenceSubs.map((levy) => `${levy.region}:${levy.subRegion}`),
-    );
+    const residenceKeys = new Set(residenceSubs.map((levy) => `${levy.region}:${levy.subRegion}`));
     return workSubs.some((levy) => residenceKeys.has(`${levy.region}:${levy.subRegion}`));
   }
 
@@ -725,21 +773,23 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
       if (missing) {
         const workLabels = workSubs.map((levy) => levy.label).join(", ") || "the work location";
         gaps.push({
-          region: home.region, subRegion: home.subRegion, severity: "blocking",
+          region: home.region,
+          subRegion: home.subRegion,
+          severity: "blocking",
           message:
-            `${work.region} withholds the higher of the resident rate for ${home.label} and the `
-            + `nonresident rate for ${workLabels}, and `
-            + `${missing.label}'s rate has not been entered. `
-            + "Enter every compared rate from the jurisdiction's register before paying this employee.",
+            `${work.region} withholds the higher of the resident rate for ${home.label} and the ` +
+            `nonresident rate for ${workLabels}, and ` +
+            `${missing.label}'s rate has not been entered. ` +
+            "Enter every compared rate from the jurisdiction's register before paying this employee.",
         });
         continue;
       }
       const takeWork = rival != null && compareRates(rivalRate!, homeRate!) > 0;
       const winner = takeWork ? rival! : home;
       trace.push(
-        `${work.region}: the higher rate wins — ${winner.label} at `
-        + `${takeWork ? rivalRate : homeRate} over `
-        + `${takeWork ? homeRate : rivalRate ?? "(no work-location levy)"}`,
+        `${work.region}: the higher rate wins — ${winner.label} at ` +
+          `${takeWork ? rivalRate : homeRate} over ` +
+          `${takeWork ? homeRate : (rivalRate ?? "(no work-location levy)")}`,
       );
       levies.push({ ...winner, basis: "resident", side: "residence" });
     }

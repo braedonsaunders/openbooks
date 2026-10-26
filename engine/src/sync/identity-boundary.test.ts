@@ -9,11 +9,27 @@ function source(name: string, refKey: string): MigrationSource {
 
 test("connector source names and adapter keys refuse unstable identities before DB work", async () => {
   await assert.rejects(
-    () => loadEntities(source("Quick Books", "qboId"), "00000000-0000-0000-0000-000000000001", null, undefined, undefined, []),
+    () =>
+      loadEntities(
+        source("Quick Books", "qboId"),
+        "00000000-0000-0000-0000-000000000001",
+        null,
+        undefined,
+        undefined,
+        [],
+      ),
     /connector name must be a stable source namespace/,
   );
   await assert.rejects(
-    () => loadEntities(source("qbo", "qbo id"), "00000000-0000-0000-0000-000000000001", null, undefined, undefined, []),
+    () =>
+      loadEntities(
+        source("qbo", "qbo id"),
+        "00000000-0000-0000-0000-000000000001",
+        null,
+        undefined,
+        undefined,
+        [],
+      ),
     /connector refKey must be a stable JSON object key/,
   );
 });

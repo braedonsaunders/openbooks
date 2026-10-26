@@ -30,7 +30,10 @@ import {
  * of the bill restores precisely this cover through billing provenance.
  */
 export class BillMatchError extends Error {
-  constructor(message: string, readonly status = 422) {
+  constructor(
+    message: string,
+    readonly status = 422,
+  ) {
     super(message);
     this.name = "BillMatchError";
   }
@@ -115,15 +118,20 @@ export async function billMatchCandidates(
   billId: string,
 ): Promise<{ billNumber: string; billStatus: string; lines: BillMatchCandidateLine[] }> {
   if (!isUuid(billId)) throw new BillMatchError("bill not found", 404);
-  const bill = (await db.execute<{
-    id: string;
-    document_number: string;
-    status: string;
-    party_id: string | null;
-    subsidiary_id: string | null;
-  }>(sql`
+  const bill = (
+    await db.execute<{
+      id: string;
+      document_number: string;
+      status: string;
+      party_id: string | null;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select id, document_number, status, party_id, subsidiary_id from documents
-     where id = ${billId} and org_id = ${orgId} and kind = 'vendor_bill'`, "objects"))[0];
+     where id = ${billId} and org_id = ${orgId} and kind = 'vendor_bill'`,
+      "objects",
+    )
+  )[0];
   if (!bill) throw new BillMatchError("bill not found", 404);
   const billLines = await db.execute<{
     id: string;
@@ -135,13 +143,16 @@ export async function billMatchCandidates(
     quantity: string;
     unit: string | null;
     custom: unknown;
-  }>(sql`
+  }>(
+    sql`
     select dl.id, dl.line_number, dl.item_id, i.kind as item_kind, i.code as item_code, i.name as item_name,
            dl.quantity::text as quantity, dl.unit, dl.custom
       from document_lines dl
       left join items i on i.id = dl.item_id and i.org_id = dl.org_id
      where dl.org_id = ${orgId} and dl.document_id = ${billId}
-     order by dl.line_number`, "objects");
+     order by dl.line_number`,
+    "objects",
+  );
   const lines: BillMatchCandidateLine[] = [];
   for (const billLine of billLines) {
     const base = {
@@ -155,15 +166,23 @@ export async function billMatchCandidates(
     };
     const poLineId = existingPurchaseOrderLineId(billLine.custom);
     if (poLineId) {
-      const matched = (await db.execute<{ document_number: string; line_number: number }>(sql`
+      const matched = (
+        await db.execute<{ document_number: string; line_number: number }>(
+          sql`
         select d.document_number, dl.line_number
           from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-         where dl.id = ${poLineId} and dl.org_id = ${orgId}`, "objects"))[0];
+         where dl.id = ${poLineId} and dl.org_id = ${orgId}`,
+          "objects",
+        )
+      )[0];
       lines.push({
         ...base,
         matched: matched
-          ? { purchaseOrderNumber: matched.document_number, purchaseOrderLineNumber: matched.line_number }
+          ? {
+              purchaseOrderNumber: matched.document_number,
+              purchaseOrderLineNumber: matched.line_number,
+            }
           : null,
         candidates: [],
       });
@@ -184,7 +203,8 @@ export async function billMatchCandidates(
     });
     const result: BillMatchCandidate[] = [];
     for (const candidate of candidates) {
-      const receipts = await db.execute<PurchaseReceiptReference>(sql`
+      const receipts = await db.execute<PurchaseReceiptReference>(
+        sql`
         select r.id, r.document_number as "documentNumber", r.document_date::text as "documentDate", r.status
           from document_links link
           join documents r on r.id = link.to_document_id and r.org_id = link.org_id
@@ -192,7 +212,9 @@ export async function billMatchCandidates(
            and link.from_document_id = ${candidate.purchaseOrderId}
            and link.link_type = 'fulfills'
            and r.kind = 'purchase_receipt'
-         order by r.document_date, r.document_number`, "objects");
+         order by r.document_date, r.document_number`,
+        "objects",
+      );
       result.push({
         purchaseOrderId: candidate.purchaseOrderId,
         purchaseOrderNumber: candidate.purchaseOrderNumber,
@@ -250,23 +272,31 @@ export async function matchVendorBillLines(input: {
     seen.add(match.billLineId);
   }
   if (input.expectedUpdatedAt !== undefined && !isDocumentRevisionToken(input.expectedUpdatedAt)) {
-    throw new BillMatchError("this bill changed after you opened it; reload and review the latest revision", 409);
+    throw new BillMatchError(
+      "this bill changed after you opened it; reload and review the latest revision",
+      409,
+    );
   }
   return withOrgTransaction(orgId, () =>
     db.transaction(async (tx) => {
-      const bill = (await tx.execute<{
-        id: string;
-        document_number: string;
-        status: string;
-        party_id: string | null;
-        subsidiary_id: string | null;
-        revision: string;
-      }>(sql`
+      const bill = (
+        await tx.execute<{
+          id: string;
+          document_number: string;
+          status: string;
+          party_id: string | null;
+          subsidiary_id: string | null;
+          revision: string;
+        }>(
+          sql`
         select id, document_number, status, party_id, subsidiary_id,
                ${documentRevisionCounterSql(sql`revision_seq`)} as revision
           from documents
          where id = ${billId} and org_id = ${orgId} and kind = 'vendor_bill'
-         for update`, "objects"))[0];
+         for update`,
+          "objects",
+        )
+      )[0];
       if (!bill) throw new BillMatchError("bill not found", 404);
       if (bill.status !== "draft" && bill.status !== "approved") {
         throw new BillMatchError(
@@ -274,7 +304,10 @@ export async function matchVendorBillLines(input: {
         );
       }
       if (input.expectedUpdatedAt !== undefined && input.expectedUpdatedAt !== bill.revision) {
-        throw new BillMatchError("this bill changed after you opened it; reload and review the latest revision", 409);
+        throw new BillMatchError(
+          "this bill changed after you opened it; reload and review the latest revision",
+          409,
+        );
       }
       const billLines = await tx.execute<{
         id: string;
@@ -287,7 +320,8 @@ export async function matchVendorBillLines(input: {
         unit: string | null;
         base_unit: string | null;
         custom: unknown;
-      }>(sql`
+      }>(
+        sql`
         select dl.id, dl.line_number, dl.item_id, i.kind as item_kind, i.code as item_code, i.name as item_name,
                dl.quantity::text as quantity, dl.unit, profile.base_unit, dl.custom
           from document_lines dl
@@ -295,7 +329,9 @@ export async function matchVendorBillLines(input: {
           left join item_inventory_profiles profile on profile.org_id = dl.org_id and profile.item_id = dl.item_id
          where dl.org_id = ${orgId} and dl.document_id = ${billId}
          order by dl.line_number
-         for update of dl`, "objects");
+         for update of dl`,
+        "objects",
+      );
       const byBillLine = new Map(billLines.map((line) => [line.id, line]));
       for (const match of input.matches) {
         const billLine = byBillLine.get(match.billLineId);
@@ -306,11 +342,15 @@ export async function matchVendorBillLines(input: {
           );
         }
         if (existingPurchaseOrderLineId(billLine.custom) !== null) {
-          throw new BillMatchError(`bill line ${billLine.line_number} is already matched to its purchase order`);
+          throw new BillMatchError(
+            `bill line ${billLine.line_number} is already matched to its purchase order`,
+          );
         }
         const quantity = canonicalDecimal(billLine.quantity, 8);
         if (quantity === null || toQuantityUnits(quantity) <= 0n) {
-          throw new BillMatchError(`bill line ${billLine.line_number} has no positive quantity to match`);
+          throw new BillMatchError(
+            `bill line ${billLine.line_number} has no positive quantity to match`,
+          );
         }
       }
       // Lock every purchase-order header before any line, in id order: the
@@ -318,17 +358,27 @@ export async function matchVendorBillLines(input: {
       // conversion of the same order serializes instead of deadlocking.
       // Header ids come from an unlocked discovery read; every property is
       // revalidated under the locks below.
-      const poLineIds = [...new Set(input.matches.map((match) => match.purchaseOrderLineId))].sort();
-      const discoveredPoIds = (await tx.execute<{ document_id: string }>(sql`
+      const poLineIds = [
+        ...new Set(input.matches.map((match) => match.purchaseOrderLineId)),
+      ].sort();
+      const discoveredPoIds = (
+        await tx.execute<{ document_id: string }>(
+          sql`
         select distinct document_id from document_lines
-         where org_id = ${orgId} and id = any(${`{${poLineIds.join(",")}}`}::uuid[])`, "objects"))
+         where org_id = ${orgId} and id = any(${`{${poLineIds.join(",")}}`}::uuid[])`,
+          "objects",
+        )
+      )
         .map((row) => row.document_id)
         .sort();
-      const poHeaders = await tx.execute<{ id: string; status: string }>(sql`
+      const poHeaders = await tx.execute<{ id: string; status: string }>(
+        sql`
         select id, status from documents
          where org_id = ${orgId} and id = any(${`{${discoveredPoIds.join(",")}}`}::uuid[])
          order by id
-         for update`, "objects");
+         for update`,
+        "objects",
+      );
       const poLines = await tx.execute<{
         id: string;
         document_id: string;
@@ -344,7 +394,8 @@ export async function matchVendorBillLines(input: {
         quantity_fulfilled: string;
         quantity_billed: string;
         quantity_cancelled: string;
-      }>(sql`
+      }>(
+        sql`
         select l.id, d.id as document_id, d.document_number, d.status as document_status,
                d.party_id as document_party_id, d.subsidiary_id as document_subsidiary_id,
                l.line_number, l.item_id, i.kind as item_kind, l.unit,
@@ -355,16 +406,28 @@ export async function matchVendorBillLines(input: {
           left join items i on i.id = l.item_id and i.org_id = l.org_id
          where l.org_id = ${orgId} and l.id = any(${`{${poLineIds.join(",")}}`}::uuid[])
          order by l.document_id, l.id
-         for update of l`, "objects");
+         for update of l`,
+        "objects",
+      );
       if (poLines.length !== poLineIds.length) {
-        throw new BillMatchError("a chosen purchase-order line is missing — reload and match again", 409);
+        throw new BillMatchError(
+          "a chosen purchase-order line is missing — reload and match again",
+          409,
+        );
       }
       const poIds = [...new Set(poLines.map((line) => line.document_id))].sort();
-      if (poHeaders.length !== poIds.length || !poIds.every((id) => poHeaders.some((header) => header.id === id))) {
+      if (
+        poHeaders.length !== poIds.length ||
+        !poIds.every((id) => poHeaders.some((header) => header.id === id))
+      ) {
         throw new BillMatchError("a chosen purchase order changed while it was being matched", 409);
       }
       const byPoLine = new Map(poLines.map((line) => [line.id, line]));
-      const prepared: { billLine: (typeof billLines)[number]; poLine: (typeof poLines)[number]; cover: string }[] = [];
+      const prepared: {
+        billLine: (typeof billLines)[number];
+        poLine: (typeof poLines)[number];
+        cover: string;
+      }[] = [];
       for (const match of input.matches) {
         const billLine = byBillLine.get(match.billLineId)!;
         const poLine = byPoLine.get(match.purchaseOrderLineId)!;
@@ -432,11 +495,17 @@ export async function matchVendorBillLines(input: {
       const reopened: string[] = [];
       const reopenForWrites = async (id: string, status: string, label: string) => {
         if (status !== "approved") return;
-        const reopenedRow = (await tx.execute<{ id: string }>(sql`
+        const reopenedRow = (
+          await tx.execute<{ id: string }>(
+            sql`
           update documents set status = 'draft', updated_at = now(), updated_by = ${actorId}
            where id = ${id} and org_id = ${orgId} and status = 'approved'
-          returning id`, "objects"))[0];
-        if (!reopenedRow) throw new BillMatchError(`${label} changed while it was being matched`, 409);
+          returning id`,
+            "objects",
+          )
+        )[0];
+        if (!reopenedRow)
+          throw new BillMatchError(`${label} changed while it was being matched`, 409);
         reopened.push(id);
       };
       await reopenForWrites(billId, bill.status, `bill ${bill.document_number}`);
@@ -450,31 +519,49 @@ export async function matchVendorBillLines(input: {
         // ceiling is the unified cover validated above under these same
         // locks (live receipts can exceed the received counter after a
         // return or a historic write, so the counter ceiling cannot stand).
-        const advanced = (await tx.execute<{ id: string }>(sql`
+        const advanced = (
+          await tx.execute<{ id: string }>(
+            sql`
           update document_lines set quantity_billed = quantity_billed + ${cover}, updated_at = now(), updated_by = ${actorId}
            where id = ${poLine.id} and org_id = ${orgId}
              and quantity_billed + ${cover} <= ${orderedNetOfCancelledSql("document_lines")}
-          returning id`, "objects"))[0];
+          returning id`,
+            "objects",
+          )
+        )[0];
         if (!advanced) {
           throw new BillMatchError(
             `purchase order ${poLine.document_number} line ${poLine.line_number} changed while it was being matched`,
             409,
           );
         }
-        const bag = (billLine.custom && typeof billLine.custom === "object"
-          ? { ...(billLine.custom as Record<string, unknown>) }
-          : {}) as Record<string, unknown>;
+        const bag = (
+          billLine.custom && typeof billLine.custom === "object"
+            ? { ...(billLine.custom as Record<string, unknown>) }
+            : {}
+        ) as Record<string, unknown>;
         bag.purchaseOrderLineId = poLine.id;
         bag.convertedFrom = { documentId: poLine.document_id, lineId: poLine.id, quantity: cover };
-        const stamped = (await tx.execute<{ id: string }>(sql`
+        const stamped = (
+          await tx.execute<{ id: string }>(
+            sql`
           update document_lines set custom = ${JSON.stringify(bag)}::jsonb, updated_at = now(), updated_by = ${actorId}
            where id = ${billLine.id} and org_id = ${orgId}
-          returning id`, "objects"))[0];
-        if (!stamped) throw new BillMatchError("a bill line changed while it was being matched", 409);
-        const edge = (await tx.execute<{ id: string }>(sql`
+          returning id`,
+            "objects",
+          )
+        )[0];
+        if (!stamped)
+          throw new BillMatchError("a bill line changed while it was being matched", 409);
+        const edge = (
+          await tx.execute<{ id: string }>(
+            sql`
           select id from document_links
            where org_id = ${orgId} and from_document_id = ${poLine.document_id}
-             and to_document_id = ${billId} and link_type = 'bills'`, "objects"))[0];
+             and to_document_id = ${billId} and link_type = 'bills'`,
+            "objects",
+          )
+        )[0];
         if (!edge) {
           await tx.execute(sql`
             insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by)
@@ -491,11 +578,17 @@ export async function matchVendorBillLines(input: {
         });
       }
       for (const id of reopened) {
-        const restored = (await tx.execute<{ id: string }>(sql`
+        const restored = (
+          await tx.execute<{ id: string }>(
+            sql`
           update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
            where id = ${id} and org_id = ${orgId} and status = 'draft'
-          returning id`, "objects"))[0];
-        if (!restored) throw new BillMatchError("a document changed while it was being matched", 409);
+          returning id`,
+            "objects",
+          )
+        )[0];
+        if (!restored)
+          throw new BillMatchError("a document changed while it was being matched", 409);
       }
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -515,6 +608,9 @@ export async function matchVendorBillLines(input: {
   );
 }
 
-function poLineLabel(poLines: { document_id: string; document_number: string }[], poId: string): string {
+function poLineLabel(
+  poLines: { document_id: string; document_number: string }[],
+  poId: string,
+): string {
   return poLines.find((line) => line.document_id === poId)?.document_number ?? poId;
 }

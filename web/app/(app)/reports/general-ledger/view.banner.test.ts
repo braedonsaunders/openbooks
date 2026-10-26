@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import type { GeneralLedgerData } from './view'
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { GeneralLedgerData } from "./view";
 
-const { generalLedgerSpec } = await import('./view')
+const { generalLedgerSpec } = await import("./view");
 
 // enabling Multi-subsidiary crashed the GL report with React
 // error 441 — the loader converts the typed rates refusal into a banner with
@@ -13,53 +13,57 @@ const { generalLedgerSpec } = await import('./view')
 function blockedData(): GeneralLedgerData {
   return {
     ratesBlocked: {
-      code: 'rates-not-derived',
-      title: 'Rates have not been derived',
-      description: 'No consolidated exchange rates for EUR for March 2026.',
-      deriveLabel: 'Derive rates',
-      deriveHref: '/close',
+      code: "rates-not-derived",
+      title: "Rates have not been derived",
+      description: "No consolidated exchange rates for EUR for March 2026.",
+      deriveLabel: "Derive rates",
+      deriveHref: "/close",
     },
     ratesReady: false,
-  } as unknown as GeneralLedgerData
+  } as unknown as GeneralLedgerData;
 }
 
 function blocksOf(spec: unknown): Record<string, unknown>[] {
-  const found: Record<string, unknown>[] = []
+  const found: Record<string, unknown>[] = [];
   const visit = (node: unknown): void => {
     if (Array.isArray(node)) {
-      for (const item of node) visit(item)
-      return
+      for (const item of node) visit(item);
+      return;
     }
-    if (typeof node === 'object' && node !== null) {
-      found.push(node as Record<string, unknown>)
-      for (const value of Object.values(node)) visit(value)
+    if (typeof node === "object" && node !== null) {
+      found.push(node as Record<string, unknown>);
+      for (const value of Object.values(node)) visit(value);
     }
-  }
-  visit((spec as { body: unknown }).body)
-  return found
+  };
+  visit((spec as { body: unknown }).body);
+  return found;
 }
 
-test('a rates refusal renders as a derive banner gated on the block', () => {
-  const blocks = blocksOf(generalLedgerSpec(blockedData()))
-  const banner = blocks.find((block) => block.widget === 'empty-state')
-  assert.ok(banner, 'the blocked report must render an empty-state banner')
-  assert.deepEqual(banner.when, { $: 'ratesBlocked' }, 'the banner shows exactly while the notice is set')
-  const props = banner.props as Record<string, unknown>
-  assert.equal(props.title, 'Rates have not been derived')
-  assert.equal(props.description, 'No consolidated exchange rates for EUR for March 2026.')
-  assert.equal(props.action, 'link-button')
-  const actionProps = props.actionProps as Record<string, unknown>
-  assert.equal(actionProps.href, '/close', 'the banner must link to period close to derive rates')
-  assert.equal(actionProps.label, 'Derive rates')
-})
+test("a rates refusal renders as a derive banner gated on the block", () => {
+  const blocks = blocksOf(generalLedgerSpec(blockedData()));
+  const banner = blocks.find((block) => block.widget === "empty-state");
+  assert.ok(banner, "the blocked report must render an empty-state banner");
+  assert.deepEqual(
+    banner.when,
+    { $: "ratesBlocked" },
+    "the banner shows exactly while the notice is set",
+  );
+  const props = banner.props as Record<string, unknown>;
+  assert.equal(props.title, "Rates have not been derived");
+  assert.equal(props.description, "No consolidated exchange rates for EUR for March 2026.");
+  assert.equal(props.action, "link-button");
+  const actionProps = props.actionProps as Record<string, unknown>;
+  assert.equal(actionProps.href, "/close", "the banner must link to period close to derive rates");
+  assert.equal(actionProps.label, "Derive rates");
+});
 
-test('the paper hides while rates are blocked', () => {
-  const blocks = blocksOf(generalLedgerSpec(blockedData()))
-  const paper = blocks.find((block) => block.kind === 'paper')
-  assert.ok(paper, 'the report paper must still be in the spec')
+test("the paper hides while rates are blocked", () => {
+  const blocks = blocksOf(generalLedgerSpec(blockedData()));
+  const paper = blocks.find((block) => block.kind === "paper");
+  assert.ok(paper, "the report paper must still be in the spec");
   assert.deepEqual(
     paper.when,
-    { $: 'ratesReady' },
-    'the paper shows only when rates are ready — no numbers beside the banner',
-  )
-})
+    { $: "ratesReady" },
+    "the paper shows only when rates are ready — no numbers beside the banner",
+  );
+});

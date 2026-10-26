@@ -3,7 +3,12 @@ import { db } from "../../platform/db.ts";
 import { fromUnits, toUnits } from "../../money/money.ts";
 import { openBalancesByParty, projectRollups, trialBalanceByKey } from "../corpus-lib/extract.ts";
 import { assertSimOrg } from "../../sim/db-guard.ts";
-import type { CorpusAccount, CorpusDocLine, CorpusParty, CorpusProject } from "../corpus-lib/types.ts";
+import type {
+  CorpusAccount,
+  CorpusDocLine,
+  CorpusParty,
+  CorpusProject,
+} from "../corpus-lib/types.ts";
 import type { SimOrg } from "../../sim/world.ts";
 import type { RunManifest } from "../../sim/manifest.ts";
 import type { DatasetEvent, GoldenSnapshot, ReplayDataset } from "./types.ts";
@@ -21,7 +26,13 @@ import type { DatasetEvent, GoldenSnapshot, ReplayDataset } from "./types.ts";
  * overhead pairs, recognition) as origin-tagged journals.
  */
 
-const COMMERCIAL_KINDS = ["vendor_bill", "customer_invoice", "customer_credit", "vendor_credit", "expense_report"];
+const COMMERCIAL_KINDS = [
+  "vendor_bill",
+  "customer_invoice",
+  "customer_credit",
+  "vendor_credit",
+  "expense_report",
+];
 const PAYMENT_KINDS = ["vendor_payment", "customer_payment"];
 
 interface Maps {
@@ -30,7 +41,12 @@ interface Maps {
   projectKeyById: Map<string, string>;
 }
 
-function buildMaps(world: SimOrg): { maps: Maps; parties: CorpusParty[]; partyIds: Record<string, string>; projectIds: Record<string, string> } {
+function buildMaps(world: SimOrg): {
+  maps: Maps;
+  parties: CorpusParty[];
+  partyIds: Record<string, string>;
+  projectIds: Record<string, string>;
+} {
   const accountKeyById = new Map(Object.entries(world.accounts).map(([key, id]) => [id, key]));
   const parties: CorpusParty[] = [];
   const partyIds: Record<string, string> = {};
@@ -68,45 +84,72 @@ function buildMaps(world: SimOrg): { maps: Maps; parties: CorpusParty[]; partyId
 
 function requireKey<T>(map: Map<string, T>, id: string, what: string): T {
   const key = map.get(id);
-  if (key === undefined) throw new Error(`export: ${what} ${id} has no semantic key (outside the sim world)`);
+  if (key === undefined)
+    throw new Error(`export: ${what} ${id} has no semantic key (outside the sim world)`);
   return key;
 }
 
 async function exportAccounts(world: SimOrg): Promise<CorpusAccount[]> {
   const ids = Object.values(world.accounts);
-  const rows = (await db.execute<{ id: string; number: string; name: string; type: string }>(sql`
-    select id, number, name, type from accounts where id in ${ids} order by number`, "objects"));
+  const rows = await db.execute<{ id: string; number: string; name: string; type: string }>(
+    sql`
+    select id, number, name, type from accounts where id in ${ids} order by number`,
+    "objects",
+  );
   const keyById = new Map(Object.entries(world.accounts).map(([key, id]) => [id, key]));
-  return rows.map((r) => ({ key: keyById.get(r.id)!, number: r.number, name: r.name, type: r.type }));
+  return rows.map((r) => ({
+    key: keyById.get(r.id)!,
+    number: r.number,
+    name: r.name,
+    type: r.type,
+  }));
 }
 
 async function exportProjects(world: SimOrg, maps: Maps): Promise<CorpusProject[]> {
   const out: CorpusProject[] = [];
   const custKey = (id: string) => requireKey(maps.partyKeyById, id, "customer");
   for (const job of world.jobs) {
-    const sov = (await db.execute<{ description: string; scheduled_value: string }>(sql`
+    const sov = await db.execute<{ description: string; scheduled_value: string }>(
+      sql`
       select description, scheduled_value::text as scheduled_value from sov_lines
-       where project_id = ${job.id} and org_id = ${world.orgId} order by sort_order`, "objects"));
+       where project_id = ${job.id} and org_id = ${world.orgId} order by sort_order`,
+      "objects",
+    );
     out.push({
       key: job.code,
       name: job.name,
       method: job.method,
       customer: custKey(job.customerId),
       contractValue: job.contractValue,
-      sovLines: sov.length ? sov.map((l) => ({ description: l.description, scheduledValue: l.scheduled_value })) : undefined,
+      sovLines: sov.length
+        ? sov.map((l) => ({ description: l.description, scheduledValue: l.scheduled_value }))
+        : undefined,
     });
   }
   for (const eng of world.engagements) {
-    out.push({ key: eng.code, name: eng.name, method: "time_and_materials", customer: custKey(eng.customerId) });
+    out.push({
+      key: eng.code,
+      name: eng.name,
+      method: "time_and_materials",
+      customer: custKey(eng.customerId),
+    });
   }
   return out;
 }
 
 /** Signed GL lines of one journal entry in semantic keys. */
 async function entryGlLines(entryId: string, maps: Maps): Promise<CorpusDocLine[]> {
-  const rows = (await db.execute<{ account_id: string; project_id: string | null; amount: string; memo: string | null }>(sql`
+  const rows = await db.execute<{
+    account_id: string;
+    project_id: string | null;
+    amount: string;
+    memo: string | null;
+  }>(
+    sql`
     select account_id, project_id, amount::text as amount, memo from journal_lines
-     where entry_id = ${entryId} order by line_number`, "objects"));
+     where entry_id = ${entryId} order by line_number`,
+    "objects",
+  );
   return rows.map((l) => ({
     account: requireKey(maps.accountKeyById, l.account_id, "account"),
     amount: fromUnits(toUnits(l.amount)),
@@ -127,18 +170,25 @@ export async function exportDataset(
 
   // Every posted/reversed entry, with its source document when it has one,
   // in stable replay order.
-  const entries = (await db.execute<{
-      entry_id: string; origin: string | null; posting_date: string;
-      doc_id: string | null; kind: string | null; document_number: string | null;
-      party_id: string | null; document_date: string | null; due_date: string | null; memo: string | null;
-    }>(sql`
+  const entries = await db.execute<{
+    entry_id: string;
+    origin: string | null;
+    posting_date: string;
+    doc_id: string | null;
+    kind: string | null;
+    document_number: string | null;
+    party_id: string | null;
+    document_date: string | null;
+    due_date: string | null;
+    memo: string | null;
+  }>(sql`
     select e.id as entry_id, e.origin, e.posting_date::text as posting_date,
            d.id as doc_id, d.kind, d.document_number, d.party_id,
            d.document_date::text as document_date, d.due_date::text as due_date, d.memo
       from journal_entries e
       left join documents d on d.posted_entry_id = e.id
      where e.org_id = ${world.orgId} and e.status in ('posted', 'reversed')
-     order by e.posting_date, e.created_at, e.entry_number`));
+     order by e.posting_date, e.created_at, e.entry_number`);
 
   const events: DatasetEvent[] = [];
   const eventIdByDocId = new Map<string, string>();
@@ -163,9 +213,17 @@ export async function exportDataset(
     const glLines = await entryGlLines(row.entry_id, maps);
 
     if (row.doc_id && row.kind && COMMERCIAL_KINDS.includes(row.kind)) {
-      const docLines = (await db.execute<{ account_id: string; project_id: string | null; amount: string; description: string | null }>(sql`
+      const docLines = await db.execute<{
+        account_id: string;
+        project_id: string | null;
+        amount: string;
+        description: string | null;
+      }>(
+        sql`
         select account_id, project_id, amount::text as amount, description from document_lines
-         where document_id = ${row.doc_id} and org_id = ${world.orgId} order by line_number`, "objects"));
+         where document_id = ${row.doc_id} and org_id = ${world.orgId} order by line_number`,
+        "objects",
+      );
       const id = uniqueId(row.document_number ?? row.doc_id);
       eventIdByDocId.set(row.doc_id, id);
       documents++;
@@ -213,14 +271,17 @@ export async function exportDataset(
   // Payments last within their date (they settle previously posted items).
   for (const row of deferredPayments) {
     const glLines = await entryGlLines(row.entry_id, maps);
-    const allocs = (await db.execute<{ amount: string; target_doc: string }>(sql`
+    const allocs = await db.execute<{ amount: string; target_doc: string }>(
+      sql`
       select a.amount::text as amount, td.id as target_doc
         from applications a
         join journal_lines fl on fl.id = a.from_line_id
         join journal_lines tl on tl.id = a.to_line_id
         join documents td on td.posted_entry_id = tl.entry_id
        where fl.entry_id = ${row.entry_id} and a.unapplied_at is null
-       order by a.created_at`, "objects"));
+       order by a.created_at`,
+      "objects",
+    );
     const id = uniqueId(row.document_number ?? row.doc_id!);
     eventIdByDocId.set(row.doc_id!, id);
     documents++;
@@ -233,7 +294,8 @@ export async function exportDataset(
         memo: row.memo ?? undefined,
         allocations: allocs.map((a) => {
           const target = eventIdByDocId.get(a.target_doc);
-          if (!target) throw new Error(`payment ${id} settles document ${a.target_doc} that was not exported`);
+          if (!target)
+            throw new Error(`payment ${id} settles document ${a.target_doc} that was not exported`);
           return { event: target, amount: fromUnits(toUnits(a.amount)) };
         }),
       },

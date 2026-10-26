@@ -104,15 +104,15 @@ export const shiftDay = (date: string, days: number): string =>
 
 /** Resolution order for a scoped schedule row — most specific first. */
 export type WorkScheduleScope =
-  | "employee"
-  | "job_title"
-  | "trade"
-  | "department"
-  | "subsidiary"
-  | "organization";
+  "employee" | "job_title" | "trade" | "department" | "subsidiary" | "organization";
 
 const SCOPE_RANK: Record<WorkScheduleScope, number> = {
-  employee: 0, job_title: 1, trade: 2, department: 3, subsidiary: 4, organization: 5,
+  employee: 0,
+  job_title: 1,
+  trade: 2,
+  department: 3,
+  subsidiary: 4,
+  organization: 5,
 };
 
 /**
@@ -170,12 +170,17 @@ export interface WorkScheduleScopeKeys {
 }
 
 const scopeOf = (row: WorkScheduleRow): WorkScheduleScope =>
-  row.employeePartyId !== null ? "employee"
-  : row.jobTitle !== null ? "job_title"
-  : row.tradeId !== null ? "trade"
-  : row.departmentId !== null ? "department"
-  : row.subsidiaryId !== null ? "subsidiary"
-  : "organization";
+  row.employeePartyId !== null
+    ? "employee"
+    : row.jobTitle !== null
+      ? "job_title"
+      : row.tradeId !== null
+        ? "trade"
+        : row.departmentId !== null
+          ? "department"
+          : row.subsidiaryId !== null
+            ? "subsidiary"
+            : "organization";
 
 /**
  * The schedule in force for an employee on a date, or null when none is —
@@ -196,15 +201,18 @@ export function pickWorkSchedule(
     if (row.effectiveTo && row.effectiveTo < onDate) continue;
     const scope = scopeOf(row);
     if (scope === "employee" && row.employeePartyId !== employee.employeePartyId) continue;
-    if (scope === "job_title"
-      && (employee.jobTitle ?? "").toLowerCase() !== (row.jobTitle ?? "").toLowerCase()) continue;
+    if (
+      scope === "job_title" &&
+      (employee.jobTitle ?? "").toLowerCase() !== (row.jobTitle ?? "").toLowerCase()
+    )
+      continue;
     if (scope === "trade" && row.tradeId !== (employee.tradeId ?? null)) continue;
     if (scope === "department" && row.departmentId !== (employee.departmentId ?? null)) continue;
     if (scope === "subsidiary" && row.subsidiaryId !== (employee.subsidiaryId ?? null)) continue;
     if (
-      best === null
-      || SCOPE_RANK[scope] < SCOPE_RANK[best.scope]
-      || (SCOPE_RANK[scope] === SCOPE_RANK[best.scope] && row.effectiveFrom > best.row.effectiveFrom)
+      best === null ||
+      SCOPE_RANK[scope] < SCOPE_RANK[best.scope] ||
+      (SCOPE_RANK[scope] === SCOPE_RANK[best.scope] && row.effectiveFrom > best.row.effectiveFrom)
     ) {
       best = { row, scope };
     }
@@ -245,10 +253,7 @@ export function cyclePositionOn(schedule: ResolvedWorkSchedule, date: string): n
  * A cycle position with no day row is zero hours — a scheduled day off — which
  * is a real, known answer and not the same as null.
  */
-export function scheduledHoursOn(
-  schedule: ResolvedWorkSchedule,
-  date: string,
-): string | null {
+export function scheduledHoursOn(schedule: ResolvedWorkSchedule, date: string): string | null {
   if (schedule.pattern === "varies") return null;
   const position = cyclePositionOn(schedule, date);
   const day = schedule.days.find((entry) => entry.dayIndex === position);
@@ -400,8 +405,7 @@ export function describeWorkSchedule(schedule: ResolvedWorkSchedule): string {
 // ---------------------------------------------------------------------------
 
 const day = (value: string | Date | null): string | null =>
-  value === null ? null
-  : String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
+  value === null ? null : String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
 
 /**
  * Subsidiary predicate for schedule rows. Only the employee and subsidiary
@@ -436,13 +440,23 @@ export async function loadWorkSchedules(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<WorkScheduleRow[]> {
-  const rows = (await tx.execute<{
-      id: string; name: string | null; employee_party_id: string | null; job_title: string | null;
-      trade_id: string | null; department_id: string | null; subsidiary_id: string | null;
-      pattern: WorkPattern; cycle_days: number | null; cycle_anchor: string | Date | null;
-      effective_from: string | Date; effective_to: string | Date | null; is_active: boolean;
-      days: { dayIndex: number; hours: string }[] | null;
-    }>(sql`
+  const rows = await tx.execute<{
+    id: string;
+    name: string | null;
+    employee_party_id: string | null;
+    job_title: string | null;
+    trade_id: string | null;
+    department_id: string | null;
+    subsidiary_id: string | null;
+    pattern: WorkPattern;
+    cycle_days: number | null;
+    cycle_anchor: string | Date | null;
+    effective_from: string | Date;
+    effective_to: string | Date | null;
+    is_active: boolean;
+    days: { dayIndex: number; hours: string }[] | null;
+  }>(
+    sql`
     select s.id, s.name, s.employee_party_id, s.job_title, s.trade_id, s.department_id,
            s.subsidiary_id, s.pattern, s.cycle_days, s.cycle_anchor,
            s.effective_from, s.effective_to, s.is_active,
@@ -457,7 +471,9 @@ export async function loadWorkSchedules(
      where s.org_id = ${orgId}
        ${scheduleScopeFilter(allowedSubsidiaryIds)}
      order by s.effective_from, s.id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -496,16 +512,21 @@ export async function resolveWorkSchedule(
 ): Promise<ResolvedWorkSchedule | null> {
   let keys = scope;
   if (!keys) {
-    const employee = (await tx.execute<{
-        job_title: string | null; trade_id: string | null;
-        department_id: string | null; subsidiary_id: string | null;
-      }>(sql`
+    const employee = await tx.execute<{
+      job_title: string | null;
+      trade_id: string | null;
+      department_id: string | null;
+      subsidiary_id: string | null;
+    }>(
+      sql`
       select er.job_title, er.trade_id, er.department_id, p.subsidiary_id
         from employee_roles er
         join parties p on p.id = er.party_id and p.org_id = er.org_id
        where er.org_id = ${orgId} and er.party_id = ${employeePartyId}
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     const found = employee[0];
     keys = {
       jobTitle: found?.job_title ?? null,

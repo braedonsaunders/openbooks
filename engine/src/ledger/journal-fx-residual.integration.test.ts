@@ -44,16 +44,25 @@ test(
       { accountId: org.accounts.bank, amount: "-0.0002", txnAmount: "-0.0002", fxRate: "1" },
     ];
     try {
-      const first = await withOrgContext(org.orgId, () => postEntry(db, { ...baseInput(org, key), lines }));
+      const first = await withOrgContext(org.orgId, () =>
+        postEntry(db, { ...baseInput(org, key), lines }),
+      );
       assert.equal(first.lines.length, 5);
-      const state = await withOrgContext(org.orgId, () => db.execute<{ status: string; lines: number; sub: string }>(sql`
+      const state = await withOrgContext(org.orgId, () =>
+        db.execute<{ status: string; lines: number; sub: string }>(
+          sql`
         select e.status, count(l.id)::int as lines, sum(l.amount)::text as sub
           from journal_entries e join journal_lines l on l.entry_id = e.id
          where e.org_id = ${org.orgId} and e.custom->>'idempotencyKey' = ${key}
            and l.subsidiary_id = ${org.subsidiaryId}
-         group by e.status`, "objects"));
+         group by e.status`,
+          "objects",
+        ),
+      );
       assert.deepEqual(state, [{ status: "posted", lines: 5, sub: "0.0000" }]);
-      const replay = await withOrgContext(org.orgId, () => postEntry(db, { ...baseInput(org, key), lines }));
+      const replay = await withOrgContext(org.orgId, () =>
+        postEntry(db, { ...baseInput(org, key), lines }),
+      );
       assert.equal(replay.entryId, first.entryId);
       assert.equal(replay.lines.length, 5);
     } finally {
@@ -79,11 +88,19 @@ test(
     try {
       await assert.rejects(
         withOrgContext(org.orgId, () => postEntry(db, { ...baseInput(org, key), lines })),
-        (error: unknown) => /exceeds the per-entry FX rounding bound.*nothing was posted; correct the line exchange rates or functional amounts/.test(errorText(error)),
+        (error: unknown) =>
+          /exceeds the per-entry FX rounding bound.*nothing was posted; correct the line exchange rates or functional amounts/.test(
+            errorText(error),
+          ),
       );
-      const remnant = await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
+      const remnant = await withOrgContext(org.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from journal_entries
-         where org_id = ${org.orgId} and custom->>'idempotencyKey' = ${key}`, "objects"));
+         where org_id = ${org.orgId} and custom->>'idempotencyKey' = ${key}`,
+          "objects",
+        ),
+      );
       assert.deepEqual(remnant, [{ n: 0 }]);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -97,17 +114,27 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const posted = await withOrgContext(org.orgId, () => postEntry(db, {
-        ...baseInput(org, `fx-selector-${randomUUID()}`),
-        lines: [
-          { accountId: org.accounts.bank, amount: "10.0001", txnAmount: "10.0000", fxRate: "1" },
-          { accountId: org.accounts.cogs, amount: "-10.0001", txnAmount: "-10.0001", fxRate: "1" },
-        ],
-      }));
+      const posted = await withOrgContext(org.orgId, () =>
+        postEntry(db, {
+          ...baseInput(org, `fx-selector-${randomUUID()}`),
+          lines: [
+            { accountId: org.accounts.bank, amount: "10.0001", txnAmount: "10.0000", fxRate: "1" },
+            {
+              accountId: org.accounts.cogs,
+              amount: "-10.0001",
+              txnAmount: "-10.0001",
+              fxRate: "1",
+            },
+          ],
+        }),
+      );
       const selectors = [...Array.from({ length: 128 }, () => posted.entryId), randomUUID(), null];
       await withOrgContext(org.orgId, async () => {
-        const before = await db.execute(sql`select * from journal_lines
-          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`, "objects");
+        const before = await db.execute(
+          sql`select * from journal_lines
+          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`,
+          "objects",
+        );
         // The repeated identities preserve the same lawful 0.0001 deviation
         // at the exact two-line boundary, in both posting-message contexts.
         for (const newPosting of [true, false]) {
@@ -118,8 +145,11 @@ test(
         }
         await db.execute(sql`select public.journal_lines_check_fx_residual_entries(
           ${sql.param(selectors)}::uuid[])`);
-        const after = await db.execute(sql`select * from journal_lines
-          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`, "objects");
+        const after = await db.execute(
+          sql`select * from journal_lines
+          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`,
+          "objects",
+        );
         assert.deepEqual(after, before);
         assert.equal(after.length, 2);
       });

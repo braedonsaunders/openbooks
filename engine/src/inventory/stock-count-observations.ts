@@ -35,7 +35,8 @@ export async function auditCountedChange(
     after: CountedChangeImage;
   },
 ): Promise<void> {
-  const written = (await tx.execute<{ id: string }>(sql`
+  const written = await tx.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'stock_count_lines', ${input.lineId}, 'update',
             ${JSON.stringify({
@@ -46,14 +47,19 @@ export async function auditCountedChange(
               after: input.after,
             })}::jsonb,
             ${actorId})
-    returning id`, "objects"));
+    returning id`,
+    "objects",
+  );
   if (written.length === 0) {
     throw new InventoryError("count observation was not audited — reload the count and try again");
   }
 }
 
 /** An explicit reason, or the fallback (null for first records, the factual default for corrections and recounts). */
-export function countedChangeReason(explicit: string | null | undefined, fallback: string | null): string | null {
+export function countedChangeReason(
+  explicit: string | null | undefined,
+  fallback: string | null,
+): string | null {
   if (explicit !== undefined && explicit !== null && explicit.trim() !== "") {
     if (explicit.trim().length > 500) {
       throw new InventoryError("count observation reason must be at most 500 characters");

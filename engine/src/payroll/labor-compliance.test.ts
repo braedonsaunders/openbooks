@@ -28,7 +28,10 @@ test("packs declaring labor-compliance files declare a non-empty, well-formed li
     const keys = new Set<string>();
     for (const format of formats) {
       assert.ok(format.key.trim().length > 0, `${code} declares a file with a blank key`);
-      assert.ok(!keys.has(format.key), `${code} declares file key ${format.key} twice — keys live once`);
+      assert.ok(
+        !keys.has(format.key),
+        `${code} declares file key ${format.key} twice — keys live once`,
+      );
       keys.add(format.key);
       assert.ok(format.label.trim().length > 0, `${code} file ${format.key} has a blank label`);
       assert.equal(typeof format.build, "function", `${code} file ${format.key} has no builder`);
@@ -63,7 +66,10 @@ test("packs declaring construction declare cited, effective-dated rules; only CA
       `${code} declares construction but lists no rule — present implies non-empty`,
     );
     for (const rule of rules) {
-      assert.ok("citation" in rule && rule.citation.trim().length > 0, `${code} ${rule.kind} has no citation`);
+      assert.ok(
+        "citation" in rule && rule.citation.trim().length > 0,
+        `${code} ${rule.kind} has no citation`,
+      );
       assert.ok(
         "effectiveFrom" in rule && DATE.test(rule.effectiveFrom),
         `${code} ${rule.kind} has no YYYY-MM-DD effectiveFrom`,
@@ -110,7 +116,8 @@ test("builders refuse an empty payload and nameless rows by name, and are determ
   assert.throws(
     () => federal.build({ ...CONTEXT, rows: [] }),
     (error: unknown) =>
-      error instanceof LaborComplianceBuildError && /no resolved worker\/classification\/day rows/.test(error.message),
+      error instanceof LaborComplianceBuildError &&
+      /no resolved worker\/classification\/day rows/.test(error.message),
   );
   assert.throws(
     () =>

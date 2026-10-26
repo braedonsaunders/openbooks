@@ -23,7 +23,7 @@ import { useAppAction } from "../../../../../lib/use-app-action";
 import { useBusinessToday } from "../../../../../components/business-date-provider";
 import { confirmDialog } from "../../../../../lib/confirm";
 import { promptDialog } from "../../../../../lib/prompt";
-import { DateField } from '../../../../../components/date-field'
+import { DateField } from "../../../../../components/date-field";
 
 type UnlinkedCustomer = {
   stripeId: string;
@@ -47,7 +47,13 @@ type RunSummary = {
   startedAt: string;
   finishedAt: string | null;
   stripeAccount: string | null;
-  seen: { meters: number; prices: number; customers: number; subscriptions: number; summaries: number };
+  seen: {
+    meters: number;
+    prices: number;
+    customers: number;
+    subscriptions: number;
+    summaries: number;
+  };
   created: { meters: number; prices: number; records: number; replayed: number };
   linked: number;
   skipped: number;
@@ -91,10 +97,14 @@ function runBadgeVariant(status: string): "success" | "warning" | "destructive" 
 
 function RunStatus({ status }: { status: string }) {
   const t = useTranslations("admin.setup.paymentProviders");
-  const label = status === "ok" ? t("billingImport.statusOk")
-    : status === "ok_with_errors" ? t("billingImport.statusOkWithErrors")
-    : status === "failed" ? t("billingImport.statusFailed")
-    : t("billingImport.statusRunning");
+  const label =
+    status === "ok"
+      ? t("billingImport.statusOk")
+      : status === "ok_with_errors"
+        ? t("billingImport.statusOkWithErrors")
+        : status === "failed"
+          ? t("billingImport.statusFailed")
+          : t("billingImport.statusRunning");
   return <Badge variant={runBadgeVariant(status)}>{label}</Badge>;
 }
 
@@ -118,7 +128,10 @@ export function StripeBillingImport() {
   const [subscriptions, setSubscriptions] = useState<SubscriptionOption[] | null>(null);
   const [picks, setPicks] = useState<Record<string, string>>({});
 
-  const failureMessage = useCallback((failure: ActionError, fallback: string) => failure.displayMessage(fallback), []);
+  const failureMessage = useCallback(
+    (failure: ActionError, fallback: string) => failure.displayMessage(fallback),
+    [],
+  );
 
   const load = useCallback(async () => {
     const result = await fetchAction<Overview>("/api/usage/stripe-billing/overview");
@@ -147,49 +160,64 @@ export function StripeBillingImport() {
       confirmLabel: t("billingImport.runImport"),
     });
     if (!confirmed) return;
-    await execute(() => fetchAction("/api/usage/stripe-billing/import", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ since, until }),
-    }), {
-      fallbackMessage: tc("feedback.somethingWentWrong"),
-      onOk: () => {
-        toast.success(t("billingImport.imported"));
-        void refresh();
+    await execute(
+      () =>
+        fetchAction("/api/usage/stripe-billing/import", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ since, until }),
+        }),
+      {
+        fallbackMessage: tc("feedback.somethingWentWrong"),
+        onOk: () => {
+          toast.success(t("billingImport.imported"));
+          void refresh();
+        },
+        onRefused: (failure) =>
+          setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
       },
-      onRefused: (failure) => setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
-    });
+    );
   }
 
   async function saveSchedule(cadence: "off" | "hourly" | "daily") {
-    await execute(() => fetchAction("/api/usage/stripe-billing/schedule", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cadence }),
-    }), {
-      fallbackMessage: tc("feedback.somethingWentWrong"),
-      onOk: () => {
-        toast.success(t("billingImport.scheduleSaved"));
-        void refresh();
+    await execute(
+      () =>
+        fetchAction("/api/usage/stripe-billing/schedule", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cadence }),
+        }),
+      {
+        fallbackMessage: tc("feedback.somethingWentWrong"),
+        onOk: () => {
+          toast.success(t("billingImport.scheduleSaved"));
+          void refresh();
+        },
+        onRefused: (failure) =>
+          setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
       },
-      onRefused: (failure) => setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
-    });
+    );
   }
 
   async function link(objectType: "customer" | "subscription", stripeId: string, nativeId: string) {
     if (!nativeId) return;
-    await execute(() => fetchAction("/api/usage/stripe-billing/links", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ objectType, stripeId, nativeId }),
-    }), {
-      fallbackMessage: tc("feedback.somethingWentWrong"),
-      onOk: () => {
-        toast.success(t("billingImport.linked"));
-        void refresh();
+    await execute(
+      () =>
+        fetchAction("/api/usage/stripe-billing/links", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ objectType, stripeId, nativeId }),
+        }),
+      {
+        fallbackMessage: tc("feedback.somethingWentWrong"),
+        onOk: () => {
+          toast.success(t("billingImport.linked"));
+          void refresh();
+        },
+        onRefused: (failure) =>
+          setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
       },
-      onRefused: (failure) => setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
-    });
+    );
   }
 
   async function skip(objectType: "customer" | "subscription", stripeId: string) {
@@ -206,33 +234,47 @@ export function StripeBillingImport() {
       setError(t("billingImport.skipNeedsRun"));
       return;
     }
-    await execute(() => fetchAction("/api/usage/stripe-billing/skips", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ objectType, stripeId, stripeAccount, reason: reason || null }),
-    }), {
-      fallbackMessage: tc("feedback.somethingWentWrong"),
-      onOk: () => {
-        toast.success(t("billingImport.skipped"));
-        void refresh();
+    await execute(
+      () =>
+        fetchAction("/api/usage/stripe-billing/skips", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ objectType, stripeId, stripeAccount, reason: reason || null }),
+        }),
+      {
+        fallbackMessage: tc("feedback.somethingWentWrong"),
+        onOk: () => {
+          toast.success(t("billingImport.skipped"));
+          void refresh();
+        },
+        onRefused: (failure) =>
+          setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
       },
-      onRefused: (failure) => setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
-    });
+    );
   }
 
   async function unskip(row: SkipRow) {
-    await execute(() => fetchAction("/api/usage/stripe-billing/skips", {
-      method: "DELETE",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ objectType: row.objectType, stripeId: row.stripeId, stripeAccount: row.stripeAccount }),
-    }), {
-      fallbackMessage: tc("feedback.somethingWentWrong"),
-      onOk: () => {
-        toast.success(t("billingImport.unskipped"));
-        void refresh();
+    await execute(
+      () =>
+        fetchAction("/api/usage/stripe-billing/skips", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            objectType: row.objectType,
+            stripeId: row.stripeId,
+            stripeAccount: row.stripeAccount,
+          }),
+        }),
+      {
+        fallbackMessage: tc("feedback.somethingWentWrong"),
+        onOk: () => {
+          toast.success(t("billingImport.unskipped"));
+          void refresh();
+        },
+        onRefused: (failure) =>
+          setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
       },
-      onRefused: (failure) => setError(failureMessage(failure, tc("feedback.somethingWentWrong"))),
-    });
+    );
   }
 
   async function createAndLink(entry: UnlinkedCustomer) {
@@ -248,7 +290,12 @@ export function StripeBillingImport() {
     const created = await fetchAction<{ id: string }>("/api/parties", {
       method: "POST",
       headers: { "content-type": "application/json", "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ kind: "customer", displayName: name, email: entry.email, roles: { customer: {} } }),
+      body: JSON.stringify({
+        kind: "customer",
+        displayName: name,
+        email: entry.email,
+        roles: { customer: {} },
+      }),
     });
     if (!created.ok) {
       setError(created.error.displayMessage(t("billingImport.createFailed")));
@@ -259,41 +306,70 @@ export function StripeBillingImport() {
 
   async function ensurePickers() {
     if (customers === null) {
-      const result = await fetchAction<{ customers: CustomerOption[] }>("/api/usage/stripe-billing/customers");
+      const result = await fetchAction<{ customers: CustomerOption[] }>(
+        "/api/usage/stripe-billing/customers",
+      );
       if (result.ok) setCustomers(result.data.customers);
     }
     if (subscriptions === null) {
-      const result = await fetchAction<{ subscriptions: Array<{ id: string; customerName: string; planName: string; status: string }> }>("/api/subscriptions");
+      const result = await fetchAction<{
+        subscriptions: Array<{
+          id: string;
+          customerName: string;
+          planName: string;
+          status: string;
+        }>;
+      }>("/api/subscriptions");
       if (result.ok) {
-        setSubscriptions(result.data.subscriptions.map((s) => ({
-          id: s.id, customerName: s.customerName, planName: s.planName, status: s.status,
-        })));
+        setSubscriptions(
+          result.data.subscriptions.map((s) => ({
+            id: s.id,
+            customerName: s.customerName,
+            planName: s.planName,
+            status: s.status,
+          })),
+        );
       }
     }
   }
 
   if (!overview) {
-    return loading
-      ? <p className="text-sm text-slate-500">…</p>
-      : (
-        <div className="space-y-2" role="alert">
-          <p className="text-sm text-red-600">{error ?? tc("feedback.somethingWentWrong")}</p>
-          <Button variant="outline" onClick={() => { setLoading(true); void load(); }}>{tc("actions.retry")}</Button>
-        </div>
-      );
+    return loading ? (
+      <p className="text-sm text-slate-500">…</p>
+    ) : (
+      <div className="space-y-2" role="alert">
+        <p className="text-sm text-red-600">{error ?? tc("feedback.somethingWentWrong")}</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setLoading(true);
+            void load();
+          }}
+        >
+          {tc("actions.retry")}
+        </Button>
+      </div>
+    );
   }
 
   const lastRun = overview.lastRun;
   const attention = overview.unlinked.length + overview.skipped.length;
-  const subRefusals = lastRun?.refusalDetails.filter((r) => r.code === "stripe_subscription_unlinked") ?? [];
+  const subRefusals =
+    lastRun?.refusalDetails.filter((r) => r.code === "stripe_subscription_unlinked") ?? [];
 
   return (
     <div className="space-y-4 border-t border-slate-200 pt-4 dark:border-slate-800">
       <div>
         <h3 className="font-semibold text-slate-900 dark:text-white">{t("billingImport.title")}</h3>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("billingImport.description")}</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          {t("billingImport.description")}
+        </p>
       </div>
-      {error ? <p className="text-sm text-red-600" role="alert">{error}</p> : null}
+      {error ? (
+        <p className="text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       {lastRun ? (
         <p className="text-sm text-slate-700 dark:text-slate-300">
@@ -302,8 +378,7 @@ export function StripeBillingImport() {
             records: lastRun.created.records,
             customers: lastRun.seen.customers,
             prices: lastRun.created.prices,
-          })}
-          {" "}
+          })}{" "}
           <RunStatus status={lastRun.status} />
           {overview.unlinked.length > 0 ? (
             <span className="ml-2 text-amber-700 dark:text-amber-400">
@@ -313,8 +388,12 @@ export function StripeBillingImport() {
         </p>
       ) : (
         <div className="rounded-lg border border-dashed border-slate-300 p-4 dark:border-slate-700">
-          <p className="text-sm font-medium text-slate-900 dark:text-white">{t("billingImport.neverRun")}</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("billingImport.neverRunDetail")}</p>
+          <p className="text-sm font-medium text-slate-900 dark:text-white">
+            {t("billingImport.neverRun")}
+          </p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {t("billingImport.neverRunDetail")}
+          </p>
         </div>
       )}
 
@@ -335,7 +414,11 @@ export function StripeBillingImport() {
 
       <div className="space-y-1.5">
         <Label>{t("billingImport.schedule")}</Label>
-        <Select value={overview.schedule} disabled={busy} onChange={(e) => void saveSchedule(e.target.value as "off" | "hourly" | "daily")}>
+        <Select
+          value={overview.schedule}
+          disabled={busy}
+          onChange={(e) => void saveSchedule(e.target.value as "off" | "hourly" | "daily")}
+        >
           <option value="off">{t("billingImport.scheduleOff")}</option>
           <option value="hourly">{t("billingImport.scheduleHourly")}</option>
           <option value="daily">{t("billingImport.scheduleDaily")}</option>
@@ -356,7 +439,9 @@ export function StripeBillingImport() {
             {overview.runs.map((run) => (
               <SharedTableRow key={run.id}>
                 <SharedTableCell>{viewerFormat.dateTime(new Date(run.startedAt))}</SharedTableCell>
-                <SharedTableCell><RunStatus status={run.status} /></SharedTableCell>
+                <SharedTableCell>
+                  <RunStatus status={run.status} />
+                </SharedTableCell>
                 <SharedTableCell>
                   {t("billingImport.runCreatedDetail", {
                     records: run.created.records,
@@ -368,10 +453,10 @@ export function StripeBillingImport() {
                   {run.unlinked + run.skipped + run.refusals === 0
                     ? "—"
                     : t("billingImport.runAttentionDetail", {
-                      unlinked: run.unlinked,
-                      skipped: run.skipped,
-                      refusals: run.refusals,
-                    })}
+                        unlinked: run.unlinked,
+                        skipped: run.skipped,
+                        refusals: run.refusals,
+                      })}
                 </SharedTableCell>
               </SharedTableRow>
             ))}
@@ -381,16 +466,27 @@ export function StripeBillingImport() {
 
       <DisclosureSection
         title={t("billingImport.needsAttention")}
-        summary={attention + subRefusals.length === 0 ? t("billingImport.allClear") : t("billingImport.attentionSummary", { count: attention + subRefusals.length })}
+        summary={
+          attention + subRefusals.length === 0
+            ? t("billingImport.allClear")
+            : t("billingImport.attentionSummary", { count: attention + subRefusals.length })
+        }
         forceOpen={attention + subRefusals.length > 0}
-        onOpenChange={(open) => { if (open) void ensurePickers(); }}
+        onOpenChange={(open) => {
+          if (open) void ensurePickers();
+        }}
       >
         <div className="space-y-3">
           {overview.unlinked.map((entry) => (
-            <div key={entry.stripeId} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <div
+              key={entry.stripeId}
+              className="rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+            >
               <p className="text-sm font-medium text-slate-900 dark:text-white">
                 {entry.stripeId}
-                {entry.email ? <span className="ml-2 font-normal text-slate-500">{entry.email}</span> : null}
+                {entry.email ? (
+                  <span className="ml-2 font-normal text-slate-500">{entry.email}</span>
+                ) : null}
               </p>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 {entry.emailMatch && entry.suggestedCustomerName
@@ -399,14 +495,24 @@ export function StripeBillingImport() {
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {entry.emailMatch && entry.suggestedCustomerId ? (
-                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void link("customer", entry.stripeId, entry.suggestedCustomerId!)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      void link("customer", entry.stripeId, entry.suggestedCustomerId!)
+                    }
+                  >
                     {t("billingImport.linkSuggested", { name: entry.suggestedCustomerName ?? "" })}
                   </Button>
                 ) : null}
                 <SearchSelect
                   value={picks[entry.stripeId] ?? ""}
                   onChange={(value) => setPicks((prev) => ({ ...prev, [entry.stripeId]: value }))}
-                  options={(customers ?? []).map((c) => ({ value: c.id, label: c.email ? `${c.name} · ${c.email}` : c.name }))}
+                  options={(customers ?? []).map((c) => ({
+                    value: c.id,
+                    label: c.email ? `${c.name} · ${c.email}` : c.name,
+                  }))}
                   placeholder={t("billingImport.chooseCustomer")}
                   sheetTitle={t("billingImport.chooseCustomer")}
                   ariaLabel={t("billingImport.chooseCustomer")}
@@ -420,18 +526,33 @@ export function StripeBillingImport() {
                 >
                   {t("billingImport.link")}
                 </Button>
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void createAndLink(entry)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void createAndLink(entry)}
+                >
                   {t("billingImport.createCustomer")}
                 </Button>
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void skip("customer", entry.stripeId)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void skip("customer", entry.stripeId)}
+                >
                   {t("billingImport.skip")}
                 </Button>
               </div>
             </div>
           ))}
           {subRefusals.map((refusal) => (
-            <div key={refusal.stripeId} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-              <p className="text-sm font-medium text-slate-900 dark:text-white">{refusal.stripeId}</p>
+            <div
+              key={refusal.stripeId}
+              className="rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+            >
+              <p className="text-sm font-medium text-slate-900 dark:text-white">
+                {refusal.stripeId}
+              </p>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{refusal.message}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <SearchSelect
@@ -450,22 +571,34 @@ export function StripeBillingImport() {
                   variant="outline"
                   size="sm"
                   disabled={busy || !(picks[refusal.stripeId] ?? "")}
-                  onClick={() => void link("subscription", refusal.stripeId, picks[refusal.stripeId] ?? "")}
+                  onClick={() =>
+                    void link("subscription", refusal.stripeId, picks[refusal.stripeId] ?? "")
+                  }
                 >
                   {t("billingImport.link")}
                 </Button>
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void skip("subscription", refusal.stripeId)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void skip("subscription", refusal.stripeId)}
+                >
                   {t("billingImport.skip")}
                 </Button>
               </div>
             </div>
           ))}
           {overview.skipped.map((row) => (
-            <div key={row.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <div
+              key={row.id}
+              className="rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+            >
               <p className="text-sm text-slate-700 dark:text-slate-300">
                 {row.stripeId}
                 <span className="ml-2 text-slate-500">
-                  {t("billingImport.skippedDetail", { reason: row.reason ?? t("billingImport.noReason") })}
+                  {t("billingImport.skippedDetail", {
+                    reason: row.reason ?? t("billingImport.noReason"),
+                  })}
                 </span>
               </p>
               <div className="mt-2">
@@ -476,7 +609,9 @@ export function StripeBillingImport() {
             </div>
           ))}
           {attention + subRefusals.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t("billingImport.allClear")}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t("billingImport.allClear")}
+            </p>
           ) : null}
         </div>
       </DisclosureSection>

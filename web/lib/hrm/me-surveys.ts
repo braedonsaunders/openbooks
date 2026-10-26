@@ -1,12 +1,12 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { HrmSurveysError } from '@openbooks/engine/hrm/documents/errors'
-import { listOwnInvitations } from '@openbooks/engine/hrm/surveys/responses'
-import { loadOrRefuse, type PageRefusal } from '../load-or-refuse'
-import { meTabs } from './self-service'
-import { getAuthz, type Authz } from '../authz'
-import { requireFeatureEnabled } from '../feature-gates'
+import { getTranslations } from "next-intl/server";
+import { HrmSurveysError } from "@openbooks/engine/hrm/documents/errors";
+import { listOwnInvitations } from "@openbooks/engine/hrm/surveys/responses";
+import { loadOrRefuse, type PageRefusal } from "../load-or-refuse";
+import { meTabs } from "./self-service";
+import { getAuthz, type Authz } from "../authz";
+import { requireFeatureEnabled } from "../feature-gates";
 
 /**
  * Me open-surveys loader (0230, HR-19): the actor's unanswered
@@ -19,22 +19,22 @@ import { requireFeatureEnabled } from '../feature-gates'
  */
 
 export interface MeSurveysAuthz {
-  orgId: string
-  userId: string
-  session: Authz
+  orgId: string;
+  userId: string;
+  session: Authz;
 }
 
 export async function meSurveysAuthz(): Promise<MeSurveysAuthz | null> {
-  const gate = await getAuthz()
-  if (!gate) return null
-  await requireFeatureEnabled(gate.user.orgId, 'hrm')
-  await requireFeatureEnabled(gate.user.orgId, 'hrmSurveys')
-  return { orgId: gate.user.orgId, userId: gate.user.id, session: gate }
+  const gate = await getAuthz();
+  if (!gate) return null;
+  await requireFeatureEnabled(gate.user.orgId, "hrm");
+  await requireFeatureEnabled(gate.user.orgId, "hrmSurveys");
+  return { orgId: gate.user.orgId, userId: gate.user.id, session: gate };
 }
 
 export async function loadMeSurveysHome(authz: MeSurveysAuthz) {
-  const t = await getTranslations('hrm')
-  const tabs = await meTabs(authz.session, '/me/surveys')
+  const t = await getTranslations("hrm");
+  const tabs = await meTabs(authz.session, "/me/surveys");
   // An unlinked login is a correct refusal with the remedy (the shared
   // loadOrRefuse mechanism): only the no-link REFUSED text converts — the
   // grant refusal from the same call and every other error still throw.
@@ -42,21 +42,25 @@ export async function loadMeSurveysHome(authz: MeSurveysAuthz) {
     () => listOwnInvitations({ orgId: authz.orgId, actorId: authz.userId }),
     {
       refusals: [
-        { error: HrmSurveysError, code: 'REFUSED', messageIncludes: 'not linked to a person record' },
+        {
+          error: HrmSurveysError,
+          code: "REFUSED",
+          messageIncludes: "not linked to a person record",
+        },
       ],
-      title: t('me.refusedTitle'),
+      title: t("me.refusedTitle"),
     },
-  )
-  const invitations = outcome.ok ? outcome.data : []
-  const refusal: PageRefusal | null = outcome.ok ? null : outcome.refusal
+  );
+  const invitations = outcome.ok ? outcome.data : [];
+  const refusal: PageRefusal | null = outcome.ok ? null : outcome.refusal;
   return {
-    title: t('meSurveys.title'),
-    description: t('meSurveys.description'),
+    title: t("meSurveys.title"),
+    description: t("meSurveys.description"),
     tabs,
     refusal,
     columns: {
-      name: t('meSurveys.columns.name'),
-      closes: t('meSurveys.columns.closes'),
+      name: t("meSurveys.columns.name"),
+      closes: t("meSurveys.columns.closes"),
     },
     rows: invitations.map((invitation) => ({
       id: invitation.invitationId,
@@ -64,9 +68,9 @@ export async function loadMeSurveysHome(authz: MeSurveysAuthz) {
       kind: invitation.surveyKind,
       closes: invitation.closesAt,
     })),
-    empty: t('meSurveys.empty'),
-    respondLabel: t('meSurveys.respond'),
-    actionFailed: t('meSurveys.actionFailed'),
-    reissueFailed: t('meSurveys.reissueFailed'),
-  }
+    empty: t("meSurveys.empty"),
+    respondLabel: t("meSurveys.respond"),
+    actionFailed: t("meSurveys.actionFailed"),
+    reissueFailed: t("meSurveys.reissueFailed"),
+  };
 }

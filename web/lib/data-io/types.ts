@@ -9,124 +9,125 @@
  */
 
 export type ResourceFieldKind =
-  | 'text'
-  | 'long_text'
-  | 'number'
-  | 'currency'
-  | 'percent'
-  | 'boolean'
-  | 'date'
-  | 'datetime'
-  | 'select'
-  | 'multiselect'
-  | 'reference'
+  | "text"
+  | "long_text"
+  | "number"
+  | "currency"
+  | "percent"
+  | "boolean"
+  | "date"
+  | "datetime"
+  | "select"
+  | "multiselect"
+  | "reference";
 
 /** A `reference` field points at another resource, matched by a human key. */
 export interface ResourceRefTarget {
   /** Resource key of the referenced entity, e.g. 'accounts', 'tax-codes'. */
-  resource: string
+  resource: string;
   /** The human column used to name the target in a file, e.g. 'number', 'code'. */
-  by: string
+  by: string;
 }
 
 /** One importable/exportable field, unified across all entity families. */
 export interface ResourceField {
   /** Stable key: camelCase column (setup/master), field id (records). */
-  key: string
-  label: string
-  kind: ResourceFieldKind
-  required?: boolean
+  key: string;
+  label: string;
+  kind: ResourceFieldKind;
+  required?: boolean;
   /** For select/multiselect. */
-  options?: { value: string; label: string }[]
+  options?: { value: string; label: string }[];
   /** For `reference` fields. */
-  ref?: ResourceRefTarget
+  ref?: ResourceRefTarget;
   /** Stored in a `custom` jsonb / record data map rather than a core column. */
-  custom?: boolean
+  custom?: boolean;
   /** Repeating sublist section id (custom records only); values are row arrays. */
-  section?: string
+  section?: string;
   /** Computed/immutable — included in export, ignored on import. */
-  readOnly?: boolean
+  readOnly?: boolean;
 }
 
 /** Client-safe metadata about a resource (drives pickers, nav, permissions). */
 export interface ResourceDescriptor {
-  key: string
-  label: string
+  key: string;
+  label: string;
   /** 'Setup' | 'Master data' | 'Records' | 'Transactions'. */
-  group: ResourceGroup
-  iconKey: string
-  readPermission: string
-  writePermission: string
-  supportsImport: boolean
+  group: ResourceGroup;
+  iconKey: string;
+  readPermission: string;
+  writePermission: string;
+  supportsImport: boolean;
   /** Field key used to match update-vs-insert on import (the natural key). */
-  naturalKey?: string
+  naturalKey?: string;
   /** Transactions can optionally post to the ledger; this gates that step. */
-  canPost?: boolean
-  postPermission?: string
+  canPost?: boolean;
+  postPermission?: string;
   /**
    * `write()` enforces `WriteCtx.allowedSubsidiaryIds` itself. Resources
    * without it are refused for subsidiary-restricted importers by the import
    * route (see web/lib/data-io/write-scope.ts).
    */
-  scopedWrite?: boolean
+  scopedWrite?: boolean;
 }
 
-export type ResourceGroup = 'Setup' | 'Master data' | 'Property management' | 'Records' | 'Transactions'
+export type ResourceGroup =
+  "Setup" | "Master data" | "Property management" | "Records" | "Transactions";
 
-export type ImportMode = 'insert' | 'upsert'
+export type ImportMode = "insert" | "upsert";
 
-export type CellValue = string | number | boolean | null
+export type CellValue = string | number | boolean | null;
 
 /** Reserved row key: source header → spreadsheet cell provenance. */
-export const CELL_PROVENANCE_KEY = '__openbooksCellProvenance'
-export type CellProvenance = 'formula'
+export const CELL_PROVENANCE_KEY = "__openbooksCellProvenance";
+export type CellProvenance = "formula";
 
 /** Reserved row key: target field → source column selected by the mapping. */
-export const SOURCE_COLUMNS_KEY = '__sourceColumns'
+export const SOURCE_COLUMNS_KEY = "__sourceColumns";
 
 /** Reserved row key: source columns the mapping intentionally left unused. */
-export const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
+export const UNMAPPED_COLUMNS_KEY = "__unmappedColumns";
 
 /** A single row's error during preview/commit. */
 export interface RowError {
   /** 1-based source row number (excluding the header row). */
-  row: number
-  message: string
-  field?: string
+  row: number;
+  message: string;
+  field?: string;
 }
 
 /** Outcome of a write (commit) or a dry-run (preview). */
 export interface WriteOutcome {
-  created: number
-  updated: number
-  failed: number
-  errors: RowError[]
+  created: number;
+  updated: number;
+  failed: number;
+  errors: RowError[];
   /**
    * Rows the run removes (a zero amount over an existing record deletes it).
    * Optional so resources without delete semantics keep their existing shape;
    * set it whenever a preview or commit can remove, so effect counts never
    * hide a removal inside updated.
    */
-  deleted?: number
+  deleted?: number;
   /**
    * Non-blocking row advisories (a warning never fails its row). Optional so
    * resources without advisories keep their existing outcome shape; the
    * import route passes the outcome through untouched, so anything set here
    * reaches the preview and the commit result alike.
    */
-  warnings?: RowError[]
+  warnings?: RowError[];
 }
 
-export const EXPORT_FORMATS = ['csv', 'xlsx', 'json'] as const
-export type ExportFormat = (typeof EXPORT_FORMATS)[number]
+export const EXPORT_FORMATS = ["csv", "xlsx", "json"] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /** Resolve the historical absent-format default without coercing unknown values. */
 export function requestedExportFormat(value: unknown): ExportFormat | null {
-  if (value === undefined) return 'csv'
-  return typeof value === 'string' && (EXPORT_FORMATS as readonly string[]).includes(value)
+  if (value === undefined) return "csv";
+  return typeof value === "string" && (EXPORT_FORMATS as readonly string[]).includes(value)
     ? (value as ExportFormat)
-    : null
+    : null;
 }
 
-export const IMPORT_FORMATS = ['csv', 'xlsx', 'json'] as const
-export type ImportFormat = (typeof IMPORT_FORMATS)[number]
+export const IMPORT_FORMATS = ["csv", "xlsx", "json"] as const;
+export type ImportFormat = (typeof IMPORT_FORMATS)[number];

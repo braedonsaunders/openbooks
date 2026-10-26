@@ -9,10 +9,7 @@ import test from "node:test";
 process.env.OPENBOOKS_DB_URL = "";
 process.env.OPENBOOKS_MIGRATION_DB_URL = "";
 
-const {
-  HrmChangeRequestError,
-  validateChangePayload,
-} = await import("./change-requests.ts");
+const { HrmChangeRequestError, validateChangePayload } = await import("./change-requests.ts");
 
 function codeOf(fn: () => unknown): string {
   try {
@@ -36,24 +33,45 @@ test("bank_change accepts the sealed shape and refuses plaintext-shaped proposal
   assert.equal(parsed.accountLastFour, "6789");
   assert.equal(
     codeOf(() =>
-      validateChangePayload({ kind: "bank_change", bankName: "First Bank", accountNumber: "12345678" }),
+      validateChangePayload({
+        kind: "bank_change",
+        bankName: "First Bank",
+        accountNumber: "12345678",
+      }),
     ),
     "INVALID_PAYLOAD",
     "plaintext account numbers never validate — seal before filing",
   );
   assert.equal(
     codeOf(() =>
-      validateChangePayload({ kind: "bank_change", bankName: "First Bank", sealedAccount: "x", accountLastFour: "678" }),
+      validateChangePayload({
+        kind: "bank_change",
+        bankName: "First Bank",
+        sealedAccount: "x",
+        accountLastFour: "678",
+      }),
     ),
     "INVALID_PAYLOAD",
   );
 });
 
 test("unknown kinds are refused by name", () => {
-  assert.equal(codeOf(() => validateChangePayload({ kind: "promote" })), "UNKNOWN_KIND");
-  assert.equal(codeOf(() => validateChangePayload({})), "UNKNOWN_KIND");
-  assert.equal(codeOf(() => validateChangePayload(null)), "INVALID_PAYLOAD");
-  assert.equal(codeOf(() => validateChangePayload([])), "INVALID_PAYLOAD");
+  assert.equal(
+    codeOf(() => validateChangePayload({ kind: "promote" })),
+    "UNKNOWN_KIND",
+  );
+  assert.equal(
+    codeOf(() => validateChangePayload({})),
+    "UNKNOWN_KIND",
+  );
+  assert.equal(
+    codeOf(() => validateChangePayload(null)),
+    "INVALID_PAYLOAD",
+  );
+  assert.equal(
+    codeOf(() => validateChangePayload([])),
+    "INVALID_PAYLOAD",
+  );
   assert.throws(
     () => validateChangePayload({ kind: "promotion" }),
     /hire, status_change, assignment_change, termination, position_assignment, profile_change, or bank_change/,
@@ -71,7 +89,9 @@ test("hire accepts a minimal proposal and defaults status to active", () => {
 
 test("hire refuses terminated status and bad windows", () => {
   assert.equal(
-    codeOf(() => validateChangePayload({ kind: "hire", status: "terminated", effectiveFrom: "2026-09-01" })),
+    codeOf(() =>
+      validateChangePayload({ kind: "hire", status: "terminated", effectiveFrom: "2026-09-01" }),
+    ),
     "INVALID_PAYLOAD",
   );
   assert.equal(
@@ -79,7 +99,13 @@ test("hire refuses terminated status and bad windows", () => {
     "INVALID_PAYLOAD",
   );
   assert.equal(
-    codeOf(() => validateChangePayload({ kind: "hire", effectiveFrom: "2026-09-01", effectiveTo: "2026-09-01" })),
+    codeOf(() =>
+      validateChangePayload({
+        kind: "hire",
+        effectiveFrom: "2026-09-01",
+        effectiveTo: "2026-09-01",
+      }),
+    ),
     "INVALID_PAYLOAD",
   );
   assert.equal(
@@ -115,27 +141,34 @@ test("hire refuses a malformed initial assignment by name", () => {
     initialAssignment: { assignmentKey: "primary", jobTitle: "Engineer" },
   };
   assert.equal(
+    codeOf(() => validateChangePayload({ ...base, initialAssignment: { assignmentKey: " " } })),
+    "INVALID_PAYLOAD",
+  );
+  assert.equal(
     codeOf(() =>
-      validateChangePayload({ ...base, initialAssignment: { assignmentKey: " " } }),
+      validateChangePayload({
+        ...base,
+        initialAssignment: { assignmentKey: "primary", fte: "lots" },
+      }),
     ),
     "INVALID_PAYLOAD",
   );
   assert.equal(
     codeOf(() =>
-      validateChangePayload({ ...base, initialAssignment: { assignmentKey: "primary", fte: "lots" } }),
-    ),
-    "INVALID_PAYLOAD",
-  );
-  assert.equal(
-    codeOf(() =>
-      validateChangePayload({ ...base, initialAssignment: { assignmentKey: "primary", managerEmploymentId: null } }),
+      validateChangePayload({
+        ...base,
+        initialAssignment: { assignmentKey: "primary", managerEmploymentId: null },
+      }),
     ),
     "INVALID_PAYLOAD",
     "manager removal is not modeled on a hire either",
   );
   assert.equal(
     codeOf(() =>
-      validateChangePayload({ ...base, initialAssignment: { assignmentKey: "primary", grade: "L4" } }),
+      validateChangePayload({
+        ...base,
+        initialAssignment: { assignmentKey: "primary", grade: "L4" },
+      }),
     ),
     "INVALID_PAYLOAD",
     "unknown assignment keys are refused, never silently stored",
@@ -149,29 +182,90 @@ test("status_change requires a governed status and a real window", () => {
     effectiveFrom: "2026-09-01",
   });
   assert.equal(parsed.kind, "status_change");
-  assert.equal(codeOf(() => validateChangePayload({ kind: "status_change", status: "fired", effectiveFrom: "2026-09-01" })), "INVALID_PAYLOAD");
-  assert.equal(codeOf(() => validateChangePayload({ kind: "status_change", status: "active", effectiveFrom: "not-a-date" })), "INVALID_PAYLOAD");
+  assert.equal(
+    codeOf(() =>
+      validateChangePayload({
+        kind: "status_change",
+        status: "fired",
+        effectiveFrom: "2026-09-01",
+      }),
+    ),
+    "INVALID_PAYLOAD",
+  );
+  assert.equal(
+    codeOf(() =>
+      validateChangePayload({
+        kind: "status_change",
+        status: "active",
+        effectiveFrom: "not-a-date",
+      }),
+    ),
+    "INVALID_PAYLOAD",
+  );
   // Ending employment must be a termination so coverage and final pay follow.
-  assert.equal(codeOf(() => validateChangePayload({ kind: "status_change", status: "terminated", effectiveFrom: "2026-09-01" })), "INVALID_PAYLOAD");
-  assert.equal(validateChangePayload({ kind: "status_change", status: "terminated", effectiveFrom: "2026-09-01", effectiveTo: "2026-09-08", historicalObservation: { sourceReference: "Record of employment" } }).kind, "status_change");
+  assert.equal(
+    codeOf(() =>
+      validateChangePayload({
+        kind: "status_change",
+        status: "terminated",
+        effectiveFrom: "2026-09-01",
+      }),
+    ),
+    "INVALID_PAYLOAD",
+  );
+  assert.equal(
+    validateChangePayload({
+      kind: "status_change",
+      status: "terminated",
+      effectiveFrom: "2026-09-01",
+      effectiveTo: "2026-09-08",
+      historicalObservation: { sourceReference: "Record of employment" },
+    }).kind,
+    "status_change",
+  );
 });
 
 test("assignment_change needs at least one content field", () => {
-  assert.equal(codeOf(() => validateChangePayload({ kind: "assignment_change", assignmentKey: "primary" })), "INVALID_PAYLOAD");
-  const parsed = validateChangePayload({ kind: "assignment_change", assignmentKey: "primary", fte: "0.8" });
+  assert.equal(
+    codeOf(() => validateChangePayload({ kind: "assignment_change", assignmentKey: "primary" })),
+    "INVALID_PAYLOAD",
+  );
+  const parsed = validateChangePayload({
+    kind: "assignment_change",
+    assignmentKey: "primary",
+    fte: "0.8",
+  });
   assert.equal(parsed.kind, "assignment_change");
 });
 
 test("assignment_change refuses manager removal, bad fte, and bad refs", () => {
   assert.equal(
-    codeOf(() => validateChangePayload({ kind: "assignment_change", assignmentKey: "k", fte: "1", managerEmploymentId: null })),
+    codeOf(() =>
+      validateChangePayload({
+        kind: "assignment_change",
+        assignmentKey: "k",
+        fte: "1",
+        managerEmploymentId: null,
+      }),
+    ),
     "INVALID_PAYLOAD",
   );
   for (const fte of ["0", "-1", "NaN", "1.23456", "lots", "1000"]) {
-    assert.equal(codeOf(() => validateChangePayload({ kind: "assignment_change", assignmentKey: "k", fte })), "INVALID_PAYLOAD", `fte ${fte}`);
+    assert.equal(
+      codeOf(() => validateChangePayload({ kind: "assignment_change", assignmentKey: "k", fte })),
+      "INVALID_PAYLOAD",
+      `fte ${fte}`,
+    );
   }
   assert.equal(
-    codeOf(() => validateChangePayload({ kind: "assignment_change", assignmentKey: "k", fte: "1", departmentId: "nope" })),
+    codeOf(() =>
+      validateChangePayload({
+        kind: "assignment_change",
+        assignmentKey: "k",
+        fte: "1",
+        departmentId: "nope",
+      }),
+    ),
     "INVALID_PAYLOAD",
   );
 });
@@ -179,22 +273,39 @@ test("assignment_change refuses manager removal, bad fte, and bad refs", () => {
 test("termination needs a real civil date", () => {
   const parsed = validateChangePayload({ kind: "termination", effectiveDate: "2026-10-31" });
   assert.equal(parsed.kind, "termination");
-  assert.equal(codeOf(() => validateChangePayload({ kind: "termination" })), "INVALID_PAYLOAD");
-  assert.equal(codeOf(() => validateChangePayload({ kind: "termination", effectiveDate: "2026-02-30" })), "INVALID_PAYLOAD");
+  assert.equal(
+    codeOf(() => validateChangePayload({ kind: "termination" })),
+    "INVALID_PAYLOAD",
+  );
+  assert.equal(
+    codeOf(() => validateChangePayload({ kind: "termination", effectiveDate: "2026-02-30" })),
+    "INVALID_PAYLOAD",
+  );
 });
 
-test('historical status observations bind a real bounded window and a nonblank dated source', () => {
-  const base = { kind: 'status_change', status: 'active', effectiveFrom: '2020-01-03', effectiveTo: '2020-01-04',
-    historicalObservation: { sourceReference: '  Dated declaration January 3  ' } };
+test("historical status observations bind a real bounded window and a nonblank dated source", () => {
+  const base = {
+    kind: "status_change",
+    status: "active",
+    effectiveFrom: "2020-01-03",
+    effectiveTo: "2020-01-04",
+    historicalObservation: { sourceReference: "  Dated declaration January 3  " },
+  };
   const parsed = validateChangePayload(base);
-  assert.equal(parsed.kind, 'status_change');
-  if (parsed.kind !== 'status_change') throw new Error('unreachable');
-  assert.deepEqual(parsed.historicalObservation, { sourceReference: 'Dated declaration January 3' });
+  assert.equal(parsed.kind, "status_change");
+  if (parsed.kind !== "status_change") throw new Error("unreachable");
+  assert.deepEqual(parsed.historicalObservation, {
+    sourceReference: "Dated declaration January 3",
+  });
   for (const payload of [
     { ...base, effectiveTo: null },
-    { ...base, effectiveTo: '2020-01-03' },
-    { ...base, historicalObservation: { sourceReference: ' ' } },
-    { ...base, historicalObservation: { sourceReference: 'Declaration', hireDate: '2019-01-01' } },
-    { ...base, kind: 'hire' },
-  ]) assert.equal(codeOf(() => validateChangePayload(payload)), 'INVALID_PAYLOAD');
+    { ...base, effectiveTo: "2020-01-03" },
+    { ...base, historicalObservation: { sourceReference: " " } },
+    { ...base, historicalObservation: { sourceReference: "Declaration", hireDate: "2019-01-01" } },
+    { ...base, kind: "hire" },
+  ])
+    assert.equal(
+      codeOf(() => validateChangePayload(payload)),
+      "INVALID_PAYLOAD",
+    );
 });

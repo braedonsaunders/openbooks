@@ -17,14 +17,20 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 type Filter = { key: string; operator: string; value?: string | null; to?: string | null };
 
 async function onhandCount(orgId: string, viewFilters: Filter[] = []): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from cost_layers oh
-      where ${inventoryOnhandWhere({ ...defaultListView("inventory_onhand"), filters: viewFilters as never }, {}, orgId)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from cost_layers oh
+      where ${inventoryOnhandWhere({ ...defaultListView("inventory_onhand"), filters: viewFilters as never }, {}, orgId)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
 async function movementCount(orgId: string, viewFilters: Filter[] = []): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements m
-      where ${inventoryMovementWhere({ ...defaultListView("inventory_movement"), filters: viewFilters as never }, {}, orgId)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from inventory_movements m
+      where ${inventoryMovementWhere({ ...defaultListView("inventory_movement"), filters: viewFilters as never }, {}, orgId)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -39,7 +45,9 @@ test("malformed inventory filters match nothing instead of throwing", { skip: !D
       "malformed onhand item filter matches nothing",
     );
     assert.equal(
-      await onhandCount(org.orgId, [{ key: "stock_location_id", operator: "eq", value: "not-a-uuid" }]),
+      await onhandCount(org.orgId, [
+        { key: "stock_location_id", operator: "eq", value: "not-a-uuid" },
+      ]),
       0,
       "malformed onhand location filter matches nothing",
     );

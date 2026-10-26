@@ -2,19 +2,38 @@ import { lockActorCommandAuthority } from "../organization/actor-command-authori
 import { sql } from "drizzle-orm";
 import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
-import { db, orgContext, withBypass, withOrg, withOrgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import {
+  db,
+  orgContext,
+  withBypass,
+  withOrg,
+  withOrgContext,
+  withOrgTransaction,
+  type SqlExecutor,
+} from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
-import { add, mul, mulDecimalFactors, mulRatio, neg, normalizeMoney, toUnits } from "../money/money.ts";
+import {
+  add,
+  mul,
+  mulDecimalFactors,
+  mulRatio,
+  neg,
+  normalizeMoney,
+  toUnits,
+} from "../money/money.ts";
 import { computeLineTaxes } from "../tax/tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "../tax/persist.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { resolveDocumentLineDefaults } from "../ledger/document-defaults.ts";
 import { type PostingDeps } from "../journal/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { ConsolidatedBillingError, resolveSubscriptionBillingTarget } from "./consolidated-billing.ts";
+import {
+  ConsolidatedBillingError,
+  resolveSubscriptionBillingTarget,
+} from "./consolidated-billing.ts";
 import { advanceAnchoredMonth, retreatAnchoredMonth } from "./cadence.ts";
 import { daysInCivilMonth } from "../platform/civil-date.ts";
 import {
@@ -62,7 +81,10 @@ const POSTGRES_INTEGER_MAX = 2_147_483_647;
 const POSTGRES_MONEY_MAX_UNITS = 9_999_999_999_999_999_999n;
 
 export class SubscriptionError extends Error {
-  constructor(message: string, readonly status = 422) {
+  constructor(
+    message: string,
+    readonly status = 422,
+  ) {
     super(message);
     this.name = "SubscriptionError";
   }
@@ -75,18 +97,22 @@ export async function lockCustomerForScope(
   customerId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const allowed = scope === null
-    ? sql``
-    : scope.size
-      ? sql`and (c.subsidiary_id is null or c.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`
-      : sql`and c.subsidiary_id is null`;
-  const customer = await tx.execute(sql`
+  const allowed =
+    scope === null
+      ? sql``
+      : scope.size
+        ? sql`and (c.subsidiary_id is null or c.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`
+        : sql`and c.subsidiary_id is null`;
+  const customer = await tx.execute(
+    sql`
     select c.id
       from parties c
      where c.org_id = ${orgId} and c.id = ${customerId}
        ${allowed}
      for share of c
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!customer[0]) throw new ScopeNotFoundError();
 }
 
@@ -97,19 +123,23 @@ export async function lockSubscriptionCustomerForScope(
   subscriptionId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const allowed = scope === null
-    ? sql``
-    : scope.size
-      ? sql`and (c.subsidiary_id is null or c.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`
-      : sql`and c.subsidiary_id is null`;
-  const customer = await tx.execute(sql`
+  const allowed =
+    scope === null
+      ? sql``
+      : scope.size
+        ? sql`and (c.subsidiary_id is null or c.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`
+        : sql`and c.subsidiary_id is null`;
+  const customer = await tx.execute(
+    sql`
     select c.id
       from subscriptions s
       join parties c on c.id = s.customer_id and c.org_id = s.org_id
      where s.org_id = ${orgId} and s.id = ${subscriptionId}
        ${allowed}
      for share of c
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!customer[0]) throw new ScopeNotFoundError();
 }
 
@@ -176,10 +206,14 @@ function persistSubscriptionMoney(
 function persistRatedQuantity(value: unknown): string {
   const exact = canonicalDecimal(value, 8);
   if (exact === null || compareDecimal(exact, "0") <= 0) {
-    throw new SubscriptionError("rated invoice quantity must be a positive decimal with no more than 8 decimal places");
+    throw new SubscriptionError(
+      "rated invoice quantity must be a positive decimal with no more than 8 decimal places",
+    );
   }
   if (exact.split(".", 1)[0]!.replace(/^0+/, "").length > 20) {
-    throw new SubscriptionError("rated invoice quantity is outside the supported numeric(28,8) range");
+    throw new SubscriptionError(
+      "rated invoice quantity is outside the supported numeric(28,8) range",
+    );
   }
   return exact;
 }
@@ -187,10 +221,14 @@ function persistRatedQuantity(value: unknown): string {
 function persistRatedUnitPrice(value: unknown): string {
   const exact = canonicalDecimal(value, 8);
   if (exact === null || compareDecimal(exact, "0") < 0) {
-    throw new SubscriptionError("rated invoice unit price must be a nonnegative decimal with no more than 8 decimal places");
+    throw new SubscriptionError(
+      "rated invoice unit price must be a nonnegative decimal with no more than 8 decimal places",
+    );
   }
   if (exact.split(".", 1)[0]!.replace(/^0+/, "").length > 20) {
-    throw new SubscriptionError("rated invoice unit price is outside the supported numeric(28,8) range");
+    throw new SubscriptionError(
+      "rated invoice unit price is outside the supported numeric(28,8) range",
+    );
   }
   return exact;
 }
@@ -222,7 +260,10 @@ function subscriptionDate(isoDate: string): Date {
  * Feb 28 +1mo → Mar 31 with the anchor, never Mar 28. Pure — unit-tested.
  */
 export function advanceSubscription(
-  isoDate: string, interval: Interval, intervalCount = 1, anchorDay?: number | null,
+  isoDate: string,
+  interval: Interval,
+  intervalCount = 1,
+  anchorDay?: number | null,
 ): string {
   const cadence = normalizeSubscriptionCadence(interval, intervalCount);
   const n = cadence.intervalCount;
@@ -243,7 +284,8 @@ export function advanceSubscription(
   if (!Number.isSafeInteger(anchor) || anchor < 1 || anchor > 31) {
     throw new SubscriptionError("billing anchor day must be between 1 and 31");
   }
-  const monthStep = (cadence.interval === "monthly" ? 1 : cadence.interval === "quarterly" ? 3 : 12) * n;
+  const monthStep =
+    (cadence.interval === "monthly" ? 1 : cadence.interval === "quarterly" ? 3 : 12) * n;
   try {
     return advanceAnchoredMonth(y!, m!, monthStep, anchor);
   } catch {
@@ -257,7 +299,11 @@ export function advanceSubscription(
  * an anchor that does not land on it cannot describe a cycle through it, and
  * the bill date's own day is the only cycle that does.
  */
-function cycleAnchorThrough(billOn: string, interval: Interval, anchorDay: number | null | undefined): number {
+function cycleAnchorThrough(
+  billOn: string,
+  interval: Interval,
+  anchorDay: number | null | undefined,
+): number {
   const [y, m, d] = billOn.split("-").map(Number);
   if (interval === "weekly" || anchorDay == null) return d!;
   if (!Number.isSafeInteger(anchorDay) || anchorDay < 1 || anchorDay > 31) {
@@ -273,7 +319,10 @@ function cycleAnchorThrough(billOn: string, interval: Interval, anchorDay: numbe
  * returned date reproduces `periodEnd`. Pure — unit-tested.
  */
 export function billingPeriodStartBefore(
-  periodEnd: string, interval: Interval, intervalCount = 1, anchorDay?: number | null,
+  periodEnd: string,
+  interval: Interval,
+  intervalCount = 1,
+  anchorDay?: number | null,
 ): string {
   const cadence = normalizeSubscriptionCadence(interval, intervalCount);
   const n = cadence.intervalCount;
@@ -288,7 +337,8 @@ export function billingPeriodStartBefore(
   }
   const anchor = cycleAnchorThrough(periodEnd, cadence.interval, anchorDay);
   const [y, m] = periodEnd.split("-").map(Number);
-  const monthStep = (cadence.interval === "monthly" ? 1 : cadence.interval === "quarterly" ? 3 : 12) * n;
+  const monthStep =
+    (cadence.interval === "monthly" ? 1 : cadence.interval === "quarterly" ? 3 : 12) * n;
   try {
     return retreatAnchoredMonth(y!, m!, monthStep, anchor);
   } catch {
@@ -311,7 +361,8 @@ export function firstPeriodStub(
   anchorDay?: number | null,
 ): { periodStart: string; stubDays: number; periodDays: number } {
   subscriptionDate(startOn);
-  if (firstBillOn <= startOn) throw new SubscriptionError("nothing to prorate for the first period");
+  if (firstBillOn <= startOn)
+    throw new SubscriptionError("nothing to prorate for the first period");
   const periodStart = billingPeriodStartBefore(firstBillOn, interval, intervalCount, anchorDay);
   if (startOn < periodStart) {
     throw new SubscriptionError(
@@ -425,7 +476,10 @@ export function resolveNextBillOnUpdate(input: NextBillOnUpdateInput): NextBillO
         `repeat with skipUnbilledService and a skip reason to skip that window explicitly`,
     );
   }
-  return { nextBillOn: input.newNextBillOn, skippedWindow: { from: boundary, to: input.newNextBillOn } };
+  return {
+    nextBillOn: input.newNextBillOn,
+    skippedWindow: { from: boundary, to: input.newNextBillOn },
+  };
 }
 
 /** Normalize a subscription's charge to a monthly figure (analytics only). */
@@ -461,38 +515,66 @@ export interface ContractRecurring {
  * rather than falling back to its plan price, because the plan price is not
  * what it bills. Plan-priced subscriptions have no entry.
  */
-export async function contractRecurringAmounts(orgId: string, asOf: string): Promise<Map<string, ContractRecurring>> {
-  const contracts = await db.execute<{ subscriptionId: string; pinnedVersionId: string }>(sql`
+export async function contractRecurringAmounts(
+  orgId: string,
+  asOf: string,
+): Promise<Map<string, ContractRecurring>> {
+  const contracts = await db.execute<{ subscriptionId: string; pinnedVersionId: string }>(
+    sql`
     select subscription_id as "subscriptionId", plan_version_id as "pinnedVersionId"
       from subscription_lifecycles where org_id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   if (contracts.length === 0) return new Map();
   const changes = await db.execute<{
-    subscriptionId: string; effectiveOn: string; seq: number; fromVersionId: string | null; toVersionId: string | null;
-  }>(sql`
+    subscriptionId: string;
+    effectiveOn: string;
+    seq: number;
+    fromVersionId: string | null;
+    toVersionId: string | null;
+  }>(
+    sql`
     select subscription_id as "subscriptionId", effective_on::text as "effectiveOn", amendment_number as seq,
            before_snapshot #>> '{lifecycle,planVersionId}' as "fromVersionId",
            after_snapshot #>> '{lifecycle,planVersionId}' as "toVersionId"
       from subscription_amendments
      where org_id = ${orgId} and amendment_type = 'change_plan'
-  `, "objects");
-  const versions = await db.execute<{ id: string; interval: Interval; intervalCount: number }>(sql`
+  `,
+    "objects",
+  );
+  const versions = await db.execute<{ id: string; interval: Interval; intervalCount: number }>(
+    sql`
     select id, interval, interval_count as "intervalCount" from subscription_plan_versions where org_id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const versionById = new Map(versions.map((version) => [version.id, version]));
   const changesBySubscription = new Map<string, PlanChangeFact[]>();
   for (const change of changes) {
     const list = changesBySubscription.get(change.subscriptionId) ?? [];
-    list.push({ effectiveOn: change.effectiveOn, seq: Number(change.seq), fromVersionId: change.fromVersionId, toVersionId: change.toVersionId });
+    list.push({
+      effectiveOn: change.effectiveOn,
+      seq: Number(change.seq),
+      fromVersionId: change.fromVersionId,
+      toVersionId: change.toVersionId,
+    });
     changesBySubscription.set(change.subscriptionId, list);
   }
-  const components = await db.execute<{ subscriptionId: string; quantity: string | null; unitPrice: string | null }>(sql`
+  const components = await db.execute<{
+    subscriptionId: string;
+    quantity: string | null;
+    unitPrice: string | null;
+  }>(
+    sql`
     select c.subscription_id as "subscriptionId", c.quantity::text as quantity, c.unit_price::text as "unitPrice"
       from subscription_components c
       join subscription_lifecycles l on l.org_id = c.org_id and l.subscription_id = c.subscription_id
      where c.org_id = ${orgId}
        and c.effective_from <= ${asOf}::date and (c.effective_to is null or c.effective_to >= ${asOf}::date)
-  `, "objects");
+  `,
+    "objects",
+  );
   const linesBySubscription = new Map<string, Array<{ quantity: string; unitPrice: string }>>();
   for (const row of components) {
     if (row.quantity === null || row.unitPrice === null) continue;
@@ -508,7 +590,10 @@ export async function contractRecurringAmounts(orgId: string, asOf: string): Pro
       changes: changesBySubscription.get(contract.subscriptionId) ?? [],
     });
     const version = versionById.get(inForce);
-    if (!version) throw new SubscriptionError("the contract's plan version is missing; repair the contract before reading its recurring revenue");
+    if (!version)
+      throw new SubscriptionError(
+        "the contract's plan version is missing; repair the contract before reading its recurring revenue",
+      );
     out.set(contract.subscriptionId, {
       amount: subscriptionComponentTotal(linesBySubscription.get(contract.subscriptionId) ?? []),
       interval: version.interval,
@@ -540,11 +625,17 @@ export interface SubscriptionRecurringInput {
  * until that date. Pure.
  */
 export function subscriptionRecurringRevenue(input: SubscriptionRecurringInput): string {
-  const earning = input.status === "active"
-    || (input.status === "canceled" && input.canceledOn !== null && input.canceledOn > input.asOf);
+  const earning =
+    input.status === "active" ||
+    (input.status === "canceled" && input.canceledOn !== null && input.canceledOn > input.asOf);
   if (!earning) return "0.0000";
   if (input.contract !== null) {
-    return monthlyRecurringRevenue(input.contract.amount, input.contract.interval, input.contract.intervalCount, "1");
+    return monthlyRecurringRevenue(
+      input.contract.amount,
+      input.contract.interval,
+      input.contract.intervalCount,
+      "1",
+    );
   }
   return monthlyRecurringRevenue(
     String(input.priceOverride ?? input.planAmount ?? "0"),
@@ -570,13 +661,13 @@ export function resolveSubscriptionCancellation(input: {
   if (effectiveOn < input.paidThrough) {
     throw new SubscriptionError(
       `cancellation date ${effectiveOn} precedes the paid-through date ${input.paidThrough}, the end of the last invoiced period. ` +
-      `Cancel effective ${input.paidThrough}; earlier dates need a credit for the unused service, which is not automated.`,
+        `Cancel effective ${input.paidThrough}; earlier dates need a credit for the unused service, which is not automated.`,
     );
   }
   if (effectiveOn > input.paidThrough) {
     throw new SubscriptionError(
       `service from ${input.paidThrough} to ${effectiveOn} is not invoiced, so the subscription cannot end on ${effectiveOn}. ` +
-      `Cancel effective ${input.paidThrough}, the end of the last invoiced period.`,
+        `Cancel effective ${input.paidThrough}, the end of the last invoiced period.`,
     );
   }
   return effectiveOn;
@@ -640,7 +731,12 @@ type SubRow = {
  * period [periodStart, periodEnd] — full × remainingDays / totalDays, rounded to
  * ledger precision. Pure — unit-tested. Zero when the period is degenerate.
  */
-export function prorate(fullAmount: string, periodStart: string, periodEnd: string, asOf: string): string {
+export function prorate(
+  fullAmount: string,
+  periodStart: string,
+  periodEnd: string,
+  asOf: string,
+): string {
   const total = calendarDaysBetween(periodStart, periodEnd);
   if (total <= 0) return "0.0000";
   const remaining = Math.max(0, Math.min(total, calendarDaysBetween(asOf, periodEnd)));
@@ -656,25 +752,40 @@ export function prorate(fullAmount: string, periodStart: string, periodEnd: stri
  * the absolute amount. Zero stays an invoice; callers skip zero anyway.
  * Pure — unit-tested.
  */
-export function prorationDocument(adjustment: string): { kind: "customer_invoice" | "customer_credit"; amount: string } {
+export function prorationDocument(adjustment: string): {
+  kind: "customer_invoice" | "customer_credit";
+  amount: string;
+} {
   return toUnits(adjustment) < 0n
     ? { kind: "customer_credit", amount: neg(adjustment) }
     : { kind: "customer_invoice", amount: normalizeMoney(adjustment) };
 }
 
-async function resolveIncomeAccount(orgId: string, incomeAccountId: string | null): Promise<string> {
+async function resolveIncomeAccount(
+  orgId: string,
+  incomeAccountId: string | null,
+): Promise<string> {
   if (!incomeAccountId) {
-    throw new SubscriptionError("Configure the income account on the billing plan or charge component before creating an invoice");
+    throw new SubscriptionError(
+      "Configure the income account on the billing plan or charge component before creating an invoice",
+    );
   }
   // The generator pins one tenant transaction, retaining this lock through
   // invoice creation and optional posting. Explicit non-income accounts remain
   // valid for configured deferral/other accounting policies.
-  const account = (await db.execute<{ id: string }>(sql`
+  const account = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from accounts where org_id = ${orgId} and id = ${incomeAccountId}
       and is_active and not is_summary for share
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!account) {
-    throw new SubscriptionError("The configured billing income account must be an active, non-summary account in this organization");
+    throw new SubscriptionError(
+      "The configured billing income account must be an active, non-summary account in this organization",
+    );
   }
   return account.id;
 }
@@ -807,23 +918,34 @@ export async function createSubscriptionInvoice(
 async function createSubscriptionInvoiceInTransaction(
   spec: InvoiceSpec,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean; total: string }> {
-  const invoiceLines: AdvancedBillingLine[] = spec.lines?.length ? spec.lines : [{
-    description: spec.description,
-    quantity: spec.quantity,
-    unitPrice: spec.unitPrice,
-    incomeAccountId: spec.incomeAccountId,
-    itemId: spec.itemId,
-    taxCodeId: spec.taxCodeId,
-  }];
+  const invoiceLines: AdvancedBillingLine[] = spec.lines?.length
+    ? spec.lines
+    : [
+        {
+          description: spec.description,
+          quantity: spec.quantity,
+          unitPrice: spec.unitPrice,
+          incomeAccountId: spec.incomeAccountId,
+          itemId: spec.itemId,
+          taxCodeId: spec.taxCodeId,
+        },
+      ];
   // Stored subscriptions and existing invoices stay. Turning Inventory off
   // must refuse a generate that would persist inventory / assembly / kit.
   if (!(await inventoryFeatureEnabled(db, spec.orgId))) {
-    const itemIds = [...new Set(
-      invoiceLines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
-    )];
+    const itemIds = [
+      ...new Set(
+        invoiceLines
+          .map((line) => line.itemId)
+          .filter((itemId): itemId is string => Boolean(itemId)),
+      ),
+    ];
     for (const itemId of itemIds) {
-      const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`, "objects"));
+      const item = await db.execute<{ kind: string }>(
+        sql`
+        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`,
+        "objects",
+      );
       if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
         throw new SubscriptionError("Inventory is disabled", 404);
       }
@@ -834,12 +956,19 @@ async function createSubscriptionInvoiceInTransaction(
   // Canonical switchboard read (::boolean casts threw on non-boolean imports).
   const equipmentOn = await orgFeatureEnabled(spec.orgId, "equipment");
   if (!equipmentOn) {
-    const itemIds = [...new Set(
-      invoiceLines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
-    )];
+    const itemIds = [
+      ...new Set(
+        invoiceLines
+          .map((line) => line.itemId)
+          .filter((itemId): itemId is string => Boolean(itemId)),
+      ),
+    ];
     for (const itemId of itemIds) {
-      const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`, "objects"));
+      const item = await db.execute<{ kind: string }>(
+        sql`
+        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`,
+        "objects",
+      );
       if (item[0] && item[0].kind === "equipment_charge") {
         throw new SubscriptionError("Equipment is disabled", 404);
       }
@@ -868,11 +997,21 @@ async function createSubscriptionInvoiceInTransaction(
       throw new SubscriptionError("rated invoice amount must be an exact money amount");
     }
     const amount = carriesRatedAmount ? normalizeMoney(exactAmount!) : mul(quantity, unitPrice);
-    if (carriesRatedAmount && (compareDecimal(amount, "0") < 0 || toUnits(amount) > POSTGRES_MONEY_MAX_UNITS)) {
-      throw new SubscriptionError("rated invoice amount is outside the supported nonnegative numeric(19,4) range");
+    if (
+      carriesRatedAmount &&
+      (compareDecimal(amount, "0") < 0 || toUnits(amount) > POSTGRES_MONEY_MAX_UNITS)
+    ) {
+      throw new SubscriptionError(
+        "rated invoice amount is outside the supported nonnegative numeric(19,4) range",
+      );
     }
-    if (carriesRatedAmount && compareDecimal(amount, mulDecimalFactors("1", [unitPrice, quantity])) !== 0) {
-      throw new SubscriptionError("rated invoice amount does not reproduce from its quantity and unit price");
+    if (
+      carriesRatedAmount &&
+      compareDecimal(amount, mulDecimalFactors("1", [unitPrice, quantity])) !== 0
+    ) {
+      throw new SubscriptionError(
+        "rated invoice amount does not reproduce from its quantity and unit price",
+      );
     }
     const applyTax = spec.applyTax !== false && input.taxCodeId && toUnits(amount) > 0n;
     let lineTax = "0.0000";
@@ -892,18 +1031,23 @@ async function createSubscriptionInvoiceInTransaction(
         // any document/line/evidence write rather than invoicing taxed work
         // as 0% tax. An active code with no rate on the invoice date already
         // refuses inside loadTaxComponentConfig; that refusal is preserved.
-        const meta = (await db.execute<{ code: string; isActive: boolean }>(sql`
+        const meta = (
+          await db.execute<{ code: string; isActive: boolean }>(
+            sql`
           select code, is_active as "isActive" from tax_codes
-           where id = ${taxCodeId} and org_id = ${spec.orgId}`, "objects"))[0];
+           where id = ${taxCodeId} and org_id = ${spec.orgId}`,
+            "objects",
+          )
+        )[0];
         if (meta && !meta.isActive) {
           throw new SubscriptionError(
             `tax code ${meta.code} is inactive on ${spec.invoiceDate}; refusing to invoice it as 0% tax — ` +
-            `reactivate the tax code under Company Settings or point the billing plan/charge at a live tax code before generating`,
+              `reactivate the tax code under Company Settings or point the billing plan/charge at a live tax code before generating`,
           );
         }
         throw new SubscriptionError(
           `tax code ${meta?.code ?? taxCodeId} is not configured in this organization on ${spec.invoiceDate}; ` +
-          `refusing to invoice it as 0% tax — point the billing plan/charge at a live tax code before generating`,
+            `refusing to invoice it as 0% tax — point the billing plan/charge at a live tax code before generating`,
         );
       }
       const res = computeLineTaxes(amount, cfg, {});
@@ -914,12 +1058,23 @@ async function createSubscriptionInvoiceInTransaction(
     }
     netAmount = add(netAmount, lineAmount);
     taxTotal = add(taxTotal, lineTax);
-    prepared.push({ input: { ...input, quantity, unitPrice }, amount: lineAmount, taxInputAmount, taxAmount: lineTax, accountId: await resolveIncomeAccount(spec.orgId, input.incomeAccountId), taxComponents });
+    prepared.push({
+      input: { ...input, quantity, unitPrice },
+      amount: lineAmount,
+      taxInputAmount,
+      taxAmount: lineTax,
+      accountId: await resolveIncomeAccount(spec.orgId, input.incomeAccountId),
+      taxComponents,
+    });
   }
   const total = add(netAmount, taxTotal);
 
   const kind = spec.documentKind ?? "customer_invoice";
-  const documentNumber = await nextNumber(spec.orgId, kind, kind === "customer_credit" ? "CM-" : "INV-");
+  const documentNumber = await nextNumber(
+    spec.orgId,
+    kind,
+    kind === "customer_credit" ? "CM-" : "INV-",
+  );
   // A consolidation-eligible charge collects as a pending draft for the
   // group's run: it never auto-posts standalone, and the run supersedes it
   // with links instead of deleting it. The bill-to recipient rides the
@@ -934,14 +1089,17 @@ async function createSubscriptionInvoiceInTransaction(
     headerCustom.consolidationPeriodEnd = spec.consolidation.periodEnd;
     headerCustom.consolidationStatus = "pending_consolidation";
   }
-  const created = (await db.execute<{ id: string }>(sql`
+  const created = await db.execute<{ id: string }>(
+    sql`
     insert into documents (org_id, kind, document_number, party_id, document_date, due_date, currency, status,
                            subsidiary_id, location_id, memo, subtotal, tax_total, total, custom, created_by)
     values (${spec.orgId}, ${kind}, ${documentNumber}, ${spec.customerId}, ${spec.invoiceDate}, ${spec.dueDate ?? null},
             ${spec.currency}, 'draft', ${spec.subsidiaryId}, ${spec.locationId ?? null}, ${spec.memo}, ${netAmount}, ${taxTotal}, ${total},
             ${JSON.stringify(headerCustom)}::jsonb, ${spec.actorId})
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const invoiceId = created[0]!.id;
 
   for (const [index, preparedLine] of prepared.entries()) {
@@ -950,7 +1108,8 @@ async function createSubscriptionInvoiceInTransaction(
     // party check passes and per-entity books stay attributable. AR still
     // follows the header party (payer).
     const linePartyId = spec.servicePartyId ?? null;
-    const line = await db.execute<{ id: string }>(sql`
+    const line = await db.execute<{ id: string }>(
+      sql`
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity,
             unit_price, amount, tax_code_id, tax_input_amount, tax_amount, subsidiary_id, party_id, service_party_id, custom, is_billable, created_by)
       values (${spec.orgId}, ${invoiceId}, ${index + 1}, ${preparedLine.input.itemId}, ${preparedLine.accountId},
@@ -961,16 +1120,24 @@ async function createSubscriptionInvoiceInTransaction(
             ${linePartyId},
             ${JSON.stringify(preparedLine.input.custom ?? {})}::jsonb, true, ${spec.actorId})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (preparedLine.taxComponents.length) {
-      await persistLineTaxComponents(spec.orgId, line[0]!.id, preparedLine.taxComponents, spec.actorId);
+      await persistLineTaxComponents(
+        spec.orgId,
+        line[0]!.id,
+        preparedLine.taxComponents,
+        spec.actorId,
+      );
     }
   }
 
   if (spec.renewalPeriod && kind === "customer_invoice") {
     // A renewal order is a service-term commitment. The renews edge relieves
     // native customer exposure without handing periodic stock to fulfillment.
-    const orders = await db.execute<{id:string}>(sql`
+    const orders = await db.execute<{ id: string }>(
+      sql`
       select d.id from subscription_renewal_occurrences o
       join documents d on d.org_id=o.org_id and d.id=o.document_id
       where o.org_id=${spec.orgId} and o.subscription_id=${spec.renewalPeriod.subscriptionId}
@@ -979,26 +1146,41 @@ async function createSubscriptionInvoiceInTransaction(
         and o.snapshot->'source'->'request'->'custom'->'subscriptionRenewal'->>'termEndsOn'>=${spec.renewalPeriod.endsOn}
         and d.party_id=${spec.customerId} and d.currency=${spec.currency}
         and d.subsidiary_id=${spec.subsidiaryId} for share of d
-    `, "objects");
-    if(orders.length>1) throw new SubscriptionError('Multiple accepted renewal orders cover this service period; review renewal agreement history');
-    if(orders[0] && !(await db.execute(sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by)
-      values(${spec.orgId},${orders[0].id},${invoiceId},'renews',${spec.actorId}) returning id`, "objects"))[0]) throw new SubscriptionError('Renewal billing provenance could not be saved');
+    `,
+      "objects",
+    );
+    if (orders.length > 1)
+      throw new SubscriptionError(
+        "Multiple accepted renewal orders cover this service period; review renewal agreement history",
+      );
+    if (
+      orders[0] &&
+      !(
+        await db.execute(
+          sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by)
+      values(${spec.orgId},${orders[0].id},${invoiceId},'renews',${spec.actorId}) returning id`,
+          "objects",
+        )
+      )[0]
+    )
+      throw new SubscriptionError("Renewal billing provenance could not be saved");
   }
   let posted = false;
   if (spec.autoPost && !spec.consolidation) {
-    const submission = await submitAndReleaseIfUngated(
-      kind,
-      invoiceId,
-      spec.actorId,
-      { source: spec.actorId === null ? "schedule" : "api" },
-    );
+    const submission = await submitAndReleaseIfUngated(kind, invoiceId, spec.actorId, {
+      source: spec.actorId === null ? "schedule" : "api",
+    });
     if (submission.flowError) {
       throw new SubscriptionError(`approval could not be routed: ${submission.flowError}`);
     }
     if (!submission.gated) {
-      await postDocument(invoiceId, await controlDeps(spec.orgId), spec.postingAuditSource
-        ? { audit: { actorId: spec.actorId, source: spec.postingAuditSource } }
-        : {});
+      await postDocument(
+        invoiceId,
+        await controlDeps(spec.orgId),
+        spec.postingAuditSource
+          ? { audit: { actorId: spec.actorId, source: spec.postingAuditSource } }
+          : {},
+      );
       posted = true;
     }
   }
@@ -1024,45 +1206,69 @@ export async function resolveSubscriptionLineTax(
   input: { planTaxCodeId: string | null; customerId: string; itemId: string | null },
 ): Promise<{ taxCodeId: string | null; source: SubscriptionLineTaxSource | null }> {
   if (input.planTaxCodeId) {
-    const usable = (await runner.execute<{ id: string }>(sql`
-      select id from tax_codes where id = ${input.planTaxCodeId} and org_id = ${orgId} and is_active`, "objects"))[0];
+    const usable = (
+      await runner.execute<{ id: string }>(
+        sql`
+      select id from tax_codes where id = ${input.planTaxCodeId} and org_id = ${orgId} and is_active`,
+        "objects",
+      )
+    )[0];
     if (!usable) {
       throw new SubscriptionError(
         "the billing plan names a tax code that is not active in this organization; " +
-        "reactivate it under Company Settings or clear the plan's tax code before billing",
+          "reactivate it under Company Settings or clear the plan's tax code before billing",
       );
     }
     return { taxCodeId: input.planTaxCodeId, source: "plan" };
   }
-  const resolved = (await resolveDocumentLineDefaults(runner, orgId, {
-    kind: "customer_invoice",
-    partyId: input.customerId,
-    itemIds: input.itemId ? [input.itemId] : [],
-  }))[0];
+  const resolved = (
+    await resolveDocumentLineDefaults(runner, orgId, {
+      kind: "customer_invoice",
+      partyId: input.customerId,
+      itemIds: input.itemId ? [input.itemId] : [],
+    })
+  )[0];
   if (resolved?.taxCodeId) return { taxCodeId: resolved.taxCodeId, source: resolved.taxSource };
   if (!input.itemId) {
     // The native helper resolves through named items, so an item-less line
     // checks the payer default directly — same precedence, same usability
     // bar. A named-but-unusable payer code falls through to the explicit
     // refusal below, never to silent zero.
-    const partyCode = (await runner.execute<{ tax_code_id: string | null }>(sql`
+    const partyCode =
+      (
+        await runner.execute<{ tax_code_id: string | null }>(
+          sql`
       select tax_code_id from customer_roles
-       where org_id = ${orgId} and party_id = ${input.customerId} and is_active`, "objects"))[0]?.tax_code_id ?? null;
+       where org_id = ${orgId} and party_id = ${input.customerId} and is_active`,
+          "objects",
+        )
+      )[0]?.tax_code_id ?? null;
     if (partyCode) {
-      const usable = (await runner.execute<{ id: string }>(sql`
-        select id from tax_codes where id = ${partyCode} and org_id = ${orgId} and is_active`, "objects"))[0];
+      const usable = (
+        await runner.execute<{ id: string }>(
+          sql`
+        select id from tax_codes where id = ${partyCode} and org_id = ${orgId} and is_active`,
+          "objects",
+        )
+      )[0];
       if (usable) return { taxCodeId: partyCode, source: "party" };
     }
   }
-  const named = (await runner.execute<{ named: boolean }>(sql`
+  const named =
+    (
+      await runner.execute<{ named: boolean }>(
+        sql`
     select (exists(select 1 from customer_roles
                     where org_id = ${orgId} and party_id = ${input.customerId} and tax_code_id is not null)
             or exists(select 1 from items
-                       where org_id = ${orgId} and id = ${input.itemId} and tax_code_id is not null)) as named`, "objects"))[0]?.named === true;
+                       where org_id = ${orgId} and id = ${input.itemId} and tax_code_id is not null)) as named`,
+        "objects",
+      )
+    )[0]?.named === true;
   if (named) {
     throw new SubscriptionError(
       "the customer or item names tax that cannot be resolved to an active tax code in this organization; " +
-      "correct the customer's default tax or the item's tax code before billing",
+        "correct the customer's default tax or the item's tax code before billing",
     );
   }
   return { taxCodeId: null, source: null };
@@ -1080,20 +1286,35 @@ async function billOne(
   // period/revision lookup + document creation + guard insert one atomic claim;
   // a concurrent caller waits, then replays the committed invoice instead of
   // leaving an orphan duplicate document.
-  await db.execute(sql`select id from subscriptions where id = ${sub.id} and org_id = ${sub.orgId} for update`);
+  await db.execute(
+    sql`select id from subscriptions where id = ${sub.id} and org_id = ${sub.orgId} for update`,
+  );
   // Re-read status UNDER the lock: the caller's SubRow was loaded before the
   // lock and is stale — a subscription canceled (or vanished) between that
   // read and this claim must refuse instead of cutting a new invoice.
-  const live = (await db.execute<{ status: string }>(sql`
+  const live = (
+    await db.execute<{ status: string }>(
+      sql`
     select status from subscriptions where id = ${sub.id} and org_id = ${sub.orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!live) throw new SubscriptionError("subscription not found");
   if (live.status === "canceled") {
-    throw new SubscriptionError("subscription is canceled — set its status back to active before billing");
+    throw new SubscriptionError(
+      "subscription is canceled — set its status back to active before billing",
+    );
   }
   const price = sub.priceOverride ?? sub.planAmount;
-  const advanced = await advancedBillingSnapshot(sub.orgId, sub.id, billingDate, periodStartOverride);
-  if (advanced && !advanced.lines.length) throw new SubscriptionError("subscription has no billable components for this period");
+  const advanced = await advancedBillingSnapshot(
+    sub.orgId,
+    sub.id,
+    billingDate,
+    periodStartOverride,
+  );
+  if (advanced && !advanced.lines.length)
+    throw new SubscriptionError("subscription has no billable components for this period");
   // ONE occurrence key per billed invoice, lifecycle-managed or not, recorded
   // through the same subscription_period_invoices guard (single source of
   // truth). Advanced lifecycles use their frozen period window + contract
@@ -1103,21 +1324,34 @@ async function billOne(
   // whose success bookkeeping failed after posting rolled its claim back and
   // the retry re-cut a second invoice for the same period.
   const guard = advanced
-    ? { startsOn: advanced.periodStartsOn, endsOn: advanced.periodEndsOn, revision: advanced.contractRevision }
+    ? {
+        startsOn: advanced.periodStartsOn,
+        endsOn: advanced.periodEndsOn,
+        revision: advanced.contractRevision,
+      }
     : {
         startsOn: billingDate,
         endsOn: advanceSubscription(billingDate, sub.interval, sub.intervalCount, sub.anchorDay),
         revision: 1,
       };
-  const prior = (await db.execute<{ invoiceId: string; documentNumber: string; status: string }>(sql`
+  const prior = await db.execute<{ invoiceId: string; documentNumber: string; status: string }>(
+    sql`
     select d.id as "invoiceId", d.document_number as "documentNumber", d.status
       from subscription_period_invoices pi join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
      where pi.org_id = ${sub.orgId} and pi.subscription_id = ${sub.id}
        and pi.period_starts_on = ${guard.startsOn}
        and pi.period_ends_on = ${guard.endsOn} and pi.contract_revision = ${guard.revision}
      limit 1
-  `, "objects"));
-  if (prior[0]) return { invoiceId: prior[0].invoiceId, documentNumber: prior[0].documentNumber, posted: prior[0].status === "posted", created: false };
+  `,
+    "objects",
+  );
+  if (prior[0])
+    return {
+      invoiceId: prior[0].invoiceId,
+      documentNumber: prior[0].documentNumber,
+      posted: prior[0].status === "posted",
+      created: false,
+    };
   // The charge bills through the payer hierarchy on the billing date: the
   // header carries the payer (AR) and the billing entity, the lines carry
   // the service party (and the service entity across legal entities), and a
@@ -1170,7 +1404,7 @@ async function billOne(
     autoPost: opts?.autoPost ?? sub.autoPost,
     lines: advanced?.lines,
     custom: subscriptionBillingProvenance(sub.id, actor, billingDate),
-    renewalPeriod: {subscriptionId:sub.id,startsOn:guard.startsOn,endsOn:guard.endsOn},
+    renewalPeriod: { subscriptionId: sub.id, startsOn: guard.startsOn, endsOn: guard.endsOn },
     postingAuditSource: POSTING_AUDIT_SOURCES[actor.source],
   });
   await db.execute(sql`
@@ -1217,13 +1451,22 @@ export interface SubscriptionRunResult {
  * signal). Recording the failure must never itself abort the tick: if the
  * write fails, the failure is logged and the loop continues.
  */
-async function recordSubscriptionTickFailure(orgId: string, subscriptionId: string, message: string): Promise<void> {
+async function recordSubscriptionTickFailure(
+  orgId: string,
+  subscriptionId: string,
+  message: string,
+): Promise<void> {
   try {
-    await withOrgTransaction(orgId, async () => db.execute(sql`
+    await withOrgTransaction(orgId, async () =>
+      db.execute(sql`
       update subscriptions set last_error = ${message} where id = ${subscriptionId} and org_id = ${orgId}
-    `));
+    `),
+    );
   } catch (recordError) {
-    console.error(`[subscriptions] failure recording failed for subscription ${subscriptionId}:`, recordError);
+    console.error(
+      `[subscriptions] failure recording failed for subscription ${subscriptionId}:`,
+      recordError,
+    );
   }
 }
 
@@ -1247,19 +1490,21 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   const orgScope = scopedOrgId ? sql`and s.org_id = ${scopedOrgId}` : sql``;
 
   // bypass: scheduler-tick — the unscoped scan finds due subscriptions across every production organization.
-  const due = await withBypass(async () =>
-    (await db.execute<{
-      id: string;
-      orgId: string;
-      nextBillOn: string;
-      currentPeriodStart: string | null;
-      interval: Interval;
-      intervalCount: number;
-      quantity: string;
-      priceOverride: string | null;
-      planAmount: string;
-      anchorDay: number;
-    }>(sql`
+  const due = await withBypass(
+    async () =>
+      await db.execute<{
+        id: string;
+        orgId: string;
+        nextBillOn: string;
+        currentPeriodStart: string | null;
+        interval: Interval;
+        intervalCount: number;
+        quantity: string;
+        priceOverride: string | null;
+        planAmount: string;
+        anchorDay: number;
+      }>(
+        sql`
       select s.id, s.org_id as "orgId", s.next_bill_on as "nextBillOn",
              s.current_period_start as "currentPeriodStart",
              s.quantity, s.price_override as "priceOverride", p.amount as "planAmount",
@@ -1278,7 +1523,9 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
          and case (o.settings->'features'->>'subscriptionBilling') when 'true' then true when 'false' then false else false end
          and (l.id is null or case (o.settings->'features'->>'advancedSubscriptions') when 'true' then true when 'false' then false else false end)
          ${orgScope}
-    `, "objects")),
+    `,
+        "objects",
+      ),
   );
 
   // Orgs whose business day cannot be read (a misconfigured calendar) fail
@@ -1291,7 +1538,11 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       const dateFailure = orgDateFailures.get(row.orgId);
       if (dateFailure !== undefined) {
         result.failed += 1;
-        await recordSubscriptionTickFailure(row.orgId, row.id, `business day unavailable: ${dateFailure}`);
+        await recordSubscriptionTickFailure(
+          row.orgId,
+          row.id,
+          `business day unavailable: ${dateFailure}`,
+        );
         continue;
       }
       try {
@@ -1302,7 +1553,11 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
         orgDateFailures.set(row.orgId, message);
         console.error(`[subscriptions] org ${row.orgId} business day failed:`, e);
         result.failed += 1;
-        await recordSubscriptionTickFailure(row.orgId, row.id, `business day unavailable: ${message}`);
+        await recordSubscriptionTickFailure(
+          row.orgId,
+          row.id,
+          `business day unavailable: ${message}`,
+        );
         continue;
       }
     }
@@ -1314,15 +1569,26 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       // billing transaction can write. The same checks run again at invoice
       // persistence, so a bypassed or residual row cannot become a charge.
       normalizeSubscriptionMoney(row.quantity, "stored quantity", "positive");
-      normalizeSubscriptionMoney(row.priceOverride ?? row.planAmount, "stored price", "nonnegative");
+      normalizeSubscriptionMoney(
+        row.priceOverride ?? row.planAmount,
+        "stored price",
+        "nonnegative",
+      );
       // Month-end starts keep their anchor day (stored, else the start date's
       // day): Jan 31 steps Feb 28 → Mar 31, never Mar 28.
-      advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount, row.anchorDay);
+      advanced = advanceSubscription(
+        row.nextBillOn,
+        row.interval,
+        row.intervalCount,
+        row.anchorDay,
+      );
       const canBill = await prepareAdvancedSubscriptionBilling(row.orgId, row.id, row.nextBillOn);
       if (!canBill) {
-        await withOrgTransaction(row.orgId, async () => db.execute(sql`
+        await withOrgTransaction(row.orgId, async () =>
+          db.execute(sql`
           update subscriptions set last_error = 'Contract term ended — renewal required' where id = ${row.id} and org_id = ${row.orgId}
-        `));
+        `),
+        );
         continue;
       }
     } catch (e) {
@@ -1341,20 +1607,29 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     let sub: Awaited<ReturnType<typeof billOne>> | null = null;
     try {
       sub = await withOrg(row.orgId, async () => {
-        const claimed = (await db.execute<{ id: string }>(sql`
+        const claimed = await db.execute<{ id: string }>(
+          sql`
           update subscriptions
              set next_bill_on = ${advanced}, current_period_start = ${row.nextBillOn}, last_billed_at = now()
            where id = ${row.id} and org_id = ${row.orgId} and next_bill_on = ${row.nextBillOn} and status = 'active'
           returning id
-        `, "objects"));
+        `,
+          "objects",
+        );
         if (!claimed.length) return null; // another tick won it
-        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${row.id} and s.org_id = ${row.orgId} limit 1`, "objects"));
+        const r = await db.execute<SubRow>(
+          sql`${SUB_SELECT} where s.id = ${row.id} and s.org_id = ${row.orgId} limit 1`,
+          "objects",
+        );
         const s = r[0];
         if (!s) throw new SubscriptionError("subscription vanished");
         // Engine-initiated: explicit null (the repository system identity)
         // plus the scheduler source marker — never a row id, never a historic
         // creator.
-        return billOne(s, row.nextBillOn, row.nextBillOn, row.currentPeriodStart, { actorId: null, source: "scheduler" });
+        return billOne(s, row.nextBillOn, row.nextBillOn, row.currentPeriodStart, {
+          actorId: null,
+          source: "scheduler",
+        });
       });
     } catch (e) {
       // Billing threw — withOrg already rolled the whole unit back, claim
@@ -1392,7 +1667,10 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      console.error(`[subscriptions] success bookkeeping failed for subscription ${row.id}:`, message);
+      console.error(
+        `[subscriptions] success bookkeeping failed for subscription ${row.id}:`,
+        message,
+      );
       await withOrgTransaction(row.orgId, async () => {
         await db.execute(sql`
           update subscriptions set last_error = ${`invoiced ${gen.documentNumber} but bookkeeping failed: ${message}`}
@@ -1423,24 +1701,36 @@ export async function billSubscriptionNow(
   // Both flags use the registry fallback shape (non-boolean stored values
   // fall back to the default instead of throwing 22P02); the conjunction is
   // the advancedSubscriptions requiresAll ['subscriptionBilling'] chain.
-  const meta = await withOrgContext(orgId, async () =>
-    (await db.execute<{ advancedLifecycle: boolean; advancedEnabled: boolean }>(sql`
+  const meta = await withOrgContext(
+    orgId,
+    async () =>
+      await db.execute<{ advancedLifecycle: boolean; advancedEnabled: boolean }>(
+        sql`
       select l.id is not null as "advancedLifecycle",
              (case (o.settings->'features'->>'advancedSubscriptions') when 'true' then true when 'false' then false else false end
               and case (o.settings->'features'->>'subscriptionBilling') when 'true' then true when 'false' then false else false end) as "advancedEnabled"
         from subscriptions s join orgs o on o.id = s.org_id
         left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
        where s.id = ${subscriptionId} and s.org_id = ${orgId}
-    `, "objects")),
+    `,
+        "objects",
+      ),
   );
   if (!meta[0]) throw new SubscriptionError("subscription not found");
-  if (meta[0].advancedLifecycle && !meta[0].advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
+  if (meta[0].advancedLifecycle && !meta[0].advancedEnabled)
+    throw new SubscriptionError("advanced subscription lifecycle is disabled");
   const gen = await withOrg(orgId, async () => {
     await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, allowedSubsidiaryIds);
-    const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`, "objects"));
+    const r = await db.execute<SubRow>(
+      sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`,
+      "objects",
+    );
     const s = r[0];
     if (!s) throw new SubscriptionError("subscription not found");
-    return billOne(s, s.nextBillOn, s.nextBillOn, s.currentPeriodStart, { actorId, source: "bill_now" });
+    return billOne(s, s.nextBillOn, s.nextBillOn, s.currentPeriodStart, {
+      actorId,
+      source: "bill_now",
+    });
   });
   // A double-click replays the first invoice through billOne's guard row and
   // keeps its count; only a newly created invoice advances the counter.
@@ -1469,7 +1759,12 @@ const SUBSCRIPTION_CATCH_UP_WALK_LIMIT = 1000;
  * periods with truncated set instead of walking forever.
  */
 export function pendingSubscriptionPeriods(
-  input: { interval: Interval; intervalCount: number; anchorDay: number | null; nextBillOn: string },
+  input: {
+    interval: Interval;
+    intervalCount: number;
+    anchorDay: number | null;
+    nextBillOn: string;
+  },
   asOf: string,
 ): SubscriptionCatchUpPreview {
   const periods: string[] = [];
@@ -1495,11 +1790,18 @@ export async function previewSubscriptionCatchUp(
 ): Promise<SubscriptionCatchUpPreview> {
   const row = await withOrg(orgId, () => loadSubRow(subscriptionId, orgId));
   if (row.advancedLifecycle) {
-    throw new SubscriptionError("advanced lifecycles bill through contract amendments, not catch-up runs");
+    throw new SubscriptionError(
+      "advanced lifecycles bill through contract amendments, not catch-up runs",
+    );
   }
   const today = asOf ?? (await businessToday(orgId));
   return pendingSubscriptionPeriods(
-    { interval: row.interval, intervalCount: row.intervalCount, anchorDay: row.anchorDay, nextBillOn: row.nextBillOn },
+    {
+      interval: row.interval,
+      intervalCount: row.intervalCount,
+      anchorDay: row.anchorDay,
+      nextBillOn: row.nextBillOn,
+    },
     today,
   );
 }
@@ -1553,11 +1855,15 @@ export async function runSubscriptionCatchUp(
   const selectedList = [...new Set(input.selectedPeriods ?? [])];
   if (input.mode === "selected") {
     if (selectedList.length === 0) {
-      throw new SubscriptionError("selected catch-up needs at least one period date — choose from the preview list");
+      throw new SubscriptionError(
+        "selected catch-up needs at least one period date — choose from the preview list",
+      );
     }
     for (const selected of selectedList) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(selected)) {
-        throw new SubscriptionError(`selected catch-up period ${selected} is not a calendar date (YYYY-MM-DD)`);
+        throw new SubscriptionError(
+          `selected catch-up period ${selected} is not a calendar date (YYYY-MM-DD)`,
+        );
       }
     }
   } else if (selectedList.length > 0) {
@@ -1579,10 +1885,17 @@ export async function runSubscriptionCatchUp(
       return loadSubRow(subscriptionId, orgId);
     });
     if (row.advancedLifecycle) {
-      throw new SubscriptionError("advanced lifecycles bill through contract amendments, not catch-up runs");
+      throw new SubscriptionError(
+        "advanced lifecycles bill through contract amendments, not catch-up runs",
+      );
     }
     if (row.status !== "active") {
-      const stopped = row.status === "canceled" ? "canceled" : row.status === "suspended" ? "suspended" : "paused";
+      const stopped =
+        row.status === "canceled"
+          ? "canceled"
+          : row.status === "suspended"
+            ? "suspended"
+            : "paused";
       outcome = finish(stopped);
       break;
     }
@@ -1591,13 +1904,22 @@ export async function runSubscriptionCatchUp(
     // period the operator never saw listed.
     if (input.mode === "selected" && !selectedValidated) {
       selectedValidated = true;
-      const pendingSet = new Set(pendingSubscriptionPeriods(
-        { interval: row.interval, intervalCount: row.intervalCount, anchorDay: row.anchorDay, nextBillOn: row.nextBillOn },
-        asOf,
-      ).periods);
+      const pendingSet = new Set(
+        pendingSubscriptionPeriods(
+          {
+            interval: row.interval,
+            intervalCount: row.intervalCount,
+            anchorDay: row.anchorDay,
+            nextBillOn: row.nextBillOn,
+          },
+          asOf,
+        ).periods,
+      );
       for (const selected of selectedList) {
         if (!pendingSet.has(selected)) {
-          throw new SubscriptionError(`selected catch-up period ${selected} is not a pending billing period — choose from the preview list`);
+          throw new SubscriptionError(
+            `selected catch-up period ${selected} is not a pending billing period — choose from the preview list`,
+          );
         }
       }
     }
@@ -1606,16 +1928,28 @@ export async function runSubscriptionCatchUp(
       break;
     }
     const periodStart = row.nextBillOn;
-    const advanced = advanceSubscription(periodStart, row.interval, row.intervalCount, row.anchorDay);
+    const advanced = advanceSubscription(
+      periodStart,
+      row.interval,
+      row.intervalCount,
+      row.anchorDay,
+    );
     // Advancing past one period without billing: the skip-all choice and
     // every unlisted period of a selected run share this unit.
     const advancePast = async (): Promise<boolean> => {
-      const moved = await withOrg(orgId, async () => (await db.execute<{ id: string }>(sql`
+      const moved = await withOrg(
+        orgId,
+        async () =>
+          await db.execute<{ id: string }>(
+            sql`
         update subscriptions
            set next_bill_on = ${advanced}, current_period_start = ${periodStart}, last_billed_at = now()
          where id = ${subscriptionId} and org_id = ${orgId} and next_bill_on = ${periodStart} and status = 'active'
         returning id
-      `, "objects")));
+      `,
+            "objects",
+          ),
+      );
       return moved.length > 0;
     };
     const billThis =
@@ -1631,14 +1965,23 @@ export async function runSubscriptionCatchUp(
     // An already-billed period replays instead of billing again — the retry
     // path after a crash between billing and advancing, or a rewound
     // cursor — and the cursor still advances past it.
-    const already = await withOrgContext(orgId, async () => (await db.execute<{ invoiceId: string; documentNumber: string }>(sql`
+    const already = await withOrgContext(
+      orgId,
+      async () =>
+        (
+          await db.execute<{ invoiceId: string; documentNumber: string }>(
+            sql`
       select d.id as "invoiceId", d.document_number as "documentNumber"
         from subscription_period_invoices pi
         join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
        where pi.org_id = ${orgId} and pi.subscription_id = ${subscriptionId}
          and pi.period_starts_on = ${periodStart}
        order by d.created_at desc limit 1
-    `, "objects"))[0]);
+    `,
+            "objects",
+          )
+        )[0],
+    );
     if (already) {
       if (!(await advancePast())) continue; // another worker advanced it; recompute
       results.push({
@@ -1651,30 +1994,52 @@ export async function runSubscriptionCatchUp(
     }
     try {
       const gen = await withOrg(orgId, async () => {
-        const claimed = (await db.execute<{ id: string }>(sql`
+        const claimed = await db.execute<{ id: string }>(
+          sql`
           update subscriptions
              set next_bill_on = ${advanced}, current_period_start = ${periodStart}, last_billed_at = now()
            where id = ${subscriptionId} and org_id = ${orgId} and next_bill_on = ${periodStart} and status = 'active'
           returning id
-        `, "objects"));
+        `,
+          "objects",
+        );
         if (!claimed.length) return null; // another worker won it
-        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`, "objects"));
+        const r = await db.execute<SubRow>(
+          sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`,
+          "objects",
+        );
         const s = r[0];
         if (!s) throw new SubscriptionError("subscription vanished");
-        return billOne(s, periodStart, periodStart, periodStart, { actorId: input.actorId, source: "catch_up" }, {
-          autoPost: postThis,
-        });
+        return billOne(
+          s,
+          periodStart,
+          periodStart,
+          periodStart,
+          { actorId: input.actorId, source: "catch_up" },
+          {
+            autoPost: postThis,
+          },
+        );
       });
       if (!gen) {
         // Another worker won this period: replay whatever it committed.
-        const replay = await withOrgContext(orgId, async () => (await db.execute<{ invoiceId: string; documentNumber: string; posted: boolean }>(sql`
+        const replay = await withOrgContext(
+          orgId,
+          async () =>
+            (
+              await db.execute<{ invoiceId: string; documentNumber: string; posted: boolean }>(
+                sql`
           select d.id as "invoiceId", d.document_number as "documentNumber", (d.status = 'posted') as "posted"
             from subscription_period_invoices pi
             join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
            where pi.org_id = ${orgId} and pi.subscription_id = ${subscriptionId}
              and pi.period_starts_on = ${periodStart}
            order by d.created_at desc limit 1
-        `, "objects"))[0]);
+        `,
+                "objects",
+              )
+            )[0],
+        );
         results.push({
           periodStart,
           status: "replayed",
@@ -1703,8 +2068,15 @@ export async function runSubscriptionCatchUp(
         });
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        console.error(`[subscriptions] success bookkeeping failed for subscription ${subscriptionId}:`, message);
-        await recordSubscriptionTickFailure(orgId, subscriptionId, `invoiced ${gen.documentNumber} but bookkeeping failed: ${message}`);
+        console.error(
+          `[subscriptions] success bookkeeping failed for subscription ${subscriptionId}:`,
+          message,
+        );
+        await recordSubscriptionTickFailure(
+          orgId,
+          subscriptionId,
+          `invoiced ${gen.documentNumber} but bookkeeping failed: ${message}`,
+        );
       }
       results.push({
         periodStart,
@@ -1745,8 +2117,13 @@ type SubDetail = SubRow & {
 
 /** Refuse a subscription id the caller's organization does not own. */
 async function requireSubscriptionInOrg(orgId: string, subscriptionId: string): Promise<void> {
-  const meta = await withOrgContext(orgId, async () =>
-    (await db.execute<{ id: string }>(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects")),
+  const meta = await withOrgContext(
+    orgId,
+    async () =>
+      await db.execute<{ id: string }>(
+        sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`,
+        "objects",
+      ),
   );
   if (!meta[0]) throw new SubscriptionError("subscription not found");
 }
@@ -1757,7 +2134,8 @@ async function requireSubscriptionInOrg(orgId: string, subscriptionId: string): 
  * subscription row lock so they price from locked, current state.
  */
 export async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDetail> {
-  const r = (await db.execute<SubDetail>(sql`
+  const r = await db.execute<SubDetail>(
+    sql`
     select s.id, s.org_id as "orgId", s.customer_id as "customerId",
            s.bill_to_party_id as "billToOverride", s.payer_party_id as "payerOverride", s.quantity,
            s.price_override as "priceOverride", s.auto_post as "autoPost",
@@ -1783,7 +2161,9 @@ export async function loadSubRow(subscriptionId: string, orgId: string): Promise
       left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
       join orgs o on o.id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const d = r[0];
   if (!d) throw new SubscriptionError("subscription not found");
   return d;
@@ -1818,22 +2198,33 @@ export async function changeSubscription(
   // together or not at all.
   return withOrg(orgId, async () => {
     await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, allowedSubsidiaryIds);
-    await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
+    await db.execute(
+      sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`,
+    );
     const row = await loadSubRow(subscriptionId, orgId);
     if (row.status === "canceled") throw new SubscriptionError("subscription is canceled");
-    if (row.advancedLifecycle) throw new SubscriptionError("use an advanced contract amendment to change subscription components");
+    if (row.advancedLifecycle)
+      throw new SubscriptionError(
+        "use an advanced contract amendment to change subscription components",
+      );
 
     const oldQty = row.quantity;
     const oldPrice = row.priceOverride ?? row.planAmount;
     const persistedOldQty = persistSubscriptionMoney(oldQty, "stored quantity", "positive");
     const persistedOldPrice = persistSubscriptionMoney(oldPrice, "stored price", "nonnegative");
-    const newQty = persistSubscriptionMoney(changes.quantity ?? persistedOldQty, "quantity", "positive");
-    const persistedPriceOverride = changes.priceOverride == null
-      ? null
-      : persistSubscriptionMoney(changes.priceOverride, "price override", "nonnegative");
-    const newPrice = changes.priceOverride !== undefined
-      ? (persistedPriceOverride ?? row.planAmount)
-      : persistedOldPrice;
+    const newQty = persistSubscriptionMoney(
+      changes.quantity ?? persistedOldQty,
+      "quantity",
+      "positive",
+    );
+    const persistedPriceOverride =
+      changes.priceOverride == null
+        ? null
+        : persistSubscriptionMoney(changes.priceOverride, "price override", "nonnegative");
+    const newPrice =
+      changes.priceOverride !== undefined
+        ? (persistedPriceOverride ?? row.planAmount)
+        : persistedOldPrice;
     const persistedNewPrice = persistSubscriptionMoney(newPrice, "price", "nonnegative");
     const oldFull = mul(persistedOldQty, persistedOldPrice);
     const newFull = mul(newQty, persistedNewPrice);
@@ -1843,8 +2234,24 @@ export async function changeSubscription(
     // Prorated value of each configuration for the remaining slice of the
     // period, at the full billing period's daily rate (a prorated first stub
     // is shorter than the period but billed at that same rate).
-    const oldRemaining = remainingPeriodProration(oldFull, periodStart, periodEnd, today, row.interval, row.intervalCount, row.anchorDay);
-    const newRemaining = remainingPeriodProration(newFull, periodStart, periodEnd, today, row.interval, row.intervalCount, row.anchorDay);
+    const oldRemaining = remainingPeriodProration(
+      oldFull,
+      periodStart,
+      periodEnd,
+      today,
+      row.interval,
+      row.intervalCount,
+      row.anchorDay,
+    );
+    const newRemaining = remainingPeriodProration(
+      newFull,
+      periodStart,
+      periodEnd,
+      today,
+      row.interval,
+      row.intervalCount,
+      row.anchorDay,
+    );
     const adjustment = add(newRemaining, neg(oldRemaining)); // >0 upgrade charge, <0 credit
 
     let invoiceId: string | null = null;
@@ -1875,7 +2282,10 @@ export async function changeSubscription(
         invoiceDate: today,
         autoPost: false,
         documentKind: doc.kind,
-        custom: subscriptionBillingProvenance(subscriptionId, { actorId, source: "change_proration" }),
+        custom: subscriptionBillingProvenance(subscriptionId, {
+          actorId,
+          source: "change_proration",
+        }),
         postingAuditSource: POSTING_AUDIT_SOURCES.change_proration,
       });
       invoiceId = gen.invoiceId;
@@ -1925,17 +2335,24 @@ export async function prorateFirstInvoice(
     if (actorId !== null) {
       const liveScope = await lockActorCommandAuthority(db, orgId, actorId, null, "ar.create");
       const callerScope = actor?.allowedSubsidiaryIds;
-      scope = callerScope === undefined || callerScope === null ? liveScope
-        : liveScope === null ? callerScope
-        : new Set([...liveScope].filter(id => callerScope.has(id)));
+      scope =
+        callerScope === undefined || callerScope === null
+          ? liveScope
+          : liveScope === null
+            ? callerScope
+            : new Set([...liveScope].filter((id) => callerScope.has(id)));
     }
     await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, scope);
-    await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
+    await db.execute(
+      sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`,
+    );
     const row = await loadSubRow(subscriptionId, orgId);
     // loadSubRow reads under the row lock, so this status is current — a
     // canceled subscription must refuse instead of cutting a first invoice.
     if (row.status === "canceled") {
-      throw new SubscriptionError("subscription is canceled — set its status back to active before billing");
+      throw new SubscriptionError(
+        "subscription is canceled — set its status back to active before billing",
+      );
     }
     // Single-fire: create inserts next_bill_on = firstBillOn and
     // current_period_start = startOn — the same two columns a successful
@@ -1951,11 +2368,20 @@ export async function prorateFirstInvoice(
     // period that ends on firstBillOn, and the cycle is anchored on that
     // period so the scheduler's next advance from firstBillOn continues the
     // same cadence the stub was priced against.
-    const anchorDay = row.interval === "weekly"
-      ? row.anchorDay
-      : cycleAnchorThrough(firstBillOn, row.interval, row.anchorDay);
-    const amount = firstPeriodProration(full, row.startOn, firstBillOn, row.interval, row.intervalCount, anchorDay);
-    if (toUnits(amount) <= 0n) throw new SubscriptionError("nothing to prorate for the first period");
+    const anchorDay =
+      row.interval === "weekly"
+        ? row.anchorDay
+        : cycleAnchorThrough(firstBillOn, row.interval, row.anchorDay);
+    const amount = firstPeriodProration(
+      full,
+      row.startOn,
+      firstBillOn,
+      row.interval,
+      row.intervalCount,
+      anchorDay,
+    );
+    if (toUnits(amount) <= 0n)
+      throw new SubscriptionError("nothing to prorate for the first period");
 
     const target = await resolveSubscriptionBillingTarget(orgId, row.customerId, today, {
       billToPartyId: row.billToOverride,

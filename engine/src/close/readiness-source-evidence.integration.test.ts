@@ -13,7 +13,12 @@ import { ensureCloseDefaults } from "./defaults.ts";
 import { refreshCloseRun } from "./run-automation.ts";
 import { startCloseRun } from "./run-start.ts";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 /**
  * Close readiness and source evidence (0158): a source-evidenced sign-off
@@ -62,23 +67,46 @@ async function bankEntry(
            ${org.subsidiaryId}, ${`-${amount}`}, 'CAD', ${`-${amount}`}, 1)
       `);
     }
-    await tx.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+    await tx.execute(
+      sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`,
+    );
     return entryId;
   });
 }
 
 async function periodEnd(orgId: string, periodId: string): Promise<string> {
-  return (await db.execute<{ ends_on: string }>(sql`
+  return (
+    await db.execute<{ ends_on: string }>(
+      sql`
     select ends_on::text from accounting_periods where id = ${periodId} and org_id = ${orgId}
-  `, "objects"))[0]!.ends_on;
+  `,
+      "objects",
+    )
+  )[0]!.ends_on;
 }
 
-async function bankException(orgId: string, runId: string): Promise<{ count: number; accounts: { number: string | null; clearedLines: number; unclearedLines: number }[] } | null> {
+async function bankException(
+  orgId: string,
+  runId: string,
+): Promise<{
+  count: number;
+  accounts: { number: string | null; clearedLines: number; unclearedLines: number }[];
+} | null> {
   await refreshCloseRun(orgId, runId);
-  const row = (await db.execute<{ details: { count: number; accounts?: { number: string | null; clearedLines: number; unclearedLines: number }[] } }>(sql`
+  const row = (
+    await db.execute<{
+      details: {
+        count: number;
+        accounts?: { number: string | null; clearedLines: number; unclearedLines: number }[];
+      };
+    }>(
+      sql`
     select details from close_exceptions
      where org_id = ${orgId} and run_id = ${runId} and code = 'bank-unreconciled' and status = 'open'
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   return { count: row.details.count, accounts: row.details.accounts ?? [] };
 }
@@ -86,7 +114,9 @@ async function bankException(orgId: string, runId: string): Promise<{ count: num
 async function setup(): Promise<{ org: ScratchOrg; actor: string; endsOn: string }> {
   const org = await createScratchOrg();
   const actor = await createScratchUser(org.orgId, "Close reviewer", "admin");
-  await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
+  await db.execute(
+    sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`,
+  );
   return { org, actor, endsOn: await periodEnd(org.orgId, org.periodId) };
 }
 
@@ -96,10 +126,21 @@ test("bank-unreconciled names open accounts with cleared counts", { skip: !enabl
     const cleared = await bankEntry(org, actor, ["100"], "open-cleared");
     const open = await bankEntry(org, actor, ["25"], "open-uncleared");
     await applySourceLineEvidence(org.orgId, "test-connector", [
-      { entryId: cleared, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }] },
-      { entryId: open, lines: [{ accountId: org.accounts.bank, cleared: false, clearedDate: null }] },
+      {
+        entryId: cleared,
+        lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }],
+      },
+      {
+        entryId: open,
+        lines: [{ accountId: org.accounts.bank, cleared: false, clearedDate: null }],
+      },
     ]);
-    const runId = await startCloseRun({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, actorId: actor });
+    const runId = await startCloseRun({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      actorId: actor,
+    });
     const exception = await bankException(org.orgId, runId);
     assert.ok(exception, "bank-unreconciled is open");
     assert.equal(exception.count, 1);
@@ -112,43 +153,66 @@ test("bank-unreconciled names open accounts with cleared counts", { skip: !enabl
   }
 });
 
-test("a source-evidenced sign-off satisfies readiness like a statement one", { skip: !enabled }, async () => {
-  const { org, actor, endsOn } = await setup();
-  try {
-    const entry = await bankEntry(org, actor, ["308", "21"], "covered");
-    await applySourceLineEvidence(org.orgId, "test-connector", [
-      {
-        entryId: entry,
-        lines: [
-          { accountId: org.accounts.bank, cleared: true, clearedDate: endsOn },
-          { accountId: org.accounts.bank, cleared: true, clearedDate: endsOn },
-        ],
-      },
-    ]);
-    await refreshSourceReconciliationState(org.orgId, "test-connector");
-    const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null });
-    assert.equal(signed.signed, true);
-    const runId = await startCloseRun({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, actorId: actor });
-    assert.equal(await bankException(org.orgId, runId), null);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+test(
+  "a source-evidenced sign-off satisfies readiness like a statement one",
+  { skip: !enabled },
+  async () => {
+    const { org, actor, endsOn } = await setup();
+    try {
+      const entry = await bankEntry(org, actor, ["308", "21"], "covered");
+      await applySourceLineEvidence(org.orgId, "test-connector", [
+        {
+          entryId: entry,
+          lines: [
+            { accountId: org.accounts.bank, cleared: true, clearedDate: endsOn },
+            { accountId: org.accounts.bank, cleared: true, clearedDate: endsOn },
+          ],
+        },
+      ]);
+      await refreshSourceReconciliationState(org.orgId, "test-connector");
+      const signed = await signOffFromSourceEvidence(
+        { accountId: org.accounts.bank },
+        { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null },
+      );
+      assert.equal(signed.signed, true);
+      const runId = await startCloseRun({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actor,
+      });
+      assert.equal(await bankException(org.orgId, runId), null);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
 test("readiness returns to statement-only when the policy is off", { skip: !enabled }, async () => {
   const { org, actor, endsOn } = await setup();
   try {
     const entry = await bankEntry(org, actor, ["100"], "policy");
     await applySourceLineEvidence(org.orgId, "test-connector", [
-      { entryId: entry, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: endsOn }] },
+      {
+        entryId: entry,
+        lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: endsOn }],
+      },
     ]);
     await refreshSourceReconciliationState(org.orgId, "test-connector");
-    const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null });
+    const signed = await signOffFromSourceEvidence(
+      { accountId: org.accounts.bank },
+      { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null },
+    );
     assert.equal(signed.signed, true);
     await ensureCloseDefaults(org.orgId, actor);
     await db.execute(sql`
       update close_policies set is_active = false where org_id = ${org.orgId} and code = 'source-reconciliation-evidence'`);
-    const runId = await startCloseRun({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, actorId: actor });
+    const runId = await startCloseRun({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      actorId: actor,
+    });
     const exception = await bankException(org.orgId, runId);
     assert.ok(exception, "source sign-offs stop satisfying readiness when the policy is off");
     assert.equal(exception.count, 1);

@@ -10,7 +10,6 @@ import { analyticsConfig } from "../../../../lib/analytics/config";
 import { ANALYTICS_CONFIG } from "../../../../lib/analytics/config-spec";
 import { notFound } from "@/lib/api/responses";
 
-
 export const runtime = "nodejs";
 
 /**
@@ -31,13 +30,8 @@ export const GET = defineRoute({
     // remedy. reports.read alone never sufficed — no embedding page declares
     // it — so it is not in the set.
 
-    if (!gate)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    if (
-      !can(gate, "banking.read") &&
-      !can(gate, "ap.read") &&
-      !can(gate, "ar.read")
-    ) {
+    if (!gate) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!can(gate, "banking.read") && !can(gate, "ap.read") && !can(gate, "ar.read")) {
       return NextResponse.json(
         { error: "missing permission: banking.read, ap.read or ar.read" },
         { status: 403 },
@@ -51,10 +45,7 @@ export const GET = defineRoute({
     const url = new URL(req.url);
     const weekStart = url.searchParams.get("week");
     if (!isIsoCalendarDate(weekStart)) {
-      return NextResponse.json(
-        { error: "week must be an ISO date" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "week must be an ISO date" }, { status: 400 });
     }
     const horizonParam = url.searchParams.get("horizon");
     const horizonWeeks = horizonParam === null ? 13 : Number(horizonParam);
@@ -71,10 +62,7 @@ export const GET = defineRoute({
     }
     const asOf = url.searchParams.get("asOf") ?? undefined;
     if (asOf !== undefined && !isIsoCalendarDate(asOf)) {
-      return NextResponse.json(
-        { error: "asOf must be an ISO date" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "asOf must be an ISO date" }, { status: 400 });
     }
     // The cockpit's subsidiary view must be reproduced or the drill would show
     // transactions the page's own totals excluded.
@@ -110,7 +98,8 @@ export const GET = defineRoute({
       const apSettings = {
         weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
         restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
-        runwayCautionWeeks: cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
+        runwayCautionWeeks:
+          cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
       };
       const position = await cashPosition(
         user.orgId,
@@ -121,11 +110,7 @@ export const GET = defineRoute({
         gate.allowedSubsidiaryIds,
       );
       const week = position.weeks.find((w) => w.weekStart === weekStart);
-      if (!week)
-        return NextResponse.json(
-          { error: "week not in horizon" },
-          { status: 404 },
-        );
+      if (!week) return NextResponse.json({ error: "week not in horizon" }, { status: 404 });
       return NextResponse.json({
         weekStart: week.weekStart,
         arEntries: week.arEntries,
@@ -133,10 +118,7 @@ export const GET = defineRoute({
       });
     } catch (error) {
       console.error("[cash/week-entries] failed", error);
-      return NextResponse.json(
-        { error: "could not load week" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: "could not load week" }, { status: 500 });
     }
   },
 });

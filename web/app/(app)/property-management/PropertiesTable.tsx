@@ -21,7 +21,17 @@ const COLUMN_LABEL_KEYS: Record<string, string> = {
   status: "list.columns.status",
 };
 
-export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: PropertyWorkspace; view: ListViewConfig; fieldDefs: CustomFieldDefClient[]; onOpen: (id: string) => void }) {
+export function PropertiesTable({
+  data,
+  view,
+  fieldDefs,
+  onOpen,
+}: {
+  data: PropertyWorkspace;
+  view: ListViewConfig;
+  fieldDefs: CustomFieldDefClient[];
+  onOpen: (id: string) => void;
+}) {
   const t = useTranslations("entities.propertyManagement");
   const tc = useTranslations("customization");
   const defs = new Map<string, CustomFieldDefClient>(
@@ -30,13 +40,13 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
   const columns = view.columns.filter((column) => column.visible);
   const showsCodeColumn = columns.some((column) => column.key === "code");
   const label = (column: ListColumn) => {
-    const override = column.labelOverride?.trim()
-    if (override) return override
+    const override = column.labelOverride?.trim();
+    if (override) return override;
     if (column.key.startsWith("cf_")) {
-      return defs.get(column.key.slice(3))?.label ?? column.key
+      return defs.get(column.key.slice(3))?.label ?? column.key;
     }
-    const key = COLUMN_LABEL_KEYS[column.key]
-    return (key ? t(key) : undefined) ?? column.key
+    const key = COLUMN_LABEL_KEYS[column.key];
+    return (key ? t(key) : undefined) ?? column.key;
   };
   // Enum cells resolve through the catalog with a raw fallback, so a future
   // enum value still renders instead of throwing on a missing key.
@@ -62,27 +72,23 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
         <>
           <div className="font-medium text-teal-700">{property.name}</div>
           {showsCodeColumn ? null : (
-            <div className="font-mono text-xs text-slate-500">
-              {property.code}
-            </div>
+            <div className="font-mono text-xs text-slate-500">{property.code}</div>
           )}
         </>
       );
-    if (key === "code")
-      return <span className="font-mono text-sm">{property.code}</span>;
+    if (key === "code") return <span className="font-mono text-sm">{property.code}</span>;
     if (key === "subsidiary") return property.subsidiaryName;
     if (key === "location") return property.locationName || t("list.notMapped");
-    if (key === "property_type")
-      return <span>{typeLabel(property.propertyType)}</span>;
+    if (key === "property_type") return <span>{typeLabel(property.propertyType)}</span>;
     if (key === "occupancy")
       return (
         <span className="tabular-nums">
           {property.occupiedUnits} / {property.unitCount}
         </span>
       );
-    if (key === "currency")
-      return <span className="font-mono text-xs">{property.currency}</span>;
-    if (key === "status") return <Status value={property.status} label={statusLabel(property.status)} />;
+    if (key === "currency") return <span className="font-mono text-xs">{property.currency}</span>;
+    if (key === "status")
+      return <Status value={property.status} label={statusLabel(property.status)} />;
     return "—";
   };
   // Search text mirrors the displayed cells in plain strings. Internal row
@@ -96,7 +102,8 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
     if (key === "code") return property.code;
     if (key === "subsidiary") return property.subsidiaryName ?? "";
     if (key === "location") return property.locationName ?? "";
-    if (key === "property_type") return `${property.propertyType} ${typeLabel(property.propertyType)}`;
+    if (key === "property_type")
+      return `${property.propertyType} ${typeLabel(property.propertyType)}`;
     if (key === "occupancy") return `${property.occupiedUnits} ${property.unitCount}`;
     if (key === "currency") return property.currency ?? "";
     if (key === "status") return `${property.status} ${statusLabel(property.status) ?? ""}`;
@@ -110,12 +117,7 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: Prope
       searchable
       onRowClick={(property) => onOpen(property.id)}
       rowRole="button"
-      empty={(
-        <Empty
-          title={t("list.emptyTitle")}
-          detail={t("list.emptyDetail")}
-        />
-      )}
+      empty={<Empty title={t("list.emptyTitle")} detail={t("list.emptyDetail")} />}
       columns={columns.map((column) => ({
         key: column.key,
         header: label(column),

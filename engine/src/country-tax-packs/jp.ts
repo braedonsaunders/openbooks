@@ -4,12 +4,19 @@ const JP_CONSUMPTION_2025: TaxReturnPack = {
   code: "JP_CONSUMPTION",
   name: "Consumption and Local Consumption Taxes — General Form workpaper",
   country: "JP",
-  jurisdiction: { code: "JP", name: "Japan", country: "JP", level: "country", taxType: "consumption" },
+  jurisdiction: {
+    code: "JP",
+    name: "Japan",
+    country: "JP",
+    level: "country",
+    taxType: "consumption",
+  },
   defaultFrequency: "annual",
   submissionChannel: "portal_manual",
   governmentFormat: "portal_entry",
   submissionUrl: "https://www.nta.go.jp/english/taxes/consumption_tax/general_form_2025.htm",
-  watermark: "Working copy — confirm the current filer/entity-specific form, separate standard and reduced rates, and review invoice-method credits, interim payments, local-tax transfers, and special methods before e-Tax filing",
+  watermark:
+    "Working copy — confirm the current filer/entity-specific form, separate standard and reduced rates, and review invoice-method credits, interim payments, local-tax transfers, and special methods before e-Tax filing",
   boxes: [
     { lineCode: "1", label: "Tax base", sign: 1, sequence: 10 },
     { lineCode: "2", label: "Consumption tax", sign: -1, sequence: 20 },
@@ -23,9 +30,29 @@ const JP_CONSUMPTION_2025: TaxReturnPack = {
     { lineCode: "10", label: "Interim payment", sign: 1, sequence: 100 },
     { lineCode: "11", label: "Amount of tax payable", sign: 1, sequence: 110 },
     { lineCode: "12", label: "Refundable interim payment", sign: 1, sequence: 120 },
-    { lineCode: "26", label: "Total consumption and local consumption taxes — payable or refundable", sign: 1, sequence: 130 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — combined consumption and local consumption tax collected, all rates", sign: -1, sequence: 140, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — combined consumption and local consumption tax paid, all rates", sign: 1, sequence: 150, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "26",
+      label: "Total consumption and local consumption taxes — payable or refundable",
+      sign: 1,
+      sequence: 130,
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label:
+        "OpenBooks workpaper — combined consumption and local consumption tax collected, all rates",
+      sign: -1,
+      sequence: 140,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — combined consumption and local consumption tax paid, all rates",
+      sign: 1,
+      sequence: 150,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
   ],
 };
 
@@ -88,10 +115,29 @@ export const JAPAN_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: "10",
         role: "standard",
         rates: [
-          { ratePercent: "3", effectiveFrom: "1989-04-01", effectiveTo: "1997-03-31", sourceId: "nta_consumption_tax_history" },
-          { ratePercent: "5", effectiveFrom: "1997-04-01", effectiveTo: "2014-03-31", sourceId: "nta_consumption_tax_history" },
-          { ratePercent: "8", effectiveFrom: "2014-04-01", effectiveTo: "2019-09-30", sourceId: "nta_consumption_tax_history" },
-          { ratePercent: "10", effectiveFrom: "2019-10-01", sourceId: "nta_consumption_tax_current" },
+          {
+            ratePercent: "3",
+            effectiveFrom: "1989-04-01",
+            effectiveTo: "1997-03-31",
+            sourceId: "nta_consumption_tax_history",
+          },
+          {
+            ratePercent: "5",
+            effectiveFrom: "1997-04-01",
+            effectiveTo: "2014-03-31",
+            sourceId: "nta_consumption_tax_history",
+          },
+          {
+            ratePercent: "8",
+            effectiveFrom: "2014-04-01",
+            effectiveTo: "2019-09-30",
+            sourceId: "nta_consumption_tax_history",
+          },
+          {
+            ratePercent: "10",
+            effectiveFrom: "2019-10-01",
+            sourceId: "nta_consumption_tax_current",
+          },
         ],
       },
       {
@@ -100,7 +146,11 @@ export const JAPAN_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: "8",
         role: "reduced",
         rates: [
-          { ratePercent: "8", effectiveFrom: "2019-10-01", sourceId: "nta_consumption_tax_reduced" },
+          {
+            ratePercent: "8",
+            effectiveFrom: "2019-10-01",
+            sourceId: "nta_consumption_tax_reduced",
+          },
         ],
       },
     ],

@@ -2,18 +2,36 @@ import { accountingFirm } from "./industry-samples.ts";
 import type { Profile } from "./types.ts";
 
 const steady = {
-  1: "1.00", 2: "1.00", 3: "1.00", 4: "1.00", 5: "1.00", 6: "1.00",
-  7: "1.00", 8: "1.00", 9: "1.00", 10: "1.00", 11: "1.00", 12: "1.00",
+  1: "1.00",
+  2: "1.00",
+  3: "1.00",
+  4: "1.00",
+  5: "1.00",
+  6: "1.00",
+  7: "1.00",
+  8: "1.00",
+  9: "1.00",
+  10: "1.00",
+  11: "1.00",
+  12: "1.00",
 } as const;
 
 const assuranceDemand = {
   ...steady,
-  1: "1.45", 2: "1.45", 3: "1.45", 4: "1.35",
+  1: "1.45",
+  2: "1.45",
+  3: "1.45",
+  4: "1.35",
 } as const;
 
 const taxDemand = {
   ...steady,
-  1: "1.65", 2: "1.65", 3: "1.55", 4: "1.40", 9: "1.35", 10: "1.35",
+  1: "1.65",
+  2: "1.65",
+  3: "1.55",
+  4: "1.40",
+  9: "1.35",
+  10: "1.35",
 } as const;
 
 export const seasonalAdvisory: Profile = {
@@ -45,7 +63,10 @@ export const seasonalAdvisory: Profile = {
         positions: [
           { jobTitle: "Assurance Partner", members: ["Maya Chen (Assurance Partner)"] },
           { jobTitle: "Assurance Manager", members: ["Gabriel Foster (Assurance Manager)"] },
-          { jobTitle: "Senior Auditor", members: ["Nadia Singh (Senior Auditor)", "Connor Bell (Senior Auditor)"] },
+          {
+            jobTitle: "Senior Auditor",
+            members: ["Nadia Singh (Senior Auditor)", "Connor Bell (Senior Auditor)"],
+          },
         ],
         monthlyDemandFactors: assuranceDemand,
         genericDemand: { jobTitle: "Senior Auditor" },

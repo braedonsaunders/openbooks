@@ -22,7 +22,10 @@ registerHooks({
     // The route factory imports the same alias lazily at request time from
     // its own module URL, so it never matches the route-directory guard.
     // Match the alias exactly so the factory gate uses this test's session.
-    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/psp/"))) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/psp/"))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -62,10 +65,10 @@ registerHooks({
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { withOrgContext } = await import("@openbooks/engine/platform/db");
-const { importSettlementBatch, parseStripeBalanceTransactions, postSettlementBatch } = await import("@openbooks/engine/payments/psp-settlement");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { importSettlementBatch, parseStripeBalanceTransactions, postSettlementBatch } =
+  await import("@openbooks/engine/payments/psp-settlement");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 const json = (body: unknown) =>
@@ -77,45 +80,74 @@ const json = (body: unknown) =>
 
 test("post rechecks the locked batch after a concurrent subsidiary rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL }).connect();
+  const holder = await new Pool({
+    connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL,
+  }).connect();
   try {
     const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     const subsidiaryB = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, tax_ids, is_elimination, is_active, custom)
       values (${subsidiaryB}, ${org.orgId}, 'Other Entity', 'CAD', 'CA', ${org.subsidiaryId}, '{}'::jsonb, false, true, '{}'::jsonb)
-    `));
-    const parsed = parseStripeBalanceTransactions([
-      { id: "race-charge", type: "charge", amount: 10000, currency: "cad", fee: 0, net: 10000 },
-    ], `psp-rehome-${org.orgId}`, org.date);
-    const imported = await withOrgContext(org.orgId, () => importSettlementBatch(org.orgId, actorId, parsed, {
-      bankAccountId: org.accounts.bank,
-      feeAccountId: org.accounts.freight,
-      clearingAccountId: org.accounts.clearing,
-      subsidiaryId: org.subsidiaryId,
-    }));
+    `),
+    );
+    const parsed = parseStripeBalanceTransactions(
+      [{ id: "race-charge", type: "charge", amount: 10000, currency: "cad", fee: 0, net: 10000 }],
+      `psp-rehome-${org.orgId}`,
+      org.date,
+    );
+    const imported = await withOrgContext(org.orgId, () =>
+      importSettlementBatch(org.orgId, actorId, parsed, {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      }),
+    );
     state.user = { orgId: org.orgId, id: actorId };
     state.allowed = new Set([org.subsidiaryId]);
     await holder.query("begin"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
-    const held = await holder.query("select id from psp_settlement_batches where id = $1 for update", [imported.batchId]);
+    const held = await holder.query(
+      "select id from psp_settlement_batches where id = $1 for update",
+      [imported.batchId],
+    );
     assert.equal(held.rows.length, 1);
     let settled = false;
-    const pending = withOrgContext(org.orgId, () => POST(json({ action: "post", batchId: imported.batchId })))
-      .then((response) => { settled = true; return response; });
+    const pending = withOrgContext(org.orgId, () =>
+      POST(json({ action: "post", batchId: imported.batchId })),
+    ).then((response) => {
+      settled = true;
+      return response;
+    });
     await new Promise((resolve) => setTimeout(resolve, 4000));
     assert.equal(settled, false, "POST must wait on the batch row lock");
-    const waiting = (await holder.query(`select count(*)::int as n from pg_stat_activity
+    const waiting = (
+      await holder.query(`select count(*)::int as n from pg_stat_activity
       where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'
-        and query ilike '%psp_settlement_batches%for update%'`)).rows[0].n as number;
+        and query ilike '%psp_settlement_batches%for update%'`)
+    ).rows[0].n as number;
     assert.ok(waiting > 0, "POST reached the locked batch row");
-    await withBypassContext(() => (holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [subsidiaryB, imported.batchId])));
+    await withBypassContext(() =>
+      holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [
+        subsidiaryB,
+        imported.batchId,
+      ]),
+    );
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: "not_found" });
-    const batch = (await withBypassContext(() => db.execute(sql`
+    const batch = (
+      await withBypassContext(() =>
+        db.execute(
+          sql`
       select status, subsidiary_id from psp_settlement_batches where org_id = ${org.orgId} and id = ${imported.batchId}
-    `, "objects")))[0] as { status: string; subsidiary_id: string };
+    `,
+          "objects",
+        ),
+      )
+    )[0] as { status: string; subsidiary_id: string };
     assert.deepEqual(batch, { status: "draft", subsidiary_id: subsidiaryB });
   } finally {
     await holder.query("rollback").catch(() => undefined);
@@ -128,48 +160,96 @@ test("post rechecks the locked batch after a concurrent subsidiary rehome", asyn
 
 test("reverse rechecks the locked batch after a concurrent subsidiary rehome", async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const holder = await new Pool({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL }).connect();
+  const holder = await new Pool({
+    connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL,
+  }).connect();
   try {
     const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     const subsidiaryB = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, tax_ids, is_elimination, is_active, custom)
       values (${subsidiaryB}, ${org.orgId}, 'Other Entity', 'CAD', 'CA', ${org.subsidiaryId}, '{}'::jsonb, false, true, '{}'::jsonb)
-    `));
-    const parsed = parseStripeBalanceTransactions([
-      { id: "reverse-race-charge", type: "charge", amount: 10000, currency: "cad", fee: 0, net: 10000 },
-    ], `psp-reverse-rehome-${org.orgId}`, org.date);
-    const imported = await withOrgContext(org.orgId, () => importSettlementBatch(org.orgId, actorId, parsed, {
-      bankAccountId: org.accounts.bank,
-      feeAccountId: org.accounts.freight,
-      clearingAccountId: org.accounts.clearing,
-      subsidiaryId: org.subsidiaryId,
-    }));
+    `),
+    );
+    const parsed = parseStripeBalanceTransactions(
+      [
+        {
+          id: "reverse-race-charge",
+          type: "charge",
+          amount: 10000,
+          currency: "cad",
+          fee: 0,
+          net: 10000,
+        },
+      ],
+      `psp-reverse-rehome-${org.orgId}`,
+      org.date,
+    );
+    const imported = await withOrgContext(org.orgId, () =>
+      importSettlementBatch(org.orgId, actorId, parsed, {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      }),
+    );
     await postSettlementBatch(org.orgId, imported.batchId, actorId, null);
     state.user = { orgId: org.orgId, id: actorId };
     state.allowed = new Set([org.subsidiaryId]);
     await holder.query("begin"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
-    const held = await holder.query("select id from psp_settlement_batches where id = $1 for update", [imported.batchId]);
+    const held = await holder.query(
+      "select id from psp_settlement_batches where id = $1 for update",
+      [imported.batchId],
+    );
     assert.equal(held.rows.length, 1);
     let settled = false;
-    const pending = withOrgContext(org.orgId, () => POST(json({
-      action: "reverse", batchId: imported.batchId, reversalDate: org.date, reason: "duplicate payout",
-    }))).then((response) => { settled = true; return response; });
+    const pending = withOrgContext(org.orgId, () =>
+      POST(
+        json({
+          action: "reverse",
+          batchId: imported.batchId,
+          reversalDate: org.date,
+          reason: "duplicate payout",
+        }),
+      ),
+    ).then((response) => {
+      settled = true;
+      return response;
+    });
     await new Promise((resolve) => setTimeout(resolve, 4000));
     assert.equal(settled, false, "POST must wait on the batch row lock");
-    const waiting = (await holder.query(`select count(*)::int as n from pg_stat_activity
+    const waiting = (
+      await holder.query(`select count(*)::int as n from pg_stat_activity
       where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'
-        and query ilike '%psp_settlement_batches%for update%'`)).rows[0].n as number;
+        and query ilike '%psp_settlement_batches%for update%'`)
+    ).rows[0].n as number;
     assert.ok(waiting > 0, "POST reached the locked batch row");
-    await withBypassContext(() => (holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [subsidiaryB, imported.batchId])));
+    await withBypassContext(() =>
+      holder.query("update psp_settlement_batches set subsidiary_id = $1 where id = $2", [
+        subsidiaryB,
+        imported.batchId,
+      ]),
+    );
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: "not_found" });
-    const batch = (await withBypassContext(() => db.execute(sql`
+    const batch = (
+      await withBypassContext(() =>
+        db.execute(
+          sql`
       select status, subsidiary_id, reversal_entry_id from psp_settlement_batches where org_id = ${org.orgId} and id = ${imported.batchId}
-    `, "objects")))[0] as { status: string; subsidiary_id: string; reversal_entry_id: string | null };
-    assert.deepEqual(batch, { status: "posted", subsidiary_id: subsidiaryB, reversal_entry_id: null });
+    `,
+          "objects",
+        ),
+      )
+    )[0] as { status: string; subsidiary_id: string; reversal_entry_id: string | null };
+    assert.deepEqual(batch, {
+      status: "posted",
+      subsidiary_id: subsidiaryB,
+      reversal_entry_id: null,
+    });
   } finally {
     await holder.query("rollback").catch(() => undefined);
     holder.release();
@@ -182,13 +262,18 @@ test("reverse rechecks the locked batch after a concurrent subsidiary rehome", a
 test("post/reverse answer a malformed batch id with 404, never a 500", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
-    const subsidiaryId = (await withBypassContext(
-        () =>
-          db.execute<{ id: string }>(
-            sql`select id from subsidiaries where org_id = ${org.orgId} and parent_id is null order by created_at limit 1`, "objects",
-          ),
-      ))[0]!.id;
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
+    const subsidiaryId = (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`select id from subsidiaries where org_id = ${org.orgId} and parent_id is null order by created_at limit 1`,
+          "objects",
+        ),
+      )
+    )[0]!.id;
     state.allowed = new Set([subsidiaryId]);
     for (const body of [
       { action: "post", batchId: "not-a-uuid" },
@@ -213,50 +298,75 @@ test("import reports the persisted posted batch when the provider changes eviden
     const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     const externalRef = `provider-correction-${org.orgId}`;
     const originalTransactions = [
-      { id: "original-charge", type: "charge", amount: 10000, currency: "cad", fee: 500, net: 9500 },
+      {
+        id: "original-charge",
+        type: "charge",
+        amount: 10000,
+        currency: "cad",
+        fee: 500,
+        net: 9500,
+      },
     ];
     const parsed = parseStripeBalanceTransactions(originalTransactions, externalRef, org.date);
-    const imported = await withOrgContext(org.orgId, () => importSettlementBatch(org.orgId, actorId, parsed, {
-      bankAccountId: org.accounts.bank,
-      feeAccountId: org.accounts.freight,
-      clearingAccountId: org.accounts.clearing,
-      subsidiaryId: org.subsidiaryId,
-    }));
+    const imported = await withOrgContext(org.orgId, () =>
+      importSettlementBatch(org.orgId, actorId, parsed, {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: org.subsidiaryId,
+      }),
+    );
     await postSettlementBatch(org.orgId, imported.batchId, actorId, null);
     state.user = { orgId: org.orgId, id: actorId };
     state.allowed = new Set([org.subsidiaryId]);
 
-    const exactReplay = await withOrgContext(org.orgId, () => POST(json({
-      action: "import",
-      provider: "stripe",
-      externalRef,
-      settlementDate: org.date,
-      transactions: originalTransactions,
-      bankAccountId: org.accounts.bank,
-      feeAccountId: org.accounts.freight,
-      clearingAccountId: org.accounts.clearing,
-      subsidiaryId: org.subsidiaryId,
-    })));
+    const exactReplay = await withOrgContext(org.orgId, () =>
+      POST(
+        json({
+          action: "import",
+          provider: "stripe",
+          externalRef,
+          settlementDate: org.date,
+          transactions: originalTransactions,
+          bankAccountId: org.accounts.bank,
+          feeAccountId: org.accounts.freight,
+          clearingAccountId: org.accounts.clearing,
+          subsidiaryId: org.subsidiaryId,
+        }),
+      ),
+    );
     assert.equal(exactReplay.status, 200);
-    const replayBody = await exactReplay.json() as { totals: { grossAmount: string } };
+    const replayBody = (await exactReplay.json()) as { totals: { grossAmount: string } };
     assert.equal(replayBody.totals.grossAmount, "100.0000");
 
-    const correction = await withOrgContext(org.orgId, () => POST(json({
-      action: "import",
-      provider: "stripe",
-      externalRef,
-      settlementDate: org.date,
-      transactions: [
-        { id: "corrected-charge", type: "charge", amount: 12000, currency: "cad", fee: 500, net: 11500 },
-      ],
-      bankAccountId: org.accounts.bank,
-      feeAccountId: org.accounts.freight,
-      clearingAccountId: org.accounts.clearing,
-      subsidiaryId: org.subsidiaryId,
-    })));
+    const correction = await withOrgContext(org.orgId, () =>
+      POST(
+        json({
+          action: "import",
+          provider: "stripe",
+          externalRef,
+          settlementDate: org.date,
+          transactions: [
+            {
+              id: "corrected-charge",
+              type: "charge",
+              amount: 12000,
+              currency: "cad",
+              fee: 500,
+              net: 11500,
+            },
+          ],
+          bankAccountId: org.accounts.bank,
+          feeAccountId: org.accounts.freight,
+          clearingAccountId: org.accounts.clearing,
+          subsidiaryId: org.subsidiaryId,
+        }),
+      ),
+    );
     assert.equal(correction.status, 409);
     assert.deepEqual(await correction.json(), {
-      error: "provider settlement reference already has different evidence (gross amount differs (stored 100.0000 vs imported 120.0000)); use the persisted batch, then reverse it or record a separate adjustment",
+      error:
+        "provider settlement reference already has different evidence (gross amount differs (stored 100.0000 vs imported 120.0000)); use the persisted batch, then reverse it or record a separate adjustment",
       batch: {
         batchId: imported.batchId,
         status: "posted",
@@ -274,10 +384,17 @@ test("import reports the persisted posted batch when the provider changes eviden
         },
       },
     });
-    const persisted = (await withBypassContext(() => db.execute(sql`
+    const persisted = (
+      await withBypassContext(() =>
+        db.execute(
+          sql`
       select gross_amount::text as gross, status from psp_settlement_batches
        where id = ${imported.batchId} and org_id = ${org.orgId}
-    `, "objects")))[0] as { gross: string; status: string };
+    `,
+          "objects",
+        ),
+      )
+    )[0] as { gross: string; status: string };
     assert.deepEqual(persisted, { gross: "100.0000", status: "posted" });
   } finally {
     state.user = { orgId: "", id: "" };

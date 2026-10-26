@@ -19,8 +19,12 @@ export type ChangeOwnPasswordResult =
  * the same length bounds as a password reset, and different from the
  * current password.
  */
-export function newPasswordPolicyRefusal(currentPassword: string, newPassword: string): PasswordPolicyRefusal | null {
-  if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH) return "weak_password";
+export function newPasswordPolicyRefusal(
+  currentPassword: string,
+  newPassword: string,
+): PasswordPolicyRefusal | null {
+  if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > MAX_PASSWORD_LENGTH)
+    return "weak_password";
   if (newPassword === currentPassword) return "unchanged_password";
   return null;
 }

@@ -1,33 +1,33 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Badge, Button, DisclosureSection, UrlDrawer } from '@openbooks/ui'
-import { confirmDialog } from '@/lib/confirm'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { createMoneyFormatter } from '@/lib/money-format'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Badge, Button, DisclosureSection, UrlDrawer } from "@openbooks/ui";
+import { confirmDialog } from "@/lib/confirm";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { createMoneyFormatter } from "@/lib/money-format";
 
 export interface AttemptPayload {
-  id: string
-  invoiceId: string
-  invoiceNumber: string
-  customerName: string
-  amount: string
-  currency: string
-  provider: string
-  providerRef: string | null
-  methodLabel: string | null
-  status: string
-  declineCode: string | null
-  declineKind: string | null
-  retryPosition: number
-  nextRetryOn: string | null
-  authUrl: string | null
-  usedBackup: boolean
-  receiptId: string | null
-  attemptedAt: string
+  id: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  customerName: string;
+  amount: string;
+  currency: string;
+  provider: string;
+  providerRef: string | null;
+  methodLabel: string | null;
+  status: string;
+  declineCode: string | null;
+  declineKind: string | null;
+  retryPosition: number;
+  nextRetryOn: string | null;
+  authUrl: string | null;
+  usedBackup: boolean;
+  receiptId: string | null;
+  attemptedAt: string;
 }
 
 /**
@@ -38,74 +38,91 @@ export interface AttemptPayload {
 export function AttemptDrawer({
   drawer,
 }: {
-  drawer: { attempt: AttemptPayload; canRetry: boolean; closeHref: string }
+  drawer: { attempt: AttemptPayload; canRetry: boolean; closeHref: string };
 }) {
-  const t = useTranslations('ar.collections.attempts')
-  const tc = useTranslations('common')
-  const router = useRouter()
-  const { attempt, canRetry, closeHref } = drawer
-  const { money } = createMoneyFormatter(useLocale(), attempt.currency)
-  const formattedAmount = money(attempt.amount, { currency: attempt.currency })
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const retryable = canRetry && attempt.status === 'failed' &&
-    (attempt.declineKind === 'soft' || attempt.declineKind === 'insufficient_funds')
-  const needsAuth = attempt.status === 'failed' && attempt.declineKind === 'needs_authentication'
+  const t = useTranslations("ar.collections.attempts");
+  const tc = useTranslations("common");
+  const router = useRouter();
+  const { attempt, canRetry, closeHref } = drawer;
+  const { money } = createMoneyFormatter(useLocale(), attempt.currency);
+  const formattedAmount = money(attempt.amount, { currency: attempt.currency });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const retryable =
+    canRetry &&
+    attempt.status === "failed" &&
+    (attempt.declineKind === "soft" || attempt.declineKind === "insufficient_funds");
+  const needsAuth = attempt.status === "failed" && attempt.declineKind === "needs_authentication";
   const remedy =
-    attempt.status !== 'failed' ? null
-    : attempt.declineKind === 'hard' ? t('remedyHard')
-    : attempt.declineKind === 'needs_authentication' ? t('remedyNeedsAuth')
-    : attempt.declineKind === 'insufficient_funds' ? t('remedyInsufficientFunds')
-    : null
+    attempt.status !== "failed"
+      ? null
+      : attempt.declineKind === "hard"
+        ? t("remedyHard")
+        : attempt.declineKind === "needs_authentication"
+          ? t("remedyNeedsAuth")
+          : attempt.declineKind === "insufficient_funds"
+            ? t("remedyInsufficientFunds")
+            : null;
   const statusLabel =
-    attempt.status === 'succeeded' ? t('statusSucceeded')
-    : attempt.status === 'failed' ? t('statusFailed')
-    : attempt.status === 'processing' ? t('statusProcessing')
-    : attempt.status === 'canceled' ? t('statusCanceled')
-    : t('statusInitiated')
+    attempt.status === "succeeded"
+      ? t("statusSucceeded")
+      : attempt.status === "failed"
+        ? t("statusFailed")
+        : attempt.status === "processing"
+          ? t("statusProcessing")
+          : attempt.status === "canceled"
+            ? t("statusCanceled")
+            : t("statusInitiated");
   const summary =
-    attempt.status === 'succeeded' ? t('summarySucceeded', { amount: formattedAmount, invoice: attempt.invoiceNumber })
-    : attempt.status === 'failed' ? t('summaryFailed', { amount: formattedAmount, invoice: attempt.invoiceNumber })
-    : attempt.status === 'processing' ? t('summaryProcessing', { amount: formattedAmount, invoice: attempt.invoiceNumber })
-    : attempt.status === 'canceled' ? t('summaryCanceled', { amount: formattedAmount, invoice: attempt.invoiceNumber })
-    : t('summaryInitiated', { amount: formattedAmount, invoice: attempt.invoiceNumber })
+    attempt.status === "succeeded"
+      ? t("summarySucceeded", { amount: formattedAmount, invoice: attempt.invoiceNumber })
+      : attempt.status === "failed"
+        ? t("summaryFailed", { amount: formattedAmount, invoice: attempt.invoiceNumber })
+        : attempt.status === "processing"
+          ? t("summaryProcessing", { amount: formattedAmount, invoice: attempt.invoiceNumber })
+          : attempt.status === "canceled"
+            ? t("summaryCanceled", { amount: formattedAmount, invoice: attempt.invoiceNumber })
+            : t("summaryInitiated", { amount: formattedAmount, invoice: attempt.invoiceNumber });
 
   const copyAuthLink = async () => {
-    if (!attempt.authUrl) return
+    if (!attempt.authUrl) return;
     try {
-      await navigator.clipboard.writeText(attempt.authUrl)
-      toast.success(t('authLinkCopied'))
+      await navigator.clipboard.writeText(attempt.authUrl);
+      toast.success(t("authLinkCopied"));
     } catch {
-      setError(t('retryFailed'))
+      setError(t("retryFailed"));
     }
-  }
+  };
 
   const retryNow = async () => {
     const confirmed = await confirmDialog({
-      title: t('retryConfirmTitle'),
-      message: t('retryConfirmDescription', { amount: formattedAmount, invoice: attempt.invoiceNumber }),
-      confirmLabel: t('retryNow'),
-      cancelLabel: tc('actions.cancel'),
-    })
-    if (!confirmed) return
-    setBusy(true)
-    setError(null)
+      title: t("retryConfirmTitle"),
+      message: t("retryConfirmDescription", {
+        amount: formattedAmount,
+        invoice: attempt.invoiceNumber,
+      }),
+      confirmLabel: t("retryNow"),
+      cancelLabel: tc("actions.cancel"),
+    });
+    if (!confirmed) return;
+    setBusy(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/autopay/attempts/${attempt.id}/retry`, { method: 'POST' })
+      const res = await fetch(`/api/autopay/attempts/${attempt.id}/retry`, { method: "POST" });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback.
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, t('retryFailed')))
-        return
+        setError(await readApiErrorMessage(res, t("retryFailed")));
+        return;
       }
-      toast.success(t('retryStarted'))
-      router.refresh()
+      toast.success(t("retryStarted"));
+      router.refresh();
     } catch {
-      setError(t('retryFailed'))
+      setError(t("retryFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
   return (
     <UrlDrawer
@@ -114,8 +131,18 @@ export function AttemptDrawer({
       syncUrlOnClose
       title={
         <span className="flex items-center gap-2.5">
-          <span>{t('title', { invoice: attempt.invoiceNumber })}</span>
-          <Badge variant={attempt.status === 'succeeded' ? 'success' : attempt.status === 'failed' ? 'destructive' : attempt.status === 'processing' ? 'warning' : 'secondary'}>
+          <span>{t("title", { invoice: attempt.invoiceNumber })}</span>
+          <Badge
+            variant={
+              attempt.status === "succeeded"
+                ? "success"
+                : attempt.status === "failed"
+                  ? "destructive"
+                  : attempt.status === "processing"
+                    ? "warning"
+                    : "secondary"
+            }
+          >
             {statusLabel}
           </Badge>
         </span>
@@ -124,7 +151,7 @@ export function AttemptDrawer({
       headerActions={
         retryable ? (
           <Button disabled={busy} onClick={() => void retryNow()}>
-            {busy ? tc('actions.saving') : t('retryNow')}
+            {busy ? tc("actions.saving") : t("retryNow")}
           </Button>
         ) : undefined
       }
@@ -136,48 +163,52 @@ export function AttemptDrawer({
           </p>
         )}
         <p className="text-sm">{summary}</p>
-        {remedy && (
-          <p className="text-sm text-muted-foreground">{remedy}</p>
-        )}
+        {remedy && <p className="text-sm text-muted-foreground">{remedy}</p>}
         {needsAuth && attempt.authUrl && (
           <div className="flex items-center gap-2">
             <p className="text-sm break-all">{attempt.authUrl}</p>
             <Button variant="outline" onClick={() => void copyAuthLink()}>
-              {t('copyAuthLink')}
+              {t("copyAuthLink")}
             </Button>
           </div>
         )}
-        {attempt.status === 'succeeded' && attempt.usedBackup && (
-          <p className="text-sm text-muted-foreground">{t('collectedViaBackup')}</p>
+        {attempt.status === "succeeded" && attempt.usedBackup && (
+          <p className="text-sm text-muted-foreground">{t("collectedViaBackup")}</p>
         )}
-        {attempt.status === 'failed' && attempt.nextRetryOn && (
-          <p className="text-sm text-muted-foreground">{t('nextRetry', { date: attempt.nextRetryOn })}</p>
+        {attempt.status === "failed" && attempt.nextRetryOn && (
+          <p className="text-sm text-muted-foreground">
+            {t("nextRetry", { date: attempt.nextRetryOn })}
+          </p>
         )}
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <dt className="text-muted-foreground">{t('amount')}</dt>
+          <dt className="text-muted-foreground">{t("amount")}</dt>
           <dd>{formattedAmount}</dd>
-          <dt className="text-muted-foreground">{t('method')}</dt>
-          <dd>{attempt.methodLabel ?? tc('labels.notSet')}</dd>
+          <dt className="text-muted-foreground">{t("method")}</dt>
+          <dd>{attempt.methodLabel ?? tc("labels.notSet")}</dd>
           {attempt.declineCode && (
             <>
-              <dt className="text-muted-foreground">{t('decline')}</dt>
+              <dt className="text-muted-foreground">{t("decline")}</dt>
               <dd>{attempt.declineCode}</dd>
             </>
           )}
         </dl>
-        <DisclosureSection title={t('providerDetail')} summary={attempt.provider} forceOpen={attempt.status === 'processing'}>
+        <DisclosureSection
+          title={t("providerDetail")}
+          summary={attempt.provider}
+          forceOpen={attempt.status === "processing"}
+        >
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <dt className="text-muted-foreground">{t('provider')}</dt>
+            <dt className="text-muted-foreground">{t("provider")}</dt>
             <dd>{attempt.provider}</dd>
-            <dt className="text-muted-foreground">{t('position')}</dt>
+            <dt className="text-muted-foreground">{t("position")}</dt>
             <dd>{attempt.retryPosition + 1}</dd>
-            <dt className="text-muted-foreground">{t('providerRef')}</dt>
-            <dd className="break-all">{attempt.providerRef ?? tc('labels.notSet')}</dd>
-            <dt className="text-muted-foreground">{t('attemptedAt')}</dt>
+            <dt className="text-muted-foreground">{t("providerRef")}</dt>
+            <dd className="break-all">{attempt.providerRef ?? tc("labels.notSet")}</dd>
+            <dt className="text-muted-foreground">{t("attemptedAt")}</dt>
             <dd>{attempt.attemptedAt}</dd>
           </dl>
         </DisclosureSection>
       </div>
     </UrlDrawer>
-  )
+  );
 }

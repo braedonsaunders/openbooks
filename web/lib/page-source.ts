@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from "node:fs";
 
 /**
  * The source of a page — which is now TWO files.
@@ -21,12 +21,12 @@ import { existsSync, readFileSync } from 'node:fs'
  * two files without anyone having to remember to update a test.
  */
 export function pageSource(path: string): string {
-  const parts = [readFileSync(path, 'utf8')]
-  const view = path.replace(/page\.tsx$/, 'view.ts')
+  const parts = [readFileSync(path, "utf8")];
+  const view = path.replace(/page\.tsx$/, "view.ts");
   // Pages that compose another native page or predate the split may have no
   // sibling view.
-  if (view !== path && existsSync(view)) parts.push(readFileSync(view, 'utf8'))
-  return parts.join('\n')
+  if (view !== path && existsSync(view)) parts.push(readFileSync(view, "utf8"));
+  return parts.join("\n");
 }
 
 /**
@@ -39,12 +39,12 @@ export function pageSource(path: string): string {
  */
 export function readingPagePairs(read: (path: string) => string): (path: string) => string {
   return (path: string) => {
-    if (!path.endsWith('page.tsx')) return read(path)
-    const view = path.replace(/page\.tsx$/, 'view.ts')
+    if (!path.endsWith("page.tsx")) return read(path);
+    const view = path.replace(/page\.tsx$/, "view.ts");
     try {
-      return `${read(path)}\n${read(view)}`
+      return `${read(path)}\n${read(view)}`;
     } catch {
-      return read(path)
+      return read(path);
     }
-  }
+  };
 }

@@ -92,8 +92,8 @@ export function adyenRecurringCardDetail(item: AdyenNotificationItem): {
   if (!detailReference) return null;
   const rawSummary = adyenScalarString(additionalData.cardSummary);
   const rawExpiry = adyenScalarString(additionalData.expiryDate);
-  const rawBrand = adyenScalarString(additionalData.paymentMethodVariant)
-    ?? adyenScalarString(item.paymentMethod);
+  const rawBrand =
+    adyenScalarString(additionalData.paymentMethodVariant) ?? adyenScalarString(item.paymentMethod);
   if (!rawSummary && !rawExpiry && !rawBrand) return null;
   let expMonth: number | null = null;
   let expYear: number | null = null;
@@ -101,8 +101,17 @@ export function adyenRecurringCardDetail(item: AdyenNotificationItem): {
     const match = /^(\d{1,2})\/(\d{4})$/.exec(rawExpiry.trim());
     const month = match ? Number(match[1]) : NaN;
     const year = match ? Number(match[2]) : NaN;
-    if (!match || !Number.isInteger(month) || month < 1 || month > 12 || year < 2000 || year > 2100) {
-      throw new PaymentAcceptanceError(`adyen card detail carries an unreadable expiry ${JSON.stringify(rawExpiry)}`);
+    if (
+      !match ||
+      !Number.isInteger(month) ||
+      month < 1 ||
+      month > 12 ||
+      year < 2000 ||
+      year > 2100
+    ) {
+      throw new PaymentAcceptanceError(
+        `adyen card detail carries an unreadable expiry ${JSON.stringify(rawExpiry)}`,
+      );
     }
     expMonth = month;
     expYear = year;
@@ -110,7 +119,10 @@ export function adyenRecurringCardDetail(item: AdyenNotificationItem): {
   return { detailReference, brand: rawBrand, last4: rawSummary, expMonth, expYear };
 }
 
-export function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: AdyenNotificationItem): WebhookEvent | null {
+export function normalizeAdyenNotificationItem(
+  payload: Record<string, unknown>,
+  item: AdyenNotificationItem,
+): WebhookEvent | null {
   const eventCode = adyenScalarString(item.eventCode);
   const successFlag = normalizeAdyenSuccessFlag(adyenScalarString(item.success) ?? item.success);
   const linkToken = stringLinkToken(item.merchantReference);
@@ -135,12 +147,12 @@ export function normalizeAdyenNotificationItem(payload: Record<string, unknown>,
       setupCustomerRef: shopperRef,
       cardUpdaterRefresh: card
         ? {
-          providerMethodId: card.detailReference,
-          brand: card.brand,
-          last4: card.last4,
-          expMonth: card.expMonth,
-          expYear: card.expYear,
-        }
+            providerMethodId: card.detailReference,
+            brand: card.brand,
+            last4: card.last4,
+            expMonth: card.expMonth,
+            expYear: card.expYear,
+          }
         : null,
       linkToken,
       status: "succeeded",
@@ -157,17 +169,22 @@ export function normalizeAdyenNotificationItem(payload: Record<string, unknown>,
       // quarantine tests) still classify un-normalizable amounts.
       paidAmount:
         amountValue != null && amountCurrency
-          ? fromAdyenMinorUnits(BigInt(amountValue as string | number | bigint | boolean), String(amountCurrency))
+          ? fromAdyenMinorUnits(
+              BigInt(amountValue as string | number | bigint | boolean),
+              String(amountCurrency),
+            )
           : null,
-      paidCurrency:
-        typeof amountCurrency === "string"
-          ? amountCurrency.toUpperCase()
-          : null,
+      paidCurrency: typeof amountCurrency === "string" ? amountCurrency.toUpperCase() : null,
       raw: payload,
     };
   }
   if (eventCode === "AUTHORISATION") {
-    return { externalRef: String(item.pspReference ?? ""), linkToken, status: "failed", raw: payload };
+    return {
+      externalRef: String(item.pspReference ?? ""),
+      linkToken,
+      status: "failed",
+      raw: payload,
+    };
   }
   if (eventCode === "CANCELLATION" || eventCode === "CANCEL_OR_REFUND") {
     const refundCurrency = typeof amountCurrency === "string" ? amountCurrency.toUpperCase() : null;
@@ -179,13 +196,20 @@ export function normalizeAdyenNotificationItem(payload: Record<string, unknown>,
       providerEventId: `${String(item.pspReference ?? "")}:${eventCode}`,
       refundedAmount:
         amountValue != null && amountCurrency
-          ? fromAdyenMinorUnits(BigInt(amountValue as string | number | bigint | boolean), String(amountCurrency))
+          ? fromAdyenMinorUnits(
+              BigInt(amountValue as string | number | bigint | boolean),
+              String(amountCurrency),
+            )
           : null,
       refundCurrency,
       raw: payload,
     };
   }
-  if (eventCode === "CHARGEBACK" || eventCode === "CHARGEBACK_REVERSED" || eventCode === "SECOND_CHARGEBACK") {
+  if (
+    eventCode === "CHARGEBACK" ||
+    eventCode === "CHARGEBACK_REVERSED" ||
+    eventCode === "SECOND_CHARGEBACK"
+  ) {
     const disputeCurrency = typeof amountCurrency === "string" ? amountCurrency.toUpperCase() : "";
     return {
       externalRef: String(item.originalReference ?? item.pspReference ?? ""),
@@ -198,11 +222,19 @@ export function normalizeAdyenNotificationItem(payload: Record<string, unknown>,
         id: String(item.pspReference ?? ""),
         amount:
           amountValue != null && amountCurrency
-            ? fromAdyenMinorUnits(BigInt(amountValue as string | number | bigint | boolean), String(amountCurrency))
+            ? fromAdyenMinorUnits(
+                BigInt(amountValue as string | number | bigint | boolean),
+                String(amountCurrency),
+              )
             : "0",
         currency: disputeCurrency,
         reason: eventCode,
-        state: eventCode === "CHARGEBACK" ? "opened" : eventCode === "SECOND_CHARGEBACK" ? "lost" : "won",
+        state:
+          eventCode === "CHARGEBACK"
+            ? "opened"
+            : eventCode === "SECOND_CHARGEBACK"
+              ? "lost"
+              : "won",
       },
       raw: payload,
     };
@@ -224,7 +256,9 @@ export function verifyAdyenWebhookDelivery(
   }
   const body = isJsonRecord(payload) ? payload : {};
   const items = Array.isArray(body.notificationItems)
-    ? body.notificationItems.map((entry: unknown) => (isJsonRecord(entry) ? entry.NotificationRequestItem : undefined)).filter(Boolean)
+    ? body.notificationItems
+        .map((entry: unknown) => (isJsonRecord(entry) ? entry.NotificationRequestItem : undefined))
+        .filter(Boolean)
     : [];
   if (items.length === 0) return invalidWebhook();
   const keyBytes = Buffer.from(secrets.webhookSecret, "base64");
@@ -260,7 +294,12 @@ export function verifyAdyenWebhookDelivery(
       const event = normalizeAdyenNotificationItem(body, item);
       if (event) events.push(event);
     } catch (error) {
-      logPaymentWebhookItemMalformed("adyen", String(item.pspReference ?? ""), String(item.eventCode ?? ""), error);
+      logPaymentWebhookItemMalformed(
+        "adyen",
+        String(item.pspReference ?? ""),
+        String(item.eventCode ?? ""),
+        error,
+      );
     }
   }
   return verifiedWebhook(events);
@@ -270,10 +309,12 @@ export const adyenAdapter: PaymentProviderAdapter = {
   key: "adyen",
   async createCheckout(secrets, req, fetchFn = defaultFetch) {
     if (!secrets.apiKey) throw new PaymentAcceptanceError("adyen API key is not configured");
-    if (!secrets.merchantAccount) throw new PaymentAcceptanceError("adyen merchant account is not configured");
+    if (!secrets.merchantAccount)
+      throw new PaymentAcceptanceError("adyen merchant account is not configured");
     const total = add(req.invoiceAmount, req.surchargeAmount);
     const amountValue = Number(toAdyenMinorUnits(total, req.currency));
-    if (!Number.isSafeInteger(amountValue)) throw new PaymentAcceptanceError("adyen amount exceeds the safe integer range");
+    if (!Number.isSafeInteger(amountValue))
+      throw new PaymentAcceptanceError("adyen amount exceeds the safe integer range");
     const base = resolveAcceptanceProviderApiBase("adyen", secrets.apiBase);
     const res = await fetchFn(`${base}/sessions`, {
       method: "POST",
@@ -289,15 +330,22 @@ export const adyenAdapter: PaymentProviderAdapter = {
       }),
     });
     const json = await fetchJsonBody(res);
-    if (res.status >= 400) throw new PaymentAcceptanceError(`adyen session failed: ${json.message ?? res.status}`);
-    if (typeof json.id !== "string" || json.id === "" || typeof json.url !== "string" || json.url === "") {
+    if (res.status >= 400)
+      throw new PaymentAcceptanceError(`adyen session failed: ${json.message ?? res.status}`);
+    if (
+      typeof json.id !== "string" ||
+      json.id === "" ||
+      typeof json.url !== "string" ||
+      json.url === ""
+    ) {
       throw new PaymentAcceptanceError("adyen returned no session url");
     }
     return { redirectUrl: json.url, externalRef: json.id };
   },
   async createSetupSession(secrets, req, fetchFn = defaultFetch) {
     if (!secrets.apiKey) throw new PaymentAcceptanceError("adyen API key is not configured");
-    if (!secrets.merchantAccount) throw new PaymentAcceptanceError("adyen merchant account is not configured");
+    if (!secrets.merchantAccount)
+      throw new PaymentAcceptanceError("adyen merchant account is not configured");
     // Tokenization-only payment link (€0 authorisation): the shopper saves a
     // method without moving money, stored for later ContAuth charges.
     const base = resolveAcceptanceProviderApiBase("adyen", secrets.apiBase);
@@ -317,25 +365,41 @@ export const adyenAdapter: PaymentProviderAdapter = {
       }),
     });
     const json = await fetchJsonBody(res);
-    if (res.status >= 400) throw new PaymentAcceptanceError(`adyen setup link failed: ${json.message ?? res.status}`);
-    if (typeof json.id !== "string" || json.id === "" || typeof json.url !== "string" || json.url === "") {
+    if (res.status >= 400)
+      throw new PaymentAcceptanceError(`adyen setup link failed: ${json.message ?? res.status}`);
+    if (
+      typeof json.id !== "string" ||
+      json.id === "" ||
+      typeof json.url !== "string" ||
+      json.url === ""
+    ) {
       throw new PaymentAcceptanceError("adyen setup link returned no url");
     }
-    return { redirectUrl: json.url, externalRef: json.id, providerCustomerId: req.providerCustomerId ?? req.linkToken };
+    return {
+      redirectUrl: json.url,
+      externalRef: json.id,
+      providerCustomerId: req.providerCustomerId ?? req.linkToken,
+    };
   },
   async chargeOffSession(secrets, req, fetchFn = defaultFetch) {
     if (!secrets.apiKey) throw new PaymentAcceptanceError("adyen API key is not configured");
-    if (!secrets.merchantAccount) throw new PaymentAcceptanceError("adyen merchant account is not configured");
+    if (!secrets.merchantAccount)
+      throw new PaymentAcceptanceError("adyen merchant account is not configured");
     if (!req.providerCustomerId) {
       return { status: "failed", providerRef: null, declineCode: "missing_shopper_reference" };
     }
     const amountValue = Number(toAdyenMinorUnits(req.amount, req.currency));
-    if (!Number.isSafeInteger(amountValue)) throw new PaymentAcceptanceError("adyen amount exceeds the safe integer range");
+    if (!Number.isSafeInteger(amountValue))
+      throw new PaymentAcceptanceError("adyen amount exceeds the safe integer range");
     const base = resolveAcceptanceProviderApiBase("adyen", secrets.apiBase);
     const res = await fetchFn(`${base}/payments`, {
       method: "POST",
       redirect: "error",
-      headers: { "x-api-key": secrets.apiKey, "content-type": "application/json", "Idempotency-Key": req.idempotencyKey },
+      headers: {
+        "x-api-key": secrets.apiKey,
+        "content-type": "application/json",
+        "Idempotency-Key": req.idempotencyKey,
+      },
       body: JSON.stringify({
         merchantAccount: secrets.merchantAccount,
         reference: req.idempotencyKey,
@@ -353,8 +417,14 @@ export const adyenAdapter: PaymentProviderAdapter = {
     }
     const pspReference = typeof json.pspReference === "string" ? json.pspReference : "";
     if (json.resultCode === "Authorised") return { status: "succeeded", providerRef: pspReference };
-    if (json.resultCode === "Received" || json.resultCode === "Pending") return { status: "processing", providerRef: pspReference };
-    const refusal = typeof json.refusalReason === "string" ? json.refusalReason : typeof json.resultCode === "string" ? json.resultCode : null;
+    if (json.resultCode === "Received" || json.resultCode === "Pending")
+      return { status: "processing", providerRef: pspReference };
+    const refusal =
+      typeof json.refusalReason === "string"
+        ? json.refusalReason
+        : typeof json.resultCode === "string"
+          ? json.resultCode
+          : null;
     if (
       json.resultCode === "ChallengeShopper" ||
       json.resultCode === "IdentifyShopper" ||
@@ -365,14 +435,23 @@ export const adyenAdapter: PaymentProviderAdapter = {
       // treatment as Stripe's requires_action — keep the link, never retry.
       const action = jsonObject(json.action);
       const authUrl = typeof action.url === "string" && action.url !== "" ? action.url : null;
-      return { status: "requires_action", providerRef: pspReference || null, authUrl, declineCode: refusal };
+      return {
+        status: "requires_action",
+        providerRef: pspReference || null,
+        authUrl,
+        declineCode: refusal,
+      };
     }
     return { status: "failed", providerRef: pspReference || null, declineCode: refusal };
   },
   async detachMethod(secrets, req, fetchFn = defaultFetch) {
     if (!secrets.apiKey) throw new PaymentAcceptanceError("adyen API key is not configured");
-    if (!secrets.merchantAccount) throw new PaymentAcceptanceError("adyen merchant account is not configured");
-    if (!req.providerCustomerId) throw new PaymentAcceptanceError("adyen stored method has no shopper reference; remove it locally instead");
+    if (!secrets.merchantAccount)
+      throw new PaymentAcceptanceError("adyen merchant account is not configured");
+    if (!req.providerCustomerId)
+      throw new PaymentAcceptanceError(
+        "adyen stored method has no shopper reference; remove it locally instead",
+      );
     // Stored details disable through the Recurring API (a different host from
     // Checkout): an unknown detail reference means the method is already
     // gone, so removal stays idempotent.
@@ -390,7 +469,9 @@ export const adyenAdapter: PaymentProviderAdapter = {
     if (res.status >= 400) {
       const message = typeof json.message === "string" ? json.message : null;
       if (res.status === 422 && message?.includes("Unknown")) return;
-      throw new PaymentAcceptanceError(`adyen stored method disable failed: ${message ?? res.status}`);
+      throw new PaymentAcceptanceError(
+        `adyen stored method disable failed: ${message ?? res.status}`,
+      );
     }
   },
   verifyWebhookDelivery: verifyAdyenWebhookDelivery,

@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 import {
   RevenueRecognitionError,
   StaleRecognitionPreviewError,
-} from '@openbooks/engine/revenue/recognition'
+} from "@openbooks/engine/revenue/recognition";
 
 /**
  * Named revenue-recognition refusals (closed period, unconfigured accounts,
@@ -13,11 +13,11 @@ import {
  */
 export function revenueRecognitionErrorResponse(error: unknown, fallback: string): NextResponse {
   if (error instanceof StaleRecognitionPreviewError) {
-    return NextResponse.json({ error: 'stale_preview' }, { status: 409 })
+    return NextResponse.json({ error: "stale_preview" }, { status: 409 });
   }
   if (error instanceof RevenueRecognitionError) {
-    return NextResponse.json({ error: error.message }, { status: 422 })
+    return NextResponse.json({ error: error.message }, { status: 422 });
   }
-  console.error(fallback, error)
-  return NextResponse.json({ error: fallback }, { status: 500 })
+  console.error(fallback, error);
+  return NextResponse.json({ error: fallback }, { status: 500 });
 }

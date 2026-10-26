@@ -31,10 +31,7 @@
 export type PostedCorrectionFieldClass = "metadata" | "dimension" | "financial";
 
 export type PostedCorrectionOutcome =
-  | "metadata-correction"
-  | "reclass"
-  | "void-and-reissue"
-  | "refused-closed-period";
+  "metadata-correction" | "reclass" | "void-and-reissue" | "refused-closed-period";
 
 /** Header fields that never reach the posting kernel (see module comment). */
 export const POSTED_METADATA_FIELDS: ReadonlySet<string> = new Set([

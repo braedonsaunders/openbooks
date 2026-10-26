@@ -52,7 +52,9 @@ function sftpSession(client: ssh2.Client): Promise<ssh2.SFTPWrapper> {
 
 function readdir(sftp: ssh2.SFTPWrapper, path: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
-    sftp.readdir(path, (error, list) => (error ? reject(error) : resolve(list.map((entry) => entry.filename))));
+    sftp.readdir(path, (error, list) =>
+      error ? reject(error) : resolve(list.map((entry) => entry.filename)),
+    );
   });
 }
 
@@ -60,8 +62,12 @@ test("a real client lists a directory of more than 1,000 long names completely",
   const lane = randomUUID().slice(0, 8);
   const rootPrefix = `sftp/${ORG}/readdir-${lane}`;
   const config: SftpServerConfig = {
-    id: `readdir-${lane}`, orgId: ORG, username: `readdir-${lane}`, backend: "local",
-    bucket: null, rootPrefix,
+    id: `readdir-${lane}`,
+    orgId: ORG,
+    username: `readdir-${lane}`,
+    backend: "local",
+    bucket: null,
+    rootPrefix,
   };
   const backend = backendFor(config);
   // Long names: one batched reply must stay far under ssh2's 256 KiB packet
@@ -73,7 +79,11 @@ test("a real client lists a directory of more than 1,000 long names completely",
     await backend.write(`inbound/${name}`, Buffer.from("statement"));
   }
 
-  const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: passwordResolver(config) });
+  const server = await startSftpServer({
+    port: 0,
+    hostKey: generateHostKey(),
+    resolve: passwordResolver(config),
+  });
   const client = await connect(server.port, config.username);
   try {
     const sftp = await sftpSession(client);
@@ -95,10 +105,18 @@ test("an empty directory still terminates the listing", async () => {
   const lane = randomUUID().slice(0, 8);
   const rootPrefix = `sftp/${ORG}/readdir-empty-${lane}`;
   const config: SftpServerConfig = {
-    id: `readdir-empty-${lane}`, orgId: ORG, username: `readdir-empty-${lane}`, backend: "local",
-    bucket: null, rootPrefix,
+    id: `readdir-empty-${lane}`,
+    orgId: ORG,
+    username: `readdir-empty-${lane}`,
+    backend: "local",
+    bucket: null,
+    rootPrefix,
   };
-  const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: passwordResolver(config) });
+  const server = await startSftpServer({
+    port: 0,
+    hostKey: generateHostKey(),
+    resolve: passwordResolver(config),
+  });
   const client = await connect(server.port, config.username);
   try {
     const sftp = await sftpSession(client);

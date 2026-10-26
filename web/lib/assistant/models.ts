@@ -42,7 +42,11 @@ export async function fetchJson(
 ): Promise<unknown> {
   // Provider keys ride Authorization headers or a ?key= query parameter; a
   // followed redirect would replay them to whichever host the Location names.
-  const res = await transport(url, { headers, signal: AbortSignal.timeout(15_000), redirect: "error" });
+  const res = await transport(url, {
+    headers,
+    signal: AbortSignal.timeout(15_000),
+    redirect: "error",
+  });
   if (!res.ok) {
     throw new Error(`${res.status} ${res.statusText}`);
   }
@@ -80,7 +84,10 @@ const modelListCache = new Map<string, { at: number; items: ModelListItem[] }>()
 
 async function cacheKeyFor(config: AiConfig): Promise<string> {
   const { createHash } = await import("node:crypto");
-  const fingerprint = createHash("sha256").update(config.apiKey ?? "").digest("hex").slice(0, 32);
+  const fingerprint = createHash("sha256")
+    .update(config.apiKey ?? "")
+    .digest("hex")
+    .slice(0, 32);
   return `${config.provider}|${config.baseUrl ?? ""}|${fingerprint}`;
 }
 
@@ -103,7 +110,10 @@ export type ListModelsOptions = {
  * Fetch the available model ids for a provider config. Throws on HTTP / auth
  * errors so the caller can surface the provider's message.
  */
-export async function listModels(config: AiConfig, opts: ListModelsOptions = {}): Promise<ModelListItem[]> {
+export async function listModels(
+  config: AiConfig,
+  opts: ListModelsOptions = {},
+): Promise<ModelListItem[]> {
   const spec = providerSpec(config.provider);
   const key = config.apiKey;
 
@@ -156,10 +166,15 @@ export async function listModels(config: AiConfig, opts: ListModelsOptions = {})
       // base URL that rebinds after this check still fails closed.
       const refusal = await connectorUrlRefusal(baseURL, opts.lookup);
       if (refusal) throw new Error("The AI base URL must point at a public host.");
-      const transport: typeof fetch = (input, init) => guardedFetch(input, init, { lookup: opts.lookup });
-      const json = await fetchJson(`${trimSlash(baseURL)}/models`, {
-        Authorization: `Bearer ${key}`,
-      }, transport);
+      const transport: typeof fetch = (input, init) =>
+        guardedFetch(input, init, { lookup: opts.lookup });
+      const json = await fetchJson(
+        `${trimSlash(baseURL)}/models`,
+        {
+          Authorization: `Bearer ${key}`,
+        },
+        transport,
+      );
       const root = json as Record<string, unknown>;
       const data = asArray(root?.data).length ? asArray(root?.data) : asArray(root?.models);
       return dedupeSort(

@@ -63,7 +63,13 @@ interface RouteState {
   writes: string[];
 }
 
-function dueRow(line: string, asset: string, number: string, amount: string, postsGl: boolean): DueRow {
+function dueRow(
+  line: string,
+  asset: string,
+  number: string,
+  amount: string,
+  postsGl: boolean,
+): DueRow {
   return {
     line_id: line,
     asset_id: asset,
@@ -102,20 +108,8 @@ const state: RouteState = {
   periods: [{ id: PERIOD_ID }],
   assets: [{ id: ASSET_A }, { id: ASSET_B }],
   due: [
-    dueRow(
-      "00000000-0000-4000-8000-00000000l001",
-      ASSET_A,
-      "FA-0001",
-      "100.0000",
-      true,
-    ),
-    dueRow(
-      "00000000-0000-4000-8000-00000000l002",
-      ASSET_B,
-      "FA-0002",
-      "250.5000",
-      false,
-    ),
+    dueRow("00000000-0000-4000-8000-00000000l001", ASSET_A, "FA-0001", "100.0000", true),
+    dueRow("00000000-0000-4000-8000-00000000l002", ASSET_B, "FA-0002", "250.5000", false),
   ],
   stale: [],
   queries: [],
@@ -155,9 +149,8 @@ function inspect(query: unknown): { text: string; params: unknown[] } {
   return { text: walk(chunks, true), params };
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksDepreciationPreviewInspect = inspect;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksDepreciationPreviewInspect =
+  inspect;
 
 const mockDb = `
   const state = globalThis[Symbol.for('openbooks.depreciation-preview-route-test')]
@@ -270,10 +263,14 @@ const _hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     if (url === "mock:next-intl-server")
-      return { format: "module", source: "export async function getLocale() { return 'en' }\nexport async function getTranslations() { return (key) => key }", shortCircuit: true };
+      return {
+        format: "module",
+        source:
+          "export async function getLocale() { return 'en' }\nexport async function getTranslations() { return (key) => key }",
+        shortCircuit: true,
+      };
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
@@ -308,7 +305,13 @@ interface PreviewBody {
     lineId: string;
     assetNumber: string;
     periodName: string;
-    periodRef: { fiscalYear: number; periodNumber: number; adjustment: boolean; startsOn: string; endsOn: string };
+    periodRef: {
+      fiscalYear: number;
+      periodNumber: number;
+      adjustment: boolean;
+      startsOn: string;
+      endsOn: string;
+    };
     amount: string;
     debitAccountId: string;
     debitAccountNumber: string;
@@ -338,7 +341,11 @@ test("preview returns the exact balanced impact with a fingerprint", async () =>
   // locale, with the position and dates carried beside the label.
   assert.equal(first.periodName, "P09 FY2026 · Sep 2026");
   assert.deepEqual(first.periodRef, {
-    fiscalYear: 2026, periodNumber: 9, adjustment: false, startsOn: "2026-09-01", endsOn: "2026-09-30",
+    fiscalYear: 2026,
+    periodNumber: 9,
+    adjustment: false,
+    startsOn: "2026-09-01",
+    endsOn: "2026-09-30",
   });
   assert.equal(first.amount, "100.0000");
   assert.equal(first.debitAccountId, EXPENSE_ID);
@@ -367,16 +374,28 @@ test("preview performs zero writes", async () => {
 test("unknown book, period, and asset ids are refused by name", async () => {
   reset();
   const cases: [Record<string, unknown>, string][] = [
-    [{ bookId: "00000000-0000-4000-8000-00000000b099", throughDate: "2026-09-30" }, "book_not_found"],
-    [{ periodId: "00000000-0000-4000-8000-000000000999", throughDate: "2026-09-30" }, "period_not_found"],
-    [{ assetIds: ["00000000-0000-4000-8000-00000000a099"], throughDate: "2026-09-30" }, "unknown_asset"],
+    [
+      { bookId: "00000000-0000-4000-8000-00000000b099", throughDate: "2026-09-30" },
+      "book_not_found",
+    ],
+    [
+      { periodId: "00000000-0000-4000-8000-000000000999", throughDate: "2026-09-30" },
+      "period_not_found",
+    ],
+    [
+      { assetIds: ["00000000-0000-4000-8000-00000000a099"], throughDate: "2026-09-30" },
+      "unknown_asset",
+    ],
     [{ throughDate: "2026-02-30" }, "invalid_through_date"],
   ];
   for (const [index, [body, code]] of cases.entries()) {
     const res = await preview(body);
     assert.equal(res.status, 422);
     const responseBody = (await res.json()) as { error: string; issues?: { path: string }[] };
-    assert.equal(index === 3 ? responseBody.issues?.[0]?.path : responseBody.error, index === 3 ? "throughDate" : code);
+    assert.equal(
+      index === 3 ? responseBody.issues?.[0]?.path : responseBody.error,
+      index === 3 ? "throughDate" : code,
+    );
   }
 });
 
@@ -407,16 +426,17 @@ test("the posting date is fingerprinted and validated", async () => {
   const dated = ((await datedResponse.json()) as PreviewBody).fingerprint;
   assert.notEqual(plain, dated);
   const bad = await preview({ throughDate: "2026-09-30", postingDate: "2026-13-40" });
-  assert.deepEqual([bad.status, ((await bad.json()) as { issues?: { path: string }[] }).issues?.[0]?.path], [422, "postingDate"]);
+  assert.deepEqual(
+    [bad.status, ((await bad.json()) as { issues?: { path: string }[] }).issues?.[0]?.path],
+    [422, "postingDate"],
+  );
 });
 
 test("a posting date outside a line's period warns instead of failing", async () => {
   reset();
-  const data = (
-    (await (
-      await preview({ throughDate: "2026-09-30", postingDate: "2026-08-15" })
-    ).json()) as PreviewBody
-  );
+  const data = (await (
+    await preview({ throughDate: "2026-09-30", postingDate: "2026-08-15" })
+  ).json()) as PreviewBody;
   // September lines with an August posting date: every row warns, and the
   // set still fingerprints — Confirm skips those lines by name.
   assert.equal(data.rows.length, 2);

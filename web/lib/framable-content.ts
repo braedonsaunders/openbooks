@@ -10,5 +10,8 @@ const FRAMABLE_CONTENT_ROUTES = [
 ];
 
 export function isFramableContentRequest(pathname: string, method: string): boolean {
-  return (method === "GET" || method === "HEAD") && FRAMABLE_CONTENT_ROUTES.some((route) => route.test(pathname));
+  return (
+    (method === "GET" || method === "HEAD") &&
+    FRAMABLE_CONTENT_ROUTES.some((route) => route.test(pathname))
+  );
 }

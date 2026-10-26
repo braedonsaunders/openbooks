@@ -1,17 +1,26 @@
-import 'server-only'
+import "server-only";
 
-import { notFound, redirect } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../../../../lib/authz'
-import { canRunReportEntity, requireReportEntityFeature } from '../../../../../../../lib/report-authz'
-import { canAccessReportArtifact } from '../../../../../../../lib/report-execution-context'
-import { isUuid } from '../../../../../../../lib/list-params'
-import { loadReportDefinition } from '../../../../../../../lib/custom-reports'
-import type { DeliveryPanel, RunRow } from './DeliveryPanel'
-import type { ScheduleRow } from '../../../../ScheduleEditor'
+import { notFound, redirect } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../../../../lib/authz";
+import {
+  canRunReportEntity,
+  requireReportEntityFeature,
+} from "../../../../../../../lib/report-authz";
+import { canAccessReportArtifact } from "../../../../../../../lib/report-execution-context";
+import { isUuid } from "../../../../../../../lib/list-params";
+import { loadReportDefinition } from "../../../../../../../lib/custom-reports";
+import type { DeliveryPanel, RunRow } from "./DeliveryPanel";
+import type { ScheduleRow } from "../../../../ScheduleEditor";
 
 /**
  * Delivery management for one saved report, split into a loader and a spec.
@@ -33,44 +42,49 @@ import type { ScheduleRow } from '../../../../ScheduleEditor'
  * string building — so the loader builds it.
  */
 
-type PanelProps = Parameters<typeof DeliveryPanel>[0]
+type PanelProps = Parameters<typeof DeliveryPanel>[0];
 
 export interface ReportDeliveryData {
-  title: string
-  backHref: string
-  backLabel: string
-  definitionId: string
-  schedules: PanelProps['schedules']
-  recentRuns: PanelProps['recentRuns']
-  canSchedule: boolean
+  title: string;
+  backHref: string;
+  backLabel: string;
+  definitionId: string;
+  schedules: PanelProps["schedules"];
+  recentRuns: PanelProps["recentRuns"];
+  canSchedule: boolean;
 }
 
 export async function loadReportDelivery(id: string): Promise<ReportDeliveryData> {
-  const authz = await requirePermission('reports.read')
-  const canSchedule = can(authz, 'reports.schedule')
-  if (!isUuid(id)) notFound()
+  const authz = await requirePermission("reports.read");
+  const canSchedule = can(authz, "reports.schedule");
+  if (!isUuid(id)) notFound();
 
-  const definition = await loadReportDefinition(authz.user.orgId, id)
-  if (!definition) notFound()
-  if (definition.report_type === 'statement' || !definition.query) redirect('/reports/custom')
-  await requireReportEntityFeature(authz, definition.query)
-  if (!(await canRunReportEntity(authz, definition.query))) notFound()
+  const definition = await loadReportDefinition(authz.user.orgId, id);
+  if (!definition) notFound();
+  if (definition.report_type === "statement" || !definition.query) redirect("/reports/custom");
+  await requireReportEntityFeature(authz, definition.query);
+  if (!(await canRunReportEntity(authz, definition.query))) notFound();
 
-  const t = await getTranslations('reports')
-  const tk = await getTranslations('reports.custom')
-  const displayName = definition.kind === 'built_in' && t.has(`builtIns.${definition.slug}.name`)
-    ? t(`builtIns.${definition.slug}.name`)
-    : definition.name
+  const t = await getTranslations("reports");
+  const tk = await getTranslations("reports.custom");
+  const displayName =
+    definition.kind === "built_in" && t.has(`builtIns.${definition.slug}.name`)
+      ? t(`builtIns.${definition.slug}.name`)
+      : definition.name;
 
   const [schedules, recentRuns] = await Promise.all([
-    db.execute<ScheduleRow & { authorization_snapshot: unknown }>(sql`
+    db.execute<ScheduleRow & { authorization_snapshot: unknown }>(
+      sql`
       select id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
              timezone, recipient_emails, next_run_at, active, authorization_snapshot
         from report_schedules
        where org_id = ${authz.user.orgId} and definition_id = ${id}
        order by next_run_at
-    `, 'objects'),
-    db.execute<RunRow & { authorization_snapshot: unknown }>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<RunRow & { authorization_snapshot: unknown }>(
+      sql`
       select r.id, r.trigger, r.status, r.error, r.row_count, r.started_at, r.finished_at,
              r.authorization_snapshot,
              exists(select 1 from report_run_artifacts a where a.run_id=r.id and a.org_id=r.org_id) as artifact_available,
@@ -83,60 +97,68 @@ export async function loadReportDelivery(id: string): Promise<ReportDeliveryData
        where r.org_id = ${authz.user.orgId} and r.definition_id = ${id}
        group by r.id
        order by r.created_at desc limit 10
-    `, 'objects'),
-  ])
+    `,
+      "objects",
+    ),
+  ]);
 
   // The list API filters rows the caller cannot reach through the run's
   // pinned scope, and single-schedule writes refuse with 403: this view
   // matches both, so a narrower schedule's recipients and a narrower run's
   // error and artifact metadata never leak through the delivery screen.
   // The snapshot itself never leaves the server.
-  const visibleSchedules: ScheduleRow[] = []
+  const visibleSchedules: ScheduleRow[] = [];
   for (const row of schedules) {
-    const { authorization_snapshot, ...visible } = row
-    if (authorization_snapshot == null || (await canAccessReportArtifact(authz, authorization_snapshot))) {
-      visibleSchedules.push(visible)
+    const { authorization_snapshot, ...visible } = row;
+    if (
+      authorization_snapshot == null ||
+      (await canAccessReportArtifact(authz, authorization_snapshot))
+    ) {
+      visibleSchedules.push(visible);
     }
   }
-  const visibleRuns: RunRow[] = []
+  const visibleRuns: RunRow[] = [];
   for (const run of recentRuns) {
-    const { authorization_snapshot, ...visible } = run
-    if (authorization_snapshot == null || (await canAccessReportArtifact(authz, authorization_snapshot))) {
-      visibleRuns.push({ ...visible, error: visible.error ? tk('runner.runFailedHelp') : null })
+    const { authorization_snapshot, ...visible } = run;
+    if (
+      authorization_snapshot == null ||
+      (await canAccessReportArtifact(authz, authorization_snapshot))
+    ) {
+      visibleRuns.push({ ...visible, error: visible.error ? tk("runner.runFailedHelp") : null });
     }
   }
 
   return {
-    title: `${displayName} — ${tk('runner.scheduledDelivery')}`,
+    title: `${displayName} — ${tk("runner.scheduledDelivery")}`,
     backHref: `/reports/custom/run/${definition.id}`,
     backLabel: displayName,
     definitionId: definition.id,
     schedules: visibleSchedules,
     recentRuns: visibleRuns,
     canSchedule,
-  }
+  };
 }
 
-const f = ref<ReportDeliveryData>()
+const f = ref<ReportDeliveryData>();
 
 export function reportDeliverySpec(data: ReportDeliveryData): PageSpec {
   return page({
-    route: '/reports/custom/run/[id]/delivery',
+    route: "/reports/custom/run/[id]/delivery",
     // `detail`, not `list`: the native page uses DetailPageLayout.
-    layout: 'detail',
+    layout: "detail",
     header: [
       pageHeader({
-        title: f('title'),
-        back: { href: f('backHref'), label: f('backLabel') },
+        title: f("title"),
+        back: { href: f("backHref"), label: f("backLabel") },
       }),
     ],
     body: [
-      widgetBlock('delivery-panel', {
+      widgetBlock("delivery-panel", {
         definitionId: data.definitionId,
         schedules: data.schedules,
         recentRuns: data.recentRuns,
         canSchedule: data.canSchedule,
       }),
     ],
-  })
+  });
 }

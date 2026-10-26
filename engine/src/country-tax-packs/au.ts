@@ -8,7 +8,8 @@ const AU_BAS_GST: TaxReturnPack = {
   defaultFrequency: "quarterly",
   submissionChannel: "portal_manual",
   governmentFormat: "portal_entry",
-  submissionUrl: "https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/how-to-lodge-your-bas",
+  submissionUrl:
+    "https://www.ato.gov.au/businesses-and-organisations/preparing-lodging-and-paying/how-to-lodge-your-bas",
   watermark: "Working copy — lodge through ATO online services or enabled business software",
   boxes: [
     { lineCode: "G1", label: "Total sales", sign: 1, sequence: 10 },
@@ -16,8 +17,22 @@ const AU_BAS_GST: TaxReturnPack = {
     { lineCode: "G3", label: "Other GST-free sales", sign: 1, sequence: 30 },
     { lineCode: "G10", label: "Capital purchases", sign: 1, sequence: 40 },
     { lineCode: "G11", label: "Non-capital purchases", sign: 1, sequence: 50 },
-    { lineCode: "1A", label: "GST on sales", sign: -1, sequence: 60, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "1B", label: "GST on purchases", sign: 1, sequence: 70, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "1A",
+      label: "GST on sales",
+      sign: -1,
+      sequence: 60,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "1B",
+      label: "GST on purchases",
+      sign: 1,
+      sequence: 70,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
   ],
 };
 

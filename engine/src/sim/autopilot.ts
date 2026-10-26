@@ -29,9 +29,19 @@ export interface AutopilotSummary {
   monthsClosed: string[];
 }
 
-export async function autopilotDay(profile: Profile, world: SimOrg, manifest: RunManifest): Promise<AutopilotSummary> {
+export async function autopilotDay(
+  profile: Profile,
+  world: SimOrg,
+  manifest: RunManifest,
+): Promise<AutopilotSummary> {
   const today = manifest.simDate;
-  const summary: AutopilotSummary = { billsPosted: 0, vendorsPaid: 0, invoicesIssued: 0, receiptsApplied: 0, monthsClosed: [] };
+  const summary: AutopilotSummary = {
+    billsPosted: 0,
+    vendorsPaid: 0,
+    invoicesIssued: 0,
+    receiptsApplied: 0,
+    monthsClosed: [],
+  };
 
   // --- AP: post the inbox, then pay bills due within a week ---------------
   const inbox = (await observe.apInbox(world)) as { id: string; dispute: string | null }[];
@@ -48,10 +58,16 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
       await ops.postBill(world, bill.id);
       recordCoverage(manifest, "vendor_bill");
       summary.billsPosted++;
-    } catch (e) { console.error(`[autopilot ${today}] post-bill skipped: ${(e as Error).message}`); }
+    } catch (e) {
+      console.error(`[autopilot ${today}] post-bill skipped: ${(e as Error).message}`);
+    }
   }
 
-  const open = (await observe.apOpen(world)) as { vendorId: string; lineId: string; dueDate: string | null }[];
+  const open = (await observe.apOpen(world)) as {
+    vendorId: string;
+    lineId: string;
+    dueDate: string | null;
+  }[];
   const horizon = addCalendarDays(today, 7);
   const byVendor = new Map<string, string[]>();
   for (const item of open) {
@@ -64,8 +80,13 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
   for (const [vendorId, lineIds] of byVendor) {
     try {
       const res = await ops.payVendor(world, vendorId, lineIds, world.actors.apClerk, today);
-      if (res) { recordCoverage(manifest, "vendor_payment"); summary.vendorsPaid++; }
-    } catch (e) { console.error(`[autopilot ${today}] pay-vendor skipped: ${(e as Error).message}`); }
+      if (res) {
+        recordCoverage(manifest, "vendor_payment");
+        summary.vendorsPaid++;
+      }
+    } catch (e) {
+      console.error(`[autopilot ${today}] pay-vendor skipped: ${(e as Error).message}`);
+    }
   }
 
   // --- Expense reports: approve/post the crew's job-tagged reports, then
@@ -80,7 +101,9 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
       await ops.postBill(world, exp.id);
       recordCoverage(manifest, "expense_report");
       employeesWithExpenses.add(exp.party_id);
-    } catch (e) { console.error(`[autopilot ${today}] post-expense skipped: ${(e as Error).message}`); }
+    } catch (e) {
+      console.error(`[autopilot ${today}] post-expense skipped: ${(e as Error).message}`);
+    }
   }
   // Reimburse weekly (Fridays) and at month-end so the payable doesn't accrue.
   if (new Date(`${today}T00:00:00Z`).getUTCDay() === 5 || isMonthEnd(today)) {
@@ -89,7 +112,9 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
       try {
         const res = await ops.reimburseEmployee(world, empId, world.actors.apClerk, today);
         if (res) recordCoverage(manifest, "expense_reimbursement");
-      } catch (e) { console.error(`[autopilot ${today}] reimburse skipped: ${(e as Error).message}`); }
+      } catch (e) {
+        console.error(`[autopilot ${today}] reimburse skipped: ${(e as Error).message}`);
+      }
     }
   }
 
@@ -109,28 +134,37 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
       await ops.issueInvoice(world, inv.id);
       recordCoverage(manifest, "customer_invoice");
       summary.invoicesIssued++;
-    } catch (e) { console.error(`[autopilot ${today}] issue-invoice skipped: ${(e as Error).message}`); }
+    } catch (e) {
+      console.error(`[autopilot ${today}] issue-invoice skipped: ${(e as Error).message}`);
+    }
   }
 
-  const receipts = (await observe.arReceipts(world)) as { id: string; suggested: { lineId: string; amount: string }[] | null }[];
+  const receipts = (await observe.arReceipts(world)) as {
+    id: string;
+    suggested: { lineId: string; amount: string }[] | null;
+  }[];
   for (const r of receipts) {
     // Only apply positive allocations (a short-pay of a tiny invoice can round to
     // 0.00, which the payment engine correctly rejects). Exact comparison:
     // identical verdicts to the old float threshold on every decimal input,
     // and an unreadable amount is dropped here exactly as NaN was.
-    const alloc = (r.suggested ?? []).filter((s) => {
-      try {
-        return cmp(s.amount, "0.0050") > 0;
-      } catch {
-        return false;
-      }
-    }).map((s) => ({ lineId: s.lineId, amount: s.amount }));
+    const alloc = (r.suggested ?? [])
+      .filter((s) => {
+        try {
+          return cmp(s.amount, "0.0050") > 0;
+        } catch {
+          return false;
+        }
+      })
+      .map((s) => ({ lineId: s.lineId, amount: s.amount }));
     if (alloc.length === 0) continue;
     try {
       await ops.applyReceipt(world, r.id, alloc, world.actors.arClerk);
       recordCoverage(manifest, "customer_payment");
       summary.receiptsApplied++;
-    } catch (e) { console.error(`[autopilot ${today}] apply-receipt skipped: ${(e as Error).message}`); }
+    } catch (e) {
+      console.error(`[autopilot ${today}] apply-receipt skipped: ${(e as Error).message}`);
+    }
   }
 
   // --- Construction PM: drive the job portfolio (all billing methods) mid-month ----
@@ -160,7 +194,10 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
   if (isMonthEnd(today) && world.engagements.length > 0) {
     for (const eng of world.engagements) {
       const res = await opsTm.billTimeAndMaterials(world, eng.id, today);
-      if (res) { recordCoverage(manifest, "customer_invoice"); summary.invoicesIssued++; }
+      if (res) {
+        recordCoverage(manifest, "customer_invoice");
+        summary.invoicesIssued++;
+      }
     }
   }
 
@@ -173,7 +210,12 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
       const status = (await observe.periodStatus(world)) as { name: string; gl_state: string }[];
       const glState = status.find((s) => s.name === priorName)?.gl_state ?? "open";
       if (glState !== "closed") {
-        await ops.closeMonth(world, period.id, world.actors.controller, "autopilot month-end close");
+        await ops.closeMonth(
+          world,
+          period.id,
+          world.actors.controller,
+          "autopilot month-end close",
+        );
         recordCoverage(manifest, "period_close");
         summary.monthsClosed.push(priorName);
       }

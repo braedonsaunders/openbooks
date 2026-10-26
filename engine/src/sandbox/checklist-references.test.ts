@@ -41,9 +41,19 @@ test("sandbox checklist rebasing preserves structure and moves every declared te
     },
   };
   const document = checklistDocument({
-    name: "Welcome", appliesTo: { employerSubsidiaryId: source, departmentId: source },
-    steps: [checklistStep({ id: source, title: "Welcome colleague", description: null,
-      ownerKind: "named_party", ownerPartyId: source, evidenceKind: "none", design })],
+    name: "Welcome",
+    appliesTo: { employerSubsidiaryId: source, departmentId: source },
+    steps: [
+      checklistStep({
+        id: source,
+        title: "Welcome colleague",
+        description: null,
+        ownerKind: "named_party",
+        ownerPartyId: source,
+        evidenceKind: "none",
+        design,
+      }),
+    ],
   });
   const result = remapChecklistDocument(document, ids);
   assert.equal(result.steps[0]?.id, target);

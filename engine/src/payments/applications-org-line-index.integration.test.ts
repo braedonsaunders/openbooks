@@ -19,14 +19,17 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 const BIG_ROWS = 5000;
 const SMALL_ROWS = 5;
 
-async function seedApplications(org: {
-  orgId: string;
-  bookId: string;
-  periodId: string;
-  subsidiaryId: string;
-  date: string;
-  accounts: Record<string, string>;
-}, n: number): Promise<void> {
+async function seedApplications(
+  org: {
+    orgId: string;
+    bookId: string;
+    periodId: string;
+    subsidiaryId: string;
+    date: string;
+    accounts: Record<string, string>;
+  },
+  n: number,
+): Promise<void> {
   // Plain-table staging: every step reads committed tables, so no DML-CTE
   // visibility quirks and no client-side id plumbing.
   //
@@ -94,21 +97,27 @@ async function probePlan(smallOrgId: string, lineId: string): Promise<string> {
   return r.rows.map((row) => row["QUERY PLAN"] ?? "").join("\n");
 }
 
-test("small-tenant application OR-probes use the org-leading composite indexes", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const big = await createScratchOrg();
-  const small = await createScratchOrg();
-  try {
-    await seedApplications(big, BIG_ROWS);
-    await seedApplications(small, SMALL_ROWS);
-    const smallLine = (await db.execute<{ id: string }>(sql`
-      select jl.id from journal_lines jl where jl.org_id = ${small.orgId} limit 1`)).rows[0]!.id;
-    await db.execute(sql`ANALYZE applications`);
-    const after = await probePlan(small.orgId, smallLine);
-    assert.match(after, /applications_org_(from|to)_idx/);
-    assert.doesNotMatch(after, /Seq Scan on applications/);
-    assert.doesNotMatch(after, /BitmapOr/);
-  } finally {
-    await dropScratchOrg(big.orgId);
-    await dropScratchOrg(small.orgId);
-  }
-});
+test(
+  "small-tenant application OR-probes use the org-leading composite indexes",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const big = await createScratchOrg();
+    const small = await createScratchOrg();
+    try {
+      await seedApplications(big, BIG_ROWS);
+      await seedApplications(small, SMALL_ROWS);
+      const smallLine = (
+        await db.execute<{ id: string }>(sql`
+      select jl.id from journal_lines jl where jl.org_id = ${small.orgId} limit 1`)
+      ).rows[0]!.id;
+      await db.execute(sql`ANALYZE applications`);
+      const after = await probePlan(small.orgId, smallLine);
+      assert.match(after, /applications_org_(from|to)_idx/);
+      assert.doesNotMatch(after, /Seq Scan on applications/);
+      assert.doesNotMatch(after, /BitmapOr/);
+    } finally {
+      await dropScratchOrg(big.orgId);
+      await dropScratchOrg(small.orgId);
+    }
+  },
+);

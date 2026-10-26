@@ -1,64 +1,64 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Scale } from 'lucide-react'
-import { Button, Input, Label, Popover } from '@openbooks/ui'
-import { useBusinessToday } from '../../../components/business-date-provider'
-import { readApiErrorMessage } from '../../../lib/api-error'
-import { DateField } from '../../../components/date-field'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Scale } from "lucide-react";
+import { Button, Input, Label, Popover } from "@openbooks/ui";
+import { useBusinessToday } from "../../../components/business-date-provider";
+import { readApiErrorMessage } from "../../../lib/api-error";
+import { DateField } from "../../../components/date-field";
 
-type RemeasurementKindKey = 'revalued' | 'impaired' | 'unknown'
+type RemeasurementKindKey = "revalued" | "impaired" | "unknown";
 
 /** Keep API result codes behind the translation catalog; unknown codes must never render raw. */
 function remeasurementKindKey(kind: unknown): RemeasurementKindKey {
   switch (kind) {
-    case 'revalued':
-      return 'revalued'
-    case 'impaired':
-      return 'impaired'
+    case "revalued":
+      return "revalued";
+    case "impaired":
+      return "impaired";
     default:
-      return 'unknown'
+      return "unknown";
   }
 }
 
 /** Revalue / impair an asset to a new carrying value (posts the adjustment and
  *  rebuilds the remaining schedule). Shown in the asset drawer for in-service assets. */
 export function RemeasureButton({ assetId }: { assetId: string }) {
-  const t = useTranslations('assets')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [value, setValue] = useState('')
-  const [date, setDate] = useState(useBusinessToday())
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("assets");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [date, setDate] = useState(useBusinessToday());
+  const [busy, setBusy] = useState(false);
 
   async function submit() {
     if (!value.trim()) {
-      toast.error(t('remeasure.newValue'))
-      return
+      toast.error(t("remeasure.newValue"));
+      return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}/remeasure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ newCarryingValue: value.trim(), date }),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon('feedback.saveFailed')))
-      const d = (await res.json()) as { kind?: string; delta?: string }
-      const kind = t(`remeasure.kinds.${remeasurementKindKey(d.kind)}`)
-      toast.success(t('remeasure.done', { kind, delta: d.delta ?? '0' }))
-      setOpen(false)
-      router.refresh()
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, tCommon("feedback.saveFailed")));
+      const d = (await res.json()) as { kind?: string; delta?: string };
+      const kind = t(`remeasure.kinds.${remeasurementKindKey(d.kind)}`);
+      toast.success(t("remeasure.done", { kind, delta: d.delta ?? "0" }));
+      setOpen(false);
+      router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error && e.message ? e.message : tCommon('feedback.saveFailed'))
+      toast.error(e instanceof Error && e.message ? e.message : tCommon("feedback.saveFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -69,24 +69,31 @@ export function RemeasureButton({ assetId }: { assetId: string }) {
       trigger={
         <Button variant="outline" onClick={() => setOpen((v) => !v)}>
           <Scale size={15} className="mr-1.5" />
-          {t('remeasure.label')}
+          {t("remeasure.label")}
         </Button>
       }
     >
       <div className="w-72 space-y-3 p-3">
         <div className="space-y-1.5">
-          <Label htmlFor="rm-value">{t('remeasure.newValue')}</Label>
-          <Input id="rm-value" type="number" min="0" step="0.01" value={value}
-            onChange={(e) => setValue(e.target.value)} placeholder="0.00" />
+          <Label htmlFor="rm-value">{t("remeasure.newValue")}</Label>
+          <Input
+            id="rm-value"
+            type="number"
+            min="0"
+            step="0.01"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="0.00"
+          />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="rm-date">{t('remeasure.date')}</Label>
+          <Label htmlFor="rm-date">{t("remeasure.date")}</Label>
           <DateField id="rm-date" value={date} onChange={(value) => setDate(value)} />
         </div>
         <Button className="w-full" onClick={submit} disabled={busy}>
-          {busy ? t('remeasure.working') : t('remeasure.action')}
+          {busy ? t("remeasure.working") : t("remeasure.action")}
         </Button>
       </div>
     </Popover>
-  )
+  );
 }

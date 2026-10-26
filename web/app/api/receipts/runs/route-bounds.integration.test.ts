@@ -12,10 +12,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __collectionRunBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -34,7 +40,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const { POST } = await import("./route.ts");
 
@@ -55,51 +62,75 @@ async function fixture(): Promise<Fx> {
   const partyBankAccountId = randomUUID();
   const mandateId = randomUUID();
   const invoiceId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into payment_formats
       (id, org_id, code, name, rail, direction, country, currency, created_by, updated_by)
     values
       (${formatId}, ${org.orgId}, 'NACHA-DD-TEST', 'NACHA debit test',
-       'nacha_debit', 'debit', 'US', 'CAD', ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
+       'nacha_debit', 'debit', 'US', 'CAD', ${actorId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into payment_bank_profiles
       (id, org_id, name, bank_account_id, subsidiary_id, payment_format_id,
        currency, country, created_by, updated_by)
     values
       (${profileId}, ${org.orgId}, 'Collection profile', ${org.accounts.bank},
-       ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA', ${actorId}, ${actorId})`));
-  const { seedApprovedBankAccountFixture } = await import('@openbooks/engine/testing/bank-accounts');
-  await seedApprovedBankAccountFixture({ id: partyBankAccountId, orgId: org.orgId, actorId, partyId: org.customerId,
-    bankName: 'Customer bank', country: 'CA', currency: 'CAD', routing: {}, lastFour: '1234' });
-  await withBypassContext(() => db.execute(sql`
+       ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA', ${actorId}, ${actorId})`),
+  );
+  const { seedApprovedBankAccountFixture } =
+    await import("@openbooks/engine/testing/bank-accounts");
+  await seedApprovedBankAccountFixture({
+    id: partyBankAccountId,
+    orgId: org.orgId,
+    actorId,
+    partyId: org.customerId,
+    bankName: "Customer bank",
+    country: "CA",
+    currency: "CAD",
+    routing: {},
+    lastFour: "1234",
+  });
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into payment_mandates
       (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference,
        status, signed_on, valid_from, created_by, updated_by)
     values
       (${mandateId}, ${org.orgId}, ${org.customerId}, ${partyBankAccountId},
        'nacha', 'MANDATE-BOUNDS', 'active', ${org.date}, ${org.date},
-       ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
+       ${actorId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into documents
       (id, org_id, kind, status, document_number, subsidiary_id, party_id,
        document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
     values
       (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-BOUNDS',
        ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
-       '125', '0', '125', ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
+       '125', '0', '125', ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price,
        amount, tax_amount, tax_input_amount)
     values
       (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '125',
-       '125', '0', '125')`));
-  await withBypassContext(() => db.execute(sql`
+       '125', '0', '125')`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     update documents set status = 'approved', updated_at = now()
-     where id = ${invoiceId} and org_id = ${org.orgId}`));
-  await withBypassContext(() => postDocument(invoiceId, {
-    control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-  }));
+     where id = ${invoiceId} and org_id = ${org.orgId}`),
+  );
+  await withBypassContext(() =>
+    postDocument(invoiceId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    }),
+  );
   return { orgId: org.orgId, profileId, invoiceId, date: org.date };
 }
 
@@ -120,7 +151,11 @@ const post = (fx: Fx, scheduledFor: string) =>
 
 async function runCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from payment_runs where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from payment_runs where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -129,7 +164,11 @@ test("collection run refuses a non-calendar scheduled date without writing", asy
   try {
     const response = await post(fx, "2026-09-31");
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.equal(
+      response.status,
+      400,
+      `expected 400, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal(await runCount(fx.orgId), 0);
   } finally {

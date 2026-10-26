@@ -35,15 +35,26 @@ const serviceBlock = (name) => {
 };
 
 test("web/worker S3 credentials do not come from the root user", () => {
-  const anchor = code.slice(code.indexOf("x-openbooks-runtime-environment:"), code.indexOf("services:"));
+  const anchor = code.slice(
+    code.indexOf("x-openbooks-runtime-environment:"),
+    code.indexOf("services:"),
+  );
   assert.match(anchor, /S3_ACCESS_KEY_ID/, "test fixture: shared anchor must configure S3 creds");
-  assert.doesNotMatch(anchor, /S3_ACCESS_KEY_ID:.*MINIO_ROOT_USER/, "app S3 access key must not be the root user");
+  assert.doesNotMatch(
+    anchor,
+    /S3_ACCESS_KEY_ID:.*MINIO_ROOT_USER/,
+    "app S3 access key must not be the root user",
+  );
   assert.doesNotMatch(
     anchor,
     /S3_SECRET_ACCESS_KEY:.*MINIO_ROOT_PASSWORD/,
     "app S3 secret must not be the root password",
   );
-  assert.match(anchor, /S3_ACCESS_KEY_ID:.*MINIO_APP_USER/, "app S3 access key must be the dedicated app user");
+  assert.match(
+    anchor,
+    /S3_ACCESS_KEY_ID:.*MINIO_APP_USER/,
+    "app S3 access key must be the dedicated app user",
+  );
   assert.match(
     anchor,
     /S3_SECRET_ACCESS_KEY:.*MINIO_APP_PASSWORD/,
@@ -62,7 +73,11 @@ test("the app object-storage password is required, never defaulted", () => {
 test("minio-init creates the dedicated user with a bucket-scoped policy", () => {
   const init = serviceBlock("minio-init");
   assert.match(init, /mc admin user add/, "minio-init must create the app user");
-  assert.match(init, /mc admin policy create/, "minio-init must create a custom policy (canned policies are server-wide)");
+  assert.match(
+    init,
+    /mc admin policy create/,
+    "minio-init must create a custom policy (canned policies are server-wide)",
+  );
   assert.match(init, /mc admin policy set/, "minio-init must attach the policy to the app user");
   assert.match(init, /arn:aws:s3:::openbooks/, "the custom policy must scope to the app bucket");
   assert.doesNotMatch(init, /"s3:\*"/, "the custom policy must not grant wildcard S3 actions");
@@ -72,7 +87,11 @@ test("minio-init creates the dedicated user with a bucket-scoped policy", () => 
 test("root credentials stay with minio/minio-init only", () => {
   for (const name of ["web", "worker", "bootstrap"]) {
     const block = serviceBlock(name);
-    assert.doesNotMatch(block, /MINIO_ROOT_(USER|PASSWORD)/, `${name} must never receive root credentials`);
+    assert.doesNotMatch(
+      block,
+      /MINIO_ROOT_(USER|PASSWORD)/,
+      `${name} must never receive root credentials`,
+    );
   }
   const init = serviceBlock("minio-init");
   assert.match(init, /MINIO_ROOT_USER/, "minio-init still needs root to administer users/policies");

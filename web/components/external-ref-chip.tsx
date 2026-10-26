@@ -1,4 +1,4 @@
-import { Badge } from '@openbooks/ui'
+import { Badge } from "@openbooks/ui";
 
 /**
  * The storefront or integrator identity that created a document, when one
@@ -10,14 +10,14 @@ export function ExternalRefChip({
   externalRef,
   externalSource,
 }: {
-  externalRef: unknown
-  externalSource: unknown
+  externalRef: unknown;
+  externalSource: unknown;
 }) {
-  if (typeof externalRef !== 'string' || typeof externalSource !== 'string') return null
-  if (!externalRef || !externalSource) return null
+  if (typeof externalRef !== "string" || typeof externalSource !== "string") return null;
+  if (!externalRef || !externalSource) return null;
   return (
     <Badge variant="outline" className="shrink-0 font-mono">
       {`${externalSource} · ${externalRef}`}
     </Badge>
-  )
+  );
 }

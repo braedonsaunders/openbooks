@@ -3,65 +3,91 @@ import { analyticsQuery } from "../analytics/query";
 import { sql } from "drizzle-orm";
 import { ACCOUNT_CLASS_TYPES } from "@openbooks/engine/records/account-types";
 import { advanceAnchoredMonth } from "@openbooks/engine/billing/cadence";
-import { addCalendarDays, addMonthsClamped, businessToday, calendarDaysBetween, daysInCivilMonth, parseIsoDate, utcDateFromParts } from "@openbooks/engine/platform/business-date/module";
+import {
+  addCalendarDays,
+  addMonthsClamped,
+  businessToday,
+  calendarDaysBetween,
+  daysInCivilMonth,
+  parseIsoDate,
+  utcDateFromParts,
+} from "@openbooks/engine/platform/business-date/module";
 import { declaredPeriodQuarter, fiscalMonthOffset, type FiscalPeriod } from "@openbooks/reports";
 import { enactedIncomeTaxRate } from "@openbooks/engine/tax-returns";
-import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/money/money";
+import {
+  abs as moneyAbs,
+  add as moneyAdd,
+  cmp as moneyCmp,
+  div as moneyDiv,
+  mulDecimal,
+  neg as moneyNeg,
+  normalizeMoney,
+  sum as moneySum,
+} from "@openbooks/engine/money/money";
 import { ANALYTICS_CONFIG } from "../analytics/config-spec";
 import { analyticsConfig } from "../analytics/config";
 import { evaluateFormula } from "./formula";
 import { OVERDUE_PUSH_METHOD } from "./overdue-push";
 import { agingBasisDate, agingBucketIndex } from "../aging-basis";
 import { monthYearLabel } from "../format";
-import { getMoneyFormatter } from '../money-server'
-import { resolveOrgId } from '../org-scope'
-import { excludePeriodEndJournals, statementMonthActivity } from '@openbooks/engine/records/period-end-origins'
-import { statementBookExpr } from '../gl-summary'
-import { flowRates, lineFunctional, MissingExchangeRateError, presentationCurrency, presentationRates } from '../fx-presentation'
+import { getMoneyFormatter } from "../money-server";
+import { resolveOrgId } from "../org-scope";
+import {
+  excludePeriodEndJournals,
+  statementMonthActivity,
+} from "@openbooks/engine/records/period-end-origins";
+import { statementBookExpr } from "../gl-summary";
+import {
+  flowRates,
+  lineFunctional,
+  MissingExchangeRateError,
+  presentationCurrency,
+  presentationRates,
+} from "../fx-presentation";
 
 interface CashWeeklyHistoryRow extends Record<string, unknown> {
-  wk: string
-  number: string | null
-  name: string
-  net: string
-  gross: string
+  wk: string;
+  number: string | null;
+  name: string;
+  net: string;
+  gross: string;
   /** Line entity's functional currency (translated before adding). */
-  func: string | null
+  func: string | null;
   /** Bucket's latest posting date (the translation date). */
-  late: string
+  late: string;
 }
 
 interface CashDailyRow extends Record<string, unknown> {
-  day: string
-  spend: string
-  paid: string
+  day: string;
+  spend: string;
+  paid: string;
   /** Line entity's functional currency (translated before adding). */
-  func: string | null
+  func: string | null;
 }
 
 interface CashPaymentEventRow extends Record<string, unknown> {
-  day: string
-  paid: string
+  day: string;
+  paid: string;
   /** Line entity's functional currency (translated before adding). */
-  func: string | null
+  func: string | null;
   /** Bucket's latest document date (the translation date). */
-  late: string
+  late: string;
 }
 
 interface CashRegisterLineRow extends Record<string, unknown> {
-  day: string
-  kind: string
-  doc_number: string | null
-  party: string
-  memo: string
-  entry_id: string
-  raw_amount: string
+  day: string;
+  kind: string;
+  doc_number: string | null;
+  party: string;
+  memo: string;
+  entry_id: string;
+  raw_amount: string;
   /** Line entity's functional currency (translated before netting/adding). */
-  func: string | null
+  func: string | null;
 }
 
-export { openItems } from './open-items'
-export { CASH_HORIZON_PRESETS, MAX_CASH_HORIZON_WEEKS, normalizeCashHorizonWeeks } from './horizon'
+export { openItems } from "./open-items";
+export { CASH_HORIZON_PRESETS, MAX_CASH_HORIZON_WEEKS, normalizeCashHorizonWeeks } from "./horizon";
 
 /**
  * Shared cash-engine core — the primitives behind BOTH the read-only analytics
@@ -425,7 +451,17 @@ export type RefusedCategory = {
 /** Every refusing category in a forecast, in forecast order. */
 export function refusedCategories(categories: readonly CategoryWeekly[]): RefusedCategory[] {
   return categories.flatMap((c) =>
-    c.unavailable ? [{ id: c.id, name: c.name, code: c.unavailable.code, message: c.unavailable.message, params: c.unavailable.params }] : [],
+    c.unavailable
+      ? [
+          {
+            id: c.id,
+            name: c.name,
+            code: c.unavailable.code,
+            message: c.unavailable.message,
+            params: c.unavailable.params,
+          },
+        ]
+      : [],
   );
 }
 
@@ -571,23 +607,31 @@ const CASHFLOW_MODEL_DEFAULTS: ForecastModelParams = {
  * undefined entries fall back too — a spread would let them shadow a default
  * with nothing.
  */
-export function forecastModelParams(
-  values: { [K in keyof ForecastModelParams]?: ForecastModelParams[K] | undefined },
-): ForecastModelParams {
+export function forecastModelParams(values: {
+  [K in keyof ForecastModelParams]?: ForecastModelParams[K] | undefined;
+}): ForecastModelParams {
   return {
     settleBufferSigma: values.settleBufferSigma ?? CASHFLOW_MODEL_DEFAULTS.settleBufferSigma,
-    overduePushShortDays: values.overduePushShortDays ?? CASHFLOW_MODEL_DEFAULTS.overduePushShortDays,
+    overduePushShortDays:
+      values.overduePushShortDays ?? CASHFLOW_MODEL_DEFAULTS.overduePushShortDays,
     overduePushMidDays: values.overduePushMidDays ?? CASHFLOW_MODEL_DEFAULTS.overduePushMidDays,
     overduePushLongDays: values.overduePushLongDays ?? CASHFLOW_MODEL_DEFAULTS.overduePushLongDays,
-    overdueMidThresholdDays: values.overdueMidThresholdDays ?? CASHFLOW_MODEL_DEFAULTS.overdueMidThresholdDays,
-    overdueLongThresholdDays: values.overdueLongThresholdDays ?? CASHFLOW_MODEL_DEFAULTS.overdueLongThresholdDays,
-    collectibilityHorizonDays: values.collectibilityHorizonDays ?? CASHFLOW_MODEL_DEFAULTS.collectibilityHorizonDays,
-    cardTrajectoryTolerance: values.cardTrajectoryTolerance ?? CASHFLOW_MODEL_DEFAULTS.cardTrajectoryTolerance,
-    cardMedianBlendWeight: values.cardMedianBlendWeight ?? CASHFLOW_MODEL_DEFAULTS.cardMedianBlendWeight,
+    overdueMidThresholdDays:
+      values.overdueMidThresholdDays ?? CASHFLOW_MODEL_DEFAULTS.overdueMidThresholdDays,
+    overdueLongThresholdDays:
+      values.overdueLongThresholdDays ?? CASHFLOW_MODEL_DEFAULTS.overdueLongThresholdDays,
+    collectibilityHorizonDays:
+      values.collectibilityHorizonDays ?? CASHFLOW_MODEL_DEFAULTS.collectibilityHorizonDays,
+    cardTrajectoryTolerance:
+      values.cardTrajectoryTolerance ?? CASHFLOW_MODEL_DEFAULTS.cardTrajectoryTolerance,
+    cardMedianBlendWeight:
+      values.cardMedianBlendWeight ?? CASHFLOW_MODEL_DEFAULTS.cardMedianBlendWeight,
     vendorOutlierSigma: values.vendorOutlierSigma ?? CASHFLOW_MODEL_DEFAULTS.vendorOutlierSigma,
-    cardStatementCloseDays: values.cardStatementCloseDays ?? CASHFLOW_MODEL_DEFAULTS.cardStatementCloseDays,
+    cardStatementCloseDays:
+      values.cardStatementCloseDays ?? CASHFLOW_MODEL_DEFAULTS.cardStatementCloseDays,
     cardDefaultPayDay: values.cardDefaultPayDay ?? CASHFLOW_MODEL_DEFAULTS.cardDefaultPayDay,
-    cardStalePaymentDays: values.cardStalePaymentDays ?? CASHFLOW_MODEL_DEFAULTS.cardStalePaymentDays,
+    cardStalePaymentDays:
+      values.cardStalePaymentDays ?? CASHFLOW_MODEL_DEFAULTS.cardStalePaymentDays,
   };
 }
 
@@ -602,7 +646,11 @@ export async function cashflowModel(orgId: string): Promise<ForecastModelParams>
  * remainder — never a float subtraction (1 - 0.7 in binary is
  * 0.30000000000000004, which would corrupt the blend).
  */
-export function blendTrajectoryPayment(median: Money, trajectory: Money, medianWeight: number): Money {
+export function blendTrajectoryPayment(
+  median: Money,
+  trajectory: Money,
+  medianWeight: number,
+): Money {
   const medianPart = multiplyMoney(median, String(medianWeight));
   const trajectoryPart = multiplyMoney(trajectory, subtractMoney("1", String(medianWeight)));
   return addMoney(medianPart, trajectoryPart);
@@ -659,7 +707,10 @@ export interface OpenItem {
   remaining: Money;
 }
 
-export type PaymentStats = { map: Map<string, { avg: number; sd: number; n: number }>; globalAvg: number | null };
+export type PaymentStats = {
+  map: Map<string, { avg: number; sd: number; n: number }>;
+  globalAvg: number | null;
+};
 
 /**
  * The same weeks with their per-transaction arrays withheld. Totals and counts
@@ -719,7 +770,12 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[], includeNull = 
  * figure. Callers forecast history-less items at their due date, or leave
  * them unplaced when they carry none.
  */
-export async function paymentStats(side: Side, asOfIso: string, subIds?: string[], orgId?: string): Promise<PaymentStats> {
+export async function paymentStats(
+  side: Side,
+  asOfIso: string,
+  subIds?: string[],
+  orgId?: string,
+): Promise<PaymentStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   // Settlement behaviour comes from party_payment_stats, the rollup maintained
   // by a trigger at the settlement event. It stores sufficient
@@ -737,13 +793,16 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
   // The company rollup intentionally has no entity dimension. Restricted
   // readers reconstruct the same sufficient statistics from visible source
   // and target lines, so another entity cannot influence their forecast.
-  const source = subIds === undefined ? sql`
+  const source =
+    subIds === undefined
+      ? sql`
     select party_id, settled_on, n, sum_days, sum_days_sq
       from party_payment_stats
      where org_id = ${resolvedOrgId} and account_type = ${acctType}
        and settled_on >= ${historyStart}::date
        and settled_on <= ${asOfIso}::date
-  ` : sql`
+  `
+      : sql`
     select bl.party_id, pl.posting_date as settled_on, count(*) as n,
            sum((pl.posting_date - bl.posting_date)::numeric) as sum_days,
            sum(((pl.posting_date - bl.posting_date)::numeric)^2) as sum_days_sq
@@ -791,9 +850,9 @@ export async function paymentStats(side: Side, asOfIso: string, subIds?: string[
 
 /** Load configured categories from orgs.settings.analytics.cashflowCategories. */
 export async function loadCategories(orgId: string): Promise<ForecastCategory[]> {
-  const r = (await analyticsQuery(sql`
+  const r = await analyticsQuery(sql`
     select settings -> 'analytics' -> 'cashflowCategories' as cats from orgs where id = ${orgId}
-  `));
+  `);
   const raw = r.rows[0]?.cats;
   if (!Array.isArray(raw)) return [];
   return raw.filter((c) => c && typeof c === "object" && c.id && c.name && c.method);
@@ -863,8 +922,14 @@ export async function resolveFormulaTaxRateForCategory(
   const enacted = await Promise.all(scopes.map((s) => taxReader(orgId, s, weekIso)));
   const missing = scopes.filter((_, i) => enacted[i] === null);
   if (missing.length > 0) {
-    const where = missing.map((s) => (s === null ? `organization ${orgId}` : `subsidiary ${s}`)).join(", ");
-    throw new FormulaTaxRefusal(cat.id, cat.name, `has no enacted income tax rate for ${where} on ${weekIso}`);
+    const where = missing
+      .map((s) => (s === null ? `organization ${orgId}` : `subsidiary ${s}`))
+      .join(", ");
+    throw new FormulaTaxRefusal(
+      cat.id,
+      cat.name,
+      `has no enacted income tax rate for ${where} on ${weekIso}`,
+    );
   }
   const rates = enacted.map((e) => e!.ratePercent);
   if (new Set(rates).size > 1) {
@@ -894,7 +959,8 @@ export function parseAnchorDate(value: unknown): string | null {
     roundTrip.getUTCFullYear() !== y! ||
     roundTrip.getUTCMonth() !== m! - 1 ||
     roundTrip.getUTCDate() !== d!
-  ) return null;
+  )
+    return null;
   return value;
 }
 
@@ -905,7 +971,11 @@ export function parseAnchorDate(value: unknown): string | null {
  * months before the anchor month clamp through platform daysInCivilMonth,
  * since advanceAnchoredMonth only steps forward.
  */
-export function anchoredMonthlyOccurrences(anchorIso: string, fromIso: string, toIso: string): string[] {
+export function anchoredMonthlyOccurrences(
+  anchorIso: string,
+  fromIso: string,
+  toIso: string,
+): string[] {
   const [ay, amo, aday] = anchorIso.split("-").map(Number) as [number, number, number];
   const anchorIdx = ay * 12 + amo;
   const [fy, fmo] = fromIso.split("-").map(Number) as [number, number];
@@ -927,7 +997,8 @@ export function anchoredMonthlyOccurrences(anchorIso: string, fromIso: string, t
 }
 // daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
 // onto 1900-1999.
-const daysInMonthUTC = (d: Date): number => daysInCivilMonth(d.getUTCFullYear(), d.getUTCMonth() + 1);
+const daysInMonthUTC = (d: Date): number =>
+  daysInCivilMonth(d.getUTCFullYear(), d.getUTCMonth() + 1);
 
 /**
  * Spread one month's amount across a forecast week using the ACTUAL calendar
@@ -994,7 +1065,9 @@ export function fiscalFormulaFlagsFromPeriods(
   const holds = (d: string) => weekStartIso <= d && d <= weekEnd;
   for (const p of overlapping) {
     const q = declaredPeriodQuarter(p.periodNumber);
-    const group = periods.filter((x) => x.fiscalYear === p.fiscalYear && declaredPeriodQuarter(x.periodNumber) === q);
+    const group = periods.filter(
+      (x) => x.fiscalYear === p.fiscalYear && declaredPeriodQuarter(x.periodNumber) === q,
+    );
     const firstFrom = group.reduce((a, x) => (x.from < a ? x.from : a), group[0]!.from);
     const lastTo = group.reduce((a, x) => (x.to > a ? x.to : a), group[0]!.to);
     const yearPeriods = periods.filter((x) => x.fiscalYear === p.fiscalYear);
@@ -1005,7 +1078,8 @@ export function fiscalFormulaFlagsFromPeriods(
   }
   return { quarter, isQStart, isQEnd, isYearEnd };
 }
-const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
+const isSet = (v: number | string | null | undefined): boolean =>
+  v !== null && v !== undefined && v !== "";
 
 /**
  * Whether a category may appear in front of a caller. SQL-backed methods
@@ -1064,7 +1138,10 @@ export function fullWindowWeeklyAverage(
   windowStartIso: string,
   dataStartIso: string | null,
 ): Money {
-  return divideMoney(total, String(historyWindowDivisor(historyWeeks, windowStartIso, dataStartIso)));
+  return divideMoney(
+    total,
+    String(historyWindowDivisor(historyWeeks, windowStartIso, dataStartIso)),
+  );
 }
 
 /**
@@ -1219,7 +1296,7 @@ export async function categoryWeekly(
    */
   locale = "en-US",
 ): Promise<CategoryWeekly> {
-  const { money } = await getMoneyFormatter(orgId)
+  const { money } = await getMoneyFormatter(orgId);
   const n = weekStarts.length;
   // Strategy implementations use ordinary numbers for non-ledger model
   // coefficients (proration, cadence), but every monetary result is
@@ -1285,9 +1362,10 @@ export async function categoryWeekly(
       // cash need.
       const pastOccurrence = freq !== "weekly" && curr < asOf;
       if (!pastOccurrence) {
-        const currentAmount = freq === "weekly"
-          ? multiplyMoney(amount, String(getProrationFactor(curr, asOf, null, null)))
-          : amount;
+        const currentAmount =
+          freq === "weekly"
+            ? multiplyMoney(amount, String(getProrationFactor(curr, asOf, null, null)))
+            : amount;
         const i = wkIndex.get(wk);
         if (i !== undefined) weeklyExact[i] = addMoney(weeklyExact[i] ?? ZERO_MONEY, currentAmount);
       }
@@ -1295,18 +1373,26 @@ export async function categoryWeekly(
     logic = `${money(amount, { maximumFractionDigits: 0 })} ${freq}`;
     meta = { method: "Manual Recurring", amount, frequency: freq };
     breakdown = weekStarts
-      .map((w, i) => ({ name: `Manual (${freq})`, date: w, amount: weeklyExact[i] ?? ZERO_MONEY, type: "Scheduled" }))
+      .map((w, i) => ({
+        name: `Manual (${freq})`,
+        date: w,
+        amount: weeklyExact[i] ?? ZERO_MONEY,
+        type: "Scheduled",
+      }))
       .filter((row) => compareMoney(String(row.amount), ZERO_MONEY) > 0);
   } else if (cat.method === "gl_history_average" && cat.accountIds?.length) {
     const historyWeeks = Math.max(1, Math.min(52, cat.historyWeeks ?? 12));
     const useNet = cat.useNetAmt === true;
-    const ids = sql.join(cat.accountIds.map((a) => sql`${a}`), sql`, `);
+    const ids = sql.join(
+      cat.accountIds.map((a) => sql`${a}`),
+      sql`, `,
+    );
     const historyStart = addDays(tStart, -historyWeeks * 7);
     // Grouped by Sunday-start week AND account: weeks before the horizon feed
     // the average, weeks inside it act as actuals (). History is cut at
     // asOf: postings after the forecast date must not leak into a historical
     // forecast, so only the current (partial) week can carry actuals.
-    const r = (await analyticsQuery<CashWeeklyHistoryRow>(sql`
+    const r = await analyticsQuery<CashWeeklyHistoryRow>(sql`
       -- Legs are stamped in their line entity's functional: carry it (and the
       -- bucket's latest posting date) so the merge below translates every leg
       -- into presentation currency BEFORE adding. Raw sums across
@@ -1324,14 +1410,22 @@ export async function categoryWeekly(
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1, a.number, a.name, sub.base_currency
-    `));
+    `);
     const translatedNet = await translateHistoryLegs(
       orgId,
-      r.rows.map((x) => ({ func: x.func, date: String(x.late), amount: normalizeMoneyValue(String(x.net)) })),
+      r.rows.map((x) => ({
+        func: x.func,
+        date: String(x.late),
+        amount: normalizeMoneyValue(String(x.net)),
+      })),
     );
     const translatedGross = await translateHistoryLegs(
       orgId,
-      r.rows.map((x) => ({ func: x.func, date: String(x.late), amount: normalizeMoneyValue(String(x.gross)) })),
+      r.rows.map((x) => ({
+        func: x.func,
+        date: String(x.late),
+        amount: normalizeMoneyValue(String(x.gross)),
+      })),
     );
     const weeklyHistory: Record<string, Money> = {};
     const accountTotals = new Map<string, Money>();
@@ -1349,7 +1443,9 @@ export async function categoryWeekly(
     let totalHistory = ZERO_MONEY;
     const startKey = toISO(tStart);
     for (const k of Object.keys(weeklyHistory)) {
-      if (k < startKey) { totalHistory = addMoney(totalHistory, weeklyHistory[k]!); }
+      if (k < startKey) {
+        totalHistory = addMoney(totalHistory, weeklyHistory[k]!);
+      }
     }
     // The data start is the earliest posting in this strategy's own read
     // scope (same accounts, book, and subsidiary filter as the history
@@ -1358,7 +1454,13 @@ export async function categoryWeekly(
     // account's type and gross, which net mode needs to resolve one
     // normal-balance convention for the orientation below.
     const windowStartIso = toISO(historyStart);
-    const scopeRows = (await analyticsQuery<{ d: string | null; id: string; type: string; gross: string; func: string | null }>(sql`
+    const scopeRows = await analyticsQuery<{
+      d: string | null;
+      id: string;
+      type: string;
+      gross: string;
+      func: string | null;
+    }>(sql`
       select min(e.posting_date)::text as d, a.id::text as id, a.type as type, sum(abs(l.amount)) as gross, sub.base_currency as func
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -1368,12 +1470,16 @@ export async function categoryWeekly(
         join subsidiaries sub on sub.id = l.subsidiary_id
        where l.org_id = ${orgId} and l.account_id in (${ids})${subScope(sql`l.subsidiary_id`, context.subIds)}
        group by a.id, a.type, sub.base_currency
-    `));
+    `);
     // Lifetime activity has no bucket date: translate every leg at the
     // forecast date (today's rate for a lifetime total) before the merge.
     const scopeTranslated = await translateHistoryLegs(
       orgId,
-      scopeRows.rows.map((row) => ({ func: row.func, date: asOfIso, amount: normalizeMoneyValue(String(row.gross)) })),
+      scopeRows.rows.map((row) => ({
+        func: row.func,
+        date: asOfIso,
+        amount: normalizeMoneyValue(String(row.gross)),
+      })),
     );
     const scopeMerged = new Map<string, { d: string | null; type: string; gross: Money }>();
     scopeRows.rows.forEach((row, i) => {
@@ -1383,7 +1489,8 @@ export async function categoryWeekly(
       scopeMerged.set(row.id, cur);
     });
     const dataStartIso = [...scopeMerged.values()].reduce<string | null>(
-      (earliest, row) => (row.d !== null && (earliest === null || row.d < earliest) ? row.d : earliest),
+      (earliest, row) =>
+        row.d !== null && (earliest === null || row.d < earliest) ? row.d : earliest,
       null,
     );
     const divisor = historyWindowDivisor(historyWeeks, windowStartIso, dataStartIso);
@@ -1393,19 +1500,24 @@ export async function categoryWeekly(
     // a foreign-functional account votes with its presentation weight.
     const voted = cat.accountIds.flatMap((id) => {
       const row = scopeMerged.get(id);
-      return row
-        ? [{ id, type: row.type, gross: row.gross }]
-        : [];
+      return row ? [{ id, type: row.type, gross: row.gross }] : [];
     });
     const oriented = useNet
       ? orientNetTotal(totalHistory, netConvention(voted))
       : { total: absMoney(totalHistory), againstDirection: false };
-    let weeklyAvg = fullWindowWeeklyAverage(oriented.total, historyWeeks, windowStartIso, dataStartIso);
+    let weeklyAvg = fullWindowWeeklyAverage(
+      oriented.total,
+      historyWeeks,
+      windowStartIso,
+      dataStartIso,
+    );
     if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
     weekStarts.forEach((k, i) => {
       const actual = weeklyHistory[k] ?? ZERO_MONEY;
       // A monthly placement lands the week's average as a whole month's worth.
-      const forecastAmount = isSet(cat.expectedWeek) ? spreadWeeklyOverMonth(weeklyAvg, k) : weeklyAvg;
+      const forecastAmount = isSet(cat.expectedWeek)
+        ? spreadWeeklyOverMonth(weeklyAvg, k)
+        : weeklyAvg;
       const amount = compareMoney(actual, ZERO_MONEY) > 0 ? actual : forecastAmount;
       const factor = getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek);
       weeklyExact[i] = multiplyMoney(amount, String(factor));
@@ -1415,7 +1527,12 @@ export async function categoryWeekly(
       method: "GL Average",
       sourceTotal: absMoney(totalHistory),
       weeksUsed: divisor,
-      rawAverage: fullWindowWeeklyAverage(oriented.total, historyWeeks, windowStartIso, dataStartIso),
+      rawAverage: fullWindowWeeklyAverage(
+        oriented.total,
+        historyWeeks,
+        windowStartIso,
+        dataStartIso,
+      ),
       adjustmentPct: Math.round(adj * 100),
       finalAverage: weeklyAvg,
     };
@@ -1427,16 +1544,23 @@ export async function categoryWeekly(
       // in an outflow category, net spend in an inflow one): forecast 0 and
       // say so on the card, naming the net that was set aside, rather than
       // letting it add cash in the wrong direction.
-      const note =
-        `netted ${totalHistory} runs against the ${cat.direction} direction — forecast 0; recheck the selected accounts`;
+      const note = `netted ${totalHistory} runs against the ${cat.direction} direction — forecast 0; recheck the selected accounts`;
       logic = `${logic} · ${note}`;
       breakdown.push({ name: note, amount: ZERO_MONEY, type: "Note" });
     }
   } else if (cat.method === "vendor_payment_history" && (cat.partyIds?.length || cat.partyId)) {
     const vids = cat.partyIds?.length ? cat.partyIds : [cat.partyId!];
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 12));
-    const idList = sql.join(vids.map((v) => sql`${v}`), sql`, `);
-    const r = (await analyticsQuery<{ month: string; func: string | null; paid: string; late: string }>(sql`
+    const idList = sql.join(
+      vids.map((v) => sql`${v}`),
+      sql`, `,
+    );
+    const r = await analyticsQuery<{
+      month: string;
+      func: string | null;
+      paid: string;
+      late: string;
+    }>(sql`
       -- documents.total is transaction-currency denominated: translate at the
       -- document FX rate into functional currency before adding, exactly like
       -- the purchasing paid values do. The functional leg is carried (with
@@ -1456,19 +1580,32 @@ export async function categoryWeekly(
         and coalesce(d.document_date, d.posting_date) > ${asOfIso}::date - (${historyMonths} || ' months')::interval
         and coalesce(d.document_date, d.posting_date) <= ${asOfIso}::date${subScope(sql`d.subsidiary_id`, context.subIds, context.includeNullSubsidiary === true)}
       group by 1, 2
-    `));
+    `);
     const translatedPaid = await translateHistoryLegs(
       orgId,
-      r.rows.map((x) => ({ func: x.func, date: String(x.late), amount: normalizeMoneyValue(String(x.paid)) })),
+      r.rows.map((x) => ({
+        func: x.func,
+        date: String(x.late),
+        amount: normalizeMoneyValue(String(x.paid)),
+      })),
     );
     const monthlyTotals = new Map<string, Money>();
     r.rows.forEach((x, i) => {
       const month = String(x.month);
-      monthlyTotals.set(month, addMoney(monthlyTotals.get(month) ?? ZERO_MONEY, translatedPaid[i]!));
+      monthlyTotals.set(
+        month,
+        addMoney(monthlyTotals.get(month) ?? ZERO_MONEY, translatedPaid[i]!),
+      );
     });
-    const months = [...monthlyTotals.values()].filter((v) => compareMoney(v, ZERO_MONEY) > 0).sort(compareMoney);
+    const months = [...monthlyTotals.values()]
+      .filter((v) => compareMoney(v, ZERO_MONEY) > 0)
+      .sort(compareMoney);
     const mid = Math.floor(months.length / 2);
-    const median = months.length ? (months.length % 2 !== 0 ? months[mid]! : divideMoney(addMoney(months[mid - 1]!, months[mid]!), "2")) : ZERO_MONEY;
+    const median = months.length
+      ? months.length % 2 !== 0
+        ? months[mid]!
+        : divideMoney(addMoney(months[mid - 1]!, months[mid]!), "2")
+      : ZERO_MONEY;
     // Without an expected week the monthly median spreads across each week's
     // own calendar month; the card's weekly equivalent is the horizon mean of
     // those scaled weeks (post-adjustment, pre-proration).
@@ -1477,20 +1614,28 @@ export async function categoryWeekly(
       const scaled = isSet(cat.expectedWeek) ? median : spreadMonthlyOverWeek(median, k);
       const baseAmount = adj !== 0 ? multiplyMoney(scaled, String(1 + adj)) : scaled;
       scaledSum = addMoney(scaledSum, baseAmount);
-      weeklyExact[i] = multiplyMoney(baseAmount, String(getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek)));
+      weeklyExact[i] = multiplyMoney(
+        baseAmount,
+        String(getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek)),
+      );
     });
     logic = `median of ${months.length} monthly payments${isSet(cat.expectedWeek) ? "" : ", spread by actual month length"}`;
     meta = {
       method: "Vendor History (Median)",
       monthlyMedian: median,
-      finalWeekly: weekStarts.length ? divideMoney(scaledSum, String(weekStarts.length)) : ZERO_MONEY,
+      finalWeekly: weekStarts.length
+        ? divideMoney(scaledSum, String(weekStarts.length))
+        : ZERO_MONEY,
       vendors: vids.length,
       ...(cat.partyName ? { vendor: cat.partyName } : {}),
     };
     breakdown = [...monthlyTotals.entries()]
       .map(([month, amount]) => ({ name: month, amount, type: "Source Month" }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  } else if (cat.method === "credit_card_cycle" && (cat.cardAccountIds?.length || cat.accountIds?.length)) {
+  } else if (
+    cat.method === "credit_card_cycle" &&
+    (cat.cardAccountIds?.length || cat.accountIds?.length)
+  ) {
     const accountIds = cat.cardAccountIds?.length ? cat.cardAccountIds : cat.accountIds!;
     const lookbackMonths = Math.max(1, Math.min(24, cat.historyMonths ?? 6));
     // The window opens an exact calendar span before the forecast date — the
@@ -1498,12 +1643,15 @@ export async function categoryWeekly(
     const historyStartIso = addMonthsClamped(asOfIso, -lookbackMonths);
     const lookbackDays = Math.max(1, calendarDaysBetween(historyStartIso, asOfIso));
     const historyStart = parseISO(historyStartIso);
-    const ids = sql.join(accountIds.map((a) => sql`${a}`), sql`, `);
+    const ids = sql.join(
+      accountIds.map((a) => sql`${a}`),
+      sql`, `,
+    );
     // Charges push the card liability (amount < 0), payments release it (> 0).
     // Legs carry their functional currency: each (day, functional) leg is
     // translated at its day BEFORE the merge, so two subsidiaries' card
     // activity never adds raw.
-    const r = (await analyticsQuery<CashDailyRow>(sql`
+    const r = await analyticsQuery<CashDailyRow>(sql`
       select e.posting_date::text as day, sub.base_currency as func,
              sum(case when l.amount < 0 then -l.amount else 0 end) as spend,
              sum(case when l.amount > 0 then l.amount else 0 end) as paid
@@ -1515,16 +1663,24 @@ export async function categoryWeekly(
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1, 2
-    `));
+    `);
     const translatedSpend = await translateHistoryLegs(
       orgId,
-      r.rows.map((x) => ({ func: x.func, date: String(x.day), amount: normalizeMoneyValue(String(x.spend)) })),
+      r.rows.map((x) => ({
+        func: x.func,
+        date: String(x.day),
+        amount: normalizeMoneyValue(String(x.spend)),
+      })),
     );
     const translatedPaid = await translateHistoryLegs(
       orgId,
-      r.rows.map((x) => ({ func: x.func, date: String(x.day), amount: normalizeMoneyValue(String(x.paid)) })),
+      r.rows.map((x) => ({
+        func: x.func,
+        date: String(x.day),
+        amount: normalizeMoneyValue(String(x.paid)),
+      })),
     );
-    const balR = (await analyticsQuery<{ func: string | null; bal: string }>(sql`
+    const balR = await analyticsQuery<{ func: string | null; bal: string }>(sql`
       select sub.base_currency as func, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -1533,19 +1689,31 @@ export async function categoryWeekly(
       join subsidiaries sub on sub.id = l.subsidiary_id
       where l.org_id = ${orgId} and l.account_id in (${ids}) and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1
-    `));
+    `);
     // A point-in-time stock has no flow date: translate every functional
     // balance at the forecast date before adding.
     const translatedBal = await translateHistoryLegs(
       orgId,
-      balR.rows.map((x) => ({ func: x.func, date: asOfIso, amount: normalizeMoneyValue(String(x.bal)) })),
+      balR.rows.map((x) => ({
+        func: x.func,
+        date: asOfIso,
+        amount: normalizeMoneyValue(String(x.bal)),
+      })),
     );
     const totalCurrentBalance = absMoney(sumMoney(translatedBal));
 
-    interface DayTotals { date: Date; spend: Money; paid: Money }
+    interface DayTotals {
+      date: Date;
+      spend: Money;
+      paid: Money;
+    }
     const mergedDays = new Map<string, DayTotals>();
     r.rows.forEach((x, i) => {
-      const cur = mergedDays.get(String(x.day)) ?? { date: parseISO(String(x.day)), spend: ZERO_MONEY, paid: ZERO_MONEY };
+      const cur = mergedDays.get(String(x.day)) ?? {
+        date: parseISO(String(x.day)),
+        spend: ZERO_MONEY,
+        paid: ZERO_MONEY,
+      };
       cur.spend = addMoney(cur.spend, translatedSpend[i]!);
       cur.paid = addMoney(cur.paid, translatedPaid[i]!);
       mergedDays.set(String(x.day), cur);
@@ -1554,23 +1722,45 @@ export async function categoryWeekly(
     const grandTotalSpend = sumMoney(days.map((d) => d.spend));
 
     // Monthly payment rollups with the largest payment's day of month.
-    const monthly = new Map<string, { total: Money; count: number; largestDay: number | null; largestAmt: Money }>();
+    const monthly = new Map<
+      string,
+      { total: Money; count: number; largestDay: number | null; largestAmt: Money }
+    >();
     for (const d of days) {
       if (compareMoney(d.paid, ZERO_MONEY) <= 0) continue;
       const mKey = toISO(d.date).slice(0, 7);
-      const m = monthly.get(mKey) ?? { total: ZERO_MONEY, count: 0, largestDay: null, largestAmt: ZERO_MONEY };
+      const m = monthly.get(mKey) ?? {
+        total: ZERO_MONEY,
+        count: 0,
+        largestDay: null,
+        largestAmt: ZERO_MONEY,
+      };
       m.total = addMoney(m.total, d.paid);
       m.count += 1;
-      if (compareMoney(d.paid, m.largestAmt) > 0) { m.largestAmt = d.paid; m.largestDay = d.date.getUTCDate(); }
+      if (compareMoney(d.paid, m.largestAmt) > 0) {
+        m.largestAmt = d.paid;
+        m.largestDay = d.date.getUTCDate();
+      }
       monthly.set(mKey, m);
     }
     const monthlyTotals = [...monthly.entries()]
-      .map(([month, m]) => ({ month, total: m.total, paymentCount: m.count, largestPaymentDay: m.largestDay }))
+      .map(([month, m]) => ({
+        month,
+        total: m.total,
+        paymentCount: m.count,
+        largestPaymentDay: m.largestDay,
+      }))
       .sort((a, b) => a.month.localeCompare(b.month));
     const currentMonth = asOfIso.slice(0, 7);
     const dayOfMonth = asOf.getUTCDate();
-    const completedMonths = monthlyTotals.filter((m) =>
-      m.month < currentMonth || (m.month === currentMonth && compareMoney(m.total, ZERO_MONEY) > 0 && m.largestPaymentDay !== null && dayOfMonth >= m.largestPaymentDay));
+    const completedMonths = monthlyTotals.filter(
+      (m) =>
+        m.month < currentMonth ||
+        (m.month === currentMonth &&
+          compareMoney(m.total, ZERO_MONEY) > 0 &&
+          m.largestPaymentDay !== null &&
+          dayOfMonth >= m.largestPaymentDay),
+    );
 
     let medianPayment: Money = ZERO_MONEY;
     let avgPayment: Money = ZERO_MONEY;
@@ -1579,33 +1769,46 @@ export async function categoryWeekly(
       const amounts = completedMonths.map((m) => m.total);
       const sorted = [...amounts].sort(compareMoney);
       const mid = Math.floor(sorted.length / 2);
-      medianPayment = sorted.length % 2 !== 0 ? sorted[mid]! : divideMoney(addMoney(sorted[mid - 1]!, sorted[mid]!), "2");
+      medianPayment =
+        sorted.length % 2 !== 0
+          ? sorted[mid]!
+          : divideMoney(addMoney(sorted[mid - 1]!, sorted[mid]!), "2");
       avgPayment = divideMoney(sumMoney(amounts), String(amounts.length));
       if (completedMonths.length >= 4) {
         const recent = completedMonths.slice(-3);
         const older = completedMonths.slice(0, -3);
         const recentAvg = divideMoney(sumMoney(recent.map((m) => m.total)), String(recent.length));
         const olderAvg = divideMoney(sumMoney(older.map((m) => m.total)), String(older.length));
-        paymentTrend = compareMoney(olderAvg, ZERO_MONEY) > 0
-          ? divideMoney(subtractMoney(recentAvg, olderAvg), olderAvg)
-          : ZERO_MONEY;
+        paymentTrend =
+          compareMoney(olderAvg, ZERO_MONEY) > 0
+            ? divideMoney(subtractMoney(recentAvg, olderAvg), olderAvg)
+            : ZERO_MONEY;
       }
     } else {
       // No completed payment month: the window's daily rate scaled to the
       // forecast month's exact length.
-      const monthlySpendRate = multiplyMoney(divideMoney(grandTotalSpend, String(lookbackDays)), String(daysInMonthUTC(asOf)));
+      const monthlySpendRate = multiplyMoney(
+        divideMoney(grandTotalSpend, String(lookbackDays)),
+        String(daysInMonthUTC(asOf)),
+      );
       medianPayment = monthlySpendRate;
       avgPayment = monthlySpendRate;
     }
 
     // Primary payment day (mode; median when all unique).
-    const primaryDays = completedMonths.filter((m) => m.largestPaymentDay !== null).map((m) => m.largestPaymentDay!);
+    const primaryDays = completedMonths
+      .filter((m) => m.largestPaymentDay !== null)
+      .map((m) => m.largestPaymentDay!);
     let detectedPaymentDay = model.cardDefaultPayDay;
     if (primaryDays.length > 0) {
       const counts = new Map<number, number>();
       for (const d of primaryDays) counts.set(d, (counts.get(d) ?? 0) + 1);
       let maxCount = 0;
-      for (const [day, count] of counts) if (count > maxCount) { maxCount = count; detectedPaymentDay = day; }
+      for (const [day, count] of counts)
+        if (count > maxCount) {
+          maxCount = count;
+          detectedPaymentDay = day;
+        }
       if (maxCount === 1 && primaryDays.length > 1) {
         const sortedDays = [...primaryDays].sort((a, b) => a - b);
         detectedPaymentDay = sortedDays[Math.floor(sortedDays.length / 2)]!;
@@ -1625,9 +1828,13 @@ export async function categoryWeekly(
     } else {
       throw new CategoryForecastRefusal(cat.id, cat.name);
     }
-    const significantPayments = days.filter((d) => compareMoney(d.paid, effectiveThreshold) > 0).sort((a, b) => b.date.getTime() - a.date.getTime());
+    const significantPayments = days
+      .filter((d) => compareMoney(d.paid, effectiveThreshold) > 0)
+      .sort((a, b) => b.date.getTime() - a.date.getTime());
     const lastPaymentDate = significantPayments[0]?.date ?? null;
-    const daysSinceLastPayment = lastPaymentDate ? Math.ceil((asOf.getTime() - lastPaymentDate.getTime()) / MS_DAY) : model.cardStalePaymentDays;
+    const daysSinceLastPayment = lastPaymentDate
+      ? Math.ceil((asOf.getTime() - lastPaymentDate.getTime()) / MS_DAY)
+      : model.cardStalePaymentDays;
 
     let nextPaymentDate = new Date(asOf);
     nextPaymentDate.setUTCDate(Math.min(detectedPaymentDay, daysInMonthUTC(nextPaymentDate)));
@@ -1639,28 +1846,46 @@ export async function categoryWeekly(
 
     // Projected growth to statement close, then trajectory/median blend.
     const daysFromPaymentToStatementClose = model.cardStatementCloseDays;
-    const cycleProgress = compareMoney(medianPayment, ZERO_MONEY) > 0
-      ? compareMoney(totalCurrentBalance, medianPayment) >= 0
-        ? "1.0000"
-        : divideMoney(totalCurrentBalance, medianPayment)
-      : "1.0000";
-    const daysRemainingToAccrue = compareMoney(cycleProgress, "1.0000") >= 0
-      ? ZERO_MONEY
-      : multiplyMoney(String(daysFromPaymentToStatementClose), subtractMoney("1.0000", cycleProgress));
-    const trajectoryEstimate = addMoney(totalCurrentBalance, multiplyMoney(dailyBurnRate, daysRemainingToAccrue));
-    const varianceFromMedian = compareMoney(medianPayment, ZERO_MONEY) > 0
-      ? divideMoney(absMoney(subtractMoney(trajectoryEstimate, medianPayment)), medianPayment)
-      : ZERO_MONEY;
+    const cycleProgress =
+      compareMoney(medianPayment, ZERO_MONEY) > 0
+        ? compareMoney(totalCurrentBalance, medianPayment) >= 0
+          ? "1.0000"
+          : divideMoney(totalCurrentBalance, medianPayment)
+        : "1.0000";
+    const daysRemainingToAccrue =
+      compareMoney(cycleProgress, "1.0000") >= 0
+        ? ZERO_MONEY
+        : multiplyMoney(
+            String(daysFromPaymentToStatementClose),
+            subtractMoney("1.0000", cycleProgress),
+          );
+    const trajectoryEstimate = addMoney(
+      totalCurrentBalance,
+      multiplyMoney(dailyBurnRate, daysRemainingToAccrue),
+    );
+    const varianceFromMedian =
+      compareMoney(medianPayment, ZERO_MONEY) > 0
+        ? divideMoney(absMoney(subtractMoney(trajectoryEstimate, medianPayment)), medianPayment)
+        : ZERO_MONEY;
     let projectedPayment: Money;
     let projectionMethod: string;
-    if (compareMoney(varianceFromMedian, normalizeMoneyValue(String(model.cardTrajectoryTolerance))) <= 0) {
+    if (
+      compareMoney(
+        varianceFromMedian,
+        normalizeMoneyValue(String(model.cardTrajectoryTolerance)),
+      ) <= 0
+    ) {
       projectedPayment = trajectoryEstimate;
       projectionMethod = "Current Cycle Trajectory";
     } else if (compareMoney(trajectoryEstimate, medianPayment) < 0) {
       projectedPayment = medianPayment;
       projectionMethod = "Historical Median (Low Trajectory)";
     } else {
-      projectedPayment = blendTrajectoryPayment(medianPayment, trajectoryEstimate, model.cardMedianBlendWeight);
+      projectedPayment = blendTrajectoryPayment(
+        medianPayment,
+        trajectoryEstimate,
+        model.cardMedianBlendWeight,
+      );
       projectionMethod = "Blended (High Trajectory)";
     }
 
@@ -1676,16 +1901,28 @@ export async function categoryWeekly(
       const wk = toISO(weekStart(paymentDate));
       const amountToPay = isFirstPayment ? projectedPayment : medianPayment;
       const weekIndex = wkIndex.get(wk);
-      if (weekIndex !== undefined) weeklyExact[weekIndex] = addMoney(weeklyExact[weekIndex] ?? ZERO_MONEY, amountToPay);
+      if (weekIndex !== undefined)
+        weeklyExact[weekIndex] = addMoney(weeklyExact[weekIndex] ?? ZERO_MONEY, amountToPay);
       if (isFirstPayment) {
-        breakdown.unshift({ name: "Next Payment", amount: amountToPay, date: toISO(paymentDate), type: "Projection", details: projectionMethod });
+        breakdown.unshift({
+          name: "Next Payment",
+          amount: amountToPay,
+          date: toISO(paymentDate),
+          type: "Projection",
+          details: projectionMethod,
+        });
         isFirstPayment = false;
       }
       paymentDate = addMonthsUTC(paymentDate, 1);
       paymentDate.setUTCDate(Math.min(detectedPaymentDay, daysInMonthUTC(paymentDate)));
       paymentDate = businessDay(paymentDate);
     }
-    breakdown.push({ name: "Current Balance", amount: totalCurrentBalance, type: "Info", details: `${daysSinceLastPayment} days since last payment` });
+    breakdown.push({
+      name: "Current Balance",
+      amount: totalCurrentBalance,
+      type: "Info",
+      details: `${daysSinceLastPayment} days since last payment`,
+    });
 
     logic = `card cycle · pays day ${detectedPaymentDay} · median ${money(medianPayment, { maximumFractionDigits: 0 })}`;
     meta = {
@@ -1707,9 +1944,15 @@ export async function categoryWeekly(
     let expression = cat.formula.toUpperCase();
     expression = expression
       .replace(/IF\s*\(([^,]+),([^,]+),([^)]+)\)/g, "($1 ? $2 : $3)")
-      .replace(/MAX\(/g, "max(").replace(/MIN\(/g, "min(").replace(/ABS\(/g, "abs(")
-      .replace(/CEIL\(/g, "ceil(").replace(/FLOOR\(/g, "floor(").replace(/ROUND\(/g, "round(")
-      .replace(/SQRT\(/g, "sqrt(").replace(/POW\(/g, "pow(").replace(/AVG\(/g, "avg(");
+      .replace(/MAX\(/g, "max(")
+      .replace(/MIN\(/g, "min(")
+      .replace(/ABS\(/g, "abs(")
+      .replace(/CEIL\(/g, "ceil(")
+      .replace(/FLOOR\(/g, "floor(")
+      .replace(/ROUND\(/g, "round(")
+      .replace(/SQRT\(/g, "sqrt(")
+      .replace(/POW\(/g, "pow(")
+      .replace(/AVG\(/g, "avg(");
     // The rate is effective-dated per week being forecast — one read per
     // week, only for formulas that price tax.
     const weekTaxRates = expression.includes("{TAX_RATE}")
@@ -1728,22 +1971,32 @@ export async function categoryWeekly(
       // Quarter flags resolve on the FISCAL calendar, never calendar
       // quarters: declared 4-4-5/custom periods win when they cover the
       // week, otherwise the offset counts months from the fiscal year start.
-      const fiscal = fiscalFormulaFlagsFromPeriods(k, context.fiscalPeriods)
-        ?? fiscalFormulaFlags(k, context.fiscalStartMonth ?? 1, isMonthStart, isMonthEnd);
+      const fiscal =
+        fiscalFormulaFlagsFromPeriods(k, context.fiscalPeriods) ??
+        fiscalFormulaFlags(k, context.fiscalStartMonth ?? 1, isMonthStart, isMonthEnd);
       const evalStr = expression
-        .replace(/{AR_IN}/g, String(valAR)).replace(/{AP_OUT}/g, String(valAP))
-        .replace(/{NET_FLOW}/g, subtractMoney(valAR, valAP)).replace(/{CASH_START}/g, String(context.cashStart))
-        .replace(/{WEEK_NUM}/g, String(weekIndex)).replace(/{MONTH}/g, String(monthNum))
-        .replace(/{QUARTER}/g, String(fiscal.quarter)).replace(/{YEAR}/g, String(cur.getUTCFullYear()))
+        .replace(/{AR_IN}/g, String(valAR))
+        .replace(/{AP_OUT}/g, String(valAP))
+        .replace(/{NET_FLOW}/g, subtractMoney(valAR, valAP))
+        .replace(/{CASH_START}/g, String(context.cashStart))
+        .replace(/{WEEK_NUM}/g, String(weekIndex))
+        .replace(/{MONTH}/g, String(monthNum))
+        .replace(/{QUARTER}/g, String(fiscal.quarter))
+        .replace(/{YEAR}/g, String(cur.getUTCFullYear()))
         .replace(/{DAY}/g, String(dayOfMonth))
-        .replace(/{IS_WK1}/g, weekIndex === 1 ? "1" : "0").replace(/{IS_WK2}/g, weekIndex === 2 ? "1" : "0")
-        .replace(/{IS_WK3}/g, weekIndex === 3 ? "1" : "0").replace(/{IS_WK4}/g, weekIndex === 4 ? "1" : "0")
+        .replace(/{IS_WK1}/g, weekIndex === 1 ? "1" : "0")
+        .replace(/{IS_WK2}/g, weekIndex === 2 ? "1" : "0")
+        .replace(/{IS_WK3}/g, weekIndex === 3 ? "1" : "0")
+        .replace(/{IS_WK4}/g, weekIndex === 4 ? "1" : "0")
         .replace(/{IS_WK5}/g, weekIndex >= 5 ? "1" : "0")
-        .replace(/{IS_MONTH_START}/g, String(isMonthStart)).replace(/{IS_MONTH_END}/g, String(isMonthEnd))
+        .replace(/{IS_MONTH_START}/g, String(isMonthStart))
+        .replace(/{IS_MONTH_END}/g, String(isMonthEnd))
         .replace(/{IS_Q_START}/g, String(fiscal.isQStart))
         .replace(/{IS_Q_END}/g, String(fiscal.isQEnd))
         .replace(/{IS_YEAR_END}/g, String(fiscal.isYearEnd))
-        .replace(/{TAX_RATE}/g, weekTaxRates[i] ?? "0").replace(/{TRUE}/g, "1").replace(/{FALSE}/g, "0");
+        .replace(/{TAX_RATE}/g, weekTaxRates[i] ?? "0")
+        .replace(/{TRUE}/g, "1")
+        .replace(/{FALSE}/g, "0");
       // A malformed tenant formula is a refusal the operator must see named,
       // never a silent 0 forecast that looks like "no cash expected" —
       // forecast-only, but it is the forecast the release gate reads.
@@ -1765,8 +2018,11 @@ export async function categoryWeekly(
   } else if (cat.method === "vendor_recurring_average" && (cat.partyIds?.length || cat.partyId)) {
     const vids = cat.partyIds?.length ? cat.partyIds : [cat.partyId!];
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 3));
-    const idList = sql.join(vids.map((v) => sql`${v}`), sql`, `);
-    const r = (await analyticsQuery<CashPaymentEventRow>(sql`
+    const idList = sql.join(
+      vids.map((v) => sql`${v}`),
+      sql`, `,
+    );
+    const r = await analyticsQuery<CashPaymentEventRow>(sql`
       -- Same functional-currency translation as the payment history above,
       -- then into presentation currency per (day, functional) leg: daily
       -- totals never add two subsidiaries' functionals raw.
@@ -1782,10 +2038,14 @@ export async function categoryWeekly(
         and d.kind in ('vendor_payment', 'check')
         and coalesce(d.document_date, d.posting_date) >= ${asOfIso}::date - (${historyMonths} || ' months')::interval${subScope(sql`d.subsidiary_id`, context.subIds, context.includeNullSubsidiary === true)}
       group by 1, 2
-    `));
+    `);
     const translatedEvents = await translateHistoryLegs(
       orgId,
-      r.rows.map((x) => ({ func: x.func, date: String(x.late ?? x.day), amount: normalizeMoneyValue(String(x.paid)) })),
+      r.rows.map((x) => ({
+        func: x.func,
+        date: String(x.late ?? x.day),
+        amount: normalizeMoneyValue(String(x.paid)),
+      })),
     );
     const mergedEvents = new Map<string, Money>();
     r.rows.forEach((x, i) => {
@@ -1798,14 +2058,21 @@ export async function categoryWeekly(
     if (events.length >= 2) {
       const intervals: number[] = [];
       for (let i = 0; i < events.length - 1; i++) {
-        intervals.push(Math.ceil(Math.abs(events[i]!.date.getTime() - events[i + 1]!.date.getTime()) / MS_DAY));
+        intervals.push(
+          Math.ceil(Math.abs(events[i]!.date.getTime() - events[i + 1]!.date.getTime()) / MS_DAY),
+        );
       }
       intervals.sort((a, b) => a - b);
       const medianInterval = intervals[Math.floor(intervals.length / 2)]!;
       let frequencyLabel = "Monthly";
       let nextIntervalDays = 30;
-      if (medianInterval >= 5 && medianInterval <= 9) { frequencyLabel = "Weekly"; nextIntervalDays = 7; }
-      else if (medianInterval >= 12 && medianInterval <= 16) { frequencyLabel = "Bi-Weekly"; nextIntervalDays = 14; }
+      if (medianInterval >= 5 && medianInterval <= 9) {
+        frequencyLabel = "Weekly";
+        nextIntervalDays = 7;
+      } else if (medianInterval >= 12 && medianInterval <= 16) {
+        frequencyLabel = "Bi-Weekly";
+        nextIntervalDays = 14;
+      }
       const amounts = events.map((e) => e.amount);
       const filtered = filterRecurringOutliers(amounts, model.vendorOutlierSigma);
       let avgAmount = divideMoney(sumMoney(filtered), String(filtered.length));
@@ -1814,7 +2081,8 @@ export async function categoryWeekly(
       while (nextDate < asOf) nextDate = addDays(nextDate, nextIntervalDays);
       while (nextDate <= tEnd) {
         const weekIndex = wkIndex.get(toISO(weekStart(nextDate)));
-        if (weekIndex !== undefined) weeklyExact[weekIndex] = addMoney(weeklyExact[weekIndex] ?? ZERO_MONEY, avgAmount);
+        if (weekIndex !== undefined)
+          weeklyExact[weekIndex] = addMoney(weeklyExact[weekIndex] ?? ZERO_MONEY, avgAmount);
         nextDate = addDays(nextDate, nextIntervalDays);
       }
       logic = `${frequencyLabel.toLowerCase()} cadence auto-detected · avg ${money(avgAmount, { maximumFractionDigits: 0 })}`;
@@ -1830,11 +2098,19 @@ export async function categoryWeekly(
       logic = "not enough payment history to detect a cadence";
       meta = { method: "Vendor Recurring (Auto)", samples: events.length };
     }
-    breakdown = events.map((e) => ({ name: "Historical Payment", amount: e.amount, date: toISO(e.date), type: "Source Data" }));
+    breakdown = events.map((e) => ({
+      name: "Historical Payment",
+      amount: e.amount,
+      date: toISO(e.date),
+      type: "Source Data",
+    }));
   } else if (cat.method === "bank_register_history" && cat.bankAccountIds?.length) {
     const historyWeeks = Math.max(1, Math.min(52, cat.historyWeeks ?? 12));
     const historyStart = addDays(tStart, -historyWeeks * 7);
-    const ids = sql.join(cat.bankAccountIds.map((a) => sql`${a}`), sql`, `);
+    const ids = sql.join(
+      cat.bankAccountIds.map((a) => sql`${a}`),
+      sql`, `,
+    );
     const includeTransfers = cat.includeTransfers !== false;
     const includeChecks = cat.includeChecks !== false;
     const includeJournals = cat.includeJournals === true;
@@ -1846,9 +2122,12 @@ export async function categoryWeekly(
     const kindFilter = sql.join(kindClauses, sql` or `);
     const keywords = (cat.memoKeywords ?? []).map((k) => k.trim()).filter(Boolean);
     const memoFilter = keywords.length
-      ? sql` and (${sql.join(keywords.map((k) => sql`coalesce(d.memo, e.memo, '') ilike ${"%" + k + "%"}`), sql` or `)})`
+      ? sql` and (${sql.join(
+          keywords.map((k) => sql`coalesce(d.memo, e.memo, '') ilike ${"%" + k + "%"}`),
+          sql` or `,
+        )})`
       : sql``;
-    const r = (await analyticsQuery<CashRegisterLineRow>(sql`
+    const r = await analyticsQuery<CashRegisterLineRow>(sql`
       -- One row per in-scope bank leg with its functional currency. Transfers
       -- net PER ENTRY over the in-scope bank legs (see the merge below): a
       -- plain move between two selected banks nets to zero, a fee-bearing one
@@ -1872,34 +2151,72 @@ export async function categoryWeekly(
         and (l.amount < 0 or coalesce(d.kind, 'journal') = 'transfer')
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}
         and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
-    `));
+    `);
     const translatedLegs = await translateHistoryLegs(
       orgId,
-      r.rows.map((x) => ({ func: x.func, date: String(x.day), amount: normalizeMoneyValue(String(x.raw_amount)) })),
+      r.rows.map((x) => ({
+        func: x.func,
+        date: String(x.day),
+        amount: normalizeMoneyValue(String(x.raw_amount)),
+      })),
     );
     // Non-transfer legs contribute their outflow directly; transfer legs net
     // per entry over the translated in-scope legs (inflows included — they
     // are in the rows above precisely so the net sees them).
-    interface RegisterContribution { day: string; kind: string; doc_number: string | null; party: string; memo: string; amount: Money }
+    interface RegisterContribution {
+      day: string;
+      kind: string;
+      doc_number: string | null;
+      party: string;
+      memo: string;
+      amount: Money;
+    }
     const contributions: RegisterContribution[] = [];
-    const transferEntries = new Map<string, { day: string; kind: string; doc_number: string | null; party: string; memo: string; outflow: RegisterContribution | null; total: Money }>();
+    const transferEntries = new Map<
+      string,
+      {
+        day: string;
+        kind: string;
+        doc_number: string | null;
+        party: string;
+        memo: string;
+        outflow: RegisterContribution | null;
+        total: Money;
+      }
+    >();
     r.rows.forEach((x, i) => {
       const amount = translatedLegs[i]!;
       if (String(x.kind) !== "transfer") {
         contributions.push({
-          day: String(x.day), kind: String(x.kind), doc_number: (x.doc_number as string | null) ?? null,
-          party: String(x.party ?? ""), memo: String(x.memo ?? ""), amount: normalizeMoneyValue(String(moneyNeg(amount))),
+          day: String(x.day),
+          kind: String(x.kind),
+          doc_number: (x.doc_number as string | null) ?? null,
+          party: String(x.party ?? ""),
+          memo: String(x.memo ?? ""),
+          amount: normalizeMoneyValue(String(moneyNeg(amount))),
         });
         return;
       }
       const entryId = String(x.entry_id);
       const cur = transferEntries.get(entryId) ?? {
-        day: String(x.day), kind: String(x.kind), doc_number: (x.doc_number as string | null) ?? null,
-        party: String(x.party ?? ""), memo: String(x.memo ?? ""), outflow: null, total: ZERO_MONEY,
+        day: String(x.day),
+        kind: String(x.kind),
+        doc_number: (x.doc_number as string | null) ?? null,
+        party: String(x.party ?? ""),
+        memo: String(x.memo ?? ""),
+        outflow: null,
+        total: ZERO_MONEY,
       };
       cur.total = addMoney(cur.total, amount);
       if (compareMoney(amount, ZERO_MONEY) < 0 && cur.outflow === null) {
-        cur.outflow = { day: String(x.day), kind: String(x.kind), doc_number: (x.doc_number as string | null) ?? null, party: String(x.party ?? ""), memo: String(x.memo ?? ""), amount: ZERO_MONEY };
+        cur.outflow = {
+          day: String(x.day),
+          kind: String(x.kind),
+          doc_number: (x.doc_number as string | null) ?? null,
+          party: String(x.party ?? ""),
+          memo: String(x.memo ?? ""),
+          amount: ZERO_MONEY,
+        };
       }
       transferEntries.set(entryId, cur);
     });
@@ -1909,13 +2226,20 @@ export async function categoryWeekly(
       const net = normalizeMoneyValue(String(moneyNeg(entry.total)));
       if (compareMoney(net, ZERO_MONEY) <= 0) continue;
       const display = entry.outflow ?? entry;
-      contributions.push({ day: entry.day, kind: entry.kind, doc_number: entry.doc_number, party: display.party, memo: entry.memo, amount: net });
+      contributions.push({
+        day: entry.day,
+        kind: entry.kind,
+        doc_number: entry.doc_number,
+        party: display.party,
+        memo: entry.memo,
+        amount: net,
+      });
     }
     // Same data-start rule as the GL path (see historyWindowDivisor),
     // measured in this strategy's own read scope: bank legs matching its
     // kind/memo filters, unbounded in time.
     const windowStartIso = toISO(historyStart);
-    const bankStartRow = (await analyticsQuery<{ d: string | null }>(sql`
+    const bankStartRow = await analyticsQuery<{ d: string | null }>(sql`
       select min(e.posting_date)::text as d
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -1932,7 +2256,7 @@ export async function categoryWeekly(
                 and l2.amount > 0
            )
          )
-    `));
+    `);
     const bankStartIso = bankStartRow.rows[0]?.d ?? null;
     const weeklyHistory: Record<string, Money> = {};
     const currentWeekKey = toISO(weekStart(asOf));
@@ -1955,10 +2279,17 @@ export async function categoryWeekly(
     }
     let totalHistory = ZERO_MONEY;
     for (const k of Object.keys(weeklyHistory)) {
-      if (k < startKey) { totalHistory = addMoney(totalHistory, weeklyHistory[k]!); }
+      if (k < startKey) {
+        totalHistory = addMoney(totalHistory, weeklyHistory[k]!);
+      }
     }
     const divisor = historyWindowDivisor(historyWeeks, windowStartIso, bankStartIso);
-    let weeklyAvg = fullWindowWeeklyAverage(totalHistory, historyWeeks, windowStartIso, bankStartIso);
+    let weeklyAvg = fullWindowWeeklyAverage(
+      totalHistory,
+      historyWeeks,
+      windowStartIso,
+      bankStartIso,
+    );
     if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
     weekStarts.forEach((k, i) => {
       const actual = weeklyHistory[k] ?? ZERO_MONEY;
@@ -1968,7 +2299,10 @@ export async function categoryWeekly(
         amount = compareMoney(remainder, ZERO_MONEY) > 0 ? remainder : ZERO_MONEY;
       } else if (compareMoney(actual, ZERO_MONEY) > 0 && k > currentWeekKey) amount = actual;
       else amount = weeklyAvg;
-      weeklyExact[i] = multiplyMoney(amount, String(getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek)));
+      weeklyExact[i] = multiplyMoney(
+        amount,
+        String(getProrationFactor(parseISO(k), asOf, cat.expectedDay, cat.expectedWeek)),
+      );
     });
     logic = `${historyWeeks}-week bank register average${adj ? ` ${adj > 0 ? "+" : ""}${Math.round(adj * 100)}%` : ""}${keywords.length ? ` · memo: ${keywords.join(", ")}` : ""}`;
     meta = {
@@ -1994,7 +2328,10 @@ export async function categoryWeekly(
     total: sumMoney(finalWeekly),
     logic,
     meta,
-    breakdown: breakdown.map((row) => ({ ...row, amount: normalizeMoneyValue(String(row.amount)) })),
+    breakdown: breakdown.map((row) => ({
+      ...row,
+      amount: normalizeMoneyValue(String(row.amount)),
+    })),
   };
 }
 
@@ -2013,7 +2350,7 @@ export async function bankBalances(asOf: string, subIds?: string[], explicitOrgI
   // ambient request/session resolution is absent in non-request callers, and
   // an unscoped call there fails instead of reading the caller's tenant.
   const orgId = await resolveOrgId(explicitOrgId);
-  const r = (await analyticsQuery(sql`
+  const r = await analyticsQuery(sql`
     with bank_accounts as (
       select id from accounts
        where org_id = ${orgId} and type = 'asset_bank' and is_summary = false and is_active
@@ -2059,21 +2396,47 @@ export async function bankBalances(asOf: string, subIds?: string[], explicitOrgI
     where a.org_id = ${orgId} and a.type = 'asset_bank' and a.is_summary = false and a.is_active
       ${subIds && subIds.length > 0 ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${subIds.join(",")}}`}::uuid[]))` : sql``}
     group by a.id, a.name, a.number, m.func
-  `));
+  `);
   // A consolidated view spans functionals: translate each (account,
   // functional) leg at the closing spot and re-sum per account. Missing rate
   // coverage fails closed — never a mixed-functional total.
   const base = await presentationCurrency(orgId);
-  const legs = r.rows as { id: string; name: string; number: string | null; func: string | null; balance: string }[];
-  const rates = await presentationRates(orgId, base, legs.map((x) => x.func ?? null), asOf);
-  const byAccount = new Map<string, { id: string; name: string; number: string | null; legs: string[] }>();
+  const legs = r.rows as {
+    id: string;
+    name: string;
+    number: string | null;
+    func: string | null;
+    balance: string;
+  }[];
+  const rates = await presentationRates(
+    orgId,
+    base,
+    legs.map((x) => x.func ?? null),
+    asOf,
+  );
+  const byAccount = new Map<
+    string,
+    { id: string; name: string; number: string | null; legs: string[] }
+  >();
   for (const x of legs) {
-    const cur = byAccount.get(String(x.id)) ?? { id: String(x.id), name: String(x.name), number: x.number == null ? null : String(x.number), legs: [] };
-    cur.legs.push(multiplyMoney(String(x.balance), rates.get(lineFunctional(x.func ?? null, base))!));
+    const cur = byAccount.get(String(x.id)) ?? {
+      id: String(x.id),
+      name: String(x.name),
+      number: x.number == null ? null : String(x.number),
+      legs: [],
+    };
+    cur.legs.push(
+      multiplyMoney(String(x.balance), rates.get(lineFunctional(x.func ?? null, base))!),
+    );
     byAccount.set(String(x.id), cur);
   }
   return [...byAccount.values()]
-    .map((a) => ({ id: a.id, name: a.name, number: a.number, balance: normalizeMoneyValue(sumMoney(a.legs)) }))
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      number: a.number,
+      balance: normalizeMoneyValue(sumMoney(a.legs)),
+    }))
     .sort((x, y) => compareMoney(y.balance, x.balance));
 }
 
@@ -2129,11 +2492,12 @@ export function predict(
   // Overdue → push forward (the configured push ladder).
   if (date < asOf) {
     const overdue = daysBetween(date, asOf);
-    const push = overdue > model.overdueLongThresholdDays
-      ? model.overduePushLongDays
-      : overdue > model.overdueMidThresholdDays
-        ? model.overduePushMidDays
-        : model.overduePushShortDays;
+    const push =
+      overdue > model.overdueLongThresholdDays
+        ? model.overduePushLongDays
+        : overdue > model.overdueMidThresholdDays
+          ? model.overduePushMidDays
+          : model.overduePushShortDays;
     date = addDays(asOf, push);
     method = OVERDUE_PUSH_METHOD;
     basisDays = null;
@@ -2166,7 +2530,10 @@ export function isUnappliedCredit(item: OpenItem): boolean {
  * past-due receivable balance, so unapplied credits neither reduce it nor
  * count toward it. Credits are reported separately as a positive magnitude.
  */
-export function collectionsBalances(items: OpenItem[], asOf: Date): {
+export function collectionsBalances(
+  items: OpenItem[],
+  asOf: Date,
+): {
   overdue: Money;
   overdueCount: number;
   unappliedCredits: Money;
@@ -2203,7 +2570,11 @@ export function summariseSide(
   unplaced: { count: number; total: Money } = { count: 0, total: ZERO_MONEY },
 ): SideSummary {
   const buckets = new Map<string, Money>([
-    ["Current", ZERO_MONEY], ["1-30", ZERO_MONEY], ["31-60", ZERO_MONEY], ["61-90", ZERO_MONEY], ["90+", ZERO_MONEY],
+    ["Current", ZERO_MONEY],
+    ["1-30", ZERO_MONEY],
+    ["31-60", ZERO_MONEY],
+    ["61-90", ZERO_MONEY],
+    ["90+", ZERO_MONEY],
   ]);
   let outstanding = ZERO_MONEY;
   for (const it of items) {
@@ -2216,7 +2587,8 @@ export function summariseSide(
   return {
     outstanding,
     scheduled,
-    pctCurrent: compareMoney(outstanding, ZERO_MONEY) > 0 ? divideMoney(current, outstanding) : ZERO_MONEY,
+    pctCurrent:
+      compareMoney(outstanding, ZERO_MONEY) > 0 ? divideMoney(current, outstanding) : ZERO_MONEY,
     avgDays,
     buckets: [...buckets.entries()].map(([label, amount], index) => ({ label, amount, index })),
     unplaced,
@@ -2244,14 +2616,14 @@ export function scheduleForecast(
   model: ForecastModelParams = CASHFLOW_MODEL_DEFAULTS,
   receivable = false,
 ): {
-    byWeek: Map<string, ForecastEntry[]>;
-    entries: ForecastEntry[];
-    scheduled: Money;
-    /** Items placed in no week (no history and no due date), counted, never dropped. */
-    unplaced: { count: number; total: Money };
-    /** Receivables past the collectability horizon, counted and listed, never projected. */
-    notForecast: { count: number; total: Money; entries: NotForecastEntry[] };
-  } {
+  byWeek: Map<string, ForecastEntry[]>;
+  entries: ForecastEntry[];
+  scheduled: Money;
+  /** Items placed in no week (no history and no due date), counted, never dropped. */
+  unplaced: { count: number; total: Money };
+  /** Receivables past the collectability horizon, counted and listed, never projected. */
+  notForecast: { count: number; total: Money; entries: NotForecastEntry[] };
+} {
   const byWeek = new Map<string, ForecastEntry[]>();
   const entries: ForecastEntry[] = [];
   let scheduled = ZERO_MONEY;
@@ -2261,7 +2633,11 @@ export function scheduleForecast(
   const notForecastEntries: NotForecastEntry[] = [];
   for (const it of items) {
     const dpd = daysPastDue(it, asOf);
-    if (receivable && compareMoney(it.remaining, ZERO_MONEY) > 0 && dpd > model.collectibilityHorizonDays) {
+    if (
+      receivable &&
+      compareMoney(it.remaining, ZERO_MONEY) > 0 &&
+      dpd > model.collectibilityHorizonDays
+    ) {
       notForecastTotal = addMoney(notForecastTotal, it.remaining);
       notForecastEntries.push({
         id: it.id,

@@ -34,7 +34,15 @@ async function ensureOpenPeriod(orgId: string, periodId: string): Promise<void> 
   `);
 }
 
-async function pullConfig(orgId: string, userId: string, bank: string, fee: string, fx: string, clearing: string, pullEnabled: boolean): Promise<void> {
+async function pullConfig(
+  orgId: string,
+  userId: string,
+  bank: string,
+  fee: string,
+  fx: string,
+  clearing: string,
+  pullEnabled: boolean,
+): Promise<void> {
   await db.execute(sql`
     insert into psp_provider_configs
       (org_id, provider, display_name, is_enabled, acceptance_enabled, pull_enabled,
@@ -61,7 +69,15 @@ test("a pulled payout imports once, posts, and advances the cursor", { skip: !DB
       await db.execute(sql`
         update orgs set settings = settings || '{"features":{"banking":true}}'::jsonb where id = ${org.orgId}`);
       await ensureOpenPeriod(org.orgId, org.periodId);
-      await pullConfig(org.orgId, userId, org.accounts.bank, org.accounts.adjustment, org.accounts.fxGainLoss, org.accounts.clearing, true);
+      await pullConfig(
+        org.orgId,
+        userId,
+        org.accounts.bank,
+        org.accounts.adjustment,
+        org.accounts.fxGainLoss,
+        org.accounts.clearing,
+        true,
+      );
 
       const parsed = await fetchStripePayoutSettlement(
         { apiKey: "sk_test_pull" },
@@ -76,8 +92,13 @@ test("a pulled payout imports once, posts, and advances the cursor", { skip: !DB
       const posted = await postSettlementBatch(org.orgId, first.batchIds[0]!, userId, null);
       assert.ok(posted.entryId);
 
-      const cursor = (await db.execute<{ last_pull_at: string | null }>(sql`
-        select last_pull_at from psp_provider_configs where org_id = ${org.orgId} and provider = 'stripe'`, "objects"))[0];
+      const cursor = (
+        await db.execute<{ last_pull_at: string | null }>(
+          sql`
+        select last_pull_at from psp_provider_configs where org_id = ${org.orgId} and provider = 'stripe'`,
+          "objects",
+        )
+      )[0];
       assert.ok(cursor!.last_pull_at, "pull cursor advances after import");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -90,7 +111,15 @@ test("pull refuses when the provider config has it off", { skip: !DB }, async ()
   await withOrgContext(org.orgId, async () => {
     try {
       const userId = await createScratchUser(org.orgId, "Pull Tester", "admin");
-      await pullConfig(org.orgId, userId, org.accounts.bank, org.accounts.adjustment, org.accounts.fxGainLoss, org.accounts.clearing, false);
+      await pullConfig(
+        org.orgId,
+        userId,
+        org.accounts.bank,
+        org.accounts.adjustment,
+        org.accounts.fxGainLoss,
+        org.accounts.clearing,
+        false,
+      );
       const parsed = await fetchStripePayoutSettlement(
         { apiKey: "sk_test_pull" },
         { id: "po_off", currency: "CAD", arrivalDate: "2026-07-10" },

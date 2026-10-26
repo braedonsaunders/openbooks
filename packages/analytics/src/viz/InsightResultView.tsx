@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useMemo } from 'react'
-import { useTranslations } from 'next-intl'
-import { buildVizSpec, formatCell } from '../viz'
-import type { QueryResult, ResultColumn, VizSettings, VizType } from '../types'
-import { InsightChart } from './InsightChart'
+import { useMemo } from "react";
+import { useTranslations } from "next-intl";
+import { buildVizSpec, formatCell } from "../viz";
+import type { QueryResult, ResultColumn, VizSettings, VizType } from "../types";
+import { InsightChart } from "./InsightChart";
 
 /**
  * The single renderer for an executed insight result. Given a QueryResult and a
@@ -22,41 +22,41 @@ export function InsightResultView({
   settings,
   chartHeight,
 }: {
-  result: QueryResult
-  vizType: VizType
-  settings?: VizSettings
+  result: QueryResult;
+  vizType: VizType;
+  settings?: VizSettings;
   /** Fixed chart height in px; omit to fill a sized parent. */
-  chartHeight?: number
+  chartHeight?: number;
 }) {
-  const t = useTranslations('insights.viz')
+  const t = useTranslations("insights.viz");
 
   // Localize fixed-vocabulary dimension values everywhere they surface: chart
   // categories, pie names, and table cells. Boolean columns arrive as real
   // booleans from pg, and as their SQL literals when grouped into a text key.
   const valueLabel = useMemo(() => {
     return (col: ResultColumn, v: unknown): string | null => {
-      if (col.valueKind !== 'boolean') return null
-      if (typeof v === 'boolean') return t(v ? 'values.yes' : 'values.no')
-      if (v === 'true' || v === 'false') return t(v === 'true' ? 'values.yes' : 'values.no')
-      return null
-    }
-  }, [t])
+      if (col.valueKind !== "boolean") return null;
+      if (typeof v === "boolean") return t(v ? "values.yes" : "values.no");
+      if (v === "true" || v === "false") return t(v === "true" ? "values.yes" : "values.no");
+      return null;
+    };
+  }, [t]);
 
   const spec = useMemo(
     () => buildVizSpec(result, vizType, settings ?? {}, valueLabel),
     [result, vizType, settings, valueLabel],
-  )
+  );
 
-  if (spec.kind === 'empty') {
+  if (spec.kind === "empty") {
     return (
       <div className="flex h-full min-h-[8rem] items-center justify-center px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
         {t(`empty.${spec.reason}`)}
       </div>
-    )
+    );
   }
 
-  if (spec.kind === 'chart') {
-    return <InsightChart option={spec.option} height={chartHeight} />
+  if (spec.kind === "chart") {
+    return <InsightChart option={spec.option} height={chartHeight} />;
   }
 
   // table
@@ -69,8 +69,8 @@ export function InsightResultView({
               <th
                 key={c.key}
                 className={
-                  'px-3 py-2 font-semibold text-slate-600 dark:text-slate-300 ' +
-                  (c.type === 'currency' || c.type === 'number' ? 'text-right' : 'text-left')
+                  "px-3 py-2 font-semibold text-slate-600 dark:text-slate-300 " +
+                  (c.type === "currency" || c.type === "number" ? "text-right" : "text-left")
                 }
               >
                 {c.label}
@@ -85,7 +85,7 @@ export function InsightResultView({
                 colSpan={spec.columns.length}
                 className="px-3 py-8 text-center text-slate-500 dark:text-slate-400"
               >
-                {t('noRows')}
+                {t("noRows")}
               </td>
             </tr>
           ) : (
@@ -99,11 +99,13 @@ export function InsightResultView({
                     key={c.key}
                     aria-label={result.undefinedLabels?.[i]?.[c.key]}
                     className={
-                      'px-3 py-1.5 ' +
-                      (c.type === 'currency' || c.type === 'number'
-                        ? 'text-right tabular-nums'
-                        : 'text-left text-slate-700 dark:text-slate-300') +
-                      (result.undefinedLabels?.[i]?.[c.key] ? ' text-slate-400 dark:text-slate-500' : '')
+                      "px-3 py-1.5 " +
+                      (c.type === "currency" || c.type === "number"
+                        ? "text-right tabular-nums"
+                        : "text-left text-slate-700 dark:text-slate-300") +
+                      (result.undefinedLabels?.[i]?.[c.key]
+                        ? " text-slate-400 dark:text-slate-500"
+                        : "")
                     }
                   >
                     {valueLabel(c, row[c.key]) ?? formatCell(row[c.key], c.type, c.format, c.scale)}
@@ -115,5 +117,5 @@ export function InsightResultView({
         </tbody>
       </table>
     </div>
-  )
+  );
 }

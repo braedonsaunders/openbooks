@@ -27,7 +27,9 @@ import { inputGuards } from "../input-guards.ts";
 
 /** Shared HRM feature gate (actor.ts): audience-aware when HRM is off. */
 
-const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
+const { requireOrgId, requireActorId, requireId } = inputGuards(
+  (message) => new SelfServiceError("REFUSED", message),
+);
 
 /**
  * The actor's direct-report employment ids as of today. One level: rows
@@ -93,14 +95,17 @@ export async function findTeamEmploymentIdsForParty(query: {
     const today = await businessToday(orgId);
     const reports = await resolveTeamEmploymentIds(db, orgId, actorId, today);
     if (reports.length === 0) return [];
-    const rows = await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(
+      sql`
       select e.id::text as id
         from worker_employments e
        where e.org_id = ${orgId}
          and e.worker_party_id = ${workerPartyId}
          and e.id in (select jsonb_array_elements_text(${JSON.stringify([...reports])}::jsonb)::uuid)
        order by e.id
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((row) => row.id);
   });
 }
@@ -125,7 +130,12 @@ export async function loadTeamRoster(
 ): Promise<TeamRosterEntry[]> {
   if (reportIds.length === 0) return [];
   const summaries = await loadMyEmploymentSummaries(exec, orgId, reportIds, today);
-  const names = await exec.execute<{ employment_id: string; worker_party_id: string; name: string }>(sql`
+  const names = await exec.execute<{
+    employment_id: string;
+    worker_party_id: string;
+    name: string;
+  }>(
+    sql`
     select e.id::text as employment_id,
            e.worker_party_id::text as worker_party_id,
            p.display_name as name
@@ -133,7 +143,9 @@ export async function loadTeamRoster(
       join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
      where e.org_id = ${orgId}
        and e.id in (select jsonb_array_elements_text(${JSON.stringify([...reportIds])}::jsonb)::uuid)
-  `, "objects");
+  `,
+    "objects",
+  );
   const byId = new Map(names.map((row) => [row.employment_id, row]));
   return summaries.map((summary) => {
     const identity = byId.get(summary.employmentId);
@@ -186,7 +198,8 @@ export async function loadTeamSteps(
     required: boolean;
     evidence_kind: string;
     owner_kind: string;
-  }>(sql`
+  }>(
+    sql`
     select s.id, s.process_id::text as process_id, p.kind as process_kind,
            p.employment_id::text as employment_id,
            wp.display_name as worker_name,
@@ -205,7 +218,9 @@ export async function loadTeamSteps(
          or (s.owner_kind = 'named_party' and s.owner_party_id = ${partyId}::uuid)
        )
      order by s.due_on, s.id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     processId: row.process_id,
@@ -254,7 +269,8 @@ export async function loadTeamLeaveRequests(
     hours: string;
     status: string;
     reason: string | null;
-  }>(sql`
+  }>(
+    sql`
     select r.id, r.employment_id::text as employment_id,
            wp.display_name as worker_name,
            t.code as leave_type_code,
@@ -268,7 +284,9 @@ export async function loadTeamLeaveRequests(
        and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify([...reportIds])}::jsonb)::uuid)
        and r.status = 'submitted'
      order by r.starts_on, r.id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     employmentId: row.employment_id,
@@ -308,7 +326,8 @@ export async function loadTeamChangeRequests(
     payload: { kind?: unknown };
     status: string;
     submitted_at: string | null;
-  }>(sql`
+  }>(
+    sql`
     select r.id, r.employment_id::text as employment_id,
            wp.display_name as worker_name,
            r.payload, r.status, r.submitted_at::text as submitted_at
@@ -319,7 +338,9 @@ export async function loadTeamChangeRequests(
        and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify([...reportIds])}::jsonb)::uuid)
        and r.status = 'pending_approval'
      order by r.submitted_at, r.id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     employmentId: row.employment_id,

@@ -6,15 +6,37 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { cmp, isZero, neg, toUnits } from "../money/money.ts";
-import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { emitAvailabilityChanged } from "../webhooks/emit.ts";
 import { normalizeMovementIdempotencyKey } from "./action-idempotency.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
-import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
+import {
+  assertStockLocationAdmitsSubsidiary,
+  assertNoForeignOnHand,
+  resolveProfile,
+  assertMovementOwner,
+  assertInventoryFeature,
+} from "./profile-policy.ts";
 import { assertItemsActive } from "./item-active.ts";
-import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney, backdatedIssueShortage } from "./position.ts";
+import {
+  stockLocationDim,
+  postInventoryEntry,
+  inventoryOffsetAccountProblem,
+  type JournalLineInput,
+} from "./journal.ts";
+import {
+  primaryBookId,
+  periodForDate,
+  subsidiaryCurrency,
+  getOnHandWith,
+  lockInventoryPosition,
+  persistReceiptMoney,
+  backdatedIssueShortage,
+} from "./position.ts";
 import { consumeLayers, recordConsumptions, resolveProvisionalUnitCost } from "./cost-layers.ts";
 import { type MovementResult } from "./movement-receive.ts";
 // ---------------------------------------------------------------------------
@@ -69,11 +91,9 @@ export async function issueInventory(
   // Same early gate as receipts: junk must name InventoryError (not a bare
   // Error) and oversized figures must refuse before any journal math.
   const quantity = persistReceiptMoney(input.quantity, "issue quantity");
-  if (cmp(quantity, "0") <= 0)
-    throw new InventoryError("issue quantity must be positive");
+  if (cmp(quantity, "0") <= 0) throw new InventoryError("issue quantity must be positive");
   const period = await periodForDate(orgId, input.date, runner);
-  if (!period)
-    throw new InventoryError(`no accounting period for ${input.date}`);
+  if (!period) throw new InventoryError(`no accounting period for ${input.date}`);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId, runner);
   const ctx = await loadSubsidiaryContext(runner, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
@@ -97,7 +117,13 @@ export async function issueInventory(
     // Re-read the policy under the movement transaction's lock boundary so a
     // concurrent costing-policy revision cannot price this issue from stale
     // standard-cost or tracking settings.
-    await lockSubcontractCustodyAuthority(tx,orgId,actorId,input.subsidiaryId,input.stockLocationId);
+    await lockSubcontractCustodyAuthority(
+      tx,
+      orgId,
+      actorId,
+      input.subsidiaryId,
+      input.stockLocationId,
+    );
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
     await assertOwnedLocation(tx, orgId, input.stockLocationId);
     // INV-ACTIVE fence: an issue moves stock out, so an inactive item
@@ -109,18 +135,26 @@ export async function issueInventory(
     // stock-count posts.
     await assertItemsActive(tx, orgId, [input.itemId], {
       inactiveRemedy: "reactivate it before posting stock movements",
-      outsideOrganization:
-        "issue references an item outside this organization",
+      outsideOrganization: "issue references an item outside this organization",
     });
     assertTracking(
       profile,
       { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
       "issue",
     );
-    if (input.inspectionScrapId) await assertInspectionScrapIssue(tx,orgId,actorId,{...input,inspectionId:input.inspectionScrapId});
-    else if (input.admission !== "count") await assertSaleableStock(tx,orgId,input.stockLocationId,input);
+    if (input.inspectionScrapId)
+      await assertInspectionScrapIssue(tx, orgId, actorId, {
+        ...input,
+        inspectionId: input.inspectionScrapId,
+      });
+    else if (input.admission !== "count")
+      await assertSaleableStock(tx, orgId, input.stockLocationId, input);
     const offset = input.offsetAccountId ?? profile.cogsAccountId;
-    const accountProblem = inventoryOffsetAccountProblem(profile.assetAccountId, offset, "issue offset");
+    const accountProblem = inventoryOffsetAccountProblem(
+      profile.assetAccountId,
+      offset,
+      "issue offset",
+    );
     if (accountProblem) throw new InventoryError(accountProblem);
     await assertStockLocationAdmitsSubsidiary(
       tx,
@@ -144,18 +178,19 @@ export async function issueInventory(
       "issue",
       actorId,
     );
-    const onHand = await getOnHandWith(
-      tx,
-      orgId,
-      input.itemId,
-      input.stockLocationId,
-      { lotId: input.lotId, serialId: input.serialId, subsidiaryId: input.subsidiaryId,sourceReceiptMovementId:input.sourceReceiptMovementId },
-    );
+    const onHand = await getOnHandWith(tx, orgId, input.itemId, input.stockLocationId, {
+      lotId: input.lotId,
+      serialId: input.serialId,
+      subsidiaryId: input.subsidiaryId,
+      sourceReceiptMovementId: input.sourceReceiptMovementId,
+    });
     const shortage =
-      toUnits(input.quantity) -
-      (toUnits(onHand.quantity) > 0n ? toUnits(onHand.quantity) : 0n);
+      toUnits(input.quantity) - (toUnits(onHand.quantity) > 0n ? toUnits(onHand.quantity) : 0n);
     if (shortage > 0n) {
-      if (input.inspectionScrapId || input.sourceReceiptMovementId) throw new InventoryError("The originating receipt no longer has the full disposition quantity; reconcile its consumption or transfer before disposing it.");
+      if (input.inspectionScrapId || input.sourceReceiptMovementId)
+        throw new InventoryError(
+          "The originating receipt no longer has the full disposition quantity; reconcile its consumption or transfer before disposing it.",
+        );
       // A shortfall while another legal entity's layers sit in the same
       // position is a cross-entity attempt, not a stockout — refuse it as
       // one instead of leaking their holdings through availability errors.
@@ -167,10 +202,15 @@ export async function issueInventory(
         input.subsidiaryId,
       );
       if (!profile.allowNegativeInventory || profile.tracking !== "none") {
-        const where = (await tx.execute<{ item: string; location: string | null }>(sql`
+        const where = (
+          await tx.execute<{ item: string; location: string | null }>(
+            sql`
           select coalesce(nullif(btrim(i.code), ''), i.name) as item, l.code as location
             from items i left join stock_locations l on l.org_id = i.org_id and l.id = ${input.stockLocationId}
-           where i.org_id = ${orgId} and i.id = ${input.itemId}`, "objects"))[0];
+           where i.org_id = ${orgId} and i.id = ${input.itemId}`,
+            "objects",
+          )
+        )[0];
         const item = where?.item ?? input.itemId;
         const location = where?.location ? ` at ${where.location}` : "";
         throw new InventoryError(
@@ -181,7 +221,11 @@ export async function issueInventory(
     // Explicitly permitted negative stock is priced provisionally and is not
     // date-gated. Every other issue, including a disposition of one receipt's
     // layers, must be covered by stock on its own date.
-    if (input.sourceReceiptMovementId || !profile.allowNegativeInventory || profile.tracking !== "none") {
+    if (
+      input.sourceReceiptMovementId ||
+      !profile.allowNegativeInventory ||
+      profile.tracking !== "none"
+    ) {
       const backdated = await backdatedIssueShortage(
         tx,
         orgId,
@@ -200,28 +244,25 @@ export async function issueInventory(
     }
     const provisionalUnitCost =
       shortage > 0n
-        ? await resolveProvisionalUnitCost(
-            tx,
-            orgId,
-            profile,
-            input.itemId,
-            input.subsidiaryId,
-          )
+        ? await resolveProvisionalUnitCost(tx, orgId, profile, input.itemId, input.subsidiaryId)
         : onHand.unitCost;
-    const { cost, unitCost, consumptions, shortfallQuantity } =
-      await consumeLayers(
-        tx,
-        orgId,
-        profile,
-        input.itemId,
-        input.stockLocationId,
-        input.quantity,
-        onHand,
-        provisionalUnitCost,
-        { lotId: input.lotId, serialId: input.serialId,sourceReceiptMovementId:input.sourceReceiptMovementId },
-        input.subsidiaryId,
-        actorId,
-      );
+    const { cost, unitCost, consumptions, shortfallQuantity } = await consumeLayers(
+      tx,
+      orgId,
+      profile,
+      input.itemId,
+      input.stockLocationId,
+      input.quantity,
+      onHand,
+      provisionalUnitCost,
+      {
+        lotId: input.lotId,
+        serialId: input.serialId,
+        sourceReceiptMovementId: input.sourceReceiptMovementId,
+      },
+      input.subsidiaryId,
+      actorId,
+    );
 
     const lines: JournalLineInput[] = [
       { accountId: offset, amount: cost, ...locDims, memo: input.memo },
@@ -253,7 +294,8 @@ export async function issueInventory(
     });
 
     const issueQuantity = persistReceiptMoney(input.quantity, "issue quantity");
-    const mv = (await tx.execute<{ id: string }>(sql`
+    const mv = await tx.execute<{ id: string }>(
+      sql`
       insert into inventory_movements
         (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id,
          quantity, unit_cost, total_value,
@@ -263,19 +305,18 @@ export async function issueInventory(
               ${neg(issueQuantity)}, ${unitCost}, ${neg(cost)}, ${input.documentLineId ?? null}, ${entryId},
               ${idempotencyKey},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`, "objects"));
-    const movementId = mv[0]!.id;
-    await recordConsumptions(
-      tx,
-      orgId,
-      input.subsidiaryId,
-      consumptions,
-      movementId,
-      actorId,
+      returning id`,
+      "objects",
     );
+    const movementId = mv[0]!.id;
+    await recordConsumptions(tx, orgId, input.subsidiaryId, consumptions, movementId, actorId);
     if (input.inspectionScrapId) {
-      const stamped=await tx.execute(sql`update inventory_inspections set scrap_movement_id=${movementId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${input.inspectionScrapId} and status='fail' and disposition is null and scrap_movement_id is null returning id`, "objects");
-      if (stamped.length!==1) throw new InventoryError("The inspection scrap effect was not recorded.");
+      const stamped = await tx.execute(
+        sql`update inventory_inspections set scrap_movement_id=${movementId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${input.inspectionScrapId} and status='fail' and disposition is null and scrap_movement_id is null returning id`,
+        "objects",
+      );
+      if (stamped.length !== 1)
+        throw new InventoryError("The inspection scrap effect was not recorded.");
     }
     if (!isZero(shortfallQuantity)) {
       await tx.execute(sql`
@@ -286,7 +327,7 @@ export async function issueInventory(
                 ${shortfallQuantity},${provisionalUnitCost},${profile.negativeCostBasis},${offset},${actorId},${actorId})
       `);
     }
-    if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {
+    if (profile.tracking === "serial" || profile.tracking === "lot_serial") {
       await applySerialIssue(tx, orgId, actorId, input, movementId);
     }
     return { movementId, entryId, value: neg(cost) };

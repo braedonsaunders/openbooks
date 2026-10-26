@@ -1,9 +1,8 @@
-import { redirect } from 'next/navigation'
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { loadSetupEntity, setupEntitySpec } from './view'
+import { redirect } from "next/navigation";
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { loadSetupEntity, setupEntitySpec } from "./view";
 
-export const dynamic = 'force-dynamic'
-
+export const dynamic = "force-dynamic";
 
 /** Distinct ref sources declared anywhere in this entity's columns or fields. */
 
@@ -11,31 +10,34 @@ export const dynamic = 'force-dynamic'
 
 /** Options for a setup-entity ref source (id + code/name label). */
 
-
-
 /** Render one table cell for a column, given the raw (snake-keyed) row. */
 
 export default async function SetupEntityPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ entity: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  params: Promise<{ entity: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const { entity: entityKey } = await params
-  if (entityKey === 'benefit-plans' || entityKey === 'benefit-programs') {
-    const params = new URLSearchParams({ view: 'programs' })
-    const row = typeof sp.row === 'string' ? sp.row : undefined
-    if (row) params.set(entityKey === 'benefit-plans' ? 'plan' : 'program', row)
-    redirect(`/hrm/benefits?${params}`)
+  const sp = await searchParams;
+  const { entity: entityKey } = await params;
+  if (entityKey === "benefit-plans" || entityKey === "benefit-programs") {
+    const params = new URLSearchParams({ view: "programs" });
+    const row = typeof sp.row === "string" ? sp.row : undefined;
+    if (row) params.set(entityKey === "benefit-plans" ? "plan" : "program", row);
+    redirect(`/hrm/benefits?${params}`);
   }
-  const benefitPolicies: Record<string, string> = { 'entitlement-plans': 'entitlements', 'payroll-vacation-terms': 'vacation', 'payroll-service-credits': 'service' }
+  const benefitPolicies: Record<string, string> = {
+    "entitlement-plans": "entitlements",
+    "payroll-vacation-terms": "vacation",
+    "payroll-service-credits": "service",
+  };
   if (benefitPolicies[entityKey]) {
-    const query = new URLSearchParams({ view: 'policies', policy: benefitPolicies[entityKey]! })
-    for (const [key, value] of Object.entries(sp)) if (typeof value === 'string' && !['view', 'policy'].includes(key)) query.set(key, value)
-    redirect(`/hrm/benefits?${query}`)
+    const query = new URLSearchParams({ view: "policies", policy: benefitPolicies[entityKey]! });
+    for (const [key, value] of Object.entries(sp))
+      if (typeof value === "string" && !["view", "policy"].includes(key)) query.set(key, value);
+    redirect(`/hrm/benefits?${query}`);
   }
-  const data = await loadSetupEntity(entityKey, sp)
-  return <ModuleView spec={setupEntitySpec(data)} data={data} searchParams={sp} trusted />
+  const data = await loadSetupEntity(entityKey, sp);
+  return <ModuleView spec={setupEntitySpec(data)} data={data} searchParams={sp} trusted />;
 }

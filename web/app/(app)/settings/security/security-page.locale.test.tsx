@@ -1,38 +1,53 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { stubModules } = await import('../../../../testing/stub-modules')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { stubModules } = await import("../../../../testing/stub-modules");
 stubModules({
-  navigation: 'export function useRouter(){return {push(){}}}export function usePathname(){return "/settings/security"}export function useSearchParams(){return new URLSearchParams()}',
+  navigation:
+    'export function useRouter(){return {push(){}}}export function usePathname(){return "/settings/security"}export function useSearchParams(){return new URLSearchParams()}',
   intl: false,
   authz: false,
   features: false,
-})
-const { renderToStaticMarkup } = await import('react-dom/server')
-const { NextIntlClientProvider } = await import('next-intl')
-const frenchMessages = (await import('../../../../messages/fr')).default
-const [{ SecurityPageContent }, { jsonRequest, securityErrorMessage }] = await Promise.all([import('./sections'), import('./security-panel')])
+});
+const { renderToStaticMarkup } = await import("react-dom/server");
+const { NextIntlClientProvider } = await import("next-intl");
+const frenchMessages = (await import("../../../../messages/fr")).default;
+const [{ SecurityPageContent }, { jsonRequest, securityErrorMessage }] = await Promise.all([
+  import("./sections"),
+  import("./security-panel"),
+]);
 
-test('security settings page renders in French and uses localized request failure copy', async () => {
+test("security settings page renders in French and uses localized request failure copy", async () => {
   const markup = renderToStaticMarkup(
     <NextIntlClientProvider locale="fr" messages={frenchMessages} timeZone="UTC">
       <SecurityPageContent />
     </NextIntlClientProvider>,
-  )
+  );
 
-  assert.match(markup, /Sécurité de connexion/)
-  assert.match(markup, /Authentification multifacteur/)
+  assert.match(markup, /Sécurité de connexion/);
+  assert.match(markup, /Authentification multifacteur/);
   // Pre-load the panel asserts no MFA state: the setup action appears only
   // after the fetch resolves, so a slow load never reads as MFA-disabled.
-  assert.match(markup, /Chargement…/)
-  assert.match(markup, /Sessions actives/)
-  assert.match(markup, /Révoquez une session de navigateur sans changer votre mot de passe/)
-  assert.doesNotMatch(markup, /Sign-in security|Authenticator MFA|Set up authenticator|Active sessions|Revoke a browser session/)
-  assert.doesNotMatch(markup, /Configurer l’authentificateur/)
-  globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
-  await assert.rejects(jsonRequest('/api/auth/mfa', {}, frenchMessages.shell.securityPage.requestFailed), { message: frenchMessages.shell.securityPage.requestFailed })
-  assert.equal(securityErrorMessage(new Error('MFA setup is already pending in another session.'), 'generic'), 'MFA setup is already pending in another session.')
-  assert.equal(securityErrorMessage(new Error(''), 'generic'), 'generic')
-})
+  assert.match(markup, /Chargement…/);
+  assert.match(markup, /Sessions actives/);
+  assert.match(markup, /Révoquez une session de navigateur sans changer votre mot de passe/);
+  assert.doesNotMatch(
+    markup,
+    /Sign-in security|Authenticator MFA|Set up authenticator|Active sessions|Revoke a browser session/,
+  );
+  assert.doesNotMatch(markup, /Configurer l’authentificateur/);
+  globalThis.fetch = async () => {
+    throw new TypeError("Failed to fetch");
+  };
+  await assert.rejects(
+    jsonRequest("/api/auth/mfa", {}, frenchMessages.shell.securityPage.requestFailed),
+    { message: frenchMessages.shell.securityPage.requestFailed },
+  );
+  assert.equal(
+    securityErrorMessage(new Error("MFA setup is already pending in another session."), "generic"),
+    "MFA setup is already pending in another session.",
+  );
+  assert.equal(securityErrorMessage(new Error(""), "generic"), "generic");
+});

@@ -44,10 +44,17 @@ export async function ensureAiRailsSettings(exec: SqlExecutor, orgId: string): P
 /** Provision configuration only at its authorized Setup boundary, retaining existing values. */
 export async function ensureAiRailsSettingsForOrg(orgId: string, actorId: string): Promise<void> {
   await withOrgTransaction(orgId, async () => {
-    const allowed = await lockActorCommandAuthority(db, orgId, actorId, null, 'admin.setup.manage');
-    if (allowed !== null) throw new AiRailsError('ai_forbidden', 'Organization workforce policy requires unrestricted subsidiary access');
-    if (!await lockAndCheckOrgFeature(db, orgId, 'aiGovernanceLedger')) {
-      throw new AiRailsError('ai_feature_off', 'Enable AI governance ledger in Company Settings → Features to configure workforce review policy');
+    const allowed = await lockActorCommandAuthority(db, orgId, actorId, null, "admin.setup.manage");
+    if (allowed !== null)
+      throw new AiRailsError(
+        "ai_forbidden",
+        "Organization workforce policy requires unrestricted subsidiary access",
+      );
+    if (!(await lockAndCheckOrgFeature(db, orgId, "aiGovernanceLedger"))) {
+      throw new AiRailsError(
+        "ai_feature_off",
+        "Enable AI governance ledger in Company Settings → Features to configure workforce review policy",
+      );
     }
     await ensureAiRailsSettings(db, orgId);
   });
@@ -63,13 +70,16 @@ export async function loadAiRailsSettings(
     cohortKey: string;
     biasTerms: string[] | null;
     reviewMonths: number;
-  }>(sql`
+  }>(
+    sql`
     select z_threshold::text as "zThreshold",
            retro_threshold::text as "retroThreshold",
            cohort_key as "cohortKey", bias_terms as "biasTerms",
            review_months as "reviewMonths"
       from ai_rails_settings
-     where org_id = ${orgId}::uuid`, "objects");
+     where org_id = ${orgId}::uuid`,
+    "objects",
+  );
   const row = rows[0];
   if (!row) return { ...DEFAULT_AI_RAILS_SETTINGS };
   const cohort = ["subsidiary", "department", "pay_schedule", "job_level"].includes(row.cohortKey)

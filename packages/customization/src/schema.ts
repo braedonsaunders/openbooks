@@ -125,7 +125,10 @@ const filterOperatorSchema = z.enum([
 const filterClauseSchema = z.object({
   key: fieldKeySchema,
   operator: filterOperatorSchema,
-  value: z.union([z.string().max(500), z.array(z.string().max(500))]).nullable().optional(),
+  value: z
+    .union([z.string().max(500), z.array(z.string().max(500))])
+    .nullable()
+    .optional(),
   to: z.string().max(500).nullable().optional(),
 });
 
@@ -140,7 +143,7 @@ const listViewConfigSchema = z.object({
   schemaVersion: z.literal(1),
   recordType: recordTypeSchema,
   columns: z.array(listColumnPlacementSchema).max(100),
-  presentation: z.enum(["list","board"]).nullable().optional(),
+  presentation: z.enum(["list", "board"]).nullable().optional(),
   filters: z.array(filterClauseSchema).max(50),
   sort: z
     .object({ column: z.string().max(60), dir: z.enum(["asc", "desc"]) })
@@ -154,8 +157,8 @@ const listViewConfigSchema = z.object({
 /* ------------------------------------------------------------------ */
 
 export interface LintIssue {
-  path: string
-  message: string
+  path: string;
+  message: string;
 }
 
 /** Shared lock lookup for every customization surface that edits a built-in entry. */
@@ -163,7 +166,7 @@ export function isLockedCustomizationEntry(
   entries: readonly { key: string; locked?: boolean }[] | undefined,
   key: string,
 ): boolean {
-  return entries?.find((entry) => entry.key === key)?.locked === true
+  return entries?.find((entry) => entry.key === key)?.locked === true;
 }
 
 /**
@@ -173,15 +176,15 @@ export function isLockedCustomizationEntry(
  * refuses an untouched layout as "changed".
  */
 function stablePlacement(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stablePlacement)
+  if (Array.isArray(value)) return value.map(stablePlacement);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.keys(value as Record<string, unknown>)
         .sort()
         .map((key) => [key, stablePlacement((value as Record<string, unknown>)[key])]),
-    )
+    );
   }
-  return value
+  return value;
 }
 
 function sameLockedPlacements<T extends { key: string }>(
@@ -189,15 +192,20 @@ function sameLockedPlacements<T extends { key: string }>(
   after: readonly T[],
   isLocked: (key: string) => boolean,
 ): boolean {
-  const beforeLocked = before.filter((entry) => isLocked(entry.key))
-  const afterLocked = after.filter((entry) => isLocked(entry.key))
-  return JSON.stringify(stablePlacement(beforeLocked)) === JSON.stringify(stablePlacement(afterLocked))
+  const beforeLocked = before.filter((entry) => isLocked(entry.key));
+  const afterLocked = after.filter((entry) => isLocked(entry.key));
+  return (
+    JSON.stringify(stablePlacement(beforeLocked)) === JSON.stringify(stablePlacement(afterLocked))
+  );
 }
 
 /** Whether a proposed form edit changes any locked built-in field placement. */
-export function lockedFormEntriesUnchanged(before: FormLayoutConfig, after: FormLayoutConfig): boolean {
-  if (before.recordType !== after.recordType) return false
-  const meta = RECORD_TYPE_BY_KEY[before.recordType]
+export function lockedFormEntriesUnchanged(
+  before: FormLayoutConfig,
+  after: FormLayoutConfig,
+): boolean {
+  if (before.recordType !== after.recordType) return false;
+  const meta = RECORD_TYPE_BY_KEY[before.recordType];
   // Compare locked fields as (group, field) pairs, not per-group arrays: adding
   // or removing a group that holds no locked fields must stay allowed, while a
   // locked field changing groups (including via group removal, which folds the
@@ -207,16 +215,23 @@ export function lockedFormEntriesUnchanged(before: FormLayoutConfig, after: Form
       group.fields
         .filter((field) => isLockedCustomizationEntry(meta?.headerFields, field.key))
         .map((field) => ({ group: group.id, field })),
+    );
+  return (
+    JSON.stringify(stablePlacement(lockedHeader(before))) ===
+      JSON.stringify(stablePlacement(lockedHeader(after))) &&
+    sameLockedPlacements(before.lines.columns, after.lines.columns, (key) =>
+      isLockedCustomizationEntry(meta?.lineFields, key),
     )
-  return JSON.stringify(stablePlacement(lockedHeader(before))) === JSON.stringify(stablePlacement(lockedHeader(after)))
-    && sameLockedPlacements(before.lines.columns, after.lines.columns, (key) => isLockedCustomizationEntry(meta?.lineFields, key))
+  );
 }
 
 /** Whether a proposed list edit changes any locked built-in column placement. */
 export function lockedListEntriesUnchanged(before: ListViewConfig, after: ListViewConfig): boolean {
-  if (before.recordType !== after.recordType) return false
-  const meta = RECORD_TYPE_BY_KEY[before.recordType]
-  return sameLockedPlacements(before.columns, after.columns, (key) => isLockedCustomizationEntry(meta?.listColumns, key))
+  if (before.recordType !== after.recordType) return false;
+  const meta = RECORD_TYPE_BY_KEY[before.recordType];
+  return sameLockedPlacements(before.columns, after.columns, (key) =>
+    isLockedCustomizationEntry(meta?.listColumns, key),
+  );
 }
 
 /**
@@ -227,86 +242,87 @@ export function lockedListEntriesUnchanged(before: ListViewConfig, after: ListVi
  * API layer (the def set is per-org + dynamic).
  */
 export function lintFormLayout(config: FormLayoutConfig): LintIssue[] {
-  const issues: LintIssue[] = []
-  const meta = RECORD_TYPE_BY_KEY[config.recordType]
+  const issues: LintIssue[] = [];
+  const meta = RECORD_TYPE_BY_KEY[config.recordType];
   if (!meta) {
-    issues.push({ path: "recordType", message: "unknown record type" })
-    return issues
+    issues.push({ path: "recordType", message: "unknown record type" });
+    return issues;
   }
 
   // Header: every built-in field must appear exactly once across groups.
-  const seenHeader = new Set<string>()
+  const seenHeader = new Set<string>();
   config.header.groups.forEach((g, gi) => {
-    const within = new Set<string>()
+    const within = new Set<string>();
     g.fields.forEach((f, fi) => {
-      const path = `header.groups[${gi}].fields[${fi}]`
-      if (within.has(f.key)) issues.push({ path, message: `duplicate field "${f.key}"` })
-      within.add(f.key)
+      const path = `header.groups[${gi}].fields[${fi}]`;
+      if (within.has(f.key)) issues.push({ path, message: `duplicate field "${f.key}"` });
+      within.add(f.key);
       if (seenHeader.has(f.key) && !isCustomFieldKey(f.key))
-        issues.push({ path, message: `built-in field "${f.key}" appears in multiple groups` })
+        issues.push({ path, message: `built-in field "${f.key}" appears in multiple groups` });
       if (isCustomFieldKey(f.key)) {
-        seenHeader.add(f.key)
-        return
+        seenHeader.add(f.key);
+        return;
       }
-      const fm = meta.headerFields.find((x) => x.key === f.key)
+      const fm = meta.headerFields.find((x) => x.key === f.key);
       if (!fm) {
-        issues.push({ path, message: `unknown header field "${f.key}"` })
-        return
+        issues.push({ path, message: `unknown header field "${f.key}"` });
+        return;
       }
       if (fm.locked && !f.visible)
-        issues.push({ path, message: `"${f.key}" is locked and cannot be hidden` })
+        issues.push({ path, message: `"${f.key}" is locked and cannot be hidden` });
       if (f.required && !fm.required && !fm.requiredOverridable)
-        issues.push({ path, message: `"${f.key}" cannot be marked required` })
+        issues.push({ path, message: `"${f.key}" cannot be marked required` });
       if (f.labelOverride && fm.locked)
-        issues.push({ path, message: `"${f.key}" is locked and cannot be renamed` })
-      seenHeader.add(f.key)
-    })
-  })
+        issues.push({ path, message: `"${f.key}" is locked and cannot be renamed` });
+      seenHeader.add(f.key);
+    });
+  });
   // Every locked header field must be present.
   for (const fm of meta.headerFields) {
     if (fm.locked && !seenHeader.has(fm.key))
-      issues.push({ path: "header", message: `locked field "${fm.key}" is missing` })
+      issues.push({ path: "header", message: `locked field "${fm.key}" is missing` });
   }
 
   // Lines: every built-in line field must appear exactly once; locked visible.
-  const seenLine = new Set<string>()
+  const seenLine = new Set<string>();
   config.lines.columns.forEach((c, ci) => {
-    const path = `lines.columns[${ci}]`
+    const path = `lines.columns[${ci}]`;
     if (seenLine.has(c.key) && !isCustomFieldKey(c.key))
-      issues.push({ path, message: `duplicate line column "${c.key}"` })
+      issues.push({ path, message: `duplicate line column "${c.key}"` });
     if (isCustomFieldKey(c.key)) {
-      seenLine.add(c.key)
-      return
+      seenLine.add(c.key);
+      return;
     }
-    const fm = meta.lineFields.find((x) => x.key === c.key)
+    const fm = meta.lineFields.find((x) => x.key === c.key);
     if (!fm) {
-      issues.push({ path, message: `unknown line column "${c.key}"` })
-      return
+      issues.push({ path, message: `unknown line column "${c.key}"` });
+      return;
     }
     if (fm.locked && !c.visible)
-      issues.push({ path, message: `"${c.key}" is locked and cannot be hidden` })
+      issues.push({ path, message: `"${c.key}" is locked and cannot be hidden` });
     if (c.labelOverride && fm.locked)
-      issues.push({ path, message: `"${c.key}" is locked and cannot be renamed` })
-    seenLine.add(c.key)
-  })
+      issues.push({ path, message: `"${c.key}" is locked and cannot be renamed` });
+    seenLine.add(c.key);
+  });
   for (const fm of meta.lineFields) {
     if (fm.locked && !seenLine.has(fm.key))
-      issues.push({ path: "lines", message: `locked line column "${fm.key}" is missing` })
+      issues.push({ path: "lines", message: `locked line column "${fm.key}" is missing` });
   }
 
-  const seenActions = new Set<string>()
+  const seenActions = new Set<string>();
   config.actions.forEach((action, ai) => {
     if (seenActions.has(action.key))
-      issues.push({ path: `actions[${ai}]`, message: `duplicate action "${action.key}"` })
-    seenActions.add(action.key)
-  })
+      issues.push({ path: `actions[${ai}]`, message: `duplicate action "${action.key}"` });
+    seenActions.add(action.key);
+  });
   for (const key of FORM_ACTION_KEYS) {
-    if (!seenActions.has(key)) issues.push({ path: "actions", message: `action "${key}" is missing` })
+    if (!seenActions.has(key))
+      issues.push({ path: "actions", message: `action "${key}" is missing` });
   }
 
-  issues.push(...lintFormTabs(config))
+  issues.push(...lintFormTabs(config));
 
-  return issues
+  return issues;
 }
 
 /**
@@ -322,18 +338,20 @@ const CUSTOM_FIELD_FILTER_OPERATORS: readonly FilterOperator[] = [
   "contains",
   "is_set",
   "is_not_set",
-]
+];
 
 function filterHasValue(clause: FilterClause): boolean {
-  return Array.isArray(clause.value) ? clause.value.length > 0 : clause.value != null && clause.value !== ""
+  return Array.isArray(clause.value)
+    ? clause.value.length > 0
+    : clause.value != null && clause.value !== "";
 }
 
 function lintFilterValuePresence(issues: LintIssue[], path: string, clause: FilterClause): void {
-  const needsValue = !["is_set", "is_not_set"].includes(clause.operator)
+  const needsValue = !["is_set", "is_not_set"].includes(clause.operator);
   if (needsValue && !filterHasValue(clause))
-    issues.push({ path, message: `filter "${clause.key}" needs a value` })
+    issues.push({ path, message: `filter "${clause.key}" needs a value` });
   if (clause.operator === "between" && (clause.to == null || clause.to === ""))
-    issues.push({ path, message: `"between" needs an upper bound (to)` })
+    issues.push({ path, message: `"between" needs an upper bound (to)` });
 }
 
 /**
@@ -346,76 +364,78 @@ function lintFilterValuePresence(issues: LintIssue[], path: string, clause: Filt
  * clause. The list-views API only calls parseListView; this is the authority.
  */
 export function lintListView(config: ListViewConfig): LintIssue[] {
-  const issues: LintIssue[] = []
-  const meta = RECORD_TYPE_BY_KEY[config.recordType]
+  const issues: LintIssue[] = [];
+  const meta = RECORD_TYPE_BY_KEY[config.recordType];
   if (!meta) {
-    issues.push({ path: "recordType", message: "unknown record type" })
-    return issues
+    issues.push({ path: "recordType", message: "unknown record type" });
+    return issues;
   }
 
   // Locked columns must be present.
-  const seenCol = new Set<string>()
+  const seenCol = new Set<string>();
   config.columns.forEach((c, ci) => {
-    const path = `columns[${ci}]`
+    const path = `columns[${ci}]`;
     if (seenCol.has(c.key) && !isCustomFieldKey(c.key))
-      issues.push({ path, message: `duplicate column "${c.key}"` })
+      issues.push({ path, message: `duplicate column "${c.key}"` });
     if (isCustomFieldKey(c.key)) {
-      seenCol.add(c.key)
-      return
+      seenCol.add(c.key);
+      return;
     }
-    const cm = listColumnMeta(config.recordType, c.key)
+    const cm = listColumnMeta(config.recordType, c.key);
     if (!cm) {
-      issues.push({ path, message: `unknown column "${c.key}"` })
-      return
+      issues.push({ path, message: `unknown column "${c.key}"` });
+      return;
     }
     if (cm.locked && !c.visible)
-      issues.push({ path, message: `"${c.key}" is locked and cannot be hidden` })
-    seenCol.add(c.key)
-  })
+      issues.push({ path, message: `"${c.key}" is locked and cannot be hidden` });
+    seenCol.add(c.key);
+  });
   for (const cm of meta.listColumns) {
     if (cm.locked && !seenCol.has(cm.key))
-      issues.push({ path: "columns", message: `locked column "${cm.key}" is missing` })
+      issues.push({ path: "columns", message: `locked column "${cm.key}" is missing` });
   }
 
   // Filters: known key, allowed operator, value presence.
   config.filters.forEach((f, fi) => {
-    const path = `filters[${fi}]`
+    const path = `filters[${fi}]`;
     if (isCustomFieldKey(f.key)) {
       if (!CUSTOM_FIELD_FILTER_OPERATORS.includes(f.operator)) {
         issues.push({
           path,
           message: `operator "${f.operator}" not allowed for custom field "${f.key}"`,
-        })
-        return
+        });
+        return;
       }
-      lintFilterValuePresence(issues, path, f)
-      return
+      lintFilterValuePresence(issues, path, f);
+      return;
     }
-    const fm = listFilterMeta(config.recordType, f.key)
+    const fm = listFilterMeta(config.recordType, f.key);
     if (!fm) {
-      issues.push({ path, message: `unknown filter "${f.key}"` })
-      return
+      issues.push({ path, message: `unknown filter "${f.key}"` });
+      return;
     }
     if (!fm.operators.includes(f.operator))
-      issues.push({ path, message: `operator "${f.operator}" not allowed for "${f.key}"` })
-    lintFilterValuePresence(issues, path, f)
+      issues.push({ path, message: `operator "${f.operator}" not allowed for "${f.key}"` });
+    lintFilterValuePresence(issues, path, f);
     // option-bound filters: value must be a known option.
     if (fm.options && fm.options.length && f.operator !== "is_set" && f.operator !== "is_not_set") {
-      const allowed = new Set(fm.options.map((o) => o.value))
-      const vals = Array.isArray(f.value) ? f.value : f.value != null ? [String(f.value)] : []
-      for (const v of vals) if (!allowed.has(v)) issues.push({ path, message: `"${v}" is not a valid option for "${f.key}"` })
+      const allowed = new Set(fm.options.map((o) => o.value));
+      const vals = Array.isArray(f.value) ? f.value : f.value != null ? [String(f.value)] : [];
+      for (const v of vals)
+        if (!allowed.has(v))
+          issues.push({ path, message: `"${v}" is not a valid option for "${f.key}"` });
     }
-  })
+  });
 
   // Sort column must be a known sortable built-in (custom-field sort is not
   // supported — they live in jsonb and aren't indexed for sort).
   if (config.sort) {
-    const cm = listColumnMeta(config.recordType, config.sort.column)
+    const cm = listColumnMeta(config.recordType, config.sort.column);
     if (!cm || !cm.sortable || isCustomFieldKey(config.sort.column))
-      issues.push({ path: "sort", message: `"${config.sort.column}" is not sortable` })
+      issues.push({ path: "sort", message: `"${config.sort.column}" is not sortable` });
   }
 
-  return issues
+  return issues;
 }
 
 /* ------------------------------------------------------------------ */
@@ -426,7 +446,7 @@ export function lintListView(config: ListViewConfig): LintIssue[] {
 const VENDOR_BILL_HEADER_SPAN: Record<string, number> = {
   party_id: 2,
   memo: 3,
-}
+};
 
 /** Per-record-type header col-span defaults so a fresh baseline reads well.
  *  Falls back to VENDOR_BILL_HEADER_SPAN for transaction kinds. */
@@ -519,7 +539,7 @@ const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
     ship_to_address: 2,
     memo: 4,
   },
-}
+};
 
 /**
  * The system-default form layout for a record type — the form as it renders
@@ -529,9 +549,9 @@ const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
  * dynamic per org).
  */
 export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
-  const meta = RECORD_TYPE_BY_KEY[recordType]
-  if (!meta) throw new Error(`unknown record type: ${recordType}`)
-  const spanMap = HEADER_SPAN_BY_TYPE[recordType] ?? VENDOR_BILL_HEADER_SPAN
+  const meta = RECORD_TYPE_BY_KEY[recordType];
+  if (!meta) throw new Error(`unknown record type: ${recordType}`);
+  const spanMap = HEADER_SPAN_BY_TYPE[recordType] ?? VENDOR_BILL_HEADER_SPAN;
   return {
     schemaVersion: 1,
     recordType,
@@ -575,7 +595,7 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
           })),
         }
       : {}),
-  }
+  };
 }
 
 function resolveRegisteredSubtabs(
@@ -583,14 +603,14 @@ function resolveRegisteredSubtabs(
   registered: FormTabMeta,
 ): FormTabPlacement {
   if (!registered.subtabs?.length) {
-    const withoutSubtabs = { ...placement }
-    delete withoutSubtabs.subtabs
-    return withoutSubtabs
+    const withoutSubtabs = { ...placement };
+    delete withoutSubtabs.subtabs;
+    return withoutSubtabs;
   }
 
-  const registeredKeys = new Set(registered.subtabs.map((subtab) => subtab.key))
-  const placed = (placement.subtabs ?? []).filter((subtab) => registeredKeys.has(subtab.key))
-  const placedKeys = new Set(placed.map((subtab) => subtab.key))
+  const registeredKeys = new Set(registered.subtabs.map((subtab) => subtab.key));
+  const placed = (placement.subtabs ?? []).filter((subtab) => registeredKeys.has(subtab.key));
+  const placedKeys = new Set(placed.map((subtab) => subtab.key));
   return {
     ...placement,
     subtabs: [
@@ -599,7 +619,7 @@ function resolveRegisteredSubtabs(
         .filter((subtab) => !placedKeys.has(subtab.key))
         .map<FormTabPlacement>((subtab) => ({ key: subtab.key, visible: true })),
     ],
-  }
+  };
 }
 
 /**
@@ -611,35 +631,35 @@ function resolveRegisteredSubtabs(
  * are dropped; author-created tabs are always kept.
  */
 export function resolveFormTabs(layout: FormLayoutConfig): FormTabPlacement[] {
-  const meta = RECORD_TYPE_BY_KEY[layout.recordType]
-  const registered = meta?.tabs ?? []
-  if (registered.length === 0 && !layout.tabs?.length) return []
+  const meta = RECORD_TYPE_BY_KEY[layout.recordType];
+  const registered = meta?.tabs ?? [];
+  if (registered.length === 0 && !layout.tabs?.length) return [];
 
-  const registeredKeys = new Set(registered.map((tab) => tab.key))
+  const registeredKeys = new Set(registered.map((tab) => tab.key));
   const placed = (layout.tabs ?? []).filter(
     (tab) => registeredKeys.has(tab.key) || isCustomTabKey(tab.key),
-  )
-  const placedKeys = new Set(placed.map((tab) => tab.key))
+  );
+  const placedKeys = new Set(placed.map((tab) => tab.key));
 
   const appended = registered
     .filter((tab) => !placedKeys.has(tab.key) && !tab.locked)
-    .map<FormTabPlacement>((tab) => ({ key: tab.key, visible: true }))
+    .map<FormTabPlacement>((tab) => ({ key: tab.key, visible: true }));
 
-  const registeredByKey = new Map(registered.map((tab) => [tab.key, tab]))
+  const registeredByKey = new Map(registered.map((tab) => [tab.key, tab]));
   const resolved = [...placed, ...appended].map((placement) => {
-    const tab = registeredByKey.get(placement.key)
-    return tab ? resolveRegisteredSubtabs(placement, tab) : placement
-  })
+    const tab = registeredByKey.get(placement.key);
+    return tab ? resolveRegisteredSubtabs(placement, tab) : placement;
+  });
   // A locked tab can never be hidden or ordered away — a record must always be
   // able to show itself. One a layout has dropped comes back at the front,
   // where the record's own fields belong.
   for (const tab of registered) {
-    if (!tab.locked) continue
-    const existing = resolved.find((item) => item.key === tab.key)
-    if (existing) existing.visible = true
-    else resolved.unshift({ key: tab.key, visible: true })
+    if (!tab.locked) continue;
+    const existing = resolved.find((item) => item.key === tab.key);
+    if (existing) existing.visible = true;
+    else resolved.unshift({ key: tab.key, visible: true });
   }
-  return resolved
+  return resolved;
 }
 
 /**
@@ -651,17 +671,22 @@ export function resolveFormTabs(layout: FormLayoutConfig): FormTabPlacement[] {
  * forms on an obsolete shape.
  */
 export function mergeRegisteredFieldsIntoLayout(layout: FormLayoutConfig): FormLayoutConfig {
-  const meta = RECORD_TYPE_BY_KEY[layout.recordType]
-  if (!meta) return layout
+  const meta = RECORD_TYPE_BY_KEY[layout.recordType];
+  if (!meta) return layout;
 
-  const defaults = defaultFormLayout(layout.recordType)
-  const defaultHeader = new Map(defaults.header.groups.flatMap((group) => group.fields).map((field) => [field.key, field]))
-  const placedHeader = new Set(layout.header.groups.flatMap((group) => group.fields).map((field) => field.key))
-  if (layout.header.groups.length === 0) layout.header.groups.push({ id: "primary", label: null, fields: [] })
+  const defaults = defaultFormLayout(layout.recordType);
+  const defaultHeader = new Map(
+    defaults.header.groups.flatMap((group) => group.fields).map((field) => [field.key, field]),
+  );
+  const placedHeader = new Set(
+    layout.header.groups.flatMap((group) => group.fields).map((field) => field.key),
+  );
+  if (layout.header.groups.length === 0)
+    layout.header.groups.push({ id: "primary", label: null, fields: [] });
 
   for (let registryIndex = 0; registryIndex < meta.headerFields.length; registryIndex++) {
-    const fieldMeta = meta.headerFields[registryIndex]!
-    if (placedHeader.has(fieldMeta.key)) continue
+    const fieldMeta = meta.headerFields[registryIndex]!;
+    if (placedHeader.has(fieldMeta.key)) continue;
 
     const placement = defaultHeader.get(fieldMeta.key) ?? {
       key: fieldMeta.key,
@@ -669,67 +694,80 @@ export function mergeRegisteredFieldsIntoLayout(layout: FormLayoutConfig): FormL
       required: fieldMeta.required ? true : null,
       labelOverride: null,
       colSpan: null,
-    }
-    let targetGroup = layout.header.groups[0]!
-    let insertAt = targetGroup.fields.length
+    };
+    let targetGroup = layout.header.groups[0]!;
+    let insertAt = targetGroup.fields.length;
 
     for (let previousIndex = registryIndex - 1; previousIndex >= 0; previousIndex--) {
-      const previousKey = meta.headerFields[previousIndex]!.key
-      const group = layout.header.groups.find((candidate) => candidate.fields.some((field) => field.key === previousKey))
-      if (!group) continue
-      targetGroup = group
-      insertAt = group.fields.findIndex((field) => field.key === previousKey) + 1
-      break
+      const previousKey = meta.headerFields[previousIndex]!.key;
+      const group = layout.header.groups.find((candidate) =>
+        candidate.fields.some((field) => field.key === previousKey),
+      );
+      if (!group) continue;
+      targetGroup = group;
+      insertAt = group.fields.findIndex((field) => field.key === previousKey) + 1;
+      break;
     }
 
-    targetGroup.fields.splice(insertAt, 0, { ...placement })
-    placedHeader.add(fieldMeta.key)
+    targetGroup.fields.splice(insertAt, 0, { ...placement });
+    placedHeader.add(fieldMeta.key);
   }
 
-  const placedLines = new Set(layout.lines.columns.map((column) => column.key))
-  const defaultLines = new Map(defaults.lines.columns.map((column) => [column.key, column]))
+  const placedLines = new Set(layout.lines.columns.map((column) => column.key));
+  const defaultLines = new Map(defaults.lines.columns.map((column) => [column.key, column]));
   for (const fieldMeta of meta.lineFields) {
-    if (placedLines.has(fieldMeta.key)) continue
+    if (placedLines.has(fieldMeta.key)) continue;
     const placement = defaultLines.get(fieldMeta.key) ?? {
       key: fieldMeta.key,
       visible: true,
       width: null,
       labelOverride: null,
-    }
-    layout.lines.columns.push({ ...placement })
-    placedLines.add(fieldMeta.key)
+    };
+    layout.lines.columns.push({ ...placement });
+    placedLines.add(fieldMeta.key);
   }
 
-  const placedActions = new Set((layout.actions ?? []).map((action) => action.key))
+  const placedActions = new Set((layout.actions ?? []).map((action) => action.key));
   layout.actions = [
     ...(layout.actions ?? []),
     ...defaults.actions.filter((action) => !placedActions.has(action.key)),
-  ]
-  if (meta.tabs?.length) layout.tabs = resolveFormTabs(layout)
-  return layout
+  ];
+  if (meta.tabs?.length) layout.tabs = resolveFormTabs(layout);
+  return layout;
 }
 
 /** The system-default list view: all columns (registry order), no filters. */
 /** Stored lists and their designer share the current catalog's built-in columns. */
-export function registeredListColumns(recordType: string, columns: readonly ListColumnPlacement[]): ListColumnPlacement[] {
-  const registered = new Set(RECORD_TYPE_BY_KEY[recordType]?.listColumns.map(column => column.key) ?? []);
-  return columns.filter(column => isCustomFieldKey(column.key) || registered.has(column.key));
+export function registeredListColumns(
+  recordType: string,
+  columns: readonly ListColumnPlacement[],
+): ListColumnPlacement[] {
+  const registered = new Set(
+    RECORD_TYPE_BY_KEY[recordType]?.listColumns.map((column) => column.key) ?? [],
+  );
+  return columns.filter((column) => isCustomFieldKey(column.key) || registered.has(column.key));
 }
 
-export function defaultListView(recordType: RecordTypeKey, context: ListViewContext = {}): ListViewConfig {
-  const meta = RECORD_TYPE_BY_KEY[recordType]
-  if (!meta) throw new Error(`unknown record type: ${recordType}`)
+export function defaultListView(
+  recordType: RecordTypeKey,
+  context: ListViewContext = {},
+): ListViewConfig {
+  const meta = RECORD_TYPE_BY_KEY[recordType];
+  if (!meta) throw new Error(`unknown record type: ${recordType}`);
   // A record type's declared defaultSort wins; else date-desc (transaction date
   // or created-at); else the first sortable column. Without the declared case,
   // dated aggregates fall back to their first column — e.g. timesheet weeks
   // ordered by employee name, which buries the current week.
   const declared = meta.defaultSort
     ? meta.listColumns.find((c) => c.sortable && c.sortKey === meta.defaultSort!.sortKey)
-    : undefined
+    : undefined;
   const sortable =
     declared ??
-    meta.listColumns.find((c) => c.sortable && (c.sortKey === "date" || c.sortKey === "created" || c.sortKey === "close")) ??
-    meta.listColumns.find((c) => c.sortable)
+    meta.listColumns.find(
+      (c) =>
+        c.sortable && (c.sortKey === "date" || c.sortKey === "created" || c.sortKey === "close"),
+    ) ??
+    meta.listColumns.find((c) => c.sortable);
   return {
     schemaVersion: 1,
     recordType,
@@ -744,12 +782,16 @@ export function defaultListView(recordType: RecordTypeKey, context: ListViewCont
       ? {
           column: sortable.key,
           dir: declared
-            ? declared === sortable ? meta.defaultSort!.dir : "asc"
-            : ["date", "created", "close"].includes(sortable.sortKey ?? "") ? "desc" : "asc",
+            ? declared === sortable
+              ? meta.defaultSort!.dir
+              : "asc"
+            : ["date", "created", "close"].includes(sortable.sortKey ?? "")
+              ? "desc"
+              : "asc",
         }
       : null,
     perPage: DEFAULT_PER_PAGE,
-  }
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -758,86 +800,86 @@ export function defaultListView(recordType: RecordTypeKey, context: ListViewCont
 
 export type ParseResult<T> =
   | { success: true; data: T; issues: LintIssue[] }
-  | { success: false; data?: undefined; issues: LintIssue[] }
+  | { success: false; data?: undefined; issues: LintIssue[] };
 
 /** Cross-field checks for the tab list (called from lintFormLayout). */
 function lintFormTabs(config: FormLayoutConfig): LintIssue[] {
-  const issues: LintIssue[] = []
-  const meta = RECORD_TYPE_BY_KEY[config.recordType]
-  if (!config.tabs?.length) return issues
+  const issues: LintIssue[] = [];
+  const meta = RECORD_TYPE_BY_KEY[config.recordType];
+  if (!config.tabs?.length) return issues;
   if (!meta?.tabs?.length) {
-    issues.push({ path: "tabs", message: "this record type has no customizable tabs" })
-    return issues
+    issues.push({ path: "tabs", message: "this record type has no customizable tabs" });
+    return issues;
   }
 
-  const registered = new Map(meta.tabs.map((tab) => [tab.key, tab]))
-  const groupIds = new Set(config.header.groups.map((group) => group.id))
-  const seen = new Set<string>()
+  const registered = new Map(meta.tabs.map((tab) => [tab.key, tab]));
+  const groupIds = new Set(config.header.groups.map((group) => group.id));
+  const seen = new Set<string>();
 
   config.tabs.forEach((tab, index) => {
     if (seen.has(tab.key)) {
-      issues.push({ path: `tabs.${index}.key`, message: `duplicate tab: ${tab.key}` })
+      issues.push({ path: `tabs.${index}.key`, message: `duplicate tab: ${tab.key}` });
     }
-    seen.add(tab.key)
+    seen.add(tab.key);
 
-    const builtIn = registered.get(tab.key)
+    const builtIn = registered.get(tab.key);
     if (!builtIn && !isCustomTabKey(tab.key)) {
-      issues.push({ path: `tabs.${index}.key`, message: `unknown tab: ${tab.key}` })
-      return
+      issues.push({ path: `tabs.${index}.key`, message: `unknown tab: ${tab.key}` });
+      return;
     }
     if (builtIn?.locked && !tab.visible) {
-      issues.push({ path: `tabs.${index}.visible`, message: `${tab.key} cannot be hidden` })
+      issues.push({ path: `tabs.${index}.visible`, message: `${tab.key} cannot be hidden` });
     }
     if (builtIn && tab.groupIds?.length) {
       issues.push({
         path: `tabs.${index}.groupIds`,
         message: "only custom tabs can host field groups",
-      })
+      });
     }
     if (builtIn?.subtabs?.length) {
-      const registeredSubtabs = new Map(builtIn.subtabs.map((subtab) => [subtab.key, subtab]))
-      const seenSubtabs = new Set<string>()
+      const registeredSubtabs = new Map(builtIn.subtabs.map((subtab) => [subtab.key, subtab]));
+      const seenSubtabs = new Set<string>();
       for (const [subtabIndex, subtab] of (tab.subtabs ?? []).entries()) {
-        const path = `tabs.${index}.subtabs.${subtabIndex}`
+        const path = `tabs.${index}.subtabs.${subtabIndex}`;
         if (seenSubtabs.has(subtab.key)) {
-          issues.push({ path: `${path}.key`, message: `duplicate subtab: ${subtab.key}` })
+          issues.push({ path: `${path}.key`, message: `duplicate subtab: ${subtab.key}` });
         }
-        seenSubtabs.add(subtab.key)
+        seenSubtabs.add(subtab.key);
         if (!registeredSubtabs.has(subtab.key)) {
-          issues.push({ path: `${path}.key`, message: `unknown subtab: ${subtab.key}` })
+          issues.push({ path: `${path}.key`, message: `unknown subtab: ${subtab.key}` });
         }
         if (subtab.groupIds?.length) {
-          issues.push({ path: `${path}.groupIds`, message: "subtabs cannot host field groups" })
+          issues.push({ path: `${path}.groupIds`, message: "subtabs cannot host field groups" });
         }
       }
     } else if (tab.subtabs?.length) {
-      issues.push({ path: `tabs.${index}.subtabs`, message: "this tab has no registered subtabs" })
+      issues.push({ path: `tabs.${index}.subtabs`, message: "this tab has no registered subtabs" });
     }
     for (const groupId of tab.groupIds ?? []) {
       if (!groupIds.has(groupId)) {
-        issues.push({ path: `tabs.${index}.groupIds`, message: `unknown field group: ${groupId}` })
+        issues.push({ path: `tabs.${index}.groupIds`, message: `unknown field group: ${groupId}` });
       }
     }
-  })
+  });
 
   // A group placed on two tabs would render its fields twice, and an edit in
   // one copy would look lost in the other.
-  const assigned = new Map<string, string>()
+  const assigned = new Map<string, string>();
   for (const tab of config.tabs) {
     for (const groupId of tab.groupIds ?? []) {
-      const owner = assigned.get(groupId)
+      const owner = assigned.get(groupId);
       if (owner && owner !== tab.key) {
-        issues.push({ path: "tabs", message: `field group ${groupId} is on more than one tab` })
+        issues.push({ path: "tabs", message: `field group ${groupId} is on more than one tab` });
       }
-      assigned.set(groupId, tab.key)
+      assigned.set(groupId, tab.key);
     }
   }
 
-  return issues
+  return issues;
 }
 
 export function parseFormLayout(input: unknown): ParseResult<FormLayoutConfig> {
-  const parsed = formLayoutConfigSchema.safeParse(input)
+  const parsed = formLayoutConfigSchema.safeParse(input);
   if (!parsed.success) {
     return {
       success: false,
@@ -845,15 +887,15 @@ export function parseFormLayout(input: unknown): ParseResult<FormLayoutConfig> {
         path: i.path.join("."),
         message: i.message,
       })),
-    }
+    };
   }
-  const lint = lintFormLayout(parsed.data)
-  if (lint.length) return { success: false, issues: lint }
-  return { success: true, data: parsed.data, issues: [] }
+  const lint = lintFormLayout(parsed.data);
+  if (lint.length) return { success: false, issues: lint };
+  return { success: true, data: parsed.data, issues: [] };
 }
 
 export function parseListView(input: unknown): ParseResult<ListViewConfig> {
-  const parsed = listViewConfigSchema.safeParse(input)
+  const parsed = listViewConfigSchema.safeParse(input);
   if (!parsed.success) {
     return {
       success: false,
@@ -861,12 +903,19 @@ export function parseListView(input: unknown): ParseResult<ListViewConfig> {
         path: i.path.join("."),
         message: i.message,
       })),
-    }
+    };
   }
-  const lint = lintListView(parsed.data)
-  if (lint.length) return { success: false, issues: lint }
-  return { success: true, data: parsed.data, issues: [] }
+  const lint = lintListView(parsed.data);
+  if (lint.length) return { success: false, issues: lint };
+  return { success: true, data: parsed.data, issues: [] };
 }
 
 /** Is `key` a known built-in field/column/filter for `recordType`? */
-export { isBuiltInField, isBuiltInColumn, isBuiltInFilter, isCustomFieldKey, OPERATORS_BY_KIND, type FilterOperator }
+export {
+  isBuiltInField,
+  isBuiltInColumn,
+  isBuiltInFilter,
+  isCustomFieldKey,
+  OPERATORS_BY_KIND,
+  type FilterOperator,
+};

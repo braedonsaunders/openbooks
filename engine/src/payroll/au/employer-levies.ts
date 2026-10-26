@@ -38,8 +38,8 @@ function rateFraction(rate: string): { numerator: bigint; denominator: bigint } 
   const canonical = canonicalNonNegativeDecimal(rate, Infinity);
   if (canonical === null) {
     throw new PayrollPackError(
-      `AU workers' compensation rate "${rate}" is not a decimal fraction — `
-      + "enter the premium rate from the state insurer's notice (0.027 for 2.7%)",
+      `AU workers' compensation rate "${rate}" is not a decimal fraction — ` +
+        "enter the premium rate from the state insurer's notice (0.027 for 2.7%)",
     );
   }
   const [whole = "0", fraction = ""] = canonical.split(".");
@@ -63,8 +63,8 @@ export function assessAuWorkersComp(
   const premium = rateFraction(rate);
   if (premium.numerator > premium.denominator) {
     throw new PayrollPackError(
-      `AU workers' compensation rate "${rate}" exceeds 1 (100%) — `
-      + "correct the au_workers_comp rate for the state instead of pricing it",
+      `AU workers' compensation rate "${rate}" exceeds 1 (100%) — ` +
+        "correct the au_workers_comp rate for the state instead of pricing it",
     );
   }
   const earnings = toUnits(gross);
@@ -94,8 +94,8 @@ export async function applyAuEmployerLevies(
   const subsidiaryId = ctx.subsidiaryId ?? null;
   if (!subsidiaryId) {
     throw new PayrollPackError(
-      "AU payroll cannot calculate without the paying legal employer — assign the run "
-      + "to its legal employer, then declare the state payroll tax position in Payroll Setup → Employer facts",
+      "AU payroll cannot calculate without the paying legal employer — assign the run " +
+        "to its legal employer, then declare the state payroll tax position in Payroll Setup → Employer facts",
     );
   }
   const position = await resolveStoredEmployerFact({
@@ -108,25 +108,29 @@ export async function applyAuEmployerLevies(
   });
   if (position === "registered_liable") {
     throw new PayrollPackError(
-      "AU payroll cannot price a state-payroll-tax-registered employer's liability — no state "
-      + "payroll tax computation is transcribed (thresholds, grouping and apportionment differ "
-      + "per jurisdiction). Accruing nothing would silently omit the levy.",
+      "AU payroll cannot price a state-payroll-tax-registered employer's liability — no state " +
+        "payroll tax computation is transcribed (thresholds, grouping and apportionment differ " +
+        "per jurisdiction). Accruing nothing would silently omit the levy.",
     );
   }
   const resolution = await resolveStatutoryRates(orgId, AU_PACK_RATES, taxYear);
   const rate = resolution.values("au_workers_comp", { region })?.rate ?? null;
-  const gross = sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
+  const gross = sum(
+    lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount),
+  );
   if (toUnits(gross) <= 0n) return { ...EMPTY_EMPLOYER_LEVY_FACTORS };
   if (rate == null || rate === "") {
     throw new PayrollPackError(
-      `AU workers' compensation refuses: no insurer premium rate is configured for ${region} in ${taxYear} — `
-      + "enter the rate from the employer's state insurer notice, or an explicit 0 for a confirmed nil premium, "
-      + "in Payroll Setup → Statutory rates before calculating",
+      `AU workers' compensation refuses: no insurer premium rate is configured for ${region} in ${taxYear} — ` +
+        "enter the rate from the employer's state insurer notice, or an explicit 0 for a confirmed nil premium, " +
+        "in Payroll Setup → Statutory rates before calculating",
     );
   }
-  const pensionable = sum(lines
-    .filter((line) => line.kind === "earning" && !line.accrualOnly && (line.pensionable ?? true))
-    .map((line) => line.amount));
+  const pensionable = sum(
+    lines
+      .filter((line) => line.kind === "earning" && !line.accrualOnly && (line.pensionable ?? true))
+      .map((line) => line.amount),
+  );
   const { amount, assessable } = assessAuWorkersComp(gross, rate, pensionable);
   pushStatutory("wcb", "employer_contribution", "Workers' compensation", amount, 260);
   return { ...EMPTY_EMPLOYER_LEVY_FACTORS, wcbAmount: amount, wcbAssessable: assessable };

@@ -23,10 +23,7 @@
  * `country: "JP"` typechecks directly and this pack is in the registry,
  * wired to no settings key (null vendor), and installable.
  */
-import type {
-  PayrollCountryPack,
-  PayrollRegionCoverage,
-} from "../pack-types.ts";
+import type { PayrollCountryPack, PayrollRegionCoverage } from "../pack-types.ts";
 import { JP_CERTIFICATES } from "./certificates.ts";
 import { computeJpStatutory, JP_FACTOR_LABELS } from "./compute-statutory.ts";
 import { jpPackFilings } from "./filings.ts";
@@ -66,12 +63,14 @@ export type JpPayrollPack = PayrollCountryPack & {
 const JP_REGIONS: PayrollRegionCoverage = {
   label: "prefecture",
   known: JP_PREFECTURE_CODES,
-  regionNames: Object.fromEntries(JP_PREFECTURES.map((prefecture) => [prefecture.code, prefecture.name])),
+  regionNames: Object.fromEntries(
+    JP_PREFECTURES.map((prefecture) => [prefecture.code, prefecture.name]),
+  ),
   supported: JP_PREFECTURE_CODES,
   unsupportedReason:
-    "income tax withholding for prefecture {region} is not implemented: the JP payroll pack "
-    + "computes 源泉徴収 plus 厚生年金 and 健康保険 for every JIS prefecture, so reaching this "
-    + "message means {region} is not a known JIS X 0401 code.",
+    "income tax withholding for prefecture {region} is not implemented: the JP payroll pack " +
+    "computes 源泉徴収 plus 厚生年金 and 健康保険 for every JIS prefecture, so reaching this " +
+    "message means {region} is not a known JIS X 0401 code.",
 };
 
 export const JP_PAYROLL_PACK: JpPayrollPack = {
@@ -88,7 +87,8 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
     example: "123456789012",
     requiredForPayroll: true,
     neededFor: "statutory withholding records",
-    citation: "Digital Agency: every resident holds a 12-digit Individual Number (My Number) for social security and tax",
+    citation:
+      "Digital Agency: every resident holds a 12-digit Individual Number (My Number) for social security and tax",
     numericEntry: true,
   },
   installable: true,
@@ -112,7 +112,8 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
   // different table, untranscribed) prices bonuses, not arrears.
   retroactivePayTreatment: "periodic",
   contributoryBases: {
-    pensionable: "厚生年金保険の標準報酬の対象となる報酬 (pensionable remuneration feeding the 標準報酬月額)",
+    pensionable:
+      "厚生年金保険の標準報酬の対象となる報酬 (pensionable remuneration feeding the 標準報酬月額)",
     // No second compulsory employee contribution is priced by this pack:
     // 雇用保険 is refused by name, so the flag accumulates nothing here
     // rather than inheriting another jurisdiction's EI/FUTA meaning.
@@ -138,7 +139,15 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
         // 源泉徴収 is looked up on pay AFTER social-insurance premiums —
         // a protected pre-tax deduction moves it, so taxable_income,
         // re-derived every fixpoint pass like T4127-T/FIT/IRPF.
-        { code: "GENSEN", name: "源泉徴収 (withholding income tax)", systemKey: "income_tax", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "GENSEN",
+          name: "源泉徴収 (withholding income tax)",
+          systemKey: "income_tax",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -147,8 +156,24 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
         // 厚生年金: the 折半額 off the 標準報酬 grade — no deduction enters
         // the formula, both shares. External: the destination is the
         // employer's JPS account, configured per component.
-        { code: "KOSEI", name: "厚生年金保険 (employee)", systemKey: "pension", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "external" },
-        { code: "KOSEI-ER", name: "厚生年金保険 (employer)", systemKey: "pension", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "KOSEI",
+          name: "厚生年金保険 (employee)",
+          systemKey: "pension",
+          kind: "deduction",
+          sequence: 120,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+        {
+          code: "KOSEI-ER",
+          name: "厚生年金保険 (employer)",
+          systemKey: "pension",
+          kind: "employer_contribution",
+          sequence: 220,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -157,8 +182,24 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
         // 健康保険: grade × tenant rate, halved per the 50銭 rule — no
         // deduction enters the formula, both shares. External: the
         // destination is the employer's 協会けんぽ/組合 account.
-        { code: "KENKO", name: "健康保険 (employee)", systemKey: "health", kind: "deduction", sequence: 130, assessedOn: "earnings", remittance: "external" },
-        { code: "KENKO-ER", name: "健康保険 (employer)", systemKey: "health", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "KENKO",
+          name: "健康保険 (employee)",
+          systemKey: "health",
+          kind: "deduction",
+          sequence: 130,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+        {
+          code: "KENKO-ER",
+          name: "健康保険 (employer)",
+          systemKey: "health",
+          kind: "employer_contribution",
+          sequence: 230,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -166,9 +207,33 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
       components: [
         // Both 2026 contributions use the operator-held 標準報酬月額; the
         // support contribution is split, while the 拠出金 is employer-only.
-        { code: "KOSODATE-SUPPORT", name: "子ども・子育て支援金 (employee)", systemKey: "child_support", kind: "deduction", sequence: 140, assessedOn: "earnings", remittance: "external" },
-        { code: "KOSODATE-SUPPORT-ER", name: "子ども・子育て支援金 (employer)", systemKey: "child_support", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "external" },
-        { code: "KODOMO-ER", name: "子ども・子育て拠出金 (employer)", systemKey: "child_care_employer", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "KOSODATE-SUPPORT",
+          name: "子ども・子育て支援金 (employee)",
+          systemKey: "child_support",
+          kind: "deduction",
+          sequence: 140,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+        {
+          code: "KOSODATE-SUPPORT-ER",
+          name: "子ども・子育て支援金 (employer)",
+          systemKey: "child_support",
+          kind: "employer_contribution",
+          sequence: 240,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
+        {
+          code: "KODOMO-ER",
+          name: "子ども・子育て拠出金 (employer)",
+          systemKey: "child_care_employer",
+          kind: "employer_contribution",
+          sequence: 250,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
   ],

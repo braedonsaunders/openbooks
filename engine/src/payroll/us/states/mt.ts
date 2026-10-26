@@ -23,7 +23,9 @@
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateChoice, type PayrollCertificate,
+  certificateAmount,
+  certificateChoice,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -37,15 +39,23 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/mt.ts";
 const DOLLAR = 10_000n;
 
-export type MtPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly" | "annual" | "daily";
+export type MtPeriod = "weekly" | "biweekly" | "semimonthly" | "monthly" | "annual" | "daily";
 
 const MT_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "annual",
+  "daily",
 ];
 
 /** MW-4 line 1a / line 2, line 1b, or line 1c. */
@@ -178,17 +188,19 @@ const MT_EDITIONS_BY_YEAR: Record<number, MtYearRates> = {
   [MT_RATES_2026.year]: MT_RATES_2026,
 };
 
-export const MT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Montana Employer and Information Agent Guide — 2026 withholding formula",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Montana Department of Revenue, Employer and Information Agent Guide with "
-    + "Montana Withholding Tax Tables – 2026 (V4 November 2025) — W = A + "
-    + "(B × (G − C)); line 1a / 1b / 1c official examples",
-  status: "published",
-  region: "MT",
-}];
+export const MT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Montana Employer and Information Agent Guide — 2026 withholding formula",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Montana Department of Revenue, Employer and Information Agent Guide with " +
+      "Montana Withholding Tax Tables – 2026 (V4 November 2025) — W = A + " +
+      "(B × (G − C)); line 1a / 1b / 1c official examples",
+    status: "published",
+    region: "MT",
+  },
+];
 
 export function mtRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
@@ -201,7 +213,12 @@ function scheduleFor(status: MtFilingStatus, rates: MtYearRates): MtSchedule {
 }
 
 /** W = A + (B × (G − C)), before the nearest-dollar round. */
-export function mtPeriodTax(gross: bigint, period: MtPeriod, status: MtFilingStatus, rates: MtYearRates): bigint {
+export function mtPeriodTax(
+  gross: bigint,
+  period: MtPeriod,
+  status: MtFilingStatus,
+  rates: MtYearRates,
+): bigint {
   if (gross <= 0n) return 0n;
   const brackets = scheduleFor(status, rates)[period];
   let chosen = brackets[0]!;
@@ -221,9 +238,12 @@ function compute(
   const { factors, trace } = context;
 
   const exempt = context.exemptResult({ factorKey: "MT_EXEMPT", factorFormat: "decimal" });
-    if (exempt) return exempt;
+  if (exempt) return exempt;
 
-  const specifiedWithholding = certificateAmount(input.certificate, "specified_withholding_per_period");
+  const specifiedWithholding = certificateAmount(
+    input.certificate,
+    "specified_withholding_per_period",
+  );
   if (specifiedWithholding != null) {
     const tax = U(specifiedWithholding);
     trace("MT_SPECIFIED_WITHHOLDING", tax);
@@ -231,7 +251,8 @@ function compute(
   }
 
   // No MW-4: single filing status on line 1a.
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single_or_both") as MtFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single_or_both") as MtFilingStatus;
   let wages = U(input.wages) + U(input.supplemental ?? "0");
   if (input.basis === "nonresident") {
     wages = U(requireUsSourceWages(input.wageAllocations, "MT", null));
@@ -270,7 +291,12 @@ export const MT_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const MT_STATE_ENGINE = defineStateEngine({
-  state: { state: "MT", label: "Montana income tax", printedPeriods: MT_PERIODS, fixedPeriodsOnly: true },
+  state: {
+    state: "MT",
+    label: "Montana income tax",
+    printedPeriods: MT_PERIODS,
+    fixedPeriodsOnly: true,
+  },
   editions: pairStateRateEditions(Object.values(MT_EDITIONS_BY_YEAR), MT_TAX_YEAR_EDITIONS),
   compute: compute,
 });
@@ -305,13 +331,13 @@ export const MT_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "MT" },
   purpose: "withholding",
   citation:
-    "Montana Department of Revenue, Employer and Information Agent Guide "
-    + "with Montana Withholding Tax Tables – 2026; Form MW-4 (2026): "
-    + "https://revenuefiles.mt.gov/files/Forms/Montana_Employee_Withholding_Allowance_and_Exemption_Certificate_Form_MW-4.pdf",
+    "Montana Department of Revenue, Employer and Information Agent Guide " +
+    "with Montana Withholding Tax Tables – 2026; Form MW-4 (2026): " +
+    "https://revenuefiles.mt.gov/files/Forms/Montana_Employee_Withholding_Allowance_and_Exemption_Certificate_Form_MW-4.pdf",
   summary:
-    "Sets the Montana withholding schedule from MW-4 lines 1a, 1b, 1c, or 2. "
-    + "If the employee does not complete an MW-4, the form requires "
-    + "withholding using the single filing status on line 1a.",
+    "Sets the Montana withholding schedule from MW-4 lines 1a, 1b, 1c, or 2. " +
+    "If the employee does not complete an MW-4, the form requires " +
+    "withholding using the single filing status on line 1a.",
   storage: "certificate_rows",
   fields: [
     {
@@ -331,9 +357,9 @@ export const MT_CERTIFICATE: PayrollCertificate = {
         { value: "head_household", label: "Line 1c Head of household" },
       ],
       help:
-        "Line 1a and line 2 use the same printed tables. Line 2 cuts the "
-        + "joint standard deduction and brackets in half because both spouses "
-        + "work. Default line 1a is MW-4's own missing-form rule.",
+        "Line 1a and line 2 use the same printed tables. Line 2 cuts the " +
+        "joint standard deduction and brackets in half because both spouses " +
+        "work. Default line 1a is MW-4's own missing-form rule.",
     },
     {
       key: "additional_per_period",
@@ -342,8 +368,8 @@ export const MT_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "A flat dollar amount requested on Form MW-4 line 3. Added AFTER the "
-        + "formula is rounded to the nearest whole dollar.",
+        "A flat dollar amount requested on Form MW-4 line 3. Added AFTER the " +
+        "formula is rounded to the nearest whole dollar.",
     },
     {
       key: "specified_withholding_per_period",
@@ -352,16 +378,16 @@ export const MT_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "For wage income, Form MW-4 line 4 replaces the standard calculation. "
-        + "Do not combine it with filing status or extra withholding lines.",
+        "For wage income, Form MW-4 line 4 replaces the standard calculation. " +
+        "Do not combine it with filing status or extra withholding lines.",
     },
     {
       key: "exempt",
       label: "Line 5 — Exempt from Montana withholding",
       kind: "flag",
       help:
-        "A current exempt claim on Form MW-4 line 5 withholds zero. Dating "
-        + "any year-end lapse is certificate administration.",
+        "A current exempt claim on Form MW-4 line 5 withholds zero. Dating " +
+        "any year-end lapse is certificate administration.",
     },
   ],
 };
@@ -383,6 +409,6 @@ export const MT_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Montana Department of Revenue, Employer and Information Agent Guide "
-    + "with Montana Withholding Tax Tables – 2026; Form MW-4 (2026)",
+    "Montana Department of Revenue, Employer and Information Agent Guide " +
+    "with Montana Withholding Tax Tables – 2026; Form MW-4 (2026)",
 };

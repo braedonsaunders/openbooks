@@ -1,4 +1,10 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 
 /**
  * Secret sealing (AES-256-GCM), engine-level so BOTH the web app (sealing on a
@@ -65,7 +71,10 @@ export class SecretIntegrityError extends Error {
 function checkScope(scope: SecretScope): { orgId: string; purpose: string } {
   const orgId = scope?.orgId?.trim() ?? "";
   const purpose = scope?.purpose?.trim() ?? "";
-  if (!orgId) throw new Error("seal scope requires a non-empty orgId (tenant or user id the blob belongs to)");
+  if (!orgId)
+    throw new Error(
+      "seal scope requires a non-empty orgId (tenant or user id the blob belongs to)",
+    );
   if (!PURPOSE_RE.test(purpose)) {
     throw new Error(
       `seal scope requires a stable purpose like "connection.secrets" (lowercase letters, digits, dot, dash, underscore; got ${JSON.stringify(scope?.purpose ?? null)})`,
@@ -96,8 +105,10 @@ export function isNamedNonProductionEnvironment(
 type DataKeyRing = { activeId: string; keys: Map<string, Buffer> };
 
 function keyRemedy(): string {
-  return "generate one with `openssl rand -hex 32`, set OPENBOOKS_DATA_KEY (single-key installs) " +
-    "or OPENBOOKS_DATA_KEYS as `id=base64,id=base64` with OPENBOOKS_DATA_KEY_ACTIVE=<id> (rotated installs)";
+  return (
+    "generate one with `openssl rand -hex 32`, set OPENBOOKS_DATA_KEY (single-key installs) " +
+    "or OPENBOOKS_DATA_KEYS as `id=base64,id=base64` with OPENBOOKS_DATA_KEY_ACTIVE=<id> (rotated installs)"
+  );
 }
 
 function checkedKey(id: string, raw: string): Buffer {
@@ -106,7 +117,10 @@ function checkedKey(id: string, raw: string): Buffer {
     throw new Error(`data key ${id} looks like a placeholder — ${keyRemedy()}`);
   }
   const buf = decodeKeyMaterial(raw);
-  if (buf.length !== 32) throw new Error(`data key ${id} must decode to exactly 32 bytes (hex or base64) — ${keyRemedy()}`);
+  if (buf.length !== 32)
+    throw new Error(
+      `data key ${id} must decode to exactly 32 bytes (hex or base64) — ${keyRemedy()}`,
+    );
   return buf;
 }
 
@@ -119,16 +133,23 @@ export function loadDataKeyRing(
     const keys = new Map<string, Buffer>();
     for (const entry of multi.split(",")) {
       const eq = entry.indexOf("=");
-      if (eq <= 0) throw new Error(`OPENBOOKS_DATA_KEYS must be id=key pairs separated by commas — ${keyRemedy()}`);
+      if (eq <= 0)
+        throw new Error(
+          `OPENBOOKS_DATA_KEYS must be id=key pairs separated by commas — ${keyRemedy()}`,
+        );
       const id = entry.slice(0, eq).trim();
       const raw = entry.slice(eq + 1).trim();
       if (!id || !/^[A-Za-z0-9_-]{1,32}$/.test(id)) {
-        throw new Error(`data key id ${JSON.stringify(id)} is invalid (letters, digits, dash, underscore) — ${keyRemedy()}`);
+        throw new Error(
+          `data key id ${JSON.stringify(id)} is invalid (letters, digits, dash, underscore) — ${keyRemedy()}`,
+        );
       }
-      if (keys.has(id)) throw new Error(`data key id ${JSON.stringify(id)} is listed twice — ${keyRemedy()}`);
+      if (keys.has(id))
+        throw new Error(`data key id ${JSON.stringify(id)} is listed twice — ${keyRemedy()}`);
       keys.set(id, checkedKey(id, raw));
     }
-    if (keys.size === 0) throw new Error(`OPENBOOKS_DATA_KEYS is set but holds no keys — ${keyRemedy()}`);
+    if (keys.size === 0)
+      throw new Error(`OPENBOOKS_DATA_KEYS is set but holds no keys — ${keyRemedy()}`);
     const activeId = environment.OPENBOOKS_DATA_KEY_ACTIVE?.trim() ?? "";
     if (!activeId) {
       throw new Error(
@@ -144,9 +165,14 @@ export function loadDataKeyRing(
   }
   const raw = environment.OPENBOOKS_DATA_KEY ?? "";
   if (!raw || !raw.trim()) {
-    throw new Error(`OPENBOOKS_DATA_KEY is not set — required to seal stored secrets (32-byte key, hex or base64); ${keyRemedy()}`);
+    throw new Error(
+      `OPENBOOKS_DATA_KEY is not set — required to seal stored secrets (32-byte key, hex or base64); ${keyRemedy()}`,
+    );
   }
-  return { activeId: LEGACY_SINGLE_KEY_ID, keys: new Map([[LEGACY_SINGLE_KEY_ID, checkedKey(LEGACY_SINGLE_KEY_ID, raw)]]) };
+  return {
+    activeId: LEGACY_SINGLE_KEY_ID,
+    keys: new Map([[LEGACY_SINGLE_KEY_ID, checkedKey(LEGACY_SINGLE_KEY_ID, raw)]]),
+  };
 }
 
 /**
@@ -195,7 +221,9 @@ export function sealSecret(plain: string, scope: SecretScope): string {
 }
 
 /** Which key sealed a stored blob, without touching key material. */
-export function describeSealedBlob(stored: string | null | undefined): { version: "v1" | "v2"; keyId: string } | null {
+export function describeSealedBlob(
+  stored: string | null | undefined,
+): { version: "v1" | "v2"; keyId: string } | null {
   if (typeof stored !== "string") return null;
   if (stored.startsWith(SEALED_V2_PREFIX)) {
     const keyId = stored.slice(SEALED_V2_PREFIX.length).split(":")[0] ?? "";
@@ -239,7 +267,10 @@ export function unsealSecret(stored: string, scope: SecretScope): string {
       const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivB64, "base64"));
       decipher.setAAD(Buffer.from(aadFor(checked), "utf8"));
       decipher.setAuthTag(Buffer.from(tagB64, "base64"));
-      return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]).toString("utf8");
+      return Buffer.concat([
+        decipher.update(Buffer.from(ctB64, "base64")),
+        decipher.final(),
+      ]).toString("utf8");
     } catch {
       return fail(
         keyId,
@@ -258,14 +289,24 @@ export function unsealSecret(stored: string, scope: SecretScope): string {
     const ordered = [ring.activeId, ...[...ring.keys.keys()].filter((id) => id !== ring.activeId)];
     for (const id of ordered) {
       try {
-        const decipher = createDecipheriv("aes-256-gcm", ring.keys.get(id)!, Buffer.from(ivB64, "base64"));
+        const decipher = createDecipheriv(
+          "aes-256-gcm",
+          ring.keys.get(id)!,
+          Buffer.from(ivB64, "base64"),
+        );
         decipher.setAuthTag(Buffer.from(tagB64, "base64"));
-        return Buffer.concat([decipher.update(Buffer.from(ctB64, "base64")), decipher.final()]).toString("utf8");
+        return Buffer.concat([
+          decipher.update(Buffer.from(ctB64, "base64")),
+          decipher.final(),
+        ]).toString("utf8");
       } catch {
         continue;
       }
     }
-    return fail("v1-legacy", "legacy blob does not open under any configured data key; configure the sealing key before reading it");
+    return fail(
+      "v1-legacy",
+      "legacy blob does not open under any configured data key; configure the sealing key before reading it",
+    );
   }
   return fail("unknown", "stored value is not a sealed secret (missing enc:v1:/enc:v2: prefix)");
 }
@@ -320,9 +361,7 @@ export function keyedFingerprint(namespace: string, plain: string): string {
 }
 
 function fingerprintHmac(key: Buffer, namespace: string, plain: string): string {
-  return createHmac("sha256", key)
-    .update(`${namespace}\u0000${plain}`, "utf8")
-    .digest("hex");
+  return createHmac("sha256", key).update(`${namespace}\u0000${plain}`, "utf8").digest("hex");
 }
 
 /**
@@ -336,10 +375,10 @@ export class KeyedFingerprintError extends Error {
   readonly keyId: string;
   constructor(keyId: string) {
     super(
-      `confidential identifier fingerprints under data key ${keyId} cannot be compared `
-      + `because key ${keyId} is not configured — keep the retired key in OPENBOOKS_DATA_KEYS `
-      + `until amendments are re-fingerprinted, or run scripts/rotate-data-key.ts --apply to `
-      + `re-fingerprint filing snapshots under the active key`,
+      `confidential identifier fingerprints under data key ${keyId} cannot be compared ` +
+        `because key ${keyId} is not configured — keep the retired key in OPENBOOKS_DATA_KEYS ` +
+        `until amendments are re-fingerprinted, or run scripts/rotate-data-key.ts --apply to ` +
+        `re-fingerprint filing snapshots under the active key`,
     );
     this.name = "KeyedFingerprintError";
     this.keyId = keyId;
@@ -359,7 +398,9 @@ export function parseKeyedFingerprint(stored: string): { keyId: string; hmac: st
   if (typeof stored !== "string" || stored === "") return null;
   const colon = stored.indexOf(":");
   if (colon <= 0) {
-    return FINGERPRINT_HMAC_RE.test(stored) ? { keyId: LEGACY_SINGLE_KEY_ID, hmac: stored.toLowerCase() } : null;
+    return FINGERPRINT_HMAC_RE.test(stored)
+      ? { keyId: LEGACY_SINGLE_KEY_ID, hmac: stored.toLowerCase() }
+      : null;
   }
   const keyId = stored.slice(0, colon);
   const hmac = stored.slice(colon + 1);

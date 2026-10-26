@@ -17,7 +17,9 @@ interface EmploymentRosterColumns {
 }
 
 /** Latest role dates describe an episode, not the worker's entire history. */
-export function roleEmploymentOverlapsPeriod(c: Pick<EmploymentRosterColumns, "hiredOn" | "terminatedOn" | "periodStart" | "periodEnd">): SQL {
+export function roleEmploymentOverlapsPeriod(
+  c: Pick<EmploymentRosterColumns, "hiredOn" | "terminatedOn" | "periodStart" | "periodEnd">,
+): SQL {
   return sql`((${c.hiredOn} is null or ${c.hiredOn} <= ${c.periodEnd}::date)
     and (${c.terminatedOn} is null or ${c.terminatedOn} >= ${c.periodStart}::date))`;
 }
@@ -111,15 +113,23 @@ export interface HistoricalEmploymentRosterSource {
 
 /** Read every historical admission, including employees absent from the calculated stubs. */
 export async function historicalEmploymentRosterSource(
-  tx: Pick<SqlExecutor, "execute">, orgId: string, documentId: string,
+  tx: Pick<SqlExecutor, "execute">,
+  orgId: string,
+  documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<HistoricalEmploymentRosterSource[]> {
   const columns = {
-    org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
-    employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
-    periodStart: sql`r.period_start`, periodEnd: sql`r.period_end`,
+    org: sql`prof.org_id`,
+    employee: sql`p.id`,
+    employment: sql`prof.employment_id`,
+    employer: sql`p.subsidiary_id`,
+    hiredOn: sql`er.hired_on`,
+    terminatedOn: sql`er.terminated_on`,
+    periodStart: sql`r.period_start`,
+    periodEnd: sql`r.period_end`,
   };
-  return await tx.execute<HistoricalEmploymentRosterSource & Record<string, unknown>>(sql`
+  return await tx.execute<HistoricalEmploymentRosterSource & Record<string, unknown>>(
+    sql`
     select distinct p.id::text as "employeePartyId", e.id::text as "employmentId",
            v.version_no as "versionNo", v.status,
            v.effective_from::text as "effectiveFrom", v.effective_to::text as "effectiveTo",
@@ -142,21 +152,28 @@ export async function historicalEmploymentRosterSource(
        and not exists (select 1 from pay_run_adjustments a where a.org_id = r.org_id
          and a.pay_run_document_id = r.document_id and a.employee_party_id = p.id and a.adjustment_type = 'exclude')
      order by "employeePartyId", "employmentId", "versionNo"
-  `, "objects");
+  `,
+    "objects",
+  );
 }
 
 /** Fence possible admissions before yearly payroll locks, including previously excluded workers. */
 export async function lockPayrollEmploymentRoster(
-  tx: Pick<SqlExecutor, "execute">, orgId: string, documentId: string,
+  tx: Pick<SqlExecutor, "execute">,
+  orgId: string,
+  documentId: string,
 ): Promise<void> {
-  const employees = await tx.execute<{ employee_party_id: string }>(sql`
+  const employees = await tx.execute<{ employee_party_id: string }>(
+    sql`
     select prof.employee_party_id from employee_payroll_profiles prof
     join pay_runs r on r.org_id = prof.org_id and r.pay_schedule_id = prof.pay_schedule_id
     where r.org_id = ${orgId} and r.document_id = ${documentId} and prof.is_active
     union select employee_party_id from pay_stubs
     where org_id = ${orgId} and pay_run_document_id = ${documentId}
     order by employee_party_id
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const employee of employees) {
     await takeEmployeeConfigurationFence(tx, orgId, employee.employee_party_id);
   }

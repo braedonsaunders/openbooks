@@ -1,12 +1,19 @@
 "use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMoney } from '@/components/money-provider'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { add as addMoney, cmp as compareMoney } from '@openbooks/engine/money/money'
-import { overdueOpenPct } from './overdue-pct'
+import { add as addMoney, cmp as compareMoney } from "@openbooks/engine/money/money";
+import { overdueOpenPct } from "./overdue-pct";
 import {
   Wallet,
   TriangleAlert,
@@ -28,16 +35,14 @@ import type { NotForecastSummary } from "./not-forecast";
  * the columns it renders, so the fields the list never shows do not cross the
  * wire.
  */
-type ArCockpitData = Omit<ArPosition, "worklist" | "notForecast"> & { worklist: WorklistEntry[]; notForecast: NotForecastSummary };
-import {
-  StatTile,
-  CockpitPanel,
-  AgingBars,
-  ScheduleBars,
-} from "../../../../components/cockpit/ui";
+type ArCockpitData = Omit<ArPosition, "worklist" | "notForecast"> & {
+  worklist: WorklistEntry[];
+  notForecast: NotForecastSummary;
+};
+import { StatTile, CockpitPanel, AgingBars, ScheduleBars } from "../../../../components/cockpit/ui";
 import { TableDrilldownButton } from "../../../../components/table-drilldown-button";
 import { CashWeekFlyout } from "../../analytics/_ui/CashWeekFlyout";
-import { formatExactPercent } from '../../analytics/_ui/format'
+import { formatExactPercent } from "../../analytics/_ui/format";
 import { EntityDrawer } from "../../analytics/_ui/EntityDrawer";
 import { ArCollectionsInfoDrawer } from "./ArCollectionsInfoDrawer";
 import { CollectionsWorklist } from "./CollectionsWorklist";
@@ -55,14 +60,8 @@ const CUSTOMERS_PER_PAGE = 6;
  * customer breakdown beside it. All off the shared cash engine, so numbers
  * agree with the forecast and the other cockpits to the penny.
  */
-export function ArCockpit({
-  data,
-  canCollect,
-}: {
-  data: ArCockpitData;
-  canCollect: boolean;
-}) {
-  const { money, moneyCompact } = useMoney()
+export function ArCockpit({ data, canCollect }: { data: ArCockpitData; canCollect: boolean }) {
+  const { money, moneyCompact } = useMoney();
   const t = useTranslations("ar.cockpit");
   const locale = useLocale();
   // The position is cut as of this business day: future-dated documents are
@@ -77,9 +76,7 @@ export function ArCockpit({
   const currentParams = Object.fromEntries(search.entries());
   const [showInfo, setShowInfo] = useState(false);
   const [drillWeek, setDrillWeek] = useState<number | null>(null);
-  const [entity, setEntity] = useState<{ id: string; name: string } | null>(
-    null,
-  );
+  const [entity, setEntity] = useState<{ id: string; name: string } | null>(null);
 
   // Bare number on purpose: the overdueSub message already appends "%",
   // so formatExactPercent's suffixed value rendered "100%%".
@@ -87,21 +84,13 @@ export function ArCockpit({
   // excludes credits, so the denominator adds them back to the net outstanding.
   const grossOpen = addMoney(data.outstanding, data.unappliedCredits.total);
   const overduePct = overdueOpenPct(data.overdue, grossOpen);
-  const customerQuery = (search.get("customerQ") ?? "")
-    .trim()
-    .toLocaleLowerCase();
+  const customerQuery = (search.get("customerQ") ?? "").trim().toLocaleLowerCase();
   const customerStatus = search.get("customerStatus");
-  const customerPage = Math.max(
-    1,
-    Number.parseInt(search.get("customerPage") ?? "1", 10) || 1,
-  );
+  const customerPage = Math.max(1, Number.parseInt(search.get("customerPage") ?? "1", 10) || 1);
   const filteredCustomers = data.byCustomer.filter((customer) => {
-    if (
-      customerQuery &&
-      !customer.partyName.toLocaleLowerCase().includes(customerQuery)
-    )
+    if (customerQuery && !customer.partyName.toLocaleLowerCase().includes(customerQuery))
       return false;
-    if (customerStatus === "overdue" && compareMoney(customer.overdue, '0.0000') <= 0) return false;
+    if (customerStatus === "overdue" && compareMoney(customer.overdue, "0.0000") <= 0) return false;
     return true;
   });
   const visibleCustomers = filteredCustomers.slice(
@@ -141,7 +130,7 @@ export function ArCockpit({
             count: data.overdueCount,
             pct: overduePct,
           })}
-          tone={compareMoney(data.overdue, '0.0000') > 0 ? "negative" : "neutral"}
+          tone={compareMoney(data.overdue, "0.0000") > 0 ? "negative" : "neutral"}
         />
         <StatTile
           icon={CalendarClock}
@@ -168,7 +157,9 @@ export function ArCockpit({
       {data.unavailableCategories.length > 0 ? (
         <p className="flex shrink-0 items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
           <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-          <span>{t("refusedAlert", { names: data.unavailableCategories.map((r) => r.name).join(", ") })}</span>
+          <span>
+            {t("refusedAlert", { names: data.unavailableCategories.map((r) => r.name).join(", ") })}
+          </span>
         </p>
       ) : null}
 
@@ -197,13 +188,10 @@ export function ArCockpit({
           <CockpitPanel
             title={t("panels.aging")}
             icon={ListOrdered}
-          hint={`${moneyCompact(data.outstanding)} · ${formatExactPercent(data.summary.pctCurrent)} ${t("current")}`}
+            hint={`${moneyCompact(data.outstanding)} · ${formatExactPercent(data.summary.pctCurrent)} ${t("current")}`}
             className="shrink-0"
           >
-            <AgingBars
-              buckets={data.summary.buckets}
-              accent="text-sky-600 dark:text-sky-400"
-            />
+            <AgingBars buckets={data.summary.buckets} accent="text-sky-600 dark:text-sky-400" />
           </CockpitPanel>
 
           <NotForecastPanel notForecast={data.notForecast} />
@@ -246,9 +234,7 @@ export function ArCockpit({
                   paramKey="customerStatus"
                   pageParamKey="customerPage"
                   label={t("customerStatus")}
-                  options={[
-                    { value: "overdue", label: t("customerOverdueOnly") },
-                  ]}
+                  options={[{ value: "overdue", label: t("customerOverdueOnly") }]}
                 />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
@@ -279,20 +265,22 @@ export function ArCockpit({
                         >
                           <SharedTableCell className="px-4 py-2 text-slate-700 dark:text-slate-300">
                             {c.partyId ? (
-                              <TableDrilldownButton onActivate={() => setEntity({ id: c.partyId!, name: c.partyName })}>
+                              <TableDrilldownButton
+                                onActivate={() => setEntity({ id: c.partyId!, name: c.partyName })}
+                              >
                                 {c.partyName}
                               </TableDrilldownButton>
-                            ) : c.partyName}
+                            ) : (
+                              c.partyName
+                            )}
                           </SharedTableCell>
                           <SharedTableCell className="px-3 py-2 text-right tabular-nums">
-                            {compareMoney(c.overdue, '0.0000') > 0 ? (
+                            {compareMoney(c.overdue, "0.0000") > 0 ? (
                               <span className="text-red-600 dark:text-red-400">
                                 {moneyCompact(c.overdue)}
                               </span>
                             ) : (
-                              <span className="text-slate-300 dark:text-slate-600">
-                                —
-                              </span>
+                              <span className="text-slate-300 dark:text-slate-600">—</span>
                             )}
                           </SharedTableCell>
                           <SharedTableCell className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">

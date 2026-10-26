@@ -8,7 +8,9 @@ const JULY = { periodId: "period-july", start: "2026-07-01", end: "2026-07-31" }
 test("a source date inside its posting period is kept under either policy", () => {
   for (const policy of ["refuse", "period_boundary"] as const) {
     for (const date of ["2026-07-01", "2026-07-15", "2026-07-31"]) {
-      assert.deepEqual(resolveSourcePostingDate(date, JULY, policy, "netsuite"), { kind: "inside" });
+      assert.deepEqual(resolveSourcePostingDate(date, JULY, policy, "netsuite"), {
+        kind: "inside",
+      });
     }
   }
 });

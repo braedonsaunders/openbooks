@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../testing/stub-modules'
-import test from 'node:test'
-import { NextResponse } from 'next/server'
+import assert from "node:assert/strict";
+import { stubModules } from "../../../../../testing/stub-modules";
+import test from "node:test";
+import { NextResponse } from "next/server";
 
 // F3-22, server side: recording a filing as filed, issuing an amendment
 // and cancelling a slip are statutory acts behind POST
@@ -13,21 +13,21 @@ import { NextResponse } from 'next/server'
 // route passes, and a 403 with no engine write when the guard refuses.
 
 interface RecordedIssue {
-  revision: string
-  rowIds?: readonly string[]
+  revision: string;
+  rowIds?: readonly string[];
 }
 
 interface RouteState {
-  issues: RecordedIssue[]
+  issues: RecordedIssue[];
 }
 
-const stateKey = Symbol.for('openbooks.payroll-amendments-permission-test')
-const state: RouteState = { issues: [] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const stateKey = Symbol.for("openbooks.payroll-amendments-permission-test");
+const state: RouteState = { issues: [] };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
-const callsKey = Symbol.for('openbooks.payroll-amendments-permission-calls')
-const calls: Array<[string, string]> = []
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[callsKey] = calls
+const callsKey = Symbol.for("openbooks.payroll-amendments-permission-calls");
+const calls: Array<[string, string]> = [];
+(globalThis as typeof globalThis & Record<symbol, unknown>)[callsKey] = calls;
 
 const featureGateSource = `
   export async function guardFeaturePermission(permission, feature) {
@@ -36,7 +36,7 @@ const featureGateSource = `
     if (refusal) return refusal
     return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
   }
-`
+`;
 
 stubModules({
   navigation: false,
@@ -54,11 +54,11 @@ stubModules({
       export async function guardPayrollFilingData() { return null }
     `,
     "@openbooks/engine/platform/db": `
-      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
+      export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/platform/db"))}
       export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }
     `,
     "drizzle-orm": `
-      export * from ${JSON.stringify(import.meta.resolve('drizzle-orm'))}
+      export * from ${JSON.stringify(import.meta.resolve("drizzle-orm"))}
       export function sql() { return {} }
     `,
     "@openbooks/engine/payroll/packs": `
@@ -85,56 +85,58 @@ stubModules({
       }
     `,
   },
-})
+});
 
-const routeUrl = './route.ts?payroll-amendments-permission-test'
-const { POST, GET } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?payroll-amendments-permission-test";
+const { POST, GET } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  state.issues.length = 0
-  calls.length = 0
-  ;(globalThis as Record<string, unknown>).__filingPermissionRefusal = null
+  state.issues.length = 0;
+  calls.length = 0;
+  (globalThis as Record<string, unknown>).__filingPermissionRefusal = null;
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/payroll/year-end/amendments', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/payroll/year-end/amendments", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        country: 'CA',
-        filing: 't4',
+        country: "CA",
+        filing: "t4",
         year: 2026,
         ...body,
       }),
     }),
-  )
+  );
 }
 
-test('issuing a filing demands payroll.run, not payroll.read', async () => {
-  reset()
-  const response = await post({ revision: 'original', note: 'filed' })
-  assert.equal(response.status, 200)
-  assert.deepEqual(calls, [['payroll.run', 'payroll']])
-  assert.equal(state.issues.length, 1)
-})
+test("issuing a filing demands payroll.run, not payroll.read", async () => {
+  reset();
+  const response = await post({ revision: "original", note: "filed" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [["payroll.run", "payroll"]]);
+  assert.equal(state.issues.length, 1);
+});
 
-test('a refused caller never reaches the engine', async () => {
-  reset()
-  ;(globalThis as Record<string, unknown>).__filingPermissionRefusal = NextResponse.json(
-    { error: 'payroll.run is required' },
+test("a refused caller never reaches the engine", async () => {
+  reset();
+  (globalThis as Record<string, unknown>).__filingPermissionRefusal = NextResponse.json(
+    { error: "payroll.run is required" },
     { status: 403 },
-  )
-  const response = await post({ revision: 'original', note: 'filed' })
-  assert.equal(response.status, 403)
-  assert.deepEqual(state.issues, [])
-})
+  );
+  const response = await post({ revision: "original", note: "filed" });
+  assert.equal(response.status, 403);
+  assert.deepEqual(state.issues, []);
+});
 
-test('reading the filing history stays payroll.read', async () => {
-  reset()
+test("reading the filing history stays payroll.read", async () => {
+  reset();
   const response = await GET(
-    new Request('http://openbooks.test/api/payroll/year-end/amendments?country=CA&filing=t4&year=2026'),
-  )
-  assert.equal(response.status, 200)
-  assert.deepEqual(calls, [['payroll.read', 'payroll']])
-})
+    new Request(
+      "http://openbooks.test/api/payroll/year-end/amendments?country=CA&filing=t4&year=2026",
+    ),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [["payroll.read", "payroll"]]);
+});

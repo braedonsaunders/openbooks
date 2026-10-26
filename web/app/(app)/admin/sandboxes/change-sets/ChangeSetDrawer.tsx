@@ -1,31 +1,19 @@
-'use client'
+"use client";
 
-import { ApprovalActions } from '@/components/approval-actions'
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { useViewerFormat } from '@/lib/viewer-format'
-import { Badge, Button, UrlDrawer } from '@openbooks/ui'
-import {
-  PagedTable,
-  type PagedColumn,
-} from '../../../../../components/paged-table'
-import { confirmDialog } from '../../../../../lib/confirm'
-import type {
-  ChangeSetDetail,
-  ChangeSetItem,
-} from '../../../../../lib/sandbox-change-sets'
-import { promotionNextStep } from '../../../../../lib/sandbox-promotion'
-import { JsonValue } from '../../audit/AuditEventDrawer'
-import { transitionChangeSetAction } from '../actions'
+import { ApprovalActions } from "@/components/approval-actions";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
+import { Badge, Button, UrlDrawer } from "@openbooks/ui";
+import { PagedTable, type PagedColumn } from "../../../../../components/paged-table";
+import { confirmDialog } from "../../../../../lib/confirm";
+import type { ChangeSetDetail, ChangeSetItem } from "../../../../../lib/sandbox-change-sets";
+import { promotionNextStep } from "../../../../../lib/sandbox-promotion";
+import { JsonValue } from "../../audit/AuditEventDrawer";
+import { transitionChangeSetAction } from "../actions";
 
-const STATUS_LABELS = [
-  'draft',
-  'reviewed',
-  'approved',
-  'applied',
-  'discarded',
-] as const
+const STATUS_LABELS = ["draft", "reviewed", "approved", "applied", "discarded"] as const;
 
 /**
  * Resolves a server-supplied enum to catalog copy, falling back to the raw
@@ -37,29 +25,23 @@ function pickLabel<T extends string>(
   options: readonly T[],
   resolve: (key: T) => string,
 ): string {
-  return (options as readonly string[]).includes(value)
-    ? resolve(value as T)
-    : value
+  return (options as readonly string[]).includes(value) ? resolve(value as T) : value;
 }
 
-export function ChangeSetDrawer({
-  detail,
-}: {
-  detail: ChangeSetDetail
-}) {
-  const { dateTime } = useViewerFormat()
-  const t = useTranslations('admin')
-  const cs = 'sandboxes.changeSets'
-  const tableLabels = useTranslations('admin.sandboxes.changeSets.tables')
-  const router = useRouter()
-  const [pending, start] = useTransition()
-  const [error, setError] = useState<string | null>(null)
-  const [itemId, setItemId] = useState<string | null>(null)
-  const item = detail.items.find((row) => row.id === itemId)
-  const next = promotionNextStep(detail)
+export function ChangeSetDrawer({ detail }: { detail: ChangeSetDetail }) {
+  const { dateTime } = useViewerFormat();
+  const t = useTranslations("admin");
+  const cs = "sandboxes.changeSets";
+  const tableLabels = useTranslations("admin.sandboxes.changeSets.tables");
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [itemId, setItemId] = useState<string | null>(null);
+  const item = detail.items.find((row) => row.id === itemId);
+  const next = promotionNextStep(detail);
   const columns: PagedColumn<ChangeSetItem>[] = [
     {
-      key: 'type',
+      key: "type",
       header: t(`${cs}.columns.type`),
       cell: (row) =>
         tableLabels.has(row.tableName as never)
@@ -68,29 +50,26 @@ export function ChangeSetDrawer({
       search: (row) => row.tableName,
     },
     {
-      key: 'record',
+      key: "record",
       header: t(`${cs}.columns.record`),
       cell: (row) => (
         <Button variant="link" onClick={() => setItemId(row.id)}>
-          {String(
-            row.payload?.name ?? row.expectedBefore?.name ?? row.targetId,
-          )}
+          {String(row.payload?.name ?? row.expectedBefore?.name ?? row.targetId)}
         </Button>
       ),
-      search: (row) =>
-        `${row.targetId} ${row.payload?.name ?? row.expectedBefore?.name ?? ''}`,
+      search: (row) => `${row.targetId} ${row.payload?.name ?? row.expectedBefore?.name ?? ""}`,
     },
     {
-      key: 'operation',
+      key: "operation",
       header: t(`${cs}.columns.change`),
       cell: (row) => (
-        <Badge variant={row.op === 'delete' ? 'destructive' : 'secondary'}>
+        <Badge variant={row.op === "delete" ? "destructive" : "secondary"}>
           {t(`${cs}.op.${row.op}`)}
         </Badge>
       ),
       search: (row) => row.op,
     },
-  ]
+  ];
   return (
     <UrlDrawer
       open
@@ -109,7 +88,7 @@ export function ChangeSetDrawer({
               disabled={pending || Boolean(item)}
               onClick={() =>
                 start(async () => {
-                  const transition = next.transition!
+                  const transition = next.transition!;
                   if (
                     !(await confirmDialog(
                       t(`${cs}.confirm`, {
@@ -118,24 +97,19 @@ export function ChangeSetDrawer({
                       }),
                     ))
                   )
-                    return
-                  setError(null)
+                    return;
+                  setError(null);
                   try {
-                    const result = await transitionChangeSetAction(
-                      detail.id,
-                      transition,
-                    )
-                    if (result.error) setError(result.error)
-                    else router.refresh()
+                    const result = await transitionChangeSetAction(detail.id, transition);
+                    if (result.error) setError(result.error);
+                    else router.refresh();
                   } catch {
-                    setError(t(`${cs}.requestFailed`))
+                    setError(t(`${cs}.requestFailed`));
                   }
                 })
               }
             >
-              {pending
-                ? t(`${cs}.working`)
-                : t(`${cs}.actions.${next.transition}`)}
+              {pending ? t(`${cs}.working`) : t(`${cs}.actions.${next.transition}`)}
             </Button>
           )}
         </>
@@ -153,30 +127,22 @@ export function ChangeSetDrawer({
               {t(`${cs}.backToChanges`)}
             </Button>
             <h2 className="text-lg font-semibold">
-              {String(
-                item.payload?.name ??
-                  item.expectedBefore?.name ??
-                  item.targetId,
-              )}
+              {String(item.payload?.name ?? item.expectedBefore?.name ?? item.targetId)}
             </h2>
             <div className="grid gap-5 lg:grid-cols-2">
               <section className="min-w-0 space-y-2">
-                <h3 className="font-semibold">
-                  {t(`${cs}.productionAtCapture`)}
-                </h3>
+                <h3 className="font-semibold">{t(`${cs}.productionAtCapture`)}</h3>
                 {!item.baseCaptured ? (
                   <p>{t(`${cs}.snapshotUnavailable`)}</p>
-                ) : item.op === 'insert' ? (
+                ) : item.op === "insert" ? (
                   <p>{t(`${cs}.recordDidNotExist`)}</p>
                 ) : (
                   <JsonValue exactNumbers value={item.expectedBefore} />
                 )}
               </section>
               <section className="min-w-0 space-y-2">
-                <h3 className="font-semibold">
-                  {t(`${cs}.proposedConfiguration`)}
-                </h3>
-                {item.op === 'delete' ? (
+                <h3 className="font-semibold">{t(`${cs}.proposedConfiguration`)}</h3>
+                {item.op === "delete" ? (
                   <p>{t(`${cs}.willBeDeleted`)}</p>
                 ) : (
                   <JsonValue exactNumbers value={item.payload} />
@@ -186,63 +152,47 @@ export function ChangeSetDrawer({
           </>
         ) : (
           <>
-            {detail.status === 'reviewed' ? (
-              <ApprovalActions
-                subjectKind="sandbox_change_set"
-                subjectId={detail.id}
-              />
+            {detail.status === "reviewed" ? (
+              <ApprovalActions subjectKind="sandbox_change_set" subjectId={detail.id} />
             ) : null}
-            <Badge
-              variant={detail.status === 'applied' ? 'success' : 'secondary'}
-            >
-              {pickLabel(detail.status, STATUS_LABELS, (key) =>
-                t(`${cs}.status.${key}`),
-              )}
+            <Badge variant={detail.status === "applied" ? "success" : "secondary"}>
+              {pickLabel(detail.status, STATUS_LABELS, (key) => t(`${cs}.status.${key}`))}
             </Badge>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              {t(`${cs}.capturedCount`, { count: detail.itemCount })}{' '}
-              {detail.status === 'applied'
-                ? t(`${cs}.appliedNote`)
-                : t(`${cs}.reviewNote`)}
+              {t(`${cs}.capturedCount`, { count: detail.itemCount })}{" "}
+              {detail.status === "applied" ? t(`${cs}.appliedNote`) : t(`${cs}.reviewNote`)}
             </p>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              {(['captured', 'reviewed', 'approved', 'applied'] as const).map(
-                (stage) => {
-                  const entry = {
-                    captured: {
-                      name: detail.createdName,
-                      at: detail.createdAt,
-                    },
-                    reviewed: {
-                      name: detail.reviewedName,
-                      at: detail.reviewedAt,
-                    },
-                    approved: {
-                      name: detail.approvedName,
-                      at: detail.approvedAt,
-                    },
-                    applied: { name: detail.appliedName, at: detail.appliedAt },
-                  }[stage]
-                  return (
-                    <div key={stage}>
-                      <dt className="font-medium">
-                        {t(`${cs}.stages.${stage}`)}
-                      </dt>
-                      <dd>
-                        {entry.at
-                          ? `${entry.name ?? t(`${cs}.recordedActor`)} · ${dateTime(new Date(entry.at))}`
-                          : t(`${cs}.pending`)}
-                      </dd>
-                    </div>
-                  )
-                },
-              )}
+              {(["captured", "reviewed", "approved", "applied"] as const).map((stage) => {
+                const entry = {
+                  captured: {
+                    name: detail.createdName,
+                    at: detail.createdAt,
+                  },
+                  reviewed: {
+                    name: detail.reviewedName,
+                    at: detail.reviewedAt,
+                  },
+                  approved: {
+                    name: detail.approvedName,
+                    at: detail.approvedAt,
+                  },
+                  applied: { name: detail.appliedName, at: detail.appliedAt },
+                }[stage];
+                return (
+                  <div key={stage}>
+                    <dt className="font-medium">{t(`${cs}.stages.${stage}`)}</dt>
+                    <dd>
+                      {entry.at
+                        ? `${entry.name ?? t(`${cs}.recordedActor`)} · ${dateTime(new Date(entry.at))}`
+                        : t(`${cs}.pending`)}
+                    </dd>
+                  </div>
+                );
+              })}
             </dl>
             {next.reasonKey && (
-              <p
-                role="status"
-                className="text-sm text-amber-800 dark:text-amber-300"
-              >
+              <p role="status" className="text-sm text-amber-800 dark:text-amber-300">
                 {t(`${cs}.reasons.${next.reasonKey}`)}
               </p>
             )}
@@ -257,5 +207,5 @@ export function ChangeSetDrawer({
         )}
       </div>
     </UrlDrawer>
-  )
+  );
 }

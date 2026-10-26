@@ -60,15 +60,24 @@ function assertSide(context: ApplicationContext, side: string): AgingSide {
 
 function sliceOf(row: AgingBuckets, bucket: string | undefined): ExactDecimal {
   switch (bucket) {
-    case "current": return row.current;
-    case "days1to30": return row.b1;
-    case "days31to60": return row.b2;
-    case "days61to90": return row.b3;
-    case "over90": return row.b4;
-    case "over30": return decimalAdd(decimalAdd(row.b2, row.b3), row.b4);
-    case "over60": return decimalAdd(row.b3, row.b4);
-    case "overdue": return decimalAdd(decimalAdd(row.b1, row.b2), decimalAdd(row.b3, row.b4));
-    default: return row.total;
+    case "current":
+      return row.current;
+    case "days1to30":
+      return row.b1;
+    case "days31to60":
+      return row.b2;
+    case "days61to90":
+      return row.b3;
+    case "over90":
+      return row.b4;
+    case "over30":
+      return decimalAdd(decimalAdd(row.b2, row.b3), row.b4);
+    case "over60":
+      return decimalAdd(row.b3, row.b4);
+    case "overdue":
+      return decimalAdd(decimalAdd(row.b1, row.b2), decimalAdd(row.b3, row.b4));
+    default:
+      return row.total;
   }
 }
 
@@ -101,7 +110,9 @@ export async function listApplicationAging(
 ) {
   const side = assertSide(context, input.side);
   if (input.bucket && !BUCKETS.has(input.bucket)) {
-    throw invalidInput("bucket must be current, days1to30, days31to60, days61to90, over90, over30, over60, or overdue");
+    throw invalidInput(
+      "bucket must be current, days1to30, days31to60, days61to90, over90, over30, over60, or overdue",
+    );
   }
   const asOf = await agingAsOf(context, input.asOf);
   const limit = clamp(input.limit ?? 30, 1, 100);
@@ -113,8 +124,10 @@ export async function listApplicationAging(
   }
   const ranked = input.bucket
     ? result.rows
-      .filter((row) => decimalCmp(sliceOf(row, input.bucket), ZERO) !== 0)
-      .sort((left, right) => compareAbsoluteDescending(sliceOf(left, input.bucket), sliceOf(right, input.bucket)))
+        .filter((row) => decimalCmp(sliceOf(row, input.bucket), ZERO) !== 0)
+        .sort((left, right) =>
+          compareAbsoluteDescending(sliceOf(left, input.bucket), sliceOf(right, input.bucket)),
+        )
     : result.rows;
   return {
     side,

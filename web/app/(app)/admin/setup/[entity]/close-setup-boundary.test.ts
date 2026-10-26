@@ -12,7 +12,13 @@ const files = ["CloseSetupWorkspace.tsx", ...submodules];
 const source = (name: string) => readFileSync(new URL(name, directory), "utf8");
 
 function staticSpecifiers(name: string): string[] {
-  const file = ts.createSourceFile(name, source(name), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const file = ts.createSourceFile(
+    name,
+    source(name),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
   const specifiers: string[] = [];
   for (const statement of file.statements) {
     if (!(ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))) continue;
@@ -43,7 +49,11 @@ test("close-setup modules never backimport the workspace and form an acyclic gra
     for (const specifier of staticSpecifiers(file)) {
       const target = resolveSibling(specifier);
       if (file !== "CloseSetupWorkspace.tsx") {
-        assert.notEqual(target, "CloseSetupWorkspace.tsx", `${file} must not import ./CloseSetupWorkspace`);
+        assert.notEqual(
+          target,
+          "CloseSetupWorkspace.tsx",
+          `${file} must not import ./CloseSetupWorkspace`,
+        );
       }
       if (target) dependencies.push(target);
     }
@@ -51,7 +61,10 @@ test("close-setup modules never backimport the workspace and form an acyclic gra
   }
   const visited = new Set<string>();
   function visit(file: string, path: string[]) {
-    assert.ok(!path.includes(file), `close-setup dependency cycle: ${[...path, file].join(" -> ")}`);
+    assert.ok(
+      !path.includes(file),
+      `close-setup dependency cycle: ${[...path, file].join(" -> ")}`,
+    );
     if (visited.has(file)) return;
     for (const target of graph.get(file) ?? []) visit(target, [...path, file]);
     visited.add(file);

@@ -61,10 +61,15 @@ export async function salesOrderScope(
   orgId: string,
   documentId: string,
 ): Promise<{ id: string; subsidiaryId: string | null } | null> {
-  const row = (await runner.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const row = (
+    await runner.execute<{ id: string; subsidiary_id: string | null }>(
+      sql`
     select id, subsidiary_id from documents
      where org_id = ${orgId} and id = ${documentId} and kind = 'sales_order'
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row ? { id: row.id, subsidiaryId: row.subsidiary_id } : null;
 }
 
@@ -177,14 +182,19 @@ export async function cancelOrderLineRemainder(
   }
 
   // Lock the order before its line, the order every order-cycle writer uses.
-  const order = (await tx.execute<LockedOrderRow>(sql`
+  const order = (
+    await tx.execute<LockedOrderRow>(
+      sql`
     select d.id, d.kind, d.status, d.document_number, d.subsidiary_id
       from documents d
      where d.org_id = ${orgId}
        and d.id = (select dl.document_id from document_lines dl
                     where dl.org_id = ${orgId} and dl.id = ${input.lineId})
      for update of d
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (
     !order ||
     order.id !== input.documentId ||
@@ -209,7 +219,9 @@ export async function cancelOrderLineRemainder(
     );
   }
 
-  const line = (await tx.execute<LockedLineRow>(sql`
+  const line = (
+    await tx.execute<LockedLineRow>(
+      sql`
     select dl.id, dl.line_number, dl.quantity_cancelled::text as quantity_cancelled,
            ${openQuantitySql("dl")}::text as open,
            exists (select 1 from item_inventory_profiles profile
@@ -217,7 +229,10 @@ export async function cancelOrderLineRemainder(
       from document_lines dl
      where dl.org_id = ${orgId} and dl.id = ${input.lineId} and dl.document_id = ${order.id}
      for update of dl
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!line) throw new BackorderRefusal("Order line not found", "order_line_not_found", 404);
   const lineLabel = `${orderLabel} line ${line.line_number}`;
   if (!line.is_stock_line) {
@@ -229,11 +244,7 @@ export async function cancelOrderLineRemainder(
     );
   }
   if (!isPositiveDecimal(line.open)) {
-    throw new BackorderRefusal(
-      `${lineLabel} has nothing open to cancel`,
-      "nothing_open",
-      409,
-    );
+    throw new BackorderRefusal(`${lineLabel} has nothing open to cancel`, "nothing_open", 409);
   }
   if (compareDecimal(quantity, line.open) > 0) {
     throw new BackorderRefusal(
@@ -244,15 +255,27 @@ export async function cancelOrderLineRemainder(
     );
   }
 
-  const reopened = (await tx.execute<{ id: string }>(sql`
+  const reopened = (
+    await tx.execute<{ id: string }>(
+      sql`
     update documents set status = 'draft', updated_by = ${actorId}
      where id = ${order.id} and org_id = ${orgId} and status = 'approved'
     returning id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!reopened) {
-    throw new BackorderRefusal(`${orderLabel} changed while the remainder was being cancelled`, "order_not_open", 409, "Reload the order and try again");
+    throw new BackorderRefusal(
+      `${orderLabel} changed while the remainder was being cancelled`,
+      "order_not_open",
+      409,
+      "Reload the order and try again",
+    );
   }
-  const advanced = (await tx.execute<{ quantity_cancelled: string; open: string }>(sql`
+  const advanced = (
+    await tx.execute<{ quantity_cancelled: string; open: string }>(
+      sql`
     update document_lines
        set quantity_cancelled = quantity_cancelled + ${quantity}::numeric,
            updated_by = ${actorId}
@@ -260,17 +283,35 @@ export async function cancelOrderLineRemainder(
        and ${openQuantitySql("document_lines")} >= ${quantity}::numeric
     returning quantity_cancelled::text as quantity_cancelled,
               ${openQuantitySql("document_lines")}::text as open
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!advanced) {
-    throw new BackorderRefusal(`${lineLabel} changed while its remainder was being cancelled`, "exceeds_open_quantity", 409, "Reload the order and try again");
+    throw new BackorderRefusal(
+      `${lineLabel} changed while its remainder was being cancelled`,
+      "exceeds_open_quantity",
+      409,
+      "Reload the order and try again",
+    );
   }
-  const restored = (await tx.execute<{ id: string }>(sql`
+  const restored = (
+    await tx.execute<{ id: string }>(
+      sql`
     update documents set status = 'approved', updated_by = ${actorId}
      where id = ${order.id} and org_id = ${orgId} and status = 'draft'
     returning id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!restored) {
-    throw new BackorderRefusal(`${orderLabel} changed while the remainder was being cancelled`, "order_not_open", 409, "Reload the order and try again");
+    throw new BackorderRefusal(
+      `${orderLabel} changed while the remainder was being cancelled`,
+      "order_not_open",
+      409,
+      "Reload the order and try again",
+    );
   }
 
   const [evidence] = await tx

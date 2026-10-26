@@ -8,7 +8,10 @@ import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../organization/org-feature-lock.ts";
-import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
+import {
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+} from "../organization/subsidiary-scope.ts";
 import { createProjectInTransaction } from "../projects/project-create.ts";
 import {
   captureBudgetBaselineInTransaction,
@@ -22,7 +25,11 @@ import {
   type AwardTaskSpec,
 } from "../projects/award-plan.ts";
 import { decimal8Units, fromDecimal8Units } from "../projects/budget-decimal.ts";
-import { latestSignatureRequest, quotePresentationHash, QUOTE_SUBJECT_TABLE } from "./quote-to-cash.ts";
+import {
+  latestSignatureRequest,
+  quotePresentationHash,
+  QUOTE_SUBJECT_TABLE,
+} from "./quote-to-cash.ts";
 
 /**
  * Awarding a quote: the issued quote becomes a project whose work breakdown
@@ -157,7 +164,9 @@ async function loadQuoteForAward(
   lock: boolean,
 ): Promise<QuoteRow> {
   if (!isUuid(quoteId)) throw new QuoteAwardError("Quote not found", 404);
-  const row = (await runner.execute<QuoteRow>(sql`
+  const row = (
+    await runner.execute<QuoteRow>(
+      sql`
       select d.id, d.kind, d.document_number, d.status, d.party_id, pa.display_name as party_name,
              d.subsidiary_id, d.currency, d.fx_rate::text as fx_rate, d.document_date::text as document_date,
              d.project_id, pr.name as project_name, d.billing_method, d.reference_number, d.memo
@@ -165,30 +174,51 @@ async function loadQuoteForAward(
         left join parties pa on pa.id = d.party_id and pa.org_id = d.org_id
         left join projects pr on pr.id = d.project_id and pr.org_id = d.org_id
        where d.id = ${quoteId} and d.org_id = ${ctx.orgId}
-       ${lock ? sql`for update of d` : sql``}`, "objects"))[0];
+       ${lock ? sql`for update of d` : sql``}`,
+      "objects",
+    )
+  )[0];
   // A missing row and an out-of-scope legal entity read the same.
   if (!row || !subsidiaryScopeAllows(ctx.allowedSubsidiaryIds, row.subsidiary_id)) {
     throw new QuoteAwardError("Quote not found", 404);
   }
   if (row.kind !== "quote") {
-    throw new QuoteAwardError(`Document ${row.document_number} is not a quote — only quotes (Estimates) can be awarded`);
+    throw new QuoteAwardError(
+      `Document ${row.document_number} is not a quote — only quotes (Estimates) can be awarded`,
+    );
   }
   return row;
 }
 
-async function loadQuoteLines(runner: SqlExecutor, orgId: string, quote: QuoteRow): Promise<AwardSourceLine[]> {
+async function loadQuoteLines(
+  runner: SqlExecutor,
+  orgId: string,
+  quote: QuoteRow,
+): Promise<AwardSourceLine[]> {
   const rows = await runner.execute<{
-      id: string; line_number: number; description: string | null; item_id: string | null;
-      item_name: string | null; item_kind: string | null; item_unit: string | null; unit: string | null;
-      quantity: string; amount: string; cost_amount: string | null; item_default_cost: string | null;
-    }>(sql`
+    id: string;
+    line_number: number;
+    description: string | null;
+    item_id: string | null;
+    item_name: string | null;
+    item_kind: string | null;
+    item_unit: string | null;
+    unit: string | null;
+    quantity: string;
+    amount: string;
+    cost_amount: string | null;
+    item_default_cost: string | null;
+  }>(
+    sql`
       select dl.id, dl.line_number, dl.description, dl.item_id, i.name as item_name, i.kind as item_kind,
              i.unit as item_unit, dl.unit, dl.quantity::text as quantity, dl.amount::text as amount,
              dl.cost_amount::text as cost_amount, i.default_cost::text as item_default_cost
         from document_lines dl
         left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.org_id = ${orgId} and dl.document_id = ${quote.id}
-       order by dl.line_number, dl.id`, "objects");
+       order by dl.line_number, dl.id`,
+    "objects",
+  );
   return rows.map((row) => ({
     lineId: row.id,
     lineNumber: Number(row.line_number),
@@ -212,7 +242,9 @@ async function priorAward(
   orgId: string,
   quoteId: string,
 ): Promise<{ projectId: string; projectName: string; baselineId: string | null } | null> {
-  const row = (await runner.execute<{ project_id: string; project_name: string; baseline_id: string | null }>(sql`
+  const row = (
+    await runner.execute<{ project_id: string; project_name: string; baseline_id: string | null }>(
+      sql`
       select p.id as project_id, p.name as project_name,
              (select b.id from project_budget_baselines b
                where b.org_id = p.org_id and b.project_id = p.id and b.source_document_id = ${quoteId}
@@ -223,8 +255,13 @@ async function priorAward(
               or exists (select 1 from project_budget_baselines b
                           where b.org_id = p.org_id and b.project_id = p.id and b.source_document_id = ${quoteId}))
        order by (p.awarded_from_document_id = ${quoteId}) desc nulls last
-       limit 1`, "objects"))[0];
-  return row ? { projectId: row.project_id, projectName: row.project_name, baselineId: row.baseline_id } : null;
+       limit 1`,
+      "objects",
+    )
+  )[0];
+  return row
+    ? { projectId: row.project_id, projectName: row.project_name, baselineId: row.baseline_id }
+    : null;
 }
 
 /**
@@ -237,11 +274,16 @@ async function awardBlock(
   quote: QuoteRow,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<string | null> {
-  if (quote.status === "draft") return `Quote ${quote.document_number} is a draft — issue it before awarding it`;
-  if (quote.status === "pending_approval") return `Quote ${quote.document_number} is awaiting approval — approve it in Flows before awarding it`;
-  if (quote.status === "voided") return `Quote ${quote.document_number} is voided and cannot be awarded — issue a new quote for the work`;
-  if (quote.status !== "approved") return `Quote ${quote.document_number} is ${quote.status} and can no longer be awarded`;
-  if (!quote.party_id) return `Quote ${quote.document_number} names no customer — a project is awarded to the quote's customer`;
+  if (quote.status === "draft")
+    return `Quote ${quote.document_number} is a draft — issue it before awarding it`;
+  if (quote.status === "pending_approval")
+    return `Quote ${quote.document_number} is awaiting approval — approve it in Flows before awarding it`;
+  if (quote.status === "voided")
+    return `Quote ${quote.document_number} is voided and cannot be awarded — issue a new quote for the work`;
+  if (quote.status !== "approved")
+    return `Quote ${quote.document_number} is ${quote.status} and can no longer be awarded`;
+  if (!quote.party_id)
+    return `Quote ${quote.document_number} names no customer — a project is awarded to the quote's customer`;
   const signature = await latestSignatureRequest(runner, orgId, QUOTE_SUBJECT_TABLE, quote.id);
   if (signature && signature.status === "signed") {
     const current = await quotePresentationHash(runner, orgId, quote.id, allowedSubsidiaryIds);
@@ -252,9 +294,18 @@ async function awardBlock(
   return null;
 }
 
-async function projectTypeOptions(runner: SqlExecutor, orgId: string): Promise<AwardProjectTypeOption[]> {
+async function projectTypeOptions(
+  runner: SqlExecutor,
+  orgId: string,
+): Promise<AwardProjectTypeOption[]> {
   const today = await businessTodayInTx(runner, orgId);
-  const rows = await runner.execute<{ id: string; key: string; name: string; price_method: string | null }>(sql`
+  const rows = await runner.execute<{
+    id: string;
+    key: string;
+    name: string;
+    price_method: string | null;
+  }>(
+    sql`
       select pt.id, pt.key, pt.name,
              (select v.financial_profile->'totalPrice'->>'method'
                 from project_financial_profile_versions v
@@ -264,12 +315,15 @@ async function projectTypeOptions(runner: SqlExecutor, orgId: string): Promise<A
                order by v.effective_from desc limit 1) as price_method
         from project_types pt
        where pt.org_id = ${orgId} and pt.is_active
-       order by pt.sort_order, pt.name, pt.id`, "objects");
+       order by pt.sort_order, pt.name, pt.id`,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     key: row.key,
     name: row.name,
-    pricesFromContract: row.price_method === "contract_field" || row.price_method === "not_to_exceed",
+    pricesFromContract:
+      row.price_method === "contract_field" || row.price_method === "not_to_exceed",
   }));
 }
 
@@ -280,18 +334,25 @@ async function defaultProjectTypeId(
   billingMethod: string | null,
 ): Promise<string | null> {
   const method = billingMethod === "fixed_price" ? "fixed_price" : "time_and_materials";
-  const row = (await runner.execute<{ id: string }>(sql`
+  const row = (
+    await runner.execute<{ id: string }>(
+      sql`
       select id from project_types
        where org_id = ${orgId} and is_active and (key = ${method} or billing_method = ${method})
        order by (key = ${method}) desc, sort_order, name, id
-       limit 1`, "objects"))[0];
+       limit 1`,
+      "objects",
+    )
+  )[0];
   return row?.id ?? null;
 }
 
 function defaultProjectName(quote: QuoteRow): string {
   const memo = (quote.memo ?? "").split(/\r?\n/)[0]!.trim();
   if (memo) return memo.length > 200 ? memo.slice(0, 200) : memo;
-  return quote.party_name ? `${quote.party_name} — ${quote.document_number}` : quote.document_number;
+  return quote.party_name
+    ? `${quote.party_name} — ${quote.document_number}`
+    : quote.document_number;
 }
 
 async function customerProjects(
@@ -300,26 +361,54 @@ async function customerProjects(
   customerId: string | null,
 ): Promise<{ id: string; name: string; code: string | null }[]> {
   if (!customerId) return [];
-  return await runner.execute<{ id: string; name: string; code: string | null }>(sql`
+  return await runner.execute<{ id: string; name: string; code: string | null }>(
+    sql`
       select id, name, code from projects
        where org_id = ${ctx.orgId} and customer_id = ${customerId} and is_active
          and status not in ('closed', 'cancelled')
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, ctx.allowedSubsidiaryIds)}
        order by name, id
-       limit 500`, "objects");
+       limit 500`,
+    "objects",
+  );
 }
 
 async function projectTasks(
   runner: SqlExecutor,
   orgId: string,
   projectId: string,
-): Promise<{ id: string; code: string | null; name: string; status: string; estimated_hours: string | null; estimated_cost: string | null; estimated_price: string | null; budget_quantity: string | null; budget_unit: string | null }[]> {
-  return await runner.execute<{ id: string; code: string | null; name: string; status: string; estimated_hours: string | null; estimated_cost: string | null; estimated_price: string | null; budget_quantity: string | null; budget_unit: string | null }>(sql`
+): Promise<
+  {
+    id: string;
+    code: string | null;
+    name: string;
+    status: string;
+    estimated_hours: string | null;
+    estimated_cost: string | null;
+    estimated_price: string | null;
+    budget_quantity: string | null;
+    budget_unit: string | null;
+  }[]
+> {
+  return await runner.execute<{
+    id: string;
+    code: string | null;
+    name: string;
+    status: string;
+    estimated_hours: string | null;
+    estimated_cost: string | null;
+    estimated_price: string | null;
+    budget_quantity: string | null;
+    budget_unit: string | null;
+  }>(
+    sql`
       select id, code, name, status, estimated_hours::text as estimated_hours, estimated_cost::text as estimated_cost,
              estimated_price::text as estimated_price, budget_quantity::text as budget_quantity, budget_unit
         from project_tasks
        where org_id = ${orgId} and project_id = ${projectId}
-       order by code nulls last, name, id`, "objects");
+       order by code nulls last, name, id`,
+    "objects",
+  );
 }
 
 /**
@@ -338,7 +427,8 @@ export async function previewQuoteAward(
     const quote = await loadQuoteForAward(runner, ctx, quoteId, false);
     const prior = await priorAward(runner, ctx.orgId, quote.id);
     const featuresOn =
-      (await orgFeatureEnabled(ctx.orgId, "projects", runner)) && (await orgFeatureEnabled(ctx.orgId, "orders", runner));
+      (await orgFeatureEnabled(ctx.orgId, "projects", runner)) &&
+      (await orgFeatureEnabled(ctx.orgId, "orders", runner));
     const blocked = !featuresOn
       ? "Projects and Orders must both be on — turn them on in Company Settings → Features"
       : prior
@@ -348,14 +438,20 @@ export async function previewQuoteAward(
     const types = await projectTypeOptions(runner, ctx.orgId);
     const typeId = await defaultProjectTypeId(runner, ctx.orgId, quote.billing_method);
     const projects = await customerProjects(runner, ctx, quote.party_id);
-    const targetProjectId = options.projectId && isUuid(options.projectId)
-      ? (projects.some((p) => p.id === options.projectId) ? options.projectId : null)
-      : quote.project_id;
+    const targetProjectId =
+      options.projectId && isUuid(options.projectId)
+        ? projects.some((p) => p.id === options.projectId)
+          ? options.projectId
+          : null
+        : quote.project_id;
     const existing = targetProjectId ? await projectTasks(runner, ctx.orgId, targetProjectId) : [];
     let plan: AwardPlan | null = null;
     let planError: string | null = null;
     try {
-      plan = planQuoteAward({ lines, usedCodes: new Set(existing.map((t) => t.code).filter((c): c is string => !!c)) });
+      plan = planQuoteAward({
+        lines,
+        usedCodes: new Set(existing.map((t) => t.code).filter((c): c is string => !!c)),
+      });
     } catch (error) {
       if (!(error instanceof Error) || error.name !== "AwardPlanError") throw error;
       planError = error.message;
@@ -424,18 +520,33 @@ export async function awardQuoteInTransaction(
   // The feature-gate fence first (a new project blocks disabling Projects),
   // then both gates re-checked under it.
   await acquireOrgFeatureGateLock(runner, ctx.orgId);
-  if (!(await lockAndCheckOrgFeature(runner, ctx.orgId, "projects")) || !(await lockAndCheckOrgFeature(runner, ctx.orgId, "orders"))) {
-    throw new QuoteAwardError("Projects and Orders must both be on — turn them on in Company Settings → Features", 404);
+  if (
+    !(await lockAndCheckOrgFeature(runner, ctx.orgId, "projects")) ||
+    !(await lockAndCheckOrgFeature(runner, ctx.orgId, "orders"))
+  ) {
+    throw new QuoteAwardError(
+      "Projects and Orders must both be on — turn them on in Company Settings → Features",
+      404,
+    );
   }
   const quote = await loadQuoteForAward(runner, ctx, quoteId, true);
   // The quote row lock serializes twin awards: the second observes the first.
   const prior = await priorAward(runner, ctx.orgId, quote.id);
   if (prior) {
-    return { projectId: prior.projectId, projectName: prior.projectName, created: false, baselineId: prior.baselineId, taskCount: 0 };
+    return {
+      projectId: prior.projectId,
+      projectName: prior.projectName,
+      created: false,
+      baselineId: prior.baselineId,
+      taskCount: 0,
+    };
   }
   const blocked = await awardBlock(runner, ctx.orgId, quote, ctx.allowedSubsidiaryIds);
   if (blocked) throw new QuoteAwardError(blocked);
-  if (input.productionQuantities && !(await lockAndCheckOrgFeature(runner, ctx.orgId, "projectProgress"))) {
+  if (
+    input.productionQuantities &&
+    !(await lockAndCheckOrgFeature(runner, ctx.orgId, "projectProgress"))
+  ) {
     throw new QuoteAwardError(
       "Production quantities need Progress tracking — turn it on in Company Settings → Features, or award without them",
       422,
@@ -443,8 +554,9 @@ export async function awardQuoteInTransaction(
     );
   }
 
-  const target: AwardTarget = input.target
-    ?? (quote.project_id ? { mode: "existing", projectId: quote.project_id } : { mode: "new" });
+  const target: AwardTarget =
+    input.target ??
+    (quote.project_id ? { mode: "existing", projectId: quote.project_id } : { mode: "new" });
   if (target.mode === "new" && quote.project_id) {
     throw new QuoteAwardError(
       `Quote ${quote.document_number} is already tagged to project ${quote.project_name ?? quote.project_id} — award it into that project`,
@@ -465,11 +577,22 @@ export async function awardQuoteInTransaction(
         "target",
       );
     }
-    const row = (await runner.execute<{ id: string; name: string; customer_id: string | null; status: string; is_active: boolean }>(sql`
+    const row = (
+      await runner.execute<{
+        id: string;
+        name: string;
+        customer_id: string | null;
+        status: string;
+        is_active: boolean;
+      }>(
+        sql`
         select id, name, customer_id, status, is_active from projects
          where id = ${target.projectId} and org_id = ${ctx.orgId}
            ${subsidiaryVisibleFilter(sql`subsidiary_id`, ctx.allowedSubsidiaryIds)}
-         for update`, "objects"))[0];
+         for update`,
+        "objects",
+      )
+    )[0];
     if (!row) throw new QuoteAwardError("Project not found", 404, "target");
     if (row.customer_id !== quote.party_id) {
       throw new QuoteAwardError(
@@ -479,7 +602,11 @@ export async function awardQuoteInTransaction(
       );
     }
     if (!row.is_active || row.status === "closed" || row.status === "cancelled") {
-      throw new QuoteAwardError(`Project ${row.name} is closed — reopen it before awarding work into it`, 422, "target");
+      throw new QuoteAwardError(
+        `Project ${row.name} is closed — reopen it before awarding work into it`,
+        422,
+        "target",
+      );
     }
     existingProject = { id: row.id, name: row.name };
     priorTasks = await projectTasks(runner, ctx.orgId, row.id);
@@ -506,11 +633,24 @@ export async function awardQuoteInTransaction(
   for (const task of plan.tasks) {
     if (!task.existingTaskId) continue;
     const existing = priorById.get(task.existingTaskId);
-    if (!existing) throw new QuoteAwardError(`Task ${task.code ?? task.name} is not a task of the chosen project`, 422, "tasks");
+    if (!existing)
+      throw new QuoteAwardError(
+        `Task ${task.code ?? task.name} is not a task of the chosen project`,
+        422,
+        "tasks",
+      );
     if (existing.status !== "open") {
-      throw new QuoteAwardError(`Task ${existing.code ?? existing.name} is ${existing.status} — reopen it or map the lines to another task`, 422, "tasks");
+      throw new QuoteAwardError(
+        `Task ${existing.code ?? existing.name} is ${existing.status} — reopen it or map the lines to another task`,
+        422,
+        "tasks",
+      );
     }
-    if (task.budgetUnit && existing.budget_unit && !sameUnit(task.budgetUnit, existing.budget_unit)) {
+    if (
+      task.budgetUnit &&
+      existing.budget_unit &&
+      !sameUnit(task.budgetUnit, existing.budget_unit)
+    ) {
       throw new QuoteAwardError(
         `Task ${existing.code ?? existing.name} budgets production in ${existing.budget_unit}, not ${task.budgetUnit} — map those lines to another task`,
         422,
@@ -524,9 +664,10 @@ export async function awardQuoteInTransaction(
   let projectName: string;
   let created = false;
   if (target.mode === "new") {
-    const typeId = target.projectTypeId !== undefined
-      ? target.projectTypeId
-      : await defaultProjectTypeId(runner, ctx.orgId, quote.billing_method);
+    const typeId =
+      target.projectTypeId !== undefined
+        ? target.projectTypeId
+        : await defaultProjectTypeId(runner, ctx.orgId, quote.billing_method);
     if (target.startsOn != null && target.startsOn !== "" && !isIsoCalendarDate(target.startsOn)) {
       throw new QuoteAwardError("Invalid start date", 422, "startsOn");
     }
@@ -535,7 +676,8 @@ export async function awardQuoteInTransaction(
       contractValue = target.contractValue;
     } else {
       const types = await projectTypeOptions(runner, ctx.orgId);
-      contractValue = types.find((t) => t.id === typeId)?.pricesFromContract === true ? plan.totals.price : null;
+      contractValue =
+        types.find((t) => t.id === typeId)?.pricesFromContract === true ? plan.totals.price : null;
     }
     projectName = (target.name ?? "").trim() || defaultProjectName(quote);
     projectId = randomUUID();
@@ -562,13 +704,18 @@ export async function awardQuoteInTransaction(
     // Record the award on a project that has none yet; a project already
     // awarded from another quote keeps that provenance, and this award is
     // evidenced by its baseline's source quote.
-    const updated = (await runner.execute<{ status: string }>(sql`
+    const updated = (
+      await runner.execute<{ status: string }>(
+        sql`
         update projects
            set awarded_from_document_id = ${quote.id}, awarded_at = now(), awarded_by = ${ctx.actorId},
                status = case when status = 'quoted' then 'awarded' else status end,
                updated_at = now(), updated_by = ${ctx.actorId}
          where id = ${projectId} and org_id = ${ctx.orgId} and awarded_from_document_id is null
-         returning status`, "objects"))[0];
+         returning status`,
+        "objects",
+      )
+    )[0];
     if (updated) {
       await runner.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -581,17 +728,27 @@ export async function awardQuoteInTransaction(
   // Tasks: new rows for new groups, budget added onto mapped existing tasks.
   const taskIdByKey = new Map<string, { id: string; code: string | null; name: string }>();
   let order = Number(
-    (await runner.execute<{ next: number }>(sql`
+    (
+      await runner.execute<{ next: number }>(
+        sql`
         select coalesce(max(schedule_order), 0) + 1 as next from project_tasks
-         where org_id = ${ctx.orgId} and project_id = ${projectId}`, "objects"))[0]?.next ?? 1,
+         where org_id = ${ctx.orgId} and project_id = ${projectId}`,
+        "objects",
+      )
+    )[0]?.next ?? 1,
   );
   for (const task of plan.tasks) {
     if (task.existingTaskId) {
       const before = priorById.get(task.existingTaskId)!;
-      const quantity = task.budgetQuantity === null
-        ? before.budget_quantity
-        : fromDecimal8Units(decimal8Units(before.budget_quantity ?? "0") + decimal8Units(task.budgetQuantity));
-      const after = (await runner.execute<{ id: string }>(sql`
+      const quantity =
+        task.budgetQuantity === null
+          ? before.budget_quantity
+          : fromDecimal8Units(
+              decimal8Units(before.budget_quantity ?? "0") + decimal8Units(task.budgetQuantity),
+            );
+      const after = (
+        await runner.execute<{ id: string }>(
+          sql`
           update project_tasks
              set estimated_hours = coalesce(estimated_hours, 0) + ${task.hours}::numeric,
                  estimated_cost = coalesce(estimated_cost, 0) + ${task.cost}::numeric,
@@ -601,27 +758,75 @@ export async function awardQuoteInTransaction(
                  updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
                  updated_by = ${ctx.actorId}
            where id = ${before.id} and project_id = ${projectId} and org_id = ${ctx.orgId} and status = 'open'
-           returning id`, "objects"))[0];
-      if (!after) throw new QuoteAwardError(`Task ${before.code ?? before.name} changed while awarding — reload and try again`, 409);
-      await writeTaskAudit(runner, ctx, projectId, before.id, "update",
-        { estimated_hours: before.estimated_hours, estimated_cost: before.estimated_cost, estimated_price: before.estimated_price, budget_quantity: before.budget_quantity, budget_unit: before.budget_unit },
-        { added: { hours: task.hours, cost: task.cost, price: task.price, quantity: task.budgetQuantity, unit: task.budgetUnit } },
-        quote.document_number);
+           returning id`,
+          "objects",
+        )
+      )[0];
+      if (!after)
+        throw new QuoteAwardError(
+          `Task ${before.code ?? before.name} changed while awarding — reload and try again`,
+          409,
+        );
+      await writeTaskAudit(
+        runner,
+        ctx,
+        projectId,
+        before.id,
+        "update",
+        {
+          estimated_hours: before.estimated_hours,
+          estimated_cost: before.estimated_cost,
+          estimated_price: before.estimated_price,
+          budget_quantity: before.budget_quantity,
+          budget_unit: before.budget_unit,
+        },
+        {
+          added: {
+            hours: task.hours,
+            cost: task.cost,
+            price: task.price,
+            quantity: task.budgetQuantity,
+            unit: task.budgetUnit,
+          },
+        },
+        quote.document_number,
+      );
       taskIdByKey.set(task.key, { id: before.id, code: before.code, name: before.name });
       continue;
     }
-    const inserted = (await runner.execute<{ id: string }>(sql`
+    const inserted = (
+      await runner.execute<{ id: string }>(
+        sql`
         insert into project_tasks
           (org_id, project_id, code, name, status, estimated_hours, estimated_cost, estimated_price,
            budget_quantity, budget_unit, schedule_order, created_by, updated_by)
         values (${ctx.orgId}, ${projectId}, ${task.code}, ${task.name}, 'open', ${task.hours}, ${task.cost}, ${task.price},
                 ${task.budgetQuantity}, ${task.budgetUnit}, ${order}, ${ctx.actorId}, ${ctx.actorId})
-        returning id`, "objects"))[0];
-    if (!inserted) throw new QuoteAwardError(`Task ${task.code ?? task.name} was not recorded`, 409);
+        returning id`,
+        "objects",
+      )
+    )[0];
+    if (!inserted)
+      throw new QuoteAwardError(`Task ${task.code ?? task.name} was not recorded`, 409);
     order += 1;
-    await writeTaskAudit(runner, ctx, projectId, inserted.id, "insert", null,
-      { code: task.code, name: task.name, estimated_hours: task.hours, estimated_cost: task.cost, estimated_price: task.price, budget_quantity: task.budgetQuantity, budget_unit: task.budgetUnit },
-      quote.document_number);
+    await writeTaskAudit(
+      runner,
+      ctx,
+      projectId,
+      inserted.id,
+      "insert",
+      null,
+      {
+        code: task.code,
+        name: task.name,
+        estimated_hours: task.hours,
+        estimated_cost: task.cost,
+        estimated_price: task.price,
+        budget_quantity: task.budgetQuantity,
+        budget_unit: task.budgetUnit,
+      },
+      quote.document_number,
+    );
     taskIdByKey.set(task.key, { id: inserted.id, code: task.code, name: task.name });
   }
 
@@ -631,7 +836,8 @@ export async function awardQuoteInTransaction(
     const tagged = await runner.execute<never>(sql`
       update documents set project_id = ${projectId}, updated_at = now(), updated_by = ${ctx.actorId}
        where id = ${quote.id} and org_id = ${ctx.orgId} and project_id is null`);
-    if ((tagged.rowCount ?? 0) !== 1) throw new QuoteAwardError("The quote changed while awarding — reload and try again", 409);
+    if ((tagged.rowCount ?? 0) !== 1)
+      throw new QuoteAwardError("The quote changed while awarding — reload and try again", 409);
   }
 
   // The baseline: the project's budget before the award (one line per prior
@@ -688,7 +894,13 @@ export async function awardQuoteInTransaction(
               },
             })}::jsonb, ${ctx.actorId})`);
 
-  return { projectId, projectName, created: true, baselineId: baseline.id, taskCount: taskIdByKey.size };
+  return {
+    projectId,
+    projectName,
+    created: true,
+    baselineId: baseline.id,
+    taskCount: taskIdByKey.size,
+  };
 }
 
 /** Award a quote in its own tenant transaction. */

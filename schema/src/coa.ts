@@ -189,7 +189,10 @@ export const accountingContextDefaults = pgTable(
   },
   (t) => [
     uniqueIndex("accounting_context_defaults_org_id_id_unique").on(t.orgId, t.id),
-    check("accounting_context_defaults_one_scope", sql`num_nonnulls(${t.subsidiaryId}, ${t.country}) = 1`),
+    check(
+      "accounting_context_defaults_one_scope",
+      sql`num_nonnulls(${t.subsidiaryId}, ${t.country}) = 1`,
+    ),
     foreignKey({
       name: "accounting_context_defaults_context_fkey",
       columns: [t.orgId, t.contextId],
@@ -222,8 +225,14 @@ export const accountLocalizations = pgTable(
   (t) => [
     uniqueIndex("account_localizations_org_id_id_unique").on(t.orgId, t.id),
     index("account_localizations_account").on(t.orgId, t.accountId, t.contextId),
-    check("account_localizations_value", sql`${t.localizedNumber} is not null or ${t.localizedName} is not null`),
-    check("account_localizations_window", sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`),
+    check(
+      "account_localizations_value",
+      sql`${t.localizedNumber} is not null or ${t.localizedName} is not null`,
+    ),
+    check(
+      "account_localizations_window",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
     foreignKey({
       name: "account_localizations_context_fkey",
       columns: [t.orgId, t.contextId],

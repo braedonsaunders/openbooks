@@ -1,19 +1,9 @@
 import "server-only";
 import { cache } from "react";
-import {
-  createHash,
-  createHmac,
-  randomBytes,
-  randomUUID,
-  timingSafeEqual,
-} from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { sql } from "drizzle-orm";
-import {
-  db,
-  withBypass,
-  withBypassContext,
-} from "@openbooks/engine/platform/db";
+import { db, withBypass, withBypassContext } from "@openbooks/engine/platform/db";
 import { homeEnvironment, resolveActiveEnv } from "./org-access";
 import { setRequestOrg } from "./request-org";
 import { sealSecret, SecretIntegrityError, unsealSecret } from "./secrets";
@@ -65,7 +55,8 @@ const COOKIE = "ob_session";
 const ACTIVE_ENV_COOKIE = "ob_active_env";
 export const LOGIN_CHALLENGE_COOKIE = "ob_login_challenge";
 const TTL_S = 14 * 24 * 3600;
-const DUMMY_PASSWORD_HASH = "01010101010101010101010101010101:105ba60fca19c5323503bb2f317fc26b63fdfaf6575712e44694fcb0917fa196192bea677d6ff71b01e784e576b631d15a931a4ae569446f7f7f37917dd2d25f";
+const DUMMY_PASSWORD_HASH =
+  "01010101010101010101010101010101:105ba60fca19c5323503bb2f317fc26b63fdfaf6575712e44694fcb0917fa196192bea677d6ff71b01e784e576b631d15a931a4ae569446f7f7f37917dd2d25f";
 function sessionSecret(): string {
   // Live read (requireSessionSecret defaults to process.env): db.ts snapshots
   // the environment at module evaluation, so a snapshot read misses
@@ -99,9 +90,7 @@ function tokenHash(token: string): string {
 
 function privacyHash(kind: string, value: string | null): string | null {
   if (!value) return null;
-  return createHmac("sha256", sessionSecret())
-    .update(`openbooks:${kind}:${value}`)
-    .digest("hex");
+  return createHmac("sha256", sessionSecret()).update(`openbooks:${kind}:${value}`).digest("hex");
 }
 
 /**
@@ -195,7 +184,9 @@ export type ValidatedSession = {
 };
 
 /** Cryptographic and server-side revocation check. */
-export async function validateSessionToken(token: string | undefined): Promise<ValidatedSession | null> {
+export async function validateSessionToken(
+  token: string | undefined,
+): Promise<ValidatedSession | null> {
   const parsed = verifySessionTokenParts(token);
   if (!parsed) return null;
   const hash = tokenHash(token!);
@@ -216,22 +207,28 @@ export async function validateSessionToken(token: string | undefined): Promise<V
            select 1 from users u
             where u.id = s.user_id and u.is_active
          )`;
-    const result = await db.execute<ValidatedSession & { stale: boolean | null }>(sql`
+    const result = await db.execute<ValidatedSession & { stale: boolean | null }>(
+      sql`
       select s.user_id as "userId", s.id as "sessionId", s.expires_at as "expiresAt",
              s.auth_method as "authMethod",
              s.last_seen_at < now() - interval '5 minutes' as stale
         from auth_sessions s
        where ${live}
          for share of s
-    `, "objects");
+    `,
+      "objects",
+    );
     const session = result[0];
     if (!session) return null;
     if (session.stale) {
-      const stamped = await db.execute<{ id: string }>(sql`
+      const stamped = await db.execute<{ id: string }>(
+        sql`
         update auth_sessions s set last_seen_at = now()
          where ${live}
         returning s.id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (stamped.length === 0) return null;
     }
     return {
@@ -295,18 +292,24 @@ async function acquireAuthLocks(emailHash: string, networkHash: string | null): 
   }
 }
 
-async function ensureLoginState(emailHash: string, userId: string | null = null): Promise<LoginStateRow> {
+async function ensureLoginState(
+  emailHash: string,
+  userId: string | null = null,
+): Promise<LoginStateRow> {
   await db.execute(sql`
     insert into auth_login_state (email_hash, user_id)
     values (${emailHash}, ${userId})
     on conflict (email_hash) do update
       set user_id = coalesce(auth_login_state.user_id, excluded.user_id), updated_at = now()
   `);
-  const result = (await db.execute<LoginStateRow>(sql`
+  const result = await db.execute<LoginStateRow>(
+    sql`
     select user_id as "userId", failure_count as "failureCount",
            last_failed_at as "lastFailedAt", locked_until as "lockedUntil"
       from auth_login_state where email_hash = ${emailHash} for update
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = result[0]!;
   return {
     ...row,
@@ -342,7 +345,8 @@ async function recordLoginEvent(input: {
 async function consumeDeploymentLoginCapacity() {
   // bypass: identity-bootstrap — the deployment-wide login bucket is charged before the identity is known.
   return withBypassContext(async () => {
-    const result = (await db.execute<{ attemptCount: number; windowStartedAt: Date | string }>(sql`
+    const result = await db.execute<{ attemptCount: number; windowStartedAt: Date | string }>(
+      sql`
       insert into auth_rate_limit_buckets as bucket
         (bucket_key, window_started_at, attempt_count, updated_at)
       values ('global:password-primary', now(), 1, now())
@@ -359,7 +363,9 @@ async function consumeDeploymentLoginCapacity() {
         end,
         updated_at = now()
       returning attempt_count as "attemptCount", window_started_at as "windowStartedAt"
-    `, "objects"));
+    `,
+      "objects",
+    );
     const row = result[0]!;
     const windowStartedAt = dateValue(row.windowStartedAt);
     return {
@@ -370,14 +376,15 @@ async function consumeDeploymentLoginCapacity() {
 }
 
 async function recentAttemptCounts(emailHash: string, networkHash: string | null, userId?: string) {
-  const result = (await db.execute<{
+  const result = await db.execute<{
     emailCount: number;
     networkCount: number;
     userCount: number;
     oldestEmailAttempt: Date | null;
     oldestNetworkAttempt: Date | null;
     oldestUserAttempt: Date | null;
-  }>(sql`
+  }>(
+    sql`
     select
       email_stats.attempt_count as "emailCount",
       network_stats.attempt_count as "networkCount",
@@ -408,24 +415,31 @@ async function recentAttemptCounts(emailHash: string, networkHash: string | null
            and occurred_at > now() - (${LOGIN_WINDOW_S} * interval '1 second')
            and outcome in ('failure', 'mfa_failure')
       ) user_stats
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = result[0];
-  return row ? {
-    ...row,
-    oldestEmailAttempt: dateValue(row.oldestEmailAttempt),
-    oldestNetworkAttempt: dateValue(row.oldestNetworkAttempt),
-    oldestUserAttempt: dateValue(row.oldestUserAttempt),
-  } : {
-    emailCount: 0,
-    networkCount: 0,
-    userCount: 0,
-    oldestEmailAttempt: null,
-    oldestNetworkAttempt: null,
-    oldestUserAttempt: null,
-  };
+  return row
+    ? {
+        ...row,
+        oldestEmailAttempt: dateValue(row.oldestEmailAttempt),
+        oldestNetworkAttempt: dateValue(row.oldestNetworkAttempt),
+        oldestUserAttempt: dateValue(row.oldestUserAttempt),
+      }
+    : {
+        emailCount: 0,
+        networkCount: 0,
+        userCount: 0,
+        oldestEmailAttempt: null,
+        oldestNetworkAttempt: null,
+        oldestUserAttempt: null,
+      };
 }
 
-function attemptRateLimit(input: Awaited<ReturnType<typeof recentAttemptCounts>>, includeUser = false) {
+function attemptRateLimit(
+  input: Awaited<ReturnType<typeof recentAttemptCounts>>,
+  includeUser = false,
+) {
   const emailLimited = input.emailCount >= EMAIL_ATTEMPT_LIMIT;
   const networkLimited = input.networkCount >= NETWORK_ATTEMPT_LIMIT;
   const userLimited = includeUser && input.userCount >= MFA_ATTEMPT_LIMIT;
@@ -513,10 +527,18 @@ function maybePruneAuthData(): void {
        where occurred_at < now() - (${AUTH_EVENT_RETENTION_DAYS} * interval '1 day')
           or (user_id is null and occurred_at < now() - interval '1 day')
     `);
-    await db.execute(sql`delete from auth_login_challenges where expires_at < now() - interval '1 day'`);
-    await db.execute(sql`delete from auth_sessions where expires_at < now() - interval '30 days' or revoked_at < now() - interval '30 days'`);
-    await db.execute(sql`delete from auth_mfa_factors where enabled_at is null and setup_expires_at < now()`);
-    await db.execute(sql`delete from auth_rate_limit_buckets where updated_at < now() - interval '1 day'`);
+    await db.execute(
+      sql`delete from auth_login_challenges where expires_at < now() - interval '1 day'`,
+    );
+    await db.execute(
+      sql`delete from auth_sessions where expires_at < now() - interval '30 days' or revoked_at < now() - interval '30 days'`,
+    );
+    await db.execute(
+      sql`delete from auth_mfa_factors where enabled_at is null and setup_expires_at < now()`,
+    );
+    await db.execute(
+      sql`delete from auth_rate_limit_buckets where updated_at < now() - interval '1 day'`,
+    );
     await db.execute(sql`
       delete from auth_login_state
        where (
@@ -537,14 +559,17 @@ export async function login(
   maybePruneAuthData();
   const deploymentLimit = await consumeDeploymentLoginCapacity();
   const email = normalizeLoginEmail(rawEmail);
-  const usablePassword = typeof password === "string" && password.length > 0 && password.length <= 1024;
+  const usablePassword =
+    typeof password === "string" && password.length > 0 && password.length <= 1024;
   const emailHash = loginEmailHash(email);
   const { networkHash, userAgentHash } = contextHashes(context);
 
   // bypass: identity-bootstrap — password login resolves the address to its home identity across organizations.
   return withBypass(async () => {
     await acquireAuthLocks(emailHash, networkHash);
-    const userResult = email ? (await db.execute<{ id: string; passwordHash: string }>(sql`
+    const userResult = email
+      ? await db.execute<{ id: string; passwordHash: string }>(
+          sql`
       select u.id, u.password_hash as "passwordHash"
         from users u
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
@@ -552,7 +577,9 @@ export async function login(
        order by u.created_at
        limit 2
        for update of u
-    `, "objects"))
+    `,
+          "objects",
+        )
       : [];
     // A login identity is global even though users rows are tenant-scoped.
     // Never guess when configuration has produced two active home identities.
@@ -562,7 +589,14 @@ export async function login(
 
     if (limit.limited) {
       if (user) {
-        await recordLoginEvent({ userId: user.id, emailHash, outcome: "rate_limited", authMethod: "password", networkHash, userAgentHash });
+        await recordLoginEvent({
+          userId: user.id,
+          emailHash,
+          outcome: "rate_limited",
+          authMethod: "password",
+          networkHash,
+          userAgentHash,
+        });
       }
       return limit.identityLimited
         ? { kind: "invalid", retryAfter: limit.retryAfter }
@@ -578,7 +612,14 @@ export async function login(
     const state = await ensureLoginState(emailHash, user?.id ?? null);
     if (state.lockedUntil && state.lockedUntil.getTime() > Date.now()) {
       if (user) {
-        await recordLoginEvent({ userId: user.id, emailHash, outcome: "locked", authMethod: "password", networkHash, userAgentHash });
+        await recordLoginEvent({
+          userId: user.id,
+          emailHash,
+          outcome: "locked",
+          authMethod: "password",
+          networkHash,
+          userAgentHash,
+        });
       }
       return { kind: "invalid", retryAfter: retryAfterSeconds(state.lockedUntil) };
     }
@@ -594,7 +635,14 @@ export async function login(
     }
     if (!user || !usablePassword || !passwordVerification.valid) {
       const next = await registerFailure(emailHash, state, user?.id ?? null);
-      await recordLoginEvent({ userId: user?.id ?? null, emailHash, outcome: "failure", authMethod: "password", networkHash, userAgentHash });
+      await recordLoginEvent({
+        userId: user?.id ?? null,
+        emailHash,
+        outcome: "failure",
+        authMethod: "password",
+        networkHash,
+        userAgentHash,
+      });
       return { kind: "invalid", retryAfter: retryAfterSeconds(next.lockedUntil) };
     }
     await upgradePasswordHashIfNeeded(
@@ -605,15 +653,36 @@ export async function login(
     );
 
     if (await hasEnabledMfaAfterUserLock(user.id)) {
-      const challengeToken = await createLoginChallenge({ userId: user.id, emailHash, authMethod: "password", context });
-      await recordLoginEvent({ userId: user.id, emailHash, outcome: "mfa_required", authMethod: "password", networkHash, userAgentHash });
+      const challengeToken = await createLoginChallenge({
+        userId: user.id,
+        emailHash,
+        authMethod: "password",
+        context,
+      });
+      await recordLoginEvent({
+        userId: user.id,
+        emailHash,
+        outcome: "mfa_required",
+        authMethod: "password",
+        networkHash,
+        userAgentHash,
+      });
       return { kind: "mfa_required", challengeToken };
     }
 
     await resetFailures(emailHash, user.id);
-    await db.execute(sql`update users set last_login_at = now(), updated_at = now() where id = ${user.id}`);
+    await db.execute(
+      sql`update users set last_login_at = now(), updated_at = now() where id = ${user.id}`,
+    );
     const token = await createSessionRecord(user.id, "password", context);
-    await recordLoginEvent({ userId: user.id, emailHash, outcome: "success", authMethod: "password", networkHash, userAgentHash });
+    await recordLoginEvent({
+      userId: user.id,
+      emailHash,
+      outcome: "success",
+      authMethod: "password",
+      networkHash,
+      userAgentHash,
+    });
     return { kind: "success", token };
   });
 }
@@ -621,10 +690,13 @@ export async function login(
 /** Read the factor in a new statement AFTER acquiring the user's lock. A join
  * in the locking statement can retain its pre-wait snapshot of MFA state. */
 async function hasEnabledMfaAfterUserLock(userId: string): Promise<boolean> {
-  const result = await db.execute<{ enabled: boolean }>(sql`
+  const result = await db.execute<{ enabled: boolean }>(
+    sql`
     select exists(select 1 from auth_mfa_factors
       where user_id = ${userId} and enabled_at is not null) as enabled
-  `, "objects");
+  `,
+    "objects",
+  );
   return result[0]?.enabled === true;
 }
 
@@ -636,11 +708,13 @@ function consumeMfaCredential(input: {
   supplied: string;
 }): { lastUsedStep: number | null; recoveryCodeHashes: string[] } | null {
   const totpStep = verifyTotpCode(input.secret, input.supplied, Date.now(), input.lastUsedStep);
-  if (totpStep !== null) return { lastUsedStep: totpStep, recoveryCodeHashes: input.recoveryCodeHashes };
+  if (totpStep !== null)
+    return { lastUsedStep: totpStep, recoveryCodeHashes: input.recoveryCodeHashes };
   const normalized = normalizeRecoveryCode(input.supplied);
   if (!normalized) return null;
   const index = input.recoveryCodeHashes.findIndex((value) =>
-    verifyRecoveryCodeHash(input.userId, normalized, value));
+    verifyRecoveryCodeHash(input.userId, normalized, value),
+  );
   if (index < 0) return null;
   return {
     lastUsedStep: input.lastUsedStep,
@@ -672,7 +746,8 @@ export async function completeMfaLogin(
   context: AuthRequestContext,
 ): Promise<LoginResult> {
   const challengeToken = verifyChallengeToken(rawChallengeToken);
-  if (!challengeToken || !suppliedCode || suppliedCode.length > 64) return { kind: "invalid", retryAfter: 0 };
+  if (!challengeToken || !suppliedCode || suppliedCode.length > 64)
+    return { kind: "invalid", retryAfter: 0 };
   const { networkHash, userAgentHash } = contextHashes(context);
 
   // bypass: identity-bootstrap — MFA completion resolves the pending challenge to its identity before a session exists.
@@ -681,48 +756,90 @@ export async function completeMfaLogin(
     // challenge/factor. A password reset locks the user before invalidating
     // challenges, so completion cannot mint a session from the old password
     // after the reset's session-revocation scan.
-    const identity = (await db.execute<{ emailHash: string }>(sql`
+    const identity = (
+      await db.execute<{ emailHash: string }>(
+        sql`
       select email_hash as "emailHash" from auth_login_challenges
        where id = ${challengeToken.challengeId} and user_id = ${challengeToken.userId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!identity) return { kind: "invalid", retryAfter: 0 };
     await acquireAuthLocks(identity.emailHash, networkHash);
-    const activeUser = await db.execute<{ id: string }>(sql`
+    const activeUser = await db.execute<{ id: string }>(
+      sql`
       select id from users where id = ${challengeToken.userId} and is_active for update
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!activeUser[0]) return { kind: "invalid", retryAfter: 0 };
-    const challengeResult = (await db.execute<{ userId: string; emailHash: string; authMethod: AuthMethod; expiresAt: Date; consumedAt: Date | null }>(sql`
+    const challengeResult = await db.execute<{
+      userId: string;
+      emailHash: string;
+      authMethod: AuthMethod;
+      expiresAt: Date;
+      consumedAt: Date | null;
+    }>(
+      sql`
       select c.user_id as "userId", c.email_hash as "emailHash", c.auth_method as "authMethod",
              c.expires_at as "expiresAt", c.consumed_at as "consumedAt"
         from auth_login_challenges c
        where c.id = ${challengeToken.challengeId} and c.user_id = ${challengeToken.userId}
        for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const challenge = challengeResult[0];
-    if (!challenge || challenge.consumedAt || (dateValue(challenge.expiresAt)?.getTime() ?? 0) <= Date.now()) {
+    if (
+      !challenge ||
+      challenge.consumedAt ||
+      (dateValue(challenge.expiresAt)?.getTime() ?? 0) <= Date.now()
+    ) {
       return { kind: "invalid", retryAfter: 0 };
     }
     const state = await ensureLoginState(challenge.emailHash, challenge.userId);
     const counts = await recentAttemptCounts(challenge.emailHash, networkHash, challenge.userId);
     const limit = attemptRateLimit(counts, true);
     if (limit.limited) {
-      await recordLoginEvent({ userId: challenge.userId, emailHash: challenge.emailHash, outcome: "rate_limited", authMethod: challenge.authMethod, networkHash, userAgentHash });
+      await recordLoginEvent({
+        userId: challenge.userId,
+        emailHash: challenge.emailHash,
+        outcome: "rate_limited",
+        authMethod: challenge.authMethod,
+        networkHash,
+        userAgentHash,
+      });
       return limit.identityLimited
         ? { kind: "invalid", retryAfter: limit.retryAfter }
         : { kind: "rate_limited", retryAfter: limit.retryAfter };
     }
     if (state.lockedUntil && state.lockedUntil.getTime() > Date.now()) {
-      await recordLoginEvent({ userId: challenge.userId, emailHash: challenge.emailHash, outcome: "locked", authMethod: challenge.authMethod, networkHash, userAgentHash });
+      await recordLoginEvent({
+        userId: challenge.userId,
+        emailHash: challenge.emailHash,
+        outcome: "locked",
+        authMethod: challenge.authMethod,
+        networkHash,
+        userAgentHash,
+      });
       return { kind: "invalid", retryAfter: retryAfterSeconds(state.lockedUntil) };
     }
 
-    const factorResult = (await db.execute<{ secretEncrypted: string; recoveryCodeHashes: string[]; lastUsedStep: number | null }>(sql`
+    const factorResult = await db.execute<{
+      secretEncrypted: string;
+      recoveryCodeHashes: string[];
+      lastUsedStep: number | null;
+    }>(
+      sql`
       select secret_encrypted as "secretEncrypted", recovery_code_hashes as "recoveryCodeHashes",
              last_used_step as "lastUsedStep"
         from auth_mfa_factors
        where user_id = ${challenge.userId} and enabled_at is not null
        for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const factor = factorResult[0];
     // A tampered factor reads as a wrong code, never a 500: the failure
     // branch below still writes its mfa_failure audit row and the caller
@@ -730,23 +847,38 @@ export async function completeMfaLogin(
     let secret: string | null = null;
     if (factor) {
       try {
-        secret = unsealSecret(factor.secretEncrypted, { orgId: challenge.userId, purpose: "auth.mfa.secret" });
+        secret = unsealSecret(factor.secretEncrypted, {
+          orgId: challenge.userId,
+          purpose: "auth.mfa.secret",
+        });
       } catch (error) {
         if (!(error instanceof SecretIntegrityError)) throw error;
         logMfaIntegrityFailure(error, "completeMfaLogin", challenge.userId);
       }
     }
-    const consumed = factor && secret ? consumeMfaCredential({
-      userId: challenge.userId,
-      secret,
-      recoveryCodeHashes: Array.isArray(factor.recoveryCodeHashes) ? factor.recoveryCodeHashes : [],
-      lastUsedStep: factor.lastUsedStep,
-      supplied: suppliedCode,
-    }) : null;
+    const consumed =
+      factor && secret
+        ? consumeMfaCredential({
+            userId: challenge.userId,
+            secret,
+            recoveryCodeHashes: Array.isArray(factor.recoveryCodeHashes)
+              ? factor.recoveryCodeHashes
+              : [],
+            lastUsedStep: factor.lastUsedStep,
+            supplied: suppliedCode,
+          })
+        : null;
 
     if (!consumed) {
       const next = await registerFailure(challenge.emailHash, state, challenge.userId);
-      await recordLoginEvent({ userId: challenge.userId, emailHash: challenge.emailHash, outcome: "mfa_failure", authMethod: challenge.authMethod, networkHash, userAgentHash });
+      await recordLoginEvent({
+        userId: challenge.userId,
+        emailHash: challenge.emailHash,
+        outcome: "mfa_failure",
+        authMethod: challenge.authMethod,
+        networkHash,
+        userAgentHash,
+      });
       return { kind: "invalid", retryAfter: retryAfterSeconds(next.lockedUntil) };
     }
 
@@ -757,22 +889,38 @@ export async function completeMfaLogin(
              updated_at = now()
        where user_id = ${challenge.userId}
     `);
-    await db.execute(sql`update auth_login_challenges set consumed_at = now() where id = ${challengeToken.challengeId}`);
+    await db.execute(
+      sql`update auth_login_challenges set consumed_at = now() where id = ${challengeToken.challengeId}`,
+    );
     await resetFailures(challenge.emailHash, challenge.userId);
-    await db.execute(sql`update users set last_login_at = now(), updated_at = now() where id = ${challenge.userId}`);
+    await db.execute(
+      sql`update users set last_login_at = now(), updated_at = now() where id = ${challenge.userId}`,
+    );
     const token = await createSessionRecord(challenge.userId, challenge.authMethod, context);
-    await recordLoginEvent({ userId: challenge.userId, emailHash: challenge.emailHash, outcome: "success", authMethod: challenge.authMethod, networkHash, userAgentHash });
+    await recordLoginEvent({
+      userId: challenge.userId,
+      emailHash: challenge.emailHash,
+      outcome: "success",
+      authMethod: challenge.authMethod,
+      networkHash,
+      userAgentHash,
+    });
     return { kind: "success", token };
   });
 }
 
-export async function getMfaStatus(userId: string): Promise<{ enabled: boolean; recoveryCodesRemaining: number }> {
+export async function getMfaStatus(
+  userId: string,
+): Promise<{ enabled: boolean; recoveryCodesRemaining: number }> {
   // bypass: identity-bootstrap — MFA factors belong to the identity, not to the organization the request is scoped to.
   return withBypassContext(async () => {
-    const result = (await db.execute<{ enabledAt: Date | null; recoveryCodesRemaining: number }>(sql`
+    const result = await db.execute<{ enabledAt: Date | null; recoveryCodesRemaining: number }>(
+      sql`
       select enabled_at as "enabledAt", jsonb_array_length(recovery_code_hashes) as "recoveryCodesRemaining"
         from auth_mfa_factors where user_id = ${userId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const row = result[0];
     return { enabled: !!row?.enabledAt, recoveryCodesRemaining: row?.recoveryCodesRemaining ?? 0 };
   });
@@ -785,51 +933,84 @@ async function reauthenticateMfaEnrollment(
   password: string,
   context: AuthRequestContext,
 ): Promise<{ email: string; sessionExpiresAt: Date } | null> {
-  const identityResult = (await db.execute<{ email: string }>(sql`
+  const identityResult = await db.execute<{ email: string }>(
+    sql`
     select email from users where id = ${userId} and is_active
-  `, "objects"));
+  `,
+    "objects",
+  );
   const email = normalizeLoginEmail(identityResult[0]?.email ?? "");
   if (!email) return null;
   const emailHash = loginEmailHash(email);
   const { networkHash, userAgentHash } = contextHashes(context);
   await acquireAuthLocks(emailHash, networkHash);
 
-  const userResult = (await db.execute<{ email: string; passwordHash: string }>(sql`
+  const userResult = await db.execute<{ email: string; passwordHash: string }>(
+    sql`
     select u.email, u.password_hash as "passwordHash"
       from users u
      where u.id = ${userId} and u.is_active
      for update of u
-  `, "objects"));
+  `,
+    "objects",
+  );
   const user = userResult[0];
   if (!user || normalizeLoginEmail(user.email) !== email) return null;
   // Lock identity before session, then read session authority from a fresh
   // statement snapshot. A join evaluated before the user lock can retain a
   // stale session, and transaction-start now() does not advance while waiting.
-  const session = (await db.execute<{ expiresAt: Date | string }>(sql`
+  const session = (
+    await db.execute<{ expiresAt: Date | string }>(
+      sql`
     select expires_at as "expiresAt" from auth_sessions
      where id = ${currentSessionId} and user_id = ${userId} and revoked_at is null
      for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const sessionExpiresAt = dateValue(session?.expiresAt);
   if (!sessionExpiresAt || sessionExpiresAt.getTime() <= Date.now()) return null;
   const state = await ensureLoginState(emailHash, userId);
   const counts = await recentAttemptCounts(emailHash, networkHash, userId);
   const limit = attemptRateLimit(counts, true);
   if (limit.limited) {
-    await recordLoginEvent({ userId, emailHash, outcome: "rate_limited", authMethod: "password", networkHash, userAgentHash });
+    await recordLoginEvent({
+      userId,
+      emailHash,
+      outcome: "rate_limited",
+      authMethod: "password",
+      networkHash,
+      userAgentHash,
+    });
     return null;
   }
   if (state.lockedUntil && state.lockedUntil.getTime() > Date.now()) {
-    await recordLoginEvent({ userId, emailHash, outcome: "locked", authMethod: "password", networkHash, userAgentHash });
+    await recordLoginEvent({
+      userId,
+      emailHash,
+      outcome: "locked",
+      authMethod: "password",
+      networkHash,
+      userAgentHash,
+    });
     return null;
   }
-  const passwordVerification: Awaited<ReturnType<typeof verifyPassword>> = password.length > 0 && password.length <= 1024
-    ? await verifyPassword(password, user.passwordHash)
-    : { valid: false, needsRehash: false };
+  const passwordVerification: Awaited<ReturnType<typeof verifyPassword>> =
+    password.length > 0 && password.length <= 1024
+      ? await verifyPassword(password, user.passwordHash)
+      : { valid: false, needsRehash: false };
   if (passwordVerification.capacityLimited) return null;
   if (!passwordVerification.valid) {
     await registerFailure(emailHash, state, userId);
-    await recordLoginEvent({ userId, emailHash, outcome: "failure", authMethod: "password", networkHash, userAgentHash });
+    await recordLoginEvent({
+      userId,
+      emailHash,
+      outcome: "failure",
+      authMethod: "password",
+      networkHash,
+      userAgentHash,
+    });
     return null;
   }
   await upgradePasswordHashIfNeeded(
@@ -839,7 +1020,14 @@ async function reauthenticateMfaEnrollment(
     passwordVerification.needsRehash,
   );
   await resetFailures(emailHash, userId);
-  await recordLoginEvent({ userId, emailHash, outcome: "success", authMethod: "password", networkHash, userAgentHash });
+  await recordLoginEvent({
+    userId,
+    emailHash,
+    outcome: "success",
+    authMethod: "password",
+    networkHash,
+    userAgentHash,
+  });
   return { email, sessionExpiresAt };
 }
 
@@ -871,34 +1059,47 @@ export async function beginMfaSetup(
       context,
     );
     if (!reauthenticated) return null;
-    const existing = (await db.execute<{
-      enabledAt: Date | null
-      secretEncrypted: string
-      setupSessionId: string | null
-      setupExpiresAt: Date | string | null
-    }>(sql`
+    const existing = (
+      await db.execute<{
+        enabledAt: Date | null;
+        secretEncrypted: string;
+        setupSessionId: string | null;
+        setupExpiresAt: Date | string | null;
+      }>(
+        sql`
       select enabled_at as "enabledAt", secret_encrypted as "secretEncrypted",
              setup_session_id as "setupSessionId", setup_expires_at as "setupExpiresAt"
         from auth_mfa_factors where user_id = ${userId} for update
-    `, "objects"))[0]
+    `,
+        "objects",
+      )
+    )[0];
     // Password verification and the factor lock may themselves take time.
     if (reauthenticated.sessionExpiresAt.getTime() <= Date.now()) return null;
     if (existing?.enabledAt) throw new MfaSetupConflictError("MFA is already enabled");
-    const pendingExpiry = dateValue(existing?.setupExpiresAt)
+    const pendingExpiry = dateValue(existing?.setupExpiresAt);
     if (existing && pendingExpiry && pendingExpiry.getTime() > Date.now()) {
       if (existing.setupSessionId !== currentSessionId) {
-        throw new MfaSetupConflictError("MFA setup is already pending in another session; finish setup there or wait for it to expire before starting again")
+        throw new MfaSetupConflictError(
+          "MFA setup is already pending in another session; finish setup there or wait for it to expire before starting again",
+        );
       }
       let pendingSecret: string;
       try {
-        pendingSecret = unsealSecret(existing.secretEncrypted, { orgId: userId, purpose: "auth.mfa.secret" });
+        pendingSecret = unsealSecret(existing.secretEncrypted, {
+          orgId: userId,
+          purpose: "auth.mfa.secret",
+        });
       } catch {
         throw new Error("MFA setup secret is unavailable; restart enrollment");
       }
       return {
         secret: pendingSecret,
-        provisioningUri: totpProvisioningUri({ secret: pendingSecret, email: reauthenticated.email }),
-      }
+        provisioningUri: totpProvisioningUri({
+          secret: pendingSecret,
+          email: reauthenticated.email,
+        }),
+      };
     }
     const secret = generateTotpSecret();
     const setupExpiresAt = new Date(Date.now() + MFA_SETUP_TTL_S * 1000);
@@ -927,39 +1128,52 @@ export async function confirmMfaSetup(
 ): Promise<string[] | null> {
   // bypass: identity-bootstrap — MFA confirmation locks the identity and its session, which live outside any organization.
   return withBypass(async () => {
-    const user = await db.execute<{ id: string }>(sql`
+    const user = await db.execute<{ id: string }>(
+      sql`
       select id from users where id = ${userId} and is_active for update
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!user[0]) return null;
-    const session = await db.execute<{ id: string; expiresAt: Date | string }>(sql`
+    const session = await db.execute<{ id: string; expiresAt: Date | string }>(
+      sql`
       select id, expires_at as "expiresAt" from auth_sessions where id = ${currentSessionId} and user_id = ${userId}
         and revoked_at is null for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const sessionExpiresAt = dateValue(session[0]?.expiresAt);
     if (!sessionExpiresAt || sessionExpiresAt.getTime() <= Date.now()) return null;
-    const result = (await db.execute<{
+    const result = await db.execute<{
       secretEncrypted: string;
       enabledAt: Date | null;
       setupSessionId: string | null;
       setupExpiresAt: Date | string | null;
       setupAttemptCount: number;
-    }>(sql`
+    }>(
+      sql`
       select secret_encrypted as "secretEncrypted", enabled_at as "enabledAt",
              setup_session_id as "setupSessionId", setup_expires_at as "setupExpiresAt",
              setup_attempt_count as "setupAttemptCount"
         from auth_mfa_factors where user_id = ${userId} for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const factor = result[0];
     if (sessionExpiresAt.getTime() <= Date.now()) return null;
     if (!factor || factor.enabledAt) return null;
     const setupExpiresAt = dateValue(factor.setupExpiresAt);
     if (!setupExpiresAt || setupExpiresAt.getTime() <= Date.now()) {
-      await db.execute(sql`delete from auth_mfa_factors where user_id = ${userId} and enabled_at is null`);
+      await db.execute(
+        sql`delete from auth_mfa_factors where user_id = ${userId} and enabled_at is null`,
+      );
       return null;
     }
     if (factor.setupSessionId !== currentSessionId) return null;
     if (factor.setupAttemptCount >= MFA_SETUP_ATTEMPT_LIMIT) {
-      await db.execute(sql`delete from auth_mfa_factors where user_id = ${userId} and enabled_at is null`);
+      await db.execute(
+        sql`delete from auth_mfa_factors where user_id = ${userId} and enabled_at is null`,
+      );
       return null;
     }
     // A tampered pending factor counts as a wrong code — it consumes a
@@ -976,7 +1190,9 @@ export async function confirmMfaSetup(
     if (step === null) {
       const nextAttempt = factor.setupAttemptCount + 1;
       if (nextAttempt >= MFA_SETUP_ATTEMPT_LIMIT) {
-        await db.execute(sql`delete from auth_mfa_factors where user_id = ${userId} and enabled_at is null`);
+        await db.execute(
+          sql`delete from auth_mfa_factors where user_id = ${userId} and enabled_at is null`,
+        );
       } else {
         await db.execute(sql`
           update auth_mfa_factors
@@ -987,7 +1203,9 @@ export async function confirmMfaSetup(
       return null;
     }
     const recoveryCodes = generateRecoveryCodes();
-    const hashes = recoveryCodes.map((code) => hashRecoveryCode(userId, normalizeRecoveryCode(code)!));
+    const hashes = recoveryCodes.map((code) =>
+      hashRecoveryCode(userId, normalizeRecoveryCode(code)!),
+    );
     await db.execute(sql`
       update auth_mfa_factors
          set enabled_at = now(), last_used_step = ${step},
@@ -1000,9 +1218,12 @@ export async function confirmMfaSetup(
       update auth_sessions set revoked_at = now(), revocation_reason = 'mfa_enabled'
        where user_id = ${userId} and id <> ${currentSessionId} and revoked_at is null
     `);
-    await auditMfaChange(userId, "mfa_enabled",
+    await auditMfaChange(
+      userId,
+      "mfa_enabled",
       { mfaEnabled: false, recoveryCodesRemaining: 0 },
-      { mfaEnabled: true, recoveryCodesRemaining: recoveryCodes.length });
+      { mfaEnabled: true, recoveryCodesRemaining: recoveryCodes.length },
+    );
     return recoveryCodes;
   });
 }
@@ -1026,11 +1247,18 @@ async function auditMfaChange(
 }
 
 async function verifyEnabledMfaFactor(userId: string, suppliedCode: string) {
-  const result = (await db.execute<{ secretEncrypted: string; recoveryCodeHashes: string[]; lastUsedStep: number | null }>(sql`
+  const result = await db.execute<{
+    secretEncrypted: string;
+    recoveryCodeHashes: string[];
+    lastUsedStep: number | null;
+  }>(
+    sql`
     select secret_encrypted as "secretEncrypted", recovery_code_hashes as "recoveryCodeHashes",
            last_used_step as "lastUsedStep"
       from auth_mfa_factors where user_id = ${userId} and enabled_at is not null for update
-  `, "objects"));
+  `,
+    "objects",
+  );
   const factor = result[0];
   // A tampered enabled factor reads as a wrong code: the caller still writes
   // its mfa_failure audit row and refuses invalid_credentials, and tamper
@@ -1045,7 +1273,9 @@ async function verifyEnabledMfaFactor(userId: string, suppliedCode: string) {
     }
   }
   if (!factor || !secret) return null;
-  const recoveryCodeHashes = Array.isArray(factor.recoveryCodeHashes) ? factor.recoveryCodeHashes : [];
+  const recoveryCodeHashes = Array.isArray(factor.recoveryCodeHashes)
+    ? factor.recoveryCodeHashes
+    : [];
   const consumed = consumeMfaCredential({
     userId,
     secret,
@@ -1075,8 +1305,7 @@ type MfaSecurityReauthSuccess = {
 };
 
 type MfaSecurityReauthResult =
-  | { ok: true; verified: MfaSecurityReauthSuccess }
-  | MfaSecurityChangeFailure;
+  { ok: true; verified: MfaSecurityReauthSuccess } | MfaSecurityChangeFailure;
 
 /**
  * The caller's session, locked and confirmed live (known, unrevoked,
@@ -1088,12 +1317,17 @@ type MfaSecurityReauthResult =
  * session that expired mid-request is refused too.
  */
 async function lockLiveCallerSession(userId: string, sessionId: string): Promise<boolean> {
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from auth_sessions
      where id = ${sessionId} and user_id = ${userId}
        and revoked_at is null and expires_at > clock_timestamp()
      for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return !!row;
 }
 
@@ -1132,20 +1366,27 @@ async function reauthenticateLiveSession<T>(
   context: AuthRequestContext,
   check: { verify: () => Promise<T | null>; failureOutcome: "failure" | "mfa_failure" },
 ): Promise<{ ok: true; verified: T } | LiveSessionReauthFailure> {
-  const identityResult = (await db.execute<{ email: string }>(sql`
+  const identityResult = await db.execute<{ email: string }>(
+    sql`
     select email from users where id = ${userId} and is_active
-  `, "objects"));
+  `,
+    "objects",
+  );
   const email = normalizeLoginEmail(identityResult[0]?.email ?? "");
   if (!email) return { ok: false, reason: "invalid_credentials" };
   const emailHash = loginEmailHash(email);
   const { networkHash, userAgentHash } = contextHashes(context);
   await acquireAuthLocks(emailHash, networkHash);
-  const userResult = (await db.execute<{ email: string; passwordHash: string }>(sql`
+  const userResult = await db.execute<{ email: string; passwordHash: string }>(
+    sql`
     select email, password_hash as "passwordHash"
       from users where id = ${userId} and is_active for update
-  `, "objects"));
+  `,
+    "objects",
+  );
   const user = userResult[0];
-  if (!user || normalizeLoginEmail(user.email) !== email) return { ok: false, reason: "invalid_credentials" };
+  if (!user || normalizeLoginEmail(user.email) !== email)
+    return { ok: false, reason: "invalid_credentials" };
   // Fail fast on a dead caller session, before burning scrypt or touching
   // lockout counters. Callers re-check under lock immediately before the
   // privileged mutation, in this same transaction.
@@ -1156,25 +1397,45 @@ async function reauthenticateLiveSession<T>(
   const counts = await recentAttemptCounts(emailHash, networkHash, userId);
   const limit = attemptRateLimit(counts, true);
   if (limit.limited) {
-    await recordLoginEvent({ userId, emailHash, outcome: "rate_limited", authMethod: "password", networkHash, userAgentHash });
+    await recordLoginEvent({
+      userId,
+      emailHash,
+      outcome: "rate_limited",
+      authMethod: "password",
+      networkHash,
+      userAgentHash,
+    });
     // Unlike anonymous login there is no enumeration risk: the caller already
     // holds a live session, so throttling is reported with its retry delay.
     return { ok: false, reason: "rate_limited", retryAfter: limit.retryAfter };
   }
   if (state.lockedUntil && state.lockedUntil.getTime() > Date.now()) {
-    await recordLoginEvent({ userId, emailHash, outcome: "locked", authMethod: "password", networkHash, userAgentHash });
+    await recordLoginEvent({
+      userId,
+      emailHash,
+      outcome: "locked",
+      authMethod: "password",
+      networkHash,
+      userAgentHash,
+    });
     return { ok: false, reason: "locked", retryAfter: retryAfterSeconds(state.lockedUntil) };
   }
-  const passwordVerification: Awaited<ReturnType<typeof verifyPassword>> = password.length > 0 && password.length <= 1024
-    ? await verifyPassword(password, user.passwordHash)
-    : { valid: false, needsRehash: false };
+  const passwordVerification: Awaited<ReturnType<typeof verifyPassword>> =
+    password.length > 0 && password.length <= 1024
+      ? await verifyPassword(password, user.passwordHash)
+      : { valid: false, needsRehash: false };
   if (passwordVerification.capacityLimited) return { ok: false, reason: "busy" };
-  const verified = passwordVerification.valid
-    ? await check.verify()
-    : null;
+  const verified = passwordVerification.valid ? await check.verify() : null;
   if (verified === null) {
     await registerFailure(emailHash, state, userId);
-    await recordLoginEvent({ userId, emailHash, outcome: check.failureOutcome, authMethod: "password", networkHash, userAgentHash });
+    await recordLoginEvent({
+      userId,
+      emailHash,
+      outcome: check.failureOutcome,
+      authMethod: "password",
+      networkHash,
+      userAgentHash,
+    });
     return { ok: false, reason: "invalid_credentials" };
   }
   await upgradePasswordHashIfNeeded(
@@ -1184,7 +1445,14 @@ async function reauthenticateLiveSession<T>(
     passwordVerification.needsRehash,
   );
   await resetFailures(emailHash, userId);
-  await recordLoginEvent({ userId, emailHash, outcome: "success", authMethod: "password", networkHash, userAgentHash });
+  await recordLoginEvent({
+    userId,
+    emailHash,
+    outcome: "success",
+    authMethod: "password",
+    networkHash,
+    userAgentHash,
+  });
   return { ok: true, verified };
 }
 
@@ -1199,7 +1467,13 @@ export async function disableMfa(
 ): Promise<DisableMfaResult> {
   // bypass: identity-bootstrap — disabling MFA changes the identity's credentials and sessions, which live outside any organization.
   return withBypass(async () => {
-    const reauth = await reauthenticateMfaSecurityChange(userId, keepSessionId, password, suppliedCode, context);
+    const reauth = await reauthenticateMfaSecurityChange(
+      userId,
+      keepSessionId,
+      password,
+      suppliedCode,
+      context,
+    );
     if (!reauth.ok) return reauth;
     // Authoritative check: the caller session may have been revoked while
     // reauthentication held this transaction. The mutation below runs only
@@ -1212,16 +1486,18 @@ export async function disableMfa(
       update auth_sessions set revoked_at = now(), revocation_reason = 'mfa_disabled'
        where user_id = ${userId} and id <> ${keepSessionId} and revoked_at is null
     `);
-    await auditMfaChange(userId, "mfa_disabled",
+    await auditMfaChange(
+      userId,
+      "mfa_disabled",
       { mfaEnabled: true, recoveryCodesRemaining: reauth.verified.recoveryCodesBefore },
-      { mfaEnabled: false, recoveryCodesRemaining: 0 });
+      { mfaEnabled: false, recoveryCodesRemaining: 0 },
+    );
     return { ok: true } as const;
   });
 }
 
 export type RotateRecoveryCodesResult =
-  | { ok: true; recoveryCodes: string[] }
-  | MfaSecurityChangeFailure;
+  { ok: true; recoveryCodes: string[] } | MfaSecurityChangeFailure;
 
 export async function rotateRecoveryCodes(
   userId: string,
@@ -1232,7 +1508,13 @@ export async function rotateRecoveryCodes(
 ): Promise<RotateRecoveryCodesResult> {
   // bypass: identity-bootstrap — recovery codes belong to the identity, not to the organization the request is scoped to.
   return withBypass(async () => {
-    const reauth = await reauthenticateMfaSecurityChange(userId, sessionId, password, suppliedCode, context);
+    const reauth = await reauthenticateMfaSecurityChange(
+      userId,
+      sessionId,
+      password,
+      suppliedCode,
+      context,
+    );
     if (!reauth.ok) return reauth;
     // Authoritative check: the caller session may have been revoked while
     // reauthentication held this transaction. The mutation below runs only
@@ -1241,21 +1523,27 @@ export async function rotateRecoveryCodes(
       return { ok: false, reason: "caller_session_revoked" } as const;
     }
     const recoveryCodes = generateRecoveryCodes();
-    const hashes = recoveryCodes.map((code) => hashRecoveryCode(userId, normalizeRecoveryCode(code)!));
+    const hashes = recoveryCodes.map((code) =>
+      hashRecoveryCode(userId, normalizeRecoveryCode(code)!),
+    );
     await db.execute(sql`
       update auth_mfa_factors
          set last_used_step = ${reauth.verified.lastUsedStep},
              recovery_code_hashes = ${JSON.stringify(hashes)}::jsonb, updated_at = now()
       where user_id = ${userId}
     `);
-    await auditMfaChange(userId, "mfa_recovery_rotated",
+    await auditMfaChange(
+      userId,
+      "mfa_recovery_rotated",
       { mfaEnabled: true, recoveryCodesRemaining: reauth.verified.recoveryCodesBefore },
-      { mfaEnabled: true, recoveryCodesRemaining: recoveryCodes.length });
+      { mfaEnabled: true, recoveryCodesRemaining: recoveryCodes.length },
+    );
     return { ok: true, recoveryCodes } as const;
   });
 }
 
-export type ReplaceOwnPasswordResult = { ok: true; revokedSessions: number } | LiveSessionReauthFailure;
+export type ReplaceOwnPasswordResult =
+  { ok: true; revokedSessions: number } | LiveSessionReauthFailure;
 
 /**
  * Replace the signed-in identity's password after reauthenticating with the
@@ -1276,10 +1564,16 @@ export async function replaceOwnPassword(input: {
   const { userId, sessionId } = input;
   // bypass: identity-bootstrap — the credential and its sessions belong to the identity, not to the organization the request is scoped to.
   return withBypass(async () => {
-    const reauth = await reauthenticateLiveSession(userId, sessionId, input.currentPassword, input.context, {
-      verify: async () => true,
-      failureOutcome: "failure",
-    });
+    const reauth = await reauthenticateLiveSession(
+      userId,
+      sessionId,
+      input.currentPassword,
+      input.context,
+      {
+        verify: async () => true,
+        failureOutcome: "failure",
+      },
+    );
     if (!reauth.ok) return reauth;
     // Authoritative check: the caller session may have been revoked while
     // reauthentication held this transaction. The mutation below runs only
@@ -1287,19 +1581,27 @@ export async function replaceOwnPassword(input: {
     if (!(await lockLiveCallerSession(userId, sessionId))) {
       return { ok: false, reason: "caller_session_revoked" } as const;
     }
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update users set password_hash = ${input.newPasswordHash}, updated_at = now(), updated_by = ${userId}
        where id = ${userId} and is_active
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new Error(`password change matched ${updated.length} active users for identity ${userId}; expected exactly one`);
+      throw new Error(
+        `password change matched ${updated.length} active users for identity ${userId}; expected exactly one`,
+      );
     }
-    const revoked = await db.execute<{ id: string }>(sql`
+    const revoked = await db.execute<{ id: string }>(
+      sql`
       update auth_sessions set revoked_at = now(), revocation_reason = 'password_changed'
        where user_id = ${userId} and id <> ${sessionId} and revoked_at is null
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     // A reset link issued before the change would otherwise restore access
     // with a password the holder no longer needs to know.
     await db.execute(sql`
@@ -1321,7 +1623,10 @@ export async function replaceOwnPassword(input: {
   });
 }
 
-export async function revokeSessionToken(token: string | undefined, reason = "logout"): Promise<void> {
+export async function revokeSessionToken(
+  token: string | undefined,
+  reason = "logout",
+): Promise<void> {
   const parsed = verifySessionTokenParts(token);
   if (!parsed) return;
   // bypass: identity-bootstrap — logout revokes the cookie's session, which belongs to the identity rather than an organization.
@@ -1337,21 +1642,30 @@ export async function revokeSessionToken(token: string | undefined, reason = "lo
 export async function listUserSessions(userId: string, currentSessionId: string) {
   // bypass: identity-bootstrap — sessions belong to the identity, not to the organization the request is scoped to.
   return withBypassContext(async () => {
-    const result = (await db.execute<{ id: string; authMethod: AuthMethod; createdAt: Date; lastSeenAt: Date; expiresAt: Date; current: boolean }>(sql`
+    const result = await db.execute<{
+      id: string;
+      authMethod: AuthMethod;
+      createdAt: Date;
+      lastSeenAt: Date;
+      expiresAt: Date;
+      current: boolean;
+    }>(
+      sql`
       select id, auth_method as "authMethod", created_at as "createdAt",
              last_seen_at as "lastSeenAt", expires_at as "expiresAt",
              id = ${currentSessionId} as "current"
         from auth_sessions
        where user_id = ${userId} and revoked_at is null and expires_at > now()
        order by last_seen_at desc
-    `, "objects"));
+    `,
+      "objects",
+    );
     return result;
   });
 }
 
 export type RevokeUserSessionResult =
-  | { ok: true; revoked: boolean }
-  | { ok: false; reason: "caller_session_revoked" };
+  { ok: true; revoked: boolean } | { ok: false; reason: "caller_session_revoked" };
 
 export async function revokeUserSession(
   userId: string,
@@ -1371,15 +1685,20 @@ export async function revokeUserSession(
       update auth_sessions set revoked_at = now(), revocation_reason = ${reason}
        where id = ${sessionId} and user_id = ${userId} and revoked_at is null
     `);
-    return { ok: true, revoked: Number((result as unknown as { rowCount?: number }).rowCount ?? 0) > 0 } as const;
+    return {
+      ok: true,
+      revoked: Number((result as unknown as { rowCount?: number }).rowCount ?? 0) > 0,
+    } as const;
   });
 }
 
 export type RevokeSessionsResult =
-  | { ok: true; revoked: number }
-  | { ok: false; reason: "caller_session_revoked" };
+  { ok: true; revoked: number } | { ok: false; reason: "caller_session_revoked" };
 
-export async function revokeOtherUserSessions(userId: string, keepSessionId: string): Promise<RevokeSessionsResult> {
+export async function revokeOtherUserSessions(
+  userId: string,
+  keepSessionId: string,
+): Promise<RevokeSessionsResult> {
   // One transaction (not context-only scope): the keeper liveness lock and
   // the revocation must be atomic, or a session revoked after the route's
   // cookie check could still revoke every other session and report success.
@@ -1392,7 +1711,10 @@ export async function revokeOtherUserSessions(userId: string, keepSessionId: str
       update auth_sessions set revoked_at = now(), revocation_reason = 'user_revoked_others'
        where user_id = ${userId} and id <> ${keepSessionId} and revoked_at is null
     `);
-    return { ok: true, revoked: Number((result as unknown as { rowCount?: number }).rowCount ?? 0) } as const;
+    return {
+      ok: true,
+      revoked: Number((result as unknown as { rowCount?: number }).rowCount ?? 0),
+    } as const;
   });
 }
 
@@ -1431,17 +1753,27 @@ export async function currentUser(): Promise<SessionUser | null> {
 
 // Keyed by the cookie values, so a request that changes its session or active
 // environment resolves the new identity rather than a remembered one.
-const renderUser = cache(async (sessionToken: string | undefined, envToken: string | undefined): Promise<SessionUser | null> => {
-  const session = await renderSession(sessionToken);
-  if (!session) return null;
-  // The home organization's name and the home identity's roles travel with
-  // it: most requests act in the home organization and need nothing more.
-  // bypass: identity-bootstrap — the session's home identity row can live in a different organization than the active one.
-  const home = await withBypassContext(async () => {
-    const result = await db.execute<{
-      id: string; email: string; name: string; orgId: string; isSuperAdmin: boolean; orgName: string | null;
-      homeRoles: { key: string; name: string }[];
-    }>(sql`
+const renderUser = cache(
+  async (
+    sessionToken: string | undefined,
+    envToken: string | undefined,
+  ): Promise<SessionUser | null> => {
+    const session = await renderSession(sessionToken);
+    if (!session) return null;
+    // The home organization's name and the home identity's roles travel with
+    // it: most requests act in the home organization and need nothing more.
+    // bypass: identity-bootstrap — the session's home identity row can live in a different organization than the active one.
+    const home = await withBypassContext(async () => {
+      const result = await db.execute<{
+        id: string;
+        email: string;
+        name: string;
+        orgId: string;
+        isSuperAdmin: boolean;
+        orgName: string | null;
+        homeRoles: { key: string; name: string }[];
+      }>(
+        sql`
       select u.id, u.email, u.name, u.org_id as "orgId", u.is_super_admin as "isSuperAdmin",
              o.name as "orgName",
              coalesce((
@@ -1454,46 +1786,55 @@ const renderUser = cache(async (sessionToken: string | undefined, envToken: stri
         from users u
         left join orgs o on o.id = u.org_id
        where u.id = ${session.userId} and u.is_active
-    `, "objects");
-    return result[0];
-  });
-  if (!home) return null;
+    `,
+        "objects",
+      );
+      return result[0];
+    });
+    if (!home) return null;
 
-  const homeUser = { id: home.id, orgId: home.orgId, isSuperAdmin: !!home.isSuperAdmin };
-  const activeOrgId = verifyEnvToken(envToken);
-  const activeEnvironment = (activeOrgId && activeOrgId !== homeUser.orgId ? await resolveActiveEnv(homeUser, activeOrgId) : null)
-    ?? homeEnvironment(homeUser, home.orgName ?? undefined);
-  setRequestOrg(activeEnvironment.orgId);
-  const roles = activeEnvironment.orgId === homeUser.orgId && activeEnvironment.actingUserId === homeUser.id
-    ? home.homeRoles
-    // bypass: identity-bootstrap — roles are resolved for the active environment before the request's organization scope is in force.
-    : await withBypassContext(async () => {
-      const result = await db.execute<{ key: string; name: string }>(sql`
+    const homeUser = { id: home.id, orgId: home.orgId, isSuperAdmin: !!home.isSuperAdmin };
+    const activeOrgId = verifyEnvToken(envToken);
+    const activeEnvironment =
+      (activeOrgId && activeOrgId !== homeUser.orgId
+        ? await resolveActiveEnv(homeUser, activeOrgId)
+        : null) ?? homeEnvironment(homeUser, home.orgName ?? undefined);
+    setRequestOrg(activeEnvironment.orgId);
+    const roles =
+      activeEnvironment.orgId === homeUser.orgId && activeEnvironment.actingUserId === homeUser.id
+        ? home.homeRoles
+        : // bypass: identity-bootstrap — roles are resolved for the active environment before the request's organization scope is in force.
+          await withBypassContext(async () => {
+            const result = await db.execute<{ key: string; name: string }>(
+              sql`
         select r.key, r.name
           from role_assignments assignment
           join app_roles r on r.id = assignment.role_id and r.org_id = assignment.org_id
          where assignment.org_id = ${activeEnvironment.orgId}
            and assignment.user_id = ${activeEnvironment.actingUserId}
          order by r.is_built_in desc, r.name, r.key
-      `, "objects");
-      return result;
-    });
-  if (!homeUser.isSuperAdmin && roles.length === 0) return null;
-  return {
-    id: activeEnvironment.actingUserId,
-    email: home.email,
-    name: home.name,
-    roles,
-    orgId: activeEnvironment.orgId,
-    envKind: activeEnvironment.envKind,
-    productionOrgId: activeEnvironment.productionOrgId,
-    sandboxName: activeEnvironment.sandboxName,
-    isSuperAdmin: homeUser.isSuperAdmin,
-    homeUserId: homeUser.id,
-    homeOrgId: homeUser.orgId,
-    sessionId: session.sessionId,
-  };
-});
+      `,
+              "objects",
+            );
+            return result;
+          });
+    if (!homeUser.isSuperAdmin && roles.length === 0) return null;
+    return {
+      id: activeEnvironment.actingUserId,
+      email: home.email,
+      name: home.name,
+      roles,
+      orgId: activeEnvironment.orgId,
+      envKind: activeEnvironment.envKind,
+      productionOrgId: activeEnvironment.productionOrgId,
+      sandboxName: activeEnvironment.sandboxName,
+      isSuperAdmin: homeUser.isSuperAdmin,
+      homeUserId: homeUser.id,
+      homeOrgId: homeUser.orgId,
+      sessionId: session.sessionId,
+    };
+  },
+);
 
 /** Called only after a fully verified OIDC identity has been resolved. */
 export async function finishOidcLogin(input: {
@@ -1510,17 +1851,21 @@ export async function finishOidcLogin(input: {
   // bypass: identity-bootstrap — OIDC login resolves the issuer subject to its home identity across organizations.
   return withBypass(async () => {
     await acquireAuthLocks(emailHash, networkHash);
-    const mapped = (await db.execute<{ id: string }>(sql`
+    const mapped = await db.execute<{ id: string }>(
+      sql`
       select u.id
         from auth_oidc_identities identity
         join users u on u.id = identity.user_id and u.is_active
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
        where identity.issuer = ${input.issuer} and identity.subject = ${input.subject}
        for update of u
-    `, "objects"));
+    `,
+      "objects",
+    );
     let user = mapped[0] ?? null;
     if (!user) {
-      const candidates = (await db.execute<{ id: string }>(sql`
+      const candidates = await db.execute<{ id: string }>(
+        sql`
         select u.id
           from users u
           join orgs o on o.id = u.org_id and o.env_kind = 'production'
@@ -1528,21 +1873,40 @@ export async function finishOidcLogin(input: {
          order by u.created_at
          limit 2
          for update of u
-      `, "objects"));
+      `,
+        "objects",
+      );
       // Ambiguous emails must be linked administratively, never guessed.
       if (candidates.length !== 1) {
-        await recordLoginEvent({ userId: null, emailHash, outcome: "oidc_failure", authMethod: "oidc", networkHash, userAgentHash });
+        await recordLoginEvent({
+          userId: null,
+          emailHash,
+          outcome: "oidc_failure",
+          authMethod: "oidc",
+          networkHash,
+          userAgentHash,
+        });
         return { kind: "invalid", retryAfter: 0 };
       }
       user = candidates[0]!;
-      const linked = (await db.execute<{ userId: string }>(sql`
+      const linked = await db.execute<{ userId: string }>(
+        sql`
         insert into auth_oidc_identities (issuer, subject, user_id, email_at_link, last_login_at)
         values (${input.issuer}, ${input.subject}, ${user.id}, ${normalizedEmail}, now())
         on conflict (issuer, subject) do update set last_login_at = now()
         returning user_id as "userId"
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (linked[0]?.userId !== user.id) {
-        await recordLoginEvent({ userId: null, emailHash, outcome: "oidc_failure", authMethod: "oidc", networkHash, userAgentHash });
+        await recordLoginEvent({
+          userId: null,
+          emailHash,
+          outcome: "oidc_failure",
+          authMethod: "oidc",
+          networkHash,
+          userAgentHash,
+        });
         return { kind: "invalid", retryAfter: 0 };
       }
     } else {
@@ -1553,14 +1917,35 @@ export async function finishOidcLogin(input: {
     }
     await ensureLoginState(emailHash, user.id);
     if (await hasEnabledMfaAfterUserLock(user.id)) {
-      const challengeToken = await createLoginChallenge({ userId: user.id, emailHash, authMethod: "oidc", context: input.context });
-      await recordLoginEvent({ userId: user.id, emailHash, outcome: "mfa_required", authMethod: "oidc", networkHash, userAgentHash });
+      const challengeToken = await createLoginChallenge({
+        userId: user.id,
+        emailHash,
+        authMethod: "oidc",
+        context: input.context,
+      });
+      await recordLoginEvent({
+        userId: user.id,
+        emailHash,
+        outcome: "mfa_required",
+        authMethod: "oidc",
+        networkHash,
+        userAgentHash,
+      });
       return { kind: "mfa_required", challengeToken };
     }
     await resetFailures(emailHash, user.id);
-    await db.execute(sql`update users set last_login_at = now(), updated_at = now() where id = ${user.id}`);
+    await db.execute(
+      sql`update users set last_login_at = now(), updated_at = now() where id = ${user.id}`,
+    );
     const token = await createSessionRecord(user.id, "oidc", input.context);
-    await recordLoginEvent({ userId: user.id, emailHash, outcome: "success", authMethod: "oidc", networkHash, userAgentHash });
+    await recordLoginEvent({
+      userId: user.id,
+      emailHash,
+      outcome: "success",
+      authMethod: "oidc",
+      networkHash,
+      userAgentHash,
+    });
     return { kind: "success", token };
   });
 }

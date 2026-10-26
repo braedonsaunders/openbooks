@@ -16,7 +16,13 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { codeOnly, parseWiring, resolveReal, staticImports, stringBindings } from "./check-test-mock-surface.mjs";
+import {
+  codeOnly,
+  parseWiring,
+  resolveReal,
+  staticImports,
+  stringBindings,
+} from "./check-test-mock-surface.mjs";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -36,7 +42,13 @@ const SCAN_SUBS = ["engine/src", "web", "packages", "schema", "e2e"];
 const WRITE_VERBS = new Set(["insert", "update", "delete", "merge"]);
 // Anything that installs an explicit scope: bypass blocks for seeds and
 // org blocks for tenant writes both survive the resolver replacement.
-const SCOPE_CALLS = ["withBypass", "withBypassContext", "withOrg", "withOrgContext", "withOrgTransaction"];
+const SCOPE_CALLS = [
+  "withBypass",
+  "withBypassContext",
+  "withOrg",
+  "withOrgContext",
+  "withOrgTransaction",
+];
 
 const rel = (path, root) => (path.startsWith(root + "/") ? path.slice(root.length + 1) : path);
 const esc = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -158,11 +170,10 @@ const unescapeSpec = (text) => text.replace(/\\(['"`\\])/g, "$1");
  */
 function dynamicImportCalls(code) {
   const calls = [];
-  const pattern = /import\s*\(\s*(?:(['"`])((?:\\.|(?!\1)[^\\])*)\1|([A-Za-z_$][\w$]*))\s*(?:,[\s\S]*?)?\)/g;
+  const pattern =
+    /import\s*\(\s*(?:(['"`])((?:\\.|(?!\1)[^\\])*)\1|([A-Za-z_$][\w$]*))\s*(?:,[\s\S]*?)?\)/g;
   for (const match of code.matchAll(pattern)) {
-    const inner = match[2] !== undefined
-      ? `${match[1]}${match[2]}${match[1]}`
-      : (match[3] ?? "");
+    const inner = match[2] !== undefined ? `${match[1]}${match[2]}${match[1]}` : (match[3] ?? "");
     calls.push({ inner, index: match.index });
   }
   return calls;
@@ -170,13 +181,16 @@ function dynamicImportCalls(code) {
 
 export function ownLoadPoints(code) {
   const points = [];
-  const statik = /import\s+(?!\s*type\b)((?:[^{}'"]|\{[^}]*\})*?\s+from\s+)?(['"])((?:\\\2|(?!\2).)+)\2/g;
+  const statik =
+    /import\s+(?!\s*type\b)((?:[^{}'"]|\{[^}]*\})*?\s+from\s+)?(['"])((?:\\\2|(?!\2).)+)\2/g;
   for (const match of code.matchAll(statik)) {
     const clause = (match[1] ?? "").trim();
     if (/^\s*type[\s{]/.test(clause)) continue;
     points.push({ spec: unescapeSpec(match[3]), pos: -1 });
   }
-  for (const match of code.matchAll(/export\s+(?:\{[^}]*\}|\*[^;]*?)\s+from\s+(['"])((?:\\\1|(?!\1).)+)\1/g)) {
+  for (const match of code.matchAll(
+    /export\s+(?:\{[^}]*\}|\*[^;]*?)\s+from\s+(['"])((?:\\\1|(?!\1).)+)\1/g,
+  )) {
     if (/^\s*export\s+type\s/.test(match[0])) continue;
     points.push({ spec: unescapeSpec(match[2]), pos: -1 });
   }
@@ -409,13 +423,17 @@ export function stripped(code) {
     if (char === "/") {
       const before = code.slice(0, i);
       const previous = before.match(/\S(?=\s*$)/)?.[0];
-      const expressionStart = previous !== undefined && /[=(:,\[{!?|&;]/.test(previous) ||
+      const expressionStart =
+        (previous !== undefined && /[=(:,\[{!?|&;]/.test(previous)) ||
         /\b(?:return|case|throw|yield)\s*$/.test(before);
       if (expressionStart) {
         let end = i + 1;
         let inClass = false;
         while (end < code.length && code[end] !== "\n") {
-          if (code[end] === "\\") { end += 2; continue; }
+          if (code[end] === "\\") {
+            end += 2;
+            continue;
+          }
           if (code[end] === "[") inClass = true;
           else if (code[end] === "]") inClass = false;
           else if (code[end] === "/" && !inClass) break;
@@ -494,17 +512,26 @@ export function callExtent(src, openIndex) {
   for (let i = openIndex; i < src.length; i++) {
     const char = src[i];
     if (quote) {
-      if (char === "\\") { i++; continue; }
+      if (char === "\\") {
+        i++;
+        continue;
+      }
       if (char === quote) quote = null;
       continue;
     }
-    if (char === "'" || char === '"') { quote = char; continue; }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
     if (char === "`") {
       // Template text and interpolations are blanked upstream (noInterp),
       // so this only ever spans inert text to its closing backtick.
       i++;
       while (i < src.length) {
-        if (src[i] === "\\") { i += 2; continue; }
+        if (src[i] === "\\") {
+          i += 2;
+          continue;
+        }
         if (src[i] === "`") break;
         i++;
       }
@@ -526,17 +553,26 @@ export function braceExtent(src, openIndex) {
   for (let i = openIndex; i < src.length; i++) {
     const char = src[i];
     if (quote) {
-      if (char === "\\") { i++; continue; }
+      if (char === "\\") {
+        i++;
+        continue;
+      }
       if (char === quote) quote = null;
       continue;
     }
-    if (char === "'" || char === '"') { quote = char; continue; }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
     if (char === "`") {
       // Template text and interpolations are blanked upstream (noInterp),
       // so this only ever spans inert text to its closing backtick.
       i++;
       while (i < src.length) {
-        if (src[i] === "\\") { i += 2; continue; }
+        if (src[i] === "\\") {
+          i += 2;
+          continue;
+        }
         if (src[i] === "`") break;
         i++;
       }
@@ -557,7 +593,9 @@ export function braceExtent(src, openIndex) {
 // projection blanks template text). All inputs share offsets.
 export function writeCalls(src, text) {
   const out = [];
-  for (const match of text.matchAll(/\b(createScratchOrg|seedFlowActors|seedApprovalFlow|seedDraftDocument|createScratchUser|seedAdoption|calculatedRun|markLegacy)\s*\(/g)) {
+  for (const match of text.matchAll(
+    /\b(createScratchOrg|seedFlowActors|seedApprovalFlow|seedDraftDocument|createScratchUser|seedAdoption|calculatedRun|markLegacy)\s*\(/g,
+  )) {
     out.push({ index: match.index, call: `${match[1]}(...)` });
   }
   // Any receiver's .execute()/.query() whose first template/string argument
@@ -591,7 +629,10 @@ export function writeCalls(src, text) {
       continue;
     }
     if (first === "with" && /\b(insert|update|delete|merge)\b/i.test(head)) {
-      out.push({ index: match.index, call: `${receiver}.${match[2]}(with ... insert/update/delete ...)` });
+      out.push({
+        index: match.index,
+        call: `${receiver}.${match[2]}(with ... insert/update/delete ...)`,
+      });
     }
   }
   return out;
@@ -625,7 +666,6 @@ const inRegions = (regions, index) => regions.some(([start, end]) => index >= st
 // withBypassContext, so the list is empty and the ratchet holds at zero.
 export const BASELINE_EXPOSED = new Map([]);
 
-
 // Extents of test/it/hook callbacks: they always run after module evaluation,
 // so writes inside them are never early-safe - even when the test is declared
 // before the exposing import. describe() bodies are excluded on purpose: they
@@ -646,7 +686,10 @@ function deferredRegions(code) {
 // stays positional and is not collected here.
 function namedCallbackSites(code, name) {
   const out = [];
-  const pattern = new RegExp(`\\b(?:test|it|before|beforeEach|after|afterEach)\\s*\\(\\s*['"\`]([^'"\`]{0,70})['"\`]\\s*,\\s*${esc(name)}\\s*[,)]`, "g");
+  const pattern = new RegExp(
+    `\\b(?:test|it|before|beforeEach|after|afterEach)\\s*\\(\\s*['"\`]([^'"\`]{0,70})['"\`]\\s*,\\s*${esc(name)}\\s*[,)]`,
+    "g",
+  );
   for (const match of code.matchAll(pattern)) out.push({ index: match.index, test: match[1] });
   return out;
 }
@@ -666,7 +709,10 @@ export function functionDefs(code) {
       if (char === state.quote) state.quote = null;
       return {};
     }
-    if (char === "'" || char === '"' || char === "`") { state.quote = char; return {}; }
+    if (char === "'" || char === '"' || char === "`") {
+      state.quote = char;
+      return {};
+    }
     if (char === "(") state.paren++;
     if (char === ")") state.paren--;
     if (char === "{") state.brace++;
@@ -688,7 +734,10 @@ export function functionDefs(code) {
         if (!state.quote && code[i] === "<") angle++;
         if (!state.quote && code[i] === ">") {
           angle--;
-          if (angle === 0) { i++; break; }
+          if (angle === 0) {
+            i++;
+            break;
+          }
         }
         i++;
       }
@@ -723,7 +772,13 @@ export function functionDefs(code) {
       const before = { ...state };
       const stepped = lex(i, state);
       if (stepped.skip) i += stepped.skip;
-      if (!state.quote && code[i] === "=" && code[i + 1] === ">" && before.paren === 0 && before.brace === 0) {
+      if (
+        !state.quote &&
+        code[i] === "=" &&
+        code[i + 1] === ">" &&
+        before.paren === 0 &&
+        before.brace === 0
+      ) {
         const j = nextNonSpace(i + 2);
         // Parenthesized or single-identifier expression bodies have no block.
         if (code[j] !== "{") return null;
@@ -740,23 +795,38 @@ export function functionDefs(code) {
     defs.push({ name, nameIndex, bodyStart: extent[0], bodyEnd: extent[1] });
   };
   for (const match of code.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)) {
-    add(match[1], match.index + match[0].indexOf(match[1]), functionBody(match.index + match[0].length));
+    add(
+      match[1],
+      match.index + match[0].indexOf(match[1]),
+      functionBody(match.index + match[0].length),
+    );
   }
-  for (const match of code.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?/g)) {
-    add(match[1], match.index + match[0].indexOf(match[1]), arrowBody(match.index + match[0].length));
+  for (const match of code.matchAll(
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?/g,
+  )) {
+    add(
+      match[1],
+      match.index + match[0].indexOf(match[1]),
+      arrowBody(match.index + match[0].length),
+    );
   }
   return defs;
 }
 
 function callsOf(code, name) {
   const out = [];
-  for (const match of code.matchAll(new RegExp(`\\b${esc(name)}\\s*\\(`, "g"))) out.push(match.index);
+  for (const match of code.matchAll(new RegExp(`\\b${esc(name)}\\s*\\(`, "g")))
+    out.push(match.index);
   return out;
 }
 
 function findEnclosing(code, index, raw) {
   const before = (raw ?? code).slice(0, index);
-  const matches = [...before.matchAll(/\b(?:test|it|describe|before|beforeEach|after|afterEach)\s*\(\s*(['"`])((?:\\\1|(?!\1).){0,200}?)\1/g)];
+  const matches = [
+    ...before.matchAll(
+      /\b(?:test|it|describe|before|beforeEach|after|afterEach)\s*\(\s*(['"`])((?:\\\1|(?!\1).){0,200}?)\1/g,
+    ),
+  ];
   if (matches.length === 0) return "top level";
   const last = matches[matches.length - 1];
   return last[2];
@@ -827,7 +897,10 @@ export function scanFile(path, root = ROOT) {
   if (raw === null || !TEST_RE.test(path.split("/").pop())) return [];
   const chain = exposureChain(path, root);
   if (!chain) return [];
-  const via = chain.slice(1, -1).map((node) => rel(node, root).split("/").pop()).join(" -> ");
+  const via = chain
+    .slice(1, -1)
+    .map((node) => rel(node, root).split("/").pop())
+    .join(" -> ");
   const code = codeOnly(raw);
   // Structural scans run on the quote-stripped projection (a `seed(` inside
   // a failure message is not a call); SQL words come from raw, and test
@@ -856,14 +929,17 @@ export function scanFile(path, root = ROOT) {
     return index > reinstall;
   };
   const covered = (index, late = false) =>
-    inRegions(regions, index) || reinstallCovers(index, late) ||
+    inRegions(regions, index) ||
+    reinstallCovers(index, late) ||
     (!late && !inRegions(deferred, index) && earlySafe(index));
   // Callers of a helper: direct references plus named test callbacks.
   // The declaration site itself matches `name(` and precedes the body;
   // it is not a call. Test names come from code: stripped blanks contents.
   const callersOf = (owner) => {
     const callers = callsOf(text, owner.name)
-      .filter((index) => index !== owner.nameIndex && (index < owner.bodyStart || index >= owner.bodyEnd))
+      .filter(
+        (index) => index !== owner.nameIndex && (index < owner.bodyStart || index >= owner.bodyEnd),
+      )
       .map((index) => ({ index, late: inRegions(deferred, index) }));
     for (const site of namedCallbackSites(code, owner.name)) {
       callers.push({ index: site.index, late: true, test: site.test });
@@ -882,10 +958,17 @@ export function scanFile(path, root = ROOT) {
       if (!clean.has(def.name)) continue;
       const callers = callersOf(def);
       if (callers.length === 0) continue;
-      const ok = callers.every((caller) =>
-        covered(caller.index, caller.late) ||
-        defs.some((inner) => inner.name !== def.name && clean.has(inner.name) &&
-          caller.index > inner.bodyStart && caller.index < inner.bodyEnd));
+      const ok = callers.every(
+        (caller) =>
+          covered(caller.index, caller.late) ||
+          defs.some(
+            (inner) =>
+              inner.name !== def.name &&
+              clean.has(inner.name) &&
+              caller.index > inner.bodyStart &&
+              caller.index < inner.bodyEnd,
+          ),
+      );
       if (!ok) {
         clean.delete(def.name);
         changed = true;
@@ -907,9 +990,13 @@ export function scanFile(path, root = ROOT) {
       // Name the uncovered end caller: a caller inside another (clean)
       // helper is a covered path, so prefer the caller that is neither
       // covered nor sheltered when one exists.
-      const sheltered = (caller) => defs.some((inner) =>
-        clean.has(inner.name) && caller.index > inner.bodyStart && caller.index < inner.bodyEnd);
-      const bad = callers.find((caller) => !covered(caller.index, caller.late) && !sheltered(caller)) ??
+      const sheltered = (caller) =>
+        defs.some(
+          (inner) =>
+            clean.has(inner.name) && caller.index > inner.bodyStart && caller.index < inner.bodyEnd,
+        );
+      const bad =
+        callers.find((caller) => !covered(caller.index, caller.late) && !sheltered(caller)) ??
         callers.find((caller) => !covered(caller.index, caller.late));
       findings.push({
         file: rel(path, root),
@@ -969,20 +1056,20 @@ export function scanTree(root = ROOT) {
 
 const invoked = process.argv[1] ? process.argv[1].endsWith("check-test-bypass-scope.mjs") : false;
 if (invoked) {
-const findings = scanTree(process.argv[2] ?? ROOT);
-for (const finding of findings) {
-  const where = finding.note ? `${finding.call} ${finding.note}` : finding.call;
-  console.log(
-    `${finding.file}:${finding.line} [${finding.name}] ${where} performs unscoped fixture writes, but this file eagerly loads web/lib/request-org.ts (${finding.via || "directly"}).\n` +
-    `  WHY THIS FAILS (and why the symptom misleads): --import ./engine/src/testing/database-bypass.ts installs a bypass resolver for the test process, but importing ` +
-    `request-org.ts REPLACES it process-wide (the slot lives on globalThis) with a resolver returning undefined outside a Next.js request - so every unscoped write from here on runs RLS-enforced. ` +
-    `An unscoped INSERT then dies at setup with \`new row violates row-level security policy\` (looks like a product regression; observed at bootstrapScratchOrg). ` +
-    `An unscoped UPDATE/DELETE is worse: it silently matches zero rows, so setup never applies and the test can pass while proving nothing. ` +
-    `scripts/test-suite.mjs masks both (pooled leases avoid bare bootstrap; permissive database roles hide the rest) - do not rely on a green pool run. ` +
-    `Fix: wrap fixture creation and seed writes in withBypass()/withBypassContext() (reads: withOrgContext(); withOrg() also scopes writes; dropScratchOrg already self-wraps). ` +
-    `Lazy in-test import() of route handlers after setup is safe for setup; eager top-level reader imports are not.`,
-  );
-}
-console.log(`checked test bypass scope; exposed=${findings.length}`);
+  const findings = scanTree(process.argv[2] ?? ROOT);
+  for (const finding of findings) {
+    const where = finding.note ? `${finding.call} ${finding.note}` : finding.call;
+    console.log(
+      `${finding.file}:${finding.line} [${finding.name}] ${where} performs unscoped fixture writes, but this file eagerly loads web/lib/request-org.ts (${finding.via || "directly"}).\n` +
+        `  WHY THIS FAILS (and why the symptom misleads): --import ./engine/src/testing/database-bypass.ts installs a bypass resolver for the test process, but importing ` +
+        `request-org.ts REPLACES it process-wide (the slot lives on globalThis) with a resolver returning undefined outside a Next.js request - so every unscoped write from here on runs RLS-enforced. ` +
+        `An unscoped INSERT then dies at setup with \`new row violates row-level security policy\` (looks like a product regression; observed at bootstrapScratchOrg). ` +
+        `An unscoped UPDATE/DELETE is worse: it silently matches zero rows, so setup never applies and the test can pass while proving nothing. ` +
+        `scripts/test-suite.mjs masks both (pooled leases avoid bare bootstrap; permissive database roles hide the rest) - do not rely on a green pool run. ` +
+        `Fix: wrap fixture creation and seed writes in withBypass()/withBypassContext() (reads: withOrgContext(); withOrg() also scopes writes; dropScratchOrg already self-wraps). ` +
+        `Lazy in-test import() of route handlers after setup is safe for setup; eager top-level reader imports are not.`,
+    );
+  }
+  console.log(`checked test bypass scope; exposed=${findings.length}`);
   process.exit(findings.length > 0 ? 1 : 0);
 }

@@ -22,16 +22,26 @@ export interface PeriodEndYear {
 }
 
 export async function seedPeriodEndYear(org: ScratchOrg): Promise<PeriodEndYear> {
-  const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`, "objects"))[0]!.fiscal_calendar_id;
+  const calendarId = (
+    await db.execute<{ fiscal_calendar_id: string }>(
+      sql`
+    select fiscal_calendar_id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`,
+      "objects",
+    )
+  )[0]!.fiscal_calendar_id;
   const periods = new Map<string, string>([["2026-07", org.periodId]]);
   const month = async (year: number, number: number, fiscalYear: number, periodNumber: number) => {
     const key = `${year}-${String(number).padStart(2, "0")}`;
     if (periods.has(key)) return;
     const id = randomUUID();
     const starts = `${key}-01`;
-    const ends = (await db.execute<{ ends: string }>(sql`
-      select ((${starts}::date + interval '1 month') - interval '1 day')::date::text as ends`, "objects"))[0]!.ends;
+    const ends = (
+      await db.execute<{ ends: string }>(
+        sql`
+      select ((${starts}::date + interval '1 month') - interval '1 day')::date::text as ends`,
+        "objects",
+      )
+    )[0]!.ends;
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${id}, ${org.orgId}, ${fiscalYear}, ${periodNumber}, ${key}, ${starts}, ${ends}, false, ${calendarId})`);
@@ -64,7 +74,13 @@ let sequence = 0;
 /** Post a balanced manual-origin entry through the kernel for the scratch entity. */
 export async function postScratchEntry(
   org: ScratchOrg,
-  args: { actorId: string; periodId: string; date: string; lines: [accountId: string, amount: string][]; subsidiaryId?: string },
+  args: {
+    actorId: string;
+    periodId: string;
+    date: string;
+    lines: [accountId: string, amount: string][];
+    subsidiaryId?: string;
+  },
 ): Promise<string> {
   sequence += 1;
   const posted = await postEntry(db, {
@@ -84,10 +100,18 @@ export async function postScratchEntry(
 }
 
 /** Hard-close every module of the given periods for the whole organization. */
-export async function closeScratchPeriods(org: ScratchOrg, actorId: string, periodIds: readonly string[]): Promise<void> {
+export async function closeScratchPeriods(
+  org: ScratchOrg,
+  actorId: string,
+  periodIds: readonly string[],
+): Promise<void> {
   for (const periodId of periodIds) {
     const { results } = await closePeriodAllModules({
-      orgId: org.orgId, periodId, bookId: org.bookId, actorId, reason: "Closed for the year-end fixture",
+      orgId: org.orgId,
+      periodId,
+      bookId: org.bookId,
+      actorId,
+      reason: "Closed for the year-end fixture",
     });
     const failed = results.find((result) => !result.ok);
     if (failed) throw new Error(`could not close period ${periodId}: ${failed.error}`);
@@ -98,7 +122,12 @@ export async function closeScratchPeriods(org: ScratchOrg, actorId: string, peri
 export async function recordPeriodEndPolicy(
   org: ScratchOrg,
   year: PeriodEndYear,
-  args: { actorId: string; effectiveFrom?: string; incomeSummary?: boolean; balanceSheetJournals?: boolean },
+  args: {
+    actorId: string;
+    effectiveFrom?: string;
+    incomeSummary?: boolean;
+    balanceSheetJournals?: boolean;
+  },
 ): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
@@ -117,24 +146,75 @@ export async function recordPeriodEndPolicy(
  * of sales across FY2026, plus revenue in December 2025 that no earlier
  * closing ever closed.
  */
-export async function postScratchYearActivity(org: ScratchOrg, year: PeriodEndYear, actorId: string): Promise<void> {
+export async function postScratchYearActivity(
+  org: ScratchOrg,
+  year: PeriodEndYear,
+  actorId: string,
+): Promise<void> {
   const period = (key: string) => year.periods.get(key)!;
-  await postScratchEntry(org, { actorId, periodId: period("2025-12"), date: "2025-12-15", lines: [[org.accounts.bank, "50.0000"], [org.accounts.revenue, "-50.0000"]] });
-  await postScratchEntry(org, { actorId, periodId: period("2026-01"), date: "2026-01-02", lines: [[org.accounts.bank, "5000.0000"], [year.capitalId, "-5000.0000"]] });
-  await postScratchEntry(org, { actorId, periodId: period("2026-03"), date: "2026-03-10", lines: [[org.accounts.bank, "1000.2500"], [org.accounts.revenue, "-1000.2500"]] });
-  await postScratchEntry(org, { actorId, periodId: period("2026-07"), date: "2026-07-15", lines: [[year.rentId, "400.1000"], [org.accounts.bank, "-400.1000"]] });
-  await postScratchEntry(org, { actorId, periodId: period("2026-12"), date: "2026-12-20", lines: [[org.accounts.cogs, "100.0500"], [org.accounts.bank, "-100.0500"]] });
+  await postScratchEntry(org, {
+    actorId,
+    periodId: period("2025-12"),
+    date: "2025-12-15",
+    lines: [
+      [org.accounts.bank, "50.0000"],
+      [org.accounts.revenue, "-50.0000"],
+    ],
+  });
+  await postScratchEntry(org, {
+    actorId,
+    periodId: period("2026-01"),
+    date: "2026-01-02",
+    lines: [
+      [org.accounts.bank, "5000.0000"],
+      [year.capitalId, "-5000.0000"],
+    ],
+  });
+  await postScratchEntry(org, {
+    actorId,
+    periodId: period("2026-03"),
+    date: "2026-03-10",
+    lines: [
+      [org.accounts.bank, "1000.2500"],
+      [org.accounts.revenue, "-1000.2500"],
+    ],
+  });
+  await postScratchEntry(org, {
+    actorId,
+    periodId: period("2026-07"),
+    date: "2026-07-15",
+    lines: [
+      [year.rentId, "400.1000"],
+      [org.accounts.bank, "-400.1000"],
+    ],
+  });
+  await postScratchEntry(org, {
+    actorId,
+    periodId: period("2026-12"),
+    date: "2026-12-20",
+    lines: [
+      [org.accounts.cogs, "100.0500"],
+      [org.accounts.bank, "-100.0500"],
+    ],
+  });
 }
 
 /** Signed balance of each account for the scratch entity through a date, period-assignment basis. */
-export async function balancesThrough(org: ScratchOrg, endsOn: string, subsidiaryId?: string): Promise<Map<string, string>> {
-  const rows = await db.execute<{ account_id: string; amount: string }>(sql`
+export async function balancesThrough(
+  org: ScratchOrg,
+  endsOn: string,
+  subsidiaryId?: string,
+): Promise<Map<string, string>> {
+  const rows = await db.execute<{ account_id: string; amount: string }>(
+    sql`
     select l.account_id, sum(l.amount)::text as amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounting_periods p on p.id = e.period_id and p.org_id = e.org_id
      where l.org_id = ${org.orgId} and l.subsidiary_id = ${subsidiaryId ?? org.subsidiaryId}
        and e.book_id = ${org.bookId} and e.status in ('posted', 'reversed') and p.ends_on <= ${endsOn}::date
-     group by l.account_id`, "objects");
+     group by l.account_id`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.account_id, row.amount]));
 }

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -19,7 +19,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ar/invoices\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ar/invoices'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -76,7 +84,9 @@ const SEGMENTS: never[] = [];
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -156,7 +166,13 @@ test("a refused delete pins the reason instead of toasting into the void", async
             segments={SEGMENTS}
             canCreate
             canPost
-            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "delete", visible: true }] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [] },
+                actions: [{ key: "delete", visible: true }],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -174,7 +190,11 @@ test("a refused delete pins the reason instead of toasting into the void", async
   await tick();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the delete refusal must pin as an alert, not vanish with the toast");
-  assert.match(alert.textContent ?? "", /Draft has payments applied/, "the alert must carry the server reason");
+  assert.match(
+    alert.textContent ?? "",
+    /Draft has payments applied/,
+    "the alert must carry the server reason",
+  );
   const toasts = globalThis.__drawerToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "error" && /payments applied/.test(toast.message)),

@@ -30,17 +30,31 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
     let params: Record<string, string> | undefined;
     if (body.params !== undefined) {
       if (!body.params || typeof body.params !== "object" || Array.isArray(body.params)) {
-        throw new ApplicationError("invalid_input", "params must be an object of string values", 422);
+        throw new ApplicationError(
+          "invalid_input",
+          "params must be an object of string values",
+          422,
+        );
       }
       params = {};
       for (const [key, entry] of Object.entries(body.params as Record<string, unknown>)) {
         if (typeof entry !== "string") {
-          throw new ApplicationError("invalid_input", "params must be an object of string values", 422);
+          throw new ApplicationError(
+            "invalid_input",
+            "params must be an object of string values",
+            422,
+          );
         }
         params[key] = entry;
       }
     }
-    return { status: 200, body: { ok: true, ...(await previewLayout(context, { route: body.route, spec: body.spec, params })) } };
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        ...(await previewLayout(context, { route: body.route, spec: body.spec, params })),
+      },
+    };
   });
 }
 

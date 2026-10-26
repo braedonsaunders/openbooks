@@ -1,7 +1,15 @@
-import { seedEnabledPayrollConfiguration } from '../testing/fixtures.ts';
+import { seedEnabledPayrollConfiguration } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollPerson, seedPayrollTime, seedPostingAccount, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  seedPayrollSchedule,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -16,7 +24,11 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture, seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
+import {
+  seedOntarioEhtFixture,
+  seedUsSuiAccount,
+  seedUsEinAccount,
+} from "./filing-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -57,17 +69,17 @@ async function seedTexasHarness(): Promise<UsHarness> {
   const sutaPayable = await account("2350", "SUI payable", "liability_current");
   const statePayable = await account("2360", "State income tax payable", "liability_current");
   await seedEnabledPayrollConfiguration(org.orgId, {
-        wageExpenseAccountId: wageExpense,
-        burdenExpenseAccountId: burdenExpense,
-        netPayAccountId: netPayable,
-        wagesTo: "expense",
-        countries: ["US"],
-        // Presence-only FUTA: the 2026 Schedule A is not transcribed, so an
-        // unconfigured FUTA refuses by name; the ordinary 0.6% full-credit
-        // figure is the TEST entering a number as an employer would, and no
-        // expectation below asserts a FUTA amount.
-        us: { futaRate: "0.006" },
-      });
+    wageExpenseAccountId: wageExpense,
+    burdenExpenseAccountId: burdenExpense,
+    netPayAccountId: netPayable,
+    wagesTo: "expense",
+    countries: ["US"],
+    // Presence-only FUTA: the 2026 Schedule A is not transcribed, so an
+    // unconfigured FUTA refuses by name; the ordinary 0.6% full-credit
+    // figure is the TEST entering a number as an employer would, and no
+    // expectation below asserts a FUTA amount.
+    us: { futaRate: "0.006" },
+  });
 
   await seedPayrollComponents(org.orgId, actorId, "US");
   await setPackSlotAccount(org.orgId, actorId, "US", "fit", irsPayable);
@@ -99,22 +111,33 @@ async function seedTexasHarness(): Promise<UsHarness> {
             ${usSubId}, 'TX', true, ${actorId}, ${actorId})`);
 
   await seedUsSuiAccount(org.orgId, actorId, "TX", {
-    filingAccountId: txSuiAccountId, federalAccountId: einAccountId, subsidiaryId: usSubId,
-    effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "TX original employer registration",
+    filingAccountId: txSuiAccountId,
+    federalAccountId: einAccountId,
+    subsidiaryId: usSubId,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
+    sourceReference: "TX original employer registration",
     financingMethod: null,
   });
 
   const employeeId = randomUUID();
-  await seedPayrollPerson(org.orgId, employeeId, 'Tex Worker', {
+  await seedPayrollPerson(org.orgId, employeeId, "Tex Worker", {
     subsidiaryId: usSubId,
   });
   await seedPayrollWage(org.orgId, employeeId, actorId, {
-    currency: 'USD', rate: '45', basis: 'hour', effectiveFrom: '2026-01-01',
+    currency: "USD",
+    rate: "45",
+    basis: "hour",
+    effectiveFrom: "2026-01-01",
   });
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Biweekly US', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
-    payDateOffsetDays: 3, subsidiaryId: usSubId,
+    name: "Biweekly US",
+    frequency: "biweekly",
+    periodsPerYear: 26,
+    anchorPeriodEnd: "2026-07-18",
+    payDateOffsetDays: 3,
+    subsidiaryId: usSubId,
   });
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
@@ -130,25 +153,47 @@ async function seedTexasHarness(): Promise<UsHarness> {
             ${actorId}, ${actorId})`);
   // Assigned to the EIN account — NOT to any state SUI account.
   await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-    country: 'US', province: 'TX', payBasis: 'hourly', filingStatus: 'single', filingAccountId: einAccountId,
+    country: "US",
+    province: "TX",
+    payBasis: "hourly",
+    filingStatus: "single",
+    filingAccountId: einAccountId,
   });
   // 160 hours in the period: 160 × 45 = 7,200 gross, past the $7,000 FUTA base.
   for (const [workedOn, hours] of [
-    ["2026-07-06", 40], ["2026-07-08", 40], ["2026-07-10", 40], ["2026-07-14", 40],
+    ["2026-07-06", 40],
+    ["2026-07-08", 40],
+    ["2026-07-10", 40],
+    ["2026-07-14", 40],
   ] as const) {
     await seedPayrollTime(org.orgId, employeeId, actorId, {
-      workedOn: workedOn, hours: hours, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-      costingBasis: 'actual',
+      workedOn: workedOn,
+      hours: hours,
+      status: "approved",
+      isBillable: false,
+      billingStatus: "unbilled",
+      costingBasis: "actual",
     });
   }
   return {
-    orgId: org.orgId, actorId, subsidiaryId: usSubId, scheduleId, employeeId, einAccountId, txSuiAccountId, sutaPayable,
+    orgId: org.orgId,
+    actorId,
+    subsidiaryId: usSubId,
+    scheduleId,
+    employeeId,
+    einAccountId,
+    txSuiAccountId,
+    sutaPayable,
   };
 }
 
 async function suiRow(
-  orgId: string, actorId: string, region: string, filingAccountId: string | null,
-  rate: string, wageBase: string,
+  orgId: string,
+  actorId: string,
+  region: string,
+  filingAccountId: string | null,
+  rate: string,
+  wageBase: string,
 ): Promise<void> {
   await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, filing_account_id,
@@ -157,34 +202,40 @@ async function suiRow(
             ${JSON.stringify({ rate, wageBase })}::jsonb, ${actorId}, ${actorId})`);
 }
 
-test(
-  "TX with no SUI rate refuses by name instead of accruing 0.00",
-  { skip: !DB },
-  async () => {
-    const h = await seedTexasHarness();
-    try {
-      const run = await createPayRun({
-        orgId: h.orgId, actorId: h.actorId, payScheduleId: h.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
-      });
-      const result = await calculatePayRun({ orgId: h.orgId, documentId: run.documentId, actorId: h.actorId });
-      assert.equal(result.employees, 0);
-      assert.equal(result.errors.length, 1);
-      assert.equal(result.errors[0]!.employee, "Tex Worker");
-      // The readiness detector's sentence, verbatim, prefixed by the employee.
-      assert.match(
-        result.errors[0]!.message,
-        /no State unemployment \(SUI\) rate is configured for TX · the assigned filing account in 2026 — nothing is being accrued for it/,
-      );
-      // And nothing was accrued: no stub, no SUI line anywhere.
-      const stubs = (await db.execute(sql`
-        select 1 from pay_stubs where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
-      assert.equal(stubs.length, 0);
-    } finally {
-      await dropScratchOrgReporting(h.orgId);
-    }
-  },
-);
+test("TX with no SUI rate refuses by name instead of accruing 0.00", { skip: !DB }, async () => {
+  const h = await seedTexasHarness();
+  try {
+    const run = await createPayRun({
+      orgId: h.orgId,
+      actorId: h.actorId,
+      payScheduleId: h.scheduleId,
+      periodStart: "2026-07-05",
+      periodEnd: "2026-07-18",
+    });
+    const result = await calculatePayRun({
+      orgId: h.orgId,
+      documentId: run.documentId,
+      actorId: h.actorId,
+    });
+    assert.equal(result.employees, 0);
+    assert.equal(result.errors.length, 1);
+    assert.equal(result.errors[0]!.employee, "Tex Worker");
+    // The readiness detector's sentence, verbatim, prefixed by the employee.
+    assert.match(
+      result.errors[0]!.message,
+      /no State unemployment \(SUI\) rate is configured for TX · the assigned filing account in 2026 — nothing is being accrued for it/,
+    );
+    // And nothing was accrued: no stub, no SUI line anywhere.
+    const stubs = await db.execute(
+      sql`
+        select 1 from pay_stubs where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`,
+      "objects",
+    );
+    assert.equal(stubs.length, 0);
+  } finally {
+    await dropScratchOrgReporting(h.orgId);
+  }
+});
 
 test(
   "TX with SUI rates on other accounts still refuses for the EIN-assigned employee",
@@ -194,31 +245,55 @@ test(
     try {
       // Rates for another native payer cannot satisfy this employee's original EIN.
       const otherEmployerId = randomUUID();
-      assert.equal((await db.execute(sql`insert into subsidiaries
+      assert.equal(
+        (
+          await db.execute(
+            sql`insert into subsidiaries
         (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
         values(${otherEmployerId},${h.orgId},${h.subsidiaryId},'Other US employer','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
-        returning id`, "objects")).length, 1);
+        returning id`,
+            "objects",
+          )
+        ).length,
+        1,
+      );
       const otherEin = await seedUsEinAccount(h.orgId, h.actorId, otherEmployerId, "98-7654321");
       const otherTxSui = await seedUsSuiAccount(h.orgId, h.actorId, "TX", {
-        federalAccountId: otherEin, subsidiaryId: otherEmployerId,
-        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "Other TX original employer registration",
+        federalAccountId: otherEin,
+        subsidiaryId: otherEmployerId,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+        sourceReference: "Other TX original employer registration",
       });
       const otherCaSui = await seedUsSuiAccount(h.orgId, h.actorId, "CA", {
-        federalAccountId: otherEin, subsidiaryId: otherEmployerId,
-        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "Other CA original employer registration",
+        federalAccountId: otherEin,
+        subsidiaryId: otherEmployerId,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+        sourceReference: "Other CA original employer registration",
       });
       const otherNySui = await seedUsSuiAccount(h.orgId, h.actorId, "NY", {
-        federalAccountId: otherEin, subsidiaryId: otherEmployerId,
-        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "Other NY original employer registration",
+        federalAccountId: otherEin,
+        subsidiaryId: otherEmployerId,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+        sourceReference: "Other NY original employer registration",
       });
       await suiRow(h.orgId, h.actorId, "TX", otherTxSui, "0.034", "9000");
       await suiRow(h.orgId, h.actorId, "CA", otherCaSui, "0.034", "7000");
       await suiRow(h.orgId, h.actorId, "NY", otherNySui, "0.041", "12700");
       const run = await createPayRun({
-        orgId: h.orgId, actorId: h.actorId, payScheduleId: h.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: h.orgId,
+        actorId: h.actorId,
+        payScheduleId: h.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const result = await calculatePayRun({ orgId: h.orgId, documentId: run.documentId, actorId: h.actorId });
+      const result = await calculatePayRun({
+        orgId: h.orgId,
+        documentId: run.documentId,
+        actorId: h.actorId,
+      });
       assert.equal(result.employees, 0, "a rate somewhere in the org must not pass");
       assert.equal(result.errors.length, 1);
       assert.match(
@@ -239,23 +314,37 @@ test(
     try {
       await suiRow(h.orgId, h.actorId, "TX", h.txSuiAccountId, "0.027", "9000");
       await seedUsSuiAccount(h.orgId, h.actorId, "TX", {
-        filingAccountId: h.txSuiAccountId, federalAccountId: h.einAccountId, subsidiaryId: h.subsidiaryId,
-        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "TX original employer registration",
+        filingAccountId: h.txSuiAccountId,
+        federalAccountId: h.einAccountId,
+        subsidiaryId: h.subsidiaryId,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+        sourceReference: "TX original employer registration",
       });
       await db.execute(sql`
         update employee_payroll_profiles set filing_account_id = ${h.txSuiAccountId}
          where org_id = ${h.orgId} and employee_party_id = ${h.employeeId}`);
       const run = await createPayRun({
-        orgId: h.orgId, actorId: h.actorId, payScheduleId: h.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: h.orgId,
+        actorId: h.actorId,
+        payScheduleId: h.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const result = await calculatePayRun({ orgId: h.orgId, documentId: run.documentId, actorId: h.actorId });
+      const result = await calculatePayRun({
+        orgId: h.orgId,
+        documentId: run.documentId,
+        actorId: h.actorId,
+      });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
 
-      const stubs = (await db.execute<{ factors: Record<string, string>; gross: string }>(sql`
+      const stubs = await db.execute<{ factors: Record<string, string>; gross: string }>(
+        sql`
         select factors, gross from pay_stubs
-         where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
+         where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`,
+        "objects",
+      );
       assert.equal(stubs.length, 1);
       const factors = stubs[0]!.factors;
       assert.equal(stubs[0]!.gross, "7200.0000");
@@ -267,17 +356,24 @@ test(
       assert.equal(factors.SUTA, "194.4000");
       // FIT matches the Pub 15-T engine called directly with the same facts.
       const expected = calculatePub15T({
-        payDate: "2026-07-21", periodsPerYear: 26, wages: "7200.00", filingStatus: "single",
-        futaEffectiveRate: "0.006", sui: { rate: "0.027", wageBase: "9000" },
+        payDate: "2026-07-21",
+        periodsPerYear: 26,
+        wages: "7200.00",
+        filingStatus: "single",
+        futaEffectiveRate: "0.006",
+        sui: { rate: "0.027", wageBase: "9000" },
       });
       assert.equal(factors.FIT, expected.fit);
       assert.equal(factors.FUTA, expected.futa);
       assert.equal(factors.SUTA, expected.suta);
 
       await commitPayRun({ orgId: h.orgId, documentId: run.documentId, actorId: h.actorId });
-      const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const glLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, amount from document_lines
-         where org_id = ${h.orgId} and document_id = ${run.documentId}`, "objects"));
+         where org_id = ${h.orgId} and document_id = ${run.documentId}`,
+        "objects",
+      );
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
       const sutaLeg = glLines.find((row) => row.account_id === h.sutaPayable);
       assert.ok(sutaLeg, "SUI liability posts to its slot account");
@@ -302,8 +398,12 @@ test(
       // ordinary full-credit figure explicitly, keeping the no-notice
       // assertion an SUI property rather than a FUTA gap.
       await seedUsSuiAccount(h.orgId, h.actorId, "TX", {
-        filingAccountId: h.txSuiAccountId, federalAccountId: h.einAccountId, subsidiaryId: h.subsidiaryId,
-        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "TX original employer registration",
+        filingAccountId: h.txSuiAccountId,
+        federalAccountId: h.einAccountId,
+        subsidiaryId: h.subsidiaryId,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+        sourceReference: "TX original employer registration",
         financingMethod: "reimbursable",
       });
       await db.execute(sql`
@@ -315,28 +415,49 @@ test(
         update employee_payroll_profiles set filing_account_id = ${h.txSuiAccountId}
          where org_id = ${h.orgId} and employee_party_id = ${h.employeeId}`);
       const run = await createPayRun({
-        orgId: h.orgId, actorId: h.actorId, payScheduleId: h.scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: h.orgId,
+        actorId: h.actorId,
+        payScheduleId: h.scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      assert.ok((await payRunReadiness(h.orgId, run.documentId)).items.every((item) => item.code !== "statutory.rateUnconfigured"), "a recorded non-contributory SUI account needs no rate notice");
-      const result = await calculatePayRun({ orgId: h.orgId, documentId: run.documentId, actorId: h.actorId });
+      assert.ok(
+        (await payRunReadiness(h.orgId, run.documentId)).items.every(
+          (item) => item.code !== "statutory.rateUnconfigured",
+        ),
+        "a recorded non-contributory SUI account needs no rate notice",
+      );
+      const result = await calculatePayRun({
+        orgId: h.orgId,
+        documentId: run.documentId,
+        actorId: h.actorId,
+      });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
-      const stubs = (await db.execute<{ factors: Record<string, string>; insurable_earnings: string }>(sql`
+      const stubs = await db.execute<{
+        factors: Record<string, string>;
+        insurable_earnings: string;
+      }>(
+        sql`
         select factors, insurable_earnings from pay_stubs
-         where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
+         where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`,
+        "objects",
+      );
       assert.equal(stubs.length, 1);
       // No SUI priced on the stub …
       assert.equal(stubs[0]!.factors.SUTA, "0.0000");
       // … but the wages still accrue to the quarterly wage reporting.
       assert.equal(stubs[0]!.insurable_earnings, "7200.0000");
       // And no SUI line lands anywhere on the stub.
-      const sutaLines = (await db.execute(sql`
+      const sutaLines = await db.execute(
+        sql`
         select 1 from pay_stub_lines l
           join pay_components c on c.id = l.component_id
           join pay_stubs s on s.id = l.stub_id
          where l.org_id = ${h.orgId} and s.pay_run_document_id = ${run.documentId}
-           and c.system_key = 'suta'`, "objects"));
+           and c.system_key = 'suta'`,
+        "objects",
+      );
       assert.equal(sutaLines.length, 0);
     } finally {
       await dropScratchOrgReporting(h.orgId);
@@ -360,14 +481,22 @@ test(
       const wcbPayable = await account("2330", "WSIB payable", "liability_current");
       const ehtPayable = await account("2340", "EHT payable", "liability_current");
       await seedEnabledPayrollConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
-            wageExpenseAccountId: wageExpense,
-            burdenExpenseAccountId: burdenExpense,
-            netPayAccountId: netPayable,
+        slotAccounts: {
+          CA: {
+            cpp: craPayable,
+            ei: craPayable,
+            qpip: craPayable,
+            income_tax: craPayable,
+            vacation: vacationPayable,
+          },
+        },
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
 
-            wagesTo: "expense",
-            countries: ["CA"],
-          });
+        wagesTo: "expense",
+        countries: ["CA"],
+      });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await seedOntarioEhtFixture(org.orgId, actorId);
@@ -376,60 +505,98 @@ test(
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
 
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Ontario Worker');
+      await seedPayrollPerson(org.orgId, employeeId, "Ontario Worker");
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "30",
+        basis: "hour",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        name: "Biweekly",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 3,
       });
       // Stub calculation refuses employees without an HRM employment, so the
       // hire carries one and the profile points at it.
       const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
-      wcbExempt: true, wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
-        country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
-      }, { percentFloor: '0', method: 'accrue' });
+      await seedPayrollProfile(
+        org.orgId,
+        employeeId,
+        employmentId,
+        scheduleId,
+        actorId,
+        {
+          wcbExempt: true,
+          wcbExemptReason: "Coverage exemption declared for this non-WCB scenario",
+          country: "CA",
+          province: "ON",
+          payBasis: "hourly",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+        },
+        { percentFloor: "0", method: "accrue" },
+      );
 
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await seedPayrollTime(org.orgId, employeeId, actorId, {
-          workedOn: workedOn, hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-          costingBasis: 'actual',
+          workedOn: workedOn,
+          hours: 20,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
         });
       }
 
       // The explicit $1M exemption leaves this synthetic employer owing no EHT.
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
 
       // Inert means absent: no Health Services Fund line anywhere on the stub.
-      const hsfLines = (await db.execute(sql`
+      const hsfLines = await db.execute(
+        sql`
         select l.amount
           from pay_stub_lines l
           join pay_components c on c.id = l.component_id
           join pay_stubs s on s.id = l.stub_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-           and c.system_key = 'hsf'`, "objects"));
+           and c.system_key = 'hsf'`,
+        "objects",
+      );
       assert.equal(hsfLines.length, 0);
-      const stubs = (await db.execute<{ factors: Record<string, string> }>(sql`
+      const stubs = await db.execute<{ factors: Record<string, string> }>(
+        sql`
         select factors from pay_stubs
-         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
+         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}`,
+        "objects",
+      );
       assert.ok(!("HSF" in stubs[0]!.factors), "no HSF factor outside QC");
-      assert.equal(stubs[0]!.factors.HSF_EARN, "0", "non-applicable remuneration is retained as zero");
+      assert.equal(
+        stubs[0]!.factors.HSF_EARN,
+        "0",
+        "non-applicable remuneration is retained as zero",
+      );
 
       // And no demand for the Quebec-only control accounts — neither in the
       // setup state nor in the run pre-flight.
       const setup = await payrollSetupState(org.orgId);
-      const slotBlockers = setup.checks.filter(
-        (check) => check.code === "setup.slot" && !check.ok,
-      );
+      const slotBlockers = setup.checks.filter((check) => check.code === "setup.slot" && !check.ok);
       assert.deepEqual(
         slotBlockers.map((check) => check.detail).sort(),
         [],
@@ -442,9 +609,12 @@ test(
       assert.deepEqual(runSlotBlockers, []);
 
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = (await db.execute<{ amount: string }>(sql`
+      const glLines = await db.execute<{ amount: string }>(
+        sql`
         select amount from document_lines
-         where org_id = ${org.orgId} and document_id = ${run.documentId}`, "objects"));
+         where org_id = ${org.orgId} and document_id = ${run.documentId}`,
+        "objects",
+      );
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
     } finally {
       await dropScratchOrgReporting(org.orgId);

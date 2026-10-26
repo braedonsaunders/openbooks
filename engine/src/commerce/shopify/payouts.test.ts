@@ -15,35 +15,61 @@ function stubTransport(): typeof fetch {
   return (async (_url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as { query?: string };
     if (typeof body.query === "string" && body.query.includes("sourceOrderId")) {
-      throw new Error("Shopify would reject sourceOrderId: no such field on ShopifyPaymentsBalanceTransaction");
+      throw new Error(
+        "Shopify would reject sourceOrderId: no such field on ShopifyPaymentsBalanceTransaction",
+      );
     }
     if (typeof body.query === "string" && body.query.includes("balanceTransactions")) {
-      return new Response(JSON.stringify({
+      return new Response(
+        JSON.stringify({
+          data: {
+            node: {
+              id: "gid://shopify/ShopifyPaymentsPayout/1",
+              balanceTransactions: {
+                edges: [
+                  {
+                    cursor: "t1",
+                    node: {
+                      id: "gid://shopify/ShopifyPaymentsBalanceTransaction/11",
+                      type: "CHARGE",
+                      amount: { amount: "100.00", currencyCode: "CAD" },
+                      fee: { amount: "2.90", currencyCode: "CAD" },
+                      net: { amount: "97.10", currencyCode: "CAD" },
+                      associatedOrder: { id: "gid://shopify/Order/2001" },
+                    },
+                  },
+                  {
+                    cursor: "t2",
+                    node: {
+                      id: "gid://shopify/ShopifyPaymentsBalanceTransaction/12",
+                      type: "REFUND",
+                      amount: { amount: "20.00", currencyCode: "CAD" },
+                      fee: null,
+                      net: null,
+                      associatedOrder: { id: "gid://shopify/Order/2001" },
+                    },
+                  },
+                ],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response(
+      JSON.stringify({
         data: {
-          node: {
-            id: "gid://shopify/ShopifyPaymentsPayout/1",
-            balanceTransactions: {
+          shopifyPaymentsAccount: {
+            payouts: {
               edges: [
                 {
-                  cursor: "t1",
+                  cursor: "p1",
                   node: {
-                    id: "gid://shopify/ShopifyPaymentsBalanceTransaction/11",
-                    type: "CHARGE",
-                    amount: { amount: "100.00", currencyCode: "CAD" },
-                    fee: { amount: "2.90", currencyCode: "CAD" },
-                    net: { amount: "97.10", currencyCode: "CAD" },
-                    associatedOrder: { id: "gid://shopify/Order/2001" },
-                  },
-                },
-                {
-                  cursor: "t2",
-                  node: {
-                    id: "gid://shopify/ShopifyPaymentsBalanceTransaction/12",
-                    type: "REFUND",
-                    amount: { amount: "20.00", currencyCode: "CAD" },
-                    fee: null,
-                    net: null,
-                    associatedOrder: { id: "gid://shopify/Order/2001" },
+                    id: "gid://shopify/ShopifyPaymentsPayout/1",
+                    issuedAt: "2026-07-10T00:00:00Z",
+                    net: { amount: "77.10", currencyCode: "CAD" },
                   },
                 },
               ],
@@ -51,27 +77,9 @@ function stubTransport(): typeof fetch {
             },
           },
         },
-      }), { status: 200, headers: { "content-type": "application/json" } });
-    }
-    return new Response(JSON.stringify({
-      data: {
-        shopifyPaymentsAccount: {
-          payouts: {
-            edges: [
-              {
-                cursor: "p1",
-                node: {
-                  id: "gid://shopify/ShopifyPaymentsPayout/1",
-                  issuedAt: "2026-07-10T00:00:00Z",
-                  net: { amount: "77.10", currencyCode: "CAD" },
-                },
-              },
-            ],
-            pageInfo: { hasNextPage: false, endCursor: null },
-          },
-        },
-      },
-    }), { status: 200, headers: { "content-type": "application/json" } });
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
   }) as typeof fetch;
 }
 

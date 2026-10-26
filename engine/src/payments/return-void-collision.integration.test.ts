@@ -30,13 +30,19 @@ async function invoice(org: ScratchOrg, actor: string) {
   const entry = await postDocument(id, {
     control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
   });
-  const line = (await db.execute<{ id: string }>(sql`select id from journal_lines
-    where entry_id = ${entry} and is_open_item`, "objects"))[0]!.id;
+  const line = (
+    await db.execute<{ id: string }>(
+      sql`select id from journal_lines
+    where entry_id = ${entry} and is_open_item`,
+      "objects",
+    )
+  )[0]!.id;
   return { id, entry, line };
 }
 
 async function payment(org: ScratchOrg, actor: string, line: string) {
-  const result = await createPaymentDocument({ allowedSubsidiaryIds: null,
+  const result = await createPaymentDocument({
+    allowedSubsidiaryIds: null,
     orgId: org.orgId,
     kind: "customer_payment",
     createdBy: actor,
@@ -73,53 +79,75 @@ async function payment(org: ScratchOrg, actor: string, line: string) {
   return result.id;
 }
 
-test("bank return supersedes a pending manual void with its own evidence", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const requester = await createScratchUser(org.orgId, "Manual Requester", "accountant");
-    const bankOps = await createScratchUser(org.orgId, "Bank Operator", "accountant");
-    const inv = await invoice(org, bankOps);
-    const pay = await payment(org, bankOps, inv.line);
-    // A gated manual void request is pending approval: evidence belongs to
-    // the requester and the document is still posted.
-    await db.execute(sql`update documents
+test(
+  "bank return supersedes a pending manual void with its own evidence",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const requester = await createScratchUser(org.orgId, "Manual Requester", "accountant");
+      const bankOps = await createScratchUser(org.orgId, "Bank Operator", "accountant");
+      const inv = await invoice(org, bankOps);
+      const pay = await payment(org, bankOps, inv.line);
+      // A gated manual void request is pending approval: evidence belongs to
+      // the requester and the document is still posted.
+      await db.execute(sql`update documents
        set void_reason = 'Duplicate entry, still investigating',
            void_requested_at = now(),
            void_requested_by = ${requester},
            void_reversal_date = ${org.date},
            updated_by = ${requester}
      where id = ${pay} and org_id = ${org.orgId}`);
-    const reversalId = await reversePaymentForReturn(pay, org.orgId, "NSF return", bankOps, org.date);
-    assert.ok(reversalId);
-    const doc = (await db.execute<{
-        status: string;
-        void_reason: string | null;
-        voided_by: string | null;
-      }>(sql`select status, void_reason, voided_by from documents where id = ${pay}`, "objects"))[0]!;
-    // The bank return defines the outcome: its own evidence must win, never
-    // the pending manual request's reason. Completion carries the request
-    // evidence into voided_by, so the bank operator lands there.
-    assert.equal(doc.status, "voided");
-    assert.equal(doc.void_reason, "Bank return: NSF return");
-    assert.equal(doc.voided_by, bankOps);
-    // Both evidences are preserved in the audit trail.
-    const audit = (await db.execute<{ changes: unknown }>(sql`select changes from audit_log
+      const reversalId = await reversePaymentForReturn(
+        pay,
+        org.orgId,
+        "NSF return",
+        bankOps,
+        org.date,
+      );
+      assert.ok(reversalId);
+      const doc = (
+        await db.execute<{
+          status: string;
+          void_reason: string | null;
+          voided_by: string | null;
+        }>(sql`select status, void_reason, voided_by from documents where id = ${pay}`, "objects")
+      )[0]!;
+      // The bank return defines the outcome: its own evidence must win, never
+      // the pending manual request's reason. Completion carries the request
+      // evidence into voided_by, so the bank operator lands there.
+      assert.equal(doc.status, "voided");
+      assert.equal(doc.void_reason, "Bank return: NSF return");
+      assert.equal(doc.voided_by, bankOps);
+      // Both evidences are preserved in the audit trail.
+      const audit = (
+        await db.execute<{ changes: unknown }>(
+          sql`select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${pay}
          and changes->>'mode' = 'void_evidence_superseded'
-       order by at desc limit 1`, "objects"))[0];
-    assert.ok(audit, "expected a void_evidence_superseded audit row recording both evidences");
-    const changes = audit!.changes as Record<string, unknown>;
-    assert.equal(
-      (changes.superseded as Record<string, unknown>)?.reason,
-      "Duplicate entry, still investigating",
-    );
-    assert.equal((changes.superseded as Record<string, unknown>)?.requestedBy, requester);
-    // The manual requester is told their request was superseded.
-    const notice = (await db.execute<{ id: string }>(sql`select id from notifications
+       order by at desc limit 1`,
+          "objects",
+        )
+      )[0];
+      assert.ok(audit, "expected a void_evidence_superseded audit row recording both evidences");
+      const changes = audit!.changes as Record<string, unknown>;
+      assert.equal(
+        (changes.superseded as Record<string, unknown>)?.reason,
+        "Duplicate entry, still investigating",
+      );
+      assert.equal((changes.superseded as Record<string, unknown>)?.requestedBy, requester);
+      // The manual requester is told their request was superseded.
+      const notice = (
+        await db.execute<{ id: string }>(
+          sql`select id from notifications
        where org_id = ${org.orgId} and user_id = ${requester} and kind = 'void_superseded'
-       order by created_at desc limit 1`, "objects"))[0];
-    assert.ok(notice, "expected a void_superseded notification for the manual requester");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       order by created_at desc limit 1`,
+          "objects",
+        )
+      )[0];
+      assert.ok(notice, "expected a void_superseded notification for the manual requester");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

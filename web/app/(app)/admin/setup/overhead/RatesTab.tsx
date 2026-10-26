@@ -1,7 +1,4 @@
-import {
-  SETUP_ENTITY_BY_KEY,
-  OVERHEAD_RATE_KINDS,
-} from "../../../../../lib/setup/registry";
+import { SETUP_ENTITY_BY_KEY, OVERHEAD_RATE_KINDS } from "../../../../../lib/setup/registry";
 import { SetupEntitySection } from "../[entity]/SetupEntitySection";
 import { getMoneyFormatter } from "@/lib/money-server";
 import { formatDecimal } from "@/lib/money-format";
@@ -23,9 +20,7 @@ export async function RatesTab({
         columns: [
           { key: "departmentId", kind: "ref", ref: "departments" },
           { key: "rateKind", kind: "badge", options: OVERHEAD_RATE_KINDS },
-          ...entity.columns.filter(
-            (column) => !["departmentId", "category"].includes(column.key),
-          ),
+          ...entity.columns.filter((column) => !["departmentId", "category"].includes(column.key)),
         ],
       }}
       orgId={orgId}

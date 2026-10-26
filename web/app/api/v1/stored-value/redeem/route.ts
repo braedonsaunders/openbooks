@@ -33,7 +33,11 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
       invoiceId: body.invoiceId,
       idempotencyKey: requireV1IdempotencyKey(request),
     });
-    return { status: outcome.result.status === "posted" ? 201 : 202, body: outcome.result, replayed: outcome.replayed };
+    return {
+      status: outcome.result.status === "posted" ? 201 : 202,
+      body: outcome.result,
+      replayed: outcome.replayed,
+    };
   });
 }
 

@@ -1,4 +1,7 @@
-import { netSuiteOperationalMappingWriter, stableMappingSnapshotsMatch } from './operational-entity-mappings.ts';
+import {
+  netSuiteOperationalMappingWriter,
+  stableMappingSnapshotsMatch,
+} from "./operational-entity-mappings.ts";
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { businessToday } from "../platform/business-date.ts";
@@ -16,9 +19,14 @@ type Row = Record<string, unknown>;
 
 /** Journal-link metadata without amounts is retained without inventing an asset event. */
 export function netSuiteFamHistoryHasFinancialFacts(row: Row): boolean {
-  return ["custrecord_deprhistamount", "custrecord_deprhistbookvalue", "custrecord_deprhistpriornbv",
-    "custrecord_deprhistquantity", "custrecord_deprhistory_scheduled_amount", "custrecord_deprhistory_scheduled_nbv"]
-    .some(key => row[key] != null && String(row[key]).trim() !== "");
+  return [
+    "custrecord_deprhistamount",
+    "custrecord_deprhistbookvalue",
+    "custrecord_deprhistpriornbv",
+    "custrecord_deprhistquantity",
+    "custrecord_deprhistory_scheduled_amount",
+    "custrecord_deprhistory_scheduled_nbv",
+  ].some((key) => row[key] != null && String(row[key]).trim() !== "");
 }
 
 export interface NetSuiteFixedAssetSyncOptions {
@@ -104,7 +112,10 @@ const absoluteMoney = (value: unknown): string => {
   return fromUnits(units < 0n ? -units : units);
 };
 
-const method = (row: Row): "straight_line" | "declining_balance" | "double_declining" | "units_of_production" | "manual" => {
+const method = (
+  row: Row,
+):
+  "straight_line" | "declining_balance" | "double_declining" | "units_of_production" | "manual" => {
   const label = (text(row.fam_method_label) ?? "").toLowerCase();
   if (label.includes("straight")) return "straight_line";
   if (label.includes("double") && label.includes("declin")) return "double_declining";
@@ -113,7 +124,10 @@ const method = (row: Row): "straight_line" | "declining_balance" | "double_decli
   return "manual";
 };
 
-const status = (row: Row, hasHistory: boolean): "draft" | "in_service" | "fully_depreciated" | "disposed" | "written_off" => {
+const status = (
+  row: Row,
+  hasHistory: boolean,
+): "draft" | "in_service" | "fully_depreciated" | "disposed" | "written_off" => {
   const label = (text(row.fam_status_label) ?? "").toLowerCase();
   if (label.includes("fully")) return "fully_depreciated";
   if (label.includes("dispose")) return "disposed";
@@ -140,7 +154,9 @@ export function netSuiteFamState(asset: Row, value: Row | null, histories: Row[]
     : cost;
   const accumulatedUnits = toUnits(cost) - toUnits(bookValue);
   if (accumulatedUnits < 0n) {
-    throw new Error(`NetSuite FAM asset ${sourceId} has book value ${bookValue} above current cost ${cost}`);
+    throw new Error(
+      `NetSuite FAM asset ${sourceId} has book value ${bookValue} above current cost ${cost}`,
+    );
   }
   return { sourceId, cost, bookValue, accumulated: fromUnits(accumulatedUnits), histories, value };
 }
@@ -177,8 +193,8 @@ export interface NetSuiteFamExistingAcquisition {
 function famHistoryRefusal(assetSourceId: string, sourceHistoryId: string, detail: string): Error {
   return new Error(
     `NetSuite FAM history ${sourceHistoryId} for asset ${assetSourceId} ${detail}; ` +
-    "admitted asset lifecycle evidence is append-only and has been preserved. " +
-    "Correct or restore the FAM depreciation-history record in NetSuite to match the admitted evidence, then rerun the sync.",
+      "admitted asset lifecycle evidence is append-only and has been preserved. " +
+      "Correct or restore the FAM depreciation-history record in NetSuite to match the admitted evidence, then rerun the sync.",
   );
 }
 
@@ -211,7 +227,9 @@ export function planNetSuiteFamAcquisitions(
     const sourceHistoryId = text(history.id);
     if (sourceHistoryId) {
       if (seen.has(sourceHistoryId)) {
-        throw new Error(`NetSuite FAM asset ${assetSourceId} repeats source history id ${sourceHistoryId}`);
+        throw new Error(
+          `NetSuite FAM asset ${assetSourceId} repeats source history id ${sourceHistoryId}`,
+        );
       }
       seen.add(sourceHistoryId);
     }
@@ -219,7 +237,7 @@ export function planNetSuiteFamAcquisitions(
     if (!sourceHistoryId) {
       throw new Error(
         `NetSuite FAM asset ${assetSourceId} has an acquisition history row without a stable source history id; ` +
-        "restore the source record's identity in NetSuite, then rerun the sync.",
+          "restore the source record's identity in NetSuite, then rerun the sync.",
       );
     }
     planned.push({
@@ -250,10 +268,18 @@ export function reconcileNetSuiteFamAcquisitions(
   for (const event of existing) {
     const sourceHistoryId = netSuiteFamHistorySourceId(event.memo);
     if (!sourceHistoryId) {
-      throw famHistoryRefusal(assetSourceId, event.id, "is admitted without a provable source history identity");
+      throw famHistoryRefusal(
+        assetSourceId,
+        event.id,
+        "is admitted without a provable source history identity",
+      );
     }
     if (existingBySourceId.has(sourceHistoryId)) {
-      throw famHistoryRefusal(assetSourceId, sourceHistoryId, "is admitted more than once in native asset history");
+      throw famHistoryRefusal(
+        assetSourceId,
+        sourceHistoryId,
+        "is admitted more than once in native asset history",
+      );
     }
     existingBySourceId.set(sourceHistoryId, event);
   }
@@ -276,32 +302,54 @@ export function reconcileNetSuiteFamAcquisitions(
       continue;
     }
     if (event.reversed) {
-      throw famHistoryRefusal(assetSourceId, row.sourceHistoryId, "was reversed by a governed native correction");
+      throw famHistoryRefusal(
+        assetSourceId,
+        row.sourceHistoryId,
+        "was reversed by a governed native correction",
+      );
     }
     if (
-      event.kind !== "acquired"
-      || event.journalEntryId !== null
-      || event.financialChangeId !== null
-      || event.bookId !== null
+      event.kind !== "acquired" ||
+      event.journalEntryId !== null ||
+      event.financialChangeId !== null ||
+      event.bookId !== null
     ) {
-      throw famHistoryRefusal(assetSourceId, row.sourceHistoryId, "conflicts with the admitted native representation");
+      throw famHistoryRefusal(
+        assetSourceId,
+        row.sourceHistoryId,
+        "conflicts with the admitted native representation",
+      );
     }
-    if (event.occurredOn !== row.occurredOn || event.amount === null || toUnits(event.amount) !== toUnits(row.amount)) {
-      throw famHistoryRefusal(assetSourceId, row.sourceHistoryId, "no longer matches the admitted date or amount");
+    if (
+      event.occurredOn !== row.occurredOn ||
+      event.amount === null ||
+      toUnits(event.amount) !== toUnits(row.amount)
+    ) {
+      throw famHistoryRefusal(
+        assetSourceId,
+        row.sourceHistoryId,
+        "no longer matches the admitted date or amount",
+      );
     }
     reusedEventIds.push(event.id);
   }
   return { reusedEventIds, insert };
 }
 
-async function idMap(table: "accounts" | "subsidiaries" | "departments" | "projects" | "locations" | "parties", orgId: string) {
+async function idMap(
+  table: "accounts" | "subsidiaries" | "departments" | "projects" | "locations" | "parties",
+  orgId: string,
+) {
   // The table is a literal union with constant call sites (identifiers cannot
   // be bound); the org id is a value and is bound — manual quote-doubling is
   // not an escaping strategy.
-  const result = (await db.execute<{ id: string; source_ref: string }>(sql`
+  const result = await db.execute<{ id: string; source_ref: string }>(
+    sql`
     select id, custom->>'nsId' as source_ref from ${sql.raw(table)}
      where org_id = ${orgId} and custom->>'nsId' is not null
-  `, "objects"));
+  `,
+    "objects",
+  );
   const out = new Map<string, string>();
   for (const row of result) if (!out.has(row.source_ref)) out.set(row.source_ref, row.id);
   return out;
@@ -326,9 +374,13 @@ export function netSuiteFamPeriodForDate(
   periods: { id: string; starts_on: string; ends_on: string; is_adjustment: boolean }[],
   date: string,
 ) {
-  return periods.find((period) => !period.is_adjustment && period.starts_on <= date && period.ends_on >= date)
-    ?? periods.find((period) => period.starts_on <= date && period.ends_on >= date)
-    ?? null;
+  return (
+    periods.find(
+      (period) => !period.is_adjustment && period.starts_on <= date && period.ends_on >= date,
+    ) ??
+    periods.find((period) => period.starts_on <= date && period.ends_on >= date) ??
+    null
+  );
 }
 
 /** Replace connector-owned keys while retaining local statutory classifications. */
@@ -336,15 +388,21 @@ export function mergeNetSuiteFamTaxAttributes(
   existing: unknown,
   incoming: Record<string, unknown>,
 ): Record<string, unknown> {
-  const local = existing && typeof existing === "object" && !Array.isArray(existing)
-    ? existing as Record<string, unknown>
-    : {};
+  const local =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? (existing as Record<string, unknown>)
+      : {};
   return { ...local, ...incoming };
 }
 
-async function extractionDate(snapshot: NetSuiteFixedAssetSnapshot, orgId: string): Promise<string> {
+async function extractionDate(
+  snapshot: NetSuiteFixedAssetSnapshot,
+  orgId: string,
+): Promise<string> {
   const date = new Date(snapshot.extractedAt);
-  return Number.isNaN(date.getTime()) ? await businessToday(orgId) : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime())
+    ? await businessToday(orgId)
+    : date.toISOString().slice(0, 10);
 }
 
 /**
@@ -362,12 +420,16 @@ export async function syncNetSuiteFixedAssets(
   if (!(await orgFeatureEnabled(options.orgId, "fixedAssets"))) {
     throw new Error("Fixed Assets feature is disabled");
   }
-  const mappings = await netSuiteOperationalMappingWriter(options.orgId, options.connectionId, options.actorId ?? null);
+  const mappings = await netSuiteOperationalMappingWriter(
+    options.orgId,
+    options.connectionId,
+    options.actorId ?? null,
+  );
   const snapshot = await source.fixedAssets();
   const asOf = await extractionDate(snapshot, options.orgId);
   const historyByAsset = new Map<string, Row[]>();
   const orphanHistory: Row[] = [];
-  const sourceAssetIds = new Set(snapshot.assets.map(row => String(row.id)));
+  const sourceAssetIds = new Set(snapshot.assets.map((row) => String(row.id)));
   const sourceHistoryIds = new Set<string>();
   for (const row of snapshot.depreciationHistory) {
     // Source history identity is the admission key for native asset history;
@@ -389,51 +451,76 @@ export async function syncNetSuiteFixedAssets(
       .filter((entry): entry is [string, Row] => Boolean(entry[0])),
   );
   const states = snapshot.assets.map((asset) =>
-    netSuiteFamState(asset, valueByAsset.get(String(asset.id)) ?? null, historyByAsset.get(String(asset.id)) ?? []));
+    netSuiteFamState(
+      asset,
+      valueByAsset.get(String(asset.id)) ?? null,
+      historyByAsset.get(String(asset.id)) ?? [],
+    ),
+  );
   const sourceCost = states.reduce((sum, state) => sum + toUnits(state.cost), 0n);
   const sourceAccumulated = states.reduce((sum, state) => sum + toUnits(state.accumulated), 0n);
   const sourceBookValue = states.reduce((sum, state) => sum + toUnits(state.bookValue), 0n);
 
-  const fixedAssetAccountRefs = [...new Set([
-    ...snapshot.assetTypes.flatMap((row) => [
-      row.custrecord_assettypeassetacc,
-      row.custrecord_assettypedepracc,
-      row.custrecord_assettypedeprchargeacc,
-      row.custrecord_assettypedisposalacc,
-      row.custrecord_assettypewritedownacc,
-      row.custrecord_assettypewriteoffacc,
-    ]),
-    ...snapshot.assets.flatMap((row) => [
-      row.custrecord_assetmainacc,
-      row.custrecord_assetdepracc,
-      row.custrecord_assetdeprchargeacc,
-      row.custrecord_assetdisposalacc,
-      row.custrecord_assetwritedownacc,
-      row.custrecord_assetwriteoffacc,
-    ]),
-  ].map(text).filter((ref): ref is string => Boolean(ref)))];
+  const fixedAssetAccountRefs = [
+    ...new Set(
+      [
+        ...snapshot.assetTypes.flatMap((row) => [
+          row.custrecord_assettypeassetacc,
+          row.custrecord_assettypedepracc,
+          row.custrecord_assettypedeprchargeacc,
+          row.custrecord_assettypedisposalacc,
+          row.custrecord_assettypewritedownacc,
+          row.custrecord_assettypewriteoffacc,
+        ]),
+        ...snapshot.assets.flatMap((row) => [
+          row.custrecord_assetmainacc,
+          row.custrecord_assetdepracc,
+          row.custrecord_assetdeprchargeacc,
+          row.custrecord_assetdisposalacc,
+          row.custrecord_assetwritedownacc,
+          row.custrecord_assetwriteoffacc,
+        ]),
+      ]
+        .map(text)
+        .filter((ref): ref is string => Boolean(ref)),
+    ),
+  ];
   const sourceTransactionIds = await source.fixedAssetTransactionIds(fixedAssetAccountRefs);
   const sourceLedgerBalances = await source.fixedAssetAccountBalances(fixedAssetAccountRefs);
   const nativePreparation = await withOrgContext(options.orgId, async () => {
-    const nativeContext = await buildNativeContext(options.orgId, source.refKey, source.baseCurrency);
-    const existingResult = (await db.execute<{ source_ref: string }>(sql`
+    const nativeContext = await buildNativeContext(
+      options.orgId,
+      source.refKey,
+      source.baseCurrency,
+    );
+    const existingResult = await db.execute<{ source_ref: string }>(
+      sql`
       select custom->>${source.refKey} as source_ref
         from documents
        where org_id = ${options.orgId} and custom->>${source.refKey} is not null
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       nativeContext,
       existingRefs: new Set(existingResult.map((row) => row.source_ref)),
     };
   });
-  const missingTransactionIds = sourceTransactionIds.filter((id) => !nativePreparation.existingRefs.has(id));
-  const nativeChanges = await source.nativeTransactionsByIds(missingTransactionIds, nativePreparation.nativeContext);
+  const missingTransactionIds = sourceTransactionIds.filter(
+    (id) => !nativePreparation.existingRefs.has(id),
+  );
+  const nativeChanges = await source.nativeTransactionsByIds(
+    missingTransactionIds,
+    nativePreparation.nativeContext,
+  );
   if (nativeChanges.unbuildable.length || nativeChanges.nonLedgerRefs?.length) {
     const failures = [
       ...nativeChanges.unbuildable.map((row) => `${row.ref}: ${row.reason}`),
       ...(nativeChanges.nonLedgerRefs ?? []).map((ref) => `${ref}: non-ledger transaction`),
     ];
-    throw new Error(`NetSuite FAM ledger transactions could not be imported: ${failures.join("; ")}`);
+    throw new Error(
+      `NetSuite FAM ledger transactions could not be imported: ${failures.join("; ")}`,
+    );
   }
 
   return withOrg(options.orgId, async () => {
@@ -448,12 +535,21 @@ export async function syncNetSuiteFixedAssets(
     // The shared active posting primary — never a deactivated primary.
     const bookId = await activePostingPrimaryBookId(options.orgId);
     if (!bookId) throw new Error("the organization has no primary accounting book");
-    const periodResult = (await db.execute<{ id: string; starts_on: string; ends_on: string; is_adjustment: boolean }>(sql`
+    const periodResult = await db.execute<{
+      id: string;
+      starts_on: string;
+      ends_on: string;
+      is_adjustment: boolean;
+    }>(
+      sql`
       select id, starts_on::text, ends_on::text, is_adjustment
         from accounting_periods where org_id = ${options.orgId} order by starts_on, ends_on
-    `, "objects"));
+    `,
+      "objects",
+    );
     const asOfPeriod = netSuiteFamPeriodForDate(periodResult, asOf);
-    if (!asOfPeriod) throw new Error(`the organization has no accounting period for the FAM snapshot ${asOf}`);
+    if (!asOfPeriod)
+      throw new Error(`the organization has no accounting period for the FAM snapshot ${asOf}`);
 
     let createdCategories = 0;
     let updatedCategories = 0;
@@ -482,34 +578,71 @@ export async function syncNetSuiteFixedAssets(
           orphanHistory,
         },
       };
-      const existing = (await db.execute<{ id: string }>(sql`
+      const existing = await db.execute<{ id: string }>(
+        sql`
         select id from asset_categories
          where org_id = ${options.orgId}
            and tax_attributes->>'source' = 'netsuite_fam'
            and tax_attributes->>'nsId' = ${sourceId}
            and tax_attributes->'netsuiteFam'->>'connectionId' = ${options.connectionId}
          limit 1
-      `, "objects"));
-      const assetAccountId = requiredRef(accounts, assetType.custrecord_assettypeassetacc, "asset account");
-      const accumulatedAccountId = requiredRef(accounts, assetType.custrecord_assettypedepracc, "accumulated depreciation account");
-      const expenseAccountId = requiredRef(accounts, assetType.custrecord_assettypedeprchargeacc, "depreciation expense account");
-      const gainLossAccountId = optionalRef(accounts, assetType.custrecord_assettypedisposalacc, "gain/loss account");
+      `,
+        "objects",
+      );
+      const assetAccountId = requiredRef(
+        accounts,
+        assetType.custrecord_assettypeassetacc,
+        "asset account",
+      );
+      const accumulatedAccountId = requiredRef(
+        accounts,
+        assetType.custrecord_assettypedepracc,
+        "accumulated depreciation account",
+      );
+      const expenseAccountId = requiredRef(
+        accounts,
+        assetType.custrecord_assettypedeprchargeacc,
+        "depreciation expense account",
+      );
+      const gainLossAccountId = optionalRef(
+        accounts,
+        assetType.custrecord_assettypedisposalacc,
+        "gain/loss account",
+      );
       const lifeMonths = Number(text(assetType.custrecord_assettypelifetime) ?? 0) || null;
-      const categoryId = await mappings.write('assetCategories', sourceId, { name: text(assetType.name) ?? `NetSuite FAM type ${sourceId}` }, sql`tax_attributes->>'source'='netsuite_fam' and tax_attributes->>'nsId'=${sourceId} and tax_attributes->'netsuiteFam'->>'connectionId'=${options.connectionId}`, async mapped => {
-        let categoryId: string;
-        if (existing[0]) {
-          categoryId = existing[0].id;
-          await db.transaction(async (tx) => {
-            // Tax-class attributes share the pool-run lifecycle fence with the
-            // admin category assignment route. Re-read and lock the category
-            // only after every affected subsidiary is fenced.
-            await lockAssetCategoryTaxLifecycle(tx, options.orgId, categoryId);
-            const locked = (await tx.execute<{ id: string; tax_attributes: Record<string, unknown> | null }>(sql`
+      const categoryId = await mappings.write(
+        "assetCategories",
+        sourceId,
+        { name: text(assetType.name) ?? `NetSuite FAM type ${sourceId}` },
+        sql`tax_attributes->>'source'='netsuite_fam' and tax_attributes->>'nsId'=${sourceId} and tax_attributes->'netsuiteFam'->>'connectionId'=${options.connectionId}`,
+        async (mapped) => {
+          let categoryId: string;
+          if (existing[0]) {
+            categoryId = existing[0].id;
+            await db.transaction(async (tx) => {
+              // Tax-class attributes share the pool-run lifecycle fence with the
+              // admin category assignment route. Re-read and lock the category
+              // only after every affected subsidiary is fenced.
+              await lockAssetCategoryTaxLifecycle(tx, options.orgId, categoryId);
+              const locked = (
+                await tx.execute<{ id: string; tax_attributes: Record<string, unknown> | null }>(
+                  sql`
               select id, tax_attributes from asset_categories where id = ${categoryId} and org_id = ${options.orgId} for update
-            `, "objects"))[0];
-            if (!locked) throw new Error(`NetSuite FAM asset category ${categoryId} disappeared before sync`);
-            const taxAttributes = mergeNetSuiteFamTaxAttributes(locked.tax_attributes, rawMetadata);
-            const updated = (await tx.execute(sql`
+            `,
+                  "objects",
+                )
+              )[0];
+              if (!locked)
+                throw new Error(
+                  `NetSuite FAM asset category ${categoryId} disappeared before sync`,
+                );
+              const taxAttributes = mergeNetSuiteFamTaxAttributes(
+                locked.tax_attributes,
+                rawMetadata,
+              );
+              const updated = (
+                await tx.execute(
+                  sql`
               update asset_categories
                  set name = ${String(mapped.name)},
                      asset_account_id = ${assetAccountId},
@@ -521,12 +654,17 @@ export async function syncNetSuiteFixedAssets(
                      is_active = ${!truthy(assetType.isinactive)}, updated_at = now(), updated_by = ${options.actorId ?? null}
                where id = ${categoryId} and org_id = ${options.orgId}
                returning id
-            `, "objects"))[0];
-            if (!updated) throw new Error(`NetSuite FAM asset category ${categoryId} was not updated`);
-          });
-          updatedCategories += 1;
-        } else {
-          const inserted = (await db.execute<{ id: string }>(sql`
+            `,
+                  "objects",
+                )
+              )[0];
+              if (!updated)
+                throw new Error(`NetSuite FAM asset category ${categoryId} was not updated`);
+            });
+            updatedCategories += 1;
+          } else {
+            const inserted = await db.execute<{ id: string }>(
+              sql`
             insert into asset_categories
               (org_id, name, asset_account_id, accumulated_depreciation_account_id,
                depreciation_expense_account_id, gain_loss_account_id, default_method,
@@ -537,13 +675,19 @@ export async function syncNetSuiteFixedAssets(
                ${lifeMonths}, 'full_month', ${json(rawMetadata)}::jsonb, ${!truthy(assetType.isinactive)},
                ${options.actorId ?? null}, ${options.actorId ?? null})
             returning id
-          `, "objects"));
-          if (!inserted[0]) throw new Error('The imported asset category was not saved');
-          categoryId = inserted[0].id;
-          createdCategories += 1;
-        }
-        return categoryId;
-      }, async () => { if (existing[0]) await lockAssetCategoryTaxLifecycle(db, options.orgId, existing[0].id); });
+          `,
+              "objects",
+            );
+            if (!inserted[0]) throw new Error("The imported asset category was not saved");
+            categoryId = inserted[0].id;
+            createdCategories += 1;
+          }
+          return categoryId;
+        },
+        async () => {
+          if (existing[0]) await lockAssetCategoryTaxLifecycle(db, options.orgId, existing[0].id);
+        },
+      );
       categoryBySource.set(sourceId, categoryId);
     }
 
@@ -552,24 +696,42 @@ export async function syncNetSuiteFixedAssets(
       const state = states[assetIndex]!;
       const categorySourceRef = text(asset.custrecord_assettype);
       const categoryId = categorySourceRef ? categoryBySource.get(categorySourceRef) : null;
-      if (!categoryId) throw new Error(`NetSuite FAM asset ${state.sourceId} has unmapped asset type ${categorySourceRef}`);
-      const subsidiaryId = requiredRef(subsidiaries, asset.custrecord_assetsubsidiary, "subsidiary");
+      if (!categoryId)
+        throw new Error(
+          `NetSuite FAM asset ${state.sourceId} has unmapped asset type ${categorySourceRef}`,
+        );
+      const subsidiaryId = requiredRef(
+        subsidiaries,
+        asset.custrecord_assetsubsidiary,
+        "subsidiary",
+      );
       const departmentId = optionalRef(departments, asset.custrecord_assetdepartment, "department");
       const projectId = optionalRef(projects, asset.custrecord_assetproject, "project");
       const locationId = optionalRef(locations, asset.custrecord_assetlocation, "location");
       const custodianPartyId = optionalRef(parties, asset.custrecord_assetcaretaker, "custodian");
       const sourceStatus = status(asset, state.histories.length > 0);
       const acquiredOn = netSuiteFamDate(asset.custrecord_assetpurchasedate);
-      const inServiceOn = sourceStatus === "draft" ? null : netSuiteFamDate(asset.custrecord_assetdeprstartdate);
+      const inServiceOn =
+        sourceStatus === "draft" ? null : netSuiteFamDate(asset.custrecord_assetdeprstartdate);
       const sourceMethod = method(asset);
       const lifeMonths = Number(text(asset.custrecord_assetlifetime) ?? 0) || null;
       const categoryAccounts = {
         asset: requiredRef(accounts, asset.custrecord_assetmainacc, "asset account"),
-        accumulated: requiredRef(accounts, asset.custrecord_assetdepracc, "accumulated depreciation account"),
-        expense: requiredRef(accounts, asset.custrecord_assetdeprchargeacc, "depreciation expense account"),
+        accumulated: requiredRef(
+          accounts,
+          asset.custrecord_assetdepracc,
+          "accumulated depreciation account",
+        ),
+        expense: requiredRef(
+          accounts,
+          asset.custrecord_assetdeprchargeacc,
+          "depreciation expense account",
+        ),
       };
-      const assetAlternateDepreciation = snapshot.alternateDepreciation.filter((row) =>
-        text(row.custrecord_altdeprasset ?? row.custrecord_altdepr_asset) === state.sourceId);
+      const assetAlternateDepreciation = snapshot.alternateDepreciation.filter(
+        (row) =>
+          text(row.custrecord_altdeprasset ?? row.custrecord_altdepr_asset) === state.sourceId,
+      );
       const custom = {
         nsId: state.sourceId,
         source: "netsuite",
@@ -597,21 +759,36 @@ export async function syncNetSuiteFixedAssets(
       // source row must refuse while this asset is still unmutated. The
       // fixed_assets row lock below fences the comparison and the inserts
       // that follow against a concurrent sync of the same asset.
-      const plannedAcquisitions = planNetSuiteFamAcquisitions(state.sourceId, state.histories, acquiredOn, asOf);
-      const existing = (await db.execute<{ id: string; subsidiary_id: string; snapshot: string }>(sql`
+      const plannedAcquisitions = planNetSuiteFamAcquisitions(
+        state.sourceId,
+        state.histories,
+        acquiredOn,
+        asOf,
+      );
+      const existing = await db.execute<{ id: string; subsidiary_id: string; snapshot: string }>(
+        sql`
         select t.id, t.subsidiary_id, to_jsonb(t)::text as snapshot from fixed_assets t
          where t.org_id = ${options.orgId}
            and t.custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
            and t.custom->'netsuiteFam'->>'sourceId' = ${state.sourceId}
          limit 1 for update
-      `, "objects"));
+      `,
+        "objects",
+      );
       let acquisitionsToInsert = plannedAcquisitions;
       if (existing[0]) {
-        const admitted = (await db.execute<{
-          id: string; kind: string; occurred_on: string; amount: string | null;
-          journal_entry_id: string | null; financial_change_id: string | null;
-          book_id: string | null; memo: string | null; reversed: boolean;
-        }>(sql`
+        const admitted = await db.execute<{
+          id: string;
+          kind: string;
+          occurred_on: string;
+          amount: string | null;
+          journal_entry_id: string | null;
+          financial_change_id: string | null;
+          book_id: string | null;
+          memo: string | null;
+          reversed: boolean;
+        }>(
+          sql`
           select e.id, e.kind, e.occurred_on::text as occurred_on, e.amount::text as amount,
                  e.journal_entry_id, e.financial_change_id, e.book_id, e.memo,
                  exists(select 1 from asset_events r
@@ -620,7 +797,9 @@ export async function syncNetSuiteFixedAssets(
            where e.org_id = ${options.orgId} and e.asset_id = ${existing[0].id}
              and e.memo like '[NetSuite FAM history %]'
            order by e.id
-        `, "objects"));
+        `,
+          "objects",
+        );
         acquisitionsToInsert = reconcileNetSuiteFamAcquisitions(
           state.sourceId,
           plannedAcquisitions,
@@ -637,21 +816,32 @@ export async function syncNetSuiteFixedAssets(
           })),
         ).insert;
       }
-      const assetId = await mappings.write('fixedAssets', state.sourceId, {
-        name: text(asset.altname) ?? text(asset.custrecord_assetdescr) ?? text(asset.name) ?? `Asset ${state.sourceId}`,
-        description: text(asset.custrecord_assetdescr), serialNumber: text(asset.custrecord_assetserialno),
-      }, sql`custom->'netsuiteFam'->>'connectionId'=${options.connectionId} and custom->'netsuiteFam'->>'sourceId'=${state.sourceId}`, async mapped => {
-        let assetId: string;
-        if (existing[0]) {
-          assetId = existing[0].id;
-          await refuseFixedAssetRehomeWithEquipment(
-            db,
-            options.orgId,
-            assetId,
-            existing[0].subsidiary_id,
-            subsidiaryId,
-          );
-          const updated = await db.execute<{ id: string }>(sql`
+      const assetId = await mappings.write(
+        "fixedAssets",
+        state.sourceId,
+        {
+          name:
+            text(asset.altname) ??
+            text(asset.custrecord_assetdescr) ??
+            text(asset.name) ??
+            `Asset ${state.sourceId}`,
+          description: text(asset.custrecord_assetdescr),
+          serialNumber: text(asset.custrecord_assetserialno),
+        },
+        sql`custom->'netsuiteFam'->>'connectionId'=${options.connectionId} and custom->'netsuiteFam'->>'sourceId'=${state.sourceId}`,
+        async (mapped) => {
+          let assetId: string;
+          if (existing[0]) {
+            assetId = existing[0].id;
+            await refuseFixedAssetRehomeWithEquipment(
+              db,
+              options.orgId,
+              assetId,
+              existing[0].subsidiary_id,
+              subsidiaryId,
+            );
+            const updated = await db.execute<{ id: string }>(
+              sql`
             update fixed_assets
                set subsidiary_id = ${subsidiaryId}, category_id = ${categoryId},
                    asset_number = ${text(asset.name) ?? `NS-${state.sourceId}`},
@@ -666,11 +856,14 @@ export async function syncNetSuiteFixedAssets(
                    custom = coalesce(custom, '{}'::jsonb) || ${json(custom)}::jsonb,
                    updated_at = now(), updated_by = ${options.actorId ?? null}
              where id = ${assetId} and org_id = ${options.orgId} returning id
-          `, "objects");
-          if (!updated[0]) throw new Error('The imported fixed asset was not saved');
-          updatedAssets += 1;
-        } else {
-          const inserted = (await db.execute<{ id: string }>(sql`
+          `,
+              "objects",
+            );
+            if (!updated[0]) throw new Error("The imported fixed asset was not saved");
+            updatedAssets += 1;
+          } else {
+            const inserted = await db.execute<{ id: string }>(
+              sql`
             insert into fixed_assets
               (org_id, subsidiary_id, category_id, asset_number, name, description, status,
                acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number,
@@ -685,33 +878,47 @@ export async function syncNetSuiteFixedAssets(
                ${departmentId}, ${projectId}, ${locationId}, ${custodianPartyId}, ${json(custom)}::jsonb,
                ${options.actorId ?? null}, ${options.actorId ?? null})
             returning id
-          `, "objects"));
-          if (!inserted[0]) throw new Error('The imported fixed asset was not saved');
-          assetId = inserted[0].id;
-          createdAssets += 1;
-        }
-        return assetId;
-      });
+          `,
+              "objects",
+            );
+            if (!inserted[0]) throw new Error("The imported fixed asset was not saved");
+            assetId = inserted[0].id;
+            createdAssets += 1;
+          }
+          return assetId;
+        },
+      );
 
       // The mapping writer audits the asset row itself when fixed-asset
       // mappings are configured; audit the same before/after here when they
       // are not, so a material import is never silent either way.
-      if (!mappings.enabled('fixedAssets')) {
-        const after = (await db.execute<{ snapshot: string }>(sql`
+      if (!mappings.enabled("fixedAssets")) {
+        const after = (
+          await db.execute<{ snapshot: string }>(
+            sql`
           select to_jsonb(t)::text as snapshot from fixed_assets t where t.org_id = ${options.orgId} and t.id = ${assetId}
-        `, "objects"))[0];
-        if (!after) throw new Error('The imported fixed asset is not readable in this organization');
+        `,
+            "objects",
+          )
+        )[0];
+        if (!after)
+          throw new Error("The imported fixed asset is not readable in this organization");
         const before = existing[0]?.snapshot ?? null;
         if (!stableMappingSnapshotsMatch(before, after.snapshot)) {
-          const audit = (await db.execute<{ id: string }>(sql`
+          const audit = (
+            await db.execute<{ id: string }>(
+              sql`
             insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
-            values(${options.orgId}, 'fixed_assets', ${assetId}, ${before ? 'update' : 'insert'},
-              ${json({ event: 'netsuite_fam_asset_synced', connectionId: options.connectionId, sourceRef: state.sourceId })}::jsonb
-                || jsonb_build_object('before',${before ?? 'null'}::jsonb,'after',${after.snapshot}::jsonb),
+            values(${options.orgId}, 'fixed_assets', ${assetId}, ${before ? "update" : "insert"},
+              ${json({ event: "netsuite_fam_asset_synced", connectionId: options.connectionId, sourceRef: state.sourceId })}::jsonb
+                || jsonb_build_object('before',${before ?? "null"}::jsonb,'after',${after.snapshot}::jsonb),
               ${options.actorId ?? null})
             returning id
-          `, "objects"))[0];
-          if (!audit) throw new Error('The fixed asset sync audit was not saved');
+          `,
+              "objects",
+            )
+          )[0];
+          if (!audit) throw new Error("The fixed asset sync audit was not saved");
         }
       }
 
@@ -719,38 +926,56 @@ export async function syncNetSuiteFixedAssets(
       // reconciled above and write nothing; admitted events are never
       // deleted, updated, or reinserted.
       for (const planned of acquisitionsToInsert) {
-        const inserted = (await db.execute<{ id: string }>(sql`
+        const inserted = await db.execute<{ id: string }>(
+          sql`
           insert into asset_events
             (org_id, asset_id, kind, occurred_on, amount, memo, created_by, updated_by)
           values
             (${options.orgId}, ${assetId}, 'acquired', ${planned.occurredOn}, ${planned.amount},
              ${`[NetSuite FAM history ${planned.sourceHistoryId}]`}, ${options.actorId ?? null}, ${options.actorId ?? null})
           returning id
-        `, "objects"));
+        `,
+          "objects",
+        );
         if (inserted.length !== 1 || !inserted[0]) {
-          throw new Error(`NetSuite FAM history ${planned.sourceHistoryId} for asset ${state.sourceId} was not admitted`);
+          throw new Error(
+            `NetSuite FAM history ${planned.sourceHistoryId} for asset ${state.sourceId} was not admitted`,
+          );
         }
-        const audit = (await db.execute<{ id: string }>(sql`
+        const audit = (
+          await db.execute<{ id: string }>(
+            sql`
           insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
           values(${options.orgId}, 'asset_events', ${inserted[0].id}, 'insert',
             ${json({
-              event: 'netsuite_fam_history_admitted',
+              event: "netsuite_fam_history_admitted",
               connectionId: options.connectionId,
               sourceRef: state.sourceId,
               sourceHistoryId: planned.sourceHistoryId,
               before: null,
-              after: { assetId, kind: 'acquired', occurredOn: planned.occurredOn, amount: planned.amount },
+              after: {
+                assetId,
+                kind: "acquired",
+                occurredOn: planned.occurredOn,
+                amount: planned.amount,
+              },
             })}::jsonb,
             ${options.actorId ?? null})
           returning id
-        `, "objects"))[0];
-        if (!audit) throw new Error('The asset history admission audit was not saved');
+        `,
+            "objects",
+          )
+        )[0];
+        if (!audit) throw new Error("The asset history admission audit was not saved");
       }
 
-      const scheduleResult = (await db.execute<{ id: string }>(sql`
+      const scheduleResult = await db.execute<{ id: string }>(
+        sql`
         select id from depreciation_schedules
          where org_id = ${options.orgId} and asset_id = ${assetId} and book_id = ${bookId} limit 1
-      `, "objects"));
+      `,
+        "objects",
+      );
       let scheduleId = scheduleResult[0]?.id;
       // The mirrored schedule claims a convention like any engine-built one,
       // resolved in the engine's own order (book policy, then asset, then
@@ -758,7 +983,9 @@ export async function syncNetSuiteFixedAssets(
       // unrecorded convention would fail closed on the first engine rebuild.
       // Synced assets carry 'full_month' at the asset level (see the insert
       // above), so this resolves to the same basis the engine would use.
-      const syncedConvention = (await db.execute<{ convention: string | null }>(sql`
+      const syncedConvention = (
+        await db.execute<{ convention: string | null }>(
+          sql`
           select coalesce(
             (select p.convention
                from depreciation_book_policies p
@@ -770,9 +997,13 @@ export async function syncNetSuiteFixedAssets(
                from asset_categories c
               where c.org_id = ${options.orgId} and c.id = ${categoryId})
           ) as convention
-        `, "objects"))[0]?.convention;
+        `,
+          "objects",
+        )
+      )[0]?.convention;
       if (scheduleId) {
-        const localPosted = (await db.execute<{ count: number }>(sql`
+        const localPosted = await db.execute<{ count: number }>(
+          sql`
           select count(*)::int as count from depreciation_schedule_lines local
            where org_id = ${options.orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null
              and not exists (
@@ -788,9 +1019,13 @@ export async function syncNetSuiteFixedAssets(
                  and reversal.status='posted'
                  and (local.id=original.id or local.id=correction.id)
              )
-        `, "objects"));
+        `,
+          "objects",
+        );
         if (Number(localPosted[0]?.count ?? 0) > 0) {
-          throw new Error(`NetSuite-managed asset ${text(asset.name) ?? state.sourceId} has locally posted depreciation. Open the asset schedule and correct its local posting through Reverse depreciation, then synchronize again.`);
+          throw new Error(
+            `NetSuite-managed asset ${text(asset.name) ?? state.sourceId} has locally posted depreciation. Open the asset schedule and correct its local posting through Reverse depreciation, then synchronize again.`,
+          );
         }
         await db.execute(sql`
           update depreciation_schedules
@@ -799,12 +1034,15 @@ export async function syncNetSuiteFixedAssets(
            where id = ${scheduleId} and org_id = ${options.orgId}
         `);
       } else {
-        const inserted = (await db.execute<{ id: string }>(sql`
+        const inserted = await db.execute<{ id: string }>(
+          sql`
           insert into depreciation_schedules
             (org_id, asset_id, book_id, method, life_months, convention, created_by, updated_by)
           values (${options.orgId}, ${assetId}, ${bookId}, ${sourceMethod}, ${lifeMonths}, ${syncedConvention}, ${options.actorId ?? null}, ${options.actorId ?? null})
           returning id
-        `, "objects"));
+        `,
+          "objects",
+        );
         scheduleId = inserted[0]!.id;
       }
       await db.execute(sql`
@@ -816,10 +1054,13 @@ export async function syncNetSuiteFixedAssets(
       // source history can legitimately contain several depreciation events in
       // the same period. Aggregate those events exactly and fold any opening
       // carrying-value adjustment into the as-of period before inserting.
-      const importedByPeriod = new Map<string, {
-        period: { id: string; starts_on: string; ends_on: string; is_adjustment: boolean };
-        units: bigint;
-      }>();
+      const importedByPeriod = new Map<
+        string,
+        {
+          period: { id: string; starts_on: string; ends_on: string; is_adjustment: boolean };
+          units: bigint;
+        }
+      >();
       let importedDepreciation = 0n;
       for (const history of state.histories) {
         const historyLabel = (text(history.fam_history_type_label) ?? "").toLowerCase();
@@ -836,11 +1077,16 @@ export async function syncNetSuiteFixedAssets(
         }
         importedDepreciation += amountUnits;
         const prior = importedByPeriod.get(linePeriod.id);
-        importedByPeriod.set(linePeriod.id, { period: linePeriod, units: (prior?.units ?? 0n) + amountUnits });
+        importedByPeriod.set(linePeriod.id, {
+          period: linePeriod,
+          units: (prior?.units ?? 0n) + amountUnits,
+        });
       }
       const openingAdjustment = toUnits(state.accumulated) - importedDepreciation;
       if (openingAdjustment < 0n) {
-        throw new Error(`NetSuite FAM depreciation history exceeds accumulated depreciation for asset ${state.sourceId}`);
+        throw new Error(
+          `NetSuite FAM depreciation history exceeds accumulated depreciation for asset ${state.sourceId}`,
+        );
       }
       if (openingAdjustment > 0n) {
         const prior = importedByPeriod.get(asOfPeriod.id);
@@ -850,8 +1096,9 @@ export async function syncNetSuiteFixedAssets(
         });
       }
       let sequence = 0;
-      const importedPeriods = [...importedByPeriod.values()]
-        .sort((left, right) => left.period.starts_on.localeCompare(right.period.starts_on));
+      const importedPeriods = [...importedByPeriod.values()].sort((left, right) =>
+        left.period.starts_on.localeCompare(right.period.starts_on),
+      );
       for (const imported of importedPeriods) {
         const amount = fromUnits(imported.units);
         await db.execute(sql`
@@ -871,61 +1118,87 @@ export async function syncNetSuiteFixedAssets(
         ...sourceDoc,
         subsidiaryId: sourceDoc.subsidiaryId ?? nativePreparation.nativeContext.rootSubsidiaryId,
       };
-      if (!document.posting) throw new Error(`NetSuite FAM transaction ${document.sourceRef} is non-posting`);
+      if (!document.posting)
+        throw new Error(`NetSuite FAM transaction ${document.sourceRef} is non-posting`);
       if (!document.postingPeriodId) {
-        throw new Error(`NetSuite FAM transaction ${document.sourceRef} has no exact source period reference`);
+        throw new Error(
+          `NetSuite FAM transaction ${document.sourceRef} has no exact source period reference`,
+        );
       }
-      const existing = (await db.execute<{ id: string }>(sql`
+      const existing = await db.execute<{ id: string }>(
+        sql`
         select id from documents
          where org_id = ${options.orgId} and custom->>${source.refKey} = ${document.sourceRef} limit 1
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (existing[0]) continue;
-      const inserted = await db.insert(schema.documents).values({
-        orgId: options.orgId,
-        kind: document.kind as typeof schema.documents.$inferInsert["kind"],
-        documentNumber: document.sourceRef,
-        partyId: document.partyId,
-        subsidiaryId: document.subsidiaryId,
-        extraDims: document.extraDims ?? {},
-        documentDate: document.documentDate,
-        postingDate: document.postingDate ?? document.documentDate,
-        postingPeriodId: document.postingPeriodId ?? null,
-        dueDate: document.dueDate,
-        currency: document.currency ?? source.baseCurrency,
-        fxRate: persistSyncFxRate(document.fxRate ?? "1"),
-        status: "approved",
-        subtotal: persistSyncLineMoney(document.subtotal ?? "0", "subtotal"),
-        taxTotal: "0",
-        total: persistSyncLineMoney(document.total ?? "0", "total"),
-        memo: document.memo,
-        referenceNumber: document.referenceNumber,
-        custom: { [source.refKey]: document.sourceRef, ...document.mappedCustom, ...(Object.keys(document.mappedCustom ?? {}).length ? { connectorMappedValues: document.mappedCustom } : {}), ...(document.controlAccountId ? { controlAccountId: document.controlAccountId } : {}) },
-        createdBy: options.actorId ?? null,
-        updatedBy: options.actorId ?? null,
-      }).returning({ id: schema.documents.id });
-      if (!inserted[0]) throw new Error('The source asset ledger document was not saved');
+      const inserted = await db
+        .insert(schema.documents)
+        .values({
+          orgId: options.orgId,
+          kind: document.kind as (typeof schema.documents.$inferInsert)["kind"],
+          documentNumber: document.sourceRef,
+          partyId: document.partyId,
+          subsidiaryId: document.subsidiaryId,
+          extraDims: document.extraDims ?? {},
+          documentDate: document.documentDate,
+          postingDate: document.postingDate ?? document.documentDate,
+          postingPeriodId: document.postingPeriodId ?? null,
+          dueDate: document.dueDate,
+          currency: document.currency ?? source.baseCurrency,
+          fxRate: persistSyncFxRate(document.fxRate ?? "1"),
+          status: "approved",
+          subtotal: persistSyncLineMoney(document.subtotal ?? "0", "subtotal"),
+          taxTotal: "0",
+          total: persistSyncLineMoney(document.total ?? "0", "total"),
+          memo: document.memo,
+          referenceNumber: document.referenceNumber,
+          custom: {
+            [source.refKey]: document.sourceRef,
+            ...document.mappedCustom,
+            ...(Object.keys(document.mappedCustom ?? {}).length
+              ? { connectorMappedValues: document.mappedCustom }
+              : {}),
+            ...(document.controlAccountId ? { controlAccountId: document.controlAccountId } : {}),
+          },
+          createdBy: options.actorId ?? null,
+          updatedBy: options.actorId ?? null,
+        })
+        .returning({ id: schema.documents.id });
+      if (!inserted[0]) throw new Error("The source asset ledger document was not saved");
       const documentId = inserted[0].id;
-      await db.insert(schema.documentLines).values(document.lines.map((line) => ({
-        orgId: options.orgId,
-        documentId,
-        lineNumber: line.lineNumber,
-        accountId: line.accountId,
-        itemId: line.itemId,
-        amount: persistSyncLineMoney(line.amount, "amount"),
-        taxCodeId: line.taxCodeId,
-        taxAmount: persistSyncLineMoney(line.taxAmount, "taxAmount"),
-        taxOverridden: line.taxOverridden,
-        partyId: line.partyId ?? null,
-        departmentId: line.departmentId,
-        projectId: line.projectId,
-        subsidiaryId: line.subsidiaryId,
-        extraDims: line.extraDims ?? {},
-        description: line.description,
-        unit: line.unit ?? null, isBillable: line.isBillable ?? false, markupPercent: line.markupPercent ?? null,
-        custom: { ...(line.sourceLineRef ? { sourceLineRef: line.sourceLineRef } : {}), ...line.mappedCustom, ...(Object.keys(line.mappedCustom ?? {}).length ? { connectorMappedValues: line.mappedCustom } : {}) },
-        createdBy: options.actorId ?? null,
-        updatedBy: options.actorId ?? null,
-      })));
+      await db.insert(schema.documentLines).values(
+        document.lines.map((line) => ({
+          orgId: options.orgId,
+          documentId,
+          lineNumber: line.lineNumber,
+          accountId: line.accountId,
+          itemId: line.itemId,
+          amount: persistSyncLineMoney(line.amount, "amount"),
+          taxCodeId: line.taxCodeId,
+          taxAmount: persistSyncLineMoney(line.taxAmount, "taxAmount"),
+          taxOverridden: line.taxOverridden,
+          partyId: line.partyId ?? null,
+          departmentId: line.departmentId,
+          projectId: line.projectId,
+          subsidiaryId: line.subsidiaryId,
+          extraDims: line.extraDims ?? {},
+          description: line.description,
+          unit: line.unit ?? null,
+          isBillable: line.isBillable ?? false,
+          markupPercent: line.markupPercent ?? null,
+          custom: {
+            ...(line.sourceLineRef ? { sourceLineRef: line.sourceLineRef } : {}),
+            ...line.mappedCustom,
+            ...(Object.keys(line.mappedCustom ?? {}).length
+              ? { connectorMappedValues: line.mappedCustom }
+              : {}),
+          },
+          createdBy: options.actorId ?? null,
+          updatedBy: options.actorId ?? null,
+        })),
+      );
       await postDocument(documentId, {
         control: nativePreparation.nativeContext.control,
         cardLiabilityAccountId: nativePreparation.nativeContext.control.ap,
@@ -946,10 +1219,15 @@ export async function syncNetSuiteFixedAssets(
       importedLedgerTransactions += 1;
     }
 
-    const targetResult = (await db.execute<{
-      assets: number; categories: number; schedules: number; schedule_lines: number;
-      acquisition_cost: string; accumulated: string;
-    }>(sql`
+    const targetResult = await db.execute<{
+      assets: number;
+      categories: number;
+      schedules: number;
+      schedule_lines: number;
+      acquisition_cost: string;
+      accumulated: string;
+    }>(
+      sql`
       select count(distinct a.id)::int as assets,
              count(distinct a.category_id)::int as categories,
              count(distinct s.id)::int as schedules,
@@ -964,32 +1242,48 @@ export async function syncNetSuiteFixedAssets(
         ) a
         left join depreciation_schedules s on s.asset_id = a.id and s.org_id = a.org_id and s.book_id = ${bookId}
         left join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id and l.posted_amount is not null
-    `, "objects"));
+    `,
+      "objects",
+    );
     const target = targetResult[0]!;
     // The aggregate above repeats assets across schedule lines. Recompute cost
     // separately so a multi-line depreciation history remains penny-exact.
-    const targetCostResult = (await db.execute<{ amount: string }>(sql`
+    const targetCostResult = await db.execute<{ amount: string }>(
+      sql`
       select coalesce(sum(acquisition_cost), 0)::text as amount
         from fixed_assets
        where org_id = ${options.orgId}
          and custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const targetCost = money(targetCostResult[0]?.amount);
     const targetAccumulated = money(target.accumulated);
     const targetNbv = fromUnits(toUnits(targetCost) - toUnits(targetAccumulated));
     const mismatches: string[] = [];
-    if (Number(target.assets) !== snapshot.assets.length) mismatches.push(`asset count ${target.assets} != ${snapshot.assets.length}`);
-    if (Number(target.categories) !== snapshot.assetTypes.length) mismatches.push(`category count ${target.categories} != ${snapshot.assetTypes.length}`);
-    if (toUnits(targetCost) !== sourceCost) mismatches.push(`cost ${targetCost} != ${fromUnits(sourceCost)}`);
+    if (Number(target.assets) !== snapshot.assets.length)
+      mismatches.push(`asset count ${target.assets} != ${snapshot.assets.length}`);
+    if (Number(target.categories) !== snapshot.assetTypes.length)
+      mismatches.push(`category count ${target.categories} != ${snapshot.assetTypes.length}`);
+    if (toUnits(targetCost) !== sourceCost)
+      mismatches.push(`cost ${targetCost} != ${fromUnits(sourceCost)}`);
     if (toUnits(targetAccumulated) !== sourceAccumulated) {
-      mismatches.push(`accumulated depreciation ${targetAccumulated} != ${fromUnits(sourceAccumulated)}`);
+      mismatches.push(
+        `accumulated depreciation ${targetAccumulated} != ${fromUnits(sourceAccumulated)}`,
+      );
     }
-    if (toUnits(targetNbv) !== sourceBookValue) mismatches.push(`net book value ${targetNbv} != ${fromUnits(sourceBookValue)}`);
+    if (toUnits(targetNbv) !== sourceBookValue)
+      mismatches.push(`net book value ${targetNbv} != ${fromUnits(sourceBookValue)}`);
 
-    const targetStateResult = (await db.execute<{
-      source_id: string; cost: string; accumulated: string;
-      raw_asset_id: string | null; raw_value_id: string | null; history_count: number;
-    }>(sql`
+    const targetStateResult = await db.execute<{
+      source_id: string;
+      cost: string;
+      accumulated: string;
+      raw_asset_id: string | null;
+      raw_value_id: string | null;
+      history_count: number;
+    }>(
+      sql`
       select a.custom->'netsuiteFam'->>'sourceId' as source_id,
              a.acquisition_cost::text as cost,
              coalesce((select sum(l.posted_amount)
@@ -1003,7 +1297,9 @@ export async function syncNetSuiteFixedAssets(
         from fixed_assets a
        where a.org_id = ${options.orgId}
          and a.custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const targetStateBySource = new Map(targetStateResult.map((row) => [row.source_id, row]));
     for (const state of states) {
       const row = targetStateBySource.get(state.sourceId);
@@ -1011,19 +1307,29 @@ export async function syncNetSuiteFixedAssets(
         mismatches.push(`asset ${state.sourceId} is missing`);
         continue;
       }
-      if (toUnits(row.cost) !== toUnits(state.cost)) mismatches.push(`asset ${state.sourceId} cost differs`);
-      if (toUnits(row.accumulated) !== toUnits(state.accumulated)) mismatches.push(`asset ${state.sourceId} accumulated depreciation differs`);
+      if (toUnits(row.cost) !== toUnits(state.cost))
+        mismatches.push(`asset ${state.sourceId} cost differs`);
+      if (toUnits(row.accumulated) !== toUnits(state.accumulated))
+        mismatches.push(`asset ${state.sourceId} accumulated depreciation differs`);
       const rowNbv = toUnits(row.cost) - toUnits(row.accumulated);
-      if (rowNbv !== toUnits(state.bookValue)) mismatches.push(`asset ${state.sourceId} net book value differs`);
-      if (row.raw_asset_id !== state.sourceId) mismatches.push(`asset ${state.sourceId} raw source row is missing`);
-      if (row.raw_value_id !== (text(state.value?.id) ?? null)) mismatches.push(`asset ${state.sourceId} raw book-value row differs`);
-      if (Number(row.history_count) !== state.histories.length) mismatches.push(`asset ${state.sourceId} history row count differs`);
+      if (rowNbv !== toUnits(state.bookValue))
+        mismatches.push(`asset ${state.sourceId} net book value differs`);
+      if (row.raw_asset_id !== state.sourceId)
+        mismatches.push(`asset ${state.sourceId} raw source row is missing`);
+      if (row.raw_value_id !== (text(state.value?.id) ?? null))
+        mismatches.push(`asset ${state.sourceId} raw book-value row differs`);
+      if (Number(row.history_count) !== state.histories.length)
+        mismatches.push(`asset ${state.sourceId} history row count differs`);
     }
 
-    const preservedGlobalResult = (await db.execute<{
-      methods: number; alternate_methods: number; alternate_definitions: number;
-      asset_lifetimes: number; orphan_history: number;
-    }>(sql`
+    const preservedGlobalResult = await db.execute<{
+      methods: number;
+      alternate_methods: number;
+      alternate_definitions: number;
+      asset_lifetimes: number;
+      orphan_history: number;
+    }>(
+      sql`
       select jsonb_array_length(tax_attributes->'netsuiteFam'->'depreciationMethods')::int as methods,
              jsonb_array_length(tax_attributes->'netsuiteFam'->'alternateMethods')::int as alternate_methods,
              jsonb_array_length(tax_attributes->'netsuiteFam'->'alternateDefinitions')::int as alternate_definitions,
@@ -1034,18 +1340,26 @@ export async function syncNetSuiteFixedAssets(
          and tax_attributes->>'source' = 'netsuite_fam'
          and tax_attributes->'netsuiteFam'->>'connectionId' = ${options.connectionId}
        order by id limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     const preserved = preservedGlobalResult[0];
     if (!preserved) mismatches.push("source FAM definition metadata is missing");
     else {
-      if (Number(preserved.methods) !== snapshot.depreciationMethods.length) mismatches.push("depreciation method definitions differ");
-      if (Number(preserved.alternate_methods) !== snapshot.alternateMethods.length) mismatches.push("alternate method definitions differ");
-      if (Number(preserved.alternate_definitions) !== snapshot.alternateDefinitions.length) mismatches.push("alternate depreciation definitions differ");
-      if (Number(preserved.asset_lifetimes) !== snapshot.assetLifetimes.length) mismatches.push("asset lifetime rows differ");
-      if (Number(preserved.orphan_history) !== orphanHistory.length) mismatches.push("orphan depreciation history differs");
+      if (Number(preserved.methods) !== snapshot.depreciationMethods.length)
+        mismatches.push("depreciation method definitions differ");
+      if (Number(preserved.alternate_methods) !== snapshot.alternateMethods.length)
+        mismatches.push("alternate method definitions differ");
+      if (Number(preserved.alternate_definitions) !== snapshot.alternateDefinitions.length)
+        mismatches.push("alternate depreciation definitions differ");
+      if (Number(preserved.asset_lifetimes) !== snapshot.assetLifetimes.length)
+        mismatches.push("asset lifetime rows differ");
+      if (Number(preserved.orphan_history) !== orphanHistory.length)
+        mismatches.push("orphan depreciation history differs");
     }
 
-    const targetLedgerResult = (await db.execute<{ account_ref: string; balance: string }>(sql`
+    const targetLedgerResult = await db.execute<{ account_ref: string; balance: string }>(
+      sql`
       select a.account_ref,
              coalesce(sum(jl.amount) filter (where je.id is not null), 0)::text as balance
         from (
@@ -1057,17 +1371,24 @@ export async function syncNetSuiteFixedAssets(
         left join journal_lines jl on jl.account_id = a.id and jl.org_id = ${options.orgId}
         left join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
        group by a.account_ref
-    `, "objects"));
-    const targetLedgerBalances = new Map(targetLedgerResult.map((row) => [row.account_ref, money(row.balance)]));
+    `,
+      "objects",
+    );
+    const targetLedgerBalances = new Map(
+      targetLedgerResult.map((row) => [row.account_ref, money(row.balance)]),
+    );
     const ledgerBalances = fixedAssetAccountRefs.map((accountRef) => {
       const sourceBalance = money(sourceLedgerBalances.get(accountRef) ?? "0");
       const targetBalance = money(targetLedgerBalances.get(accountRef) ?? "0");
       if (toUnits(sourceBalance) !== toUnits(targetBalance)) {
-        mismatches.push(`fixed-asset account ${accountRef} balance ${targetBalance} != ${sourceBalance}`);
+        mismatches.push(
+          `fixed-asset account ${accountRef} balance ${targetBalance} != ${sourceBalance}`,
+        );
       }
       return { accountRef, source: sourceBalance, target: targetBalance };
     });
-    if (mismatches.length) throw new Error(`NetSuite FAM reconciliation failed: ${mismatches.join("; ")}`);
+    if (mismatches.length)
+      throw new Error(`NetSuite FAM reconciliation failed: ${mismatches.join("; ")}`);
 
     return {
       source: {

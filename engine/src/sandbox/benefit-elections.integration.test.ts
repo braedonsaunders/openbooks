@@ -6,53 +6,138 @@ import { db, withMaintenanceTransaction, withOrgTransaction } from "../platform/
 import { installEngineSeams } from "../composition/install.ts";
 import { decideGate } from "../flows/gates.ts";
 import { electEnrollment, endEnrollment } from "../hrm/benefits/enrollments.ts";
-import { assertDedicatedFixtureDatabase, hasEphemeralDatabaseMarker, createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow } from "../testing/fixtures.ts";
-import { enableFeatures, grantPermissions, seedEmployment, seedPlan, seededContributionTerms, seedWindow } from "../testing/hrm-harness.ts";
+import {
+  assertDedicatedFixtureDatabase,
+  hasEphemeralDatabaseMarker,
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  seedApprovalFlow,
+} from "../testing/fixtures.ts";
+import {
+  enableFeatures,
+  grantPermissions,
+  seedEmployment,
+  seedPlan,
+  seededContributionTerms,
+  seedWindow,
+} from "../testing/hrm-harness.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { createSandbox, deleteSandbox, refreshSandbox } from "./lifecycle.ts";
 
 installEngineSeams();
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const evidenceTables = ["hrm_benefit_enrollments", "hrm_benefit_enrollment_terms", "hrm_benefit_payroll_inputs",
-  "employment_assignments", "employment_assignment_versions", "employment_changes"] as const;
+const evidenceTables = [
+  "hrm_benefit_enrollments",
+  "hrm_benefit_enrollment_terms",
+  "hrm_benefit_payroll_inputs",
+  "employment_assignments",
+  "employment_assignment_versions",
+  "employment_changes",
+] as const;
 
 async function sourceEvidence(orgId: string) {
-  return Promise.all(evidenceTables.map(async table => ({ table, rows: await db.execute<{ evidence: string }>(sql`
-    select to_jsonb(source_row)::text as evidence from ${sql.identifier(table)} source_row where org_id=${orgId} order by id`, "objects") })));
+  return Promise.all(
+    evidenceTables.map(async (table) => ({
+      table,
+      rows: await db.execute<{ evidence: string }>(
+        sql`
+    select to_jsonb(source_row)::text as evidence from ${sql.identifier(table)} source_row where org_id=${orgId} order by id`,
+        "objects",
+      ),
+    })),
+  );
 }
 
 async function seedElections(org: Awaited<ReturnType<typeof createScratchOrg>>, actorId: string) {
   await enableFeatures(org.orgId, ["hrm"]);
   await grantPermissions(org.orgId, actorId, ["hrm.benefits.read", "hrm.benefits.manage"]);
-  const approverId = await createScratchUser(org.orgId, "Coverage approver", `coverage_${randomUUID()}`);
+  const approverId = await createScratchUser(
+    org.orgId,
+    "Coverage approver",
+    `coverage_${randomUUID()}`,
+  );
   await grantPermissions(org.orgId, approverId, ["hrm.benefits.read", "hrm.benefits.manage"]);
   const windowId = await seedWindow(org.orgId);
   const elections: string[] = [];
-  for (const reviewed of [false,true]) {
-    const employment = await seedEmployment(org.orgId, org.subsidiaryId, { displayName: `Coverage ${reviewed?"reviewed":"ungated"}` });
-    const assignment = (await db.execute<{ id: string }>(sql`insert into employment_assignments
-      (org_id,employment_id,assignment_key) values(${org.orgId},${employment.employmentId},'primary') returning id`, "objects"))[0]!.id;
-    assert.equal((await db.execute(sql`insert into employment_assignment_versions
+  for (const reviewed of [false, true]) {
+    const employment = await seedEmployment(org.orgId, org.subsidiaryId, {
+      displayName: `Coverage ${reviewed ? "reviewed" : "ungated"}`,
+    });
+    const assignment = (
+      await db.execute<{ id: string }>(
+        sql`insert into employment_assignments
+      (org_id,employment_id,assignment_key) values(${org.orgId},${employment.employmentId},'primary') returning id`,
+        "objects",
+      )
+    )[0]!.id;
+    assert.equal(
+      (
+        await db.execute(
+          sql`insert into employment_assignment_versions
       (org_id,assignment_id,employment_id,version_no,fte,is_primary,effective_from)
-      values(${org.orgId},${assignment},${employment.employmentId},1,'1.0000',true,'2020-01-01') returning id`, "objects")).length, 1);
-    assert.equal((await db.execute(sql`insert into employment_changes
+      values(${org.orgId},${assignment},${employment.employmentId},1,'1.0000',true,'2020-01-01') returning id`,
+          "objects",
+        )
+      ).length,
+      1,
+    );
+    assert.equal(
+      (
+        await db.execute(
+          sql`insert into employment_changes
       (org_id,employment_id,assignment_id,revision,change_kind,prior_snapshot,reason,recorded_by)
-      values(${org.orgId},${employment.employmentId},${assignment},1,'created','{}','Declared primary assignment',${actorId}) returning id`, "objects")).length, 1);
+      values(${org.orgId},${employment.employmentId},${assignment},1,'created','{}','Declared primary assignment',${actorId}) returning id`,
+          "objects",
+        )
+      ).length,
+      1,
+    );
     const plan = await seedPlan(org.orgId, { currency: "CAD" });
-    const terms = (await seededContributionTerms(org.orgId, plan.planId)).map(term => ({ ...term,
-      sourceDecimal: term.electedRate, provenance: { reason: "Signed coverage election", sourceIdentity: "private-election-reference" } }));
-    if(reviewed)await seedApprovalFlow(org.orgId, { subjectKind: "hrm_benefit_enrollment", assignees: [{ type: "user", userId: approverId }], mode: "any", preventSelfApproval: true });
-    const election = await electEnrollment({ orgId: org.orgId, actorId, employmentId: employment.employmentId,
-      planId: plan.planId, windowId, effectiveFrom: "2026-03-01", contributionTerms: terms });
+    const terms = (await seededContributionTerms(org.orgId, plan.planId)).map((term) => ({
+      ...term,
+      sourceDecimal: term.electedRate,
+      provenance: {
+        reason: "Signed coverage election",
+        sourceIdentity: "private-election-reference",
+      },
+    }));
+    if (reviewed)
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "hrm_benefit_enrollment",
+        assignees: [{ type: "user", userId: approverId }],
+        mode: "any",
+        preventSelfApproval: true,
+      });
+    const election = await electEnrollment({
+      orgId: org.orgId,
+      actorId,
+      employmentId: employment.employmentId,
+      planId: plan.planId,
+      windowId,
+      effectiveFrom: "2026-03-01",
+      contributionTerms: terms,
+    });
     if (reviewed) {
       assert.equal(election.status, "pending_approval");
-      const gates = await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId}
-        and subject_kind='hrm_benefit_enrollment' and subject_id=${election.id} and status='pending'`, "objects");
+      const gates = await db.execute<{ id: string }>(
+        sql`select id from flow_gates where org_id=${org.orgId}
+        and subject_kind='hrm_benefit_enrollment' and subject_id=${election.id} and status='pending'`,
+        "objects",
+      );
       assert.equal(gates.length, 1);
       await decideGate({ gateId: gates[0]!.id, userId: approverId, decision: "approved" });
     } else assert.equal(election.status, "active");
-    assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_benefit_enrollments
-      where org_id=${org.orgId} and id=${election.id}`, "objects"))[0]!.status, "active");
+    assert.equal(
+      (
+        await db.execute<{ status: string }>(
+          sql`select status from hrm_benefit_enrollments
+      where org_id=${org.orgId} and id=${election.id}`,
+          "objects",
+        )
+      )[0]!.status,
+      "active",
+    );
     elections.push(election.id);
   }
   // Reconstruct retained override metadata and one pre-retirement queue row
@@ -60,59 +145,117 @@ async function seedElections(org: Awaited<ReturnType<typeof createScratchOrg>>, 
   // were produced by the real native workflow, not by these fixture changes.
   await assertDedicatedFixtureDatabase();
   await withMaintenanceTransaction(null, async () => {
-    const marker = (await db.execute<{ marker: string | null }>(sql`select shobj_description(oid,'pg_database') as marker
-      from pg_database where datname=current_database()`, "objects"))[0]?.marker;
+    const marker = (
+      await db.execute<{ marker: string | null }>(
+        sql`select shobj_description(oid,'pg_database') as marker
+      from pg_database where datname=current_database()`,
+        "objects",
+      )
+    )[0]?.marker;
     assert.equal(hasEphemeralDatabaseMarker(marker, process.env.OPENBOOKS_TEST_DB_MARKER), true);
-    await db.execute(sql`alter table hrm_benefit_enrollment_terms disable trigger benefit_recurring_subject_trigger`);
-    await db.execute(sql`alter table hrm_benefit_enrollment_terms disable trigger benefit_term_history_trigger`);
-    assert.equal((await db.execute(sql`update hrm_benefit_enrollment_terms set
+    await db.execute(
+      sql`alter table hrm_benefit_enrollment_terms disable trigger benefit_recurring_subject_trigger`,
+    );
+    await db.execute(
+      sql`alter table hrm_benefit_enrollment_terms disable trigger benefit_term_history_trigger`,
+    );
+    assert.equal(
+      (
+        await db.execute(
+          sql`update hrm_benefit_enrollment_terms set
       override_reason='Signed override for private-election-reference',override_approved_by=${approverId},override_approved_at=now()
       where org_id=${org.orgId} and id=(select id from hrm_benefit_enrollment_terms
-        where org_id=${org.orgId} and enrollment_id=${elections[1]} order by id limit 1) returning id`, "objects")).length, 1);
-    await db.execute(sql`alter table hrm_benefit_enrollment_terms enable trigger benefit_term_history_trigger`);
-    await db.execute(sql`alter table hrm_benefit_enrollment_terms enable trigger benefit_recurring_subject_trigger`);
-    await db.execute(sql`alter table hrm_benefit_payroll_inputs disable trigger benefit_monthly_queue_retired_trigger`);
-    assert.equal((await db.execute(sql`insert into hrm_benefit_payroll_inputs
+        where org_id=${org.orgId} and enrollment_id=${elections[1]} order by id limit 1) returning id`,
+          "objects",
+        )
+      ).length,
+      1,
+    );
+    await db.execute(
+      sql`alter table hrm_benefit_enrollment_terms enable trigger benefit_term_history_trigger`,
+    );
+    await db.execute(
+      sql`alter table hrm_benefit_enrollment_terms enable trigger benefit_recurring_subject_trigger`,
+    );
+    await db.execute(
+      sql`alter table hrm_benefit_payroll_inputs disable trigger benefit_monthly_queue_retired_trigger`,
+    );
+    assert.equal(
+      (
+        await db.execute(
+          sql`insert into hrm_benefit_payroll_inputs
       (org_id,enrollment_id,employee_party_id,employment_id,kind,pay_component_id,amount,currency,coverage_from,coverage_to,status,voided_at,void_reason,created_by,updated_by)
       select e.org_id,e.id,w.worker_party_id,e.employment_id,'benefit_deduction',r.pay_component_id,'250.0000',e.currency,
         '2026-03-01','2026-03-31','voided',now(),'Superseded by native contribution calculation',${actorId},${actorId}
       from hrm_benefit_enrollments e join worker_employments w on w.org_id=e.org_id and w.id=e.employment_id
       join hrm_benefit_contribution_rules r on r.org_id=e.org_id and r.plan_id=e.plan_id and r.kind='employee_deduction'
-      where e.org_id=${org.orgId} and e.id=${elections[0]} returning id`, "objects")).length, 1);
+      where e.org_id=${org.orgId} and e.id=${elections[0]} returning id`,
+          "objects",
+        )
+      ).length,
+      1,
+    );
     // Validate the retained row's deferred tenant references before restoring
     // its INSERT guard; PostgreSQL refuses ALTER TABLE with pending events.
     await db.execute(sql`set constraints all immediate`);
-    await db.execute(sql`alter table hrm_benefit_payroll_inputs enable trigger benefit_monthly_queue_retired_trigger`);
+    await db.execute(
+      sql`alter table hrm_benefit_payroll_inputs enable trigger benefit_monthly_queue_retired_trigger`,
+    );
   });
   return { elections, approverId };
 }
 
-for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox preserves approved Benefits elections and refuses fabricated history`, { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const sandboxName = `Coverage ${randomUUID()}`;
-  let assertionFailed = false;
-  let assertionFailure: unknown;
-  try {
-    const actorId = await createScratchUser(org.orgId, "Sandbox owner", "admin");
-    const { elections, approverId } = await seedElections(org, actorId);
-    const original = await sourceEvidence(org.orgId);
-    const originalCatalog = await db.execute<{ evidence: string }>(sql`select to_jsonb(c)::text as evidence
-      from hrm_benefit_catalog c where org_id=${org.orgId} order by id`, "objects");
-    assert.equal(originalCatalog.length, 2);
-    const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName,
-      tier: masked ? "masked" : "full", masked, createdBy: actorId, lifecycleAuthority: { actorId } });
-    const target = created.sandboxOrgId;
-    const assertCopy = async () => {
-      assert.equal((await db.execute<{ status: string }>(sql`select status from sandboxes where id=${created.sandboxId}`, "objects"))[0]!.status, "ready");
-      const catalog = await db.execute<{ matched: boolean }>(sql`select
+for (const masked of [false, true])
+  test(
+    `${masked ? "masked" : "full"} sandbox preserves approved Benefits elections and refuses fabricated history`,
+    { skip: !DB },
+    async () => {
+      const org = await createScratchOrg();
+      const sandboxName = `Coverage ${randomUUID()}`;
+      let assertionFailed = false;
+      let assertionFailure: unknown;
+      try {
+        const actorId = await createScratchUser(org.orgId, "Sandbox owner", "admin");
+        const { elections, approverId } = await seedElections(org, actorId);
+        const original = await sourceEvidence(org.orgId);
+        const originalCatalog = await db.execute<{ evidence: string }>(
+          sql`select to_jsonb(c)::text as evidence
+      from hrm_benefit_catalog c where org_id=${org.orgId} order by id`,
+          "objects",
+        );
+        assert.equal(originalCatalog.length, 2);
+        const created = await createSandbox({
+          productionOrgId: org.orgId,
+          name: sandboxName,
+          tier: masked ? "masked" : "full",
+          masked,
+          createdBy: actorId,
+          lifecycleAuthority: { actorId },
+        });
+        const target = created.sandboxOrgId;
+        const assertCopy = async () => {
+          assert.equal(
+            (
+              await db.execute<{ status: string }>(
+                sql`select status from sandboxes where id=${created.sandboxId}`,
+                "objects",
+              )
+            )[0]!.status,
+            "ready",
+          );
+          const catalog = await db.execute<{ matched: boolean }>(
+            sql`select
         (c.id=ob_rebase(original.id,o.sandbox_seed) and c.insured_plan_id=c.id
          and exists(select 1 from hrm_benefit_plans p where p.org_id=c.org_id and p.id=c.insured_plan_id)) as matched
         from hrm_benefit_catalog c join orgs o on o.id=c.org_id
         join hrm_benefit_catalog original on original.org_id=o.sandbox_of and c.id=ob_rebase(original.id,o.sandbox_seed)
-        where c.org_id=${target}`, "objects");
-      assert.equal(catalog.length, 2);
-      assert.ok(catalog.every(row => row.matched));
-      const assignments = await db.execute<{ matched: boolean }>(sql`select
+        where c.org_id=${target}`,
+            "objects",
+          );
+          assert.equal(catalog.length, 2);
+          assert.ok(catalog.every((row) => row.matched));
+          const assignments = await db.execute<{ matched: boolean }>(
+            sql`select
         (v.assignment_id=ob_rebase(original.assignment_id,o.sandbox_seed)
          and v.employment_id=ob_rebase(original.employment_id,o.sandbox_seed)
          and a.employment_id=v.employment_id and v.version_no=original.version_no
@@ -123,10 +266,18 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
         from employment_assignment_versions v join orgs o on o.id=v.org_id
         join employment_assignments a on a.org_id=v.org_id and a.id=v.assignment_id
         join employment_assignment_versions original on original.org_id=o.sandbox_of and v.id=ob_rebase(original.id,o.sandbox_seed)
-        where v.org_id=${target}`, "objects");
-      assert.equal(assignments.length, 2);
-      assert.ok(assignments.every(row => row.matched));
-      const copied = await db.execute<{ status: string; matched: boolean; protected: boolean; flow_bound: boolean }>(sql`
+        where v.org_id=${target}`,
+            "objects",
+          );
+          assert.equal(assignments.length, 2);
+          assert.ok(assignments.every((row) => row.matched));
+          const copied = await db.execute<{
+            status: string;
+            matched: boolean;
+            protected: boolean;
+            flow_bound: boolean;
+          }>(
+            sql`
         select e.status,
           (e.id=ob_rebase(original.id,o.sandbox_seed) and e.plan_id=ob_rebase(original.plan_id,o.sandbox_seed)
            and e.employment_id=ob_rebase(original.employment_id,o.sandbox_seed) and e.window_id=ob_rebase(original.window_id,o.sandbox_seed)
@@ -147,11 +298,17 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
                 and g.status='approved' and g.decided_by=ob_rebase(${approverId}::uuid,o.sandbox_seed))) end) as flow_bound
         from hrm_benefit_enrollments e join orgs o on o.id=e.org_id
         join hrm_benefit_enrollments original on original.org_id=o.sandbox_of and e.id=ob_rebase(original.id,o.sandbox_seed)
-        where e.org_id=${target}`, "objects");
-      assert.equal(copied.length, 2);
-      assert.deepEqual(copied.map(row => row.status), ["active", "active"]);
-      assert.ok(copied.every(row => row.matched && row.protected && row.flow_bound));
-      const terms = await db.execute<{ matched: boolean }>(sql`select
+        where e.org_id=${target}`,
+            "objects",
+          );
+          assert.equal(copied.length, 2);
+          assert.deepEqual(
+            copied.map((row) => row.status),
+            ["active", "active"],
+          );
+          assert.ok(copied.every((row) => row.matched && row.protected && row.flow_bound));
+          const terms = await db.execute<{ matched: boolean }>(
+            sql`select
         (t.enrollment_id=ob_rebase(original.enrollment_id,o.sandbox_seed) and t.rule_id=ob_rebase(original.rule_id,o.sandbox_seed)
          and t.election_mode=original.election_mode and t.elected_rate is not distinct from original.elected_rate
          and t.effective_from=original.effective_from and t.effective_to is not distinct from original.effective_to
@@ -164,127 +321,301 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
           and t.override_reason is not distinct from original.override_reason end) as matched
         from hrm_benefit_enrollment_terms t join orgs o on o.id=t.org_id
         join hrm_benefit_enrollment_terms original on original.org_id=o.sandbox_of and t.id=ob_rebase(original.id,o.sandbox_seed)
-        where t.org_id=${target}`, "objects");
-      assert.equal(terms.length, 4);
-      assert.ok(terms.every(row => row.matched));
-      const queue = await db.execute<{ matched: boolean }>(sql`select
+        where t.org_id=${target}`,
+            "objects",
+          );
+          assert.equal(terms.length, 4);
+          assert.ok(terms.every((row) => row.matched));
+          const queue = await db.execute<{ matched: boolean }>(
+            sql`select
         (q.enrollment_id=ob_rebase(original.enrollment_id,o.sandbox_seed) and q.employee_party_id=ob_rebase(original.employee_party_id,o.sandbox_seed)
          and q.pay_component_id=ob_rebase(original.pay_component_id,o.sandbox_seed) and q.employment_id=ob_rebase(original.employment_id,o.sandbox_seed)
          and q.amount=original.amount and q.currency=original.currency and q.status=original.status
          and q.coverage_from=original.coverage_from and q.coverage_to=original.coverage_to and q.void_reason=original.void_reason) as matched
         from hrm_benefit_payroll_inputs q join orgs o on o.id=q.org_id
         join hrm_benefit_payroll_inputs original on original.org_id=o.sandbox_of and q.id=ob_rebase(original.id,o.sandbox_seed)
-        where q.org_id=${target}`, "objects");
-      assert.deepEqual(queue, [{ matched: true }]);
-      assert.deepEqual(await sourceEvidence(org.orgId), original);
-      assert.deepEqual(await db.execute<{ evidence: string }>(sql`select to_jsonb(c)::text as evidence
-        from hrm_benefit_catalog c where org_id=${org.orgId} order by id`, "objects"), originalCatalog);
-    };
-    await assertCopy();
-    await assert.rejects(withOrgTransaction(target, () => db.execute(sql`insert into employment_assignment_versions
+        where q.org_id=${target}`,
+            "objects",
+          );
+          assert.deepEqual(queue, [{ matched: true }]);
+          assert.deepEqual(await sourceEvidence(org.orgId), original);
+          assert.deepEqual(
+            await db.execute<{ evidence: string }>(
+              sql`select to_jsonb(c)::text as evidence
+        from hrm_benefit_catalog c where org_id=${org.orgId} order by id`,
+              "objects",
+            ),
+            originalCatalog,
+          );
+        };
+        await assertCopy();
+        await assert.rejects(
+          withOrgTransaction(target, () =>
+            db.execute(sql`insert into employment_assignment_versions
       (org_id,assignment_id,employment_id,version_no,fte,is_primary,effective_from)
       select ${target},${randomUUID()},employment_id,2,'1.0000',false,'2026-04-01'
-      from employment_assignments where org_id=${target} limit 1`)),
-      error => errorChainMatches(error, /assignment must exist in the same organization/));
-    await assertCopy();
-    for (const scope of [org.orgId, target]) {
-      await assert.rejects(withOrgTransaction(scope, () => db.execute(sql`
-        delete from hrm_benefit_catalog where org_id=${scope}`)),
-        error => errorChainMatches(error, /Program identity cannot be removed while its native offering exists/i));
-      await assert.rejects(withOrgTransaction(scope, () => db.execute(sql`
-        update hrm_benefit_catalog set updated_at=updated_at where org_id=${scope}`)),
-        error => errorChainMatches(error, /Program identity is immutable.*native program record/i));
-      await assert.rejects(withMaintenanceTransaction(null, async () => {
-        await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),
+      from employment_assignments where org_id=${target} limit 1`),
+          ),
+          (error) => errorChainMatches(error, /assignment must exist in the same organization/),
+        );
+        await assertCopy();
+        for (const scope of [org.orgId, target]) {
+          await assert.rejects(
+            withOrgTransaction(scope, () =>
+              db.execute(sql`
+        delete from hrm_benefit_catalog where org_id=${scope}`),
+            ),
+            (error) =>
+              errorChainMatches(
+                error,
+                /Program identity cannot be removed while its native offering exists/i,
+              ),
+          );
+          await assert.rejects(
+            withOrgTransaction(scope, () =>
+              db.execute(sql`
+        update hrm_benefit_catalog set updated_at=updated_at where org_id=${scope}`),
+            ),
+            (error) =>
+              errorChainMatches(error, /Program identity is immutable.*native program record/i),
+          );
+          await assert.rejects(
+            withMaintenanceTransaction(null, async () => {
+              await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),
           set_config('openbooks.amend','on',true),set_config('openbooks.sandbox_wipe','on',true)`);
-        await db.execute(sql`delete from hrm_benefit_catalog where org_id=${scope}`);
-      }), error => errorChainMatches(error, /Program identity cannot be removed while its native offering exists/i));
-      await assertCopy();
-    }
-    const inserts = [
-      { table: "hrm_benefit_enrollments", patch: { id: randomUUID() }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
-      { table: "hrm_benefit_enrollments", patch: { employment_id: randomUUID() }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
-      { table: "hrm_benefit_enrollments", patch: { plan_id: randomUUID() }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
-      { table: "hrm_benefit_enrollments", patch: { effective_from: "2026-04-01" }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
-      { table: "hrm_benefit_enrollments", patch: { decision_snapshot: { outcome: "approved", mode: "human", runId: randomUUID() } }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
-      { table: "hrm_benefit_enrollment_terms", patch: { elected_rate: "251.0000000000" }, refusal: /Submitted contribution elections are immutable.*record action/ },
-      { table: "hrm_benefit_enrollment_terms", patch: { rule_id: randomUUID() }, refusal: /Submitted contribution elections are immutable.*record action/ },
-      { table: "hrm_benefit_payroll_inputs", patch: { amount: "251.0000" }, refusal: /Monthly benefit input generation has been replaced.*contribution terms/ },
-    ] as const;
-    for (const { table, patch, refusal } of inserts) {
-      await assert.rejects(withMaintenanceTransaction(null, async () => {
-        await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
-        await db.execute(sql`insert into ${sql.identifier(table)} select (jsonb_populate_record(null::${sql.identifier(table)},
+              await db.execute(sql`delete from hrm_benefit_catalog where org_id=${scope}`);
+            }),
+            (error) =>
+              errorChainMatches(
+                error,
+                /Program identity cannot be removed while its native offering exists/i,
+              ),
+          );
+          await assertCopy();
+        }
+        const inserts = [
+          {
+            table: "hrm_benefit_enrollments",
+            patch: { id: randomUUID() },
+            refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/,
+          },
+          {
+            table: "hrm_benefit_enrollments",
+            patch: { employment_id: randomUUID() },
+            refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/,
+          },
+          {
+            table: "hrm_benefit_enrollments",
+            patch: { plan_id: randomUUID() },
+            refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/,
+          },
+          {
+            table: "hrm_benefit_enrollments",
+            patch: { effective_from: "2026-04-01" },
+            refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/,
+          },
+          {
+            table: "hrm_benefit_enrollments",
+            patch: {
+              decision_snapshot: { outcome: "approved", mode: "human", runId: randomUUID() },
+            },
+            refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/,
+          },
+          {
+            table: "hrm_benefit_enrollment_terms",
+            patch: { elected_rate: "251.0000000000" },
+            refusal: /Submitted contribution elections are immutable.*record action/,
+          },
+          {
+            table: "hrm_benefit_enrollment_terms",
+            patch: { rule_id: randomUUID() },
+            refusal: /Submitted contribution elections are immutable.*record action/,
+          },
+          {
+            table: "hrm_benefit_payroll_inputs",
+            patch: { amount: "251.0000" },
+            refusal: /Monthly benefit input generation has been replaced.*contribution terms/,
+          },
+        ] as const;
+        for (const { table, patch, refusal } of inserts) {
+          await assert.rejects(
+            withMaintenanceTransaction(null, async () => {
+              await db.execute(
+                sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`,
+              );
+              await db.execute(sql`insert into ${sql.identifier(table)} select (jsonb_populate_record(null::${sql.identifier(table)},
           (select to_jsonb(source_row) from ${sql.identifier(table)} source_row where org_id=${target} order by id limit 1) || ${JSON.stringify(patch)}::jsonb)).*`);
-      }), error => errorChainMatches(error, refusal));
-      await assertCopy();
-    }
-    for (const scope of [org.orgId, target]) {
-      await assert.rejects(withOrgTransaction(scope, async () => {
-        await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
-        await db.execute(sql`insert into hrm_benefit_enrollments select (jsonb_populate_record(null::hrm_benefit_enrollments,
+            }),
+            (error) => errorChainMatches(error, refusal),
+          );
+          await assertCopy();
+        }
+        for (const scope of [org.orgId, target]) {
+          await assert.rejects(
+            withOrgTransaction(scope, async () => {
+              await db.execute(
+                sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`,
+              );
+              await db.execute(sql`insert into hrm_benefit_enrollments select (jsonb_populate_record(null::hrm_benefit_enrollments,
           (select to_jsonb(e) from hrm_benefit_enrollments e where org_id=${scope} order by id limit 1) || jsonb_build_object('id',${randomUUID()}::uuid))).*`);
-      }), error => errorChainMatches(error, /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/));
-    }
-    await assert.rejects(withMaintenanceTransaction(null, async () => {
-      await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
-      await db.execute(sql`insert into hrm_benefit_enrollments select (jsonb_populate_record(null::hrm_benefit_enrollments,
+            }),
+            (error) =>
+              errorChainMatches(
+                error,
+                /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/,
+              ),
+          );
+        }
+        await assert.rejects(
+          withMaintenanceTransaction(null, async () => {
+            await db.execute(
+              sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`,
+            );
+            await db.execute(sql`insert into hrm_benefit_enrollments select (jsonb_populate_record(null::hrm_benefit_enrollments,
         (select to_jsonb(e) from hrm_benefit_enrollments e where org_id=${org.orgId} order by id limit 1)
         || jsonb_build_object('id',${randomUUID()}::uuid))).*`);
-    }), error => errorChainMatches(error, /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/));
-    for (const { table, refusal } of [
-      { table: "hrm_benefit_enrollment_terms", refusal: /Submitted contribution elections are immutable.*record action/ },
-      { table: "hrm_benefit_payroll_inputs", refusal: /Monthly benefit input generation has been replaced.*contribution terms/ },
-    ] as const) await assert.rejects(withOrgTransaction(target, async () => {
-      await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
-      await db.execute(sql`insert into ${sql.identifier(table)} select (jsonb_populate_record(null::${sql.identifier(table)},
+          }),
+          (error) =>
+            errorChainMatches(
+              error,
+              /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/,
+            ),
+        );
+        for (const { table, refusal } of [
+          {
+            table: "hrm_benefit_enrollment_terms",
+            refusal: /Submitted contribution elections are immutable.*record action/,
+          },
+          {
+            table: "hrm_benefit_payroll_inputs",
+            refusal: /Monthly benefit input generation has been replaced.*contribution terms/,
+          },
+        ] as const)
+          await assert.rejects(
+            withOrgTransaction(target, async () => {
+              await db.execute(
+                sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`,
+              );
+              await db.execute(sql`insert into ${sql.identifier(table)} select (jsonb_populate_record(null::${sql.identifier(table)},
         (select to_jsonb(source_row) from ${sql.identifier(table)} source_row where org_id=${target} order by id limit 1)
         || jsonb_build_object('id',${randomUUID()}::uuid))).*`);
-    }), error => errorChainMatches(error, refusal));
-    await assert.rejects(withMaintenanceTransaction(null, async () => {
-      await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
-      await db.execute(sql`update hrm_benefit_enrollments set decision_snapshot='{"outcome":"rejected"}'::jsonb where org_id=${target} and flow_run_id is not null`);
-    }), error => errorChainMatches(error, masked ? /Benefit workflow evidence must match/ : /Benefit approval decisions are immutable/));
-    for (const scope of [org.orgId, target]) await assert.rejects(withMaintenanceTransaction(null, async () => {
-      await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
-      await db.execute(sql`update hrm_benefit_enrollment_terms set elected_rate='251.0000' where org_id=${scope}`);
-    }), error => errorChainMatches(error, /Submitted contribution elections are immutable.*record action/));
-    await assertCopy();
-    await refreshSandbox(created.sandboxId, { keepCustomizations: false, authority: { actorId } });
-    await assertCopy();
-    if (!masked) {
-      const copy = (await db.execute<{ id: string; actor_id: string }>(sql`select ob_rebase(${elections[1]}::uuid,sandbox_seed) as id,
-        ob_rebase(${actorId}::uuid,sandbox_seed) as actor_id from orgs where id=${target}`, "objects"))[0]!;
-      const ended = await endEnrollment({ orgId: target, actorId: copy.actor_id, enrollmentId: copy.id,
-        endedOn: "2026-12-31", reason: "Coverage ended after copied workflow approval" });
-      assert.equal(ended.status, "ended", "the copied approval graph must support its ordinary native record action");
-      assert.deepEqual(await sourceEvidence(org.orgId), original);
-    }
-    await deleteSandbox(created.sandboxId);
-    for (const table of [...evidenceTables, "hrm_benefit_catalog", "hrm_benefit_plans"] as const) {
-      assert.equal((await db.execute(sql`select 1 from ${sql.identifier(table)} where org_id=${target}`, "objects")).length, 0,
-        `${table} must be removed by the native sandbox deletion`);
-    }
-    assert.equal((await db.execute(sql`select 1 from orgs where id=${target}`, "objects")).length, 0);
-    assert.deepEqual(await sourceEvidence(org.orgId), original);
-    assert.deepEqual(await db.execute<{ evidence: string }>(sql`select to_jsonb(c)::text as evidence
-      from hrm_benefit_catalog c where org_id=${org.orgId} order by id`, "objects"), originalCatalog);
-  } catch (error) {
-    assertionFailed = true;
-    assertionFailure = error;
-    throw error;
-  } finally {
-    try {
-      const shells = await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${org.orgId} and name=${sandboxName}`, "objects");
-      assert.ok(shells.length <= 1);
-      for (const shell of shells) await deleteSandbox(shell.id);
-      await dropScratchOrg(org.orgId);
-    } catch (cleanupFailure) {
-      if (assertionFailed) {
-        throw new AggregateError([assertionFailure, cleanupFailure],
-          "Benefits election assertions and sandbox cleanup both failed.", { cause: assertionFailure });
+            }),
+            (error) => errorChainMatches(error, refusal),
+          );
+        await assert.rejects(
+          withMaintenanceTransaction(null, async () => {
+            await db.execute(
+              sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`,
+            );
+            await db.execute(
+              sql`update hrm_benefit_enrollments set decision_snapshot='{"outcome":"rejected"}'::jsonb where org_id=${target} and flow_run_id is not null`,
+            );
+          }),
+          (error) =>
+            errorChainMatches(
+              error,
+              masked
+                ? /Benefit workflow evidence must match/
+                : /Benefit approval decisions are immutable/,
+            ),
+        );
+        for (const scope of [org.orgId, target])
+          await assert.rejects(
+            withMaintenanceTransaction(null, async () => {
+              await db.execute(
+                sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`,
+              );
+              await db.execute(
+                sql`update hrm_benefit_enrollment_terms set elected_rate='251.0000' where org_id=${scope}`,
+              );
+            }),
+            (error) =>
+              errorChainMatches(
+                error,
+                /Submitted contribution elections are immutable.*record action/,
+              ),
+          );
+        await assertCopy();
+        await refreshSandbox(created.sandboxId, {
+          keepCustomizations: false,
+          authority: { actorId },
+        });
+        await assertCopy();
+        if (!masked) {
+          const copy = (
+            await db.execute<{ id: string; actor_id: string }>(
+              sql`select ob_rebase(${elections[1]}::uuid,sandbox_seed) as id,
+        ob_rebase(${actorId}::uuid,sandbox_seed) as actor_id from orgs where id=${target}`,
+              "objects",
+            )
+          )[0]!;
+          const ended = await endEnrollment({
+            orgId: target,
+            actorId: copy.actor_id,
+            enrollmentId: copy.id,
+            endedOn: "2026-12-31",
+            reason: "Coverage ended after copied workflow approval",
+          });
+          assert.equal(
+            ended.status,
+            "ended",
+            "the copied approval graph must support its ordinary native record action",
+          );
+          assert.deepEqual(await sourceEvidence(org.orgId), original);
+        }
+        await deleteSandbox(created.sandboxId);
+        for (const table of [
+          ...evidenceTables,
+          "hrm_benefit_catalog",
+          "hrm_benefit_plans",
+        ] as const) {
+          assert.equal(
+            (
+              await db.execute(
+                sql`select 1 from ${sql.identifier(table)} where org_id=${target}`,
+                "objects",
+              )
+            ).length,
+            0,
+            `${table} must be removed by the native sandbox deletion`,
+          );
+        }
+        assert.equal(
+          (await db.execute(sql`select 1 from orgs where id=${target}`, "objects")).length,
+          0,
+        );
+        assert.deepEqual(await sourceEvidence(org.orgId), original);
+        assert.deepEqual(
+          await db.execute<{ evidence: string }>(
+            sql`select to_jsonb(c)::text as evidence
+      from hrm_benefit_catalog c where org_id=${org.orgId} order by id`,
+            "objects",
+          ),
+          originalCatalog,
+        );
+      } catch (error) {
+        assertionFailed = true;
+        assertionFailure = error;
+        throw error;
+      } finally {
+        try {
+          const shells = await db.execute<{ id: string }>(
+            sql`select id from sandboxes where production_org_id=${org.orgId} and name=${sandboxName}`,
+            "objects",
+          );
+          assert.ok(shells.length <= 1);
+          for (const shell of shells) await deleteSandbox(shell.id);
+          await dropScratchOrg(org.orgId);
+        } catch (cleanupFailure) {
+          if (assertionFailed) {
+            throw new AggregateError(
+              [assertionFailure, cleanupFailure],
+              "Benefits election assertions and sandbox cleanup both failed.",
+              { cause: assertionFailure },
+            );
+          }
+          throw cleanupFailure;
+        }
       }
-      throw cleanupFailure;
-    }
-  }
-});
+    },
+  );

@@ -36,7 +36,9 @@ test("an ad-hoc payment cannot pay a compliance-blocked bill", { skip: !DB }, as
     const actor = await createScratchUser(org.orgId, "Clerk", "ap_clerk");
     await grantScratchPermissions(org.orgId, actor, ["ap.pay"]);
     // Opt the org into subcontractor compliance.
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true'::jsonb) where id = ${org.orgId}`);
+    await db.execute(
+      sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true'::jsonb) where id = ${org.orgId}`,
+    );
     // A vendor class plus a block_payment insurance requirement (no expiry,
     // no verification: a missing certificate alone must block).
     const classId = randomUUID();
@@ -63,16 +65,28 @@ test("an ad-hoc payment cannot pay a compliance-blocked bill", { skip: !DB }, as
     await db.execute(sql`insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
       values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '100', '100', '0', '100')`);
-    await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${billId}`);
-    await postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+    await db.execute(
+      sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${billId}`,
+    );
+    await postDocument(billId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    });
 
     // Control: the release evaluator blocks this bill.
     const decisions = await evaluateBillsForRelease({
       orgId: org.orgId,
-      bills: [{
-        documentId: billId, documentNumber: "BILL-BLOCKED-1", partyId: vendorId,
-        vendorName: "Blocked vendor", projectId: null, documentDate: org.date, amount: "100", currency: "CAD",
-      }],
+      bills: [
+        {
+          documentId: billId,
+          documentNumber: "BILL-BLOCKED-1",
+          partyId: vendorId,
+          vendorName: "Blocked vendor",
+          projectId: null,
+          documentDate: org.date,
+          amount: "100",
+          currency: "CAD",
+        },
+      ],
       asOf: org.date,
     });
     assert.equal(decisions[0]!.decision, "blocked", "control: the bill is compliance-blocked");
@@ -81,15 +95,25 @@ test("an ad-hoc payment cannot pay a compliance-blocked bill", { skip: !DB }, as
     const open = await openItemsForParty(vendorId, "ap", org.orgId);
     const line = open.find((item) => item.documentId === billId);
     assert.ok(line, "bill has an open payable line");
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-      orgId: org.orgId, kind: "vendor_payment", createdBy: actor, partyId: vendorId,
-      bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date,
+    const payment = await createPaymentDocument({
+      allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      kind: "vendor_payment",
+      createdBy: actor,
+      partyId: vendorId,
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      documentDate: org.date,
     });
-    await updateDraftPayment(payment.id, {
-      allocations: [sameCurrencyAllocation(line!.lineId, "100")],
-    }, actor, org.orgId,
-  { allowedSubsidiaryIds: null },
-);
+    await updateDraftPayment(
+      payment.id,
+      {
+        allocations: [sameCurrencyAllocation(line!.lineId, "100")],
+      },
+      actor,
+      org.orgId,
+      { allowedSubsidiaryIds: null },
+    );
     await submitAndReleaseIfUngated("vendor_payment", payment.id, actor);
     await assert.rejects(
       postPaymentWithApplications(payment.id, [sameCurrencyAllocation(line!.lineId, "100")], actor),

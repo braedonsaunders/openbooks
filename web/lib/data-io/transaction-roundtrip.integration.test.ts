@@ -1,27 +1,26 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
 // Data-io resources are server-only. Shim that marker so this focused
 // PostgreSQL boundary test can import them under node's test runner.
-const { DOC_KINDS } = (await import('../document-kinds.ts')) as typeof import('../document-kinds.ts')
-const { transactionResource } = (await import('./transaction-resources.ts')) as typeof import(
-  './transaction-resources.ts'
-)
+const { DOC_KINDS } =
+  (await import("../document-kinds.ts")) as typeof import("../document-kinds.ts");
+const { transactionResource } =
+  (await import("./transaction-resources.ts")) as typeof import("./transaction-resources.ts");
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrgReporting } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
+const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 interface Fixture {
-  orgId: string
-  date: string
-  revenueNo: string
-  customerId: string
+  orgId: string;
+  date: string;
+  revenueNo: string;
+  customerId: string;
 }
 
 /**
@@ -31,34 +30,37 @@ interface Fixture {
  * as soon as the first test ends.
  */
 async function fixture(): Promise<Fixture> {
-  const o = await withBypassContext(() => (createScratchOrg()))
-  const revenueNo = (await withOrgContext(o.orgId, () =>
+  const o = await withBypassContext(() => createScratchOrg());
+  const revenueNo = (
+    await withOrgContext(o.orgId, () =>
       db.execute<{ number: string }>(
-        sql`select number from accounts where id = ${o.accounts.revenue}`, 'objects',
+        sql`select number from accounts where id = ${o.accounts.revenue}`,
+        "objects",
       ),
-    ))[0]?.number
-  assert.ok(revenueNo)
-  return { orgId: o.orgId, date: o.date, revenueNo, customerId: o.customerId }
+    )
+  )[0]?.number;
+  assert.ok(revenueNo);
+  return { orgId: o.orgId, date: o.date, revenueNo, customerId: o.customerId };
 }
 
 async function writeInvoice(fx: Fixture, row: Record<string, unknown>) {
-  const cfg = DOC_KINDS.customer_invoice
-  assert.ok(cfg)
+  const cfg = DOC_KINDS.customer_invoice;
+  assert.ok(cfg);
   return withOrgContext(fx.orgId, () =>
-    transactionResource(cfg, fx.orgId).write([row], 'insert', {
+    transactionResource(cfg, fx.orgId).write([row], "insert", {
       orgId: fx.orgId,
       actorId: randomUUID(),
       dryRun: false,
     }),
-  )
+  );
 }
 
 async function exportedInvoice(fx: Fixture): Promise<Record<string, unknown>> {
-  const cfg = DOC_KINDS.customer_invoice
-  assert.ok(cfg)
-  const exported = await withOrgContext(fx.orgId, () => transactionResource(cfg, fx.orgId).read())
-  assert.equal(exported.rows.length, 1)
-  return { ...(exported.rows[0] as Record<string, unknown>) }
+  const cfg = DOC_KINDS.customer_invoice;
+  assert.ok(cfg);
+  const exported = await withOrgContext(fx.orgId, () => transactionResource(cfg, fx.orgId).read());
+  assert.equal(exported.rows.length, 1);
+  return { ...(exported.rows[0] as Record<string, unknown>) };
 }
 
 /**
@@ -69,43 +71,45 @@ async function exportedInvoice(fx: Fixture): Promise<Record<string, unknown>> {
  * rewritten).
  */
 test(
-  'an exported invoice re-imports when multi-currency is off',
+  "an exported invoice re-imports when multi-currency is off",
   { skip: !DB, timeout: 180_000 },
   async () => {
-    const fx = await fixture()
+    const fx = await fixture();
     try {
       // A resolvable party, so the only friction left is the exporter's own
       // always-emitted currency column on a single-currency org.
-      await withBypassContext(() => db.execute(sql`update parties set short_code = 'ACME' where id = ${fx.customerId}`))
+      await withBypassContext(() =>
+        db.execute(sql`update parties set short_code = 'ACME' where id = ${fx.customerId}`),
+      );
       const created = await writeInvoice(fx, {
         documentDate: fx.date,
-        party: 'ACME',
-        lines: JSON.stringify([{ account: fx.revenueNo, amount: '42.50' }]),
-      })
+        party: "ACME",
+        lines: JSON.stringify([{ account: fx.revenueNo, amount: "42.50" }]),
+      });
       assert.deepEqual(
         { created: created.created, failed: created.failed },
         { created: 1, failed: 0 },
-      )
+      );
 
-      const row = await exportedInvoice(fx)
-      assert.equal(row.currency, 'CAD')
-      delete row.documentNumber
-      const replay = await writeInvoice(fx, row)
+      const row = await exportedInvoice(fx);
+      assert.equal(row.currency, "CAD");
+      delete row.documentNumber;
+      const replay = await writeInvoice(fx, row);
       assert.deepEqual(
         { created: replay.created, failed: replay.failed, errors: replay.errors },
         { created: 1, failed: 0, errors: [] },
-      )
+      );
     } finally {
-      await dropScratchOrgReporting(fx.orgId)
+      await dropScratchOrgReporting(fx.orgId);
     }
   },
-)
+);
 
 test(
-  'a foreign currency still needs the multi-currency feature',
+  "a foreign currency still needs the multi-currency feature",
   { skip: !DB, timeout: 180_000 },
   async () => {
-    const fx = await fixture()
+    const fx = await fixture();
     try {
       // The base-currency pass-through above must not open the gate: a
       // genuinely foreign currency on a single-currency org keeps failing.
@@ -113,50 +117,50 @@ test(
       // is needed for this row to reach the gate.)
       const outcome = await writeInvoice(fx, {
         documentDate: fx.date,
-        party: 'Nobody Will Resolve',
-        currency: 'USD',
-        lines: JSON.stringify([{ account: fx.revenueNo, amount: '42.50' }]),
-      })
+        party: "Nobody Will Resolve",
+        currency: "USD",
+        lines: JSON.stringify([{ account: fx.revenueNo, amount: "42.50" }]),
+      });
       assert.deepEqual(
         { created: outcome.created, failed: outcome.failed },
         { created: 0, failed: 1 },
-      )
-      assert.match(outcome.errors[0]?.message ?? '', /currency is not available/)
+      );
+      assert.match(outcome.errors[0]?.message ?? "", /currency is not available/);
     } finally {
-      await dropScratchOrgReporting(fx.orgId)
+      await dropScratchOrgReporting(fx.orgId);
     }
   },
-)
+);
 
 test(
-  'an exported invoice re-imports when the party has no short code',
+  "an exported invoice re-imports when the party has no short code",
   { skip: !DB, timeout: 180_000 },
   async () => {
-    const fx = await fixture()
+    const fx = await fixture();
     try {
       // The scratch customer carries a NULL short code — legal — and the
       // importer resolves parties by short code with a display-name fallback.
       // The exporter must emit that same key, not a null the importer rejects.
       const created = await writeInvoice(fx, {
         documentDate: fx.date,
-        party: 'Acme Customer',
-        lines: JSON.stringify([{ account: fx.revenueNo, amount: '42.50' }]),
-      })
+        party: "Acme Customer",
+        lines: JSON.stringify([{ account: fx.revenueNo, amount: "42.50" }]),
+      });
       assert.deepEqual(
         { created: created.created, failed: created.failed },
         { created: 1, failed: 0 },
-      )
+      );
 
-      const row = await exportedInvoice(fx)
-      delete row.documentNumber
-      delete row.currency
-      const replay = await writeInvoice(fx, row)
+      const row = await exportedInvoice(fx);
+      delete row.documentNumber;
+      delete row.currency;
+      const replay = await writeInvoice(fx, row);
       assert.deepEqual(
         { created: replay.created, failed: replay.failed, errors: replay.errors },
         { created: 1, failed: 0, errors: [] },
-      )
+      );
     } finally {
-      await dropScratchOrgReporting(fx.orgId)
+      await dropScratchOrgReporting(fx.orgId);
     }
   },
-)
+);

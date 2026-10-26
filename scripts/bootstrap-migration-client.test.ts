@@ -88,7 +88,11 @@ test("a lock_timeout failure names the blocker hunt and the scheduling remedy", 
     code: string;
   };
   err.code = "55P03";
-  const message = describeBootstrapMigrationFailure("generated/0251_payment_link_token_at_rest.sql", err, 5_100);
+  const message = describeBootstrapMigrationFailure(
+    "generated/0251_payment_link_token_at_rest.sql",
+    err,
+    5_100,
+  );
   assert.ok(message.includes("generated/0251_payment_link_token_at_rest.sql"));
   assert.ok(message.includes("lock_timeout") || message.includes("lock"));
   assert.ok(message.includes("pg_stat_activity"));
@@ -98,12 +102,15 @@ test("a lock_timeout failure names the blocker hunt and the scheduling remedy", 
 
 test("the no-transaction directive is an exact comment line, not a substring", () => {
   assert.equal(migrationRunsWithoutTransaction("-- openbooks: no-transaction\nselect 1;"), true);
-  assert.equal(migrationRunsWithoutTransaction("  --   OPENBOOKS:   NO-TRANSACTION  \nselect 1;"), true);
-  assert.equal(migrationRunsWithoutTransaction("-- openbooks: no-transaction-ish\nselect 1;"), false);
   assert.equal(
-    migrationRunsWithoutTransaction("select '-- openbooks: no-transaction';"),
+    migrationRunsWithoutTransaction("  --   OPENBOOKS:   NO-TRANSACTION  \nselect 1;"),
+    true,
+  );
+  assert.equal(
+    migrationRunsWithoutTransaction("-- openbooks: no-transaction-ish\nselect 1;"),
     false,
   );
+  assert.equal(migrationRunsWithoutTransaction("select '-- openbooks: no-transaction';"), false);
   assert.equal(migrationRunsWithoutTransaction("SET lock_timeout = 0;\nselect 1;"), false);
 });
 
@@ -139,13 +146,20 @@ test("the sanitizer leaves lock_timeout prose and function bodies alone", () => 
 
 test("no release migration keeps a file-level lock_timeout after the strip", () => {
   const files = releaseSchemaFiles(join(here, ".."));
-  assert.ok(files.some(({ filename }) => filename.startsWith("baselines/")), "expected the active release baseline");
+  assert.ok(
+    files.some(({ filename }) => filename.startsWith("baselines/")),
+    "expected the active release baseline",
+  );
   const survivors: string[] = [];
   for (const { filename: file, path } of files) {
     const content = readFileSync(path, "utf8");
     const clean = sanitizeMigrationContent(content);
     const withoutComments = clean.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
-    if (/(^|\s)(set\s+(?:(?:session|local)\s+)?lock_timeout|reset\s+lock_timeout)\b/i.test(withoutComments)) {
+    if (
+      /(^|\s)(set\s+(?:(?:session|local)\s+)?lock_timeout|reset\s+lock_timeout)\b/i.test(
+        withoutComments,
+      )
+    ) {
       survivors.push(file);
     }
   }
@@ -180,9 +194,7 @@ test("the splitter keeps dollar-quoted bodies whole and drops empties", () => {
 });
 
 test("the splitter does not mistake a cast or a placeholder for a dollar quote", () => {
-  const statements = splitSqlStatements(
-    "SELECT 1::$regclass; SELECT $1;",
-  );
+  const statements = splitSqlStatements("SELECT 1::$regclass; SELECT $1;");
   assert.equal(statements.length, 2);
 });
 
@@ -223,23 +235,30 @@ test("sanitize and split stay linear on the release schema and a 5 MB synthetic 
   let started = performance.now();
   const clean = sanitizeMigrationContent(corpus);
   const sanitizeMs = performance.now() - started;
-  assert.ok(sanitizeMs < 2_000, `sanitize took ${sanitizeMs.toFixed(0)}ms on ${(corpus.length / 1e6).toFixed(1)} MB`);
+  assert.ok(
+    sanitizeMs < 2_000,
+    `sanitize took ${sanitizeMs.toFixed(0)}ms on ${(corpus.length / 1e6).toFixed(1)} MB`,
+  );
   started = performance.now();
   const statements = splitSqlStatements(corpus);
   const splitMs = performance.now() - started;
-  assert.ok(splitMs < 2_000, `split took ${splitMs.toFixed(0)}ms on ${(corpus.length / 1e6).toFixed(1)} MB`);
+  assert.ok(
+    splitMs < 2_000,
+    `split took ${splitMs.toFixed(0)}ms on ${(corpus.length / 1e6).toFixed(1)} MB`,
+  );
   assert.ok(statements.length > 0);
   assert.doesNotMatch(clean, /^\s*set\s+(?:(?:session|local)\s+)?lock_timeout/m);
 
   // Synthetic 5 MB body mixing prose, dollar bodies, quoted escapes and real
   // SET statements, so the bound covers every scanner state, not just DDL.
-  const chunk = [
-    "select 1; -- SET lock_timeout = 0 is prose, not a GUC assignment",
-    "DO $$ BEGIN RAISE NOTICE 'SET lock_timeout = 0;'; END; $$;",
-    "SELECT 'it''s quoted';",
-    "SET lock_timeout = 0;",
-    "/* block /* nested SET lock_timeout = 0; */ comment */",
-  ].join("\n") + "\n";
+  const chunk =
+    [
+      "select 1; -- SET lock_timeout = 0 is prose, not a GUC assignment",
+      "DO $$ BEGIN RAISE NOTICE 'SET lock_timeout = 0;'; END; $$;",
+      "SELECT 'it''s quoted';",
+      "SET lock_timeout = 0;",
+      "/* block /* nested SET lock_timeout = 0; */ comment */",
+    ].join("\n") + "\n";
   const synthetic = chunk.repeat(Math.ceil((5 * 1024 * 1024) / chunk.length));
   assert.ok(synthetic.length >= 5 * 1024 * 1024, "expected a >= 5 MB synthetic body");
   started = performance.now();
@@ -263,9 +282,11 @@ test("sanitize and split stay linear on the release schema and a 5 MB synthetic 
 
 /** A PoolClient double that records every statement and fails on demand. The
  * runner only calls query(), so the double implements nothing else. */
-function recordingClient(
-  onQuery?: (sql: string, calls: string[]) => Promise<unknown>,
-): { client: pg.PoolClient; calls: string[]; parameters: unknown[][] } {
+function recordingClient(onQuery?: (sql: string, calls: string[]) => Promise<unknown>): {
+  client: pg.PoolClient;
+  calls: string[];
+  parameters: unknown[][];
+} {
   const calls: string[] = [];
   const parameters: unknown[][] = [];
   const client = {
@@ -287,10 +308,13 @@ const RESUME_BODY = [
 
 test("a no-transaction step failure names the file, the step, and the resume remedy", async () => {
   const { client } = recordingClient(async (_sql, calls) => {
-    if (calls.length === 3) throw new Error("relation \"probe_resume\" does not exist");
+    if (calls.length === 3) throw new Error('relation "probe_resume" does not exist');
   });
   await assert.rejects(
-    executeMigrationBody(client, RESUME_BODY, { transactional: false, filename: "generated/0999_probe.sql" }),
+    executeMigrationBody(client, RESUME_BODY, {
+      transactional: false,
+      filename: "generated/0999_probe.sql",
+    }),
     (error: unknown) => {
       const message = (error as Error).message;
       assert.ok(message.includes("generated/0999_probe.sql"), "names the file");
@@ -313,7 +337,10 @@ test("a lock-wait failure passes through unwrapped so the attempt still retries"
   });
   let caught: unknown = null;
   try {
-    await executeMigrationBody(client, RESUME_BODY, { transactional: false, filename: "generated/0999_probe.sql" });
+    await executeMigrationBody(client, RESUME_BODY, {
+      transactional: false,
+      filename: "generated/0999_probe.sql",
+    });
   } catch (error) {
     caught = error;
   }
@@ -363,8 +390,8 @@ test("a killed no-transaction attempt writes no ledger row; the resume completes
   const ledgerIndex = resumed.calls.findIndex((sql) => /_applied_migrations/.test(sql));
   for (const stepStatement of splitSqlStatements(RESUME_BODY)) {
     assert.ok(
-      resumed.calls.indexOf(stepStatement) !== -1
-        && resumed.calls.indexOf(stepStatement) < ledgerIndex,
+      resumed.calls.indexOf(stepStatement) !== -1 &&
+        resumed.calls.indexOf(stepStatement) < ledgerIndex,
       `step runs before the ledger write: ${stepStatement.slice(0, 40)}`,
     );
   }
@@ -411,14 +438,27 @@ test("a migration executes under the bounded timeout and records its file digest
   const body = sanitizeMigrationContent(content);
   const { client, calls, parameters } = recordingClient();
   await executeMigrationAttempt(client, {
-    filename, body, transactional: true, lock: migrationLockConfig({}), digest,
+    filename,
+    body,
+    transactional: true,
+    lock: migrationLockConfig({}),
+    digest,
     executeBody: executeMigrationBody,
   });
   assert.doesNotMatch(body, /SET\s+lock_timeout\s*=\s*0/i);
-  assert.ok(calls.some((statement) => /set local lock_timeout/i.test(statement) && statement.includes("5000")));
+  assert.ok(
+    calls.some(
+      (statement) => /set local lock_timeout/i.test(statement) && statement.includes("5000"),
+    ),
+  );
   assert.equal(calls.filter((statement) => statement === body).length, 1);
-  const ledgerIndex = calls.findIndex((statement) => /insert into public\._applied_migrations/.test(statement));
-  assert.equal(calls.filter((statement) => /insert into public\._applied_migrations/.test(statement)).length, 1);
+  const ledgerIndex = calls.findIndex((statement) =>
+    /insert into public\._applied_migrations/.test(statement),
+  );
+  assert.equal(
+    calls.filter((statement) => /insert into public\._applied_migrations/.test(statement)).length,
+    1,
+  );
   assert.ok(calls.indexOf(body) < ledgerIndex);
   assert.deepEqual(parameters[ledgerIndex], [filename, digest]);
 });

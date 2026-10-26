@@ -38,20 +38,25 @@ async function seedArrearsJanuary(org: ScratchOrg, actor: string): Promise<strin
     values (${planId}, ${org.orgId}, 'Arrears plan', '0', 'CAD', 'monthly', 1,
             ${org.accounts.revenue}, true, ${actor})
   `);
-  const versionId = await createPlanVersion(org.orgId, actor, {
-    planId,
-    effectiveFrom: "2026-01-01",
-    billingTiming: "arrears",
-    components: [
-      {
-        componentKey: "fee",
-        name: "Fee",
-        quantity: "1",
-        unitPrice: PRICE_A,
-        incomeAccountId: org.accounts.revenue,
-      },
-    ],
-  }, null);
+  const versionId = await createPlanVersion(
+    org.orgId,
+    actor,
+    {
+      planId,
+      effectiveFrom: "2026-01-01",
+      billingTiming: "arrears",
+      components: [
+        {
+          componentKey: "fee",
+          name: "Fee",
+          quantity: "1",
+          unitPrice: PRICE_A,
+          incomeAccountId: org.accounts.revenue,
+        },
+      ],
+    },
+    null,
+  );
   await publishPlanVersion(org.orgId, actor, versionId, null);
   const subscriptionId = randomUUID();
   await db.execute(sql`

@@ -1,4 +1,4 @@
-import type { SetupEntity } from './types'
+import type { SetupEntity } from "./types";
 
 /**
  * Setup-registry descriptor for observed statutory holidays.
@@ -26,108 +26,136 @@ import type { SetupEntity } from './types'
 /** Pack jurisdiction keys. Mirrors `declaredJurisdictions()`; a key the pack
  *  does not declare is refused by the engine rather than silently ignored. */
 const HOLIDAY_JURISDICTIONS = [
-  { value: 'CA', labelKey: 'options.holidayJurisdiction.ca' },
-  { value: 'CA-AB', labelKey: 'options.holidayJurisdiction.caAb' },
-  { value: 'CA-BC', labelKey: 'options.holidayJurisdiction.caBc' },
-  { value: 'CA-ON', labelKey: 'options.holidayJurisdiction.caOn' },
-  { value: 'CA-QC', labelKey: 'options.holidayJurisdiction.caQc' },
-  { value: 'CA-SK', labelKey: 'options.holidayJurisdiction.caSk' },
-  { value: 'US', labelKey: 'options.holidayJurisdiction.us' },
-]
+  { value: "CA", labelKey: "options.holidayJurisdiction.ca" },
+  { value: "CA-AB", labelKey: "options.holidayJurisdiction.caAb" },
+  { value: "CA-BC", labelKey: "options.holidayJurisdiction.caBc" },
+  { value: "CA-ON", labelKey: "options.holidayJurisdiction.caOn" },
+  { value: "CA-QC", labelKey: "options.holidayJurisdiction.caQc" },
+  { value: "CA-SK", labelKey: "options.holidayJurisdiction.caSk" },
+  { value: "US", labelKey: "options.holidayJurisdiction.us" },
+];
 
 const HOLIDAY_RULE_KINDS = [
-  { value: 'date', labelKey: 'options.holidayRuleKind.date' },
-  { value: 'fixed', labelKey: 'options.holidayRuleKind.fixed' },
-  { value: 'nth_weekday', labelKey: 'options.holidayRuleKind.nthWeekday' },
-  { value: 'weekday_before', labelKey: 'options.holidayRuleKind.weekdayBefore' },
-  { value: 'easter_offset', labelKey: 'options.holidayRuleKind.easterOffset' },
-]
+  { value: "date", labelKey: "options.holidayRuleKind.date" },
+  { value: "fixed", labelKey: "options.holidayRuleKind.fixed" },
+  { value: "nth_weekday", labelKey: "options.holidayRuleKind.nthWeekday" },
+  { value: "weekday_before", labelKey: "options.holidayRuleKind.weekdayBefore" },
+  { value: "easter_offset", labelKey: "options.holidayRuleKind.easterOffset" },
+];
 
 const HOLIDAY_OBSERVANCE = [
-  { value: 'none', labelKey: 'options.holidayObservance.none' },
-  { value: 'next_monday', labelKey: 'options.holidayObservance.nextMonday' },
-  { value: 'nearest_weekday', labelKey: 'options.holidayObservance.nearestWeekday' },
-]
+  { value: "none", labelKey: "options.holidayObservance.none" },
+  { value: "next_monday", labelKey: "options.holidayObservance.nextMonday" },
+  { value: "nearest_weekday", labelKey: "options.holidayObservance.nearestWeekday" },
+];
 
 export const PAYROLL_HOLIDAYS_ENTITY: SetupEntity = {
-  key: 'payroll-holidays',
-  table: 'payroll_holidays',
-  groupKey: 'workforce',
-  featureKey: 'payroll',
+  key: "payroll-holidays",
+  table: "payroll_holidays",
+  groupKey: "workforce",
+  featureKey: "payroll",
   rehomed: true, // subtab of the Payroll setup workspace, beside the calendar
-  iconKey: 'calendar',
+  iconKey: "calendar",
   orgScoped: true,
   actorCols: true,
-  orderBy: 'jurisdiction, effective_from, pack_key nulls last, name',
+  orderBy: "jurisdiction, effective_from, pack_key nulls last, name",
   // Deliberately NOT `hasActive`: a suppressed election is `isObserved = false`,
   // which is a real, visible statement about the calendar, not an archived
   // record. Hiding it the way archived setup rows are hidden would make "we do
   // not observe Boxing Day" invisible the moment it was saved.
   hasActive: false,
   columns: [
-    { key: 'jurisdiction', kind: 'badge', options: HOLIDAY_JURISDICTIONS, optionsSource: 'payroll-holiday-jurisdictions' },
-    { key: 'packKey', kind: 'code' },
-    { key: 'name', kind: 'text' },
-    { key: 'ruleKind', kind: 'badge', options: HOLIDAY_RULE_KINDS },
-    { key: 'observedOn', kind: 'date' },
-    { key: 'isObserved', kind: 'boolean' },
-    { key: 'isPaid', kind: 'boolean' },
-    { key: 'effectiveFrom', kind: 'date' },
-    { key: 'effectiveTo', kind: 'date' },
+    {
+      key: "jurisdiction",
+      kind: "badge",
+      options: HOLIDAY_JURISDICTIONS,
+      optionsSource: "payroll-holiday-jurisdictions",
+    },
+    { key: "packKey", kind: "code" },
+    { key: "name", kind: "text" },
+    { key: "ruleKind", kind: "badge", options: HOLIDAY_RULE_KINDS },
+    { key: "observedOn", kind: "date" },
+    { key: "isObserved", kind: "boolean" },
+    { key: "isPaid", kind: "boolean" },
+    { key: "effectiveFrom", kind: "date" },
+    { key: "effectiveTo", kind: "date" },
   ],
-  filters: [{ key: 'jurisdiction', options: HOLIDAY_JURISDICTIONS, optionsSource: 'payroll-holiday-jurisdictions' }],
+  filters: [
+    {
+      key: "jurisdiction",
+      options: HOLIDAY_JURISDICTIONS,
+      optionsSource: "payroll-holiday-jurisdictions",
+    },
+  ],
   fields: [
     {
-      key: 'jurisdiction', kind: 'select', required: true, options: HOLIDAY_JURISDICTIONS,
-      optionsSource: 'payroll-holiday-jurisdictions',
-      helpTextKey: 'fieldHelp.holidayJurisdiction',
+      key: "jurisdiction",
+      kind: "select",
+      required: true,
+      options: HOLIDAY_JURISDICTIONS,
+      optionsSource: "payroll-holiday-jurisdictions",
+      helpTextKey: "fieldHelp.holidayJurisdiction",
     },
     // Effective dating is compared against the holiday's OBSERVED DATE, never
     // against today, so re-running a prior period reproduces that period's
     // calendar rather than today's configuration.
-    { key: 'effectiveFrom', kind: 'date', required: true },
-    { key: 'effectiveTo', kind: 'date', helpTextKey: 'fieldHelp.holidayEffectiveTo' },
+    { key: "effectiveFrom", kind: "date", required: true },
+    { key: "effectiveTo", kind: "date", helpTextKey: "fieldHelp.holidayEffectiveTo" },
     {
-      key: 'packKey', kind: 'text',
-      helpTextKey: 'fieldHelp.holidayPackKey',
-      sectionKey: 'sections.holidayElection',
+      key: "packKey",
+      kind: "text",
+      helpTextKey: "fieldHelp.holidayPackKey",
+      sectionKey: "sections.holidayElection",
     },
-    { key: 'isObserved', kind: 'boolean', helpTextKey: 'fieldHelp.holidayIsObserved' },
-    { key: 'isPaid', kind: 'boolean', helpTextKey: 'fieldHelp.holidayIsPaid' },
+    { key: "isObserved", kind: "boolean", helpTextKey: "fieldHelp.holidayIsObserved" },
+    { key: "isPaid", kind: "boolean", helpTextKey: "fieldHelp.holidayIsPaid" },
     {
-      key: 'name', kind: 'text',
-      helpTextKey: 'fieldHelp.holidayName',
-      sectionKey: 'sections.holidayCompanyDay',
+      key: "name",
+      kind: "text",
+      helpTextKey: "fieldHelp.holidayName",
+      sectionKey: "sections.holidayCompanyDay",
     },
-    { key: 'ruleKind', kind: 'select', options: HOLIDAY_RULE_KINDS },
-    { key: 'observedOn', kind: 'date', showWhen: { field: 'ruleKind', in: ['date'] } },
+    { key: "ruleKind", kind: "select", options: HOLIDAY_RULE_KINDS },
+    { key: "observedOn", kind: "date", showWhen: { field: "ruleKind", in: ["date"] } },
     {
-      key: 'ruleMonth', kind: 'integer',
-      showWhen: { field: 'ruleKind', in: ['fixed', 'nth_weekday', 'weekday_before'] },
-    },
-    {
-      key: 'ruleDay', kind: 'integer',
-      showWhen: { field: 'ruleKind', in: ['fixed', 'weekday_before'] },
-    },
-    {
-      key: 'ruleWeekday', kind: 'integer',
-      helpTextKey: 'fieldHelp.holidayRuleWeekday',
-      showWhen: { field: 'ruleKind', in: ['nth_weekday', 'weekday_before'] },
+      key: "ruleMonth",
+      kind: "integer",
+      showWhen: { field: "ruleKind", in: ["fixed", "nth_weekday", "weekday_before"] },
     },
     {
-      key: 'ruleNth', kind: 'integer',
-      helpTextKey: 'fieldHelp.holidayRuleNth',
-      showWhen: { field: 'ruleKind', in: ['nth_weekday'] },
+      key: "ruleDay",
+      kind: "integer",
+      showWhen: { field: "ruleKind", in: ["fixed", "weekday_before"] },
     },
     {
-      key: 'ruleOffset', kind: 'integer',
-      helpTextKey: 'fieldHelp.holidayRuleOffset',
-      showWhen: { field: 'ruleKind', in: ['easter_offset'] },
+      key: "ruleWeekday",
+      kind: "integer",
+      helpTextKey: "fieldHelp.holidayRuleWeekday",
+      showWhen: { field: "ruleKind", in: ["nth_weekday", "weekday_before"] },
     },
     {
-      key: 'observance', kind: 'select', keepDefault: true, defaultValue: 'none',
-      options: HOLIDAY_OBSERVANCE, helpTextKey: 'fieldHelp.holidayObservance',
-      showWhen: { field: 'ruleKind', in: ['fixed', 'nth_weekday', 'weekday_before', 'easter_offset'] },
+      key: "ruleNth",
+      kind: "integer",
+      helpTextKey: "fieldHelp.holidayRuleNth",
+      showWhen: { field: "ruleKind", in: ["nth_weekday"] },
+    },
+    {
+      key: "ruleOffset",
+      kind: "integer",
+      helpTextKey: "fieldHelp.holidayRuleOffset",
+      showWhen: { field: "ruleKind", in: ["easter_offset"] },
+    },
+    {
+      key: "observance",
+      kind: "select",
+      keepDefault: true,
+      defaultValue: "none",
+      options: HOLIDAY_OBSERVANCE,
+      helpTextKey: "fieldHelp.holidayObservance",
+      showWhen: {
+        field: "ruleKind",
+        in: ["fixed", "nth_weekday", "weekday_before", "easter_offset"],
+      },
     },
   ],
-}
+};

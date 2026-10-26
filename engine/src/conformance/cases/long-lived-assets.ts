@@ -1,5 +1,5 @@
 import { measurePartialDisposal } from "../../assets/asset-basis.ts";
-import { measureAssetTransferElimination } from "../../consolidation/asset-transfers.ts";/**
+import { measureAssetTransferElimination } from "../../consolidation/asset-transfers.ts"; /**
  * Impairment and derecognition of long-lived assets — ASC 360 and IAS 16.
  *
  * These cases exercise the product's own measurement functions (the same ones
@@ -9,7 +9,11 @@ import { measureAssetTransferElimination } from "../../consolidation/asset-trans
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { computeDisposal, computeRemeasurement, remeasurementPolicy } from "../../assets/asset-lifecycle.ts";
+import {
+  computeDisposal,
+  computeRemeasurement,
+  remeasurementPolicy,
+} from "../../assets/asset-lifecycle.ts";
 import { db } from "../../platform/db.ts";
 import { buildSchedule, runDepreciation } from "../../assets/depreciation.ts";
 import { generateAccountingPeriods } from "../../close/calendar.ts";
@@ -19,8 +23,7 @@ import type { ConformanceCase } from "../types.ts";
 export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
   {
     id: "ppe-impairment-to-fair-value",
-    title:
-      "An impaired asset is written down to fair value and the loss is recognised immediately",
+    title: "An impaired asset is written down to fair value and the loss is recognised immediately",
     citations: [
       {
         standard: "ASC 360",
@@ -74,8 +77,7 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
 
   {
     id: "ppe-impairment-establishes-new-basis",
-    title:
-      "The written-down amount becomes the new cost basis for future depreciation",
+    title: "The written-down amount becomes the new cost basis for future depreciation",
     citations: [
       {
         standard: "ASC 360",
@@ -189,8 +191,7 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
 
   {
     id: "ppe-writeoff-recognises-full-carrying-amount",
-    title:
-      "Scrapping an asset with no proceeds recognises the whole carrying amount as a loss",
+    title: "Scrapping an asset with no proceeds recognises the whole carrying amount as a loss",
     citations: [
       {
         standard: "IAS 16",
@@ -370,10 +371,7 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
           derecognisedAccumulated: m.removedAccumulated,
           disposedCarryingAmount: m.removedCarrying,
           partialGain: m.gainLoss,
-          retainedCarryingAmount: add(
-            m.remainingCost,
-            "-" + m.remainingAccumulated,
-          ),
+          retainedCarryingAmount: add(m.remainingCost, "-" + m.remainingAccumulated),
         },
       };
     },
@@ -428,9 +426,7 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
           groupCost: "100000",
           groupAccumulated: "40000",
           groupSalvage: "0",
-          groupPlan: [
-            { startsOn: "2026-08-01", date: "2026-08-31", amount: "60000" },
-          ],
+          groupPlan: [{ startsOn: "2026-08-01", date: "2026-08-31", amount: "60000" }],
           buyerCost: "70000",
           buyerToGroupRate: "1",
           ctaAccountId: ctx.roles.subsidiaryEquity,
@@ -468,8 +464,7 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
 
   {
     id: "ppe-depreciation-445-calendar",
-    title:
-      "Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns",
+    title: "Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns",
     citations: [
       {
         standard: "IAS 16",
@@ -511,8 +506,11 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
       const calendarId = randomUUID(),
         categoryId = randomUUID(),
         assetId = randomUUID();
-      const previousDefaults = await db.execute<{ id: string }>(sql`
-        select id from fiscal_calendars where org_id=${ledger.orgId} and is_default`, "objects");
+      const previousDefaults = await db.execute<{ id: string }>(
+        sql`
+        select id from fiscal_calendars where org_id=${ledger.orgId} and is_default`,
+        "objects",
+      );
       try {
         await db.execute(sql`insert into fiscal_calendars
           (id, org_id, name, cadence, year_start_month, week_starts_on, anchor_date, time_zone, is_default, is_active, config)
@@ -540,24 +538,20 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
            acquisition_cost, salvage_value, depreciation_method, useful_life_months, depreciation_convention)
           values (${assetId}, ${ledger.orgId}, ${ledger.subsidiaryId}, ${categoryId}, ${`CONF-445-${assetId}`},
                   'Retail-calendar asset', 'in_service', '2026-07-01', '2026-07-01', 1200, 0, 'straight_line', 6, 'full_month')`);
-        await buildSchedule(
-          assetId,
-          ledger.orgId,
-          ledger.actorId,
-          ledger.bookId,
-        );
-        const lines = await db.execute<{ period_id: string; planned: string }>(sql`
+        await buildSchedule(assetId, ledger.orgId, ledger.actorId, ledger.bookId);
+        const lines = await db.execute<{ period_id: string; planned: string }>(
+          sql`
           select l.period_id, l.planned_amount::text as planned from depreciation_schedule_lines l
           join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
           where s.org_id=${ledger.orgId} and s.asset_id=${assetId} and s.book_id=${ledger.bookId}
-          order by l.sequence`, "objects");
+          order by l.sequence`,
+          "objects",
+        );
         return {
           values: {
             periodsIn445Year: String(periods.periods.length),
             scheduleLines: String(lines.length),
-            uniquePeriods: String(
-              new Set(lines.map((line) => line.period_id)).size,
-            ),
+            uniquePeriods: String(new Set(lines.map((line) => line.period_id)).size),
             plannedTotal: sum(lines.map((line) => line.planned)),
             plannedAmounts: lines.map((line) => line.planned).join(","),
           },
@@ -639,28 +633,36 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
                 '12000.0000', '0.0000', 'straight_line', 12,
                 '11000.0000', '2025-12-31', '{}'::jsonb)`);
       await buildSchedule(assetId, ledger.orgId, ledger.actorId, ledger.bookId);
-      const lines = await db.execute<{ month: string; planned: string }>(sql`
+      const lines = await db.execute<{ month: string; planned: string }>(
+        sql`
         select p.starts_on::text as month, l.planned_amount::text as planned
           from depreciation_schedule_lines l
           join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
           join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
          where s.org_id = ${ledger.orgId} and s.asset_id = ${assetId}
-         order by p.starts_on`, "objects");
-      const run = await runDepreciation(
-        ledger.orgId,
-        "2026-01-31",
-        ledger.actorId,
-        assetId,
+         order by p.starts_on`,
+        "objects",
       );
-      const posted = (await db.execute<{ posted: string }>(sql`
+      const run = await runDepreciation(ledger.orgId, "2026-01-31", ledger.actorId, assetId);
+      const posted = (
+        await db.execute<{ posted: string }>(
+          sql`
         select l.posted_amount::text as posted
           from depreciation_schedule_lines l
           join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
           join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
          where s.org_id = ${ledger.orgId} and s.asset_id = ${assetId}
-           and p.starts_on = '2026-01-01'`, "objects"))[0]!.posted;
-      const status = (await db.execute<{ status: string }>(sql`
-        select status from fixed_assets where id = ${assetId} and org_id = ${ledger.orgId}`, "objects"))[0]!.status;
+           and p.starts_on = '2026-01-01'`,
+          "objects",
+        )
+      )[0]!.posted;
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
+        select status from fixed_assets where id = ${assetId} and org_id = ${ledger.orgId}`,
+          "objects",
+        )
+      )[0]!.status;
       return {
         values: {
           scheduledMonths: String(lines.length),

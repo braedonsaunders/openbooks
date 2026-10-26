@@ -5,14 +5,13 @@ import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { enqueueSandboxOp } from "@openbooks/jobs";
-import {
-  applyChangeSet,
-  buildChangeSet,
-  reviewChangeSet,
-} from "@openbooks/engine/sandbox/promote";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "@openbooks/engine/sandbox/promote";
 import { getAuthz } from "../../../../lib/authz";
 import { can } from "../../../../lib/authz";
-import { assertUnrestrictedScope, UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
+import {
+  assertUnrestrictedScope,
+  UnrestrictedScopeError,
+} from "@openbooks/engine/organization/scope";
 import { isUuid } from "../../../../lib/list-params";
 import { validateSandboxCutoff } from "@openbooks/engine/sandbox/lifecycle";
 import { validateSandboxCadence } from "@openbooks/engine/sandbox/cadence";
@@ -54,7 +53,14 @@ function assertClientOpKey(value: unknown): string {
 }
 
 function sandboxOpJobId(op: string, parts: string, clientOpKey: string): string {
-  const digest = createHash("sha256").update(op).update("\0").update(parts).update("\0").update(clientOpKey).digest("hex").slice(0, 24);
+  const digest = createHash("sha256")
+    .update(op)
+    .update("\0")
+    .update(parts)
+    .update("\0")
+    .update(clientOpKey)
+    .digest("hex")
+    .slice(0, 24);
   return `sbx|${op}|${digest}`;
 }
 
@@ -82,25 +88,44 @@ export async function createSandboxAction(input: {
       createdBy: authz.user.id,
       initiator: { actorId: authz.user.id },
     },
-    { jobId: sandboxOpJobId("create", `${authz.user.productionOrgId}|${name}|${tier}|${asOfPeriodId ?? ""}`, clientOpKey) },
+    {
+      jobId: sandboxOpJobId(
+        "create",
+        `${authz.user.productionOrgId}|${name}|${tier}|${asOfPeriodId ?? ""}`,
+        clientOpKey,
+      ),
+    },
   );
   revalidatePath("/admin/sandboxes");
 }
 
 async function ownedSandbox(sandboxId: string, productionOrgId: string): Promise<string> {
-  const r = await db.execute<{ orgId: string }>(sql`
-    select org_id as "orgId" from sandboxes where id = ${sandboxId} and production_org_id = ${productionOrgId}`, "objects");
+  const r = await db.execute<{ orgId: string }>(
+    sql`
+    select org_id as "orgId" from sandboxes where id = ${sandboxId} and production_org_id = ${productionOrgId}`,
+    "objects",
+  );
   if (!r.length) throw new Error("sandbox not found");
   return r[0]!.orgId;
 }
 
-export async function refreshSandboxAction(sandboxId: string, keepCustomizations: boolean, clientOpKey: string): Promise<void> {
+export async function refreshSandboxAction(
+  sandboxId: string,
+  keepCustomizations: boolean,
+  clientOpKey: string,
+): Promise<void> {
   const authz = await requireManager();
   assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
   await enqueueSandboxOp(
     { op: "refresh", sandboxId, keepCustomizations, initiator: { actorId: authz.user.id } },
-    { jobId: sandboxOpJobId("refresh", `${sandboxId}|${keepCustomizations}`, assertClientOpKey(clientOpKey)) },
+    {
+      jobId: sandboxOpJobId(
+        "refresh",
+        `${sandboxId}|${keepCustomizations}`,
+        assertClientOpKey(clientOpKey),
+      ),
+    },
   );
   revalidatePath("/admin/sandboxes");
 }
@@ -132,20 +157,26 @@ export async function setScheduleAction(sandboxId: string, cadence: string | nul
   assertUuid(sandboxId, "Sandbox");
   const value = validateSandboxCadence(cadence);
   await db.transaction(async (tx) => {
-    const existing = await tx.execute<{ orgId: string; refreshSchedule: string | null }>(sql`
+    const existing = await tx.execute<{ orgId: string; refreshSchedule: string | null }>(
+      sql`
       select org_id as "orgId", refresh_schedule as "refreshSchedule"
         from sandboxes
        where id = ${sandboxId} and production_org_id = ${authz.user.productionOrgId}
        for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const before = existing[0];
     if (!before) throw new Error("sandbox not found");
-    const updated = await tx.execute(sql`
+    const updated = await tx.execute(
+      sql`
       update sandboxes
          set refresh_schedule = ${value}, updated_at = now(), updated_by = ${authz.user.id}
        where id = ${sandboxId} and org_id = ${before.orgId}
        returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!updated.length) throw new Error("sandbox not found");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -159,7 +190,10 @@ export async function setScheduleAction(sandboxId: string, cadence: string | nul
   revalidatePath("/admin/sandboxes");
 }
 
-export async function promoteSandboxAction(sandboxId: string, name: string): Promise<{ changeSetId: string; itemCount: number }> {
+export async function promoteSandboxAction(
+  sandboxId: string,
+  name: string,
+): Promise<{ changeSetId: string; itemCount: number }> {
   const authz = await requireManager();
   assertUuid(sandboxId, "Sandbox");
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
@@ -171,8 +205,11 @@ export async function promoteSandboxAction(sandboxId: string, name: string): Pro
 export async function reviewChangeSetAction(changeSetId: string): Promise<void> {
   const authz = await requireManager();
   assertUuid(changeSetId, "Change set");
-  const r = await db.execute(sql`
-    select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`, "objects");
+  const r = await db.execute(
+    sql`
+    select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`,
+    "objects",
+  );
   if (!r.length) throw new Error("change set not found");
   await reviewChangeSet(changeSetId, authz.user.id);
   revalidatePath("/admin/sandboxes");
@@ -181,14 +218,20 @@ export async function reviewChangeSetAction(changeSetId: string): Promise<void> 
 export async function applyChangeSetAction(changeSetId: string): Promise<void> {
   const authz = await requireManager();
   assertUuid(changeSetId, "Change set");
-  const r = ((await db.execute(sql`select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`, "objects")));
+  const r = await db.execute(
+    sql`select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`,
+    "objects",
+  );
   if (!r.length) throw new Error("change set not found");
   await applyChangeSet(changeSetId, authz.user.id);
   revalidatePath("/admin/sandboxes");
 }
 
 /** Return actionable domain failures without exposing database query details. */
-export async function transitionChangeSetAction(changeSetId: string, transition: PromotionTransition): Promise<{ error: string | null }> {
+export async function transitionChangeSetAction(
+  changeSetId: string,
+  transition: PromotionTransition,
+): Promise<{ error: string | null }> {
   try {
     if (transition === "review") await reviewChangeSetAction(changeSetId);
     else if (transition === "apply") await applyChangeSetAction(changeSetId);
@@ -196,7 +239,12 @@ export async function transitionChangeSetAction(changeSetId: string, transition:
     revalidatePath("/admin/sandboxes/change-sets");
     return { error: null };
   } catch (error) {
-    return { error: error instanceof Error && (error.constructor === Error || error instanceof UnrestrictedScopeError)
-      ? error.message : "The change could not be completed. Refresh the change set and try again." };
+    return {
+      error:
+        error instanceof Error &&
+        (error.constructor === Error || error instanceof UnrestrictedScopeError)
+          ? error.message
+          : "The change could not be completed. Refresh the change set and try again.",
+    };
   }
 }

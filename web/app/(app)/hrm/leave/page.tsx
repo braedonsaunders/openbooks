@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { leaveQueueSpec, leaveQueueTitle, loadLeaveQueuePage } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { leaveQueueSpec, leaveQueueTitle, loadLeaveQueuePage } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await leaveQueueTitle() }
+  return { title: await leaveQueueTitle() };
 }
 
 /**
@@ -17,16 +17,11 @@ export async function generateMetadata() {
 export default async function LeaveQueuePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadLeaveQueuePage(sp)
+  const sp = await searchParams;
+  const data = await loadLeaveQueuePage(sp);
   return (
-    <ModuleView
-      spec={leaveQueueSpec(data, '/hrm/leave')}
-      data={data}
-      searchParams={sp}
-      trusted
-    />
-  )
+    <ModuleView spec={leaveQueueSpec(data, "/hrm/leave")} data={data} searchParams={sp} trusted />
+  );
 }

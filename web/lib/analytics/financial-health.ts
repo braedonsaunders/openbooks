@@ -2,7 +2,7 @@ import "server-only";
 import { analyticsQuery } from "./query";
 import { currentAnalyticsRead } from "./read-context";
 import { cachedAnalyticsRead } from "./preview-cache";
-import { getMoneyFormatter } from '../money-server'
+import { getMoneyFormatter } from "../money-server";
 import { sql } from "drizzle-orm";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
 import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
@@ -11,17 +11,28 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { resolveOrgId } from "../org-scope";
 import { flowRates, presentationCurrency, presentationRates } from "../fx-presentation";
 import { add, cmp, mulDecimal, mulRatio, neg } from "@openbooks/engine/money";
-import { addCalendarDays, addMonthsClamped, inclusiveCalendarDays, calendarDaysBetween } from "@openbooks/engine/platform/civil-date";
+import {
+  addCalendarDays,
+  addMonthsClamped,
+  inclusiveCalendarDays,
+  calendarDaysBetween,
+} from "@openbooks/engine/platform/civil-date";
 import { enactedIncomeTaxRate } from "@openbooks/engine/tax-returns";
 import { resolveAccountGroups } from "../account-groups";
 import { defaultFiscalCalendarPeriods, fiscalYearStartOnDate } from "../fiscal";
 import { healthStrings, type FinancialHealthNotes } from "./health-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 import { OPERATING_EXPENSE_TYPES } from "./operating-expenses";
-import { decimalSum, type ExactDecimal } from '../statement-format'
+import { decimalSum, type ExactDecimal } from "../statement-format";
 import { decimalRatio, decimalSubtract } from "../reports/decimals";
 import { analyticsConfig } from "./config";
-import { RATIO_CATEGORIES, type Grade, type RatioCategory, type RatioFormat, type RatioId } from "./ratio-ids";
+import {
+  RATIO_CATEGORIES,
+  type Grade,
+  type RatioCategory,
+  type RatioFormat,
+  type RatioId,
+} from "./ratio-ids";
 
 /**
  * Financial Health — the ratio and scorecard engine behind
@@ -47,7 +58,14 @@ import { RATIO_CATEGORIES, type Grade, type RatioCategory, type RatioFormat, typ
  * - a ratio whose inputs do not exist is null with the reason, never zero.
  */
 
-export { RATIO_IDS, RATIO_CATEGORIES, type RatioId, type RatioCategory, type RatioFormat, type Grade } from "./ratio-ids";
+export {
+  RATIO_IDS,
+  RATIO_CATEGORIES,
+  type RatioId,
+  type RatioCategory,
+  type RatioFormat,
+  type Grade,
+} from "./ratio-ids";
 
 /** The account-group dimension holding the organization's ratio classifications. */
 export const RATIO_INPUT_DIMENSION = "financial_ratios";
@@ -136,7 +154,10 @@ export interface HealthFigures {
   headcount: number;
 }
 
-export type HealthPnlFigures = Pick<HealthFigures, 'revenue' | 'cogs' | 'grossProfit' | 'opex' | 'operatingIncome' | 'otherExpense' | 'netIncome'>;
+export type HealthPnlFigures = Pick<
+  HealthFigures,
+  "revenue" | "cogs" | "grossProfit" | "opex" | "operatingIncome" | "otherExpense" | "netIncome"
+>;
 
 export interface FinancialHealth {
   period: { from: string; to: string; label: string; days: number; fiscalYearDays: number };
@@ -218,7 +239,11 @@ export async function healthBenchmarks(orgId: string): Promise<HealthBenchmarks>
 // ---------------------------------------------------------------------------
 
 /** Value ÷ target (target ÷ value when lower is better), or null when not gradeable. */
-function achievement(value: ExactDecimal, target: ExactDecimal, inverse: boolean): ExactDecimal | null {
+function achievement(
+  value: ExactDecimal,
+  target: ExactDecimal,
+  inverse: boolean,
+): ExactDecimal | null {
   if (!isPositive(target)) return null;
   if (!inverse) return decimalRatio(value, target);
   // Lower is better: nothing at all is the best possible result.
@@ -253,7 +278,13 @@ export function scoreLabelOf(score: number | null, b: HealthBenchmarks): ScoreLa
 // ---------------------------------------------------------------------------
 
 /** Translated period activity (debit-positive) on the given accounts. */
-async function accountActivity(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null, accountIds: string[]): Promise<ExactDecimal> {
+async function accountActivity(
+  orgId: string,
+  from: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+  accountIds: string[],
+): Promise<ExactDecimal> {
   if (accountIds.length === 0) return ZERO;
   const r = await analyticsQuery<{ func: string | null; s: string; late: string | null }>(sql`
     select sub.base_currency as func, coalesce(sum(l.amount), 0)::text as s, max(e.posting_date)::text as late
@@ -274,12 +305,24 @@ async function accountActivity(orgId: string, from: string, to: string, allowed:
      group by sub.base_currency
   `);
   // Each functional leg translates at its latest posting date in the window.
-  const ctx = await flowRates(orgId, r.rows.map((leg) => ({ func: leg.func ?? null, date: (leg.late ?? to).slice(0, 10) })));
-  return decimalSum(r.rows.map((leg) => mulDecimal(leg.s, ctx.rateAt(leg.func ?? null, (leg.late ?? to).slice(0, 10)))));
+  const ctx = await flowRates(
+    orgId,
+    r.rows.map((leg) => ({ func: leg.func ?? null, date: (leg.late ?? to).slice(0, 10) })),
+  );
+  return decimalSum(
+    r.rows.map((leg) =>
+      mulDecimal(leg.s, ctx.rateAt(leg.func ?? null, (leg.late ?? to).slice(0, 10))),
+    ),
+  );
 }
 
 /** Translated closing balance (credit-positive) on the given accounts as of a date, at the closing spot rate. */
-async function creditBalance(orgId: string, asOf: string, allowed: ReadonlySet<string> | null, accountIds: string[]): Promise<ExactDecimal> {
+async function creditBalance(
+  orgId: string,
+  asOf: string,
+  allowed: ReadonlySet<string> | null,
+  accountIds: string[],
+): Promise<ExactDecimal> {
   if (accountIds.length === 0) return ZERO;
   const r = await analyticsQuery<{ func: string | null; s: string }>(sql`
     select sub.base_currency as func, coalesce(-sum(l.amount), 0)::text as s
@@ -297,11 +340,21 @@ async function creditBalance(orgId: string, asOf: string, allowed: ReadonlySet<s
   `);
   if (r.rows.length === 0) return ZERO;
   const base = await presentationCurrency(orgId);
-  const rates = await presentationRates(orgId, base, r.rows.map((row) => row.func), asOf);
+  const rates = await presentationRates(
+    orgId,
+    base,
+    r.rows.map((row) => row.func),
+    asOf,
+  );
   return decimalSum(r.rows.map((row) => mulDecimal(row.s, rates.get(row.func ?? base) ?? "1")));
 }
 
-async function depreciationAmortization(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null): Promise<ExactDecimal> {
+async function depreciationAmortization(
+  orgId: string,
+  from: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+): Promise<ExactDecimal> {
   const r = await analyticsQuery<{ func: string | null; s: string; late: string | null }>(sql`
     with da_accounts as (
       -- These account references are the authoritative D&A classification. They
@@ -356,13 +409,24 @@ async function depreciationAmortization(orgId: string, from: string, to: string,
   `);
   // Expense accounts are debit-positive, already the D&A magnitude; each
   // functional leg translates at its latest posting date.
-  const ctx = await flowRates(orgId, r.rows.map((leg) => ({ func: leg.func ?? null, date: (leg.late ?? to).slice(0, 10) })));
-  return decimalSum(r.rows.map((leg) => mulDecimal(leg.s, ctx.rateAt(leg.func ?? null, (leg.late ?? to).slice(0, 10)))));
+  const ctx = await flowRates(
+    orgId,
+    r.rows.map((leg) => ({ func: leg.func ?? null, date: (leg.late ?? to).slice(0, 10) })),
+  );
+  return decimalSum(
+    r.rows.map((leg) =>
+      mulDecimal(leg.s, ctx.rateAt(leg.func ?? null, (leg.late ?? to).slice(0, 10))),
+    ),
+  );
 }
 
 // Employment dates govern the selected period, including an employee
 // through their final employment day. Undated legacy hires remain eligible.
-async function activeHeadcount(orgId: string, asOf: string, allowed: ReadonlySet<string> | null): Promise<number> {
+async function activeHeadcount(
+  orgId: string,
+  asOf: string,
+  allowed: ReadonlySet<string> | null,
+): Promise<number> {
   const r = await analyticsQuery<{ c: number }>(sql`
     select count(*)::int as c from employee_roles er
     join parties p on p.id = er.party_id and p.org_id = er.org_id
@@ -375,7 +439,10 @@ async function activeHeadcount(orgId: string, asOf: string, allowed: ReadonlySet
 }
 
 /** In-scope legal entities: the visible subsidiaries (or every one) plus the root. */
-async function scopeEntities(orgId: string, allowed: ReadonlySet<string> | null): Promise<{ id: string | null; currency: string; controlTaxAccount: string | null }[]> {
+async function scopeEntities(
+  orgId: string,
+  allowed: ReadonlySet<string> | null,
+): Promise<{ id: string | null; currency: string; controlTaxAccount: string | null }[]> {
   const r = await analyticsQuery<{ id: string; currency: string; tax: string | null }>(sql`
     select s.id, s.base_currency as currency, s.control_accounts ->> 'incomeTaxExpense' as tax
       from subsidiaries s
@@ -386,12 +453,22 @@ async function scopeEntities(orgId: string, allowed: ReadonlySet<string> | null)
     select base_currency as currency, settings -> 'controlAccounts' ->> 'incomeTaxExpense' as tax from orgs where id = ${orgId}
   `);
   const root = org.rows[0];
-  const subs = r.rows.map((s) => ({ id: s.id, currency: s.currency, controlTaxAccount: s.tax ?? root?.tax ?? null }));
-  return allowed === null && root ? [{ id: null, currency: root.currency, controlTaxAccount: root.tax }, ...subs] : subs;
+  const subs = r.rows.map((s) => ({
+    id: s.id,
+    currency: s.currency,
+    controlTaxAccount: s.tax ?? root?.tax ?? null,
+  }));
+  return allowed === null && root
+    ? [{ id: null, currency: root.currency, controlTaxAccount: root.tax }, ...subs]
+    : subs;
 }
 
 /** The same window one fiscal year earlier, on the organization's calendar. */
-export async function priorFiscalWindow(orgId: string, from: string, to: string): Promise<{ from: string; to: string }> {
+export async function priorFiscalWindow(
+  orgId: string,
+  from: string,
+  to: string,
+): Promise<{ from: string; to: string }> {
   const declared = await defaultFiscalCalendarPeriods(orgId);
   if (!declared || declared.cadence === "monthly") {
     return { from: addMonthsClamped(from, -12), to: addMonthsClamped(to, -12) };
@@ -413,9 +490,27 @@ async function fiscalYearDays(orgId: string, asOf: string): Promise<number> {
 }
 
 interface Statements {
-  pl: { items: StatementRow[]; revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; netIncome: ExactDecimal };
-  priorPl: { items: StatementRow[]; revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; netIncome: ExactDecimal };
-  bs: { assets: StatementRow[]; liabilities: StatementRow[]; totalAssets: ExactDecimal; totalLiabilities: ExactDecimal; totalEquity: ExactDecimal };
+  pl: {
+    items: StatementRow[];
+    revenue: ExactDecimal;
+    cogs: ExactDecimal;
+    grossProfit: ExactDecimal;
+    netIncome: ExactDecimal;
+  };
+  priorPl: {
+    items: StatementRow[];
+    revenue: ExactDecimal;
+    cogs: ExactDecimal;
+    grossProfit: ExactDecimal;
+    netIncome: ExactDecimal;
+  };
+  bs: {
+    assets: StatementRow[];
+    liabilities: StatementRow[];
+    totalAssets: ExactDecimal;
+    totalLiabilities: ExactDecimal;
+    totalEquity: ExactDecimal;
+  };
 }
 
 /**
@@ -427,8 +522,13 @@ interface Statements {
  * consolidated statements do.
  */
 async function presentationStatements(
-  orgId: string, from: string, to: string, prior: { from: string; to: string },
-  allowed: ReadonlySet<string> | null, entities: { currency: string }[], currency: string,
+  orgId: string,
+  from: string,
+  to: string,
+  prior: { from: string; to: string },
+  allowed: ReadonlySet<string> | null,
+  entities: { currency: string }[],
+  currency: string,
 ): Promise<Statements> {
   const dims = allowed === null ? undefined : { subsidiaryIds: [...allowed] };
   if (entities.every((e) => e.currency === currency)) {
@@ -462,10 +562,15 @@ export async function financialHealth(
   // Cards and detailed tabs share the same scorecard, including statement
   // readers beneath it. Scope and period label are explicit calculation
   // inputs; equally authorized requests cannot substitute another scope.
-  const scope = allowedSubsidiaryIds === null ? "all" : JSON.stringify([...allowedSubsidiaryIds].sort());
-  return cachedAnalyticsRead(read.authz, "metric:financial-health", { ...period, scope },
+  const scope =
+    allowedSubsidiaryIds === null ? "all" : JSON.stringify([...allowedSubsidiaryIds].sort());
+  return cachedAnalyticsRead(
+    read.authz,
+    "metric:financial-health",
+    { ...period, scope },
     () => calculateFinancialHealth(period, orgId, allowedSubsidiaryIds, notes),
-    { identity: read, admit: false });
+    { identity: read, admit: false },
+  );
 }
 
 async function calculateFinancialHealth(
@@ -490,32 +595,50 @@ async function calculateFinancialHealth(
 
   // Classifications the organization made. A group that exists with no
   // accounts is a decision ("we carry no debt"); a missing group is not.
-  const ratioInputs = Object.fromEntries(RATIO_INPUT_KEYS.map((key) => {
-    const group = groups.groups.find((g) => g.key === key);
-    if (!group) return [key, null];
-    const ids = [...groups.byAccount.entries()].filter(([, ref]) => ref.key === key).map(([id]) => id);
-    return [key, ids];
-  })) as Record<RatioInputKey, string[] | null>;
-  const taxAccounts = [...new Set(entities.map((e) => e.controlTaxAccount).filter((id): id is string => !!id))];
+  const ratioInputs = Object.fromEntries(
+    RATIO_INPUT_KEYS.map((key) => {
+      const group = groups.groups.find((g) => g.key === key);
+      if (!group) return [key, null];
+      const ids = [...groups.byAccount.entries()]
+        .filter(([, ref]) => ref.key === key)
+        .map(([id]) => id);
+      return [key, ids];
+    }),
+  ) as Record<RatioInputKey, string[] | null>;
+  const taxAccounts = [
+    ...new Set(entities.map((e) => e.controlTaxAccount).filter((id): id is string => !!id)),
+  ];
 
   const [st, da, headcount, taxExpense, interestExpense, debt] = await Promise.all([
     presentationStatements(resolvedOrgId, from, to, prior, allowed, entities, currency),
     depreciationAmortization(resolvedOrgId, from, to, allowed),
     activeHeadcount(resolvedOrgId, to, allowed),
-    taxAccounts.length > 0 ? accountActivity(resolvedOrgId, from, to, allowed, taxAccounts) : Promise.resolve(null),
-    ratioInputs.interest_expense ? accountActivity(resolvedOrgId, from, to, allowed, ratioInputs.interest_expense) : Promise.resolve(null),
-    ratioInputs.interest_bearing_debt ? creditBalance(resolvedOrgId, to, allowed, ratioInputs.interest_bearing_debt) : Promise.resolve(null),
+    taxAccounts.length > 0
+      ? accountActivity(resolvedOrgId, from, to, allowed, taxAccounts)
+      : Promise.resolve(null),
+    ratioInputs.interest_expense
+      ? accountActivity(resolvedOrgId, from, to, allowed, ratioInputs.interest_expense)
+      : Promise.resolve(null),
+    ratioInputs.interest_bearing_debt
+      ? creditBalance(resolvedOrgId, to, allowed, ratioInputs.interest_bearing_debt)
+      : Promise.resolve(null),
   ]);
   const { pl, priorPl, bs } = st;
 
   // Income tax booked to an operating expense account is still tax: it never
   // reduces operating income, so NOPAT taxes the profit once.
-  const taxInOpex = taxAccounts.length > 0
-    ? await accountActivityOfTypes(resolvedOrgId, from, to, allowed, taxAccounts, [...OPERATING_EXPENSE_TYPES])
-    : ZERO;
-  const priorTaxInOpex = taxAccounts.length > 0
-    ? await accountActivityOfTypes(resolvedOrgId, prior.from, prior.to, allowed, taxAccounts, [...OPERATING_EXPENSE_TYPES])
-    : ZERO;
+  const taxInOpex =
+    taxAccounts.length > 0
+      ? await accountActivityOfTypes(resolvedOrgId, from, to, allowed, taxAccounts, [
+          ...OPERATING_EXPENSE_TYPES,
+        ])
+      : ZERO;
+  const priorTaxInOpex =
+    taxAccounts.length > 0
+      ? await accountActivityOfTypes(resolvedOrgId, prior.from, prior.to, allowed, taxAccounts, [
+          ...OPERATING_EXPENSE_TYPES,
+        ])
+      : ZERO;
 
   const operatingRevenue = totalOf(pl.items, ["income"]);
   const otherIncome = totalOf(pl.items, ["income_other"]);
@@ -549,26 +672,37 @@ async function calculateFinancialHealth(
 
   // D&A of zero is a fact when the balance sheet carries no fixed assets; with
   // fixed assets on the books and no depreciation found, EBITDA is unknown.
-  const ebitda = cmp(da, ZERO) === 0 && cmp(fixedAssets, ZERO) !== 0 ? null : add(operatingIncome, da);
+  const ebitda =
+    cmp(da, ZERO) === 0 && cmp(fixedAssets, ZERO) !== 0 ? null : add(operatingIncome, da);
 
-  const revenueGrowth = isPositive(priorRevenue) ? decimalRatio(decimalSubtract(revenue, priorRevenue), priorRevenue) : null;
-  const opIncGrowth = cmp(priorOperatingIncome, ZERO) !== 0
-    ? decimalRatio(decimalSubtract(operatingIncome, priorOperatingIncome), priorOperatingIncome.startsWith("-") ? neg(priorOperatingIncome) : priorOperatingIncome)
+  const revenueGrowth = isPositive(priorRevenue)
+    ? decimalRatio(decimalSubtract(revenue, priorRevenue), priorRevenue)
     : null;
-  const operatingLeverage = revenueGrowth !== null && opIncGrowth !== null && cmp(revenueGrowth, ZERO) !== 0
-    ? decimalRatio(opIncGrowth, revenueGrowth)
-    : null;
+  const opIncGrowth =
+    cmp(priorOperatingIncome, ZERO) !== 0
+      ? decimalRatio(
+          decimalSubtract(operatingIncome, priorOperatingIncome),
+          priorOperatingIncome.startsWith("-") ? neg(priorOperatingIncome) : priorOperatingIncome,
+        )
+      : null;
+  const operatingLeverage =
+    revenueGrowth !== null && opIncGrowth !== null && cmp(revenueGrowth, ZERO) !== 0
+      ? decimalRatio(opIncGrowth, revenueGrowth)
+      : null;
   const operatingMargin = isPositive(revenue) ? decimalRatio(operatingIncome, revenue) : null;
-  const rule40 = revenueGrowth !== null && operatingMargin !== null
-    ? mulDecimal(add(revenueGrowth, operatingMargin), "100")
-    : null;
+  const rule40 =
+    revenueGrowth !== null && operatingMargin !== null
+      ? mulDecimal(add(revenueGrowth, operatingMargin), "100")
+      : null;
   const grossMargin = isPositive(revenue) ? decimalRatio(grossProfit, revenue) : null;
-  const breakevenRevenue = grossMargin !== null && isPositive(grossMargin) ? decimalRatio(opex, grossMargin) : null;
+  const breakevenRevenue =
+    grossMargin !== null && isPositive(grossMargin) ? decimalRatio(opex, grossMargin) : null;
 
   // Flow-over-balance ratios are annualized over the fiscal year containing
   // the period end, so a month and a year grade against the same target.
   const periodDays = inclusiveCalendarDays(from, to);
-  const annualize = (flow: ExactDecimal): ExactDecimal => mulRatio(flow, BigInt(yearDays), BigInt(periodDays));
+  const annualize = (flow: ExactDecimal): ExactDecimal =>
+    mulRatio(flow, BigInt(yearDays), BigInt(periodDays));
   const annualBasis = periodDays === yearDays ? null : notes.annualized(periodDays, yearDays);
 
   // NOPAT's tax rate: effective (booked) first, enacted statutory second.
@@ -582,14 +716,25 @@ async function calculateFinancialHealth(
     category: RatioCategory,
     format: RatioFormat,
     inverse: boolean,
-    computed: { value: ExactDecimal | null; calc: string; basis?: string | null; unavailable?: string | null },
+    computed: {
+      value: ExactDecimal | null;
+      calc: string;
+      basis?: string | null;
+      unavailable?: string | null;
+    },
   ): RatioResult => {
     const value = computed.unavailable ? null : computed.value;
     const unavailable = value === null ? (computed.unavailable ?? notes.unavailable) : null;
     const benchmark = T[id];
-    const ach = value !== null && benchmark !== null ? achievement(value, benchmark, inverse) : null;
+    const ach =
+      value !== null && benchmark !== null ? achievement(value, benchmark, inverse) : null;
     return {
-      id, category, value, format, benchmark, inverse,
+      id,
+      category,
+      value,
+      format,
+      benchmark,
+      inverse,
       calc: computed.calc,
       basis: computed.basis ?? null,
       unavailable,
@@ -597,97 +742,218 @@ async function calculateFinancialHealth(
       grade: ach === null ? null : gradeOf(ach, benchmarks),
     };
   };
-  const ofRevenue = (n: ExactDecimal) => (isPositive(revenue)
-    ? { value: decimalRatio(n, revenue), calc: `${M(n)} / ${M(revenue)}` }
-    : { value: null, calc: "", unavailable: notes.noRevenue });
+  const ofRevenue = (n: ExactDecimal) =>
+    isPositive(revenue)
+      ? { value: decimalRatio(n, revenue), calc: `${M(n)} / ${M(revenue)}` }
+      : { value: null, calc: "", unavailable: notes.noRevenue };
   const needsBalanceSheet = { value: null, calc: "", unavailable: notes.noBalanceSheet };
-  const overEquity = (n: ExactDecimal, calcN: string) => (!hasBalanceSheet
-    ? needsBalanceSheet
-    : !isPositive(totalEquity)
-      ? { value: null, calc: "", unavailable: notes.equityNotPositive }
-      : { value: decimalRatio(n, totalEquity), calc: `${calcN} / ${M(totalEquity)}` });
+  const overEquity = (n: ExactDecimal, calcN: string) =>
+    !hasBalanceSheet
+      ? needsBalanceSheet
+      : !isPositive(totalEquity)
+        ? { value: null, calc: "", unavailable: notes.equityNotPositive }
+        : { value: decimalRatio(n, totalEquity), calc: `${calcN} / ${M(totalEquity)}` };
 
   const profitability: RatioResult[] = [
     mk("gross_margin", "profitability", "pct", false, ofRevenue(grossProfit)),
     mk("operating_margin", "profitability", "pct", false, ofRevenue(operatingIncome)),
-    mk("ebitda_margin", "profitability", "pct", false, ebitda === null ? { value: null, calc: "", unavailable: notes.noDA } : ofRevenue(ebitda)),
+    mk(
+      "ebitda_margin",
+      "profitability",
+      "pct",
+      false,
+      ebitda === null ? { value: null, calc: "", unavailable: notes.noDA } : ofRevenue(ebitda),
+    ),
     mk("net_margin", "profitability", "pct", false, ofRevenue(netIncome)),
-    mk("roa", "profitability", "pct", false, !hasBalanceSheet || !isPositive(totalAssets)
-      ? needsBalanceSheet
-      : { value: decimalRatio(annualize(netIncome), totalAssets), calc: `${M(annualize(netIncome))} / ${M(totalAssets)}`, basis: annualBasis }),
-    mk("roe", "profitability", "pct", false, { ...overEquity(annualize(netIncome), M(annualize(netIncome))), basis: annualBasis }),
-    mk("roic", "profitability", "pct", false, !hasBalanceSheet
-      ? needsBalanceSheet
-      : investedCapital === null
-        ? { value: null, calc: "", unavailable: notes.debtNotClassified }
-        : !isPositive(investedCapital)
-          ? { value: null, calc: "", unavailable: notes.investedCapitalNotPositive }
-          : !taxRate.rate
-            ? { value: null, calc: "", unavailable: taxRate.reason }
-            : (() => {
-                const nopat = mulDecimal(annualize(operatingIncome), decimalSubtract("1", taxRate.rate));
-                return {
-                  value: decimalRatio(nopat, investedCapital),
-                  calc: `${M(nopat)} / ${M(investedCapital)}`,
-                  basis: [taxRate.basis, annualBasis].filter(Boolean).join(" · "),
-                };
-              })()),
-    mk("roce", "profitability", "pct", false, !hasBalanceSheet || !isPositive(capitalEmployed)
-      ? needsBalanceSheet
-      : { value: decimalRatio(annualize(operatingIncome), capitalEmployed), calc: `${M(annualize(operatingIncome))} / ${M(capitalEmployed)}`, basis: annualBasis }),
+    mk(
+      "roa",
+      "profitability",
+      "pct",
+      false,
+      !hasBalanceSheet || !isPositive(totalAssets)
+        ? needsBalanceSheet
+        : {
+            value: decimalRatio(annualize(netIncome), totalAssets),
+            calc: `${M(annualize(netIncome))} / ${M(totalAssets)}`,
+            basis: annualBasis,
+          },
+    ),
+    mk("roe", "profitability", "pct", false, {
+      ...overEquity(annualize(netIncome), M(annualize(netIncome))),
+      basis: annualBasis,
+    }),
+    mk(
+      "roic",
+      "profitability",
+      "pct",
+      false,
+      !hasBalanceSheet
+        ? needsBalanceSheet
+        : investedCapital === null
+          ? { value: null, calc: "", unavailable: notes.debtNotClassified }
+          : !isPositive(investedCapital)
+            ? { value: null, calc: "", unavailable: notes.investedCapitalNotPositive }
+            : !taxRate.rate
+              ? { value: null, calc: "", unavailable: taxRate.reason }
+              : (() => {
+                  const nopat = mulDecimal(
+                    annualize(operatingIncome),
+                    decimalSubtract("1", taxRate.rate),
+                  );
+                  return {
+                    value: decimalRatio(nopat, investedCapital),
+                    calc: `${M(nopat)} / ${M(investedCapital)}`,
+                    basis: [taxRate.basis, annualBasis].filter(Boolean).join(" · "),
+                  };
+                })(),
+    ),
+    mk(
+      "roce",
+      "profitability",
+      "pct",
+      false,
+      !hasBalanceSheet || !isPositive(capitalEmployed)
+        ? needsBalanceSheet
+        : {
+            value: decimalRatio(annualize(operatingIncome), capitalEmployed),
+            calc: `${M(annualize(operatingIncome))} / ${M(capitalEmployed)}`,
+            basis: annualBasis,
+          },
+    ),
   ];
 
   const liquidity: RatioResult[] = [
-    mk("current_ratio", "liquidity", "times", false, !hasBalanceSheet
-      ? needsBalanceSheet
-      : !isPositive(currentLiabilities)
-        ? { value: null, calc: "", unavailable: notes.noCurrentLiabilities }
-        : { value: decimalRatio(currentAssets, currentLiabilities), calc: `${M(currentAssets)} / ${M(currentLiabilities)}` }),
-    mk("quick_ratio", "liquidity", "times", false, !hasBalanceSheet
-      ? needsBalanceSheet
-      : !isPositive(currentLiabilities)
-        ? { value: null, calc: "", unavailable: notes.noCurrentLiabilities }
-        : { value: decimalRatio(quickAssets, currentLiabilities), calc: `${M(quickAssets)} / ${M(currentLiabilities)}` }),
-    mk("working_capital", "liquidity", "money", false, !hasBalanceSheet
-      ? needsBalanceSheet
-      : { value: workingCapital, calc: `${M(currentAssets)} − ${M(currentLiabilities)}` }),
+    mk(
+      "current_ratio",
+      "liquidity",
+      "times",
+      false,
+      !hasBalanceSheet
+        ? needsBalanceSheet
+        : !isPositive(currentLiabilities)
+          ? { value: null, calc: "", unavailable: notes.noCurrentLiabilities }
+          : {
+              value: decimalRatio(currentAssets, currentLiabilities),
+              calc: `${M(currentAssets)} / ${M(currentLiabilities)}`,
+            },
+    ),
+    mk(
+      "quick_ratio",
+      "liquidity",
+      "times",
+      false,
+      !hasBalanceSheet
+        ? needsBalanceSheet
+        : !isPositive(currentLiabilities)
+          ? { value: null, calc: "", unavailable: notes.noCurrentLiabilities }
+          : {
+              value: decimalRatio(quickAssets, currentLiabilities),
+              calc: `${M(quickAssets)} / ${M(currentLiabilities)}`,
+            },
+    ),
+    mk(
+      "working_capital",
+      "liquidity",
+      "money",
+      false,
+      !hasBalanceSheet
+        ? needsBalanceSheet
+        : { value: workingCapital, calc: `${M(currentAssets)} − ${M(currentLiabilities)}` },
+    ),
   ];
 
   const solvency: RatioResult[] = [
-    mk("debt_to_equity", "solvency", "times", true, debt === null
-      ? { value: null, calc: "", unavailable: notes.debtNotClassified }
-      : overEquity(debt, M(debt))),
-    mk("liabilities_to_equity", "solvency", "times", true, overEquity(totalLiabilities, M(totalLiabilities))),
-    mk("interest_coverage", "solvency", "times", false, interestExpense === null
-      ? { value: null, calc: "", unavailable: notes.interestNotClassified }
-      : !isPositive(interestExpense)
-        ? { value: null, calc: "", unavailable: notes.noInterestExpense }
-        : { value: decimalRatio(operatingIncome, interestExpense), calc: `${M(operatingIncome)} / ${M(interestExpense)}` }),
+    mk(
+      "debt_to_equity",
+      "solvency",
+      "times",
+      true,
+      debt === null
+        ? { value: null, calc: "", unavailable: notes.debtNotClassified }
+        : overEquity(debt, M(debt)),
+    ),
+    mk(
+      "liabilities_to_equity",
+      "solvency",
+      "times",
+      true,
+      overEquity(totalLiabilities, M(totalLiabilities)),
+    ),
+    mk(
+      "interest_coverage",
+      "solvency",
+      "times",
+      false,
+      interestExpense === null
+        ? { value: null, calc: "", unavailable: notes.interestNotClassified }
+        : !isPositive(interestExpense)
+          ? { value: null, calc: "", unavailable: notes.noInterestExpense }
+          : {
+              value: decimalRatio(operatingIncome, interestExpense),
+              calc: `${M(operatingIncome)} / ${M(interestExpense)}`,
+            },
+    ),
   ];
 
-  const perHead = (n: ExactDecimal) => (headcount > 0
-    ? { value: decimalRatio(annualize(n), String(headcount)), calc: notes.perEmployees(M(annualize(n)), headcount), basis: annualBasis }
-    : { value: null, calc: "", unavailable: notes.noHeadcount });
+  const perHead = (n: ExactDecimal) =>
+    headcount > 0
+      ? {
+          value: decimalRatio(annualize(n), String(headcount)),
+          calc: notes.perEmployees(M(annualize(n)), headcount),
+          basis: annualBasis,
+        }
+      : { value: null, calc: "", unavailable: notes.noHeadcount };
   const efficiency: RatioResult[] = [
     mk("rev_per_employee", "efficiency", "money", false, perHead(revenue)),
     mk("gp_per_employee", "efficiency", "money", false, perHead(grossProfit)),
-    mk("asset_turnover", "efficiency", "times", false, !hasBalanceSheet || !isPositive(totalAssets)
-      ? needsBalanceSheet
-      : { value: decimalRatio(annualize(revenue), totalAssets), calc: `${M(annualize(revenue))} / ${M(totalAssets)}`, basis: annualBasis }),
+    mk(
+      "asset_turnover",
+      "efficiency",
+      "times",
+      false,
+      !hasBalanceSheet || !isPositive(totalAssets)
+        ? needsBalanceSheet
+        : {
+            value: decimalRatio(annualize(revenue), totalAssets),
+            calc: `${M(annualize(revenue))} / ${M(totalAssets)}`,
+            basis: annualBasis,
+          },
+    ),
   ];
 
   const operating: RatioResult[] = [
     mk("cogs_ratio", "operating", "pct", true, ofRevenue(cogs)),
     mk("opex_ratio", "operating", "pct", true, ofRevenue(opex)),
-    mk("operating_leverage", "operating", "times", false, operatingLeverage === null
-      ? { value: null, calc: "", unavailable: notes.noPriorComparison }
-      : { value: operatingLeverage, calc: `${pctText(opIncGrowth!)} / ${pctText(revenueGrowth!)}` }),
-    mk("rule_of_40", "operating", "points", false, rule40 === null
-      ? { value: null, calc: "", unavailable: notes.noPriorComparison }
-      : { value: rule40, calc: `${pctText(revenueGrowth!)} + ${pctText(operatingMargin!)}` }),
+    mk(
+      "operating_leverage",
+      "operating",
+      "times",
+      false,
+      operatingLeverage === null
+        ? { value: null, calc: "", unavailable: notes.noPriorComparison }
+        : {
+            value: operatingLeverage,
+            calc: `${pctText(opIncGrowth!)} / ${pctText(revenueGrowth!)}`,
+          },
+    ),
+    mk(
+      "rule_of_40",
+      "operating",
+      "points",
+      false,
+      rule40 === null
+        ? { value: null, calc: "", unavailable: notes.noPriorComparison }
+        : { value: rule40, calc: `${pctText(revenueGrowth!)} + ${pctText(operatingMargin!)}` },
+    ),
   ];
 
-  const ratios: Record<RatioCategory, RatioResult[]> = { profitability, liquidity, solvency, efficiency, operating };
+  const ratios: Record<RatioCategory, RatioResult[]> = {
+    profitability,
+    liquidity,
+    solvency,
+    efficiency,
+    operating,
+  };
 
   // A category scores only from ratios it could grade; the overall score
   // averages only categories that have a score — a genuine zero counts.
@@ -704,18 +970,46 @@ async function calculateFinancialHealth(
     currency,
     hasBalanceSheet,
     figures: {
-      revenue, operatingRevenue, otherIncome, cogs, grossProfit, opex, operatingIncome, otherExpense,
-      incomeTaxExpense: taxExpense, netIncome, preTaxIncome, depreciationAmortization: da, ebitda,
-      totalAssets, currentAssets, quickAssets, totalLiabilities, currentLiabilities, totalEquity,
-      workingCapital, capitalEmployed, interestBearingDebt: debt, interestExpense, investedCapital,
-      priorRevenue, priorOperatingIncome, revenueGrowth, operatingLeverage, rule40, breakevenRevenue,
+      revenue,
+      operatingRevenue,
+      otherIncome,
+      cogs,
+      grossProfit,
+      opex,
+      operatingIncome,
+      otherExpense,
+      incomeTaxExpense: taxExpense,
+      netIncome,
+      preTaxIncome,
+      depreciationAmortization: da,
+      ebitda,
+      totalAssets,
+      currentAssets,
+      quickAssets,
+      totalLiabilities,
+      currentLiabilities,
+      totalEquity,
+      workingCapital,
+      capitalEmployed,
+      interestBearingDebt: debt,
+      interestExpense,
+      investedCapital,
+      priorRevenue,
+      priorOperatingIncome,
+      revenueGrowth,
+      operatingLeverage,
+      rule40,
+      breakevenRevenue,
       headcount,
     },
     priorFigures: {
-      revenue: priorPl.revenue, cogs: priorPl.cogs, grossProfit: priorPl.grossProfit,
+      revenue: priorPl.revenue,
+      cogs: priorPl.cogs,
+      grossProfit: priorPl.grossProfit,
       opex: decimalSubtract(totalOf(priorPl.items, [...OPERATING_EXPENSE_TYPES]), priorTaxInOpex),
       operatingIncome: priorOperatingIncome,
-      otherExpense: totalOf(priorPl.items, ['expense_other']), netIncome: priorPl.netIncome,
+      otherExpense: totalOf(priorPl.items, ["expense_other"]),
+      netIncome: priorPl.netIncome,
     },
     ratios,
     categoryScores,
@@ -738,12 +1032,17 @@ async function calculateFinancialHealth(
   ): Promise<{ rate: ExactDecimal | null; basis: string | null; reason: string }> {
     if (booked !== null && isPositive(pretax) && cmp(booked, ZERO) > 0) {
       const effective = decimalRatio(booked, pretax)!;
-      return { rate: effective, basis: notes.effectiveTaxRate(notes.percent(effective)), reason: "" };
+      return {
+        rate: effective,
+        basis: notes.effectiveTaxRate(notes.percent(effective)),
+        reason: "",
+      };
     }
     // No booked tax for the period: every entity in scope must be taxed at the
     // same enacted rate, or there is no single rate to apply.
     const rates = await Promise.all(scope.map((e) => enactedIncomeTaxRate(org, e.id, asOf)));
-    if (rates.length === 0 || rates.some((r) => r === null)) return { rate: null, basis: null, reason: notes.noTaxRate };
+    if (rates.length === 0 || rates.some((r) => r === null))
+      return { rate: null, basis: null, reason: notes.noTaxRate };
     const distinct = new Set(rates.map((r) => r!.ratePercent));
     if (distinct.size > 1) return { rate: null, basis: null, reason: notes.mixedTaxRates };
     const statutory = decimalRatio(rates[0]!.ratePercent, "100")!;
@@ -753,12 +1052,23 @@ async function calculateFinancialHealth(
 
 /** Translated period activity on the given accounts, restricted to accounts of the given types. */
 async function accountActivityOfTypes(
-  orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null, accountIds: string[], types: string[],
+  orgId: string,
+  from: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+  accountIds: string[],
+  types: string[],
 ): Promise<ExactDecimal> {
   const r = await analyticsQuery<{ id: string }>(sql`
     select id from accounts
      where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])
        and type = any(${`{${types.join(",")}}`}::text[])
   `);
-  return accountActivity(orgId, from, to, allowed, r.rows.map((row) => row.id));
+  return accountActivity(
+    orgId,
+    from,
+    to,
+    allowed,
+    r.rows.map((row) => row.id),
+  );
 }

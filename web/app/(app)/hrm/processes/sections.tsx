@@ -1,6 +1,6 @@
-import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
-import { ProcessChecklistBody } from '../processes-client'
-import type { ProcessesPageData } from '../../../../lib/hrm/processes-page'
+import { DirtyUrlDrawer } from "../../../../components/dirty-url-drawer";
+import { ProcessChecklistBody } from "../processes-client";
+import type { ProcessesPageData } from "../../../../lib/hrm/processes-page";
 
 /**
  * Process checklist drawer section (server component): the URL drawer shell
@@ -20,12 +20,8 @@ import type { ProcessesPageData } from '../../../../lib/hrm/processes-page'
  * the spec's `when` gate already omits it, so this is the second half of
  * the same guard.
  */
-export function ProcessDrawer({
-  drawer,
-}: {
-  drawer: ProcessesPageData['drawer']
-}) {
-  if (!drawer) return null
+export function ProcessDrawer({ drawer }: { drawer: ProcessesPageData["drawer"] }) {
+  if (!drawer) return null;
   return (
     <DirtyUrlDrawer
       open
@@ -35,7 +31,10 @@ export function ProcessDrawer({
       description={drawer.description ?? undefined}
       headerActions={
         drawer.draft ? (
-          <a href={drawer.draft.href} className="text-sm font-medium text-teal-700 dark:text-teal-300">
+          <a
+            href={drawer.draft.href}
+            className="text-sm font-medium text-teal-700 dark:text-teal-300"
+          >
             {drawer.draft.label}
           </a>
         ) : undefined
@@ -47,5 +46,5 @@ export function ProcessDrawer({
         <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>
       ) : null}
     </DirtyUrlDrawer>
-  )
+  );
 }

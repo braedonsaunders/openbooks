@@ -65,12 +65,14 @@ export async function getRecoveryMetrics(
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
     `;
-    const totals = (await db.execute<{
-      attempts: number;
-      invoices: number;
-      recovered: number;
-      amount: string | null;
-    }>(sql`
+    const totals = (
+      await db.execute<{
+        attempts: number;
+        invoices: number;
+        recovered: number;
+        amount: string | null;
+      }>(
+        sql`
       with scoped_attempts as (${scopedAttempts}),
       failed as (
         select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position
@@ -91,7 +93,10 @@ export async function getRecoveryMetrics(
              (select count(*)::integer from failed) as invoices,
              (select count(*)::integer from recovered) as recovered,
              (select coalesce(sum(amount), 0)::text from recovered) as amount
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!totals) throw new AutopayError("recovery metrics could not be read; try again");
     const byClass = await db.execute<{
       declineClass: string;
@@ -99,7 +104,8 @@ export async function getRecoveryMetrics(
       invoices: number;
       recovered: number;
       amount: string | null;
-    }>(sql`
+    }>(
+      sql`
       with scoped_attempts as (${scopedAttempts}),
       failed as (
         select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position,
@@ -125,14 +131,17 @@ export async function getRecoveryMetrics(
         left join recovered r on r.invoice_id = f.invoice_id
        group by f.decline_kind
        order by f.decline_kind
-    `, "objects");
+    `,
+      "objects",
+    );
     const byProvider = await db.execute<{
       provider: string;
       failedAttempts: number;
       invoices: number;
       recovered: number;
       amount: string | null;
-    }>(sql`
+    }>(
+      sql`
       with scoped_attempts as (${scopedAttempts}),
       failed as (
         select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position, a.provider
@@ -157,8 +166,11 @@ export async function getRecoveryMetrics(
         left join recovered r on r.invoice_id = f.invoice_id
        group by f.provider
        order by f.provider
-    `, "objects");
-    const byCurrency = await db.execute<{ currency: string; amount: string | null }>(sql`
+    `,
+      "objects",
+    );
+    const byCurrency = await db.execute<{ currency: string; amount: string | null }>(
+      sql`
       with scoped_attempts as (${scopedAttempts}),
       failed as (
         select distinct on (a.invoice_id) a.invoice_id, a.retry_position as failed_position
@@ -178,8 +190,13 @@ export async function getRecoveryMetrics(
         from recovered r
        group by r.currency
        order by r.currency
-    `, "objects");
-    const churn = (await db.execute<{ n: number }>(sql`
+    `,
+      "objects",
+    );
+    const churn =
+      (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::integer as n from audit_log al
         join subscriptions s on s.org_id = al.org_id and s.id = al.row_id
         join parties p on p.org_id = s.org_id and p.id = s.customer_id
@@ -187,19 +204,31 @@ export async function getRecoveryMetrics(
          and al.changes ->> 'event' = 'autopay_reactivated'
          and al.at >= ${window.from}::timestamptz and al.at < ${window.to}::timestamptz
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-    `, "objects"))[0]?.n ?? 0;
-    const awaiting = (await db.execute<{ n: number }>(sql`
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
+    const awaiting =
+      (
+        await db.execute<{ n: number }>(
+          sql`
       with scoped_attempts as (${scopedAttempts})
       select count(*)::integer as n from scoped_attempts
        where status = 'failed'
          and decline_kind = 'needs_authentication' and next_retry_on is null
-    `, "objects"))[0]?.n ?? 0;
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
     return {
       attempts: totals.attempts,
       invoicesWithFailures: totals.invoices,
       recoveredInvoices: totals.recovered,
       recoveredAmount: totals.amount ?? "0",
-      recoveredByCurrency: byCurrency.map((row) => ({ currency: row.currency, amount: row.amount ?? "0" })),
+      recoveredByCurrency: byCurrency.map((row) => ({
+        currency: row.currency,
+        amount: row.amount ?? "0",
+      })),
       recoveryRate: recoveryRate(totals.recovered, totals.invoices),
       byDeclineClass: byClass.map((row) => ({
         declineClass: row.declineClass,
@@ -234,7 +263,10 @@ function attemptReference(attemptId: string): string {
  * (the post committed but the attempt update never did) is adopted instead
  * of minting a second receipt for the same collection.
  */
-export async function postCollectionReceipt(orgId: string, attemptId: string): Promise<{ receiptId: string; status: "posted" | "pending_approval" }> {
+export async function postCollectionReceipt(
+  orgId: string,
+  attemptId: string,
+): Promise<{ receiptId: string; status: "posted" | "pending_approval" }> {
   const rows = await db.execute<{
     attempt_id: string;
     invoice_id: string;
@@ -247,7 +279,8 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
     open_balance: string;
     receipt_id: string | null;
     enrollment_id: string;
-  }>(sql`
+  }>(
+    sql`
     select a.id as "attempt_id", d.id as "invoice_id", d.party_id,
            d.subsidiary_id, d.currency, a.amount, c.default_bank_account_id as "bank_account_id",
            d.document_number, d.open_balance, a.receipt_document_id as "receipt_id", a.enrollment_id
@@ -257,16 +290,26 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
       join psp_provider_configs c on c.org_id = a.org_id and c.provider = a.provider
      where a.id = ${attemptId} and a.org_id = ${orgId}
      for update of a
-  `, "objects");
+  `,
+    "objects",
+  );
   const a = rows[0];
   if (!a) throw new AutopayError("collection attempt not found");
   if (a.receipt_id) {
-    const existing = (await db.execute<{ status: string }>(sql`
+    const existing = (
+      await db.execute<{ status: string }>(
+        sql`
       select status from documents where id = ${a.receipt_id} and org_id = ${orgId}
         and kind='customer_payment' and party_id=${a.party_id} and subsidiary_id=${a.subsidiary_id}
         and currency=${a.currency} and reference_number=${attemptReference(attemptId)}
-    `, "objects"))[0];
-    if (!existing) throw new AutopayError("The collection receipt does not match its invoice, legal entity, currency and collection reference. Review the native collection before retrying.");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!existing)
+      throw new AutopayError(
+        "The collection receipt does not match its invoice, legal entity, currency and collection reference. Review the native collection before retrying.",
+      );
     if (existing?.status === "posted") {
       await db.execute(sql`
         update collection_attempts set status = 'succeeded', updated_at = now()
@@ -276,12 +319,17 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
     }
   } else {
     // Adopt a receipt the interrupted tick posted but never linked.
-    const adopted = (await db.execute<{ id: string }>(sql`
+    const adopted = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from documents
        where org_id = ${orgId} and kind = 'customer_payment'
          and reference_number = ${attemptReference(attemptId)} and status = 'posted'
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (adopted) {
       await db.execute(sql`
         update collection_attempts
@@ -292,63 +340,99 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
     }
   }
   if (!a.bank_account_id) {
-    throw new AutopayError("the provider has no default bank account; set one in provider settings so autopay receipts can post");
+    throw new AutopayError(
+      "the provider has no default bank account; set one in provider settings so autopay receipts can post",
+    );
   }
-  const bank = (await db.execute<{ id: string }>(sql`
+  const bank = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from accounts
      where org_id = ${orgId} and id = ${a.bank_account_id}
        and type = 'asset_bank' and is_active and not is_summary
      limit 1
-  `, "objects"))[0];
-  if (!bank) throw new AutopayError("the provider bank account is not an active bank account; fix it in provider settings first");
+  `,
+      "objects",
+    )
+  )[0];
+  if (!bank)
+    throw new AutopayError(
+      "the provider bank account is not an active bank account; fix it in provider settings first",
+    );
   // Autopay collects the invoice amount only — off-session surcharging is
   // restricted, so unlike hosted checkout there is no fee leg.
   const collected = a.amount;
   const openItems = await openItemsForParty(a.party_id, "ar", orgId);
   const item = openItems.find((i) => i.documentId === a.invoice_id);
-  const invoicePortion = item ? (cmp(collected, a.open_balance) < 0 ? collected : a.open_balance) : "0";
+  const invoicePortion = item
+    ? cmp(collected, a.open_balance) < 0
+      ? collected
+      : a.open_balance
+    : "0";
   if (cmp(invoicePortion, "0") <= 0) {
-    throw new AutopayError(`invoice ${a.document_number} no longer owes anything; the collection needs operator review before a receipt can post`);
+    throw new AutopayError(
+      `invoice ${a.document_number} no longer owes anything; the collection needs operator review before a receipt can post`,
+    );
   }
   const onAccountAmount = fromUnits(toUnits(collected) - toUnits(invoicePortion));
   const allocations = [sameCurrencyAllocation(item!.lineId, invoicePortion)];
-  const { actorId, allowedSubsidiaryIds } = await lockAutopayEnrollmentAuthority(orgId, a.enrollment_id, a.subsidiary_id);
-  const payment = a.receipt_id ? { id: a.receipt_id } : await createPaymentDocument({
+  const { actorId, allowedSubsidiaryIds } = await lockAutopayEnrollmentAuthority(
     orgId,
-    kind: "customer_payment",
-    createdBy: actorId,
-    allowedSubsidiaryIds,
-    partyId: a.party_id,
-    bankAccountId: a.bank_account_id,
-    documentDate: await businessToday(orgId),
-    memo: `Autopay — ${a.document_number}`,
-    subsidiaryId: a.subsidiary_id,
-    currency: a.currency,
-  });
+    a.enrollment_id,
+    a.subsidiary_id,
+  );
+  const payment = a.receipt_id
+    ? { id: a.receipt_id }
+    : await createPaymentDocument({
+        orgId,
+        kind: "customer_payment",
+        createdBy: actorId,
+        allowedSubsidiaryIds,
+        partyId: a.party_id,
+        bankAccountId: a.bank_account_id,
+        documentDate: await businessToday(orgId),
+        memo: `Autopay — ${a.document_number}`,
+        subsidiaryId: a.subsidiary_id,
+        currency: a.currency,
+      });
   await db.execute(sql`
     update collection_attempts set receipt_document_id = ${payment.id}, updated_at = now()
      where id = ${attemptId} and org_id = ${orgId}
   `);
-  const current = (await db.execute<{status:string}>(sql`select status from documents where org_id=${orgId} and id=${payment.id}`, "objects"))[0];
-  if (!current) throw new AutopayError("The collection's retained receipt is unavailable. Review that collection before retrying.");
-  if (current.status === "pending_approval") return { receiptId: payment.id, status: "pending_approval" };
-  if (current.status !== "draft" && current.status !== "approved") throw new AutopayError("The retained collection receipt cannot be posted. Review its lifecycle before retrying collection.");
-  if (current.status === "draft") await updateDraftPayment(
-    payment.id,
-    {
-      allocations,
-      referenceNumber: attemptReference(attemptId),
-      feeAmount: "0",
-      feeIncomeAccountId: null,
-      onAccountAmount,
-    },
-    actorId,
-    orgId,
-    { allowedSubsidiaryIds },
-  );
+  const current = (
+    await db.execute<{ status: string }>(
+      sql`select status from documents where org_id=${orgId} and id=${payment.id}`,
+      "objects",
+    )
+  )[0];
+  if (!current)
+    throw new AutopayError(
+      "The collection's retained receipt is unavailable. Review that collection before retrying.",
+    );
+  if (current.status === "pending_approval")
+    return { receiptId: payment.id, status: "pending_approval" };
+  if (current.status !== "draft" && current.status !== "approved")
+    throw new AutopayError(
+      "The retained collection receipt cannot be posted. Review its lifecycle before retrying collection.",
+    );
+  if (current.status === "draft")
+    await updateDraftPayment(
+      payment.id,
+      {
+        allocations,
+        referenceNumber: attemptReference(attemptId),
+        feeAmount: "0",
+        feeIncomeAccountId: null,
+        onAccountAmount,
+      },
+      actorId,
+      orgId,
+      { allowedSubsidiaryIds },
+    );
   if (current.status === "draft") {
     const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, actorId);
-    if (submission.flowError) throw new AutopayError(`receipt approval could not be routed: ${submission.flowError}`);
+    if (submission.flowError)
+      throw new AutopayError(`receipt approval could not be routed: ${submission.flowError}`);
     if (submission.gated) {
       await db.execute(sql`
       update collection_attempts set status = 'processing', updated_at = now()
@@ -358,12 +442,16 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
     }
   }
   await postPaymentWithApplications(payment.id, undefined, actorId);
-  const closed = (await db.execute<{ id: string }>(sql`
+  const closed = await db.execute<{ id: string }>(
+    sql`
     update collection_attempts
        set status = 'succeeded', updated_at = now()
      where id = ${attemptId} and org_id = ${orgId} and status <> 'succeeded'
      returning id
-  `, "objects"));
-  if (!closed[0]) throw new AutopayError("collection attempt changed underfoot; refusing to close over it");
+  `,
+    "objects",
+  );
+  if (!closed[0])
+    throw new AutopayError("collection attempt changed underfoot; refusing to close over it");
   return { receiptId: payment.id, status: "posted" };
 }

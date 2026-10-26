@@ -1,9 +1,9 @@
 import { defineRoute } from "@/lib/api/route";
-import { NextResponse } from 'next/server'
-import { worklistGates } from '@openbooks/engine/flows/module'
-import { requireFlowsSession } from '../_lib'
+import { NextResponse } from "next/server";
+import { worklistGates } from "@openbooks/engine/flows/module";
+import { requireFlowsSession } from "../_lib";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * My pending flow approval gates: rows assigned to me directly or to a role I
@@ -12,8 +12,8 @@ export const runtime = 'nodejs'
  * list what is waiting on them.
  */
 async function legacyGET() {
-  const authz = await requireFlowsSession()
-  if (authz instanceof NextResponse) return authz
+  const authz = await requireFlowsSession();
+  if (authz instanceof NextResponse) return authz;
   // A gate assignment is not a grant to every legal entity: the worklist
   // carries the same subsidiary boundary the decide path enforces, so
   // financial details from other entities are never listed.
@@ -22,8 +22,8 @@ async function legacyGET() {
     authz.user.id,
     undefined,
     authz.allowedSubsidiaryIds,
-  )
-  return NextResponse.json({ gates })
+  );
+  return NextResponse.json({ gates });
 }
 
 export const GET = defineRoute({

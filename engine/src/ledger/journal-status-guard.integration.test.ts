@@ -3,11 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -44,12 +40,17 @@ async function postBalanced(org: ScratchOrg, memo: string): Promise<string> {
     (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
     values (${org.orgId}, ${entry}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, '250.0000', 'CAD', '250.0000', '1', ${num}),
            (${org.orgId}, ${entry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-250.0000', 'CAD', '-250.0000', '1', ${num})`);
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`);
+  await db.execute(
+    sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`,
+  );
   return entry;
 }
 
 async function statusOf(entry: string): Promise<string> {
-  const r = await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${entry}`, "objects");
+  const r = await db.execute<{ status: string }>(
+    sql`select status from journal_entries where id = ${entry}`,
+    "objects",
+  );
   return r[0]!.status;
 }
 
@@ -94,14 +95,19 @@ async function postMirrorReversal(
   await db.execute(sql`insert into journal_entries
     (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id)
     values (${reversal}, ${org.orgId}, ${opts.bookId ?? org.bookId}, ${org.subsidiaryId}, ${num}, ${org.date}, ${org.periodId}, ${num}, 'draft', 'manual', ${original})`);
-  const src = await db.execute<MirrorLine>(sql`
+  const src = await db.execute<MirrorLine>(
+    sql`
     select line_number, account_id, subsidiary_id, amount::text as amount, currency,
            txn_amount::text as txn_amount, fx_rate::text as fx_rate, party_id, department_id,
            project_id, location_id, class_id, equipment_unit_id, payment_card_id, tax_code_id,
            extra_dims::text as extra_dims, quantity::text as quantity
-      from journal_lines where entry_id = ${original} and org_id = ${org.orgId} order by line_number`, "objects");
+      from journal_lines where entry_id = ${original} and org_id = ${org.orgId} order by line_number`,
+    "objects",
+  );
   const legs = src.map(
-    (row) => sql`(${org.orgId}, ${reversal}, ${row.line_number}, ${row.account_id}, ${row.subsidiary_id},
+    (
+      row,
+    ) => sql`(${org.orgId}, ${reversal}, ${row.line_number}, ${row.account_id}, ${row.subsidiary_id},
       ${opts.negate === false ? row.amount : negDecimal(row.amount)}, ${row.currency},
       ${opts.negate === false ? row.txn_amount : negDecimal(row.txn_amount)}, ${row.fx_rate},
       '', ${row.party_id}, ${row.department_id}, ${row.project_id}, ${row.location_id},
@@ -115,7 +121,9 @@ async function postMirrorReversal(
        payment_card_id, tax_code_id, extra_dims, quantity, custom)
     values ${sql.join(legs, sql`, `)}`);
   if (opts.post !== false) {
-    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${reversal}`);
+    await db.execute(
+      sql`update journal_entries set status = 'posted', posted_at = now() where id = ${reversal}`,
+    );
   }
   return reversal;
 }
@@ -138,7 +146,8 @@ test("posted entry cannot regress to draft", { skip: !DB }, async () =>
       "posted→draft must raise: posted history is immutable except through controlled reversal",
     );
     assert.equal(await statusOf(entry), "posted");
-  }));
+  }),
+);
 
 test("controlled reversal posted→reversed stays allowed", { skip: !DB }, async () =>
   fixture(async (org) => {
@@ -146,7 +155,8 @@ test("controlled reversal posted→reversed stays allowed", { skip: !DB }, async
     await postMirrorReversal(org, entry, "B");
     await db.execute(sql`update journal_entries set status = 'reversed' where id = ${entry}`);
     assert.equal(await statusOf(entry), "reversed");
-  }));
+  }),
+);
 
 /**
  * Finding 5.2: the header guard let posted→reversed through with no
@@ -159,11 +169,13 @@ test("posted→reversed without reversal evidence is refused", { skip: !DB }, as
     const entry = await postBalanced(org, "R1");
     await assert.rejects(
       db.execute(sql`update journal_entries set status = 'reversed' where id = ${entry}`),
-      (error: unknown) => errorChainMatches(error, /without a posted mirror reversal|can only be reversed/),
+      (error: unknown) =>
+        errorChainMatches(error, /without a posted mirror reversal|can only be reversed/),
       "a bare flip with no reversal entry must raise",
     );
     assert.equal(await statusOf(entry), "posted");
-  }));
+  }),
+);
 
 test("posted→reversed with a draft reversal is refused", { skip: !DB }, async () =>
   fixture(async (org) => {
@@ -175,7 +187,8 @@ test("posted→reversed with a draft reversal is refused", { skip: !DB }, async 
       "an unposted reversal entry is not evidence",
     );
     assert.equal(await statusOf(entry), "posted");
-  }));
+  }),
+);
 
 test("posted→reversed with a non-mirroring reversal is refused", { skip: !DB }, async () =>
   fixture(async (org) => {
@@ -187,25 +200,31 @@ test("posted→reversed with a non-mirroring reversal is refused", { skip: !DB }
       "a posted entry that does not negate the original is not a reversal",
     );
     assert.equal(await statusOf(entry), "posted");
-  }));
+  }),
+);
 
 test("posted→reversed with an economic header change is refused", { skip: !DB }, async () =>
   fixture(async (org) => {
     const entry = await postBalanced(org, "R4");
     await postMirrorReversal(org, entry, "R4");
     await assert.rejects(
-      db.execute(sql`update journal_entries set status = 'reversed', memo = 'restated' where id = ${entry}`),
+      db.execute(
+        sql`update journal_entries set status = 'reversed', memo = 'restated' where id = ${entry}`,
+      ),
       (error: unknown) => errorChainMatches(error, /without other changes/),
       "no economic header change may accompany the status flip",
     );
     assert.equal(await statusOf(entry), "posted");
-  }));
+  }),
+);
 
 test("posted→reversed evidenced by another book's reversal is refused", { skip: !DB }, async () =>
   fixture(async (org) => {
     const entry = await postBalanced(org, "R5");
     const otherBook = randomUUID();
-    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${otherBook},${org.orgId},'TAX','Tax',false,true,true)`);
+    await db.execute(
+      sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${otherBook},${org.orgId},'TAX','Tax',false,true,true)`,
+    );
     await postMirrorReversal(org, entry, "R5", { bookId: otherBook });
     await assert.rejects(
       db.execute(sql`update journal_entries set status = 'reversed' where id = ${entry}`),
@@ -213,7 +232,8 @@ test("posted→reversed evidenced by another book's reversal is refused", { skip
       "the reversal must live in the same book as the original",
     );
     assert.equal(await statusOf(entry), "posted");
-  }));
+  }),
+);
 
 test("reversed entry accepts no further transition", { skip: !DB }, async () =>
   fixture(async (org) => {
@@ -225,33 +245,47 @@ test("reversed entry accepts no further transition", { skip: !DB }, async () =>
       (error: unknown) => errorChainMatches(error, /immutable|reversed/),
     );
     assert.equal(await statusOf(entry), "reversed");
-  }));
+  }),
+);
 
 /** The guard retains immutable journal states, scoped posting fences and
  * authenticated connector replay admission. Corrections require mirror
  * reversals and cannot introduce an amendment escape. */
-test("journal guard retains immutable history and connector admission predicates", { skip: !DB }, async () =>
-  fixture(async () => {
-    const r = await db.execute<{ definition: string }>(
-      sql`select pg_get_functiondef('public.je_guard()'::regprocedure) as definition`, "objects",
-    );
-    const body = r[0]!.definition;
-    assert.match(body, /if tg_op = 'DELETE' then/i, "delete fence");
-    assert.match(body, /old.status = 'posted' and new.status = 'posted'/, "posted immutability");
-    assert.match(body, /old.status = 'posted' and new.status = 'reversed'/, "reversal admission");
-    assert.match(body, /old.status = 'reversed'/, "reversed immutability");
-    assert.match(body, /old.status = 'draft' and new.status = 'posted'/, "draft posting admission");
-    assert.match(body, /openbooks_connector_replay_authorized/, "replay authorization predicate");
-    assert.match(body, /openbooks\.connector_replay_authorization/, "replay authorization grant pointer");
-    assert.match(body, /openbooks_reversal_mirrors/, "mirror predicate");
-    assert.match(body, /without other changes/, "header-freeze rule");
-    assert.match(body, /period_posting_fence/, "period fence");
-    assert.doesNotMatch(
-      body,
-      /current_setting\('openbooks\.amend'/,
-      "no amend escape may return to the entry guard",
-    );
-  }));
+test(
+  "journal guard retains immutable history and connector admission predicates",
+  { skip: !DB },
+  async () =>
+    fixture(async () => {
+      const r = await db.execute<{ definition: string }>(
+        sql`select pg_get_functiondef('public.je_guard()'::regprocedure) as definition`,
+        "objects",
+      );
+      const body = r[0]!.definition;
+      assert.match(body, /if tg_op = 'DELETE' then/i, "delete fence");
+      assert.match(body, /old.status = 'posted' and new.status = 'posted'/, "posted immutability");
+      assert.match(body, /old.status = 'posted' and new.status = 'reversed'/, "reversal admission");
+      assert.match(body, /old.status = 'reversed'/, "reversed immutability");
+      assert.match(
+        body,
+        /old.status = 'draft' and new.status = 'posted'/,
+        "draft posting admission",
+      );
+      assert.match(body, /openbooks_connector_replay_authorized/, "replay authorization predicate");
+      assert.match(
+        body,
+        /openbooks\.connector_replay_authorization/,
+        "replay authorization grant pointer",
+      );
+      assert.match(body, /openbooks_reversal_mirrors/, "mirror predicate");
+      assert.match(body, /without other changes/, "header-freeze rule");
+      assert.match(body, /period_posting_fence/, "period fence");
+      assert.doesNotMatch(
+        body,
+        /current_setting\('openbooks\.amend'/,
+        "no amend escape may return to the entry guard",
+      );
+    }),
+);
 
 test("draft lifecycle still works: header edit then post", { skip: !DB }, async () =>
   fixture(async (org) => {
@@ -264,9 +298,12 @@ test("draft lifecycle still works: header edit then post", { skip: !DB }, async 
       values (${org.orgId}, ${entry}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, '10.0000', 'CAD', '10.0000', '1', 'x'),
              (${org.orgId}, ${entry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-10.0000', 'CAD', '-10.0000', '1', 'x')`);
     await db.execute(sql`update journal_entries set memo = 'after' where id = ${entry}`);
-    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`);
+    await db.execute(
+      sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`,
+    );
     assert.equal(await statusOf(entry), "posted");
-  }));
+  }),
+);
 
 test("delete in a soft_closed period is refused like an update", { skip: !DB }, async () => {
   // G5: the DELETE branch fenced with period_module_is_closed (true only
@@ -320,7 +357,9 @@ test("posted book rehome is refused instead of stranding activity", { skip: !DB 
     await assert.rejects(
       withOrgTransaction(org.orgId, async () => {
         await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-        await db.execute(sql`update journal_entries set book_id = ${secondBook} where id = ${entry}`);
+        await db.execute(
+          sql`update journal_entries set book_id = ${secondBook} where id = ${entry}`,
+        );
       }),
       (error: unknown) =>
         errorChainMatches(error, /posted and immutable: corrections append a reversal/),
@@ -328,7 +367,12 @@ test("posted book rehome is refused instead of stranding activity", { skip: !DB 
     );
     assert.deepEqual(await drift(), [], "the refused rehome must leave both book buckets clean");
     const bookOf = async () =>
-      (await db.execute<{ book_id: string }>(sql`select book_id from journal_entries where id = ${entry}`, "objects"))[0]!.book_id;
+      (
+        await db.execute<{ book_id: string }>(
+          sql`select book_id from journal_entries where id = ${entry}`,
+          "objects",
+        )
+      )[0]!.book_id;
     assert.equal(await bookOf(), org.bookId);
   });
 });

@@ -1,10 +1,11 @@
-import { lockApprovalSubject, requestNativeCommandApproval } from "../../platform/approval-routing.ts";
+import {
+  lockApprovalSubject,
+  requestNativeCommandApproval,
+} from "../../platform/approval-routing.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import {
-  requireAggregatePerformanceManage,
-} from "../authorization.ts";
+import { requireAggregatePerformanceManage } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
 import { inputGuards } from "../input-guards.ts";
@@ -37,7 +38,8 @@ import { HRM_PERFORMANCE_KEY } from "./one-on-ones.ts";
  */
 
 export type CalibrationSessionStatus = "draft" | "open" | "closed";
-export type CalibrationEventKind = "opened" | "rating_changed" | "potential_set" | "reverted" | "closed";
+export type CalibrationEventKind =
+  "opened" | "rating_changed" | "potential_set" | "reverted" | "closed";
 
 const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
@@ -119,26 +121,40 @@ type StoredEntry = {
   decided_at: string | null;
 };
 
-async function loadSession(db: SqlExecutor, orgId: string, id: string): Promise<StoredSession | null> {
-  const rows = await db.execute<StoredSession & { scope: unknown }>(sql`
+async function loadSession(
+  db: SqlExecutor,
+  orgId: string,
+  id: string,
+): Promise<StoredSession | null> {
+  const rows = await db.execute<StoredSession & { scope: unknown }>(
+    sql`
     select id, cycle_id, name, scope, status, facilitator_party_id,
            opened_at::text as opened_at, closed_at::text as closed_at,
            exists(select 1 from flow_gates g where g.org_id=${orgId} and g.subject_kind='hrm_calibration_session' and g.subject_id=${id} and g.status in('pending','escalated')) as approval_pending
       from hrm_calibration_sessions where org_id = ${orgId} and id = ${id}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
 /** Lock the session before any of its entries or reviews are read for a write. */
-async function lockSessionForUpdate(db: SqlExecutor, orgId: string, id: string): Promise<StoredSession | null> {
-  const rows = await db.execute<StoredSession & { scope: unknown }>(sql`
+async function lockSessionForUpdate(
+  db: SqlExecutor,
+  orgId: string,
+  id: string,
+): Promise<StoredSession | null> {
+  const rows = await db.execute<StoredSession & { scope: unknown }>(
+    sql`
     select id, cycle_id, name, scope, status, facilitator_party_id,
            opened_at::text as opened_at, closed_at::text as closed_at,
            exists(select 1 from flow_gates g where g.org_id=${orgId} and g.subject_kind='hrm_calibration_session' and g.subject_id=${id} and g.status in('pending','escalated')) as approval_pending
       from hrm_calibration_sessions
      where org_id = ${orgId} and id = ${id}
      for update
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
@@ -148,7 +164,8 @@ async function loadEntries(
   sessionId: string,
   allowed: Set<string> | null,
 ): Promise<StoredEntry[]> {
-  return await db.execute<StoredEntry>(sql`
+  return await db.execute<StoredEntry>(
+    sql`
     select e.id, e.review_id, r.employment_id, coalesce(p.display_name, '—') as subject_name, r.reviewer_party_id,
            e.proposed_rating::text as proposed_rating, e.calibrated_rating::text as calibrated_rating,
            e.potential_key, e.justification,
@@ -159,7 +176,9 @@ async function loadEntries(
       left join parties p on p.org_id = e.org_id and p.id = we.worker_party_id
      where e.org_id = ${orgId} and e.session_id = ${sessionId} ${employmentScopeFilter(allowed, "we")}
      order by e.created_at
-  `, "objects");
+  `,
+    "objects",
+  );
 }
 
 /**
@@ -182,7 +201,8 @@ async function loadMissing(
     status: string;
     kind: string;
     reviewerPartyId: string;
-  }>(sql`
+  }>(
+    sql`
     select r.id as "reviewId", r.employment_id as "employmentId",
            coalesce(subject.display_name, '—') as "subjectName", r.status, r.kind,
            r.reviewer_party_id as "reviewerPartyId"
@@ -193,7 +213,9 @@ async function loadMissing(
        and not exists (select 1 from hrm_calibration_entries e
                         where e.org_id = ${orgId} and e.session_id = ${sessionId} and e.review_id = r.id)
      order by r.created_at
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => {
     let reason: string;
     if (row.kind !== "manager") {
@@ -237,11 +259,18 @@ function cycleScopeSubsidiary(appliesTo: unknown): string | null {
 function assertCycleInScope(appliesTo: unknown, allowed: Set<string> | null): void {
   const subsidiaryId = cycleScopeSubsidiary(appliesTo);
   if (allowed !== null && subsidiaryId !== null && !allowed.has(subsidiaryId)) {
-    throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+    throw new HrmPerformanceError(
+      "NOT_FOUND",
+      "review cycle was not found — open the session over an existing cycle",
+    );
   }
 }
 
-function toDTO(session: StoredSession, entries: readonly StoredEntry[], missing: readonly MissingReviewDTO[]): CalibrationSessionDTO {
+function toDTO(
+  session: StoredSession,
+  entries: readonly StoredEntry[],
+  missing: readonly MissingReviewDTO[],
+): CalibrationSessionDTO {
   return {
     id: session.id,
     cycleId: session.cycle_id,
@@ -253,9 +282,17 @@ function toDTO(session: StoredSession, entries: readonly StoredEntry[], missing:
     openedAt: session.opened_at,
     closedAt: session.closed_at,
     entries: entries.map((e) => ({
-      id: e.id, reviewId: e.review_id, employmentId: e.employment_id, subjectName: e.subject_name, reviewerPartyId: e.reviewer_party_id,
-      proposedRating: e.proposed_rating, calibratedRating: e.calibrated_rating, potentialKey: e.potential_key,
-      justification: e.justification, decidedBy: e.decided_by, decidedAt: e.decided_at,
+      id: e.id,
+      reviewId: e.review_id,
+      employmentId: e.employment_id,
+      subjectName: e.subject_name,
+      reviewerPartyId: e.reviewer_party_id,
+      proposedRating: e.proposed_rating,
+      calibratedRating: e.calibrated_rating,
+      potentialKey: e.potential_key,
+      justification: e.justification,
+      decidedBy: e.decided_by,
+      decidedAt: e.decided_at,
     })),
     missing,
   };
@@ -272,12 +309,21 @@ async function recordEvent(
   toKey: string | null,
   reason: string | null,
 ): Promise<void> {
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const inserted = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into hrm_calibration_events (org_id, session_id, entry_id, kind, from_key, to_key, actor_user_id, reason)
     values (${orgId}, ${sessionId}, ${entryId}, ${kind}, ${fromKey}, ${toKey}, ${actorId}, ${reason})
     returning id
-  `, "objects"))[0];
-  if (!inserted) throw new HrmPerformanceError("REFUSED", "the calibration event was not stored — no row was written; retry the action");
+  `,
+      "objects",
+    )
+  )[0];
+  if (!inserted)
+    throw new HrmPerformanceError(
+      "REFUSED",
+      "the calibration event was not stored — no row was written; retry the action",
+    );
 }
 
 export async function createCalibrationSession(args: {
@@ -292,7 +338,10 @@ export async function createCalibrationSession(args: {
   const actorId = requireUuid(args.actorId, "actorId");
   const cycleId = requireUuid(args.cycleId, "cycleId");
   if (typeof args.name !== "string" || args.name.trim().length === 0) {
-    throw new HrmPerformanceError("INVALID_INPUT", "a calibration session needs a name — say which group is being calibrated");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "a calibration session needs a name — say which group is being calibrated",
+    );
   }
   if (args.facilitatorPartyId !== undefined && args.facilitatorPartyId !== null) {
     requireUuid(args.facilitatorPartyId, "facilitatorPartyId");
@@ -300,31 +349,63 @@ export async function createCalibrationSession(args: {
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
-    const cycle = (await db.execute<{ id: string; status: string; appliesTo: unknown }>(sql`
+    const cycle = (
+      await db.execute<{ id: string; status: string; appliesTo: unknown }>(
+        sql`
       select id, status, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
        for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!cycle) {
-      throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "review cycle was not found — open the session over an existing cycle",
+      );
     }
     assertCycleInScope(cycle.appliesTo, allowed);
     if (cycle.status !== "open" && cycle.status !== "calibrating") {
-      throw new HrmPerformanceError("BAD_STATE", `this cycle is ${cycle.status} — calibration belongs to an open or calibrating cycle`);
+      throw new HrmPerformanceError(
+        "BAD_STATE",
+        `this cycle is ${cycle.status} — calibration belongs to an open or calibrating cycle`,
+      );
     }
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into hrm_calibration_sessions (org_id, cycle_id, name, scope, facilitator_party_id, created_by, updated_by)
       values (${orgId}, ${cycleId}, ${args.name.trim()}, ${JSON.stringify(args.scope ?? {})}::jsonb,
               ${args.facilitatorPartyId ?? null}, ${actorId}, ${actorId})
       returning id
-    `, "objects"))[0];
-    if (!inserted) throw new HrmPerformanceError("REFUSED", "the calibration session was not stored — no row was written; retry the action");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!inserted)
+      throw new HrmPerformanceError(
+        "REFUSED",
+        "the calibration session was not stored — no row was written; retry the action",
+      );
     const session = await loadSession(db, orgId, inserted.id);
-    if (!session) throw new HrmPerformanceError("REFUSED", "the calibration session was not stored — no row can be read back; retry the action");
-    return toDTO(session, [], await loadMissing(db, orgId, session.id, cycleId, session.facilitator_party_id, allowed));
+    if (!session)
+      throw new HrmPerformanceError(
+        "REFUSED",
+        "the calibration session was not stored — no row can be read back; retry the action",
+      );
+    return toDTO(
+      session,
+      [],
+      await loadMissing(db, orgId, session.id, cycleId, session.facilitator_party_id, allowed),
+    );
   });
 }
 
-export async function openCalibrationSession(args: { orgId: string; actorId: string; id: string }): Promise<CalibrationSessionDTO> {
+export async function openCalibrationSession(args: {
+  orgId: string;
+  actorId: string;
+  id: string;
+}): Promise<CalibrationSessionDTO> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
   const id = requireUuid(args.id, "id");
@@ -332,59 +413,114 @@ export async function openCalibrationSession(args: { orgId: string; actorId: str
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const session = await loadSession(db, orgId, id);
-    if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    const sessionCycle = (await db.execute<{ status: string; appliesTo: unknown }>(sql`
+    if (!session)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "calibration session was not found — it may belong to another organization",
+      );
+    const sessionCycle = (
+      await db.execute<{ status: string; appliesTo: unknown }>(
+        sql`
       select status, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
        for update
-    `, "objects"))[0];
-    if (!sessionCycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!sessionCycle)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "review cycle was not found — open the session over an existing cycle",
+      );
     assertCycleInScope(sessionCycle.appliesTo, allowed);
     if (sessionCycle.status !== "open" && sessionCycle.status !== "calibrating") {
-      throw new HrmPerformanceError("BAD_STATE", `this cycle is ${sessionCycle.status} — calibration belongs to an open or calibrating cycle`);
+      throw new HrmPerformanceError(
+        "BAD_STATE",
+        `this cycle is ${sessionCycle.status} — calibration belongs to an open or calibrating cycle`,
+      );
     }
     if (session.status !== "draft") {
-      throw new HrmPerformanceError("BAD_STATE", `only a draft session can be opened — this one is ${session.status}`);
+      throw new HrmPerformanceError(
+        "BAD_STATE",
+        `only a draft session can be opened — this one is ${session.status}`,
+      );
     }
     // Submitted manager reviews enter within the operator's employer scope.
     // Publication approvals are determined by tenant Flows.
-    const candidates = await db.execute<{ id: string; overall_rating: string | null; reviewer_party_id: string }>(sql`
+    const candidates = await db.execute<{
+      id: string;
+      overall_rating: string | null;
+      reviewer_party_id: string;
+    }>(
+      sql`
       select r.id, r.overall_rating::text as overall_rating, r.reviewer_party_id
         from hrm_reviews r
         join worker_employments we on we.org_id = r.org_id and we.id = r.employment_id
        where r.org_id = ${orgId} and r.cycle_id = ${session.cycle_id}
          and r.kind = 'manager' and r.status = 'submitted' ${employmentScopeFilter(allowed, "we")}
-    `, "objects");
-    const updated = await db.execute<{ id: string }>(sql`
+    `,
+      "objects",
+    );
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update hrm_calibration_sessions set status = 'open', opened_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id} and status = 'draft'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new HrmPerformanceError("STALE_REVISION", "the session changed under you — reload it and try again");
+      throw new HrmPerformanceError(
+        "STALE_REVISION",
+        "the session changed under you — reload it and try again",
+      );
     }
     for (const candidate of candidates) {
-      const entry = (await db.execute<{ id: string }>(sql`
+      const entry = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into hrm_calibration_entries (org_id, session_id, review_id, proposed_rating, created_by, updated_by)
         values (${orgId}, ${id}, ${candidate.id}, ${candidate.overall_rating}::numeric, ${actorId}, ${actorId})
         -- An existing session-review entry is selected below rather than duplicated.
         on conflict do nothing
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       // on conflict do nothing is benign here: reopening an opened
       // session is refused above, so a conflict means two open calls
       // raced and one already entered this review — the read below
       // proves the entry exists either way.
-      const entryId = entry?.id ?? (await db.execute<{ id: string }>(sql`
+      const entryId =
+        entry?.id ??
+        (
+          await db.execute<{ id: string }>(
+            sql`
         select id from hrm_calibration_entries where org_id = ${orgId} and session_id = ${id} and review_id = ${candidate.id}
-      `, "objects"))[0]?.id;
+      `,
+            "objects",
+          )
+        )[0]?.id;
       if (!entryId) {
-        throw new HrmPerformanceError("REFUSED", "a calibration entry was not stored — no row can be read back; retry the action");
+        throw new HrmPerformanceError(
+          "REFUSED",
+          "a calibration entry was not stored — no row can be read back; retry the action",
+        );
       }
     }
     await recordEvent(db, orgId, actorId, id, null, "opened", null, null, null);
     const opened = await loadSession(db, orgId, id);
-    if (!opened) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    return toDTO(opened, await loadEntries(db, orgId, id, allowed), await loadMissing(db, orgId, id, opened.cycle_id, opened.facilitator_party_id, allowed));
+    if (!opened)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "calibration session was not found — it may belong to another organization",
+      );
+    return toDTO(
+      opened,
+      await loadEntries(db, orgId, id, allowed),
+      await loadMissing(db, orgId, id, opened.cycle_id, opened.facilitator_party_id, allowed),
+    );
   });
 }
 
@@ -395,17 +531,31 @@ async function requireOpenEntry(
   entryId: string,
   allowed: Set<string> | null,
 ): Promise<{ session: StoredSession; entry: StoredEntry }> {
-  const entrySession = (await db.execute<{ session_id: string }>(sql`
+  const entrySession = (
+    await db.execute<{ session_id: string }>(
+      sql`
     select session_id from hrm_calibration_entries where org_id = ${orgId} and id = ${entryId}
-  `, "objects"))[0];
-  if (!entrySession) throw new HrmPerformanceError("NOT_FOUND", "calibration entry was not found — it may belong to another session");
+  `,
+      "objects",
+    )
+  )[0];
+  if (!entrySession)
+    throw new HrmPerformanceError(
+      "NOT_FOUND",
+      "calibration entry was not found — it may belong to another session",
+    );
   // This lock is shared with closeCalibrationSession. Always take it before
   // reading or changing entries, so a close cannot pass the open-state
   // check while a decision or reversion is still in flight.
-  await lockApprovalSubject(orgId,"hrm_calibration_session",entrySession.session_id);
+  await lockApprovalSubject(orgId, "hrm_calibration_session", entrySession.session_id);
   const session = await lockSessionForUpdate(db, orgId, entrySession.session_id);
-  if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-  const entries = await db.execute<StoredEntry & { employerSubsidiaryId: string }>(sql`
+  if (!session)
+    throw new HrmPerformanceError(
+      "NOT_FOUND",
+      "calibration session was not found — it may belong to another organization",
+    );
+  const entries = await db.execute<StoredEntry & { employerSubsidiaryId: string }>(
+    sql`
     select e.id, e.review_id, r.employment_id, coalesce(p.display_name, '—') as subject_name, r.reviewer_party_id,
            e.proposed_rating::text as proposed_rating, e.calibrated_rating::text as calibrated_rating,
            e.potential_key, e.justification,
@@ -416,13 +566,22 @@ async function requireOpenEntry(
       join worker_employments we on we.org_id = e.org_id and we.id = r.employment_id
       left join parties p on p.org_id = e.org_id and p.id = we.worker_party_id
      where e.org_id = ${orgId} and e.id = ${entryId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const entry = entries[0];
-  if (!entry) throw new HrmPerformanceError("NOT_FOUND", "calibration entry was not found — it may belong to another session");
+  if (!entry)
+    throw new HrmPerformanceError(
+      "NOT_FOUND",
+      "calibration entry was not found — it may belong to another session",
+    );
   // The entry's subject must sit inside the decider's subsidiaries: without
   // this, scoped HR revises another subsidiary's ratings entry by entry.
   if (allowed !== null && !allowed.has(entry.employerSubsidiaryId)) {
-    throw new HrmPerformanceError("NOT_FOUND", "calibration entry was not found — it may belong to another session");
+    throw new HrmPerformanceError(
+      "NOT_FOUND",
+      "calibration entry was not found — it may belong to another session",
+    );
   }
   if (session.status !== "open") {
     throw new HrmPerformanceError(
@@ -432,7 +591,11 @@ async function requireOpenEntry(
         : "this session is still a draft — open it before changing ratings",
     );
   }
-  if(session.approval_pending)throw new HrmPerformanceError("REFUSED","Recall the pending calibration submission in Approvals before changing its ratings.");
+  if (session.approval_pending)
+    throw new HrmPerformanceError(
+      "REFUSED",
+      "Recall the pending calibration submission in Approvals before changing its ratings.",
+    );
   return { session, entry };
 }
 
@@ -447,10 +610,15 @@ async function loadCycleRatingScale(
   orgId: string,
   cycleId: string,
 ): Promise<RatingScale> {
-  const template = (await exec.execute<{ratingScale:unknown}>(sql`
+  const template = (
+    await exec.execute<{ ratingScale: unknown }>(
+      sql`
     select rating_scale_snapshot as "ratingScale" from hrm_review_cycles
     where org_id = ${orgId} and id = ${cycleId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!template) {
     throw new HrmPerformanceError(
       "TEMPLATE_NOT_FOUND",
@@ -471,7 +639,10 @@ export async function setCalibratedRating(args: {
   const actorId = requireUuid(args.actorId, "actorId");
   const entryId = requireUuid(args.entryId, "entryId");
   if (typeof args.justification !== "string" || args.justification.trim().length === 0) {
-    throw new HrmPerformanceError("INVALID_INPUT", "changing a calibrated rating needs a justification — say what evidence moved it");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "changing a calibrated rating needs a justification — say what evidence moved it",
+    );
   }
   const ratingText = String(args.calibratedRating ?? "").trim();
   if (ratingText.length === 0) {
@@ -486,26 +657,52 @@ export async function setCalibratedRating(args: {
     const scale = await loadCycleRatingScale(db, orgId, session.cycle_id);
     mathRefusal("REFUSED", () => assertRatingInScale(scale, ratingText, "calibrated rating"));
     const fromKey = entry.calibrated_rating ?? entry.proposed_rating;
-    const updated = await db.execute<StoredEntry>(sql`
+    const updated = await db.execute<StoredEntry>(
+      sql`
       update hrm_calibration_entries
          set calibrated_rating = ${ratingText}::numeric, justification = ${args.justification.trim()},
              decided_by = ${actorId}, decided_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${entryId}
       returning id, review_id, calibrated_rating::text as calibrated_rating
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new HrmPerformanceError("STALE_REVISION", "the entry changed under you — reload the grid and try again");
+      throw new HrmPerformanceError(
+        "STALE_REVISION",
+        "the entry changed under you — reload the grid and try again",
+      );
     }
-    await recordEvent(db, orgId, actorId, session.id, entryId, "rating_changed", fromKey, ratingText, args.justification.trim());
+    await recordEvent(
+      db,
+      orgId,
+      actorId,
+      session.id,
+      entryId,
+      "rating_changed",
+      fromKey,
+      ratingText,
+      args.justification.trim(),
+    );
     const entries = await loadEntries(db, orgId, session.id, allowed);
     const decided = entries.find((e) => e.id === entryId);
-    if (!decided) throw new HrmPerformanceError("REFUSED", "the rating change was not stored — no row can be read back; retry the action");
+    if (!decided)
+      throw new HrmPerformanceError(
+        "REFUSED",
+        "the rating change was not stored — no row can be read back; retry the action",
+      );
     return {
-      id: decided.id, reviewId: decided.review_id, employmentId: decided.employment_id,
+      id: decided.id,
+      reviewId: decided.review_id,
+      employmentId: decided.employment_id,
       subjectName: decided.subject_name,
-      reviewerPartyId: decided.reviewer_party_id, proposedRating: decided.proposed_rating,
-      calibratedRating: decided.calibrated_rating, potentialKey: decided.potential_key,
-      justification: decided.justification, decidedBy: decided.decided_by, decidedAt: decided.decided_at,
+      reviewerPartyId: decided.reviewer_party_id,
+      proposedRating: decided.proposed_rating,
+      calibratedRating: decided.calibrated_rating,
+      potentialKey: decided.potential_key,
+      justification: decided.justification,
+      decidedBy: decided.decided_by,
+      decidedAt: decided.decided_at,
     };
   });
 }
@@ -530,11 +727,24 @@ export async function calibrationPotentialOptions(args: {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const session = await loadSession(db, orgId, sessionId);
-    if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    const readCycle = (await db.execute<{ appliesTo: unknown }>(sql`
+    if (!session)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "calibration session was not found — it may belong to another organization",
+      );
+    const readCycle = (
+      await db.execute<{ appliesTo: unknown }>(
+        sql`
       select applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
-    `, "objects"))[0];
-    if (!readCycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!readCycle)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "review cycle was not found — open the session over an existing cycle",
+      );
     assertCycleInScope(readCycle.appliesTo, allowed);
     try {
       const scale = await loadCycleRatingScale(db, orgId, session.cycle_id);
@@ -556,7 +766,10 @@ export async function setPotential(args: {
   const actorId = requireUuid(args.actorId, "actorId");
   const entryId = requireUuid(args.entryId, "entryId");
   if (typeof args.potentialKey !== "string" || args.potentialKey.trim().length === 0) {
-    throw new HrmPerformanceError("INVALID_INPUT", "potential needs a key from the org-declared scale — pick the label the template declares");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "potential needs a key from the org-declared scale — pick the label the template declares",
+    );
   }
   await withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
@@ -578,42 +791,82 @@ export async function setPotential(args: {
         `potential ${JSON.stringify(potentialKey)} is outside the cycle's declared scale (${scale.labels.map((label) => JSON.stringify(label)).join(", ")}) — pick a declared label`,
       );
     }
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update hrm_calibration_entries
          set potential_key = ${potentialKey}, decided_by = ${actorId}, decided_at = now(),
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${entryId}
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new HrmPerformanceError("STALE_REVISION", "the entry changed under you — reload the grid and try again");
+      throw new HrmPerformanceError(
+        "STALE_REVISION",
+        "the entry changed under you — reload the grid and try again",
+      );
     }
-    await recordEvent(db, orgId, actorId, session.id, entryId, "potential_set", entry.potential_key, potentialKey, null);
+    await recordEvent(
+      db,
+      orgId,
+      actorId,
+      session.id,
+      entryId,
+      "potential_set",
+      entry.potential_key,
+      potentialKey,
+      null,
+    );
   });
 }
 
-export async function revertEntry(args: { orgId: string; actorId: string; entryId: string; reason: string }): Promise<void> {
+export async function revertEntry(args: {
+  orgId: string;
+  actorId: string;
+  entryId: string;
+  reason: string;
+}): Promise<void> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
   const entryId = requireUuid(args.entryId, "entryId");
   if (typeof args.reason !== "string" || args.reason.trim().length === 0) {
-    throw new HrmPerformanceError("INVALID_INPUT", "reverting a calibration needs a reason — say why the proposed rating stands");
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      "reverting a calibration needs a reason — say why the proposed rating stands",
+    );
   }
   await withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const { session, entry } = await requireOpenEntry(db, orgId, actorId, entryId, allowed);
-    const updated = await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(
+      sql`
       update hrm_calibration_entries
          set calibrated_rating = null, potential_key = null, justification = null,
              decided_by = null, decided_at = null, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${entryId}
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (updated.length !== 1) {
-      throw new HrmPerformanceError("STALE_REVISION", "the entry changed under you — reload the grid and try again");
+      throw new HrmPerformanceError(
+        "STALE_REVISION",
+        "the entry changed under you — reload the grid and try again",
+      );
     }
-    await recordEvent(db, orgId, actorId, session.id, entryId, "reverted", entry.calibrated_rating ?? entry.proposed_rating, entry.proposed_rating, args.reason.trim());
+    await recordEvent(
+      db,
+      orgId,
+      actorId,
+      session.id,
+      entryId,
+      "reverted",
+      entry.calibrated_rating ?? entry.proposed_rating,
+      entry.proposed_rating,
+      args.reason.trim(),
+    );
   });
 }
 
@@ -629,15 +882,33 @@ export async function closeCalibrationSession(args: {
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
-    await lockApprovalSubject(orgId,"hrm_calibration_session",id);
+    await lockApprovalSubject(orgId, "hrm_calibration_session", id);
     const session = await lockSessionForUpdate(db, orgId, id);
-    if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    const closeCycle = (await db.execute<{ appliesTo: unknown }>(sql`
+    if (!session)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "calibration session was not found — it may belong to another organization",
+      );
+    const closeCycle = (
+      await db.execute<{ appliesTo: unknown }>(
+        sql`
       select applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
-    `, "objects"))[0];
-    if (!closeCycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!closeCycle)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "review cycle was not found — open the session over an existing cycle",
+      );
     assertCycleInScope(closeCycle.appliesTo, allowed);
-    if(session.status==="closed")return toDTO(session,await loadEntries(db,orgId,id,allowed),await loadMissing(db,orgId,id,session.cycle_id,session.facilitator_party_id,allowed));
+    if (session.status === "closed")
+      return toDTO(
+        session,
+        await loadEntries(db, orgId, id, allowed),
+        await loadMissing(db, orgId, id, session.cycle_id, session.facilitator_party_id, allowed),
+      );
     if (session.status !== "open") {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -648,14 +919,19 @@ export async function closeCalibrationSession(args: {
     // the closer's subsidiaries fail the close instead of writing across
     // the fence or skipping silently.
     if (allowed !== null) {
-      const outside = (await db.execute<{ n: string }>(sql`
+      const outside = (
+        await db.execute<{ n: string }>(
+          sql`
         select count(*)::text as n
           from hrm_calibration_entries e
           join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
           join worker_employments we on we.org_id = e.org_id and we.id = r.employment_id
          where e.org_id = ${orgId} and e.session_id = ${id}
            and not ${employerSubsidiaryScope(allowed, "we.employer_subsidiary_id")}
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (outside && Number(outside.n) > 0) {
         throw new HrmPerformanceError(
           "FORBIDDEN",
@@ -663,19 +939,38 @@ export async function closeCalibrationSession(args: {
         );
       }
     }
-    if(await requestNativeCommandApproval({orgId,actorId,subjectKind:"hrm_calibration_session",subjectId:id,
-      command:{action:"close"},approvalRunId:args.approvalRunId})){
-      const pending=await loadSession(db,orgId,id);
-      if(!pending)throw new HrmPerformanceError("NOT_FOUND","The calibration session is unavailable.");
-      return toDTO(pending,await loadEntries(db,orgId,id,allowed),await loadMissing(db,orgId,id,session.cycle_id,session.facilitator_party_id,allowed));
+    if (
+      await requestNativeCommandApproval({
+        orgId,
+        actorId,
+        subjectKind: "hrm_calibration_session",
+        subjectId: id,
+        command: { action: "close" },
+        approvalRunId: args.approvalRunId,
+      })
+    ) {
+      const pending = await loadSession(db, orgId, id);
+      if (!pending)
+        throw new HrmPerformanceError("NOT_FOUND", "The calibration session is unavailable.");
+      return toDTO(
+        pending,
+        await loadEntries(db, orgId, id, allowed),
+        await loadMissing(db, orgId, id, session.cycle_id, session.facilitator_party_id, allowed),
+      );
     }
-    const closed = await db.execute<{ id: string }>(sql`
+    const closed = await db.execute<{ id: string }>(
+      sql`
       update hrm_calibration_sessions set status = 'closed', closed_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id} and status = 'open'
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (closed.length !== 1) {
-      throw new HrmPerformanceError("STALE_REVISION", "the session changed under you — reload it and try again");
+      throw new HrmPerformanceError(
+        "STALE_REVISION",
+        "the session changed under you — reload it and try again",
+      );
     }
     const entries = await loadEntries(db, orgId, id, allowed);
     // Close writes every decided calibrated rating back onto its review
@@ -684,7 +979,8 @@ export async function closeCalibrationSession(args: {
     // calibration occurred — never the delta, never the justification.
     for (const entry of entries) {
       if (entry.calibrated_rating === null) continue;
-      const updated = await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(
+        sql`
         update hrm_reviews
            set calibrated_rating = ${entry.calibrated_rating}::numeric,
                calibration_reason = ${entry.justification ?? "decided in calibration"},
@@ -693,7 +989,9 @@ export async function closeCalibrationSession(args: {
                updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${entry.review_id} and status = 'submitted'
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (updated.length !== 1) {
         throw new HrmPerformanceError(
           "STALE_REVISION",
@@ -707,8 +1005,16 @@ export async function closeCalibrationSession(args: {
     }
     await recordEvent(db, orgId, actorId, id, null, "closed", null, null, null);
     const done = await loadSession(db, orgId, id);
-    if (!done) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    return toDTO(done, await loadEntries(db, orgId, id, allowed), await loadMissing(db, orgId, id, done.cycle_id, done.facilitator_party_id, allowed));
+    if (!done)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "calibration session was not found — it may belong to another organization",
+      );
+    return toDTO(
+      done,
+      await loadEntries(db, orgId, id, allowed),
+      await loadMissing(db, orgId, id, done.cycle_id, done.facilitator_party_id, allowed),
+    );
   });
 }
 
@@ -724,13 +1030,30 @@ export async function getCalibrationSession(args: {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const session = await loadSession(db, orgId, id);
-    if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    const readCycle = (await db.execute<{ appliesTo: unknown }>(sql`
+    if (!session)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "calibration session was not found — it may belong to another organization",
+      );
+    const readCycle = (
+      await db.execute<{ appliesTo: unknown }>(
+        sql`
       select applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
-    `, "objects"))[0];
-    if (!readCycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!readCycle)
+      throw new HrmPerformanceError(
+        "NOT_FOUND",
+        "review cycle was not found — open the session over an existing cycle",
+      );
     assertCycleInScope(readCycle.appliesTo, allowed);
-    return toDTO(session, await loadEntries(db, orgId, id, allowed), await loadMissing(db, orgId, id, session.cycle_id, session.facilitator_party_id, allowed));
+    return toDTO(
+      session,
+      await loadEntries(db, orgId, id, allowed),
+      await loadMissing(db, orgId, id, session.cycle_id, session.facilitator_party_id, allowed),
+    );
   });
 }
 
@@ -738,7 +1061,16 @@ export async function listCalibrationSessions(args: {
   orgId: string;
   actorId: string;
   cycleId?: string;
-}): Promise<readonly { id: string; cycleId: string; name: string; status: CalibrationSessionStatus; openedAt: string | null; closedAt: string | null }[]> {
+}): Promise<
+  readonly {
+    id: string;
+    cycleId: string;
+    name: string;
+    status: CalibrationSessionStatus;
+    openedAt: string | null;
+    closedAt: string | null;
+  }[]
+> {
   const orgId = requireUuid(args.orgId, "orgId");
   const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
@@ -749,16 +1081,24 @@ export async function listCalibrationSessions(args: {
     // an org-wide cycle (null scope) still lists, with its entries fenced
     // at read time.
     const rows = await db.execute<{
-      id: string; cycleId: string; name: string; status: CalibrationSessionStatus;
-      openedAt: string | null; closedAt: string | null; appliesTo: unknown;
-    }>(sql`
+      id: string;
+      cycleId: string;
+      name: string;
+      status: CalibrationSessionStatus;
+      openedAt: string | null;
+      closedAt: string | null;
+      appliesTo: unknown;
+    }>(
+      sql`
       select s.id, s.cycle_id as "cycleId", s.name, s.status,
              s.opened_at::text as "openedAt", s.closed_at::text as "closedAt",
              c.applies_to as "appliesTo"
         from hrm_calibration_sessions s
         join hrm_review_cycles c on c.org_id = s.org_id and c.id = s.cycle_id
        where s.org_id = ${orgId}${cycleFilter} order by s.created_at desc
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows
       .filter((row) => {
         const subsidiaryId = cycleScopeSubsidiary(row.appliesTo);
@@ -777,7 +1117,10 @@ export async function calibrationDistribution(args: {
   orgId: string;
   actorId: string;
   id: string;
-}): Promise<{ readonly proposed: Readonly<Record<string, number>>; readonly calibrated: Readonly<Record<string, number>> }> {
+}): Promise<{
+  readonly proposed: Readonly<Record<string, number>>;
+  readonly calibrated: Readonly<Record<string, number>>;
+}> {
   const session = await getCalibrationSession(args);
   const proposed: Record<string, number> = {};
   const calibrated: Record<string, number> = {};

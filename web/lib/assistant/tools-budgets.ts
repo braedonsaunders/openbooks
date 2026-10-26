@@ -17,7 +17,9 @@ import { uuidInput } from "./tools-shared";
  * (draft scenarios only, revision-concurrency checked).
  */
 
-const dimInput = uuidInput.nullable().optional()
+const dimInput = uuidInput
+  .nullable()
+  .optional()
   .describe("Dimension slice, or null/omit for all values in this dimension");
 
 const getBudgetWorkspace: AssistantToolDef = {
@@ -32,7 +34,9 @@ const getBudgetWorkspace: AssistantToolDef = {
     q: z.string().max(100).optional().describe("Filter accounts by number or name"),
     page: z.number().int().min(1).max(10000).optional().describe("Account page, default 1"),
     perPage: z.number().int().min(1).max(100).optional().describe("Accounts per page, default 25"),
-    subsidiaryId: uuidInput.nullable().optional()
+    subsidiaryId: uuidInput
+      .nullable()
+      .optional()
       .describe("Legal-entity slice, or null/omit for the tenant root"),
     departmentId: dimInput,
     projectId: dimInput,
@@ -44,9 +48,15 @@ const getBudgetWorkspace: AssistantToolDef = {
       return { ok: false, error: "budgets_feature_disabled" };
     }
     const a = raw as {
-      scenarioId: string; q?: string; page?: number; perPage?: number;
-      subsidiaryId?: string | null; departmentId?: string | null; projectId?: string | null;
-      locationId?: string | null; classId?: string | null;
+      scenarioId: string;
+      q?: string;
+      page?: number;
+      perPage?: number;
+      subsidiaryId?: string | null;
+      departmentId?: string | null;
+      projectId?: string | null;
+      locationId?: string | null;
+      classId?: string | null;
     };
     const dims: BudgetDimensions = {
       subsidiaryId: a.subsidiaryId ?? null,
@@ -55,7 +65,10 @@ const getBudgetWorkspace: AssistantToolDef = {
       locationId: a.locationId ?? null,
       classId: a.classId ?? null,
     };
-    if (dims.subsidiaryId !== null && !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, dims.subsidiaryId)) {
+    if (
+      dims.subsidiaryId !== null &&
+      !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, dims.subsidiaryId)
+    ) {
       return { ok: false, error: "budget_not_found" };
     }
     const perPage = Math.min(a.perPage ?? 25, 100);
@@ -105,6 +118,4 @@ const getBudgetWorkspace: AssistantToolDef = {
   },
 };
 
-export const BUDGET_TOOLS: AssistantToolDef[] = [
-  getBudgetWorkspace,
-];
+export const BUDGET_TOOLS: AssistantToolDef[] = [getBudgetWorkspace];

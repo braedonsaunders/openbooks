@@ -27,11 +27,7 @@ test("realized FX reverses the conversion difference on outflow legs", () => {
 });
 
 test("Stripe minor-unit amounts convert exactly without changing fee magnitude", () => {
-  const parsed = parseStripeBalanceTransactions(
-    [stripeRow],
-    "po_1",
-    "2026-07-01",
-  );
+  const parsed = parseStripeBalanceTransactions([stripeRow], "po_1", "2026-07-01");
 
   assert.deepEqual(
     parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
@@ -49,12 +45,7 @@ for (const [field, row] of [
 ] as const) {
   test(`${field} rejects fractional provider minor units`, () => {
     assert.throws(
-      () =>
-        parseStripeBalanceTransactions(
-          [row],
-          "po_fractional",
-          "2026-07-01",
-        ),
+      () => parseStripeBalanceTransactions([row], "po_fractional", "2026-07-01"),
       (error) =>
         error instanceof PspSettlementError &&
         error.message === `${field} must be a safe integer in provider minor units`,
@@ -62,28 +53,16 @@ for (const [field, row] of [
   });
 }
 
-for (const amount of [
-  Number.MAX_SAFE_INTEGER + 1,
-  Number.POSITIVE_INFINITY,
-  Number.NaN,
-]) {
+for (const amount of [Number.MAX_SAFE_INTEGER + 1, Number.POSITIVE_INFINITY, Number.NaN]) {
   test(`Stripe amount rejects non-exact numeric input ${String(amount)}`, () => {
     assert.throws(
-      () =>
-        parseStripeBalanceTransactions(
-          [{ ...stripeRow, amount }],
-          "po_inexact",
-          "2026-07-01",
-        ),
+      () => parseStripeBalanceTransactions([{ ...stripeRow, amount }], "po_inexact", "2026-07-01"),
       PspSettlementError,
     );
   });
 }
 
-const invalidChargebeeAmounts: [
-  string,
-  Parameters<typeof parseChargebeeSettlement>[0],
-][] = [
+const invalidChargebeeAmounts: [string, Parameters<typeof parseChargebeeSettlement>[0]][] = [
   [
     "Chargebee line-item amount",
     {
@@ -117,12 +96,7 @@ for (const [field, payload] of invalidChargebeeAmounts) {
   });
 }
 
-for (const total of [
-  1_250.5,
-  Number.MAX_SAFE_INTEGER + 1,
-  Number.POSITIVE_INFINITY,
-  Number.NaN,
-]) {
+for (const total of [1_250.5, Number.MAX_SAFE_INTEGER + 1, Number.POSITIVE_INFINITY, Number.NaN]) {
   test(`Chargebee total rejects non-exact numeric input ${String(total)} when line items are present`, () => {
     assert.throws(
       () =>
@@ -137,8 +111,7 @@ for (const total of [
         ),
       (error) =>
         error instanceof PspSettlementError &&
-        error.message ===
-          "Chargebee total must be a safe integer in provider minor units",
+        error.message === "Chargebee total must be a safe integer in provider minor units",
     );
   });
 }
@@ -206,7 +179,10 @@ test("Stripe rows of different currencies cannot settle as one batch", () => {
   assert.throws(
     () =>
       parseStripeBalanceTransactions(
-        [stripeRow, { ...stripeRow, id: "txn_2", currency: "jpy", amount: 5000, fee: 100, net: 4900 }],
+        [
+          stripeRow,
+          { ...stripeRow, id: "txn_2", currency: "jpy", amount: 5000, fee: 100, net: 4900 },
+        ],
         "po_mixed",
         "2026-07-01",
       ),
@@ -232,7 +208,10 @@ test("Stripe payout with no transactions is rejected before any batch exists", (
 for (const [label, row] of [
   ["missing", { id: "ch_t06_1", amount: 250000, currency: "USD", fee: 7250, net: 242750 }],
   ["empty", { id: "ch_t06_1", type: "", amount: 250000, currency: "USD", fee: 7250, net: 242750 }],
-  ["non-string", { id: "ch_t06_1", type: 7, amount: 250000, currency: "USD", fee: 7250, net: 242750 }],
+  [
+    "non-string",
+    { id: "ch_t06_1", type: 7, amount: 250000, currency: "USD", fee: 7250, net: 242750 },
+  ],
 ] as const) {
   test(`Stripe transaction with ${label} type is refused with a row-naming 422, never a TypeError`, () => {
     assert.throws(
@@ -272,10 +251,7 @@ test("Chargebee total rejects three-decimal minor units instead of converting at
   // fail-closed while Stripe converts (see test above).
   assert.throws(
     () =>
-      parseChargebeeSettlement(
-        { id: "cb_bhd", currency_code: "BHD", total: 1000 },
-        "2026-07-01",
-      ),
+      parseChargebeeSettlement({ id: "cb_bhd", currency_code: "BHD", total: 1000 }, "2026-07-01"),
     (error) =>
       error instanceof PspSettlementError &&
       error.message ===
@@ -695,9 +671,7 @@ test("Stripe payout-only export is refused instead of posting an empty batch", (
         "po_only",
         "2026-07-01",
       ),
-    (error) =>
-      error instanceof PspSettlementError &&
-      /has no evidence lines/.test(error.message),
+    (error) => error instanceof PspSettlementError && /has no evidence lines/.test(error.message),
   );
 });
 
@@ -705,13 +679,24 @@ test("Stripe unknown balance-transaction types are refused, never booked as char
   assert.throws(
     () =>
       parseStripeBalanceTransactions(
-        [{ id: "xx_1", type: "issuing_transaction", amount: 500, fee: 0, net: 500, currency: "usd" }],
+        [
+          {
+            id: "xx_1",
+            type: "issuing_transaction",
+            amount: 500,
+            fee: 0,
+            net: 500,
+            currency: "usd",
+          },
+        ],
         "po_unknown",
         "2026-07-01",
       ),
     (error) =>
       error instanceof PspSettlementError &&
-      /unsupported Stripe balance transaction type "issuing_transaction" \(row 1 xx_1\)/.test(error.message),
+      /unsupported Stripe balance transaction type "issuing_transaction" \(row 1 xx_1\)/.test(
+        error.message,
+      ),
   );
 });
 
@@ -742,7 +727,9 @@ test("Stripe positive-amount refund is refused by total reconciliation, not misb
       ),
     (error) =>
       error instanceof PspSettlementError &&
-      /does not reconcile: export nets total 5\.0000 but settlement lines net to -5\.0000/.test(error.message),
+      /does not reconcile: export nets total 5\.0000 but settlement lines net to -5\.0000/.test(
+        error.message,
+      ),
   );
 });
 
@@ -853,7 +840,9 @@ test("Stripe payout movement outsized against its lines is refused, not half-pos
       ),
     (error) =>
       error instanceof PspSettlementError &&
-      /its payout movement totals 150\.0000 but settlement lines net to 48\.5000/.test(error.message),
+      /its payout movement totals 150\.0000 but settlement lines net to 48\.5000/.test(
+        error.message,
+      ),
   );
 });
 

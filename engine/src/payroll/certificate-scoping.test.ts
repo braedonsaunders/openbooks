@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  packCertificates, regionWithholdingCertificate, revalidateStoredCertificates,
+  packCertificates,
+  regionWithholdingCertificate,
+  revalidateStoredCertificates,
   type StoredCertificate,
 } from "./certificates.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
@@ -68,7 +70,9 @@ test("an amount jurisdiction declares no claim-code column field", () => {
 /* Read-path scope revalidation (C-19)                                    */
 /* --------------------------------------------------------------------- */
 
-const stored = (over: Partial<StoredCertificate> & { certificateKey: string }): StoredCertificate => ({
+const stored = (
+  over: Partial<StoredCertificate> & { certificateKey: string },
+): StoredCertificate => ({
   answers: { resident_state: "PA" },
   effectiveFrom: "2026-01-01",
   ...over,
@@ -78,7 +82,9 @@ test("a certificate filed for the employee's own region stays valid", () => {
   // NJ-165 is scoped to NJ; the employee works in NJ and resides in PA.
   const { valid, mismatched } = revalidateStoredCertificates({
     stored: [stored({ certificateKey: "us_nj_nj165", region: "NJ" })],
-    country: "US", workRegion: "NJ", residenceRegion: "PA",
+    country: "US",
+    workRegion: "NJ",
+    residenceRegion: "PA",
   });
   assert.deepEqual(mismatched, []);
   assert.equal(valid.length, 1);
@@ -89,7 +95,9 @@ test("a legacy mis-scoped certificate is ignored AND named", () => {
   // California. Key membership alone would let it drive New York's table.
   const { valid, mismatched } = revalidateStoredCertificates({
     stored: [stored({ certificateKey: "us_ny_it2104", region: "CA" })],
-    country: "US", workRegion: "CA", residenceRegion: "CA",
+    country: "US",
+    workRegion: "CA",
+    residenceRegion: "CA",
   });
   assert.deepEqual(valid, []);
   assert.equal(mismatched.length, 1);
@@ -104,7 +112,9 @@ test("a certificate for the old region after a move is not honoured", () => {
   // the new region's form.
   const { valid, mismatched } = revalidateStoredCertificates({
     stored: [stored({ certificateKey: "us_pa_rev419", region: "PA" })],
-    country: "US", workRegion: "OH", residenceRegion: "NJ",
+    country: "US",
+    workRegion: "OH",
+    residenceRegion: "NJ",
   });
   assert.deepEqual(valid, []);
   assert.equal(mismatched.length, 1);
@@ -115,7 +125,9 @@ test("a certificate for the old region after a move is not honoured", () => {
 test("a row for a certificate the pack never declared is ignored AND named", () => {
   const { valid, mismatched } = revalidateStoredCertificates({
     stored: [stored({ certificateKey: "us_no_such_form", region: "PA" })],
-    country: "US", workRegion: "PA", residenceRegion: "NJ",
+    country: "US",
+    workRegion: "PA",
+    residenceRegion: "NJ",
   });
   assert.deepEqual(valid, []);
   assert.equal(mismatched.length, 1);
@@ -127,7 +139,9 @@ test("an unscoped legacy row on a scoped certificate is not honoured", () => {
   // form proves nothing about where it was filed, so it fails closed.
   const { valid, mismatched } = revalidateStoredCertificates({
     stored: [stored({ certificateKey: "us_nj_nj165", region: null })],
-    country: "US", workRegion: "NJ", residenceRegion: "PA",
+    country: "US",
+    workRegion: "NJ",
+    residenceRegion: "PA",
   });
   assert.deepEqual(valid, []);
   assert.equal(mismatched.length, 1);

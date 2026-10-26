@@ -1,15 +1,15 @@
-import 'server-only'
+import "server-only";
 
-import { createHash } from 'node:crypto'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import type {
   FeedbackTurnResult,
   IssueDraft,
   IssuePublisher,
   PublishedIssue,
-} from '@braedonsaunders/appkit-feedback'
-import type { FeedbackSettingsView } from './config'
+} from "@braedonsaunders/appkit-feedback";
+import type { FeedbackSettingsView } from "./config";
 
 /**
  * Audit evidence for the in-app issue reporter.
@@ -32,7 +32,7 @@ import type { FeedbackSettingsView } from './config'
  * value is deliberately recognizable: it ends in the migration that
  * introduced the table (0173).
  */
-export const PLATFORM_SETTINGS_AUDIT_ROW_ID = '00000000-0000-7000-8000-000000000173'
+export const PLATFORM_SETTINGS_AUDIT_ROW_ID = "00000000-0000-7000-8000-000000000173";
 
 /**
  * Record an operator's change to the destination.
@@ -45,11 +45,11 @@ export const PLATFORM_SETTINGS_AUDIT_ROW_ID = '00000000-0000-7000-8000-000000000
  * it never holds a token, sealed or otherwise.
  */
 export async function recordFeedbackSettingsAudit(input: {
-  orgId: string
-  actorId: string
-  before: FeedbackSettingsView
-  after: FeedbackSettingsView
-  reason: string
+  orgId: string;
+  actorId: string;
+  before: FeedbackSettingsView;
+  after: FeedbackSettingsView;
+  reason: string;
 }): Promise<void> {
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -59,14 +59,14 @@ export async function recordFeedbackSettingsAudit(input: {
       ${PLATFORM_SETTINGS_AUDIT_ROW_ID},
       'update',
       ${JSON.stringify({
-        source: 'platform_admin',
-        area: 'feedback',
+        source: "platform_admin",
+        area: "feedback",
         reason: input.reason,
         before: redact(input.before),
         after: redact(input.after),
       })}::jsonb,
       ${input.actorId}
-    )`)
+    )`);
 }
 
 /** The destination as evidence may hold it: existence of a credential, never one. */
@@ -78,7 +78,7 @@ function redact(view: FeedbackSettingsView) {
     labels: view.labels,
     searchDuplicates: view.searchDuplicates,
     hasToken: view.hasToken,
-  }
+  };
 }
 
 /**
@@ -104,14 +104,14 @@ function redact(view: FeedbackSettingsView) {
  * success.
  */
 export type FeedbackFileIntent = {
-  orgId: string
-  actorId: string
-  reportId: string
-  owner: string
-  repo: string
-  payloadHash: string
-  pathname: string
-}
+  orgId: string;
+  actorId: string;
+  reportId: string;
+  owner: string;
+  repo: string;
+  payloadHash: string;
+  pathname: string;
+};
 
 export async function recordFeedbackFileIntent(input: FeedbackFileIntent): Promise<void> {
   await db.execute(sql`
@@ -122,14 +122,14 @@ export async function recordFeedbackFileIntent(input: FeedbackFileIntent): Promi
       ${input.reportId},
       'insert',
       ${JSON.stringify({
-        source: 'feedback_reporter',
-        status: 'file-intent',
+        source: "feedback_reporter",
+        status: "file-intent",
         destination: { owner: input.owner, repo: input.repo },
         payloadHash: input.payloadHash,
         pathname: input.pathname,
       })}::jsonb,
       ${input.actorId}
-    )`)
+    )`);
 }
 
 /**
@@ -138,10 +138,12 @@ export async function recordFeedbackFileIntent(input: FeedbackFileIntent): Promi
  * with labels stripped, but title and body reach GitHub byte-identical — so a
  * title+body hash still matches the created issue at reconciliation time.
  */
-export function feedbackPayloadHash(draft: Pick<IssueDraft, 'title' | 'body'> & { labels?: unknown }): string {
-  return createHash('sha256')
-    .update(JSON.stringify({ title: draft.title, body: draft.body }), 'utf8')
-    .digest('hex')
+export function feedbackPayloadHash(
+  draft: Pick<IssueDraft, "title" | "body"> & { labels?: unknown },
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ title: draft.title, body: draft.body }), "utf8")
+    .digest("hex");
 }
 
 /**
@@ -151,14 +153,14 @@ export function feedbackPayloadHash(draft: Pick<IssueDraft, 'title' | 'body'> & 
  * deployment) because the reporter acts on it.
  */
 export class FeedbackFilingRefusedError extends Error {
-  override name = 'FeedbackFilingRefusedError'
+  override name = "FeedbackFilingRefusedError";
 }
 
 export function feedbackFilingRefusedMessage(): string {
   return (
-    'The report was not filed because the filing receipt could not be recorded. ' +
-    'Try again in a moment — nothing left the deployment.'
-  )
+    "The report was not filed because the filing receipt could not be recorded. " +
+    "Try again in a moment — nothing left the deployment."
+  );
 }
 
 /**
@@ -166,12 +168,12 @@ export function feedbackFilingRefusedMessage(): string {
  * failed to write. The issue link is included so the reporter is not harmed;
  * "do not re-file" is explicit so a retry does not create a duplicate.
  */
-export function feedbackAuditPendingMessage(issue: Pick<PublishedIssue, 'number' | 'url'>): string {
+export function feedbackAuditPendingMessage(issue: Pick<PublishedIssue, "number" | "url">): string {
   return (
     `Your report was filed as issue #${issue.number} (${issue.url}), but saving the ` +
-    'audit evidence failed. Do not re-file — operators have been alerted and the ' +
-    'filing receipt will be reconciled.'
-  )
+    "audit evidence failed. Do not re-file — operators have been alerted and the " +
+    "filing receipt will be reconciled."
+  );
 }
 
 /**
@@ -187,20 +189,20 @@ export function feedbackAuditPendingMessage(issue: Pick<PublishedIssue, 'number'
 export function createIntentFirstPublisher(
   inner: IssuePublisher,
   ctx: {
-    orgId: string
-    actorId: string
-    reportId: string
-    owner: string
-    repo: string
-    pathname: string
-    refusal: { error: FeedbackFilingRefusedError | null }
+    orgId: string;
+    actorId: string;
+    reportId: string;
+    owner: string;
+    repo: string;
+    pathname: string;
+    refusal: { error: FeedbackFilingRefusedError | null };
   },
   deps?: { recordIntent?: (intent: FeedbackFileIntent) => Promise<void> },
 ): IssuePublisher {
-  const recordIntent = deps?.recordIntent ?? recordFeedbackFileIntent
+  const recordIntent = deps?.recordIntent ?? recordFeedbackFileIntent;
   const wrapped: IssuePublisher = {
     create: async (draft) => {
-      const payloadHash = feedbackPayloadHash(draft)
+      const payloadHash = feedbackPayloadHash(draft);
       try {
         await recordIntent({
           orgId: ctx.orgId,
@@ -210,49 +212,50 @@ export function createIntentFirstPublisher(
           repo: ctx.repo,
           payloadHash,
           pathname: ctx.pathname,
-        })
+        });
       } catch (error) {
         // Loud here as well as in the route: this is the moment a public
         // filing was prevented, and the cause belongs in the deployment log.
-        console.error('[feedback/turn] refusing to publish without a filing intent', error)
+        console.error("[feedback/turn] refusing to publish without a filing intent", error);
         const refused = new FeedbackFilingRefusedError(feedbackFilingRefusedMessage(), {
           cause: error,
-        })
-        ctx.refusal.error = refused
-        throw refused
+        });
+        ctx.refusal.error = refused;
+        throw refused;
       }
-      return inner.create(draft)
+      return inner.create(draft);
     },
-  }
+  };
   if (inner.searchOpen) {
-    const searchOpen = inner.searchOpen.bind(inner)
-    wrapped.searchOpen = searchOpen
+    const searchOpen = inner.searchOpen.bind(inner);
+    wrapped.searchOpen = searchOpen;
   }
-  return wrapped
+  return wrapped;
 }
 
 /** One issue as the reconciler sees it (title/body byte-identical to the draft). */
 export type FeedbackIssueSnapshot = {
-  number: number
-  url: string
-  title: string
-  body: string
-}
+  number: number;
+  url: string;
+  title: string;
+  body: string;
+};
 
 type PendingFeedbackIntent = {
-  reportId: string
-  actorId: string | null
-  pathname: string
-  payloadHash: string
-}
+  reportId: string;
+  actorId: string | null;
+  pathname: string;
+  payloadHash: string;
+};
 
 async function pendingFeedbackIntents(orgId: string): Promise<PendingFeedbackIntent[]> {
   const rows = await db.execute<{
-    reportId: string
-    actorId: string | null
-    pathname: string
-    payloadHash: string
-  }>(sql`
+    reportId: string;
+    actorId: string | null;
+    pathname: string;
+    payloadHash: string;
+  }>(
+    sql`
     select
       intent.row_id as "reportId",
       intent.actor_id as "actorId",
@@ -270,8 +273,10 @@ async function pendingFeedbackIntents(orgId: string): Promise<PendingFeedbackInt
           and done.row_id = intent.row_id
           and done.changes ->> 'status' = 'filed'
       )
-  `, 'objects')
-  return rows.filter((row) => typeof row.payloadHash === 'string' && row.payloadHash)
+  `,
+    "objects",
+  );
+  return rows.filter((row) => typeof row.payloadHash === "string" && row.payloadHash);
 }
 
 /**
@@ -282,50 +287,55 @@ async function pendingFeedbackIntents(orgId: string): Promise<PendingFeedbackInt
  * closes an intent.
  */
 export async function reconcileFeedbackFiledAudits(input: {
-  orgId: string
-  listIssues: () => Promise<FeedbackIssueSnapshot[]>
+  orgId: string;
+  listIssues: () => Promise<FeedbackIssueSnapshot[]>;
 }): Promise<{ reconciled: string[]; stillPending: string[] }> {
-  const pending = await pendingFeedbackIntents(input.orgId)
-  if (pending.length === 0) return { reconciled: [], stillPending: [] }
-  const issues = await input.listIssues()
-  const byHash = new Map<string, FeedbackIssueSnapshot>()
+  const pending = await pendingFeedbackIntents(input.orgId);
+  if (pending.length === 0) return { reconciled: [], stillPending: [] };
+  const issues = await input.listIssues();
+  const byHash = new Map<string, FeedbackIssueSnapshot>();
   for (const issue of issues) {
-    const hash = feedbackPayloadHash({ title: issue.title, body: issue.body })
-    if (!byHash.has(hash)) byHash.set(hash, issue)
+    const hash = feedbackPayloadHash({ title: issue.title, body: issue.body });
+    if (!byHash.has(hash)) byHash.set(hash, issue);
   }
-  const reconciled: string[] = []
-  const stillPending: string[] = []
+  const reconciled: string[] = [];
+  const stillPending: string[] = [];
   for (const intent of pending) {
-    const issue = byHash.get(intent.payloadHash)
+    const issue = byHash.get(intent.payloadHash);
     if (!issue) {
-      stillPending.push(intent.reportId)
-      continue
+      stillPending.push(intent.reportId);
+      continue;
     }
     await recordFeedbackFiledAudit({
       orgId: input.orgId,
       actorId: intent.actorId,
       reportId: intent.reportId,
       result: {
-        kind: 'filed',
-        issue: { id: String(issue.number), number: issue.number, url: issue.url, title: issue.title },
+        kind: "filed",
+        issue: {
+          id: String(issue.number),
+          number: issue.number,
+          url: issue.url,
+          title: issue.title,
+        },
         stripped: [],
       },
       pathname: intent.pathname,
       reconciled: true,
-    })
-    reconciled.push(intent.reportId)
+    });
+    reconciled.push(intent.reportId);
   }
-  return { reconciled, stillPending }
+  return { reconciled, stillPending };
 }
 
 export async function recordFeedbackFiledAudit(input: {
-  orgId: string
-  actorId: string | null
-  reportId: string
-  result: Extract<FeedbackTurnResult, { kind: 'filed' }>
-  pathname: string
+  orgId: string;
+  actorId: string | null;
+  reportId: string;
+  result: Extract<FeedbackTurnResult, { kind: "filed" }>;
+  pathname: string;
   /** Set when this row is written by reconciliation rather than the turn itself. */
-  reconciled?: boolean
+  reconciled?: boolean;
 }): Promise<void> {
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -335,8 +345,8 @@ export async function recordFeedbackFiledAudit(input: {
       ${input.reportId},
       'insert',
       ${JSON.stringify({
-        source: 'feedback_reporter',
-        status: 'filed',
+        source: "feedback_reporter",
+        status: "filed",
         ...(input.reconciled ? { reconciled: true } : {}),
         issue: {
           number: input.result.issue.number,
@@ -347,6 +357,5 @@ export async function recordFeedbackFiledAudit(input: {
         stripped: input.result.stripped,
       })}::jsonb,
       ${input.actorId}
-    )`)
+    )`);
 }
-

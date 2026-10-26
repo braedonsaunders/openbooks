@@ -20,7 +20,8 @@ const routeState: {
   behavior: "states",
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksNormalizationNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksNormalizationNextResponse =
+  NextResponse;
 
 // Validation (zod body/params) and the factory's refusal mapping stay real:
 // only the auth, feature, scope, and database boundaries are doubled, and
@@ -91,17 +92,23 @@ stubModules({
   },
 });
 
-const { GET } = (await import(new URL("./route.ts?metrics-normalization-get", import.meta.url).href)) as typeof import("./route.ts");
+const { GET } = (await import(
+  new URL("./route.ts?metrics-normalization-get", import.meta.url).href
+)) as typeof import("./route.ts");
 
 function reset(overrides?: Partial<typeof routeState>) {
-  Object.assign(routeState, {
-    session: { id: "user-1", orgId: "org-1" },
-    permissions: ["usage.read"],
-    features: ["saasMetrics"],
-    scopeDenied: false,
-    calls: [],
-    behavior: "states",
-  }, overrides);
+  Object.assign(
+    routeState,
+    {
+      session: { id: "user-1", orgId: "org-1" },
+      permissions: ["usage.read"],
+      features: ["saasMetrics"],
+      scopeDenied: false,
+      calls: [],
+      behavior: "states",
+    },
+    overrides,
+  );
 }
 
 test("GET returns the month states for the caller's organization", async () => {

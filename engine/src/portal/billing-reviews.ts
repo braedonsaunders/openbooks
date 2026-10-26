@@ -76,18 +76,31 @@ export async function currentBillingReviewDigest(
   prebillId: string,
   runner: SqlExecutor = db,
 ): Promise<string | null> {
-  const header = (await runner.execute<{ period_end: string; total: string }>(sql`
+  const header = (
+    await runner.execute<{ period_end: string; total: string }>(
+      sql`
     select period_end::text as period_end, proposed_bill_amount::text as total
       from prebills where org_id = ${orgId} and id = ${prebillId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!header) return null;
-  const lines = await runner.execute<DigestLine>(sql`
+  const lines = await runner.execute<DigestLine>(
+    sql`
     select id, proposed_bill_amount::text as amount, quantity::text as quantity, description
       from prebill_lines
      where org_id = ${orgId} and prebill_id = ${prebillId} and disposition = 'bill'
      order by line_number
-  `, "objects");
-  return billingReviewDigest({ id: prebillId, periodEnd: header.period_end, total: header.total, lines });
+  `,
+    "objects",
+  );
+  return billingReviewDigest({
+    id: prebillId,
+    periodEnd: header.period_end,
+    total: header.total,
+    lines,
+  });
 }
 
 /** Pre-billing reviews are visible only while the supplier has pre-billing on. */
@@ -110,7 +123,8 @@ export async function portalBillingReviews(
   runner: SqlExecutor = db,
 ): Promise<PortalBillingReviewSummary[]> {
   if (!(await reviewsEnabled(orgId))) return [];
-  return await runner.execute<PortalBillingReviewSummary>(sql`
+  return await runner.execute<PortalBillingReviewSummary>(
+    sql`
     select w.id, w.worksheet_number as "worksheetNumber", p.name as "projectName",
            w.period_start::text as "periodStart", w.period_end::text as "periodEnd",
            coalesce(s.base_currency, o.base_currency) as currency,
@@ -126,7 +140,9 @@ export async function portalBillingReviews(
        and w.status <> 'void'
      order by (w.status = 'customer_review') desc, w.customer_review_sent_at desc
      limit 50
-  `, "objects");
+  `,
+    "objects",
+  );
 }
 
 /** One worksheet as the customer sees it, or null when it is not theirs. */
@@ -137,10 +153,14 @@ export async function portalBillingReview(
   runner: SqlExecutor = db,
 ): Promise<PortalBillingReview | null> {
   if (!(await reviewsEnabled(orgId))) return null;
-  const header = (await runner.execute<PortalBillingReviewSummary & {
-    projectReference: string | null;
-    purchaseOrderNumber: string | null;
-  }>(sql`
+  const header = (
+    await runner.execute<
+      PortalBillingReviewSummary & {
+        projectReference: string | null;
+        purchaseOrderNumber: string | null;
+      }
+    >(
+      sql`
     select w.id, w.worksheet_number as "worksheetNumber", p.name as "projectName",
            p.code as "projectReference",
            coalesce(w.customer_po_number, p.customer_po_number) as "purchaseOrderNumber",
@@ -155,21 +175,32 @@ export async function portalBillingReview(
       left join subsidiaries s on s.org_id = p.org_id and s.id = p.subsidiary_id
      where w.org_id = ${orgId} and w.id = ${prebillId} and p.customer_id = ${partyId}
        and w.customer_review_sent_at is not null and w.status <> 'void'
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!header) return null;
-  const lines = await runner.execute<PortalBillingReviewLine>(sql`
+  const lines = await runner.execute<PortalBillingReviewLine>(
+    sql`
     select id, line_number as "lineNumber", source_date::text as "sourceDate", description,
            quantity::text as quantity, unit, proposed_bill_amount::text as amount,
            customer_dispute_note as "disputeNote"
       from prebill_lines
      where org_id = ${orgId} and prebill_id = ${prebillId} and disposition = 'bill'
      order by line_number
-  `, "objects");
+  `,
+    "objects",
+  );
   const digest = billingReviewDigest({
     id: header.id,
     periodEnd: header.periodEnd,
     total: header.total,
-    lines: lines.map((line) => ({ id: line.id, amount: line.amount, quantity: line.quantity, description: line.description })),
+    lines: lines.map((line) => ({
+      id: line.id,
+      amount: line.amount,
+      quantity: line.quantity,
+      description: line.description,
+    })),
   });
   return { ...header, digest, lines };
 }

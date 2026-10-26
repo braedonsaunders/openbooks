@@ -4,14 +4,33 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useViewerFormat } from "@/lib/viewer-format";
-import { Badge, Button, Input, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@openbooks/ui";
 import { ChevronRight, LockKeyhole, Plus } from "lucide-react";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
 import { mergeHref, pickString } from "../../../../../lib/list-params";
 import { PeriodDrawer } from "./close-setup-period-drawer";
 import { ReopenDrawer, ReopenList } from "./close-setup-reopen";
-import { BASE, EmptyList, Field, MODULES, SectionHeading, dataText, drawerHref } from "./close-setup-shared";
+import {
+  BASE,
+  EmptyList,
+  Field,
+  MODULES,
+  SectionHeading,
+  dataText,
+  drawerHref,
+} from "./close-setup-shared";
 import type { Props } from "./close-setup-types";
 
 export function PeriodsTab(props: Props) {
@@ -22,12 +41,10 @@ export function PeriodsTab(props: Props) {
   const selected = pickString(props.currentParams.period);
   const reopenId = pickString(props.currentParams.reopen);
   const period =
-    selected && selected !== "new"
-      ? props.periods.find((item) => item.id === selected)
-      : undefined;
+    selected && selected !== "new" ? props.periods.find((item) => item.id === selected) : undefined;
   const reopen = reopenId
-    ? (props.liveReopenRequests ?? []).find((item) => item.id === reopenId)
-      ?? props.reopenRequests.find((item) => item.id === reopenId)
+    ? ((props.liveReopenRequests ?? []).find((item) => item.id === reopenId) ??
+      props.reopenRequests.find((item) => item.id === reopenId))
     : undefined;
   return (
     <div className="space-y-5">
@@ -37,9 +54,7 @@ export function PeriodsTab(props: Props) {
         description={t("periods.description")}
         action={
           <Button size="sm" asChild>
-            <Link
-              href={drawerHref(props.currentParams, "periods", "period", "new")}
-            >
+            <Link href={drawerHref(props.currentParams, "periods", "period", "new")}>
               <Plus size={14} />
               {t("actions.generate")}
             </Link>
@@ -81,9 +96,7 @@ export function PeriodsTab(props: Props) {
             )}
           </Field>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/setup/accounting-books">
-              {t("actions.manageBooks")}
-            </Link>
+            <Link href="/admin/setup/accounting-books">{t("actions.manageBooks")}</Link>
           </Button>
           <Field label={t("fields.fiscalYear")}>
             <Input
@@ -110,24 +123,16 @@ export function PeriodsTab(props: Props) {
               <TableRow>
                 <TableHead>{t("table.period")}</TableHead>
                 <TableHead>{t("table.range")}</TableHead>
-                <TableHead className="text-right">
-                  {t("table.entries")}
-                </TableHead>
+                <TableHead className="text-right">{t("table.entries")}</TableHead>
                 <TableHead>{t("table.status")}</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {props.periods.map((item) => {
-                const states = MODULES.map(
-                  (module) => item.locks?.[module]?.state ?? "open",
-                );
-                const closed = states.filter(
-                  (state) => state === "closed",
-                ).length;
-                const soft = states.filter(
-                  (state) => state === "soft_closed",
-                ).length;
+                const states = MODULES.map((module) => item.locks?.[module]?.state ?? "open");
+                const closed = states.filter((state) => state === "closed").length;
+                const soft = states.filter((state) => state === "soft_closed").length;
                 const overall =
                   closed === MODULES.length
                     ? "closed"
@@ -156,8 +161,7 @@ export function PeriodsTab(props: Props) {
                           variant={
                             overall === "closed"
                               ? "success"
-                              : overall === "soft_closed" ||
-                                  overall === "partial"
+                              : overall === "soft_closed" || overall === "partial"
                                 ? "warning"
                                 : "outline"
                           }
@@ -175,12 +179,7 @@ export function PeriodsTab(props: Props) {
                     <TableCell>
                       <Button variant="ghost" size="sm" asChild>
                         <Link
-                          href={drawerHref(
-                            props.currentParams,
-                            "periods",
-                            "period",
-                            item.id,
-                          )}
+                          href={drawerHref(props.currentParams, "periods", "period", item.id)}
                           aria-label={t("actions.managePeriod", {
                             period: item.name,
                           })}
@@ -204,22 +203,14 @@ export function PeriodsTab(props: Props) {
           pageParamKey="periodPage"
         />
       </div>
-      {props.periods.length === 0 ? (
-        <EmptyList>{t("empty.periods")}</EmptyList>
-      ) : null}
+      {props.periods.length === 0 ? <EmptyList>{t("empty.periods")}</EmptyList> : null}
       {props.reopenTotal > 0 || pickString(props.currentParams.reopenQ) ? (
         <ReopenList {...props} />
       ) : null}
       {selected ? (
-        <PeriodDrawer
-          key={`${selected}-${props.selectedBookId}`}
-          row={period}
-          props={props}
-        />
+        <PeriodDrawer key={`${selected}-${props.selectedBookId}`} row={period} props={props} />
       ) : null}
-      {reopenId && reopen ? (
-        <ReopenDrawer key={reopenId} row={reopen} props={props} />
-      ) : null}
+      {reopenId && reopen ? <ReopenDrawer key={reopenId} row={reopen} props={props} /> : null}
     </div>
   );
 }

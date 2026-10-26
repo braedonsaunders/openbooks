@@ -35,10 +35,16 @@ export type EmailSendOutcome =
  * Mailbox case is folded away: a retried attempt for `Dana@` vs `dana@` is the
  * same delivery, not fresh mail.
  */
-export function deriveEmailDeliveryKey(input: { orgId: string; scope: string; to: string }): string {
-  if (!input.orgId?.trim()) throw new Error("delivery key derivation requires the sending organization")
-  if (!input.scope?.trim()) throw new Error("delivery key derivation requires its durable scope (job or log row)")
-  if (!input.to?.trim()) throw new Error("delivery key derivation requires the recipient mailbox")
+export function deriveEmailDeliveryKey(input: {
+  orgId: string;
+  scope: string;
+  to: string;
+}): string {
+  if (!input.orgId?.trim())
+    throw new Error("delivery key derivation requires the sending organization");
+  if (!input.scope?.trim())
+    throw new Error("delivery key derivation requires its durable scope (job or log row)");
+  if (!input.to?.trim()) throw new Error("delivery key derivation requires the recipient mailbox");
   return (
     DELIVERY_KEY_PREFIX +
     createHash("sha256")
@@ -51,15 +57,15 @@ export function deriveEmailDeliveryKey(input: { orgId: string; scope: string; to
       .update(input.to.trim().toLowerCase())
       .digest("hex")
       .slice(0, 40)
-  )
+  );
 }
 
 /** Boundary check for identities entering the transport layer. */
 export function assertEmailDeliveryKey(deliveryKey: string): string {
   if (!EMAIL_DELIVERY_KEY_PATTERN.test(deliveryKey)) {
-    throw new Error(`delivery key must match ${EMAIL_DELIVERY_KEY_PATTERN.source}`)
+    throw new Error(`delivery key must match ${EMAIL_DELIVERY_KEY_PATTERN.source}`);
   }
-  return deliveryKey
+  return deliveryKey;
 }
 
 // --- Failure classification ---------------------------------------------------
@@ -72,8 +78,7 @@ export function assertEmailDeliveryKey(deliveryKey: string): string {
 //              reconciliation first.
 
 export type NetworkFailureClass =
-  | { outcome: "notSent"; reason: string }
-  | { outcome: "uncertain"; reason: string };
+  { outcome: "notSent"; reason: string } | { outcome: "uncertain"; reason: string };
 
 /** Undici/fetch error causes that prove the request never reached the wire. */
 const PRE_TRANSMISSION_CODES = new Set([
@@ -87,9 +92,9 @@ const PRE_TRANSMISSION_CODES = new Set([
 ]);
 
 function causeCode(error: unknown): string | null {
-  const cause = error instanceof Error ? error.cause : undefined
-  const code = (cause as { code?: unknown } | undefined)?.code
-  return typeof code === "string" && code ? code : null
+  const cause = error instanceof Error ? error.cause : undefined;
+  const code = (cause as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" && code ? code : null;
 }
 
 /** undici throws this exact message when a response redirects under `redirect: "error"`. */
@@ -113,22 +118,36 @@ function causeChainMessages(error: unknown): string[] {
  * mid-flight socket loss fail closed as uncertain.
  */
 export function classifyNetworkFailure(error: unknown): NetworkFailureClass {
-  const name = error instanceof DOMException ? error.name : null
-  const errName = name ?? (error instanceof Error ? error.name : String((error as { name?: unknown })?.name ?? ""))
+  const name = error instanceof DOMException ? error.name : null;
+  const errName =
+    name ??
+    (error instanceof Error ? error.name : String((error as { name?: unknown })?.name ?? ""));
   if (errName === "TimeoutError" || errName === "AbortError") {
-    return { outcome: "uncertain", reason: `${errName}: request timed out before confirmation — acceptance state unresolved` }
+    return {
+      outcome: "uncertain",
+      reason: `${errName}: request timed out before confirmation — acceptance state unresolved`,
+    };
   }
   const chain = causeChainMessages(error);
   if (chain.some((message) => REDIRECT_REFUSAL.test(message))) {
     // The provider answered by refusing to serve here; no redirect was
     // followed and the request never reached a third origin.
-    return { outcome: "notSent", reason: "cross-origin redirect refused — provider did not accept at the requested origin" }
+    return {
+      outcome: "notSent",
+      reason: "cross-origin redirect refused — provider did not accept at the requested origin",
+    };
   }
-  const code = causeCode(error)
-  if (code && (PRE_TRANSMISSION_CODES.has(code) || code.startsWith("ERR_TLS") || code.startsWith("CERT_"))) {
-    return { outcome: "notSent", reason: `network request failed (${code})` }
+  const code = causeCode(error);
+  if (
+    code &&
+    (PRE_TRANSMISSION_CODES.has(code) || code.startsWith("ERR_TLS") || code.startsWith("CERT_"))
+  ) {
+    return { outcome: "notSent", reason: `network request failed (${code})` };
   }
-  return { outcome: "uncertain", reason: "network request failed at an unresolvable phase — acceptance state unresolved" }
+  return {
+    outcome: "uncertain",
+    reason: "network request failed at an unresolvable phase — acceptance state unresolved",
+  };
 }
 
 /** nodemailer error classes that occur strictly before message data flows. */
@@ -150,16 +169,19 @@ const SMTP_PRE_TRANSMISSION_CODES = new Set([
  * without a reply may straddle the final ack, so they stay uncertain.
  */
 export function classifySmtpFailure(error: unknown): NetworkFailureClass {
-  const detail = error as { code?: string; response?: unknown }
-  const response = typeof detail.response === "string" ? detail.response : ""
+  const detail = error as { code?: string; response?: unknown };
+  const response = typeof detail.response === "string" ? detail.response : "";
   if (response.trim()) {
-    return { outcome: "notSent", reason: response.trim() }
+    return { outcome: "notSent", reason: response.trim() };
   }
-  const code = detail.code
+  const code = detail.code;
   if (code && SMTP_PRE_TRANSMISSION_CODES.has(code)) {
-    return { outcome: "notSent", reason: `connection failed before transmission (${code})` }
+    return { outcome: "notSent", reason: `connection failed before transmission (${code})` };
   }
-  return { outcome: "uncertain", reason: `no SMTP confirmation received${code ? ` (${code})` : ""} — acceptance state unresolved` }
+  return {
+    outcome: "uncertain",
+    reason: `no SMTP confirmation received${code ? ` (${code})` : ""} — acceptance state unresolved`,
+  };
 }
 
 // --- Reconciliation ------------------------------------------------------------
@@ -191,7 +213,9 @@ export type DeliveryReconciliation =
  *   operator-facing reason; nothing here can mint a duplicate email.
  * - Clean lineage (no uncertainty, no acceptance yet) proceeds normally.
  */
-export function reconcileDeliveryAttempts(lineage: readonly AttemptRecord[]): DeliveryReconciliation {
+export function reconcileDeliveryAttempts(
+  lineage: readonly AttemptRecord[],
+): DeliveryReconciliation {
   const byAttempt = [...lineage].sort((a, b) => a.attempt - b.attempt);
   // The earliest CONFIRMED acceptance wins — confirmed means a usable (non-blank)
   // provider id. An earlier id-less sent record must not shadow a later confirmed
@@ -231,18 +255,23 @@ export function reconcileDeliveryAttempts(lineage: readonly AttemptRecord[]): De
  * SMTP-level stable identity: a deterministic Message-ID (deduped downstream by
  * conforming MTAs/MUAs) plus our audit header so duplicates remain visible.
  */
-export function buildSmtpIdentity(deliveryKey: string, from: string): { messageId: string; headers: Record<string, string> } {
-  assertEmailDeliveryKey(deliveryKey)
+export function buildSmtpIdentity(
+  deliveryKey: string,
+  from: string,
+): { messageId: string; headers: Record<string, string> } {
+  assertEmailDeliveryKey(deliveryKey);
   const senderDomain = (() => {
-    const inner = from.includes("<") ? from.slice(from.lastIndexOf("<") + 1, from.lastIndexOf(">")) : from;
-    const domain = inner.split("@")[1]?.trim().toLowerCase()
+    const inner = from.includes("<")
+      ? from.slice(from.lastIndexOf("<") + 1, from.lastIndexOf(">"))
+      : from;
+    const domain = inner.split("@")[1]?.trim().toLowerCase();
     if (!domain || domain.length > 253 || !/^[a-z0-9.-]+$/i.test(domain)) {
-      throw new Error(`cannot derive a Message-ID domain from the sender address`)
+      throw new Error(`cannot derive a Message-ID domain from the sender address`);
     }
-    return domain
-  })()
+    return domain;
+  })();
   return {
     messageId: `<${deliveryKey}@${senderDomain}>`,
     headers: { [EMAIL_DELIVERY_ID_HEADER]: deliveryKey },
-  }
+  };
 }

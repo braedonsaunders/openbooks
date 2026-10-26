@@ -1,5 +1,5 @@
-import Link from 'next/link'
-import { RemittancesView } from './RemittancesView'
+import Link from "next/link";
+import { RemittancesView } from "./RemittancesView";
 
 /**
  * The remittance list's shared sections.
@@ -13,13 +13,16 @@ import { RemittancesView } from './RemittancesView'
  * component via useTranslations/useMoney, identically wherever it renders.
  */
 
-export { RemittancesView }
+export { RemittancesView };
 
 /** The AP footnote under the list. A link over static copy is a composite cell, so it lives here. */
 export function RemittanceApNote({ note, linkLabel }: { note: string; linkLabel: string }) {
   return (
     <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">
-      {note} <Link className="underline" href={'/ap/bills' as never}>{linkLabel}</Link>
+      {note}{" "}
+      <Link className="underline" href={"/ap/bills" as never}>
+        {linkLabel}
+      </Link>
     </p>
-  )
+  );
 }

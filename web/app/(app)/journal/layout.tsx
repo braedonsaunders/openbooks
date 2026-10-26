@@ -3,5 +3,5 @@
  * available from every register and transaction surface.
  */
 export default function JournalLayout({ children }: { children: React.ReactNode }) {
-  return children
+  return children;
 }

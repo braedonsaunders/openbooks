@@ -4,7 +4,14 @@ import { db, orgContext, pool, withOrg } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
-import { ACCEPTANCE_ADAPTERS, configSecrets, type AcceptanceProvider, type OffSessionChargeOutcome, type OffSessionChargeRequest, type ProviderConfigRow } from "./acceptance.ts";
+import {
+  ACCEPTANCE_ADAPTERS,
+  configSecrets,
+  type AcceptanceProvider,
+  type OffSessionChargeOutcome,
+  type OffSessionChargeRequest,
+  type ProviderConfigRow,
+} from "./acceptance.ts";
 import { loadPaymentProviderConfig } from "./payment-link-session-expiry.ts";
 import { AutopayError, type ChargeFn } from "./autopay-policy.ts";
 
@@ -43,7 +50,19 @@ export interface AutopayRunResult {
 }
 
 export function emptyRunResult(): AutopayRunResult {
-  return { scanned: 0, charged: 0, succeeded: 0, failed: 0, retried: 0, suspended: 0, canceled: 0, reactivated: 0, skipped: 0, notices: [], orgErrors: [] };
+  return {
+    scanned: 0,
+    charged: 0,
+    succeeded: 0,
+    failed: 0,
+    retried: 0,
+    suspended: 0,
+    canceled: 0,
+    reactivated: 0,
+    skipped: 0,
+    notices: [],
+    orgErrors: [],
+  };
 }
 
 // A type alias (not an interface): SQL row types need the implicit index
@@ -98,7 +117,9 @@ export function errorMessage(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
   // A failed query carries the database's own reason as its cause; the
   // statement text and parameters around it mean nothing to an operator.
-  return error.message.startsWith("Failed query") && error.cause instanceof Error ? error.cause.message : error.message;
+  return error.message.startsWith("Failed query") && error.cause instanceof Error
+    ? error.cause.message
+    : error.message;
 }
 
 export function mergeRunResult(into: AutopayRunResult, one: AutopayRunResult): void {
@@ -131,10 +152,18 @@ export async function committed<T>(
   return value;
 }
 
-export function candidateFailed(result: AutopayRunResult, invoiceId: string): (error: unknown) => void {
+export function candidateFailed(
+  result: AutopayRunResult,
+  invoiceId: string,
+): (error: unknown) => void {
   return (error) => {
     result.failed += 1;
-    result.notices.push({ invoiceId, attemptId: null, status: "failed", detail: errorMessage(error).slice(0, 500) });
+    result.notices.push({
+      invoiceId,
+      attemptId: null,
+      status: "failed",
+      detail: errorMessage(error).slice(0, 500),
+    });
   };
 }
 
@@ -193,10 +222,15 @@ export async function withCollectionClaim<T>(
 }
 
 /** Refuse by name when the attempt's provider cannot collect. */
-export async function requireCollectingProvider(orgId: string, provider: AcceptanceProvider): Promise<ProviderConfigRow> {
+export async function requireCollectingProvider(
+  orgId: string,
+  provider: AcceptanceProvider,
+): Promise<ProviderConfigRow> {
   const config = await loadPaymentProviderConfig<ProviderConfigRow>(orgId, provider);
   if (!config || !config.is_enabled || !config.acceptance_enabled) {
-    throw new AutopayError(`${provider} is not enabled for automatic collection; enable it in provider settings first`);
+    throw new AutopayError(
+      `${provider} is not enabled for automatic collection; enable it in provider settings first`,
+    );
   }
   return config;
 }
@@ -268,7 +302,8 @@ export async function insertCollectionAttempt(
   // position first — it owns the charge and resolves it, so standing down
   // is correct and exactly one attempt charges. Fallback rows consume later
   // positions, so the retry ladder keeps bounding total attempts.
-  const attempt = (await db.execute<{ id: string }>(sql`
+  const attempt = await db.execute<{ id: string }>(
+    sql`
     insert into collection_attempts
       (org_id, invoice_id, enrollment_id, payment_method_id, fallback_method_id, amount, currency,
        provider, status, retry_position, created_by, updated_by)
@@ -277,7 +312,9 @@ export async function insertCollectionAttempt(
     -- The existing invoice retry position already owns its charge; null makes this attempt stand down.
     on conflict (org_id, invoice_id, retry_position) do nothing
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return attempt[0]?.id ?? null;
 }
 
@@ -288,12 +325,23 @@ export async function lockCollectionRetryAuthority(
   subsidiaryId: string | null,
   requestedScope: ReadonlySet<string> | null | undefined,
 ): Promise<void> {
-  if (!actorId || !subsidiaryId || requestedScope === undefined || !subsidiaryScopeAllows(requestedScope, subsidiaryId)) {
+  if (
+    !actorId ||
+    !subsidiaryId ||
+    requestedScope === undefined ||
+    !subsidiaryScopeAllows(requestedScope, subsidiaryId)
+  ) {
     throw new ScopeNotFoundError();
   }
-  const actor = await lockActorIdentity(db,orgId,actorId);
+  const actor = await lockActorIdentity(db, orgId, actorId);
   if (!actor) throw new ScopeNotFoundError();
-  const derived = await lockActorCommandAuthority(db, orgId, actorId, subsidiaryId, "autopay.manage");
+  const derived = await lockActorCommandAuthority(
+    db,
+    orgId,
+    actorId,
+    subsidiaryId,
+    "autopay.manage",
+  );
   if (!subsidiaryScopeAllows(derived, subsidiaryId)) throw new ScopeNotFoundError();
 }
 
@@ -304,11 +352,14 @@ export async function uncollectibleReason(
   status: string,
   openBalance: string,
 ): Promise<string | null> {
-  if (status !== "posted") return `invoice is ${status}; only posted invoices are collected automatically`;
+  if (status !== "posted")
+    return `invoice is ${status}; only posted invoices are collected automatically`;
   if (cmp(openBalance, "0") <= 0) return "invoice no longer owes anything; nothing to collect";
   // Disputed: an unresolved provider chargeback against this invoice's money.
   // Voluntary refunds do not block — the open balance already reflects them.
-  const disputed = (await db.execute<{ n: string }>(sql`
+  const disputed = (
+    await db.execute<{ n: string }>(
+      sql`
     select count(*)::text as n from payment_attempts a
      join payment_links l on l.id = a.link_id and l.org_id = a.org_id
     where l.org_id = ${orgId} and l.document_id = ${invoiceId}
@@ -319,18 +370,28 @@ export async function uncollectibleReason(
         where ll.org_id = ${orgId} and ll.document_id = ${invoiceId}
           and later.status = 'succeeded' and later.created_at > a.created_at
       )
-  `, "objects"))[0]?.n;
-  if (disputed !== "0") return "invoice is under a provider dispute; resolve the dispute before collecting";
+  `,
+      "objects",
+    )
+  )[0]?.n;
+  if (disputed !== "0")
+    return "invoice is under a provider dispute; resolve the dispute before collecting";
   // Disputed autopay money: an unconsumed chargeback marker parked by the
   // collection webhook against this invoice's own provider charge.
-  const clawback = (await db.execute<{ n: string }>(sql`
+  const clawback = (
+    await db.execute<{ n: string }>(
+      sql`
     select count(*)::text as n from collection_attempts ca
      join payment_pending_clawbacks pc
        on pc.org_id = ca.org_id and pc.provider = ca.provider
       and pc.intent_ref = ca.provider_ref and pc.consumed_at is null
     where ca.org_id = ${orgId} and ca.invoice_id = ${invoiceId}
-  `, "objects"))[0]?.n;
-  if (clawback !== "0") return "a chargeback was reported against this collection; reverse the receipt via payments if funds were clawed back";
+  `,
+      "objects",
+    )
+  )[0]?.n;
+  if (clawback !== "0")
+    return "a chargeback was reported against this collection; reverse the receipt via payments if funds were clawed back";
   return null;
 }
 
@@ -339,8 +400,13 @@ export async function scopeSubscriptionIds(
   candidate: Pick<CollectionCandidate, "partyId" | "subscriptionId">,
 ): Promise<string[]> {
   if (candidate.subscriptionId) return [candidate.subscriptionId];
-  return (await db.execute<{ id: string }>(sql`
+  return (
+    await db.execute<{ id: string }>(
+      sql`
     select id from subscriptions
      where org_id = ${orgId} and customer_id = ${candidate.partyId} and status = 'active'
-  `, "objects")).map((r) => r.id);
+  `,
+      "objects",
+    )
+  ).map((r) => r.id);
 }

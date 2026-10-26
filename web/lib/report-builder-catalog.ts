@@ -1,6 +1,6 @@
-import type { ReportEntity, ReportEntityColumn } from '@openbooks/reports'
+import type { ReportEntity, ReportEntityColumn } from "@openbooks/reports";
 
-export type ReportColumnGroup = 'record' | 'related' | 'identifiers'
+export type ReportColumnGroup = "record" | "related" | "identifiers";
 
 /**
  * One authoritative visibility pass for the report studio. The caller supplies
@@ -12,12 +12,13 @@ export function availableReportEntities(
   entities: readonly ReportEntity[],
   hiddenEntityKeys: readonly string[],
 ): ReportEntity[] {
-  const hidden = new Set(hiddenEntityKeys)
+  const hidden = new Set(hiddenEntityKeys);
   return [...entities]
     .filter((entity) => !hidden.has(entity.key))
-    .sort((left, right) =>
-      left.category.localeCompare(right.category) || left.label.localeCompare(right.label),
-    )
+    .sort(
+      (left, right) =>
+        left.category.localeCompare(right.category) || left.label.localeCompare(right.label),
+    );
 }
 
 /**
@@ -32,16 +33,16 @@ export function reportColumnGroup(
   column: ReportEntityColumn,
 ): ReportColumnGroup {
   if (
-    column.kind === 'uuid'
-    || column.key === 'id'
-    || column.key === 'org_id'
-    || column.key.endsWith('_id')
+    column.kind === "uuid" ||
+    column.key === "id" ||
+    column.key === "org_id" ||
+    column.key.endsWith("_id")
   ) {
-    return 'identifiers'
+    return "identifiers";
   }
 
-  const baseAlias = /^([a-z_][a-z0-9_]*)\./i.exec(entity.orgColumn)?.[1]
-  if (!baseAlias) return 'record'
-  const aliases = [...column.expr.matchAll(/\b([a-z_][a-z0-9_]*)\./gi)].map((match) => match[1])
-  return aliases.some((alias) => alias !== baseAlias) ? 'related' : 'record'
+  const baseAlias = /^([a-z_][a-z0-9_]*)\./i.exec(entity.orgColumn)?.[1];
+  if (!baseAlias) return "record";
+  const aliases = [...column.expr.matchAll(/\b([a-z_][a-z0-9_]*)\./gi)].map((match) => match[1]);
+  return aliases.some((alias) => alias !== baseAlias) ? "related" : "record";
 }

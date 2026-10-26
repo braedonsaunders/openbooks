@@ -17,7 +17,12 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { add, cmp } from "../../money/money.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../../testing/fixtures.ts";
 import { SG_PAYROLL_PACK } from "./pack.ts";
 import { ir8aSlips } from "./filings.ts";
 
@@ -61,7 +66,11 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
             ${actorId}, ${actorId})`);
 
   const component = async (
-    code: string, name: string, kind: string, systemKey: string, taxable: boolean,
+    code: string,
+    name: string,
+    kind: string,
+    systemKey: string,
+    taxable: boolean,
   ): Promise<string> => {
     const id = randomUUID();
     await db.execute(sql`
@@ -73,11 +82,26 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
   };
   const salaryId = await component("SAL", "Salary", "earning", "salary", true);
   const cpfEeId = await component("CPF_EE", "CPF — employee share", "deduction", "cpf_ee", false);
-  const cpfErId = await component("CPF_ER", "CPF — employer share", "employer_contribution", "cpf_er", false);
-  const sdlId = await component("SDL", "Skills Development Levy", "employer_contribution", "sdl", false);
+  const cpfErId = await component(
+    "CPF_ER",
+    "CPF — employer share",
+    "employer_contribution",
+    "cpf_er",
+    false,
+  );
+  const sdlId = await component(
+    "SDL",
+    "Skills Development Levy",
+    "employer_contribution",
+    "sdl",
+    false,
+  );
 
   const run = async (
-    periodEnd: string, payDate: string, status: "committed" | "draft", taxYear = 2026,
+    periodEnd: string,
+    payDate: string,
+    status: "committed" | "draft",
+    taxYear = 2026,
   ): Promise<string> => {
     const documentId = randomUUID();
     await db.execute(sql`
@@ -94,8 +118,14 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
   };
 
   const stub = async (
-    documentId: string, employeeId: string, payDate: string,
-    gross: string, cpfEe: string, cpfEr: string, sdl: string, taxYear = 2026,
+    documentId: string,
+    employeeId: string,
+    payDate: string,
+    gross: string,
+    cpfEe: string,
+    cpfEr: string,
+    sdl: string,
+    taxYear = 2026,
   ): Promise<void> => {
     const stubId = randomUUID();
     await db.execute(sql`
@@ -147,7 +177,13 @@ test(
       assert.equal(data.rows.length, 2);
 
       // Independent ground truth, straight from committed stubs.
-      const truth = await db.execute<{ employee_party_id: string; income: string; ee: string; er: string }>(sql`
+      const truth = await db.execute<{
+        employee_party_id: string;
+        income: string;
+        ee: string;
+        er: string;
+      }>(
+        sql`
         select s.employee_party_id,
                sum(case when l.kind = 'earning' then l.amount else 0 end)::text as income,
                sum(case when pc.system_key = 'cpf_ee' then l.amount else 0 end)::text as ee,
@@ -158,12 +194,12 @@ test(
           join pay_stub_lines l on l.stub_id = s.id and l.org_id = s.org_id
           join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
          where s.org_id = ${fx.orgId} and s.tax_year = 2026 and s.country = 'SG'
-         group by s.employee_party_id`, "objects");
+         group by s.employee_party_id`,
+        "objects",
+      );
       assert.equal(truth.length, 2);
       for (const row of data.rows) {
-        const expected = truth.find(
-          (candidate) => candidate.employee_party_id === row.rowId,
-        );
+        const expected = truth.find((candidate) => candidate.employee_party_id === row.rowId);
         assert.ok(expected, `population row ${row.rowId} ties to a committed-stub employee`);
         // Money ties by VALUE: the population and the raw column can carry
         // different scales for the same amount.
@@ -188,9 +224,18 @@ test(
       const total = (pick: (row: { income: string; ee: string; er: string }) => string) =>
         truth.reduce((acc, row) => add(acc, pick(row) ?? "0"), "0");
       const totals = new Map((data.totals ?? []).map((entry) => [entry.label, entry.value]));
-      assert.equal(totals.get("Employment income"), total((row) => row.income));
-      assert.equal(totals.get("Employee CPF"), total((row) => row.ee));
-      assert.equal(totals.get("Employer CPF"), total((row) => row.er));
+      assert.equal(
+        totals.get("Employment income"),
+        total((row) => row.income),
+      );
+      assert.equal(
+        totals.get("Employee CPF"),
+        total((row) => row.ee),
+      );
+      assert.equal(
+        totals.get("Employer CPF"),
+        total((row) => row.er),
+      );
 
       // Every emitted row id round-trips through the declared grammar, and
       // a foreign id parses to null.
@@ -214,14 +259,18 @@ test(
       // return — it surfaces on the slip's next-year-paid review pool.
       assert.equal(
         cmp(
-          String(slips.find((candidate) => candidate.employeePartyId === fx.employeeA)?.nextYearPaid),
+          String(
+            slips.find((candidate) => candidate.employeePartyId === fx.employeeA)?.nextYearPaid,
+          ),
           "1200.00",
         ),
         0,
       );
       assert.equal(
         cmp(
-          String(slips.find((candidate) => candidate.employeePartyId === fx.employeeA)?.employmentIncome),
+          String(
+            slips.find((candidate) => candidate.employeePartyId === fx.employeeA)?.employmentIncome,
+          ),
           "9000.00",
         ),
         0,

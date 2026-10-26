@@ -54,10 +54,16 @@ async function seedDocument(
   return id;
 }
 
-async function correctionEdge(orgId: string, creditId: string): Promise<{ to: string; linkType: string }[]> {
-  const rows = await db.execute<{ to: string; linkType: string }>(sql`
+async function correctionEdge(
+  orgId: string,
+  creditId: string,
+): Promise<{ to: string; linkType: string }[]> {
+  const rows = await db.execute<{ to: string; linkType: string }>(
+    sql`
     select to_document_id as "to", link_type as "linkType" from document_links
-     where org_id = ${orgId} and from_document_id = ${creditId}`, "objects");
+     where org_id = ${orgId} and from_document_id = ${creditId}`,
+    "objects",
+  );
   return rows;
 }
 
@@ -79,79 +85,127 @@ async function recordCorrection(
   );
 }
 
-test("a credit names its corrected invoice through a document relationship", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
-    await enableCrossBorderTax(org);
-    const invoiceId = await seedDocument(org, actorId, { kind: "customer_invoice", status: "posted", number: "INV-CORR-1" });
-    const creditId = await seedDocument(org, actorId, { kind: "customer_credit", status: "draft", number: "CR-CORR-1" });
-    await recordCorrection(org, actorId, creditId, invoiceId);
-    const edges = await correctionEdge(org.orgId, creditId);
-    assert.equal(edges.length, 1);
-    assert.equal(edges[0]!.to, invoiceId);
-    assert.equal(edges[0]!.linkType, "corrects");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a credit names its corrected invoice through a document relationship",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
+      await enableCrossBorderTax(org);
+      const invoiceId = await seedDocument(org, actorId, {
+        kind: "customer_invoice",
+        status: "posted",
+        number: "INV-CORR-1",
+      });
+      const creditId = await seedDocument(org, actorId, {
+        kind: "customer_credit",
+        status: "draft",
+        number: "CR-CORR-1",
+      });
+      await recordCorrection(org, actorId, creditId, invoiceId);
+      const edges = await correctionEdge(org.orgId, creditId);
+      assert.equal(edges.length, 1);
+      assert.equal(edges[0]!.to, invoiceId);
+      assert.equal(edges[0]!.linkType, "corrects");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("re-pointing a correction replaces the relationship instead of adding one", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
-    await enableCrossBorderTax(org);
-    const first = await seedDocument(org, actorId, { kind: "customer_invoice", status: "posted", number: "INV-CORR-2A" });
-    const second = await seedDocument(org, actorId, { kind: "customer_invoice", status: "posted", number: "INV-CORR-2B" });
-    const creditId = await seedDocument(org, actorId, { kind: "customer_credit", status: "draft", number: "CR-CORR-2" });
-    await recordCorrection(org, actorId, creditId, first);
-    await recordCorrection(org, actorId, creditId, second);
-    const edges = await correctionEdge(org.orgId, creditId);
-    assert.equal(edges.length, 1);
-    assert.equal(edges[0]!.to, second);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "re-pointing a correction replaces the relationship instead of adding one",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
+      await enableCrossBorderTax(org);
+      const first = await seedDocument(org, actorId, {
+        kind: "customer_invoice",
+        status: "posted",
+        number: "INV-CORR-2A",
+      });
+      const second = await seedDocument(org, actorId, {
+        kind: "customer_invoice",
+        status: "posted",
+        number: "INV-CORR-2B",
+      });
+      const creditId = await seedDocument(org, actorId, {
+        kind: "customer_credit",
+        status: "draft",
+        number: "CR-CORR-2",
+      });
+      await recordCorrection(org, actorId, creditId, first);
+      await recordCorrection(org, actorId, creditId, second);
+      const edges = await correctionEdge(org.orgId, creditId);
+      assert.equal(edges.length, 1);
+      assert.equal(edges[0]!.to, second);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a correction names a posted customer invoice in this organization", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
-    await enableCrossBorderTax(org);
-    const creditId = await seedDocument(org, actorId, { kind: "customer_credit", status: "draft", number: "CR-CORR-3" });
-    await assert.rejects(
-      () => recordCorrection(org, actorId, creditId, "not-a-document"),
-      /name the corrected invoice by choosing it/,
-      "a free-text pointer must refuse with the remedy",
-    );
-    await assert.rejects(
-      () => recordCorrection(org, actorId, creditId, randomUUID()),
-      /belongs to another organization/,
-      "an unknown document must refuse instead of attributing nowhere",
-    );
-    const draftInvoice = await seedDocument(org, actorId, { kind: "customer_invoice", status: "draft", number: "INV-CORR-3D" });
-    await assert.rejects(
-      () => recordCorrection(org, actorId, creditId, draftInvoice),
-      /post the corrected invoice first/,
-      "a draft target has no filed quarter to attribute to",
-    );
-    const otherCredit = await seedDocument(org, actorId, { kind: "customer_credit", status: "posted", number: "CR-CORR-3C" });
-    await assert.rejects(
-      () => recordCorrection(org, actorId, creditId, otherCredit),
-      /only correct a customer invoice/,
-      "a credit cannot correct another credit",
-    );
-    await assert.rejects(
-      () => recordCorrection(org, actorId, creditId, creditId),
-      /cannot correct itself/,
-      "a credit cannot correct itself",
-    );
-    assert.deepEqual(await correctionEdge(org.orgId, creditId), [], "no refusal may leave a half-written relationship");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a correction names a posted customer invoice in this organization",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
+      await enableCrossBorderTax(org);
+      const creditId = await seedDocument(org, actorId, {
+        kind: "customer_credit",
+        status: "draft",
+        number: "CR-CORR-3",
+      });
+      await assert.rejects(
+        () => recordCorrection(org, actorId, creditId, "not-a-document"),
+        /name the corrected invoice by choosing it/,
+        "a free-text pointer must refuse with the remedy",
+      );
+      await assert.rejects(
+        () => recordCorrection(org, actorId, creditId, randomUUID()),
+        /belongs to another organization/,
+        "an unknown document must refuse instead of attributing nowhere",
+      );
+      const draftInvoice = await seedDocument(org, actorId, {
+        kind: "customer_invoice",
+        status: "draft",
+        number: "INV-CORR-3D",
+      });
+      await assert.rejects(
+        () => recordCorrection(org, actorId, creditId, draftInvoice),
+        /post the corrected invoice first/,
+        "a draft target has no filed quarter to attribute to",
+      );
+      const otherCredit = await seedDocument(org, actorId, {
+        kind: "customer_credit",
+        status: "posted",
+        number: "CR-CORR-3C",
+      });
+      await assert.rejects(
+        () => recordCorrection(org, actorId, creditId, otherCredit),
+        /only correct a customer invoice/,
+        "a credit cannot correct another credit",
+      );
+      await assert.rejects(
+        () => recordCorrection(org, actorId, creditId, creditId),
+        /cannot correct itself/,
+        "a credit cannot correct itself",
+      );
+      assert.deepEqual(
+        await correctionEdge(org.orgId, creditId),
+        [],
+        "no refusal may leave a half-written relationship",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a correction stays with the corrected invoice's customer", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -168,7 +222,11 @@ test("a correction stays with the corrected invoice's customer", { skip: !DB }, 
       number: "INV-CORR-4",
       partyId: otherParty,
     });
-    const creditId = await seedDocument(org, actorId, { kind: "customer_credit", status: "draft", number: "CR-CORR-4" });
+    const creditId = await seedDocument(org, actorId, {
+      kind: "customer_credit",
+      status: "draft",
+      number: "CR-CORR-4",
+    });
     await assert.rejects(
       () => recordCorrection(org, actorId, creditId, invoiceId),
       /same customer/,
@@ -184,8 +242,16 @@ test("an invoice cannot name a corrected document", { skip: !DB }, async () => {
   try {
     const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
     await enableCrossBorderTax(org);
-    const invoiceId = await seedDocument(org, actorId, { kind: "customer_invoice", status: "posted", number: "INV-CORR-5A" });
-    const draftId = await seedDocument(org, actorId, { kind: "customer_invoice", status: "draft", number: "INV-CORR-5B" });
+    const invoiceId = await seedDocument(org, actorId, {
+      kind: "customer_invoice",
+      status: "posted",
+      number: "INV-CORR-5A",
+    });
+    const draftId = await seedDocument(org, actorId, {
+      kind: "customer_invoice",
+      status: "draft",
+      number: "INV-CORR-5B",
+    });
     await assert.rejects(
       () =>
         recordSupplyEvidence(
@@ -193,7 +259,11 @@ test("an invoice cannot name a corrected document", { skip: !DB }, async () => {
           org.orgId,
           draftId,
           {
-            election: { supplyKind: "digital_service", customerKind: "consumer", correctsDocumentId: invoiceId },
+            election: {
+              supplyKind: "digital_service",
+              customerKind: "consumer",
+              correctsDocumentId: invoiceId,
+            },
             evidence: [],
           },
           actorId,
@@ -201,55 +271,93 @@ test("an invoice cannot name a corrected document", { skip: !DB }, async () => {
       /only a credit memo names a corrected document/,
       "corrections flow one way: credit memo to invoice",
     );
-    assert.ok(!(await db.execute(sql`
+    assert.ok(
+      !(
+        await db.execute(
+          sql`
       select 1 from documents
-       where id = ${draftId} and custom -> 'crossBorder' ? 'correctsDocumentId'`, "objects")).length);
+       where id = ${draftId} and custom -> 'crossBorder' ? 'correctsDocumentId'`,
+          "objects",
+        )
+      ).length,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("clearing a correction removes the relationship while re-saves preserve it", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
-    await enableCrossBorderTax(org);
-    const invoiceId = await seedDocument(org, actorId, { kind: "customer_invoice", status: "posted", number: "INV-CORR-6" });
-    const creditId = await seedDocument(org, actorId, { kind: "customer_credit", status: "draft", number: "CR-CORR-6" });
-    await recordCorrection(org, actorId, creditId, invoiceId);
-    assert.equal((await correctionEdge(org.orgId, creditId)).length, 1);
-    await recordSupplyEvidence(
-      db,
-      org.orgId,
-      creditId,
-      { election: { supplyKind: "digital_service", customerKind: "consumer" }, evidence: [] },
-      actorId,
-    );
-    assert.equal(
-      (await correctionEdge(org.orgId, creditId)).length,
-      1,
-      "an evidence re-save without the pointer leaves the relationship untouched",
-    );
-    await recordSupplyEvidence(
-      db,
-      org.orgId,
-      creditId,
-      { election: { supplyKind: "digital_service", customerKind: "consumer", correctsDocumentId: null }, evidence: [] },
-      actorId,
-    );
-    assert.deepEqual(await correctionEdge(org.orgId, creditId), [], "clearing the pointer removes the relationship");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "clearing a correction removes the relationship while re-saves preserve it",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
+      await enableCrossBorderTax(org);
+      const invoiceId = await seedDocument(org, actorId, {
+        kind: "customer_invoice",
+        status: "posted",
+        number: "INV-CORR-6",
+      });
+      const creditId = await seedDocument(org, actorId, {
+        kind: "customer_credit",
+        status: "draft",
+        number: "CR-CORR-6",
+      });
+      await recordCorrection(org, actorId, creditId, invoiceId);
+      assert.equal((await correctionEdge(org.orgId, creditId)).length, 1);
+      await recordSupplyEvidence(
+        db,
+        org.orgId,
+        creditId,
+        { election: { supplyKind: "digital_service", customerKind: "consumer" }, evidence: [] },
+        actorId,
+      );
+      assert.equal(
+        (await correctionEdge(org.orgId, creditId)).length,
+        1,
+        "an evidence re-save without the pointer leaves the relationship untouched",
+      );
+      await recordSupplyEvidence(
+        db,
+        org.orgId,
+        creditId,
+        {
+          election: {
+            supplyKind: "digital_service",
+            customerKind: "consumer",
+            correctsDocumentId: null,
+          },
+          evidence: [],
+        },
+        actorId,
+      );
+      assert.deepEqual(
+        await correctionEdge(org.orgId, creditId),
+        [],
+        "clearing the pointer removes the relationship",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a draft credit naming its corrected invoice stays deletable", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
     await enableCrossBorderTax(org);
-    const invoiceId = await seedDocument(org, actorId, { kind: "customer_invoice", status: "posted", number: "INV-CORR-DEL" });
-    const creditId = await seedDocument(org, actorId, { kind: "customer_credit", status: "draft", number: "CR-CORR-DEL" });
+    const invoiceId = await seedDocument(org, actorId, {
+      kind: "customer_invoice",
+      status: "posted",
+      number: "INV-CORR-DEL",
+    });
+    const creditId = await seedDocument(org, actorId, {
+      kind: "customer_credit",
+      status: "draft",
+      number: "CR-CORR-DEL",
+    });
     await recordCorrection(org, actorId, creditId, invoiceId);
     // The 'corrects' edge points from the draft credit at its posted source,
     // like a 'reverses' edge: deleting the credit must succeed and take the
@@ -258,10 +366,19 @@ test("a draft credit naming its corrected invoice stays deletable", { skip: !DB 
       reason: "entered in error",
       allowedSubsidiaryIds: null,
     });
-    const gone = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where id = ${creditId} and org_id = ${org.orgId}`, "objects"))[0]!.n;
+    const gone = (
+      await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from documents where id = ${creditId} and org_id = ${org.orgId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(gone, 0, "the draft credit deletes instead of refusing on its correction edge");
-    assert.deepEqual(await correctionEdge(org.orgId, creditId), [], "the edge is removed with its credit");
+    assert.deepEqual(
+      await correctionEdge(org.orgId, creditId),
+      [],
+      "the edge is removed with its credit",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

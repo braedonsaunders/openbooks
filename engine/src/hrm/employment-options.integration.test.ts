@@ -10,11 +10,7 @@ import {
   listPeopleOptions,
 } from "./employment-read.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import {
   enableHrm,
   grantRead,
@@ -31,10 +27,19 @@ const skip = !process.env.OPENBOOKS_DB_URL;
 // native locations with subsidiary scope. Runs against the reviewer's own
 // database; never touches shared fixtures.
 
-async function mkPrimaryAssignment(orgId: string, employmentId: string, jobTitle: string): Promise<void> {
-  const slot = (await db.execute<{ id: string }>(sql`
+async function mkPrimaryAssignment(
+  orgId: string,
+  employmentId: string,
+  jobTitle: string,
+): Promise<void> {
+  const slot = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, 'primary') returning id`, "objects"))[0]!.id;
+    values (${orgId}, ${employmentId}, 'primary') returning id`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, version_no, job_title, fte, is_primary,
@@ -59,9 +64,14 @@ async function mkLocation(
   subsidiaryId: string | null,
   isActive: boolean,
 ): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
+  return (
+    await db.execute<{ id: string }>(
+      sql`
     insert into locations (org_id, name, code, subsidiary_id, is_active)
-    values (${orgId}, ${name}, ${code}, ${subsidiaryId}, ${isActive}) returning id`, "objects"))[0]!.id;
+    values (${orgId}, ${name}, ${code}, ${subsidiaryId}, ${isActive}) returning id`,
+      "objects",
+    )
+  )[0]!.id;
 }
 
 test("employment options name the person, employer, and live primary job", { skip }, async () => {
@@ -203,7 +213,10 @@ test("location options list active native locations inside the scope", { skip },
     assert.equal(hqOption?.label, "HQ · Headquarters");
 
     const filtered = await listLocationOptions({ orgId: org.orgId, actorId: actor, q: "shop" });
-    assert.deepEqual(filtered.map((option) => option.locationId), [shop]);
+    assert.deepEqual(
+      filtered.map((option) => option.locationId),
+      [shop],
+    );
 
     const pinned = await listLocationOptions({
       orgId: org.orgId,
@@ -227,95 +240,164 @@ test("location options list active native locations inside the scope", { skip },
   }
 });
 
-test("employment, people, and location option pages scope before applying their limit", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "Scoped HRM reader", "scoped_hrm_reader");
-    await grantRead(org.orgId, "scoped_hrm_reader");
-    await enableHrm(org.orgId);
-    const childId = await seedChildSubsidiary(org.orgId, org.subsidiaryId);
-    await restrictRole(org.orgId, "scoped_hrm_reader", [org.subsidiaryId]);
+test(
+  "employment, people, and location option pages scope before applying their limit",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Scoped HRM reader", "scoped_hrm_reader");
+      await grantRead(org.orgId, "scoped_hrm_reader");
+      await enableHrm(org.orgId);
+      const childId = await seedChildSubsidiary(org.orgId, org.subsidiaryId);
+      await restrictRole(org.orgId, "scoped_hrm_reader", [org.subsidiaryId]);
 
-    const hiddenParty = await mkParty(org.orgId, "A Hidden Worker");
-    await mkEmployment(org.orgId, hiddenParty, childId);
-    const visibleParty = await mkParty(org.orgId, "Z Visible Worker");
-    const visibleEmployment = await mkEmployment(org.orgId, visibleParty, org.subsidiaryId);
+      const hiddenParty = await mkParty(org.orgId, "A Hidden Worker");
+      await mkEmployment(org.orgId, hiddenParty, childId);
+      const visibleParty = await mkParty(org.orgId, "Z Visible Worker");
+      const visibleEmployment = await mkEmployment(org.orgId, visibleParty, org.subsidiaryId);
 
-    const employmentPage = await listEmploymentOptions({ orgId: org.orgId, actorId: actor, limit: 1 });
-    assert.deepEqual(employmentPage.map((row) => row.employmentId), [visibleEmployment]);
-    const peoplePage = await listPeopleOptions({ orgId: org.orgId, actorId: actor, limit: 1 });
-    assert.deepEqual(peoplePage.map((row) => row.partyId), [visibleParty]);
+      const employmentPage = await listEmploymentOptions({
+        orgId: org.orgId,
+        actorId: actor,
+        limit: 1,
+      });
+      assert.deepEqual(
+        employmentPage.map((row) => row.employmentId),
+        [visibleEmployment],
+      );
+      const peoplePage = await listPeopleOptions({ orgId: org.orgId, actorId: actor, limit: 1 });
+      assert.deepEqual(
+        peoplePage.map((row) => row.partyId),
+        [visibleParty],
+      );
 
-    const hiddenLocation = await mkLocation(org.orgId, "A Hidden Site", null, childId, true);
-    const visibleLocation = await mkLocation(org.orgId, "Z Visible Site", null, org.subsidiaryId, true);
-    const locationPage = await listLocationOptions({ orgId: org.orgId, actorId: actor, q: "Site", limit: 1 });
-    assert.deepEqual(locationPage.map((row) => row.locationId), [visibleLocation]);
-    assert.ok(!locationPage.some((row) => row.locationId === hiddenLocation));
-    const shared = await mkLocation(org.orgId, "M Shared Site", null, null, true);
-    const allVisibleLocations = await listLocationOptions({ orgId: org.orgId, actorId: actor, limit: 10 });
-    assert.ok(allVisibleLocations.some((row) => row.locationId === shared), "null-subsidiary shared locations remain visible");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const hiddenLocation = await mkLocation(org.orgId, "A Hidden Site", null, childId, true);
+      const visibleLocation = await mkLocation(
+        org.orgId,
+        "Z Visible Site",
+        null,
+        org.subsidiaryId,
+        true,
+      );
+      const locationPage = await listLocationOptions({
+        orgId: org.orgId,
+        actorId: actor,
+        q: "Site",
+        limit: 1,
+      });
+      assert.deepEqual(
+        locationPage.map((row) => row.locationId),
+        [visibleLocation],
+      );
+      assert.ok(!locationPage.some((row) => row.locationId === hiddenLocation));
+      const shared = await mkLocation(org.orgId, "M Shared Site", null, null, true);
+      const allVisibleLocations = await listLocationOptions({
+        orgId: org.orgId,
+        actorId: actor,
+        limit: 10,
+      });
+      assert.ok(
+        allVisibleLocations.some((row) => row.locationId === shared),
+        "null-subsidiary shared locations remain visible",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("people options key directory holders by party for the exit-interviewer picker", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = await createScratchUser(org.orgId, "HRM reader", "hrm_reader");
-    await grantRead(org.orgId, "hrm_reader");
-    await enableHrm(org.orgId);
-    const alice = await mkParty(org.orgId, "Alice Holder");
-    const aliceEmployment = await mkEmployment(org.orgId, alice, org.subsidiaryId);
-    await mkPrimaryAssignment(org.orgId, aliceEmployment, "Cashier");
-    const bob = await mkParty(org.orgId, "Bob Reserved");
-    await mkEmployment(org.orgId, bob, org.subsidiaryId);
-    // A person with two employments is one row: the picker submits party ids.
-    await mkEmployment(org.orgId, alice, org.subsidiaryId);
+test(
+  "people options key directory holders by party for the exit-interviewer picker",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "HRM reader", "hrm_reader");
+      await grantRead(org.orgId, "hrm_reader");
+      await enableHrm(org.orgId);
+      const alice = await mkParty(org.orgId, "Alice Holder");
+      const aliceEmployment = await mkEmployment(org.orgId, alice, org.subsidiaryId);
+      await mkPrimaryAssignment(org.orgId, aliceEmployment, "Cashier");
+      const bob = await mkParty(org.orgId, "Bob Reserved");
+      await mkEmployment(org.orgId, bob, org.subsidiaryId);
+      // A person with two employments is one row: the picker submits party ids.
+      await mkEmployment(org.orgId, alice, org.subsidiaryId);
 
-    const options = await listPeopleOptions({ orgId: org.orgId, actorId: actor });
-    assert.equal(options.length, 2);
-    const aliceOption = options.find((option) => option.partyId === alice);
-    assert.ok(aliceOption);
-    assert.equal(aliceOption.label, "Alice Holder");
-    const bobOption = options.find((option) => option.partyId === bob);
-    assert.ok(bobOption);
-    const filtered = await listPeopleOptions({ orgId: org.orgId, actorId: actor, q: "bob" });
-    assert.equal(filtered.length, 1);
-    assert.equal(filtered[0]?.partyId, bob);
-    // The pinned stored interviewer leads the page.
-    const pinned = await listPeopleOptions({
-      orgId: org.orgId,
-      actorId: actor,
-      limit: 1,
-      includePartyId: bob,
-    });
-    assert.equal(pinned[0]?.partyId, bob);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const options = await listPeopleOptions({ orgId: org.orgId, actorId: actor });
+      assert.equal(options.length, 2);
+      const aliceOption = options.find((option) => option.partyId === alice);
+      assert.ok(aliceOption);
+      assert.equal(aliceOption.label, "Alice Holder");
+      const bobOption = options.find((option) => option.partyId === bob);
+      assert.ok(bobOption);
+      const filtered = await listPeopleOptions({ orgId: org.orgId, actorId: actor, q: "bob" });
+      assert.equal(filtered.length, 1);
+      assert.equal(filtered[0]?.partyId, bob);
+      // The pinned stored interviewer leads the page.
+      const pinned = await listPeopleOptions({
+        orgId: org.orgId,
+        actorId: actor,
+        limit: 1,
+        includePartyId: bob,
+      });
+      assert.equal(pinned[0]?.partyId, bob);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-
-test('authoring options exclude inactive workers while stored historical selections remain readable', {skip}, async () => {
-  const org = await createScratchOrg()
-  try {
-    const actor = await createScratchUser(org.orgId, 'HR options reader', 'hrm_reader')
-    await grantRead(org.orgId, 'hrm_reader'); await enableHrm(org.orgId)
-    const current = await mkParty(org.orgId, 'Current worker')
-    const currentEmployment = await mkEmployment(org.orgId,current,org.subsidiaryId)
-    const retired = await mkParty(org.orgId, 'Retired worker')
-    const retiredEmployment = await mkEmployment(org.orgId,retired,org.subsidiaryId)
-    await db.execute(sql`update parties set is_active=false where org_id=${org.orgId} and id=${retired}`)
-    const roleRetired = await mkParty(org.orgId, 'Retired employee role')
-    await mkEmployment(org.orgId,roleRetired,org.subsidiaryId)
-    await db.execute(sql`insert into employee_roles(org_id,party_id,is_active) values(${org.orgId},${roleRetired},false)
-      on conflict(org_id,party_id) do update set is_active=false`)
-    const query = {orgId:org.orgId,actorId:actor}
-    assert.deepEqual((await listEmploymentOptions(query)).map(row=>row.employmentId),[currentEmployment])
-    assert.deepEqual((await listPeopleOptions(query)).map(row=>row.partyId),[current])
-    assert.ok((await listEmploymentOptions({...query,includeEmploymentId:retiredEmployment})).some(row=>row.employmentId===retiredEmployment))
-    assert.ok(!(await listEmploymentOptions({...query,includeEmploymentId:retiredEmployment,activeOnly:true})).some(row=>row.employmentId===retiredEmployment))
-    assert.ok(!(await listPeopleOptions({...query,includePartyId:retired,activeOnly:true})).some(row=>row.partyId===retired))
-  } finally { await dropScratchOrg(org.orgId) }
-})
+test(
+  "authoring options exclude inactive workers while stored historical selections remain readable",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "HR options reader", "hrm_reader");
+      await grantRead(org.orgId, "hrm_reader");
+      await enableHrm(org.orgId);
+      const current = await mkParty(org.orgId, "Current worker");
+      const currentEmployment = await mkEmployment(org.orgId, current, org.subsidiaryId);
+      const retired = await mkParty(org.orgId, "Retired worker");
+      const retiredEmployment = await mkEmployment(org.orgId, retired, org.subsidiaryId);
+      await db.execute(
+        sql`update parties set is_active=false where org_id=${org.orgId} and id=${retired}`,
+      );
+      const roleRetired = await mkParty(org.orgId, "Retired employee role");
+      await mkEmployment(org.orgId, roleRetired, org.subsidiaryId);
+      await db.execute(sql`insert into employee_roles(org_id,party_id,is_active) values(${org.orgId},${roleRetired},false)
+      on conflict(org_id,party_id) do update set is_active=false`);
+      const query = { orgId: org.orgId, actorId: actor };
+      assert.deepEqual(
+        (await listEmploymentOptions(query)).map((row) => row.employmentId),
+        [currentEmployment],
+      );
+      assert.deepEqual(
+        (await listPeopleOptions(query)).map((row) => row.partyId),
+        [current],
+      );
+      assert.ok(
+        (await listEmploymentOptions({ ...query, includeEmploymentId: retiredEmployment })).some(
+          (row) => row.employmentId === retiredEmployment,
+        ),
+      );
+      assert.ok(
+        !(
+          await listEmploymentOptions({
+            ...query,
+            includeEmploymentId: retiredEmployment,
+            activeOnly: true,
+          })
+        ).some((row) => row.employmentId === retiredEmployment),
+      );
+      assert.ok(
+        !(await listPeopleOptions({ ...query, includePartyId: retired, activeOnly: true })).some(
+          (row) => row.partyId === retired,
+        ),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

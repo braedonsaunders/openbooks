@@ -1,28 +1,31 @@
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return{push(){},refresh(){},replace(){},back(){},prefetch(){}}}' })
-import assert from 'node:assert/strict'
-import test from 'node:test'
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  navigation:
+    "export function useRouter(){return{push(){},refresh(){},replace(){},back(){},prefetch(){}}}",
+});
+import assert from "node:assert/strict";
+import test from "node:test";
 
 // AP pay-run planner: due dates must render in the viewer's locale.
 // A French viewer sees "5 janv.", never the pinned English "Jan 5".
-const React = await import('react')
-Object.assign(globalThis, { React })
+const React = await import("react");
+Object.assign(globalThis, { React });
 
-const { renderToStaticMarkup } = await import('react-dom/server')
-const { NextIntlClientProvider } = await import('next-intl')
-const { MoneyProvider } = await import('@/components/money-provider')
-const { PayRunPlanner } = await import('./PayRunPlanner')
+const { renderToStaticMarkup } = await import("react-dom/server");
+const { NextIntlClientProvider } = await import("next-intl");
+const { MoneyProvider } = await import("@/components/money-provider");
+const { PayRunPlanner } = await import("./PayRunPlanner");
 
 const entry = {
-  id: 'e1',
-  docId: 'd1',
-  docKind: 'vendor_bill',
-  partyName: 'Acme',
-  amount: '1250.0000',
-  dueDate: '2026-01-05',
+  id: "e1",
+  docId: "d1",
+  docKind: "vendor_bill",
+  partyName: "Acme",
+  amount: "1250.0000",
+  dueDate: "2026-01-05",
   daysOverdue: 3,
-  method: 'check',
-}
+  method: "check",
+};
 
 function markup(locale: string): string {
   return renderToStaticMarkup(
@@ -37,11 +40,14 @@ function markup(locale: string): string {
         />
       </MoneyProvider>
     </NextIntlClientProvider>,
-  )
+  );
 }
 
-test('pay-run due dates render in the viewer locale', () => {
-  assert.match(markup('en-US'), /Jan 5/)
-  assert.match(markup('fr'), /janv/i)
-  assert.ok(!markup('fr').includes('Jan 5'), 'no pinned English date may leak into the French render')
-})
+test("pay-run due dates render in the viewer locale", () => {
+  assert.match(markup("en-US"), /Jan 5/);
+  assert.match(markup("fr"), /janv/i);
+  assert.ok(
+    !markup("fr").includes("Jan 5"),
+    "no pinned English date may leak into the French render",
+  );
+});

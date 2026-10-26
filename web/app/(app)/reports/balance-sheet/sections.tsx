@@ -1,4 +1,4 @@
-import { Badge } from '@openbooks/ui'
+import { Badge } from "@openbooks/ui";
 
 /**
  * The accounting-equation check under the filter bar.
@@ -11,14 +11,14 @@ export function BalanceCheck({
   balanced,
   label,
 }: {
-  equation: string
-  balanced: boolean
-  label: string
+  equation: string;
+  balanced: boolean;
+  label: string;
 }) {
   return (
     <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
       <span>{equation}</span>
-      <Badge variant={balanced ? 'success' : 'destructive'}>{label}</Badge>
+      <Badge variant={balanced ? "success" : "destructive"}>{label}</Badge>
     </div>
-  )
+  );
 }

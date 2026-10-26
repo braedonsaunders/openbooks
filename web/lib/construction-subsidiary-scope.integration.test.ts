@@ -1,29 +1,42 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { registerHooks } from 'node:module'
-import type { SessionUser } from './auth'
-import { stubModules } from '../testing/stub-modules.ts'
-const session: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __constructionScopeSession: session })
+import assert from "node:assert/strict";
+import test from "node:test";
+import { registerHooks } from "node:module";
+import type { SessionUser } from "./auth";
+import { stubModules } from "../testing/stub-modules.ts";
+const session: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __constructionScopeSession: session });
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__constructionScopeSession.user}' }
-  return next(specifier, context)
-}})
-const { sql } = await import('drizzle-orm')
-const { db, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
-const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { randomUUID } = await import('node:crypto')
-const construction = await import('../app/api/construction/route')
-const subcontracts = await import('../app/api/subcontracts/route')
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__constructionScopeSession.user}",
+      };
+    return next(specifier, context);
+  },
+});
+const { sql } = await import("drizzle-orm");
+const { db, withOrgContext, withOrgTransaction } = await import("@openbooks/engine/platform/db");
+const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { randomUUID } = await import("node:crypto");
+const construction = await import("../app/api/construction/route");
+const subcontracts = await import("../app/api/subcontracts/route");
 
-const NOT_FOUND = { error: 'not_found' }
-const post = (handler: (req: Request) => Promise<Response>, orgId: string, body: Record<string, unknown>) =>
-  withOrgContext(orgId, () => handler(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify(body) })))
+const NOT_FOUND = { error: "not_found" };
+const post = (
+  handler: (req: Request) => Promise<Response>,
+  orgId: string,
+  body: Record<string, unknown>,
+) =>
+  withOrgContext(orgId, () =>
+    handler(new Request("http://audit.local/api", { method: "POST", body: JSON.stringify(body) })),
+  );
 const get = (handler: (req: Request) => Promise<Response>, orgId: string, query: string) =>
-  withOrgContext(orgId, () => handler(new Request('http://audit.local/api?' + query)))
+  withOrgContext(orgId, () => handler(new Request("http://audit.local/api?" + query)));
 
 /**
  * Progress billing and subcontract surfaces are project-scoped: a caller whose
@@ -32,111 +45,216 @@ const get = (handler: (req: Request) => Promise<Response>, orgId: string, query:
  * by list, or through a child row. The denial must be indistinguishable from a
  * missing record.
  */
-test('construction and subcontract routes enforce the caller subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
-  try {
-    const actor = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')
-    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings,'{}'::jsonb), '{features}', coalesce(settings->'features','{}'::jsonb) || '{"subcontracts": true}'::jsonb) where id=${org.orgId}`)
-    session.user = { id: actor, orgId: org.orgId, name: 'Billing controller', email: 'billing@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
+test(
+  "construction and subcontract routes enforce the caller subsidiary scope",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = await createScratchUser(org.orgId, "Billing controller", "reviewer");
+      await db.execute(
+        sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
+      );
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(coalesce(settings,'{}'::jsonb), '{features}', coalesce(settings->'features','{}'::jsonb) || '{"subcontracts": true}'::jsonb) where id=${org.orgId}`,
+      );
+      session.user = {
+        id: actor,
+        orgId: org.orgId,
+        name: "Billing controller",
+        email: "billing@scratch.test",
+        roles: [],
+        isSuperAdmin: false,
+        envKind: "production",
+        productionOrgId: org.orgId,
+        homeOrgId: org.orgId,
+        homeUserId: actor,
+      };
 
-    const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'schedule_of_values')!
-    const typeId = randomUUID(), other = randomUUID(), visible = randomUUID(), hidden = randomUUID()
-    const hiddenSov = randomUUID(), hiddenContract = randomUUID(), visibleContract = randomUUID(), visibleChange = randomUUID()
-    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`)
-    await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
-      values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
-    await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
-      values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'scratch fixture baseline')`)
-    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
+      const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === "schedule_of_values")!;
+      const typeId = randomUUID(),
+        other = randomUUID(),
+        visible = randomUUID(),
+        hidden = randomUUID();
+      const hiddenSov = randomUUID(),
+        hiddenContract = randomUUID(),
+        visibleContract = randomUUID(),
+        visibleChange = randomUUID();
+      await db.execute(
+        sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`,
+      );
+      await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+      values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`);
+      await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+      values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'scratch fixture baseline')`);
+      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
       values (${visible},${org.orgId},${org.subsidiaryId},'VIS','Visible job',${org.customerId},${typeId},'active',true),
-             (${hidden},${org.orgId},${other},'HID','Hidden job',${org.customerId},${typeId},'active',true)`)
-    await db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order) values (${hiddenSov},${org.orgId},${hidden},'Hidden line','1000',1)`)
-    await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status)
+             (${hidden},${org.orgId},${other},'HID','Hidden job',${org.customerId},${typeId},'active',true)`);
+      await db.execute(
+        sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order) values (${hiddenSov},${org.orgId},${hidden},'Hidden line','1000',1)`,
+      );
+      await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status)
       values (${hiddenContract},${org.orgId},${hidden},${org.vendorId},'SC-HIDDEN','Hidden scope','CAD','5000','draft'),
-             (${visibleContract},${org.orgId},${visible},${org.vendorId},'SC-VISIBLE','Visible scope','CAD','5000','draft')`)
-    await db.execute(sql`insert into subcontract_change_orders(id,org_id,subcontract_id,number,amount) values (${visibleChange},${org.orgId},${visibleContract},'CO-1','250')`)
+             (${visibleContract},${org.orgId},${visible},${org.vendorId},'SC-VISIBLE','Visible scope','CAD','5000','draft')`);
+      await db.execute(
+        sql`insert into subcontract_change_orders(id,org_id,subcontract_id,number,amount) values (${visibleChange},${org.orgId},${visibleContract},'CO-1','250')`,
+      );
 
-    const restrict = (ids: string[] | null) => db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify(ids ? { mode: 'list', subsidiaryIds: ids } : { mode: 'all' })}::jsonb where org_id=${org.orgId} and key='reviewer'`)
-    await restrict([org.subsidiaryId])
+      const restrict = (ids: string[] | null) =>
+        db.execute(
+          sql`update app_roles set subsidiary_restriction=${JSON.stringify(ids ? { mode: "list", subsidiaryIds: ids } : { mode: "all" })}::jsonb where org_id=${org.orgId} and key='reviewer'`,
+        );
+      await restrict([org.subsidiaryId]);
 
-    // --- construction: hidden project is a missing project -----------------
-    const hiddenGet = await get(construction.GET, org.orgId, `projectId=${hidden}`)
-    assert.equal(hiddenGet.status, 404); assert.deepEqual(await hiddenGet.json(), NOT_FOUND)
-    const missingGet = await get(construction.GET, org.orgId, `projectId=${randomUUID()}`)
-    assert.equal(missingGet.status, 404); assert.deepEqual(await missingGet.json(), NOT_FOUND)
-    // The release overview must count the business balance once: an alternate
-    // book and another entity's project-tagged line are not extra retainage.
-    const taxBook = randomUUID()
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainageReceivable',${org.accounts.invAsset}::text)) where id=${org.orgId}`)
-    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${taxBook},${org.orgId},'TAX','Tax',false,true,true)`)
-    for (const [book, entity] of [[org.bookId, org.subsidiaryId], [taxBook, org.subsidiaryId], [org.bookId, other]]) {
-      const entry = randomUUID()
-      await withOrgTransaction(org.orgId, async () => {
-        await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status)
-          values(${entry},${org.orgId},${book},${entity},${entry},${org.date},${org.periodId},'draft')`)
-        await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,project_id)
+      // --- construction: hidden project is a missing project -----------------
+      const hiddenGet = await get(construction.GET, org.orgId, `projectId=${hidden}`);
+      assert.equal(hiddenGet.status, 404);
+      assert.deepEqual(await hiddenGet.json(), NOT_FOUND);
+      const missingGet = await get(construction.GET, org.orgId, `projectId=${randomUUID()}`);
+      assert.equal(missingGet.status, 404);
+      assert.deepEqual(await missingGet.json(), NOT_FOUND);
+      // The release overview must count the business balance once: an alternate
+      // book and another entity's project-tagged line are not extra retainage.
+      const taxBook = randomUUID();
+      await db.execute(
+        sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainageReceivable',${org.accounts.invAsset}::text)) where id=${org.orgId}`,
+      );
+      await db.execute(
+        sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${taxBook},${org.orgId},'TAX','Tax',false,true,true)`,
+      );
+      for (const [book, entity] of [
+        [org.bookId, org.subsidiaryId],
+        [taxBook, org.subsidiaryId],
+        [org.bookId, other],
+      ]) {
+        const entry = randomUUID();
+        await withOrgTransaction(org.orgId, async () => {
+          await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status)
+          values(${entry},${org.orgId},${book},${entity},${entry},${org.date},${org.periodId},'draft')`);
+          await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,project_id)
           values(${org.orgId},${entry},1,${org.accounts.invAsset},${entity},100,'CAD',100,${visible}),
-                (${org.orgId},${entry},2,${org.accounts.revenue},${entity},-100,'CAD',-100,${visible})`)
-        await db.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${actor} where org_id=${org.orgId} and id=${entry}`)
-      })
-    }
-    const overview = await get(construction.GET, org.orgId, `projectId=${visible}`)
-    assert.equal(overview.status, 200)
-    assert.equal((await overview.json()).retainageHeld, '100.0000')
-    for (const body of [
-      { action: 'addSov', projectId: hidden, description: 'Excavation', scheduledValue: '1000' },
-      { action: 'updateSov', id: hiddenSov, description: 'Renamed', scheduledValue: '1200' },
-      { action: 'deleteSov', id: hiddenSov },
-      { action: 'addChangeOrder', projectId: hidden, number: 'CO-9', amount: '100' },
-      { action: 'createPayApp', projectId: hidden, periodEnd: '2026-07-31' },
-      { action: 'releaseRetainage', projectId: hidden, periodEnd: '2026-07-31', amount: '10' },
-      { action: 'updateSov', id: 'not-a-uuid', description: 'x', scheduledValue: '1' },
-    ]) {
-      const response = await post(construction.POST, org.orgId, body)
-      const text = await response.text()
-      assert.equal(response.status, 404, `${body.action}: ${text}`)
-      assert.deepEqual(JSON.parse(text), NOT_FOUND)
-    }
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from sov_lines where org_id=${org.orgId}`, 'objects'))[0]!.n, 1)
-    // Dates are refused as domain errors, never as a database failure.
-    const badDate = await post(construction.POST, org.orgId, { action: 'releaseRetainage', projectId: visible, periodEnd: '2026-02-30', amount: '10' })
-    assert.equal(badDate.status, 422); assert.match((await badDate.json()).error, /valid calendar date/)
+                (${org.orgId},${entry},2,${org.accounts.revenue},${entity},-100,'CAD',-100,${visible})`);
+          await db.execute(
+            sql`update journal_entries set status='posted',posted_at=now(),posted_by=${actor} where org_id=${org.orgId} and id=${entry}`,
+          );
+        });
+      }
+      const overview = await get(construction.GET, org.orgId, `projectId=${visible}`);
+      assert.equal(overview.status, 200);
+      assert.equal((await overview.json()).retainageHeld, "100.0000");
+      for (const body of [
+        { action: "addSov", projectId: hidden, description: "Excavation", scheduledValue: "1000" },
+        { action: "updateSov", id: hiddenSov, description: "Renamed", scheduledValue: "1200" },
+        { action: "deleteSov", id: hiddenSov },
+        { action: "addChangeOrder", projectId: hidden, number: "CO-9", amount: "100" },
+        { action: "createPayApp", projectId: hidden, periodEnd: "2026-07-31" },
+        { action: "releaseRetainage", projectId: hidden, periodEnd: "2026-07-31", amount: "10" },
+        { action: "updateSov", id: "not-a-uuid", description: "x", scheduledValue: "1" },
+      ]) {
+        const response = await post(construction.POST, org.orgId, body);
+        const text = await response.text();
+        assert.equal(response.status, 404, `${body.action}: ${text}`);
+        assert.deepEqual(JSON.parse(text), NOT_FOUND);
+      }
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from sov_lines where org_id=${org.orgId}`,
+            "objects",
+          )
+        )[0]!.n,
+        1,
+      );
+      // Dates are refused as domain errors, never as a database failure.
+      const badDate = await post(construction.POST, org.orgId, {
+        action: "releaseRetainage",
+        projectId: visible,
+        periodEnd: "2026-02-30",
+        amount: "10",
+      });
+      assert.equal(badDate.status, 422);
+      assert.match((await badDate.json()).error, /valid calendar date/);
 
-    // --- subcontracts ------------------------------------------------------
-    const list = await get(subcontracts.GET, org.orgId, '')
-    assert.equal(list.status, 200)
-    assert.deepEqual(((await list.json()).subcontracts as { id: string }[]).map((s) => s.id), [visibleContract])
-    const hiddenDetail = await get(subcontracts.GET, org.orgId, `id=${hiddenContract}`)
-    assert.equal(hiddenDetail.status, 404); assert.deepEqual(await hiddenDetail.json(), NOT_FOUND)
-    assert.equal((await get(subcontracts.GET, org.orgId, `id=${visibleContract}`)).status, 200)
-    for (const body of [
-      { action: 'createSubcontract', projectId: hidden, vendorId: org.vendorId, number: 'SC-NEW', title: 'New', originalCommitment: '100' },
-      { action: 'updateSubcontract', id: hiddenContract, title: 'Renamed', originalCommitment: '100', defaultRetainagePercent: '10', expectedUpdatedAt: new Date().toISOString() },
-      { action: 'addSovLine', subcontractId: hiddenContract, description: 'Line', scheduledValue: '100' },
-      { action: 'addChangeOrder', subcontractId: hiddenContract, number: 'CO-H', amount: '10' },
-      { action: 'submitSubcontract', id: hiddenContract },
-      { action: 'createPayApplication', subcontractId: hiddenContract, periodEnd: '2026-07-31' },
-      { action: 'transitionSubcontract', id: hiddenContract, transition: 'void' },
-    ]) {
-      const response = await post(subcontracts.POST, org.orgId, body)
-      const text = await response.text()
-      assert.equal(response.status, 404, `${body.action}: ${text}`)
-      assert.deepEqual(JSON.parse(text), NOT_FOUND)
-    }
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from subcontracts where org_id=${org.orgId}`, 'objects'))[0]!.n, 2)
-    const noDate = await post(subcontracts.POST, org.orgId, { action: 'approveChangeOrder', id: visibleChange })
-    assert.equal(noDate.status, 422); assert.match((await noDate.json()).error, /valid calendar date/)
+      // --- subcontracts ------------------------------------------------------
+      const list = await get(subcontracts.GET, org.orgId, "");
+      assert.equal(list.status, 200);
+      assert.deepEqual(
+        ((await list.json()).subcontracts as { id: string }[]).map((s) => s.id),
+        [visibleContract],
+      );
+      const hiddenDetail = await get(subcontracts.GET, org.orgId, `id=${hiddenContract}`);
+      assert.equal(hiddenDetail.status, 404);
+      assert.deepEqual(await hiddenDetail.json(), NOT_FOUND);
+      assert.equal((await get(subcontracts.GET, org.orgId, `id=${visibleContract}`)).status, 200);
+      for (const body of [
+        {
+          action: "createSubcontract",
+          projectId: hidden,
+          vendorId: org.vendorId,
+          number: "SC-NEW",
+          title: "New",
+          originalCommitment: "100",
+        },
+        {
+          action: "updateSubcontract",
+          id: hiddenContract,
+          title: "Renamed",
+          originalCommitment: "100",
+          defaultRetainagePercent: "10",
+          expectedUpdatedAt: new Date().toISOString(),
+        },
+        {
+          action: "addSovLine",
+          subcontractId: hiddenContract,
+          description: "Line",
+          scheduledValue: "100",
+        },
+        { action: "addChangeOrder", subcontractId: hiddenContract, number: "CO-H", amount: "10" },
+        { action: "submitSubcontract", id: hiddenContract },
+        { action: "createPayApplication", subcontractId: hiddenContract, periodEnd: "2026-07-31" },
+        { action: "transitionSubcontract", id: hiddenContract, transition: "void" },
+      ]) {
+        const response = await post(subcontracts.POST, org.orgId, body);
+        const text = await response.text();
+        assert.equal(response.status, 404, `${body.action}: ${text}`);
+        assert.deepEqual(JSON.parse(text), NOT_FOUND);
+      }
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from subcontracts where org_id=${org.orgId}`,
+            "objects",
+          )
+        )[0]!.n,
+        2,
+      );
+      const noDate = await post(subcontracts.POST, org.orgId, {
+        action: "approveChangeOrder",
+        id: visibleChange,
+      });
+      assert.equal(noDate.status, 422);
+      assert.match((await noDate.json()).error, /valid calendar date/);
 
-    // --- unrestricted caller sees everything ------------------------------
-    await restrict(null)
-    assert.equal((await get(construction.GET, org.orgId, `projectId=${hidden}`)).status, 200)
-    assert.equal((await get(subcontracts.GET, org.orgId, `id=${hiddenContract}`)).status, 200)
-    assert.equal(((await (await get(subcontracts.GET, org.orgId, '')).json()).subcontracts as unknown[]).length, 2)
-    // Empty scope denies everything.
-    await restrict([])
-    assert.equal((await get(construction.GET, org.orgId, `projectId=${visible}`)).status, 404)
-    assert.equal((await get(subcontracts.GET, org.orgId, `id=${visibleContract}`)).status, 404)
-    assert.deepEqual((await (await get(subcontracts.GET, org.orgId, '')).json()).subcontracts, [])
-  } finally { session.user = null; await dropScratchOrg(org.orgId) }
-})
+      // --- unrestricted caller sees everything ------------------------------
+      await restrict(null);
+      assert.equal((await get(construction.GET, org.orgId, `projectId=${hidden}`)).status, 200);
+      assert.equal((await get(subcontracts.GET, org.orgId, `id=${hiddenContract}`)).status, 200);
+      assert.equal(
+        ((await (await get(subcontracts.GET, org.orgId, "")).json()).subcontracts as unknown[])
+          .length,
+        2,
+      );
+      // Empty scope denies everything.
+      await restrict([]);
+      assert.equal((await get(construction.GET, org.orgId, `projectId=${visible}`)).status, 404);
+      assert.equal((await get(subcontracts.GET, org.orgId, `id=${visibleContract}`)).status, 404);
+      assert.deepEqual(
+        (await (await get(subcontracts.GET, org.orgId, "")).json()).subcontracts,
+        [],
+      );
+    } finally {
+      session.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -21,19 +21,33 @@ export interface HistoryWindow {
  * across year boundaries instead of producing a reversed or wrong-year
  * window. Pure date math (no DB); the dashboard labels and deduplicates.
  */
-export function planHistoryWindows(rangeFrom: string, rangeTo: string, count = 5): { periodMonths: number; windows: HistoryWindow[] } {
+export function planHistoryWindows(
+  rangeFrom: string,
+  rangeTo: string,
+  count = 5,
+): { periodMonths: number; windows: HistoryWindow[] } {
   const rangeStart = new Date(rangeFrom + "T00:00:00Z");
   const rangeEnd = new Date(rangeTo + "T00:00:00Z");
   const periodMonths =
-    (rangeEnd.getUTCFullYear() - rangeStart.getUTCFullYear()) * 12 + (rangeEnd.getUTCMonth() - rangeStart.getUTCMonth()) + 1;
+    (rangeEnd.getUTCFullYear() - rangeStart.getUTCFullYear()) * 12 +
+    (rangeEnd.getUTCMonth() - rangeStart.getUTCMonth()) +
+    1;
   const ymd = (d: Date) =>
     `${String(d.getUTCFullYear()).padStart(4, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
   const out: HistoryWindow[] = [];
   for (let i = 1; i <= count; i++) {
     // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would
     // remap onto 1900-1999.
-    const pEnd = utcDateFromParts(rangeEnd.getUTCFullYear(), rangeEnd.getUTCMonth() - i * periodMonths + 1, 0);
-    const pStart = utcDateFromParts(pEnd.getUTCFullYear(), pEnd.getUTCMonth() - periodMonths + 1, 1);
+    const pEnd = utcDateFromParts(
+      rangeEnd.getUTCFullYear(),
+      rangeEnd.getUTCMonth() - i * periodMonths + 1,
+      0,
+    );
+    const pStart = utcDateFromParts(
+      pEnd.getUTCFullYear(),
+      pEnd.getUTCMonth() - periodMonths + 1,
+      1,
+    );
     out.push({
       start: ymd(pStart),
       end: ymd(pEnd),
@@ -43,7 +57,12 @@ export function planHistoryWindows(rangeFrom: string, rangeTo: string, count = 5
   return { periodMonths, windows: out };
 }
 
-export function timeStatsSource(orgId: string, from: string, to: string, allowed: ReadonlySet<string> | null) {
+export function timeStatsSource(
+  orgId: string,
+  from: string,
+  to: string,
+  allowed: ReadonlySet<string> | null,
+) {
   return {
     from: sql`time_entries t
       left join parties p on p.id = t.employee_party_id and p.org_id = t.org_id
@@ -56,12 +75,26 @@ export function timeStatsSource(orgId: string, from: string, to: string, allowed
   };
 }
 
-export interface HistoryHours extends Record<string, unknown> { department: string | null; total_hours: string; billable_hours: string }
-export async function fetchHistoryHours(orgId: string, plans: { start: string; end: string }[], allowed: ReadonlySet<string> | null): Promise<HistoryHours[][]> {
+export interface HistoryHours extends Record<string, unknown> {
+  department: string | null;
+  total_hours: string;
+  billable_hours: string;
+}
+export async function fetchHistoryHours(
+  orgId: string,
+  plans: { start: string; end: string }[],
+  allowed: ReadonlySet<string> | null,
+): Promise<HistoryHours[][]> {
   if (!plans.length) return [];
-  const windows = sql.join(plans.map((plan, index) => sql`(${index}::integer, ${plan.start}::date, ${plan.end}::date)`), sql`, `);
+  const windows = sql.join(
+    plans.map((plan, index) => sql`(${index}::integer, ${plan.start}::date, ${plan.end}::date)`),
+    sql`, `,
+  );
   const from = plans.map((plan) => plan.start).sort()[0]!;
-  const to = plans.map((plan) => plan.end).sort().at(-1)!;
+  const to = plans
+    .map((plan) => plan.end)
+    .sort()
+    .at(-1)!;
   const source = timeStatsSource(orgId, from, to, allowed);
   const result = await analyticsQuery<HistoryHours & { window_index: number }>(sql`
     select periods.window_index, t.department_id as department,

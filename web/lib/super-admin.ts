@@ -34,7 +34,14 @@ export async function guardSuperAdmin(): Promise<Authz | NextResponse> {
 }
 
 /** Lock the home identity so deactivation and privilege revocation serialize with privileged writes. */
-type LockedActor = { id: string; email: string; name: string; orgId: string; isActive: boolean; isSuperAdmin: boolean };
+type LockedActor = {
+  id: string;
+  email: string;
+  name: string;
+  orgId: string;
+  isActive: boolean;
+  isSuperAdmin: boolean;
+};
 
 /**
  * Authority refusal from the actor lock: the operator passed the gate, then
@@ -52,16 +59,27 @@ export class SuperAdminAuthorityError extends Error {
   }
 }
 
-async function lockActorRows(runner: SqlExecutor, actorIds: readonly string[]): Promise<Map<string, LockedActor>> {
+async function lockActorRows(
+  runner: SqlExecutor,
+  actorIds: readonly string[],
+): Promise<Map<string, LockedActor>> {
   const ids = [...new Set(actorIds)].sort();
-  const idList = sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `);
-  const rows = await runner.execute<LockedActor>(sql`
+  const idList = sql.join(
+    ids.map((id) => sql`${id}::uuid`),
+    sql`, `,
+  );
+  const rows = await runner.execute<LockedActor>(
+    sql`
     select id, email, name, org_id as "orgId", is_active as "isActive", is_super_admin as "isSuperAdmin"
       from users where id in (${idList}) order by id for update
-  `, "objects");
+  `,
+    "objects",
+  );
   const actors = new Map(rows.map((row) => [row.id, row]));
   if (rows.length !== ids.length || rows.some((row) => !row.isActive)) {
-    throw new SuperAdminAuthorityError("Acting user is no longer active — sign in again before retrying this protected change");
+    throw new SuperAdminAuthorityError(
+      "Acting user is no longer active — sign in again before retrying this protected change",
+    );
   }
   return actors;
 }
@@ -83,7 +101,9 @@ export async function lockSuperAdminActor(
 ): Promise<{ id: string; orgId: string; isSuperAdmin: true }> {
   const actor = await lockActiveActor(runner, actorId);
   if (!actor.isSuperAdmin) {
-    throw new SuperAdminAuthorityError("Platform super-admin access was revoked — reload and retry with an active super administrator");
+    throw new SuperAdminAuthorityError(
+      "Platform super-admin access was revoked — reload and retry with an active super administrator",
+    );
   }
   return { ...actor, isSuperAdmin: true };
 }
@@ -116,17 +136,24 @@ export async function lockActorPermission(
      order by id for share
   `);
 
-  const fresh = await resolveUserAuthz({
-    ...staleAuthz.user,
-    email: acting.email,
-    name: acting.name,
-    isSuperAdmin: home.isSuperAdmin,
-  }, runner);
+  const fresh = await resolveUserAuthz(
+    {
+      ...staleAuthz.user,
+      email: acting.email,
+      name: acting.name,
+      isSuperAdmin: home.isSuperAdmin,
+    },
+    runner,
+  );
   if (!can(fresh, permission)) {
-    throw new Error(`Missing permission: ${permission} — reload after an administrator restores access`);
+    throw new Error(
+      `Missing permission: ${permission} — reload after an administrator restores access`,
+    );
   }
   if (options.requireUnrestrictedScope && fresh.allowedSubsidiaryIds !== null) {
-    throw new Error("Protected connection changes require unrestricted subsidiary access — restore the full scope and retry");
+    throw new Error(
+      "Protected connection changes require unrestricted subsidiary access — restore the full scope and retry",
+    );
   }
   return fresh;
 }

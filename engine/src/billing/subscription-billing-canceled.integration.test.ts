@@ -9,7 +9,13 @@ import {
   runDueSubscriptions,
   SubscriptionError,
 } from "./subscription-billing.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting, grantScratchPermissions, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+  grantScratchPermissions,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -45,22 +51,48 @@ async function seedSubscription(
 }
 
 async function mutationSnapshot(orgId: string, subscriptionId: string) {
-  const docs = (await db.execute<{ n: number }>(sql`
+  const docs = (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from documents
      where org_id = ${orgId} and kind in ('customer_invoice', 'customer_credit')
-  `, "objects"))[0]!.n;
-  const journals = (await db.execute<{ n: number }>(sql`
+  `,
+      "objects",
+    )
+  )[0]!.n;
+  const journals = (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from journal_entries where org_id = ${orgId}
-  `, "objects"))[0]!.n;
-  const guards = (await db.execute<{ n: number }>(sql`
+  `,
+      "objects",
+    )
+  )[0]!.n;
+  const guards = (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from subscription_period_invoices
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
-  `, "objects"))[0]!.n;
-  const sub = (await db.execute<{ runCount: number; lastInvoiceId: string | null }>(sql`
+  `,
+      "objects",
+    )
+  )[0]!.n;
+  const sub = (
+    await db.execute<{ runCount: number; lastInvoiceId: string | null }>(
+      sql`
     select run_count as "runCount", last_invoice_id as "lastInvoiceId"
       from subscriptions where id = ${subscriptionId}
-  `, "objects"))[0]!;
-  return { docs: Number(docs), journals: Number(journals), guards: Number(guards), runCount: Number(sub.runCount), lastInvoiceId: sub.lastInvoiceId };
+  `,
+      "objects",
+    )
+  )[0]!;
+  return {
+    docs: Number(docs),
+    journals: Number(journals),
+    guards: Number(guards),
+    runCount: Number(sub.runCount),
+    lastInvoiceId: sub.lastInvoiceId,
+  };
 }
 
 async function assertRefusesCanceled(promise: Promise<unknown>, path: string): Promise<void> {
@@ -82,7 +114,10 @@ for (const autoPost of [true, false]) {
       const org = await createScratchOrg();
       try {
         const actorId = await createScratchUser(org.orgId, "Billing", "admin");
-        const subscriptionId = await seedSubscription(org, actorId, { status: "canceled", autoPost });
+        const subscriptionId = await seedSubscription(org, actorId, {
+          status: "canceled",
+          autoPost,
+        });
         const before = await mutationSnapshot(org.orgId, subscriptionId);
 
         await assertRefusesCanceled(
@@ -91,7 +126,11 @@ for (const autoPost of [true, false]) {
         );
 
         const after = await mutationSnapshot(org.orgId, subscriptionId);
-        assert.deepEqual(after, before, "no document, journal, period-guard, or run_count mutation on a canceled bill-now");
+        assert.deepEqual(
+          after,
+          before,
+          "no document, journal, period-guard, or run_count mutation on a canceled bill-now",
+        );
       } finally {
         await dropScratchOrgReporting(org.orgId);
       }
@@ -106,7 +145,10 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
-      const subscriptionId = await seedSubscription(org, actorId, { status: "canceled", autoPost: true });
+      const subscriptionId = await seedSubscription(org, actorId, {
+        status: "canceled",
+        autoPost: true,
+      });
       const before = await mutationSnapshot(org.orgId, subscriptionId);
 
       await assertRefusesCanceled(
@@ -115,33 +157,36 @@ test(
       );
 
       const after = await mutationSnapshot(org.orgId, subscriptionId);
-      assert.deepEqual(after, before, "no document, journal, period-guard, or run_count mutation on a canceled first proration");
+      assert.deepEqual(
+        after,
+        before,
+        "no document, journal, period-guard, or run_count mutation on a canceled first proration",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
   },
 );
 
-test(
-  "the scheduler skips canceled subscriptions without failing",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
-      const subscriptionId = await seedSubscription(org, actorId, { status: "canceled", autoPost: true });
-      const before = await mutationSnapshot(org.orgId, subscriptionId);
+test("the scheduler skips canceled subscriptions without failing", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
+    const subscriptionId = await seedSubscription(org, actorId, {
+      status: "canceled",
+      autoPost: true,
+    });
+    const before = await mutationSnapshot(org.orgId, subscriptionId);
 
-      const result = await runDueSubscriptions(org.date);
-      assert.equal(result.billed, 0);
-      assert.equal(result.failed, 0);
+    const result = await runDueSubscriptions(org.date);
+    assert.equal(result.billed, 0);
+    assert.equal(result.failed, 0);
 
-      assert.deepEqual(await mutationSnapshot(org.orgId, subscriptionId), before);
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+    assert.deepEqual(await mutationSnapshot(org.orgId, subscriptionId), before);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 test(
   "active controls: bill-now bills once and replays the same invoice without new documents",
@@ -150,7 +195,10 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
-      const subscriptionId = await seedSubscription(org, actorId, { status: "active", autoPost: true });
+      const subscriptionId = await seedSubscription(org, actorId, {
+        status: "active",
+        autoPost: true,
+      });
 
       const first = await billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null);
       assert.ok(first.invoiceId);
@@ -159,7 +207,11 @@ test(
       assert.equal(mid.docs, 1);
 
       const replay = await billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null);
-      assert.equal(replay.invoiceId, first.invoiceId, "same-occurrence replay returns the committed invoice");
+      assert.equal(
+        replay.invoiceId,
+        first.invoiceId,
+        "same-occurrence replay returns the committed invoice",
+      );
       // A double-click replay keeps the creator's count: only a newly cut
       // invoice advances run_count, so the snapshot is byte-identical.
       assert.deepEqual(
@@ -180,7 +232,10 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Billing", "admin");
-      const subscriptionId = await seedSubscription(org, actorId, { status: "paused", autoPost: false });
+      const subscriptionId = await seedSubscription(org, actorId, {
+        status: "paused",
+        autoPost: false,
+      });
 
       const gen = await billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null);
       assert.ok(gen.invoiceId, "paused bill-now still bills: pause gates the scheduler only");

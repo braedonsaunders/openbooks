@@ -13,10 +13,16 @@ import test from "node:test";
 const engineRoot = new URL("../../../../../engine/", import.meta.url).href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __planVersionWidthState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     // The route declares permission plus a feature key, so the route factory
     // lazily imports `@/lib/feature-gates` at request time. Serve the same
     // test session there; nothing else in this file changes.
@@ -46,7 +52,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 async function fixture() {
@@ -54,34 +61,46 @@ async function fixture() {
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   state.orgId = org.orgId;
   state.actorId = actorId;
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings = settings || '{"features":{"subscriptionBilling":true,"advancedSubscriptions":true}}'::jsonb
-     where id = ${org.orgId}`));
+     where id = ${org.orgId}`),
+  );
   const planId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subscription_plans (id, org_id, name, amount, currency_code, interval, interval_count,
                                     income_account_id, is_active, created_by)
-    values (${planId}, ${org.orgId}, 'Width Plan', '0', 'CAD', 'monthly', 1, ${org.accounts.revenue}, true, ${actorId})`));
+    values (${planId}, ${org.orgId}, 'Width Plan', '0', 'CAD', 'monthly', 1, ${org.accounts.revenue}, true, ${actorId})`),
+  );
   return { org, planId };
 }
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new Request("http://subs.test/api/subscriptions/advanced", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new Request("http://subs.test/api/subscriptions/advanced", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 const versionBody = (planId: string, unitPrice: string) => ({
-  action: "createVersion", planId, effectiveFrom: "2026-07-01",
+  action: "createVersion",
+  planId,
+  effectiveFrom: "2026-07-01",
   components: [{ componentKey: "platform", name: "Platform fee", quantity: "1", unitPrice }],
 });
 
 async function versionCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -90,8 +109,16 @@ test("plan versions refuse a unit price wider than numeric(19,4) without writing
   try {
     const response = await post(versionBody(planId, "99999999999999999999.99"));
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.notEqual(response.status, 500, `expected a named error, got 500: ${JSON.stringify(json)}`);
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.notEqual(
+      response.status,
+      500,
+      `expected a named error, got 500: ${JSON.stringify(json)}`,
+    );
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.equal(await versionCount(org.orgId), 0);
   } finally {
     await dropScratchOrg(org.orgId);

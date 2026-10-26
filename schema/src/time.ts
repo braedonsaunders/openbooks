@@ -14,14 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import {
-  auditColumns,
-  currencyCode,
-  fxRate,
-  id,
-  money,
-  orgRef,
-} from "./helpers";
+import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 import { mfgWoOperations, mfgWorkOrders } from "./manufacturing";
 
 /**
@@ -65,10 +58,7 @@ export const timesheetWeeks = pgTable(
   (t) => [
     uniqueIndex("timesheet_weeks_employee_week").on(t.orgId, t.employeePartyId, t.weekStart),
     index("timesheet_weeks_status").on(t.orgId, t.status),
-    check(
-      "timesheet_weeks_week_start_is_sunday",
-      sql`extract(dow from ${t.weekStart}) = 0`,
-    ),
+    check("timesheet_weeks_week_start_is_sunday", sql`extract(dow from ${t.weekStart}) = 0`),
   ],
 );
 
@@ -217,11 +207,27 @@ export const timeEntries = pgTable(
       columns: [t.orgId, t.workOrderId, t.woOperationId],
       foreignColumns: [mfgWoOperations.orgId, mfgWoOperations.workOrderId, mfgWoOperations.id],
     }),
-    foreignKey({ name: "time_corrects_entry_fk", columns: [t.orgId,t.correctsEntryId], foreignColumns: [t.orgId,t.id] }),
-    check("time_correction_kind_chk",sql`${t.correctsEntryId} is null or (${t.amendsEntryId} is null and ${t.hours}>=0)`),
-    uniqueIndex("time_entries_one_replacement").on(t.orgId,t.correctsEntryId).where(sql`${t.correctsEntryId} is not null`),
-    foreignKey({name:"time_production_consumed_operation_fk", columns:[t.orgId,t.workOrderId,t.productionConsumedOperationId], foreignColumns:[mfgWoOperations.orgId,mfgWoOperations.workOrderId,mfgWoOperations.id]}),
-    check("time_production_consumed_target_chk",sql`${t.productionConsumedOperationId} is null or (${t.workOrderId} is not null and ${t.woOperationId} is not null and ${t.woOperationId}=${t.productionConsumedOperationId} and ${t.status}='approved')`),
+    foreignKey({
+      name: "time_corrects_entry_fk",
+      columns: [t.orgId, t.correctsEntryId],
+      foreignColumns: [t.orgId, t.id],
+    }),
+    check(
+      "time_correction_kind_chk",
+      sql`${t.correctsEntryId} is null or (${t.amendsEntryId} is null and ${t.hours}>=0)`,
+    ),
+    uniqueIndex("time_entries_one_replacement")
+      .on(t.orgId, t.correctsEntryId)
+      .where(sql`${t.correctsEntryId} is not null`),
+    foreignKey({
+      name: "time_production_consumed_operation_fk",
+      columns: [t.orgId, t.workOrderId, t.productionConsumedOperationId],
+      foreignColumns: [mfgWoOperations.orgId, mfgWoOperations.workOrderId, mfgWoOperations.id],
+    }),
+    check(
+      "time_production_consumed_target_chk",
+      sql`${t.productionConsumedOperationId} is null or (${t.workOrderId} is not null and ${t.woOperationId} is not null and ${t.woOperationId}=${t.productionConsumedOperationId} and ${t.status}='approved')`,
+    ),
     check(
       "time_entries_one_cost_object_check",
       sql`num_nonnulls(${t.projectId}, ${t.workOrderId}, ${t.serviceVisitId}) <= 1`,
@@ -270,11 +276,7 @@ export const timeEntries = pgTable(
       .where(sql`${t.timeTypeId} IS NOT NULL`),
     index("time_entries_status").on(t.orgId, t.status),
     index("time_entries_billing_status").on(t.orgId, t.billingStatus),
-    index("time_entries_costing_basis").on(
-      t.orgId,
-      t.projectId,
-      t.costingBasis,
-    ),
+    index("time_entries_costing_basis").on(t.orgId, t.projectId, t.costingBasis),
   ],
 );
 

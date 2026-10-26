@@ -1,4 +1,4 @@
-import { defineRoute } from '@/lib/api/route'
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveFlag } from "@openbooks/engine/hrm/ai/anomalies";
@@ -7,7 +7,6 @@ import { can } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -27,30 +26,37 @@ export const PATCH = defineRoute({
   params: z.object({ id: z.string() }),
   body: transitionBody,
   handler: async ({ params, body, authz: gate }) => {
-  if (!("payroll.manage time.approve hrm.employment.read".split(" ")).some((permission) => can(gate, permission))) {
-    return NextResponse.json({ error: "missing permission: one of payroll.manage, time.approve, hrm.employment.read" }, { status: 403 });
-  }
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "payroll")) &&
-    !(await isFeatureEnabled(gate.user.orgId, "timeTracking"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = params;
-  if (!isUuid(id)) {
-    return NextResponse.json({ error: "flag id must be a uuid" }, { status: 400 });
-  }
-  try {
-    const flag = await resolveFlag({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      flagId: id,
-      to: body.to,
-      reason: body.reason,
-    });
-    return NextResponse.json({ flag });
-  } catch (e) {
-    return aiRailsErrorResponse(e);
-  }
+    if (
+      !"payroll.manage time.approve hrm.employment.read"
+        .split(" ")
+        .some((permission) => can(gate, permission))
+    ) {
+      return NextResponse.json(
+        { error: "missing permission: one of payroll.manage, time.approve, hrm.employment.read" },
+        { status: 403 },
+      );
+    }
+    if (
+      !(await isFeatureEnabled(gate.user.orgId, "payroll")) &&
+      !(await isFeatureEnabled(gate.user.orgId, "timeTracking"))
+    ) {
+      return notFound("record");
+    }
+    const { id } = params;
+    if (!isUuid(id)) {
+      return NextResponse.json({ error: "flag id must be a uuid" }, { status: 400 });
+    }
+    try {
+      const flag = await resolveFlag({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        flagId: id,
+        to: body.to,
+        reason: body.reason,
+      });
+      return NextResponse.json({ flag });
+    } catch (e) {
+      return aiRailsErrorResponse(e);
+    }
   },
-})
+});

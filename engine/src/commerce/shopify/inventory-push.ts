@@ -43,7 +43,9 @@ export function sellableQuantity(
   try {
     available = normalizeDecimal(atpAvailable, 4);
   } catch {
-    throw new Error(`Channel inventory push computed an unreadable available quantity of "${atpAvailable}"; the push was lost`);
+    throw new Error(
+      `Channel inventory push computed an unreadable available quantity of "${atpAvailable}"; the push was lost`,
+    );
   }
   const held = cmp(buffer, "0.0000") < 0 ? "0.0000" : buffer;
   const netted = add(available, neg(held));
@@ -130,7 +132,10 @@ function userErrorText(errors: Array<{ field?: unknown; message?: unknown }>): s
 }
 
 /** The Shopify inventory item behind a variant, by variant gid. */
-export async function resolveShopifyInventoryItemId(client: ShopifyClient, variantGid: string): Promise<string> {
+export async function resolveShopifyInventoryItemId(
+  client: ShopifyClient,
+  variantGid: string,
+): Promise<string> {
   const { data } = await client.graphql<{
     productVariant: { inventoryItem: { id: string } | null } | null;
   }>(INVENTORY_ITEM_QUERY, { id: variantGid });

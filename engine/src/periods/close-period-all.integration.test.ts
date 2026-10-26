@@ -1,7 +1,4 @@
-import {
-  decideReopenFixture,
-  requestReviewedReopenFixture,
-} from "../testing/close.ts";
+import { decideReopenFixture, requestReviewedReopenFixture } from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
@@ -23,90 +20,129 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // audited), per-module reasons override the shared one, and a failure stops
 // the run with every module's outcome explicit.
 
-async function lockStates(orgId: string, periodId: string, bookId: string): Promise<Record<string, string>> {
-  const rows = await db.execute<{ module: string; state: string }>(sql`
+async function lockStates(
+  orgId: string,
+  periodId: string,
+  bookId: string,
+): Promise<Record<string, string>> {
+  const rows = await db.execute<{ module: string; state: string }>(
+    sql`
     select module, state from period_locks
      where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
        and subsidiary_id is null
-  `, "objects");
+  `,
+    "objects",
+  );
   return Object.fromEntries(rows.map((row) => [row.module, row.state]));
 }
 
-async function lockReasons(orgId: string, periodId: string, bookId: string): Promise<Record<string, string | null>> {
-  const rows = await db.execute<{ module: string; reason: string | null }>(sql`
+async function lockReasons(
+  orgId: string,
+  periodId: string,
+  bookId: string,
+): Promise<Record<string, string | null>> {
+  const rows = await db.execute<{ module: string; reason: string | null }>(
+    sql`
     select module, reason from period_locks
      where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
        and subsidiary_id is null
-  `, "objects");
+  `,
+    "objects",
+  );
   return Object.fromEntries(rows.map((row) => [row.module, row.reason]));
 }
 
-test("one reason closes every module with GL last and audits each transition", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Close All Controller", "admin");
+test(
+  "one reason closes every module with GL last and audits each transition",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Close All Controller", "admin");
 
-    const { results } = await closePeriodAllModules({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId,
-      reason: "Month-end close control",
-    });
+      const { results } = await closePeriodAllModules({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId,
+        reason: "Month-end close control",
+      });
 
-    assert.deepEqual(
-      results.map((result) => result.module),
-      [...CLOSE_MODULES],
-      "every module reports in GL-last order",
-    );
-    assert.ok(results.every((result) => result.ok), "every module closes");
-    assert.deepEqual(await lockStates(org.orgId, org.periodId, org.bookId), {
-      ar: "closed",
-      ap: "closed",
-      banking: "closed",
-      assets: "closed",
-      tax: "closed",
-      gl: "closed",
-    });
-    const audits = (await db.execute<{ n: string }>(sql`
+      assert.deepEqual(
+        results.map((result) => result.module),
+        [...CLOSE_MODULES],
+        "every module reports in GL-last order",
+      );
+      assert.ok(
+        results.every((result) => result.ok),
+        "every module closes",
+      );
+      assert.deepEqual(await lockStates(org.orgId, org.periodId, org.bookId), {
+        ar: "closed",
+        ap: "closed",
+        banking: "closed",
+        assets: "closed",
+        tax: "closed",
+        gl: "closed",
+      });
+      const audits = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from audit_log
        where org_id = ${org.orgId} and table_name = 'period_locks' and action = 'insert'
-    `, "objects"))[0];
-    assert.equal(Number(audits?.n ?? 0), 6, "each module close is audited");
-    const events = (await db.execute<{ n: string }>(sql`
+    `,
+          "objects",
+        )
+      )[0];
+      assert.equal(Number(audits?.n ?? 0), 6, "each module close is audited");
+      const events = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from close_events
        where org_id = ${org.orgId} and event_type = 'period.lock_changed'
-    `, "objects"))[0];
-    assert.equal(Number(events?.n ?? 0), 6, "each module close emits its event");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("a per-module reason overrides the shared one for that module only", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Close Override Controller", "admin");
-
-    const { results } = await closePeriodAllModules({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId,
-      reason: "Month-end close control",
-      moduleReasons: { ap: "AP held for the late vendor batch" },
-    });
-
-    assert.ok(results.every((result) => result.ok));
-    const reasons = await lockReasons(org.orgId, org.periodId, org.bookId);
-    assert.equal(reasons.ap, "AP held for the late vendor batch");
-    for (const module of CLOSE_MODULES.filter((candidate) => candidate !== "ap")) {
-      assert.equal(reasons[module], "Month-end close control", `${module} keeps the shared reason`);
+    `,
+          "objects",
+        )
+      )[0];
+      assert.equal(Number(events?.n ?? 0), 6, "each module close emits its event");
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
+
+test(
+  "a per-module reason overrides the shared one for that module only",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Close Override Controller", "admin");
+
+      const { results } = await closePeriodAllModules({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId,
+        reason: "Month-end close control",
+        moduleReasons: { ap: "AP held for the late vendor batch" },
+      });
+
+      assert.ok(results.every((result) => result.ok));
+      const reasons = await lockReasons(org.orgId, org.periodId, org.bookId);
+      assert.equal(reasons.ap, "AP held for the late vendor batch");
+      for (const module of CLOSE_MODULES.filter((candidate) => candidate !== "ap")) {
+        assert.equal(
+          reasons[module],
+          "Month-end close control",
+          `${module} keeps the shared reason`,
+        );
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("module order is enforced GL-last regardless of input order", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -122,8 +158,14 @@ test("module order is enforced GL-last regardless of input order", { skip: !DB }
       modules: ["gl", "ar"],
     });
 
-    assert.deepEqual(results.map((result) => result.module), ["ar", "gl"]);
-    assert.ok(results.every((result) => result.ok), "reordered input still closes GL last");
+    assert.deepEqual(
+      results.map((result) => result.module),
+      ["ar", "gl"],
+    );
+    assert.ok(
+      results.every((result) => result.ok),
+      "reordered input still closes GL last",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -160,10 +202,14 @@ test("a mid-run failure keeps applied closes and reports every module", { skip: 
     assert.equal(results[1]?.ok, false);
     assert.match(results[1]?.error ?? "", /before GL/, "GL names the open subledger remedy");
     assert.match(results[1]?.error ?? "", /AP/, "GL names the subledger still open");
-    assert.deepEqual(await lockStates(org.orgId, org.periodId, org.bookId), {
-      ar: "closed",
-      ap: "soft_closed",
-    }, "the applied close stays; nothing half-wrote");
+    assert.deepEqual(
+      await lockStates(org.orgId, org.periodId, org.bookId),
+      {
+        ar: "closed",
+        ap: "soft_closed",
+      },
+      "the applied close stays; nothing half-wrote",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -200,21 +246,24 @@ test(
       // December stands fully closed, then Banking and GL reopen under an
       // approved window: the re-close must flip both back and audit both.
       const first = await closePeriodAllModules({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: actors.adminId,
-      reason: "December close control",
-    });
-      assert.ok(first.results.every((result) => result.ok), "the first close lands");
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.adminId,
+        reason: "December close control",
+      });
+      assert.ok(
+        first.results.every((result) => result.ok),
+        "the first close lands",
+      );
       const requestId = await requestReviewedReopenFixture({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      modules: ["banking", "gl"],
-      reason: "Banking corrections after the close",
-      actorId: actors.adminId,
-    });
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        modules: ["banking", "gl"],
+        reason: "Banking corrections after the close",
+        actorId: actors.adminId,
+      });
       await decideReopenFixture({
         orgId: org.orgId,
         requestId,
@@ -222,41 +271,57 @@ test(
         decision: "approved",
         hours: 2,
       });
-      assert.deepEqual(await lockStates(org.orgId, org.periodId, org.bookId), {
-      ar: "closed",
-      ap: "closed",
-      banking: "open",
-      assets: "closed",
-      tax: "closed",
-      gl: "open",
-    }, "the approved window leaves Banking and GL open");
+      assert.deepEqual(
+        await lockStates(org.orgId, org.periodId, org.bookId),
+        {
+          ar: "closed",
+          ap: "closed",
+          banking: "open",
+          assets: "closed",
+          tax: "closed",
+          gl: "open",
+        },
+        "the approved window leaves Banking and GL open",
+      );
 
       const { results } = await closePeriodAllModules({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: actors.adminId,
-      reason: "December re-close control",
-    });
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.adminId,
+        reason: "December re-close control",
+      });
 
-      assert.ok(results.every((result) => result.ok), "the re-close reports every module ok");
-      assert.deepEqual(await lockStates(org.orgId, org.periodId, org.bookId), {
-      ar: "closed",
-      ap: "closed",
-      banking: "closed",
-      assets: "closed",
-      tax: "closed",
-      gl: "closed",
-    }, "Banking and GL stand closed again");
-      const recloseAudits = (await db.execute<{ n: string }>(sql`
+      assert.ok(
+        results.every((result) => result.ok),
+        "the re-close reports every module ok",
+      );
+      assert.deepEqual(
+        await lockStates(org.orgId, org.periodId, org.bookId),
+        {
+          ar: "closed",
+          ap: "closed",
+          banking: "closed",
+          assets: "closed",
+          tax: "closed",
+          gl: "closed",
+        },
+        "Banking and GL stand closed again",
+      );
+      const recloseAudits = (
+        await db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from audit_log
        where org_id = ${org.orgId} and table_name = 'period_locks' and action = 'update'
          and changes->'after'->>'state' = 'closed'
-    `, "objects"))[0];
+    `,
+          "objects",
+        )
+      )[0];
       assert.ok(Number(recloseAudits?.n ?? 0) >= 2, "both re-closed modules leave audit entries");
     } finally {
-    await dropScratchOrg(org.orgId);
-  }
+      await dropScratchOrg(org.orgId);
+    }
   },
 );
 

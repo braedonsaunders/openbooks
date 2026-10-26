@@ -6,7 +6,10 @@ import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { computeOssReturn, recordOssFxEvidence } from "./oss-return.ts";
 import { ossReturnToIrelandXml, ossReturnToMemberStateCsv } from "./oss-exports.ts";
-import { computeDistanceTurnover, findSupplyEvidenceConflicts } from "../tax/cross-border-monitor.ts";
+import {
+  computeDistanceTurnover,
+  findSupplyEvidenceConflicts,
+} from "../tax/cross-border-monitor.ts";
 import {
   authorityCredentialsForOrg,
   readAuthorityConnectionStatus,
@@ -30,7 +33,9 @@ async function seedEuroOrg(org: Org): Promise<void> {
     values ('EUR', 'Euro', 2), ('USD', 'US dollar', 2), ('GBP', 'Pound sterling', 2)
     on conflict (code) do nothing`);
   await db.execute(sql`update orgs set base_currency = 'EUR' where id = ${org.orgId}`);
-  await db.execute(sql`update subsidiaries set base_currency = 'EUR', country = 'IE' where id = ${org.subsidiaryId}`);
+  await db.execute(
+    sql`update subsidiaries set base_currency = 'EUR', country = 'IE' where id = ${org.subsidiaryId}`,
+  );
   await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', '{"crossBorderTax": true}'::jsonb)
      where id = ${org.orgId}`);
@@ -39,8 +44,13 @@ async function seedEuroOrg(org: Org): Promise<void> {
     [9, "2026-09-01", "2026-09-30"],
     [10, "2026-10-01", "2026-10-31"],
   ] as const) {
-    const calendar = (await db.execute<{ id: string }>(sql`
-        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
+    const calendar = (
+      await db.execute<{ id: string }>(
+        sql`
+        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`,
+        "objects",
+      )
+    )[0]!.id;
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${randomUUID()}, ${org.orgId}, 2026, ${number}, ${`2026-0${number}`}, ${start}, ${end}, false, ${calendar})`);
@@ -118,7 +128,9 @@ async function seedDigitalInvoice(
 }
 
 async function approveAndPost(org: Org, documentId: string): Promise<void> {
-  await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
+  await db.execute(
+    sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+  );
   await postDocument(documentId, {
     control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
   });
@@ -132,45 +144,64 @@ function stubTransport(payload: unknown, status = 200): typeof fetch {
     })) as typeof fetch;
 }
 
-test("dollar supplies translate at the period-end ECB rate with stored evidence", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
-    await seedEuroOrg(org);
-    const deCode = await seedRateCode(org, actorId, "DE-VAT-S", "DE", "19.0000");
-    const invoiceId = await seedDigitalInvoice(
-      org, actorId, "INV-OSS-USD", "DE", deCode, "19.0000", "2026-07-10", "USD", "0.85",
-    );
-    await approveAndPost(org, invoiceId);
-    await db.execute(sql`
+test(
+  "dollar supplies translate at the period-end ECB rate with stored evidence",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
+      await seedEuroOrg(org);
+      const deCode = await seedRateCode(org, actorId, "DE-VAT-S", "DE", "19.0000");
+      const invoiceId = await seedDigitalInvoice(
+        org,
+        actorId,
+        "INV-OSS-USD",
+        "DE",
+        deCode,
+        "19.0000",
+        "2026-07-10",
+        "USD",
+        "0.85",
+      );
+      await approveAndPost(org, invoiceId);
+      await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId}, 'USD', 'EUR', '2026-09-30', 'spot', '0.85', 'ecb')`);
 
-    const oss = await computeOssReturn(db, org.orgId, { scheme: "union", from: "2026-07-01", to: "2026-09-30" });
-    assert.equal(oss.currency, "EUR");
-    assert.equal(oss.lines.length, 1);
-    assert.equal(oss.lines[0]!.baseAmount, "850.0000");
-    assert.equal(oss.lines[0]!.taxAmount, "161.5000");
-    assert.equal(oss.fx.length, 1);
-    assert.equal(oss.fx[0]!.currency, "USD");
-    assert.equal(Number(oss.fx[0]!.rate), 0.85);
-    assert.equal(oss.fx[0]!.rateAsOf, "2026-09-30");
-    assert.match(oss.fx[0]!.digest, /^[0-9a-f]{32,64}$/);
+      const oss = await computeOssReturn(db, org.orgId, {
+        scheme: "union",
+        from: "2026-07-01",
+        to: "2026-09-30",
+      });
+      assert.equal(oss.currency, "EUR");
+      assert.equal(oss.lines.length, 1);
+      assert.equal(oss.lines[0]!.baseAmount, "850.0000");
+      assert.equal(oss.lines[0]!.taxAmount, "161.5000");
+      assert.equal(oss.fx.length, 1);
+      assert.equal(oss.fx[0]!.currency, "USD");
+      assert.equal(Number(oss.fx[0]!.rate), 0.85);
+      assert.equal(oss.fx[0]!.rateAsOf, "2026-09-30");
+      assert.match(oss.fx[0]!.digest, /^[0-9a-f]{32,64}$/);
 
-    const recorded = await recordOssFxEvidence(db, org.orgId, actorId, oss);
-    assert.equal(recorded.stored, 1);
-    const again = await recordOssFxEvidence(db, org.orgId, actorId, oss);
-    assert.equal(again.stored, 1);
-    const rows = await db.execute<{ currency: string; rate: string }>(sql`
+      const recorded = await recordOssFxEvidence(db, org.orgId, actorId, oss);
+      assert.equal(recorded.stored, 1);
+      const again = await recordOssFxEvidence(db, org.orgId, actorId, oss);
+      assert.equal(again.stored, 1);
+      const rows = await db.execute<{ currency: string; rate: string }>(
+        sql`
         select currency, rate::text as rate from tax_oss_fx_evidence
          where org_id = ${org.orgId} and scheme = 'union'
-           and period_from = '2026-07-01' and period_to = '2026-09-30'`, "objects");
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0]!.currency, "USD");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+           and period_from = '2026-07-01' and period_to = '2026-09-30'`,
+        "objects",
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]!.currency, "USD");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a currency with no ECB rate refuses by name with the FX remedy", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -179,11 +210,20 @@ test("a currency with no ECB rate refuses by name with the FX remedy", { skip: !
     await seedEuroOrg(org);
     const deCode = await seedRateCode(org, actorId, "DE-VAT-S", "DE", "19.0000");
     const invoiceId = await seedDigitalInvoice(
-      org, actorId, "INV-OSS-GBP", "DE", deCode, "19.0000", "2026-07-10", "GBP", "1.17",
+      org,
+      actorId,
+      "INV-OSS-GBP",
+      "DE",
+      deCode,
+      "19.0000",
+      "2026-07-10",
+      "GBP",
+      "1.17",
     );
     await approveAndPost(org, invoiceId);
     await assert.rejects(
-      () => computeOssReturn(db, org.orgId, { scheme: "union", from: "2026-07-01", to: "2026-09-30" }),
+      () =>
+        computeOssReturn(db, org.orgId, { scheme: "union", from: "2026-07-01", to: "2026-09-30" }),
       /GBP.*ECB rate|ECB rate.*GBP/,
     );
   } finally {
@@ -243,93 +283,165 @@ test("member-state layouts carry every filed figure with its evidence", async ()
   assert.match(nl, /CORRECTIE;FR;20\.00;-1000\.00;-200\.00;2026-Q2/);
   const ie = ossReturnToIrelandXml(oss);
   assert.match(ie, /ROS/);
-  assert.match(ie, /<Supply kind="supply" consumptionCountry="DE" vatRate="19\.00" baseAmount="850\.00" vatAmount="161\.50" \/>/);
-  assert.match(ie, /<Supply kind="correction" consumptionCountry="FR"[^>]*correctionQuarter="2026-Q2" \/>/);
-  assert.match(ie, /<Translation currency="USD" rate="0\.85" rateAsOf="2026-09-30" source="ecb" digest="0123456789abcdef0123456789abcdef" \/>/);
+  assert.match(
+    ie,
+    /<Supply kind="supply" consumptionCountry="DE" vatRate="19\.00" baseAmount="850\.00" vatAmount="161\.50" \/>/,
+  );
+  assert.match(
+    ie,
+    /<Supply kind="correction" consumptionCountry="FR"[^>]*correctionQuarter="2026-Q2" \/>/,
+  );
+  assert.match(
+    ie,
+    /<Translation currency="USD" rate="0\.85" rateAsOf="2026-09-30" source="ecb" digest="0123456789abcdef0123456789abcdef" \/>/,
+  );
 });
 
-test("conflicting evidence surfaces on the draft before posting refuses it", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
-    await seedEuroOrg(org);
-    const deCode = await seedRateCode(org, actorId, "DE-VAT-S", "DE", "19.0000");
-    const cleanId = await seedDigitalInvoice(org, actorId, "INV-OSS-OK", "DE", deCode, "19.0000", "2026-07-10");
-    const conflictId = await seedDigitalInvoice(org, actorId, "INV-OSS-BAD", "DE", deCode, "19.0000", "2026-07-11");
-    await db.execute(sql`
+test(
+  "conflicting evidence surfaces on the draft before posting refuses it",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
+      await seedEuroOrg(org);
+      const deCode = await seedRateCode(org, actorId, "DE-VAT-S", "DE", "19.0000");
+      const cleanId = await seedDigitalInvoice(
+        org,
+        actorId,
+        "INV-OSS-OK",
+        "DE",
+        deCode,
+        "19.0000",
+        "2026-07-10",
+      );
+      const conflictId = await seedDigitalInvoice(
+        org,
+        actorId,
+        "INV-OSS-BAD",
+        "DE",
+        deCode,
+        "19.0000",
+        "2026-07-11",
+      );
+      await db.execute(sql`
       update document_supply_evidence set country_code = 'FR'
        where org_id = ${org.orgId} and document_id = ${conflictId} and kind = 'ip_country'`);
 
-    const conflicts = await findSupplyEvidenceConflicts(db, org.orgId);
-    assert.equal(conflicts.length, 1);
-    assert.equal(conflicts[0]!.documentId, conflictId);
-    assert.equal(conflicts[0]!.documentNumber, "INV-OSS-BAD");
-    assert.deepEqual(conflicts[0]!.countries, ["DE", "FR"]);
-    assert.ok(!conflicts.some((conflict) => conflict.documentId === cleanId));
+      const conflicts = await findSupplyEvidenceConflicts(db, org.orgId);
+      assert.equal(conflicts.length, 1);
+      assert.equal(conflicts[0]!.documentId, conflictId);
+      assert.equal(conflicts[0]!.documentNumber, "INV-OSS-BAD");
+      assert.deepEqual(conflicts[0]!.countries, ["DE", "FR"]);
+      assert.ok(!conflicts.some((conflict) => conflict.documentId === cleanId));
 
-    await approveAndPost(org, cleanId);
-    const afterPosting = await findSupplyEvidenceConflicts(db, org.orgId);
-    assert.ok(!afterPosting.some((conflict) => conflict.documentId === cleanId));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await approveAndPost(org, cleanId);
+      const afterPosting = await findSupplyEvidenceConflicts(db, org.orgId);
+      assert.ok(!afterPosting.some((conflict) => conflict.documentId === cleanId));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("the threshold monitor nets credits, translates covered turnover and names the rest", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
-    await seedEuroOrg(org);
-    const deCode = await seedRateCode(org, actorId, "DE-VAT-S", "DE", "19.0000");
-    const first = await seedDigitalInvoice(org, actorId, "INV-TH-1", "DE", deCode, "19.0000", "2026-08-10", "EUR", "1", 6000);
-    const second = await seedDigitalInvoice(org, actorId, "INV-TH-2", "DE", deCode, "19.0000", "2026-09-12", "EUR", "1", 5000);
-    const uncovered = await seedDigitalInvoice(org, actorId, "INV-TH-3", "DE", deCode, "19.0000", "2026-10-14", "GBP", "1.17", 500);
-    await approveAndPost(org, first);
-    await approveAndPost(org, second);
-    await approveAndPost(org, uncovered);
+test(
+  "the threshold monitor nets credits, translates covered turnover and names the rest",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
+      await seedEuroOrg(org);
+      const deCode = await seedRateCode(org, actorId, "DE-VAT-S", "DE", "19.0000");
+      const first = await seedDigitalInvoice(
+        org,
+        actorId,
+        "INV-TH-1",
+        "DE",
+        deCode,
+        "19.0000",
+        "2026-08-10",
+        "EUR",
+        "1",
+        6000,
+      );
+      const second = await seedDigitalInvoice(
+        org,
+        actorId,
+        "INV-TH-2",
+        "DE",
+        deCode,
+        "19.0000",
+        "2026-09-12",
+        "EUR",
+        "1",
+        5000,
+      );
+      const uncovered = await seedDigitalInvoice(
+        org,
+        actorId,
+        "INV-TH-3",
+        "DE",
+        deCode,
+        "19.0000",
+        "2026-10-14",
+        "GBP",
+        "1.17",
+        500,
+      );
+      await approveAndPost(org, first);
+      await approveAndPost(org, second);
+      await approveAndPost(org, uncovered);
 
-    const turnover = await computeDistanceTurnover(db, org.orgId, 2026, "2026-12-31");
-    assert.equal(turnover.totalEur, "11000.0000");
-    assert.equal(turnover.crossed, true);
-    assert.deepEqual(turnover.uncoveredCurrencies, ["GBP"]);
-    assert.equal(turnover.translated.length, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const turnover = await computeDistanceTurnover(db, org.orgId, 2026, "2026-12-31");
+      assert.equal(turnover.totalEur, "11000.0000");
+      assert.equal(turnover.crossed, true);
+      assert.deepEqual(turnover.uncoveredCurrencies, ["GBP"]);
+      assert.equal(turnover.translated.length, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("authority credentials seal at rest and drive validation without network", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Tax Admin", "admin");
-    await seedEuroOrg(org);
+test(
+  "authority credentials seal at rest and drive validation without network",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Tax Admin", "admin");
+      await seedEuroOrg(org);
 
-    const abn = await saveAuthorityCredentials(db, org.orgId, actorId, "abn", { guid: "abn-guid-value-1" });
-    assert.equal(abn.status, "ready");
-    assert.equal(abn.hasCredentials, true);
-    assert.ok(!JSON.stringify(abn).includes("abn-guid-value-1"));
-    const abnCreds = await authorityCredentialsForOrg(db, org.orgId);
-    assert.equal(abnCreds.abnGuid, "abn-guid-value-1");
+      const abn = await saveAuthorityCredentials(db, org.orgId, actorId, "abn", {
+        guid: "abn-guid-value-1",
+      });
+      assert.equal(abn.status, "ready");
+      assert.equal(abn.hasCredentials, true);
+      assert.ok(!JSON.stringify(abn).includes("abn-guid-value-1"));
+      const abnCreds = await authorityCredentialsForOrg(db, org.orgId);
+      assert.equal(abnCreds.abnGuid, "abn-guid-value-1");
 
-    await saveAuthorityCredentials(db, org.orgId, actorId, "hmrc", {
-      clientId: "hmrc-client-9",
-      clientSecret: "hmrc-s3cr3t-9",
-      scope: "read:vat",
-    });
-    const refreshed = await refreshHmrcToken(
-      db,
-      org.orgId,
-      actorId,
-      stubTransport({ access_token: "hmrc-tok-1", expires_in: 14_400 }),
-    );
-    assert.equal(refreshed.status, "ready");
-    assert.ok(refreshed.tokenExpiresAt);
-    assert.ok(!JSON.stringify(refreshed).includes("hmrc-s3cr3t-9"));
-    const hmrcCreds = await authorityCredentialsForOrg(db, org.orgId);
-    assert.equal(hmrcCreds.hmrcAccessToken, "hmrc-tok-1");
-    const status = await readAuthorityConnectionStatus(db, org.orgId, "hmrc");
-    assert.ok(!JSON.stringify(status).includes("hmrc-tok-1"));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await saveAuthorityCredentials(db, org.orgId, actorId, "hmrc", {
+        clientId: "hmrc-client-9",
+        clientSecret: "hmrc-s3cr3t-9",
+        scope: "read:vat",
+      });
+      const refreshed = await refreshHmrcToken(
+        db,
+        org.orgId,
+        actorId,
+        stubTransport({ access_token: "hmrc-tok-1", expires_in: 14_400 }),
+      );
+      assert.equal(refreshed.status, "ready");
+      assert.ok(refreshed.tokenExpiresAt);
+      assert.ok(!JSON.stringify(refreshed).includes("hmrc-s3cr3t-9"));
+      const hmrcCreds = await authorityCredentialsForOrg(db, org.orgId);
+      assert.equal(hmrcCreds.hmrcAccessToken, "hmrc-tok-1");
+      const status = await readAuthorityConnectionStatus(db, org.orgId, "hmrc");
+      assert.ok(!JSON.stringify(status).includes("hmrc-tok-1"));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

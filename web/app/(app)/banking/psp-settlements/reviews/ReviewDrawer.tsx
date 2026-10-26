@@ -1,50 +1,50 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { Button } from '@openbooks/ui'
-import { ApprovalActions } from '@/components/approval-actions'
+import { useRouter } from "next/navigation";
+import { Button } from "@openbooks/ui";
+import { ApprovalActions } from "@/components/approval-actions";
 
 export interface ReviewHistoryEntry {
-  status: string
-  statusLabel: string
-  at: string
-  reason: string | null
+  status: string;
+  statusLabel: string;
+  at: string;
+  reason: string | null;
 }
 
 export interface ReviewDrawerData {
-  id: string
-  providerLabel: string
-  kindLabel: string
-  statusLabel: string
-  isPending: boolean
-  amount: string
-  providerEventId: string
-  providerRef: string | null
-  reason: string | null
-  receiptNumber: string | null
-  invoiceNumber: string | null
-  history: ReviewHistoryEntry[]
-  canDecide: boolean
-  closeHref: string
+  id: string;
+  providerLabel: string;
+  kindLabel: string;
+  statusLabel: string;
+  isPending: boolean;
+  amount: string;
+  providerEventId: string;
+  providerRef: string | null;
+  reason: string | null;
+  receiptNumber: string | null;
+  invoiceNumber: string | null;
+  history: ReviewHistoryEntry[];
+  canDecide: boolean;
+  closeHref: string;
   strings: {
-    kindRow: string
-    statusRow: string
-    amountRow: string
-    eventRow: string
-    providerRefRow: string
-    reasonGivenRow: string
-    receiptRow: string
-    invoiceRow: string
-    historyTitle: string
-    approveLabel: string
-    rejectLabel: string
-    reasonLabel: string
-    reasonPlaceholder: string
-    decidedNote: string
-    approvedMessage: string
-    rejectedMessage: string
-    closeLabel: string
-  }
+    kindRow: string;
+    statusRow: string;
+    amountRow: string;
+    eventRow: string;
+    providerRefRow: string;
+    reasonGivenRow: string;
+    receiptRow: string;
+    invoiceRow: string;
+    historyTitle: string;
+    approveLabel: string;
+    rejectLabel: string;
+    reasonLabel: string;
+    reasonPlaceholder: string;
+    decidedNote: string;
+    approvedMessage: string;
+    rejectedMessage: string;
+    closeLabel: string;
+  };
 }
 
 /**
@@ -54,13 +54,9 @@ export interface ReviewDrawerData {
  * demand, never required to proceed — and rejecting moves nothing without a
  * named reason the audit keeps.
  */
-export function PspDisputeReviewDrawer({
-  review,
-}: {
-  review: ReviewDrawerData
-}) {
-  const router = useRouter()
-  const { strings } = review
+export function PspDisputeReviewDrawer({ review }: { review: ReviewDrawerData }) {
+  const router = useRouter();
+  const { strings } = review;
   const rows: [string, string | null][] = [
     [strings.kindRow, review.kindLabel],
     [strings.statusRow, review.statusLabel],
@@ -70,14 +66,12 @@ export function PspDisputeReviewDrawer({
     [strings.reasonGivenRow, review.reason],
     [strings.receiptRow, review.receiptNumber],
     [strings.invoiceRow, review.invoiceNumber],
-  ]
+  ];
 
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="font-semibold text-slate-900 dark:text-white">
-          {review.providerLabel}
-        </h3>
+        <h3 className="font-semibold text-slate-900 dark:text-white">{review.providerLabel}</h3>
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         {rows.map(([label, value]) =>
@@ -99,10 +93,7 @@ export function PspDisputeReviewDrawer({
               <li key={`${entry.at}-${index}`} className="tabular-nums">
                 {entry.statusLabel} · {entry.at}
                 {entry.reason ? (
-                  <span className="text-slate-500 dark:text-slate-400">
-                    {' '}
-                    — {entry.reason}
-                  </span>
+                  <span className="text-slate-500 dark:text-slate-400"> — {entry.reason}</span>
                 ) : null}
               </li>
             ))}
@@ -115,26 +106,20 @@ export function PspDisputeReviewDrawer({
           subjectId={review.id}
           {...(review.canDecide
             ? {
-                submitApprovalHref: '/api/psp/disputes',
-                submitApprovalBody: { action: 'submit', disputeId: review.id },
+                submitApprovalHref: "/api/psp/disputes",
+                submitApprovalBody: { action: "submit", disputeId: review.id },
               }
             : {})}
-          submissionStatuses={['pending_review']}
+          submissionStatuses={["pending_review"]}
         />
       ) : (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {strings.decidedNote}
-        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{strings.decidedNote}</p>
       )}
       <div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => router.push(review.closeHref)}
-        >
+        <Button size="sm" variant="ghost" onClick={() => router.push(review.closeHref)}>
           {strings.closeLabel}
         </Button>
       </div>
     </div>
-  )
+  );
 }

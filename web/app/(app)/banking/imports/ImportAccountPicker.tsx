@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { Select } from '@openbooks/ui'
-import { ImportStatementButton } from '../[accountId]/ImportStatementButton'
+import { useState } from "react";
+import { Select } from "@openbooks/ui";
+import { ImportStatementButton } from "../[accountId]/ImportStatementButton";
 
 export interface ImportAccountOption {
-  id: string
-  label: string
+  id: string;
+  label: string;
 }
 
 /**
@@ -22,16 +22,16 @@ export function ImportAccountPicker({
   selectLabel,
   placeholder,
 }: {
-  accounts: ImportAccountOption[]
-  selectLabel: string
-  placeholder: string
+  accounts: ImportAccountOption[];
+  selectLabel: string;
+  placeholder: string;
 }) {
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? '')
-  const selected = accounts.find((account) => account.id === accountId) ?? accounts[0]
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const selected = accounts.find((account) => account.id === accountId) ?? accounts[0];
   // No reconcilable accounts: render nothing. The list's empty state carries
   // the guidance instead — it names the reconcilable prerequisite and links
   // to the Chart of Accounts — so the picker must not invent a second one.
-  if (!selected) return null
+  if (!selected) return null;
   return (
     <span className="inline-flex items-center gap-2">
       <Select
@@ -54,5 +54,5 @@ export function ImportAccountPicker({
       */}
       <ImportStatementButton key={selected.id} accountId={selected.id} />
     </span>
-  )
+  );
 }

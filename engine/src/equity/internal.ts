@@ -4,7 +4,11 @@ import { sql } from "drizzle-orm";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import {
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+  orgFeatureEnabled,
+} from "../organization/org-feature-lock.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { memoizedRead } from "../platform/read-memo.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -22,11 +26,18 @@ export async function assertEquityFeature(runner: SqlExecutor, orgId: string): P
 
 /** Read-path feature check (no fence: reads change nothing). */
 export async function assertEquityReadable(orgId: string): Promise<void> {
-  if (!(await memoizedRead(`equity-readable:${orgId}`, () => orgFeatureEnabled(orgId, EQUITY_FEATURE_KEY)))) throw featureOff();
+  if (
+    !(await memoizedRead(`equity-readable:${orgId}`, () =>
+      orgFeatureEnabled(orgId, EQUITY_FEATURE_KEY),
+    ))
+  )
+    throw featureOff();
 }
 
 function forbidden(permission: EquityPermission, scoped: boolean): EquityError {
-  return equityError(scoped ? "forbiddenForEntity" : "forbidden", { permission: fig.text(permission) });
+  return equityError(scoped ? "forbiddenForEntity" : "forbidden", {
+    permission: fig.text(permission),
+  });
 }
 
 /**
@@ -55,7 +66,8 @@ export async function requireEquityReader(
   subsidiaryId: string | null,
 ): Promise<ReadonlySet<string> | null> {
   const allowed = await memoizedRead(`equity-reader:${orgId}:${actorId}`, async () => {
-    if (!(await actorHasPermission(runner, orgId, actorId, "equity.read"))) throw forbidden("equity.read", false);
+    if (!(await actorHasPermission(runner, orgId, actorId, "equity.read")))
+      throw forbidden("equity.read", false);
     return actorAllowedSubsidiaryIds(runner, orgId, actorId) as Promise<ReadonlySet<string> | null>;
   });
   if (subsidiaryId !== null && allowed !== null && !allowed.has(subsidiaryId)) {
@@ -69,8 +81,14 @@ export async function requireEquityReader(
  * entity's whole history (outstanding shares, pools, vesting), so the lock
  * is taken before that read and held to commit.
  */
-export async function lockEquityEntity(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<void> {
-  await runner.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`openbooks:equity:${orgId}:${subsidiaryId}`}, 0))`);
+export async function lockEquityEntity(
+  runner: SqlExecutor,
+  orgId: string,
+  subsidiaryId: string,
+): Promise<void> {
+  await runner.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`openbooks:equity:${orgId}:${subsidiaryId}`}, 0))`,
+  );
 }
 
 export interface LegalEntity {
@@ -80,17 +98,38 @@ export interface LegalEntity {
 }
 
 /** An active legal entity of the organization with its functional currency; anything else refuses. */
-export async function loadLegalEntity(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<LegalEntity> {
-  return memoizedRead(`equity-legal-entity:${orgId}:${subsidiaryId}`, () => readLegalEntity(runner, orgId, subsidiaryId));
+export async function loadLegalEntity(
+  runner: SqlExecutor,
+  orgId: string,
+  subsidiaryId: string,
+): Promise<LegalEntity> {
+  return memoizedRead(`equity-legal-entity:${orgId}:${subsidiaryId}`, () =>
+    readLegalEntity(runner, orgId, subsidiaryId),
+  );
 }
 
-async function readLegalEntity(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<LegalEntity> {
+async function readLegalEntity(
+  runner: SqlExecutor,
+  orgId: string,
+  subsidiaryId: string,
+): Promise<LegalEntity> {
   if (!isUuid(subsidiaryId)) {
     throw equityError("entityInvalid", {}, { field: "subsidiaryId" });
   }
-  const row = (await runner.execute<{ id: string; name: string; currency: string | null; is_active: boolean; is_elimination: boolean }>(sql`
+  const row = (
+    await runner.execute<{
+      id: string;
+      name: string;
+      currency: string | null;
+      is_active: boolean;
+      is_elimination: boolean;
+    }>(
+      sql`
     select id, name, nullif(trim(base_currency), '') as currency, is_active, is_elimination
-      from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`, "objects"))[0];
+      from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`,
+      "objects",
+    )
+  )[0];
   if (!row || !row.is_active || row.is_elimination) {
     throw equityError("entityInactive", {}, { field: "subsidiaryId" });
   }
@@ -102,7 +141,12 @@ async function readLegalEntity(runner: SqlExecutor, orgId: string, subsidiaryId:
 
 /** ISO minor-unit exponent of a currency; an unknown code refuses by name. */
 export async function currencyExponent(runner: SqlExecutor, currency: string): Promise<number> {
-  const row = (await runner.execute<{ minor_units: number }>(sql`select minor_units from currencies where code = ${currency}`, "objects"))[0];
+  const row = (
+    await runner.execute<{ minor_units: number }>(
+      sql`select minor_units from currencies where code = ${currency}`,
+      "objects",
+    )
+  )[0];
   const exponent = row?.minor_units;
   if (exponent === undefined || !Number.isInteger(exponent) || exponent < 0 || exponent > 4) {
     throw equityError("currencyUnknown", { currency: fig.text(currency) });
@@ -113,13 +157,23 @@ export async function currencyExponent(runner: SqlExecutor, currency: string): P
 /** One audit_log row; a write that stores nothing is a failure. */
 export async function writeEquityAudit(
   runner: SqlExecutor,
-  input: { orgId: string; table: string; rowId: string; action: string; actorId: string | null; changes: Record<string, unknown> },
+  input: {
+    orgId: string;
+    table: string;
+    rowId: string;
+    action: string;
+    actorId: string | null;
+    changes: Record<string, unknown>;
+  },
 ): Promise<void> {
-  const written = await runner.execute<{ id: string }>(sql`
+  const written = await runner.execute<{ id: string }>(
+    sql`
     insert into audit_log (id, org_id, table_name, row_id, action, changes, actor_id)
     values (${randomUUID()}, ${input.orgId}, ${input.table}, ${input.rowId}, ${input.action},
       ${JSON.stringify(input.changes, (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value))}::jsonb, ${input.actorId})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (written.length !== 1) {
     throw equityError("auditUnwritten");
   }
@@ -127,8 +181,21 @@ export async function writeEquityAudit(
 
 /** What a required reason explains, as the refusal names it. */
 export type ReasonSubject =
-  | "classAmendment" | "split" | "reserveChange" | "mfnElection" | "mfnReversal" | "roundAmendment" | "roundVoid" | "accountPolicy"
-  | "forfeit" | "expire" | "cancel" | "repurchase" | "void" | "reverse" | "withdrawal";
+  | "classAmendment"
+  | "split"
+  | "reserveChange"
+  | "mfnElection"
+  | "mfnReversal"
+  | "roundAmendment"
+  | "roundVoid"
+  | "accountPolicy"
+  | "forfeit"
+  | "expire"
+  | "cancel"
+  | "repurchase"
+  | "void"
+  | "reverse"
+  | "withdrawal";
 
 /** A reason's bounds, the schema's own. */
 export const REASON_LENGTH = { min: 5, max: 2000 } as const;
@@ -137,7 +204,15 @@ export const REASON_LENGTH = { min: 5, max: 2000 } as const;
 export function requireReason(reason: unknown, subject: ReasonSubject): string {
   const text = typeof reason === "string" ? reason.trim() : "";
   if (text.length < REASON_LENGTH.min || text.length > REASON_LENGTH.max) {
-    throw equityError("reasonRequired", { subject: fig.choice(subject), min: fig.count(REASON_LENGTH.min), max: fig.count(REASON_LENGTH.max) }, { field: "reason" });
+    throw equityError(
+      "reasonRequired",
+      {
+        subject: fig.choice(subject),
+        min: fig.count(REASON_LENGTH.min),
+        max: fig.count(REASON_LENGTH.max),
+      },
+      { field: "reason" },
+    );
   }
   return text;
 }
@@ -145,7 +220,19 @@ export function requireReason(reason: unknown, subject: ReasonSubject): string {
 /** Map a unique-key violation to a named conflict; anything else propagates unchanged. */
 export function conflictOf(error: unknown, constraint: string, conflict: EquityError): never {
   const chain: unknown[] = [];
-  for (let cursor: unknown = error; cursor && chain.length < 5; cursor = (cursor as { cause?: unknown }).cause) chain.push(cursor);
-  if (chain.some((entry) => (entry as { code?: unknown }).code === "23505" && String((entry as { constraint?: unknown }).constraint ?? "") === constraint)) throw conflict;
+  for (
+    let cursor: unknown = error;
+    cursor && chain.length < 5;
+    cursor = (cursor as { cause?: unknown }).cause
+  )
+    chain.push(cursor);
+  if (
+    chain.some(
+      (entry) =>
+        (entry as { code?: unknown }).code === "23505" &&
+        String((entry as { constraint?: unknown }).constraint ?? "") === constraint,
+    )
+  )
+    throw conflict;
   throw error;
 }

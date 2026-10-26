@@ -66,11 +66,14 @@ registerHooks({
 const patchRouteUrl = "./route.ts?journal-subsidiary-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 
-
-function patchRequest(id: string, body: unknown): { req: Request; ctx: { params: Promise<{ id: string }> } } {
+function patchRequest(
+  id: string,
+  body: unknown,
+): { req: Request; ctx: { params: Promise<{ id: string }> } } {
   return {
     req: new Request(`http://localhost/api/journals/${id}`, {
       method: "PATCH",
@@ -82,29 +85,30 @@ function patchRequest(id: string, body: unknown): { req: Request; ctx: { params:
 }
 
 async function revisionToken(documentId: string): Promise<string> {
-  const row = (await db.execute<{ updatedAt: string }>(sql`
+  const row = await db.execute<{ updatedAt: string }>(
+    sql`
     select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${documentId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return row[0]!.updatedAt;
 }
 
-test(
-  "journals PATCH refuses to clear the header subsidiary",
-  async () => {
-    const org = await withBypassContext(() => createScratchOrg());
-    try {
-      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-      // A subsidiary-restricted caller: the null-clear must be refused, not
-      // waved past the scope guard (which only checks non-null ids).
-      routeState.authz = {
-        user: { roles: [], orgId: org.orgId, id: adminId },
-        permissions: new Set(),
-        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-      };
-      const documentId = randomUUID();
-      await withBypassContext(async () => {
-        await db.execute(sql`
+test("journals PATCH refuses to clear the header subsidiary", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    // A subsidiary-restricted caller: the null-clear must be refused, not
+    // waved past the scope guard (which only checks non-null ids).
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
+    const documentId = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`
           insert into documents
             (id, org_id, kind, document_number, subsidiary_id, document_date,
              currency, fx_rate, status, subtotal, tax_total, total, custom,
@@ -115,7 +119,7 @@ test(
             '{}'::jsonb, ${adminId}, ${adminId}
           )
         `);
-        await db.execute(sql`
+      await db.execute(sql`
           insert into document_lines
             (org_id, document_id, line_number, account_id, quantity, unit_price,
              amount, subsidiary_id, custom, created_by, updated_by)
@@ -127,28 +131,32 @@ test(
             -100, ${org.subsidiaryId}, '{}'::jsonb, ${adminId}, ${adminId}
           )
         `);
-      });
+    });
 
-      // The mocked session gate carries no connection scope; the revision
-      // read, the handler, and the verification read run under the org.
-      const token = await withOrgContext(org.orgId, () => revisionToken(documentId));
-      const attempt = patchRequest(documentId, { subsidiaryId: null, expectedUpdatedAt: token });
-      const refused = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
-      assert.equal(refused.status, 422);
-      assert.match((await refused.json() as { error: string }).error, /subsidiary/i);
-      const stored = (await withOrgContext(org.orgId, () => db.execute<{ subsidiary_id: string | null }>(sql`
+    // The mocked session gate carries no connection scope; the revision
+    // read, the handler, and the verification read run under the org.
+    const token = await withOrgContext(org.orgId, () => revisionToken(documentId));
+    const attempt = patchRequest(documentId, { subsidiaryId: null, expectedUpdatedAt: token });
+    const refused = await withOrgContext(org.orgId, () => PATCH(attempt.req, attempt.ctx));
+    assert.equal(refused.status, 422);
+    assert.match(((await refused.json()) as { error: string }).error, /subsidiary/i);
+    const stored = await withOrgContext(org.orgId, () =>
+      db.execute<{ subsidiary_id: string | null }>(
+        sql`
         select subsidiary_id from documents where id = ${documentId}
-      `, "objects")));
-      assert.equal(stored[0]!.subsidiary_id, org.subsidiaryId);
+      `,
+        "objects",
+      ),
+    );
+    assert.equal(stored[0]!.subsidiary_id, org.subsidiaryId);
 
-      // Positive control: an ordinary header edit with the same revision
-      // still saves, so the refusal is the null — not the harness.
-      const memo = patchRequest(documentId, { memo: "still editable", expectedUpdatedAt: token });
-      const saved = await withOrgContext(org.orgId, () => PATCH(memo.req, memo.ctx));
-      assert.equal(saved.status, 200, await saved.clone().text());
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    // Positive control: an ordinary header edit with the same revision
+    // still saves, so the refusal is the null — not the harness.
+    const memo = patchRequest(documentId, { memo: "still editable", expectedUpdatedAt: token });
+    const saved = await withOrgContext(org.orgId, () => PATCH(memo.req, memo.ctx));
+    assert.equal(saved.status, 200, await saved.clone().text());
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});

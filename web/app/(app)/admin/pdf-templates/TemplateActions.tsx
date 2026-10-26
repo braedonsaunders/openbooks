@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { promptDialog } from '../../../../lib/prompt'
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { promptDialog } from "../../../../lib/prompt";
 
 /**
  * First non-colliding name: the base when free, else "base 2", "base 3", …
@@ -29,44 +29,44 @@ export function NewTemplateButton({
   defaultName,
   starterDesign,
 }: {
-  recordType: string
-  asDuplicateOfStarter?: boolean
+  recordType: string;
+  asDuplicateOfStarter?: boolean;
   /** Pre-filled template name (e.g. "Customer invoice starter"). */
-  defaultName?: string
+  defaultName?: string;
   starterDesign?: {
-    sourceHtml: string
-    headerHtml: string
-    footerHtml: string
-    paperSize: string
-    orientation: string
-    marginMm: number
-  }
+    sourceHtml: string;
+    headerHtml: string;
+    footerHtml: string;
+    paperSize: string;
+    orientation: string;
+    marginMm: number;
+  };
 }) {
-  const t = useTranslations('pdfTemplates')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("pdfTemplates");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
 
   async function create() {
-    const name = await promptDialog({ title: t('newTemplate'), initialValue: defaultName })
-    if (!name?.trim()) return
-    setBusy(true)
+    const name = await promptDialog({ title: t("newTemplate"), initialValue: defaultName });
+    if (!name?.trim()) return;
+    setBusy(true);
     try {
-      const res = await fetch('/api/pdf-templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/pdf-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recordType, name: name.trim(), ...starterDesign }),
-      })
+      });
       // The status is checked before the body is parsed: a non-JSON error
       // body must toast the failure, never an unhandled rejection with no
       // toast at all.
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('editor.saveFailed')))
-      const data = (await res.json().catch(() => null)) as { id?: unknown } | null
-      if (typeof data?.id !== 'string' || !data.id) throw new Error(t('editor.saveFailed'))
-      router.push(`/admin/pdf-templates/${data.id}`)
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("editor.saveFailed")));
+      const data = (await res.json().catch(() => null)) as { id?: unknown } | null;
+      if (typeof data?.id !== "string" || !data.id) throw new Error(t("editor.saveFailed"));
+      router.push(`/admin/pdf-templates/${data.id}`);
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : t('editor.saveFailed'))
+      toast.error(error instanceof Error && error.message ? error.message : t("editor.saveFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -76,13 +76,13 @@ export function NewTemplateButton({
       disabled={busy}
       className="text-sm font-medium text-teal-700 hover:underline disabled:opacity-50 dark:text-teal-300"
     >
-      {t('list.duplicate')}
+      {t("list.duplicate")}
     </button>
   ) : (
     <Button onClick={create} disabled={busy}>
-      {t('newTemplate')}
+      {t("newTemplate")}
     </Button>
-  )
+  );
 }
 
 /** Copy an existing template (name prompt) and open the copy. */
@@ -94,32 +94,32 @@ export function DuplicateTemplateButton({
   /** Names already used by this record type — the offered default skips them. */
   takenNames?: Set<string>;
 }) {
-  const t = useTranslations('pdfTemplates')
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("pdfTemplates");
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
 
   async function duplicate() {
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch(`/api/pdf-templates/${templateId}`)
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('editor.saveFailed')))
-      const data = (await res.json().catch(() => null)) as { row?: unknown } | null
-      const src = (data?.row ?? null) as Record<string, unknown> | null
+      const res = await fetch(`/api/pdf-templates/${templateId}`);
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("editor.saveFailed")));
+      const data = (await res.json().catch(() => null)) as { row?: unknown } | null;
+      const src = (data?.row ?? null) as Record<string, unknown> | null;
       // Never navigate to /undefined: the copy needs a real source row and a
       // real created id, or the failure toasts instead of routing nowhere.
-      if (!src || typeof src.name !== 'string' || typeof src.recordType !== 'string') {
-        throw new Error(t('editor.saveFailed'))
+      if (!src || typeof src.name !== "string" || typeof src.recordType !== "string") {
+        throw new Error(t("editor.saveFailed"));
       }
       const name = await promptDialog({
-        title: t('list.duplicate'),
+        title: t("list.duplicate"),
         // Digits-only suffix, never a persisted English "(copy)": the offered
         // default must not collide and must carry no language.
         initialValue: uniqueTemplateName(src.name, takenNames ?? new Set([src.name])),
-      })
-      if (!name?.trim()) return
-      const created = await fetch('/api/pdf-templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!name?.trim()) return;
+      const created = await fetch("/api/pdf-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           recordType: src.recordType,
           name: name.trim(),
@@ -131,15 +131,16 @@ export function DuplicateTemplateButton({
           orientation: src.orientation,
           marginMm: src.marginMm,
         }),
-      })
-      if (!created.ok) throw new Error(await readApiErrorMessage(created, t('editor.saveFailed')))
-      const createdData = (await created.json().catch(() => null)) as { id?: unknown } | null
-      if (typeof createdData?.id !== 'string' || !createdData.id) throw new Error(t('editor.saveFailed'))
-      router.push(`/admin/pdf-templates/${createdData.id}`)
+      });
+      if (!created.ok) throw new Error(await readApiErrorMessage(created, t("editor.saveFailed")));
+      const createdData = (await created.json().catch(() => null)) as { id?: unknown } | null;
+      if (typeof createdData?.id !== "string" || !createdData.id)
+        throw new Error(t("editor.saveFailed"));
+      router.push(`/admin/pdf-templates/${createdData.id}`);
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : t('editor.saveFailed'))
+      toast.error(error instanceof Error && error.message ? error.message : t("editor.saveFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -149,7 +150,7 @@ export function DuplicateTemplateButton({
       disabled={busy}
       className="text-sm font-medium text-teal-700 hover:underline disabled:opacity-50 dark:text-teal-300"
     >
-      {t('list.duplicate')}
+      {t("list.duplicate")}
     </button>
-  )
+  );
 }

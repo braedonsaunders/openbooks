@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  closePosting,
-  pausePosting,
-} from "@openbooks/engine/hrm/recruiting/postings";
+import { closePosting, pausePosting } from "@openbooks/engine/hrm/recruiting/postings";
 
 import { recruitingErrorResponse } from "../../_lib";
 import { transitionPostingBody } from "../bodies";
@@ -21,11 +18,7 @@ export const POST = defineRoute({
   feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: transitionPostingBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
 
     try {

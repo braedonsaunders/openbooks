@@ -46,10 +46,7 @@
  */
 import { PayrollError } from "../error.ts";
 import type { PayrollFilingData, PayrollPackFilings } from "../filing-registry.ts";
-import type {
-  PayrollCountryPack,
-  PayrollRemittanceSchedule,
-} from "../pack-types.ts";
+import type { PayrollCountryPack, PayrollRemittanceSchedule } from "../pack-types.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { SG_CERTIFICATES } from "./certificates.ts";
 import { computeSgStatutory, SG_FACTOR_LABELS } from "./cpf.ts";
@@ -92,8 +89,8 @@ const SG_WITHHOLDING: PayrollPackWithholding = {
       subRegions: [],
       subRegionConflictRule: "both",
       citation:
-        "IRAS, Reporting Employee Earnings (IR8A, App 8A/8B); "
-        + "IRAS, Tax Clearance for Foreign & SPR Employees (IR21)",
+        "IRAS, Reporting Employee Earnings (IR8A, App 8A/8B); " +
+        "IRAS, Tax Clearance for Foreign & SPR Employees (IR21)",
     },
   ],
 };
@@ -116,9 +113,7 @@ const SG_WITHHOLDING: PayrollPackWithholding = {
 function sgPackFilings(): PayrollPackFilings {
   return {
     country: "SG",
-    programTypes: [
-      { key: "sg_cpf", label: "CPF Submission Number" },
-    ],
+    programTypes: [{ key: "sg_cpf", label: "CPF Submission Number" }],
     yearEnd: [
       // Form IR8A is populated from committed pay runs (see `./filings.ts`
       // for the box set, its IRAS citations, and the AIS model it serves).
@@ -130,24 +125,23 @@ function sgPackFilings(): PayrollPackFilings {
         label: "Form IR21 (tax clearance)",
         cadence: "separation",
         description:
-          "Tax clearance for a departing non-Singapore-Citizen employee: the employer files "
-          + "Form IR21 and \"withhold[s] all monies due to the employee for tax clearance purpose\" "
-          + "(IRAS, Tax Clearance for Foreign & SPR Employees (IR21)) — the one employer-side "
-          + "withholding Singapore names, and not yet built by this pack.",
+          "Tax clearance for a departing non-Singapore-Citizen employee: the employer files " +
+          'Form IR21 and "withhold[s] all monies due to the employee for tax clearance purpose" ' +
+          "(IRAS, Tax Clearance for Foreign & SPR Employees (IR21)) — the one employer-side " +
+          "withholding Singapore names, and not yet built by this pack.",
         population: async (): Promise<PayrollFilingData> => {
           throw new PayrollError(
-            "the SG payroll pack seeks no IR21 tax clearance — no IR21 builder exists "
-            + "(clearance is an event-driven withholding on a departing non-citizen, not a monthly line)",
+            "the SG payroll pack seeks no IR21 tax clearance — no IR21 builder exists " +
+              "(clearance is an event-driven withholding on a departing non-citizen, not a monthly line)",
           );
         },
         parseRowId: () => null,
-        downloadRefusal:
-          "the SG payroll pack produces no Form IR21 file — no IR21 builder exists",
+        downloadRefusal: "the SG payroll pack produces no Form IR21 file — no IR21 builder exists",
         amendment: {
           supported: false,
           refusal:
-            "an IR21 is changed by withdrawing or refiling it with IRAS before clearance is issued — "
-            + "no in-product correction file is built",
+            "an IR21 is changed by withdrawing or refiling it with IRAS before clearance is issued — " +
+            "no in-product correction file is built",
         },
       },
     ],
@@ -193,11 +187,27 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
         // $1,600), rounded DOWN to the dollar. Assessed on OW — no pre-tax
         // deduction enters the CPF formula — so earnings-assessed and
         // computed once, exactly like CPP/EI.
-        { code: "CPF_EE", name: "CPF — employee share", systemKey: "cpf_ee", kind: "deduction", sequence: 110, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "CPF_EE",
+          name: "CPF — employee share",
+          systemKey: "cpf_ee",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
         // "[37% (OW)]*" less the employee share ("Employer's share = Total
         // contribution - Employee's share"), max $2,960 total. Employer-side,
         // earnings-assessed, never re-derived by the protection fixpoint.
-        { code: "CPF_ER", name: "CPF — employer share", systemKey: "cpf_er", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "CPF_ER",
+          name: "CPF — employer share",
+          systemKey: "cpf_er",
+          kind: "employer_contribution",
+          sequence: 210,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -207,7 +217,15 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
         // cap over $4,500), collected by the CPF Board on behalf of SWDA —
         // so `tax_authority` alongside CPF, stated here rather than guessed
         // per employee. Employer-side, earnings-assessed.
-        { code: "SDL", name: "Skills Development Levy", systemKey: "sdl", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "SDL",
+          name: "Skills Development Levy",
+          systemKey: "sdl",
+          kind: "employer_contribution",
+          sequence: 220,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
   ],
@@ -251,7 +269,8 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
     pensionable: "CPF Ordinary Wages (OW, capped at the monthly OW ceiling)",
     // No employee social-insurance levy runs through the payroll: the SDL
     // prices on monthly total wages, not on a flagged insurable base.
-    insurable: "No insurable base — Singapore levies no earnings-related employee insurance through payroll",
+    insurable:
+      "No insurable base — Singapore levies no earnings-related employee insurance through payroll",
   },
   // Union dues buy no CPF treatment: contributions price on OW regardless.
   // Declared null so dues lines carry no treatment.
@@ -282,15 +301,15 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
       kind: "code",
       label: "Termination date (ISO)",
       refusalReason:
-        "Cessation of a non-citizen's employment withholds all monies for IRAS tax clearance; "
-        + "without a termination date the hold cannot tell a final pay from an ordinary one.",
+        "Cessation of a non-citizen's employment withholds all monies for IRAS tax clearance; " +
+        "without a termination date the hold cannot tell a final pay from an ordinary one.",
       required: false,
       producer: {
         kind: "none",
         notes:
-          "No pack-owned channel carries this yet: the engine record feeds it from the HRM "
-          + "employment, and no SG certificate field or profile-column mapping produces it. "
-          + "Declare the certificate or profile-column producer here when that input is built.",
+          "No pack-owned channel carries this yet: the engine record feeds it from the HRM " +
+          "employment, and no SG certificate field or profile-column mapping produces it. " +
+          "Declare the certificate or profile-column producer here when that input is built.",
       },
     },
   ],

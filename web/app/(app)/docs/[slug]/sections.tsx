@@ -1,28 +1,28 @@
-import Link from 'next/link'
-import { ArrowLeft, ArrowRight, ChevronRight } from 'lucide-react'
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
 
-import { ChatMarkdown } from '../../../../components/assistant/markdown'
+import { ChatMarkdown } from "../../../../components/assistant/markdown";
 
 export interface DocArticleLink {
-  slug: string
-  title: string
+  slug: string;
+  title: string;
 }
 
 export interface DocArticleContent {
-  breadcrumbLabel: string
-  breadcrumbTitle: string
-  categoryTitle: string | null
+  breadcrumbLabel: string;
+  breadcrumbTitle: string;
+  categoryTitle: string | null;
   /** Raw Markdown; the component renders it (never pre-rendered in the loader). */
-  body: string
+  body: string;
   /** Fully formatted `docs.lastUpdated` string (loader runs `t`). */
-  lastUpdated: string
-  relatedTitle: string
-  related: DocArticleLink[]
-  articleNavLabel: string
-  previous: DocArticleLink | null
-  next: DocArticleLink | null
-  previousLabel: string
-  nextLabel: string
+  lastUpdated: string;
+  relatedTitle: string;
+  related: DocArticleLink[];
+  articleNavLabel: string;
+  previous: DocArticleLink | null;
+  next: DocArticleLink | null;
+  previousLabel: string;
+  nextLabel: string;
 }
 
 /**
@@ -61,7 +61,9 @@ export function DocArticleView({ content }: { content: DocArticleContent }) {
 
       {content.related.length > 0 ? (
         <div className="mt-6">
-          <h2 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{content.relatedTitle}</h2>
+          <h2 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {content.relatedTitle}
+          </h2>
           <ul className="space-y-1">
             {content.related.map((r) => (
               <li key={r.slug}>
@@ -88,7 +90,10 @@ export function DocArticleView({ content }: { content: DocArticleContent }) {
               className="group rounded-lg border border-slate-200 p-3 hover:border-teal-300 dark:border-slate-800 dark:hover:border-teal-800"
             >
               <span className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" aria-hidden />
+                <ArrowLeft
+                  className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5"
+                  aria-hidden
+                />
                 {content.previousLabel}
               </span>
               <span className="mt-1 block text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -105,7 +110,10 @@ export function DocArticleView({ content }: { content: DocArticleContent }) {
             >
               <span className="flex items-center justify-end gap-1 text-xs text-slate-500 dark:text-slate-400">
                 {content.nextLabel}
-                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                <ArrowRight
+                  className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
+                  aria-hidden
+                />
               </span>
               <span className="mt-1 block text-sm font-medium text-slate-900 dark:text-slate-100">
                 {content.next.title}
@@ -115,5 +123,5 @@ export function DocArticleView({ content }: { content: DocArticleContent }) {
         </nav>
       ) : null}
     </article>
-  )
+  );
 }

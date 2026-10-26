@@ -16,7 +16,8 @@ export interface OriginalCostLocation {
 /** Unknown legacy provenance propagates; an anchor receipt is not pool cost. */
 export function sumOriginalCosts(values: (string | null)[]): string | null {
   return values.some((value) => value == null)
-    ? null : fromUnits(values.reduce((sum, value) => sum + toUnits(value!), 0n));
+    ? null
+    : fromUnits(values.reduce((sum, value) => sum + toUnits(value!), 0n));
 }
 
 /**
@@ -36,16 +37,23 @@ export function consumeOriginalCost(
   if (basis == null) return null;
   const total = toUnits(available);
   const take = toUnits(quantity);
-  if (total <= 0n || take < 0n || take > total) throw originalCostRefusal(quantity, available, location);
+  if (total <= 0n || take < 0n || take > total)
+    throw originalCostRefusal(quantity, available, location);
   return fromUnits(roundDiv(toUnits(basis) * take, total));
 }
 
-function originalCostRefusal(quantity: string, available: string, location?: OriginalCostLocation): InventoryError {
+function originalCostRefusal(
+  quantity: string,
+  available: string,
+  location?: OriginalCostLocation,
+): InventoryError {
   const scope = [
     location?.itemId ? `item ${location.itemId}` : null,
     location?.stockLocationId ? `location ${location.stockLocationId}` : null,
     location?.layerId ? `layer ${location.layerId}` : null,
-  ].filter((part): part is string => part !== null).join(", ");
+  ]
+    .filter((part): part is string => part !== null)
+    .join(", ");
   return new InventoryError(
     `original-cost allocation takes ${quantity} from ${available} available` +
       (scope ? ` (${scope})` : "") +
@@ -65,14 +73,19 @@ export function splitOriginalCost(
   let quantity = quantities.reduce((sum, value) => sum + toUnits(value), 0n);
   const shares = quantities.map((value) => {
     const share = consumeOriginalCost(remaining, value, fromUnits(quantity), location);
-    if (remaining != null && share != null) remaining = fromUnits(toUnits(remaining) - toUnits(share));
+    if (remaining != null && share != null)
+      remaining = fromUnits(toUnits(remaining) - toUnits(share));
     quantity -= toUnits(value);
     return share;
   });
   // Quantity rounding may put one fragment below carrying value even when
   // the entire pool remains below original cost. Move only the necessary
   // basis between those representational fragments, conserving the total.
-  if (basis != null && carryingValues && toUnits(basis) >= carryingValues.reduce((sum, value) => sum + toUnits(value), 0n)) {
+  if (
+    basis != null &&
+    carryingValues &&
+    toUnits(basis) >= carryingValues.reduce((sum, value) => sum + toUnits(value), 0n)
+  ) {
     const values = carryingValues.map(toUnits);
     const units = shares.map((share) => toUnits(share!));
     for (let i = 0; i < units.length; i++) {

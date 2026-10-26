@@ -77,7 +77,8 @@ export async function projectBillingHasBegun(
   projectId: string,
 ): Promise<boolean> {
   const prior = await runner.execute(
-    sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${projectId} and status <> 'void' limit 1`, "objects",
+    sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${projectId} and status <> 'void' limit 1`,
+    "objects",
   );
   return prior.length > 0;
 }
@@ -101,18 +102,23 @@ export async function assertProjectHeaderChangeAllowed(
   projectId: string,
   change: { contractValue?: string | null; subsidiaryId?: string | null },
 ): Promise<void> {
-  const row = (await runner.execute<{
-    contract_value: string | null;
-    subsidiary_id: string | null;
-    procedure: string | null;
-  }>(sql`
+  const row = (
+    await runner.execute<{
+      contract_value: string | null;
+      subsidiary_id: string | null;
+      procedure: string | null;
+    }>(
+      sql`
     select p.contract_value::text as contract_value, p.subsidiary_id,
            pt.invoicing_profile->>'billingProcedure' as procedure
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}
        for update of p
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) refuse("project_not_found");
 
   if (
@@ -129,7 +135,9 @@ export async function assertProjectHeaderChangeAllowed(
 
   if (change.subsidiaryId !== undefined && row.subsidiary_id !== change.subsidiaryId) {
     const target = change.subsidiaryId;
-    const history = (await runner.execute<{ found: boolean }>(sql`
+    const history = (
+      await runner.execute<{ found: boolean }>(
+        sql`
       select exists (
                select 1 from journal_lines jl
                  join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
@@ -148,7 +156,10 @@ export async function assertProjectHeaderChangeAllowed(
                select 1 from pay_applications pa
                 where pa.org_id = ${orgId} and pa.project_id = ${projectId}
                   and pa.status <> 'void') as found
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (history?.found) refuse("subsidiary_has_posted_history");
   }
 }

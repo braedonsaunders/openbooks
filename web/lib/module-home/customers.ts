@@ -1,19 +1,21 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
 import {
-  addCalendarDays, businessToday, weekStartsEndingOn,
-} from '@openbooks/engine/platform/business-date/module'
-import { isoDateOf } from '@openbooks/engine/platform/civil-date'
-import { db } from '@openbooks/engine/platform/db'
-import { add, cmp, mulDecimal } from '@openbooks/engine/money/money'
-import { agingBasisDate } from '../aging-basis'
-import { resolvePeriod } from '../periods'
-import { flowRates, translateFlows } from '../fx-presentation'
-import { calculateForecast, type ForecastRow } from '../crm'
-import { crmOpportunityScope } from '../crm-scope'
-import { isFeatureEnabled } from '../features'
-import { paymentStats } from '../cash/core'
-import { openItems } from '../cash/open-items'
+  addCalendarDays,
+  businessToday,
+  weekStartsEndingOn,
+} from "@openbooks/engine/platform/business-date/module";
+import { isoDateOf } from "@openbooks/engine/platform/civil-date";
+import { db } from "@openbooks/engine/platform/db";
+import { add, cmp, mulDecimal } from "@openbooks/engine/money/money";
+import { agingBasisDate } from "../aging-basis";
+import { resolvePeriod } from "../periods";
+import { flowRates, translateFlows } from "../fx-presentation";
+import { calculateForecast, type ForecastRow } from "../crm";
+import { crmOpportunityScope } from "../crm-scope";
+import { isFeatureEnabled } from "../features";
+import { paymentStats } from "../cash/core";
+import { openItems } from "../cash/open-items";
 
 /**
  * Customers module home — one light round trip for the relationship-to-cash
@@ -25,66 +27,66 @@ import { openItems } from '../cash/open-items'
  */
 
 export interface CustomerExposureRow {
-  partyId: string
-  name: string
-  open: string
-  overdue: string
-  openInvoices: number
-  openOpportunities: number
-  oldestDue: string | null
+  partyId: string;
+  name: string;
+  open: string;
+  overdue: string;
+  openInvoices: number;
+  openOpportunities: number;
+  oldestDue: string | null;
 }
 
 export interface CustomersHome {
-  arOutstanding: string
-  arOverdue: string
-  openInvoices: number
-  overdueInvoices: number
-  activeCustomers: number
+  arOutstanding: string;
+  arOverdue: string;
+  openInvoices: number;
+  overdueInvoices: number;
+  activeCustomers: number;
   /**
    * The ONE org settlement mean — the same settlement-weighted trailing mean
    * the cash cockpit, cashflow analytics, MCP cashflow tool, get_vitals, and
    * customer intelligence quote. Null with no settlements: never an invented
    * figure.
    */
-  dso: number | null
-  pipeline: { total: string; weighted: string; closed: string }
-  topExposure: CustomerExposureRow[]
+  dso: number | null;
+  pipeline: { total: string; weighted: string; closed: string };
+  topExposure: CustomerExposureRow[];
   /** Weekly collections (posted customer payments), oldest → newest. */
-  trend: { weekStart: string; collected: string }[]
+  trend: { weekStart: string; collected: string }[];
   badges: {
-    openOpportunities: number
-    openQuotes: number
-    openSalesOrders: number
-    receipts7d: number
-    collected7d: string
-    customers: number
-  }
+    openOpportunities: number;
+    openQuotes: number;
+    openSalesOrders: number;
+    receipts7d: number;
+    collected7d: string;
+    customers: number;
+  };
   /**
    * False when Orders is off OR the caller lacks the orders read grant
    * (quotes and sales orders read behind ar.read at their source) — hide
    * quote/SO vitals rather than show zeros.
    */
-  ordersEnabled: boolean
+  ordersEnabled: boolean;
   /**
    * False when CRM is off OR the caller lacks the CRM read grant (the
    * pipeline and opportunity counts read behind crm.opportunities.read at
    * their source) — hide pipeline/opportunity vitals rather than show zeros.
    */
-  crmEnabled: boolean
+  crmEnabled: boolean;
   /**
    * False when the caller lacks ar.read. The AR families
    * (balances, collections, DSO, roster) are then skipped, never
    * zero-shaped — the view hides their vitals.
    */
-  arAllowed: boolean
+  arAllowed: boolean;
   /**
    * False when the caller lacks parties.read. The directory
    * and customer count are then skipped — the view hides them.
    */
-  partiesAllowed: boolean
+  partiesAllowed: boolean;
 }
 
-const TREND_WEEKS = 13
+const TREND_WEEKS = 13;
 
 function customerPaymentMovements(orgId: string, from: string, through: string, docScope: SQL) {
   return sql`
@@ -103,7 +105,7 @@ function customerPaymentMovements(orgId: string, from: string, through: string, 
      where d.org_id = ${orgId} and d.kind = 'customer_payment' and d.status = 'voided'
        and d.voided_at::date between ${from}::date and ${through}::date
        ${docScope}
-  `
+  `;
 }
 
 /**
@@ -119,17 +121,20 @@ async function pipelineInOrgCurrency(
   // One shared rate context instead of a hand-rolled per-currency lookup:
   // the same latest-dated-spot rule (inverse quotes included), with a
   // missing rate failing closed naming the pair and date.
-  const fx = await flowRates(orgId, rows.map((row) => ({ func: String(row.currency).trim().toUpperCase() || null, date: asOf })))
-  let total = '0.0000'
-  let weighted = '0.0000'
-  let closed = '0.0000'
+  const fx = await flowRates(
+    orgId,
+    rows.map((row) => ({ func: String(row.currency).trim().toUpperCase() || null, date: asOf })),
+  );
+  let total = "0.0000";
+  let weighted = "0.0000";
+  let closed = "0.0000";
   for (const row of rows) {
-    const rate = fx.rateAt(String(row.currency).trim().toUpperCase() || null, asOf)
-    total = add(total, mulDecimal(row.pipeline_amount ?? '0', rate))
-    weighted = add(weighted, mulDecimal(row.weighted_amount ?? '0', rate))
-    closed = add(closed, mulDecimal(row.closed_amount ?? '0', rate))
+    const rate = fx.rateAt(String(row.currency).trim().toUpperCase() || null, asOf);
+    total = add(total, mulDecimal(row.pipeline_amount ?? "0", rate));
+    weighted = add(weighted, mulDecimal(row.weighted_amount ?? "0", rate));
+    closed = add(closed, mulDecimal(row.closed_amount ?? "0", rate));
   }
-  return { total, weighted, closed }
+  return { total, weighted, closed };
 }
 
 /**
@@ -145,9 +150,9 @@ async function pipelineInOrgCurrency(
  * where every family is granted (tests, trusted callers).
  */
 export interface CustomersHomeGrants {
-  ar: boolean
-  crm: boolean
-  parties: boolean
+  ar: boolean;
+  crm: boolean;
+  parties: boolean;
 }
 
 export async function customersHome(
@@ -163,18 +168,18 @@ export async function customersHome(
 ): Promise<CustomersHome> {
   // Section grants default open so existing callers keep
   // their payload; the /customers loader always passes explicit grants.
-  const arGranted = grants?.ar ?? true
-  const crmGranted = grants?.crm ?? true
-  const partiesGranted = grants?.parties ?? true
+  const arGranted = grants?.ar ?? true;
+  const crmGranted = grants?.crm ?? true;
+  const partiesGranted = grants?.parties ?? true;
   const [ordersOn, crmOn] = await Promise.all([
-    isFeatureEnabled(orgId, 'orders'),
-    isFeatureEnabled(orgId, 'crm'),
-  ])
-  const today = await businessToday(orgId)
-  const ago7 = addCalendarDays(today, -7)
-  const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
-  const trendFrom = weekStarts[0]!
-  const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
+    isFeatureEnabled(orgId, "orders"),
+    isFeatureEnabled(orgId, "crm"),
+  ]);
+  const today = await businessToday(orgId);
+  const ago7 = addCalendarDays(today, -7);
+  const weekStarts = weekStartsEndingOn(today, TREND_WEEKS);
+  const trendFrom = weekStarts[0]!;
+  const subArr = subIds !== undefined ? sql`${`{${subIds.join(",")}}`}::uuid[]` : null;
   // Document-side reads match root-owned rows only for unrestricted
   // root-covering views; the limb never widens an empty scope (see filters).
   const docScope =
@@ -182,73 +187,127 @@ export async function customersHome(
       ? sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))`
       : subArr
         ? sql` and d.subsidiary_id = any(${subArr})`
-        : sql``
+        : sql``;
   // The pipeline forecast covers the FISCAL quarter (declared calendars
   // honoured), never the calendar quarter — the cockpit and the forecast
   // it quotes must agree on which quarter "this quarter" is.
-  const quarter = await resolvePeriod('this_fiscal_quarter', { orgId, today })
+  const quarter = await resolvePeriod("this_fiscal_quarter", { orgId, today });
 
-  const [arItems, dsoStats, trendRes, badgeRes, collectedRowsRes, forecast, orgRes, oppRes] = (await Promise.all([
-    arGranted ? openItems(orgId, 'ar', today, subIds) : Promise.resolve([]),
-    // Days-to-settle is the ONE org mean from the cash engine's maintained
-    // settlement rollup — the same reader the cash cockpit, cashflow
-    // analytics, MCP cashflow tool, get_vitals, and customer intelligence
-    // quote — never a second local grain. The rollup scan keeps this landing
-    // cheap; subsidiary scoping rides the engine's own rules. The AR
-    // settlement rollup is unreadable without ar.read, and an unreadable
-    // rollup is null — never a zero that reads as "settles today".
-    arGranted ? paymentStats("ar", today, subIds, orgId) : Promise.resolve({ map: new Map<string, { avg: number; sd: number; n: number }>(), globalAvg: null }),
-    // 13-week collections trend retains the original receipt in its posting
-    // week and records a void as a negative movement in the void week.
-    // Skipped without ar.read — never queried, never shaped.
-    arGranted ? db.execute(sql`
+  const [arItems, dsoStats, trendRes, badgeRes, collectedRowsRes, forecast, orgRes, oppRes] =
+    await Promise.all([
+      arGranted ? openItems(orgId, "ar", today, subIds) : Promise.resolve([]),
+      // Days-to-settle is the ONE org mean from the cash engine's maintained
+      // settlement rollup — the same reader the cash cockpit, cashflow
+      // analytics, MCP cashflow tool, get_vitals, and customer intelligence
+      // quote — never a second local grain. The rollup scan keeps this landing
+      // cheap; subsidiary scoping rides the engine's own rules. The AR
+      // settlement rollup is unreadable without ar.read, and an unreadable
+      // rollup is null — never a zero that reads as "settles today".
+      arGranted
+        ? paymentStats("ar", today, subIds, orgId)
+        : Promise.resolve({
+            map: new Map<string, { avg: number; sd: number; n: number }>(),
+            globalAvg: null,
+          }),
+      // 13-week collections trend retains the original receipt in its posting
+      // week and records a void as a negative movement in the void week.
+      // Skipped without ar.read — never queried, never shaped.
+      arGranted
+        ? db.execute(
+            sql`
       select date_trunc('week', movement.dt)::date as wk, movement.func,
              max(movement.dt)::text as late, coalesce(sum(movement.amount), 0) as collected
         from (${customerPaymentMovements(orgId, trendFrom, today, docScope)}) movement
        group by 1, 2
-    `, 'objects') : Promise.resolve([]),
-    // Directory badges — cheap counts for the workspace's other pages (the
-    // collected-value scalar moved to the row query below for translation).
-    // Each badge keeps its source permission — opportunity
-    // counts behind crm.opportunities.read, quotes/sales orders and
-    // receipts behind ar.read, the customer count behind parties.read.
-    db.execute(sql`
+    `,
+            "objects",
+          )
+        : Promise.resolve([]),
+      // Directory badges — cheap counts for the workspace's other pages (the
+      // collected-value scalar moved to the row query below for translation).
+      // Each badge keeps its source permission — opportunity
+      // counts behind crm.opportunities.read, quotes/sales orders and
+      // receipts behind ar.read, the customer count behind parties.read.
+      db.execute(
+        sql`
       select
-        ${crmOn && crmGranted ? sql`(select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-          where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))} and o.is_active and not s.is_closed)` : sql`0`} as open_opps,
-        ${ordersOn && arGranted ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'quote'
-          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_quotes,
-        ${ordersOn && arGranted ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'sales_order'
-          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_sos,
-        ${arGranted ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
+        ${
+          crmOn && crmGranted
+            ? sql`(select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+          where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))} and o.is_active and not s.is_closed)`
+            : sql`0`
+        } as open_opps,
+        ${
+          ordersOn && arGranted
+            ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'quote'
+          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})`
+            : sql`0`
+        } as open_quotes,
+        ${
+          ordersOn && arGranted
+            ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'sales_order'
+          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})`
+            : sql`0`
+        } as open_sos,
+        ${
+          arGranted
+            ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
           and d.status = 'posted' -- Live entries only: the live receipt count excludes payments voided by the current snapshot
           and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= ${ago7})` : sql`0`} as receipts_7d,
-        ${partiesGranted ? sql`(select count(*) from parties p where p.org_id = ${orgId} and p.is_active
+          and coalesce(d.document_date, d.posting_date) >= ${ago7})`
+            : sql`0`
+        } as receipts_7d,
+        ${
+          partiesGranted
+            ? sql`(select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
-          ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``})` : sql`0`} as customers
-    `, 'objects'),
-    // 7-day net collections per (date, functional), including voids that
-    // reverse an earlier receipt inside this window.
-    // Skipped without ar.read — never queried, never shaped.
-    arGranted ? db.execute(sql`
+          ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``})`
+            : sql`0`
+        } as customers
+    `,
+        "objects",
+      ),
+      // 7-day net collections per (date, functional), including voids that
+      // reverse an earlier receipt inside this window.
+      // Skipped without ar.read — never queried, never shaped.
+      arGranted
+        ? db.execute(
+            sql`
       select movement.dt::text as dt, movement.func, coalesce(sum(movement.amount), 0) as amt
         from (${customerPaymentMovements(orgId, ago7, today, docScope)}) movement
        group by 1, 2
-    `, 'objects') : Promise.resolve([]),
-    crmOn && crmGranted ? calculateForecast({ orgId, periodStart: quarter.from, periodEnd: quarter.to, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
-    db.execute<{ baseCurrency: string }>(sql`
+    `,
+            "objects",
+          )
+        : Promise.resolve([]),
+      crmOn && crmGranted
+        ? calculateForecast({
+            orgId,
+            periodStart: quarter.from,
+            periodEnd: quarter.to,
+            allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds),
+          })
+        : Promise.resolve([]),
+      db.execute<{ baseCurrency: string }>(
+        sql`
       select base_currency as "baseCurrency" from orgs where id = ${orgId}
-    `, 'objects'),
-    crmOn && crmGranted && arGranted ? db.execute<{ party_id: string; n: string }>(sql`
+    `,
+        "objects",
+      ),
+      crmOn && crmGranted && arGranted
+        ? db.execute<{ party_id: string; n: string }>(
+            sql`
       select o.party_id, count(*) as n
         from crm_opportunities o
         join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
        where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))}
          and o.is_active and not s.is_closed
        group by o.party_id
-    `, 'objects') : Promise.resolve([]),
-  ]))
+    `,
+            "objects",
+          )
+        : Promise.resolve([]),
+    ]);
 
   // Open-item balances arrive in presentation currency from the shared cash
   // reader. Collection flows translate at their document-date spot; missing
@@ -257,69 +316,91 @@ export async function customersHome(
   // lookup never runs ahead of the data it translates.
   const trendCtx = await flowRates(
     orgId,
-    trendRes.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
-  )
-  const byWeek = new Map<string, string>()
+    trendRes.map((r) => ({
+      func: (r.func ?? null) as string | null,
+      date: String(r.late ?? r.wk).slice(0, 10),
+    })),
+  );
+  const byWeek = new Map<string, string>();
   for (const r of trendRes) {
-    const wk = String(r.wk).slice(0, 10)
-    const late = String(r.late ?? r.wk).slice(0, 10)
-    const collected = mulDecimal(String(r.collected ?? '0'), trendCtx.rateAt((r.func ?? null) as string | null, late))
-    byWeek.set(wk, add(byWeek.get(wk) ?? '0.0000', collected))
+    const wk = String(r.wk).slice(0, 10);
+    const late = String(r.late ?? r.wk).slice(0, 10);
+    const collected = mulDecimal(
+      String(r.collected ?? "0"),
+      trendCtx.rateAt((r.func ?? null) as string | null, late),
+    );
+    byWeek.set(wk, add(byWeek.get(wk) ?? "0.0000", collected));
   }
-  const collected7d = add('0.0000', await translateFlows(
-    orgId,
-    collectedRowsRes.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
-  ))
+  const collected7d = add(
+    "0.0000",
+    await translateFlows(
+      orgId,
+      collectedRowsRes.map((r) => ({
+        func: (r.func ?? null) as string | null,
+        date: String(r.dt).slice(0, 10),
+        amount: String(r.amt ?? 0),
+      })),
+    ),
+  );
 
-  const openOppsByParty = new Map(oppRes.map((row) => [row.party_id, Number(row.n)]))
-  let arOutstanding = '0.0000'
-  let arOverdue = '0.0000'
-  let openInvoices = 0
-  let overdueInvoices = 0
+  const openOppsByParty = new Map(oppRes.map((row) => [row.party_id, Number(row.n)]));
+  let arOutstanding = "0.0000";
+  let arOverdue = "0.0000";
+  let openInvoices = 0;
+  let overdueInvoices = 0;
   // The shared open-item population supplies both the summary and hero
   // roster, so voids, applications and book selection stay consistent.
-  const byParty = new Map<string, {
-    name: string
-    open: string
-    overdue: string
-    openInvoices: number
-    openOpportunities: number
-    oldestDue: string | null
-  }>()
-  for (const item of arItems) {
-    const partyId = item.partyId ?? 'null'
-    const cur = byParty.get(partyId) ?? {
-      name: item.partyName, open: '0.0000', overdue: '0.0000', openInvoices: 0,
-      openOpportunities: openOppsByParty.get(partyId) ?? 0, oldestDue: null as string | null,
+  const byParty = new Map<
+    string,
+    {
+      name: string;
+      open: string;
+      overdue: string;
+      openInvoices: number;
+      openOpportunities: number;
+      oldestDue: string | null;
     }
-    cur.open = add(cur.open, item.remaining)
-    cur.openInvoices += 1
-    openInvoices += 1
-    arOutstanding = add(arOutstanding, item.remaining)
-    const due = item.dueDate ? isoDateOf(item.dueDate) : null
+  >();
+  for (const item of arItems) {
+    const partyId = item.partyId ?? "null";
+    const cur = byParty.get(partyId) ?? {
+      name: item.partyName,
+      open: "0.0000",
+      overdue: "0.0000",
+      openInvoices: 0,
+      openOpportunities: openOppsByParty.get(partyId) ?? 0,
+      oldestDue: null as string | null,
+    };
+    cur.open = add(cur.open, item.remaining);
+    cur.openInvoices += 1;
+    openInvoices += 1;
+    arOutstanding = add(arOutstanding, item.remaining);
+    const due = item.dueDate ? isoDateOf(item.dueDate) : null;
     // Past due follows the shared aging rule: an item ages from its due
     // date, else its posting date — an untermed invoice is due on issue, so
     // it can never hide as permanently current here while the aging report
     // shows it 90+ days past due.
-    const basis = agingBasisDate({ dueDate: item.dueDate, postingDate: item.tranDate })
-    const basisIso = basis ? isoDateOf(basis) : null
+    const basis = agingBasisDate({ dueDate: item.dueDate, postingDate: item.tranDate });
+    const basisIso = basis ? isoDateOf(basis) : null;
     if (basisIso && basisIso < today) {
-      cur.overdue = add(cur.overdue, item.remaining)
-      arOverdue = add(arOverdue, item.remaining)
-      overdueInvoices += 1
+      cur.overdue = add(cur.overdue, item.remaining);
+      arOverdue = add(arOverdue, item.remaining);
+      overdueInvoices += 1;
     }
-    if (due && (!cur.oldestDue || due < cur.oldestDue)) cur.oldestDue = due
-    byParty.set(partyId, cur)
+    if (due && (!cur.oldestDue || due < cur.oldestDue)) cur.oldestDue = due;
+    byParty.set(partyId, cur);
   }
   const topExposure = [...byParty.entries()]
     .map(([partyId, b]) => ({ partyId, ...b }))
     .sort((x, y) => cmp(y.open, x.open))
-    .slice(0, 10)
+    .slice(0, 10);
 
-  const badge = badgeRes[0] ?? {}
-  const orgCurrency = String(orgRes[0]?.baseCurrency ?? '').trim().toUpperCase()
-  if (!orgCurrency) throw new Error('organization currency is not configured')
-  const pipeline = await pipelineInOrgCurrency(orgId, today, forecast)
+  const badge = badgeRes[0] ?? {};
+  const orgCurrency = String(orgRes[0]?.baseCurrency ?? "")
+    .trim()
+    .toUpperCase();
+  if (!orgCurrency) throw new Error("organization currency is not configured");
+  const pipeline = await pipelineInOrgCurrency(orgId, today, forecast);
 
   return {
     arOutstanding,
@@ -330,7 +411,10 @@ export async function customersHome(
     dso: dsoStats.globalAvg,
     pipeline,
     topExposure,
-    trend: weekStarts.map((weekStart) => ({ weekStart, collected: byWeek.get(weekStart) ?? '0.0000' })),
+    trend: weekStarts.map((weekStart) => ({
+      weekStart,
+      collected: byWeek.get(weekStart) ?? "0.0000",
+    })),
     badges: {
       openOpportunities: Number(badge.open_opps ?? 0),
       openQuotes: Number(badge.open_quotes ?? 0),
@@ -345,5 +429,5 @@ export async function customersHome(
     crmEnabled: crmOn && crmGranted,
     arAllowed: arGranted,
     partiesAllowed: partiesGranted,
-  }
+  };
 }

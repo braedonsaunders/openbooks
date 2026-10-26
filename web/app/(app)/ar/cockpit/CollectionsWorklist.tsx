@@ -1,18 +1,25 @@
 "use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMoney } from '@/components/money-provider'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useMoney } from "@/components/money-provider";
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
-import { cmp as compareMoney, sum as sumMoney } from '@openbooks/engine/money/money'
+import { cmp as compareMoney, sum as sumMoney } from "@openbooks/engine/money/money";
 import { ArrowRight, TriangleAlert, CalendarClock, Receipt } from "lucide-react";
 import { Badge, Button, cn } from "@openbooks/ui";
 
 import { SearchInput } from "../../../../components/search-input";
 import { FilterChips } from "../../../../components/filter-bar";
 import { Pagination } from "../../../../components/pagination";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { InteractiveTableRow } from "@/components/interactive-table-row";
 import { overduePushBasis } from "@/lib/cash/overdue-push";
 
 const PER_PAGE = 10;
@@ -51,7 +58,7 @@ export function CollectionsWorklist({
   /** ar.pay — gates the collection-run handoff. */
   canCollect: boolean;
 }) {
-  const { money, moneyCompact } = useMoney()
+  const { money, moneyCompact } = useMoney();
   const t = useTranslations("ar.cockpit.worklist");
   const format = useFormatter();
   const router = useRouter();
@@ -59,10 +66,7 @@ export function CollectionsWorklist({
   const currentParams = Object.fromEntries(search.entries());
   const query = (search.get("cwQ") ?? "").trim().toLocaleLowerCase();
   const status = search.get("cwStatus");
-  const page = Math.max(
-    1,
-    Number.parseInt(search.get("cwPage") ?? "1", 10) || 1,
-  );
+  const page = Math.max(1, Number.parseInt(search.get("cwPage") ?? "1", 10) || 1);
   // Only invoices with a source document can be routed into a collection run.
   const collectible = useMemo(() => entries.filter((e) => e.docId), [entries]);
   const filtered = collectible.filter((entry) => {
@@ -79,34 +83,42 @@ export function CollectionsWorklist({
   });
   const visible = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   const [selected, setSelected] = useState<Set<string>>(
-    () =>
-      new Set(collectible.filter((e) => e.daysOverdue > 0).map((e) => e.id)),
+    () => new Set(collectible.filter((e) => e.daysOverdue > 0).map((e) => e.id)),
   );
 
   const selectedEntries = collectible.filter((e) => selected.has(e.id));
   // The assumption describes every item the horizon's forecast pushes, so it
   // reads the full entry list (the same population as the overdue amounts).
   const pushBasis = overduePushBasis(entries);
-  const pushDetail = pushBasis === null
-    ? null
-    : pushBasis.minDaysOverdue === pushBasis.maxDaysOverdue
-      ? t("overduePush.basisSameAge", { count: pushBasis.count, days: pushBasis.minDaysOverdue, amount: money(pushBasis.total) })
-      : t("overduePush.basis", { count: pushBasis.count, minDays: pushBasis.minDaysOverdue, maxDays: pushBasis.maxDaysOverdue, amount: money(pushBasis.total) });
+  const pushDetail =
+    pushBasis === null
+      ? null
+      : pushBasis.minDaysOverdue === pushBasis.maxDaysOverdue
+        ? t("overduePush.basisSameAge", {
+            count: pushBasis.count,
+            days: pushBasis.minDaysOverdue,
+            amount: money(pushBasis.total),
+          })
+        : t("overduePush.basis", {
+            count: pushBasis.count,
+            minDays: pushBasis.minDaysOverdue,
+            maxDays: pushBasis.maxDaysOverdue,
+            amount: money(pushBasis.total),
+          });
   const total = sumMoney(selectedEntries.map((e) => e.amount));
 
   const toggle = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
 
   const build = () => {
     const ids = selectedEntries.map((e) => e.docId!).filter(Boolean);
     if (!ids.length) return;
-    router.push(
-      (`/receipts?view=runs&newRun=1&preselect=${ids.join(",")}`),
-    );
+    router.push(`/receipts?view=runs&newRun=1&preselect=${ids.join(",")}`);
   };
 
   const methodLabel = (method: string) => {
@@ -127,7 +139,7 @@ export function CollectionsWorklist({
           <p
             className={cn(
               "text-lg font-bold tabular-nums",
-              compareMoney(overdueTotal, '0.0000') > 0
+              compareMoney(overdueTotal, "0.0000") > 0
                 ? "text-red-600 dark:text-red-400"
                 : "text-slate-900 dark:text-slate-100",
             )}
@@ -154,18 +166,17 @@ export function CollectionsWorklist({
       </div>
 
       {pushBasis !== null && pushDetail !== null ? (
-        <div role="note" className="shrink-0 border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-800 dark:border-amber-950 dark:bg-amber-950/30 dark:text-amber-200">
+        <div
+          role="note"
+          className="shrink-0 border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-800 dark:border-amber-950 dark:bg-amber-950/30 dark:text-amber-200"
+        >
           <p className="font-semibold">{t("overduePush.assumption")}</p>
           <p className="tabular-nums">{pushDetail}</p>
         </div>
       ) : null}
 
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
-        <SearchInput
-          placeholder={t("search")}
-          paramKey="cwQ"
-          pageParamKey="cwPage"
-        />
+        <SearchInput placeholder={t("search")} paramKey="cwQ" pageParamKey="cwPage" />
         <FilterChips
           basePath="/ar"
           currentParams={currentParams}
@@ -190,11 +201,15 @@ export function CollectionsWorklist({
             <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
                 <SharedTableHead className="w-9 py-2 pl-4" />
-                <SharedTableHead className="py-2 text-left font-medium">{t("customer")}</SharedTableHead>
+                <SharedTableHead className="py-2 text-left font-medium">
+                  {t("customer")}
+                </SharedTableHead>
                 <SharedTableHead className="py-2 text-left font-medium">
                   {t("prediction")}
                 </SharedTableHead>
-                <SharedTableHead className="py-2 text-right font-medium">{t("due")}</SharedTableHead>
+                <SharedTableHead className="py-2 text-right font-medium">
+                  {t("due")}
+                </SharedTableHead>
                 <SharedTableHead className="py-2 pr-4 text-right font-medium">
                   {t("amount")}
                 </SharedTableHead>
@@ -207,7 +222,8 @@ export function CollectionsWorklist({
                   <InteractiveTableRow
                     key={e.id}
                     className="group cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
-                    onClick={() => toggle(e.id)} noAnimate
+                    onClick={() => toggle(e.id)}
+                    noAnimate
                   >
                     <SharedTableCell className="w-9 py-2 pl-4">
                       <input
@@ -271,11 +287,7 @@ export function CollectionsWorklist({
           })}
         </span>
         {canCollect ? (
-          <Button
-            size="sm"
-            disabled={selectedEntries.length === 0}
-            onClick={build}
-          >
+          <Button size="sm" disabled={selectedEntries.length === 0} onClick={build}>
             {t("build")}
             <ArrowRight size={15} />
           </Button>

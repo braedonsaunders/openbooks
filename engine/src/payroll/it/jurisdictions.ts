@@ -30,17 +30,72 @@ import { IT_REGIONS } from "./regions.ts";
 
 /** The 11 national festività every region observes. Copied per entry below. */
 const IT_FESTIVITA_NAZIONALI: PayrollJurisdiction["holidays"] = [
-  { key: "capodanno", name: "Capodanno", rule: { kind: "fixed", month: 1, day: 1 }, observance: "none" },
-  { key: "epifania", name: "Epifania", rule: { kind: "fixed", month: 1, day: 6 }, observance: "none" },
-  { key: "lunedi_angelo", name: "Lunedì dell'Angelo", rule: { kind: "easter_offset", days: 1 }, observance: "none" },
-  { key: "liberazione", name: "Anniversario della Liberazione", rule: { kind: "fixed", month: 4, day: 25 }, observance: "none" },
-  { key: "lavoro", name: "Festa del Lavoro", rule: { kind: "fixed", month: 5, day: 1 }, observance: "none" },
-  { key: "repubblica", name: "Festa della Repubblica", rule: { kind: "fixed", month: 6, day: 2 }, observance: "none" },
-  { key: "ferragosto", name: "Ferragosto (Assunzione)", rule: { kind: "fixed", month: 8, day: 15 }, observance: "none" },
-  { key: "ognissanti", name: "Ognissanti", rule: { kind: "fixed", month: 11, day: 1 }, observance: "none" },
-  { key: "immacolata", name: "Immacolata Concezione", rule: { kind: "fixed", month: 12, day: 8 }, observance: "none" },
-  { key: "natale", name: "Natale", rule: { kind: "fixed", month: 12, day: 25 }, observance: "none" },
-  { key: "santo_stefano", name: "Santo Stefano", rule: { kind: "fixed", month: 12, day: 26 }, observance: "none" },
+  {
+    key: "capodanno",
+    name: "Capodanno",
+    rule: { kind: "fixed", month: 1, day: 1 },
+    observance: "none",
+  },
+  {
+    key: "epifania",
+    name: "Epifania",
+    rule: { kind: "fixed", month: 1, day: 6 },
+    observance: "none",
+  },
+  {
+    key: "lunedi_angelo",
+    name: "Lunedì dell'Angelo",
+    rule: { kind: "easter_offset", days: 1 },
+    observance: "none",
+  },
+  {
+    key: "liberazione",
+    name: "Anniversario della Liberazione",
+    rule: { kind: "fixed", month: 4, day: 25 },
+    observance: "none",
+  },
+  {
+    key: "lavoro",
+    name: "Festa del Lavoro",
+    rule: { kind: "fixed", month: 5, day: 1 },
+    observance: "none",
+  },
+  {
+    key: "repubblica",
+    name: "Festa della Repubblica",
+    rule: { kind: "fixed", month: 6, day: 2 },
+    observance: "none",
+  },
+  {
+    key: "ferragosto",
+    name: "Ferragosto (Assunzione)",
+    rule: { kind: "fixed", month: 8, day: 15 },
+    observance: "none",
+  },
+  {
+    key: "ognissanti",
+    name: "Ognissanti",
+    rule: { kind: "fixed", month: 11, day: 1 },
+    observance: "none",
+  },
+  {
+    key: "immacolata",
+    name: "Immacolata Concezione",
+    rule: { kind: "fixed", month: 12, day: 8 },
+    observance: "none",
+  },
+  {
+    key: "natale",
+    name: "Natale",
+    rule: { kind: "fixed", month: 12, day: 25 },
+    observance: "none",
+  },
+  {
+    key: "santo_stefano",
+    name: "Santo Stefano",
+    rule: { kind: "fixed", month: 12, day: 26 },
+    observance: "none",
+  },
 ];
 
 function itJurisdiction(code: string, name: string): PayrollJurisdiction {
@@ -57,13 +112,13 @@ function itJurisdiction(code: string, name: string): PayrollJurisdiction {
     name: `Italia (festività nazionali) — ${name}`,
     scope: "employment",
     citation:
-      "L. 27 maggio 1949, n. 260; L. 5 marzo 1977, n. 54; "
-      + "DPR 28 dicembre 1985, n. 792; L. 20 novembre 2000, n. 336",
+      "L. 27 maggio 1949, n. 260; L. 5 marzo 1977, n. 54; " +
+      "DPR 28 dicembre 1985, n. 792; L. 20 novembre 2000, n. 336",
     holidays: [...IT_FESTIVITA_NAZIONALI],
     holidayPay: null,
   };
 }
 
-export const IT_JURISDICTIONS: readonly PayrollJurisdiction[] = IT_REGIONS.map(
-  (region) => itJurisdiction(region.code, region.name),
+export const IT_JURISDICTIONS: readonly PayrollJurisdiction[] = IT_REGIONS.map((region) =>
+  itJurisdiction(region.code, region.name),
 );

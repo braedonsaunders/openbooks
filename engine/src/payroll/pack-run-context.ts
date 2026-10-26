@@ -1,9 +1,14 @@
 /** The run resolved jurisdiction context. Split from packs.ts (pure moves only). */
-import { type PayrollAssessedOn, type PayrollCountry, type PayrollCountryPack } from "./pack-types"
-import { PAYROLL_COUNTRY_PACKS, packStatutoryComponents, payrollPack, payrollCountry } from "./pack-registry"
-import { payrollTaxYear, assertPayrollRegionSupported } from "./pack-tax-years"
-import type { PayrollPackRates, PayrollStatutoryRateSlot } from "./statutory-rates.ts"
-import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts"
+import { type PayrollAssessedOn, type PayrollCountry, type PayrollCountryPack } from "./pack-types";
+import {
+  PAYROLL_COUNTRY_PACKS,
+  packStatutoryComponents,
+  payrollPack,
+  payrollCountry,
+} from "./pack-registry";
+import { payrollTaxYear, assertPayrollRegionSupported } from "./pack-tax-years";
+import type { PayrollPackRates, PayrollStatutoryRateSlot } from "./statutory-rates.ts";
+import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts";
 
 /**
  * The run's resolved jurisdiction: ONE country, ONE legal entity, ONE
@@ -50,9 +55,9 @@ export function resolvePayrollRunContext(input: {
     pack = payrollPack(subsidiary.country ?? "");
   } catch (error) {
     throw new PayrollJurisdictionError(
-      `the ${entity} legal entity is registered in `
-      + `${subsidiary.country || "no country"} and cannot run payroll: `
-      + `${error instanceof Error ? error.message : String(error)}`,
+      `the ${entity} legal entity is registered in ` +
+        `${subsidiary.country || "no country"} and cannot run payroll: ` +
+        `${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -63,15 +68,15 @@ export function resolvePayrollRunContext(input: {
   const currency = subsidiary.baseCurrency ?? "";
   if (currency !== pack.statutoryCurrency) {
     throw new PayrollJurisdictionError(
-      `${entity} is a payroll entity in ${pack.country}, whose statutory engine computes in `
-      + `${pack.statutoryCurrency}, but its functional currency is `
-      + `${currency || "unset"} — payroll cannot be run until they agree`,
+      `${entity} is a payroll entity in ${pack.country}, whose statutory engine computes in ` +
+        `${pack.statutoryCurrency}, but its functional currency is ` +
+        `${currency || "unset"} — payroll cannot be run until they agree`,
     );
   }
   if (input.runCurrency != null && input.runCurrency !== currency) {
     throw new PayrollJurisdictionError(
-      `this pay run is denominated in ${input.runCurrency} but its ${entity} entity's `
-      + `functional currency is ${currency}`,
+      `this pay run is denominated in ${input.runCurrency} but its ${entity} entity's ` +
+        `functional currency is ${currency}`,
     );
   }
 
@@ -140,9 +145,9 @@ export function resolveEmployeePayrollContext(input: {
   }
   if (country && country !== run.country) {
     problems.push(
-      `their payroll profile is on the ${country} country pack, but this run pays from `
-      + `${run.subsidiaryName} (${run.country} legal entity) — employees on the ${country} pack `
-      + `cannot be paid ${run.country} statutory withholdings`,
+      `their payroll profile is on the ${country} country pack, but this run pays from ` +
+        `${run.subsidiaryName} (${run.country} legal entity) — employees on the ${country} pack ` +
+        `cannot be paid ${run.country} statutory withholdings`,
     );
   }
 
@@ -151,9 +156,9 @@ export function resolveEmployeePayrollContext(input: {
   // US-entity employee ended up on a Canadian run with nothing complaining.
   if (employee.subsidiaryCountry && employee.subsidiaryCountry !== run.country) {
     problems.push(
-      `their legal entity is in ${employee.subsidiaryCountry} but this run pays from `
-      + `${run.subsidiaryName} (${run.country}) — pay them from a pay schedule scoped to `
-      + "their own entity",
+      `their legal entity is in ${employee.subsidiaryCountry} but this run pays from ` +
+        `${run.subsidiaryName} (${run.country}) — pay them from a pay schedule scoped to ` +
+        "their own entity",
     );
   }
 
@@ -162,8 +167,8 @@ export function resolveEmployeePayrollContext(input: {
   // is a false return, not a mislabel.
   if (employee.filingAccountCountry && employee.filingAccountCountry !== run.country) {
     problems.push(
-      `their payroll filing account ${employee.filingAccountNumber ?? employee.filingAccountId} `
-      + `files in ${employee.filingAccountCountry} — this run files in ${run.country}`,
+      `their payroll filing account ${employee.filingAccountNumber ?? employee.filingAccountId} ` +
+        `files in ${employee.filingAccountCountry} — this run files in ${run.country}`,
     );
   }
 
@@ -228,9 +233,11 @@ export function packRates(country: string): PayrollPackRates {
   const declared = declaredPackRates().find((entry) => entry.country === country);
   if (!declared) {
     throw new PayrollPackError(
-      `the ${country || "(unset)"} payroll pack declares no statutory rate slots — a pack must `
-      + "declare which of its statutory rates are tenant-entered and at what scope. Declared for: "
-      + (declaredPackRates().map((entry) => entry.country).join(", ") || "none"),
+      `the ${country || "(unset)"} payroll pack declares no statutory rate slots — a pack must ` +
+        "declare which of its statutory rates are tenant-entered and at what scope. Declared for: " +
+        (declaredPackRates()
+          .map((entry) => entry.country)
+          .join(", ") || "none"),
     );
   }
   return declared;
@@ -242,8 +249,8 @@ export function statutoryRateSlot(country: string, slotKey: string): PayrollStat
   const slot = pack.slots.find((declared) => declared.key === slotKey);
   if (!slot) {
     throw new PayrollPackError(
-      `the ${country} payroll pack declares no "${slotKey}" statutory rate — it declares `
-      + (pack.slots.map((declared) => declared.key).join(", ") || "none"),
+      `the ${country} payroll pack declares no "${slotKey}" statutory rate — it declares ` +
+        (pack.slots.map((declared) => declared.key).join(", ") || "none"),
     );
   }
   return slot;
@@ -261,13 +268,14 @@ export function statutoryAssessment(
   systemKey: string,
   kind: "deduction" | "employer_contribution" | "credit",
 ): PayrollAssessedOn {
-  const declared = packStatutoryComponents(country)
-    .filter((component) => component.systemKey === systemKey && component.kind === kind);
+  const declared = packStatutoryComponents(country).filter(
+    (component) => component.systemKey === systemKey && component.kind === kind,
+  );
   const assessedOn = declared[0]?.assessedOn;
   if (!assessedOn) {
     throw new PayrollPackError(
-      `the ${country} payroll pack does not declare what ${systemKey}/${kind} is assessed on — `
-      + `this configuration is not supported by the ${country} pack; contact support.`,
+      `the ${country} payroll pack does not declare what ${systemKey}/${kind} is assessed on — ` +
+        `this configuration is not supported by the ${country} pack; contact support.`,
     );
   }
   if (declared.some((component) => component.assessedOn !== assessedOn)) {

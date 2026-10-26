@@ -1,24 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const financialReports: DocArticle = {
-  slug: 'financial-reports',
-  title: 'Reports and Ledger Detail',
-  category: 'reporting',
+  slug: "financial-reports",
+  title: "Reports and Ledger Detail",
+  category: "reporting",
   order: 1,
   summary:
-    'Run financial statements, aging, registers, ledger detail, budget, order, and project reports.',
-  updated: '2026-10-11',
+    "Run financial statements, aging, registers, ledger detail, budget, order, and project reports.",
+  updated: "2026-10-11",
   keywords: [
-    'reports',
-    'profit and loss',
-    'balance sheet',
-    'cash flow',
-    'trial balance',
-    'general ledger',
-    'aging',
-    'register',
+    "reports",
+    "profit and loss",
+    "balance sheet",
+    "cash flow",
+    "trial balance",
+    "general ledger",
+    "aging",
+    "register",
   ],
-  related: ['accounting-model', 'analytics-and-saved-views', 'period-close'],
+  related: ["accounting-model", "analytics-and-saved-views", "period-close"],
   body: `# Reports and Ledger Detail
 
 The **Reports** hub groups statutory statements, ledger reports,
@@ -149,30 +149,30 @@ unexpected account signs and period movement, confirm retained earnings and
 foreign-currency treatment, and preserve the final report package with approval
 evidence.
 `,
-}
+};
 
 export const analyticsAndSavedViews: DocArticle = {
-  slug: 'analytics-and-saved-views',
-  title: 'Analytics, Dashboards, and Saved Views',
-  category: 'reporting',
+  slug: "analytics-and-saved-views",
+  title: "Analytics, Dashboards, and Saved Views",
+  category: "reporting",
   order: 2,
   summary:
-    'Choose between financial reports, operational analytics, dashboard cards, custom reports, and reusable record views.',
-  updated: '2026-09-16',
+    "Choose between financial reports, operational analytics, dashboard cards, custom reports, and reusable record views.",
+  updated: "2026-09-16",
   keywords: [
-    'analytics',
-    'dashboard',
-    'insights',
-    'saved search',
-    'saved view',
-    'custom report',
-    'KPI',
-    'query',
-    'sentinel',
-    'forensics',
-    'duplicates',
+    "analytics",
+    "dashboard",
+    "insights",
+    "saved search",
+    "saved view",
+    "custom report",
+    "KPI",
+    "query",
+    "sentinel",
+    "forensics",
+    "duplicates",
   ],
-  related: ['financial-reports', 'switching-from-enterprise-systems', 'apps'],
+  related: ["financial-reports", "switching-from-enterprise-systems", "apps"],
   body: `# Analytics, Dashboards, and Saved Views
 
 OpenBooks offers several reporting surfaces because financial statements,
@@ -237,32 +237,27 @@ Use a financial report to answer **what posted to the books**, a saved view to
 answer **which records meet these conditions**, and analytics to answer **what
 operating pattern deserves attention**.
 `,
-}
+};
 
 export const periodClose: DocArticle = {
-  slug: 'period-close',
-  title: 'Period Close',
-  category: 'banking-close',
+  slug: "period-close",
+  title: "Period Close",
+  category: "banking-close",
   order: 2,
   summary:
-    'Prepare, execute, approve, and lock an accounting period — publishing the reporting package with advanced close — reopening under governance when needed.',
-  updated: '2026-10-10',
+    "Prepare, execute, approve, and lock an accounting period — publishing the reporting package with advanced close — reopening under governance when needed.",
+  updated: "2026-10-10",
   keywords: [
-    'period close',
-    'month end',
-    'close checklist',
-    'lock',
-    'reopen',
-    'signoff',
-    'evidence',
-    'continuous close',
+    "period close",
+    "month end",
+    "close checklist",
+    "lock",
+    "reopen",
+    "signoff",
+    "evidence",
+    "continuous close",
   ],
-  related: [
-    'banking-and-reconciliation',
-    'financial-reports',
-    'audit-log',
-    'year-end-closing',
-  ],
+  related: ["banking-and-reconciliation", "financial-reports", "audit-log", "year-end-closing"],
   body: `# Period Close
 
 Period close turns a set of completed reconciliations and reviews into a governed
@@ -373,26 +368,26 @@ status changes to **reversed**. Reports include it together with the linked
 posted reversal; excluding the original would report the reversal as new
 economic activity instead of a cancellation.
 `,
-}
+};
 
 export const yearEndClosing: DocArticle = {
-  slug: 'year-end-closing',
-  title: 'Year-End Closing Journals',
-  category: 'banking-close',
+  slug: "year-end-closing",
+  title: "Year-End Closing Journals",
+  category: "banking-close",
   order: 3,
   summary:
-    'Post explicit year-end closing and opening journals where a jurisdiction requires them, as a governed step of the year-end close.',
-  updated: '2026-10-11',
+    "Post explicit year-end closing and opening journals where a jurisdiction requires them, as a governed step of the year-end close.",
+  updated: "2026-10-11",
   keywords: [
-    'year-end close',
-    'closing entries',
-    'period-end journals',
-    'retained earnings',
-    'income summary',
-    'opening balances',
-    'balance sheet closing',
+    "year-end close",
+    "closing entries",
+    "period-end journals",
+    "retained earnings",
+    "income summary",
+    "opening balances",
+    "balance sheet closing",
   ],
-  related: ['period-close', 'financial-reports', 'audit-log'],
+  related: ["period-close", "financial-reports", "audit-log"],
   body: `# Year-End Closing Journals
 
 OpenBooks computes retained earnings in every statement, so most organizations
@@ -511,4 +506,4 @@ sheet for any date is therefore identical with or without the closing
 journals, and the income statement of a closed year is still reportable. The
 Journal, the General Ledger detail and account registers include them.
 `,
-}
+};

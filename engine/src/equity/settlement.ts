@@ -55,8 +55,14 @@ export interface Settlement {
  * and settlement accruals. With `asOf`, only runs through that date and
  * settlements dated on or before it count.
  */
-export async function accruedToDate(orgId: string, securityId: string, asOf?: string | null): Promise<bigint> {
-  const row = (await db.execute<{ runs: string; events: string }>(sql`
+export async function accruedToDate(
+  orgId: string,
+  securityId: string,
+  asOf?: string | null,
+): Promise<bigint> {
+  const row = (
+    await db.execute<{ runs: string; events: string }>(
+      sql`
     select coalesce((select sum(l.period_amount) from equity_interest_run_lines l
                       join equity_interest_runs r on r.org_id = l.org_id and r.id = l.run_id
                      where l.org_id = ${orgId} and l.security_id = ${securityId}
@@ -65,24 +71,52 @@ export async function accruedToDate(orgId: string, securityId: string, asOf?: st
                      where e.org_id = ${orgId} and e.security_id = ${securityId}
                        ${asOf ? sql`and e.effective_on <= ${asOf}::date` : sql``}
                        and not exists (select 1 from equity_security_events r where r.org_id = e.org_id and r.kind = 'reverse' and r.reverses_event_id = e.id)
-                       and not exists (select 1 from equity_security_events v where v.org_id = e.org_id and v.kind = 'void' and v.security_id = e.resulting_security_id)), 0)::text as events`, "objects"))[0];
+                       and not exists (select 1 from equity_security_events v where v.org_id = e.org_id and v.kind = 'void' and v.security_id = e.resulting_security_id)), 0)::text as events`,
+      "objects",
+    )
+  )[0];
   return toUnits(row?.runs ?? "0") + toUnits(row?.events ?? "0");
 }
 
 /** The credit the issuance posted to the convertible instruments account of the policy in force on the issue date. */
-async function principalLine(orgId: string, subsidiaryId: string, security: SecurityRecord): Promise<{ accountId: string; currency: string; fxRate: string; units: bigint; txnUnits: bigint }> {
+async function principalLine(
+  orgId: string,
+  subsidiaryId: string,
+  security: SecurityRecord,
+): Promise<{
+  accountId: string;
+  currency: string;
+  fxRate: string;
+  units: bigint;
+  txnUnits: bigint;
+}> {
   const issuedUnder = await resolveAccountPolicy(db, orgId, subsidiaryId, security.issueDate);
-  const rows = await db.execute<{ account_id: string; currency: string; fx_rate: string; amount: string; txn_amount: string }>(sql`
+  const rows = await db.execute<{
+    account_id: string;
+    currency: string;
+    fx_rate: string;
+    amount: string;
+    txn_amount: string;
+  }>(
+    sql`
     select l.account_id, l.currency, l.fx_rate::text as fx_rate, l.amount::text as amount, l.txn_amount::text as txn_amount
       from equity_securities s
       join journal_lines l on l.org_id = s.org_id and l.entry_id = s.journal_entry_id
      where s.org_id = ${orgId} and s.id = ${security.id} and l.amount < 0
-       and l.account_id = ${issuedUnder.convertibleInstrumentsAccountId}`, "objects");
+       and l.account_id = ${issuedUnder.convertibleInstrumentsAccountId}`,
+    "objects",
+  );
   if (rows.length !== 1) {
     throw equityError("issuanceEntryUnknown", { security: fig.text(security.securityNumber) });
   }
   const row = rows[0]!;
-  return { accountId: row.account_id, currency: row.currency, fxRate: row.fx_rate, units: -toUnits(row.amount), txnUnits: -toUnits(row.txn_amount) };
+  return {
+    accountId: row.account_id,
+    currency: row.currency,
+    fxRate: row.fx_rate,
+    units: -toUnits(row.amount),
+    txnUnits: -toUnits(row.txn_amount),
+  };
 }
 
 /**
@@ -103,11 +137,17 @@ export async function settleConvertible(input: {
   const exponent = await currencyExponent(db, security.currency);
   const fxRate = await spotRate(db, input.orgId, security.currency, functional, on, functional);
   const principal = await principalLine(input.orgId, input.subsidiaryId, security);
-  const legs: EquityLeg[] = [{
-    accountId: principal.accountId,
-    units: principal.units,
-    foreign: { currency: principal.currency, txnUnits: principal.txnUnits, fxRate: principal.fxRate },
-  }];
+  const legs: EquityLeg[] = [
+    {
+      accountId: principal.accountId,
+      units: principal.units,
+      foreign: {
+        currency: principal.currency,
+        txnUnits: principal.txnUnits,
+        fxRate: principal.fxRate,
+      },
+    },
+  ];
   let interestTxnUnits = 0n;
   let accrual: Settlement["accrual"] = null;
   let interestHistorical = 0n;
@@ -120,44 +160,86 @@ export async function settleConvertible(input: {
       const policy = await resolveAccountPolicy(db, input.orgId, input.subsidiaryId, on);
       const stubFunctional = functionalUnits(stub, fxRate);
       const entryId = await postEquityEntry(db, {
-        orgId: input.orgId, subsidiaryId: input.subsidiaryId, currency: functional, postingDate: on,
-        entryNumberBase: `EQ-${security.securityNumber}-INT`, memo: `Interest on ${security.securityNumber} to ${on}`,
-        idempotencyKey: `equity:event:${input.eventId}:accrual`, actorId: input.actorId, auditAction: "equity.interest",
-        auditChanges: { securityId: security.id, eventId: input.eventId, interest: stub.toString() },
+        orgId: input.orgId,
+        subsidiaryId: input.subsidiaryId,
+        currency: functional,
+        postingDate: on,
+        entryNumberBase: `EQ-${security.securityNumber}-INT`,
+        memo: `Interest on ${security.securityNumber} to ${on}`,
+        idempotencyKey: `equity:event:${input.eventId}:accrual`,
+        actorId: input.actorId,
+        auditAction: "equity.interest",
+        auditChanges: {
+          securityId: security.id,
+          eventId: input.eventId,
+          interest: stub.toString(),
+        },
         legs: [
-          { accountId: requirePolicyAccount(policy, "interestExpenseAccountId"), units: stubFunctional },
           {
-            accountId: requirePolicyAccount(policy, "accruedInterestAccountId"), units: -stubFunctional,
-            foreign: { currency: security.currency, txnUnits: -stub, fxRate }, balance: { securityId: security.id, role: "interest" },
+            accountId: requirePolicyAccount(policy, "interestExpenseAccountId"),
+            units: stubFunctional,
+          },
+          {
+            accountId: requirePolicyAccount(policy, "accruedInterestAccountId"),
+            units: -stubFunctional,
+            foreign: { currency: security.currency, txnUnits: -stub, fxRate },
+            balance: { securityId: security.id, role: "interest" },
           },
         ],
       });
       accrual = { txnUnits: stub, functionalUnits: stubFunctional, entryId };
     }
-    const groups = await instrumentBalance(db, input.orgId, input.subsidiaryId, security.id, "interest");
+    const groups = await instrumentBalance(
+      db,
+      input.orgId,
+      input.subsidiaryId,
+      security.id,
+      "interest",
+    );
     const carried = groups.reduce((sum, group) => sum - group.txnUnits, 0n);
-    if (carried !== interestTxnUnits || groups.some((group) => group.currency !== security.currency)) {
+    if (
+      carried !== interestTxnUnits ||
+      groups.some((group) => group.currency !== security.currency)
+    ) {
       throw equityError("interestUnreconciled", {
-        carried: fig.money(fromUnits(carried), security.currency), accrued: fig.money(fromUnits(interestTxnUnits), security.currency),
-        security: fig.text(security.securityNumber), date: fig.date(on),
+        carried: fig.money(fromUnits(carried), security.currency),
+        accrued: fig.money(fromUnits(interestTxnUnits), security.currency),
+        security: fig.text(security.securityNumber),
+        date: fig.date(on),
       });
     }
     for (const group of groups) {
       legs.push({
-        accountId: group.accountId, units: -group.units,
+        accountId: group.accountId,
+        units: -group.units,
         foreign: { currency: group.currency, txnUnits: -group.txnUnits, fxRate: group.fxRate },
         balance: { securityId: security.id, role: "interest" },
       });
       interestHistorical -= group.units;
     }
   }
-  const remeasurePrincipal = security.currency !== functional && !(await isEquityAccount(db, input.orgId, principal.accountId));
-  const principalSettlement = remeasurePrincipal ? functionalUnits(principal.txnUnits, fxRate) : principal.units;
+  const remeasurePrincipal =
+    security.currency !== functional &&
+    !(await isEquityAccount(db, input.orgId, principal.accountId));
+  const principalSettlement = remeasurePrincipal
+    ? functionalUnits(principal.txnUnits, fxRate)
+    : principal.units;
   const interestSettlement = functionalUnits(interestTxnUnits, fxRate);
   const settlementUnits = principalSettlement + interestSettlement;
   const difference = settlementUnits - (principal.units + interestHistorical);
   if (difference !== 0n) {
-    legs.push({ accountId: await realizedFxAccount(db, input.orgId), units: difference, memo: `Realized exchange difference on ${security.securityNumber}` });
+    legs.push({
+      accountId: await realizedFxAccount(db, input.orgId),
+      units: difference,
+      memo: `Realized exchange difference on ${security.securityNumber}`,
+    });
   }
-  return { legs, settlementUnits, principalTxnUnits: principal.txnUnits, interestTxnUnits, fxRate, accrual };
+  return {
+    legs,
+    settlementUnits,
+    principalTxnUnits: principal.txnUnits,
+    interestTxnUnits,
+    fxRate,
+    accrual,
+  };
 }

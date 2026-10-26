@@ -32,11 +32,22 @@ function refuses(fn: () => void): string {
 describe("rounding rules", () => {
   for (const [name, hours, rule, expected] of [
     ["none keeps exact hours", "7.1267", { incrementMinutes: 0, mode: "nearest" }, "7.1267"],
-    ["nearest quarter rounds 7.13 to 7.25", "7.13", { incrementMinutes: 15, mode: "nearest" }, "7.2500"],
-    ["nearest quarter rounds 7.11 to 7.00", "7.11", { incrementMinutes: 15, mode: "nearest" }, "7.0000"],
+    [
+      "nearest quarter rounds 7.13 to 7.25",
+      "7.13",
+      { incrementMinutes: 15, mode: "nearest" },
+      "7.2500",
+    ],
+    [
+      "nearest quarter rounds 7.11 to 7.00",
+      "7.11",
+      { incrementMinutes: 15, mode: "nearest" },
+      "7.0000",
+    ],
     ["up always rounds up a partial tenth", "7.01", { incrementMinutes: 6, mode: "up" }, "7.1000"],
     ["down truncates a partial tenth", "7.19", { incrementMinutes: 6, mode: "down" }, "7.1000"],
-  ] as const) it(name, () => assert.equal(roundHours(hours, rule), expected));
+  ] as const)
+    it(name, () => assert.equal(roundHours(hours, rule), expected));
   it("exact steps are untouched in every mode", () => {
     assert.equal(roundHours("8.25", { incrementMinutes: 15, mode: "up" }), "8.2500");
     assert.equal(roundHours("8.25", { incrementMinutes: 15, mode: "down" }), "8.2500");
@@ -91,7 +102,10 @@ describe("shift-level break allocation", () => {
   });
   it("the nets sum to the shift-level net rule", () => {
     const nets = allocateShiftNetMs([4 * H, 4 * H], [10 * 60_000, 0], 30);
-    assert.equal(nets.reduce((a, b) => a + b, 0), netShiftMs(8 * H, 10 * 60_000, 30));
+    assert.equal(
+      nets.reduce((a, b) => a + b, 0),
+      netShiftMs(8 * H, 10 * 60_000, 30),
+    );
   });
   it("a break longer than the shift nets to zero, never negative", () => {
     assert.deepEqual(allocateShiftNetMs([4 * H], [0], 300), [0]);
@@ -99,7 +113,8 @@ describe("shift-level break allocation", () => {
 });
 
 /** Source instants share one conversion fixture; each split keeps its own zone and assertions. */
-const splitInstants = (from: string, to: string, zone: string) => splitZoneDays(Date.parse(from), Date.parse(to), zone);
+const splitInstants = (from: string, to: string, zone: string) =>
+  splitZoneDays(Date.parse(from), Date.parse(to), zone);
 
 describe("round-once dealing", () => {
   const quarter = { incrementMinutes: 15, mode: "nearest" } as const;
@@ -118,8 +133,14 @@ describe("round-once dealing", () => {
   });
   it("UTC day splits are exact to the millisecond", () => {
     const pieces = splitInstants("2026-09-14T23:52:00.000Z", "2026-09-15T00:08:00.000Z", "UTC");
-    assert.deepEqual(pieces.map((p) => p.date), ["2026-09-14", "2026-09-15"]);
-    assert.deepEqual(pieces.map((p) => p.ms), [8 * 60_000, 8 * 60_000]);
+    assert.deepEqual(
+      pieces.map((p) => p.date),
+      ["2026-09-14", "2026-09-15"],
+    );
+    assert.deepEqual(
+      pieces.map((p) => p.ms),
+      [8 * 60_000, 8 * 60_000],
+    );
   });
   it("a single-day span is one piece", () => {
     const pieces = splitInstants("2026-09-14T08:00:00.000Z", "2026-09-14T16:00:00.000Z", "UTC");
@@ -128,22 +149,34 @@ describe("round-once dealing", () => {
   it("a UTC-5 evening shift stays on its one local date", () => {
     // 20:00-24:00 Toronto time is 01:00-05:00Z: a UTC split would date
     // the whole shift on Jan 15.
-    const pieces = splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "America/Toronto");
+    const pieces = splitInstants(
+      "2026-01-15T01:00:00.000Z",
+      "2026-01-15T05:00:00.000Z",
+      "America/Toronto",
+    );
     assert.deepEqual(pieces, [{ date: "2026-01-14", ms: 4 * 3_600_000 }]);
   });
   it("an overnight local shift splits at the business midnight", () => {
     // 22:00-02:00 Toronto time: local midnight is 05:00Z.
-    const pieces = splitInstants("2026-01-15T03:00:00.000Z", "2026-01-15T07:00:00.000Z", "America/Toronto");
+    const pieces = splitInstants(
+      "2026-01-15T03:00:00.000Z",
+      "2026-01-15T07:00:00.000Z",
+      "America/Toronto",
+    );
     assert.deepEqual(pieces, [
       { date: "2026-01-14", ms: 2 * 3_600_000 },
       { date: "2026-01-15", ms: 2 * 3_600_000 },
     ]);
   });
   it("an unknown zone refuses instead of guessing a boundary", () => {
-    refuses(() => splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "Not/AZone"));
+    refuses(() =>
+      splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "Not/AZone"),
+    );
   });
   it("the zone refusal names the Business time zone setting that fixes it", () => {
-    const message = refuses(() => splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "Not/AZone"));
+    const message = refuses(() =>
+      splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "Not/AZone"),
+    );
     assert.match(message, /"Not\/AZone"/, "the refusal names the offending zone");
     assert.match(message, /Business time zone/, "the refusal names the real setting");
     assert.match(message, /Company Settings/, "the refusal names where the setting lives");
@@ -151,7 +184,11 @@ describe("round-once dealing", () => {
   it("a stored alias days in its canonical zone", () => {
     // US/Eastern is absent from supportedValuesOf but formats fine; the
     // shared validator canonicalizes it instead of refusing it.
-    const pieces = splitInstants("2026-01-15T01:00:00.000Z", "2026-01-15T05:00:00.000Z", "US/Eastern");
+    const pieces = splitInstants(
+      "2026-01-15T01:00:00.000Z",
+      "2026-01-15T05:00:00.000Z",
+      "US/Eastern",
+    );
     assert.deepEqual(pieces, [{ date: "2026-01-14", ms: 4 * 3_600_000 }]);
   });
   it("the 23:52-00:08 shift deals its single quarter deterministically", () => {
@@ -196,15 +233,21 @@ describe("geofence containment", () => {
 
 describe("clock sequencing", () => {
   it("clock-in while clocked in is refused", () => {
-    const msg = refuses(() => validateClockSequence("clock_in", { clockedIn: true, onBreak: false }));
+    const msg = refuses(() =>
+      validateClockSequence("clock_in", { clockedIn: true, onBreak: false }),
+    );
     assert.match(msg, /Already clocked in/);
   });
   it("clock-out with no open pair is refused, never silently paired", () => {
-    const msg = refuses(() => validateClockSequence("clock_out", { clockedIn: false, onBreak: false }));
+    const msg = refuses(() =>
+      validateClockSequence("clock_out", { clockedIn: false, onBreak: false }),
+    );
     assert.match(msg, /No open clock-in/);
   });
   it("clock-out on an open break names the remedy", () => {
-    const msg = refuses(() => validateClockSequence("clock_out", { clockedIn: true, onBreak: true }));
+    const msg = refuses(() =>
+      validateClockSequence("clock_out", { clockedIn: true, onBreak: true }),
+    );
     assert.match(msg, /end the break/);
   });
   it("break_end with no break is refused", () => {
@@ -221,7 +264,9 @@ describe("clock sequencing", () => {
 describe("event chronology", () => {
   const open = Date.parse("2026-09-14T11:00:00.000Z");
   it("a clock-out before its clock-in refuses by name", () => {
-    const msg = refuses(() => validateEventChronology("clock_out", open, Date.parse("2026-09-14T10:30:00.000Z")));
+    const msg = refuses(() =>
+      validateEventChronology("clock_out", open, Date.parse("2026-09-14T10:30:00.000Z")),
+    );
     assert.match(msg, /clock-out.*not after the open clock-in/);
   });
   it("a close at the same instant as the open refuses", () => {
@@ -253,14 +298,20 @@ describe("offline payload identity", () => {
   });
   it("ids match case-insensitively", () => {
     assert.equal(
-      sameClockPayload(base, { ...base, projectId: "22222222-2222-4222-8222-222222222222".toUpperCase() }),
+      sameClockPayload(base, {
+        ...base,
+        projectId: "22222222-2222-4222-8222-222222222222".toUpperCase(),
+      }),
       true,
     );
   });
   it("a different kind, instant, worker, project or source conflicts", () => {
     assert.equal(sameClockPayload(base, { ...base, kind: "clock_out" }), false);
     assert.equal(sameClockPayload(base, { ...base, occurredAtMs: base.occurredAtMs + 1 }), false);
-    assert.equal(sameClockPayload(base, { ...base, employeePartyId: "33333333-3333-4333-8333-333333333333" }), false);
+    assert.equal(
+      sameClockPayload(base, { ...base, employeePartyId: "33333333-3333-4333-8333-333333333333" }),
+      false,
+    );
     assert.equal(sameClockPayload(base, { ...base, projectId: null }), false);
     assert.equal(sameClockPayload(base, { ...base, source: "kiosk" }), false);
   });

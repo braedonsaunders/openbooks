@@ -19,4 +19,3 @@ export async function refusal<E extends abstract new (...args: never[]) => Error
   }
   throw new Error(`expected a ${expected.name} refusal, the call succeeded`);
 }
-

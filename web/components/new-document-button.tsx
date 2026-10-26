@@ -1,18 +1,18 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { ChevronDown, Plus } from 'lucide-react'
-import { Button, Popover } from '@openbooks/ui'
-import { documentCreateHref, isDocumentCreateKind } from '../lib/document-kinds'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, Plus } from "lucide-react";
+import { Button, Popover } from "@openbooks/ui";
+import { documentCreateHref, isDocumentCreateKind } from "../lib/document-kinds";
 
 export interface NewDocumentItem {
-  kind: string
-  label: string
+  kind: string;
+  label: string;
   /** A related record created on its own surface (for example Receive
    *  payment on the receivables cockpit): the item navigates here instead
    *  of opening the document drawer for `kind`. */
-  href?: string
+  href?: string;
 }
 
 /**
@@ -27,37 +27,39 @@ export function NewDocumentButton({
   basePath,
   triggerLabel,
 }: {
-  items: NewDocumentItem[]
-  basePath: string
-  triggerLabel: string
+  items: NewDocumentItem[];
+  basePath: string;
+  triggerLabel: string;
 }) {
-  const [open, setOpen] = useState(false)
-  const router = useRouter()
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   function create(item: NewDocumentItem) {
-    setOpen(false)
+    setOpen(false);
     // A blank href is absent, not a target: pushing '' would reload the list
     // in place — a dead click with no drawer and no error.
-    router.push(item.href || documentCreateHref(basePath, item.kind))
+    router.push(item.href || documentCreateHref(basePath, item.kind));
   }
 
   // Only navigable items survive: a misconfigured kind must withdraw its
   // control rather than render a button that throws on click (a dead New
   // with no drawer and no error). Href items navigate elsewhere, so they
   // are kept regardless of kind.
-  const navigable = items.filter((item) => (item.href ?? '') !== '' || isDocumentCreateKind(item.kind))
+  const navigable = items.filter(
+    (item) => (item.href ?? "") !== "" || isDocumentCreateKind(item.kind),
+  );
 
   // No creatable kind → no control: never a dropdown that opens empty.
-  if (navigable.length === 0) return null
+  if (navigable.length === 0) return null;
 
   // Single kind → plain button (no dropdown).
   if (navigable.length === 1) {
-    const only = navigable[0]!
+    const only = navigable[0]!;
     return (
       <Button type="button" onClick={() => create(only)}>
         <Plus size={15} /> {only.label}
       </Button>
-    )
+    );
   }
 
   return (
@@ -87,5 +89,5 @@ export function NewDocumentButton({
         ))}
       </div>
     </Popover>
-  )
+  );
 }

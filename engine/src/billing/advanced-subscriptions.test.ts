@@ -24,17 +24,62 @@ import {
 import { prorateDays } from "../money/money.ts";
 
 test("trial suppresses advance billing until trial end", () => {
-  assert.equal(firstLifecycleBillOn({ termStartsOn: "2026-01-01", trialEndsOn: "2026-01-15", billingTiming: "advance", interval: "monthly", intervalCount: 1 }), "2026-01-15");
+  assert.equal(
+    firstLifecycleBillOn({
+      termStartsOn: "2026-01-01",
+      trialEndsOn: "2026-01-15",
+      billingTiming: "advance",
+      interval: "monthly",
+      intervalCount: 1,
+    }),
+    "2026-01-15",
+  );
 });
 
 test("arrears bills one interval after service begins, including after a trial", () => {
-  assert.equal(firstLifecycleBillOn({ termStartsOn: "2026-01-01", trialEndsOn: null, billingTiming: "arrears", interval: "monthly", intervalCount: 1 }), "2026-02-01");
-  assert.equal(firstLifecycleBillOn({ termStartsOn: "2026-01-01", trialEndsOn: "2026-01-15", billingTiming: "arrears", interval: "monthly", intervalCount: 1 }), "2026-02-15");
+  assert.equal(
+    firstLifecycleBillOn({
+      termStartsOn: "2026-01-01",
+      trialEndsOn: null,
+      billingTiming: "arrears",
+      interval: "monthly",
+      intervalCount: 1,
+    }),
+    "2026-02-01",
+  );
+  assert.equal(
+    firstLifecycleBillOn({
+      termStartsOn: "2026-01-01",
+      trialEndsOn: "2026-01-15",
+      billingTiming: "arrears",
+      interval: "monthly",
+      intervalCount: 1,
+    }),
+    "2026-02-15",
+  );
 });
 
 test("advance and arrears produce different service periods around the same bill date", () => {
-  assert.deepEqual(lifecycleBillingPeriod({ billOn: "2026-02-01", serviceAnchor: "2026-01-01", billingTiming: "arrears", interval: "monthly", intervalCount: 1 }), { periodStartsOn: "2026-01-01", periodEndsOn: "2026-02-01" });
-  assert.deepEqual(lifecycleBillingPeriod({ billOn: "2026-02-01", serviceAnchor: "2026-01-01", billingTiming: "advance", interval: "monthly", intervalCount: 1 }), { periodStartsOn: "2026-02-01", periodEndsOn: "2026-03-01" });
+  assert.deepEqual(
+    lifecycleBillingPeriod({
+      billOn: "2026-02-01",
+      serviceAnchor: "2026-01-01",
+      billingTiming: "arrears",
+      interval: "monthly",
+      intervalCount: 1,
+    }),
+    { periodStartsOn: "2026-01-01", periodEndsOn: "2026-02-01" },
+  );
+  assert.deepEqual(
+    lifecycleBillingPeriod({
+      billOn: "2026-02-01",
+      serviceAnchor: "2026-01-01",
+      billingTiming: "advance",
+      interval: "monthly",
+      intervalCount: 1,
+    }),
+    { periodStartsOn: "2026-02-01", periodEndsOn: "2026-03-01" },
+  );
 });
 
 test("month-end anchors re-pin every step instead of drifting from the clamped date", async () => {
@@ -51,7 +96,14 @@ test("month-end anchors re-pin every step instead of drifting from the clamped d
 
 test("anchored advance windows are contiguous with no gaps or overlaps", () => {
   const advance = (billOn: string) =>
-    lifecycleBillingPeriod({ billOn, serviceAnchor: billOn, billingTiming: "advance", interval: "monthly", intervalCount: 1, anchorDay: 31 });
+    lifecycleBillingPeriod({
+      billOn,
+      serviceAnchor: billOn,
+      billingTiming: "advance",
+      interval: "monthly",
+      intervalCount: 1,
+      anchorDay: 31,
+    });
   const first = advance("2026-01-31");
   const second = advance(first.periodEndsOn);
   const third = advance(second.periodEndsOn);
@@ -63,10 +115,30 @@ test("anchored advance windows are contiguous with no gaps or overlaps", () => {
 });
 
 test("the lifecycle anchor is the day service first billed from", () => {
-  assert.equal(lifecycleAnchorDay({ termStartsOn: "2026-01-31", trialEndsOn: null, fallback: "2026-01-31" }), 31);
-  assert.equal(lifecycleAnchorDay({ termStartsOn: "2026-01-15", trialEndsOn: "2026-01-31", fallback: "2026-01-15" }), 31);
-  assert.equal(lifecycleAnchorDay({ termStartsOn: "2026-01-15", trialEndsOn: "2026-01-10", fallback: "2026-01-15" }), 15);
-  assert.equal(lifecycleAnchorDay({ termStartsOn: null, trialEndsOn: null, fallback: "2026-03-10" }), 10);
+  assert.equal(
+    lifecycleAnchorDay({ termStartsOn: "2026-01-31", trialEndsOn: null, fallback: "2026-01-31" }),
+    31,
+  );
+  assert.equal(
+    lifecycleAnchorDay({
+      termStartsOn: "2026-01-15",
+      trialEndsOn: "2026-01-31",
+      fallback: "2026-01-15",
+    }),
+    31,
+  );
+  assert.equal(
+    lifecycleAnchorDay({
+      termStartsOn: "2026-01-15",
+      trialEndsOn: "2026-01-10",
+      fallback: "2026-01-15",
+    }),
+    15,
+  );
+  assert.equal(
+    lifecycleAnchorDay({ termStartsOn: null, trialEndsOn: null, fallback: "2026-03-10" }),
+    10,
+  );
 });
 
 test("published catalog terms are immutable", () => {
@@ -81,22 +153,79 @@ test("idempotent retries can only replay on the original subscription", () => {
 });
 
 test("co-term requires a different subscription for the same customer", () => {
-  assert.doesNotThrow(() => assertCotermAllowed({ subscriptionId: "sub-1", anchorSubscriptionId: "sub-2", customerId: "cust-1", anchorCustomerId: "cust-1" }));
-  assert.throws(() => assertCotermAllowed({ subscriptionId: "sub-1", anchorSubscriptionId: "sub-1", customerId: "cust-1", anchorCustomerId: "cust-1" }), /different anchor/);
-  assert.throws(() => assertCotermAllowed({ subscriptionId: "sub-1", anchorSubscriptionId: "sub-2", customerId: "cust-1", anchorCustomerId: "cust-2" }), /same customer/);
+  assert.doesNotThrow(() =>
+    assertCotermAllowed({
+      subscriptionId: "sub-1",
+      anchorSubscriptionId: "sub-2",
+      customerId: "cust-1",
+      anchorCustomerId: "cust-1",
+    }),
+  );
+  assert.throws(
+    () =>
+      assertCotermAllowed({
+        subscriptionId: "sub-1",
+        anchorSubscriptionId: "sub-1",
+        customerId: "cust-1",
+        anchorCustomerId: "cust-1",
+      }),
+    /different anchor/,
+  );
+  assert.throws(
+    () =>
+      assertCotermAllowed({
+        subscriptionId: "sub-1",
+        anchorSubscriptionId: "sub-2",
+        customerId: "cust-1",
+        anchorCustomerId: "cust-2",
+      }),
+    /same customer/,
+  );
 });
 
 test("renewal boundary respects invoice timing and policy", () => {
-  assert.equal(renewalAction({ billingTiming: "advance", dueOn: "2027-01-01", termEndsOn: "2027-01-01", policy: "auto" }), "renew");
-  assert.equal(renewalAction({ billingTiming: "arrears", dueOn: "2027-01-01", termEndsOn: "2027-01-01", policy: "auto" }), "bill");
-  assert.equal(renewalAction({ billingTiming: "arrears", dueOn: "2027-02-01", termEndsOn: "2027-01-01", policy: "manual" }), "stop");
+  assert.equal(
+    renewalAction({
+      billingTiming: "advance",
+      dueOn: "2027-01-01",
+      termEndsOn: "2027-01-01",
+      policy: "auto",
+    }),
+    "renew",
+  );
+  assert.equal(
+    renewalAction({
+      billingTiming: "arrears",
+      dueOn: "2027-01-01",
+      termEndsOn: "2027-01-01",
+      policy: "auto",
+    }),
+    "bill",
+  );
+  assert.equal(
+    renewalAction({
+      billingTiming: "arrears",
+      dueOn: "2027-02-01",
+      termEndsOn: "2027-01-01",
+      policy: "manual",
+    }),
+    "stop",
+  );
 });
 
 test("multi-component invoice total preserves ledger precision", () => {
-  assert.equal(subscriptionComponentTotal([{ quantity: "10", unitPrice: "12.50" }, { quantity: "1", unitPrice: "29.99" }]), "154.9900");
+  assert.equal(
+    subscriptionComponentTotal([
+      { quantity: "10", unitPrice: "12.50" },
+      { quantity: "1", unitPrice: "29.99" },
+    ]),
+    "154.9900",
+  );
 });
 
-function arrearsWindow(overrides: Partial<ComponentWindow> & { componentKey: string }): ComponentWindow {
+function arrearsWindow(
+  overrides: Partial<ComponentWindow> & { componentKey: string },
+): ComponentWindow {
   return {
     description: "Fee",
     quantity: "1",
@@ -114,8 +243,18 @@ test("arrears prices the interval at the price in force during it, not the next 
   // Price A runs through Jan 31, price B starts Feb 1; a Jan 1 - Feb 1
   // arrears bill must charge A for January, never B.
   const lines = arrearsLinesForInterval("2026-01-01", "2026-02-01", [
-    arrearsWindow({ componentKey: "fee", unitPrice: "310.0000", effectiveFrom: "2026-01-01", effectiveTo: "2026-01-31" }),
-    arrearsWindow({ componentKey: "fee", unitPrice: "620.0000", effectiveFrom: "2026-02-01", effectiveTo: null }),
+    arrearsWindow({
+      componentKey: "fee",
+      unitPrice: "310.0000",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-01-31",
+    }),
+    arrearsWindow({
+      componentKey: "fee",
+      unitPrice: "620.0000",
+      effectiveFrom: "2026-02-01",
+      effectiveTo: null,
+    }),
   ]);
   assert.equal(lines.length, 1);
   assert.equal(lines[0]!.unitPrice, "310.0000");
@@ -127,20 +266,32 @@ test("an unchanged arrears price bills one verbatim line as before", () => {
   const lines = arrearsLinesForInterval("2026-01-01", "2026-02-01", [
     arrearsWindow({ componentKey: "fee", quantity: "2", unitPrice: "155.0000" }),
   ]);
-  assert.deepEqual(lines, [{
-    description: "Fee",
-    quantity: "2",
-    unitPrice: "155.0000",
-    incomeAccountId: null,
-    itemId: null,
-    taxCodeId: null,
-  }]);
+  assert.deepEqual(lines, [
+    {
+      description: "Fee",
+      quantity: "2",
+      unitPrice: "155.0000",
+      incomeAccountId: null,
+      itemId: null,
+      taxCodeId: null,
+    },
+  ]);
 });
 
 test("a mid-interval arrears price change splits and prorates by effective window", () => {
   const lines = arrearsLinesForInterval("2026-01-01", "2026-02-01", [
-    arrearsWindow({ componentKey: "fee", unitPrice: "310.0000", effectiveFrom: "2026-01-01", effectiveTo: "2026-01-15" }),
-    arrearsWindow({ componentKey: "fee", unitPrice: "620.0000", effectiveFrom: "2026-01-16", effectiveTo: null }),
+    arrearsWindow({
+      componentKey: "fee",
+      unitPrice: "310.0000",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-01-15",
+    }),
+    arrearsWindow({
+      componentKey: "fee",
+      unitPrice: "620.0000",
+      effectiveFrom: "2026-01-16",
+      effectiveTo: null,
+    }),
   ]);
   assert.equal(lines.length, 2);
   assert.equal(lines[0]!.unitPrice, prorateDays("310.0000", 15, 31));
@@ -153,7 +304,13 @@ test("a mid-interval arrears price change splits and prorates by effective windo
 
 test("an arrears component added mid-interval bills only its served slice", () => {
   const lines = arrearsLinesForInterval("2026-01-01", "2026-02-01", [
-    arrearsWindow({ componentKey: "addon", description: "Add-on", unitPrice: "310.0000", effectiveFrom: "2026-01-16", effectiveTo: null }),
+    arrearsWindow({
+      componentKey: "addon",
+      description: "Add-on",
+      unitPrice: "310.0000",
+      effectiveFrom: "2026-01-16",
+      effectiveTo: null,
+    }),
   ]);
   assert.equal(lines.length, 1);
   assert.equal(lines[0]!.unitPrice, prorateDays("310.0000", 16, 31));
@@ -166,8 +323,18 @@ test("arrears windowing keeps civil years 1-99 (0096 splits 14/29 and 15/29)", (
   // February 0096 is a 29-day leap month, like the 1996 control.
   for (const century of ["0096", "1996"]) {
     const lines = arrearsLinesForInterval(`${century}-02-01`, `${century}-03-01`, [
-      arrearsWindow({ componentKey: "fee", unitPrice: "290.0000", effectiveFrom: `${century}-02-01`, effectiveTo: `${century}-02-14` }),
-      arrearsWindow({ componentKey: "fee", unitPrice: "290.0000", effectiveFrom: `${century}-02-15`, effectiveTo: null }),
+      arrearsWindow({
+        componentKey: "fee",
+        unitPrice: "290.0000",
+        effectiveFrom: `${century}-02-01`,
+        effectiveTo: `${century}-02-14`,
+      }),
+      arrearsWindow({
+        componentKey: "fee",
+        unitPrice: "290.0000",
+        effectiveFrom: `${century}-02-15`,
+        effectiveTo: null,
+      }),
     ]);
     assert.equal(lines.length, 2);
     assert.equal(lines[0]!.unitPrice, "140.0000");
@@ -178,11 +345,16 @@ test("arrears windowing keeps civil years 1-99 (0096 splits 14/29 and 15/29)", (
 });
 
 test("arrears windowing is degenerate-safe", () => {
-  assert.deepEqual(arrearsLinesForInterval("2026-02-01", "2026-02-01", [arrearsWindow({ componentKey: "fee" })]), []);
+  assert.deepEqual(
+    arrearsLinesForInterval("2026-02-01", "2026-02-01", [arrearsWindow({ componentKey: "fee" })]),
+    [],
+  );
   assert.deepEqual(arrearsLinesForInterval("2026-01-01", "2026-02-01", []), []);
 });
 
-function ledgerAmendment(overrides: Partial<EffectiveLifecycleAmendment> & { type: string; effectiveOn: string }): EffectiveLifecycleAmendment {
+function ledgerAmendment(
+  overrides: Partial<EffectiveLifecycleAmendment> & { type: string; effectiveOn: string },
+): EffectiveLifecycleAmendment {
   return {
     seq: 1,
     timing: null,
@@ -197,90 +369,193 @@ function ledgerAmendment(overrides: Partial<EffectiveLifecycleAmendment> & { typ
 
 test("a never-billed subscription activates at its term dates as before", () => {
   assert.deepEqual(
-    activationBillingCursors({ termStartsOn: "2026-01-01", firstBillOn: "2026-01-01", anchor: "2026-01-01", boundary: "2026-01-01", billed: false }),
+    activationBillingCursors({
+      termStartsOn: "2026-01-01",
+      firstBillOn: "2026-01-01",
+      anchor: "2026-01-01",
+      boundary: "2026-01-01",
+      billed: false,
+    }),
     { nextBillOn: "2026-01-01", currentPeriodStart: "2026-01-01" },
   );
 });
 
 test("a term start inside billed service refuses naming the boundary and the opt-in", () => {
   assert.throws(
-    () => activationBillingCursors({ termStartsOn: "2026-01-01", firstBillOn: "2026-01-01", anchor: "2026-01-01", boundary: "2026-02-01", billed: true }),
+    () =>
+      activationBillingCursors({
+        termStartsOn: "2026-01-01",
+        firstBillOn: "2026-01-01",
+        anchor: "2026-01-01",
+        boundary: "2026-02-01",
+        billed: true,
+      }),
     /already-billed service through 2026-02-01.*billFromUnbilledBoundary/,
   );
 });
 
 test("the controlled transition bills only from the unbilled boundary", () => {
   assert.deepEqual(
-    activationBillingCursors({ termStartsOn: "2026-01-01", firstBillOn: "2026-01-01", anchor: "2026-01-01", boundary: "2026-02-01", billed: true, billFromUnbilledBoundary: true }),
+    activationBillingCursors({
+      termStartsOn: "2026-01-01",
+      firstBillOn: "2026-01-01",
+      anchor: "2026-01-01",
+      boundary: "2026-02-01",
+      billed: true,
+      billFromUnbilledBoundary: true,
+    }),
     { nextBillOn: "2026-02-01", currentPeriodStart: "2026-02-01" },
   );
   // A term starting at the boundary needs no transition.
   assert.deepEqual(
-    activationBillingCursors({ termStartsOn: "2026-02-01", firstBillOn: "2026-02-01", anchor: "2026-02-01", boundary: "2026-02-01", billed: true }),
+    activationBillingCursors({
+      termStartsOn: "2026-02-01",
+      firstBillOn: "2026-02-01",
+      anchor: "2026-02-01",
+      boundary: "2026-02-01",
+      billed: true,
+    }),
     { nextBillOn: "2026-02-01", currentPeriodStart: "2026-02-01" },
   );
 });
 
 test("lifecycle state with no amendments is the activation state", () => {
   assert.deepEqual(
-    resolveEffectiveLifecycleState({ asOf: "2026-06-01", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments: [] }),
+    resolveEffectiveLifecycleState({
+      asOf: "2026-06-01",
+      fallbackTiming: "advance",
+      fallbackTermEndsOn: "2027-01-01",
+      amendments: [],
+    }),
     { billingTiming: "advance", termEndsOn: "2027-01-01" },
   );
 });
 
 test("a future timing change does not govern an earlier bill date", () => {
-  const amendments = [ledgerAmendment({
-    type: "change_timing",
-    effectiveOn: "2026-07-01",
-    timing: "arrears",
-    baseTiming: "advance",
-    baseTerm: "2027-01-01",
-    baseTermKnown: true,
-  })];
+  const amendments = [
+    ledgerAmendment({
+      type: "change_timing",
+      effectiveOn: "2026-07-01",
+      timing: "arrears",
+      baseTiming: "advance",
+      baseTerm: "2027-01-01",
+      baseTermKnown: true,
+    }),
+  ];
   assert.equal(
-    resolveEffectiveLifecycleState({ asOf: "2026-06-01", fallbackTiming: "arrears", fallbackTermEndsOn: "2027-01-01", amendments }).billingTiming,
+    resolveEffectiveLifecycleState({
+      asOf: "2026-06-01",
+      fallbackTiming: "arrears",
+      fallbackTermEndsOn: "2027-01-01",
+      amendments,
+    }).billingTiming,
     "advance",
   );
   assert.equal(
-    resolveEffectiveLifecycleState({ asOf: "2026-07-01", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments }).billingTiming,
+    resolveEffectiveLifecycleState({
+      asOf: "2026-07-01",
+      fallbackTiming: "advance",
+      fallbackTermEndsOn: "2027-01-01",
+      amendments,
+    }).billingTiming,
     "arrears",
   );
 });
 
 test("a future term reduction does not end the term before its date", () => {
-  const amendments = [ledgerAmendment({
-    type: "change_term",
-    effectiveOn: "2026-07-01",
-    seq: 1,
-    term: "2026-06-15",
-    termKnown: true,
-    baseTiming: "advance",
-    baseTerm: "2027-01-01",
-    baseTermKnown: true,
-  })];
-  const before = resolveEffectiveLifecycleState({ asOf: "2026-06-20", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments });
+  const amendments = [
+    ledgerAmendment({
+      type: "change_term",
+      effectiveOn: "2026-07-01",
+      seq: 1,
+      term: "2026-06-15",
+      termKnown: true,
+      baseTiming: "advance",
+      baseTerm: "2027-01-01",
+      baseTermKnown: true,
+    }),
+  ];
+  const before = resolveEffectiveLifecycleState({
+    asOf: "2026-06-20",
+    fallbackTiming: "advance",
+    fallbackTermEndsOn: "2027-01-01",
+    amendments,
+  });
   assert.equal(before.termEndsOn, "2027-01-01");
-  assert.equal(renewalAction({ billingTiming: before.billingTiming, dueOn: "2026-06-20", termEndsOn: before.termEndsOn, policy: "manual" }), "bill");
-  const after = resolveEffectiveLifecycleState({ asOf: "2026-07-15", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments });
+  assert.equal(
+    renewalAction({
+      billingTiming: before.billingTiming,
+      dueOn: "2026-06-20",
+      termEndsOn: before.termEndsOn,
+      policy: "manual",
+    }),
+    "bill",
+  );
+  const after = resolveEffectiveLifecycleState({
+    asOf: "2026-07-15",
+    fallbackTiming: "advance",
+    fallbackTermEndsOn: "2027-01-01",
+    amendments,
+  });
   assert.equal(after.termEndsOn, "2026-06-15");
-  assert.equal(renewalAction({ billingTiming: after.billingTiming, dueOn: "2026-07-15", termEndsOn: after.termEndsOn, policy: "manual" }), "stop");
+  assert.equal(
+    renewalAction({
+      billingTiming: after.billingTiming,
+      dueOn: "2026-07-15",
+      termEndsOn: after.termEndsOn,
+      policy: "manual",
+    }),
+    "stop",
+  );
 });
 
 test("amendments fold in effective-date order with application order breaking ties", () => {
   const amendments = [
-    ledgerAmendment({ type: "change_term", effectiveOn: "2026-09-01", seq: 2, term: "2026-12-31", termKnown: true, baseTiming: "advance", baseTerm: "2027-01-01", baseTermKnown: true }),
-    ledgerAmendment({ type: "change_term", effectiveOn: "2026-03-01", seq: 3, term: "2026-06-30", termKnown: true }),
+    ledgerAmendment({
+      type: "change_term",
+      effectiveOn: "2026-09-01",
+      seq: 2,
+      term: "2026-12-31",
+      termKnown: true,
+      baseTiming: "advance",
+      baseTerm: "2027-01-01",
+      baseTermKnown: true,
+    }),
+    ledgerAmendment({
+      type: "change_term",
+      effectiveOn: "2026-03-01",
+      seq: 3,
+      term: "2026-06-30",
+      termKnown: true,
+    }),
   ];
-  const resolved = resolveEffectiveLifecycleState({ asOf: "2026-10-01", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments });
+  const resolved = resolveEffectiveLifecycleState({
+    asOf: "2026-10-01",
+    fallbackTiming: "advance",
+    fallbackTermEndsOn: "2027-01-01",
+    amendments,
+  });
   assert.equal(resolved.termEndsOn, "2026-12-31");
-  const mid = resolveEffectiveLifecycleState({ asOf: "2026-05-01", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments });
+  const mid = resolveEffectiveLifecycleState({
+    asOf: "2026-05-01",
+    fallbackTiming: "advance",
+    fallbackTermEndsOn: "2027-01-01",
+    amendments,
+  });
   assert.equal(mid.termEndsOn, "2026-06-30");
 });
 
 test("unusable ledger rows are ignored instead of refusing billing", () => {
-  const amendments = [ledgerAmendment({ type: "change_timing", effectiveOn: "not-a-date", timing: "arrears" })];
+  const amendments = [
+    ledgerAmendment({ type: "change_timing", effectiveOn: "not-a-date", timing: "arrears" }),
+  ];
   assert.deepEqual(
-    resolveEffectiveLifecycleState({ asOf: "2026-08-01", fallbackTiming: "advance", fallbackTermEndsOn: null, amendments }),
+    resolveEffectiveLifecycleState({
+      asOf: "2026-08-01",
+      fallbackTiming: "advance",
+      fallbackTermEndsOn: null,
+      amendments,
+    }),
     { billingTiming: "advance", termEndsOn: null },
   );
 });
@@ -318,25 +593,38 @@ test("ledger projection reads the request and snapshots defensively", () => {
  * renewal commits nothing and replays cleanly through the same
  * deterministic key". */
 
-test('subscription date arithmetic rejects malformed dates, intervals, and fractional terms', async () => {
-  const { advanceLifecycleDate } = await import('./advanced-subscriptions.ts');
+test("subscription date arithmetic rejects malformed dates, intervals, and fractional terms", async () => {
+  const { advanceLifecycleDate } = await import("./advanced-subscriptions.ts");
   for (const count of [0, -1, 1.5, NaN, Infinity, 2147483648]) {
-    assert.throws(() => advanceLifecycleDate('2026-01-31', 'monthly', count), AdvancedSubscriptionError);
+    assert.throws(
+      () => advanceLifecycleDate("2026-01-31", "monthly", count),
+      AdvancedSubscriptionError,
+    );
   }
-  for (const date of ['2026-02-30', '2026-13-01', '0000-01-01', '2026-1-1', '']) {
-    assert.throws(() => advanceLifecycleDate(date, 'monthly'), AdvancedSubscriptionError);
+  for (const date of ["2026-02-30", "2026-13-01", "0000-01-01", "2026-1-1", ""]) {
+    assert.throws(() => advanceLifecycleDate(date, "monthly"), AdvancedSubscriptionError);
   }
-  assert.throws(() => advanceLifecycleDate('2026-01-01', 'typo' as 'monthly'), AdvancedSubscriptionError);
-  assert.equal(advanceLifecycleDate('2026-01-31', 'monthly', 2), '2026-03-31');
-  assert.equal(advanceLifecycleDate('2028-02-29', 'annually'), '2029-02-28');
-  assert.equal(advanceLifecycleDate('0096-02-28', 'weekly'), '0096-03-06');
-  assert.equal(advanceLifecycleDate('0096-01-31', 'monthly'), '0096-02-29');
-  assert.throws(() => advanceLifecycleDate('9999-12-31', 'monthly'), AdvancedSubscriptionError);
+  assert.throws(
+    () => advanceLifecycleDate("2026-01-01", "typo" as "monthly"),
+    AdvancedSubscriptionError,
+  );
+  assert.equal(advanceLifecycleDate("2026-01-31", "monthly", 2), "2026-03-31");
+  assert.equal(advanceLifecycleDate("2028-02-29", "annually"), "2029-02-28");
+  assert.equal(advanceLifecycleDate("0096-02-28", "weekly"), "0096-03-06");
+  assert.equal(advanceLifecycleDate("0096-01-31", "monthly"), "0096-02-29");
+  assert.throws(() => advanceLifecycleDate("9999-12-31", "monthly"), AdvancedSubscriptionError);
 });
 
 const pinnedPlan: PlanVersionTerms = {
-  planId: "plan-a", status: "published", effectiveFrom: "2026-01-01", effectiveTo: null,
-  interval: "monthly", intervalCount: 1, billingTiming: "advance", currency: "CAD", requiredComponents: 1,
+  planId: "plan-a",
+  status: "published",
+  effectiveFrom: "2026-01-01",
+  effectiveTo: null,
+  interval: "monthly",
+  intervalCount: 1,
+  billingTiming: "advance",
+  currency: "CAD",
+  requiredComponents: 1,
 };
 const targetPlan: PlanVersionTerms = { ...pinnedPlan, planId: "plan-b" };
 const planChangeBase = {
@@ -353,7 +641,9 @@ test("a plan change on the paid-through date with the same cadence and currency 
 });
 
 test("a plan change may be future-dated after the paid-through date when the cadence is unchanged", () => {
-  assert.doesNotThrow(() => assertPlanChangeRules({ ...planChangeBase, effectiveOn: "2026-12-01" }));
+  assert.doesNotThrow(() =>
+    assertPlanChangeRules({ ...planChangeBase, effectiveOn: "2026-12-01" }),
+  );
 });
 
 test("a plan change before the paid-through date would reprice invoiced service and is refused", () => {
@@ -372,7 +662,11 @@ test("a plan change must match the contract's billing currency", () => {
 
 test("the new plan must carry the contract's billing timing", () => {
   assert.throws(
-    () => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, billingTiming: "arrears" } }),
+    () =>
+      assertPlanChangeRules({
+        ...planChangeBase,
+        target: { ...targetPlan, billingTiming: "arrears" },
+      }),
     /different timing/,
   );
 });
@@ -387,28 +681,67 @@ test("a change of cadence is allowed only on the paid-through date for an advanc
 });
 
 test("a plan change refuses the same plan, an unpublished or ineffective version, and a version without required components", () => {
-  assert.throws(() => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, planId: "plan-a" } }), /already on this plan/);
-  assert.throws(() => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, status: "draft" } }), /published plan version/);
   assert.throws(
-    () => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, effectiveFrom: "2026-12-01" } }),
+    () => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, planId: "plan-a" } }),
+    /already on this plan/,
+  );
+  assert.throws(
+    () => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, status: "draft" } }),
+    /published plan version/,
+  );
+  assert.throws(
+    () =>
+      assertPlanChangeRules({
+        ...planChangeBase,
+        target: { ...targetPlan, effectiveFrom: "2026-12-01" },
+      }),
     /not effective on 2026-11-01/,
   );
   assert.throws(
-    () => assertPlanChangeRules({ ...planChangeBase, target: { ...targetPlan, requiredComponents: 0 } }),
+    () =>
+      assertPlanChangeRules({
+        ...planChangeBase,
+        target: { ...targetPlan, requiredComponents: 0 },
+      }),
     /no required components/,
   );
 });
 
 test("the paid-through date is the end of the invoiced service, or the start when nothing is invoiced", () => {
-  assert.equal(subscriptionPaidThrough({ startOn: "2026-01-01", nextBillOn: "2026-11-01", billed: true, guardedThrough: null }), "2026-11-01");
-  assert.equal(subscriptionPaidThrough({ startOn: "2026-01-01", nextBillOn: "2026-02-01", billed: false, guardedThrough: null }), "2026-01-01");
+  assert.equal(
+    subscriptionPaidThrough({
+      startOn: "2026-01-01",
+      nextBillOn: "2026-11-01",
+      billed: true,
+      guardedThrough: null,
+    }),
+    "2026-11-01",
+  );
+  assert.equal(
+    subscriptionPaidThrough({
+      startOn: "2026-01-01",
+      nextBillOn: "2026-02-01",
+      billed: false,
+      guardedThrough: null,
+    }),
+    "2026-01-01",
+  );
 });
 
 test("the plan in force is the predecessor until a change's date, then its target", () => {
   const change = { effectiveOn: "2026-12-01", seq: 1, fromVersionId: "v-a", toVersionId: "v-b" };
-  assert.equal(planVersionInForce({ asOf: "2026-11-30", pinnedVersionId: "v-b", changes: [change] }), "v-a");
-  assert.equal(planVersionInForce({ asOf: "2026-12-01", pinnedVersionId: "v-b", changes: [change] }), "v-b");
-  assert.equal(planVersionInForce({ asOf: "2026-11-30", pinnedVersionId: "v-b", changes: [] }), "v-b");
+  assert.equal(
+    planVersionInForce({ asOf: "2026-11-30", pinnedVersionId: "v-b", changes: [change] }),
+    "v-a",
+  );
+  assert.equal(
+    planVersionInForce({ asOf: "2026-12-01", pinnedVersionId: "v-b", changes: [change] }),
+    "v-b",
+  );
+  assert.equal(
+    planVersionInForce({ asOf: "2026-11-30", pinnedVersionId: "v-b", changes: [] }),
+    "v-b",
+  );
 });
 
 test("successive plan changes fold in effective-date order and a backdated change is read by its date", () => {

@@ -17,10 +17,7 @@ import {
   recordRecognitionEvent,
   runRevenueRecognition,
 } from "./recognition.ts";
-import {
-  proposeRevenueModification,
-  applyRevenueModification,
-} from "./contract-modifications.ts";
+import { proposeRevenueModification, applyRevenueModification } from "./contract-modifications.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
 import { decideGate } from "../flows/gates.ts";
 
@@ -42,9 +39,12 @@ async function fixture(fn: (f: Fixture) => Promise<void>) {
     await db.execute(
       sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`,
     );
-    const calendar = (await db.execute<{ id: string }>(
-        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, "objects",
-      ))[0]!.id;
+    const calendar = (
+      await db.execute<{ id: string }>(
+        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`,
+        "objects",
+      )
+    )[0]!.id;
     for (const [month, last] of [
       ["08", "31"],
       ["09", "30"],
@@ -66,12 +66,7 @@ async function fixture(fn: (f: Fixture) => Promise<void>) {
    values(${contractId},${org.orgId},${org.subsidiaryId},${org.customerId},${`MS-${contractId}`},'active','2026-07-01','2026-09-30','CAD',1000,${actors.submitterId},${actors.submitterId})`);
     await db.execute(sql`insert into performance_obligations(id,org_id,contract_id,description,recognition_rule_id,allocated_price,standalone_selling_price,recognition_starts_on,deferred_account_id,recognized_account_id,status,created_by,updated_by)
    values(${obligationId},${org.orgId},${contractId},'Milestone deliverable',${ruleId},1000,1000,'2026-07-01',${org.accounts.deferred},${org.accounts.recognized},'open',${actors.submitterId},${actors.submitterId})`);
-    await buildRecognitionSchedule(
-      obligationId,
-      org.orgId,
-      actors.submitterId,
-      org.bookId,
-    );
+    await buildRecognitionSchedule(obligationId, org.orgId, actors.submitterId, org.bookId);
     // Earn the milestone before amending: a promise with no events recorded
     // cannot be retired because the amendment's own posting pass refuses an
     // event-less open milestone before it ever reaches retirement.
@@ -104,8 +99,9 @@ async function fixture(fn: (f: Fixture) => Promise<void>) {
 
 async function eventCount(f: Fixture, obligationId: string) {
   const rows = await db.execute<{ id: string }>(
-      sql`select id from recognition_events where org_id=${f.org.orgId} and obligation_id=${obligationId}`, "objects",
-    );
+    sql`select id from recognition_events where org_id=${f.org.orgId} and obligation_id=${obligationId}`,
+    "objects",
+  );
   return rows.length;
 }
 
@@ -118,9 +114,12 @@ test(
       // milestone promise retires it: satisfied, schedule closed.
       const { changeId } = await proposeRevenueModification(
         f.org.orgId,
-        (await db.execute<{ id: string }>(
-            sql`select contract_id as id from performance_obligations where org_id=${f.org.orgId} and id=${f.obligationId}`, "objects",
-          ))[0]!.id,
+        (
+          await db.execute<{ id: string }>(
+            sql`select contract_id as id from performance_obligations where org_id=${f.org.orgId} and id=${f.obligationId}`,
+            "objects",
+          )
+        )[0]!.id,
         f.actors.submitterId,
         {
           effectiveOn: "2026-08-01",
@@ -154,23 +153,25 @@ test(
         },
       );
       await submitFinancialChange(f.org.orgId, changeId, f.actors.submitterId);
-      const gate = (await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${changeId} and status='pending'`, "objects",
-        ))[0];
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${changeId} and status='pending'`,
+          "objects",
+        )
+      )[0];
       assert.ok(gate);
       await decideGate({
         gateId: gate.id,
         userId: f.actors.approver1Id,
         decision: "approved",
       });
-      await applyRevenueModification(
-        f.org.orgId,
-        changeId,
-        f.actors.submitterId,
-      );
-      const status = (await db.execute<{ status: string }>(
-          sql`select status from performance_obligations where org_id=${f.org.orgId} and id=${f.obligationId}`, "objects",
-        ))[0]!.status;
+      await applyRevenueModification(f.org.orgId, changeId, f.actors.submitterId);
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`select status from performance_obligations where org_id=${f.org.orgId} and id=${f.obligationId}`,
+          "objects",
+        )
+      )[0]!.status;
       assert.equal(status, "satisfied");
 
       await assert.rejects(

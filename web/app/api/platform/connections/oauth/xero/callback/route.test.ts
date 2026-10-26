@@ -14,7 +14,10 @@ interface CallbackState {
   identityError: string | null;
   exchangeRedirectUri: string | null;
 }
-const secrets = sealJson({ clientId: "xero-client", clientSecret: "xero-secret" }, { orgId: "org-1", purpose: "connection.secrets" });
+const secrets = sealJson(
+  { clientId: "xero-client", clientSecret: "xero-secret" },
+  { orgId: "org-1", purpose: "connection.secrets" },
+);
 const state: CallbackState = {
   tenants: [
     { tenantId: "first-tenant", tenantName: "First" },
@@ -106,10 +109,7 @@ const mockSources = new Map<string, string>([
     `export function connectionAuditChanges() { return { event: "oauth_connected" } }`,
   ],
   ["mock:super-admin", `export async function lockActorPermission(tx, gate) { return gate }`],
-  [
-    "mock:email-tokens",
-    `export function appBaseUrl() { return "https://books.example"; }`,
-  ],
+  ["mock:email-tokens", `export function appBaseUrl() { return "https://books.example"; }`],
 ]);
 
 const hooks = registerHooks({
@@ -135,12 +135,13 @@ const hooks = registerHooks({
   },
 });
 
-const xero_oauth_callbackUrl = './route.ts?xero-oauth-callback'
-const { GET } = (await import(xero_oauth_callbackUrl)) as typeof import('./route.ts');
-const xero_oauth_callback_flowUrl = '../../_flow.ts?xero-oauth-callback-flow'
-const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(xero_oauth_callback_flowUrl)) as typeof import('../../_flow.ts');
-test.after(() => hooks.deregister())
-
+const xero_oauth_callbackUrl = "./route.ts?xero-oauth-callback";
+const { GET } = (await import(xero_oauth_callbackUrl)) as typeof import("./route.ts");
+const xero_oauth_callback_flowUrl = "../../_flow.ts?xero-oauth-callback-flow";
+const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(
+  xero_oauth_callback_flowUrl
+)) as typeof import("../../_flow.ts");
+test.after(() => hooks.deregister());
 
 function reset(): void {
   state.tenants = [
@@ -165,7 +166,10 @@ async function callback(init: { state: string; cookie?: string | null }): Promis
   const url = new URL("https://evil.example/api/platform/connections/oauth/xero/callback");
   url.searchParams.set("code", "auth-code");
   url.searchParams.set("state", init.state);
-  const headers: Record<string, string> = { host: "evil.example", "x-forwarded-host": "evil.example" };
+  const headers: Record<string, string> = {
+    host: "evil.example",
+    "x-forwarded-host": "evil.example",
+  };
   if (init.cookie) headers.cookie = `${CONNECTION_OAUTH_COOKIE}=${init.cookie}`;
   return GET(new Request(url, { headers }));
 }
@@ -173,16 +177,22 @@ async function callback(init: { state: string; cookie?: string | null }): Promis
 test("Xero callback bounce and redirect_uri use appBaseUrl, not the request Host", async () => {
   reset();
   const res = await GET(
-    new Request("https://evil.example/api/platform/connections/oauth/xero/callback?error=access_denied", {
-      headers: { host: "evil.example" },
-    }),
+    new Request(
+      "https://evil.example/api/platform/connections/oauth/xero/callback?error=access_denied",
+      {
+        headers: { host: "evil.example" },
+      },
+    ),
   );
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=denied");
 });
 
 test("a reusable sealed org/connection pair without the cookie nonce is badstate", async () => {
   reset();
-  const reusable = sealJson({ orgId: "org-1", connectionId: "conn-1" }, { orgId: "system", purpose: "connection.oauth.state" });
+  const reusable = sealJson(
+    { orgId: "org-1", connectionId: "conn-1" },
+    { orgId: "system", purpose: "connection.oauth.state" },
+  );
   const res = await callback({ state: reusable, cookie: "unrelated-nonce" });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=badstate");
   assert.equal(state.updated, null);
@@ -200,12 +210,19 @@ test("a matching cookie is required; replay after the cookie is cleared is badst
 
 test("Xero callback rechecks setup authority after the provider round-trip", async () => {
   reset();
-  state.connection = { ...state.connection, config: { tenantId: "stored-tenant" }, status: "revoked" };
+  state.connection = {
+    ...state.connection,
+    config: { tenantId: "stored-tenant" },
+    status: "revoked",
+  };
   const { state: sealed, nonce } = mintConnectionOauthState("org-1", "conn-1");
 
   const response = await callback({ state: sealed, cookie: nonce });
 
-  assert.deepEqual([response.headers.get("location"), state.updated], ["https://books.example/sync?oauth=error", null]);
+  assert.deepEqual(
+    [response.headers.get("location"), state.updated],
+    ["https://books.example/sync?oauth=error", null],
+  );
 });
 
 test("Xero callback refuses an ambiguous first-tenant bind by name", async () => {
@@ -222,7 +239,10 @@ test("Xero callback pins a prior stored tenantId instead of tenants[0]", async (
   const { state: sealed, nonce } = mintConnectionOauthState("org-1", "conn-1");
   const res = await callback({ state: sealed, cookie: nonce });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=connected");
-  assert.equal((state.updated?.config as { tenantId?: string } | undefined)?.tenantId, "stored-tenant");
+  assert.equal(
+    (state.updated?.config as { tenantId?: string } | undefined)?.tenantId,
+    "stored-tenant",
+  );
 });
 
 test("a Postgres 22P02 connection id in state is notfound, not an unhandled 500", async () => {

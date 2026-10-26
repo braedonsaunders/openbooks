@@ -4,7 +4,12 @@ import { sql } from "drizzle-orm";
 import { withTransactionSavepoint } from "../platform/db.ts";
 import { add, cmp, fromUnits, neg, roundDiv, toUnits } from "../money/money.ts";
 import { extendCost } from "./costing.ts";
-import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  uuidArray,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertInventoryFeature } from "./profile-policy.ts";
@@ -43,42 +48,57 @@ export async function revalueOpenLayersToStandardCost(
   // Keep layer repricing and every balancing journal one indivisible operation.
   return withTransactionSavepoint(tx, async () => {
     await assertInventoryFeature(tx, orgId);
-    await tx.execute(sql`select set_config('openbooks.inventory_original_cost_writer','basis-v1',true)`);
+    await tx.execute(
+      sql`select set_config('openbooks.inventory_original_cost_writer','basis-v1',true)`,
+    );
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     if (p.standardCost == null) {
       throw new InventoryError(
         "a standard cost must be configured before switching this item to standard costing",
       );
     }
-    const layers = (await tx.execute<{
-        id: string;
-        subsidiary_id: string;
-        stock_location_id: string;
-        remaining_quantity: string;
-        unit_cost: string;
-        remaining_original_cost: string | null;
-        evidence: string;
-      }>(sql`
+    const layers = await tx.execute<{
+      id: string;
+      subsidiary_id: string;
+      stock_location_id: string;
+      remaining_quantity: string;
+      unit_cost: string;
+      remaining_original_cost: string | null;
+      evidence: string;
+    }>(
+      sql`
       select id, subsidiary_id, stock_location_id, remaining_quantity, unit_cost, remaining_original_cost,
              to_jsonb(cost_layers)::text as evidence
         from cost_layers
        where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
        order by received_at, id
-       for update`, "objects"));
+       for update`,
+      "objects",
+    );
     const allowedSubsidiaryIds = p.allowedSubsidiaryIds;
-    if (allowedSubsidiaryIds != null && layers.some(layer => !allowedSubsidiaryIds.has(layer.subsidiary_id))) {
+    if (
+      allowedSubsidiaryIds != null &&
+      layers.some((layer) => !allowedSubsidiaryIds.has(layer.subsidiary_id))
+    ) {
       throw new InventoryError("revaluation requires access to every subsidiary holding this item");
     }
     // Measure per owner AND stock location while rewriting every layer onto
     // standard cost: each position revalues into its own location-stamped
     // journal below, so location-sliced statements keep tying to the layers.
-    const deltasByOwner = new Map<string, { subsidiaryId: string; stockLocationId: string; delta: bigint }>();
+    const deltasByOwner = new Map<
+      string,
+      { subsidiaryId: string; stockLocationId: string; delta: bigint }
+    >();
     for (const layer of layers) {
       const delta =
         toUnits(extendCost(layer.remaining_quantity, p.standardCost)) -
         toUnits(extendCost(layer.remaining_quantity, layer.unit_cost));
       const key = `${layer.subsidiary_id} ${layer.stock_location_id}`;
-      const slot = deltasByOwner.get(key) ?? { subsidiaryId: layer.subsidiary_id, stockLocationId: layer.stock_location_id, delta: 0n };
+      const slot = deltasByOwner.get(key) ?? {
+        subsidiaryId: layer.subsidiary_id,
+        stockLocationId: layer.stock_location_id,
+        delta: 0n,
+      };
       slot.delta += delta;
       deltasByOwner.set(key, slot);
     }
@@ -89,15 +109,25 @@ export async function revalueOpenLayersToStandardCost(
       for (const layer of layers) {
         // A revised policy replaces known original basis (including an old
         // NRV allowance), but never invents provenance for a legacy layer.
-        const basis = layer.remaining_original_cost == null
-          ? null : extendCost(layer.remaining_quantity, standardCost);
-        if (cmp(layer.unit_cost, standardCost) === 0 &&
-          (basis == null || cmp(basis, layer.remaining_original_cost!) === 0)) continue;
-        const after = (await tx.execute<{ evidence: string }>(sql`update cost_layers
+        const basis =
+          layer.remaining_original_cost == null
+            ? null
+            : extendCost(layer.remaining_quantity, standardCost);
+        if (
+          cmp(layer.unit_cost, standardCost) === 0 &&
+          (basis == null || cmp(basis, layer.remaining_original_cost!) === 0)
+        )
+          continue;
+        const after = (
+          await tx.execute<{ evidence: string }>(
+            sql`update cost_layers
           set unit_cost=${standardCost}, remaining_original_cost=${basis},
               updated_at=now(), updated_by=${actorId}
           where org_id=${orgId} and id=${layer.id}
-          returning to_jsonb(cost_layers)::text as evidence`, "objects"))[0]!;
+          returning to_jsonb(cost_layers)::text as evidence`,
+            "objects",
+          )
+        )[0]!;
         // JSON stays text between database calls so financial numbers never
         // round through JavaScript's JSON-number representation.
         // A rate change is material even when owner deltas cancel or original
@@ -125,7 +155,11 @@ export async function revalueOpenLayersToStandardCost(
         "revaluing open layers to standard cost requires a variance account to book the revaluation on — configure one for this item before switching it to (or revising) standard costing",
       );
     }
-    const accountProblem = inventoryOffsetAccountProblem(p.assetAccountId, p.varianceAccountId, "variance");
+    const accountProblem = inventoryOffsetAccountProblem(
+      p.assetAccountId,
+      p.varianceAccountId,
+      "variance",
+    );
     if (accountProblem) throw new InventoryError(accountProblem);
     const ctx = await loadSubsidiaryContext(tx, orgId);
     const accountIds = [p.assetAccountId, p.varianceAccountId];
@@ -134,8 +168,14 @@ export async function revalueOpenLayersToStandardCost(
     for (const slot of changed) {
       try {
         await validateSubsidiaryRestrictions(tx, {
-          orgId, ctx, docSubsidiaryId: slot.subsidiaryId,
-          lines: accountIds.map((accountId) => ({ accountId, subsidiaryId: slot.subsidiaryId, amount: "0" })),
+          orgId,
+          ctx,
+          docSubsidiaryId: slot.subsidiaryId,
+          lines: accountIds.map((accountId) => ({
+            accountId,
+            subsidiaryId: slot.subsidiaryId,
+            amount: "0",
+          })),
         });
       } catch (error) {
         if (error instanceof SubsidiaryError) throw new InventoryError(error.message);
@@ -157,26 +197,28 @@ export async function revalueOpenLayersToStandardCost(
         locationId = await stockLocationDim(tx, orgId, slot.stockLocationId, null);
         locationDims.set(slot.stockLocationId, locationId);
       }
-      entryIds.push(await postInventoryEntry(tx, {
-        orgId,
-        bookId,
-        subsidiaryId: slot.subsidiaryId,
-        actorId,
-        currency,
-        periodId,
-        date,
-        entryNumber: `INV-RCST-${date}-${itemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
-        memo,
-        lines: [
-          { accountId: p.assetAccountId, amount: fromUnits(slot.delta), locationId, memo },
-          {
-            accountId: p.varianceAccountId,
-            amount: fromUnits(-slot.delta),
-            locationId,
-            memo,
-          },
-        ],
-      }));
+      entryIds.push(
+        await postInventoryEntry(tx, {
+          orgId,
+          bookId,
+          subsidiaryId: slot.subsidiaryId,
+          actorId,
+          currency,
+          periodId,
+          date,
+          entryNumber: `INV-RCST-${date}-${itemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+          memo,
+          lines: [
+            { accountId: p.assetAccountId, amount: fromUnits(slot.delta), locationId, memo },
+            {
+              accountId: p.varianceAccountId,
+              amount: fromUnits(-slot.delta),
+              locationId,
+              memo,
+            },
+          ],
+        }),
+      );
     }
     return entryIds;
   });
@@ -223,14 +265,12 @@ export async function revalueLayerExactly(
   if (quantityUnits <= 0n) {
     throw new InventoryError("cannot revalue an empty inventory layer");
   }
-  const valueAt = (quantity: bigint, rate: bigint) =>
-    roundDiv(quantity * rate, scale);
+  const valueAt = (quantity: bigint, rate: bigint) => roundDiv(quantity * rate, scale);
 
   const targetValue = valueAt(quantityUnits, oldRateUnits) + shareUnits;
   const findExactRate = (): bigint | null => {
     let low = oldRateUnits;
-    let high =
-      (targetValue * scale + quantityUnits - 1n) / quantityUnits + 2n;
+    let high = (targetValue * scale + quantityUnits - 1n) / quantityUnits + 2n;
     if (high < low) high = low;
     while (valueAt(quantityUnits, high) < targetValue) {
       high = high * 2n + 1n;
@@ -262,25 +302,28 @@ export async function revalueLayerExactly(
   const roundingQuantityUnits = scale; // exactly one base unit
   const mainQuantityUnits = quantityUnits - roundingQuantityUnits;
   const mainOldValue = valueAt(mainQuantityUnits, oldRateUnits);
-  let mainRateUnits =
-    oldRateUnits + (shareUnits * scale) / quantityUnits;
-  let mainDelta =
-    valueAt(mainQuantityUnits, mainRateUnits) - mainOldValue;
+  let mainRateUnits = oldRateUnits + (shareUnits * scale) / quantityUnits;
+  let mainDelta = valueAt(mainQuantityUnits, mainRateUnits) - mainOldValue;
   while (mainDelta > shareUnits && mainRateUnits > oldRateUnits) {
     mainRateUnits -= 1n;
     mainDelta = valueAt(mainQuantityUnits, mainRateUnits) - mainOldValue;
   }
   if (mainDelta < 0n || mainDelta > shareUnits) {
-    throw new InventoryError(
-      "landed-cost allocation produced an invalid layer delta",
-    );
+    throw new InventoryError("landed-cost allocation produced an invalid layer delta");
   }
   const roundingDelta = shareUnits - mainDelta;
   const roundingRateUnits = oldRateUnits + roundingDelta;
   const splitLayerId = randomUUID();
-  const splitBasis = consumeOriginalCost(layer.remaining_original_cost, "1", layer.remaining_quantity, { layerId: layer.id });
-  const mainBasis = layer.remaining_original_cost == null || splitBasis == null ? null
-    : add(add(layer.remaining_original_cost, neg(splitBasis)), fromUnits(mainDelta));
+  const splitBasis = consumeOriginalCost(
+    layer.remaining_original_cost,
+    "1",
+    layer.remaining_quantity,
+    { layerId: layer.id },
+  );
+  const mainBasis =
+    layer.remaining_original_cost == null || splitBasis == null
+      ? null
+      : add(add(layer.remaining_original_cost, neg(splitBasis)), fromUnits(mainDelta));
   const roundingBasis = splitBasis == null ? null : add(splitBasis, fromUnits(roundingDelta));
 
   await tx.execute(sql`
@@ -331,22 +374,14 @@ export async function devalueLayerExactly(
   const scale = 10_000n;
   const quantityUnits = toUnits(layer.remaining_quantity);
   const currentRateUnits = toUnits(layer.unit_cost);
-  if (
-    quantityUnits <= 0n ||
-    cmp(layer.remaining_quantity, layer.original_quantity) !== 0
-  ) {
-    throw new InventoryError(
-      "landed cost cannot be reversed after its layer has been consumed",
-    );
+  if (quantityUnits <= 0n || cmp(layer.remaining_quantity, layer.original_quantity) !== 0) {
+    throw new InventoryError("landed cost cannot be reversed after its layer has been consumed");
   }
-  const valueAt = (quantity: bigint, rate: bigint) =>
-    roundDiv(quantity * rate, scale);
+  const valueAt = (quantity: bigint, rate: bigint) => roundDiv(quantity * rate, scale);
   const currentValue = valueAt(quantityUnits, currentRateUnits);
   const targetValue = currentValue - amountUnits;
   if (targetValue < 0n) {
-    throw new InventoryError(
-      "landed-cost reversal would make the layer value negative",
-    );
+    throw new InventoryError("landed-cost reversal would make the layer value negative");
   }
   let low = 0n;
   let high = currentRateUnits;

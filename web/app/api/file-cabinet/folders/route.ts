@@ -2,11 +2,7 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  getFolder,
-  getFolderTree,
-  createFolder,
-} from "../../../../lib/file-cabinet";
+import { getFolder, getFolderTree, createFolder } from "../../../../lib/file-cabinet";
 import { isUuid } from "../../../../lib/list-params";
 import { can } from "../../../../lib/authz";
 import { fileViewer, requireFolderAccess } from "../lib";
@@ -40,10 +36,7 @@ export const POST = defineRoute({
     const parentId = body.parentId ?? null;
     if (parentId !== null) {
       if (!isUuid(parentId) || !(await getFolder(gate.user.orgId, parentId))) {
-        return NextResponse.json(
-          { error: "parent folder not found" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "parent folder not found" }, { status: 400 });
       }
       // Creating a sub-folder needs Editor+ on the parent.
       const access = await requireFolderAccess(gate, parentId, "editor");

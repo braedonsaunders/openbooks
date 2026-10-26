@@ -55,13 +55,14 @@ const { POST } = (await import(postUrl)) as typeof import("./route.ts");
 const { PATCH, DELETE } = (await import(idUrl)) as typeof import("./[id]/route.ts");
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Template Admin", "admin"));
+  const actorId = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Template Admin", "admin"),
+  );
   routeState.authz = {
     user: { orgId: org.orgId, id: actorId },
     permissions: new Set(["*"]),
@@ -71,125 +72,125 @@ async function seed(): Promise<{ orgId: string; actorId: string }> {
 }
 
 async function auditEvents(orgId: string, rowId: string) {
-  return await withBypassContext(() => db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
+  return await withBypassContext(() =>
+    db.execute<{ action: string; changes: unknown; actor_id: string }>(
+      sql`
     select action, changes, actor_id from audit_log
      where org_id = ${orgId} and table_name = 'pdf_templates' and row_id = ${rowId}
      order by at, id
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
 }
 
-test(
-  "POST writes the created design as insert {after} evidence",
-  async () => {
-    const f = await seed();
-    try {
-      const res = await withOrgContext(f.orgId, () =>
-        POST(
-          new Request("http://localhost/api/pdf-templates", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ recordType: "customer_invoice", name: "Audited Create" }),
-          }),
-        ),
-      );
-      assert.equal(res.status, 200, await res.clone().text());
-      const created = (await res.json()) as { id: string };
-
-      const events = await auditEvents(f.orgId, created.id);
-      assert.equal(events.length, 1, "one insert event per created template");
-      assert.equal(events[0]!.action, "insert");
-      assert.equal(events[0]!.actor_id, f.actorId);
-      const changes = events[0]!.changes as { after: { name: string; record_type: string; source_html: string } };
-      assert.equal(changes.after.name, "Audited Create");
-      assert.equal(changes.after.record_type, "customer_invoice");
-      assert.ok(changes.after.source_html.length > 0, "the after-image carries the design, not just its name");
-    } finally {
-      await withBypassContext(() => dropScratchOrg(f.orgId));
-    }
-  },
-);
-
-test(
-  "PATCH writes {before, after} showing what the save changed",
-  async () => {
-    const f = await seed();
-    try {
-      const created = await withOrgContext(f.orgId, () =>
-        POST(
-          new Request("http://localhost/api/pdf-templates", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ recordType: "customer_invoice", name: "Before Name" }),
-          }),
-        ).then(async (res) => {
-          assert.equal(res.status, 200, await res.clone().text());
-          return ((await res.json()) as { id: string }).id;
+test("POST writes the created design as insert {after} evidence", async () => {
+  const f = await seed();
+  try {
+    const res = await withOrgContext(f.orgId, () =>
+      POST(
+        new Request("http://localhost/api/pdf-templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordType: "customer_invoice", name: "Audited Create" }),
         }),
-      );
-      const patched = await withOrgContext(f.orgId, () =>
-        PATCH(
-          new Request(`http://localhost/api/pdf-templates/${created}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: "After Name" }),
-          }),
-          { params: Promise.resolve({ id: created }) },
-        ),
-      );
-      assert.equal(patched.status, 200, await patched.clone().text());
+      ),
+    );
+    assert.equal(res.status, 200, await res.clone().text());
+    const created = (await res.json()) as { id: string };
 
-      const events = await auditEvents(f.orgId, created);
-      assert.equal(events.length, 2, "insert plus one update event");
-      const update = events[1]!;
-      assert.equal(update.action, "update");
-      assert.equal(update.actor_id, f.actorId);
-      const changes = update.changes as { before: { name: string }; after: { name: string } };
-      assert.equal(changes.before.name, "Before Name");
-      assert.equal(changes.after.name, "After Name");
-    } finally {
-      await withBypassContext(() => dropScratchOrg(f.orgId));
-    }
-  },
-);
+    const events = await auditEvents(f.orgId, created.id);
+    assert.equal(events.length, 1, "one insert event per created template");
+    assert.equal(events[0]!.action, "insert");
+    assert.equal(events[0]!.actor_id, f.actorId);
+    const changes = events[0]!.changes as {
+      after: { name: string; record_type: string; source_html: string };
+    };
+    assert.equal(changes.after.name, "Audited Create");
+    assert.equal(changes.after.record_type, "customer_invoice");
+    assert.ok(
+      changes.after.source_html.length > 0,
+      "the after-image carries the design, not just its name",
+    );
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.orgId));
+  }
+});
 
-test(
-  "DELETE writes the removed design as delete {before} evidence",
-  async () => {
-    const f = await seed();
-    try {
-      const created = await withOrgContext(f.orgId, () =>
-        POST(
-          new Request("http://localhost/api/pdf-templates", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ recordType: "customer_invoice", name: "Doomed Design" }),
-          }),
-        ).then(async (res) => {
-          assert.equal(res.status, 200, await res.clone().text());
-          return ((await res.json()) as { id: string }).id;
+test("PATCH writes {before, after} showing what the save changed", async () => {
+  const f = await seed();
+  try {
+    const created = await withOrgContext(f.orgId, () =>
+      POST(
+        new Request("http://localhost/api/pdf-templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordType: "customer_invoice", name: "Before Name" }),
         }),
-      );
-      const deleted = await withOrgContext(f.orgId, () =>
-        DELETE(
-          new Request(`http://localhost/api/pdf-templates/${created}`, { method: "DELETE" }),
-          { params: Promise.resolve({ id: created }) },
-        ),
-      );
-      assert.equal(deleted.status, 200, await deleted.clone().text());
+      ).then(async (res) => {
+        assert.equal(res.status, 200, await res.clone().text());
+        return ((await res.json()) as { id: string }).id;
+      }),
+    );
+    const patched = await withOrgContext(f.orgId, () =>
+      PATCH(
+        new Request(`http://localhost/api/pdf-templates/${created}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "After Name" }),
+        }),
+        { params: Promise.resolve({ id: created }) },
+      ),
+    );
+    assert.equal(patched.status, 200, await patched.clone().text());
 
-      const events = await auditEvents(f.orgId, created);
-      assert.equal(events.length, 2, "insert plus one delete event");
-      const removal = events[1]!;
-      assert.equal(removal.action, "delete");
-      assert.equal(removal.actor_id, f.actorId);
-      const changes = removal.changes as { before: { name: string; record_type: string } };
-      assert.equal(changes.before.name, "Doomed Design");
-      assert.equal(changes.before.record_type, "customer_invoice");
-    } finally {
-      await withBypassContext(() => dropScratchOrg(f.orgId));
-    }
-  },
-);
+    const events = await auditEvents(f.orgId, created);
+    assert.equal(events.length, 2, "insert plus one update event");
+    const update = events[1]!;
+    assert.equal(update.action, "update");
+    assert.equal(update.actor_id, f.actorId);
+    const changes = update.changes as { before: { name: string }; after: { name: string } };
+    assert.equal(changes.before.name, "Before Name");
+    assert.equal(changes.after.name, "After Name");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.orgId));
+  }
+});
+
+test("DELETE writes the removed design as delete {before} evidence", async () => {
+  const f = await seed();
+  try {
+    const created = await withOrgContext(f.orgId, () =>
+      POST(
+        new Request("http://localhost/api/pdf-templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recordType: "customer_invoice", name: "Doomed Design" }),
+        }),
+      ).then(async (res) => {
+        assert.equal(res.status, 200, await res.clone().text());
+        return ((await res.json()) as { id: string }).id;
+      }),
+    );
+    const deleted = await withOrgContext(f.orgId, () =>
+      DELETE(new Request(`http://localhost/api/pdf-templates/${created}`, { method: "DELETE" }), {
+        params: Promise.resolve({ id: created }),
+      }),
+    );
+    assert.equal(deleted.status, 200, await deleted.clone().text());
+
+    const events = await auditEvents(f.orgId, created);
+    assert.equal(events.length, 2, "insert plus one delete event");
+    const removal = events[1]!;
+    assert.equal(removal.action, "delete");
+    assert.equal(removal.actor_id, f.actorId);
+    const changes = removal.changes as { before: { name: string; record_type: string } };
+    assert.equal(changes.before.name, "Doomed Design");
+    assert.equal(changes.before.record_type, "customer_invoice");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.orgId));
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 // The factory's lazy session-gate import runs on every request, so the hook

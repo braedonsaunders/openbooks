@@ -1,6 +1,6 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 
 /**
  * File Cabinet activity logging — writes to the shared immutable `audit_log`.
@@ -11,25 +11,26 @@ import { db } from '@openbooks/engine/platform/db'
  * Pass `executor` (a transaction) so evidence commits or rolls back atomically
  * with the mutation it describes; without one it writes on the pooled db.
  */
-export { recordFileEvent, type FileEvent } from '@openbooks/engine/platform/file-audit'
+export { recordFileEvent, type FileEvent } from "@openbooks/engine/platform/file-audit";
 
 export type FileActivityEntry = {
-  id: string
-  event: string
-  actorId: string | null
-  actorName: string | null
-  at: string
-  changes: Record<string, unknown>
+  id: string;
+  event: string;
+  actorId: string | null;
+  actorName: string | null;
+  at: string;
+  changes: Record<string, unknown>;
 };
 
 /** Activity history for a file or folder, newest first. */
 export async function listFileActivity(
   orgId: string,
-  table: 'folders' | 'files',
+  table: "folders" | "files",
   rowId: string,
   limit = 50,
 ): Promise<FileActivityEntry[]> {
-  const r = (await db.execute<FileActivityEntry>(sql`
+  const r = await db.execute<FileActivityEntry>(
+    sql`
     select a.id, coalesce(a.changes->>'event', a.action) as event,
            a.actor_id as "actorId", coalesce(u.name, u.email) as "actorName",
            a.at, a.changes
@@ -38,6 +39,8 @@ export async function listFileActivity(
      where a.org_id = ${orgId} and a.table_name = ${table} and a.row_id = ${rowId}
      order by a.at desc
      limit ${limit}
-  `, 'objects'))
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }

@@ -45,8 +45,20 @@ import {
  */
 
 const FOURTEEN = [
-  "CA", "US", "GB", "DE", "FR", "IE",
-  "AU", "IT", "NL", "ES", "SG", "JP", "PL", "BR",
+  "CA",
+  "US",
+  "GB",
+  "DE",
+  "FR",
+  "IE",
+  "AU",
+  "IT",
+  "NL",
+  "ES",
+  "SG",
+  "JP",
+  "PL",
+  "BR",
 ];
 
 interface ConsumedRead {
@@ -59,14 +71,14 @@ function consumedInSourceText(sourceText: string): ConsumedRead[] {
   const found: ConsumedRead[] = [];
   const source = ts.createSourceFile("pack-scan.ts", sourceText, ts.ScriptTarget.Latest, true);
   const onEmployeeRecord = (target: ts.Expression): boolean =>
-    (ts.isIdentifier(target) && target.text === "emp")
-    || (ts.isPropertyAccessExpression(target) && target.name.text === "emp");
+    (ts.isIdentifier(target) && target.text === "emp") ||
+    (ts.isPropertyAccessExpression(target) && target.name.text === "emp");
   const visit = (node: ts.Node): void => {
     if (ts.isElementAccessExpression(node)) {
       const arg = node.argumentExpression;
       if (
-        onEmployeeRecord(node.expression)
-        && (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg))
+        onEmployeeRecord(node.expression) &&
+        (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg))
       ) {
         found.push({ key: arg.text, countryArg: null });
       }
@@ -76,15 +88,17 @@ function consumedInSourceText(sourceText: string): ConsumedRead[] {
       }
     } else if (ts.isCallExpression(node)) {
       if (
-        ts.isIdentifier(node.expression)
-        && node.expression.text === "empFact"
-        && node.arguments.length === 3
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "empFact" &&
+        node.arguments.length === 3
       ) {
         const countryNode = node.arguments[0];
         const keyNode = node.arguments[2];
         if (
-          countryNode !== undefined && keyNode !== undefined
-          && ts.isStringLiteral(countryNode) && ts.isStringLiteral(keyNode)
+          countryNode !== undefined &&
+          keyNode !== undefined &&
+          ts.isStringLiteral(countryNode) &&
+          ts.isStringLiteral(keyNode)
         ) {
           found.push({ key: keyNode.text, countryArg: countryNode.text });
         }
@@ -98,8 +112,20 @@ function consumedInSourceText(sourceText: string): ConsumedRead[] {
 
 /** Registry country → pack directory (Canada's is `canada/`, not `ca/`). */
 const PACK_DIRS: Record<string, string> = {
-  CA: "canada", US: "us", GB: "gb", DE: "de", FR: "fr", IE: "ie",
-  AU: "au", IT: "it", NL: "nl", ES: "es", SG: "sg", JP: "jp", PL: "pl", BR: "br",
+  CA: "canada",
+  US: "us",
+  GB: "gb",
+  DE: "de",
+  FR: "fr",
+  IE: "ie",
+  AU: "au",
+  IT: "it",
+  NL: "nl",
+  ES: "es",
+  SG: "sg",
+  JP: "jp",
+  PL: "pl",
+  BR: "br",
 };
 
 /** Every employee-record read in one pack's non-test sources. */
@@ -132,10 +158,18 @@ test("every pack with reads has its facts module registered", () => {
     assert.ok(isEmployeeFactsRegistered(country), `${country} facts are registered`);
   }
   assert.ok(isEmployeeFactsRegistered("GB"), "GB facts are registered");
-  assert.deepEqual(employeeFactsFor("GB").map((fact) => fact.key), [
-    "gb_student_loan_plan", "gb_postgraduate_loan", "gb_nic_category_letter",
-    "gb_ae_age_band", "gb_ae_membership_status", "gb_ae_scheme_basis", "gb_ae_deduction_method",
-  ]);
+  assert.deepEqual(
+    employeeFactsFor("GB").map((fact) => fact.key),
+    [
+      "gb_student_loan_plan",
+      "gb_postgraduate_loan",
+      "gb_nic_category_letter",
+      "gb_ae_age_band",
+      "gb_ae_membership_status",
+      "gb_ae_scheme_basis",
+      "gb_ae_deduction_method",
+    ],
+  );
 });
 
 for (const country of FOURTEEN) {
@@ -145,12 +179,14 @@ for (const country of FOURTEEN) {
     // country literal on every empFact call is the pack's own.
     for (const read of consumed.reads) {
       assert.equal(
-        read.countryArg ?? country, country,
+        read.countryArg ?? country,
+        country,
         `${country} reads "${read.key}" under country ${read.countryArg ?? "(raw)"}`,
       );
     }
     assert.deepEqual(
-      consumed.keys, declaredKeys(country),
+      consumed.keys,
+      declaredKeys(country),
       `${country}: consumed ${JSON.stringify(consumed.keys)} vs declared ${JSON.stringify(declaredKeys(country))}`,
     );
   });
@@ -176,8 +212,20 @@ test("payable is derived: all fourteen packs payable once every required fact ha
   // declares a required fact with no producer, this flips back to false
   // for it — that is the derivation working, not this test rotting.
   const expectedPayable: Record<string, boolean> = {
-    CA: true, US: true, GB: true, DE: true, FR: true, IE: true,
-    AU: true, IT: true, NL: true, ES: true, SG: true, JP: true, PL: true, BR: true,
+    CA: true,
+    US: true,
+    GB: true,
+    DE: true,
+    FR: true,
+    IE: true,
+    AU: true,
+    IT: true,
+    NL: true,
+    ES: true,
+    SG: true,
+    JP: true,
+    PL: true,
+    BR: true,
   };
   const packOf = (country: string) => {
     const pack = PAYROLL_COUNTRY_PACKS[country];
@@ -197,21 +245,28 @@ test("payable is derived: all fourteen packs payable once every required fact ha
   // The derivation still names blockers by key when they exist — and still
   // ignores optional vacancies: prove both against a synthetic pack-shaped
   // declaration rather than by wishing a real pack unpayable again.
-  const syntheticProblem = packPayableProblem({
-    ...packOf("PL"),
-    employeeFacts: [
-      {
-        key: "pl_rok_urodzenia", kind: "year", label: "Birth year (rok urodzenia)",
-        refusalReason: "Fixture.", required: true,
-        producer: { kind: "none", notes: "Fixture: no producer." },
-      },
-      {
-        key: "zz_optional", kind: "flag", label: "Fixture optional",
-        refusalReason: "Fixture.", required: false,
-        producer: { kind: "none", notes: "Fixture: no producer." },
-      },
-    ],
-  }) ?? "";
+  const syntheticProblem =
+    packPayableProblem({
+      ...packOf("PL"),
+      employeeFacts: [
+        {
+          key: "pl_rok_urodzenia",
+          kind: "year",
+          label: "Birth year (rok urodzenia)",
+          refusalReason: "Fixture.",
+          required: true,
+          producer: { kind: "none", notes: "Fixture: no producer." },
+        },
+        {
+          key: "zz_optional",
+          kind: "flag",
+          label: "Fixture optional",
+          refusalReason: "Fixture.",
+          required: false,
+          producer: { kind: "none", notes: "Fixture: no producer." },
+        },
+      ],
+    }) ?? "";
   assert.match(syntheticProblem, /pl_rok_urodzenia/);
   assert.doesNotMatch(syntheticProblem, /zz_optional/);
 });
@@ -227,11 +282,16 @@ test("missingEmployeeFacts lists required-but-absent facts, never optional ones"
     ["pl_rok_urodzenia"],
   );
   assert.deepEqual(missingEmployeeFacts("PL", { pl_rok_urodzenia: "1990" }), []);
-  assert.deepEqual(missingEmployeeFacts("PL", { pl_rok_urodzenia: "" }).map((fact) => fact.key), [
-    "pl_rok_urodzenia",
-  ]);
   assert.deepEqual(
-    missingEmployeeFacts("ES", { es_situacion_laboral: "activo", es_grupo_cotizacion: "3", es_ano_nacimiento: "1990" }).map((fact) => fact.key),
+    missingEmployeeFacts("PL", { pl_rok_urodzenia: "" }).map((fact) => fact.key),
+    ["pl_rok_urodzenia"],
+  );
+  assert.deepEqual(
+    missingEmployeeFacts("ES", {
+      es_situacion_laboral: "activo",
+      es_grupo_cotizacion: "3",
+      es_ano_nacimiento: "1990",
+    }).map((fact) => fact.key),
     ["es_contrato_temporal"],
     "an absent contrato temporal is missing: the desempleo split is never defaulted",
   );
@@ -246,7 +306,11 @@ test("Brazil's prose is not a producer: one explicit non-form declaration, typed
   // the profile-column channel validates against the typed declarations and
   // a column no certificate field maps is not a producer.
   const certificates = packCertificates("BR").certificates;
-  assert.equal(certificates.length, 1, "Brazil declares exactly its cadastre facts, no invented form");
+  assert.equal(
+    certificates.length,
+    1,
+    "Brazil declares exactly its cadastre facts, no invented form",
+  );
   assert.equal(certificates[0]?.key, "br_cadastro");
   assert.equal(certificates[0]?.storage, "profile_columns");
   const producers = (PAYROLL_COUNTRY_PACKS["BR"]?.employeeFacts ?? []).map(
@@ -286,26 +350,31 @@ test("instrument: comments and prose never count as consumption", () => {
   // comments; br/tax-year-2026.ts:151 carries one inside a refusal string.
   // The same shapes must yield nothing here.
   const reads = consumedInSourceText(
-    `// emp["zz_comment_fact"]\n`
-    + `// empFact("ZZ", emp, "zz_comment_call")\n`
-    + `const label = "refused via zz_string_fact";\n`
-    + `const keys = ["zz_array_fact"];\n`
-    + `const ok = 1;\n`,
+    `// emp["zz_comment_fact"]\n` +
+      `// empFact("ZZ", emp, "zz_comment_call")\n` +
+      `const label = "refused via zz_string_fact";\n` +
+      `const keys = ["zz_array_fact"];\n` +
+      `const ok = 1;\n`,
   );
   assert.deepEqual(reads, []);
 });
 
 test("instrument: a claimed producer that resolves nowhere is refused by name", () => {
   const base: PayrollEmployeeFact = {
-    key: "zz_fact", kind: "flag", label: "Fixture", refusalReason: "Fixture.",
-    required: true, producer: { kind: "none", notes: "Fixture." },
+    key: "zz_fact",
+    kind: "flag",
+    label: "Fixture",
+    refusalReason: "Fixture.",
+    required: true,
+    producer: { kind: "none", notes: "Fixture." },
   };
   const badCertificate: PayrollEmployeeFact = {
     ...base,
     producer: { kind: "certificate", certificate: "es_145", field: "no_such_field" },
   };
   assert.match(
-    employeeFactProducerProblem("ES", badCertificate) ?? "", /no_such_field/,
+    employeeFactProducerProblem("ES", badCertificate) ?? "",
+    /no_such_field/,
     "an undeclared certificate field must be refused naming the field",
   );
   const badColumn: PayrollEmployeeFact = {
@@ -313,7 +382,8 @@ test("instrument: a claimed producer that resolves nowhere is refused by name", 
     producer: { kind: "profile_column", column: "no_such_column" },
   };
   assert.match(
-    employeeFactProducerProblem("PL", badColumn) ?? "", /no_such_column/,
+    employeeFactProducerProblem("PL", badColumn) ?? "",
+    /no_such_column/,
     "an unmapped profile column must be refused naming the column",
   );
   const badFlag: PayrollEmployeeFact = {
@@ -321,7 +391,8 @@ test("instrument: a claimed producer that resolves nowhere is refused by name", 
     producer: { kind: "exemption_flag", column: "no_such_flag" },
   };
   assert.match(
-    employeeFactProducerProblem("US", badFlag) ?? "", /no_such_flag/,
+    employeeFactProducerProblem("US", badFlag) ?? "",
+    /no_such_flag/,
     "an undeclared exemption flag must be refused naming the column",
   );
   const badBase: PayrollEmployeeFact = {
@@ -329,22 +400,17 @@ test("instrument: a claimed producer that resolves nowhere is refused by name", 
     producer: { kind: "base_column", column: "no_such_base_column" },
   };
   assert.match(
-    employeeFactProducerProblem("US", badBase) ?? "", /no_such_base_column/,
+    employeeFactProducerProblem("US", badBase) ?? "",
+    /no_such_base_column/,
     "a missing base column must be refused naming the column",
   );
 });
 
 test("instrument: reading through the declaration refuses an undeclared key", () => {
-  assert.throws(
-    () => empFact("PL", {}, "pl_undeclared_key"),
-    /without declaring it/,
-  );
+  assert.throws(() => empFact("PL", {}, "pl_undeclared_key"), /without declaring it/);
   // ...and a country with no registered declaration refuses before any key
   // is even considered — silence can never smuggle a read past it.
-  assert.throws(
-    () => empFact("ZZ", {}, "zz_anything"),
-    /no employeeFacts registered for ZZ/,
-  );
+  assert.throws(() => empFact("ZZ", {}, "zz_anything"), /no employeeFacts registered for ZZ/);
   // ...while a declared key passes the raw value through untouched.
   assert.equal(empFact("PL", { pl_rok_urodzenia: "1990" }, "pl_rok_urodzenia"), "1990");
   assert.equal(empFact("PL", {}, "pl_rok_urodzenia"), undefined);

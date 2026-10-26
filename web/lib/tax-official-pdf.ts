@@ -1,6 +1,6 @@
-import { PDFDocument, PDFName } from 'pdf-lib'
-import type { TaxReturnBox } from '@openbooks/engine/tax-returns/return'
-import { formatDecimal } from './money-format'
+import { PDFDocument, PDFName } from "pdf-lib";
+import type { TaxReturnBox } from "@openbooks/engine/tax-returns/return";
+import { formatDecimal } from "./money-format";
 
 /**
  * Fill a tenant-uploaded official government AcroForm PDF with the computed
@@ -12,66 +12,71 @@ import { formatDecimal } from './money-format'
  */
 
 export class OfficialPdfError extends Error {
-  readonly name = 'OfficialPdfError'
+  readonly name = "OfficialPdfError";
 }
 
 /** Government forms show whole-dollar/2-decimal amounts; render the box value so. */
 function fmtAmount(v: string): string {
-  const formatted = formatDecimal('en', v, {
+  const formatted = formatDecimal("en", v, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
-  return formatted.includes('∞') ? v : formatted
+  });
+  return formatted.includes("∞") ? v : formatted;
 }
 
 export interface FillResult {
-  bytes: Uint8Array
-  filled: number
-  unmatched: string[]
+  bytes: Uint8Array;
+  filled: number;
+  unmatched: string[];
 }
 
-export async function fillOfficialTaxPdf(pdfBytes: Uint8Array, boxes: TaxReturnBox[]): Promise<FillResult> {
-  let doc: PDFDocument
+export async function fillOfficialTaxPdf(
+  pdfBytes: Uint8Array,
+  boxes: TaxReturnBox[],
+): Promise<FillResult> {
+  let doc: PDFDocument;
   try {
-    doc = await PDFDocument.load(pdfBytes)
+    doc = await PDFDocument.load(pdfBytes);
   } catch (e) {
-    throw new OfficialPdfError(`could not read the uploaded PDF: ${e instanceof Error ? e.message : String(e)}`)
+    throw new OfficialPdfError(
+      `could not read the uploaded PDF: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
-  const form = doc.getForm()
+  const form = doc.getForm();
   // Static/hybrid XFA: disconnect it so readers fall back to the AcroForm we fill.
   try {
-    if (form.acroForm.dict.has(PDFName.of('XFA'))) form.deleteXFA()
+    if (form.acroForm.dict.has(PDFName.of("XFA"))) form.deleteXFA();
   } catch {
     /* no XFA / not accessible — proceed */
   }
 
-  const fields = form.getFields()
+  const fields = form.getFields();
   if (fields.length === 0) {
     throw new OfficialPdfError(
-      'this PDF has no fillable form fields — it may be a dynamic XFA/LiveCycle form, which cannot be filled. Use the facsimile instead.',
-    )
+      "this PDF has no fillable form fields — it may be a dynamic XFA/LiveCycle form, which cannot be filled. Use the facsimile instead.",
+    );
   }
-  const fieldNames = new Set(fields.map((f) => f.getName()))
+  const fieldNames = new Set(fields.map((f) => f.getName()));
 
-  let filled = 0
-  const unmatched: string[] = []
+  let filled = 0;
+  const unmatched: string[] = [];
   for (const box of boxes) {
-    if (!box.pdfField) continue
+    if (!box.pdfField) continue;
     if (!fieldNames.has(box.pdfField)) {
-      unmatched.push(box.pdfField)
-      continue
+      unmatched.push(box.pdfField);
+      continue;
     }
     try {
-      form.getTextField(box.pdfField).setText(fmtAmount(box.value))
-      filled++
+      form.getTextField(box.pdfField).setText(fmtAmount(box.value));
+      filled++;
     } catch {
       // Not a text field (checkbox/radio/dropdown) — unsupported for v1; skip.
-      unmatched.push(box.pdfField)
+      unmatched.push(box.pdfField);
     }
   }
 
   // Bake values into the page content so every reader/printer renders identically.
-  form.flatten()
-  const bytes = await doc.save()
-  return { bytes, filled, unmatched }
+  form.flatten();
+  const bytes = await doc.save();
+  return { bytes, filled, unmatched };
 }

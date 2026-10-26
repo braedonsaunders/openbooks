@@ -1,24 +1,31 @@
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { sql } from 'drizzle-orm';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/database'
-import { recordSupplyEvidence } from '@openbooks/engine/tax'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { sql } from "drizzle-orm";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/database";
+import { recordSupplyEvidence } from "@openbooks/engine/tax";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const EvidenceSchema = z.object({
-  kind: z.enum(['billing_address', 'ip_country', 'card_bin_country', 'bank_country', 'sim_country', 'ship_to']),
+  kind: z.enum([
+    "billing_address",
+    "ip_country",
+    "card_bin_country",
+    "bank_country",
+    "sim_country",
+    "ship_to",
+  ]),
   country: z.string().min(2).max(2),
   source: z.string().min(1).max(40),
 });
 
 const PUTBodySchema = z.object({
   election: z.object({
-    supplyKind: z.enum(['digital_service', 'goods']),
-    customerKind: z.enum(['consumer', 'business']),
+    supplyKind: z.enum(["digital_service", "goods"]),
+    customerKind: z.enum(["consumer", "business"]),
     // A credit memo names the posted invoice it corrects (null clears it);
     // absent leaves the relationship untouched.
     correctsDocumentId: uuidString().nullable().optional(),
@@ -27,11 +34,11 @@ const PUTBodySchema = z.object({
 });
 
 type EvidenceRow = {
-  kind: string
-  countryCode: string
-  source: string
-  observedOn: string | null
-}
+  kind: string;
+  countryCode: string;
+  source: string;
+  observedOn: string | null;
+};
 
 /**
  * Place-of-supply evidence on a draft sales document: read the collected
@@ -40,21 +47,32 @@ type EvidenceRow = {
  * BINs. Posted documents refuse through the evidence guard.
  */
 export const GET = defineRoute({
-  permission: 'ar.read',
-  feature: 'crossBorderTax',
+  permission: "ar.read",
+  feature: "crossBorderTax",
   params: z.object({ id: uuidString() }),
   handler: async ({ authz: routeAuthz, params }) => {
     const gate = routeAuthz;
     try {
-      const doc = (await db.execute<{ custom: { crossBorder?: unknown; crossBorderSupply?: unknown } | null }>(sql`
-        select custom from documents where org_id = ${gate.user.orgId} and id = ${params.id}`, 'objects'))[0]
-      if (!doc) return NextResponse.json({ error: 'document not found' }, { status: 404 })
-      const rows = await db.execute<EvidenceRow>(sql`
+      const doc = (
+        await db.execute<{ custom: { crossBorder?: unknown; crossBorderSupply?: unknown } | null }>(
+          sql`
+        select custom from documents where org_id = ${gate.user.orgId} and id = ${params.id}`,
+          "objects",
+        )
+      )[0];
+      if (!doc) return NextResponse.json({ error: "document not found" }, { status: 404 });
+      const rows = await db.execute<EvidenceRow>(
+        sql`
         select kind, country_code as "countryCode", source, observed_on::text as "observedOn"
           from document_supply_evidence
          where org_id = ${gate.user.orgId} and document_id = ${params.id}
-         order by kind, source`, 'objects')
-      const corrected = (await db.execute<{ id: string; number: string }>(sql`
+         order by kind, source`,
+        "objects",
+      );
+      const corrected =
+        (
+          await db.execute<{ id: string; number: string }>(
+            sql`
         select corrected.id, corrected.document_number as number
           from document_links link
           join documents corrected
@@ -62,32 +80,54 @@ export const GET = defineRoute({
          where link.org_id = ${gate.user.orgId}
            and link.from_document_id = ${params.id}
            and link.link_type = 'corrects'
-         limit 1`, 'objects'))[0] ?? null
-      return NextResponse.json({ election: doc.custom?.crossBorder ?? null, verdict: doc.custom?.crossBorderSupply ?? null, evidence: rows, correctedDocument: corrected })
+         limit 1`,
+            "objects",
+          )
+        )[0] ?? null;
+      return NextResponse.json({
+        election: doc.custom?.crossBorder ?? null,
+        verdict: doc.custom?.crossBorderSupply ?? null,
+        evidence: rows,
+        correctedDocument: corrected,
+      });
     } catch (e: unknown) {
-      return apiErrorResponse(e, { safeStatus: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 });
     }
   },
 });
 
 export const PUT = defineRoute({
-  permission: 'ar.create',
-  feature: 'crossBorderTax',
+  permission: "ar.create",
+  feature: "crossBorderTax",
   params: z.object({ id: uuidString() }),
   body: PUTBodySchema,
   handler: async ({ authz: routeAuthz, params, body: routeBody }) => {
     const gate = routeAuthz;
     const { election, evidence } = routeBody as {
-      election: { supplyKind: 'digital_service' | 'goods'; customerKind: 'consumer' | 'business'; correctsDocumentId?: string | null }
-      evidence: { kind: 'billing_address' | 'ip_country' | 'card_bin_country' | 'bank_country' | 'sim_country' | 'ship_to'; country: string; source: string }[]
-    }
+      election: {
+        supplyKind: "digital_service" | "goods";
+        customerKind: "consumer" | "business";
+        correctsDocumentId?: string | null;
+      };
+      evidence: {
+        kind:
+          | "billing_address"
+          | "ip_country"
+          | "card_bin_country"
+          | "bank_country"
+          | "sim_country"
+          | "ship_to";
+        country: string;
+        source: string;
+      }[];
+    };
     try {
       const saved = await withOrgTransaction(gate.user.orgId, () =>
         recordSupplyEvidence(db, gate.user.orgId, params.id, { election, evidence }, gate.user.id),
-      )
-      return NextResponse.json({ ok: true, ...saved })
+      );
+      return NextResponse.json({ ok: true, ...saved });
     } catch (e: unknown) {
-      return apiErrorResponse(e, { safeStatus: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 });
     }
   },
 });

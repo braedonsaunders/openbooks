@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  createPayBand,
-  listPayBands,
-} from "@openbooks/engine/hrm/compensation/bands";
+import { createPayBand, listPayBands } from "@openbooks/engine/hrm/compensation/bands";
 
 import { isUuid } from "../../../../lib/list-params";
 import { compensationErrorResponse } from "../compensation/_lib";
@@ -24,17 +21,11 @@ export const GET = defineRoute({
     const url = new URL(req.url);
     const levelId = url.searchParams.get("levelId");
     if (levelId !== null && !isUuid(levelId)) {
-      return NextResponse.json(
-        { error: "levelId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "levelId must be a uuid" }, { status: 400 });
     }
     const asOf = url.searchParams.get("asOf");
     if (asOf !== null && !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
-      return NextResponse.json(
-        { error: "asOf must be YYYY-MM-DD" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "asOf must be YYYY-MM-DD" }, { status: 400 });
     }
     try {
       const bands = await listPayBands({

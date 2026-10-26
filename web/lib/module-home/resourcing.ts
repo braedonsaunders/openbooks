@@ -1,10 +1,14 @@
-import 'server-only'
-import { add } from '@openbooks/engine/money/money'
-import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
-import { weekStartOf } from '@openbooks/engine/resourcing/weeks'
-import { loadResourcingBoard } from '../resourcing/queries'
-import { loadUtilizationFacts, RESOURCING_REPORT_PLANS, summarizeResourcingRows } from '../resourcing/report-facts'
-import { reportRunLabels } from '../report-labels'
+import "server-only";
+import { add } from "@openbooks/engine/money/money";
+import { addCalendarDays, businessToday } from "@openbooks/engine/platform/business-date/module";
+import { weekStartOf } from "@openbooks/engine/resourcing/weeks";
+import { loadResourcingBoard } from "../resourcing/queries";
+import {
+  loadUtilizationFacts,
+  RESOURCING_REPORT_PLANS,
+  summarizeResourcingRows,
+} from "../resourcing/report-facts";
+import { reportRunLabels } from "../report-labels";
 
 /**
  * Resourcing module home — the staffing cockpit vitals over the next four
@@ -35,44 +39,44 @@ export async function resourcingHome(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ResourcingHome> {
-  const firstSunday = weekStartOf(await businessToday(orgId))
-  const lastSunday = addCalendarDays(firstSunday, 21)
-  const netCapacities: string[] = []
-  const bench = new Set<string>()
-  const rolloffs = new Set<string>()
-  const unknownCapacity = new Set<string>()
-  let overallocatedWeeks = 0
-  let page = 1
-  let pages = 1
+  const firstSunday = weekStartOf(await businessToday(orgId));
+  const lastSunday = addCalendarDays(firstSunday, 21);
+  const netCapacities: string[] = [];
+  const bench = new Set<string>();
+  const rolloffs = new Set<string>();
+  const unknownCapacity = new Set<string>();
+  let overallocatedWeeks = 0;
+  let page = 1;
+  let pages = 1;
   do {
     const board = await loadResourcingBoard(orgId, allowedSubsidiaryIds, {
       firstSunday,
       lastSunday,
       onDate: firstSunday,
       page,
-    })
+    });
     for (const fact of board.forecast.personWeeks) {
-      if (fact.netCapacity !== null) netCapacities.push(fact.netCapacity)
-      else unknownCapacity.add(fact.employeePartyId)
-      if (fact.overallocated === true) overallocatedWeeks += 1
+      if (fact.netCapacity !== null) netCapacities.push(fact.netCapacity);
+      else unknownCapacity.add(fact.employeePartyId);
+      if (fact.overallocated === true) overallocatedWeeks += 1;
     }
-    for (const person of board.forecast.bench) bench.add(person.employeePartyId)
-    for (const person of board.forecast.rolloffs) rolloffs.add(person.employeePartyId)
-    pages = Math.max(1, Math.ceil(board.total / board.pageSize))
-    page += 1
-  } while (page <= pages)
+    for (const person of board.forecast.bench) bench.add(person.employeePartyId);
+    for (const person of board.forecast.rolloffs) rolloffs.add(person.employeePartyId);
+    pages = Math.max(1, Math.ceil(board.total / board.pageSize));
+    page += 1;
+  } while (page <= pages);
 
-  const utilization = await utilizationTotal(orgId, allowedSubsidiaryIds, firstSunday, lastSunday)
+  const utilization = await utilizationTotal(orgId, allowedSubsidiaryIds, firstSunday, lastSunday);
   return {
     firstSunday,
     lastSunday,
-    netCapacity: netCapacities.reduce((total, hours) => add(total, hours), '0.0000'),
+    netCapacity: netCapacities.reduce((total, hours) => add(total, hours), "0.0000"),
     benchPeople: bench.size,
     rolloffs: rolloffs.size,
     overallocatedWeeks,
     unknownCapacityPeople: unknownCapacity.size,
     utilization,
-  }
+  };
 }
 
 /**
@@ -88,31 +92,36 @@ async function utilizationTotal(
   firstSunday: string,
   lastSunday: string,
 ): Promise<string | null> {
-  const { getTranslations } = await import('next-intl/server')
-  const t = await getTranslations('resourcing.reports.utilization')
-  const rows = await loadUtilizationFacts(orgId, allowedSubsidiaryIds, { firstSunday, lastSunday })
-  const utilizationLabel = t('measures.utilization')
+  const { getTranslations } = await import("next-intl/server");
+  const t = await getTranslations("resourcing.reports.utilization");
+  const rows = await loadUtilizationFacts(orgId, allowedSubsidiaryIds, { firstSunday, lastSunday });
+  const utilizationLabel = t("measures.utilization");
   const plan = RESOURCING_REPORT_PLANS.utilization({
     utilization: utilizationLabel,
-    booked: t('measures.booked'),
-    personCount: t('measures.personCount'),
-    unknownCapacity: t('measures.unknownCapacity'),
-    noCapacity: t('guards.noCapacity'),
-    undefined: t('guards.undefined'),
-  })
-  const runLabels = await reportRunLabels()
-  plan.labels = runLabels
-  const result = summarizeResourcingRows('utilization', rows, plan)
+    booked: t("measures.booked"),
+    personCount: t("measures.personCount"),
+    unknownCapacity: t("measures.unknownCapacity"),
+    noCapacity: t("guards.noCapacity"),
+    undefined: t("guards.undefined"),
+  });
+  const runLabels = await reportRunLabels();
+  plan.labels = runLabels;
+  const result = summarizeResourcingRows("utilization", rows, plan);
   // Summary cards are labeled through the shared run labels, never the raw
   // measure label: the utilization card reads like "Total utilization".
-  const cardLabel = runLabels.summaryTotal?.(utilizationLabel) ?? `Total ${utilizationLabel.toLowerCase()}`
-  const item = result.summary.find((entry) => entry.label === cardLabel)
-  if (!item || item.value === null || item.value === undefined || item.value === '') return null
+  const cardLabel =
+    runLabels.summaryTotal?.(utilizationLabel) ?? `Total ${utilizationLabel.toLowerCase()}`;
+  const item = result.summary.find((entry) => entry.label === cardLabel);
+  if (!item || item.value === null || item.value === undefined || item.value === "") return null;
   // A computed refusal still speaks: the guard publishes its named label as
   // the card value. That is not a figure — it reads as unknown capacity.
-  const refusal = new Set([t('guards.noCapacity'), t('guards.undefined'), runLabels.undefinedFormula?.() ?? 'Undefined — divides by zero'])
-  if (typeof item.value === 'string' && refusal.has(item.value)) return null
+  const refusal = new Set([
+    t("guards.noCapacity"),
+    t("guards.undefined"),
+    runLabels.undefinedFormula?.() ?? "Undefined — divides by zero",
+  ]);
+  if (typeof item.value === "string" && refusal.has(item.value)) return null;
   // Percent formula values arrive formatted by the shared shaper (such as
   // "10.00%"): display the card value byte-for-byte, never re-suffixed.
-  return String(item.value)
+  return String(item.value);
 }

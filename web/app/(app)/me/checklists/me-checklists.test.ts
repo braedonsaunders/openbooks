@@ -16,15 +16,24 @@ function specJson(data: Record<string, unknown>): string {
 const TABS = [{ label: "Checklists", href: "/me/checklists" }];
 
 test("a refused checklists read renders the remedy", () => {
-  const json = specJson({ tabs: TABS, refusal: { title: "No checklists", message: "ask an administrator for a linked employment" } } as unknown as Record<string, unknown>);
-  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  const json = specJson({
+    tabs: TABS,
+    refusal: { title: "No checklists", message: "ask an administrator for a linked employment" },
+  } as unknown as Record<string, unknown>);
+  assert.ok(json.includes('"empty-state"'), "the refusal renders through the empty-state block");
   assert.ok(json.includes("No checklists"), "the refusal title reaches the page");
-  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
+  assert.ok(
+    json.includes("ask an administrator for a linked employment"),
+    "the refusal remedy reaches the page",
+  );
 });
 
 test("the steps table binds with the tab strip in the header", () => {
   const json = specJson({ tabs: TABS, refusal: null } as unknown as Record<string, unknown>);
-  assert.ok(json.includes("\"module-home-tabs\""), "the header carries the tab strip");
+  assert.ok(json.includes('"module-home-tabs"'), "the header carries the tab strip");
   assert.ok(json.includes("/me/checklists"), "the strip links the checklists surface");
-  assert.ok(json.includes("\"hrm-step-complete\""), "the row action rides the shared step-complete widget");
+  assert.ok(
+    json.includes('"hrm-step-complete"'),
+    "the row action rides the shared step-complete widget",
+  );
 });

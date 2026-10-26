@@ -43,7 +43,10 @@ async function rolledBack(run: () => Promise<void>): Promise<void> {
 }
 
 /** A refusal aborts its statement; a savepoint keeps the outer transaction usable. */
-async function refusedInSavepoint(statement: () => Promise<unknown>, pattern: RegExp): Promise<void> {
+async function refusedInSavepoint(
+  statement: () => Promise<unknown>,
+  pattern: RegExp,
+): Promise<void> {
   await db.execute(sql`savepoint guard_probe`);
   await assert.rejects(statement(), refusedBy(pattern));
   await db.execute(sql`rollback to savepoint guard_probe`);
@@ -65,27 +68,38 @@ test("a dunning log row carries only a known delivery status", { skip: !DB }, as
   }
 });
 
-test("a price schedule revision is non-negative and a change reason is never blank", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await rolledBack(async () => {
-      const [{ ccy }] = await db.execute<{ ccy: string }>(sql`
-        select base_currency as ccy from subsidiaries where id = ${org.subsidiaryId}`, 'objects');
-      // Inactive schedules, so the guards under test are the only ones in play.
-      const insert = (revision: number, reason: string | null) => db.execute(sql`
+test(
+  "a price schedule revision is non-negative and a change reason is never blank",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await rolledBack(async () => {
+        const [{ ccy }] = await db.execute<{ ccy: string }>(
+          sql`
+        select base_currency as ccy from subsidiaries where id = ${org.subsidiaryId}`,
+          "objects",
+        );
+        // Inactive schedules, so the guards under test are the only ones in play.
+        const insert = (revision: number, reason: string | null) =>
+          db.execute(sql`
         insert into item_price_schedules
           (org_id, item_id, customer_id, currency, effective_from, is_active, revision, change_reason)
         values (${org.orgId}, ${org.items.fifo}, ${org.customerId}, ${ccy}, ${org.date}, false,
                 ${revision}, ${reason})`);
-      await insert(0, null);
-      await insert(1, "list price correction");
-      await refusedInSavepoint(() => insert(-1, null), /item_price_schedule_revision_nonnegative/);
-      await refusedInSavepoint(() => insert(2, "   "), /item_price_schedule_reason_present/);
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        await insert(0, null);
+        await insert(1, "list price correction");
+        await refusedInSavepoint(
+          () => insert(-1, null),
+          /item_price_schedule_revision_nonnegative/,
+        );
+        await refusedInSavepoint(() => insert(2, "   "), /item_price_schedule_reason_present/);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a legacy-reconciliation attestation is all or nothing", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -99,7 +113,10 @@ test("a legacy-reconciliation attestation is all or nothing", { skip: !DB }, asy
            total_transaction_price, created_by, updated_by)
         values (${contract}, ${org.orgId}, ${org.customerId}, 'ATTEST-1', 'active', ${org.date}, 'CAD',
                 1200, ${actor}, ${actor})`);
-      const insert = (description: string, attestation: { at: boolean; by: boolean; reason: string | null }) =>
+      const insert = (
+        description: string,
+        attestation: { at: boolean; by: boolean; reason: string | null },
+      ) =>
         db.execute(sql`
           insert into performance_obligations
             (id, org_id, contract_id, description, recognition_rule_id, allocated_price, status,
@@ -132,8 +149,11 @@ test("a stored tax filing changes only by filing it, and never after", { skip: !
   const org = await createScratchOrg();
   try {
     await rolledBack(async () => {
-      const [{ ccy }] = await db.execute<{ ccy: string }>(sql`
-        select base_currency as ccy from subsidiaries where id = ${org.subsidiaryId}`, 'objects');
+      const [{ ccy }] = await db.execute<{ ccy: string }>(
+        sql`
+        select base_currency as ccy from subsidiaries where id = ${org.subsidiaryId}`,
+        "objects",
+      );
       const filingId = randomUUID();
       await db.execute(sql`
         insert into tax_filings
@@ -147,7 +167,8 @@ test("a stored tax filing changes only by filing it, and never after", { skip: !
         /tax filing snapshots are immutable/,
       );
       await refusedInSavepoint(
-        () => db.execute(sql`
+        () =>
+          db.execute(sql`
           update tax_filings
              set status = 'filed', filed_at = now(), filing_reference = 'REF-1', boxes = '[{"box":"1"}]'::jsonb
            where id = ${filingId}`),
@@ -160,7 +181,8 @@ test("a stored tax filing changes only by filing it, and never after", { skip: !
       assert.equal(filed.rowCount, 1, "prepared to filed is the one admitted transition");
 
       await refusedInSavepoint(
-        () => db.execute(sql`update tax_filings set filing_reference = 'REF-2' where id = ${filingId}`),
+        () =>
+          db.execute(sql`update tax_filings set filing_reference = 'REF-2' where id = ${filingId}`),
         /tax filing snapshots are immutable/,
       );
       await refusedInSavepoint(

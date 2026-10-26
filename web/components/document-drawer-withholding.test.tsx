@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -18,7 +18,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -63,8 +71,8 @@ const { DOC_KINDS } = await import("../lib/document-kinds");
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 function columnHeaders(): string[] {
-  return [...document.querySelectorAll('[role="columnheader"]')].map(
-    (node) => (node.textContent ?? "").trim(),
+  return [...document.querySelectorAll('[role="columnheader"]')].map((node) =>
+    (node.textContent ?? "").trim(),
   );
 }
 
@@ -124,7 +132,13 @@ async function renderBill(
             // A resolved bill form always places the line amount; withholding
             // columns are never placed by the layout and appear only behind a
             // registration.
-            layout={{ header: { groups: [] }, lines: { columns: [{ key: "amount", visible: true }] }, actions: [] } as never}
+            layout={
+              {
+                header: { groups: [] },
+                lines: { columns: [{ key: "amount", visible: true }] },
+                actions: [],
+              } as never
+            }
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -138,22 +152,46 @@ async function renderBill(
 test("a bill with no withholding registration hides the withholding columns", async (t) => {
   await renderBill(undefined, t);
   const headers = columnHeaders();
-  assert.ok(headers.some((header) => header.includes("Amount")), "the line grid itself renders");
-  assert.ok(!headers.some((header) => header.includes("Withholding treatment")), "no treatment column without a registration");
-  assert.ok(!headers.some((header) => header.includes("Direct materials cost")), "no materials column without a registration");
-  assert.ok(!String(document.body.textContent).includes("direct cost of materials"), "no scheme guidance without a registration");
+  assert.ok(
+    headers.some((header) => header.includes("Amount")),
+    "the line grid itself renders",
+  );
+  assert.ok(
+    !headers.some((header) => header.includes("Withholding treatment")),
+    "no treatment column without a registration",
+  );
+  assert.ok(
+    !headers.some((header) => header.includes("Direct materials cost")),
+    "no materials column without a registration",
+  );
+  assert.ok(
+    !String(document.body.textContent).includes("direct cost of materials"),
+    "no scheme guidance without a registration",
+  );
 });
 
 test("an empty registration list hides the withholding columns", async (t) => {
   await renderBill([], t);
   const headers = columnHeaders();
-  assert.ok(!headers.some((header) => header.includes("Withholding treatment")), "an empty scope is the same as no registration");
-  assert.ok(!headers.some((header) => header.includes("Direct materials cost")), "an empty scope is the same as no registration");
+  assert.ok(
+    !headers.some((header) => header.includes("Withholding treatment")),
+    "an empty scope is the same as no registration",
+  );
+  assert.ok(
+    !headers.some((header) => header.includes("Direct materials cost")),
+    "an empty scope is the same as no registration",
+  );
 });
 
 test("an active registration shows the withholding columns and neutral guidance", async (t) => {
   await renderBill([{ code: "GB_CIS" }], t);
   const headers = columnHeaders();
-  assert.ok(headers.some((header) => header.includes("Withholding treatment")), "the treatment column renders behind a registration");
-  assert.ok(headers.some((header) => header.includes("Direct materials cost")), "the materials column renders behind a registration");
+  assert.ok(
+    headers.some((header) => header.includes("Withholding treatment")),
+    "the treatment column renders behind a registration",
+  );
+  assert.ok(
+    headers.some((header) => header.includes("Direct materials cost")),
+    "the materials column renders behind a registration",
+  );
 });

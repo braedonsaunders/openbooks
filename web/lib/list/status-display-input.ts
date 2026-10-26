@@ -13,7 +13,10 @@ export interface StatusDisplayOption {
   stableCode?: string;
 }
 
-export function tagStaticStatusOption(option: { value: string; labelKey?: string }, label: string): StatusDisplayOption {
+export function tagStaticStatusOption(
+  option: { value: string; labelKey?: string },
+  label: string,
+): StatusDisplayOption {
   return {
     value: option.value,
     label,

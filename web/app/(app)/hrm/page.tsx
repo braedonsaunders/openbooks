@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { hrmSpec, hrmTitle, loadHrmPage } from './view'
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { hrmSpec, hrmTitle, loadHrmPage } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await hrmTitle() }
+  return { title: await hrmTitle() };
 }
 
 /**
@@ -18,6 +18,6 @@ export async function generateMetadata() {
  * 404s otherwise.
  */
 export default async function HrmHomePage() {
-  const data = await loadHrmPage()
-  return <ModuleView spec={hrmSpec(data)} data={data} searchParams={{}} trusted />
+  const data = await loadHrmPage();
+  return <ModuleView spec={hrmSpec(data)} data={data} searchParams={{}} trusted />;
 }

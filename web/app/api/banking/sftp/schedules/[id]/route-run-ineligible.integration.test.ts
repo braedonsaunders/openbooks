@@ -54,15 +54,11 @@ const routeState: RouteState = {
   runResult: [],
   deny(permission) {
     return permission
-      ? NextResponse.json(
-          { error: `missing permission: ${permission}` },
-          { status: 403 },
-        )
+      ? NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
       : NextResponse.json({ error: "unauthorized" }, { status: 401 });
   },
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.sftp-schedule-run-ineligible-test')]
@@ -120,11 +116,9 @@ const hooks = registerHooks({
 const itemUrl = "./route.ts?sftp-schedule-run-ineligible-test";
 const { PATCH } = (await import(itemUrl)) as typeof import("./route.ts");
 
-const { db, withBypass, withOrgContext } =
-  await import("@openbooks/engine/platform/db");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/testing/fixtures");
-
 
 interface Fixture {
   orgId: string;
@@ -135,11 +129,7 @@ interface Fixture {
 async function seed(withFeature = true): Promise<Fixture> {
   return withBypass(async () => {
     const org = await createScratchOrg();
-    const actorId = await createScratchUser(
-      org.orgId,
-      "SFTP Run Admin",
-      "sftp_run_admin",
-    );
+    const actorId = await createScratchUser(org.orgId, "SFTP Run Admin", "sftp_run_admin");
     if (withFeature) {
       await db.execute(sql`
         update orgs
@@ -201,14 +191,11 @@ async function runStatus(
   routeState.runResult = [];
   const res = (await withOrgContext(fixture.orgId, () =>
     PATCH(
-      new Request(
-        `http://openbooks.test/api/banking/sftp/schedules/${id}`,
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "run" }),
-        },
-      ),
+      new Request(`http://openbooks.test/api/banking/sftp/schedules/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "run" }),
+      }),
       { params: Promise.resolve({ id }) },
     ),
   )) as NextResponse;
@@ -218,162 +205,138 @@ async function runStatus(
   };
 }
 
-test(
-  "run refuses an inactive schedule instead of reporting a fabricated success",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const { scheduleId } = await createSchedule(fixture, {
-        scheduleActive: false,
-      });
-      const outcome = await runStatus(fixture, scheduleId);
-      assert.equal(outcome.status, 409);
-      assert.equal(
-        outcome.body?.error,
-        "Activate this schedule before running it.",
+test("run refuses an inactive schedule instead of reporting a fabricated success", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const { scheduleId } = await createSchedule(fixture, {
+      scheduleActive: false,
+    });
+    const outcome = await runStatus(fixture, scheduleId);
+    assert.equal(outcome.status, 409);
+    assert.equal(outcome.body?.error, "Activate this schedule before running it.");
+    assert.equal(outcome.body?.code, "SCHEDULE_INACTIVE");
+    // The refusal enables nothing: the schedule stays inactive.
+    const state = await withBypass(async () => {
+      const r = await db.execute<{ is_active: boolean }>(
+        sql`select is_active from sftp_import_schedules where id = ${scheduleId}`,
+        "objects",
       );
-      assert.equal(outcome.body?.code, "SCHEDULE_INACTIVE");
-      // The refusal enables nothing: the schedule stays inactive.
-      const state = await withBypass(async () => {
-        const r = await db.execute<{ is_active: boolean }>(
-          sql`select is_active from sftp_import_schedules where id = ${scheduleId}`, "objects",
-        );
-        return r[0];
-      });
-      assert.equal(state?.is_active, false);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+      return r[0];
+    });
+    assert.equal(state?.is_active, false);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "run refuses when the schedule's SFTP server is inactive",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const { scheduleId, serverId } = await createSchedule(fixture, {
-        serverActive: false,
-      });
-      const outcome = await runStatus(fixture, scheduleId);
-      assert.equal(outcome.status, 409);
-      assert.equal(
-        outcome.body?.error,
-        "Activate the SFTP server before running this schedule.",
+test("run refuses when the schedule's SFTP server is inactive", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const { scheduleId, serverId } = await createSchedule(fixture, {
+      serverActive: false,
+    });
+    const outcome = await runStatus(fixture, scheduleId);
+    assert.equal(outcome.status, 409);
+    assert.equal(outcome.body?.error, "Activate the SFTP server before running this schedule.");
+    assert.equal(outcome.body?.code, "SFTP_SERVER_INACTIVE");
+    // Neither the schedule nor the server is silently enabled.
+    const state = await withBypass(async () => {
+      const r = await db.execute<{ is_active: boolean }>(
+        sql`select is_active from sftp_servers where id = ${serverId}`,
+        "objects",
       );
-      assert.equal(outcome.body?.code, "SFTP_SERVER_INACTIVE");
-      // Neither the schedule nor the server is silently enabled.
-      const state = await withBypass(async () => {
-        const r = await db.execute<{ is_active: boolean }>(
-          sql`select is_active from sftp_servers where id = ${serverId}`, "objects",
-        );
-        return r[0];
-      });
-      assert.equal(state?.is_active, false);
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+      return r[0];
+    });
+    assert.equal(state?.is_active, false);
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "run refuses for a non-production organization",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const { scheduleId } = await createSchedule(fixture);
-      await withBypass(async () => {
-        await db.execute(
-          sql`update orgs set env_kind = 'sandbox' where id = ${fixture.orgId}`,
-        );
-      });
-      const outcome = await runStatus(fixture, scheduleId);
-      assert.equal(outcome.status, 409);
-      assert.equal(
-        outcome.body?.error,
-        "Manual SFTP runs are available only in production organizations.",
-      );
-      assert.equal(outcome.body?.code, "SFTP_RUN_NON_PRODUCTION");
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("run refuses for a non-production organization", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const { scheduleId } = await createSchedule(fixture);
+    await withBypass(async () => {
+      await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${fixture.orgId}`);
+    });
+    const outcome = await runStatus(fixture, scheduleId);
+    assert.equal(outcome.status, 409);
+    assert.equal(
+      outcome.body?.error,
+      "Manual SFTP runs are available only in production organizations.",
+    );
+    assert.equal(outcome.body?.code, "SFTP_RUN_NON_PRODUCTION");
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "run refuses when the scan returns nothing for an eligible schedule",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const { scheduleId } = await createSchedule(fixture);
-      // The schedule is fully eligible, yet the scan came back with no run
-      // (it was deactivated and reactivated around the scan, or the tick
-      // raced the operator). That is stale, never a clean empty folder.
-      const outcome = await runStatus(fixture, scheduleId);
-      assert.equal(outcome.status, 409);
-      assert.equal(
-        outcome.body?.error,
-        "The schedule changed while the run was starting — try running it again.",
-      );
-      assert.equal(outcome.body?.code, "SCHEDULE_RUN_STALE");
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("run refuses when the scan returns nothing for an eligible schedule", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const { scheduleId } = await createSchedule(fixture);
+    // The schedule is fully eligible, yet the scan came back with no run
+    // (it was deactivated and reactivated around the scan, or the tick
+    // raced the operator). That is stale, never a clean empty folder.
+    const outcome = await runStatus(fixture, scheduleId);
+    assert.equal(outcome.status, 409);
+    assert.equal(
+      outcome.body?.error,
+      "The schedule changed while the run was starting — try running it again.",
+    );
+    assert.equal(outcome.body?.code, "SCHEDULE_RUN_STALE");
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
-test(
-  "run keeps a genuinely executed empty scan a success",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture);
-      const { scheduleId } = await createSchedule(fixture);
-      routeState.runCalls.length = 0;
-      routeState.runResult = [
-        {
-          scheduleId,
-          filesSeen: 0,
-          imported: 0,
-          duplicates: 0,
-          errors: [],
-          files: [],
-        },
-      ];
-      const res = (await withOrgContext(fixture.orgId, () =>
-        PATCH(
-          new Request(
-            `http://openbooks.test/api/banking/sftp/schedules/${scheduleId}`,
-            {
-              method: "PATCH",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ action: "run" }),
-            },
-          ),
-          { params: Promise.resolve({ id: scheduleId }) },
-        ),
-      )) as NextResponse;
-      assert.equal(res.status, 200);
-      assert.deepEqual(await res.json(), {
-        ok: true,
-        result: {
-          scheduleId,
-          filesSeen: 0,
-          imported: 0,
-          duplicates: 0,
-          errors: [],
-          files: [],
-        },
-      });
-    } finally {
-      await withBypass(() => dropScratchOrg(fixture.orgId));
-    }
-  },
-);
+test("run keeps a genuinely executed empty scan a success", async () => {
+  const fixture = await seed();
+  try {
+    authorize(fixture);
+    const { scheduleId } = await createSchedule(fixture);
+    routeState.runCalls.length = 0;
+    routeState.runResult = [
+      {
+        scheduleId,
+        filesSeen: 0,
+        imported: 0,
+        duplicates: 0,
+        errors: [],
+        files: [],
+      },
+    ];
+    const res = (await withOrgContext(fixture.orgId, () =>
+      PATCH(
+        new Request(`http://openbooks.test/api/banking/sftp/schedules/${scheduleId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "run" }),
+        }),
+        { params: Promise.resolve({ id: scheduleId }) },
+      ),
+    )) as NextResponse;
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+      ok: true,
+      result: {
+        scheduleId,
+        filesSeen: 0,
+        imported: 0,
+        duplicates: 0,
+        errors: [],
+        files: [],
+      },
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(fixture.orgId));
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

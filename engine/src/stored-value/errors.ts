@@ -27,8 +27,7 @@ export class StoredValueError extends PostingError {
   }
 }
 
-export const STORED_VALUE_FEATURE_REMEDY =
-  "Enable Stored value in Company Settings → Features.";
+export const STORED_VALUE_FEATURE_REMEDY = "Enable Stored value in Company Settings → Features.";
 
 export function storedValueFeatureOff(): StoredValueError {
   return new StoredValueError({

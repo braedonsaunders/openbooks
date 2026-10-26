@@ -3,7 +3,11 @@ import type { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { loadSubsidiaryContext, restrictionAdmits } from "../organization/subsidiaries.ts";
-import { intercompanyControlAccount, IntercompanyPolicyError, type IntercompanyControlAccount } from "../organization/intercompany-accounts.ts";
+import {
+  intercompanyControlAccount,
+  IntercompanyPolicyError,
+  type IntercompanyControlAccount,
+} from "../organization/intercompany-accounts.ts";
 
 /**
  * Receivable/payable control account resolution for party documents.
@@ -65,7 +69,8 @@ function remedyFor(side: ControlSide, source: ControlAccountSource): string {
 function sourceLabel(side: ControlSide, source: ControlAccountSource): string {
   if (source === "document") return `the document's ${NOUN[side]} account`;
   if (source === "intercompany") return `the intercompany ${NOUN[side]} account`;
-  if (source === "party") return side === "ar" ? "the customer's Receivable account" : "the vendor's Payable account";
+  if (source === "party")
+    return side === "ar" ? "the customer's Receivable account" : "the vendor's Payable account";
   return `the organization ${NOUN[side]} control account`;
 }
 
@@ -101,23 +106,29 @@ export async function assertControlAccountUsable(
   if (!isUuid(candidate)) {
     throw new PostingError(`${label} is not a valid account reference — ${remedy}`);
   }
-  const row = (await runner.execute<{
-    number: string | null;
-    name: string;
-    type: string;
-    is_active: boolean;
-    is_summary: boolean;
-    subsidiary_id: string | null;
-    include_children: boolean;
-  }>(sql`
+  const row = (
+    await runner.execute<{
+      number: string | null;
+      name: string;
+      type: string;
+      is_active: boolean;
+      is_summary: boolean;
+      subsidiary_id: string | null;
+      include_children: boolean;
+    }>(
+      sql`
     select a.number, a.name, a.type, a.is_active, a.is_summary, a.subsidiary_id,
            a.subsidiary_include_children as include_children
       from accounts a
-     where a.org_id = ${subject.orgId} and a.id = ${candidate}::uuid`, "objects"))[0];
+     where a.org_id = ${subject.orgId} and a.id = ${candidate}::uuid`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new PostingError(`${label} does not exist in this organization — ${remedy}`);
   const display = `${row.number ? `${row.number} · ` : ""}${row.name}`;
   if (!row.is_active) throw new PostingError(`${label} ${display} is inactive — ${remedy}`);
-  if (row.is_summary) throw new PostingError(`${label} ${display} is a summary account — ${remedy}`);
+  if (row.is_summary)
+    throw new PostingError(`${label} ${display} is a summary account — ${remedy}`);
   if (row.type !== EXPECTED_TYPE[side]) {
     throw new PostingError(
       `${label} ${display} is not a ${NOUN[side]} account (type ${row.type}; expected ${EXPECTED_TYPE[side]}) — ${remedy}`,
@@ -178,20 +189,28 @@ export async function controlAccountCandidate(
   }
   if (chosen) return { side, accountId: chosen, source: "document" };
   if (subject.partyId) {
-    const role = (await runner.execute<{ account_id: string | null }>(
-      side === "ar"
-        ? sql`select ar_account_id::text as account_id from customer_roles
+    const role = (
+      await runner.execute<{ account_id: string | null }>(
+        side === "ar"
+          ? sql`select ar_account_id::text as account_id from customer_roles
                where org_id = ${subject.orgId} and party_id = ${subject.partyId}`
-        : sql`select ap_account_id::text as account_id from vendor_roles
-               where org_id = ${subject.orgId} and party_id = ${subject.partyId}`, "objects",
-    ))[0];
+          : sql`select ap_account_id::text as account_id from vendor_roles
+               where org_id = ${subject.orgId} and party_id = ${subject.partyId}`,
+        "objects",
+      )
+    )[0];
     if (role?.account_id) return { side, accountId: role.account_id, source: "party" };
   }
   const supplied = side === "ar" ? orgControl?.ar : orgControl?.ap;
   if (supplied) return { side, accountId: supplied, source: "organization" };
-  const org = (await runner.execute<{ account_id: string | null }>(sql`
+  const org = (
+    await runner.execute<{ account_id: string | null }>(
+      sql`
     select settings->'controlAccounts'->>${side}::text as account_id
-      from orgs where id = ${subject.orgId}`, "objects"))[0];
+      from orgs where id = ${subject.orgId}`,
+      "objects",
+    )
+  )[0];
   return { side, accountId: org?.account_id || null, source: "organization" };
 }
 
@@ -219,7 +238,12 @@ export async function resolveDocumentControlAccount(
     candidate.accountId,
     candidate.source,
   );
-  return { side: candidate.side, accountId: candidate.accountId, source: candidate.source, ...account };
+  return {
+    side: candidate.side,
+    accountId: candidate.accountId,
+    source: candidate.source,
+    ...account,
+  };
 }
 
 /**
@@ -234,7 +258,9 @@ export async function postedDocumentControlAccount(
   orgId: string,
   documentId: string,
 ): Promise<string | null> {
-  const row = (await runner.execute<{ account_id: string | null }>(sql`
+  const row = (
+    await runner.execute<{ account_id: string | null }>(
+      sql`
     select coalesce(
              (select jl.account_id::text
                 from journal_lines jl
@@ -243,7 +269,10 @@ export async function postedDocumentControlAccount(
                limit 1),
              nullif(d.custom->>'controlAccountId', '')) as account_id
       from documents d
-     where d.org_id = ${orgId} and d.id = ${documentId} and d.status = 'posted'`, "objects"))[0];
+     where d.org_id = ${orgId} and d.id = ${documentId} and d.status = 'posted'`,
+      "objects",
+    )
+  )[0];
   return row?.account_id ?? null;
 }
 
@@ -260,14 +289,24 @@ export async function controlAccountLookupScope(
   document: { status: string; subsidiaryId: string | null } | null;
 }> {
   const party = input.partyId
-    ? (await runner.execute<{ subsidiaryId: string | null }>(sql`
+    ? ((
+        await runner.execute<{ subsidiaryId: string | null }>(
+          sql`
         select subsidiary_id as "subsidiaryId" from parties
-         where id = ${input.partyId} and org_id = ${input.orgId}`, "objects"))[0] ?? null
+         where id = ${input.partyId} and org_id = ${input.orgId}`,
+          "objects",
+        )
+      )[0] ?? null)
     : null;
   const document = input.documentId
-    ? (await runner.execute<{ status: string; subsidiaryId: string | null }>(sql`
+    ? ((
+        await runner.execute<{ status: string; subsidiaryId: string | null }>(
+          sql`
         select status, subsidiary_id as "subsidiaryId" from documents
-         where id = ${input.documentId} and org_id = ${input.orgId} and kind = ${input.kind}`, "objects"))[0] ?? null
+         where id = ${input.documentId} and org_id = ${input.orgId} and kind = ${input.kind}`,
+          "objects",
+        )
+      )[0] ?? null)
     : null;
   return { party, document };
 }
@@ -316,7 +355,8 @@ export async function controlAccountChoices(
   const side = DOCUMENT_CONTROL_SIDE[input.kind];
   if (!side) return null;
   const allowed = input.allowedSubsidiaryIds === null ? null : [...input.allowedSubsidiaryIds];
-  const accounts = await runner.execute<ControlAccountOption>(sql`
+  const accounts = await runner.execute<ControlAccountOption>(
+    sql`
     select a.id, a.number, a.name
       from accounts a
      where a.org_id = ${input.orgId} and a.is_active and not a.is_summary
@@ -324,25 +364,41 @@ export async function controlAccountChoices(
        and (a.subsidiary_id is null or a.subsidiary_id = ${input.subsidiaryId}::uuid)
        and (${allowed === null}::boolean or a.subsidiary_id is null
             or a.subsidiary_id = any(${`{${(allowed ?? []).join(",")}}`}::uuid[]))
-     order by a.number nulls last, a.name`, "objects");
+     order by a.number nulls last, a.name`,
+    "objects",
+  );
   const label = async (id: string | null): Promise<ControlAccountOption | null> => {
     if (!id || !isUuid(id)) return null;
-    const row = (await runner.execute<ControlAccountOption>(sql`
-      select id, number, name from accounts where org_id = ${input.orgId} and id = ${id}::uuid`, "objects"))[0];
+    const row = (
+      await runner.execute<ControlAccountOption>(
+        sql`
+      select id, number, name from accounts where org_id = ${input.orgId} and id = ${id}::uuid`,
+        "objects",
+      )
+    )[0];
     return row ?? null;
   };
   const role = input.partyId
-    ? (await runner.execute<{ account_id: string | null }>(
-        side === "ar"
-          ? sql`select ar_account_id::text as account_id from customer_roles
+    ? ((
+        await runner.execute<{ account_id: string | null }>(
+          side === "ar"
+            ? sql`select ar_account_id::text as account_id from customer_roles
                  where org_id = ${input.orgId} and party_id = ${input.partyId}`
-          : sql`select ap_account_id::text as account_id from vendor_roles
-                 where org_id = ${input.orgId} and party_id = ${input.partyId}`, "objects",
-      ))[0]?.account_id ?? null
+            : sql`select ap_account_id::text as account_id from vendor_roles
+                 where org_id = ${input.orgId} and party_id = ${input.partyId}`,
+          "objects",
+        )
+      )[0]?.account_id ?? null)
     : null;
-  const org = (await runner.execute<{ account_id: string | null }>(sql`
+  const org =
+    (
+      await runner.execute<{ account_id: string | null }>(
+        sql`
     select settings->'controlAccounts'->>${side}::text as account_id
-      from orgs where id = ${input.orgId}`, "objects"))[0]?.account_id ?? null;
+      from orgs where id = ${input.orgId}`,
+        "objects",
+      )
+    )[0]?.account_id ?? null;
   const postedAccount = input.postedDocumentId
     ? await postedDocumentControlAccount(runner, input.orgId, input.postedDocumentId)
     : null;
@@ -352,12 +408,15 @@ export async function controlAccountChoices(
   let intercompanyAccount: string | null = null;
   if (input.partyId) {
     try {
-      intercompanyAccount = (await intercompanyControlAccount(runner, {
-        orgId: input.orgId,
-        side,
-        partyId: input.partyId,
-        subsidiaryId: input.subsidiaryId,
-      }))?.accountId ?? null;
+      intercompanyAccount =
+        (
+          await intercompanyControlAccount(runner, {
+            orgId: input.orgId,
+            side,
+            partyId: input.partyId,
+            subsidiaryId: input.subsidiaryId,
+          })
+        )?.accountId ?? null;
     } catch (error) {
       if (!(error instanceof IntercompanyPolicyError)) throw error;
     }

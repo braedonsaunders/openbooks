@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  createCycle,
-  listCycles,
-} from "@openbooks/engine/hrm/compensation/cycles";
+import { createCycle, listCycles } from "@openbooks/engine/hrm/compensation/cycles";
 
 import { compensationErrorResponse } from "../compensation/_lib";
 import { meritCyclesPayrollRefusal } from "./_gate";

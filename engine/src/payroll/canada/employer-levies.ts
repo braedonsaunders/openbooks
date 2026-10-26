@@ -4,9 +4,20 @@ import { PayrollError } from "../error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { undecidedWorkerCompError } from "../employee-worker-comp.ts";
-import { resolveStatutoryHistoryScope, employerScopedStatutoryStubs, requireStatutoryHistoryFactors } from "../statutory-history-scope.ts";
-import { employeeOpeningLevyAmount, readEmployeeOpeningLevySources, requireEmployerOpeningLevySources } from "../opening-levy-source-reader.ts";
-import { EMPLOYER_LEVY_PROGRAMS, parseEmployerLevyAdjustmentEvidence } from "../run-levy-adjustment-evidence.ts";
+import {
+  resolveStatutoryHistoryScope,
+  employerScopedStatutoryStubs,
+  requireStatutoryHistoryFactors,
+} from "../statutory-history-scope.ts";
+import {
+  employeeOpeningLevyAmount,
+  readEmployeeOpeningLevySources,
+  requireEmployerOpeningLevySources,
+} from "../opening-levy-source-reader.ts";
+import {
+  EMPLOYER_LEVY_PROGRAMS,
+  parseEmployerLevyAdjustmentEvidence,
+} from "../run-levy-adjustment-evidence.ts";
 
 /**
  * The pay-run lifecycle states, as `pay_runs.run_status` spells them
@@ -18,8 +29,8 @@ export type CaExemptionRunStatus = "draft" | "calculated" | "committed" | "voide
 
 function assertNeverStatus(status: never): never {
   throw new PayrollPackError(
-    `CA EHT exemption has no rule for pay-run status "${status}" — `
-    + "name the new lifecycle state here before it consumes (or escapes) exemption room",
+    `CA EHT exemption has no rule for pay-run status "${status}" — ` +
+      "name the new lifecycle state here before it consumes (or escapes) exemption room",
   );
 }
 
@@ -55,7 +66,11 @@ export type QuebecHsfSector = "other" | "primary_manufacturing" | "public" | "ex
  * Exact integer-cent arithmetic, half-up to four rate decimals. Only 2026
  * is transcribed — any other year refuses rather than pricing a stale table.
  */
-export function quebecHsfRateForPayroll(sector: QuebecHsfSector, totalPayroll: string, year: number): Rate {
+export function quebecHsfRateForPayroll(
+  sector: QuebecHsfSector,
+  totalPayroll: string,
+  year: number,
+): Rate {
   if (year !== 2026) {
     throw new PayrollPackError(
       `QC HSF rate formula is transcribed for 2026 only — update the Revenu Québec table before pricing ${year}`,
@@ -100,7 +115,14 @@ export function ehtExemptionConsumedByRunStatus(status: CaExemptionRunStatus): b
   }
 }
 import {
-  add, cmp, mulPercent, mulRatio, neg, roundMoney, sum, toUnits,
+  add,
+  cmp,
+  mulPercent,
+  mulRatio,
+  neg,
+  roundMoney,
+  sum,
+  toUnits,
 } from "../../money/money.ts";
 import type { Money, Rate } from "../../money/brands.ts";
 import { caPayrollConfig } from "./config.ts";
@@ -134,13 +156,20 @@ const CNT_MAX_2026 = "103000";
  * database.
  */
 export function levyAssessableBase(
-  lines: readonly Pick<PayrollEmployerLevyContext["lines"][number],
-    "kind" | "amount" | "accrualOnly" | "programApplicability">[],
+  lines: readonly Pick<
+    PayrollEmployerLevyContext["lines"][number],
+    "kind" | "amount" | "accrualOnly" | "programApplicability"
+  >[],
   programKey: string,
 ): string {
-  return sum(lines.filter((l) =>
-    l.kind === "earning" && !l.accrualOnly
-    && (l.programApplicability?.[programKey] ?? true)).map((l) => l.amount));
+  return sum(
+    lines
+      .filter(
+        (l) =>
+          l.kind === "earning" && !l.accrualOnly && (l.programApplicability?.[programKey] ?? true),
+      )
+      .map((l) => l.amount),
+  );
 }
 
 /**
@@ -152,10 +181,22 @@ export async function applyCaEmployerLevies(
   ctx: PayrollEmployerLevyContext,
 ): Promise<PayrollEmployerLevyFactors> {
   const {
-    tx, orgId, documentId, employeePartyId, employeeName, taxYear, region, lines, pushStatutory,
+    tx,
+    orgId,
+    documentId,
+    employeePartyId,
+    employeeName,
+    taxYear,
+    region,
+    lines,
+    pushStatutory,
   } = ctx;
   const historyScope = await resolveStatutoryHistoryScope(tx, {
-    orgId, documentId, taxYear, subsidiaryId: ctx.subsidiaryId ?? null, country: 'CA',
+    orgId,
+    documentId,
+    taxYear,
+    subsidiaryId: ctx.subsidiaryId ?? null,
+    country: "CA",
   });
   const config = await caPayrollConfig(orgId, taxYear, ctx.payDate ?? null);
 
@@ -174,18 +215,39 @@ export async function applyCaEmployerLevies(
 
   // A current inactive employee role does not exempt earnings on an already
   // selected historical or final-payment run from its retained classification.
-  const workerCompGroupId = ctx.workerCompGroupId === undefined
-    ? (await tx.execute<{ id: string | null }>(sql`
+  const workerCompGroupId =
+    ctx.workerCompGroupId === undefined
+      ? ((
+          await tx.execute<{ id: string | null }>(
+            sql`
         select public.payroll_worker_comp_group_at(${orgId}::uuid, ${employeePartyId}::uuid, coalesce(${ctx.payDate ?? null}::date, current_date))::text as id
-      `, "objects"))[0]?.id ?? null
-    : ctx.workerCompGroupId;
-  const wcb = workerCompGroupId === null ? undefined
-    : (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
+      `,
+            "objects",
+          )
+        )[0]?.id ?? null)
+      : ctx.workerCompGroupId;
+  const wcb =
+    workerCompGroupId === null
+      ? undefined
+      : (
+          await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(
+            sql`
         select rate_percent, max_assessable from worker_comp_groups
          where org_id=${orgId} and id=${workerCompGroupId} for share
-      `, "objects"))[0];
-  if (workerCompGroupId && (!wcb || wcb.rate_percent === null || cmp(wcb.rate_percent, '0') < 0 || wcb.max_assessable !== null && cmp(wcb.max_assessable, '0') < 0)) {
-    throw new PayrollError(`${employeeName}: the dated worker-compensation group has no valid configured rate or assessable ceiling — review its rate and ceiling in Company Setup → Worker compensation groups before calculating.`);
+      `,
+            "objects",
+          )
+        )[0];
+  if (
+    workerCompGroupId &&
+    (!wcb ||
+      wcb.rate_percent === null ||
+      cmp(wcb.rate_percent, "0") < 0 ||
+      (wcb.max_assessable !== null && cmp(wcb.max_assessable, "0") < 0))
+  ) {
+    throw new PayrollError(
+      `${employeeName}: the dated worker-compensation group has no valid configured rate or assessable ceiling — review its rate and ceiling in Company Setup → Worker compensation groups before calculating.`,
+    );
   }
   // Audited employer-only issued levy amounts recorded on this run. The
   // operator states the exact issued premium; calculation books it exactly
@@ -195,7 +257,15 @@ export async function applyCaEmployerLevies(
   // they would without it. Any employer-contribution levy adjustment
   // without its audited evidence refuses rather than booking an
   // unexplained amount.
-  const levyAdjustmentRows = await tx.execute<{ id: string; amount: string; note: string | null; system_key: string; is_active: boolean; country: string | null }>(sql`
+  const levyAdjustmentRows = await tx.execute<{
+    id: string;
+    amount: string;
+    note: string | null;
+    system_key: string;
+    is_active: boolean;
+    country: string | null;
+  }>(
+    sql`
     select a.id::text, a.amount::text as amount, a.note, c.system_key, c.is_active, c.country
       from pay_run_adjustments a
       join pay_components c on c.org_id=a.org_id and c.id=a.component_id
@@ -203,19 +273,31 @@ export async function applyCaEmployerLevies(
        and a.employee_party_id=${employeePartyId} and a.adjustment_type='line'
        and c.kind='employer_contribution' and c.system_key in ('eht', 'wcb')
      order by a.created_at, a.id
-  `, "objects");
+  `,
+    "objects",
+  );
   let wcbAdjustmentAmount: Money = "0" as Money;
   let ehtAdjustmentAmount: Money = "0" as Money;
   for (const row of levyAdjustmentRows) {
     const evidence = parseEmployerLevyAdjustmentEvidence(row.note);
-    if (!evidence || evidence.requestId !== row.id || !row.is_active || row.country !== "CA"
-      || canonicalDecimal(canonicalDecimal(row.amount, 4), 2) === null || cmp(row.amount, "0") <= 0
-      || EMPLOYER_LEVY_PROGRAMS[evidence.programKey].systemKey !== row.system_key) {
-      throw new PayrollError(`${employeeName}: a saved employer levy adjustment is missing its programme, reason, source reference or request identity — correct it through the audited employer levy adjustment command before calculating`);
+    if (
+      !evidence ||
+      evidence.requestId !== row.id ||
+      !row.is_active ||
+      row.country !== "CA" ||
+      canonicalDecimal(canonicalDecimal(row.amount, 4), 2) === null ||
+      cmp(row.amount, "0") <= 0 ||
+      EMPLOYER_LEVY_PROGRAMS[evidence.programKey].systemKey !== row.system_key
+    ) {
+      throw new PayrollError(
+        `${employeeName}: a saved employer levy adjustment is missing its programme, reason, source reference or request identity — correct it through the audited employer levy adjustment command before calculating`,
+      );
     }
     if (evidence.programKey === "ca_wcb") {
       if (evidence.workerCompGroupId !== workerCompGroupId) {
-        throw new PayrollError(`${employeeName}: the saved WCB/WSIB levy adjustment names a different worker-compensation group than the employee's group on the pay date — correct it through the audited employer levy adjustment command before calculating`);
+        throw new PayrollError(
+          `${employeeName}: the saved WCB/WSIB levy adjustment names a different worker-compensation group than the employee's group on the pay date — correct it through the audited employer levy adjustment command before calculating`,
+        );
       }
       wcbAdjustmentAmount = add(wcbAdjustmentAmount, row.amount) as Money;
     } else {
@@ -225,7 +307,9 @@ export async function applyCaEmployerLevies(
   const hasWcbAdjustment = levyAdjustmentRows.some((row) => row.system_key === "wcb");
   const hasEhtAdjustment = levyAdjustmentRows.some((row) => row.system_key === "eht");
   if (hasWcbAdjustment && !(wcb?.rate_percent && cmp(wcb.rate_percent, "0") >= 0)) {
-    throw new PayrollError(`${employeeName}: a WCB/WSIB levy adjustment is recorded but the employee's worker-compensation group has no configured rate — configure the group in Company Setup → Worker compensation groups before calculating`);
+    throw new PayrollError(
+      `${employeeName}: a WCB/WSIB levy adjustment is recorded but the employee's worker-compensation group has no configured rate — configure the group in Company Setup → Worker compensation groups before calculating`,
+    );
   }
   // An undecided coverage with assessable earnings is a refusal, never a
   // silent zero: without a rate class there is no premium, and without an
@@ -234,10 +318,15 @@ export async function applyCaEmployerLevies(
   // the levy without it. No assessable earnings means no premium is lost,
   // so an uncovered employee with nothing assessable calculates cleanly.
   if (!wcb && cmp(assessableFor("wcb"), "0") > 0) {
-    const coverage = (await tx.execute<{ wcb_exempt: boolean | null }>(sql`
+    const coverage = (
+      await tx.execute<{ wcb_exempt: boolean | null }>(
+        sql`
       select wcb_exempt from employee_payroll_profiles
        where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!coverage?.wcb_exempt) {
       throw new PayrollError(undecidedWorkerCompError(employeeName));
     }
@@ -251,26 +340,43 @@ export async function applyCaEmployerLevies(
     // Pre-adoption assessable earnings ride the opening carry-in, like every
     // other annual ceiling: without it a mid-year adopter re-opens the full
     // group maximum on the first stub.
-    await requireStatutoryHistoryFactors(tx, historyScope, { employeePartyId, region }, ['WCB_EARN']);
+    await requireStatutoryHistoryFactors(tx, historyScope, { employeePartyId, region }, [
+      "WCB_EARN",
+    ]);
     const openingSources = await readEmployeeOpeningLevySources(tx, {
-      orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId, beforeDate: ctx.payDate,
+      orgId,
+      employeePartyId,
+      taxYear,
+      subsidiaryId: historyScope.subsidiaryId,
+      beforeDate: ctx.payDate,
     });
-    const openingAssessable = employeeOpeningLevyAmount(openingSources, { programKey: 'ca_wcb', region });
-    const priorAssessable = (await tx.execute<{ prior: string }>(sql`
+    const openingAssessable = employeeOpeningLevyAmount(openingSources, {
+      programKey: "ca_wcb",
+      region,
+    });
+    const priorAssessable = (
+      await tx.execute<{ prior: string }>(
+        sql`
       select ${openingAssessable}::numeric + coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
         from ${employerScopedStatutoryStubs(historyScope, { employeePartyId, region })} s
        where s.pay_run_document_id <> ${documentId}
-    `, "objects"))[0]!.prior;
+    `,
+        "objects",
+      )
+    )[0]!.prior;
     const assessable = assessableFor("wcb");
     const room = wcb.max_assessable
-      ? (cmp(wcb.max_assessable, priorAssessable) > 0 ? add(wcb.max_assessable, neg(priorAssessable)) : "0")
+      ? cmp(wcb.max_assessable, priorAssessable) > 0
+        ? add(wcb.max_assessable, neg(priorAssessable))
+        : "0"
       : assessable;
     const computedAssessable = (cmp(assessable, room) <= 0 ? assessable : room) as Money;
     wcbAssessable = computedAssessable;
     if (cmp(computedAssessable, "0") > 0 || hasWcbAdjustment) {
-      const computedAmount = cmp(computedAssessable, "0") > 0
-        ? ledgerPrecisionLevy(computedAssessable, wcb.rate_percent)
-        : "0" as Money;
+      const computedAmount =
+        cmp(computedAssessable, "0") > 0
+          ? ledgerPrecisionLevy(computedAssessable, wcb.rate_percent)
+          : ("0" as Money);
       // The assessed premium factor stays the native assessment of this
       // stub's own lines; the issued operator amount rides the same line
       // set and is retained separately (wcbAdjustmentAmount), never
@@ -285,7 +391,10 @@ export async function applyCaEmployerLevies(
       // Excluded earning types carry no premium, so they carry no allocation
       // either. First-appearance order is kept so the last-project remainder
       // rule below stays stable.
-      const byTarget = new Map<string, { amount: string; projectId: string; departmentId: string | null }>();
+      const byTarget = new Map<
+        string,
+        { amount: string; projectId: string; departmentId: string | null }
+      >();
       for (const line of lines) {
         if (line.kind !== "earning" || line.accrualOnly || !line.projectId) continue;
         if (!(line.programApplicability?.["wcb"] ?? true)) continue;
@@ -306,13 +415,16 @@ export async function applyCaEmployerLevies(
       let allocated = "0";
       const allTagged = cmp(sum(splits.map((s) => s.amount)), assessable) === 0;
       for (const [index, split] of splits.entries()) {
-        const share = index === splits.length - 1 && allTagged
-          ? add(computedAmount, neg(allocated))
-          : roundMoney(mulRatio(computedAmount, toUnits(split.amount), assessableUnits), 2);
+        const share =
+          index === splits.length - 1 && allTagged
+            ? add(computedAmount, neg(allocated))
+            : roundMoney(mulRatio(computedAmount, toUnits(split.amount), assessableUnits), 2);
         if (cmp(share, "0") === 0) continue;
         allocated = add(allocated, share);
         allocations.push({
-          amount: share, projectId: split.projectId, departmentId: split.departmentId,
+          amount: share,
+          projectId: split.projectId,
+          departmentId: split.departmentId,
         });
       }
       const remainder = add(computedAmount, neg(allocated));
@@ -328,8 +440,8 @@ export async function applyCaEmployerLevies(
       const allocatedTotal = sum(allocations.map((a) => a.amount));
       if (cmp(allocatedTotal, lineTotal) !== 0) {
         throw new PayrollError(
-          `WCB allocation ${allocatedTotal} does not equal the ${lineTotal} premium `
-          + `for ${employeeName}`,
+          `WCB allocation ${allocatedTotal} does not equal the ${lineTotal} premium ` +
+            `for ${employeeName}`,
         );
       }
       pushStatutory("wcb", "employer_contribution", "WCB/WSIB", lineTotal, 260, { allocations });
@@ -338,7 +450,9 @@ export async function applyCaEmployerLevies(
 
   const eht = config.eht(region);
   if (hasEhtAdjustment && !eht) {
-    throw new PayrollError(`${employeeName}: an employer health tax levy adjustment is recorded but CA ${region} employer health tax is not configured for ${taxYear} — configure the ca_eht rate in Payroll Setup → Statutory rates before calculating`);
+    throw new PayrollError(
+      `${employeeName}: an employer health tax levy adjustment is recorded but CA ${region} employer health tax is not configured for ${taxYear} — configure the ca_eht rate in Payroll Setup → Statutory rates before calculating`,
+    );
   }
   if (eht) {
     const lineEarnings = assessableFor("eht") as Money;
@@ -368,48 +482,62 @@ export async function applyCaEmployerLevies(
       // never used to relabel another province's historical assessments.
       const exemptionFact = `eht_exemption_share_${region.toLowerCase()}`;
       const declaredExemption = await resolveStoredEmployerFact({
-        tx, orgId, subsidiaryId: historyScope.subsidiaryId, country: 'CA', factKey: exemptionFact,
+        tx,
+        orgId,
+        subsidiaryId: historyScope.subsidiaryId,
+        country: "CA",
+        factKey: exemptionFact,
         asOf: ctx.payDate ?? `${taxYear}-01-01`,
       });
-      const availableExemption = eht.annualExemption ?? '0';
-      if (cmp(availableExemption, '0') > 0 && declaredExemption === null) {
+      const availableExemption = eht.annualExemption ?? "0";
+      if (cmp(availableExemption, "0") > 0 && declaredExemption === null) {
         throw new PayrollError(
-          `CA ${region} employer health tax has no annual exemption allocation for this legal employer — `
-          + `record ${exemptionFact} for ${taxYear} in Payroll Setup → Employer facts before applying the associated-employer exemption.`,
+          `CA ${region} employer health tax has no annual exemption allocation for this legal employer — ` +
+            `record ${exemptionFact} for ${taxYear} in Payroll Setup → Employer facts before applying the associated-employer exemption.`,
         );
       }
-      const exemption = declaredExemption ?? '0';
+      const exemption = declaredExemption ?? "0";
       if (cmp(exemption, availableExemption) > 0) {
         throw new PayrollError(
-          `CA ${region} employer health tax exemption allocation exceeds the configured amount available to the associated-employer group — `
-          + `review ${exemptionFact} in Payroll Setup → Employer facts and the ${region} rate in Payroll Setup → Statutory rates.`,
+          `CA ${region} employer health tax exemption allocation exceeds the configured amount available to the associated-employer group — ` +
+            `review ${exemptionFact} in Payroll Setup → Employer facts and the ${region} rate in Payroll Setup → Statutory rates.`,
         );
       }
       // Prior remuneration can consume only a positive declared exemption.
       // A zero allocation taxes this run's full base and needs no prior factor.
-      let priorInProvince = '0';
-      if (cmp(exemption, '0') > 0) {
-        await requireStatutoryHistoryFactors(tx, historyScope, { region }, ['EHT_EARN']);
+      let priorInProvince = "0";
+      if (cmp(exemption, "0") > 0) {
+        await requireStatutoryHistoryFactors(tx, historyScope, { region }, ["EHT_EARN"]);
         const ehtOpening = await requireEmployerOpeningLevySources(tx, {
-          orgId, subsidiaryId: historyScope.subsidiaryId, taxYear, programKey: 'ca_eht', region, beforeDate: ctx.payDate,
+          orgId,
+          subsidiaryId: historyScope.subsidiaryId,
+          taxYear,
+          programKey: "ca_eht",
+          region,
+          beforeDate: ctx.payDate,
         });
-        const priorRows = await tx.execute<{ prior: string }>(sql`
+        const priorRows = await tx.execute<{ prior: string }>(
+          sql`
           select (coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0)
                   + ${ehtOpening}::numeric)::text as prior
             from ${employerScopedStatutoryStubs(historyScope, { region, includeCurrentDocument: true })} s
-        `, "objects");
-        if (priorRows.length !== 1) throw new PayrollError('Employer health tax prior remuneration could not be resolved uniquely');
+        `,
+          "objects",
+        );
+        if (priorRows.length !== 1)
+          throw new PayrollError(
+            "Employer health tax prior remuneration could not be resolved uniquely",
+          );
         priorInProvince = priorRows[0]!.prior;
       }
-      const exemptionLeft = cmp(exemption, priorInProvince) > 0
-        ? add(exemption, neg(priorInProvince))
-        : "0";
-      const taxableRemuneration = cmp(lineEarnings, exemptionLeft) > 0
-        ? add(lineEarnings, neg(exemptionLeft))
-        : "0";
-      const computedEhtAmount = cmp(taxableRemuneration, "0") > 0
-        ? ledgerPrecisionLevy(taxableRemuneration, eht.rate)
-        : "0" as Money;
+      const exemptionLeft =
+        cmp(exemption, priorInProvince) > 0 ? add(exemption, neg(priorInProvince)) : "0";
+      const taxableRemuneration =
+        cmp(lineEarnings, exemptionLeft) > 0 ? add(lineEarnings, neg(exemptionLeft)) : "0";
+      const computedEhtAmount =
+        cmp(taxableRemuneration, "0") > 0
+          ? ledgerPrecisionLevy(taxableRemuneration, eht.rate)
+          : ("0" as Money);
       // Assessed factor = native assessment of own lines only; the issued
       // operator amount adds to the line and is retained separately.
       ehtAmount = computedEhtAmount;
@@ -433,14 +561,15 @@ export async function applyCaEmployerLevies(
     if (hsf) {
       hsfEarnings = assessableFor("hsf") as Money;
       if (cmp(hsfEarnings, "0") > 0) {
-        const classes = (hsf.sectorOther ? 1 : 0)
-          + (hsf.sectorPublic ? 1 : 0)
-          + (hsf.sectorPrimaryManufacturing ? 1 : 0)
-          + (hsf.sectorExempt2026 ? 1 : 0);
+        const classes =
+          (hsf.sectorOther ? 1 : 0) +
+          (hsf.sectorPublic ? 1 : 0) +
+          (hsf.sectorPrimaryManufacturing ? 1 : 0) +
+          (hsf.sectorExempt2026 ? 1 : 0);
         if (classes > 1) {
           throw new PayrollPackError(
-            "QC HSF sector flags are mutually exclusive — set exactly one of sectorOther, "
-            + "sectorPublic, sectorPrimaryManufacturing, sectorExempt2026",
+            "QC HSF sector flags are mutually exclusive — set exactly one of sectorOther, " +
+              "sectorPublic, sectorPrimaryManufacturing, sectorExempt2026",
           );
         }
         const sector: QuebecHsfSector | null = hsf.sectorOther
@@ -454,16 +583,16 @@ export async function applyCaEmployerLevies(
                 : null;
         if (sector === null) {
           throw new PayrollPackError(
-            "QC HSF needs the employer's sector classification: the statutory rate comes from "
-            + "the Revenu Québec total-payroll formula by sector, never from a flat configured rate. "
-            + "Set exactly one sector flag on the QC ca_hsf rate (sectorOther, sectorPublic, "
-            + "sectorPrimaryManufacturing, or sectorExempt2026) before calculating payroll",
+            "QC HSF needs the employer's sector classification: the statutory rate comes from " +
+              "the Revenu Québec total-payroll formula by sector, never from a flat configured rate. " +
+              "Set exactly one sector flag on the QC ca_hsf rate (sectorOther, sectorPublic, " +
+              "sectorPrimaryManufacturing, or sectorExempt2026) before calculating payroll",
           );
         } else if (sector === "exempt_2026") {
           if (taxYear !== 2026) {
             throw new PayrollPackError(
-              `QC HSF 2026 agriculture/forestry/fishing exemption does not cover ${taxYear} — clear the `
-              + "exemption, or contact support for a year the exemption does not cover.",
+              `QC HSF 2026 agriculture/forestry/fishing exemption does not cover ${taxYear} — clear the ` +
+                "exemption, or contact support for a year the exemption does not cover.",
             );
           }
           hsfAmount = "0" as Money;
@@ -475,18 +604,25 @@ export async function applyCaEmployerLevies(
           // no HSF carry-in column yet — a mid-year adopter understates the
           // rate basis, so true up the adoption stub outside the pack until
           // one exists.
-        const ytd = (await tx.execute<{ remuneration: string; booked: string }>(sql`
+          const ytd = (
+            await tx.execute<{ remuneration: string; booked: string }>(
+              sql`
             select coalesce(sum((s.factors->>'HSF_EARN')::numeric), 0) as remuneration,
                    coalesce(sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                                   join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                                  where l.org_id = ${orgId} and l.stub_id = s.id
                                    and l.kind = 'employer_contribution' and pc.system_key = 'hsf')), 0) as booked
           from ${employerScopedStatutoryStubs(historyScope, { region, includeCurrentDocument: true })} s
-          `, "objects"))[0]!;
+          `,
+              "objects",
+            )
+          )[0]!;
           const ytdBase = add(ytd.remuneration, hsfEarnings);
           const rate = quebecHsfRateForPayroll(sector, ytdBase, taxYear);
           const cumulative = mulPercent(ytdBase, rate, 2);
-          hsfAmount = (cmp(cumulative, ytd.booked) > 0 ? add(cumulative, neg(ytd.booked)) : "0") as Money;
+          hsfAmount = (
+            cmp(cumulative, ytd.booked) > 0 ? add(cumulative, neg(ytd.booked)) : "0"
+          ) as Money;
         }
         if (cmp(hsfAmount, "0") > 0) {
           pushStatutory("hsf", "employer_contribution", "Health Services Fund", hsfAmount, 280);
@@ -508,8 +644,8 @@ export async function applyCaEmployerLevies(
   if (region === "QC") {
     if (taxYear !== 2026) {
       throw new PayrollPackError(
-        `Québec CNT has no transcribed rate for ${taxYear}: 2026 prices 0.06% to $103,000 per employee `
-        + "(Revenu Québec). This year is not yet supported by the CA-QC pack; contact support.",
+        `Québec CNT has no transcribed rate for ${taxYear}: 2026 prices 0.06% to $103,000 per employee ` +
+          "(Revenu Québec). This year is not yet supported by the CA-QC pack; contact support.",
       );
     }
     const runSubsidiary = historyScope.subsidiaryId;
@@ -522,27 +658,54 @@ export async function applyCaEmployerLevies(
       asOf: ctx.payDate ?? `${taxYear}-12-31`,
     });
     if (cntExemption === "none") {
-      await requireStatutoryHistoryFactors(tx, historyScope, { employeePartyId, region: 'QC' }, ['CNT_EARN']);
+      await requireStatutoryHistoryFactors(tx, historyScope, { employeePartyId, region: "QC" }, [
+        "CNT_EARN",
+      ]);
       const cntSources = await readEmployeeOpeningLevySources(tx, {
-        orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId, beforeDate: ctx.payDate,
+        orgId,
+        employeePartyId,
+        taxYear,
+        subsidiaryId: historyScope.subsidiaryId,
+        beforeDate: ctx.payDate,
       });
-      const cntOpening = employeeOpeningLevyAmount(cntSources, { programKey: 'ca_cnt', region: 'QC' });
-      const priorCnt = (await tx.execute<{ prior: string }>(sql`
+      const cntOpening = employeeOpeningLevyAmount(cntSources, {
+        programKey: "ca_cnt",
+        region: "QC",
+      });
+      const priorCnt = (
+        await tx.execute<{ prior: string }>(
+          sql`
         select ${cntOpening}::numeric + coalesce(sum((s.factors->>'CNT_EARN')::numeric), 0) as prior
-          from ${employerScopedStatutoryStubs(historyScope, { employeePartyId, region: 'QC', includeCurrentDocument: true })} s
-      `, "objects"))[0]!.prior;
+          from ${employerScopedStatutoryStubs(historyScope, { employeePartyId, region: "QC", includeCurrentDocument: true })} s
+      `,
+          "objects",
+        )
+      )[0]!.prior;
       const assessable = assessableFor("cnt");
       const room = cmp(CNT_MAX_2026, priorCnt) > 0 ? add(CNT_MAX_2026, neg(priorCnt)) : "0";
       cntEarnings = (cmp(assessable, room) <= 0 ? assessable : room) as Money;
       if (cmp(cntEarnings, "0") > 0) {
         cntAmount = mulPercent(cntEarnings, CNT_RATE_2026, 2) as Money;
-        pushStatutory("cnt", "employer_contribution", "Contribution related to labour standards (CNT)", cntAmount, 285);
+        pushStatutory(
+          "cnt",
+          "employer_contribution",
+          "Contribution related to labour standards (CNT)",
+          cntAmount,
+          285,
+        );
       }
     }
   }
 
   return {
-    wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings, cntAmount, cntEarnings,
+    wcbAmount,
+    wcbAssessable,
+    ehtAmount,
+    ehtEarnings,
+    hsfAmount,
+    hsfEarnings,
+    cntAmount,
+    cntEarnings,
     ...(hasWcbAdjustment ? { wcbAdjustmentAmount } : {}),
     ...(hasEhtAdjustment ? { ehtAdjustmentAmount } : {}),
   };

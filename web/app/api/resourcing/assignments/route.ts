@@ -2,7 +2,12 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { upsertAssignment } from "@openbooks/engine/resourcing/assignments";
 import { defineRoute } from "@/lib/api/route";
-import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
+import {
+  findUnownedCustomReferences,
+  loadFieldDefs,
+  unknownCustomFieldKey,
+  validateCustomValues,
+} from "@/lib/custom-fields";
 
 const Common = {
   projectId: uuidString(),
@@ -56,13 +61,18 @@ export const POST = defineRoute({
       custom.cleaned,
     );
     if (unownedReferences.length > 0) {
-      return Response.json({
-        error: "invalid_custom_fields",
-        fields: Object.fromEntries(unownedReferences.map((field) => [
-          field.key,
-          `${field.label} must reference a record in this organization`,
-        ])),
-      }, { status: 422 });
+      return Response.json(
+        {
+          error: "invalid_custom_fields",
+          fields: Object.fromEntries(
+            unownedReferences.map((field) => [
+              field.key,
+              `${field.label} must reference a record in this organization`,
+            ]),
+          ),
+        },
+        { status: 422 },
+      );
     }
     const result = await upsertAssignment({
       ...body,

@@ -1,12 +1,12 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { dataExportSpec, loadDataExport } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { dataExportSpec, loadDataExport } from "./view";
 
 export default async function DataExportPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadDataExport()
-  return <ModuleView spec={dataExportSpec()} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadDataExport();
+  return <ModuleView spec={dataExportSpec()} data={data} searchParams={sp} trusted />;
 }

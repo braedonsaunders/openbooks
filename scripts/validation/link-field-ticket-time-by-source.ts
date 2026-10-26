@@ -44,11 +44,9 @@ if (!isUuid(orgId)) {
 const inputPath = args.get("input") ?? "/tmp/ns-time-ticket.json";
 const sourceKey = args.get("source-key") ?? "nsId";
 const outputPath =
-  args.get("out") ??
-  `/tmp/openbooks-field-ticket-source-links-${orgId}-${Date.now()}.json`;
+  args.get("out") ?? `/tmp/openbooks-field-ticket-source-links-${orgId}-${Date.now()}.json`;
 const apply = args.get("apply") === "true";
-const excludeProjectConflicts =
-  args.get("exclude-project-conflicts") === "true";
+const excludeProjectConflicts = args.get("exclude-project-conflicts") === "true";
 const actorArg = args.get("actor")?.trim() ?? "";
 if (actorArg && !isUuid(actorArg)) {
   throw new Error("--actor must be a user UUID from the target organization");
@@ -66,14 +64,10 @@ if (apply && target.isProduction && !process.argv.includes("--production")) {
   throw new Error("--production is required for a live tenant");
 }
 
-const raw = JSON.parse(readFileSync(inputPath, "utf8")) as Array<
-  Record<string, unknown>
->;
+const raw = JSON.parse(readFileSync(inputPath, "utf8")) as Array<Record<string, unknown>>;
 const links: SourceLink[] = raw.map((row) => ({
   sourceRef: String(row.id ?? row.source_ref ?? row.sourceRef ?? "").trim(),
-  ticketNumber: String(
-    row.ticket_number ?? row.ticketNumber ?? "",
-  ).trim(),
+  ticketNumber: String(row.ticket_number ?? row.ticketNumber ?? "").trim(),
 }));
 const uniqueLinks = new Map<string, SourceLink>();
 for (const link of links) {
@@ -90,11 +84,7 @@ for (const link of links) {
 }
 
 const BATCH = 1_000;
-const resolved = await resolveTimeTicketLinks(
-  orgId,
-  sourceKey,
-  [...uniqueLinks.values()],
-);
+const resolved = await resolveTimeTicketLinks(orgId, sourceKey, [...uniqueLinks.values()]);
 
 if (resolved.length !== uniqueLinks.size) {
   throw new Error(
@@ -121,9 +111,12 @@ if (apply) {
       "refusing apply: --actor <user UUID> is required so every audit row carries its operator; pass the operator's user id from the target organization",
     );
   }
-  const actor = (await db.execute(
-      sql`select id from users where org_id = ${orgId} and id = ${actorArg}`, "objects",
-    ))[0];
+  const actor = (
+    await db.execute(
+      sql`select id from users where org_id = ${orgId} and id = ${actorArg}`,
+      "objects",
+    )
+  )[0];
   if (!actor) {
     throw new Error(
       `refusing apply: --actor ${actorArg} is not a user of this organization; pass the operator's user id from the target organization`,
@@ -141,9 +134,7 @@ if (apply) {
     );
   }
   const runId = randomUUID();
-  const inputSha256 = createHash("sha256")
-    .update(readFileSync(inputPath))
-    .digest("hex");
+  const inputSha256 = createHash("sha256").update(readFileSync(inputPath)).digest("hex");
   for (let offset = 0; offset < applicableChanges.length; offset += BATCH) {
     const batch = applicableChanges.slice(offset, offset + BATCH).map((row) => ({
       timeEntryId: row.timeEntryId!,

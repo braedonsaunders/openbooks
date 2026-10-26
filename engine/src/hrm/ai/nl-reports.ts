@@ -21,12 +21,27 @@ import { logDecision } from "./governance.ts";
 
 const AGG_FNS = ["count", "count_distinct", "sum", "avg", "min", "max", "latest"] as const;
 const FILTER_OPS = [
-  "eq", "neq", "in", "not_in", "gte", "lte",
-  "is_null", "is_not_null", "is_true", "is_false", "contains",
+  "eq",
+  "neq",
+  "in",
+  "not_in",
+  "gte",
+  "lte",
+  "is_null",
+  "is_not_null",
+  "is_true",
+  "is_false",
+  "contains",
 ] as const;
 const TEMPORAL_BINS = [
-  "day", "week", "month", "quarter", "year",
-  "fiscal_period", "fiscal_quarter", "fiscal_year",
+  "day",
+  "week",
+  "month",
+  "quarter",
+  "year",
+  "fiscal_period",
+  "fiscal_quarter",
+  "fiscal_year",
 ] as const;
 
 /** Caller-visible catalog snapshot: entity key, its column keys, its gate. */
@@ -45,8 +60,14 @@ export interface NlCatalogEntity {
  * package re-validates on execution.
  */
 export type NlTemporalBin =
-  | "day" | "week" | "month" | "quarter" | "year"
-  | "fiscal_period" | "fiscal_quarter" | "fiscal_year";
+  | "day"
+  | "week"
+  | "month"
+  | "quarter"
+  | "year"
+  | "fiscal_period"
+  | "fiscal_quarter"
+  | "fiscal_year";
 
 export type NlAggFn = "count" | "count_distinct" | "sum" | "avg" | "min" | "max" | "latest";
 
@@ -82,7 +103,9 @@ function validateFilters(
   if (!isRecord(filters)) throw nlDefinitionRefused("filters must be a rule group object or null");
   if (depth > 5) throw nlDefinitionRefused("filters nest deeper than 5 levels");
   if (filters.combinator !== "and" && filters.combinator !== "or") {
-    throw nlDefinitionRefused(`filters combinator must be "and" or "or", got ${JSON.stringify(filters.combinator)}`);
+    throw nlDefinitionRefused(
+      `filters combinator must be "and" or "or", got ${JSON.stringify(filters.combinator)}`,
+    );
   }
   if (!Array.isArray(filters.rules)) throw nlDefinitionRefused("filters.rules must be an array");
   if (countRules(filters) > 60) throw nlDefinitionRefused("filters carry more than 60 rules");
@@ -100,7 +123,9 @@ function validateFilters(
       );
     }
     if (typeof rule.op !== "string" || !(FILTER_OPS as readonly string[]).includes(rule.op)) {
-      throw nlDefinitionRefused(`filter operator ${JSON.stringify(rule.op)} on "${field}" is unknown`);
+      throw nlDefinitionRefused(
+        `filter operator ${JSON.stringify(rule.op)} on "${field}" is unknown`,
+      );
     }
     rules.push({ field, op: rule.op, ...(rule.value !== undefined ? { value: rule.value } : {}) });
   }
@@ -123,8 +148,14 @@ export function validateNlDefinition(
 ): NlValidatedDefinition {
   if (!isRecord(raw)) throw nlDefinitionRefused("definition must be an object");
   const allowedTop = new Set([
-    "entity", "mode", "columns", "breakouts", "measures",
-    "filters", "sorts", "limit",
+    "entity",
+    "mode",
+    "columns",
+    "breakouts",
+    "measures",
+    "filters",
+    "sorts",
+    "limit",
   ]);
   for (const key of Object.keys(raw)) {
     if (!allowedTop.has(key)) throw nlDefinitionRefused(`unknown definition key "${key}"`);
@@ -148,13 +179,18 @@ export function validateNlDefinition(
   const columns = new Set(entity.columns);
   const mode = raw.mode === undefined || raw.mode === null ? "rows" : raw.mode;
   if (mode !== "rows" && mode !== "summarize") {
-    throw nlDefinitionRefused(`mode must be "rows" or "summarize", got ${JSON.stringify(raw.mode)}`);
+    throw nlDefinitionRefused(
+      `mode must be "rows" or "summarize", got ${JSON.stringify(raw.mode)}`,
+    );
   }
-  if (!Array.isArray(raw.columns)) throw nlDefinitionRefused("columns must be an array of entity column keys");
+  if (!Array.isArray(raw.columns))
+    throw nlDefinitionRefused("columns must be an array of entity column keys");
   const outColumns: string[] = [];
   for (const c of raw.columns) {
     if (typeof c !== "string" || !columns.has(c)) {
-      throw nlDefinitionRefused(`column ${JSON.stringify(c)} is not a column of entity "${entityKey}"`);
+      throw nlDefinitionRefused(
+        `column ${JSON.stringify(c)} is not a column of entity "${entityKey}"`,
+      );
     }
     if (!outColumns.includes(c)) outColumns.push(c);
   }
@@ -164,7 +200,8 @@ export function validateNlDefinition(
   const breakouts: NlValidatedDefinition["breakouts"] = [];
   if (raw.breakouts !== undefined && raw.breakouts !== null) {
     if (!Array.isArray(raw.breakouts)) throw nlDefinitionRefused("breakouts must be an array");
-    if (raw.breakouts.length > 6) throw nlDefinitionRefused("breakouts carry more than 6 dimensions");
+    if (raw.breakouts.length > 6)
+      throw nlDefinitionRefused("breakouts carry more than 6 dimensions");
     for (const b of raw.breakouts) {
       if (!isRecord(b) || typeof b.column !== "string" || !columns.has(b.column)) {
         throw nlDefinitionRefused(
@@ -172,10 +209,17 @@ export function validateNlDefinition(
         );
       }
       const bin = b.bin === undefined || b.bin === null ? undefined : b.bin;
-      if (bin !== undefined && (typeof bin !== "string" || !(TEMPORAL_BINS as readonly string[]).includes(bin))) {
-        throw nlDefinitionRefused(`breakout bin ${JSON.stringify(b.bin)} on "${b.column}" is unknown`);
+      if (
+        bin !== undefined &&
+        (typeof bin !== "string" || !(TEMPORAL_BINS as readonly string[]).includes(bin))
+      ) {
+        throw nlDefinitionRefused(
+          `breakout bin ${JSON.stringify(b.bin)} on "${b.column}" is unknown`,
+        );
       }
-      breakouts.push(bin === undefined ? { column: b.column } : { column: b.column, bin: bin as NlTemporalBin });
+      breakouts.push(
+        bin === undefined ? { column: b.column } : { column: b.column, bin: bin as NlTemporalBin },
+      );
     }
   }
   const measures: NlValidatedDefinition["measures"] = [];
@@ -183,7 +227,11 @@ export function validateNlDefinition(
     if (!Array.isArray(raw.measures)) throw nlDefinitionRefused("measures must be an array");
     if (raw.measures.length > 8) throw nlDefinitionRefused("measures carry more than 8 aggregates");
     for (const m of raw.measures) {
-      if (!isRecord(m) || typeof m.fn !== "string" || !(AGG_FNS as readonly string[]).includes(m.fn)) {
+      if (
+        !isRecord(m) ||
+        typeof m.fn !== "string" ||
+        !(AGG_FNS as readonly string[]).includes(m.fn)
+      ) {
         throw nlDefinitionRefused(
           `measure fn ${JSON.stringify(isRecord(m) ? m.fn : m)} is unknown (count, sum, avg, min, max, count_distinct, latest)`,
         );
@@ -198,7 +246,9 @@ export function validateNlDefinition(
       measures.push({
         fn: m.fn as NlAggFn,
         ...(m.fn === "count" ? {} : { column: m.column as string }),
-        ...(typeof m.label === "string" && m.label.trim() ? { label: m.label.trim().slice(0, 80) } : {}),
+        ...(typeof m.label === "string" && m.label.trim()
+          ? { label: m.label.trim().slice(0, 80) }
+          : {}),
       });
     }
   }
@@ -220,13 +270,26 @@ export function validateNlDefinition(
   }
   let limit: number | null = null;
   if (raw.limit !== undefined && raw.limit !== null) {
-    if (!Number.isInteger(raw.limit) || (raw.limit as number) < 1 || (raw.limit as number) > 10000) {
+    if (
+      !Number.isInteger(raw.limit) ||
+      (raw.limit as number) < 1 ||
+      (raw.limit as number) > 10000
+    ) {
       throw nlDefinitionRefused("limit must be an integer from 1 to 10000");
     }
     limit = raw.limit as number;
   }
   const filters = validateFilters(entityKey, columns, raw.filters ?? null, 0);
-  return { entity: entityKey, mode, columns: outColumns, breakouts, measures, filters, sorts, limit };
+  return {
+    entity: entityKey,
+    mode,
+    columns: outColumns,
+    breakouts,
+    measures,
+    filters,
+    sorts,
+    limit,
+  };
 }
 
 export interface NlDraftInput {
@@ -249,15 +312,22 @@ export async function saveNlDraft(
   input: NlDraftInput,
 ): Promise<{ draftId: string; definition: NlValidatedDefinition }> {
   const { orgId, actorId, question } = input;
-  if (!orgId || !actorId) throw new AiRailsError("ai_invalid_input", "orgId and actorId are required");
+  if (!orgId || !actorId)
+    throw new AiRailsError("ai_invalid_input", "orgId and actorId are required");
   if (!question || question.trim().length === 0) {
-    throw new AiRailsError("ai_invalid_input", "ask a question first — an empty question has no report");
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "ask a question first — an empty question has no report",
+    );
   }
   const definition = validateNlDefinition(input.candidate, input.catalog, input.callerPermissions);
-  const rows = await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(
+    sql`
     insert into nl_report_drafts (org_id, user_id, question, definition, status)
     values (${orgId}::uuid, ${actorId}::uuid, ${question}, ${JSON.stringify(definition)}::jsonb, 'drafted')
-    returning id::text as id`, "objects");
+    returning id::text as id`,
+    "objects",
+  );
   const draft = rows[0];
   if (!draft) {
     throw new AiRailsError(
@@ -282,7 +352,9 @@ export async function saveNlDraft(
 }
 
 /** Public boundary: validate and save the draft. One transaction. */
-export async function draftNlReport(query: NlDraftInput): Promise<{ draftId: string; definition: NlValidatedDefinition }> {
+export async function draftNlReport(
+  query: NlDraftInput,
+): Promise<{ draftId: string; definition: NlValidatedDefinition }> {
   return withOrgTransaction(query.orgId, () => saveNlDraft(db, query));
 }
 
@@ -299,13 +371,22 @@ export async function listNlDrafts(
   exec: SqlExecutor,
   input: { readonly orgId: string; readonly actorId: string },
 ): Promise<NlDraftRow[]> {
-  const rows = await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
+  const rows = await exec.execute<{
+    id: string;
+    question: string;
+    definition: NlValidatedDefinition;
+    status: string;
+    createdAt: string;
+  }>(
+    sql`
     select id::text as id, question, definition, status,
            created_at::text as "createdAt"
       from nl_report_drafts
      where org_id = ${input.orgId}::uuid and user_id = ${input.actorId}::uuid
      order by created_at desc, id desc
-     limit 20`, "objects");
+     limit 20`,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     question: row.question,
@@ -322,15 +403,29 @@ export async function listNlDrafts(
  */
 export async function transitionNlDraft(
   exec: SqlExecutor,
-  input: { readonly orgId: string; readonly actorId: string; readonly draftId: string; readonly status: "saved" | "discarded" },
+  input: {
+    readonly orgId: string;
+    readonly actorId: string;
+    readonly draftId: string;
+    readonly status: "saved" | "discarded";
+  },
 ): Promise<NlDraftRow> {
-  const rows = await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
+  const rows = await exec.execute<{
+    id: string;
+    question: string;
+    definition: NlValidatedDefinition;
+    status: string;
+    createdAt: string;
+  }>(
+    sql`
     update nl_report_drafts
        set status = ${input.status}
      where org_id = ${input.orgId}::uuid and user_id = ${input.actorId}::uuid
        and id = ${input.draftId}::uuid and status = 'drafted'
     returning id::text as id, question, definition, status,
-              created_at::text as "createdAt"`, "objects");
+              created_at::text as "createdAt"`,
+    "objects",
+  );
   const row = rows[0];
   if (!row) {
     throw new AiRailsError(
@@ -338,5 +433,11 @@ export async function transitionNlDraft(
       `report draft ${input.draftId} is not an open draft of yours — it is missing, already saved or discarded, or belongs to someone else`,
     );
   }
-  return { id: row.id, question: row.question, definition: row.definition, status: row.status, createdAt: row.createdAt };
+  return {
+    id: row.id,
+    question: row.question,
+    definition: row.definition,
+    status: row.status,
+    createdAt: row.createdAt,
+  };
 }

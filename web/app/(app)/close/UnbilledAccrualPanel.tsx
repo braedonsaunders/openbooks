@@ -1,6 +1,6 @@
 "use client";
 
-import { useIdentityState } from "@/lib/use-identity-state"
+import { useIdentityState } from "@/lib/use-identity-state";
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -64,7 +64,13 @@ const isZero = (value: string) => /^-?0*(\.0*)?$/.test(value.trim());
  * what posting would add or correct, the per-project detail behind a Review
  * disclosure, and the one action that posts it.
  */
-export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; canPost: boolean }) {
+export function UnbilledAccrualPanel({
+  periodId,
+  canPost,
+}: {
+  periodId: string;
+  canPost: boolean;
+}) {
   const t = useTranslations("close.unbilledAccrual");
   const router = useRouter();
   const { money } = useMoney();
@@ -74,12 +80,17 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
 
   const load = useCallback(() => {
     return fetch(`/api/close/unbilled-revenue-accrual?periodId=${encodeURIComponent(periodId)}`)
-      .then(async response => {
+      .then(async (response) => {
         if (!response.ok) throw new Error(await readError(response, t("loadFailed")));
-        return await response.json() as AccrualPreview;
+        return (await response.json()) as AccrualPreview;
       })
-      .then(preview => setState({ status: "ready", preview }))
-      .catch((cause: unknown) => setState({ status: "failed", message: cause instanceof Error ? cause.message : t("loadFailed") }));
+      .then((preview) => setState({ status: "ready", preview }))
+      .catch((cause: unknown) =>
+        setState({
+          status: "failed",
+          message: cause instanceof Error ? cause.message : t("loadFailed"),
+        }),
+      );
   }, [periodId, t, setState]);
 
   useEffect(() => {
@@ -99,7 +110,7 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
         return;
       }
       toast.success(t("posted"));
-      setAttempt(value => value + 1);
+      setAttempt((value) => value + 1);
       router.refresh();
     } catch {
       toast.error(t("postFailed"));
@@ -114,8 +125,10 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
   if (state.status === "failed") {
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <p role="alert" className="text-sm text-red-700 dark:text-red-300">{state.message}</p>
-        <Button variant="outline" size="sm" onClick={() => setAttempt(value => value + 1)}>
+        <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+          {state.message}
+        </p>
+        <Button variant="outline" size="sm" onClick={() => setAttempt((value) => value + 1)}>
           <RefreshCw size={14} />
           {t("retry")}
         </Button>
@@ -129,8 +142,15 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
     <div className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-800">
       <p className="text-xs text-slate-500">
         {preview.reversal.date
-          ? t("dates", { period: preview.period.name, accrualDate: preview.period.endsOn, reversalDate: preview.reversal.date })
-          : t("datesNoReversal", { period: preview.period.name, accrualDate: preview.period.endsOn })}
+          ? t("dates", {
+              period: preview.period.name,
+              accrualDate: preview.period.endsOn,
+              reversalDate: preview.reversal.date,
+            })
+          : t("datesNoReversal", {
+              period: preview.period.name,
+              accrualDate: preview.period.endsOn,
+            })}
       </p>
       {preview.lines.length === 0 ? (
         <p className="text-sm text-slate-600 dark:text-slate-300">{t("empty")}</p>
@@ -154,7 +174,9 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
           </div>
           <div>
             <dt className="text-xs text-slate-500">{t("projectsLabel")}</dt>
-            <dd className="text-base font-semibold tabular-nums">{t("projects", { count: preview.projectCount })}</dd>
+            <dd className="text-base font-semibold tabular-nums">
+              {t("projects", { count: preview.projectCount })}
+            </dd>
           </div>
         </dl>
       )}
@@ -167,14 +189,19 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
           <AlertDescription>
             <ul className="list-disc space-y-1 pl-5">
               {preview.problems.map((problem, index) => (
-                <li key={`${problem.code}-${problem.projectId ?? ""}-${index}`}>{problem.message}</li>
+                <li key={`${problem.code}-${problem.projectId ?? ""}-${index}`}>
+                  {problem.message}
+                </li>
               ))}
             </ul>
           </AlertDescription>
         </Alert>
       ) : null}
       {preview.lines.length > 0 ? (
-        <DisclosureSection title={t("review")} summary={t("projects", { count: preview.projectCount })}>
+        <DisclosureSection
+          title={t("review")}
+          summary={t("projects", { count: preview.projectCount })}
+        >
           <Table>
             <TableHeader>
               <TableRow>
@@ -187,10 +214,20 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
             <TableBody>
               {preview.lines.map((line) => (
                 <TableRow key={`${line.projectId}-${line.revenueAccountId}-${line.currency}`}>
-                  <TableCell>{line.projectCode ? `${line.projectCode} · ${line.projectName}` : line.projectName}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(line.unbilled, { currency: line.currency })}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(line.accrued, { currency: line.currency })}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(line.delta, { currency: line.currency })}</TableCell>
+                  <TableCell>
+                    {line.projectCode
+                      ? `${line.projectCode} · ${line.projectName}`
+                      : line.projectName}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {money(line.unbilled, { currency: line.currency })}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {money(line.accrued, { currency: line.currency })}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {money(line.delta, { currency: line.currency })}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -203,7 +240,11 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
           {t("upToDate")}
         </Badge>
       ) : canPost ? (
-        <Button size="sm" disabled={posting || !pending || preview.problems.length > 0} onClick={() => void post()}>
+        <Button
+          size="sm"
+          disabled={posting || !pending || preview.problems.length > 0}
+          onClick={() => void post()}
+        >
           <Play size={14} />
           {t("post")}
         </Button>

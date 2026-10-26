@@ -1,11 +1,14 @@
 import { authorizeTimeWorkspace, refuseOthersTime, timeWorkFamily } from "@/lib/time-workspace";
-import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/projects/time-work-target";
-import { z } from 'zod'
+import {
+  lockSharedTimeAuthority,
+  TimeWorkTargetError,
+} from "@openbooks/engine/projects/time-work-target";
+import { z } from "zod";
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { notFound, unprocessable } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { sql } from 'drizzle-orm'
+import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   lockScopeRow,
@@ -13,12 +16,9 @@ import {
   ScopeNotFoundError,
 } from "@openbooks/engine/organization/scope";
 import { normalizeMoney } from "@openbooks/engine/money/money";
-import {
-  checkProjectsWriteEnabled,
-  isFeatureEnabled,
-} from "../../../lib/features";
+import { checkProjectsWriteEnabled, isFeatureEnabled } from "../../../lib/features";
 import { isUuid } from "../../../lib/list-params";
-import { can } from '../../../lib/authz'
+import { can } from "../../../lib/authz";
 import {
   findUnownedCustomReferences,
   loadFieldDefs,
@@ -40,22 +40,26 @@ import {
 const saveBodySchema = z.strictObject({
   employee: uuidId,
   week: isoDate("week must be a valid calendar date"),
-  rows: z.array(z.strictObject({
-    projectId: uuidId.nullable().optional(),
-    workOrderId: uuidId.nullable().optional(),
-    woOperationId: uuidId.nullable().optional(),
-    itemId: uuidId.nullable().optional(),
-    timeTypeId: uuidId.nullable().optional(),
-    departmentId: uuidId.nullable().optional(),
-    isBillable: z.boolean().optional(),
-    memo: z.string().max(2000).nullable().optional(),
-    hours: z.array(z.union([z.string(), z.number().finite(), z.null()])).length(7),
-    custom: z.record(z.string().min(1), z.json()).default({}),
-  })).max(1000),
+  rows: z
+    .array(
+      z.strictObject({
+        projectId: uuidId.nullable().optional(),
+        workOrderId: uuidId.nullable().optional(),
+        woOperationId: uuidId.nullable().optional(),
+        itemId: uuidId.nullable().optional(),
+        timeTypeId: uuidId.nullable().optional(),
+        departmentId: uuidId.nullable().optional(),
+        isBillable: z.boolean().optional(),
+        memo: z.string().max(2000).nullable().optional(),
+        hours: z.array(z.union([z.string(), z.number().finite(), z.null()])).length(7),
+        custom: z.record(z.string().min(1), z.json()).default({}),
+      }),
+    )
+    .max(1000),
   expectedRevision: z.string().min(1, "expectedRevision is required"),
 });
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
@@ -118,31 +122,26 @@ function hoursOrNull(v: unknown): string | null | "invalid" {
   // time_entries.hours is numeric(19,4): fifteen whole digits. The format
   // check admits any magnitude, so a pasted 20-digit cell died in Postgres
   // with a storage error. Fail closed with the same named refusal.
-  if (hours.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15)
-    return "invalid";
+  if (hours.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) return "invalid";
   return hours;
 }
 
 /** GET ?employee=&week= → the week's grid rows + status. */
 export const GET = defineRoute({
   authorize: authorizeTimeWorkspace("time.read"),
-  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
+  feature: {
+    none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target.",
+  },
   handler: async ({ request, authz }) => {
     const orgId = authz.user.orgId;
 
     const url = new URL(request.url);
     const employee = url.searchParams.get("employee");
     const weekParam = url.searchParams.get("week");
-    if (!employee || !isUuid(employee))
-      return unprocessable("Invalid employee");
-    if (!weekParam || !isIsoDate(weekParam))
-      return unprocessable("Invalid week");
+    if (!employee || !isUuid(employee)) return unprocessable("Invalid employee");
+    if (!weekParam || !isIsoDate(weekParam)) return unprocessable("Invalid week");
 
-    const ownedEmployee = await pinTimekeeper(
-      orgId,
-      employee,
-      authz.allowedSubsidiaryIds,
-    );
+    const ownedEmployee = await pinTimekeeper(orgId, employee, authz.allowedSubsidiaryIds);
     if (!ownedEmployee) return unprocessable("Employee not found");
     // A self-service caller reads only their own week.
     const othersRefused = await refuseOthersTime(authz, "time.read", ownedEmployee);
@@ -150,15 +149,15 @@ export const GET = defineRoute({
     try {
       return await withOrgTransaction(orgId, async () => {
         const days = weekWindow(weekStart(weekParam));
-        await lockSharedTimeAuthority(db, orgId, authz.user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: authz.allowedSubsidiaryIds, permission: "time.read", workFamily: timeWorkFamily(request) });
-        await lockScopeRow(
-          db,
-          orgId,
-          "party",
-          ownedEmployee,
-          authz.allowedSubsidiaryIds,
-          "share",
-        );
+        await lockSharedTimeAuthority(db, orgId, authz.user.id, {
+          employeeId: ownedEmployee,
+          from: days[0]!,
+          through: days[6]!,
+          requestedScope: authz.allowedSubsidiaryIds,
+          permission: "time.read",
+          workFamily: timeWorkFamily(request),
+        });
+        await lockScopeRow(db, orgId, "party", ownedEmployee, authz.allowedSubsidiaryIds, "share");
         const payload = await loadWeek(
           orgId,
           ownedEmployee,
@@ -168,8 +167,7 @@ export const GET = defineRoute({
         return NextResponse.json(payload);
       });
     } catch (error) {
-      if (error instanceof ScopeNotFoundError)
-        return notFound("timesheet week");
+      if (error instanceof ScopeNotFoundError) return notFound("timesheet week");
       throw error;
     }
   },
@@ -186,32 +184,29 @@ export const GET = defineRoute({
  */
 const save = defineRoute({
   authorize: authorizeTimeWorkspace("time.manage"),
-  feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
+  feature: {
+    none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target.",
+  },
   body: saveBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ request: workspaceRequest, authz: gate, body: requestBody }) => {
-    const { user } = gate
-    const orgId = user.orgId
+    const { user } = gate;
+    const orgId = user.orgId;
 
-    const body = requestBody as SaveBody
+    const body = requestBody as SaveBody;
     const employee = uuidOrNull(body.employee);
-    if (employee === "invalid" || employee === null)
-      return bad("Invalid employee");
+    if (employee === "invalid" || employee === null) return bad("Invalid employee");
     if (!body.week || !isIsoDate(body.week)) return bad("Invalid week");
-    const week = weekStart(body.week)
-    const days = weekWindow(week)
+    const week = weekStart(body.week);
+    const days = weekWindow(week);
     if (!Array.isArray(body.rows)) return bad("Rows must be a list");
 
-    const ownedEmployee = await pinTimekeeper(
-      orgId,
-      employee,
-      gate.allowedSubsidiaryIds,
-    );
+    const ownedEmployee = await pinTimekeeper(orgId, employee, gate.allowedSubsidiaryIds);
     if (!ownedEmployee) return bad("Employee not found");
     // A self-service caller enters only their own week; refused before any
     // of the named employee's entries are read.
     const othersRefused = await refuseOthersTime(gate, "time.manage", ownedEmployee);
-    if (othersRefused) return othersRefused
+    if (othersRefused) return othersRefused;
     // The grant production targets are fenced with: the supervisory grant,
     // or time.self for a caller entering their own week.
     const timeEntryPermission = can(gate, "time.manage") ? "time.manage" : "time.self";
@@ -233,8 +228,8 @@ const save = defineRoute({
     // Org-defined line fields live on time_entries.custom; validate + strip
     // unknown keys exactly as every other record does.
     const lineDefs = await loadFieldDefs("time_entries");
-    const newStatus = 'draft' as const
-    const toPersist: Persist[] = []
+    const newStatus = "draft" as const;
+    const toPersist: Persist[] = [];
     for (const r of body.rows) {
       if (r == null || typeof r !== "object" || Array.isArray(r))
         return bad("Each row must be an object");
@@ -245,38 +240,35 @@ const save = defineRoute({
         return bad("Invalid billable flag");
       const projectId = uuidOrNull(r.projectId);
       if (projectId === "invalid") return bad("Invalid project");
-      const workOrderId = uuidOrNull(r.workOrderId), woOperationId = uuidOrNull(r.woOperationId);
-      if (workOrderId === 'invalid' || woOperationId === 'invalid' || (projectId && workOrderId) || (woOperationId && !workOrderId)) return bad('Choose one project or production order; an operation must belong to that production order.');
+      const workOrderId = uuidOrNull(r.workOrderId),
+        woOperationId = uuidOrNull(r.woOperationId);
+      if (
+        workOrderId === "invalid" ||
+        woOperationId === "invalid" ||
+        (projectId && workOrderId) ||
+        (woOperationId && !workOrderId)
+      )
+        return bad(
+          "Choose one project or production order; an operation must belong to that production order.",
+        );
       const itemId = uuidOrNull(r.itemId);
       if (itemId === "invalid") return bad("Invalid item");
       const timeTypeId = uuidOrNull(r.timeTypeId);
       if (timeTypeId === "invalid") return bad("Invalid time type");
       const departmentId = uuidOrNull(r.departmentId);
       if (departmentId === "invalid") return bad("Invalid department");
-      const memo =
-        typeof r.memo === "string" && r.memo.trim() !== ""
-          ? r.memo.trim()
-          : null;
+      const memo = typeof r.memo === "string" && r.memo.trim() !== "" ? r.memo.trim() : null;
       const isBillable = r.isBillable === true;
       const validated = validateCustomValues(lineDefs, r.custom);
-      if (!validated.ok)
-        return bad(
-          Object.values(validated.errors)[0] ?? "Invalid custom field",
-        );
+      if (!validated.ok) return bad(Object.values(validated.errors)[0] ?? "Invalid custom field");
       // Reference custom values are uuid-SHAPED at this point but nothing
       // proves the referenced row belongs to the caller: refuse foreign or
       // dangling ids instead of persisting a cross-tenant pointer.
-      const unowned = await findUnownedCustomReferences(
-        orgId,
-        lineDefs,
-        validated.cleaned,
-      );
-      if (unowned.length > 0)
-        return bad(`${unowned[0]!.label} not found in this organization`);
+      const unowned = await findUnownedCustomReferences(orgId, lineDefs, validated.cleaned);
+      if (unowned.length > 0) return bad(`${unowned[0]!.label} not found in this organization`);
       const custom = validated.cleaned;
       const cells = Array.isArray(r.hours) ? r.hours : [];
-      let ownedRefs:
-        Awaited<ReturnType<typeof pinTimesheetLineRefs>> | undefined;
+      let ownedRefs: Awaited<ReturnType<typeof pinTimesheetLineRefs>> | undefined;
 
       const pinRowRefs = async () => {
         if (ownedRefs === undefined) {
@@ -303,7 +295,9 @@ const save = defineRoute({
         if (h === null) continue;
         rowHasHours = true;
         if (projectId === null && isBillable)
-          return bad("Billable hours need a project; select the customer project or mark this work nonbillable");
+          return bad(
+            "Billable hours need a project; select the customer project or mark this work nonbillable",
+          );
         const pinned = await pinRowRefs();
         if (!pinned) {
           return bad("Invalid project, item, time type, or department");
@@ -332,7 +326,9 @@ const save = defineRoute({
         // leave/vacation time type declares against its approved leave,
         // which the declaration audit records for the approver.
         if (projectId === null && isBillable)
-          return bad("Billable hours need a project; select the customer project or mark this work nonbillable");
+          return bad(
+            "Billable hours need a project; select the customer project or mark this work nonbillable",
+          );
         const pinned = await pinRowRefs();
         if (!pinned) {
           return bad("Invalid project, item, time type, or department");
@@ -357,17 +353,23 @@ const save = defineRoute({
     // would persist a new inventory / assembly / kit item. Amendments that only
     // reverse an existing locked row copy the original item and are not refused.
     if (!(await isFeatureEnabled(orgId, "inventory"))) {
-      const stored = await db.execute<{ item_id: string }>(sql`
+      const stored = await db.execute<{ item_id: string }>(
+        sql`
       select item_id from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
-         and item_id is not null`, "objects");
+         and item_id is not null`,
+        "objects",
+      );
       const storedIds = new Set(stored.map((row) => row.item_id));
       for (const p of toPersist) {
         if (!p.itemId || storedIds.has(p.itemId)) continue;
-        const item = await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${p.itemId} and org_id = ${orgId}`, "objects");
+        const item = await db.execute<{ kind: string }>(
+          sql`
+        select kind from items where id = ${p.itemId} and org_id = ${orgId}`,
+          "objects",
+        );
         if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
           return notFound("record");
         }
@@ -377,17 +379,23 @@ const save = defineRoute({
     // would persist a new equipment_charge item. Amendments that only reverse
     // an existing locked row copy the original item and are not refused.
     if (!(await isFeatureEnabled(orgId, "equipment"))) {
-      const stored = await db.execute<{ item_id: string }>(sql`
+      const stored = await db.execute<{ item_id: string }>(
+        sql`
       select item_id from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
-         and item_id is not null`, "objects");
+         and item_id is not null`,
+        "objects",
+      );
       const storedIds = new Set(stored.map((row) => row.item_id));
       for (const p of toPersist) {
         if (!p.itemId || storedIds.has(p.itemId)) continue;
-        const item = await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${p.itemId} and org_id = ${orgId}`, "objects");
+        const item = await db.execute<{ kind: string }>(
+          sql`
+        select kind from items where id = ${p.itemId} and org_id = ${orgId}`,
+          "objects",
+        );
         if (item[0] && item[0].kind === "equipment_charge") {
           return notFound("record");
         }
@@ -404,18 +412,30 @@ const save = defineRoute({
     // never silently overwrites an approval (or an in-flight submission).
     // Set when the revision fence below refuses the save; answered as a 409
     // after the transaction (which wrote nothing) commits empty.
-    let staleRevision: string | null = null
-    let projectsRefused: boolean
+    let staleRevision: string | null = null;
+    let projectsRefused: boolean;
     try {
       projectsRefused = await withOrgTransaction(orgId, async () => {
-        const tx = db
-        await lockSharedTimeAuthority(tx, orgId, user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: gate.allowedSubsidiaryIds, permission: "time.manage", workFamily: timeWorkFamily(workspaceRequest) });
+        const tx = db;
+        await lockSharedTimeAuthority(tx, orgId, user.id, {
+          employeeId: ownedEmployee,
+          from: days[0]!,
+          through: days[6]!,
+          requestedScope: gate.allowedSubsidiaryIds,
+          permission: "time.manage",
+          workFamily: timeWorkFamily(workspaceRequest),
+        });
         // Canonical lock order is department, party, project. Shared locks
         // pin legal-entity attribution through the save.
         const departmentScopes = await lockScopeRows(
-          tx, orgId,
-          toPersist.flatMap((p) => p.departmentId ? [{ kind: "department" as const, id: p.departmentId }] : []),
-          gate.allowedSubsidiaryIds, "share", { orgWideNull: true },
+          tx,
+          orgId,
+          toPersist.flatMap((p) =>
+            p.departmentId ? [{ kind: "department" as const, id: p.departmentId }] : [],
+          ),
+          gate.allowedSubsidiaryIds,
+          "share",
+          { orgWideNull: true },
         );
         const employeeScope = await lockScopeRow(
           tx,
@@ -426,20 +446,44 @@ const save = defineRoute({
           "share",
         );
         const projectScopes = await lockScopeRows(
-          tx, orgId,
-          toPersist.flatMap((p) => p.projectId ? [{ kind: "project" as const, id: p.projectId }] : []),
-          gate.allowedSubsidiaryIds, "share",
+          tx,
+          orgId,
+          toPersist.flatMap((p) =>
+            p.projectId ? [{ kind: "project" as const, id: p.projectId }] : [],
+          ),
+          gate.allowedSubsidiaryIds,
+          "share",
         );
         for (const p of toPersist) {
-          const production = p.workOrderId ? await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds, requireOpen: false, permission: timeEntryPermission }) : null;
-          const projectEntity = production?.subsidiaryId ?? projectScopes.find((row) => row.id === p.projectId)?.subsidiaryId;
-          if (employeeScope.subsidiaryId != null && projectEntity != null && employeeScope.subsidiaryId !== projectEntity) {
-            throw new TimeLineEntityRefusal("The project belongs to a different legal entity than the employee");
+          const production = p.workOrderId
+            ? await lockTimeWorkOrderTarget(tx, orgId, user.id, {
+                workOrderId: p.workOrderId,
+                operationId: p.woOperationId,
+                requestedScope: gate.allowedSubsidiaryIds,
+                requireOpen: false,
+                permission: timeEntryPermission,
+              })
+            : null;
+          const projectEntity =
+            production?.subsidiaryId ??
+            projectScopes.find((row) => row.id === p.projectId)?.subsidiaryId;
+          if (
+            employeeScope.subsidiaryId != null &&
+            projectEntity != null &&
+            employeeScope.subsidiaryId !== projectEntity
+          ) {
+            throw new TimeLineEntityRefusal(
+              "The project belongs to a different legal entity than the employee",
+            );
           }
-          const departmentEntity = departmentScopes.find((row) => row.id === p.departmentId)?.subsidiaryId;
+          const departmentEntity = departmentScopes.find(
+            (row) => row.id === p.departmentId,
+          )?.subsidiaryId;
           const workEntity = projectEntity ?? employeeScope.subsidiaryId;
           if (departmentEntity != null && workEntity != null && departmentEntity !== workEntity) {
-            throw new TimeLineEntityRefusal("The department belongs to a different legal entity than this work; select a department in the employee or project legal entity");
+            throw new TimeLineEntityRefusal(
+              "The department belongs to a different legal entity than this work; select a department in the employee or project legal entity",
+            );
           }
         }
         // Released entries remain immutable across subsequent saves.
@@ -456,31 +500,32 @@ const save = defineRoute({
         // The row lock serializes concurrent saves of this week so two writers
         // cannot interleave their diffs.
         const stored = await tx.execute<{
-            id: string;
-            worked_on: string;
-            hours: string;
-            project_id: string | null;
-            work_order_id: string | null;
-            wo_operation_id: string | null;
-            item_id: string | null;
-            time_type_id: string | null;
-            department_id: string | null;
-            memo: string | null;
-            is_billable: boolean;
-            status: string;
-            custom: Record<string, unknown> | null;
-            invoiced_by_line_id: string | null;
-            payroll_batch_ref: string | null;
-            cost_journal_entry_id: string | null;
+          id: string;
+          worked_on: string;
+          hours: string;
+          project_id: string | null;
+          work_order_id: string | null;
+          wo_operation_id: string | null;
+          item_id: string | null;
+          time_type_id: string | null;
+          department_id: string | null;
+          memo: string | null;
+          is_billable: boolean;
+          status: string;
+          custom: Record<string, unknown> | null;
+          invoiced_by_line_id: string | null;
+          payroll_batch_ref: string | null;
+          cost_journal_entry_id: string | null;
           production_consumed_operation_id: string | null;
-            overhead_journal_entry_id: string | null;
-            field_ticket_id: string | null;
-            service_visit_id: string | null;
-            billing_status: "unbilled" | "billed";
-            amends_entry_id: string | null;
-            corrects_entry_id: string | null;
-            has_contra: boolean;
-          }>(sql`
+          overhead_journal_entry_id: string | null;
+          field_ticket_id: string | null;
+          service_visit_id: string | null;
+          billing_status: "unbilled" | "billed";
+          amends_entry_id: string | null;
+          corrects_entry_id: string | null;
+          has_contra: boolean;
+        }>(
+          sql`
       select id, worked_on, hours::text as hours, project_id, work_order_id, wo_operation_id, item_id,
              time_type_id, department_id, memo, is_billable, status, custom,
              invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
@@ -496,7 +541,9 @@ const save = defineRoute({
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
        for update
-    `, "objects");
+    `,
+          "objects",
+        );
         // Lost-update fence: the client names the revision it loaded,
         // refuse a save over a week that moved since. The lock above is held,
         // so the re-read sees the latest committed state; no write has
@@ -504,27 +551,31 @@ const save = defineRoute({
         // nothing — the other editor's hours stand and this save lands
         // nowhere. (The refusal travels out-of-band: any truthy callback
         // value is read as the projects-refused flag.)
-        const current = await loadWeek(
-          orgId,
-          ownedEmployee,
-          week,
-          gate.allowedSubsidiaryIds,
-        );
+        const current = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds);
         if (current.revision !== body.expectedRevision) {
           staleRevision = current.revision;
           return false;
         }
         const replaceable = (row: (typeof stored)[number]): boolean => {
-          if (row.amends_entry_id != null || row.corrects_entry_id != null || row.has_contra) return false;
+          if (row.amends_entry_id != null || row.corrects_entry_id != null || row.has_contra)
+            return false;
           // Crew capture owns ticket rows and visit completion owns service
           // labor. A weekly aggregate must not delete their stable source
           // identities, even after a time-only rejection.
-          if (row.field_ticket_id != null || row.service_visit_id != null || row.invoiced_by_line_id != null || row.payroll_batch_ref != null
-            || row.cost_journal_entry_id != null || row.production_consumed_operation_id != null
-            || row.overhead_journal_entry_id != null || row.billing_status !== "unbilled") return false;
+          if (
+            row.field_ticket_id != null ||
+            row.service_visit_id != null ||
+            row.invoiced_by_line_id != null ||
+            row.payroll_batch_ref != null ||
+            row.cost_journal_entry_id != null ||
+            row.production_consumed_operation_id != null ||
+            row.overhead_journal_entry_id != null ||
+            row.billing_status !== "unbilled"
+          )
+            return false;
           if (row.status === "draft" || row.status === "rejected") return true;
-          return false
-        }
+          return false;
+        };
         const lineKey = (v: {
           workedOn: string;
           hours: string;
@@ -577,7 +628,7 @@ const save = defineRoute({
             survivorCounts.set(key, (survivorCounts.get(key) ?? 0) + 1);
           }
         }
-        const toInsert: Persist[] = []
+        const toInsert: Persist[] = [];
         for (const p of toPersist) {
           const key = lineKey(p);
           const survivors = survivorCounts.get(key) ?? 0;
@@ -608,20 +659,38 @@ const save = defineRoute({
           return true;
         }
         const deleteIds = Array.from(replaceableIds.values()).flat();
-        for (const row of stored.filter(row => deleteIds.includes(row.id) && row.work_order_id)) {
-          await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: row.work_order_id!, operationId: row.wo_operation_id, requestedScope: gate.allowedSubsidiaryIds, permission: timeEntryPermission });
+        for (const row of stored.filter((row) => deleteIds.includes(row.id) && row.work_order_id)) {
+          await lockTimeWorkOrderTarget(tx, orgId, user.id, {
+            workOrderId: row.work_order_id!,
+            operationId: row.wo_operation_id,
+            requestedScope: gate.allowedSubsidiaryIds,
+            permission: timeEntryPermission,
+          });
         }
         if (deleteIds.length > 0) {
-          const deleted = await tx.execute(sql`
+          const deleted = await tx.execute(
+            sql`
         delete from time_entries
          where org_id = ${orgId}
            and id = any(${`{${deleteIds.join(",")}}`}::uuid[]) returning id
-      `, "objects");
-          if (deleted.length !== deleteIds.length) throw new TimeLineEntityRefusal("The time lines changed while saving. Reload before trying again.");
+      `,
+            "objects",
+          );
+          if (deleted.length !== deleteIds.length)
+            throw new TimeLineEntityRefusal(
+              "The time lines changed while saving. Reload before trying again.",
+            );
         }
         for (const p of toInsert) {
-          if (p.workOrderId) await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds, permission: timeEntryPermission });
-          const saved = await tx.execute<{ id: string }>(sql`
+          if (p.workOrderId)
+            await lockTimeWorkOrderTarget(tx, orgId, user.id, {
+              workOrderId: p.workOrderId,
+              operationId: p.woOperationId,
+              requestedScope: gate.allowedSubsidiaryIds,
+              permission: timeEntryPermission,
+            });
+          const saved = await tx.execute<{ id: string }>(
+            sql`
         insert into time_entries
           (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
            project_id, work_order_id, wo_operation_id, department_id, memo, is_billable, status, custom,
@@ -632,15 +701,19 @@ const save = defineRoute({
            ${p.isBillable}, ${newStatus}, ${JSON.stringify(p.custom)}::jsonb,
            ${user.id}, ${user.id})
         returning id
-      `, "objects");
-          if(saved.length!==1)throw new TimeLineEntityRefusal("The time line was not saved. Reload the week before retrying.");
+      `,
+            "objects",
+          );
+          if (saved.length !== 1)
+            throw new TimeLineEntityRefusal(
+              "The time line was not saved. Reload the week before retrying.",
+            );
         }
-        return false
-      })
+        return false;
+      });
     } catch (error) {
       if (error instanceof TimeLineEntityRefusal) return bad(error.message);
-      if (error instanceof ScopeNotFoundError)
-        return notFound("record");
+      if (error instanceof ScopeNotFoundError) return notFound("record");
       // Native work-target refusals preserve the saved week atomically.
       if (error instanceof TimeApprovalRefusal || error instanceof TimeWorkTargetError)
         return apiErrorResponse(error);
@@ -658,15 +731,10 @@ const save = defineRoute({
     }
     if (projectsRefused) return bad("Projects feature is disabled");
 
-    const payload = await loadWeek(
-      orgId,
-      ownedEmployee,
-      week,
-      gate.allowedSubsidiaryIds,
-    );
-    return NextResponse.json(payload)
+    const payload = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds);
+    return NextResponse.json(payload);
   },
-})
+});
 
-export const PUT = save
-export const POST = save
+export const PUT = save;
+export const POST = save;

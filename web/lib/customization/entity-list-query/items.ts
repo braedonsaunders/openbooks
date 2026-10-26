@@ -8,7 +8,7 @@ import { pushCustomFieldFilter } from "../list-query";
 /* Items                                                               */
 /* ------------------------------------------------------------------ */
 
-export const ITEM_STATUS_EXPR = sql`case when i.is_active then 'active' else 'inactive' end`
+export const ITEM_STATUS_EXPR = sql`case when i.is_active then 'active' else 'inactive' end`;
 
 export const ITEM_BUILT_IN_EXPR: Record<string, SQL> = {
   code: sql`i.code`,
@@ -21,7 +21,7 @@ export const ITEM_BUILT_IN_EXPR: Record<string, SQL> = {
   family: sql`fam.code`,
   family_name: sql`fam.name`,
   status: ITEM_STATUS_EXPR,
-}
+};
 
 export const ITEM_SORTS: Record<string, SQL> = {
   code: sql`i.code`,
@@ -32,53 +32,64 @@ export const ITEM_SORTS: Record<string, SQL> = {
   cost: sql`i.default_cost`,
   family: sql`fam.code`,
   status: sql`i.is_active`,
-}
+};
 
 function itemFilterPredicate(clause: FilterClause): SQL | null {
-  const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+  const value = Array.isArray(clause.value)
+    ? String(clause.value[0] ?? "")
+    : String(clause.value ?? "");
   const select = (column: SQL) => {
-    if (clause.operator === 'eq') return sql`${column} = ${value}`
-    if (clause.operator === 'ne') return sql`${column} <> ${value}`
-    if (clause.operator === 'in' || clause.operator === 'not_in') {
-      const values = (Array.isArray(clause.value) ? clause.value : [value]).map(String).filter(Boolean)
-      if (!values.length) return clause.operator === 'in' ? sql`false` : sql`true`
-      const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
-      return clause.operator === 'in' ? sql`${column} in (${list})` : sql`${column} not in (${list})`
+    if (clause.operator === "eq") return sql`${column} = ${value}`;
+    if (clause.operator === "ne") return sql`${column} <> ${value}`;
+    if (clause.operator === "in" || clause.operator === "not_in") {
+      const values = (Array.isArray(clause.value) ? clause.value : [value])
+        .map(String)
+        .filter(Boolean);
+      if (!values.length) return clause.operator === "in" ? sql`false` : sql`true`;
+      const list = sql.join(
+        values.map((item) => sql`${item}`),
+        sql`, `,
+      );
+      return clause.operator === "in"
+        ? sql`${column} in (${list})`
+        : sql`${column} not in (${list})`;
     }
-    return null
+    return null;
+  };
+  if (clause.key === "kind") return select(sql`i.kind`);
+  if (clause.key === "status") return select(ITEM_STATUS_EXPR);
+  if (clause.key === "family") {
+    if (clause.operator === "eq") return sql`fam.code = ${value}`;
+    if (clause.operator === "contains") return sql`fam.code ilike ${`%${value}%`}`;
+    if (clause.operator === "is_set") return sql`i.family_id is not null`;
+    if (clause.operator === "is_not_set") return sql`i.family_id is null`;
   }
-  if (clause.key === 'kind') return select(sql`i.kind`)
-  if (clause.key === 'status') return select(ITEM_STATUS_EXPR)
-  if (clause.key === 'family') {
-    if (clause.operator === 'eq') return sql`fam.code = ${value}`
-    if (clause.operator === 'contains') return sql`fam.code ilike ${`%${value}%`}`
-    if (clause.operator === 'is_set') return sql`i.family_id is not null`
-    if (clause.operator === 'is_not_set') return sql`i.family_id is null`
+  if (clause.key === "category") {
+    if (clause.operator === "eq") return sql`i.category = ${value}`;
+    if (clause.operator === "contains") return sql`i.category ilike ${`%${value}%`}`;
+    if (clause.operator === "is_set") return sql`coalesce(i.category, '') <> ''`;
+    if (clause.operator === "is_not_set") return sql`coalesce(i.category, '') = ''`;
   }
-  if (clause.key === 'category') {
-    if (clause.operator === 'eq') return sql`i.category = ${value}`
-    if (clause.operator === 'contains') return sql`i.category ilike ${`%${value}%`}`
-    if (clause.operator === 'is_set') return sql`coalesce(i.category, '') <> ''`
-    if (clause.operator === 'is_not_set') return sql`coalesce(i.category, '') = ''`
-  }
-  return null
+  return null;
 }
 
 export function itemWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
-  const parts: SQL[] = [sql`i.org_id = ${orgId}`]
-  const savedViewOwnsActivity = view.filters.some((filter) => filter.key === 'status')
-  if (!adhoc.showInactive && !savedViewOwnsActivity) parts.push(sql`and i.is_active`)
+  const parts: SQL[] = [sql`i.org_id = ${orgId}`];
+  const savedViewOwnsActivity = view.filters.some((filter) => filter.key === "status");
+  if (!adhoc.showInactive && !savedViewOwnsActivity) parts.push(sql`and i.is_active`);
   for (const filter of view.filters) {
-    if (pushCustomFieldFilter(parts, filter, "i")) continue
-    const predicate = itemFilterPredicate(filter)
-    if (predicate) parts.push(sql`and ${predicate}`)
+    if (pushCustomFieldFilter(parts, filter, "i")) continue;
+    const predicate = itemFilterPredicate(filter);
+    if (predicate) parts.push(sql`and ${predicate}`);
   }
-  if (adhoc.filters?.kind) parts.push(sql`and i.kind = ${adhoc.filters.kind}`)
+  if (adhoc.filters?.kind) parts.push(sql`and i.kind = ${adhoc.filters.kind}`);
   if (adhoc.q) {
-    const query = `%${adhoc.q}%`
+    const query = `%${adhoc.q}%`;
     // Variants are found by their family and option values through the same
     // search: no separate variant picker exists.
-    parts.push(sql`and (i.name ilike ${query} or i.code ilike ${query} or i.category ilike ${query} or fam.name ilike ${query} or fam.code ilike ${query} or i.option_values::text ilike ${query})`)
+    parts.push(
+      sql`and (i.name ilike ${query} or i.code ilike ${query} or i.category ilike ${query} or fam.name ilike ${query} or fam.code ilike ${query} or i.option_values::text ilike ${query})`,
+    );
   }
-  return sql.join(parts, sql` `)
+  return sql.join(parts, sql` `);
 }

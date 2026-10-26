@@ -1,32 +1,32 @@
-import 'server-only'
-import { createHash } from 'node:crypto'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { compileTemplateHtml } from '@openbooks/pdf'
-import { isUuid } from '../list-params'
-import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
-import { starterTemplate } from './starters'
-import { disabledDocKinds, isDocKindEnabled } from '../documents'
+import "server-only";
+import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { compileTemplateHtml } from "@openbooks/pdf";
+import { isUuid } from "../list-params";
+import { PDF_RECORD_TYPE_BY_KEY } from "./catalog";
+import { starterTemplate } from "./starters";
+import { disabledDocKinds, isDocKindEnabled } from "../documents";
 
 /** A pdf_templates row shaped for the editor + renderer. */
 export type PdfTemplateRow = {
-  id: string
-  recordType: string
-  name: string
-  description: string | null
-  paperSize: 'letter' | 'a4' | 'legal' | '4x6'
-  orientation: 'portrait' | 'landscape'
-  marginMm: number
-  headerHtml: string | null
-  footerHtml: string | null
-  sourceHtml: string
-  compiledHtml: string
-  isDefault: boolean
-  isActive: boolean
+  id: string;
+  recordType: string;
+  name: string;
+  description: string | null;
+  paperSize: "letter" | "a4" | "legal" | "4x6";
+  orientation: "portrait" | "landscape";
+  marginMm: number;
+  headerHtml: string | null;
+  footerHtml: string | null;
+  sourceHtml: string;
+  compiledHtml: string;
+  isDefault: boolean;
+  isActive: boolean;
   /** Design version: bumped by every PATCH, cited by every issued PDF. */
-  revision: number
-  updatedAt: string
-}
+  revision: number;
+  updatedAt: string;
+};
 
 const COLS = sql`
   id, record_type as "recordType", name, description,
@@ -34,7 +34,7 @@ const COLS = sql`
   header_html as "headerHtml", footer_html as "footerHtml",
   source_html as "sourceHtml", compiled_html as "compiledHtml",
   is_default as "isDefault", is_active as "isActive", revision, updated_at as "updatedAt"
-`
+`;
 
 /**
  * The organization's brand accent, which tints every starter design. Starters
@@ -43,59 +43,77 @@ const COLS = sql`
  * a freshly created one.
  */
 export async function orgBrandPrimary(orgId: string): Promise<string | null> {
-  const r = (await db.execute<{ brand_primary: string | null }>(sql`
+  const r = await db.execute<{ brand_primary: string | null }>(
+    sql`
     select settings ->> 'brandPrimary' as brand_primary from orgs where id = ${orgId}
-  `, 'objects'))
-  return r[0]?.brand_primary ?? null
+  `,
+    "objects",
+  );
+  return r[0]?.brand_primary ?? null;
 }
 
-export async function listPdfTemplates(orgId: string, recordType?: string): Promise<PdfTemplateRow[]> {
-  const filter = recordType ? sql` and record_type = ${recordType}` : sql``
-  const r = (await db.execute<PdfTemplateRow>(sql`
+export async function listPdfTemplates(
+  orgId: string,
+  recordType?: string,
+): Promise<PdfTemplateRow[]> {
+  const filter = recordType ? sql` and record_type = ${recordType}` : sql``;
+  const r = await db.execute<PdfTemplateRow>(
+    sql`
     select ${COLS} from pdf_templates
      where org_id = ${orgId}${filter}
      order by record_type, is_default desc, name
-  `, 'objects'))
-  return r
+  `,
+    "objects",
+  );
+  return r;
 }
 
 export async function getPdfTemplate(orgId: string, id: string): Promise<PdfTemplateRow | null> {
   // pdf_templates.id is a uuid PK. A malformed id is the same miss as a
   // foreign row and must never be bound — a driver cast error is not a 404.
-  if (!isUuid(id)) return null
-  const r = (await db.execute<PdfTemplateRow>(sql`
+  if (!isUuid(id)) return null;
+  const r = await db.execute<PdfTemplateRow>(
+    sql`
     select ${COLS} from pdf_templates where org_id = ${orgId} and id = ${id}
-  `, 'objects'))
-  return r[0] ?? null
+  `,
+    "objects",
+  );
+  return r[0] ?? null;
 }
 
 /** Templates available through read surfaces, with the canonical document-kind feature fence applied. */
-export async function listVisiblePdfTemplates(orgId: string, recordType?: string): Promise<PdfTemplateRow[]> {
-  const kind = recordType ? PDF_RECORD_TYPE_BY_KEY[recordType]?.docKind ?? recordType : null
-  if (kind && !(await isDocKindEnabled(orgId, kind))) return []
-  const hidden = new Set(await disabledDocKinds(orgId))
+export async function listVisiblePdfTemplates(
+  orgId: string,
+  recordType?: string,
+): Promise<PdfTemplateRow[]> {
+  const kind = recordType ? (PDF_RECORD_TYPE_BY_KEY[recordType]?.docKind ?? recordType) : null;
+  if (kind && !(await isDocKindEnabled(orgId, kind))) return [];
+  const hidden = new Set(await disabledDocKinds(orgId));
   return (await listPdfTemplates(orgId, recordType)).filter((row) => {
-    const rowKind = PDF_RECORD_TYPE_BY_KEY[row.recordType]?.docKind ?? row.recordType
-    return !hidden.has(rowKind)
-  })
+    const rowKind = PDF_RECORD_TYPE_BY_KEY[row.recordType]?.docKind ?? row.recordType;
+    return !hidden.has(rowKind);
+  });
 }
 
 /** A saved design is not readable when its document kind is disabled. */
-export async function getVisiblePdfTemplate(orgId: string, id: string): Promise<PdfTemplateRow | null> {
-  const row = await getPdfTemplate(orgId, id)
-  const kind = row ? PDF_RECORD_TYPE_BY_KEY[row.recordType]?.docKind ?? row.recordType : null
-  if (!row || !kind || !(await isDocKindEnabled(orgId, kind))) return null
-  return row
+export async function getVisiblePdfTemplate(
+  orgId: string,
+  id: string,
+): Promise<PdfTemplateRow | null> {
+  const row = await getPdfTemplate(orgId, id);
+  const kind = row ? (PDF_RECORD_TYPE_BY_KEY[row.recordType]?.docKind ?? row.recordType) : null;
+  if (!row || !kind || !(await isDocKindEnabled(orgId, kind))) return null;
+  return row;
 }
 
 /** What the render route prints with: a saved template or the built-in starter. */
 export type ResolvedPdfTemplate = {
-  compiledHtml: string
-  paperSize: 'letter' | 'a4' | 'legal' | '4x6'
-  orientation: 'portrait' | 'landscape'
-  marginMm: number
-  headerHtml: string | null
-  footerHtml: string | null
+  compiledHtml: string;
+  paperSize: "letter" | "a4" | "legal" | "4x6";
+  orientation: "portrait" | "landscape";
+  marginMm: number;
+  headerHtml: string | null;
+  footerHtml: string | null;
   /**
    * Immutable evidence of which design produced the PDF: the saved
    * template's id + revision plus the hash of the whole printed design
@@ -104,8 +122,8 @@ export type ResolvedPdfTemplate = {
    * Every issuance channel (download headers, email_log meta, backup
    * manifest) records this.
    */
-  provenance: PdfTemplateProvenance
-}
+  provenance: PdfTemplateProvenance;
+};
 
 /**
  * Every field the renderer consumes: the compiled body plus the chrome and
@@ -115,17 +133,17 @@ export type ResolvedPdfTemplate = {
  */
 export type PdfPrintDesign = Pick<
   ResolvedPdfTemplate,
-  'compiledHtml' | 'paperSize' | 'orientation' | 'marginMm' | 'headerHtml' | 'footerHtml'
->
+  "compiledHtml" | "paperSize" | "orientation" | "marginMm" | "headerHtml" | "footerHtml"
+>;
 
 /** Which template design produced an issued PDF. */
 export type PdfTemplateProvenance = {
   /** Null for the built-in starter (no saved row, no revision). */
-  templateId: string | null
-  revision: number | null
+  templateId: string | null;
+  revision: number | null;
   /** sha256 hex of the canonical PdfPrintDesign actually printed. */
-  contentHash: string
-}
+  contentHash: string;
+};
 
 /**
  * Hash the whole printed design, not just the body: header, footer, paper
@@ -134,7 +152,7 @@ export type PdfTemplateProvenance = {
  * stable for identical designs.
  */
 export function printDesignHash(design: PdfPrintDesign): string {
-  return createHash('sha256')
+  return createHash("sha256")
     .update(
       JSON.stringify({
         compiledHtml: design.compiledHtml,
@@ -144,9 +162,9 @@ export function printDesignHash(design: PdfPrintDesign): string {
         headerHtml: design.headerHtml || null,
         footerHtml: design.footerHtml || null,
       }),
-      'utf8',
+      "utf8",
     )
-    .digest('hex')
+    .digest("hex");
 }
 
 /**
@@ -159,14 +177,17 @@ export async function loadRecordDesignatedTemplateName(
   docKind: string | null,
   id: string,
 ): Promise<string | null> {
-  if (!docKind) return null
-  const rows = await db.execute<{ name: string | null }>(sql`
+  if (!docKind) return null;
+  const rows = await db.execute<{ name: string | null }>(
+    sql`
     select custom ->> 'template' as name from documents
      where org_id = ${orgId} and id = ${id} and kind = ${docKind}
      limit 1
-  `, 'objects')
-  const name = (rows[0]?.name ?? '').trim()
-  return name ? name : null
+  `,
+    "objects",
+  );
+  const name = (rows[0]?.name ?? "").trim();
+  return name ? name : null;
 }
 
 /**
@@ -182,59 +203,79 @@ export async function resolvePdfTemplate(
   templateId?: string | null,
   designatedName?: string | null,
 ): Promise<ResolvedPdfTemplate | null> {
-  const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
-  if (!meta) return null
+  const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
+  if (!meta) return null;
 
   if (templateId != null) {
-    if (!isUuid(templateId)) return null
-    const tpl = await getPdfTemplate(orgId, templateId)
+    if (!isUuid(templateId)) return null;
+    const tpl = await getPdfTemplate(orgId, templateId);
     if (tpl && tpl.recordType === recordType && tpl.isActive) {
       return {
         ...tpl,
-        provenance: { templateId: tpl.id, revision: tpl.revision, contentHash: printDesignHash(tpl) },
-      }
+        provenance: {
+          templateId: tpl.id,
+          revision: tpl.revision,
+          contentHash: printDesignHash(tpl),
+        },
+      };
     }
-    return null
+    return null;
   }
 
   // A record-level designation (for example the consolidation group's
   // template recorded on its invoices) wins over the org default: the group
   // chose its own face for its own invoices. An unknown or inactive name
   // falls through to the default rather than refusing the print.
-  const designation = (designatedName ?? '').trim()
+  const designation = (designatedName ?? "").trim();
   if (designation) {
-    const named = (await db.execute<PdfTemplateRow>(sql`
+    const named = (
+      await db.execute<PdfTemplateRow>(
+        sql`
       select ${COLS} from pdf_templates
        where org_id = ${orgId} and record_type = ${recordType} and is_active and name = ${designation}
        limit 1
-    `, 'objects'))[0]
+    `,
+        "objects",
+      )
+    )[0];
     if (named) {
       return {
         ...named,
-        provenance: { templateId: named.id, revision: named.revision, contentHash: printDesignHash(named) },
-      }
+        provenance: {
+          templateId: named.id,
+          revision: named.revision,
+          contentHash: printDesignHash(named),
+        },
+      };
     }
   }
 
-  const r = (await db.execute<PdfTemplateRow>(sql`
+  const r = await db.execute<PdfTemplateRow>(
+    sql`
     select ${COLS} from pdf_templates
      where org_id = ${orgId} and record_type = ${recordType} and is_active
      order by is_default desc, name limit 1
-  `, 'objects'))
-  const found = r.find((t) => t.isDefault) ?? r[0]
+  `,
+    "objects",
+  );
+  const found = r.find((t) => t.isDefault) ?? r[0];
   if (found) {
     return {
       ...found,
-      provenance: { templateId: found.id, revision: found.revision, contentHash: printDesignHash(found) },
-    }
+      provenance: {
+        templateId: found.id,
+        revision: found.revision,
+        contentHash: printDesignHash(found),
+      },
+    };
   }
 
   // Built-in fallback: compile the starter on the fly with the org accent.
-  const starter = starterTemplate(meta, await orgBrandPrimary(orgId))
-  const { compiledHtml } = compileTemplateHtml(starter.sourceHtml)
-  const paperSize = starter.paperSize ?? 'letter'
-  const orientation = starter.orientation ?? 'portrait'
-  const marginMm = starter.marginMm ?? 14
+  const starter = starterTemplate(meta, await orgBrandPrimary(orgId));
+  const { compiledHtml } = compileTemplateHtml(starter.sourceHtml);
+  const paperSize = starter.paperSize ?? "letter";
+  const orientation = starter.orientation ?? "portrait";
+  const marginMm = starter.marginMm ?? 14;
   return {
     compiledHtml,
     paperSize,
@@ -254,5 +295,5 @@ export async function resolvePdfTemplate(
         footerHtml: starter.footerHtml || null,
       }),
     },
-  }
+  };
 }

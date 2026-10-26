@@ -95,11 +95,7 @@ export async function snapshotTableCatalog(
   };
 }
 
-function describeDiff(
-  kind: string,
-  name: string,
-  detail: string,
-): string {
+function describeDiff(kind: string, name: string, detail: string): string {
   return `${kind} ${name}: ${detail}`;
 }
 
@@ -121,11 +117,7 @@ export function diffTableCatalog(
     }
     if (got.definition !== want.definition || got.validated !== want.validated) {
       diffs.push(
-        describeDiff(
-          "constraint",
-          name,
-          `was ${JSON.stringify(want)} now ${JSON.stringify(got)}`,
-        ),
+        describeDiff("constraint", name, `was ${JSON.stringify(want)} now ${JSON.stringify(got)}`),
       );
     }
   }
@@ -142,7 +134,11 @@ export function diffTableCatalog(
       diffs.push(describeDiff("index", name, "present before the test, missing now"));
       continue;
     }
-    if (got.definition !== want.definition || got.valid !== want.valid || got.ready !== want.ready) {
+    if (
+      got.definition !== want.definition ||
+      got.valid !== want.valid ||
+      got.ready !== want.ready
+    ) {
       diffs.push(
         describeDiff("index", name, `was ${JSON.stringify(want)} now ${JSON.stringify(got)}`),
       );
@@ -162,10 +158,10 @@ export function diffTableCatalog(
       continue;
     }
     if (
-      got.type !== want.type
-      || got.nullable !== want.nullable
-      || got.hasDefault !== want.hasDefault
-      || got.default !== want.default
+      got.type !== want.type ||
+      got.nullable !== want.nullable ||
+      got.hasDefault !== want.hasDefault ||
+      got.default !== want.default
     ) {
       diffs.push(
         describeDiff("column", name, `was ${JSON.stringify(want)} now ${JSON.stringify(got)}`),

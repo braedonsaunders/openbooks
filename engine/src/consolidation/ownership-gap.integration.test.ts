@@ -4,7 +4,12 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { runOwnershipConsolidation } from "./consolidation.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 /**
  * Ownership coverage gaps must fail closed. An ownership change is recorded
@@ -18,7 +23,9 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } fro
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function seedGapFixture(org: ScratchOrg): Promise<{ childId: string; accounts: Map<string, string> }> {
+async function seedGapFixture(
+  org: ScratchOrg,
+): Promise<{ childId: string; accounts: Map<string, string> }> {
   const childId = randomUUID();
   const eliminationId = randomUUID();
   await db.execute(sql`
@@ -59,7 +66,9 @@ async function seedGapFixture(org: ScratchOrg): Promise<{ childId: string; accou
       values
         (${org.orgId},${entry},1,${org.accounts.bank},${childId},${revenue},'CAD',${revenue},'1'),
         (${org.orgId},${entry},2,${org.accounts.revenue},${childId},${`-${revenue}`},'CAD',${`-${revenue}`},'1')`);
-    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
+    await db.execute(
+      sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`,
+    );
   };
   // Opening equity plus covered profit (Jul 15) plus gap-day profit (Jul 30).
   const capId = randomUUID();
@@ -73,13 +82,16 @@ async function seedGapFixture(org: ScratchOrg): Promise<{ childId: string; accou
       values
         (${org.orgId},${capId},1,${org.accounts.bank},${childId},'1000','CAD','1000','1'),
         (${org.orgId},${capId},2,${accounts.get("childEquity")!},${childId},'-1000','CAD','-1000','1')`);
-  await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${capId}`);
+  await db.execute(
+    sql`update journal_entries set status='posted', posted_at=now() where id=${capId}`,
+  );
   await postEntry("OWN-PROFIT-COVERED", "2026-07-15", "100");
   await postEntry("OWN-PROFIT-GAP", "2026-07-30", "100");
   // Policy A covers July 1–29; policy B takes over July 31 for the SAME
   // acquisition — July 30 belongs to no policy. Both rows are closable
   // because no consolidation has run yet.
-  const policy = (id: string, from: string, to: string | null, percent: string): Promise<unknown> => db.execute(sql`
+  const policy = (id: string, from: string, to: string | null, percent: string): Promise<unknown> =>
+    db.execute(sql`
       insert into subsidiary_ownership_interests
         (id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,effective_to,ownership_percent,method,
          acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,
@@ -94,17 +106,21 @@ async function seedGapFixture(org: ScratchOrg): Promise<{ childId: string; accou
   return { childId, accounts };
 }
 
-test("a same-acquisition coverage gap refuses consolidation instead of dropping the day", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedGapFixture(org);
-    await assert.rejects(
-      runOwnershipConsolidation(org.orgId, org.periodId, actorId),
-      /ownership coverage for .* has a gap: the policy ending 2026-07-29.*2026-07-31/,
-      "July 30 belongs to no policy: the run must refuse, not silently consolidate 30 of 31 days",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a same-acquisition coverage gap refuses consolidation instead of dropping the day",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedGapFixture(org);
+      await assert.rejects(
+        runOwnershipConsolidation(org.orgId, org.periodId, actorId),
+        /ownership coverage for .* has a gap: the policy ending 2026-07-29.*2026-07-31/,
+        "July 30 belongs to no policy: the run must refuse, not silently consolidate 30 of 31 days",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

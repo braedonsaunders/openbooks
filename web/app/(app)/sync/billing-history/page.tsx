@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadBillingHistory, billingHistorySpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadBillingHistory, billingHistorySpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Billing-platform history import (Chargebee, Recurly, Maxio, Zuora): connect
@@ -13,9 +13,9 @@ export const dynamic = 'force-dynamic'
 export default async function BillingHistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadBillingHistory()
-  return <ModuleView spec={billingHistorySpec()} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadBillingHistory();
+  return <ModuleView spec={billingHistorySpec()} data={data} searchParams={sp} trusted />;
 }

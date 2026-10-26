@@ -46,21 +46,32 @@ for (const unit of ["money", "hours"] as const) {
       entitlementMovementKey: `${plan.id}:payout`,
     };
 
-    await applyBankDrawdown({
-      execute: async () => { throw new Error("generated payout must not query or redraw the bank"); },
-    } as never, {
-      orgId: "org-1",
-      documentId: "run-1",
-      payDate: "2026-07-21",
-      employeePartyId: "employee-1",
-      employeeName: "Bank Employee",
-      terminationRun: false,
-      plans: [plan],
-      lines: [line],
-      entitlementMovements: [movement],
-    });
+    await applyBankDrawdown(
+      {
+        execute: async () => {
+          throw new Error("generated payout must not query or redraw the bank");
+        },
+      } as never,
+      {
+        orgId: "org-1",
+        documentId: "run-1",
+        payDate: "2026-07-21",
+        employeePartyId: "employee-1",
+        employeeName: "Bank Employee",
+        terminationRun: false,
+        plans: [plan],
+        lines: [line],
+        entitlementMovements: [movement],
+      },
+    );
 
-    assert.deepEqual([line.entitlementSettlementPlanId, line.entitlementMovementKey], [plan.id, `${plan.id}:payout`]);
-    assert.deepEqual([movement.amount, movement.hours], [unit === "money" ? "-50.0000" : "-1.0000", unit === "money" ? null : "1.00"]);
+    assert.deepEqual(
+      [line.entitlementSettlementPlanId, line.entitlementMovementKey],
+      [plan.id, `${plan.id}:payout`],
+    );
+    assert.deepEqual(
+      [movement.amount, movement.hours],
+      [unit === "money" ? "-50.0000" : "-1.0000", unit === "money" ? null : "1.00"],
+    );
   });
 }

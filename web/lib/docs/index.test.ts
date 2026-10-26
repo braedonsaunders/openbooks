@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 import {
   adjacentArticles,
   categoriesWithArticles,
@@ -8,123 +8,155 @@ import {
   DOC_CATEGORIES,
   DOC_SECTIONS,
   getArticle,
-} from './index'
+} from "./index";
 
-test('documentation registry is complete and internally consistent', () => {
-  assert.ok(DOC_ARTICLES.length >= 30, 'the foundational documentation set should remain substantial')
+test("documentation registry is complete and internally consistent", () => {
+  assert.ok(
+    DOC_ARTICLES.length >= 30,
+    "the foundational documentation set should remain substantial",
+  );
 
-  const categoryKeys = DOC_CATEGORIES.map((category) => category.key)
-  const sectionKeys = DOC_SECTIONS.map((section) => section.key)
-  const slugs = DOC_ARTICLES.map((article) => article.slug)
-  assert.equal(new Set(categoryKeys).size, categoryKeys.length, 'category keys must be unique')
-  assert.equal(new Set(sectionKeys).size, sectionKeys.length, 'section keys must be unique')
-  assert.equal(new Set(slugs).size, slugs.length, 'article slugs must be unique')
+  const categoryKeys = DOC_CATEGORIES.map((category) => category.key);
+  const sectionKeys = DOC_SECTIONS.map((section) => section.key);
+  const slugs = DOC_ARTICLES.map((article) => article.slug);
+  assert.equal(new Set(categoryKeys).size, categoryKeys.length, "category keys must be unique");
+  assert.equal(new Set(sectionKeys).size, sectionKeys.length, "section keys must be unique");
+  assert.equal(new Set(slugs).size, slugs.length, "article slugs must be unique");
 
-  const knownCategories = new Set(categoryKeys)
-  const sectionsByKey = new Map(DOC_SECTIONS.map((section) => [section.key, section]))
-  const knownSlugs = new Set(slugs)
+  const knownCategories = new Set(categoryKeys);
+  const sectionsByKey = new Map(DOC_SECTIONS.map((section) => [section.key, section]));
+  const knownSlugs = new Set(slugs);
 
   for (const section of DOC_SECTIONS) {
-    assert.ok(knownCategories.has(section.category), `${section.key} must reference a registered category`)
+    assert.ok(
+      knownCategories.has(section.category),
+      `${section.key} must reference a registered category`,
+    );
     if (section.parentKey) {
-      const parent = sectionsByKey.get(section.parentKey)
-      assert.ok(parent, `${section.key} must reference an existing parent section`)
-      assert.equal(parent?.category, section.category, `${section.key} and its parent must share a category`)
+      const parent = sectionsByKey.get(section.parentKey);
+      assert.ok(parent, `${section.key} must reference an existing parent section`);
+      assert.equal(
+        parent?.category,
+        section.category,
+        `${section.key} and its parent must share a category`,
+      );
     }
 
-    const visited = new Set<string>()
-    let current: typeof section | undefined = section
+    const visited = new Set<string>();
+    let current: typeof section | undefined = section;
     while (current) {
-      assert.equal(visited.has(current.key), false, `${section.key} cannot contain a parent cycle`)
-      visited.add(current.key)
-      current = current.parentKey ? sectionsByKey.get(current.parentKey) : undefined
+      assert.equal(visited.has(current.key), false, `${section.key} cannot contain a parent cycle`);
+      visited.add(current.key);
+      current = current.parentKey ? sectionsByKey.get(current.parentKey) : undefined;
     }
   }
 
   for (const article of DOC_ARTICLES) {
-    assert.ok(knownCategories.has(article.category), `${article.slug} must reference a registered category`)
+    assert.ok(
+      knownCategories.has(article.category),
+      `${article.slug} must reference a registered category`,
+    );
     if (article.section) {
-      const section = sectionsByKey.get(article.section)
-      assert.ok(section, `${article.slug} must reference an existing section`)
-      assert.equal(section?.category, article.category, `${article.slug} and its section must share a category`)
+      const section = sectionsByKey.get(article.section);
+      assert.ok(section, `${article.slug} must reference an existing section`);
+      assert.equal(
+        section?.category,
+        article.category,
+        `${article.slug} and its section must share a category`,
+      );
     }
-    assert.match(article.slug, /^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-    assert.match(article.updated, /^\d{4}-\d{2}-\d{2}$/)
-    assert.ok(article.summary.trim().length >= 40, `${article.slug} needs a useful summary`)
-    assert.ok(article.body.startsWith(`# ${article.title}\n`), `${article.slug} body must begin with its title`)
-    assert.ok(article.body.trim().length >= 500, `${article.slug} must be a substantive article`)
-    assert.equal(article.body.includes('`'), false, `${article.slug} must follow the no-backticks authoring convention`)
+    assert.match(article.slug, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+    assert.match(article.updated, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(article.summary.trim().length >= 40, `${article.slug} needs a useful summary`);
+    assert.ok(
+      article.body.startsWith(`# ${article.title}\n`),
+      `${article.slug} body must begin with its title`,
+    );
+    assert.ok(article.body.trim().length >= 500, `${article.slug} must be a substantive article`);
+    assert.equal(
+      article.body.includes("`"),
+      false,
+      `${article.slug} must follow the no-backticks authoring convention`,
+    );
 
     for (const related of article.related ?? []) {
-      assert.ok(knownSlugs.has(related), `${article.slug} references missing related article ${related}`)
-      assert.notEqual(related, article.slug, `${article.slug} cannot relate to itself`)
+      assert.ok(
+        knownSlugs.has(related),
+        `${article.slug} references missing related article ${related}`,
+      );
+      assert.notEqual(related, article.slug, `${article.slug} cannot relate to itself`);
     }
   }
-})
+});
 
-test('period-close docs scope the Publish stage to the advanced close flow', () => {
+test("period-close docs scope the Publish stage to the advanced close flow", () => {
   // The article presented the Publish stage / Publish package
   // button unconditionally, but simple-mode runs only Scope, Readiness,
   // Execute, Review, Lock — Publish is the sixth stage behind advanced close.
-  const article = getArticle('period-close')
-  assert.ok(article, 'period-close article must exist')
+  const article = getArticle("period-close");
+  assert.ok(article, "period-close article must exist");
   assert.match(
     article.body,
     /Publish[\s\S]{0,400}[Aa]dvanced/,
-    'the Publish stage must be qualified as advanced-close-only so simple-mode readers stop hunting for it',
-  )
+    "the Publish stage must be qualified as advanced-close-only so simple-mode readers stop hunting for it",
+  );
   assert.match(
     article.body,
     /Scope.*Readiness.*Execute.*Review.*Lock/s,
-    'the article must name the five simple-mode stages in order',
-  )
-})
+    "the article must name the five simple-mode stages in order",
+  );
+});
 
-test('categories, sections, and articles have deterministic display order', () => {
-  const groups = categoriesWithArticles()
+test("categories, sections, and articles have deterministic display order", () => {
+  const groups = categoriesWithArticles();
   assert.deepEqual(
     groups.map(({ category }) => category.order),
     [...groups].map(({ category }) => category.order).sort((a, b) => a - b),
-  )
+  );
 
   for (const { category, articles } of groups) {
-    assert.ok(articles.length > 0, `${category.key} should not be empty`)
-    assert.equal(new Set(articles.map((article) => article.slug)).size, articles.length)
+    assert.ok(articles.length > 0, `${category.key} should not be empty`);
+    assert.equal(new Set(articles.map((article) => article.slug)).size, articles.length);
   }
 
-  const nav = docNavIndex()
+  const nav = docNavIndex();
   assert.deepEqual(
     nav.articles.map((article) => article.slug),
     groups.flatMap(({ articles }) => articles.map((article) => article.slug)),
-  )
+  );
 
   for (const category of DOC_CATEGORIES) {
-    const siblings = DOC_SECTIONS.filter((section) => section.category === category.key && !section.parentKey)
+    const siblings = DOC_SECTIONS.filter(
+      (section) => section.category === category.key && !section.parentKey,
+    );
     assert.deepEqual(
       siblings.map((section) => section.order),
       [...siblings].map((section) => section.order).sort((a, b) => a - b),
-    )
+    );
   }
-})
+});
 
-test('article lookup and adjacent navigation follow visible reading order', () => {
-  const ordered = categoriesWithArticles().flatMap(({ articles }) => articles)
-  assert.equal(getArticle(ordered[0]!.slug), ordered[0])
-  assert.deepEqual(adjacentArticles(ordered[0]!.slug), { next: ordered[1] })
+test("article lookup and adjacent navigation follow visible reading order", () => {
+  const ordered = categoriesWithArticles().flatMap(({ articles }) => articles);
+  assert.equal(getArticle(ordered[0]!.slug), ordered[0]);
+  assert.deepEqual(adjacentArticles(ordered[0]!.slug), { next: ordered[1] });
   assert.deepEqual(adjacentArticles(ordered.at(-1)!.slug), {
     previous: ordered.at(-2),
-  })
-  assert.deepEqual(adjacentArticles('not-an-article'), {})
-})
+  });
+  assert.deepEqual(adjacentArticles("not-an-article"), {});
+});
 
-test('sidebar metadata omits article bodies while full-text search retains the complete catalog', () => {
-  const browsing = docNavIndex({ includeText: false })
-  const searching = docNavIndex()
-  assert.deepEqual(browsing.categories, searching.categories)
-  assert.deepEqual(browsing.sections, searching.sections)
-  assert.deepEqual(browsing.articles, searching.articles.map(({ text: _text, ...article }) => article))
-  assert.ok(JSON.stringify(browsing).length < JSON.stringify(searching).length / 5)
+test("sidebar metadata omits article bodies while full-text search retains the complete catalog", () => {
+  const browsing = docNavIndex({ includeText: false });
+  const searching = docNavIndex();
+  assert.deepEqual(browsing.categories, searching.categories);
+  assert.deepEqual(browsing.sections, searching.sections);
+  assert.deepEqual(
+    browsing.articles,
+    searching.articles.map(({ text: _text, ...article }) => article),
+  );
+  assert.ok(JSON.stringify(browsing).length < JSON.stringify(searching).length / 5);
   for (const article of searching.articles) {
-    assert.equal(article.text, getArticle(article.slug)?.body.toLowerCase())
+    assert.equal(article.text, getArticle(article.slug)?.body.toLowerCase());
   }
-})
+});

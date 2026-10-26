@@ -3,10 +3,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient } from "pg";
 import { db, pool, withOrgContext } from "@openbooks/engine/platform/db";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "@openbooks/engine/testing/fixtures";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 
@@ -38,27 +35,33 @@ async function end(client: PoolClient, commit: boolean): Promise<void> {
 }
 
 async function tableSecurity(): Promise<Map<string, { rls: boolean; force: boolean }>> {
-  const rows = (await db.execute<{ name: string; rls: boolean; force: boolean }>(sql`
+  const rows = (
+    await db.execute<{ name: string; rls: boolean; force: boolean }>(sql`
     select c.relname as name, c.relrowsecurity as rls, c.relforcerowsecurity as force
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public'
-       and c.relname in ('positions', 'position_versions', 'position_funding', 'position_changes')`)).rows;
+       and c.relname in ('positions', 'position_versions', 'position_funding', 'position_changes')`)
+  ).rows;
   return new Map(rows.map((row) => [row.name, { rls: row.rls, force: row.force }]));
 }
 
 async function hasConstraint(name: string): Promise<boolean> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = (
+    await db.execute<{ n: number }>(sql`
     select count(*)::int as n from pg_constraint c
       join pg_namespace n on n.oid = c.connamespace
-     where n.nspname = 'public' and c.conname = ${name}`)).rows;
+     where n.nspname = 'public' and c.conname = ${name}`)
+  ).rows;
   return (rows[0]?.n ?? 0) > 0;
 }
 
 async function hasPolicy(table: string, policy: string): Promise<boolean> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = (
+    await db.execute<{ n: number }>(sql`
     select count(*)::int as n from pg_policies
-     where schemaname = 'public' and tablename = ${table} and policyname = ${policy}`)).rows;
+     where schemaname = 'public' and tablename = ${table} and policyname = ${policy}`)
+  ).rows;
   return (rows[0]?.n ?? 0) > 0;
 }
 
@@ -69,7 +72,10 @@ test("position tables exist with enforced tenant RLS", { skip }, async () => {
     assert.ok(state, `${table} must exist after bootstrap`);
     assert.equal(state.rls, true, `${table} must have RLS enabled`);
     assert.equal(state.force, true, `${table} must force RLS on table owners`);
-    assert.ok(await hasPolicy(table, "org_isolation"), `${table} must carry the org_isolation policy`);
+    assert.ok(
+      await hasPolicy(table, "org_isolation"),
+      `${table} must carry the org_isolation policy`,
+    );
   }
 });
 
@@ -84,9 +90,11 @@ test("position storage invariants exist by name", { skip }, async () => {
   ]) {
     assert.ok(await hasConstraint(name), `${name} must exist after bootstrap`);
   }
-  const guard = (await db.execute<{ definition: string }>(sql`
+  const guard = (
+    await db.execute<{ definition: string }>(sql`
     select pg_get_functiondef(oid) as definition from pg_proc
-     where proname = 'employment_assignment_versions_closure_guard'`)).rows[0]?.definition;
+     where proname = 'employment_assignment_versions_closure_guard'`)
+  ).rows[0]?.definition;
   assert.ok(guard, "the assignment closure guard must exist");
   assert.match(guard, /position_id/, "the closure allowlist must pin the position link");
 });
@@ -99,13 +107,17 @@ test("a cross-org position write is refused by RLS", { skip }, async () => {
     await writer.query("savepoint refused_probe");
     try {
       await assert.rejects(
-        writer.query(`insert into positions (org_id, position_code) values ('${first.orgId}', 'X-1')`),
+        writer.query(
+          `insert into positions (org_id, position_code) values ('${first.orgId}', 'X-1')`,
+        ),
         /row-level security|policy/,
       );
     } finally {
       await writer.query("rollback to savepoint refused_probe");
     }
-    const seen = await writer.query(`select count(*)::int as n from positions where org_id = '${first.orgId}'`);
+    const seen = await writer.query(
+      `select count(*)::int as n from positions where org_id = '${first.orgId}'`,
+    );
     assert.equal(seen.rows[0].n, 0, "org B must not read org A's positions");
   } finally {
     await end(writer, false);

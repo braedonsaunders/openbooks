@@ -36,10 +36,20 @@ type AssetRow = {
 const scopeSql = (allowed: readonly string[] | null | undefined) =>
   allowed ? sql`and subsidiary_id = any(${uuidArray([...allowed])}::uuid[])` : sql``;
 
-async function candidate(tx: SqlExecutor, orgId: string, row: AssetRow): Promise<ComponentCandidate> {
+async function candidate(
+  tx: SqlExecutor,
+  orgId: string,
+  row: AssetRow,
+): Promise<ComponentCandidate> {
   const [children, books] = await Promise.all([
-    tx.execute<{ id: string }>(sql`select id from fixed_assets where org_id = ${orgId} and parent_asset_id = ${row.id}`, "objects"),
-    tx.execute<{ book_id: string }>(sql`select distinct book_id from depreciation_schedules where org_id = ${orgId} and asset_id = ${row.id}`, "objects"),
+    tx.execute<{ id: string }>(
+      sql`select id from fixed_assets where org_id = ${orgId} and parent_asset_id = ${row.id}`,
+      "objects",
+    ),
+    tx.execute<{ book_id: string }>(
+      sql`select distinct book_id from depreciation_schedules where org_id = ${orgId} and asset_id = ${row.id}`,
+      "objects",
+    ),
   ]);
   return {
     id: row.id,
@@ -59,16 +69,27 @@ async function lockAssets(
   ids: readonly string[],
   allowed: readonly string[] | null | undefined,
 ): Promise<Map<string, AssetRow>> {
-  const rows = await tx.execute<AssetRow>(sql`
+  const rows = await tx.execute<AssetRow>(
+    sql`
     select id, asset_number, name, subsidiary_id, status, parent_asset_id
       from fixed_assets
      where org_id = ${orgId} and id = any(${uuidArray([...new Set(ids)])}::uuid[]) ${scopeSql(allowed)}
      order by id
-     for update`, "objects");
+     for update`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.id, row]));
 }
 
-async function audit(tx: SqlExecutor, orgId: string, assetId: string, actorId: string, before: unknown, after: unknown, reason: string | null) {
+async function audit(
+  tx: SqlExecutor,
+  orgId: string,
+  assetId: string,
+  actorId: string,
+  before: unknown,
+  after: unknown,
+  reason: string | null,
+) {
   await tx.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'fixed_assets', ${assetId}, 'update',
@@ -78,11 +99,22 @@ async function audit(tx: SqlExecutor, orgId: string, assetId: string, actorId: s
 /** Attach an existing asset to a parent as one of its components. */
 export async function attachAssetComponent(
   orgId: string,
-  args: { parentAssetId: string; componentAssetId: string; actorId: string; reason?: string | null; allowedSubsidiaryIds?: readonly string[] | null },
+  args: {
+    parentAssetId: string;
+    componentAssetId: string;
+    actorId: string;
+    reason?: string | null;
+    allowedSubsidiaryIds?: readonly string[] | null;
+  },
 ): Promise<{ parentAssetId: string; componentAssetId: string }> {
   return withOrgTransaction(orgId, async () => {
     const tx: SqlExecutor = db;
-    const locked = await lockAssets(tx, orgId, [args.parentAssetId, args.componentAssetId], args.allowedSubsidiaryIds);
+    const locked = await lockAssets(
+      tx,
+      orgId,
+      [args.parentAssetId, args.componentAssetId],
+      args.allowedSubsidiaryIds,
+    );
     const parent = locked.get(args.parentAssetId);
     const child = locked.get(args.componentAssetId);
     if (!parent || !child) refuse("asset_not_found", "asset not found", { status: 404 });
@@ -93,14 +125,31 @@ export async function attachAssetComponent(
       feature: "assetComponents",
       subsidiaryIds: [parent.subsidiary_id, child.subsidiary_id],
     });
-    assertComponentAttachable(await candidate(tx, orgId, parent), await candidate(tx, orgId, child));
-    if (child.parent_asset_id === parent.id) return { parentAssetId: parent.id, componentAssetId: child.id };
-    const updated = (await tx.execute<{ id: string }>(sql`
+    assertComponentAttachable(
+      await candidate(tx, orgId, parent),
+      await candidate(tx, orgId, child),
+    );
+    if (child.parent_asset_id === parent.id)
+      return { parentAssetId: parent.id, componentAssetId: child.id };
+    const updated = (
+      await tx.execute<{ id: string }>(
+        sql`
       update fixed_assets set parent_asset_id = ${parent.id}, updated_at = clock_timestamp(), updated_by = ${args.actorId}
        where org_id = ${orgId} and id = ${child.id} and parent_asset_id is null
-       returning id`, "objects"))[0];
+       returning id`,
+        "objects",
+      )
+    )[0];
     if (!updated) throw new Error(`asset ${child.asset_number} was not attached; no row changed`);
-    await audit(tx, orgId, child.id, args.actorId, { parent_asset_id: null }, { parent_asset_id: parent.id }, args.reason?.trim() || null);
+    await audit(
+      tx,
+      orgId,
+      child.id,
+      args.actorId,
+      { parent_asset_id: null },
+      { parent_asset_id: parent.id },
+      args.reason?.trim() || null,
+    );
     return { parentAssetId: parent.id, componentAssetId: child.id };
   });
 }
@@ -108,7 +157,12 @@ export async function attachAssetComponent(
 /** Detach a component so it stands alone in the register again. */
 export async function detachAssetComponent(
   orgId: string,
-  args: { componentAssetId: string; actorId: string; reason: string; allowedSubsidiaryIds?: readonly string[] | null },
+  args: {
+    componentAssetId: string;
+    actorId: string;
+    reason: string;
+    allowedSubsidiaryIds?: readonly string[] | null;
+  },
 ): Promise<{ componentAssetId: string; formerParentAssetId: string }> {
   const reason = args.reason.trim();
   if (!reason) refuse("reason_required", "state why the component is being detached");
@@ -117,7 +171,8 @@ export async function detachAssetComponent(
     const locked = await lockAssets(tx, orgId, [args.componentAssetId], args.allowedSubsidiaryIds);
     const child = locked.get(args.componentAssetId);
     if (!child) refuse("asset_not_found", "asset not found", { status: 404 });
-    if (!child.parent_asset_id) refuse("not_a_component", `asset ${child.asset_number} is not a component`);
+    if (!child.parent_asset_id)
+      refuse("not_a_component", `asset ${child.asset_number} is not a component`);
     await assertAssetAccess(tx, {
       orgId,
       actorId: args.actorId,
@@ -126,12 +181,25 @@ export async function detachAssetComponent(
       subsidiaryIds: [child.subsidiary_id],
     });
     const formerParentAssetId = child.parent_asset_id;
-    const updated = (await tx.execute<{ id: string }>(sql`
+    const updated = (
+      await tx.execute<{ id: string }>(
+        sql`
       update fixed_assets set parent_asset_id = null, updated_at = clock_timestamp(), updated_by = ${args.actorId}
        where org_id = ${orgId} and id = ${child.id} and parent_asset_id = ${formerParentAssetId}
-       returning id`, "objects"))[0];
+       returning id`,
+        "objects",
+      )
+    )[0];
     if (!updated) throw new Error(`asset ${child.asset_number} was not detached; no row changed`);
-    await audit(tx, orgId, child.id, args.actorId, { parent_asset_id: formerParentAssetId }, { parent_asset_id: null }, reason);
+    await audit(
+      tx,
+      orgId,
+      child.id,
+      args.actorId,
+      { parent_asset_id: formerParentAssetId },
+      { parent_asset_id: null },
+      reason,
+    );
     return { componentAssetId: child.id, formerParentAssetId };
   });
 }
@@ -153,7 +221,8 @@ export async function createAssetComponent(
   },
 ): Promise<{ id: string; assetNumber: string }> {
   const cost = canonicalDecimal(args.acquisitionCost, 4);
-  if (cost === null || cmp(cost, "0") < 0) refuse("amount_invalid", "component cost must be a non-negative exact amount");
+  if (cost === null || cmp(cost, "0") < 0)
+    refuse("amount_invalid", "component cost must be a non-negative exact amount");
   return withOrgTransaction(orgId, async () => {
     const tx: SqlExecutor = db;
     const locked = await lockAssets(tx, orgId, [args.parentAssetId], args.allowedSubsidiaryIds);
@@ -166,9 +235,16 @@ export async function createAssetComponent(
       feature: "assetComponents",
       subsidiaryIds: [parent.subsidiary_id],
     });
-    if (parent.parent_asset_id) refuse("component_nesting", `asset ${parent.asset_number} is itself a component; add the new component to its parent`);
+    if (parent.parent_asset_id)
+      refuse(
+        "component_nesting",
+        `asset ${parent.asset_number} is itself a component; add the new component to its parent`,
+      );
     if (!["draft", "in_service", "fully_depreciated"].includes(parent.status)) {
-      refuse("component_parent_status", `asset ${parent.asset_number} is ${parent.status} and cannot take components`);
+      refuse(
+        "component_parent_status",
+        `asset ${parent.asset_number} is ${parent.status} and cannot take components`,
+      );
     }
     const created = await createDraftAsset(tx, {
       orgId,
@@ -214,9 +290,14 @@ export async function loadCompoundAsset(
   assetId: string,
   options: { allowedSubsidiaryIds?: readonly string[] | null } = {},
 ): Promise<CompoundView | null> {
-  const self = (await db.execute<AssetRow>(sql`
+  const self = (
+    await db.execute<AssetRow>(
+      sql`
     select id, asset_number, name, subsidiary_id, status, parent_asset_id from fixed_assets
-     where org_id = ${orgId} and id = ${assetId} ${scopeSql(options.allowedSubsidiaryIds)}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${assetId} ${scopeSql(options.allowedSubsidiaryIds)}`,
+      "objects",
+    )
+  )[0];
   if (!self) return null;
   const rootId = self.parent_asset_id ?? self.id;
   const members = await db.execute<{
@@ -226,12 +307,15 @@ export async function loadCompoundAsset(
     status: string;
     parent_asset_id: string | null;
     category_name: string | null;
-  }>(sql`
+  }>(
+    sql`
     select a.id, a.asset_number, a.name, a.status, a.parent_asset_id, c.name as category_name
       from fixed_assets a
       left join asset_categories c on c.org_id = a.org_id and c.id = a.category_id
      where a.org_id = ${orgId} and (a.id = ${rootId} or a.parent_asset_id = ${rootId})
-     order by (a.id = ${rootId}) desc, a.asset_number`, "objects");
+     order by (a.id = ${rootId}) desc, a.asset_number`,
+    "objects",
+  );
   const root = members.find((member) => member.id === rootId);
   if (!root) return null;
   const values = await db.execute<{
@@ -242,16 +326,26 @@ export async function loadCompoundAsset(
     cost: string;
     accumulated: string;
     carrying_value: string;
-  }>(sql`
+  }>(
+    sql`
     select v.asset_id, v.book_id, b.name as book_name, b.is_primary,
            v.cost::text as cost, v.accumulated::text as accumulated, v.carrying_value::text as carrying_value
       from asset_book_carrying_values v
       join accounting_books b on b.org_id = v.org_id and b.id = v.book_id and b.is_active
      where v.org_id = ${orgId} and v.asset_id = any(${uuidArray(members.map((member) => member.id))}::uuid[])
-     order by b.is_primary desc, b.code`, "objects");
-  const books = new Map(values.map((row) => [row.book_id, { name: row.book_name, isPrimary: row.is_primary }]));
+     order by b.is_primary desc, b.code`,
+    "objects",
+  );
+  const books = new Map(
+    values.map((row) => [row.book_id, { name: row.book_name, isPrimary: row.is_primary }]),
+  );
   return {
-    parent: { id: root.id, assetNumber: root.asset_number, name: root.name, parentAssetId: root.parent_asset_id },
+    parent: {
+      id: root.id,
+      assetNumber: root.asset_number,
+      name: root.name,
+      parentAssetId: root.parent_asset_id,
+    },
     members: members.map((member) => ({
       id: member.id,
       assetNumber: member.asset_number,
@@ -261,16 +355,30 @@ export async function loadCompoundAsset(
       isParent: member.id === rootId,
       books: values
         .filter((row) => row.asset_id === member.id)
-        .map((row) => ({ bookId: row.book_id, cost: add(row.cost, "0"), accumulated: add(row.accumulated, "0"), carryingValue: add(row.carrying_value, "0") })),
+        .map((row) => ({
+          bookId: row.book_id,
+          cost: add(row.cost, "0"),
+          accumulated: add(row.accumulated, "0"),
+          carryingValue: add(row.carrying_value, "0"),
+        })),
     })),
-    rollup: rollUpCompound(values.map((row) => ({
-      assetId: row.asset_id,
-      bookId: row.book_id,
-      cost: row.cost,
-      accumulated: row.accumulated,
-      carryingValue: row.carrying_value,
-    }))).map((entry) => ({ ...entry, bookName: books.get(entry.bookId)?.name ?? "", isPrimary: books.get(entry.bookId)?.isPrimary ?? false }))
-      .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.bookName.localeCompare(b.bookName)),
+    rollup: rollUpCompound(
+      values.map((row) => ({
+        assetId: row.asset_id,
+        bookId: row.book_id,
+        cost: row.cost,
+        accumulated: row.accumulated,
+        carryingValue: row.carrying_value,
+      })),
+    )
+      .map((entry) => ({
+        ...entry,
+        bookName: books.get(entry.bookId)?.name ?? "",
+        isPrimary: books.get(entry.bookId)?.isPrimary ?? false,
+      }))
+      .sort(
+        (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.bookName.localeCompare(b.bookName),
+      ),
   };
 }
 
@@ -282,7 +390,8 @@ export async function listComponentCandidates(
   orgId: string,
   parentAssetId: string,
 ): Promise<{ id: string; label: string }[]> {
-  return await db.execute<{ id: string; label: string }>(sql`
+  return await db.execute<{ id: string; label: string }>(
+    sql`
     select a.id, concat_ws(' · ', a.asset_number, a.name) as label
       from fixed_assets a
       join fixed_assets root on root.org_id = a.org_id and root.id = ${parentAssetId}
@@ -290,12 +399,22 @@ export async function listComponentCandidates(
        and a.parent_asset_id is null and a.id <> root.id
        and a.status in ('draft', 'in_service', 'fully_depreciated')
        and not exists (select 1 from fixed_assets c where c.org_id = a.org_id and c.parent_asset_id = a.id)
-     order by a.asset_number limit 500`, "objects");
+     order by a.asset_number limit 500`,
+    "objects",
+  );
 }
 
 export interface CompoundDisposalResult {
   parentAssetId: string;
-  disposals: { assetId: string; assetNumber: string; entryId: string | null; proceeds: string; nbv: string; gainLoss: string; status: string }[];
+  disposals: {
+    assetId: string;
+    assetNumber: string;
+    entryId: string | null;
+    proceeds: string;
+    nbv: string;
+    gainLoss: string;
+    status: string;
+  }[];
 }
 
 /**
@@ -322,18 +441,30 @@ export async function disposeCompoundAsset(
   const reason = args.reason.trim();
   if (!reason) refuse("reason_required", "state why the compound asset is being disposed");
   const proceeds = canonicalDecimal(args.proceeds ?? "0", 4);
-  if (proceeds === null || cmp(proceeds, "0") < 0) refuse("proceeds_invalid", "proceeds must be a non-negative exact amount");
-  if (args.writeOff && cmp(proceeds, "0") !== 0) refuse("write_off_with_proceeds", "a write-off takes no proceeds; record a sale disposal instead");
+  if (proceeds === null || cmp(proceeds, "0") < 0)
+    refuse("proceeds_invalid", "proceeds must be a non-negative exact amount");
+  if (args.writeOff && cmp(proceeds, "0") !== 0)
+    refuse(
+      "write_off_with_proceeds",
+      "a write-off takes no proceeds; record a sale disposal instead",
+    );
   return withOrgTransaction(orgId, async () => {
     const tx: SqlExecutor = db;
-    const family = await tx.execute<AssetRow>(sql`
+    const family = await tx.execute<AssetRow>(
+      sql`
       select id, asset_number, name, subsidiary_id, status, parent_asset_id from fixed_assets
        where org_id = ${orgId} and (id = ${args.parentAssetId} or parent_asset_id = ${args.parentAssetId})
          ${scopeSql(args.allowedSubsidiaryIds)}
-       order by id for update`, "objects");
+       order by id for update`,
+      "objects",
+    );
     const parent = family.find((row) => row.id === args.parentAssetId);
     if (!parent) refuse("asset_not_found", "asset not found", { status: 404 });
-    if (parent.parent_asset_id) refuse("not_a_parent", `asset ${parent.asset_number} is a component; dispose it on its own or dispose its parent`);
+    if (parent.parent_asset_id)
+      refuse(
+        "not_a_parent",
+        `asset ${parent.asset_number} is a component; dispose it on its own or dispose its parent`,
+      );
     await assertAssetAccess(tx, {
       orgId,
       actorId: args.actorId,
@@ -343,48 +474,86 @@ export async function disposeCompoundAsset(
     });
     const components = family.filter((row) => row.id !== parent.id);
     if (components.length === 0) {
-      refuse("no_components", `asset ${parent.asset_number} has no components`, { remedy: "Use Dispose on the asset itself." });
+      refuse("no_components", `asset ${parent.asset_number} has no components`, {
+        remedy: "Use Dispose on the asset itself.",
+      });
     }
     const drafts = family.filter((row) => row.status === "draft");
     if (drafts.length > 0) {
-      refuse("component_draft", `draft ${drafts.map((row) => row.asset_number).join(", ")} cannot be disposed`, {
-        remedy: "Place each draft in service, or detach and delete it, before disposing the compound asset.",
-      });
+      refuse(
+        "component_draft",
+        `draft ${drafts.map((row) => row.asset_number).join(", ")} cannot be disposed`,
+        {
+          remedy:
+            "Place each draft in service, or detach and delete it, before disposing the compound asset.",
+        },
+      );
     }
-    const live = family.filter((row) => row.status === "in_service" || row.status === "fully_depreciated");
+    const live = family.filter(
+      (row) => row.status === "in_service" || row.status === "fully_depreciated",
+    );
     if (!live.some((row) => row.id === parent.id)) {
-      refuse("parent_not_live", `asset ${parent.asset_number} is ${parent.status} and cannot be disposed`);
+      refuse(
+        "parent_not_live",
+        `asset ${parent.asset_number} is ${parent.status} and cannot be disposed`,
+      );
     }
     // Remaining components first, the parent last, so a refusal on any
     // member rolls back the whole family.
     const ordered = [...live.filter((row) => row.id !== parent.id), parent];
-    const carrying = await tx.execute<{ asset_id: string; cost: string; carrying_value: string }>(sql`
+    const carrying = await tx.execute<{ asset_id: string; cost: string; carrying_value: string }>(
+      sql`
       select v.asset_id, v.cost::text as cost, v.carrying_value::text as carrying_value
         from asset_book_carrying_values v
         join accounting_books b on b.org_id = v.org_id and b.id = v.book_id and b.is_primary and b.is_active and b.posts_gl
-       where v.org_id = ${orgId} and v.asset_id = any(${uuidArray(ordered.map((row) => row.id))}::uuid[])`, "objects");
+       where v.org_id = ${orgId} and v.asset_id = any(${uuidArray(ordered.map((row) => row.id))}::uuid[])`,
+      "objects",
+    );
     const values = new Map(carrying.map((row) => [row.asset_id, row]));
     // The parent leads the apportionment so it absorbs the price when nothing carries value.
-    const shares = new Map(apportionProceeds(proceeds, [parent, ...ordered.filter((row) => row.id !== parent.id)].map((row) => ({
-      assetId: row.id,
-      carryingValue: values.get(row.id)?.carrying_value ?? "0",
-      cost: values.get(row.id)?.cost ?? "0",
-    }))).map((share) => [share.assetId, share.proceeds]));
+    const shares = new Map(
+      apportionProceeds(
+        proceeds,
+        [parent, ...ordered.filter((row) => row.id !== parent.id)].map((row) => ({
+          assetId: row.id,
+          carryingValue: values.get(row.id)?.carrying_value ?? "0",
+          cost: values.get(row.id)?.cost ?? "0",
+        })),
+      ).map((share) => [share.assetId, share.proceeds]),
+    );
     const disposals: CompoundDisposalResult["disposals"] = [];
     for (const row of ordered) {
       const share = shares.get(row.id) ?? "0.0000";
       const value = values.get(row.id);
-      if (row.id === parent.id && cmp(value?.cost ?? "0", "0") === 0 && cmp(value?.carrying_value ?? "0", "0") === 0 && cmp(share, "0") === 0) {
+      if (
+        row.id === parent.id &&
+        cmp(value?.cost ?? "0", "0") === 0 &&
+        cmp(value?.carrying_value ?? "0", "0") === 0 &&
+        cmp(share, "0") === 0
+      ) {
         // A parent that carries no cost of its own is only the family's
         // container: nothing sits in the ledger for it to derecognize, so it
         // closes with its components and posts no journal.
         const status = args.writeOff ? "written_off" : "disposed";
-        const closed = (await tx.execute<{ id: string }>(sql`
+        const closed = (
+          await tx.execute<{ id: string }>(
+            sql`
           update fixed_assets set status = ${status}, updated_at = clock_timestamp(), updated_by = ${args.actorId}
            where org_id = ${orgId} and id = ${row.id} and status in ('in_service', 'fully_depreciated')
-           returning id`, "objects"))[0];
+           returning id`,
+            "objects",
+          )
+        )[0];
         if (!closed) throw new Error(`asset ${row.asset_number} was not closed; no row changed`);
-        disposals.push({ assetId: row.id, assetNumber: row.asset_number, entryId: null, proceeds: share, nbv: "0.0000", gainLoss: "0.0000", status });
+        disposals.push({
+          assetId: row.id,
+          assetNumber: row.asset_number,
+          entryId: null,
+          proceeds: share,
+          nbv: "0.0000",
+          gainLoss: "0.0000",
+          status,
+        });
         continue;
       }
       const result = await disposeAsset(orgId, row.id, {
@@ -392,10 +561,18 @@ export async function disposeCompoundAsset(
         actorId: args.actorId,
         writeOff: args.writeOff === true || cmp(share, "0") === 0,
         proceeds: share,
-        proceedsAccountId: cmp(share, "0") === 0 ? null : args.proceedsAccountId ?? null,
+        proceedsAccountId: cmp(share, "0") === 0 ? null : (args.proceedsAccountId ?? null),
         allowedSubsidiaryIds: args.allowedSubsidiaryIds ?? null,
       });
-      disposals.push({ assetId: row.id, assetNumber: row.asset_number, entryId: result.entryId, proceeds: share, nbv: result.nbv, gainLoss: result.gainLoss, status: result.status });
+      disposals.push({
+        assetId: row.id,
+        assetNumber: row.asset_number,
+        entryId: result.entryId,
+        proceeds: share,
+        nbv: result.nbv,
+        gainLoss: result.gainLoss,
+        status: result.status,
+      });
     }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

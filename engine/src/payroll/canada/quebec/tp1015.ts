@@ -56,7 +56,15 @@
 import { PayrollError } from "../../error.ts";
 import type { Money } from "../../../money/brands.ts";
 import {
-  bmin, D, divIntCents, max0, mulInt, mulRateCents, mulRatioCents, rate6, U,
+  bmin,
+  D,
+  divIntCents,
+  max0,
+  mulInt,
+  mulRateCents,
+  mulRatioCents,
+  rate6,
+  U,
 } from "../../../money/payroll-decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import { qcRatesForPayDate, type QcEditionRates, type QcTaxBracket } from "./rates.ts";
@@ -171,7 +179,9 @@ export function calculateTp1015(input: Tp1015Input): Tp1015Result {
   }
 
   const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[`QC_${key}`] = D(value); };
+  const trace = (key: string, value: bigint) => {
+    factors[`QC_${key}`] = D(value);
+  };
 
   const G = U(input.income);
   const B2 = opt(input.nonPeriodic);
@@ -204,21 +214,19 @@ export function calculateTp1015(input: Tp1015Input): Tp1015Result {
   //       sums (s. 2.1.2). Computed independently, exactly as the guide does
   //       (Appendix 2: CS = 54.33 splits 14.82 / 39.51, which do not sum to
   //       54.33 — each parenthesis rounds on its own).
-  const CS = mulRatioCents(
-    C, rate6(rates.qppFirstAdditionalRate), rate6(rates.qppTotalRate),
-  ) + C2;
+  const CS = mulRatioCents(C, rate6(rates.qppFirstAdditionalRate), rate6(rates.qppTotalRate)) + C2;
   const CSA = B2 > ZERO && S3 > ZERO ? mulRatioCents(CS, max0(S3 - B2), S3) : CS;
   const CSB = B2 > ZERO && S3 > ZERO ? mulRatioCents(CS, bmin(B2, S3), S3) : ZERO;
-  trace("CS", CS); trace("CSA", CSA); trace("CSB", CSB);
+  trace("CS", CS);
+  trace("CSA", CSA);
+  trace("CSB", CSB);
 
   // ---- E — personal tax credits (s. 2.1.1 Step 2) --------------------------
   // "If the result is not a multiple of 1, round it to the nearest multiple
   // of 1. If the result is halfway between two multiples of 1, round it up."
   // Default when no TP-1015.3-V is on file: the basic personal amount.
   const E = roundDollar(
-    input.personalCredits === undefined
-      ? U(rates.basicPersonalAmount)
-      : U(input.personalCredits),
+    input.personalCredits === undefined ? U(rates.basicPersonalAmount) : U(input.personalCredits),
   );
   trace("E", E);
 
@@ -243,12 +251,12 @@ export function calculateTp1015(input: Tp1015Input): Tp1015Result {
   const annualTax = (I: bigint): { y: bigint; t: string; k: string } => {
     const bracket = bracketFor(rates.brackets, I);
     const y = max0(
-      mulRateCents(I, bracket.rate)
-      - U(bracket.k)
-      - K1
-      - mulRateCents(E, rates.creditRate)
-      - mulRateCents(mulInt(Q, P), rates.labourFundsCreditRate)
-      - mulRateCents(mulInt(Q1, P), rates.labourFundsCreditRate),
+      mulRateCents(I, bracket.rate) -
+        U(bracket.k) -
+        K1 -
+        mulRateCents(E, rates.creditRate) -
+        mulRateCents(mulInt(Q, P), rates.labourFundsCreditRate) -
+        mulRateCents(mulInt(Q1, P), rates.labourFundsCreditRate),
     );
     return { y, t: bracket.rate, k: bracket.k };
   };
@@ -283,9 +291,7 @@ export function calculateTp1015(input: Tp1015Input): Tp1015Result {
       // Step 1: I = [P × (G − F − H − CSA)] + B1 + B2 − CSB1 − CSB − J − J1
       // (B1/B2 already net of their factor-F amounts), floor 0.
       // Step 2: A = T × (B2 − CSB), T taken from the bracket of that I.
-      const I2 = max0(
-        mulInt(G - F - H - CSA, P) + B1n + B2n - CSB1 - CSB - J - J1,
-      );
+      const I2 = max0(mulInt(G - F - H - CSA, P) + B1n + B2n - CSB1 - CSB - J - J1);
       trace("I2", I2);
       const bracket = bracketFor(rates.brackets, I2);
       bonusTax = max0(mulRateCents(max0(B2n - CSB), bracket.rate));

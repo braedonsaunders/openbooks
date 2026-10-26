@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { useDirtyClose } from '../../../../lib/use-dirty-close'
-import { DateField } from '../../../../components/date-field'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button, Drawer, Input, Label, Select } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { useDirtyClose } from "../../../../lib/use-dirty-close";
+import { DateField } from "../../../../components/date-field";
 
 /**
  * New-window dialog, opened from the page header through the `window=new`
@@ -20,56 +20,56 @@ export function WindowDialog({
   subsidiaryOptions,
   departmentOptions,
 }: {
-  closeHref: string
-  subsidiaryOptions: { value: string; label: string }[]
-  departmentOptions: { value: string; label: string }[]
+  closeHref: string;
+  subsidiaryOptions: { value: string; label: string }[];
+  departmentOptions: { value: string; label: string }[];
 }) {
-  const t = useTranslations('hrm')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [saving, setSaving] = useState(false)
-  const [name, setName] = useState('')
-  const [kind, setKind] = useState('open_enrollment')
-  const [opensOn, setOpensOn] = useState('')
-  const [closesOn, setClosesOn] = useState('')
-  const [planYearStartOn, setPlanYearStartOn] = useState('')
-  const [subsidiary, setSubsidiary] = useState('')
-  const [department, setDepartment] = useState('')
+  const t = useTranslations("hrm");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState("open_enrollment");
+  const [opensOn, setOpensOn] = useState("");
+  const [closesOn, setClosesOn] = useState("");
+  const [planYearStartOn, setPlanYearStartOn] = useState("");
+  const [subsidiary, setSubsidiary] = useState("");
+  const [department, setDepartment] = useState("");
 
   function close() {
-    router.push(closeHref as never)
-    router.refresh()
+    router.push(closeHref as never);
+    router.refresh();
   }
 
   // A half-typed window never closes silently: Cancel, the X button,
   // Escape, and the backdrop all route through onClose, which asks first —
   // the same shared guard the lease and change-request forms use.
   const dirty =
-    name.trim() !== '' ||
-    kind !== 'open_enrollment' ||
-    opensOn !== '' ||
-    closesOn !== '' ||
-    planYearStartOn !== '' ||
-    subsidiary !== '' ||
-    department !== ''
+    name.trim() !== "" ||
+    kind !== "open_enrollment" ||
+    opensOn !== "" ||
+    closesOn !== "" ||
+    planYearStartOn !== "" ||
+    subsidiary !== "" ||
+    department !== "";
   const closeGuard = useDirtyClose({
     dirty,
     busy: saving,
     onClose: close,
-    message: tCommon('feedback.unsavedChanges'),
-    confirmLabel: tCommon('confirm.discardChanges'),
-  })
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
 
   async function save() {
     if (!name.trim() || !opensOn || !closesOn || !planYearStartOn) {
-      toast.error(t('benefits.windowRequired'))
-      return
+      toast.error(t("benefits.windowRequired"));
+      return;
     }
-    setSaving(true)
+    setSaving(true);
     try {
-      const res = await fetch('/api/hrm/enrollment-windows', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const res = await fetch("/api/hrm/enrollment-windows", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
           kind,
@@ -79,49 +79,62 @@ export function WindowDialog({
           employerSubsidiaryId: subsidiary || null,
           departmentId: department || null,
         }),
-      })
+      });
       // res.ok first, always: a refusal body is read only for its message.
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('benefits.windowFailed')))
-        return
+        toast.error(await readApiErrorMessage(res, t("benefits.windowFailed")));
+        return;
       }
-      close()
+      close();
     } catch {
       // A transport failure rejects before any HTTP response: surface the
       // localized failure instead of stranding the form on saving.
-      toast.error(t('benefits.windowFailed'))
+      toast.error(t("benefits.windowFailed"));
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   return (
-    <Drawer open onClose={() => void closeGuard.close()} title={t('benefits.newWindowTitle')} size="md">
+    <Drawer
+      open
+      onClose={() => void closeGuard.close()}
+      title={t("benefits.newWindowTitle")}
+      size="md"
+    >
       <div className="flex flex-col gap-4 p-4">
         <div>
-          <Label htmlFor="benefits-window-name">{t('benefits.windowName')}</Label>
+          <Label htmlFor="benefits-window-name">{t("benefits.windowName")}</Label>
           <Input id="benefits-window-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
-          <Label htmlFor="benefits-window-kind">{t('benefits.windowKind')}</Label>
+          <Label htmlFor="benefits-window-kind">{t("benefits.windowKind")}</Label>
           <Select id="benefits-window-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
-            <option value="open_enrollment">{t('benefits.windowKinds.open_enrollment')}</option>
-            <option value="new_hire">{t('benefits.windowKinds.new_hire')}</option>
-            <option value="life_event">{t('benefits.windowKinds.life_event')}</option>
+            <option value="open_enrollment">{t("benefits.windowKinds.open_enrollment")}</option>
+            <option value="new_hire">{t("benefits.windowKinds.new_hire")}</option>
+            <option value="life_event">{t("benefits.windowKinds.life_event")}</option>
           </Select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label htmlFor="benefits-window-opens">{t('benefits.windowOpens')}</Label>
-            <DateField id="benefits-window-opens" value={opensOn} onChange={(value) => setOpensOn(value)} />
+            <Label htmlFor="benefits-window-opens">{t("benefits.windowOpens")}</Label>
+            <DateField
+              id="benefits-window-opens"
+              value={opensOn}
+              onChange={(value) => setOpensOn(value)}
+            />
           </div>
           <div>
-            <Label htmlFor="benefits-window-closes">{t('benefits.windowCloses')}</Label>
-            <DateField id="benefits-window-closes" value={closesOn} onChange={(value) => setClosesOn(value)} />
+            <Label htmlFor="benefits-window-closes">{t("benefits.windowCloses")}</Label>
+            <DateField
+              id="benefits-window-closes"
+              value={closesOn}
+              onChange={(value) => setClosesOn(value)}
+            />
           </div>
         </div>
         <div>
-          <Label htmlFor="benefits-window-year">{t('benefits.windowPlanYear')}</Label>
+          <Label htmlFor="benefits-window-year">{t("benefits.windowPlanYear")}</Label>
           <DateField
             id="benefits-window-year"
             value={planYearStartOn}
@@ -129,9 +142,13 @@ export function WindowDialog({
           />
         </div>
         <div>
-          <Label htmlFor="benefits-window-subsidiary">{t('benefits.windowSubsidiary')}</Label>
-          <Select id="benefits-window-subsidiary" value={subsidiary} onChange={(e) => setSubsidiary(e.target.value)}>
-            <option value="">{t('benefits.windowAll')}</option>
+          <Label htmlFor="benefits-window-subsidiary">{t("benefits.windowSubsidiary")}</Label>
+          <Select
+            id="benefits-window-subsidiary"
+            value={subsidiary}
+            onChange={(e) => setSubsidiary(e.target.value)}
+          >
+            <option value="">{t("benefits.windowAll")}</option>
             {subsidiaryOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
@@ -140,9 +157,13 @@ export function WindowDialog({
           </Select>
         </div>
         <div>
-          <Label htmlFor="benefits-window-department">{t('benefits.windowDepartment')}</Label>
-          <Select id="benefits-window-department" value={department} onChange={(e) => setDepartment(e.target.value)}>
-            <option value="">{t('benefits.windowAll')}</option>
+          <Label htmlFor="benefits-window-department">{t("benefits.windowDepartment")}</Label>
+          <Select
+            id="benefits-window-department"
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+          >
+            <option value="">{t("benefits.windowAll")}</option>
             {departmentOptions.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
@@ -152,13 +173,13 @@ export function WindowDialog({
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => void closeGuard.close()}>
-            {t('benefits.cancel')}
+            {t("benefits.cancel")}
           </Button>
           <Button disabled={saving} onClick={save}>
-            {t('benefits.createWindow')}
+            {t("benefits.createWindow")}
           </Button>
         </div>
       </div>
     </Drawer>
-  )
+  );
 }

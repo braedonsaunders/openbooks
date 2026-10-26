@@ -29,19 +29,29 @@ export async function accountingPreferences(
   subsidiaryId: string,
   onDate: string,
 ): Promise<AccountingPreferences> {
-  const subsidiary = (await runner.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id=${orgId} and id=${subsidiaryId}`, "objects"))[0];
+  const subsidiary = (
+    await runner.execute<{ id: string }>(
+      sql`
+    select id from subsidiaries where org_id=${orgId} and id=${subsidiaryId}`,
+      "objects",
+    )
+  )[0];
   if (!subsidiary)
     throw new AccountingPreferenceError(
       "The accounting entity is unavailable.",
       "Choose a subsidiary of this organization.",
     );
-  const row = (await runner.execute<AccountingPreferences & Record<string, unknown>>(sql`
+  const row = (
+    await runner.execute<AccountingPreferences & Record<string, unknown>>(
+      sql`
     select id, fiscal_calendar_id as "fiscalCalendarId", posting_rate_type as "postingRateType",
            allow_backdated_posting as "allowBackdatedPosting",
            allow_future_posting as "allowFuturePosting", default_journal_form_id as "defaultJournalFormId"
     from subsidiary_accounting_preferences where org_id=${orgId} and subsidiary_id=${subsidiaryId} and effective_from<=${onDate}::date
-    order by effective_from desc limit 1`, "objects"))[0];
+    order by effective_from desc limit 1`,
+      "objects",
+    )
+  )[0];
   return (
     row ?? {
       id: null,
@@ -60,12 +70,7 @@ export async function assertEntityPostingDate(
   subsidiaryId: string,
   postingDate: string,
 ): Promise<void> {
-  const policy = await accountingPreferences(
-    runner,
-    orgId,
-    subsidiaryId,
-    postingDate,
-  );
+  const policy = await accountingPreferences(runner, orgId, subsidiaryId, postingDate);
   if (policy.allowBackdatedPosting && policy.allowFuturePosting) return;
   const today = await businessTodayInTx(runner, orgId);
   if (!policy.allowBackdatedPosting && postingDate < today)

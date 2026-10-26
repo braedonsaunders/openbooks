@@ -2,27 +2,37 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
-import { NextResponse } from 'next/server'
-import { and, eq } from 'drizzle-orm'
-import { evaluateLogicRule, graphSubjectAdmission, planAutomation, type EvalContext } from '@openbooks/forms-core'
-import { db, schema, withOrgContext } from '@openbooks/engine/platform/db'
+import { NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
+import {
+  evaluateLogicRule,
+  graphSubjectAdmission,
+  planAutomation,
+  type EvalContext,
+} from "@openbooks/forms-core";
+import { db, schema, withOrgContext } from "@openbooks/engine/platform/db";
 import {
   dispatchFailureReason,
   getFlowAdapter,
   parseFlowGraph,
   runRecordFlows,
-} from '@openbooks/engine/flows/module'
-import { can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
-import { canReadSubjectRecord, holdsSubjectGrant, manualButtonPermission } from '../../../../lib/flow-subject-authz'
-import { loadFlowSubjectSubsidiary, requireFlowsRecordReader } from '../_lib'
-import { isUuid } from '../../../../lib/list-params'
+} from "@openbooks/engine/flows/module";
+import { can, guardSubsidiaryScope, type Authz } from "../../../../lib/authz";
+import {
+  canReadSubjectRecord,
+  holdsSubjectGrant,
+  manualButtonPermission,
+} from "../../../../lib/flow-subject-authz";
+import { loadFlowSubjectSubsidiary, requireFlowsRecordReader } from "../_lib";
+import { isUuid } from "../../../../lib/list-params";
 
 const requestBodySchema = z.object({
-  buttonId: z.string().trim().min(1).max(100), subjectId: uuidString(), subjectKind: z.string().trim().min(1).max(100),
+  buttonId: z.string().trim().min(1).max(100),
+  subjectId: uuidString(),
+  subjectKind: z.string().trim().min(1).max(100),
 });
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Manual flow triggers — the "record buttons" authored as `manual` trigger
@@ -39,9 +49,9 @@ export const runtime = 'nodejs'
  */
 
 interface ManualButton {
-  buttonId: string
-  label: string
-  confirm?: string
+  buttonId: string;
+  label: string;
+  confirm?: string;
 }
 
 /** Resolve the manual buttons the caller may use on a record right now. */
@@ -51,25 +61,30 @@ async function availableButtons(
   subjectId: string,
   flowsEnabled = true,
 ): Promise<ManualButton[] | NextResponse> {
-  const adapter = getFlowAdapter(subjectKind)
-  if (!adapter) return NextResponse.json({ error: 'unknown subject kind' }, { status: 400 })
+  const adapter = getFlowAdapter(subjectKind);
+  if (!adapter) return NextResponse.json({ error: "unknown subject kind" }, { status: 400 });
 
   // Domain read before anything about the record is disclosed: without the
   // subject kind's read grant the record answers exactly as if missing.
   if (!(await canReadSubjectRecord(authz, subjectKind, subjectId))) {
-    return NextResponse.json({ error: 'record not found' }, { status: 404 })
+    return NextResponse.json({ error: "record not found" }, { status: 404 });
   }
   // Manual flows can mutate their subject. Resolve its legal entity before
   // loading any values or evaluating buttons so a restricted caller cannot
   // use a forged id to run an action on a hidden subsidiary's record.
-  const subjectSubsidiaryId = await loadFlowSubjectSubsidiary(subjectKind, subjectId, authz.user.orgId, authz.allowedSubsidiaryIds)
-  const denied = guardSubsidiaryScope(authz, subjectSubsidiaryId)
-  if (denied) return denied
+  const subjectSubsidiaryId = await loadFlowSubjectSubsidiary(
+    subjectKind,
+    subjectId,
+    authz.user.orgId,
+    authz.allowedSubsidiaryIds,
+  );
+  const denied = guardSubsidiaryScope(authz, subjectSubsidiaryId);
+  if (denied) return denied;
 
-  const subject = await adapter.loadContext(subjectId)
-  if (!subject) return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  const subject = await adapter.loadContext(subjectId);
+  if (!subject) return NextResponse.json({ error: "record not found" }, { status: 404 });
   // With Flows off no flow offers a button: the visible record has none.
-  if (!flowsEnabled) return []
+  if (!flowsEnabled) return [];
   // Viewer-aware showIf (button conditions like "Next Approver = Current
   // User" / "Requestor = Current User"): inject who is LOOKING before
   // evaluating each button's rule.
@@ -80,11 +95,11 @@ async function availableButtons(
       and(
         eq(schema.flowGates.orgId, authz.user.orgId),
         eq(schema.flowGates.subjectId, subjectId),
-        eq(schema.flowGates.status, 'pending'),
+        eq(schema.flowGates.status, "pending"),
         eq(schema.flowGates.assigneeUserId, authz.user.id),
       ),
     )
-    .limit(1)
+    .limit(1);
   const evalCtx: EvalContext = {
     values: {
       ...subject.values,
@@ -93,7 +108,7 @@ async function availableButtons(
       is_pending_approver: !!pendingGate,
     },
     rows: subject.rows ?? {},
-  }
+  };
 
   const flows = await db
     .select({ id: schema.flows.id, graph: schema.flows.graph })
@@ -104,23 +119,23 @@ async function availableButtons(
         eq(schema.flows.subjectKind, subjectKind),
         eq(schema.flows.enabled, true),
       ),
-    )
+    );
 
-  const buttons: ManualButton[] = []
-  const seen = new Set<string>()
+  const buttons: ManualButton[] = [];
+  const seen = new Set<string>();
   for (const flow of flows) {
-    const graph = parseFlowGraph(flow.id, flow.graph)
-    if (!graph) continue
+    const graph = parseFlowGraph(flow.id, flow.graph);
+    if (!graph) continue;
     // Legal-entity admission: a flow limited to other legal entities (or
     // one whose limit this record's unresolved entity cannot prove)
     // offers no buttons on this record.
-    if (graphSubjectAdmission(graph, subjectSubsidiaryId) !== 'admitted') continue
+    if (graphSubjectAdmission(graph, subjectSubsidiaryId) !== "admitted") continue;
     for (const node of graph.nodes) {
-      if (node.data.kind !== 'trigger' || node.data.trigger.trigger !== 'manual') continue
-      const td = node.data.trigger
-      if (seen.has(td.buttonId)) continue
-      if (td.requirePermission && !can(authz, td.requirePermission)) continue
-      if (td.showIf && !evaluateLogicRule(td.showIf, evalCtx)) continue
+      if (node.data.kind !== "trigger" || node.data.trigger.trigger !== "manual") continue;
+      const td = node.data.trigger;
+      if (seen.has(td.buttonId)) continue;
+      if (td.requirePermission && !can(authz, td.requirePermission)) continue;
+      if (td.showIf && !evaluateLogicRule(td.showIf, evalCtx)) continue;
       // Subject action authority, independent of the trigger's optional
       // requirePermission: the button's own planned effects decide the
       // grant — edit for field sets, post/approve for status transitions
@@ -129,36 +144,35 @@ async function availableButtons(
       // unavailability refusal for it.
       const required = manualButtonPermission(
         subjectKind,
-        planAutomation(graph, { kind: 'manual', buttonId: td.buttonId }, evalCtx),
-      )
-      if (!required || !(await holdsSubjectGrant(authz, subjectKind, subjectId, required))) continue
-      seen.add(td.buttonId)
-      buttons.push({ buttonId: td.buttonId, label: td.label, confirm: td.confirm })
+        planAutomation(graph, { kind: "manual", buttonId: td.buttonId }, evalCtx),
+      );
+      if (!required || !(await holdsSubjectGrant(authz, subjectKind, subjectId, required)))
+        continue;
+      seen.add(td.buttonId);
+      buttons.push({ buttonId: td.buttonId, label: td.label, confirm: td.confirm });
     }
   }
-  return buttons
+  return buttons;
 }
 
 async function legacyGET(req: Request) {
-  const session = await requireFlowsRecordReader()
-  if (session instanceof NextResponse) return session
-  const { authz, flowsEnabled } = session
+  const session = await requireFlowsRecordReader();
+  if (session instanceof NextResponse) return session;
+  const { authz, flowsEnabled } = session;
 
-  const url = new URL(req.url)
-  const subjectKind = url.searchParams.get('subjectKind') ?? ''
-  const subjectId = url.searchParams.get('subjectId') ?? ''
+  const url = new URL(req.url);
+  const subjectKind = url.searchParams.get("subjectKind") ?? "";
+  const subjectId = url.searchParams.get("subjectId") ?? "";
   if (!subjectKind || !isUuid(subjectId)) {
-    return NextResponse.json({ error: 'subjectKind and subjectId required' }, { status: 400 })
+    return NextResponse.json({ error: "subjectKind and subjectId required" }, { status: 400 });
   }
 
   const buttons = await withOrgContext(authz.user.orgId, () =>
     availableButtons(authz, subjectKind, subjectId, flowsEnabled),
-  )
-  if (buttons instanceof NextResponse) return buttons
-  return NextResponse.json({ buttons })
+  );
+  if (buttons instanceof NextResponse) return buttons;
+  return NextResponse.json({ buttons });
 }
-
-
 
 export const GET = defineRoute({
   public: "session",
@@ -169,23 +183,21 @@ export const POST = defineRoute({
   public: "session",
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
+    const authz = routeAuthz;
 
-    const authz = routeAuthz
-
-
-
-
-
-    if (!body.subjectKind || !isUuid(body.subjectId ?? '') || !body.buttonId) {
-      return NextResponse.json({ error: 'subjectKind, subjectId, buttonId required' }, { status: 400 })
+    if (!body.subjectKind || !isUuid(body.subjectId ?? "") || !body.buttonId) {
+      return NextResponse.json(
+        { error: "subjectKind, subjectId, buttonId required" },
+        { status: 400 },
+      );
     }
 
     const buttons = await withOrgContext(authz.user.orgId, () =>
       availableButtons(authz, body.subjectKind!, body.subjectId!),
-    )
-    if (buttons instanceof NextResponse) return buttons
+    );
+    if (buttons instanceof NextResponse) return buttons;
     if (!buttons.some((b) => b.buttonId === body.buttonId)) {
-      return NextResponse.json({ error: 'this action is not available' }, { status: 404 })
+      return NextResponse.json({ error: "this action is not available" }, { status: 404 });
     }
 
     // The request's subsidiary scope travels into the dispatch: the
@@ -195,7 +207,7 @@ export const POST = defineRoute({
     // that just left the caller's legal entity.
     const result = await withOrgContext(authz.user.orgId, () =>
       runRecordFlows(
-        { kind: 'manual', buttonId: body.buttonId! },
+        { kind: "manual", buttonId: body.buttonId! },
         body.subjectKind!,
         body.subjectId!,
         {
@@ -204,24 +216,22 @@ export const POST = defineRoute({
           allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
         },
       ),
-    )
+    );
     // A dispatch-level failure leaves NO runs behind (the dispatch threw before
     // any flow ran). Reporting 200 ok:true for that would toast success for
     // work that never ran — refuse loudly with the dispatch reason instead.
     if (result.failed && result.runs.length === 0) {
-      return NextResponse.json(
-        { error: result.error ?? 'flow dispatch failed' },
-        { status: 500 },
-      )
+      return NextResponse.json({ error: result.error ?? "flow dispatch failed" }, { status: 500 });
     }
-    const failed = result.failed || result.runs.some((r) => r.status === 'failed')
-    const reason = failed ? dispatchFailureReason(result) : null
+    const failed = result.failed || result.runs.some((r) => r.status === "failed");
+    const reason = failed ? dispatchFailureReason(result) : null;
     return NextResponse.json({
       ok: !failed,
       runs: result.runs,
       gatesCreated: result.gatesCreated,
       ...(reason ? { error: reason } : {}),
-    })
+    });
   },
 
-  feature: "flows",});
+  feature: "flows",
+});

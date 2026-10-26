@@ -38,11 +38,14 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedRecognitionTermPeriods(
   org: Awaited<ReturnType<typeof createScratchOrg>>,
 ): Promise<void> {
-  const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
+  const calendar = await db.execute<{ fiscal_calendar_id: string }>(
+    sql`
     select fiscal_calendar_id
       from accounting_periods
      where id = ${org.periodId} and org_id = ${org.orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
@@ -71,14 +74,17 @@ async function seedRecognitionTermPeriods(
 }
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  const r = await db.execute<{ balance: string }>(sql`
+  const r = await db.execute<{ balance: string }>(
+    sql`
     select coalesce(sum(line.amount), 0)::text as balance
       from journal_lines line
       join journal_entries entry on entry.id = line.entry_id
      where line.org_id = ${orgId}
        and line.account_id = ${accountId}
        and entry.status = 'posted'
-  `, "objects");
+  `,
+    "objects",
+  );
   return r[0]!.balance;
 }
 
@@ -188,24 +194,44 @@ async function postAndApplyCredit(
     },
     { audit: { actorId: adminId, source: "test" } },
   );
-  const creditEntry = (await db.execute<{ posted_entry_id: string }>(sql`
+  const creditEntry = (
+    await db.execute<{ posted_entry_id: string }>(
+      sql`
       select posted_entry_id from documents
        where id = ${creditId} and org_id = ${org.orgId}
-    `, "objects"))[0]!.posted_entry_id;
-  const invoiceEntry = (await db.execute<{ posted_entry_id: string }>(sql`
+    `,
+      "objects",
+    )
+  )[0]!.posted_entry_id;
+  const invoiceEntry = (
+    await db.execute<{ posted_entry_id: string }>(
+      sql`
       select posted_entry_id from documents
        where id = ${invoiceId} and org_id = ${org.orgId}
-    `, "objects"))[0]!.posted_entry_id;
-  const fromLine = (await db.execute<{ id: string }>(sql`
+    `,
+      "objects",
+    )
+  )[0]!.posted_entry_id;
+  const fromLine = (
+    await db.execute<{ id: string }>(
+      sql`
       select id from journal_lines
        where entry_id = ${creditEntry} and org_id = ${org.orgId}
          and account_id = ${org.accounts.ar}
-    `, "objects"))[0]!.id;
-  const toLine = (await db.execute<{ id: string }>(sql`
+    `,
+      "objects",
+    )
+  )[0]!.id;
+  const toLine = (
+    await db.execute<{ id: string }>(
+      sql`
       select id from journal_lines
        where entry_id = ${invoiceEntry} and org_id = ${org.orgId}
          and account_id = ${org.accounts.ar}
-    `, "objects"))[0]!.id;
+    `,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into applications
       (org_id, from_line_id, to_line_id, amount, applied_on, source_amount,
@@ -236,7 +262,14 @@ test(
       assert.equal(first.totalAmount, "300.0000");
 
       // Operator credits the full 900 remainder to deferred and applies it.
-      await postAndApplyCredit(org, actors.adminId, invoiceId, "CM-CAP-FULL", "900", org.accounts.deferred);
+      await postAndApplyCredit(
+        org,
+        actors.adminId,
+        invoiceId,
+        "CM-CAP-FULL",
+        "900",
+        org.accounts.deferred,
+      );
 
       // GL exact at this point: earned 300, deferred fully unwound.
       assert.equal(await glBalance(org.orgId, org.accounts.recognized), "-300.0000");
@@ -269,7 +302,14 @@ test(
       assert.equal(first.posted, 3);
 
       // Credit half the 900 remainder: 450 genuinely unearned remains.
-      await postAndApplyCredit(org, actors.adminId, invoiceId, "CM-CAP-PART", "450", org.accounts.deferred);
+      await postAndApplyCredit(
+        org,
+        actors.adminId,
+        invoiceId,
+        "CM-CAP-PART",
+        "450",
+        org.accounts.deferred,
+      );
       assert.equal(await glBalance(org.orgId, org.accounts.deferred), "-450.0000");
 
       // Must post exactly 450 more — never the full 900 plan, and never zero
@@ -321,7 +361,14 @@ test(
       assert.equal(first.posted, 3);
 
       // 100 service concession: debits income directly, service continues.
-      await postAndApplyCredit(org, actors.adminId, invoiceId, "CM-CAP-CONC", "100", org.accounts.revenue);
+      await postAndApplyCredit(
+        org,
+        actors.adminId,
+        invoiceId,
+        "CM-CAP-CONC",
+        "100",
+        org.accounts.revenue,
+      );
 
       // The full remaining plan still posts: earned nets 300 − 100 + 900.
       const rerun = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
@@ -335,83 +382,189 @@ test(
   },
 );
 
-test('credits follow prospective reallocation into an added promise rather than being lost with its missing invoice line', {skip:!DB}, async()=>{
- const org=await createScratchOrg();
- try {
-  const actors=await seedFlowActors(org.orgId);
-  await grantScratchPermissions(org.orgId,actors.approver1Id,["ar.post"]);
-  await seedRecognitionTermPeriods(org);
-  const invoiceId=await postInvoice(org,actors.adminId,'INV-AMENDED-CREDIT');
-  const first=await runRevenueRecognition(org.orgId,'2026-09-30',actors.adminId);assert.equal(first.totalAmount,'300.0000');
-  const original=(await db.execute<{id:string;contract_id:string}>(sql`select o.id,o.contract_id from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id where o.org_id=${org.orgId} and dl.document_id=${invoiceId}`, "objects"))[0]!;
-  const {proposeRevenueModification,applyRevenueModification}=await import('./contract-modifications.ts');
-  const {submitFinancialChange}=await import('../flows/financial-changes-adapter.ts');
-  const {seedApprovalFlow}=await import('../testing/fixtures.ts');
-  const {decideGate}=await import('../flows/gates.ts');
-  await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`);
-  await seedApprovalFlow(org.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:false});
-  const promise={description:'Remaining promise',standaloneSellingPrice:'450',recognitionRuleId:org.recognitionRuleId,recognitionEndsOn:'2027-06-30',percentComplete:'25',deferredAccountId:org.accounts.deferred,recognizedAccountId:org.accounts.recognized};
-  const {changeId}=await proposeRevenueModification(org.orgId,original.contract_id,actors.submitterId,{effectiveOn:'2026-10-01',reason:'Reallocate distinct remaining service without new consideration',idempotencyKey:randomUUID(),subsidiaryId:org.subsidiaryId,enforceableRightsEvidence:'Both parties signed the changed service scope',assessment:'Two equally priced remaining promises; unchanged CAD recognition basis',bookRates:[{bookId:org.bookId,fxRate:'1'}],groups:[{treatment:'prospective',existingObligationIds:[original.id],considerationChange:'0',remainingDistinct:true,additionsAtStandalonePrice:false,promises:[{...promise,existingId:original.id},{...promise,description:'New replacement promise',percentComplete:'0'}]}]});
-  await submitFinancialChange(org.orgId,changeId,actors.submitterId);
-  const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`, "objects"))[0]!;
-  await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'});
-  const applied=await applyRevenueModification(org.orgId,changeId,actors.submitterId);assert.equal((applied.obligationIds as string[]).length,2);
-  await postAndApplyCredit(org,actors.adminId,invoiceId,'CM-AMENDED-CREDIT','900',org.accounts.deferred);
-  const after=await runRevenueRecognition(org.orgId,'2027-06-30',actors.adminId);assert.equal(after.posted,0);assert.equal(await glBalance(org.orgId,org.accounts.recognized),'-300.0000');assert.equal(await glBalance(org.orgId,org.accounts.deferred),'0.0000');
- } finally {await dropScratchOrg(org.orgId)}
-});
-
-for (const scenario of [
-  { title: "a full-remainder credit", applied: "900", earned: "300.0000", additional: "0.0000", mirror: false },
-  { title: "a partial application", applied: "300", earned: "900.0000", additional: "1200.0000", mirror: false },
-  { title: "one credit with a secondary GL representation", applied: "300", earned: "900.0000", additional: "1200.0000", mirror: true },
-]) {
-  test(`${scenario.title} caps every recognition book using one settlement source`, { skip: !DB }, async () => {
+test(
+  "credits follow prospective reallocation into an added promise rather than being lost with its missing invoice line",
+  { skip: !DB },
+  async () => {
     const org = await createScratchOrg();
     try {
       const actors = await seedFlowActors(org.orgId);
-      const secondBook = randomUUID();
-      await db.execute(sql`insert into accounting_books (id,org_id,code,name,is_primary,is_active,posts_gl)
-        values (${secondBook},${org.orgId},'TAX','Tax book',false,true,true)`);
+      await grantScratchPermissions(org.orgId, actors.approver1Id, ["ar.post"]);
       await seedRecognitionTermPeriods(org);
-      const invoiceId = await postInvoice(org, actors.adminId, "INV-BOOK-CREDIT");
+      const invoiceId = await postInvoice(org, actors.adminId, "INV-AMENDED-CREDIT");
       const first = await runRevenueRecognition(org.orgId, "2026-09-30", actors.adminId);
-      assert.equal(first.posted, 6, "each book recognizes its first three periods");
-      const creditId = await postAndApplyCredit(org, actors.adminId, invoiceId,
-        "CM-BOOK-CREDIT", "900", org.accounts.deferred, scenario.applied);
-      if (scenario.mirror) {
-        // A second GL representation must not become a second commercial credit.
-        await db.transaction(async tx => {
-          const mirrorId = randomUUID();
-          await tx.execute(sql`insert into journal_entries
+      assert.equal(first.totalAmount, "300.0000");
+      const original = (
+        await db.execute<{ id: string; contract_id: string }>(
+          sql`select o.id,o.contract_id from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id where o.org_id=${org.orgId} and dl.document_id=${invoiceId}`,
+          "objects",
+        )
+      )[0]!;
+      const { proposeRevenueModification, applyRevenueModification } =
+        await import("./contract-modifications.ts");
+      const { submitFinancialChange } = await import("../flows/financial-changes-adapter.ts");
+      const { seedApprovalFlow } = await import("../testing/fixtures.ts");
+      const { decideGate } = await import("../flows/gates.ts");
+      await db.execute(
+        sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`,
+      );
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "financial_change",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "any",
+        preventSelfApproval: false,
+      });
+      const promise = {
+        description: "Remaining promise",
+        standaloneSellingPrice: "450",
+        recognitionRuleId: org.recognitionRuleId,
+        recognitionEndsOn: "2027-06-30",
+        percentComplete: "25",
+        deferredAccountId: org.accounts.deferred,
+        recognizedAccountId: org.accounts.recognized,
+      };
+      const { changeId } = await proposeRevenueModification(
+        org.orgId,
+        original.contract_id,
+        actors.submitterId,
+        {
+          effectiveOn: "2026-10-01",
+          reason: "Reallocate distinct remaining service without new consideration",
+          idempotencyKey: randomUUID(),
+          subsidiaryId: org.subsidiaryId,
+          enforceableRightsEvidence: "Both parties signed the changed service scope",
+          assessment: "Two equally priced remaining promises; unchanged CAD recognition basis",
+          bookRates: [{ bookId: org.bookId, fxRate: "1" }],
+          groups: [
+            {
+              treatment: "prospective",
+              existingObligationIds: [original.id],
+              considerationChange: "0",
+              remainingDistinct: true,
+              additionsAtStandalonePrice: false,
+              promises: [
+                { ...promise, existingId: original.id },
+                { ...promise, description: "New replacement promise", percentComplete: "0" },
+              ],
+            },
+          ],
+        },
+      );
+      await submitFinancialChange(org.orgId, changeId, actors.submitterId);
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`,
+          "objects",
+        )
+      )[0]!;
+      await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: "approved" });
+      const applied = await applyRevenueModification(org.orgId, changeId, actors.submitterId);
+      assert.equal((applied.obligationIds as string[]).length, 2);
+      await postAndApplyCredit(
+        org,
+        actors.adminId,
+        invoiceId,
+        "CM-AMENDED-CREDIT",
+        "900",
+        org.accounts.deferred,
+      );
+      const after = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
+      assert.equal(after.posted, 0);
+      assert.equal(await glBalance(org.orgId, org.accounts.recognized), "-300.0000");
+      assert.equal(await glBalance(org.orgId, org.accounts.deferred), "0.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+for (const scenario of [
+  {
+    title: "a full-remainder credit",
+    applied: "900",
+    earned: "300.0000",
+    additional: "0.0000",
+    mirror: false,
+  },
+  {
+    title: "a partial application",
+    applied: "300",
+    earned: "900.0000",
+    additional: "1200.0000",
+    mirror: false,
+  },
+  {
+    title: "one credit with a secondary GL representation",
+    applied: "300",
+    earned: "900.0000",
+    additional: "1200.0000",
+    mirror: true,
+  },
+]) {
+  test(
+    `${scenario.title} caps every recognition book using one settlement source`,
+    { skip: !DB },
+    async () => {
+      const org = await createScratchOrg();
+      try {
+        const actors = await seedFlowActors(org.orgId);
+        const secondBook = randomUUID();
+        await db.execute(sql`insert into accounting_books (id,org_id,code,name,is_primary,is_active,posts_gl)
+        values (${secondBook},${org.orgId},'TAX','Tax book',false,true,true)`);
+        await seedRecognitionTermPeriods(org);
+        const invoiceId = await postInvoice(org, actors.adminId, "INV-BOOK-CREDIT");
+        const first = await runRevenueRecognition(org.orgId, "2026-09-30", actors.adminId);
+        assert.equal(first.posted, 6, "each book recognizes its first three periods");
+        const creditId = await postAndApplyCredit(
+          org,
+          actors.adminId,
+          invoiceId,
+          "CM-BOOK-CREDIT",
+          "900",
+          org.accounts.deferred,
+          scenario.applied,
+        );
+        if (scenario.mirror) {
+          // A second GL representation must not become a second commercial credit.
+          await db.transaction(async (tx) => {
+            const mirrorId = randomUUID();
+            await tx.execute(sql`insert into journal_entries
             (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,source_document_id,created_by)
             values (${mirrorId},${org.orgId},${secondBook},${org.subsidiaryId},${`CM-TAX-${mirrorId}`},
               ${org.date},${org.periodId},'draft','manual',${creditId},${actors.adminId})`);
-          await tx.execute(sql`insert into journal_lines
+            await tx.execute(sql`insert into journal_lines
             (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id)
             select l.org_id,${mirrorId},l.line_number,l.account_id,l.subsidiary_id,l.amount,l.currency,l.txn_amount,l.fx_rate,l.party_id
             from journal_lines l join documents d on d.posted_entry_id=l.entry_id and d.org_id=l.org_id
             where d.id=${creditId} and d.org_id=${org.orgId}`);
-          await tx.execute(sql`update journal_entries set status='posted',posted_by=${actors.adminId}
+            await tx.execute(sql`update journal_entries set status='posted',posted_by=${actors.adminId}
             where id=${mirrorId} and org_id=${org.orgId}`);
-        });
-      }
-      const after = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
-      assert.equal(toUnits(after.totalAmount), toUnits(scenario.additional));
-      const balances = await db.execute<{ book_id: string; amount: string }>(sql`
+          });
+        }
+        const after = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
+        assert.equal(toUnits(after.totalAmount), toUnits(scenario.additional));
+        const balances = await db.execute<{ book_id: string; amount: string }>(
+          sql`
         select e.book_id,sum(l.amount)::text as amount from journal_lines l
         join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
         where l.org_id=${org.orgId} and l.account_id=${org.accounts.recognized}
-          and e.status in ('posted','reversed') group by e.book_id`, "objects");
-      assert.deepEqual(new Set(balances.map(r => r.book_id)), new Set([org.bookId, secondBook]));
-      // The set comparison above rides an inline map, so pin the row count
-      // directly: both books must have posted, or the loop proves nothing.
-      assert.equal(balances.length, 2);
-      for (const row of balances) assert.equal(row.amount, `-${scenario.earned}`, `earned balance in book ${row.book_id}`);
-      const replay = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
-      assert.equal(replay.posted, 0, "held plans cannot release additional revenue on replay");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  });
+          and e.status in ('posted','reversed') group by e.book_id`,
+          "objects",
+        );
+        assert.deepEqual(
+          new Set(balances.map((r) => r.book_id)),
+          new Set([org.bookId, secondBook]),
+        );
+        // The set comparison above rides an inline map, so pin the row count
+        // directly: both books must have posted, or the loop proves nothing.
+        assert.equal(balances.length, 2);
+        for (const row of balances)
+          assert.equal(row.amount, `-${scenario.earned}`, `earned balance in book ${row.book_id}`);
+        const replay = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
+        assert.equal(replay.posted, 0, "held plans cannot release additional revenue on replay");
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }

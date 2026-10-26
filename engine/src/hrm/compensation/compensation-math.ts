@@ -1,6 +1,15 @@
 import { CompensationError } from "./errors.ts";
-import { compileExpression, ExpressionError, type CompiledExpression } from "../../money/expression.ts";
-import { canonicalDecimal, compareDecimal, divideDecimal, parseExactDecimal } from "../../money/exact-decimal.ts";
+import {
+  compileExpression,
+  ExpressionError,
+  type CompiledExpression,
+} from "../../money/expression.ts";
+import {
+  canonicalDecimal,
+  compareDecimal,
+  divideDecimal,
+  parseExactDecimal,
+} from "../../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../../money/decimal-refusal.ts";
 import { calendarDaysBetween } from "../../platform/civil-date.ts";
 
@@ -26,7 +35,10 @@ const RATIO_SCALE = 10;
 function toExactDecimal(value: string, what: string): string {
   const parsed = parseExactDecimal(value);
   if (parsed === null) {
-    throw new CompensationError("INVALID_INPUT", `${what} ${JSON.stringify(value)} is not a finite decimal — refuse the amount, never coerce it`);
+    throw new CompensationError(
+      "INVALID_INPUT",
+      `${what} ${JSON.stringify(value)} is not a finite decimal — refuse the amount, never coerce it`,
+    );
   }
   return parsed;
 }
@@ -34,7 +46,10 @@ function toExactDecimal(value: string, what: string): string {
 /** compaRatio = rate / target, scaled to 10 decimal places. Refuses a non-positive target by name. */
 export function compaRatio(rate: string, target: string | null): string {
   if (target === null) {
-    throw new CompensationError("REFUSED", "This pay band has no target rate — configure an approved target on a new pay-band version in Compensation → Pay bands before calculating a compa-ratio.");
+    throw new CompensationError(
+      "REFUSED",
+      "This pay band has no target rate — configure an approved target on a new pay-band version in Compensation → Pay bands before calculating a compa-ratio.",
+    );
   }
   const r = toExactDecimal(rate, "rate");
   const t = toExactDecimal(target, "band target");
@@ -97,10 +112,19 @@ function matrixPercent(raw: unknown, field: string): string {
   // Existing matrix documents contain numeric percentages. Read their
   // finite decimal representation once; all comparisons and storage
   // calculations below use exact text rather than numeric arithmetic.
-  const text = typeof raw === "number" && Number.isFinite(raw) ? parseExactDecimal(String(raw)) : raw;
+  const text =
+    typeof raw === "number" && Number.isFinite(raw) ? parseExactDecimal(String(raw)) : raw;
   const exact = canonicalDecimal(text, 6);
-  if (exact === null) throw new CompensationError("REFUSED", decimalNullRefusal(field, "a decimal percentage", text, 6));
-  if (exact.replace(/^-/, "").split(".")[0]!.length > 13) throw new CompensationError("REFUSED", `${field} allows at most 13 whole digits — reduce the percentage before saving`);
+  if (exact === null)
+    throw new CompensationError(
+      "REFUSED",
+      decimalNullRefusal(field, "a decimal percentage", text, 6),
+    );
+  if (exact.replace(/^-/, "").split(".")[0]!.length > 13)
+    throw new CompensationError(
+      "REFUSED",
+      `${field} allows at most 13 whole digits — reduce the percentage before saving`,
+    );
   return exact;
 }
 
@@ -108,32 +132,75 @@ function matrixPercent(raw: unknown, field: string): string {
 export function validateMatrixGuideline(guideline: Record<string, unknown>): void {
   for (const name of ["rows", "cols"] as const) {
     const values = guideline[name];
-    if (values !== undefined && (!Array.isArray(values) || values.length > 64
-        || values.some((value) => typeof value !== "string" || value.length === 0 || value.length > 64)
-        || new Set(values).size !== values.length)) {
-      throw new CompensationError("REFUSED", `matrix ${name} must be a bounded list of unique, non-empty names — correct the guideline before saving`);
+    if (
+      values !== undefined &&
+      (!Array.isArray(values) ||
+        values.length > 64 ||
+        values.some(
+          (value) => typeof value !== "string" || value.length === 0 || value.length > 64,
+        ) ||
+        new Set(values).size !== values.length)
+    ) {
+      throw new CompensationError(
+        "REFUSED",
+        `matrix ${name} must be a bounded list of unique, non-empty names — correct the guideline before saving`,
+      );
     }
   }
   const rows = (guideline.rows ?? []) as string[];
   const cols = (guideline.cols ?? []) as string[];
-  if (cols.some((column) => !(COMPA_QUARTILES as readonly string[]).includes(column))) throw new CompensationError("REFUSED", "matrix columns must be q1, q2, q3, or q4 — choose the declared compa-ratio quartiles");
-  if (guideline.unratedRow != null && (typeof guideline.unratedRow !== "string" || !rows.includes(guideline.unratedRow))) {
-    throw new CompensationError("REFUSED", "the matrix unrated row must name one of its declared rows — declare that row or remove the fallback");
+  if (cols.some((column) => !(COMPA_QUARTILES as readonly string[]).includes(column)))
+    throw new CompensationError(
+      "REFUSED",
+      "matrix columns must be q1, q2, q3, or q4 — choose the declared compa-ratio quartiles",
+    );
+  if (
+    guideline.unratedRow != null &&
+    (typeof guideline.unratedRow !== "string" || !rows.includes(guideline.unratedRow))
+  ) {
+    throw new CompensationError(
+      "REFUSED",
+      "the matrix unrated row must name one of its declared rows — declare that row or remove the fallback",
+    );
   }
   const cells = guideline.cells;
   if (cells === undefined) return;
-  if (!cells || typeof cells !== "object" || Array.isArray(cells)) throw new CompensationError("REFUSED", "matrix cells must be a record keyed by performance row and quartile — correct the guideline before saving");
+  if (!cells || typeof cells !== "object" || Array.isArray(cells))
+    throw new CompensationError(
+      "REFUSED",
+      "matrix cells must be a record keyed by performance row and quartile — correct the guideline before saving",
+    );
   for (const [rowKey, cellsByColumn] of Object.entries(cells)) {
-    if (!rows.includes(rowKey)) throw new CompensationError("REFUSED", `matrix cells name undeclared performance row ${JSON.stringify(rowKey)} — declare it in rows before assigning its cells`);
-    if (!cellsByColumn || typeof cellsByColumn !== "object" || Array.isArray(cellsByColumn)) throw new CompensationError("REFUSED", `matrix row ${JSON.stringify(rowKey)} needs a record of quartile cells — correct the row`);
+    if (!rows.includes(rowKey))
+      throw new CompensationError(
+        "REFUSED",
+        `matrix cells name undeclared performance row ${JSON.stringify(rowKey)} — declare it in rows before assigning its cells`,
+      );
+    if (!cellsByColumn || typeof cellsByColumn !== "object" || Array.isArray(cellsByColumn))
+      throw new CompensationError(
+        "REFUSED",
+        `matrix row ${JSON.stringify(rowKey)} needs a record of quartile cells — correct the row`,
+      );
     for (const [column, value] of Object.entries(cellsByColumn)) {
-      if (!cols.includes(column)) throw new CompensationError("REFUSED", `matrix row ${JSON.stringify(rowKey)} names undeclared quartile ${JSON.stringify(column)} — declare that column before assigning its cells`);
+      if (!cols.includes(column))
+        throw new CompensationError(
+          "REFUSED",
+          `matrix row ${JSON.stringify(rowKey)} names undeclared quartile ${JSON.stringify(column)} — declare that column before assigning its cells`,
+        );
       const label = `matrix cell ${JSON.stringify(rowKey)} / ${column}`;
-      if (!value || typeof value !== "object" || Array.isArray(value)) throw new CompensationError("REFUSED", `${label} needs minimum and maximum percentages — supply both bounds`);
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new CompensationError(
+          "REFUSED",
+          `${label} needs minimum and maximum percentages — supply both bounds`,
+        );
       const cell = value as Record<string, unknown>;
       const minimum = matrixPercent(cell.min, `${label} minimum`);
       const maximum = matrixPercent(cell.max, `${label} maximum`);
-      if (compareDecimal(minimum, maximum) > 0) throw new CompensationError("REFUSED", `${label} has a minimum above its maximum — put the bounds in ascending order`);
+      if (compareDecimal(minimum, maximum) > 0)
+        throw new CompensationError(
+          "REFUSED",
+          `${label} has a minimum above its maximum — put the bounds in ascending order`,
+        );
     }
   }
 }
@@ -173,7 +240,13 @@ export function resolveMatrixGuideline(
     );
   }
   const cell = guideline.cells?.[rowKey]?.[colKey];
-  if (!cell || compareDecimal(matrixPercent(cell.min, "guideline minimum"), matrixPercent(cell.max, "guideline maximum")) > 0) {
+  if (
+    !cell ||
+    compareDecimal(
+      matrixPercent(cell.min, "guideline minimum"),
+      matrixPercent(cell.max, "guideline maximum"),
+    ) > 0
+  ) {
     throw new CompensationError(
       "REFUSED",
       `the cycle guideline has no usable cell for performance ${JSON.stringify(rowKey)} in quartile ${colKey} — complete the matrix before opening the cycle`,
@@ -209,14 +282,24 @@ export function exactGuidelineTenure(startedOn: string, asOf: string): string {
 export function exactReviewRating(raw: unknown): string | null {
   if (raw === null) return null;
   const rating = canonicalDecimal(raw, 18);
-  if (rating === null) throw new CompensationError("REFUSED", decimalNullRefusal("The shared review rating", "a decimal rating", raw, 18));
+  if (rating === null)
+    throw new CompensationError(
+      "REFUSED",
+      decimalNullRefusal("The shared review rating", "a decimal rating", raw, 18),
+    );
   return rating;
 }
 
 function compiledGuideline(expr: string): CompiledExpression {
-  const compiled = compileExpression(expr, FORMULA_IDENTIFIERS.map((name) => ({ name, type: { kind: "scalar" } })));
+  const compiled = compileExpression(
+    expr,
+    FORMULA_IDENTIFIERS.map((name) => ({ name, type: { kind: "scalar" } })),
+  );
   if (compiled.resultType.kind !== "scalar") {
-    throw new CompensationError("REFUSED", "the guideline formula must produce a numeric percent — use if(condition, yes, no) to choose a percentage");
+    throw new CompensationError(
+      "REFUSED",
+      "the guideline formula must produce a numeric percent — use if(condition, yes, no) to choose a percentage",
+    );
   }
   return compiled;
 }
@@ -231,34 +314,59 @@ export function evaluateExactFormula(expr: string, inputs: ExactFormulaInputs, s
   try {
     const compiled = compiledGuideline(expr);
     if (compiled.dependencies.includes("rating") && inputs.rating === null) {
-      throw new CompensationError("REFUSED", "the guideline formula needs a rating but this line has no shared review — share a review for the cycle window or set the line by matrix");
+      throw new CompensationError(
+        "REFUSED",
+        "the guideline formula needs a rating but this line has no shared review — share a review for the cycle window or set the line by matrix",
+      );
     }
-    const result = compiled.evaluate({ rating: inputs.rating, compa_ratio: inputs.compaRatio, tenure_years: inputs.tenureYears }, {
-      scale, mode: "half_away_from_zero", maxWholeDigits: scale === 6 ? 13 : 15,
-    });
+    const result = compiled.evaluate(
+      { rating: inputs.rating, compa_ratio: inputs.compaRatio, tenure_years: inputs.tenureYears },
+      {
+        scale,
+        mode: "half_away_from_zero",
+        maxWholeDigits: scale === 6 ? 13 : 15,
+      },
+    );
     return result.value as string;
-  } catch (error) { return guidelineRefusal(error); }
+  } catch (error) {
+    return guidelineRefusal(error);
+  }
 }
 
 /** Validate a definition without inventing employee values or executing a branch. */
 export function validateGuidelineFormula(expr: string): void {
   try {
     const compiled = compiledGuideline(expr);
-    if (compiled.dependencies.length === 0) compiled.evaluate({}, { scale: 6, mode: "half_away_from_zero", maxWholeDigits: 13 });
-  } catch (error) { guidelineRefusal(error); }
+    if (compiled.dependencies.length === 0)
+      compiled.evaluate({}, { scale: 6, mode: "half_away_from_zero", maxWholeDigits: 13 });
+  } catch (error) {
+    guidelineRefusal(error);
+  }
 }
 
 /** Compatibility for analytical consumers; stored financial guidelines use evaluateExactFormula. */
 export function evaluateFormula(expr: string, inputs: FormulaInputs): number {
-  if (!Number.isFinite(inputs.compaRatio) || !Number.isFinite(inputs.tenureYears)
-      || (inputs.rating !== null && !Number.isFinite(inputs.rating))) {
-    throw new CompensationError("REFUSED", "the guideline formula inputs are not finite — resolve the rating, compa-ratio and tenure before evaluating");
+  if (
+    !Number.isFinite(inputs.compaRatio) ||
+    !Number.isFinite(inputs.tenureYears) ||
+    (inputs.rating !== null && !Number.isFinite(inputs.rating))
+  ) {
+    throw new CompensationError(
+      "REFUSED",
+      "the guideline formula inputs are not finite — resolve the rating, compa-ratio and tenure before evaluating",
+    );
   }
-  return Number(evaluateExactFormula(expr, {
-    rating: inputs.rating === null ? null : parseExactDecimal(String(inputs.rating))!,
-    compaRatio: parseExactDecimal(String(inputs.compaRatio))!,
-    tenureYears: parseExactDecimal(String(inputs.tenureYears))!,
-  }, 18));
+  return Number(
+    evaluateExactFormula(
+      expr,
+      {
+        rating: inputs.rating === null ? null : parseExactDecimal(String(inputs.rating))!,
+        compaRatio: parseExactDecimal(String(inputs.compaRatio))!,
+        tenureYears: parseExactDecimal(String(inputs.tenureYears))!,
+      },
+      18,
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +386,10 @@ export interface OlsFit {
 }
 
 /** Solve a square linear system by Gaussian elimination with partial pivoting. Refuses a singular system by name. */
-export function solveLinearSystem(a: readonly (readonly number[])[], b: readonly number[]): number[] {
+export function solveLinearSystem(
+  a: readonly (readonly number[])[],
+  b: readonly number[],
+): number[] {
   const n = b.length;
   if (n === 0 || a.length !== n || a.some((row) => row.length !== n)) {
     throw new CompensationError(
@@ -320,7 +431,9 @@ export function solveLinearSystem(a: readonly (readonly number[])[], b: readonly
  * {y, x}. Returns coefficients [intercept, ...slopes] and R². Refuses
  * fewer observations than columns, and any non-finite input, by name.
  */
-export function ordinaryLeastSquares(observations: readonly { y: number; x: readonly number[] }[]): OlsFit {
+export function ordinaryLeastSquares(
+  observations: readonly { y: number; x: readonly number[] }[],
+): OlsFit {
   if (observations.length === 0) {
     throw new CompensationError(
       "REFUSED",
@@ -408,14 +521,16 @@ export function fitUnexplainedGap(
 }
 
 /** Mean and median of finite numbers. Refuses the empty set by name. */
-export function meanAndMedian(values: readonly number[], what: string): { mean: number; median: number } {
+export function meanAndMedian(
+  values: readonly number[],
+  what: string,
+): { mean: number; median: number } {
   if (values.length === 0) {
     throw new CompensationError("REFUSED", `${what} has no records — there is no gap to measure`);
   }
   const sorted = [...values].sort((a, b) => a - b);
   const mean = sorted.reduce((s, v) => s + v, 0) / sorted.length;
   const mid = Math.floor(sorted.length / 2);
-  const median =
-    sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  const median = sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
   return { mean, median };
 }

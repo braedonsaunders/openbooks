@@ -4,11 +4,7 @@ import {
   uiMessageChunkSchema,
   type UIMessageChunk,
 } from "ai";
-import {
-  trackOwnedRun,
-  type OwnedRunSnapshot,
-  type OwnedRunStore,
-} from "./owned-runs";
+import { trackOwnedRun, type OwnedRunSnapshot, type OwnedRunStore } from "./owned-runs";
 
 /**
  * Bridges a UI-message-protocol turn (runAgentTurn's SSE response) into a
@@ -83,7 +79,10 @@ export async function assembleStoreBranch(
   onChunk: (parts: unknown[]) => void,
 ): Promise<void> {
   try {
-    const chunks = parseJsonEventStream({ stream: branch, schema: uiMessageChunkSchema }).pipeThrough(
+    const chunks = parseJsonEventStream({
+      stream: branch,
+      schema: uiMessageChunkSchema,
+    }).pipeThrough(
       new TransformStream<{ success: boolean; value?: UIMessageChunk }, UIMessageChunk>({
         transform(part, controller) {
           if (part.success && part.value) controller.enqueue(part.value);

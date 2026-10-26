@@ -1,89 +1,151 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { resolveAppModule } from './test-module-hooks'
+import { resolveAppModule } from "./test-module-hooks";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import * as React from "react";
 import type { SessionUser } from "./auth";
-import { stubModules } from '../testing/stub-modules.ts'
+import { stubModules } from "../testing/stub-modules.ts";
 
 const root = pathToFileURL(process.cwd() + "/").href;
 const session: { user: SessionUser | null } = { user: null };
 // The plain tsx runner uses classic JSX for this RSC source; Next supplies
 // the automatic JSX runtime in production.
 Object.assign(globalThis, { __auditViewerSession: session, React });
-stubModules({ navigation: false, intl: 'export async function getTranslations(){return Object.assign(key=>key,{has:()=>false})};export async function getLocale(){return \'en\'};export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat(\'en\',typeof f===\'object\'?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat(\'en\',typeof f===\'object\'?f:o).format(v instanceof Date?v:new Date(String(v)))}}', authz: false, features: false });
+stubModules({
+  navigation: false,
+  intl: "export async function getTranslations(){return Object.assign(key=>key,{has:()=>false})};export async function getLocale(){return 'en'};export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat('en',typeof f==='object'?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat('en',typeof f==='object'?f:o).format(v instanceof Date?v:new Date(String(v)))}}",
+  authz: false,
+  features: false,
+});
 
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__auditViewerSession.user}" };
-  const app = resolveAppModule(specifier, context, next, root);
-  if (app) return app;
-  return next(specifier, context);
-} });
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__auditViewerSession.user}",
+      };
+    const app = resolveAppModule(specifier, context, next, root);
+    if (app) return app;
+    return next(specifier, context);
+  },
+});
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { default: Audit } = await import("../app/(app)/admin/audit/page");
-const { GET: auditEvent } = await import('../app/api/audit/events/[id]/route');
+const { GET: auditEvent } = await import("../app/api/audit/events/[id]/route");
 
-const cases: Array<{ mode: "restricted" | "empty" | "all"; query?: Record<string, string>; invalid?: boolean }> = [
-  { mode: "restricted" }, { mode: "empty" }, { mode: "all" },
+const cases: Array<{
+  mode: "restricted" | "empty" | "all";
+  query?: Record<string, string>;
+  invalid?: boolean;
+}> = [
+  { mode: "restricted" },
+  { mode: "empty" },
+  { mode: "all" },
   { mode: "all", query: { actor: "not-a-uuid" }, invalid: true },
   { mode: "all", query: { from: "not-a-date" }, invalid: true },
   { mode: "all", query: { to: "2026-02-30" }, invalid: true },
   { mode: "all", query: { from: "2026-01-01", to: "2026-12-31" } },
 ];
 for (const { mode, query = {}, invalid = false } of cases) {
-  test(`company audit viewer scope: ${mode} ${JSON.stringify(query)}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await withBypassContext(() => createScratchOrg());
-    try {
-      const actor = await withBypassContext(() => createScratchUser(org.orgId, "Scoped auditor", "audit_reviewer"));
-      const restriction = mode === "all" ? { mode: "all" } : { mode: "list", subsidiaryIds: mode === "empty" ? [] : [org.subsidiaryId] };
-      await withBypassContext(() => db.execute(sql`update app_roles set permissions='["admin.audit.read"]'::jsonb, subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
-        where org_id=${org.orgId} and key='audit_reviewer'`));
-      session.user = { id: actor, orgId: org.orgId, name: "Scoped auditor", email: "auditor@scratch.test", roles: [], isSuperAdmin: false,
-        envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
-      const hiddenSubsidiary = randomUUID();
-      const eventId = randomUUID();
-      // A deleted document has no live row from which to infer visibility.
-      // Its retained snapshot and even its presence/count remain disclosures.
-      const evidence = { before: { document: { id: randomUUID(), subsidiary_id: hiddenSubsidiary,
-        kind: "customer_invoice", number: "PRIVATE-AUDIT-DOCUMENT" }, lines: [{ amount: "98765.4300" }] } };
-      await withBypassContext(() => db.execute(sql`insert into audit_log(id,org_id,table_name,row_id,action,changes,actor_id)
-        values (${eventId},${org.orgId},'documents',${evidence.before.document.id},'delete',${JSON.stringify(evidence)}::jsonb,${actor})`));
-      const invoke = () => withOrgContext(org.orgId, () => Audit({ searchParams: Promise.resolve({ event: eventId, ...query }) }));
-      if (!invalid) {
-        const response = await withOrgContext(org.orgId, () => auditEvent(
-          new Request(`http://localhost/api/audit/events/${eventId}`),
-          { params: Promise.resolve({ id: eventId }) },
-        ));
-        assert.equal(response.status, mode === 'all' ? 200 : 403);
-        const body = await response.json();
-        if (mode === 'all') {
-          assert.equal(body.id, eventId);
-          assert.deepEqual(body.changes, evidence);
-          assert.equal(response.headers.get('cache-control'), 'private, no-store');
-          const missing = await withOrgContext(org.orgId, () => auditEvent(
-            new Request('http://localhost/api/audit/events/missing'),
-            { params: Promise.resolve({ id: randomUUID() }) },
-          ));
-          assert.equal(missing.status, 404);
-        } else {
-          assert.ok(!JSON.stringify(body).includes('PRIVATE-AUDIT-DOCUMENT'));
+  test(
+    `company audit viewer scope: ${mode} ${JSON.stringify(query)}`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      const org = await withBypassContext(() => createScratchOrg());
+      try {
+        const actor = await withBypassContext(() =>
+          createScratchUser(org.orgId, "Scoped auditor", "audit_reviewer"),
+        );
+        const restriction =
+          mode === "all"
+            ? { mode: "all" }
+            : { mode: "list", subsidiaryIds: mode === "empty" ? [] : [org.subsidiaryId] };
+        await withBypassContext(() =>
+          db.execute(sql`update app_roles set permissions='["admin.audit.read"]'::jsonb, subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
+        where org_id=${org.orgId} and key='audit_reviewer'`),
+        );
+        session.user = {
+          id: actor,
+          orgId: org.orgId,
+          name: "Scoped auditor",
+          email: "auditor@scratch.test",
+          roles: [],
+          isSuperAdmin: false,
+          envKind: "production",
+          productionOrgId: org.orgId,
+          homeOrgId: org.orgId,
+          homeUserId: actor,
+        };
+        const hiddenSubsidiary = randomUUID();
+        const eventId = randomUUID();
+        // A deleted document has no live row from which to infer visibility.
+        // Its retained snapshot and even its presence/count remain disclosures.
+        const evidence = {
+          before: {
+            document: {
+              id: randomUUID(),
+              subsidiary_id: hiddenSubsidiary,
+              kind: "customer_invoice",
+              number: "PRIVATE-AUDIT-DOCUMENT",
+            },
+            lines: [{ amount: "98765.4300" }],
+          },
+        };
+        await withBypassContext(() =>
+          db.execute(sql`insert into audit_log(id,org_id,table_name,row_id,action,changes,actor_id)
+        values (${eventId},${org.orgId},'documents',${evidence.before.document.id},'delete',${JSON.stringify(evidence)}::jsonb,${actor})`),
+        );
+        const invoke = () =>
+          withOrgContext(org.orgId, () =>
+            Audit({ searchParams: Promise.resolve({ event: eventId, ...query }) }),
+          );
+        if (!invalid) {
+          const response = await withOrgContext(org.orgId, () =>
+            auditEvent(new Request(`http://localhost/api/audit/events/${eventId}`), {
+              params: Promise.resolve({ id: eventId }),
+            }),
+          );
+          assert.equal(response.status, mode === "all" ? 200 : 403);
+          const body = await response.json();
+          if (mode === "all") {
+            assert.equal(body.id, eventId);
+            assert.deepEqual(body.changes, evidence);
+            assert.equal(response.headers.get("cache-control"), "private, no-store");
+            const missing = await withOrgContext(org.orgId, () =>
+              auditEvent(new Request("http://localhost/api/audit/events/missing"), {
+                params: Promise.resolve({ id: randomUUID() }),
+              }),
+            );
+            assert.equal(missing.status, 404);
+          } else {
+            assert.ok(!JSON.stringify(body).includes("PRIVATE-AUDIT-DOCUMENT"));
+          }
         }
+        if (mode === "all" && !invalid) {
+          const output = JSON.stringify(await invoke(), (_key, value: unknown) =>
+            React.isValidElement(value) ? value.props : value,
+          );
+          assert.ok(output.includes("PRIVATE-AUDIT-DOCUMENT"));
+          assert.ok(output.includes("98765.4300"));
+        } else {
+          await assert.rejects(
+            invoke,
+            (error: unknown) =>
+              error instanceof Error &&
+              (error.message.includes("NEXT_REDIRECT") ||
+                error.message.includes("NEXT_HTTP_ERROR_FALLBACK;404")),
+          );
+        }
+      } finally {
+        session.user = null;
+        await dropScratchOrg(org.orgId);
       }
-      if (mode === "all" && !invalid) {
-        const output = JSON.stringify(await invoke(), (_key, value: unknown) => React.isValidElement(value) ? value.props : value);
-        assert.ok(output.includes("PRIVATE-AUDIT-DOCUMENT"));
-        assert.ok(output.includes("98765.4300"));
-      } else {
-        await assert.rejects(invoke, (error: unknown) => error instanceof Error &&
-          (error.message.includes("NEXT_REDIRECT") || error.message.includes("NEXT_HTTP_ERROR_FALLBACK;404")));
-      }
-    } finally {
-      session.user = null;
-      await dropScratchOrg(org.orgId);
-    }
-  });
+    },
+  );
 }

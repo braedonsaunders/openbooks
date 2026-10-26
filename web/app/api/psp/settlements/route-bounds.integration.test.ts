@@ -11,10 +11,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __pspReverseBoundState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function getAuthz() {
@@ -30,8 +36,10 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
-const { importSettlementBatch, postSettlementBatch } = await import("@openbooks/engine/payments/psp-settlement");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
+const { importSettlementBatch, postSettlementBatch } =
+  await import("@openbooks/engine/payments/psp-settlement");
 const { POST } = await import("./route.ts");
 
 async function fixture(): Promise<{ orgId: string; batchId: string; date: string }> {
@@ -40,7 +48,9 @@ async function fixture(): Promise<{ orgId: string; batchId: string; date: string
   state.orgId = org.orgId;
   state.actorId = actor;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,banking}', 'true'::jsonb, true) where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = jsonb_set(settings, '{features,banking}', 'true'::jsonb, true) where id = ${org.orgId}`,
+    ),
   );
   const parsed = {
     provider: "stripe",
@@ -85,19 +95,26 @@ const post = (batchId: string, reversalDate: string) =>
     ),
   );
 
-async function batchState(orgId: string, batchId: string): Promise<{ status: string; reversalEntryId: string | null }> {
+async function batchState(
+  orgId: string,
+  batchId: string,
+): Promise<{ status: string; reversalEntryId: string | null }> {
   const rows = await withBypassContext(() =>
     db.execute<{ status: string; reversalEntryId: string | null }>(
-      sql`select status, reversal_entry_id as "reversalEntryId" from psp_settlement_batches where org_id = ${orgId} and id = ${batchId}`, "objects",
-    ));
+      sql`select status, reversal_entry_id as "reversalEntryId" from psp_settlement_batches where org_id = ${orgId} and id = ${batchId}`,
+      "objects",
+    ),
+  );
   return { status: rows[0]!.status, reversalEntryId: rows[0]!.reversalEntryId };
 }
 
 async function journalCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
     db.execute<{ n: string }>(
-      sql`select count(*) as n from journal_entries where org_id = ${orgId}`, "objects",
-    ));
+      sql`select count(*) as n from journal_entries where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return Number(rows[0]!.n);
 }
 
@@ -106,10 +123,21 @@ test("psp reversal refuses a non-calendar reversal date without writing", async 
   try {
     const journalsBefore = await journalCount(orgId);
     const response = await post(batchId, "2026-09-31");
-    const json = (await response.json().catch(() => null)) as { error?: string; issues?: Array<{ path?: string; message?: string }> } | null;
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    const json = (await response.json().catch(() => null)) as {
+      error?: string;
+      issues?: Array<{ path?: string; message?: string }>;
+    } | null;
+    assert.equal(
+      response.status,
+      400,
+      `expected 400, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.match(json?.error ?? "", /calendar date/, "the refusal names calendar reality");
-    assert.equal(json?.issues?.[0]?.path, "reversalDate", "the refusal names the offending field, not a blanket body error");
+    assert.equal(
+      json?.issues?.[0]?.path,
+      "reversalDate",
+      "the refusal names the offending field, not a blanket body error",
+    );
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     const after = await batchState(orgId, batchId);
     assert.equal(after.status, "posted", "the batch remains posted");

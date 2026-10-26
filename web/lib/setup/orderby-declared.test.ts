@@ -43,7 +43,10 @@ function ddlColumnsByTable(): Map<string, Set<string>> {
   }
   // A reader that parses nothing would silently accept or reject every
   // term; pin that it sees the schema's tables and their columns.
-  assert.ok(out.size > 500 && out.get("flows")?.has("org_id"), `release schema yielded ${out.size} tables`);
+  assert.ok(
+    out.size > 500 && out.get("flows")?.has("org_id"),
+    `release schema yielded ${out.size} tables`,
+  );
   return out;
 }
 
@@ -68,8 +71,7 @@ function allowedColumns(
   return out;
 }
 
-const TERM_RE =
-  /^([A-Za-z][A-Za-z0-9_]*)(\s+(asc|desc))?(\s+nulls\s+(first|last))?$/i;
+const TERM_RE = /^([A-Za-z][A-Za-z0-9_]*)(\s+(asc|desc))?(\s+nulls\s+(first|last))?$/i;
 const SNAKE_RE = /^[a-z][a-z0-9_]*$/;
 
 test("every SetupEntity.orderBy names only declared snake_case columns", () => {
@@ -83,7 +85,9 @@ test("every SetupEntity.orderBy names only declared snake_case columns", () => {
       const term = rawTerm.trim();
       const m = term.match(TERM_RE);
       if (!m) {
-        offenders.push(`${entity.key}: orderBy term ${JSON.stringify(term)} is not <column> [asc|desc] [nulls first|last]`);
+        offenders.push(
+          `${entity.key}: orderBy term ${JSON.stringify(term)} is not <column> [asc|desc] [nulls first|last]`,
+        );
         continue;
       }
       const col = m[1]!;
@@ -94,14 +98,15 @@ test("every SetupEntity.orderBy names only declared snake_case columns", () => {
         continue;
       }
       if (!allowed.has(col)) {
-        offenders.push(`${entity.key}: orderBy column ${JSON.stringify(col)} is not a declared field/column of the entity`);
+        offenders.push(
+          `${entity.key}: orderBy column ${JSON.stringify(col)} is not a declared field/column of the entity`,
+        );
       }
     }
   }
   assert.deepEqual(
     offenders,
     [],
-    "SetupEntity.orderBy terms must be declared snake_case columns:\n  " +
-      offenders.join("\n  "),
+    "SetupEntity.orderBy terms must be declared snake_case columns:\n  " + offenders.join("\n  "),
   );
 });

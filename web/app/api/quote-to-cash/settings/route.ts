@@ -1,22 +1,22 @@
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
 import {
   getQuoteToCashSettings,
   saveQuoteToCashSettings,
-} from '@openbooks/engine/billing/quote-to-cash'
-import { db, withOrgContext } from '@openbooks/engine/platform/database'
+} from "@openbooks/engine/billing/quote-to-cash";
+import { db, withOrgContext } from "@openbooks/engine/platform/database";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const settingsBody = z.strictObject({
   autoActivateOnSign: z.boolean(),
-  defaultBillingTiming: z.enum(['advance', 'arrears']),
-  defaultStartRule: z.enum(['quote_date', 'first_of_next_month', 'custom']),
+  defaultBillingTiming: z.enum(["advance", "arrears"]),
+  defaultStartRule: z.enum(["quote_date", "first_of_next_month", "custom"]),
   signatureExpiryDays: z.number(),
   orderFormTemplateId: z.string().nullish(),
-})
+});
 
 /**
  * The quote-to-cash policy row Setup edits (mutationPath of the
@@ -24,42 +24,38 @@ const settingsBody = z.strictObject({
  * defaults; POST upserts the singleton after validating every field.
  */
 export const GET = defineRoute({
-  permission: 'ar.read',
-  feature: 'quoteToCash',
+  permission: "ar.read",
+  feature: "quoteToCash",
   handler: async ({ authz }) => {
     try {
       const settings = await withOrgContext(authz.user.orgId, () =>
         getQuoteToCashSettings(authz.user.orgId, db),
-      )
-      return NextResponse.json({ settings })
+      );
+      return NextResponse.json({ settings });
     } catch (e) {
-      return apiErrorResponse(e)
+      return apiErrorResponse(e);
     }
   },
-})
+});
 
 export const POST = defineRoute({
-  permission: 'ar.create',
-  feature: 'quoteToCash',
-  scope: 'unrestricted',
+  permission: "ar.create",
+  feature: "quoteToCash",
+  scope: "unrestricted",
   body: settingsBody,
   handler: async ({ authz, body }) => {
     try {
       return NextResponse.json({
-        settings: await saveQuoteToCashSettings(
-          authz.user.orgId,
-          authz.user.id,
-          {
-            autoActivateOnSign: body.autoActivateOnSign,
-            defaultBillingTiming: body.defaultBillingTiming,
-            defaultStartRule: body.defaultStartRule,
-            signatureExpiryDays: body.signatureExpiryDays,
-            orderFormTemplateId: body.orderFormTemplateId,
-          },
-        ),
-      })
+        settings: await saveQuoteToCashSettings(authz.user.orgId, authz.user.id, {
+          autoActivateOnSign: body.autoActivateOnSign,
+          defaultBillingTiming: body.defaultBillingTiming,
+          defaultStartRule: body.defaultStartRule,
+          signatureExpiryDays: body.signatureExpiryDays,
+          orderFormTemplateId: body.orderFormTemplateId,
+        }),
+      });
     } catch (e) {
-      return apiErrorResponse(e)
+      return apiErrorResponse(e);
     }
   },
-})
+});

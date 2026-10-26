@@ -1,5 +1,12 @@
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrg, withOrgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import {
+  db,
+  withBypass,
+  withOrg,
+  withOrgContext,
+  withOrgTransaction,
+  type SqlExecutor,
+} from "../platform/db.ts";
 import {
   importStatement,
   requireBankAccountInScope,
@@ -102,7 +109,11 @@ function untilAborted<T>(signal: AbortSignal, work: Promise<T>): Promise<T> {
 }
 
 /** Read the whole body under the deadline, refusing as soon as it exceeds the byte cap. */
-async function readCappedBody(provider: string, res: Response, signal: AbortSignal): Promise<Uint8Array> {
+async function readCappedBody(
+  provider: string,
+  res: Response,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
   if (!res.body) return new Uint8Array(0);
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -160,7 +171,11 @@ function parseProviderJson(text: string): unknown {
     numberPattern.lastIndex = valueStart;
     const match = numberPattern.exec(text);
     if (!match) continue;
-    replacements.push({ start: valueStart, end: numberPattern.lastIndex, value: JSON.stringify(match[0]) });
+    replacements.push({
+      start: valueStart,
+      end: numberPattern.lastIndex,
+      value: JSON.stringify(match[0]),
+    });
   }
   let exactText = text;
   for (const replacement of replacements.reverse()) {
@@ -214,13 +229,21 @@ export interface GoCardlessTransaction {
 
 /** Keep the bank's calendar date; an import window is not booking evidence. */
 function gocardlessPostedOn(transaction: GoCardlessTransaction): string {
-  const value = transaction.bookingDate || transaction.bookingDateTime || transaction.valueDate || transaction.valueDateTime;
+  const value =
+    transaction.bookingDate ||
+    transaction.bookingDateTime ||
+    transaction.valueDate ||
+    transaction.valueDateTime;
   if (typeof value !== "string") {
-    throw new FeedError("GoCardless booked transaction has no booking or value date; obtain dated transaction evidence before importing");
+    throw new FeedError(
+      "GoCardless booked transaction has no booking or value date; obtain dated transaction evidence before importing",
+    );
   }
   const parts = /^(\d{4})-(\d{2})-(\d{2})(?:$|T)/.exec(value);
   if (!parts || !Number.isFinite(Date.parse(value))) {
-    throw new FeedError("GoCardless booked transaction has an invalid booking or value date; obtain corrected transaction evidence before importing");
+    throw new FeedError(
+      "GoCardless booked transaction has an invalid booking or value date; obtain corrected transaction evidence before importing",
+    );
   }
   return assertRealDate(parts[1]!, parts[2]!, parts[3]!, "GoCardless booking date");
 }
@@ -259,8 +282,12 @@ async function providerJson(
   init: RequestInit,
   options: BankFeedFetchOptions = {},
 ): Promise<{ body: unknown; raw: Uint8Array }> {
-  const requestDeadline = AbortSignal.timeout(options.requestTimeoutMs ?? BANK_FEED_REQUEST_TIMEOUT_MS);
-  const signal = options.signal ? AbortSignal.any([options.signal, requestDeadline]) : requestDeadline;
+  const requestDeadline = AbortSignal.timeout(
+    options.requestTimeoutMs ?? BANK_FEED_REQUEST_TIMEOUT_MS,
+  );
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, requestDeadline])
+    : requestDeadline;
   try {
     const res = await untilAborted(signal, fetch(url, { ...init, redirect: "error", signal }));
     const raw = await readCappedBody(provider, res, signal);
@@ -307,8 +334,12 @@ export function bankFeedSourceEvidence(
 // --------------------------------------------------------------------------
 const GOCARDLESS_BASE = "https://bankaccountdata.gocardless.com/api/v2";
 
-async function gocardlessToken(creds: Record<string, string>, options?: BankFeedFetchOptions): Promise<string> {
-  if (!creds.secretId || !creds.secretKey) throw new FeedError("GoCardless secret_id / secret_key required");
+async function gocardlessToken(
+  creds: Record<string, string>,
+  options?: BankFeedFetchOptions,
+): Promise<string> {
+  if (!creds.secretId || !creds.secretKey)
+    throw new FeedError("GoCardless secret_id / secret_key required");
   const { body } = await providerJson(
     "GoCardless",
     `${GOCARDLESS_BASE}/token/new/`,
@@ -413,7 +444,9 @@ export function plaidApiBase(environment?: unknown): string {
  * hard page cap throws instead of letting history fall off the end silently.
  */
 export async function plaidFetchAllTransactions(
-  fetchPage: (offset: number) => Promise<{ transactions: PlaidTransaction[]; total_transactions: unknown }>,
+  fetchPage: (
+    offset: number,
+  ) => Promise<{ transactions: PlaidTransaction[]; total_transactions: unknown }>,
 ): Promise<PlaidTransaction[]> {
   const all: PlaidTransaction[] = [];
   let expectedTotal: number | undefined;
@@ -427,22 +460,36 @@ export async function plaidFetchAllTransactions(
     const body = await fetchPage(all.length);
     const total = body.total_transactions;
     if (typeof total !== "number" || !Number.isSafeInteger(total) || total < 0) {
-      throw new FeedError("Plaid did not return a valid transaction total; retry the complete sync window");
+      throw new FeedError(
+        "Plaid did not return a valid transaction total; retry the complete sync window",
+      );
     }
     expectedTotal ??= total;
     if (total !== expectedTotal) {
-      throw new FeedError("Plaid transaction total changed during pagination; retry the complete sync window");
+      throw new FeedError(
+        "Plaid transaction total changed during pagination; retry the complete sync window",
+      );
     }
-    if (!Array.isArray(body.transactions) || body.transactions.length > PLAID_PAGE_SIZE || all.length + body.transactions.length > total) {
-      throw new FeedError("Plaid transaction page does not match its total; retry the complete sync window");
+    if (
+      !Array.isArray(body.transactions) ||
+      body.transactions.length > PLAID_PAGE_SIZE ||
+      all.length + body.transactions.length > total
+    ) {
+      throw new FeedError(
+        "Plaid transaction page does not match its total; retry the complete sync window",
+      );
     }
     if (!body.transactions.length && all.length < total) {
-      throw new FeedError("Plaid returned an incomplete transaction page; retry the complete sync window");
+      throw new FeedError(
+        "Plaid returned an incomplete transaction page; retry the complete sync window",
+      );
     }
     for (const transaction of body.transactions) {
       if (transaction?.transaction_id) {
         if (identities.has(transaction.transaction_id)) {
-          throw new FeedError("Plaid repeated a transaction during pagination; retry the complete sync window");
+          throw new FeedError(
+            "Plaid repeated a transaction during pagination; retry the complete sync window",
+          );
         }
         identities.add(transaction.transaction_id);
       }
@@ -463,7 +510,11 @@ const plaid: BankFeedAdapter = {
       await providerJson("Plaid", `${base}/accounts/get`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ client_id: creds.clientId, secret: creds.secret, access_token: creds.accessToken }),
+        body: JSON.stringify({
+          client_id: creds.clientId,
+          secret: creds.secret,
+          access_token: creds.accessToken,
+        }),
       });
       return { ok: true };
     } catch (e) {
@@ -477,18 +528,23 @@ const plaid: BankFeedAdapter = {
     const today = untilIso;
     const rawResponses: Uint8Array[] = [];
     const transactions = await plaidFetchAllTransactions(async (offset) => {
-      const { body, raw } = await providerJson("Plaid", `${base}/transactions/get`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          client_id: creds.clientId,
-          secret: creds.secret,
-          access_token: creds.accessToken,
-          start_date: sinceIso,
-          end_date: today,
-          options: { account_ids: [accountId], count: PLAID_PAGE_SIZE, offset },
-        }),
-      }, options);
+      const { body, raw } = await providerJson(
+        "Plaid",
+        `${base}/transactions/get`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            client_id: creds.clientId,
+            secret: creds.secret,
+            access_token: creds.accessToken,
+            start_date: sinceIso,
+            end_date: today,
+            options: { account_ids: [accountId], count: PLAID_PAGE_SIZE, offset },
+          }),
+        },
+        options,
+      );
       rawResponses.push(raw);
       const payload = isJsonRecord(body) ? body : {};
       return {
@@ -501,18 +557,20 @@ const plaid: BankFeedAdapter = {
     // transaction id, or vanish, so importing them would leave statement
     // evidence that can never reconcile at sign-off (same reason GoCardless
     // takes booked transactions only).
-    const lines: ParsedStatementLine[] = transactions.filter((t) => !t?.pending).map((t) => {
-      currency ??= t.iso_currency_code ?? null;
-      // Plaid: positive amount = outflow. Bank convention wants −withdrawal.
-      const signed = neg(exactFeedAmount(t.amount));
-      return {
-        postedOn: (t.date || sinceIso).slice(0, 10),
-        amount: signed,
-        description: t.name || t.merchant_name || null,
-        counterpartyRef: t.merchant_name || null,
-        bankTransactionId: t.transaction_id || null,
-      };
-    });
+    const lines: ParsedStatementLine[] = transactions
+      .filter((t) => !t?.pending)
+      .map((t) => {
+        currency ??= t.iso_currency_code ?? null;
+        // Plaid: positive amount = outflow. Bank convention wants −withdrawal.
+        const signed = neg(exactFeedAmount(t.amount));
+        return {
+          postedOn: (t.date || sinceIso).slice(0, 10),
+          amount: signed,
+          description: t.name || t.merchant_name || null,
+          counterpartyRef: t.merchant_name || null,
+          bankTransactionId: t.transaction_id || null,
+        };
+      });
     return { lines, currency, sourceEvidence: bankFeedSourceEvidence("plaid", rawResponses) };
   },
 };
@@ -579,21 +637,27 @@ export async function testBankFeedConnection(
   ctx: { orgId: string },
   credentialSnapshot?: string | null,
 ): Promise<{ ok: boolean; detail?: string }> {
-  const row = await withOrgContext(ctx.orgId, async () =>
-    (await db.execute<{ orgId: string; provider: string; credentials: string | null }>(sql`
+  const row = await withOrgContext(
+    ctx.orgId,
+    async () =>
+      await db.execute<{ orgId: string; provider: string; credentials: string | null }>(
+        sql`
       select c.org_id as "orgId", c.provider, c.credentials
         from bank_feed_connections c
         join orgs o on o.id = c.org_id
        where c.id = ${connectionId}
          and c.org_id = ${ctx.orgId}
          and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
-    `, "objects")),
+    `,
+        "objects",
+      ),
   );
   const conn = row[0];
   if (!conn) return { ok: false, detail: "connection not found" };
   const adapter = getBankFeedAdapter(conn.provider);
   if (!adapter) return { ok: false, detail: "provider is not an API feed" };
-  const sealedCredentials = credentialSnapshot === undefined ? conn.credentials : credentialSnapshot;
+  const sealedCredentials =
+    credentialSnapshot === undefined ? conn.credentials : credentialSnapshot;
   const creds =
     sealedCredentials == null
       ? {}
@@ -633,7 +697,12 @@ export const MAX_FEED_SYNC_OVERLAP_DAYS = 90;
  */
 export function resolveFeedSyncOverlapDays(value: unknown): number {
   if (value === null || value === undefined) return DEFAULT_FEED_SYNC_OVERLAP_DAYS;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_FEED_SYNC_OVERLAP_DAYS) {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > MAX_FEED_SYNC_OVERLAP_DAYS
+  ) {
     throw new FeedError(
       `sync overlap must be a whole number of days from 0 to ${MAX_FEED_SYNC_OVERLAP_DAYS}`,
     );
@@ -653,7 +722,9 @@ export function sinceFor(
     // Cold start: pull the last 90 days so the first sync has history.
     return addCalendarDays(today, -90);
   }
-  const synced = (lastSyncAt instanceof Date ? lastSyncAt : new Date(lastSyncAt)).toISOString().slice(0, 10);
+  const synced = (lastSyncAt instanceof Date ? lastSyncAt : new Date(lastSyncAt))
+    .toISOString()
+    .slice(0, 10);
   // Re-pull the overlap; importStatement dedupes on the provider txn id.
   return addCalendarDays(synced, -overlapDays);
 }
@@ -686,7 +757,8 @@ async function syncOne(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<FeedSyncOutcome> {
   const adapter = getBankFeedAdapter(row.provider);
-  if (!adapter) return { connectionId: row.id, imported: 0, duplicates: 0, error: "not an API provider" };
+  if (!adapter)
+    return { connectionId: row.id, imported: 0, duplicates: 0, error: "not an API provider" };
   const creds =
     row.credentials == null
       ? {}
@@ -741,7 +813,8 @@ async function assertCurrentSyncConfiguration(
   executor: SqlExecutor,
   connection: { id: string; orgId: string; configurationRevision: string },
 ): Promise<void> {
-  const current = await executor.execute(sql`
+  const current = await executor.execute(
+    sql`
     select c.id from bank_feed_connections c
       join orgs o on o.id = c.org_id
      where c.id = ${connection.id} and c.org_id = ${connection.orgId}
@@ -749,8 +822,11 @@ async function assertCurrentSyncConfiguration(
        and c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
        and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end
      for share of c, o
-  `, "objects");
-  if (!current.length) throw new FeedError("Bank feed configuration changed during sync; run the sync again");
+  `,
+    "objects",
+  );
+  if (!current.length)
+    throw new FeedError("Bank feed configuration changed during sync; run the sync again");
 }
 
 /**
@@ -773,8 +849,9 @@ async function recordSyncOutcome(
 ): Promise<boolean> {
   const lastResult = JSON.stringify({ imported: outcome.imported, duplicates: outcome.duplicates });
   return withOrgTransaction(connection.orgId, async () => {
-    const result = await db.execute(outcome.error
-      ? sql`
+    const result = await db.execute(
+      outcome.error
+        ? sql`
         update bank_feed_connections
            set last_attempt_at = now(),
                last_result = ${lastResult}::jsonb,
@@ -786,7 +863,7 @@ async function recordSyncOutcome(
              and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end)
          returning id
       `
-      : sql`
+        : sql`
         update bank_feed_connections
            set last_attempt_at = now(),
                last_sync_at = now(),
@@ -798,7 +875,9 @@ async function recordSyncOutcome(
            and exists (select 1 from orgs o where o.id = bank_feed_connections.org_id
              and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end)
          returning id
-      `, "objects");
+      `,
+      "objects",
+    );
     return result.length > 0;
   });
 }
@@ -837,7 +916,9 @@ export async function runDueFeedPass<Row extends { id: string }>(
       if (outcome) outcomes.push(outcome);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      console.error(`[bank-feeds] connection ${row.id} could not be claimed or recorded: ${message}`);
+      console.error(
+        `[bank-feeds] connection ${row.id} could not be claimed or recorded: ${message}`,
+      );
       outcomes.push({
         connectionId: row.id,
         imported: 0,
@@ -857,11 +938,14 @@ export async function runDueFeedPass<Row extends { id: string }>(
  * A pass starts feeds only while its budget has time left. Feeds it does not
  * reach are never claimed, so they stay due and the next tick picks them up.
  */
-export async function runDueBankFeeds(options: RunDueBankFeedsOptions = {}): Promise<FeedSyncOutcome[]> {
+export async function runDueBankFeeds(
+  options: RunDueBankFeedsOptions = {},
+): Promise<FeedSyncOutcome[]> {
   const now = Date.now();
   // bypass: scheduler-tick — the scan finds due feed connections across every organization.
-  const due = await withBypass(async () =>
-    (await db.execute<{
+  const due = await withBypass(
+    async () =>
+      await db.execute<{
         id: string;
         orgId: string;
         provider: string;
@@ -873,7 +957,8 @@ export async function runDueBankFeeds(options: RunDueBankFeedsOptions = {}): Pro
         lastSyncAt: Date | string | null;
         syncOverlapDays: number | null;
         configurationRevision: string;
-      }>(sql`
+      }>(
+        sql`
       select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
              c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
              c.next_sync_at as "nextSyncAt", c.last_sync_at as "lastSyncAt",
@@ -886,17 +971,15 @@ export async function runDueBankFeeds(options: RunDueBankFeedsOptions = {}): Pro
          and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
          and c.sync_cadence <> 'manual'
          and (c.next_sync_at is null or c.next_sync_at <= now())
-    `, "objects")),
+    `,
+        "objects",
+      ),
   );
 
-  const { outcomes, deferred } = await runDueFeedPass(
-    due,
-    (row) => claimAndSyncDueFeed(row, now),
-    {
-      budgetMs: options.budgetMs ?? BANK_FEED_PASS_BUDGET_MS,
-      clock: options.clock ?? (() => performance.now()),
-    },
-  );
+  const { outcomes, deferred } = await runDueFeedPass(due, (row) => claimAndSyncDueFeed(row, now), {
+    budgetMs: options.budgetMs ?? BANK_FEED_PASS_BUDGET_MS,
+    clock: options.clock ?? (() => performance.now()),
+  });
   if (deferred > 0) {
     console.warn(
       `[bank-feeds] pass budget of ${options.budgetMs ?? BANK_FEED_PASS_BUDGET_MS} ms spent; ` +
@@ -925,20 +1008,23 @@ async function claimAndSyncDueFeed(
   // The scan is only a candidate list. Claim the row only if its complete
   // configuration revision and eligibility are still current, and sync
   // exclusively from the values returned by that successful claim.
-  const claimed = await withOrgTransaction(row.orgId, async () =>
-    (await db.execute<{
-      id: string;
-      orgId: string;
-      provider: string;
-      accountId: string;
-      credentials: string | null;
-      externalAccountId: string | null;
-      syncCadence: string;
-      nextSyncAt: Date | null;
-      lastSyncAt: Date | string | null;
-      syncOverlapDays: number | null;
-      configurationRevision: string;
-    }>(sql`
+  const claimed = await withOrgTransaction(
+    row.orgId,
+    async () =>
+      await db.execute<{
+        id: string;
+        orgId: string;
+        provider: string;
+        accountId: string;
+        credentials: string | null;
+        externalAccountId: string | null;
+        syncCadence: string;
+        nextSyncAt: Date | null;
+        lastSyncAt: Date | string | null;
+        syncOverlapDays: number | null;
+        configurationRevision: string;
+      }>(
+        sql`
       update bank_feed_connections c set next_sync_at = ${nextSync}
         from orgs o
        where c.id = ${row.id} and c.org_id = ${row.orgId} and o.id = c.org_id
@@ -954,7 +1040,9 @@ async function claimAndSyncDueFeed(
                 c.sync_cadence as "syncCadence", c.next_sync_at as "nextSyncAt",
                 c.last_sync_at as "lastSyncAt", c.sync_overlap_days as "syncOverlapDays",
                 c.updated_at::text as "configurationRevision"
-    `, "objects")),
+    `,
+        "objects",
+      ),
   );
   const claim = claimed[0];
   if (!claim) return null;
@@ -963,13 +1051,21 @@ async function claimAndSyncDueFeed(
   try {
     outcome = await syncOne(claim, SYSTEM_ACTOR_ID, null);
   } catch (e) {
-    outcome = { connectionId: row.id, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
+    outcome = {
+      connectionId: row.id,
+      imported: 0,
+      duplicates: 0,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
   try {
-    if (!(await recordSyncOutcome(claim, outcome))) outcome.error = "Bank feed configuration changed during sync; run the sync again";
+    if (!(await recordSyncOutcome(claim, outcome)))
+      outcome.error = "Bank feed configuration changed during sync; run the sync again";
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    console.error(`[bank-feeds] connection ${row.id} sync outcome could not be recorded: ${message}`);
+    console.error(
+      `[bank-feeds] connection ${row.id} sync outcome could not be recorded: ${message}`,
+    );
     outcome.error = `sync outcome could not be recorded: ${message}`;
   }
   return outcome;
@@ -985,8 +1081,10 @@ export async function syncBankFeedNow(
   connectionId: string,
   ctx: { orgId: string; userId: string; allowedSubsidiaryIds: ReadonlySet<string> | null },
 ): Promise<FeedSyncOutcome> {
-  const row = await withOrgContext(ctx.orgId, async () =>
-    (await db.execute<{
+  const row = await withOrgContext(
+    ctx.orgId,
+    async () =>
+      await db.execute<{
         id: string;
         orgId: string;
         provider: string;
@@ -996,7 +1094,8 @@ export async function syncBankFeedNow(
         lastSyncAt: Date | string | null;
         syncOverlapDays: number | null;
         configurationRevision: string;
-      }>(sql`
+      }>(
+        sql`
       select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
              c.external_account_id as "externalAccountId", c.last_sync_at as "lastSyncAt",
              c.sync_overlap_days as "syncOverlapDays", c.updated_at::text as "configurationRevision"
@@ -1006,7 +1105,9 @@ export async function syncBankFeedNow(
          and c.org_id = ${ctx.orgId}
          and c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
          and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
-    `, "objects")),
+    `,
+        "objects",
+      ),
   );
   const conn = row[0];
   if (!conn) throw new FeedError("connection not found");
@@ -1020,9 +1121,15 @@ export async function syncBankFeedNow(
   try {
     outcome = await syncOne(conn, ctx.userId, ctx.allowedSubsidiaryIds);
   } catch (e) {
-    outcome = { connectionId, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
+    outcome = {
+      connectionId,
+      imported: 0,
+      duplicates: 0,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
-  if (!(await recordSyncOutcome(conn, outcome))) outcome.error = "Bank feed configuration changed during sync; run the sync again";
+  if (!(await recordSyncOutcome(conn, outcome)))
+    outcome.error = "Bank feed configuration changed during sync; run the sync again";
   return outcome;
 }
 

@@ -1,4 +1,8 @@
-import { canonicalNonNegativeDecimal, compareDecimal, isPositiveDecimal } from "../../money/exact-decimal.ts";
+import {
+  canonicalNonNegativeDecimal,
+  compareDecimal,
+  isPositiveDecimal,
+} from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import {
@@ -8,7 +12,14 @@ import {
 } from "../authorization.ts";
 import { loadVacancyAsOf } from "../positions-read.ts";
 import { RecruitingError } from "./errors.ts";
-import { optionalCivilDate, requireActorId, requireCivilDate, requireId, requireOrgId, requireReason } from "./input.ts";
+import {
+  optionalCivilDate,
+  requireActorId,
+  requireCivilDate,
+  requireId,
+  requireOrgId,
+  requireReason,
+} from "./input.ts";
 import { ensureDefaultPipelineTemplate, loadPipelineTemplate } from "./pipeline.ts";
 import { loadJobDescriptionForRequisition } from "./job-descriptions.ts";
 
@@ -104,7 +115,10 @@ const REQUISITION_COLUMNS = sql`
 
 function toDTO(row: RequisitionRow): RequisitionDTO {
   if (!(REQUISITION_STATUSES as readonly string[]).includes(row.status)) {
-    throw new RecruitingError("REFUSED", `requisition ${row.id} carries unknown status ${row.status} — refusing a lifecycle the service cannot resolve`);
+    throw new RecruitingError(
+      "REFUSED",
+      `requisition ${row.id} carries unknown status ${row.status} — refusing a lifecycle the service cannot resolve`,
+    );
   }
   return {
     ...row,
@@ -134,16 +148,24 @@ function toDTO(row: RequisitionRow): RequisitionDTO {
  * rows, which would each hand out the same number).
  */
 async function allocateRequisitionNumber(exec: SqlExecutor, orgId: string): Promise<string> {
-  const seq = (await exec.execute<{ prefix: string; next_number: number; padding: number }>(sql`
+  const seq = (
+    await exec.execute<{ prefix: string; next_number: number; padding: number }>(
+      sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, 'hrm_requisition', null, 'REQ-')
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     where number_sequences.org_id = ${orgId}
     returning prefix, next_number, padding
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!seq) {
-    throw new RecruitingError("REFUSED", "the requisition number was not allocated — no sequence row was written; retry the request");
+    throw new RecruitingError(
+      "REFUSED",
+      "the requisition number was not allocated — no sequence row was written; retry the request",
+    );
   }
   return `${seq.prefix}${String(seq.next_number).padStart(seq.padding, "0")}`;
 }
@@ -155,53 +177,89 @@ async function assertRefVisible(
   id: string,
   label: string,
 ): Promise<void> {
-  const found = (await exec.execute<{ one: number }>(sql`
+  const found =
+    (
+      await exec.execute<{ one: number }>(
+        sql`
     select 1 as one from ${table === "subsidiaries" ? sql`subsidiaries` : table === "departments" ? sql`departments` : table === "locations" ? sql`locations` : sql`parties`}
      where org_id = ${orgId} and id = ${id} limit 1
-  `, "objects")).length > 0;
+  `,
+        "objects",
+      )
+    ).length > 0;
   if (!found) {
-    throw new RecruitingError("NOT_FOUND", `${label} is not visible in this organization — check the reference`);
+    throw new RecruitingError(
+      "NOT_FOUND",
+      `${label} is not visible in this organization — check the reference`,
+    );
   }
 }
 
 async function assertUserVisible(exec: SqlExecutor, orgId: string, userId: string): Promise<void> {
-  const found = (await exec.execute<{ one: number }>(sql`
+  const found =
+    (
+      await exec.execute<{ one: number }>(
+        sql`
     select 1 as one from users where org_id = ${orgId} and id = ${userId} limit 1
-  `, "objects")).length > 0;
+  `,
+        "objects",
+      )
+    ).length > 0;
   if (!found) {
-    throw new RecruitingError("NOT_FOUND", "recruiter is not visible in this organization — check the reference");
+    throw new RecruitingError(
+      "NOT_FOUND",
+      "recruiter is not visible in this organization — check the reference",
+    );
   }
 }
 
 function requireHeadcount(value: unknown): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-    throw new RecruitingError("INVALID_INPUT", "headcount is an integer of at least 1 — the opening fills at least one hire");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "headcount is an integer of at least 1 — the opening fills at least one hire",
+    );
   }
   return value;
 }
 
-
-
 export function requireCompensation(value: unknown): RequisitionCompensation | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "object") {
-    throw new RecruitingError("INVALID_INPUT", "compensation travels as an all-or-nothing range (min, max, currency, basis) — send all four or none");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "compensation travels as an all-or-nothing range (min, max, currency, basis) — send all four or none",
+    );
   }
   const { min, max, currency, basis } = value as Record<string, unknown>;
   if (typeof min !== "string" || canonicalNonNegativeDecimal(min, 4) === null) {
-    throw new RecruitingError("INVALID_INPUT", "compensation min must be a decimal with up to 4 fraction digits");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "compensation min must be a decimal with up to 4 fraction digits",
+    );
   }
   if (typeof max !== "string" || canonicalNonNegativeDecimal(max, 4) === null) {
-    throw new RecruitingError("INVALID_INPUT", "compensation max must be a decimal with up to 4 fraction digits");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "compensation max must be a decimal with up to 4 fraction digits",
+    );
   }
-  if (compareDecimal(canonicalNonNegativeDecimal(min, 4)!, canonicalNonNegativeDecimal(max, 4)!) > 0) {
-    throw new RecruitingError("INVALID_INPUT", "compensation min exceeds max — enter a range where the minimum is no greater than the maximum");
+  if (
+    compareDecimal(canonicalNonNegativeDecimal(min, 4)!, canonicalNonNegativeDecimal(max, 4)!) > 0
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "compensation min exceeds max — enter a range where the minimum is no greater than the maximum",
+    );
   }
   if (typeof currency !== "string" || !/^[A-Z]{3}$/.test(currency)) {
     throw new RecruitingError("INVALID_INPUT", "compensation currency must be a 3-letter code");
   }
   if (basis !== "hourly" && basis !== "annual") {
-    throw new RecruitingError("INVALID_INPUT", "compensation basis must be hourly or annual — check the basis");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "compensation basis must be hourly or annual — check the basis",
+    );
   }
   return { min, max, currency, basis };
 }
@@ -262,13 +320,25 @@ export async function createRequisition(query: CreateRequisitionQuery): Promise<
   const actorId = requireActorId(query.actorId);
   const requestedTitle = optionalText(query.title, "requisition title");
   if (typeof query.employerSubsidiaryId !== "string" || query.employerSubsidiaryId.length === 0) {
-    throw new RecruitingError("INVALID_INPUT", "employerSubsidiaryId must be a non-empty string — a vacancy belongs to a legal entity");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "employerSubsidiaryId must be a non-empty string — a vacancy belongs to a legal entity",
+    );
   }
   const headcount = requireHeadcount(query.headcount);
   const requestedCompensation = requireCompensation(query.compensation);
-  const positionId = query.positionId === undefined || query.positionId === null ? null : requireId(query.positionId, "positionId");
-  const departmentId = query.departmentId === undefined || query.departmentId === null ? null : requireId(query.departmentId, "departmentId");
-  const locationId = query.locationId === undefined || query.locationId === null ? null : requireId(query.locationId, "locationId");
+  const positionId =
+    query.positionId === undefined || query.positionId === null
+      ? null
+      : requireId(query.positionId, "positionId");
+  const departmentId =
+    query.departmentId === undefined || query.departmentId === null
+      ? null
+      : requireId(query.departmentId, "departmentId");
+  const locationId =
+    query.locationId === undefined || query.locationId === null
+      ? null
+      : requireId(query.locationId, "locationId");
   const hiringManagerPartyId =
     query.hiringManagerPartyId === undefined || query.hiringManagerPartyId === null
       ? null
@@ -289,33 +359,56 @@ export async function createRequisition(query: CreateRequisitionQuery): Promise<
       ? null
       : requireId(query.jobDescriptionId, "jobDescriptionId");
   if (requestedTitle === null && jobDescriptionId === null) {
-    throw new RecruitingError("INVALID_INPUT", "requisition title must be non-blank — enter a title or start from a job description");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "requisition title must be non-blank — enter a title or start from a job description",
+    );
   }
 
   return withOrgTransaction(orgId, async () => {
     // Authority first, against the DECLARED employer: no planting vacancies
     // in a legal entity the actor cannot see.
-    await requireRecruitingManageForEmployer(db, orgId, actorId, query.employerSubsidiaryId as string);
+    await requireRecruitingManageForEmployer(
+      db,
+      orgId,
+      actorId,
+      query.employerSubsidiaryId as string,
+    );
     if (positionId) {
       // The actor must at least see the position to recruit against it.
       await requireHrmPositionRead(db, orgId, actorId, positionId);
     }
-    await assertRefVisible(db, orgId, "subsidiaries", query.employerSubsidiaryId as string, "employer subsidiary");
+    await assertRefVisible(
+      db,
+      orgId,
+      "subsidiaries",
+      query.employerSubsidiaryId as string,
+      "employer subsidiary",
+    );
     if (departmentId) await assertRefVisible(db, orgId, "departments", departmentId, "department");
     if (locationId) await assertRefVisible(db, orgId, "locations", locationId, "location");
-    if (hiringManagerPartyId) await assertRefVisible(db, orgId, "parties", hiringManagerPartyId, "hiring manager");
+    if (hiringManagerPartyId)
+      await assertRefVisible(db, orgId, "parties", hiringManagerPartyId, "hiring manager");
     if (recruiterUserId) await assertUserVisible(db, orgId, recruiterUserId);
     if (pipelineTemplateId) {
       const template = await loadPipelineTemplate(db, orgId, pipelineTemplateId);
-      if (!template) throw new RecruitingError("NOT_FOUND", "pipeline template is not visible in this organization — check the reference");
+      if (!template)
+        throw new RecruitingError(
+          "NOT_FOUND",
+          "pipeline template is not visible in this organization — check the reference",
+        );
     }
-    const source = jobDescriptionId ? await loadJobDescriptionForRequisition(db, orgId, jobDescriptionId) : null;
+    const source = jobDescriptionId
+      ? await loadJobDescriptionForRequisition(db, orgId, jobDescriptionId)
+      : null;
     const title = requestedTitle ?? source!.title;
     const employmentKind = requestedEmploymentKind ?? source?.employmentKind ?? null;
     const compensation = requestedCompensation ?? source?.compensation ?? null;
     const description = requestedDescription ?? source?.description ?? null;
     const number = await allocateRequisitionNumber(db, orgId);
-    const inserted = (await db.execute<RequisitionRow>(sql`
+    const inserted = (
+      await db.execute<RequisitionRow>(
+        sql`
       insert into hrm_requisitions
         (org_id, requisition_number, position_id, title, employer_subsidiary_id,
          department_id, location_id, hiring_manager_party_id, recruiter_user_id,
@@ -330,9 +423,15 @@ export async function createRequisition(query: CreateRequisitionQuery): Promise<
               ${compensation?.currency ?? null}, ${compensation?.basis ?? null},
               'draft', ${pipelineTemplateId}, ${description}, ${jobDescriptionId}, ${actorId}, ${actorId})
       returning ${REQUISITION_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!inserted) {
-      throw new RecruitingError("REFUSED", "the requisition was not stored — no row was written; retry the request");
+      throw new RecruitingError(
+        "REFUSED",
+        "the requisition was not stored — no row was written; retry the request",
+      );
     }
     return toDTO(inserted);
   });
@@ -343,10 +442,15 @@ async function loadRequisitionForUpdate(
   orgId: string,
   requisitionId: string,
 ): Promise<RequisitionRow> {
-  const row = (await exec.execute<RequisitionRow>(sql`
+  const row = (
+    await exec.execute<RequisitionRow>(
+      sql`
     select ${REQUISITION_COLUMNS} from hrm_requisitions
      where org_id = ${orgId} and id = ${requisitionId} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
   }
@@ -389,15 +493,26 @@ export async function openRequisition(query: OpenRequisitionQuery): Promise<Requ
     }
     const effectiveTarget = targetStartOn ?? current.targetStartOn;
     if (current.positionId) {
-      await assertPositionOpenable(db, orgId, actorId, current.positionId, effectiveTarget, overEstablishment);
+      await assertPositionOpenable(
+        db,
+        orgId,
+        actorId,
+        current.positionId,
+        effectiveTarget,
+        overEstablishment,
+      );
     }
     let templateId = current.pipelineTemplateId;
     if (!templateId) {
       const seed = await ensureDefaultPipelineTemplate(db, orgId, actorId);
       templateId = seed.id;
     }
-    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
-    const updated = (await db.execute<RequisitionRow>(sql`
+    const today = (
+      await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects")
+    )[0]!.today;
+    const updated = (
+      await db.execute<RequisitionRow>(
+        sql`
       update hrm_requisitions
          set status = 'open', opened_on = coalesce(opened_on, ${today}::date),
              target_start_on = coalesce(${effectiveTarget}::date, target_start_on),
@@ -407,7 +522,10 @@ export async function openRequisition(query: OpenRequisitionQuery): Promise<Requ
        where org_id = ${orgId} and id = ${requisitionId}
          and status in ('draft', 'on_hold')
       returning ${REQUISITION_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
       throw new RecruitingError(
         "STALE_REVISION",
@@ -431,14 +549,22 @@ async function assertPositionOpenable(
   targetStartOn: string | null,
   overEstablishment: boolean,
 ): Promise<void> {
-  const live = (await exec.execute<{ status: string }>(sql`
+  const live = (
+    await exec.execute<{ status: string }>(
+      sql`
     select v.status from position_versions v
      where v.org_id = ${orgId} and v.position_id = ${positionId}
        and v.recorded_until is null
      order by v.version_no desc limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!live) {
-    throw new RecruitingError("NOT_FOUND", "the requisition's position has no live version — resolve the position before opening");
+    throw new RecruitingError(
+      "NOT_FOUND",
+      "the requisition's position has no live version — resolve the position before opening",
+    );
   }
   if (live.status === "closed") {
     throw new RecruitingError(
@@ -446,7 +572,10 @@ async function assertPositionOpenable(
       "the requisition's position is closed — open a new position instead of recruiting against a retired establishment",
     );
   }
-  const asOf = targetStartOn ?? (await exec.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
+  const asOf =
+    targetStartOn ??
+    (await exec.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!
+      .today;
   const vacancy = await loadVacancyAsOf(exec, {
     orgId,
     actorId,
@@ -505,22 +634,34 @@ async function transitionRequisition(
     const subject = await requireHrmRecruitingManage(db, orgId, actorId, requisitionId);
     const expected = action === "hold" ? "open" : action === "resume" ? "on_hold" : "open";
     const next = action === "hold" ? "on_hold" : action === "resume" ? "open" : "cancelled";
-    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
+    const today = (
+      await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects")
+    )[0]!.today;
     const updated =
       action === "cancel"
-        ? (await db.execute<RequisitionRow>(sql`
+        ? (
+            await db.execute<RequisitionRow>(
+              sql`
             update hrm_requisitions
                set status = 'cancelled', closed_on = ${today}::date, close_reason = ${reason},
                    updated_by = ${actorId}, updated_at = now()
              where org_id = ${orgId} and id = ${requisitionId} and status = ${expected}
             returning ${REQUISITION_COLUMNS}
-          `, "objects"))[0]
-        : (await db.execute<RequisitionRow>(sql`
+          `,
+              "objects",
+            )
+          )[0]
+        : (
+            await db.execute<RequisitionRow>(
+              sql`
             update hrm_requisitions
                set status = ${next}, updated_by = ${actorId}, updated_at = now()
              where org_id = ${orgId} and id = ${requisitionId} and status = ${expected}
             returning ${REQUISITION_COLUMNS}
-          `, "objects"))[0];
+          `,
+              "objects",
+            )
+          )[0];
     if (!updated) {
       const current = await loadRequisitionForUpdate(db, orgId, requisitionId);
       throw new RecruitingError(
@@ -558,17 +699,33 @@ export async function reviseRequisition(query: ReviseRequisitionQuery): Promise<
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const requisitionId = requireId(query.requisitionId, "requisitionId");
-  if (typeof query.expectedRevision !== "number" || !Number.isInteger(query.expectedRevision) || query.expectedRevision < 1) {
-    throw new RecruitingError("INVALID_INPUT", "expectedRevision is the positive integer revision the edit was made against — reload the opening");
+  if (
+    typeof query.expectedRevision !== "number" ||
+    !Number.isInteger(query.expectedRevision) ||
+    query.expectedRevision < 1
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "expectedRevision is the positive integer revision the edit was made against — reload the opening",
+    );
   }
   const expectedRevision = query.expectedRevision;
   if (query.title === null) {
-    throw new RecruitingError("INVALID_INPUT", "requisition title must be non-blank — an opening always has a title");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "requisition title must be non-blank — an opening always has a title",
+    );
   }
-  const title = query.title === undefined ? undefined : optionalText(query.title, "requisition title");
-  const employmentKind = query.employmentKind === undefined ? undefined : optionalText(query.employmentKind, "employmentKind");
-  const compensation = query.compensation === undefined ? undefined : requireCompensation(query.compensation);
-  const description = query.description === undefined ? undefined : optionalDescription(query.description);
+  const title =
+    query.title === undefined ? undefined : optionalText(query.title, "requisition title");
+  const employmentKind =
+    query.employmentKind === undefined
+      ? undefined
+      : optionalText(query.employmentKind, "employmentKind");
+  const compensation =
+    query.compensation === undefined ? undefined : requireCompensation(query.compensation);
+  const description =
+    query.description === undefined ? undefined : optionalDescription(query.description);
 
   return withOrgTransaction(orgId, async () => {
     const subject = await requireHrmRecruitingManage(db, orgId, actorId, requisitionId);
@@ -599,7 +756,9 @@ export async function reviseRequisition(query: ReviseRequisitionQuery): Promise<
       description: before.description,
     };
     if (JSON.stringify(next) === JSON.stringify(prior)) return before;
-    const updated = (await db.execute<RequisitionRow>(sql`
+    const updated = (
+      await db.execute<RequisitionRow>(
+        sql`
       update hrm_requisitions
          set title = ${next.title}, employment_kind = ${next.employmentKind},
              compensation_min = ${next.compensation?.min ?? null},
@@ -613,21 +772,32 @@ export async function reviseRequisition(query: ReviseRequisitionQuery): Promise<
          and revision = ${expectedRevision}
          and status in ('draft', 'open', 'on_hold')
       returning ${REQUISITION_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
       throw new RecruitingError(
         "STALE_REVISION",
         `requisition ${subject.requisitionNumber} changed while saving — reload it and reapply the edit`,
       );
     }
-    const audited = (await db.execute<{ id: string }>(sql`
+    const audited = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'hrm_requisitions', ${requisitionId}, 'requisition_posting_revised',
               ${JSON.stringify({ before: prior, after: next })}::jsonb, ${actorId})
       returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!audited) {
-      throw new RecruitingError("REFUSED", "the posting edit was not audited — no audit row was written; retry the request");
+      throw new RecruitingError(
+        "REFUSED",
+        "the posting edit was not audited — no audit row was written; retry the request",
+      );
     }
     return toDTO(updated);
   });
@@ -644,7 +814,9 @@ export async function bumpFillForHire(
   exec: SqlExecutor,
   args: { orgId: string; actorId: string; requisitionId: string; expectedRevision: number },
 ): Promise<RequisitionDTO> {
-  const updated = (await exec.execute<RequisitionRow>(sql`
+  const updated = (
+    await exec.execute<RequisitionRow>(
+      sql`
     update hrm_requisitions
        set filled_count = filled_count + 1,
            revision = revision + 1,
@@ -656,7 +828,10 @@ export async function bumpFillForHire(
        and status = 'open'
        and filled_count < headcount
     returning ${REQUISITION_COLUMNS}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!updated) {
     throw new RecruitingError(
       "REFUSED",

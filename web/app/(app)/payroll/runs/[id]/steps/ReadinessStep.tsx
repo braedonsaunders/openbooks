@@ -1,17 +1,22 @@
-'use client'
+"use client";
 
 /** Split from RunWizard.tsx; moved without behavior changes. */
-import { READINESS_CODE_FALLBACK, type ReadinessItem, type Readiness, type RosterRow } from '../run-wizard-model'
-import { HeaderFact } from '../run-wizard-controls'
-import { useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { AlertTriangle, Beaker, Calculator, CheckCircle2, Link2, Loader2 } from 'lucide-react'
-import { Button, cn } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../../../lib/api-error'
-import { HolidayAttestations } from '../HolidayAttestations'
+import {
+  READINESS_CODE_FALLBACK,
+  type ReadinessItem,
+  type Readiness,
+  type RosterRow,
+} from "../run-wizard-model";
+import { HeaderFact } from "../run-wizard-controls";
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { AlertTriangle, Beaker, Calculator, CheckCircle2, Link2, Loader2 } from "lucide-react";
+import { Button, cn } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../../../lib/api-error";
+import { HolidayAttestations } from "../HolidayAttestations";
 
 /* ------------------------------------------------------------------ */
 /* Step 2 — Readiness                                                  */
@@ -37,32 +42,32 @@ export function ReadinessStep({
   onAnswered,
   fmt,
 }: {
-  runId: string
-  roster: RosterRow[]
-  readiness: Readiness
-  canCalculate: boolean
-  calculated: boolean
-  busy: boolean
+  runId: string;
+  roster: RosterRow[];
+  readiness: Readiness;
+  canCalculate: boolean;
+  calculated: boolean;
+  busy: boolean;
   dry: {
-    employees: number
-    gross: string
-    net: string
-    employerCost: string
-    errors: { employee: string; message: string }[]
-  } | null
-  onDryRun: () => void
-  onCalculate: () => void
-  onAnswered: () => void
-  fmt: (v: string | number | null | undefined) => string
+    employees: number;
+    gross: string;
+    net: string;
+    employerCost: string;
+    errors: { employee: string; message: string }[];
+  } | null;
+  onDryRun: () => void;
+  onCalculate: () => void;
+  onAnswered: () => void;
+  fmt: (v: string | number | null | undefined) => string;
 }) {
-  const t = useTranslations('payroll')
-  const router = useRouter()
-  const [acknowledged, setAcknowledged] = useState(false)
-  const [resolving, setResolving] = useState<string | null>(null)
+  const t = useTranslations("payroll");
+  const router = useRouter();
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [resolving, setResolving] = useState<string | null>(null);
   const [linkResult, setLinkResult] = useState<{
-    linked: number
-    unresolved: { employeeName: string; reason: string | null }[]
-  } | null>(null)
+    linked: number;
+    unresolved: { employeeName: string; reason: string | null }[];
+  } | null>(null);
 
   /**
    * One-click repair for the "no payroll link" blocker: link every unlinked
@@ -71,34 +76,34 @@ export function ReadinessStep({
    * Employees screen or the links import — then the panel refreshes.
    */
   const resolveLinks = async (item: ReadinessItem) => {
-    setResolving(item.code)
-    setLinkResult(null)
+    setResolving(item.code);
+    setLinkResult(null);
     try {
       const res = await fetch(`/api/payroll/runs/${runId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: 'resolve-employment-links',
+          action: "resolve-employment-links",
           employeePartyIds: item.employees.map((e) => e.partyId),
         }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
-      const j = await res.json()
+      });
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, "failed"));
+      const j = await res.json();
       setLinkResult({
         linked: Array.isArray(j.linked) ? j.linked.length : 0,
         unresolved: Array.isArray(j.unresolved) ? j.unresolved : [],
-      })
-      router.refresh()
+      });
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setResolving(null)
+      setResolving(null);
     }
-  }
+  };
 
-  const blockers = readiness.items.filter((i) => i.severity === 'blocker')
-  const warnings = readiness.items.filter((i) => i.severity === 'warning')
-  const needsAck = warnings.length > 0 && !acknowledged
+  const blockers = readiness.items.filter((i) => i.severity === "blocker");
+  const warnings = readiness.items.filter((i) => i.severity === "warning");
+  const needsAck = warnings.length > 0 && !acknowledged;
   // A readiness code with no message must still be READABLE. Rendering the raw
   // key ("…codes.employee.noOpeningBalance") on the one screen that decides
   // whether a payday is safe to run is worse than an untranslated sentence.
@@ -106,96 +111,120 @@ export function ReadinessStep({
     t.has(`wizard.readiness.codes.${item.code}` as never)
       ? t(`wizard.readiness.codes.${item.code}`, {
           count: item.employees.length,
-          detail: item.detail ?? '',
+          detail: item.detail ?? "",
         })
-      : (READINESS_CODE_FALLBACK[item.code]?.(item.employees.length, item.detail ?? '') ?? item.code)
+      : (READINESS_CODE_FALLBACK[item.code]?.(item.employees.length, item.detail ?? "") ??
+        item.code);
 
-  const list = (items: ReadinessItem[], severity: 'blocker' | 'warning') => (
+  const list = (items: ReadinessItem[], severity: "blocker" | "warning") => (
     <ul className="divide-y divide-slate-100 dark:divide-slate-800">
       {items.map((item, index) => (
-        <li key={`${item.code}-${index}`} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+        <li
+          key={`${item.code}-${index}`}
+          className="flex flex-wrap items-start justify-between gap-3 px-4 py-3"
+        >
           <div className="min-w-0">
             <p
               className={cn(
-                'text-sm font-medium',
-                severity === 'blocker'
-                  ? 'text-red-700 dark:text-red-300'
-                  : 'text-amber-700 dark:text-amber-300',
+                "text-sm font-medium",
+                severity === "blocker"
+                  ? "text-red-700 dark:text-red-300"
+                  : "text-amber-700 dark:text-amber-300",
               )}
             >
               {label(item)}
             </p>
             {item.employees.length > 0 && (
               <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                {item.employees.slice(0, 8).map((e) => e.name).join(', ')}
+                {item.employees
+                  .slice(0, 8)
+                  .map((e) => e.name)
+                  .join(", ")}
                 {item.employees.length > 8
-                  ? t('wizard.readiness.andMore', { count: item.employees.length - 8 })
-                  : ''}
+                  ? t("wizard.readiness.andMore", { count: item.employees.length - 8 })
+                  : ""}
               </p>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {item.action === 'payroll.resolve-employment-links' && (
-              <Button size="sm" variant="outline" disabled={resolving !== null} onClick={() => resolveLinks(item)}>
+            {item.action === "payroll.resolve-employment-links" && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={resolving !== null}
+                onClick={() => resolveLinks(item)}
+              >
                 {resolving === item.code ? (
                   <Loader2 size={14} className="animate-spin" aria-hidden />
                 ) : (
                   <Link2 size={14} aria-hidden />
                 )}
-                {t('wizard.readiness.linkEmployments')}
+                {t("wizard.readiness.linkEmployments")}
               </Button>
             )}
             {item.href && (
               <Button asChild size="sm" variant="outline">
-                <Link href={item.href as never}>{t('wizard.readiness.fix')}</Link>
+                <Link href={item.href as never}>{t("wizard.readiness.fix")}</Link>
               </Button>
             )}
           </div>
         </li>
       ))}
     </ul>
-  )
+  );
 
   return (
     <div className="space-y-4">
       <div
         className={cn(
-          'flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3.5',
+          "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3.5",
           blockers.length > 0
-            ? 'border-red-200/80 bg-red-50 dark:border-red-800/60 dark:bg-red-950/40'
-            : 'border-emerald-200/80 bg-emerald-50 dark:border-emerald-800/60 dark:bg-emerald-950/40',
+            ? "border-red-200/80 bg-red-50 dark:border-red-800/60 dark:bg-red-950/40"
+            : "border-emerald-200/80 bg-emerald-50 dark:border-emerald-800/60 dark:bg-emerald-950/40",
         )}
       >
         <div className="flex items-center gap-3">
           {blockers.length > 0 ? (
             <AlertTriangle size={20} className="text-red-600 dark:text-red-400" aria-hidden />
           ) : (
-            <CheckCircle2 size={20} className="text-emerald-600 dark:text-emerald-400" aria-hidden />
+            <CheckCircle2
+              size={20}
+              className="text-emerald-600 dark:text-emerald-400"
+              aria-hidden
+            />
           )}
           <div>
             <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               {blockers.length > 0
-                ? t('wizard.readiness.blockedTitle', { count: blockers.length })
-                : t('wizard.readiness.readyTitle', { count: readiness.included })}
+                ? t("wizard.readiness.blockedTitle", { count: blockers.length })
+                : t("wizard.readiness.readyTitle", { count: readiness.included })}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {blockers.length > 0
-                ? t('wizard.readiness.blockedHint')
+                ? t("wizard.readiness.blockedHint")
                 : warnings.length > 0
-                  ? t('wizard.readiness.warningsHint', { count: warnings.length })
-                  : t('wizard.readiness.readyHint')}
+                  ? t("wizard.readiness.warningsHint", { count: warnings.length })
+                  : t("wizard.readiness.readyHint")}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" disabled={busy} onClick={onDryRun}>
-            {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Beaker size={14} aria-hidden />}
-            {t('wizard.readiness.dryRun')}
+            {busy ? (
+              <Loader2 size={14} className="animate-spin" aria-hidden />
+            ) : (
+              <Beaker size={14} aria-hidden />
+            )}
+            {t("wizard.readiness.dryRun")}
           </Button>
           {canCalculate && (
             <Button onClick={onCalculate} disabled={busy || needsAck}>
-              {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Calculator size={14} aria-hidden />}
-              {calculated ? t('wizard.period.recalculate') : t('run.calculate')}
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden />
+              ) : (
+                <Calculator size={14} aria-hidden />
+              )}
+              {calculated ? t("wizard.period.recalculate") : t("run.calculate")}
             </Button>
           )}
         </div>
@@ -204,13 +233,13 @@ export function ReadinessStep({
       {dry && (
         <div className="rounded-xl border border-sky-200/80 bg-sky-50 px-4 py-3 dark:border-sky-800/60 dark:bg-sky-950/40">
           <p className="mb-2 text-sm font-semibold text-sky-900 dark:text-sky-200">
-            {t('wizard.readiness.dryRunTitle')}
+            {t("wizard.readiness.dryRunTitle")}
           </p>
           <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
-            <HeaderFact label={t('columns.employees')}>{String(dry.employees)}</HeaderFact>
-            <HeaderFact label={t('columns.gross')}>{fmt(dry.gross)}</HeaderFact>
-            <HeaderFact label={t('columns.net')}>{fmt(dry.net)}</HeaderFact>
-            <HeaderFact label={t('run.employerCost')}>{fmt(dry.employerCost)}</HeaderFact>
+            <HeaderFact label={t("columns.employees")}>{String(dry.employees)}</HeaderFact>
+            <HeaderFact label={t("columns.gross")}>{fmt(dry.gross)}</HeaderFact>
+            <HeaderFact label={t("columns.net")}>{fmt(dry.net)}</HeaderFact>
+            <HeaderFact label={t("run.employerCost")}>{fmt(dry.employerCost)}</HeaderFact>
           </dl>
           {dry.errors.length > 0 && (
             <ul className="mt-3 ml-5 list-disc space-y-0.5 text-sm text-sky-900 dark:text-sky-200">
@@ -230,32 +259,34 @@ export function ReadinessStep({
               onAnswered={onAnswered}
             />
           )}
-          <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">{t('wizard.readiness.dryRunHint')}</p>
+          <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">
+            {t("wizard.readiness.dryRunHint")}
+          </p>
         </div>
       )}
 
       {blockers.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 dark:border-slate-800 dark:text-slate-100">
-            {t('wizard.readiness.blockersTitle')}
+            {t("wizard.readiness.blockersTitle")}
           </h3>
-          {list(blockers, 'blocker')}
+          {list(blockers, "blocker")}
         </div>
       )}
 
       {linkResult && (
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
           <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-            {t('wizard.readiness.linksResolved', { count: linkResult.linked })}
+            {t("wizard.readiness.linksResolved", { count: linkResult.linked })}
             {linkResult.unresolved.length > 0 &&
-              ` · ${t('wizard.readiness.linksUnresolved', { count: linkResult.unresolved.length })}`}
+              ` · ${t("wizard.readiness.linksUnresolved", { count: linkResult.unresolved.length })}`}
           </p>
           {linkResult.unresolved.length > 0 && (
             <ul className="mt-2 ml-5 list-disc space-y-0.5 text-sm text-slate-600 dark:text-slate-300">
               {linkResult.unresolved.map((entry) => (
                 <li key={entry.employeeName}>
                   <span className="font-medium">{entry.employeeName}</span>
-                  {entry.reason ? `: ${entry.reason}` : ''}
+                  {entry.reason ? `: ${entry.reason}` : ""}
                 </li>
               ))}
             </ul>
@@ -266,9 +297,9 @@ export function ReadinessStep({
       {warnings.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 dark:border-slate-800 dark:text-slate-100">
-            {t('wizard.readiness.warningsTitle')}
+            {t("wizard.readiness.warningsTitle")}
           </h3>
-          {list(warnings, 'warning')}
+          {list(warnings, "warning")}
           {canCalculate && (
             <label className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
               <input
@@ -277,7 +308,7 @@ export function ReadinessStep({
                 checked={acknowledged}
                 onChange={(e) => setAcknowledged(e.target.checked)}
               />
-              {t('wizard.readiness.acknowledge')}
+              {t("wizard.readiness.acknowledge")}
             </label>
           )}
         </div>
@@ -285,9 +316,9 @@ export function ReadinessStep({
 
       {blockers.length === 0 && warnings.length === 0 && (
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-          {t('wizard.readiness.allClear')}
+          {t("wizard.readiness.allClear")}
         </div>
       )}
     </div>
-  )
+  );
 }

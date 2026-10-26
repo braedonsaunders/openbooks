@@ -67,19 +67,16 @@ type BackupQueueRecovery = {
 async function recoverStaleQueuedBackupRun(
   run: { id: string; org_id: string },
   queue: BackupQueueRecovery = {
-    getJob: async (id) => await getBackupQueue().getJob(id) as FailedBackupJob | undefined,
+    getJob: async (id) => (await getBackupQueue().getJob(id)) as FailedBackupJob | undefined,
     enqueue: enqueueBackupRun,
   },
 ): Promise<"enqueued" | "revived" | "already-present"> {
   const existing = await queue.getJob(run.id);
   if (!existing) {
-    await queue.enqueue(
-      { op: "run", runId: run.id, orgId: run.org_id },
-      { jobId: run.id },
-    );
+    await queue.enqueue({ op: "run", runId: run.id, orgId: run.org_id }, { jobId: run.id });
     return "enqueued";
   }
-  if (await existing.getState() === "failed") {
+  if ((await existing.getState()) === "failed") {
     await existing.retry("failed");
     return "revived";
   }
@@ -96,11 +93,21 @@ export async function tick(): Promise<void> {
     // row running so a later tick can decide without destroying evidence.
     // bypass: scheduler-tick — stale running backups are found across every organization.
     const staleRunning = await withBypassContext(() =>
-      db.execute<{ id: string; org_id: string; object_key: string | null; sha256: string | null; byte_size: string | null }>(sql`
+      db.execute<{
+        id: string;
+        org_id: string;
+        object_key: string | null;
+        sha256: string | null;
+        byte_size: string | null;
+      }>(
+        sql`
       select id, org_id, object_key, sha256, byte_size::text as byte_size
         from backup_runs
        where status = 'running' and updated_at < now() - interval '6 hours'
-       limit 25`, "objects"));
+       limit 25`,
+        "objects",
+      ),
+    );
     for (const run of staleRunning) {
       // Claim the row under its lock FIRST, then probe storage while holding
       // it. A heartbeat or completion racing this scan either wins the lock
@@ -111,30 +118,43 @@ export async function tick(): Promise<void> {
       // Storage outages (or a missing probe) decide nothing: the row stays
       // running and a later tick retries without destroying evidence.
       const verdict = await withOrgTransaction(run.org_id, async () => {
-        const locked = (await db.execute<{ id: string }>(sql`
+        const locked = await db.execute<{ id: string }>(
+          sql`
           select id from backup_runs
            where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
              and updated_at < now() - interval '6 hours'
            for update
-        `, "objects"));
+        `,
+          "objects",
+        );
         if (!locked[0]) return null;
         if (run.object_key && run.sha256 && run.byte_size) {
           try {
             const object = await headBackupObject(run.object_key);
             const matches =
-              object.Metadata?.sha256 === run.sha256 && String(object.ContentLength) === run.byte_size;
+              object.Metadata?.sha256 === run.sha256 &&
+              String(object.ContentLength) === run.byte_size;
             if (!matches) {
               try {
                 await deleteBackupObject(run.object_key);
               } catch (error) {
-                console.error(`[backup-scheduler] cannot delete mismatched object for ${run.id}; will retry:`, (error as Error).message);
+                console.error(
+                  `[backup-scheduler] cannot delete mismatched object for ${run.id}; will retry:`,
+                  (error as Error).message,
+                );
                 return null;
               }
             }
             return { recovered: matches } as const;
           } catch (error) {
-            if ((error as { name?: string }).name !== "NotFound" && (error as { name?: string }).name !== "NoSuchKey") {
-              console.error(`[backup-scheduler] cannot reconcile ${run.id}; will retry:`, (error as Error).message);
+            if (
+              (error as { name?: string }).name !== "NotFound" &&
+              (error as { name?: string }).name !== "NoSuchKey"
+            ) {
+              console.error(
+                `[backup-scheduler] cannot reconcile ${run.id}; will retry:`,
+                (error as Error).message,
+              );
               return null;
             }
           }
@@ -149,12 +169,15 @@ export async function tick(): Promise<void> {
         // so the next tick retries this exact reconciliation instead of
         // leaving a completed backup without durable evidence.
         await withOrgTransaction(run.org_id, async () => {
-          const finalized = (await db.execute<{ id: string }>(sql`
+          const finalized = await db.execute<{ id: string }>(
+            sql`
           update backup_runs
              set status = 'completed', error = null, completed_at = now(), updated_at = now()
            where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
              and updated_at < now() - interval '6 hours'
-           returning id`, "objects"));
+           returning id`,
+            "objects",
+          );
           if (!finalized[0]) return;
           await auditBackupEvent({
             orgId: run.org_id,
@@ -169,14 +192,17 @@ export async function tick(): Promise<void> {
         // lands without evidence describing why its never-verified bytes were
         // discarded. If the evidence write fails, the row stays 'running'.
         await withOrgTransaction(run.org_id, async () => {
-          const abandoned = (await db.execute<{ id: string }>(sql`
+          const abandoned = await db.execute<{ id: string }>(
+            sql`
           update backup_runs
              set status = 'failed', object_key = null,
                  error = 'worker stopped before the upload could be verified',
                  completed_at = now(), updated_at = now()
            where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
              and updated_at < now() - interval '6 hours'
-           returning id`, "objects"));
+           returning id`,
+            "objects",
+          );
           if (!abandoned[0]) return;
           await auditBackupEvent({
             orgId: run.org_id,
@@ -199,10 +225,14 @@ export async function tick(): Promise<void> {
     // one audited unit.
     // bypass: scheduler-tick — failed uploads awaiting cleanup are found across every organization.
     const failedUploads = await withBypassContext(() =>
-      db.execute<{ id: string; org_id: string; object_key: string }>(sql`
+      db.execute<{ id: string; org_id: string; object_key: string }>(
+        sql`
       select id, org_id, object_key from backup_runs
        where status = 'failed' and object_key is not null and purged_at is null
-       limit 25`, "objects"));
+       limit 25`,
+        "objects",
+      ),
+    );
     for (const run of failedUploads) {
       if (run.object_key !== backupObjectKey(run.org_id, run.id)) {
         console.error(
@@ -220,18 +250,25 @@ export async function tick(): Promise<void> {
             rowId: run.id,
             actorId: null,
             changes: { event: "backup_orphan_cleanup_requested", objectKey: run.object_key },
-          }));
+          }),
+        );
         await deleteBackupObject(run.object_key);
       } catch (error) {
-        console.error(`[backup-scheduler] orphan cleanup failed for ${run.object_key}:`, (error as Error).message);
+        console.error(
+          `[backup-scheduler] orphan cleanup failed for ${run.object_key}:`,
+          (error as Error).message,
+        );
         continue;
       }
       try {
         await withOrgTransaction(run.org_id, async () => {
-          const cleared = (await db.execute<{ id: string }>(sql`
+          const cleared = await db.execute<{ id: string }>(
+            sql`
           update backup_runs set object_key = null, updated_at = now()
            where id = ${run.id} and org_id = ${run.org_id} and status = 'failed' and object_key = ${run.object_key}
-           returning id`, "objects"));
+           returning id`,
+            "objects",
+          );
           if (!cleared[0]) return;
           await auditBackupEvent({
             orgId: run.org_id,
@@ -251,12 +288,16 @@ export async function tick(): Promise<void> {
 
     // bypass: scheduler-tick — due backup policies are found across every organization.
     const due = await withBypassContext(() =>
-      db.execute<DuePolicy>(sql`
+      db.execute<DuePolicy>(
+        sql`
       select org_id, frequency, hour_utc, day_of_week, day_of_month
         from backup_policies
        where enabled and next_run_at is not null and next_run_at <= now()
        order by next_run_at
-       limit 25`, "objects"));
+       limit 25`,
+        "objects",
+      ),
+    );
 
     for (const policy of due) {
       // Claim: advance next_run_at past "now"; exactly one scanner wins.
@@ -286,7 +327,8 @@ export async function tick(): Promise<void> {
           )
           insert into backup_runs (org_id, kind, status)
           select org_id, 'scheduled', 'queued' from claimed
-          returning id`));
+          returning id`),
+        );
       } catch (error) {
         const postgresError = error as { code?: string; constraint?: string };
         if (
@@ -299,20 +341,21 @@ export async function tick(): Promise<void> {
       }
       if (run.rows.length === 0) continue;
       const runId = run.rows[0]!.id;
-      await enqueueBackupRun(
-        { op: "run", runId, orgId: policy.org_id },
-        { jobId: runId },
-      );
+      await enqueueBackupRun({ op: "run", runId, orgId: policy.org_id }, { jobId: runId });
       console.log(`[backup-scheduler] org ${policy.org_id}: scheduled run ${runId} enqueued`);
     }
 
     // Self-heal queued runs whose job never made it to (or survived in) Redis.
     // bypass: scheduler-tick — stale queued backups are found across every organization.
     const staleQueued = await withBypassContext(() =>
-      db.execute<{ id: string; org_id: string }>(sql`
+      db.execute<{ id: string; org_id: string }>(
+        sql`
       select id, org_id from backup_runs
        where status = 'queued' and created_at < now() - interval '10 minutes'
-       limit 25`, "objects"));
+       limit 25`,
+        "objects",
+      ),
+    );
     for (const run of staleQueued) {
       await recoverStaleQueuedBackupRun(run);
     }

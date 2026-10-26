@@ -9,11 +9,23 @@
  * per-share price is divided by the same factor.
  */
 import { equityError, fig } from "./errors.ts";
-import { divideRational, floorShares, multiplyRational, ONE, rational, type Rational } from "./quantities.ts";
+import {
+  divideRational,
+  floorShares,
+  multiplyRational,
+  ONE,
+  rational,
+  type Rational,
+} from "./quantities.ts";
 import type { SplitRecord } from "./types.ts";
 
 /** Product of the ratios of a class's splits effective after `after` and on or before `through`. */
-export function splitFactor(splits: readonly SplitRecord[], shareClassId: string, after: string, through: string): Rational {
+export function splitFactor(
+  splits: readonly SplitRecord[],
+  shareClassId: string,
+  after: string,
+  through: string,
+): Rational {
   let factor = ONE;
   for (const split of splits) {
     if (split.shareClassId !== shareClassId) continue;
@@ -32,7 +44,9 @@ export function restateShares(
   statedOn: string,
   asOf: string,
 ): bigint {
-  return floorShares(multiplyRational(rational(quantity), splitFactor(splits, shareClassId, statedOn, asOf)));
+  return floorShares(
+    multiplyRational(rational(quantity), splitFactor(splits, shareClassId, statedOn, asOf)),
+  );
 }
 
 /** A per-share price stated on `statedOn`, restated to `asOf` (exact; the caller quantizes). */
@@ -49,6 +63,10 @@ export function restatePrice(
 /** Refuse a split ratio the schema would refuse, before anything is written. */
 export function validateSplitRatio(numerator: bigint, denominator: bigint): void {
   if (numerator <= 0n || denominator <= 0n || numerator === denominator) {
-    throw equityError("splitRatioInvalid", { newShares: fig.term("splitNew"), oldShares: fig.term("splitOld") }, { field: "ratio" });
+    throw equityError(
+      "splitRatioInvalid",
+      { newShares: fig.term("splitNew"), oldShares: fig.term("splitOld") },
+      { field: "ratio" },
+    );
   }
 }

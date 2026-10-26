@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useRouter } from "next/navigation";
 import { DrawerTabStrip } from "../../../../components/drawer-tab-strip";

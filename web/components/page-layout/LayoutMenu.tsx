@@ -1,18 +1,18 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { LayoutGrid, Eye, EyeOff, ChevronUp, ChevronDown, RotateCcw } from 'lucide-react'
-import { Button, Popover, cn } from '@openbooks/ui'
+import { useState } from "react";
+import { LayoutGrid, Eye, EyeOff, ChevronUp, ChevronDown, RotateCcw } from "lucide-react";
+import { Button, Popover, cn } from "@openbooks/ui";
 
 export type LayoutMenuRow = {
-  key: string
-  label: string
-  hidden: boolean
+  key: string;
+  label: string;
+  hidden: boolean;
   /** Secondary text after the label (e.g. an account number). */
-  detail?: string
+  detail?: string;
   /** false = toggle-only row (no up/down arrows), e.g. a fixed vitals strip. */
-  orderable?: boolean
-}
+  orderable?: boolean;
+};
 
 /**
  * Customize-layout popover — the shared show/hide/reorder control for
@@ -29,23 +29,23 @@ export function LayoutMenu({
   onToggle,
   onMove,
   onReset,
-  size = 'sm',
+  size = "sm",
 }: {
-  title: string
-  triggerLabel: string
-  resetLabel: string
-  rows: LayoutMenuRow[]
-  onToggle: (key: string) => void
-  onMove: (key: string, dir: -1 | 1) => void
-  onReset: () => void
-  size?: 'sm' | 'xs'
+  title: string;
+  triggerLabel: string;
+  resetLabel: string;
+  rows: LayoutMenuRow[];
+  onToggle: (key: string) => void;
+  onMove: (key: string, dir: -1 | 1) => void;
+  onReset: () => void;
+  size?: "sm" | "xs";
 }) {
-  const [open, setOpen] = useState(false)
-  const orderable = rows.filter((r) => r.orderable !== false)
-  const firstKey = orderable[0]?.key
-  const lastKey = orderable[orderable.length - 1]?.key
+  const [open, setOpen] = useState(false);
+  const orderable = rows.filter((r) => r.orderable !== false);
+  const firstKey = orderable[0]?.key;
+  const lastKey = orderable[orderable.length - 1]?.key;
   const iconBtn =
-    'grid h-6 w-6 place-items-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent dark:hover:bg-slate-800 dark:hover:text-slate-200'
+    "grid h-6 w-6 place-items-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent dark:hover:bg-slate-800 dark:hover:text-slate-200";
   return (
     <Popover
       open={open}
@@ -53,7 +53,7 @@ export function LayoutMenu({
       align="end"
       className="w-72 p-2"
       trigger={
-        size === 'xs' ? (
+        size === "xs" ? (
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -65,7 +65,12 @@ export function LayoutMenu({
             <LayoutGrid size={14} />
           </button>
         ) : (
-          <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+          >
             <LayoutGrid size={14} />
             {triggerLabel}
           </Button>
@@ -80,26 +85,47 @@ export function LayoutMenu({
           <li key={row.key} className="flex items-center gap-1 rounded-md px-2 py-1.5">
             <span
               className={cn(
-                'min-w-0 flex-1 truncate text-sm',
-                row.hidden ? 'text-slate-400 line-through dark:text-slate-500' : 'text-slate-700 dark:text-slate-200',
+                "min-w-0 flex-1 truncate text-sm",
+                row.hidden
+                  ? "text-slate-400 line-through dark:text-slate-500"
+                  : "text-slate-700 dark:text-slate-200",
               )}
             >
               {row.label}
               {row.detail ? (
-                <span className="ml-1.5 font-mono text-xs text-slate-400 dark:text-slate-500">{row.detail}</span>
+                <span className="ml-1.5 font-mono text-xs text-slate-400 dark:text-slate-500">
+                  {row.detail}
+                </span>
               ) : null}
             </span>
             {row.orderable !== false ? (
               <>
-                <button type="button" className={iconBtn} aria-label={`${row.label} ↑`} disabled={row.key === firstKey} onClick={() => onMove(row.key, -1)}>
+                <button
+                  type="button"
+                  className={iconBtn}
+                  aria-label={`${row.label} ↑`}
+                  disabled={row.key === firstKey}
+                  onClick={() => onMove(row.key, -1)}
+                >
                   <ChevronUp size={14} />
                 </button>
-                <button type="button" className={iconBtn} aria-label={`${row.label} ↓`} disabled={row.key === lastKey} onClick={() => onMove(row.key, 1)}>
+                <button
+                  type="button"
+                  className={iconBtn}
+                  aria-label={`${row.label} ↓`}
+                  disabled={row.key === lastKey}
+                  onClick={() => onMove(row.key, 1)}
+                >
                   <ChevronDown size={14} />
                 </button>
               </>
             ) : null}
-            <button type="button" className={iconBtn} aria-label={row.label} onClick={() => onToggle(row.key)}>
+            <button
+              type="button"
+              className={iconBtn}
+              aria-label={row.label}
+              onClick={() => onToggle(row.key)}
+            >
               {row.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </li>
@@ -116,5 +142,5 @@ export function LayoutMenu({
         </button>
       </div>
     </Popover>
-  )
+  );
 }

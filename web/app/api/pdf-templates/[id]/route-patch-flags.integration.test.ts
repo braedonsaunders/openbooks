@@ -19,7 +19,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.pdf-template-patch-bool-test')]
@@ -31,8 +31,10 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if ((specifier === "../../../../lib/authz" && context.parentURL?.includes("pdf-templates")) ||
-        (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) {
+    if (
+      (specifier === "../../../../lib/authz" && context.parentURL?.includes("pdf-templates")) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -50,34 +52,37 @@ const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 after(() => hooks.deregister());
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 const TEMPLATE_ID = "00000000-0000-4000-8000-000000000031";
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {
   return withBypassContext(async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Template Admin", "admin");
-  await db.execute(sql`
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Template Admin", "admin");
+    await db.execute(sql`
     insert into pdf_templates (id, org_id, record_type, name, source_html, compiled_html, created_by, updated_by)
     values (${TEMPLATE_ID}, ${org.orgId}, 'customer_invoice', 'Standard', '<p>Hi</p>', '<p>Hi</p>', ${actorId}, ${actorId})
     on conflict (id) do update set org_id = ${org.orgId}, is_default = false, is_active = true,
       source_html = '<p>Hi</p>', compiled_html = '<p>Hi</p>'`);
-  routeState.authz = {
-    user: { orgId: org.orgId, id: actorId },
-    permissions: new Set(["*"]),
-    allowedSubsidiaryIds: null,
-  };
-  return { orgId: org.orgId, actorId };
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["*"]),
+      allowedSubsidiaryIds: null,
+    };
+    return { orgId: org.orgId, actorId };
   });
 }
 
 async function storedFlags(orgId: string): Promise<{ isDefault: boolean; isActive: boolean }> {
-  const r = await withOrgContext(orgId, () => db.execute<{ isDefault: boolean; isActive: boolean }>(sql`
+  const r = await withOrgContext(orgId, () =>
+    db.execute<{ isDefault: boolean; isActive: boolean }>(
+      sql`
     select is_default as "isDefault", is_active as "isActive"
-      from pdf_templates where id = ${TEMPLATE_ID} and org_id = ${orgId}`, "objects"));
+      from pdf_templates where id = ${TEMPLATE_ID} and org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return r[0]!;
 }
 
@@ -88,42 +93,39 @@ function patchRequest(body: unknown): Request {
   });
 }
 
-test(
-  "PATCH refuses a non-boolean isDefault with a 400, never a storage 500",
-  async () => {
-    const f = await seed();
-    // The mocked session gate carries no connection scope; the handler runs
-    // under the org, as the middleware provides in production.
-    const res = await withOrgContext(f.orgId, () => PATCH(patchRequest({ isDefault: "sometimes" }), {
+test("PATCH refuses a non-boolean isDefault with a 400, never a storage 500", async () => {
+  const f = await seed();
+  // The mocked session gate carries no connection scope; the handler runs
+  // under the org, as the middleware provides in production.
+  const res = await withOrgContext(f.orgId, () =>
+    PATCH(patchRequest({ isDefault: "sometimes" }), {
       params: Promise.resolve({ id: TEMPLATE_ID }),
-    }));
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /isDefault/);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
-  },
-);
+    }),
+  );
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /isDefault/);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
+});
 
-test(
-  "PATCH refuses a non-boolean isActive with a 400, never a storage 500",
-  async () => {
-    const f = await seed();
-    const res = await withOrgContext(f.orgId, () => PATCH(patchRequest({ isActive: "eventually" }), {
+test("PATCH refuses a non-boolean isActive with a 400, never a storage 500", async () => {
+  const f = await seed();
+  const res = await withOrgContext(f.orgId, () =>
+    PATCH(patchRequest({ isActive: "eventually" }), {
       params: Promise.resolve({ id: TEMPLATE_ID }),
-    }));
-    assert.equal(res.status, 400);
-    assert.match(String((await res.json()).error), /isActive/);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
-  },
-);
+    }),
+  );
+  assert.equal(res.status, 400);
+  assert.match(String((await res.json()).error), /isActive/);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
+});
 
-test(
-  "PATCH still accepts real booleans for both flags",
-  async () => {
-    const f = await seed();
-    const res = await withOrgContext(f.orgId, () => PATCH(patchRequest({ isDefault: true, isActive: false }), {
+test("PATCH still accepts real booleans for both flags", async () => {
+  const f = await seed();
+  const res = await withOrgContext(f.orgId, () =>
+    PATCH(patchRequest({ isDefault: true, isActive: false }), {
       params: Promise.resolve({ id: TEMPLATE_ID }),
-    }));
-    assert.equal(res.status, 200);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: true, isActive: false });
-  },
-);
+    }),
+  );
+  assert.equal(res.status, 200);
+  assert.deepEqual(await storedFlags(f.orgId), { isDefault: true, isActive: false });
+});

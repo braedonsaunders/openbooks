@@ -11,7 +11,10 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __pspSettlementDateRouteState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier.endsWith("/lib/authz"))
@@ -34,7 +37,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 async function fixture() {
@@ -65,8 +69,10 @@ const postImport = (externalRef: string, settlementDate: string) =>
 async function batchCount(orgId: string, externalRef: string): Promise<number> {
   const rows = await withBypassContext(() =>
     db.execute<{ n: string }>(
-      sql`select count(*)::text as n from psp_settlement_batches where org_id = ${orgId} and external_ref = ${externalRef}`, "objects",
-    ));
+      sql`select count(*)::text as n from psp_settlement_batches where org_id = ${orgId} and external_ref = ${externalRef}`,
+      "objects",
+    ),
+  );
   return Number(rows[0]!.n);
 }
 
@@ -75,10 +81,21 @@ test("psp import refuses an impossible settlement date at the boundary with noth
   try {
     const externalRef = `payout-route-bad-${orgId}`;
     const response = await postImport(externalRef, "2023-02-30");
-    const json = (await response.json().catch(() => null)) as { error?: string; issues?: Array<{ path?: string }> } | null;
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    const json = (await response.json().catch(() => null)) as {
+      error?: string;
+      issues?: Array<{ path?: string }>;
+    } | null;
+    assert.equal(
+      response.status,
+      400,
+      `expected 400, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.match(json?.error ?? "", /must be a valid calendar date/);
-    assert.equal(json?.issues?.[0]?.path, "settlementDate", "the refusal names the offending field");
+    assert.equal(
+      json?.issues?.[0]?.path,
+      "settlementDate",
+      "the refusal names the offending field",
+    );
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
     assert.equal(await batchCount(orgId, externalRef), 0);
   } finally {

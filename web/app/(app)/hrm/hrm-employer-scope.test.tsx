@@ -1,11 +1,11 @@
-const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return { refresh(){}, push(){} }}' })
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import test from 'node:test'
-import { isUuid } from '@/lib/list-params'
-import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return { refresh(){}, push(){} }}" });
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+import { isUuid } from "@/lib/list-params";
+import { LOCALE_CODES as LOCALES } from "../../../i18n/config";
 
 /**
  * ?requisition=new must never show a raw UUID in the Employer field — the loader
@@ -22,57 +22,63 @@ import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
  * catalogs.
  */
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { renderToStaticMarkup } = await import('react-dom/server')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { renderToStaticMarkup } = await import("react-dom/server");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
 // Dynamic: the forms resolve next/navigation through the stub above, so
 // they must load after the hook registers.
-const { RecruitingCreateForm } = await import('./recruiting/RecruitingCreateForm')
-const { PositionCreateForm } = await import('./positions/PositionCreateForm')
+const { RecruitingCreateForm } = await import("./recruiting/RecruitingCreateForm");
+const { PositionCreateForm } = await import("./positions/PositionCreateForm");
 
-const MESSAGES = join(process.cwd(), 'web', 'messages')
+const MESSAGES = join(process.cwd(), "web", "messages");
 
-const ENTITY_ID = 'd726d187-0000-0000-0000-000000000001'
-const REFUSAL = 'No legal entity is visible to you — ask an administrator for access.'
+const ENTITY_ID = "d726d187-0000-0000-0000-000000000001";
+const REFUSAL = "No legal entity is visible to you — ask an administrator for access.";
 
 const RECRUITING_LABELS = {
-  jobDescription: 'Job description', noJobDescription: 'No job description', jobDescriptionNote: 'Select a job description', description: 'Description',
-  title: 'Title',
-  employer: 'Employer',
-  department: 'Department',
-  noDepartment: 'No department',
-  headcount: 'Headcount',
-  targetStart: 'Target start',
-  submit: 'Create requisition',
-  failed: 'Could not create the requisition',
-}
+  jobDescription: "Job description",
+  noJobDescription: "No job description",
+  jobDescriptionNote: "Select a job description",
+  description: "Description",
+  title: "Title",
+  employer: "Employer",
+  department: "Department",
+  noDepartment: "No department",
+  headcount: "Headcount",
+  targetStart: "Target start",
+  submit: "Create requisition",
+  failed: "Could not create the requisition",
+};
 
 const POSITION_LABELS = {
-  code: 'Code',
-  title: 'Title',
-  employer: 'Employer',
-  department: 'Department',
-  noDepartment: 'No department',
-  plannedFte: 'Planned FTE',
-  status: 'Status',
-  effectiveFrom: 'Effective from',
-  reason: 'Reason',
-  reasonPlaceholder: 'Why is this position needed?',
-  submit: 'Create position',
-  failed: 'Could not create the position',
-}
+  code: "Code",
+  title: "Title",
+  employer: "Employer",
+  department: "Department",
+  noDepartment: "No department",
+  plannedFte: "Planned FTE",
+  status: "Status",
+  effectiveFrom: "Effective from",
+  reason: "Reason",
+  reasonPlaceholder: "Why is this position needed?",
+  submit: "Create position",
+  failed: "Could not create the position",
+};
 
 function provider(children: React.ReactNode): React.ReactNode {
   return (
     <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
       {children}
     </NextIntlClientProvider>
-  )
+  );
 }
 
-function recruitingHtml(employers: Array<{ value: string; label: string }>, employerRefusal: string | null): string {
+function recruitingHtml(
+  employers: Array<{ value: string; label: string }>,
+  employerRefusal: string | null,
+): string {
   return renderToStaticMarkup(
     provider(
       <RecruitingCreateForm
@@ -84,10 +90,13 @@ function recruitingHtml(employers: Array<{ value: string; label: string }>, empl
         labels={RECRUITING_LABELS}
       />,
     ),
-  )
+  );
 }
 
-function positionHtml(employers: Array<{ value: string; label: string }>, employerRefusal: string | null): string {
+function positionHtml(
+  employers: Array<{ value: string; label: string }>,
+  employerRefusal: string | null,
+): string {
   return renderToStaticMarkup(
     provider(
       <PositionCreateForm
@@ -96,45 +105,49 @@ function positionHtml(employers: Array<{ value: string; label: string }>, employ
         employers={employers}
         employerRefusal={employerRefusal}
         departments={[]}
-        statuses={[{ value: 'planned', label: 'Planned' }]}
+        statuses={[{ value: "planned", label: "Planned" }]}
         labels={POSITION_LABELS}
       />,
     ),
-  )
+  );
 }
 
-test('a caller with no authorized legal entity is refused by name and cannot submit', () => {
+test("a caller with no authorized legal entity is refused by name and cannot submit", () => {
   for (const [name, html] of [
-    ['recruiting', recruitingHtml([], REFUSAL)],
-    ['positions', positionHtml([], REFUSAL)],
+    ["recruiting", recruitingHtml([], REFUSAL)],
+    ["positions", positionHtml([], REFUSAL)],
   ] as const) {
-    assert.match(html, /role="alert"/, `${name}: the refusal renders as an accessible alert`)
-    assert.ok(html.includes(REFUSAL), `${name}: the refusal names the remedy in words`)
-    assert.match(html, /disabled/, `${name}: the refusal blocks submit`)
-    assert.ok(!html.includes(ENTITY_ID), `${name}: no unauthorized id is offered beside the refusal`)
+    assert.match(html, /role="alert"/, `${name}: the refusal renders as an accessible alert`);
+    assert.ok(html.includes(REFUSAL), `${name}: the refusal names the remedy in words`);
+    assert.match(html, /disabled/, `${name}: the refusal blocks submit`);
+    assert.ok(
+      !html.includes(ENTITY_ID),
+      `${name}: no unauthorized id is offered beside the refusal`,
+    );
   }
-})
+});
 
-test('the authorized employer renders as a name, never an id', () => {
-  const employers = [{ value: ENTITY_ID, label: 'Main' }]
+test("the authorized employer renders as a name, never an id", () => {
+  const employers = [{ value: ENTITY_ID, label: "Main" }];
   for (const [name, html] of [
-    ['recruiting', recruitingHtml(employers, null)],
-    ['positions', positionHtml(employers, null)],
+    ["recruiting", recruitingHtml(employers, null)],
+    ["positions", positionHtml(employers, null)],
   ] as const) {
-    assert.ok(html.includes('Main'), `${name}: the single entity renders its NAME`)
-    assert.ok(!html.includes(ENTITY_ID), `${name}: the raw employer id never renders as text`)
+    assert.ok(html.includes("Main"), `${name}: the single entity renders its NAME`);
+    assert.ok(!html.includes(ENTITY_ID), `${name}: the raw employer id never renders as text`);
   }
-})
+});
 
-test('the refusal names the remedy in every locale', () => {
+test("the refusal names the remedy in every locale", () => {
   for (const locale of LOCALES) {
-    const catalog = JSON.parse(
-      readFileSync(join(MESSAGES, locale, 'hrm.json'), 'utf8'),
-    )
-    for (const section of ['recruiting', 'positions']) {
-      const message = catalog[section]?.create?.noEmployer
-      assert.ok(typeof message === 'string' && message.length > 0, `${locale}/${section}: noEmployer must be translated`)
-      assert.ok(!isUuid(message), `${locale}/${section}: the refusal is words, never an id`)
+    const catalog = JSON.parse(readFileSync(join(MESSAGES, locale, "hrm.json"), "utf8"));
+    for (const section of ["recruiting", "positions"]) {
+      const message = catalog[section]?.create?.noEmployer;
+      assert.ok(
+        typeof message === "string" && message.length > 0,
+        `${locale}/${section}: noEmployer must be translated`,
+      );
+      assert.ok(!isUuid(message), `${locale}/${section}: the refusal is words, never an id`);
     }
   }
-})
+});

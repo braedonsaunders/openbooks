@@ -1,8 +1,5 @@
 import { fromUnits, toUnits } from "../money/money.ts";
-import type {
-  SourceAccountMonthRow,
-  SourceProjectAccountMonthRow,
-} from "./source.ts";
+import type { SourceAccountMonthRow, SourceProjectAccountMonthRow } from "./source.ts";
 
 export interface AccountMonthMismatch {
   accountRef: string;
@@ -111,9 +108,7 @@ function bucket(
       throw new Error(`${side} account-month row for ${accountRef} has invalid month "${month}"`);
     }
     if (usePeriodRefs && !periodRef) {
-      throw new Error(
-        `${side} account-month row for ${accountRef} has no exact period reference`,
-      );
+      throw new Error(`${side} account-month row for ${accountRef} has no exact period reference`);
     }
     let amount: bigint;
     try {
@@ -143,15 +138,10 @@ export function verifyProjectAccountMonths(
   mismatchLimit = 50,
 ): ProjectAccountMonthVerification {
   if (!Number.isSafeInteger(mismatchLimit) || mismatchLimit < 0) {
-    throw new Error(
-      "project-account-month mismatch limit must be a non-negative integer",
-    );
+    throw new Error("project-account-month mismatch limit must be a non-negative integer");
   }
 
-  const usePeriodRefs = sourceUsesPeriodRefs(
-    sourceRows,
-    "project-account-month",
-  );
+  const usePeriodRefs = sourceUsesPeriodRefs(sourceRows, "project-account-month");
   const source = projectBucket(sourceRows, "source", usePeriodRefs);
   const target = projectBucket(targetRows, "target", usePeriodRefs);
   const keys = new Set([...source.amounts.keys(), ...target.amounts.keys()]);

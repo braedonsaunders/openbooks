@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   Download,
   Eye,
@@ -24,7 +24,7 @@ import {
   UploadCloud,
   Users,
   X,
-} from 'lucide-react'
+} from "lucide-react";
 import {
   Badge,
   ContextMenu,
@@ -37,49 +37,51 @@ import {
   TableHeader,
   TableRow,
   useContextMenu,
-} from '@openbooks/ui'
-import { SortTh } from '../../../components/sortable-th'
-import { confirmDialog } from '../../../lib/confirm'
-import { promptDialog } from '../../../lib/prompt'
-import { readApiBulkFailures, readApiErrorMessage, refusalMessageFromBody } from '../../../lib/api-error'
+} from "@openbooks/ui";
+import { SortTh } from "../../../components/sortable-th";
+import { confirmDialog } from "../../../lib/confirm";
+import { promptDialog } from "../../../lib/prompt";
+import {
+  readApiBulkFailures,
+  readApiErrorMessage,
+  refusalMessageFromBody,
+} from "../../../lib/api-error";
 
 export interface FolderRow {
-  id: string
-  name: string
-  fileCount: number
-  isSystem: boolean
+  id: string;
+  name: string;
+  fileCount: number;
+  isSystem: boolean;
 }
 
 export interface FileRow {
-  id: string
-  name: string
-  fileType: string
-  sizeLabel: string
-  modifiedLabel: string
-  versionCount: number
-  folderName: string | null
+  id: string;
+  name: string;
+  fileType: string;
+  sizeLabel: string;
+  modifiedLabel: string;
+  versionCount: number;
+  folderName: string | null;
 }
 
-type Target =
-  | { kind: 'file'; row: FileRow }
-  | { kind: 'folder'; row: FolderRow }
+type Target = { kind: "file"; row: FileRow } | { kind: "folder"; row: FolderRow };
 
 /** Icon + accent color for a file's derived type. */
 function fileIcon(fileType: string) {
   switch (fileType) {
-    case 'pdf':
-      return { Icon: FileText, className: 'text-rose-500 dark:text-rose-400' }
-    case 'image':
-      return { Icon: ImageIcon, className: 'text-violet-500 dark:text-violet-400' }
-    case 'csv':
-    case 'spreadsheet':
-      return { Icon: FileSpreadsheet, className: 'text-emerald-500 dark:text-emerald-400' }
-    case 'document':
-      return { Icon: FileText, className: 'text-blue-500 dark:text-blue-400' }
-    case 'text':
-      return { Icon: FileCode, className: 'text-amber-500 dark:text-amber-400' }
+    case "pdf":
+      return { Icon: FileText, className: "text-rose-500 dark:text-rose-400" };
+    case "image":
+      return { Icon: ImageIcon, className: "text-violet-500 dark:text-violet-400" };
+    case "csv":
+    case "spreadsheet":
+      return { Icon: FileSpreadsheet, className: "text-emerald-500 dark:text-emerald-400" };
+    case "document":
+      return { Icon: FileText, className: "text-blue-500 dark:text-blue-400" };
+    case "text":
+      return { Icon: FileCode, className: "text-amber-500 dark:text-amber-400" };
     default:
-      return { Icon: FileIcon, className: 'text-slate-400 dark:text-slate-500' }
+      return { Icon: FileIcon, className: "text-slate-400 dark:text-slate-500" };
   }
 }
 
@@ -94,418 +96,488 @@ export function FileList({
   sort,
   dir,
 }: {
-  folders: FolderRow[]
-  files: FileRow[]
-  activeFolderId?: string
-  showLocation: boolean
-  canEdit: boolean
-  canDelete: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  sort: string
-  dir: 'asc' | 'desc'
+  folders: FolderRow[];
+  files: FileRow[];
+  activeFolderId?: string;
+  showLocation: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  sort: string;
+  dir: "asc" | "desc";
 }) {
-  const t = useTranslations('documents')
-  const tt = useTranslations('documents.toasts')
-  const tb = useTranslations('documents.bulk')
-  const tc = useTranslations('common')
-  const router = useRouter()
-  const search = useSearchParams()
+  const t = useTranslations("documents");
+  const tt = useTranslations("documents.toasts");
+  const tb = useTranslations("documents.bulk");
+  const tc = useTranslations("common");
+  const router = useRouter();
+  const search = useSearchParams();
 
-  const menu = useContextMenu()
-  const [target, setTarget] = useState<Target | null>(null)
-  const replaceInputRef = useRef<HTMLInputElement>(null)
+  const menu = useContextMenu();
+  const [target, setTarget] = useState<Target | null>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
   // Pending file-replace request (fresh object per click, so retrying after a
   // cancelled picker still reopens it). The input click lives in the effect
   // below: refs stay out of render-created closures.
-  const [replaceReq, setReplaceReq] = useState<{ id: string; n: number } | null>(null)
+  const [replaceReq, setReplaceReq] = useState<{ id: string; n: number } | null>(null);
 
   // --- multi-select ---------------------------------------------------------
   // Selection is keyed by "file:<id>" / "folder:<id>". Only rows the caller can
   // delete are selectable (canDelete gates both), matching the server checks.
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [bulkBusy, setBulkBusy] = useState(false)
-  const selectable = canDelete
-  const rowKeys = [
-    ...folders.map((f) => `folder:${f.id}`),
-    ...files.map((f) => `file:${f.id}`),
-  ]
-  const allSelected = rowKeys.length > 0 && rowKeys.every((k) => selected.has(k))
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const selectable = canDelete;
+  const rowKeys = [...folders.map((f) => `folder:${f.id}`), ...files.map((f) => `file:${f.id}`)];
+  const allSelected = rowKeys.length > 0 && rowKeys.every((k) => selected.has(k));
 
   function toggle(key: string) {
     setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
   function toggleAll() {
-    setSelected((prev) => (prev.size === rowKeys.length ? new Set() : new Set(rowKeys)))
+    setSelected((prev) => (prev.size === rowKeys.length ? new Set() : new Set(rowKeys)));
   }
   function clearSelection() {
-    setSelected(new Set())
+    setSelected(new Set());
   }
   const selectedFileIds = () =>
-    [...selected].filter((k) => k.startsWith('file:')).map((k) => k.slice(5))
+    [...selected].filter((k) => k.startsWith("file:")).map((k) => k.slice(5));
   const selectedFolderIds = () =>
-    [...selected].filter((k) => k.startsWith('folder:')).map((k) => k.slice(7))
+    [...selected].filter((k) => k.startsWith("folder:")).map((k) => k.slice(7));
 
   async function bulkDownload() {
-    const ids = selectedFileIds()
+    const ids = selectedFileIds();
     if (ids.length === 0) {
-      toast.error(tb('nothingDownloadable'))
-      return
+      toast.error(tb("nothingDownloadable"));
+      return;
     }
-    setBulkBusy(true)
+    setBulkBusy(true);
     try {
-      const res = await fetch('/api/file-cabinet/bulk-download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/file-cabinet/bulk-download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileIds: ids }),
-      })
+      });
       if (!res.ok) {
-        const message = await readApiErrorMessage(res, tb('downloadFailed'))
-        const countLimit = /^too many files \(limit (\d+)\)$/.exec(message)?.[1]
-        if (res.status === 403) toast.error(tb('downloadForbidden'))
-        else if (countLimit) toast.error(tb('tooManyFiles', { count: countLimit }))
-        else if (message === 'zip source exceeds 250 MB limit') toast.error(tb('selectionTooLarge'))
-        else if (message === 'nothing to download') toast.error(tb('nothingAvailable'))
-        else if (message === 'no files selected') toast.error(tb('nothingDownloadable'))
-        else toast.error(message)
-        return
+        const message = await readApiErrorMessage(res, tb("downloadFailed"));
+        const countLimit = /^too many files \(limit (\d+)\)$/.exec(message)?.[1];
+        if (res.status === 403) toast.error(tb("downloadForbidden"));
+        else if (countLimit) toast.error(tb("tooManyFiles", { count: countLimit }));
+        else if (message === "zip source exceeds 250 MB limit")
+          toast.error(tb("selectionTooLarge"));
+        else if (message === "nothing to download") toast.error(tb("nothingAvailable"));
+        else if (message === "no files selected") toast.error(tb("nothingDownloadable"));
+        else toast.error(message);
+        return;
       }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'files.zip'
-      a.click()
-      URL.revokeObjectURL(url)
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "files.zip";
+      a.click();
+      URL.revokeObjectURL(url);
     } catch {
       // Transport failure (offline, reset connection): fetch rejects, so
       // the !res.ok branch above never runs — name it instead of going inert.
-      toast.error(tb('downloadFailed'))
+      toast.error(tb("downloadFailed"));
     } finally {
-      setBulkBusy(false)
+      setBulkBusy(false);
     }
   }
 
   async function bulkDelete() {
     const ok = await confirmDialog({
-      title: tb('deleteConfirm.title'),
-      message: tb('deleteConfirm.body'),
-      tone: 'danger',
-    })
-    if (!ok) return
-    setBulkBusy(true)
+      title: tb("deleteConfirm.title"),
+      message: tb("deleteConfirm.body"),
+      tone: "danger",
+    });
+    if (!ok) return;
+    setBulkBusy(true);
     try {
-      const res = await fetch('/api/file-cabinet/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/file-cabinet/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: 'delete',
+          action: "delete",
           fileIds: selectedFileIds(),
           folderIds: selectedFolderIds(),
         }),
-      })
+      });
       // The status is checked before the body is parsed: a refused bulk
       // (403/422) or a non-JSON error body must name the refusal, never a
       // SyntaxError from res.json().
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, tb('deleteFailed')))
-        return
+        toast.error(await readApiErrorMessage(res, tb("deleteFailed")));
+        return;
       }
-      const body = await res.json().catch(() => null)
-      const failures = readApiBulkFailures(body, tb('deleteFailed'))
+      const body = await res.json().catch(() => null);
+      const failures = readApiBulkFailures(body, tb("deleteFailed"));
       const done =
-        body !== null && typeof body === 'object' && !Array.isArray(body) && typeof (body as { done?: unknown }).done === 'number'
+        body !== null &&
+        typeof body === "object" &&
+        !Array.isArray(body) &&
+        typeof (body as { done?: unknown }).done === "number"
           ? (body as { done: number }).done
-          : 0
+          : 0;
       if (failures.length === 0) {
-        toast.success(tb('deleted', { count: done }))
-        clearSelection()
+        toast.success(tb("deleted", { count: done }));
+        clearSelection();
       } else {
         // A partial bulk is reported as partial: the toast names how many
         // moved and how many were refused (with each reason), and exactly
         // the refused rows stay selected — the trashed ones must not look
         // untouched, and the refused ones must not look trashed.
-        const failedIds = new Set(failures.map((failure) => failure.id))
+        const failedIds = new Set(failures.map((failure) => failure.id));
         setSelected(
-          (prev) => new Set([...prev].filter((key) => failedIds.has(key.slice(key.indexOf(':') + 1)))),
-        )
-        const reasons = [...new Set(failures.map((failure) => failure.error))].join(', ')
-        toast.error(tb('partialDeleted', { done, skipped: failures.length, reasons }))
+          (prev) =>
+            new Set([...prev].filter((key) => failedIds.has(key.slice(key.indexOf(":") + 1)))),
+        );
+        const reasons = [...new Set(failures.map((failure) => failure.error))].join(", ");
+        toast.error(tb("partialDeleted", { done, skipped: failures.length, reasons }));
       }
-      router.refresh()
+      router.refresh();
     } catch {
-      toast.error(tb('deleteFailed'))
+      toast.error(tb("deleteFailed"));
     } finally {
-      setBulkBusy(false)
+      setBulkBusy(false);
     }
   }
 
   function fileHref(id: string): string {
-    return `/documents?file=${id}${activeFolderId ? `&fid=${activeFolderId}` : ''}`
+    return `/documents?file=${id}${activeFolderId ? `&fid=${activeFolderId}` : ""}`;
   }
 
   function folderHref(id: string): string {
-    const p = new URLSearchParams()
-    for (const key of ['q', 'sort', 'dir', 'perPage'] as const) {
-      const v = currentParams[key]
-      if (typeof v === 'string' && v) p.set(key, v)
+    const p = new URLSearchParams();
+    for (const key of ["q", "sort", "dir", "perPage"] as const) {
+      const v = currentParams[key];
+      if (typeof v === "string" && v) p.set(key, v);
     }
-    p.set('fid', id)
-    return `/documents?${p.toString()}`
+    p.set("fid", id);
+    return `/documents?${p.toString()}`;
   }
 
   /** Open a folder's properties/sharing drawer (keeps the current location). */
   function folderPropsHref(id: string, folderTab?: string): string {
-    const p = new URLSearchParams()
-    if (activeFolderId) p.set('fid', activeFolderId)
-    p.set('folder', id)
-    if (folderTab) p.set('folderTab', folderTab)
-    return `/documents?${p.toString()}`
+    const p = new URLSearchParams();
+    if (activeFolderId) p.set("fid", activeFolderId);
+    p.set("folder", id);
+    if (folderTab) p.set("folderTab", folderTab);
+    return `/documents?${p.toString()}`;
   }
 
   async function copyLink(href: string) {
     try {
-      await navigator.clipboard.writeText(new URL(href, window.location.origin).toString())
-      toast.success(tt('linkCopied'))
+      await navigator.clipboard.writeText(new URL(href, window.location.origin).toString());
+      toast.success(tt("linkCopied"));
     } catch {
-      toast.error(tt('linkCopyFailed'))
+      toast.error(tt("linkCopyFailed"));
     }
   }
 
   async function renameFile(row: FileRow) {
     const name = await promptDialog({
-      title: t('rename.fileTitle'),
-      label: t('file.drawer.name'),
+      title: t("rename.fileTitle"),
+      label: t("file.drawer.name"),
       initialValue: row.name,
-      confirmLabel: tc('actions.rename'),
-    })
-    if (!name || name === row.name) return
+      confirmLabel: tc("actions.rename"),
+    });
+    if (!name || name === row.name) return;
     try {
       const res = await fetch(`/api/file-cabinet/files/${row.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
-      })
+      });
       if (res.ok) {
-        toast.success(tt('fileRenamed'))
-        router.refresh()
+        toast.success(tt("fileRenamed"));
+        router.refresh();
       } else {
-        toast.error(await readApiErrorMessage(res, tt('fileRenameFailed')))
+        toast.error(await readApiErrorMessage(res, tt("fileRenameFailed")));
       }
     } catch {
-      toast.error(tt('fileRenameFailed'))
+      toast.error(tt("fileRenameFailed"));
     }
   }
 
   async function renameFolder(row: FolderRow) {
     const name = await promptDialog({
-      title: t('rename.folderTitle'),
-      label: t('folder.edit.nameLabel'),
+      title: t("rename.folderTitle"),
+      label: t("folder.edit.nameLabel"),
       initialValue: row.name,
-      confirmLabel: tc('actions.rename'),
-    })
-    if (!name || name === row.name) return
+      confirmLabel: tc("actions.rename"),
+    });
+    if (!name || name === row.name) return;
     try {
       const res = await fetch(`/api/file-cabinet/folders/${row.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
-      })
+      });
       if (res.ok) {
-        toast.success(tt('folderRenamed'))
-        router.refresh()
+        toast.success(tt("folderRenamed"));
+        router.refresh();
       } else {
-        toast.error(await readApiErrorMessage(res, tt('folderRenameFailed')))
+        toast.error(await readApiErrorMessage(res, tt("folderRenameFailed")));
       }
     } catch {
-      toast.error(tt('folderRenameFailed'))
+      toast.error(tt("folderRenameFailed"));
     }
   }
 
   async function deleteFile(row: FileRow) {
     const ok = await confirmDialog({
-      title: t('file.drawer.delete.title'),
-      message: t('file.drawer.delete.body'),
-      tone: 'danger',
-    })
-    if (!ok) return
+      title: t("file.drawer.delete.title"),
+      message: t("file.drawer.delete.body"),
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
-      const res = await fetch(`/api/file-cabinet/files/${row.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/file-cabinet/files/${row.id}`, { method: "DELETE" });
       if (res.ok) {
-        toast.success(tt('fileDeleted'))
+        toast.success(tt("fileDeleted"));
         // If the deleted file's flyout is open, close it.
-        if (search.get('file') === row.id) {
-          const p = new URLSearchParams(search.toString())
-          p.delete('file')
-          router.push(p.toString() ? `/documents?${p.toString()}` : '/documents')
+        if (search.get("file") === row.id) {
+          const p = new URLSearchParams(search.toString());
+          p.delete("file");
+          router.push(p.toString() ? `/documents?${p.toString()}` : "/documents");
         }
-        router.refresh()
+        router.refresh();
       } else {
-        toast.error(await readApiErrorMessage(res, tt('fileDeleteFailed')))
+        toast.error(await readApiErrorMessage(res, tt("fileDeleteFailed")));
       }
     } catch {
-      toast.error(tt('fileDeleteFailed'))
+      toast.error(tt("fileDeleteFailed"));
     }
   }
 
   async function deleteFolder(row: FolderRow) {
     const ok = await confirmDialog({
-      title: t('folder.delete.title'),
-      message: t('folder.delete.body'),
-      tone: 'danger',
-    })
-    if (!ok) return
+      title: t("folder.delete.title"),
+      message: t("folder.delete.body"),
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
-      const res = await fetch(`/api/file-cabinet/folders/${row.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/file-cabinet/folders/${row.id}`, { method: "DELETE" });
       if (res.ok) {
-        toast.success(tt('folderDeleted'))
-        router.refresh()
+        toast.success(tt("folderDeleted"));
+        router.refresh();
       } else {
         // The trash refusal names its remedy (e.g. the 409
         // retained_evidence_cannot_be_trashed detail); pass it through
         // instead of a generic failure. ('has attached files' is a purge
         // refusal this non-purge call never receives.)
-        toast.error(await readApiErrorMessage(res, tt('folderDeleteFailed')))
+        toast.error(await readApiErrorMessage(res, tt("folderDeleteFailed")));
       }
     } catch {
-      toast.error(tt('folderDeleteFailed'))
+      toast.error(tt("folderDeleteFailed"));
     }
   }
 
   function startReplace(id: string) {
-    setReplaceReq((prev) => ({ id, n: (prev?.n ?? 0) + 1 }))
+    setReplaceReq((prev) => ({ id, n: (prev?.n ?? 0) + 1 }));
   }
 
   useEffect(() => {
-    if (replaceReq) replaceInputRef.current?.click()
-  }, [replaceReq])
+    if (replaceReq) replaceInputRef.current?.click();
+  }, [replaceReq]);
 
   async function handleReplace(id: string, fileInput: File) {
-    const form = new FormData()
-    form.append('file', fileInput)
+    const form = new FormData();
+    form.append("file", fileInput);
     try {
-      const res = await fetch(`/api/file-cabinet/files/${id}/replace`, { method: 'POST', body: form })
+      const res = await fetch(`/api/file-cabinet/files/${id}/replace`, {
+        method: "POST",
+        body: form,
+      });
       if (res.ok) {
-        toast.success(tt('fileReplaced'))
-        router.refresh()
+        toast.success(tt("fileReplaced"));
+        router.refresh();
       } else {
         // The refusal reads through the shared helper so message, remedy and
         // code render instead of the bare `error` field.
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
-        toast.error(refusalMessageFromBody(err, { fallback: tt('fileReplaceFailed') }) ?? tt('fileReplaceFailed'))
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(
+          refusalMessageFromBody(err, { fallback: tt("fileReplaceFailed") }) ??
+            tt("fileReplaceFailed"),
+        );
       }
     } catch {
-      toast.error(tt('fileReplaceFailed'))
+      toast.error(tt("fileReplaceFailed"));
     }
   }
 
   function menuItems(tgt: Target): ContextMenuEntry[] {
-    if (tgt.kind === 'folder') {
-      const row = tgt.row
-      const manageable = canDelete && !row.isSystem
+    if (tgt.kind === "folder") {
+      const row = tgt.row;
+      const manageable = canDelete && !row.isSystem;
       const items: ContextMenuEntry[] = [
-        { key: 'open', label: t('rowMenu.openFolder'), icon: FolderOpen, onSelect: () => router.push(folderHref(row.id)) },
-        { key: 'props', label: t('rowMenu.properties'), icon: Settings2, onSelect: () => router.push(folderPropsHref(row.id)) },
-        { key: 'copy', label: t('rowMenu.copyLink'), icon: Link2, onSelect: () => void copyLink(folderHref(row.id)) },
-      ]
+        {
+          key: "open",
+          label: t("rowMenu.openFolder"),
+          icon: FolderOpen,
+          onSelect: () => router.push(folderHref(row.id)),
+        },
+        {
+          key: "props",
+          label: t("rowMenu.properties"),
+          icon: Settings2,
+          onSelect: () => router.push(folderPropsHref(row.id)),
+        },
+        {
+          key: "copy",
+          label: t("rowMenu.copyLink"),
+          icon: Link2,
+          onSelect: () => void copyLink(folderHref(row.id)),
+        },
+      ];
       if (canDelete) {
         items.push({
-          key: 'share',
-          label: t('rowMenu.manageAccess'),
+          key: "share",
+          label: t("rowMenu.manageAccess"),
           icon: Users,
-          onSelect: () => router.push(folderPropsHref(row.id, 'sharing')),
-        })
+          onSelect: () => router.push(folderPropsHref(row.id, "sharing")),
+        });
       }
       if (manageable) {
         items.push(
-          { key: 'sep', separator: true },
-          { key: 'rename', label: tc('actions.rename'), icon: Pencil, onSelect: () => void renameFolder(row) },
-          { key: 'delete', label: tc('actions.delete'), icon: Trash2, danger: true, onSelect: () => void deleteFolder(row) },
-        )
+          { key: "sep", separator: true },
+          {
+            key: "rename",
+            label: tc("actions.rename"),
+            icon: Pencil,
+            onSelect: () => void renameFolder(row),
+          },
+          {
+            key: "delete",
+            label: tc("actions.delete"),
+            icon: Trash2,
+            danger: true,
+            onSelect: () => void deleteFolder(row),
+          },
+        );
       }
-      return items
+      return items;
     }
 
-    const row = tgt.row
+    const row = tgt.row;
     const items: ContextMenuEntry[] = [
-      { key: 'open', label: t('rowMenu.open'), icon: Eye, onSelect: () => router.push(fileHref(row.id)) },
       {
-        key: 'download',
-        label: tc('actions.download'),
-        icon: Download,
-        onSelect: () => window.open(`/api/file-cabinet/files/${row.id}/download`, '_blank', 'noopener'),
+        key: "open",
+        label: t("rowMenu.open"),
+        icon: Eye,
+        onSelect: () => router.push(fileHref(row.id)),
       },
-      { key: 'copy', label: t('rowMenu.copyLink'), icon: Link2, onSelect: () => void copyLink(fileHref(row.id)) },
-    ]
+      {
+        key: "download",
+        label: tc("actions.download"),
+        icon: Download,
+        onSelect: () =>
+          window.open(`/api/file-cabinet/files/${row.id}/download`, "_blank", "noopener"),
+      },
+      {
+        key: "copy",
+        label: t("rowMenu.copyLink"),
+        icon: Link2,
+        onSelect: () => void copyLink(fileHref(row.id)),
+      },
+    ];
     if (canDelete) {
       items.push({
-        key: 'share',
-        label: t('rowMenu.manageAccess'),
+        key: "share",
+        label: t("rowMenu.manageAccess"),
         icon: Users,
         onSelect: () =>
           router.push(
-            `/documents?file=${row.id}${activeFolderId ? `&fid=${activeFolderId}` : ''}&fileTab=sharing`,
+            `/documents?file=${row.id}${activeFolderId ? `&fid=${activeFolderId}` : ""}&fileTab=sharing`,
           ),
-      })
+      });
     }
     if (canEdit) {
       items.push(
-        { key: 'sep1', separator: true },
-        { key: 'rename', label: tc('actions.rename'), icon: Pencil, onSelect: () => void renameFile(row) },
-        { key: 'replace', label: tc('actions.replace'), icon: UploadCloud, onSelect: () => startReplace(row.id) },
-      )
+        { key: "sep1", separator: true },
+        {
+          key: "rename",
+          label: tc("actions.rename"),
+          icon: Pencil,
+          onSelect: () => void renameFile(row),
+        },
+        {
+          key: "replace",
+          label: tc("actions.replace"),
+          icon: UploadCloud,
+          onSelect: () => startReplace(row.id),
+        },
+      );
     }
     if (canDelete) {
       items.push(
-        { key: 'sep2', separator: true },
-        { key: 'delete', label: tc('actions.delete'), icon: Trash2, danger: true, onSelect: () => void deleteFile(row) },
-      )
+        { key: "sep2", separator: true },
+        {
+          key: "delete",
+          label: tc("actions.delete"),
+          icon: Trash2,
+          danger: true,
+          onSelect: () => void deleteFile(row),
+        },
+      );
     }
-    return items
+    return items;
   }
 
   function openMenuFor(tgt: Target, e: React.MouseEvent) {
-    setTarget(tgt)
-    menu.onContextMenu(e)
+    setTarget(tgt);
+    menu.onContextMenu(e);
   }
 
   function openKebab(tgt: Target, el: HTMLElement) {
-    setTarget(tgt)
-    menu.openBelow(el)
+    setTarget(tgt);
+    menu.openBelow(el);
   }
 
   const kebabCell = (tgt: Target) => (
     <TableCell className="w-10 text-right">
       <button
         type="button"
-        aria-label={tc('actions.more')}
+        aria-label={tc("actions.more")}
         onClick={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          openKebab(tgt, e.currentTarget)
+          e.preventDefault();
+          e.stopPropagation();
+          openKebab(tgt, e.currentTarget);
         }}
         className="inline-flex size-7 items-center justify-center rounded text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-700 focus:opacity-100 dark:hover:bg-slate-800 dark:hover:text-slate-200"
       >
         <MoreVertical className="h-4 w-4" />
       </button>
     </TableCell>
-  )
+  );
 
   return (
     <>
       {selectable && selected.size > 0 ? (
         <div className="sticky top-0 z-20 mb-2 flex items-center gap-2 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm dark:border-teal-900 dark:bg-teal-950/40">
           <span className="font-medium text-teal-800 dark:text-teal-200">
-            {tb('selected', { count: selected.size })}
+            {tb("selected", { count: selected.size })}
           </span>
           <div className="ml-auto flex items-center gap-1.5">
-            <Button variant="outline" size="sm" disabled={bulkBusy} onClick={() => void bulkDownload()}>
-              {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {tb('download')}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkBusy}
+              onClick={() => void bulkDownload()}
+            >
+              {bulkBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {tb("download")}
             </Button>
             <Button
               variant="outline"
@@ -515,11 +587,11 @@ export function FileList({
               onClick={() => void bulkDelete()}
             >
               <Trash2 className="h-4 w-4" />
-              {tb('delete')}
+              {tb("delete")}
             </Button>
             <Button variant="ghost" size="sm" disabled={bulkBusy} onClick={clearSelection}>
               <X className="h-4 w-4" />
-              {tb('clear')}
+              {tb("clear")}
             </Button>
           </div>
         </div>
@@ -531,111 +603,145 @@ export function FileList({
               <TableHead className="w-8">
                 <input
                   type="checkbox"
-                  aria-label={tb('selectAll')}
+                  aria-label={tb("selectAll")}
                   checked={allSelected}
                   onChange={toggleAll}
                   className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                 />
               </TableHead>
             ) : null}
-            <SortTh basePath="/documents" currentParams={currentParams} column="name" sort={sort} dir={dir}>
-              {t('columns.name')}
+            <SortTh
+              basePath="/documents"
+              currentParams={currentParams}
+              column="name"
+              sort={sort}
+              dir={dir}
+            >
+              {t("columns.name")}
             </SortTh>
-            <TableHead>{t('columns.type')}</TableHead>
-            <SortTh basePath="/documents" currentParams={currentParams} column="size" sort={sort} dir={dir} align="right">
-              {t('columns.size')}
+            <TableHead>{t("columns.type")}</TableHead>
+            <SortTh
+              basePath="/documents"
+              currentParams={currentParams}
+              column="size"
+              sort={sort}
+              dir={dir}
+              align="right"
+            >
+              {t("columns.size")}
             </SortTh>
-            <SortTh basePath="/documents" currentParams={currentParams} column="created" sort={sort} dir={dir}>
-              {t('columns.modified')}
+            <SortTh
+              basePath="/documents"
+              currentParams={currentParams}
+              column="created"
+              sort={sort}
+              dir={dir}
+            >
+              {t("columns.modified")}
             </SortTh>
-            {showLocation ? <TableHead>{t('columns.location')}</TableHead> : null}
+            {showLocation ? <TableHead>{t("columns.location")}</TableHead> : null}
             <TableHead className="w-10">
-              <span className="sr-only">{tc('actions.more')}</span>
+              <span className="sr-only">{tc("actions.more")}</span>
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-        {folders.map((folder) => {
-          const tgt: Target = { kind: 'folder', row: folder }
-          return (
-            <TableRow key={`folder-${folder.id}`} className="group" onContextMenu={(e) => openMenuFor(tgt, e)}>
-              {selectable ? (
-                <TableCell className="w-8">
-                  <input
-                    type="checkbox"
-                    aria-label={folder.name}
-                    checked={selected.has(`folder:${folder.id}`)}
-                    onChange={() => toggle(`folder:${folder.id}`)}
-                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                  />
+          {folders.map((folder) => {
+            const tgt: Target = { kind: "folder", row: folder };
+            return (
+              <TableRow
+                key={`folder-${folder.id}`}
+                className="group"
+                onContextMenu={(e) => openMenuFor(tgt, e)}
+              >
+                {selectable ? (
+                  <TableCell className="w-8">
+                    <input
+                      type="checkbox"
+                      aria-label={folder.name}
+                      checked={selected.has(`folder:${folder.id}`)}
+                      onChange={() => toggle(`folder:${folder.id}`)}
+                      className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                    />
+                  </TableCell>
+                ) : null}
+                <TableCell className="font-medium">
+                  <Link
+                    href={folderHref(folder.id)}
+                    className="flex items-center gap-2 text-slate-800 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-300"
+                  >
+                    <FolderIcon className="h-4 w-4 shrink-0 text-teal-500 dark:text-teal-400" />
+                    <span className="truncate">{folder.name}</span>
+                  </Link>
                 </TableCell>
-              ) : null}
-              <TableCell className="font-medium">
-                <Link
-                  href={folderHref(folder.id)}
-                  className="flex items-center gap-2 text-slate-800 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-300"
-                >
-                  <FolderIcon className="h-4 w-4 shrink-0 text-teal-500 dark:text-teal-400" />
-                  <span className="truncate">{folder.name}</span>
-                </Link>
-              </TableCell>
-              <TableCell className="text-slate-500 dark:text-slate-400">{t('list.folderRow')}</TableCell>
-              <TableCell className="text-right tabular-nums text-slate-400 dark:text-slate-500">
-                {folder.fileCount > 0 ? t('folder.fileCount', { count: folder.fileCount }) : '—'}
-              </TableCell>
-              <TableCell className="text-slate-400 dark:text-slate-500">—</TableCell>
-              {showLocation ? <TableCell>—</TableCell> : null}
-              {kebabCell(tgt)}
-            </TableRow>
-          )
-        })}
-        {files.map((f) => {
-          const { Icon, className } = fileIcon(f.fileType)
-          const tgt: Target = { kind: 'file', row: f }
-          return (
-            <TableRow key={f.id} className="group" onContextMenu={(e) => openMenuFor(tgt, e)}>
-              {selectable ? (
-                <TableCell className="w-8">
-                  <input
-                    type="checkbox"
-                    aria-label={f.name}
-                    checked={selected.has(`file:${f.id}`)}
-                    onChange={() => toggle(`file:${f.id}`)}
-                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                  />
+                <TableCell className="text-slate-500 dark:text-slate-400">
+                  {t("list.folderRow")}
                 </TableCell>
-              ) : null}
-              <TableCell className="font-medium">
-                <Link
-                  href={fileHref(f.id)}
-                  className="flex items-center gap-2 text-slate-800 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-300"
-                >
-                  <Icon className={`h-4 w-4 shrink-0 ${className}`} />
-                  <span className="truncate">{f.name}</span>
-                  {f.versionCount > 1 ? (
-                    <span className="shrink-0 text-xs text-slate-400">v{f.versionCount}</span>
-                  ) : null}
-                </Link>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary">{t(`fileTypes.${f.fileType}`)}</Badge>
-              </TableCell>
-              <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">
-                {f.sizeLabel}
-              </TableCell>
-              <TableCell className="text-slate-500 dark:text-slate-400">{f.modifiedLabel}</TableCell>
-              {showLocation ? (
-                <TableCell className="text-slate-500 dark:text-slate-400">{f.folderName ?? '—'}</TableCell>
-              ) : null}
-              {kebabCell(tgt)}
-            </TableRow>
-          )
-        })}
+                <TableCell className="text-right tabular-nums text-slate-400 dark:text-slate-500">
+                  {folder.fileCount > 0 ? t("folder.fileCount", { count: folder.fileCount }) : "—"}
+                </TableCell>
+                <TableCell className="text-slate-400 dark:text-slate-500">—</TableCell>
+                {showLocation ? <TableCell>—</TableCell> : null}
+                {kebabCell(tgt)}
+              </TableRow>
+            );
+          })}
+          {files.map((f) => {
+            const { Icon, className } = fileIcon(f.fileType);
+            const tgt: Target = { kind: "file", row: f };
+            return (
+              <TableRow key={f.id} className="group" onContextMenu={(e) => openMenuFor(tgt, e)}>
+                {selectable ? (
+                  <TableCell className="w-8">
+                    <input
+                      type="checkbox"
+                      aria-label={f.name}
+                      checked={selected.has(`file:${f.id}`)}
+                      onChange={() => toggle(`file:${f.id}`)}
+                      className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                    />
+                  </TableCell>
+                ) : null}
+                <TableCell className="font-medium">
+                  <Link
+                    href={fileHref(f.id)}
+                    className="flex items-center gap-2 text-slate-800 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-300"
+                  >
+                    <Icon className={`h-4 w-4 shrink-0 ${className}`} />
+                    <span className="truncate">{f.name}</span>
+                    {f.versionCount > 1 ? (
+                      <span className="shrink-0 text-xs text-slate-400">v{f.versionCount}</span>
+                    ) : null}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary">{t(`fileTypes.${f.fileType}`)}</Badge>
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">
+                  {f.sizeLabel}
+                </TableCell>
+                <TableCell className="text-slate-500 dark:text-slate-400">
+                  {f.modifiedLabel}
+                </TableCell>
+                {showLocation ? (
+                  <TableCell className="text-slate-500 dark:text-slate-400">
+                    {f.folderName ?? "—"}
+                  </TableCell>
+                ) : null}
+                {kebabCell(tgt)}
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
 
       {target ? (
-        <ContextMenu open={menu.open} position={menu.position} onClose={menu.close} items={menuItems(target)} />
+        <ContextMenu
+          open={menu.open}
+          position={menu.position}
+          onClose={menu.close}
+          items={menuItems(target)}
+        />
       ) : null}
 
       <input
@@ -643,12 +749,12 @@ export function FileList({
         type="file"
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f && replaceReq) void handleReplace(replaceReq.id, f)
-          e.target.value = ''
-          setReplaceReq(null)
+          const f = e.target.files?.[0];
+          if (f && replaceReq) void handleReplace(replaceReq.id, f);
+          e.target.value = "";
+          setReplaceReq(null);
         }}
       />
     </>
-  )
+  );
 }

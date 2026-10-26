@@ -1,19 +1,45 @@
 import { readNetSuiteSettlements } from "./netsuite-settlements.ts";
-export { toSourceApplicationLinks, uniqueNetSuiteApplicationLinks } from "./netsuite-settlements.ts";
+export {
+  toSourceApplicationLinks,
+  uniqueNetSuiteApplicationLinks,
+} from "./netsuite-settlements.ts";
 import { settlementDigest, type SettlementObservation } from "./settlement-observation.ts";
-import { netSuiteEntityMappingMetadata, type EntityMappingField } from "./entity-mapping-contract.ts";
-import { netsuiteCustomizationChoices, netsuiteCustomRecordFields, type NetSuiteCustomizationKind } from "../connectors/netsuite.ts";
+import {
+  netSuiteEntityMappingMetadata,
+  type EntityMappingField,
+} from "./entity-mapping-contract.ts";
+import {
+  netsuiteCustomizationChoices,
+  netsuiteCustomRecordFields,
+  type NetSuiteCustomizationKind,
+} from "../connectors/netsuite.ts";
 import { NETSUITE_MAPPING_GROUPS, validateConnectionMappings } from "./connection-settings.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { importNetSuiteCrm } from "./netsuite-crm.ts";
 import { syncNetSuiteFixedAssets } from "./netsuite-fixed-assets.ts";
-import { importNetSuiteAttachments, downloadSourceFile, safeFilename } from "./netsuite-attachments.ts";
-import { DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID, DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID, NetSuiteBridgeClient, type NetSuiteBridgeConfig, type NetSuitePaymentTerm } from "../connectors/netsuite-bridge.ts";
+import {
+  importNetSuiteAttachments,
+  downloadSourceFile,
+  safeFilename,
+} from "./netsuite-attachments.ts";
+import {
+  DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID,
+  DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID,
+  NetSuiteBridgeClient,
+  type NetSuiteBridgeConfig,
+  type NetSuitePaymentTerm,
+} from "../connectors/netsuite-bridge.ts";
 import type { NetSuiteCreds } from "../connectors/netsuite.ts";
 import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { refusedConnectionBaseCurrency } from "./base-currency.ts";
-import { buildNativeFromNetSuite, netSuiteCurrencyIso, type NetSuiteTaxCodeFallbacks, type NsHeader, type NsLine } from "./netsuite-native.ts";
+import {
+  buildNativeFromNetSuite,
+  netSuiteCurrencyIso,
+  type NetSuiteTaxCodeFallbacks,
+  type NsHeader,
+  type NsLine,
+} from "./netsuite-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
   EntityStream,
@@ -82,9 +108,12 @@ export function netSuiteAccountCurrency(
 ): string | null {
   if (account.accttype !== "Bank" && account.accttype !== "CredCard") return null;
   if (s(account.currency)) {
-    const currency = currencies.get(String(account.currency)) ?? netSuiteCurrencyIso(account.currency);
+    const currency =
+      currencies.get(String(account.currency)) ?? netSuiteCurrencyIso(account.currency);
     if (currency) return currency;
-    throw new Error(`Cannot resolve currency for NetSuite account ${account.id} (${account.currency}); check source currency access and configuration before retrying`);
+    throw new Error(
+      `Cannot resolve currency for NetSuite account ${account.id} (${account.currency}); check source currency access and configuration before retrying`,
+    );
   }
   const candidates = s(account.subsidiary)
     ? subsidiaries.filter((subsidiary) => subsidiary.sourceRef === String(account.subsidiary))
@@ -93,7 +122,9 @@ export function netSuiteAccountCurrency(
     const currency = netSuiteCurrencyIso(candidates[0]?.fields.baseCurrency);
     if (currency) return currency;
   }
-  throw new Error(`Cannot resolve currency for NetSuite account ${account.id}; check its source subsidiary and currency configuration before retrying`);
+  throw new Error(
+    `Cannot resolve currency for NetSuite account ${account.id}; check its source subsidiary and currency configuration before retrying`,
+  );
 }
 
 /** One SuiteQL transactionline cleared state, normalized for the mirror. */
@@ -148,12 +179,17 @@ const NS_ITEM_KIND: Record<string, string> = {
 // something else maps it on its connection via `projectBillingTypes` — the
 // stock reading is the default, never a particular customer's convention.
 const NS_BILLING: Record<string, string> = {
-  TM: "time_and_materials", FBI: "fixed_price", FBM: "fixed_price",
+  TM: "time_and_materials",
+  FBI: "fixed_price",
+  FBM: "fixed_price",
 };
 
 /** Project-type keys a source billing type may resolve to. */
 const PROJECT_TYPE_KEYS = [
-  "time_and_materials", "fixed_price", "cost_plus", "not_to_exceed",
+  "time_and_materials",
+  "fixed_price",
+  "cost_plus",
+  "not_to_exceed",
 ] as const;
 const NETSUITE_ID_WINDOW = 5_000;
 
@@ -184,7 +220,10 @@ export interface NetSuiteAccountMappings {
    * document number. The mapping is tenant-owned because NetSuite accounts use
    * different custom fields for this provenance. */
   timeEntryFieldTicketNumberField?: string;
-  projectStatuses?: Record<string, "active" | "awarded" | "substantially_complete" | "closed" | "cancelled">;
+  projectStatuses?: Record<
+    string,
+    "active" | "awarded" | "substantially_complete" | "closed" | "cancelled"
+  >;
   /** Overrides for `jobbillingtype` → project type, keyed by the source code.
    * NetSuite's stock enum offers only time-and-materials and two fixed-bid
    * members, so an account that runs budget / do-not-exceed work commonly
@@ -228,9 +267,14 @@ const safeSuiteScriptId = (value: unknown, label: string): string | null => {
   return field;
 };
 
-export function numericIdWindows(maxId: number, width = NETSUITE_ID_WINDOW): Array<[number, number]> {
-  if (!Number.isSafeInteger(maxId) || maxId < 0) throw new Error("maxId must be a non-negative safe integer");
-  if (!Number.isSafeInteger(width) || width < 1) throw new Error("window width must be a positive safe integer");
+export function numericIdWindows(
+  maxId: number,
+  width = NETSUITE_ID_WINDOW,
+): Array<[number, number]> {
+  if (!Number.isSafeInteger(maxId) || maxId < 0)
+    throw new Error("maxId must be a non-negative safe integer");
+  if (!Number.isSafeInteger(width) || width < 1)
+    throw new Error("window width must be a positive safe integer");
   const windows: Array<[number, number]> = [];
   for (let lo = 0; lo < maxId; lo += width) windows.push([lo, Math.min(lo + width, maxId)]);
   return windows;
@@ -242,8 +286,9 @@ export function numericIdWindows(maxId: number, width = NETSUITE_ID_WINDOW): Arr
 export function netSuiteCreditOpenBalance(total: string, applied: string): string {
   const totalUnits = toUnits(total);
   const appliedUnits = toUnits(applied);
-  const remaining = (totalUnits < 0n ? -totalUnits : totalUnits)
-    - (appliedUnits < 0n ? -appliedUnits : appliedUnits);
+  const remaining =
+    (totalUnits < 0n ? -totalUnits : totalUnits) -
+    (appliedUnits < 0n ? -appliedUnits : appliedUnits);
   return fromUnits(remaining > 0n ? remaining : 0n);
 }
 
@@ -253,11 +298,23 @@ export function uniqueNetSuiteTransactionLines(rows: NsLine[]): NsLine[] {
   for (const row of rows) {
     const key = `${String(row.transaction)}:${String(row.id)}`;
     const payload = JSON.stringify([
-      row.transaction, row.id, row.mainline, row.taxline, row.item ?? null,
-      row.account ?? null, row.expenseaccount ?? null, row.netamount ?? null,
-      row.foreignamount ?? null, row.quantity ?? null, row.rate ?? null,
-      row.units ?? null, row.department ?? null, row.entity ?? null,
-      row.subsidiary ?? null, row.memo ?? null, row.taxrate1 ?? null,
+      row.transaction,
+      row.id,
+      row.mainline,
+      row.taxline,
+      row.item ?? null,
+      row.account ?? null,
+      row.expenseaccount ?? null,
+      row.netamount ?? null,
+      row.foreignamount ?? null,
+      row.quantity ?? null,
+      row.rate ?? null,
+      row.units ?? null,
+      row.department ?? null,
+      row.entity ?? null,
+      row.subsidiary ?? null,
+      row.memo ?? null,
+      row.taxrate1 ?? null,
       row.taxcode ?? null,
     ]);
     const prior = unique.get(key);
@@ -301,45 +358,64 @@ export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
     throw new Error("NetSuite field mappings must be a JSON object");
   }
   const raw = parsed as Record<string, unknown>;
-  const projectStatuses = raw.projectStatuses == null
-    ? undefined
-    : Object.fromEntries(Object.entries(raw.projectStatuses as Record<string, unknown>).map(([key, status]) => {
-        const normalized = String(status);
-        if (!["active", "awarded", "substantially_complete", "closed", "cancelled"].includes(normalized)) {
-          throw new Error(`NetSuite project status mapping ${key} has invalid target ${normalized}`);
-        }
-        return [key.toLowerCase(), normalized];
-      })) as NetSuiteAccountMappings["projectStatuses"];
-  const taxCodeFallbacks = raw.taxCodeFallbacks == null
-    ? undefined
-    : parseNetSuiteTaxCodeFallbacks(raw.taxCodeFallbacks);
-  const projectBillingTypes = raw.projectBillingTypes == null
-    ? undefined
-    : Object.fromEntries(Object.entries(raw.projectBillingTypes as Record<string, unknown>).map(([key, target]) => {
-        const normalized = String(target);
-        if (!(PROJECT_TYPE_KEYS as readonly string[]).includes(normalized)) {
-          throw new Error(`NetSuite project billing type mapping ${key} has invalid target ${normalized}`);
-        }
-        return [key.toUpperCase(), normalized];
-      })) as NetSuiteAccountMappings["projectBillingTypes"];
+  const projectStatuses =
+    raw.projectStatuses == null
+      ? undefined
+      : (Object.fromEntries(
+          Object.entries(raw.projectStatuses as Record<string, unknown>).map(([key, status]) => {
+            const normalized = String(status);
+            if (
+              !["active", "awarded", "substantially_complete", "closed", "cancelled"].includes(
+                normalized,
+              )
+            ) {
+              throw new Error(
+                `NetSuite project status mapping ${key} has invalid target ${normalized}`,
+              );
+            }
+            return [key.toLowerCase(), normalized];
+          }),
+        ) as NetSuiteAccountMappings["projectStatuses"]);
+  const taxCodeFallbacks =
+    raw.taxCodeFallbacks == null ? undefined : parseNetSuiteTaxCodeFallbacks(raw.taxCodeFallbacks);
+  const projectBillingTypes =
+    raw.projectBillingTypes == null
+      ? undefined
+      : (Object.fromEntries(
+          Object.entries(raw.projectBillingTypes as Record<string, unknown>).map(
+            ([key, target]) => {
+              const normalized = String(target);
+              if (!(PROJECT_TYPE_KEYS as readonly string[]).includes(normalized)) {
+                throw new Error(
+                  `NetSuite project billing type mapping ${key} has invalid target ${normalized}`,
+                );
+              }
+              return [key.toUpperCase(), normalized];
+            },
+          ),
+        ) as NetSuiteAccountMappings["projectBillingTypes"]);
   const mappings: NetSuiteAccountMappings = {
-    crmProbabilityField: safeSuiteScriptId(raw.crmProbabilityField, "crmProbabilityField") ?? undefined,
-    projectForemanField: safeSuiteScriptId(raw.projectForemanField, "projectForemanField") ?? undefined,
+    crmProbabilityField:
+      safeSuiteScriptId(raw.crmProbabilityField, "crmProbabilityField") ?? undefined,
+    projectForemanField:
+      safeSuiteScriptId(raw.projectForemanField, "projectForemanField") ?? undefined,
     lineMarkupField: safeSuiteScriptId(raw.lineMarkupField, "lineMarkupField") ?? undefined,
-    lineBillableField:
-      safeSuiteScriptId(raw.lineBillableField, "lineBillableField") ?? undefined,
-    projectPurchaseOrderField: safeSuiteScriptId(raw.projectPurchaseOrderField, "projectPurchaseOrderField") ?? undefined,
+    lineBillableField: safeSuiteScriptId(raw.lineBillableField, "lineBillableField") ?? undefined,
+    projectPurchaseOrderField:
+      safeSuiteScriptId(raw.projectPurchaseOrderField, "projectPurchaseOrderField") ?? undefined,
     itemCategoryField: safeSuiteScriptId(raw.itemCategoryField, "itemCategoryField") ?? undefined,
-    customerShortCodeField: safeSuiteScriptId(raw.customerShortCodeField, "customerShortCodeField") ?? undefined,
-    employeeBenefitsField: safeSuiteScriptId(raw.employeeBenefitsField, "employeeBenefitsField") ?? undefined,
+    customerShortCodeField:
+      safeSuiteScriptId(raw.customerShortCodeField, "customerShortCodeField") ?? undefined,
+    employeeBenefitsField:
+      safeSuiteScriptId(raw.employeeBenefitsField, "employeeBenefitsField") ?? undefined,
     timeTypeRecord: safeSuiteScriptId(raw.timeTypeRecord, "timeTypeRecord") ?? undefined,
-    timeTypeMultiplierField: safeSuiteScriptId(raw.timeTypeMultiplierField, "timeTypeMultiplierField") ?? undefined,
-    timeEntryTypeField: safeSuiteScriptId(raw.timeEntryTypeField, "timeEntryTypeField") ?? undefined,
+    timeTypeMultiplierField:
+      safeSuiteScriptId(raw.timeTypeMultiplierField, "timeTypeMultiplierField") ?? undefined,
+    timeEntryTypeField:
+      safeSuiteScriptId(raw.timeEntryTypeField, "timeEntryTypeField") ?? undefined,
     timeEntryFieldTicketNumberField:
-      safeSuiteScriptId(
-        raw.timeEntryFieldTicketNumberField,
-        "timeEntryFieldTicketNumberField",
-      ) ?? undefined,
+      safeSuiteScriptId(raw.timeEntryFieldTicketNumberField, "timeEntryFieldTicketNumberField") ??
+      undefined,
     projectStatuses,
     projectBillingTypes,
     taxCodeFallbacks,
@@ -371,9 +447,7 @@ const usDateToIso = (v: unknown): string | null => {
 /** Normalize the source's commercial billing fact independently of any local
  * invoice-line link. NetSuite's `billed` flag is authoritative; its status
  * label is retained only as audit/provenance evidence. */
-export function normalizeNetSuiteTimeEntry(
-  tb: Record<string, unknown>,
-): SourceEntity {
+export function normalizeNetSuiteTimeEntry(tb: Record<string, unknown>): SourceEntity {
   return {
     sourceRef: String(tb.id),
     fields: {
@@ -406,21 +480,15 @@ const LINE_COLS = `tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item, tl.a
   tl.cleared, TO_CHAR(tl.cleareddate, 'MM/DD/YYYY') AS cleareddate`;
 
 /** Line columns plus whatever optional fields this account has mapped. */
-export function netSuiteLineColumns(
-  mappings: NetSuiteAccountMappings,
-): string {
+export function netSuiteLineColumns(mappings: NetSuiteAccountMappings): string {
   const billable = mappings.lineBillableField
     ? `COALESCE(${mappings.lineBillableField}, tl.isbillable) AS isbillable`
     : "tl.isbillable";
-  const markup = mappings.lineMarkupField
-    ? `, ${mappings.lineMarkupField} AS markup`
-    : "";
+  const markup = mappings.lineMarkupField ? `, ${mappings.lineMarkupField} AS markup` : "";
   return `${LINE_COLS}, ${billable}${markup}`;
 }
 
-export function normalizeNetSuiteAccountingPeriods(
-  rows: Record<string, string>[],
-): SourceEntity[] {
+export function normalizeNetSuiteAccountingPeriods(rows: Record<string, string>[]): SourceEntity[] {
   const years = rows
     .filter((row) => isT(row.isyear))
     .map((row) => ({
@@ -437,8 +505,8 @@ export function normalizeNetSuiteAccountingPeriods(
     );
   const counters = new Map<number, number>();
   return posting.map(({ row, start, end }) => {
-    const fiscalYear = years.find((year) => year.start <= start && year.end >= end)?.year
-      ?? Number(end.slice(0, 4));
+    const fiscalYear =
+      years.find((year) => year.start <= start && year.end >= end)?.year ?? Number(end.slice(0, 4));
     const periodNumber = (counters.get(fiscalYear) ?? 0) + 1;
     counters.set(fiscalYear, periodNumber);
     return {
@@ -460,10 +528,19 @@ export function normalizeNetSuiteAccountingPeriods(
   });
 }
 
-type NetSuiteTermDateDriven = Pick<NetSuitePaymentTerm, "dateDriven" | "dayOfMonthNetDue" | "dueNextMonthIfWithinDays" | "dateDrivenDiscountPercent" | "dayDiscountExpires">;
+type NetSuiteTermDateDriven = Pick<
+  NetSuitePaymentTerm,
+  | "dateDriven"
+  | "dayOfMonthNetDue"
+  | "dueNextMonthIfWithinDays"
+  | "dateDrivenDiscountPercent"
+  | "dayDiscountExpires"
+>;
 
 /** The date-driven fields of a loaded NetSuite term record. */
-export function netSuiteTermDateDrivenFields(fields: Record<string, unknown>): NetSuiteTermDateDriven {
+export function netSuiteTermDateDrivenFields(
+  fields: Record<string, unknown>,
+): NetSuiteTermDateDriven {
   return {
     dateDriven: isT(fields.datedriven) || fields.datedriven === "true",
     dayOfMonthNetDue: s(fields.dayofmonthnetdue),
@@ -483,7 +560,10 @@ export function netSuiteTermDateDrivenFields(fields: Record<string, unknown>): N
  * date-driven discount carries its expiry day so the loader can refuse a
  * discount it cannot represent.
  */
-export function normalizeNetSuitePaymentTerm(term: NetSuitePaymentTerm, dateDriven: NetSuiteTermDateDriven): SourceEntity {
+export function normalizeNetSuitePaymentTerm(
+  term: NetSuitePaymentTerm,
+  dateDriven: NetSuiteTermDateDriven,
+): SourceEntity {
   const fields: Record<string, unknown> = { name: term.name };
   if (dateDriven.dateDriven) {
     const percent = s(dateDriven.dateDrivenDiscountPercent);
@@ -493,7 +573,7 @@ export function normalizeNetSuitePaymentTerm(term: NetSuitePaymentTerm, dateDriv
       dueDayOfMonth: s(dateDriven.dayOfMonthNetDue) ?? 0,
       discountPercent,
       discountDays: null,
-      discountDayOfMonth: discountPercent ? s(dateDriven.dayDiscountExpires) ?? 0 : null,
+      discountDayOfMonth: discountPercent ? (s(dateDriven.dayDiscountExpires) ?? 0) : null,
     });
   } else {
     Object.assign(fields, {
@@ -527,9 +607,9 @@ export function normalizeNetSuiteTaxCodes(
   const taken = new Set(salesTaxItems.map(sourceCode));
   const groupCodes = new Map<string, string>();
   const assignmentOrder = (a: Record<string, string>, b: Record<string, string>) =>
-    Number(isT(a.isinactive)) - Number(isT(b.isinactive))
-      || Number(a.id) - Number(b.id)
-      || (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
+    Number(isT(a.isinactive)) - Number(isT(b.isinactive)) ||
+    Number(a.id) - Number(b.id) ||
+    (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0);
   for (const row of [...taxGroups].sort(assignmentOrder)) {
     const name = sourceCode(row);
     const rate = canonicalDecimal(ratePercent(row)) ?? ratePercent(row);
@@ -579,7 +659,8 @@ export class NetSuiteSource implements MigrationSource {
   private readonly mappings: NetSuiteAccountMappings;
   private readonly configuredAccountingBookId: string | null;
   private accountingBookResolution: Promise<string> | null = null;
-  private settlementPayers: { graphDigest: string; payerDigests: Map<string, string> } | null = null;
+  private settlementPayers: { graphDigest: string; payerDigests: Map<string, string> } | null =
+    null;
 
   constructor(
     private readonly creds: NetSuiteCreds,
@@ -594,7 +675,8 @@ export class NetSuiteSource implements MigrationSource {
     this.bridge = new NetSuiteBridgeClient(creds, opts.bridge);
     this.expectedAccount = creds.account;
     this.soapEndpointVersion = opts.soapEndpointVersion ?? "2022_1";
-    if (!/^20\d{2}_\d+$/.test(this.soapEndpointVersion)) throw new Error("NetSuite SOAP endpoint version is invalid");
+    if (!/^20\d{2}_\d+$/.test(this.soapEndpointVersion))
+      throw new Error("NetSuite SOAP endpoint version is invalid");
     this.photoSourceAccount = creds.account;
     this.photoBridge = {
       script: String(opts.bridge?.scriptId ?? DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID),
@@ -603,10 +685,14 @@ export class NetSuiteSource implements MigrationSource {
     this.mappings = parseNetSuiteMappings(opts.mappings);
     const baseCurrency = refusedConnectionBaseCurrency(opts.baseCurrency);
     if (baseCurrency === "missing") {
-      throw new Error("NetSuite source needs its base currency — set it on the connection before syncing");
+      throw new Error(
+        "NetSuite source needs its base currency — set it on the connection before syncing",
+      );
     }
     if (baseCurrency === "invalid") {
-      throw new Error(`NetSuite source has an invalid base currency ${JSON.stringify(opts.baseCurrency)} — set it on the connection before syncing`);
+      throw new Error(
+        `NetSuite source has an invalid base currency ${JSON.stringify(opts.baseCurrency)} — set it on the connection before syncing`,
+      );
     }
     this.baseCurrency = opts.baseCurrency.trim().toUpperCase();
     const accountingBookId = String(opts.accountingBookId ?? "").trim();
@@ -621,59 +707,118 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   async mappingSourceFields(entity: string): Promise<EntityMappingField[]> {
-    const kinds: Record<string, NetSuiteCustomizationKind> = { items: 'itemCustomField', customers: 'entityCustomField', vendors: 'entityCustomField', employees: 'entityCustomField', projects: 'entityCustomField', transactions: 'transactionBodyCustomField', transactionLines: 'transactionColumnCustomField' };
+    const kinds: Record<string, NetSuiteCustomizationKind> = {
+      items: "itemCustomField",
+      customers: "entityCustomField",
+      vendors: "entityCustomField",
+      employees: "entityCustomField",
+      projects: "entityCustomField",
+      transactions: "transactionBodyCustomField",
+      transactionLines: "transactionColumnCustomField",
+    };
     const kind = kinds[entity];
     if (!kind) return [];
-    return (await netsuiteCustomizationChoices(kind, this.creds, this.soapEndpointVersion)).map(field => ({ key: field.value, label: field.label, kind: 'text' }));
+    return (await netsuiteCustomizationChoices(kind, this.creds, this.soapEndpointVersion)).map(
+      (field) => ({ key: field.value, label: field.label, kind: "text" }),
+    );
   }
 
-  async mappingSourceValues(entity: string, fields: readonly string[], refs: readonly string[]): Promise<Map<string, Record<string, unknown>>> {
-    const tables: Record<string, string> = { items: 'item', customers: 'customer', vendors: 'vendor', employees: 'employee', projects: 'job', transactions: 'transaction', transactionLines: 'transactionline' };
+  async mappingSourceValues(
+    entity: string,
+    fields: readonly string[],
+    refs: readonly string[],
+  ): Promise<Map<string, Record<string, unknown>>> {
+    const tables: Record<string, string> = {
+      items: "item",
+      customers: "customer",
+      vendors: "vendor",
+      employees: "employee",
+      projects: "job",
+      transactions: "transaction",
+      transactionLines: "transactionline",
+    };
     const table = tables[entity];
-    const allowed = new Set((await this.mappingSourceFields(entity)).map(field => field.key));
-    if (!table || fields.some(field => !allowed.has(field) || !/^[a-z][a-z0-9_]{0,119}$/i.test(field))) throw new Error('Choose an accessible source field for this entity');
-    const ids = [...new Set(refs.map(ref => entity === 'transactionLines' ? ref.split(':')[0]! : ref))];
-    if (ids.some(id => !/^\d+$/.test(id))) throw new Error('Source field reads need verified NetSuite record identities');
+    const allowed = new Set((await this.mappingSourceFields(entity)).map((field) => field.key));
+    if (
+      !table ||
+      fields.some((field) => !allowed.has(field) || !/^[a-z][a-z0-9_]{0,119}$/i.test(field))
+    )
+      throw new Error("Choose an accessible source field for this entity");
+    const ids = [
+      ...new Set(refs.map((ref) => (entity === "transactionLines" ? ref.split(":")[0]! : ref))),
+    ];
+    if (ids.some((id) => !/^\d+$/.test(id)))
+      throw new Error("Source field reads need verified NetSuite record identities");
     const result = new Map<string, Record<string, unknown>>();
     for (let offset = 0; offset < ids.length; offset += 500) {
-      const columns = fields.map((field, index) => `${field} AS mapping_${index}`).join(', ');
-      const rows = await this.q<Record<string, unknown>>(`SELECT id${entity === 'transactionLines' ? ', transaction AS transaction_id' : ''}, ${columns} FROM ${table} WHERE ${entity === 'transactionLines' ? 'transaction' : 'id'} IN (${ids.slice(offset, offset + 500).join(',')})`);
+      const columns = fields.map((field, index) => `${field} AS mapping_${index}`).join(", ");
+      const rows = await this.q<Record<string, unknown>>(
+        `SELECT id${entity === "transactionLines" ? ", transaction AS transaction_id" : ""}, ${columns} FROM ${table} WHERE ${entity === "transactionLines" ? "transaction" : "id"} IN (${ids.slice(offset, offset + 500).join(",")})`,
+      );
       for (const row of rows) {
-        const ref = entity === 'transactionLines' ? `${row.transaction_id}:${row.id}` : String(row.id);
-        result.set(ref, Object.fromEntries(fields.map((field, index) => [field, row[`mapping_${index}`]])));
+        const ref =
+          entity === "transactionLines" ? `${row.transaction_id}:${row.id}` : String(row.id);
+        result.set(
+          ref,
+          Object.fromEntries(fields.map((field, index) => [field, row[`mapping_${index}`]])),
+        );
       }
     }
     return result;
   }
 
-  async mappingOptions(field: string, parent?: string): Promise<{ value: string; label: string }[]> {
-    if (field === 'taxCodeFallbacks') return (await this.taxCodes()).filter((row) => row.fields.isActive).map((row) => ({ value: row.sourceRef, label: String(row.fields.code) + ' — ' + String(row.fields.name) }));
+  async mappingOptions(
+    field: string,
+    parent?: string,
+  ): Promise<{ value: string; label: string }[]> {
+    if (field === "taxCodeFallbacks")
+      return (await this.taxCodes())
+        .filter((row) => row.fields.isActive)
+        .map((row) => ({
+          value: row.sourceRef,
+          label: String(row.fields.code) + " — " + String(row.fields.name),
+        }));
     const types: Record<string, NetSuiteCustomizationKind> = {
-      projectForemanField: 'entityCustomField', projectPurchaseOrderField: 'entityCustomField', customerShortCodeField: 'entityCustomField', employeeBenefitsField: 'entityCustomField',
-      lineMarkupField: 'transactionColumnCustomField', lineBillableField: 'transactionColumnCustomField', timeEntryTypeField: 'transactionColumnCustomField', timeEntryFieldTicketNumberField: 'transactionColumnCustomField',
-      itemCategoryField: 'itemCustomField', timeTypeRecord: 'customRecordType', crmProbabilityField: 'transactionBodyCustomField',
+      projectForemanField: "entityCustomField",
+      projectPurchaseOrderField: "entityCustomField",
+      customerShortCodeField: "entityCustomField",
+      employeeBenefitsField: "entityCustomField",
+      lineMarkupField: "transactionColumnCustomField",
+      lineBillableField: "transactionColumnCustomField",
+      timeEntryTypeField: "transactionColumnCustomField",
+      timeEntryFieldTicketNumberField: "transactionColumnCustomField",
+      itemCategoryField: "itemCustomField",
+      timeTypeRecord: "customRecordType",
+      crmProbabilityField: "transactionBodyCustomField",
     };
-    if (field === 'timeTypeMultiplierField') {
-      if (!parent) throw new Error('Select the time-type source record before choosing its multiplier field');
+    if (field === "timeTypeMultiplierField") {
+      if (!parent)
+        throw new Error("Select the time-type source record before choosing its multiplier field");
       return netsuiteCustomRecordFields(parent, this.creds, this.soapEndpointVersion);
     }
-    if (field === 'projectStatuses') {
-      const rows = await this.q<{ value: string }>("SELECT DISTINCT BUILTIN.DF(entitystatus) AS value FROM job WHERE entitystatus IS NOT NULL ORDER BY value");
+    if (field === "projectStatuses") {
+      const rows = await this.q<{ value: string }>(
+        "SELECT DISTINCT BUILTIN.DF(entitystatus) AS value FROM job WHERE entitystatus IS NOT NULL ORDER BY value",
+      );
       return rows.map((row) => ({ value: row.value, label: row.value }));
     }
-    if (field === 'projectBillingTypes') {
-      const rows = await this.q<{ value: string; label: string }>("SELECT DISTINCT jobbillingtype AS value, BUILTIN.DF(jobbillingtype) AS label FROM job WHERE jobbillingtype IS NOT NULL ORDER BY value");
+    if (field === "projectBillingTypes") {
+      const rows = await this.q<{ value: string; label: string }>(
+        "SELECT DISTINCT jobbillingtype AS value, BUILTIN.DF(jobbillingtype) AS label FROM job WHERE jobbillingtype IS NOT NULL ORDER BY value",
+      );
       return rows.map((row) => ({ value: row.value, label: row.label || row.value }));
     }
     const kind = types[field];
-    if (!kind) throw new Error('This source does not expose choices for the selected mapping');
+    if (!kind) throw new Error("This source does not expose choices for the selected mapping");
     return netsuiteCustomizationChoices(kind, this.creds, this.soapEndpointVersion);
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {
     const health = await this.bridge.requireCompatible();
-    if (String(health.accountId).replaceAll("_", "-").toLowerCase()
-      !== this.expectedAccount.replaceAll("_", "-").toLowerCase()) {
+    if (
+      String(health.accountId).replaceAll("_", "-").toLowerCase() !==
+      this.expectedAccount.replaceAll("_", "-").toLowerCase()
+    ) {
       throw new Error(
         `NetSuite bridge account ${health.accountId} does not match configured account ${this.expectedAccount}`,
       );
@@ -712,18 +857,11 @@ export class NetSuiteSource implements MigrationSource {
        WHERE tal.posting = 'T'
        ORDER BY tal.accountingbook`);
     const available = [
-      ...new Set(
-        rows
-          .map((row) => String(row.id ?? "").trim())
-          .filter((id) => /^\d+$/.test(id)),
-      ),
+      ...new Set(rows.map((row) => String(row.id ?? "").trim()).filter((id) => /^\d+$/.test(id))),
     ].sort((left, right) => Number(left) - Number(right));
 
     if (this.configuredAccountingBookId) {
-      if (
-        available.length > 0 &&
-        !available.includes(this.configuredAccountingBookId)
-      ) {
+      if (available.length > 0 && !available.includes(this.configuredAccountingBookId)) {
         throw new Error(
           `configured NetSuite accounting book ${this.configuredAccountingBookId} has no posted accounting lines; available books: ${available.join(", ")}`,
         );
@@ -814,7 +952,9 @@ export class NetSuiteSource implements MigrationSource {
   ): Promise<T[]> {
     if (!since) return this.q<T>(fullSql);
     try {
-      return await this.q<T>(filteredSql ?? `${fullSql} WHERE lastmodifieddate >= ${this.ts(since)}`);
+      return await this.q<T>(
+        filteredSql ?? `${fullSql} WHERE lastmodifieddate >= ${this.ts(since)}`,
+      );
     } catch {
       return this.q<T>(fullSql);
     }
@@ -855,12 +995,8 @@ export class NetSuiteSource implements MigrationSource {
 
   private async taxCodes(): Promise<SourceEntity[]> {
     const [salesTaxItems, taxGroups] = await Promise.all([
-      this.q<Record<string, string>>(
-        "SELECT id, itemid, rate, isinactive FROM salestaxitem",
-      ),
-      this.q<Record<string, string>>(
-        "SELECT id, itemid, rate, isinactive FROM taxgroup",
-      ),
+      this.q<Record<string, string>>("SELECT id, itemid, rate, isinactive FROM salestaxitem"),
+      this.q<Record<string, string>>("SELECT id, itemid, rate, isinactive FROM taxgroup"),
     ]);
     return normalizeNetSuiteTaxCodes(salesTaxItems, taxGroups);
   }
@@ -875,37 +1011,64 @@ export class NetSuiteSource implements MigrationSource {
     return normalizeNetSuiteAccountingPeriods(rows);
   }
 
-  async syncOperationalRecords(options: { orgId: string; connectionId: string; actorId: string | null; populations?: { crm: boolean; fixedAssets: boolean }; mappingSource?: MigrationSource }): Promise<SourceOperationalSyncResult> {
+  async syncOperationalRecords(options: {
+    orgId: string;
+    connectionId: string;
+    actorId: string | null;
+    populations?: { crm: boolean; fixedAssets: boolean };
+    mappingSource?: MigrationSource;
+  }): Promise<SourceOperationalSyncResult> {
     const result: SourceOperationalSyncResult = { disabledFeatures: [] };
     if (options.populations?.fixedAssets !== false) {
       if (await orgFeatureEnabled(options.orgId, "fixedAssets")) {
-        result.fixedAssets = await syncNetSuiteFixedAssets((options.mappingSource ?? this) as NetSuiteSource, options);
+        result.fixedAssets = await syncNetSuiteFixedAssets(
+          (options.mappingSource ?? this) as NetSuiteSource,
+          options,
+        );
       } else result.disabledFeatures.push("fixedAssets");
     }
     if (options.populations?.crm !== false) {
       if (await orgFeatureEnabled(options.orgId, "crm")) {
-        result.crm = await importNetSuiteCrm(options.orgId, options.connectionId, undefined, { actorId: options.actorId });
+        result.crm = await importNetSuiteCrm(options.orgId, options.connectionId, undefined, {
+          actorId: options.actorId,
+        });
       } else result.disabledFeatures.push("crm");
     }
     return result;
   }
 
   async syncAttachments(options: {
-    orgId: string; connectionId: string; actorId: string | null;
+    orgId: string;
+    connectionId: string;
+    actorId: string | null;
     changes?: { since: Date; sourceRefs: readonly string[] };
   }) {
     return importNetSuiteAttachments({
-      org: options.orgId, connectionId: options.connectionId, actorId: options.actorId,
-      execute: true, concurrency: 4, changes: options.changes,
+      org: options.orgId,
+      connectionId: options.connectionId,
+      actorId: options.actorId,
+      execute: true,
+      concurrency: 4,
+      changes: options.changes,
     });
   }
 
   async projectInputDeletions(refs: { projects: string[]; timeEntries: string[] }) {
-    const result: { projects: { sourceRef: string; deletedAt: string }[]; timeEntries: { sourceRef: string; deletedAt: string }[] } = { projects: [], timeEntries: [] };
-    for (const [key, label] of [["projects", "Job"], ["timeEntries", "Time"]] as const) {
+    const result: {
+      projects: { sourceRef: string; deletedAt: string }[];
+      timeEntries: { sourceRef: string; deletedAt: string }[];
+    } = { projects: [], timeEntries: [] };
+    for (const [key, label] of [
+      ["projects", "Job"],
+      ["timeEntries", "Time"],
+    ] as const) {
       for (let offset = 0; offset < refs[key].length; offset += 500) {
         const batch = refs[key].slice(offset, offset + 500);
-        const rows = await this.bridge.deletedRecords(new Date("1970-01-01T00:00:00Z"), undefined, batch);
+        const rows = await this.bridge.deletedRecords(
+          new Date("1970-01-01T00:00:00Z"),
+          undefined,
+          batch,
+        );
         for (const row of rows) {
           if (row.recordType === label && batch.includes(row.internalId) && row.deletedAt) {
             result[key].push({ sourceRef: row.internalId, deletedAt: row.deletedAt });
@@ -917,17 +1080,12 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   async projectFinancialInputs(): Promise<SourceProjectFinancialInputs> {
-    const [entries, projects] = await Promise.all([
-      this.timeEntries(null),
-      this.projects(null),
-    ]);
+    const [entries, projects] = await Promise.all([this.timeEntries(null), this.projects(null)]);
     return {
       timeEntryBillingStates: entries.map((entry) => ({
         sourceRef: entry.sourceRef,
-        billingStatus:
-          entry.fields.billingStatus === "billed" ? "billed" : "unbilled",
-        costingBasis:
-          entry.fields.costingBasis === "estimated" ? "estimated" : "actual",
+        billingStatus: entry.fields.billingStatus === "billed" ? "billed" : "unbilled",
+        costingBasis: entry.fields.costingBasis === "estimated" ? "estimated" : "actual",
         sourceStatus: s(entry.fields.sourceBillingStatus),
         employeeRef: s(entry.fields.employeeRef),
         projectRef: s(entry.fields.projectRef),
@@ -950,9 +1108,7 @@ export class NetSuiteSource implements MigrationSource {
             ? project.fields.billingMethod
             : null,
         contractValue:
-          typeof project.fields.contractValue === "string"
-            ? project.fields.contractValue
-            : null,
+          typeof project.fields.contractValue === "string" ? project.fields.contractValue : null,
       })),
     };
   }
@@ -977,14 +1133,19 @@ export class NetSuiteSource implements MigrationSource {
       // Their one root is unambiguously the connection's configured base.
     }
     const aliases: Record<string, string> = {
-      CAN: "CAD", CDN: "CAD", "CANADIAN DOLLAR": "CAD",
-      USA: "USD", "US DOLLAR": "USD", "U.S. DOLLAR": "USD",
+      CAN: "CAD",
+      CDN: "CAD",
+      "CANADIAN DOLLAR": "CAD",
+      USA: "USD",
+      "US DOLLAR": "USD",
+      "U.S. DOLLAR": "USD",
     };
     return rows.map((row) => {
       const label = s(row.currencylabel)?.toUpperCase() ?? "";
-      const detected = currencyById.get(String(row.currency))
-        ?? aliases[label]
-        ?? (/^[A-Z]{3}$/.test(label) ? label : null);
+      const detected =
+        currencyById.get(String(row.currency)) ??
+        aliases[label] ??
+        (/^[A-Z]{3}$/.test(label) ? label : null);
       const baseCurrency = detected ?? (!s(row.parent) ? this.baseCurrency : null);
       if (!baseCurrency) {
         throw new Error(
@@ -1008,17 +1169,28 @@ export class NetSuiteSource implements MigrationSource {
 
   private async accounts(subsidiaries: SourceEntity[]): Promise<SourceEntity[]> {
     const rows = await this.q<{
-      id: string; acctnumber?: string; fullname?: string; dispname?: string;
-      accttype: string; parent?: string; issummary?: string; isinactive?: string;
-      eliminate?: string; reconcilewithmatching?: string; accountsearchdisplaynamecopy?: string;
-      currency?: string; subsidiary?: string;
+      id: string;
+      acctnumber?: string;
+      fullname?: string;
+      dispname?: string;
+      accttype: string;
+      parent?: string;
+      issummary?: string;
+      isinactive?: string;
+      eliminate?: string;
+      reconcilewithmatching?: string;
+      accountsearchdisplaynamecopy?: string;
+      currency?: string;
+      subsidiary?: string;
     }>(`
       SELECT account.* FROM account`);
     // Currency is absent from the account schema when Multiple Currencies is
     // disabled. Selecting the record avoids referring to that unavailable column.
     const currencies = new Map<string, string>();
     if (rows.some((row) => s(row.currency))) {
-      for (const currency of await this.q<Record<string, string>>("SELECT id, symbol, name FROM currency")) {
+      for (const currency of await this.q<Record<string, string>>(
+        "SELECT id, symbol, name FROM currency",
+      )) {
         const iso = netSuiteCurrencyIso(currency.symbol);
         if (iso) currencies.set(String(currency.id), iso);
       }
@@ -1063,13 +1235,16 @@ export class NetSuiteSource implements MigrationSource {
     const purchaseOrder = this.mappings.projectPurchaseOrderField
       ? `${this.mappings.projectPurchaseOrderField} AS ponumber`
       : "NULL AS ponumber";
-    const rows = await this.qSince<Record<string, string>>(`
+    const rows = await this.qSince<Record<string, string>>(
+      `
       SELECT id, entityid, companyname, isinactive, entitystatus, jobbillingtype,
              BUILTIN.DF(entitystatus) AS statuslabel,
              customer, projectmanager, ${foreman}, ${purchaseOrder},
              TO_CHAR(startdate, 'MM/DD/YYYY') AS startdate,
              TO_CHAR(scheduledenddate, 'MM/DD/YYYY') AS enddate
-        FROM job`, since);
+        FROM job`,
+      since,
+    );
     // `jobprice` (fixed-bid contract price; the RESTlet reads the same field) is
     // feature-gated on some accounts, so fetch it in a separate guarded query —
     // a missing optional field degrades contractValue to null instead of
@@ -1079,7 +1254,9 @@ export class NetSuiteSource implements MigrationSource {
       for (const p of await this.qSince<{ id: string; jobprice?: string }>(
         "SELECT id, jobprice FROM job WHERE jobprice IS NOT NULL",
         since,
-        since ? `SELECT id, jobprice FROM job WHERE jobprice IS NOT NULL AND lastmodifieddate >= ${this.ts(since)}` : undefined,
+        since
+          ? `SELECT id, jobprice FROM job WHERE jobprice IS NOT NULL AND lastmodifieddate >= ${this.ts(since)}`
+          : undefined,
       )) {
         if (s(p.jobprice)) priceByRef.set(String(p.id), String(p.jobprice));
       }
@@ -1121,10 +1298,21 @@ export class NetSuiteSource implements MigrationSource {
     } catch {
       pricingRows = [];
     }
-    const priceByItem = new Map(pricingRows.map((row) => [String(row.item), moneyValue(row.unitprice)]));
+    const priceByItem = new Map(
+      pricingRows.map((row) => [String(row.item), moneyValue(row.unitprice)]),
+    );
     const rows = await this.qSince<{
-      id: string; itemid?: string; displayname?: string; itemtype: string; isinactive?: string; category?: string;
-      cost?: string; averagecost?: string; lastpurchaseprice?: string; costestimate?: string; saleunit?: string;
+      id: string;
+      itemid?: string;
+      displayname?: string;
+      itemtype: string;
+      isinactive?: string;
+      category?: string;
+      cost?: string;
+      averagecost?: string;
+      lastpurchaseprice?: string;
+      costestimate?: string;
+      saleunit?: string;
     }>(
       `SELECT id, itemid, displayname, itemtype, isinactive, cost, averagecost,
               lastpurchaseprice, costestimate, BUILTIN.DF(saleunit) AS saleunit, ${category}
@@ -1159,9 +1347,13 @@ export class NetSuiteSource implements MigrationSource {
       // A bridge older than 1.7.3 omits the date-driven fields. NetSuite
       // forbids net days on date-driven terms, so only a term without net
       // days can be date-driven; its record states which it is.
-      const dateDriven = term.dateDriven !== undefined || term.netDays > 0
-        ? term
-        : netSuiteTermDateDrivenFields((await this.bridge.record<{ fields: Record<string, unknown> }>("term", term.id)).fields);
+      const dateDriven =
+        term.dateDriven !== undefined || term.netDays > 0
+          ? term
+          : netSuiteTermDateDrivenFields(
+              (await this.bridge.record<{ fields: Record<string, unknown> }>("term", term.id))
+                .fields,
+            );
       out.push(normalizeNetSuitePaymentTerm(term, dateDriven));
     }
     return out;
@@ -1172,34 +1364,47 @@ export class NetSuiteSource implements MigrationSource {
     const multiplier = this.mappings.timeTypeMultiplierField
       ? `${this.mappings.timeTypeMultiplierField} AS multiplier`
       : "NULL AS multiplier";
-    const rows = await this.q<{ id: string; name?: string; multiplier?: string; isinactive?: string }>(
-      `SELECT id, name, ${multiplier}, isinactive FROM ${this.mappings.timeTypeRecord}`,
-    );
+    const rows = await this.q<{
+      id: string;
+      name?: string;
+      multiplier?: string;
+      isinactive?: string;
+    }>(`SELECT id, name, ${multiplier}, isinactive FROM ${this.mappings.timeTypeRecord}`);
     return rows.map((t) => ({
       sourceRef: String(t.id),
-      fields: { name: s(t.name) ?? `Time type ${t.id}`, costMultiplier: s(t.multiplier) ?? "1", isActive: !isT(t.isinactive) },
+      fields: {
+        name: s(t.name) ?? `Time type ${t.id}`,
+        costMultiplier: s(t.multiplier) ?? "1",
+        isActive: !isT(t.isinactive),
+      },
     }));
   }
 
   /** Photo inventory uses stable employee and file IDs, including inactive employees. */
   async partyPhotos() {
     const health = await this.bridge.health();
-    if (String(health.accountId).replaceAll("_", "-").toLowerCase()
-      !== this.expectedAccount.replaceAll("_", "-").toLowerCase()) {
+    if (
+      String(health.accountId).replaceAll("_", "-").toLowerCase() !==
+      this.expectedAccount.replaceAll("_", "-").toLowerCase()
+    ) {
       throw new Error("NetSuite employee photo account does not match the configured connector");
     }
     const rows = await this.q<{ id: string; photofile: string | null }>(
       "SELECT id, image AS photofile FROM employee ORDER BY id",
     );
     const refs = new Set<string>();
-    return rows.map(row => {
+    return rows.map((row) => {
       const partyRef = String(row.id);
-      if (!/^-?\d+$/.test(partyRef) || refs.has(partyRef) || !Object.hasOwn(row, 'photofile')) {
-        throw new Error("NetSuite employee photo inventory returned an invalid or duplicate identity");
+      if (!/^-?\d+$/.test(partyRef) || refs.has(partyRef) || !Object.hasOwn(row, "photofile")) {
+        throw new Error(
+          "NetSuite employee photo inventory returned an invalid or duplicate identity",
+        );
       }
       refs.add(partyRef);
-      const fileRef = row.photofile == null || String(row.photofile).trim() === '' ? null : String(row.photofile);
-      if (fileRef !== null && !/^\d+$/.test(fileRef)) throw new Error(`Employee ${partyRef} has an invalid NetSuite photo file ID`);
+      const fileRef =
+        row.photofile == null || String(row.photofile).trim() === "" ? null : String(row.photofile);
+      if (fileRef !== null && !/^\d+$/.test(fileRef))
+        throw new Error(`Employee ${partyRef} has an invalid NetSuite photo file ID`);
       return { partyRef, fileRef };
     });
   }
@@ -1212,13 +1417,21 @@ export class NetSuiteSource implements MigrationSource {
 
   /** Exact source IDs use the same employee projection as full and incremental synchronization. */
   async employeeEntities(refs: readonly string[]): Promise<EntityStream[]> {
-    if (!refs.length || refs.length > 100 || refs.some(ref => !/^\d+$/.test(ref))) throw new Error('A scoped employee pull requires 1–100 numeric NetSuite IDs');
+    if (!refs.length || refs.length > 100 || refs.some((ref) => !/^\d+$/.test(ref)))
+      throw new Error("A scoped employee pull requires 1–100 numeric NetSuite IDs");
     const records = await this.parties(null, refs);
-    if (new Set(records.map(row => row.sourceRef)).size !== new Set(refs).size || refs.some(ref => !records.some(row => row.sourceRef === ref))) throw new Error('A requested NetSuite employee is absent or duplicated in the source');
-    return [{ resource: 'parties', records }];
+    if (
+      new Set(records.map((row) => row.sourceRef)).size !== new Set(refs).size ||
+      refs.some((ref) => !records.some((row) => row.sourceRef === ref))
+    )
+      throw new Error("A requested NetSuite employee is absent or duplicated in the source");
+    return [{ resource: "parties", records }];
   }
 
-  private async parties(since?: Date | null, employeeRefs?: readonly string[]): Promise<SourceEntity[]> {
+  private async parties(
+    since?: Date | null,
+    employeeRefs?: readonly string[],
+  ): Promise<SourceEntity[]> {
     // Merge signals: entity records expose isinactive only; merge audit lives
     // in System Notes, which this adapter does not pull. No mergedIntoRef is
     // emitted; a merged-away entity takes the mirror's held path.
@@ -1228,37 +1441,59 @@ export class NetSuiteSource implements MigrationSource {
     const benefits = this.mappings.employeeBenefitsField
       ? `${this.mappings.employeeBenefitsField} AS benefits`
       : "NULL AS benefits";
-    const customers = employeeRefs ? [] : await this.qSince<Record<string, string>>(`
+    const customers = employeeRefs
+      ? []
+      : await this.qSince<Record<string, string>>(
+          `
       SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
              url, terms, creditlimit, salesrep, taxitem, receivablesaccount, subsidiary,
              ${shortCode}
-        FROM customer`, since);
-    const vendors = employeeRefs ? [] : await this.qSince<Record<string, string>>(`
+        FROM customer`,
+          since,
+        );
+    const vendors = employeeRefs
+      ? []
+      : await this.qSince<Record<string, string>>(
+          `
       SELECT id, entityid, companyname, altname, isperson, isinactive, email, phone,
              terms, legalname, taxidnum, is1099eligible, payablesaccount, expenseaccount, subsidiary
-        FROM vendor`, since);
-    const employees = await this.qSince<Record<string, string>>(`
+        FROM vendor`,
+          since,
+        );
+    const employees = await this.qSince<Record<string, string>>(
+      `
       SELECT id, entityid, firstname, lastname, isinactive, email, homephone,
              mobilephone, phone, department, supervisor,
              subsidiary,
              TO_CHAR(hiredate, 'MM/DD/YYYY') AS hiredate,
              TO_CHAR(releasedate, 'MM/DD/YYYY') AS releasedate,
              ${benefits}, initials
-        FROM employee${employeeRefs ? ` WHERE id IN (${employeeRefs.join(',')})` : ''}`, since);
+        FROM employee${employeeRefs ? ` WHERE id IN (${employeeRefs.join(",")})` : ""}`,
+      since,
+    );
 
     const out: SourceEntity[] = [];
     for (const c of customers) {
       out.push({
         sourceRef: String(c.id),
         fields: {
-          displayName: String(c.companyname ?? c.altname ?? c.entityid ?? `Customer ${c.id}`).slice(0, 500),
+          displayName: String(c.companyname ?? c.altname ?? c.entityid ?? `Customer ${c.id}`).slice(
+            0,
+            500,
+          ),
           kind: isT(c.isperson) ? "person" : "company",
           isActive: !isT(c.isinactive),
-          email: s(c.email), phone: s(c.phone), website: s(c.url), shortCode: s(c.shortform),
+          email: s(c.email),
+          phone: s(c.phone),
+          website: s(c.url),
+          shortCode: s(c.shortform),
           subsidiaryRef: s(c.subsidiary),
           customerRole: {
-            arAccountRef: s(c.receivablesaccount), termsRef: s(c.terms),
-            creditLimit: s(c.creditlimit), salesRepRef: s(c.salesrep), taxCodeRef: s(c.taxitem),
+            arAccountRef: s(c.receivablesaccount),
+            termsRef: s(c.terms),
+            creditLimit: s(c.creditlimit),
+            salesRepRef: s(c.salesrep),
+            taxCodeRef: s(c.taxitem),
           },
         },
       });
@@ -1269,14 +1504,22 @@ export class NetSuiteSource implements MigrationSource {
       out.push({
         sourceRef: String(v.id),
         fields: {
-          displayName: String(v.companyname ?? v.altname ?? v.entityid ?? `Vendor ${v.id}`).slice(0, 500),
+          displayName: String(v.companyname ?? v.altname ?? v.entityid ?? `Vendor ${v.id}`).slice(
+            0,
+            500,
+          ),
           kind: isT(v.isperson) ? "person" : "company",
           isActive: !isT(v.isinactive),
-          email: s(v.email), phone: s(v.phone), legalName: s(v.legalname), taxIds,
+          email: s(v.email),
+          phone: s(v.phone),
+          legalName: s(v.legalname),
+          taxIds,
           subsidiaryRef: s(v.subsidiary),
           vendorRole: {
-            apAccountRef: s(v.payablesaccount), termsRef: s(v.terms),
-            defaultExpenseAccountRef: s(v.expenseaccount), is1099OrT4a: isT(v.is1099eligible),
+            apAccountRef: s(v.payablesaccount),
+            termsRef: s(v.terms),
+            defaultExpenseAccountRef: s(v.expenseaccount),
+            is1099OrT4a: isT(v.is1099eligible),
           },
         },
       });
@@ -1285,14 +1528,21 @@ export class NetSuiteSource implements MigrationSource {
       out.push({
         sourceRef: String(e.id),
         fields: {
-          displayName: String(e.entityid ?? [e.firstname, e.lastname].filter(Boolean).join(" ") ?? `Employee ${e.id}`).slice(0, 500),
+          displayName: String(
+            e.entityid ?? [e.firstname, e.lastname].filter(Boolean).join(" ") ?? `Employee ${e.id}`,
+          ).slice(0, 500),
           kind: "person",
           isActive: !isT(e.isinactive),
-          email: s(e.email), phone: s(e.mobilephone) ?? s(e.phone) ?? s(e.homephone),
+          email: s(e.email),
+          phone: s(e.mobilephone) ?? s(e.phone) ?? s(e.homephone),
           subsidiaryRef: s(e.subsidiary),
           employeeRole: {
-            employeeNumber: s(e.initials), departmentRef: s(e.department), supervisorRef: s(e.supervisor),
-            hiredOn: usDateToIso(e.hiredate), terminatedOn: usDateToIso(e.releasedate), hasBenefits: isT(e.benefits),
+            employeeNumber: s(e.initials),
+            departmentRef: s(e.department),
+            supervisorRef: s(e.supervisor),
+            hiredOn: usDateToIso(e.hiredate),
+            terminatedOn: usDateToIso(e.releasedate),
+            hasBenefits: isT(e.benefits),
           },
         },
       });
@@ -1314,17 +1564,24 @@ export class NetSuiteSource implements MigrationSource {
       const rows = await this.qSince<Record<string, string>>(
         full,
         since,
-        since ? `${full} WHERE ab.entity IN (SELECT id FROM ${kind} WHERE lastmodifieddate >= ${this.ts(since)})` : undefined,
+        since
+          ? `${full} WHERE ab.entity IN (SELECT id FROM ${kind} WHERE lastmodifieddate >= ${this.ts(since)})`
+          : undefined,
       );
       for (const a of rows) {
         out.push({
           sourceRef: `${kind}:${a.abid}`,
           fields: {
             entityRef: s(a.entity),
-            label: s(a.label), line1: s(a.addr1),
+            label: s(a.label),
+            line1: s(a.addr1),
             line2: [s(a.addr2), s(a.addr3)].filter(Boolean).join(", ") || null,
-            city: s(a.city), region: s(a.state), postalCode: s(a.zip), country: s(a.country),
-            isDefaultBilling: isT(a.defaultbilling), isDefaultShipping: isT(a.defaultshipping),
+            city: s(a.city),
+            region: s(a.state),
+            postalCode: s(a.zip),
+            country: s(a.country),
+            isDefaultBilling: isT(a.defaultbilling),
+            isDefaultShipping: isT(a.defaultshipping),
           },
         });
       }
@@ -1333,20 +1590,30 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private async contacts(since?: Date | null): Promise<SourceEntity[]> {
-    const rows = await this.qSince<Record<string, string>>(`
+    const rows = await this.qSince<Record<string, string>>(
+      `
       SELECT id, company, contactrole, BUILTIN.DF(contactrole) AS contactrolelabel,
              email, phone, officephone, mobilephone,
              title, entityid, firstname, lastname, fax, isinactive
-        FROM contact`, since);
+        FROM contact`,
+      since,
+    );
     return rows.map((c) => ({
       sourceRef: String(c.id),
       fields: {
         companyRef: s(c.company),
-        name: s(c.entityid) ?? ([s(c.firstname), s(c.lastname)].filter(Boolean).join(" ") || "Contact"),
-        firstName: s(c.firstname), lastName: s(c.lastname), title: s(c.title),
+        name:
+          s(c.entityid) ?? ([s(c.firstname), s(c.lastname)].filter(Boolean).join(" ") || "Contact"),
+        firstName: s(c.firstname),
+        lastName: s(c.lastname),
+        title: s(c.title),
         role: s(c.contactrolelabel),
-        email: s(c.email), phone: s(c.phone) ?? s(c.officephone), mobilePhone: s(c.mobilephone),
-        fax: s(c.fax), isPrimary: /primary/i.test(s(c.contactrolelabel) ?? ""), isActive: !isT(c.isinactive),
+        email: s(c.email),
+        phone: s(c.phone) ?? s(c.officephone),
+        mobilePhone: s(c.mobilephone),
+        fax: s(c.fax),
+        isPrimary: /primary/i.test(s(c.contactrolelabel) ?? ""),
+        isActive: !isT(c.isinactive),
       },
     }));
   }
@@ -1386,7 +1653,8 @@ export class NetSuiteSource implements MigrationSource {
       };
     });
     if (since) {
-      for (const partition of partitions) rows.push(...(await this.q<Record<string, string>>(partition.sql)));
+      for (const partition of partitions)
+        rows.push(...(await this.q<Record<string, string>>(partition.sql)));
     } else {
       const exported = await this.bridge.bulkQuery<Record<string, string>>(partitions);
       for (const partition of partitions) rows.push(...(exported.get(partition.id) ?? []));
@@ -1397,15 +1665,20 @@ export class NetSuiteSource implements MigrationSource {
   /** The project type a source `jobbillingtype` resolves to: the account's own
    * override when it has one, otherwise NetSuite's stock reading. */
   private projectBillingType(value: unknown): string | null {
-    const code = String(value ?? "").trim().toUpperCase();
+    const code = String(value ?? "")
+      .trim()
+      .toUpperCase();
     if (!code) return null;
     return this.mappings.projectBillingTypes?.[code] ?? NS_BILLING[code] ?? null;
   }
 
   private projectStatus(row: Record<string, string>): string {
     const id = String(row.entitystatus ?? "").toLowerCase();
-    const label = String(row.statuslabel ?? "").trim().toLowerCase();
-    const configured = this.mappings.projectStatuses?.[id] ?? this.mappings.projectStatuses?.[label];
+    const label = String(row.statuslabel ?? "")
+      .trim()
+      .toLowerCase();
+    const configured =
+      this.mappings.projectStatuses?.[id] ?? this.mappings.projectStatuses?.[label];
     if (configured) return configured;
     if (/cancel/.test(label)) return "cancelled";
     if (/substantial/.test(label)) return "substantially_complete";
@@ -1446,10 +1719,12 @@ export class NetSuiteSource implements MigrationSource {
          AND tal.accountingbook = ${accountingBookId}
          AND tal.account IN (${refs.join(",")})
        GROUP BY tal.account`);
-    return new Map(rows.map((row) => [
-      String(row.account),
-      fromUnits(toUnits(row.debit ?? "0") - toUnits(row.credit ?? "0")),
-    ]));
+    return new Map(
+      rows.map((row) => [
+        String(row.account),
+        fromUnits(toUnits(row.debit ?? "0") - toUnits(row.credit ?? "0")),
+      ]),
+    );
   }
 
   /**
@@ -1457,31 +1732,47 @@ export class NetSuiteSource implements MigrationSource {
    * mirrors (FAM here) so they reuse the normal NetSuite builder without
    * enumerating the account's entire transaction universe.
    */
-  async nativeTransactionsByIds(transactionIds: string[], ctx: NativeContext): Promise<NativeChanges> {
+  async nativeTransactionsByIds(
+    transactionIds: string[],
+    ctx: NativeContext,
+  ): Promise<NativeChanges> {
     const ids = [...new Set(transactionIds)];
-    if (ids.some((id) => !/^\d+$/.test(id))) throw new Error("NetSuite transaction ids must be numeric");
+    if (ids.some((id) => !/^\d+$/.test(id)))
+      throw new Error("NetSuite transaction ids must be numeric");
     const nowRows = await this.q<{ now: string }>(NETSUITE_TRANSACTION_WATERMARK_QUERY);
     if (!nowRows[0]?.now) throw new Error("NetSuite has no transaction watermark");
     const syncedThrough = new Date(nowRows[0]!.now.replace(" ", "T") + "Z");
-    if (!ids.length) return { documents: [], applications: [], deletedRefs: [], syncedThrough, unbuildable: [], nonLedgerRefs: [] };
+    if (!ids.length)
+      return {
+        documents: [],
+        applications: [],
+        deletedRefs: [],
+        syncedThrough,
+        unbuildable: [],
+        nonLedgerRefs: [],
+      };
 
     const headers: NsHeader[] = [];
     const linesByTxn = new Map<string, NsLine[]>();
     for (let index = 0; index < ids.length; index += 150) {
       const chunk = ids.slice(index, index + 150);
-      headers.push(...await this.q<NsHeader>(
-        `SELECT ${HEADER_COLS} FROM transaction t WHERE t.id IN (${chunk.join(",")}) ORDER BY t.id`,
-      ));
+      headers.push(
+        ...(await this.q<NsHeader>(
+          `SELECT ${HEADER_COLS} FROM transaction t WHERE t.id IN (${chunk.join(",")}) ORDER BY t.id`,
+        )),
+      );
       for (const line of await this.q<NsLine>(
         `SELECT ${netSuiteLineColumns(this.mappings)} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")}) ORDER BY tl.transaction, tl.id`,
       )) {
         const key = String(line.transaction);
         linesByTxn.set(key, [...(linesByTxn.get(key) ?? []), line]);
       }
-
     }
     for (const [transactionId, rows] of linesByTxn) {
-      linesByTxn.set(transactionId, uniqueNetSuiteTransactionLines(rows).sort((a, b) => Number(a.id) - Number(b.id)));
+      linesByTxn.set(
+        transactionId,
+        uniqueNetSuiteTransactionLines(rows).sort((a, b) => Number(a.id) - Number(b.id)),
+      );
     }
     const documents: NativeDocument[] = [];
     const unbuildable: { ref: string; reason: string }[] = [];
@@ -1489,22 +1780,31 @@ export class NetSuiteSource implements MigrationSource {
     for (const header of headers) {
       const raw = linesByTxn.get(String(header.id));
       if (!raw?.length) continue;
-      const built = buildNativeFromNetSuite(ctx, { ...header, id: String(header.id) }, raw, { taxCodeFallbacks: this.mappings.taxCodeFallbacks });
+      const built = buildNativeFromNetSuite(ctx, { ...header, id: String(header.id) }, raw, {
+        taxCodeFallbacks: this.mappings.taxCodeFallbacks,
+      });
       if ("skip" in built) {
-        if (built.skip === "posting='F'" || built.skip.startsWith("non-ledger source transaction")) nonLedgerRefs.push(String(header.id));
+        if (built.skip === "posting='F'" || built.skip.startsWith("non-ledger source transaction"))
+          nonLedgerRefs.push(String(header.id));
         else unbuildable.push({ ref: String(header.id), reason: built.skip });
       } else {
         documents.push(built.doc);
       }
     }
     const { applications, observation } = await this.readSettlements(ids);
-    return { documents, applications, settlementObservation: observation, sourcePresence: this.sourcePresence(headers), deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
+    return {
+      documents,
+      applications,
+      settlementObservation: observation,
+      sourcePresence: this.sourcePresence(headers),
+      deletedRefs: [],
+      syncedThrough,
+      unbuildable,
+      nonLedgerRefs,
+    };
   }
 
-  nativeChangesByRefs(
-    sourceRefs: string[],
-    ctx: NativeContext,
-  ): Promise<NativeChanges> {
+  nativeChangesByRefs(sourceRefs: string[], ctx: NativeContext): Promise<NativeChanges> {
     return this.nativeTransactionsByIds(sourceRefs, ctx);
   }
 
@@ -1529,8 +1829,17 @@ export class NetSuiteSource implements MigrationSource {
     let fullWindows: Array<[number, number]> = [];
     if (effectiveSince) {
       const clause = `t.lastmodifieddate >= ${this.ts(effectiveSince)} AND t.lastmodifieddate <= ${this.ts(syncedThrough)}`;
-      headers.push(...(await this.q<NsHeader>(`SELECT ${HEADER_COLS} FROM transaction t WHERE ${clause} ORDER BY t.id`)));
-      ctx.onProgress?.({ phase: "pull", message: "Pulling transactions…", current: headers.length, total: totalTxns });
+      headers.push(
+        ...(await this.q<NsHeader>(
+          `SELECT ${HEADER_COLS} FROM transaction t WHERE ${clause} ORDER BY t.id`,
+        )),
+      );
+      ctx.onProgress?.({
+        phase: "pull",
+        message: "Pulling transactions…",
+        current: headers.length,
+        total: totalTxns,
+      });
     } else {
       const maxRow = (await this.q<{ m: string }>("SELECT MAX(t.id) AS m FROM transaction t"))[0]!;
       const maxId = Number(maxRow.m ?? 0);
@@ -1542,7 +1851,12 @@ export class NetSuiteSource implements MigrationSource {
       const exported = await this.bridge.bulkQuery<NsHeader>(partitions);
       for (const partition of partitions) {
         headers.push(...(exported.get(partition.id) ?? []));
-        ctx.onProgress?.({ phase: "pull", message: "Pulling transactions…", current: headers.length, total: totalTxns });
+        ctx.onProgress?.({
+          phase: "pull",
+          message: "Pulling transactions…",
+          current: headers.length,
+          total: totalTxns,
+        });
       }
     }
 
@@ -1561,13 +1875,22 @@ export class NetSuiteSource implements MigrationSource {
       for (let i = 0; i < tids.length; i += 150) {
         const chunk = tids.slice(i, i + 150);
         if (chunk.length === 0) continue;
-        ctx.onProgress?.({ phase: "pull", message: "Pulling transaction lines…", current: Math.min(i + 150, tids.length), total: tids.length });
-        collectLines(await this.q<NsLine>(
-          `SELECT ${netSuiteLineColumns(this.mappings)} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")}) ORDER BY tl.transaction, tl.id`,
-        ));
+        ctx.onProgress?.({
+          phase: "pull",
+          message: "Pulling transaction lines…",
+          current: Math.min(i + 150, tids.length),
+          total: tids.length,
+        });
+        collectLines(
+          await this.q<NsLine>(
+            `SELECT ${netSuiteLineColumns(this.mappings)} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")}) ORDER BY tl.transaction, tl.id`,
+          ),
+        );
       }
     } else {
-      const occupiedWindows = new Set(headers.map((header) => Math.floor((Number(header.id) - 1) / NETSUITE_ID_WINDOW)));
+      const occupiedWindows = new Set(
+        headers.map((header) => Math.floor((Number(header.id) - 1) / NETSUITE_ID_WINDOW)),
+      );
       const windowsWithHeaders = fullWindows.filter((_, index) => occupiedWindows.has(index));
       const partitions = windowsWithHeaders.map(([lo, hi], index) => ({
         id: `line-${String(index).padStart(4, "0")}`,
@@ -1600,15 +1923,21 @@ export class NetSuiteSource implements MigrationSource {
     for (const h of headers) {
       const raw = linesByTxn.get(String(h.id));
       if (!raw || raw.length === 0) continue;
-      const built = buildNativeFromNetSuite(ctx, { ...h, id: String(h.id) }, raw, { taxCodeFallbacks: this.mappings.taxCodeFallbacks });
+      const built = buildNativeFromNetSuite(ctx, { ...h, id: String(h.id) }, raw, {
+        taxCodeFallbacks: this.mappings.taxCodeFallbacks,
+      });
       if ("skip" in built) {
-        if (built.skip === "posting='F'" || built.skip.startsWith("non-ledger source transaction")) {
+        if (
+          built.skip === "posting='F'" ||
+          built.skip.startsWith("non-ledger source transaction")
+        ) {
           nonLedgerRefs.push(String(h.id));
           continue;
         }
         // Silent for genuinely non-posting rows; everything else is diagnostic.
         if (h.posting === "T") unbuildable.push({ ref: String(h.id), reason: built.skip });
-        else if (built.skip.startsWith("order")) unbuildable.push({ ref: String(h.id), reason: built.skip });
+        else if (built.skip.startsWith("order"))
+          unbuildable.push({ ref: String(h.id), reason: built.skip });
         continue;
       }
       documents.push(built.doc);
@@ -1622,9 +1951,11 @@ export class NetSuiteSource implements MigrationSource {
     const deletedRefs: string[] = [];
     if (effectiveSince) {
       const deleted = await this.bridge.deletedRecords(effectiveSince);
-      const transactionLabel = /invoice|bill|payment|credit|journal|check|deposit|transfer|expense report|sales order|purchase order/i;
+      const transactionLabel =
+        /invoice|bill|payment|credit|journal|check|deposit|transfer|expense report|sales order|purchase order/i;
       for (const row of deleted) {
-        if (row.internalId && transactionLabel.test(row.recordType)) deletedRefs.push(row.internalId);
+        if (row.internalId && transactionLabel.test(row.recordType))
+          deletedRefs.push(row.internalId);
       }
     }
     return {
@@ -1640,38 +1971,53 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private sourcePresence(headers: NsHeader[]) {
-    return headers.map(header => {
+    return headers.map((header) => {
       if (header.posting !== "T" && header.posting !== "F") {
-        throw new Error(`NetSuite transaction ${header.id} has unknown posting state; restore source transaction access and retry the sync`);
+        throw new Error(
+          `NetSuite transaction ${header.id} has unknown posting state; restore source transaction access and retry the sync`,
+        );
       }
       return { ref: String(header.id), posting: header.posting === "T" };
     });
   }
 
   private async readSettlements(refs?: string[]) {
-    const result = await readNetSuiteSettlements(query => this.q(query), {
+    const result = await readNetSuiteSettlements((query) => this.q(query), {
       sourceAccount: this.expectedAccount,
       bookRef: await this.accountingBookId(),
       baseCurrency: this.baseCurrency,
       refs,
     });
-    this.settlementPayers = { graphDigest: result.observation.graphDigest, payerDigests: result.payerDigests };
+    this.settlementPayers = {
+      graphDigest: result.observation.graphDigest,
+      payerDigests: result.payerDigests,
+    };
     return result;
   }
 
   async revalidateSettlementObservation(observation: SettlementObservation): Promise<void> {
-    if (observation.source !== this.name || observation.sourceAccount !== this.expectedAccount
-        || observation.bookRef !== await this.accountingBookId()) {
-      throw new Error("source settlement observation belongs to a different source account or book");
+    if (
+      observation.source !== this.name ||
+      observation.sourceAccount !== this.expectedAccount ||
+      observation.bookRef !== (await this.accountingBookId())
+    ) {
+      throw new Error(
+        "source settlement observation belongs to a different source account or book",
+      );
     }
-    const current = await this.readSettlements(observation.scope.kind === "references" ? observation.scope.refs : undefined);
+    const current = await this.readSettlements(
+      observation.scope.kind === "references" ? observation.scope.refs : undefined,
+    );
     if (current.observation.graphDigest !== observation.graphDigest) {
       throw new Error("source settlement graph changed before reconciliation; retry the sync");
     }
     observation.observedThrough = current.observation.observedThrough;
   }
 
-  async confirmSettlementReleases(observation: SettlementObservation, paymentRefs: string[]): Promise<void> {
+  async confirmSettlementReleases(
+    observation: SettlementObservation,
+    paymentRefs: string[],
+  ): Promise<void> {
     // Recheck only affected payers while local settlement locks are held.
     // Their exact link evidence must agree with the revalidated population.
     const expected = this.settlementPayers;
@@ -1679,22 +2025,40 @@ export class NetSuiteSource implements MigrationSource {
       throw new Error("NetSuite settlement releases require their revalidated source observation");
     }
     const refs = [...new Set(paymentRefs)].sort();
-    if (refs.some(ref => !/^\d+$/.test(ref))) throw new Error("NetSuite settlement payment references must be numeric");
+    if (refs.some((ref) => !/^\d+$/.test(ref)))
+      throw new Error("NetSuite settlement payment references must be numeric");
     for (let index = 0; index < refs.length; index += 150) {
       const chunk = refs.slice(index, index + 150);
       const current = await this.readSettlements(chunk);
-      if (chunk.some(ref => (current.payerDigests.get(ref) ?? settlementDigest([]))
-          !== (expected.payerDigests.get(ref) ?? settlementDigest([])))) {
-        throw new Error("NetSuite settlement payer links changed before release; retry the sync; settlements were preserved");
+      if (
+        chunk.some(
+          (ref) =>
+            (current.payerDigests.get(ref) ?? settlementDigest([])) !==
+            (expected.payerDigests.get(ref) ?? settlementDigest([])),
+        )
+      ) {
+        throw new Error(
+          "NetSuite settlement payer links changed before release; retry the sync; settlements were preserved",
+        );
       }
       const query = `SELECT id,posting FROM transaction WHERE id IN (${chunk.join(",")}) ORDER BY id`;
       const first = await this.q<{ id: string; posting: string }>(query);
       const second = await this.q<{ id: string; posting: string }>(query);
-      if (first.length !== chunk.length || second.length !== chunk.length
-          || first.some((row, position) => row.id !== second[position]?.id || row.posting !== "T" || second[position]?.posting !== "T")
-          || new Set(first.map(row => String(row.id))).size !== chunk.length
-          || first.some(row => !chunk.includes(String(row.id)))) {
-        throw new Error(`NetSuite settlement payers ${chunk.join(", ")} are missing, nonposting, or changed during release confirmation; restore source access or resolve their governed reversal, then retry the sync; settlements were preserved`);
+      if (
+        first.length !== chunk.length ||
+        second.length !== chunk.length ||
+        first.some(
+          (row, position) =>
+            row.id !== second[position]?.id ||
+            row.posting !== "T" ||
+            second[position]?.posting !== "T",
+        ) ||
+        new Set(first.map((row) => String(row.id))).size !== chunk.length ||
+        first.some((row) => !chunk.includes(String(row.id)))
+      ) {
+        throw new Error(
+          `NetSuite settlement payers ${chunk.join(", ")} are missing, nonposting, or changed during release confirmation; restore source access or resolve their governed reversal, then retry the sync; settlements were preserved`,
+        );
       }
     }
   }
@@ -1710,7 +2074,10 @@ export class NetSuiteSource implements MigrationSource {
        GROUP BY tal.account`);
     return rows
       .filter((r) => r.acct)
-      .map((r) => ({ accountRef: String(r.acct), balance: fromUnits(toUnits(r.d) - toUnits(r.c)) }));
+      .map((r) => ({
+        accountRef: String(r.acct),
+        balance: fromUnits(toUnits(r.d) - toUnits(r.c)),
+      }));
   }
 
   async monthlyActivity(): Promise<SourceAccountMonthRow[]> {

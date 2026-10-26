@@ -12,12 +12,10 @@
  */
 
 export type BoundedBodyResult =
-  | { ok: true; text: string }
-  | { ok: false; reason: "too_large" | "unreadable" };
+  { ok: true; text: string } | { ok: false; reason: "too_large" | "unreadable" };
 
 export type BoundedBytesResult =
-  | { ok: true; bytes: Buffer }
-  | { ok: false; reason: "too_large" | "unreadable" };
+  { ok: true; bytes: Buffer } | { ok: false; reason: "too_large" | "unreadable" };
 
 /**
  * Byte twin of the text reader for signature-verified deliveries: HMAC

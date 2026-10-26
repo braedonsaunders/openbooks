@@ -12,8 +12,7 @@ interface ProvisionCreateCall {
   input: { lossCarryforwardUsed: string };
 }
 const routeState: { calls: ProvisionCreateCall[] } = { calls: [] };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const root = pathToFileURL(process.cwd() + "/").href;
 
@@ -51,10 +50,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
-  [
-    "@openbooks/engine/tax-returns/income-tax-provision",
-    "mock:income-tax-provision",
-  ],
+  ["@openbooks/engine/tax-returns/income-tax-provision", "mock:income-tax-provision"],
 ]);
 
 const hooks = registerHooks({
@@ -68,8 +64,7 @@ const hooks = registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
@@ -96,11 +91,7 @@ test("POST refuses a provision amount wider than numeric(19,4) before the run", 
   });
 
   assert.equal(response.status, 400, JSON.stringify(await response.json()));
-  assert.equal(
-    routeState.calls.length,
-    0,
-    "a refused amount must never reach the provision run",
-  );
+  assert.equal(routeState.calls.length, 0, "a refused amount must never reach the provision run");
 });
 
 test("POST still runs an ordinary provision", async () => {

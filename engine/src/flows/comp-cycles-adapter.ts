@@ -2,11 +2,7 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
-import type {
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-  FlowExecCtx,
-} from "./types.ts";
+import type { FlowSubjectAdapter, FlowSubjectContext, FlowExecCtx } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
@@ -88,123 +84,119 @@ async function loadCycle(subjectId: string): Promise<CycleRow | null> {
   // every caller scopes the subject through its own org-scoped gate row.
   // findCandidateIds below is the tenant-bounded entry point and keeps
   // the explicit boundary.
-  const result = await db.execute<CycleRow>(sql`
+  const result = await db.execute<CycleRow>(
+    sql`
     select org_id, name, kind, status,
            effective_on::text as effective_on, budget_total::text as budget_total,
            created_by, revision
       from hrm_comp_cycles
      where id = ${subjectId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return result[0] ?? null;
 }
 
-export const hrmCompCycleFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
-    // A cycle scoped to one employer entity carries it; an org-wide cycle has
-    // no owner and restricted callers fail closed on it.
-    permissions: {
-      read: "hrm.compensation.read",
-      edit: "hrm.compensation.manage",
-      approve: "hrm.compensation.manage",
-    },
-    scope: tableScope(
-      "column",
-      "hrm_comp_cycles",
-      "scope_employer_subsidiary_id",
-    ),
-    profile: hrmCompCycleSubjectProfile,
-    // releaseApproval below delegates to the registered engine handler.
-    releaseViaHandler: true,
-    // A flow must not rewrite the round it is approving: the cycle freezes
-    // on submit, so no header field is flow-writable.
+export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
+  // A cycle scoped to one employer entity carries it; an org-wide cycle has
+  // no owner and restricted callers fail closed on it.
+  permissions: {
+    read: "hrm.compensation.read",
+    edit: "hrm.compensation.manage",
+    approve: "hrm.compensation.manage",
+  },
+  scope: tableScope("column", "hrm_comp_cycles", "scope_employer_subsidiary_id"),
+  profile: hrmCompCycleSubjectProfile,
+  // releaseApproval below delegates to the registered engine handler.
+  releaseViaHandler: true,
+  // A flow must not rewrite the round it is approving: the cycle freezes
+  // on submit, so no header field is flow-writable.
 
-    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-      const cycle = await loadCycle(subjectId);
-      if (!cycle) return null;
-      const fingerprint = (await db.execute<{
-          value: string;
-        }>(sql`select public.compensation_cycle_approval_fingerprint(c) as value
-      from hrm_comp_cycles c where c.org_id=${cycle.org_id} and c.id=${subjectId}`, "objects"))[0]?.value;
-      if (!fingerprint)
-        throw new Error(
-          "The compensation cycle is unavailable for submission.",
-        );
-      return {
-        values: {
-          id: subjectId,
-          cycleId: subjectId,
-          approvalFingerprint: fingerprint,
-          cycleRevision: cycle.revision,
-          cycleKind: cycle.kind,
-          effectiveOn: String(cycle.effective_on).slice(0, 10),
-          budgetTotal: cycle.budget_total,
-          status: cycle.status,
-          submittedBy: cycle.created_by,
-        },
-        submitterUserId: cycle.created_by,
-      };
-    },
+  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+    const cycle = await loadCycle(subjectId);
+    if (!cycle) return null;
+    const fingerprint = (
+      await db.execute<{
+        value: string;
+      }>(
+        sql`select public.compensation_cycle_approval_fingerprint(c) as value
+      from hrm_comp_cycles c where c.org_id=${cycle.org_id} and c.id=${subjectId}`,
+        "objects",
+      )
+    )[0]?.value;
+    if (!fingerprint) throw new Error("The compensation cycle is unavailable for submission.");
+    return {
+      values: {
+        id: subjectId,
+        cycleId: subjectId,
+        approvalFingerprint: fingerprint,
+        cycleRevision: cycle.revision,
+        cycleKind: cycle.kind,
+        effectiveOn: String(cycle.effective_on).slice(0, 10),
+        budgetTotal: cycle.budget_total,
+        status: cycle.status,
+        submittedBy: cycle.created_by,
+      },
+      submitterUserId: cycle.created_by,
+    };
+  },
 
-    label(subjectId: string, values: Record<string, unknown>): string {
-      const name =
-        typeof values.cycleKind === "string"
-          ? values.cycleKind
-          : "compensation";
-      return `Compensation ${name} ${subjectId.slice(0, 8)}`;
-    },
+  label(subjectId: string, values: Record<string, unknown>): string {
+    const name = typeof values.cycleKind === "string" ? values.cycleKind : "compensation";
+    return `Compensation ${name} ${subjectId.slice(0, 8)}`;
+  },
 
-    deepLink(subjectId: string): string {
-      return `/hrm/compensation/cycles/${subjectId}`;
-    },
+  deepLink(subjectId: string): string {
+    return `/hrm/compensation/cycles/${subjectId}`;
+  },
 
-    async getStatus(subjectId: string): Promise<string | null> {
-      return (await loadCycle(subjectId))?.status ?? null;
-    },
+  async getStatus(subjectId: string): Promise<string | null> {
+    return (await loadCycle(subjectId))?.status ?? null;
+  },
 
-    async changeStatus(): Promise<void> {
+  async changeStatus(): Promise<void> {
+    throw new Error("comp-cycle status is released by the approval engine, not a flow action");
+  },
+
+  async setField(): Promise<void> {
+    throw new Error("compensation cycles are frozen on submit; cancel and start a new round");
+  },
+
+  /** Recent cycles in review, for scheduled fan-out (reminders). */
+  async findCandidateIds(limit: number): Promise<string[]> {
+    const orgId = ambientTenantOrgId();
+    if (!orgId) {
       throw new Error(
-        "comp-cycle status is released by the approval engine, not a flow action",
+        `findCandidateIds for "${HRM_COMP_CYCLE_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
       );
-    },
-
-    async setField(): Promise<void> {
-      throw new Error(
-        "compensation cycles are frozen on submit; cancel and start a new round",
-      );
-    },
-
-    /** Recent cycles in review, for scheduled fan-out (reminders). */
-    async findCandidateIds(limit: number): Promise<string[]> {
-      const orgId = ambientTenantOrgId();
-      if (!orgId) {
-        throw new Error(
-          `findCandidateIds for "${HRM_COMP_CYCLE_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
-        );
-      }
-      const result = await db.execute<{ id: string }>(sql`
+    }
+    const result = await db.execute<{ id: string }>(
+      sql`
       select id::text as id from hrm_comp_cycles
        where org_id = ${orgId} and status = 'in_review'
        order by created_at desc
        limit ${limit}
-    `, "objects");
-      return result.map((row) => row.id);
-    },
+    `,
+      "objects",
+    );
+    return result.map((row) => row.id);
+  },
 
-    async releaseApproval(
-      subjectId: string,
-      outcome: "approved" | "rejected",
-      ctx: FlowExecCtx,
-      detail?: { comment?: string | null },
-      run?: { id: string; dispatchValues: Record<string, unknown> | null },
-    ): Promise<void> {
-      await releaseFlowApproval({
-        subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        comment: detail?.comment,
-        ctx,
-        approvalRunId: run?.id,
-      });
-    },
-  });
+  async releaseApproval(
+    subjectId: string,
+    outcome: "approved" | "rejected",
+    ctx: FlowExecCtx,
+    detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
+  ): Promise<void> {
+    await releaseFlowApproval({
+      subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      comment: detail?.comment,
+      ctx,
+      approvalRunId: run?.id,
+    });
+  },
+});

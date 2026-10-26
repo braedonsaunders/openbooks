@@ -30,7 +30,11 @@ async function account(
   return id;
 }
 
-async function customerDefault(org: Org, actorId: string, arAccountId: string | null): Promise<void> {
+async function customerDefault(
+  org: Org,
+  actorId: string,
+  arAccountId: string | null,
+): Promise<void> {
   await db.execute(sql`
     insert into customer_roles (org_id, party_id, ar_account_id, currency, is_on_hold, created_by, updated_by)
     values (${org.orgId}, ${org.customerId}, ${arAccountId}, 'CAD', false, ${actorId}, ${actorId})
@@ -83,33 +87,60 @@ function post(org: Org, documentId: string): Promise<string> {
 }
 
 async function controlLegs(entryId: string) {
-  return await db.execute<{ id: string; account_id: string; amount: string; is_open_item: boolean; party_id: string | null }>(sql`
+  return await db.execute<{
+    id: string;
+    account_id: string;
+    amount: string;
+    is_open_item: boolean;
+    party_id: string | null;
+  }>(
+    sql`
     select id, account_id, amount::text as amount, is_open_item, party_id
       from journal_lines where entry_id = ${entryId} and is_open_item
-     order by id`, "objects");
+     order by id`,
+    "objects",
+  );
 }
 
 async function storedChoice(documentId: string): Promise<string | null> {
-  return (await db.execute<{ choice: string | null }>(sql`
-    select custom->>'controlAccountId' as choice from documents where id = ${documentId}`, "objects"))[0]!.choice;
+  return (
+    await db.execute<{ choice: string | null }>(
+      sql`
+    select custom->>'controlAccountId' as choice from documents where id = ${documentId}`,
+      "objects",
+    )
+  )[0]!.choice;
 }
 
 async function accountBalance(org: Org, accountId: string): Promise<string> {
-  return (await db.execute<{ balance: string }>(sql`
+  return (
+    await db.execute<{ balance: string }>(
+      sql`
     select coalesce(sum(jl.amount), 0)::text as balance
       from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-     where jl.org_id = ${org.orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`, "objects"))[0]!.balance;
+     where jl.org_id = ${org.orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`,
+      "objects",
+    )
+  )[0]!.balance;
 }
 
 async function unposted(documentId: string) {
-  return (await db.execute<{ status: string; entries: number }>(sql`
+  return (
+    await db.execute<{ status: string; entries: number }>(
+      sql`
     select status, (select count(*)::int from journal_entries where source_document_id = ${documentId}) as entries
-      from documents where id = ${documentId}`, "objects"))[0]!;
+      from documents where id = ${documentId}`,
+      "objects",
+    )
+  )[0]!;
 }
 
 async function expectRefusal(promise: Promise<unknown>, ...patterns: RegExp[]): Promise<void> {
-  await assert.rejects(promise, (error: unknown) =>
-    error instanceof PostingError && patterns.every((pattern) => pattern.test(error.message)));
+  await assert.rejects(
+    promise,
+    (error: unknown) =>
+      error instanceof PostingError && patterns.every((pattern) => pattern.test(error.message)),
+  );
 }
 
 test(
@@ -124,7 +155,10 @@ test(
         await customerDefault(org, actorId, retainage);
 
         const invoiceId = await approvedDocument(org, actorId, {
-          kind: "customer_invoice", number: "INV-CTL-1", total: "1000", lineAccountId: org.accounts.revenue,
+          kind: "customer_invoice",
+          number: "INV-CTL-1",
+          total: "1000",
+          lineAccountId: org.accounts.revenue,
         });
         const entryId = await post(org, invoiceId);
         const legs = await controlLegs(entryId);
@@ -139,31 +173,59 @@ test(
         // Receive payment: the receipt's credit lands on the invoice's own
         // receivable account, so the open item and the GL clear together.
         const payment = await createPaymentDocument({
-          allowedSubsidiaryIds: null, orgId: org.orgId, kind: "customer_payment", createdBy: actorId,
-          partyId: org.customerId, bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId,
-          documentDate: org.date, currency: "CAD", fxRate: "1",
-        });
-        await updateDraftPayment(payment.id, {
-          allocations: [sameCurrencyAllocation(legs[0]!.id, "1000")],
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          kind: "customer_payment",
+          createdBy: actorId,
+          partyId: org.customerId,
           bankAccountId: org.accounts.bank,
-        }, actorId, org.orgId, { allowedSubsidiaryIds: null });
+          subsidiaryId: org.subsidiaryId,
+          documentDate: org.date,
+          currency: "CAD",
+          fxRate: "1",
+        });
+        await updateDraftPayment(
+          payment.id,
+          {
+            allocations: [sameCurrencyAllocation(legs[0]!.id, "1000")],
+            bankAccountId: org.accounts.bank,
+          },
+          actorId,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        );
         await db.execute(sql`
           update documents set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
            where id = ${payment.id}`);
-        const { entryId: paymentEntryId } = await postPaymentWithApplications(payment.id, undefined, actorId);
+        const { entryId: paymentEntryId } = await postPaymentWithApplications(
+          payment.id,
+          undefined,
+          actorId,
+        );
         const paymentLegs = await controlLegs(paymentEntryId);
-        assert.deepEqual(paymentLegs.map((leg) => [leg.account_id, leg.amount]), [[retainage, "-1000.0000"]]);
+        assert.deepEqual(
+          paymentLegs.map((leg) => [leg.account_id, leg.amount]),
+          [[retainage, "-1000.0000"]],
+        );
         assert.equal(await accountBalance(org, retainage), "0.0000");
         assert.equal(await accountBalance(org, org.accounts.ar), "0");
-        const applied = (await db.execute<{ applied: string }>(sql`
+        const applied = (
+          await db.execute<{ applied: string }>(
+            sql`
           select coalesce(sum(amount), 0)::text as applied from applications
-           where to_line_id = ${legs[0]!.id} and unapplied_at is null`, "objects"))[0]!;
+           where to_line_id = ${legs[0]!.id} and unapplied_at is null`,
+            "objects",
+          )
+        )[0]!;
         assert.equal(applied.applied, "1000.0000");
 
         // Changing the customer's default never reinterprets posted history.
         await customerDefault(org, actorId, org.accounts.ar);
         assert.equal(await storedChoice(invoiceId), retainage);
-        assert.deepEqual((await controlLegs(entryId)).map((leg) => leg.account_id), [retainage]);
+        assert.deepEqual(
+          (await controlLegs(entryId)).map((leg) => leg.account_id),
+          [retainage],
+        );
       });
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
@@ -184,16 +246,28 @@ test(
         await customerDefault(org, actorId, progress);
 
         const chosen = await approvedDocument(org, actorId, {
-          kind: "customer_invoice", number: "INV-CTL-DOC", total: "250", lineAccountId: org.accounts.revenue,
+          kind: "customer_invoice",
+          number: "INV-CTL-DOC",
+          total: "250",
+          lineAccountId: org.accounts.revenue,
           custom: { controlAccountId: retainage },
         });
-        assert.deepEqual((await controlLegs(await post(org, chosen))).map((leg) => leg.account_id), [retainage]);
+        assert.deepEqual(
+          (await controlLegs(await post(org, chosen))).map((leg) => leg.account_id),
+          [retainage],
+        );
 
         await customerDefault(org, actorId, null);
         const fallback = await approvedDocument(org, actorId, {
-          kind: "customer_invoice", number: "INV-CTL-ORG", total: "300", lineAccountId: org.accounts.revenue,
+          kind: "customer_invoice",
+          number: "INV-CTL-ORG",
+          total: "300",
+          lineAccountId: org.accounts.revenue,
         });
-        assert.deepEqual((await controlLegs(await post(org, fallback))).map((leg) => leg.account_id), [org.accounts.ar]);
+        assert.deepEqual(
+          (await controlLegs(await post(org, fallback))).map((leg) => leg.account_id),
+          [org.accounts.ar],
+        );
         // The organization fallback is stamped too: the document names the
         // account its open item carries even if the org control later moves.
         assert.equal(await storedChoice(fallback), org.accounts.ar);
@@ -212,30 +286,53 @@ test(
     try {
       await withBypass(async () => {
         const actorId = await createScratchUser(org.orgId, "Receivable guard", "admin");
-        const inactive = await account(org, "1190", "Closed Receivable", "asset_receivable", { active: false });
+        const inactive = await account(org, "1190", "Closed Receivable", "asset_receivable", {
+          active: false,
+        });
         await customerDefault(org, actorId, inactive);
         const fromDefault = await approvedDocument(org, actorId, {
-          kind: "customer_invoice", number: "INV-CTL-INACTIVE", total: "100", lineAccountId: org.accounts.revenue,
+          kind: "customer_invoice",
+          number: "INV-CTL-INACTIVE",
+          total: "100",
+          lineAccountId: org.accounts.revenue,
         });
-        await expectRefusal(post(org, fromDefault), /customer's Receivable account/, /1190/, /inactive/, /customer record/);
+        await expectRefusal(
+          post(org, fromDefault),
+          /customer's Receivable account/,
+          /1190/,
+          /inactive/,
+          /customer record/,
+        );
         assert.deepEqual(await unposted(fromDefault), { status: "approved", entries: 0 });
         assert.equal(await storedChoice(fromDefault), null);
 
         await customerDefault(org, actorId, null);
         const wrongType = await approvedDocument(org, actorId, {
-          kind: "customer_invoice", number: "INV-CTL-TYPE", total: "100", lineAccountId: org.accounts.revenue,
+          kind: "customer_invoice",
+          number: "INV-CTL-TYPE",
+          total: "100",
+          lineAccountId: org.accounts.revenue,
           custom: { controlAccountId: org.accounts.revenue },
         });
-        await expectRefusal(post(org, wrongType), /document's receivable account/, /not a receivable account/);
+        await expectRefusal(
+          post(org, wrongType),
+          /document's receivable account/,
+          /not a receivable account/,
+        );
         assert.deepEqual(await unposted(wrongType), { status: "approved", entries: 0 });
 
         const otherSubsidiary = randomUUID();
         await db.execute(sql`
           insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
           values (${otherSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Other Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
-        const foreign = await account(org, "1130", "Other Co Receivable", "asset_receivable", { subsidiaryId: otherSubsidiary });
+        const foreign = await account(org, "1130", "Other Co Receivable", "asset_receivable", {
+          subsidiaryId: otherSubsidiary,
+        });
         const crossEntity = await approvedDocument(org, actorId, {
-          kind: "customer_invoice", number: "INV-CTL-ENTITY", total: "100", lineAccountId: org.accounts.revenue,
+          kind: "customer_invoice",
+          number: "INV-CTL-ENTITY",
+          total: "100",
+          lineAccountId: org.accounts.revenue,
           custom: { controlAccountId: foreign },
         });
         await expectRefusal(post(org, crossEntity), /different subsidiary/);
@@ -245,10 +342,15 @@ test(
         await db.execute(sql`
           update orgs set settings = settings #- '{controlAccounts,ar}' where id = ${org.orgId}`);
         const unconfigured = await approvedDocument(org, actorId, {
-          kind: "customer_invoice", number: "INV-CTL-NONE", total: "100", lineAccountId: org.accounts.revenue,
+          kind: "customer_invoice",
+          number: "INV-CTL-NONE",
+          total: "100",
+          lineAccountId: org.accounts.revenue,
         });
         await expectRefusal(
-          postDocument(unconfigured, { control: { ar: "", ap: org.accounts.ap, bank: org.accounts.bank } }),
+          postDocument(unconfigured, {
+            control: { ar: "", ap: org.accounts.ap, bank: org.accounts.bank },
+          }),
           /no receivable account is configured/,
           /Control accounts/,
         );
@@ -272,17 +374,29 @@ test(
         await vendorDefault(org, actorId, holdback);
 
         const billId = await approvedDocument(org, actorId, {
-          kind: "vendor_bill", number: "BILL-CTL-1", total: "400", lineAccountId: org.accounts.cogs,
+          kind: "vendor_bill",
+          number: "BILL-CTL-1",
+          total: "400",
+          lineAccountId: org.accounts.cogs,
         });
         const billLegs = await controlLegs(await post(org, billId));
-        assert.deepEqual(billLegs.map((leg) => [leg.account_id, leg.amount]), [[holdback, "-400.0000"]]);
+        assert.deepEqual(
+          billLegs.map((leg) => [leg.account_id, leg.amount]),
+          [[holdback, "-400.0000"]],
+        );
         assert.equal(await storedChoice(billId), holdback);
 
         const creditId = await approvedDocument(org, actorId, {
-          kind: "vendor_credit", number: "VCRED-CTL-1", total: "40", lineAccountId: org.accounts.cogs,
+          kind: "vendor_credit",
+          number: "VCRED-CTL-1",
+          total: "40",
+          lineAccountId: org.accounts.cogs,
         });
         const creditLegs = await controlLegs(await post(org, creditId));
-        assert.deepEqual(creditLegs.map((leg) => [leg.account_id, leg.amount]), [[holdback, "40.0000"]]);
+        assert.deepEqual(
+          creditLegs.map((leg) => [leg.account_id, leg.amount]),
+          [[holdback, "40.0000"]],
+        );
         assert.equal(await accountBalance(org, holdback), "-360.0000");
         assert.equal(await accountBalance(org, org.accounts.ap), "0");
       });

@@ -37,11 +37,7 @@ export interface SimProject {
 
 /** Create a project with a schedule of values (G703 line items). */
 export type BillingMethod =
-  | "time_and_materials"
-  | "schedule_of_values"
-  | "fixed_price"
-  | "not_to_exceed"
-  | "cost_plus";
+  "time_and_materials" | "schedule_of_values" | "fixed_price" | "not_to_exceed" | "cost_plus";
 
 export async function setupProject(
   world: SimOrg,
@@ -66,9 +62,12 @@ export async function setupProject(
   // profitability/invoicing/backup profiles), not free text. billing_method is
   // only the coarse back-compat classifier (time_and_materials|fixed_price|
   // cost_plus) and is derived from the resolved type.
-  const typeRow = (await db.execute<{ id: string }>(sql`
+  const typeRow = await db.execute<{ id: string }>(
+    sql`
     select id from project_types
-     where org_id = ${world.orgId} and key = ${method} and is_active limit 1`, "objects"));
+     where org_id = ${world.orgId} and key = ${method} and is_active limit 1`,
+    "objects",
+  );
   const type = typeRow[0];
   if (!type) throw new Error(`no project_type "${method}" — run seedProjectTypes`);
 
@@ -102,10 +101,20 @@ export async function runProgressBilling(
   submitterId: string,
   approverId: string,
 ): Promise<{ invoiceId: string; documentNumber: string; currentDue: string; retainage: string }> {
-  const sov = (await db.execute<{ id: string; scheduled_value: string }>(sql`
-    select id, scheduled_value from sov_lines where org_id = ${world.orgId} and project_id = ${projectId}`, "objects"));
+  const sov = await db.execute<{ id: string; scheduled_value: string }>(
+    sql`
+    select id, scheduled_value from sov_lines where org_id = ${world.orgId} and project_id = ${projectId}`,
+    "objects",
+  );
   // The simulator runs as the system, outside any subsidiary restriction.
-  const app = await createPayApplication(world.orgId, submitterId, projectId, periodEnd, "10", null);
+  const app = await createPayApplication(
+    world.orgId,
+    submitterId,
+    projectId,
+    periodEnd,
+    "10",
+    null,
+  );
   const updates: PayApplicationLineUpdate[] = sov.map((l) => ({
     sovLineId: l.id,
     thisPeriodCompleted: mulDecimal(l.scheduled_value, fraction),
@@ -129,22 +138,41 @@ export async function billFixedPrice(
   amount: string,
   invoiceDate: string,
   description = "Milestone billing",
-): Promise<{ invoiceId: string; documentNumber: string; amount: string; billedToDate: string; contractValue: string }> {
-  const proj = (await db.execute<{ customer_id: string | null; name: string; code: string; type_key: string | null; contract: string }>(sql`
+): Promise<{
+  invoiceId: string;
+  documentNumber: string;
+  amount: string;
+  billedToDate: string;
+  contractValue: string;
+}> {
+  const proj = await db.execute<{
+    customer_id: string | null;
+    name: string;
+    code: string;
+    type_key: string | null;
+    contract: string;
+  }>(
+    sql`
     select p.customer_id, p.name, p.code, pt.key as type_key, p.contract_value::text as contract
       from projects p left join project_types pt on pt.id = p.project_type_id
-     where p.id = ${projectId} and p.org_id = ${world.orgId}`, "objects"));
+     where p.id = ${projectId} and p.org_id = ${world.orgId}`,
+    "objects",
+  );
   const p = proj[0];
   if (!p?.customer_id) throw new Error(`project ${projectId} has no customer to bill`);
   if (p.type_key !== "fixed_price" && p.type_key !== "not_to_exceed") {
     throw new Error(`project ${projectId} is a ${p.type_key ?? "?"} job, not fixed-price/NTE`);
   }
-  if (cmp(amount, "0") <= 0) throw new Error("fixed-price billing amount must be greater than zero");
-  const priorRow = (await db.execute<{ billed: string }>(sql`
+  if (cmp(amount, "0") <= 0)
+    throw new Error("fixed-price billing amount must be greater than zero");
+  const priorRow = await db.execute<{ billed: string }>(
+    sql`
     select coalesce(sum(total), 0)::text as billed from documents
      -- Live entries only: a voided invoice no longer consumes contract value, so it does not block billing.
      where org_id = ${world.orgId} and kind = 'customer_invoice' and status = 'posted'
-       and custom->'sim'->>'projectId' = ${projectId}`, "objects"));
+       and custom->'sim'->>'projectId' = ${projectId}`,
+    "objects",
+  );
   const priorBilled = priorRow[0]?.billed ?? "0";
   const billedToDate = add(priorBilled, amount);
   if (cmp(billedToDate, p.contract) > 0) {
@@ -163,7 +191,13 @@ export async function billFixedPrice(
     custom: { sim: { fixedPrice: true, projectId } },
     lines: [{ accountId: world.accounts.revenueService!, description, amount, projectId }],
   });
-  return { invoiceId: res.documentId, documentNumber, amount, billedToDate, contractValue: p.contract };
+  return {
+    invoiceId: res.documentId,
+    documentNumber,
+    amount,
+    billedToDate,
+    contractValue: p.contract,
+  };
 }
 
 /** Release withheld retainage for a project as a final billing. */

@@ -16,24 +16,26 @@ const civilDate = civilDateInput();
 // JSON boundary. Numeric JSON values have already crossed IEEE-754 and are
 // refused with a remedy instead of being stringified.
 const money4 = (field: string) =>
-  z.string({ error: `${field} must be sent as a decimal string, not a JSON number` }).transform((raw, ctx) => {
-    const exact = canonicalDecimal(raw, 4);
-    if (exact === null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: decimalNullRefusal(field, "a positive amount with at most 4 decimals", raw, 4),
-      });
-      return z.NEVER;
-    }
-    if (!isPositiveDecimal(exact)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `${field} must be greater than zero — got "${suppliedValue(raw)}"`,
-      });
-      return z.NEVER;
-    }
-    return exact;
-  });
+  z
+    .string({ error: `${field} must be sent as a decimal string, not a JSON number` })
+    .transform((raw, ctx) => {
+      const exact = canonicalDecimal(raw, 4);
+      if (exact === null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: decimalNullRefusal(field, "a positive amount with at most 4 decimals", raw, 4),
+        });
+        return z.NEVER;
+      }
+      if (!isPositiveDecimal(exact)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${field} must be greater than zero — got "${suppliedValue(raw)}"`,
+        });
+        return z.NEVER;
+      }
+      return exact;
+    });
 const currency = z.string().regex(/^[A-Z]{3}$/, "must be an ISO 4217 code");
 
 export const createFamilyBody = z.object({
@@ -56,7 +58,9 @@ export const createLevelBody = z.object({
   code: z.string().trim().min(1).max(40),
   name: z.string().trim().min(1).max(160),
   rank: z.number().int().min(1),
-  equalValueCriteria: z.array(z.object({ criterion, weight: z.string().regex(/^\d+(\.\d+)?$/) })).min(1),
+  equalValueCriteria: z
+    .array(z.object({ criterion, weight: z.string().regex(/^\d+(\.\d+)?$/) }))
+    .min(1),
 });
 
 export const updateLevelBody = z.object({
@@ -95,7 +99,10 @@ export const createCycleBody = z.object({
   guidelineKind: z.enum(["matrix", "formula"]),
   guideline: z.record(z.string(), z.unknown()),
   scope: z
-    .object({ employerSubsidiaryId: uuid.nullable().optional(), departmentId: uuid.nullable().optional() })
+    .object({
+      employerSubsidiaryId: uuid.nullable().optional(),
+      departmentId: uuid.nullable().optional(),
+    })
     .optional(),
 });
 

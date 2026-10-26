@@ -14,7 +14,8 @@ const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-server-"));
 const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
-const { DEFAULT_SFTP_LIMITS, generateHostKey, sftpSessionLimits, startSftpServer } = await import("./server.ts");
+const { DEFAULT_SFTP_LIMITS, generateHostKey, sftpSessionLimits, startSftpServer } =
+  await import("./server.ts");
 
 const keyPair = { private: generateHostKey() };
 const parsedPublic = (() => {
@@ -40,9 +41,13 @@ const config = {
 
 function resolve() {
   return {
-    async password() { return null; },
+    async password() {
+      return null;
+    },
     async publicKey(_username: string, keyAlgo: string, keyData: Buffer) {
-      return keyAlgo === parsedPublic.type && keyData.equals(parsedPublic.getPublicSSH()) ? config : null;
+      return keyAlgo === parsedPublic.type && keyData.equals(parsedPublic.getPublicSSH())
+        ? config
+        : null;
     },
   };
 }
@@ -66,7 +71,9 @@ function connect(key: ssh2.ParsedKey): Promise<ssh2.Client> {
       port: serverPort,
       username: config.username,
       hostVerifier: () => true,
-      authHandler: [{ type: "publickey", username: config.username, key } as ssh2.PublicKeyAuthMethod],
+      authHandler: [
+        { type: "publickey", username: config.username, key } as ssh2.PublicKeyAuthMethod,
+      ],
     });
   });
 }
@@ -85,7 +92,13 @@ function connectPassword(username: string, password: string): Promise<ssh2.Clien
       settled = true;
       resolveClient(client);
     });
-    client.connect({ host: "127.0.0.1", port: serverPort, username, password, hostVerifier: () => true });
+    client.connect({
+      host: "127.0.0.1",
+      port: serverPort,
+      username,
+      password,
+      hostVerifier: () => true,
+    });
   });
 }
 
@@ -96,12 +109,18 @@ function livelyResolver() {
     async password(username: string, _password: string): Promise<SftpServerConfig | null> {
       return username === config.username ? { ...config } : null;
     },
-    async checkSession(_config: SftpServerConfig): Promise<SessionLiveness> { return live; },
-    async withMutationGuard(_config, operation) { return operation(live); },
+    async checkSession(_config: SftpServerConfig): Promise<SessionLiveness> {
+      return live;
+    },
+    async withMutationGuard(_config, operation) {
+      return operation(live);
+    },
   };
   return {
     resolver,
-    kill: (reason: string) => { live = { alive: false, reason }; },
+    kill: (reason: string) => {
+      live = { alive: false, reason };
+    },
   };
 }
 
@@ -112,7 +131,12 @@ async function withServer<T>(
   resolver: SftpResolver = resolve(),
   limits?: { maxFileBytes?: number; maxOpenHandles?: number; maxSessionBufferBytes?: number },
 ): Promise<T> {
-  const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: resolver, limits });
+  const server = await startSftpServer({
+    port: 0,
+    hostKey: generateHostKey(),
+    resolve: resolver,
+    limits,
+  });
   serverPort = server.port;
   try {
     return await fn();
@@ -123,115 +147,133 @@ async function withServer<T>(
 
 function sftpSession(client: ssh2.Client): Promise<ssh2.SFTPWrapper> {
   return new Promise((resolveSftp, reject) => {
-    client.sftp((error, sftp) => error ? reject(error) : resolveSftp(sftp));
+    client.sftp((error, sftp) => (error ? reject(error) : resolveSftp(sftp)));
   });
 }
 
 function open(sftp: ssh2.SFTPWrapper, path: string, mode: ssh2.OpenMode): Promise<Buffer> {
   return new Promise((resolveHandle, reject) => {
-    sftp.open(path, mode, (error, handle) => error ? reject(error) : resolveHandle(handle));
+    sftp.open(path, mode, (error, handle) => (error ? reject(error) : resolveHandle(handle)));
   });
 }
 
-function write(sftp: ssh2.SFTPWrapper, handle: Buffer, data: Buffer, position: number): Promise<void> {
+function write(
+  sftp: ssh2.SFTPWrapper,
+  handle: Buffer,
+  data: Buffer,
+  position: number,
+): Promise<void> {
   return new Promise((resolveWrite, reject) => {
-    sftp.write(handle, data, 0, data.length, position, (error) => error ? reject(error) : resolveWrite());
+    sftp.write(handle, data, 0, data.length, position, (error) =>
+      error ? reject(error) : resolveWrite(),
+    );
   });
 }
 
 function close(sftp: ssh2.SFTPWrapper, handle: Buffer): Promise<void> {
   return new Promise((resolveClose, reject) => {
-    sftp.close(handle, (error) => error ? reject(error) : resolveClose());
+    sftp.close(handle, (error) => (error ? reject(error) : resolveClose()));
   });
 }
 
 function readFile(sftp: ssh2.SFTPWrapper, path: string): Promise<Buffer> {
   return new Promise((resolveFile, reject) => {
-    sftp.readFile(path, (error, data) => error ? reject(error) : resolveFile(data));
+    sftp.readFile(path, (error, data) => (error ? reject(error) : resolveFile(data)));
   });
 }
 
-function readChunk(sftp: ssh2.SFTPWrapper, handle: Buffer, offset: number, length: number): Promise<Buffer> {
+function readChunk(
+  sftp: ssh2.SFTPWrapper,
+  handle: Buffer,
+  offset: number,
+  length: number,
+): Promise<Buffer> {
   return new Promise((resolveRead, reject) => {
-    sftp.read(handle, Buffer.alloc(length), 0, length, offset, (error, _bytes, data) => error ? reject(error) : resolveRead(data));
+    sftp.read(handle, Buffer.alloc(length), 0, length, offset, (error, _bytes, data) =>
+      error ? reject(error) : resolveRead(data),
+    );
   });
 }
 
 function opendir(sftp: ssh2.SFTPWrapper, path: string): Promise<Buffer> {
   return new Promise((resolveDir, reject) => {
-    sftp.opendir(path, (error, handle) => error ? reject(error) : resolveDir(handle));
+    sftp.opendir(path, (error, handle) => (error ? reject(error) : resolveDir(handle)));
   });
 }
 
 function setstat(sftp: ssh2.SFTPWrapper, path: string, attrs: ssh2.InputAttributes): Promise<void> {
   return new Promise((resolveSet, reject) => {
-    sftp.setstat(path, attrs, (error) => error ? reject(error) : resolveSet());
+    sftp.setstat(path, attrs, (error) => (error ? reject(error) : resolveSet()));
   });
 }
 
-function fsetstat(sftp: ssh2.SFTPWrapper, handle: Buffer, attrs: ssh2.InputAttributes): Promise<void> {
+function fsetstat(
+  sftp: ssh2.SFTPWrapper,
+  handle: Buffer,
+  attrs: ssh2.InputAttributes,
+): Promise<void> {
   return new Promise((resolveSet, reject) => {
-    sftp.fsetstat(handle, attrs, (error) => error ? reject(error) : resolveSet());
+    sftp.fsetstat(handle, attrs, (error) => (error ? reject(error) : resolveSet()));
   });
 }
 
 function mkdir(sftp: ssh2.SFTPWrapper, path: string): Promise<void> {
   return new Promise((resolveMkdir, reject) => {
-    sftp.mkdir(path, (error) => error ? reject(error) : resolveMkdir());
+    sftp.mkdir(path, (error) => (error ? reject(error) : resolveMkdir()));
   });
 }
 
 function rmdir(sftp: ssh2.SFTPWrapper, path: string): Promise<void> {
   return new Promise((resolveRmdir, reject) => {
-    sftp.rmdir(path, (error) => error ? reject(error) : resolveRmdir());
+    sftp.rmdir(path, (error) => (error ? reject(error) : resolveRmdir()));
   });
 }
 
 function unlink(sftp: ssh2.SFTPWrapper, path: string): Promise<void> {
   return new Promise((resolveUnlink, reject) => {
-    sftp.unlink(path, (error) => error ? reject(error) : resolveUnlink());
+    sftp.unlink(path, (error) => (error ? reject(error) : resolveUnlink()));
   });
 }
 
 function rename(sftp: ssh2.SFTPWrapper, from: string, to: string): Promise<void> {
   return new Promise((resolveRename, reject) => {
-    sftp.rename(from, to, (error) => error ? reject(error) : resolveRename());
+    sftp.rename(from, to, (error) => (error ? reject(error) : resolveRename()));
   });
 }
 
 function stat(sftp: ssh2.SFTPWrapper, path: string): Promise<ssh2.Stats> {
   return new Promise((resolveStat, reject) => {
-    sftp.stat(path, (error, stats) => error ? reject(error) : resolveStat(stats));
+    sftp.stat(path, (error, stats) => (error ? reject(error) : resolveStat(stats)));
   });
 }
 
 function readdir(sftp: ssh2.SFTPWrapper, location: string | Buffer): Promise<ssh2.FileEntry[]> {
   return new Promise((resolveList, reject) => {
-    sftp.readdir(location, (error, list) => error ? reject(error) : resolveList(list));
+    sftp.readdir(location, (error, list) => (error ? reject(error) : resolveList(list)));
   });
 }
 
 function realpath(sftp: ssh2.SFTPWrapper, path: string): Promise<string> {
   return new Promise((resolvePath, reject) => {
-    sftp.realpath(path, (error, absPath) => error ? reject(error) : resolvePath(absPath));
+    sftp.realpath(path, (error, absPath) => (error ? reject(error) : resolvePath(absPath)));
   });
 }
 
 function fstat(sftp: ssh2.SFTPWrapper, handle: Buffer): Promise<ssh2.Stats> {
   return new Promise((resolveFstat, reject) => {
-    sftp.fstat(handle, (error, stats) => error ? reject(error) : resolveFstat(stats));
+    sftp.fstat(handle, (error, stats) => (error ? reject(error) : resolveFstat(stats)));
   });
 }
 
 function symlink(sftp: ssh2.SFTPWrapper, target: string, link: string): Promise<void> {
   return new Promise((resolveLink, reject) => {
-    sftp.symlink(target, link, (error) => error ? reject(error) : resolveLink());
+    sftp.symlink(target, link, (error) => (error ? reject(error) : resolveLink()));
   });
 }
 
 function readlink(sftp: ssh2.SFTPWrapper, path: string): Promise<string> {
   return new Promise((resolveTarget, reject) => {
-    sftp.readlink(path, (error, target) => error ? reject(error) : resolveTarget(target));
+    sftp.readlink(path, (error, target) => (error ? reject(error) : resolveTarget(target)));
   });
 }
 
@@ -243,7 +285,10 @@ test("public-key authentication rejects an invalid signature but accepts a valid
   await withServer(async () => {
     // RED before the fix: ssh2 would reach ready because the resolver result
     // was accepted without checking this fabricated signature.
-    await assert.rejects(connect(untrusted), /All configured authentication methods failed|authentication/i);
+    await assert.rejects(
+      connect(untrusted),
+      /All configured authentication methods failed|authentication/i,
+    );
 
     const client = await connect(privateKey());
     client.end();
@@ -279,12 +324,16 @@ test("an authorized_keys line that passed validation authenticates a real signed
   const pair = ssh2.utils.generateKeyPairSync("ed25519");
   if (typeof pair.public !== "string") throw new Error("expected an OpenSSH public key line");
   // Stored exactly as the creation route stores it: validated, normalized.
-  const stored = validateAuthorizedKeys(`  ${pair.public.trim()}   bank@example.com  \n`).join("\n");
+  const stored = validateAuthorizedKeys(`  ${pair.public.trim()}   bank@example.com  \n`).join(
+    "\n",
+  );
   const loginKey = ssh2.utils.parseKey(pair.private);
   if (loginKey instanceof Error) throw loginKey;
   // The production matcher shape from manager.ts, reading the stored text.
   const textResolver = {
-    async password() { return null; },
+    async password() {
+      return null;
+    },
     async publicKey(_username: string, keyAlgo: string, keyData: Buffer) {
       for (const line of stored.split("\n")) {
         const trimmed = line.trim();
@@ -311,28 +360,35 @@ test("an authorized_keys line that passed validation authenticates a real signed
 });
 
 test("a sparse high-offset write refuses with a named reason instead of gap-filling", async () => {
-  await withServer(async () => {
-    const client = await connect(privateKey());
-    try {
-      const sftp = await sftpSession(client);
-      const handle = await open(sftp, "sparse.bin", "w");
+  await withServer(
+    async () => {
+      const client = await connect(privateKey());
       try {
-        // RED before the fix: Buffer.alloc(end) gap-filled ~10 MiB for one
-        // byte (and ~4 GiB at a 0xFFFFFFFF offset) inside the shared process.
-        await assert.rejects(
-          write(sftp, handle, Buffer.from("x"), 10 * 1024 * 1024),
-          /per-file SFTP limit/,
+        const sftp = await sftpSession(client);
+        const handle = await open(sftp, "sparse.bin", "w");
+        try {
+          // RED before the fix: Buffer.alloc(end) gap-filled ~10 MiB for one
+          // byte (and ~4 GiB at a 0xFFFFFFFF offset) inside the shared process.
+          await assert.rejects(
+            write(sftp, handle, Buffer.from("x"), 10 * 1024 * 1024),
+            /per-file SFTP limit/,
+          );
+          // The refused write allocated nothing and the handle still works.
+          await write(sftp, handle, Buffer.from("ok"), 512);
+        } finally {
+          await close(sftp, handle);
+        }
+        assert.deepEqual(
+          (await readFile(sftp, "sparse.bin")).subarray(512, 514),
+          Buffer.from("ok"),
         );
-        // The refused write allocated nothing and the handle still works.
-        await write(sftp, handle, Buffer.from("ok"), 512);
       } finally {
-        await close(sftp, handle);
+        client.end();
       }
-      assert.deepEqual((await readFile(sftp, "sparse.bin")).subarray(512, 514), Buffer.from("ok"));
-    } finally {
-      client.end();
-    }
-  }, resolve(), { maxFileBytes: 1024 });
+    },
+    resolve(),
+    { maxFileBytes: 1024 },
+  );
 });
 
 test("an over-cap file refuses to OPEN for read and for resume, before any read", async () => {
@@ -340,64 +396,79 @@ test("an over-cap file refuses to OPEN for read and for resume, before any read"
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "big.bin"), Buffer.alloc(2048, 7));
   writeFileSync(join(dir, "small.bin"), Buffer.from("fits"));
-  await withServer(async () => {
-    const client = await connect(privateKey());
-    try {
-      const sftp = await sftpSession(client);
-      // RED before the fix: the whole 2048-byte object was read into the
-      // session before anything checked its size.
-      await assert.rejects(open(sftp, "big.bin", "r"), /per-file SFTP limit/);
-      await assert.rejects(open(sftp, "big.bin", "r+"), /per-file SFTP limit/);
-      const handle = await open(sftp, "small.bin", "r");
+  await withServer(
+    async () => {
+      const client = await connect(privateKey());
       try {
-        assert.deepEqual(await readFile(sftp, "small.bin"), Buffer.from("fits"));
+        const sftp = await sftpSession(client);
+        // RED before the fix: the whole 2048-byte object was read into the
+        // session before anything checked its size.
+        await assert.rejects(open(sftp, "big.bin", "r"), /per-file SFTP limit/);
+        await assert.rejects(open(sftp, "big.bin", "r+"), /per-file SFTP limit/);
+        const handle = await open(sftp, "small.bin", "r");
+        try {
+          assert.deepEqual(await readFile(sftp, "small.bin"), Buffer.from("fits"));
+        } finally {
+          await close(sftp, handle);
+        }
       } finally {
-        await close(sftp, handle);
+        client.end();
       }
-    } finally {
-      client.end();
-    }
-  }, resolve(), { maxFileBytes: 1024 });
+    },
+    resolve(),
+    { maxFileBytes: 1024 },
+  );
 });
 
 test("concurrent handles and stacked buffers refuse past the session caps", async () => {
-  await withServer(async () => {
-    const client = await connect(privateKey());
-    try {
-      const sftp = await sftpSession(client);
-      const first = await open(sftp, "stack-a.bin", "w");
-      await write(sftp, first, Buffer.alloc(1500, 1), 0);
-      const second = await open(sftp, "stack-b.bin", "w");
+  await withServer(
+    async () => {
+      const client = await connect(privateKey());
       try {
-        // RED before the fix: every connection buffered without bound until CLOSE.
-        await assert.rejects(write(sftp, second, Buffer.alloc(1500, 2), 0), /per-session SFTP buffer limit/);
-      } finally {
-        await close(sftp, second);
-      }
-      await close(sftp, first);
-    } finally {
-      client.end();
-    }
-  }, resolve(), { maxFileBytes: 2048, maxSessionBufferBytes: 2048 });
-
-  await withServer(async () => {
-    const client = await connect(privateKey());
-    try {
-      const sftp = await sftpSession(client);
-      const first = await open(sftp, "handle-a.bin", "w");
-      const second = await open(sftp, "handle-b.bin", "w");
-      try {
-        await assert.rejects(open(sftp, "handle-c.bin", "w"), /too many open files/);
+        const sftp = await sftpSession(client);
+        const first = await open(sftp, "stack-a.bin", "w");
+        await write(sftp, first, Buffer.alloc(1500, 1), 0);
+        const second = await open(sftp, "stack-b.bin", "w");
+        try {
+          // RED before the fix: every connection buffered without bound until CLOSE.
+          await assert.rejects(
+            write(sftp, second, Buffer.alloc(1500, 2), 0),
+            /per-session SFTP buffer limit/,
+          );
+        } finally {
+          await close(sftp, second);
+        }
         await close(sftp, first);
-        const third = await open(sftp, "handle-c.bin", "w");
-        await close(sftp, third);
       } finally {
-        await close(sftp, second);
+        client.end();
       }
-    } finally {
-      client.end();
-    }
-  }, resolve(), { maxOpenHandles: 2 });
+    },
+    resolve(),
+    { maxFileBytes: 2048, maxSessionBufferBytes: 2048 },
+  );
+
+  await withServer(
+    async () => {
+      const client = await connect(privateKey());
+      try {
+        const sftp = await sftpSession(client);
+        const first = await open(sftp, "handle-a.bin", "w");
+        const second = await open(sftp, "handle-b.bin", "w");
+        try {
+          await assert.rejects(open(sftp, "handle-c.bin", "w"), /too many open files/);
+          await close(sftp, first);
+          const third = await open(sftp, "handle-c.bin", "w");
+          await close(sftp, third);
+        } finally {
+          await close(sftp, second);
+        }
+      } finally {
+        client.end();
+      }
+    },
+    resolve(),
+    { maxOpenHandles: 2 },
+  );
 });
 
 test("session limit env overrides apply, and garbage never disables a cap", () => {
@@ -457,12 +528,17 @@ test("a held connection can no longer read or write once the login is disabled",
       assert.deepEqual(await readChunk(setup, reader, 0, 6), Buffer.from("before"));
       const resumer = await open(setup, "held.txt", "r+");
 
-      lively.kill("sftp login 'sftp-test' is disabled — ask your administrator to re-enable it, then reconnect");
+      lively.kill(
+        "sftp login 'sftp-test' is disabled — ask your administrator to re-enable it, then reconnect",
+      );
 
       // RED before the fix: the config was cached for the whole connection,
       // so every one of these succeeded after the disable.
       await assert.rejects(open(await freshSftp(), "held.txt", "r"), /is disabled/);
-      await assert.rejects(write(await freshSftp(), resumer, Buffer.from("after"), 0), /is disabled/);
+      await assert.rejects(
+        write(await freshSftp(), resumer, Buffer.from("after"), 0),
+        /is disabled/,
+      );
       await assert.rejects(readChunk(await freshSftp(), reader, 0, 6), /is disabled/);
       await assert.rejects(opendir(await freshSftp(), "/"), /is disabled/);
     } finally {
@@ -485,9 +561,14 @@ test("a held connection can no longer read or write after credential rotation", 
       const writer = await open(setup, "rotated.txt", "w");
       await write(setup, writer, Buffer.from("before"), 0);
 
-      lively.kill("sftp login 'sftp-test' credentials changed — reconnect with the current password or key");
+      lively.kill(
+        "sftp login 'sftp-test' credentials changed — reconnect with the current password or key",
+      );
 
-      await assert.rejects(write(await freshSftp(), writer, Buffer.from("after"), 0), /credentials changed/);
+      await assert.rejects(
+        write(await freshSftp(), writer, Buffer.from("after"), 0),
+        /credentials changed/,
+      );
       await assert.rejects(open(await freshSftp(), "rotated.txt", "r"), /credentials changed/);
     } finally {
       for (const client of clients) client.end();
@@ -518,25 +599,39 @@ test("a disabled login refuses RMDIR and every other operation class", async () 
       const dirHandle = await opendir(setup, "/");
       const fileHandle = await open(setup, "sweep-full/file.txt", "r");
 
-      lively.kill("sftp login 'sftp-test' is disabled — ask your administrator to re-enable it, then reconnect");
+      lively.kill(
+        "sftp login 'sftp-test' is disabled — ask your administrator to re-enable it, then reconnect",
+      );
 
       // RED before the fix: RMDIR skipped the fence, so the empty folder
       // removed cleanly after the disable.
       await assert.rejects(rmdir(await freshSftp(), "sweep-empty"), /is disabled/);
       await assert.rejects(unlink(await freshSftp(), "sweep-full/file.txt"), /is disabled/);
       await assert.rejects(mkdir(await freshSftp(), "sweep-nope"), /is disabled/);
-      await assert.rejects(rename(await freshSftp(), "sweep-full/file.txt", "sweep-full/moved.txt"), /is disabled/);
+      await assert.rejects(
+        rename(await freshSftp(), "sweep-full/file.txt", "sweep-full/moved.txt"),
+        /is disabled/,
+      );
       await assert.rejects(stat(await freshSftp(), "sweep-full/file.txt"), /is disabled/);
       await assert.rejects(opendir(await freshSftp(), "/"), /is disabled/);
       await assert.rejects(readdir(await freshSftp(), dirHandle), /is disabled/);
       await assert.rejects(open(await freshSftp(), "sweep-full/file.txt", "r"), /is disabled/);
       await assert.rejects(readChunk(await freshSftp(), fileHandle, 0, 1), /is disabled/);
-      await assert.rejects(write(await freshSftp(), fileHandle, Buffer.from("y"), 0), /is disabled/);
+      await assert.rejects(
+        write(await freshSftp(), fileHandle, Buffer.from("y"), 0),
+        /is disabled/,
+      );
       await assert.rejects(fstat(await freshSftp(), fileHandle), /is disabled/);
       await assert.rejects(close(await freshSftp(), fileHandle), /is disabled/);
-      await assert.rejects(setstat(await freshSftp(), "sweep-full/file.txt", { mode: 0o644 }), /is disabled/);
+      await assert.rejects(
+        setstat(await freshSftp(), "sweep-full/file.txt", { mode: 0o644 }),
+        /is disabled/,
+      );
       await assert.rejects(realpath(await freshSftp(), "/"), /is disabled/);
-      await assert.rejects(symlink(await freshSftp(), "sweep-full/file.txt", "sweep-link"), /is disabled/);
+      await assert.rejects(
+        symlink(await freshSftp(), "sweep-full/file.txt", "sweep-link"),
+        /is disabled/,
+      );
       await assert.rejects(readlink(await freshSftp(), "sweep-full/file.txt"), /is disabled/);
     } finally {
       for (const client of clients) client.end();
@@ -662,7 +757,11 @@ test("RMDIR of a populated folder fails with the refusal instead of a phantom su
         (error: Error & { code?: number }) => error,
       );
       assert.ok(failure, "removing a populated folder must fail");
-      assert.equal(failure.code, 4, "the refusal carries the SFTP FAILURE status, not NO_SUCH_FILE");
+      assert.equal(
+        failure.code,
+        4,
+        "the refusal carries the SFTP FAILURE status, not NO_SUCH_FILE",
+      );
       assert.match(failure.message, /populated.*not empty/);
 
       // The folder and its statement survive the refusal; an emptied folder
@@ -679,7 +778,6 @@ test("RMDIR of a populated folder fails with the refusal instead of a phantom su
 test.after(() => {
   rmSync(scratchDataDir, { recursive: true, force: true });
 });
-
 
 test("host-key generation refuses malformed dependency output before persistence", (t) => {
   const valid = generateHostKey();

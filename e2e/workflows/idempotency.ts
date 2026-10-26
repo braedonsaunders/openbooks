@@ -23,9 +23,7 @@ export function withIdempotencyKey(
   const merged = { ...(headers ?? {}) };
   const verb = method.toUpperCase();
   if (verb === "GET" || verb === "HEAD") return merged;
-  const present = Object.keys(merged).some(
-    (name) => name.toLowerCase() === "idempotency-key",
-  );
+  const present = Object.keys(merged).some((name) => name.toLowerCase() === "idempotency-key");
   if (!present) merged["Idempotency-Key"] = randomUUID();
   return merged;
 }

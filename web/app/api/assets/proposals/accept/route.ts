@@ -11,7 +11,11 @@ const target = z.strictObject({
   name: z.string().trim().min(1, "each asset needs a name").max(200),
   categoryId: id,
   amount: money("amount"),
-  quantity: z.string().regex(/^\d+(\.\d{1,8})?$/, "quantity must be a positive decimal").nullable().optional(),
+  quantity: z
+    .string()
+    .regex(/^\d+(\.\d{1,8})?$/, "quantity must be a positive decimal")
+    .nullable()
+    .optional(),
   description: optionalText(4000),
   serialNumber: optionalText(200),
   inServiceOn: calendarDate("inServiceOn").nullable().optional(),
@@ -42,16 +46,20 @@ export const POST = defineRoute({
   invalidBodyStatus: 422,
   handler: async ({ authz: gate, body: input }) => {
     try {
-      const result = await acceptAssetProposals(gate.user.orgId, {
-        idempotencyKey: input.idempotencyKey,
-        operation: input.operation,
-        proposalIds: input.proposalIds,
-        acceptedOn: input.acceptedOn,
-        reason: input.reason ?? null,
-        targets: input.targets.map((entry) => ({ ...entry, quantity: entry.quantity ?? null })),
-        parentAssetId: input.parentAssetId ?? null,
-        cipAssetId: input.cipAssetId ?? null,
-      }, { actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) });
+      const result = await acceptAssetProposals(
+        gate.user.orgId,
+        {
+          idempotencyKey: input.idempotencyKey,
+          operation: input.operation,
+          proposalIds: input.proposalIds,
+          acceptedOn: input.acceptedOn,
+          reason: input.reason ?? null,
+          targets: input.targets.map((entry) => ({ ...entry, quantity: entry.quantity ?? null })),
+          parentAssetId: input.parentAssetId ?? null,
+          cipAssetId: input.cipAssetId ?? null,
+        },
+        { actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) },
+      );
       return NextResponse.json(result, { status: result.replayed ? 200 : 201 });
     } catch (error) {
       // Placing an accepted asset in service can raise the native schedule refusals.

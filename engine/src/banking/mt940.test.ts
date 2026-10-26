@@ -30,7 +30,10 @@ test("MT940 reads the wire comma as the decimal point, never as grouping", () =>
       "-",
     ].join("\n"),
   );
-  assert.deepEqual(parsed.lines.map((line) => line.amount), ["12.3450"]);
+  assert.deepEqual(
+    parsed.lines.map((line) => line.amount),
+    ["12.3450"],
+  );
   assert.equal(parsed.closingBalance, "12.3450");
 });
 
@@ -67,8 +70,7 @@ test("MT940 refuses to merge multiple statements into one", () => {
   ].join("\n");
   assert.throws(
     () => parseMt940(multi),
-    (err: unknown) =>
-      err instanceof BankingError && /multiple statements/.test(err.message),
+    (err: unknown) => err instanceof BankingError && /multiple statements/.test(err.message),
   );
 });
 
@@ -124,7 +126,8 @@ test("MT940 refuses contradictory opening and closing balance currencies", () =>
         ].join("\n"),
       ),
     (err: unknown) =>
-      err instanceof BankingError && /contradictory balance currencies USD and CAD/.test(err.message),
+      err instanceof BankingError &&
+      /contradictory balance currencies USD and CAD/.test(err.message),
   );
 });
 

@@ -4,11 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { mirrorSourceDeletion } from "../sync/source-deletions.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -59,21 +55,21 @@ async function seedPostedEntryWithDimensions(
   return entryId;
 }
 
-async function readReversalLineDimensions(
-  orgId: string,
-  reversalEntryId: string,
-) {
+async function readReversalLineDimensions(orgId: string, reversalEntryId: string) {
   return db.execute<{
     quantity: string | null;
     unit: string | null;
     custom: Record<string, string>;
-  }>(sql`
+  }>(
+    sql`
     select quantity::text, unit, custom
       from journal_lines
      where org_id = ${orgId}
        and entry_id = ${reversalEntryId}
        and line_number = 1
-  `, "objects");
+  `,
+    "objects",
+  );
 }
 
 test(
@@ -227,16 +223,16 @@ test(
       });
       assert.deepEqual(result, { documentId, deleted: true });
 
-      const reversalEntry = await db.execute<{ id: string }>(sql`
+      const reversalEntry = await db.execute<{ id: string }>(
+        sql`
         select id
           from journal_entries
          where org_id = ${org.orgId}
            and reverses_entry_id = ${sourceEntryId}
-      `, "objects");
-      const reversal = await readReversalLineDimensions(
-        org.orgId,
-        reversalEntry[0]!.id,
+      `,
+        "objects",
       );
+      const reversal = await readReversalLineDimensions(org.orgId, reversalEntry[0]!.id);
       assert.deepEqual(reversal[0], {
         quantity: "-4.5000",
         unit: "tonnes",

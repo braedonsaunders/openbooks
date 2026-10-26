@@ -19,10 +19,30 @@ import { arePeriodModulesOpen, canonicalPeriodLabel } from "../periods/period-po
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
-import { db, orgContext, withBypass, withOrg, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
+import {
+  db,
+  orgContext,
+  withBypass,
+  withOrg,
+  withOrgTransaction,
+  withTransactionSavepoint,
+  type SqlExecutor,
+} from "../platform/db.ts";
 import { AMORTIZATION_FEATURE_KEY, AmortizationError } from "./errors.ts";
-import { assertAmortizationFeature, recordScheduleEvent, requireAmortizationAuthority, writeAmortizationAudit } from "./internal.ts";
-import { closePlannedLines, livePlanLines, loadSchedule, postScheduleEntry, scheduleBalance, updateSchedule } from "./schedule-store.ts";
+import {
+  assertAmortizationFeature,
+  recordScheduleEvent,
+  requireAmortizationAuthority,
+  writeAmortizationAudit,
+} from "./internal.ts";
+import {
+  closePlannedLines,
+  livePlanLines,
+  loadSchedule,
+  postScheduleEntry,
+  scheduleBalance,
+  updateSchedule,
+} from "./schedule-store.ts";
 
 export interface AmortizationRunProblem {
   scheduleId: string;
@@ -38,7 +58,14 @@ export interface AmortizationRunResult {
   posted: number;
   /** Ledger total posted, as a canonical decimal string per currency. */
   totals: Record<string, string>;
-  entries: { scheduleId: string; scheduleNumber: string; periodStart: string; amount: string; currency: string; entryId: string }[];
+  entries: {
+    scheduleId: string;
+    scheduleNumber: string;
+    periodStart: string;
+    amount: string;
+    currency: string;
+    entryId: string;
+  }[];
   completed: string[];
   problems: AmortizationRunProblem[];
 }
@@ -53,7 +80,7 @@ type DueLine = {
   destination_account_id: string;
   book_id: string;
   subsidiary_id: string;
-}
+};
 
 /** Planned lines of active schedules due by the cutoff, in a stable order. */
 async function dueLines(
@@ -65,10 +92,12 @@ async function dueLines(
   const subsidiaryFilter = scope.subsidiaryIds
     ? sql`and s.subsidiary_id = any(${`{${[...scope.subsidiaryIds].join(",")}}`}::uuid[])`
     : sql``;
-  const scheduleFilter = scope.scheduleIds && scope.scheduleIds.length > 0
-    ? sql`and s.id = any(${`{${scope.scheduleIds.join(",")}}`}::uuid[])`
-    : sql``;
-  return await runner.execute<DueLine>(sql`
+  const scheduleFilter =
+    scope.scheduleIds && scope.scheduleIds.length > 0
+      ? sql`and s.id = any(${`{${scope.scheduleIds.join(",")}}`}::uuid[])`
+      : sql``;
+  return await runner.execute<DueLine>(
+    sql`
     select l.id as line_id, s.id as schedule_id, s.schedule_number, l.period_start::text as period_start,
            l.period_end::text as period_end, l.planned_amount::text as planned_amount,
            l.destination_account_id, s.book_id, s.subsidiary_id
@@ -77,14 +106,25 @@ async function dueLines(
      where l.org_id = ${orgId} and l.status = 'planned' and s.status = 'active'
        and l.period_end <= ${cutoff}
        ${subsidiaryFilter} ${scheduleFilter}
-     order by s.schedule_number, l.period_start`, "objects");
+     order by s.schedule_number, l.period_start`,
+    "objects",
+  );
 }
 
 /** Resolve a run cutoff: a period's end, or an explicit as-of date. */
-async function resolveCutoff(runner: SqlExecutor, orgId: string, input: { periodId?: string | null; asOf?: string | null }): Promise<string> {
+async function resolveCutoff(
+  runner: SqlExecutor,
+  orgId: string,
+  input: { periodId?: string | null; asOf?: string | null },
+): Promise<string> {
   if (input.periodId) {
-    const period = (await runner.execute<{ ends_on: string }>(sql`
-      select ends_on::text as ends_on from accounting_periods where org_id = ${orgId} and id = ${input.periodId}`, "objects"))[0];
+    const period = (
+      await runner.execute<{ ends_on: string }>(
+        sql`
+      select ends_on::text as ends_on from accounting_periods where org_id = ${orgId} and id = ${input.periodId}`,
+        "objects",
+      )
+    )[0];
     if (!period) {
       throw new AmortizationError("The period does not exist in this organization.", {
         status: 404,
@@ -120,13 +160,22 @@ async function postDueLine(
   orgId: string,
   actorId: string | null,
   due: DueLine,
-): Promise<{ entryId: string; amount: string; currency: string; completed: boolean } | AmortizationRunProblem | null> {
+): Promise<
+  | { entryId: string; amount: string; currency: string; completed: boolean }
+  | AmortizationRunProblem
+  | null
+> {
   const schedule = await loadSchedule(runner, orgId, due.schedule_id, { lock: true });
   if (schedule.status !== "active") return null;
-  const line = (await runner.execute<{ status: string }>(sql`
+  const line = (
+    await runner.execute<{ status: string }>(
+      sql`
     select status from expense_amortization_schedule_lines
      where org_id = ${orgId} and id = ${due.line_id}
-     for update`, "objects"))[0];
+     for update`,
+      "objects",
+    )
+  )[0];
   if (!line || line.status !== "planned") return null;
   const problem = (code: string, message: string, remedy: string): AmortizationRunProblem => ({
     scheduleId: schedule.id,
@@ -144,8 +193,13 @@ async function postDueLine(
       `Generate the accounting period covering ${due.period_end}, then run amortization again.`,
     );
   }
-  const book = (await runner.execute<{ is_active: boolean; posts_gl: boolean }>(sql`
-    select is_active, posts_gl from accounting_books where org_id = ${orgId} and id = ${schedule.bookId}`, "objects"))[0];
+  const book = (
+    await runner.execute<{ is_active: boolean; posts_gl: boolean }>(
+      sql`
+    select is_active, posts_gl from accounting_books where org_id = ${orgId} and id = ${schedule.bookId}`,
+      "objects",
+    )
+  )[0];
   if (!book?.is_active || !book.posts_gl) {
     return problem(
       "amortization_book_inactive",
@@ -153,24 +207,35 @@ async function postDueLine(
       "Reactivate the book in Company Settings → Accounting books, or cancel the schedule with a write-off in an active book.",
     );
   }
-  if (!(await arePeriodModulesOpen(runner, {
-    orgId,
-    periodId: period.id,
-    bookId: schedule.bookId,
-    subsidiaryIds: [schedule.subsidiaryId],
-    modules: ["gl"],
-  }))) {
+  if (
+    !(await arePeriodModulesOpen(runner, {
+      orgId,
+      periodId: period.id,
+      bookId: schedule.bookId,
+      subsidiaryIds: [schedule.subsidiaryId],
+      modules: ["gl"],
+    }))
+  ) {
     // The covering period is always a regular period (the resolver excludes adjustments).
-    const periodLabel = canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false });
+    const periodLabel = canonicalPeriodLabel({
+      fiscalYear: period.fiscal_year,
+      periodNumber: period.period_number,
+      adjustment: false,
+    });
     return problem(
       "amortization_period_closed",
       `Period ${periodLabel} is closed for this schedule's entity and book.`,
       `Reopen ${periodLabel} through a reopen request, or move the unposted amount into an open period by changing the schedule's remaining term.`,
     );
   }
-  const amount = (await runner.execute<{ planned_amount: string }>(sql`
+  const amount = (
+    await runner.execute<{ planned_amount: string }>(
+      sql`
     select planned_amount::text as planned_amount from expense_amortization_schedule_lines
-     where org_id = ${orgId} and id = ${due.line_id}`, "objects"))[0]!.planned_amount;
+     where org_id = ${orgId} and id = ${due.line_id}`,
+      "objects",
+    )
+  )[0]!.planned_amount;
   const units = toUnits(amount);
   if (units === 0n) {
     // A rounded-to-zero line has no ledger entry and cannot enter posted history.
@@ -190,17 +255,23 @@ async function postDueLine(
       { accountId: schedule.deferralAccountId, amount: -units },
     ],
   });
-  const updated = await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(
+    sql`
     update expense_amortization_schedule_lines
        set status = 'posted', journal_entry_id = ${entryId}, posted_at = now(), posted_by = ${actorId}
      where org_id = ${orgId} and id = ${due.line_id} and status = 'planned'
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (updated.length !== 1) {
-    throw new AmortizationError(`Plan line ${due.period_start.slice(0, 7)} of ${schedule.scheduleNumber} changed while it posted.`, {
-      status: 409,
-      code: "amortization_line_conflict",
-      remedy: "Run amortization again.",
-    });
+    throw new AmortizationError(
+      `Plan line ${due.period_start.slice(0, 7)} of ${schedule.scheduleNumber} changed while it posted.`,
+      {
+        status: 409,
+        code: "amortization_line_conflict",
+        remedy: "Run amortization again.",
+      },
+    );
   }
   const lines = await livePlanLines(runner, orgId, schedule.id);
   const balance = scheduleBalance(schedule, lines);
@@ -232,7 +303,14 @@ async function runOnRunner(
   // Acquire the setup fence before schedule locks so book activation can
   // capture schedules and ledger copies without an inverted lock order.
   await lockLedgerSetupFence(runner, orgId, "shared");
-  const result: AmortizationRunResult = { cutoff, posted: 0, totals: {}, entries: [], completed: [], problems: [] };
+  const result: AmortizationRunResult = {
+    cutoff,
+    posted: 0,
+    totals: {},
+    entries: [],
+    completed: [],
+    problems: [],
+  };
   const totals = new Map<string, bigint>();
   const blockedSchedules = new Set<string>();
   for (const due of await dueLines(runner, orgId, cutoff, scope)) {
@@ -241,7 +319,9 @@ async function runOnRunner(
     if (blockedSchedules.has(due.schedule_id)) continue;
     let outcome: Awaited<ReturnType<typeof postDueLine>>;
     try {
-      outcome = await withTransactionSavepoint(runner, () => postDueLine(runner, orgId, actorId, due));
+      outcome = await withTransactionSavepoint(runner, () =>
+        postDueLine(runner, orgId, actorId, due),
+      );
     } catch (error) {
       if (!(error instanceof AmortizationError)) throw error;
       outcome = {
@@ -289,7 +369,13 @@ export async function runExpenseAmortization(input: {
 }): Promise<AmortizationRunResult> {
   return withOrgTransaction(input.orgId, async () => {
     await assertAmortizationFeature(db, input.orgId);
-    const allowed = await requireAmortizationAuthority(db, input.orgId, input.actorId, null, "amortization.manage");
+    const allowed = await requireAmortizationAuthority(
+      db,
+      input.orgId,
+      input.actorId,
+      null,
+      "amortization.manage",
+    );
     const cutoff = await resolveCutoff(db, input.orgId, input);
     const result = await runOnRunner(db, input.orgId, input.actorId, cutoff, {
       subsidiaryIds: allowed,
@@ -319,7 +405,11 @@ async function recordRunAudit(
       cutoff: result.cutoff,
       posted: result.posted,
       totals: result.totals,
-      problems: result.problems.map((problem) => ({ schedule: problem.scheduleNumber, period: problem.periodStart, code: problem.code })),
+      problems: result.problems.map((problem) => ({
+        schedule: problem.scheduleNumber,
+        period: problem.periodStart,
+        code: problem.code,
+      })),
     },
   });
 }
@@ -343,17 +433,26 @@ export async function runDueExpenseAmortization(asOf?: string): Promise<Amortiza
   const orgScope = scopedOrgId ? sql`and s.org_id = ${scopedOrgId}` : sql``;
   // bypass: scheduler-tick — the unscoped scan finds organizations with due
   // amortization across every tenant; each one then runs in its own scope.
-  const candidates = await withBypass(async () =>
-    await db.execute<{ org_id: string }>(sql`
+  const candidates = await withBypass(
+    async () =>
+      await db.execute<{ org_id: string }>(
+        sql`
       select distinct s.org_id
         from expense_amortization_schedules s
         join expense_amortization_schedule_lines l on l.org_id = s.org_id and l.schedule_id = s.id
        where s.status = 'active' and l.status = 'planned' and l.period_end <= current_date ${orgScope}
-       order by s.org_id`, "objects"));
+       order by s.org_id`,
+        "objects",
+      ),
+  );
   for (const { org_id: orgId } of candidates) {
     try {
-      const enabled = await withOrg(orgId, async () =>
-        (await orgFeatureEnabled(orgId, AMORTIZATION_FEATURE_KEY)) && (await orgFeatureEnabled(orgId, "expenseAmortizationAutoRun")));
+      const enabled = await withOrg(
+        orgId,
+        async () =>
+          (await orgFeatureEnabled(orgId, AMORTIZATION_FEATURE_KEY)) &&
+          (await orgFeatureEnabled(orgId, "expenseAmortizationAutoRun")),
+      );
       if (!enabled) continue;
       result.orgs += 1;
       const cutoff = asOf ?? (await withOrg(orgId, () => businessToday(orgId)));
@@ -366,7 +465,10 @@ export async function runDueExpenseAmortization(asOf?: string): Promise<Amortiza
       result.posted += run.posted;
       if (run.problems.length > 0) result.problems.push({ orgId, problems: run.problems });
     } catch (error) {
-      result.orgErrors.push({ orgId, error: (error instanceof Error ? error.message : String(error)).slice(0, 1000) });
+      result.orgErrors.push({
+        orgId,
+        error: (error instanceof Error ? error.message : String(error)).slice(0, 1000),
+      });
     }
   }
   return result;

@@ -8,16 +8,41 @@ import {
 } from "./income-tax-provision.ts";
 
 test("inherently-deductible categories normalize positive inputs to the DTA side", () => {
-  const nol = { category: "loss_carryforward" as const, description: "NOL", difference: "100000", source: "manual" as const };
+  const nol = {
+    category: "loss_carryforward" as const,
+    description: "NOL",
+    difference: "100000",
+    source: "manual" as const,
+  };
   assert.equal(toDeductibleSide(nol).difference, "-100000.0000");
-  const warranty = { category: "provisions" as const, description: "Warranty", difference: "20000", source: "manual" as const };
+  const warranty = {
+    category: "provisions" as const,
+    description: "Warranty",
+    difference: "20000",
+    source: "manual" as const,
+  };
   assert.equal(toDeductibleSide(warranty).difference, "-20000.0000");
   // Already-negative inputs keep their sign; every other category is caller-signed.
-  const signed = { category: "provisions" as const, description: "Warranty", difference: "-20000", source: "manual" as const };
+  const signed = {
+    category: "provisions" as const,
+    description: "Warranty",
+    difference: "-20000",
+    source: "manual" as const,
+  };
   assert.equal(toDeductibleSide(signed).difference, "-20000");
-  const taxable = { category: "fixed_assets" as const, description: "P&E", difference: "200000", source: "manual" as const };
+  const taxable = {
+    category: "fixed_assets" as const,
+    description: "P&E",
+    difference: "200000",
+    source: "manual" as const,
+  };
   assert.equal(toDeductibleSide(taxable).difference, "200000");
-  const revenue = { category: "revenue_recognition" as const, description: "Unbilled", difference: "50000", source: "manual" as const };
+  const revenue = {
+    category: "revenue_recognition" as const,
+    description: "Unbilled",
+    difference: "50000",
+    source: "manual" as const,
+  };
   assert.equal(toDeductibleSide(revenue).difference, "50000");
 });
 
@@ -51,7 +76,14 @@ test("framework changes recognition language, not math (ASC 740 vs IAS 12)", () 
     permanentDifferences: [],
     lossCarryforwardUsed: "0",
     valuationAllowance: "10000",
-    differences: [{ category: "provisions" as const, description: "Accrued warranty", difference: "-80000", source: "manual" as const }],
+    differences: [
+      {
+        category: "provisions" as const,
+        description: "Accrued warranty",
+        difference: "-80000",
+        source: "manual" as const,
+      },
+    ],
   };
   const us = buildProvision({ ...base, framework: "asc740" });
   const ifrs = buildProvision({ ...base, framework: "ias12" });
@@ -144,8 +176,18 @@ test("temporary differences shift tax between current and deferred, not the tota
     lossCarryforwardUsed: "0",
     valuationAllowance: "0",
     differences: [
-      { category: "fixed_assets", description: "P&E book vs tax", difference: "200000", source: "auto" },
-      { category: "provisions", description: "Accrued warranty", difference: "-80000", source: "manual" },
+      {
+        category: "fixed_assets",
+        description: "P&E book vs tax",
+        difference: "200000",
+        source: "auto",
+      },
+      {
+        category: "provisions",
+        description: "Accrued warranty",
+        difference: "-80000",
+        source: "manual",
+      },
     ],
   });
   // Originating net taxable difference of 120,000 defers tax: taxable profit is
@@ -192,7 +234,12 @@ test("loss carryforwards are attributes, not basis differences — they never ad
     lossCarryforwardUsed: "0",
     valuationAllowance: "0",
     differences: [
-      { category: "loss_carryforward", description: "Unused losses", difference: "-400000", source: "manual" },
+      {
+        category: "loss_carryforward",
+        description: "Unused losses",
+        difference: "-400000",
+        source: "manual",
+      },
     ],
   });
   // The carryforward DTA is measured, but taxable profit is untouched: the
@@ -209,7 +256,14 @@ test("valuation allowance reduces the DTA and cannot exceed it", () => {
     enactedRatePercent: RATE,
     permanentDifferences: [],
     lossCarryforwardUsed: "0",
-    differences: [{ category: "provisions" as const, description: "Accrued warranty", difference: "-80000", source: "manual" as const }],
+    differences: [
+      {
+        category: "provisions" as const,
+        description: "Accrued warranty",
+        difference: "-80000",
+        source: "manual" as const,
+      },
+    ],
   };
   const c = buildProvision({ ...base, valuationAllowance: "10000" });
   assert.equal(c.balances.dtaGross, "21200.0000");
@@ -244,7 +298,14 @@ test("a loss year recognizes no current tax and reconciles through the not-recog
     permanentDifferences: [],
     lossCarryforwardUsed: "0",
     valuationAllowance: "0",
-    differences: [{ category: "loss_carryforward", description: "Current-year loss carried forward", difference: "-500000", source: "manual" }],
+    differences: [
+      {
+        category: "loss_carryforward",
+        description: "Current-year loss carried forward",
+        difference: "-500000",
+        source: "manual",
+      },
+    ],
   });
   assert.equal(c.currentTax, "0.0000");
   assert.equal(c.balances.dtaGross, "132500.0000"); // the loss becomes a DTA
@@ -254,8 +315,15 @@ test("a loss year recognizes no current tax and reconciles through the not-recog
   const stepsTotal = c.rateReconciliation
     .filter((s) => s.key !== "total")
     .reduce((a, s) => a + Number(s.amount), 0);
-  assert.ok(Math.abs(stepsTotal - Number(c.totalExpense)) < 0.005, "reconciliation ties to total expense");
-  assert.equal(c.effectiveRatePercent, "26.50", "loss-year benefit at the statutory rate is a negative expense over a negative base");
+  assert.ok(
+    Math.abs(stepsTotal - Number(c.totalExpense)) < 0.005,
+    "reconciliation ties to total expense",
+  );
+  assert.equal(
+    c.effectiveRatePercent,
+    "26.50",
+    "loss-year benefit at the statutory rate is a negative expense over a negative base",
+  );
 });
 
 test("rate reconciliation steps sum to the total expense", () => {

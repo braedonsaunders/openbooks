@@ -1,87 +1,86 @@
-'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
-import { Button, Drawer, Label, Textarea } from '@openbooks/ui'
-import { useBusinessToday } from '@/components/business-date-provider'
-import { useDirtyClose } from '@/lib/use-dirty-close'
-import { refusalMessageFromBody } from '@/lib/api-error'
-import { useTranslations } from 'next-intl'
-import { DateField } from '@/components/date-field'
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Button, Drawer, Label, Textarea } from "@openbooks/ui";
+import { useBusinessToday } from "@/components/business-date-provider";
+import { useDirtyClose } from "@/lib/use-dirty-close";
+import { refusalMessageFromBody } from "@/lib/api-error";
+import { useTranslations } from "next-intl";
+import { DateField } from "@/components/date-field";
 export function ReverseAssetChange({
   id,
-  domain = 'asset',
+  domain = "asset",
   effectiveOn,
   operation,
 }: {
-  id: string
-  domain?: 'asset' | 'consolidation'
-  effectiveOn?: string
-  operation?: string
+  id: string;
+  domain?: "asset" | "consolidation";
+  effectiveOn?: string;
+  operation?: string;
 }) {
   const router = useRouter(),
-    today = useBusinessToday()
-  const tc = useTranslations('common')
+    today = useBusinessToday();
+  const tc = useTranslations("common");
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [date, setDate] = useState(effectiveOn ?? today),
-    [reason, setReason] = useState(''),
-    [key, setKey] = useState(() => crypto.randomUUID())
+    [reason, setReason] = useState(""),
+    [key, setKey] = useState(() => crypto.randomUUID());
   const dirty =
-    reason !== '' ||
-    ((domain === 'asset' || operation === 'net_investment_oci') &&
-      date !== (effectiveOn ?? today))
+    reason !== "" ||
+    ((domain === "asset" || operation === "net_investment_oci") && date !== (effectiveOn ?? today));
   const closeDrawer = () => {
-    setOpen(false)
-    setDate(effectiveOn ?? today)
-    setReason('')
-    setKey(crypto.randomUUID())
-  }
+    setOpen(false);
+    setDate(effectiveOn ?? today);
+    setReason("");
+    setKey(crypto.randomUUID());
+  };
   const closeGuard = useDirtyClose({
     dirty,
     busy,
     onClose: closeDrawer,
-    message: tc('feedback.unsavedChanges'),
-    confirmLabel: tc('confirm.discardChanges'),
-  })
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
+  });
   async function propose() {
-    setBusy(true)
+    setBusy(true);
     try {
       const r = await fetch(
-        operation === 'net_investment_oci'
+        operation === "net_investment_oci"
           ? `/api/consolidation/net-investment-changes/${id}/reverse`
-          : domain === 'asset'
+          : domain === "asset"
             ? `/api/accounting/changes/${id}/reverse`
             : `/api/consolidation/changes/${id}/reverse`,
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...(domain === 'asset' || operation === 'net_investment_oci'
+            ...(domain === "asset" || operation === "net_investment_oci"
               ? { effectiveOn: date }
               : {}),
             reason,
             idempotencyKey: key,
           }),
         },
-      )
+      );
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of the bare `error` field.
       if (!r.ok) {
-        const refusal = await r.json().catch(() => ({}))
+        const refusal = await r.json().catch(() => ({}));
         throw new Error(
           refusalMessageFromBody(refusal, {
-            fallback: 'Could not propose reversal',
-          }) ?? 'Could not propose reversal',
-        )
+            fallback: "Could not propose reversal",
+          }) ?? "Could not propose reversal",
+        );
       }
-      const value = (await r.json()) as { changeId: string }
-      closeDrawer()
-      router.push(`/accounting/changes?change=${value.changeId}`)
+      const value = (await r.json()) as { changeId: string };
+      closeDrawer();
+      router.push(`/accounting/changes?change=${value.changeId}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not propose reversal')
+      toast.error(e instanceof Error ? e.message : "Could not propose reversal");
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
   return (
@@ -94,11 +93,11 @@ export function ReverseAssetChange({
         open={open}
         onClose={closeGuard.close}
         title={
-          operation === 'net_investment_oci'
-            ? 'Correct net-investment FX'
-            : domain === 'asset'
-              ? 'Reverse asset change'
-              : 'Correct loss of control'
+          operation === "net_investment_oci"
+            ? "Correct net-investment FX"
+            : domain === "asset"
+              ? "Reverse asset change"
+              : "Correct loss of control"
         }
         description="The original journals remain intact. Reversal follows the tenant’s configured Accounting event Flows."
         footer={
@@ -108,23 +107,22 @@ export function ReverseAssetChange({
         }
       >
         <div className="space-y-4">
-          {domain === 'asset' || operation === 'net_investment_oci' ? (
+          {domain === "asset" || operation === "net_investment_oci" ? (
             <div>
               <Label>Reversal date</Label>
               <DateField
                 disabled={busy}
                 value={date}
                 onChange={(value) => {
-                  setDate(value)
-                  setKey(crypto.randomUUID())
+                  setDate(value);
+                  setKey(crypto.randomUUID());
                 }}
               />
             </div>
           ) : (
             <p>
-              The correction uses the original disposal date. Its accounting
-              period must be open, and later retained-interest consolidation
-              prevents this reversal.
+              The correction uses the original disposal date. Its accounting period must be open,
+              and later retained-interest consolidation prevents this reversal.
             </p>
           )}
           <div>
@@ -133,13 +131,13 @@ export function ReverseAssetChange({
               disabled={busy}
               value={reason}
               onChange={(e) => {
-                setReason(e.target.value)
-                setKey(crypto.randomUUID())
+                setReason(e.target.value);
+                setKey(crypto.randomUUID());
               }}
             />
           </div>
         </div>
       </Drawer>
     </>
-  )
+  );
 }

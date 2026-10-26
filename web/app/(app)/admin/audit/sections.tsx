@@ -1,21 +1,21 @@
-import { Button } from '@openbooks/ui'
-import Link from 'next/link'
-import { BookOpen } from 'lucide-react'
-import type { ComponentProps } from 'react'
-import { AuditRows, type AuditListRow } from './AuditRows'
-import type { AuditEvent } from './AuditEventDrawer'
-import { AuditEventHost } from './AuditEventHost'
+import { Button } from "@openbooks/ui";
+import Link from "next/link";
+import { BookOpen } from "lucide-react";
+import type { ComponentProps } from "react";
+import { AuditRows, type AuditListRow } from "./AuditRows";
+import type { AuditEvent } from "./AuditEventDrawer";
+import { AuditEventHost } from "./AuditEventHost";
 
 /** Shared paged rows and the URL-driven event drawer, placed by the page spec. */
 
-export type { AuditListRow, AuditEvent }
+export type { AuditListRow, AuditEvent };
 
 export function AuditRowsTable({ rows, selectedId }: ComponentProps<typeof AuditRows>) {
-  return <AuditRows rows={rows} selectedId={selectedId} />
+  return <AuditRows rows={rows} selectedId={selectedId} />;
 }
 
 export function AuditEventFlyout({ event }: { event: AuditEvent | null; closeHref: string }) {
-  return <AuditEventHost event={event} />
+  return <AuditEventHost event={event} />;
 }
 
 /**
@@ -34,5 +34,5 @@ export function AuditDocsLink({ href, label }: { href: string; label: string }) 
         <BookOpen size={15} aria-hidden /> {label}
       </Link>
     </Button>
-  )
+  );
 }

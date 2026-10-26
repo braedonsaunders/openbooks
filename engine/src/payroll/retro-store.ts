@@ -310,20 +310,24 @@ type RetroSourceColumn = (typeof RETRO_EARNING_SOURCE_REGISTRY)[number]["column"
  */
 export async function detectRetroCandidates(input: DetectRetroInput): Promise<RetroCandidate[]> {
   const executor = input.executor ?? db;
-  const employeeFilter = input.employeePartyIds && input.employeePartyIds.length > 0
-    ? sql`and s.employee_party_id = any(${`{${[...input.employeePartyIds].join(",")}}`}::uuid[])`
-    : sql``;
+  const employeeFilter =
+    input.employeePartyIds && input.employeePartyIds.length > 0
+      ? sql`and s.employee_party_id = any(${`{${[...input.employeePartyIds].join(",")}}`}::uuid[])`
+      : sql``;
   const scheduleFilter = input.payScheduleId
     ? sql`and r.pay_schedule_id = ${input.payScheduleId}`
     : sql``;
   // The omitted arm below starts from the roster rather than from stubs, so
   // its filters name the roster's own aliases.
-  const omittedEmployeeFilter = input.employeePartyIds && input.employeePartyIds.length > 0
-    ? sql`and p.id = any(${`{${[...input.employeePartyIds].join(",")}}`}::uuid[])`
-    : sql``;
+  const omittedEmployeeFilter =
+    input.employeePartyIds && input.employeePartyIds.length > 0
+      ? sql`and p.id = any(${`{${[...input.employeePartyIds].join(",")}}`}::uuid[])`
+      : sql``;
 
   const sourceProjection = sql.join(
-    RETRO_EARNING_SOURCE_REGISTRY.map((source) => sql`${source.query} as ${sql.raw(source.column)}`),
+    RETRO_EARNING_SOURCE_REGISTRY.map(
+      (source) => sql`${source.query} as ${sql.raw(source.column)}`,
+    ),
     sql`, `,
   );
   const sourceNullProjection = sql.join(
@@ -331,12 +335,19 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
     sql`, `,
   );
   type CandidateSourceRow = {
-      employee_party_id: string; employee_name: string;
-      source_document_id: string; source_document_number: string;
-      pay_schedule_id: string; pay_schedule_name: string;
-      period_start: string; period_end: string; pay_date: string; tax_year: number;
-    } & Record<RetroSourceColumn, string | null>;
-  const rows = (await executor.execute<CandidateSourceRow>(sql`
+    employee_party_id: string;
+    employee_name: string;
+    source_document_id: string;
+    source_document_number: string;
+    pay_schedule_id: string;
+    pay_schedule_name: string;
+    period_start: string;
+    period_end: string;
+    pay_date: string;
+    tax_year: number;
+  } & Record<RetroSourceColumn, string | null>;
+  const rows = await executor.execute<CandidateSourceRow>(
+    sql`
     select s.employee_party_id, p.display_name as employee_name,
            r.document_id as source_document_id, d.document_number as source_document_number,
            r.pay_schedule_id, sch.name as pay_schedule_name,
@@ -358,7 +369,9 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
        ${employeeFilter}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
      order by p.display_name, r.period_end
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   // Omitted employees: the main query above starts FROM pay_stubs, so an
   // employee who was never paid for a period at all is invisible to it —
@@ -379,12 +392,20 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
   // cell differences to zero (the honest "nothing left" row) while a cell a
   // later correction made underpaid again still surfaces its increment.
   // Nothing is ever marked "done"; the arithmetic simply has nothing to give.
-  const omitted = (await executor.execute<CandidateSourceRow & {
-      source_document_id: string; source_document_number: string;
-      pay_schedule_id: string; pay_schedule_name: string;
-      period_start: string; period_end: string; pay_date: string; tax_year: number;
+  const omitted = await executor.execute<
+    CandidateSourceRow & {
+      source_document_id: string;
+      source_document_number: string;
+      pay_schedule_id: string;
+      pay_schedule_name: string;
+      period_start: string;
+      period_end: string;
+      pay_date: string;
+      tax_year: number;
       omitted_detail: string;
-    }>(sql`
+    }
+  >(
+    sql`
     select distinct s2.employee_party_id, s2.employee_name,
            s2.source_document_id, s2.source_document_number,
            s2.pay_schedule_id, s2.pay_schedule_name,
@@ -414,10 +435,15 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
            and r.tax_year = ${input.taxYear}
            and (sch.subsidiary_id is null or sch.subsidiary_id = d.subsidiary_id)
            and ${payrollEmploymentOverlapsPeriod({
-         org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
-         employer: sql`d.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
-         periodStart: sql`r.period_start`, periodEnd: sql`r.period_end`,
-       })}
+             org: sql`prof.org_id`,
+             employee: sql`p.id`,
+             employment: sql`prof.employment_id`,
+             employer: sql`d.subsidiary_id`,
+             hiredOn: sql`er.hired_on`,
+             terminatedOn: sql`er.terminated_on`,
+             periodStart: sql`r.period_start`,
+             periodEnd: sql`r.period_end`,
+           })}
            and not exists (
              select 1 from pay_stubs s
               where s.org_id = r.org_id and s.pay_run_document_id = r.document_id
@@ -438,17 +464,22 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
            ${omittedEmployeeFilter}
            ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
       ) s2
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   const candidates: RetroCandidate[] = [];
-  for (const row of [...rows.map((row) => ({ ...row, omitted_detail: null as string | null })), ...omitted]) {
+  for (const row of [
+    ...rows.map((row) => ({ ...row, omitted_detail: null as string | null })),
+    ...omitted,
+  ]) {
     const reasons: RetroReason[] = [];
     if (row.omitted_detail) {
       reasons.push({ source: "omitted_from_run", detail: row.omitted_detail });
     }
     for (const source of RETRO_EARNING_SOURCE_REGISTRY) {
       const value = row[source.column];
-      if (!value || source.source === "unclaimed_time" && cmp(value, "0") <= 0) continue;
+      if (!value || (source.source === "unclaimed_time" && cmp(value, "0") <= 0)) continue;
       reasons.push({ source: source.source, detail: source.detail(value) });
     }
     if (reasons.length === 0) continue;
@@ -468,8 +499,11 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
   }
   // The stub-anchored rows arrive ordered and the omitted rows are appended
   // after them; restore the one ordering the review relies on.
-  candidates.sort((a, b) =>
-    a.employeeName.localeCompare(b.employeeName) || (a.periodEnd < b.periodEnd ? -1 : a.periodEnd > b.periodEnd ? 1 : 0));
+  candidates.sort(
+    (a, b) =>
+      a.employeeName.localeCompare(b.employeeName) ||
+      (a.periodEnd < b.periodEnd ? -1 : a.periodEnd > b.periodEnd ? 1 : 0),
+  );
   return candidates;
 }
 
@@ -574,9 +608,11 @@ export async function quantifyRetroCandidates(input: {
     for (const candidate of candidates) {
       if (simulationFailure) {
         quantified.push({
-          candidate, outcome: "unavailable", difference: null,
-          blockedReason: `${candidate.sourceDocumentNumber} could not be recalculated: `
-            + simulationFailure,
+          candidate,
+          outcome: "unavailable",
+          difference: null,
+          blockedReason:
+            `${candidate.sourceDocumentNumber} could not be recalculated: ` + simulationFailure,
         });
         continue;
       }
@@ -586,12 +622,14 @@ export async function quantifyRetroCandidates(input: {
         // would otherwise attach one's failure text to the other's candidate.
         const named = errors.find((e) => e.employeePartyId === candidate.employeePartyId);
         quantified.push({
-          candidate, outcome: "unavailable", difference: null,
+          candidate,
+          outcome: "unavailable",
+          difference: null,
           blockedReason: named
-            ? `${candidate.sourceDocumentNumber} no longer calculates for this employee: `
-              + named.message
-            : `${candidate.sourceDocumentNumber} no longer produces a stub for this employee — `
-              + "their payroll profile, schedule or employment has changed since it was paid",
+            ? `${candidate.sourceDocumentNumber} no longer calculates for this employee: ` +
+              named.message
+            : `${candidate.sourceDocumentNumber} no longer produces a stub for this employee — ` +
+              "their payroll profile, schedule or employment has changed since it was paid",
         });
         continue;
       }
@@ -613,14 +651,20 @@ export async function quantifyRetroCandidates(input: {
 
 /** The EARNINGS a committed run actually paid, per employee. */
 async function committedEarningLines(
-  orgId: string, sourceDocumentId: string,
+  orgId: string,
+  sourceDocumentId: string,
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<Map<string, RetroEarningLine[]>> {
-  const rows = (await executor.execute<{
-      employee_party_id: string; component_id: string | null; description: string;
-      project_id: string | null; department_id: string | null;
-      amount: string; hours: string | null;
-    }>(sql`
+  const rows = await executor.execute<{
+    employee_party_id: string;
+    component_id: string | null;
+    description: string;
+    project_id: string | null;
+    department_id: string | null;
+    amount: string;
+    hours: string | null;
+  }>(
+    sql`
     select s.employee_party_id, l.component_id, l.description, l.project_id, l.department_id,
            l.amount, l.hours
       from pay_stub_lines l
@@ -628,7 +672,9 @@ async function committedEarningLines(
      where l.org_id = ${orgId} and s.pay_run_document_id = ${sourceDocumentId}
        and l.kind = 'earning'
      order by s.employee_party_id, l.sequence
-  `, "objects"));
+  `,
+    "objects",
+  );
   const byEmployee = new Map<string, RetroEarningLine[]>();
   for (const row of rows) {
     const lines = byEmployee.get(row.employee_party_id) ?? [];
@@ -654,14 +700,19 @@ async function committedEarningLines(
  * so it is owed again, and must not count as settled.
  */
 async function previouslySettledBuckets(
-  orgId: string, sourceDocumentId: string,
+  orgId: string,
+  sourceDocumentId: string,
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<Map<string, RetroSettledBucket[]>> {
-  const rows = (await executor.execute<{
-      employee_party_id: string; component_id: string | null;
-      project_id: string | null; department_id: string | null;
-      description: string | null; previously_settled: string;
-    }>(sql`
+  const rows = await executor.execute<{
+    employee_party_id: string;
+    component_id: string | null;
+    project_id: string | null;
+    department_id: string | null;
+    description: string | null;
+    previously_settled: string;
+  }>(
+    sql`
     select st.employee_party_id, a.component_id, a.project_id, a.department_id,
            min(a.description) as description, sum(a.amount)::text as previously_settled
       from payroll_retro_allocations a
@@ -670,7 +721,9 @@ async function previouslySettledBuckets(
      where st.org_id = ${orgId} and st.source_pay_run_document_id = ${sourceDocumentId}
        and rr.run_status = 'committed'
      group by st.employee_party_id, a.component_id, a.project_id, a.department_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const byEmployee = new Map<string, RetroSettledBucket[]>();
   for (const row of rows) {
     const buckets = byEmployee.get(row.employee_party_id) ?? [];
@@ -692,11 +745,14 @@ async function previouslySettledBuckets(
 
 /** The statutory year a pay date falls in for the SCHEDULE'S legal entity. */
 async function scheduleTaxYear(
-  orgId: string, payScheduleId: string, payDate: string,
+  orgId: string,
+  payScheduleId: string,
+  payDate: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<number> {
-  const rows = (await executor.execute<{ country: string | null; subsidiary_id: string | null }>(sql`
+  const rows = await executor.execute<{ country: string | null; subsidiary_id: string | null }>(
+    sql`
     select coalesce(sub.country, root.country) as country,
            coalesce(sub.id, root.id) as subsidiary_id
       from pay_schedules sch
@@ -706,18 +762,20 @@ async function scheduleTaxYear(
          where s.org_id = sch.org_id and s.parent_id is null and s.is_active
          order by s.created_at limit 1) root on true
      where sch.org_id = ${orgId} and sch.id = ${payScheduleId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!rows[0]) throw new RetroPayError("pay schedule not found");
   const country = rows[0].country;
   if (!country) {
     throw new RetroPayError(
-      "the pay schedule's legal entity has no country, so no statutory year can be resolved "
-      + "for it — set the subsidiary's country before running retroactive pay",
+      "the pay schedule's legal entity has no country, so no statutory year can be resolved " +
+        "for it — set the subsidiary's country before running retroactive pay",
     );
   }
   if (
-    !rows[0].subsidiary_id
-    || (allowedSubsidiaryIds != null && !allowedSubsidiaryIds.has(rows[0].subsidiary_id))
+    !rows[0].subsidiary_id ||
+    (allowedSubsidiaryIds != null && !allowedSubsidiaryIds.has(rows[0].subsidiary_id))
   ) {
     throw new RetroPayError("pay schedule not found");
   }
@@ -764,17 +822,23 @@ export async function proposeRetroPay(input: {
   return {
     taxYear,
     periods,
-    employees: summarizeRetro(withDifference.map((period) => ({
-      employeePartyId: period.candidate.employeePartyId,
-      employeeName: period.candidate.employeeName,
-      delta: period.difference!.delta,
-    }))),
-    payableTotal: sum(periods
-      .filter((period) => period.outcome === "payable")
-      .map((period) => period.difference!.delta)),
-    overpaidTotal: sum(periods
-      .filter((period) => period.outcome === "overpaid")
-      .map((period) => period.difference!.delta)),
+    employees: summarizeRetro(
+      withDifference.map((period) => ({
+        employeePartyId: period.candidate.employeePartyId,
+        employeeName: period.candidate.employeeName,
+        delta: period.difference!.delta,
+      })),
+    ),
+    payableTotal: sum(
+      periods
+        .filter((period) => period.outcome === "payable")
+        .map((period) => period.difference!.delta),
+    ),
+    overpaidTotal: sum(
+      periods
+        .filter((period) => period.outcome === "overpaid")
+        .map((period) => period.difference!.delta),
+    ),
     unavailable: periods.filter((period) => period.outcome === "unavailable").length,
   };
 }
@@ -832,13 +896,23 @@ export async function createRetroPayRun(
   // same (employee, source period) cell: the second would be refused at commit
   // (retro.doubleSettled) only after recalculation replayed its stored
   // allocation. The creator serializes here and refuses the duplicate up front.
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payroll-retro-create:${orgId}:${input.payScheduleId}`}, 0))`);
-    return createRetroPayRunLocked(input, tx);
-  }, { isolationLevel: "serializable" }).catch((error: unknown) => {
-    if (isRetroSerializationFailure(error)) throw new RetroPayError("Retroactive pay sources changed concurrently; reload the review and create the run again.");
-    throw error;
-  });
+  return db
+    .transaction(
+      async (tx) => {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`payroll-retro-create:${orgId}:${input.payScheduleId}`}, 0))`,
+        );
+        return createRetroPayRunLocked(input, tx);
+      },
+      { isolationLevel: "serializable" },
+    )
+    .catch((error: unknown) => {
+      if (isRetroSerializationFailure(error))
+        throw new RetroPayError(
+          "Retroactive pay sources changed concurrently; reload the review and create the run again.",
+        );
+      throw error;
+    });
 }
 
 async function createRetroPayRunLocked(
@@ -847,24 +921,29 @@ async function createRetroPayRunLocked(
 ): Promise<CreateRetroPayRunResult> {
   const { orgId, actorId } = input;
   const proposal = await proposeRetroPay({
-    orgId, actorId,
+    orgId,
+    actorId,
     payScheduleId: input.payScheduleId,
     payDate: input.payDate,
     employeePartyIds: input.employeePartyIds,
     allowedSubsidiaryIds: input.allowedSubsidiaryIds,
   });
   const excluded = new Set(input.excludeSourcePayRunDocumentIds ?? []);
-  const paying = proposal.periods.filter((period) =>
-    period.outcome === "payable" && !excluded.has(period.candidate.sourcePayRunDocumentId));
+  const paying = proposal.periods.filter(
+    (period) =>
+      period.outcome === "payable" && !excluded.has(period.candidate.sourcePayRunDocumentId),
+  );
   if (paying.length === 0) {
-    const blocked = proposal.periods.filter(period => period.outcome === "unavailable");
+    const blocked = proposal.periods.filter((period) => period.outcome === "unavailable");
     if (blocked.length > 0) {
-      throw new RetroPayError("Retroactive pay could not be calculated: "
-        + blocked.map(period => period.blockedReason).join("; "));
+      throw new RetroPayError(
+        "Retroactive pay could not be calculated: " +
+          blocked.map((period) => period.blockedReason).join("; "),
+      );
     }
     throw new RetroPayError(
-      "there is nothing to pay retroactively: no committed period in this statutory year "
-      + "produces a positive difference against what it already paid",
+      "there is nothing to pay retroactively: no committed period in this statutory year " +
+        "produces a positive difference against what it already paid",
     );
   }
   // Retro that crosses a statutory year is a different exercise — it changes
@@ -873,17 +952,21 @@ async function createRetroPayRunLocked(
   const crossYear = paying.filter((period) => period.candidate.taxYear !== proposal.taxYear);
   if (crossYear.length > 0) {
     throw new RetroPayError(
-      `${crossYear.length} period(s) fall in a different statutory year from the ${proposal.taxYear} `
-      + "retro run — prior-year retroactive pay changes filed year-end slips and must go through "
-      + "an amended return, not a current-year cheque",
+      `${crossYear.length} period(s) fall in a different statutory year from the ${proposal.taxYear} ` +
+        "retro run — prior-year retroactive pay changes filed year-end slips and must go through " +
+        "an amended return, not a current-year cheque",
     );
   }
 
   // An open (draft/calculated) retro run already holding one of these cells
   // is the double-settlement the commit gate refuses; refuse it here, before
   // a second run exists, naming the run that holds the cell.
-  const cells = paying.map((p) => `${p.candidate.employeePartyId}:${p.candidate.sourcePayRunDocumentId}`);
-  const held = (await tx.execute<{ document_number: string | null; employee_name: string }>(sql`
+  const cells = paying.map(
+    (p) => `${p.candidate.employeePartyId}:${p.candidate.sourcePayRunDocumentId}`,
+  );
+  const held = (
+    await tx.execute<{ document_number: string | null; employee_name: string }>(
+      sql`
     select d.document_number, p.display_name as employee_name
       from payroll_retro_settlements st
       join pay_runs rr on rr.document_id = st.retro_pay_run_document_id and rr.org_id = st.org_id
@@ -894,26 +977,27 @@ async function createRetroPayRunLocked(
        and (st.employee_party_id::text || ':' || st.source_pay_run_document_id::text) = any(${`{${cells.join(",")}}`}::text[])
      order by d.document_number
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (held) {
     throw new RetroPayError(
-      `retro run ${held.document_number ?? ""} already settles ${held.employee_name}'s period(s) and has not been committed `
-      + "— commit or delete that run before proposing the same difference again",
+      `retro run ${held.document_number ?? ""} already settles ${held.employee_name}'s period(s) and has not been committed ` +
+        "— commit or delete that run before proposing the same difference again",
     );
   }
 
   const employeePartyIds = [...new Set(paying.map((p) => p.candidate.employeePartyId))];
-  const periodStart = paying
-    .map((p) => p.candidate.periodStart)
-    .reduce((a, b) => (a < b ? a : b));
-  const periodEnd = paying
-    .map((p) => p.candidate.periodEnd)
-    .reduce((a, b) => (a > b ? a : b));
+  const periodStart = paying.map((p) => p.candidate.periodStart).reduce((a, b) => (a < b ? a : b));
+  const periodEnd = paying.map((p) => p.candidate.periodEnd).reduce((a, b) => (a > b ? a : b));
 
   const run = await createPayRun({
-    orgId, actorId,
+    orgId,
+    actorId,
     payScheduleId: input.payScheduleId,
-    periodStart, periodEnd,
+    periodStart,
+    periodEnd,
     payDate: input.payDate,
     runType: "retro",
     employeePartyIds,
@@ -933,7 +1017,11 @@ async function createRetroPayRunLocked(
       const sourceId = period.candidate.sourcePayRunDocumentId;
       if (!quantificationSnapshots.has(sourceId)) {
         const snapshot = await payRunCalculationSource(
-          orgId, sourceId, tx, false, input.allowedSubsidiaryIds,
+          orgId,
+          sourceId,
+          tx,
+          false,
+          input.allowedSubsidiaryIds,
         );
         quantificationSnapshots.set(sourceId, snapshot ? JSON.stringify(snapshot) : null);
       }
@@ -942,7 +1030,8 @@ async function createRetroPayRunLocked(
       const difference = period.difference!;
       const buckets = payableRetroBuckets(difference);
       const snapshot = quantificationSnapshots.get(period.candidate.sourcePayRunDocumentId) ?? null;
-      const settlement = (await tx.execute<{ id: string }>(sql`
+      const settlement = await tx.execute<{ id: string }>(
+        sql`
         insert into payroll_retro_settlements
           (org_id, retro_pay_run_document_id, employee_party_id, source_pay_run_document_id,
            source_period_start, source_period_end, source_pay_date, source_tax_year,
@@ -958,7 +1047,9 @@ async function createRetroPayRunLocked(
            ${JSON.stringify(period.candidate.reasons)}::jsonb, ${snapshot}::jsonb,
            ${actorId}, ${actorId})
         returning id
-      `, "objects"));
+      `,
+        "objects",
+      );
       const settlementId = settlement[0]!.id;
       for (const bucket of buckets) {
         await tx.execute(sql`
@@ -1039,16 +1130,23 @@ export async function retroEarningLinesForStub(
     allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   },
 ): Promise<RetroStubEarningLine[]> {
-  const rows = (await tx.execute<{
-      settlement_id: string;
-      component_id: string | null; description: string;
-      project_id: string | null; department_id: string | null; amount: string;
-      is_active: boolean | null; component_name: string | null;
-      supplemental_wage_category: string | null;
-      statutory_reporting_category: string | null;
-      statutory_exemption_category: string | null;
-      source_period_start: string; source_period_end: string; delta: string;
-    }>(sql`
+  const rows = await tx.execute<{
+    settlement_id: string;
+    component_id: string | null;
+    description: string;
+    project_id: string | null;
+    department_id: string | null;
+    amount: string;
+    is_active: boolean | null;
+    component_name: string | null;
+    supplemental_wage_category: string | null;
+    statutory_reporting_category: string | null;
+    statutory_exemption_category: string | null;
+    source_period_start: string;
+    source_period_end: string;
+    delta: string;
+  }>(
+    sql`
     select st.id as settlement_id,
            a.component_id, a.description, a.project_id, a.department_id, a.amount,
            c.is_active, c.name as component_name, ec.supplemental_wage_category,
@@ -1067,7 +1165,9 @@ export async function retroEarningLinesForStub(
        and st.employee_party_id = ${input.employeePartyId}
        ${payrollSubsidiaryScopeFilter(sql`ep.subsidiary_id`, input.allowedSubsidiaryIds)}
      order by st.source_period_start, a.description
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) return [];
 
   const lines: RetroStubEarningLine[] = [];
@@ -1075,10 +1175,10 @@ export async function retroEarningLinesForStub(
   for (const row of rows) {
     if (!row.component_id || row.is_active !== true) {
       throw new RetroPayError(
-        `the retroactive difference for ${input.employeeName} in `
-        + `${row.source_period_start} – ${row.source_period_end} is against `
-        + `"${row.component_name ?? row.description}", a pay component that no longer exists or is `
-        + "inactive — reactivate it, or re-quantify the retro run against the components in use",
+        `the retroactive difference for ${input.employeeName} in ` +
+          `${row.source_period_start} – ${row.source_period_end} is against ` +
+          `"${row.component_name ?? row.description}", a pay component that no longer exists or is ` +
+          "inactive — reactivate it, or re-quantify the retro run against the components in use",
       );
     }
     if (cmp(row.amount, "0") === 0) continue;
@@ -1095,7 +1195,8 @@ export async function retroEarningLinesForStub(
       nonPeriodic: input.nonPeriodic,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
       statutoryReportingCategory: row.statutory_reporting_category,
-      statutoryExemptionCategory: row.statutory_exemption_category as UsStatutoryExemptionCategory | null,
+      statutoryExemptionCategory:
+        row.statutory_exemption_category as UsStatutoryExemptionCategory | null,
       sequence: sequence++,
     });
   }
@@ -1104,14 +1205,14 @@ export async function retroEarningLinesForStub(
   // Keyed on the SETTLEMENT, not on its period: two runs can legitimately cover
   // the same days (an off-cycle bonus inside a regular period), and collapsing
   // them by date would silently drop one of the two deltas from the check.
-  const settledTotal = sum([...new Map(
-    rows.map((row) => [row.settlement_id, row.delta]),
-  ).values()]);
+  const settledTotal = sum([
+    ...new Map(rows.map((row) => [row.settlement_id, row.delta])).values(),
+  ]);
   const lineTotal = sum(lines.map((line) => line.amount));
   if (cmp(lineTotal, settledTotal) !== 0) {
     throw new RetroPayError(
-      `retroactive lines ${lineTotal} for ${input.employeeName} do not equal the `
-      + `${settledTotal} settled — the run cannot pay an amount its evidence does not support`,
+      `retroactive lines ${lineTotal} for ${input.employeeName} do not equal the ` +
+        `${settledTotal} settled — the run cannot pay an amount its evidence does not support`,
     );
   }
   return lines;
@@ -1161,17 +1262,26 @@ export interface RetroRunReview {
 
 /** Old vs new vs delta, per employee per period, for a retro run that exists. */
 export async function retroRunReview(
-  orgId: string, documentId: string,
+  orgId: string,
+  documentId: string,
   executor: Pick<typeof db, "execute"> = db,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<RetroRunReview> {
-  const settlements = (await executor.execute<{
-      id: string; employee_party_id: string; employee_name: string;
-      source_document_number: string; source_period_start: string;
-      source_period_end: string; source_pay_date: string;
-      original_earnings: string; recomputed_earnings: string;
-      previously_settled: string; delta: string; reasons: RetroReason[];
-    }>(sql`
+  const settlements = await executor.execute<{
+    id: string;
+    employee_party_id: string;
+    employee_name: string;
+    source_document_number: string;
+    source_period_start: string;
+    source_period_end: string;
+    source_pay_date: string;
+    original_earnings: string;
+    recomputed_earnings: string;
+    previously_settled: string;
+    delta: string;
+    reasons: RetroReason[];
+  }>(
+    sql`
     select st.id, st.employee_party_id, p.display_name as employee_name,
            d.document_number as source_document_number,
            st.source_period_start::text as source_period_start,
@@ -1187,12 +1297,17 @@ export async function retroRunReview(
        ${payrollSubsidiaryScopeFilter(sql`retro_doc.subsidiary_id`, allowedSubsidiaryIds)}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name, st.source_period_start
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (settlements.length === 0) {
     return { documentId, settlements: [], employees: [], total: "0" };
   }
 
-  const allocations = (await executor.execute<({ settlement_id: string } & Record<string, string | null>)>(sql`
+  const allocations = await executor.execute<
+    { settlement_id: string } & Record<string, string | null>
+  >(
+    sql`
     select a.settlement_id, a.description, c.name as component_name,
            a.project_id, proj.name as project_name,
            a.department_id, dept.name as department_name,
@@ -1205,7 +1320,9 @@ export async function retroRunReview(
       left join departments dept on dept.id = a.department_id and dept.org_id = a.org_id
      where a.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
      order by a.amount desc
-  `, "objects"));
+  `,
+    "objects",
+  );
   const bySettlement = new Map<string, RetroReviewAllocation[]>();
   for (const row of allocations) {
     const list = bySettlement.get(row.settlement_id) ?? [];
@@ -1245,11 +1362,13 @@ export async function retroRunReview(
   return {
     documentId,
     settlements: rows,
-    employees: summarizeRetro(rows.map((row) => ({
-      employeePartyId: row.employeePartyId,
-      employeeName: row.employeeName,
-      delta: row.delta,
-    }))),
+    employees: summarizeRetro(
+      rows.map((row) => ({
+        employeePartyId: row.employeePartyId,
+        employeeName: row.employeeName,
+        delta: row.delta,
+      })),
+    ),
     total: sum(rows.map((row) => row.delta)),
   };
 }
@@ -1276,26 +1395,39 @@ export interface RetroReadinessFinding {
 }
 
 export async function retroRunFindings(
-  orgId: string, documentId: string,
+  orgId: string,
+  documentId: string,
   executor: Pick<typeof db, "execute"> = db,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<RetroReadinessFinding[]> {
   const findings: RetroReadinessFinding[] = [];
-  const runRows = (await executor.execute<{ run_type: string; tax_year: number }>(sql`
+  const runRows = await executor.execute<{ run_type: string; tax_year: number }>(
+    sql`
     select r.run_type, r.tax_year from pay_runs r
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const run = runRows[0];
   if (!run || run.run_type !== "retro") return findings;
 
-  const rows = (await executor.execute<{
-      id: string; employee_party_id: string; employee_name: string;
-      source_pay_run_document_id: string; source_tax_year: number;
-      previously_settled: string; delta: string; source_document_number: string;
-      source_run_status: string; wage_moved: boolean; component_moved: boolean;
-      time_moved: boolean;
-      other_committed: string; other_open: number; retired_components: number;
-    }>(sql`
+  const rows = await executor.execute<{
+    id: string;
+    employee_party_id: string;
+    employee_name: string;
+    source_pay_run_document_id: string;
+    source_tax_year: number;
+    previously_settled: string;
+    delta: string;
+    source_document_number: string;
+    source_run_status: string;
+    wage_moved: boolean;
+    component_moved: boolean;
+    time_moved: boolean;
+    other_committed: string;
+    other_open: number;
+    retired_components: number;
+  }>(sql`
     select st.id, st.employee_party_id, p.display_name as employee_name,
            st.source_pay_run_document_id, st.source_tax_year, st.quantified_at,
            st.previously_settled, st.delta,
@@ -1441,11 +1573,13 @@ export async function retroRunFindings(
      where st.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`retro_doc.subsidiary_id`, allowedSubsidiaryIds)}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
+  `);
 
   if (rows.rows.length === 0) {
     findings.push({
-      severity: "blocker", code: "retro.noSettlements", employees: [],
+      severity: "blocker",
+      code: "retro.noSettlements",
+      employees: [],
     });
     return findings;
   }
@@ -1457,35 +1591,62 @@ export async function retroRunFindings(
     detail?: string,
   ) => {
     if (matching.length === 0) return;
-    const employees = [...new Map(matching.map((row) =>
-      [row.employee_party_id, { partyId: row.employee_party_id, name: row.employee_name }],
-    )).values()];
+    const employees = [
+      ...new Map(
+        matching.map((row) => [
+          row.employee_party_id,
+          { partyId: row.employee_party_id, name: row.employee_name },
+        ]),
+      ).values(),
+    ];
     findings.push({ severity, code, employees, ...(detail ? { detail } : {}) });
   };
 
-  collect("blocker", "retro.sourceVoided",
+  collect(
+    "blocker",
+    "retro.sourceVoided",
     rows.rows.filter((row) => row.source_run_status !== "committed"),
-    rows.rows.find((row) => row.source_run_status !== "committed")?.source_document_number);
+    rows.rows.find((row) => row.source_run_status !== "committed")?.source_document_number,
+  );
 
-  collect("blocker", "retro.crossTaxYear",
+  collect(
+    "blocker",
+    "retro.crossTaxYear",
     rows.rows.filter((row) => Number(row.source_tax_year) !== Number(run.tax_year)),
-    String(run.tax_year));
+    String(run.tax_year),
+  );
 
-  collect("blocker", "retro.stale",
-    rows.rows.filter((row) =>
-      row.wage_moved || row.component_moved || row.time_moved
-      || cmp(row.other_committed, row.previously_settled) !== 0));
+  collect(
+    "blocker",
+    "retro.stale",
+    rows.rows.filter(
+      (row) =>
+        row.wage_moved ||
+        row.component_moved ||
+        row.time_moved ||
+        cmp(row.other_committed, row.previously_settled) !== 0,
+    ),
+  );
 
-  collect("blocker", "retro.doubleSettled",
-    rows.rows.filter((row) => row.other_open > 0));
+  collect(
+    "blocker",
+    "retro.doubleSettled",
+    rows.rows.filter((row) => row.other_open > 0),
+  );
 
-  collect("blocker", "retro.componentRetired",
-    rows.rows.filter((row) => row.retired_components > 0));
+  collect(
+    "blocker",
+    "retro.componentRetired",
+    rows.rows.filter((row) => row.retired_components > 0),
+  );
 
   // Advisory: the run pays nothing for somebody it names. Not a blocker — the
   // stub is correct and an operator may have excluded the amount deliberately.
-  collect("warning", "retro.zeroDelta",
-    rows.rows.filter((row) => cmp(row.delta, "0") === 0));
+  collect(
+    "warning",
+    "retro.zeroDelta",
+    rows.rows.filter((row) => cmp(row.delta, "0") === 0),
+  );
 
   return findings;
 }

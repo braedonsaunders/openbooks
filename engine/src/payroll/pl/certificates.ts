@@ -17,10 +17,7 @@
  * relative to the workplace — an employee-stated residence fact, defaulted
  * to neither.
  */
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 
 const PL_PIT2_CERTIFICATE: PayrollCertificate = {
   key: "pl_pit2",
@@ -30,9 +27,9 @@ const PL_PIT2_CERTIFICATE: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "Ministerstwo Finansów, formularz PIT-2; art. 31b (oświadczenie "
-    + "o stosowaniu pomniejszenia) i art. 22 ust. 2 pkt 1/3 (KUP) ustawy "
-    + "o podatku dochodowym od osób fizycznych",
+    "Ministerstwo Finansów, formularz PIT-2; art. 31b (oświadczenie " +
+    "o stosowaniu pomniejszenia) i art. 22 ust. 2 pkt 1/3 (KUP) ustawy " +
+    "o podatku dochodowym od osób fizycznych",
   summary:
     "Whether the employee filed the monthly-reduction statement and which KUP the payer deducts; the payer copies both answers, never computes them.",
   storage: "certificate_rows",
@@ -58,7 +55,10 @@ const PL_PIT2_CERTIFICATE: PayrollCertificate = {
       kind: "choice",
       choices: [
         { value: "miejscowy", label: "250 zł — jedna umowa, ta sama miejscowość" },
-        { value: "dojazd", label: "300 zł — zamieszkanie poza miejscowością zakładu, bez dodatku za rozłąkę" },
+        {
+          value: "dojazd",
+          label: "300 zł — zamieszkanie poza miejscowością zakładu, bez dodatku za rozłąkę",
+        },
       ],
       // No default, required: the two amounts differ and an undeclared
       // residence must not fall through to 250 zł.
@@ -98,12 +98,12 @@ const PL_WIEK_CERTIFICATE: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "ustawa o ewidencji ludności, art. 15 ust. 2 (Dz.U. 2018 poz. 1382: century in the PESEL month "
-    + "digits); updof FP/FS age bar (art. 261) and the under-26 refusal, which cannot be decided "
-    + "without the year",
+    "ustawa o ewidencji ludności, art. 15 ust. 2 (Dz.U. 2018 poz. 1382: century in the PESEL month " +
+    "digits); updof FP/FS age bar (art. 261) and the under-26 refusal, which cannot be decided " +
+    "without the year",
   summary:
-    "The employee's birth year for the FP age bar. Derived from the PESEL on file where one "
-    + "exists; entered here for employees without one. A value contradicting the PESEL refuses.",
+    "The employee's birth year for the FP age bar. Derived from the PESEL on file where one " +
+    "exists; entered here for employees without one. A value contradicting the PESEL refuses.",
   storage: "profile_columns",
   fields: [
     {
@@ -117,9 +117,10 @@ const PL_WIEK_CERTIFICATE: PayrollCertificate = {
       // UNANSWERED profile still saves, so readiness names the gap before
       // calculation rather than the save refusing an incomplete setup.
       required: true,
-      help: "Four-digit birth year. Prefilled from the employee's PESEL where one is on file "
-        + "(first six digits YYMMDD, century in the month digits); enter it directly for "
-        + "employees without a PESEL. A year contradicting the PESEL refuses on save.",
+      help:
+        "Four-digit birth year. Prefilled from the employee's PESEL where one is on file " +
+        "(first six digits YYMMDD, century in the month digits); enter it directly for " +
+        "employees without a PESEL. A year contradicting the PESEL refuses on save.",
     },
   ],
 };
@@ -140,21 +141,21 @@ const PL_ZATRUDNIENIE_CERTIFICATE: PayrollCertificate = {
   label: "Employment facts (working time)",
   scope: { level: "country" },
   purpose: "withholding",
-  citation:
-    "Labour Market Act of 20 March 2025, art. 259 (proportional minimum wage)",
+  citation: "Labour Market Act of 20 March 2025, art. 259 (proportional minimum wage)",
   summary:
-    "The employer's per-employee employment record for the fund lines: the "
-    + "working-time fraction behind the pro-rata FP/FS threshold.",
+    "The employer's per-employee employment record for the fund lines: the " +
+    "working-time fraction behind the pro-rata FP/FS threshold.",
   storage: "certificate_rows",
   fields: [
     {
       key: "wymiar_etatu",
       label: "Wymiar etatu (fraction of full time)",
       kind: "code",
-      help: "Working time as a decimal fraction of a full etat (\"1\" full time, "
-        + "\"0.5\" half time), at most four decimals. The FP/FS threshold is the "
-        + "full-time minimum wage times this fraction. Unset prices against the "
-        + "full minimum only; pay below it refuses until the fraction is recorded.",
+      help:
+        'Working time as a decimal fraction of a full etat ("1" full time, ' +
+        '"0.5" half time), at most four decimals. The FP/FS threshold is the ' +
+        "full-time minimum wage times this fraction. Unset prices against the " +
+        "full minimum only; pay below it refuses until the fraction is recorded.",
     },
   ],
 };
@@ -177,11 +178,11 @@ const PL_OTWARCIE_ROKU_CERTIFICATE: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "ustawa o podatku dochodowym od osób fizycznych, art. 32 ust. 2 (próg 120 000 zł od początku roku); "
-    + "ustawa o systemie ubezpieczeń społecznych, art. 19 ust. 1 (roczna podstawa emerytalna i rentowa)",
+    "ustawa o podatku dochodowym od osób fizycznych, art. 32 ust. 2 (próg 120 000 zł od początku roku); " +
+    "ustawa o systemie ubezpieczeń społecznych, art. 19 ust. 1 (roczna podstawa emerytalna i rentowa)",
   summary:
-    "This payer's dochód and emerytalne/rentowe contribution base for the employee in the tax "
-    + "year before its payroll ran here. Runs committed here are added automatically.",
+    "This payer's dochód and emerytalne/rentowe contribution base for the employee in the tax " +
+    "year before its payroll ran here. Runs committed here are added automatically.",
   storage: "certificate_rows",
   fields: [
     {
@@ -191,9 +192,10 @@ const PL_OTWARCIE_ROKU_CERTIFICATE: PayrollCertificate = {
       decimals: 2,
       min: "0",
       required: true,
-      help: "Sum of the monthly dochód (revenue less KUP and employee social contributions) this "
-        + "payer paid the employee this year before its payroll ran here, from the prior "
-        + "provider's report. Zero when nothing was paid. Exclude runs committed here.",
+      help:
+        "Sum of the monthly dochód (revenue less KUP and employee social contributions) this " +
+        "payer paid the employee this year before its payroll ran here, from the prior " +
+        "provider's report. Zero when nothing was paid. Exclude runs committed here.",
     },
     {
       key: "podstawa_emerytalna_ytd",
@@ -202,9 +204,10 @@ const PL_OTWARCIE_ROKU_CERTIFICATE: PayrollCertificate = {
       decimals: 2,
       min: "0",
       required: true,
-      help: "Emerytalne/rentowe contribution base this payer already assessed this year before "
-        + "its payroll ran here, from the prior provider's report. Zero when nothing was paid. "
-        + "Exclude runs committed here.",
+      help:
+        "Emerytalne/rentowe contribution base this payer already assessed this year before " +
+        "its payroll ran here, from the prior provider's report. Zero when nothing was paid. " +
+        "Exclude runs committed here.",
     },
   ],
 };
@@ -212,6 +215,9 @@ const PL_OTWARCIE_ROKU_CERTIFICATE: PayrollCertificate = {
 export const PL_CERTIFICATES: PayrollPackCertificates = {
   country: "PL",
   certificates: [
-    PL_PIT2_CERTIFICATE, PL_WIEK_CERTIFICATE, PL_ZATRUDNIENIE_CERTIFICATE, PL_OTWARCIE_ROKU_CERTIFICATE,
+    PL_PIT2_CERTIFICATE,
+    PL_WIEK_CERTIFICATE,
+    PL_ZATRUDNIENIE_CERTIFICATE,
+    PL_OTWARCIE_ROKU_CERTIFICATE,
   ],
 };

@@ -1,35 +1,63 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { REPORT_ENTITY_MAP, bindPayStubIncomeTaxKeys, bindPayStubSocialKeys, customRecordEntities, ReportQueryValidationError, validateCustomQuery, type ReportEntity, type ReportCustomQuery } from '@openbooks/reports'
-import { eiColumnSystemKeys, employeeSocialInsuranceSystemKeys, incomeTaxWithholdingSystemKeys } from '@openbooks/engine/payroll/packs'
-import { can, type Authz } from './authz'
-import { applyPayrollConfidentialityToCatalog } from './payroll-confidentiality'
-import { inTypeAudience } from './records'
-import { lintRecordFields } from './record-schema'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  REPORT_ENTITY_MAP,
+  bindPayStubIncomeTaxKeys,
+  bindPayStubSocialKeys,
+  customRecordEntities,
+  ReportQueryValidationError,
+  validateCustomQuery,
+  type ReportEntity,
+  type ReportCustomQuery,
+} from "@openbooks/reports";
+import {
+  eiColumnSystemKeys,
+  employeeSocialInsuranceSystemKeys,
+  incomeTaxWithholdingSystemKeys,
+} from "@openbooks/engine/payroll/packs";
+import { can, type Authz } from "./authz";
+import { applyPayrollConfidentialityToCatalog } from "./payroll-confidentiality";
+import { inTypeAudience } from "./records";
+import { lintRecordFields } from "./record-schema";
 
 /** Rebuilt per request/execution: no cross-tenant cache or stale role/definition grant. */
-export async function customRecordReportCatalog(authz: Authz): Promise<Record<string, ReportEntity>> {
-  if (!can(authz, 'records.read')) return {}
+export async function customRecordReportCatalog(
+  authz: Authz,
+): Promise<Record<string, ReportEntity>> {
+  if (!can(authz, "records.read")) return {};
   const [definitions, assignments] = await Promise.all([
-    db.execute<{ id: string; key: string; name: string; description: string | null; fields: unknown; allowed_roles: string[] | null }>(sql`
+    db.execute<{
+      id: string;
+      key: string;
+      name: string;
+      description: string | null;
+      fields: unknown;
+      allowed_roles: string[] | null;
+    }>(
+      sql`
       select id,key,name,description,fields,allowed_roles from custom_record_types
-      where org_id=${authz.user.orgId} and status='published' order by sort_order,name`, 'objects'),
-    db.execute<{ key: string }>(sql`select r.key from role_assignments a
+      where org_id=${authz.user.orgId} and status='published' order by sort_order,name`,
+      "objects",
+    ),
+    db.execute<{ key: string }>(
+      sql`select r.key from role_assignments a
       join app_roles r on r.id=a.role_id and r.org_id=a.org_id
-      where a.org_id=${authz.user.orgId} and a.user_id=${authz.user.id}`, 'objects'),
-  ])
-  const roles = assignments.map(r => r.key)
-  const entities = definitions.flatMap(d => {
-    if (!authz.user.isSuperAdmin && !inTypeAudience(roles, d.allowed_roles)) return []
-    const fields = lintRecordFields(d.fields, d.name)
-    return fields.success ? customRecordEntities({ ...d, fields: fields.sections }) : []
-  })
-  return Object.fromEntries(entities.map(e => [e.key, e]))
+      where a.org_id=${authz.user.orgId} and a.user_id=${authz.user.id}`,
+      "objects",
+    ),
+  ]);
+  const roles = assignments.map((r) => r.key);
+  const entities = definitions.flatMap((d) => {
+    if (!authz.user.isSuperAdmin && !inTypeAudience(roles, d.allowed_roles)) return [];
+    const fields = lintRecordFields(d.fields, d.name);
+    return fields.success ? customRecordEntities({ ...d, fields: fields.sections }) : [];
+  });
+  return Object.fromEntries(entities.map((e) => [e.key, e]));
 }
 
 export async function reportEntityCatalog(authz: Authz): Promise<Record<string, ReportEntity>> {
-  const catalog = { ...REPORT_ENTITY_MAP, ...await customRecordReportCatalog(authz) }
+  const catalog = { ...REPORT_ENTITY_MAP, ...(await customRecordReportCatalog(authz)) };
   // The register's income_tax column aggregates the pack-declared
   // withholding set (every deduction assessed on taxable income) from the
   // stub lines — never the CA/US factor labels baked into the static
@@ -40,34 +68,41 @@ export async function reportEntityCatalog(authz: Authz): Promise<Record<string, 
   // pack's contributions land in one of the two existing columns with both
   // labels untouched. The guard keeps a custom-record override of this key
   // (if one ever exists) untouched.
-  const payStubs = catalog.pay_stubs
-  if (payStubs?.key === 'pay_stubs') {
+  const payStubs = catalog.pay_stubs;
+  if (payStubs?.key === "pay_stubs") {
     catalog.pay_stubs = bindPayStubSocialKeys(
       bindPayStubIncomeTaxKeys(payStubs, incomeTaxWithholdingSystemKeys()),
       eiColumnSystemKeys(),
       employeeSocialInsuranceSystemKeys(),
-    )
+    );
   }
   // Readers without payroll.read reach the ledger_lines entity through the
   // report builder, saved views, and drills: mask payroll party identity at
   // the catalog so every one of those paths compiles the same masked
   // expressions (per-row amounts collapse in the execution wrapper).
-  return applyPayrollConfidentialityToCatalog(catalog, can(authz, 'payroll.read'))
+  return applyPayrollConfidentialityToCatalog(catalog, can(authz, "payroll.read"));
 }
 
 export function validateCatalogReportQuery(query: unknown, catalog: Record<string, ReportEntity>) {
-  const raw = query as ReportCustomQuery | null
-  if (raw?.entity?.startsWith('custom:')) {
-    const entity = Object.hasOwn(catalog, raw.entity) ? catalog[raw.entity] : null
-    if (!entity) throw new ReportQueryValidationError('Custom record report source is unavailable')
-    const fields = [...(raw.columns ?? []), ...(raw.breakouts ?? []).map(b => b.column),
-      ...(raw.measures ?? []).flatMap(m => m.column ? [m.column] : []),
-      ...(raw.sorts ?? []).map(s => s.column), ...(raw.groupBy ? [raw.groupBy] : [])]
-    if (fields.some(f => !entity.columns.some(c => c.key === f))) throw new ReportQueryValidationError('A custom record report field changed or is unavailable; review the report definition')
+  const raw = query as ReportCustomQuery | null;
+  if (raw?.entity?.startsWith("custom:")) {
+    const entity = Object.hasOwn(catalog, raw.entity) ? catalog[raw.entity] : null;
+    if (!entity) throw new ReportQueryValidationError("Custom record report source is unavailable");
+    const fields = [
+      ...(raw.columns ?? []),
+      ...(raw.breakouts ?? []).map((b) => b.column),
+      ...(raw.measures ?? []).flatMap((m) => (m.column ? [m.column] : [])),
+      ...(raw.sorts ?? []).map((s) => s.column),
+      ...(raw.groupBy ? [raw.groupBy] : []),
+    ];
+    if (fields.some((f) => !entity.columns.some((c) => c.key === f)))
+      throw new ReportQueryValidationError(
+        "A custom record report field changed or is unavailable; review the report definition",
+      );
   }
-  return validateCustomQuery(query, catalog)
+  return validateCustomQuery(query, catalog);
 }
 
 export async function validateOrgReportQuery(authz: Authz, query: unknown) {
-  return validateCatalogReportQuery(query, await reportEntityCatalog(authz))
+  return validateCatalogReportQuery(query, await reportEntityCatalog(authz));
 }

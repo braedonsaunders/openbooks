@@ -1,6 +1,6 @@
-import 'server-only'
-import { getTranslations } from 'next-intl/server'
-import type { ModuleHomeTab } from '../../../components/module-home/ui'
+import "server-only";
+import { getTranslations } from "next-intl/server";
+import type { ModuleHomeTab } from "../../../components/module-home/ui";
 
 /**
  * The Compliance workspace's route-tab strip, defined once so every page in the
@@ -14,20 +14,28 @@ import type { ModuleHomeTab } from '../../../components/module-home/ui'
  */
 export async function complianceTabs(
   activeHref: string,
-  opts: { projectsEnabled: boolean; complianceEnabled?: boolean; informationReturnsEnabled?: boolean },
+  opts: {
+    projectsEnabled: boolean;
+    complianceEnabled?: boolean;
+    informationReturnsEnabled?: boolean;
+  },
 ): Promise<ModuleHomeTab[]> {
-  const t = await getTranslations('compliance')
-  const complianceOn = opts.complianceEnabled ?? true
-  const returnsOn = opts.informationReturnsEnabled ?? true
+  const t = await getTranslations("compliance");
+  const complianceOn = opts.complianceEnabled ?? true;
+  const returnsOn = opts.informationReturnsEnabled ?? true;
   const tabs = [
-    ...(complianceOn ? [{ href: '/compliance', key: 'tabs.overview' }] : []),
-    ...(complianceOn ? [{ href: '/compliance/vendors', key: 'tabs.vendors' }] : []),
-    ...(opts.projectsEnabled && complianceOn ? [{ href: '/compliance/lien-waivers', key: 'tabs.lienWaivers' }] : []),
-    ...(returnsOn ? [{ href: '/compliance/information-returns', key: 'tabs.informationReturns' }] : []),
-  ]
+    ...(complianceOn ? [{ href: "/compliance", key: "tabs.overview" }] : []),
+    ...(complianceOn ? [{ href: "/compliance/vendors", key: "tabs.vendors" }] : []),
+    ...(opts.projectsEnabled && complianceOn
+      ? [{ href: "/compliance/lien-waivers", key: "tabs.lienWaivers" }]
+      : []),
+    ...(returnsOn
+      ? [{ href: "/compliance/information-returns", key: "tabs.informationReturns" }]
+      : []),
+  ];
   return tabs.map((tab) => ({
     href: tab.href,
     label: t(tab.key),
     active: activeHref === tab.href,
-  }))
+  }));
 }

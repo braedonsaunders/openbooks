@@ -1,14 +1,24 @@
-import { sql } from 'drizzle-orm'
-import { db } from '../platform/db.ts'
-import { add, cmp, mulRate, neg, normalizeDecimal, roundMoney } from '../money/money.ts'
-import { IncomeTaxProvisionError, spotRateToPresentation } from './income-tax-provision.ts'
-import { TaxRequestValidationError } from '../tax/request-validation.ts'
-import { uuidArray } from '../organization/subsidiaries.ts'
-import { evaluateUsNexus, thresholdForState, US_NEXUS_MEASUREMENT_MONTHS, type NexusEvaluation, type StateNexusThreshold, type StateSales } from '../tax/us-nexus.ts'
-import { marketplaceNexusRuleFor, readAllMarketplaceNexusRules } from '../tax/marketplace-facilitators.ts'
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
+import { add, cmp, mulRate, neg, normalizeDecimal, roundMoney } from "../money/money.ts";
+import { IncomeTaxProvisionError, spotRateToPresentation } from "./income-tax-provision.ts";
+import { TaxRequestValidationError } from "../tax/request-validation.ts";
+import { uuidArray } from "../organization/subsidiaries.ts";
+import {
+  evaluateUsNexus,
+  thresholdForState,
+  US_NEXUS_MEASUREMENT_MONTHS,
+  type NexusEvaluation,
+  type StateNexusThreshold,
+  type StateSales,
+} from "../tax/us-nexus.ts";
+import {
+  marketplaceNexusRuleFor,
+  readAllMarketplaceNexusRules,
+} from "../tax/marketplace-facilitators.ts";
 
 /** Role-derived subsidiary visibility; null/undefined means unrestricted. */
-export type UsNexusSubsidiaryScope = ReadonlySet<string> | null | undefined
+export type UsNexusSubsidiaryScope = ReadonlySet<string> | null | undefined;
 
 /**
  * Restrict legal-entity-owned documents to the caller's visible subsidiaries.
@@ -16,11 +26,14 @@ export type UsNexusSubsidiaryScope = ReadonlySet<string> | null | undefined
  * subsidiary also fail closed for restricted callers.
  */
 function subsidiaryScopeFilter(allowedSubsidiaryIds: UsNexusSubsidiaryScope) {
-  if (allowedSubsidiaryIds == null) return sql``
-  const ids = [...allowedSubsidiaryIds]
+  if (allowedSubsidiaryIds == null) return sql``;
+  const ids = [...allowedSubsidiaryIds];
   return ids.length > 0
-    ? sql`and d.subsidiary_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`
-    : sql`and false`
+    ? sql`and d.subsidiary_id in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`
+    : sql`and false`;
 }
 
 /**
@@ -31,79 +44,94 @@ function subsidiaryScopeFilter(allowedSubsidiaryIds: UsNexusSubsidiaryScope) {
  */
 export interface UsNexusLedgerOptions {
   /** Subsidiaries forming the filing entity; ANDed with visibility scope. */
-  subsidiaryIds?: string[]
+  subsidiaryIds?: string[];
   /**
    * Working currency: row conversion target and threshold expression currency.
    * Defaults to the entity's single functional currency (an entity spanning
    * several functional currencies must declare one explicitly); unscoped
    * ledgers default to USD, the threshold reference currency.
    */
-  currency?: string
+  currency?: string;
   /** fx_rates `rate_type` for row conversion and threshold translation. */
-  rateType?: string
+  rateType?: string;
   /** Rate effective date (ISO); defaults to the window end (`to`). */
-  rateDate?: string
+  rateDate?: string;
 }
 
 export interface UsNexusTranslation {
-  rateType: string
-  rateDate: string
+  rateType: string;
+  rateDate: string;
   /** Effective date of the applied USD→working rate row. */
-  rateAsOf: string
+  rateAsOf: string;
   /** The policy rate the USD reference thresholds were translated at. */
-  usdToCurrencyRate: string
+  usdToCurrencyRate: string;
 }
 
-const NEXUS_CURRENCY_RE = /^[A-Z]{3}$/
-const NEXUS_RATE_TYPE_RE = /^[a-z][a-z0-9_]{1,31}$/
-const NEXUS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const NEXUS_CURRENCY_RE = /^[A-Z]{3}$/;
+const NEXUS_RATE_TYPE_RE = /^[a-z][a-z0-9_]{1,31}$/;
+const NEXUS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 async function resolveEntityScope(
   orgId: string,
   opts: UsNexusLedgerOptions,
 ): Promise<{ subsidiaryIds: string[] | null; currency: string }> {
-  const rateType = opts.rateType ?? 'spot'
+  const rateType = opts.rateType ?? "spot";
   if (!NEXUS_RATE_TYPE_RE.test(rateType)) {
-    throw new TaxRequestValidationError(`nexus rateType "${opts.rateType}" is not a valid rate source`)
+    throw new TaxRequestValidationError(
+      `nexus rateType "${opts.rateType}" is not a valid rate source`,
+    );
   }
   if (opts.rateDate !== undefined && !NEXUS_DATE_RE.test(opts.rateDate)) {
-    throw new TaxRequestValidationError(`nexus rateDate "${opts.rateDate}" is not an ISO date (YYYY-MM-DD)`)
+    throw new TaxRequestValidationError(
+      `nexus rateDate "${opts.rateDate}" is not an ISO date (YYYY-MM-DD)`,
+    );
   }
   if (opts.currency !== undefined && !NEXUS_CURRENCY_RE.test(opts.currency)) {
-    throw new TaxRequestValidationError(`nexus currency "${opts.currency}" is not a valid 3-letter currency code`)
+    throw new TaxRequestValidationError(
+      `nexus currency "${opts.currency}" is not a valid 3-letter currency code`,
+    );
   }
-  if (!opts.subsidiaryIds) return { subsidiaryIds: null, currency: opts.currency ?? 'USD' }
+  if (!opts.subsidiaryIds) return { subsidiaryIds: null, currency: opts.currency ?? "USD" };
   if (opts.subsidiaryIds.length === 0) {
-    throw new TaxRequestValidationError('nexus filing entity must name at least one subsidiary')
+    throw new TaxRequestValidationError("nexus filing entity must name at least one subsidiary");
   }
-  const ids = [...new Set(opts.subsidiaryIds)]
+  const ids = [...new Set(opts.subsidiaryIds)];
   try {
-    uuidArray(ids)
+    uuidArray(ids);
   } catch (e) {
-    throw new TaxRequestValidationError(`nexus filing entity names an invalid subsidiary id (${e instanceof Error ? e.message : String(e)})`)
+    throw new TaxRequestValidationError(
+      `nexus filing entity names an invalid subsidiary id (${e instanceof Error ? e.message : String(e)})`,
+    );
   }
-  const rows = (await db.execute<{ id: string; base_currency: string; is_elimination: boolean }>(sql`
+  const rows = await db.execute<{ id: string; base_currency: string; is_elimination: boolean }>(
+    sql`
     select id, base_currency, is_elimination from subsidiaries
-     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`, 'objects'))
-  const known = new Set(rows.map((r) => r.id))
-  const unknown = ids.filter((id) => !known.has(id))
+     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`,
+    "objects",
+  );
+  const known = new Set(rows.map((r) => r.id));
+  const unknown = ids.filter((id) => !known.has(id));
   if (unknown.length > 0) {
-    throw new TaxRequestValidationError(`nexus filing entity references subsidiaries outside this organization: ${unknown.join(', ')}`)
+    throw new TaxRequestValidationError(
+      `nexus filing entity references subsidiaries outside this organization: ${unknown.join(", ")}`,
+    );
   }
-  const elimination = rows.filter((r) => r.is_elimination)
+  const elimination = rows.filter((r) => r.is_elimination);
   if (elimination.length > 0) {
-    throw new TaxRequestValidationError('nexus filing entity cannot include an elimination entity — only legal filers hold nexus')
+    throw new TaxRequestValidationError(
+      "nexus filing entity cannot include an elimination entity — only legal filers hold nexus",
+    );
   }
   if (!opts.currency) {
-    const currencies = [...new Set(rows.map((r) => r.base_currency))]
+    const currencies = [...new Set(rows.map((r) => r.base_currency))];
     if (currencies.length > 1) {
       throw new TaxRequestValidationError(
-        `nexus filing entity spans functional currencies (${currencies.sort().join(' and ')}) — pass currency to declare the working currency`,
-      )
+        `nexus filing entity spans functional currencies (${currencies.sort().join(" and ")}) — pass currency to declare the working currency`,
+      );
     }
-    return { subsidiaryIds: ids, currency: currencies[0]! }
+    return { subsidiaryIds: ids, currency: currencies[0]! };
   }
-  return { subsidiaryIds: ids, currency: opts.currency }
+  return { subsidiaryIds: ids, currency: opts.currency };
 }
 
 /**
@@ -129,36 +157,36 @@ async function resolveEntityScope(
 /** How marketplace-facilitated sales treated one state's threshold. */
 export interface UsNexusMarketplaceInfo {
   /** Marketplace-attributed sales in the working currency. */
-  marketplaceSalesUsd: string
+  marketplaceSalesUsd: string;
   /** Whether the state's rule counts them toward the threshold. */
-  included: boolean
+  included: boolean;
   /** True when no verified rule exists: the state needs operator review. */
-  needsReview: boolean
+  needsReview: boolean;
   /** The cited source of a verified rule, else empty. */
-  source: string
+  source: string;
 }
 
-export type UsNexusStateEvaluation = NexusEvaluation & { marketplace: UsNexusMarketplaceInfo }
+export type UsNexusStateEvaluation = NexusEvaluation & { marketplace: UsNexusMarketplaceInfo };
 
 export interface UsNexusResult {
-  from: string
-  to: string
+  from: string;
+  to: string;
   /**
    * Statutory measurement window the thresholds were evaluated over: the
    * trailing policy months ending at `to`, independent of the display
    * period (`from`/`to`).
    */
-  measuredFrom: string
-  measuredTo: string
+  measuredFrom: string;
+  measuredTo: string;
   /** Working currency: `states`/`unattributed` amounts are denominated here. */
-  currency: string
+  currency: string;
   /** The filing entity measured, or null for the org-wide ledger. */
-  subsidiaryIds: string[] | null
-  states: UsNexusStateEvaluation[]
+  subsidiaryIds: string[] | null;
+  states: UsNexusStateEvaluation[];
   /** Posted US sales that could not be attributed to a state (no captured destination). */
-  unattributed: { salesUsd: string; txnCount: number }
+  unattributed: { salesUsd: string; txnCount: number };
   /** Threshold-translation evidence; null when thresholds applied directly (USD). */
-  translation: UsNexusTranslation | null
+  translation: UsNexusTranslation | null;
 }
 
 export async function computeUsNexusStatus(
@@ -168,34 +196,43 @@ export async function computeUsNexusStatus(
   allowedSubsidiaryIds?: UsNexusSubsidiaryScope,
   opts: UsNexusLedgerOptions = {},
 ): Promise<UsNexusResult> {
-  const rateType = opts.rateType ?? 'spot'
-  const rateDate = opts.rateDate ?? to
+  const rateType = opts.rateType ?? "spot";
+  const rateDate = opts.rateDate ?? to;
   // Thresholds measure the statutory trailing window ending at the as-of
   // date, never the caller's display period: a quarter query must still see
   // the preceding twelve months of receipts. Month arithmetic stays in SQL
   // so month-end as-of dates land exactly (JS month rollback would shift
   // Feb-29 windows by a day).
-  const measuredFrom = (await db.execute<{ from: string }>(sql`
-    select ((${to}::date - (${US_NEXUS_MEASUREMENT_MONTHS}::int * interval '1 month') + interval '1 day'))::text as "from"`, 'objects'))[0]!.from
-  const entity = await resolveEntityScope(orgId, opts)
-  const target = entity.currency
+  const measuredFrom = (
+    await db.execute<{ from: string }>(
+      sql`
+    select ((${to}::date - (${US_NEXUS_MEASUREMENT_MONTHS}::int * interval '1 month') + interval '1 day'))::text as "from"`,
+      "objects",
+    )
+  )[0]!.from;
+  const entity = await resolveEntityScope(orgId, opts);
+  const target = entity.currency;
   const entityFilter =
     entity.subsidiaryIds === null
       ? sql``
-      : sql`and d.subsidiary_id in (${sql.join(entity.subsidiaryIds.map((id) => sql`${id}`), sql`, `)})`
-  const resolvedCountry = sql`coalesce(nullif(trim(d.ship_to_country), ''), nullif(trim(q.country), ''), '')`
-  const resolvedRegion = sql`coalesce(nullif(trim(d.ship_to_region), ''), nullif(trim(q.region), ''), '')`
-  const rows = (await db.execute<{
-    state: string
-    currency: string
-    fx_rate: string
-    base_currency: string
-    amount: string
-    marketplace_amount: string
-    is_invoice: number
-    marketplace_invoice: number
-    as_of: string
-  }>(sql`
+      : sql`and d.subsidiary_id in (${sql.join(
+          entity.subsidiaryIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})`;
+  const resolvedCountry = sql`coalesce(nullif(trim(d.ship_to_country), ''), nullif(trim(q.country), ''), '')`;
+  const resolvedRegion = sql`coalesce(nullif(trim(d.ship_to_region), ''), nullif(trim(q.region), ''), '')`;
+  const rows = await db.execute<{
+    state: string;
+    currency: string;
+    fx_rate: string;
+    base_currency: string;
+    amount: string;
+    marketplace_amount: string;
+    is_invoice: number;
+    marketplace_invoice: number;
+    as_of: string;
+  }>(
+    sql`
     select case when upper(${resolvedCountry}) = 'US'
                 then ${resolvedRegion} else '' end as state,
            d.currency,
@@ -256,129 +293,163 @@ export async function computeUsNexusStatus(
          nullif(${resolvedCountry}, '') is null
          or upper(${resolvedCountry}) = 'US'
        )
-  `, 'objects'))
+  `,
+    "objects",
+  );
 
-  const byState = new Map<string, { sales: string; marketplace: string; txnCount: number; marketplaceTxnCount: number }>()
-  const rateCache = new Map<string, Promise<string>>()
+  const byState = new Map<
+    string,
+    { sales: string; marketplace: string; txnCount: number; marketplaceTxnCount: number }
+  >();
+  const rateCache = new Map<string, Promise<string>>();
 
   const rateToTarget = (fromCurrency: string, asOf: string): Promise<string> => {
-    const key = `${fromCurrency}|${asOf}`
-    const cached = rateCache.get(key)
-    if (cached) return cached
+    const key = `${fromCurrency}|${asOf}`;
+    const cached = rateCache.get(key);
+    if (cached) return cached;
     const lookup = (async () => {
       try {
-        return (await spotRateToPresentation(db, orgId, fromCurrency, target, asOf, rateType)).rate
+        return (await spotRateToPresentation(db, orgId, fromCurrency, target, asOf, rateType)).rate;
       } catch (e) {
         if (e instanceof IncomeTaxProvisionError) {
           throw new TaxRequestValidationError(
             `no ${rateType} rate for ${fromCurrency}→${target} on or before ${asOf} — configure exchange rates before measuring nexus in ${target}`,
-          )
+          );
         }
-        throw e
+        throw e;
       }
-    })()
-    rateCache.set(key, lookup)
-    return lookup
-  }
+    })();
+    rateCache.set(key, lookup);
+    return lookup;
+  };
 
   // The marketplace share converts exactly like the header: same currency,
   // same rate, same date — so excluding it is pure subtraction, never a
   // second conversion that could drift from the measured figure.
-  const convert = async (amount: string, row: { currency: string; base_currency: string; fx_rate: string; as_of: string }): Promise<string> => {
-    if (row.currency === target) return amount
+  const convert = async (
+    amount: string,
+    row: { currency: string; base_currency: string; fx_rate: string; as_of: string },
+  ): Promise<string> => {
+    if (row.currency === target) return amount;
     // A stored rate is authoritative only when it differs from the column
     // default at the column's own ten-decimal scale. The numeric(19,10) value
     // reads back as '1.0000000000', so a raw string comparison against '1'
     // treated every unstamped legacy rate as a real 1:1 peg and converted at
     // 1.0 instead of resolving the rate below — the same default-vs-set
     // distinction the posting kernel draws before honouring a header rate.
-    if (row.base_currency === target && row.fx_rate && normalizeDecimal(row.fx_rate, 10) !== '1.0000000000') {
-      return mulRate(amount, row.fx_rate)
+    if (
+      row.base_currency === target &&
+      row.fx_rate &&
+      normalizeDecimal(row.fx_rate, 10) !== "1.0000000000"
+    ) {
+      return mulRate(amount, row.fx_rate);
     }
-    return mulRate(amount, await rateToTarget(row.currency, row.as_of))
-  }
+    return mulRate(amount, await rateToTarget(row.currency, row.as_of));
+  };
 
   for (const row of rows) {
-    const converted = await convert(row.amount, row)
-    const convertedMarketplace = await convert(row.marketplace_amount, row)
-    const key = row.state.trim()
-    const prev = byState.get(key) ?? { sales: '0', marketplace: '0', txnCount: 0, marketplaceTxnCount: 0 }
+    const converted = await convert(row.amount, row);
+    const convertedMarketplace = await convert(row.marketplace_amount, row);
+    const key = row.state.trim();
+    const prev = byState.get(key) ?? {
+      sales: "0",
+      marketplace: "0",
+      txnCount: 0,
+      marketplaceTxnCount: 0,
+    };
     byState.set(key, {
       sales: add(prev.sales, converted),
       marketplace: add(prev.marketplace, convertedMarketplace),
       txnCount: prev.txnCount + Number(row.is_invoice),
       marketplaceTxnCount: prev.marketplaceTxnCount + Number(row.marketplace_invoice ?? 0),
-    })
+    });
   }
 
   // Verified per-state rules govern; unlisted states default to included
   // pending review. States whose rule excludes facilitator sales measure
   // without the marketplace share; the share is still reported per state so
   // the operator sees what was set aside and which states need review.
-  const seededRules = await readAllMarketplaceNexusRules()
-  const marketplaceInfo = new Map<string, UsNexusMarketplaceInfo>()
-  const attributed: StateSales[] = []
-  let unattributed = { salesUsd: '0', txnCount: 0 }
+  const seededRules = await readAllMarketplaceNexusRules();
+  const marketplaceInfo = new Map<string, UsNexusMarketplaceInfo>();
+  const attributed: StateSales[] = [];
+  let unattributed = { salesUsd: "0", txnCount: 0 };
   for (const [state, agg] of byState) {
     if (!state) {
-      unattributed = { salesUsd: agg.sales, txnCount: agg.txnCount }
-      continue
+      unattributed = { salesUsd: agg.sales, txnCount: agg.txnCount };
+      continue;
     }
-    const upper = state.toUpperCase()
-    const rule = marketplaceNexusRuleFor(upper, seededRules)
+    const upper = state.toUpperCase();
+    const rule = marketplaceNexusRuleFor(upper, seededRules);
     marketplaceInfo.set(upper, {
       marketplaceSalesUsd: agg.marketplace,
       included: rule.includeInThreshold,
       needsReview: rule.needsReview,
       source: rule.source,
-    })
+    });
     attributed.push({
       state: upper,
       salesUsd: rule.includeInThreshold ? agg.sales : add(agg.sales, neg(agg.marketplace)),
       txnCount: rule.includeInThreshold ? agg.txnCount : agg.txnCount - agg.marketplaceTxnCount,
-    })
+    });
   }
 
   const withMarketplace = (evaluations: NexusEvaluation[]): UsNexusStateEvaluation[] =>
     evaluations.map((evaluation) => ({
       ...evaluation,
       marketplace: marketplaceInfo.get(evaluation.state) ?? {
-        marketplaceSalesUsd: '0',
+        marketplaceSalesUsd: "0",
         included: true,
         needsReview: true,
-        source: '',
+        source: "",
       },
-    }))
+    }));
 
   // Thresholds are USD reference data. In the USD working currency they apply
   // directly (the historical path — no lookup, no evidence object). Otherwise
   // each state's dollar trigger translates once at the declared policy rate;
   // the coarse whole-dollar figures round to cents for the numeric threshold
   // field while the measured sales keep full ledger precision.
-  if (target === 'USD') {
-    return { from, to, measuredFrom, measuredTo: to, currency: target, subsidiaryIds: entity.subsidiaryIds, states: withMarketplace(evaluateUsNexus(attributed, { asOf: to })), unattributed, translation: null }
+  if (target === "USD") {
+    return {
+      from,
+      to,
+      measuredFrom,
+      measuredTo: to,
+      currency: target,
+      subsidiaryIds: entity.subsidiaryIds,
+      states: withMarketplace(evaluateUsNexus(attributed, { asOf: to })),
+      unattributed,
+      translation: null,
+    };
   }
-  let policyRate: string
-  let policyAsOf: string
+  let policyRate: string;
+  let policyAsOf: string;
   try {
-    ({ rate: policyRate, asOf: policyAsOf } = await spotRateToPresentation(db, orgId, 'USD', target, rateDate, rateType))
+    ({ rate: policyRate, asOf: policyAsOf } = await spotRateToPresentation(
+      db,
+      orgId,
+      "USD",
+      target,
+      rateDate,
+      rateType,
+    ));
   } catch (e) {
     if (e instanceof IncomeTaxProvisionError) {
       throw new TaxRequestValidationError(
         `cannot translate nexus thresholds USD→${target} (${e.message})`,
-      )
+      );
     }
-    throw e
+    throw e;
   }
-  const thresholds = new Map<string, StateNexusThreshold>()
+  const thresholds = new Map<string, StateNexusThreshold>();
   for (const sale of attributed) {
-    const reference = thresholdForState(sale.state, to)
+    const reference = thresholdForState(sale.state, to);
     thresholds.set(
       sale.state,
-      reference.measure === 'none' || cmp(reference.salesUsd, '0') === 0
+      reference.measure === "none" || cmp(reference.salesUsd, "0") === 0
         ? reference
         : { ...reference, salesUsd: roundMoney(mulRate(reference.salesUsd, policyRate), 2) },
-    )
+    );
   }
   return {
     from,
@@ -390,5 +461,5 @@ export async function computeUsNexusStatus(
     states: withMarketplace(evaluateUsNexus(attributed, { thresholds })),
     unattributed,
     translation: { rateType, rateDate, rateAsOf: policyAsOf, usdToCurrencyRate: policyRate },
-  }
+  };
 }

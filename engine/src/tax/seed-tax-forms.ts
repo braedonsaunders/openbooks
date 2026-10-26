@@ -1,9 +1,19 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { COUNTRY_TAX_PACKS, countryTaxPackForReturn } from "../country-tax-packs/index.ts";
-import type { TaxReturnPack, TaxReturnPackBox, TaxReturnPackJurisdiction } from "../country-tax-packs/types.ts";
+import type {
+  TaxReturnPack,
+  TaxReturnPackBox,
+  TaxReturnPackJurisdiction,
+} from "../country-tax-packs/types.ts";
 
-export type { TaxBoxBasis, TaxBoxMap, TaxReturnPack, TaxReturnPackBox, TaxReturnPackJurisdiction } from "../country-tax-packs/types.ts";
+export type {
+  TaxBoxBasis,
+  TaxBoxMap,
+  TaxReturnPack,
+  TaxReturnPackBox,
+  TaxReturnPackJurisdiction,
+} from "../country-tax-packs/types.ts";
 
 /**
  * Importable government return definitions. A pack supplies the official box
@@ -86,13 +96,18 @@ export async function installTaxReturnPacks(
     return pack;
   });
 
-  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
-    const results: InstalledTaxReturnPack[] = [];
-    for (const pack of packs) {
-      results.push({ code: pack.code, ...(await installTaxReturnPackWith(tx, orgId, pack, actorId)) });
-    }
-    return results;
-  }));
+  return withOrgTransaction(orgId, () =>
+    db.transaction(async (tx) => {
+      const results: InstalledTaxReturnPack[] = [];
+      for (const pack of packs) {
+        results.push({
+          code: pack.code,
+          ...(await installTaxReturnPackWith(tx, orgId, pack, actorId)),
+        });
+      }
+      return results;
+    }),
+  );
 }
 
 async function installTaxReturnPackWith(
@@ -104,7 +119,8 @@ async function installTaxReturnPackWith(
   // Reference-data jurisdiction the return files into. Idempotent by (org, code)
   // so re-importing a pack keeps the same jurisdiction row and its registrations.
   const j = pack.jurisdiction;
-  const jurRes = (await tx.execute<{ id: string }>(sql`
+  const jurRes = await tx.execute<{ id: string }>(
+    sql`
     insert into tax_jurisdictions
       (org_id, code, name, country, region, level, tax_type, is_active, created_by, updated_by)
     values (${orgId}, ${j.code}, ${j.name}, ${j.country}, ${j.region ?? null},
@@ -114,10 +130,13 @@ async function installTaxReturnPackWith(
           level = excluded.level, tax_type = excluded.tax_type, is_active = true,
           updated_at = now(), updated_by = ${actorId}
     where tax_jurisdictions.org_id = ${orgId}
-    returning id`, "objects"));
+    returning id`,
+    "objects",
+  );
   const jurisdictionId = jurRes[0]?.id ?? null;
 
-  const formRes = (await tx.execute<{ id: string; inserted: boolean }>(sql`
+  const formRes = await tx.execute<{ id: string; inserted: boolean }>(
+    sql`
     insert into tax_return_forms
       (org_id, code, name, country, jurisdiction_id, submission_channel, government_format,
        submission_url, watermark, notice_key, is_active, created_by, updated_by)
@@ -134,17 +153,32 @@ async function installTaxReturnPackWith(
           is_active = true,
           updated_at = now(), updated_by = ${actorId}
     where tax_return_forms.org_id = ${orgId}
-    returning id, (xmax = 0) as inserted`, "objects"));
+    returning id, (xmax = 0) as inserted`,
+    "objects",
+  );
 
-  await tx.execute(sql`delete from tax_report_lines where org_id = ${orgId} and report_code = ${pack.code}`);
+  await tx.execute(
+    sql`delete from tax_report_lines where org_id = ${orgId} and report_code = ${pack.code}`,
+  );
 
-  const candidates = (await tx.execute<{ id: string; code: string; country: string | null; jurisdiction_id: string | null; jurisdiction_code: string | null; jurisdiction_tax_type: TaxReturnPackJurisdiction["taxType"] | null; applies_to: "sales" | "purchases" | "both" }>(sql`
+  const candidates = await tx.execute<{
+    id: string;
+    code: string;
+    country: string | null;
+    jurisdiction_id: string | null;
+    jurisdiction_code: string | null;
+    jurisdiction_tax_type: TaxReturnPackJurisdiction["taxType"] | null;
+    applies_to: "sales" | "purchases" | "both";
+  }>(
+    sql`
     select c.id, c.code, c.country, c.jurisdiction_id, c.applies_to,
            j.code as jurisdiction_code, j.tax_type as jurisdiction_tax_type
       from tax_codes c
       left join tax_jurisdictions j on j.id = c.jurisdiction_id and j.org_id = c.org_id
      where c.org_id = ${orgId} and c.is_active
-       and c.applies_to in ('sales', 'purchases', 'both')`, "objects"));
+       and c.applies_to in ('sales', 'purchases', 'both')`,
+    "objects",
+  );
   // Prefer tax codes scoped to THIS jurisdiction (so a state return sums only its
   // own state's codes, not every US code); fall back to country, then to codes
   // with no country at all.
@@ -153,15 +187,22 @@ async function installTaxReturnPackWith(
     : [];
   const countryCodes = candidates.filter((row) => row.country === pack.country);
   const includedTaxTypes = countryTaxPackForReturn(pack.code)?.parentReturnIncludedTaxTypes;
-  const eligible = j.level === "state" || j.level === "county" || j.level === "city"
-    ? jurisdictionCodes
-    : includedTaxTypes?.length
-      ? countryCodes.filter((row) => row.jurisdiction_tax_type === null || includedTaxTypes.includes(row.jurisdiction_tax_type))
-      : countryCodes.length > 0
-        ? countryCodes
-        : candidates.filter((row) => row.country === null);
+  const eligible =
+    j.level === "state" || j.level === "county" || j.level === "city"
+      ? jurisdictionCodes
+      : includedTaxTypes?.length
+        ? countryCodes.filter(
+            (row) =>
+              row.jurisdiction_tax_type === null ||
+              includedTaxTypes.includes(row.jurisdiction_tax_type),
+          )
+        : countryCodes.length > 0
+          ? countryCodes
+          : candidates.filter((row) => row.country === null);
   const sales = eligible.filter((row) => row.applies_to === "sales" || row.applies_to === "both");
-  const purchases = eligible.filter((row) => row.applies_to === "purchases" || row.applies_to === "both");
+  const purchases = eligible.filter(
+    (row) => row.applies_to === "purchases" || row.applies_to === "both",
+  );
 
   // Every candidate left out of the return, named with the reason and the
   // remedy — counts alone let a hand-made code with no jurisdiction vanish
@@ -170,12 +211,14 @@ async function installTaxReturnPackWith(
   const eligibleIds = new Set(eligible.map((row) => row.id));
   const excludedCodes: ExcludedTaxCode[] = candidates
     .filter((row) => !eligibleIds.has(row.id))
-    .map((row) => describeExcludedCode(row, {
-      packCountry: pack.country,
-      packJurisdiction: j.code,
-      subdivisionReturn,
-      taxTypeFiltered: Boolean(includedTaxTypes?.length),
-    }))
+    .map((row) =>
+      describeExcludedCode(row, {
+        packCountry: pack.country,
+        packJurisdiction: j.code,
+        subdivisionReturn,
+        taxTypeFiltered: Boolean(includedTaxTypes?.length),
+      }),
+    )
     .sort((a, b) => a.code.localeCompare(b.code));
 
   let boxRows = 0;
@@ -235,7 +278,12 @@ interface ExcludedCandidate {
  */
 function describeExcludedCode(
   row: ExcludedCandidate,
-  opts: { packCountry: string; packJurisdiction: string; subdivisionReturn: boolean; taxTypeFiltered: boolean },
+  opts: {
+    packCountry: string;
+    packJurisdiction: string;
+    subdivisionReturn: boolean;
+    taxTypeFiltered: boolean;
+  },
 ): ExcludedTaxCode {
   const { packCountry, packJurisdiction, subdivisionReturn, taxTypeFiltered } = opts;
   if (subdivisionReturn) {
@@ -255,7 +303,9 @@ function describeExcludedCode(
     }
     return {
       code: row.code,
-      reason: row.country ? `belongs to country "${row.country}" with no jurisdiction` : `no country or jurisdiction assigned`,
+      reason: row.country
+        ? `belongs to country "${row.country}" with no jurisdiction`
+        : `no country or jurisdiction assigned`,
       remedy: row.country
         ? `assign its jurisdiction to file under the owning return`
         : `assign country "${packCountry}" and jurisdiction "${packJurisdiction}" to include it in this return`,

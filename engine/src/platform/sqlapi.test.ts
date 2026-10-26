@@ -33,16 +33,37 @@ class GovernedPoolHarness {
   async connectGovernedReadClient() {
     this.governedConnects += 1;
     return {
-      query: async (textOrConfig: string | { text: string; values?: unknown[] }, params?: unknown[]) => {
+      query: async (
+        textOrConfig: string | { text: string; values?: unknown[] },
+        params?: unknown[],
+      ) => {
         const text = typeof textOrConfig === "string" ? textOrConfig : textOrConfig.text;
         const values = typeof textOrConfig === "string" ? params : textOrConfig.values;
         this.queries.push({ text, params: values });
-        const normalized = text.replace(/\s+/g, " ").replace(/\( /g, "(").replace(/ \)/g, ")").trim().toLowerCase();
+        const normalized = text
+          .replace(/\s+/g, " ")
+          .replace(/\( /g, "(")
+          .replace(/ \)/g, ")")
+          .trim()
+          .toLowerCase();
         if (normalized.startsWith("explain")) {
-          const plan = [{ Plan: { "Node Type": "Nested Loop", Plans: this.planRelations.map((name) => ({ "Node Type": "Seq Scan", "Relation Name": name })) } }];
+          const plan = [
+            {
+              Plan: {
+                "Node Type": "Nested Loop",
+                Plans: this.planRelations.map((name) => ({
+                  "Node Type": "Seq Scan",
+                  "Relation Name": name,
+                })),
+              },
+            },
+          ];
           return { rows: [{ "QUERY PLAN": plan }], fields: [], rowCount: 1 };
         }
-        if (normalized.includes("from (select 42 as answer) __q") && normalized.includes("__ob_row_bytes")) {
+        if (
+          normalized.includes("from (select 42 as answer) __q") &&
+          normalized.includes("__ob_row_bytes")
+        ) {
           return {
             rows: [
               { __ob_row_bytes: 13, __ob_row: { answer: 42 } },
@@ -52,30 +73,37 @@ class GovernedPoolHarness {
             rowCount: 2,
           };
         }
-        if (normalized.includes("from (select 'wide' as payload) __q") && normalized.includes("__ob_row_bytes")) {
+        if (
+          normalized.includes("from (select 'wide' as payload) __q") &&
+          normalized.includes("__ob_row_bytes")
+        ) {
           const maxBytes = Number(values?.[1] ?? 0);
           const payload = { payload: "x".repeat(200) };
           const size = Buffer.byteLength(JSON.stringify(payload), "utf8");
           return {
-            rows: [{
-              __ob_row_bytes: size,
-              __ob_row: size > maxBytes ? null : payload,
-            }],
+            rows: [
+              {
+                __ob_row_bytes: size,
+                __ob_row: size > maxBytes ? null : payload,
+              },
+            ],
             fields: [{ name: "__ob_row_bytes" }, { name: "__ob_row" }],
             rowCount: 1,
           };
         }
         if (normalized.includes("from information_schema.columns")) {
           return {
-            rows: [{
-              table_name: "accounts",
-              table_type: "VIEW",
-              column_name: "id",
-              data_type: "uuid",
-              is_nullable: "NO",
-              ordinal_position: 1,
-              is_key: false,
-            }],
+            rows: [
+              {
+                table_name: "accounts",
+                table_type: "VIEW",
+                column_name: "id",
+                data_type: "uuid",
+                is_nullable: "NO",
+                ordinal_position: 1,
+                is_key: false,
+              },
+            ],
             fields: [],
             rowCount: 1,
           };
@@ -107,7 +135,7 @@ class GovernedPoolHarness {
 
 const harnessKey = Symbol.for("openbooks.sqlapi-governed-pool-test");
 const harness = new GovernedPoolHarness();
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[harnessKey] = harness;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[harnessKey] = harness;
 const stateExpression = `globalThis[Symbol.for('openbooks.sqlapi-governed-pool-test')]`;
 const sqlapiUrl = new URL("./sqlapi.ts?governed-pool-boundary-test", import.meta.url).href;
 const mockDbUrl = "mock:sqlapi-governed-db";
@@ -145,7 +173,7 @@ const {
   USER_SQL_MAX_RESULT_BYTES,
   UserSqlRefusal,
   validateUserSql,
-} = await import(sqlapiUrl) as typeof import("./sqlapi.ts");
+} = (await import(sqlapiUrl)) as typeof import("./sqlapi.ts");
 hooks.deregister();
 
 test("query validation preserves PostgreSQL string literals and quoted identifiers", () => {
@@ -213,16 +241,32 @@ test("query validation refuses set_config hidden in a Unicode-escaped identifier
 
 test("query validation refuses every function that executes SQL held in a string", () => {
   const attempts: Array<[string, RegExp]> = [
-    ["select query_to_xml('select set_config(''role'',''none'',true)', false, false, '')", /query_to_xml\(\) is not allowed/],
-    [`select PG_CATALOG . "query_to_xml"('select 1', false, false, '')`, /query_to_xml\(\) is not allowed/],
-    [`select U&"\\0071uery_to_xml"('select 1', false, false, '')`, /query_to_xml\(\) is not allowed/],
-    ["select Query_To_Xml_And_XmlSchema('select 1', false, false, '')", /query_to_xml_and_xmlschema\(\) is not allowed/],
+    [
+      "select query_to_xml('select set_config(''role'',''none'',true)', false, false, '')",
+      /query_to_xml\(\) is not allowed/,
+    ],
+    [
+      `select PG_CATALOG . "query_to_xml"('select 1', false, false, '')`,
+      /query_to_xml\(\) is not allowed/,
+    ],
+    [
+      `select U&"\\0071uery_to_xml"('select 1', false, false, '')`,
+      /query_to_xml\(\) is not allowed/,
+    ],
+    [
+      "select Query_To_Xml_And_XmlSchema('select 1', false, false, '')",
+      /query_to_xml_and_xmlschema\(\) is not allowed/,
+    ],
     ["select * from ts_stat('select ''a''::tsvector')", /ts_stat\(\) is not allowed/],
-    ["select ts_rewrite('a'::tsquery, 'select ''a''::tsquery, ''b''::tsquery')", /ts_rewrite\(\) is not allowed/],
+    [
+      "select ts_rewrite('a'::tsquery, 'select ''a''::tsquery, ''b''::tsquery')",
+      /ts_rewrite\(\) is not allowed/,
+    ],
     ["select s.ts_stat from (select 1) s", /ts_stat\(\) is not allowed/],
     ["select database_to_xml(true, true, '')", /database_to_xml\(\) is not allowed/],
   ];
-  for (const [sqlText, refusal] of attempts) assert.throws(() => validateUserSql(sqlText), refusal, sqlText);
+  for (const [sqlText, refusal] of attempts)
+    assert.throws(() => validateUserSql(sqlText), refusal, sqlText);
   // The names inside literals are data, and longer identifiers are not the functions.
   assert.doesNotThrow(() => validateUserSql("select 'query_to_xml' as label, 1 as ts_stats"));
 });
@@ -232,11 +276,18 @@ test("runUserSql stays closed while the read role can still execute SQL text, an
   harness.executableTextFunctions = ["query_to_xml(text,boolean,boolean,text)"];
   await assert.rejects(
     runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001" }),
-    (error: unknown) => error instanceof UserSqlRefusal && error.status === 409
-      && /pg_catalog\.query_to_xml\(text,boolean,boolean,text\)/.test(error.message)
-      && /revoke execute on function pg_catalog\.query_to_xml\(text,boolean,boolean,text\) from public/.test(error.message),
+    (error: unknown) =>
+      error instanceof UserSqlRefusal &&
+      error.status === 409 &&
+      /pg_catalog\.query_to_xml\(text,boolean,boolean,text\)/.test(error.message) &&
+      /revoke execute on function pg_catalog\.query_to_xml\(text,boolean,boolean,text\) from public/.test(
+        error.message,
+      ),
   );
-  assert.equal(harness.queries.some(({ text }) => text.includes("__ob_row_bytes")), false);
+  assert.equal(
+    harness.queries.some(({ text }) => text.includes("__ob_row_bytes")),
+    false,
+  );
 });
 
 test("runUserSql withholds the result and discards the connection when the statement left the governed session", async () => {
@@ -244,7 +295,9 @@ test("runUserSql withholds the result and discards the connection when the state
   harness.sessionIntact = false;
   await assert.rejects(
     runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001" }),
-    (error: unknown) => error instanceof UserSqlRefusal && /changed the session role or organization scope/.test(error.message),
+    (error: unknown) =>
+      error instanceof UserSqlRefusal &&
+      /changed the session role or organization scope/.test(error.message),
   );
   assert.equal(harness.discarded, 1);
 });
@@ -254,40 +307,90 @@ test("payroll relations need payroll.read, however the query reaches them", asyn
   harness.planRelations = ["accounts", "pay_stubs", "employee_pay_components", "pay_applications"];
   await assert.rejects(
     runUserSql("select * from v", { orgId: "00000000-0000-4000-8000-000000000001" }),
-    (error: unknown) => error instanceof UserSqlRefusal && error.status === 403
-      && /requires the payroll\.read permission: this query reads employee_pay_components, pay_stubs\./.test(error.message),
+    (error: unknown) =>
+      error instanceof UserSqlRefusal &&
+      error.status === 403 &&
+      /requires the payroll\.read permission: this query reads employee_pay_components, pay_stubs\./.test(
+        error.message,
+      ),
   );
-  assert.equal(harness.queries.some(({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain")), false);
+  assert.equal(
+    harness.queries.some(
+      ({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain"),
+    ),
+    false,
+  );
 
   harness.reset();
   harness.planRelations = ["pay_stubs"];
-  const granted = await runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true, expenseRead: true });
+  const granted = await runUserSql("select 42 as answer", {
+    orgId: "00000000-0000-4000-8000-000000000001",
+    payrollRead: true,
+    expenseRead: true,
+  });
   assert.equal(granted.rowCount, 2);
-  assert.equal(harness.queries.some(({ text }) => text.startsWith("explain")), false);
+  assert.equal(
+    harness.queries.some(({ text }) => text.startsWith("explain")),
+    false,
+  );
 });
 
 test("document relations carry every employee's expense reports, so raw SQL over them needs org-wide expense read", async () => {
-  for (const relation of ["documents", "document_lines", "document_line_tax_components", "document_links"]) {
+  for (const relation of [
+    "documents",
+    "document_lines",
+    "document_line_tax_components",
+    "document_links",
+  ]) {
     harness.reset();
     harness.planRelations = ["accounts", relation];
     await assert.rejects(
-      runUserSql("select * from v", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true }),
-      (error: unknown) => error instanceof UserSqlRefusal && error.status === 403
-        && new RegExp(`expense reports require the expenses\\.read permission: this query reads ${relation}\\.`).test(error.message),
+      runUserSql("select * from v", {
+        orgId: "00000000-0000-4000-8000-000000000001",
+        payrollRead: true,
+      }),
+      (error: unknown) =>
+        error instanceof UserSqlRefusal &&
+        error.status === 403 &&
+        new RegExp(
+          `expense reports require the expenses\\.read permission: this query reads ${relation}\\.`,
+        ).test(error.message),
     );
-    assert.equal(harness.queries.some(({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain")), false, `${relation} never runs`);
+    assert.equal(
+      harness.queries.some(
+        ({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain"),
+      ),
+      false,
+      `${relation} never runs`,
+    );
   }
 
   harness.reset();
   harness.planRelations = ["documents"];
-  const granted = await runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true, expenseRead: true });
+  const granted = await runUserSql("select 42 as answer", {
+    orgId: "00000000-0000-4000-8000-000000000001",
+    payrollRead: true,
+    expenseRead: true,
+  });
   assert.equal(granted.rowCount, 2);
 
   // Relations that hold no expense report stay open to a payroll reader.
   harness.reset();
   harness.planRelations = ["accounts", "pay_stubs"];
-  assert.equal((await runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true })).rowCount, 2);
-  assert.equal(isExpenseRelation("expense_fx_policies"), false, "expense policy configuration is not an expense report");
+  assert.equal(
+    (
+      await runUserSql("select 42 as answer", {
+        orgId: "00000000-0000-4000-8000-000000000001",
+        payrollRead: true,
+      })
+    ).rowCount,
+    2,
+  );
+  assert.equal(
+    isExpenseRelation("expense_fx_policies"),
+    false,
+    "expense policy configuration is not an expense report",
+  );
 });
 
 test("query validation still sees statements after a dollar-quote closer hidden in a comment", () => {
@@ -319,27 +422,36 @@ test("SQL API operations use only the isolated governed pool", async () => {
   assert.deepEqual(result.rows, [{ answer: 42 }]);
   assert.equal(result.truncated, true);
   assert.equal(result.rowCount, 1);
-  assert.deepEqual(catalog, [{
-    name: "accounts",
-    kind: "view",
-    columns: [{ name: "id", type: "uuid", nullable: false, isKey: false }],
-  }]);
+  assert.deepEqual(catalog, [
+    {
+      name: "accounts",
+      kind: "view",
+      columns: [{ name: "id", type: "uuid", nullable: false, isKey: false }],
+    },
+  ]);
   assert.equal(harness.governedConnects, 3);
   assert.equal(harness.requestConnects, 0);
   assert.equal(harness.releases, 3);
 
-  const statements = harness.queries.map(({ text }) => text.replace(/\s+/g, " ").trim().toLowerCase());
+  const statements = harness.queries.map(({ text }) =>
+    text.replace(/\s+/g, " ").trim().toLowerCase(),
+  );
   assert.equal(statements.filter((text) => text === "begin transaction read only").length, 2);
   assert.equal(statements.filter((text) => text === "set local role openbooks_read").length, 2);
   assert.equal(
-    statements.filter((text) => text === "set local search_path = openbooks_query, pg_catalog").length,
+    statements.filter((text) => text === "set local search_path = openbooks_query, pg_catalog")
+      .length,
     2,
   );
   assert.ok(statements.includes("set local statement_timeout = 1234"));
   // Catalog introspection plans with nested loops; only ad-hoc console SQL disables them.
-  const catalogQuery = statements.findIndex((text) => text.includes("from information_schema.columns"));
+  const catalogQuery = statements.findIndex((text) =>
+    text.includes("from information_schema.columns"),
+  );
   assert.equal(statements[catalogQuery - 1], "set local enable_nestloop = on");
-  const userQuery = harness.queries.find(({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain"));
+  const userQuery = harness.queries.find(
+    ({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain"),
+  );
   assert.ok(userQuery, "governed user SQL must go through the measured wrapper");
   assert.match(userQuery!.text, /row_to_json/);
   assert.match(userQuery!.text, /limit \$1::pg_catalog\.int4/);
@@ -352,9 +464,11 @@ test("SQL API operations use only the isolated governed pool", async () => {
     4,
   );
   assert.equal(
-    harness.queries.filter(({ text, params }) =>
-      text.includes("set_config('app.current_org'")
-      && params?.[0] === "00000000-0000-4000-8000-000000000001").length,
+    harness.queries.filter(
+      ({ text, params }) =>
+        text.includes("set_config('app.current_org'") &&
+        params?.[0] === "00000000-0000-4000-8000-000000000001",
+    ).length,
     2,
   );
 });
@@ -376,23 +490,55 @@ test("runUserSql refuses a result that exceeds the caller byte budget", async ()
   assert.equal(typeof allowed.rows[0]?.payload, "string");
 });
 
-
 test("SQL comments and trailing delimiters never swallow the enclosing query", async () => {
-  assert.equal(validateUserSql("select ';--literal' as value; -- trailing"), "select ';--literal' as value");
-  assert.equal(validateUserSql('select 1 as "semi;column" /* nested /* comment */ closed */;'), 'select 1 as "semi;column"');
-  assert.equal(validateUserSql("select $$;--literal$$ as value; -- trailing"), "select $$;--literal$$ as value");
-  assert.equal(validateUserSql(String.raw`select E'escaped\';literal' as value; -- trailing`), String.raw`select E'escaped\';literal' as value`);
+  assert.equal(
+    validateUserSql("select ';--literal' as value; -- trailing"),
+    "select ';--literal' as value",
+  );
+  assert.equal(
+    validateUserSql('select 1 as "semi;column" /* nested /* comment */ closed */;'),
+    'select 1 as "semi;column"',
+  );
+  assert.equal(
+    validateUserSql("select $$;--literal$$ as value; -- trailing"),
+    "select $$;--literal$$ as value",
+  );
+  assert.equal(
+    validateUserSql(String.raw`select E'escaped\';literal' as value; -- trailing`),
+    String.raw`select E'escaped\';literal' as value`,
+  );
   assert.throws(() => validateUserSql("select 1; -- comment\nselect 2"), /one statement/);
   harness.reset();
-  await runUserSql("select 42 as answer -- trailing", { orgId: "00000000-0000-4000-8000-000000000001" });
-  assert.ok(harness.queries.some(query => /from \(\nselect 42 as answer\n\)/.test(query.text)));
+  await runUserSql("select 42 as answer -- trailing", {
+    orgId: "00000000-0000-4000-8000-000000000001",
+  });
+  assert.ok(harness.queries.some((query) => /from \(\nselect 42 as answer\n\)/.test(query.text)));
 });
 
 test("shared raw ledger and labor relations refuse before execution without payroll authority", async () => {
-  for (const relation of ["journal_entries", "journal_lines", "documents", "document_lines", "time_entries", "labor_cost_rates", "field_ticket_labor_lines", "hrm_benefit_program_revisions"]) {
+  for (const relation of [
+    "journal_entries",
+    "journal_lines",
+    "documents",
+    "document_lines",
+    "time_entries",
+    "labor_cost_rates",
+    "field_ticket_labor_lines",
+    "hrm_benefit_program_revisions",
+  ]) {
     harness.reset();
     harness.planRelations = [relation];
-    await assert.rejects(runUserSql("select count(*) from a where wage > 0", { orgId: "00000000-0000-4000-8000-000000000001" }), /payroll.read/);
-    assert.equal(harness.queries.some(query => query.text.includes("__ob_row_bytes") && !query.text.startsWith("explain")), false);
+    await assert.rejects(
+      runUserSql("select count(*) from a where wage > 0", {
+        orgId: "00000000-0000-4000-8000-000000000001",
+      }),
+      /payroll.read/,
+    );
+    assert.equal(
+      harness.queries.some(
+        (query) => query.text.includes("__ob_row_bytes") && !query.text.startsWith("explain"),
+      ),
+      false,
+    );
   }
 });

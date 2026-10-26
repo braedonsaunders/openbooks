@@ -51,7 +51,8 @@ export function computeEnps(values: number[]): EnpsResult {
   const detractors = valid.filter((v) => v <= 6).length;
   const passives = valid.length - promoters - detractors;
   return {
-    score: Math.round((promoters / valid.length) * 100) - Math.round((detractors / valid.length) * 100),
+    score:
+      Math.round((promoters / valid.length) * 100) - Math.round((detractors / valid.length) * 100),
     promoters,
     passives,
     detractors,
@@ -73,18 +74,26 @@ export function aggregateQuestion(
       answer.raw === null || answer.raw === undefined
         ? "—"
         : Array.isArray(answer.raw)
-          ? answer.raw.map((v) => String(v)).sort().join(" + ") || "—"
+          ? answer.raw
+              .map((v) => String(v))
+              .sort()
+              .join(" + ") || "—"
           : String(answer.raw);
     // Text answers aggregate by presence only in counts — the comment
     // list (separate reader, group-gated) carries the words.
-    distribution.set(answer.kind === "text" ? "answered" : key, (distribution.get(answer.kind === "text" ? "answered" : key) ?? 0) + 1);
+    distribution.set(
+      answer.kind === "text" ? "answered" : key,
+      (distribution.get(answer.kind === "text" ? "answered" : key) ?? 0) + 1,
+    );
   }
   return {
     questionId,
     kind,
     responses: mine.length,
     mean:
-      numerics.length > 0 ? Math.round((numerics.reduce((a, b) => a + b, 0) / numerics.length) * 100) / 100 : null,
+      numerics.length > 0
+        ? Math.round((numerics.reduce((a, b) => a + b, 0) / numerics.length) * 100) / 100
+        : null,
     distribution: [...distribution.entries()]
       .map(([value, count]) => ({ value, count }))
       .sort((a, b) => b.count - a.count),
@@ -92,7 +101,9 @@ export function aggregateQuestion(
 }
 
 /** Mean scale score per driver key (drivers group scale questions). */
-export function driverScores(answers: ResultAnswer[]): { driver: string; mean: number; responses: number }[] {
+export function driverScores(
+  answers: ResultAnswer[],
+): { driver: string; mean: number; responses: number }[] {
   const byDriver = new Map<string, number[]>();
   for (const answer of answers) {
     if (!answer.driverKey || answer.kind !== "scale" || answer.value === null) continue;
@@ -126,12 +137,13 @@ export interface Heatmap {
  * min_group_size return null + suppressed: true — never a number that
  * could be traced to one respondent.
  */
-export function heatmap(
-  answers: ResultAnswer[],
-  minGroupSize: number,
-): Heatmap {
-  const drivers = [...new Set(answers.filter((a) => a.driverKey && a.kind === "scale").map((a) => a.driverKey!))].sort();
-  const segments = [...new Set(answers.map((a) => a.segment).filter((s): s is string => !!s))].sort();
+export function heatmap(answers: ResultAnswer[], minGroupSize: number): Heatmap {
+  const drivers = [
+    ...new Set(answers.filter((a) => a.driverKey && a.kind === "scale").map((a) => a.driverKey!)),
+  ].sort();
+  const segments = [
+    ...new Set(answers.map((a) => a.segment).filter((s): s is string => !!s)),
+  ].sort();
   const cells: Record<string, Record<string, HeatmapCell>> = {};
   for (const driver of drivers) {
     cells[driver] = {};

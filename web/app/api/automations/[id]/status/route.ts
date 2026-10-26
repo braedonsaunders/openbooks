@@ -6,7 +6,6 @@ import { isUuid } from "../../../../../lib/list-params";
 import { automationStatusBody } from "../../bodies";
 import { automationErrorResponse } from "../../_lib";
 
-
 export const runtime = "nodejs";
 
 /** Enable/disable an automation (enabling re-validates the recipe). */
@@ -20,10 +19,7 @@ export const POST = defineRoute({
 
     const { id } = await ctx.params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "automation id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "automation id must be a uuid" }, { status: 400 });
 
     try {
       const automation = await setAutomationStatus({

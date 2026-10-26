@@ -51,15 +51,16 @@ async function recordProjectOverheadAdjustmentWithinTransaction(
       select pg_advisory_xact_lock(hashtextextended(
         ${`project-overhead-adjustment:${input.orgId}:${sourceSystem}:${sourceRef}`}, 0
       ))`);
-    const prior = (await tx.execute<{
-        id: string;
-        project_id: string;
-        adjustment_date: string;
-        amount: string;
-        reason: string;
-        reverses_adjustment_id: string | null;
-        evidence_matches: boolean;
-      }>(sql`
+    const prior = await tx.execute<{
+      id: string;
+      project_id: string;
+      adjustment_date: string;
+      amount: string;
+      reason: string;
+      reverses_adjustment_id: string | null;
+      evidence_matches: boolean;
+    }>(
+      sql`
       select id, project_id, adjustment_date::text as adjustment_date,
              amount::text, reason, reverses_adjustment_id,
              evidence = ${JSON.stringify(evidence)}::jsonb as evidence_matches
@@ -68,7 +69,9 @@ async function recordProjectOverheadAdjustmentWithinTransaction(
          and source_system = ${sourceSystem}
          and source_ref = ${sourceRef}
        for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const existing = prior[0];
     if (existing) {
       const equivalent =
@@ -76,8 +79,7 @@ async function recordProjectOverheadAdjustmentWithinTransaction(
         existing.adjustment_date === input.adjustmentDate &&
         normalizeMoney(existing.amount) === amount &&
         existing.reason === reason &&
-        existing.reverses_adjustment_id ===
-          (input.reversesAdjustmentId ?? null) &&
+        existing.reverses_adjustment_id === (input.reversesAdjustmentId ?? null) &&
         existing.evidence_matches;
       if (!equivalent) {
         throw new Error(
@@ -88,7 +90,8 @@ async function recordProjectOverheadAdjustmentWithinTransaction(
     }
   }
 
-  const inserted = (await tx.execute<{ id: string }>(sql`
+  const inserted = await tx.execute<{ id: string }>(
+    sql`
     insert into project_overhead_adjustments (
       org_id, project_id, adjustment_date, amount, reason,
       source_system, source_ref, reverses_adjustment_id, evidence,
@@ -101,7 +104,9 @@ async function recordProjectOverheadAdjustmentWithinTransaction(
       ${input.actorId ?? null}, ${input.actorId ?? null}
     )
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const id = inserted[0]!.id;
   await tx.execute(sql`
     insert into audit_log (
@@ -149,16 +154,10 @@ export async function recordProjectOverheadAdjustment(
   const sourceSystem = input.sourceSystem?.trim() || null;
   const sourceRef = input.sourceRef?.trim() || null;
   if ((sourceSystem === null) !== (sourceRef === null)) {
-    throw new Error(
-      "sourceSystem and sourceRef must either both be provided or both be absent",
-    );
+    throw new Error("sourceSystem and sourceRef must either both be provided or both be absent");
   }
   const evidence = input.evidence ?? {};
-  if (
-    !evidence ||
-    typeof evidence !== "object" ||
-    Array.isArray(evidence)
-  ) {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) {
     throw new Error("overhead adjustment evidence must be an object");
   }
 
@@ -194,25 +193,26 @@ export async function reverseProjectOverheadAdjustment(input: {
   const sourceSystem = input.sourceSystem?.trim() || null;
   const sourceRef = input.sourceRef?.trim() || null;
   if ((sourceSystem === null) !== (sourceRef === null)) {
-    throw new Error(
-      "sourceSystem and sourceRef must either both be provided or both be absent",
-    );
+    throw new Error("sourceSystem and sourceRef must either both be provided or both be absent");
   }
 
   // Lock the source row before checking its reversal lineage. This is the
   // serialization point for concurrent retries: a second caller waits for
   // the first transaction to commit, then returns its existing reversal.
   return inDbTransaction(async (tx) => {
-    const original = (await tx.execute<{
-        project_id: string;
-        amount: string;
-        evidence: Record<string, unknown>;
-      }>(sql`
+    const original = await tx.execute<{
+      project_id: string;
+      amount: string;
+      evidence: Record<string, unknown>;
+    }>(
+      sql`
       select project_id, amount::text, evidence
         from project_overhead_adjustments
        where org_id = ${input.orgId} and id = ${input.adjustmentId}
        for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const row = original[0];
     if (!row) throw new Error("overhead adjustment not found");
 
@@ -221,16 +221,18 @@ export async function reverseProjectOverheadAdjustment(input: {
       reversalOf: input.adjustmentId,
       originalEvidence: row.evidence,
     };
-    const existing = (await tx.execute<{
-      id: string;
-      project_id: string;
-      adjustment_date: string;
-      amount: string;
-      reason: string;
-      source_system: string | null;
-      source_ref: string | null;
-      evidence_matches: boolean;
-    }>(sql`
+    const existing = (
+      await tx.execute<{
+        id: string;
+        project_id: string;
+        adjustment_date: string;
+        amount: string;
+        reason: string;
+        source_system: string | null;
+        source_ref: string | null;
+        evidence_matches: boolean;
+      }>(
+        sql`
       select id, project_id, adjustment_date::text as adjustment_date,
              amount::text, reason, source_system, source_ref,
              evidence = ${JSON.stringify(reversalEvidence)}::jsonb as evidence_matches
@@ -238,7 +240,10 @@ export async function reverseProjectOverheadAdjustment(input: {
        where org_id = ${input.orgId}
          and reverses_adjustment_id = ${input.adjustmentId}
        for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (existing) {
       const equivalent =
         existing.project_id === row.project_id &&

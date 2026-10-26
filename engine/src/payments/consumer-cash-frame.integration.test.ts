@@ -5,7 +5,11 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -39,15 +43,23 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, party_id)
       values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '100', '100', '0', ${org.vendorId})`);
-    await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`);
+    await db.execute(
+      sql`update documents set status = 'approved' where id = ${billId} and org_id = ${org.orgId}`,
+    );
     const billEntryId = await postDocument(billId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
-    const billLineId = (await db.execute<{ id: string }>(sql`
+    const billLineId = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from journal_lines where entry_id = ${billEntryId} and account_id = ${org.accounts.ap}
-    `, "objects"))[0]!.id;
+    `,
+        "objects",
+      )
+    )[0]!.id;
 
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+    const payment = await createPaymentDocument({
+      allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "vendor_payment",
       createdBy: actor,
@@ -63,14 +75,16 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
       {
         partyId: org.vendorId,
         bankAccountId: org.accounts.bank,
-        allocations: [{
-          openLineId: billLineId,
-          sourceTransactionAmount: "100",
-          targetTransactionAmount: "100",
-          settlementRate: "1",
-          settlementRateSource: "same_currency" as const,
-          settlementRateReference: "same transaction currency",
-        }],
+        allocations: [
+          {
+            openLineId: billLineId,
+            sourceTransactionAmount: "100",
+            targetTransactionAmount: "100",
+            settlementRate: "1",
+            settlementRateSource: "same_currency" as const,
+            settlementRateReference: "same transaction currency",
+          },
+        ],
         discountAmount: "10.0000",
         discountAccountId: org.accounts.cogs,
       },
@@ -78,7 +92,9 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
       org.orgId,
       { allowedSubsidiaryIds: null },
     );
-    await db.execute(sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`);
+    await db.execute(
+      sql`update documents set status = 'approved' where id = ${payment.id} and org_id = ${org.orgId}`,
+    );
     await postDocument(payment.id, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
@@ -86,18 +102,25 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
     // Module-home paid tile shape (web/lib/module-home/purchasing.ts) and
     // cash-forecast vendor history shape (web/lib/cash/core.ts): header
     // totals are the cash frame, so the aggregate is the 90 that moved.
-    const tile = (await db.execute<{ paid: string }>(sql`
+    const tile = (
+      await db.execute<{ paid: string }>(
+        sql`
       select coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0)::text as paid
         from documents d
        where d.org_id = ${org.orgId} and d.kind in ('vendor_payment', 'check')
          and d.status = 'posted' and d.voided_at is null
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(tile.paid, "90.0000");
 
     // 1099 / compliance paid-this-year shape (engine/src/compliance/information-returns.ts,
     // web/lib/compliance.ts): bank-side legs only — the discount leg never
     // leaves the bank and must not inflate reportable cash.
-    const cash = (await db.execute<{ cash: string }>(sql`
+    const cash = (
+      await db.execute<{ cash: string }>(
+        sql`
       select coalesce(-sum(jl.amount) filter (
         where jl.amount < 0 and not jl.is_open_item and funding.type = 'asset_bank'
       ), 0)::text as cash
@@ -106,7 +129,10 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
         join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
        where d.org_id = ${org.orgId} and d.id = ${payment.id}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(cash.cash, "90.0000");
   } finally {
     await dropScratchOrgReporting(org.orgId);

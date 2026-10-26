@@ -24,9 +24,12 @@ export const GET = defineRoute({
   params: Params,
   handler: async ({ authz, params }) => {
     const orgId = authz.user.orgId;
-    const visible = await db.select({ id: projects.id })
+    const visible = await db
+      .select({ id: projects.id })
       .from(projects)
-      .where(sql`${and(eq(projects.orgId, orgId), eq(projects.id, params.id))}${subsidiaryVisibleFilter(sql`projects.subsidiary_id`, authz.allowedSubsidiaryIds)}`);
+      .where(
+        sql`${and(eq(projects.orgId, orgId), eq(projects.id, params.id))}${subsidiaryVisibleFilter(sql`projects.subsidiary_id`, authz.allowedSubsidiaryIds)}`,
+      );
     if (visible.length === 0) return notFound("project");
     const lastSunday = weekStartOf(await businessToday(orgId));
     const firstSunday = addCalendarDays(lastSunday, -21);

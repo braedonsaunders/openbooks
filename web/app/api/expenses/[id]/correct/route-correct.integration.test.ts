@@ -1,92 +1,119 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
+import test from "node:test";
 
 // A posted expense report follows the same amend/reverse
 // contract as bills — Correct creates the correcting revision, never
 // "void and re-key". POST /api/expenses/[id]/correct is the dedicated
 // correction workflow (the generic documents route 422s expense reports).
-const root = pathToFileURL(process.cwd() + '/').href
+const root = pathToFileURL(process.cwd() + "/").href;
 const state: {
-  orgId: string
-  actorId: string
-  roles: { key: string; name: string }[]
-  permissions: string[]
-} = { orgId: '', actorId: '', roles: [], permissions: [] }
-Object.assign(globalThis, { __expenseCorrectState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+  orgId: string;
+  actorId: string;
+  roles: { key: string; name: string }[];
+  permissions: string[];
+} = { orgId: "", actorId: "", roles: [], permissions: [] };
+Object.assign(globalThis, { __expenseCorrectState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
     // The route factory resolves the gate by @/ alias at request time; serve
     // the same intended session for its literal as for the relative import.
-    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
+    if (specifier === "../../../../../lib/feature-gates" || specifier === "@/lib/feature-gates")
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__expenseCorrectState;
         return { user: { orgId: s.orgId, id: s.actorId, roles: s.roles, isSuperAdmin: false }, permissions: new Set(s.permissions), allowedSubsidiaryIds: null };
       }
-    `)
+    `);
     // Pin the engine to THIS checkout: the environment shares node_modules
     // with the main checkout, so an unmapped @openbooks/engine import would
     // silently exercise main's engine instead of the branch under test.
-    if (specifier.startsWith('@openbooks/engine/')) return next(root + specifier.slice('@openbooks/'.length), context)
-    return next(specifier, context)
+    if (specifier.startsWith("@openbooks/engine/"))
+      return next(root + specifier.slice("@openbooks/".length), context);
+    return next(specifier, context);
   },
-})
-const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures')
-const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
-const { submitAndReleaseIfUngated } = await import('@openbooks/engine/flows/submit')
+});
+const { sql } = await import("drizzle-orm");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } =
+  await import("@openbooks/engine/testing/fixtures");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
+const { submitAndReleaseIfUngated } = await import("@openbooks/engine/flows/submit");
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-const { POST } = await import('./route.ts')
+const { POST } = await import("./route.ts");
 // The route's web/lib chain (documents → org-scope → auth → request-org)
 // registers the app RLS resolver at import time, replacing the preloaded
 // trusted-test boundary for this process (see route-recall). Re-install it
 // AFTER the web imports; the route scopes itself explicitly.
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
-installTrustedTestDatabaseBypass()
-const { installEngineSeams } = await import("@openbooks/engine/composition/install")
-const { withSimClock } = await import("@openbooks/engine/testing/platform/clock")
-installEngineSeams()
+const { installTrustedTestDatabaseBypass } =
+  await import("@openbooks/engine/testing/database-bypass");
+installTrustedTestDatabaseBypass();
+const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+const { withSimClock } = await import("@openbooks/engine/testing/platform/clock");
+installEngineSeams();
 
-function as(actorId: string, permissions: string[] = ['expenses.create', 'ap.post']) {
-  state.actorId = actorId
-  state.roles = [{ key: 'accountant', name: 'accountant' }]
-  state.permissions = permissions
+function as(actorId: string, permissions: string[] = ["expenses.create", "ap.post"]) {
+  state.actorId = actorId;
+  state.roles = [{ key: "accountant", name: "accountant" }];
+  state.permissions = permissions;
 }
 
-async function correct(id: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> | null }> {
-  const response = await withSimClock("2026-07-20T12:00:00Z", () => withOrgContext(state.orgId, () => POST(
-    new Request(`http://expenses.test/api/expenses/${id}/correct`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-    { params: Promise.resolve({ id }) },
-  )))
-  return { status: response.status, json: (await response.json().catch(() => null)) as Record<string, unknown> | null }
+async function correct(
+  id: string,
+  body: unknown,
+): Promise<{ status: number; json: Record<string, unknown> | null }> {
+  const response = await withSimClock("2026-07-20T12:00:00Z", () =>
+    withOrgContext(state.orgId, () =>
+      POST(
+        new Request(`http://expenses.test/api/expenses/${id}/correct`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id }) },
+      ),
+    ),
+  );
+  return {
+    status: response.status,
+    json: (await response.json().catch(() => null)) as Record<string, unknown> | null,
+  };
 }
 
 async function revision(id: string): Promise<string> {
-  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id = ${id} and org_id = ${state.orgId}`, 'objects'))[0]!.revision
+  return (
+    await db.execute<{ revision: string }>(
+      sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id = ${id} and org_id = ${state.orgId}`,
+      "objects",
+    )
+  )[0]!.revision;
 }
 
 async function statusOf(id: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from documents where id = ${id} and org_id = ${state.orgId}`, 'objects'))[0]!.status
+  return (
+    await db.execute<{ status: string }>(
+      sql`select status from documents where id = ${id} and org_id = ${state.orgId}`,
+      "objects",
+    )
+  )[0]!.status;
 }
 
 interface PostedFixture {
-  orgId: string
-  subsidiaryId: string
-  documentDate: string
-  actorId: string
-  employeeId: string
-  cogs: string
-  id: string
-  control: { ar: string; ap: string; bank: string; employeePayable: string }
-  cleanup: () => Promise<void>
+  orgId: string;
+  subsidiaryId: string;
+  documentDate: string;
+  actorId: string;
+  employeeId: string;
+  cogs: string;
+  id: string;
+  control: { ar: string; ap: string; bank: string; employeePayable: string };
+  cleanup: () => Promise<void>;
 }
 
 /**
@@ -95,290 +122,414 @@ interface PostedFixture {
  * are immutable (posted_document_status_guard), so a test that needs a
  * non-posted report must never get there by rewinding one.
  */
-async function postedFixture(opts: {
-  stopBeforePosting?: boolean
-  nonRootSubsidiary?: boolean
-  postingRateType?: string
-} = {}): Promise<PostedFixture> {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  const actorId = await createScratchUser(org.orgId, 'Sammy Sloppy', 'accountant')
-  await grantScratchPermissions(org.orgId, actorId, ['expenses.create'])
-  as(actorId)
-  const reportSubsidiaryId = opts.nonRootSubsidiary ? randomUUID() : org.subsidiaryId
+async function postedFixture(
+  opts: {
+    stopBeforePosting?: boolean;
+    nonRootSubsidiary?: boolean;
+    postingRateType?: string;
+  } = {},
+): Promise<PostedFixture> {
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  const actorId = await createScratchUser(org.orgId, "Sammy Sloppy", "accountant");
+  await grantScratchPermissions(org.orgId, actorId, ["expenses.create"]);
+  as(actorId);
+  const reportSubsidiaryId = opts.nonRootSubsidiary ? randomUUID() : org.subsidiaryId;
   if (opts.nonRootSubsidiary) {
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${reportSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Expense report entity', 'CAD', 'CA')
-    `)
+    `);
   }
   if (opts.postingRateType) {
     await db.execute(sql`
       insert into fx_rate_types (org_id, key, name)
       values (${org.orgId}, ${opts.postingRateType}, 'Corporate')
-    `)
+    `);
     await db.execute(sql`
       insert into subsidiary_accounting_preferences
         (org_id, subsidiary_id, effective_from, posting_rate_type, reason, created_by)
       values (${org.orgId}, ${reportSubsidiaryId}, ${org.date}, ${opts.postingRateType},
               'Use the entity corporate rate series', ${actorId})
-    `)
+    `);
   }
-  const employeePayable = randomUUID()
+  const employeePayable = randomUUID();
   await db.execute(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
-    values (${employeePayable}, ${org.orgId}, '2400', 'Employee Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`)
+    values (${employeePayable}, ${org.orgId}, '2400', 'Employee Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
   await db.execute(sql`
     update orgs
        set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts,employeePayable}', to_jsonb(${employeePayable}::text), true)
-     where id = ${org.orgId}`)
-  const employeeId = randomUUID()
+     where id = ${org.orgId}`);
+  const employeeId = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-    values (${employeeId}, ${org.orgId}, 'employee', 'Sammy Sloppy', ${reportSubsidiaryId}, true, '{}'::jsonb)`)
-  await db.execute(sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employeeId})`)
-  const id = randomUUID()
+    values (${employeeId}, ${org.orgId}, 'employee', 'Sammy Sloppy', ${reportSubsidiaryId}, true, '{}'::jsonb)`);
+  await db.execute(
+    sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employeeId})`,
+  );
+  const id = randomUUID();
   await db.execute(sql`
     insert into documents (id, org_id, kind, status, document_number, document_date, party_id, subsidiary_id, currency, subtotal, tax_total, total, custom, created_by)
-    values (${id}, ${org.orgId}, 'expense_report', 'draft', 'EXP-POSTED', ${org.date}, ${employeeId}, ${reportSubsidiaryId}, 'CAD', '875.50', '0', '875.50', '{}'::jsonb, ${actorId})`)
+    values (${id}, ${org.orgId}, 'expense_report', 'draft', 'EXP-POSTED', ${org.date}, ${employeeId}, ${reportSubsidiaryId}, 'CAD', '875.50', '0', '875.50', '{}'::jsonb, ${actorId})`);
   await db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount, tax_amount)
-    values (${randomUUID()}, ${org.orgId}, ${id}, 1, ${org.accounts.cogs}, 'Travel', '1', '875.50', '875.50', '0')`)
-  await withOrgContext(org.orgId, () => submitAndReleaseIfUngated('expense_report', id, actorId))
-  assert.equal(await statusOf(id), 'approved')
-  const cleanup = () => dropScratchOrg(org.orgId)
-  const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable }
-  if (opts.stopBeforePosting) return { orgId: org.orgId, subsidiaryId: reportSubsidiaryId, documentDate: org.date, actorId, employeeId, cogs: org.accounts.cogs, id, control, cleanup }
-  await postDocument(id, { control })
-  assert.equal(await statusOf(id), 'posted')
-  return { orgId: org.orgId, subsidiaryId: reportSubsidiaryId, documentDate: org.date, actorId, employeeId, cogs: org.accounts.cogs, id, control, cleanup }
+    values (${randomUUID()}, ${org.orgId}, ${id}, 1, ${org.accounts.cogs}, 'Travel', '1', '875.50', '875.50', '0')`);
+  await withOrgContext(org.orgId, () => submitAndReleaseIfUngated("expense_report", id, actorId));
+  assert.equal(await statusOf(id), "approved");
+  const cleanup = () => dropScratchOrg(org.orgId);
+  const control = {
+    ar: org.accounts.ar,
+    ap: org.accounts.ap,
+    bank: org.accounts.bank,
+    employeePayable,
+  };
+  if (opts.stopBeforePosting)
+    return {
+      orgId: org.orgId,
+      subsidiaryId: reportSubsidiaryId,
+      documentDate: org.date,
+      actorId,
+      employeeId,
+      cogs: org.accounts.cogs,
+      id,
+      control,
+      cleanup,
+    };
+  await postDocument(id, { control });
+  assert.equal(await statusOf(id), "posted");
+  return {
+    orgId: org.orgId,
+    subsidiaryId: reportSubsidiaryId,
+    documentDate: org.date,
+    actorId,
+    employeeId,
+    cogs: org.accounts.cogs,
+    id,
+    control,
+    cleanup,
+  };
 }
 
-const REASON = 'correct the travel total after the final receipts arrived'
+const REASON = "correct the travel total after the final receipts arrived";
 
-test('correct creates the correcting revision and voids the posted source', async () => {
-  const { actorId, cogs, id, control, cleanup } = await postedFixture()
+test("correct creates the correcting revision and voids the posted source", async () => {
+  const { actorId, cogs, id, control, cleanup } = await postedFixture();
   try {
-    as(actorId)
+    as(actorId);
     const response = await correct(id, {
       expectedUpdatedAt: await revision(id),
       amendmentReason: REASON,
-      memo: 'updated memo',
+      memo: "updated memo",
       // 0171 requires settlement on every newly written line (the drawer
       // sends it); the correction still proves the amount change 875.50 →
       // 900.00, not the settlement gate.
-      lines: [{ accountId: cogs, amount: '900.00', description: 'updated line', settlementType: 'out_of_pocket' }],
-    })
-    assert.equal(response.status, 201, JSON.stringify(response.json))
-    assert.equal(response.json?.ok, true)
-    assert.equal(response.json?.voidStatus, 'voided')
-    const correctionId = String(response.json?.correctionId)
-    assert.match(String(response.json?.correctionNumber), /^EXP-/)
-    assert.equal(await statusOf(id), 'voided')
-    assert.equal(await statusOf(correctionId), 'draft')
-    const replacement = (await db.execute<{ memo: string; total: string; custom: Record<string, unknown> }>(
-      sql`select memo, total::text as total, custom from documents where id = ${correctionId}`, 'objects',
-    ))[0]!
-    assert.equal(replacement.memo, 'updated memo')
-    assert.equal(replacement.total, '900.0000')
-    assert.equal(replacement.custom.correctionOf, id)
-    assert.equal(replacement.custom.correctionReason, REASON)
+      lines: [
+        {
+          accountId: cogs,
+          amount: "900.00",
+          description: "updated line",
+          settlementType: "out_of_pocket",
+        },
+      ],
+    });
+    assert.equal(response.status, 201, JSON.stringify(response.json));
+    assert.equal(response.json?.ok, true);
+    assert.equal(response.json?.voidStatus, "voided");
+    const correctionId = String(response.json?.correctionId);
+    assert.match(String(response.json?.correctionNumber), /^EXP-/);
+    assert.equal(await statusOf(id), "voided");
+    assert.equal(await statusOf(correctionId), "draft");
+    const replacement = (
+      await db.execute<{ memo: string; total: string; custom: Record<string, unknown> }>(
+        sql`select memo, total::text as total, custom from documents where id = ${correctionId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(replacement.memo, "updated memo");
+    assert.equal(replacement.total, "900.0000");
+    assert.equal(replacement.custom.correctionOf, id);
+    assert.equal(replacement.custom.correctionReason, REASON);
     const lines = await db.execute<{ amount: string; description: string }>(
-      sql`select amount::text as amount, description from document_lines where document_id = ${correctionId} and org_id = ${state.orgId} order by line_number`, 'objects',
-    )
-    assert.deepEqual(lines.map((l) => [l.description, l.amount]), [['updated line', '900.0000']])
-    const link = (await db.execute<{ linkType: string; reason: string }>(
-      sql`select link_type as "linkType", reason from document_links where from_document_id = ${correctionId} and to_document_id = ${id} and org_id = ${state.orgId}`, 'objects',
-    ))[0]
-    assert.equal(link?.linkType, 'reverses')
-    assert.equal(link?.reason, REASON)
+      sql`select amount::text as amount, description from document_lines where document_id = ${correctionId} and org_id = ${state.orgId} order by line_number`,
+      "objects",
+    );
+    assert.deepEqual(
+      lines.map((l) => [l.description, l.amount]),
+      [["updated line", "900.0000"]],
+    );
+    const link = (
+      await db.execute<{ linkType: string; reason: string }>(
+        sql`select link_type as "linkType", reason from document_links where from_document_id = ${correctionId} and to_document_id = ${id} and org_id = ${state.orgId}`,
+        "objects",
+      )
+    )[0];
+    assert.equal(link?.linkType, "reverses");
+    assert.equal(link?.reason, REASON);
     // The void is an exact append-only reversal: the reversal entry mirrors
     // the source entry line for line with debits and credits swapped, and
     // source, reversal, and replacement entries are all retained.
-    const sourceEntry = (await db.execute<{ id: string }>(
-      sql`select posted_entry_id as id from documents where id = ${id} and org_id = ${state.orgId}`, 'objects',
-    ))[0]!.id
-    const reversalEntry = (await db.execute<{ id: string }>(
-      sql`select id from journal_entries where reverses_entry_id = ${sourceEntry} and org_id = ${state.orgId}`, 'objects',
-    ))[0]?.id
-    assert.ok(reversalEntry, 'the void posts a reversal entry linked to the source entry')
-    type EntryLine = { account: string; amount: string; txn: string }
+    const sourceEntry = (
+      await db.execute<{ id: string }>(
+        sql`select posted_entry_id as id from documents where id = ${id} and org_id = ${state.orgId}`,
+        "objects",
+      )
+    )[0]!.id;
+    const reversalEntry = (
+      await db.execute<{ id: string }>(
+        sql`select id from journal_entries where reverses_entry_id = ${sourceEntry} and org_id = ${state.orgId}`,
+        "objects",
+      )
+    )[0]?.id;
+    assert.ok(reversalEntry, "the void posts a reversal entry linked to the source entry");
+    type EntryLine = { account: string; amount: string; txn: string };
     const entryLines = async (entryId: string): Promise<EntryLine[]> =>
-      await db.execute<EntryLine>(sql`select account_id as account, amount::text as amount, txn_amount::text as txn
-        from journal_lines where entry_id = ${entryId} and org_id = ${state.orgId} order by line_number`, 'objects')
-    const sourceLines = await entryLines(sourceEntry)
-    assert.ok(sourceLines.length > 0, 'the source entry carries lines')
-    const negate = (v: string): string => (v.startsWith('-') ? v.slice(1) : `-${v}`)
+      await db.execute<EntryLine>(
+        sql`select account_id as account, amount::text as amount, txn_amount::text as txn
+        from journal_lines where entry_id = ${entryId} and org_id = ${state.orgId} order by line_number`,
+        "objects",
+      );
+    const sourceLines = await entryLines(sourceEntry);
+    assert.ok(sourceLines.length > 0, "the source entry carries lines");
+    const negate = (v: string): string => (v.startsWith("-") ? v.slice(1) : `-${v}`);
     assert.deepEqual(
       await entryLines(reversalEntry),
-      sourceLines.map((l) => ({ account: l.account, amount: negate(l.amount), txn: negate(l.txn) })),
-    )
-    await withOrgContext(state.orgId, () => submitAndReleaseIfUngated('expense_report', correctionId, actorId))
-    const replacementEntry = await postDocument(correctionId, { control })
-    assert.equal(await statusOf(correctionId), 'posted')
+      sourceLines.map((l) => ({
+        account: l.account,
+        amount: negate(l.amount),
+        txn: negate(l.txn),
+      })),
+    );
+    await withOrgContext(state.orgId, () =>
+      submitAndReleaseIfUngated("expense_report", correctionId, actorId),
+    );
+    const replacementEntry = await postDocument(correctionId, { control });
+    assert.equal(await statusOf(correctionId), "posted");
     const retained = await db.execute<{ id: string; status: string }>(
       sql`select id, status from journal_entries
-        where id in (${sourceEntry}, ${reversalEntry}, ${replacementEntry}) and org_id = ${state.orgId}`, 'objects',
-    )
+        where id in (${sourceEntry}, ${reversalEntry}, ${replacementEntry}) and org_id = ${state.orgId}`,
+      "objects",
+    );
     const byId = (rows: { id: string; status: string }[]) =>
-      rows.map((r) => [r.id, r.status] as [string, string]).sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      rows.map((r) => [r.id, r.status] as [string, string]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
     assert.deepEqual(
       byId(retained),
       byId([
-        { id: sourceEntry, status: 'reversed' },
-        { id: reversalEntry, status: 'posted' },
-        { id: replacementEntry, status: 'posted' },
+        { id: sourceEntry, status: "reversed" },
+        { id: reversalEntry, status: "posted" },
+        { id: replacementEntry, status: "posted" },
       ]),
-    )
+    );
     const net = await db.execute<{ account: string; amount: string }>(
       sql`select account_id as account, sum(amount)::text as amount from journal_lines
         where entry_id in (${sourceEntry}, ${reversalEntry}, ${replacementEntry}) and org_id = ${state.orgId}
-        group by account_id having sum(amount) <> 0 order by account_id`, 'objects',
-    )
+        group by account_id having sum(amount) <> 0 order by account_id`,
+      "objects",
+    );
     const byAccount = (rows: { account: string; amount: string }[]) =>
-      rows.map((r) => [r.account, r.amount] as [string, string]).sort((a, b) => (a[0] < b[0] ? -1 : 1))
-    assert.deepEqual(byAccount(net), byAccount(await entryLines(replacementEntry)))
+      rows
+        .map((r) => [r.account, r.amount] as [string, string])
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    assert.deepEqual(byAccount(net), byAccount(await entryLines(replacementEntry)));
   } finally {
-    await cleanup()
+    await cleanup();
   }
-})
+});
 
-test('correct refuses inactive and out-of-entity employees', async () => {
-  const { actorId, id, orgId, subsidiaryId, cleanup } = await postedFixture()
+test("correct refuses inactive and out-of-entity employees", async () => {
+  const { actorId, id, orgId, subsidiaryId, cleanup } = await postedFixture();
   try {
-    as(actorId)
-    const otherSubsidiaryId = randomUUID()
-    const foreignEmployeeId = randomUUID()
-    const inactiveEmployeeId = randomUUID()
+    as(actorId);
+    const otherSubsidiaryId = randomUUID();
+    const foreignEmployeeId = randomUUID();
+    const inactiveEmployeeId = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
       values (${otherSubsidiaryId}, ${orgId}, ${subsidiaryId}, 'Other expense entity', 'CAD', 'CA')
-    `)
+    `);
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
       values (${foreignEmployeeId}, ${orgId}, 'employee', 'Other entity employee', ${otherSubsidiaryId}, true, '{}'::jsonb),
              (${inactiveEmployeeId}, ${orgId}, 'employee', 'Inactive employee', ${subsidiaryId}, false, '{}'::jsonb)
-    `)
+    `);
 
     for (const partyId of [foreignEmployeeId, inactiveEmployeeId]) {
       const response = await correct(id, {
         expectedUpdatedAt: await revision(id),
         amendmentReason: REASON,
         partyId,
-      })
-      assert.equal(response.status, 404, JSON.stringify(response.json))
-      assert.equal(await statusOf(id), 'posted', 'a refused employee assignment leaves the source posted')
+      });
+      assert.equal(response.status, 404, JSON.stringify(response.json));
+      assert.equal(
+        await statusOf(id),
+        "posted",
+        "a refused employee assignment leaves the source posted",
+      );
     }
-    const corrections = (await db.execute<{ count: number }>(sql`
+    const corrections = (
+      await db.execute<{ count: number }>(
+        sql`
       select count(*)::int as count from document_links
        where org_id = ${orgId} and to_document_id = ${id} and link_type = 'reverses'
-    `, 'objects'))[0]!.count
-    assert.equal(corrections, 0, 'refused assignments create no correction draft')
+    `,
+        "objects",
+      )
+    )[0]!.count;
+    assert.equal(corrections, 0, "refused assignments create no correction draft");
   } finally {
-    await cleanup()
+    await cleanup();
   }
-})
+});
 
-test('correct converts foreign expense lines with the report subsidiary rate type', async () => {
+test("correct converts foreign expense lines with the report subsidiary rate type", async () => {
   const { actorId, cogs, documentDate, id, orgId, cleanup } = await postedFixture({
     nonRootSubsidiary: true,
-    postingRateType: 'corporate',
-  })
+    postingRateType: "corporate",
+  });
   try {
-    as(actorId)
+    as(actorId);
     await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate, rate_type, source)
       values (${orgId}, 'EUR', 'CAD', ${documentDate}, '1.2500000000', 'corporate', 'manual')
-    `)
+    `);
 
     const response = await correct(id, {
       expectedUpdatedAt: await revision(id),
       amendmentReason: REASON,
-      lines: [{
-        accountId: cogs,
-        description: 'Foreign travel',
-        amount: '0',
-        settlementType: 'out_of_pocket',
-        foreignCurrency: { currency: 'EUR', amount: '100', rateDate: documentDate, method: 'rate_table', rate: '1.2500000000' },
-      }],
-    })
-    assert.equal(response.status, 201, JSON.stringify(response.json))
-    const evidence = (await db.execute<{ rateType: string }>(sql`
+      lines: [
+        {
+          accountId: cogs,
+          description: "Foreign travel",
+          amount: "0",
+          settlementType: "out_of_pocket",
+          foreignCurrency: {
+            currency: "EUR",
+            amount: "100",
+            rateDate: documentDate,
+            method: "rate_table",
+            rate: "1.2500000000",
+          },
+        },
+      ],
+    });
+    assert.equal(response.status, 201, JSON.stringify(response.json));
+    const evidence = (
+      await db.execute<{ rateType: string }>(
+        sql`
       select original_fx_evidence->>'rateType' as "rateType" from document_lines
        where org_id = ${orgId} and document_id = ${String(response.json?.correctionId)}
-    `, 'objects'))[0]
-    assert.equal(evidence?.rateType, 'corporate')
+    `,
+        "objects",
+      )
+    )[0];
+    assert.equal(evidence?.rateType, "corporate");
   } finally {
-    await cleanup()
+    await cleanup();
   }
-})
+});
 
-test('correct fails closed on reason, state, revision, and repeat calls', async () => {
-  const { actorId, id, cleanup } = await postedFixture()
+test("correct fails closed on reason, state, revision, and repeat calls", async () => {
+  const { actorId, id, cleanup } = await postedFixture();
   try {
-    as(actorId)
-    const good = { expectedUpdatedAt: await revision(id), amendmentReason: REASON }
-    assert.equal((await correct(id, { expectedUpdatedAt: await revision(id) })).status, 422, 'a missing reason must fail')
-    assert.equal((await correct(id, { ...good, amendmentReason: 'short' })).status, 422, 'a short reason must fail')
-    assert.equal((await correct(id, { amendmentReason: REASON })).status, 409, 'a missing revision must fail closed')
-    assert.equal((await correct(id, { ...good, expectedUpdatedAt: '2000-01-01T00:00:00.000Z' })).status, 409, 'a stale revision must fail closed')
-    assert.equal(await statusOf(id), 'posted')
+    as(actorId);
+    const good = { expectedUpdatedAt: await revision(id), amendmentReason: REASON };
+    assert.equal(
+      (await correct(id, { expectedUpdatedAt: await revision(id) })).status,
+      422,
+      "a missing reason must fail",
+    );
+    assert.equal(
+      (await correct(id, { ...good, amendmentReason: "short" })).status,
+      422,
+      "a short reason must fail",
+    );
+    assert.equal(
+      (await correct(id, { amendmentReason: REASON })).status,
+      409,
+      "a missing revision must fail closed",
+    );
+    assert.equal(
+      (await correct(id, { ...good, expectedUpdatedAt: "2000-01-01T00:00:00.000Z" })).status,
+      409,
+      "a stale revision must fail closed",
+    );
+    assert.equal(await statusOf(id), "posted");
     // A reason-only correction still yields a faithful, postable draft.
-    const reasonOnly = await correct(id, { expectedUpdatedAt: await revision(id), amendmentReason: REASON })
-    assert.equal(reasonOnly.status, 201, JSON.stringify(reasonOnly.json))
-    const faithful = (await db.execute<{ memo: string; total: string }>(
-      sql`select memo, total::text as total from documents where id = ${String(reasonOnly.json?.correctionId)}`, 'objects',
-    ))[0]!
-    assert.equal(faithful.total, '875.5000', 'an unedited correction copies the posted totals')
+    const reasonOnly = await correct(id, {
+      expectedUpdatedAt: await revision(id),
+      amendmentReason: REASON,
+    });
+    assert.equal(reasonOnly.status, 201, JSON.stringify(reasonOnly.json));
+    const faithful = (
+      await db.execute<{ memo: string; total: string }>(
+        sql`select memo, total::text as total from documents where id = ${String(reasonOnly.json?.correctionId)}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(faithful.total, "875.5000", "an unedited correction copies the posted totals");
   } finally {
-    await cleanup()
+    await cleanup();
   }
-})
+});
 
-test('a standing correction edge conflicts with a second correction', async () => {
-  const { orgId, actorId, id, cleanup } = await postedFixture()
+test("a standing correction edge conflicts with a second correction", async () => {
+  const { orgId, actorId, id, cleanup } = await postedFixture();
   try {
-    as(actorId)
+    as(actorId);
     // Simulate the gated-void window: a concurrent correction's `reverses`
     // edge already stands while the source is still posted. Correction
     // lineage is immutable, so the simulation rows stay for the org wipe.
-    const subsidiaryId = (await db.execute<{ id: string }>(sql`select subsidiary_id as id from documents where id = ${id}`, 'objects'))[0]!.id
-    const dummyId = randomUUID()
+    const subsidiaryId = (
+      await db.execute<{ id: string }>(
+        sql`select subsidiary_id as id from documents where id = ${id}`,
+        "objects",
+      )
+    )[0]!.id;
+    const dummyId = randomUUID();
     await db.execute(sql`
       insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom, created_by)
-      values (${dummyId}, ${orgId}, 'expense_report', 'draft', 'EXP-DUMMY', '2026-07-15', ${subsidiaryId}, 'CAD', '1', '0', '1', '{}'::jsonb, ${actorId})`)
+      values (${dummyId}, ${orgId}, 'expense_report', 'draft', 'EXP-DUMMY', '2026-07-15', ${subsidiaryId}, 'CAD', '1', '0', '1', '{}'::jsonb, ${actorId})`);
     await db.execute(sql`
       insert into document_links (org_id, from_document_id, to_document_id, link_type, reason, requested_by, requested_at, created_by, updated_by)
-      values (${orgId}, ${dummyId}, ${id}, 'reverses', ${REASON}, ${actorId}, now(), ${actorId}, ${actorId})`)
-    const conflict = await correct(id, { expectedUpdatedAt: await revision(id), amendmentReason: REASON })
-    assert.equal(conflict.status, 409, JSON.stringify(conflict.json))
-    assert.match(String(conflict.json?.error), /correction/i)
-    assert.equal(await statusOf(id), 'posted', 'the conflict writes nothing')
+      values (${orgId}, ${dummyId}, ${id}, 'reverses', ${REASON}, ${actorId}, now(), ${actorId}, ${actorId})`);
+    const conflict = await correct(id, {
+      expectedUpdatedAt: await revision(id),
+      amendmentReason: REASON,
+    });
+    assert.equal(conflict.status, 409, JSON.stringify(conflict.json));
+    assert.match(String(conflict.json?.error), /correction/i);
+    assert.equal(await statusOf(id), "posted", "the conflict writes nothing");
   } finally {
-    await cleanup()
+    await cleanup();
   }
-})
+});
 
-test('correct refuses non-posted reports and under-permissioned callers', async () => {
-  const { actorId, id, cleanup } = await postedFixture()
+test("correct refuses non-posted reports and under-permissioned callers", async () => {
+  const { actorId, id, cleanup } = await postedFixture();
   try {
-    as(actorId, ['expenses.create'])
-    const forbidden = await correct(id, { expectedUpdatedAt: await revision(id), amendmentReason: REASON })
-    assert.equal(forbidden.status, 403, JSON.stringify(forbidden.json))
-    assert.equal(await statusOf(id), 'posted')
+    as(actorId, ["expenses.create"]);
+    const forbidden = await correct(id, {
+      expectedUpdatedAt: await revision(id),
+      amendmentReason: REASON,
+    });
+    assert.equal(forbidden.status, 403, JSON.stringify(forbidden.json));
+    assert.equal(await statusOf(id), "posted");
   } finally {
-    await cleanup()
+    await cleanup();
   }
   // The wrong-state path needs an approved-but-never-posted report. It is
   // built by halting the fixture at approved: posted rows are immutable, so
   // rewinding one with a raw status update is refused by the guard.
-  const approved = await postedFixture({ stopBeforePosting: true })
+  const approved = await postedFixture({ stopBeforePosting: true });
   try {
-    as(approved.actorId)
-    assert.equal(await statusOf(approved.id), 'approved')
-    const wrongState = await correct(approved.id, { expectedUpdatedAt: await revision(approved.id), amendmentReason: REASON })
-    assert.equal(wrongState.status, 422, JSON.stringify(wrongState.json))
+    as(approved.actorId);
+    assert.equal(await statusOf(approved.id), "approved");
+    const wrongState = await correct(approved.id, {
+      expectedUpdatedAt: await revision(approved.id),
+      amendmentReason: REASON,
+    });
+    assert.equal(wrongState.status, 422, JSON.stringify(wrongState.json));
   } finally {
-    await approved.cleanup()
+    await approved.cleanup();
   }
-})
+});

@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
-import { useEffect, useRef, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
-import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button, Drawer, Input, Label, Select } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { MoneyInput, moneyFieldError } from "../../../../components/money-input";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
 
 export interface ScheduleOption {
-  id: string
-  name: string
-  frequency: string
+  id: string;
+  name: string;
+  frequency: string;
 }
 
 /**
@@ -21,8 +21,8 @@ export interface ScheduleOption {
  * must not become a second place jurisdictions are enumerated.
  */
 export interface LabourJurisdictionOption {
-  key: string
-  name: string
+  key: string;
+  name: string;
 }
 
 /**
@@ -32,18 +32,18 @@ export interface LabourJurisdictionOption {
  * place employment classes are enumerated.
  */
 export interface HolidayOccupationClassOption {
-  classKey: string
-  label: string
-  citation: string
+  classKey: string;
+  label: string;
+  citation: string;
 }
 
 /** A payroll program/EIN account the employee can be filed and remitted under. */
 export interface FilingAccountOption {
-  id: string
-  accountNumber: string
-  name: string
+  id: string;
+  accountNumber: string;
+  name: string;
   /** The country pack the account files under — an open string, like the profile's. */
-  country: string
+  country: string;
 }
 
 /**
@@ -53,34 +53,34 @@ export interface FilingAccountOption {
  * editor renders whatever the installed packs declare.
  */
 export interface DeclaredProfileField {
-  key: string
-  label: string
-  kind: 'choice' | 'count' | 'amount' | 'flag' | 'code'
-  choices?: readonly { value: string; label: string; help?: string }[]
-  decimals?: number
-  min?: string
-  max?: string
-  default?: string
-  required?: boolean
-  help: string
-  storage?: { kind: 'row' } | { kind: 'column'; column: string }
+  key: string;
+  label: string;
+  kind: "choice" | "count" | "amount" | "flag" | "code";
+  choices?: readonly { value: string; label: string; help?: string }[];
+  decimals?: number;
+  min?: string;
+  max?: string;
+  default?: string;
+  required?: boolean;
+  help: string;
+  storage?: { kind: "row" } | { kind: "column"; column: string };
 }
 
 /** One withholding certificate a pack declares, as served with the profiles. */
 export interface DeclaredProfileCertificate {
-  key: string
-  form: string
-  label: string
+  key: string;
+  form: string;
+  label: string;
   /** The publication or statute the form and its fields come from — pack data,
    *  shown under the form heading exactly as declared, never translated here. */
-  citation: string
+  citation: string;
   /** Which storage the pack declared: column fields persist on the profile,
    *  row-backed fields file through the certificates API. Read, never assumed:
    *  the renderer binds each field by its own storage, so a pack moves a
    *  certificate between storages with no edit here. */
-  storage: 'profile_columns' | 'certificate_rows'
-  scope: { level: string; region?: string; subRegion?: string }
-  fields: readonly DeclaredProfileField[]
+  storage: "profile_columns" | "certificate_rows";
+  scope: { level: string; region?: string; subRegion?: string };
+  fields: readonly DeclaredProfileField[];
 }
 
 /**
@@ -90,9 +90,9 @@ export interface DeclaredProfileCertificate {
  * history.
  */
 export interface StoredCertificateRow {
-  certificateKey: string
-  answers: Record<string, string>
-  effectiveFrom: string | null
+  certificateKey: string;
+  answers: Record<string, string>;
+  effectiveFrom: string | null;
 }
 
 /**
@@ -103,114 +103,114 @@ export interface StoredCertificateRow {
  */
 export interface PackProfileDeclaration {
   /** The pack's own display name, served by GET /api/payroll/profiles. */
-  countryName: string
-  subdivisionLabel: string
-  subdivisions: string[]
+  countryName: string;
+  subdivisionLabel: string;
+  subdivisions: string[];
   /** Display name per subdivision code, served by GET /api/payroll/profiles. */
-  subdivisionNames: Record<string, string>
-  supportedSubdivisions: string[]
-  unsupportedReason: string
-  unsupportedReasons: Record<string, string>
-  certificates: DeclaredProfileCertificate[]
-  exemptionFlags: { column: string; label: string; help: string }[]
+  subdivisionNames: Record<string, string>;
+  supportedSubdivisions: string[];
+  unsupportedReason: string;
+  unsupportedReasons: Record<string, string>;
+  certificates: DeclaredProfileCertificate[];
+  exemptionFlags: { column: string; label: string; help: string }[];
   /**
    * The pack's employee identifier, served by GET /api/payroll/profiles.
    * The sealed field renders the pack's own label, example and keyboard —
    * never a hardcoded "SIN / SSN" with a numeric keypad.
    */
   identifier: {
-    label: string
-    formatHelp: string
-    example: string
-    required: boolean
-    neededFor: string | null
-    numericEntry: boolean
-  }
+    label: string;
+    formatHelp: string;
+    example: string;
+    required: boolean;
+    neededFor: string | null;
+    numericEntry: boolean;
+  };
 }
 
 export type ProfileRow = {
-  id: string
-  employee_party_id: string
-  employment_id?: string
-  employee_name: string
-  pay_schedule_id: string
-  schedule_name: string | null
+  id: string;
+  employee_party_id: string;
+  employment_id?: string;
+  employee_name: string;
+  pay_schedule_id: string;
+  schedule_name: string | null;
   /** '' only on a blank NEW profile whose default could not be derived from
    *  the employee's subsidiary — the operator must choose; the API refuses
    *  a save with no country rather than assuming one. An open string: the
    *  countries on offer come from the served pack declarations, never a union
    *  in this file. */
-  country: string
-  province: string
+  country: string;
+  province: string;
   /** The labour jurisdiction whose employment standards govern the employment;
    *  null = derive it from the work region (the answer for almost everyone). */
-  labour_jurisdiction: string | null
-  pay_basis: 'hourly' | 'salary'
-  federal_claim_code: number | null
-  federal_claim_amount: string | null
-  provincial_claim_code: number | null
-  provincial_claim_amount: string | null
-  additional_tax_per_period: string | null
-  prescribed_zone_deduction: string | null
-  authorized_annual_deductions: string | null
-  authorized_federal_credits: string | null
-  authorized_provincial_credits: string | null
-  cpp_exempt: boolean
-  ei_exempt: boolean
-  tax_exempt: boolean
+  labour_jurisdiction: string | null;
+  pay_basis: "hourly" | "salary";
+  federal_claim_code: number | null;
+  federal_claim_amount: string | null;
+  provincial_claim_code: number | null;
+  provincial_claim_amount: string | null;
+  additional_tax_per_period: string | null;
+  prescribed_zone_deduction: string | null;
+  authorized_annual_deductions: string | null;
+  authorized_federal_credits: string | null;
+  authorized_provincial_credits: string | null;
+  cpp_exempt: boolean;
+  ei_exempt: boolean;
+  tax_exempt: boolean;
   /** Workers-compensation exclusion with a reason (0662); false = covered or undecided. */
-  wcb_exempt: boolean
-  wcb_exempt_reason: string | null
+  wcb_exempt: boolean;
+  wcb_exempt_reason: string | null;
   /** Current WCB/WSIB rate class (employee_roles); absent on list rows, which do not edit. */
-  worker_comp_group_id?: string | null
+  worker_comp_group_id?: string | null;
   /** An open string: the allowed answers come from the pack's declared
    *  certificate choices, never a union in this file. */
-  filing_status: string | null
-  multiple_jobs: boolean
-  dependent_credits: string | null
-  other_income_annual: string | null
-  deductions_annual: string | null
-  w4_pre_2020: boolean
-  w4_allowances: number | null
-  fica_exempt: boolean
-  futa_exempt: boolean
-  sui_exempt: boolean
+  filing_status: string | null;
+  multiple_jobs: boolean;
+  dependent_credits: string | null;
+  other_income_annual: string | null;
+  deductions_annual: string | null;
+  w4_pre_2020: boolean;
+  w4_allowances: number | null;
+  fica_exempt: boolean;
+  futa_exempt: boolean;
+  sui_exempt: boolean;
   /** Pack-declared employee facts (0191), served by GET /api/payroll/profiles. */
-  pl_rok_urodzenia: number | null
-  es_ano_nacimiento: number | null
-  es_grupo_cotizacion: number | null
-  es_situacion_laboral: string | null
-  es_contrato_temporal: string | null
-  jp_hyojun_hoshu: number | null
-  jp_kaigo_dainigou: string | null
-  br_dependentes: number | null
-  br_pensao_mensal: string | null
-  br_salario_familia_filhos: number | null
-  filing_account_id: string | null
-  stub_delivery: 'email' | 'print' | 'both'
+  pl_rok_urodzenia: number | null;
+  es_ano_nacimiento: number | null;
+  es_grupo_cotizacion: number | null;
+  es_situacion_laboral: string | null;
+  es_contrato_temporal: string | null;
+  jp_hyojun_hoshu: number | null;
+  jp_kaigo_dainigou: string | null;
+  br_dependentes: number | null;
+  br_pensao_mensal: string | null;
+  br_salario_familia_filhos: number | null;
+  filing_account_id: string | null;
+  stub_delivery: "email" | "print" | "both";
   /** Payroll override of the pay rail; null inherits the party preference. */
-  payment_method: 'eft' | 'cheque' | null
+  payment_method: "eft" | "cheque" | null;
   /**
    * Standing commission-pay status for statutory-holiday rules that read it.
    * Three-state: null is UNANSWERED and the engine fails closed on it — never
    * defaulted, never inferred (migration 0181).
    */
-  paid_on_commission: boolean | null
+  paid_on_commission: boolean | null;
   /**
    * Standing statutory occupation class (migration 0409): the occupation or
    * contract class the employee answers. Null is UNANSWERED and a declaring
    * rule fails closed on it — never defaulted, never inferred.
    */
-  statutory_occupation_class: string | null
-  is_active: boolean
+  statutory_occupation_class: string | null;
+  is_active: boolean;
 };
 
-const STUB_DELIVERIES = ['email', 'print', 'both'] as const
-const PAYMENT_METHODS = ['eft', 'cheque'] as const
+const STUB_DELIVERIES = ["email", "print", "both"] as const;
+const PAYMENT_METHODS = ["eft", "cheque"] as const;
 
 /** snake_case profile column → camelCase locale namespace (`filing_status` → `filingStatus`). */
 function columnLocaleBase(column: string): string {
-  return column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())
+  return column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }
 
 /**
@@ -220,53 +220,53 @@ function columnLocaleBase(column: string): string {
  * camelCase(column) exactly like the locale keys.
  */
 function columnBodyKey(column: string): string {
-  return columnLocaleBase(column)
+  return columnLocaleBase(column);
 }
 
 export function ProfileEditor(props: {
-  profile: ProfileRow
-  schedules: ScheduleOption[]
+  profile: ProfileRow;
+  schedules: ScheduleOption[];
   /** Empty for single-account employers: the country pack's default is used. */
-  filingAccounts?: FilingAccountOption[]
+  filingAccounts?: FilingAccountOption[];
   /** country pack → the labour jurisdictions it declares, from the API. */
-  labourJurisdictions?: Record<string, LabourJurisdictionOption[]>
+  labourJurisdictions?: Record<string, LabourJurisdictionOption[]>;
   /** employment jurisdiction → the occupation classes its rules recognise, from the API. */
-  statutoryOccupationClasses?: Record<string, HolidayOccupationClassOption[]>
+  statutoryOccupationClasses?: Record<string, HolidayOccupationClassOption[]>;
   /** Every known pack, in registry order — the country picker offers exactly these. */
-  countries?: string[]
+  countries?: string[];
   /** country pack → what the editor renders for it: subdivisions, withholding
    *  certificates, exemption flags. From the API, declared by the packs. */
-  packProfiles?: Record<string, PackProfileDeclaration>
+  packProfiles?: Record<string, PackProfileDeclaration>;
   /** Active WCB/WSIB rate classes for the coverage control, from the API. */
-  workerCompGroups?: { id: string; code: string; name: string }[]
+  workerCompGroups?: { id: string; code: string; name: string }[];
   /** The employee's current row-backed filings, for prefilling row-backed
    *  fields. Served with the profile; absent on the list variant, which does
    *  not edit. */
-  storedCertificates?: StoredCertificateRow[]
+  storedCertificates?: StoredCertificateRow[];
   /** Pack-derived prefill hints by profile column (0191: the PL birth year
    *  off the PESEL), served with the profile. Shown where the row is blank
    *  and saved on submit — the visible half of derive-and-prefill. */
-  derivedColumns?: Record<string, string>
+  derivedColumns?: Record<string, string>;
   /** Hire date, served with the profile: the effective date the main Save
    *  files answered row-backed certificates with, so they never stamp a
    *  silent today. */
-  employmentStart?: string | null
-  onClose: () => void
-  onSaved: () => void
+  employmentStart?: string | null;
+  onClose: () => void;
+  onSaved: () => void;
   /**
    * Unsaved-draft signal for embedding drawers (the employee drawer's close
    * guard): reported true while the draft differs from the last saved state,
    * false again after a successful save. Optional; the standalone editor
    * omits it.
    */
-  onDirtyChange?: (dirty: boolean) => void
+  onDirtyChange?: (dirty: boolean) => void;
   /** Render as a plain section (inside another drawer/tab) instead of a Drawer. */
-  inline?: boolean
+  inline?: boolean;
   /**
    * Values only: no inputs, no Save. The employee drawer honours its edit
    * mode exactly like its Overview tab — read mode renders values.
    */
-  readOnly?: boolean
+  readOnly?: boolean;
   /**
    * Which half renders: the generic employment facts (schedule, basis,
    * country, region, labour jurisdiction, stub delivery, payment method,
@@ -275,121 +275,145 @@ export function ProfileEditor(props: {
    * standalone editor; the employee drawer mounts ONE editor and switches
    * this prop so unsaved edits survive sub-tab switches.
    */
-  section?: 'general' | 'tax'
+  section?: "general" | "tax";
 }) {
-  const t = useTranslations('payroll.profiles')
-  const tc = useTranslations('common')
-  const p = props.profile
-  const [busy, setBusy] = useState(false)
-  const [payScheduleId, setPayScheduleId] = useState(p.pay_schedule_id)
+  const t = useTranslations("payroll.profiles");
+  const tc = useTranslations("common");
+  const p = props.profile;
+  const [busy, setBusy] = useState(false);
+  const [payScheduleId, setPayScheduleId] = useState(p.pay_schedule_id);
   // No coercion: an unset country stays unset until the operator chooses.
   // Defaulting it to a pack here is exactly the silent-Canada fallthrough the
   // engine refuses (engine/src/payroll/packs.ts).
-  const [country, setCountry] = useState<ProfileRow['country']>(p.country)
-  const [province, setProvince] = useState(p.province)
-  const [labourJurisdiction, setLabourJurisdiction] = useState(p.labour_jurisdiction ?? '')
-  const [payBasis, setPayBasis] = useState<'hourly' | 'salary'>(p.pay_basis)
-  const [federalClaimCode, setFederalClaimCode] = useState(p.federal_claim_code == null ? '' : String(p.federal_claim_code))
-  const [federalClaimAmount, setFederalClaimAmount] = useState(p.federal_claim_amount ?? '')
-  const [provincialClaimCode, setProvincialClaimCode] = useState(p.provincial_claim_code == null ? '' : String(p.provincial_claim_code))
-  const [provincialClaimAmount, setProvincialClaimAmount] = useState(p.provincial_claim_amount ?? '')
-  const [additionalTax, setAdditionalTax] = useState(p.additional_tax_per_period ?? '')
-  const [prescribedZoneDeduction, setPrescribedZoneDeduction] = useState(p.prescribed_zone_deduction ?? '')
-  const [authorizedAnnualDeductions, setAuthorizedAnnualDeductions] = useState(p.authorized_annual_deductions ?? '')
-  const [authorizedFederalCredits, setAuthorizedFederalCredits] = useState(p.authorized_federal_credits ?? '')
-  const [authorizedProvincialCredits, setAuthorizedProvincialCredits] = useState(p.authorized_provincial_credits ?? '')
-  const [cppExempt, setCppExempt] = useState(p.cpp_exempt)
-  const [eiExempt, setEiExempt] = useState(p.ei_exempt)
-  const [taxExempt, setTaxExempt] = useState(p.tax_exempt)
-  const [wcbExempt, setWcbExempt] = useState(p.wcb_exempt)
-  const [wcbExemptReason, setWcbExemptReason] = useState(p.wcb_exempt_reason ?? '')
+  const [country, setCountry] = useState<ProfileRow["country"]>(p.country);
+  const [province, setProvince] = useState(p.province);
+  const [labourJurisdiction, setLabourJurisdiction] = useState(p.labour_jurisdiction ?? "");
+  const [payBasis, setPayBasis] = useState<"hourly" | "salary">(p.pay_basis);
+  const [federalClaimCode, setFederalClaimCode] = useState(
+    p.federal_claim_code == null ? "" : String(p.federal_claim_code),
+  );
+  const [federalClaimAmount, setFederalClaimAmount] = useState(p.federal_claim_amount ?? "");
+  const [provincialClaimCode, setProvincialClaimCode] = useState(
+    p.provincial_claim_code == null ? "" : String(p.provincial_claim_code),
+  );
+  const [provincialClaimAmount, setProvincialClaimAmount] = useState(
+    p.provincial_claim_amount ?? "",
+  );
+  const [additionalTax, setAdditionalTax] = useState(p.additional_tax_per_period ?? "");
+  const [prescribedZoneDeduction, setPrescribedZoneDeduction] = useState(
+    p.prescribed_zone_deduction ?? "",
+  );
+  const [authorizedAnnualDeductions, setAuthorizedAnnualDeductions] = useState(
+    p.authorized_annual_deductions ?? "",
+  );
+  const [authorizedFederalCredits, setAuthorizedFederalCredits] = useState(
+    p.authorized_federal_credits ?? "",
+  );
+  const [authorizedProvincialCredits, setAuthorizedProvincialCredits] = useState(
+    p.authorized_provincial_credits ?? "",
+  );
+  const [cppExempt, setCppExempt] = useState(p.cpp_exempt);
+  const [eiExempt, setEiExempt] = useState(p.ei_exempt);
+  const [taxExempt, setTaxExempt] = useState(p.tax_exempt);
+  const [wcbExempt, setWcbExempt] = useState(p.wcb_exempt);
+  const [wcbExemptReason, setWcbExemptReason] = useState(p.wcb_exempt_reason ?? "");
   // Rate class as loaded, for the writer's optimistic check; '' is unassigned.
   // Sent back only when the operator changes the select, so an untouched
   // control never re-asserts the class.
-  const initialWorkerCompGroupId = (p as { worker_comp_group_id?: string | null }).worker_comp_group_id ?? ''
-  const [workerCompGroupId, setWorkerCompGroupId] = useState(initialWorkerCompGroupId)
-  const [filingStatus, setFilingStatus] = useState<ProfileRow['filing_status']>(p.filing_status)
-  const [multipleJobs, setMultipleJobs] = useState(p.multiple_jobs)
-  const [dependentCredits, setDependentCredits] = useState(p.dependent_credits ?? '')
-  const [otherIncomeAnnual, setOtherIncomeAnnual] = useState(p.other_income_annual ?? '')
-  const [deductionsAnnual, setDeductionsAnnual] = useState(p.deductions_annual ?? '')
-  const [w4Pre2020, setW4Pre2020] = useState(p.w4_pre_2020)
-  const [w4Allowances, setW4Allowances] = useState(p.w4_allowances == null ? '' : String(p.w4_allowances))
-  const [ficaExempt, setFicaExempt] = useState(p.fica_exempt)
-  const [futaExempt, setFutaExempt] = useState(p.futa_exempt)
-  const [suiExempt, setSuiExempt] = useState(p.sui_exempt)
-  const [isActive, setIsActive] = useState(p.is_active)
-  const [sin, setSin] = useState('')
-  const [filingAccountId, setFilingAccountId] = useState(p.filing_account_id ?? '')
-  const [stubDelivery, setStubDelivery] = useState<ProfileRow['stub_delivery']>(p.stub_delivery ?? 'email')
-  const [paymentMethod, setPaymentMethod] = useState<string>(p.payment_method ?? '')
+  const initialWorkerCompGroupId =
+    (p as { worker_comp_group_id?: string | null }).worker_comp_group_id ?? "";
+  const [workerCompGroupId, setWorkerCompGroupId] = useState(initialWorkerCompGroupId);
+  const [filingStatus, setFilingStatus] = useState<ProfileRow["filing_status"]>(p.filing_status);
+  const [multipleJobs, setMultipleJobs] = useState(p.multiple_jobs);
+  const [dependentCredits, setDependentCredits] = useState(p.dependent_credits ?? "");
+  const [otherIncomeAnnual, setOtherIncomeAnnual] = useState(p.other_income_annual ?? "");
+  const [deductionsAnnual, setDeductionsAnnual] = useState(p.deductions_annual ?? "");
+  const [w4Pre2020, setW4Pre2020] = useState(p.w4_pre_2020);
+  const [w4Allowances, setW4Allowances] = useState(
+    p.w4_allowances == null ? "" : String(p.w4_allowances),
+  );
+  const [ficaExempt, setFicaExempt] = useState(p.fica_exempt);
+  const [futaExempt, setFutaExempt] = useState(p.futa_exempt);
+  const [suiExempt, setSuiExempt] = useState(p.sui_exempt);
+  const [isActive, setIsActive] = useState(p.is_active);
+  const [sin, setSin] = useState("");
+  const [filingAccountId, setFilingAccountId] = useState(p.filing_account_id ?? "");
+  const [stubDelivery, setStubDelivery] = useState<ProfileRow["stub_delivery"]>(
+    p.stub_delivery ?? "email",
+  );
+  const [paymentMethod, setPaymentMethod] = useState<string>(p.payment_method ?? "");
   // Three-state: '' is UNANSWERED (null on the row), the only state that
   // refuses the affected calculation rather than answering it.
   const [paidOnCommission, setPaidOnCommission] = useState<string>(
-    p.paid_on_commission == null ? '' : String(p.paid_on_commission),
-  )
+    p.paid_on_commission == null ? "" : String(p.paid_on_commission),
+  );
   // The same three-state shape for the employment class: '' is UNANSWERED.
   const [occupationClass, setOccupationClass] = useState<string>(
-    p.statutory_occupation_class ?? '',
-  )
+    p.statutory_occupation_class ?? "",
+  );
   // Accounts file under one country pack, so only the employee's own apply.
-  const filingAccounts = (props.filingAccounts ?? []).filter((account) => account.country === country)
+  const filingAccounts = (props.filingAccounts ?? []).filter(
+    (account) => account.country === country,
+  );
   // Same rule for the labour jurisdictions: one pack's declarations, and none
   // at all until a country is chosen.
-  const labourOptions = (country && props.labourJurisdictions?.[country]) || []
+  const labourOptions = (country && props.labourJurisdictions?.[country]) || [];
   // The employment jurisdiction the class question is asked under: the
   // labour-jurisdiction override wins, otherwise the work region implies it —
   // the same derivation the engine's jurisdictionKey makes, so the editor
   // offers the classes of the calendar that will actually run.
   const employmentJurisdiction = labourJurisdiction.trim()
     ? labourJurisdiction.trim().toUpperCase()
-    : province.trim() ? `${country}-${province.trim().toUpperCase()}` : country
-  const classOptions = props.statutoryOccupationClasses?.[employmentJurisdiction] ?? []
+    : province.trim()
+      ? `${country}-${province.trim().toUpperCase()}`
+      : country;
+  const classOptions = props.statutoryOccupationClasses?.[employmentJurisdiction] ?? [];
   // A stored answer from a jurisdiction that recognises nothing now (the
   // employee moved provinces) stays visible and saveable: hiding the control
   // would strand the answer with no way to clear it.
-  const offeredClasses = occupationClass !== '' && !classOptions.some((option) => option.classKey === occupationClass)
-    ? [...classOptions, { classKey: occupationClass, label: occupationClass, citation: '' }]
-    : classOptions
+  const offeredClasses =
+    occupationClass !== "" && !classOptions.some((option) => option.classKey === occupationClass)
+      ? [...classOptions, { classKey: occupationClass, label: occupationClass, citation: "" }]
+      : classOptions;
   const classLabel = (classKey: string, fallback: string): string =>
-    textOf(`employmentClassOptions.${classKey}`, fallback)
+    textOf(`employmentClassOptions.${classKey}`, fallback);
 
   // Everything below renders from the selected pack's declaration — the
   // subdivision list and label, the withholding certificates, the exemption
   // flags. No pack means no withholding section: the honest empty state, not
   // another country's shape.
-  const pack = country ? props.packProfiles?.[country] : undefined
+  const pack = country ? props.packProfiles?.[country] : undefined;
   // The certificate's declared scope is the authority: a country-level form
   // files for every employee of the pack, a region- or sub-region-level form
   // only for an employee of its own region. Never inferred from the key.
   const applicableCertificates = (pack?.certificates ?? []).filter(
     (certificate) => !certificate.scope.region || certificate.scope.region === province,
-  )
+  );
   // Every profile column the selected pack answers through — certificate
   // fields plus exemption flags. Answers held in state for any other column
   // are nulled on save: carrying one pack's withholding facts on another
   // pack's profile would be refused on save for labour jurisdictions, and
   // withholding gets the same rule.
-  const declaredColumns = new Set<string>()
+  const declaredColumns = new Set<string>();
   for (const certificate of pack?.certificates ?? []) {
     for (const field of certificate.fields) {
-      if (field.storage?.kind === 'column') declaredColumns.add(field.storage.column)
+      if (field.storage?.kind === "column") declaredColumns.add(field.storage.column);
     }
   }
-  for (const flag of pack?.exemptionFlags ?? []) declaredColumns.add(flag.column)
+  for (const flag of pack?.exemptionFlags ?? []) declaredColumns.add(flag.column);
   const kept = (column: string, value: string | null): string | null =>
-    declaredColumns.has(column) ? value : null
+    declaredColumns.has(column) ? value : null;
   // Whole-number answers read through the shared classifier, never a bare
   // Number(): an unreadable entry ("300,000", full-width digits, a currency
   // suffix) is NaN, which JSON posts as null — a silent clear of the stored
   // answer. save() refuses those by name first; anything it did not see is
   // posted as typed so the server refuses it rather than clearing.
   const wholeNumber = (raw: string): number | string => {
-    const canonical = canonicalDecimal(raw, 0)
-    return canonical === null ? raw : Number(canonical)
-  }
+    const canonical = canonicalDecimal(raw, 0);
+    return canonical === null ? raw : Number(canonical);
+  };
   const keptCount = (column: string, raw: string): number | string | null =>
-    raw.trim() === '' || !declaredColumns.has(column) ? null : wholeNumber(raw)
+    raw.trim() === "" || !declaredColumns.has(column) ? null : wholeNumber(raw);
 
   // Column → state, so the generic field renderer below can bind whatever the
   // pack declares without naming a single form's fields.
@@ -403,12 +427,12 @@ export function ProfileEditor(props: {
     authorized_annual_deductions: [authorizedAnnualDeductions, setAuthorizedAnnualDeductions],
     authorized_federal_credits: [authorizedFederalCredits, setAuthorizedFederalCredits],
     authorized_provincial_credits: [authorizedProvincialCredits, setAuthorizedProvincialCredits],
-    filing_status: [filingStatus ?? '', (value) => setFilingStatus(value || null)],
+    filing_status: [filingStatus ?? "", (value) => setFilingStatus(value || null)],
     dependent_credits: [dependentCredits, setDependentCredits],
     other_income_annual: [otherIncomeAnnual, setOtherIncomeAnnual],
     deductions_annual: [deductionsAnnual, setDeductionsAnnual],
     w4_allowances: [w4Allowances, setW4Allowances],
-  }
+  };
   const columnFlag: Record<string, [boolean, (value: boolean) => void]> = {
     multiple_jobs: [multipleJobs, setMultipleJobs],
     w4_pre_2020: [w4Pre2020, setW4Pre2020],
@@ -419,66 +443,94 @@ export function ProfileEditor(props: {
     ei_exempt: [eiExempt, setEiExempt],
     tax_exempt: [taxExempt, setTaxExempt],
     wcb_exempt: [wcbExempt, setWcbExempt],
-  }
+  };
   // Pack-declared columns with no bespoke binding above (every 0191 fact and
   // any future pack's): answers held as text, keyed by column. The profile
   // row seeds them, the pack-derived hints (PESEL birth year) fill blanks,
   // and an operator edit wins over both — so the next pack's fact renders
   // and saves with no edit to this file.
-  const [extraColumns, setExtraColumns] = useState<Record<string, string>>({})
+  const [extraColumns, setExtraColumns] = useState<Record<string, string>>({});
   const rowCellText = (column: string): string => {
-    const raw: unknown = (p as unknown as Record<string, unknown>)[column]
-    if (raw === null || raw === undefined) return ''
-    if (typeof raw === 'boolean') return raw ? 'true' : 'false'
-    return String(raw)
-  }
+    const raw: unknown = (p as unknown as Record<string, unknown>)[column];
+    if (raw === null || raw === undefined) return "";
+    if (typeof raw === "boolean") return raw ? "true" : "false";
+    return String(raw);
+  };
   const extraValue = (column: string): string =>
-    extraColumns[column] ?? props.derivedColumns?.[column] ?? rowCellText(column)
+    extraColumns[column] ?? props.derivedColumns?.[column] ?? rowCellText(column);
   const setExtraValue = (column: string) => (value: string) =>
-    setExtraColumns((prev) => ({ ...prev, [column]: value }))
+    setExtraColumns((prev) => ({ ...prev, [column]: value }));
   // Answers on row-backed certificates, keyed by certificate then field —
   // prefilled from the employee's current filings. Column-backed answers live
   // in the column state above; the two never share a field, so neither path
   // can clobber the other.
   const [rowAnswers, setRowAnswers] = useState<Record<string, Record<string, string>>>(() => {
-    const initial: Record<string, Record<string, string>> = {}
+    const initial: Record<string, Record<string, string>> = {};
     for (const stored of props.storedCertificates ?? []) {
-      initial[stored.certificateKey] = { ...stored.answers }
+      initial[stored.certificateKey] = { ...stored.answers };
     }
-    return initial
-  })
+    return initial;
+  });
   const setRowAnswer = (certificateKey: string, fieldKey: string, value: string) =>
     setRowAnswers((prev) => ({
       ...prev,
       [certificateKey]: { ...(prev[certificateKey] ?? {}), [fieldKey]: value },
-    }))
+    }));
 
   // Unsaved-draft signal (see onDirtyChange): the whole draft serializes
   // against the baseline captured at mount. A successful save re-baselines
   // (in save() below), so the guard clears with it; derived-column prefill
   // never populates state, so an untouched draft reads clean.
   const draftSnapshot = JSON.stringify([
-    payScheduleId, country, province, labourJurisdiction, payBasis,
-    federalClaimCode, federalClaimAmount, provincialClaimCode, provincialClaimAmount,
-    additionalTax, prescribedZoneDeduction, authorizedAnnualDeductions,
-    authorizedFederalCredits, authorizedProvincialCredits,
-    cppExempt, eiExempt, taxExempt, filingStatus, multipleJobs,
-    dependentCredits, otherIncomeAnnual, deductionsAnnual,
-    w4Pre2020, w4Allowances, ficaExempt, futaExempt, suiExempt,
-    wcbExempt, wcbExemptReason, workerCompGroupId,
-    isActive, sin,
-    filingAccountId, stubDelivery, paymentMethod, paidOnCommission, occupationClass,
-    extraColumns, rowAnswers,
-  ])
-  const [baseline, setBaseline] = useState<string | null>(null)
-  const reportedRef = useRef<boolean | null>(null)
+    payScheduleId,
+    country,
+    province,
+    labourJurisdiction,
+    payBasis,
+    federalClaimCode,
+    federalClaimAmount,
+    provincialClaimCode,
+    provincialClaimAmount,
+    additionalTax,
+    prescribedZoneDeduction,
+    authorizedAnnualDeductions,
+    authorizedFederalCredits,
+    authorizedProvincialCredits,
+    cppExempt,
+    eiExempt,
+    taxExempt,
+    filingStatus,
+    multipleJobs,
+    dependentCredits,
+    otherIncomeAnnual,
+    deductionsAnnual,
+    w4Pre2020,
+    w4Allowances,
+    ficaExempt,
+    futaExempt,
+    suiExempt,
+    wcbExempt,
+    wcbExemptReason,
+    workerCompGroupId,
+    isActive,
+    sin,
+    filingAccountId,
+    stubDelivery,
+    paymentMethod,
+    paidOnCommission,
+    occupationClass,
+    extraColumns,
+    rowAnswers,
+  ]);
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const reportedRef = useRef<boolean | null>(null);
   useEffect(() => {
-    const dirty = draftSnapshot !== (baseline ?? draftSnapshot)
+    const dirty = draftSnapshot !== (baseline ?? draftSnapshot);
     if (reportedRef.current !== dirty) {
-      reportedRef.current = dirty
-      props.onDirtyChange?.(dirty)
+      reportedRef.current = dirty;
+      props.onDirtyChange?.(dirty);
     }
-  })
+  });
 
   // Display strings: the locale wins where a key exists for the data concept
   // (keyed by column, never by country), otherwise the pack's declared
@@ -487,43 +539,47 @@ export function ProfileEditor(props: {
   // pack-cards surface uses.
   const hasKey = (key: string): boolean => {
     try {
-      return t.has(key as never)
+      return t.has(key as never);
     } catch {
-      return false
+      return false;
     }
-  }
+  };
   const textOf = (key: string, fallback: string): string =>
-    hasKey(key) ? t(key as never) : fallback
+    hasKey(key) ? t(key as never) : fallback;
   // Country names: the locale wins where a key exists for the code (CA/US),
   // otherwise the PACK'S OWN NAME served with the declarations — never the
   // bare code. A surface handed only codes has nothing to show but codes,
   // which is how this picker rendered "GB"/"DE"/"FR".
   const countryLabel = (code: string): string => {
-    if (hasKey(`country.${code}`)) return t(`country.${code}` as never)
-    return props.packProfiles?.[code]?.countryName ?? code
-  }
+    if (hasKey(`country.${code}`)) return t(`country.${code}` as never);
+    return props.packProfiles?.[code]?.countryName ?? code;
+  };
   const fieldLabel = (column: string | null, fallback: string): string =>
-    column ? textOf(`fields.${columnLocaleBase(column)}`, fallback) : fallback
+    column ? textOf(`fields.${columnLocaleBase(column)}`, fallback) : fallback;
   const choiceLabel = (column: string, value: string, fallback: string): string =>
-    textOf(`${columnLocaleBase(column)}.${value}`, fallback)
+    textOf(`${columnLocaleBase(column)}.${value}`, fallback);
   // Workers-compensation coverage: the org's active rate classes plus the
   // pack's exemption declaration. Shown where the org prices WCB, where the
   // pack declares the exclusion, or where an answer is already stored —
   // never for packs with no workers-comp premium.
-  const workerCompGroups = props.workerCompGroups ?? []
-  const wcbRelevant = workerCompGroups.length > 0
-    || (pack?.exemptionFlags ?? []).some((flag) => flag.column === 'wcb_exempt')
-    || wcbExempt || workerCompGroupId !== ''
+  const workerCompGroups = props.workerCompGroups ?? [];
+  const wcbRelevant =
+    workerCompGroups.length > 0 ||
+    (pack?.exemptionFlags ?? []).some((flag) => flag.column === "wcb_exempt") ||
+    wcbExempt ||
+    workerCompGroupId !== "";
   const wcbCoverageReadout = wcbExempt
-    ? (wcbExemptReason.trim() || textOf('fields.wcbExempt', 'WCB exempt'))
-    : (workerCompGroups.find((group) => group.id === workerCompGroupId)?.name
-      ?? (workerCompGroupId !== '' ? workerCompGroupId : textOf('fields.wcbUndecided', 'Coverage not decided')))
+    ? wcbExemptReason.trim() || textOf("fields.wcbExempt", "WCB exempt")
+    : (workerCompGroups.find((group) => group.id === workerCompGroupId)?.name ??
+      (workerCompGroupId !== ""
+        ? workerCompGroupId
+        : textOf("fields.wcbUndecided", "Coverage not decided")));
 
   // Declared above `save`: both the save path and the render path below
   // read it, and a const arrow used before its declaration trips the
   // hooks-immutability gate.
   const columnOf = (field: DeclaredProfileField): string | null =>
-    field.storage?.kind === 'column' ? field.storage.column : null
+    field.storage?.kind === "column" ? field.storage.column : null;
 
   // An amount or whole-number answer, resolved exactly as the inputs below
   // bind it: bespoke column state, then the generic extra-column read, then
@@ -536,7 +592,7 @@ export function ProfileEditor(props: {
   ): string =>
     column
       ? (columnText[column]?.[0] ?? extraValue(column))
-      : (rowAnswers[certificate.key]?.[field.key] ?? '')
+      : (rowAnswers[certificate.key]?.[field.key] ?? "");
 
   async function save() {
     // Pack amount fields are classified before anything is posted: an
@@ -544,21 +600,21 @@ export function ProfileEditor(props: {
     // round trip that discards every other answer with it.
     for (const certificate of applicableCertificates) {
       for (const field of certificate.fields) {
-        if (field.kind !== 'amount' && field.kind !== 'count') continue
-        const column = columnOf(field)
+        if (field.kind !== "amount" && field.kind !== "count") continue;
+        const column = columnOf(field);
         const refusal = moneyFieldError(
           fieldLabel(column, field.label),
-          field.kind === 'count' ? 'a whole number' : 'a money amount',
+          field.kind === "count" ? "a whole number" : "a money amount",
           amountValue(certificate, field, column),
-          field.kind === 'count' ? 0 : 4,
-        )
+          field.kind === "count" ? 0 : 4,
+        );
         if (refusal !== null) {
-          toast.error(refusal)
-          return
+          toast.error(refusal);
+          return;
         }
       }
     }
-    setBusy(true)
+    setBusy(true);
     try {
       // Declared columns with no bespoke binding above save generically:
       // counts as numbers, flags as "true"/"false" text, everything else
@@ -566,26 +622,24 @@ export function ProfileEditor(props: {
       // against the pack's own declaration. Columns of a pack that is not
       // selected are never sent: carrying one pack's facts on another's
       // profile is refused on save.
-      const extraFactSave: Record<string, string | number | null> = {}
+      const extraFactSave: Record<string, string | number | null> = {};
       for (const certificate of applicableCertificates) {
         for (const field of certificate.fields) {
-          const column = columnOf(field)
-          if (!column || columnText[column] || columnFlag[column]) continue
-          const raw = extraColumns[column]
-            ?? props.derivedColumns?.[column]
-            ?? rowCellText(column)
-          if (raw.trim() === '') {
-            extraFactSave[columnBodyKey(column)] = null
-          } else if (field.kind === 'count') {
-            extraFactSave[columnBodyKey(column)] = wholeNumber(raw)
+          const column = columnOf(field);
+          if (!column || columnText[column] || columnFlag[column]) continue;
+          const raw = extraColumns[column] ?? props.derivedColumns?.[column] ?? rowCellText(column);
+          if (raw.trim() === "") {
+            extraFactSave[columnBodyKey(column)] = null;
+          } else if (field.kind === "count") {
+            extraFactSave[columnBodyKey(column)] = wholeNumber(raw);
           } else {
-            extraFactSave[columnBodyKey(column)] = raw
+            extraFactSave[columnBodyKey(column)] = raw;
           }
         }
       }
-      const res = await fetch('/api/payroll/profiles', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/payroll/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           employeePartyId: p.employee_party_id,
           ...(sin.trim() ? { sin: sin.trim() } : {}),
@@ -594,52 +648,65 @@ export function ProfileEditor(props: {
           province,
           labourJurisdiction: labourJurisdiction || null,
           payBasis,
-          federalClaimCode: keptCount('federal_claim_code', federalClaimCode),
-          federalClaimAmount: kept('federal_claim_amount', federalClaimAmount || null),
-          provincialClaimCode: keptCount('provincial_claim_code', provincialClaimCode),
-          provincialClaimAmount: kept('provincial_claim_amount', provincialClaimAmount || null),
-          additionalTaxPerPeriod: kept('additional_tax_per_period', additionalTax || null),
-          prescribedZoneDeduction: kept('prescribed_zone_deduction', prescribedZoneDeduction || null),
-          authorizedAnnualDeductions: kept('authorized_annual_deductions', authorizedAnnualDeductions || null),
-          authorizedFederalCredits: kept('authorized_federal_credits', authorizedFederalCredits || null),
-          authorizedProvincialCredits: kept('authorized_provincial_credits', authorizedProvincialCredits || null),
-          cppExempt: declaredColumns.has('cpp_exempt') && cppExempt,
-          eiExempt: declaredColumns.has('ei_exempt') && eiExempt,
-          taxExempt: declaredColumns.has('tax_exempt') && taxExempt,
+          federalClaimCode: keptCount("federal_claim_code", federalClaimCode),
+          federalClaimAmount: kept("federal_claim_amount", federalClaimAmount || null),
+          provincialClaimCode: keptCount("provincial_claim_code", provincialClaimCode),
+          provincialClaimAmount: kept("provincial_claim_amount", provincialClaimAmount || null),
+          additionalTaxPerPeriod: kept("additional_tax_per_period", additionalTax || null),
+          prescribedZoneDeduction: kept(
+            "prescribed_zone_deduction",
+            prescribedZoneDeduction || null,
+          ),
+          authorizedAnnualDeductions: kept(
+            "authorized_annual_deductions",
+            authorizedAnnualDeductions || null,
+          ),
+          authorizedFederalCredits: kept(
+            "authorized_federal_credits",
+            authorizedFederalCredits || null,
+          ),
+          authorizedProvincialCredits: kept(
+            "authorized_provincial_credits",
+            authorizedProvincialCredits || null,
+          ),
+          cppExempt: declaredColumns.has("cpp_exempt") && cppExempt,
+          eiExempt: declaredColumns.has("ei_exempt") && eiExempt,
+          taxExempt: declaredColumns.has("tax_exempt") && taxExempt,
           // Posted as typed so the server refuses an unreasoned exemption by
           // name rather than clearing it; cleared with the flag.
-          wcbExempt: declaredColumns.has('wcb_exempt') && wcbExempt,
-          wcbExemptReason: declaredColumns.has('wcb_exempt') && wcbExempt ? wcbExemptReason : null,
+          wcbExempt: declaredColumns.has("wcb_exempt") && wcbExempt,
+          wcbExemptReason: declaredColumns.has("wcb_exempt") && wcbExempt ? wcbExemptReason : null,
           // Rate class only when the operator moved the select: the writer's
           // optimistic check compares against the loaded value, and an
           // untouched control must never re-assert it.
           ...(workerCompGroupId !== initialWorkerCompGroupId
             ? {
-                workerCompGroupId: workerCompGroupId === '' ? null : workerCompGroupId,
-                expectedWorkerCompGroupId: initialWorkerCompGroupId === '' ? null : initialWorkerCompGroupId,
+                workerCompGroupId: workerCompGroupId === "" ? null : workerCompGroupId,
+                expectedWorkerCompGroupId:
+                  initialWorkerCompGroupId === "" ? null : initialWorkerCompGroupId,
               }
             : {}),
-          filingStatus: kept('filing_status', filingStatus),
-          multipleJobs: declaredColumns.has('multiple_jobs') && multipleJobs,
-          dependentCredits: kept('dependent_credits', dependentCredits || null),
-          otherIncomeAnnual: kept('other_income_annual', otherIncomeAnnual || null),
-          deductionsAnnual: kept('deductions_annual', deductionsAnnual || null),
-          w4Pre2020: declaredColumns.has('w4_pre_2020') && w4Pre2020,
-          w4Allowances: keptCount('w4_allowances', w4Allowances),
-          ficaExempt: declaredColumns.has('fica_exempt') && ficaExempt,
-          futaExempt: declaredColumns.has('futa_exempt') && futaExempt,
-          suiExempt: declaredColumns.has('sui_exempt') && suiExempt,
+          filingStatus: kept("filing_status", filingStatus),
+          multipleJobs: declaredColumns.has("multiple_jobs") && multipleJobs,
+          dependentCredits: kept("dependent_credits", dependentCredits || null),
+          otherIncomeAnnual: kept("other_income_annual", otherIncomeAnnual || null),
+          deductionsAnnual: kept("deductions_annual", deductionsAnnual || null),
+          w4Pre2020: declaredColumns.has("w4_pre_2020") && w4Pre2020,
+          w4Allowances: keptCount("w4_allowances", w4Allowances),
+          ficaExempt: declaredColumns.has("fica_exempt") && ficaExempt,
+          futaExempt: declaredColumns.has("futa_exempt") && futaExempt,
+          suiExempt: declaredColumns.has("sui_exempt") && suiExempt,
           filingAccountId: filingAccountId || null,
           stubDelivery,
           paymentMethod: paymentMethod || null,
           // Always sent: the state round-trips the stored answer, so an
           // untouched control keeps whatever the row holds (including null).
-          paidOnCommission: paidOnCommission === '' ? null : paidOnCommission === 'true',
-          statutoryOccupationClass: occupationClass === '' ? null : occupationClass,
+          paidOnCommission: paidOnCommission === "" ? null : paidOnCommission === "true",
+          statutoryOccupationClass: occupationClass === "" ? null : occupationClass,
           isActive,
           ...extraFactSave,
         }),
-      })
+      });
       // The status is checked before the body is parsed: a non-JSON error body
       // must surface the failure, never a SyntaxError from res.json().
       //
@@ -654,29 +721,29 @@ export function ProfileEditor(props: {
       // supersedes only its own form's history — and every committed resource
       // is refreshed before any failure is reported, so the panel shows what
       // stuck alongside what did not.
-      const failures: string[] = []
-      let committed = false
+      const failures: string[] = [];
+      let committed = false;
       if (!res.ok) {
-        failures.push(await readApiErrorMessage(res, 'failed to save the payroll profile'))
+        failures.push(await readApiErrorMessage(res, "failed to save the payroll profile"));
       } else {
-        committed = true
+        committed = true;
         // Row-backed certificates file through the certificates API — one POST
         // per certificate the operator answered, each superseding the previous
         // filing rather than overwriting it. Certificates with nothing entered
         // file nothing: an empty filing would read as "on file" downstream.
         for (const certificate of applicableCertificates) {
-          if (certificate.storage !== 'certificate_rows') continue
-          const answers: Record<string, string> = {}
+          if (certificate.storage !== "certificate_rows") continue;
+          const answers: Record<string, string> = {};
           for (const field of certificate.fields) {
-            const value = (rowAnswers[certificate.key]?.[field.key] ?? '').trim()
-            if (value !== '') answers[field.key] = value
+            const value = (rowAnswers[certificate.key]?.[field.key] ?? "").trim();
+            if (value !== "") answers[field.key] = value;
           }
-          if (Object.keys(answers).length === 0) continue
-          let certRes: Response
+          if (Object.keys(answers).length === 0) continue;
+          let certRes: Response;
           try {
-            certRes = await fetch('/api/payroll/certificates', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+            certRes = await fetch("/api/payroll/certificates", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 employeePartyId: p.employee_party_id,
                 country,
@@ -686,39 +753,41 @@ export function ProfileEditor(props: {
                 // when known, otherwise the server's business-day default.
                 effectiveFrom: props.employmentStart ?? null,
               }),
-            })
+            });
           } catch (e) {
             // A dead connection fails every filing after it the same way, so
             // one refusal is recorded and the rest are not attempted — the
             // committed profile below is still refreshed before reporting.
             failures.push(
               `payroll profile saved, but ${certificate.form} · ${certificate.label} was not filed: ${(e as Error).message}`,
-            )
-            break
+            );
+            break;
           }
           // The status is checked before the body is parsed (see above).
           if (!certRes.ok) {
-            const reason = await readApiErrorMessage(certRes, 'failed to save the certificate')
-            failures.push(`payroll profile saved, but ${certificate.form} · ${certificate.label} was not saved: ${reason}`)
+            const reason = await readApiErrorMessage(certRes, "failed to save the certificate");
+            failures.push(
+              `payroll profile saved, but ${certificate.form} · ${certificate.label} was not saved: ${reason}`,
+            );
           }
         }
       }
       // Refresh every committed resource before reporting failure: the panel
       // re-reads the profile and filings, so a partial save is visible.
-      if (committed) props.onSaved()
+      if (committed) props.onSaved();
       if (failures.length === 0) {
-        toast.success(t('saved'))
+        toast.success(t("saved"));
         // The draft now matches the server: re-baseline so onDirtyChange
         // clears with the save (the effect above reports the flip). A
         // partial save keeps the draft dirty — unsaved work remains.
-        setBaseline(draftSnapshot)
+        setBaseline(draftSnapshot);
       } else {
-        for (const failure of failures) toast.error(failure)
+        for (const failure of failures) toast.error(failure);
       }
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -726,14 +795,14 @@ export function ProfileEditor(props: {
     <div className="flex justify-end gap-2">
       {!props.inline && (
         <Button variant="ghost" onClick={props.onClose} disabled={busy}>
-          {t('cancel')}
+          {t("cancel")}
         </Button>
       )}
       <Button onClick={save} disabled={busy || !payScheduleId}>
-        {t('save')}
+        {t("save")}
       </Button>
     </div>
-  )
+  );
 
   /**
    * One non-flag certificate field, whichever storage it uses. The input
@@ -751,22 +820,25 @@ export function ProfileEditor(props: {
     value: string,
     set: (value: string) => void,
   ) => {
-    const id = `pp-${certificate.key}-${field.key}`
+    const id = `pp-${certificate.key}-${field.key}`;
     // Display strings: the locale wins where a key exists for the data
     // concept (keyed by column, never by country); a row-backed field has no
     // column, so the pack's declared English reads as written — legible on
     // day one, localizable later without touching this file.
-    const label = fieldLabel(column, field.label)
+    const label = fieldLabel(column, field.label);
     const optionLabel = (choice: { value: string; label: string }): string =>
-      column ? choiceLabel(column, choice.value, choice.label) : choice.label
-    if (field.kind === 'choice') {
+      column ? choiceLabel(column, choice.value, choice.label) : choice.label;
+    if (field.kind === "choice") {
       // The pack's declared default is the statutory no-answer position
       // ("no W-4 on file is withheld as single"), read — never a literal here.
-      const current = value || field.default || ''
-      const showEmpty = !field.required || current === ''
+      const current = value || field.default || "";
+      const showEmpty = !field.required || current === "";
       return (
         <div key={field.key}>
-          <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
+          <Label htmlFor={id} help={field.help}>
+            {label}
+            {field.required ? " *" : ""}
+          </Label>
           <Select id={id} value={current} onChange={(e) => set(e.target.value)}>
             {showEmpty && <option value="">—</option>}
             {(field.choices ?? []).map((choice) => (
@@ -776,21 +848,29 @@ export function ProfileEditor(props: {
             ))}
           </Select>
         </div>
-      )
+      );
     }
-    if (field.kind === 'count') {
+    if (field.kind === "count") {
       // A narrow band is a codeset the operator picks from (TD1 0–10); a
       // wide one is typed (W-4 allowances 0–99). The cutoff is presentation,
       // the band itself is declared.
-      const min = field.min == null ? null : Number(field.min)
-      const max = field.max == null ? null : Number(field.max)
-      const codes = min !== null && max !== null && Number.isInteger(min) && Number.isInteger(max) && max - min <= 10
-        ? Array.from({ length: max - min + 1 }, (_, i) => String(min + i))
-        : null
+      const min = field.min == null ? null : Number(field.min);
+      const max = field.max == null ? null : Number(field.max);
+      const codes =
+        min !== null &&
+        max !== null &&
+        Number.isInteger(min) &&
+        Number.isInteger(max) &&
+        max - min <= 10
+          ? Array.from({ length: max - min + 1 }, (_, i) => String(min + i))
+          : null;
       if (codes) {
         return (
           <div key={field.key}>
-            <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
+            <Label htmlFor={id} help={field.help}>
+              {label}
+              {field.required ? " *" : ""}
+            </Label>
             <Select id={id} value={value} onChange={(e) => set(e.target.value)}>
               <option value="">—</option>
               {codes.map((code) => (
@@ -800,11 +880,14 @@ export function ProfileEditor(props: {
               ))}
             </Select>
           </div>
-        )
+        );
       }
       return (
         <div key={field.key}>
-          <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
+          <Label htmlFor={id} help={field.help}>
+            {label}
+            {field.required ? " *" : ""}
+          </Label>
           <MoneyInput
             id={id}
             ariaLabel={label}
@@ -816,12 +899,15 @@ export function ProfileEditor(props: {
             placeholder="0"
           />
         </div>
-      )
+      );
     }
-    if (field.kind === 'amount') {
+    if (field.kind === "amount") {
       return (
         <div key={field.key}>
-          <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
+          <Label htmlFor={id} help={field.help}>
+            {label}
+            {field.required ? " *" : ""}
+          </Label>
           <MoneyInput
             id={id}
             ariaLabel={label}
@@ -833,31 +919,32 @@ export function ProfileEditor(props: {
             placeholder="0.00"
           />
         </div>
-      )
+      );
     }
     return (
       <div key={field.key}>
-        <Label htmlFor={id} help={field.help}>{label}{field.required ? ' *' : ''}</Label>
-        <Input
-          id={id}
-          inputMode="text"
-          value={value}
-          onChange={(e) => set(e.target.value)}
-        />
+        <Label htmlFor={id} help={field.help}>
+          {label}
+          {field.required ? " *" : ""}
+        </Label>
+        <Input id={id} inputMode="text" value={value} onChange={(e) => set(e.target.value)} />
       </div>
-    )
-  }
+    );
+  };
 
-  const renderBodyField = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField) => {
-    const column = columnOf(field)
-    if (field.kind === 'flag' || !column) return null
+  const renderBodyField = (
+    certificate: DeclaredProfileCertificate,
+    field: DeclaredProfileField,
+  ) => {
+    const column = columnOf(field);
+    if (field.kind === "flag" || !column) return null;
     // Bespoke bindings first (the CA/US columns); anything the packs declare
     // beyond them binds the generic extra-column state — the next pack's
     // fact renders with no edit here.
-    const binding = columnText[column] ?? [extraValue(column), setExtraValue(column)] as const
-    const [value, set] = binding
-    return renderFieldInput(certificate, field, column, value, set)
-  }
+    const binding = columnText[column] ?? ([extraValue(column), setExtraValue(column)] as const);
+    const [value, set] = binding;
+    return renderFieldInput(certificate, field, column, value, set);
+  };
 
   /**
    * One non-flag field on a row-backed certificate, bound to the row answers
@@ -865,27 +952,32 @@ export function ProfileEditor(props: {
    * — they render on the column path above, unchanged.
    */
   const renderRowField = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField) => {
-    if (field.kind === 'flag' || columnOf(field)) return null
-    const value = rowAnswers[certificate.key]?.[field.key] ?? ''
-    return renderFieldInput(
-      certificate, field, null, value,
-      (next) => setRowAnswer(certificate.key, field.key, next),
-    )
-  }
+    if (field.kind === "flag" || columnOf(field)) return null;
+    const value = rowAnswers[certificate.key]?.[field.key] ?? "";
+    return renderFieldInput(certificate, field, null, value, (next) =>
+      setRowAnswer(certificate.key, field.key, next),
+    );
+  };
 
   // Every checkbox in declaration order: the applicable certificates' flag
   // fields, then the pack's exemption flags, then the generic active toggle.
   // Column-backed flags bind the profile columns; row-backed flags bind the
   // row answers filed through the certificates API. Withholding flags stay
   // separate from the active toggle so the tax half renders without it.
-  type FlagEntry = { id: string; label: string; help: string; checked: boolean; set: (value: boolean) => void }
-  const withholdingFlags: FlagEntry[] = []
+  type FlagEntry = {
+    id: string;
+    label: string;
+    help: string;
+    checked: boolean;
+    set: (value: boolean) => void;
+  };
+  const withholdingFlags: FlagEntry[] = [];
   for (const certificate of applicableCertificates) {
     for (const field of certificate.fields) {
-      if (field.kind !== 'flag') continue
-      const column = columnOf(field)
+      if (field.kind !== "flag") continue;
+      const column = columnOf(field);
       if (column) {
-        const binding = columnFlag[column]
+        const binding = columnFlag[column];
         if (binding) {
           withholdingFlags.push({
             id: `pp-${certificate.key}-${field.key}`,
@@ -893,8 +985,8 @@ export function ProfileEditor(props: {
             help: field.help,
             checked: binding[0],
             set: binding[1],
-          })
-          continue
+          });
+          continue;
         }
         // Generic text-backed flag (the JP kaigo status and any future
         // pack's): answers are "true"/"false" strings, and untouched is
@@ -903,67 +995,80 @@ export function ProfileEditor(props: {
           id: `pp-${certificate.key}-${field.key}`,
           label: fieldLabel(column, field.label),
           help: field.help,
-          checked: extraValue(column) === 'true',
-          set: (value: boolean) => setExtraValue(column)(value ? 'true' : 'false'),
-        })
-        continue
+          checked: extraValue(column) === "true",
+          set: (value: boolean) => setExtraValue(column)(value ? "true" : "false"),
+        });
+        continue;
       }
       withholdingFlags.push({
         id: `pp-${certificate.key}-${field.key}`,
         label: field.label,
         help: field.help,
-        checked: rowAnswers[certificate.key]?.[field.key] === 'true',
-        set: (value: boolean) => setRowAnswer(certificate.key, field.key, value ? 'true' : 'false'),
-      })
+        checked: rowAnswers[certificate.key]?.[field.key] === "true",
+        set: (value: boolean) => setRowAnswer(certificate.key, field.key, value ? "true" : "false"),
+      });
     }
   }
   for (const flag of pack?.exemptionFlags ?? []) {
     // wcb_exempt renders in the general section's coverage block (rate class
     // plus reasoned exemption together) instead of as a bare tax checkbox.
-    if (flag.column === 'wcb_exempt') continue
-    const binding = columnFlag[flag.column]
-    if (!binding) continue
+    if (flag.column === "wcb_exempt") continue;
+    const binding = columnFlag[flag.column];
+    if (!binding) continue;
     withholdingFlags.push({
       id: `pp-exempt-${flag.column}`,
       label: fieldLabel(flag.column, flag.label),
       help: flag.help,
       checked: binding[0],
       set: binding[1],
-    })
+    });
   }
-  const activeEntry: FlagEntry = { id: 'pp-active', label: t('fields.isActive'), help: '', checked: isActive, set: setIsActive }
-  const flagEntries: FlagEntry[] = [...withholdingFlags, activeEntry]
+  const activeEntry: FlagEntry = {
+    id: "pp-active",
+    label: t("fields.isActive"),
+    help: "",
+    checked: isActive,
+    set: setIsActive,
+  };
+  const flagEntries: FlagEntry[] = [...withholdingFlags, activeEntry];
 
-  const showGeneral = props.section !== 'tax'
-  const showTax = props.section !== 'general'
+  const showGeneral = props.section !== "tax";
+  const showTax = props.section !== "general";
   // The pack-declared employee identifier (SIN/SSN/...) files with
   // withholding, so it renders on the tax half, not with the generic facts.
   const identifierField = (
     <div>
-      <Label htmlFor="pp-sin">{pack?.identifier.label ?? t('fields.sin')}</Label>
+      <Label htmlFor="pp-sin">{pack?.identifier.label ?? t("fields.sin")}</Label>
       <Input
         id="pp-sin"
         value={sin}
         onChange={(e) => setSin(e.target.value)}
-        placeholder={(p as { sin_last3?: string | null }).sin_last3
-          ? `••• ••• ${(p as { sin_last3?: string | null }).sin_last3}`
-          : (pack?.identifier.example ?? t('fields.sinPlaceholder'))}
-        inputMode={pack?.identifier.numericEntry === false ? 'text' : 'numeric'}
+        placeholder={
+          (p as { sin_last3?: string | null }).sin_last3
+            ? `••• ••• ${(p as { sin_last3?: string | null }).sin_last3}`
+            : (pack?.identifier.example ?? t("fields.sinPlaceholder"))
+        }
+        inputMode={pack?.identifier.numericEntry === false ? "text" : "numeric"}
         autoComplete="off"
       />
     </div>
-  )
+  );
   // Flags for the rendered half; the full view keeps today's single group so
   // its order never changes.
-  const sectionFlags = showGeneral && showTax ? flagEntries : showGeneral ? [activeEntry] : withholdingFlags
+  const sectionFlags =
+    showGeneral && showTax ? flagEntries : showGeneral ? [activeEntry] : withholdingFlags;
 
   const body = (
-      <div className="space-y-4">
-        {showGeneral && (
+    <div className="space-y-4">
+      {showGeneral && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <Label htmlFor="pp-schedule">{t('fields.schedule')}</Label>
-            <Select id="pp-schedule" value={payScheduleId} onChange={(e) => setPayScheduleId(e.target.value)}>
+            <Label htmlFor="pp-schedule">{t("fields.schedule")}</Label>
+            <Select
+              id="pp-schedule"
+              value={payScheduleId}
+              onChange={(e) => setPayScheduleId(e.target.value)}
+            >
               <option value="">—</option>
               {props.schedules.map((schedule) => (
                 <option key={schedule.id} value={schedule.id}>
@@ -975,51 +1080,70 @@ export function ProfileEditor(props: {
           {/* One installed pack and the profile already in it: there is no
               choice to offer, so the field stays out of the form. */}
           {!((props.countries ?? []).length === 1 && country === props.countries![0]) && (
-          <div>
-            <Label htmlFor="pp-country">{t('fields.country')}</Label>
-            <Select
-              id="pp-country"
-              value={country}
-              onChange={(e) => {
-                setCountry(e.target.value)
-                // The jurisdiction inside the country is the operator's
-                // choice, never a defaulted capital-of-payroll literal.
-                setProvince('')
-                // Labour jurisdiction keys belong to ONE pack; carrying one
-                // across a country change would be refused on save.
-                setLabourJurisdiction('')
-                // Filing accounts belong to one country pack.
-                setFilingAccountId('')
-              }}
-            >
-              {country === '' && <option value="" disabled>—</option>}
-              {(props.countries ?? []).map((code) => (
-                <option key={code} value={code}>
-                  {countryLabel(code)}
-                </option>
-              ))}
-            </Select>
-          </div>
+            <div>
+              <Label htmlFor="pp-country">{t("fields.country")}</Label>
+              <Select
+                id="pp-country"
+                value={country}
+                onChange={(e) => {
+                  setCountry(e.target.value);
+                  // The jurisdiction inside the country is the operator's
+                  // choice, never a defaulted capital-of-payroll literal.
+                  setProvince("");
+                  // Labour jurisdiction keys belong to ONE pack; carrying one
+                  // across a country change would be refused on save.
+                  setLabourJurisdiction("");
+                  // Filing accounts belong to one country pack.
+                  setFilingAccountId("");
+                }}
+              >
+                {country === "" && (
+                  <option value="" disabled>
+                    —
+                  </option>
+                )}
+                {(props.countries ?? []).map((code) => (
+                  <option key={code} value={code}>
+                    {countryLabel(code)}
+                  </option>
+                ))}
+              </Select>
+            </div>
           )}
           {pack && (
-          <div>
-            <Label htmlFor="pp-province">
-              {textOf(`fields.${pack.subdivisionLabel}`, pack.subdivisionLabel)}
-            </Label>
-            <Select id="pp-province" value={province} onChange={(e) => setProvince(e.target.value)}>
-              {province === '' && <option value="" disabled>—</option>}
-              {pack.subdivisions.map((code) => {
-                const supported = pack.supportedSubdivisions.includes(code)
-                const reason = (pack.unsupportedReasons[code] ?? pack.unsupportedReason)
-                  .replace(/\{region\}/g, code)
-                return (
-                  <option key={code} value={code} disabled={!supported} title={supported ? undefined : reason}>
-                    {pack.subdivisionNames[code] ?? code}
+            <div>
+              <Label htmlFor="pp-province">
+                {textOf(`fields.${pack.subdivisionLabel}`, pack.subdivisionLabel)}
+              </Label>
+              <Select
+                id="pp-province"
+                value={province}
+                onChange={(e) => setProvince(e.target.value)}
+              >
+                {province === "" && (
+                  <option value="" disabled>
+                    —
                   </option>
-                )
-              })}
-            </Select>
-          </div>
+                )}
+                {pack.subdivisions.map((code) => {
+                  const supported = pack.supportedSubdivisions.includes(code);
+                  const reason = (pack.unsupportedReasons[code] ?? pack.unsupportedReason).replace(
+                    /\{region\}/g,
+                    code,
+                  );
+                  return (
+                    <option
+                      key={code}
+                      value={code}
+                      disabled={!supported}
+                      title={supported ? undefined : reason}
+                    >
+                      {pack.subdivisionNames[code] ?? code}
+                    </option>
+                  );
+                })}
+              </Select>
+            </div>
           )}
           {/* The employment-standards override. Blank — the case for almost
               every employment — derives the labour jurisdiction from the work
@@ -1030,15 +1154,15 @@ export function ProfileEditor(props: {
               unaffected and still follows the region. */}
           {labourOptions.length > 0 && (
             <div>
-              <Label htmlFor="pp-labour-jurisdiction" help={t('labourJurisdiction.help')}>
-                {t('fields.labourJurisdiction')}
+              <Label htmlFor="pp-labour-jurisdiction" help={t("labourJurisdiction.help")}>
+                {t("fields.labourJurisdiction")}
               </Label>
               <Select
                 id="pp-labour-jurisdiction"
                 value={labourJurisdiction}
                 onChange={(e) => setLabourJurisdiction(e.target.value)}
               >
-                <option value="">{t('labourJurisdiction.fromRegion')}</option>
+                <option value="">{t("labourJurisdiction.fromRegion")}</option>
                 {labourOptions.map((option) => (
                   <option key={option.key} value={option.key}>
                     {option.key} · {option.name}
@@ -1048,23 +1172,27 @@ export function ProfileEditor(props: {
             </div>
           )}
           <div>
-            <Label htmlFor="pp-basis">{t('fields.payBasis')}</Label>
-            <Select id="pp-basis" value={payBasis} onChange={(e) => setPayBasis(e.target.value as 'hourly' | 'salary')}>
-              <option value="hourly">{t('basis.hourly')}</option>
-              <option value="salary">{t('basis.salary')}</option>
+            <Label htmlFor="pp-basis">{t("fields.payBasis")}</Label>
+            <Select
+              id="pp-basis"
+              value={payBasis}
+              onChange={(e) => setPayBasis(e.target.value as "hourly" | "salary")}
+            >
+              <option value="hourly">{t("basis.hourly")}</option>
+              <option value="salary">{t("basis.salary")}</option>
             </Select>
           </div>
           {/* Only offered once the employer keeps more than the default
               account; a single-account employer needs no choice. */}
           {filingAccounts.length > 0 && (
             <div>
-              <Label htmlFor="pp-filing-account">{t('fields.filingAccount')}</Label>
+              <Label htmlFor="pp-filing-account">{t("fields.filingAccount")}</Label>
               <Select
                 id="pp-filing-account"
                 value={filingAccountId}
                 onChange={(e) => setFilingAccountId(e.target.value)}
               >
-                <option value="">{t('filingAccountDefault')}</option>
+                <option value="">{t("filingAccountDefault")}</option>
                 {filingAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.accountNumber} · {account.name}
@@ -1074,11 +1202,11 @@ export function ProfileEditor(props: {
             </div>
           )}
           <div>
-            <Label htmlFor="pp-stub-delivery">{t('fields.stubDelivery')}</Label>
+            <Label htmlFor="pp-stub-delivery">{t("fields.stubDelivery")}</Label>
             <Select
               id="pp-stub-delivery"
               value={stubDelivery}
-              onChange={(e) => setStubDelivery(e.target.value as ProfileRow['stub_delivery'])}
+              onChange={(e) => setStubDelivery(e.target.value as ProfileRow["stub_delivery"])}
             >
               {STUB_DELIVERIES.map((option) => (
                 <option key={option} value={option}>
@@ -1091,13 +1219,15 @@ export function ProfileEditor(props: {
               itself falls back to "EFT if there are approved bank details,
               otherwise cheque" — so this is only set to override that. */}
           <div>
-            <Label htmlFor="pp-payment-method" help={t('paymentMethod.help')}>{t('fields.paymentMethod')}</Label>
+            <Label htmlFor="pp-payment-method" help={t("paymentMethod.help")}>
+              {t("fields.paymentMethod")}
+            </Label>
             <Select
               id="pp-payment-method"
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
             >
-              <option value="">{t('paymentMethod.inherit')}</option>
+              <option value="">{t("paymentMethod.inherit")}</option>
               {PAYMENT_METHODS.map((option) => (
                 <option key={option} value={option}>
                   {t(`paymentMethod.${option}`)}
@@ -1113,18 +1243,23 @@ export function ProfileEditor(props: {
           <div>
             <Label
               htmlFor="pp-paid-on-commission"
-              help={textOf('paidOnCommission.help', 'Whether the employee is paid in whole or in part on commission. Some statutory-holiday rules pay a different amount — or refuse until this is answered. Leave unanswered until confirmed.')}
+              help={textOf(
+                "paidOnCommission.help",
+                "Whether the employee is paid in whole or in part on commission. Some statutory-holiday rules pay a different amount — or refuse until this is answered. Leave unanswered until confirmed.",
+              )}
             >
-              {textOf('fields.paidOnCommission', 'Paid on commission')}
+              {textOf("fields.paidOnCommission", "Paid on commission")}
             </Label>
             <Select
               id="pp-paid-on-commission"
               value={paidOnCommission}
               onChange={(e) => setPaidOnCommission(e.target.value)}
             >
-              <option value="">{textOf('paidOnCommission.unanswered', 'Not answered')}</option>
-              <option value="false">{textOf('paidOnCommission.no', 'No')}</option>
-              <option value="true">{textOf('paidOnCommission.yes', 'Yes, in whole or in part')}</option>
+              <option value="">{textOf("paidOnCommission.unanswered", "Not answered")}</option>
+              <option value="false">{textOf("paidOnCommission.no", "No")}</option>
+              <option value="true">
+                {textOf("paidOnCommission.yes", "Yes, in whole or in part")}
+              </option>
             </Select>
           </div>
           {/* Standing employment-class answer, beside the commission status.
@@ -1135,26 +1270,29 @@ export function ProfileEditor(props: {
               where keys exist, else the pack's declared English reads as
               written — exactly like the pack-driven fields above. */}
           {offeredClasses.length > 0 && (
-          <div>
-            <Label
-              htmlFor="pp-employment-class"
-              help={textOf('occupationClass.help', 'The occupation or contract class a statutory-holiday rule reads (for example a route salesperson). Some rules pay a different amount — or refuse until this is answered. Leave unanswered until confirmed.')}
-            >
-              {textOf('fields.occupationClass', 'Employment class')}
-            </Label>
-            <Select
-              id="pp-employment-class"
-              value={occupationClass}
-              onChange={(e) => setOccupationClass(e.target.value)}
-            >
-              <option value="">{textOf('occupationClass.unanswered', 'Not answered')}</option>
-              {offeredClasses.map((option) => (
-                <option key={option.classKey} value={option.classKey} title={option.citation}>
-                  {classLabel(option.classKey, option.label)}
-                </option>
-              ))}
-            </Select>
-          </div>
+            <div>
+              <Label
+                htmlFor="pp-employment-class"
+                help={textOf(
+                  "occupationClass.help",
+                  "The occupation or contract class a statutory-holiday rule reads (for example a route salesperson). Some rules pay a different amount — or refuse until this is answered. Leave unanswered until confirmed.",
+                )}
+              >
+                {textOf("fields.occupationClass", "Employment class")}
+              </Label>
+              <Select
+                id="pp-employment-class"
+                value={occupationClass}
+                onChange={(e) => setOccupationClass(e.target.value)}
+              >
+                <option value="">{textOf("occupationClass.unanswered", "Not answered")}</option>
+                {offeredClasses.map((option) => (
+                  <option key={option.classKey} value={option.classKey} title={option.citation}>
+                    {classLabel(option.classKey, option.label)}
+                  </option>
+                ))}
+              </Select>
+            </div>
           )}
           {/* Workers-compensation coverage: the rate class that prices the
               employer's premium, or a reasoned exemption where the account
@@ -1162,108 +1300,107 @@ export function ProfileEditor(props: {
               refuses the run by name, so this control defaults to nothing —
               clearing the select returns the employee to undecided. */}
           {wcbRelevant && (
-          <div className="sm:col-span-2">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="pp-worker-comp-group">{t('fields.workerCompGroup')}</Label>
-                <Select
-                  id="pp-worker-comp-group"
-                  value={workerCompGroupId}
-                  onChange={(e) => setWorkerCompGroupId(e.target.value)}
-                >
-                  <option value="">—</option>
-                  {workerCompGroups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </Select>
+            <div className="sm:col-span-2">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="pp-worker-comp-group">{t("fields.workerCompGroup")}</Label>
+                  <Select
+                    id="pp-worker-comp-group"
+                    value={workerCompGroupId}
+                    onChange={(e) => setWorkerCompGroupId(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {workerCompGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="pp-wcb-exempt">{t("fields.wcbExempt")}</Label>
+                  <label
+                    htmlFor="pp-wcb-exempt"
+                    className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200"
+                  >
+                    <input
+                      id="pp-wcb-exempt"
+                      type="checkbox"
+                      checked={wcbExempt}
+                      onChange={(e) => setWcbExempt(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+                    />
+                    {wcbExempt
+                      ? wcbExemptReason.trim() || t("fields.wcbExemptReason")
+                      : textOf("fields.wcbExempt", "WCB exempt")}
+                  </label>
+                  {wcbExempt && (
+                    <Input
+                      id="pp-wcb-exempt-reason"
+                      value={wcbExemptReason}
+                      onChange={(e) => setWcbExemptReason(e.target.value)}
+                      placeholder={t("fields.wcbExemptReason")}
+                      className="mt-2"
+                    />
+                  )}
+                </div>
               </div>
-              <div>
-                <Label htmlFor="pp-wcb-exempt">{t('fields.wcbExempt')}</Label>
-                <label htmlFor="pp-wcb-exempt" className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                  <input
-                    id="pp-wcb-exempt"
-                    type="checkbox"
-                    checked={wcbExempt}
-                    onChange={(e) => setWcbExempt(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
-                  />
-                  {wcbExempt
-                    ? (wcbExemptReason.trim() || t('fields.wcbExemptReason'))
-                    : textOf('fields.wcbExempt', 'WCB exempt')}
-                </label>
-                {wcbExempt && (
-                  <Input
-                    id="pp-wcb-exempt-reason"
-                    value={wcbExemptReason}
-                    onChange={(e) => setWcbExemptReason(e.target.value)}
-                    placeholder={t('fields.wcbExemptReason')}
-                    className="mt-2"
-                  />
-                )}
-              </div>
+              {workerCompGroupId === "" && !wcbExempt && (
+                <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                  {t("fields.wcbUndecided")}
+                </p>
+              )}
             </div>
-            {(workerCompGroupId === '' && !wcbExempt) && (
-              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                {t('fields.wcbUndecided')}
-              </p>
-            )}
-          </div>
           )}
         </div>
-        )}
-        {showTax && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {identifierField}
-        </div>
-        )}
-        {showTax && (<>
-
-        {/* Withholding, from the selected pack's declared certificates: the
+      )}
+      {showTax && <div className="grid gap-3 sm:grid-cols-2">{identifierField}</div>}
+      {showTax && (
+        <>
+          {/* Withholding, from the selected pack's declared certificates: the
             country-level form, plus the subdivision's own form when one is
             declared for it. A new pack's forms render here with no edit to
             this file — including forms this build has never heard of. */}
-        {applicableCertificates.map((certificate) => (
-          <div key={certificate.key} className="space-y-3">
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {certificate.form} · {certificate.label}
-            </p>
-            {certificate.citation && (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {certificate.citation}
+          {applicableCertificates.map((certificate) => (
+            <div key={certificate.key} className="space-y-3">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                {certificate.form} · {certificate.label}
               </p>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              {certificate.fields.map((field) => (
-                renderBodyField(certificate, field) ?? renderRowField(certificate, field)
-              ))}
+              {certificate.citation && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">{certificate.citation}</p>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {certificate.fields.map(
+                  (field) =>
+                    renderBodyField(certificate, field) ?? renderRowField(certificate, field),
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-        </>)}
-
-        <div className="space-y-2">
-          {sectionFlags.map((entry) => (
-            <label
-              key={entry.id}
-              htmlFor={entry.id}
-              title={entry.help || undefined}
-              className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200"
-            >
-              <input
-                id={entry.id}
-                type="checkbox"
-                checked={entry.checked}
-                onChange={(e) => entry.set(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
-              />
-              {entry.label}
-            </label>
           ))}
-        </div>
+        </>
+      )}
+
+      <div className="space-y-2">
+        {sectionFlags.map((entry) => (
+          <label
+            key={entry.id}
+            htmlFor={entry.id}
+            title={entry.help || undefined}
+            className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200"
+          >
+            <input
+              id={entry.id}
+              type="checkbox"
+              checked={entry.checked}
+              onChange={(e) => entry.set(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
+            />
+            {entry.label}
+          </label>
+        ))}
       </div>
-  )
+    </div>
+  );
   // Read-only values for the drawer read mode: the same derived data the
   // editor binds (pack declarations, lookups, stored answers), rendered as
   // values with no inputs and no Save. Respects the section prop like the
@@ -1274,106 +1411,137 @@ export function ProfileEditor(props: {
         <Label>{label}</Label>
         <p className="text-sm text-slate-800 dark:text-slate-200">{value}</p>
       </div>
-    )
-    const roFieldValue = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField): string => {
-      const column = columnOf(field)
-      if (field.kind === 'flag') {
+    );
+    const roFieldValue = (
+      certificate: DeclaredProfileCertificate,
+      field: DeclaredProfileField,
+    ): string => {
+      const column = columnOf(field);
+      if (field.kind === "flag") {
         if (column) {
-          const bespoke = columnFlag[column]?.[0]
-          if (bespoke !== undefined) return bespoke ? tc('labels.yes') : tc('labels.no')
+          const bespoke = columnFlag[column]?.[0];
+          if (bespoke !== undefined) return bespoke ? tc("labels.yes") : tc("labels.no");
           // Generic text-backed column flag: the same extra-column resolver
           // edit mode binds — untouched is unanswered, never a defaulted "No".
-          const raw = extraValue(column)
-          if (raw === '' && field.required) return tc('labels.notSet')
-          return raw === 'true' ? tc('labels.yes') : tc('labels.no')
+          const raw = extraValue(column);
+          if (raw === "" && field.required) return tc("labels.notSet");
+          return raw === "true" ? tc("labels.yes") : tc("labels.no");
         }
-        const raw = rowAnswers[certificate.key]?.[field.key] ?? ''
-        if (raw === '' && field.required) return tc('labels.notSet')
-        return raw === 'true' ? tc('labels.yes') : tc('labels.no')
+        const raw = rowAnswers[certificate.key]?.[field.key] ?? "";
+        if (raw === "" && field.required) return tc("labels.notSet");
+        return raw === "true" ? tc("labels.yes") : tc("labels.no");
       }
       const raw = column
-        ? (columnText[column]?.[0] ?? '')
-        : (rowAnswers[certificate.key]?.[field.key] ?? '')
-      if (field.kind === 'choice') {
-        const current = raw || field.default || ''
-        if (!current) return '—'
-        const choice = (field.choices ?? []).find((candidate) => candidate.value === current)
-        if (!choice) return current
-        return column ? choiceLabel(column, choice.value, choice.label) : choice.label
+        ? (columnText[column]?.[0] ?? "")
+        : (rowAnswers[certificate.key]?.[field.key] ?? "");
+      if (field.kind === "choice") {
+        const current = raw || field.default || "";
+        if (!current) return "—";
+        const choice = (field.choices ?? []).find((candidate) => candidate.value === current);
+        if (!choice) return current;
+        return column ? choiceLabel(column, choice.value, choice.label) : choice.label;
       }
-      return raw === '' ? '—' : raw
-    }
-    const roFieldLabel = (certificate: DeclaredProfileCertificate, field: DeclaredProfileField): string => {
-      const column = columnOf(field)
-      if (field.kind === 'flag' && !column) return field.label
-      return fieldLabel(column, field.label)
-    }
-    const scheduleName = props.schedules.find((schedule) => schedule.id === payScheduleId)?.name ?? '—'
-    const filingAccount = filingAccounts.find((account) => account.id === filingAccountId)
-    const sinLast3 = (p as { sin_last3?: string | null }).sin_last3
+      return raw === "" ? "—" : raw;
+    };
+    const roFieldLabel = (
+      certificate: DeclaredProfileCertificate,
+      field: DeclaredProfileField,
+    ): string => {
+      const column = columnOf(field);
+      if (field.kind === "flag" && !column) return field.label;
+      return fieldLabel(column, field.label);
+    };
+    const scheduleName =
+      props.schedules.find((schedule) => schedule.id === payScheduleId)?.name ?? "—";
+    const filingAccount = filingAccounts.find((account) => account.id === filingAccountId);
+    const sinLast3 = (p as { sin_last3?: string | null }).sin_last3;
     return (
       <div className="space-y-4">
         {showGeneral && (
           <div className="grid gap-3 sm:grid-cols-2">
-            {roRow('schedule', t('fields.schedule'), scheduleName)}
-            {roRow('country', t('fields.country'), country ? countryLabel(country) : '—')}
-            {pack ? roRow('province', textOf(`fields.${pack.subdivisionLabel}`, pack.subdivisionLabel), province ? (pack.subdivisionNames[province] ?? province) : '—') : null}
+            {roRow("schedule", t("fields.schedule"), scheduleName)}
+            {roRow("country", t("fields.country"), country ? countryLabel(country) : "—")}
+            {pack
+              ? roRow(
+                  "province",
+                  textOf(`fields.${pack.subdivisionLabel}`, pack.subdivisionLabel),
+                  province ? (pack.subdivisionNames[province] ?? province) : "—",
+                )
+              : null}
             {labourOptions.length > 0
               ? roRow(
-                  'labour',
-                  t('fields.labourJurisdiction'),
+                  "labour",
+                  t("fields.labourJurisdiction"),
                   labourJurisdiction
-                    ? (labourOptions.find((option) => option.key === labourJurisdiction)?.name ?? labourJurisdiction)
-                    : t('labourJurisdiction.fromRegion'),
+                    ? (labourOptions.find((option) => option.key === labourJurisdiction)?.name ??
+                        labourJurisdiction)
+                    : t("labourJurisdiction.fromRegion"),
                 )
               : null}
-            {roRow('basis', t('fields.payBasis'), t(`basis.${payBasis}`))}
-            {wcbRelevant
-              ? roRow('wcb', t('fields.workerCompGroup'), wcbCoverageReadout)
-              : null}
+            {roRow("basis", t("fields.payBasis"), t(`basis.${payBasis}`))}
+            {wcbRelevant ? roRow("wcb", t("fields.workerCompGroup"), wcbCoverageReadout) : null}
             {filingAccounts.length > 0
               ? roRow(
-                  'filing',
-                  t('fields.filingAccount'),
-                  filingAccount ? `${filingAccount.accountNumber} · ${filingAccount.name}` : t('filingAccountDefault'),
+                  "filing",
+                  t("fields.filingAccount"),
+                  filingAccount
+                    ? `${filingAccount.accountNumber} · ${filingAccount.name}`
+                    : t("filingAccountDefault"),
                 )
               : null}
-            {roRow('stub', t('fields.stubDelivery'), t(`stubDelivery.${stubDelivery}`))}
-            {roRow('payment', t('fields.paymentMethod'), paymentMethod ? t(`paymentMethod.${paymentMethod as 'eft' | 'cheque'}`) : t('paymentMethod.inherit'))}
+            {roRow("stub", t("fields.stubDelivery"), t(`stubDelivery.${stubDelivery}`))}
             {roRow(
-              'commission',
-              textOf('fields.paidOnCommission', 'Paid on commission'),
-              paidOnCommission === ''
-                ? textOf('paidOnCommission.unanswered', 'Not answered')
-                : paidOnCommission === 'true'
-                  ? textOf('paidOnCommission.yes', 'Yes, in whole or in part')
-                  : textOf('paidOnCommission.no', 'No'),
+              "payment",
+              t("fields.paymentMethod"),
+              paymentMethod
+                ? t(`paymentMethod.${paymentMethod as "eft" | "cheque"}`)
+                : t("paymentMethod.inherit"),
+            )}
+            {roRow(
+              "commission",
+              textOf("fields.paidOnCommission", "Paid on commission"),
+              paidOnCommission === ""
+                ? textOf("paidOnCommission.unanswered", "Not answered")
+                : paidOnCommission === "true"
+                  ? textOf("paidOnCommission.yes", "Yes, in whole or in part")
+                  : textOf("paidOnCommission.no", "No"),
             )}
             {offeredClasses.length > 0
               ? roRow(
-                'employment-class',
-                textOf('fields.occupationClass', 'Employment class'),
-                occupationClass === ''
-                  ? textOf('occupationClass.unanswered', 'Not answered')
-                  : classLabel(
-                    occupationClass,
-                    offeredClasses.find((option) => option.classKey === occupationClass)?.label ?? occupationClass,
-                  ),
-              )
+                  "employment-class",
+                  textOf("fields.occupationClass", "Employment class"),
+                  occupationClass === ""
+                    ? textOf("occupationClass.unanswered", "Not answered")
+                    : classLabel(
+                        occupationClass,
+                        offeredClasses.find((option) => option.classKey === occupationClass)
+                          ?.label ?? occupationClass,
+                      ),
+                )
               : null}
-            {roRow('active', t('fields.isActive'), isActive ? t('active') : t('inactive'))}
+            {roRow("active", t("fields.isActive"), isActive ? t("active") : t("inactive"))}
           </div>
         )}
         {showTax && (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              {roRow('identifier', pack?.identifier.label ?? t('fields.sin'), sinLast3 ? `••• ••• ${sinLast3}` : '—')}
+              {roRow(
+                "identifier",
+                pack?.identifier.label ?? t("fields.sin"),
+                sinLast3 ? `••• ••• ${sinLast3}` : "—",
+              )}
             </div>
             {applicableCertificates.map((certificate) => {
               const rows = certificate.fields
-                .filter((field) => field.kind !== 'flag')
-                .map((field) => roRow(`${certificate.key}.${field.key}`, roFieldLabel(certificate, field), roFieldValue(certificate, field)))
-              if (rows.length === 0) return null
+                .filter((field) => field.kind !== "flag")
+                .map((field) =>
+                  roRow(
+                    `${certificate.key}.${field.key}`,
+                    roFieldLabel(certificate, field),
+                    roFieldValue(certificate, field),
+                  ),
+                );
+              if (rows.length === 0) return null;
               return (
                 <div key={certificate.key} className="space-y-3">
                   <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -1386,17 +1554,19 @@ export function ProfileEditor(props: {
                   )}
                   <div className="grid gap-3 sm:grid-cols-2">{rows}</div>
                 </div>
-              )
+              );
             })}
             {withholdingFlags.length > 0 && (
               <div className="grid gap-3 sm:grid-cols-2">
-                {withholdingFlags.map((entry) => roRow(entry.id, entry.label, entry.checked ? tc('labels.yes') : tc('labels.no')))}
+                {withholdingFlags.map((entry) =>
+                  roRow(entry.id, entry.label, entry.checked ? tc("labels.yes") : tc("labels.no")),
+                )}
               </div>
             )}
           </>
         )}
       </div>
-    )
+    );
   }
   if (props.inline) {
     return (
@@ -1404,17 +1574,17 @@ export function ProfileEditor(props: {
         {body}
         {footer}
       </div>
-    )
+    );
   }
   return (
     <Drawer
       open
       onClose={props.onClose}
       title={p.employee_name}
-      description={t('editorDescription')}
+      description={t("editorDescription")}
       footer={footer}
     >
       {body}
     </Drawer>
-  )
+  );
 }

@@ -1,9 +1,8 @@
-import 'server-only'
-import { reportBookSelection } from '../../../../lib/report-books'
+import "server-only";
+import { reportBookSelection } from "../../../../lib/report-books";
 
-
-import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { getTranslations } from "next-intl/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   column,
   drill,
@@ -19,19 +18,19 @@ import {
   toggleLinks,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { buildHref, parseListParams } from '../../../../lib/list-params'
-import { partnerBalances } from '../../../../lib/reports'
-import { reportSubsidiaryView, type CurrencyBasisNotice } from '../../../../lib/consolidation'
-import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
-import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
-import { orgInfo } from '../../../../lib/data'
-import { resolveOrgId } from '../../../../lib/org-scope'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { decimalCmp, decimalNeg, decimalSum } from '../../../../lib/statement-format'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { buildHref, parseListParams } from "../../../../lib/list-params";
+import { partnerBalances } from "../../../../lib/reports";
+import { reportSubsidiaryView, type CurrencyBasisNotice } from "../../../../lib/consolidation";
+import { statementReportSpec, stringReportParams } from "@/lib/reports/statement-report-spec";
+import { ReportCurrencyBasisError } from "../../../../lib/reports/currency-basis";
+import { orgInfo } from "../../../../lib/data";
+import { resolveOrgId } from "../../../../lib/org-scope";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
+import { decimalCmp, decimalNeg, decimalSum } from "../../../../lib/statement-format";
+import type { ReportDrillTarget } from "../../../../lib/report-drill";
 
 /**
  * The partners report, split into a loader and a spec.
@@ -48,161 +47,199 @@ import type { ReportDrillTarget } from '../../../../lib/report-drill'
  * patchable by an agent) without any of the logic above becoming data too.
  */
 
-const PER_PAGE = 50
+const PER_PAGE = 50;
 
 export interface PartnersRow {
   /** Null for ledger lines carrying no party — the report still shows them. */
-  id: string | null
-  rowKey: string
-  displayName: string | null
-  balance: string
+  id: string | null;
+  rowKey: string;
+  displayName: string | null;
+  balance: string;
   /** Named presentation state, decided here — the spec never compares numbers. */
-  balanceTone: 'default' | 'negative'
+  balanceTone: "default" | "negative";
   /** Postgres returns count(*) as a string; presented verbatim. */
-  lineCount: string
-  drill: ReportDrillTarget
+  lineCount: string;
+  drill: ReportDrillTarget;
 }
 
 export interface PartnersData {
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
-  title: string
-  backHref: string
-  backLabel: string
-  searchPlaceholder: string
-  payableHref: string
-  receivableHref: string
-  payableLabel: string
-  receivableLabel: string
-  isPayable: boolean
-  isReceivable: boolean
-  totalLabel: string
-  total: string
-  totalDrill: ReportDrillTarget
-  noPartyLabel: string
+  primaryFilter: {
+    paramKey: string;
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+  } | null;
+  title: string;
+  backHref: string;
+  backLabel: string;
+  searchPlaceholder: string;
+  payableHref: string;
+  receivableHref: string;
+  payableLabel: string;
+  receivableLabel: string;
+  isPayable: boolean;
+  isReceivable: boolean;
+  totalLabel: string;
+  total: string;
+  totalDrill: ReportDrillTarget;
+  noPartyLabel: string;
   /** Provenance title for the partyless row's drill: the ledger lines behind it. */
-  noPartyDrillLabel: string
-  columnParty: string
-  columnOutstanding: string
-  columnGlLines: string
-  company: string
-  periodPhrase: string
-  rows: PartnersRow[]
-  totalRows: number
-  currentPage: number
-  perPage: number
+  noPartyDrillLabel: string;
+  columnParty: string;
+  columnOutstanding: string;
+  columnGlLines: string;
+  company: string;
+  periodPhrase: string;
+  rows: PartnersRow[];
+  totalRows: number;
+  currentPage: number;
+  perPage: number;
   /** Widget inputs: absent definition id omits the schedule button entirely. */
-  scheduleDefId: string | null
-  scheduleParams: Record<string, string>
-  exportParams: Record<string, string>
-  subsidiaries: SubsidiaryPicker
+  scheduleDefId: string | null;
+  scheduleParams: Record<string, string>;
+  exportParams: Record<string, string>;
+  subsidiaries: SubsidiaryPicker;
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
-  currencyBasisBlocked: CurrencyBasisNotice | null
+  currencyBasisBlocked: CurrencyBasisNotice | null;
   /** False exactly when the multi-currency refusal is set. */
-  currencyBasisReady: boolean
+  currencyBasisReady: boolean;
 }
 
-type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>["picker"];
 
 export async function loadPartners(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PartnersData> {
-  const authz = await requirePermission('reports.read')
-  const { money: formatMoney } = await getMoneyFormatter()
-  const t = await getTranslations('reports.partners')
-  const tr = await getTranslations('reports')
-  const tc = await getTranslations('common')
+  const authz = await requirePermission("reports.read");
+  const { money: formatMoney } = await getMoneyFormatter();
+  const t = await getTranslations("reports.partners");
+  const tr = await getTranslations("reports");
+  const tc = await getTranslations("common");
 
-  const tb = await getTranslations('budgets')
-  const { books, selectedBook } = await reportBookSelection(authz.user.orgId, Array.isArray(sp.book) ? sp.book[0] : sp.book)
-  const kind = sp.kind === 'receivable' ? 'receivable' : 'payable'
-  const scheduleDefId = await reportScheduleAnchor('partners', { kind })
-  const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
-  const asOf = await businessToday(await resolveOrgId())
+  const tb = await getTranslations("budgets");
+  const { books, selectedBook } = await reportBookSelection(
+    authz.user.orgId,
+    Array.isArray(sp.book) ? sp.book[0] : sp.book,
+  );
+  const kind = sp.kind === "receivable" ? "receivable" : "payable";
+  const scheduleDefId = await reportScheduleAnchor("partners", { kind });
+  const params = parseListParams(sp, {
+    sort: "balance",
+    allowedSorts: ["balance"] as const,
+    perPage: PER_PAGE,
+  });
+  const asOf = await businessToday(await resolveOrgId());
   // Legal-entity scope resolves through the subsidiary view — the same
   // contract as the statement pages: a restricted reader's view resolves to
   // the subsidiaries they may see, and the picker offers the
   // single-currency choice a multi-currency viewed set refuses with.
-  const subRaw = sp.sub
-  const subsidiaryParam = Array.isArray(subRaw) ? subRaw[0] : subRaw
-  const orgPromise = orgInfo()
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let all: Awaited<ReturnType<typeof partnerBalances>> = []
-  let currencyBasisBlocked: CurrencyBasisNotice | null = null
+  const subRaw = sp.sub;
+  const subsidiaryParam = Array.isArray(subRaw) ? subRaw[0] : subRaw;
+  const orgPromise = orgInfo();
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let all: Awaited<ReturnType<typeof partnerBalances>> = [];
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null;
   try {
-    subView = await reportSubsidiaryView(subsidiaryParam, asOf, selectedBook.id)
-    all = await partnerBalances(kind, authz.user.orgId, asOf, selectedBook.id, {
-      subsidiaryIds: subView.subsidiary?.ids,
-    }, can(authz, 'payroll.read'))
+    subView = await reportSubsidiaryView(subsidiaryParam, asOf, selectedBook.id);
+    all = await partnerBalances(
+      kind,
+      authz.user.orgId,
+      asOf,
+      selectedBook.id,
+      {
+        subsidiaryIds: subView.subsidiary?.ids,
+      },
+      can(authz, "payroll.read"),
+    );
   } catch (e) {
     // A multi-currency viewed set is a NAMED refusal, not a defect: the
     // banner carries the remedy (choose a single-currency subsidiary view)
     // and the filter-bar picker beside it offers that choice.
-    if (!(e instanceof ReportCurrencyBasisError)) throw e
+    if (!(e instanceof ReportCurrencyBasisError)) throw e;
     currencyBasisBlocked = {
-      code: 'multi-currency-basis',
-      title: tr('statement.currencyBasisBlockedTitle'),
+      code: "multi-currency-basis",
+      title: tr("statement.currencyBasisBlockedTitle"),
       description: e.message,
-    }
+    };
   }
-  const org = await orgPromise
+  const org = await orgPromise;
 
   // Figures present in the VIEW's currency (the context node's functional
   // currency), not the org base — a foreign-functional subsidiary view
   // states its own money. Mirrors the P&L and balance sheet.
-  const m = (value: string) => formatMoney(value, { currency: subView?.currency ?? org?.base_currency })
-  const q = params.q?.toLowerCase()
-  const filtered = q ? all.filter((r) => (r.display_name ?? '').toLowerCase().includes(q)) : all
+  const m = (value: string) =>
+    formatMoney(value, { currency: subView?.currency ?? org?.base_currency });
+  const q = params.q?.toLowerCase();
+  const filtered = q ? all.filter((r) => (r.display_name ?? "").toLowerCase().includes(q)) : all;
   // Payables are stored credit-negative; the report presents them positive.
-  const presented = (value: string) => (kind === 'payable' ? decimalNeg(value) : value)
-  const total = presented(decimalSum(filtered.map((row) => row.balance)))
-  const pageRows = filtered.slice((params.page - 1) * PER_PAGE, params.page * PER_PAGE)
-  const accountTypes = [kind === 'payable' ? 'liability_payable' : 'asset_receivable']
-  const noPartyLabel = t('noPartyOnLines')
+  const presented = (value: string) => (kind === "payable" ? decimalNeg(value) : value);
+  const total = presented(decimalSum(filtered.map((row) => row.balance)));
+  const pageRows = filtered.slice((params.page - 1) * PER_PAGE, params.page * PER_PAGE);
+  const accountTypes = [kind === "payable" ? "liability_payable" : "asset_receivable"];
+  const noPartyLabel = t("noPartyOnLines");
   // OM-06: the partyless row is control-account GL lines with no
   // counterparty — on a sample tenant the opening-balance journal. The cell
   // keeps its established label; the drill (which opens exactly those JE
   // lines) carries the provenance title instead of repeating the bare
   // placeholder, so the origin is legible without asserting every such row
   // is an opening balance.
-  const noPartyDrillLabel = t('noPartyDrillLabel')
-  const totalLabel = t('totalOutstanding')
+  const noPartyDrillLabel = t("noPartyDrillLabel");
+  const totalLabel = t("totalOutstanding");
 
   return {
-    title: kind === 'payable' ? t('payablesTitle') : t('receivablesTitle'),
-    backHref: '/reports',
-    backLabel: tr('hub.title'),
-    searchPlaceholder: t('searchPlaceholder'),
+    title: kind === "payable" ? t("payablesTitle") : t("receivablesTitle"),
+    backHref: "/reports",
+    backLabel: tr("hub.title"),
+    searchPlaceholder: t("searchPlaceholder"),
     // The kind toggle keeps the operator's search term and pager position —
     // rebuilding from kind+book alone dropped both (F1T-5).
-    payableHref: buildHref('/reports/partners', { kind: 'payable', book: selectedBook.id, q: params.q, page: params.page }),
-    receivableHref: buildHref('/reports/partners', { kind: 'receivable', book: selectedBook.id, q: params.q, page: params.page }),
-    payableLabel: t('payables'),
-    receivableLabel: t('receivables'),
-    isPayable: kind === 'payable',
-    isReceivable: kind === 'receivable',
+    payableHref: buildHref("/reports/partners", {
+      kind: "payable",
+      book: selectedBook.id,
+      q: params.q,
+      page: params.page,
+    }),
+    receivableHref: buildHref("/reports/partners", {
+      kind: "receivable",
+      book: selectedBook.id,
+      q: params.q,
+      page: params.page,
+    }),
+    payableLabel: t("payables"),
+    receivableLabel: t("receivables"),
+    isPayable: kind === "payable",
+    isReceivable: kind === "receivable",
     totalLabel,
     total: m(total),
-    totalDrill: { kind: 'ledger', bookId: selectedBook.id, label: totalLabel, accountTypes, to: asOf, mode: 'balance' },
+    totalDrill: {
+      kind: "ledger",
+      bookId: selectedBook.id,
+      label: totalLabel,
+      accountTypes,
+      to: asOf,
+      mode: "balance",
+    },
     noPartyLabel,
     noPartyDrillLabel,
-    columnParty: tc('labels.party'),
-    columnOutstanding: t('columns.outstanding'),
-    columnGlLines: t('columns.glLines'),
-    company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('description')}`,
+    columnParty: tc("labels.party"),
+    columnOutstanding: t("columns.outstanding"),
+    columnGlLines: t("columns.glLines"),
+    company: org?.name ?? "",
+    periodPhrase: `${selectedBook.name} · ${t("description")}`,
     rows: pageRows.map((row, index) => {
-      const balance = presented(row.balance)
+      const balance = presented(row.balance);
       return {
         id: row.id,
         rowKey: row.id ?? `none-${index}`,
         displayName: row.display_name,
         balance: m(balance),
-        balanceTone: decimalCmp(balance, '0') < 0 ? 'negative' : 'default',
+        balanceTone: decimalCmp(balance, "0") < 0 ? "negative" : "default",
         lineCount: row.line_count,
         drill: {
-          kind: 'ledger', bookId: selectedBook.id,
+          kind: "ledger",
+          bookId: selectedBook.id,
           label: row.display_name ?? noPartyDrillLabel,
           accountTypes,
           // The partyless row drills to exactly its lines: an absent filter
@@ -210,91 +247,111 @@ export async function loadPartners(
           partyIds: row.id ? [row.id] : undefined,
           unassignedParty: row.id ? undefined : true,
           to: asOf,
-          mode: 'balance',
+          mode: "balance",
         },
-      }
+      };
     }),
     totalRows: filtered.length,
     currentPage: params.page,
     perPage: PER_PAGE,
-    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
+    primaryFilter:
+      books.length > 1
+        ? {
+            paramKey: "book",
+            label: tb("list.bookFilter"),
+            value: selectedBook.id,
+            options: books.map((book) => ({ value: book.id, label: book.name })),
+          }
+        : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: { ...stringReportParams(sp), kind },
     subsidiaries: subView?.picker ?? [],
     currencyBasisBlocked,
     currencyBasisReady: currencyBasisBlocked === null,
-  }
+  };
 }
 
-const f = ref<PartnersData>()
-const row = field
+const f = ref<PartnersData>();
+const row = field;
 /** Page-level constants referenced from inside a row scope. */
-const rootF = rootRef<PartnersData>()
+const rootF = rootRef<PartnersData>();
 
 export function partnersSpec(data: PartnersData): PageSpec {
   return statementReportSpec({
-    route: '/reports/partners',
-    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
-    filters: [{
-      controls: { search: true, period: false, subsidiary: true },
-      options: {
-        searchPlaceholder: f('searchPlaceholder'),
-        subsidiaries: f('subsidiaries'),
-        leading: toggleLinks([
-          { href: f('payableHref'), label: f('payableLabel'), activeWhen: f('isPayable') },
-          { href: f('receivableHref'), label: f('receivableLabel'), activeWhen: f('isReceivable') },
-        ]),
-        primaryFilter: f('primaryFilter'),
+    route: "/reports/partners",
+    header: { title: f("title"), back: { href: f("backHref"), label: f("backLabel") } },
+    filters: [
+      {
+        controls: { search: true, period: false, subsidiary: true },
+        options: {
+          searchPlaceholder: f("searchPlaceholder"),
+          subsidiaries: f("subsidiaries"),
+          leading: toggleLinks([
+            { href: f("payableHref"), label: f("payableLabel"), activeWhen: f("isPayable") },
+            {
+              href: f("receivableHref"),
+              label: f("receivableLabel"),
+              activeWhen: f("isReceivable"),
+            },
+          ]),
+          primaryFilter: f("primaryFilter"),
+        },
       },
-    }],
+    ],
     schedule: {
-      definitionId: data.scheduleDefId ?? '',
+      definitionId: data.scheduleDefId ?? "",
       statementParams: data.scheduleParams,
-      when: f('scheduleDefId'),
+      when: f("scheduleDefId"),
     },
-    exportMenu: { kind: 'partners', params: data.exportParams },
-    headerAfterFilters: [summaryLine(f('totalLabel'), drill(f('totalDrill'), money(f('total'))))],
+    exportMenu: { kind: "partners", params: data.exportParams },
+    headerAfterFilters: [summaryLine(f("totalLabel"), drill(f("totalDrill"), money(f("total"))))],
     bodyBeforePaper: [
       // The multi-currency refusal renders without an action: the remedy is
       // the subsidiary picker in the filter bar above, not a link.
       ...(data.currencyBasisBlocked
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.currencyBasisBlocked?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.currencyBasisBlocked?.title ?? "",
                 description: data.currencyBasisBlocked?.description,
               }),
-              when: f('currencyBasisBlocked'),
+              when: f("currencyBasisBlocked"),
             },
           ]
         : []),
     ],
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('periodPhrase'),
-      when: f('currencyBasisReady'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
+      when: f("currencyBasisReady"),
     },
     blocks: [
       table({
-        variant: 'report',
-        rows: f('rows'),
-        rowKey: row('rowKey'),
+        variant: "report",
+        rows: f("rows"),
+        rowKey: row("rowKey"),
         columns: [
-          column(f('columnParty'), text(row('displayName'), { fallback: rootF('noPartyLabel') })),
-          column(f('columnOutstanding'), drill(row('drill'), money(row('balance'), { tone: row('balanceTone') })), {
-            align: 'right',
+          column(f("columnParty"), text(row("displayName"), { fallback: rootF("noPartyLabel") })),
+          column(
+            f("columnOutstanding"),
+            drill(row("drill"), money(row("balance"), { tone: row("balanceTone") })),
+            {
+              align: "right",
+            },
+          ),
+          column(f("columnGlLines"), drill(row("drill"), number(row("lineCount"))), {
+            align: "right",
           }),
-          column(f('columnGlLines'), drill(row('drill'), number(row('lineCount'))), { align: 'right' }),
         ],
       }),
       pagination({
-        basePath: '/reports/partners',
-        total: f('totalRows'),
-        page: f('currentPage'),
-        perPage: f('perPage'),
+        basePath: "/reports/partners",
+        total: f("totalRows"),
+        page: f("currentPage"),
+        perPage: f("perPage"),
       }),
     ],
-  })
+  });
 }

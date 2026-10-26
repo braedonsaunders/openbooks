@@ -1,27 +1,32 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   FulfillmentRefusal,
   getFulfillmentDocument,
   lockShipmentForCompletion,
   markShipmentComplete,
-} from '@openbooks/engine/sales/fulfillment'
+} from "@openbooks/engine/sales/fulfillment";
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
   resolveOrgEmailTransportDetailed,
-} from '@openbooks/engine/delivery/email-config/module'
-import { deriveEmailDeliveryKey, sendVia, shipmentTrackingEmail, emailDeliveryBlockedParts } from '@openbooks/emails'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
-import { kitComponentMovesStock, loadKitComponents } from '@openbooks/engine/inventory'
-import { fromUnits, toUnits } from '@openbooks/engine/money'
-import { fulfillSalesOrderInTx, type SalesFulfillmentLineInput } from './order-cycle'
+} from "@openbooks/engine/delivery/email-config/module";
+import {
+  deriveEmailDeliveryKey,
+  sendVia,
+  shipmentTrackingEmail,
+  emailDeliveryBlockedParts,
+} from "@openbooks/emails";
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "./custom-fields";
+import { kitComponentMovesStock, loadKitComponents } from "@openbooks/engine/inventory";
+import { fromUnits, toUnits } from "@openbooks/engine/money";
+import { fulfillSalesOrderInTx, type SalesFulfillmentLineInput } from "./order-cycle";
 
-type Scope = ReadonlySet<string> | null
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+type Scope = ReadonlySet<string> | null;
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * Save header custom-field values on a draft pick list or shipment through
@@ -35,58 +40,94 @@ export async function saveFulfillmentCustom(
   tx: Tx,
   orgId: string,
   actorId: string,
-  input: { documentId: string; kind: 'pick_list' | 'shipment'; custom: Record<string, unknown> },
+  input: { documentId: string; kind: "pick_list" | "shipment"; custom: Record<string, unknown> },
 ): Promise<Record<string, unknown>> {
-  const current = (await tx.execute<{ custom: Record<string, unknown> | null; document_number: string; status: string; stage: string }>(sql`
+  const current = (
+    await tx.execute<{
+      custom: Record<string, unknown> | null;
+      document_number: string;
+      status: string;
+      stage: string;
+    }>(
+      sql`
     select d.custom, d.document_number, d.status, fd.stage
       from documents d
       join fulfillment_documents fd on fd.document_id = d.id and fd.org_id = d.org_id
      where d.org_id = ${orgId} and d.id = ${input.documentId} and d.kind = ${input.kind}
-     for update of d`, 'objects'))[0]
-  if (!current) throw new FulfillmentRefusal(`${input.kind === 'pick_list' ? 'Pick list' : 'Shipment'} not found`, 'not_found', 404)
-  if (current.status !== 'draft' || current.stage !== 'open') {
-    throw new FulfillmentRefusal(
-      `${current.document_number} is ${current.stage === 'done' ? 'complete' : current.status}; custom fields change only on a draft`,
-      'wrong_stage',
-      409,
+     for update of d`,
+      "objects",
     )
+  )[0];
+  if (!current)
+    throw new FulfillmentRefusal(
+      `${input.kind === "pick_list" ? "Pick list" : "Shipment"} not found`,
+      "not_found",
+      404,
+    );
+  if (current.status !== "draft" || current.stage !== "open") {
+    throw new FulfillmentRefusal(
+      `${current.document_number} is ${current.stage === "done" ? "complete" : current.status}; custom fields change only on a draft`,
+      "wrong_stage",
+      409,
+    );
   }
-  const defs = await loadFieldDefs('documents', input.kind)
-  const existing = current.custom ?? {}
-  const validated = validateCustomValues(defs, { ...existing, ...input.custom })
-  if (!validated.ok) throw new FulfillmentRefusal(Object.values(validated.errors)[0]!, 'invalid_input', 422)
-  const supplied: Record<string, unknown> = {}
+  const defs = await loadFieldDefs("documents", input.kind);
+  const existing = current.custom ?? {};
+  const validated = validateCustomValues(defs, { ...existing, ...input.custom });
+  if (!validated.ok)
+    throw new FulfillmentRefusal(Object.values(validated.errors)[0]!, "invalid_input", 422);
+  const supplied: Record<string, unknown> = {};
   for (const key of Object.keys(input.custom)) {
-    if (validated.cleaned[key] !== undefined) supplied[key] = validated.cleaned[key]
+    if (validated.cleaned[key] !== undefined) supplied[key] = validated.cleaned[key];
   }
-  const [unowned] = await findUnownedCustomReferences(orgId, defs, supplied)
-  if (unowned) throw new FulfillmentRefusal(`${unowned.label} not found in this organization`, 'not_found', 404)
-  const next: Record<string, unknown> = { ...existing, ...validated.cleaned }
+  const [unowned] = await findUnownedCustomReferences(orgId, defs, supplied);
+  if (unowned)
+    throw new FulfillmentRefusal(
+      `${unowned.label} not found in this organization`,
+      "not_found",
+      404,
+    );
+  const next: Record<string, unknown> = { ...existing, ...validated.cleaned };
   for (const def of defs) {
-    if (Object.prototype.hasOwnProperty.call(input.custom, def.key) && input.custom[def.key] == null) delete next[def.key]
+    if (
+      Object.prototype.hasOwnProperty.call(input.custom, def.key) &&
+      input.custom[def.key] == null
+    )
+      delete next[def.key];
   }
-  const saved = await tx.execute<{ id: string }>(sql`
+  const saved = await tx.execute<{ id: string }>(
+    sql`
     update documents set custom = ${JSON.stringify(next)}::jsonb, updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${input.documentId} and status = 'draft'
-    returning id`, 'objects')
+    returning id`,
+    "objects",
+  );
   if (saved.length === 0) {
-    throw new FulfillmentRefusal(`${current.document_number} changed while its custom fields were being saved`, 'changed_concurrently', 409, 'Reload and try again')
+    throw new FulfillmentRefusal(
+      `${current.document_number} changed while its custom fields were being saved`,
+      "changed_concurrently",
+      409,
+      "Reload and try again",
+    );
   }
-  const audited = await tx.execute<{ id: string }>(sql`
+  const audited = await tx.execute<{ id: string }>(
+    sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'documents', ${input.documentId}, 'update',
-            ${JSON.stringify({ mode: 'custom_fields_set', before: existing, after: next })}::jsonb, ${actorId})
-    returning id`, 'objects')
-  if (audited.length === 0) throw new Error('custom-field change was not audited')
-  return next
+            ${JSON.stringify({ mode: "custom_fields_set", before: existing, after: next })}::jsonb, ${actorId})
+    returning id`,
+    "objects",
+  );
+  if (audited.length === 0) throw new Error("custom-field change was not audited");
+  return next;
 }
 
 export interface CompletedShipment {
-  shipmentId: string
-  shipmentNumber: string
-  fulfillmentId: string
-  fulfillmentNumber: string
-  replayed: boolean
+  shipmentId: string;
+  shipmentNumber: string;
+  fulfillmentId: string;
+  fulfillmentNumber: string;
+  replayed: boolean;
 }
 
 /**
@@ -100,27 +141,27 @@ async function shipmentFulfillmentLines(
   tx: Tx,
   orgId: string,
   locked: {
-    salesOrderId: string
-    shipment: { document_date: string }
+    salesOrderId: string;
+    shipment: { document_date: string };
     lines: {
-      salesOrderLineId: string
-      orderItemId: string | null
-      itemId: string | null
-      quantity: string
-      binId: string
-      lotId: string | null
-      serialId: string | null
-    }[]
+      salesOrderLineId: string;
+      orderItemId: string | null;
+      itemId: string | null;
+      quantity: string;
+      binId: string;
+      lotId: string | null;
+      serialId: string | null;
+    }[];
   },
 ): Promise<SalesFulfillmentLineInput[]> {
-  const groups = new Map<string, typeof locked.lines>()
+  const groups = new Map<string, typeof locked.lines>();
   for (const line of locked.lines) {
-    groups.set(line.salesOrderLineId, [...(groups.get(line.salesOrderLineId) ?? []), line])
+    groups.set(line.salesOrderLineId, [...(groups.get(line.salesOrderLineId) ?? []), line]);
   }
-  const requests: SalesFulfillmentLineInput[] = []
+  const requests: SalesFulfillmentLineInput[] = [];
   for (const rows of groups.values()) {
-    const first = rows[0]!
-    const componentRows = rows.filter((row) => row.itemId !== row.orderItemId)
+    const first = rows[0]!;
+    const componentRows = rows.filter((row) => row.itemId !== row.orderItemId);
     if (componentRows.length === 0) {
       for (const row of rows) {
         requests.push({
@@ -129,64 +170,67 @@ async function shipmentFulfillmentLines(
           lotId: row.lotId,
           serialId: row.serialId,
           stockLocationId: row.binId,
-        })
+        });
       }
-      continue
+      continue;
     }
     if (componentRows.length !== rows.length) {
       throw new FulfillmentRefusal(
-        'A shipment mixes kit components with the kit itself; pick the kit by component or void the shipment',
-        'invalid_input',
+        "A shipment mixes kit components with the kit itself; pick the kit by component or void the shipment",
+        "invalid_input",
         422,
-        'Void the shipment and pick the kit line by component',
-      )
+        "Void the shipment and pick the kit line by component",
+      );
     }
     if (!first.orderItemId) {
       throw new FulfillmentRefusal(
-        'A shipment names kit components for an order line with no item; void the shipment',
-        'invalid_input',
+        "A shipment names kit components for an order line with no item; void the shipment",
+        "invalid_input",
         422,
-        'Void the shipment and pick the order line again',
-      )
+        "Void the shipment and pick the order line again",
+      );
     }
-    const components = (await loadKitComponents(tx, orgId, first.orderItemId, locked.shipment.document_date))
-      .filter((component) => kitComponentMovesStock(component.componentKind))
+    const components = (
+      await loadKitComponents(tx, orgId, first.orderItemId, locked.shipment.document_date)
+    ).filter((component) => kitComponentMovesStock(component.componentKind));
     const missing = components.filter(
       (component) => !componentRows.some((row) => row.itemId === component.componentItemId),
-    )
+    );
     if (missing.length > 0) {
       throw new FulfillmentRefusal(
-        `The shipment is missing ${missing.length === 1 ? 'a kit component' : `${missing.length} kit components`}; every component ships for the kit to ship`,
-        'exceeds_open_quantity',
+        `The shipment is missing ${missing.length === 1 ? "a kit component" : `${missing.length} kit components`}; every component ships for the kit to ship`,
+        "exceeds_open_quantity",
         422,
-        'Pick the missing components before completing the shipment',
-      )
+        "Pick the missing components before completing the shipment",
+      );
     }
     // One kit quantity shared by every row: q1/p1 == q2/p2 compared without
     // division, then exact to stock precision so the drain re-derives the
     // picked quantities bit-for-bit.
-    const perByComponent = new Map(components.map((component) => [component.componentItemId, toUnits(component.quantityPer)]))
-    const firstPer = perByComponent.get(componentRows[0]!.itemId!)!
-    const firstQty = toUnits(componentRows[0]!.quantity)
+    const perByComponent = new Map(
+      components.map((component) => [component.componentItemId, toUnits(component.quantityPer)]),
+    );
+    const firstPer = perByComponent.get(componentRows[0]!.itemId!)!;
+    const firstQty = toUnits(componentRows[0]!.quantity);
     for (const row of componentRows.slice(1)) {
-      const qty = toUnits(row.quantity)
+      const qty = toUnits(row.quantity);
       if (qty * firstPer !== firstQty * perByComponent.get(row.itemId!)!) {
         throw new FulfillmentRefusal(
-          'The kit components on this shipment cover different kit quantities; ship whole kits',
-          'exceeds_open_quantity',
+          "The kit components on this shipment cover different kit quantities; ship whole kits",
+          "exceeds_open_quantity",
           422,
-          'Pick component quantities that cover the same number of kits',
-        )
+          "Pick component quantities that cover the same number of kits",
+        );
       }
     }
-    const scaled = firstQty * 10000n
+    const scaled = firstQty * 10000n;
     if (scaled % firstPer !== 0n) {
       throw new FulfillmentRefusal(
-        'The kit components on this shipment cover a fractional kit quantity; ship whole kits',
-        'exceeds_open_quantity',
+        "The kit components on this shipment cover a fractional kit quantity; ship whole kits",
+        "exceeds_open_quantity",
         422,
-        'Pick component quantities that cover whole kits',
-      )
+        "Pick component quantities that cover whole kits",
+      );
     }
     requests.push({
       sourceLineId: first.salesOrderLineId,
@@ -200,9 +244,9 @@ async function shipmentFulfillmentLines(
         serialId: row.serialId,
         stockLocationId: row.binId,
       })),
-    })
+    });
   }
-  return requests
+  return requests;
 }
 
 /**
@@ -221,38 +265,55 @@ export async function completeShipment(
   input: { shipmentId: string; allowedSubsidiaryIds: Scope },
 ): Promise<CompletedShipment> {
   return db.transaction(async (tx) => {
-    const locked = await lockShipmentForCompletion(tx, orgId, input.shipmentId, input.allowedSubsidiaryIds)
-    const shipmentNumber = locked.shipment.document_number
-    if (locked.shipment.stage === 'done' && locked.shipment.sales_fulfillment_id) {
-      const recorded = (await tx.execute<{ document_number: string }>(sql`
+    const locked = await lockShipmentForCompletion(
+      tx,
+      orgId,
+      input.shipmentId,
+      input.allowedSubsidiaryIds,
+    );
+    const shipmentNumber = locked.shipment.document_number;
+    if (locked.shipment.stage === "done" && locked.shipment.sales_fulfillment_id) {
+      const recorded = (
+        await tx.execute<{ document_number: string }>(
+          sql`
         select document_number from documents
-         where org_id = ${orgId} and id = ${locked.shipment.sales_fulfillment_id}`, 'objects'))[0]
+         where org_id = ${orgId} and id = ${locked.shipment.sales_fulfillment_id}`,
+          "objects",
+        )
+      )[0];
       return {
         shipmentId: locked.shipment.id,
         shipmentNumber,
         fulfillmentId: locked.shipment.sales_fulfillment_id,
-        fulfillmentNumber: recorded?.document_number ?? '',
+        fulfillmentNumber: recorded?.document_number ?? "",
         replayed: true,
-      }
+      };
     }
-    const fulfillment = await fulfillSalesOrderInTx(tx, orgId, userId, locked.salesOrderId, {
-      fulfillmentDate: locked.shipment.document_date,
-      idempotencyKey: `shipment:${locked.shipment.id}`,
-      lines: await shipmentFulfillmentLines(tx, orgId, locked),
-    }, { inventory: 'apply' })
+    const fulfillment = await fulfillSalesOrderInTx(
+      tx,
+      orgId,
+      userId,
+      locked.salesOrderId,
+      {
+        fulfillmentDate: locked.shipment.document_date,
+        idempotencyKey: `shipment:${locked.shipment.id}`,
+        lines: await shipmentFulfillmentLines(tx, orgId, locked),
+      },
+      { inventory: "apply" },
+    );
     await markShipmentComplete(tx, orgId, userId, {
       shipment: { id: locked.shipment.id, documentNumber: shipmentNumber },
       pickListId: locked.pickListId,
       salesFulfillmentId: fulfillment.id,
-    })
+    });
     return {
       shipmentId: locked.shipment.id,
       shipmentNumber,
       fulfillmentId: fulfillment.id,
       fulfillmentNumber: fulfillment.documentNumber,
       replayed: false,
-    }
-  })
+    };
+  });
 }
 
 /**
@@ -265,48 +326,58 @@ export async function sendShipmentTracking(
   userId: string,
   input: { shipmentId: string; to?: string; message?: string; allowedSubsidiaryIds: Scope },
 ): Promise<{ to: string; subject: string }> {
-  const shipment = await getFulfillmentDocument(db, orgId, input.shipmentId, input.allowedSubsidiaryIds)
-  if (!shipment || shipment.kind !== 'shipment') {
-    throw new FulfillmentRefusal('Shipment not found', 'not_found', 404)
+  const shipment = await getFulfillmentDocument(
+    db,
+    orgId,
+    input.shipmentId,
+    input.allowedSubsidiaryIds,
+  );
+  if (!shipment || shipment.kind !== "shipment") {
+    throw new FulfillmentRefusal("Shipment not found", "not_found", 404);
   }
-  if (shipment.stage !== 'done') {
+  if (shipment.stage !== "done") {
     throw new FulfillmentRefusal(
       `${shipment.documentNumber} is not complete yet`,
-      'wrong_stage',
+      "wrong_stage",
       409,
       `Complete ${shipment.documentNumber} before sending its tracking`,
-    )
+    );
   }
   if (!shipment.carrier || !shipment.carrierService || !shipment.trackingNumber) {
     throw new FulfillmentRefusal(
       `${shipment.documentNumber} has no tracking number`,
-      'carrier_required',
+      "carrier_required",
       422,
-      'A completed shipment cannot change; send the tracking number to the customer directly',
-    )
+      "A completed shipment cannot change; send the tracking number to the customer directly",
+    );
   }
-  const party = (await db.execute<{ email: string | null; org_name: string }>(sql`
+  const party = (
+    await db.execute<{ email: string | null; org_name: string }>(
+      sql`
     select p.email, o.name as org_name
       from orgs o
       left join parties p on p.org_id = o.id and p.id = ${shipment.customer?.id ?? null}
-     where o.id = ${orgId}`, 'objects'))[0]
-  const to = (input.to?.trim() || party?.email?.trim() || '')
+     where o.id = ${orgId}`,
+      "objects",
+    )
+  )[0];
+  const to = input.to?.trim() || party?.email?.trim() || "";
   if (!to) {
     throw new FulfillmentRefusal(
-      'No recipient email',
-      'invalid_input',
+      "No recipient email",
+      "invalid_input",
       422,
       "Enter a recipient, or add an email address to the customer's record",
-    )
+    );
   }
-  const delivery = await resolveOrgEmailTransportDetailed(orgId)
-  if (delivery.state !== 'ready') {
-    const parts = emailDeliveryBlockedParts(delivery)
-    throw new FulfillmentRefusal(parts.summary, 'invalid_input', 422, parts.remedy)
+  const delivery = await resolveOrgEmailTransportDetailed(orgId);
+  if (delivery.state !== "ready") {
+    const parts = emailDeliveryBlockedParts(delivery);
+    throw new FulfillmentRefusal(parts.summary, "invalid_input", 422, parts.remedy);
   }
-  const transport = delivery.transport
+  const transport = delivery.transport;
   const body = shipmentTrackingEmail({
-    orgName: party?.org_name || 'OpenBooks',
+    orgName: party?.org_name || "OpenBooks",
     shipmentNumber: shipment.documentNumber,
     orderNumber: shipment.salesOrder?.number,
     partyName: shipment.customer?.name || undefined,
@@ -315,36 +386,36 @@ export async function sendShipmentTracking(
     trackingNumber: shipment.trackingNumber,
     trackingUrl: shipment.trackingUrl ?? undefined,
     message: input.message,
-  })
+  });
   const logId = await insertEmailLog({
     orgId,
     recipients: [to],
     subject: body.subject,
-    status: 'queued',
-    categoryKey: 'document',
-    meta: { recordType: 'shipment', recordId: shipment.id },
-    actor: { kind: 'user', userId },
-  })
-  let uncertaintyRecorded = false
+    status: "queued",
+    categoryKey: "document",
+    meta: { recordType: "shipment", recordId: shipment.id },
+    actor: { kind: "user", userId },
+  });
+  let uncertaintyRecorded = false;
   try {
     const outcome = await sendVia(
       transport,
       { to, subject: body.subject, html: body.html, text: body.text },
       { deliveryKey: deriveEmailDeliveryKey({ orgId, scope: `direct:${logId}`, to }) },
-    )
-    if (outcome.kind === 'sent') {
-      await markEmailSent(orgId, logId, outcome.providerMessageId)
+    );
+    if (outcome.kind === "sent") {
+      await markEmailSent(orgId, logId, outcome.providerMessageId);
     } else {
       // Acceptance unknown: record it as uncertain, never as sent or failed.
-      uncertaintyRecorded = true
-      await markEmailUncertain(orgId, logId, outcome.reason)
-      throw new Error(outcome.reason)
+      uncertaintyRecorded = true;
+      await markEmailUncertain(orgId, logId, outcome.reason);
+      throw new Error(outcome.reason);
     }
   } catch (error) {
     if (!uncertaintyRecorded) {
-      await markEmailFailed(orgId, logId, error instanceof Error ? error.message : String(error))
+      await markEmailFailed(orgId, logId, error instanceof Error ? error.message : String(error));
     }
-    throw error
+    throw error;
   }
-  return { to, subject: body.subject }
+  return { to, subject: body.subject };
 }

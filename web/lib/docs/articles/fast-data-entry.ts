@@ -1,14 +1,31 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const fastDataEntry: DocArticle = {
-  slug: 'fast-data-entry',
-  title: 'Fast data entry from the keyboard',
-  category: 'transactions',
+  slug: "fast-data-entry",
+  title: "Fast data entry from the keyboard",
+  category: "transactions",
   order: 2,
-  summary: 'Enter bills, invoices and journals without the mouse: type-to-search pickers, vendor defaults and recall, Post & new, line-grid keys, spreadsheet paste, arithmetic in amounts and personal entry preferences.',
-  updated: '2026-10-21',
-  keywords: ['keyboard', 'shortcuts', 'data entry', 'fast entry', 'save and new', 'post and new', 'recall', 'last bill', 'control total', 'paste', 'calculator', 'auto decimal', 'enter key', 'duplicate', 'command palette'],
-  related: ['batch-bill-entry', 'transaction-lifecycle', 'purchasing-workflow'],
+  summary:
+    "Enter bills, invoices and journals without the mouse: type-to-search pickers, vendor defaults and recall, Post & new, line-grid keys, spreadsheet paste, arithmetic in amounts and personal entry preferences.",
+  updated: "2026-10-21",
+  keywords: [
+    "keyboard",
+    "shortcuts",
+    "data entry",
+    "fast entry",
+    "save and new",
+    "post and new",
+    "recall",
+    "last bill",
+    "control total",
+    "paste",
+    "calculator",
+    "auto decimal",
+    "enter key",
+    "duplicate",
+    "command palette",
+  ],
+  related: ["batch-bill-entry", "transaction-lifecycle", "purchasing-workflow"],
   body: `# Fast data entry from the keyboard
 
 Everything you enter day to day — bills, invoices, credits and journal
@@ -129,4 +146,4 @@ Open your account menu and choose **Data entry** (also at the bottom of the
 Preferences change how the keyboard behaves for you only; every amount,
 account and date is still checked the same way.
 `,
-}
+};

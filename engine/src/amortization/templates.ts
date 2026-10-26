@@ -7,7 +7,12 @@ import { sql } from "drizzle-orm";
 import { PNL_COST_TYPES } from "../records/account-types.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { AmortizationError } from "./errors.ts";
-import { percentageEntry, TEMPLATE_COLUMNS, templateVersionFromRow, type TemplateVersion } from "./internal.ts";
+import {
+  percentageEntry,
+  TEMPLATE_COLUMNS,
+  templateVersionFromRow,
+  type TemplateVersion,
+} from "./internal.ts";
 import {
   AMORTIZATION_METHODS,
   AMORTIZATION_TERM_SOURCES,
@@ -34,22 +39,33 @@ export async function resolveTemplateVersion(
   templateId: string,
   onDate: string,
 ): Promise<TemplateVersion> {
-  const named = (await runner.execute<{ code: string; name: string }>(sql`
+  const named = (
+    await runner.execute<{ code: string; name: string }>(
+      sql`
     select code, name from expense_amortization_templates
-     where org_id = ${orgId} and id = ${templateId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${templateId}`,
+      "objects",
+    )
+  )[0];
   if (!named) {
     throw new AmortizationError("The amortization template does not exist in this organization.", {
       status: 404,
       code: "amortization_template_unknown",
-      remedy: "Choose an amortization template from Company Settings → Setup → Amortization templates.",
+      remedy:
+        "Choose an amortization template from Company Settings → Setup → Amortization templates.",
     });
   }
-  const row = (await runner.execute<TemplateRow>(sql`
+  const row = (
+    await runner.execute<TemplateRow>(
+      sql`
     select ${TEMPLATE_COLUMNS}
       from expense_amortization_templates
      where org_id = ${orgId} and code = ${named.code} and is_active and effective_from <= ${onDate}
      order by effective_from desc
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new AmortizationError(
       `Amortization template ${named.code} has no active version in effect on ${onDate}.`,
@@ -63,15 +79,25 @@ export async function resolveTemplateVersion(
 }
 
 /** Load one exact template version (no effective-date resolution). */
-export async function loadTemplateVersion(runner: SqlExecutor, orgId: string, templateId: string): Promise<TemplateVersion> {
-  const row = (await runner.execute<TemplateRow>(sql`
+export async function loadTemplateVersion(
+  runner: SqlExecutor,
+  orgId: string,
+  templateId: string,
+): Promise<TemplateVersion> {
+  const row = (
+    await runner.execute<TemplateRow>(
+      sql`
     select ${TEMPLATE_COLUMNS} from expense_amortization_templates
-     where org_id = ${orgId} and id = ${templateId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${templateId}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new AmortizationError("The amortization template does not exist in this organization.", {
       status: 404,
       code: "amortization_template_unknown",
-      remedy: "Choose an amortization template from Company Settings → Setup → Amortization templates.",
+      remedy:
+        "Choose an amortization template from Company Settings → Setup → Amortization templates.",
     });
   }
   return templateVersionFromRow(row);
@@ -84,23 +110,44 @@ interface AccountFacts {
   isSummary: boolean;
 }
 
-async function accountFacts(runner: SqlExecutor, orgId: string, accountId: string): Promise<AccountFacts | null> {
-  const row = (await runner.execute<{ code: string; type: string; is_active: boolean; is_summary: boolean }>(sql`
-    select coalesce(number, name) as code, type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
-  return row ? { code: row.code, type: row.type, isActive: row.is_active, isSummary: row.is_summary } : null;
+async function accountFacts(
+  runner: SqlExecutor,
+  orgId: string,
+  accountId: string,
+): Promise<AccountFacts | null> {
+  const row = (
+    await runner.execute<{ code: string; type: string; is_active: boolean; is_summary: boolean }>(
+      sql`
+    select coalesce(number, name) as code, type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`,
+      "objects",
+    )
+  )[0];
+  return row
+    ? { code: row.code, type: row.type, isActive: row.is_active, isSummary: row.is_summary }
+    : null;
 }
 
 /** The deferral account must be an active, postable balance-sheet asset. */
-export async function assertDeferralAccount(runner: SqlExecutor, orgId: string, accountId: string): Promise<void> {
+export async function assertDeferralAccount(
+  runner: SqlExecutor,
+  orgId: string,
+  accountId: string,
+): Promise<void> {
   const account = await accountFacts(runner, orgId, accountId);
-  if (!account || !account.isActive || account.isSummary || !DEFERRAL_ACCOUNT_TYPES.includes(account.type)) {
+  if (
+    !account ||
+    !account.isActive ||
+    account.isSummary ||
+    !DEFERRAL_ACCOUNT_TYPES.includes(account.type)
+  ) {
     throw new AmortizationError(
       account
         ? `Account ${account.code} cannot hold prepaid expenses: it must be an active, postable current or other asset account.`
         : "The deferral account does not exist in this organization.",
       {
         code: "amortization_deferral_account_invalid",
-        remedy: "Set the template's deferral account to an active prepaid (current or other asset) account in the chart of accounts.",
+        remedy:
+          "Set the template's deferral account to an active prepaid (current or other asset) account in the chart of accounts.",
       },
     );
   }
@@ -114,14 +161,20 @@ export async function assertDestinationAccount(
   context: string,
 ): Promise<void> {
   const account = await accountFacts(runner, orgId, accountId);
-  if (!account || !account.isActive || account.isSummary || !DESTINATION_ACCOUNT_TYPES.includes(account.type)) {
+  if (
+    !account ||
+    !account.isActive ||
+    account.isSummary ||
+    !DESTINATION_ACCOUNT_TYPES.includes(account.type)
+  ) {
     throw new AmortizationError(
       account
         ? `${context}: account ${account.code} cannot receive amortization; it must be an active, postable expense or cost of goods sold account.`
         : `${context}: the destination account does not exist in this organization.`,
       {
         code: "amortization_destination_account_invalid",
-        remedy: "Choose an active expense or cost of goods sold account as the destination (on the line, the template or the schedule).",
+        remedy:
+          "Choose an active expense or cost of goods sold account as the destination (on the line, the template or the schedule).",
       },
     );
   }
@@ -142,12 +195,16 @@ export async function validateTemplateWrite(
     body[key] !== undefined ? body[key] : current ? current[column] : undefined;
   const method = String(value("method", "method") ?? "");
   const termSource = String(value("termSource", "term_source") ?? "");
-  if (!AMORTIZATION_METHODS.includes(method as AmortizationMethod)) return "Choose an amortization method.";
-  if (!AMORTIZATION_TERM_SOURCES.includes(termSource as AmortizationTermSource)) return "Choose where the term comes from.";
+  if (!AMORTIZATION_METHODS.includes(method as AmortizationMethod))
+    return "Choose an amortization method.";
+  if (!AMORTIZATION_TERM_SOURCES.includes(termSource as AmortizationTermSource))
+    return "Choose where the term comes from.";
   const rawCount = value("periodCount", "period_count");
-  const periodCount = rawCount === null || rawCount === undefined || rawCount === "" ? null : Number(rawCount);
+  const periodCount =
+    rawCount === null || rawCount === undefined || rawCount === "" ? null : Number(rawCount);
   const rawOffset = value("periodOffset", "period_offset");
-  const periodOffset = rawOffset === null || rawOffset === undefined || rawOffset === "" ? 0 : Number(rawOffset);
+  const periodOffset =
+    rawOffset === null || rawOffset === undefined || rawOffset === "" ? 0 : Number(rawOffset);
   const rawPercentages = value("percentages", "percentages");
   const percentages = Array.isArray(rawPercentages) ? rawPercentages.map(percentageEntry) : null;
   try {
@@ -155,16 +212,28 @@ export async function validateTemplateWrite(
       method: method as AmortizationMethod,
       termSource: termSource as AmortizationTermSource,
       periodCount: periodCount !== null && Number.isFinite(periodCount) ? periodCount : null,
-      percentages: method === "variable" ? percentages : percentages && percentages.length > 0 ? percentages : null,
+      percentages:
+        method === "variable"
+          ? percentages
+          : percentages && percentages.length > 0
+            ? percentages
+            : null,
       periodOffset,
     });
     const deferral = value("deferralAccountId", "deferral_account_id");
-    if (typeof deferral !== "string" || deferral === "") return "Choose the deferral (prepaid) account.";
+    if (typeof deferral !== "string" || deferral === "")
+      return "Choose the deferral (prepaid) account.";
     await assertDeferralAccount(runner, orgId, deferral);
     const destination = value("destinationAccountId", "destination_account_id");
     if (typeof destination === "string" && destination !== "") {
-      if (destination === deferral) return "The destination account must differ from the deferral account.";
-      await assertDestinationAccount(runner, orgId, destination, "The template's default destination");
+      if (destination === deferral)
+        return "The destination account must differ from the deferral account.";
+      await assertDestinationAccount(
+        runner,
+        orgId,
+        destination,
+        "The template's default destination",
+      );
     }
   } catch (error) {
     if (error instanceof AmortizationError) return `${error.message} ${error.remedy}`;
@@ -179,8 +248,23 @@ export async function listCurrentTemplates(
   orgId: string,
   onDate: string,
   retainedIds: readonly string[] = [],
-): Promise<{ id: string; code: string; name: string; method: AmortizationMethod; termSource: AmortizationTermSource }[]> {
-  const rows = await runner.execute<{ id: string; code: string; name: string; method: string; term_source: string }>(sql`
+): Promise<
+  {
+    id: string;
+    code: string;
+    name: string;
+    method: AmortizationMethod;
+    termSource: AmortizationTermSource;
+  }[]
+> {
+  const rows = await runner.execute<{
+    id: string;
+    code: string;
+    name: string;
+    method: string;
+    term_source: string;
+  }>(
+    sql`
     with current_versions as (
       select distinct on (code) id, code, name, method, term_source
         from expense_amortization_templates
@@ -188,10 +272,19 @@ export async function listCurrentTemplates(
        order by code, effective_from desc
     )
     select * from current_versions
-    ${retainedIds.length > 0 ? sql`union
+    ${
+      retainedIds.length > 0
+        ? sql`union
       select id, code, name, method, term_source from expense_amortization_templates
-      where org_id = ${orgId} and id in (${sql.join(retainedIds.map(id => sql`${id}::uuid`), sql`, `)})` : sql``}
-    order by code, id`, "objects");
+      where org_id = ${orgId} and id in (${sql.join(
+        retainedIds.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`
+        : sql``
+    }
+    order by code, id`,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     code: row.code,

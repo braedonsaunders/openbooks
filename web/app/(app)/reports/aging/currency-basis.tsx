@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Select } from '@openbooks/ui'
-import { stripReportOverlay } from '../../../../lib/report-overlay'
-import { useReportOverlayOptional } from '../../../../components/navigation-provider'
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Select } from "@openbooks/ui";
+import { stripReportOverlay } from "../../../../lib/report-overlay";
+import { useReportOverlayOptional } from "../../../../components/navigation-provider";
 
 export interface CurrencyOption {
-  value: string
-  label: string
+  value: string;
+  label: string;
 }
 
 /**
@@ -27,31 +27,33 @@ export function CurrencyBasisControl({
   baseLabel,
   transactionLabel,
 }: {
-  currencies: CurrencyOption[]
-  currency: string
-  currencyBasis: 'base' | 'transaction'
-  currencyLabel: string
-  basisLabel: string
-  baseLabel: string
-  transactionLabel: string
+  currencies: CurrencyOption[];
+  currency: string;
+  currencyBasis: "base" | "transaction";
+  currencyLabel: string;
+  basisLabel: string;
+  baseLabel: string;
+  transactionLabel: string;
 }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const overlay = useReportOverlayOptional()
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const overlay = useReportOverlayOptional();
   const setParam = (key: string, value: string) => {
-    const next = stripReportOverlay(new URLSearchParams(overlay?.search ?? searchParams.toString()))
-    next.set(key, value)
-    overlay?.beginReload()
-    router.replace(`${pathname}?${next.toString()}`)
-  }
+    const next = stripReportOverlay(
+      new URLSearchParams(overlay?.search ?? searchParams.toString()),
+    );
+    next.set(key, value);
+    overlay?.beginReload();
+    router.replace(`${pathname}?${next.toString()}`);
+  };
   return (
     <div className="flex items-center gap-2">
       <label className="flex items-center gap-1 text-sm">
         <span className="text-slate-500 dark:text-slate-400">{currencyLabel}</span>
         <Select
           value={currency}
-          onChange={(e) => setParam('currency', e.target.value)}
+          onChange={(e) => setParam("currency", e.target.value)}
           className="h-8 w-24"
           aria-label={currencyLabel}
         >
@@ -66,7 +68,7 @@ export function CurrencyBasisControl({
         <span className="text-slate-500 dark:text-slate-400">{basisLabel}</span>
         <Select
           value={currencyBasis}
-          onChange={(e) => setParam('currencyBasis', e.target.value)}
+          onChange={(e) => setParam("currencyBasis", e.target.value)}
           className="h-8 w-40"
           aria-label={basisLabel}
         >
@@ -75,5 +77,5 @@ export function CurrencyBasisControl({
         </Select>
       </label>
     </div>
-  )
+  );
 }

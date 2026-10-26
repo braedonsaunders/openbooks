@@ -8,7 +8,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/estimates?estimate=019f0000-0000-4000-8000-000000000005", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/estimates?estimate=019f0000-0000-4000-8000-000000000005",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 Object.assign(globalThis, {
   __estimateWithdrawRouter: { push() {}, replace() {}, refresh() {} },
@@ -16,7 +20,10 @@ Object.assign(globalThis, {
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__estimateWithdrawRouter}export function usePathname(){return '/estimates'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__estimateWithdrawRouter}export function usePathname(){return '/estimates'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
@@ -76,10 +83,15 @@ const APPROVAL_STATE = {
   myActions: null,
 };
 
-async function mount(viewer: { submittedByViewer: boolean; canManage: boolean; canApprove: boolean }, kind: 'quote' | 'sales_order' | 'purchase_order' = 'quote') {
+async function mount(
+  viewer: { submittedByViewer: boolean; canManage: boolean; canApprove: boolean },
+  kind: "quote" | "sales_order" | "purchase_order" = "quote",
+) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.includes("/api/flows/record-state")) {
       return Response.json({
         approvalState: APPROVAL_STATE,
@@ -126,7 +138,8 @@ async function mount(viewer: { submittedByViewer: boolean; canManage: boolean; c
   // Drawer header actions sit behind the "Actions" menu popover: open it,
   // then wait (bounded) for ApprovalActions to resolve record-state.
   const trigger = [...document.querySelectorAll("button")].find(
-    (button) => (button.textContent ?? "").trim() === "Actions" && button.hasAttribute("aria-expanded"),
+    (button) =>
+      (button.textContent ?? "").trim() === "Actions" && button.hasAttribute("aria-expanded"),
   );
   assert.ok(trigger, "the Actions menu trigger renders");
   await act(async () => {
@@ -138,7 +151,9 @@ async function mount(viewer: { submittedByViewer: boolean; canManage: boolean; c
     if (/Pending with/.test(text)) break;
     await tick(50);
   }
-  const buttons = [...document.querySelectorAll("button")].map((button) => button.textContent?.trim() ?? "");
+  const buttons = [...document.querySelectorAll("button")].map(
+    (button) => button.textContent?.trim() ?? "",
+  );
   return {
     buttons,
     cleanup: async () => {
@@ -155,7 +170,10 @@ async function mount(viewer: { submittedByViewer: boolean; canManage: boolean; c
 test("a quote's submitter is offered Withdraw submission", async () => {
   const view = await mount({ submittedByViewer: true, canManage: true, canApprove: false });
   try {
-    assert.ok(view.buttons.includes("Withdraw submission"), "the preparer must be able to recall their own quote");
+    assert.ok(
+      view.buttons.includes("Withdraw submission"),
+      "the preparer must be able to recall their own quote",
+    );
   } finally {
     await view.cleanup();
   }
@@ -164,7 +182,10 @@ test("a quote's submitter is offered Withdraw submission", async () => {
 test("an approver of quotes is offered Withdraw submission for a colleague's submission", async () => {
   const view = await mount({ submittedByViewer: false, canManage: false, canApprove: true });
   try {
-    assert.ok(view.buttons.includes("Withdraw submission"), "the approve grant may withdraw a submission it did not make");
+    assert.ok(
+      view.buttons.includes("Withdraw submission"),
+      "the approve grant may withdraw a submission it did not make",
+    );
   } finally {
     await view.cleanup();
   }
@@ -182,7 +203,7 @@ test("another estimator with only the create grant is not offered Withdraw submi
   }
 });
 
-for (const kind of ['sales_order', 'purchase_order'] as const) {
+for (const kind of ["sales_order", "purchase_order"] as const) {
   test(`the submitter of a pending ${kind} is offered Withdraw submission`, async () => {
     const view = await mount({ submittedByViewer: true, canManage: true, canApprove: true }, kind);
     try {

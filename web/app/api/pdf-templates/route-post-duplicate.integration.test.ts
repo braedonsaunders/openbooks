@@ -55,18 +55,20 @@ const routeUrl = "./route.ts?pdf-template-post-duplicate-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {
   // Scratch-org seeding bypasses row-level security (cluster rejects 42501
   // otherwise); the route calls under test run unwrapped, as in production.
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Template Admin", "admin"));
-  await withBypassContext(() => db.execute(sql`
+  const actorId = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Template Admin", "admin"),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into pdf_templates (org_id, record_type, name, source_html, compiled_html, created_by, updated_by)
-    values (${org.orgId}, 'customer_invoice', 'Standard', '<p>Hi</p>', '<p>Hi</p>', ${actorId}, ${actorId})`));
+    values (${org.orgId}, 'customer_invoice', 'Standard', '<p>Hi</p>', '<p>Hi</p>', ${actorId}, ${actorId})`),
+  );
   routeState.authz = {
     user: { orgId: org.orgId, id: actorId },
     permissions: new Set(["*"]),
@@ -83,35 +85,34 @@ function postRequest(body: unknown): Request {
   });
 }
 
-test(
-  "POST a taken template name answers 409, never a 500 with SQL",
-  async () => {
-    const f = await seed();
-    // Middleware establishes the tenant scope in production; mirror it here.
-    const res = await withOrgContext(f.orgId, () =>
-      POST(postRequest({ recordType: "customer_invoice", name: "Standard" })),
-    );
-    const body = await res.json();
-    assert.equal(res.status, 409);
-    assert.match(String(body.error), /already exists/);
-    assert.doesNotMatch(String(body.error), /insert into/i);
-  },
-);
+test("POST a taken template name answers 409, never a 500 with SQL", async () => {
+  const f = await seed();
+  // Middleware establishes the tenant scope in production; mirror it here.
+  const res = await withOrgContext(f.orgId, () =>
+    POST(postRequest({ recordType: "customer_invoice", name: "Standard" })),
+  );
+  const body = await res.json();
+  assert.equal(res.status, 409);
+  assert.match(String(body.error), /already exists/);
+  assert.doesNotMatch(String(body.error), /insert into/i);
+});
 
-test(
-  "POST a fresh template name still creates",
-  async () => {
-    const f = await seed();
-    const res = await withOrgContext(f.orgId, () =>
-      POST(postRequest({ recordType: "customer_invoice", name: "Standard 2" })),
-    );
-    assert.equal(res.status, 200);
-    const created = (await res.json()) as { id: string };
-    const stored = await withBypassContext(() => db.execute<{ name: string }>(sql`
-      select name from pdf_templates where id = ${created.id} and org_id = ${f.orgId}`, "objects"));
-    assert.equal(stored[0]?.name, "Standard 2");
-  },
-);
+test("POST a fresh template name still creates", async () => {
+  const f = await seed();
+  const res = await withOrgContext(f.orgId, () =>
+    POST(postRequest({ recordType: "customer_invoice", name: "Standard 2" })),
+  );
+  assert.equal(res.status, 200);
+  const created = (await res.json()) as { id: string };
+  const stored = await withBypassContext(() =>
+    db.execute<{ name: string }>(
+      sql`
+      select name from pdf_templates where id = ${created.id} and org_id = ${f.orgId}`,
+      "objects",
+    ),
+  );
+  assert.equal(stored[0]?.name, "Standard 2");
+});
 
 // Release the route doubles after every test in this file has run.
 // The factory's lazy session-gate import runs on every request, so the hook

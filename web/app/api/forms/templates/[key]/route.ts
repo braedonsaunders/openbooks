@@ -14,7 +14,11 @@ const putBodySchema0 = z
     category: z.string().trim().max(120).nullable().optional(),
     description: z.string().trim().max(2000).nullable().optional(),
     kind: z.enum(["form", "wizard", "checklist", "register"]).optional(),
-    allowedRoles: z.array(z.string().trim().min(1, "allowedRoles cannot contain blank keys")).max(20).nullable().optional(),
+    allowedRoles: z
+      .array(z.string().trim().min(1, "allowedRoles cannot contain blank keys"))
+      .max(20)
+      .nullable()
+      .optional(),
     schema: z.json().optional(),
   })
   .refine((body) => Object.keys(body).length > 0, "provide at least one template field to update");
@@ -26,7 +30,6 @@ function schemaHash(schema: unknown): string {
 }
 
 export const runtime = "nodejs";
-
 
 /** Template meta + all versions + the editable draft schema. */
 export const GET = defineRoute({
@@ -40,15 +43,17 @@ export const GET = defineRoute({
     const { key } = await params;
 
     const template = await getTemplateByKey(user.orgId, key);
-    if (!template)
-      return notFound("record");
+    if (!template) return notFound("record");
 
-    const versions = await db.execute(sql`
+    const versions = await db.execute(
+      sql`
     select id, version, changelog, published_at, created_at
       from form_template_versions
      where org_id = ${user.orgId} and template_id = ${template.id}
      order by version desc
-  `, "objects");
+  `,
+      "objects",
+    );
     const latest = await getLatestVersion(user.orgId, template.id);
 
     return NextResponse.json({
@@ -80,8 +85,7 @@ export const PUT = defineRoute({
     const { key } = await params;
 
     const template = await getTemplateByKey(user.orgId, key);
-    if (!template)
-      return notFound("record");
+    if (!template) return notFound("record");
 
     const body = routeBody;
 
@@ -94,8 +98,7 @@ export const PUT = defineRoute({
 
     // Validate the schema before opening the write transaction. This keeps a
     // request that combines metadata and an invalid schema entirely read-only.
-    const parsedSchema =
-      body.schema === undefined ? undefined : parseFormSchema(body.schema);
+    const parsedSchema = body.schema === undefined ? undefined : parseFormSchema(body.schema);
     if (parsedSchema && !parsedSchema.success) {
       return NextResponse.json(
         { error: "invalid schema", issues: parsedSchema.issues },
@@ -110,14 +113,16 @@ export const PUT = defineRoute({
         // same lock, so a PUT that raced a publish serializes after it and
         // observes the published row instead of overwriting the snapshot.
         // The preflight lookup above is not authoritative — re-check inside.
-        const locked = await tx.execute(sql`
+        const locked = await tx.execute(
+          sql`
         select id, key, name, category, description, status, kind, allowed_roles
           from form_templates
          where id = ${template.id} and org_id = ${user.orgId}
          for update
-      `, "objects");
-        const beforeTemplate = locked[0] as
-          Record<string, unknown> | undefined;
+      `,
+          "objects",
+        );
+        const beforeTemplate = locked[0] as Record<string, unknown> | undefined;
         if (!beforeTemplate) return { kind: "not-found" as const };
 
         if (hasMetadataChanges) {
@@ -127,9 +132,7 @@ export const PUT = defineRoute({
           const bodyKind = body.kind as string | undefined;
           const bodyRoles = body.allowedRoles as string[] | null | undefined;
           const name = bodyName?.trim() || template.name;
-          const kind = ["form", "wizard", "checklist", "register"].includes(
-            bodyKind ?? "",
-          )
+          const kind = ["form", "wizard", "checklist", "register"].includes(bodyKind ?? "")
             ? bodyKind!
             : template.kind;
           const allowedRoles =
@@ -141,10 +144,7 @@ export const PUT = defineRoute({
           const afterTemplate = {
             ...beforeTemplate,
             name,
-            category:
-              bodyCategory === undefined
-                ? template.category
-                : bodyCategory?.trim() || null,
+            category: bodyCategory === undefined ? template.category : bodyCategory?.trim() || null,
             description:
               bodyDescription === undefined
                 ? template.description
@@ -178,13 +178,16 @@ export const PUT = defineRoute({
         if (parsedSchema) {
           // Locked: a concurrent publish either committed before this lock
           // (observed here as published) or waits behind it.
-          const latestResult = await tx.execute(sql`
+          const latestResult = await tx.execute(
+            sql`
           select id, version, schema, published_at
             from form_template_versions
            where org_id = ${user.orgId} and template_id = ${template.id}
            order by version desc limit 1
            for update
-        `, "objects");
+        `,
+            "objects",
+          );
           const latest = latestResult[0] as
             | {
                 id: string;
@@ -200,15 +203,17 @@ export const PUT = defineRoute({
             // a publish that committed between the lock and this write cannot
             // be overwritten: zero rows means the race was lost and the edit
             // goes to a new draft version instead.
-            const stamped = await tx.execute(sql`
+            const stamped = await tx.execute(
+              sql`
             update form_template_versions
                set schema = ${afterSchema}::jsonb,
                    updated_at = now(), updated_by = ${user.id}
              where id = ${latest.id} and org_id = ${user.orgId} and published_at is null
              returning version
-          `, "objects");
-            const kept = (stamped[0] as { version: number } | undefined)
-              ?.version;
+          `,
+              "objects",
+            );
+            const kept = (stamped[0] as { version: number } | undefined)?.version;
             if (kept !== undefined) {
               savedVersion = kept;
               await auditSetupChange(
@@ -228,12 +233,15 @@ export const PUT = defineRoute({
               );
             } else {
               const next = latest.version + 1;
-              const spawned = await tx.execute(sql`
+              const spawned = await tx.execute(
+                sql`
               insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
               values (${user.orgId}, ${template.id}, ${next},
                       ${afterSchema}::jsonb, ${user.id}, ${user.id})
               returning id
-            `, "objects");
+            `,
+                "objects",
+              );
               await auditSetupChange(
                 {
                   orgId: user.orgId,
@@ -253,12 +261,15 @@ export const PUT = defineRoute({
           } else {
             // Latest is published (immutable) or missing — spawn the next draft.
             const next = (latest?.version ?? 0) + 1;
-            const spawned = await tx.execute(sql`
+            const spawned = await tx.execute(
+              sql`
             insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
             values (${user.orgId}, ${template.id}, ${next},
                     ${afterSchema}::jsonb, ${user.id}, ${user.id})
             returning id
-          `, "objects");
+          `,
+              "objects",
+            );
             await auditSetupChange(
               {
                 orgId: user.orgId,
@@ -267,9 +278,7 @@ export const PUT = defineRoute({
                 action: "insert",
                 changes: {
                   version: next,
-                  before: latest
-                    ? { version: latest.version, schemaHash: beforeSchemaHash }
-                    : null,
+                  before: latest ? { version: latest.version, schemaHash: beforeSchemaHash } : null,
                   after: { schemaHash: schemaHash(parsedSchema.data) },
                 },
                 actorId: user.id,
@@ -302,27 +311,32 @@ export const DELETE = defineRoute({
     const { key } = await params;
 
     const template = await getTemplateByKey(user.orgId, key);
-    if (!template)
-      return notFound("record");
+    if (!template) return notFound("record");
 
     const outcome = await db.transaction(async (tx) => {
-      const locked = await tx.execute(sql`
+      const locked = await tx.execute(
+        sql`
       select id, key, name, category, description, status, kind, allowed_roles
         from form_templates
        where id = ${template.id} and org_id = ${user.orgId}
        for update
-    `, "objects");
+    `,
+        "objects",
+      );
       const before = locked[0] as Record<string, unknown> | undefined;
       if (!before) return { kind: "not-found" as const };
       // Archiving is idempotent: a second request observes the archived row
       // and succeeds without writing a duplicate audit event.
       if (before.status === "archived") return { kind: "ok" as const };
-      const archived = await tx.execute(sql`
+      const archived = await tx.execute(
+        sql`
       update form_templates
          set status = 'archived', updated_at = now(), updated_by = ${user.id}
        where id = ${template.id} and org_id = ${user.orgId} and status <> 'archived'
        returning id
-    `, "objects");
+    `,
+        "objects",
+      );
       if (archived.length === 0) return { kind: "not-found" as const };
       await auditSetupChange(
         {

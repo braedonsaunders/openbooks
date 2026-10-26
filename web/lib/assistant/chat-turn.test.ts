@@ -31,7 +31,11 @@ function adminAuthz(): Authz {
     homeOrgId: orgId,
     homeUserId: userId,
   };
-  return { user, permissions: new Set(["*", "assistant.use", "assistant.write"]), allowedSubsidiaryIds: null };
+  return {
+    user,
+    permissions: new Set(["*", "assistant.use", "assistant.write"]),
+    allowedSubsidiaryIds: null,
+  };
 }
 
 function allFeaturesExceptApps(): Record<string, boolean> {
@@ -39,7 +43,11 @@ function allFeaturesExceptApps(): Record<string, boolean> {
 }
 
 test("a payroll question pre-routes payroll but not inventory", async () => {
-  const turn = await buildChatTurn(adminAuthz(), allFeaturesExceptApps(), "Summarize our most recent pay run.");
+  const turn = await buildChatTurn(
+    adminAuthz(),
+    allFeaturesExceptApps(),
+    "Summarize our most recent pay run.",
+  );
   const active = turn.activeTools();
   assert.ok(active.includes("list_pay_runs"), "pre-routed payroll tool missing");
   assert.ok(active.includes("whoami"), "core tool missing");
@@ -61,9 +69,12 @@ test("a greeting sends core tools only", async () => {
 });
 
 test("prior conversation tools keep their module pre-routed", async () => {
-  const turn = await buildChatTurn(adminAuthz(), allFeaturesExceptApps(), "And the second location?", [
-    "inventory_levels",
-  ]);
+  const turn = await buildChatTurn(
+    adminAuthz(),
+    allFeaturesExceptApps(),
+    "And the second location?",
+    ["inventory_levels"],
+  );
   assert.ok(turn.activeTools().includes("inventory_movements"), "follow-up lost its module");
 });
 

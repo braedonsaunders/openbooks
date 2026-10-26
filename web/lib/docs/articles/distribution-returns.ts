@@ -1,14 +1,15 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const distributionReturns: DocArticle = {
-  slug: 'distribution-returns',
-  title: 'Return Authorizations',
-  category: 'transactions',
+  slug: "distribution-returns",
+  title: "Return Authorizations",
+  category: "transactions",
   order: 10,
-  summary: 'Authorize a customer return against a shipped quantity, record arrivals, inspect each line, and choose whether accepted goods are restocked, scrapped or returned to a vendor.',
-  updated: '2026-09-27',
-  keywords: ['return authorization', 'RMA', 'customer return', 'inspection', 'restock', 'scrap'],
-  related: ['distribution-pick-ship', 'sales-workflow'],
+  summary:
+    "Authorize a customer return against a shipped quantity, record arrivals, inspect each line, and choose whether accepted goods are restocked, scrapped or returned to a vendor.",
+  updated: "2026-09-27",
+  keywords: ["return authorization", "RMA", "customer return", "inspection", "restock", "scrap"],
+  related: ["distribution-pick-ship", "sales-workflow"],
   body: `# Return Authorizations
 
 Return Authorizations track a customer's return from approval through receiving and inspection. Each line references a posted customer shipment, so the authorized quantity cannot exceed the quantity still available to return.
@@ -31,4 +32,4 @@ Inspection creates one customer credit for accepted goods. Apply or refund that 
 
 Return Authorizations are off by default. Turn on **Return Authorizations** in Company Settings → Features to show the page and its assistant reads. Turning it off preserves the authorization, credits and audit history.
 `,
-}
+};

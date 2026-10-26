@@ -34,7 +34,8 @@ export async function returnableBillLines(
   orgId: string,
   billId: string,
 ): Promise<PrefillBillLine[]> {
-  const rows = await runner.execute<PrefillBillLine>(sql`
+  const rows = await runner.execute<PrefillBillLine>(
+    sql`
     with received as (
       select m.document_line_id as line_id, m.id as movement_id,
              m.quantity as received_qty
@@ -74,6 +75,8 @@ export async function returnableBillLines(
       left join returned r on r.receipt_id = s.movement_id::text
      where l.org_id = ${orgId} and l.document_id = ${billId}
        and (s.movement_id is null or s.received_qty - coalesce(r.qty, 0) > 0)
-     order by l.line_number`, "objects");
+     order by l.line_number`,
+    "objects",
+  );
   return rows;
 }

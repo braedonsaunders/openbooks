@@ -65,8 +65,14 @@ test("accounts and projects pin from their single-result shapes", () => {
 test("failures and unknown tools leave pins untouched and unmutated", () => {
   const before: EntityPins = { party: { id: PARTY_ID, label: "Customer A" } };
   const snapshot = JSON.stringify(before);
-  assert.deepEqual(updatePinsFromToolOutput(before, "get_document", { ok: false, error: "forbidden" }), before);
-  assert.deepEqual(updatePinsFromToolOutput(before, "no_such_tool", { ok: true, data: {} }), before);
+  assert.deepEqual(
+    updatePinsFromToolOutput(before, "get_document", { ok: false, error: "forbidden" }),
+    before,
+  );
+  assert.deepEqual(
+    updatePinsFromToolOutput(before, "no_such_tool", { ok: true, data: {} }),
+    before,
+  );
   assert.equal(JSON.stringify(before), snapshot);
 });
 

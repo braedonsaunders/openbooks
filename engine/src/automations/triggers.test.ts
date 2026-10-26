@@ -15,19 +15,42 @@ import {
 import { AUTOMATION_TRIGGER_KINDS } from "@openbooks/schema/src/hrm-automations.ts";
 
 test("all six trigger kinds parse", () => {
-  assert.equal(parseAutomationTrigger({ kind: "schedule", cron: "0 9 * * *", timezone: "UTC" }).kind, "schedule");
   assert.equal(
-    parseAutomationTrigger({ kind: "date_relative", entity: "employment", dateField: "service_start", offsetDays: 3, direction: "before", atTime: "09:00" }).kind,
+    parseAutomationTrigger({ kind: "schedule", cron: "0 9 * * *", timezone: "UTC" }).kind,
+    "schedule",
+  );
+  assert.equal(
+    parseAutomationTrigger({
+      kind: "date_relative",
+      entity: "employment",
+      dateField: "service_start",
+      offsetDays: 3,
+      direction: "before",
+      atTime: "09:00",
+    }).kind,
     "date_relative",
   );
-  assert.equal(parseAutomationTrigger({ kind: "field_change", entity: "employment", field: "status" }).kind, "field_change");
-  assert.equal(parseAutomationTrigger({ kind: "event", subjectKind: "x", eventKind: "approved" }).kind, "event");
+  assert.equal(
+    parseAutomationTrigger({ kind: "field_change", entity: "employment", field: "status" }).kind,
+    "field_change",
+  );
+  assert.equal(
+    parseAutomationTrigger({ kind: "event", subjectKind: "x", eventKind: "approved" }).kind,
+    "event",
+  );
   assert.equal(parseAutomationTrigger({ kind: "document", event: "signed" }).kind, "document");
   assert.equal(parseAutomationTrigger({ kind: "manual" }).kind, "manual");
 });
 
 test("trigger kind vocabulary matches the storage CHECK (0226)", () => {
-  assert.deepEqual([...AUTOMATION_TRIGGER_KINDS].sort(), ["date_relative", "document", "event", "field_change", "manual", "schedule"]);
+  assert.deepEqual([...AUTOMATION_TRIGGER_KINDS].sort(), [
+    "date_relative",
+    "document",
+    "event",
+    "field_change",
+    "manual",
+    "schedule",
+  ]);
 });
 
 test("unknown trigger kind refuses with remedy", () => {
@@ -39,7 +62,15 @@ test("unknown trigger kind refuses with remedy", () => {
 
 test("bad at_time refuses", () => {
   assert.throws(
-    () => parseAutomationTrigger({ kind: "date_relative", entity: "e", dateField: "f", offsetDays: 1, direction: "before", atTime: "9am" }),
+    () =>
+      parseAutomationTrigger({
+        kind: "date_relative",
+        entity: "e",
+        dateField: "f",
+        offsetDays: 1,
+        direction: "before",
+        atTime: "9am",
+      }),
     AutomationContractError,
   );
 });
@@ -83,16 +114,19 @@ test("delay, approve_step and start_flow refuse publishing with named remedies",
 
 test("unknown send_email template keys refuse publishing with the valid keys named", () => {
   assert.throws(
-    () => assertPublishableAutomationActions(
-      parseAutomationActions([{ kind: "send_email", templateKey: "probe", to: "initiator" }]),
-    ),
+    () =>
+      assertPublishableAutomationActions(
+        parseAutomationActions([{ kind: "send_email", templateKey: "probe", to: "initiator" }]),
+      ),
     (e: unknown) =>
       e instanceof AutomationContractError &&
       /unknown email template 'probe'/.test((e as Error).message) &&
       /automation_notice/.test((e as Error).message),
   );
   assertPublishableAutomationActions(
-    parseAutomationActions([{ kind: "send_email", templateKey: "automation_notice", to: "initiator" }]),
+    parseAutomationActions([
+      { kind: "send_email", templateKey: "automation_notice", to: "initiator" },
+    ]),
   );
 });
 
@@ -111,13 +145,23 @@ test("a schedule that cannot parse is refused at save with the value named", () 
   );
   // …while the save-time check refuses by name with the remedy.
   assert.equal(invalidScheduleCronReason("0 9 * * *", "UTC"), null);
-  assert.match(invalidScheduleCronReason("not-a-cron", "UTC") ?? "", /cron 'not-a-cron' is not a valid cron expression/);
+  assert.match(
+    invalidScheduleCronReason("not-a-cron", "UTC") ?? "",
+    /cron 'not-a-cron' is not a valid cron expression/,
+  );
   assert.match(invalidScheduleCronReason("not-a-cron", "UTC") ?? "", /fix the cron and save again/);
-  assert.match(invalidScheduleCronReason("0 9 * * *", "Nope/Zone") ?? "", /timezone 'Nope\/Zone' is not a valid IANA timezone/);
+  assert.match(
+    invalidScheduleCronReason("0 9 * * *", "Nope/Zone") ?? "",
+    /timezone 'Nope\/Zone' is not a valid IANA timezone/,
+  );
   assert.throws(
-    () => assertValidScheduleTrigger(parseAutomationTrigger({ kind: "schedule", cron: "not-a-cron", timezone: "UTC" })),
+    () =>
+      assertValidScheduleTrigger(
+        parseAutomationTrigger({ kind: "schedule", cron: "not-a-cron", timezone: "UTC" }),
+      ),
     (e: unknown) =>
-      e instanceof AutomationContractError && /cron 'not-a-cron' is invalid|not a valid cron expression/.test((e as Error).message),
+      e instanceof AutomationContractError &&
+      /cron 'not-a-cron' is invalid|not a valid cron expression/.test((e as Error).message),
   );
   // Non-schedule triggers are untouched by the cron check.
   assertValidScheduleTrigger(parseAutomationTrigger({ kind: "manual" }));
@@ -135,7 +179,10 @@ test("event-sourced triggers refuse enabling by name while drafts stay saveable"
           ? { kind, subjectKind: "hrm_employment_change_request", eventKind: "approved" }
           : { kind, event: "signed" as const };
     const trigger = parseAutomationTrigger(base);
-    assert.match(eventSourcedTriggerRefusal(trigger) ?? "", new RegExp(`trigger kind '${kind}' is not available yet`));
+    assert.match(
+      eventSourcedTriggerRefusal(trigger) ?? "",
+      new RegExp(`trigger kind '${kind}' is not available yet`),
+    );
     assert.match(eventSourcedTriggerRefusal(trigger) ?? "", /never fire/);
     assert.throws(() => assertTriggerCanEnable(trigger), AutomationContractError);
   }

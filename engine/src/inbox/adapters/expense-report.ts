@@ -8,11 +8,7 @@
  * uses; posting stays in expenses after approval.
  */
 
-import {
-  decideGate,
-  delegateGate,
-  gateDecisionCapability,
-} from "../../flows/gates.ts";
+import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
 import { toWorklistScope } from "../guard.ts";
 import { parseDelegationReason } from "../delegation.ts";
@@ -23,22 +19,15 @@ import { inboxItemId, priorityForDueDate } from "../types.ts";
 export const expenseReportAdapter: InboxAdapter = {
   kind: "expense_report",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if(ctx.approvalWorklistOwnsGates)return [];
+    if (ctx.approvalWorklistOwnsGates) return [];
     const out: InboxItem[] = [];
-    const approvals = await worklistApprovals(
-      ctx.orgId,
-      ctx.actorId,
-      toWorklistScope(ctx),
-    );
+    const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, toWorklistScope(ctx));
     for (const item of approvals) {
       if (item.kind === "flow_gate") {
         if (item.gate.subjectKind !== "expense_report") continue;
         const gate = item.gate;
-        const sodBlocked = (await gateDecisionCapability(gate.id, ctx.actorId))
-          .sodBlocked;
-        const dueAt = gate.escalateAt
-          ? new Date(gate.escalateAt).toISOString()
-          : null;
+        const sodBlocked = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
+        const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
         out.push({
           id: inboxItemId("expense_report", `gate:${gate.id}`),
           kind: "expense_report",
@@ -115,8 +104,6 @@ export const expenseReportAdapter: InboxAdapter = {
         return;
       }
     }
-    throw new Error(
-      `action ${JSON.stringify(actionKey)} is not available on this expense report`,
-    );
+    throw new Error(`action ${JSON.stringify(actionKey)} is not available on this expense report`);
   },
 };

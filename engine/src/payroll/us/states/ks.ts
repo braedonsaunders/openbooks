@@ -23,7 +23,9 @@
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { PayrollError } from "../../error.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
@@ -37,19 +39,35 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ks.ts";
 const KS_K4C_KEY = "us_ks_k4c";
 
 export type KsPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly"
-  | "quarterly" | "semiannual" | "annual" | "daily";
+  | "weekly"
+  | "biweekly"
+  | "semimonthly"
+  | "monthly"
+  | "quarterly"
+  | "semiannual"
+  | "annual"
+  | "daily";
 
 export type KsFilingStatus = "single" | "married";
 
 const KS_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly",
-  "quarterly", "semiannual", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "semiannual",
+  "annual",
+  "daily",
 ];
 
 interface KsBracket {
@@ -77,7 +95,9 @@ const P558 = pctToRate("5.58");
  */
 export const KS_TABLES: Readonly<Record<KsPeriod, KsPeriodTable>> = {
   weekly: {
-    marriedJoint: "352.31", single: "176.15", dependent: "44.62",
+    marriedJoint: "352.31",
+    single: "176.15",
+    dependent: "44.62",
     singleBrackets: [
       { over: "0", notOver: "69", base: "0", rate: pctToRate("0") },
       { over: "69", notOver: "512", base: "0", rate: P52 },
@@ -90,7 +110,9 @@ export const KS_TABLES: Readonly<Record<KsPeriod, KsPeriodTable>> = {
     ],
   },
   biweekly: {
-    marriedJoint: "704.62", single: "352.31", dependent: "89.23",
+    marriedJoint: "704.62",
+    single: "352.31",
+    dependent: "89.23",
     singleBrackets: [
       { over: "0", notOver: "139", base: "0", rate: pctToRate("0") },
       { over: "139", notOver: "1023", base: "0", rate: P52 },
@@ -103,7 +125,9 @@ export const KS_TABLES: Readonly<Record<KsPeriod, KsPeriodTable>> = {
     ],
   },
   semimonthly: {
-    marriedJoint: "763.33", single: "381.67", dependent: "96.67",
+    marriedJoint: "763.33",
+    single: "381.67",
+    dependent: "96.67",
     singleBrackets: [
       { over: "0", notOver: "150", base: "0", rate: pctToRate("0") },
       { over: "150", notOver: "1109", base: "0", rate: P52 },
@@ -116,7 +140,9 @@ export const KS_TABLES: Readonly<Record<KsPeriod, KsPeriodTable>> = {
     ],
   },
   monthly: {
-    marriedJoint: "1526.67", single: "763.33", dependent: "193.33",
+    marriedJoint: "1526.67",
+    single: "763.33",
+    dependent: "193.33",
     singleBrackets: [
       { over: "0", notOver: "300", base: "0", rate: pctToRate("0") },
       { over: "300", notOver: "2217", base: "0", rate: P52 },
@@ -129,7 +155,9 @@ export const KS_TABLES: Readonly<Record<KsPeriod, KsPeriodTable>> = {
     ],
   },
   quarterly: {
-    marriedJoint: "4580.00", single: "2290.00", dependent: "580.00",
+    marriedJoint: "4580.00",
+    single: "2290.00",
+    dependent: "580.00",
     singleBrackets: [
       { over: "0", notOver: "901", base: "0", rate: pctToRate("0") },
       { over: "901", notOver: "6651", base: "0", rate: P52 },
@@ -142,7 +170,9 @@ export const KS_TABLES: Readonly<Record<KsPeriod, KsPeriodTable>> = {
     ],
   },
   semiannual: {
-    marriedJoint: "9160.00", single: "4580.00", dependent: "1160.00",
+    marriedJoint: "9160.00",
+    single: "4580.00",
+    dependent: "1160.00",
     singleBrackets: [
       { over: "0", notOver: "1803", base: "0", rate: pctToRate("0") },
       { over: "1803", notOver: "13303", base: "0", rate: P52 },
@@ -155,7 +185,9 @@ export const KS_TABLES: Readonly<Record<KsPeriod, KsPeriodTable>> = {
     ],
   },
   annual: {
-    marriedJoint: "18320.00", single: "9160.00", dependent: "2320.00",
+    marriedJoint: "18320.00",
+    single: "9160.00",
+    dependent: "2320.00",
     singleBrackets: [
       { over: "0", notOver: "3605", base: "0", rate: pctToRate("0") },
       { over: "3605", notOver: "26605", base: "0", rate: P52 },
@@ -168,7 +200,9 @@ export const KS_TABLES: Readonly<Record<KsPeriod, KsPeriodTable>> = {
     ],
   },
   daily: {
-    marriedJoint: "70.46", single: "35.23", dependent: "8.92",
+    marriedJoint: "70.46",
+    single: "35.23",
+    dependent: "8.92",
     singleBrackets: [
       { over: "0", notOver: "14", base: "0", rate: pctToRate("0") },
       { over: "14", notOver: "102", base: "0", rate: P52 },
@@ -198,17 +232,19 @@ const KS_EDITIONS_BY_YEAR: Record<number, KsYearRates> = {
   [KS_RATES_2026.year]: KS_RATES_2026,
 };
 
-export const KS_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Kansas KW-100 Withholding Tax Guide (Rev. 7-24) — rates on or after July 1, 2024",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Kansas Department of Revenue, KW-100 Withholding Tax Guide (live official) "
-    + "— percentage formula, $9,160 / $18,320 / $2,320 allowances, Esmeralda "
-    + "Espinoza $2,000 semi-monthly married 3-allowance example ($41.44)",
-  status: "published",
-  region: "KS",
-}];
+export const KS_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Kansas KW-100 Withholding Tax Guide (Rev. 7-24) — rates on or after July 1, 2024",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Kansas Department of Revenue, KW-100 Withholding Tax Guide (live official) " +
+      "— percentage formula, $9,160 / $18,320 / $2,320 allowances, Esmeralda " +
+      "Espinoza $2,000 semi-monthly married 3-allowance example ($41.44)",
+    status: "published",
+    region: "KS",
+  },
+];
 
 /**
  * KW-100 Step 1: Joint treats the first two allowances as the $18,320 personal
@@ -246,12 +282,18 @@ function compute(
   const period = context.requirePrintedPeriod(input.periodsPerYear, KS_PERIODS, 260);
   const { factors, trace } = context;
 
-  const exempt = context.exemptResult({ factorKey: "KS_EXEMPT", factorFormat: "decimal", statutoryTax: true, additionalWithholding: true });
+  const exempt = context.exemptResult({
+    factorKey: "KS_EXEMPT",
+    factorFormat: "decimal",
+    statutoryTax: true,
+    additionalWithholding: true,
+  });
   if (exempt) return exempt;
 
   // Missing K-4: "the employer must withhold wages at the single rate with no
   // allowances."
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as KsFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single") as KsFilingStatus;
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -266,8 +308,8 @@ function compute(
   let allocationRate = "1";
   if (input.basis === "nonresident") {
     const k4c = input.supportingCertificates?.[KS_K4C_KEY];
-    const workAllocation = input.wageAllocations?.find((item) =>
-      item.region === "KS" && item.subRegion === null,
+    const workAllocation = input.wageAllocations?.find(
+      (item) => item.region === "KS" && item.subRegion === null,
     );
     if (k4c?.onFile) {
       const percentage = certificateAmount(k4c, "kansas_services_percentage");
@@ -283,7 +325,8 @@ function compute(
     factors.KS_NONRESIDENT_ALLOCATION = allocationRate;
   }
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
-  const sourcedTax = input.basis === "nonresident" ? mulRateCents(periodTax, allocationRate) : periodTax;
+  const sourcedTax =
+    input.basis === "nonresident" ? mulRateCents(periodTax, allocationRate) : periodTax;
   const total = sourcedTax + extra;
   if (input.basis === "nonresident") trace("KS_NONRESIDENT_TAX", sourcedTax);
   trace("KS_WITHHELD", total);
@@ -350,12 +393,12 @@ export const KS_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "KS" },
   purpose: "withholding",
   citation:
-    "Kansas Department of Revenue, KW-100 Withholding Tax Guide (live official); "
-    + "Form K-4 (Rev. 7-24)",
+    "Kansas Department of Revenue, KW-100 Withholding Tax Guide (live official); " +
+    "Form K-4 (Rev. 7-24)",
   summary:
-    "Sets the K-4 allowance rate (Single or Joint) and the total number of "
-    + "Kansas withholding allowances. If the employee does not complete a K-4, "
-    + "KW-100 requires withholding at the single rate with no allowances.",
+    "Sets the K-4 allowance rate (Single or Joint) and the total number of " +
+    "Kansas withholding allowances. If the employee does not complete a K-4, " +
+    "KW-100 requires withholding at the single rate with no allowances.",
   storage: "certificate_rows",
   fields: [
     {
@@ -371,9 +414,9 @@ export const KS_CERTIFICATE: PayrollCertificate = {
         { value: "married", label: "Joint — married and spouse has no income" },
       ],
       help:
-        "K-4 Line A / Line 3. Joint uses the Married percentage table and the "
-        + "$18,320 personal exemption. Single uses the Single table and the "
-        + "$9,160 personal exemption. Default Single is KW-100's missing-form rule.",
+        "K-4 Line A / Line 3. Joint uses the Married percentage table and the " +
+        "$18,320 personal exemption. Single uses the Single table and the " +
+        "$9,160 personal exemption. Default Single is KW-100's missing-form rule.",
     },
     {
       key: "allowances",
@@ -383,10 +426,10 @@ export const KS_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "From the K-4 Personal Allowance Worksheet line F. Joint treats the "
-        + "first two allowances as the $18,320 married-joint exemption; Single "
-        + "treats the first as the $9,160 exemption. Each remaining allowance "
-        + "is the $2,320 dependent amount. Default zero is KW-100's missing-form rule.",
+        "From the K-4 Personal Allowance Worksheet line F. Joint treats the " +
+        "first two allowances as the $18,320 married-joint exemption; Single " +
+        "treats the first as the $9,160 exemption. Each remaining allowance " +
+        "is the $2,320 dependent amount. Default zero is KW-100's missing-form rule.",
     },
     {
       key: "additional_per_period",
@@ -395,17 +438,17 @@ export const KS_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "Optional extra Kansas withholding requested on Form K-4. Added AFTER "
-        + "the percentage formula. The amounts in KW-100 are the minimum.",
+        "Optional extra Kansas withholding requested on Form K-4. Added AFTER " +
+        "the percentage formula. The amounts in KW-100 are the minimum.",
     },
     {
       key: "exempt",
       label: "Line 6 — Exempt from Kansas withholding",
       kind: "flag",
       help:
-        "A federal withholding exemption also exempts Kansas withholding. A "
-        + "current Exempt on K-4 line 6 withholds zero. Exemption from "
-        + "withholding is not an exemption from filing a Kansas return.",
+        "A federal withholding exemption also exempts Kansas withholding. A " +
+        "current Exempt on K-4 line 6 withholds zero. Exemption from " +
+        "withholding is not an exemption from filing a Kansas return.",
     },
   ],
 };
@@ -422,16 +465,18 @@ export const KS_K4C_CERTIFICATE: PayrollCertificate = {
   summary:
     "Reports the approximate percentage of a nonresident employee's services performed in Kansas. In the absence of K-4C or adequate work records, Kansas withholding applies to total wages.",
   storage: "certificate_rows",
-  fields: [{
-    key: "kansas_services_percentage",
-    label: "Percentage of services performed in Kansas",
-    kind: "amount",
-    decimals: 4,
-    min: "0",
-    max: "100",
-    required: true,
-    help: "Enter the K-4C percentage of the employee's services performed in Kansas during the calendar year.",
-  }],
+  fields: [
+    {
+      key: "kansas_services_percentage",
+      label: "Percentage of services performed in Kansas",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      max: "100",
+      required: true,
+      help: "Enter the K-4C percentage of the employee's services performed in Kansas during the calendar year.",
+    },
+  ],
 };
 
 export const KS_REGION: PayrollRegionWithholding = {
@@ -445,6 +490,5 @@ export const KS_REGION: PayrollRegionWithholding = {
   certificateKey: "us_ks_k4",
   subRegions: [],
   subRegionConflictRule: "both",
-  citation:
-    "Kansas Department of Revenue, KW-100 Withholding Tax Guide (live official); Form K-4",
+  citation: "Kansas Department of Revenue, KW-100 Withholding Tax Guide (live official); Form K-4",
 };

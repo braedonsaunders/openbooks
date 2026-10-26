@@ -3,14 +3,24 @@ import type { Money } from "../money/brands.ts";
 import { addMoney, cmpMoney, negMoney } from "../money/brands.ts";
 import { fromUnits, isZero, toUnits } from "../money/money.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { loadSubsidiaryContext, restrictionAdmits, uuidArray } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  restrictionAdmits,
+  uuidArray,
+} from "../organization/subsidiaries.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { fundFeatureOff, fundPostingRefusal } from "./errors.ts";
-import type { BalancingContext, BalancingLeg, BalancingLegProvider, BalancingLineView } from "../journal/balancing-hooks.ts";
+import type {
+  BalancingContext,
+  BalancingLeg,
+  BalancingLegProvider,
+  BalancingLineView,
+} from "../journal/balancing-hooks.ts";
 
 const FUND_KEY = "fund";
 const FEATURE_KEY = "fundAccounting";
-const FUND_SETUP_REMEDY = "Choose an active fund allowed for this subsidiary under Setup → Accounting → Dimensions.";
+const FUND_SETUP_REMEDY =
+  "Choose an active fund allowed for this subsidiary under Setup → Accounting → Dimensions.";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface FundPairView {
@@ -129,7 +139,12 @@ export function interfundLegs(
     const key = `${line.subsidiaryId}\u0000${line.fundId}`;
     const cell = cells.get(key);
     if (cell) cell.amount = addMoney(cell.amount, line.amount);
-    else cells.set(key, { fundId: line.fundId, subsidiaryId: line.subsidiaryId, amount: line.amount as Money });
+    else
+      cells.set(key, {
+        fundId: line.fundId,
+        subsidiaryId: line.subsidiaryId,
+        amount: line.amount as Money,
+      });
   }
 
   const missingResidual = [...missingBySubsidiary.values()].some((amount) => !isZero(amount));
@@ -137,7 +152,8 @@ export function interfundLegs(
     throw fundPostingRefusal({
       message: "A journal entry has an unbalanced line without a fund assignment.",
       code: "fund_missing",
-      remedy: "Assign the line to a fund or configure the default fund under Setup → Accounting → Dimensions.",
+      remedy:
+        "Assign the line to a fund or configure the default fund under Setup → Accounting → Dimensions.",
     });
   }
 
@@ -160,8 +176,13 @@ export function interfundLegs(
   }
 
   const legs: BalancingLeg[] = [];
-  for (const [subsidiaryId, subsidiaryCells] of [...bySubsidiary.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    const subsidiaryTotal = subsidiaryCells.reduce((total, cell) => addMoney(total, cell.amount), "0.0000" as Money);
+  for (const [subsidiaryId, subsidiaryCells] of [...bySubsidiary.entries()].sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    const subsidiaryTotal = subsidiaryCells.reduce(
+      (total, cell) => addMoney(total, cell.amount),
+      "0.0000" as Money,
+    );
     if (!isZero(subsidiaryTotal)) {
       const name = subsidiaryNames.get(subsidiaryId) ?? subsidiaryId;
       throw fundPostingRefusal({
@@ -201,12 +222,7 @@ export function interfundLegs(
         // The from fund carries the due-from asset; the to fund carries the due-to liability.
         const pair = pairByDirection.get(`${negativeFundId}\u0000${positiveFundId}`);
         if (!pair) continue;
-        const edge = addFlowEdge(
-          graph,
-          positiveOffset + p,
-          negativeOffset + n,
-          totalPositive,
-        );
+        const edge = addFlowEdge(graph, positiveOffset + p, negativeOffset + n, totalPositive);
         pairFlows.push({ positiveFundId, negativeFundId, pair, edge });
       }
     }
@@ -218,9 +234,10 @@ export function interfundLegs(
     }));
     if (positiveRemainder.some(({ units }) => units > 0n)) {
       const unmatchedPositive = positiveRemainder.find(({ units }) => units > 0n)!.cell;
-      const unmatchedNegative = negative.find((cell) =>
-        !pairByDirection.has(`${cell.fundId}\u0000${unmatchedPositive.fundId}`),
-      ) ?? negative[0]!;
+      const unmatchedNegative =
+        negative.find(
+          (cell) => !pairByDirection.has(`${cell.fundId}\u0000${unmatchedPositive.fundId}`),
+        ) ?? negative[0]!;
       const fromCode = displayFund(unmatchedNegative.fundId, fundCodes);
       const toCode = displayFund(unmatchedPositive.fundId, fundCodes);
       throw fundPostingRefusal({
@@ -309,15 +326,21 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
   lines: readonly BalancingLineView[],
 ): Promise<readonly BalancingLeg[]> => {
   if (lines.length === 0) return [];
-  const explicitIds = [...new Set(lines.flatMap((line) => {
-    const dims = line.extraDims && typeof line.extraDims === "object" ? line.extraDims : null;
-    const value = dims && Object.prototype.hasOwnProperty.call(dims, FUND_KEY) ? dims[FUND_KEY] : null;
-    return typeof value === "string" && UUID_RE.test(value) ? [value] : [];
-  }))];
+  const explicitIds = [
+    ...new Set(
+      lines.flatMap((line) => {
+        const dims = line.extraDims && typeof line.extraDims === "object" ? line.extraDims : null;
+        const value =
+          dims && Object.prototype.hasOwnProperty.call(dims, FUND_KEY) ? dims[FUND_KEY] : null;
+        return typeof value === "string" && UUID_RE.test(value) ? [value] : [];
+      }),
+    ),
+  ];
 
   // One org/key index lookup returns the segment default and every named value's
   // activity, classification, and subsidiary restriction in the same query.
-  const lookup = await runner.execute<FundSegmentLookup>(sql`
+  const lookup = await runner.execute<FundSegmentLookup>(
+    sql`
     with fund_segment as (
       select org_id, id, default_value_id, is_active, feature_key
         from segment_definitions
@@ -339,7 +362,9 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
         on sv.org_id = fs.org_id and sv.segment_id = fs.id and sv.id = rv.id
       left join funds f on f.org_id = sv.org_id and f.id = sv.id
      order by sv.id
-  `, "objects");
+  `,
+    "objects",
+  );
   const segment = lookup[0];
   if (!segment) return [];
 
@@ -347,7 +372,9 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
   const values = new Map<string, FundSegmentLookup>();
   for (const row of lookup) if (row.fundId) values.set(row.fundId, row);
   const effectiveIds = lines.map((line) => rawFundId(line, defaultValueId));
-  const hasNonDefaultFund = effectiveIds.some((fundId) => fundId !== null && fundId !== defaultValueId);
+  const hasNonDefaultFund = effectiveIds.some(
+    (fundId) => fundId !== null && fundId !== defaultValueId,
+  );
   if (hasNonDefaultFund && !(await lockAndCheckOrgFeature(runner, ctx.orgId, FEATURE_KEY))) {
     throw fundFeatureOff();
   }
@@ -376,19 +403,24 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
       throw fundPostingRefusal({
         message: `Fund "${fundCode}" has no nonprofit accounting classification.`,
         code: "fund_unclassified",
-        remedy: "Complete the fund's accounting classification under Setup → Accounting → Dimensions.",
+        remedy:
+          "Complete the fund's accounting classification under Setup → Accounting → Dimensions.",
       });
     }
     if (value.restrictionSubsidiaryId) {
       subsidiaryContext ??= await loadSubsidiaryContext(runner, ctx.orgId);
-      if (!restrictionAdmits(
-        subsidiaryContext,
-        value.restrictionSubsidiaryId,
-        value.includeChildren === true,
-        line.subsidiaryId,
-      )) {
-        const restrictedName = subsidiaryContext.byId.get(value.restrictionSubsidiaryId)?.name ?? "another subsidiary";
-        const lineName = subsidiaryContext.byId.get(line.subsidiaryId)?.name ?? "the posting subsidiary";
+      if (
+        !restrictionAdmits(
+          subsidiaryContext,
+          value.restrictionSubsidiaryId,
+          value.includeChildren === true,
+          line.subsidiaryId,
+        )
+      ) {
+        const restrictedName =
+          subsidiaryContext.byId.get(value.restrictionSubsidiaryId)?.name ?? "another subsidiary";
+        const lineName =
+          subsidiaryContext.byId.get(line.subsidiaryId)?.name ?? "the posting subsidiary";
         throw fundPostingRefusal({
           message: `Fund "${fundCode}" is restricted to ${restrictedName} and cannot be posted to ${lineName}.`,
           code: "fund_subsidiary_mismatch",
@@ -399,7 +431,8 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
   }
 
   const fundCodes = new Map<string, string>();
-  for (const [fundId, value] of values) fundCodes.set(fundId, value.fundCode || value.fundName || "unclassified fund");
+  for (const [fundId, value] of values)
+    fundCodes.set(fundId, value.fundCode || value.fundName || "unclassified fund");
   const normalizedLines: FundPostingLine[] = lineAssignments.map(({ line, fundId }) => ({
     accountId: line.accountId,
     amount: line.amount,
@@ -418,11 +451,22 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
   for (const [key, amount] of residuals) if (!isZero(amount)) nonzeroFunds.add(key);
   if (nonzeroFunds.size <= 1) return [];
 
-  const fundIds = [...new Set([...nonzeroFunds].map((key) => key.slice(key.indexOf("\u0000") + 1)).filter((id) => id !== "<missing>"))];
-  const subsidiaryIds = [...new Set([...nonzeroFunds]
-    .map((key) => key.slice(0, key.indexOf("\u0000")))
-    .filter((id) => UUID_RE.test(id)))];
-  const pairLookup = await runner.execute<FundPairLookup>(sql`
+  const fundIds = [
+    ...new Set(
+      [...nonzeroFunds]
+        .map((key) => key.slice(key.indexOf("\u0000") + 1))
+        .filter((id) => id !== "<missing>"),
+    ),
+  ];
+  const subsidiaryIds = [
+    ...new Set(
+      [...nonzeroFunds]
+        .map((key) => key.slice(0, key.indexOf("\u0000")))
+        .filter((id) => UUID_RE.test(id)),
+    ),
+  ];
+  const pairLookup = await runner.execute<FundPairLookup>(
+    sql`
     select s.id as "subsidiaryId", s.name as "subsidiaryName", s.base_currency as "baseCurrency",
            p.from_fund_id as "fromFundId", p.to_fund_id as "toFundId",
            p.due_from_account_id as "dueFromAccountId", p.due_to_account_id as "dueToAccountId"
@@ -434,7 +478,9 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
      where s.org_id = ${ctx.orgId}
        and s.id = any(${uuidArray(subsidiaryIds)}::uuid[])
      order by s.id, p.from_fund_id, p.to_fund_id
-  `, "objects");
+  `,
+    "objects",
+  );
   const pairs: FundPairView[] = [];
   const baseCurrencyBySubsidiary = new Map<string, string>();
   const subsidiaryNames = new Map<string, string>();
@@ -451,5 +497,11 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
       });
     }
   }
-  return interfundLegs(normalizedLines, pairs, fundCodes, baseCurrencyBySubsidiary, subsidiaryNames);
+  return interfundLegs(
+    normalizedLines,
+    pairs,
+    fundCodes,
+    baseCurrencyBySubsidiary,
+    subsidiaryNames,
+  );
 };

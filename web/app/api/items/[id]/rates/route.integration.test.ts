@@ -19,7 +19,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.rates-route-test')]
@@ -37,8 +37,8 @@ const hooks = registerHooks({
     // the alias climbs five directories to the web root.
     if (
       (specifier === "../../../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/items/")) ||
-      (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))
+        context.parentURL?.includes("/api/items/")) ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:feature-gates", shortCircuit: true };
     }
@@ -55,10 +55,10 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?rates-currency-serialization-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { withBypassContext, withOrgContext, db, pool } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { withBypassContext, withOrgContext, db, pool } =
+  await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 type PoolClient = import("pg").PoolClient;
 
 /** Drizzle wraps driver errors, so match the whole rendered chain. */
@@ -75,12 +75,14 @@ interface Fixture {
 }
 
 async function seed(): Promise<Fixture> {
-  const org = await withBypassContext(() => (createScratchOrg()));
-  const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   const bookId = randomUUID();
-  await withBypassContext(() => (db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into item_rate_books (org_id, id, code, name, currency, is_default, is_active, created_by, updated_by)
-    values (${org.orgId}, ${bookId}, 'FIELD', 'Field Rates', 'CAD', false, true, ${actorId}, ${actorId})`)));
+    values (${org.orgId}, ${bookId}, 'FIELD', 'Field Rates', 'CAD', false, true, ${actorId}, ${actorId})`),
+  );
   return { orgId: org.orgId, actorId, itemId: org.items.service, bookId };
 }
 
@@ -98,10 +100,10 @@ async function openSetupShapedPatch(
         `item-rate-books:${fixture.orgId}`,
       ]);
     }
-    await client.query(
-      "select id from item_rate_books where id = $1 and org_id = $2 for update",
-      [fixture.bookId, fixture.orgId],
-    );
+    await client.query("select id from item_rate_books where id = $1 and org_id = $2 for update", [
+      fixture.bookId,
+      fixture.orgId,
+    ]);
     const backend = await client.query<{ pid: number }>("select pg_backend_pid() as pid");
     return { client, pid: Number(backend.rows[0]!.pid) };
   } catch (error) {
@@ -138,7 +140,9 @@ function ratesBody(): Record<string, unknown> {
     baseUnit: "hour",
     pricingPolicy: "capped_ladder",
     invoicePresentation: "rate_components",
-    tiers: [{ unitCode: "hour", unitName: "Hour", baseQuantity: "1", costRate: "75", billRate: "125" }],
+    tiers: [
+      { unitCode: "hour", unitName: "Hour", baseQuantity: "1", costRate: "75", billRate: "125" },
+    ],
   };
 }
 
@@ -149,118 +153,135 @@ function post(fixture: Fixture, body?: Record<string, unknown>): Promise<Respons
     allowedSubsidiaryIds: null,
   };
   const payload = { ...ratesBody(), ...body, rateBookId: fixture.bookId };
-  return POST(new Request(`http://openbooks.test/api/items/${fixture.itemId}/rates`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  }), { params: Promise.resolve({ id: fixture.itemId }) });
+  return POST(
+    new Request(`http://openbooks.test/api/items/${fixture.itemId}/rates`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+    { params: Promise.resolve({ id: fixture.itemId }) },
+  );
 }
 
 async function assertFirstVersionLanded(fixture: Fixture): Promise<void> {
-  const state = (await withOrgContext(fixture.orgId, () => db.execute<{ versions: number; lines: number; audit: number; currency: string }>(sql`
+  const state = await withOrgContext(fixture.orgId, () =>
+    db.execute<{ versions: number; lines: number; audit: number; currency: string }>(
+      sql`
     select
       (select count(*)::int from item_rate_versions where org_id = ${fixture.orgId} and rate_book_id = ${fixture.bookId}) as versions,
       (select count(*)::int from item_rate_lines l join item_rate_versions v on v.id = l.version_id
         where l.org_id = ${fixture.orgId} and v.rate_book_id = ${fixture.bookId}) as lines,
       (select count(*)::int from audit_log where org_id = ${fixture.orgId} and table_name = 'item_rate_versions') as audit,
-      (select currency from item_rate_books where id = ${fixture.bookId}) as currency`, "objects")));
+      (select currency from item_rate_books where id = ${fixture.bookId}) as currency`,
+      "objects",
+    ),
+  );
   assert.equal(state[0]?.versions, 1, "the first version must exist");
   assert.equal(state[0]?.lines, 1, "the version's rate line must exist");
   assert.equal(state[0]?.audit, 1, "the version's audit row must exist");
 }
 
-test.after(() => hooks.deregister())
-test(
-  "first version creation waits on the Setup rate-book fence, so a racing currency PATCH cannot pass the history check",
-  async () => {
-    const fixture = await seed();
-    const patch = await openSetupShapedPatch(fixture, true);
-    let open = true;
-    try {
-      const save = post(fixture);
-      const observed = await observeWaiter(patch.pid, save);
-      assert.equal(
-        observed.blocked,
-        true,
-        "first version creation must wait while the Setup-shaped currency PATCH holds the fence",
-      );
+test.after(() => hooks.deregister());
+test("first version creation waits on the Setup rate-book fence, so a racing currency PATCH cannot pass the history check", async () => {
+  const fixture = await seed();
+  const patch = await openSetupShapedPatch(fixture, true);
+  let open = true;
+  try {
+    const save = post(fixture);
+    const observed = await observeWaiter(patch.pid, save);
+    assert.equal(
+      observed.blocked,
+      true,
+      "first version creation must wait while the Setup-shaped currency PATCH holds the fence",
+    );
 
-      // The paused PATCH is the only writer: its guard check sees no version
-      // history, so its currency change commits while the save waits.
-      await withBypassContext(() => patch.client.query(
-        "update item_rate_books set currency = $1 where org_id = $2 and id = $3",
-        ["USD", fixture.orgId, fixture.bookId],
-      ));
-      await patch.client.query("commit");
-      open = false;
+    // The paused PATCH is the only writer: its guard check sees no version
+    // history, so its currency change commits while the save waits.
+    await withBypassContext(() =>
+      patch.client.query("update item_rate_books set currency = $1 where org_id = $2 and id = $3", [
+        "USD",
+        fixture.orgId,
+        fixture.bookId,
+      ]),
+    );
+    await patch.client.query("commit");
+    open = false;
 
-      const response = await save;
-      assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
-      await assertFirstVersionLanded(fixture);
+    const response = await save;
+    assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
+    await assertFirstVersionLanded(fixture);
 
-      // Exactly one currency generation landed, and the committed first
-      // version freezes it: subsequent changes are rejected.
-      const book = (await withOrgContext(fixture.orgId, () => db.execute<{ currency: string }>(sql`
-        select currency from item_rate_books where id = ${fixture.bookId}`, "objects")));
-      assert.equal(book[0]?.currency, "USD");
-      await assert.rejects(
-        withBypassContext(() => (db.execute(sql`
-          update item_rate_books set currency = 'EUR' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`))),
-        (error: unknown) =>
-          errorChain(error).includes("rate book currency cannot change after version history exists"),
-      );
-    } finally {
-      if (open) await patch.client.query("rollback").catch(() => undefined);
-      patch.client.release();
-      await dropScratchOrgReporting(fixture.orgId);
-    }
-  },
-);
+    // Exactly one currency generation landed, and the committed first
+    // version freezes it: subsequent changes are rejected.
+    const book = await withOrgContext(fixture.orgId, () =>
+      db.execute<{ currency: string }>(
+        sql`
+        select currency from item_rate_books where id = ${fixture.bookId}`,
+        "objects",
+      ),
+    );
+    assert.equal(book[0]?.currency, "USD");
+    await assert.rejects(
+      withBypassContext(() =>
+        db.execute(sql`
+          update item_rate_books set currency = 'EUR' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`),
+      ),
+      (error: unknown) =>
+        errorChain(error).includes("rate book currency cannot change after version history exists"),
+    );
+  } finally {
+    if (open) await patch.client.query("rollback").catch(() => undefined);
+    patch.client.release();
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
-test(
-  "the save holds the advisory fence before it reads the rate book",
-  async () => {
-    const fixture = await seed();
-    const holder = await openSetupShapedPatch(fixture, false);
-    let open = true;
-    try {
-      const save = post(fixture);
-      const observed = await observeWaiter(holder.pid, save);
-      assert.equal(
-        observed.blocked,
-        true,
-        "the save must wait on the book row lock before completing",
-      );
-      // The save is blocked at its book read; by then it must already hold
-      // the organization's rate-book advisory fence.
-      const fence = await pool.query<{ n: number }>(
-        "select count(*)::int as n from pg_locks where locktype = 'advisory' and granted and pid = $1",
-        [observed.waiterPid],
-      );
-      assert.ok(
-        (fence.rows[0]?.n ?? 0) >= 1,
-        "the advisory fence must be acquired before the book is read",
-      );
+test("the save holds the advisory fence before it reads the rate book", async () => {
+  const fixture = await seed();
+  const holder = await openSetupShapedPatch(fixture, false);
+  let open = true;
+  try {
+    const save = post(fixture);
+    const observed = await observeWaiter(holder.pid, save);
+    assert.equal(
+      observed.blocked,
+      true,
+      "the save must wait on the book row lock before completing",
+    );
+    // The save is blocked at its book read; by then it must already hold
+    // the organization's rate-book advisory fence.
+    const fence = await pool.query<{ n: number }>(
+      "select count(*)::int as n from pg_locks where locktype = 'advisory' and granted and pid = $1",
+      [observed.waiterPid],
+    );
+    assert.ok(
+      (fence.rows[0]?.n ?? 0) >= 1,
+      "the advisory fence must be acquired before the book is read",
+    );
 
-      await holder.client.query("rollback");
-      open = false;
-      const response = await save;
-      assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
-      await assertFirstVersionLanded(fixture);
+    await holder.client.query("rollback");
+    open = false;
+    const response = await save;
+    assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
+    await assertFirstVersionLanded(fixture);
 
-      const book = (await db.execute<{ currency: string }>(sql`
-        select currency from item_rate_books where id = ${fixture.bookId}`, "objects"));
-      assert.equal(book[0]?.currency, "CAD", "no currency change raced this save");
-      await assert.rejects(
-        withBypassContext(() => (db.execute(sql`
-          update item_rate_books set currency = 'USD' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`))),
-        (error: unknown) =>
-          errorChain(error).includes("rate book currency cannot change after version history exists"),
-      );
-    } finally {
-      if (open) await holder.client.query("rollback").catch(() => undefined);
-      holder.client.release();
-      await dropScratchOrgReporting(fixture.orgId);
-    }
-  },
-);
+    const book = await db.execute<{ currency: string }>(
+      sql`
+        select currency from item_rate_books where id = ${fixture.bookId}`,
+      "objects",
+    );
+    assert.equal(book[0]?.currency, "CAD", "no currency change raced this save");
+    await assert.rejects(
+      withBypassContext(() =>
+        db.execute(sql`
+          update item_rate_books set currency = 'USD' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`),
+      ),
+      (error: unknown) =>
+        errorChain(error).includes("rate book currency cannot change after version history exists"),
+    );
+  } finally {
+    if (open) await holder.client.query("rollback").catch(() => undefined);
+    holder.client.release();
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});

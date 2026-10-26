@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { fiscalMonthlyBoxes, fiscalPeriodsPerYear, priorYearWindow } = await import("./fiscal-buckets.ts");
+const { fiscalMonthlyBoxes, fiscalPeriodsPerYear, priorYearWindow } =
+  await import("./fiscal-buckets.ts");
 
 const periods = [
   { fiscalYear: 2026, periodNumber: 1, name: "P1", from: "2026-02-01", to: "2026-03-01" },
@@ -62,4 +63,3 @@ test("the prior-year window spans the matched periods, never calendar -12 months
   assert.equal(priorYearWindow(cal, "2027-03-02", "2027-04-05"), null);
   assert.equal(priorYearWindow([], "2026-03-02", "2026-04-05"), null);
 });
-

@@ -1,6 +1,6 @@
-'use client'
+"use client";
 
-import { useIdentityState } from '@/lib/use-identity-state'
+import { useIdentityState } from "@/lib/use-identity-state";
 
 // HR-15 inbox badge: the live count on the inbox nav entry. Polls the count
 // route on a 60s cadence (no websocket — the inbox is a live read model, so
@@ -9,68 +9,71 @@ import { useIdentityState } from '@/lib/use-identity-state'
 // badge that cannot prove work is waiting shows nothing rather than a stale
 // number.
 
-import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { useDocumentHidden } from '../lib/use-document-hidden'
+import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useDocumentHidden } from "../lib/use-document-hidden";
 
-const POLL_MS = 60_000
+const POLL_MS = 60_000;
 
 export function NavCountBadge({ source }: { source: string }) {
-  const t = useTranslations('shell.topNav')
-  const hidden = useDocumentHidden()
-  const [count, setCount] = useIdentityState<number | null>([hidden, source], null)
-  const [partial, setPartial] = useState(false)
+  const t = useTranslations("shell.topNav");
+  const hidden = useDocumentHidden();
+  const [count, setCount] = useIdentityState<number | null>([hidden, source], null);
+  const [partial, setPartial] = useState(false);
 
   useEffect(() => {
-    if (hidden) return
-    let alive = true
-    let loading = false
-    const controller = new AbortController()
+    if (hidden) return;
+    let alive = true;
+    let loading = false;
+    const controller = new AbortController();
     async function load() {
-      if (loading) return
-      loading = true
+      if (loading) return;
+      loading = true;
       try {
-        const res = await fetch(source, { headers: { Accept: 'application/json' }, signal: controller.signal })
+        const res = await fetch(source, {
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        });
         if (!res.ok) {
           // The route is down or refusing: clear any previous count rather
           // than badge a stale number nobody can verify.
-          if (alive) setCount(null)
-          return
+          if (alive) setCount(null);
+          return;
         }
-        const data = await res.json().catch(() => null)
-        const next = typeof data?.count === 'number' ? data.count : null
+        const data = await res.json().catch(() => null);
+        const next = typeof data?.count === "number" ? data.count : null;
         if (alive) {
-          setCount(next)
-          setPartial(next !== null && data?.partial === true)
+          setCount(next);
+          setPartial(next !== null && data?.partial === true);
         }
       } catch {
         // Unreachable route: clear rather than badge a guess.
-        if (alive) setCount(null)
+        if (alive) setCount(null);
       } finally {
-        loading = false
+        loading = false;
       }
     }
-    load()
-    const timer = setInterval(load, POLL_MS)
+    load();
+    const timer = setInterval(load, POLL_MS);
     return () => {
-      alive = false
-      controller.abort()
-      clearInterval(timer)
-    }
-  }, [source, hidden, setCount])
+      alive = false;
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, [source, hidden, setCount]);
 
-  if (count === null || count <= 0) return null
+  if (count === null || count <= 0) return null;
   // A partial count names a source that failed to load: the badge keeps
   // the number but marks itself degraded instead of passing a low count
   // as exact.
-  const shown = count > 99 ? '99+' : String(count)
+  const shown = count > 99 ? "99+" : String(count);
   return (
     <span
-      aria-label={partial ? t('itemsWaitingPartial', { count }) : t('itemsWaiting', { count })}
-      title={partial ? t('partialSourcesTitle') : undefined}
+      aria-label={partial ? t("itemsWaitingPartial", { count }) : t("itemsWaiting", { count })}
+      title={partial ? t("partialSourcesTitle") : undefined}
       className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-teal-700 px-1.5 text-[11px] font-semibold tabular-nums text-white dark:bg-teal-400 dark:text-teal-950"
     >
       {partial ? `${shown}!` : shown}
     </span>
-  )
+  );
 }

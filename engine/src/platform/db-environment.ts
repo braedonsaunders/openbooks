@@ -15,21 +15,18 @@ export function resolveDatabaseEnvironment(
   processEnvironment: Record<string, string | undefined>,
   readLocalFile: () => string,
 ): Record<string, string> {
-  const resolved: Record<string, string> = {}
-  if (
-    readsLocalEnvFile(processEnvironment.NODE_ENV) &&
-    !processEnvironment.NODE_TEST_CONTEXT
-  ) {
+  const resolved: Record<string, string> = {};
+  if (readsLocalEnvFile(processEnvironment.NODE_ENV) && !processEnvironment.NODE_TEST_CONTEXT) {
     try {
       for (const [key, value] of Object.entries(parseEnv(readLocalFile()))) {
-        if (typeof value === "string" && /^[A-Z0-9_]+$/.test(key)) resolved[key] = value
+        if (typeof value === "string" && /^[A-Z0-9_]+$/.test(key)) resolved[key] = value;
       }
     } catch {
       // Containers have no local file and supply their environment explicitly.
     }
   }
   for (const [key, value] of Object.entries(processEnvironment)) {
-    if (value !== undefined && /^[A-Z0-9_]+$/.test(key)) resolved[key] = value
+    if (value !== undefined && /^[A-Z0-9_]+$/.test(key)) resolved[key] = value;
   }
-  return resolved
+  return resolved;
 }

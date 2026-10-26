@@ -13,9 +13,21 @@ test("anomaly list rejects malformed dates and employment ids before issuing SQL
   } as unknown as SqlExecutor;
   const base = { orgId: "org", actorId: "actor" };
 
-  await assert.rejects(listFlags(exec, { ...base, periodFrom: "" }), /periodFrom must be a valid calendar date/);
-  await assert.rejects(listFlags(exec, { ...base, periodTo: "2026-02-30" }), /periodTo must be a valid calendar date/);
-  await assert.rejects(listFlags(exec, { ...base, periodFrom: "2026-06-30", periodTo: "2026-06-01" }), /periodTo must be on or after periodFrom/);
-  await assert.rejects(listFlags(exec, { ...base, employmentId: "invalid" }), /employmentId must be a valid UUID/);
+  await assert.rejects(
+    listFlags(exec, { ...base, periodFrom: "" }),
+    /periodFrom must be a valid calendar date/,
+  );
+  await assert.rejects(
+    listFlags(exec, { ...base, periodTo: "2026-02-30" }),
+    /periodTo must be a valid calendar date/,
+  );
+  await assert.rejects(
+    listFlags(exec, { ...base, periodFrom: "2026-06-30", periodTo: "2026-06-01" }),
+    /periodTo must be on or after periodFrom/,
+  );
+  await assert.rejects(
+    listFlags(exec, { ...base, employmentId: "invalid" }),
+    /employmentId must be a valid UUID/,
+  );
   assert.equal(queries, 0);
 });

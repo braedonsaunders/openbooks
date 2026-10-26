@@ -16,7 +16,10 @@ import { sql } from "drizzle-orm";
 import { strandedWorkFindings } from "../agents/stranded-work.ts";
 import { db, withOrgContext, withBypassContext } from "../platform/db.ts";
 import { requestDocumentVoid, DocumentVoidError } from "./document-void.ts";
-import { assertPostingEffectsSettled, incompletePostingEffectsCount } from "../periods/period-locks.ts";
+import {
+  assertPostingEffectsSettled,
+  incompletePostingEffectsCount,
+} from "../periods/period-locks.ts";
 import { ATTR_KIND, ATTR_SURFACE } from "../platform/telemetry.ts";
 import {
   claimPostingEffectsForDocument,
@@ -43,7 +46,10 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const metricExporter = new InMemoryMetricExporter(AggregationTemporality.DELTA);
 const meterProvider = new MeterProvider({
   readers: [
-    new PeriodicExportingMetricReader({ exporter: metricExporter, exportIntervalMillis: 3_600_000 }),
+    new PeriodicExportingMetricReader({
+      exporter: metricExporter,
+      exportIntervalMillis: 3_600_000,
+    }),
   ],
 });
 metrics.setGlobalMeterProvider(meterProvider);
@@ -54,9 +60,15 @@ async function collectDurations(): Promise<Array<DataPoint<Histogram>>> {
     .getMetrics()
     .flatMap((resource) => resource.scopeMetrics.flatMap((scope) => scope.metrics));
   metricExporter.reset();
-  const metric = snapshot.find((candidate) => candidate.descriptor.name === "openbooks.outbox.attempt_duration");
+  const metric = snapshot.find(
+    (candidate) => candidate.descriptor.name === "openbooks.outbox.attempt_duration",
+  );
   assert.ok(metric, "attempt_duration was not exported");
-  assert.equal(metric.dataPointType, DataPointType.HISTOGRAM, "attempt_duration must be a histogram");
+  assert.equal(
+    metric.dataPointType,
+    DataPointType.HISTOGRAM,
+    "attempt_duration must be a histogram",
+  );
   return (metric as MetricData).dataPoints as Array<DataPoint<Histogram>>;
 }
 
@@ -66,53 +78,61 @@ async function postFixtureDocument(org: ScratchOrg, documentId: string, entryId:
     values (${org.orgId}, ${entryId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '100', 'CAD', '100', 1),
            (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-100', 'CAD', '-100', 1)
   `);
-  await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId} and org_id=${org.orgId}`);
+  await db.execute(
+    sql`update journal_entries set status='posted', posted_at=now() where id=${entryId} and org_id=${org.orgId}`,
+  );
   await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId},
     subsidiary_id=${org.subsidiaryId}, party_id=${org.customerId}, subtotal=100, total=100, open_balance=100
     where id=${documentId} and org_id=${org.orgId}`);
 }
 
-test("attempt ceiling terminalizes posting effects and authorized replay preserves audit evidence", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  const actorId = randomUUID();
-  const documentId = randomUUID();
-  const entryId = randomUUID();
-  const effectId = randomUUID();
-  const terminalAt = new Date("2026-07-20T12:00:00.000Z");
-  const logs: string[] = [];
-  const originalLog = console.log;
-  try {
-    await withOrgContext(org.orgId, async () => {
-    await db.transaction(async (tx) => {
-      const role = await tx.execute<{ id: string }>(sql`
+test(
+  "attempt ceiling terminalizes posting effects and authorized replay preserves audit evidence",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = randomUUID();
+    const documentId = randomUUID();
+    const entryId = randomUUID();
+    const effectId = randomUUID();
+    const terminalAt = new Date("2026-07-20T12:00:00.000Z");
+    const logs: string[] = [];
+    const originalLog = console.log;
+    try {
+      await withOrgContext(org.orgId, async () => {
+        await db.transaction(async (tx) => {
+          const role = await tx.execute<{ id: string }>(
+            sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions)
         values (${org.orgId}, 'posting-effects-operator', 'Posting Effects Operator', false, '["ar.post"]'::jsonb)
         returning id
-      `, "objects");
-      await tx.execute(sql`
+      `,
+            "objects",
+          );
+          await tx.execute(sql`
         insert into users (id, org_id, email, name, password_hash, is_active)
         values (${actorId}, ${org.orgId}, ${`posting-effects-${actorId.slice(0, 8)}@test.local`},
                 'Posting Effects Operator', 'x', true)
       `);
-      await tx.execute(sql`
+          await tx.execute(sql`
         insert into role_assignments (org_id, user_id, role_id)
         values (${org.orgId}, ${actorId}, ${role[0]!.id})
       `);
-    });
-    await db.execute(sql`
+        });
+        await db.execute(sql`
       insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
       values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
               ${`POSTFX-${entryId}`}, ${org.date}, ${org.periodId}, 'draft', 'document')
     `);
-    await db.execute(sql`
+        await db.execute(sql`
       insert into documents
         (id, org_id, kind, document_number, document_date, currency, status, custom)
       values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-${documentId}`},
               ${org.date}, 'CAD', 'draft', '{}'::jsonb)
     `);
-    await postFixtureDocument(org, documentId, entryId);
-    await db.execute(sql`
+        await postFixtureDocument(org, documentId, entryId);
+        await db.execute(sql`
       insert into posting_effects
         (id, org_id, document_id, kind, entry_id, posting_date, actor_id,
          status, attempt_count, next_attempt_at)
@@ -121,109 +141,202 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
               '2000-01-01T00:00:00Z')
     `);
 
-    console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
-    const result = await processDuePostingEffects(terminalAt, 1, async () => {
-      throw new Error("inventory projection remained inconsistent");
-    });
-    console.log = originalLog;
-    assert.deepEqual(result, { processed: 1, succeeded: 0, failed: 1, fenced: 0 });
+        console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+        const result = await processDuePostingEffects(terminalAt, 1, async () => {
+          throw new Error("inventory projection remained inconsistent");
+        });
+        console.log = originalLog;
+        assert.deepEqual(result, { processed: 1, succeeded: 0, failed: 1, fenced: 0 });
 
-    const failed = await listFailedPostingEffects(org.orgId);
-    assert.equal(failed.length, 1);
-    assert.equal(failed[0]!.id, effectId);
-    assert.equal(failed[0]!.status, "terminal_failed");
-    assert.equal(failed[0]!.attemptCount, MAX_POSTING_EFFECTS_ATTEMPTS);
-    assert.equal(failed[0]!.terminalFailureReason, "inventory projection remained inconsistent");
-    assert.equal(new Date(failed[0]!.terminalFailedAt!).toISOString(), terminalAt.toISOString());
-    assert.equal(failed[0]!.terminalFailedBy, POSTING_EFFECTS_WORKER_IDENTITY);
-    assert.equal(
-      logs.filter((line) => line.includes(TERMINAL_FAILURE_LOG_EVENT) && line.includes(effectId)).length,
-      1,
-      "the terminal transition emits exactly one operator signal",
-    );
+        const failed = await listFailedPostingEffects(org.orgId);
+        assert.equal(failed.length, 1);
+        assert.equal(failed[0]!.id, effectId);
+        assert.equal(failed[0]!.status, "terminal_failed");
+        assert.equal(failed[0]!.attemptCount, MAX_POSTING_EFFECTS_ATTEMPTS);
+        assert.equal(
+          failed[0]!.terminalFailureReason,
+          "inventory projection remained inconsistent",
+        );
+        assert.equal(
+          new Date(failed[0]!.terminalFailedAt!).toISOString(),
+          terminalAt.toISOString(),
+        );
+        assert.equal(failed[0]!.terminalFailedBy, POSTING_EFFECTS_WORKER_IDENTITY);
+        assert.equal(
+          logs.filter(
+            (line) => line.includes(TERMINAL_FAILURE_LOG_EVENT) && line.includes(effectId),
+          ).length,
+          1,
+          "the terminal transition emits exactly one operator signal",
+        );
 
-    const terminalAudit = await db.execute<{ event: string; reason: string }>(sql`
+        const terminalAudit = await db.execute<{ event: string; reason: string }>(
+          sql`
       select changes->>'event' as event, changes->'after'->>'reason' as reason
         from audit_log
        where org_id=${org.orgId} and table_name='posting_effects' and row_id=${effectId}
          and request_id='posting_effects_terminal_failure'
-    `, "objects");
-    assert.deepEqual(terminalAudit, [{
-      event: "posting_effects_terminal_failure",
-      reason: "inventory projection remained inconsistent",
-    }]);
+    `,
+          "objects",
+        );
+        assert.deepEqual(terminalAudit, [
+          {
+            event: "posting_effects_terminal_failure",
+            reason: "inventory projection remained inconsistent",
+          },
+        ]);
 
-    const stranded = await strandedWorkFindings(org.orgId, "1900-01-01");
-    assert.ok(stranded.some((finding) => finding.subjectId === effectId && finding.severity === "critical"));
-    assert.deepEqual(await strandedWorkFindings(randomUUID(), "1900-01-01"), [], "durable failures must remain tenant-scoped");
-    assert.deepEqual(await strandedWorkFindings(org.orgId, "1900-01-01"), stranded, "the failure remains detectable after its initial notification");
+        const stranded = await strandedWorkFindings(org.orgId, "1900-01-01");
+        assert.ok(
+          stranded.some(
+            (finding) => finding.subjectId === effectId && finding.severity === "critical",
+          ),
+        );
+        assert.deepEqual(
+          await strandedWorkFindings(randomUUID(), "1900-01-01"),
+          [],
+          "durable failures must remain tenant-scoped",
+        );
+        assert.deepEqual(
+          await strandedWorkFindings(org.orgId, "1900-01-01"),
+          stranded,
+          "the failure remains detectable after its initial notification",
+        );
 
-    await assert.rejects(() => requestDocumentVoid({ documentId, orgId: org.orgId, actorId,
-      reason: "Controller reviewed this invoice", reversalDate: org.date, source: "api" }),
-      (error: unknown) => error instanceof DocumentVoidError && error.code === 'posting-effects-incomplete'
-        && /Retry posting effects on the posted document/.test(error.message));
-    const unvoided = (await db.execute<{ status: string; void_requested_at: Date | null }>(sql`
+        await assert.rejects(
+          () =>
+            requestDocumentVoid({
+              documentId,
+              orgId: org.orgId,
+              actorId,
+              reason: "Controller reviewed this invoice",
+              reversalDate: org.date,
+              source: "api",
+            }),
+          (error: unknown) =>
+            error instanceof DocumentVoidError &&
+            error.code === "posting-effects-incomplete" &&
+            /Retry posting effects on the posted document/.test(error.message),
+        );
+        const unvoided = (
+          await db.execute<{ status: string; void_requested_at: Date | null }>(
+            sql`
       select status, void_requested_at from documents where org_id=${org.orgId} and id=${documentId}
-    `, "objects"))[0]!;
-    assert.equal(unvoided.status, 'posted'); assert.equal(unvoided.void_requested_at, null);
-    const closeScope = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
-    assert.equal(await incompletePostingEffectsCount(db, closeScope), 1);
-    await assert.rejects(() => assertPostingEffectsSettled(db, closeScope), /1 posting effects.*retry terminal failures.*before closing GL/);
-    assert.equal(await incompletePostingEffectsCount(db, { ...closeScope, orgId: randomUUID() }), 0);
-    assert.equal(await incompletePostingEffectsCount(db, { ...closeScope, subsidiaryIds: [randomUUID()] }), 0);
-    await db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect)
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(unvoided.status, "posted");
+        assert.equal(unvoided.void_requested_at, null);
+        const closeScope = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
+        assert.equal(await incompletePostingEffectsCount(db, closeScope), 1);
+        await assert.rejects(
+          () => assertPostingEffectsSettled(db, closeScope),
+          /1 posting effects.*retry terminal failures.*before closing GL/,
+        );
+        assert.equal(
+          await incompletePostingEffectsCount(db, { ...closeScope, orgId: randomUUID() }),
+          0,
+        );
+        assert.equal(
+          await incompletePostingEffectsCount(db, { ...closeScope, subsidiaryIds: [randomUUID()] }),
+          0,
+        );
+        await db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect)
       values (${org.orgId},${actorId},'ar.post','deny')`);
-    await assert.rejects(() => replayTerminalPostingEffect({ orgId: org.orgId, id: effectId, actorId,
-      reason: "Controller reviewed the failure before retrying." }), /posting permission and legal-entity access/);
-    assert.equal((await listFailedPostingEffects(org.orgId))[0]!.status, 'terminal_failed');
-    await db.execute(sql`delete from user_permission_overrides where org_id=${org.orgId} and user_id=${actorId} and permission='ar.post'`);
-    await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [] })}::jsonb
+        await assert.rejects(
+          () =>
+            replayTerminalPostingEffect({
+              orgId: org.orgId,
+              id: effectId,
+              actorId,
+              reason: "Controller reviewed the failure before retrying.",
+            }),
+          /posting permission and legal-entity access/,
+        );
+        assert.equal((await listFailedPostingEffects(org.orgId))[0]!.status, "terminal_failed");
+        await db.execute(
+          sql`delete from user_permission_overrides where org_id=${org.orgId} and user_id=${actorId} and permission='ar.post'`,
+        );
+        await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [] })}::jsonb
       where org_id=${org.orgId} and key='posting-effects-operator'`);
-    await assert.rejects(() => replayTerminalPostingEffect({ orgId: org.orgId, id: effectId, actorId,
-      reason: "Controller reviewed the failure before retrying." }), /posting permission and legal-entity access/);
-    await db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='posting-effects-operator'`);
-    const replayAt = new Date("2026-07-20T13:00:00.000Z");
-    await replayTerminalPostingEffect({
-      orgId: org.orgId,
-      id: effectId,
-      actorId,
-      reason: "Controller verified the inventory configuration and approved a deterministic replay.",
-      now: replayAt,
-    });
-    assert.deepEqual(await listFailedPostingEffects(org.orgId), []);
-    assert.ok(!(await strandedWorkFindings(org.orgId, "1900-01-01")).some((finding) => finding.subjectId === effectId), "authorized recovery removes the terminal finding");
-    const replayed = await db.execute<{
-      status: string;
-      attempt_count: number;
-      terminal_failure_reason: string | null;
-    }>(sql`
+        await assert.rejects(
+          () =>
+            replayTerminalPostingEffect({
+              orgId: org.orgId,
+              id: effectId,
+              actorId,
+              reason: "Controller reviewed the failure before retrying.",
+            }),
+          /posting permission and legal-entity access/,
+        );
+        await db.execute(
+          sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='posting-effects-operator'`,
+        );
+        const replayAt = new Date("2026-07-20T13:00:00.000Z");
+        await replayTerminalPostingEffect({
+          orgId: org.orgId,
+          id: effectId,
+          actorId,
+          reason:
+            "Controller verified the inventory configuration and approved a deterministic replay.",
+          now: replayAt,
+        });
+        assert.deepEqual(await listFailedPostingEffects(org.orgId), []);
+        assert.ok(
+          !(await strandedWorkFindings(org.orgId, "1900-01-01")).some(
+            (finding) => finding.subjectId === effectId,
+          ),
+          "authorized recovery removes the terminal finding",
+        );
+        const replayed = await db.execute<{
+          status: string;
+          attempt_count: number;
+          terminal_failure_reason: string | null;
+        }>(
+          sql`
       select status, attempt_count, terminal_failure_reason
         from posting_effects where id=${effectId} and org_id=${org.orgId}
-    `, "objects");
-    assert.deepEqual(replayed, [{ status: "pending", attempt_count: 0, terminal_failure_reason: null }]);
+    `,
+          "objects",
+        );
+        assert.deepEqual(replayed, [
+          { status: "pending", attempt_count: 0, terminal_failure_reason: null },
+        ]);
 
-    const replayAudit = await db.execute<{ event: string; actor_id: string; reason: string }>(sql`
+        const replayAudit = await db.execute<{ event: string; actor_id: string; reason: string }>(
+          sql`
       select changes->>'event' as event, actor_id, changes->>'reason' as reason
         from audit_log
        where org_id=${org.orgId} and table_name='posting_effects' and row_id=${effectId}
          and request_id='posting_effects_replay'
-    `, "objects");
-    assert.deepEqual(replayAudit, [{
-      event: "posting_effects_replay_authorized",
-      actor_id: actorId,
-      reason: "Controller verified the inventory configuration and approved a deterministic replay.",
-    }]);
+    `,
+          "objects",
+        );
+        assert.deepEqual(replayAudit, [
+          {
+            event: "posting_effects_replay_authorized",
+            actor_id: actorId,
+            reason:
+              "Controller verified the inventory configuration and approved a deterministic replay.",
+          },
+        ]);
 
-    assert.equal(await incompletePostingEffectsCount(db, closeScope), 1, 'queuing a replay does not establish completion');
-    const replayResult = await processDuePostingEffects(replayAt, 1, async () => {});
-    await assertPostingEffectsSettled(db, closeScope);
-    assert.deepEqual(replayResult, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
-    });
-  } finally {
-    console.log = originalLog;
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+        assert.equal(
+          await incompletePostingEffectsCount(db, closeScope),
+          1,
+          "queuing a replay does not establish completion",
+        );
+        const replayResult = await processDuePostingEffects(replayAt, 1, async () => {});
+        await assertPostingEffectsSettled(db, closeScope);
+        assert.deepEqual(replayResult, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
+      });
+    } finally {
+      console.log = originalLog;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("document claim reports each lifecycle state distinctly", { skip: !DB }, async () => {
   // Every branch of the claim fallback is a mutation target: a negated row
@@ -300,33 +413,36 @@ test("document claim reports each lifecycle state distinctly", { skip: !DB }, as
   }
 });
 
-test("stale recovery spares fresh leases and stays silent without a terminal transition", { skip: !DB }, async () => {
-  // A divided threshold (or a shifted staleness bound) recovers the fresh
-  // lease too; negated becameTerminal guards write terminal audit evidence
-  // and emit the operator signal for a routine retryable recovery.
-  const org = await createScratchOrg();
-  const documentId = randomUUID();
-  const freshDocumentId = randomUUID();
-  const entryId = randomUUID();
-  const freshId = randomUUID();
-  const staleId = randomUUID();
-  const freshLease = randomUUID();
-  const staleLease = randomUUID();
-  const recoveryNow = new Date("2026-07-20T12:00:00.000Z");
-  const freshAt = new Date(recoveryNow.getTime() - 60_000);
-  const staleAt = new Date(recoveryNow.getTime() - 16 * 60_000);
-  const logs: string[] = [];
-  const originalLog = console.log;
-  const originalWarn = console.warn;
-  const originalError = console.error;
-  try {
-    await db.execute(sql`
+test(
+  "stale recovery spares fresh leases and stays silent without a terminal transition",
+  { skip: !DB },
+  async () => {
+    // A divided threshold (or a shifted staleness bound) recovers the fresh
+    // lease too; negated becameTerminal guards write terminal audit evidence
+    // and emit the operator signal for a routine retryable recovery.
+    const org = await createScratchOrg();
+    const documentId = randomUUID();
+    const freshDocumentId = randomUUID();
+    const entryId = randomUUID();
+    const freshId = randomUUID();
+    const staleId = randomUUID();
+    const freshLease = randomUUID();
+    const staleLease = randomUUID();
+    const recoveryNow = new Date("2026-07-20T12:00:00.000Z");
+    const freshAt = new Date(recoveryNow.getTime() - 60_000);
+    const staleAt = new Date(recoveryNow.getTime() - 16 * 60_000);
+    const logs: string[] = [];
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    const originalError = console.error;
+    try {
+      await db.execute(sql`
       insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
       values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
               ${`POSTFX-SILENT-${entryId}`}, ${org.date}, ${org.periodId}, 'draft', 'document')
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, document_number, document_date, currency, status, custom)
       values (${documentId}, ${org.orgId}, 'vendor_bill', ${`BILL-SILENT-${documentId}`},
@@ -334,7 +450,7 @@ test("stale recovery spares fresh leases and stays silent without a terminal tra
              (${freshDocumentId}, ${org.orgId}, 'vendor_bill', ${`BILL-SILENT-${freshDocumentId}`},
               ${org.date}, 'CAD', 'draft', '{}'::jsonb)
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into posting_effects
         (id, org_id, document_id, kind, entry_id, posting_date, status,
          attempt_count, locked_at, lease_token, next_attempt_at)
@@ -344,164 +460,197 @@ test("stale recovery spares fresh leases and stays silent without a terminal tra
               ${org.date}, 'running', 0, ${staleAt}, ${staleLease}, '2000-01-01T00:00:00Z')
     `);
 
-    console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
-    console.warn = (...args: unknown[]) => logs.push(args.map(String).join(" "));
-    console.error = (...args: unknown[]) => logs.push(args.map(String).join(" "));
-    assert.equal(await recoverStalePostingEffects(recoveryNow), 1);
+      console.log = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+      console.warn = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+      console.error = (...args: unknown[]) => logs.push(args.map(String).join(" "));
+      assert.equal(await recoverStalePostingEffects(recoveryNow), 1);
 
-    const rows = await db.execute<{
-      id: string;
-      status: string;
-      attempt_count: number;
-      lease_token: string | null;
-      locked_at: Date | null;
-    }>(sql`
+      const rows = await db.execute<{
+        id: string;
+        status: string;
+        attempt_count: number;
+        lease_token: string | null;
+        locked_at: Date | null;
+      }>(
+        sql`
       select id, status, attempt_count, lease_token, locked_at
         from posting_effects where org_id = ${org.orgId} order by id
-    `, "objects");
-    const fresh = rows.find((r) => r.id === freshId)!;
-    assert.deepEqual(
-      { status: fresh.status, attempt_count: fresh.attempt_count, lease_token: fresh.lease_token },
-      { status: "running", attempt_count: 0, lease_token: freshLease },
-    );
-    assert.equal(new Date(fresh.locked_at!).getTime(), freshAt.getTime());
-    const stale = rows.find((r) => r.id === staleId)!;
-    assert.deepEqual(
-      { status: stale.status, attempt_count: stale.attempt_count, lease_token: stale.lease_token },
-      { status: "failed", attempt_count: 0, lease_token: null },
-    );
+    `,
+        "objects",
+      );
+      const fresh = rows.find((r) => r.id === freshId)!;
+      assert.deepEqual(
+        {
+          status: fresh.status,
+          attempt_count: fresh.attempt_count,
+          lease_token: fresh.lease_token,
+        },
+        { status: "running", attempt_count: 0, lease_token: freshLease },
+      );
+      assert.equal(new Date(fresh.locked_at!).getTime(), freshAt.getTime());
+      const stale = rows.find((r) => r.id === staleId)!;
+      assert.deepEqual(
+        {
+          status: stale.status,
+          attempt_count: stale.attempt_count,
+          lease_token: stale.lease_token,
+        },
+        { status: "failed", attempt_count: 0, lease_token: null },
+      );
 
-    const terminalAudit = await db.execute<{ count: string }>(sql`
+      const terminalAudit = await db.execute<{ count: string }>(
+        sql`
       select count(*)::text as count from audit_log
        where org_id = ${org.orgId} and table_name = 'posting_effects'
          and request_id = 'posting_effects_terminal_failure'
-    `, "objects");
-    assert.equal(terminalAudit[0]!.count, "0");
-    assert.deepEqual(
-      logs.filter((line) => line.includes(TERMINAL_FAILURE_LOG_EVENT)),
-      [],
-    );
-  } finally {
-    console.log = originalLog;
-    console.warn = originalWarn;
-    console.error = originalError;
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.equal(terminalAudit[0]!.count, "0");
+      assert.deepEqual(
+        logs.filter((line) => line.includes(TERMINAL_FAILURE_LOG_EVENT)),
+        [],
+      );
+    } finally {
+      console.log = originalLog;
+      console.warn = originalWarn;
+      console.error = originalError;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("failure evidence truncates at one thousand characters and replay guards its preconditions", { skip: !DB }, async () => {
-  // The 1000-character evidence bound, the missing-row and non-terminal
-  // replay guards, and the exact 10/1000-character reason acceptances each
-  // pin one mutation: shifted bounds, negated existence checks, or narrowed
-  // reason fences.
-  const org = await createScratchOrg();
-  const actorId = randomUUID();
-  const docIds = [randomUUID(), randomUUID()];
-  const entryIds = [randomUUID(), randomUUID()];
-  const effectIds = [randomUUID(), randomUUID()];
-  const failedAt = new Date("2026-07-20T12:00:00.000Z");
-  try {
-    await db.transaction(async (tx) => {
-      const role = await tx.execute<{ id: string }>(sql`
+test(
+  "failure evidence truncates at one thousand characters and replay guards its preconditions",
+  { skip: !DB },
+  async () => {
+    // The 1000-character evidence bound, the missing-row and non-terminal
+    // replay guards, and the exact 10/1000-character reason acceptances each
+    // pin one mutation: shifted bounds, negated existence checks, or narrowed
+    // reason fences.
+    const org = await createScratchOrg();
+    const actorId = randomUUID();
+    const docIds = [randomUUID(), randomUUID()];
+    const entryIds = [randomUUID(), randomUUID()];
+    const effectIds = [randomUUID(), randomUUID()];
+    const failedAt = new Date("2026-07-20T12:00:00.000Z");
+    try {
+      await db.transaction(async (tx) => {
+        const role = await tx.execute<{ id: string }>(
+          sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions)
         values (${org.orgId}, 'posting-effects-guard', 'Posting Effects Guard', false, '["ar.post"]'::jsonb)
         returning id
-      `, "objects");
-      await tx.execute(sql`
+      `,
+          "objects",
+        );
+        await tx.execute(sql`
         insert into users (id, org_id, email, name, password_hash, is_active)
         values (${actorId}, ${org.orgId}, ${`posting-effects-guard-${actorId.slice(0, 8)}@test.local`},
                 'Posting Effects Guard', 'x', true)
       `);
-      await tx.execute(sql`
+        await tx.execute(sql`
         insert into role_assignments (org_id, user_id, role_id)
         values (${org.orgId}, ${actorId}, ${role[0]!.id})
       `);
-    });
-    for (let i = 0; i < 2; i += 1) {
-      await db.execute(sql`
+      });
+      for (let i = 0; i < 2; i += 1) {
+        await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
         values (${entryIds[i]}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
                 ${`POSTFX-GUARD-${i}-${entryIds[i]}`}, ${org.date}, ${org.periodId}, 'draft', 'document')
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, document_date, currency, status, custom)
         values (${docIds[i]}, ${org.orgId}, 'customer_invoice', ${`INV-GUARD-${i}-${docIds[i]}`},
                 ${org.date}, 'CAD', 'draft', '{}'::jsonb)
       `);
-      await postFixtureDocument(org, docIds[i]!, entryIds[i]!);
-      await db.execute(sql`
+        await postFixtureDocument(org, docIds[i]!, entryIds[i]!);
+        await db.execute(sql`
         insert into posting_effects
           (id, org_id, document_id, kind, entry_id, posting_date, status,
            attempt_count, next_attempt_at)
         values (${effectIds[i]}, ${org.orgId}, ${docIds[i]}, 'customer_invoice', ${entryIds[i]},
                 ${org.date}, 'failed', ${MAX_POSTING_EFFECTS_ATTEMPTS - 1}, '2000-01-01T00:00:00Z')
       `);
-    }
+      }
 
-    const first = await claimPostingEffectsForDocument(docIds[0]!);
-    assert.ok(first !== null && typeof first === "object");
-    await markPostingEffectsFailed(first, new Error("x".repeat(2000)), failedAt);
-    const stored = await db.execute<{ error: string }>(sql`
+      const first = await claimPostingEffectsForDocument(docIds[0]!);
+      assert.ok(first !== null && typeof first === "object");
+      await markPostingEffectsFailed(first, new Error("x".repeat(2000)), failedAt);
+      const stored = await db.execute<{ error: string }>(
+        sql`
       select error from posting_effects where id = ${effectIds[0]} and org_id = ${org.orgId}
-    `, "objects");
-    assert.equal(stored[0]!.error.length, 1000);
+    `,
+        "objects",
+      );
+      assert.equal(stored[0]!.error.length, 1000);
 
-    await assert.rejects(
-      () => replayTerminalPostingEffect({
-        orgId: org.orgId,
-        id: randomUUID(),
-        actorId,
-        reason: "Controller verified the failure and approved a replay.",
-      }),
-      /was not found/,
-    );
-    await assert.rejects(
-      () => replayTerminalPostingEffect({
-        orgId: org.orgId,
-        id: effectIds[1]!,
-        actorId,
-        reason: "Controller verified the failure and approved a replay.",
-      }),
-      /only terminal-failed/,
-    );
+      await assert.rejects(
+        () =>
+          replayTerminalPostingEffect({
+            orgId: org.orgId,
+            id: randomUUID(),
+            actorId,
+            reason: "Controller verified the failure and approved a replay.",
+          }),
+        /was not found/,
+      );
+      await assert.rejects(
+        () =>
+          replayTerminalPostingEffect({
+            orgId: org.orgId,
+            id: effectIds[1]!,
+            actorId,
+            reason: "Controller verified the failure and approved a replay.",
+          }),
+        /only terminal-failed/,
+      );
 
-    // Terminalize both rows, then replay at the exact reason-length fences:
-    // 10 and 1000 characters are legal; 9 and 1001 already throw elsewhere.
-    await db.execute(sql`
+      // Terminalize both rows, then replay at the exact reason-length fences:
+      // 10 and 1000 characters are legal; 9 and 1001 already throw elsewhere.
+      await db.execute(sql`
       update posting_effects set attempt_count = ${MAX_POSTING_EFFECTS_ATTEMPTS - 1}, status = 'failed'
        where id in (${effectIds[0]}, ${effectIds[1]}) and org_id = ${org.orgId}
     `);
-    for (const docId of docIds) {
-      const row = await claimPostingEffectsForDocument(docId!);
-      assert.ok(row !== null && typeof row === "object");
-      await markPostingEffectsFailed(row, new Error("ceiling reached"), failedAt);
-    }
-    await replayTerminalPostingEffect({
-      orgId: org.orgId,
-      id: effectIds[0]!,
-      actorId,
-      reason: "0123456789",
-    });
-    await replayTerminalPostingEffect({
-      orgId: org.orgId,
-      id: effectIds[1]!,
-      actorId,
-      reason: "y".repeat(1000),
-    });
-    const replayed = await db.execute<{ id: string; status: string; attempt_count: number }>(sql`
+      for (const docId of docIds) {
+        const row = await claimPostingEffectsForDocument(docId!);
+        assert.ok(row !== null && typeof row === "object");
+        await markPostingEffectsFailed(row, new Error("ceiling reached"), failedAt);
+      }
+      await replayTerminalPostingEffect({
+        orgId: org.orgId,
+        id: effectIds[0]!,
+        actorId,
+        reason: "0123456789",
+      });
+      await replayTerminalPostingEffect({
+        orgId: org.orgId,
+        id: effectIds[1]!,
+        actorId,
+        reason: "y".repeat(1000),
+      });
+      const replayed = await db.execute<{ id: string; status: string; attempt_count: number }>(
+        sql`
       select id, status, attempt_count from posting_effects where org_id = ${org.orgId} order by id
-    `, "objects");
-    assert.deepEqual(replayed, replayed.map((r) => ({
-      id: r.id,
-      status: "pending",
-      attempt_count: 0,
-    })));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.deepEqual(
+        replayed,
+        replayed.map((r) => ({
+          id: r.id,
+          status: "pending",
+          attempt_count: 0,
+        })),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /** Bulk-seed `count` due (or failed) effects with real documents and entries. */
 async function seedEffects(
@@ -537,19 +686,23 @@ async function seedEffects(
   `);
 }
 
-test("failed-effects listing caps the default page at one hundred rows", { skip: !DB }, async () => {
-  // The default limit is a mutation target (100 -> 99/101): only a store
-  // holding more than a page distinguishes the cap from "everything".
-  const org = await createScratchOrg();
-  try {
-    await seedEffects(org, 105, "CAP", "failed");
-    const page = await listFailedPostingEffects(org.orgId);
-    assert.equal(page.length, 100);
-    assert.equal((await listFailedPostingEffects(org.orgId, 3)).length, 3);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "failed-effects listing caps the default page at one hundred rows",
+  { skip: !DB },
+  async () => {
+    // The default limit is a mutation target (100 -> 99/101): only a store
+    // holding more than a page distinguishes the cap from "everything".
+    const org = await createScratchOrg();
+    try {
+      await seedEffects(org, 105, "CAP", "failed");
+      const page = await listFailedPostingEffects(org.orgId);
+      assert.equal(page.length, 100);
+      assert.equal((await listFailedPostingEffects(org.orgId, 3)).length, 3);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("the due drain honors its default, zero and explicit batch caps", { skip: !DB }, async () => {
   // The default limit (50 -> 49/51), the lower clamp (1 -> 0/2, observed
@@ -609,10 +762,13 @@ test("the due drain never takes more than two hundred rows per call", { skip: !D
       failed: 0,
       fenced: 0,
     });
-    const left = await db.execute<{ count: string }>(sql`
+    const left = await db.execute<{ count: string }>(
+      sql`
       select count(*)::text as count from posting_effects
        where org_id = ${org.orgId} and status = 'pending'
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.equal(left[0]!.count, "1");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -627,10 +783,14 @@ test("the due drain reports wall-clock attempt durations", { skip: !DB }, async 
   try {
     await seedEffects(org, 2, "BAT-M", "pending");
     let calls = 0;
-    const result = await processDuePostingEffects(new Date("2026-07-20T12:00:00.000Z"), 10, async () => {
-      calls += 1;
-      if (calls === 1) throw new Error("first attempt fails");
-    });
+    const result = await processDuePostingEffects(
+      new Date("2026-07-20T12:00:00.000Z"),
+      10,
+      async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("first attempt fails");
+      },
+    );
     assert.deepEqual(result, { processed: 2, succeeded: 1, failed: 1, fenced: 0 });
     const points = (await collectDurations()).filter(
       (point) => point.attributes[ATTR_SURFACE] === "posting_effects",
@@ -709,9 +869,13 @@ test("a directly fenced drain completion counts fenced", { skip: !DB }, async ()
   const org = await createScratchOrg();
   try {
     await seedEffects(org, 1, "BAT-F", "pending");
-    const result = await processDuePostingEffects(new Date("2026-07-20T12:00:00.000Z"), 1, async () => {
-      throw new PostingEffectsLeaseFencedError("simulated completion steal");
-    });
+    const result = await processDuePostingEffects(
+      new Date("2026-07-20T12:00:00.000Z"),
+      1,
+      async () => {
+        throw new PostingEffectsLeaseFencedError("simulated completion steal");
+      },
+    );
     assert.deepEqual(result, { processed: 1, succeeded: 0, failed: 0, fenced: 1 });
     for (const point of (await collectDurations()).filter(
       (point) => point.attributes[ATTR_SURFACE] === "posting_effects",
@@ -727,68 +891,79 @@ test("a directly fenced drain completion counts fenced", { skip: !DB }, async ()
   }
 });
 
-test("a recovered posting-effect lease fences the stale worker completion", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const documentId = randomUUID();
-  const entryId = randomUUID();
-  const effectId = randomUUID();
-  const firstNow = new Date("2026-07-20T10:00:00.000Z");
-  const recoveryNow = new Date(firstNow.getTime() + 16 * 60_000);
-  let releaseOld!: () => void;
-  let signalOldClaimed!: () => void;
-  const oldHeld = new Promise<void>((resolve) => { releaseOld = resolve; });
-  const oldClaimed = new Promise<void>((resolve) => { signalOldClaimed = resolve; });
-  let oldLease = "";
-  let replacementLease = "";
-  try {
-    await db.execute(sql`
+test(
+  "a recovered posting-effect lease fences the stale worker completion",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const documentId = randomUUID();
+    const entryId = randomUUID();
+    const effectId = randomUUID();
+    const firstNow = new Date("2026-07-20T10:00:00.000Z");
+    const recoveryNow = new Date(firstNow.getTime() + 16 * 60_000);
+    let releaseOld!: () => void;
+    let signalOldClaimed!: () => void;
+    const oldHeld = new Promise<void>((resolve) => {
+      releaseOld = resolve;
+    });
+    const oldClaimed = new Promise<void>((resolve) => {
+      signalOldClaimed = resolve;
+    });
+    let oldLease = "";
+    let replacementLease = "";
+    try {
+      await db.execute(sql`
       insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
       values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
               ${`POSTFX-FENCE-${entryId}`}, ${org.date}, ${org.periodId}, 'draft', 'document')
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, document_number, document_date, currency, status, custom)
       values (${documentId}, ${org.orgId}, 'vendor_bill', ${`BILL-FENCE-${documentId}`},
               ${org.date}, 'CAD', 'draft', '{}'::jsonb)
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into posting_effects
         (id, org_id, document_id, kind, entry_id, posting_date, status, next_attempt_at)
       values (${effectId}, ${org.orgId}, ${documentId}, 'vendor_bill', ${entryId},
               ${org.date}, 'pending', '2000-01-01T00:00:00Z')
     `);
 
-    const staleWorker = processDuePostingEffects(firstNow, 1, async (row) => {
-      oldLease = row.lease_token;
-      signalOldClaimed();
-      await oldHeld;
-    });
-    await oldClaimed;
-    assert.ok(oldLease, "the first claim must carry a lease token");
+      const staleWorker = processDuePostingEffects(firstNow, 1, async (row) => {
+        oldLease = row.lease_token;
+        signalOldClaimed();
+        await oldHeld;
+      });
+      await oldClaimed;
+      assert.ok(oldLease, "the first claim must carry a lease token");
 
-    assert.equal(await recoverStalePostingEffects(recoveryNow), 1);
-    const replacement = await processDuePostingEffects(recoveryNow, 1, async (row) => {
-      replacementLease = row.lease_token;
-    });
-    assert.deepEqual(replacement, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
-    assert.ok(replacementLease);
-    assert.notEqual(replacementLease, oldLease, "recovery must mint a different lease");
+      assert.equal(await recoverStalePostingEffects(recoveryNow), 1);
+      const replacement = await processDuePostingEffects(recoveryNow, 1, async (row) => {
+        replacementLease = row.lease_token;
+      });
+      assert.deepEqual(replacement, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
+      assert.ok(replacementLease);
+      assert.notEqual(replacementLease, oldLease, "recovery must mint a different lease");
 
-    releaseOld();
-    const staleResult = await staleWorker;
-    assert.deepEqual(staleResult, { processed: 1, succeeded: 0, failed: 0, fenced: 1 });
-    const stored = await db.execute<{
-      status: string;
-      attempt_count: number;
-      lease_token: string | null;
-    }>(sql`
+      releaseOld();
+      const staleResult = await staleWorker;
+      assert.deepEqual(staleResult, { processed: 1, succeeded: 0, failed: 0, fenced: 1 });
+      const stored = await db.execute<{
+        status: string;
+        attempt_count: number;
+        lease_token: string | null;
+      }>(
+        sql`
       select status, attempt_count, lease_token from posting_effects where id=${effectId}
-    `, "objects");
-    assert.deepEqual(stored, [{ status: "succeeded", attempt_count: 2, lease_token: null }]);
-  } finally {
-    releaseOld?.();
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.deepEqual(stored, [{ status: "succeeded", attempt_count: 2, lease_token: null }]);
+    } finally {
+      releaseOld?.();
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

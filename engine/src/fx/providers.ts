@@ -68,7 +68,10 @@ export interface FxSyncResult {
 
 export class FxProviderError extends Error {}
 
-export const FX_PROVIDER_MANIFESTS: Record<FxProviderKey, { displayName: string; requiresSecret: boolean; anchor: string }> = {
+export const FX_PROVIDER_MANIFESTS: Record<
+  FxProviderKey,
+  { displayName: string; requiresSecret: boolean; anchor: string }
+> = {
   bank_of_canada: { displayName: "Bank of Canada", requiresSecret: false, anchor: "CAD" },
   ecb: { displayName: "European Central Bank", requiresSecret: false, anchor: "EUR" },
   open_exchange_rates: { displayName: "Open Exchange Rates", requiresSecret: true, anchor: "USD" },
@@ -86,9 +89,12 @@ const CONFIG_COLS = sql`id, org_id as "orgId", provider, display_name as "displa
  * carries foreign-currency lines, so the sync this module exists to run
  * silently never ran for exactly the orgs the default exists to protect. */
 async function multiCurrencyFeatureEnabled(orgId: string): Promise<boolean> {
-  const r = (await db.execute<{ features: Record<string, boolean> | null }>(sql`
+  const r = await db.execute<{ features: Record<string, boolean> | null }>(
+    sql`
     select settings->'features' as features from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return dataDependentFeatureDefault(db, orgId, "multiCurrency", r[0]?.features ?? null);
 }
 
@@ -97,10 +103,13 @@ export async function readFxProviderConfig(
   runner: Pick<typeof db, "execute"> = db,
   lock = false,
 ): Promise<FxProviderConfigRow | null> {
-  const r = (await runner.execute<FxProviderConfigRow>(sql`
+  const r = await runner.execute<FxProviderConfigRow>(
+    sql`
     select ${CONFIG_COLS} from fx_provider_configs where org_id = ${orgId} limit 1
     ${lock ? sql`for update` : sql``}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0] ?? null;
 }
 
@@ -122,7 +131,9 @@ function fxProviderConfigAuditView(row: FxProviderConfigRow): Record<string, unk
   };
 }
 
-export async function readFxProviderConfigView(orgId: string): Promise<FxProviderConfigView | null> {
+export async function readFxProviderConfigView(
+  orgId: string,
+): Promise<FxProviderConfigView | null> {
   const row = await readFxProviderConfig(orgId);
   if (!row) return null;
   const { secrets, ...safe } = row;
@@ -143,8 +154,11 @@ export interface SaveFxProviderInput {
 }
 
 function cleanCurrency(value: unknown): string {
-  const code = String(value ?? "").trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(code)) throw new FxProviderError(`invalid currency code: ${code || "(blank)"}`);
+  const code = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code))
+    throw new FxProviderError(`invalid currency code: ${code || "(blank)"}`);
   return code;
 }
 
@@ -165,13 +179,22 @@ export async function saveFxProviderConfig(
     throw new FxProviderError("lookback must be between 1 and 31 days");
   }
   const baseCurrency = cleanCurrency(input.baseCurrency);
-  const currencies = [...new Set(input.currencies.map(cleanCurrency).filter((c) => c !== baseCurrency))].sort();
+  const currencies = [
+    ...new Set(input.currencies.map(cleanCurrency).filter((c) => c !== baseCurrency)),
+  ].sort();
   if (currencies.length === 0) throw new FxProviderError("choose at least one foreign currency");
 
-  const known = (await db.execute<{ code: string }>(sql`
-    select code from currencies where code in (${sql.join([baseCurrency, ...currencies].map((c) => sql`${c}`), sql`, `)})
-  `, "objects"));
-  if (known.length !== currencies.length + 1) throw new FxProviderError("one or more currencies are not in the currency registry");
+  const known = await db.execute<{ code: string }>(
+    sql`
+    select code from currencies where code in (${sql.join(
+      [baseCurrency, ...currencies].map((c) => sql`${c}`),
+      sql`, `,
+    )})
+  `,
+    "objects",
+  );
+  if (known.length !== currencies.length + 1)
+    throw new FxProviderError("one or more currencies are not in the currency registry");
 
   // The config write and its immutable before/after audit commit as one
   // unit: an audit failure rolls the config back with it, so a provider,
@@ -184,7 +207,7 @@ export async function saveFxProviderConfig(
     // saves can mislabel an upsert as an insert and update audits can share a
     // stale snapshot.
     await tx.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended(${'fx-provider-config:' + orgId}, 0))
+      select pg_advisory_xact_lock(hashtextextended(${"fx-provider-config:" + orgId}, 0))
     `);
     const existing = await readFxProviderConfig(orgId, tx, true);
     let sealed = existing?.secrets ?? null;
@@ -192,13 +215,17 @@ export async function saveFxProviderConfig(
     if (typeof input.apiKey === "string" && input.apiKey.trim()) {
       sealed = sealJson({ apiKey: input.apiKey.trim() }, { orgId, purpose: "fx.provider.secrets" });
     }
-    const sealedApiKey = sealed == null ? undefined : unsealJson<{ apiKey?: string }>(sealed, { orgId, purpose: "fx.provider.secrets" }).apiKey;
+    const sealedApiKey =
+      sealed == null
+        ? undefined
+        : unsealJson<{ apiKey?: string }>(sealed, { orgId, purpose: "fx.provider.secrets" }).apiKey;
     if (input.isEnabled && manifest.requiresSecret && !sealedApiKey) {
       throw new FxProviderError("an API key is required before enabling Open Exchange Rates");
     }
     const next = input.isEnabled ? computeNextSyncAt(input.schedule, input.syncHourUtc) : null;
     const displayName = String(input.displayName ?? "").trim() || manifest.displayName;
-    const r = (await tx.execute<{ id: string }>(sql`
+    const r = await tx.execute<{ id: string }>(
+      sql`
       insert into fx_provider_configs
         (org_id, provider, display_name, base_currency, currencies, schedule, sync_hour_utc,
          lookback_days, is_enabled, secrets, next_sync_at, created_by, updated_by)
@@ -214,7 +241,9 @@ export async function saveFxProviderConfig(
         last_error = null, updated_at = now(), updated_by = excluded.updated_by
       where fx_provider_configs.org_id = ${orgId}
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     const id = r[0]!.id;
     const after = (await readFxProviderConfig(orgId, tx))!;
     await tx.execute(sql`
@@ -229,10 +258,16 @@ export async function saveFxProviderConfig(
   });
 }
 
-export function computeNextSyncAt(schedule: FxSyncSchedule, hourUtc: number, now = new Date()): Date | null {
+export function computeNextSyncAt(
+  schedule: FxSyncSchedule,
+  hourUtc: number,
+  now = new Date(),
+): Date | null {
   if (schedule === "manual") return null;
   // Year is the wall-clock `now` (live clock in production), which cannot be below 100 — see the allow-list.
-  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0));
+  const next = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0),
+  );
   if (schedule === "weekly") {
     next.setUTCDate(next.getUTCDate() + 7);
     return next;
@@ -246,7 +281,9 @@ export function computeNextSyncAt(schedule: FxSyncSchedule, hourUtc: number, now
 
 function syncRange(config: FxProviderConfigRow, to: string): { from: string; to: string } {
   const lookbackStart = addCalendarDays(to, -(config.lookbackDays - 1));
-  const revisionStart = config.lastObservationDate ? addCalendarDays(config.lastObservationDate, -2) : lookbackStart;
+  const revisionStart = config.lastObservationDate
+    ? addCalendarDays(config.lastObservationDate, -2)
+    : lookbackStart;
   return { from: revisionStart > lookbackStart ? revisionStart : lookbackStart, to };
 }
 
@@ -267,9 +304,9 @@ function expandScientific(value: string): string {
   // exponents (a thousand-digit exponent parses as Infinity) refuse too.
   const leadingZeros = digits.match(/^0*/)?.[0].length ?? 0;
   if (
-    !Number.isFinite(decimalAt)
-    || decimalAt - leadingZeros > 9
-    || -decimalAt + leadingZeros + 1 > DECIMAL_SCALE
+    !Number.isFinite(decimalAt) ||
+    decimalAt - leadingZeros > 9 ||
+    -decimalAt + leadingZeros + 1 > DECIMAL_SCALE
   ) {
     throw new FxProviderError(`provider returned an unrepresentable rate: ${value}`);
   }
@@ -305,14 +342,21 @@ export function ratioRate(numerator: string, denominator: string): string {
     return updateFxRate({ rate: `${whole}.${fraction}` });
   } catch (error) {
     if (error instanceof CurrencyError) {
-      throw new FxProviderError(`provider returned an unrepresentable rate: ${numerator}/${denominator}`);
+      throw new FxProviderError(
+        `provider returned an unrepresentable rate: ${numerator}/${denominator}`,
+      );
     }
     throw error;
   }
 }
 
 /** Build every directed pair so posting and any subsidiary tree need no triangulation. */
-export function normalizeFxSnapshots(snapshots: FxSnapshot[], baseCurrency: string, currencies: string[], providerName = "provider"): NormalizedFxRate[] {
+export function normalizeFxSnapshots(
+  snapshots: FxSnapshot[],
+  baseCurrency: string,
+  currencies: string[],
+  providerName = "provider",
+): NormalizedFxRate[] {
   const wanted = [...new Set([baseCurrency, ...currencies])].sort();
   const out: NormalizedFxRate[] = [];
   for (const snapshot of snapshots) {
@@ -328,12 +372,14 @@ export function normalizeFxSnapshots(snapshots: FxSnapshot[], baseCurrency: stri
         // anchor-per-foreign it is units[from]/units[to]. Either way the
         // anchor side enters as the stored "1", so the observed direction
         // reproduces exactly and every other pair rounds exactly once.
-        const numerator = snapshot.anchorBasis === "anchor-per-foreign"
-          ? snapshot.unitsPerAnchor[fromCurrency]!
-          : snapshot.unitsPerAnchor[toCurrency]!;
-        const denominator = snapshot.anchorBasis === "anchor-per-foreign"
-          ? snapshot.unitsPerAnchor[toCurrency]!
-          : snapshot.unitsPerAnchor[fromCurrency]!;
+        const numerator =
+          snapshot.anchorBasis === "anchor-per-foreign"
+            ? snapshot.unitsPerAnchor[fromCurrency]!
+            : snapshot.unitsPerAnchor[toCurrency]!;
+        const denominator =
+          snapshot.anchorBasis === "anchor-per-foreign"
+            ? snapshot.unitsPerAnchor[toCurrency]!
+            : snapshot.unitsPerAnchor[fromCurrency]!;
         let rate: string;
         try {
           rate = ratioRate(numerator, denominator);
@@ -369,8 +415,12 @@ function fxFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
 }
 
 async function fetchText(url: URL): Promise<string> {
-  const response = await fxFetch(url, { signal: AbortSignal.timeout(20_000), headers: { Accept: "application/json,text/csv" } });
-  if (!response.ok) throw new FxProviderError(`provider request failed with HTTP ${response.status}`);
+  const response = await fxFetch(url, {
+    signal: AbortSignal.timeout(20_000),
+    headers: { Accept: "application/json,text/csv" },
+  });
+  if (!response.ok)
+    throw new FxProviderError(`provider request failed with HTTP ${response.status}`);
   const text = await response.text();
   if (text.length > 20_000_000) throw new FxProviderError("provider response exceeded 20 MB");
   return text;
@@ -383,10 +433,14 @@ function parseCsvRow(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const char = line[i]!;
     if (char === '"') {
-      if (quoted && line[i + 1] === '"') { cell += '"'; i++; }
-      else quoted = !quoted;
-    } else if (char === "," && !quoted) { cells.push(cell); cell = ""; }
-    else cell += char;
+      if (quoted && line[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      cells.push(cell);
+      cell = "";
+    } else cell += char;
   }
   cells.push(cell);
   return cells;
@@ -398,7 +452,8 @@ export function parseEcbCsv(text: string): FxSnapshot[] {
   const currencyAt = header.indexOf("CURRENCY");
   const dateAt = header.indexOf("TIME_PERIOD");
   const valueAt = header.indexOf("OBS_VALUE");
-  if (currencyAt < 0 || dateAt < 0 || valueAt < 0) throw new FxProviderError("ECB response is missing required columns");
+  if (currencyAt < 0 || dateAt < 0 || valueAt < 0)
+    throw new FxProviderError("ECB response is missing required columns");
   const byDate = new Map<string, Record<string, string>>();
   for (const line of lines) {
     const row = parseCsvRow(line);
@@ -410,7 +465,14 @@ export function parseEcbCsv(text: string): FxSnapshot[] {
     rates[currency] = value;
     byDate.set(date, rates);
   }
-  return [...byDate].sort(([a], [b]) => a.localeCompare(b)).map(([date, unitsPerAnchor]) => ({ date, anchor: "EUR", anchorBasis: "foreign-per-anchor" as const, unitsPerAnchor }));
+  return [...byDate]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, unitsPerAnchor]) => ({
+      date,
+      anchor: "EUR",
+      anchorBasis: "foreign-per-anchor" as const,
+      unitsPerAnchor,
+    }));
 }
 
 export function parseBankOfCanadaJson(text: string): FxSnapshot[] {
@@ -432,11 +494,22 @@ export function parseBankOfCanadaJson(text: string): FxSnapshot[] {
       // through a pre-rounded 0.7692307692.
       if (match && value != null) rates[match[1]!] = String(value);
     }
-    return [{ date: observation.d, anchor: "CAD", anchorBasis: "anchor-per-foreign" as const, unitsPerAnchor: rates }];
+    return [
+      {
+        date: observation.d,
+        anchor: "CAD",
+        anchorBasis: "anchor-per-foreign" as const,
+        unitsPerAnchor: rates,
+      },
+    ];
   });
 }
 
-async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string, to: string): Promise<FxSnapshot[]> {
+async function fetchProviderSnapshots(
+  config: FxProviderConfigRow,
+  from: string,
+  to: string,
+): Promise<FxSnapshot[]> {
   if (config.provider === "bank_of_canada") {
     const url = new URL("https://www.bankofcanada.ca/valet/observations/group/FX_RATES_DAILY/json");
     url.searchParams.set("start_date", from);
@@ -453,7 +526,10 @@ async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string,
   const apiKey =
     config.secrets == null
       ? undefined
-      : unsealJson<{ apiKey?: string }>(config.secrets, { orgId: config.orgId, purpose: "fx.provider.secrets" }).apiKey;
+      : unsealJson<{ apiKey?: string }>(config.secrets, {
+          orgId: config.orgId,
+          purpose: "fx.provider.secrets",
+        }).apiKey;
   if (!apiKey) throw new FxProviderError("Open Exchange Rates API key is missing");
   const snapshots: FxSnapshot[] = [];
   for (let date = from; date <= to; date = addCalendarDays(date, 1)) {
@@ -468,10 +544,18 @@ async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string,
     } catch {
       throw new FxProviderError("Open Exchange Rates returned an invalid payload");
     }
-    if (!payload.base || !payload.rates) throw new FxProviderError("Open Exchange Rates returned an invalid payload");
-    const unitsPerAnchor = Object.fromEntries(Object.entries(payload.rates).map(([code, value]) => [code, String(value)]));
+    if (!payload.base || !payload.rates)
+      throw new FxProviderError("Open Exchange Rates returned an invalid payload");
+    const unitsPerAnchor = Object.fromEntries(
+      Object.entries(payload.rates).map(([code, value]) => [code, String(value)]),
+    );
     unitsPerAnchor[payload.base] = "1";
-    snapshots.push({ date, anchor: payload.base, anchorBasis: "foreign-per-anchor" as const, unitsPerAnchor });
+    snapshots.push({
+      date,
+      anchor: payload.base,
+      anchorBasis: "foreign-per-anchor" as const,
+      unitsPerAnchor,
+    });
   }
   return snapshots;
 }
@@ -566,14 +650,18 @@ async function createRun(
       if (!occurrence.rowCount) return null;
     }
     try {
-      const r = (await tx.execute<{ id: string; leaseToken: string }>(sql`
+      const r = await tx.execute<{ id: string; leaseToken: string }>(
+        sql`
         insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, created_by, lease_token)
         values (${config.orgId}, ${config.id}, ${trigger}, ${from}, ${to}, ${actorId ?? null}, gen_random_uuid())
         returning id, lease_token as "leaseToken"
-      `, "objects"));
+      `,
+        "objects",
+      );
       return { runId: r[0]!.id, leaseToken: r[0]!.leaseToken };
     } catch (error) {
-      if (isFxRunInProgressConflict(error)) throw new FxProviderError("an FX provider run is already in progress");
+      if (isFxRunInProgressConflict(error))
+        throw new FxProviderError("an FX provider run is already in progress");
       throw error;
     }
   });
@@ -631,12 +719,22 @@ export async function applyNormalizedRates(
   },
 ): Promise<FxApplyCounts> {
   const counts: FxApplyCounts = { inserted: 0, updated: 0, manualPreserved: 0 };
-  const existing = (await runner.execute<{ from_currency: string; to_currency: string; as_of: string; source: string }>(sql`
+  const existing = await runner.execute<{
+    from_currency: string;
+    to_currency: string;
+    as_of: string;
+    source: string;
+  }>(
+    sql`
     select from_currency, to_currency, as_of::text, source from fx_rates
      where org_id = ${args.orgId} and rate_type = 'spot'
        and as_of between ${args.from} and ${args.to}
-  `, "objects"));
-  const byKey = new Map(existing.map((row) => [`${row.as_of}|${row.from_currency}|${row.to_currency}`, row.source]));
+  `,
+    "objects",
+  );
+  const byKey = new Map(
+    existing.map((row) => [`${row.as_of}|${row.from_currency}|${row.to_currency}`, row.source]),
+  );
   const writable: NormalizedFxRate[] = [];
   for (const rate of args.normalized) {
     let persistedRate: string;
@@ -658,9 +756,12 @@ export async function applyNormalizedRates(
   }
   for (let at = 0; at < writable.length; at += FX_RATE_APPLY_CHUNK) {
     const chunk = writable.slice(at, at + FX_RATE_APPLY_CHUNK);
-    const rows = chunk.map((rate) => sql`(${args.orgId}, ${rate.fromCurrency}, ${rate.toCurrency}, ${rate.date},
-      'spot', ${rate.rate}, ${args.provider}, ${args.configId}, now(), ${args.actorId ?? null}, ${args.actorId ?? null})`);
-    const applied = (await runner.execute<{ inserted: boolean }>(sql`
+    const rows = chunk.map(
+      (rate) => sql`(${args.orgId}, ${rate.fromCurrency}, ${rate.toCurrency}, ${rate.date},
+      'spot', ${rate.rate}, ${args.provider}, ${args.configId}, now(), ${args.actorId ?? null}, ${args.actorId ?? null})`,
+    );
+    const applied = await runner.execute<{ inserted: boolean }>(
+      sql`
       insert into fx_rates
         (org_id, from_currency, to_currency, as_of, rate_type, rate, source,
          provider_config_id, imported_at, created_by, updated_by)
@@ -670,7 +771,9 @@ export async function applyNormalizedRates(
         imported_at = now(), updated_at = now(), updated_by = excluded.updated_by
        where fx_rates.source <> 'manual'
       returning (xmax = 0) as inserted
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const row of applied) {
       if (row.inserted) counts.inserted++;
       else counts.updated++;
@@ -691,29 +794,42 @@ export async function runFxProvider(
   if (!(await multiCurrencyFeatureEnabled(orgId))) {
     throw new FxProviderError("multi-currency is disabled");
   }
-  if (trigger !== "test" && !config.isEnabled) throw new FxProviderError("enable the FX provider before synchronizing");
+  if (trigger !== "test" && !config.isEnabled)
+    throw new FxProviderError("enable the FX provider before synchronizing");
   try {
     await assertNotSandbox(orgId, "FX provider synchronization");
   } catch {
     throw new FxProviderError("FX providers cannot contact external services from a sandbox");
   }
   const today = await businessToday(orgId);
-  const range = trigger === "test"
-    ? { from: addCalendarDays(today, -6), to: today }
-    : syncRange(config, today);
-  const claim = await createRun(config, trigger, range.from, range.to, actorId, scheduledOccurrence);
+  const range =
+    trigger === "test" ? { from: addCalendarDays(today, -6), to: today } : syncRange(config, today);
+  const claim = await createRun(
+    config,
+    trigger,
+    range.from,
+    range.to,
+    actorId,
+    scheduledOccurrence,
+  );
   if (!claim) throw new FxScheduleClaimLostError();
-  await db.execute(sql`update fx_provider_configs set last_attempt_at = now() where id = ${config.id} and org_id = ${orgId}`);
+  await db.execute(
+    sql`update fx_provider_configs set last_attempt_at = now() where id = ${config.id} and org_id = ${orgId}`,
+  );
   try {
     const snapshots = await fetchProviderSnapshots(config, range.from, range.to);
-    if (snapshots.length === 0) throw new FxProviderError("provider returned no observations for the requested period");
+    if (snapshots.length === 0)
+      throw new FxProviderError("provider returned no observations for the requested period");
     const normalized = normalizeFxSnapshots(
       snapshots,
       config.baseCurrency,
       config.currencies,
       FX_PROVIDER_MANIFESTS[config.provider].displayName,
     );
-    const latestObservationDate = snapshots.map((s) => s.date).sort().at(-1)!;
+    const latestObservationDate = snapshots
+      .map((s) => s.date)
+      .sort()
+      .at(-1)!;
     const result: FxSyncResult = {
       observationsReceived: snapshots.length,
       normalizedRates: normalized.length,
@@ -722,7 +838,9 @@ export async function runFxProvider(
       manualOverridesPreserved: 0,
       latestObservationDate,
     };
-    const next = config.isEnabled ? computeNextSyncAt(config.schedule, config.syncHourUtc, now) : null;
+    const next = config.isEnabled
+      ? computeNextSyncAt(config.schedule, config.syncHourUtc, now)
+      : null;
     if (trigger !== "test") {
       // Renew the run lease after the (possibly long) fetch phase and before
       // the apply transaction opens: a takeover that reclaimed this run while
@@ -744,12 +862,15 @@ export async function runFxProvider(
       // to write anything unless the current running claim is still ours. The
       // row lock also serializes a concurrent stale-claim takeover — it waits
       // for this transaction's outcome instead of racing inside it.
-      const owned = (await tx.execute<{ id: string }>(sql`
+      const owned = await tx.execute<{ id: string }>(
+        sql`
         select id from fx_provider_runs
          where id = ${claim.runId} and org_id = ${orgId}
            and lease_token = ${claim.leaseToken} and status = 'running'
          for update
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (!owned.length) throw new FxRunLeaseLostError();
       if (trigger !== "test") {
         const applied = await applyNormalizedRates(tx, {
@@ -797,7 +918,10 @@ export async function runFxProvider(
     return result;
   } catch (error) {
     const message = fxStorageMessage(error);
-    const retryAt = config.isEnabled && config.schedule !== "manual" ? new Date(now.getTime() + 60 * 60 * 1000) : null;
+    const retryAt =
+      config.isEnabled && config.schedule !== "manual"
+        ? new Date(now.getTime() + 60 * 60 * 1000)
+        : null;
     // Fenced on the token: an attempt that already lost its claim must not
     // record its own outcome nor overwrite the winner's schedule state. The
     // run row and the config acknowledgment go in one atomic unit so this
@@ -824,7 +948,10 @@ export async function runFxProvider(
         `);
       });
     } catch (markFailure) {
-      console.error(`[fx-provider] could not record the failed outcome for run ${claim.runId}:`, markFailure);
+      console.error(
+        `[fx-provider] could not record the failed outcome for run ${claim.runId}:`,
+        markFailure,
+      );
     }
     throw error;
   }
@@ -838,7 +965,8 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
   // layer denies by default — the scan would find nothing, silently.
   // bypass: scheduler-tick — due FX feeds are found across every production organization.
   const due = await withBypassContext(() =>
-    db.execute<FxProviderConfigRow>(sql`
+    db.execute<FxProviderConfigRow>(
+      sql`
     select ${CONFIG_COLS} from fx_provider_configs
      where is_enabled and schedule <> 'manual' and next_sync_at <= ${now}
        and exists (
@@ -863,7 +991,10 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
        )
        )
      order by next_sync_at limit 20
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
   let claimedCount = 0;
   for (const config of due) {
     const next = computeNextSyncAt(config.schedule, config.syncHourUtc, now);
@@ -871,13 +1002,12 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
       // The occurrence claim is performed inside runFxProvider's transaction,
       // together with creation of its durable run row. A crash before dispatch
       // therefore leaves a reclaimable running row instead of a skipped cursor.
-      await withOrgContext(config.orgId, () => runFxProvider(
-        config.orgId,
-        "scheduler",
-        undefined,
-        now,
-        { claimedNextSyncAt: config.nextSyncAt!, nextSyncAt: next! },
-      ));
+      await withOrgContext(config.orgId, () =>
+        runFxProvider(config.orgId, "scheduler", undefined, now, {
+          claimedNextSyncAt: config.nextSyncAt!,
+          nextSyncAt: next!,
+        }),
+      );
       claimedCount++;
     } catch (error) {
       if (!(error instanceof FxScheduleClaimLostError)) {

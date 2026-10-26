@@ -5,7 +5,8 @@ import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
-  var __settleRouter: { push(url: string): void; refresh(): void; replace(url: string): void } | undefined;
+  var __settleRouter:
+    { push(url: string): void; refresh(): void; replace(url: string): void } | undefined;
   var __settleToasts: { kind: string; message: string }[] | undefined;
 }
 
@@ -193,14 +194,21 @@ test("one Post click right after Save posts on the revision the save committed",
     const post = buttonsNamed("Receive & post");
     assert.equal(post.length, 1, "view mode offers the primary Post after save");
     assert.equal(post[0]!.disabled, false, "a save that reported its revision leaves Post live");
-    assert.ok(!(document.body.textContent ?? "").includes("Saving…"), "no settling reason shows once the save committed");
+    assert.ok(
+      !(document.body.textContent ?? "").includes("Saving…"),
+      "no settling reason shows once the save committed",
+    );
     await act(async () => {
       post[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       await tick();
       await tick();
     });
     assert.equal(saves.length, 1, "the save reached the update endpoint once");
-    assert.equal(saves[0]!.body.expectedUpdatedAt, "41", "the save is fenced on the loaded revision");
+    assert.equal(
+      saves[0]!.body.expectedUpdatedAt,
+      "41",
+      "the save is fenced on the loaded revision",
+    );
     assert.equal(posts.length, 1, "the single Post click posts exactly once");
     assert.equal(
       (posts.at(0)!.body as { expectedUpdatedAt?: string }).expectedUpdatedAt,
@@ -282,7 +290,9 @@ test("a Post refused right after Save pins the server reason and toasts it", asy
     }
     if (url === "/api/payments/post-with-applications") {
       return Response.json(
-        { error: "this payment changed after you opened it; reload and review the latest revision" },
+        {
+          error: "this payment changed after you opened it; reload and review the latest revision",
+        },
         { status: 409 },
       );
     }
@@ -311,7 +321,11 @@ test("a Post refused right after Save pins the server reason and toasts it", asy
       (document.body.textContent ?? "").includes("changed after you opened it"),
       "the refusal pins inline beside the record",
     );
-    assert.equal(buttonsNamed("Receive & post")[0]?.disabled, false, "Post is available again after the refusal");
+    assert.equal(
+      buttonsNamed("Receive & post")[0]?.disabled,
+      false,
+      "Post is available again after the refusal",
+    );
   } finally {
     globalThis.fetch = prior;
     await done();
@@ -323,7 +337,9 @@ test("a stale-revision post refuses loudly with a toast and an inline pin", asyn
   globalThis.fetch = (async (input: RequestInfo | URL, _init?: RequestInit) => {
     if (String(input) === "/api/payments/post-with-applications") {
       return Response.json(
-        { error: "this payment changed after you opened it; reload and review the latest revision" },
+        {
+          error: "this payment changed after you opened it; reload and review the latest revision",
+        },
         { status: 409 },
       );
     }

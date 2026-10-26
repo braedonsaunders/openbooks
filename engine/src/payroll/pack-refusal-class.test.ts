@@ -32,13 +32,13 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { declaredPayrollFilings } from "./filing-registry.ts";
 import { PayrollError } from "./error.ts";
-import {
-  PayrollJurisdictionError,
-  PayrollPackError,
-  payrollTaxYearSupport,
-} from "./packs.ts";
+import { PayrollJurisdictionError, PayrollPackError, payrollTaxYearSupport } from "./packs.ts";
 import { payrollSupportedTaxYears } from "./tax-years.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 import { calculateT4127 } from "./canada/t4127.ts";
 import { ratesForPayDate as caRatesForPayDate } from "./canada/rates.ts";
 import { ratesForPayDate as usRatesForPayDate } from "./us/rates.ts";
@@ -96,11 +96,11 @@ test(
             } catch (error) {
               assert.ok(
                 error instanceof PayrollError,
-                `${pack.country}/${filing.key} for ${taxYear} rejected with `
-                + `${(error as { constructor?: { name?: string } })?.constructor?.name ?? typeof error}`
-                + ` — "${error instanceof Error ? error.message : String(error)}". A declared pack `
-                + "refusal must be a PayrollError (or PayrollPackError, which now extends it), or "
-                + "the generic year-end layer rethrows it and the whole page dies for every org.",
+                `${pack.country}/${filing.key} for ${taxYear} rejected with ` +
+                  `${(error as { constructor?: { name?: string } })?.constructor?.name ?? typeof error}` +
+                  ` — "${error instanceof Error ? error.message : String(error)}". A declared pack ` +
+                  "refusal must be a PayrollError (or PayrollPackError, which now extends it), or " +
+                  "the generic year-end layer rethrows it and the whole page dies for every org.",
               );
             }
           }
@@ -128,24 +128,42 @@ test("pack calculation entries refuse with a PayrollError", () => {
     PayrollError,
   );
   assert.throws(
-    () => miCityWithholding({
-      city: "DETROIT", wages: "1000.00", rate: null,
-      exemptionPerYear: "600", exemptions: 2, periodsPerYear: 26,
-    }),
+    () =>
+      miCityWithholding({
+        city: "DETROIT",
+        wages: "1000.00",
+        rate: null,
+        exemptionPerYear: "600",
+        exemptions: 2,
+        periodsPerYear: 26,
+      }),
     PayrollError,
   );
   assert.throws(
-    () => calculateT4127(assessedCanadianWages({ payDate: "2026-01-15", province: "ON", periodsPerYear: 0, income: "1000.00" })),
+    () =>
+      calculateT4127(
+        assessedCanadianWages({
+          payDate: "2026-01-15",
+          province: "ON",
+          periodsPerYear: 0,
+          income: "1000.00",
+        }),
+      ),
     PayrollError,
   );
   // A Connecticut supplemental paid with no regular wages refuses as a
   // PayrollError too: the year-end conversion sites rethrow anything else,
   // so a bare Error here would kill the whole year-end page org-wide.
   assert.throws(
-    () => CT_WITHHOLDING.compute({
-      payDate: "2026-03-15", periodsPerYear: 52, wages: "0", supplemental: "500.00",
-      basis: "resident", certificate: resolveCertificate({ certificate: CT_CERTIFICATE }),
-    }),
+    () =>
+      CT_WITHHOLDING.compute({
+        payDate: "2026-03-15",
+        periodsPerYear: 52,
+        wages: "0",
+        supplemental: "500.00",
+        basis: "resident",
+        certificate: resolveCertificate({ certificate: CT_CERTIFICATE }),
+      }),
     PayrollError,
   );
   // Edition resolvers refuse an untranscribed year with an operator remedy —
@@ -216,7 +234,11 @@ test(
       const t4 = sections.find((section) => section.country === "CA" && section.key === "t4");
       assert.ok(t4?.populationRefusal, "the CA T4 must carry the named refusal");
       assert.match(t4.populationRefusal, /unknown historical country/);
-      assert.match(sections.find((section) => section.country === "US" && section.key === "940")?.populationRefusal ?? "", /Form 940 or Schedule A.*https:\/\/www\.irs\.gov\/instructions\/i940.*reconcile the EIN's committed FUTA-taxable wages/);
+      assert.match(
+        sections.find((section) => section.country === "US" && section.key === "940")
+          ?.populationRefusal ?? "",
+        /Form 940 or Schedule A.*https:\/\/www\.irs\.gov\/instructions\/i940.*reconcile the EIN's committed FUTA-taxable wages/,
+      );
       for (const section of refused) {
         assert.ok(section.populationRefusal!.length > 0);
       }

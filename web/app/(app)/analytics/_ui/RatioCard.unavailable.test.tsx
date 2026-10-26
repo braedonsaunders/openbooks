@@ -7,7 +7,11 @@ import test from "node:test";
 
 // jsdom first: the card reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/analytics", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/analytics",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -84,7 +88,13 @@ async function renderCard(data: RatioResult) {
 }
 
 test("an unavailable ratio shows the engine's reason in the reader's language", async (t) => {
-  const { unmount } = await renderCard({ ...RATIO, value: null, score: null, grade: null, unavailable: "Aucun chiffre d’affaires sur la période" });
+  const { unmount } = await renderCard({
+    ...RATIO,
+    value: null,
+    score: null,
+    grade: null,
+    unavailable: "Aucun chiffre d’affaires sur la période",
+  });
   t.after(unmount);
   const text = document.body.textContent ?? "";
   assert.match(text, /Aucun chiffre d’affaires sur la période/, "the reason must render");

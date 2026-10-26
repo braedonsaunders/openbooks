@@ -5,7 +5,8 @@ import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
-  var __payRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
+  var __payRouter:
+    { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
 }
 
 // A draft receipt whose prerequisites are not met hid its only path to
@@ -126,8 +127,7 @@ async function renderDrawer(options: {
 }) {
   const side = options.side ?? "ar";
   const prior = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    Response.json({ rates: [] })) as typeof fetch;
+  globalThis.fetch = (async () => Response.json({ rates: [] })) as typeof fetch;
   globalThis.__payRouter = { push() {}, replace() {}, refresh() {} };
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -251,7 +251,9 @@ test("a receipt with no open invoice takes an amount received instead of blockin
     mode: "edit",
   });
   try {
-    const received = document.querySelector<HTMLInputElement>('input[aria-label="Amount received"]');
+    const received = document.querySelector<HTMLInputElement>(
+      'input[aria-label="Amount received"]',
+    );
     assert.ok(received, "the amount received input is offered when no invoice is open");
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     await act(async () => {
@@ -279,7 +281,11 @@ test("a flow-governed draft labels the primary action Submit for approval", asyn
     const submits = buttonsNamed("Submit for approval");
     assert.equal(submits.length, 1, "a governed draft must offer Submit for approval");
     assert.equal(submits[0]!.disabled, false, "no blocker means the submit is enabled");
-    assert.equal(buttonsNamed("Receive & post").length, 0, "the direct-post label must not show when governed");
+    assert.equal(
+      buttonsNamed("Receive & post").length,
+      0,
+      "the direct-post label must not show when governed",
+    );
   } finally {
     await done();
   }

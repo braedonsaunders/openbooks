@@ -24,26 +24,25 @@ export async function assertCustodyReceiptEvidence(
     throw new InventoryError(
       "Ownership recognition requires a named actor, an atomic custody transaction and its own journal",
     );
-  await lockActorCommandAuthority(
-    runner,
-    orgId,
-    actorId,
-    input.subsidiaryId,
-    "items.post",
-  );
+  await lockActorCommandAuthority(runner, orgId, actorId, input.subsidiaryId, "items.post");
   if (!(await lockAndCheckOrgFeature(runner, orgId, "consignment")))
     throw new InventoryError("Turn on Consignment before taking ownership");
-  const source = (await runner.execute<{
+  const source = (
+    await runner.execute<{
       item_id: string;
       subsidiary_id: string;
       lot_id: string | null;
       serial_id: string | null;
       pending: boolean;
-    }>(sql`
+    }>(
+      sql`
     select stock.item_id,stock.subsidiary_id,stock.lot_id,stock.serial_id,
       stock.original_quantity-stock.remaining_quantity-coalesce((select sum(event.quantity) from consignment_events event
         where event.org_id=stock.org_id and event.stock_id=stock.id and event.kind in ('transfer','return','take_ownership')),0)=${input.quantity}::numeric as pending
-    from consignment_stock stock where stock.org_id=${orgId} and stock.id=${input.ownershipSourceStockId} for update`, "objects"))[0];
+    from consignment_stock stock where stock.org_id=${orgId} and stock.id=${input.ownershipSourceStockId} for update`,
+      "objects",
+    )
+  )[0];
   if (
     !source ||
     !source.pending ||

@@ -16,7 +16,10 @@ declare global {
   var __billingToasts: { kind: string; message: string }[] | undefined;
 }
 
-await bootJsdomEnvironment({ url: "http://localhost:4800/projects?project=p1", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/projects?project=p1",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: {
@@ -88,7 +91,12 @@ function props() {
       source: { basis: "", backupRequired: "", backupType: "", template: "" },
     },
     canManage: true,
-    applicationPermissions: { canRead: false, canCreate: true, canApprove: false, canInvoice: false },
+    applicationPermissions: {
+      canRead: false,
+      canCreate: true,
+      canApprove: false,
+      canInvoice: false,
+    },
     applicationIncomeAccounts: [],
     formOpen: false,
     onFormOpenChange() {},
@@ -127,7 +135,9 @@ async function mount(fetchImpl: typeof fetch) {
 }
 
 function createInvoiceButton(host: HTMLElement): HTMLButtonElement {
-  const found = [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Create invoice");
+  const found = [...host.querySelectorAll("button")].find(
+    (b) => b.textContent?.trim() === "Create invoice",
+  );
   assert.ok(found, "an open request must offer Create invoice");
   return found as HTMLButtonElement;
 }
@@ -157,11 +167,13 @@ test("a dead network releases the button and toasts the fallback", async (t) => 
 
 test("a 422 pins the server reason beside the section", async (t) => {
   const reason = "This billing request has already been invoiced";
-  const drawer = await mount((async () =>
-    new Response(JSON.stringify({ error: reason }), {
-      status: 422,
-      headers: { "content-type": "application/json" },
-    })) as typeof fetch);
+  const drawer = await mount(
+    (async () =>
+      new Response(JSON.stringify({ error: reason }), {
+        status: 422,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch,
+  );
   t.after(() => drawer.done());
   const button = createInvoiceButton(drawer.host);
   await click(button);
@@ -170,7 +182,10 @@ test("a 422 pins the server reason beside the section", async (t) => {
   assert.ok(alert, "the refusal must pin beside the section, not live only in a toast");
   // \x5c is the backslash member: the class stays a regex literal with no
   // double-backslash run, so the escape ratchet keeps scanning it.
-  assert.match(alert!.textContent ?? "", new RegExp(reason.replace(/[.*+?^${}()|[\]\x5c]/g, "\\$&")));
+  assert.match(
+    alert!.textContent ?? "",
+    new RegExp(reason.replace(/[.*+?^${}()|[\]\x5c]/g, "\\$&")),
+  );
 });
 
 test("a created invoice navigates to its edit page", async (t) => {
@@ -208,8 +223,17 @@ test("a fixed-price project shows the contract remaining, never time at rates", 
     invoicedToDate: "45500.0000",
   });
   assert.ok(html.includes("$54,500.00"), "the contract remaining is the banner figure");
-  assert.ok(html.includes(messages.projects.billing.contractRemaining.replace("{contract}", "$100,000.00").replace("{invoiced}", "$45,500.00")));
-  assert.ok(!html.includes("$54,000.00"), "the valued-work figure never shows for a fixed-price contract");
+  assert.ok(
+    html.includes(
+      messages.projects.billing.contractRemaining
+        .replace("{contract}", "$100,000.00")
+        .replace("{invoiced}", "$45,500.00"),
+    ),
+  );
+  assert.ok(
+    !html.includes("$54,000.00"),
+    "the valued-work figure never shows for a fixed-price contract",
+  );
 });
 
 test("a fixed-price project without a contract value names the remedy instead of showing zero", () => {

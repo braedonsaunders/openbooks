@@ -131,7 +131,18 @@ export interface NativeDocument {
 
 /** Live progress emitted during a sync so the UI can show a real bar. */
 export interface SyncProgress {
-  phase: "starting" | "entities" | "pull" | "post" | "applications" | "source-evidence" | "operational-records" | "attachments" | "project-financials" | "verify" | "done";
+  phase:
+    | "starting"
+    | "entities"
+    | "pull"
+    | "post"
+    | "applications"
+    | "source-evidence"
+    | "operational-records"
+    | "attachments"
+    | "project-financials"
+    | "verify"
+    | "done";
   message: string;
   /** X of Y for the current phase (omit when not countable). */
   current?: number;
@@ -185,8 +196,11 @@ export async function buildNativeContext(
   refKey: string,
   baseCurrency: string,
 ): Promise<NativeContext> {
-  const [org] = await db.execute<{ ctrl: Record<string, string> }>(sql`
-      select settings->'controlAccounts' as ctrl from orgs where id = ${orgId}`, "objects");
+  const [org] = await db.execute<{ ctrl: Record<string, string> }>(
+    sql`
+      select settings->'controlAccounts' as ctrl from orgs where id = ${orgId}`,
+    "objects",
+  );
   const ctrl = org?.ctrl ?? {};
   const control: PostingDeps["control"] = {
     ar: ctrl.ar!,
@@ -197,12 +211,24 @@ export async function buildNativeContext(
     employeePayable: ctrl.employeePayable,
   };
 
-  const accountByRef = new Map<string, { id: string; number: string | null; name: string; type: string }>();
+  const accountByRef = new Map<
+    string,
+    { id: string; number: string | null; name: string; type: string }
+  >();
   const accountRefById = new Map<string, string>();
   const ownedAccountIds = new Set<string>();
-  for (const r of (await db.execute<{ id: string; number: string | null; name: string; type: string; ref: string | null }>(sql`
+  for (const r of await db.execute<{
+    id: string;
+    number: string | null;
+    name: string;
+    type: string;
+    ref: string | null;
+  }>(
+    sql`
       select id, number, name, type, custom->>${refKey} as ref
-        from accounts where org_id = ${orgId}`, "objects"))) {
+        from accounts where org_id = ${orgId}`,
+    "objects",
+  )) {
     ownedAccountIds.add(r.id);
     if (r.ref) {
       accountByRef.set(r.ref, { id: r.id, number: r.number, name: r.name, type: r.type });
@@ -211,29 +237,33 @@ export async function buildNativeContext(
   }
   for (const [key, accountId] of Object.entries(control)) {
     if (accountId && !ownedAccountIds.has(accountId)) {
-      throw new Error(
-        `control account ${key} does not belong to organization ${orgId}`,
-      );
+      throw new Error(`control account ${key} does not belong to organization ${orgId}`);
     }
   }
 
   const idMap = async (table: string): Promise<Map<string, string>> => {
-    const rows = (await db.execute<{ id: string; ref: string }>(sql`
+    const rows = await db.execute<{ id: string; ref: string }>(
+      sql`
       select id, custom->>${refKey} as ref from ${sql.raw(table)}
-       where org_id = ${orgId} and custom->>${refKey} is not null`, "objects"));
+       where org_id = ${orgId} and custom->>${refKey} is not null`,
+      "objects",
+    );
     return new Map(rows.map((r) => [r.ref, r.id]));
   };
   const mergeAwarePartyMap = async (
     partyOrgId: string,
     partyRefKey: string,
   ): Promise<Map<string, string>> => {
-    const rows = (await db.execute<{ id: string; ref: string; survivor: string | null }>(sql`
+    const rows = await db.execute<{ id: string; ref: string; survivor: string | null }>(
+      sql`
       select p.id, p.custom->>${partyRefKey} as ref,
              (select s.id from parties s
                where s.org_id = p.org_id and s.id = (p.custom->'merged_into'->>'survivor')::uuid
                limit 1) as survivor
         from parties p
-       where p.org_id = ${partyOrgId} and p.custom->>${partyRefKey} is not null`, "objects"));
+       where p.org_id = ${partyOrgId} and p.custom->>${partyRefKey} is not null`,
+      "objects",
+    );
     const byId = new Map(rows.map((r) => [r.id, r]));
     const resolve = (id: string, seen: Set<string>): string => {
       if (seen.has(id)) return id;
@@ -260,13 +290,16 @@ export async function buildNativeContext(
   const partyByRef = await mergeAwarePartyMap(orgId, refKey);
 
   const segmentValueByRef = new Map<string, Map<string, string>>();
-  const segmentRows = (await db.execute<{ key: string; id: string; ref: string }>(sql`
+  const segmentRows = await db.execute<{ key: string; id: string; ref: string }>(
+    sql`
     select sd.key, sv.id, sv.custom->>${refKey} as ref
       from segment_definitions sd
       join segment_values sv on sv.segment_id = sd.id and sv.org_id = sd.org_id
      where sd.org_id = ${orgId} and sd.source_kind = 'custom'
        and sv.custom->>${refKey} is not null
-  `, "objects"));
+  `,
+    "objects",
+  );
   for (const row of segmentRows) {
     const values = segmentValueByRef.get(row.key) ?? new Map<string, string>();
     values.set(row.ref, row.id);
@@ -275,11 +308,14 @@ export async function buildNativeContext(
 
   const taxByRate = new Map<string, { id: string; rate: string }>();
   const taxCodeByRef = new Map<string, string>();
-  for (const r of (await db.execute<{ id: string; rate: string | null; ref: string | null }>(sql`
+  for (const r of await db.execute<{ id: string; rate: string | null; ref: string | null }>(
+    sql`
       select tc.id, tr.rate_percent as rate, tc.custom->>${refKey} as ref from tax_codes tc
         left join tax_rates tr on tr.tax_code_id = tc.id and tr.org_id = tc.org_id
        where tc.org_id = ${orgId}
-       order by (tc.custom->>${refKey} is null), tc.created_at, tc.id`, "objects"))) {
+       order by (tc.custom->>${refKey} is null), tc.created_at, tc.id`,
+    "objects",
+  )) {
     const rate = r.rate ?? "0";
     const key = normalizeMoney(rate);
     if (!taxByRate.has(key)) taxByRate.set(key, { id: r.id, rate });
@@ -289,24 +325,23 @@ export async function buildNativeContext(
   }
 
   const periods = await db.execute<{
-        id: string;
-        starts_on: string;
-        ends_on: string;
-        is_adjustment: boolean;
-        source_ref: string | null;
-      }>(sql`
+    id: string;
+    starts_on: string;
+    ends_on: string;
+    is_adjustment: boolean;
+    source_ref: string | null;
+  }>(
+    sql`
       select id, starts_on, ends_on, is_adjustment,
              custom->>${refKey} as source_ref
         from accounting_periods
        where org_id = ${orgId}
-       order by starts_on, ends_on, period_number`, "objects");
+       order by starts_on, ends_on, period_number`,
+    "objects",
+  );
   const periodFor = (d: string) =>
-    periods.find(
-      (period) =>
-        !period.is_adjustment &&
-        period.starts_on <= d &&
-        period.ends_on >= d,
-    )?.id;
+    periods.find((period) => !period.is_adjustment && period.starts_on <= d && period.ends_on >= d)
+      ?.id;
   const periodByRef: NativeContext["periodByRef"] = new Map();
   for (const period of periods) {
     if (!period.source_ref) continue;
@@ -323,8 +358,11 @@ export async function buildNativeContext(
       isAdjustment: period.is_adjustment,
     });
   }
-  const root = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`, "objects"));
+  const root = await db.execute<{ id: string }>(
+    sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`,
+    "objects",
+  );
   if (!root[0]) throw new Error(`org ${orgId} has no root subsidiary`);
 
   return {

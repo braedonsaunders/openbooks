@@ -5,15 +5,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button, Drawer, Input, Label, Select } from "@openbooks/ui";
-import {
-  PagedTable,
-  type PagedColumn,
-} from "../../../../components/paged-table";
+import { PagedTable, type PagedColumn } from "../../../../components/paged-table";
 import { ListFilterSelect } from "../../../../components/list-filter-select";
 import { DateRangeFilter } from "../../../../components/date-range-filter";
 import { readApiErrorMessage } from "../../../../lib/api-error";
 import { useHeaderAction } from "../_ui/use-header-action";
-import { DateField } from '../../../../components/date-field'
+import { DateField } from "../../../../components/date-field";
 
 interface EmployeeChoice {
   employmentId: string;
@@ -48,9 +45,9 @@ export interface WorkLocationScope {
 export function completeScope(scope: WorkLocationScope): boolean {
   return Boolean(
     scope.employmentId &&
-      DATE.test(scope.periodStart) &&
-      DATE.test(scope.periodEnd) &&
-      scope.periodStart <= scope.periodEnd,
+    DATE.test(scope.periodStart) &&
+    DATE.test(scope.periodEnd) &&
+    scope.periodStart <= scope.periodEnd,
   );
 }
 

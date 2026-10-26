@@ -35,7 +35,11 @@ const ofxDoc = (acctFrom: string) =>
   ].join("\r\n");
 
 test("OFX carries its ACCTID as the file's account", () => {
-  const parsed = parseOfx(ofxDoc("<BANKACCTFROM><BANKID>001</BANKID><ACCTID>12345678</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>"));
+  const parsed = parseOfx(
+    ofxDoc(
+      "<BANKACCTFROM><BANKID>001</BANKID><ACCTID>12345678</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>",
+    ),
+  );
   assert.equal(parsed.externalAccountId, "12345678");
 });
 
@@ -46,7 +50,11 @@ test("OFX with two distinct accounts refuses naming both", () => {
   );
   assert.throws(
     () => parseOfx(two),
-    (e: unknown) => e instanceof BankingError && /multiple accounts/.test(e.message) && /111/.test(e.message) && /222/.test(e.message),
+    (e: unknown) =>
+      e instanceof BankingError &&
+      /multiple accounts/.test(e.message) &&
+      /111/.test(e.message) &&
+      /222/.test(e.message),
     "merging two ledgers must name both accounts, not just refuse",
   );
 });
@@ -58,7 +66,11 @@ test("OFX without an ACCTID carries no identity", () => {
 
 test("BAI2 carries its single 03 account number", () => {
   const parsed = parseBai2(
-    ["02,ORG,1,1,260821,0000,CAD,2/", "03,987654321,CAD,015,100000/", "16,165,+150000,Z,REF,,deposit/"].join("\n"),
+    [
+      "02,ORG,1,1,260821,0000,CAD,2/",
+      "03,987654321,CAD,015,100000/",
+      "16,165,+150000,Z,REF,,deposit/",
+    ].join("\n"),
   );
   assert.equal(parsed.externalAccountId, "987654321");
 });
@@ -86,12 +98,21 @@ test("CAMT.053 carries its statement IBAN and refuses a second one", () => {
   assert.throws(
     () => parseCamt053(camt("CA000123456789", "<Acct><Id><IBAN>CA000999999999</IBAN></Id></Acct>")),
     (e: unknown) =>
-      e instanceof BankingError && /multiple accounts/.test(e.message) && /CA000999999999/.test(e.message),
+      e instanceof BankingError &&
+      /multiple accounts/.test(e.message) &&
+      /CA000999999999/.test(e.message),
   );
 });
 
 test("CSV carries no account identity", () => {
-  assert.equal(parseCsv("date,amount,description\n2026-07-01,12.50,salary\n", { date: 0, amount: 1, description: 2 }).lines[0]?.amount, "12.5000");
+  assert.equal(
+    parseCsv("date,amount,description\n2026-07-01,12.50,salary\n", {
+      date: 0,
+      amount: 1,
+      description: 2,
+    }).lines[0]?.amount,
+    "12.5000",
+  );
 });
 
 test("identifier comparison is whitespace-blind and case-blind, never silent", () => {

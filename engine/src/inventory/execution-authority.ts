@@ -23,7 +23,9 @@ export async function requireExecutionConfirmation(
     throw new InventoryError(
       "Scan the suggested bin, item and quantity through warehouse execution before posting this observation",
     );
-  const evidence = (await tx.execute(sql`select task.id from warehouse_execution_tasks task
+  const evidence = (
+    await tx.execute(
+      sql`select task.id from warehouse_execution_tasks task
     join warehouse_scan_events event on event.org_id=task.org_id and event.task_id=task.id and event.outcome='confirmed'
     where task.org_id=${orgId} and task.id=${input.taskId} and task.stage=${input.stage} and task.status='open'
       and event.xmin=(txid_current()%4294967296)::text::xid and task.quantity=${input.quantity}::numeric
@@ -32,7 +34,10 @@ export async function requireExecutionConfirmation(
       ${input.fromBinId ? sql`and task.from_stock_location_id=${input.fromBinId}` : sql``}
       ${input.toBinId ? sql`and task.to_stock_location_id=${input.toBinId}` : sql``}
       ${input.observation ? sql`and task.basis->>'observation'=${input.observation}` : sql``}
-    limit 1`, "objects"))[0];
+    limit 1`,
+      "objects",
+    )
+  )[0];
   if (!evidence)
     throw new InventoryError(
       "This scan does not authorize the current warehouse operation; refresh its suggestion and scan again",

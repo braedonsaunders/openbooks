@@ -1,5 +1,5 @@
-import { FRAME_NAMES, WIDGET_NAMES } from './registry-names'
-import { WIDGET_CONTRACTS } from './widget-contracts'
+import { FRAME_NAMES, WIDGET_NAMES } from "./registry-names";
+import { WIDGET_CONTRACTS } from "./widget-contracts";
 
 /**
  * What a spec is checked against, and why there are two answers.
@@ -22,9 +22,9 @@ export const AUTHORING_REGISTRIES = {
   widgets: WIDGET_NAMES,
   frames: FRAME_NAMES,
   contracts: WIDGET_CONTRACTS,
-} as const
+} as const;
 
 export const RENDER_REGISTRIES = {
   widgets: WIDGET_NAMES,
   frames: FRAME_NAMES,
-} as const
+} as const;

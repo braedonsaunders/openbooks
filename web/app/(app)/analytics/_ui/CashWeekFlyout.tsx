@@ -1,11 +1,24 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "../../reports/ReportTable"
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { Button, Drawer, cn } from '@openbooks/ui'
-import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney, mulDecimal, sum as sumMoney } from '@openbooks/engine/money/money'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "../../reports/ReportTable";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { Button, Drawer, cn } from "@openbooks/ui";
+import {
+  abs as absoluteMoney,
+  cmp as compareMoney,
+  div as divideMoney,
+  mulDecimal,
+  sum as sumMoney,
+} from "@openbooks/engine/money/money";
 import {
   History,
   Gauge as GaugeIcon,
@@ -24,67 +37,90 @@ import {
   Cog,
   List,
   Download,
-} from 'lucide-react'
-import type { CategoryWeekly, ForecastEntry, WeekRow } from '../../../../lib/cash/core'
-import { TxnLink } from '../../reports/TxnLink'
-import { useBusinessToday } from '../../../../components/business-date-provider'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { shortDateLabel } from '@/lib/format'
-import { Gauge } from './Gauge'
-import { EntityDrawer } from './EntityDrawer'
-import { exportCsv } from './exportCsv'
-import { categoryRefusalText } from './category-refusal-text'
-import { forecastMethodBase, OVERDUE_PUSH_METHOD, overduePushBasis } from '../../../../lib/cash/overdue-push'
-import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
-const ZERO_MONEY = '0.0000'
-const PAGE_SIZE = 25
+} from "lucide-react";
+import type { CategoryWeekly, ForecastEntry, WeekRow } from "../../../../lib/cash/core";
+import { TxnLink } from "../../reports/TxnLink";
+import { useBusinessToday } from "../../../../components/business-date-provider";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { shortDateLabel } from "@/lib/format";
+import { Gauge } from "./Gauge";
+import { EntityDrawer } from "./EntityDrawer";
+import { exportCsv } from "./exportCsv";
+import { categoryRefusalText } from "./category-refusal-text";
+import {
+  forecastMethodBase,
+  OVERDUE_PUSH_METHOD,
+  overduePushBasis,
+} from "../../../../lib/cash/overdue-push";
+import { formatExactPercent, toChartNumber, useAnalyticsMoney } from "./format";
+const ZERO_MONEY = "0.0000";
+const PAGE_SIZE = 25;
 
-export function cashWeekEntriesUrl(weekStart: string, selectedSubsidiaryIds?: string[], horizonWeeks?: number): string {
-  const params = new URLSearchParams({ week: weekStart })
-  if (selectedSubsidiaryIds !== undefined) params.set('sub', selectedSubsidiaryIds.join(','))
+export function cashWeekEntriesUrl(
+  weekStart: string,
+  selectedSubsidiaryIds?: string[],
+  horizonWeeks?: number,
+): string {
+  const params = new URLSearchParams({ week: weekStart });
+  if (selectedSubsidiaryIds !== undefined) params.set("sub", selectedSubsidiaryIds.join(","));
   // The route defaults to 13 weeks and 404s weeks outside its horizon: the
   // caller must name the horizon it rendered, or weeks 14-26 of a 26-week
   // forecast never load.
-  if (horizonWeeks !== undefined) params.set('horizon', String(horizonWeeks))
-  return `/api/cash/week-entries?${params}`
+  if (horizonWeeks !== undefined) params.set("horizon", String(horizonWeeks));
+  return `/api/cash/week-entries?${params}`;
 }
 
-type SortCol = 'docNumber' | 'partyName' | 'predictedDate' | 'amount'
-type TabKey = 'ar' | 'ap' | `cat:${string}`
+type SortCol = "docNumber" | "partyName" | "predictedDate" | "amount";
+type TabKey = "ar" | "ap" | `cat:${string}`;
 
 /**
  * The category method code → accent colors. Keyed on the stable method code
  * the engine returns (gl_history_average, …), never on the translated label.
  */
 const CAT_METHOD_TONE: Record<string, string> = {
-  gl_history_average: 'text-sky-600 dark:text-sky-400',
-  vendor_payment_history: 'text-violet-600 dark:text-violet-400',
-  credit_card_cycle: 'text-pink-600 dark:text-pink-400',
-  manual_recurring: 'text-emerald-600 dark:text-emerald-400',
-  vendor_recurring_average: 'text-amber-600 dark:text-amber-400',
-  bank_register_history: 'text-cyan-600 dark:text-cyan-400',
-  formula_expression: 'text-indigo-600 dark:text-indigo-400',
-}
+  gl_history_average: "text-sky-600 dark:text-sky-400",
+  vendor_payment_history: "text-violet-600 dark:text-violet-400",
+  credit_card_cycle: "text-pink-600 dark:text-pink-400",
+  manual_recurring: "text-emerald-600 dark:text-emerald-400",
+  vendor_recurring_average: "text-amber-600 dark:text-amber-400",
+  bank_register_history: "text-cyan-600 dark:text-cyan-400",
+  formula_expression: "text-indigo-600 dark:text-indigo-400",
+};
 
 /**
  * Engine breakdown-row types (stable English codes) → catalog keys. Unknown
  * future types render raw rather than blank.
  */
 const BREAKDOWN_TYPE_KEYS: Record<string, string> = {
-  Scheduled: 'scheduled',
-  'Source Data': 'sourceData',
-  'Source Month': 'sourceMonth',
-  Historical: 'historical',
-  Projection: 'projection',
-  'Bank Register': 'bankRegister',
-  'This Week (Applied)': 'thisWeekApplied',
-  Formula: 'formula',
-  Info: 'info',
-  Note: 'note',
-}
+  Scheduled: "scheduled",
+  "Source Data": "sourceData",
+  "Source Month": "sourceMonth",
+  Historical: "historical",
+  Projection: "projection",
+  "Bank Register": "bankRegister",
+  "This Week (Applied)": "thisWeekApplied",
+  Formula: "formula",
+  Info: "info",
+  Note: "note",
+};
 
 /** Human labels for the meta stats behind each estimate. */
-const MONEYISH = new Set(['sourceTotal','rawAverage','finalAverage','monthlyMedian','finalWeekly','amount','medianPayment','avgPayment','currentBalance','dailyBurnRate','monthlySpendRate','projectedGrowth','avgAmount','currentWeekApplied'])
+const MONEYISH = new Set([
+  "sourceTotal",
+  "rawAverage",
+  "finalAverage",
+  "monthlyMedian",
+  "finalWeekly",
+  "amount",
+  "medianPayment",
+  "avgPayment",
+  "currentBalance",
+  "dailyBurnRate",
+  "monthlySpendRate",
+  "projectedGrowth",
+  "avgAmount",
+  "currentWeekApplied",
+]);
 
 /**
  * Per-week cash drill with detailed KPI
@@ -102,186 +138,271 @@ export function CashWeekFlyout({
   categories = [],
   weekIndex = 0,
   horizonWeeks,
-  initialSide = 'ap',
+  initialSide = "ap",
   canPayRun = false,
   canCollectionRun = false,
   onClose,
 }: {
-  week: WeekRow
-  selectedSubsidiaryIds?: string[]
+  week: WeekRow;
+  selectedSubsidiaryIds?: string[];
   /** Full forecast categories (weekly aligned with the horizon grid). */
-  categories?: CategoryWeekly[]
+  categories?: CategoryWeekly[];
   /** This week's index into each category's weekly[] array. */
-  weekIndex?: number
+  weekIndex?: number;
   /** Weeks the calling page rendered: forwarded as the drill's `horizon`
    * so late-horizon weeks resolve instead of 404ing outside the default. */
-  horizonWeeks?: number
-  initialSide?: 'ar' | 'ap'
+  horizonWeeks?: number;
+  initialSide?: "ar" | "ap";
   /** ap.pay — shows "Build pay run" on the AP tab (filtered set → /payments). */
-  canPayRun?: boolean
+  canPayRun?: boolean;
   /** ar.pay — shows "Build collection run" on the AR tab (filtered set → /receipts). */
-  canCollectionRun?: boolean
-  onClose: () => void
+  canCollectionRun?: boolean;
+  onClose: () => void;
 }) {
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string) => fmtMoney(n, { compact: true })
-  const locale = useLocale()
-  const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
-  const t = useTranslations('analytics.cashWeek')
-  const tCommon = useTranslations('common')
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: string) => fmtMoney(n, { compact: true });
+  const locale = useLocale();
+  const fmtDate = (d: string) => shortDateLabel(new Date(d + "T00:00:00Z"), locale);
+  const t = useTranslations("analytics.cashWeek");
+  const tCommon = useTranslations("common");
   // The org business day behind every days-vs-due pill in this dialog.
-  const businessToday = useBusinessToday()
-  const router = useRouter()
-  const [tab, setTab] = useState<TabKey>(initialSide)
-  const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
-  const [search, setSearch] = useState('')
-  const [sortCol, setSortCol] = useState<SortCol>('amount')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [page, setPage] = useState(1)
+  const businessToday = useBusinessToday();
+  const router = useRouter();
+  const [tab, setTab] = useState<TabKey>(initialSide);
+  const [entity, setEntity] = useState<{ id: string; name: string } | null>(null);
+  const [search, setSearch] = useState("");
+  const [sortCol, setSortCol] = useState<SortCol>("amount");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
 
-  const arTotal = week.arTotal
-  const apTotal = week.apTotal
+  const arTotal = week.arTotal;
+  const apTotal = week.apTotal;
   // The page ships every week's totals but none of their transactions — a real
   // ledger has tens of thousands of open items and only one week is ever open.
   // Fetch this week's rows when the flyout mounts; fall back to whatever the
   // row already carries (analytics callers that still embed them).
-  const [fetched, setFetched] = useState<{ ar: ForecastEntry[]; ap: ForecastEntry[] } | null>(week.arEntries.length || week.apEntries.length ? { ar: week.arEntries, ap: week.apEntries } : null)
-  const [fetchState, setFetchState] = useState<'loading' | 'loaded' | 'failed'>(fetched ? 'loaded' : 'loading')
+  const [fetched, setFetched] = useState<{ ar: ForecastEntry[]; ap: ForecastEntry[] } | null>(
+    week.arEntries.length || week.apEntries.length
+      ? { ar: week.arEntries, ap: week.apEntries }
+      : null,
+  );
+  const [fetchState, setFetchState] = useState<"loading" | "loaded" | "failed">(
+    fetched ? "loaded" : "loading",
+  );
   // The server's refusal (a missing FX rate, a denied week) in its own
   // words — never a generic "load failed" that hides what to fix.
-  const [fetchMessage, setFetchMessage] = useState<string | null>(null)
-  const [fetchAttempt, setFetchAttempt] = useState(0)
+  const [fetchMessage, setFetchMessage] = useState<string | null>(null);
+  const [fetchAttempt, setFetchAttempt] = useState(0);
   // A new request supersedes the old fetch lifecycle: clear its failure
   // message while rendering (the request key identifies the fetch, not the
   // loading phase), never with a synchronous setState inside the effect.
-  const requestKey = `${week.weekStart}|${(selectedSubsidiaryIds ?? []).join(',')}|${horizonWeeks ?? ''}`
-  const [seenRequest, setSeenRequest] = useState(requestKey)
+  const requestKey = `${week.weekStart}|${(selectedSubsidiaryIds ?? []).join(",")}|${horizonWeeks ?? ""}`;
+  const [seenRequest, setSeenRequest] = useState(requestKey);
   if (seenRequest !== requestKey) {
-    setSeenRequest(requestKey)
-    setFetchMessage(null)
+    setSeenRequest(requestKey);
+    setFetchMessage(null);
   }
   useEffect(() => {
-    if (fetched) return
-    let cancelled = false
-    ;(async () => {
+    if (fetched) return;
+    let cancelled = false;
+    (async () => {
       try {
-        const r = await fetch(cashWeekEntriesUrl(week.weekStart, selectedSubsidiaryIds, horizonWeeks))
-        if (cancelled) return
+        const r = await fetch(
+          cashWeekEntriesUrl(week.weekStart, selectedSubsidiaryIds, horizonWeeks),
+        );
+        if (cancelled) return;
         // The status is checked first: the error body is read for the
         // server's message, never parsed as data.
         if (!r.ok) {
-          setFetchMessage(await readApiErrorMessage(r, tCommon('feedback.loadFailed')))
-          setFetchState('failed')
-          return
+          setFetchMessage(await readApiErrorMessage(r, tCommon("feedback.loadFailed")));
+          setFetchState("failed");
+          return;
         }
-        const d = (await r.json()) as { arEntries?: ForecastEntry[]; apEntries?: ForecastEntry[] }
+        const d = (await r.json()) as { arEntries?: ForecastEntry[]; apEntries?: ForecastEntry[] };
         if (!cancelled) {
-          setFetched({ ar: d.arEntries ?? [], ap: d.apEntries ?? [] })
-          setFetchState('loaded')
+          setFetched({ ar: d.arEntries ?? [], ap: d.apEntries ?? [] });
+          setFetchState("loaded");
         }
       } catch {
         // A rejected fetch is a network failure, not a server refusal: the
         // caller's own translated copy, never the browser's raw error.
         if (!cancelled) {
-          setFetchMessage(tCommon('feedback.loadFailed'))
-          setFetchState('failed')
+          setFetchMessage(tCommon("feedback.loadFailed"));
+          setFetchState("failed");
         }
       }
-    })()
+    })();
     return () => {
-      cancelled = true
-    }
-  }, [week.weekStart, selectedSubsidiaryIds, horizonWeeks, fetched, fetchAttempt, tCommon])
+      cancelled = true;
+    };
+  }, [week.weekStart, selectedSubsidiaryIds, horizonWeeks, fetched, fetchAttempt, tCommon]);
   // Refused categories read as zeros but still get their tab: filtering on a
   // positive week would silently drop them, hiding the refusal.
-  const weekCats = categories.filter((c) => c.unavailable !== undefined || compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0)
-  const otherIn = sumMoney(weekCats.filter((c) => c.direction === 'inflow').map((c) => c.weekly[weekIndex] ?? ZERO_MONEY))
+  const weekCats = categories.filter(
+    (c) =>
+      c.unavailable !== undefined ||
+      compareMoney(c.weekly[weekIndex] ?? ZERO_MONEY, ZERO_MONEY) > 0,
+  );
+  const otherIn = sumMoney(
+    weekCats.filter((c) => c.direction === "inflow").map((c) => c.weekly[weekIndex] ?? ZERO_MONEY),
+  );
   // Refused outflow categories stay out of the money rows (their tab names
   // the refusal) — a 0.0000 row would read as "nothing expected".
-  const catOuts = weekCats.filter((c) => c.direction === 'outflow' && c.unavailable === undefined)
+  const catOuts = weekCats.filter((c) => c.direction === "outflow" && c.unavailable === undefined);
   // No outflow is no coverage figure — never a fabricated 100%.
-  const coverage = compareMoney(week.outflow, ZERO_MONEY) > 0 ? divideMoney(week.inflow, week.outflow) : null
+  const coverage =
+    compareMoney(week.outflow, ZERO_MONEY) > 0 ? divideMoney(week.inflow, week.outflow) : null;
   // The gauge is visualization-only; the exact ratio remains the source for
   // text and all other decisions.
-  const coveragePercent = coverage === null ? 0 : toChartNumber(mulDecimal(coverage, '100'))
+  const coveragePercent = coverage === null ? 0 : toChartNumber(mulDecimal(coverage, "100"));
 
   // Breakdown — the summary rows, straight off the shared WeekRow.
   const breakdown: { label: string; value: string; icon: typeof Wallet; tone: string }[] = [
-    { label: t('breakdown.startingCash'), value: week.startingCash, icon: Wallet, tone: 'neutral' },
-    ...(week.apCapacity !== null ? [{ label: t('breakdown.safeApCapacity'), value: week.apCapacity, icon: ShieldCheck, tone: 'info' }] : []),
-    { label: t('breakdown.inflowAr'), value: arTotal, icon: ArrowDown, tone: 'inflow' },
-    ...(compareMoney(otherIn, ZERO_MONEY) > 0 ? [{ label: t('breakdown.inflowOther'), value: otherIn, icon: ArrowDown, tone: 'inflow' }] : []),
-    { label: t('breakdown.outflowAp'), value: apTotal, icon: ArrowUp, tone: 'outflow' },
-    ...catOuts.map((c) => ({ label: t('breakdown.outCategory', { name: c.name }), value: c.weekly[weekIndex] ?? ZERO_MONEY, icon: ArrowUp, tone: 'outflow' })),
-    ...(compareMoney(week.deferredOut, ZERO_MONEY) > 0 ? [{ label: t('breakdown.deferredBacklog'), value: week.deferredOut, icon: Clock, tone: 'warning' }] : []),
-    { label: t('breakdown.netChange'), value: week.net, icon: ArrowLeftRight, tone: compareMoney(week.net, ZERO_MONEY) >= 0 ? 'positive' : 'negative' },
-    { label: t('breakdown.endingCash'), value: week.endingCash, icon: Landmark, tone: compareMoney(week.endingCash, ZERO_MONEY) >= 0 ? 'neutral' : 'negative' },
-  ]
+    { label: t("breakdown.startingCash"), value: week.startingCash, icon: Wallet, tone: "neutral" },
+    ...(week.apCapacity !== null
+      ? [
+          {
+            label: t("breakdown.safeApCapacity"),
+            value: week.apCapacity,
+            icon: ShieldCheck,
+            tone: "info",
+          },
+        ]
+      : []),
+    { label: t("breakdown.inflowAr"), value: arTotal, icon: ArrowDown, tone: "inflow" },
+    ...(compareMoney(otherIn, ZERO_MONEY) > 0
+      ? [{ label: t("breakdown.inflowOther"), value: otherIn, icon: ArrowDown, tone: "inflow" }]
+      : []),
+    { label: t("breakdown.outflowAp"), value: apTotal, icon: ArrowUp, tone: "outflow" },
+    ...catOuts.map((c) => ({
+      label: t("breakdown.outCategory", { name: c.name }),
+      value: c.weekly[weekIndex] ?? ZERO_MONEY,
+      icon: ArrowUp,
+      tone: "outflow",
+    })),
+    ...(compareMoney(week.deferredOut, ZERO_MONEY) > 0
+      ? [
+          {
+            label: t("breakdown.deferredBacklog"),
+            value: week.deferredOut,
+            icon: Clock,
+            tone: "warning",
+          },
+        ]
+      : []),
+    {
+      label: t("breakdown.netChange"),
+      value: week.net,
+      icon: ArrowLeftRight,
+      tone: compareMoney(week.net, ZERO_MONEY) >= 0 ? "positive" : "negative",
+    },
+    {
+      label: t("breakdown.endingCash"),
+      value: week.endingCash,
+      icon: Landmark,
+      tone: compareMoney(week.endingCash, ZERO_MONEY) >= 0 ? "neutral" : "negative",
+    },
+  ];
 
-  const side: 'ar' | 'ap' = tab === 'ar' ? 'ar' : 'ap'
-  const activeCat = tab.startsWith('cat:') ? weekCats.find((c) => c.id === tab.slice(4)) : undefined
+  const side: "ar" | "ap" = tab === "ar" ? "ar" : "ap";
+  const activeCat = tab.startsWith("cat:")
+    ? weekCats.find((c) => c.id === tab.slice(4))
+    : undefined;
   const filtered = useMemo(() => {
     // Inside the memo: a `?? []` fallback outside would hand the dep array a
     // fresh empty-array identity on every render, defeating the memo.
-    const entries = side === 'ar' ? (fetched?.ar ?? []) : (fetched?.ap ?? [])
-    const q = search.trim().toLowerCase()
-    if (!q) return entries
-    return entries.filter((e) => e.partyName.toLowerCase().includes(q) || (e.docNumber ?? '').toLowerCase().includes(q))
-  }, [fetched, search, side])
+    const entries = side === "ar" ? (fetched?.ar ?? []) : (fetched?.ap ?? []);
+    const q = search.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter(
+      (e) => e.partyName.toLowerCase().includes(q) || (e.docNumber ?? "").toLowerCase().includes(q),
+    );
+  }, [fetched, search, side]);
 
   const sorted = useMemo(() => {
-    const dir = sortDir === 'asc' ? 1 : -1
+    const dir = sortDir === "asc" ? 1 : -1;
     return filtered.slice().sort((a, b) => {
-      const av = sortCol === 'amount' ? a.amount : ((a[sortCol] ?? '') as string)
-      const bv = sortCol === 'amount' ? b.amount : ((b[sortCol] ?? '') as string)
-      if (sortCol === 'amount') return compareMoney(absoluteMoney(av), absoluteMoney(bv)) * -dir
-      return av < bv ? -dir : av > bv ? dir : 0
-    })
-  }, [filtered, sortCol, sortDir])
+      const av = sortCol === "amount" ? a.amount : ((a[sortCol] ?? "") as string);
+      const bv = sortCol === "amount" ? b.amount : ((b[sortCol] ?? "") as string);
+      if (sortCol === "amount") return compareMoney(absoluteMoney(av), absoluteMoney(bv)) * -dir;
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }, [filtered, sortCol, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
-  const curPage = Math.min(page, totalPages)
-  const start = (curPage - 1) * PAGE_SIZE
-  const paged = sorted.slice(start, start + PAGE_SIZE)
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const curPage = Math.min(page, totalPages);
+  const start = (curPage - 1) * PAGE_SIZE;
+  const paged = sorted.slice(start, start + PAGE_SIZE);
 
   // The overdue-push population is the whole week's AR, not the search
   // result: the assumption describes every item the week's amount includes.
   const pushBasis = useMemo(
-    () => (side === 'ar' ? overduePushBasis(fetched?.ar ?? []) : null),
+    () => (side === "ar" ? overduePushBasis(fetched?.ar ?? []) : null),
     [fetched, side],
-  )
-  const pushDetail = pushBasis === null
-    ? null
-    : pushBasis.minDaysOverdue === pushBasis.maxDaysOverdue
-      ? t('overduePush.basisSameAge', { count: pushBasis.count, days: pushBasis.minDaysOverdue, amount: money(pushBasis.total) })
-      : t('overduePush.basis', { count: pushBasis.count, minDays: pushBasis.minDaysOverdue, maxDays: pushBasis.maxDaysOverdue, amount: money(pushBasis.total) })
+  );
+  const pushDetail =
+    pushBasis === null
+      ? null
+      : pushBasis.minDaysOverdue === pushBasis.maxDaysOverdue
+        ? t("overduePush.basisSameAge", {
+            count: pushBasis.count,
+            days: pushBasis.minDaysOverdue,
+            amount: money(pushBasis.total),
+          })
+        : t("overduePush.basis", {
+            count: pushBasis.count,
+            minDays: pushBasis.minDaysOverdue,
+            maxDays: pushBasis.maxDaysOverdue,
+            amount: money(pushBasis.total),
+          });
 
   const switchTab = (k: TabKey) => {
-    setTab(k)
-    setSearch('')
-    setPage(1)
-  }
+    setTab(k);
+    setSearch("");
+    setPage(1);
+  };
   const sortBy = (col: SortCol) => {
-    if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
-      setSortCol(col)
-      setSortDir('desc')
+      setSortCol(col);
+      setSortDir("desc");
     }
-  }
+  };
 
   const TONE: Record<string, { label: string; value: string }> = {
-    neutral: { label: 'text-slate-500 dark:text-slate-400', value: 'text-slate-800 dark:text-slate-200' },
-    info: { label: 'text-sky-600 dark:text-sky-400', value: 'text-sky-600 dark:text-sky-400' },
-    inflow: { label: 'text-emerald-600 dark:text-emerald-400', value: 'text-emerald-600 dark:text-emerald-400' },
-    outflow: { label: 'text-red-600 dark:text-red-400', value: 'text-red-600 dark:text-red-400' },
-    warning: { label: 'text-amber-600 dark:text-amber-400', value: 'text-amber-600 dark:text-amber-400' },
-    positive: { label: 'text-slate-500 dark:text-slate-400', value: 'text-emerald-600 dark:text-emerald-400' },
-    negative: { label: 'text-slate-500 dark:text-slate-400', value: 'text-red-600 dark:text-red-400' },
-  }
+    neutral: {
+      label: "text-slate-500 dark:text-slate-400",
+      value: "text-slate-800 dark:text-slate-200",
+    },
+    info: { label: "text-sky-600 dark:text-sky-400", value: "text-sky-600 dark:text-sky-400" },
+    inflow: {
+      label: "text-emerald-600 dark:text-emerald-400",
+      value: "text-emerald-600 dark:text-emerald-400",
+    },
+    outflow: { label: "text-red-600 dark:text-red-400", value: "text-red-600 dark:text-red-400" },
+    warning: {
+      label: "text-amber-600 dark:text-amber-400",
+      value: "text-amber-600 dark:text-amber-400",
+    },
+    positive: {
+      label: "text-slate-500 dark:text-slate-400",
+      value: "text-emerald-600 dark:text-emerald-400",
+    },
+    negative: {
+      label: "text-slate-500 dark:text-slate-400",
+      value: "text-red-600 dark:text-red-400",
+    },
+  };
 
   const sortIcon = (col: SortCol) => (
-    <ArrowUpDown size={10} className={cn('ml-1 inline', sortCol === col ? 'text-teal-500' : 'text-slate-300 dark:text-slate-600')} />
-  )
+    <ArrowUpDown
+      size={10}
+      className={cn(
+        "ml-1 inline",
+        sortCol === col ? "text-teal-500" : "text-slate-300 dark:text-slate-600",
+      )}
+    />
+  );
 
   return (
     <Drawer
@@ -289,8 +410,8 @@ export function CashWeekFlyout({
       onClose={onClose}
       size="xl"
       title={week.label}
-      description={t('drawerDescription', {
-        net: `${compareMoney(week.net, ZERO_MONEY) >= 0 ? '+' : ''}${money(week.net)}`,
+      description={t("drawerDescription", {
+        net: `${compareMoney(week.net, ZERO_MONEY) >= 0 ? "+" : ""}${money(week.net)}`,
         ending: money(week.endingCash),
       })}
       bodyClassName="overflow-hidden flex flex-col p-0"
@@ -299,57 +420,115 @@ export function CashWeekFlyout({
       <div className="shrink-0 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
         <div className="mb-3 flex items-stretch gap-3">
           <div className="flex flex-1 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-            <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', compareMoney(week.net, ZERO_MONEY) >= 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400')}>
+            <span
+              className={cn(
+                "grid h-9 w-9 shrink-0 place-items-center rounded-lg",
+                compareMoney(week.net, ZERO_MONEY) >= 0
+                  ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400"
+                  : "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400",
+              )}
+            >
               <ArrowLeftRight size={16} />
             </span>
             <div>
-              <p className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('netChange')}</p>
-              <p className={cn('text-lg font-bold tabular-nums', compareMoney(week.net, ZERO_MONEY) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
-                {compareMoney(week.net, ZERO_MONEY) >= 0 ? '+' : ''}{money(week.net)}
+              <p className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                {t("netChange")}
+              </p>
+              <p
+                className={cn(
+                  "text-lg font-bold tabular-nums",
+                  compareMoney(week.net, ZERO_MONEY) >= 0
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-600 dark:text-red-400",
+                )}
+              >
+                {compareMoney(week.net, ZERO_MONEY) >= 0 ? "+" : ""}
+                {money(week.net)}
               </p>
             </div>
           </div>
           <div className="flex flex-1 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
             {/* Coverage is a ratio, not a health score: the ring stays untoned rather than grading against a scale nobody configured. */}
-            <Gauge value={Math.max(0, Math.min(100, coveragePercent))} size={64} thickness={8} showTicks={false} showValue={false} className="shrink-0" bands={null} />
+            <Gauge
+              value={Math.max(0, Math.min(100, coveragePercent))}
+              size={64}
+              thickness={8}
+              showTicks={false}
+              showValue={false}
+              className="shrink-0"
+              bands={null}
+            />
             <div>
-              <p className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> {t('coverageRatio')}</p>
-              <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">{coverage === null ? '—' : formatExactPercent(coverage)}</p>
+              <p className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                <GaugeIcon size={10} /> {t("coverageRatio")}
+              </p>
+              <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">
+                {coverage === null ? "—" : formatExactPercent(coverage)}
+              </p>
             </div>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
           {breakdown.map((row) => {
-            const tone = TONE[row.tone]!
-            const Icon = row.icon
+            const tone = TONE[row.tone]!;
+            const Icon = row.icon;
             return (
-              <div key={row.label} className="flex items-center justify-between border-b border-slate-50 py-1 text-xs last:border-0 sm:[&:nth-last-child(2)]:border-0 dark:border-slate-800/60">
-                <span className={cn('flex items-center gap-1.5', tone.label)}><Icon size={11} />{row.label}</span>
-                <span className={cn('font-semibold tabular-nums', tone.value)}>{money(row.value)}</span>
+              <div
+                key={row.label}
+                className="flex items-center justify-between border-b border-slate-50 py-1 text-xs last:border-0 sm:[&:nth-last-child(2)]:border-0 dark:border-slate-800/60"
+              >
+                <span className={cn("flex items-center gap-1.5", tone.label)}>
+                  <Icon size={11} />
+                  {row.label}
+                </span>
+                <span className={cn("font-semibold tabular-nums", tone.value)}>
+                  {money(row.value)}
+                </span>
               </div>
-            )
+            );
           })}
         </div>
       </div>
 
       {/* primary tabs: AR / AP / each category active this week */}
       <div className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-slate-100 px-4 dark:border-slate-800">
-        {(
-          [
-            { key: 'ar' as TabKey, label: t('tabs.arInflows'), icon: <ArrowDown size={13} className="text-emerald-500" />, count: week.arCount, total: arTotal, badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' },
-            { key: 'ap' as TabKey, label: t('tabs.apOutflows'), icon: <ArrowUp size={13} className="text-red-500" />, count: week.apCount, total: apTotal, badge: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' },
-          ]
-        ).map((tabItem) => (
+        {[
+          {
+            key: "ar" as TabKey,
+            label: t("tabs.arInflows"),
+            icon: <ArrowDown size={13} className="text-emerald-500" />,
+            count: week.arCount,
+            total: arTotal,
+            badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+          },
+          {
+            key: "ap" as TabKey,
+            label: t("tabs.apOutflows"),
+            icon: <ArrowUp size={13} className="text-red-500" />,
+            count: week.apCount,
+            total: apTotal,
+            badge: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
+          },
+        ].map((tabItem) => (
           <button
             key={tabItem.key}
             type="button"
             onClick={() => switchTab(tabItem.key)}
-            className={cn('-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors', tab === tabItem.key ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}
+            className={cn(
+              "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors",
+              tab === tabItem.key
+                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200",
+            )}
           >
             {tabItem.icon}
             {tabItem.label}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-bold', tabItem.badge)}>{tabItem.count}</span>
-            <span className="rounded-full border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">{money(tabItem.total)}</span>
+            <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-bold", tabItem.badge)}>
+              {tabItem.count}
+            </span>
+            <span className="rounded-full border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              {money(tabItem.total)}
+            </span>
           </button>
         ))}
         {weekCats.map((c) => (
@@ -357,24 +536,52 @@ export function CashWeekFlyout({
             key={c.id}
             type="button"
             onClick={() => switchTab(`cat:${c.id}`)}
-            className={cn('-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors', tab === `cat:${c.id}` ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}
+            className={cn(
+              "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors",
+              tab === `cat:${c.id}`
+                ? "border-teal-500 text-teal-600 dark:text-teal-400"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200",
+            )}
           >
-            <Cog size={13} className={c.direction === 'inflow' ? 'text-teal-500' : 'text-amber-500'} />
+            <Cog
+              size={13}
+              className={c.direction === "inflow" ? "text-teal-500" : "text-amber-500"}
+            />
             {c.name}
-            {c.unavailable
-              ? <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">{t('tabs.unavailable')}</span>
-              : <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-semibold', c.direction === 'inflow' ? 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300')}>{money(c.weekly[weekIndex] ?? ZERO_MONEY)}</span>}
+            {c.unavailable ? (
+              <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                {t("tabs.unavailable")}
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                  c.direction === "inflow"
+                    ? "bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300"
+                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
+                )}
+              >
+                {money(c.weekly[weekIndex] ?? ZERO_MONEY)}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {activeCat ? (
-        <CategoryPane key={activeCat.id} cat={activeCat} weekAmount={activeCat.weekly[weekIndex] ?? ZERO_MONEY} />
+        <CategoryPane
+          key={activeCat.id}
+          cat={activeCat}
+          weekAmount={activeCat.weekly[weekIndex] ?? ZERO_MONEY}
+        />
       ) : (
         <>
           {pushBasis !== null && pushDetail !== null ? (
-            <div role="note" className="shrink-0 border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-800 dark:border-amber-950 dark:bg-amber-950/30 dark:text-amber-200">
-              <p className="font-semibold">{t('overduePush.assumption')}</p>
+            <div
+              role="note"
+              className="shrink-0 border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-800 dark:border-amber-950 dark:bg-amber-950/30 dark:text-amber-200"
+            >
+              <p className="font-semibold">{t("overduePush.assumption")}</p>
               <p className="tabular-nums">{pushDetail}</p>
             </div>
           ) : null}
@@ -382,11 +589,19 @@ export function CashWeekFlyout({
           {/* search toolbar */}
           <div className="flex shrink-0 items-center gap-2 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
             <div className="relative flex-1">
-              <Search size={13} className="absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" />
+              <Search
+                size={13}
+                className="absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
+              />
               <input
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-                placeholder={t('search.transactions', { party: side === 'ar' ? t('search.customers') : t('search.vendors') })}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder={t("search.transactions", {
+                  party: side === "ar" ? t("search.customers") : t("search.vendors"),
+                })}
                 className="h-8 w-full rounded-md border border-slate-200 bg-white pr-2 pl-8 text-sm text-slate-700 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
               />
             </div>
@@ -394,54 +609,133 @@ export function CashWeekFlyout({
 
           {/* transaction table */}
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {fetchState === 'loading' ? (
-              <p className="px-6 py-10 text-center text-sm text-slate-400">{tCommon('feedback.loading')}</p>
-            ) : fetchState === 'failed' ? (
-              <div role="alert" className="px-6 py-10 text-center text-sm text-red-600 dark:text-red-400">
-                <p>{fetchMessage ?? tCommon('feedback.loadFailed')}</p>
-                <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => {
-                  setFetchState('loading')
-                  setFetchAttempt((attempt) => attempt + 1)
-                }}>{tCommon('actions.retry')}</Button>
+            {fetchState === "loading" ? (
+              <p className="px-6 py-10 text-center text-sm text-slate-400">
+                {tCommon("feedback.loading")}
+              </p>
+            ) : fetchState === "failed" ? (
+              <div
+                role="alert"
+                className="px-6 py-10 text-center text-sm text-red-600 dark:text-red-400"
+              >
+                <p>{fetchMessage ?? tCommon("feedback.loadFailed")}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => {
+                    setFetchState("loading");
+                    setFetchAttempt((attempt) => attempt + 1);
+                  }}
+                >
+                  {tCommon("actions.retry")}
+                </Button>
               </div>
             ) : paged.length === 0 ? (
               <p className="px-6 py-10 text-center text-sm text-slate-400">
-                {search ? t('empty.noMatches') : t('empty.noneThisWeek', { side: side === 'ar' ? t('empty.inflows') : t('empty.outflows') })}
+                {search
+                  ? t("empty.noMatches")
+                  : t("empty.noneThisWeek", {
+                      side: side === "ar" ? t("empty.inflows") : t("empty.outflows"),
+                    })}
               </p>
             ) : (
               <SharedTable className="w-full text-sm">
                 <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
                   <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <SharedTableHead className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('docNumber')}>{t('table.id')}{sortIcon('docNumber')}</SharedTableHead>
-                    <SharedTableHead className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('partyName')}>{side === 'ar' ? t('table.customer') : t('table.vendor')}{sortIcon('partyName')}</SharedTableHead>
-                    <SharedTableHead className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('predictedDate')}>{t('table.predicted')}{sortIcon('predictedDate')}</SharedTableHead>
-                    <SharedTableHead className="px-3 py-2 text-center font-medium">{t('table.method')}</SharedTableHead>
-                    <SharedTableHead className="px-3 py-2 text-center font-medium">{t('table.status')}</SharedTableHead>
-                    <SharedTableHead className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>{t('table.amount')}{sortIcon('amount')}</SharedTableHead>
+                    <SharedTableHead
+                      className="cursor-pointer px-4 py-2 text-left font-medium select-none"
+                      onClick={() => sortBy("docNumber")}
+                    >
+                      {t("table.id")}
+                      {sortIcon("docNumber")}
+                    </SharedTableHead>
+                    <SharedTableHead
+                      className="cursor-pointer px-3 py-2 text-left font-medium select-none"
+                      onClick={() => sortBy("partyName")}
+                    >
+                      {side === "ar" ? t("table.customer") : t("table.vendor")}
+                      {sortIcon("partyName")}
+                    </SharedTableHead>
+                    <SharedTableHead
+                      className="cursor-pointer px-3 py-2 text-left font-medium select-none"
+                      onClick={() => sortBy("predictedDate")}
+                    >
+                      {t("table.predicted")}
+                      {sortIcon("predictedDate")}
+                    </SharedTableHead>
+                    <SharedTableHead className="px-3 py-2 text-center font-medium">
+                      {t("table.method")}
+                    </SharedTableHead>
+                    <SharedTableHead className="px-3 py-2 text-center font-medium">
+                      {t("table.status")}
+                    </SharedTableHead>
+                    <SharedTableHead
+                      className="cursor-pointer px-4 py-2 text-right font-medium select-none"
+                      onClick={() => sortBy("amount")}
+                    >
+                      {t("table.amount")}
+                      {sortIcon("amount")}
+                    </SharedTableHead>
                   </SharedTableRow>
                 </SharedTableHeader>
                 <SharedTableBody>
                   {paged.map((e) => (
-                    <SharedTableRow key={e.id} className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                    <SharedTableRow
+                      key={e.id}
+                      className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
+                    >
                       <SharedTableCell className="px-4 py-2.5">
-                        <TxnLink entryId={e.entryId} docKind={e.docKind} docId={e.docId} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">
-                          {e.docNumber || e.docKind || '—'}
+                        <TxnLink
+                          entryId={e.entryId}
+                          docKind={e.docKind}
+                          docId={e.docId}
+                          className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300"
+                        >
+                          {e.docNumber || e.docKind || "—"}
                         </TxnLink>
                       </SharedTableCell>
                       <SharedTableCell className="px-3 py-2.5">
                         {e.partyId ? (
-                          <button type="button" onClick={() => setEntity({ id: e.partyId!, name: e.partyName })} title={t('paymentHistoryTitle')} className="flex items-center gap-1 font-medium text-slate-700 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-300">
+                          <button
+                            type="button"
+                            onClick={() => setEntity({ id: e.partyId!, name: e.partyName })}
+                            title={t("paymentHistoryTitle")}
+                            className="flex items-center gap-1 font-medium text-slate-700 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-300"
+                          >
                             {e.partyName}
-                            <History size={11} className="text-slate-300 group-hover:text-teal-500 dark:text-slate-600" />
+                            <History
+                              size={11}
+                              className="text-slate-300 group-hover:text-teal-500 dark:text-slate-600"
+                            />
                           </button>
                         ) : (
-                          <span className="font-medium text-slate-700 dark:text-slate-200">{e.partyName}</span>
+                          <span className="font-medium text-slate-700 dark:text-slate-200">
+                            {e.partyName}
+                          </span>
                         )}
                       </SharedTableCell>
-                      <SharedTableCell className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(e.predictedDate)}</SharedTableCell>
-                      <SharedTableCell className="px-3 py-2.5 text-center"><MethodPill method={e.method} /><ForecastBasisNote entry={e} /></SharedTableCell>
-                      <SharedTableCell className="px-3 py-2.5 text-center"><DaysPill entry={e} today={businessToday} /></SharedTableCell>
-                      <SharedTableCell className={cn('px-4 py-2.5 text-right font-semibold tabular-nums', side === 'ar' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>{money(e.amount)}</SharedTableCell>
+                      <SharedTableCell className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                        {fmtDate(e.predictedDate)}
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-2.5 text-center">
+                        <MethodPill method={e.method} />
+                        <ForecastBasisNote entry={e} />
+                      </SharedTableCell>
+                      <SharedTableCell className="px-3 py-2.5 text-center">
+                        <DaysPill entry={e} today={businessToday} />
+                      </SharedTableCell>
+                      <SharedTableCell
+                        className={cn(
+                          "px-4 py-2.5 text-right font-semibold tabular-nums",
+                          side === "ar"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-600 dark:text-red-400",
+                        )}
+                      >
+                        {money(e.amount)}
+                      </SharedTableCell>
                     </SharedTableRow>
                   ))}
                 </SharedTableBody>
@@ -453,14 +747,32 @@ export function CashWeekFlyout({
           {sorted.length > PAGE_SIZE ? (
             <div className="flex shrink-0 items-center justify-between border-t border-slate-100 px-4 py-2 dark:border-slate-800">
               <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                {t('pagination.showing', { from: start + 1, to: Math.min(start + PAGE_SIZE, sorted.length), total: sorted.length })}
+                {t("pagination.showing", {
+                  from: start + 1,
+                  to: Math.min(start + PAGE_SIZE, sorted.length),
+                  total: sorted.length,
+                })}
               </span>
               <div className="flex items-center gap-1">
-                <button type="button" aria-label={tCommon('actions.previous')} disabled={curPage <= 1} onClick={() => setPage((p) => p - 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                <button
+                  type="button"
+                  aria-label={tCommon("actions.previous")}
+                  disabled={curPage <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
                   <ChevronLeft size={14} />
                 </button>
-                <span className="px-1 text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{curPage}/{totalPages}</span>
-                <button type="button" aria-label={tCommon('actions.next')} disabled={curPage >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                <span className="px-1 text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
+                  {curPage}/{totalPages}
+                </span>
+                <button
+                  type="button"
+                  aria-label={tCommon("actions.next")}
+                  disabled={curPage >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
                   <ChevronRight size={14} />
                 </button>
               </div>
@@ -468,18 +780,29 @@ export function CashWeekFlyout({
           ) : null}
 
           {/* action bar — hand the filtered set to the run builders */}
-          {(side === 'ap' && canPayRun) || (side === 'ar' && canCollectionRun) ? (
-            <ActionBar side={side} entries={filtered} onBuild={(ids) => {
-              const base = side === 'ap' ? '/payments' : '/receipts'
-              router.push((`${base}?view=runs&newRun=1&preselect=${ids.join(',')}`))
-            }} />
+          {(side === "ap" && canPayRun) || (side === "ar" && canCollectionRun) ? (
+            <ActionBar
+              side={side}
+              entries={filtered}
+              onBuild={(ids) => {
+                const base = side === "ap" ? "/payments" : "/receipts";
+                router.push(`${base}?view=runs&newRun=1&preselect=${ids.join(",")}`);
+              }}
+            />
           ) : null}
         </>
       )}
 
-      {entity ? <EntityDrawer party={entity.id} name={entity.name} side={side} onClose={() => setEntity(null)} /> : null}
+      {entity ? (
+        <EntityDrawer
+          party={entity.id}
+          name={entity.name}
+          side={side}
+          onClose={() => setEntity(null)}
+        />
+      ) : null}
     </Drawer>
-  )
+  );
 }
 
 /**
@@ -489,113 +812,163 @@ export function CashWeekFlyout({
  * columns and pagination.
  */
 function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: string }) {
-  const today = useBusinessToday()
-  const locale = useLocale()
-  const fmtMoney = useAnalyticsMoney()
-  const tCommon = useTranslations('common')
-  const money = (n: string) => fmtMoney(n, { compact: true })
-  const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
-  const t = useTranslations('analytics.cashWeek')
-  const tMeta = useTranslations('analytics.cashWeek.meta')
+  const today = useBusinessToday();
+  const locale = useLocale();
+  const fmtMoney = useAnalyticsMoney();
+  const tCommon = useTranslations("common");
+  const money = (n: string) => fmtMoney(n, { compact: true });
+  const fmtDate = (d: string) => shortDateLabel(new Date(d + "T00:00:00Z"), locale);
+  const t = useTranslations("analytics.cashWeek");
+  const tMeta = useTranslations("analytics.cashWeek.meta");
   // Refusals render through the shared code-selected cashflow message — the
   // same sentence as the category table, not a second copy.
-  const tCashflow = useTranslations('analytics.cashflow')
+  const tCashflow = useTranslations("analytics.cashflow");
   // Method names live with the category editor's catalog (one translated set
   // for the method codes, reused here instead of a second copy).
-  const tMethods = useTranslations('analytics.categoryManager')
-  const [search, setSearch] = useState('')
-  const [sortCol, setSortCol] = useState<'name' | 'date' | 'amount' | 'type'>('amount')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [page, setPage] = useState(1)
+  const tMethods = useTranslations("analytics.categoryManager");
+  const [search, setSearch] = useState("");
+  const [sortCol, setSortCol] = useState<"name" | "date" | "amount" | "type">("amount");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
 
-  const tone = cat.direction === 'inflow' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
-  const methodTone = CAT_METHOD_TONE[cat.method] ?? 'text-slate-600 dark:text-slate-300'
-  const methodLabel = tMethods(`methods.${cat.method}.label`)
-  const breakdownType = useCallback((type: string) => {
-    const key = BREAKDOWN_TYPE_KEYS[type]
-    return key === undefined ? type : t(`breakdownTypes.${key}`)
-  }, [t])
+  const tone =
+    cat.direction === "inflow"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : "text-red-600 dark:text-red-400";
+  const methodTone = CAT_METHOD_TONE[cat.method] ?? "text-slate-600 dark:text-slate-300";
+  const methodLabel = tMethods(`methods.${cat.method}.label`);
+  const breakdownType = useCallback(
+    (type: string) => {
+      const key = BREAKDOWN_TYPE_KEYS[type];
+      return key === undefined ? type : t(`breakdownTypes.${key}`);
+    },
+    [t],
+  );
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return cat.breakdown
-    return cat.breakdown.filter((r) =>
-      r.name.toLowerCase().includes(q) || breakdownType(r.type).toLowerCase().includes(q) || (r.date ?? '').toLowerCase().includes(q))
-  }, [cat.breakdown, search, breakdownType])
+    const q = search.trim().toLowerCase();
+    if (!q) return cat.breakdown;
+    return cat.breakdown.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        breakdownType(r.type).toLowerCase().includes(q) ||
+        (r.date ?? "").toLowerCase().includes(q),
+    );
+  }, [cat.breakdown, search, breakdownType]);
 
   const sorted = useMemo(() => {
-    const dir = sortDir === 'asc' ? 1 : -1
+    const dir = sortDir === "asc" ? 1 : -1;
     return filtered.slice().sort((a, b) => {
-      const av = sortCol === 'amount' ? absoluteMoney(a.amount) : ((a[sortCol] ?? '') as string).toLowerCase()
-      const bv = sortCol === 'amount' ? absoluteMoney(b.amount) : ((b[sortCol] ?? '') as string).toLowerCase()
-      if (sortCol === 'amount') return compareMoney(av, bv) * -dir
-      return av < bv ? -dir : av > bv ? dir : 0
-    })
-  }, [filtered, sortCol, sortDir])
+      const av =
+        sortCol === "amount"
+          ? absoluteMoney(a.amount)
+          : ((a[sortCol] ?? "") as string).toLowerCase();
+      const bv =
+        sortCol === "amount"
+          ? absoluteMoney(b.amount)
+          : ((b[sortCol] ?? "") as string).toLowerCase();
+      if (sortCol === "amount") return compareMoney(av, bv) * -dir;
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }, [filtered, sortCol, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
-  const curPage = Math.min(page, totalPages)
-  const start = (curPage - 1) * PAGE_SIZE
-  const paged = sorted.slice(start, start + PAGE_SIZE)
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const curPage = Math.min(page, totalPages);
+  const start = (curPage - 1) * PAGE_SIZE;
+  const paged = sorted.slice(start, start + PAGE_SIZE);
 
   const sortBy = (col: typeof sortCol) => {
-    if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
-      setSortCol(col)
-      setSortDir(col === 'amount' ? 'desc' : 'asc')
+      setSortCol(col);
+      setSortDir(col === "amount" ? "desc" : "asc");
     }
-  }
+  };
   const sortIcon = (col: typeof sortCol) => (
-    <ArrowUpDown size={10} className={cn('ml-1 inline', sortCol === col ? 'text-teal-500' : 'text-slate-300 dark:text-slate-600')} />
-  )
+    <ArrowUpDown
+      size={10}
+      className={cn(
+        "ml-1 inline",
+        sortCol === col ? "text-teal-500" : "text-slate-300 dark:text-slate-600",
+      )}
+    />
+  );
 
   const downloadCsv = () => {
     exportCsv(
-      `cashflow_category_${cat.name.replace(/\s+/g, '_')}`,
-      [t('csvHeaders.entityDescription'), t('csvHeaders.date'), t('csvHeaders.amount'), t('csvHeaders.type')],
-      cat.breakdown.map((row) => [row.name, row.date ?? '', row.amount, row.type]),
+      `cashflow_category_${cat.name.replace(/\s+/g, "_")}`,
+      [
+        t("csvHeaders.entityDescription"),
+        t("csvHeaders.date"),
+        t("csvHeaders.amount"),
+        t("csvHeaders.type"),
+      ],
+      cat.breakdown.map((row) => [row.name, row.date ?? "", row.amount, row.type]),
       today,
-    )
-  }
+    );
+  };
 
   const kpis: { label: string; value: string; cls?: string }[] = [
-    { label: t('category.thisWeek'), value: money(weekAmount), cls: tone },
-    { label: t('category.totalForecast'), value: money(cat.total), cls: tone },
-    { label: t('category.method'), value: methodLabel, cls: methodTone },
-    { label: t('category.sourceItems'), value: String(cat.breakdown.length) },
-  ]
+    { label: t("category.thisWeek"), value: money(weekAmount), cls: tone },
+    { label: t("category.totalForecast"), value: money(cat.total), cls: tone },
+    { label: t("category.method"), value: methodLabel, cls: methodTone },
+    { label: t("category.sourceItems"), value: String(cat.breakdown.length) },
+  ];
 
   return (
     <>
       {/* KPI row + export */}
       <div className="flex shrink-0 items-stretch gap-2 border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
         {kpis.map((k) => (
-          <div key={k.label} className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 dark:border-slate-800">
-            <p className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">{k.label}</p>
-            <p className={cn('truncate text-sm font-bold tabular-nums', k.cls ?? 'text-slate-800 dark:text-slate-100')}>{k.value}</p>
+          <div
+            key={k.label}
+            className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 dark:border-slate-800"
+          >
+            <p className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+              {k.label}
+            </p>
+            <p
+              className={cn(
+                "truncate text-sm font-bold tabular-nums",
+                k.cls ?? "text-slate-800 dark:text-slate-100",
+              )}
+            >
+              {k.value}
+            </p>
           </div>
         ))}
-        <button type="button" onClick={downloadCsv} title={t('category.exportCsvTitle')} className="flex shrink-0 items-center gap-1.5 self-center rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+        <button
+          type="button"
+          onClick={downloadCsv}
+          title={t("category.exportCsvTitle")}
+          className="flex shrink-0 items-center gap-1.5 self-center rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
           <Download size={13} />
-          {t('category.export')}
+          {t("category.export")}
         </button>
       </div>
       <p className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 px-4 py-1.5 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
         <List size={11} />
-        {cat.logic || '—'}
+        {cat.logic || "—"}
       </p>
       {cat.unavailable ? (
         <p className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
           {categoryRefusalText(tCashflow, cat)}
         </p>
       ) : null}
-      {Object.keys(cat.meta).filter((k) => k !== 'method' && k !== 'formula').length ? (
+      {Object.keys(cat.meta).filter((k) => k !== "method" && k !== "formula").length ? (
         <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
           {Object.entries(cat.meta)
-            .filter(([k]) => k !== 'method' && k !== 'formula')
+            .filter(([k]) => k !== "method" && k !== "formula")
             .map(([k, v]) => (
-              <span key={k} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                {tMeta.has(k) ? tMeta(k) : k}: <span className="font-semibold tabular-nums">{MONEYISH.has(k) ? money(String(v)) : String(v)}</span>
+              <span
+                key={k}
+                className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+              >
+                {tMeta.has(k) ? tMeta(k) : k}:{" "}
+                <span className="font-semibold tabular-nums">
+                  {MONEYISH.has(k) ? money(String(v)) : String(v)}
+                </span>
               </span>
             ))}
         </div>
@@ -607,8 +980,11 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
           <Search size={13} className="absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" />
           <input
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            placeholder={t('search.sourceItems')}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder={t("search.sourceItems")}
             className="h-8 w-full rounded-md border border-slate-200 bg-white pr-2 pl-8 text-sm text-slate-700 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
           />
         </div>
@@ -618,30 +994,69 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
       <div className="min-h-0 flex-1 overflow-y-auto">
         {paged.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-slate-400">
-            {search ? t('empty.noMatches') : t('empty.noSourceItems')}
+            {search ? t("empty.noMatches") : t("empty.noSourceItems")}
           </p>
         ) : (
           <SharedTable className="w-full text-sm">
             <SharedTableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
               <SharedTableRow className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <SharedTableHead className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('name')}>{t('table.entityDescription')}{sortIcon('name')}</SharedTableHead>
-                <SharedTableHead className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('date')}>{t('table.date')}{sortIcon('date')}</SharedTableHead>
-                <SharedTableHead className="cursor-pointer px-3 py-2 text-center font-medium select-none" onClick={() => sortBy('type')}>{t('table.type')}{sortIcon('type')}</SharedTableHead>
-                <SharedTableHead className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>{t('table.amount')}{sortIcon('amount')}</SharedTableHead>
+                <SharedTableHead
+                  className="cursor-pointer px-4 py-2 text-left font-medium select-none"
+                  onClick={() => sortBy("name")}
+                >
+                  {t("table.entityDescription")}
+                  {sortIcon("name")}
+                </SharedTableHead>
+                <SharedTableHead
+                  className="cursor-pointer px-3 py-2 text-left font-medium select-none"
+                  onClick={() => sortBy("date")}
+                >
+                  {t("table.date")}
+                  {sortIcon("date")}
+                </SharedTableHead>
+                <SharedTableHead
+                  className="cursor-pointer px-3 py-2 text-center font-medium select-none"
+                  onClick={() => sortBy("type")}
+                >
+                  {t("table.type")}
+                  {sortIcon("type")}
+                </SharedTableHead>
+                <SharedTableHead
+                  className="cursor-pointer px-4 py-2 text-right font-medium select-none"
+                  onClick={() => sortBy("amount")}
+                >
+                  {t("table.amount")}
+                  {sortIcon("amount")}
+                </SharedTableHead>
               </SharedTableRow>
             </SharedTableHeader>
             <SharedTableBody>
               {paged.map((r, i) => (
-                <SharedTableRow key={`${r.name}-${r.date ?? ''}-${i}`} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
+                <SharedTableRow
+                  key={`${r.name}-${r.date ?? ""}-${i}`}
+                  className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30"
+                >
                   <SharedTableCell className="px-4 py-2.5">
                     <span className="font-medium text-slate-700 dark:text-slate-200">{r.name}</span>
-                    {r.details ? <span className="block text-[11px] text-slate-400 dark:text-slate-500">{r.details}</span> : null}
+                    {r.details ? (
+                      <span className="block text-[11px] text-slate-400 dark:text-slate-500">
+                        {r.details}
+                      </span>
+                    ) : null}
                   </SharedTableCell>
-                  <SharedTableCell className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">{r.date ? fmtDate(r.date) : '—'}</SharedTableCell>
+                  <SharedTableCell className="px-3 py-2.5 text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                    {r.date ? fmtDate(r.date) : "—"}
+                  </SharedTableCell>
                   <SharedTableCell className="px-3 py-2.5 text-center">
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{breakdownType(r.type)}</span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {breakdownType(r.type)}
+                    </span>
                   </SharedTableCell>
-                  <SharedTableCell className={cn('px-4 py-2.5 text-right font-semibold tabular-nums', tone)}>{money(r.amount)}</SharedTableCell>
+                  <SharedTableCell
+                    className={cn("px-4 py-2.5 text-right font-semibold tabular-nums", tone)}
+                  >
+                    {money(r.amount)}
+                  </SharedTableCell>
                 </SharedTableRow>
               ))}
             </SharedTableBody>
@@ -653,21 +1068,39 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: st
       {sorted.length > PAGE_SIZE ? (
         <div className="flex shrink-0 items-center justify-between border-t border-slate-100 px-4 py-2 dark:border-slate-800">
           <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-            {t('pagination.showing', { from: start + 1, to: Math.min(start + PAGE_SIZE, sorted.length), total: sorted.length })}
+            {t("pagination.showing", {
+              from: start + 1,
+              to: Math.min(start + PAGE_SIZE, sorted.length),
+              total: sorted.length,
+            })}
           </span>
           <div className="flex items-center gap-1">
-            <button type="button" aria-label={tCommon('actions.previous')} disabled={curPage <= 1} onClick={() => setPage((p) => p - 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+            <button
+              type="button"
+              aria-label={tCommon("actions.previous")}
+              disabled={curPage <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
               <ChevronLeft size={14} />
             </button>
-            <span className="px-1 text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{curPage}/{totalPages}</span>
-            <button type="button" aria-label={tCommon('actions.next')} disabled={curPage >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+            <span className="px-1 text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
+              {curPage}/{totalPages}
+            </span>
+            <button
+              type="button"
+              aria-label={tCommon("actions.next")}
+              disabled={curPage >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
               <ChevronRight size={14} />
             </button>
           </div>
         </div>
       ) : null}
     </>
-  )
+  );
 }
 
 /**
@@ -681,61 +1114,90 @@ function ActionBar({
   entries,
   onBuild,
 }: {
-  side: 'ar' | 'ap'
-  entries: ForecastEntry[]
-  onBuild: (docIds: string[]) => void
+  side: "ar" | "ap";
+  entries: ForecastEntry[];
+  onBuild: (docIds: string[]) => void;
 }) {
-  const fmtMoney = useAnalyticsMoney()
-  const money = (n: string) => fmtMoney(n, { compact: true })
-  const t = useTranslations('analytics.cashWeek.actionBar')
-  const runnable = entries.filter((e) => e.docId)
-  const total = sumMoney(runnable.map((e) => e.amount))
-  if (runnable.length === 0) return null
+  const fmtMoney = useAnalyticsMoney();
+  const money = (n: string) => fmtMoney(n, { compact: true });
+  const t = useTranslations("analytics.cashWeek.actionBar");
+  const runnable = entries.filter((e) => e.docId);
+  const total = sumMoney(runnable.map((e) => e.amount));
+  if (runnable.length === 0) return null;
   return (
     <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/30">
       <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-        {t('summary', { count: runnable.length, kind: side === 'ap' ? t('bills') : t('invoices'), total: money(total) })}
+        {t("summary", {
+          count: runnable.length,
+          kind: side === "ap" ? t("bills") : t("invoices"),
+          total: money(total),
+        })}
       </span>
       <Button size="sm" onClick={() => onBuild(runnable.map((e) => e.docId!))}>
-        {side === 'ap' ? t('buildPayRun') : t('buildCollectionRun')}
+        {side === "ap" ? t("buildPayRun") : t("buildCollectionRun")}
         <ArrowRight size={15} />
       </Button>
     </div>
-  )
+  );
 }
 
 /** Prediction-method pill (classes: History / Terms / Average / Pushed). */
 function MethodPill({ method }: { method: string }) {
-  const t = useTranslations('analytics.cashWeek.methods')
+  const t = useTranslations("analytics.cashWeek.methods");
   // A deferred prediction carries its source week in an English suffix
   // ("Global avg (deferred from 2026-08-30)"): the pill key strips it and
   // the tooltip translates it, so neither the color nor the text depends on
   // English.
-  const deferred = method.match(/\(deferred from (.*)\)$/)
-  const base = forecastMethodBase(method)
+  const deferred = method.match(/\(deferred from (.*)\)$/);
+  const base = forecastMethodBase(method);
   const map: Record<string, { key: string; cls: string }> = {
-    Statistical: { key: 'history', cls: 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300' },
-    'Due date': { key: 'dueDate', cls: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' },
-    'Global avg': { key: 'average', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
-    'Overdue push': { key: 'pushed', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' },
-  }
-  const m = map[base]
-  const label = m ? t(m.key) : base
+    Statistical: {
+      key: "history",
+      cls: "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
+    },
+    "Due date": {
+      key: "dueDate",
+      cls: "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
+    },
+    "Global avg": {
+      key: "average",
+      cls: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    },
+    "Overdue push": {
+      key: "pushed",
+      cls: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+    },
+  };
+  const m = map[base];
+  const label = m ? t(m.key) : base;
   // The deferred week is a calendar date, not an identifier: render it in
   // the request locale (noon-anchored UTC, like every other day label) so a
   // German operator never reads an ISO stamp in a translated tooltip.
-  const locale = useLocale()
-  const deferredDay = deferred?.[1] !== undefined
-    ? new Date(`${deferred[1]}T12:00:00Z`).toLocaleDateString(locale, { dateStyle: 'medium', timeZone: 'UTC' })
-    : null
-  const title = base === OVERDUE_PUSH_METHOD
-    ? t('pushedAssumption')
-    : deferredDay !== null ? `${label} (${t('deferredFrom', { date: deferredDay })})` : label
+  const locale = useLocale();
+  const deferredDay =
+    deferred?.[1] !== undefined
+      ? new Date(`${deferred[1]}T12:00:00Z`).toLocaleDateString(locale, {
+          dateStyle: "medium",
+          timeZone: "UTC",
+        })
+      : null;
+  const title =
+    base === OVERDUE_PUSH_METHOD
+      ? t("pushedAssumption")
+      : deferredDay !== null
+        ? `${label} (${t("deferredFrom", { date: deferredDay })})`
+        : label;
   return (
-    <span title={title} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', m?.cls ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
+    <span
+      title={title}
+      className={cn(
+        "rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+        m?.cls ?? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+      )}
+    >
       {label}
     </span>
-  )
+  );
 }
 
 /**
@@ -745,17 +1207,25 @@ function MethodPill({ method }: { method: string }) {
  * bare figure.
  */
 function ForecastBasisNote({ entry }: { entry: ForecastEntry }) {
-  const t = useTranslations('analytics.cashWeek.methods')
-  const locale = useLocale()
-  const base = forecastMethodBase(entry.method)
-  const dateLabel = (iso: string) => shortDateLabel(new Date(iso + 'T00:00:00Z'), locale)
-  let text: string | null = null
-  if (base === 'Statistical' && entry.basisDays != null) text = t('basisHistory', { days: entry.basisDays })
-  else if (base === 'Global avg' && entry.basisDays != null) text = t('basisAverage', { days: entry.basisDays })
-  else if (base === 'Due date' && entry.dueDate) text = t('basisDueDate', { date: dateLabel(entry.dueDate) })
-  else if (base === OVERDUE_PUSH_METHOD) text = t('basisPushed', { days: entry.daysOverdue, date: dateLabel(entry.predictedDate) })
-  if (text === null) return null
-  return <span className="mt-1 block max-w-[14rem] text-[10px] leading-tight text-slate-500 dark:text-slate-400">{text}</span>
+  const t = useTranslations("analytics.cashWeek.methods");
+  const locale = useLocale();
+  const base = forecastMethodBase(entry.method);
+  const dateLabel = (iso: string) => shortDateLabel(new Date(iso + "T00:00:00Z"), locale);
+  let text: string | null = null;
+  if (base === "Statistical" && entry.basisDays != null)
+    text = t("basisHistory", { days: entry.basisDays });
+  else if (base === "Global avg" && entry.basisDays != null)
+    text = t("basisAverage", { days: entry.basisDays });
+  else if (base === "Due date" && entry.dueDate)
+    text = t("basisDueDate", { date: dateLabel(entry.dueDate) });
+  else if (base === OVERDUE_PUSH_METHOD)
+    text = t("basisPushed", { days: entry.daysOverdue, date: dateLabel(entry.predictedDate) });
+  if (text === null) return null;
+  return (
+    <span className="mt-1 block max-w-[14rem] text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+      {text}
+    </span>
+  );
 }
 
 /** Whole days between now and a due date (module scope, like `daysSince` in AccountsRoster). */
@@ -765,21 +1235,38 @@ function ForecastBasisNote({ entry }: { entry: ForecastEntry }) {
  * — never the browser UTC clock, which can sit a day off the org.
  */
 function daysVsDue(dueDate: string, todayIso: string): number {
-  return Math.round((new Date(todayIso + 'T00:00:00Z').getTime() - new Date(dueDate + 'T00:00:00Z').getTime()) / 86_400_000)
+  return Math.round(
+    (new Date(todayIso + "T00:00:00Z").getTime() - new Date(dueDate + "T00:00:00Z").getTime()) /
+      86_400_000,
+  );
 }
 
 /** Days-vs-due pill: overdue red (+Nd), due within a week amber, comfortable green. */
 function DaysPill({ entry, today }: { entry: ForecastEntry; today: string }) {
-  const locale = useLocale()
-  if (!entry.dueDate) return <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
-  const days = daysVsDue(entry.dueDate, today)
+  const locale = useLocale();
+  if (!entry.dueDate) return <span className="text-xs text-slate-300 dark:text-slate-600">—</span>;
+  const days = daysVsDue(entry.dueDate, today);
   // Localized narrow day counts ("+5d" in en, the locale's own narrow form
   // elsewhere) instead of a hardcoded English suffix.
-  const dayCount = new Intl.NumberFormat(locale, { style: 'unit', unit: 'day', unitDisplay: 'narrow' }).format(Math.abs(days))
-  const cls = days > 0
-    ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300'
-    : days >= -7
-      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
-      : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-  return <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums whitespace-nowrap', cls)}>{days > 0 ? `+${dayCount}` : `-${dayCount}`}</span>
+  const dayCount = new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "day",
+    unitDisplay: "narrow",
+  }).format(Math.abs(days));
+  const cls =
+    days > 0
+      ? "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300"
+      : days >= -7
+        ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+        : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300";
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums whitespace-nowrap",
+        cls,
+      )}
+    >
+      {days > 0 ? `+${dayCount}` : `-${dayCount}`}
+    </span>
+  );
 }

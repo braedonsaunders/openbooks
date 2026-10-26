@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import { Input, Label, Select, Textarea } from '@openbooks/ui'
-import type { ActionData, ActionKind, FlowSubjectProfile } from '@openbooks/forms-core'
-import { buildAction, type OrgRole, type OrgUser } from './graph'
-import { TargetsEditor } from './TargetsEditor'
-import { DateField } from '../../../../../components/date-field'
+import { useTranslations } from "next-intl";
+import { Input, Label, Select, Textarea } from "@openbooks/ui";
+import type { ActionData, ActionKind, FlowSubjectProfile } from "@openbooks/forms-core";
+import { buildAction, type OrgRole, type OrgUser } from "./graph";
+import { TargetsEditor } from "./TargetsEditor";
+import { DateField } from "../../../../../components/date-field";
 
 /**
  * Action inspector: kind picker plus per-kind editors. Email/notify bodies
@@ -14,12 +14,10 @@ import { DateField } from '../../../../../components/date-field'
  */
 
 function FieldTokensHint({ profile }: { profile: FlowSubjectProfile }) {
-  const t = useTranslations('admin.flows.action')
+  const t = useTranslations("admin.flows.action");
   return (
     <details className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-      <summary className="cursor-pointer select-none">
-        {t("interpolationHint")}
-      </summary>
+      <summary className="cursor-pointer select-none">{t("interpolationHint")}</summary>
       <div className="mt-1.5 flex flex-wrap gap-1">
         {profile.fields.map((f) => (
           <code
@@ -32,7 +30,7 @@ function FieldTokensHint({ profile }: { profile: FlowSubjectProfile }) {
         ))}
       </div>
     </details>
-  )
+  );
 }
 
 export function ActionEditor({
@@ -42,22 +40,24 @@ export function ActionEditor({
   users,
   roles,
 }: {
-  action: ActionData
-  onChange: (action: ActionData) => void
-  profile: FlowSubjectProfile
-  users: OrgUser[]
-  roles: OrgRole[]
+  action: ActionData;
+  onChange: (action: ActionData) => void;
+  profile: FlowSubjectProfile;
+  users: OrgUser[];
+  roles: OrgRole[];
 }) {
-  const t = useTranslations('admin.flows')
-  const writableFields = profile.fields.filter((f) => f.writable)
-  const selectedField = writableFields.find((field) => field.key === (action.action === 'set_field' ? action.field : ''))
+  const t = useTranslations("admin.flows");
+  const writableFields = profile.fields.filter((f) => f.writable);
+  const selectedField = writableFields.find(
+    (field) => field.key === (action.action === "set_field" ? action.field : ""),
+  );
   const literalDefault = () =>
-    selectedField?.options?.[0]?.value ?? (selectedField?.type === 'bool' ? false : '')
+    selectedField?.options?.[0]?.value ?? (selectedField?.type === "bool" ? false : "");
 
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label>{t('action.kind')}</Label>
+        <Label>{t("action.kind")}</Label>
         <Select
           value={action.action}
           onChange={(e) => onChange(buildAction(e.target.value as ActionKind, profile))}
@@ -71,19 +71,15 @@ export function ActionEditor({
       </div>
 
       {action.action === "send_board_schedule" ? (
-        <p className="text-sm text-slate-500">
-          {t("action.automaticScheduleHelp")}
-        </p>
+        <p className="text-sm text-slate-500">{t("action.automaticScheduleHelp")}</p>
       ) : null}
       {action.action === "distribute_schedule" ? (
-        <p className="text-sm text-slate-500">
-          {t("action.scheduleReportHelp")}
-        </p>
+        <p className="text-sm text-slate-500">{t("action.scheduleReportHelp")}</p>
       ) : null}
-      {action.action === 'send_email' ? (
+      {action.action === "send_email" ? (
         <>
           <div className="space-y-1.5">
-            <Label>{t('action.recipients')}</Label>
+            <Label>{t("action.recipients")}</Label>
             <TargetsEditor
               value={action.to}
               onChange={(to) => onChange({ ...action, to })}
@@ -91,18 +87,18 @@ export function ActionEditor({
               users={users}
               roles={roles}
               allowEmail
-              addLabel={t('targets.add')}
+              addLabel={t("targets.add")}
             />
           </div>
           <div className="space-y-1.5">
-            <Label>{t('action.subject')}</Label>
+            <Label>{t("action.subject")}</Label>
             <Input
               value={action.subject}
               onChange={(e) => onChange({ ...action, subject: e.target.value })}
             />
           </div>
           <div className="space-y-1.5">
-            <Label>{t('action.body')}</Label>
+            <Label>{t("action.body")}</Label>
             <Textarea
               rows={6}
               value={action.body}
@@ -117,9 +113,9 @@ export function ActionEditor({
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
             <span>
-              <span className="block font-medium">{t('action.attachPdf')}</span>
+              <span className="block font-medium">{t("action.attachPdf")}</span>
               <span className="block text-xs text-slate-500 dark:text-slate-400">
-                {t('action.attachPdfHint')}
+                {t("action.attachPdfHint")}
               </span>
             </span>
           </label>
@@ -127,10 +123,10 @@ export function ActionEditor({
         </>
       ) : null}
 
-      {action.action === 'notify' ? (
+      {action.action === "notify" ? (
         <>
           <div className="space-y-1.5">
-            <Label>{t('action.recipients')}</Label>
+            <Label>{t("action.recipients")}</Label>
             <TargetsEditor
               value={action.to}
               onChange={(to) => onChange({ ...action, to })}
@@ -138,28 +134,28 @@ export function ActionEditor({
               users={users}
               roles={roles}
               allowEmail
-              addLabel={t('targets.add')}
+              addLabel={t("targets.add")}
             />
           </div>
           <div className="space-y-1.5">
-            <Label>{t('action.title')}</Label>
+            <Label>{t("action.title")}</Label>
             <Input
               value={action.title}
               onChange={(e) => onChange({ ...action, title: e.target.value })}
             />
           </div>
           <div className="space-y-1.5">
-            <Label>{t('action.notifyBody')}</Label>
+            <Label>{t("action.notifyBody")}</Label>
             <Textarea
               rows={3}
-              value={action.body ?? ''}
+              value={action.body ?? ""}
               onChange={(e) => onChange({ ...action, body: e.target.value || undefined })}
             />
           </div>
           <div className="space-y-1.5">
-            <Label>{t('action.href')}</Label>
+            <Label>{t("action.href")}</Label>
             <Input
-              value={action.href ?? ''}
+              value={action.href ?? ""}
               onChange={(e) => onChange({ ...action, href: e.target.value || undefined })}
               placeholder="/inbox"
             />
@@ -168,26 +164,27 @@ export function ActionEditor({
         </>
       ) : null}
 
-      {action.action === 'set_field' ? (
+      {action.action === "set_field" ? (
         <>
           <div className="space-y-1.5">
-            <Label>{t('action.field')}</Label>
+            <Label>{t("action.field")}</Label>
             <Select
               value={action.field}
               onChange={(e) => {
-                const field = writableFields.find((candidate) => candidate.key === e.target.value)
+                const field = writableFields.find((candidate) => candidate.key === e.target.value);
                 onChange({
                   ...action,
                   field: e.target.value,
-                  ...(action.value.kind === 'literal'
+                  ...(action.value.kind === "literal"
                     ? {
                         value: {
-                          kind: 'literal' as const,
-                          value: field?.options?.[0]?.value ?? (field?.type === 'bool' ? false : ''),
+                          kind: "literal" as const,
+                          value:
+                            field?.options?.[0]?.value ?? (field?.type === "bool" ? false : ""),
                         },
                       }
                     : {}),
-                })
+                });
               }}
             >
               {writableFields.map((f) => (
@@ -198,40 +195,34 @@ export function ActionEditor({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>{t('action.valueSource')}</Label>
+            <Label>{t("action.valueSource")}</Label>
             <Select
               value={action.value.kind}
               onChange={(e) => {
-                const kind = e.target.value as 'literal' | 'today' | 'now' | 'current_user_name'
+                const kind = e.target.value as "literal" | "today" | "now" | "current_user_name";
                 onChange({
                   ...action,
-                  value: kind === 'literal' ? { kind, value: literalDefault() } : { kind },
-                })
+                  value: kind === "literal" ? { kind, value: literalDefault() } : { kind },
+                });
               }}
             >
-              <option value="literal">
-                {t("action.valueSources.literal")}
-              </option>
-              <option value="today">{t('action.valueSources.today')}</option>
-              <option value="now">{t('action.valueSources.now')}</option>
-              <option value="current_user_name">
-                {t("action.valueSources.currentUser")}
-              </option>
-              {action.value.kind === 'expression' ? (
-                <option value="expression">
-                  {t("action.valueSources.expression")}
-                </option>
+              <option value="literal">{t("action.valueSources.literal")}</option>
+              <option value="today">{t("action.valueSources.today")}</option>
+              <option value="now">{t("action.valueSources.now")}</option>
+              <option value="current_user_name">{t("action.valueSources.currentUser")}</option>
+              {action.value.kind === "expression" ? (
+                <option value="expression">{t("action.valueSources.expression")}</option>
               ) : null}
             </Select>
           </div>
-          {action.value.kind === 'literal' ? (
+          {action.value.kind === "literal" ? (
             <div className="space-y-1.5">
-              <Label>{t('action.value')}</Label>
+              <Label>{t("action.value")}</Label>
               {selectedField?.options?.length ? (
                 <Select
-                  value={String(action.value.value ?? '')}
+                  value={String(action.value.value ?? "")}
                   onChange={(e) =>
-                    onChange({ ...action, value: { kind: 'literal', value: e.target.value } })
+                    onChange({ ...action, value: { kind: "literal", value: e.target.value } })
                   }
                 >
                   {selectedField.options.map((option) => (
@@ -240,51 +231,53 @@ export function ActionEditor({
                     </option>
                   ))}
                 </Select>
-              ) : selectedField?.type === 'bool' ? (
+              ) : selectedField?.type === "bool" ? (
                 <Select
                   value={String(action.value.value ?? false)}
                   onChange={(e) =>
                     onChange({
                       ...action,
-                      value: { kind: 'literal', value: e.target.value === 'true' },
+                      value: { kind: "literal", value: e.target.value === "true" },
                     })
                   }
                 >
-                  <option value="true">{t('logic.true')}</option>
-                  <option value="false">{t('logic.false')}</option>
+                  <option value="true">{t("logic.true")}</option>
+                  <option value="false">{t("logic.false")}</option>
                 </Select>
-              ) : selectedField?.type === 'date' ? (
+              ) : selectedField?.type === "date" ? (
                 <DateField
-                  value={String(action.value.value ?? '')}
-                  onChange={(next) => onChange({ ...action, value: { kind: 'literal', value: next } })}
+                  value={String(action.value.value ?? "")}
+                  onChange={(next) =>
+                    onChange({ ...action, value: { kind: "literal", value: next } })
+                  }
                 />
               ) : (
                 <Input
-                  type={selectedField?.type === 'number' ? 'number' : 'text'}
-                  value={String(action.value.value ?? '')}
+                  type={selectedField?.type === "number" ? "number" : "text"}
+                  value={String(action.value.value ?? "")}
                   onChange={(e) => {
-                    const raw = e.target.value
+                    const raw = e.target.value;
                     const value =
-                      selectedField?.type === 'number' && raw !== '' && !Number.isNaN(Number(raw))
+                      selectedField?.type === "number" && raw !== "" && !Number.isNaN(Number(raw))
                         ? Number(raw)
-                        : raw
-                    onChange({ ...action, value: { kind: 'literal', value } })
+                        : raw;
+                    onChange({ ...action, value: { kind: "literal", value } });
                   }}
                 />
               )}
             </div>
           ) : null}
-          {action.value.kind === 'expression' ? (
+          {action.value.kind === "expression" ? (
             <p className="rounded-md border border-dashed border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-              {t('action.expressionPreserved')}
+              {t("action.expressionPreserved")}
             </p>
           ) : null}
         </>
       ) : null}
 
-      {action.action === 'change_status' ? (
+      {action.action === "change_status" ? (
         <div className="space-y-1.5">
-          <Label>{t('action.status')}</Label>
+          <Label>{t("action.status")}</Label>
           <Select value={action.to} onChange={(e) => onChange({ ...action, to: e.target.value })}>
             {profile.statuses.map((s) => (
               <option key={s.value} value={s.value}>
@@ -295,31 +288,31 @@ export function ActionEditor({
         </div>
       ) : null}
 
-      {action.action === 'post_document' ? (
+      {action.action === "post_document" ? (
         <p className="rounded-md border border-dashed border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          {t('action.postDocumentHint')}
+          {t("action.postDocumentHint")}
         </p>
       ) : null}
 
-      {action.action === 'lock_record' ? (
+      {action.action === "lock_record" ? (
         <>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              {t('action.lockReason')}
+              {t("action.lockReason")}
             </label>
             <Input
-              value={action.reason ?? ''}
+              value={action.reason ?? ""}
               onChange={(e) => onChange({ ...action, reason: e.target.value || undefined })}
-              placeholder={t('action.lockReasonPlaceholder')}
+              placeholder={t("action.lockReasonPlaceholder")}
             />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              {t('action.lockExemptRoles')}
+              {t("action.lockExemptRoles")}
             </label>
             <div className="flex flex-wrap gap-2">
               {(profile.roles ?? []).map((role) => {
-                const selected = action.exemptRoles?.includes(role) ?? false
+                const selected = action.exemptRoles?.includes(role) ?? false;
                 return (
                   <button
                     key={role}
@@ -327,18 +320,18 @@ export function ActionEditor({
                     onClick={() => {
                       const next = selected
                         ? (action.exemptRoles ?? []).filter((r) => r !== role)
-                        : [...(action.exemptRoles ?? []), role]
-                      onChange({ ...action, exemptRoles: next.length > 0 ? next : undefined })
+                        : [...(action.exemptRoles ?? []), role];
+                      onChange({ ...action, exemptRoles: next.length > 0 ? next : undefined });
                     }}
                     className={
                       selected
-                        ? 'rounded-full border border-teal-500 bg-teal-50 px-2.5 py-0.5 text-xs text-teal-700 dark:bg-teal-950 dark:text-teal-300'
-                        : 'rounded-full border border-slate-200 px-2.5 py-0.5 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400'
+                        ? "rounded-full border border-teal-500 bg-teal-50 px-2.5 py-0.5 text-xs text-teal-700 dark:bg-teal-950 dark:text-teal-300"
+                        : "rounded-full border border-slate-200 px-2.5 py-0.5 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400"
                     }
                   >
                     {role}
                   </button>
-                )
+                );
               })}
             </div>
             <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
@@ -348,11 +341,11 @@ export function ActionEditor({
         </>
       ) : null}
 
-      {action.action === 'unlock_record' ? (
+      {action.action === "unlock_record" ? (
         <p className="rounded-md border border-dashed border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          {t('action.unlockHint')}
+          {t("action.unlockHint")}
         </p>
       ) : null}
     </div>
-  )
+  );
 }

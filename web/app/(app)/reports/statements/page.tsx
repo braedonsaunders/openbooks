@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadStatementPicker, statementPickerSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadStatementPicker, statementPickerSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * The customer-statement picker. The page is a loader and a spec: `./view.ts`
@@ -12,9 +12,9 @@ export const dynamic = 'force-dynamic'
 export default async function CustomerStatements({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadStatementPicker(sp)
-  return <ModuleView spec={statementPickerSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadStatementPicker(sp);
+  return <ModuleView spec={statementPickerSpec(data)} data={data} searchParams={sp} trusted />;
 }

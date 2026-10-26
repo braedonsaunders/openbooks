@@ -14,12 +14,20 @@ function scriptKind(file) {
 }
 
 function parseFile(file) {
-  return ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, scriptKind(file));
+  return ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKind(file),
+  );
 }
 
 function isExported(node) {
-  return ts.canHaveModifiers(node)
-    && (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+  return (
+    ts.canHaveModifiers(node) &&
+    (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+  );
 }
 
 function containsScratchOrgType(node) {
@@ -36,7 +44,8 @@ function containsScratchOrgType(node) {
 }
 
 function functionReturnType(node) {
-  if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)) return node.type;
+  if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node))
+    return node.type;
   return undefined;
 }
 
@@ -46,7 +55,11 @@ function scratchOrgFactories(fixturesPath) {
   const exportedFactories = new Set();
 
   for (const statement of source.statements) {
-    if (ts.isFunctionDeclaration(statement) && statement.name && containsScratchOrgType(functionReturnType(statement))) {
+    if (
+      ts.isFunctionDeclaration(statement) &&
+      statement.name &&
+      containsScratchOrgType(functionReturnType(statement))
+    ) {
       localFactories.add(statement.name.text);
       if (isExported(statement)) exportedFactories.add(statement.name.text);
       continue;
@@ -62,8 +75,13 @@ function scratchOrgFactories(fixturesPath) {
   }
 
   for (const statement of source.statements) {
-    if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier || !statement.exportClause
-      || !ts.isNamedExports(statement.exportClause)) continue;
+    if (
+      !ts.isExportDeclaration(statement) ||
+      statement.moduleSpecifier ||
+      !statement.exportClause ||
+      !ts.isNamedExports(statement.exportClause)
+    )
+      continue;
     for (const specifier of statement.exportClause.elements) {
       const localName = (specifier.propertyName ?? specifier.name).text;
       if (localFactories.has(localName)) exportedFactories.add(specifier.name.text);
@@ -126,11 +144,12 @@ function importedFactories(source, file, root, fixturesPath, factories) {
     }
   };
 
-  const dynamicFixturesCall = (node) => ts.isCallExpression(node)
-    && node.expression.kind === ts.SyntaxKind.ImportKeyword
-    && node.arguments.length > 0
-    && ts.isStringLiteralLike(node.arguments[0])
-    && importTargetsFixtures(node.arguments[0].text, file, root, fixturesPath);
+  const dynamicFixturesCall = (node) =>
+    ts.isCallExpression(node) &&
+    node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+    node.arguments.length > 0 &&
+    ts.isStringLiteralLike(node.arguments[0]) &&
+    importTargetsFixtures(node.arguments[0].text, file, root, fixturesPath);
 
   for (const statement of source.statements) {
     if (ts.isImportDeclaration(statement)) {
@@ -141,7 +160,8 @@ function importedFactories(source, file, root, fixturesPath, factories) {
     if (!ts.isVariableStatement(statement)) continue;
     for (const declaration of statement.declarationList.declarations) {
       const initializer = declaration.initializer;
-      const call = initializer && ts.isAwaitExpression(initializer) ? initializer.expression : initializer;
+      const call =
+        initializer && ts.isAwaitExpression(initializer) ? initializer.expression : initializer;
       if (!call || !dynamicFixturesCall(call)) continue;
       if (ts.isIdentifier(declaration.name)) namespaces.add(declaration.name.text);
       if (!ts.isObjectBindingPattern(declaration.name)) continue;
@@ -165,7 +185,11 @@ function testBindings(source) {
   const namespaces = new Set();
   const hooks = new Set(["before"]);
   for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) || moduleSpecifierText(statement.moduleSpecifier) !== "node:test") continue;
+    if (
+      !ts.isImportDeclaration(statement) ||
+      moduleSpecifierText(statement.moduleSpecifier) !== "node:test"
+    )
+      continue;
     const clause = statement.importClause;
     if (!clause) continue;
     if (clause.name) named.add(clause.name.text);
@@ -183,14 +207,22 @@ function testBindings(source) {
 }
 
 function isFunctionLike(node) {
-  return ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)
-    || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node)
+  );
 }
 
 function isMemberCall(expression, namespaces, method) {
-  return ts.isPropertyAccessExpression(expression)
-    && namespaces.has(expression.expression.getText())
-    && expression.name.text === method;
+  return (
+    ts.isPropertyAccessExpression(expression) &&
+    namespaces.has(expression.expression.getText()) &&
+    expression.name.text === method
+  );
 }
 
 function isRegistrationCall(call, bindings, name) {
@@ -200,7 +232,8 @@ function isRegistrationCall(call, bindings, name) {
     return bindings.hooks.has(expression.text);
   }
   return name === "test"
-    ? isMemberCall(expression, bindings.namespaces, "test") || isMemberCall(expression, bindings.namespaces, "it")
+    ? isMemberCall(expression, bindings.namespaces, "test") ||
+        isMemberCall(expression, bindings.namespaces, "it")
     : isMemberCall(expression, bindings.namespaces, "before");
 }
 
@@ -209,11 +242,17 @@ function callbackNode(argument, source) {
   if (isFunctionLike(argument)) return argument;
   if (!ts.isIdentifier(argument)) return null;
   for (const statement of source.statements) {
-    if (ts.isFunctionDeclaration(statement) && statement.name?.text === argument.text) return statement;
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === argument.text)
+      return statement;
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
-        if (ts.isIdentifier(declaration.name) && declaration.name.text === argument.text
-          && declaration.initializer && isFunctionLike(declaration.initializer)) return declaration.initializer;
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.name.text === argument.text &&
+          declaration.initializer &&
+          isFunctionLike(declaration.initializer)
+        )
+          return declaration.initializer;
       }
     }
   }
@@ -223,13 +262,22 @@ function callbackNode(argument, source) {
 function factoryInvocationName(call, factories, imported) {
   const expression = call.expression;
   if (ts.isIdentifier(expression)) return imported.named.get(expression.text) ?? null;
-  if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)
-    && imported.namespaces.has(expression.expression.text) && factories.has(expression.name.text)) {
+  if (
+    ts.isPropertyAccessExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    imported.namespaces.has(expression.expression.text) &&
+    factories.has(expression.name.text)
+  ) {
     return expression.name.text;
   }
-  if (ts.isElementAccessExpression(expression) && ts.isIdentifier(expression.expression)
-    && imported.namespaces.has(expression.expression.text) && expression.argumentExpression
-    && ts.isStringLiteralLike(expression.argumentExpression) && factories.has(expression.argumentExpression.text)) {
+  if (
+    ts.isElementAccessExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    imported.namespaces.has(expression.expression.text) &&
+    expression.argumentExpression &&
+    ts.isStringLiteralLike(expression.argumentExpression) &&
+    factories.has(expression.argumentExpression.text)
+  ) {
     return expression.argumentExpression.text;
   }
   return null;
@@ -303,9 +351,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const result = checkTree();
   if (result.violations.length > 0) {
     for (const violation of result.violations) {
-      console.error(`${relative(ROOT, violation.file)}:${violation.line} creates ${violation.factories.join(", ")} in top-level before() with ${violation.topLevelTests} top-level tests`);
+      console.error(
+        `${relative(ROOT, violation.file)}:${violation.line} creates ${violation.factories.join(", ")} in top-level before() with ${violation.topLevelTests} top-level tests`,
+      );
     }
-    console.error(`[scratch-org-lease-shape] ${result.violations.length} violation(s) in ${result.filesChecked} integration files`);
+    console.error(
+      `[scratch-org-lease-shape] ${result.violations.length} violation(s) in ${result.filesChecked} integration files`,
+    );
     process.exitCode = 1;
   } else {
     console.log(`[scratch-org-lease-shape] ${result.filesChecked} integration files; 0 violations`);

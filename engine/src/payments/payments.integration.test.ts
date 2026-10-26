@@ -10,20 +10,32 @@ import {
   recordPaymentSettlement,
   rollbackPaymentRun,
 } from "./operations.ts";
-import { cancelPaymentRun, PAYMENT_RUN_INTERNAL_CANCEL_REASONS, PAYMENT_RUN_SYSTEM_ACTOR_ID } from "./run-cancellation.ts";
+import {
+  cancelPaymentRun,
+  PAYMENT_RUN_INTERNAL_CANCEL_REASONS,
+  PAYMENT_RUN_SYSTEM_ACTOR_ID,
+} from "./run-cancellation.ts";
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
 import { createPaymentRun } from "./run-creation.ts";
 import { payeeBankStateSql } from "./payee-bank-account.ts";
 import { PaymentError, PaymentRevisionConflictError } from "../payments-core/payment-errors.ts";
 import { postPaymentRun } from "./run-posting.ts";
-import { markAutomaticRemittanceEnqueueFailed, settleAutomaticRemittanceEnqueueError } from "./run-remittance.ts";
+import {
+  markAutomaticRemittanceEnqueueFailed,
+  settleAutomaticRemittanceEnqueueError,
+} from "./run-remittance.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { createDocumentsFlowAdapter } from "../flows/documents-adapter.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
 import { openItemsForParty, suggestApplications } from "./payment-queries.ts";
 import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  grantScratchPermissions,
+  dropScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -45,7 +57,10 @@ function isCrossRunInstructionConflict(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
     const candidate = current as { code?: string; constraint?: string; cause?: unknown };
-    if (candidate.code === "23503" && candidate.constraint === "payment_run_items_instruction_run") {
+    if (
+      candidate.code === "23503" &&
+      candidate.constraint === "payment_run_items_instruction_run"
+    ) {
       return true;
     }
     current = candidate.cause;
@@ -67,13 +82,15 @@ const expectGenerationRefused = (
  *  writers really contend instead of merely running near each other. */
 async function waitForBlockedBy(blockerPid: number, minimum = 1): Promise<number> {
   for (let attempt = 0; attempt < 200; attempt += 1) {
-    const blocked = await withBypass(() => db.execute<{ pid: number; count: number }>(sql`
+    const blocked = await withBypass(() =>
+      db.execute<{ pid: number; count: number }>(sql`
       select activity.pid::int as pid, count(*) over ()::int as count
         from pg_stat_activity activity
        where ${blockerPid} = any(pg_blocking_pids(activity.pid))
        order by activity.pid
        limit 1
-    `));
+    `),
+    );
     if ((blocked.rows[0]?.count ?? 0) >= minimum) return blocked.rows[0]!.pid;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -127,14 +144,16 @@ async function installPostingClaim(
   claimedAt: SQL = sql`now()`,
 ): Promise<string> {
   const token = randomUUID();
-  await withOrgContext(org.orgId, () => db.execute(sql`
+  await withOrgContext(org.orgId, () =>
+    db.execute(sql`
     update payment_runs
        set status = 'processing',
            posting_claim_token = ${token}::uuid,
            posting_claimed_at = ${claimedAt},
            posting_claimed_by = ${actorId}
      where id = ${runId} and org_id = ${org.orgId}
-  `));
+  `),
+  );
   return token;
 }
 
@@ -145,14 +164,16 @@ async function withPostingClaim<T>(
   token: string | null,
   work: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
 ): Promise<T> {
-  return withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-    if (token !== null) {
-      await tx.execute(sql`
+  return withOrgContext(org.orgId, () =>
+    db.transaction(async (tx) => {
+      if (token !== null) {
+        await tx.execute(sql`
         select set_config('openbooks.payment_run_claim', ${`${runId}:${token}`}, true)
       `);
-    }
-    return work(tx);
-  }));
+      }
+      return work(tx);
+    }),
+  );
 }
 
 /** Assert the storage-level instruction fence rejected the write, wherever in
@@ -284,88 +305,121 @@ async function seedPostingClaimRun(
   };
 }
 
-test("cross-currency payment, dual-amount application, realized FX, evidence, and reversal are atomic", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "FX Tester", "admin");
+test(
+  "cross-currency payment, dual-amount application, realized FX, evidence, and reversal are atomic",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "FX Tester", "admin");
 
-    const invoiceId = randomUUID();
-    await db.execute(sql`
+      const invoiceId = randomUUID();
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
       values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-FX-1',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'EUR', '1.2',
               '100', '0', '100', ${userId})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
       values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '100')`);
-    await db.execute(sql`
+      await db.execute(sql`
       update documents set status = 'approved', updated_at = now()
        where id = ${invoiceId} and org_id = ${org.orgId}`);
-    const invoiceEntryId = await postDocument(invoiceId, {
-      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-    });
-    const invoiceControl = (await db.execute<{ id: string }>(sql`
+      const invoiceEntryId = await postDocument(invoiceId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      const invoiceControl = await db.execute<{ id: string }>(sql`
       select id from journal_lines where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
-    `));
-    const targetLineId = invoiceControl.rows[0]!.id;
+    `);
+      const targetLineId = invoiceControl.rows[0]!.id;
 
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-      orgId: org.orgId,
-      kind: "customer_payment",
-      createdBy: userId,
-      partyId: org.customerId,
-      bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId,
-      documentDate: org.date,
-      currency: "USD",
-      fxRate: "1.625",
-    });
-    await updateDraftPayment(payment.id, {
-      allocations: [{
-        openLineId: targetLineId,
-        sourceTransactionAmount: "80",
-        targetTransactionAmount: "100",
-        settlementRate: "1.25",
-        settlementRateSource: "manual",
-        settlementRateReference: "BANK-SETTLEMENT-42",
-      }],
-      bankAccountId: org.accounts.bank,
-    }, userId, org.orgId,
-  { allowedSubsidiaryIds: null },
-);
-    await db.execute(sql`
+      const payment = await createPaymentDocument({
+        allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        kind: "customer_payment",
+        createdBy: userId,
+        partyId: org.customerId,
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        documentDate: org.date,
+        currency: "USD",
+        fxRate: "1.625",
+      });
+      await updateDraftPayment(
+        payment.id,
+        {
+          allocations: [
+            {
+              openLineId: targetLineId,
+              sourceTransactionAmount: "80",
+              targetTransactionAmount: "100",
+              settlementRate: "1.25",
+              settlementRateSource: "manual",
+              settlementRateReference: "BANK-SETTLEMENT-42",
+            },
+          ],
+          bankAccountId: org.accounts.bank,
+        },
+        userId,
+        org.orgId,
+        { allowedSubsidiaryIds: null },
+      );
+      await db.execute(sql`
       update documents
          set status = 'approved', submitted_by = ${userId}, submitted_at = now()
        where id = ${payment.id}
     `);
 
-    // A missing realized-FX account must roll back the payment itself, not
-    // leave a posted-but-unapplied transaction behind.
-    await db.execute(sql`
+      // A missing realized-FX account must roll back the payment itself, not
+      // leave a posted-but-unapplied transaction behind.
+      await db.execute(sql`
       update orgs set settings = settings #- '{controlAccounts,fxRealizedGainLoss}' where id = ${org.orgId}`);
-    await assert.rejects(postPaymentWithApplications(payment.id, undefined, userId), /realized FX gain\/loss account is not configured/);
-    const afterFailure = (await db.execute<{ status: string; posted_entry_id: string | null; entries: number }>(sql`
+      await assert.rejects(
+        postPaymentWithApplications(payment.id, undefined, userId),
+        /realized FX gain\/loss account is not configured/,
+      );
+      const afterFailure = await db.execute<{
+        status: string;
+        posted_entry_id: string | null;
+        entries: number;
+      }>(sql`
       select status, posted_entry_id,
              (select count(*) from journal_entries where source_document_id = ${payment.id})::int as entries
         from documents where id = ${payment.id}
-    `));
-    assert.deepEqual(afterFailure.rows[0], { status: "approved", posted_entry_id: null, entries: 0 });
+    `);
+      assert.deepEqual(afterFailure.rows[0], {
+        status: "approved",
+        posted_entry_id: null,
+        entries: 0,
+      });
 
-    await db.execute(sql`
+      await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{controlAccounts,fxRealizedGainLoss}', to_jsonb(${org.accounts.fxGainLoss}::text), true)
        where id = ${org.orgId}`);
-    const { entryId: paymentEntryId } = await postPaymentWithApplications(payment.id, undefined, userId);
-    const evidence = (await db.execute<{
-      amount: string; source_amount: string;
-      source_transaction_amount: string; source_transaction_currency: string;
-      target_transaction_amount: string; target_transaction_currency: string;
-      settlement_rate: string; settlement_rate_source: string; settlement_rate_reference: string;
-      fx_gain_loss_entry_id: string; fx_status: string; fx_balance: string;
-      control_adjustment: string; gain_loss: string;
-    }>(sql`
+      const { entryId: paymentEntryId } = await postPaymentWithApplications(
+        payment.id,
+        undefined,
+        userId,
+      );
+      const evidence = await db.execute<{
+        amount: string;
+        source_amount: string;
+        source_transaction_amount: string;
+        source_transaction_currency: string;
+        target_transaction_amount: string;
+        target_transaction_currency: string;
+        settlement_rate: string;
+        settlement_rate_source: string;
+        settlement_rate_reference: string;
+        fx_gain_loss_entry_id: string;
+        fx_status: string;
+        fx_balance: string;
+        control_adjustment: string;
+        gain_loss: string;
+      }>(sql`
       select a.amount, a.source_amount,
              a.source_transaction_amount, a.source_transaction_currency,
              a.target_transaction_amount, a.target_transaction_currency,
@@ -376,48 +430,63 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
              (select amount from journal_lines where entry_id = a.fx_gain_loss_entry_id and account_id = ${org.accounts.fxGainLoss}) as gain_loss
         from applications a join journal_entries fx on fx.id = a.fx_gain_loss_entry_id
        where a.from_line_id in (select id from journal_lines where entry_id = ${paymentEntryId})
-    `));
-    assert.deepEqual(evidence.rows[0], {
-      amount: "120.0000",
-      source_amount: "130.0000",
-      source_transaction_amount: "80.0000",
-      source_transaction_currency: "USD",
-      target_transaction_amount: "100.0000",
-      target_transaction_currency: "EUR",
-      settlement_rate: "1.2500000000",
-      settlement_rate_source: "manual",
-      settlement_rate_reference: "BANK-SETTLEMENT-42",
-      fx_gain_loss_entry_id: evidence.rows[0]!.fx_gain_loss_entry_id,
-      fx_status: "posted",
-      fx_balance: "0.0000",
-      control_adjustment: "10.0000",
-      gain_loss: "-10.0000",
-    });
+    `);
+      assert.deepEqual(evidence.rows[0], {
+        amount: "120.0000",
+        source_amount: "130.0000",
+        source_transaction_amount: "80.0000",
+        source_transaction_currency: "USD",
+        target_transaction_amount: "100.0000",
+        target_transaction_currency: "EUR",
+        settlement_rate: "1.2500000000",
+        settlement_rate_source: "manual",
+        settlement_rate_reference: "BANK-SETTLEMENT-42",
+        fx_gain_loss_entry_id: evidence.rows[0]!.fx_gain_loss_entry_id,
+        fx_status: "posted",
+        fx_balance: "0.0000",
+        control_adjustment: "10.0000",
+        gain_loss: "-10.0000",
+      });
 
-    const fxEntryId = evidence.rows[0]!.fx_gain_loss_entry_id;
-    const reversalId = await reversePaymentForReturn(payment.id, org.orgId, "NSF", userId, org.date);
-    assert.ok(reversalId);
-    const reversed = (await db.execute<{ payment_status: string; fx_status: string; reversals: number; unapplied: number; document_status: string }>(sql`
+      const fxEntryId = evidence.rows[0]!.fx_gain_loss_entry_id;
+      const reversalId = await reversePaymentForReturn(
+        payment.id,
+        org.orgId,
+        "NSF",
+        userId,
+        org.date,
+      );
+      assert.ok(reversalId);
+      const reversed = await db.execute<{
+        payment_status: string;
+        fx_status: string;
+        reversals: number;
+        unapplied: number;
+        document_status: string;
+      }>(sql`
       select
         (select status from journal_entries where id = ${paymentEntryId}) as payment_status,
         (select status from journal_entries where id = ${fxEntryId}) as fx_status,
         (select count(*) from journal_entries where reverses_entry_id in (${paymentEntryId}, ${fxEntryId}) and status = 'posted')::int as reversals,
         (select count(*) from applications where from_line_id in (select id from journal_lines where entry_id = ${paymentEntryId}) and unapplied_at is not null)::int as unapplied,
         (select status from documents where id = ${payment.id}) as document_status
-    `));
-    assert.deepEqual(reversed.rows[0], {
-      payment_status: "reversed",
-      fx_status: "reversed",
-      reversals: 2,
-      unapplied: 1,
-      document_status: "voided",
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `);
+      assert.deepEqual(reversed.rows[0], {
+        payment_status: "reversed",
+        fx_status: "reversed",
+        reversals: 2,
+        unapplied: 1,
+        document_status: "voided",
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-async function seedPaymentRunSelectionFixture(org: Awaited<ReturnType<typeof createScratchOrg>>): Promise<PaymentRunSelectionFixture> {
+async function seedPaymentRunSelectionFixture(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+): Promise<PaymentRunSelectionFixture> {
   return withBypass(async () => {
     const actorId = await createScratchUser(org.orgId, "Run Operator", "accountant");
     await grantScratchPermissions(org.orgId, actorId, ["ap.pay"]);
@@ -481,49 +550,68 @@ test("run posting is bound to stored cash and credit targets", { skip: !DB }, as
            amount, tax_amount, tax_input_amount)
         values (${org.orgId}, ${creditId}, 1, ${org.accounts.cogs}, '1', '30', '30', '0', '30')`);
       await db.execute(sql`update documents set status = 'approved' where id = ${creditId}`);
-      await postDocument(creditId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+      await postDocument(creditId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
 
-      const run = await createPaymentRun({ allowedSubsidiaryIds: null,
+      const run = await createPaymentRun({
+        allowedSubsidiaryIds: null,
         orgId: org.orgId,
         createdBy: options.actorId,
         paymentBankProfileId: options.profileId,
         billDocumentIds: [options.billId],
         scheduledFor: org.date,
       });
-      const instruction = (await db.execute<{ id: string; payment_document_id: string }>(sql`
+      const instruction = (
+        await db.execute<{ id: string; payment_document_id: string }>(sql`
         select id, payment_document_id from payment_instructions
          where payment_run_id = ${run.id} and org_id = ${org.orgId}
-      `)).rows[0]!;
-      const creditItem = (await db.execute<{ source_open_line_id: string; source_document_id: string; targets: unknown }>(sql`
+      `)
+      ).rows[0]!;
+      const creditItem = (
+        await db.execute<{
+          source_open_line_id: string;
+          source_document_id: string;
+          targets: unknown;
+        }>(sql`
         select source_open_line_id, source_document_id,
                credit_target_allocations as targets
           from payment_run_items
          where payment_run_id = ${run.id} and payment_instruction_id = ${instruction.id}
            and kind = 'credit' and org_id = ${org.orgId}
-      `)).rows[0]!;
-      assert.deepEqual(creditItem.targets, [{
-        toLineId: (await db.execute<{ id: string }>(sql`
+      `)
+      ).rows[0]!;
+      assert.deepEqual(creditItem.targets, [
+        {
+          toLineId: (
+            await db.execute<{ id: string }>(sql`
           select source_open_line_id as id from payment_run_items
            where payment_run_id = ${run.id} and payment_instruction_id = ${instruction.id}
              and kind <> 'credit' and org_id = ${org.orgId}
-        `)).rows[0]!.id,
-        amount: "30.0000",
-      }]);
+        `)
+          ).rows[0]!.id,
+          amount: "30.0000",
+        },
+      ]);
 
       // The shared posting service rejects the same live claim for every
       // direct caller, before an individually approved payment can escape.
       await assert.rejects(
         postPaymentWithApplications(instruction.payment_document_id, undefined, options.actorId),
-        (error: unknown) => error instanceof PaymentError && /claimed by a payment run/.test(error.message),
+        (error: unknown) =>
+          error instanceof PaymentError && /claimed by a payment run/.test(error.message),
       );
       await assert.rejects(
-        withOrgTransaction(org.orgId, () => createDocumentsFlowAdapter("vendor_payment").setField(
-          instruction.payment_document_id,
-          "memo",
-          "changed by flow",
-          { orgId: org.orgId, userId: options.actorId },
-        )),
-        (error: unknown) => error instanceof PaymentError && /claimed by open payment run/.test(error.message),
+        withOrgTransaction(org.orgId, () =>
+          createDocumentsFlowAdapter("vendor_payment").setField(
+            instruction.payment_document_id,
+            "memo",
+            "changed by flow",
+            { orgId: org.orgId, userId: options.actorId },
+          ),
+        ),
+        (error: unknown) =>
+          error instanceof PaymentError && /claimed by open payment run/.test(error.message),
       );
 
       // A changed credit target/amount is rejected against the stored run
@@ -537,10 +625,21 @@ test("run posting is bound to stored cash and credit targets", { skip: !DB }, as
                'amount', '29.0000', 'sourceDocumentId', ${creditItem.source_document_id}::text
              )), true), status = 'approved'
          where id = ${instruction.payment_document_id} and org_id = ${org.orgId}`);
-      await db.execute(sql`update payment_runs set status = 'generated' where id = ${run.id} and org_id = ${org.orgId}`);
+      await db.execute(
+        sql`update payment_runs set status = 'generated' where id = ${run.id} and org_id = ${org.orgId}`,
+      );
       const posting = await postPaymentRun(run.id, org.orgId, options.actorId);
-      assert.match(posting.failures[0]?.error ?? "", /composition differs from the approved run items/);
-      const result = (await db.execute<{ run_status: string; document_status: string; instruction_status: string; item_status: string }>(sql`
+      assert.match(
+        posting.failures[0]?.error ?? "",
+        /composition differs from the approved run items/,
+      );
+      const result = (
+        await db.execute<{
+          run_status: string;
+          document_status: string;
+          instruction_status: string;
+          item_status: string;
+        }>(sql`
         select run.status as run_status, document.status as document_status,
                instruction.status as instruction_status,
                item.status as item_status
@@ -549,8 +648,14 @@ test("run posting is bound to stored cash and credit targets", { skip: !DB }, as
           join documents document on document.id = instruction.payment_document_id and document.org_id = instruction.org_id
           join payment_run_items item on item.payment_instruction_id = instruction.id and item.kind = 'credit'
          where instruction.id = ${instruction.id} and instruction.org_id = ${org.orgId}
-      `)).rows[0]!;
-      assert.deepEqual(result, { run_status: "partially_failed", document_status: "approved", instruction_status: "pending", item_status: "selected" });
+      `)
+      ).rows[0]!;
+      assert.deepEqual(result, {
+        run_status: "partially_failed",
+        document_status: "approved",
+        instruction_status: "pending",
+        item_status: "selected",
+      });
     });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -576,13 +681,19 @@ async function postVendorDocument(
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, '1', ${amount}, ${amount}, '0',
             ${kind === "vendor_credit" ? amount : null})`);
-  await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
-  await postDocument(documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-  const openLineId = (await db.execute<{ id: string }>(sql`
+  await db.execute(
+    sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`,
+  );
+  await postDocument(documentId, {
+    control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+  });
+  const openLineId = (
+    await db.execute<{ id: string }>(sql`
     select jl.id from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
      where je.source_document_id = ${documentId} and je.status = 'posted' and jl.is_open_item
-  `)).rows[0]!.id;
+  `)
+  ).rows[0]!.id;
   return { documentId, openLineId };
 }
 
@@ -597,241 +708,395 @@ function errorChainText(error: unknown): string {
   return parts.join(" | ");
 }
 
-test("a bill reserved by a delivered payment run cannot also be paid by hand", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const options = await seedPaymentRunSelectionFixture(org);
-    await withOrgContext(org.orgId, async () => {
-      const billLineId = (await db.execute<{ id: string }>(sql`
+test(
+  "a bill reserved by a delivered payment run cannot also be paid by hand",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const options = await seedPaymentRunSelectionFixture(org);
+      await withOrgContext(org.orgId, async () => {
+        const billLineId = (
+          await db.execute<{ id: string }>(sql`
         select jl.id from journal_lines jl
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where je.source_document_id = ${options.billId} and je.status = 'posted' and jl.is_open_item
-      `)).rows[0]!.id;
-      const draftManualPayment = async () => {
-        const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-          orgId: org.orgId, kind: "vendor_payment", createdBy: options.actorId, partyId: org.vendorId,
-          bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date,
-          currency: "CAD", fxRate: "1",
-        });
-        await updateDraftPayment(payment.id, {
-          partyId: org.vendorId, bankAccountId: org.accounts.bank,
-          allocations: [sameCurrencyAllocation(billLineId, "125")],
-        }, options.actorId, org.orgId,
-  { allowedSubsidiaryIds: null },
-);
-        return payment.id;
-      };
-      // A clerk drafts and approves a manual payment of the bill...
-      const manualId = await draftManualPayment();
-      await db.execute(sql`update documents set status = 'approved' where id = ${manualId} and org_id = ${org.orgId}`);
-      // ...while the same bill goes into a run whose file reaches the bank.
-      const run = await createPaymentRun({ allowedSubsidiaryIds: null,
-        orgId: org.orgId, createdBy: options.actorId, paymentBankProfileId: options.profileId,
-        billDocumentIds: [options.billId], scheduledFor: org.date,
-      });
-      await db.execute(sql`update payment_runs set status = 'delivered' where id = ${run.id} and org_id = ${org.orgId}`);
-
-      const listed = (await openItemsForParty(org.vendorId, "ap", org.orgId)).find((item) => item.lineId === billLineId);
-      assert.deepEqual(listed?.reservedByRun, { runId: run.id, runNumber: run.runNumber, runStatus: "delivered" });
-      assert.deepEqual((await suggestApplications(org.vendorId, "125", "ap", { sourceCurrency: "CAD", orgId: org.orgId })).allocations, []);
-
-      const refusal = (error: unknown) => {
-        assert.ok(error instanceof PaymentError, errorChainText(error));
-        assert.equal(
-          error.message,
-          `BILL-RESERVE-1 is reserved by payment run ${run.runNumber} (delivered), which will pay it; ` +
-          `pay it through that run, or confirm with the bank that payment run ${run.runNumber}'s file was not processed and roll the run back before settling it here`,
+      `)
+        ).rows[0]!.id;
+        const draftManualPayment = async () => {
+          const payment = await createPaymentDocument({
+            allowedSubsidiaryIds: null,
+            orgId: org.orgId,
+            kind: "vendor_payment",
+            createdBy: options.actorId,
+            partyId: org.vendorId,
+            bankAccountId: org.accounts.bank,
+            subsidiaryId: org.subsidiaryId,
+            documentDate: org.date,
+            currency: "CAD",
+            fxRate: "1",
+          });
+          await updateDraftPayment(
+            payment.id,
+            {
+              partyId: org.vendorId,
+              bankAccountId: org.accounts.bank,
+              allocations: [sameCurrencyAllocation(billLineId, "125")],
+            },
+            options.actorId,
+            org.orgId,
+            { allowedSubsidiaryIds: null },
+          );
+          return payment.id;
+        };
+        // A clerk drafts and approves a manual payment of the bill...
+        const manualId = await draftManualPayment();
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${manualId} and org_id = ${org.orgId}`,
         );
-        return true;
-      };
-      await assert.rejects(postPaymentWithApplications(manualId, undefined, options.actorId), refusal);
-      await assert.rejects(draftManualPayment(), refusal);
-
-      // Writers that bypass the payment service meet the same line in PostgreSQL.
-      const credit = await postVendorDocument(org, options.actorId, "vendor_credit", "CREDIT-OUTSIDE-RUN", "10");
-      await assert.rejects(
-        db.execute(sql`
-          insert into applications
-            (org_id, from_line_id, to_line_id, amount, source_amount, source_transaction_amount,
-             source_transaction_currency, target_transaction_amount, target_transaction_currency,
-             settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on, created_by)
-          values (${org.orgId}, ${credit.openLineId}, ${billLineId}, '10', '10', '10', 'CAD', '10', 'CAD',
-                  '1', 'same_currency', 'direct write', ${org.date}, ${options.actorId})`),
-        (error: unknown) => {
-          assert.match(errorChainText(error), new RegExp(`BILL-RESERVE-1 is reserved by payment run ${run.runNumber} \\(delivered\\)`));
-          return true;
-        },
-      );
-
-      // The named remedy works: once the run is rolled back the manual payment posts.
-      await rollbackPaymentRun(run.id, org.orgId, options.actorId, "bank returned the file unprocessed");
-      await postPaymentWithApplications(manualId, undefined, options.actorId);
-      const bill = (await db.execute<{ settled: boolean }>(sql`
-        select open_balance = 0 as settled from documents where id = ${options.billId} and org_id = ${org.orgId}
-      `)).rows[0];
-      assert.deepEqual(bill, { settled: true });
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
-
-test("a bill a run settles wholly with credit is reserved by that run and settles when it posts", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const options = await seedPaymentRunSelectionFixture(org);
-    await withOrgContext(org.orgId, async () => {
-      // Oldest first: the 30 credit covers the 20 bill whole and 10 of the 125 bill.
-      const covered = await postVendorDocument(org, options.actorId, "vendor_bill", "BILL-CREDIT-COVERED", "20");
-      await postVendorDocument(org, options.actorId, "vendor_credit", "CREDIT-COVERS-BILL", "30");
-      const runFor = (billDocumentIds: string[]) => createPaymentRun({ allowedSubsidiaryIds: null,
-        orgId: org.orgId, createdBy: options.actorId, paymentBankProfileId: options.profileId,
-        billDocumentIds, scheduledFor: org.date,
-      });
-      const run = await runFor([covered.documentId, options.billId]);
-      const items = (await db.execute<{ document_number: string; kind: string; cash_free: boolean; status: string }>(sql`
-        select d.document_number, item.kind, item.payment_amount = 0 as cash_free, item.status
-          from payment_run_items item
-          join documents d on d.id = item.source_document_id and d.org_id = item.org_id
-         where item.payment_run_id = ${run.id} and item.org_id = ${org.orgId}
-         order by d.document_number
-      `)).rows;
-      assert.deepEqual(items, [
-        { document_number: "BILL-CREDIT-COVERED", kind: "bill", cash_free: true, status: "selected" },
-        { document_number: "BILL-RESERVE-1", kind: "bill", cash_free: false, status: "selected" },
-        { document_number: "CREDIT-COVERS-BILL", kind: "credit", cash_free: true, status: "selected" },
-      ]);
-      // A second run cannot pay the credit-covered bill in cash.
-      await assert.rejects(runFor([covered.documentId]), (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.equal(error.message, `BILL-CREDIT-COVERED (${run.runNumber}) is already selected in another live payment run`);
-        return true;
-      });
-
-      await db.execute(sql`
-        update documents set status = 'approved'
-         where org_id = ${org.orgId} and id in (
-           select payment_document_id from payment_instructions where payment_run_id = ${run.id} and org_id = ${org.orgId})`);
-      await db.execute(sql`update payment_runs set status = 'generated' where id = ${run.id} and org_id = ${org.orgId}`);
-      const posting = await postPaymentRun(run.id, org.orgId, options.actorId);
-      assert.deepEqual(posting.failures, []);
-      const settled = (await db.execute<{ document_number: string; open: string }>(sql`
-        select document_number, open_balance::text as open from documents
-         where org_id = ${org.orgId} and id in (${covered.documentId}, ${options.billId})
-         order by document_number
-      `)).rows.map((row) => [row.document_number, toUnits(row.open)]);
-      assert.deepEqual(settled, [["BILL-CREDIT-COVERED", 0n], ["BILL-RESERVE-1", 0n]]);
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
-
-test("an open item can be reserved by only one live payment run at a time", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const options = await seedPaymentRunSelectionFixture(org);
-
-    await withOrgContext(org.orgId, async () => {
-      const openLineId = (await db.execute<{ id: string }>(sql`
-        select jl.id as id
-          from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-         where je.source_document_id = ${options.billId}
-           and je.status = 'posted' and jl.is_open_item and jl.amount < 0
-      `)).rows[0]!.id;
-
-      const createRun = () =>
-        createPaymentRun({ allowedSubsidiaryIds: null,
+        // ...while the same bill goes into a run whose file reaches the bank.
+        const run = await createPaymentRun({
+          allowedSubsidiaryIds: null,
           orgId: org.orgId,
           createdBy: options.actorId,
           paymentBankProfileId: options.profileId,
           billDocumentIds: [options.billId],
           scheduledFor: org.date,
         });
-      const itemStatuses = (runId: string) =>
-        db.execute<{ status: string; n: number }>(sql`
+        await db.execute(
+          sql`update payment_runs set status = 'delivered' where id = ${run.id} and org_id = ${org.orgId}`,
+        );
+
+        const listed = (await openItemsForParty(org.vendorId, "ap", org.orgId)).find(
+          (item) => item.lineId === billLineId,
+        );
+        assert.deepEqual(listed?.reservedByRun, {
+          runId: run.id,
+          runNumber: run.runNumber,
+          runStatus: "delivered",
+        });
+        assert.deepEqual(
+          (
+            await suggestApplications(org.vendorId, "125", "ap", {
+              sourceCurrency: "CAD",
+              orgId: org.orgId,
+            })
+          ).allocations,
+          [],
+        );
+
+        const refusal = (error: unknown) => {
+          assert.ok(error instanceof PaymentError, errorChainText(error));
+          assert.equal(
+            error.message,
+            `BILL-RESERVE-1 is reserved by payment run ${run.runNumber} (delivered), which will pay it; ` +
+              `pay it through that run, or confirm with the bank that payment run ${run.runNumber}'s file was not processed and roll the run back before settling it here`,
+          );
+          return true;
+        };
+        await assert.rejects(
+          postPaymentWithApplications(manualId, undefined, options.actorId),
+          refusal,
+        );
+        await assert.rejects(draftManualPayment(), refusal);
+
+        // Writers that bypass the payment service meet the same line in PostgreSQL.
+        const credit = await postVendorDocument(
+          org,
+          options.actorId,
+          "vendor_credit",
+          "CREDIT-OUTSIDE-RUN",
+          "10",
+        );
+        await assert.rejects(
+          db.execute(sql`
+          insert into applications
+            (org_id, from_line_id, to_line_id, amount, source_amount, source_transaction_amount,
+             source_transaction_currency, target_transaction_amount, target_transaction_currency,
+             settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on, created_by)
+          values (${org.orgId}, ${credit.openLineId}, ${billLineId}, '10', '10', '10', 'CAD', '10', 'CAD',
+                  '1', 'same_currency', 'direct write', ${org.date}, ${options.actorId})`),
+          (error: unknown) => {
+            assert.match(
+              errorChainText(error),
+              new RegExp(
+                `BILL-RESERVE-1 is reserved by payment run ${run.runNumber} \\(delivered\\)`,
+              ),
+            );
+            return true;
+          },
+        );
+
+        // The named remedy works: once the run is rolled back the manual payment posts.
+        await rollbackPaymentRun(
+          run.id,
+          org.orgId,
+          options.actorId,
+          "bank returned the file unprocessed",
+        );
+        await postPaymentWithApplications(manualId, undefined, options.actorId);
+        const bill = (
+          await db.execute<{ settled: boolean }>(sql`
+        select open_balance = 0 as settled from documents where id = ${options.billId} and org_id = ${org.orgId}
+      `)
+        ).rows[0];
+        assert.deepEqual(bill, { settled: true });
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a bill a run settles wholly with credit is reserved by that run and settles when it posts",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const options = await seedPaymentRunSelectionFixture(org);
+      await withOrgContext(org.orgId, async () => {
+        // Oldest first: the 30 credit covers the 20 bill whole and 10 of the 125 bill.
+        const covered = await postVendorDocument(
+          org,
+          options.actorId,
+          "vendor_bill",
+          "BILL-CREDIT-COVERED",
+          "20",
+        );
+        await postVendorDocument(org, options.actorId, "vendor_credit", "CREDIT-COVERS-BILL", "30");
+        const runFor = (billDocumentIds: string[]) =>
+          createPaymentRun({
+            allowedSubsidiaryIds: null,
+            orgId: org.orgId,
+            createdBy: options.actorId,
+            paymentBankProfileId: options.profileId,
+            billDocumentIds,
+            scheduledFor: org.date,
+          });
+        const run = await runFor([covered.documentId, options.billId]);
+        const items = (
+          await db.execute<{
+            document_number: string;
+            kind: string;
+            cash_free: boolean;
+            status: string;
+          }>(sql`
+        select d.document_number, item.kind, item.payment_amount = 0 as cash_free, item.status
+          from payment_run_items item
+          join documents d on d.id = item.source_document_id and d.org_id = item.org_id
+         where item.payment_run_id = ${run.id} and item.org_id = ${org.orgId}
+         order by d.document_number
+      `)
+        ).rows;
+        assert.deepEqual(items, [
+          {
+            document_number: "BILL-CREDIT-COVERED",
+            kind: "bill",
+            cash_free: true,
+            status: "selected",
+          },
+          { document_number: "BILL-RESERVE-1", kind: "bill", cash_free: false, status: "selected" },
+          {
+            document_number: "CREDIT-COVERS-BILL",
+            kind: "credit",
+            cash_free: true,
+            status: "selected",
+          },
+        ]);
+        // A second run cannot pay the credit-covered bill in cash.
+        await assert.rejects(runFor([covered.documentId]), (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.equal(
+            error.message,
+            `BILL-CREDIT-COVERED (${run.runNumber}) is already selected in another live payment run`,
+          );
+          return true;
+        });
+
+        await db.execute(sql`
+        update documents set status = 'approved'
+         where org_id = ${org.orgId} and id in (
+           select payment_document_id from payment_instructions where payment_run_id = ${run.id} and org_id = ${org.orgId})`);
+        await db.execute(
+          sql`update payment_runs set status = 'generated' where id = ${run.id} and org_id = ${org.orgId}`,
+        );
+        const posting = await postPaymentRun(run.id, org.orgId, options.actorId);
+        assert.deepEqual(posting.failures, []);
+        const settled = (
+          await db.execute<{ document_number: string; open: string }>(sql`
+        select document_number, open_balance::text as open from documents
+         where org_id = ${org.orgId} and id in (${covered.documentId}, ${options.billId})
+         order by document_number
+      `)
+        ).rows.map((row) => [row.document_number, toUnits(row.open)]);
+        assert.deepEqual(settled, [
+          ["BILL-CREDIT-COVERED", 0n],
+          ["BILL-RESERVE-1", 0n],
+        ]);
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "an open item can be reserved by only one live payment run at a time",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const options = await seedPaymentRunSelectionFixture(org);
+
+      await withOrgContext(org.orgId, async () => {
+        const openLineId = (
+          await db.execute<{ id: string }>(sql`
+        select jl.id as id
+          from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+         where je.source_document_id = ${options.billId}
+           and je.status = 'posted' and jl.is_open_item and jl.amount < 0
+      `)
+        ).rows[0]!.id;
+
+        const createRun = () =>
+          createPaymentRun({
+            allowedSubsidiaryIds: null,
+            orgId: org.orgId,
+            createdBy: options.actorId,
+            paymentBankProfileId: options.profileId,
+            billDocumentIds: [options.billId],
+            scheduledFor: org.date,
+          });
+        const itemStatuses = (runId: string) =>
+          db.execute<{ status: string; n: number }>(sql`
           select status, count(*)::int as n
             from payment_run_items
            where org_id = ${org.orgId} and payment_run_id = ${runId}
              and source_open_line_id = ${openLineId}
            group by status`);
 
-      // The first live run reserves the bill's payable line.
-      const firstRun = await createRun();
-      assert.deepEqual((await itemStatuses(firstRun.id)).rows, [{ status: "selected", n: 1 }]);
+        // The first live run reserves the bill's payable line.
+        const firstRun = await createRun();
+        assert.deepEqual((await itemStatuses(firstRun.id)).rows, [{ status: "selected", n: 1 }]);
 
-      // An overlapping selection of the reserved bill is refused while that
-      // run is live.
-      await assert.rejects(createRun, (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /already selected in another live payment run/);
-        return true;
-      });
+        // An overlapping selection of the reserved bill is refused while that
+        // run is live.
+        await assert.rejects(createRun, (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /already selected in another live payment run/);
+          return true;
+        });
 
-      // PostgreSQL — not the service-level selection filter — is the final
-      // authority: a writer that skips the filter still cannot double-reserve.
-      const ghostRunId = randomUUID();
-      await db.execute(sql`
+        // PostgreSQL — not the service-level selection filter — is the final
+        // authority: a writer that skips the filter still cannot double-reserve.
+        const ghostRunId = randomUUID();
+        await db.execute(sql`
         insert into payment_runs
           (id, org_id, run_number, bank_account_id, payment_bank_profile_id,
            method, direction, purpose, currency, status, created_by)
         values (${ghostRunId}, ${org.orgId}, 'RUN-RESERVE-GHOST', ${org.accounts.bank},
                 ${options.profileId}, 'eft', 'outbound', 'vendor_payments',
                 'CAD', 'draft', ${options.actorId})`);
-      await assert.rejects(
-        db.execute(sql`
+        await assert.rejects(
+          db.execute(sql`
           insert into payment_run_items
             (org_id, payment_run_id, source_document_id, source_open_line_id, kind,
              gross_amount, payment_amount, currency, status, created_by)
           values (${org.orgId}, ${ghostRunId}, ${options.billId}, ${openLineId}, 'bill',
                   '125', '125', 'CAD', 'selected', ${options.actorId})`),
-        isLiveSourceConflict,
-      );
+          isLiveSourceConflict,
+        );
 
-      // Cancelling the live run releases the reservation through the
-      // lifecycle triggers...
-      await cancelPaymentRun(firstRun.id, org.orgId, options.actorId, "release the reservation");
-      assert.deepEqual((await itemStatuses(firstRun.id)).rows, [{ status: "excluded", n: 1 }]);
+        // Cancelling the live run releases the reservation through the
+        // lifecycle triggers...
+        await cancelPaymentRun(firstRun.id, org.orgId, options.actorId, "release the reservation");
+        assert.deepEqual((await itemStatuses(firstRun.id)).rows, [{ status: "excluded", n: 1 }]);
 
-      // ...and only a live (`selected`) item reserves its source line, so a
-      // new run can reserve the released bill immediately while the excluded
-      // history coexists.
-      const secondRun = await createRun();
-      assert.notEqual(secondRun.id, firstRun.id);
-      assert.deepEqual((await itemStatuses(secondRun.id)).rows, [{ status: "selected", n: 1 }]);
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        // ...and only a live (`selected`) item reserves its source line, so a
+        // new run can reserve the released bill immediately while the excluded
+        // history coexists.
+        const secondRun = await createRun();
+        assert.notEqual(secondRun.id, firstRun.id);
+        assert.deepEqual((await itemStatuses(secondRun.id)).rows, [{ status: "selected", n: 1 }]);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a payee bank account requires native approval evidence before a payment run can pin it", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const options = await seedPaymentRunSelectionFixture(org);
-    const bankId = randomUUID();
-    await assert.rejects(withOrgContext(org.orgId, () => db.execute(sql`
+test(
+  "a payee bank account requires native approval evidence before a payment run can pin it",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const options = await seedPaymentRunSelectionFixture(org);
+      const bankId = randomUUID();
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.execute(sql`
       insert into party_bank_accounts
         (id,org_id,party_id,bank_name,country,currency,routing,approval_status,is_active,approved_at,created_by,updated_by)
       values(${bankId},${org.orgId},${org.vendorId},'Vendor bank','CA','CAD','{"routingNumber":"021000021"}'::jsonb,
-        'approved',true,null,${options.actorId},${options.actorId})`)),
-      error => error instanceof Error && error.cause instanceof Error && /pending native Flow routing/.test(error.cause.message));
-    assert.equal((await db.execute<{ id: string }>(sql`select id from party_bank_accounts where org_id=${org.orgId} and id=${bankId}`, "objects")).length,0);
-    await grantScratchPermissions(org.orgId,options.actorId,["parties.manage"]);
-    await seedApprovedBankAccountFixture({orgId:org.orgId,actorId:options.actorId,partyId:org.vendorId,id:bankId,
-      bankName:'Vendor bank',country:'CA',currency:'CAD',routing:{routingNumber:'021000021'},lastFour:'0021'});
-    await withOrgContext(org.orgId,async () => {
-      const state=(await db.execute<{state:string}>(sql`select ${payeeBankStateSql(sql`${org.vendorId}::uuid`,sql`${org.orgId}::uuid`)} as state`)).rows[0];
-      assert.equal(state?.state,'approved');
-      const run=await createPaymentRun({allowedSubsidiaryIds:null,orgId:org.orgId,createdBy:options.actorId,
-        paymentBankProfileId:options.profileId,billDocumentIds:[options.billId],scheduledFor:org.date});
-      const instruction=(await db.execute<{bank:string|null}>(sql`select payee_bank_account_id as bank from payment_instructions
-        where org_id=${org.orgId} and payment_run_id=${run.id}`)).rows[0];
-      assert.equal(instruction?.bank,bankId);
-    });
-  } finally {await dropScratchOrg(org.orgId);}
-});
+        'approved',true,null,${options.actorId},${options.actorId})`),
+        ),
+        (error) =>
+          error instanceof Error &&
+          error.cause instanceof Error &&
+          /pending native Flow routing/.test(error.cause.message),
+      );
+      assert.equal(
+        (
+          await db.execute<{ id: string }>(
+            sql`select id from party_bank_accounts where org_id=${org.orgId} and id=${bankId}`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
+      await grantScratchPermissions(org.orgId, options.actorId, ["parties.manage"]);
+      await seedApprovedBankAccountFixture({
+        orgId: org.orgId,
+        actorId: options.actorId,
+        partyId: org.vendorId,
+        id: bankId,
+        bankName: "Vendor bank",
+        country: "CA",
+        currency: "CAD",
+        routing: { routingNumber: "021000021" },
+        lastFour: "0021",
+      });
+      await withOrgContext(org.orgId, async () => {
+        const state = (
+          await db.execute<{ state: string }>(
+            sql`select ${payeeBankStateSql(sql`${org.vendorId}::uuid`, sql`${org.orgId}::uuid`)} as state`,
+          )
+        ).rows[0];
+        assert.equal(state?.state, "approved");
+        const run = await createPaymentRun({
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          createdBy: options.actorId,
+          paymentBankProfileId: options.profileId,
+          billDocumentIds: [options.billId],
+          scheduledFor: org.date,
+        });
+        const instruction = (
+          await db.execute<{
+            bank: string | null;
+          }>(sql`select payee_bank_account_id as bank from payment_instructions
+        where org_id=${org.orgId} and payment_run_id=${run.id}`)
+        ).rows[0];
+        assert.equal(instruction?.bank, bankId);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /** The duplicate-bill refusal must name the bill and the live run
  * holding it — a generic "another live payment run" leaves the operator
@@ -843,7 +1108,8 @@ test("a duplicate-bill run refusal names the bill and the holding run", { skip: 
 
     await withOrgContext(org.orgId, async () => {
       const createRun = () =>
-        createPaymentRun({ allowedSubsidiaryIds: null,
+        createPaymentRun({
+          allowedSubsidiaryIds: null,
           orgId: org.orgId,
           createdBy: options.actorId,
           paymentBankProfileId: options.profileId,
@@ -866,110 +1132,120 @@ test("a duplicate-bill run refusal names the bill and the holding run", { skip: 
   }
 });
 
-test("one run's instruction lifecycle cannot release another run's live reservation", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const options = await seedPaymentRunSelectionFixture(org);
+test(
+  "one run's instruction lifecycle cannot release another run's live reservation",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const options = await seedPaymentRunSelectionFixture(org);
 
-    await withOrgContext(org.orgId, async () => {
-      const openLineId = (await db.execute<{ id: string }>(sql`
+      await withOrgContext(org.orgId, async () => {
+        const openLineId = (
+          await db.execute<{ id: string }>(sql`
         select jl.id as id
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where je.source_document_id = ${options.billId}
            and je.status = 'posted' and jl.is_open_item and jl.amount < 0
-      `)).rows[0]!.id;
+      `)
+        ).rows[0]!.id;
 
-      const createRun = () =>
-        createPaymentRun({ allowedSubsidiaryIds: null,
-          orgId: org.orgId,
-          createdBy: options.actorId,
-          paymentBankProfileId: options.profileId,
-          billDocumentIds: [options.billId],
-          scheduledFor: org.date,
-        });
-      const liveReservation = () =>
-        db.execute<{ status: string; n: number }>(sql`
+        const createRun = () =>
+          createPaymentRun({
+            allowedSubsidiaryIds: null,
+            orgId: org.orgId,
+            createdBy: options.actorId,
+            paymentBankProfileId: options.profileId,
+            billDocumentIds: [options.billId],
+            scheduledFor: org.date,
+          });
+        const liveReservation = () =>
+          db.execute<{ status: string; n: number }>(sql`
           select status, count(*)::int as n
             from payment_run_items
            where org_id = ${org.orgId} and source_open_line_id = ${openLineId}
            group by status`);
 
-      // The live run reserves the bill's payable line.
-      const liveRun = await createRun();
-      assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
-      const liveInstructionId = (await db.execute<{ id: string }>(sql`
+        // The live run reserves the bill's payable line.
+        const liveRun = await createRun();
+        assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
+        const liveInstructionId = (
+          await db.execute<{ id: string }>(sql`
         select id from payment_instructions
          where payment_run_id = ${liveRun.id} and org_id = ${org.orgId}
-      `)).rows[0]!.id;
-      const liveItemId = (await db.execute<{ id: string }>(sql`
+      `)
+        ).rows[0]!.id;
+        const liveItemId = (
+          await db.execute<{ id: string }>(sql`
         select id from payment_run_items
          where payment_run_id = ${liveRun.id} and org_id = ${org.orgId}
            and source_open_line_id = ${openLineId}
-      `)).rows[0]!.id;
+      `)
+        ).rows[0]!.id;
 
-      // A second run with its own instruction must never touch the first
-      // run's reservation, however its lifecycle advances.
-      const otherRunId = randomUUID();
-      await db.execute(sql`
+        // A second run with its own instruction must never touch the first
+        // run's reservation, however its lifecycle advances.
+        const otherRunId = randomUUID();
+        await db.execute(sql`
         insert into payment_runs
           (id, org_id, run_number, bank_account_id, payment_bank_profile_id,
            method, direction, purpose, currency, status, created_by)
         values (${otherRunId}, ${org.orgId}, 'RUN-RESERVE-OTHER', ${org.accounts.bank},
                 ${options.profileId}, 'eft', 'outbound', 'vendor_payments',
                 'CAD', 'draft', ${options.actorId})`);
-      const otherInstructionId = randomUUID();
-      await db.execute(sql`
+        const otherInstructionId = randomUUID();
+        await db.execute(sql`
         insert into payment_instructions
           (id, org_id, payment_run_id, payee_party_id, amount, currency,
            status, created_by)
         values (${otherInstructionId}, ${org.orgId}, ${otherRunId}, ${org.vendorId},
                 '125', 'CAD', 'pending', ${options.actorId})`);
 
-      // Even with the corrupt legacy shape physically present — planted here
-      // inside a deferred-constraint probe that always rolls back — cancelling
-      // the foreign instruction leaves the live reservation standing. The old
-      // instruction-id-only fan-out released it right here.
-      class ProbeComplete extends Error {}
-      await assert.rejects(
-        db.transaction(async (tx) => {
-          await tx.execute(sql`set constraints payment_run_items_instruction_run deferred`);
-          await tx.execute(sql`
+        // Even with the corrupt legacy shape physically present — planted here
+        // inside a deferred-constraint probe that always rolls back — cancelling
+        // the foreign instruction leaves the live reservation standing. The old
+        // instruction-id-only fan-out released it right here.
+        class ProbeComplete extends Error {}
+        await assert.rejects(
+          db.transaction(async (tx) => {
+            await tx.execute(sql`set constraints payment_run_items_instruction_run deferred`);
+            await tx.execute(sql`
             update payment_run_items
                set payment_instruction_id = ${otherInstructionId}, updated_at = now(),
                    updated_by = ${options.actorId}
              where id = ${liveItemId} and org_id = ${org.orgId}
           `);
-          await tx.execute(sql`
+            await tx.execute(sql`
             update payment_instructions
                set status = 'cancelled', updated_at = now(), updated_by = ${options.actorId}
              where id = ${otherInstructionId} and org_id = ${org.orgId}
           `);
-          const probed = await tx.execute<{ status: string; n: number }>(sql`
+            const probed = await tx.execute<{ status: string; n: number }>(sql`
             select status, count(*)::int as n
               from payment_run_items
              where id = ${liveItemId} and org_id = ${org.orgId}
             group by status`);
-          assert.deepEqual(probed.rows, [{ status: "selected", n: 1 }]);
-          throw new ProbeComplete("probe observed — roll the corruption back");
-        }),
-        ProbeComplete,
-      );
-      assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
+            assert.deepEqual(probed.rows, [{ status: "selected", n: 1 }]);
+            throw new ProbeComplete("probe observed — roll the corruption back");
+          }),
+          ProbeComplete,
+        );
+        assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
 
-      // Storage makes the corruption unrepresentable for committed data: no
-      // writer can wire one run's item to another run's instruction.
-      await assert.rejects(
-        db.execute(sql`
+        // Storage makes the corruption unrepresentable for committed data: no
+        // writer can wire one run's item to another run's instruction.
+        await assert.rejects(
+          db.execute(sql`
           update payment_run_items
              set payment_instruction_id = ${otherInstructionId}, updated_at = now(),
                  updated_by = ${options.actorId}
            where id = ${liveItemId} and org_id = ${org.orgId}
         `),
-        isCrossRunInstructionConflict,
-      );
-      await assert.rejects(
-        db.execute(sql`
+          isCrossRunInstructionConflict,
+        );
+        await assert.rejects(
+          db.execute(sql`
           insert into payment_run_items
             (org_id, payment_run_id, payment_instruction_id, source_document_id,
              source_open_line_id, kind, gross_amount, discount_amount, credit_amount,
@@ -978,22 +1254,28 @@ test("one run's instruction lifecycle cannot release another run's live reservat
                   ${openLineId}, 'bill', '125', '0', '0', '125', 'CAD',
                   'excluded', ${options.actorId})
         `),
-        isCrossRunInstructionConflict,
-      );
+          isCrossRunInstructionConflict,
+        );
 
-      // The other run going terminal releases only its own items — the live
-      // reservation survives to be paid by its own run's lifecycle.
-      await cancelPaymentRun(otherRunId, org.orgId, options.actorId, "release only its own items");
-      assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
+        // The other run going terminal releases only its own items — the live
+        // reservation survives to be paid by its own run's lifecycle.
+        await cancelPaymentRun(
+          otherRunId,
+          org.orgId,
+          options.actorId,
+          "release only its own items",
+        );
+        assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
 
-      // And the owning run's own cancellation still releases normally.
-      await cancelPaymentRun(liveRun.id, org.orgId, options.actorId, "owning run cancellation");
-      assert.deepEqual((await liveReservation()).rows, [{ status: "excluded", n: 1 }]);
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        // And the owning run's own cancellation still releases normally.
+        await cancelPaymentRun(liveRun.id, org.orgId, options.actorId, "owning run cancellation");
+        assert.deepEqual((await liveReservation()).rows, [{ status: "excluded", n: 1 }]);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /**
  * A minimal cancellable run: `instructionCount` pending instructions whose
@@ -1063,41 +1345,49 @@ async function seedCancellableRun(
   return { runId, instructionIds, paymentDocumentIds };
 }
 
-test("cancellation commits attributable canonical evidence atomically with the mutation", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Cancel Attributor", "admin"));
-    const seeded = await seedCancellableRun(org, userId);
+test(
+  "cancellation commits attributable canonical evidence atomically with the mutation",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const userId = await withBypass(() =>
+        createScratchUser(org.orgId, "Cancel Attributor", "admin"),
+      );
+      const seeded = await seedCancellableRun(org, userId);
 
-    // Fail-closed contract: no actor or no reason, no cancellation at all.
-    await assert.rejects(
-      withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "   ")),
-      (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /a cancellation reason is required/);
-        return true;
-      },
-    );
+      // Fail-closed contract: no actor or no reason, no cancellation at all.
+      await assert.rejects(
+        withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "   ")),
+        (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /a cancellation reason is required/);
+          return true;
+        },
+      );
 
-    await withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "duplicate batch"));
+      await withOrgContext(org.orgId, () =>
+        cancelPaymentRun(seeded.runId, org.orgId, userId, "duplicate batch"),
+      );
 
-    const state = (await db.execute<{
-      run_status: string;
-      updated_by: string | null;
-      event_count: number;
-      event_from_status: string | null;
-      event_to_status: string | null;
-      event_actor: string | null;
-      event_reason: string | null;
-      event_source: string | null;
-      audit_count: number;
-      audit_action: string | null;
-      audit_actor: string | null;
-      audit_after_status: string | null;
-      audit_reason: string | null;
-      cancelled_instructions: number;
-      surviving_documents: number;
-    }>(sql`
+      const state = (
+        await db.execute<{
+          run_status: string;
+          updated_by: string | null;
+          event_count: number;
+          event_from_status: string | null;
+          event_to_status: string | null;
+          event_actor: string | null;
+          event_reason: string | null;
+          event_source: string | null;
+          audit_count: number;
+          audit_action: string | null;
+          audit_actor: string | null;
+          audit_after_status: string | null;
+          audit_reason: string | null;
+          cancelled_instructions: number;
+          surviving_documents: number;
+        }>(sql`
       select run.status as run_status, run.updated_by::text as updated_by,
              (select count(*)::int from payment_events e
                where e.org_id = run.org_id and e.payment_run_id = run.id
@@ -1141,56 +1431,66 @@ test("cancellation commits attributable canonical evidence atomically with the m
                                where i.org_id = run.org_id and i.payment_run_id = run.id)) as surviving_documents
         from payment_runs run
        where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-    `)).rows[0];
-    assert.deepEqual(state, {
-      run_status: "cancelled",
-      updated_by: userId,
-      event_count: 1,
-      event_from_status: "draft",
-      event_to_status: "cancelled",
-      event_actor: userId,
-      event_reason: "duplicate batch",
-      event_source: "user",
-      audit_count: 1,
-      audit_action: "void",
-      audit_actor: userId,
-      audit_after_status: "cancelled",
-      audit_reason: "duplicate batch",
-      cancelled_instructions: seeded.instructionIds.length,
-      surviving_documents: 0,
-    });
+    `)
+      ).rows[0];
+      assert.deepEqual(state, {
+        run_status: "cancelled",
+        updated_by: userId,
+        event_count: 1,
+        event_from_status: "draft",
+        event_to_status: "cancelled",
+        event_actor: userId,
+        event_reason: "duplicate batch",
+        event_source: "user",
+        audit_count: 1,
+        audit_action: "void",
+        audit_actor: userId,
+        audit_after_status: "cancelled",
+        audit_reason: "duplicate batch",
+        cancelled_instructions: seeded.instructionIds.length,
+        surviving_documents: 0,
+      });
 
-    // A second cancellation is refused and writes nothing further.
-    await assert.rejects(
-      withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "again")),
-      (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /a cancelled run cannot be cancelled/);
-        return true;
-      },
-    );
-    const recount = (await db.execute<{ events: number; audits: number }>(sql`
+      // A second cancellation is refused and writes nothing further.
+      await assert.rejects(
+        withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "again")),
+        (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /a cancelled run cannot be cancelled/);
+          return true;
+        },
+      );
+      const recount = (
+        await db.execute<{ events: number; audits: number }>(sql`
       select (select count(*)::int from payment_events
                where org_id = ${org.orgId} and payment_run_id = ${seeded.runId}) as events,
              (select count(*)::int from audit_log
                where org_id = ${org.orgId} and table_name = 'payment_runs'
                  and row_id = ${seeded.runId}) as audits
-    `)).rows[0];
-    assert.deepEqual(recount, { events: 1, audits: 1 });
+    `)
+      ).rows[0];
+      assert.deepEqual(recount, { events: 1, audits: 1 });
 
-    // The engine-initiated path records the same evidence under the system
-    // identity: sentinel on the mutated row, null actor on user-keyed tables.
-    const systemRun = await seedCancellableRun(org, userId);
-    await withOrgContext(org.orgId, () =>
-      cancelPaymentRun(systemRun.runId, org.orgId, PAYMENT_RUN_SYSTEM_ACTOR_ID, PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed));
-    const systemState = (await db.execute<{
-      updated_by: string;
-      event_actor: string | null;
-      event_reason: string;
-      event_source: string;
-      audit_actor: string | null;
-      audit_source: string;
-    }>(sql`
+      // The engine-initiated path records the same evidence under the system
+      // identity: sentinel on the mutated row, null actor on user-keyed tables.
+      const systemRun = await seedCancellableRun(org, userId);
+      await withOrgContext(org.orgId, () =>
+        cancelPaymentRun(
+          systemRun.runId,
+          org.orgId,
+          PAYMENT_RUN_SYSTEM_ACTOR_ID,
+          PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed,
+        ),
+      );
+      const systemState = (
+        await db.execute<{
+          updated_by: string;
+          event_actor: string | null;
+          event_reason: string;
+          event_source: string;
+          audit_actor: string | null;
+          audit_source: string;
+        }>(sql`
       select run.updated_by::text as updated_by,
              (select e.actor_id::text from payment_events e
                where e.org_id = run.org_id and e.payment_run_id = run.id
@@ -1209,51 +1509,61 @@ test("cancellation commits attributable canonical evidence atomically with the m
                  and a.row_id = run.id) as audit_source
         from payment_runs run
        where run.id = ${systemRun.runId} and run.org_id = ${org.orgId}
-    `)).rows[0];
-    assert.deepEqual(systemState, {
-      updated_by: PAYMENT_RUN_SYSTEM_ACTOR_ID,
-      event_actor: null,
-      event_reason: PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed,
-      event_source: "system",
-      audit_actor: null,
-      audit_source: "system",
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+    `)
+      ).rows[0];
+      assert.deepEqual(systemState, {
+        updated_by: PAYMENT_RUN_SYSTEM_ACTOR_ID,
+        event_actor: null,
+        event_reason: PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed,
+        event_source: "system",
+        audit_actor: null,
+        audit_source: "system",
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a refused cancellation rolls back mutations and leaves no orphaned evidence", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Cancel Refuser", "admin"));
-    const seeded = await seedCancellableRun(org, userId);
+test(
+  "a refused cancellation rolls back mutations and leaves no orphaned evidence",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const userId = await withBypass(() =>
+        createScratchUser(org.orgId, "Cancel Refuser", "admin"),
+      );
+      const seeded = await seedCancellableRun(org, userId);
 
-    // One payment stops being a draft while the run is being assembled:
-    // the mid-flight refusal must discard everything, including the draft
-    // deletion already performed for the earlier instruction.
-    await db.execute(sql`
+      // One payment stops being a draft while the run is being assembled:
+      // the mid-flight refusal must discard everything, including the draft
+      // deletion already performed for the earlier instruction.
+      await db.execute(sql`
       update documents set status = 'approved', updated_at = now()
        where id = ${seeded.paymentDocumentIds[1]} and org_id = ${org.orgId}
     `);
 
-    await assert.rejects(
-      withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "should not land")),
-      (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /no longer drafts/);
-        return true;
-      },
-    );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          cancelPaymentRun(seeded.runId, org.orgId, userId, "should not land"),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /no longer drafts/);
+          return true;
+        },
+      );
 
-    const state = (await db.execute<{
-      run_status: string;
-      pending_instructions: number;
-      linked_documents: number;
-      live_documents: number;
-      event_count: number;
-      audit_count: number;
-    }>(sql`
+      const state = (
+        await db.execute<{
+          run_status: string;
+          pending_instructions: number;
+          linked_documents: number;
+          live_documents: number;
+          event_count: number;
+          audit_count: number;
+        }>(sql`
       select run.status as run_status,
              (select count(*)::int from payment_instructions i
                where i.org_id = run.org_id and i.payment_run_id = run.id
@@ -1272,106 +1582,124 @@ test("a refused cancellation rolls back mutations and leaves no orphaned evidenc
                  and a.row_id = run.id) as audit_count
         from payment_runs run
        where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-    `)).rows[0];
-    assert.deepEqual(state, {
-      run_status: "draft",
-      pending_instructions: seeded.instructionIds.length,
-      linked_documents: seeded.instructionIds.length,
-      live_documents: seeded.paymentDocumentIds.length,
-      event_count: 0,
-      audit_count: 0,
+    `)
+      ).rows[0];
+      assert.deepEqual(state, {
+        run_status: "draft",
+        pending_instructions: seeded.instructionIds.length,
+        linked_documents: seeded.instructionIds.length,
+        live_documents: seeded.paymentDocumentIds.length,
+        event_count: 0,
+        audit_count: 0,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "run creation turns a storage source-claim conflict into its domain failure without drafts",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let releaseSequence!: () => void;
+    const sequenceReleased = new Promise<void>((resolve) => {
+      releaseSequence = resolve;
     });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+    try {
+      const options = await seedPaymentRunSelectionFixture(org);
 
-test("run creation turns a storage source-claim conflict into its domain failure without drafts", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  let releaseSequence!: () => void;
-  const sequenceReleased = new Promise<void>((resolve) => { releaseSequence = resolve; });
-  try {
-    const options = await seedPaymentRunSelectionFixture(org);
-
-    await withOrgContext(org.orgId, async () => {
-      const openLineId = (await db.execute<{ id: string }>(sql`
+      await withOrgContext(org.orgId, async () => {
+        const openLineId = (
+          await db.execute<{ id: string }>(sql`
         select jl.id as id
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where je.source_document_id = ${options.billId}
            and je.status = 'posted' and jl.is_open_item and jl.amount < 0
-      `)).rows[0]!.id;
-      const createRun = () =>
-        createPaymentRun({ allowedSubsidiaryIds: null,
-          orgId: org.orgId,
-          createdBy: options.actorId,
-          paymentBankProfileId: options.profileId,
-          billDocumentIds: [options.billId],
-          scheduledFor: org.date,
+      `)
+        ).rows[0]!.id;
+        const createRun = () =>
+          createPaymentRun({
+            allowedSubsidiaryIds: null,
+            orgId: org.orgId,
+            createdBy: options.actorId,
+            paymentBankProfileId: options.profileId,
+            billDocumentIds: [options.billId],
+            scheduledFor: org.date,
+          });
+
+        // The constructor owns its transaction by contract. A nested caller is
+        // refused before any artifact exists: the conflict translation below is
+        // only sound when it judges failures of the whole atomic unit.
+        await withOrgTransaction(org.orgId, () =>
+          assert.rejects(createRun(), (error: unknown) => {
+            assert.ok(error instanceof PaymentError);
+            assert.match(error.message, /cannot be nested in another database transaction/);
+            return true;
+          }),
+        );
+
+        // Park the changed constructor after its reservation filter read the
+        // bill as unreserved but before it inserts any item: number_sequences
+        // (the run number) is that window's first write.
+        let signalLocked!: (pid: number) => void;
+        const sequenceLocked = new Promise<number>((resolve) => {
+          signalLocked = resolve;
         });
+        const holder = withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+            await tx.execute(sql`lock table number_sequences in exclusive mode`);
+            signalLocked(pid.rows[0]!.pid);
+            await sequenceReleased;
+          }),
+        );
+        const holderPid = await sequenceLocked;
 
-      // The constructor owns its transaction by contract. A nested caller is
-      // refused before any artifact exists: the conflict translation below is
-      // only sound when it judges failures of the whole atomic unit.
-      await withOrgTransaction(org.orgId, () =>
-        assert.rejects(createRun(), (error: unknown) => {
-          assert.ok(error instanceof PaymentError);
-          assert.match(error.message, /cannot be nested in another database transaction/);
-          return true;
-        }),
-      );
+        const creation = createRun();
+        await waitForBlockedBy(holderPid);
 
-      // Park the changed constructor after its reservation filter read the
-      // bill as unreserved but before it inserts any item: number_sequences
-      // (the run number) is that window's first write.
-      let signalLocked!: (pid: number) => void;
-      const sequenceLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
-      const holder = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
-        await tx.execute(sql`lock table number_sequences in exclusive mode`);
-        signalLocked(pid.rows[0]!.pid);
-        await sequenceReleased;
-      }));
-      const holderPid = await sequenceLocked;
-
-      const creation = createRun();
-      await waitForBlockedBy(holderPid);
-
-      // Inside that window another live run reserves the same open line —
-      // committed state the filter can no longer see, so only PostgreSQL's
-      // partial unique index stands between the run and a double reservation.
-      const ghostRunId = randomUUID();
-      await db.execute(sql`
+        // Inside that window another live run reserves the same open line —
+        // committed state the filter can no longer see, so only PostgreSQL's
+        // partial unique index stands between the run and a double reservation.
+        const ghostRunId = randomUUID();
+        await db.execute(sql`
         insert into payment_runs
           (id, org_id, run_number, bank_account_id, payment_bank_profile_id,
            method, direction, purpose, currency, status, created_by)
         values (${ghostRunId}, ${org.orgId}, 'RUN-RESERVE-RACER', ${org.accounts.bank},
                 ${options.profileId}, 'eft', 'outbound', 'vendor_payments',
                 'CAD', 'draft', ${options.actorId})`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into payment_run_items
           (org_id, payment_run_id, source_document_id, source_open_line_id, kind,
            gross_amount, payment_amount, currency, status, created_by)
         values (${org.orgId}, ${ghostRunId}, ${options.billId}, ${openLineId}, 'bill',
                 '125', '125', 'CAD', 'selected', ${options.actorId})`);
 
-      releaseSequence();
-      await holder;
-      await assert.rejects(creation, (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(
-          error.message,
-          /a selected bill or credit is already reserved by another live payment run/,
-        );
-        return true;
-      });
+        releaseSequence();
+        await holder;
+        await assert.rejects(creation, (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(
+            error.message,
+            /a selected bill or credit is already reserved by another live payment run/,
+          );
+          return true;
+        });
 
-      // The losing attempt is fully atomic — no draft artifacts survive — and
-      // the winner's reservation stands untouched.
-      const aftermath = (await db.execute<{
-        runs: number; instructions: number; payments: number;
-        items: number; selected: number; sequences: number;
-      }>(sql`
+        // The losing attempt is fully atomic — no draft artifacts survive — and
+        // the winner's reservation stands untouched.
+        const aftermath = await db.execute<{
+          runs: number;
+          instructions: number;
+          payments: number;
+          items: number;
+          selected: number;
+          sequences: number;
+        }>(sql`
         select
           (select count(*)::int from payment_runs where org_id = ${org.orgId}) as runs,
           (select count(*)::int from payment_instructions where org_id = ${org.orgId}) as instructions,
@@ -1380,53 +1708,59 @@ test("run creation turns a storage source-claim conflict into its domain failure
           (select count(*)::int from payment_run_items where org_id = ${org.orgId} and status = 'selected') as selected,
           (select count(*)::int from number_sequences where org_id = ${org.orgId}
              and document_kind in ('payment_run', 'vendor_payment')) as sequences
-      `));
-      assert.deepEqual(aftermath.rows[0], {
-        runs: 1,
-        instructions: 0,
-        payments: 0,
-        items: 1,
-        selected: 1,
-        sequences: 0,
+      `);
+        assert.deepEqual(aftermath.rows[0], {
+          runs: 1,
+          instructions: 0,
+          payments: 0,
+          items: 1,
+          selected: 1,
+          sequences: 0,
+        });
       });
-    });
-  } finally {
-    releaseSequence?.();
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+    } finally {
+      releaseSequence?.();
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("posting refuses to hide its durable claim inside an ambient transaction", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Nested poster", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
+test(
+  "posting refuses to hide its durable claim inside an ambient transaction",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Nested poster", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
 
-    // The posting lifecycle owns several separate transactions: the claim
-    // must COMMIT before any instruction work starts. Joined to an ambient
-    // transaction it would stay invisible to other posters until that unit
-    // ended and vanish entirely if it rolled back — so the poster refuses
-    // outright instead of silently degrading every fence to a no-op.
-    await withOrgTransaction(org.orgId, () =>
-      assert.rejects(
-        postPaymentRun(seeded.runId, org.orgId, actorId),
-        (error: unknown) => {
+      // The posting lifecycle owns several separate transactions: the claim
+      // must COMMIT before any instruction work starts. Joined to an ambient
+      // transaction it would stay invisible to other posters until that unit
+      // ended and vanish entirely if it rolled back — so the poster refuses
+      // outright instead of silently degrading every fence to a no-op.
+      await withOrgTransaction(org.orgId, () =>
+        assert.rejects(postPaymentRun(seeded.runId, org.orgId, actorId), (error: unknown) => {
           assert.ok(error instanceof PaymentError);
           assert.match(error.message, /cannot be nested in another database transaction/);
           return true;
-        },
-      ),
-    );
+        }),
+      );
 
-    // Nothing moved: the run is still unclaimed with its pending instruction,
-    // ready for a legitimate poster.
-    const untouched = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        instruction_status: string;
-        claim_token: boolean;
-        started_events: number;
-      }>(sql`
+      // Nothing moved: the run is still unclaimed with its pending instruction,
+      // ready for a legitimate poster.
+      const untouched = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              instruction_status: string;
+              claim_token: boolean;
+              started_events: number;
+            }>(sql`
         select run.status as run_status,
                instruction.status as instruction_status,
                run.posting_claim_token is not null as claim_token,
@@ -1437,44 +1771,60 @@ test("posting refuses to hide its durable claim inside an ambient transaction", 
           join payment_instructions instruction
             on instruction.payment_run_id = run.id and instruction.org_id = run.org_id
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(untouched, {
-      run_status: "generated",
-      instruction_status: "pending",
-      claim_token: false,
-      started_events: 0,
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(untouched, {
+        run_status: "generated",
+        instruction_status: "pending",
+        claim_token: false,
+        started_events: 0,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("one concurrent payment-run poster owns the processing claim and its evidence", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  let releaseInstruction!: () => void;
-  const instructionReleased = new Promise<void>((resolve) => { releaseInstruction = resolve; });
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Run poster", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
-    let signalLocked!: (pid: number) => void;
-    const instructionLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
-    const blocker = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
-      await tx.execute(sql`
+test(
+  "one concurrent payment-run poster owns the processing claim and its evidence",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let releaseInstruction!: () => void;
+    const instructionReleased = new Promise<void>((resolve) => {
+      releaseInstruction = resolve;
+    });
+    try {
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "Run poster", "admin"));
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
+      let signalLocked!: (pid: number) => void;
+      const instructionLocked = new Promise<number>((resolve) => {
+        signalLocked = resolve;
+      });
+      const blocker = withOrgContext(org.orgId, () =>
+        db.transaction(async (tx) => {
+          const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+          await tx.execute(sql`
         select id from payment_instructions
          where id = ${seeded.instructionId} and org_id = ${org.orgId}
          for update
       `);
-      signalLocked(pid.rows[0]!.pid);
-      await instructionReleased;
-    }));
-    const blockerPid = await instructionLocked;
+          signalLocked(pid.rows[0]!.pid);
+          await instructionReleased;
+        }),
+      );
+      const blockerPid = await instructionLocked;
 
-    const winner = withOrgContext(org.orgId, () =>
-      postPaymentRun(seeded.runId, org.orgId, actorId));
-    await waitForBlockedBy(blockerPid);
-    const claimed = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ status: string; started: number; claims: number }>(sql`
+      const winner = withOrgContext(org.orgId, () =>
+        postPaymentRun(seeded.runId, org.orgId, actorId),
+      );
+      await waitForBlockedBy(blockerPid);
+      const claimed = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ status: string; started: number; claims: number }>(sql`
         select run.status,
                (select count(*)::int from payment_events event
                  where event.payment_run_id = run.id and event.org_id = run.org_id
@@ -1484,34 +1834,43 @@ test("one concurrent payment-run poster owns the processing claim and its eviden
                    and event.event_type = 'run_posting_recovered') as claims
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(claimed, { status: "processing", started: 1, claims: 0 });
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(claimed, { status: "processing", started: 1, claims: 0 });
 
-    const loser = withOrgContext(org.orgId, () =>
-      postPaymentRun(seeded.runId, org.orgId, actorId));
-    releaseInstruction();
-    await blocker;
-    const results = await Promise.allSettled([winner, loser]);
-    const fulfilled = results.filter(
-      (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof postPaymentRun>>> =>
-        result.status === "fulfilled",
-    );
-    const rejected = results.filter(
-      (result): result is PromiseRejectedResult => result.status === "rejected",
-    );
-    assert.deepEqual(fulfilled.map((result) => result.value), [{ posted: 1, failures: [] }]);
-    assert.equal(rejected.length, 1);
-    assert.ok(rejected[0]!.reason instanceof PaymentError);
-    assert.match(rejected[0]!.reason.message, /already being posted|already posted/);
+      const loser = withOrgContext(org.orgId, () =>
+        postPaymentRun(seeded.runId, org.orgId, actorId),
+      );
+      releaseInstruction();
+      await blocker;
+      const results = await Promise.allSettled([winner, loser]);
+      const fulfilled = results.filter(
+        (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof postPaymentRun>>> =>
+          result.status === "fulfilled",
+      );
+      const rejected = results.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      assert.deepEqual(
+        fulfilled.map((result) => result.value),
+        [{ posted: 1, failures: [] }],
+      );
+      assert.equal(rejected.length, 1);
+      assert.ok(rejected[0]!.reason instanceof PaymentError);
+      assert.match(rejected[0]!.reason.message, /already being posted|already posted/);
 
-    const final = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        instruction_status: string;
-        claim_token: boolean;
-        started: number;
-        completed: number;
-      }>(sql`
+      const final = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              instruction_status: string;
+              claim_token: boolean;
+              started: number;
+              completed: number;
+            }>(sql`
         select run.status as run_status, instruction.status as instruction_status,
                run.posting_claim_token is not null as claim_token,
                (select count(*)::int from payment_events event
@@ -1524,261 +1883,334 @@ test("one concurrent payment-run poster owns the processing claim and its eviden
           join payment_instructions instruction
             on instruction.payment_run_id = run.id and instruction.org_id = run.org_id
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(final, {
-      run_status: "confirmed",
-      instruction_status: "sent",
-      claim_token: false,
-      started: 1,
-      completed: 1,
-    });
-  } finally {
-    releaseInstruction?.();
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(final, {
+        run_status: "confirmed",
+        instruction_status: "sent",
+        claim_token: false,
+        started: 1,
+        completed: 1,
+      });
+    } finally {
+      releaseInstruction?.();
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("the current payment-instruction claim fence rejects an untrusted sandbox-wipe GUC", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Sandbox-wipe fence", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
-    await installPostingClaim(org, seeded.runId, actorId);
+test(
+  "the current payment-instruction claim fence rejects an untrusted sandbox-wipe GUC",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Sandbox-wipe fence", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+      await installPostingClaim(org, seeded.runId, actorId);
 
-    const withRawSandboxWipe = <T>(
-      work: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
-    ): Promise<T> => withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-      await tx.execute(sql`
+      const withRawSandboxWipe = <T>(
+        work: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
+      ): Promise<T> =>
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`
         select set_config('openbooks.sandbox_wipe', 'on', true)
       `);
-      return work(tx);
-    }));
+            return work(tx);
+          }),
+        );
 
-    // The caller-controlled GUC is not teardown authority for a production
-    // tenant: every trigger operation remains behind the processing claim.
-    await assertInstructionFenceRejected(
-      withRawSandboxWipe((tx) => tx.execute(sql`
+      // The caller-controlled GUC is not teardown authority for a production
+      // tenant: every trigger operation remains behind the processing claim.
+      await assertInstructionFenceRejected(
+        withRawSandboxWipe((tx) =>
+          tx.execute(sql`
         insert into payment_instructions
           (id, org_id, payment_run_id, payee_party_id, amount, currency,
            status, created_by, updated_by)
         values
           (${randomUUID()}, ${org.orgId}, ${seeded.runId}, ${org.vendorId},
            '25', 'CAD', 'pending', ${actorId}, ${actorId})
-      `)),
-    );
-    await assertInstructionFenceRejected(
-      withRawSandboxWipe((tx) => tx.execute(sql`
+      `),
+        ),
+      );
+      await assertInstructionFenceRejected(
+        withRawSandboxWipe((tx) =>
+          tx.execute(sql`
         update payment_instructions
            set amount = '99', updated_at = now(), updated_by = ${actorId}
          where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
-      `)),
-    );
-    await assertInstructionFenceRejected(
-      withRawSandboxWipe((tx) => tx.execute(sql`
+      `),
+        ),
+      );
+      await assertInstructionFenceRejected(
+        withRawSandboxWipe((tx) =>
+          tx.execute(sql`
         delete from payment_instructions
          where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
-      `)),
-    );
+      `),
+        ),
+      );
 
-    // Once the tenant is explicitly classified as a sandbox, the same
-    // transaction-local GUC is an authorized teardown context for DELETE.
-    await withBypass(() => db.execute(sql`
+      // Once the tenant is explicitly classified as a sandbox, the same
+      // transaction-local GUC is an authorized teardown context for DELETE.
+      await withBypass(() =>
+        db.execute(sql`
       update orgs set env_kind = 'sandbox'
        where id = ${org.orgId} and name like 'Scratch %'
-    `));
-    await withRawSandboxWipe((tx) => tx.execute(sql`
+    `),
+      );
+      await withRawSandboxWipe((tx) =>
+        tx.execute(sql`
       delete from payment_instructions
        where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
-    `));
-    const remaining = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ count: number }>(sql`
+    `),
+      );
+      const remaining = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ count: number }>(sql`
         select count(*)::int as count
           from payment_instructions
          where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
-      `)).rows[0]?.count);
-    assert.equal(remaining, 1);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0]?.count,
+      );
+      assert.equal(remaining, 1);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("the instruction fence is enforced by storage: superseded claim tokens cannot mutate instructions", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Storage fence", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 3));
+test(
+  "the instruction fence is enforced by storage: superseded claim tokens cannot mutate instructions",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Storage fence", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 3));
 
-    // A live poster holds the lease and advances its first instruction.
-    const liveToken = await installPostingClaim(org, seeded.runId, actorId);
-    await withPostingClaim(org, seeded.runId, liveToken, (tx) => tx.execute(sql`
+      // A live poster holds the lease and advances its first instruction.
+      const liveToken = await installPostingClaim(org, seeded.runId, actorId);
+      await withPostingClaim(org, seeded.runId, liveToken, (tx) =>
+        tx.execute(sql`
       update payment_instructions
          set status = 'sent', updated_at = now(), updated_by = ${actorId}
         where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
-    `));
+    `),
+      );
 
-    // A new poster recovers the lease: the previous token is now superseded.
-    const supersededToken = liveToken;
-    const currentToken = await installPostingClaim(org, seeded.runId, actorId);
-    assert.notEqual(currentToken, supersededToken);
+      // A new poster recovers the lease: the previous token is now superseded.
+      const supersededToken = liveToken;
+      const currentToken = await installPostingClaim(org, seeded.runId, actorId);
+      assert.notEqual(currentToken, supersededToken);
 
-    // The superseded worker can neither advance lifecycle state…
-    await assertInstructionFenceRejected(
-      withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
+      // The superseded worker can neither advance lifecycle state…
+      await assertInstructionFenceRejected(
+        withPostingClaim(org, seeded.runId, supersededToken, (tx) =>
+          tx.execute(sql`
         update payment_instructions
            set status = 'sent', updated_at = now(), updated_by = ${actorId}
           where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
-      `)),
-    );
-    // …nor touch instruction metadata…
-    await assertInstructionFenceRejected(
-      withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
+      `),
+        ),
+      );
+      // …nor touch instruction metadata…
+      await assertInstructionFenceRejected(
+        withPostingClaim(org, seeded.runId, supersededToken, (tx) =>
+          tx.execute(sql`
         update payment_instructions
            set remittance_email_sent_at = now(), updated_at = now(), updated_by = ${actorId}
           where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
-      `)),
-    );
-    // …nor remove rows.
-    await assertInstructionFenceRejected(
-      withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
+      `),
+        ),
+      );
+      // …nor remove rows.
+      await assertInstructionFenceRejected(
+        withPostingClaim(org, seeded.runId, supersededToken, (tx) =>
+          tx.execute(sql`
         delete from payment_instructions
          where id = ${seeded.instructionIds[2]!} and org_id = ${org.orgId}
-      `)),
-    );
-    // A stale writer cannot bundle financial or payment-file metadata with
-    // the settlement-style status carve-out. The row-wide guard also covers
-    // payment_run_id and payee_bank_account_id mutations.
-    await assertInstructionFenceRejected(
-      withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
+      `),
+        ),
+      );
+      // A stale writer cannot bundle financial or payment-file metadata with
+      // the settlement-style status carve-out. The row-wide guard also covers
+      // payment_run_id and payee_bank_account_id mutations.
+      await assertInstructionFenceRejected(
+        withPostingClaim(org, seeded.runId, supersededToken, (tx) =>
+          tx.execute(sql`
         update payment_instructions
            set amount = '99', payment_reference = 'stale-writer',
                status = 'returned', updated_at = now(), updated_by = ${actorId}
          where id = ${seeded.instructionIds[2]!} and org_id = ${org.orgId}
-      `)),
-    );
+      `),
+        ),
+      );
 
-    // An unclaimed writer is equally powerless: the posting advance and
-    // metadata edits are refused…
-    await assertInstructionFenceRejected(
-      withPostingClaim(org, seeded.runId, null, (tx) => tx.execute(sql`
+      // An unclaimed writer is equally powerless: the posting advance and
+      // metadata edits are refused…
+      await assertInstructionFenceRejected(
+        withPostingClaim(org, seeded.runId, null, (tx) =>
+          tx.execute(sql`
         update payment_instructions
            set status = 'sent', updated_at = now(), updated_by = ${actorId}
           where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
-      `)),
-    );
-    await assertInstructionFenceRejected(
-      withPostingClaim(org, seeded.runId, null, (tx) => tx.execute(sql`
+      `),
+        ),
+      );
+      await assertInstructionFenceRejected(
+        withPostingClaim(org, seeded.runId, null, (tx) =>
+          tx.execute(sql`
         update payment_instructions
            set remittance_email_sent_at = now(), updated_at = now(), updated_by = ${actorId}
           where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
-      `)),
-    );
-    // …while the settlement-style lifecycle retreat stays available to the
-    // bank-outcome writer, which serializes on the run row itself.
-    await withPostingClaim(org, seeded.runId, null, (tx) => tx.execute(sql`
+      `),
+        ),
+      );
+      // …while the settlement-style lifecycle retreat stays available to the
+      // bank-outcome writer, which serializes on the run row itself.
+      await withPostingClaim(org, seeded.runId, null, (tx) =>
+        tx.execute(sql`
       update payment_instructions
          set status = 'returned', updated_at = now(), updated_by = ${actorId}
         where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
-    `));
+    `),
+      );
 
-    // The current claim holder advances the very row the superseded token
-    // was refused: authority, not row state, decides.
-    await withPostingClaim(org, seeded.runId, currentToken, (tx) => tx.execute(sql`
+      // The current claim holder advances the very row the superseded token
+      // was refused: authority, not row state, decides.
+      await withPostingClaim(org, seeded.runId, currentToken, (tx) =>
+        tx.execute(sql`
       update payment_instructions
          set status = 'sent', updated_at = now(), updated_by = ${actorId}
         where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
-    `));
+    `),
+      );
 
-    const final = await withBypass(async () =>
-      (await db.execute<{ statuses: string[]; stamped: number }>(sql`
+      const final = await withBypass(
+        async () =>
+          (
+            await db.execute<{ statuses: string[]; stamped: number }>(sql`
         select array_agg(status order by id) as statuses,
                count(*) filter (where remittance_email_sent_at is not null)::int as stamped
           from payment_instructions
          where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(final, { statuses: ["returned", "sent", "pending"], stamped: 0 });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(final, { statuses: ["returned", "sent", "pending"], stamped: 0 });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a terminal transition fences a stale payment-run worker before downstream instruction or remittance mutation", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  let secondInstructionReleased!: () => void;
-  const instructionReleased = new Promise<void>((resolve) => { secondInstructionReleased = resolve; });
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Return racer", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2, { autoRemittance: true }));
-    let signalLocked!: (pid: number) => void;
-    const secondInstructionLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
-    const blocker = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-      // Parking the stale worker on the second instruction's row lock holds
-      // the run mid-flight (`processing`, first instruction sent) while the
-      // bank-return writer queues behind the worker's own run-row lock — the
-      // documented shared lock order, so the terminal transition can only
-      // land after the worker's current instruction commits.
-      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
-      await tx.execute(sql`
+test(
+  "a terminal transition fences a stale payment-run worker before downstream instruction or remittance mutation",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let secondInstructionReleased!: () => void;
+    const instructionReleased = new Promise<void>((resolve) => {
+      secondInstructionReleased = resolve;
+    });
+    try {
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "Return racer", "admin"));
+      const seeded = await withOrgContext(org.orgId, () =>
+        seedPostingClaimRun(org, actorId, 2, { autoRemittance: true }),
+      );
+      let signalLocked!: (pid: number) => void;
+      const secondInstructionLocked = new Promise<number>((resolve) => {
+        signalLocked = resolve;
+      });
+      const blocker = withOrgContext(org.orgId, () =>
+        db.transaction(async (tx) => {
+          // Parking the stale worker on the second instruction's row lock holds
+          // the run mid-flight (`processing`, first instruction sent) while the
+          // bank-return writer queues behind the worker's own run-row lock — the
+          // documented shared lock order, so the terminal transition can only
+          // land after the worker's current instruction commits.
+          const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+          await tx.execute(sql`
         select id from payment_instructions
          where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
          for update
       `);
-      signalLocked(pid.rows[0]!.pid);
-      await instructionReleased;
-    }));
-    const blockerPid = await secondInstructionLocked;
+          signalLocked(pid.rows[0]!.pid);
+          await instructionReleased;
+        }),
+      );
+      const blockerPid = await secondInstructionLocked;
 
-    const staleWorker = withOrgContext(org.orgId, () =>
-      postPaymentRun(seeded.runId, org.orgId, actorId));
-    // Claim the worker's rejection the moment the worker exists: the fence
-    // can land while this test is still awaiting the parked blocker and the
-    // settlement below, and a handler attached only by the assert.rejects
-    // loses that race — reporting correct fencing as an unhandled rejection.
-    // The guard merely marks the original promise handled; the assertion
-    // underneath still judges that same promise, so the test keeps proving
-    // the stale worker dies with exactly this error.
-    staleWorker.catch(() => {});
-    const workerPid = await waitForBlockedBy(blockerPid);
+      const staleWorker = withOrgContext(org.orgId, () =>
+        postPaymentRun(seeded.runId, org.orgId, actorId),
+      );
+      // Claim the worker's rejection the moment the worker exists: the fence
+      // can land while this test is still awaiting the parked blocker and the
+      // settlement below, and a handler attached only by the assert.rejects
+      // loses that race — reporting correct fencing as an unhandled rejection.
+      // The guard merely marks the original promise handled; the assertion
+      // underneath still judges that same promise, so the test keeps proving
+      // the stale worker dies with exactly this error.
+      staleWorker.catch(() => {});
+      const workerPid = await waitForBlockedBy(blockerPid);
 
-    // The bank return for the first instruction queues behind the parked
-    // worker; releasing the instruction lets the worker commit its send,
-    // then the settlement lands and fences everything the worker does next.
-    const settlement = withOrgContext(org.orgId, () => recordPaymentSettlement({
-      instructionId: seeded.instructionIds[0]!,
-      orgId: org.orgId,
-      userId: actorId,
-      status: "returned",
-      effectiveOn: org.date,
-      returnCode: "R01",
-      returnReason: "posting-claim concurrency regression",
-    }));
-    // Prove the terminal writer has actually queued behind the worker's run
-    // lock before releasing the child-row blocker. Without this causal wait,
-    // the worker can legitimately finish first and the assertion below would
-    // race a settlement that had not yet reached its lock boundary.
-    await waitForBlockedBy(workerPid);
-    secondInstructionReleased();
-    await blocker;
-    await settlement;
-    await assert.rejects(
-      staleWorker,
-      (error: Error) => error instanceof PaymentError && /no longer owns the run/.test(error.message),
-    );
+      // The bank return for the first instruction queues behind the parked
+      // worker; releasing the instruction lets the worker commit its send,
+      // then the settlement lands and fences everything the worker does next.
+      const settlement = withOrgContext(org.orgId, () =>
+        recordPaymentSettlement({
+          instructionId: seeded.instructionIds[0]!,
+          orgId: org.orgId,
+          userId: actorId,
+          status: "returned",
+          effectiveOn: org.date,
+          returnCode: "R01",
+          returnReason: "posting-claim concurrency regression",
+        }),
+      );
+      // Prove the terminal writer has actually queued behind the worker's run
+      // lock before releasing the child-row blocker. Without this causal wait,
+      // the worker can legitimately finish first and the assertion below would
+      // race a settlement that had not yet reached its lock boundary.
+      await waitForBlockedBy(workerPid);
+      secondInstructionReleased();
+      await blocker;
+      await settlement;
+      await assert.rejects(
+        staleWorker,
+        (error: Error) =>
+          error instanceof PaymentError && /no longer owns the run/.test(error.message),
+      );
 
-    const final = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        first_instruction_status: string;
-        second_instruction_status: string;
-        first_payment_status: string;
-        second_payment_status: string;
-        sent: number;
-        returned: number;
-        completed: number;
-        failed: number;
-        remittances: number;
-        second_remittance_stamped: boolean;
-        claim_token: boolean;
-      }>(sql`
+      const final = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              first_instruction_status: string;
+              second_instruction_status: string;
+              first_payment_status: string;
+              second_payment_status: string;
+              sent: number;
+              returned: number;
+              completed: number;
+              failed: number;
+              remittances: number;
+              second_remittance_stamped: boolean;
+              claim_token: boolean;
+            }>(sql`
         select run.status as run_status,
                (select status from payment_instructions
                  where id = ${seeded.instructionIds[0]!}) as first_instruction_status,
@@ -1808,87 +2240,118 @@ test("a terminal transition fences a stale payment-run worker before downstream 
                 run.posting_claim_token is not null as claim_token
            from payment_runs run
           where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-       `)).rows[0]);
-    assert.deepEqual(final, {
-      run_status: "returned",
-      first_instruction_status: "returned",
-      second_instruction_status: "sent",
-      first_payment_status: "voided",
-      second_payment_status: "posted",
-      sent: 2,
-      returned: 1,
-      completed: 0,
-      failed: 0,
-      // The worker staged remittance evidence only for instructions it sent
-      // while its heartbeat still proved ownership: always the first one, and
-      // possibly also the sibling when the worker's post-commit fence won the
-      // race against the settlement that was queuing on the run row — a claim
-      // that was still valid in storage at that instant. What authority loss
-      // forbids everywhere is completion: no superseded write may stamp
-      // instruction metadata or mark advice sent.
-      second_remittance_stamped: false,
-      claim_token: false,
-    });
-    // Advice evidence exists for the first instruction always, and at most
-    // one more row when the sibling's staging won its pre-supersession race.
-    const remittanceCounts = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ first: number; second: number }>(sql`
+       `)
+          ).rows[0],
+      );
+      assert.deepEqual(final, {
+        run_status: "returned",
+        first_instruction_status: "returned",
+        second_instruction_status: "sent",
+        first_payment_status: "voided",
+        second_payment_status: "posted",
+        sent: 2,
+        returned: 1,
+        completed: 0,
+        failed: 0,
+        // The worker staged remittance evidence only for instructions it sent
+        // while its heartbeat still proved ownership: always the first one, and
+        // possibly also the sibling when the worker's post-commit fence won the
+        // race against the settlement that was queuing on the run row — a claim
+        // that was still valid in storage at that instant. What authority loss
+        // forbids everywhere is completion: no superseded write may stamp
+        // instruction metadata or mark advice sent.
+        second_remittance_stamped: false,
+        claim_token: false,
+      });
+      // Advice evidence exists for the first instruction always, and at most
+      // one more row when the sibling's staging won its pre-supersession race.
+      const remittanceCounts = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ first: number; second: number }>(sql`
         select count(*) filter (where payment_instruction_id = ${seeded.instructionIds[0]!})::int as first,
                count(*) filter (where payment_instruction_id = ${seeded.instructionIds[1]!})::int as second
           from payment_remittances
          where org_id = ${org.orgId}
            and payment_instruction_id in (${seeded.instructionIds[0]!}, ${seeded.instructionIds[1]!})
-      `)).rows[0]);
-    const counts = remittanceCounts!;
-    assert.ok(counts.first === 1, `expected advice staged once for the authoritatively sent instruction, got ${counts.first}`);
-    assert.ok(counts.second >= 0 && counts.second <= 1);
-    const secondRemittanceStatuses = (await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ statuses: string[] | null }>(sql`
+      `)
+          ).rows[0],
+      );
+      const counts = remittanceCounts!;
+      assert.ok(
+        counts.first === 1,
+        `expected advice staged once for the authoritatively sent instruction, got ${counts.first}`,
+      );
+      assert.ok(counts.second >= 0 && counts.second <= 1);
+      const secondRemittanceStatuses =
+        (
+          await withOrgContext(
+            org.orgId,
+            async () =>
+              (
+                await db.execute<{ statuses: string[] | null }>(sql`
         select coalesce(array_agg(distinct status), '{}') as statuses
           from payment_remittances
          where payment_instruction_id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
-      `)).rows[0]))?.statuses ?? [];
-    assert.ok(
-      secondRemittanceStatuses.every((status) => status === "failed" || status === "pending"),
-      `a superseded worker must never mark advice sent; pending preserves an unverifiable queue handoff: ${JSON.stringify(secondRemittanceStatuses)}`,
-    );
-  } finally {
-    secondInstructionReleased?.();
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+              ).rows[0],
+          )
+        )?.statuses ?? [];
+      assert.ok(
+        secondRemittanceStatuses.every((status) => status === "failed" || status === "pending"),
+        `a superseded worker must never mark advice sent; pending preserves an unverifiable queue handoff: ${JSON.stringify(secondRemittanceStatuses)}`,
+      );
+    } finally {
+      secondInstructionReleased?.();
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a bank-return transition cannot strand a returned run's pending instructions", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Return resume", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+test(
+  "a bank-return transition cannot strand a returned run's pending instructions",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Return resume", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
 
-    // A partial release followed by a bank return: the first instruction went
-    // out and came back while the second never left. The settlement writer
-    // stamps the whole run `returned`, which used to wall the unsent
-    // instruction off behind a terminal status forever.
-    await withOrgContext(org.orgId, () => db.execute(sql`
+      // A partial release followed by a bank return: the first instruction went
+      // out and came back while the second never left. The settlement writer
+      // stamps the whole run `returned`, which used to wall the unsent
+      // instruction off behind a terminal status forever.
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update payment_instructions
          set status = 'sent', updated_at = now(), updated_by = ${actorId}
        where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
-    `));
-    await withOrgContext(org.orgId, () => recordPaymentSettlement({
-      instructionId: seeded.instructionIds[0]!,
-      orgId: org.orgId,
-      userId: actorId,
-      status: "returned",
-      effectiveOn: org.date,
-      returnCode: "R01",
-      returnReason: "stranded pending instruction regression",
-    }));
-    const stranded = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        first_status: string;
-        second_status: string;
-        first_payment_status: string;
-      }>(sql`
+    `),
+      );
+      await withOrgContext(org.orgId, () =>
+        recordPaymentSettlement({
+          instructionId: seeded.instructionIds[0]!,
+          orgId: org.orgId,
+          userId: actorId,
+          status: "returned",
+          effectiveOn: org.date,
+          returnCode: "R01",
+          returnReason: "stranded pending instruction regression",
+        }),
+      );
+      const stranded = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              first_status: string;
+              second_status: string;
+              first_payment_status: string;
+            }>(sql`
         select run.status as run_status,
                (select status from payment_instructions
                   where id = ${seeded.instructionIds[0]!}) as first_status,
@@ -1898,32 +2361,38 @@ test("a bank-return transition cannot strand a returned run's pending instructio
                   where id = ${seeded.paymentDocumentIds[0]!}) as first_payment_status
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(stranded, {
-      run_status: "returned",
-      first_status: "returned",
-      second_status: "pending",
-      first_payment_status: "voided",
-    });
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(stranded, {
+        run_status: "returned",
+        first_status: "returned",
+        second_status: "pending",
+        first_payment_status: "voided",
+      });
 
-    // Posting resumes exactly the outstanding work: the returned instruction
-    // is never touched again, and its sibling finally reaches `sent`.
-    const outcome = await withOrgContext(org.orgId, () =>
-      postPaymentRun(seeded.runId, org.orgId, actorId));
-    assert.deepEqual(outcome, { posted: 1, failures: [] });
+      // Posting resumes exactly the outstanding work: the returned instruction
+      // is never touched again, and its sibling finally reaches `sent`.
+      const outcome = await withOrgContext(org.orgId, () =>
+        postPaymentRun(seeded.runId, org.orgId, actorId),
+      );
+      assert.deepEqual(outcome, { posted: 1, failures: [] });
 
-    const final = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        first_status: string;
-        second_status: string;
-        second_payment_status: string;
-        started: number;
-        completed: number;
-        failed: number;
-        sent_events: number;
-        claim_token: boolean;
-      }>(sql`
+      const final = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              first_status: string;
+              second_status: string;
+              second_payment_status: string;
+              started: number;
+              completed: number;
+              failed: number;
+              sent_events: number;
+              claim_token: boolean;
+            }>(sql`
         select run.status as run_status,
                (select status from payment_instructions
                   where id = ${seeded.instructionIds[0]!}) as first_status,
@@ -1946,88 +2415,111 @@ test("a bank-return transition cannot strand a returned run's pending instructio
                run.posting_claim_token is not null as claim_token
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(final, {
-      // Completing the remainder does not rebrand a run that carries a bank
-      // return as fully confirmed: the aggregate marker survives.
-      run_status: "returned",
-      first_status: "returned",
-      second_status: "sent",
-      second_payment_status: "posted",
-      started: 1,
-      completed: 1,
-      failed: 0,
-      sent_events: 1,
-      claim_token: false,
-    });
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(final, {
+        // Completing the remainder does not rebrand a run that carries a bank
+        // return as fully confirmed: the aggregate marker survives.
+        run_status: "returned",
+        first_status: "returned",
+        second_status: "sent",
+        second_payment_status: "posted",
+        started: 1,
+        completed: 1,
+        failed: 0,
+        sent_events: 1,
+        claim_token: false,
+      });
 
-    // With nothing left pending the terminal door closes again.
-    await assert.rejects(
-      withOrgContext(org.orgId, () => postPaymentRun(seeded.runId, org.orgId, actorId)),
-      (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /run is already posted/);
-        return true;
-      },
-    );
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      // With nothing left pending the terminal door closes again.
+      await assert.rejects(
+        withOrgContext(org.orgId, () => postPaymentRun(seeded.runId, org.orgId, actorId)),
+        (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /run is already posted/);
+          return true;
+        },
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a recovered stale posting claim resumes the run without double-posting", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Crash recovery", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+test(
+  "a recovered stale posting claim resumes the run without double-posting",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Crash recovery", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
 
-    // Simulate a crashed poster: it claimed the run, committed the first
-    // instruction as sent under its then-live claim, then died without
-    // completing or releasing. The lease has made no progress for far longer
-    // than the staleness window.
-    const crashedToken = await installPostingClaim(org, seeded.runId, actorId, sql`now() - interval '20 minutes'`);
-    await withPostingClaim(org, seeded.runId, crashedToken, (tx) => tx.execute(sql`
+      // Simulate a crashed poster: it claimed the run, committed the first
+      // instruction as sent under its then-live claim, then died without
+      // completing or releasing. The lease has made no progress for far longer
+      // than the staleness window.
+      const crashedToken = await installPostingClaim(
+        org,
+        seeded.runId,
+        actorId,
+        sql`now() - interval '20 minutes'`,
+      );
+      await withPostingClaim(org, seeded.runId, crashedToken, (tx) =>
+        tx.execute(sql`
       update payment_instructions
          set status = 'sent', updated_at = now(), updated_by = ${actorId}
         where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
-    `));
+    `),
+      );
 
-    // A fresh claim while the abandoned one still reads recent is refused...
-    await withOrgContext(org.orgId, () => db.execute(sql`
+      // A fresh claim while the abandoned one still reads recent is refused...
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update payment_runs
          set posting_claimed_at = now()
        where id = ${seeded.runId} and org_id = ${org.orgId}
-    `));
-    await assert.rejects(
-      withOrgContext(org.orgId, () => postPaymentRun(seeded.runId, org.orgId, actorId)),
-      (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /run is already being posted/);
-        return true;
-      },
-    );
+    `),
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () => postPaymentRun(seeded.runId, org.orgId, actorId)),
+        (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /run is already being posted/);
+          return true;
+        },
+      );
 
-    // ...but once the lease goes stale the next poster takes over, finishes
-    // exactly the pending remainder, and retires the claim on completion.
-    await withOrgContext(org.orgId, () => db.execute(sql`
+      // ...but once the lease goes stale the next poster takes over, finishes
+      // exactly the pending remainder, and retires the claim on completion.
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update payment_runs
          set posting_claimed_at = now() - interval '20 minutes'
        where id = ${seeded.runId} and org_id = ${org.orgId}
-    `));
-    const outcome = await withOrgContext(org.orgId, () =>
-      postPaymentRun(seeded.runId, org.orgId, actorId));
-    assert.deepEqual(outcome, { posted: 1, failures: [] });
+    `),
+      );
+      const outcome = await withOrgContext(org.orgId, () =>
+        postPaymentRun(seeded.runId, org.orgId, actorId),
+      );
+      assert.deepEqual(outcome, { posted: 1, failures: [] });
 
-    const final = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        sent: number;
-        started: number;
-        recovered: number;
-        failed: number;
-        completed: number;
-        claim_token: boolean;
-      }>(sql`
+      const final = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              sent: number;
+              started: number;
+              recovered: number;
+              failed: number;
+              completed: number;
+              claim_token: boolean;
+            }>(sql`
         select run.status as run_status,
              (select count(*)::int from payment_instructions i
                where i.payment_run_id = run.id and i.org_id = run.org_id
@@ -2047,106 +2539,143 @@ test("a recovered stale posting claim resumes the run without double-posting", {
              run.posting_claim_token is not null as claim_token
         from payment_runs run
        where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(final, {
-      run_status: "confirmed",
-      sent: 2,
-      started: 0,
-      recovered: 1,
-      failed: 0,
-      completed: 1,
-      claim_token: false,
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(final, {
+        run_status: "confirmed",
+        sent: 2,
+        started: 0,
+        recovered: 1,
+        failed: 0,
+        completed: 1,
+        claim_token: false,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("concurrent payment-file reprocessing cannot clobber an in-flight posting or its terminal result", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  let releaseSecondInstruction!: () => void;
-  const secondInstructionReleased = new Promise<void>((resolve) => { releaseSecondInstruction = resolve; });
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Reprocess racer", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
-    let signalLocked!: () => void;
-    const secondInstructionLocked = new Promise<void>((resolve) => { signalLocked = resolve; });
-    const blocker = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-      // Parking the poster on the second instruction's row lock holds the run
-      // mid-flight (`processing`, one instruction sent) so the reprocess
-      // attempts land in a real causal window without starving any reader.
-      await tx.execute(sql`
+test(
+  "concurrent payment-file reprocessing cannot clobber an in-flight posting or its terminal result",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let releaseSecondInstruction!: () => void;
+    const secondInstructionReleased = new Promise<void>((resolve) => {
+      releaseSecondInstruction = resolve;
+    });
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Reprocess racer", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+      let signalLocked!: () => void;
+      const secondInstructionLocked = new Promise<void>((resolve) => {
+        signalLocked = resolve;
+      });
+      const blocker = withOrgContext(org.orgId, () =>
+        db.transaction(async (tx) => {
+          // Parking the poster on the second instruction's row lock holds the run
+          // mid-flight (`processing`, one instruction sent) so the reprocess
+          // attempts land in a real causal window without starving any reader.
+          await tx.execute(sql`
         select id from payment_instructions
          where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
          for update
       `);
-      signalLocked();
-      await secondInstructionReleased;
-    }));
-    await secondInstructionLocked;
+          signalLocked();
+          await secondInstructionReleased;
+        }),
+      );
+      await secondInstructionLocked;
 
-    const poster = withOrgContext(org.orgId, () =>
-      postPaymentRun(seeded.runId, org.orgId, actorId));
-    await waitForState(async () =>
-      withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          run_status: string;
-          first_status: string;
-          second_status: string;
-        }>(sql`
+      const poster = withOrgContext(org.orgId, () =>
+        postPaymentRun(seeded.runId, org.orgId, actorId),
+      );
+      await waitForState(
+        async () =>
+          withOrgContext(
+            org.orgId,
+            async () =>
+              (
+                await db.execute<{
+                  run_status: string;
+                  first_status: string;
+                  second_status: string;
+                }>(sql`
           select run.status as run_status,
                  (select status from payment_instructions where id = ${seeded.instructionIds[0]!}) as first_status,
                  (select status from payment_instructions where id = ${seeded.instructionIds[1]!}) as second_status
             from payment_runs run
            where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-        `)).rows[0]), {
-      run_status: "processing",
-      first_status: "sent",
-      second_status: "pending",
-    });
+        `)
+              ).rows[0],
+          ),
+        {
+          run_status: "processing",
+          first_status: "sent",
+          second_status: "pending",
+        },
+      );
 
-    // Both reprocessing entry points refuse while a posting claim owns the
-    // lifecycle: neither may drag the run back to `generated` mid-posting.
-    await assert.rejects(
-      withOrgContext(org.orgId, () => generatePaymentFileArtifact(seeded.runId, org.orgId, actorId)),
-      (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /approve the payment run before generating its file/);
-        return true;
-      },
-    );
-    await assert.rejects(
-      withOrgContext(org.orgId, () => generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: randomUUID() })),
-      (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /approve the payment run before generating its file/);
-        return true;
-      },
-    );
-    const duringPosting = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ run_status: string; artifacts: number }>(sql`
+      // Both reprocessing entry points refuse while a posting claim owns the
+      // lifecycle: neither may drag the run back to `generated` mid-posting.
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /approve the payment run before generating its file/);
+          return true;
+        },
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+            reprocessFileId: randomUUID(),
+          }),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /approve the payment run before generating its file/);
+          return true;
+        },
+      );
+      const duringPosting = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ run_status: string; artifacts: number }>(sql`
         select run.status as run_status,
                (select count(*)::int from payment_files f
                  where f.payment_run_id = run.id and f.org_id = run.org_id) as artifacts
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(duringPosting, { run_status: "processing", artifacts: 0 });
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(duringPosting, { run_status: "processing", artifacts: 0 });
 
-    releaseSecondInstruction();
-    await blocker;
-    const outcome = await poster;
-    assert.deepEqual(outcome, { posted: 2, failures: [] });
+      releaseSecondInstruction();
+      await blocker;
+      const outcome = await poster;
+      assert.deepEqual(outcome, { posted: 2, failures: [] });
 
-    // The terminal result stands and no artifact was written behind it.
-    const final = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        claim_token: boolean;
-        artifacts: number;
-        file_events: number;
-        completed: number;
-      }>(sql`
+      // The terminal result stands and no artifact was written behind it.
+      const final = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              claim_token: boolean;
+              artifacts: number;
+              file_events: number;
+              completed: number;
+            }>(sql`
         select run.status as run_status,
                run.posting_claim_token is not null as claim_token,
                (select count(*)::int from payment_files f
@@ -2159,177 +2688,269 @@ test("concurrent payment-file reprocessing cannot clobber an in-flight posting o
                    and e.event_type = 'run_posting_completed') as completed
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(final, {
-      run_status: "confirmed",
-      claim_token: false,
-      artifacts: 0,
-      file_events: 0,
-      completed: 1,
-    });
-  } finally {
-    releaseSecondInstruction?.();
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(final, {
+        run_status: "confirmed",
+        claim_token: false,
+        artifacts: 0,
+        file_events: 0,
+        completed: 1,
+      });
+    } finally {
+      releaseSecondInstruction?.();
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("payment-file reprocessing cannot drag a settled or returned run out of its terminal state", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Terminal guard", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
-    await withOrgContext(org.orgId, () => postPaymentRun(seeded.runId, org.orgId, actorId));
+test(
+  "payment-file reprocessing cannot drag a settled or returned run out of its terminal state",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Terminal guard", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
+      await withOrgContext(org.orgId, () => postPaymentRun(seeded.runId, org.orgId, actorId));
 
-    // The bank confirms settlement: another lifecycle path has preserved the
-    // instruction and driven the run into its terminal `settled` state.
-    await withOrgContext(org.orgId, () => recordPaymentSettlement({
-      instructionId: seeded.instructionId,
-      orgId: org.orgId,
-      userId: actorId,
-      status: "settled",
-      effectiveOn: org.date,
-      bankReference: "BANK-SETTLE-1",
-    }));
-    const terminalState = async () => withOrgContext(org.orgId, async () =>
-      (await db.execute<{ run_status: string; artifacts: number }>(sql`
+      // The bank confirms settlement: another lifecycle path has preserved the
+      // instruction and driven the run into its terminal `settled` state.
+      await withOrgContext(org.orgId, () =>
+        recordPaymentSettlement({
+          instructionId: seeded.instructionId,
+          orgId: org.orgId,
+          userId: actorId,
+          status: "settled",
+          effectiveOn: org.date,
+          bankReference: "BANK-SETTLE-1",
+        }),
+      );
+      const terminalState = async () =>
+        withOrgContext(
+          org.orgId,
+          async () =>
+            (
+              await db.execute<{ run_status: string; artifacts: number }>(sql`
         select run.status as run_status,
                (select count(*)::int from payment_files f
                  where f.payment_run_id = run.id and f.org_id = run.org_id) as artifacts
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
+      `)
+            ).rows[0],
+        );
 
-    await expectGenerationRefused(withOrgContext(org.orgId, () =>
-      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId)));
-    await expectGenerationRefused(withOrgContext(org.orgId, () =>
-      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: randomUUID() })));
-    assert.deepEqual(await terminalState(), { run_status: "settled", artifacts: 0 });
+      await expectGenerationRefused(
+        withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId),
+        ),
+      );
+      await expectGenerationRefused(
+        withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+            reprocessFileId: randomUUID(),
+          }),
+        ),
+      );
+      assert.deepEqual(await terminalState(), { run_status: "settled", artifacts: 0 });
 
-    // A late bank return moves the run to its other terminal state; the same
-    // refusals hold there and nothing regresses.
-    await withOrgContext(org.orgId, () => recordPaymentSettlement({
-      instructionId: seeded.instructionId,
-      orgId: org.orgId,
-      userId: actorId,
-      status: "returned",
-      effectiveOn: org.date,
-      returnCode: "R01",
-      returnReason: "terminal-state regression coverage",
-    }));
-    await expectGenerationRefused(withOrgContext(org.orgId, () =>
-      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: randomUUID() })));
-    assert.deepEqual(await terminalState(), { run_status: "returned", artifacts: 0 });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      // A late bank return moves the run to its other terminal state; the same
+      // refusals hold there and nothing regresses.
+      await withOrgContext(org.orgId, () =>
+        recordPaymentSettlement({
+          instructionId: seeded.instructionId,
+          orgId: org.orgId,
+          userId: actorId,
+          status: "returned",
+          effectiveOn: org.date,
+          returnCode: "R01",
+          returnReason: "terminal-state regression coverage",
+        }),
+      );
+      await expectGenerationRefused(
+        withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+            reprocessFileId: randomUUID(),
+          }),
+        ),
+      );
+      assert.deepEqual(await terminalState(), { run_status: "returned", artifacts: 0 });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a partially failed run still accepts legitimate file regeneration and reprocessing lineage", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Regen operator", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
-    // A prior posting attempt left the run retryable.
-    await withOrgContext(org.orgId, () => db.execute(sql`
+test(
+  "a partially failed run still accepts legitimate file regeneration and reprocessing lineage",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Regen operator", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+      // A prior posting attempt left the run retryable.
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update payment_runs set status = 'partially_failed', updated_by = ${actorId}
        where id = ${seeded.runId} and org_id = ${org.orgId}
-    `));
+    `),
+      );
 
-    const first = await withOrgContext(org.orgId, () =>
-      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId));
-    assert.match(first.filename, /\.csv$/);
-    const firstState = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ run_status: string; file_status: string; sequence: number }>(sql`
+      const first = await withOrgContext(org.orgId, () =>
+        generatePaymentFileArtifact(seeded.runId, org.orgId, actorId),
+      );
+      assert.match(first.filename, /\.csv$/);
+      const firstState = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ run_status: string; file_status: string; sequence: number }>(sql`
         select run.status as run_status, f.status as file_status, f.sequence_number as sequence
           from payment_runs run join payment_files f
             on f.payment_run_id = run.id and f.org_id = run.org_id
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(firstState, { run_status: "generated", file_status: "approved", sequence: 1 });
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(firstState, {
+        run_status: "generated",
+        file_status: "approved",
+        sequence: 1,
+      });
 
-    // Reprocessing supersedes the prior artifact and keeps the run generable.
-    const second = await withOrgContext(org.orgId, () =>
-      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id }));
-    assert.notEqual(second.id, first.id);
-    const lineage = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ statuses: string[]; sequences: number[]; parents: (string | null)[] }>(sql`
+      // Reprocessing supersedes the prior artifact and keeps the run generable.
+      const second = await withOrgContext(org.orgId, () =>
+        generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+          reprocessFileId: first.id,
+        }),
+      );
+      assert.notEqual(second.id, first.id);
+      const lineage = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              statuses: string[];
+              sequences: number[];
+              parents: (string | null)[];
+            }>(sql`
         select array_agg(status order by sequence_number) as statuses,
                array_agg(sequence_number order by sequence_number) as sequences,
                array_agg(parent_payment_file_id order by sequence_number) as parents
           from payment_files
          where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(lineage, {
-      statuses: ["superseded", "approved"],
-      sequences: [1, 2],
-      parents: [null, first.id],
-    });
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(lineage, {
+        statuses: ["superseded", "approved"],
+        sequences: [1, 2],
+        parents: [null, first.id],
+      });
 
-    // Refuse both idempotent retrieval and reprocessing after one instruction was sent.
-    await withOrgContext(org.orgId, () => db.execute(sql`
+      // Refuse both idempotent retrieval and reprocessing after one instruction was sent.
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update payment_instructions set status = 'sent', updated_by = ${actorId}
        where id = ${seeded.instructionId} and org_id = ${org.orgId}
-    `));
-    await withOrgContext(org.orgId, () => db.execute(sql`
+    `),
+      );
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update payment_runs set status = 'partially_failed', updated_by = ${actorId}
        where id = ${seeded.runId} and org_id = ${org.orgId}
-    `));
-    await expectGenerationRefused(withOrgContext(org.orgId, () =>
-      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId)), /already left pending/);
-    await expectGenerationRefused(withOrgContext(org.orgId, () =>
-      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: second.id })),
-    /already left pending/);
-    const afterRefusal = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ statuses: string[]; sequences: number[] }>(sql`
+    `),
+      );
+      await expectGenerationRefused(
+        withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId),
+        ),
+        /already left pending/,
+      );
+      await expectGenerationRefused(
+        withOrgContext(org.orgId, () =>
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+            reprocessFileId: second.id,
+          }),
+        ),
+        /already left pending/,
+      );
+      const afterRefusal = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ statuses: string[]; sequences: number[] }>(sql`
         select array_agg(status order by sequence_number) as statuses,
                array_agg(sequence_number order by sequence_number) as sequences
           from payment_files where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(afterRefusal, { statuses: ["superseded", "approved"], sequences: [1, 2] });
-  } finally {
-    // The scratch-org teardown does not know about payment artifacts; drop
-    // them under the same teardown grants (the append-only evidence guards
-    // require the sandbox flag), evidence first.
-    await withBypass(() => db.transaction(async (tx) => {
-      await tx.execute(sql`
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(afterRefusal, { statuses: ["superseded", "approved"], sequences: [1, 2] });
+    } finally {
+      // The scratch-org teardown does not know about payment artifacts; drop
+      // them under the same teardown grants (the append-only evidence guards
+      // require the sandbox flag), evidence first.
+      await withBypass(() =>
+        db.transaction(async (tx) => {
+          await tx.execute(sql`
         select set_config('openbooks.amend', 'on', true),
                set_config('openbooks.sandbox_wipe', 'on', true),
                set_config('app.bypass_rls', 'on', true)`);
-      await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId} and name like 'Scratch %'`);
-      await tx.execute(sql`delete from payment_events where org_id = ${org.orgId} and payment_file_id is not null`);
-      await tx.execute(sql`delete from payment_files where org_id = ${org.orgId}`);
-    }));
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+          await tx.execute(
+            sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId} and name like 'Scratch %'`,
+          );
+          await tx.execute(
+            sql`delete from payment_events where org_id = ${org.orgId} and payment_file_id is not null`,
+          );
+          await tx.execute(sql`delete from payment_files where org_id = ${org.orgId}`);
+        }),
+      );
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("cancellation judges the run under its row lock, not the caller's stale read", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  let releaseHolder!: (() => void) | undefined;
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Cancel racer", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
-    // The caller's preflight sees a cancellable draft whose payments are
-    // still drafts — nothing but the lifecycle gate itself may stop it. The
-    // wire-fixture payments are demoted to plain draft documents (their
-    // posting evidence removed under the amend kernel bypass) so every child
-    // mutation a stale cancellation attempts is actually available to it.
-    // Append-only journal storage gives the amend bypass no posted-line deletes:
-    // demote through the sandbox-wipe path the teardown uses, on this
-    // scratch org only.
-    await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-      await tx.execute(sql`
+test(
+  "cancellation judges the run under its row lock, not the caller's stale read",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let releaseHolder!: (() => void) | undefined;
+    try {
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "Cancel racer", "admin"));
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+      // The caller's preflight sees a cancellable draft whose payments are
+      // still drafts — nothing but the lifecycle gate itself may stop it. The
+      // wire-fixture payments are demoted to plain draft documents (their
+      // posting evidence removed under the amend kernel bypass) so every child
+      // mutation a stale cancellation attempts is actually available to it.
+      // Append-only journal storage gives the amend bypass no posted-line deletes:
+      // demote through the sandbox-wipe path the teardown uses, on this
+      // scratch org only.
+      await withOrgContext(org.orgId, () =>
+        db.transaction(async (tx) => {
+          await tx.execute(sql`
         select set_config('openbooks.amend', 'on', true),
                set_config('openbooks.sandbox_wipe', 'on', true),
                set_config('app.bypass_rls', 'on', true)`);
-      await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId} and name like 'Scratch %'`);
-      await tx.execute(sql`
+          await tx.execute(
+            sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId} and name like 'Scratch %'`,
+          );
+          await tx.execute(sql`
         update documents set status = 'draft', posted_entry_id = null
          where org_id = ${org.orgId}
            and id in (select payment_document_id from payment_instructions
                       where payment_run_id = ${seeded.runId} and org_id = ${org.orgId})
       `);
-      await tx.execute(sql`
+          await tx.execute(sql`
         delete from journal_lines
          where org_id = ${org.orgId}
            and entry_id in (
@@ -2341,7 +2962,7 @@ test("cancellation judges the run under its row lock, not the caller's stale rea
                 )
            )
       `);
-      await tx.execute(sql`
+          await tx.execute(sql`
         delete from journal_entries
          where org_id = ${org.orgId}
            and source_document_id in (
@@ -2349,47 +2970,61 @@ test("cancellation judges the run under its row lock, not the caller's stale rea
               where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
            )
       `);
-    }));
-    await withOrgContext(org.orgId, () => db.execute(sql`
+        }),
+      );
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update payment_runs set status = 'draft', updated_by = ${actorId}
        where id = ${seeded.runId} and org_id = ${org.orgId}
-    `));
+    `),
+      );
 
-    let signalLocked!: (pid: number) => void;
-    const runRowLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
-    const raceObserved = new Promise<void>((resolve) => { releaseHolder = resolve; });
-    const holder = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
-      await tx.execute(sql`
+      let signalLocked!: (pid: number) => void;
+      const runRowLocked = new Promise<number>((resolve) => {
+        signalLocked = resolve;
+      });
+      const raceObserved = new Promise<void>((resolve) => {
+        releaseHolder = resolve;
+      });
+      const holder = withOrgContext(org.orgId, () =>
+        db.transaction(async (tx) => {
+          const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+          await tx.execute(sql`
         select id from payment_runs
          where id = ${seeded.runId} and org_id = ${org.orgId}
          for update
       `);
-      signalLocked(pid.rows[0]!.pid);
-      await raceObserved;
-      // While the cancellation is fenced out on the row lock, another
-      // lifecycle path installs a non-cancellable state — exactly the
-      // overwrite window this control owns.
-      await tx.execute(sql`
+          signalLocked(pid.rows[0]!.pid);
+          await raceObserved;
+          // While the cancellation is fenced out on the row lock, another
+          // lifecycle path installs a non-cancellable state — exactly the
+          // overwrite window this control owns.
+          await tx.execute(sql`
         update payment_runs set status = 'generated', updated_at = now(), updated_by = ${actorId}
          where id = ${seeded.runId} and org_id = ${org.orgId}
       `);
-    }));
-    const holderPid = await runRowLocked;
+        }),
+      );
+      const holderPid = await runRowLocked;
 
-    const cancellation = withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, actorId, "concurrency regression"));
-    // The cancellation must contend on the run row before mutating anything.
-    await waitForBlockedBy(holderPid);
-    releaseHolder?.();
-    await holder;
+      const cancellation = withOrgContext(org.orgId, () =>
+        cancelPaymentRun(seeded.runId, org.orgId, actorId, "concurrency regression"),
+      );
+      // The cancellation must contend on the run row before mutating anything.
+      await waitForBlockedBy(holderPid);
+      releaseHolder?.();
+      await holder;
 
-    await assert.rejects(cancellation, (error: unknown) => {
-      assert.ok(error instanceof PaymentError);
-      assert.match(error.message, /cannot be cancelled/);
-      return true;
-    });
-    const final = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ run_status: string; pending: number; documents: number }>(sql`
+      await assert.rejects(cancellation, (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /cannot be cancelled/);
+        return true;
+      });
+      const final = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ run_status: string; pending: number; documents: number }>(sql`
         select run.status as run_status,
                (select count(*)::int from payment_instructions i
                  where i.payment_run_id = run.id and i.org_id = run.org_id
@@ -2401,13 +3036,16 @@ test("cancellation judges the run under its row lock, not the caller's stale rea
                 )) as documents
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(final, { run_status: "generated", pending: 2, documents: 2 });
-  } finally {
-    releaseHolder?.();
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(final, { run_status: "generated", pending: 2, documents: 2 });
+    } finally {
+      releaseHolder?.();
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("draft payment saves are fenced by the exact document revision", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
@@ -2434,13 +3072,16 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
     const invoiceEntryId = await postDocument(invoiceId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
-    const openLineId = (await db.execute<{ id: string }>(sql`
+    const openLineId = (
+      await db.execute<{ id: string }>(sql`
       select id from journal_lines
        where entry_id = ${invoiceEntryId} and org_id = ${org.orgId}
          and is_open_item and amount < 0
-    `)).rows[0]!.id;
+    `)
+    ).rows[0]!.id;
 
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+    const payment = await createPaymentDocument({
+      allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "vendor_payment",
       createdBy: userId,
@@ -2452,42 +3093,58 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
       fxRate: "1",
     });
 
-    const revision = async () => withOrgContext(org.orgId, async () =>
-      (await db.execute<{ updatedAt: string }>(sql`
+    const revision = async () =>
+      withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ updatedAt: string }>(sql`
         select (revision_seq)::text as "updatedAt"
           from documents where id = ${payment.id} and org_id = ${org.orgId}
-      `)).rows[0]!.updatedAt);
+      `)
+          ).rows[0]!.updatedAt,
+      );
 
     const allocationSave = {
       partyId: org.vendorId,
       bankAccountId: org.accounts.bank,
-      allocations: [{
-        openLineId,
-        sourceTransactionAmount: "40",
-        targetTransactionAmount: "40",
-        settlementRate: "1",
-        settlementRateSource: "same_currency" as const,
-        settlementRateReference: "same transaction currency",
-      }],
+      allocations: [
+        {
+          openLineId,
+          sourceTransactionAmount: "40",
+          targetTransactionAmount: "40",
+          settlementRate: "1",
+          settlementRateSource: "same_currency" as const,
+          settlementRateReference: "same transaction currency",
+        },
+      ],
     };
 
     // The first save under the caller's loaded revision goes through.
     const initialRevision = await revision();
-    await withOrgContext(org.orgId, () => updateDraftPayment(payment.id, {
-      ...allocationSave,
-    }, userId, org.orgId, { expectedRevision: initialRevision, allowedSubsidiaryIds: null },
-));
+    await withOrgContext(org.orgId, () =>
+      updateDraftPayment(
+        payment.id,
+        {
+          ...allocationSave,
+        },
+        userId,
+        org.orgId,
+        { expectedRevision: initialRevision, allowedSubsidiaryIds: null },
+      ),
+    );
     const afterSave = await revision();
     assert.notEqual(afterSave, initialRevision);
 
     // The pre-save token is now stale: the whole save fences and nothing
     // about the draft moves.
     await assert.rejects(
-      withOrgContext(org.orgId, () => updateDraftPayment(payment.id, {}, userId, org.orgId, {
-        expectedRevision: initialRevision,
-        allowedSubsidiaryIds: null,
-      },
-)),
+      withOrgContext(org.orgId, () =>
+        updateDraftPayment(payment.id, {}, userId, org.orgId, {
+          expectedRevision: initialRevision,
+          allowedSubsidiaryIds: null,
+        }),
+      ),
       (error: unknown) => error instanceof PaymentRevisionConflictError,
     );
     const afterConflict = await revision();
@@ -2495,241 +3152,318 @@ test("draft payment saves are fenced by the exact document revision", { skip: !D
 
     // A save without a token remains legal for internal callers (run
     // creation); the API contract requires one — covered by the route.
-    await withOrgContext(org.orgId, () => updateDraftPayment(payment.id, {
-      memo: "internal unfenced save",
-    }, userId, org.orgId,
-  { allowedSubsidiaryIds: null },
-));
+    await withOrgContext(org.orgId, () =>
+      updateDraftPayment(
+        payment.id,
+        {
+          memo: "internal unfenced save",
+        },
+        userId,
+        org.orgId,
+        { allowedSubsidiaryIds: null },
+      ),
+    );
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
 
-test("customer-payment surcharge posting rejects a non-income fee account", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Fee account guard", "admin");
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-      orgId: org.orgId,
-      kind: "customer_payment",
-      createdBy: userId,
-      partyId: org.customerId,
-      bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId,
-      documentDate: org.date,
-      currency: "CAD",
-    });
-    await assert.rejects(
-      updateDraftPayment(
-        payment.id,
-        { feeAmount: "1", feeIncomeAccountId: org.accounts.cogs },
-        userId,
-        org.orgId,
-        { allowedSubsidiaryIds: null },
-      ),
-      (error: unknown) => error instanceof PaymentError && /fee income account/.test(error.message),
-    );
-    const unchanged = await db.execute<{ status: string; total: string; lines: number }>(sql`
+test(
+  "customer-payment surcharge posting rejects a non-income fee account",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Fee account guard", "admin");
+      const payment = await createPaymentDocument({
+        allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        kind: "customer_payment",
+        createdBy: userId,
+        partyId: org.customerId,
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        documentDate: org.date,
+        currency: "CAD",
+      });
+      await assert.rejects(
+        updateDraftPayment(
+          payment.id,
+          { feeAmount: "1", feeIncomeAccountId: org.accounts.cogs },
+          userId,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        ),
+        (error: unknown) =>
+          error instanceof PaymentError && /fee income account/.test(error.message),
+      );
+      const unchanged = await db.execute<{ status: string; total: string; lines: number }>(sql`
       select d.status, d.total,
              (select count(*)::int from document_lines l where l.org_id = d.org_id and l.document_id = d.id) as lines
         from documents d
        where d.org_id = ${org.orgId} and d.id = ${payment.id}
     `);
-    assert.deepEqual(unchanged.rows[0], { status: "draft", total: "0.0000", lines: 0 });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("draft allocation shape validation fails closed before any open-item read", { skip: !DB }, async () => {
-  // validateAllocationInputs is a mutation target with no coverage: every
-  // guard below (missing line, duplicate line, non-positive amounts, bad
-  // evidence source, blank reference, unusable rate) must refuse the draft
-  // before the open-item lookup, which these shapes never reach.
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Allocation shape guard", "admin");
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-      orgId: org.orgId,
-      kind: "vendor_payment",
-      createdBy: userId,
-      partyId: org.vendorId,
-      bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId,
-      documentDate: org.date,
-      currency: "CAD",
-    });
-    const lineId = randomUUID();
-    const shape = (overrides: Record<string, unknown>) => ({
-      openLineId: lineId,
-      sourceTransactionAmount: "10",
-      targetTransactionAmount: "10",
-      settlementRate: "1",
-      settlementRateSource: "same_currency" as const,
-      settlementRateReference: "same transaction currency",
-      ...overrides,
-    });
-    const cases: Array<[string, Record<string, unknown> | Array<Record<string, unknown>>, RegExp]> = [
-      ["missing open item line", { openLineId: "" }, /missing its open item line/],
-      ["duplicate open item", [shape({}), shape({})], /allocated twice/],
-      ["zero source amount", { sourceTransactionAmount: "0" }, /positive exact decimals/],
-      ["negative target amount", { targetTransactionAmount: "-1" }, /positive exact decimals/],
-      ["zero target base amount", { targetBaseAmount: "0" }, /positive exact decimals/],
-      ["negative target base amount", { targetBaseAmount: "-2.5" }, /positive exact decimals/],
-      ["invalid evidence source", { settlementRateSource: "bogus" }, /evidence source is invalid/],
-      ["blank evidence reference", { settlementRateReference: "   " }, /evidence reference is required/],
-      ["over-precise rate", { settlementRate: "1.00000000001" }, /positive exact decimals/],
-      ["zero rate", { settlementRate: "0.0000000000" }, /positive exact decimals/],
-      ["negative rate", { settlementRate: "-1" }, /positive exact decimals/],
-    ];
-    for (const [name, allocations, message] of cases) {
-      await assert.rejects(
-        updateDraftPayment(
-          payment.id,
-          { allocations: (Array.isArray(allocations) ? allocations : [shape(allocations)]) as never },
-          userId,
-          org.orgId,
-          { allowedSubsidiaryIds: null },
-        ),
-        (error: unknown) => error instanceof PaymentError && message.test(error.message),
-        name,
-      );
+      assert.deepEqual(unchanged.rows[0], { status: "draft", total: "0.0000", lines: 0 });
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-    // A well-formed shape clears validation and dies later at the open-item
-    // lookup, proving the guards above are ordered before it.
-    await assert.rejects(
-      updateDraftPayment(payment.id, { allocations: [shape({})] }, userId, org.orgId, { allowedSubsidiaryIds: null }),
-      (error: unknown) => error instanceof PaymentError && /not an open item for this party/.test(error.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test("settlement evidence must cross-foot and match the currency rules", { skip: !DB }, async () => {
-  // validateSettlementEvidence is uncovered: a rate that does not reproduce
-  // the target amount, same-currency pairs without a unit rate, and
-  // cross-currency pairs without explicit evidence must all fail closed.
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Settlement evidence guard", "admin");
-    const invoiceId = randomUUID();
-    await db.execute(sql`
+test(
+  "draft allocation shape validation fails closed before any open-item read",
+  { skip: !DB },
+  async () => {
+    // validateAllocationInputs is a mutation target with no coverage: every
+    // guard below (missing line, duplicate line, non-positive amounts, bad
+    // evidence source, blank reference, unusable rate) must refuse the draft
+    // before the open-item lookup, which these shapes never reach.
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Allocation shape guard", "admin");
+      const payment = await createPaymentDocument({
+        allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        kind: "vendor_payment",
+        createdBy: userId,
+        partyId: org.vendorId,
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        documentDate: org.date,
+        currency: "CAD",
+      });
+      const lineId = randomUUID();
+      const shape = (overrides: Record<string, unknown>) => ({
+        openLineId: lineId,
+        sourceTransactionAmount: "10",
+        targetTransactionAmount: "10",
+        settlementRate: "1",
+        settlementRateSource: "same_currency" as const,
+        settlementRateReference: "same transaction currency",
+        ...overrides,
+      });
+      const cases: Array<
+        [string, Record<string, unknown> | Array<Record<string, unknown>>, RegExp]
+      > = [
+        ["missing open item line", { openLineId: "" }, /missing its open item line/],
+        ["duplicate open item", [shape({}), shape({})], /allocated twice/],
+        ["zero source amount", { sourceTransactionAmount: "0" }, /positive exact decimals/],
+        ["negative target amount", { targetTransactionAmount: "-1" }, /positive exact decimals/],
+        ["zero target base amount", { targetBaseAmount: "0" }, /positive exact decimals/],
+        ["negative target base amount", { targetBaseAmount: "-2.5" }, /positive exact decimals/],
+        [
+          "invalid evidence source",
+          { settlementRateSource: "bogus" },
+          /evidence source is invalid/,
+        ],
+        [
+          "blank evidence reference",
+          { settlementRateReference: "   " },
+          /evidence reference is required/,
+        ],
+        ["over-precise rate", { settlementRate: "1.00000000001" }, /positive exact decimals/],
+        ["zero rate", { settlementRate: "0.0000000000" }, /positive exact decimals/],
+        ["negative rate", { settlementRate: "-1" }, /positive exact decimals/],
+      ];
+      for (const [name, allocations, message] of cases) {
+        await assert.rejects(
+          updateDraftPayment(
+            payment.id,
+            {
+              allocations: (Array.isArray(allocations)
+                ? allocations
+                : [shape(allocations)]) as never,
+            },
+            userId,
+            org.orgId,
+            { allowedSubsidiaryIds: null },
+          ),
+          (error: unknown) => error instanceof PaymentError && message.test(error.message),
+          name,
+        );
+      }
+      // A well-formed shape clears validation and dies later at the open-item
+      // lookup, proving the guards above are ordered before it.
+      await assert.rejects(
+        updateDraftPayment(payment.id, { allocations: [shape({})] }, userId, org.orgId, {
+          allowedSubsidiaryIds: null,
+        }),
+        (error: unknown) =>
+          error instanceof PaymentError && /not an open item for this party/.test(error.message),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "settlement evidence must cross-foot and match the currency rules",
+  { skip: !DB },
+  async () => {
+    // validateSettlementEvidence is uncovered: a rate that does not reproduce
+    // the target amount, same-currency pairs without a unit rate, and
+    // cross-currency pairs without explicit evidence must all fail closed.
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Settlement evidence guard", "admin");
+      const invoiceId = randomUUID();
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
       values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-EVIDENCE-1',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
               '100', '0', '100', ${userId})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price,
          amount, tax_amount)
         values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100',
               '100', '0')`);
-    await db.execute(sql`
+      await db.execute(sql`
       update documents set status = 'approved', updated_at = now()
        where id = ${invoiceId} and org_id = ${org.orgId}`);
-    const invoiceEntryId = await postDocument(invoiceId, {
-      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-    });
-    const openLineId = (await db.execute<{ id: string }>(sql`
+      const invoiceEntryId = await postDocument(invoiceId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      const openLineId = (
+        await db.execute<{ id: string }>(sql`
       select id from journal_lines
        where entry_id = ${invoiceEntryId} and org_id = ${org.orgId}
          and is_open_item
-    `)).rows[0]!.id;
+    `)
+      ).rows[0]!.id;
 
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-      orgId: org.orgId,
-      kind: "customer_payment",
-      createdBy: userId,
-      partyId: org.customerId,
-      bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId,
-      documentDate: org.date,
-      currency: "CAD",
-    });
-    const evidence = (overrides: Record<string, unknown>) => ({
-      openLineId,
-      sourceTransactionAmount: "80",
-      targetTransactionAmount: "80",
-      settlementRate: "1",
-      settlementRateSource: "same_currency" as const,
-      settlementRateReference: "same transaction currency",
-      ...overrides,
-    });
-    const cases: Array<[string, Record<string, unknown>, RegExp]> = [
-      ["rate does not cross-foot", { targetTransactionAmount: "100", settlementRate: "1.2" }, /does not cross-foot/],
-      ["same-currency pair without a unit rate", { settlementRate: "1.0000000001", settlementRateSource: "manual" }, /require equal amounts and a rate of one/],
-      ["same-currency pair without same-currency evidence", { settlementRateSource: "manual" }, /require equal amounts and a rate of one/],
-    ];
-    for (const [name, allocation, message] of cases) {
-      await assert.rejects(
-        updateDraftPayment(payment.id, { allocations: [evidence(allocation)] }, userId, org.orgId, { allowedSubsidiaryIds: null }),
-        (error: unknown) => error instanceof PaymentError && message.test(error.message),
-        name,
-      );
-    }
+      const payment = await createPaymentDocument({
+        allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        kind: "customer_payment",
+        createdBy: userId,
+        partyId: org.customerId,
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        documentDate: org.date,
+        currency: "CAD",
+      });
+      const evidence = (overrides: Record<string, unknown>) => ({
+        openLineId,
+        sourceTransactionAmount: "80",
+        targetTransactionAmount: "80",
+        settlementRate: "1",
+        settlementRateSource: "same_currency" as const,
+        settlementRateReference: "same transaction currency",
+        ...overrides,
+      });
+      const cases: Array<[string, Record<string, unknown>, RegExp]> = [
+        [
+          "rate does not cross-foot",
+          { targetTransactionAmount: "100", settlementRate: "1.2" },
+          /does not cross-foot/,
+        ],
+        [
+          "same-currency pair without a unit rate",
+          { settlementRate: "1.0000000001", settlementRateSource: "manual" },
+          /require equal amounts and a rate of one/,
+        ],
+        [
+          "same-currency pair without same-currency evidence",
+          { settlementRateSource: "manual" },
+          /require equal amounts and a rate of one/,
+        ],
+      ];
+      for (const [name, allocation, message] of cases) {
+        await assert.rejects(
+          updateDraftPayment(
+            payment.id,
+            { allocations: [evidence(allocation)] },
+            userId,
+            org.orgId,
+            { allowedSubsidiaryIds: null },
+          ),
+          (error: unknown) => error instanceof PaymentError && message.test(error.message),
+          name,
+        );
+      }
 
-    const foreignInvoiceId = randomUUID();
-    await db.execute(sql`
+      const foreignInvoiceId = randomUUID();
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
       values (${foreignInvoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-EVIDENCE-FX',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'EUR', '1.2',
               '100', '0', '100', ${userId})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price,
          amount, tax_amount)
         values (${org.orgId}, ${foreignInvoiceId}, 1, ${org.accounts.revenue}, '1', '100',
               '100', '0')`);
-    await db.execute(sql`
+      await db.execute(sql`
       update documents set status = 'approved', updated_at = now()
        where id = ${foreignInvoiceId} and org_id = ${org.orgId}`);
-    const foreignEntryId = await postDocument(foreignInvoiceId, {
-      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-    });
-    const foreignLineId = (await db.execute<{ id: string }>(sql`
+      const foreignEntryId = await postDocument(foreignInvoiceId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      const foreignLineId = (
+        await db.execute<{ id: string }>(sql`
       select id from journal_lines
        where entry_id = ${foreignEntryId} and org_id = ${org.orgId}
          and is_open_item
-    `)).rows[0]!.id;
-    const foreignPayment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-      orgId: org.orgId,
-      kind: "customer_payment",
-      createdBy: userId,
-      partyId: org.customerId,
-      bankAccountId: org.accounts.bank,
-      subsidiaryId: org.subsidiaryId,
-      documentDate: org.date,
-      currency: "USD",
-      fxRate: "1.1",
-    });
-    const foreign = (overrides: Record<string, unknown>) => ({
-      openLineId: foreignLineId,
-      sourceTransactionAmount: "100",
-      targetTransactionAmount: "120",
-      settlementRate: "1.2",
-      settlementRateSource: "manual" as const,
-      settlementRateReference: "BANK-ADVICE-7",
-      ...overrides,
-    });
-    await assert.rejects(
-      updateDraftPayment(foreignPayment.id, { allocations: [foreign({ settlementRateSource: "same_currency" })] }, userId, org.orgId, { allowedSubsidiaryIds: null }),
-      (error: unknown) => error instanceof PaymentError && /require explicit settlement-rate evidence/.test(error.message),
-      "cross-currency pair without explicit evidence",
-    );
-    await assert.rejects(
-      updateDraftPayment(foreignPayment.id, { allocations: [foreign({ settlementRateSource: "provider" })] }, userId, org.orgId, { allowedSubsidiaryIds: null }),
-      (error: unknown) => error instanceof PaymentError && /requires an FX rate observation/.test(error.message),
-      "provider evidence without an observation",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `)
+      ).rows[0]!.id;
+      const foreignPayment = await createPaymentDocument({
+        allowedSubsidiaryIds: null,
+        orgId: org.orgId,
+        kind: "customer_payment",
+        createdBy: userId,
+        partyId: org.customerId,
+        bankAccountId: org.accounts.bank,
+        subsidiaryId: org.subsidiaryId,
+        documentDate: org.date,
+        currency: "USD",
+        fxRate: "1.1",
+      });
+      const foreign = (overrides: Record<string, unknown>) => ({
+        openLineId: foreignLineId,
+        sourceTransactionAmount: "100",
+        targetTransactionAmount: "120",
+        settlementRate: "1.2",
+        settlementRateSource: "manual" as const,
+        settlementRateReference: "BANK-ADVICE-7",
+        ...overrides,
+      });
+      await assert.rejects(
+        updateDraftPayment(
+          foreignPayment.id,
+          { allocations: [foreign({ settlementRateSource: "same_currency" })] },
+          userId,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        ),
+        (error: unknown) =>
+          error instanceof PaymentError &&
+          /require explicit settlement-rate evidence/.test(error.message),
+        "cross-currency pair without explicit evidence",
+      );
+      await assert.rejects(
+        updateDraftPayment(
+          foreignPayment.id,
+          { allocations: [foreign({ settlementRateSource: "provider" })] },
+          userId,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        ),
+        (error: unknown) =>
+          error instanceof PaymentError && /requires an FX rate observation/.test(error.message),
+        "provider evidence without an observation",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("posting compares allocations against the approved snapshot", { skip: !DB }, async () => {
   // allocationsMatchApprovedSnapshot is uncovered: posting the approved
@@ -2761,11 +3495,15 @@ test("posting compares allocations against the approved snapshot", { skip: !DB }
       const entryId = await postDocument(invoiceId, {
         control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
       });
-      openLineIds.push((await db.execute<{ id: string }>(sql`
+      openLineIds.push(
+        (
+          await db.execute<{ id: string }>(sql`
         select id from journal_lines
          where entry_id = ${entryId} and org_id = ${org.orgId}
            and is_open_item
-      `)).rows[0]!.id);
+      `)
+        ).rows[0]!.id,
+      );
     }
     const stored = (lineId: string, amount: string) => ({
       openLineId: lineId,
@@ -2777,7 +3515,8 @@ test("posting compares allocations against the approved snapshot", { skip: !DB }
     });
     const paymentIds: string[] = [];
     for (let i = 0; i < 2; i += 1) {
-      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+      const payment = await createPaymentDocument({
+        allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "customer_payment",
         createdBy: userId,
@@ -2787,13 +3526,17 @@ test("posting compares allocations against the approved snapshot", { skip: !DB }
         documentDate: org.date,
         currency: "CAD",
       });
-      const saved = await updateDraftPayment(payment.id, {
-        partyId: org.customerId,
-        bankAccountId: org.accounts.bank,
-        allocations: [stored(openLineIds[i]!, "100")],
-      }, userId, org.orgId,
-  { allowedSubsidiaryIds: null },
-);
+      const saved = await updateDraftPayment(
+        payment.id,
+        {
+          partyId: org.customerId,
+          bankAccountId: org.accounts.bank,
+          allocations: [stored(openLineIds[i]!, "100")],
+        },
+        userId,
+        org.orgId,
+        { allowedSubsidiaryIds: null },
+      );
       // The drawer renders the returned document: a loader that answers
       // null for a just-saved draft breaks the round trip.
       assert.ok(saved, "draft save returns the document");
@@ -2816,7 +3559,8 @@ test("posting compares allocations against the approved snapshot", { skip: !DB }
     // Drifted amounts: the snapshot mismatches and nothing posts.
     await assert.rejects(
       postPaymentWithApplications(paymentIds[1]!, [stored(openLineIds[1]!, "70")], userId),
-      (error: unknown) => error instanceof PaymentError && /differ from the approved document/.test(error.message),
+      (error: unknown) =>
+        error instanceof PaymentError && /differ from the approved document/.test(error.message),
     );
     const drifted = await db.execute<{ status: string; posted_entry_id: string | null }>(sql`
       select status, posted_entry_id from documents where id = ${paymentIds[1]} and org_id = ${org.orgId}
@@ -2852,13 +3596,16 @@ test("customer receipts refuse a vendor-style early-payment discount", { skip: !
     const invoiceEntryId = await postDocument(invoiceId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
-    const openLineId = (await db.execute<{ id: string }>(sql`
+    const openLineId = (
+      await db.execute<{ id: string }>(sql`
       select id from journal_lines
        where entry_id = ${invoiceEntryId} and org_id = ${org.orgId}
          and is_open_item
-    `)).rows[0]!.id;
+    `)
+    ).rows[0]!.id;
 
-    const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+    const payment = await createPaymentDocument({
+      allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
       createdBy: userId,
@@ -2878,14 +3625,16 @@ test("customer receipts refuse a vendor-style early-payment discount", { skip: !
         {
           partyId: org.customerId,
           bankAccountId: org.accounts.bank,
-          allocations: [{
-            openLineId,
-            sourceTransactionAmount: "100",
-            targetTransactionAmount: "100",
-            settlementRate: "1",
-            settlementRateSource: "same_currency" as const,
-            settlementRateReference: "same transaction currency",
-          }],
+          allocations: [
+            {
+              openLineId,
+              sourceTransactionAmount: "100",
+              targetTransactionAmount: "100",
+              settlementRate: "1",
+              settlementRateSource: "same_currency" as const,
+              settlementRateReference: "same transaction currency",
+            },
+          ],
           discountAmount: "10",
           discountAccountId: org.accounts.cogs,
         },
@@ -2893,7 +3642,9 @@ test("customer receipts refuse a vendor-style early-payment discount", { skip: !
         org.orgId,
         { allowedSubsidiaryIds: null },
       ),
-      (error: unknown) => error instanceof PaymentError && /discounts only apply to vendor payments/.test(error.message),
+      (error: unknown) =>
+        error instanceof PaymentError &&
+        /discounts only apply to vendor payments/.test(error.message),
     );
     const unchanged = await db.execute<{ status: string; total: string; lines: number }>(sql`
       select d.status, d.total,
@@ -2907,147 +3658,206 @@ test("customer receipts refuse a vendor-style early-payment discount", { skip: !
   }
 });
 
-test("a customer receipt with no applications posts only as an on-account credit, and refuses with neither", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "On-account receipt", "admin");
-    const approvedReceipt = async (onAccountAmount: string) => {
-      const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
-        orgId: org.orgId,
-        kind: "customer_payment",
-        createdBy: userId,
-        partyId: org.customerId,
-        bankAccountId: org.accounts.bank,
-        subsidiaryId: org.subsidiaryId,
-        documentDate: org.date,
-        currency: "CAD",
-      });
-      await updateDraftPayment(
-        payment.id,
-        { partyId: org.customerId, bankAccountId: org.accounts.bank, allocations: [], onAccountAmount },
-        userId,
-        org.orgId,
-        { allowedSubsidiaryIds: null },
-      );
-      await db.execute(sql`
+test(
+  "a customer receipt with no applications posts only as an on-account credit, and refuses with neither",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "On-account receipt", "admin");
+      const approvedReceipt = async (onAccountAmount: string) => {
+        const payment = await createPaymentDocument({
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          kind: "customer_payment",
+          createdBy: userId,
+          partyId: org.customerId,
+          bankAccountId: org.accounts.bank,
+          subsidiaryId: org.subsidiaryId,
+          documentDate: org.date,
+          currency: "CAD",
+        });
+        await updateDraftPayment(
+          payment.id,
+          {
+            partyId: org.customerId,
+            bankAccountId: org.accounts.bank,
+            allocations: [],
+            onAccountAmount,
+          },
+          userId,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        );
+        await db.execute(sql`
         update documents set status = 'approved', updated_at = now()
          where id = ${payment.id} and org_id = ${org.orgId}`);
-      return payment.id;
-    };
+        return payment.id;
+      };
 
-    // Cash received with no invoice open: the whole receipt is an AR credit.
-    const credited = await approvedReceipt("150");
-    const { entryId } = await withOrgTransaction(org.orgId, () =>
-      postPaymentWithApplications(credited, undefined, userId, "ui", { deferEffects: true }));
-    const legs = (await db.execute<{ accountId: string; amount: string; isOpenItem: boolean }>(sql`
+      // Cash received with no invoice open: the whole receipt is an AR credit.
+      const credited = await approvedReceipt("150");
+      const { entryId } = await withOrgTransaction(org.orgId, () =>
+        postPaymentWithApplications(credited, undefined, userId, "ui", { deferEffects: true }),
+      );
+      const legs = (
+        await db.execute<{ accountId: string; amount: string; isOpenItem: boolean }>(sql`
       select account_id as "accountId", amount::text as amount, is_open_item as "isOpenItem"
         from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId}
-       order by line_number`)).rows;
-    assert.deepEqual(
-      legs.map((leg) => [leg.accountId === org.accounts.bank ? "bank" : leg.accountId === org.accounts.ar ? "ar" : "other", leg.amount, leg.isOpenItem]),
-      [["bank", "150.0000", false], ["ar", "-150.0000", true]],
-      "bank debits the receipt; AR is credited as an open customer credit",
-    );
-    const applied = (await db.execute<{ n: string }>(sql`
+       order by line_number`)
+      ).rows;
+      assert.deepEqual(
+        legs.map((leg) => [
+          leg.accountId === org.accounts.bank
+            ? "bank"
+            : leg.accountId === org.accounts.ar
+              ? "ar"
+              : "other",
+          leg.amount,
+          leg.isOpenItem,
+        ]),
+        [
+          ["bank", "150.0000", false],
+          ["ar", "-150.0000", true],
+        ],
+        "bank debits the receipt; AR is credited as an open customer credit",
+      );
+      const applied = (
+        await db.execute<{ n: string }>(sql`
       select count(*)::text as n from applications
        where org_id = ${org.orgId}
-         and from_line_id in (select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and is_open_item)`)).rows[0]!;
-    assert.equal(Number(applied.n), 0, "an on-account receipt writes no applications");
+         and from_line_id in (select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and is_open_item)`)
+      ).rows[0]!;
+      assert.equal(Number(applied.n), 0, "an on-account receipt writes no applications");
 
-    // Neither applications nor an on-account amount: nothing would be recorded, so refuse by name.
-    const empty = await approvedReceipt("0");
-    await assert.rejects(
-      withOrgTransaction(org.orgId, () => postPaymentWithApplications(empty, undefined, userId, "ui", { deferEffects: true })),
-      (error: unknown) =>
-        error instanceof PaymentError && /enter the amount received so the receipt posts as an on-account credit/.test(error.message),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Neither applications nor an on-account amount: nothing would be recorded, so refuse by name.
+      const empty = await approvedReceipt("0");
+      await assert.rejects(
+        withOrgTransaction(org.orgId, () =>
+          postPaymentWithApplications(empty, undefined, userId, "ui", { deferEffects: true }),
+        ),
+        (error: unknown) =>
+          error instanceof PaymentError &&
+          /enter the amount received so the receipt posts as an on-account credit/.test(
+            error.message,
+          ),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an in-flight automatic remittance decision holds the run against a concurrent bank return", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  let releaseProfileTable!: () => void;
-  const profileTableReleased = new Promise<void>((resolve) => { releaseProfileTable = resolve; });
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Tail serializer", "admin"));
-    const seeded = await withOrgContext(org.orgId, () =>
-      seedPostingClaimRun(org, actorId, 1, { autoRemittance: true }));
-    await withOrgContext(org.orgId, () => db.execute(sql`
+test(
+  "an in-flight automatic remittance decision holds the run against a concurrent bank return",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let releaseProfileTable!: () => void;
+    const profileTableReleased = new Promise<void>((resolve) => {
+      releaseProfileTable = resolve;
+    });
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Tail serializer", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () =>
+        seedPostingClaimRun(org, actorId, 1, { autoRemittance: true }),
+      );
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       insert into vendor_roles (org_id, party_id, eft_notification_email, created_by, updated_by)
       values (${org.orgId}, ${org.vendorId}, 'ap@vendor.example', ${actorId}, ${actorId})
-    `));
+    `),
+      );
 
-    // Park the worker inside its remittance staging transaction, after it
-    // committed the first instruction as `sent`: holding this table stops the
-    // tail's context read at the exact point where a bank return could
-    // otherwise interleave.
-    let signalLocked!: (pid: number) => void;
-    const profileTableLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
-    const blocker = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
-      await tx.execute(sql`lock table payment_bank_profiles in access exclusive mode`);
-      signalLocked(pid.rows[0]!.pid);
-      await profileTableReleased;
-    }));
-    const blockerPid = await profileTableLocked;
+      // Park the worker inside its remittance staging transaction, after it
+      // committed the first instruction as `sent`: holding this table stops the
+      // tail's context read at the exact point where a bank return could
+      // otherwise interleave.
+      let signalLocked!: (pid: number) => void;
+      const profileTableLocked = new Promise<number>((resolve) => {
+        signalLocked = resolve;
+      });
+      const blocker = withOrgContext(org.orgId, () =>
+        db.transaction(async (tx) => {
+          const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+          await tx.execute(sql`lock table payment_bank_profiles in access exclusive mode`);
+          signalLocked(pid.rows[0]!.pid);
+          await profileTableReleased;
+        }),
+      );
+      const blockerPid = await profileTableLocked;
 
-    const worker = withOrgContext(org.orgId, () =>
-      postPaymentRun(seeded.runId, org.orgId, actorId));
-    await waitForState(async () =>
-      withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          run_status: string;
-          instruction_status: string;
-        }>(sql`
+      const worker = withOrgContext(org.orgId, () =>
+        postPaymentRun(seeded.runId, org.orgId, actorId),
+      );
+      await waitForState(
+        async () =>
+          withOrgContext(
+            org.orgId,
+            async () =>
+              (
+                await db.execute<{
+                  run_status: string;
+                  instruction_status: string;
+                }>(sql`
         select run.status as run_status,
                (select status from payment_instructions
                   where id = ${seeded.instructionIds[0]!}) as instruction_status
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]), {
-        run_status: "processing",
-        instruction_status: "sent",
-      });
-    await waitForBlockedBy(blockerPid);
+      `)
+              ).rows[0],
+          ),
+        {
+          run_status: "processing",
+          instruction_status: "sent",
+        },
+      );
+      await waitForBlockedBy(blockerPid);
 
-    // The parked staging transaction owns the aggregate: it holds the run row
-    // for its whole decision, so a concurrent bank return can only choose one
-    // side of the commit — before it (fencing the worker) or after it (a
-    // legitimately advised payment). A NOWAIT probe proves the row really is
-    // held while the tail is parked; an unfenced tail that merely reads holds
-    // nothing and the probe would sail through.
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-        await tx.execute(sql`
+      // The parked staging transaction owns the aggregate: it holds the run row
+      // for its whole decision, so a concurrent bank return can only choose one
+      // side of the commit — before it (fencing the worker) or after it (a
+      // legitimately advised payment). A NOWAIT probe proves the row really is
+      // held while the tail is parked; an unfenced tail that merely reads holds
+      // nothing and the probe would sail through.
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.transaction(async (tx) => {
+            await tx.execute(sql`
           select id from payment_runs
            where id = ${seeded.runId} and org_id = ${org.orgId}
            for update nowait
         `);
-      })),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(error.message, /could not obtain the lock|nowait|55006/i);
-        return true;
-      },
-    );
+          }),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /could not obtain the lock|nowait|55006/i);
+          return true;
+        },
+      );
 
-    releaseProfileTable();
-    await blocker;
-    assert.deepEqual(await worker, { posted: 1, failures: [] });
+      releaseProfileTable();
+      await blocker;
+      assert.deepEqual(await worker, { posted: 1, failures: [] });
 
-    // The advice legitimately went out for a still-sent instruction under the
-    // live claim, exactly once, and the run completed under the same claim.
-    const final = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        instruction_status: string;
-        claim_token: boolean;
-        remittances: number;
-        remittance_status: string;
-        remittance_stamp_missing: boolean;
-      }>(sql`
+      // The advice legitimately went out for a still-sent instruction under the
+      // live claim, exactly once, and the run completed under the same claim.
+      const final = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              instruction_status: string;
+              claim_token: boolean;
+              remittances: number;
+              remittance_status: string;
+              remittance_stamp_missing: boolean;
+            }>(sql`
         select run.status as run_status,
                (select status from payment_instructions
                   where id = ${seeded.instructionIds[0]!}) as instruction_status,
@@ -3062,59 +3872,81 @@ test("an in-flight automatic remittance decision holds the run against a concurr
                   where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}) as remittance_stamp_missing
           from payment_runs run
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.ok(final, "the posting run and staged remittance must remain observable");
-    assert.equal(final.run_status, "confirmed");
-    assert.equal(final.instruction_status, "sent");
-    assert.equal(final.claim_token, false);
-    assert.equal(final.remittances, 1);
-    assert.ok(
-      final.remittance_status === "pending" || final.remittance_status === "failed",
-      `queueing must leave delivery unconfirmed; observed ${final.remittance_status}`,
-    );
-    assert.equal(final.remittance_stamp_missing, true, "posting cannot stamp delivery before the email worker confirms it");
-  } finally {
-    releaseProfileTable?.();
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.ok(final, "the posting run and staged remittance must remain observable");
+      assert.equal(final.run_status, "confirmed");
+      assert.equal(final.instruction_status, "sent");
+      assert.equal(final.claim_token, false);
+      assert.equal(final.remittances, 1);
+      assert.ok(
+        final.remittance_status === "pending" || final.remittance_status === "failed",
+        `queueing must leave delivery unconfirmed; observed ${final.remittance_status}`,
+      );
+      assert.equal(
+        final.remittance_stamp_missing,
+        true,
+        "posting cannot stamp delivery before the email worker confirms it",
+      );
+    } finally {
+      releaseProfileTable?.();
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("posting completion reconciles a worker-confirmed remittance onto its instruction", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Remittance reconciler", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1, { autoRemittance: true }));
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`
+test(
+  "posting completion reconciles a worker-confirmed remittance onto its instruction",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Remittance reconciler", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () =>
+        seedPostingClaimRun(org, actorId, 1, { autoRemittance: true }),
+      );
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
         update payment_instructions
            set status = 'sent', updated_at = now(), updated_by = ${actorId}
          where id = ${seeded.instructionId} and org_id = ${org.orgId}
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into payment_remittances
           (org_id, payment_instruction_id, recipients, status, attempt_count, sent_at, created_by, updated_by)
         values
           (${org.orgId}, ${seeded.instructionId}, '["ap@example.test"]'::jsonb,
            'sent', 1, now(), ${actorId}, ${actorId})
       `);
-    });
+      });
 
-    const before = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ stamp_missing: boolean }>(sql`
+      const before = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ stamp_missing: boolean }>(sql`
         select remittance_email_sent_at is null as stamp_missing
           from payment_instructions
          where id = ${seeded.instructionId} and org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(before, { stamp_missing: true });
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(before, { stamp_missing: true });
 
-    await postPaymentRun(seeded.runId, org.orgId, actorId);
+      await postPaymentRun(seeded.runId, org.orgId, actorId);
 
-    const after = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        remittance_status: string;
-        stamp_missing: boolean;
-      }>(sql`
+      const after = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              remittance_status: string;
+              stamp_missing: boolean;
+            }>(sql`
         select run.status as run_status,
                remittance.status as remittance_status,
                instruction.remittance_email_sent_at is null as stamp_missing
@@ -3124,45 +3956,58 @@ test("posting completion reconciles a worker-confirmed remittance onto its instr
           join payment_remittances remittance
             on remittance.payment_instruction_id = instruction.id and remittance.org_id = instruction.org_id
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(after, {
-      run_status: "confirmed",
-      remittance_status: "sent",
-      stamp_missing: false,
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(after, {
+        run_status: "confirmed",
+        remittance_status: "sent",
+        stamp_missing: false,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("posting completion leaves a queued remittance unstamped until delivery confirmation", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Pending remittance", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1, { autoRemittance: false }));
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`
+test(
+  "posting completion leaves a queued remittance unstamped until delivery confirmation",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Pending remittance", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () =>
+        seedPostingClaimRun(org, actorId, 1, { autoRemittance: false }),
+      );
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
         update payment_instructions
            set status = 'sent', updated_at = now(), updated_by = ${actorId}
          where id = ${seeded.instructionId} and org_id = ${org.orgId}
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into payment_remittances
           (org_id, payment_instruction_id, recipients, status, attempt_count, created_by, updated_by)
         values
           (${org.orgId}, ${seeded.instructionId}, '["ap@example.test"]'::jsonb,
            'pending', 0, ${actorId}, ${actorId})
       `);
-    });
+      });
 
-    await postPaymentRun(seeded.runId, org.orgId, actorId);
+      await postPaymentRun(seeded.runId, org.orgId, actorId);
 
-    const after = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{
-        run_status: string;
-        remittance_status: string;
-        stamp_missing: boolean;
-      }>(sql`
+      const after = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              run_status: string;
+              remittance_status: string;
+              stamp_missing: boolean;
+            }>(sql`
         select run.status as run_status,
                remittance.status as remittance_status,
                instruction.remittance_email_sent_at is null as stamp_missing
@@ -3172,156 +4017,283 @@ test("posting completion leaves a queued remittance unstamped until delivery con
           join payment_remittances remittance
             on remittance.payment_instruction_id = instruction.id and remittance.org_id = instruction.org_id
          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
-    assert.deepEqual(after, {
-      run_status: "confirmed",
-      remittance_status: "pending",
-      stamp_missing: true,
-    });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(after, {
+        run_status: "confirmed",
+        remittance_status: "pending",
+        stamp_missing: true,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a late remittance enqueue failure cannot overwrite worker-confirmed sent state", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Late remittance failure", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1));
-    const remittanceId = randomUUID();
-    await withOrgContext(org.orgId, () => db.execute(sql`
+test(
+  "a late remittance enqueue failure cannot overwrite worker-confirmed sent state",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Late remittance failure", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1));
+      const remittanceId = randomUUID();
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       insert into payment_remittances
         (id, org_id, payment_instruction_id, recipients, status, attempt_count, sent_at, created_by, updated_by)
       values
         (${remittanceId}, ${org.orgId}, ${seeded.instructionId}, '["ap@example.test"]'::jsonb,
          'sent', 1, now(), ${actorId}, ${actorId})
-    `));
+    `),
+      );
 
-    await withOrgContext(org.orgId, () =>
-      markAutomaticRemittanceEnqueueFailed(org.orgId, remittanceId, actorId, "queue acknowledgement was lost"),
-    );
+      await withOrgContext(org.orgId, () =>
+        markAutomaticRemittanceEnqueueFailed(
+          org.orgId,
+          remittanceId,
+          actorId,
+          "queue acknowledgement was lost",
+        ),
+      );
 
-    const state = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ status: string; attempt_count: number }>(sql`
+      const state = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ status: string; attempt_count: number }>(sql`
         select status, attempt_count from payment_remittances
          where id = ${remittanceId} and org_id = ${org.orgId}
-      `)).rows[0],
-    );
-    assert.deepEqual(state, { status: "sent", attempt_count: 1 });
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows[0],
+      );
+      assert.deepEqual(state, { status: "sent", attempt_count: 1 });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("automatic remittance enqueue failures settle only proven non-acceptance", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Remittance queue probe", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1));
-    const ids = [randomUUID(), randomUUID(), randomUUID()];
-    await withOrgContext(org.orgId, () => db.execute(sql`
+test(
+  "automatic remittance enqueue failures settle only proven non-acceptance",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Remittance queue probe", "admin"),
+      );
+      const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1));
+      const ids = [randomUUID(), randomUUID(), randomUUID()];
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       insert into payment_remittances
         (id, org_id, payment_instruction_id, recipients, status, attempt_count, created_by, updated_by)
       values
         (${ids[0]}, ${org.orgId}, ${seeded.instructionId}, '["ap@example.test","ar@example.test"]'::jsonb, 'pending', 0, ${actorId}, ${actorId}),
         (${ids[1]}, ${org.orgId}, ${seeded.instructionId}, '["ap@example.test","ar@example.test"]'::jsonb, 'pending', 0, ${actorId}, ${actorId}),
         (${ids[2]}, ${org.orgId}, ${seeded.instructionId}, '["ap@example.test","ar@example.test"]'::jsonb, 'pending', 0, ${actorId}, ${actorId})
-    `));
-    const data = (id: string) => ({
-      orgId: org.orgId,
-      to: ["ap@example.test", "ar@example.test"],
-      subject: "Payment advice",
-      html: "<p>Paid</p>",
-      text: "Paid",
-      meta: { category: "payment_remittance", paymentRemittanceId: id },
-    });
+    `),
+      );
+      const data = (id: string) => ({
+        orgId: org.orgId,
+        to: ["ap@example.test", "ar@example.test"],
+        subject: "Payment advice",
+        html: "<p>Paid</p>",
+        text: "Paid",
+        meta: { category: "payment_remittance", paymentRemittanceId: id },
+      });
 
-    const accepted = await settleAutomaticRemittanceEnqueueError({
-      orgId: org.orgId, remittanceId: ids[0]!, actorId, error: new Error("ack lost"), data: data(ids[0]!),
-      jobId: `payment-remittance|${ids[0]}`, probeQueuedJob: async () => ({ id: "accepted" }),
-    });
-    const absent = await settleAutomaticRemittanceEnqueueError({
-      orgId: org.orgId, remittanceId: ids[1]!, actorId, error: new Error("rejected"), data: data(ids[1]!),
-      jobId: `payment-remittance|${ids[1]}`, probeQueuedJob: async () => null,
-    });
-    const unknown = await settleAutomaticRemittanceEnqueueError({
-      orgId: org.orgId, remittanceId: ids[2]!, actorId, error: new Error("probe unavailable"), data: data(ids[2]!),
-      jobId: `payment-remittance|${ids[2]}`, probeQueuedJob: async () => { throw new Error("Redis unavailable"); },
-    });
+      const accepted = await settleAutomaticRemittanceEnqueueError({
+        orgId: org.orgId,
+        remittanceId: ids[0]!,
+        actorId,
+        error: new Error("ack lost"),
+        data: data(ids[0]!),
+        jobId: `payment-remittance|${ids[0]}`,
+        probeQueuedJob: async () => ({ id: "accepted" }),
+      });
+      const absent = await settleAutomaticRemittanceEnqueueError({
+        orgId: org.orgId,
+        remittanceId: ids[1]!,
+        actorId,
+        error: new Error("rejected"),
+        data: data(ids[1]!),
+        jobId: `payment-remittance|${ids[1]}`,
+        probeQueuedJob: async () => null,
+      });
+      const unknown = await settleAutomaticRemittanceEnqueueError({
+        orgId: org.orgId,
+        remittanceId: ids[2]!,
+        actorId,
+        error: new Error("probe unavailable"),
+        data: data(ids[2]!),
+        jobId: `payment-remittance|${ids[2]}`,
+        probeQueuedJob: async () => {
+          throw new Error("Redis unavailable");
+        },
+      });
 
-    assert.deepEqual([accepted, absent, unknown], ["already-queued", "not-queued", "uncertain"]);
-    const states = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ id: string; status: string }>(sql`
+      assert.deepEqual([accepted, absent, unknown], ["already-queued", "not-queued", "uncertain"]);
+      const states = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ id: string; status: string }>(sql`
         select id, status from payment_remittances where org_id = ${org.orgId}
          and id in (${ids[0]!}, ${ids[1]!}, ${ids[2]!})
         order by id
-      `)).rows,
-    );
-    const byId = new Map(states.map((row) => [row.id, row.status]));
-    assert.equal(byId.get(ids[0]!), "pending", "a job already accepted by BullMQ remains worker-owned");
-    assert.equal(byId.get(ids[1]!), "failed", "only proven non-acceptance is terminally failed");
-    assert.equal(byId.get(ids[2]!), "pending", "an unreachable queue cannot prove non-acceptance");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `)
+          ).rows,
+      );
+      const byId = new Map(states.map((row) => [row.id, row.status]));
+      assert.equal(
+        byId.get(ids[0]!),
+        "pending",
+        "a job already accepted by BullMQ remains worker-owned",
+      );
+      assert.equal(byId.get(ids[1]!), "failed", "only proven non-acceptance is terminally failed");
+      assert.equal(
+        byId.get(ids[2]!),
+        "pending",
+        "an unreachable queue cannot prove non-acceptance",
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-for (const boundary of ['another run', 'missing parent', 'concurrent retry', 'stale parent', 'voided parent'] as const) {
+for (const boundary of [
+  "another run",
+  "missing parent",
+  "concurrent retry",
+  "stale parent",
+  "voided parent",
+] as const) {
   test(`payment-file reprocessing enforces ${boundary}`, { skip: !DB }, async () => {
     const org = await withBypass(() => createScratchOrg());
     try {
-      const actorId = await withBypass(() => createScratchUser(org.orgId, 'File lineage operator', 'admin'));
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "File lineage operator", "admin"),
+      );
       const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
-      const first = await withOrgContext(org.orgId, () => generatePaymentFileArtifact(seeded.runId, org.orgId, actorId));
-      if (boundary === 'concurrent retry') {
-        const results = await Promise.all([1, 2].map(() => withOrgContext(org.orgId, () =>
-          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id }))));
-        assert.equal(results[0]!.id, results[1]!.id, 'a retry must reuse the one successor, never fork the bank-file lineage');
+      const first = await withOrgContext(org.orgId, () =>
+        generatePaymentFileArtifact(seeded.runId, org.orgId, actorId),
+      );
+      if (boundary === "concurrent retry") {
+        const results = await Promise.all(
+          [1, 2].map(() =>
+            withOrgContext(org.orgId, () =>
+              generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+                reprocessFileId: first.id,
+              }),
+            ),
+          ),
+        );
+        assert.equal(
+          results[0]!.id,
+          results[1]!.id,
+          "a retry must reuse the one successor, never fork the bank-file lineage",
+        );
         const replay = await withOrgContext(org.orgId, () =>
-          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id }));
+          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+            reprocessFileId: first.id,
+          }),
+        );
         assert.equal(replay.id, results[0]!.id);
-        const count = await withOrgContext(org.orgId, async () => (await db.execute<{ n: number }>(sql`
+        const count = await withOrgContext(
+          org.orgId,
+          async () =>
+            (
+              await db.execute<{ n: number }>(sql`
           select count(*)::int as n from payment_files where payment_run_id=${seeded.runId} and org_id=${org.orgId}
-        `)).rows[0]!.n);
+        `)
+            ).rows[0]!.n,
+        );
         assert.equal(count, 2);
-      } else if (boundary === 'stale parent' || boundary === 'voided parent') {
-        if (boundary === 'stale parent') {
+      } else if (boundary === "stale parent" || boundary === "voided parent") {
+        if (boundary === "stale parent") {
           const second = await withOrgContext(org.orgId, () =>
-            generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id }));
+            generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+              reprocessFileId: first.id,
+            }),
+          );
           await withOrgContext(org.orgId, () =>
-            generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: second.id }));
+            generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+              reprocessFileId: second.id,
+            }),
+          );
         } else {
-          await withOrgContext(org.orgId, () => db.execute(sql`
+          await withOrgContext(org.orgId, () =>
+            db.execute(sql`
             update payment_files set status='voided' where id=${first.id} and org_id=${org.orgId}
-          `));
+          `),
+          );
         }
-        await assert.rejects(withOrgContext(org.orgId, () =>
-          generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id })),
-          (error: unknown) => error instanceof PaymentError && /latest non-voided/.test(error.message));
+        await assert.rejects(
+          withOrgContext(org.orgId, () =>
+            generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, {
+              reprocessFileId: first.id,
+            }),
+          ),
+          (error: unknown) =>
+            error instanceof PaymentError && /latest non-voided/.test(error.message),
+        );
       } else {
-        const target = boundary === 'another run'
-          ? await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId))
-          : seeded;
-        const before = await withOrgContext(org.orgId, async () => (await db.execute<{ n: number }>(sql`
+        const target =
+          boundary === "another run"
+            ? await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId))
+            : seeded;
+        const before = await withOrgContext(
+          org.orgId,
+          async () =>
+            (
+              await db.execute<{ n: number }>(sql`
           select count(*)::int as n from payment_files where org_id=${org.orgId}
-        `)).rows[0]!.n);
-        await assert.rejects(withOrgContext(org.orgId, () =>
-          generatePaymentFileArtifact(target.runId, org.orgId, actorId, {
-            reprocessFileId: boundary === 'missing parent' ? randomUUID() : first.id,
-          })), (error: unknown) => error instanceof PaymentError && /payment file.*not found/i.test(error.message));
-        const after = await withOrgContext(org.orgId, async () => (await db.execute<{ n: number; status: string }>(sql`
+        `)
+            ).rows[0]!.n,
+        );
+        await assert.rejects(
+          withOrgContext(org.orgId, () =>
+            generatePaymentFileArtifact(target.runId, org.orgId, actorId, {
+              reprocessFileId: boundary === "missing parent" ? randomUUID() : first.id,
+            }),
+          ),
+          (error: unknown) =>
+            error instanceof PaymentError && /payment file.*not found/i.test(error.message),
+        );
+        const after = await withOrgContext(
+          org.orgId,
+          async () =>
+            (
+              await db.execute<{ n: number; status: string }>(sql`
           select (select count(*)::int from payment_files where org_id=${org.orgId}) as n,
                  status from payment_files where id=${first.id} and org_id=${org.orgId}
-        `)).rows[0]!);
-        assert.deepEqual(after, { n: before, status: 'approved' });
+        `)
+            ).rows[0]!,
+        );
+        assert.deepEqual(after, { n: before, status: "approved" });
       }
     } finally {
-      await withBypass(() => db.transaction(async (tx) => {
-        await tx.execute(sql`select set_config('openbooks.amend', 'on', true), set_config('openbooks.sandbox_wipe', 'on', true)`);
-        await tx.execute(sql`update orgs set env_kind='sandbox' where id=${org.orgId} and name like 'Scratch %'`);
-        await tx.execute(sql`delete from payment_events where org_id=${org.orgId} and payment_file_id is not null`);
-        await tx.execute(sql`delete from payment_files where org_id=${org.orgId}`);
-      }));
+      await withBypass(() =>
+        db.transaction(async (tx) => {
+          await tx.execute(
+            sql`select set_config('openbooks.amend', 'on', true), set_config('openbooks.sandbox_wipe', 'on', true)`,
+          );
+          await tx.execute(
+            sql`update orgs set env_kind='sandbox' where id=${org.orgId} and name like 'Scratch %'`,
+          );
+          await tx.execute(
+            sql`delete from payment_events where org_id=${org.orgId} and payment_file_id is not null`,
+          );
+          await tx.execute(sql`delete from payment_files where org_id=${org.orgId}`);
+        }),
+      );
       await withBypass(() => dropScratchOrg(org.orgId));
     }
   });
@@ -3387,9 +4359,10 @@ test(
       assert.equal(over.strategy, "fifo");
       assert.equal(over.applied, "80.0000");
       assert.equal(over.remaining, "20.0000");
-      assert.deepEqual(over.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]), [
-        [openLineId, "80.0000"],
-      ]);
+      assert.deepEqual(
+        over.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]),
+        [[openLineId, "80.0000"]],
+      );
 
       const exact = await suggestApplications(org.customerId, "80.0000", "ar", {
         sourceCurrency: "CAD",
@@ -3415,7 +4388,10 @@ test(
         [exact, "80.0000"],
         [byRef, "100.0000"],
       ] as const) {
-        const allocated = result.allocations.reduce((sum, a) => sum + toUnits(a.sourceTransactionAmount), 0n);
+        const allocated = result.allocations.reduce(
+          (sum, a) => sum + toUnits(a.sourceTransactionAmount),
+          0n,
+        );
         assert.equal(allocated, toUnits(result.applied), "allocations sum to the applied amount");
         assert.equal(
           allocated + toUnits(result.remaining),
@@ -3443,15 +4419,15 @@ test(
     // (due date, posting date, entry number), so the dust must land on the
     // second invoice exactly.
     try {
-    const dustLineId = randomUUID();
-    for (const [tag, lineId, amount] of [
-      ["A", firstLineId, 80],
-      ["B", secondLineId, 50],
-      ["C", dustLineId, 0.0001],
-    ] as const) {
-      const documentId = randomUUID();
-      const entryId = randomUUID();
-      await db.execute(sql`
+      const dustLineId = randomUUID();
+      for (const [tag, lineId, amount] of [
+        ["A", firstLineId, 80],
+        ["B", secondLineId, 50],
+        ["C", dustLineId, 0.0001],
+      ] as const) {
+        const documentId = randomUUID();
+        const entryId = randomUUID();
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
            document_date, posting_date, currency, status, subtotal, tax_total,
@@ -3461,7 +4437,7 @@ test(
            ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
            'CAD', 'approved', ${amount}, 0, ${amount}, '{}'::jsonb)
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
            period_id, memo, status, source_document_id, origin)
@@ -3470,7 +4446,7 @@ test(
            ${`INV-FIFO-DUST-${tag}`}, ${org.date}, ${org.periodId}, 'FIFO dust fixture',
            'draft', ${documentId}, 'document')
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into journal_lines
           (id, org_id, entry_id, line_number, account_id, subsidiary_id,
            amount, currency, txn_amount, fx_rate, party_id, is_open_item)
@@ -3480,17 +4456,17 @@ test(
           (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.revenue},
            ${org.subsidiaryId}, ${-amount}, 'CAD', ${-amount}, 1, null, false)
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         update journal_entries
            set status = 'posted', posted_at = now()
          where id = ${entryId}
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         update documents
            set posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}, status = 'posted'
          where id = ${documentId}
       `);
-    }
+      }
 
       const dust = await suggestApplications(org.customerId, "80.0001", "ar", {
         sourceCurrency: "CAD",
@@ -3499,10 +4475,13 @@ test(
       assert.equal(dust.strategy, "fifo");
       assert.equal(dust.applied, "80.0001");
       assert.equal(dust.remaining, "0.0000");
-      assert.deepEqual(dust.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]), [
-        [firstLineId, "80.0000"],
-        [secondLineId, "0.0001"],
-      ]);
+      assert.deepEqual(
+        dust.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]),
+        [
+          [firstLineId, "80.0000"],
+          [secondLineId, "0.0001"],
+        ],
+      );
 
       // A reference naming the second invoice resolves there, not on the
       // first queue entry: an inverted matcher settles the wrong invoice.
@@ -3514,9 +4493,10 @@ test(
       assert.equal(bySecondRef.strategy, "reference");
       assert.equal(bySecondRef.applied, "50.0000");
       assert.equal(bySecondRef.remaining, "30.0001");
-      assert.deepEqual(bySecondRef.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]), [
-        [secondLineId, "50.0000"],
-      ]);
+      assert.deepEqual(
+        bySecondRef.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]),
+        [[secondLineId, "50.0000"]],
+      );
 
       // A dust open line is still suggested: a widened positivity filter
       // drops it from the queue and the exact match misses.
@@ -3526,9 +4506,10 @@ test(
       });
       assert.equal(dustExact.strategy, "exact");
       assert.equal(dustExact.applied, "0.0001");
-      assert.deepEqual(dustExact.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]), [
-        [dustLineId, "0.0001"],
-      ]);
+      assert.deepEqual(
+        dustExact.allocations.map((a) => [a.openLineId, a.sourceTransactionAmount]),
+        [[dustLineId, "0.0001"]],
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -3548,13 +4529,19 @@ test(
     try {
       for (const amount of ["0", "-5", "-0.0001"] as const) {
         assert.deepEqual(
-          await suggestApplications(org.vendorId, amount, "ar", { sourceCurrency: "CAD", orgId: org.orgId }),
+          await suggestApplications(org.vendorId, amount, "ar", {
+            sourceCurrency: "CAD",
+            orgId: org.orgId,
+          }),
           { allocations: [], applied: "0", remaining: "0.0000", strategy: "none" },
           `amount ${amount}`,
         );
       }
       assert.deepEqual(
-        await suggestApplications(org.vendorId, "5", "ar", { sourceCurrency: "CAD", orgId: org.orgId }),
+        await suggestApplications(org.vendorId, "5", "ar", {
+          sourceCurrency: "CAD",
+          orgId: org.orgId,
+        }),
         { allocations: [], applied: "0", remaining: "5.0000", strategy: "none" },
       );
     } finally {

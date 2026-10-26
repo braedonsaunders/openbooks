@@ -9,7 +9,9 @@ import { isUuid } from "../../../../lib/list-params";
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
 const civilDate = civilDateInput();
-const decimal = z.string().regex(/^\d+(\.\d{1,4})?$/, "must be a decimal with up to 4 fraction digits");
+const decimal = z
+  .string()
+  .regex(/^\d+(\.\d{1,4})?$/, "must be a decimal with up to 4 fraction digits");
 const text255 = z.string().trim().min(1).max(255);
 
 export const createClassificationBody = z.object({
@@ -76,7 +78,10 @@ export const createPerDiemPolicyBody = z.object({
   basis: z.enum(["flat_daily", "distance_brackets", "hours_threshold"]),
   rules: z.record(z.string(), z.unknown()),
   lodgingOffset: decimal.nullable().optional(),
-  weeklyRule: z.object({ worked_days: z.number().int(), paid_days: z.number().int() }).nullable().optional(),
+  weeklyRule: z
+    .object({ worked_days: z.number().int(), paid_days: z.number().int() })
+    .nullable()
+    .optional(),
   payComponentId: uuid.nullable().optional(),
   currency: z.string().trim().length(3),
   effectiveFrom: civilDate,

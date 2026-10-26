@@ -1,14 +1,31 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const salesWorkflow: DocArticle = {
-  slug: 'sales-workflow',
-  title: 'Sales: Estimate to Cash',
-  category: 'transactions',
+  slug: "sales-workflow",
+  title: "Sales: Estimate to Cash",
+  category: "transactions",
   order: 1,
-  summary: 'A practical tour of estimates, sales orders, invoices, credits, receipts, and customer balances.',
-  updated: '2026-10-10',
-  keywords: ['sales', 'estimate', 'quote', 'sales order', 'invoice', 'credit memo', 'receipt', 'accounts receivable', 'collections worklist', 'dso'],
-  related: ['payments-and-applications', 'transaction-lifecycle', 'financial-reports', 'electronic-invoicing'],
+  summary:
+    "A practical tour of estimates, sales orders, invoices, credits, receipts, and customer balances.",
+  updated: "2026-10-10",
+  keywords: [
+    "sales",
+    "estimate",
+    "quote",
+    "sales order",
+    "invoice",
+    "credit memo",
+    "receipt",
+    "accounts receivable",
+    "collections worklist",
+    "dso",
+  ],
+  related: [
+    "payments-and-applications",
+    "transaction-lifecycle",
+    "financial-reports",
+    "electronic-invoicing",
+  ],
   body: `# Sales: Estimate to Cash
 
 The sales workflow can begin with an estimate, a sales order, or directly with a
@@ -103,17 +120,32 @@ read-only because it predicts customer behaviour rather than imposing an
 internal payment-capacity rule. Use **How it works** in the cockpit to review
 the current method and open this guide.
 `,
-}
+};
 
 export const purchasingWorkflow: DocArticle = {
-  slug: 'purchasing-workflow',
-  title: 'Purchases: Order to Payment',
-  category: 'transactions',
+  slug: "purchasing-workflow",
+  title: "Purchases: Order to Payment",
+  category: "transactions",
   order: 2,
-  summary: 'A practical tour of purchase orders, bills, credits, approvals, payments, and vendor balances.',
-  updated: '2026-10-10',
-  keywords: ['purchase', 'purchase order', 'vendor bill', 'vendor credit', 'accounts payable', 'payment', 'approval'],
-  related: ['payments-and-applications', 'transaction-lifecycle', 'file-cabinet', 'electronic-invoicing', 'contractor-withholding'],
+  summary:
+    "A practical tour of purchase orders, bills, credits, approvals, payments, and vendor balances.",
+  updated: "2026-10-10",
+  keywords: [
+    "purchase",
+    "purchase order",
+    "vendor bill",
+    "vendor credit",
+    "accounts payable",
+    "payment",
+    "approval",
+  ],
+  related: [
+    "payments-and-applications",
+    "transaction-lifecycle",
+    "file-cabinet",
+    "electronic-invoicing",
+    "contractor-withholding",
+  ],
   body: `# Purchases: Order to Payment
 
 The purchase workflow can begin with a purchase order or directly with a vendor
@@ -202,17 +234,23 @@ At close, reconcile vendor aging and unapplied credits to the AP control account
 review old drafts and approvals, and investigate duplicate or unmatched source
 evidence.
 `,
-}
+};
 
 export const paymentsAndApplications: DocArticle = {
-  slug: 'payments-and-applications',
-  title: 'Payments, Credits, and Applications',
-  category: 'transactions',
+  slug: "payments-and-applications",
+  title: "Payments, Credits, and Applications",
+  category: "transactions",
   order: 3,
-  summary: 'Understand how cash and credits settle open receivables and payables without losing subledger detail.',
-  updated: '2026-07-21',
-  keywords: ['payment', 'receipt', 'application', 'credit', 'unapplied', 'open item', 'settlement'],
-  related: ['sales-workflow', 'purchasing-workflow', 'banking-and-reconciliation', 'contractor-withholding'],
+  summary:
+    "Understand how cash and credits settle open receivables and payables without losing subledger detail.",
+  updated: "2026-07-21",
+  keywords: ["payment", "receipt", "application", "credit", "unapplied", "open item", "settlement"],
+  related: [
+    "sales-workflow",
+    "purchasing-workflow",
+    "banking-and-reconciliation",
+    "contractor-withholding",
+  ],
   body: `# Payments, Credits, and Applications
 
 Recording cash and settling an open item are related but distinct events. The
@@ -271,17 +309,30 @@ At minimum, reconcile:
 - payment clearing accounts to transmitted and settled payments; and
 - bank-account ledger balances to signed-off bank reconciliations.
 `,
-}
+};
 
 export const bankingAndReconciliation: DocArticle = {
-  slug: 'banking-and-reconciliation',
-  title: 'Banking, Matching, and Reconciliation',
-  category: 'banking-close',
+  slug: "banking-and-reconciliation",
+  title: "Banking, Matching, and Reconciliation",
+  category: "banking-close",
   order: 1,
-  summary: 'Import statement activity, match or categorize lines, build rules, and sign off reconciliations.',
-  updated: '2026-09-16',
-  keywords: ['bank feed', 'statement', 'import', 'matching', 'categorize', 'bank rule', 'reconciliation', 'cash', 'source evidence', 'cleared', 'mirror'],
-  related: ['payments-and-applications', 'period-close', 'reconciliation-before-cutover'],
+  summary:
+    "Import statement activity, match or categorize lines, build rules, and sign off reconciliations.",
+  updated: "2026-09-16",
+  keywords: [
+    "bank feed",
+    "statement",
+    "import",
+    "matching",
+    "categorize",
+    "bank rule",
+    "reconciliation",
+    "cash",
+    "source evidence",
+    "cleared",
+    "mirror",
+  ],
+  related: ["payments-and-applications", "period-close", "reconciliation-before-cutover"],
   body: `# Banking, Matching, and Reconciliation
 
 Banking compares external statement evidence with the general ledger. Importing
@@ -337,17 +388,27 @@ a statement sign-off. Accounts whose source markers are only partially cleared
 for the period stay open, and the readiness detail names them with their
 cleared and uncleared counts.
 `,
-}
+};
 
 export const fileCabinet: DocArticle = {
-  slug: 'file-cabinet',
-  title: 'File Cabinet and Supporting Evidence',
-  category: 'administration',
+  slug: "file-cabinet",
+  title: "File Cabinet and Supporting Evidence",
+  category: "administration",
   order: 5,
-  summary: 'Organize, search, version, and govern files that support transactions and administrative work.',
-  updated: '2026-07-19',
-  keywords: ['file cabinet', 'files', 'folders', 'attachments', 'evidence', 'version', 'private folder', 'AP capture'],
-  related: ['audit-log', 'purchasing-workflow', 'period-close'],
+  summary:
+    "Organize, search, version, and govern files that support transactions and administrative work.",
+  updated: "2026-07-19",
+  keywords: [
+    "file cabinet",
+    "files",
+    "folders",
+    "attachments",
+    "evidence",
+    "version",
+    "private folder",
+    "AP capture",
+  ],
+  related: ["audit-log", "purchasing-workflow", "period-close"],
   body: `# File Cabinet and Supporting Evidence
 
 The **File Cabinet** stores organization files in folders with search, version
@@ -396,4 +457,4 @@ Keep original bank statements, vendor invoices, customer support, approvals,
 imports, reconciliation packages, and issued financial reports according to the
 organization's retention policy.
 `,
-}
+};

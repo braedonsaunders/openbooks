@@ -29,8 +29,13 @@ test("createSubcontract refuses by name while Subcontracts is disabled and write
       (error: unknown) =>
         error instanceof SubcontractError && error.message === "Subcontracts feature is disabled",
     );
-    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from subcontracts
-      where org_id=${org.orgId}`, "objects"))[0]!.n;
+    const count = (
+      await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from subcontracts
+      where org_id=${org.orgId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(count, 0, "a refused subcontract must leave no subcontracts row");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -39,7 +44,9 @@ test("createSubcontract refuses by name while Subcontracts is disabled and write
 
 test("createSubcontract blocked on the fence loses to a committed Subcontracts disable", async () => {
   const org = await createScratchOrg();
-  const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
+  const writer = new pg.Client({
+    connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+  });
   let pending: Promise<unknown> | undefined;
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -64,8 +71,13 @@ test("createSubcontract blocked on the fence loses to a committed Subcontracts d
       (error: unknown) =>
         error instanceof SubcontractError && error.message === "Subcontracts feature is disabled",
     );
-    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from subcontracts
-      where org_id=${org.orgId}`, "objects"))[0]!.n;
+    const count = (
+      await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from subcontracts
+      where org_id=${org.orgId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(count, 0, "the losing creator must leave no subcontracts row");
   } finally {
     await writer.query("rollback").catch(() => {});

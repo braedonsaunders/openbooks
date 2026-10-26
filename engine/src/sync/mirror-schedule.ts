@@ -29,23 +29,17 @@ export function mirrorIsDue(input: {
   lastScheduledAttemptAt: Date | string | null;
   scheduledFailuresSinceSuccess: number;
 }): boolean {
-  const lastSuccessfulAt = input.lastSuccessfulAt
-    ? new Date(input.lastSuccessfulAt)
-    : null;
+  const lastSuccessfulAt = input.lastSuccessfulAt ? new Date(input.lastSuccessfulAt) : null;
   const lastScheduledAttemptAt = input.lastScheduledAttemptAt
     ? new Date(input.lastScheduledAttemptAt)
     : null;
   const cadenceDue =
     !lastSuccessfulAt ||
-    nextMirrorAt(input.schedule, lastSuccessfulAt).getTime() <=
-      input.now.getTime();
+    nextMirrorAt(input.schedule, lastSuccessfulAt).getTime() <= input.now.getTime();
   if (!cadenceDue) return false;
   if (!lastScheduledAttemptAt) return true;
   const failures = Math.max(0, input.scheduledFailuresSinceSuccess);
   if (failures === 0) return true;
-  const backoff = Math.min(
-    15 * 60_000 * 2 ** Math.min(failures - 1, 5),
-    6 * 60 * 60_000,
-  );
+  const backoff = Math.min(15 * 60_000 * 2 ** Math.min(failures - 1, 5), 6 * 60 * 60_000);
   return lastScheduledAttemptAt.getTime() + backoff <= input.now.getTime();
 }

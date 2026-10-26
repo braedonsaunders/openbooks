@@ -1,15 +1,25 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const chartOfAccountsGovernance: DocArticle = {
-  slug: 'chart-of-accounts-governance',
-  title: 'Account Merges, Accounting Contexts and Segment Dependencies',
-  category: 'accounting',
+  slug: "chart-of-accounts-governance",
+  title: "Account Merges, Accounting Contexts and Segment Dependencies",
+  category: "accounting",
   order: 7,
   summary:
-    'Merge a duplicate account into a surviving one with a previewed reclass, present reports under localized account numbers and names, and restrict segment values to allowed combinations.',
-  updated: '2026-10-11',
-  keywords: ['merge accounts', 'account merge', 'accounting context', 'local gaap', 'statutory chart', 'localized account', 'segment dependency', 'filtered by', 'cascading segment'],
-  related: ['chart-of-accounts-and-dimensions', 'period-close', 'financial-reports'],
+    "Merge a duplicate account into a surviving one with a previewed reclass, present reports under localized account numbers and names, and restrict segment values to allowed combinations.",
+  updated: "2026-10-11",
+  keywords: [
+    "merge accounts",
+    "account merge",
+    "accounting context",
+    "local gaap",
+    "statutory chart",
+    "localized account",
+    "segment dependency",
+    "filtered by",
+    "cascading segment",
+  ],
+  related: ["chart-of-accounts-and-dimensions", "period-close", "financial-reports"],
   body: `# Account Merges, Accounting Contexts and Segment Dependencies
 
 Three switches in **Company Settings → Features** govern the chart of
@@ -125,4 +135,4 @@ history is never re-evaluated. **Setup → Dependency exceptions** lists the
 open documents whose lines break a rule, so a newly added rule can be worked
 through before those documents post.
 `,
-}
+};

@@ -1,16 +1,32 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission, can } from '../../../../lib/authz'
-import { analyticsConfig } from '../../../../lib/analytics/config'
-import { ANALYTICS_CONFIG } from '../../../../lib/analytics/config-spec'
-import { normalizeCashHorizonWeeks, normalizeMoneyValue, withoutWeekEntries, resolveAsOf } from '../../../../lib/cash/core'
-import { cashPosition, type CashPosition } from '../../../../lib/cash/cash-position'
-import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
-import { userPageLayout } from '../../../../lib/page-layout'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import type { PageLayoutPrefs } from '@openbooks/schema'
+import { getLocale, getTranslations } from "next-intl/server";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission, can } from "../../../../lib/authz";
+import { analyticsConfig } from "../../../../lib/analytics/config";
+import { ANALYTICS_CONFIG } from "../../../../lib/analytics/config-spec";
+import {
+  normalizeCashHorizonWeeks,
+  normalizeMoneyValue,
+  withoutWeekEntries,
+  resolveAsOf,
+} from "../../../../lib/cash/core";
+import { cashPosition, type CashPosition } from "../../../../lib/cash/cash-position";
+import {
+  MissingRatesError,
+  reportSubsidiaryView,
+  type RatesBlockedNotice,
+} from "../../../../lib/consolidation";
+import { userPageLayout } from "../../../../lib/page-layout";
+import { groupTabs } from "../../../../components/module-home/group-tabs";
+import type { PageLayoutPrefs } from "@openbooks/schema";
 
 /**
  * The cash control center, split into a loader and a spec.
@@ -29,72 +45,73 @@ import type { PageLayoutPrefs } from '@openbooks/schema'
  * could compose, so there is nothing to share back with page.tsx.
  */
 
-type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
-type Tabs = Awaited<ReturnType<typeof groupTabs>>
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>["picker"];
+type Tabs = Awaited<ReturnType<typeof groupTabs>>;
 
 export interface BankingCashData {
-  title: string
-  description: string
-  subsidiaryPicker: SubsidiaryPicker
-  subsidiaryValue: string
-  selectedSubsidiaryIds: string[] | undefined
-  subsidiaryLabel: string
-  tabs: Tabs
-  data: CashPosition
+  title: string;
+  description: string;
+  subsidiaryPicker: SubsidiaryPicker;
+  subsidiaryValue: string;
+  selectedSubsidiaryIds: string[] | undefined;
+  subsidiaryLabel: string;
+  tabs: Tabs;
+  data: CashPosition;
   /** Null unless the FX-rate pipeline blocked; the cockpit hides with it. */
-  ratesBlocked: RatesBlockedNotice | null
+  ratesBlocked: RatesBlockedNotice | null;
   /** False exactly when ratesBlocked is set; the cockpit hides with it. */
-  ratesReady: boolean
-  layoutPrefs: PageLayoutPrefs
-  canConfigure: boolean
-  canPayRun: boolean
-  canCollectionRun: boolean
+  ratesReady: boolean;
+  layoutPrefs: PageLayoutPrefs;
+  canConfigure: boolean;
+  canPayRun: boolean;
+  canCollectionRun: boolean;
 }
 
 export async function loadBankingCash(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<BankingCashData> {
-  const authz = await requirePermission('banking.read')
-  const t = await getTranslations('banking.cash')
-  const locale = await getLocale()
-  const tBanking = await getTranslations('banking')
+  const authz = await requirePermission("banking.read");
+  const t = await getTranslations("banking.cash");
+  const locale = await getLocale();
+  const tBanking = await getTranslations("banking");
 
   // The cockpit opens on the org's configured default horizon when the request
   // names none — the same setting the Analytics dashboard and tiles use.
-  const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
+  const cfg = await analyticsConfig(authz.user.orgId, "cashflow");
   const horizon = normalizeCashHorizonWeeks(
     sp.horizon,
     cfg.defaultHorizonWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
-  )
+  );
 
   // Subsidiary context (multi-subsidiary orgs): the whole cockpit — cash,
   // open items, SQL-backed forecast categories — scopes to the selected view.
-  const subId = typeof sp.sub === 'string' ? sp.sub : undefined
-  const asOfIso = await resolveAsOf(authz.user.orgId)
+  const subId = typeof sp.sub === "string" ? sp.sub : undefined;
+  const asOfIso = await resolveAsOf(authz.user.orgId);
   // Fail closed when the FX-rate pipeline is blocked: the cockpit forecast is
   // an FX-bearing projection, so the loader reports `ratesBlocked` and the
   // page renders the shared typed banner instead of the cockpit.
-  const tr = await getTranslations('reports')
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let ratesBlocked: RatesBlockedNotice | null = null
+  const tr = await getTranslations("reports");
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let ratesBlocked: RatesBlockedNotice | null = null;
   try {
-    subView = await reportSubsidiaryView(subId, asOfIso)
+    subView = await reportSubsidiaryView(subId, asOfIso);
   } catch (error) {
-    if (!(error instanceof MissingRatesError)) throw error
+    if (!(error instanceof MissingRatesError)) throw error;
     ratesBlocked = {
-      code: 'rates-not-derived',
-      title: tr('statement.ratesBlockedTitle'),
+      code: "rates-not-derived",
+      title: tr("statement.ratesBlockedTitle"),
       description: (error as Error).message,
-      deriveLabel: tr('statement.ratesBlockedAction'),
-      deriveHref: '/close',
-    }
+      deriveLabel: tr("statement.ratesBlockedAction"),
+      deriveHref: "/close",
+    };
   }
 
   const apSettings = {
     weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
     restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
-    runwayCautionWeeks: cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
-  }
+    runwayCautionWeeks:
+      cfg.runwayCautionWeeks ?? ANALYTICS_CONFIG.cashflow.defaults.runwayCautionWeeks,
+  };
   // Never run the position scope-less: a missing view inherits the caller's
   // full allowed set, which would silently widen a blocked-rate response.
   const [position, layoutPrefs] = await Promise.all([
@@ -110,8 +127,8 @@ export async function loadBankingCash(
           locale,
         )
       : null,
-    userPageLayout(authz.user.id, 'banking-cash'),
-  ])
+    userPageLayout(authz.user.id, "banking-cash"),
+  ]);
   // Every week's totals and counts travel with the page; the transactions
   // behind them do not. On a real ledger those arrays are the entire open-item
   // book repeated across the horizon — tens of megabytes to render a timeline
@@ -120,23 +137,23 @@ export async function loadBankingCash(
   const emptyPosition: CashPosition = {
     asOf: asOfIso,
     horizonWeeks: horizon,
-    startingCash: '0',
+    startingCash: "0",
     bankAccounts: [],
     weeks: [],
-    totalInflows: '0',
-    totalOutflows: '0',
-    netChange: '0',
-    projectedEnd: '0',
-    lowestCash: '0',
-    lowestWeek: '',
-    burnRate: '0',
+    totalInflows: "0",
+    totalOutflows: "0",
+    netChange: "0",
+    projectedEnd: "0",
+    lowestCash: "0",
+    lowestWeek: "",
+    burnRate: "0",
     runwayWeeks: null,
-    runwayStatus: 'healthy',
-    deferredBeyondHorizon: '0',
+    runwayStatus: "healthy",
+    deferredBeyondHorizon: "0",
     dso: null,
     dpo: null,
-    arOutstanding: '0',
-    apOutstanding: '0',
+    arOutstanding: "0",
+    apOutstanding: "0",
     arCoverage: null,
     categories: [],
     unavailableCategories: [],
@@ -144,65 +161,66 @@ export async function loadBankingCash(
     vendorOptions: [],
     accountOptions: [],
     subsidiaryOptions: [],
-  }
+  };
   const data = position
     ? { ...position, weeks: withoutWeekEntries(position.weeks) }
-    : emptyPosition
+    : emptyPosition;
 
-  const subQs = subId ? `?sub=${subId}` : ''
+  const subQs = subId ? `?sub=${subId}` : "";
 
   return {
-    title: t('title'),
-    description: t('description'),
+    title: t("title"),
+    description: t("description"),
     ratesBlocked,
     ratesReady: ratesBlocked === null,
     subsidiaryPicker: subView?.picker ?? [],
-    subsidiaryValue: subView?.picker.find((p) => p.id === subId)?.id ?? subView?.picker[0]?.id ?? '',
+    subsidiaryValue:
+      subView?.picker.find((p) => p.id === subId)?.id ?? subView?.picker[0]?.id ?? "",
     selectedSubsidiaryIds: subView?.subsidiary?.ids,
-    subsidiaryLabel: tBanking('home.subsidiary'),
-    tabs: await groupTabs('banking', '/banking/cash', { subQs, orgId: authz.user.orgId }),
+    subsidiaryLabel: tBanking("home.subsidiary"),
+    tabs: await groupTabs("banking", "/banking/cash", { subQs, orgId: authz.user.orgId }),
     data,
     layoutPrefs,
-    canConfigure: can(authz, 'admin.setup.manage'),
-    canPayRun: can(authz, 'ap.pay'),
-    canCollectionRun: can(authz, 'ar.pay'),
-  }
+    canConfigure: can(authz, "admin.setup.manage"),
+    canPayRun: can(authz, "ap.pay"),
+    canCollectionRun: can(authz, "ar.pay"),
+  };
 }
 
-const f = ref<BankingCashData>()
+const f = ref<BankingCashData>();
 
 export function bankingCashSpec(data: BankingCashData): PageSpec {
   return page({
-    route: '/banking/cash',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/banking/cash",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-3",
         actions: [
-          widget('subsidiary-switcher', {
+          widget("subsidiary-switcher", {
             picker: data.subsidiaryPicker,
             value: data.subsidiaryValue,
             label: data.subsidiaryLabel,
           }),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
       {
-        ...widgetBlock('empty-state', {
-          title: data.ratesBlocked?.title ?? '',
+        ...widgetBlock("empty-state", {
+          title: data.ratesBlocked?.title ?? "",
           description: data.ratesBlocked?.description,
-          action: 'link-button',
+          action: "link-button",
           actionProps: {
-            href: data.ratesBlocked?.deriveHref ?? '/close',
-            label: data.ratesBlocked?.deriveLabel ?? '',
+            href: data.ratesBlocked?.deriveHref ?? "/close",
+            label: data.ratesBlocked?.deriveLabel ?? "",
           },
         }),
-        when: f('ratesBlocked'),
+        when: f("ratesBlocked"),
       },
       // One client island: the horizon switcher, vitals strip, alert banner,
       // reorderable panels and config drawer are client state and client
@@ -215,7 +233,7 @@ export function bankingCashSpec(data: BankingCashData): PageSpec {
       // renders the shared CashCockpit over that data — a widget, not a
       // slot, because there is no capability left to re-derive.
       {
-        ...widgetBlock('cash-cockpit', {
+        ...widgetBlock("cash-cockpit", {
           data: data.data,
           selectedSubsidiaryIds: data.selectedSubsidiaryIds,
           layoutPrefs: data.layoutPrefs,
@@ -225,8 +243,8 @@ export function bankingCashSpec(data: BankingCashData): PageSpec {
         }),
         // The cockpit forecast is an FX-bearing projection: hide it while
         // rates are blocked and show the banner above instead of zeros.
-        when: f('ratesReady'),
+        when: f("ratesReady"),
       },
     ],
-  })
+  });
 }

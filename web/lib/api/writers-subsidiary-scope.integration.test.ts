@@ -9,8 +9,7 @@ import type { ResolvedApiType } from "./registry-data.ts";
 const { deleteRecord, updateRecord } = await import("./writers.ts");
 const { createAppPlatformAdapter } = await import("../apps/platform.ts");
 const { loadApiSchema, resolveApiType } = await import("./schema-registry.ts");
-const { db, env, withBypass, withOrgContext } =
-  await import("@openbooks/engine/platform/db");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
 
@@ -64,13 +63,11 @@ test(
         homeUserId: userId,
         homeOrgId: org.orgId,
       };
-      const resolved = await withOrgContext(org.orgId, () =>
-        resolveApiType(org.orgId, "items"),
-      );
+      const resolved = await withOrgContext(org.orgId, () => resolveApiType(org.orgId, "items"));
       assert.ok(resolved, "items type resolves");
-      const schema = (
-        await withOrgContext(org.orgId, () => loadApiSchema(org.orgId))
-      ).find((s) => s.key === "items");
+      const schema = (await withOrgContext(org.orgId, () => loadApiSchema(org.orgId))).find(
+        (s) => s.key === "items",
+      );
       assert.ok(schema, "items schema loads");
       assert.ok(
         !schema.fields.some((f) => f.name === "subsidiary_id"),
@@ -84,9 +81,7 @@ test(
       );
       assert.equal(updated.status, 200);
 
-      const deleted = await withOrgContext(org.orgId, () =>
-        deleteRecord(user, resolved, itemId),
-      );
+      const deleted = await withOrgContext(org.orgId, () => deleteRecord(user, resolved, itemId));
       assert.equal(deleted.status, 200);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -107,11 +102,13 @@ test(
       const actor = (await seedFlowActors(created.orgId)).adminId;
       const branch = randomUUID();
       const typeId = randomUUID();
-      const fields = [{
-        id: "main",
-        title: "Details",
-        fields: [{ id: "title", type: "text", label: "Title" }],
-      }];
+      const fields = [
+        {
+          id: "main",
+          title: "Details",
+          fields: [{ id: "title", type: "text", label: "Title" }],
+        },
+      ];
       await db.execute(sql`
         insert into subsidiaries
           (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
@@ -144,10 +141,13 @@ test(
 
     const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
     const revisionOf = async (id: string) => {
-      const rows = await db.execute<{ revision: string }>(sql`
+      const rows = await db.execute<{ revision: string }>(
+        sql`
         select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
           from custom_records where id = ${id}
-      `, "objects");
+      `,
+        "objects",
+      );
       return rows[0]!.revision;
     };
     const resolved: ResolvedApiType = {
@@ -188,10 +188,15 @@ test(
         assert.equal(hiddenUpdate.status, 404, JSON.stringify(hiddenUpdate.body));
         const hiddenDelete = await deleteRecord(user, resolved, hiddenDraftId, fence);
         assert.equal(hiddenDelete.status, 404, JSON.stringify(hiddenDelete.body));
-        const stored = (await db.execute<{ title: string; n: string }>(sql`
+        const stored = (
+          await db.execute<{ title: string; n: string }>(
+            sql`
           select data ->> 'title' as title, (select count(*)::text from custom_records where id = ${hiddenDraftId}) as n
             from custom_records where id = ${hiddenId}
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         assert.equal(stored?.title, "hidden");
         assert.equal(stored?.n, "1");
 
@@ -204,10 +209,15 @@ test(
           fence,
         );
         assert.equal(visibleUpdate.status, 200, JSON.stringify(visibleUpdate.body));
-        const after = (await db.execute<{ title: string; subsidiary_id: string | null }>(sql`
+        const after = (
+          await db.execute<{ title: string; subsidiary_id: string | null }>(
+            sql`
           select data ->> 'title' as title, data ->> 'subsidiary_id' as subsidiary_id
             from custom_records where id = ${visibleId}
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         assert.equal(after?.title, "kept");
         assert.equal(
           after?.subsidiary_id,
@@ -222,7 +232,10 @@ test(
           userCan: () => true,
           allowedSubsidiaryIds: new Set([branch]),
         });
-        const listed = (await other.list(typeKey, {})) as { records: Array<{ id: string }>; total: number };
+        const listed = (await other.list(typeKey, {})) as {
+          records: Array<{ id: string }>;
+          total: number;
+        };
         assert.equal(
           listed.records.some((row) => row.id === visibleId),
           false,

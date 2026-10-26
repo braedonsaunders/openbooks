@@ -15,57 +15,86 @@
  * what makes the generic API safe — see api/admin/setup/[entity]/route.ts.
  */
 
-import type { SetupEntity } from './types'
-import { PAYROLL_US_FILING_ACCOUNT_LINEAGE_ENTITY } from './payroll-us-filing-account-lineage'
-import { AI_CAPABILITIES_ENTITY } from './hrm-ai-rails'
-import { BENEFIT_TRANSACTION_POLICY_ENTITY } from './benefit-transaction-policy'
-import { SETUP_GROUPS } from './types'
-import { CONTRACTOR_WITHHOLDING_ENTITIES } from './entities/contractor-withholding'
-import { FINANCIAL_POLICY_ENTITIES } from './entities/financial-policies'
-import { COMPANY_ENTITIES } from './entities/company'
-import { CALENDAR_ENTITIES } from './entities/calendars'
-import { WORK_CALENDARS_ENTITY } from './entities/work-calendars'
-import { ACCOUNTING_ENTITIES } from './entities/accounting'
-import { AMORTIZATION_ENTITIES } from './entities/amortization'
-import { EQUITY_ENTITIES } from './entities/equity'
-import { INTERNAL_BILLING_RULES_ENTITY } from './entities/internal-billing'
-import { MULTI_BOOK_ENTITIES } from './entities/multibook'
-import { TAX_ENTITIES } from './entities/taxes'
-import { DIMENSION_ENTITIES } from './entities/dimensions'
-import { CHART_ENTITIES } from './entities/chart'
-import { BILLING_ENTITIES } from './entities/billing'
-import { SALES_SETUP_ENTITIES } from './entities/sales'
-import { CRM_SETUP_ENTITIES } from './entities/crm'
-import { STORED_VALUE_ENTITIES } from './entities/stored-value'
-import { POS_ENTITIES } from './entities/pos'
-import { EINVOICING_ENTITIES } from './entities/einvoicing'
-import { AP_CAPTURE_ENTITIES } from './entities/ap-capture'
-import { REBATE_AGREEMENTS_ENTITY } from './entities/rebates'
-import { RENEWAL_POLICIES_ENTITY } from './entities/renewals'
-import { REVENUE_ENTITIES } from './entities/revenue'
-import { INVENTORY_ENTITIES } from './entities/inventory'
-import { WAREHOUSE_ENTITIES } from './entities/warehouses'
-import { SHIPPING_ENTITIES } from './entities/shipping'
-import { WORKFORCE_ENTITIES } from './entities/workforce'
-import { SCHEDULING_ENTITIES } from './entities/scheduling'
-import { SERVICE_ENTITIES } from './entities/service'
-import { HRM_PROCESS_ENTITIES } from './entities/hrm-processes'
-import { ASSET_ENTITIES } from './entities/assets'
-import { CURRENCY_ENTITIES } from './entities/currency'
-import { MANUFACTURING_ENTITIES } from './entities/manufacturing'
-import { INSPECTION_PLANS_ENTITY } from './entities/inspection-plans'
-import { OPERATING_PROFILE_ENTITIES } from './entities/operating-profiles'
-import { USAGE_ENTITIES } from './entities/usage'
-import { ENTITLEMENT_ENTITIES } from './entities/entitlements'
-import { NONPROFIT_SETUP_ENTITIES } from './entities/nonprofit'
-import { COMMERCE_ENTITIES } from './entities/commerce'
-import { PAYROLL_COMPENSATION_PACKAGES_ENTITY, PAYROLL_COMPENSATION_VERSIONS_ENTITY, PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY } from './payroll-compensation-packages'
-import { TRAINING_COURSES_ENTITY, TRAINING_SESSIONS_ENTITY, TRAINING_PARTICIPANTS_ENTITY } from './hrm-training'
+import type { SetupEntity } from "./types";
+import { PAYROLL_US_FILING_ACCOUNT_LINEAGE_ENTITY } from "./payroll-us-filing-account-lineage";
+import { AI_CAPABILITIES_ENTITY } from "./hrm-ai-rails";
+import { BENEFIT_TRANSACTION_POLICY_ENTITY } from "./benefit-transaction-policy";
+import { SETUP_GROUPS } from "./types";
+import { CONTRACTOR_WITHHOLDING_ENTITIES } from "./entities/contractor-withholding";
+import { FINANCIAL_POLICY_ENTITIES } from "./entities/financial-policies";
+import { COMPANY_ENTITIES } from "./entities/company";
+import { CALENDAR_ENTITIES } from "./entities/calendars";
+import { WORK_CALENDARS_ENTITY } from "./entities/work-calendars";
+import { ACCOUNTING_ENTITIES } from "./entities/accounting";
+import { AMORTIZATION_ENTITIES } from "./entities/amortization";
+import { EQUITY_ENTITIES } from "./entities/equity";
+import { INTERNAL_BILLING_RULES_ENTITY } from "./entities/internal-billing";
+import { MULTI_BOOK_ENTITIES } from "./entities/multibook";
+import { TAX_ENTITIES } from "./entities/taxes";
+import { DIMENSION_ENTITIES } from "./entities/dimensions";
+import { CHART_ENTITIES } from "./entities/chart";
+import { BILLING_ENTITIES } from "./entities/billing";
+import { SALES_SETUP_ENTITIES } from "./entities/sales";
+import { CRM_SETUP_ENTITIES } from "./entities/crm";
+import { STORED_VALUE_ENTITIES } from "./entities/stored-value";
+import { POS_ENTITIES } from "./entities/pos";
+import { EINVOICING_ENTITIES } from "./entities/einvoicing";
+import { AP_CAPTURE_ENTITIES } from "./entities/ap-capture";
+import { REBATE_AGREEMENTS_ENTITY } from "./entities/rebates";
+import { RENEWAL_POLICIES_ENTITY } from "./entities/renewals";
+import { REVENUE_ENTITIES } from "./entities/revenue";
+import { INVENTORY_ENTITIES } from "./entities/inventory";
+import { WAREHOUSE_ENTITIES } from "./entities/warehouses";
+import { SHIPPING_ENTITIES } from "./entities/shipping";
+import { WORKFORCE_ENTITIES } from "./entities/workforce";
+import { SCHEDULING_ENTITIES } from "./entities/scheduling";
+import { SERVICE_ENTITIES } from "./entities/service";
+import { HRM_PROCESS_ENTITIES } from "./entities/hrm-processes";
+import { ASSET_ENTITIES } from "./entities/assets";
+import { CURRENCY_ENTITIES } from "./entities/currency";
+import { MANUFACTURING_ENTITIES } from "./entities/manufacturing";
+import { INSPECTION_PLANS_ENTITY } from "./entities/inspection-plans";
+import { OPERATING_PROFILE_ENTITIES } from "./entities/operating-profiles";
+import { USAGE_ENTITIES } from "./entities/usage";
+import { ENTITLEMENT_ENTITIES } from "./entities/entitlements";
+import { NONPROFIT_SETUP_ENTITIES } from "./entities/nonprofit";
+import { COMMERCE_ENTITIES } from "./entities/commerce";
+import {
+  PAYROLL_COMPENSATION_PACKAGES_ENTITY,
+  PAYROLL_COMPENSATION_VERSIONS_ENTITY,
+  PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY,
+} from "./payroll-compensation-packages";
+import {
+  TRAINING_COURSES_ENTITY,
+  TRAINING_SESSIONS_ENTITY,
+  TRAINING_PARTICIPANTS_ENTITY,
+} from "./hrm-training";
 
-export type { SetupFieldKind, SetupColumnKind, SetupRefSource, SetupOption, SetupDynamicOptionsSource, SetupField, SetupColumn, SetupFilter, SetupEntity, SetupEntityGate, SetupGroup } from './types'
-export { setupOptionLabel, setupFieldVisible, setupFieldOptions, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, setupEntityForFeatureState, resolveSetupEntityGate, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY } from './types'
-export { SETUP_GROUPS }
-export { OVERHEAD_RATE_KINDS, LIEN_WAIVER_TYPES } from './options'
+export type {
+  SetupFieldKind,
+  SetupColumnKind,
+  SetupRefSource,
+  SetupOption,
+  SetupDynamicOptionsSource,
+  SetupField,
+  SetupColumn,
+  SetupFilter,
+  SetupEntity,
+  SetupEntityGate,
+  SetupGroup,
+} from "./types";
+export {
+  setupOptionLabel,
+  setupFieldVisible,
+  setupFieldOptions,
+  setupEntitySubsidiaryField,
+  setupEntitySubsidiaryReferenceFields,
+  setupEntityForFeatureState,
+  resolveSetupEntityGate,
+  SETUP_PROJECTS_OR_MANUFACTURING_REMEDY,
+} from "./types";
+export { SETUP_GROUPS };
+export { OVERHEAD_RATE_KINDS, LIEN_WAIVER_TYPES } from "./options";
 
 export const SETUP_ENTITIES: SetupEntity[] = [
   BENEFIT_TRANSACTION_POLICY_ENTITY,
@@ -109,59 +138,66 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...ENTITLEMENT_ENTITIES,
   ...NONPROFIT_SETUP_ENTITIES,
   ...COMMERCE_ENTITIES,
-  PAYROLL_COMPENSATION_PACKAGES_ENTITY, PAYROLL_COMPENSATION_VERSIONS_ENTITY, PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY,
-  TRAINING_COURSES_ENTITY, TRAINING_SESSIONS_ENTITY, TRAINING_PARTICIPANTS_ENTITY,
+  PAYROLL_COMPENSATION_PACKAGES_ENTITY,
+  PAYROLL_COMPENSATION_VERSIONS_ENTITY,
+  PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY,
+  TRAINING_COURSES_ENTITY,
+  TRAINING_SESSIONS_ENTITY,
+  TRAINING_PARTICIPANTS_ENTITY,
   ...CHART_ENTITIES,
-]
+];
 
-export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))
+export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]));
 
 /** Collections rendered inside an owning record with the shared setup list. */
 export function setupChildEntities(parentKey: string): SetupEntity[] {
-  return SETUP_ENTITIES.filter((entity) => entity.parentRecords?.some((parent) => parent.entityKey === parentKey))
+  return SETUP_ENTITIES.filter((entity) =>
+    entity.parentRecords?.some((parent) => parent.entityKey === parentKey),
+  );
 }
 
 /** Collection links lead to the owning records, where the child tab is opened. */
 export function setupEntityHref(entity: SetupEntity): string {
-  if (entity.key === 'schedule-boards') return '/scheduling/boards'
-  if (entity.key.startsWith('training-')) return '/hrm/training'
-  if (entity.key.startsWith('payroll-compensation-')) return '/admin/setup/payroll?tab=compensation-packages'
-  if (entity.key === 'benefit-programs') return '/hrm/benefits?view=programs'
-  if (entity.key === 'benefit-plans') return '/hrm/benefits?view=programs'
-  if (entity.key === 'entitlement-plans') return '/hrm/benefits?view=programs&type=time_off'
-  if (entity.key === 'payroll-vacation-terms') return '/hrm/benefits?view=employees'
-  if (entity.key === 'payroll-service-credits') return '/hrm/benefits?view=employees'
-  const parentKey = entity.parentRecords?.[0]?.entityKey
-  if (!parentKey) return `/admin/setup/${entity.key}`
+  if (entity.key === "schedule-boards") return "/scheduling/boards";
+  if (entity.key.startsWith("training-")) return "/hrm/training";
+  if (entity.key.startsWith("payroll-compensation-"))
+    return "/admin/setup/payroll?tab=compensation-packages";
+  if (entity.key === "benefit-programs") return "/hrm/benefits?view=programs";
+  if (entity.key === "benefit-plans") return "/hrm/benefits?view=programs";
+  if (entity.key === "entitlement-plans") return "/hrm/benefits?view=programs&type=time_off";
+  if (entity.key === "payroll-vacation-terms") return "/hrm/benefits?view=employees";
+  if (entity.key === "payroll-service-credits") return "/hrm/benefits?view=employees";
+  const parentKey = entity.parentRecords?.[0]?.entityKey;
+  if (!parentKey) return `/admin/setup/${entity.key}`;
   const parentHomes: Record<string, string> = {
-    items: '/items',
-    'benefit-plans': '/hrm/benefits?view=programs',
-    'benefit-enrollment-configuration': '/hrm/benefits?view=employees',
-    'benefit-programs': '/hrm/benefits?view=programs',
-    'tax-regimes': '/admin/setup/tax-depreciation?tab=regimes',
-    'entitlement-plans': '/hrm/benefits?view=programs&type=time_off',
-    'pay-components': '/admin/setup/payroll?tab=components',
-    'payroll-filing-accounts': '/admin/setup/payroll?tab=filing',
-  }
-  const home = parentHomes[parentKey] ?? `/admin/setup/${parentKey}`
-  return `${home}${home.includes('?') ? '&' : '?'}${parentKey === 'items' ? 'itemSetup' : 'setupTab'}=${entity.key}`
+    items: "/items",
+    "benefit-plans": "/hrm/benefits?view=programs",
+    "benefit-enrollment-configuration": "/hrm/benefits?view=employees",
+    "benefit-programs": "/hrm/benefits?view=programs",
+    "tax-regimes": "/admin/setup/tax-depreciation?tab=regimes",
+    "entitlement-plans": "/hrm/benefits?view=programs&type=time_off",
+    "pay-components": "/admin/setup/payroll?tab=components",
+    "payroll-filing-accounts": "/admin/setup/payroll?tab=filing",
+  };
+  const home = parentHomes[parentKey] ?? `/admin/setup/${parentKey}`;
+  return `${home}${home.includes("?") ? "&" : "?"}${parentKey === "items" ? "itemSetup" : "setupTab"}=${entity.key}`;
 }
 
 /** Entities grouped by section, in registry order — drives the left rail. */
 export function setupEntitiesByGroup(): Map<string, SetupEntity[]> {
-  const byGroup = new Map<string, SetupEntity[]>()
-  for (const g of SETUP_GROUPS) byGroup.set(g.key, [])
+  const byGroup = new Map<string, SetupEntity[]>();
+  for (const g of SETUP_GROUPS) byGroup.set(g.key, []);
   for (const e of SETUP_ENTITIES) {
-    if (e.nestedUnder || e.parentRecords?.length || e.rehomed) continue
-    const list = byGroup.get(e.groupKey)
-    if (list) list.push(e)
+    if (e.nestedUnder || e.parentRecords?.length || e.rehomed) continue;
+    const list = byGroup.get(e.groupKey);
+    if (list) list.push(e);
   }
-  return byGroup
+  return byGroup;
 }
 
 /** camelCase field key → snake_case db column. */
 export function toSnake(key: string): string {
-  return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+  return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }
 
 /** Generic picker columns for a ref-option target, derived from the columns
@@ -174,25 +210,25 @@ export function toSnake(key: string): string {
  *  so this function is the single derivation the picker test pins. */
 export interface RefTargetPicker {
   /** Option-value column (what referencing rows store). */
-  valueCol: string
+  valueCol: string;
   /** Label columns: both when a code-like and a name-like column exist
    *  (rendered `code · name`), else the single one, else the natural key,
    *  else the value column itself (never a missing column). */
-  labelCols: string[]
+  labelCols: string[];
   /** ORDER BY column, same priority as the label. */
-  orderCol: string
+  orderCol: string;
 }
 
 export function refTargetPicker(target: SetupEntity): RefTargetPicker {
   const declared = new Set([
     ...target.fields.map((f) => toSnake(f.key)),
     ...target.columns.map((c) => toSnake(c.key)),
-  ])
-  const valueCol = toSnake(target.refValue ?? target.idColumn ?? 'id')
-  const codeCol = declared.has('code') ? 'code' : declared.has('key') ? 'key' : null
-  const nameCol = declared.has('name') ? 'name' : declared.has('label') ? 'label' : null
-  const naturalCol = target.naturalKey ? toSnake(target.naturalKey) : null
+  ]);
+  const valueCol = toSnake(target.refValue ?? target.idColumn ?? "id");
+  const codeCol = declared.has("code") ? "code" : declared.has("key") ? "key" : null;
+  const nameCol = declared.has("name") ? "name" : declared.has("label") ? "label" : null;
+  const naturalCol = target.naturalKey ? toSnake(target.naturalKey) : null;
   const labelCols =
-    codeCol && nameCol ? [codeCol, nameCol] : [nameCol ?? codeCol ?? naturalCol ?? valueCol]
-  return { valueCol, labelCols, orderCol: nameCol ?? codeCol ?? naturalCol ?? valueCol }
+    codeCol && nameCol ? [codeCol, nameCol] : [nameCol ?? codeCol ?? naturalCol ?? valueCol];
+  return { valueCol, labelCols, orderCol: nameCol ?? codeCol ?? naturalCol ?? valueCol };
 }

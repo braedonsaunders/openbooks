@@ -1,8 +1,5 @@
-import {seedCloseRunApprovalFixture} from "../testing/close.ts";
-import {
-  decideReopenFixture,
-  requestReviewedReopenFixture,
-} from "../testing/close.ts";
+import { seedCloseRunApprovalFixture } from "../testing/close.ts";
+import { decideReopenFixture, requestReviewedReopenFixture } from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
@@ -11,11 +8,7 @@ import { closeApprovedRun, publishCloseRun } from "./run-completion.ts";
 import { recloseApprovedReopen } from "./reopening.ts";
 import { startCloseRun } from "./run-start.ts";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 /**
  * A corrected package must reach its recipients. publishCloseRun enqueues one
@@ -75,16 +68,11 @@ test(
         actorId: actors.adminId,
       });
       const approveAndClose = async () => {
-        await seedCloseRunApprovalFixture(org.orgId,runId,actors.adminId);
+        await seedCloseRunApprovalFixture(org.orgId, runId, actors.adminId);
         await closeApprovedRun(org.orgId, runId, actors.adminId);
       };
       await approveAndClose();
-      await publishCloseRun(
-        org.orgId,
-        runId,
-        actors.adminId,
-        "first publication",
-      );
+      await publishCloseRun(org.orgId, runId, actors.adminId, "first publication");
       assert.equal(enqueues.length, 1, "first publish must enqueue delivery");
       assert.equal(enqueues[0]!.swallowed, false);
 
@@ -116,17 +104,8 @@ test(
         reason: "Correction posted and reviewed; window closed for re-issue",
       });
       await approveAndClose();
-      await publishCloseRun(
-        org.orgId,
-        runId,
-        actors.adminId,
-        "corrected re-publication",
-      );
-      assert.equal(
-        enqueues.length,
-        2,
-        "re-publication must enqueue delivery again",
-      );
+      await publishCloseRun(org.orgId, runId, actors.adminId, "corrected re-publication");
+      assert.equal(enqueues.length, 2, "re-publication must enqueue delivery again");
       assert.equal(
         enqueues[1]!.swallowed,
         false,

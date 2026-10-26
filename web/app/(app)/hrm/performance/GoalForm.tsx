@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Button, Input, Label } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { DateField } from '../../../../components/date-field'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Button, Input, Label } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { DateField } from "../../../../components/date-field";
 
 /**
  * The goal form in the review drawer: set a goal on the review's
@@ -13,51 +13,51 @@ import { DateField } from '../../../../components/date-field'
  * subject-or-HR in the service; refusals render as the error.
  */
 export function GoalForm({ employmentId, cycleId }: { employmentId: string; cycleId: string }) {
-  const t = useTranslations('hrm')
-  const router = useRouter()
-  const [title, setTitle] = useState('')
-  const [dueOn, setDueOn] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const t = useTranslations("hrm");
+  const router = useRouter();
+  const [title, setTitle] = useState("");
+  const [dueOn, setDueOn] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
     try {
-      const res = await fetch('/api/hrm/goals', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const res = await fetch("/api/hrm/goals", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           employmentId,
           cycleId,
           title: title.trim(),
           dueOn: dueOn.length > 0 ? dueOn : null,
         }),
-      })
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, t('performance.actionFailed')))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, t("performance.actionFailed")));
+        setBusy(false);
+        return;
       }
-      setTitle('')
-      setDueOn('')
-      setBusy(false)
-      router.refresh()
+      setTitle("");
+      setDueOn("");
+      setBusy(false);
+      router.refresh();
     } catch {
-      setError(t('performance.actionFailed'))
-      setBusy(false)
+      setError(t("performance.actionFailed"));
+      setBusy(false);
     }
   }
 
   return (
     <form onSubmit={submit} className="mt-2 space-y-3">
       <div>
-        <Label htmlFor="goal-title">{t('performance.goalTitle')}</Label>
+        <Label htmlFor="goal-title">{t("performance.goalTitle")}</Label>
         <Input id="goal-title" value={title} onChange={(e) => setTitle(e.target.value)} required />
       </div>
       <div>
-        <Label htmlFor="goal-due">{t('performance.goalDue')}</Label>
+        <Label htmlFor="goal-due">{t("performance.goalDue")}</Label>
         <DateField id="goal-due" value={dueOn} onChange={(value) => setDueOn(value)} />
       </div>
       {error ? (
@@ -66,52 +66,52 @@ export function GoalForm({ employmentId, cycleId }: { employmentId: string; cycl
         </p>
       ) : null}
       <Button type="submit" variant="outline" disabled={busy}>
-        {t('performance.addGoal')}
+        {t("performance.addGoal")}
       </Button>
     </form>
-  )
+  );
 }
 
 /** The goal progress editor: records progress through PATCH /api/hrm/goals/[id]. */
 export function GoalProgressForm({ goalId, failed }: { goalId: string; failed: string }) {
-  const t = useTranslations('hrm')
-  const router = useRouter()
-  const [progress, setProgress] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const t = useTranslations("hrm");
+  const router = useRouter();
+  const [progress, setProgress] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError(null)
-    const parsed = Number(progress.trim())
+    event.preventDefault();
+    setError(null);
+    const parsed = Number(progress.trim());
     if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
-      setError(t('performance.goalProgressInvalid'))
-      return
+      setError(t("performance.goalProgressInvalid"));
+      return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/hrm/goals/${goalId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'progress', progressPercent: parsed }),
-      })
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "progress", progressPercent: parsed }),
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, failed));
+        setBusy(false);
+        return;
       }
-      setBusy(false)
-      router.refresh()
+      setBusy(false);
+      router.refresh();
     } catch {
-      setError(failed)
-      setBusy(false)
+      setError(failed);
+      setBusy(false);
     }
   }
 
   return (
     <form onSubmit={submit} className="flex items-end gap-2">
       <div>
-        <Label htmlFor={`goal-progress-${goalId}`}>{t('performance.goalProgress')}</Label>
+        <Label htmlFor={`goal-progress-${goalId}`}>{t("performance.goalProgress")}</Label>
         <Input
           id={`goal-progress-${goalId}`}
           inputMode="numeric"
@@ -126,9 +126,8 @@ export function GoalProgressForm({ goalId, failed }: { goalId: string; failed: s
         </p>
       ) : null}
       <Button type="submit" variant="outline" disabled={busy}>
-        {t('performance.saveProgress')}
+        {t("performance.saveProgress")}
       </Button>
     </form>
-  )
+  );
 }
-

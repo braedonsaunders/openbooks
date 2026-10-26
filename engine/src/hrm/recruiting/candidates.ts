@@ -15,7 +15,14 @@ import { ANONYMIZED_DISPLAY_NAME } from "./retention.ts";
  * and a merged event records it. party_id is set ONLY by hire.
  */
 
-export const CANDIDATE_SOURCE_VALUES = ["referral", "job_board", "agency", "direct", "internal", "other"] as const;
+export const CANDIDATE_SOURCE_VALUES = [
+  "referral",
+  "job_board",
+  "agency",
+  "direct",
+  "internal",
+  "other",
+] as const;
 
 /**
  * A duplicate-email refusal that names the survivor structurally.
@@ -104,10 +111,17 @@ export async function loadCandidate(
   orgId: string,
   candidateId: string,
 ): Promise<CandidateRow | null> {
-  return (await exec.execute<CandidateRow>(sql`
+  return (
+    (
+      await exec.execute<CandidateRow>(
+        sql`
     select ${CANDIDATE_COLUMNS} from hrm_candidates
      where org_id = ${orgId} and id = ${candidateId}
-  `, "objects"))[0] ?? null;
+  `,
+        "objects",
+      )
+    )[0] ?? null
+  );
 }
 
 /** Case-insensitive email match within the org (the duplicate-email refusal). */
@@ -116,11 +130,18 @@ export async function findCandidateByEmail(
   orgId: string,
   email: string,
 ): Promise<CandidateRow | null> {
-  return (await exec.execute<CandidateRow>(sql`
+  return (
+    (
+      await exec.execute<CandidateRow>(
+        sql`
     select ${CANDIDATE_COLUMNS} from hrm_candidates
      where org_id = ${orgId} and lower(btrim(email)) = lower(btrim(${email}))
      order by created_at limit 1
-  `, "objects"))[0] ?? null;
+  `,
+        "objects",
+      )
+    )[0] ?? null
+  );
 }
 
 export interface CreateCandidateQuery {
@@ -159,7 +180,10 @@ export async function createCandidate(query: CreateCandidateQuery): Promise<Crea
       : typeof query.email === "string" && query.email.trim().length > 0
         ? query.email.trim()
         : (() => {
-            throw new RecruitingError("INVALID_INPUT", "candidate email must be non-blank when sent");
+            throw new RecruitingError(
+              "INVALID_INPUT",
+              "candidate email must be non-blank when sent",
+            );
           })();
   const phone =
     query.phone === undefined || query.phone === null || query.phone === ""
@@ -167,12 +191,16 @@ export async function createCandidate(query: CreateCandidateQuery): Promise<Crea
       : typeof query.phone === "string" && query.phone.trim().length > 0
         ? query.phone.trim()
         : (() => {
-            throw new RecruitingError("INVALID_INPUT", "candidate phone must be non-blank when sent");
+            throw new RecruitingError(
+              "INVALID_INPUT",
+              "candidate phone must be non-blank when sent",
+            );
           })();
   const source =
     query.source === undefined || query.source === null
       ? null
-      : typeof query.source === "string" && (CANDIDATE_SOURCE_VALUES as readonly string[]).includes(query.source)
+      : typeof query.source === "string" &&
+          (CANDIDATE_SOURCE_VALUES as readonly string[]).includes(query.source)
         ? query.source
         : (() => {
             throw new RecruitingError(
@@ -186,16 +214,27 @@ export async function createCandidate(query: CreateCandidateQuery): Promise<Crea
       : requireId(query.resumeAttachmentId, "resumeAttachmentId");
   const isInternal = query.isInternal === true;
   const mergeInto =
-    query.mergeInto === undefined || query.mergeInto === null ? null : requireId(query.mergeInto, "mergeInto");
+    query.mergeInto === undefined || query.mergeInto === null
+      ? null
+      : requireId(query.mergeInto, "mergeInto");
 
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     if (resumeAttachmentId) {
-      const file = (await db.execute<{ one: number }>(sql`
+      const file =
+        (
+          await db.execute<{ one: number }>(
+            sql`
         select 1 as one from files where org_id = ${orgId} and id = ${resumeAttachmentId} limit 1
-      `, "objects")).length > 0;
+      `,
+            "objects",
+          )
+        ).length > 0;
       if (!file) {
-        throw new RecruitingError("NOT_FOUND", "resume attachment is not visible in this organization — check the reference");
+        throw new RecruitingError(
+          "NOT_FOUND",
+          "resume attachment is not visible in this organization — check the reference",
+        );
       }
     }
     if (email) {
@@ -216,17 +255,28 @@ export async function createCandidate(query: CreateCandidateQuery): Promise<Crea
         }
         const survivor = await loadCandidate(db, orgId, duplicate.id);
         if (!survivor) {
-          throw new RecruitingError("NOT_FOUND", "merge target is not visible in this organization — check the reference");
+          throw new RecruitingError(
+            "NOT_FOUND",
+            "merge target is not visible in this organization — check the reference",
+          );
         }
         return { candidate: toDTO(survivor), mergedInto: toDTO(survivor) };
       }
       if (mergeInto) {
-        throw new RecruitingError("NOT_FOUND", "merge target is not visible in this organization — check the reference");
+        throw new RecruitingError(
+          "NOT_FOUND",
+          "merge target is not visible in this organization — check the reference",
+        );
       }
     } else if (mergeInto) {
-      throw new RecruitingError("INVALID_INPUT", "mergeInto needs the duplicate email — without an email there is nothing to merge");
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        "mergeInto needs the duplicate email — without an email there is nothing to merge",
+      );
     }
-    const inserted = (await db.execute<CandidateRow>(sql`
+    const inserted = (
+      await db.execute<CandidateRow>(
+        sql`
       insert into hrm_candidates
         (org_id, display_name, email, phone, source,
          source_detail, resume_attachment_id, is_internal, notes,
@@ -237,9 +287,15 @@ export async function createCandidate(query: CreateCandidateQuery): Promise<Crea
               ${typeof query.notes === "string" ? query.notes : null},
               ${actorId}, ${actorId})
       returning ${CANDIDATE_COLUMNS}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!inserted) {
-      throw new RecruitingError("REFUSED", "the candidate was not stored — no row was written; retry the request");
+      throw new RecruitingError(
+        "REFUSED",
+        "the candidate was not stored — no row was written; retry the request",
+      );
     }
     return { candidate: toDTO(inserted), mergedInto: null };
   });
@@ -253,12 +309,17 @@ export async function linkCandidateParty(
   exec: SqlExecutor,
   args: { orgId: string; actorId: string; candidateId: string; partyId: string },
 ): Promise<void> {
-  const updated = (await exec.execute<{ id: string }>(sql`
+  const updated = (
+    await exec.execute<{ id: string }>(
+      sql`
     update hrm_candidates
        set party_id = ${args.partyId}, updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${args.candidateId} and party_id is null
     returning id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!updated) {
     throw new RecruitingError(
       "REFUSED",

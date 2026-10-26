@@ -20,9 +20,18 @@ import {
   Select,
   UrlDrawer,
 } from "@openbooks/ui";
-import { DateField } from '../../../../components/date-field'
-import { billingAcceptConfig, canRerunBillingImport, suggestedBillingMappings } from '@/lib/billing-history-mapping'
-import { formatObjectCounts, shouldOpenImportWizard, BILLING_IMPORT_COUNT_KEYS, type BillingImportCounts } from './presentation'
+import { DateField } from "../../../../components/date-field";
+import {
+  billingAcceptConfig,
+  canRerunBillingImport,
+  suggestedBillingMappings,
+} from "@/lib/billing-history-mapping";
+import {
+  formatObjectCounts,
+  shouldOpenImportWizard,
+  BILLING_IMPORT_COUNT_KEYS,
+  type BillingImportCounts,
+} from "./presentation";
 
 // --- shapes (mirror the API responses) -----------------------------------------
 
@@ -62,16 +71,19 @@ interface Preflight {
 }
 
 interface MappingOptions {
-  plans: { value: string; label: string }[]
-  customers: { value: string; label: string }[]
-  incomeAccounts: { value: string; label: string }[]
-  clearingAccounts: { value: string; label: string }[]
-  taxCodes: { value: string; label: string }[]
+  plans: { value: string; label: string }[];
+  customers: { value: string; label: string }[];
+  incomeAccounts: { value: string; label: string }[];
+  clearingAccounts: { value: string; label: string }[];
+  taxCodes: { value: string; label: string }[];
 }
 
 type Step = "connect" | "preflight" | "result";
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive" | "warning" | "success"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "secondary" | "outline" | "destructive" | "warning" | "success"
+> = {
   complete: "success",
   running: "default",
   ready: "secondary",
@@ -84,7 +96,15 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "dest
 const PROVIDERS = ["chargebee", "recurly", "maxio", "zuora"] as const;
 const ATTENTION_KINDS = ["plan", "currency", "tax_code", "customer"] as const;
 const DIFFERENCE_KINDS = ["mrr", "open_ar", "deferred_revenue"] as const;
-const STATUSES = ["draft", "preflight", "ready", "running", "reconciling", "complete", "failed"] as const;
+const STATUSES = [
+  "draft",
+  "preflight",
+  "ready",
+  "running",
+  "reconciling",
+  "complete",
+  "failed",
+] as const;
 type EnumTranslationKey =
   | `providers.${(typeof PROVIDERS)[number]}`
   | `statuses.${(typeof STATUSES)[number]}`
@@ -110,9 +130,8 @@ export function BillingHistoryClient() {
     group: "providers" | "statuses" | "attentionKinds" | "differenceKinds",
     value: string,
     supported: readonly string[],
-  ) => supported.includes(value)
-    ? t(`${group}.${value}` as EnumTranslationKey)
-    : t("unknownValue");
+  ) =>
+    supported.includes(value) ? t(`${group}.${value}` as EnumTranslationKey) : t("unknownValue");
   const [runs, setRuns] = useState<ImportRun[]>([]);
   const [loading, setLoading] = useState(true);
   const tCommon = useTranslations("common");
@@ -136,7 +155,10 @@ export function BillingHistoryClient() {
   const [mappingOptions, setMappingOptions] = useState<MappingOptions | null>(null);
   const [mappingLoading, setMappingLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ counts: Counts; reconciliation: { ties: boolean; differences: Difference[] } } | null>(null);
+  const [result, setResult] = useState<{
+    counts: Counts;
+    reconciliation: { ties: boolean; differences: Difference[] };
+  } | null>(null);
 
   // Promise chains, not await-then-set: the exemplar console keeps setState
   // out of the synchronous effect path so one fetch cannot cascade renders.
@@ -200,12 +222,16 @@ export function BillingHistoryClient() {
   async function startPreflight() {
     setBusy(true);
     try {
-      const started = (await postJson("/api/billing-import/start", {
-        provider,
-        externalAccount,
-        apiKey,
-        site: site || undefined,
-      }, t("requestFailed"))) as { runId: string; preflight: Preflight };
+      const started = (await postJson(
+        "/api/billing-import/start",
+        {
+          provider,
+          externalAccount,
+          apiKey,
+          site: site || undefined,
+        },
+        t("requestFailed"),
+      )) as { runId: string; preflight: Preflight };
       setRunId(started.runId);
       setPreflight(started.preflight);
       const seeded = suggestedBillingMappings(started.preflight.attention);
@@ -225,21 +251,29 @@ export function BillingHistoryClient() {
     if (!runId) return;
     setBusy(true);
     try {
-      await postJson("/api/billing-import/accept", {
-        runId,
-        config: billingAcceptConfig({
-          mode,
-          cutoverOn,
-          historyDepthMonths,
-          incomeAccountId,
-          clearingAccountId,
-          taxCodeId,
-          planMap,
-          customerMap,
-          autoSync,
-        }),
-      }, t("requestFailed"));
-      const done = (await postJson("/api/billing-import/import", { runId }, t("requestFailed"))) as {
+      await postJson(
+        "/api/billing-import/accept",
+        {
+          runId,
+          config: billingAcceptConfig({
+            mode,
+            cutoverOn,
+            historyDepthMonths,
+            incomeAccountId,
+            clearingAccountId,
+            taxCodeId,
+            planMap,
+            customerMap,
+            autoSync,
+          }),
+        },
+        t("requestFailed"),
+      );
+      const done = (await postJson(
+        "/api/billing-import/import",
+        { runId },
+        t("requestFailed"),
+      )) as {
         counts: Counts;
         reconciliation: { ties: boolean; differences: Difference[] };
       };
@@ -271,19 +305,31 @@ export function BillingHistoryClient() {
       key: "provider",
       header: t("provider"),
       cell: (row) => translatedEnum("providers", row.provider, PROVIDERS),
-      search: (row) => `${translatedEnum("providers", row.provider, PROVIDERS)} ${row.externalAccount}`,
+      search: (row) =>
+        `${translatedEnum("providers", row.provider, PROVIDERS)} ${row.externalAccount}`,
     },
-    { key: "account", header: t("account"), cell: (row) => row.externalAccount, search: (row) => row.externalAccount },
+    {
+      key: "account",
+      header: t("account"),
+      cell: (row) => row.externalAccount,
+      search: (row) => row.externalAccount,
+    },
     {
       key: "mode",
       header: t("mode"),
-      cell: (row) => t(row.mode === "opening_balances" ? "modeOpeningBalances" : "modePostHistorical"),
-      search: (row) => t(row.mode === "opening_balances" ? "modeOpeningBalances" : "modePostHistorical"),
+      cell: (row) =>
+        t(row.mode === "opening_balances" ? "modeOpeningBalances" : "modePostHistorical"),
+      search: (row) =>
+        t(row.mode === "opening_balances" ? "modeOpeningBalances" : "modePostHistorical"),
     },
     {
       key: "status",
       header: t("status"),
-      cell: (row) => <Badge variant={STATUS_VARIANT[row.status] ?? "outline"}>{translatedEnum("statuses", row.status, STATUSES)}</Badge>,
+      cell: (row) => (
+        <Badge variant={STATUS_VARIANT[row.status] ?? "outline"}>
+          {translatedEnum("statuses", row.status, STATUSES)}
+        </Badge>
+      ),
       search: (row) => translatedEnum("statuses", row.status, STATUSES),
     },
     {
@@ -329,13 +375,20 @@ export function BillingHistoryClient() {
       {loading ? (
         <p className="text-sm text-muted-foreground">{t("loading")}</p>
       ) : loadError ? (
-        <div className="rounded-lg border border-red-300 p-6 text-center dark:border-red-900" role="alert">
+        <div
+          className="rounded-lg border border-red-300 p-6 text-center dark:border-red-900"
+          role="alert"
+        >
           <p className="text-sm text-red-700 dark:text-red-300">{loadError}</p>
-          <Button className="mt-4" variant="outline" onClick={() => {
-            setLoading(true);
-            setLoadError(null);
-            void refresh();
-          }}>
+          <Button
+            className="mt-4"
+            variant="outline"
+            onClick={() => {
+              setLoading(true);
+              setLoadError(null);
+              void refresh();
+            }}
+          >
             <RefreshCw className="mr-1 h-4 w-4" />
             {tCommon("actions.retry")}
           </Button>
@@ -344,7 +397,12 @@ export function BillingHistoryClient() {
         <EmptyState
           title={t("emptyTitle")}
           description={t("emptyBody")}
-          action={<Button onClick={openWizard}><Plus className="mr-1 h-4 w-4" />{t("newImport")}</Button>}
+          action={
+            <Button onClick={openWizard}>
+              <Plus className="mr-1 h-4 w-4" />
+              {t("newImport")}
+            </Button>
+          }
         />
       ) : (
         <PagedTable
@@ -357,20 +415,31 @@ export function BillingHistoryClient() {
         />
       )}
 
-      <UrlDrawer open={drawerOpen} openKey="new" closeHref="/sync/billing-history" title={t("wizardTitle")}>
+      <UrlDrawer
+        open={drawerOpen}
+        openKey="new"
+        closeHref="/sync/billing-history"
+        title={t("wizardTitle")}
+      >
         {step === "connect" && (
           <div className="space-y-4">
             <div>
               <Label>{t("provider")}</Label>
               <Select value={provider} onChange={(e) => setProvider(e.target.value)}>
                 {["chargebee", "recurly", "maxio", "zuora"].map((p) => (
-                  <option key={p} value={p}>{translatedEnum("providers", p, PROVIDERS)}</option>
+                  <option key={p} value={p}>
+                    {translatedEnum("providers", p, PROVIDERS)}
+                  </option>
                 ))}
               </Select>
             </div>
             <div>
               <Label>{t("account")}</Label>
-              <Input value={externalAccount} onChange={(e) => setExternalAccount(e.target.value)} placeholder={t("accountPlaceholder")} />
+              <Input
+                value={externalAccount}
+                onChange={(e) => setExternalAccount(e.target.value)}
+                placeholder={t("accountPlaceholder")}
+              />
             </div>
             <div>
               <Label>{t("apiKey")}</Label>
@@ -380,7 +449,10 @@ export function BillingHistoryClient() {
               <Label>{t("siteOptional")}</Label>
               <Input value={site} onChange={(e) => setSite(e.target.value)} />
             </div>
-            <Button disabled={busy || !externalAccount || !apiKey} onClick={() => void startPreflight()}>
+            <Button
+              disabled={busy || !externalAccount || !apiKey}
+              onClick={() => void startPreflight()}
+            >
               <RefreshCw className="mr-1 h-4 w-4" />
               {t("runPreflight")}
             </Button>
@@ -393,7 +465,9 @@ export function BillingHistoryClient() {
               <h3 className="font-medium">{t("countsTitle")}</h3>
               <ul className="mt-1 text-sm">
                 {BILLING_IMPORT_COUNT_KEYS.map((k) => (
-                  <li key={k}>{t(`count_${k}`)}: {preflight.counts[k]}</li>
+                  <li key={k}>
+                    {t(`count_${k}`)}: {preflight.counts[k]}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -404,36 +478,61 @@ export function BillingHistoryClient() {
               ) : (
                 <ul className="mt-1 space-y-2">
                   {preflight.attention.map((item) => (
-                    <li key={`${item.kind}:${item.externalRef}`} className="rounded border p-2 text-sm">
-                      <Badge variant="warning">{translatedEnum("attentionKinds", item.kind, ATTENTION_KINDS)}</Badge>
+                    <li
+                      key={`${item.kind}:${item.externalRef}`}
+                      className="rounded border p-2 text-sm"
+                    >
+                      <Badge variant="warning">
+                        {translatedEnum("attentionKinds", item.kind, ATTENTION_KINDS)}
+                      </Badge>
                       <p className="mt-1">{item.label}</p>
-                      {item.suggestion && <p className="text-muted-foreground">{item.suggestion.label}</p>}
+                      {item.suggestion && (
+                        <p className="text-muted-foreground">{item.suggestion.label}</p>
+                      )}
                       <p className="text-muted-foreground">{item.remedy}</p>
                       {mappingOptions && item.kind === "plan" ? (
                         <div className="mt-2">
                           <Label>{t("count_plans")}</Label>
-                          <Select value={planMap[item.externalRef] ?? ""} onChange={(event) => setPlanMap((current) => {
-                            const next = { ...current };
-                            if (event.target.value) next[item.externalRef] = event.target.value;
-                            else delete next[item.externalRef];
-                            return next;
-                          })}>
+                          <Select
+                            value={planMap[item.externalRef] ?? ""}
+                            onChange={(event) =>
+                              setPlanMap((current) => {
+                                const next = { ...current };
+                                if (event.target.value) next[item.externalRef] = event.target.value;
+                                else delete next[item.externalRef];
+                                return next;
+                              })
+                            }
+                          >
                             <option value="">{t("automaticMapping")}</option>
-                            {mappingOptions.plans.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            {mappingOptions.plans.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
                           </Select>
                         </div>
                       ) : null}
                       {mappingOptions && item.kind === "customer" ? (
                         <div className="mt-2">
                           <Label>{t("count_customers")}</Label>
-                          <Select value={customerMap[item.externalRef] ?? ""} onChange={(event) => setCustomerMap((current) => {
-                            const next = { ...current };
-                            if (event.target.value) next[item.externalRef] = event.target.value;
-                            else delete next[item.externalRef];
-                            return next;
-                          })}>
+                          <Select
+                            value={customerMap[item.externalRef] ?? ""}
+                            onChange={(event) =>
+                              setCustomerMap((current) => {
+                                const next = { ...current };
+                                if (event.target.value) next[item.externalRef] = event.target.value;
+                                else delete next[item.externalRef];
+                                return next;
+                              })
+                            }
+                          >
                             <option value="">{t("automaticMapping")}</option>
-                            {mappingOptions.customers.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            {mappingOptions.customers.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
                           </Select>
                         </div>
                       ) : null}
@@ -442,18 +541,27 @@ export function BillingHistoryClient() {
                 </ul>
               )}
             </div>
-            {mappingLoading ? <p className="text-sm text-muted-foreground">{t("loadingMappings")}</p> : null}
+            {mappingLoading ? (
+              <p className="text-sm text-muted-foreground">{t("loadingMappings")}</p>
+            ) : null}
             {!mappingLoading && mappingOptions === null ? (
               <div className="space-y-2 rounded border border-amber-300 p-3 text-sm">
                 <p>{t("mappingOptionsUnavailable")}</p>
-                <Button size="sm" variant="outline" onClick={() => void loadMappingOptions()}>{t("retryMappings")}</Button>
+                <Button size="sm" variant="outline" onClick={() => void loadMappingOptions()}>
+                  {t("retryMappings")}
+                </Button>
               </div>
             ) : null}
             <DisclosureSection title={t("advancedTitle")} summary={t("advancedSummary")}>
               <div className="space-y-4 pt-2">
                 <div>
                   <Label>{t("mode")}</Label>
-                  <Select value={mode} onChange={(e) => setMode(e.target.value as "post_historical" | "opening_balances")}>
+                  <Select
+                    value={mode}
+                    onChange={(e) =>
+                      setMode(e.target.value as "post_historical" | "opening_balances")
+                    }
+                  >
                     <option value="post_historical">{t("modePostHistorical")}</option>
                     <option value="opening_balances">{t("modeOpeningBalances")}</option>
                   </Select>
@@ -466,41 +574,82 @@ export function BillingHistoryClient() {
                   <>
                     <div>
                       <Label>{t("incomeAccount")}</Label>
-                      <Select value={incomeAccountId} onChange={(event) => setIncomeAccountId(event.target.value)}>
+                      <Select
+                        value={incomeAccountId}
+                        onChange={(event) => setIncomeAccountId(event.target.value)}
+                      >
                         <option value="">{t("noMapping")}</option>
-                        {mappingOptions.incomeAccounts.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {mappingOptions.incomeAccounts.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </Select>
                     </div>
                     <div>
                       <Label>{t("clearingAccount")}</Label>
-                      <Select value={clearingAccountId} onChange={(event) => setClearingAccountId(event.target.value)}>
+                      <Select
+                        value={clearingAccountId}
+                        onChange={(event) => setClearingAccountId(event.target.value)}
+                      >
                         <option value="">{t("noMapping")}</option>
-                        {mappingOptions.clearingAccounts.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {mappingOptions.clearingAccounts.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </Select>
                     </div>
                     <div>
                       <Label>{t("taxCode")}</Label>
-                      <Select value={taxCodeId} onChange={(event) => setTaxCodeId(event.target.value)}>
+                      <Select
+                        value={taxCodeId}
+                        onChange={(event) => setTaxCodeId(event.target.value)}
+                      >
                         <option value="">{t("noMapping")}</option>
-                        {mappingOptions.taxCodes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {mappingOptions.taxCodes.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </Select>
                     </div>
                   </>
                 ) : null}
                 <div>
                   <Label>{t("historyDepth")}</Label>
-                  <Input type="number" min={1} step={1} value={historyDepthMonths} onChange={(event) => setHistoryDepthMonths(event.target.value)} />
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={historyDepthMonths}
+                    onChange={(event) => setHistoryDepthMonths(event.target.value)}
+                  />
                 </div>
                 <div>
                   <Label>{t("autoSync")}</Label>
-                  <Select value={autoSync ? "true" : "false"} onChange={(event) => setAutoSync(event.target.value === "true")}>
+                  <Select
+                    value={autoSync ? "true" : "false"}
+                    onChange={(event) => setAutoSync(event.target.value === "true")}
+                  >
                     <option value="false">{t("autoSyncOff")}</option>
                     <option value="true">{t("autoSyncOn")}</option>
                   </Select>
                 </div>
               </div>
             </DisclosureSection>
-            <Button disabled={busy || mappingOptions === null || mappingLoading || (historyDepthMonths !== "" && (!/^\d+$/.test(historyDepthMonths) || !Number.isSafeInteger(Number(historyDepthMonths)) || Number(historyDepthMonths) <= 0))} onClick={() => void acceptAndRun()}>
+            <Button
+              disabled={
+                busy ||
+                mappingOptions === null ||
+                mappingLoading ||
+                (historyDepthMonths !== "" &&
+                  (!/^\d+$/.test(historyDepthMonths) ||
+                    !Number.isSafeInteger(Number(historyDepthMonths)) ||
+                    Number(historyDepthMonths) <= 0))
+              }
+              onClick={() => void acceptAndRun()}
+            >
               <Play className="mr-1 h-4 w-4" />
               {t("acceptAndImport")}
             </Button>
@@ -518,15 +667,22 @@ export function BillingHistoryClient() {
               <ul className="space-y-2">
                 {result.reconciliation.differences.map((d, i) => (
                   <li key={i} className="rounded border p-2 text-sm">
-                    <Badge variant="outline">{translatedEnum("differenceKinds", d.kind, DIFFERENCE_KINDS)}</Badge>
+                    <Badge variant="outline">
+                      {translatedEnum("differenceKinds", d.kind, DIFFERENCE_KINDS)}
+                    </Badge>
                     <p className="mt-1 font-medium">{d.ref}</p>
-                    <p>{t("sourceValue")}: {d.sourceMajor} · {t("openbooksValue")}: {d.openbooksMajor}</p>
+                    <p>
+                      {t("sourceValue")}: {d.sourceMajor} · {t("openbooksValue")}:{" "}
+                      {d.openbooksMajor}
+                    </p>
                     <p className="text-muted-foreground">{d.explanation}</p>
                   </li>
                 ))}
               </ul>
             )}
-            <Button asChild variant="outline"><Link href="/sync/billing-history">{t("close")}</Link></Button>
+            <Button asChild variant="outline">
+              <Link href="/sync/billing-history">{t("close")}</Link>
+            </Button>
           </div>
         )}
       </UrlDrawer>

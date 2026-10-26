@@ -37,9 +37,7 @@ class MergeHoldSource implements MigrationSource {
     return [
       {
         resource: "parties",
-        records: this.merged
-          ? [party("A"), party("B", "A")]
-          : [party("A"), party("B"), party("C")],
+        records: this.merged ? [party("A"), party("B", "A")] : [party("A"), party("B"), party("C")],
       },
       {
         resource: "contacts",

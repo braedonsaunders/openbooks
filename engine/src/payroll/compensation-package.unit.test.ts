@@ -1,133 +1,423 @@
 import { lockCompensationPackageConfiguration } from "./compensation-package-store.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import assert from "node:assert/strict";
-import { compensationPackageSchemaRefusal } from './compensation-package-error.ts';
+import { compensationPackageSchemaRefusal } from "./compensation-package-error.ts";
 import test from "node:test";
-import { evaluateCompensationPackage, validateCompensationPackage, compensationPackagePattern, type CompensationPackageDefinition } from "./compensation-package.ts";
+import {
+  evaluateCompensationPackage,
+  validateCompensationPackage,
+  compensationPackagePattern,
+  type CompensationPackageDefinition,
+} from "./compensation-package.ts";
 import { PayrollError } from "./error.ts";
-import { validateCompensationPackagePayrollPolicy, validateCompensationPackageCurrencyRounding } from './compensation-package-payroll-policy.ts';
+import {
+  validateCompensationPackagePayrollPolicy,
+  validateCompensationPackageCurrencyRounding,
+} from "./compensation-package-payroll-policy.ts";
 
 const orgId = "10000000-0000-4000-8000-000000000001";
 const componentId = "10000000-0000-4000-8000-000000000002";
 const bonusId = "10000000-0000-4000-8000-000000000003";
 const rounding = { scale: 2, mode: "half_even" as const, maxWholeDigits: 15 };
-const components = [componentId, bonusId].map((id) => ({ orgId, id, code: id === componentId ? "TRAVEL" : "BONUS", kind: "earning" as const, country: "CA", systemKey: null, isActive: true }));
+const components = [componentId, bonusId].map((id) => ({
+  orgId,
+  id,
+  code: id === componentId ? "TRAVEL" : "BONUS",
+  kind: "earning" as const,
+  country: "CA",
+  systemKey: null,
+  isActive: true,
+}));
 const definition: CompensationPackageDefinition = {
-  orgId, country: "CA", currency: "CAD", partialPeriod: "allow",
-  inputs: [{ name: "allowance", type: { kind: "money", currency: "CAD" }, source: "assignment", minimum: "0", maximum: "10000" }],
-  rules: [{ key: "travel", componentId, expression: "allowance", rounding, proration: "calendar_days" }],
+  orgId,
+  country: "CA",
+  currency: "CAD",
+  partialPeriod: "allow",
+  inputs: [
+    {
+      name: "allowance",
+      type: { kind: "money", currency: "CAD" },
+      source: "assignment",
+      minimum: "0",
+      maximum: "10000",
+    },
+  ],
+  rules: [
+    { key: "travel", componentId, expression: "allowance", rounding, proration: "calendar_days" },
+  ],
 };
-const context = { periodStart: "2026-01-01", periodEnd: "2026-01-31", effectiveFrom: "2026-01-16", effectiveTo: null, values: { allowance: "310.00" }, occupiedComponentIds: [], replacementComponentIds: [] };
+const context = {
+  periodStart: "2026-01-01",
+  periodEnd: "2026-01-31",
+  effectiveFrom: "2026-01-16",
+  effectiveTo: null,
+  values: { allowance: "310.00" },
+  occupiedComponentIds: [],
+  replacementComponentIds: [],
+};
 
 test("every inclusive assignment slice prices exact calendar coverage before its rounding boundary", () => {
   for (let day = 1; day <= 31; day++) {
-    const result = evaluateCompensationPackage(definition, components, { ...context, effectiveFrom: `2026-01-${String(day).padStart(2, "0")}` });
+    const result = evaluateCompensationPackage(definition, components, {
+      ...context,
+      effectiveFrom: `2026-01-${String(day).padStart(2, "0")}`,
+    });
     assert.equal(result.lines[0]!.amount, `${(32 - day) * 10}.0000`);
   }
-  assert.equal(evaluateCompensationPackage(definition, components, { ...context, effectiveFrom: "2026-02-01" }).lines.length, 0);
-  assert.throws(() => evaluateCompensationPackage({ ...definition, partialPeriod: "refuse" }, components, context), /requires full-period.*align/);
-  assert.throws(() => evaluateCompensationPackage(definition, components, { ...context, periodEnd: "2026-02-30" }), /valid calendar dates/);
+  assert.equal(
+    evaluateCompensationPackage(definition, components, { ...context, effectiveFrom: "2026-02-01" })
+      .lines.length,
+    0,
+  );
+  assert.throws(
+    () =>
+      evaluateCompensationPackage({ ...definition, partialPeriod: "refuse" }, components, context),
+    /requires full-period.*align/,
+  );
+  assert.throws(
+    () =>
+      evaluateCompensationPackage(definition, components, { ...context, periodEnd: "2026-02-30" }),
+    /valid calendar dates/,
+  );
 });
 
 test("proration includes additive literals and leaves eligibility thresholds unchanged", () => {
-  const rule = { ...definition.rules[0]!, expression: "allowance + 31", condition: "allowance >= 300" };
-  assert.equal(evaluateCompensationPackage({ ...definition, rules: [rule] }, components, context).lines[0]!.amount, "176.0000");
-  const fine = { ...context, values: { allowance: "0.01" }, periodEnd: "2026-01-03", effectiveFrom: "2026-01-03" };
-  assert.equal(evaluateCompensationPackage({ ...definition, rules: [{ ...rule, expression: "allowance / 2", condition: null, rounding: { ...rounding, scale: 4 } }] }, components, fine).lines[0]!.amount, "0.0017");
+  const rule = {
+    ...definition.rules[0]!,
+    expression: "allowance + 31",
+    condition: "allowance >= 300",
+  };
+  assert.equal(
+    evaluateCompensationPackage({ ...definition, rules: [rule] }, components, context).lines[0]!
+      .amount,
+    "176.0000",
+  );
+  const fine = {
+    ...context,
+    values: { allowance: "0.01" },
+    periodEnd: "2026-01-03",
+    effectiveFrom: "2026-01-03",
+  };
+  assert.equal(
+    evaluateCompensationPackage(
+      {
+        ...definition,
+        rules: [
+          {
+            ...rule,
+            expression: "allowance / 2",
+            condition: null,
+            rounding: { ...rounding, scale: 4 },
+          },
+        ],
+      },
+      components,
+      fine,
+    ).lines[0]!.amount,
+    "0.0017",
+  );
 });
 
 test("dependent components consume actual rounded pay and cannot prorate it twice", () => {
-  const bonus = { key: "bonus", componentId: bonusId, expression: "travel * 10 / 100", rounding, proration: "none" as const };
+  const bonus = {
+    key: "bonus",
+    componentId: bonusId,
+    expression: "travel * 10 / 100",
+    rounding,
+    proration: "none" as const,
+  };
   const packageDefinition = { ...definition, rules: [...definition.rules, bonus] };
-  assert.deepEqual(evaluateCompensationPackage(packageDefinition, components, context).lines.map((line) => line.amount), ["160.0000", "16.0000"]);
-  assert.throws(() => validateCompensationPackage({ ...packageDefinition, rules: [...definition.rules, { ...bonus, proration: "calendar_days" }] }, components), /bonus.*travel.*not prorated twice/);
+  assert.deepEqual(
+    evaluateCompensationPackage(packageDefinition, components, context).lines.map(
+      (line) => line.amount,
+    ),
+    ["160.0000", "16.0000"],
+  );
+  assert.throws(
+    () =>
+      validateCompensationPackage(
+        {
+          ...packageDefinition,
+          rules: [...definition.rules, { ...bonus, proration: "calendar_days" }],
+        },
+        components,
+      ),
+    /bonus.*travel.*not prorated twice/,
+  );
   const replacement = { ...context, replacementComponentIds: [componentId], values: {} };
-  assert.throws(() => evaluateCompensationPackage(packageDefinition, components, replacement), /travel.*actual amount.*native replacement/);
-  const result = evaluateCompensationPackage(packageDefinition, components, { ...replacement, suppliedComponentAmounts: { [componentId]: "200.00" } });
+  assert.throws(
+    () => evaluateCompensationPackage(packageDefinition, components, replacement),
+    /travel.*actual amount.*native replacement/,
+  );
+  const result = evaluateCompensationPackage(packageDefinition, components, {
+    ...replacement,
+    suppliedComponentAmounts: { [componentId]: "200.00" },
+  });
   assert.equal(result.lines.length, 1);
   assert.equal(result.lines[0]!.componentId, bonusId);
   assert.equal(result.lines[0]!.amount, "20.0000");
 });
 
-test('package dependencies respect earnings and protected deduction settlement boundaries', () => {
-  const native = components.map(component => ({ ...component, basis: 'fixed_amount' as const, basisCapHoursPerPeriod: null,
-    basisCapAmountPerPeriod: null, basisCapAmountPerYear: null, protectionBase: 'none', protectionClass: null }));
-  const laterRule = { key: 'later', componentId: bonusId, expression: 'travel * 0.1', rounding, proration: 'none' as const };
+test("package dependencies respect earnings and protected deduction settlement boundaries", () => {
+  const native = components.map((component) => ({
+    ...component,
+    basis: "fixed_amount" as const,
+    basisCapHoursPerPeriod: null,
+    basisCapAmountPerPeriod: null,
+    basisCapAmountPerYear: null,
+    protectionBase: "none",
+    protectionClass: null,
+  }));
+  const laterRule = {
+    key: "later",
+    componentId: bonusId,
+    expression: "travel * 0.1",
+    rounding,
+    proration: "none" as const,
+  };
   const valid = { ...definition, rules: [...definition.rules, laterRule] };
-  validateCompensationPackagePayrollPolicy(valid, [native[0]!, { ...native[1]!, kind: 'deduction' }]);
-  const reversed = { ...valid, rules: [{ ...definition.rules[0]!, expression: 'later * 2', proration: 'none' as const }, { ...laterRule, expression: 'allowance' }] };
-  assert.throws(() => validateCompensationPackagePayrollPolicy(reversed, [native[0]!, { ...native[1]!, kind: 'deduction' }]), /earning travel.*later.*after earnings.*move the later dependency/);
-  assert.throws(() => validateCompensationPackagePayrollPolicy(valid, [{ ...native[0]!, kind: 'deduction', protectionBase: 'net_pay' }, { ...native[1]!, kind: 'employer_contribution' }]), /later.*protected component TRAVEL.*remove that dependency/);
+  validateCompensationPackagePayrollPolicy(valid, [
+    native[0]!,
+    { ...native[1]!, kind: "deduction" },
+  ]);
+  const reversed = {
+    ...valid,
+    rules: [
+      { ...definition.rules[0]!, expression: "later * 2", proration: "none" as const },
+      { ...laterRule, expression: "allowance" },
+    ],
+  };
+  assert.throws(
+    () =>
+      validateCompensationPackagePayrollPolicy(reversed, [
+        native[0]!,
+        { ...native[1]!, kind: "deduction" },
+      ]),
+    /earning travel.*later.*after earnings.*move the later dependency/,
+  );
+  assert.throws(
+    () =>
+      validateCompensationPackagePayrollPolicy(valid, [
+        { ...native[0]!, kind: "deduction", protectionBase: "net_pay" },
+        { ...native[1]!, kind: "employer_contribution" },
+      ]),
+    /later.*protected component TRAVEL.*remove that dependency/,
+  );
 });
 
 test("replacement-only defaults need no missing assignment values and never pay twice", () => {
   for (const field of ["occupiedComponentIds", "replacementComponentIds"] as const) {
-    const result = evaluateCompensationPackage(definition, components, { ...context, [field]: [componentId], values: {} });
+    const result = evaluateCompensationPackage(definition, components, {
+      ...context,
+      [field]: [componentId],
+      values: {},
+    });
     assert.equal(result.lines.length, 0);
     assert.deepEqual(result.suppressedComponentIds, [componentId]);
   }
 });
 
 test("bounded inputs and component ownership refuse with usable remedies", () => {
-  assert.throws(() => evaluateCompensationPackage(definition, components, { ...context, values: { allowance: "10000.01" } }), /allowance.*bound.*correct.*assignment/);
-  assert.throws(() => evaluateCompensationPackage(definition, components, { ...context, values: { allowance: "12,34" } }),
-    (error: unknown) => error instanceof PayrollError && /write "12,34" as "12.34"/.test(error.message));
-  assert.throws(() => evaluateCompensationPackage(definition, components, { ...context, values: {} }), /allowance.*missing/);
-  assert.throws(() => validateCompensationPackage({ ...definition, inputs: [{ ...definition.inputs[0]!, minimum: "1,234" }] }, components), /ambiguous/);
-  assert.throws(() => validateCompensationPackage(definition, [{ ...components[0]!, systemKey: "base_pay" }]), /statutory.*owned/);
-  assert.throws(() => validateCompensationPackage(definition, [{ ...components[0]!, orgId: bonusId }]), /not visible.*organization/);
+  assert.throws(
+    () =>
+      evaluateCompensationPackage(definition, components, {
+        ...context,
+        values: { allowance: "10000.01" },
+      }),
+    /allowance.*bound.*correct.*assignment/,
+  );
+  assert.throws(
+    () =>
+      evaluateCompensationPackage(definition, components, {
+        ...context,
+        values: { allowance: "12,34" },
+      }),
+    (error: unknown) =>
+      error instanceof PayrollError && /write "12,34" as "12.34"/.test(error.message),
+  );
+  assert.throws(
+    () => evaluateCompensationPackage(definition, components, { ...context, values: {} }),
+    /allowance.*missing/,
+  );
+  assert.throws(
+    () =>
+      validateCompensationPackage(
+        { ...definition, inputs: [{ ...definition.inputs[0]!, minimum: "1,234" }] },
+        components,
+      ),
+    /ambiguous/,
+  );
+  assert.throws(
+    () => validateCompensationPackage(definition, [{ ...components[0]!, systemKey: "base_pay" }]),
+    /statutory.*owned/,
+  );
+  assert.throws(
+    () => validateCompensationPackage(definition, [{ ...components[0]!, orgId: bonusId }]),
+    /not visible.*organization/,
+  );
   const longest = "allowance" + " ".repeat(4096 - "allowance".length);
-  assert.ok(validateCompensationPackage({ ...definition, rules: [{ ...definition.rules[0]!, expression: longest, proration: "none" }] }, components));
-  assert.throws(() => validateCompensationPackage({ ...definition, rules: [{ ...definition.rules[0]!, expression: longest }] }, components), /declared calendar proration.*shorten or simplify/);
+  assert.ok(
+    validateCompensationPackage(
+      {
+        ...definition,
+        rules: [{ ...definition.rules[0]!, expression: longest, proration: "none" }],
+      },
+      components,
+    ),
+  );
+  assert.throws(
+    () =>
+      validateCompensationPackage(
+        { ...definition, rules: [{ ...definition.rules[0]!, expression: longest }] },
+        components,
+      ),
+    /declared calendar proration.*shorten or simplify/,
+  );
 });
 
 test("native worked hours and pay cannot receive a second calendar fraction", () => {
-  const hourly: CompensationPackageDefinition = { ...definition,
-    inputs: [{ name: "hours", type: { kind: "hours" }, source: "period_hours", minimum: "0", maximum: "1000" },
-      { name: "wage", type: { kind: "hourly_rate", currency: "CAD" }, source: "hourly_wage", minimum: "0", maximum: "10000" }],
-    rules: [{ ...definition.rules[0]!, expression: "hours * wage", proration: "none" }] };
-  assert.equal(evaluateCompensationPackage(hourly, components, { ...context, values: { hours: "4.5", wage: "25.1234" } }).lines[0]!.amount, "113.0600");
-  assert.throws(() => validateCompensationPackage({ ...hourly, rules: [{ ...hourly.rules[0]!, proration: "calendar_days" }] }, components), /native period input.*no proration/);
+  const hourly: CompensationPackageDefinition = {
+    ...definition,
+    inputs: [
+      {
+        name: "hours",
+        type: { kind: "hours" },
+        source: "period_hours",
+        minimum: "0",
+        maximum: "1000",
+      },
+      {
+        name: "wage",
+        type: { kind: "hourly_rate", currency: "CAD" },
+        source: "hourly_wage",
+        minimum: "0",
+        maximum: "10000",
+      },
+    ],
+    rules: [{ ...definition.rules[0]!, expression: "hours * wage", proration: "none" }],
+  };
+  assert.equal(
+    evaluateCompensationPackage(hourly, components, {
+      ...context,
+      values: { hours: "4.5", wage: "25.1234" },
+    }).lines[0]!.amount,
+    "113.0600",
+  );
+  assert.throws(
+    () =>
+      validateCompensationPackage(
+        { ...hourly, rules: [{ ...hourly.rules[0]!, proration: "calendar_days" }] },
+        components,
+      ),
+    /native period input.*no proration/,
+  );
 });
 
 test("hashes use canonical declared policy and patterns share the formula language", () => {
   const hash = validateCompensationPackage(definition, components);
-  const equivalent = { ...definition, ignored: "not financial policy", inputs: [{ ...definition.inputs[0]!, minimum: "0.00", ignored: "metadata" }] };
+  const equivalent = {
+    ...definition,
+    ignored: "not financial policy",
+    inputs: [{ ...definition.inputs[0]!, minimum: "0.00", ignored: "metadata" }],
+  };
   assert.equal(validateCompensationPackage(equivalent, components), hash);
-  assert.notEqual(validateCompensationPackage({ ...definition, rules: [{ ...definition.rules[0]!, proration: "none" }] }, components), hash);
-  assert.equal(compensationPackagePattern({ pattern: "percentage", amountInput: "base", factorInput: "percent" }), "base * percent / 100");
-  assert.throws(() => compensationPackagePattern({ pattern: "hourly", amountInput: "wage" }), /factor input/);
+  assert.notEqual(
+    validateCompensationPackage(
+      { ...definition, rules: [{ ...definition.rules[0]!, proration: "none" }] },
+      components,
+    ),
+    hash,
+  );
+  assert.equal(
+    compensationPackagePattern({
+      pattern: "percentage",
+      amountInput: "base",
+      factorInput: "percent",
+    }),
+    "base * percent / 100",
+  );
+  assert.throws(
+    () => compensationPackagePattern({ pattern: "hourly", amountInput: "wage" }),
+    /factor input/,
+  );
 });
 
-test('an absent package schema names server maintenance without masking unrelated database failures', () => {
-  const error = { message: 'Query failed with private parameters', cause: { code: '42P01', message: 'relation "payroll_compensation_configuration" does not exist' } }
-  assert.match(compensationPackageSchemaRefusal(error)!.message, /administrator.*server upgrade/)
-  assert.doesNotMatch(compensationPackageSchemaRefusal(error)!.message, /relation|private parameters|payroll_compensation_/)
-  for (const cause of [{ code: '42P01', message: 'relation "worker_employments" does not exist' }, { code: '23503', message: 'relation "payroll_compensation_packages" does not exist' }]) assert.equal(compensationPackageSchemaRefusal({ cause }), null)
-  const cycle: { cause?: unknown } = {}; cycle.cause = cycle
-  assert.equal(compensationPackageSchemaRefusal(cycle), null)
-})
+test("an absent package schema names server maintenance without masking unrelated database failures", () => {
+  const error = {
+    message: "Query failed with private parameters",
+    cause: {
+      code: "42P01",
+      message: 'relation "payroll_compensation_configuration" does not exist',
+    },
+  };
+  assert.match(compensationPackageSchemaRefusal(error)!.message, /administrator.*server upgrade/);
+  assert.doesNotMatch(
+    compensationPackageSchemaRefusal(error)!.message,
+    /relation|private parameters|payroll_compensation_/,
+  );
+  for (const cause of [
+    { code: "42P01", message: 'relation "worker_employments" does not exist' },
+    { code: "23503", message: 'relation "payroll_compensation_packages" does not exist' },
+  ])
+    assert.equal(compensationPackageSchemaRefusal({ cause }), null);
+  const cycle: { cause?: unknown } = {};
+  cycle.cause = cycle;
+  assert.equal(compensationPackageSchemaRefusal(cycle), null);
+});
 
-test('native currency precision admits zero through four payable places and refuses finer or unknown quanta', () => {
-  for (const minorUnits of [0,2,3,4]) {
-    const valid={...definition,rules:definition.rules.map(rule=>({...rule,rounding:{...rule.rounding,scale:minorUnits}}))};
-    assert.doesNotThrow(()=>validateCompensationPackageCurrencyRounding(valid,minorUnits));
-    if (minorUnits<4) assert.throws(()=>validateCompensationPackageCurrencyRounding({...valid,rules:valid.rules.map(rule=>({...rule,
-      rounding:{...rule.rounding,scale:minorUnits+1}}))},minorUnits),/rule travel.*correct the draft.*approve and assign a replacement/);
+test("native currency precision admits zero through four payable places and refuses finer or unknown quanta", () => {
+  for (const minorUnits of [0, 2, 3, 4]) {
+    const valid = {
+      ...definition,
+      rules: definition.rules.map((rule) => ({
+        ...rule,
+        rounding: { ...rule.rounding, scale: minorUnits },
+      })),
+    };
+    assert.doesNotThrow(() => validateCompensationPackageCurrencyRounding(valid, minorUnits));
+    if (minorUnits < 4)
+      assert.throws(
+        () =>
+          validateCompensationPackageCurrencyRounding(
+            {
+              ...valid,
+              rules: valid.rules.map((rule) => ({
+                ...rule,
+                rounding: { ...rule.rounding, scale: minorUnits + 1 },
+              })),
+            },
+            minorUnits,
+          ),
+        /rule travel.*correct the draft.*approve and assign a replacement/,
+      );
   }
-  for (const invalid of [-1,5,NaN]) assert.throws(()=>validateCompensationPackageCurrencyRounding(definition,invalid),/CAD has no supported payable precision/);
+  for (const invalid of [-1, 5, NaN])
+    assert.throws(
+      () => validateCompensationPackageCurrencyRounding(definition, invalid),
+      /CAD has no supported payable precision/,
+    );
 });
 
 test("native compensation configuration is required with authoring enabled or disabled", async () => {
-  for (const enabled of [false, true]) for (const mode of ["read", "write"] as const) {
-    for (const configured of [false, true]) {
-      const responses = [[{ features: { payroll: true, compensationPackages: enabled } }], configured ? [{ revision: "7" }] : []];
-      let calls = 0;
-      const tx = { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: responses[calls++] ?? [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as unknown as SqlExecutor;
-      const result = lockCompensationPackageConfiguration(tx, orgId, mode);
-      if (configured) assert.equal(await result, "7");
-      else await assert.rejects(result, /Compensation configuration is missing/);
-      assert.equal(calls, 2);
+  for (const enabled of [false, true])
+    for (const mode of ["read", "write"] as const) {
+      for (const configured of [false, true]) {
+        const responses = [
+          [{ features: { payroll: true, compensationPackages: enabled } }],
+          configured ? [{ revision: "7" }] : [],
+        ];
+        let calls = 0;
+        const tx = {
+          execute: async (_query: unknown, mode?: string) =>
+            Promise.resolve({ rows: responses[calls++] ?? [] }).then(
+              <T extends { rows: unknown }>(result: T) =>
+                mode === "objects" ? result.rows : result,
+            ),
+        } as unknown as SqlExecutor;
+        const result = lockCompensationPackageConfiguration(tx, orgId, mode);
+        if (configured) assert.equal(await result, "7");
+        else await assert.rejects(result, /Compensation configuration is missing/);
+        assert.equal(calls, 2);
+      }
     }
-  }
 });

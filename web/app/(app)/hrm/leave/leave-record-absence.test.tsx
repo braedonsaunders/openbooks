@@ -7,11 +7,18 @@ import test from "node:test";
 // close). Calendar absence days open the same drawer on the fact.
 
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/hrm/leave", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/hrm/leave",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__leaveRouter}export function usePathname(){return '/hrm/leave'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__leaveRouter}export function usePathname(){return '/hrm/leave'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
@@ -52,7 +59,9 @@ interface Script {
 function installFetch(script: Script): () => void {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.includes("/api/hrm/options?source=leave-types")) {
       return Response.json({ options: [{ id: TYPE_ID, label: "VAC — Vacation" }] });
     }
@@ -62,7 +71,19 @@ function installFetch(script: Script): () => void {
     if (url.startsWith("/api/hrm/leave-balances?")) {
       script.balanceUrls.push(url);
       return Response.json({
-        balances: [{ leaveTypeId: TYPE_ID, code: "VAC", name: "Vacation", entitlement: "120", taken: "8", pending: "0", remaining: "112", balance: "112", unlimited: false }],
+        balances: [
+          {
+            leaveTypeId: TYPE_ID,
+            code: "VAC",
+            name: "Vacation",
+            entitlement: "120",
+            taken: "8",
+            pending: "0",
+            remaining: "112",
+            balance: "112",
+            unlimited: false,
+          },
+        ],
         asOf: "2026-08-03",
         effect: { leaveTypeId: TYPE_ID, remainingAfter: "104" },
       });
@@ -70,7 +91,15 @@ function installFetch(script: Script): () => void {
     if (url === "/api/hrm/leave-absences" && init?.method === "POST") {
       script.posts.push({ url, body: JSON.parse(String(init.body)) });
       return Response.json({
-        absence: { id: ABSENCE_ID, employmentId: EMP, onDate: "2026-08-03", hours: "8", leaveTypeCode: "VAC", source: "recorded", reason: "approved verbally by the owner" },
+        absence: {
+          id: ABSENCE_ID,
+          employmentId: EMP,
+          onDate: "2026-08-03",
+          hours: "8",
+          leaveTypeCode: "VAC",
+          source: "recorded",
+          reason: "approved verbally by the owner",
+        },
       });
     }
     if (url === `/api/hrm/leave-absences/${ABSENCE_ID}` && (init?.method ?? "GET") === "GET") {
@@ -99,7 +128,9 @@ function installFetch(script: Script): () => void {
 
 function setInput(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   const proto =
-    el instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    el instanceof window.HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!;
   setter.call(el, value);
   el.dispatchEvent(new window.Event("input", { bubbles: true }));
@@ -146,7 +177,10 @@ function makeRouter() {
   return pushes;
 }
 
-async function mountRecord(t: { after: (fn: () => void | Promise<void>) => void }, absenceId: string | null = null) {
+async function mountRecord(
+  t: { after: (fn: () => void | Promise<void>) => void },
+  absenceId: string | null = null,
+) {
   const restoreFetch = installFetch({ posts: [], balanceUrls: [] });
   t.after(restoreFetch);
   const host = document.createElement("div");
@@ -155,7 +189,13 @@ async function mountRecord(t: { after: (fn: () => void | Promise<void>) => void 
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <LeaveDrawer requestId={null} absenceId={absenceId} canWithdrawCancel={false} record={absenceId === null} onClose={() => {}} />
+        <LeaveDrawer
+          requestId={null}
+          absenceId={absenceId}
+          canWithdrawCancel={false}
+          record={absenceId === null}
+          onClose={() => {}}
+        />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -184,7 +224,10 @@ async function fillRecordForm() {
   await act(async () => {
     setInput(document.querySelector("input#leave-record-date") as HTMLInputElement, "2026-08-03");
     setInput(document.querySelector("input#leave-record-hours") as HTMLInputElement, "8");
-    setInput(document.querySelector("textarea#leave-record-reason") as HTMLTextAreaElement, "approved verbally by the owner");
+    setInput(
+      document.querySelector("textarea#leave-record-reason") as HTMLTextAreaElement,
+      "approved verbally by the owner",
+    );
     await tick();
   });
   // The balance effect rides a debounced fetch behind the typing.
@@ -230,13 +273,21 @@ test("the record form names its basis and posts it with the save", async (t) => 
     hours: "8",
     reason: "approved verbally by the owner",
   });
-  assert.equal(pushes.length, 1, "the save confirms by opening the saved record, never a silent close");
+  assert.equal(
+    pushes.length,
+    1,
+    "the save confirms by opening the saved record, never a silent close",
+  );
   const opened = new URL(pushes[0]!, "https://openbooks.test");
   assert.equal(opened.pathname, "/hrm/leave");
   assert.equal(opened.searchParams.get("view"), "calendar");
   assert.equal(opened.searchParams.get("from"), "2026-08-01");
   assert.equal(opened.searchParams.get("to"), "2026-08-31");
-  assert.equal(opened.searchParams.get("absence"), ABSENCE_ID, "the record is visible and selected through the mutation result");
+  assert.equal(
+    opened.searchParams.get("absence"),
+    ABSENCE_ID,
+    "the record is visible and selected through the mutation result",
+  );
 });
 
 test("a back-dated day marks the reason required and refuses an empty basis without posting", async (t) => {

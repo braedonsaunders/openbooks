@@ -65,27 +65,55 @@ export async function planMovementsForStub(
   const { orgId, employeePartyId, movementDate, payRunDocumentId } = input;
   const plans = input.plans ?? (await entitlementPlans(orgId, executor));
   if (plans.length === 0) return { movements: [], warnings: [] };
-  if (input.earnings.some(line => line.componentId === null || typeof line.bankable !== 'boolean')) {
-    throw new PayrollError('Entitlement earnings need resolved dated vacation-base inclusion; configure component statutory treatments in Payroll Setup and recalculate the editable run.');
+  if (
+    input.earnings.some((line) => line.componentId === null || typeof line.bankable !== "boolean")
+  ) {
+    throw new PayrollError(
+      "Entitlement earnings need resolved dated vacation-base inclusion; configure component statutory treatments in Payroll Setup and recalculate the editable run.",
+    );
   }
 
-  const tiers = await resolveServiceTier(executor, orgId, employeePartyId, input.policyDate ?? movementDate, input.employmentId);
+  const tiers = await resolveServiceTier(
+    executor,
+    orgId,
+    employeePartyId,
+    input.policyDate ?? movementDate,
+    input.employmentId,
+  );
   // One scope lookup serves every plan's limit resolution for this employee.
-  const scope = await employeeScope(executor, orgId, employeePartyId, { onDate: input.policyDate ?? movementDate, employmentId: input.employmentId });
+  const scope = await employeeScope(executor, orgId, employeePartyId, {
+    onDate: input.policyDate ?? movementDate,
+    employmentId: input.employmentId,
+  });
   const movements: EntitlementMovement[] = [];
   const warnings: EntitlementWarning[] = [];
   for (const plan of plans) {
     // Settling this bank cannot replenish it. Deferred wages paid from a
     // different bank retain their declared eligibility for this plan.
-    const eligible = input.earnings.filter((line) =>
-      plan.payoutComponentId === null || line.componentId !== plan.payoutComponentId);
-    const earnings = sum(eligible.filter((line) => line.bankable === true).map((line) => line.amount));
-    const hours = sum(eligible.filter((line) => line.hours != null).map((line) => String(line.hours)));
+    const eligible = input.earnings.filter(
+      (line) => plan.payoutComponentId === null || line.componentId !== plan.payoutComponentId,
+    );
+    const earnings = sum(
+      eligible.filter((line) => line.bankable === true).map((line) => line.amount),
+    );
+    const hours = sum(
+      eligible.filter((line) => line.hours != null).map((line) => String(line.hours)),
+    );
     const openingBalance = await planBalanceExcludingRun(
-      executor, orgId, plan.id, employeePartyId, movementDate, payRunDocumentId,
+      executor,
+      orgId,
+      plan.id,
+      employeePartyId,
+      movementDate,
+      payRunDocumentId,
     );
     const limit = await resolvePlanLimit(
-      executor, orgId, plan.id, employeePartyId, movementDate, scope,
+      executor,
+      orgId,
+      plan.id,
+      employeePartyId,
+      movementDate,
+      scope,
     );
     const result = computePlanMovement({
       plan,
@@ -149,8 +177,8 @@ export async function recordEntitlementMovements(
     ];
     if (employeePartyIds.length === 0) {
       throw new PayrollError(
-        "recordEntitlementMovements needs the employees whose run movements it replaces "
-        + "— a run-wide delete would drop every other employee's ledger rows",
+        "recordEntitlementMovements needs the employees whose run movements it replaces " +
+          "— a run-wide delete would drop every other employee's ledger rows",
       );
     }
     await executor.execute(sql`

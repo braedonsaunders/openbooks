@@ -19,7 +19,10 @@ const pinned = src([
 ]);
 
 test("a test asserting on source text is a pin; a behaviour test beside it is not", () => {
-  assert.deepEqual(sourcePinTests(pinned).map((pin) => pin.name), ["guard exists"]);
+  assert.deepEqual(
+    sourcePinTests(pinned).map((pin) => pin.name),
+    ["guard exists"],
+  );
 });
 
 test("a local read helper and bindings through it count as source pins", () => {
@@ -27,7 +30,7 @@ test("a local read helper and bindings through it count as source pins", () => {
     'const read = (path: string) => READ(new URL(path, import.meta.url), "utf8");',
     'const tools = read("./tools.ts");',
     'test("pins module binding", () => {',
-    "  assert.match(tools, /feature: \"orders\"/);",
+    '  assert.match(tools, /feature: "orders"/);',
     "});",
     'test("pins call inside the test", () => {',
     "  const route = read('./route.ts');",
@@ -35,10 +38,10 @@ test("a local read helper and bindings through it count as source pins", () => {
     "});",
     'test("behaviour", () => { assert.equal(1, 1); });',
   ]);
-  assert.deepEqual(sourcePinTests(viaHelper).map((pin) => pin.name), [
-    "pins module binding",
-    "pins call inside the test",
-  ]);
+  assert.deepEqual(
+    sourcePinTests(viaHelper).map((pin) => pin.name),
+    ["pins module binding", "pins call inside the test"],
+  );
 });
 
 test("inline reads, includes and indexOf over source text are pins too", () => {
@@ -54,7 +57,7 @@ test("inline reads, includes and indexOf over source text are pins too", () => {
 test("the read is followed through slices, splits, templates, helpers and collected verdicts", () => {
   const cases = {
     "multi-line read, sliced by position": [
-      'const PANEL = READ(',
+      "const PANEL = READ(",
       '  new URL("../app/documents/SharePanel.tsx", import.meta.url),', // source-path: synthetic
       '  "utf8",',
       ");",
@@ -72,7 +75,7 @@ test("the read is followed through slices, splits, templates, helpers and collec
       'test("t", () => { const both = `${a}\\n`; assert.ok(both.includes("x")); });',
     ],
     "same-file slicing and asserting helpers": [
-      'const section = (src: string, from: string) => src.slice(src.indexOf(from));',
+      "const section = (src: string, from: string) => src.slice(src.indexOf(from));",
       "function requireGuard(text: string) { assert.match(text, /guard/); }",
       'test("t", () => { requireGuard(section(READ("route.ts", "utf8"), "export")); });',
     ],
@@ -88,7 +91,11 @@ test("the read is followed through slices, splits, templates, helpers and collec
     ],
   };
   for (const [shape, lines] of Object.entries(cases)) {
-    assert.deepEqual(sourcePinTests(src(lines)).map((pin) => pin.name), ["t"], shape);
+    assert.deepEqual(
+      sourcePinTests(src(lines)).map((pin) => pin.name),
+      ["t"],
+      shape,
+    );
   }
 });
 
@@ -136,6 +143,8 @@ test("the ratchet refuses new pins and growth, and makes shrinkage stick", () =>
 });
 
 test("the committed tree matches the committed burn-down list", () => {
-  const allowlist = JSON.parse(readFileSync("scripts/test-source-pins.allowlist.json", "utf8")).files;
+  const allowlist = JSON.parse(
+    readFileSync("scripts/test-source-pins.allowlist.json", "utf8"),
+  ).files;
   assert.deepEqual(reconcile(scanTree(), allowlist), []);
 });

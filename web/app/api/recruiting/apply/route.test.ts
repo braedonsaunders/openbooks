@@ -39,40 +39,48 @@ function applyRequest(postingId: string, displayName: string): Request {
 const POSTING_ID = "00000000-0000-4000-8000-000000000051";
 
 test("an unreadable body 400s before the limiter runs", async () => {
-    __resetApplyRateLimitForTests();
-    const response = await POST(
-      new Request("http://openbooks.test/api/recruiting/apply", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ postingId: "nope" }),
-      }),
-    );
-    assert.equal(response.status, 400);
+  __resetApplyRateLimitForTests();
+  const response = await POST(
+    new Request("http://openbooks.test/api/recruiting/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ postingId: "nope" }),
+    }),
+  );
+  assert.equal(response.status, 400);
 });
 
 test("the sixth apply inside the window 429s with the remedy", async () => {
-    __resetApplyRateLimitForTests();
-    const statuses: number[] = [];
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      const response = await POST(applyRequest(POSTING_ID, `Applicant ${attempt}`));
-      statuses.push(response.status);
-    }
-    assert.deepEqual(statuses.slice(0, 5).every((status) => status !== 429), true, "the first five reach the service");
+  __resetApplyRateLimitForTests();
+  const statuses: number[] = [];
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const response = await POST(applyRequest(POSTING_ID, `Applicant ${attempt}`));
+    statuses.push(response.status);
+  }
+  assert.deepEqual(
+    statuses.slice(0, 5).every((status) => status !== 429),
+    true,
+    "the first five reach the service",
+  );
   assert.equal(statuses[5], 429, "the sixth attempt is rate limited");
-    const sixth = await POST(applyRequest(POSTING_ID, "Applicant late"));
-    assert.equal(sixth.status, 429);
-    assert.match(String((await sixth.json()).error), /wait a minute/);
+  const sixth = await POST(applyRequest(POSTING_ID, "Applicant late"));
+  assert.equal(sixth.status, 429);
+  assert.match(String((await sixth.json()).error), /wait a minute/);
 });
 
 test("a filled honeypot shapes success and writes nothing", async () => {
-    __resetApplyRateLimitForTests();
-    const response = await POST(
-      new Request("http://openbooks.test/api/recruiting/apply", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ postingId: POSTING_ID, displayName: "Bot", website: "http://bot.test" }),
+  __resetApplyRateLimitForTests();
+  const response = await POST(
+    new Request("http://openbooks.test/api/recruiting/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        postingId: POSTING_ID,
+        displayName: "Bot",
+        website: "http://bot.test",
       }),
-    );
-    assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { received: true });
+    }),
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { received: true });
 });

@@ -3,11 +3,26 @@ import { db, type SqlExecutor } from "../platform/db.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError } from "./contracts.ts";
 import { assertDocumentLinesUntracked } from "./tracking.ts";
-import { assertInventoryOffHoldsNoStock, assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
+import {
+  assertInventoryOffHoldsNoStock,
+  assertMovementOwner,
+  inventoryFeatureEnabled,
+} from "./profile-policy.ts";
 import { lockInventoryPosition } from "./position.ts";
-import { crossSubsidiaryFulfillmentActive, crossSubsidiaryFulfillmentHandler, foreignStockLocationOwner } from "./cross-subsidiary.ts";
+import {
+  crossSubsidiaryFulfillmentActive,
+  crossSubsidiaryFulfillmentHandler,
+  foreignStockLocationOwner,
+} from "./cross-subsidiary.ts";
 import { issueInventory, type IssueInput } from "./movements.ts";
-import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
+import {
+  loadDocumentInventoryLines,
+  unprofiledInventoryLines,
+  assertNoUnprofiledInventoryLines,
+  inventoryPostingEffectKey,
+  isJsonRecord,
+  type DocumentInventoryLine,
+} from "./document-lines.ts";
 import { isUuid } from "../platform/uuid.ts";
 import {
   inventoryKitComponentEffectKey,
@@ -31,14 +46,17 @@ export async function isFulfilmentGovernedInvoice(
   orgId: string,
   documentId: string,
 ): Promise<boolean> {
-  const governed = await runner.execute(sql`
+  const governed = await runner.execute(
+    sql`
     select 1
       from document_links link
       join documents source
         on source.id = link.from_document_id and source.org_id = link.org_id
      where link.org_id = ${orgId} and link.to_document_id = ${documentId}
        and link.link_type = 'bills' and source.kind = 'sales_order'
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   return !!governed[0];
 }
 
@@ -58,8 +76,12 @@ export async function assertInvoiceIssuesPostable(
   documentId: string,
 ): Promise<void> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) {
-    await assertInventoryOffHoldsNoStock(runner, orgId,
-      (await loadDocumentInventoryLines(runner, orgId, documentId)).map((line) => line.itemId), "invoice");
+    await assertInventoryOffHoldsNoStock(
+      runner,
+      orgId,
+      (await loadDocumentInventoryLines(runner, orgId, documentId)).map((line) => line.itemId),
+      "invoice",
+    );
     return;
   }
   assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
@@ -78,15 +100,21 @@ export async function assertInvoiceIssuesPostable(
   // down: a kit whose recipe is missing or names a tracked component could
   // never issue from a standalone invoice. Refuse before posting, naming the
   // shipment flow that carries component lot and serial evidence.
-  const document = (await runner.execute<{ document_date: string }>(sql`
+  const document = (
+    await runner.execute<{ document_date: string }>(
+      sql`
     select document_date::text as document_date from documents
-     where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${documentId}`,
+      "objects",
+    )
+  )[0];
   const date = document?.document_date;
   for (const line of lines) {
     if (line.itemKind !== "kit" || !date) continue;
     const kitName = await kitLabel(runner, orgId, line.itemId);
-    const components = (await loadKitComponents(runner, orgId, line.itemId, date))
-      .filter((component) => kitComponentMovesStock(component.componentKind));
+    const components = (await loadKitComponents(runner, orgId, line.itemId, date)).filter(
+      (component) => kitComponentMovesStock(component.componentKind),
+    );
     for (const component of components) {
       const profile = await resolveProfile(orgId, component.componentItemId, runner);
       if (profile.tracking !== "none") {
@@ -101,9 +129,10 @@ export async function assertInvoiceIssuesPostable(
   }
 }
 
-function salesFulfillmentTrackingSelection(
-  line: DocumentInventoryLine,
-): { lotId: string | null; serialId: string | null } {
+function salesFulfillmentTrackingSelection(line: DocumentInventoryLine): {
+  lotId: string | null;
+  serialId: string | null;
+} {
   const evidence = isJsonRecord(line.custom) ? line.custom.fulfillment : null;
   const label = `sales-fulfillment line ${line.lineNumber} (item ${line.itemId})`;
   if (!isJsonRecord(evidence)) {
@@ -118,10 +147,7 @@ function salesFulfillmentTrackingSelection(
   if (lotId !== null && !isUuid(lotId)) {
     throw new InventoryError(`${label} lotId must be a UUID`);
   }
-  if (
-    serialId !== null &&
-    !isUuid(serialId)
-  ) {
+  if (serialId !== null && !isUuid(serialId)) {
     throw new InventoryError(`${label} serialId must be a UUID`);
   }
   return { lotId, serialId };
@@ -193,7 +219,11 @@ async function explodeKitLine(
           `chosen on the shipment; pick the component explicitly instead`,
       );
     }
-    if (pick && (((profile.tracking === "lot" || profile.tracking === "lot_serial") && !pick.lotId) || ((profile.tracking === "serial" || profile.tracking === "lot_serial") && !pick.serialId))) {
+    if (
+      pick &&
+      (((profile.tracking === "lot" || profile.tracking === "lot_serial") && !pick.lotId) ||
+        ((profile.tracking === "serial" || profile.tracking === "lot_serial") && !pick.serialId))
+    ) {
       const componentName = await kitLabel(runner, orgId, component.componentItemId);
       throw new InventoryError(
         `${label} component ${componentName} is ${profile.tracking}-tracked but names no ${profile.tracking}; ` +
@@ -202,7 +232,10 @@ async function explodeKitLine(
     }
   }
   const quantities = new Map(
-    kitComponentQuantities(kitName, line.quantity, components).map((entry) => [entry.componentItemId, entry.quantity]),
+    kitComponentQuantities(kitName, line.quantity, components).map((entry) => [
+      entry.componentItemId,
+      entry.quantity,
+    ]),
   );
   return { components, quantities, picks: pickByComponent };
 }
@@ -254,8 +287,12 @@ export async function applySalesFulfillmentInventoryIssues(
   subsidiaryId: string | null,
 ): Promise<number> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) {
-    await assertInventoryOffHoldsNoStock(runner, orgId,
-      (await loadDocumentInventoryLines(runner, orgId, documentId)).map((line) => line.itemId), "shipment");
+    await assertInventoryOffHoldsNoStock(
+      runner,
+      orgId,
+      (await loadDocumentInventoryLines(runner, orgId, documentId)).map((line) => line.itemId),
+      "shipment",
+    );
     return 0;
   }
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
@@ -269,7 +306,10 @@ export async function applySalesFulfillmentInventoryIssues(
       explosions.set(
         line.lineId,
         await explodeKitLine(
-          runner, orgId, line, date,
+          runner,
+          orgId,
+          line,
+          date,
           `sales-fulfillment line ${line.lineNumber} (item ${line.itemId})`,
         ),
       );
@@ -284,32 +324,39 @@ export async function applySalesFulfillmentInventoryIssues(
     }
     for (const component of explosion.components) {
       const pick = explosion.picks.get(component.componentItemId);
-      positions.add(`${component.componentItemId}:${pick?.stockLocationId ?? line.stockLocationId}`);
+      positions.add(
+        `${component.componentItemId}:${pick?.stockLocationId ?? line.stockLocationId}`,
+      );
     }
   }
   for (const key of [...positions].sort()) {
     const separator = key.indexOf(":");
-    await lockInventoryPosition(
-      runner,
-      key.slice(0, separator),
-      key.slice(separator + 1),
-    );
+    await lockInventoryPosition(runner, key.slice(0, separator), key.slice(separator + 1));
   }
   let count = 0;
   for (const line of lines) {
     const explosion = explosions.get(line.lineId);
     if (!explosion) {
-      const seen = (await runner.execute(sql`
+      const seen = await runner.execute(
+        sql`
         select 1 from inventory_movements
          where org_id = ${orgId} and document_line_id = ${line.lineId}
            and kind = 'issue'
-         limit 1`, "objects"));
+         limit 1`,
+        "objects",
+      );
       if (seen[0]) continue;
       const selection = salesFulfillmentTrackingSelection(line);
       // A warehouse owned by another entity ships through cross-subsidiary
       // fulfillment when it is on; otherwise the ordinary issue below refuses
       // the cross-entity attempt exactly as before.
-      const owner = await foreignStockLocationOwner(runner, orgId, ctx, line.stockLocationId, movementSubsidiaryId);
+      const owner = await foreignStockLocationOwner(
+        runner,
+        orgId,
+        ctx,
+        line.stockLocationId,
+        movementSubsidiaryId,
+      );
       if (owner && (await crossSubsidiaryFulfillmentActive(runner, orgId))) {
         await crossSubsidiaryFulfillmentHandler()!.fulfill(runner, {
           orgId,
@@ -334,17 +381,27 @@ export async function applySalesFulfillmentInventoryIssues(
       await issueInventory(
         orgId,
         actorId,
-        salesLineIssueInput(line, selection, movementSubsidiaryId, date, "COGS (sales fulfillment)", runner),
+        salesLineIssueInput(
+          line,
+          selection,
+          movementSubsidiaryId,
+          date,
+          "COGS (sales fulfillment)",
+          runner,
+        ),
       );
       count++;
       continue;
     }
     for (const component of explosion.components) {
-      const seen = (await runner.execute(sql`
+      const seen = await runner.execute(
+        sql`
         select 1 from inventory_movements
          where org_id = ${orgId} and document_line_id = ${line.lineId}
            and item_id = ${component.componentItemId} and kind = 'issue'
-         limit 1`, "objects"));
+         limit 1`,
+        "objects",
+      );
       if (seen[0]) continue;
       await issueInventory(
         orgId,
@@ -418,8 +475,12 @@ export async function applyInventoryIssuesForInvoice(
   subsidiaryId: string,
 ): Promise<number> {
   if (!(await inventoryFeatureEnabled(db, orgId))) {
-    await assertInventoryOffHoldsNoStock(db, orgId,
-      (await loadDocumentInventoryLines(db, orgId, documentId)).map((line) => line.itemId), "invoice");
+    await assertInventoryOffHoldsNoStock(
+      db,
+      orgId,
+      (await loadDocumentInventoryLines(db, orgId, documentId)).map((line) => line.itemId),
+      "invoice",
+    );
     return 0;
   }
   if (await isFulfilmentGovernedInvoice(db, orgId, documentId)) return 0;
@@ -430,7 +491,13 @@ export async function applyInventoryIssuesForInvoice(
       if (line.itemKind === "kit") {
         explosions.set(
           line.lineId,
-          await explodeKitLine(tx, orgId, line, date, `invoice line ${line.lineNumber} (item ${line.itemId})`),
+          await explodeKitLine(
+            tx,
+            orgId,
+            line,
+            date,
+            `invoice line ${line.lineNumber} (item ${line.itemId})`,
+          ),
         );
       }
     }
@@ -443,36 +510,47 @@ export async function applyInventoryIssuesForInvoice(
       }
       for (const component of explosion.components) {
         const pick = explosion.picks.get(component.componentItemId);
-        positions.add(`${component.componentItemId}:${pick?.stockLocationId ?? line.stockLocationId}`);
+        positions.add(
+          `${component.componentItemId}:${pick?.stockLocationId ?? line.stockLocationId}`,
+        );
       }
     }
     for (const key of [...positions].sort()) {
       const separator = key.indexOf(":");
-      await lockInventoryPosition(
-        tx,
-        key.slice(0, separator),
-        key.slice(separator + 1),
-      );
+      await lockInventoryPosition(tx, key.slice(0, separator), key.slice(separator + 1));
     }
     let count = 0;
     for (const l of lines) {
       const explosion = explosions.get(l.lineId);
       if (!explosion) {
-        const seen = (await tx.execute(sql`
-          select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'issue' limit 1`, "objects"));
+        const seen = await tx.execute(
+          sql`
+          select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'issue' limit 1`,
+          "objects",
+        );
         if (seen[0]) continue;
         await issueInventory(
           orgId,
           actorId,
-          salesLineIssueInput(l, { lotId: null, serialId: null }, subsidiaryId, date, "COGS (invoice)", tx),
+          salesLineIssueInput(
+            l,
+            { lotId: null, serialId: null },
+            subsidiaryId,
+            date,
+            "COGS (invoice)",
+            tx,
+          ),
         );
         count++;
         continue;
       }
       for (const component of explosion.components) {
-        const seen = (await tx.execute(sql`
+        const seen = await tx.execute(
+          sql`
           select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId}
-            and item_id = ${component.componentItemId} and kind = 'issue' limit 1`, "objects"));
+            and item_id = ${component.componentItemId} and kind = 'issue' limit 1`,
+          "objects",
+        );
         if (seen[0]) continue;
         await issueInventory(
           orgId,

@@ -37,7 +37,11 @@ async function handleV1POST(
     const { id } = await params;
     const body = updateBudgetCellsBody.parse(await readV1JsonObject(request));
     if (typeof body.expectedRevision !== "number") {
-      throw new ApplicationError("invalid_input", "expectedRevision must be the current scenario revision", 422);
+      throw new ApplicationError(
+        "invalid_input",
+        "expectedRevision must be the current scenario revision",
+        422,
+      );
     }
     const outcome = await updateBudgetCells(context, {
       scenarioId: id,
@@ -51,5 +55,6 @@ async function handleV1POST(
 
 export const POST = defineRoute({
   public: "token",
-  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+  handler: ({ request, params }) =>
+    handleV1POST(request, { params: Promise.resolve(params as never) } as never),
 });

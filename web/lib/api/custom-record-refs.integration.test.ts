@@ -17,16 +17,18 @@ const { documentRevisionCounterSql } = await import("@openbooks/engine/records/r
 /** Current optimistic-concurrency token for a custom record (opaque wire form). */
 async function revisionOf(id: string): Promise<string> {
   const rows = await withBypass(() =>
-    db.execute<{ revision: string }>(sql`
+    db.execute<{ revision: string }>(
+      sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-        from custom_records where id = ${id}`, "objects"),
+        from custom_records where id = ${id}`,
+      "objects",
+    ),
   );
   return rows[0]!.revision;
 }
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -76,19 +78,24 @@ async function seedType(orgId: string, actorId: string, typeKey: string) {
       fields: [{ id: "billto", type: "party", label: "Bill to" }],
     },
   ];
-  await withBypass(() => db.execute(sql`
+  await withBypass(() =>
+    db.execute(sql`
     insert into custom_record_types
       (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
     values
       (${randomUUID()}, ${orgId}, ${typeKey}, 'Ref Record', 'Ref Records',
        ${JSON.stringify(sections)}::jsonb,
        'published', ${actorId}, ${actorId})
-  `));
+  `),
+  );
 }
 
 async function recordCount(orgId: string, typeKey: string): Promise<number> {
   const r = await withBypass(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from custom_records where org_id = ${orgId} and type_key = ${typeKey}`, "objects"),
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from custom_records where org_id = ${orgId} and type_key = ${typeKey}`,
+      "objects",
+    ),
   );
   return r[0]!.n;
 }
@@ -112,10 +119,16 @@ test(
 
       // CREATE with foreign-org header references must fail closed.
       const refusedCreate = await withOrgContext(orgA.orgId, () =>
-        createRecord(user, resolved, fields, {
-          status: "active",
-          data: { vendor: foreignParty, acct: foreignAccount },
-        }, { allowedSubsidiaryIds: null }),
+        createRecord(
+          user,
+          resolved,
+          fields,
+          {
+            status: "active",
+            data: { vendor: foreignParty, acct: foreignAccount },
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         refusedCreate.status,
@@ -126,10 +139,16 @@ test(
 
       // CREATE with a dangling (well-formed but nonexistent) uuid must also fail closed.
       const refusedDangling = await withOrgContext(orgA.orgId, () =>
-        createRecord(user, resolved, fields, {
-          status: "active",
-          data: { vendor: randomUUID(), acct: ownAccount },
-        }, { allowedSubsidiaryIds: null }),
+        createRecord(
+          user,
+          resolved,
+          fields,
+          {
+            status: "active",
+            data: { vendor: randomUUID(), acct: ownAccount },
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         refusedDangling.status,
@@ -140,10 +159,16 @@ test(
 
       // CREATE with a foreign-org reference inside a repeating row must fail closed.
       const refusedRow = await withOrgContext(orgA.orgId, () =>
-        createRecord(user, resolved, fields, {
-          status: "active",
-          data: { vendor: ownParty, acct: ownAccount, lines: [{ billto: foreignParty }] },
-        }, { allowedSubsidiaryIds: null }),
+        createRecord(
+          user,
+          resolved,
+          fields,
+          {
+            status: "active",
+            data: { vendor: ownParty, acct: ownAccount, lines: [{ billto: foreignParty }] },
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         refusedRow.status,
@@ -154,10 +179,16 @@ test(
 
       // CREATE with own-org references still succeeds (header + repeating row).
       const created = await withOrgContext(orgA.orgId, () =>
-        createRecord(user, resolved, fields, {
-          status: "active",
-          data: { vendor: ownParty, acct: ownAccount, lines: [{ billto: ownParty }] },
-        }, { allowedSubsidiaryIds: null }),
+        createRecord(
+          user,
+          resolved,
+          fields,
+          {
+            status: "active",
+            data: { vendor: ownParty, acct: ownAccount, lines: [{ billto: ownParty }] },
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         created.status,
@@ -169,10 +200,17 @@ test(
       // UPDATE swapping in a foreign-org reference must fail closed and leave the row untouched.
       const createdRevision = await revisionOf(createdId);
       const refusedUpdate = await withOrgContext(orgA.orgId, () =>
-        updateRecord(user, resolved, fields, createdId, {
-          data: { vendor: foreignParty },
-          expectedUpdatedAt: createdRevision,
-        }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          createdId,
+          {
+            data: { vendor: foreignParty },
+            expectedUpdatedAt: createdRevision,
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         refusedUpdate.status,
@@ -180,18 +218,19 @@ test(
         `expected tenant-opaque 404, got ${refusedUpdate.status}: ${JSON.stringify(refusedUpdate.body)}`,
       );
       const afterUpdate = await withBypass(() =>
-        db.execute<{ data: unknown }>(sql`select data from custom_records where id = ${createdId}`, "objects"),
+        db.execute<{ data: unknown }>(
+          sql`select data from custom_records where id = ${createdId}`,
+          "objects",
+        ),
       );
-      assert.equal(
-        (afterUpdate[0]!.data as { vendor: string }).vendor,
-        ownParty,
-      );
+      assert.equal((afterUpdate[0]!.data as { vendor: string }).vendor, ownParty);
 
       // UPDATE touching only an unrelated key on a row carrying a legacy
       // (pre-fence) foreign value must NOT lock the row: ownership applies to
       // newly supplied references only.
       const legacyId = randomUUID();
-      await withBypass(() => db.execute(sql`
+      await withBypass(() =>
+        db.execute(sql`
         insert into custom_records
           (id, org_id, type_id, type_key, record_number, data, search_text, status, created_by, updated_by)
         values
@@ -200,13 +239,21 @@ test(
            ${typeKey}, 'LEG-00001',
            ${JSON.stringify({ vendor: foreignParty, acct: ownAccount })}::jsonb,
            'legacy', 'active', ${actorId}, ${actorId})
-      `));
+      `),
+      );
       const legacyRevision = await revisionOf(legacyId);
       const legacyTouch = await withOrgContext(orgA.orgId, () =>
-        updateRecord(user, resolved, fields, legacyId, {
-          data: { acct: ownAccount },
-          expectedUpdatedAt: legacyRevision,
-        }, { allowedSubsidiaryIds: null }),
+        updateRecord(
+          user,
+          resolved,
+          fields,
+          legacyId,
+          {
+            data: { acct: ownAccount },
+            expectedUpdatedAt: legacyRevision,
+          },
+          { allowedSubsidiaryIds: null },
+        ),
       );
       assert.equal(
         legacyTouch.status,

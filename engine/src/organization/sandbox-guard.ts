@@ -15,12 +15,10 @@ const envCache = new Map<string, "production" | "sandbox" | "preview">();
 
 const KNOWN_ENV_KINDS = ["production", "sandbox", "preview"] as const;
 
-export async function getEnvKind(
-  orgId: string,
-): Promise<"production" | "sandbox" | "preview"> {
+export async function getEnvKind(orgId: string): Promise<"production" | "sandbox" | "preview"> {
   const hit = envCache.get(orgId);
   if (hit) return hit;
-  const res = (await db.execute(sql`select env_kind from orgs where id = ${orgId}`, "objects"));
+  const res = await db.execute(sql`select env_kind from orgs where id = ${orgId}`, "objects");
   // B3-ORG-01: an UNKNOWN org (no row: deleted or forged id) must fail
   // CLOSED with a named refusal. Defaulting it to 'production' let
   // assertNotSandbox pass, so email, payment files, SFTP and webhooks

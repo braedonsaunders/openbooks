@@ -116,10 +116,7 @@ const mockSources = new Map<string, string>([
     export const HRM_FEATURE_KEY = 'hrm';
     export async function findEmploymentsByParty() { hit('findEmploymentsByParty'); return ['employment-1'] }`,
   ],
-  [
-    "hrm/field-time/settings.ts",
-    `export const FIELD_TIME_FEATURE = 'fieldTime';`,
-  ],
+  ["hrm/field-time/settings.ts", `export const FIELD_TIME_FEATURE = 'fieldTime';`],
   [
     "hrm/processes.ts",
     `export async function completeProcessStep() { throw new Error('not under test') }`,
@@ -157,10 +154,7 @@ const mockSources = new Map<string, string>([
     export async function listOpenRequestsForParty() { return [] }`,
   ],
   ["hrm/ai/anomalies.ts", `export async function listFlags() { return [] }`],
-  [
-    "hrm/ai/governance.ts",
-    `export async function overdueReviews() { return [] }`,
-  ],
+  ["hrm/ai/governance.ts", `export async function overdueReviews() { return [] }`],
   [
     "hrm/ai/settings.ts",
     `export async function loadAiRailsSettings() { return { reviewMonths: 12 } }`,
@@ -173,10 +167,7 @@ const mockSources = new Map<string, string>([
       return async permission => { hit('actorHasPermission'); state.facts.push(['permission',orgId,actorId,permission]); return true };
     }`,
   ],
-  [
-    "automations/action-reasons.ts",
-    `export async function validateSubmitActionReason() {}`,
-  ],
+  ["automations/action-reasons.ts", `export async function validateSubmitActionReason() {}`],
 ]);
 
 const hooks = registerHooks({
@@ -187,8 +178,7 @@ const hooks = registerHooks({
       context.parentURL?.includes("/engine/src/inbox/")
     ) {
       const tail = specifier.replace(/^(\.\.\/)+/, "");
-      if (mockSources.has(tail))
-        return { url: `mock:inbox-read-memo/${tail}`, shortCircuit: true };
+      if (mockSources.has(tail)) return { url: `mock:inbox-read-memo/${tail}`, shortCircuit: true };
     }
     return nextResolve(specifier, context);
   },
@@ -254,16 +244,9 @@ beforeEach(() => {
       aiGovernanceLedger: true,
       fieldTime: true,
     },
-    installed: new Set([
-      "hrm_worker_qualifications",
-      "payroll_anomaly_flags",
-      "ai_capabilities",
-    ]),
+    installed: new Set(["hrm_worker_qualifications", "payroll_anomaly_flags", "ai_capabilities"]),
     partyId: "party-1",
-    gates: [
-      gate("g-leave", "hrm_leave_request"),
-      gate("g-week", "timesheet_week"),
-    ],
+    gates: [gate("g-leave", "hrm_leave_request"), gate("g-week", "timesheet_week")],
     gatesFail: false,
     calls: {},
     facts: [],
@@ -277,11 +260,7 @@ describe("inbox read memo", () => {
     state.installed = new Set(["payroll_anomaly_flags", "ai_capabilities"]);
     await inbox.countInbox(CTX, { kinds: ["hrm_qualification_alert"] });
     await inbox.countInbox(CTX, { kinds: ["hrm_qualification_alert"] });
-    assert.equal(
-      state.calls.to_regclass,
-      2,
-      "an absent table is probed again on every read",
-    );
+    assert.equal(state.calls.to_regclass, 2, "an absent table is probed again on every read");
     assert.equal(
       state.calls.loadApprovalPerson,
       undefined,
@@ -290,11 +269,7 @@ describe("inbox read memo", () => {
     state.installed.add("hrm_worker_qualifications");
     await inbox.countInbox(CTX, { kinds: ["hrm_qualification_alert"] });
     await inbox.countInbox(CTX, { kinds: ["hrm_qualification_alert"] });
-    assert.equal(
-      state.calls.to_regclass,
-      3,
-      "an installed table is probed once, then remembered",
-    );
+    assert.equal(state.calls.to_regclass, 3, "an installed table is probed once, then remembered");
     assert.equal(state.calls.loadApprovalPerson, 2);
   });
 
@@ -327,15 +302,9 @@ describe("inbox read memo", () => {
   });
 
   it("re-derives every fact on the next read, so a revoked switch takes effect at once", async () => {
-    assert.equal(
-      await inbox.countInbox(CTX, { kinds: ["hrm_leave_request"] }),
-      1,
-    );
+    assert.equal(await inbox.countInbox(CTX, { kinds: ["hrm_leave_request"] }), 1);
     state.features.hrm = false;
-    assert.equal(
-      await inbox.countInbox(CTX, { kinds: ["hrm_leave_request"] }),
-      0,
-    );
+    assert.equal(await inbox.countInbox(CTX, { kinds: ["hrm_leave_request"] }), 0);
     assert.equal(state.calls["feature:hrm"], 2);
   });
 
@@ -347,11 +316,7 @@ describe("inbox read memo", () => {
       items.map((item) => item.id),
       ["timesheet_week:gate:g-week"],
     );
-    assert.equal(
-      state.calls.listMyReviews,
-      undefined,
-      "hrm sources stop at the switch",
-    );
+    assert.equal(state.calls.listMyReviews, undefined, "hrm sources stop at the switch");
     assert.equal(state.calls.mayReadOwnLeaveRequests, undefined);
   });
 
@@ -400,15 +365,13 @@ describe("inbox read memo", () => {
     assert.ok(
       state.facts.some(
         (fact) =>
-          JSON.stringify(fact) ===
-          JSON.stringify(["gates", "org-2", "user-1", ["approver"], null]),
+          JSON.stringify(fact) === JSON.stringify(["gates", "org-2", "user-1", ["approver"], null]),
       ),
     );
     assert.ok(
       state.facts.some(
         (fact) =>
-          JSON.stringify(fact) ===
-          JSON.stringify(["gates", "org-1", "user-2", ["approver"], null]),
+          JSON.stringify(fact) === JSON.stringify(["gates", "org-1", "user-2", ["approver"], null]),
       ),
     );
     await inbox.listInbox(CTX, {
@@ -446,10 +409,7 @@ describe("inbox read memo", () => {
     await inbox.listInbox(ctx, {
       kinds: ["hrm_benefit_enrollment_window", "hrm_qualification_alert"],
     });
-    for (const table of [
-      "from hrm_enrollment_windows",
-      "from public.hrm_worker_qualifications",
-    ]) {
+    for (const table of ["from hrm_enrollment_windows", "from public.hrm_worker_qualifications"]) {
       const query = state.queries.find((query) => query.sql.includes(table));
       assert.ok(query, table);
       assert.ok(query.params.includes(ctx.asOf));
@@ -475,11 +435,7 @@ describe("inbox read memo", () => {
       "direct calls each derive a new live authority",
     );
     await actorPermissionOn(beginInboxRead(CTX), "payroll.manage");
-    assert.equal(
-      state.calls.createActorPermissionRead,
-      4,
-      "the next read derives authority again",
-    );
+    assert.equal(state.calls.createActorPermissionRead, 4, "the next read derives authority again");
   });
 
   it("snapshots role and legal-entity scope before concurrent sources read", async () => {

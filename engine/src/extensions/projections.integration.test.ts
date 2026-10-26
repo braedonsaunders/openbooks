@@ -1,80 +1,303 @@
-import assert from 'node:assert/strict';
-import { registerHooks } from 'node:module';
-import test from 'node:test';
-import { actorHasPermission, createActorPermissionRead } from '../organization/actor-permissions.ts';
-import { sql } from 'drizzle-orm';
-import { db, env, withBypassContext } from '../platform/db.ts';
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/fixtures.ts';
-import { installTestExtension, disableTestExtension } from '../testing/extension-packages.ts';
-import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting, reapRetiredNavLinks, NAV_CONFIG_TOTAL_ROW_CAP } from './projections.ts';
-import { defaultNavConfig } from '../navigation/nav-registry.ts';
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import {
+  actorHasPermission,
+  createActorPermissionRead,
+} from "../organization/actor-permissions.ts";
+import { sql } from "drizzle-orm";
+import { db, env, withBypassContext } from "../platform/db.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { installTestExtension, disableTestExtension } from "../testing/extension-packages.ts";
+import {
+  getExtensionSettings,
+  listActiveExtensionContributions,
+  updateExtensionSetting,
+  reapRetiredNavLinks,
+  NAV_CONFIG_TOTAL_ROW_CAP,
+} from "./projections.ts";
+import { defaultNavConfig } from "../navigation/nav-registry.ts";
 
-const permissions = ['admin.customization.manage', 'admin.setup.manage', 'admin.roles.manage'];
+const permissions = ["admin.customization.manage", "admin.setup.manage", "admin.roles.manage"];
 const contributions = [
-  { kind: 'nav', href: '/module-sample', label: 'Sample', group: 'insights', requiredPermission: 'sample.read' },
-  { kind: 'setting', key: 'caption', label: 'Caption', valueType: 'string', defaultValue: 'Original' },
-  { kind: 'permission', key: 'sample.read', label: 'Read sample' },
+  {
+    kind: "nav",
+    href: "/module-sample",
+    label: "Sample",
+    group: "insights",
+    requiredPermission: "sample.read",
+  },
+  {
+    kind: "setting",
+    key: "caption",
+    label: "Caption",
+    valueType: "string",
+    defaultValue: "Original",
+  },
+  { kind: "permission", key: "sample.read", label: "Read sample" },
 ];
 
-test('reviewed extension projects navigation, dated settings and grantable permissions atomically; upgrade and uninstall preserve evidence', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  await withBypassContext(async () => {
-    const org = await createScratchOrg();
-    const actorId = await createScratchUser(org.orgId, 'Approver', 'admin');
-    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
-    const manifest = { key: 'sample-module', name: 'Sample module', version: '1.0.0', permissions, contributions };
-    try {
-      const approved = await installTestExtension({orgId:org.orgId,actorId,manifest});
-      assert.equal((await listActiveExtensionContributions(org.orgId)).length, 3);
-      assert.equal(await actorHasPermission(db, org.orgId, actorId, 'sample.read'), true);
-      assert.equal(await createActorPermissionRead(db, org.orgId, actorId)('sample.read'), true);
-      const hooks = registerHooks({ resolve(specifier, context, next) { return specifier === 'server-only' ? { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' } : next(specifier, context); } });
-      let resolveNav: (orgId: string, can: (permission: string | undefined) => boolean, roleKeys: readonly string[], t: (key: string) => string) => Promise<{ items: { href: string }[] }[]>;
-      const navModulePath = '../../../web/lib/nav/resolve.ts';
-      try { ({ resolveNav } = await import(navModulePath)); } finally { hooks.deregister(); }
-      const hasShortcut = async (can: (permission: string | undefined) => boolean) => (await resolveNav(org.orgId, can, [], (key) => key)).some((group) => group.items.some((item) => item.href === '/module-sample'));
-      assert.equal(await hasShortcut(() => true), true);
-      assert.equal(await hasShortcut((permission) => permission !== 'sample.read'), false, 'navigation enforces the declared permission');
+test(
+  "reviewed extension projects navigation, dated settings and grantable permissions atomically; upgrade and uninstall preserve evidence",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    await withBypassContext(async () => {
+      const org = await createScratchOrg();
+      const actorId = await createScratchUser(org.orgId, "Approver", "admin");
+      await db.execute(
+        sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`,
+      );
+      const manifest = {
+        key: "sample-module",
+        name: "Sample module",
+        version: "1.0.0",
+        permissions,
+        contributions,
+      };
+      try {
+        const approved = await installTestExtension({ orgId: org.orgId, actorId, manifest });
+        assert.equal((await listActiveExtensionContributions(org.orgId)).length, 3);
+        assert.equal(await actorHasPermission(db, org.orgId, actorId, "sample.read"), true);
+        assert.equal(await createActorPermissionRead(db, org.orgId, actorId)("sample.read"), true);
+        const hooks = registerHooks({
+          resolve(specifier, context, next) {
+            return specifier === "server-only"
+              ? { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" }
+              : next(specifier, context);
+          },
+        });
+        let resolveNav: (
+          orgId: string,
+          can: (permission: string | undefined) => boolean,
+          roleKeys: readonly string[],
+          t: (key: string) => string,
+        ) => Promise<{ items: { href: string }[] }[]>;
+        const navModulePath = "../../../web/lib/nav/resolve.ts";
+        try {
+          ({ resolveNav } = await import(navModulePath));
+        } finally {
+          hooks.deregister();
+        }
+        const hasShortcut = async (can: (permission: string | undefined) => boolean) =>
+          (await resolveNav(org.orgId, can, [], (key) => key)).some((group) =>
+            group.items.some((item) => item.href === "/module-sample"),
+          );
+        assert.equal(await hasShortcut(() => true), true);
+        assert.equal(
+          await hasShortcut((permission) => permission !== "sample.read"),
+          false,
+          "navigation enforces the declared permission",
+        );
 
-      assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Original');
-      const nav = (await db.execute<{ config: {groups: {items: {href?: string; hidden?: boolean}[]}[]} }>(sql`select config from org_nav_configs where org_id = ${org.orgId}`, 'objects'))[0]!.config;
-      assert.equal(nav.groups.flatMap((group) => group.items).filter((item) => item.href === '/module-sample' && !item.hidden).length, 1);
-      const beforeChange = new Date((await db.execute<{ at: string }>(sql`select date_trunc('milliseconds', clock_timestamp())::text as at`, 'objects'))[0]!.at);
-      await db.execute(sql`select pg_sleep(0.01)`);
-      await updateExtensionSetting({ orgId: org.orgId, actorId, extensionKey: manifest.key, key: 'caption', value: 'Custom', reason: 'Customize caption', effectivePermissions: ['*'] });
-      assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Custom');
-      await assert.rejects(() => updateExtensionSetting({ orgId: org.orgId, actorId, extensionKey: manifest.key, key: 'caption', value: 'Stale overwrite', expectedValue: 'Original', expectedExtensionVersionId: approved.versionId!, reason: 'Refuse lost update', effectivePermissions: ['*'] }), /Setting changed/);
-      assert.equal((await getExtensionSettings(org.orgId, db, beforeChange))['sample-module']!.caption, 'Original');
-      await assert.rejects(() => updateExtensionSetting({ orgId: org.orgId, actorId, extensionKey: manifest.key, key: 'caption', value: false, reason: 'Wrong type', effectivePermissions: ['*'] }));
-      await assert.rejects(() => installTestExtension({orgId:org.orgId,actorId,
-        manifest:{...manifest,version:'1.1.0',contributions:contributions.map(c=>c.kind==='setting'?{...c,valueType:'boolean',defaultValue:false}:c)}}), /defaultValue must be a boolean/);
-      assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Custom');
-      assert.equal((await db.execute<{ count:number }>(sql`select count(*)::int as count from app_versions where org_id=${org.orgId}`, 'objects'))[0]!.count,1,'failed projection appends no version');
-      await assert.rejects(() => installTestExtension({orgId:org.orgId,actorId,manifest:{key:'second-extension',name:'Second',version:'1.0.0',permissions:['admin.customization.manage'],contributions:[{kind:'nav',href:'/module-sample',label:'Conflicting shortcut',group:'insights'}]}}),/already has an owner/);
-      assert.equal((await db.execute(sql`select id from apps where org_id=${org.orgId} and key='second-extension'`, 'objects')).length,0,'failed projection leaves no package');
-      await installTestExtension({orgId:org.orgId,actorId,manifest:{...manifest,version:'2.0.0',contributions:contributions.map(c=>c.kind==='setting'?{...c,defaultValue:'Changed default'}:c)}});
-      assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Custom');
-      await assert.rejects(() => updateExtensionSetting({ orgId: org.orgId, actorId, extensionKey: manifest.key, key: 'caption', value: 'Stale version', expectedValue: 'Custom', expectedExtensionVersionId: approved.versionId!, reason: 'Refuse stale schema', effectivePermissions: ['*'] }), /Extension version changed/);
-      await disableTestExtension({ orgId: org.orgId, actorId, key: manifest.key });
-      assert.equal((await listActiveExtensionContributions(org.orgId)).length, 0);
-      assert.equal(await actorHasPermission(db, org.orgId, actorId, 'sample.read'), false, 'inactive declarations defeat wildcard grants without deleting stored role grants');
-      assert.equal(await createActorPermissionRead(db, org.orgId, actorId)('sample.read'), false, 'a fresh read observes native extension revocation');
-      assert.equal(await hasShortcut(() => true), false, 'uninstalled shortcuts are hidden even from wildcard readers');
-      assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Custom');
-      await assert.rejects(() => updateExtensionSetting({ orgId: org.orgId, actorId, extensionKey: manifest.key, key: 'caption', value: 'Dormant write', reason: 'Refused', effectivePermissions: ['*'] }), /Active extension setting/);
-      const audits = await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`select changes, actor_id from audit_log where org_id = ${org.orgId} and changes->>'event' like 'extension_projection%'`, 'objects');
-      assert.ok(audits.length >= 5);
-      for (const row of audits) { assert.equal(row.actor_id, actorId); assert.ok(row.changes.reason); assert.ok('before' in row.changes && 'after' in row.changes); }
-    } finally { await dropScratchOrg(org.orgId); }
-  });
-});
+        assert.equal((await getExtensionSettings(org.orgId))["sample-module"]!.caption, "Original");
+        const nav = (
+          await db.execute<{
+            config: { groups: { items: { href?: string; hidden?: boolean }[] }[] };
+          }>(sql`select config from org_nav_configs where org_id = ${org.orgId}`, "objects")
+        )[0]!.config;
+        assert.equal(
+          nav.groups
+            .flatMap((group) => group.items)
+            .filter((item) => item.href === "/module-sample" && !item.hidden).length,
+          1,
+        );
+        const beforeChange = new Date(
+          (
+            await db.execute<{ at: string }>(
+              sql`select date_trunc('milliseconds', clock_timestamp())::text as at`,
+              "objects",
+            )
+          )[0]!.at,
+        );
+        await db.execute(sql`select pg_sleep(0.01)`);
+        await updateExtensionSetting({
+          orgId: org.orgId,
+          actorId,
+          extensionKey: manifest.key,
+          key: "caption",
+          value: "Custom",
+          reason: "Customize caption",
+          effectivePermissions: ["*"],
+        });
+        assert.equal((await getExtensionSettings(org.orgId))["sample-module"]!.caption, "Custom");
+        await assert.rejects(
+          () =>
+            updateExtensionSetting({
+              orgId: org.orgId,
+              actorId,
+              extensionKey: manifest.key,
+              key: "caption",
+              value: "Stale overwrite",
+              expectedValue: "Original",
+              expectedExtensionVersionId: approved.versionId!,
+              reason: "Refuse lost update",
+              effectivePermissions: ["*"],
+            }),
+          /Setting changed/,
+        );
+        assert.equal(
+          (await getExtensionSettings(org.orgId, db, beforeChange))["sample-module"]!.caption,
+          "Original",
+        );
+        await assert.rejects(() =>
+          updateExtensionSetting({
+            orgId: org.orgId,
+            actorId,
+            extensionKey: manifest.key,
+            key: "caption",
+            value: false,
+            reason: "Wrong type",
+            effectivePermissions: ["*"],
+          }),
+        );
+        await assert.rejects(
+          () =>
+            installTestExtension({
+              orgId: org.orgId,
+              actorId,
+              manifest: {
+                ...manifest,
+                version: "1.1.0",
+                contributions: contributions.map((c) =>
+                  c.kind === "setting" ? { ...c, valueType: "boolean", defaultValue: false } : c,
+                ),
+              },
+            }),
+          /defaultValue must be a boolean/,
+        );
+        assert.equal((await getExtensionSettings(org.orgId))["sample-module"]!.caption, "Custom");
+        assert.equal(
+          (
+            await db.execute<{ count: number }>(
+              sql`select count(*)::int as count from app_versions where org_id=${org.orgId}`,
+              "objects",
+            )
+          )[0]!.count,
+          1,
+          "failed projection appends no version",
+        );
+        await assert.rejects(
+          () =>
+            installTestExtension({
+              orgId: org.orgId,
+              actorId,
+              manifest: {
+                key: "second-extension",
+                name: "Second",
+                version: "1.0.0",
+                permissions: ["admin.customization.manage"],
+                contributions: [
+                  {
+                    kind: "nav",
+                    href: "/module-sample",
+                    label: "Conflicting shortcut",
+                    group: "insights",
+                  },
+                ],
+              },
+            }),
+          /already has an owner/,
+        );
+        assert.equal(
+          (
+            await db.execute(
+              sql`select id from apps where org_id=${org.orgId} and key='second-extension'`,
+              "objects",
+            )
+          ).length,
+          0,
+          "failed projection leaves no package",
+        );
+        await installTestExtension({
+          orgId: org.orgId,
+          actorId,
+          manifest: {
+            ...manifest,
+            version: "2.0.0",
+            contributions: contributions.map((c) =>
+              c.kind === "setting" ? { ...c, defaultValue: "Changed default" } : c,
+            ),
+          },
+        });
+        assert.equal((await getExtensionSettings(org.orgId))["sample-module"]!.caption, "Custom");
+        await assert.rejects(
+          () =>
+            updateExtensionSetting({
+              orgId: org.orgId,
+              actorId,
+              extensionKey: manifest.key,
+              key: "caption",
+              value: "Stale version",
+              expectedValue: "Custom",
+              expectedExtensionVersionId: approved.versionId!,
+              reason: "Refuse stale schema",
+              effectivePermissions: ["*"],
+            }),
+          /Extension version changed/,
+        );
+        await disableTestExtension({ orgId: org.orgId, actorId, key: manifest.key });
+        assert.equal((await listActiveExtensionContributions(org.orgId)).length, 0);
+        assert.equal(
+          await actorHasPermission(db, org.orgId, actorId, "sample.read"),
+          false,
+          "inactive declarations defeat wildcard grants without deleting stored role grants",
+        );
+        assert.equal(
+          await createActorPermissionRead(db, org.orgId, actorId)("sample.read"),
+          false,
+          "a fresh read observes native extension revocation",
+        );
+        assert.equal(
+          await hasShortcut(() => true),
+          false,
+          "uninstalled shortcuts are hidden even from wildcard readers",
+        );
+        assert.equal((await getExtensionSettings(org.orgId))["sample-module"]!.caption, "Custom");
+        await assert.rejects(
+          () =>
+            updateExtensionSetting({
+              orgId: org.orgId,
+              actorId,
+              extensionKey: manifest.key,
+              key: "caption",
+              value: "Dormant write",
+              reason: "Refused",
+              effectivePermissions: ["*"],
+            }),
+          /Active extension setting/,
+        );
+        const audits = await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(
+          sql`select changes, actor_id from audit_log where org_id = ${org.orgId} and changes->>'event' like 'extension_projection%'`,
+          "objects",
+        );
+        assert.ok(audits.length >= 5);
+        for (const row of audits) {
+          assert.equal(row.actor_id, actorId);
+          assert.ok(row.changes.reason);
+          assert.ok("before" in row.changes && "after" in row.changes);
+        }
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    });
+  },
+);
 
-test('reapRetiredNavLinks prunes the oldest retired rows first and never touches live or user rows', () => {
+test("reapRetiredNavLinks prunes the oldest retired rows first and never touches live or user rows", () => {
   const config = defaultNavConfig();
   const visibleBefore = config.groups.reduce((n, group) => n + group.items.length, 0);
   assert.ok(visibleBefore < NAV_CONFIG_TOTAL_ROW_CAP);
-  const group = config.groups.find((entry) => entry.id === 'insights')!;
-  for (let i = 0; i < 400; i++) group.items.push({ kind: 'link', href: `/old-${i}`, label: `Old ${i}`, extensionKey: 'old-ext', hidden: true });
-  for (let i = 0; i < 50; i++) group.items.push({ kind: 'link', href: `/mine-${i}`, label: 'Mine', hidden: true });
+  const group = config.groups.find((entry) => entry.id === "insights")!;
+  for (let i = 0; i < 400; i++)
+    group.items.push({
+      kind: "link",
+      href: `/old-${i}`,
+      label: `Old ${i}`,
+      extensionKey: "old-ext",
+      hidden: true,
+    });
+  for (let i = 0; i < 50; i++)
+    group.items.push({ kind: "link", href: `/mine-${i}`, label: "Mine", hidden: true });
   const total = visibleBefore + 450;
   assert.ok(total > NAV_CONFIG_TOTAL_ROW_CAP);
   const pruned = reapRetiredNavLinks(config);
@@ -84,22 +307,35 @@ test('reapRetiredNavLinks prunes the oldest retired rows first and never touches
   // Visible rows all survive, oldest retired extension rows are gone, the
   // newest retired rows and every user-hidden row survive.
   assert.equal(items.filter((item) => !item.hidden).length, visibleBefore);
-  const links = items.flatMap((item) => (item.kind === 'link' ? [item] : []));
-  assert.ok(!links.some((item) => item.href === '/old-0'));
+  const links = items.flatMap((item) => (item.kind === "link" ? [item] : []));
+  assert.ok(!links.some((item) => item.href === "/old-0"));
   const oldestSurvivor = `/old-${total - NAV_CONFIG_TOTAL_ROW_CAP}`;
   assert.ok(links.some((item) => item.href === oldestSurvivor && item.hidden));
-  assert.ok(links.some((item) => item.href === '/old-399' && item.hidden));
-  for (let i = 0; i < 50; i++) assert.ok(links.some((item) => item.href === `/mine-${i}`), `user-hidden /mine-${i} must survive`);
+  assert.ok(links.some((item) => item.href === "/old-399" && item.hidden));
+  for (let i = 0; i < 50; i++)
+    assert.ok(
+      links.some((item) => item.href === `/mine-${i}`),
+      `user-hidden /mine-${i} must survive`,
+    );
 });
 
-test('reapRetiredNavLinks leaves an over-cap visible nav alone and is a no-op under the cap', () => {
+test("reapRetiredNavLinks leaves an over-cap visible nav alone and is a no-op under the cap", () => {
   const full = defaultNavConfig();
-  const group = full.groups.find((entry) => entry.id === 'insights')!;
-  for (let i = 0; i < 500; i++) group.items.push({ kind: 'link', href: `/live-${i}`, label: `Live ${i}`, extensionKey: 'live-ext' });
+  const group = full.groups.find((entry) => entry.id === "insights")!;
+  for (let i = 0; i < 500; i++)
+    group.items.push({
+      kind: "link",
+      href: `/live-${i}`,
+      label: `Live ${i}`,
+      extensionKey: "live-ext",
+    });
   const total = full.groups.reduce((n, entry) => n + entry.items.length, 0);
   assert.ok(total > NAV_CONFIG_TOTAL_ROW_CAP);
   assert.equal(reapRetiredNavLinks(full), 0);
-  assert.equal(full.groups.reduce((n, entry) => n + entry.items.length, 0), total);
+  assert.equal(
+    full.groups.reduce((n, entry) => n + entry.items.length, 0),
+    total,
+  );
 
   const small = defaultNavConfig();
   const snapshot = JSON.stringify(small);
@@ -107,7 +343,7 @@ test('reapRetiredNavLinks leaves an over-cap visible nav alone and is a no-op un
   assert.equal(JSON.stringify(small), snapshot);
 });
 
-test('reapRetiredNavLinks prunes the globally oldest retired row across groups', () => {
+test("reapRetiredNavLinks prunes the globally oldest retired row across groups", () => {
   const config = defaultNavConfig();
   const groupA = config.groups[0]!;
   const groupB = config.groups[1]!;
@@ -116,148 +352,310 @@ test('reapRetiredNavLinks prunes the globally oldest retired row across groups',
   // retired rows below are added; visible rows are never reapable.
   const filler = NAV_CONFIG_TOTAL_ROW_CAP + 1 - visibleBefore - 2;
   assert.ok(filler > 0);
-  for (let i = 0; i < filler; i++) groupA.items.push({ kind: 'link', href: `/live-${i}`, label: `Live ${i}` });
+  for (let i = 0; i < filler; i++)
+    groupA.items.push({ kind: "link", href: `/live-${i}`, label: `Live ${i}` });
   // Group A comes earlier in config order but retires NEWER than group B:
   // the single prune must take B's older row, proving group traversal order
   // does not arbitrate across groups.
-  groupA.items.push({ kind: 'link', href: '/retired-new', label: 'New', extensionKey: 'ext-a', hidden: true, retiredAt: '2026-09-02T00:00:00.000Z' });
-  groupB.items.push({ kind: 'link', href: '/retired-old', label: 'Old', extensionKey: 'ext-b', hidden: true, retiredAt: '2026-09-01T00:00:00.000Z' });
+  groupA.items.push({
+    kind: "link",
+    href: "/retired-new",
+    label: "New",
+    extensionKey: "ext-a",
+    hidden: true,
+    retiredAt: "2026-09-02T00:00:00.000Z",
+  });
+  groupB.items.push({
+    kind: "link",
+    href: "/retired-old",
+    label: "Old",
+    extensionKey: "ext-b",
+    hidden: true,
+    retiredAt: "2026-09-01T00:00:00.000Z",
+  });
   assert.equal(reapRetiredNavLinks(config), 1);
-  const hrefs = config.groups.flatMap((group) => group.items).flatMap((item) => (item.kind === 'link' ? [item.href] : []));
-  assert.ok(!hrefs.includes('/retired-old'), "group B's older retirement must be pruned first");
-  assert.ok(hrefs.includes('/retired-new'), "group A's newer retirement must survive");
+  const hrefs = config.groups
+    .flatMap((group) => group.items)
+    .flatMap((item) => (item.kind === "link" ? [item.href] : []));
+  assert.ok(!hrefs.includes("/retired-old"), "group B's older retirement must be pruned first");
+  assert.ok(hrefs.includes("/retired-new"), "group A's newer retirement must survive");
 });
 
-test('reapRetiredNavLinks treats unstamped legacy retirements as oldest', () => {
+test("reapRetiredNavLinks treats unstamped legacy retirements as oldest", () => {
   const config = defaultNavConfig();
   const groupA = config.groups[0]!;
   const groupB = config.groups[1]!;
   const visibleBefore = config.groups.reduce((n, group) => n + group.items.length, 0);
   const filler = NAV_CONFIG_TOTAL_ROW_CAP + 1 - visibleBefore - 2;
   assert.ok(filler > 0);
-  for (let i = 0; i < filler; i++) groupA.items.push({ kind: 'link', href: `/live-${i}`, label: `Live ${i}` });
-  groupA.items.push({ kind: 'link', href: '/retired-stamped', label: 'Stamped', extensionKey: 'ext-a', hidden: true, retiredAt: '2026-09-02T00:00:00.000Z' });
-  groupB.items.push({ kind: 'link', href: '/retired-legacy', label: 'Legacy', extensionKey: 'ext-b', hidden: true });
+  for (let i = 0; i < filler; i++)
+    groupA.items.push({ kind: "link", href: `/live-${i}`, label: `Live ${i}` });
+  groupA.items.push({
+    kind: "link",
+    href: "/retired-stamped",
+    label: "Stamped",
+    extensionKey: "ext-a",
+    hidden: true,
+    retiredAt: "2026-09-02T00:00:00.000Z",
+  });
+  groupB.items.push({
+    kind: "link",
+    href: "/retired-legacy",
+    label: "Legacy",
+    extensionKey: "ext-b",
+    hidden: true,
+  });
   assert.equal(reapRetiredNavLinks(config), 1);
-  const hrefs = config.groups.flatMap((group) => group.items).flatMap((item) => (item.kind === 'link' ? [item.href] : []));
-  assert.ok(!hrefs.includes('/retired-legacy'), 'an unstamped legacy retirement must sort oldest');
-  assert.ok(hrefs.includes('/retired-stamped'), 'the stamped retirement must survive');
+  const hrefs = config.groups
+    .flatMap((group) => group.items)
+    .flatMap((item) => (item.kind === "link" ? [item.href] : []));
+  assert.ok(!hrefs.includes("/retired-legacy"), "an unstamped legacy retirement must sort oldest");
+  assert.ok(hrefs.includes("/retired-stamped"), "the stamped retirement must survive");
 });
 
 type NavProbeItem = { href?: string; hidden?: boolean; extensionKey?: string };
 
 async function navItemsAt(orgId: string, href: string): Promise<NavProbeItem[]> {
-  const nav = (await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(sql`select config from org_nav_configs where org_id = ${orgId}`, 'objects'))[0]!.config;
+  const nav = (
+    await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(
+      sql`select config from org_nav_configs where org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!.config;
   return nav.groups.flatMap((group) => group.items).filter((item) => item.href === href);
 }
 
-test('a disabled extension releases its navigation href; re-enabling refuses while another extension owns it', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  await withBypassContext(async () => {
-    const org = await createScratchOrg();
-    const actorId = await createScratchUser(org.orgId, 'Approver', 'admin');
-    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
-    const permissions = ['admin.customization.manage'];
-    try {
-      await installTestExtension({ orgId: org.orgId, actorId, manifest: { key: 'first-extension', name: 'First', version: '1.0.0', permissions, contributions: [{ kind: 'nav', href: '/module-sample', label: 'Sample A', group: 'insights' }] } });
-      await disableTestExtension({ orgId: org.orgId, actorId, key: 'first-extension' });
-      // The href is free again: a different extension may claim it.
-      await installTestExtension({ orgId: org.orgId, actorId, manifest: { key: 'second-extension', name: 'Second', version: '1.0.0', permissions, contributions: [{ kind: 'nav', href: '/module-sample', label: 'Sample B', group: 'insights' }] } });
-      let atHref = await navItemsAt(org.orgId, '/module-sample');
-      assert.equal(atHref.filter((item) => !item.hidden).length, 1);
-      assert.equal(atHref.find((item) => !item.hidden)?.extensionKey, 'second-extension');
-      // The disabled owner's row is kept for history, but owns nothing.
-      assert.ok(atHref.some((item) => item.hidden && item.extensionKey === 'first-extension'));
-      // Re-enabling the first extension while the second owns the href refuses.
-      // Variable indirection (not a literal) so engine typecheck does not
-      // follow the import into web's graph — same pattern as the nav import.
-      const storePath = '../../../web/lib/apps/store.ts';
-      const { setAppStatus } = await import(storePath);
-      await assert.rejects(() => setAppStatus(org.orgId, actorId, 'first-extension', 'installed'), /already has an owner/);
-      atHref = await navItemsAt(org.orgId, '/module-sample');
-      assert.equal(atHref.find((item) => !item.hidden)?.extensionKey, 'second-extension');
-    } finally { await dropScratchOrg(org.orgId); }
-  });
-});
+test(
+  "a disabled extension releases its navigation href; re-enabling refuses while another extension owns it",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    await withBypassContext(async () => {
+      const org = await createScratchOrg();
+      const actorId = await createScratchUser(org.orgId, "Approver", "admin");
+      await db.execute(
+        sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`,
+      );
+      const permissions = ["admin.customization.manage"];
+      try {
+        await installTestExtension({
+          orgId: org.orgId,
+          actorId,
+          manifest: {
+            key: "first-extension",
+            name: "First",
+            version: "1.0.0",
+            permissions,
+            contributions: [
+              { kind: "nav", href: "/module-sample", label: "Sample A", group: "insights" },
+            ],
+          },
+        });
+        await disableTestExtension({ orgId: org.orgId, actorId, key: "first-extension" });
+        // The href is free again: a different extension may claim it.
+        await installTestExtension({
+          orgId: org.orgId,
+          actorId,
+          manifest: {
+            key: "second-extension",
+            name: "Second",
+            version: "1.0.0",
+            permissions,
+            contributions: [
+              { kind: "nav", href: "/module-sample", label: "Sample B", group: "insights" },
+            ],
+          },
+        });
+        let atHref = await navItemsAt(org.orgId, "/module-sample");
+        assert.equal(atHref.filter((item) => !item.hidden).length, 1);
+        assert.equal(atHref.find((item) => !item.hidden)?.extensionKey, "second-extension");
+        // The disabled owner's row is kept for history, but owns nothing.
+        assert.ok(atHref.some((item) => item.hidden && item.extensionKey === "first-extension"));
+        // Re-enabling the first extension while the second owns the href refuses.
+        // Variable indirection (not a literal) so engine typecheck does not
+        // follow the import into web's graph — same pattern as the nav import.
+        const storePath = "../../../web/lib/apps/store.ts";
+        const { setAppStatus } = await import(storePath);
+        await assert.rejects(
+          () => setAppStatus(org.orgId, actorId, "first-extension", "installed"),
+          /already has an owner/,
+        );
+        atHref = await navItemsAt(org.orgId, "/module-sample");
+        assert.equal(atHref.find((item) => !item.hidden)?.extensionKey, "second-extension");
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    });
+  },
+);
 
-test('retired hidden links do not count toward the 256-item navigation cap', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  await withBypassContext(async () => {
-    const org = await createScratchOrg();
-    const actorId = await createScratchUser(org.orgId, 'Approver', 'admin');
-    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
-    try {
-      const config = defaultNavConfig();
-      const group = config.groups.find((entry) => entry.id === 'insights')!;
-      for (let i = 0; i < 300; i++) group.items.push({ kind: 'link', href: `/retired-${i}`, label: `Retired ${i}`, extensionKey: 'retired-ext', hidden: true });
-      await db.execute(sql`insert into org_nav_configs (org_id, config, created_by, updated_by)
+test(
+  "retired hidden links do not count toward the 256-item navigation cap",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    await withBypassContext(async () => {
+      const org = await createScratchOrg();
+      const actorId = await createScratchUser(org.orgId, "Approver", "admin");
+      await db.execute(
+        sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`,
+      );
+      try {
+        const config = defaultNavConfig();
+        const group = config.groups.find((entry) => entry.id === "insights")!;
+        for (let i = 0; i < 300; i++)
+          group.items.push({
+            kind: "link",
+            href: `/retired-${i}`,
+            label: `Retired ${i}`,
+            extensionKey: "retired-ext",
+            hidden: true,
+          });
+        await db.execute(sql`insert into org_nav_configs (org_id, config, created_by, updated_by)
         values (${org.orgId}, ${JSON.stringify(config)}::jsonb, ${actorId}, ${actorId})
         on conflict (org_id) do update set config = excluded.config, updated_by = excluded.updated_by, updated_at = now()`);
-      // 300+ stored rows but only a handful visible: a new install still succeeds.
-      await installTestExtension({ orgId: org.orgId, actorId, manifest: { key: 'fresh-extension', name: 'Fresh', version: '1.0.0', permissions: ['admin.customization.manage'], contributions: [{ kind: 'nav', href: '/module-fresh', label: 'Fresh', group: 'insights' }] } });
-      const stored = (await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(sql`select config from org_nav_configs where org_id = ${org.orgId}`, 'objects'))[0]!.config;
-      const items = stored.groups.flatMap((entry) => entry.items);
-      assert.equal(items.filter((item) => item.href === '/module-fresh' && !item.hidden).length, 1);
-      assert.equal(items.filter((item) => item.hidden).length, 300);
-    } finally { await dropScratchOrg(org.orgId); }
-  });
-});
+        // 300+ stored rows but only a handful visible: a new install still succeeds.
+        await installTestExtension({
+          orgId: org.orgId,
+          actorId,
+          manifest: {
+            key: "fresh-extension",
+            name: "Fresh",
+            version: "1.0.0",
+            permissions: ["admin.customization.manage"],
+            contributions: [
+              { kind: "nav", href: "/module-fresh", label: "Fresh", group: "insights" },
+            ],
+          },
+        });
+        const stored = (
+          await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(
+            sql`select config from org_nav_configs where org_id = ${org.orgId}`,
+            "objects",
+          )
+        )[0]!.config;
+        const items = stored.groups.flatMap((entry) => entry.items);
+        assert.equal(
+          items.filter((item) => item.href === "/module-fresh" && !item.hidden).length,
+          1,
+        );
+        assert.equal(items.filter((item) => item.hidden).length, 300);
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    });
+  },
+);
 
 async function navItemCount(orgId: string): Promise<number> {
-  const config = (await db.execute<{ config: { groups: { items: unknown[] }[] } }>(sql`select config from org_nav_configs where org_id = ${orgId}`, 'objects'))[0]!.config;
+  const config = (
+    await db.execute<{ config: { groups: { items: unknown[] }[] } }>(
+      sql`select config from org_nav_configs where org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!.config;
   return config.groups.reduce((n, group) => n + group.items.length, 0);
 }
 
-test('upgrade/uninstall churn keeps the stored nav item count bounded without ever blocking an install', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  await withBypassContext(async () => {
-    const org = await createScratchOrg();
-    const actorId = await createScratchUser(org.orgId, 'Approver', 'admin');
-    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
-    const permissions = ['admin.customization.manage'];
-    try {
-      const config = defaultNavConfig();
-      const group = config.groups.find((entry) => entry.id === 'insights')!;
-      for (let i = 0; i < 510; i++) group.items.push({ kind: 'link', href: `/retired-${i}`, label: `Retired ${i}`, extensionKey: 'retired-ext', hidden: true });
-      await db.execute(sql`insert into org_nav_configs (org_id, config, created_by, updated_by)
+test(
+  "upgrade/uninstall churn keeps the stored nav item count bounded without ever blocking an install",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    await withBypassContext(async () => {
+      const org = await createScratchOrg();
+      const actorId = await createScratchUser(org.orgId, "Approver", "admin");
+      await db.execute(
+        sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`,
+      );
+      const permissions = ["admin.customization.manage"];
+      try {
+        const config = defaultNavConfig();
+        const group = config.groups.find((entry) => entry.id === "insights")!;
+        for (let i = 0; i < 510; i++)
+          group.items.push({
+            kind: "link",
+            href: `/retired-${i}`,
+            label: `Retired ${i}`,
+            extensionKey: "retired-ext",
+            hidden: true,
+          });
+        await db.execute(sql`insert into org_nav_configs (org_id, config, created_by, updated_by)
         values (${org.orgId}, ${JSON.stringify(config)}::jsonb, ${actorId}, ${actorId})
         on conflict (org_id) do update set config = excluded.config, updated_by = excluded.updated_by, updated_at = now()`);
-      const seeded = await navItemCount(org.orgId);
-      assert.ok(seeded > NAV_CONFIG_TOTAL_ROW_CAP);
+        const seeded = await navItemCount(org.orgId);
+        assert.ok(seeded > NAV_CONFIG_TOTAL_ROW_CAP);
 
-      const install = (version: string, href: string) => installTestExtension({
-        orgId: org.orgId, actorId,
-        manifest: { key: 'churn-app', name: 'Churn', version, permissions, contributions: [{ kind: 'nav', href, label: 'Churn', group: 'insights' }] },
-      });
-      // Every install succeeds despite the over-cap history, lands exactly on
-      // the cap, and retires the oldest rows first.
-      await install('1.0.0', '/churn-1');
-      assert.equal(await navItemCount(org.orgId), NAV_CONFIG_TOTAL_ROW_CAP);
-      assert.equal((await navItemsAt(org.orgId, '/churn-1')).filter((item) => !item.hidden).length, 1);
-      const pruned = seeded + 1 - NAV_CONFIG_TOTAL_ROW_CAP;
-      assert.ok((await navItemsAt(org.orgId, `/retired-${pruned - 1}`)).length === 0, 'the oldest retired rows are reaped');
-      assert.ok((await navItemsAt(org.orgId, `/retired-${pruned}`)).length === 1, 'reaping stops exactly at the cap');
-      assert.ok((await navItemsAt(org.orgId, '/retired-509')).length === 1, 'the newest retired rows survive');
+        const install = (version: string, href: string) =>
+          installTestExtension({
+            orgId: org.orgId,
+            actorId,
+            manifest: {
+              key: "churn-app",
+              name: "Churn",
+              version,
+              permissions,
+              contributions: [{ kind: "nav", href, label: "Churn", group: "insights" }],
+            },
+          });
+        // Every install succeeds despite the over-cap history, lands exactly on
+        // the cap, and retires the oldest rows first.
+        await install("1.0.0", "/churn-1");
+        assert.equal(await navItemCount(org.orgId), NAV_CONFIG_TOTAL_ROW_CAP);
+        assert.equal(
+          (await navItemsAt(org.orgId, "/churn-1")).filter((item) => !item.hidden).length,
+          1,
+        );
+        const pruned = seeded + 1 - NAV_CONFIG_TOTAL_ROW_CAP;
+        assert.ok(
+          (await navItemsAt(org.orgId, `/retired-${pruned - 1}`)).length === 0,
+          "the oldest retired rows are reaped",
+        );
+        assert.ok(
+          (await navItemsAt(org.orgId, `/retired-${pruned}`)).length === 1,
+          "reaping stops exactly at the cap",
+        );
+        assert.ok(
+          (await navItemsAt(org.orgId, "/retired-509")).length === 1,
+          "the newest retired rows survive",
+        );
 
-      // Upgrade churn: each new href retires the previous one and the count
-      // stays pinned at the cap; disable/re-enable churn behaves the same.
-      await install('1.0.1', '/churn-2');
-      await install('1.0.2', '/churn-3');
-      assert.equal(await navItemCount(org.orgId), NAV_CONFIG_TOTAL_ROW_CAP);
-      assert.equal((await navItemsAt(org.orgId, '/churn-3')).filter((item) => !item.hidden).length, 1);
-      await disableTestExtension({ orgId: org.orgId, actorId, key: 'churn-app' });
-      const storePath = '../../../web/lib/apps/store.ts';
-      const { setAppStatus } = await import(storePath);
-      await setAppStatus(org.orgId, actorId, 'churn-app', 'installed');
-      assert.ok((await navItemCount(org.orgId)) <= NAV_CONFIG_TOTAL_ROW_CAP);
-      assert.equal((await navItemsAt(org.orgId, '/churn-3')).filter((item) => !item.hidden).length, 1);
+        // Upgrade churn: each new href retires the previous one and the count
+        // stays pinned at the cap; disable/re-enable churn behaves the same.
+        await install("1.0.1", "/churn-2");
+        await install("1.0.2", "/churn-3");
+        assert.equal(await navItemCount(org.orgId), NAV_CONFIG_TOTAL_ROW_CAP);
+        assert.equal(
+          (await navItemsAt(org.orgId, "/churn-3")).filter((item) => !item.hidden).length,
+          1,
+        );
+        await disableTestExtension({ orgId: org.orgId, actorId, key: "churn-app" });
+        const storePath = "../../../web/lib/apps/store.ts";
+        const { setAppStatus } = await import(storePath);
+        await setAppStatus(org.orgId, actorId, "churn-app", "installed");
+        assert.ok((await navItemCount(org.orgId)) <= NAV_CONFIG_TOTAL_ROW_CAP);
+        assert.equal(
+          (await navItemsAt(org.orgId, "/churn-3")).filter((item) => !item.hidden).length,
+          1,
+        );
 
-      // The reaped rows survive as history in this write's audit snapshot:
-      // retired-0 was present before the first churn install and absent after.
-      const audits = await db.execute<{ changes: { event?: string; before?: unknown; after?: unknown } }>(sql`
-        select changes from audit_log where org_id = ${org.orgId} and table_name = 'org_nav_configs'`, 'objects');
-      assert.ok(audits.some((row) =>
-        row.changes.event === 'extension_projection' &&
-        JSON.stringify(row.changes.before).includes('/retired-0') &&
-        !JSON.stringify(row.changes.after).includes('/retired-0')));
-    } finally { await dropScratchOrg(org.orgId); }
-  });
-});
-
+        // The reaped rows survive as history in this write's audit snapshot:
+        // retired-0 was present before the first churn install and absent after.
+        const audits = await db.execute<{
+          changes: { event?: string; before?: unknown; after?: unknown };
+        }>(
+          sql`
+        select changes from audit_log where org_id = ${org.orgId} and table_name = 'org_nav_configs'`,
+          "objects",
+        );
+        assert.ok(
+          audits.some(
+            (row) =>
+              row.changes.event === "extension_projection" &&
+              JSON.stringify(row.changes.before).includes("/retired-0") &&
+              !JSON.stringify(row.changes.after).includes("/retired-0"),
+          ),
+        );
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    });
+  },
+);

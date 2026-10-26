@@ -18,6 +18,9 @@ test("an unknown tab falls back to Applications", () => {
 
 test("selection hrefs keep the tab and the selection", () => {
   assert.equal(hrefForDepth("openings", null), "/hrm/recruiting?tab=openings");
-  assert.equal(hrefForDepth("interviews", { interview: "i-1" }), "/hrm/recruiting?tab=interviews&interview=i-1");
+  assert.equal(
+    hrefForDepth("interviews", { interview: "i-1" }),
+    "/hrm/recruiting?tab=interviews&interview=i-1",
+  );
   assert.equal(hrefForDepth("offers", { offer: "o-9" }), "/hrm/recruiting?tab=offers&offer=o-9");
 });

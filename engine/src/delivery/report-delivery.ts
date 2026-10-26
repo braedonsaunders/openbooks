@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { computeNextRunAt } from "@openbooks/reports";
 import { enqueueEmail, enqueueReportRun, type EnqueueEmailData } from "@openbooks/jobs";
-import { deriveEmailDeliveryKey, isValidEmailAddress, scheduledReportEmail } from "@openbooks/emails";
+import {
+  deriveEmailDeliveryKey,
+  isValidEmailAddress,
+  scheduledReportEmail,
+} from "@openbooks/emails";
 import { storeEmailAttachments } from "./email-attachments.ts";
 import {
   settleStagedAttachmentsAfterEnqueueError,
@@ -76,7 +80,8 @@ type CadenceRow = {
  */
 export async function materializeDueReportRuns(now = new Date(), limit = 50): Promise<string[]> {
   return db.transaction(async (tx) => {
-    const due = (await tx.execute<CadenceRow>(sql`
+    const due = await tx.execute<CadenceRow>(
+      sql`
       select id, org_id, definition_id, cadence, day_of_week, day_of_month,
              hour, minute, timezone, recipient_emails, filters, next_run_at, authorization_snapshot
         from report_schedules
@@ -92,19 +97,25 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
        order by next_run_at
        for update skip locked
        limit ${Math.max(1, Math.min(limit, 500))}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const runIds: string[] = [];
     for (const schedule of due) {
       const scheduledFor = new Date(schedule.next_run_at);
-      const next = computeNextRunAt({
-        cadence: schedule.cadence,
-        dayOfWeek: schedule.day_of_week,
-        dayOfMonth: schedule.day_of_month,
-        hour: schedule.hour,
-        minute: schedule.minute,
-        timezone: schedule.timezone,
-      }, scheduledFor);
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const next = computeNextRunAt(
+        {
+          cadence: schedule.cadence,
+          dayOfWeek: schedule.day_of_week,
+          dayOfMonth: schedule.day_of_month,
+          hour: schedule.hour,
+          minute: schedule.minute,
+          timezone: schedule.timezone,
+        },
+        scheduledFor,
+      );
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
         insert into report_runs
           (org_id, schedule_id, definition_id, trigger, status, scheduled_for,
            recipient_emails, filters, next_attempt_at, authorization_snapshot)
@@ -116,7 +127,9 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
           where schedule_id is not null and scheduled_for is not null
         do nothing
         returning id
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (inserted[0]) runIds.push(inserted[0].id);
       await tx.execute(sql`
         update report_schedules set next_run_at=${next}, updated_at=now()
@@ -136,7 +149,14 @@ export async function dispatchQueuedReportRuns(
     update report_runs set status='queued', locked_at=null, next_attempt_at=${now}, updated_at=now()
      where trigger='scheduled' and status='running' and locked_at < ${new Date(now.getTime() - STALE_RUN_MS)}
   `);
-  const rows = (await db.execute<{ id: string; org_id: string; definition_id: string; schedule_id: string; dispatch_count: number }>(sql`
+  const rows = await db.execute<{
+    id: string;
+    org_id: string;
+    definition_id: string;
+    schedule_id: string;
+    dispatch_count: number;
+  }>(
+    sql`
     select id, org_id, definition_id, schedule_id, dispatch_count
       from report_runs
      where trigger='scheduled'
@@ -145,12 +165,19 @@ export async function dispatchQueuedReportRuns(
        and coalesce(next_attempt_at, created_at) <= ${now}
      order by coalesce(next_attempt_at, created_at)
      limit 100
-  `, "objects"));
+  `,
+    "objects",
+  );
   let dispatched = 0;
   for (const row of rows) {
     const jobId = `report-run|${row.id}|${row.dispatch_count}`;
     await enqueue(
-      { runId: row.id, orgId: row.org_id, definitionId: row.definition_id, scheduleId: row.schedule_id },
+      {
+        runId: row.id,
+        orgId: row.org_id,
+        definitionId: row.definition_id,
+        scheduleId: row.schedule_id,
+      },
       { jobId },
     );
     // The fence serializes concurrent dispatchers: a loser observes zero
@@ -166,23 +193,39 @@ export async function dispatchQueuedReportRuns(
   return dispatched;
 }
 
-export type ReportRenderer = (orgId: string, definitionId: string, runId: string) => Promise<Buffer>;
+export type ReportRenderer = (
+  orgId: string,
+  definitionId: string,
+  runId: string,
+) => Promise<Buffer>;
 
 /** Render once, retain immutable bytes/hash, and create recipient outbox rows atomically. */
-export async function processScheduledReportRun(runId: string, render: ReportRenderer): Promise<{ skipped?: true; deliveries?: number; unclaimed?: true }> {
+export async function processScheduledReportRun(
+  runId: string,
+  render: ReportRenderer,
+): Promise<{ skipped?: true; deliveries?: number; unclaimed?: true }> {
   // The claim below is a lease: locked_at names this renderer's ownership and
   // the stale-run sweep (dispatchQueuedReportRuns) may reassign it after
   // STALE_RUN_MS. Every terminal write below is conditional on still holding
   // that lease — a renderer whose lease was stolen stands down instead of
   // letting a late failure overwrite another renderer's success.
-  const claimed = (await db.execute<{ org_id: string; definition_id: string; recipient_emails: string[]; attempt_count: number; locked_at: Date | string }>(sql`
+  const claimed = await db.execute<{
+    org_id: string;
+    definition_id: string;
+    recipient_emails: string[];
+    attempt_count: number;
+    locked_at: Date | string;
+  }>(
+    sql`
     update report_runs
        set status='running', attempt_count=attempt_count+1, started_at=coalesce(started_at,now()),
            locked_at=now(), error=null, updated_at=now()
      where id=${runId} and trigger='scheduled' and status in ('queued','failed')
        and attempt_count < ${MAX_RUN_ATTEMPTS}
      returning org_id, definition_id, recipient_emails, attempt_count, locked_at
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = claimed[0];
   if (!row) {
     // A stored artifact is proof the run already delivered, so standing
@@ -190,7 +233,10 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
     // another renderer, or unknown — none of which is a skip, so return a
     // named outcome the worker surfaces on the completed job instead of
     // reporting success-by-silence.
-    const complete = (await db.execute(sql`select 1 from report_run_artifacts where run_id=${runId}`, "objects"));
+    const complete = await db.execute(
+      sql`select 1 from report_run_artifacts where run_id=${runId}`,
+      "objects",
+    );
     if (complete[0]) return { skipped: true };
     return { unclaimed: true };
   }
@@ -207,17 +253,28 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
     async () => {
       const startedAt = Date.now();
       try {
-        const meta = (await db.execute<{ report_name: string }>(sql`
+        const meta = await db.execute<{ report_name: string }>(
+          sql`
           select rd.name as report_name from report_definitions rd
            where rd.id=${row.definition_id} and rd.org_id=${row.org_id}
-        `, "objects"));
+        `,
+          "objects",
+        );
         if (!meta[0]) throw new Error("scheduled report definition is unavailable");
         const pdf = await render(row.org_id, row.definition_id, runId);
-        if (pdf.length === 0) throw new Error("scheduled report renderer returned an empty artifact");
-        const slug = meta[0].report_name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-|-$/g, "");
+        if (pdf.length === 0)
+          throw new Error("scheduled report renderer returned an empty artifact");
+        const slug = meta[0].report_name
+          .replace(/[^a-z0-9]+/gi, "-")
+          .toLowerCase()
+          .replace(/^-|-$/g, "");
         const filename = `${slug || "report"}-${await businessToday(row.org_id)}.pdf`;
         const hash = createHash("sha256").update(pdf).digest("hex");
-        const recipients = [...new Set((row.recipient_emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))];
+        const recipients = [
+          ...new Set(
+            (row.recipient_emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean),
+          ),
+        ];
 
         // The lease is taken FIRST, before any insert: the row lock confirms
         // this renderer still owns the run, and holding it to commit freezes
@@ -229,12 +286,15 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
         // longer ours) means the sweep reassigned this run; stand down and
         // let the current owner drive it to terminal.
         const completed = await db.transaction(async (tx) => {
-          const held = (await tx.execute<{ id: string }>(sql`
+          const held = await tx.execute<{ id: string }>(
+            sql`
             select id from report_runs
              where id=${runId} and org_id=${row.org_id}
                and status='running' and locked_at=${row.locked_at}
              for update
-          `, "objects"));
+          `,
+            "objects",
+          );
           if (held.length === 0) return false;
           await tx.execute(sql`
             insert into report_run_artifacts
@@ -251,13 +311,16 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
               on conflict (run_id, recipient) do nothing
             `);
           }
-          const stamped = (await tx.execute<{ id: string }>(sql`
+          const stamped = await tx.execute<{ id: string }>(
+            sql`
             update report_runs set status='succeeded', finished_at=now(), locked_at=null,
                    next_attempt_at=null, updated_at=now()
              where id=${runId} and org_id=${row.org_id}
                and status='running' and locked_at=${row.locked_at}
              returning id
-          `, "objects"));
+          `,
+            "objects",
+          );
           return stamped.length > 0;
         });
         if (!completed) return { skipped: true };
@@ -275,7 +338,8 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
         // Conditional on the lease for the same reason as the success path:
         // a late failure from a superseded renderer must not overwrite the
         // current owner's outcome (in particular, another renderer's success).
-        const marked = (await db.execute<{ becameTerminal: boolean }>(sql`
+        const marked = await db.execute<{ becameTerminal: boolean }>(
+          sql`
           update report_runs set status='failed', error=${message.slice(0, 1000)}, finished_at=${failedAt},
                  locked_at=null, next_attempt_at=${new Date(failedAt.getTime() + delay)},
                  terminal_failed_at = case when ${terminal}
@@ -290,7 +354,9 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
            returning (${terminal}
                      and terminal_failed_by = ${REPORT_RUN_WORKER_IDENTITY}
                      and terminal_failed_at = ${failedAt}) as "becameTerminal"
-        `, "objects"));
+        `,
+          "objects",
+        );
         // No row: the lease moved on (stale sweep reassigned or another
         // renderer finished). The current owner drives the outcome; this
         // render's failure is stale evidence, not a new failure.
@@ -328,7 +394,8 @@ async function quarantineUndeliverableReportDelivery(
   now: Date,
 ): Promise<void> {
   const reason = `invalid recipient email address: ${row.recipient}`.slice(0, 1000);
-  const marked = (await db.execute<{ becameTerminal: boolean }>(sql`
+  const marked = await db.execute<{ becameTerminal: boolean }>(
+    sql`
     update report_delivery_outbox set status='failed', error=${reason},
            attempt_count=${MAX_DELIVERY_ATTEMPTS}, next_attempt_at=${now},
            terminal_failed_at = coalesce(terminal_failed_at, ${now}),
@@ -339,7 +406,9 @@ async function quarantineUndeliverableReportDelivery(
      where id=${row.id} and org_id=${row.org_id} and status in ('pending','failed')
      returning (terminal_failed_by = ${EMAIL_DELIVERY_WORKER_IDENTITY}
                 and terminal_failed_at = ${now}) as "becameTerminal"
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (marked[0]?.becameTerminal) {
     logTerminalFailure({
       surface: "report_delivery_outbox",
@@ -382,40 +451,72 @@ const REBUILD_LIVE_ACTIVITY_MINUTES = 5;
 async function rebuildStuckEnqueuedDeliveries(now: Date): Promise<number> {
   const horizon = new Date(now.getTime() - STUCK_ENQUEUED_REBUILD_MINUTES * 60_000);
   const liveAfter = new Date(now.getTime() - REBUILD_LIVE_ACTIVITY_MINUTES * 60_000);
-  const stale = (await db.execute<{
-    id: string; org_id: string; recipient: string; dispatch_count: number; queue_job_id: string | null;
-  }>(sql`
+  const stale = await db.execute<{
+    id: string;
+    org_id: string;
+    recipient: string;
+    dispatch_count: number;
+    queue_job_id: string | null;
+  }>(
+    sql`
     select d.id, d.org_id, d.recipient, d.dispatch_count, d.queue_job_id
       from report_delivery_outbox d
      where d.status = 'enqueued' and d.next_attempt_at < ${horizon}
        and d.terminal_failed_at is null
      order by d.next_attempt_at
      limit 100
-  `, "objects"));
+  `,
+    "objects",
+  );
   let rebuilt = 0;
   for (const row of stale) {
     try {
-      const deliveryKey = deriveEmailDeliveryKey({ orgId: row.org_id, scope: `report:${row.id}`, to: row.recipient });
-      const log = (await db.execute<{ id: string; status: string; provider_message_id: string | null; updated_at: string | Date }>(sql`
+      const deliveryKey = deriveEmailDeliveryKey({
+        orgId: row.org_id,
+        scope: `report:${row.id}`,
+        to: row.recipient,
+      });
+      const log = await db.execute<{
+        id: string;
+        status: string;
+        provider_message_id: string | null;
+        updated_at: string | Date;
+      }>(
+        sql`
         select id, status, provider_message_id, updated_at from email_log
          where org_id = ${row.org_id} and delivery_key = ${deliveryKey}
          order by updated_at desc
          limit 5
-      `, "objects"));
+      `,
+        "objects",
+      );
       const sent = log.find((entry) => entry.status === "sent");
       if (sent) {
-        await markReportDeliverySent(row.org_id, row.id, sent.id, sent.provider_message_id ?? "unknown");
+        await markReportDeliverySent(
+          row.org_id,
+          row.id,
+          sent.id,
+          sent.provider_message_id ?? "unknown",
+        );
         continue;
       }
       // The driver returns timestamptz as a string; compare as Dates (a raw
       // string >= Date comparison is always false and would rebuild live rows).
-      if (log.some((entry) => (entry.status === "queued" || entry.status === "sending") && new Date(entry.updated_at) >= liveAfter)) {
+      if (
+        log.some(
+          (entry) =>
+            (entry.status === "queued" || entry.status === "sending") &&
+            new Date(entry.updated_at) >= liveAfter,
+        )
+      ) {
         continue;
       }
       try {
         const queue = getEmailQueue();
         const candidates = new Set(
-          [row.queue_job_id, `report-delivery|${row.id}|${row.dispatch_count - 1}`].filter((id): id is string => typeof id === "string" && id.length > 0),
+          [row.queue_job_id, `report-delivery|${row.id}|${row.dispatch_count - 1}`].filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          ),
         );
         for (const jobId of candidates) {
           await queue.remove(jobId);
@@ -453,40 +554,72 @@ async function rebuildStuckEnqueuedDeliveries(now: Date): Promise<number> {
 async function recoverStuckSendingDeliveries(now: Date): Promise<number> {
   const horizon = new Date(now.getTime() - STUCK_ENQUEUED_REBUILD_MINUTES * 60_000);
   const liveAfter = new Date(now.getTime() - REBUILD_LIVE_ACTIVITY_MINUTES * 60_000);
-  const stale = (await db.execute<{
-    id: string; org_id: string; recipient: string; dispatch_count: number; queue_job_id: string | null;
-  }>(sql`
+  const stale = await db.execute<{
+    id: string;
+    org_id: string;
+    recipient: string;
+    dispatch_count: number;
+    queue_job_id: string | null;
+  }>(
+    sql`
     select d.id, d.org_id, d.recipient, d.dispatch_count, d.queue_job_id
       from report_delivery_outbox d
      where d.status = 'sending' and d.updated_at < ${horizon}
        and d.terminal_failed_at is null
      order by d.updated_at
      limit 100
-  `, "objects"));
+  `,
+    "objects",
+  );
   let recovered = 0;
   for (const row of stale) {
     try {
-      const deliveryKey = deriveEmailDeliveryKey({ orgId: row.org_id, scope: `report:${row.id}`, to: row.recipient });
-      const log = (await db.execute<{ id: string; status: string; provider_message_id: string | null; updated_at: string | Date }>(sql`
+      const deliveryKey = deriveEmailDeliveryKey({
+        orgId: row.org_id,
+        scope: `report:${row.id}`,
+        to: row.recipient,
+      });
+      const log = await db.execute<{
+        id: string;
+        status: string;
+        provider_message_id: string | null;
+        updated_at: string | Date;
+      }>(
+        sql`
         select id, status, provider_message_id, updated_at from email_log
          where org_id = ${row.org_id} and delivery_key = ${deliveryKey}
          order by updated_at desc
          limit 5
-      `, "objects"));
+      `,
+        "objects",
+      );
       const sent = log.find((entry) => entry.status === "sent");
       if (sent) {
-        await markReportDeliverySent(row.org_id, row.id, sent.id, sent.provider_message_id ?? "unknown");
+        await markReportDeliverySent(
+          row.org_id,
+          row.id,
+          sent.id,
+          sent.provider_message_id ?? "unknown",
+        );
         continue;
       }
       // The driver returns timestamptz as a string; compare as Dates (a raw
       // string >= Date comparison is always false and would recover live rows).
-      if (log.some((entry) => (entry.status === "queued" || entry.status === "sending") && new Date(entry.updated_at) >= liveAfter)) {
+      if (
+        log.some(
+          (entry) =>
+            (entry.status === "queued" || entry.status === "sending") &&
+            new Date(entry.updated_at) >= liveAfter,
+        )
+      ) {
         continue;
       }
       try {
         const queue = getEmailQueue();
         const candidates = new Set(
-          [row.queue_job_id, `report-delivery|${row.id}|${row.dispatch_count - 1}`].filter((id): id is string => typeof id === "string" && id.length > 0),
+          [row.queue_job_id, `report-delivery|${row.id}|${row.dispatch_count - 1}`].filter(
+            (id): id is string => typeof id === "string" && id.length > 0,
+          ),
         );
         for (const jobId of candidates) {
           await queue.remove(jobId);
@@ -494,13 +627,16 @@ async function recoverStuckSendingDeliveries(now: Date): Promise<number> {
       } catch {
         // Redis down: the redispatch below fails too and retries — never a duplicate.
       }
-      const moved = (await db.execute<{ id: string }>(sql`
+      const moved = await db.execute<{ id: string }>(
+        sql`
         update report_delivery_outbox set status='failed',
                error='delivery worker lost while sending; rebuilt for redispatch',
                next_attempt_at=${now}, updated_at=${now}
          where id=${row.id} and org_id=${row.org_id} and status='sending'
          returning id
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (moved[0]) recovered++;
     } catch (error) {
       console.error(`[reports] recovery of stuck sending delivery ${row.id} failed:`, error);
@@ -520,10 +656,19 @@ export async function dispatchReportDeliveries(
   // pending/failed scan forever.
   await rebuildStuckEnqueuedDeliveries(now);
   await recoverStuckSendingDeliveries(now);
-  const due = (await db.execute<{
-    id: string; org_id: string; run_id: string; recipient: string; dispatch_count: number;
-    filename: string; content_type: string; bytes: Buffer; report_name: string; org_name: string;
-  }>(sql`
+  const due = await db.execute<{
+    id: string;
+    org_id: string;
+    run_id: string;
+    recipient: string;
+    dispatch_count: number;
+    filename: string;
+    content_type: string;
+    bytes: Buffer;
+    report_name: string;
+    org_name: string;
+  }>(
+    sql`
     select d.id, d.org_id, d.run_id, d.recipient, d.dispatch_count,
            a.filename, a.content_type, a.bytes, rd.name as report_name, o.name as org_name
       from report_delivery_outbox d
@@ -535,26 +680,35 @@ export async function dispatchReportDeliveries(
        and d.attempt_count < ${MAX_DELIVERY_ATTEMPTS}
      order by d.next_attempt_at
      limit 100
-  `, "objects"));
+  `,
+    "objects",
+  );
   let dispatched = 0;
   for (const row of due) {
     if (!isValidEmailAddress(row.recipient)) {
       await quarantineUndeliverableReportDelivery(row, now);
       continue;
     }
-    const mail = scheduledReportEmail({ orgName: row.org_name, reportName: row.report_name, attachmentName: row.filename });
+    const mail = scheduledReportEmail({
+      orgName: row.org_name,
+      reportName: row.report_name,
+      attachmentName: row.filename,
+    });
     const jobId = `report-delivery|${row.id}|${row.dispatch_count}`;
     // Claim the outbox row BEFORE staging: concurrent dispatchers select the
     // same pending row and only the claimant may stage. Staging keys derive
     // from the dispatch identity, so even a fenced-out loser's put lands on
     // the same bytes the winner staged — never a fresh orphan generation.
     // The status + generation guard is the arbiter: exactly one claimant wins.
-    const claimed = (await db.execute<{ id: string }>(sql`
+    const claimed = await db.execute<{ id: string }>(
+      sql`
       update report_delivery_outbox set status='enqueued', dispatch_count=dispatch_count+1,
              queue_job_id=${jobId}, error=null, updated_at=now()
        where id=${row.id} and org_id=${row.org_id} and status in ('pending','failed') and dispatch_count=${row.dispatch_count}
        returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!claimed[0]) continue;
     // Stage the rendered bytes outside the queue payload: the worker fetches
     // them at send time instead of Redis holding file contents for days.
@@ -562,7 +716,11 @@ export async function dispatchReportDeliveries(
     // overwrites the same blob instead of orphaning a fresh random key.
     const attachments = await storeEmailAttachments(
       [
-        { filename: row.filename, content: Buffer.from(row.bytes).toString("base64"), contentType: row.content_type },
+        {
+          filename: row.filename,
+          content: Buffer.from(row.bytes).toString("base64"),
+          contentType: row.content_type,
+        },
       ],
       { storageKeySeed: jobId, orgId: row.org_id },
     );
@@ -597,7 +755,7 @@ export async function dispatchReportDeliveries(
         });
         console.warn(
           `[reports] email enqueue for delivery ${row.id} threw after queue acceptance ` +
-          `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
+            `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
         );
       } catch {
         await db.execute(sql`
@@ -612,11 +770,14 @@ export async function dispatchReportDeliveries(
     // Confirm the row still carries this dispatch: a concurrent suppression
     // or rebuild may have moved it after staging. Only an applied confirm
     // counts — a fenced-out dispatch is never reported as done.
-    const confirmed = (await db.execute<{ id: string }>(sql`
+    const confirmed = await db.execute<{ id: string }>(
+      sql`
       update report_delivery_outbox set updated_at=now()
        where id=${row.id} and org_id=${row.org_id} and status='enqueued' and queue_job_id=${jobId}
        returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!confirmed[0]) {
       // This attempt's staged refs belong to no live dispatch. Settle them
       // through the shared helper: it keeps them only when the queued job
@@ -627,7 +788,9 @@ export async function dispatchReportDeliveries(
           attachments,
           data: emailData,
           jobId,
-          error: new Error(`report delivery ${row.id} left 'enqueued' before its dispatch confirmed`),
+          error: new Error(
+            `report delivery ${row.id} left 'enqueued' before its dispatch confirmed`,
+          ),
           probeQueuedJob: deps.probeQueuedJob,
         });
       } catch {
@@ -660,13 +823,20 @@ function logDeliveryNotApplied(deliveryId: string, transition: string, legalFrom
   );
 }
 
-export async function markReportDeliveryStarted(orgId: string, deliveryId: string, jobId: string | null): Promise<boolean> {
-  const marked = await db.execute<{ id: string }>(sql`
+export async function markReportDeliveryStarted(
+  orgId: string,
+  deliveryId: string,
+  jobId: string | null,
+): Promise<boolean> {
+  const marked = await db.execute<{ id: string }>(
+    sql`
     update report_delivery_outbox set status='sending', attempt_count=attempt_count+1,
            last_attempt_at=now(), queue_job_id=coalesce(${jobId},queue_job_id), updated_at=now()
      where id=${deliveryId} and org_id=${orgId} and status in ('enqueued','sending')
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (marked[0]) return true;
   logDeliveryNotApplied(deliveryId, "sending", "enqueued/sending");
   return false;
@@ -678,16 +848,29 @@ export async function markReportDeliveryStarted(orgId: string, deliveryId: strin
 // already-sent row into a second recorded send. An already-sent row is
 // success (idempotent completion, like the dunning claim settle); anything
 // else unmoved is false and the caller must not proceed as if sent.
-export async function markReportDeliverySent(orgId: string, deliveryId: string, emailLogId: string, providerMessageId: string): Promise<boolean> {
-  const marked = await db.execute<{ id: string }>(sql`
+export async function markReportDeliverySent(
+  orgId: string,
+  deliveryId: string,
+  emailLogId: string,
+  providerMessageId: string,
+): Promise<boolean> {
+  const marked = await db.execute<{ id: string }>(
+    sql`
     update report_delivery_outbox set status='sent', email_log_id=${emailLogId}, provider_message_id=${providerMessageId},
            sent_at=now(), error=null, updated_at=now() where id=${deliveryId} and org_id=${orgId} and status in ('sending','enqueued')
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (marked[0]) return true;
-  const current = (await db.execute<{ status: string }>(sql`
+  const current = (
+    await db.execute<{ status: string }>(
+      sql`
     select status from report_delivery_outbox where id=${deliveryId} and org_id=${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (current?.status === "sent") return true;
   logDeliveryNotApplied(deliveryId, "sent", "sending/enqueued");
   return false;
@@ -697,17 +880,30 @@ export async function markReportDeliverySent(orgId: string, deliveryId: string, 
 // stale retry/racing callback must not rewrite an already-sent row into a
 // suppression, erasing the evidence that the report email was delivered.
 // An already-suppressed row is success; anything else unmoved is false.
-export async function markReportDeliverySuppressed(orgId: string, deliveryId: string, emailLogId: string, reason: string): Promise<boolean> {
-  const marked = await db.execute<{ id: string }>(sql`
+export async function markReportDeliverySuppressed(
+  orgId: string,
+  deliveryId: string,
+  emailLogId: string,
+  reason: string,
+): Promise<boolean> {
+  const marked = await db.execute<{ id: string }>(
+    sql`
     update report_delivery_outbox set status='suppressed', email_log_id=${emailLogId}, error=${reason.slice(0, 1000)},
            updated_at=now() where id=${deliveryId} and org_id=${orgId}
              and status = any(array['pending','enqueued','sending','failed'])
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (marked[0]) return true;
-  const current = (await db.execute<{ status: string }>(sql`
+  const current = (
+    await db.execute<{ status: string }>(
+      sql`
     select status from report_delivery_outbox where id=${deliveryId} and org_id=${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (current?.status === "suppressed") return true;
   logDeliveryNotApplied(deliveryId, "suppressed", "pending/enqueued/sending/failed");
   return false;
@@ -728,10 +924,11 @@ export async function markReportDeliveryFailed(
   // rows. That conjunction is the one and only terminal transition, so stamp
   // and log it in the same statement that records the failure.
   const failedAt = new Date();
-  const marked = (await db.execute<{
+  const marked = await db.execute<{
     becameTerminal: boolean;
     attempts: number;
-  }>(sql`
+  }>(
+    sql`
     update report_delivery_outbox set status=${finalQueueAttempt ? "failed" : "enqueued"}, email_log_id=${emailLogId},
            error=${error.slice(0, 1000)}, next_attempt_at=${new Date(failedAt.getTime() + 5 * 60_000)},
            terminal_failed_at = case when ${finalQueueAttempt} and attempt_count >= ${MAX_DELIVERY_ATTEMPTS}
@@ -747,7 +944,9 @@ export async function markReportDeliveryFailed(
                (attempt_count >= ${MAX_DELIVERY_ATTEMPTS}
                 and terminal_failed_by = ${EMAIL_DELIVERY_WORKER_IDENTITY}
                 and terminal_failed_at = ${failedAt}) as "becameTerminal"
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = marked[0];
   if (row?.becameTerminal) {
     logTerminalFailure({

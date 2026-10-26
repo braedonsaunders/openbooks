@@ -28,20 +28,38 @@ test("asset account overrides accept shared and caller-visible accounts and refu
              (${inheritableAccountId}, ${org.orgId}, 'ASSET-PARENT', 'Parent account inherited by child', 'asset_fixed', ${org.subsidiaryId}, true)`);
 
     const scope = [childId, siblingId];
-    assert.equal(await parseAccountOverride(db, org.orgId, childId, childAccountId, "invalid_asset_account"), childAccountId);
-    assert.equal(await parseAccountOverride(db, org.orgId, childId, sharedAccountId, "invalid_asset_account"), sharedAccountId);
-    assert.equal(await parseAccountOverride(db, org.orgId, childId, inheritableAccountId, "invalid_asset_account"), inheritableAccountId);
+    assert.equal(
+      await parseAccountOverride(db, org.orgId, childId, childAccountId, "invalid_asset_account"),
+      childAccountId,
+    );
+    assert.equal(
+      await parseAccountOverride(db, org.orgId, childId, sharedAccountId, "invalid_asset_account"),
+      sharedAccountId,
+    );
+    assert.equal(
+      await parseAccountOverride(
+        db,
+        org.orgId,
+        childId,
+        inheritableAccountId,
+        "invalid_asset_account",
+      ),
+      inheritableAccountId,
+    );
     await assert.rejects(
       parseAccountOverride(db, org.orgId, childId, siblingAccountId, "invalid_asset_account"),
       (error: unknown) => error instanceof FieldRefusal && error.code === "invalid_asset_account",
     );
 
-    const pickerAccounts = await db.execute<{ id: string }>(sql`
+    const pickerAccounts = await db.execute<{ id: string }>(
+      sql`
       select a.id from accounts a
        where a.org_id = ${org.orgId} and a.is_active and not a.is_summary
          ${assetAccountScopeSql(org.orgId, scope)}
          and a.id = any(${`{${childAccountId},${siblingAccountId},${sharedAccountId},${inheritableAccountId}}`}::uuid[])
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.deepEqual(
       new Set(pickerAccounts.map((row) => row.id)),
       new Set([childAccountId, siblingAccountId, sharedAccountId, inheritableAccountId]),

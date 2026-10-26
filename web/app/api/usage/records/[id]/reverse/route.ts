@@ -4,22 +4,30 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 
 const Params = z.object({ id: uuidString() }).strict();
-const Body = z.object({
-  reason: z.string().trim().min(1),
-  occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-}).strict();
+const Body = z
+  .object({
+    reason: z.string().trim().min(1),
+    occurredOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+  })
+  .strict();
 
 export const POST = defineRoute({
   permission: "usage.manage",
   feature: "usageBilling",
   params: Params,
   body: Body,
-  handler: async ({ authz, params, body }) => Response.json(await reverseUsageRecord(
-    authz.user.orgId,
-    authz.user.id,
-    params.id,
-    body.reason,
-    body.occurredOn,
-    authz.allowedSubsidiaryIds,
-  )),
+  handler: async ({ authz, params, body }) =>
+    Response.json(
+      await reverseUsageRecord(
+        authz.user.orgId,
+        authz.user.id,
+        params.id,
+        body.reason,
+        body.occurredOn,
+        authz.allowedSubsidiaryIds,
+      ),
+    ),
 });

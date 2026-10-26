@@ -76,9 +76,7 @@ export function accountGroupNamePatternError(pattern: unknown): string | null {
 
   // Keep a synthetic root frame so top-level alternatives (for example the
   // seeded `rent|lease` rules) are handled like alternatives inside a group.
-  const groups: GroupFrame[] = [
-    { hasQuantifier: false, hasAlternation: false },
-  ];
+  const groups: GroupFrame[] = [{ hasQuantifier: false, hasAlternation: false }];
   let atom: Atom | undefined;
   let escaped = false;
   let inCharacterClass = false;
@@ -145,11 +143,7 @@ export function accountGroupNamePatternError(pattern: unknown): string | null {
     }
 
     // `?:` is a non-capturing group prefix, not an optional quantifier.
-    if (
-      char === "?" &&
-      pattern[index - 1] === "(" &&
-      pattern[index + 1] === ":"
-    ) {
+    if (char === "?" && pattern[index - 1] === "(" && pattern[index + 1] === ":") {
       continue;
     }
 
@@ -172,10 +166,7 @@ export function accountGroupNamePatternError(pattern: unknown): string | null {
       // quantifier. It is not an independently quantified atom.
       if (char === "?" && atom?.quantified) continue;
 
-      if (
-        atom?.kind === "group" &&
-        (atom.hasQuantifier || atom.hasAlternation)
-      ) {
+      if (atom?.kind === "group" && (atom.hasQuantifier || atom.hasAlternation)) {
         return "contains catastrophic backtracking";
       }
       if (atom) atom.quantified = true;
@@ -204,11 +195,16 @@ export function accountGroupNamePatternError(pattern: unknown): string | null {
   return null;
 }
 
-function matchesRule(acct: { number: string | null; name: string; type: string }, m: AccountGroupMatch): boolean {
-  const conditions = (m.accountTypes?.length ? 1 : 0) + (m.numberPrefixes?.length ? 1 : 0) + (m.namePattern ? 1 : 0);
+function matchesRule(
+  acct: { number: string | null; name: string; type: string },
+  m: AccountGroupMatch,
+): boolean {
+  const conditions =
+    (m.accountTypes?.length ? 1 : 0) + (m.numberPrefixes?.length ? 1 : 0) + (m.namePattern ? 1 : 0);
   if (conditions === 0) return false; // empty rule never matches (use isCatchAll)
   if (m.accountTypes?.length && !m.accountTypes.includes(acct.type)) return false;
-  if (m.numberPrefixes?.length && !m.numberPrefixes.some((p) => (acct.number ?? "").startsWith(p))) return false;
+  if (m.numberPrefixes?.length && !m.numberPrefixes.some((p) => (acct.number ?? "").startsWith(p)))
+    return false;
   if (m.namePattern) {
     if (accountGroupNamePatternError(m.namePattern)) return false;
     let re: RegExp;
@@ -222,9 +218,12 @@ function matchesRule(acct: { number: string | null; name: string; type: string }
   return true;
 }
 
-export async function listAccountGroups(dimension: string, orgId?: string): Promise<AccountGroup[]> {
+export async function listAccountGroups(
+  dimension: string,
+  orgId?: string,
+): Promise<AccountGroup[]> {
   const orgFilter = orgId ? sql` and org_id = ${orgId}` : sql``;
-  const r = (await db.execute<{
+  const r = await db.execute<{
     id: string;
     dimension: string;
     key: string;
@@ -233,12 +232,15 @@ export async function listAccountGroups(dimension: string, orgId?: string): Prom
     sort_order: number;
     match: AccountGroupMatch;
     is_catch_all: boolean;
-  }>(sql`
+  }>(
+    sql`
     select id, dimension, key, name, color, sort_order, match, is_catch_all
     from account_groups
     where dimension = ${dimension} and is_active = true${orgFilter}
     order by sort_order, name
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.map((x) => ({
     id: x.id,
     dimension: x.dimension,
@@ -262,25 +264,40 @@ type ClassificationAccount = { id: string; number: string | null; name: string; 
 
 async function classificationAccounts(orgId?: string) {
   const orgFilter = orgId ? sql` and org_id = ${orgId}` : sql``;
-  return db.execute<ClassificationAccount>(sql`select id, number, name, type from accounts where is_summary = false${orgFilter}`);
+  return db.execute<ClassificationAccount>(
+    sql`select id, number, name, type from accounts where is_summary = false${orgFilter}`,
+  );
 }
 
 /** Resolve several classifications over one fresh account population. No facts survive this read. */
-export async function resolveAccountGroupDimensions(dimensions: readonly string[], orgId?: string): Promise<Map<string, ResolvedGroups>> {
+export async function resolveAccountGroupDimensions(
+  dimensions: readonly string[],
+  orgId?: string,
+): Promise<Map<string, ResolvedGroups>> {
   const unique = [...new Set(dimensions)];
   if (unique.length === 0) return new Map();
   const accounts = classificationAccounts(orgId);
-  const resolved = await Promise.all(unique.map(async dimension =>
-    [dimension, await resolveGroupsWithAccounts(dimension, orgId, () => accounts)] as const));
+  const resolved = await Promise.all(
+    unique.map(
+      async (dimension) =>
+        [dimension, await resolveGroupsWithAccounts(dimension, orgId, () => accounts)] as const,
+    ),
+  );
   return new Map(resolved);
 }
 
-export async function resolveAccountGroups(dimension: string, orgId?: string): Promise<ResolvedGroups> {
+export async function resolveAccountGroups(
+  dimension: string,
+  orgId?: string,
+): Promise<ResolvedGroups> {
   return resolveGroupsWithAccounts(dimension, orgId, () => classificationAccounts(orgId));
 }
 
-async function resolveGroupsWithAccounts(dimension: string, orgId: string | undefined,
-  readAccounts: () => ReturnType<typeof classificationAccounts>): Promise<ResolvedGroups> {
+async function resolveGroupsWithAccounts(
+  dimension: string,
+  orgId: string | undefined,
+  readAccounts: () => ReturnType<typeof classificationAccounts>,
+): Promise<ResolvedGroups> {
   const orgFilter = orgId ? sql` and g.org_id = ${orgId}` : sql``;
   const [groups, pinRows, acctRows] = await Promise.all([
     listAccountGroups(dimension, orgId),
@@ -290,13 +307,16 @@ async function resolveGroupsWithAccounts(dimension: string, orgId: string | unde
       key: string;
       name: string;
       color: string | null;
-    }>(sql`
+    }>(
+      sql`
       select m.account_id, g.id as group_id, g.key, g.name, g.color
       from account_group_members m
       join account_groups g on g.id = m.group_id
       where g.dimension = ${dimension} and g.is_active = true${orgFilter}
       order by m.account_id, g.id
-    `, "objects"),
+    `,
+      "objects",
+    ),
     readAccounts(),
   ]);
 
@@ -333,7 +353,8 @@ async function resolveGroupsWithAccounts(dimension: string, orgId: string | unde
       continue;
     }
     const hit = groups.find((g) => !g.isCatchAll && matchesRule(acct, g.match)) ?? catchAll;
-    if (hit) byAccount.set(a.id, { groupId: hit.id, key: hit.key, name: hit.name, color: hit.color });
+    if (hit)
+      byAccount.set(a.id, { groupId: hit.id, key: hit.key, name: hit.name, color: hit.color });
   }
   return { groups, byAccount, pinned: new Set(pins.keys()) };
 }

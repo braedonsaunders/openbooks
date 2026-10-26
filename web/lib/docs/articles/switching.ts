@@ -1,15 +1,14 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const switchingFromSmallBusinessSystems: DocArticle = {
-  slug: 'switching-from-small-business-systems',
-  title: 'Switching from a Small Business System',
-  category: 'switching',
+  slug: "switching-from-small-business-systems",
+  title: "Switching from a Small Business System",
+  category: "switching",
   order: 1,
-  summary:
-    'Map familiar lists, forms, bank workflows, reports, and close controls into OpenBooks.',
-  updated: '2026-07-21',
-  keywords: ['small business', 'migration', 'classes', 'bank feed', 'familiarization'],
-  related: ['quick-start', 'banking-and-reconciliation', 'migration-and-cutover'],
+  summary: "Map familiar lists, forms, bank workflows, reports, and close controls into OpenBooks.",
+  updated: "2026-07-21",
+  keywords: ["small business", "migration", "classes", "bank feed", "familiarization"],
+  related: ["quick-start", "banking-and-reconciliation", "migration-and-cutover"],
   body: `# Switching from a Small Business System
 
 OpenBooks separates business transactions from their ledger entries and adds
@@ -64,18 +63,18 @@ and audit evidence required by policy. Preserve stable source identifiers.
 Reconcile account-period activity and open items, then verify dimensions,
 parties, projects, tax, and currency detail on representative transactions.
 `,
-}
+};
 
 export const switchingFromEnterpriseSystems: DocArticle = {
-  slug: 'switching-from-enterprise-systems',
-  title: 'Switching from an Enterprise System',
-  category: 'switching',
+  slug: "switching-from-enterprise-systems",
+  title: "Switching from an Enterprise System",
+  category: "switching",
   order: 2,
   summary:
-    'Map entities, dimensions, subledgers, workflows, reporting, and extensions into OpenBooks.',
-  updated: '2026-07-21',
-  keywords: ['enterprise', 'migration', 'dimensions', 'subledgers', 'familiarization'],
-  related: ['navigation-and-records', 'migration-and-cutover', 'analytics-and-saved-views'],
+    "Map entities, dimensions, subledgers, workflows, reporting, and extensions into OpenBooks.",
+  updated: "2026-07-21",
+  keywords: ["enterprise", "migration", "dimensions", "subledgers", "familiarization"],
+  related: ["navigation-and-records", "migration-and-cutover", "analytics-and-saved-views"],
   body: `# Switching from an Enterprise System
 
 OpenBooks covers the accounting and operations jobs expected from an enterprise
@@ -132,9 +131,9 @@ Prove trial balance and account-period activity, then reconcile AR, AP, bank,
 tax, fixed assets, inventory, projects, revenue, and intercompany detail. Keep
 the source read-only after cutover for historical evidence.
 `,
-}
+};
 
 export const switchingArticles: DocArticle[] = [
   switchingFromSmallBusinessSystems,
   switchingFromEnterpriseSystems,
-]
+];

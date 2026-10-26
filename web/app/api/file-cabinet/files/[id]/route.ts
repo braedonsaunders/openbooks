@@ -43,11 +43,9 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     const file = await getFile(gate.user.orgId, id, fileViewer(gate));
-    if (!file)
-      return notFound("record");
+    if (!file) return notFound("record");
     return NextResponse.json({ file });
   },
 });
@@ -59,20 +57,15 @@ export const PATCH = defineRoute({
   body: patchBodySchema0,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     // Editing (rename/move) a file needs Editor+ on it.
     const gateAccess = await requireFileAccess(gate, id, "editor");
     if (gateAccess) return gateAccess;
 
     const body = routeBody;
-    if (!body)
-      return NextResponse.json({ error: "invalid body" }, { status: 400 });
+    if (!body) return NextResponse.json({ error: "invalid body" }, { status: 400 });
 
-    const name =
-      typeof body.name === "string" && body.name.trim()
-        ? body.name.trim()
-        : null;
+    const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : null;
     const folderId = typeof body.folderId === "string" ? body.folderId : null;
     // Every refusal is decided BEFORE anything commits: the rename and the move
     // below share one transaction, so a refused move can never leave a rename
@@ -82,8 +75,7 @@ export const PATCH = defineRoute({
       const destGate = await requireFolderAccess(gate, folderId, "editor");
       if (destGate) return destGate;
     }
-    if (name === null && folderId === null)
-      return NextResponse.json({ ok: true });
+    if (name === null && folderId === null) return NextResponse.json({ ok: true });
     try {
       await inDbTransaction(async (tx) => {
         const audit = {
@@ -93,23 +85,11 @@ export const PATCH = defineRoute({
         };
         if (name !== null) {
           // The verb commits the rename and its attributable audit atomically.
-          const ok = await renameFile(
-            gate.user.orgId,
-            id,
-            name,
-            gate.user.id,
-            audit,
-          );
+          const ok = await renameFile(gate.user.orgId, id, name, gate.user.id, audit);
           if (!ok) throw new FilePatchAbort(404, "not found");
         }
         if (folderId !== null) {
-          const ok = await moveFile(
-            gate.user.orgId,
-            id,
-            folderId,
-            gate.user.id,
-            audit,
-          );
+          const ok = await moveFile(gate.user.orgId, id, folderId, gate.user.id, audit);
           if (!ok) throw new FilePatchAbort(400, "cannot move file");
         }
       });
@@ -129,8 +109,7 @@ export const DELETE = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     // Deleting needs Manager on the file.
     const gateAccess = await requireFileAccess(gate, id, "manager");
     if (gateAccess) return gateAccess;
@@ -141,15 +120,11 @@ export const DELETE = defineRoute({
     if (purge) {
       const outcome = await purgeFile(gate.user.orgId, id, audit);
       if (outcome === "retained") {
-        return NextResponse.json(
-          { error: "retained_evidence_cannot_be_purged" },
-          { status: 409 },
-        );
+        return NextResponse.json({ error: "retained_evidence_cannot_be_purged" }, { status: 409 });
       }
       if (outcome === "forbidden")
         return NextResponse.json({ error: "forbidden" }, { status: 403 });
-      if (outcome === "not_found")
-        return notFound("record");
+      if (outcome === "not_found") return notFound("record");
       return NextResponse.json({ ok: true });
     }
     const ok = await deleteFile(gate.user.orgId, id, audit);

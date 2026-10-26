@@ -1,46 +1,54 @@
-'use client'
+"use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
-import { cn } from '@openbooks/ui'
-import { compareDecimal } from '../../../lib/exact-decimal'
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+import { cn } from "@openbooks/ui";
+import { compareDecimal } from "../../../lib/exact-decimal";
 
 export interface QueryResult {
-  columns: string[]
-  rows: Record<string, unknown>[]
-  rowCount: number
-  truncated: boolean
-  durationMs: number
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+  truncated: boolean;
+  durationMs: number;
 }
 
 function isNumeric(v: unknown): boolean {
-  if (typeof v === 'number') return true
-  if (typeof v !== 'string') return false
-  return v.trim() !== '' && /^-?\d[\d,]*(\.\d+)?$/.test(v.trim())
+  if (typeof v === "number") return true;
+  if (typeof v !== "string") return false;
+  return v.trim() !== "" && /^-?\d[\d,]*(\.\d+)?$/.test(v.trim());
 }
 
 function cellText(v: unknown): string {
-  if (v === null || v === undefined) return ''
-  if (typeof v === 'object') return JSON.stringify(v)
-  return String(v)
+  if (v === null || v === undefined) return "";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
 }
 
 function decimalText(v: unknown): string | null {
-  const text = cellText(v).trim().replace(/,/g, '')
-  return /^[+-]?\d+(?:\.\d+)?$/.test(text) ? text : null
+  const text = cellText(v).trim().replace(/,/g, "");
+  return /^[+-]?\d+(?:\.\d+)?$/.test(text) ? text : null;
 }
 
 /** Compare numeric cells without coercing exact database decimals to Number. */
 export function compareNumericValues(left: unknown, right: unknown): number {
-  const leftDecimal = decimalText(left)
-  const rightDecimal = decimalText(right)
-  if (leftDecimal !== null && rightDecimal !== null) return compareDecimal(leftDecimal, rightDecimal)
-  return cellText(left).localeCompare(cellText(right), undefined, { numeric: true })
+  const leftDecimal = decimalText(left);
+  const rightDecimal = decimalText(right);
+  if (leftDecimal !== null && rightDecimal !== null)
+    return compareDecimal(leftDecimal, rightDecimal);
+  return cellText(left).localeCompare(cellText(right), undefined, { numeric: true });
 }
 
-type SortDir = 'asc' | 'desc' | null
+type SortDir = "asc" | "desc" | null;
 
 /**
  * The results surface of the SQL console: a virtualization-free but
@@ -49,59 +57,64 @@ type SortDir = 'asc' | 'desc' | null
  * null rendering. Purely presentational; the console owns the data.
  */
 export function ResultsGrid({ result, filter }: { result: QueryResult; filter: string }) {
-  const t = useTranslations('query')
-  const [sortCol, setSortCol] = useState<string | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>(null)
+  const t = useTranslations("query");
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
 
   // Which columns read as numeric (sampled from the first rows) → right-align
   // + numeric-aware sort.
   const numericCols = useMemo(() => {
-    const set = new Set<string>()
+    const set = new Set<string>();
     for (const col of result.columns) {
-      const sample = result.rows.slice(0, 25).map((r) => r[col]).filter((v) => v !== null && v !== undefined)
-      if (sample.length > 0 && sample.every(isNumeric)) set.add(col)
+      const sample = result.rows
+        .slice(0, 25)
+        .map((r) => r[col])
+        .filter((v) => v !== null && v !== undefined);
+      if (sample.length > 0 && sample.every(isNumeric)) set.add(col);
     }
-    return set
-  }, [result])
+    return set;
+  }, [result]);
 
   const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    if (!q) return result.rows
-    return result.rows.filter((r) => result.columns.some((c) => cellText(r[c]).toLowerCase().includes(q)))
-  }, [result, filter])
+    const q = filter.trim().toLowerCase();
+    if (!q) return result.rows;
+    return result.rows.filter((r) =>
+      result.columns.some((c) => cellText(r[c]).toLowerCase().includes(q)),
+    );
+  }, [result, filter]);
 
   const sorted = useMemo(() => {
-    if (!sortCol || !sortDir) return filtered
-    const num = numericCols.has(sortCol)
-    const dir = sortDir === 'asc' ? 1 : -1
+    if (!sortCol || !sortDir) return filtered;
+    const num = numericCols.has(sortCol);
+    const dir = sortDir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
-      const av = a[sortCol]
-      const bv = b[sortCol]
-      if (av === null || av === undefined) return 1
-      if (bv === null || bv === undefined) return -1
-      if (num) return compareNumericValues(av, bv) * dir
-      return cellText(av).localeCompare(cellText(bv), undefined, { numeric: true }) * dir
-    })
-  }, [filtered, sortCol, sortDir, numericCols])
+      const av = a[sortCol];
+      const bv = b[sortCol];
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
+      if (num) return compareNumericValues(av, bv) * dir;
+      return cellText(av).localeCompare(cellText(bv), undefined, { numeric: true }) * dir;
+    });
+  }, [filtered, sortCol, sortDir, numericCols]);
 
   function toggleSort(col: string) {
     if (sortCol !== col) {
-      setSortCol(col)
-      setSortDir('asc')
-    } else if (sortDir === 'asc') {
-      setSortDir('desc')
+      setSortCol(col);
+      setSortDir("asc");
+    } else if (sortDir === "asc") {
+      setSortDir("desc");
     } else {
-      setSortCol(null)
-      setSortDir(null)
+      setSortCol(null);
+      setSortDir(null);
     }
   }
 
   if (result.columns.length === 0) {
     return (
       <div className="flex h-full items-center justify-center p-10 text-sm text-slate-500 dark:text-slate-400">
-        {t('emptyResultSet')}
+        {t("emptyResultSet")}
       </div>
-    )
+    );
   }
 
   return (
@@ -113,31 +126,41 @@ export function ResultsGrid({ result, filter }: { result: QueryResult; filter: s
               #
             </SharedTableHead>
             {result.columns.map((c) => {
-              const active = sortCol === c
+              const active = sortCol === c;
               return (
                 <SharedTableHead
                   key={c}
                   onClick={() => toggleSort(c)}
                   className={cn(
-                    'group cursor-pointer select-none border-b border-slate-200 px-3 py-2 font-semibold whitespace-nowrap dark:border-slate-800',
-                    numericCols.has(c) ? 'text-right' : 'text-left',
-                    active ? 'text-teal-700 dark:text-teal-300' : 'text-slate-600 dark:text-slate-300',
+                    "group cursor-pointer select-none border-b border-slate-200 px-3 py-2 font-semibold whitespace-nowrap dark:border-slate-800",
+                    numericCols.has(c) ? "text-right" : "text-left",
+                    active
+                      ? "text-teal-700 dark:text-teal-300"
+                      : "text-slate-600 dark:text-slate-300",
                   )}
                 >
-                  <span className={cn('inline-flex items-center gap-1.5', numericCols.has(c) && 'flex-row-reverse')}>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5",
+                      numericCols.has(c) && "flex-row-reverse",
+                    )}
+                  >
                     <span className="font-mono">{c}</span>
                     {active ? (
-                      sortDir === 'asc' ? (
+                      sortDir === "asc" ? (
                         <ArrowUp size={13} className="shrink-0" />
                       ) : (
                         <ArrowDown size={13} className="shrink-0" />
                       )
                     ) : (
-                      <ChevronsUpDown size={13} className="shrink-0 text-slate-300 opacity-0 group-hover:opacity-100 dark:text-slate-600" />
+                      <ChevronsUpDown
+                        size={13}
+                        className="shrink-0 text-slate-300 opacity-0 group-hover:opacity-100 dark:text-slate-600"
+                      />
                     )}
                   </span>
                 </SharedTableHead>
-              )
+              );
             })}
           </SharedTableRow>
         </SharedTableHeader>
@@ -151,43 +174,52 @@ export function ResultsGrid({ result, filter }: { result: QueryResult; filter: s
                 {i + 1}
               </SharedTableCell>
               {result.columns.map((c) => {
-                const v = row[c]
-                const isNull = v === null || v === undefined
+                const v = row[c];
+                const isNull = v === null || v === undefined;
                 return (
                   <SharedTableCell
                     key={c}
                     className={cn(
-                      'max-w-[28rem] truncate px-3 py-1.5 align-top',
-                      numericCols.has(c) ? 'text-right font-mono tabular-nums text-slate-800 dark:text-slate-200' : 'text-slate-700 dark:text-slate-300',
+                      "max-w-[28rem] truncate px-3 py-1.5 align-top",
+                      numericCols.has(c)
+                        ? "text-right font-mono tabular-nums text-slate-800 dark:text-slate-200"
+                        : "text-slate-700 dark:text-slate-300",
                     )}
-                    title={isNull ? 'NULL' : cellText(v)}
+                    title={isNull ? "NULL" : cellText(v)}
                   >
-                    {isNull ? <span className="text-slate-300 dark:text-slate-600">∅</span> : cellText(v)}
+                    {isNull ? (
+                      <span className="text-slate-300 dark:text-slate-600">∅</span>
+                    ) : (
+                      cellText(v)
+                    )}
                   </SharedTableCell>
-                )
+                );
               })}
             </SharedTableRow>
           ))}
           {sorted.length === 0 ? (
             <SharedTableRow>
-              <SharedTableCell colSpan={result.columns.length + 1} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-                {t('noFilterMatch')}
+              <SharedTableCell
+                colSpan={result.columns.length + 1}
+                className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400"
+              >
+                {t("noFilterMatch")}
               </SharedTableCell>
             </SharedTableRow>
           ) : null}
         </SharedTableBody>
       </SharedTable>
     </div>
-  )
+  );
 }
 
 /** Serialize a result to CSV (RFC-4180-ish quoting). Shared by copy + download. */
 export function resultToCsv(result: QueryResult): string {
   const esc = (v: unknown) => {
-    const s = cellText(v)
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  const header = result.columns.map(esc).join(',')
-  const body = result.rows.map((r) => result.columns.map((c) => esc(r[c])).join(',')).join('\n')
-  return `${header}\n${body}`
+    const s = cellText(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = result.columns.map(esc).join(",");
+  const body = result.rows.map((r) => result.columns.map((c) => esc(r[c])).join(",")).join("\n");
+  return `${header}\n${body}`;
 }

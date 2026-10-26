@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
@@ -59,9 +69,10 @@ export const insightDashboards = pgTable(
      * Grid placement of cards: [{ cardId, x, y, w, h }] on a 12-column grid.
      * Card visibility is still governed by each card's own status/allowedRoles.
      */
-    layout: jsonb("layout").$type<
-      { cardId: string; x: number; y: number; w: number; h: number }[]
-    >().notNull().default([]),
+    layout: jsonb("layout")
+      .$type<{ cardId: string; x: number; y: number; w: number; h: number }[]>()
+      .notNull()
+      .default([]),
     status: text("status", { enum: INSIGHT_STATUSES }).notNull().default("draft"),
     allowedRoles: jsonb("allowed_roles").$type<string[]>(),
     /**

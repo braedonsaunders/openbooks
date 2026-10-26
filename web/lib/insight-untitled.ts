@@ -9,6 +9,6 @@
  * language sails through the publish gate. Import these — never re-spell
  * the English, and never store `t('...untitled')`.
  */
-export const UNTITLED_CARD_NAME = 'Untitled card'
+export const UNTITLED_CARD_NAME = "Untitled card";
 
-export const UNTITLED_DASHBOARD_NAME = 'Untitled dashboard'
+export const UNTITLED_DASHBOARD_NAME = "Untitled dashboard";

@@ -70,7 +70,11 @@ test("bare rows", async () => {
 
 test("the live repository has no unanchored assertion-bearing loops", () => {
   const findings = scanTree();
-  assert.deepEqual(findings, [], `${findings.length} unanchored loops:\n${findings.map((finding) => `${finding.file}:${finding.line} [${finding.name}] loop over \`${finding.collection}\``).join("\n")}`);
+  assert.deepEqual(
+    findings,
+    [],
+    `${findings.length} unanchored loops:\n${findings.map((finding) => `${finding.file}:${finding.line} [${finding.name}] loop over \`${finding.collection}\``).join("\n")}`,
+  );
 });
 
 test("non-test files and loops without asserts are out of scope", () => {

@@ -75,7 +75,8 @@ export async function liveReceiptQuantity(
   orgId: string,
   movementId: string,
 ): Promise<LiveReceiptQuantity> {
-  const rows = await runner.execute<LiveReceiptQuantity>(sql`
+  const rows = await runner.execute<LiveReceiptQuantity>(
+    sql`
     select (coalesce((select m.quantity from inventory_movements m
                       where m.org_id = ${orgId} and m.id = ${movementId}), 0)
             + coalesce((select sum(r.quantity) from inventory_movements r
@@ -93,7 +94,9 @@ export async function liveReceiptQuantity(
                            and not exists (
                              select 1 from inventory_movements r2
                               where r2.org_id = r.org_id and r2.reverses_movement_id = r.id
-                           )), 0))::text as value`, "objects");
+                           )), 0))::text as value`,
+    "objects",
+  );
   return rows[0] ?? { quantity: "0", value: "0" };
 }
 
@@ -112,7 +115,8 @@ export async function postedReturnQuantity(
     sourceMovementId: string;
   },
 ): Promise<string> {
-  const rows = await runner.execute<{ quantity: string }>(sql`
+  const rows = await runner.execute<{ quantity: string }>(
+    sql`
     select coalesce(sum(abs(prior.quantity)), 0)::text as quantity
       from inventory_movements prior
       join document_lines credit_line
@@ -123,6 +127,8 @@ export async function postedReturnQuantity(
        returnKind: input.returnKind,
        evidenceKey: input.evidenceKey,
        sourceId: sql`${input.sourceMovementId}`,
-     })}`, "objects");
+     })}`,
+    "objects",
+  );
   return rows[0]?.quantity ?? "0";
 }

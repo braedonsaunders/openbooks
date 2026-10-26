@@ -17,7 +17,10 @@ export class CustomerItemRefusal extends InventoryError {
 
 const FEATURES_REMEDY = "turn on Customer part numbers in Company Settings → Features";
 
-export async function assertCustomerPartNumbersEnabled(runner: SqlExecutor, orgId: string): Promise<void> {
+export async function assertCustomerPartNumbersEnabled(
+  runner: SqlExecutor,
+  orgId: string,
+): Promise<void> {
   if (!(await orgFeatureEnabled(orgId, "customerPartNumbers", runner))) {
     throw new CustomerItemRefusal(
       `customer part numbers are turned off for this organization; ${FEATURES_REMEDY}`,
@@ -36,13 +39,16 @@ export async function validateCustomerItemRef(
   itemId: string,
 ): Promise<void> {
   await assertCustomerPartNumbersEnabled(runner, orgId);
-  const rows = await runner.execute<{ customer_id: string; item_id: string }>(sql`
+  const rows = await runner.execute<{ customer_id: string; item_id: string }>(
+    sql`
     select p.id as customer_id, i.id as item_id
       from parties p
       join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active
       join items i on i.org_id = p.org_id and i.id = ${itemId}
      where p.org_id = ${orgId} and p.id = ${customerId}
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   if (!rows[0]) {
     throw new CustomerItemRefusal(
       "customer part number must reference a customer party and item in this organization",
@@ -57,15 +63,27 @@ export async function listCustomerItemRefs(
   orgId: string,
   customerId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
-): Promise<Array<{ id: string; customerId: string; itemId: string; customerSku: string; description: string | null; itemCode: string | null; itemName: string }>> {
+): Promise<
+  Array<{
+    id: string;
+    customerId: string;
+    itemId: string;
+    customerSku: string;
+    description: string | null;
+    itemCode: string | null;
+    itemName: string;
+  }>
+> {
   await assertCustomerPartNumbersEnabled(runner, orgId);
   const subsidiaries = allowedSubsidiaryIds == null ? null : [...allowedSubsidiaryIds];
-  const scope = subsidiaries === null
-    ? sql`true`
-    : subsidiaries.length > 0
-      ? sql`(p.subsidiary_id is null or p.subsidiary_id = any(${sql.param(subsidiaries)}::uuid[]))`
-      : sql`p.subsidiary_id is null`;
-  return (await runner.execute(sql`
+  const scope =
+    subsidiaries === null
+      ? sql`true`
+      : subsidiaries.length > 0
+        ? sql`(p.subsidiary_id is null or p.subsidiary_id = any(${sql.param(subsidiaries)}::uuid[]))`
+        : sql`p.subsidiary_id is null`;
+  return (await runner.execute(
+    sql`
     select cir.id, cir.customer_id as "customerId", cir.item_id as "itemId",
            cir.customer_sku as "customerSku", cir.description,
            i.code as "itemCode", i.name as "itemName"
@@ -74,8 +92,15 @@ export async function listCustomerItemRefs(
       join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active
       join items i on i.id = cir.item_id and i.org_id = cir.org_id
      where cir.org_id = ${orgId} and cir.customer_id = ${customerId} and ${scope}
-     order by cir.customer_sku, cir.id`, "objects")) as Array<{
-       id: string; customerId: string; itemId: string; customerSku: string;
-       description: string | null; itemCode: string | null; itemName: string;
-     }>;
+     order by cir.customer_sku, cir.id`,
+    "objects",
+  )) as Array<{
+    id: string;
+    customerId: string;
+    itemId: string;
+    customerSku: string;
+    description: string | null;
+    itemCode: string | null;
+    itemName: string;
+  }>;
 }

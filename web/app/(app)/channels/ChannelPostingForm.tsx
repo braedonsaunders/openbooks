@@ -1,27 +1,27 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { Button, DisclosureSection, SearchSelect, TagInput } from '@openbooks/ui'
-import { Switch } from '../../../components/switch'
-import { useAppAction } from '@/lib/use-app-action'
-import { channelRequest } from './channel-client'
-import { DateField } from '@/components/date-field'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { ActionAlert } from "@braedonsaunders/appkit-errors/react";
+import { Button, DisclosureSection, SearchSelect, TagInput } from "@openbooks/ui";
+import { Switch } from "../../../components/switch";
+import { useAppAction } from "@/lib/use-app-action";
+import { channelRequest } from "./channel-client";
+import { DateField } from "@/components/date-field";
 
 interface PolicyView {
-  mode: string
-  unpaidCreatesSalesOrder: boolean
-  guestCustomerPartyId: string | null
-  guestCustomerName: string | null
-  createPromotionOnMatchMiss: boolean
-  cutoffTz: string
-  excludedTags: string[]
-  excludedSources: string[]
-  effectiveFrom: string
-  effectiveTo: string | null
+  mode: string;
+  unpaidCreatesSalesOrder: boolean;
+  guestCustomerPartyId: string | null;
+  guestCustomerName: string | null;
+  createPromotionOnMatchMiss: boolean;
+  cutoffTz: string;
+  excludedTags: string[];
+  excludedSources: string[];
+  effectiveFrom: string;
+  effectiveTo: string | null;
 }
 
 /**
@@ -38,12 +38,12 @@ export function ChannelPostingForm({
   history,
   customers,
 }: {
-  canManage: boolean
-  today: string
-  channels: { id: string; name: string; kind: string; currency: string }[]
-  policies: Record<string, PolicyView | null>
-  history: Record<string, PolicyView[]>
-  customers: { value: string; label: string }[]
+  canManage: boolean;
+  today: string;
+  channels: { id: string; name: string; kind: string; currency: string }[];
+  policies: Record<string, PolicyView | null>;
+  history: Record<string, PolicyView[]>;
+  customers: { value: string; label: string }[];
 }) {
   return (
     <div className="space-y-4">
@@ -59,7 +59,7 @@ export function ChannelPostingForm({
         />
       ))}
     </div>
-  )
+  );
 }
 
 function ChannelPolicyCard({
@@ -70,24 +70,26 @@ function ChannelPolicyCard({
   canManage,
   today,
 }: {
-  channel: { id: string; name: string; kind: string; currency: string }
-  policy: PolicyView | null
-  history: PolicyView[]
-  customers: { value: string; label: string }[]
-  canManage: boolean
-  today: string
+  channel: { id: string; name: string; kind: string; currency: string };
+  policy: PolicyView | null;
+  history: PolicyView[];
+  customers: { value: string; label: string }[];
+  canManage: boolean;
+  today: string;
 }) {
-  const t = useTranslations('channels')
-  const router = useRouter()
-  const { busy, refusal, execute } = useAppAction()
-  const [mode, setMode] = useState(policy?.mode ?? 'per_order')
-  const [unpaid, setUnpaid] = useState(policy?.unpaidCreatesSalesOrder ?? false)
-  const [guest, setGuest] = useState(policy?.guestCustomerPartyId ?? '')
-  const [createPromotion, setCreatePromotion] = useState(policy?.createPromotionOnMatchMiss ?? false)
-  const [cutoffTz, setCutoffTz] = useState(policy?.cutoffTz ?? 'UTC')
-  const [excludedTags, setExcludedTags] = useState<string[]>(policy?.excludedTags ?? [])
-  const [excludedSources, setExcludedSources] = useState<string[]>(policy?.excludedSources ?? [])
-  const [effectiveFrom, setEffectiveFrom] = useState(today)
+  const t = useTranslations("channels");
+  const router = useRouter();
+  const { busy, refusal, execute } = useAppAction();
+  const [mode, setMode] = useState(policy?.mode ?? "per_order");
+  const [unpaid, setUnpaid] = useState(policy?.unpaidCreatesSalesOrder ?? false);
+  const [guest, setGuest] = useState(policy?.guestCustomerPartyId ?? "");
+  const [createPromotion, setCreatePromotion] = useState(
+    policy?.createPromotionOnMatchMiss ?? false,
+  );
+  const [cutoffTz, setCutoffTz] = useState(policy?.cutoffTz ?? "UTC");
+  const [excludedTags, setExcludedTags] = useState<string[]>(policy?.excludedTags ?? []);
+  const [excludedSources, setExcludedSources] = useState<string[]>(policy?.excludedSources ?? []);
+  const [effectiveFrom, setEffectiveFrom] = useState(today);
 
   const onSave = async () => {
     await execute(
@@ -95,11 +97,11 @@ function ChannelPolicyCard({
         channelRequest<{ effectiveFrom: string }>(
           `/api/channels/${channel.id}/posting-policy`,
           {
-            method: 'POST',
+            method: "POST",
             body: {
               mode,
               unpaidCreatesSalesOrder: unpaid,
-              guestCustomerPartyId: guest === '' ? null : guest,
+              guestCustomerPartyId: guest === "" ? null : guest,
               createPromotionOnMatchMiss: createPromotion,
               cutoffTz,
               excludedTags,
@@ -107,17 +109,17 @@ function ChannelPolicyCard({
               effectiveFrom,
             },
           },
-          t('posting.save'),
+          t("posting.save"),
         ),
       {
-        fallbackMessage: t('posting.save'),
+        fallbackMessage: t("posting.save"),
         onOk: (outcome) => {
-          router.refresh()
-          toast.success(t('posting.saved', { date: outcome.effectiveFrom }))
+          router.refresh();
+          toast.success(t("posting.saved", { date: outcome.effectiveFrom }));
         },
       },
-    )
-  }
+    );
+  };
 
   return (
     <section className="rounded-lg border p-4" aria-label={channel.name}>
@@ -127,28 +129,30 @@ function ChannelPolicyCard({
         </h3>
         {policy ? (
           <p className="text-xs text-slate-500">
-            {t(`posting.${policy.mode === 'daily_summary' ? 'modeDailySummary' : 'modePerOrder'}`)}
+            {t(`posting.${policy.mode === "daily_summary" ? "modeDailySummary" : "modePerOrder"}`)}
           </p>
         ) : (
-          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">{t('posting.noPolicy')}</p>
+          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+            {t("posting.noPolicy")}
+          </p>
         )}
       </div>
-      <ActionAlert error={refusal} fallbackMessage={t('posting.save')} />
+      <ActionAlert error={refusal} fallbackMessage={t("posting.save")} />
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="text-sm">
-          <span className="mb-1 block font-medium">{t('posting.mode')}</span>
+          <span className="mb-1 block font-medium">{t("posting.mode")}</span>
           <select
             className="w-full rounded-md border px-2 py-1.5"
             value={mode}
             disabled={!canManage || busy}
             onChange={(e) => setMode(e.target.value)}
           >
-            <option value="per_order">{t('posting.modePerOrder')}</option>
-            <option value="daily_summary">{t('posting.modeDailySummary')}</option>
+            <option value="per_order">{t("posting.modePerOrder")}</option>
+            <option value="daily_summary">{t("posting.modeDailySummary")}</option>
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block font-medium">{t('posting.effectiveFrom')}</span>
+          <span className="mb-1 block font-medium">{t("posting.effectiveFrom")}</span>
           <DateField
             className="w-full rounded-md border px-2 py-1.5"
             value={effectiveFrom}
@@ -159,35 +163,37 @@ function ChannelPolicyCard({
         </label>
       </div>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-        {mode === 'daily_summary' ? t('posting.modeDailySummaryDescription') : t('posting.modePerOrderDescription')}
+        {mode === "daily_summary"
+          ? t("posting.modeDailySummaryDescription")
+          : t("posting.modePerOrderDescription")}
       </p>
       <div className="mt-3 space-y-3">
         <Switch
           on={unpaid}
           disabled={!canManage || busy}
-          label={t('posting.unpaidCreatesSalesOrder')}
+          label={t("posting.unpaidCreatesSalesOrder")}
           onToggle={() => setUnpaid((flag) => !flag)}
         />
         <Switch
           on={createPromotion}
           disabled={!canManage || busy}
-          label={t('posting.createPromotion')}
+          label={t("posting.createPromotion")}
           onToggle={() => setCreatePromotion((flag) => !flag)}
         />
         <label className="block text-sm">
-          <span className="mb-1 block font-medium">{t('posting.guestCustomer')}</span>
+          <span className="mb-1 block font-medium">{t("posting.guestCustomer")}</span>
           <SearchSelect
             options={customers}
             value={guest}
-            onChange={(value) => setGuest(value ?? '')}
-            placeholder={t('posting.guestCustomerDescription')}
+            onChange={(value) => setGuest(value ?? "")}
+            placeholder={t("posting.guestCustomerDescription")}
           />
         </label>
       </div>
-      <DisclosureSection title={t('posting.advanced')} summary={t('posting.advancedSummary')}>
+      <DisclosureSection title={t("posting.advanced")} summary={t("posting.advancedSummary")}>
         <div className="grid gap-3 pt-2 sm:grid-cols-2">
           <label className="text-sm">
-            <span className="mb-1 block font-medium">{t('posting.cutoffTz')}</span>
+            <span className="mb-1 block font-medium">{t("posting.cutoffTz")}</span>
             <input
               className="w-full rounded-md border px-2 py-1.5"
               value={cutoffTz}
@@ -198,36 +204,39 @@ function ChannelPolicyCard({
         </div>
         <div className="mt-3 space-y-3">
           <div>
-            <span className="mb-1 block text-sm font-medium">{t('posting.excludedTags')}</span>
+            <span className="mb-1 block text-sm font-medium">{t("posting.excludedTags")}</span>
             <TagInput
               id={`excluded-tags-${channel.id}`}
               value={excludedTags}
               onChange={setExcludedTags}
-              placeholder={t('posting.excludedTags')}
-              ariaLabel={t('posting.excludedTags')}
+              placeholder={t("posting.excludedTags")}
+              ariaLabel={t("posting.excludedTags")}
               allowNew
             />
           </div>
           <div>
-            <span className="mb-1 block text-sm font-medium">{t('posting.excludedSources')}</span>
+            <span className="mb-1 block text-sm font-medium">{t("posting.excludedSources")}</span>
             <TagInput
               id={`excluded-sources-${channel.id}`}
               value={excludedSources}
               onChange={setExcludedSources}
-              placeholder={t('posting.excludedSources')}
-              ariaLabel={t('posting.excludedSources')}
+              placeholder={t("posting.excludedSources")}
+              ariaLabel={t("posting.excludedSources")}
               allowNew
             />
           </div>
         </div>
         {history.length > 0 ? (
           <div className="mt-3">
-            <h4 className="text-sm font-medium">{t('posting.history')}</h4>
+            <h4 className="text-sm font-medium">{t("posting.history")}</h4>
             <ul className="mt-1 space-y-1 text-xs text-slate-600 dark:text-slate-300">
               {history.map((row) => (
                 <li key={`${row.effectiveFrom}-${row.mode}`}>
-                  {row.effectiveFrom}{row.effectiveTo ? ` – ${row.effectiveTo}` : ' – …'} ·{' '}
-                  {t(`posting.${row.mode === 'daily_summary' ? 'modeDailySummary' : 'modePerOrder'}`)}
+                  {row.effectiveFrom}
+                  {row.effectiveTo ? ` – ${row.effectiveTo}` : " – …"} ·{" "}
+                  {t(
+                    `posting.${row.mode === "daily_summary" ? "modeDailySummary" : "modePerOrder"}`,
+                  )}
                 </li>
               ))}
             </ul>
@@ -237,10 +246,10 @@ function ChannelPolicyCard({
       {canManage ? (
         <div className="mt-3">
           <Button disabled={busy} onClick={onSave}>
-            {t('posting.save')}
+            {t("posting.save")}
           </Button>
         </div>
       ) : null}
     </section>
-  )
+  );
 }

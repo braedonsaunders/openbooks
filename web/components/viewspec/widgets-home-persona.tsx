@@ -1,6 +1,6 @@
-import type { ComponentProps } from 'react'
-import { InboxTaskList } from './native-widgets.client'
-import { str, type WidgetRenderer } from './widget-props'
+import type { ComponentProps } from "react";
+import { InboxTaskList } from "./native-widgets.client";
+import { str, type WidgetRenderer } from "./widget-props";
 
 /**
  * HR-15 persona-home widgets: the inbox task list for the unified inbox
@@ -13,17 +13,16 @@ import { str, type WidgetRenderer } from './widget-props'
  * registry (web/app/(app)/dashboard/_widget-registry.ts).
  */
 export const PERSONA_WIDGETS: Record<string, WidgetRenderer> = {
-  'inbox-task-list': (props) => (
+  "inbox-task-list": (props) => (
     <InboxTaskList
-      rows={(props.rows as ComponentProps<typeof InboxTaskList>['rows']) ?? []}
-      users={(props.users as ComponentProps<typeof InboxTaskList>['users']) ?? []}
+      rows={(props.rows as ComponentProps<typeof InboxTaskList>["rows"]) ?? []}
+      users={(props.users as ComponentProps<typeof InboxTaskList>["users"]) ?? []}
       labels={{
-        open: str(props, 'openLabel') ?? 'Open',
-        acted: str(props, 'actedLabel') ?? 'Done',
-        delegatePlaceholder:
-          str(props, 'delegatePlaceholder') ?? 'Delegate to…',
+        open: str(props, "openLabel") ?? "Open",
+        acted: str(props, "actedLabel") ?? "Done",
+        delegatePlaceholder: str(props, "delegatePlaceholder") ?? "Delegate to…",
       }}
-      notices={(props.notices as ComponentProps<typeof InboxTaskList>['notices']) ?? []}
+      notices={(props.notices as ComponentProps<typeof InboxTaskList>["notices"]) ?? []}
     />
   ),
-}
+};

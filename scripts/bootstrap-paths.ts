@@ -1,9 +1,9 @@
 /** Bootstrap path and hash helpers (the repoRoot trap: this file stays in scripts/). Split from scripts/bootstrap.ts (pure moves only). */
-import { createHash } from "node:crypto"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
-import { type RuntimeDatabaseConfig } from "./bootstrap-roles.ts"
-import { env, pool } from "@openbooks/engine/platform/db"
+import { createHash } from "node:crypto";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { type RuntimeDatabaseConfig } from "./bootstrap-roles.ts";
+import { env, pool } from "@openbooks/engine/platform/db";
 
 export const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const migrationsDir = join(repoRoot, "schema", "migrations");
@@ -54,10 +54,7 @@ export function bypassDatabaseConfig(): RuntimeDatabaseConfig | null {
 
 export async function quoted(value: string, kind: "identifier" | "literal"): Promise<string> {
   const fn = kind === "identifier" ? "quote_ident" : "quote_literal";
-  const result = await pool.query<{ value: string }>(
-    `select ${fn}($1) as value`,
-    [value],
-  );
+  const result = await pool.query<{ value: string }>(`select ${fn}($1) as value`, [value]);
   return result.rows[0]!.value;
 }
 

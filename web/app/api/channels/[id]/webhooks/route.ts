@@ -90,7 +90,13 @@ export const POST = defineRoute({
       // what to fix instead of a bare status.
       if (error instanceof CommerceError && isVerificationRefusal(error.code)) {
         return NextResponse.json(
-          { error: VERIFICATION_REFUSAL_SUMMARIES[error.code] ?? "the webhook delivery failed verification", code: error.code, remedy: error.remedy },
+          {
+            error:
+              VERIFICATION_REFUSAL_SUMMARIES[error.code] ??
+              "the webhook delivery failed verification",
+            code: error.code,
+            remedy: error.remedy,
+          },
           { status: 401 },
         );
       }

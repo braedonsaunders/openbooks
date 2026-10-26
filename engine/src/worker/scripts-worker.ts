@@ -2,7 +2,11 @@ import { Worker } from "bullmq";
 import { SCRIPTS_QUEUE, getBlockingConnection, type ScriptJobData } from "@openbooks/jobs";
 import { withOrgContext } from "../platform/db.ts";
 import { runBulkScript, runScheduledScript, type ScriptOutcome } from "../scripting/scripting.ts";
-import { bulkRunIdempotencyScope, claimBulkRunExecution, completeBulkRunKey } from "../scripting/bulk-run-claim.ts";
+import {
+  bulkRunIdempotencyScope,
+  claimBulkRunExecution,
+  completeBulkRunKey,
+} from "../scripting/bulk-run-claim.ts";
 
 /**
  * Execute one `scripts` queue payload — the exact code the worker callback
@@ -74,7 +78,12 @@ async function runBulkScriptClaimed(d: ScriptJobData): Promise<ScriptOutcome> {
   if (!key || !actorId) {
     return runBulkScript(d.scriptId, d.orgId, { actorId });
   }
-  const execution = await claimBulkRunExecution({ orgId: d.orgId, actorId, scriptId: d.scriptId, key });
+  const execution = await claimBulkRunExecution({
+    orgId: d.orgId,
+    actorId,
+    scriptId: d.scriptId,
+    key,
+  });
   if (execution.status === "completed") {
     return execution.response as ScriptOutcome;
   }
@@ -89,8 +98,17 @@ async function runBulkScriptClaimed(d: ScriptJobData): Promise<ScriptOutcome> {
         "retry with the same key after it completes to replay the recorded outcome",
     );
   }
-  const outcome = await runBulkScript(d.scriptId, d.orgId, { actorId, idempotencyScope: bulkRunIdempotencyScope(key) });
-  await completeBulkRunKey({ orgId: d.orgId, actorId, scriptId: d.scriptId, key, response: outcome });
+  const outcome = await runBulkScript(d.scriptId, d.orgId, {
+    actorId,
+    idempotencyScope: bulkRunIdempotencyScope(key),
+  });
+  await completeBulkRunKey({
+    orgId: d.orgId,
+    actorId,
+    scriptId: d.scriptId,
+    key,
+    response: outcome,
+  });
   return outcome;
 }
 
@@ -121,4 +139,3 @@ export function createScriptsWorker(): Worker<ScriptJobData> {
     },
   );
 }
-

@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
 
 /**
  * Page layouts as an agent capability, exercised against a real tenant.
@@ -11,63 +11,62 @@ import test from 'node:test'
  * behind for the audit trail rather than destroying it.
  */
 
-const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
-const layouts = await import('./page-layouts')
-const { applicationTool, executeApplicationTool } = await import('./tool-catalog')
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const layouts = await import("./page-layouts");
+const { applicationTool, executeApplicationTool } = await import("./tool-catalog");
 
-type Ctx = Parameters<typeof layouts.listLayouts>[0]
+type Ctx = Parameters<typeof layouts.listLayouts>[0];
 
 function contextFor(orgId: string, userId: string, permissions: string[]): Ctx {
   return {
     authz: {
-      user: { id: userId, orgId, name: 'Test', email: 't@example.test', roles: [] },
+      user: { id: userId, orgId, name: "Test", email: "t@example.test", roles: [] },
       permissions: new Set(permissions),
       allowedSubsidiaryIds: null,
     },
-    source: 'mcp',
+    source: "mcp",
     requestId: randomUUID(),
     apiKeyId: null,
-  } as unknown as Ctx
+  } as unknown as Ctx;
 }
 
 const validSpec = (route: string) => ({
   specVersion: 1,
   route,
-  layout: 'list',
-  header: [{ kind: 'page-header', title: 'Customized' }],
-  body: [{ kind: 'heading', level: 2, content: 'Hello' }],
-})
+  layout: "list",
+  header: [{ kind: "page-header", title: "Customized" }],
+  body: [{ kind: "heading", level: 2, content: "Hello" }],
+});
 
-test('page layouts are org-scoped, permission-gated and audited', async (t) => {
+test("page layouts are org-scoped, permission-gated and audited", async (t) => {
   // Fixtures are created and torn down under the trusted boundary; the
   // product calls below run inside `withOrgContext`, under ordinary RLS. That
   // split is what makes the org-isolation assertion mean anything — if the
   // whole test ran bypassed, seeing nothing from the other org would prove
   // nothing about the policy.
   const { orgA, orgB, userA, userB } = await withBypassContext(async () => {
-    const a = await createScratchOrg()
-    const b = await createScratchOrg()
+    const a = await createScratchOrg();
+    const b = await createScratchOrg();
     return {
       orgA: a.orgId,
       orgB: b.orgId,
-      userA: await createScratchUser(a.orgId, 'Layout Admin', 'layout_admin'),
-      userB: await createScratchUser(b.orgId, 'Other Admin', 'layout_admin'),
-    }
-  })
+      userA: await createScratchUser(a.orgId, "Layout Admin", "layout_admin"),
+      userB: await createScratchUser(b.orgId, "Other Admin", "layout_admin"),
+    };
+  });
   t.after(async () => {
     await withBypassContext(async () => {
-      await dropScratchOrg(orgA)
-      await dropScratchOrg(orgB)
-    })
-  })
+      await dropScratchOrg(orgA);
+      await dropScratchOrg(orgB);
+    });
+  });
 
-  const allowed = contextFor(orgA, userA, ['admin.customization.manage'])
-  const reader = contextFor(orgA, userA, ['reports.read'])
-  const otherOrg = contextFor(orgB, userB, ['admin.customization.manage'])
+  const allowed = contextFor(orgA, userA, ["admin.customization.manage"]);
+  const reader = contextFor(orgA, userA, ["reports.read"]);
+  const otherOrg = contextFor(orgB, userB, ["admin.customization.manage"]);
 
   await withOrgContext(orgA, async () => {
     // The permission gates every entry point, not just the writes. Reading
@@ -75,133 +74,142 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     for (const call of [
       () => layouts.listLayouts(reader),
       () => layouts.describeLayoutVocabulary(reader),
-      () => layouts.setLayout(reader, { route: '/banking', spec: validSpec('/banking') }),
-      () => layouts.clearLayout(reader, { route: '/banking' }),
-      () => layouts.describePageLayout(reader, { route: '/banking' }),
-      () => layouts.listLayoutHistory(reader, { route: '/banking' }),
-      () => layouts.restoreLayout(reader, { route: '/banking', versionId: randomUUID() }),
+      () => layouts.setLayout(reader, { route: "/banking", spec: validSpec("/banking") }),
+      () => layouts.clearLayout(reader, { route: "/banking" }),
+      () => layouts.describePageLayout(reader, { route: "/banking" }),
+      () => layouts.listLayoutHistory(reader, { route: "/banking" }),
+      () => layouts.restoreLayout(reader, { route: "/banking", versionId: randomUUID() }),
     ]) {
-      await assert.rejects(call, /forbidden/i, 'a reader must not reach page layouts')
+      await assert.rejects(call, /forbidden/i, "a reader must not reach page layouts");
     }
 
     // The vocabulary comes from the live registries, so it cannot promise a
     // widget the renderer does not have.
-    const vocab = await layouts.describeLayoutVocabulary(allowed)
-    assert.ok(vocab.widgets.length > 50, 'the widget registry should be non-trivial')
-    assert.ok(vocab.frames.includes('page-container'))
-    assert.ok(vocab.blockKinds.includes('heading'))
+    const vocab = await layouts.describeLayoutVocabulary(allowed);
+    assert.ok(vocab.widgets.length > 50, "the widget registry should be non-trivial");
+    assert.ok(vocab.frames.includes("page-container"));
+    assert.ok(vocab.blockKinds.includes("heading"));
 
     // A draft is checkable without storing anything.
     const bad = await layouts.validateLayout(allowed, {
-      spec: { ...validSpec('/banking'), body: [{ kind: 'widget', widget: 'no-such-widget' }] },
-    })
-    assert.equal(bad.valid, false)
-    assert.ok(bad.errors.some((e) => e.includes('no-such-widget')))
-    assert.deepEqual((await layouts.listLayouts(allowed)).layouts, [], 'validating stores nothing')
+      spec: { ...validSpec("/banking"), body: [{ kind: "widget", widget: "no-such-widget" }] },
+    });
+    assert.equal(bad.valid, false);
+    assert.ok(bad.errors.some((e) => e.includes("no-such-widget")));
+    assert.deepEqual((await layouts.listLayouts(allowed)).layouts, [], "validating stores nothing");
 
     const stored = await layouts.setLayout(allowed, {
-      route: '/banking',
-      spec: validSpec('/banking'),
-      note: 'test',
-    })
-    assert.equal(stored.stored, true)
+      route: "/banking",
+      spec: validSpec("/banking"),
+      note: "test",
+    });
+    assert.equal(stored.stored, true);
 
-    const listed = await layouts.listLayouts(allowed)
-    assert.equal(listed.layouts.length, 1)
-    assert.equal(listed.layouts[0]!.route, '/banking')
+    const listed = await layouts.listLayouts(allowed);
+    assert.equal(listed.layouts.length, 1);
+    assert.equal(listed.layouts[0]!.route, "/banking");
     // The list also says which routes CAN be customized, so an author does not
     // have to guess a route pattern and learn it was wrong at save time.
-    assert.ok(listed.customizableRoutes.includes('/banking'))
+    assert.ok(listed.customizableRoutes.includes("/banking"));
 
     // A route nothing declares is refused with candidates rather than an
     // empty answer: a typo is the likeliest reason to land here, and "no such
     // route" with no help is where an author gives up.
-    const unknown = await layouts.describePageLayout(allowed, { route: '/bankng' })
-    assert.equal(unknown.known, false)
+    const unknown = await layouts.describePageLayout(allowed, { route: "/bankng" });
+    assert.equal(unknown.known, false);
     assert.ok(
-      'didYouMean' in unknown && unknown.didYouMean.includes('/banking'),
+      "didYouMean" in unknown && unknown.didYouMean.includes("/banking"),
       `expected /banking among the suggestions, got ${JSON.stringify(unknown)}`,
-    )
-  })
+    );
+  });
 
   // The other org sees none of it. This is the property that makes storing a
   // renderable document per tenant safe to do at all.
   await withOrgContext(orgB, async () => {
-    assert.deepEqual((await layouts.listLayouts(otherOrg)).layouts, [])
-  })
+    assert.deepEqual((await layouts.listLayouts(otherOrg)).layouts, []);
+  });
 
   await withOrgContext(orgA, async () => {
     // A save replaces rather than accumulates: one ACTIVE layout per route.
-    await layouts.setLayout(allowed, { route: '/banking', spec: validSpec('/banking') })
-    assert.equal((await layouts.listLayouts(allowed)).layouts.length, 1)
+    await layouts.setLayout(allowed, { route: "/banking", spec: validSpec("/banking") });
+    assert.equal((await layouts.listLayouts(allowed)).layouts.length, 1);
 
     // History is the undo that outlives the session. Two saves, so there is a
     // previous version to go back to.
-    await layouts.setLayout(allowed, { route: '/banking', spec: validSpec('/banking'), note: 'second' })
-    const history = await layouts.listLayoutHistory(allowed, { route: '/banking' })
-    assert.equal(history.versions.length, 3, 'every save is kept, not just the live one')
-    assert.equal(history.versions.filter((version) => version.active).length, 1)
+    await layouts.setLayout(allowed, {
+      route: "/banking",
+      spec: validSpec("/banking"),
+      note: "second",
+    });
+    const history = await layouts.listLayoutHistory(allowed, { route: "/banking" });
+    assert.equal(history.versions.length, 3, "every save is kept, not just the live one");
+    assert.equal(history.versions.filter((version) => version.active).length, 1);
     // Newest first, and `savedAt` is when the version was WRITTEN. A
     // superseded row's `updated_at` is when it was switched off, and
     // reporting that would claim two layouts went live at the same instant.
-    assert.ok(history.versions[0]!.active)
-    assert.ok(history.versions[0]!.savedAt >= history.versions[1]!.savedAt)
+    assert.ok(history.versions[0]!.active);
+    assert.ok(history.versions[0]!.savedAt >= history.versions[1]!.savedAt);
 
-    const previous = history.versions.find((version) => !version.active)!
+    const previous = history.versions.find((version) => !version.active)!;
     const restored = await layouts.restoreLayout(allowed, {
-      route: '/banking',
+      route: "/banking",
       versionId: previous.id,
-    })
-    assert.equal(restored.restored, true)
-    const afterRestore = await layouts.listLayoutHistory(allowed, { route: '/banking' })
-    assert.equal(afterRestore.versions.length, 4, 'a restore APPENDS rather than reactivating')
+    });
+    assert.equal(restored.restored, true);
+    const afterRestore = await layouts.listLayoutHistory(allowed, { route: "/banking" });
+    assert.equal(afterRestore.versions.length, 4, "a restore APPENDS rather than reactivating");
     assert.notEqual(
       afterRestore.versions.find((version) => version.active)!.id,
       previous.id,
-      'the old row stays off; reactivating it would make its timestamp lie',
-    )
+      "the old row stays off; reactivating it would make its timestamp lie",
+    );
 
     // A version that is already live, and a version id belonging to another
     // route, are both refused — an id is not a capability.
-    const active = afterRestore.versions.find((version) => version.active)!
+    const active = afterRestore.versions.find((version) => version.active)!;
     assert.equal(
-      (await layouts.restoreLayout(allowed, { route: '/banking', versionId: active.id })).restored,
+      (await layouts.restoreLayout(allowed, { route: "/banking", versionId: active.id })).restored,
       false,
-    )
+    );
     assert.equal(
-      (await layouts.restoreLayout(allowed, { route: '/accounts', versionId: previous.id })).restored,
+      (await layouts.restoreLayout(allowed, { route: "/accounts", versionId: previous.id }))
+        .restored,
       false,
-    )
+    );
 
     // A personal layout is a preference, not a policy change: it wins for its
     // owner and is invisible to everyone else, including in the admin list.
     const personal = await layouts.setLayout(allowed, {
-      route: '/banking',
-      spec: validSpec('/banking'),
-      scope: 'user',
-    })
-    assert.equal(personal.stored, true)
-    const mine = await layouts.listLayouts(allowed)
-    assert.equal(mine.layouts.filter((layout) => layout.userId !== null).length, 1)
+      route: "/banking",
+      spec: validSpec("/banking"),
+      scope: "user",
+    });
+    assert.equal(personal.stored, true);
+    const mine = await layouts.listLayouts(allowed);
+    assert.equal(mine.layouts.filter((layout) => layout.userId !== null).length, 1);
 
     // Clearing the PERSONAL layout must leave the org's alone. Scoping this
     // wrongly would let one person's preference switch off the layout their
     // whole organization is using.
-    assert.equal((await layouts.clearLayout(allowed, { route: '/banking', scope: 'user' })).cleared, 1)
-    const afterPersonalClear = await layouts.listLayouts(allowed)
-    assert.equal(afterPersonalClear.layouts.filter((layout) => layout.userId !== null).length, 0)
-    assert.equal(afterPersonalClear.layouts.filter((layout) => layout.userId === null).length, 1)
+    assert.equal(
+      (await layouts.clearLayout(allowed, { route: "/banking", scope: "user" })).cleared,
+      1,
+    );
+    const afterPersonalClear = await layouts.listLayouts(allowed);
+    assert.equal(afterPersonalClear.layouts.filter((layout) => layout.userId !== null).length, 0);
+    assert.equal(afterPersonalClear.layouts.filter((layout) => layout.userId === null).length, 1);
 
-    const cleared = await layouts.clearLayout(allowed, { route: '/banking' })
-    assert.equal(cleared.cleared, 1)
-    assert.deepEqual((await layouts.listLayouts(allowed)).layouts, [])
+    const cleared = await layouts.clearLayout(allowed, { route: "/banking" });
+    assert.equal(cleared.cleared, 1);
+    assert.deepEqual((await layouts.listLayouts(allowed)).layouts, []);
 
     // Deactivated, not deleted — the audit entries point at rows someone can
     // still read.
     const rows = await db.execute<{ n: string }>(
-      sql`select count(*) as n from page_specs where org_id = ${orgA}`, 'objects',
-    )
-    assert.equal(Number(rows[0]!.n), 5, 'every stored layout survives as an inactive row')
+      sql`select count(*) as n from page_specs where org_id = ${orgA}`,
+      "objects",
+    );
+    assert.equal(Number(rows[0]!.n), 5, "every stored layout survives as an inactive row");
 
     // Each save/restore/clear is ONE transaction, so its audit rows share the
     // same `at` (transaction now()); the order of the rows inside such a pair
@@ -209,68 +217,96 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     // sorted rather than one flat sequence — the flat form was order-flaky
     // under the pooled runner.
     const audit = await db.execute<{ action: string; at: string }>(
-      sql`select action, at::text as at from audit_log where org_id = ${orgA} and table_name = 'page_specs' order by at`, 'objects',
-    )
-    const groups: string[][] = []
-    let lastAt: string | null = null
+      sql`select action, at::text as at from audit_log where org_id = ${orgA} and table_name = 'page_specs' order by at`,
+      "objects",
+    );
+    const groups: string[][] = [];
+    let lastAt: string | null = null;
     for (const row of audit) {
-      if (row.at !== lastAt) { groups.push([]); lastAt = row.at }
-      groups[groups.length - 1]!.push(row.action)
+      if (row.at !== lastAt) {
+        groups.push([]);
+        lastAt = row.at;
+      }
+      groups[groups.length - 1]!.push(row.action);
     }
     assert.deepEqual(
       groups.map((group) => [...group].sort()),
       [
-        ['insert'],           // first save
-        ['insert', 'update'], // replacing save supersedes the previous row
-        ['insert', 'update'], // second replacing save
-        ['insert', 'update'], // restore appends and supersedes
-        ['insert'],           // personal layout
-        ['update'],           // personal clear
-        ['update'],           // org clear
+        ["insert"], // first save
+        ["insert", "update"], // replacing save supersedes the previous row
+        ["insert", "update"], // second replacing save
+        ["insert", "update"], // restore appends and supersedes
+        ["insert"], // personal layout
+        ["update"], // personal clear
+        ["update"], // org clear
       ],
-      'every save, every restore and every clear is recorded, with its supersession',
-    )
-  })
-})
+      "every save, every restore and every clear is recorded, with its supersession",
+    );
+  });
+});
 
-test('MCP page-layout mutations replay their committed outcomes after a lost response', async (t) => {
+test("MCP page-layout mutations replay their committed outcomes after a lost response", async (t) => {
   const { orgId, userId } = await withBypassContext(async () => {
-    const org = await createScratchOrg()
-    return { orgId: org.orgId, userId: await createScratchUser(org.orgId, 'Layout MCP Admin', 'layout_admin') }
-  })
-  t.after(() => withBypassContext(() => dropScratchOrg(orgId)))
+    const org = await createScratchOrg();
+    return {
+      orgId: org.orgId,
+      userId: await createScratchUser(org.orgId, "Layout MCP Admin", "layout_admin"),
+    };
+  });
+  t.after(() => withBypassContext(() => dropScratchOrg(orgId)));
 
-  const context = contextFor(orgId, userId, ['admin.customization.manage'])
+  const context = contextFor(orgId, userId, ["admin.customization.manage"]);
   const call = async (name: string, input: Record<string, unknown>) => {
-    const tool = applicationTool(name)
-    assert.ok(tool, `${name} must be registered`)
-    return executeApplicationTool(tool, context, input)
-  }
+    const tool = applicationTool(name);
+    assert.ok(tool, `${name} must be registered`);
+    return executeApplicationTool(tool, context, input);
+  };
 
   await withOrgContext(orgId, async () => {
-    const prior = await layouts.setLayout(context, { route: '/banking', spec: validSpec('/banking') })
-    assert.equal(prior.stored, true)
+    const prior = await layouts.setLayout(context, {
+      route: "/banking",
+      spec: validSpec("/banking"),
+    });
+    assert.equal(prior.stored, true);
 
-    const setInput = { route: '/banking', spec: validSpec('/banking'), idempotencyKey: 'layout-set-retry-001' }
-    const setFirst = await call('set_page_layout', setInput)
-    const setReplay = await call('set_page_layout', setInput)
-    assert.equal(setReplay.replayed, true, 'a lost response must replay the original set result')
-    assert.equal(setReplay.id, setFirst.id)
-    assert.equal((await layouts.listLayoutHistory(context, { route: '/banking' })).versions.length, 2);
+    const setInput = {
+      route: "/banking",
+      spec: validSpec("/banking"),
+      idempotencyKey: "layout-set-retry-001",
+    };
+    const setFirst = await call("set_page_layout", setInput);
+    const setReplay = await call("set_page_layout", setInput);
+    assert.equal(setReplay.replayed, true, "a lost response must replay the original set result");
+    assert.equal(setReplay.id, setFirst.id);
+    assert.equal(
+      (await layouts.listLayoutHistory(context, { route: "/banking" })).versions.length,
+      2,
+    );
 
-    const restoreInput = { route: '/banking', versionId: prior.id!, idempotencyKey: 'layout-restore-retry-001' }
-    const restoreFirst = await call('restore_page_layout', restoreInput)
-    const restoreReplay = await call('restore_page_layout', restoreInput)
-    assert.equal(restoreReplay.replayed, true, 'a replay must return the successful restore result')
-    assert.equal(restoreReplay.id, restoreFirst.id)
-    assert.equal((await layouts.listLayoutHistory(context, { route: '/banking' })).versions.length, 3);
+    const restoreInput = {
+      route: "/banking",
+      versionId: prior.id!,
+      idempotencyKey: "layout-restore-retry-001",
+    };
+    const restoreFirst = await call("restore_page_layout", restoreInput);
+    const restoreReplay = await call("restore_page_layout", restoreInput);
+    assert.equal(
+      restoreReplay.replayed,
+      true,
+      "a replay must return the successful restore result",
+    );
+    assert.equal(restoreReplay.id, restoreFirst.id);
+    assert.equal(
+      (await layouts.listLayoutHistory(context, { route: "/banking" })).versions.length,
+      3,
+    );
 
-    const clearInput = { route: '/banking', idempotencyKey: 'layout-clear-retry-001' }
-    const clearFirst = await call('clear_page_layout', clearInput)
-    const clearReplay = await call('clear_page_layout', clearInput)
-    assert.equal(clearReplay.replayed, true, 'a replay must return the original clear count')
-    assert.equal(clearReplay.cleared, clearFirst.cleared)
+    const clearInput = { route: "/banking", idempotencyKey: "layout-clear-retry-001" };
+    const clearFirst = await call("clear_page_layout", clearInput);
+    const clearReplay = await call("clear_page_layout", clearInput);
+    assert.equal(clearReplay.replayed, true, "a replay must return the original clear count");
+    assert.equal(clearReplay.cleared, clearFirst.cleared);
     assert.equal((clearFirst as { cleared: number }).cleared, 1);
     assert.deepEqual((await layouts.listLayouts(context)).layouts, []);
-  })
-})
+  });
+});

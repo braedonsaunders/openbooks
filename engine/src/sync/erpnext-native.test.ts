@@ -12,7 +12,10 @@ function context(): NativeContext {
     control: { ar: "ar-id", ap: "ap-id", bank: "bank-id" },
     accountByRef: new Map([
       ["Sales", { id: "sales-id", number: "4000", name: "Sales", type: "income" }],
-      ["AR", { id: "ar-id", number: "1100", name: "Accounts Receivable", type: "asset_receivable" }],
+      [
+        "AR",
+        { id: "ar-id", number: "1100", name: "Accounts Receivable", type: "asset_receivable" },
+      ],
     ]),
     accountRefById: new Map(),
     partyByRef: new Map([["C:Customer", "customer-id"]]),
@@ -95,9 +98,7 @@ test("ERPNext return-invoice tax keeps the credit's sign", () => {
       taxAmount: line.taxAmount,
       taxCodeId: line.taxCodeId,
     })),
-    [
-      { lineNumber: 1, amount: "-100.0000", taxAmount: "-5.0000", taxCodeId: "gst-code-id" },
-    ],
+    [{ lineNumber: 1, amount: "-100.0000", taxAmount: "-5.0000", taxCodeId: "gst-code-id" }],
   );
 });
 
@@ -147,12 +148,33 @@ test("ERPNext payments propagate clearance dates as cleared evidence", () => {
     cleared.lines.map((line) => [line.sourceCleared, line.sourceClearedDate]),
     [[true, "2026-08-27"]],
   );
-  const openSource = { name: "PE-2", payment_type: "Receive", party_type: "Customer", party: "Customer", posting_date: "2026-08-20", docstatus: 1, paid_from: "Debtors", paid_to: "Bank", base_paid_amount: 500, base_received_amount: 500, clearance_date: null };
+  const openSource = {
+    name: "PE-2",
+    payment_type: "Receive",
+    party_type: "Customer",
+    party: "Customer",
+    posting_date: "2026-08-20",
+    docstatus: 1,
+    paid_from: "Debtors",
+    paid_to: "Bank",
+    base_paid_amount: 500,
+    base_received_amount: 500,
+    clearance_date: null,
+  };
   const open = buildErpPayment(ctx, openSource);
   assert.ok(!("skip" in open));
   assert.deepEqual(
     open.lines.map((line) => [line.sourceCleared, line.sourceClearedDate]),
     [[false, null]],
   );
-  assert.deepEqual(buildErpPayment(ctx, { ...openSource, payment_type: "Internal Transfer", base_received_amount: 600 }), { skip: "cross-currency internal transfer PE-2 has different base-paid and base-received amounts; import it with explicit FX legs" });
+  assert.deepEqual(
+    buildErpPayment(ctx, {
+      ...openSource,
+      payment_type: "Internal Transfer",
+      base_received_amount: 600,
+    }),
+    {
+      skip: "cross-currency internal transfer PE-2 has different base-paid and base-received amounts; import it with explicit FX legs",
+    },
+  );
 });

@@ -43,7 +43,12 @@ export const STALE_SANDBOX_CLAIM_MS = 60 * 60 * 1000;
 export type SandboxRefreshQueueLiveness = "live" | "dead" | "unknown";
 
 const LIVE_SANDBOX_JOB_STATES = new Set([
-  "active", "delayed", "paused", "prioritized", "waiting", "waiting-children",
+  "active",
+  "delayed",
+  "paused",
+  "prioritized",
+  "waiting",
+  "waiting-children",
 ]);
 
 export async function sandboxRefreshQueueLiveness(
@@ -75,7 +80,10 @@ async function getSandboxRefreshJobState(jobId: string): Promise<string | null> 
   return job ? job.getState() : null;
 }
 
-async function withRefreshRecoveryLock(sandboxId: string, recover: () => Promise<boolean>): Promise<boolean> {
+async function withRefreshRecoveryLock(
+  sandboxId: string,
+  recover: () => Promise<boolean>,
+): Promise<boolean> {
   const client = await longPool.connect();
   const key = sandboxRefreshLockKey(sandboxId);
   let locked = false;
@@ -89,7 +97,9 @@ async function withRefreshRecoveryLock(sandboxId: string, recover: () => Promise
     return await recover();
   } finally {
     if (locked) {
-      await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [key]).catch(() => undefined);
+      await client
+        .query("select pg_advisory_unlock(hashtextextended($1, 0))", [key])
+        .catch(() => undefined);
     }
     client.release();
   }
@@ -99,14 +109,24 @@ export async function releaseStaleSandboxClaims(
   getJobState: (jobId: string) => Promise<string | null> = getSandboxRefreshJobState,
 ): Promise<number> {
   // bypass: scheduler-tick — stale refresh claims are found across every organization.
-  const stale = (await withBypassContext(() =>
-    db.execute<{ id: string; orgId: string; productionOrgId: string; cadence: string | null; lastError: string | null }>(sql`
+  const stale = await withBypassContext(() =>
+    db.execute<{
+      id: string;
+      orgId: string;
+      productionOrgId: string;
+      cadence: string | null;
+      lastError: string | null;
+    }>(
+      sql`
       select id, org_id as "orgId", production_org_id as "productionOrgId",
              refresh_schedule as "cadence", last_error as "lastError"
         from sandboxes
        where status = 'refreshing'
          and updated_at < now() - make_interval(secs => ${STALE_SANDBOX_CLAIM_MS / 1000})
-    `, "objects")));
+    `,
+      "objects",
+    ),
+  );
   let released = 0;
   for (const row of stale) {
     const proofExists = row.lastError?.startsWith(REFRESH_CLONE_PROOF_PREFIX) === true;
@@ -120,16 +140,20 @@ export async function releaseStaleSandboxClaims(
         ? "refresh lease expired: worker stopped during clone verification; rerun refresh or delete this sandbox"
         : "refresh worker never started: stale scheduler claim released for re-queue";
       // A sandbox row is written from its production organization's scope.
-      const done = await withOrgContext(row.productionOrgId, () => db.execute<never>(sql`
+      const done = await withOrgContext(row.productionOrgId, () =>
+        db.execute<never>(sql`
         update sandboxes set status = ${proofExists ? "failed" : "ready"},
                last_error = ${message}, updated_at = now()
          where id = ${row.id} and org_id = ${row.orgId} and production_org_id = ${row.productionOrgId}
            and status = 'refreshing'
            and last_error is not distinct from ${row.lastError}
            and updated_at < now() - make_interval(secs => ${STALE_SANDBOX_CLAIM_MS / 1000})
-      `));
+      `),
+      );
       if (done.rowCount) {
-        console.error(`[sandbox-scheduler] ${proofExists ? "failed" : "released"} stale refresh for sandbox ${row.id}: ${message}`);
+        console.error(
+          `[sandbox-scheduler] ${proofExists ? "failed" : "released"} stale refresh for sandbox ${row.id}: ${message}`,
+        );
       }
       return Boolean(done.rowCount);
     });
@@ -140,9 +164,7 @@ export async function releaseStaleSandboxClaims(
   return released;
 }
 
-export async function tick(
-  enqueue: typeof enqueueSandboxOp = enqueueSandboxOp,
-): Promise<void> {
+export async function tick(enqueue: typeof enqueueSandboxOp = enqueueSandboxOp): Promise<void> {
   if (running) return;
   running = true;
   try {
@@ -151,7 +173,7 @@ export async function tick(
     // its claim must cross an explicit trusted boundary — otherwise RLS denies
     // by default and the scanner silently sees no sandboxes at all.
     // bypass: scheduler-tick — sandboxes due a refresh are found across every organization.
-    const due = (await withBypassContext(() =>
+    const due = await withBypassContext(() =>
       db.execute<{
         id: string;
         orgId: string;
@@ -159,29 +181,39 @@ export async function tick(
         cadence: string;
         keep: boolean | null;
         ageSec: string;
-      }>(sql`
+      }>(
+        sql`
       select id, org_id as "orgId", production_org_id as "productionOrgId",
              refresh_schedule as "cadence", refresh_keep_customizations as "keep",
              extract(epoch from (now() - coalesce(last_refresh_at, created_at))) as "ageSec"
         from sandboxes
        where status = 'ready' and refresh_schedule is not null
-       limit 50`, "objects")));
+       limit 50`,
+        "objects",
+      ),
+    );
 
     for (const s of due) {
       const window = CADENCE_MS[s.cadence];
       if (!window || Number(s.ageSec) * 1000 < window) continue;
       // Claim: flip ready→refreshing so only one scanner fires it.
       // A sandbox row is written from its production organization's scope.
-      const claimed = (await withOrgContext(s.productionOrgId, () =>
+      const claimed = await withOrgContext(s.productionOrgId, () =>
         db.execute<never>(sql`
         update sandboxes set status = 'refreshing'
          where id = ${s.id} and org_id = ${s.orgId} and production_org_id = ${s.productionOrgId}
-           and status = 'ready'`)));
+           and status = 'ready'`),
+      );
       if (!claimed.rowCount) continue;
       try {
         // Hand back to 'ready' is done by the refresh op; enqueue it.
         await enqueue(
-          { op: "refresh", sandboxId: s.id, keepCustomizations: s.keep !== false, initiator: { systemReason: "scheduled sandbox refresh" } },
+          {
+            op: "refresh",
+            sandboxId: s.id,
+            keepCustomizations: s.keep !== false,
+            initiator: { systemReason: "scheduled sandbox refresh" },
+          },
           { jobId: `sbxsched|${s.id}|${Math.floor(Date.now() / window)}` },
         );
       } catch (e) {
@@ -195,8 +227,12 @@ export async function tick(
           db.execute(sql`
           update sandboxes set status = 'ready', last_error = ${message}, updated_at = now()
            where id = ${s.id} and org_id = ${s.orgId} and production_org_id = ${s.productionOrgId}
-             and status = 'refreshing'`));
-        console.error(`[sandbox-scheduler] enqueue failed for sandbox ${s.id}; claim released:`, message);
+             and status = 'refreshing'`),
+        );
+        console.error(
+          `[sandbox-scheduler] enqueue failed for sandbox ${s.id}; claim released:`,
+          message,
+        );
       }
     }
   } catch (e) {

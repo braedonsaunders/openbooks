@@ -30,9 +30,7 @@ test("a full close-out parses with sorted parts", () => {
       feeTotal: "0.3500",
       overShort: "-0.5000",
       serverPartyId: "123e4567-e89b-12d3-a456-426614174000",
-      parts: [
-        { position: 2, tip: "5.0000", fee: "0.3500" },
-      ],
+      parts: [{ position: 2, tip: "5.0000", fee: "0.3500" }],
     },
     tenders,
   );
@@ -69,13 +67,15 @@ test("an unknown close-out field refuses instead of parking silently", () => {
 
 test("totals must cross-foot to the parts", () => {
   assert.throws(
-    () => parseCashCloseout({ tipsTotal: "6.0000", parts: [{ position: 2, tip: "5.0000" }] }, tenders),
+    () =>
+      parseCashCloseout({ tipsTotal: "6.0000", parts: [{ position: 2, tip: "5.0000" }] }, tenders),
     (error: unknown) =>
       error instanceof CashCloseoutError &&
       /tips total 6\.0000 does not match its tender tips 5\.0000/.test(error.message),
   );
   assert.throws(
-    () => parseCashCloseout({ feeTotal: "1.0000", parts: [{ position: 2, fee: "0.3500" }] }, tenders),
+    () =>
+      parseCashCloseout({ feeTotal: "1.0000", parts: [{ position: 2, fee: "0.3500" }] }, tenders),
     (error: unknown) =>
       error instanceof CashCloseoutError && /fee total 1\.0000 does not match/.test(error.message),
   );
@@ -84,10 +84,9 @@ test("totals must cross-foot to the parts", () => {
 test("a tip on a gift card tender refuses", () => {
   assert.throws(
     () =>
-      parseCashCloseout(
-        { tipsTotal: "1.0000", parts: [{ position: 1, tip: "1.0000" }] },
-        [{ kind: "stored_value", amountMinor: 10_000_000n }],
-      ),
+      parseCashCloseout({ tipsTotal: "1.0000", parts: [{ position: 1, tip: "1.0000" }] }, [
+        { kind: "stored_value", amountMinor: 10_000_000n },
+      ]),
     (error: unknown) =>
       error instanceof CashCloseoutError && /puts a tip on a gift card tender/.test(error.message),
   );
@@ -97,7 +96,8 @@ test("a processor fee rides card-family tenders only", () => {
   assert.ok(FEE_TENDER_KINDS.has("card"));
   assert.ok(!FEE_TENDER_KINDS.has("cash"));
   assert.throws(
-    () => parseCashCloseout({ feeTotal: "0.3000", parts: [{ position: 1, fee: "0.3000" }] }, tenders),
+    () =>
+      parseCashCloseout({ feeTotal: "0.3000", parts: [{ position: 1, fee: "0.3000" }] }, tenders),
     (error: unknown) =>
       error instanceof CashCloseoutError &&
       /deducts a processor fee from a cash tender/.test(error.message),
@@ -112,7 +112,8 @@ test("tip and fee cannot exceed what the tender collected", () => {
         tenders,
       ),
     (error: unknown) =>
-      error instanceof CashCloseoutError && /exceeds its tender's collected 1150\.0000/.test(error.message),
+      error instanceof CashCloseoutError &&
+      /exceeds its tender's collected 1150\.0000/.test(error.message),
   );
 });
 
@@ -134,21 +135,20 @@ test("parts must name this sale's tenders exactly once", () => {
         },
         tenders,
       ),
-    (error: unknown) => error instanceof CashCloseoutError && /repeats tender 2/.test(error.message),
+    (error: unknown) =>
+      error instanceof CashCloseoutError && /repeats tender 2/.test(error.message),
   );
   assert.throws(
     () => parseCashCloseout({ tipsTotal: "0", parts: [{ position: 2 }] }, tenders),
-    (error: unknown) => error instanceof CashCloseoutError && /no tip and no fee/.test(error.message),
+    (error: unknown) =>
+      error instanceof CashCloseoutError && /no tip and no fee/.test(error.message),
   );
 });
 
 test("a malformed server reference refuses", () => {
   assert.throws(
     () =>
-      parseCashCloseout(
-        { overShort: "0.2500", serverPartyId: "not-a-uuid", parts: [] },
-        tenders,
-      ),
+      parseCashCloseout({ overShort: "0.2500", serverPartyId: "not-a-uuid", parts: [] }, tenders),
     (error: unknown) =>
       error instanceof CashCloseoutError && /not a valid staff reference/.test(error.message),
   );
@@ -156,7 +156,10 @@ test("a malformed server reference refuses", () => {
 
 test("the row-level check is shared with the tender writer", () => {
   assert.doesNotThrow(() =>
-    assertTenderCloseoutPart({ kind: "card", amountMinor: 1000n, tipMinor: 100n, feeMinor: 10n }, "Tender 1"),
+    assertTenderCloseoutPart(
+      { kind: "card", amountMinor: 1000n, tipMinor: 100n, feeMinor: 10n },
+      "Tender 1",
+    ),
   );
   assert.throws(
     () =>

@@ -40,21 +40,17 @@ function authorizationShape(error: unknown): unknown {
 test("restricted application contexts fail closed for missing and unknown subsidiaries", () => {
   const restricted = context(new Set([ALLOWED_SUBSIDIARY]));
 
-  assert.doesNotThrow(() =>
-    assertSubsidiaryAccess(restricted, ALLOWED_SUBSIDIARY),
-  );
+  assert.doesNotThrow(() => assertSubsidiaryAccess(restricted, ALLOWED_SUBSIDIARY));
 
-  const denied = [null, undefined, "", OUT_OF_SCOPE_SUBSIDIARY].map(
-    (subsidiaryId) => {
-      let error: unknown;
-      try {
-        assertSubsidiaryAccess(restricted, subsidiaryId);
-      } catch (caught) {
-        error = caught;
-      }
-      return authorizationShape(error);
-    },
-  );
+  const denied = [null, undefined, "", OUT_OF_SCOPE_SUBSIDIARY].map((subsidiaryId) => {
+    let error: unknown;
+    try {
+      assertSubsidiaryAccess(restricted, subsidiaryId);
+    } catch (caught) {
+      error = caught;
+    }
+    return authorizationShape(error);
+  });
 
   // A missing/null row must not disclose whether a record exists or whether
   // its subsidiary was outside the caller's scope: every denial is the same
@@ -70,15 +66,7 @@ test("restricted application contexts fail closed for missing and unknown subsid
 
 test("an explicitly unrestricted application context keeps legacy access", () => {
   const unrestricted = context(null);
-  for (const subsidiaryId of [
-    null,
-    undefined,
-    "",
-    ALLOWED_SUBSIDIARY,
-    OUT_OF_SCOPE_SUBSIDIARY,
-  ]) {
-    assert.doesNotThrow(() =>
-      assertSubsidiaryAccess(unrestricted, subsidiaryId),
-    );
+  for (const subsidiaryId of [null, undefined, "", ALLOWED_SUBSIDIARY, OUT_OF_SCOPE_SUBSIDIARY]) {
+    assert.doesNotThrow(() => assertSubsidiaryAccess(unrestricted, subsidiaryId));
   }
 });

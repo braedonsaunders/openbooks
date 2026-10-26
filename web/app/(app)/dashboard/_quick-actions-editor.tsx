@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Plus, Search, Trash2 } from 'lucide-react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Button, Drawer, Input } from '@openbooks/ui'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Button, Drawer, Input } from "@openbooks/ui";
 import {
   MAX_QUICK_ACTIONS,
   TONE_KEYS,
@@ -18,20 +18,23 @@ import {
   type QuickActionOption,
   type QuickActionOptions,
   type SaveQuickActionsAction,
-} from './_quick-actions-shared'
-import { FALLBACK_ICON, ICON_PICKER_KEYS, QUICK_ACTION_ICONS } from './_quick-actions-icons'
-import { listQuickActionOptions, saveQuickActions } from './actions'
-import { useDirtyClose } from '../../../lib/use-dirty-close'
+} from "./_quick-actions-shared";
+import { FALLBACK_ICON, ICON_PICKER_KEYS, QUICK_ACTION_ICONS } from "./_quick-actions-icons";
+import { listQuickActionOptions, saveQuickActions } from "./actions";
+import { useDirtyClose } from "../../../lib/use-dirty-close";
 
-type View = 'list' | 'picker' | 'edit'
-type PickerTab = 'common' | 'custom'
+type View = "list" | "picker" | "edit";
+type PickerTab = "common" | "custom";
 
 function genId(): string {
-  return globalThis.crypto.randomUUID()
+  return globalThis.crypto.randomUUID();
 }
 
 function choiceLabel(value: string): string {
-  return value.split('-').map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join(' ')
+  return value
+    .split("-")
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 export function QuickActionsEditor({
@@ -42,106 +45,108 @@ export function QuickActionsEditor({
   onSaved,
   saveAction = saveQuickActions,
 }: {
-  open: boolean
-  value: QuickAction[]
-  hiddenActionIds?: readonly string[]
-  onClose: () => void
-  onSaved: (next: QuickAction[]) => void
-  saveAction?: SaveQuickActionsAction
+  open: boolean;
+  value: QuickAction[];
+  hiddenActionIds?: readonly string[];
+  onClose: () => void;
+  onSaved: (next: QuickAction[]) => void;
+  saveAction?: SaveQuickActionsAction;
 }) {
-  const t = useTranslations('dashboard')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [items, setItems] = useState<QuickAction[]>(value)
-  const [view, setView] = useState<View>('list')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [options, setOptions] = useState<QuickActionOptions | null>(null)
-  const [optionsError, setOptionsError] = useState(false)
-  const [optionsAttempt, setOptionsAttempt] = useState(0)
-  const [saving, setSaving] = useState(false)
-  const [pickerTab, setPickerTab] = useState<PickerTab>('common')
-  const [search, setSearch] = useState('')
-  const [customLabel, setCustomLabel] = useState('')
-  const [customHref, setCustomHref] = useState('')
+  const t = useTranslations("dashboard");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [items, setItems] = useState<QuickAction[]>(value);
+  const [view, setView] = useState<View>("list");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [options, setOptions] = useState<QuickActionOptions | null>(null);
+  const [optionsError, setOptionsError] = useState(false);
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [pickerTab, setPickerTab] = useState<PickerTab>("common");
+  const [search, setSearch] = useState("");
+  const [customLabel, setCustomLabel] = useState("");
+  const [customHref, setCustomHref] = useState("");
 
   function reset(nextItems: QuickAction[]) {
-    setItems(nextItems.map((a) => ({ ...a })))
-    setView('list')
-    setEditingId(null)
-    setOptionsError(false)
-    setSearch('')
-    setPickerTab('common')
-    setCustomLabel('')
-    setCustomHref('')
+    setItems(nextItems.map((a) => ({ ...a })));
+    setView("list");
+    setEditingId(null);
+    setOptionsError(false);
+    setSearch("");
+    setPickerTab("common");
+    setCustomLabel("");
+    setCustomHref("");
   }
 
   // Explicit Cancel discards; overlay/Escape goes through the dirty guard.
   function discard() {
-    reset(value)
-    onClose()
+    reset(value);
+    onClose();
   }
 
-  const dirty = JSON.stringify(items) !== JSON.stringify(value)
+  const dirty = JSON.stringify(items) !== JSON.stringify(value);
   const { close: guardedClose } = useDirtyClose({
     dirty,
     busy: saving,
     onClose: () => {
-      reset(value)
-      onClose()
+      reset(value);
+      onClose();
     },
-    message: tCommon('feedback.unsavedChanges'),
-    confirmLabel: tCommon('confirm.discardChanges'),
-  })
+    message: tCommon("feedback.unsavedChanges"),
+    confirmLabel: tCommon("confirm.discardChanges"),
+  });
 
   useEffect(() => {
-    if (!open || options) return
-    let cancelled = false
+    if (!open || options) return;
+    let cancelled = false;
     listQuickActionOptions()
       .then((nextOptions) => {
-        if (!cancelled) setOptions(nextOptions)
+        if (!cancelled) setOptions(nextOptions);
       })
       .catch(() => {
         if (!cancelled) {
-          setOptionsError(true)
-          toast.error(t('quickActions.editor.loadFailed'))
+          setOptionsError(true);
+          toast.error(t("quickActions.editor.loadFailed"));
         }
-      })
-    return () => { cancelled = true }
-  }, [open, options, optionsAttempt, t])
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, options, optionsAttempt, t]);
 
   function retryOptions() {
-    setOptionsError(false)
-    setOptionsAttempt((n) => n + 1)
+    setOptionsError(false);
+    setOptionsAttempt((n) => n + 1);
   }
 
-  const loadingOptions = open && !options && !optionsError
-  const hidden = new Set(hiddenActionIds)
-  const visibleItems = visibleQuickActions(items, hidden)
-  const editing = editingId ? items.find((a) => a.id === editingId) : null
+  const loadingOptions = open && !options && !optionsError;
+  const hidden = new Set(hiddenActionIds);
+  const visibleItems = visibleQuickActions(items, hidden);
+  const editing = editingId ? items.find((a) => a.id === editingId) : null;
 
   function patch(id: string, changes: Partial<QuickAction>) {
-    setItems((prev) => prev.map((a) => (a.id === id ? { ...a, ...changes } : a)))
+    setItems((prev) => prev.map((a) => (a.id === id ? { ...a, ...changes } : a)));
   }
 
   function remove(id: string) {
-    setItems((prev) => prev.filter((a) => a.id !== id))
+    setItems((prev) => prev.filter((a) => a.id !== id));
   }
 
   function move(id: string, dir: -1 | 1) {
     setItems((prev) => {
-      const i = prev.findIndex((a) => a.id === id)
-      const j = i + dir
-      if (i < 0 || j < 0 || j >= prev.length) return prev
-      const next = [...prev]
-      ;[next[i], next[j]] = [next[j]!, next[i]!]
-      return next
-    })
+      const i = prev.findIndex((a) => a.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j]!, next[i]!];
+      return next;
+    });
   }
 
   function addFromOption(opt: QuickActionOption) {
     if (items.length >= MAX_QUICK_ACTIONS) {
-      toast.error(t('quickActions.editor.maxReached', { count: MAX_QUICK_ACTIONS }))
-      return
+      toast.error(t("quickActions.editor.maxReached", { count: MAX_QUICK_ACTIONS }));
+      return;
     }
     setItems((prev) => [
       ...prev,
@@ -152,67 +157,67 @@ export function QuickActionsEditor({
         iconKey: opt.iconKey,
         tone: opt.tone,
       },
-    ])
-    setView('list')
-    setSearch('')
+    ]);
+    setView("list");
+    setSearch("");
   }
 
   function addCustom() {
-    const label = customLabel.trim()
-    const href = customHref.trim()
-    if (!label || !href) return
+    const label = customLabel.trim();
+    const href = customHref.trim();
+    if (!label || !href) return;
     // Mirrors safeHref in _quick-actions-input.ts — '//' would be protocol-relative.
-    if (!((href.startsWith('/') && !href.startsWith('//')) || /^https?:\/\//i.test(href))) {
-      toast.error(t('quickActions.editor.invalidUrl'))
-      return
+    if (!((href.startsWith("/") && !href.startsWith("//")) || /^https?:\/\//i.test(href))) {
+      toast.error(t("quickActions.editor.invalidUrl"));
+      return;
     }
     if (items.length >= MAX_QUICK_ACTIONS) {
-      toast.error(t('quickActions.editor.maxReached', { count: MAX_QUICK_ACTIONS }))
-      return
+      toast.error(t("quickActions.editor.maxReached", { count: MAX_QUICK_ACTIONS }));
+      return;
     }
-    setItems((prev) => [...prev, { id: genId(), label, href, iconKey: 'link', tone: 'sky' }])
-    setCustomLabel('')
-    setCustomHref('')
-    setView('list')
+    setItems((prev) => [...prev, { id: genId(), label, href, iconKey: "link", tone: "sky" }]);
+    setCustomLabel("");
+    setCustomHref("");
+    setView("list");
   }
 
   async function handleSave() {
     const clean = items
       .map((a): QuickAction => {
-        const href = a.href.trim()
+        const href = a.href.trim();
         if (isCuratedQuickAction(a)) {
-          return { ...a, label: undefined, href }
+          return { ...a, label: undefined, href };
         }
-        return { id: a.id, label: a.label?.trim(), href, iconKey: a.iconKey, tone: a.tone }
+        return { id: a.id, label: a.label?.trim(), href, iconKey: a.iconKey, tone: a.tone };
       })
-      .filter((a) => (a.labelKey || a.label) && a.href)
-    setSaving(true)
+      .filter((a) => (a.labelKey || a.label) && a.href);
+    setSaving(true);
     try {
-      const res = await saveAction(clean)
+      const res = await saveAction(clean);
       if (res.ok) {
-        toast.success(t('quickActions.editor.saved'))
-        onSaved(clean)
-        router.refresh()
-        reset(clean)
-        onClose()
+        toast.success(t("quickActions.editor.saved"));
+        onSaved(clean);
+        router.refresh();
+        reset(clean);
+        onClose();
       } else {
-        toast.error(res.error ?? t('quickActions.editor.saveFailed'))
+        toast.error(res.error ?? t("quickActions.editor.saveFailed"));
       }
     } catch {
       // A rejected save action throws past the result branch: surface the
       // localized failure instead of failing silently with zero feedback.
-      toast.error(t('quickActions.editor.saveFailed'))
+      toast.error(t("quickActions.editor.saveFailed"));
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   const title =
-    view === 'picker'
-      ? t('quickActions.editor.addAction')
-      : view === 'edit'
-        ? t('quickActions.editor.edit')
-        : t('quickActions.editor.title')
+    view === "picker"
+      ? t("quickActions.editor.addAction")
+      : view === "edit"
+        ? t("quickActions.editor.edit")
+        : t("quickActions.editor.title");
 
   return (
     <Drawer
@@ -220,29 +225,32 @@ export function QuickActionsEditor({
       onClose={() => void guardedClose()}
       size="md"
       title={title}
-      description={view === 'list' ? t('quickActions.editor.description') : undefined}
+      description={view === "list" ? t("quickActions.editor.description") : undefined}
       footer={
         <>
           <Button type="button" variant="ghost" onClick={discard} disabled={saving}>
-            {t('quickActions.editor.cancel')}
+            {t("quickActions.editor.cancel")}
           </Button>
           <Button type="button" onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            {t('quickActions.editor.save')}
+            {t("quickActions.editor.save")}
           </Button>
         </>
       }
     >
-      {view === 'list' ? (
+      {view === "list" ? (
         <ListView
           items={visibleItems}
           storedCount={items.length}
-          onAdd={() => setView('picker')}
-          onEdit={(id) => { setEditingId(id); setView('edit') }}
+          onAdd={() => setView("picker")}
+          onEdit={(id) => {
+            setEditingId(id);
+            setView("edit");
+          }}
           onRemove={remove}
           onMove={move}
         />
-      ) : view === 'picker' ? (
+      ) : view === "picker" ? (
         <PickerView
           tab={pickerTab}
           setTab={setPickerTab}
@@ -258,17 +266,17 @@ export function QuickActionsEditor({
           setCustomHref={setCustomHref}
           onAddOption={addFromOption}
           onAddCustom={addCustom}
-          onBack={() => setView('list')}
+          onBack={() => setView("list")}
         />
       ) : editing ? (
         <EditView
           action={editing}
           onPatch={(c) => patch(editing.id, c)}
-          onBack={() => setView('list')}
+          onBack={() => setView("list")}
         />
       ) : null}
     </Drawer>
-  )
+  );
 }
 
 function ListView({
@@ -279,22 +287,22 @@ function ListView({
   onRemove,
   onMove,
 }: {
-  items: QuickAction[]
-  storedCount: number
-  onAdd: () => void
-  onEdit: (id: string) => void
-  onRemove: (id: string) => void
-  onMove: (id: string, dir: -1 | 1) => void
+  items: QuickAction[];
+  storedCount: number;
+  onAdd: () => void;
+  onEdit: (id: string) => void;
+  onRemove: (id: string) => void;
+  onMove: (id: string, dir: -1 | 1) => void;
 }) {
-  const t = useTranslations('dashboard')
-  const tCommon = useTranslations('common')
-  const atMax = storedCount >= MAX_QUICK_ACTIONS
+  const t = useTranslations("dashboard");
+  const tCommon = useTranslations("common");
+  const atMax = storedCount >= MAX_QUICK_ACTIONS;
   return (
     <div className="space-y-3">
       <ul className="space-y-2">
         {items.map((a, i) => {
-          const tc = toneOf(a.tone)
-          const Icon = QUICK_ACTION_ICONS[a.iconKey] ?? FALLBACK_ICON
+          const tc = toneOf(a.tone);
+          const Icon = QUICK_ACTION_ICONS[a.iconKey] ?? FALLBACK_ICON;
           return (
             <li
               key={a.id}
@@ -303,7 +311,7 @@ function ListView({
               <div className="flex flex-col">
                 <button
                   type="button"
-                  aria-label={tCommon('actions.previous')}
+                  aria-label={tCommon("actions.previous")}
                   disabled={i === 0}
                   onClick={() => onMove(a.id, -1)}
                   className="rounded p-0.5 text-slate-400 transition hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200"
@@ -312,7 +320,7 @@ function ListView({
                 </button>
                 <button
                   type="button"
-                  aria-label={tCommon('actions.next')}
+                  aria-label={tCommon("actions.next")}
                   disabled={i === items.length - 1}
                   onClick={() => onMove(a.id, 1)}
                   className="rounded p-0.5 text-slate-400 transition hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200"
@@ -325,12 +333,14 @@ function ListView({
                 onClick={() => onEdit(a.id)}
                 className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
               >
-                <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tc.chip}`}>
+                <span
+                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tc.chip}`}
+                >
                   <Icon size={15} />
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                    {quickActionLabel(a, t) || t('quickActions.editor.unnamed')}
+                    {quickActionLabel(a, t) || t("quickActions.editor.unnamed")}
                   </span>
                   <span className="block truncate text-[11px] text-slate-400 dark:text-slate-500">
                     {a.href}
@@ -340,14 +350,14 @@ function ListView({
               <span className={`h-3 w-3 shrink-0 rounded-full ${tc.swatch}`} aria-hidden />
               <button
                 type="button"
-                aria-label={tCommon('actions.remove')}
+                aria-label={tCommon("actions.remove")}
                 onClick={() => onRemove(a.id)}
                 className="rounded-md p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
               >
                 <Trash2 size={15} />
               </button>
             </li>
-          )
+          );
         })}
       </ul>
 
@@ -359,11 +369,11 @@ function ListView({
       >
         <Plus size={15} />
         {atMax
-          ? t('quickActions.editor.maxReached', { count: MAX_QUICK_ACTIONS })
-          : t('quickActions.editor.addAction')}
+          ? t("quickActions.editor.maxReached", { count: MAX_QUICK_ACTIONS })
+          : t("quickActions.editor.addAction")}
       </button>
     </div>
-  )
+  );
 }
 
 function PickerView({
@@ -383,33 +393,33 @@ function PickerView({
   onAddCustom,
   onBack,
 }: {
-  tab: PickerTab
-  setTab: (t: PickerTab) => void
-  search: string
-  setSearch: (s: string) => void
-  options: QuickActionOptions | null
-  loading: boolean
-  optionsError: boolean
-  onRetry: () => void
-  customLabel: string
-  customHref: string
-  setCustomLabel: (s: string) => void
-  setCustomHref: (s: string) => void
-  onAddOption: (o: QuickActionOption) => void
-  onAddCustom: () => void
-  onBack: () => void
+  tab: PickerTab;
+  setTab: (t: PickerTab) => void;
+  search: string;
+  setSearch: (s: string) => void;
+  options: QuickActionOptions | null;
+  loading: boolean;
+  optionsError: boolean;
+  onRetry: () => void;
+  customLabel: string;
+  customHref: string;
+  setCustomLabel: (s: string) => void;
+  setCustomHref: (s: string) => void;
+  onAddOption: (o: QuickActionOption) => void;
+  onAddCustom: () => void;
+  onBack: () => void;
 }) {
-  const t = useTranslations('dashboard')
-  const tCommon = useTranslations('common')
+  const t = useTranslations("dashboard");
+  const tCommon = useTranslations("common");
   const tabs: { key: PickerTab; label: string }[] = [
-    { key: 'common', label: t('quickActions.editor.common') },
-    { key: 'custom', label: t('quickActions.editor.customUrl') },
-  ]
-  const list = tab === 'common' ? (options?.common ?? []) : []
-  const q = search.trim().toLowerCase()
+    { key: "common", label: t("quickActions.editor.common") },
+    { key: "custom", label: t("quickActions.editor.customUrl") },
+  ];
+  const list = tab === "common" ? (options?.common ?? []) : [];
+  const q = search.trim().toLowerCase();
   const filtered = q
     ? list.filter((o) => o.label.toLowerCase().includes(q) || o.href.toLowerCase().includes(q))
-    : list
+    : list;
 
   return (
     <div className="space-y-3">
@@ -419,7 +429,7 @@ function PickerView({
         className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
       >
         <ArrowLeft size={13} />
-        {t('quickActions.editor.back')}
+        {t("quickActions.editor.back")}
       </button>
 
       <div className="flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800/60">
@@ -430,8 +440,8 @@ function PickerView({
             onClick={() => setTab(tb.key)}
             className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition ${
               tab === tb.key
-                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             }`}
           >
             {tb.label}
@@ -439,22 +449,22 @@ function PickerView({
         ))}
       </div>
 
-      {tab === 'custom' ? (
+      {tab === "custom" ? (
         <div className="space-y-3">
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-              {t('quickActions.editor.label')}
+              {t("quickActions.editor.label")}
             </label>
             <Input
               value={customLabel}
               onChange={(e) => setCustomLabel(e.target.value)}
-              placeholder={t('quickActions.editor.labelPlaceholder')}
+              placeholder={t("quickActions.editor.labelPlaceholder")}
               maxLength={80}
             />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-              {t('quickActions.editor.link')}
+              {t("quickActions.editor.link")}
             </label>
             <Input
               value={customHref}
@@ -462,7 +472,7 @@ function PickerView({
               placeholder="/ar"
             />
             <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              {t('quickActions.editor.linkHint')}
+              {t("quickActions.editor.linkHint")}
             </p>
           </div>
           <Button
@@ -472,7 +482,7 @@ function PickerView({
             className="w-full"
           >
             <Plus size={14} className="mr-1.5" />
-            {t('quickActions.editor.addAction')}
+            {t("quickActions.editor.addAction")}
           </Button>
         </div>
       ) : (
@@ -485,7 +495,7 @@ function PickerView({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={t('quickActions.editor.searchPlaceholder')}
+              placeholder={t("quickActions.editor.searchPlaceholder")}
               className="pl-8"
             />
           </div>
@@ -493,26 +503,26 @@ function PickerView({
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">
               <Loader2 size={16} className="animate-spin" />
-              {t('quickActions.editor.loading')}
+              {t("quickActions.editor.loading")}
             </div>
           ) : optionsError ? (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {t('quickActions.editor.loadFailed')}
+                {t("quickActions.editor.loadFailed")}
               </p>
               <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-                {tCommon('actions.retry')}
+                {tCommon("actions.retry")}
               </Button>
             </div>
           ) : filtered.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
-              {t('quickActions.editor.noResults')}
+              {t("quickActions.editor.noResults")}
             </p>
           ) : (
             <ul className="space-y-1">
               {filtered.map((o) => {
-                const tc = toneOf(o.tone)
-                const Icon = QUICK_ACTION_ICONS[o.iconKey] ?? FALLBACK_ICON
+                const tc = toneOf(o.tone);
+                const Icon = QUICK_ACTION_ICONS[o.iconKey] ?? FALLBACK_ICON;
                 return (
                   <li key={`${o.href}:${o.label}`}>
                     <button
@@ -520,7 +530,9 @@ function PickerView({
                       onClick={() => onAddOption(o)}
                       className="flex w-full items-center gap-2.5 rounded-lg border border-transparent px-2 py-1.5 text-left transition hover:border-teal-200 hover:bg-teal-50/50 dark:hover:border-teal-800/60 dark:hover:bg-teal-950/30"
                     >
-                      <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tc.chip}`}>
+                      <span
+                        className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tc.chip}`}
+                      >
                         <Icon size={15} />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -539,14 +551,14 @@ function PickerView({
                       <Plus size={15} className="shrink-0 text-teal-600 dark:text-teal-400" />
                     </button>
                   </li>
-                )
+                );
               })}
             </ul>
           )}
         </>
       )}
     </div>
-  )
+  );
 }
 
 function EditView({
@@ -554,11 +566,11 @@ function EditView({
   onPatch,
   onBack,
 }: {
-  action: QuickAction
-  onPatch: (changes: Partial<QuickAction>) => void
-  onBack: () => void
+  action: QuickAction;
+  onPatch: (changes: Partial<QuickAction>) => void;
+  onBack: () => void;
 }) {
-  const t = useTranslations('dashboard')
+  const t = useTranslations("dashboard");
   return (
     <div className="space-y-4">
       <button
@@ -567,27 +579,27 @@ function EditView({
         className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
       >
         <ArrowLeft size={13} />
-        {t('quickActions.editor.back')}
+        {t("quickActions.editor.back")}
       </button>
 
       <ActionPreview action={action} />
 
       <div className="space-y-1">
         <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-          {t('quickActions.editor.label')}
+          {t("quickActions.editor.label")}
         </label>
         <Input
           value={quickActionLabel(action, t)}
           onChange={(e) => onPatch({ label: e.target.value, labelKey: undefined })}
           readOnly={isCuratedQuickAction(action)}
-          placeholder={t('quickActions.editor.labelPlaceholder')}
+          placeholder={t("quickActions.editor.labelPlaceholder")}
           maxLength={80}
         />
       </div>
 
       <div className="space-y-1">
         <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-          {t('quickActions.editor.link')}
+          {t("quickActions.editor.link")}
         </label>
         <Input
           value={action.href}
@@ -598,76 +610,78 @@ function EditView({
 
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-          {t('quickActions.editor.icon')}
+          {t("quickActions.editor.icon")}
         </label>
         <div className="grid grid-cols-7 gap-1.5 sm:grid-cols-9">
           {ICON_PICKER_KEYS.map((key) => {
-            const Icon = QUICK_ACTION_ICONS[key]!
-            const active = action.iconKey === key
+            const Icon = QUICK_ACTION_ICONS[key]!;
+            const active = action.iconKey === key;
             return (
               <button
                 key={key}
                 type="button"
-                aria-label={`${t('quickActions.editor.icon')}: ${choiceLabel(key)}`}
+                aria-label={`${t("quickActions.editor.icon")}: ${choiceLabel(key)}`}
                 onClick={() => onPatch({ iconKey: key })}
                 className={`flex aspect-square items-center justify-center rounded-lg border transition ${
                   active
-                    ? 'border-teal-400 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300'
-                    : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800/60'
+                    ? "border-teal-400 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300"
+                    : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800/60"
                 }`}
               >
                 <Icon size={16} />
               </button>
-            )
+            );
           })}
         </div>
       </div>
 
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-          {t('quickActions.editor.color')}
+          {t("quickActions.editor.color")}
         </label>
         <div className="flex flex-wrap gap-2">
           {TONE_KEYS.map((tone) => {
-            const active = action.tone === tone
+            const active = action.tone === tone;
             return (
               <button
                 key={tone}
                 type="button"
-                aria-label={`${t('quickActions.editor.color')}: ${TONES[tone].name}`}
+                aria-label={`${t("quickActions.editor.color")}: ${TONES[tone].name}`}
                 title={TONES[tone].name}
                 onClick={() => onPatch({ tone })}
                 className={`h-7 w-7 rounded-full ${TONES[tone].swatch} ring-2 ring-offset-2 transition dark:ring-offset-slate-900 ${
-                  active ? 'ring-slate-900 dark:ring-white' : 'ring-transparent'
+                  active ? "ring-slate-900 dark:ring-white" : "ring-transparent"
                 }`}
               />
-            )
+            );
           })}
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function ActionPreview({ action }: { action: QuickAction }) {
-  const t = useTranslations('dashboard')
-  const tc = toneOf(action.tone)
-  const Icon = QUICK_ACTION_ICONS[action.iconKey] ?? FALLBACK_ICON
+  const t = useTranslations("dashboard");
+  const tc = toneOf(action.tone);
+  const Icon = QUICK_ACTION_ICONS[action.iconKey] ?? FALLBACK_ICON;
   return (
     <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800/40">
       <p className="mb-2 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-        {t('quickActions.editor.preview')}
+        {t("quickActions.editor.preview")}
       </p>
       <div
         className={`group flex w-full max-w-[16rem] items-center gap-2.5 rounded-xl border px-3 py-2 shadow-sm ${tc.tile}`}
       >
-        <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${tc.chip}`}>
+        <span
+          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${tc.chip}`}
+        >
           <Icon size={14} />
         </span>
         <span className={`min-w-0 flex-1 truncate text-[13px] font-medium ${tc.label}`}>
-          {quickActionLabel(action, t) || t('quickActions.editor.unnamed')}
+          {quickActionLabel(action, t) || t("quickActions.editor.unnamed")}
         </span>
       </div>
     </div>
-  )
+  );
 }

@@ -1,8 +1,11 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
-const realRunLifecycleUrl = new URL('../../../../../../engine/src/payroll/run-lifecycle.ts', import.meta.url).href
-const realAuthzUrl = new URL('../../../../../lib/authz.ts', import.meta.url).href
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
+const realRunLifecycleUrl = new URL(
+  "../../../../../../engine/src/payroll/run-lifecycle.ts",
+  import.meta.url,
+).href;
+const realAuthzUrl = new URL("../../../../../lib/authz.ts", import.meta.url).href;
 
 /**
  * POST submit-approval — the remedy the commit refusal names.
@@ -17,36 +20,36 @@ const realAuthzUrl = new URL('../../../../../lib/authz.ts', import.meta.url).hre
  * through the same approval boundary as before.
  */
 
-const stateKey = Symbol.for('openbooks.payroll-run-submit-approval-test')
+const stateKey = Symbol.for("openbooks.payroll-run-submit-approval-test");
 interface RouteState {
-  ownedSubsidiaryId: string | null
-  submitCalls: unknown[][]
-  submitResult: { gated: boolean; runId: string | null; flowError: string | null }
-  evidenceCalls: unknown[][]
-  approvalReleaseCalls: unknown[]
-  approvalReleaseError: string | null
-  commitCalls: unknown[]
-  permissions: Set<string>
-  recalculationCalls: unknown[]
-  policyExists: boolean
+  ownedSubsidiaryId: string | null;
+  submitCalls: unknown[][];
+  submitResult: { gated: boolean; runId: string | null; flowError: string | null };
+  evidenceCalls: unknown[][];
+  approvalReleaseCalls: unknown[];
+  approvalReleaseError: string | null;
+  commitCalls: unknown[];
+  permissions: Set<string>;
+  recalculationCalls: unknown[];
+  policyExists: boolean;
 }
 const routeState: RouteState = {
-  ownedSubsidiaryId: 'sub-1',
+  ownedSubsidiaryId: "sub-1",
   submitCalls: [],
-  submitResult: { gated: true, runId: 'run-1', flowError: null },
+  submitResult: { gated: true, runId: "run-1", flowError: null },
   evidenceCalls: [],
   approvalReleaseCalls: [],
   approvalReleaseError: null,
   commitCalls: [],
-  permissions: new Set(['payroll.run']),
+  permissions: new Set(["payroll.run"]),
   recalculationCalls: [],
   policyExists: true,
-}
-;(globalThis as Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-submit-approval-test')]
       export const db = {
@@ -61,7 +64,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:feature-gates',
+    "mock:feature-gates",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-submit-approval-test')]
       export async function guardFeaturePermission() {
@@ -70,14 +73,14 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       export { guardUnrestrictedScope, subsidiaryScopeAllows, subsidiariesInScope, can } from '${realAuthzUrl}'
       export function guardSubsidiaryScope() { return undefined }
     `,
   ],
   [
-    'mock:payroll-run',
+    "mock:payroll-run",
     `
       export { attributePayRunEntity, discardPayRun } from '${realRunLifecycleUrl}'
       const state = globalThis[Symbol.for('openbooks.payroll-run-submit-approval-test')]
@@ -87,10 +90,13 @@ const mockSources = new Map<string, string>([
       export async function previewPayRunGl() { throw new Error('not under test') }
     `,
   ],
-  ['mock:payroll-payment', `export async function recordPayRunPayment() { throw new Error('not under test') }`],
-  ['mock:payroll-readiness', `export async function assertPayRunNotStale() {}`],
   [
-    'mock:payroll-approval',
+    "mock:payroll-payment",
+    `export async function recordPayRunPayment() { throw new Error('not under test') }`,
+  ],
+  ["mock:payroll-readiness", `export async function assertPayRunNotStale() {}`],
+  [
+    "mock:payroll-approval",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-submit-approval-test')]
       // The boundary maps the REAL PayrollError to 422, so the double must
@@ -109,7 +115,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:flows',
+    "mock:flows",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-submit-approval-test')]
       export async function submitAndReleaseIfUngated(...args) {
@@ -118,9 +124,12 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:payroll-outputs', `export async function emailRunStubs() { throw new Error('not under test') }`],
   [
-    'mock:payroll-evidence',
+    "mock:payroll-outputs",
+    `export async function emailRunStubs() { throw new Error('not under test') }`,
+  ],
+  [
+    "mock:payroll-evidence",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-submit-approval-test')]
       export async function assemblePayRunEvidence(...args) {
@@ -129,9 +138,9 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:payroll-scope', `export async function lockAndCheckPayrollRunPopulation() {}`],
+  ["mock:payroll-scope", `export async function lockAndCheckPayrollRunPopulation() {}`],
   [
-    'mock:payroll-run-adjustments',
+    "mock:payroll-run-adjustments",
     `
       export async function recordPayRunHolidayHours() { throw new Error('not under test') }
       export function canonicalAdjustmentHours() { throw new Error('not under test') }
@@ -141,173 +150,201 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:payroll-holiday-attestations',
+    "mock:payroll-holiday-attestations",
     `export async function storedHolidayEligibilityForRun() { return {} }`,
   ],
-])
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // A mock: URL has no base for workspace resolution; the approval double
     // raises the REAL PayrollError (the boundary maps it to 422 by
     // instanceof), so resolve it to the workspace file explicitly.
-    if (specifier === 'real:payroll-error') {
+    if (specifier === "real:payroll-error") {
       return {
         shortCircuit: true,
-        url: new URL('../../../../../../engine/src/payroll/error.ts', import.meta.url).href,
-      }
+        url: new URL("../../../../../../engine/src/payroll/error.ts", import.meta.url).href,
+      };
     }
-    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
-    if (['@openbooks/engine/payroll/run-calculation', '@openbooks/engine/payroll/run-commit', '@openbooks/engine/payroll/run-lifecycle'].includes(specifier)) return { url: 'mock:payroll-run', shortCircuit: true }
-    if (specifier === '@openbooks/engine/payroll/payment') return { url: 'mock:payroll-payment', shortCircuit: true }
-    if (specifier === '@openbooks/engine/payroll/readiness') return { url: 'mock:payroll-readiness', shortCircuit: true }
-    if (specifier === '@openbooks/engine/payroll/approval') return { url: 'mock:payroll-approval', shortCircuit: true }
-    if (specifier === '@openbooks/engine/flows/module') return { url: 'mock:flows', shortCircuit: true }
-    if (specifier === '@openbooks/engine/payroll/run-adjustments') {
-      return { url: 'mock:payroll-run-adjustments', shortCircuit: true }
+    if (specifier === "@openbooks/engine/platform/db")
+      return { url: "mock:db", shortCircuit: true };
+    if (
+      [
+        "@openbooks/engine/payroll/run-calculation",
+        "@openbooks/engine/payroll/run-commit",
+        "@openbooks/engine/payroll/run-lifecycle",
+      ].includes(specifier)
+    )
+      return { url: "mock:payroll-run", shortCircuit: true };
+    if (specifier === "@openbooks/engine/payroll/payment")
+      return { url: "mock:payroll-payment", shortCircuit: true };
+    if (specifier === "@openbooks/engine/payroll/readiness")
+      return { url: "mock:payroll-readiness", shortCircuit: true };
+    if (specifier === "@openbooks/engine/payroll/approval")
+      return { url: "mock:payroll-approval", shortCircuit: true };
+    if (specifier === "@openbooks/engine/flows/module")
+      return { url: "mock:flows", shortCircuit: true };
+    if (specifier === "@openbooks/engine/payroll/run-adjustments") {
+      return { url: "mock:payroll-run-adjustments", shortCircuit: true };
     }
-    if (specifier === '@openbooks/engine/payroll/holiday-attestations') {
-      return { url: 'mock:payroll-holiday-attestations', shortCircuit: true }
+    if (specifier === "@openbooks/engine/payroll/holiday-attestations") {
+      return { url: "mock:payroll-holiday-attestations", shortCircuit: true };
     }
-    if (specifier === '@openbooks/engine/payroll/scope') return { url: 'mock:payroll-scope', shortCircuit: true }
-    if (specifier.endsWith('/lib/payroll-outputs')) return { url: 'mock:payroll-outputs', shortCircuit: true }
-    if (specifier.endsWith('/lib/payroll-evidence')) return { url: 'mock:payroll-evidence', shortCircuit: true }
-    if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }
-    if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (specifier === "@openbooks/engine/payroll/scope")
+      return { url: "mock:payroll-scope", shortCircuit: true };
+    if (specifier.endsWith("/lib/payroll-outputs"))
+      return { url: "mock:payroll-outputs", shortCircuit: true };
+    if (specifier.endsWith("/lib/payroll-evidence"))
+      return { url: "mock:payroll-evidence", shortCircuit: true };
+    if (specifier.endsWith("/lib/feature-gates"))
+      return { url: "mock:feature-gates", shortCircuit: true };
+    if (specifier.endsWith("/lib/authz")) return { url: "mock:authz", shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?payroll-run-submit-approval-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-after(() => hooks.deregister())
+const routeUrl = "./route.ts?payroll-run-submit-approval-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
+after(() => hooks.deregister());
 
-const RUN_ID = '00000000-0000-4000-8000-000000000001'
+const RUN_ID = "00000000-0000-4000-8000-000000000001";
 
 function reset() {
-  routeState.ownedSubsidiaryId = 'sub-1'
-  routeState.submitCalls = []
-  routeState.submitResult = { gated: true, runId: 'run-1', flowError: null }
-  routeState.evidenceCalls = []
-  routeState.approvalReleaseCalls = []
-  routeState.approvalReleaseError = null
-  routeState.commitCalls = []
-  routeState.permissions = new Set(['payroll.run'])
-  routeState.recalculationCalls = []
-  routeState.policyExists = true
+  routeState.ownedSubsidiaryId = "sub-1";
+  routeState.submitCalls = [];
+  routeState.submitResult = { gated: true, runId: "run-1", flowError: null };
+  routeState.evidenceCalls = [];
+  routeState.approvalReleaseCalls = [];
+  routeState.approvalReleaseError = null;
+  routeState.commitCalls = [];
+  routeState.permissions = new Set(["payroll.run"]);
+  routeState.recalculationCalls = [];
+  routeState.policyExists = true;
 }
 
 function post(body: unknown) {
   return POST(
     new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: RUN_ID }) },
-  )
+  );
 }
 
-test('submit-approval assembles the evidence package and routes through the native engine', async () => {
-  reset()
-  const res = await post({ action: 'submit-approval' })
-  assert.equal(res.status, 200)
-  assert.deepEqual(await res.json(), { ok: true, evidence: { attached: 3 }, gated: true })
+test("submit-approval assembles the evidence package and routes through the native engine", async () => {
+  reset();
+  const res = await post({ action: "submit-approval" });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true, evidence: { attached: 3 }, gated: true });
   // Evidence first (the approver reads it), then the Flows submission with
   // the pay_run subject kind — payroll models nothing itself.
-  assert.deepEqual(routeState.evidenceCalls, [['org-1', 'actor-1', RUN_ID, null]])
-  assert.deepEqual(routeState.submitCalls, [['pay_run', RUN_ID, 'actor-1']])
-})
+  assert.deepEqual(routeState.evidenceCalls, [["org-1", "actor-1", RUN_ID, null]]);
+  assert.deepEqual(routeState.submitCalls, [["pay_run", RUN_ID, "actor-1"]]);
+});
 
-test('submit-approval on a tenant with no flow reports gated:false and parks nothing', async () => {
-  reset()
-  routeState.submitResult = { gated: false, runId: null, flowError: null }
-  const res = await post({ action: 'submit-approval' })
-  assert.equal(res.status, 200)
-  assert.deepEqual(await res.json(), { ok: true, evidence: { attached: 3 }, gated: false })
-})
+test("submit-approval on a tenant with no flow reports gated:false and parks nothing", async () => {
+  reset();
+  routeState.submitResult = { gated: false, runId: null, flowError: null };
+  const res = await post({ action: "submit-approval" });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true, evidence: { attached: 3 }, gated: false });
+});
 
-test('submit-approval fails closed when the flow errors', async () => {
-  reset()
-  routeState.submitResult = { gated: false, runId: null, flowError: 'approval could not be routed: no approvers resolved' }
-  const res = await post({ action: 'submit-approval' })
-  assert.equal(res.status, 422)
-  const body = (await res.json()) as { error: string }
-  assert.match(body.error, /no approvers resolved/)
-  assert.equal(routeState.commitCalls.length, 0)
-})
+test("submit-approval fails closed when the flow errors", async () => {
+  reset();
+  routeState.submitResult = {
+    gated: false,
+    runId: null,
+    flowError: "approval could not be routed: no approvers resolved",
+  };
+  const res = await post({ action: "submit-approval" });
+  assert.equal(res.status, 422);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /no approvers resolved/);
+  assert.equal(routeState.commitCalls.length, 0);
+});
 
-test('commit still refuses through the unchanged approval boundary', async () => {
-  reset()
+test("commit still refuses through the unchanged approval boundary", async () => {
+  reset();
   routeState.approvalReleaseError =
-    'pay run has not been submitted for approval — this organization requires a pay-run approval'
-  const res = await post({ action: 'commit' })
-  assert.equal(res.status, 422)
-  const body = (await res.json()) as { error: string }
-  assert.equal(body.error, routeState.approvalReleaseError)
+    "pay run has not been submitted for approval — this organization requires a pay-run approval";
+  const res = await post({ action: "commit" });
+  assert.equal(res.status, 422);
+  const body = (await res.json()) as { error: string };
+  assert.equal(body.error, routeState.approvalReleaseError);
   // The refusal fired before any money moved.
-  assert.equal(routeState.commitCalls.length, 0)
-  assert.deepEqual(routeState.approvalReleaseCalls, [{ orgId: 'org-1', documentId: RUN_ID }])
-})
+  assert.equal(routeState.commitCalls.length, 0);
+  assert.deepEqual(routeState.approvalReleaseCalls, [{ orgId: "org-1", documentId: RUN_ID }]);
+});
 
-test('submit-approval on an unknown run answers not found', async () => {
-  reset()
-  routeState.ownedSubsidiaryId = null
-  const res = await post({ action: 'submit-approval' })
-  assert.equal(res.status, 404)
-  assert.equal(routeState.submitCalls.length, 0)
-})
+test("submit-approval on an unknown run answers not found", async () => {
+  reset();
+  routeState.ownedSubsidiaryId = null;
+  const res = await post({ action: "submit-approval" });
+  assert.equal(res.status, 404);
+  assert.equal(routeState.submitCalls.length, 0);
+});
 
-test('recalculating an approved run requires payroll approval authority before mutation', async () => {
-  reset()
-  routeState.permissions.add('gl.post')
-  const res = await post({ action: 'recalculate-approved' })
-  assert.equal(res.status, 403)
-  assert.match((await res.json() as { error: string }).error, /payroll.manage/)
-  assert.deepEqual(routeState.recalculationCalls, [])
-  assert.deepEqual(routeState.submitCalls, [])
-})
+test("recalculating an approved run requires payroll approval authority before mutation", async () => {
+  reset();
+  routeState.permissions.add("gl.post");
+  const res = await post({ action: "recalculate-approved" });
+  assert.equal(res.status, 403);
+  assert.match(((await res.json()) as { error: string }).error, /payroll.manage/);
+  assert.deepEqual(routeState.recalculationCalls, []);
+  assert.deepEqual(routeState.submitCalls, []);
+});
 
-test('payroll approval authority recalculates and resubmits the new evidence', async () => {
-  reset()
-  routeState.permissions.add('payroll.manage')
-  const res = await post({ action: 'recalculate-approved' })
-  assert.equal(res.status, 200)
-  const body = await res.json() as { resubmitted: boolean; gated: boolean; gross: string }
-  assert.equal(body.resubmitted, true)
-  assert.equal(body.gated, true)
-  assert.equal(body.gross, '2000.0000')
-  assert.deepEqual(routeState.recalculationCalls, [{
-    orgId: 'org-1', documentId: RUN_ID, actorId: 'actor-1', allowedSubsidiaryIds: null,
-  }])
-  assert.deepEqual(routeState.submitCalls, [['pay_run', RUN_ID, 'actor-1']])
-  assert.equal(routeState.commitCalls.length, 0)
-})
+test("payroll approval authority recalculates and resubmits the new evidence", async () => {
+  reset();
+  routeState.permissions.add("payroll.manage");
+  const res = await post({ action: "recalculate-approved" });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { resubmitted: boolean; gated: boolean; gross: string };
+  assert.equal(body.resubmitted, true);
+  assert.equal(body.gated, true);
+  assert.equal(body.gross, "2000.0000");
+  assert.deepEqual(routeState.recalculationCalls, [
+    {
+      orgId: "org-1",
+      documentId: RUN_ID,
+      actorId: "actor-1",
+      allowedSubsidiaryIds: null,
+    },
+  ]);
+  assert.deepEqual(routeState.submitCalls, [["pay_run", RUN_ID, "actor-1"]]);
+  assert.equal(routeState.commitCalls.length, 0);
+});
 
-test('a failed resubmission names the recalculated draft state and the approval remedy', async () => {
-  reset()
-  routeState.permissions.add('payroll.manage')
-  routeState.submitResult.flowError = 'no approvers resolved'
-  const res = await post({ action: 'recalculate-approved' })
-  assert.equal(res.status, 422)
-  assert.match((await res.json() as { error: string }).error, /recalculated and returned to draft.*no approvers resolved/)
-  assert.equal(routeState.recalculationCalls.length, 1)
-  assert.equal(routeState.commitCalls.length, 0)
-})
+test("a failed resubmission names the recalculated draft state and the approval remedy", async () => {
+  reset();
+  routeState.permissions.add("payroll.manage");
+  routeState.submitResult.flowError = "no approvers resolved";
+  const res = await post({ action: "recalculate-approved" });
+  assert.equal(res.status, 422);
+  assert.match(
+    ((await res.json()) as { error: string }).error,
+    /recalculated and returned to draft.*no approvers resolved/,
+  );
+  assert.equal(routeState.recalculationCalls.length, 1);
+  assert.equal(routeState.commitCalls.length, 0);
+});
 
-test('a recalculated run with no approval policy stays draft without inventing an approval', async () => {
-  reset()
-  routeState.permissions.add('payroll.manage')
-  routeState.policyExists = false
-  const res = await post({ action: 'recalculate-approved' })
-  assert.equal(res.status, 200)
-  const body = await res.json() as { resubmitted: boolean; gated: boolean }
-  assert.equal(body.resubmitted, false)
-  assert.equal(body.gated, false)
-  assert.deepEqual(routeState.submitCalls, [])
-})
+test("a recalculated run with no approval policy stays draft without inventing an approval", async () => {
+  reset();
+  routeState.permissions.add("payroll.manage");
+  routeState.policyExists = false;
+  const res = await post({ action: "recalculate-approved" });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { resubmitted: boolean; gated: boolean };
+  assert.equal(body.resubmitted, false);
+  assert.equal(body.gated, false);
+  assert.deepEqual(routeState.submitCalls, []);
+});

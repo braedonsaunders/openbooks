@@ -1,23 +1,23 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import test from 'node:test';
-import type { SessionUser } from '../auth';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import type { SessionUser } from "../auth";
 
-const { sql } = await import('drizzle-orm');
-const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { executeAssistantTool } = await import('./registry');
+const { sql } = await import("drizzle-orm");
+const { withBypassContext, db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { executeAssistantTool } = await import("./registry");
 
 function reader(orgId: string, subsidiaryIds: Set<string> | null, perms: string[]) {
   const userId = randomUUID();
   const user: SessionUser = {
     id: userId,
     orgId,
-    name: 'Orders scope reader',
-    email: 'orders-scope@scratch.test',
-    roles: [{ key: 'ordinary-role', name: 'Ordinary role' }],
+    name: "Orders scope reader",
+    email: "orders-scope@scratch.test",
+    roles: [{ key: "ordinary-role", name: "Ordinary role" }],
     isSuperAdmin: false,
-    envKind: 'production',
+    envKind: "production",
     productionOrgId: orgId,
     homeOrgId: orgId,
     homeUserId: userId,
@@ -25,95 +25,133 @@ function reader(orgId: string, subsidiaryIds: Set<string> | null, perms: string[
   return { user, permissions: new Set(perms), allowedSubsidiaryIds: subsidiaryIds };
 }
 
-test('order reads: backlog, line remainders, and subsidiary isolation', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
-  const hidden = randomUUID();
-  const soId = randomUUID();
-  const hiddenPoId = randomUUID();
-  try {
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"warehousing":true,"fulfillment":true}'::jsonb) where id=${org.orgId}`);
-      await db.execute(sql`
+test(
+  "order reads: backlog, line remainders, and subsidiary isolation",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const hidden = randomUUID();
+    const soId = randomUUID();
+    const hiddenPoId = randomUUID();
+    try {
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"warehousing":true,"fulfillment":true}'::jsonb) where id=${org.orgId}`,
+        );
+        await db.execute(sql`
         insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
         values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden buyer','CAD','CA',true,false)
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into documents(id,org_id,kind,document_number,document_date,status,currency,subtotal,tax_total,total,subsidiary_id,party_id)
         values (${soId},${org.orgId},'sales_order','SO-0001',${org.date},'draft','CAD','200','0','200',${org.subsidiaryId},${org.customerId}),
                (${hiddenPoId},${org.orgId},'purchase_order','PO-0001',${org.date},'draft','CAD','500','0','500',${hidden},${org.vendorId})
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines(id,org_id,document_id,line_number,item_id,quantity,quantity_fulfilled,quantity_billed,unit_price,amount,subsidiary_id)
         values (${randomUUID()},${org.orgId},${soId},1,${org.items.service},'10','4','2','20','200',${org.subsidiaryId}),
                (${randomUUID()},${org.orgId},${soId},2,${org.items.fifo},'3','1','0','0','0',${org.subsidiaryId}),
                (${randomUUID()},${org.orgId},${hiddenPoId},1,${org.items.fifo},'5','0','0','100','500',${hidden})
       `);
-      // Lines are immutable once approved: seed them as drafts, then commit.
-      await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id in (${soId},${hiddenPoId})`);
-    });
+        // Lines are immutable once approved: seed them as drafts, then commit.
+        await db.execute(
+          sql`update documents set status='approved' where org_id=${org.orgId} and id in (${soId},${hiddenPoId})`,
+        );
+      });
 
-    const arOnly = reader(org.orgId, new Set([org.subsidiaryId]), ['assistant.use', 'ar.read']);
-    const search = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(arOnly, 'search_orders', {}));
-    assert.equal(search.ok, true, JSON.stringify(search));
-    const searchData = (search as { ok: true; data: Record<string, unknown> }).data;
-    assert.equal(searchData.total, 1);
-    assert.equal(searchData.backlogTotal, '200.0000');
-    const item = ((searchData.items as Record<string, unknown>[])[0]);
-    assert.ok(item);
-    assert.equal(item.documentNumber, 'SO-0001');
-    assert.equal(item.fulfilment, 'partially_fulfilled');
-    assert.equal(item.billing, 'partially_billed');
+      const arOnly = reader(org.orgId, new Set([org.subsidiaryId]), ["assistant.use", "ar.read"]);
+      const search = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(arOnly, "search_orders", {}),
+      );
+      assert.equal(search.ok, true, JSON.stringify(search));
+      const searchData = (search as { ok: true; data: Record<string, unknown> }).data;
+      assert.equal(searchData.total, 1);
+      assert.equal(searchData.backlogTotal, "200.0000");
+      const item = (searchData.items as Record<string, unknown>[])[0];
+      assert.ok(item);
+      assert.equal(item.documentNumber, "SO-0001");
+      assert.equal(item.fulfilment, "partially_fulfilled");
+      assert.equal(item.billing, "partially_billed");
 
-    const get = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(arOnly, 'get_order', { kind: 'sales_order', id: soId }));
-    assert.equal(get.ok, true, JSON.stringify(get));
-    const header = (get as { ok: true; data: { header: Record<string, unknown> } }).data.header;
-    assert.equal(header.open_balance, null);
-    const line = ((get as { ok: true; data: Record<string, unknown> }).data.lines as Record<string, unknown>[])[0];
-    assert.ok(line);
-    assert.equal(line.unit_price, '20');
-    assert.equal(line.remainingBillable, '8.0000');
-    assert.equal(line.fulfilment, 'partially_fulfilled');
-    // A stock line bills only what has shipped: 1 of 3, exactly what
-    // Convert to Invoice would carry, not the whole ordered remainder.
-    const stockLine = ((get as { ok: true; data: Record<string, unknown> }).data.lines as Record<string, unknown>[])[1];
-    assert.ok(stockLine);
-    assert.equal(stockLine.remainingBillable, '1.0000');
+      const get = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(arOnly, "get_order", { kind: "sales_order", id: soId }),
+      );
+      assert.equal(get.ok, true, JSON.stringify(get));
+      const header = (get as { ok: true; data: { header: Record<string, unknown> } }).data.header;
+      assert.equal(header.open_balance, null);
+      const line = (
+        (get as { ok: true; data: Record<string, unknown> }).data.lines as Record<string, unknown>[]
+      )[0];
+      assert.ok(line);
+      assert.equal(line.unit_price, "20");
+      assert.equal(line.remainingBillable, "8.0000");
+      assert.equal(line.fulfilment, "partially_fulfilled");
+      // A stock line bills only what has shipped: 1 of 3, exactly what
+      // Convert to Invoice would carry, not the whole ordered remainder.
+      const stockLine = (
+        (get as { ok: true; data: Record<string, unknown> }).data.lines as Record<string, unknown>[]
+      )[1];
+      assert.ok(stockLine);
+      assert.equal(stockLine.remainingBillable, "1.0000");
 
-    // The backorder position lists the stock line only, with its open quantity.
-    const position = await withOrgContext(org.orgId, () => executeAssistantTool(arOnly, 'get_backorder_position', { orderId: soId }));
-    assert.equal(position.ok, true, JSON.stringify(position));
-    const backordered = (position as { ok: true; data: { items: { lineNumber: number; open: string }[] } }).data.items;
-    assert.deepEqual(backordered.map((row) => [row.lineNumber, row.open]), [[2, '2.00000000']]);
+      // The backorder position lists the stock line only, with its open quantity.
+      const position = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(arOnly, "get_backorder_position", { orderId: soId }),
+      );
+      assert.equal(position.ok, true, JSON.stringify(position));
+      const backordered = (
+        position as { ok: true; data: { items: { lineNumber: number; open: string }[] } }
+      ).data.items;
+      assert.deepEqual(
+        backordered.map((row) => [row.lineNumber, row.open]),
+        [[2, "2.00000000"]],
+      );
 
-    // a purchasing-only caller cannot read the sales order; ar-only caller cannot read purchase kinds.
-    const apOnly = reader(org.orgId, new Set([org.subsidiaryId]), ['assistant.use', 'purchase_orders.read']);
-    const crossKind = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(apOnly, 'get_order', { kind: 'sales_order', id: soId }));
-    assert.equal(crossKind.ok, false);
-    const hiddenSeeker = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(apOnly, 'search_orders', { kind: 'purchase_order' }));
-    assert.equal(hiddenSeeker.ok, true, JSON.stringify(hiddenSeeker));
-    assert.equal((hiddenSeeker as { ok: true; data: Record<string, unknown> }).data.total, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // a purchasing-only caller cannot read the sales order; ar-only caller cannot read purchase kinds.
+      const apOnly = reader(org.orgId, new Set([org.subsidiaryId]), [
+        "assistant.use",
+        "purchase_orders.read",
+      ]);
+      const crossKind = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(apOnly, "get_order", { kind: "sales_order", id: soId }),
+      );
+      assert.equal(crossKind.ok, false);
+      const hiddenSeeker = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(apOnly, "search_orders", { kind: "purchase_order" }),
+      );
+      assert.equal(hiddenSeeker.ok, true, JSON.stringify(hiddenSeeker));
+      assert.equal((hiddenSeeker as { ok: true; data: Record<string, unknown> }).data.total, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('order reads refuse while the feature is off', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
-  try {
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"orders":false}'::jsonb) where id=${org.orgId}`);
-    });
-    const authz = reader(org.orgId, null, ['assistant.use', 'ar.read']);
-    const search = await withOrgContext(org.orgId, () =>
-      executeAssistantTool(authz, 'search_orders', {}));
-    assert.equal(search.ok, false);
-    assert.equal((search as { ok: false; error: string }).error, 'orders_feature_disabled');
-    assert.deepEqual(await withOrgContext(org.orgId, () => executeAssistantTool(authz, 'get_backorder_position', {})), { ok: false, error: 'feature_disabled' });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "order reads refuse while the feature is off",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"orders":false}'::jsonb) where id=${org.orgId}`,
+        );
+      });
+      const authz = reader(org.orgId, null, ["assistant.use", "ar.read"]);
+      const search = await withOrgContext(org.orgId, () =>
+        executeAssistantTool(authz, "search_orders", {}),
+      );
+      assert.equal(search.ok, false);
+      assert.equal((search as { ok: false; error: string }).error, "orders_feature_disabled");
+      assert.deepEqual(
+        await withOrgContext(org.orgId, () =>
+          executeAssistantTool(authz, "get_backorder_position", {}),
+        ),
+        { ok: false, error: "feature_disabled" },
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

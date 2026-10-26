@@ -9,7 +9,10 @@ const draftExtensionBody = z.looseObject({
   bundle: z.json().refine((value) => value !== undefined, "bundle is required"),
   reason: z.string().trim().min(1, "reason is required").optional(),
   expectedBaseVersionId: z.union([z.string(), z.null()]).optional(),
-  sourceDraft: z.looseObject({ id: z.string().min(1), contentHash: z.string().min(1) }).nullable().optional(),
+  sourceDraft: z
+    .looseObject({ id: z.string().min(1), contentHash: z.string().min(1) })
+    .nullable()
+    .optional(),
 });
 
 export const runtime = "nodejs";
@@ -31,12 +34,14 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
     const result = await draftExtension(context, {
       bundle: body.bundle,
       reason: body.reason,
-      expectedBaseVersionId: typeof body.expectedBaseVersionId === "string" || body.expectedBaseVersionId === null
-        ? body.expectedBaseVersionId
-        : undefined,
-      sourceDraft: body.sourceDraft && typeof body.sourceDraft === "object" && !Array.isArray(body.sourceDraft)
-        ? body.sourceDraft as { id: string; contentHash: string }
-        : undefined,
+      expectedBaseVersionId:
+        typeof body.expectedBaseVersionId === "string" || body.expectedBaseVersionId === null
+          ? body.expectedBaseVersionId
+          : undefined,
+      sourceDraft:
+        body.sourceDraft && typeof body.sourceDraft === "object" && !Array.isArray(body.sourceDraft)
+          ? (body.sourceDraft as { id: string; contentHash: string })
+          : undefined,
     });
     return { status: 201, body: { ok: true, ...result } };
   });

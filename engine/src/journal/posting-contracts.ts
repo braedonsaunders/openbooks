@@ -28,8 +28,21 @@ export type PostingDocumentLine = typeof schema.documentLines.$inferSelect;
  * so internally composed documents need not state them; the native loaders
  * select every stored column, and absent or null evidence records no explicit
  * rate. */
-export type Doc = Omit<PostingDocument, "journalMode" | "journalReverseOn" | "journalFxRateExplicit" | "documentFxRateEvidence"> & Partial<Pick<PostingDocument, "journalMode" | "journalReverseOn" | "journalFxRateExplicit" | "documentFxRateEvidence">>;
-export type DocLine = Omit<PostingDocumentLine, "journalCurrency" | "journalFxRate" | "journalEliminate"> & Partial<Pick<PostingDocumentLine, "journalCurrency" | "journalFxRate" | "journalEliminate">>;
+export type Doc = Omit<
+  PostingDocument,
+  "journalMode" | "journalReverseOn" | "journalFxRateExplicit" | "documentFxRateEvidence"
+> &
+  Partial<
+    Pick<
+      PostingDocument,
+      "journalMode" | "journalReverseOn" | "journalFxRateExplicit" | "documentFxRateEvidence"
+    >
+  >;
+export type DocLine = Omit<
+  PostingDocumentLine,
+  "journalCurrency" | "journalFxRate" | "journalEliminate"
+> &
+  Partial<Pick<PostingDocumentLine, "journalCurrency" | "journalFxRate" | "journalEliminate">>;
 
 /**
  * The date a posting belongs to, for every kind and every creation path: an
@@ -88,7 +101,7 @@ export interface KernelLine {
 
 export interface PostingDeps {
   /** Authoritative approved agency allocations; resolved by the posting coordinator. */
-  agencyByLine?: Map<string,{accountId:string;vendorAmount:string}>;
+  agencyByLine?: Map<string, { accountId: string; vendorAmount: string }>;
   /** Historical replay: bypass source-imported period locks, never user locks. */
   migration?: boolean;
   /** org-level control accounts (from orgs.settings.controlAccounts). */
@@ -325,7 +338,10 @@ export class PostingError extends Error {
    */
   readonly details?: unknown;
 
-  constructor(message?: string, options?: { customGlLineRuns?: CustomGlLineRunEvidence[]; details?: unknown }) {
+  constructor(
+    message?: string,
+    options?: { customGlLineRuns?: CustomGlLineRunEvidence[]; details?: unknown },
+  ) {
     super(message);
     this.customGlLineRuns = options?.customGlLineRuns;
     this.details = options?.details;
@@ -334,16 +350,16 @@ export class PostingError extends Error {
 
 /** Automation and audit controls applied across the posting phases. */
 export type PostDocumentOptions = {
-    deferEffects?: boolean;
-    /** Source-authoritative replay runs the accounting kernel and product
-     * subledgers without re-firing tenant-authored UI scripts or flows. */
-    suppressAutomation?: boolean;
-    audit?: { actorId: string | null; source: string };
-    /**
-     * A connector replay's database authority: the running sync run and the controller who
-     * authorized the connection's append-only posted-change policy. The database re-proves both
-     * before a replayed posting may land in a period whose source-imported lock is closed; user
-     * locks still refuse. Honoured only with `PostingDeps.migration`.
-     */
-    connectorReplay?: { requestId: string; actorId: string };
-  };
+  deferEffects?: boolean;
+  /** Source-authoritative replay runs the accounting kernel and product
+   * subledgers without re-firing tenant-authored UI scripts or flows. */
+  suppressAutomation?: boolean;
+  audit?: { actorId: string | null; source: string };
+  /**
+   * A connector replay's database authority: the running sync run and the controller who
+   * authorized the connection's append-only posted-change policy. The database re-proves both
+   * before a replayed posting may land in a period whose source-imported lock is closed; user
+   * locks still refuse. Honoured only with `PostingDeps.migration`.
+   */
+  connectorReplay?: { requestId: string; actorId: string };
+};

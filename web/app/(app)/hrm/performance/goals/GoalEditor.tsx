@@ -1,96 +1,91 @@
-'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations, useFormatter } from 'next-intl'
-import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
-import type { GoalDTO } from '@openbooks/engine/hrm/performance'
-import {
-  DirtyUrlDrawer,
-  useDirtyUrlDrawer,
-} from '../../../../../components/dirty-url-drawer'
-import { readApiErrorMessage } from '../../../../../lib/api-error'
-import { DateField } from '../../../../../components/date-field'
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations, useFormatter } from "next-intl";
+import { Button, Input, Label, Select, Textarea } from "@openbooks/ui";
+import type { GoalDTO } from "@openbooks/engine/hrm/performance";
+import { DirtyUrlDrawer, useDirtyUrlDrawer } from "../../../../../components/dirty-url-drawer";
+import { readApiErrorMessage } from "../../../../../lib/api-error";
+import { DateField } from "../../../../../components/date-field";
 type Initial = {
-  goal: GoalDTO
+  goal: GoalDTO;
   updates: {
-    progressPercent: number
-    note: string | null
-    recordedAt: string
-  }[]
-} | null
+    progressPercent: number;
+    note: string | null;
+    recordedAt: string;
+  }[];
+} | null;
 export function GoalEditor({
   initial,
   employees,
   canWrite,
   closeHref,
 }: {
-  initial: Initial
-  employees: { value: string; label: string }[]
-  canWrite: boolean
-  closeHref: string
+  initial: Initial;
+  employees: { value: string; label: string }[];
+  canWrite: boolean;
+  closeHref: string;
 }) {
-  const t = useTranslations('hrm.talentWorkspace')
+  const t = useTranslations("hrm.talentWorkspace");
   return (
     <DirtyUrlDrawer
       open
-      openKey={initial?.goal.id ?? 'new'}
+      openKey={initial?.goal.id ?? "new"}
       closeHref={closeHref}
-      title={initial?.goal.title ?? t('newGoal')}
+      title={initial?.goal.title ?? t("newGoal")}
     >
       <GoalForm
-        key={initial?.goal.id ?? 'new'}
+        key={initial?.goal.id ?? "new"}
         initial={initial}
         employees={employees}
         canWrite={canWrite}
       />
     </DirtyUrlDrawer>
-  )
+  );
 }
 function GoalForm({
   initial,
   employees,
   canWrite,
 }: {
-  initial: Initial
-  employees: { value: string; label: string }[]
-  canWrite: boolean
+  initial: Initial;
+  employees: { value: string; label: string }[];
+  canWrite: boolean;
 }) {
-  const t = useTranslations('hrm.talentWorkspace'),
+  const t = useTranslations("hrm.talentWorkspace"),
     fmt = useFormatter(),
-    router = useRouter()
-  const [title, setTitle] = useState(''),
-    [description, setDescription] = useState(''),
-    [employment, setEmployment] = useState(employees[0]?.value ?? ''),
-    [due, setDue] = useState(''),
-    [note, setNote] = useState(''),
-    [progress, setProgress] = useState(
-      String(initial?.goal.progressPercent ?? 0),
-    ),
+    router = useRouter();
+  const [title, setTitle] = useState(""),
+    [description, setDescription] = useState(""),
+    [employment, setEmployment] = useState(employees[0]?.value ?? ""),
+    [due, setDue] = useState(""),
+    [note, setNote] = useState(""),
+    [progress, setProgress] = useState(String(initial?.goal.progressPercent ?? 0)),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState<string | null>(null)
+    [error, setError] = useState<string | null>(null);
   const dirty = initial
-    ? note !== '' || progress !== String(initial.goal.progressPercent)
-    : title !== '' ||
-      description !== '' ||
-      due !== '' ||
-      employment !== (employees[0]?.value ?? '')
-  const close = useDirtyUrlDrawer(dirty, busy)
-  async function save(action = 'progress') {
-    setBusy(true)
-    setError(null)
+    ? note !== "" || progress !== String(initial.goal.progressPercent)
+    : title !== "" ||
+      description !== "" ||
+      due !== "" ||
+      employment !== (employees[0]?.value ?? "");
+  const close = useDirtyUrlDrawer(dirty, busy);
+  async function save(action = "progress") {
+    setBusy(true);
+    setError(null);
     try {
       const response = await fetch(
-        initial ? `/api/hrm/goals/${initial.goal.id}` : '/api/hrm/goals',
+        initial ? `/api/hrm/goals/${initial.goal.id}` : "/api/hrm/goals",
         {
-          method: initial ? 'PATCH' : 'POST',
-          headers: { 'content-type': 'application/json' },
+          method: initial ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify(
             initial
               ? {
                   action,
-                  ...(action === 'progress'
+                  ...(action === "progress"
                     ? { progressPercent: Number(progress), note: note || null }
-                    : action === 'achieve'
+                    : action === "achieve"
                       ? {}
                       : { note }),
                 }
@@ -102,46 +97,42 @@ function GoalForm({
                 },
           ),
         },
-      )
+      );
       if (!response.ok) {
-        setError(await readApiErrorMessage(response, t('saveFailed')))
-        return
+        setError(await readApiErrorMessage(response, t("saveFailed")));
+        return;
       }
-      const payload = (await response.json()) as { goal?: GoalDTO }
+      const payload = (await response.json()) as { goal?: GoalDTO };
       if (!payload.goal?.id) {
-        setError(t('saveFailed'))
-        return
+        setError(t("saveFailed"));
+        return;
       }
-      setNote('')
-      router.push('/hrm/performance/goals?goal=' + payload.goal.id)
-      router.refresh()
+      setNote("");
+      router.push("/hrm/performance/goals?goal=" + payload.goal.id);
+      router.refresh();
     } catch {
-      setError(t('saveFailed'))
+      setError(t("saveFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
   return (
     <form
       className="space-y-4"
       onSubmit={(e) => {
-        e.preventDefault()
-        void save()
+        e.preventDefault();
+        void save();
       }}
     >
       <fieldset
-        disabled={
-          !canWrite || busy || (!!initial && initial.goal.status !== 'active')
-        }
+        disabled={!canWrite || busy || (!!initial && initial.goal.status !== "active")}
         className="space-y-4"
       >
         {initial ? (
           <>
-            <p className="whitespace-pre-wrap text-sm">
-              {initial.goal.description}
-            </p>
+            <p className="whitespace-pre-wrap text-sm">{initial.goal.description}</p>
             <div>
-              <Label htmlFor="goal-progress">{t('progress')}</Label>
+              <Label htmlFor="goal-progress">{t("progress")}</Label>
               <Input
                 id="goal-progress"
                 type="number"
@@ -154,7 +145,7 @@ function GoalForm({
               />
             </div>
             <div>
-              <Label htmlFor="goal-note">{t('progressNote')}</Label>
+              <Label htmlFor="goal-note">{t("progressNote")}</Label>
               <Textarea
                 id="goal-note"
                 maxLength={2000}
@@ -166,7 +157,7 @@ function GoalForm({
         ) : (
           <>
             <div>
-              <Label htmlFor="goal-employee">{t('employee')}</Label>
+              <Label htmlFor="goal-employee">{t("employee")}</Label>
               <Select
                 required
                 id="goal-employee"
@@ -181,7 +172,7 @@ function GoalForm({
               </Select>
             </div>
             <div>
-              <Label htmlFor="goal-title">{t('goalTitle')}</Label>
+              <Label htmlFor="goal-title">{t("goalTitle")}</Label>
               <Input
                 id="goal-title"
                 required
@@ -191,7 +182,7 @@ function GoalForm({
               />
             </div>
             <div>
-              <Label htmlFor="goal-description">{t('goalDescription')}</Label>
+              <Label htmlFor="goal-description">{t("goalDescription")}</Label>
               <Textarea
                 id="goal-description"
                 maxLength={2000}
@@ -200,44 +191,34 @@ function GoalForm({
               />
             </div>
             <div>
-              <Label htmlFor="goal-due">{t('due')}</Label>
-              <DateField
-                id="goal-due"
-                value={due}
-                onChange={(value) => setDue(value)}
-              />
+              <Label htmlFor="goal-due">{t("due")}</Label>
+              <DateField id="goal-due" value={due} onChange={(value) => setDue(value)} />
             </div>
           </>
         )}
         {canWrite && (
           <div className="flex flex-wrap gap-2">
-            <Button type="submit">
-              {initial ? t('goalAction') : t('newGoal')}
-            </Button>
+            <Button type="submit">{initial ? t("goalAction") : t("newGoal")}</Button>
             {initial && (
               <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void save('achieve')}
-                >
-                  {t('achieve')}
+                <Button type="button" variant="outline" onClick={() => void save("achieve")}>
+                  {t("achieve")}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   disabled={!note.trim()}
-                  onClick={() => void save('miss')}
+                  onClick={() => void save("miss")}
                 >
-                  {t('miss')}
+                  {t("miss")}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   disabled={!note.trim()}
-                  onClick={() => void save('cancel')}
+                  onClick={() => void save("cancel")}
                 >
-                  {t('cancelGoal')}
+                  {t("cancelGoal")}
                 </Button>
               </>
             )}
@@ -251,25 +232,20 @@ function GoalForm({
       )}
       {initial && (
         <section className="space-y-2">
-          <h3 className="font-medium">{t('goalHistory')}</h3>
+          <h3 className="font-medium">{t("goalHistory")}</h3>
           {initial.updates.map((update, i) => (
             <p key={i} className="text-sm">
-              {update.progressPercent}% · {update.note} ·{' '}
+              {update.progressPercent}% · {update.note} ·{" "}
               {fmt.dateTime(new Date(update.recordedAt), {
-                dateStyle: 'medium',
+                dateStyle: "medium",
               })}
             </p>
           ))}
         </section>
       )}
-      <Button
-        type="button"
-        variant="ghost"
-        disabled={busy}
-        onClick={() => void close()}
-      >
-        {t('cancel')}
+      <Button type="button" variant="ghost" disabled={busy} onClick={() => void close()}>
+        {t("cancel")}
       </Button>
     </form>
-  )
+  );
 }

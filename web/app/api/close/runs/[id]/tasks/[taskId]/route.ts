@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { guardCloseScope } from "@/lib/close-scope";
 
 import { NextResponse } from "next/server";
@@ -16,32 +16,18 @@ const requestBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("waive"), notes: z.string().max(2000).optional() }),
 ]);
 
-
 export const runtime = "nodejs";
 
-const ACTIONS = new Set([
-  "start",
-  "submit",
-  "complete",
-  "waive",
-]);
-
-
+const ACTIONS = new Set(["start", "submit", "complete", "waive"]);
 
 export const POST = defineRoute({
   public: "session",
-  params: z.object({ "id": z.string(), "taskId": z.string() }),
+  params: z.object({ id: z.string(), taskId: z.string() }),
   body: requestBodySchema,
   handler: async ({ body, params }) => {
-
     const { id, taskId } = params;
     if (!isUuid(id) || !isUuid(taskId))
-      return NextResponse.json(
-        { error: "invalid run or task id" },
-        { status: 400 },
-      );
-
-
+      return NextResponse.json({ error: "invalid run or task id" }, { status: 400 });
 
     if (!body.action || !ACTIONS.has(body.action))
       return NextResponse.json({ error: "invalid task action" }, { status: 400 });
@@ -61,8 +47,7 @@ export const POST = defineRoute({
       });
       return NextResponse.json({ ok: true });
     } catch (error) {
-      if (error instanceof CloseError)
-        return apiErrorResponse(error, { safeStatus: 422 });
+      if (error instanceof CloseError) return apiErrorResponse(error, { safeStatus: 422 });
       throw error;
     }
   },

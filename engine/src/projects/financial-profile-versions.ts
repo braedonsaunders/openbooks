@@ -27,12 +27,7 @@ const MEASURES = new Set([
   "estimate_at_completion",
   "cost_to_complete",
 ]);
-const TOTAL_COST_COMPONENTS = new Set([
-  "actual_cost",
-  "committed_cost",
-  "labor_cost",
-  "overhead",
-]);
+const TOTAL_COST_COMPONENTS = new Set(["actual_cost", "committed_cost", "labor_cost", "overhead"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -101,9 +96,7 @@ function optionalNonnegativeDecimal(
  * canonical decimal strings. Readers that already `String()` these fields keep
  * working; legacy JSON numbers remain accepted on the way in.
  */
-export function canonicalizeProjectFinancialProfile(
-  profile: FinancialProfile,
-): FinancialProfile {
+export function canonicalizeProjectFinancialProfile(profile: FinancialProfile): FinancialProfile {
   const next = structuredClone(profile);
   if (next.overhead?.ratePercent !== undefined) {
     next.overhead.ratePercent = optionalNonnegativeDecimal(
@@ -142,25 +135,24 @@ export function assertValidProjectFinancialProfile(
   oneOf(actual.source, ["account_types", "account_group", "none"], "actualCost.source");
   if (actual.accountTypes !== undefined) strings(actual.accountTypes, "actualCost.accountTypes");
   if (actual.groupKeys !== undefined) strings(actual.groupKeys, "actualCost.groupKeys");
-  if (actual.dimension !== undefined && (typeof actual.dimension !== "string" || !actual.dimension)) {
+  if (
+    actual.dimension !== undefined &&
+    (typeof actual.dimension !== "string" || !actual.dimension)
+  ) {
     throw new Error("actualCost.dimension is invalid");
   }
 
   const labor = object(profile.laborCost, "laborCost");
   oneOf(
     labor.source,
-    [
-      "in_actual_cost",
-      "time_rate",
-      "estimated_time_rate",
-      "payroll_je",
-      "account_group",
-      "none",
-    ],
+    ["in_actual_cost", "time_rate", "estimated_time_rate", "payroll_je", "account_group", "none"],
     "laborCost.source",
   );
   if (labor.groupKeys !== undefined) strings(labor.groupKeys, "laborCost.groupKeys");
-  if (labor.source === "account_group" && (typeof labor.dimension !== "string" || !labor.dimension)) {
+  if (
+    labor.source === "account_group" &&
+    (typeof labor.dimension !== "string" || !labor.dimension)
+  ) {
     throw new Error("laborCost.dimension is required when laborCost.source is 'account_group'");
   }
 
@@ -205,15 +197,8 @@ export function assertValidProjectFinancialProfile(
   strings(committed.docKinds, "committedCost.docKinds");
   if (committed.statuses !== undefined) {
     const statuses = strings(committed.statuses, "committedCost.statuses");
-    if (
-      statuses.some(
-        (status) =>
-          !["pending_approval", "approved", "rejected"].includes(status),
-      )
-    ) {
-      throw new Error(
-        "committedCost.statuses contains an unsupported lifecycle",
-      );
+    if (statuses.some((status) => !["pending_approval", "approved", "rejected"].includes(status))) {
+      throw new Error("committedCost.statuses contains an unsupported lifecycle");
     }
   }
   const billable = object(profile.billableValue, "billableValue");
@@ -228,24 +213,20 @@ export function assertValidProjectFinancialProfile(
     strings(billable.costSourceKinds, "billableValue.costSourceKinds");
   }
   if (billable.costSourceStatuses !== undefined) {
-    const statuses = strings(
-      billable.costSourceStatuses,
-      "billableValue.costSourceStatuses",
-    );
+    const statuses = strings(billable.costSourceStatuses, "billableValue.costSourceStatuses");
     if (
       statuses.some(
-        (status) =>
-          !["pending_approval", "approved", "posted", "rejected"].includes(
-            status,
-          ),
+        (status) => !["pending_approval", "approved", "posted", "rejected"].includes(status),
       )
     ) {
-      throw new Error(
-        "billableValue.costSourceStatuses contains an unsupported lifecycle",
-      );
+      throw new Error("billableValue.costSourceStatuses contains an unsupported lifecycle");
     }
   }
-  oneOf(object(profile.costBudget, "costBudget").source, ["wbs_estimates", "none"], "costBudget.source");
+  oneOf(
+    object(profile.costBudget, "costBudget").source,
+    ["wbs_estimates", "none"],
+    "costBudget.source",
+  );
 
   const price = object(profile.totalPrice, "totalPrice");
   oneOf(
@@ -316,10 +297,9 @@ export async function publishProjectFinancialProfileInTransaction(
   assertValidProjectFinancialProfile(input.financialProfile);
   const storedProfile = canonicalizeProjectFinancialProfile(input.financialProfile);
 
-  await tx.execute(
-    sql`select set_config('openbooks.publish_project_profile', 'on', true)`,
-  );
-  const type = (await tx.execute<{ id: string; accounting_today: string }>(sql`
+  await tx.execute(sql`select set_config('openbooks.publish_project_profile', 'on', true)`);
+  const type = await tx.execute<{ id: string; accounting_today: string }>(
+    sql`
     select pt.id,
            (
              current_timestamp at time zone coalesce(
@@ -339,7 +319,9 @@ export async function publishProjectFinancialProfileInTransaction(
       join orgs o on o.id = pt.org_id
      where pt.id = ${input.projectTypeId} and pt.org_id = ${input.orgId}
      for update of pt
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!type[0]) throw new Error("project type not found");
   if (input.effectiveFrom < type[0].accounting_today) {
     throw new Error(
@@ -347,20 +329,22 @@ export async function publishProjectFinancialProfileInTransaction(
     );
   }
 
-  const sameDate = (await tx.execute<{ id: string }>(sql`
+  const sameDate = await tx.execute<{ id: string }>(
+    sql`
     select id from project_financial_profile_versions
      where org_id = ${input.orgId}
        and project_type_id = ${input.projectTypeId}
        and effective_from = ${input.effectiveFrom}
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (sameDate.length) {
-    throw new Error(
-      `a financial profile version already starts on ${input.effectiveFrom}`,
-    );
+    throw new Error(`a financial profile version already starts on ${input.effectiveFrom}`);
   }
 
-  const next = (await tx.execute<{ effective_from: string }>(sql`
+  const next = await tx.execute<{ effective_from: string }>(
+    sql`
     select effective_from::text as effective_from
       from project_financial_profile_versions
      where org_id = ${input.orgId}
@@ -368,11 +352,18 @@ export async function publishProjectFinancialProfileInTransaction(
        and effective_from > ${input.effectiveFrom}
      order by effective_from
      limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const effectiveTo = next[0]
-    ? (await tx.execute<{ d: string }>(sql`
+    ? (
+        await tx.execute<{ d: string }>(
+          sql`
           select (${next[0].effective_from}::date - 1)::text as d
-        `, "objects"))[0]!.d
+        `,
+          "objects",
+        )
+      )[0]!.d
     : null;
 
   await tx.execute(sql`
@@ -411,11 +402,12 @@ export async function publishProjectFinancialProfileInTransaction(
       from closed
   `);
 
-  const inserted = (await tx.execute<{
-      id: string;
-      effective_from: string;
-      effective_to: string | null;
-    }>(sql`
+  const inserted = await tx.execute<{
+    id: string;
+    effective_from: string;
+    effective_to: string | null;
+  }>(
+    sql`
     insert into project_financial_profile_versions (
       org_id, project_type_id, effective_from, effective_to,
       financial_profile, reason, created_by, updated_by
@@ -427,7 +419,9 @@ export async function publishProjectFinancialProfileInTransaction(
     )
     returning id, effective_from::text as effective_from,
               effective_to::text as effective_to
-  `, "objects"));
+  `,
+    "objects",
+  );
   const version = inserted[0]!;
   await tx.execute(sql`
     insert into audit_log

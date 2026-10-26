@@ -21,9 +21,12 @@ export async function activePostingPrimaryBookId(
   orgId: string,
   runner: SqlExecutor = db,
 ): Promise<string | null> {
-  const r = (await runner.execute<{ id: string }>(sql`
+  const r = await runner.execute<{ id: string }>(
+    sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active and posts_gl
-     limit 1`, "objects"));
+     limit 1`,
+    "objects",
+  );
   return r[0]?.id ?? null;
 }

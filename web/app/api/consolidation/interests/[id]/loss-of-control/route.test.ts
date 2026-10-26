@@ -4,9 +4,8 @@ import { stubModules } from "../../../../../../testing/stub-modules";
 stubModules({ authz: true });
 import { test } from "node:test";
 const state = { allowed: true, calls: [] as unknown[][], refusal: "" };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[
-  Symbol.for("control-loss-route")
-] = state;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("control-loss-route")] =
+  state;
 registerHooks({
   resolve(specifier, context, next) {
     // Resolve framework imports against this real file, not the virtual auth URL.
@@ -22,15 +21,9 @@ registerHooks({
         url: "data:text/javascript,export const db={execute:async(_query, mode)=>Promise.resolve({rows:[]}).then((result) => (mode === 'objects' ? result.rows : result))};export const ambientTenantOrgId=()=>null;export const currentRequestOrgResolver=()=>null;export const registerRequestOrgResolver=()=>{};export async function withBypass(work){return work()};export async function withBypassContext(work){return work()};export async function withOrgTransaction(_orgId,work){return work()}",
       };
     if (specifier === "@/lib/api/json")
-      return next(
-        new URL("../../../../../../lib/api/json.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../../../../lib/api/json.ts", import.meta.url).href, context);
     if (specifier === "@/lib/list-params")
-      return next(
-        new URL("../../../../../../lib/list-params.ts", import.meta.url).href,
-        context,
-      );
+      return next(new URL("../../../../../../lib/list-params.ts", import.meta.url).href, context);
     return next(specifier, context);
   },
   load(url, context, next) {
@@ -125,17 +118,13 @@ test("proposal data passes through and proposal refusals keep their status", asy
   assert.equal(ok.status, 200);
   assert.deepEqual(await ok.json(), { proposal: true });
   state.refusal = "ownership interest not found";
-  const refused = await route.GET(
-    new Request("http://openbooks.test/x"),
-    context,
-  );
+  const refused = await route.GET(new Request("http://openbooks.test/x"), context);
   assert.equal(refused.status, 404);
   assert.equal((await refused.json()).error, state.refusal);
   state.refusal = "";
 });
 test("control-loss domain refusal and authorization are not swallowed", async () => {
-  state.refusal =
-    "The approved ledger evidence changed; propose a new disposal";
+  state.refusal = "The approved ledger evidence changed; propose a new disposal";
   const r = await route.POST(request(valid), context);
   assert.equal(r.status, 422);
   assert.equal((await r.json()).error, state.refusal);

@@ -4,11 +4,8 @@ import test from "node:test";
 // The application tool catalog is server-only, but this wiring test runs with
 // Node's plain test runner. Keep the module graph identical to the other
 // application tests by shimming only the marker package.
-const {
-  APPLICATION_TOOLS,
-  applicationTool,
-  executeApplicationTool,
-} = await import("./tool-catalog.ts");
+const { APPLICATION_TOOLS, applicationTool, executeApplicationTool } =
+  await import("./tool-catalog.ts");
 const { applicationContextFromSession } = await import("./context.ts");
 type Authz = import("../authz.ts").Authz;
 type SessionUser = import("../auth.ts").SessionUser;
@@ -64,11 +61,7 @@ test("tool names are unique, non-empty snake_case identifiers", () => {
 
 test("every tool wires a handler and a parsing input schema", () => {
   for (const tool of APPLICATION_TOOLS) {
-    assert.equal(
-      typeof tool.execute,
-      "function",
-      `${tool.name} must wire an execute handler`,
-    );
+    assert.equal(typeof tool.execute, "function", `${tool.name} must wire an execute handler`);
     assert.equal(
       typeof tool.inputSchema?.safeParse,
       "function",
@@ -98,14 +91,27 @@ test("every mutating tool requires a retry key and is protected by executeIdempo
       assert.equal(tool.mutationProtection, "none", `${tool.name} is read-only`);
       continue;
     }
-    assert.equal(tool.mutationProtection, "execute-idempotent", `${tool.name} must use the catalog mutation wrapper`);
-    const shape = (tool.inputSchema as unknown as {
-      shape?: Record<string, { isOptional?: () => boolean; safeParse: (value: unknown) => { success: boolean } }>;
-    }).shape;
+    assert.equal(
+      tool.mutationProtection,
+      "execute-idempotent",
+      `${tool.name} must use the catalog mutation wrapper`,
+    );
+    const shape = (
+      tool.inputSchema as unknown as {
+        shape?: Record<
+          string,
+          { isOptional?: () => boolean; safeParse: (value: unknown) => { success: boolean } }
+        >;
+      }
+    ).shape;
     const key = shape?.idempotencyKey;
     assert.ok(key, `${tool.name} must declare idempotencyKey in its input schema`);
     assert.equal(key.isOptional?.(), false, `${tool.name} must require idempotencyKey`);
-    assert.equal(key.safeParse("catalog-retry-key-001").success, true, `${tool.name} must accept a valid retry key`);
+    assert.equal(
+      key.safeParse("catalog-retry-key-001").success,
+      true,
+      `${tool.name} must accept a valid retry key`,
+    );
   }
 });
 

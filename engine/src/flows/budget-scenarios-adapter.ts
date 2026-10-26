@@ -82,32 +82,35 @@ type BudgetRow = {
 };
 
 async function loadBudget(subjectId: string): Promise<BudgetRow | null> {
-  const result = await db.execute<BudgetRow>(sql`
+  const result = await db.execute<BudgetRow>(
+    sql`
     select bs.id, bs.org_id, bs.name, bs.description, bs.book_id, b.name as book_name,
            bs.fiscal_year, bs.kind, bs.status, bs.revision, bs.created_by
       from budget_scenarios bs
       join accounting_books b on b.id = bs.book_id and b.org_id = bs.org_id
      where bs.id = ${subjectId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return result[0] ?? null;
 }
 
-export const budgetScenariosFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: BUDGET_SCENARIO_SUBJECT_KIND,
-    // Checker decisions require the tenant approval grant and every line's entity.
-    permissions: {
-      read: "budgets.read",
-      edit: "budgets.manage",
-      approve: "budgets.approve",
-    },
-    scope: { via: "custom", subsidiaryOf: budgetScenarioScopeOwners },
-    profile: budgetScenarioSubjectProfile,
+export const budgetScenariosFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: BUDGET_SCENARIO_SUBJECT_KIND,
+  // Checker decisions require the tenant approval grant and every line's entity.
+  permissions: {
+    read: "budgets.read",
+    edit: "budgets.manage",
+    approve: "budgets.approve",
+  },
+  scope: { via: "custom", subsidiaryOf: budgetScenarioScopeOwners },
+  profile: budgetScenarioSubjectProfile,
 
-    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-      const budget = await loadBudget(subjectId);
-      if (!budget) return null;
-      const lines = await db.execute<Record<string, unknown>>(sql`
+  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+    const budget = await loadBudget(subjectId);
+    if (!budget) return null;
+    const lines = await db.execute<Record<string, unknown>>(
+      sql`
       select bl.account_id as "accountId", bl.period_id as "periodId",
              bl.department_id as "departmentId", bl.project_id as "projectId",
              bl.location_id as "locationId", bl.class_id as "classId",
@@ -115,90 +118,95 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter =
         from budget_lines bl
        where bl.scenario_id = ${subjectId} and bl.org_id = ${budget.org_id}
        order by bl.created_at, bl.id
-    `, "objects");
-      const total = await db.execute<{ total: string }>(sql`
+    `,
+      "objects",
+    );
+    const total = await db.execute<{ total: string }>(
+      sql`
       select coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0)::text as total
         from budget_lines bl
         join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
        where bl.scenario_id = ${subjectId} and bl.org_id = ${budget.org_id}
-    `, "objects");
-      return {
-        values: {
-          id: budget.id,
-          name: budget.name,
-          description: budget.description,
-          bookId: budget.book_id,
-          bookName: budget.book_name,
-          fiscalYear: budget.fiscal_year,
-          kind: budget.kind,
-          status: budget.status,
-          revision: budget.revision,
-          total: total[0]?.total ?? "0.0000",
-          lineCount: lines.length,
-          createdBy: budget.created_by,
-        },
-        rows: { lines },
-        submitterUserId: budget.created_by,
-      };
-    },
+    `,
+      "objects",
+    );
+    return {
+      values: {
+        id: budget.id,
+        name: budget.name,
+        description: budget.description,
+        bookId: budget.book_id,
+        bookName: budget.book_name,
+        fiscalYear: budget.fiscal_year,
+        kind: budget.kind,
+        status: budget.status,
+        revision: budget.revision,
+        total: total[0]?.total ?? "0.0000",
+        lineCount: lines.length,
+        createdBy: budget.created_by,
+      },
+      rows: { lines },
+      submitterUserId: budget.created_by,
+    };
+  },
 
-    label(subjectId: string, values: Record<string, unknown>): string {
-      const name = String(values.name ?? subjectId);
-      const year = values.fiscalYear ? ` · FY${String(values.fiscalYear)}` : "";
-      return `${name}${year}`;
-    },
+  label(subjectId: string, values: Record<string, unknown>): string {
+    const name = String(values.name ?? subjectId);
+    const year = values.fiscalYear ? ` · FY${String(values.fiscalYear)}` : "";
+    return `${name}${year}`;
+  },
 
-    deepLink(subjectId: string): string {
-      return `/budgets?budget=${subjectId}`;
-    },
+  deepLink(subjectId: string): string {
+    return `/budgets?budget=${subjectId}`;
+  },
 
-    async getStatus(subjectId: string): Promise<string | null> {
-      return (await loadBudget(subjectId))?.status ?? null;
-    },
+  async getStatus(subjectId: string): Promise<string | null> {
+    return (await loadBudget(subjectId))?.status ?? null;
+  },
 
-    async changeStatus(): Promise<void> {
+  async changeStatus(): Promise<void> {
+    throw new Error("Use native budget submission and Flow gates to change approval state.");
+  },
+
+  async releaseApproval(subjectId, outcome, ctx, detail, run) {
+    if (!ctx.userId) throw new Error("A budget release requires a named operator.");
+    await releaseBudgetScenario(
+      ctx.orgId,
+      ctx.userId,
+      subjectId,
+      outcome,
+      run?.id,
+      detail?.comment,
+    );
+  },
+
+  async setField(): Promise<void> {
+    throw new Error(
+      "budget fields are not writable by flows — draft edits go through the budget API",
+    );
+  },
+
+  async findCandidateIds(limit: number): Promise<string[]> {
+    // Coarse newest-first fetch for scheduled fan-out; the select rule does
+    // the real filtering in JS against each record's loaded context. The
+    // explicit org_id predicate is the tenant boundary — same contract as the
+    // documents adapter. It fails closed when no ambient tenant is active
+    // rather than reading unscoped across organizations.
+    const orgId = ambientTenantOrgId();
+    if (!orgId) {
       throw new Error(
-        "Use native budget submission and Flow gates to change approval state.",
+        `findCandidateIds for "budget_scenario" requires an ambient tenant context (withOrg)`,
       );
-    },
-
-    async releaseApproval(subjectId, outcome, ctx, detail, run) {
-      if (!ctx.userId)
-        throw new Error("A budget release requires a named operator.");
-      await releaseBudgetScenario(
-        ctx.orgId,
-        ctx.userId,
-        subjectId,
-        outcome,
-        run?.id,
-        detail?.comment,
-      );
-    },
-
-    async setField(): Promise<void> {
-      throw new Error(
-        "budget fields are not writable by flows — draft edits go through the budget API",
-      );
-    },
-
-    async findCandidateIds(limit: number): Promise<string[]> {
-      // Coarse newest-first fetch for scheduled fan-out; the select rule does
-      // the real filtering in JS against each record's loaded context. The
-      // explicit org_id predicate is the tenant boundary — same contract as the
-      // documents adapter. It fails closed when no ambient tenant is active
-      // rather than reading unscoped across organizations.
-      const orgId = ambientTenantOrgId();
-      if (!orgId) {
-        throw new Error(
-          `findCandidateIds for "budget_scenario" requires an ambient tenant context (withOrg)`,
-        );
-      }
-      const result = await db.execute<{ id: string }>(sql`
+    }
+    const result = await db.execute<{ id: string }>(
+      sql`
       select id from budget_scenarios
        where org_id = ${orgId} and status <> 'archived'
        order by created_at desc
        limit ${limit}
-    `, "objects");
-      return result.map((row) => row.id);
-    },
-  });
+    `,
+      "objects",
+    );
+    return result.map((row) => row.id);
+  },
+});

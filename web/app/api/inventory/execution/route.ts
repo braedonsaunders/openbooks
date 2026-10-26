@@ -67,9 +67,7 @@ export const POST = defineRoute({
             ? await suggestPutaway(org, actor, body)
             : await suggestCountObservation(org, actor, body);
       return NextResponse.json({
-        task: await withOrgTransaction(org, () =>
-          executionTaskView(db, org, actor, task.id),
-        ),
+        task: await withOrgTransaction(org, () => executionTaskView(db, org, actor, task.id)),
       });
     }),
 });

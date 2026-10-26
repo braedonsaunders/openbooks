@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import type { ComponentProps } from 'react'
-import { getTranslations } from 'next-intl/server'
+import type { ComponentProps } from "react";
+import { getTranslations } from "next-intl/server";
 import {
   grid,
   page,
@@ -11,11 +11,11 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { documentsPageViewer } from '../../../lib/file-cabinet/page-viewer'
-import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
-import { dateTime } from '../../../lib/format'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../lib/authz";
+import { documentsPageViewer } from "../../../lib/file-cabinet/page-viewer";
+import { isUuid, parseListParams, pickString } from "../../../lib/list-params";
+import { dateTime } from "../../../lib/format";
 import {
   accessAtLeast,
   fileAccessLevel,
@@ -26,12 +26,12 @@ import {
   getFolderTree,
   listFolderContents,
   type AccessLevel,
-} from '../../../lib/file-cabinet'
-import type { FileDrawer } from './FileDrawer'
-import type { FolderDrawer } from './FolderDrawer'
-import type { FolderRow, FileRow } from './FileList'
-import type { TreeFolder } from './FolderTree'
-import type { DocumentCrumb } from './sections'
+} from "../../../lib/file-cabinet";
+import type { FileDrawer } from "./FileDrawer";
+import type { FolderDrawer } from "./FolderDrawer";
+import type { FolderRow, FileRow } from "./FileList";
+import type { TreeFolder } from "./FolderTree";
+import type { DocumentCrumb } from "./sections";
 
 /**
  * The file cabinet, split into a loader and a spec.
@@ -54,52 +54,52 @@ import type { DocumentCrumb } from './sections'
  * EmptyState.
  */
 
-type FileDrawerPayload = ComponentProps<typeof FileDrawer> & { remountKey: string }
-type FolderDrawerPayload = ComponentProps<typeof FolderDrawer> & { remountKey: string }
+type FileDrawerPayload = ComponentProps<typeof FileDrawer> & { remountKey: string };
+type FolderDrawerPayload = ComponentProps<typeof FolderDrawer> & { remountKey: string };
 
 export interface DocumentsData {
-  title: string
-  description: string
-  searchPlaceholder: string
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
+  title: string;
+  description: string;
+  searchPlaceholder: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
   /** documents.manage, or Editor+ on the current folder: may upload here and
    *  create sub-folders (top-level creation still needs documents.manage). */
-  canWrite: boolean
-  trashHref: string
-  trashLabel: string
-  allFilesHref: string
-  allFilesLabel: string
-  crumbs: DocumentCrumb[]
-  treeFolders: TreeFolder[]
-  activeFolderId?: string
-  folders: FolderRow[]
-  files: FileRow[]
-  showLocation: boolean
-  canEdit: boolean
-  canDelete: boolean
-  sort: string
-  dir: 'asc' | 'desc'
-  total: number
-  currentPage: number
-  perPage: number
-  isEmpty: boolean
-  hasRows: boolean
-  emptyTitle: string
-  emptyDescription: string
-  linkNotice: string | null
-  fileDrawerOpen: boolean
-  fileDrawer: FileDrawerPayload | null
-  folderDrawerCreateOpen: boolean
-  folderDrawerCreate: FolderDrawerPayload | null
-  folderDrawerEditOpen: boolean
-  folderDrawerEdit: FolderDrawerPayload | null
+  canWrite: boolean;
+  trashHref: string;
+  trashLabel: string;
+  allFilesHref: string;
+  allFilesLabel: string;
+  crumbs: DocumentCrumb[];
+  treeFolders: TreeFolder[];
+  activeFolderId?: string;
+  folders: FolderRow[];
+  files: FileRow[];
+  showLocation: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  sort: string;
+  dir: "asc" | "desc";
+  total: number;
+  currentPage: number;
+  perPage: number;
+  isEmpty: boolean;
+  hasRows: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
+  linkNotice: string | null;
+  fileDrawerOpen: boolean;
+  fileDrawer: FileDrawerPayload | null;
+  folderDrawerCreateOpen: boolean;
+  folderDrawerCreate: FolderDrawerPayload | null;
+  folderDrawerEditOpen: boolean;
+  folderDrawerEdit: FolderDrawerPayload | null;
 }
 
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /** Build a /documents href that navigates to a folder, preserving sort/search. */
@@ -107,39 +107,44 @@ function folderHref(
   sp: Record<string, string | string[] | undefined>,
   folderId: string | null,
 ): string {
-  const params = new URLSearchParams()
-  for (const key of ['q', 'sort', 'dir', 'perPage'] as const) {
-    const v = sp[key]
-    if (typeof v === 'string' && v) params.set(key, v)
+  const params = new URLSearchParams();
+  for (const key of ["q", "sort", "dir", "perPage"] as const) {
+    const v = sp[key];
+    if (typeof v === "string" && v) params.set(key, v);
   }
-  if (folderId) params.set('fid', folderId)
-  const qs = params.toString()
-  return qs ? `/documents?${qs}` : '/documents'
+  if (folderId) params.set("fid", folderId);
+  const qs = params.toString();
+  return qs ? `/documents?${qs}` : "/documents";
 }
 
 export async function loadDocuments(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<DocumentsData> {
-  const authz = await requirePermission('documents.read')
-  const canManage = can(authz, 'documents.manage')
-  const orgId = authz.user.orgId
-  const viewer = documentsPageViewer({ userId: authz.user.id, isAdmin: can(authz, '*'), canManage, allowedSubsidiaryIds: authz.allowedSubsidiaryIds })
-  const baseline: AccessLevel = viewer.baseline ?? 'viewer'
-  const t = await getTranslations('documents')
+  const authz = await requirePermission("documents.read");
+  const canManage = can(authz, "documents.manage");
+  const orgId = authz.user.orgId;
+  const viewer = documentsPageViewer({
+    userId: authz.user.id,
+    isAdmin: can(authz, "*"),
+    canManage,
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+  });
+  const baseline: AccessLevel = viewer.baseline ?? "viewer";
+  const t = await getTranslations("documents");
 
-  const fileId = typeof sp.file === 'string' ? sp.file : undefined
-  const folderParam = typeof sp.folder === 'string' ? sp.folder : undefined
-  const folderId = pickString(sp.fid)
-  const activeFolderId = folderId && isUuid(folderId) ? folderId : undefined
+  const fileId = typeof sp.file === "string" ? sp.file : undefined;
+  const folderParam = typeof sp.folder === "string" ? sp.folder : undefined;
+  const folderId = pickString(sp.fid);
+  const activeFolderId = folderId && isUuid(folderId) ? folderId : undefined;
   const params = parseListParams(sp, {
-    sort: 'name',
-    dir: 'asc',
+    sort: "name",
+    dir: "asc",
     perPage: 50,
-    allowedSorts: ['name', 'size', 'created'] as const,
-  })
+    allowedSorts: ["name", "size", "created"] as const,
+  });
 
   const localizeName = (name: string, systemKind: string | null) =>
-    systemKind === 'ap_capture' ? t('systemFolders.apCapture') : name
+    systemKind === "ap_capture" ? t("systemFolders.apCapture") : name;
 
   // Sidebar tree (navigable folders only — the leaf per-record attachment
   // folders are excluded) and the current folder's contents (its immediate
@@ -155,92 +160,98 @@ export async function loadDocuments(
       offset: (params.page - 1) * params.perPage,
     }),
     activeFolderId ? getFolderPath(orgId, viewer, activeFolderId) : Promise.resolve([]),
-  ])
-  const { folders: childFolderNodes, files, total } = contents
+  ]);
+  const { folders: childFolderNodes, files, total } = contents;
   const localizedTree = tree.map((folder) => ({
     ...folder,
     name: localizeName(folder.name, folder.systemKind),
-  }))
+  }));
 
   const [openFile, treeOpenFolder] = await Promise.all([
     fileId && isUuid(fileId) ? getFile(orgId, fileId, viewer) : null,
-    folderParam && folderParam !== 'new' && isUuid(folderParam)
-      ? localizedTree.find((f) => f.id === folderParam) ?? null
+    folderParam && folderParam !== "new" && isUuid(folderParam)
+      ? (localizedTree.find((f) => f.id === folderParam) ?? null)
       : null,
-  ])
+  ]);
   // Record-attachment folders never appear in the sidebar tree, but row
   // menus link their Properties / Manage access drawers here: resolve those
   // ids with the same scoped single-folder read, so a hidden folder still
   // reads as not found and existence never leaks.
   const recordOpenFolder =
-    !treeOpenFolder && folderParam && folderParam !== 'new' && isUuid(folderParam)
+    !treeOpenFolder && folderParam && folderParam !== "new" && isUuid(folderParam)
       ? await getFolder(orgId, folderParam, viewer)
-      : null
-  const openFolder = treeOpenFolder ??
+      : null;
+  const openFolder =
+    treeOpenFolder ??
     (recordOpenFolder
-      ? { ...recordOpenFolder, name: localizeName(recordOpenFolder.name, recordOpenFolder.systemKind) }
-      : null)
+      ? {
+          ...recordOpenFolder,
+          name: localizeName(recordOpenFolder.name, recordOpenFolder.systemKind),
+        }
+      : null);
 
   // Effective access tiers for UI affordances (the server re-checks every
   // mutation). The current folder's tier is inherited by the items it contains;
   // at the virtual root / in search, fall back to the org-role baseline.
   const [currentAccess, openFileAccess, openFolderAccess] = await Promise.all([
     activeFolderId ? folderAccessLevel(orgId, viewer, activeFolderId) : Promise.resolve(baseline),
-    openFile ? fileAccessLevel(orgId, viewer, openFile.id) : Promise.resolve<AccessLevel>('none'),
-    openFolder ? folderAccessLevel(orgId, viewer, openFolder.id) : Promise.resolve<AccessLevel>('none'),
-  ])
+    openFile ? fileAccessLevel(orgId, viewer, openFile.id) : Promise.resolve<AccessLevel>("none"),
+    openFolder
+      ? folderAccessLevel(orgId, viewer, openFolder.id)
+      : Promise.resolve<AccessLevel>("none"),
+  ]);
 
   // Sub-folders of the current location, shown as rows above the files — a real
   // file browser. Empty while searching (search spans the whole cabinet).
   const childFolders = childFolderNodes.map((f) => ({
     ...f,
     name: localizeName(f.name, f.systemKind),
-  }))
+  }));
 
   // Breadcrumb path — resolved from the folder itself (works for leaf record
   // folders that never appear in the sidebar tree).
   const pathCrumbs = pathNodes.map((c) => ({
     id: c.id,
     name: localizeName(c.name, c.systemKind),
-  }))
+  }));
   const crumbs: DocumentCrumb[] = pathCrumbs.map((c, i) => ({
     id: c.id,
     name: c.name,
     href: folderHref(sp, c.id),
     isLast: i === pathCrumbs.length - 1,
-  }))
+  }));
 
-  const newFolderParent = activeFolderId
-  const isEmpty = files.length === 0 && childFolders.length === 0
+  const newFolderParent = activeFolderId;
+  const isEmpty = files.length === 0 && childFolders.length === 0;
   // Upload needs Editor+ on the folder and sub-folder creation needs
   // Editor+ on the parent — the upload and sub-folder APIs' own bar, not
   // documents.manage — so Editor-grant holders get the affordances where
   // they may act. At the virtual root there is no folder tier, so only
   // documents.manage writes there.
-  const canEditCurrent = accessAtLeast(currentAccess, 'editor')
-  const canWrite = canManage || canEditCurrent
-  const canCreateFolder = canManage || (activeFolderId !== undefined && canEditCurrent)
+  const canEditCurrent = accessAtLeast(currentAccess, "editor");
+  const canWrite = canManage || canEditCurrent;
+  const canCreateFolder = canManage || (activeFolderId !== undefined && canEditCurrent);
 
   // A ?file= / ?folder= that names nothing resolvable must say so: the
   // drawers stay closed (malformed id, deleted item, or nothing shared —
   // never distinguished, so existence does not leak), and the plain list
   // alone would read as a working link.
-  const fileLinkDead = sp.file !== undefined && !openFile
+  const fileLinkDead = sp.file !== undefined && !openFile;
   const folderLinkDead =
-    folderParam !== undefined && (folderParam === 'new' ? !canCreateFolder : !openFolder)
-  const linkNotice = fileLinkDead || folderLinkDead ? t('list.linkNotFound') : null
+    folderParam !== undefined && (folderParam === "new" ? !canCreateFolder : !openFolder);
+  const linkNotice = fileLinkDead || folderLinkDead ? t("list.linkNotFound") : null;
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
-    searchPlaceholder: t('list.searchPlaceholder'),
+    title: t("list.title"),
+    description: t("list.description"),
+    searchPlaceholder: t("list.searchPlaceholder"),
     currentParams: sp,
     canManage,
     canWrite,
-    trashHref: '/documents/trash',
-    trashLabel: t('trash.link'),
+    trashHref: "/documents/trash",
+    trashLabel: t("trash.link"),
     allFilesHref: folderHref(sp, null),
-    allFilesLabel: t('list.allFiles'),
+    allFilesLabel: t("list.allFiles"),
     crumbs,
     treeFolders: localizedTree,
     activeFolderId,
@@ -261,7 +272,7 @@ export async function loadDocuments(
     })),
     showLocation: !activeFolderId,
     canEdit: canEditCurrent,
-    canDelete: accessAtLeast(currentAccess, 'manager'),
+    canDelete: accessAtLeast(currentAccess, "manager"),
     sort: params.sort,
     dir: params.dir,
     total,
@@ -269,24 +280,24 @@ export async function loadDocuments(
     perPage: params.perPage,
     isEmpty,
     hasRows: !isEmpty,
-    emptyTitle: t('list.empty.title'),
-    emptyDescription: t('list.empty.description'),
+    emptyTitle: t("list.empty.title"),
+    emptyDescription: t("list.empty.description"),
     linkNotice,
     fileDrawerOpen: Boolean(openFile),
     fileDrawer: openFile
       ? {
           remountKey: String(openFile.id),
           file: openFile,
-          canEdit: accessAtLeast(openFileAccess, 'editor'),
-          canManage: accessAtLeast(openFileAccess, 'manager'),
+          canEdit: accessAtLeast(openFileAccess, "editor"),
+          canManage: accessAtLeast(openFileAccess, "manager"),
         }
       : null,
-    folderDrawerCreateOpen: folderParam === 'new' && canCreateFolder,
+    folderDrawerCreateOpen: folderParam === "new" && canCreateFolder,
     folderDrawerCreate:
-      folderParam === 'new' && canCreateFolder
+      folderParam === "new" && canCreateFolder
         ? {
-            remountKey: 'new-folder',
-            mode: 'create',
+            remountKey: "new-folder",
+            mode: "create",
             folders: localizedTree,
             parentId: newFolderParent,
           }
@@ -295,16 +306,16 @@ export async function loadDocuments(
     folderDrawerEdit: openFolder
       ? {
           remountKey: String(openFolder.id),
-          mode: 'edit',
+          mode: "edit",
           folder: openFolder,
           folders: localizedTree,
-          canManage: accessAtLeast(openFolderAccess, 'manager'),
+          canManage: accessAtLeast(openFolderAccess, "manager"),
         }
       : null,
-  }
+  };
 }
 
-const f = ref<DocumentsData>()
+const f = ref<DocumentsData>();
 
 export function documentsSpec(data: DocumentsData): PageSpec {
   const actionsProps = {
@@ -312,57 +323,57 @@ export function documentsSpec(data: DocumentsData): PageSpec {
     trashLabel: data.trashLabel,
     currentParams: data.currentParams,
     newFolderParentId: data.activeFolderId ?? null,
-  }
+  };
   return page({
-    route: '/documents',
+    route: "/documents",
     // The cabinet owns its own full-height shell — ListPageLayout's centered
     // container would nest the chrome, so header and body concatenate.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      grid('flex h-full min-h-0 flex-col', [
+      grid("flex h-full min-h-0 flex-col", [
         // Header — full width, not centered.
         grid(
-          'border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900',
+          "border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900",
           [
             pageHeader({
-              title: f('title'),
-              description: f('description'),
-              actions: [widget('documents-actions', actionsProps, f('canWrite'))],
+              title: f("title"),
+              description: f("description"),
+              actions: [widget("documents-actions", actionsProps, f("canWrite"))],
             }),
-            grid('mt-2 flex flex-wrap items-center gap-2', [
-              widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
+            grid("mt-2 flex flex-wrap items-center gap-2", [
+              widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
             ]),
           ],
         ),
         // Body — folder tree + file listing fill the viewport.
-        grid('flex min-h-0 flex-1', [
-          widgetBlock('folder-tree', {
+        grid("flex min-h-0 flex-1", [
+          widgetBlock("folder-tree", {
             folders: data.treeFolders,
             activeFolderId: data.activeFolderId ?? null,
           }),
-          grid('app-scroll flex min-w-0 flex-1 flex-col overflow-auto', [
+          grid("app-scroll flex min-w-0 flex-1 flex-col overflow-auto", [
             {
-              ...widgetBlock('documents-link-notice', { message: data.linkNotice ?? '' }),
-              when: f('linkNotice'),
+              ...widgetBlock("documents-link-notice", { message: data.linkNotice ?? "" }),
+              when: f("linkNotice"),
             },
-            widgetBlock('documents-breadcrumb', {
+            widgetBlock("documents-breadcrumb", {
               homeHref: data.allFilesHref,
               homeLabel: data.allFilesLabel,
               crumbs: data.crumbs,
             }),
-            grid('min-w-0 flex-1 p-3 sm:p-4', [
+            grid("min-w-0 flex-1 p-3 sm:p-4", [
               {
-                ...widgetBlock('empty-state', {
+                ...widgetBlock("empty-state", {
                   title: data.emptyTitle,
                   description: data.emptyDescription,
-                  action: data.canWrite ? 'documents-actions' : null,
+                  action: data.canWrite ? "documents-actions" : null,
                   actionProps: data.canWrite ? actionsProps : null,
                 }),
-                when: f('isEmpty'),
+                when: f("isEmpty"),
               },
               {
-                ...widgetBlock('file-list', {
+                ...widgetBlock("file-list", {
                   folders: data.folders,
                   files: data.files,
                   activeFolderId: data.activeFolderId ?? null,
@@ -373,17 +384,17 @@ export function documentsSpec(data: DocumentsData): PageSpec {
                   sort: data.sort,
                   dir: data.dir,
                 }),
-                when: f('hasRows'),
+                when: f("hasRows"),
               },
               {
                 ...pagination({
-                  basePath: '/documents',
-                  total: f('total'),
-                  page: f('currentPage'),
-                  perPage: f('perPage'),
+                  basePath: "/documents",
+                  total: f("total"),
+                  page: f("currentPage"),
+                  perPage: f("perPage"),
                   // The native pager DOES carry the `mt-3` wrapper here.
                 }),
-                when: f('hasRows'),
+                when: f("hasRows"),
               },
             ]),
           ]),
@@ -391,17 +402,17 @@ export function documentsSpec(data: DocumentsData): PageSpec {
       ]),
       // URL-backed drawers, portaled to <body> wherever it renders.
       {
-        ...widgetBlock('file-drawer', { drawer: data.fileDrawer }),
-        when: f('fileDrawerOpen'),
+        ...widgetBlock("file-drawer", { drawer: data.fileDrawer }),
+        when: f("fileDrawerOpen"),
       },
       {
-        ...widgetBlock('folder-drawer', { drawer: data.folderDrawerCreate }),
-        when: f('folderDrawerCreateOpen'),
+        ...widgetBlock("folder-drawer", { drawer: data.folderDrawerCreate }),
+        when: f("folderDrawerCreateOpen"),
       },
       {
-        ...widgetBlock('folder-drawer', { drawer: data.folderDrawerEdit }),
-        when: f('folderDrawerEditOpen'),
+        ...widgetBlock("folder-drawer", { drawer: data.folderDrawerEdit }),
+        when: f("folderDrawerEditOpen"),
       },
     ],
-  })
+  });
 }

@@ -1,10 +1,14 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
-import 'server-only'
-import { type FileViewer, type AccessLevel, accessAtLeast } from '@openbooks/engine/records/file-cabinet-access'
-import { folderAccessLevel, fileAccessLevel } from '@openbooks/engine/records/file-cabinet-access'
-import { lockCabinetAuthorization } from '@openbooks/engine/records/file-cabinet-access'
-export { lockCabinetAuthorization } from '@openbooks/engine/records/file-cabinet-access'
-import { inDbTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
+import "server-only";
+import {
+  type FileViewer,
+  type AccessLevel,
+  accessAtLeast,
+} from "@openbooks/engine/records/file-cabinet-access";
+import { folderAccessLevel, fileAccessLevel } from "@openbooks/engine/records/file-cabinet-access";
+import { lockCabinetAuthorization } from "@openbooks/engine/records/file-cabinet-access";
+export { lockCabinetAuthorization } from "@openbooks/engine/records/file-cabinet-access";
+import { inDbTransaction, type SqlExecutor } from "@openbooks/engine/platform/db";
 
 /**
  * Attribution for a mutating verb's audit evidence. When passed, the verb
@@ -14,9 +18,9 @@ import { inDbTransaction, type SqlExecutor } from '@openbooks/engine/platform/db
  * behaviour for callers that record their own evidence.
  */
 export interface FileMutationAudit {
-  actorId: string | null
+  actorId: string | null;
   /** Participate in a caller-owned transaction (bulk units and replacements). */
-  executor?: SqlExecutor
+  executor?: SqlExecutor;
   /**
    * The caller as a FileViewer, for subsidiary-fence enforcement inside the
    * mutation's own transaction. When present the verb re-evaluates the
@@ -27,12 +31,12 @@ export interface FileMutationAudit {
    * trusted internal callers (AP capture, tax PDFs) whose flows scope the
    * write themselves.
    */
-  viewer?: FileViewer
+  viewer?: FileViewer;
   /** Recheck and lock an attachment target in the same transaction as its link mutation. */
   authorizeAttachmentTarget?: (
     executor: SqlExecutor,
     target: { targetTable: string; targetId: string },
-  ) => Promise<void>
+  ) => Promise<void>;
 }
 
 /**
@@ -48,9 +52,9 @@ export async function viewerFileGate(
   min: AccessLevel,
   options: { includeInactive?: boolean } = {},
 ): Promise<boolean> {
-  if (!audit?.viewer) return true
-  await lockCabinetAuthorization(exec, orgId)
-  return accessAtLeast(await fileAccessLevel(orgId, audit.viewer, fileId, exec, options), min)
+  if (!audit?.viewer) return true;
+  await lockCabinetAuthorization(exec, orgId);
+  return accessAtLeast(await fileAccessLevel(orgId, audit.viewer, fileId, exec, options), min);
 }
 
 export async function viewerFolderGate(
@@ -61,9 +65,9 @@ export async function viewerFolderGate(
   min: AccessLevel,
   options: { includeInactive?: boolean } = {},
 ): Promise<boolean> {
-  if (!audit?.viewer) return true
-  await lockCabinetAuthorization(exec, orgId)
-  return accessAtLeast(await folderAccessLevel(orgId, audit.viewer, folderId, exec, options), min)
+  if (!audit?.viewer) return true;
+  await lockCabinetAuthorization(exec, orgId);
+  return accessAtLeast(await folderAccessLevel(orgId, audit.viewer, folderId, exec, options), min);
 }
 
 export async function runMutation<T>(
@@ -72,9 +76,9 @@ export async function runMutation<T>(
   authorizationOrgId?: string,
 ): Promise<T> {
   const run = async (tx: SqlExecutor) => {
-    if (authorizationOrgId) await lockCabinetAuthorization(tx, authorizationOrgId)
-    return work(tx)
-  }
-  if (executor) return run(executor)
-  return inDbTransaction(run)
+    if (authorizationOrgId) await lockCabinetAuthorization(tx, authorizationOrgId);
+    return work(tx);
+  };
+  if (executor) return run(executor);
+  return inDbTransaction(run);
 }

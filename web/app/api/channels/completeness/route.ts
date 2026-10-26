@@ -25,19 +25,26 @@ export const GET = defineRoute({
     if (scopeDenied) return scopeDenied;
     const day = new URL(req.url).searchParams.get("day") ?? todayUtc();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-      return NextResponse.json({ error: "day must be a YYYY-MM-DD calendar date" }, { status: 400 });
+      return NextResponse.json(
+        { error: "day must be a YYYY-MM-DD calendar date" },
+        { status: 400 },
+      );
     }
     const bookId = await activePostingPrimaryBookId(gate.user.orgId);
     if (!bookId) {
       return NextResponse.json(
-        { error: "no active primary posting book", remedy: "Activate the primary posting book under Accounting → Books." },
+        {
+          error: "no active primary posting book",
+          remedy: "Activate the primary posting book under Accounting → Books.",
+        },
         { status: 422 },
       );
     }
-    const checks = await commerceCloseChecks(
-      gate.user.orgId,
-      { startsOn: day, endsOn: day, bookId },
-    );
+    const checks = await commerceCloseChecks(gate.user.orgId, {
+      startsOn: day,
+      endsOn: day,
+      bookId,
+    });
     return NextResponse.json({
       day,
       checks: checks.map((check) => ({

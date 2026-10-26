@@ -4,22 +4,69 @@ const BE_VAT_PERIODIC_2026: TaxReturnPack = {
   code: "BE_VAT_PERIODIC",
   name: "Déclaration TVA périodique / Periodieke btw-aangifte 2026",
   country: "BE",
-  jurisdiction: { code: "BE", name: "Belgium — TVA/BTW territory", country: "BE", level: "country", taxType: "vat" },
+  jurisdiction: {
+    code: "BE",
+    name: "Belgium — TVA/BTW territory",
+    country: "BE",
+    level: "country",
+    taxType: "vat",
+  },
   defaultFrequency: "monthly",
   submissionChannel: "file_upload",
   governmentFormat: "certified_file",
-  submissionUrl: "https://finance.belgium.be/en/E-services/Intervat/how-to-use-intervat/submit-periodic-return",
-  watermark: "Working copy — lodge through Intervat as an XML file or on-screen; monthly filing is the general rule and quarterly filing is an election below the turnover threshold that this pack does not model",
+  submissionUrl:
+    "https://finance.belgium.be/en/E-services/Intervat/how-to-use-intervat/submit-periodic-return",
+  watermark:
+    "Working copy — lodge through Intervat as an XML file or on-screen; monthly filing is the general rule and quarterly filing is an election below the turnover threshold that this pack does not model",
   boxes: [
-    { lineCode: "01", label: "Grille 01 — taxable base for supplies and services at 6%", sign: 1, sequence: 10 },
-    { lineCode: "02", label: "Grille 02 — taxable base for supplies and services at 12%", sign: 1, sequence: 20 },
-    { lineCode: "03", label: "Grille 03 — taxable base for supplies and services at 21%", sign: 1, sequence: 30 },
-    { lineCode: "54", label: "Grille 54 — VAT due on the turnover in grilles 01, 02 and 03", sign: 1, sequence: 40 },
+    {
+      lineCode: "01",
+      label: "Grille 01 — taxable base for supplies and services at 6%",
+      sign: 1,
+      sequence: 10,
+    },
+    {
+      lineCode: "02",
+      label: "Grille 02 — taxable base for supplies and services at 12%",
+      sign: 1,
+      sequence: 20,
+    },
+    {
+      lineCode: "03",
+      label: "Grille 03 — taxable base for supplies and services at 21%",
+      sign: 1,
+      sequence: 30,
+    },
+    {
+      lineCode: "54",
+      label: "Grille 54 — VAT due on the turnover in grilles 01, 02 and 03",
+      sign: 1,
+      sequence: 40,
+    },
     { lineCode: "59", label: "Grille 59 — deductible VAT", sign: 1, sequence: 50 },
     { lineCode: "71", label: "Grille 71 — balance payable to the State", sign: 1, sequence: 60 },
-    { lineCode: "72", label: "Grille 72 — balance recoverable from the State", sign: 1, sequence: 70 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 80, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 90, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "72",
+      label: "Grille 72 — balance recoverable from the State",
+      sign: 1,
+      sequence: 70,
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label: "OpenBooks workpaper — output VAT from the ledger, all configured rates",
+      sign: -1,
+      sequence: 80,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — input VAT from the ledger, all configured rates",
+      sign: 1,
+      sequence: 90,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
   ],
 };
 
@@ -93,7 +140,8 @@ export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "fps_periodic_return",
-      title: "FPS Finance — periodic VAT return: monthly filing is the general rule, quarterly is an election",
+      title:
+        "FPS Finance — periodic VAT return: monthly filing is the general rule, quarterly is an election",
       url: "https://finance.belgium.be/en/enterprises/vat/declaration/periodic-return",
       asOf: "2026-08-01",
     },
@@ -105,7 +153,8 @@ export const BELGIUM_TAX_PACK: CountryTaxPackDefinition = {
     },
     {
       id: "fps_vat_rates",
-      title: "FPS Finance — VAT rates: standard 21% (R03), intermediate 12% (R02), reduced 6% (R01); zero rate (R00) for exceptional goods and services (applicability, not origin)",
+      title:
+        "FPS Finance — VAT rates: standard 21% (R03), intermediate 12% (R02), reduced 6% (R01); zero rate (R00) for exceptional goods and services (applicability, not origin)",
       url: "https://finance.belgium.be/en/enterprises/vat/vat-obligation/rates-and-calculation/vat-rates",
       asOf: "2026-09-18",
     },

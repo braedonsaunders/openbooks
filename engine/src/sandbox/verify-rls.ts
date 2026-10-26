@@ -24,8 +24,7 @@ import { assertTemplateSandboxSource } from "./source-validation.ts";
 
 export const BOGUS_ORG_ID = "00000000-0000-0000-0000-000000000000";
 
-const UUID_VALUE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_VALUE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type CloneRlsTableCounts = {
   table: string;
@@ -149,19 +148,19 @@ export async function cloneTierVerificationTables(tier: SandboxTier): Promise<st
 }
 
 /** One round trip per chunk: per-table counts as (table, n) rows. */
-async function countChunk(
-  tables: string[],
-  whereOrg: string | null,
-): Promise<Map<string, number>> {
+async function countChunk(tables: string[], whereOrg: string | null): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   for (let i = 0; i < tables.length; i += 100) {
-    const branches = tables.slice(i, i + 100).map((table) =>
-      whereOrg === null
-        ? sql`select ${table}::text as tbl, count(*)::int as n from ${sql.raw(`"${table}"`)}`
-        : sql`select ${table}::text as tbl, count(*)::int as n from ${sql.raw(`"${table}"`)} where org_id = ${whereOrg}`,
-    );
+    const branches = tables
+      .slice(i, i + 100)
+      .map((table) =>
+        whereOrg === null
+          ? sql`select ${table}::text as tbl, count(*)::int as n from ${sql.raw(`"${table}"`)}`
+          : sql`select ${table}::text as tbl, count(*)::int as n from ${sql.raw(`"${table}"`)} where org_id = ${whereOrg}`,
+      );
     const result = await db.execute<{ tbl: string; n: number }>(
-      sql.join(branches, sql` union all `), "objects",
+      sql.join(branches, sql` union all `),
+      "objects",
     );
     for (const row of result) out.set(row.tbl, row.n);
     for (const table of tables.slice(i, i + 100)) {
@@ -193,10 +192,13 @@ export async function verifyCloneRls(args: {
       env_kind: string;
       sandbox_of: string | null;
       settings: Record<string, unknown> | null;
-    }>(sql`
+    }>(
+      sql`
       select id, env_kind, sandbox_of, settings
         from orgs
-       where id = ${args.productionOrgId} or id = ${args.sandboxOrgId}`, "objects");
+       where id = ${args.productionOrgId} or id = ${args.sandboxOrgId}`,
+      "objects",
+    );
     return result;
   });
   const production = orgs.find((row) => row.id === args.productionOrgId);
@@ -206,7 +208,8 @@ export async function verifyCloneRls(args: {
       `clone RLS re-verification failed: production org ${args.productionOrgId} was not found. Pass the source tenant of the clone.`,
     );
   }
-  if (args.allowTemplateSource === true) assertTemplateSandboxSource(production, args.productionOrgId);
+  if (args.allowTemplateSource === true)
+    assertTemplateSandboxSource(production, args.productionOrgId);
   else assertProductionSourceKind(production);
   if (!sandbox) {
     throw new Error(
@@ -229,9 +232,19 @@ export async function verifyCloneRls(args: {
   // bypass: cross-org-by-design — unscoped counts are the reference the scoped counts below are proven against.
   const bypassProduction = await withBypass(() => countChunk(verifyTables, args.productionOrgId));
   const bypassSandbox = await withBypass(() => countChunk(verifyTables, args.sandboxOrgId));
-  const scopedProduction = await withOrgTransaction(args.productionOrgId, () => countChunk(verifyTables, null), { readOnly: true });
-  const scopedSandbox = await withOrgTransaction(args.sandboxOrgId, () => countChunk(verifyTables, null), { readOnly: true });
-  const scopedBogus = await withOrgTransaction(BOGUS_ORG_ID, () => countChunk(verifyTables, null), { readOnly: true });
+  const scopedProduction = await withOrgTransaction(
+    args.productionOrgId,
+    () => countChunk(verifyTables, null),
+    { readOnly: true },
+  );
+  const scopedSandbox = await withOrgTransaction(
+    args.sandboxOrgId,
+    () => countChunk(verifyTables, null),
+    { readOnly: true },
+  );
+  const scopedBogus = await withOrgTransaction(BOGUS_ORG_ID, () => countChunk(verifyTables, null), {
+    readOnly: true,
+  });
 
   const tables: CloneRlsTableCounts[] = verifyTables.map((table) => ({
     table,
@@ -262,8 +275,11 @@ async function resolveClonePair(argv: string[]): Promise<{
   if (productionOrgId && sandboxOrgId) {
     // bypass: cross-org-by-design — a sandbox row links a production organization to its copy.
     const row = await withBypass(async () => {
-      const result = await db.execute<{ tier: SandboxTier }>(sql`
-        select tier from sandboxes where org_id = ${sandboxOrgId} order by created_at desc limit 1`, "objects");
+      const result = await db.execute<{ tier: SandboxTier }>(
+        sql`
+        select tier from sandboxes where org_id = ${sandboxOrgId} order by created_at desc limit 1`,
+        "objects",
+      );
       return result[0];
     });
     if (!row) {
@@ -280,12 +296,19 @@ async function resolveClonePair(argv: string[]): Promise<{
   }
   // bypass: cross-org-by-design — with no pair given, the proof picks the newest ready sandbox of the installation.
   const pair = await withBypass(async () => {
-    const result = await db.execute<{ production_org_id: string; org_id: string; tier: SandboxTier }>(sql`
+    const result = await db.execute<{
+      production_org_id: string;
+      org_id: string;
+      tier: SandboxTier;
+    }>(
+      sql`
       select production_org_id, org_id, tier
         from sandboxes
        where status = 'ready'
        order by created_at desc
-       limit 1`, "objects");
+       limit 1`,
+      "objects",
+    );
     return result[0];
   });
   if (!pair) {
@@ -304,14 +327,19 @@ async function main(): Promise<void> {
       `table checks for production ${proof.productionOrgId} vs sandbox ${proof.sandboxOrgId} (tier ${pair.tier})`,
     );
     for (const table of proof.tables) {
-      const verified = table.bypassProduction > 0 && table.bypassSandbox > 0 ? "verified" : "UNVERIFIED (one side empty)";
+      const verified =
+        table.bypassProduction > 0 && table.bypassSandbox > 0
+          ? "verified"
+          : "UNVERIFIED (one side empty)";
       console.log(
         `  ${table.table} [${verified}]: bypass prod=${table.bypassProduction} sandbox=${table.bypassSandbox}; ` +
           `scoped prod=${table.scopedProduction} sandbox=${table.scopedSandbox} bogus=${table.scopedBogus}`,
       );
     }
     if ((proof.unverifiedTables ?? []).length > 0) {
-      console.log(`unverified tables (empty on at least one side, proving nothing): ${proof.unverifiedTables!.join(", ")}`);
+      console.log(
+        `unverified tables (empty on at least one side, proving nothing): ${proof.unverifiedTables!.join(", ")}`,
+      );
     }
     console.log(
       "clone RLS enforced: scoped counts match each tenant and the bogus org sees nothing.",
@@ -326,9 +354,11 @@ function launchedAsCli(): boolean {
   // Bundlers fold imported modules into the process entry file, making the
   // import URL equal the worker entry URL. Only the verifier's own CLI may run
   // the standalone proof; normal imports use verifyCloneRls directly.
-  return typeof entry === "string" &&
+  return (
+    typeof entry === "string" &&
     basename(entry) === "verify-rls.ts" &&
-    import.meta.url === pathToFileURL(entry).href;
+    import.meta.url === pathToFileURL(entry).href
+  );
 }
 
 if (launchedAsCli()) {

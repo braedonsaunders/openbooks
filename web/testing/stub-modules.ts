@@ -83,7 +83,8 @@ const PLATFORM_DB_URL = new URL("../../engine/src/platform/db.ts", import.meta.u
 function navigationSource(pathname: string, routerSource?: string): string {
   const safe = pathname.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   return (
-    (routerSource ?? `export function useRouter(){return{push(){},refresh(){},replace(){},back(){},forward(){}}}`) +
+    (routerSource ??
+      `export function useRouter(){return{push(){},refresh(){},replace(){},back(){},forward(){}}}`) +
     `export function usePathname(){return '${safe}'}` +
     `export function useSearchParams(){return new URLSearchParams()}` +
     `export function redirect(url){throw new Error('REDIRECT:'+url)}` +
@@ -92,17 +93,19 @@ function navigationSource(pathname: string, routerSource?: string): string {
 }
 
 /** Server locale boundary for tests that retain their own catalog translator. */
-export function intlServerStubSource(translationsSource =
-  `export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}`,
+export function intlServerStubSource(
+  translationsSource = `export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}`,
 ): string {
-  return translationsSource +
-  `export async function getMessages(){return {}}` +
-  `export async function getLocale(){return 'en'}` +
-  `export async function getTimeZone(){return 'UTC'}` +
-  // Formatter in the same neutral locale and zone.
-  `export async function getFormatter(){return {` +
-  `dateTime:(value,options)=>new Intl.DateTimeFormat('en',{...(options??{}),timeZone:'UTC'}).format(value),` +
-  `number:(value,options)=>new Intl.NumberFormat('en',options).format(value)}}`;
+  return (
+    translationsSource +
+    `export async function getMessages(){return {}}` +
+    `export async function getLocale(){return 'en'}` +
+    `export async function getTimeZone(){return 'UTC'}` +
+    // Formatter in the same neutral locale and zone.
+    `export async function getFormatter(){return {` +
+    `dateTime:(value,options)=>new Intl.DateTimeFormat('en',{...(options??{}),timeZone:'UTC'}).format(value),` +
+    `number:(value,options)=>new Intl.NumberFormat('en',options).format(value)}}`
+  );
 }
 
 const INTL_SERVER_DEFAULT = intlServerStubSource();
@@ -141,9 +144,7 @@ function authzSource(permissions: string[] | null): string {
 
 function featuresSource(enabled: string[] | null): string {
   const check =
-    enabled === null
-      ? `return true`
-      : `return ${JSON.stringify(enabled)}.includes(key)`;
+    enabled === null ? `return true` : `return ${JSON.stringify(enabled)}.includes(key)`;
   return (
     `export async function orgFeatureState(){return {}}` +
     `export async function isFeatureEnabled(_orgId,key){${check}}` +
@@ -166,9 +167,13 @@ function virtual(source: string): { shortCircuit: boolean; url: string } {
 export function withAuthzTestSurface(source: string): string {
   const additions: string[] = [];
   const hasExport = (name: string): boolean =>
-    new RegExp(`\\bexport\\s+(?:(?:async)\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`).test(source);
+    new RegExp(
+      `\\bexport\\s+(?:(?:async)\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`,
+    ).test(source);
   if (!hasExport("can")) {
-    additions.push(`export function can(authz, permission) { const permissions = authz?.permissions; return Boolean(permissions && (permissions.has?.('*') || permissions.has?.(permission) || permissions.includes?.('*') || permissions.includes?.(permission))); }`);
+    additions.push(
+      `export function can(authz, permission) { const permissions = authz?.permissions; return Boolean(permissions && (permissions.has?.('*') || permissions.has?.(permission) || permissions.includes?.('*') || permissions.includes?.(permission))); }`,
+    );
   }
   if (!hasExport("getAuthz") && hasExport("guardPermission")) {
     additions.push(`export async function getAuthz() { return guardPermission(); }`);
@@ -182,24 +187,44 @@ export function withPlatformDbTestSurface(source: string): string {
   // (`export const withOrg = unexpected, orgContext = ...`), so a later
   // binding in such a list counts as declared too.
   const hasExport = (name: string): boolean =>
-    new RegExp(`\\bexport\\s+(?:(?:async)\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`).test(source)
-    || new RegExp(`\\bexport\\s+(?:const|let|var)\\s[^;]*[,\\s]${name}\\s*=`).test(source);
+    new RegExp(
+      `\\bexport\\s+(?:(?:async)\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`,
+    ).test(source) ||
+    new RegExp(`\\bexport\\s+(?:const|let|var)\\s[^;]*[,\\s]${name}\\s*=`).test(source);
   const sharedExports: Array<[string, string]> = [
-    ["inExecutorTransaction", `export async function inExecutorTransaction(executor, fn) { return fn(executor) }`],
+    [
+      "inExecutorTransaction",
+      `export async function inExecutorTransaction(executor, fn) { return fn(executor) }`,
+    ],
     ["ambientTenantOrgId", `export function ambientTenantOrgId() { return null }`],
-    ["ambientBypassWithoutTransaction", `export function ambientBypassWithoutTransaction() { return false }`],
+    [
+      "ambientBypassWithoutTransaction",
+      `export function ambientBypassWithoutTransaction() { return false }`,
+    ],
     ["withBypass", `export async function withBypass(fn) { return fn() }`],
     ["withBypassContext", `export async function withBypassContext(fn) { return fn() }`],
     ["currentRequestOrgResolver", `export function currentRequestOrgResolver() { return null }`],
     ["registerRequestOrgResolver", `export function registerRequestOrgResolver() {}`],
-    ["orgContext", `export const orgContext = { getStore: () => undefined, run: (store, fn) => fn() }`],
-    ["withTransactionSavepoint", `export async function withTransactionSavepoint(runner, name, work) { return work(runner) }`],
+    [
+      "orgContext",
+      `export const orgContext = { getStore: () => undefined, run: (store, fn) => fn() }`,
+    ],
+    [
+      "withTransactionSavepoint",
+      `export async function withTransactionSavepoint(runner, name, work) { return work(runner) }`,
+    ],
     // No pooled transaction is pinned to a double's context: callers read through its db.
-    ["pinnedTransactionExecutor", `export function pinnedTransactionExecutor() { return undefined }`],
+    [
+      "pinnedTransactionExecutor",
+      `export function pinnedTransactionExecutor() { return undefined }`,
+    ],
     // The compatibility entry point runs tenant work through the double's own transaction when it has one.
-    ["withOrg", hasExport("withOrgTransaction")
-      ? `export async function withOrg(orgId, fn) { return orgId === null ? fn() : withOrgTransaction(orgId, () => fn()) }`
-      : `export async function withOrg(orgId, fn) { return fn() }`],
+    [
+      "withOrg",
+      hasExport("withOrgTransaction")
+        ? `export async function withOrg(orgId, fn) { return orgId === null ? fn() : withOrgTransaction(orgId, () => fn()) }`
+        : `export async function withOrg(orgId, fn) { return fn() }`,
+    ],
   ];
   const additions = sharedExports
     .filter(([name]) => !hasExport(name))
@@ -219,9 +244,7 @@ function isAuthzSpecifier(specifier: string): boolean {
 function isFeaturesSpecifier(specifier: string): boolean {
   // Same scoping rule as above: only the /lib/-suffixed family. Bare
   // relative spellings (`../features`) go through `extra` exactly.
-  return (
-    specifier.endsWith("/lib/features") || specifier.endsWith("/lib/feature-gates")
-  );
+  return specifier.endsWith("/lib/features") || specifier.endsWith("/lib/feature-gates");
 }
 
 function resolveOptionSource(
@@ -294,8 +317,11 @@ export function stubModules(options: StubModulesOptions = {}): void {
       const resolved = next(specifier, context);
       // A declared database double also owns native readers' relative imports
       // of that same module. Validation and domain modules stay real.
-      if (platformDbOverride !== undefined && resolved.url === PLATFORM_DB_URL
-        && context.parentURL !== virtual(platformDbOverride).url) {
+      if (
+        platformDbOverride !== undefined &&
+        resolved.url === PLATFORM_DB_URL &&
+        context.parentURL !== virtual(platformDbOverride).url
+      ) {
         return virtual(platformDbOverride);
       }
       return resolved;

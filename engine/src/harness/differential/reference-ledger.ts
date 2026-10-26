@@ -74,7 +74,8 @@ export class ReferenceLedger {
     this.accounts = new Set(corpus.accounts.map((a) => a.key));
     this.parties = new Map(corpus.parties.map((p) => [p.key, new Set(p.roles)]));
     for (const required of ["ar", "ap", "bank"]) {
-      if (!this.accounts.has(required)) throw new Error(`corpus is missing the "${required}" account`);
+      if (!this.accounts.has(required))
+        throw new Error(`corpus is missing the "${required}" account`);
     }
   }
 
@@ -100,7 +101,8 @@ export class ReferenceLedger {
           this.post(line.account, cents);
           net += cents;
         }
-        if (net !== 0n) throw new Error(`${event.id}: journal does not balance (net ${fromCents(net)})`);
+        if (net !== 0n)
+          throw new Error(`${event.id}: journal does not balance (net ${fromCents(net)})`);
         break;
       }
       case "customer_invoice":
@@ -115,8 +117,10 @@ export class ReferenceLedger {
         }, 0n);
         const isCustomer = event.kind.startsWith("customer");
         const isCredit = event.kind.endsWith("credit");
-        const control = event.kind === "expense_report" ? "employeePayable" : isCustomer ? "ar" : "ap";
-        const role = event.kind === "expense_report" ? "employee" : isCustomer ? "customer" : "vendor";
+        const control =
+          event.kind === "expense_report" ? "employeePayable" : isCustomer ? "ar" : "ap";
+        const role =
+          event.kind === "expense_report" ? "employee" : isCustomer ? "customer" : "vendor";
         this.requireParty(event.party, role, event.id);
         // Line legs: revenue is credited on invoices (and debited back on credits);
         // cost is debited on bills/expenses (and credited back on vendor credits).
@@ -141,7 +145,10 @@ export class ReferenceLedger {
         // A vendor_payment settles the AP side, which also carries employee
         // reimbursements (expense reports) — either role is a valid payee.
         if (isCustomer) this.requireParty(event.party, "customer", event.id);
-        else if (!this.parties.get(event.party)?.has("vendor") && !this.parties.get(event.party)?.has("employee")) {
+        else if (
+          !this.parties.get(event.party)?.has("vendor") &&
+          !this.parties.get(event.party)?.has("employee")
+        ) {
           throw new Error(`${event.id}: party "${event.party}" lacks the vendor/employee role`);
         }
         let total = 0n;
@@ -150,13 +157,17 @@ export class ReferenceLedger {
           const cents = toCents(alloc.amount);
           if (cents <= 0n) throw new Error(`${event.id}: allocation amounts must be positive`);
           const item = this.openItems.get(alloc.event);
-          if (!item) throw new Error(`${event.id}: allocation targets unknown event "${alloc.event}"`);
-          if (item.party !== event.party) throw new Error(`${event.id}: allocation crosses parties (${alloc.event})`);
+          if (!item)
+            throw new Error(`${event.id}: allocation targets unknown event "${alloc.event}"`);
+          if (item.party !== event.party)
+            throw new Error(`${event.id}: allocation crosses parties (${alloc.event})`);
           if (item.side !== (isCustomer ? "ar" : "ap")) {
             throw new Error(`${event.id}: allocation crosses subledger sides (${alloc.event})`);
           }
           if (control !== null && control !== item.control) {
-            throw new Error(`${event.id}: one payment may not settle items on different control accounts`);
+            throw new Error(
+              `${event.id}: one payment may not settle items on different control accounts`,
+            );
           }
           control = item.control;
           // An application reduces the open item's MAGNITUDE toward zero — the
@@ -170,7 +181,8 @@ export class ReferenceLedger {
           item.remaining += item.remaining < 0n ? cents : -cents;
           total += cents;
         }
-        if (total === 0n || control === null) throw new Error(`${event.id}: payment with no allocations`);
+        if (total === 0n || control === null)
+          throw new Error(`${event.id}: payment with no allocations`);
         if (isCustomer) {
           this.post("bank", total);
           this.post(control, -total);
@@ -191,7 +203,8 @@ export class ReferenceLedger {
       net += bal;
       if (bal !== 0n) trialBalance[key] = fromCents(bal);
     }
-    if (net !== 0n) throw new Error(`reference ledger out of balance by ${fromCents(net)} — oracle bug`);
+    if (net !== 0n)
+      throw new Error(`reference ledger out of balance by ${fromCents(net)} — oracle bug`);
 
     const openBalances: Record<string, { ar?: string; ap?: string }> = {};
     const byPartySide = new Map<string, bigint>();

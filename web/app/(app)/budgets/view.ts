@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
+import { getLocale, getTranslations } from "next-intl/server";
+import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
 import {
   page,
   pageHeader,
@@ -9,15 +9,22 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../lib/list-params'
-import { listBudgetSourceOptions, loadBudgetBooksAndYears, loadBudgetWorkspace, loadUnsavedBudgetWorkspace, type BudgetDimensions, type BudgetWorkspace } from '../../../lib/budgets'
-import type { BudgetDrawer } from './BudgetDrawer'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { isUuid, mergeHref, parsePrefixedListParams, pickString } from "../../../lib/list-params";
+import {
+  listBudgetSourceOptions,
+  loadBudgetBooksAndYears,
+  loadBudgetWorkspace,
+  loadUnsavedBudgetWorkspace,
+  type BudgetDimensions,
+  type BudgetWorkspace,
+} from "../../../lib/budgets";
+import type { BudgetDrawer } from "./BudgetDrawer";
 
 /** URL parameter prefix of a custom segment slice: budgetSeg_<segment key>. */
-const BUDGET_SEGMENT_PARAM = 'budgetSeg_'
+const BUDGET_SEGMENT_PARAM = "budgetSeg_";
 
 /**
  * Budgets, split into a loader and a spec.
@@ -37,106 +44,124 @@ const BUDGET_SEGMENT_PARAM = 'budgetSeg_'
  * and the widgets render them.
  */
 
-type BudgetDrawerProps = Parameters<typeof BudgetDrawer>[0]
+type BudgetDrawerProps = Parameters<typeof BudgetDrawer>[0];
 
 export interface BudgetsData {
-  title: string
-  description: string
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
-  canCreate: boolean
-  drawer: (Record<string, unknown> & { remountKey: string }) | null
+  title: string;
+  description: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
+  canCreate: boolean;
+  drawer: (Record<string, unknown> & { remountKey: string }) | null;
 }
 
 export async function loadBudgets(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<BudgetsData> {
-  const t = await getTranslations('budgets')
-  const authz = await requirePermission('budgets.read')
-  await requireFeatureEnabled(authz.user.orgId, 'budgets')
+  const t = await getTranslations("budgets");
+  const authz = await requirePermission("budgets.read");
+  await requireFeatureEnabled(authz.user.orgId, "budgets");
 
-  const orgId = authz.user.orgId
-  const canManage = can(authz, 'budgets.manage')
-  const budgetId = pickString(sp.budget)
-  const budgetList = parsePrefixedListParams(sp, 'budget', { sort: 'account', dir: 'asc', perPage: 50, allowedSorts: ['account'] as const })
+  const orgId = authz.user.orgId;
+  const canManage = can(authz, "budgets.manage");
+  const budgetId = pickString(sp.budget);
+  const budgetList = parsePrefixedListParams(sp, "budget", {
+    sort: "account",
+    dir: "asc",
+    perPage: 50,
+    allowedSorts: ["account"] as const,
+  });
   const dimension = (key: string) => {
-    const value = pickString(sp[key])
-    return value && isUuid(value) ? value : null
-  }
+    const value = pickString(sp[key]);
+    return value && isUuid(value) ? value : null;
+  };
   const dims: BudgetDimensions = {
-    subsidiaryId: dimension('budgetSubsidiary'),
-    departmentId: dimension('budgetDepartment'),
-    projectId: dimension('budgetProject'),
-    locationId: dimension('budgetLocation'),
-    classId: dimension('budgetClass'),
+    subsidiaryId: dimension("budgetSubsidiary"),
+    departmentId: dimension("budgetDepartment"),
+    projectId: dimension("budgetProject"),
+    locationId: dimension("budgetLocation"),
+    classId: dimension("budgetClass"),
     // Custom segment slices (fund included) travel as budgetSeg_<segment key>;
     // the workspace loader drops any key or value that is not active.
-    extraDims: Object.fromEntries(Object.keys(sp)
+    extraDims: Object.fromEntries(
+      Object.keys(sp)
+        .filter((param) => param.startsWith(BUDGET_SEGMENT_PARAM))
+        .map((param) => [param.slice(BUDGET_SEGMENT_PARAM.length), dimension(param)])
+        .filter((entry): entry is [string, string] => entry[1] !== null),
+    ),
+  };
+  const segmentParams = Object.fromEntries(
+    Object.keys(sp)
       .filter((param) => param.startsWith(BUDGET_SEGMENT_PARAM))
-      .map((param) => [param.slice(BUDGET_SEGMENT_PARAM.length), dimension(param)])
-      .filter((entry): entry is [string, string] => entry[1] !== null)),
-  }
-  const segmentParams = Object.fromEntries(Object.keys(sp)
-    .filter((param) => param.startsWith(BUDGET_SEGMENT_PARAM))
-    .map((param) => [param, null]))
-  const { books, years } = await loadBudgetBooksAndYears(orgId)
+      .map((param) => [param, null]),
+  );
+  const { books, years } = await loadBudgetBooksAndYears(orgId);
   // Unsaved-create (?budgetNew=1): the drawer opens over an in-memory
   // workspace — zero writes on open, zero on Cancel, one explicit Save. The
   // button and the drawer share this flag, so neither is ever offered
   // without the other. A book and at least one fiscal year must exist to
   // start a budget; the workspace loader and the Save endpoint re-validate
   // the resolved book/year with named refusals.
-  const canCreate = canManage && books.length > 0 && years.length > 0
-  const creating = pickString(sp.budgetNew) === '1' && canCreate && !budgetId
+  const canCreate = canManage && books.length > 0 && years.length > 0;
+  const creating = pickString(sp.budgetNew) === "1" && canCreate && !budgetId;
   const [sources, workspace, unsaved] = await Promise.all([
-    ((budgetId && isUuid(budgetId)) || creating)
+    (budgetId && isUuid(budgetId)) || creating
       ? listBudgetSourceOptions(orgId, authz.allowedSubsidiaryIds).then((rows) => ({ rows }))
       : Promise.resolve({ rows: [] as { id: string; name: string; fiscal_year: number }[] }),
-    budgetId && isUuid(budgetId) ? loadBudgetWorkspace(budgetId, orgId, {
-      q: budgetList.q,
-      page: budgetList.page,
-      perPage: budgetList.perPage,
-      dims,
-      // The drawer payload carries the scenario's name, status and lines:
-      // an out-of-scope scenario loads as missing so the drawer stays shut.
-      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    }) : Promise.resolve(null),
-    creating ? loadUnsavedBudgetWorkspace(orgId, {
-      q: budgetList.q,
-      page: budgetList.page,
-      perPage: budgetList.perPage,
-      dims,
-    }) : Promise.resolve(null),
-  ])
-  const requestedReturn = pickString(sp.drawerReturn)
-  const closeHref = requestedReturn?.startsWith('/budgets') ? requestedReturn : mergeHref('/budgets', sp, {
-    budget: null,
-    budgetNew: null,
-    budgetQ: null,
-    budgetPage: null,
-    budgetSubsidiary: null,
-    budgetDepartment: null,
-    budgetProject: null,
-    budgetLocation: null,
-    budgetClass: null,
-    ...segmentParams,
-    budgetImport: null,
-    budgetView: null,
-    drawerReturn: null,
-  })
+    budgetId && isUuid(budgetId)
+      ? loadBudgetWorkspace(budgetId, orgId, {
+          q: budgetList.q,
+          page: budgetList.page,
+          perPage: budgetList.perPage,
+          dims,
+          // The drawer payload carries the scenario's name, status and lines:
+          // an out-of-scope scenario loads as missing so the drawer stays shut.
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        })
+      : Promise.resolve(null),
+    creating
+      ? loadUnsavedBudgetWorkspace(orgId, {
+          q: budgetList.q,
+          page: budgetList.page,
+          perPage: budgetList.perPage,
+          dims,
+        })
+      : Promise.resolve(null),
+  ]);
+  const requestedReturn = pickString(sp.drawerReturn);
+  const closeHref = requestedReturn?.startsWith("/budgets")
+    ? requestedReturn
+    : mergeHref("/budgets", sp, {
+        budget: null,
+        budgetNew: null,
+        budgetQ: null,
+        budgetPage: null,
+        budgetSubsidiary: null,
+        budgetDepartment: null,
+        budgetProject: null,
+        budgetLocation: null,
+        budgetClass: null,
+        ...segmentParams,
+        budgetImport: null,
+        budgetView: null,
+        drawerReturn: null,
+      });
 
   // Remount key: switching scenarios, revisions, or dimensional slices must
   // reset the drawer's client state, and a widget at a fixed position would
   // otherwise be reused.
-  const openWorkspace = workspace ?? unsaved
+  const openWorkspace = workspace ?? unsaved;
   // Worksheet columns read as every period list labels them, in the
   // viewer's locale.
-  const locale = await getLocale()
+  const locale = await getLocale();
   const drawerPayload: BudgetDrawerProps | null = openWorkspace
     ? {
         initial: {
           ...(openWorkspace as BudgetWorkspace),
-          periods: openWorkspace.periods.map((period) => ({ ...period, name: periodDisplayLabel(period.periodRef, locale) })),
+          periods: openWorkspace.periods.map((period) => ({
+            ...period,
+            name: periodDisplayLabel(period.periodRef, locale),
+          })),
         },
         currentParams: sp,
         dims,
@@ -144,54 +169,53 @@ export async function loadBudgets(
         books,
         years,
         sources: sources.rows,
-        newlyCreated: unsaved ? true : pickString(sp.budgetNew) === '1',
+        newlyCreated: unsaved ? true : pickString(sp.budgetNew) === "1",
         createMode: unsaved ? true : undefined,
         canManage,
-        canApprove: unsaved ? false : can(authz, 'budgets.approve'),
-        canExport: unsaved ? false : can(authz, 'data.export'),
+        canApprove: unsaved ? false : can(authz, "budgets.approve"),
+        canExport: unsaved ? false : can(authz, "data.export"),
       }
-    : null
-  const sliceKey = `${dims.subsidiaryId}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}-${JSON.stringify(openWorkspace?.effectiveExtraDims ?? {})}`
+    : null;
+  const sliceKey = `${dims.subsidiaryId}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}-${JSON.stringify(openWorkspace?.effectiveExtraDims ?? {})}`;
   const persistedKey = workspace
     ? `${workspace.scenario.id}-${workspace.scenario.revision}-${sliceKey}`
-    : ''
-  const drawer: BudgetsData['drawer'] = openWorkspace && drawerPayload
-    ? {
-        remountKey: unsaved
-          ? `new-${sliceKey}`
-          : persistedKey,
-        ...drawerPayload,
-      }
-    : null
+    : "";
+  const drawer: BudgetsData["drawer"] =
+    openWorkspace && drawerPayload
+      ? {
+          remountKey: unsaved ? `new-${sliceKey}` : persistedKey,
+          ...drawerPayload,
+        }
+      : null;
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
+    title: t("list.title"),
+    description: t("list.description"),
     currentParams: sp,
     canManage,
     canCreate,
     drawer,
-  }
+  };
 }
 
-const f = ref<BudgetsData>()
+const f = ref<BudgetsData>();
 
 export function budgetsSpec(data: BudgetsData): PageSpec {
   const newBudget = {
-    widget: 'new-budget',
+    widget: "new-budget",
     props: { currentParams: data.currentParams },
-  }
+  };
   return page({
-    route: '/budgets',
-    layout: 'list',
+    route: "/budgets",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         // The New affordance needs the creation grant plus a book and a
         // fiscal year to start from — the same flag the ?budgetNew=1 drawer
         // shares, so neither is ever offered without the other.
-        actions: [widget(newBudget.widget, newBudget.props, f('canCreate'))],
+        actions: [widget(newBudget.widget, newBudget.props, f("canCreate"))],
       }),
     ],
     body: [
@@ -199,12 +223,12 @@ export function budgetsSpec(data: BudgetsData): PageSpec {
       // a user id and a permission decision, none of which may travel through
       // a spec. The drawer's own `?budgetQ`/`?budgetPage`/dimension params
       // ride inside `sp`, so the workspace worksheet keeps working.
-      widgetBlock('entity-list-view', {
-        recordType: 'budget_scenario',
+      widgetBlock("entity-list-view", {
+        recordType: "budget_scenario",
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'budget-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer ? { widget: "budget-drawer", props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newBudget : null,
       }),
     ],
-  })
+  });
 }

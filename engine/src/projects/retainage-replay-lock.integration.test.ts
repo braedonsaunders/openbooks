@@ -11,7 +11,11 @@ import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+} from "../testing/fixtures.ts";
 import {
   createPayApplication,
   generatePayApplicationInvoice,
@@ -44,7 +48,9 @@ async function holdRowLock(
 ): Promise<void> {
   const rollback = new Error("__f6_lock_holder_rollback__");
   await withOrgTransaction(orgId, async () => {
-    await db.execute(sql`select 1 from ${sql.raw(table)} where org_id = ${orgId} and id = ${id} for update`);
+    await db.execute(
+      sql`select 1 from ${sql.raw(table)} where org_id = ${orgId} and id = ${id} for update`,
+    );
     held();
     await released;
     throw rollback;
@@ -56,7 +62,9 @@ async function holdRowLock(
 async function adminActor(org: Org): Promise<{ actor: string; approver: string }> {
   const actor = await createScratchUser(org.orgId, "Lock controller", "admin");
   const approver = await createScratchUser(org.orgId, "Lock approver", "admin");
-  await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`);
+  await db.execute(
+    sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`,
+  );
   return { actor, approver };
 }
 
@@ -71,10 +79,18 @@ async function policyType(orgId: string, key: string): Promise<string> {
 }
 
 async function controlAccounts(org: Org): Promise<void> {
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainageReceivable',${org.accounts.invAsset}::text)) where id=${org.orgId}`);
+  await db.execute(
+    sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainageReceivable',${org.accounts.invAsset}::text)) where id=${org.orgId}`,
+  );
 }
 
-async function postInvoice(org: Org, actor: string, approver: string, kind: string, id: string): Promise<void> {
+async function postInvoice(
+  org: Org,
+  actor: string,
+  approver: string,
+  kind: string,
+  id: string,
+): Promise<void> {
   assert.equal((await submitAndReleaseIfUngated(kind, id, actor)).autoApproved, true);
   await postDocument(
     id,
@@ -89,7 +105,9 @@ test("concurrent customer draws serialize on the project lock during replay", en
   // both settle the same residual and a minor unit of dust strands.
   const org = await createScratchOrg();
   let releaseLock!: () => void;
-  const released = new Promise<void>((resolve) => { releaseLock = resolve; });
+  const released = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
   try {
     const { actor, approver } = await adminActor(org);
     await controlAccounts(org);
@@ -99,28 +117,65 @@ test("concurrent customer draws serialize on the project lock during replay", en
       values(${project},${org.orgId},${org.subsidiaryId},'LOCK-C','Lock job',${org.customerId},${type},'active')`);
     await db.execute(sql`insert into sov_lines(org_id,project_id,description,scheduled_value,sort_order,income_account_id)
       values(${org.orgId},${project},'Work','10000',1,${org.accounts.revenue})`);
-    const sov = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and project_id=${project}`, "objects"))[0]!.id;
+    const sov = (
+      await db.execute<{ id: string }>(
+        sql`select id from sov_lines where org_id=${org.orgId} and project_id=${project}`,
+        "objects",
+      )
+    )[0]!.id;
 
     // The prior draw must be fully closed (submitted, approved, invoiced,
     // posted): the domain refuses a second open draw, so the race under test
     // is a later submit replaying settled history while another transaction
     // holds the project.
-    const prior = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10", null));
+    const prior = await withOrgTransaction(org.orgId, () =>
+      createPayApplication(org.orgId, actor, project, org.date, "10", null),
+    );
     await withOrgTransaction(org.orgId, () =>
-      submitPayApplication(org.orgId, actor, prior.id, [{ sovLineId: sov, thisPeriodCompleted: "333.33", materialsStored: "0" }], null));
-    const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, prior.id, null));
+      submitPayApplication(
+        org.orgId,
+        actor,
+        prior.id,
+        [{ sovLineId: sov, thisPeriodCompleted: "333.33", materialsStored: "0" }],
+        null,
+      ),
+    );
+    const generated = await withOrgTransaction(org.orgId, () =>
+      generatePayApplicationInvoice(org.orgId, actor, prior.id, null),
+    );
     await postInvoice(org, actor, approver, "customer_invoice", generated.invoiceId);
-    const draft = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, addCalendarDays(org.date, 1), "10", null));
+    const draft = await withOrgTransaction(org.orgId, () =>
+      createPayApplication(org.orgId, actor, project, addCalendarDays(org.date, 1), "10", null),
+    );
 
     let held = false;
-    const holder = holdRowLock(org.orgId, "projects", project, () => { held = true; }, released);
+    const holder = holdRowLock(
+      org.orgId,
+      "projects",
+      project,
+      () => {
+        held = true;
+      },
+      released,
+    );
     while (!held) await sleep(50);
 
     const submit = withOrgTransaction(org.orgId, () =>
-      submitPayApplication(org.orgId, actor, draft.id, [{ sovLineId: sov, thisPeriodCompleted: "333.33", materialsStored: "0" }], null));
+      submitPayApplication(
+        org.orgId,
+        actor,
+        draft.id,
+        [{ sovLineId: sov, thisPeriodCompleted: "333.33", materialsStored: "0" }],
+        null,
+      ),
+    );
     const verdict = await Promise.race([submit.then(() => "finished" as const), sleep(3000)]);
     try {
-      assert.equal(verdict, "blocked", "the second submit must wait on the project lock while the replay reads settled history");
+      assert.equal(
+        verdict,
+        "blocked",
+        "the second submit must wait on the project lock while the replay reads settled history",
+      );
     } finally {
       releaseLock();
     }
@@ -134,58 +189,110 @@ test("concurrent customer draws serialize on the project lock during replay", en
   }
 });
 
-test("concurrent vendor draws serialize on the subcontract lock during replay", enabled, async () => {
-  const org = await createScratchOrg();
-  let releaseLock!: () => void;
-  const released = new Promise<void>((resolve) => { releaseLock = resolve; });
-  try {
-    const { actor, approver } = await adminActor(org);
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true}'::jsonb) where id=${org.orgId}`);
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainageReceivable',${org.accounts.invAsset}::text,'retainagePayable',${org.accounts.invAsset}::text)) where id=${org.orgId}`);
-    const type = await policyType(org.orgId, "lock_vend");
-    const project = randomUUID(), vendor = randomUUID(), subcontract = randomUUID(), sov = randomUUID();
-    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status)
-      values(${project},${org.orgId},${org.subsidiaryId},'LOCK-V','Vendor lock job',${org.customerId},${type},'active')`);
-    await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active) values(${vendor},${org.orgId},'vendor','Lock vendor',true)`);
-    await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-LOCK','Lock scope','CAD','10000','draft')`);
-    await db.execute(sql`insert into subcontract_sov_lines(id,org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order) values(${sov},${org.orgId},${subcontract},'Work','10000',${org.accounts.cogs},1)`);
-
-    await withOrgTransaction(org.orgId, () => submitSubcontract(org.orgId,actor,subcontract));
-
-    const draw = async (work: string, date: string) => {
-      const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: date }));
-      await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: work, materialsStoredCurrent: "0" }] }));
-      return app.id;
-    };
-    // Fully close the prior draw first: the domain refuses a second open
-    // draw, so the race under test is a later submit replaying settled
-    // history while another transaction holds the subcontract.
-    const closeDraw = async (work: string, date: string): Promise<string> => {
-      const appId = await draw(work, date);
-      await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, appId));
-      const generated = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, appId));
-      await postInvoice(org, actor, approver, "vendor_bill", generated.vendorBillDocumentId);
-      return appId;
-    };
-    await closeDraw("333.33", org.date);
-    const draftId = await draw("333.33", addCalendarDays(org.date, 1));
-
-    let held = false;
-    const holder = holdRowLock(org.orgId, "subcontracts", subcontract, () => { held = true; }, released);
-    while (!held) await sleep(50);
-
-    const submit = withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, draftId));
-    const verdict = await Promise.race([submit.then(() => "finished" as const), sleep(3000)]);
+test(
+  "concurrent vendor draws serialize on the subcontract lock during replay",
+  enabled,
+  async () => {
+    const org = await createScratchOrg();
+    let releaseLock!: () => void;
+    const released = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
     try {
-      assert.equal(verdict, "blocked", "the second submit must wait on the subcontract lock while the replay reads settled history");
+      const { actor, approver } = await adminActor(org);
+      await db.execute(
+        sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true}'::jsonb) where id=${org.orgId}`,
+      );
+      await db.execute(
+        sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainageReceivable',${org.accounts.invAsset}::text,'retainagePayable',${org.accounts.invAsset}::text)) where id=${org.orgId}`,
+      );
+      const type = await policyType(org.orgId, "lock_vend");
+      const project = randomUUID(),
+        vendor = randomUUID(),
+        subcontract = randomUUID(),
+        sov = randomUUID();
+      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status)
+      values(${project},${org.orgId},${org.subsidiaryId},'LOCK-V','Vendor lock job',${org.customerId},${type},'active')`);
+      await db.execute(
+        sql`insert into parties(id,org_id,kind,display_name,is_active) values(${vendor},${org.orgId},'vendor','Lock vendor',true)`,
+      );
+      await db.execute(
+        sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-LOCK','Lock scope','CAD','10000','draft')`,
+      );
+      await db.execute(
+        sql`insert into subcontract_sov_lines(id,org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order) values(${sov},${org.orgId},${subcontract},'Work','10000',${org.accounts.cogs},1)`,
+      );
+
+      await withOrgTransaction(org.orgId, () => submitSubcontract(org.orgId, actor, subcontract));
+
+      const draw = async (work: string, date: string) => {
+        const app = await withOrgTransaction(org.orgId, () =>
+          createVendorPayApplication({
+            orgId: org.orgId,
+            userId: actor,
+            subcontractId: subcontract,
+            periodEnd: date,
+          }),
+        );
+        await withOrgTransaction(org.orgId, () =>
+          updateVendorPayApplicationLines({
+            orgId: org.orgId,
+            userId: actor,
+            payApplicationId: app.id,
+            expectedRevision: 1,
+            lines: [{ sovLineId: sov, workCompletedThisPeriod: work, materialsStoredCurrent: "0" }],
+          }),
+        );
+        return app.id;
+      };
+      // Fully close the prior draw first: the domain refuses a second open
+      // draw, so the race under test is a later submit replaying settled
+      // history while another transaction holds the subcontract.
+      const closeDraw = async (work: string, date: string): Promise<string> => {
+        const appId = await draw(work, date);
+        await withOrgTransaction(org.orgId, () =>
+          submitVendorPayApplication(org.orgId, actor, appId),
+        );
+        const generated = await withOrgTransaction(org.orgId, () =>
+          generateVendorPayApplicationBill(org.orgId, actor, appId),
+        );
+        await postInvoice(org, actor, approver, "vendor_bill", generated.vendorBillDocumentId);
+        return appId;
+      };
+      await closeDraw("333.33", org.date);
+      const draftId = await draw("333.33", addCalendarDays(org.date, 1));
+
+      let held = false;
+      const holder = holdRowLock(
+        org.orgId,
+        "subcontracts",
+        subcontract,
+        () => {
+          held = true;
+        },
+        released,
+      );
+      while (!held) await sleep(50);
+
+      const submit = withOrgTransaction(org.orgId, () =>
+        submitVendorPayApplication(org.orgId, actor, draftId),
+      );
+      const verdict = await Promise.race([submit.then(() => "finished" as const), sleep(3000)]);
+      try {
+        assert.equal(
+          verdict,
+          "blocked",
+          "the second submit must wait on the subcontract lock while the replay reads settled history",
+        );
+      } finally {
+        releaseLock();
+      }
+      const computed = await submit;
+      assert.equal(computed.retainageThisPeriod, "33.3400");
+      await holder;
     } finally {
       releaseLock();
+      await dropScratchOrgReporting(org.orgId);
     }
-    const computed = await submit;
-    assert.equal(computed.retainageThisPeriod, "33.3400");
-    await holder;
-  } finally {
-    releaseLock();
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+  },
+);

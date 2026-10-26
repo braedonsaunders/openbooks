@@ -1,7 +1,7 @@
 /** Organization, currency, subsidiary, role, and admin seeding for installation bootstrap. */
-import { randomBytes, scryptSync } from "node:crypto"
-import { sql } from "drizzle-orm"
-import { db, env } from "@openbooks/engine/platform/db"
+import { randomBytes, scryptSync } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db, env } from "@openbooks/engine/platform/db";
 import {
   alignAdministratorRoleToCatalogue,
   ensureRootSubsidiary as ensureOrganizationRootSubsidiary,
@@ -9,8 +9,8 @@ import {
   seedBuiltInRolesForNewOrganization,
   seedOrganizationLedgerFoundation,
   validateOrganizationIdentity,
-} from "@openbooks/engine/provisioning/create-organization"
-import { SUPPORTED_CURRENCIES } from "@openbooks/engine/fx/currencies"
+} from "@openbooks/engine/provisioning/create-organization";
+import { SUPPORTED_CURRENCIES } from "@openbooks/engine/fx/currencies";
 
 /**
  * The first organization of a fresh installation, from ORG_NAME,
@@ -19,9 +19,9 @@ import { SUPPORTED_CURRENCIES } from "@openbooks/engine/fx/currencies"
  * A no-op once any organization exists.
  */
 export async function ensureOrg(): Promise<string> {
-  const existing = (await db.execute<{ id: string }>(
+  const existing = await db.execute<{ id: string }>(
     sql`select id from orgs order by created_at limit 1`,
-  ));
+  );
   const existingRow = existing.rows[0];
   if (existingRow) return existingRow.id;
 
@@ -40,7 +40,9 @@ export async function ensureOrg(): Promise<string> {
   // Runs inside bootstrap's installation-wide scope on the installer
   // connection; there is no actor yet, so the rows carry no creator.
   const orgId = await insertOrganizationRecord(identity, null);
-  console.log(`[bootstrap] created org "${identity.name}" (${identity.currency}/${identity.country})`);
+  console.log(
+    `[bootstrap] created org "${identity.name}" (${identity.currency}/${identity.country})`,
+  );
   const foundation = await seedOrganizationLedgerFoundation(orgId, null);
   console.log(
     `[bootstrap] primary book + periods ${foundation.firstFiscalYear}..${foundation.lastFiscalYear} ensured`,
@@ -59,9 +61,7 @@ export async function seedCurrencies(): Promise<void> {
   }
   const configured = env.ORG_CURRENCY?.trim().toUpperCase();
   if (configured && !SUPPORTED_CURRENCIES.some((currency) => currency.code === configured)) {
-    throw new Error(
-      `ORG_CURRENCY ${configured} is not in the supported ISO 4217 registry`,
-    );
+    throw new Error(`ORG_CURRENCY ${configured} is not in the supported ISO 4217 registry`);
   }
   console.log(`[bootstrap] ${SUPPORTED_CURRENCIES.length} currencies ensured`);
 }
@@ -88,9 +88,11 @@ export async function seedRoles(orgId: string): Promise<void> {
  * including permissions introduced after the organization was created.
  */
 export async function alignAdministratorRole(orgId: string): Promise<void> {
-  const outcome = await alignAdministratorRoleToCatalogue(orgId)
+  const outcome = await alignAdministratorRoleToCatalogue(orgId);
   if (outcome === "aligned") {
-    console.log(`[bootstrap] org ${orgId} built-in Administrator role aligned to the permission catalogue`)
+    console.log(
+      `[bootstrap] org ${orgId} built-in Administrator role aligned to the permission catalogue`,
+    );
   }
 }
 
@@ -107,25 +109,29 @@ export async function seedAdmin(orgId: string): Promise<void> {
   // Only set the password when the user is first created — a running instance
   // must not have its admin password silently reset on every deploy.
   const created = await db.transaction(async (tx) => {
-    const inserted = (await tx.execute<{ id: string }>(sql`
+    const inserted = await tx.execute<{ id: string }>(sql`
       insert into users (org_id, email, name, password_hash)
       values (${orgId}, ${email.toLowerCase()}, ${name}, ${hash})
       -- A repeated bootstrap resolves the existing administrator without resetting its password.
       on conflict (org_id, email) do nothing
       returning id
-    `));
-    const userId = inserted.rows[0]?.id ?? ((await tx.execute<{ id: string }>(sql`
+    `);
+    const userId =
+      inserted.rows[0]?.id ??
+      (
+        await tx.execute<{ id: string }>(sql`
       select id from users where org_id = ${orgId} and email = ${email.toLowerCase()} limit 1
-    `))).rows[0]?.id;
+    `)
+      ).rows[0]?.id;
     if (!userId) throw new Error(`administrator ${email} could not be resolved after seed`);
-    const assignment = (await tx.execute<{ id: string }>(sql`
+    const assignment = await tx.execute<{ id: string }>(sql`
       insert into role_assignments (org_id, user_id, role_id)
       select ${orgId}, ${userId}, id from app_roles
        where org_id = ${orgId} and key = 'admin'
       -- A repeated bootstrap preserves the existing administrator role assignment.
       on conflict (org_id, user_id, role_id) do nothing
       returning id
-    `));
+    `);
     if (inserted.rows.length > 0 && assignment.rows.length === 0) {
       throw new Error("new administrator did not receive an explicit admin role assignment");
     }
@@ -157,12 +163,14 @@ export async function ensureFirstPlatformAdmin(): Promise<void> {
   if (!configured) return;
   const email = configured.toLowerCase();
   const granted = await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('openbooks:first-platform-admin', 0))`);
-    const existing = (await tx.execute<{ id: string }>(sql`
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended('openbooks:first-platform-admin', 0))`,
+    );
+    const existing = await tx.execute<{ id: string }>(sql`
       select id from users where is_super_admin and is_active limit 1
-    `));
+    `);
     if (existing.rows.length > 0) return false;
-    const candidates = (await tx.execute<{
+    const candidates = await tx.execute<{
       id: string;
       org_id: string;
       email: string;
@@ -172,11 +180,10 @@ export async function ensureFirstPlatformAdmin(): Promise<void> {
       select id, org_id, email, is_active, is_super_admin
         from users
        where lower(email) = ${email}
-    `));
+    `);
     const active = candidates.rows.filter((row) => row.is_active);
     if (active.length === 0) {
-      const state =
-        candidates.rows.length > 0 ? "exists but is inactive" : "does not exist";
+      const state = candidates.rows.length > 0 ? "exists but is inactive" : "does not exist";
       const remedy =
         candidates.rows.length > 0
           ? "reactivate that user"
@@ -194,25 +201,25 @@ export async function ensureFirstPlatformAdmin(): Promise<void> {
       );
     }
     const target = active[0]!;
-    const promoted = (await tx.execute<{ id: string }>(sql`
+    const promoted = await tx.execute<{ id: string }>(sql`
       update users
          set is_super_admin = true, updated_at = now(), updated_by = ${target.id}
        where id = ${target.id} and not is_super_admin and is_active
          and not exists (select 1 from users where is_super_admin and is_active)
       returning id
-    `));
+    `);
     if (promoted.rows.length === 0) {
       // A concurrent bootstrap granted first: the no-op condition now holds,
       // so this is the benign lost race rather than a dropped write.
-      const raced = (await tx.execute<{ id: string }>(sql`
+      const raced = await tx.execute<{ id: string }>(sql`
         select id from users where is_super_admin and is_active limit 1
-      `));
+      `);
       if (raced.rows.length > 0) return false;
       throw new Error(
         `[bootstrap] PLATFORM_ADMIN_EMAIL grant for ${configured} affected no rows; re-run bootstrap`,
       );
     }
-    const audit = (await tx.execute<{ id: string }>(sql`
+    const audit = await tx.execute<{ id: string }>(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (
         ${target.org_id},
@@ -228,7 +235,7 @@ export async function ensureFirstPlatformAdmin(): Promise<void> {
         ${target.id}
       )
       returning id
-    `));
+    `);
     if (audit.rows.length !== 1) {
       throw new Error(
         `[bootstrap] PLATFORM_ADMIN_EMAIL grant for ${configured} was not audited; re-run bootstrap`,

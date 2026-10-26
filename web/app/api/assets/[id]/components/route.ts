@@ -62,26 +62,40 @@ export const POST = defineRoute({
     const actorId = gate.user.id;
     switch (input.action) {
       case "attach":
-        return NextResponse.json(await attachAssetComponent(gate.user.orgId, {
-          parentAssetId, componentAssetId: input.componentAssetId, reason: input.reason ?? null, actorId, allowedSubsidiaryIds,
-        }));
+        return NextResponse.json(
+          await attachAssetComponent(gate.user.orgId, {
+            parentAssetId,
+            componentAssetId: input.componentAssetId,
+            reason: input.reason ?? null,
+            actorId,
+            allowedSubsidiaryIds,
+          }),
+        );
       case "detach":
-        return NextResponse.json(await detachAssetComponent(gate.user.orgId, {
-          componentAssetId: input.componentAssetId, reason: input.reason, actorId, allowedSubsidiaryIds,
-        }));
+        return NextResponse.json(
+          await detachAssetComponent(gate.user.orgId, {
+            componentAssetId: input.componentAssetId,
+            reason: input.reason,
+            actorId,
+            allowedSubsidiaryIds,
+          }),
+        );
       case "create":
-        return NextResponse.json(await createAssetComponent(gate.user.orgId, {
-          parentAssetId,
-          actorId,
-          allowedSubsidiaryIds,
-          name: input.name,
-          categoryId: input.categoryId,
-          acquisitionCost: input.acquisitionCost,
-          acquiredOn: input.acquiredOn ?? null,
-          inServiceOn: input.inServiceOn ?? null,
-          description: input.description ?? null,
-          serialNumber: input.serialNumber ?? null,
-        }), { status: 201 });
+        return NextResponse.json(
+          await createAssetComponent(gate.user.orgId, {
+            parentAssetId,
+            actorId,
+            allowedSubsidiaryIds,
+            name: input.name,
+            categoryId: input.categoryId,
+            acquisitionCost: input.acquisitionCost,
+            acquiredOn: input.acquiredOn ?? null,
+            inServiceOn: input.inServiceOn ?? null,
+            description: input.description ?? null,
+            serialNumber: input.serialNumber ?? null,
+          }),
+          { status: 201 },
+        );
     }
   },
 });

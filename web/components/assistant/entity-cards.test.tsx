@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
+import { stubModules } from "../../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../../testing/jsdom-env.ts";
 
 // F5-3: AssistantEntityCards hardcoded its English doc-kind labels
 // (KIND_LABELS) while common.transactionTypes carries every one of them
@@ -14,7 +14,15 @@ import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/assistant", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return{push(){},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return \'/assistant\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return{push(){},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/assistant'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -97,7 +105,10 @@ test("F5-3: record cards resolve kind, status, due and reference through the cat
     assert.match(text, /Réf\./);
     assert.ok(text.includes("PO-3"), "the reference value itself must still render");
     for (const leaked of ["Vendor bill", "Estimate", "posted", "Due ", "Ref "]) {
-      assert.ok(!text.includes(leaked), `English ${JSON.stringify(leaked)} must not leak into the French card`);
+      assert.ok(
+        !text.includes(leaked),
+        `English ${JSON.stringify(leaked)} must not leak into the French card`,
+      );
     }
   } finally {
     await act(async () => {

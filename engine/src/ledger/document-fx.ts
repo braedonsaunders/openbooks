@@ -18,10 +18,18 @@ export type { DocumentFxRateEvidence };
  * rate is honoured by the same stamping path; every other kind is measured
  * at the organization's exchange rates.
  */
-export const EXPLICIT_FX_DOCUMENT_KINDS: ReadonlySet<string> = new Set(["customer_invoice", "vendor_bill", "customer_credit", "vendor_credit"]);
+export const EXPLICIT_FX_DOCUMENT_KINDS: ReadonlySet<string> = new Set([
+  "customer_invoice",
+  "vendor_bill",
+  "customer_credit",
+  "vendor_credit",
+]);
 
 /** Kinds whose native payment editor may record an explicit settlement rate. */
-export const PAYMENT_FX_DOCUMENT_KINDS: ReadonlySet<string> = new Set(["customer_payment", "vendor_payment"]);
+export const PAYMENT_FX_DOCUMENT_KINDS: ReadonlySet<string> = new Set([
+  "customer_payment",
+  "vendor_payment",
+]);
 
 /** Kinds whose recorded explicit rate posting must honour and validate. */
 export const POSTING_FX_DOCUMENT_KINDS: ReadonlySet<string> = new Set([
@@ -41,7 +49,9 @@ const KIND_LABEL: Record<string, string> = {
 /** The allowed kinds named for an operator-facing refusal, in set order. */
 function allowedKindsLabel(allowedKinds: ReadonlySet<string>): string {
   const labels = [...allowedKinds].map((kind) => KIND_LABEL[kind] ?? kind.replaceAll("_", " "));
-  return labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}` : (labels[0] ?? "");
+  return labels.length > 1
+    ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`
+    : (labels[0] ?? "");
 }
 
 /** An explicit-rate request: the rate and the conversion it was quoted for. */
@@ -68,9 +78,7 @@ export interface DocumentFxIdentity {
 export class DocumentFxError extends Error {}
 
 export type DocumentFxEditPlan =
-  | { action: "keep" }
-  | { action: "set"; evidence: DocumentFxRateEvidence }
-  | { action: "clear" };
+  { action: "keep" } | { action: "set"; evidence: DocumentFxRateEvidence } | { action: "clear" };
 
 const EVIDENCE_KEYS = "fromCurrency,rate,rateDate,reason,source,subsidiaryId,toCurrency,version";
 const CURRENCY_CODE = /^[A-Z]{3}$/;
@@ -103,18 +111,27 @@ export function readDocumentFxRateEvidence(value: unknown): DocumentFxRateEviden
   );
   if (typeof value !== "object" || Array.isArray(value)) throw malformed;
   const evidence = value as Record<string, unknown>;
-  if (Object.keys(evidence).sort().join(",") !== EVIDENCE_KEYS || evidence.version !== 1) throw malformed;
+  if (Object.keys(evidence).sort().join(",") !== EVIDENCE_KEYS || evidence.version !== 1)
+    throw malformed;
   const rate = explicitFxRate(evidence.rate);
   const source = boundedText(evidence.source, 1, 120);
   const reason = boundedText(evidence.reason, 8, 500);
   const { fromCurrency, toCurrency, rateDate, subsidiaryId } = evidence;
   if (
-    rate === null || source === null || reason === null ||
-    typeof fromCurrency !== "string" || !CURRENCY_CODE.test(fromCurrency) ||
-    typeof toCurrency !== "string" || !CURRENCY_CODE.test(toCurrency) || fromCurrency === toCurrency ||
-    typeof rateDate !== "string" || !isIsoCalendarDate(rateDate) ||
-    typeof subsidiaryId !== "string" || !isUuid(subsidiaryId)
-  ) throw malformed;
+    rate === null ||
+    source === null ||
+    reason === null ||
+    typeof fromCurrency !== "string" ||
+    !CURRENCY_CODE.test(fromCurrency) ||
+    typeof toCurrency !== "string" ||
+    !CURRENCY_CODE.test(toCurrency) ||
+    fromCurrency === toCurrency ||
+    typeof rateDate !== "string" ||
+    !isIsoCalendarDate(rateDate) ||
+    typeof subsidiaryId !== "string" ||
+    !isUuid(subsidiaryId)
+  )
+    throw malformed;
   return { version: 1, rate, source, reason, fromCurrency, toCurrency, rateDate, subsidiaryId };
 }
 
@@ -125,7 +142,11 @@ export function documentFxIdentityChanges(
 ): ("currency" | "legal entity" | "posting date")[] {
   const changes: ("currency" | "legal entity" | "posting date")[] = [];
   if (evidence.fromCurrency !== identity.currency) changes.push("currency");
-  if (evidence.subsidiaryId !== identity.subsidiaryId || evidence.toCurrency !== identity.functionalCurrency) changes.push("legal entity");
+  if (
+    evidence.subsidiaryId !== identity.subsidiaryId ||
+    evidence.toCurrency !== identity.functionalCurrency
+  )
+    changes.push("legal entity");
   if (evidence.rateDate !== identity.rateDate) changes.push("posting date");
   return changes;
 }
@@ -136,36 +157,57 @@ export function documentFxIdentityChanges(
  * quoted for, so a rate is never applied to a pair or day it was not meant
  * for; the legal entity is the document's own.
  */
-export function explicitFxEvidence(input: unknown, identity: DocumentFxIdentity): DocumentFxRateEvidence {
+export function explicitFxEvidence(
+  input: unknown,
+  identity: DocumentFxIdentity,
+): DocumentFxRateEvidence {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new DocumentFxError("an explicit exchange rate needs its rate, source, reason, currencies and rate date");
+    throw new DocumentFxError(
+      "an explicit exchange rate needs its rate, source, reason, currencies and rate date",
+    );
   }
   const request = input as Record<string, unknown>;
   const rate = explicitFxRate(request.rate);
   if (rate === null) {
-    throw new DocumentFxError("enter the exchange rate as a positive exact decimal with at most 9 whole digits and 10 decimal places");
+    throw new DocumentFxError(
+      "enter the exchange rate as a positive exact decimal with at most 9 whole digits and 10 decimal places",
+    );
   }
   const source = boundedText(request.source, 1, 120);
-  if (source === null) throw new DocumentFxError("name where the exchange rate came from, in 1 to 120 characters");
+  if (source === null)
+    throw new DocumentFxError("name where the exchange rate came from, in 1 to 120 characters");
   const reason = boundedText(request.reason, 8, 500);
-  if (reason === null) throw new DocumentFxError("state why this document uses an explicit exchange rate, in 8 to 500 characters");
+  if (reason === null)
+    throw new DocumentFxError(
+      "state why this document uses an explicit exchange rate, in 8 to 500 characters",
+    );
   if (identity.currency === identity.functionalCurrency) {
     throw new DocumentFxError(
       `this document is in ${identity.currency}, the functional currency of its legal entity, so it has no exchange rate to record`,
     );
   }
-  if (request.fromCurrency !== identity.currency || request.toCurrency !== identity.functionalCurrency) {
+  if (
+    request.fromCurrency !== identity.currency ||
+    request.toCurrency !== identity.functionalCurrency
+  ) {
     throw new DocumentFxError(
       `the exchange rate must convert ${identity.currency} to ${identity.functionalCurrency}, the functional currency of the document's legal entity`,
     );
   }
   if (request.rateDate !== identity.rateDate) {
-    throw new DocumentFxError(`the exchange rate must be for ${identity.rateDate}, the date this document posts on`);
+    throw new DocumentFxError(
+      `the exchange rate must be for ${identity.rateDate}, the date this document posts on`,
+    );
   }
   return {
-    version: 1, rate, source, reason,
-    fromCurrency: identity.currency, toCurrency: identity.functionalCurrency,
-    rateDate: identity.rateDate, subsidiaryId: identity.subsidiaryId,
+    version: 1,
+    rate,
+    source,
+    reason,
+    fromCurrency: identity.currency,
+    toCurrency: identity.functionalCurrency,
+    rateDate: identity.rateDate,
+    subsidiaryId: identity.subsidiaryId,
   };
 }
 
@@ -205,14 +247,18 @@ export function planDocumentFxEdit(args: {
     const changed = changes.join(" and ");
     throw new DocumentFxError(
       `the recorded ${stored.fromCurrency} to ${stored.toCurrency} exchange rate for ${stored.rateDate} belongs to this document's ` +
-      `previous ${changed}; record a rate for the new ${changed} with this change, or clear the explicit rate`,
+        `previous ${changed}; record a rate for the new ${changed} with this change, or clear the explicit rate`,
     );
   }
   if (!allowedKinds.has(kind)) {
-    throw new DocumentFxError(`an explicit exchange rate can be recorded only on ${allowedKindsLabel(allowedKinds)}`);
+    throw new DocumentFxError(
+      `an explicit exchange rate can be recorded only on ${allowedKindsLabel(allowedKinds)}`,
+    );
   }
   if (!identity) {
-    throw new DocumentFxError("assign the document an active subsidiary before recording an explicit exchange rate");
+    throw new DocumentFxError(
+      "assign the document an active subsidiary before recording an explicit exchange rate",
+    );
   }
   return { action: "set", evidence: explicitFxEvidence(input, identity) };
 }
@@ -234,8 +280,10 @@ export function documentFxPostingRefusal(
   }
   const changes = documentFxIdentityChanges(evidence, identity);
   if (changes.length > 0) {
-    return `the recorded ${evidence.fromCurrency} to ${evidence.toCurrency} exchange rate for ${evidence.rateDate} no longer matches ` +
-      `this document's ${changes.join(" and ")}; return it to draft and record the rate it posts with, or clear the explicit rate`;
+    return (
+      `the recorded ${evidence.fromCurrency} to ${evidence.toCurrency} exchange rate for ${evidence.rateDate} no longer matches ` +
+      `this document's ${changes.join(" and ")}; return it to draft and record the rate it posts with, or clear the explicit rate`
+    );
   }
   if (compareDecimal(evidence.rate, documentRate) !== 0) {
     return "this document's exchange rate differs from its recorded rate evidence; return it to draft and record the rate again";
@@ -248,12 +296,27 @@ export async function documentFxState(
   runner: Pick<SqlExecutor, "execute">,
   orgId: string,
   documentId: string,
-): Promise<{ currency: string; documentDate: string; postingDate: string | null; evidence: unknown }> {
-  const row = (await runner.execute<{ currency: string; document_date: string; posting_date: string | null; evidence: unknown }>(sql`
+): Promise<{
+  currency: string;
+  documentDate: string;
+  postingDate: string | null;
+  evidence: unknown;
+}> {
+  const row = (
+    await runner.execute<{
+      currency: string;
+      document_date: string;
+      posting_date: string | null;
+      evidence: unknown;
+    }>(
+      sql`
     select currency, document_date::text as document_date, posting_date::text as posting_date,
            document_fx_rate_evidence as evidence
       from documents
-     where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${documentId}`,
+      "objects",
+    )
+  )[0];
   if (!row) throw new DocumentFxError("the document was not found in this organization");
   return {
     currency: row.currency,
@@ -274,8 +337,15 @@ export async function subsidiaryFunctionalCurrency(
   orgId: string,
   subsidiaryId: string,
 ): Promise<string | null> {
-  return (await runner.execute<{ base_currency: string }>(sql`
+  return (
+    (
+      await runner.execute<{ base_currency: string }>(
+        sql`
     select base_currency from subsidiaries
      where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination
-     for share`, "objects"))[0]?.base_currency ?? null;
+     for share`,
+        "objects",
+      )
+    )[0]?.base_currency ?? null
+  );
 }

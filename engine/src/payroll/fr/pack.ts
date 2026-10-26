@@ -1,8 +1,5 @@
 import type { PayrollCountryPack } from "../pack-types.ts";
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { computeFrStatutory, FR_FACTOR_LABELS } from "./compute-statutory.ts";
 import { frPackFilings } from "./filings.ts";
@@ -48,8 +45,8 @@ const FR_REGIONS: Omit<PayrollCountryPack, "country">["regions"] = {
   regionNames: { FR: "France" },
   supported: ["FR"],
   unsupportedReason:
-    "income tax withholding for {region} is not implemented: PAS does not compute end to end. "
-    + "This region is not yet supported by the FR pack; contact support.",
+    "income tax withholding for {region} is not implemented: PAS does not compute end to end. " +
+    "This region is not yet supported by the FR pack; contact support.",
 };
 
 // ---------------------------------------------------------------------------
@@ -62,7 +59,15 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
     components: [
       // CGI art. 204 A: PAS is rate × monthly net imposable, so a pre-tax
       // deduction moves it — re-derived by the fixpoint like T4127 factor T.
-      { code: "PAS", name: "Prélèvement à la source", systemKey: "pas", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+      {
+        code: "PAS",
+        name: "Prélèvement à la source",
+        systemKey: "pas",
+        kind: "deduction",
+        sequence: 110,
+        assessedOn: "taxable_income",
+        remittance: "tax_authority",
+      },
     ],
   },
   {
@@ -71,9 +76,33 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
       // Employee social contributions collected by URSSAF: assurance
       // vieillesse (plafonnée et déplafonnée), CSG, CRDS. Rate × salary —
       // deductions do not enter.
-      { code: "VIEIL", name: "Assurance vieillesse (salariale)", systemKey: "vieillesse", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "CSG", name: "CSG (salariale)", systemKey: "csg", kind: "deduction", sequence: 130, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "CRDS", name: "CRDS (salariale)", systemKey: "crds", kind: "deduction", sequence: 135, assessedOn: "earnings", remittance: "tax_authority" },
+      {
+        code: "VIEIL",
+        name: "Assurance vieillesse (salariale)",
+        systemKey: "vieillesse",
+        kind: "deduction",
+        sequence: 120,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "CSG",
+        name: "CSG (salariale)",
+        systemKey: "csg",
+        kind: "deduction",
+        sequence: 130,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "CRDS",
+        name: "CRDS (salariale)",
+        systemKey: "crds",
+        kind: "deduction",
+        sequence: 135,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
     ],
   },
   {
@@ -85,14 +114,78 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
       // Remittance is "external": the destination is the employer's own
       // caisse de retraite, configured per component — never the URSSAF/DGFiP
       // vendor, whatever the collection channel.
-      { code: "ARRCO", name: "Retraite complémentaire (salariale)", systemKey: "arrco", kind: "deduction", sequence: 140, assessedOn: "earnings", remittance: "external" },
-      { code: "ARRCO-ER", name: "Retraite complémentaire (employeur)", systemKey: "arrco", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "external" },
-      { code: "CEG", name: "Contribution d'équilibre général (salariale)", systemKey: "ceg", kind: "deduction", sequence: 141, assessedOn: "earnings", remittance: "external" },
-      { code: "CEG-ER", name: "Contribution d'équilibre général (employeur)", systemKey: "ceg", kind: "employer_contribution", sequence: 241, assessedOn: "earnings", remittance: "external" },
-      { code: "CET", name: "Contribution d'équilibre technique (salariale)", systemKey: "cet", kind: "deduction", sequence: 142, assessedOn: "earnings", remittance: "external" },
-      { code: "CET-ER", name: "Contribution d'équilibre technique (employeur)", systemKey: "cet", kind: "employer_contribution", sequence: 242, assessedOn: "earnings", remittance: "external" },
-      { code: "APEC", name: "Cotisation APEC (salariale)", systemKey: "apec", kind: "deduction", sequence: 143, assessedOn: "earnings", remittance: "external" },
-      { code: "APEC-ER", name: "Cotisation APEC (employeur)", systemKey: "apec", kind: "employer_contribution", sequence: 243, assessedOn: "earnings", remittance: "external" },
+      {
+        code: "ARRCO",
+        name: "Retraite complémentaire (salariale)",
+        systemKey: "arrco",
+        kind: "deduction",
+        sequence: 140,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
+      {
+        code: "ARRCO-ER",
+        name: "Retraite complémentaire (employeur)",
+        systemKey: "arrco",
+        kind: "employer_contribution",
+        sequence: 240,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
+      {
+        code: "CEG",
+        name: "Contribution d'équilibre général (salariale)",
+        systemKey: "ceg",
+        kind: "deduction",
+        sequence: 141,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
+      {
+        code: "CEG-ER",
+        name: "Contribution d'équilibre général (employeur)",
+        systemKey: "ceg",
+        kind: "employer_contribution",
+        sequence: 241,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
+      {
+        code: "CET",
+        name: "Contribution d'équilibre technique (salariale)",
+        systemKey: "cet",
+        kind: "deduction",
+        sequence: 142,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
+      {
+        code: "CET-ER",
+        name: "Contribution d'équilibre technique (employeur)",
+        systemKey: "cet",
+        kind: "employer_contribution",
+        sequence: 242,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
+      {
+        code: "APEC",
+        name: "Cotisation APEC (salariale)",
+        systemKey: "apec",
+        kind: "deduction",
+        sequence: 143,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
+      {
+        code: "APEC-ER",
+        name: "Cotisation APEC (employeur)",
+        systemKey: "apec",
+        kind: "employer_contribution",
+        sequence: 243,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
     ],
   },
   {
@@ -103,22 +196,126 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
       // chômage, AGS, FNAL/CSA/dialogue social et versement mobilité.
       // Rate × salary; the AT/MP and versement mobilité rates are the
       // employer-entered slots below (notified per establishment / commune).
-      { code: "MAL-ER", name: "Assurance maladie (employeur)", systemKey: "maladie_er", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "VIEIL-ER", name: "Assurance vieillesse (employeur)", systemKey: "vieillesse_er", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "FAM-ER", name: "Allocations familiales (employeur)", systemKey: "allocfam_er", kind: "employer_contribution", sequence: 215, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "ATMP-ER", name: "Accidents du travail / maladies pro. (employeur)", systemKey: "atmp", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "VM-ER", name: "Versement mobilité (employeur)", systemKey: "versement_mobilite_er", kind: "employer_contribution", sequence: 221, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "CHOM-ER", name: "Assurance chômage (employeur)", systemKey: "chomage_er", kind: "employer_contribution", sequence: 225, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "AGS-ER", name: "Cotisation AGS (employeur)", systemKey: "ags_er", kind: "employer_contribution", sequence: 226, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "CDN-ER", name: "FNAL, CSA et dialogue social (employeur)", systemKey: "cdn_er", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
+      {
+        code: "MAL-ER",
+        name: "Assurance maladie (employeur)",
+        systemKey: "maladie_er",
+        kind: "employer_contribution",
+        sequence: 210,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "VIEIL-ER",
+        name: "Assurance vieillesse (employeur)",
+        systemKey: "vieillesse_er",
+        kind: "employer_contribution",
+        sequence: 211,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "FAM-ER",
+        name: "Allocations familiales (employeur)",
+        systemKey: "allocfam_er",
+        kind: "employer_contribution",
+        sequence: 215,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "ATMP-ER",
+        name: "Accidents du travail / maladies pro. (employeur)",
+        systemKey: "atmp",
+        kind: "employer_contribution",
+        sequence: 220,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "VM-ER",
+        name: "Versement mobilité (employeur)",
+        systemKey: "versement_mobilite_er",
+        kind: "employer_contribution",
+        sequence: 221,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "CHOM-ER",
+        name: "Assurance chômage (employeur)",
+        systemKey: "chomage_er",
+        kind: "employer_contribution",
+        sequence: 225,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "AGS-ER",
+        name: "Cotisation AGS (employeur)",
+        systemKey: "ags_er",
+        kind: "employer_contribution",
+        sequence: 226,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "CDN-ER",
+        name: "FNAL, CSA et dialogue social (employeur)",
+        systemKey: "cdn_er",
+        kind: "employer_contribution",
+        sequence: 230,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
       // Training levies collected by URSSAF: CFP (effectif-dependent),
       // taxe d'apprentissage (Alsace-Moselle variant) and the CDD-only
       // CPF contribution. Rate × salary, no ceiling.
-      { code: "CFP-ER", name: "Contribution à la formation professionnelle (employeur)", systemKey: "cfp_er", kind: "employer_contribution", sequence: 227, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "TA-ER", name: "Taxe d'apprentissage (employeur)", systemKey: "apprentissage_er", kind: "employer_contribution", sequence: 228, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "CPFC-DD-ER", name: "Contribution CPF-CDD (employeur)", systemKey: "cpf_cdd_er", kind: "employer_contribution", sequence: 229, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "RGDU-URSSAF", name: "Réduction générale (part Urssaf)", systemKey: "rgdu_urssaf", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "RGDU-ARRCO", name: "Réduction générale (part Agirc-Arrco)", systemKey: "rgdu_arrco", kind: "employer_contribution", sequence: 251, assessedOn: "earnings", remittance: "external" },
+      {
+        code: "CFP-ER",
+        name: "Contribution à la formation professionnelle (employeur)",
+        systemKey: "cfp_er",
+        kind: "employer_contribution",
+        sequence: 227,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "TA-ER",
+        name: "Taxe d'apprentissage (employeur)",
+        systemKey: "apprentissage_er",
+        kind: "employer_contribution",
+        sequence: 228,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "CPFC-DD-ER",
+        name: "Contribution CPF-CDD (employeur)",
+        systemKey: "cpf_cdd_er",
+        kind: "employer_contribution",
+        sequence: 229,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "RGDU-URSSAF",
+        name: "Réduction générale (part Urssaf)",
+        systemKey: "rgdu_urssaf",
+        kind: "employer_contribution",
+        sequence: 250,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "RGDU-ARRCO",
+        name: "Réduction générale (part Agirc-Arrco)",
+        systemKey: "rgdu_arrco",
+        kind: "employer_contribution",
+        sequence: 251,
+        assessedOn: "earnings",
+        remittance: "external",
+      },
     ],
   },
 ];
@@ -134,8 +331,8 @@ const FR_PAS_CERTIFICATE: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "impots.gouv.fr — Gérer mon prélèvement à la source; formulaire n° 2043 "
-    + "(demande de numéro fiscal et de taux personnalisé)",
+    "impots.gouv.fr — Gérer mon prélèvement à la source; formulaire n° 2043 " +
+    "(demande de numéro fiscal et de taux personnalisé)",
   summary:
     "The PAS rate option the employee chose with DGFiP; DGFiP transmits the resulting rate to the employer.",
   storage: "certificate_rows",
@@ -157,8 +354,15 @@ const FR_PAS_CERTIFICATE: PayrollCertificate = {
       kind: "choice",
       choices: [
         { value: "metropole", label: "Métropole (grille I)" },
-        { value: "hors_de_france", label: "Hors de France — domicile fiscal étranger (retenue CGI art. 182 A, non transcrite)" },
-        { value: "guadeloupe_reunion_martinique", label: "Guadeloupe, Réunion, Martinique (grille II — non transcrite)" },
+        {
+          value: "hors_de_france",
+          label:
+            "Hors de France — domicile fiscal étranger (retenue CGI art. 182 A, non transcrite)",
+        },
+        {
+          value: "guadeloupe_reunion_martinique",
+          label: "Guadeloupe, Réunion, Martinique (grille II — non transcrite)",
+        },
         { value: "guyane_mayotte", label: "Guyane, Mayotte (grille III — non transcrite)" },
       ],
       // No default, required: the grilles differ by domicile
@@ -213,17 +417,19 @@ const FR_APEC_CERTIFICATE: PayrollCertificate = {
   citation: "ANI du 17 novembre 2017, articles 2.1 et 2.2; ANI APEC du 12 juillet 2011",
   summary: "The employee's effective classification determines whether APEC contributions apply.",
   storage: "certificate_rows",
-  fields: [{
-    key: "apec_eligibility",
-    label: "APEC classification coverage",
-    kind: "choice",
-    choices: [
-      { value: "covered", label: "Covered under ANI articles 2.1 or 2.2" },
-      { value: "not_covered", label: "Not covered under ANI articles 2.1 or 2.2" },
-    ],
-    required: true,
-    help: "Use the employee's effective professional classification and applicable collective agreement; do not infer coverage from job title alone.",
-  }],
+  fields: [
+    {
+      key: "apec_eligibility",
+      label: "APEC classification coverage",
+      kind: "choice",
+      choices: [
+        { value: "covered", label: "Covered under ANI articles 2.1 or 2.2" },
+        { value: "not_covered", label: "Not covered under ANI articles 2.1 or 2.2" },
+      ],
+      required: true,
+      help: "Use the employee's effective professional classification and applicable collective agreement; do not infer coverage from job title alone.",
+    },
+  ],
 };
 
 const FR_CERTIFICATES: PayrollPackCertificates = {
@@ -260,8 +466,8 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
       // ever runs. Revisit if one is ever declared.
       subRegionConflictRule: "work_only",
       citation:
-        "CGI art. 204 A et s. (prélèvement à la source, en vigueur depuis le "
-        + "1er janvier 2019); CGI art. 182 A (retenue à la source des non-résidents)",
+        "CGI art. 204 A et s. (prélèvement à la source, en vigueur depuis le " +
+        "1er janvier 2019); CGI art. 182 A (retenue à la source des non-résidents)",
     },
   ],
 };
@@ -283,17 +489,72 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
 // ---------------------------------------------------------------------------
 
 const FR_NATIONAL_HOLIDAYS: PayrollCountryPack["jurisdictions"][number]["holidays"] = [
-  { key: "fr_new_year", name: "Jour de l'An", rule: { kind: "fixed", month: 1, day: 1 }, observance: "none" },
-  { key: "fr_easter_monday", name: "Lundi de Pâques", rule: { kind: "easter_offset", days: 1 }, observance: "none" },
-  { key: "fr_labour_day", name: "Fête du Travail (1er mai)", rule: { kind: "fixed", month: 5, day: 1 }, observance: "none" },
-  { key: "fr_victory_day", name: "Victoire 1945 (8 mai)", rule: { kind: "fixed", month: 5, day: 8 }, observance: "none" },
-  { key: "fr_ascension", name: "Ascension", rule: { kind: "easter_offset", days: 39 }, observance: "none" },
-  { key: "fr_whit_monday", name: "Lundi de Pentecôte", rule: { kind: "easter_offset", days: 50 }, observance: "none" },
-  { key: "fr_bastille_day", name: "Fête nationale (14 juillet)", rule: { kind: "fixed", month: 7, day: 14 }, observance: "none" },
-  { key: "fr_assumption", name: "Assomption", rule: { kind: "fixed", month: 8, day: 15 }, observance: "none" },
-  { key: "fr_all_saints", name: "Toussaint", rule: { kind: "fixed", month: 11, day: 1 }, observance: "none" },
-  { key: "fr_armistice", name: "Armistice 1918 (11 novembre)", rule: { kind: "fixed", month: 11, day: 11 }, observance: "none" },
-  { key: "fr_christmas", name: "Noël", rule: { kind: "fixed", month: 12, day: 25 }, observance: "none" },
+  {
+    key: "fr_new_year",
+    name: "Jour de l'An",
+    rule: { kind: "fixed", month: 1, day: 1 },
+    observance: "none",
+  },
+  {
+    key: "fr_easter_monday",
+    name: "Lundi de Pâques",
+    rule: { kind: "easter_offset", days: 1 },
+    observance: "none",
+  },
+  {
+    key: "fr_labour_day",
+    name: "Fête du Travail (1er mai)",
+    rule: { kind: "fixed", month: 5, day: 1 },
+    observance: "none",
+  },
+  {
+    key: "fr_victory_day",
+    name: "Victoire 1945 (8 mai)",
+    rule: { kind: "fixed", month: 5, day: 8 },
+    observance: "none",
+  },
+  {
+    key: "fr_ascension",
+    name: "Ascension",
+    rule: { kind: "easter_offset", days: 39 },
+    observance: "none",
+  },
+  {
+    key: "fr_whit_monday",
+    name: "Lundi de Pentecôte",
+    rule: { kind: "easter_offset", days: 50 },
+    observance: "none",
+  },
+  {
+    key: "fr_bastille_day",
+    name: "Fête nationale (14 juillet)",
+    rule: { kind: "fixed", month: 7, day: 14 },
+    observance: "none",
+  },
+  {
+    key: "fr_assumption",
+    name: "Assomption",
+    rule: { kind: "fixed", month: 8, day: 15 },
+    observance: "none",
+  },
+  {
+    key: "fr_all_saints",
+    name: "Toussaint",
+    rule: { kind: "fixed", month: 11, day: 1 },
+    observance: "none",
+  },
+  {
+    key: "fr_armistice",
+    name: "Armistice 1918 (11 novembre)",
+    rule: { kind: "fixed", month: 11, day: 11 },
+    observance: "none",
+  },
+  {
+    key: "fr_christmas",
+    name: "Noël",
+    rule: { kind: "fixed", month: 12, day: 25 },
+    observance: "none",
+  },
 ];
 
 const FR_JURISDICTIONS: PayrollCountryPack["jurisdictions"] = [
@@ -317,12 +578,22 @@ const FR_JURISDICTIONS: PayrollCountryPack["jurisdictions"] = [
     name: "France — Alsace-Moselle (droit local)",
     scope: "employment",
     citation:
-      "Droit local d'Alsace-Moselle: Vendredi saint et 26 décembre (Saint-Étienne) "
-      + "chômés en Moselle, Bas-Rhin et Haut-Rhin (service-public.fr F2405)",
+      "Droit local d'Alsace-Moselle: Vendredi saint et 26 décembre (Saint-Étienne) " +
+      "chômés en Moselle, Bas-Rhin et Haut-Rhin (service-public.fr F2405)",
     holidays: [
       ...FR_NATIONAL_HOLIDAYS,
-      { key: "fr_good_friday", name: "Vendredi saint", rule: { kind: "easter_offset", days: -2 }, observance: "none" },
-      { key: "fr_st_stephen", name: "Saint-Étienne (26 décembre)", rule: { kind: "fixed", month: 12, day: 26 }, observance: "none" },
+      {
+        key: "fr_good_friday",
+        name: "Vendredi saint",
+        rule: { kind: "easter_offset", days: -2 },
+        observance: "none",
+      },
+      {
+        key: "fr_st_stephen",
+        name: "Saint-Étienne (26 décembre)",
+        rule: { kind: "fixed", month: 12, day: 26 },
+        observance: "none",
+      },
     ],
     holidayPay: null,
   },
@@ -345,11 +616,13 @@ export const FR_PAYROLL_PACK = {
   employeeIdentifier: {
     label: "numéro de sécurité sociale (NIR)",
     pattern: "[12]\\d{4}[0-9A-Z]{5}\\d{5}",
-    formatHelp: "15 characters: sex, birth year/month, birthplace code (2A/2B for Corsica), serial, key",
+    formatHelp:
+      "15 characters: sex, birth year/month, birthplace code (2A/2B for Corsica), serial, key",
     example: "254022A03300522",
     requiredForPayroll: true,
     neededFor: "DSN",
-    citation: "INSEE: the NIR is 13 digits plus a 2-digit control key; birthplace 2A Corse-du-Sud / 2B Haute-Corse (COG)",
+    citation:
+      "INSEE: the NIR is 13 digits plus a 2-digit control key; birthplace 2A Corse-du-Sud / 2B Haute-Corse (COG)",
     numericEntry: false,
   },
   // installable is true: the 2026 payslip (PAS + URSSAF + AGIRC-ARRCO) is
@@ -376,7 +649,8 @@ export const FR_PAYROLL_PACK = {
   // paid (impots.gouv.fr, prélèvement à la source).
   retroactivePayTreatment: "periodic",
   contributoryBases: {
-    pensionable: "Salaire soumis aux cotisations vieillesse (plafonnée et déplafonnée) et à la retraite complémentaire AGIRC-ARRCO (tranches 1 et 2)",
+    pensionable:
+      "Salaire soumis aux cotisations vieillesse (plafonnée et déplafonnée) et à la retraite complémentaire AGIRC-ARRCO (tranches 1 et 2)",
     // No employee contribution in this pack is assessed on a separate
     // insurable base: employer assurance chômage is assessed on total salary,
     // so the flag accumulates nothing here rather than inheriting another

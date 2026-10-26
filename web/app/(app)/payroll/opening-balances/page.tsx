@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadPayrollOpeningBalances, payrollOpeningBalancesSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadPayrollOpeningBalances, payrollOpeningBalancesSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Mid-year adoption: the statutory year-to-date each employee brings in from
@@ -18,9 +18,11 @@ export const dynamic = 'force-dynamic'
 export default async function PayrollOpeningBalancesPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadPayrollOpeningBalances(sp)
-  return <ModuleView spec={payrollOpeningBalancesSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadPayrollOpeningBalances(sp);
+  return (
+    <ModuleView spec={payrollOpeningBalancesSpec(data)} data={data} searchParams={sp} trusted />
+  );
 }

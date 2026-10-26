@@ -1,6 +1,6 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { isUuid } from "../../../../lib/list-params";
 import { RunQueryError, queryLineage } from "@openbooks/engine/allocations/run-queries";
@@ -13,7 +13,11 @@ export const runtime = "nodejs";
  * Exactly one anchor; `allocations.read`. The LineagePanel component
  * renders this payload for the Runs tab, A5's journal drawer and A9.
  */
-async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+async function legacyGET(
+  req: Request,
+  ctx: { params: Promise<unknown> },
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
 
   const params = new URL(req.url).searchParams;
@@ -57,7 +61,9 @@ async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, inject
 }
 
 export const GET = defineRoute({
-  permission: "allocations.read", feature: "allocations",
+  permission: "allocations.read",
+  feature: "allocations",
 
-  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+  handler: ({ request, params, authz }) =>
+    legacyGET(request, { params: Promise.resolve(params) }, authz),
 });

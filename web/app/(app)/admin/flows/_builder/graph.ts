@@ -1,4 +1,4 @@
-import type { ConnectionMode, Edge, Node } from '@xyflow/react'
+import type { ConnectionMode, Edge, Node } from "@xyflow/react";
 import type {
   ActionData,
   ActionKind,
@@ -8,7 +8,7 @@ import type {
   RecipientTarget,
   TriggerData,
   TriggerKind,
-} from '@openbooks/forms-core'
+} from "@openbooks/forms-core";
 
 /**
  * Graph plumbing shared by the flow builder: AutomationGraph ⇄ React Flow
@@ -16,30 +16,29 @@ import type {
  * Pure data — every React component lives beside this file.
  */
 
-export type NodeData = AutomationNode['data']
-export type NodeKind = NodeData['kind']
-export type FlowNode = Node<NodeData>
+export type NodeData = AutomationNode["data"];
+export type NodeKind = NodeData["kind"];
+export type FlowNode = Node<NodeData>;
 
 /** An org user offered by the "specific user" pickers. */
-export type OrgUser = { id: string; name: string; email: string }
-export type OrgRole = { key: string; name: string }
+export type OrgUser = { id: string; name: string; email: string };
+export type OrgRole = { key: string; name: string };
 
-export const newId = (prefix: string) =>
-  `${prefix}_${globalThis.crypto.randomUUID()}`
+export const newId = (prefix: string) => `${prefix}_${globalThis.crypto.randomUUID()}`;
 
 /** Branch-handle → visible edge label ('next' stays unlabeled). */
 export function edgeLabel(
   handle: string | null | undefined,
   labels: Record<string, string>,
 ): string | undefined {
-  return handle && handle !== 'next' ? (labels[handle] ?? handle) : undefined
+  return handle && handle !== "next" ? (labels[handle] ?? handle) : undefined;
 }
 
 /** A keyboard/button connect request: source node + handle, target node. */
 export interface ConnectRequest {
-  source: string
-  sourceHandle: string
-  target: string
+  source: string;
+  sourceHandle: string;
+  target: string;
 }
 
 /**
@@ -49,7 +48,7 @@ export interface ConnectRequest {
  * through the side-panel Connect — the drag had to thread a dot. The edge
  * still validates through buildConnectEdge exactly like a picked one.
  */
-export const CANVAS_CONNECTION_MODE = 'loose' as ConnectionMode
+export const CANVAS_CONNECTION_MODE = "loose" as ConnectionMode;
 
 /**
  * Handles a node can connect FROM — exactly the source Handle ids the
@@ -58,13 +57,13 @@ export const CANVAS_CONNECTION_MODE = 'loose' as ConnectionMode
  */
 export function connectHandles(kind: NodeKind): string[] {
   switch (kind) {
-    case 'trigger':
-    case 'action':
-      return ['next']
-    case 'condition':
-      return ['then', 'else']
-    case 'gate':
-      return ['approve', 'reject']
+    case "trigger":
+    case "action":
+      return ["next"];
+    case "condition":
+      return ["then", "else"];
+    case "gate":
+      return ["approve", "reject"];
   }
 }
 
@@ -73,11 +72,8 @@ export function connectHandles(kind: NodeKind): string[] {
  * target Handle (triggers render none, so wiring into one would be a dead
  * edge the pointer path cannot even draw), minus the source itself.
  */
-export function connectTargets(
-  sourceId: string,
-  nodes: FlowNode[],
-): FlowNode[] {
-  return nodes.filter((n) => n.id !== sourceId && n.data.kind !== 'trigger')
+export function connectTargets(sourceId: string, nodes: FlowNode[]): FlowNode[] {
+  return nodes.filter((n) => n.id !== sourceId && n.data.kind !== "trigger");
 }
 
 /**
@@ -92,19 +88,19 @@ export function buildConnectEdge(
   nodes: FlowNode[],
   labels: Record<string, string>,
 ): Edge | null {
-  const source = nodes.find((n) => n.id === req.source)
-  const target = nodes.find((n) => n.id === req.target)
-  if (!source || !target) return null
-  if (source.id === target.id) return null
-  if (target.data.kind === 'trigger') return null
-  if (!connectHandles(source.data.kind).includes(req.sourceHandle)) return null
+  const source = nodes.find((n) => n.id === req.source);
+  const target = nodes.find((n) => n.id === req.target);
+  if (!source || !target) return null;
+  if (source.id === target.id) return null;
+  if (target.data.kind === "trigger") return null;
+  if (!connectHandles(source.data.kind).includes(req.sourceHandle)) return null;
   return {
-    id: newId('e'),
+    id: newId("e"),
     source: source.id,
     target: target.id,
     sourceHandle: req.sourceHandle,
     label: edgeLabel(req.sourceHandle, labels),
-  }
+  };
 }
 
 /**
@@ -113,7 +109,7 @@ export function buildConnectEdge(
  * before every add so a second trigger can never accumulate on the canvas.
  */
 export function canAddTrigger(nodes: FlowNode[]): boolean {
-  return !nodes.some((n) => n.data.kind === 'trigger')
+  return !nodes.some((n) => n.data.kind === "trigger");
 }
 
 /**
@@ -123,14 +119,14 @@ export function canAddTrigger(nodes: FlowNode[]): boolean {
  * order is stable, and a load→save round trip converges instead of growing.
  */
 export function dedupeGraphNodes(graph: AutomationGraph): AutomationGraph {
-  const seen = new Set<string>()
+  const seen = new Set<string>();
   const nodes = graph.nodes.filter((n) => {
-    if (seen.has(n.id)) return false
-    seen.add(n.id)
-    return true
-  })
-  if (nodes.length === graph.nodes.length) return graph
-  return { ...graph, nodes }
+    if (seen.has(n.id)) return false;
+    seen.add(n.id);
+    return true;
+  });
+  if (nodes.length === graph.nodes.length) return graph;
+  return { ...graph, nodes };
 }
 
 /** Stored graph → React Flow state (labels re-derived from handles). */
@@ -138,7 +134,7 @@ export function toFlow(
   graph: AutomationGraph,
   labels: Record<string, string>,
 ): { nodes: FlowNode[]; edges: Edge[] } {
-  const loaded = dedupeGraphNodes(graph)
+  const loaded = dedupeGraphNodes(graph);
   return {
     nodes: loaded.nodes.map((n) => ({
       id: n.id,
@@ -153,7 +149,7 @@ export function toFlow(
       sourceHandle: e.sourceHandle ?? null,
       label: edgeLabel(e.sourceHandle, labels),
     })),
-  }
+  };
 }
 
 /**
@@ -169,20 +165,16 @@ export function fromFlow(
 ): AutomationGraph {
   // Saving converges too: canvas state that somehow holds two nodes with one
   // id persists as one (first wins), so re-open → save can never grow nodes.
-  const seen = new Set<string>()
+  const seen = new Set<string>();
   const unique = nodes.filter((n) => {
-    if (seen.has(n.id)) return false
-    seen.add(n.id)
-    return true
-  })
-  const scopeIds = [
-    ...new Set((subsidiaryIds ?? []).map((id) => id.toLowerCase())),
-  ]
+    if (seen.has(n.id)) return false;
+    seen.add(n.id);
+    return true;
+  });
+  const scopeIds = [...new Set((subsidiaryIds ?? []).map((id) => id.toLowerCase()))];
   return {
     schemaVersion: 1,
-    ...(scopeIds.length > 0
-      ? { subjectScope: { subsidiaryIds: scopeIds } }
-      : {}),
+    ...(scopeIds.length > 0 ? { subjectScope: { subsidiaryIds: scopeIds } } : {}),
     nodes: unique.map((n) => ({
       id: n.id,
       position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },
@@ -192,84 +184,74 @@ export function fromFlow(
       id: e.id,
       source: e.source,
       target: e.target,
-      sourceHandle:
-        (e.sourceHandle as AutomationGraph['edges'][number]['sourceHandle']) ??
-        'next',
+      sourceHandle: (e.sourceHandle as AutomationGraph["edges"][number]["sourceHandle"]) ?? "next",
     })),
-  }
+  };
 }
 
 /**
  * Fresh TriggerData for a trigger kind. Defaults are chosen to pass the zod
  * graph schema so a just-added node can be saved immediately.
  */
-export function buildTrigger(
-  kind: TriggerKind,
-  profile: FlowSubjectProfile,
-): TriggerData {
+export function buildTrigger(kind: TriggerKind, profile: FlowSubjectProfile): TriggerData {
   switch (kind) {
-    case 'on_field_value':
+    case "on_field_value":
       return {
-        trigger: 'on_field_value',
-        rule: { op: 'isSet', field: firstFieldKey(profile) },
-      }
-    case 'status_change':
-      return { trigger: 'status_change' } // no from/to = every transition
-    case 'scheduled':
+        trigger: "on_field_value",
+        rule: { op: "isSet", field: firstFieldKey(profile) },
+      };
+    case "status_change":
+      return { trigger: "status_change" }; // no from/to = every transition
+    case "scheduled":
       return {
-        trigger: 'scheduled',
-        cron: '0 8 * * 1',
-        ...(profile.subjectKind === 'schedule_board'
-          ? { select: { limit: 200 } }
-          : {}),
-      }
-    case 'manual':
-      return { trigger: 'manual', buttonId: newId('btn'), label: 'Run flow' }
+        trigger: "scheduled",
+        cron: "0 8 * * 1",
+        ...(profile.subjectKind === "schedule_board" ? { select: { limit: 200 } } : {}),
+      };
+    case "manual":
+      return { trigger: "manual", buttonId: newId("btn"), label: "Run flow" };
     default:
-      return { trigger: kind } as TriggerData
+      return { trigger: kind } as TriggerData;
   }
 }
 
 /** Fresh ActionData for an action kind, again schema-valid out of the box. */
-export function buildAction(
-  kind: ActionKind,
-  profile: FlowSubjectProfile,
-): ActionData {
+export function buildAction(kind: ActionKind, profile: FlowSubjectProfile): ActionData {
   switch (kind) {
-    case 'send_board_schedule':
-      return { action: 'send_board_schedule' }
-    case 'distribute_schedule':
-      return { action: 'distribute_schedule' }
-    case 'send_email':
+    case "send_board_schedule":
+      return { action: "send_board_schedule" };
+    case "distribute_schedule":
+      return { action: "distribute_schedule" };
+    case "send_email":
       return {
-        action: 'send_email',
-        to: [{ type: 'submitter' }],
-        subject: 'Update on {{documentNumber}}',
-        body: '',
-      }
-    case 'notify':
+        action: "send_email",
+        to: [{ type: "submitter" }],
+        subject: "Update on {{documentNumber}}",
+        body: "",
+      };
+    case "notify":
       return {
-        action: 'notify',
-        to: [{ type: 'submitter' }],
-        title: 'Update on {{documentNumber}}',
-      }
-    case 'set_field':
+        action: "notify",
+        to: [{ type: "submitter" }],
+        title: "Update on {{documentNumber}}",
+      };
+    case "set_field":
       return {
-        action: 'set_field',
+        action: "set_field",
         field: firstWritableFieldKey(profile),
-        value: { kind: 'literal', value: '' },
-      }
-    case 'change_status':
+        value: { kind: "literal", value: "" },
+      };
+    case "change_status":
       return {
-        action: 'change_status',
-        to: profile.statuses[0]?.value ?? 'draft',
-      }
-    case 'post_document':
-      return { action: 'post_document' }
-    case 'lock_record':
-      return { action: 'lock_record' }
-    case 'unlock_record':
-      return { action: 'unlock_record' }
+        action: "change_status",
+        to: profile.statuses[0]?.value ?? "draft",
+      };
+    case "post_document":
+      return { action: "post_document" };
+    case "lock_record":
+      return { action: "lock_record" };
+    case "unlock_record":
+      return { action: "unlock_record" };
   }
 }
 
@@ -281,41 +263,38 @@ export function buildAction(
  * first role when no admin role exists.
  */
 export function defaultGateRole(profile: FlowSubjectProfile): string {
-  if (profile.roles?.includes('admin')) return 'admin'
-  return profile.roles?.[0] ?? 'approver'
+  if (profile.roles?.includes("admin")) return "admin";
+  return profile.roles?.[0] ?? "approver";
 }
 
 /** Default payload for a node freshly dropped from the palette. */
-export function defaultNodeData(
-  kind: NodeKind,
-  profile: FlowSubjectProfile,
-): NodeData {
+export function defaultNodeData(kind: NodeKind, profile: FlowSubjectProfile): NodeData {
   switch (kind) {
-    case 'trigger':
+    case "trigger":
       return {
-        kind: 'trigger',
-        trigger: buildTrigger(profile.triggers[0] ?? 'on_submit', profile),
-      }
-    case 'condition':
+        kind: "trigger",
+        trigger: buildTrigger(profile.triggers[0] ?? "on_submit", profile),
+      };
+    case "condition":
       return {
-        kind: 'condition',
-        rule: { op: 'isSet', field: firstFieldKey(profile) },
-      }
-    case 'action':
+        kind: "condition",
+        rule: { op: "isSet", field: firstFieldKey(profile) },
+      };
+    case "action":
       return {
-        kind: 'action',
-        action: buildAction(profile.actions[0] ?? 'notify', profile),
-      }
-    case 'gate':
+        kind: "action",
+        action: buildAction(profile.actions[0] ?? "notify", profile),
+      };
+    case "gate":
       return {
-        kind: 'gate',
+        kind: "gate",
         gate: {
-          title: 'Approval',
-          assignees: [{ type: 'role', role: defaultGateRole(profile) }],
-          mode: 'any',
+          title: "Approval",
+          assignees: [{ type: "role", role: defaultGateRole(profile) }],
+          mode: "any",
           preventSelfApproval: true,
         },
-      }
+      };
   }
 }
 
@@ -334,25 +313,22 @@ export function autoWireEdge(
   anchorId: string | undefined,
   labels: Record<string, string>,
 ): Edge | null {
-  const fresh = nodes.find((n) => n.id === newId)
-  if (!fresh || fresh.data.kind === 'trigger') return null
+  const fresh = nodes.find((n) => n.id === newId);
+  if (!fresh || fresh.data.kind === "trigger") return null;
   const anchor =
-    nodes.find((n) => n.id === anchorId && n.id !== newId) ??
-    tailNode(newId, nodes, edges)
-  if (!anchor) return null
+    nodes.find((n) => n.id === anchorId && n.id !== newId) ?? tailNode(newId, nodes, edges);
+  if (!anchor) return null;
   const used = new Set(
-    edges
-      .filter((e) => e.source === anchor.id)
-      .map((e) => e.sourceHandle ?? 'next'),
-  )
-  const handles = connectHandles(anchor.data.kind)
-  const handle = handles.find((h) => !used.has(h)) ?? handles[0]
-  if (!handle) return null
+    edges.filter((e) => e.source === anchor.id).map((e) => e.sourceHandle ?? "next"),
+  );
+  const handles = connectHandles(anchor.data.kind);
+  const handle = handles.find((h) => !used.has(h)) ?? handles[0];
+  if (!handle) return null;
   return buildConnectEdge(
     { source: anchor.id, sourceHandle: handle, target: newId },
     nodes,
     labels,
-  )
+  );
 }
 
 /**
@@ -360,16 +336,10 @@ export function autoWireEdge(
  * ties. A linear graph has exactly one, so palette adds extend the chain;
  * a branched graph extends its rightmost open end.
  */
-function tailNode(
-  excludeId: string,
-  nodes: FlowNode[],
-  edges: Edge[],
-): FlowNode | null {
-  const open = nodes.filter(
-    (n) => n.id !== excludeId && !edges.some((e) => e.source === n.id),
-  )
-  if (open.length === 0) return null
-  return open.reduce((a, b) => (b.position.x > a.position.x ? b : a))
+function tailNode(excludeId: string, nodes: FlowNode[], edges: Edge[]): FlowNode | null {
+  const open = nodes.filter((n) => n.id !== excludeId && !edges.some((e) => e.source === n.id));
+  if (open.length === 0) return null;
+  return open.reduce((a, b) => (b.position.x > a.position.x ? b : a));
 }
 
 /**
@@ -383,16 +353,16 @@ export function defaultTargetRow(
   profile: FlowSubjectProfile,
   allowEmail: boolean,
 ): RecipientTarget {
-  if (!allowEmail) return { type: 'role', role: defaultGateRole(profile) }
-  return { type: 'submitter' }
+  if (!allowEmail) return { type: "role", role: defaultGateRole(profile) };
+  return { type: "submitter" };
 }
 
 export function firstFieldKey(profile: FlowSubjectProfile): string {
-  return profile.fields[0]?.key ?? 'status'
+  return profile.fields[0]?.key ?? "status";
 }
 
 export function firstWritableFieldKey(profile: FlowSubjectProfile): string {
-  return profile.fields.find((f) => f.writable)?.key ?? firstFieldKey(profile)
+  return profile.fields.find((f) => f.writable)?.key ?? firstFieldKey(profile);
 }
 
 /**
@@ -400,22 +370,17 @@ export function firstWritableFieldKey(profile: FlowSubjectProfile): string {
  * lightly staggered vertically so stacks of adds stay readable. Triggers
  * start a column of their own on the left edge.
  */
-export function nextPosition(
-  kind: NodeKind,
-  nodes: FlowNode[],
-): { x: number; y: number } {
-  if (nodes.length === 0) return { x: 60, y: 120 }
-  if (kind === 'trigger') {
-    const triggers = nodes.filter((n) => n.data.kind === 'trigger')
-    const maxY = triggers.length
-      ? Math.max(...triggers.map((n) => n.position.y))
-      : -60
-    return { x: 60, y: maxY + 160 }
+export function nextPosition(kind: NodeKind, nodes: FlowNode[]): { x: number; y: number } {
+  if (nodes.length === 0) return { x: 60, y: 120 };
+  if (kind === "trigger") {
+    const triggers = nodes.filter((n) => n.data.kind === "trigger");
+    const maxY = triggers.length ? Math.max(...triggers.map((n) => n.position.y)) : -60;
+    return { x: 60, y: maxY + 160 };
   }
-  const maxX = Math.max(...nodes.map((n) => n.position.x))
-  const atFrontier = nodes.filter((n) => n.position.x === maxX)
+  const maxX = Math.max(...nodes.map((n) => n.position.x));
+  const atFrontier = nodes.filter((n) => n.position.x === maxX);
   return {
     x: maxX + 260,
     y: (atFrontier[0]?.position.y ?? 120) + (atFrontier.length - 1) * 40,
-  }
+  };
 }

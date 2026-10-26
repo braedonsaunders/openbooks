@@ -7,25 +7,25 @@
  * the unknown-component notice instead of presenting it as the name.
  */
 export interface KitComponentIdentity {
-  componentItemId: string
-  code: string | null
-  name: string | null
+  componentItemId: string;
+  code: string | null;
+  name: string | null;
 }
 
 export function componentLabel(line: KitComponentIdentity): string {
-  const code = line.code?.trim() ?? ''
-  const name = line.name?.trim() ?? ''
-  if (code && name) return `${code} · ${name}`
-  if (name) return name
-  if (code) return code
-  return line.componentItemId.slice(0, 8)
+  const code = line.code?.trim() ?? "";
+  const name = line.name?.trim() ?? "";
+  if (code && name) return `${code} · ${name}`;
+  if (name) return name;
+  if (code) return code;
+  return line.componentItemId.slice(0, 8);
 }
 
 /** Whether the joined catalog row stands behind the line. The API answers
  *  this explicitly with the joined row id; blank code or name alone proves
  *  nothing about the row behind them. */
 export function isComponentIdentityMissing(joinedId: string | null): boolean {
-  return joinedId == null
+  return joinedId == null;
 }
 
 /** Strict current-ness: only a real boolean counts. Anything else means
@@ -33,26 +33,28 @@ export function isComponentIdentityMissing(joinedId: string | null): boolean {
  *  payload instead of guessing — guessing current recreates the
  *  double-count this flag exists to prevent. */
 export function strictIsCurrent(value: unknown): boolean | null {
-  return typeof value === 'boolean' ? value : null
+  return typeof value === "boolean" ? value : null;
 }
 
 export interface EffectiveWindow {
-  from: string | null
-  to: string | null
+  from: string | null;
+  to: string | null;
 }
 
 /** Which caption a recipe line's effectivity window needs. The overview
  *  keeps every stored line including expired ones, so a bounded window
  *  names its dates and only an unbounded line stays captionless — the
  *  everyday reader never mistakes history for double consumption. */
-export function effectiveWindowKind(window: EffectiveWindow): 'range' | 'from' | 'ended' | 'evergreen' {
-  if (window.from && window.to) return 'range'
-  if (window.from) return 'from'
-  if (window.to) return 'ended'
-  return 'evergreen'
+export function effectiveWindowKind(
+  window: EffectiveWindow,
+): "range" | "from" | "ended" | "evergreen" {
+  if (window.from && window.to) return "range";
+  if (window.from) return "from";
+  if (window.to) return "ended";
+  return "evergreen";
 }
 
 /** Display trimming for ledger decimal strings: `12.5000` reads as `12.5`. */
 export function trimKitQty(quantity: string): string {
-  return quantity.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
+  return quantity.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }

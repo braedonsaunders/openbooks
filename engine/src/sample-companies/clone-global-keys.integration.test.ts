@@ -43,21 +43,33 @@ async function seedTemplateOrg(): Promise<string> {
         values (${template.orgId}, 'admin', 'admin', true, '[]'::jsonb)
         on conflict (org_id, key) do update set updated_at = now()`),
     );
-    const period = (await withBypass(() => db.execute<{ id: string }>(sql`
+    const period = (
+      await withBypass(() =>
+        db.execute<{ id: string }>(
+          sql`
       select id from accounting_periods
        where org_id = ${template.orgId}
          and starts_on <= '2026-07-10' and ends_on >= '2026-07-10'
-       limit 1`, "objects")))[0]?.id;
+       limit 1`,
+          "objects",
+        ),
+      )
+    )[0]?.id;
     assert.ok(period, "scratch org seeds no period covering the template posting date");
     const journal = await withOrgContext(template.orgId, () =>
-      createScriptJournal(template.orgId, null, {
-        documentDate: "2026-07-10",
-        memo: "Atlas template seed",
-        lines: [
-          { accountId: template.accounts.bank, amount: "1000" },
-          { accountId: template.accounts.ar, amount: "-1000" },
-        ],
-      }, { post: true }),
+      createScriptJournal(
+        template.orgId,
+        null,
+        {
+          documentDate: "2026-07-10",
+          memo: "Atlas template seed",
+          lines: [
+            { accountId: template.accounts.bank, amount: "1000" },
+            { accountId: template.accounts.ar, amount: "-1000" },
+          ],
+        },
+        { post: true },
+      ),
     );
     assert.ok(journal.entryId, "template seed journal did not post");
     await withBypass(() =>
@@ -98,7 +110,11 @@ async function seedTemplateOrg(): Promise<string> {
         insert into hrm_document_signers (id, org_id, document_id, ord, signer_party_id, role, status, token_hash)
         values (${randomUUID()}, ${template.orgId}, ${hrmDocId}, 0, ${signerPartyId}, 'employee', 'pending', ${`atlas-sign-token-${randomUUID()}`})`),
     );
-    await withBypass(() => db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{sampleTemplate}', '{"enabled":true}'::jsonb) where id = ${template.orgId}`)); // stub stands in for a promoted template: carry its registration flag
+    await withBypass(() =>
+      db.execute(
+        sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{sampleTemplate}', '{"enabled":true}'::jsonb) where id = ${template.orgId}`,
+      ),
+    ); // stub stands in for a promoted template: carry its registration flag
     return template.orgId;
   } catch (error) {
     await withBypass(() => dropScratchOrg(template.orgId));
@@ -146,9 +162,17 @@ function stubTemplate(fixture: Fixture) {
 }
 
 async function count(orgId: string, table: string): Promise<number> {
-  return withBypassContext(async () => (await db.execute<{ n: number }>(sql`
+  return withBypassContext(
+    async () =>
+      (
+        await db.execute<{ n: number }>(
+          sql`
     select count(*)::int as n from ${sql.identifier(table)} where org_id = ${orgId}
-  `, "objects"))[0]!.n);
+  `,
+          "objects",
+        )
+      )[0]!.n,
+  );
 }
 
 test(
@@ -172,10 +196,18 @@ test(
 
       // Posted financial history survived the birth.
       assert.equal(await count(result.orgId, "documents"), 2);
-      const postedEntries = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
+      const postedEntries = await withBypassContext(
+        async () =>
+          (
+            await db.execute<{ n: number }>(
+              sql`
         select count(*)::int as n from journal_entries
          where org_id = ${result.orgId} and status = 'posted'
-      `, "objects"))[0]!.n);
+      `,
+              "objects",
+            )
+          )[0]!.n,
+      );
       assert.equal(postedEntries, 1);
 
       // Executable scheduler work stays behind: never replay the source's
@@ -184,10 +216,19 @@ test(
 
       // Flow run history is kept but its global dedup key is cleared.
       assert.equal(await count(result.orgId, "flow_runs"), 1);
-      const keys = await withBypassContext(async () => await db.execute<{ occurrence_key: string | null }>(sql`
+      const keys = await withBypassContext(
+        async () =>
+          await db.execute<{ occurrence_key: string | null }>(
+            sql`
         select occurrence_key from flow_runs where org_id = ${result.orgId}
-      `, "objects"));
-      assert.deepEqual(keys.map((row) => row.occurrence_key), [null]);
+      `,
+            "objects",
+          ),
+      );
+      assert.deepEqual(
+        keys.map((row) => row.occurrence_key),
+        [null],
+      );
 
       // The signing-link bearer token stays behind with its document's
       // signers; the HR document itself is ordinary history and is kept.
@@ -199,10 +240,18 @@ test(
       const statuses = await sampleCompanyStatuses(fixture.memberUserId);
       const manufacturing = statuses.find((s) => s.industryKey === INDUSTRY);
       assert.equal(manufacturing?.existingOrgId, result.orgId);
-      const access = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
+      const access = await withBypassContext(
+        async () =>
+          (
+            await db.execute<{ n: number }>(
+              sql`
         select count(*)::int as n from user_org_access
          where org_id = ${result.orgId} and member_user_id = ${fixture.memberUserId} and is_active
-      `, "objects"))[0]!.n);
+      `,
+              "objects",
+            )
+          )[0]!.n,
+      );
       assert.equal(access, 1);
     } finally {
       await dropFixture(fixture);
@@ -242,11 +291,17 @@ test(
       );
       // No org row carries this attempt's birth marker: the shell is gone,
       // not merely unlisted.
-      const shells = await withBypassContext(async () => await db.execute<{ id: string }>(sql`
+      const shells = await withBypassContext(
+        async () =>
+          await db.execute<{ id: string }>(
+            sql`
         select id from orgs
          where settings->'sampleCompany'->>'ownerUserId' = ${fixture.memberUserId}
            and settings->'sampleCompany'->>'industryKey' = ${INDUSTRY}
-      `, "objects"));
+      `,
+            "objects",
+          ),
+      );
       assert.deepEqual(shells, []);
       // ...and the API state matches: no ready company, no resumable
       // partial, so existingOrgId=null tells the truth.

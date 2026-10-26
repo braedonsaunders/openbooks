@@ -25,45 +25,79 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("script journal submission keeps its provenance while ordinary submissions retain their approval gate", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await withOrgContext(org.orgId, async () => {
-      const actors = await seedFlowActors(org.orgId);
-      await grantScratchPermissions(org.orgId, actors.adminId, ["gl.post"]);
-      await grantScratchPermissions(org.orgId, actors.approver1Id, ["gl.post"]);
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,flows}', 'true'::jsonb) where id = ${org.orgId}`);
-      const seeded = await seedApprovalFlow(org.orgId, {
-        subjectKind: "journal", assignees: [{ type: "user", userId: actors.approver1Id }], mode: "any",
+test(
+  "script journal submission keeps its provenance while ordinary submissions retain their approval gate",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const actors = await seedFlowActors(org.orgId);
+        await grantScratchPermissions(org.orgId, actors.adminId, ["gl.post"]);
+        await grantScratchPermissions(org.orgId, actors.approver1Id, ["gl.post"]);
+        await db.execute(
+          sql`update orgs set settings = jsonb_set(settings, '{features,flows}', 'true'::jsonb) where id = ${org.orgId}`,
+        );
+        const seeded = await seedApprovalFlow(org.orgId, {
+          subjectKind: "journal",
+          assignees: [{ type: "user", userId: actors.approver1Id }],
+          mode: "any",
+        });
+        const graph = (
+          await db.execute<{ graph: { nodes: unknown[]; edges: unknown[] } }>(
+            sql`
+        select graph from flows where org_id = ${org.orgId} and id = ${seeded.flowId}`,
+            "objects",
+          )
+        )[0]!.graph;
+        graph.nodes.push({
+          id: "source",
+          position: { x: 110, y: 0 },
+          data: {
+            kind: "condition",
+            rule: { op: "eq", field: "event_source", value: "ui" },
+          },
+        });
+        graph.edges = [
+          { id: "source-trigger", source: "trigger", target: "source", sourceHandle: "next" },
+          { id: "source-gate", source: "source", target: seeded.gateNodeId, sourceHandle: "then" },
+        ];
+        const changed = await db.execute(
+          sql`update flows set graph = ${JSON.stringify(graph)}::jsonb
+        where org_id = ${org.orgId} and id = ${seeded.flowId} returning id`,
+          "objects",
+        );
+        assert.equal(changed.length, 1);
+        const scripted = await createScriptJournal(
+          org.orgId,
+          actors.adminId,
+          {
+            documentDate: org.date,
+            lines: [
+              { accountId: org.accounts.bank, amount: "10" },
+              { accountId: org.accounts.cogs, amount: "-10" },
+            ],
+          },
+          { post: true, allowedSubsidiaryIds: null },
+        );
+        assert.ok(
+          scripted.entryId,
+          "the configured UI-only gate does not intercept script provenance",
+        );
+        const ordinary = await seedBalancedDraftJournal(
+          org,
+          `MANUAL-${randomUUID()}`,
+          actors.adminId,
+        );
+        const submitted = await submitAndReleaseIfUngated("journal", ordinary, actors.adminId);
+        assert.equal(submitted.gated, true);
+        assert.equal(submitted.autoApproved, false);
       });
-      const graph = (await db.execute<{ graph: { nodes: unknown[]; edges: unknown[] } }>(sql`
-        select graph from flows where org_id = ${org.orgId} and id = ${seeded.flowId}`, "objects"))[0]!.graph;
-      graph.nodes.push({ id: "source", position: { x: 110, y: 0 }, data: {
-        kind: "condition", rule: { op: "eq", field: "event_source", value: "ui" },
-      } });
-      graph.edges = [
-        { id: "source-trigger", source: "trigger", target: "source", sourceHandle: "next" },
-        { id: "source-gate", source: "source", target: seeded.gateNodeId, sourceHandle: "then" },
-      ];
-      const changed = await db.execute(sql`update flows set graph = ${JSON.stringify(graph)}::jsonb
-        where org_id = ${org.orgId} and id = ${seeded.flowId} returning id`, "objects");
-      assert.equal(changed.length, 1);
-      const scripted = await createScriptJournal(org.orgId, actors.adminId, {
-        documentDate: org.date, lines: [
-          { accountId: org.accounts.bank, amount: "10" },
-          { accountId: org.accounts.cogs, amount: "-10" },
-        ],
-      }, { post: true, allowedSubsidiaryIds: null });
-      assert.ok(scripted.entryId, "the configured UI-only gate does not intercept script provenance");
-      const ordinary = await seedBalancedDraftJournal(org, `MANUAL-${randomUUID()}`, actors.adminId);
-      const submitted = await submitAndReleaseIfUngated("journal", ordinary, actors.adminId);
-      assert.equal(submitted.gated, true);
-      assert.equal(submitted.autoApproved, false);
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /** Seed a balanced two-line draft journal and return its id. */
 async function seedBalancedDraftJournal(
@@ -121,14 +155,11 @@ test("before_post custom mutations reject posting controls but preserve safe met
   );
   assert.equal(safeResult.status, "ok");
   assert.deepEqual(safeResult.set?.custom, { note: "reviewed", source: "script" });
-  assert.deepEqual(
-    mergeBeforePostCustomMutation(ctx.document.custom, safeResult.set?.custom),
-    {
-      controlAccountId: "approved-control",
-      note: "reviewed",
-      source: "script",
-    },
-  );
+  assert.deepEqual(mergeBeforePostCustomMutation(ctx.document.custom, safeResult.set?.custom), {
+    controlAccountId: "approved-control",
+    note: "reviewed",
+    source: "script",
+  });
 });
 
 test(
@@ -226,11 +257,7 @@ test(
 
       await assert.rejects(
         withOrgTransaction(org.orgId, async () => {
-          const released = await submitAndReleaseIfUngated(
-            "journal",
-            documentId,
-            actorId,
-          );
+          const released = await submitAndReleaseIfUngated("journal", documentId, actorId);
           assert.equal(released.autoApproved, true);
           await postDocument(
             documentId,
@@ -247,18 +274,23 @@ test(
         /period .*closed|closed.*period/i,
       );
 
-      const state = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
+      const state = await withOrgContext(
+        org.orgId,
+        async () =>
+          await db.execute<{
             status: string;
             submitted_at: string | null;
             posted_entry_id: string | null;
             entry_count: number;
-          }>(sql`
+          }>(
+            sql`
           select status, submitted_at, posted_entry_id,
                  (select count(*)::int from journal_entries
                     where source_document_id = ${documentId}) as entry_count
             from documents where id = ${documentId}
-        `, "objects")),
+        `,
+            "objects",
+          ),
       );
       assert.deepEqual(state[0], {
         status: "draft",
@@ -280,19 +312,22 @@ test(
  * never leave a half-applied scripted mutation behind on an unposted
  * document.
  */
-test("before_post script effects are atomic with the posting transaction", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() =>
-      createScratchUser(org.orgId, "Journal poster", "admin"),
-    );
-    // Enable tenant scripting and register one before_post mutation script.
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`
+test(
+  "before_post script effects are atomic with the posting transaction",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Journal poster", "admin"),
+      );
+      // Enable tenant scripting and register one before_post mutation script.
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
         update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true')
          where id = ${org.orgId}
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into user_scripts
           (org_id, name, trigger_point, document_kind, source, timeout_ms, sort_order, is_active)
         values (
@@ -301,14 +336,14 @@ test("before_post script effects are atomic with the posting transaction", { ski
           2000, 100, true
         )
       `);
-    });
+      });
 
-    // Rollback side: the script runs, then the post fails on a closed period.
-    const failingDoc = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-SCRIPT-RB", actorId),
-    );
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`
+      // Rollback side: the script runs, then the post fails on a closed period.
+      const failingDoc = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-SCRIPT-RB", actorId),
+      );
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
         insert into period_locks
           (org_id, period_id, book_id, subsidiary_id, module, state,
            locked_at, locked_by, reason, created_by, updated_by)
@@ -318,60 +353,79 @@ test("before_post script effects are atomic with the posting transaction", { ski
           ${actorId}, ${actorId}
         )
       `);
-    });
-    await assert.rejects(
-      withOrgTransaction(org.orgId, async () => {
-        await submitAndReleaseIfUngated("journal", failingDoc, actorId);
-        await postDocument(failingDoc, postingControlDeps(org), { deferEffects: true });
-      }),
-      /period .*closed|closed.*period/i,
-    );
-    const rolledBack = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ memo: string | null; script_runs: number }>(sql`
+      });
+      await assert.rejects(
+        withOrgTransaction(org.orgId, async () => {
+          await submitAndReleaseIfUngated("journal", failingDoc, actorId);
+          await postDocument(failingDoc, postingControlDeps(org), { deferEffects: true });
+        }),
+        /period .*closed|closed.*period/i,
+      );
+      const rolledBack = await withOrgContext(
+        org.orgId,
+        async () =>
+          await db.execute<{ memo: string | null; script_runs: number }>(
+            sql`
         select d.memo,
                (select count(*)::int from script_runs r
                  where r.target_id = ${failingDoc}) as script_runs
           from documents d where d.id = ${failingDoc}
-      `, "objects")),
-    );
-    assert.deepEqual(rolledBack[0], {
-      memo: null,
-      script_runs: 0,
-    }, "the failed post must not leave the script mutation or its evidence behind");
+      `,
+            "objects",
+          ),
+      );
+      assert.deepEqual(
+        rolledBack[0],
+        {
+          memo: null,
+          script_runs: 0,
+        },
+        "the failed post must not leave the script mutation or its evidence behind",
+      );
 
-    // Reopen the period so the commit side can post.
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`
+      // Reopen the period so the commit side can post.
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
         delete from period_locks
          where org_id = ${org.orgId} and reason = 'Script atomicity rollback probe'
       `);
-    });
+      });
 
-    // Commit side: the same script commits its mutation WITH the posting.
-    const okDoc = await withOrgContext(org.orgId, () =>
-      seedBalancedDraftJournal(org, "JE-SCRIPT-OK", actorId),
-    );
-    await withOrgTransaction(org.orgId, async () => {
-      await submitAndReleaseIfUngated("journal", okDoc, actorId);
-      await postDocument(okDoc, postingControlDeps(org), { deferEffects: true });
-    });
-    const committed = await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ memo: string | null; status: string; script_runs: number }>(sql`
+      // Commit side: the same script commits its mutation WITH the posting.
+      const okDoc = await withOrgContext(org.orgId, () =>
+        seedBalancedDraftJournal(org, "JE-SCRIPT-OK", actorId),
+      );
+      await withOrgTransaction(org.orgId, async () => {
+        await submitAndReleaseIfUngated("journal", okDoc, actorId);
+        await postDocument(okDoc, postingControlDeps(org), { deferEffects: true });
+      });
+      const committed = await withOrgContext(
+        org.orgId,
+        async () =>
+          await db.execute<{ memo: string | null; status: string; script_runs: number }>(
+            sql`
         select d.memo, d.status,
                (select count(*)::int from script_runs r
                  where r.target_id = ${okDoc}) as script_runs
           from documents d where d.id = ${okDoc}
-      `, "objects")),
-    );
-    assert.deepEqual(committed[0], {
-      memo: "scripted-memo",
-      status: "posted",
-      script_runs: 1,
-    }, "a committed post carries the script mutation and its evidence");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      `,
+            "objects",
+          ),
+      );
+      assert.deepEqual(
+        committed[0],
+        {
+          memo: "scripted-memo",
+          status: "posted",
+          script_runs: 1,
+        },
+        "a committed post carries the script mutation and its evidence",
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test(
   "an approved document cannot have its posting control rewritten by before_post",
@@ -433,13 +487,16 @@ test(
         /protected posting custom field/,
       );
       const state = await withOrgContext(org.orgId, () =>
-        db.execute<{ status: string; custom: Record<string, unknown>; entryCount: number }>(sql`
+        db.execute<{ status: string; custom: Record<string, unknown>; entryCount: number }>(
+          sql`
           select status, custom,
                  (select count(*)::int from journal_entries
                    where source_document_id = ${documentId}) as "entryCount"
             from documents
            where id = ${documentId} and org_id = ${org.orgId}
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(state[0], {
         status: "approved",
@@ -473,14 +530,14 @@ test(
   async () => {
     const org = await withBypass(() => createScratchOrg());
     try {
-      const actorId = await withBypass(() =>
-        createScratchUser(org.orgId, "FX poster", "admin"),
-      );
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX poster", "admin"));
       // 100 + 100 − 200 EUR converts to exactly zero, but per-line half-up
       // rounding at 0.3333333333 yields 33.3333 + 33.3333 − 66.6667 = −0.0001.
       const documentId = randomUUID();
       await withOrgContext(org.orgId, async () => {
-        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,multiCurrency}','true'::jsonb) where id=${org.orgId}`);
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features,multiCurrency}','true'::jsonb) where id=${org.orgId}`,
+        );
         await db.execute(sql`
           insert into documents
             (id, org_id, kind, status, document_number, subsidiary_id,
@@ -522,14 +579,17 @@ test(
           fx_rate: string;
           currency: string;
           subsidiary_id: string;
-        }>(sql`
+        }>(
+          sql`
           select amount::text as amount, txn_amount::text as txn_amount,
                  fx_rate::text as fx_rate, currency,
                  subsidiary_id::text as subsidiary_id
             from journal_lines
            where org_id = ${org.orgId} and entry_id = ${entryId}
            order by line_number
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       // The final line absorbed the −0.0001 residual; nothing else moved.
       assert.deepEqual(
@@ -546,16 +606,12 @@ test(
         lines.map((l) => l.txn_amount),
         ["100.0000", "100.0000", "-200.0000"],
       );
-      assert.deepEqual(lines.map((l) => l.fx_rate), [
-        "0.3333333333",
-        "0.3333333333",
-        "0.3333333333",
-      ]);
-      assert.deepEqual([...new Set(lines.map((l) => l.currency))], ["EUR"]);
       assert.deepEqual(
-        [...new Set(lines.map((l) => l.subsidiary_id))],
-        [org.subsidiaryId],
+        lines.map((l) => l.fx_rate),
+        ["0.3333333333", "0.3333333333", "0.3333333333"],
       );
+      assert.deepEqual([...new Set(lines.map((l) => l.currency))], ["EUR"]);
+      assert.deepEqual([...new Set(lines.map((l) => l.subsidiary_id))], [org.subsidiaryId]);
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
@@ -573,12 +629,12 @@ test(
   async () => {
     const org = await withBypass(() => createScratchOrg());
     try {
-      const actorId = await withBypass(() =>
-        createScratchUser(org.orgId, "FX poster", "admin"),
-      );
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX poster", "admin"));
       const documentId = randomUUID();
       await withOrgContext(org.orgId, async () => {
-        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,multiCurrency}','true'::jsonb) where id=${org.orgId}`);
+        await db.execute(
+          sql`update orgs set settings=jsonb_set(settings,'{features,multiCurrency}','true'::jsonb) where id=${org.orgId}`,
+        );
         await db.execute(sql`
           insert into documents
             (id, org_id, kind, status, document_number, subsidiary_id,
@@ -614,12 +670,15 @@ test(
       );
 
       const lines = await withOrgContext(org.orgId, () =>
-        db.execute<{ amount: string; txn_amount: string }>(sql`
+        db.execute<{ amount: string; txn_amount: string }>(
+          sql`
           select amount::text as amount, txn_amount::text as txn_amount
             from journal_lines
            where org_id = ${org.orgId} and entry_id = ${entryId}
            order by line_number
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(
         lines.map((l) => l.amount),
@@ -641,7 +700,9 @@ test(
   async () => {
     const org = await withBypass(() => createScratchOrg());
     try {
-      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX tie-break poster", "admin"));
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "FX tie-break poster", "admin"),
+      );
       const documentId = randomUUID();
       await withOrgContext(org.orgId, async () => {
         await db.execute(sql`
@@ -677,12 +738,15 @@ test(
         postDocument(documentId, postingControlDeps(org), { deferEffects: true }),
       );
       const lines = await withOrgContext(org.orgId, () =>
-        db.execute<{ amount: string; fx_rate: string; txn_amount: string }>(sql`
+        db.execute<{ amount: string; fx_rate: string; txn_amount: string }>(
+          sql`
           select amount::text as amount, fx_rate::text as fx_rate, txn_amount::text as txn_amount
             from journal_lines
            where org_id = ${org.orgId} and entry_id = ${entryId}
            order by line_number
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(lines, [
         { amount: "200.0000", fx_rate: "2.0000000000", txn_amount: "100.0000" },
@@ -798,26 +862,29 @@ test(
       // No withOrgTransaction: the post must still refuse AND leave the
       // script's memo mutation, the status, and the evidence behind.
       await assert.rejects(
-        withOrgContext(org.orgId, () =>
-          postDocument(documentId, deps, { deferEffects: true }),
-        ),
+        withOrgContext(org.orgId, () => postDocument(documentId, deps, { deferEffects: true })),
         /period .*closed|closed.*period/i,
       );
-      const rolledBack = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          memo: string | null;
-          custom: Record<string, unknown>;
-          script_runs: number;
-          entry_count: number;
-        }>(sql`
+      const rolledBack = await withOrgContext(
+        org.orgId,
+        async () =>
+          await db.execute<{
+            status: string;
+            memo: string | null;
+            custom: Record<string, unknown>;
+            script_runs: number;
+            entry_count: number;
+          }>(
+            sql`
           select d.status, d.memo, d.custom,
                  (select count(*)::int from script_runs r
                    where r.target_id = ${documentId}) as script_runs,
                  (select count(*)::int from journal_entries
                    where source_document_id = ${documentId}) as entry_count
             from documents d where d.id = ${documentId}
-        `, "objects")),
+        `,
+            "objects",
+          ),
       );
       assert.deepEqual(
         rolledBack[0],
@@ -843,14 +910,17 @@ test(
         postDocument(documentId, deps, { audit: { actorId, source: "test" } }),
       );
       assert.ok(entryId);
-      const committed = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          status: string;
-          memo: string | null;
-          script_runs: number;
-          entry_count: number;
-          effects: string;
-        }>(sql`
+      const committed = await withOrgContext(
+        org.orgId,
+        async () =>
+          await db.execute<{
+            status: string;
+            memo: string | null;
+            script_runs: number;
+            entry_count: number;
+            effects: string;
+          }>(
+            sql`
           select d.status, d.memo,
                  (select count(*)::int from script_runs r
                    where r.target_id = ${documentId}) as script_runs,
@@ -859,7 +929,9 @@ test(
                  (select status from posting_effects
                    where document_id = ${documentId}) as effects
             from documents d where d.id = ${documentId}
-        `, "objects")),
+        `,
+            "objects",
+          ),
       );
       assert.deepEqual(
         committed[0],

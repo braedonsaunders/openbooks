@@ -21,8 +21,7 @@ const routeState: BenfordRouteState = {
   detailRows: [],
   aggregateRow: { n: "0", total: "0" },
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL chunk into text for checking the generated predicates. */
 function sqlText(query: unknown): string {
@@ -33,18 +32,13 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks)
-        return sqlText(chunk);
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })
     .join("");
 }
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksBenfordSqlText = sqlText;
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksBenfordSql = sql;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksBenfordSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksBenfordSql = sql;
 
 const authzSource = `
   const state = globalThis[Symbol.for('openbooks.benford-route-test')]
@@ -125,7 +119,10 @@ test("reports-only Benford drill is refused without querying", async () => {
   assert.equal(response.status, 403);
   const body = (await response.json()) as { error: string; message: string };
   assert.equal(body.error, "forbidden");
-  assert.ok(body.message.includes("admin.audit.read"), `refusal must name the missing grant, got: ${body.message}`);
+  assert.ok(
+    body.message.includes("admin.audit.read"),
+    `refusal must name the missing grant, got: ${body.message}`,
+  );
   assert.equal(routeState.calls.length, 0);
 });
 
@@ -138,23 +135,27 @@ test("a Benford drill without org-wide expense read is refused without querying"
 
   assert.equal(response.status, 403);
   const body = (await response.json()) as { error: string; message: string };
-  assert.ok(body.message.includes("expenses.read"), `refusal must name the missing grant, got: ${body.message}`);
+  assert.ok(
+    body.message.includes("expenses.read"),
+    `refusal must name the missing grant, got: ${body.message}`,
+  );
   assert.equal(routeState.calls.length, 0);
 });
 
 test("subsidiary-restricted Benford drill is refused without querying", async () => {
   reset();
   routeState.permissions = ["reports.read", "admin.audit.read", "expenses.read"];
-  routeState.allowedSubsidiaryIds = new Set([
-    "00000000-0000-4000-8000-000000000001",
-  ]);
+  routeState.allowedSubsidiaryIds = new Set(["00000000-0000-4000-8000-000000000001"]);
 
   const response = await GET(request());
 
   assert.equal(response.status, 403);
   const body = (await response.json()) as { error: string; message: string };
   assert.equal(body.error, "forbidden");
-  assert.ok(body.message.includes("unrestricted"), `refusal must name the missing requirement, got: ${body.message}`);
+  assert.ok(
+    body.message.includes("unrestricted"),
+    `refusal must name the missing requirement, got: ${body.message}`,
+  );
   assert.equal(routeState.calls.length, 0);
 });
 
@@ -198,16 +199,23 @@ test("unrestricted Benford drill keeps the shared filter empty", async () => {
       },
     ],
   });
-  assert.deepEqual(routeState.filters, [
-    { column: "d.subsidiary_id", allowed: null },
-  ]);
+  assert.deepEqual(routeState.filters, [{ column: "d.subsidiary_id", allowed: null }]);
   assert.equal(routeState.calls.length, 2);
+  assert.ok(routeState.calls.every((text) => !text.includes("d.subsidiary_id")));
   assert.ok(
-    routeState.calls.every((text) => !text.includes("d.subsidiary_id")),
+    routeState.calls[0]?.includes("je.org_id = d.org_id"),
+    "journal entry lookup remains in the document organization",
   );
-  assert.ok(routeState.calls[0]?.includes("je.org_id = d.org_id"), "journal entry lookup remains in the document organization");
-  assert.ok(routeState.calls.every((text) => text.includes("power(10, coalesce(cu.minor_units, 2)) >= 100")), "drill uses the shared minor-unit amount floor");
-  assert.ok(routeState.calls.every((text) => text.includes("left(trunc(abs(d.total))::bigint::text, 1)")), "1D drill uses sentinelData's exact text prefix");
+  assert.ok(
+    routeState.calls.every((text) =>
+      text.includes("power(10, coalesce(cu.minor_units, 2)) >= 100"),
+    ),
+    "drill uses the shared minor-unit amount floor",
+  );
+  assert.ok(
+    routeState.calls.every((text) => text.includes("left(trunc(abs(d.total))::bigint::text, 1)")),
+    "1D drill uses sentinelData's exact text prefix",
+  );
 });
 
 test("Benford drill preserves unsafe-size monetary decimals", async () => {
@@ -239,9 +247,11 @@ test("Benford drill scopes detail and totals to one document currency", async ()
   reset();
   routeState.permissions = ["reports.read", "admin.audit.read", "expenses.read"];
   routeState.allowedSubsidiaryIds = null;
-  const response = await GET(new Request(
-    "http://openbooks.test/api/analytics/sentinel/benford?digit=4&from=2026-01-01&to=2026-12-31&currency=USD",
-  ));
+  const response = await GET(
+    new Request(
+      "http://openbooks.test/api/analytics/sentinel/benford?digit=4&from=2026-01-01&to=2026-12-31&currency=USD",
+    ),
+  );
   assert.equal(response.status, 200);
   assert.equal((await response.json()).currency, "USD");
   assert.equal(routeState.calls.length, 2);
@@ -249,19 +259,31 @@ test("Benford drill scopes detail and totals to one document currency", async ()
 });
 
 const invalidFilters: Record<string, string>[] = [
-  { digit: "4.5" }, { digit: "0" }, { digit: "10" },
-  { dim: "2d", digit: "9" }, { dim: "unknown" },
-  { from: "not-a-date" }, { to: "2026-02-30" },
+  { digit: "4.5" },
+  { digit: "0" },
+  { digit: "10" },
+  { dim: "2d", digit: "9" },
+  { dim: "unknown" },
+  { from: "not-a-date" },
+  { to: "2026-02-30" },
   { from: "2026-12-31", to: "2026-01-01" },
-  { currency: "usd" }, { currency: "USDD" },
+  { currency: "usd" },
+  { currency: "USDD" },
 ];
 for (const invalid of invalidFilters) {
   test(`Benford drill refuses malformed filters before querying: ${JSON.stringify(invalid)}`, async () => {
     reset();
     routeState.permissions = ["reports.read", "admin.audit.read", "expenses.read"];
     routeState.allowedSubsidiaryIds = null;
-    const query = new URLSearchParams({ digit: "4", from: "2026-01-01", to: "2026-12-31", ...invalid });
-    const response = await GET(new Request("http://openbooks.test/api/analytics/sentinel/benford?" + query));
+    const query = new URLSearchParams({
+      digit: "4",
+      from: "2026-01-01",
+      to: "2026-12-31",
+      ...invalid,
+    });
+    const response = await GET(
+      new Request("http://openbooks.test/api/analytics/sentinel/benford?" + query),
+    );
     assert.equal(response.status, 400);
     assert.equal(routeState.calls.length, 0);
   });

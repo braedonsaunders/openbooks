@@ -29,17 +29,19 @@ export async function loadFeatureState(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<Record<string, boolean>> {
-  const row = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
+  const row = (
+    await exec.execute<{ features: Record<string, boolean> | null }>(
+      sql`
     select settings->'features' as features from orgs where id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.features ?? {};
 }
 
 /** Refuse by name when Recruiting (or its HRM parent) is off. */
-export async function requireDepthFeature(
-  exec: SqlExecutor,
-  orgId: string,
-): Promise<void> {
+export async function requireDepthFeature(exec: SqlExecutor, orgId: string): Promise<void> {
   try {
     await requireRecruitingFeature(exec, orgId);
   } catch (error) {
@@ -65,13 +67,18 @@ export async function notifyUsers(
   args: { orgId: string; actorId: string | null; notices: readonly DepthNotice[] },
 ): Promise<void> {
   for (const notice of args.notices) {
-    const id = (await exec.execute<{ id: string }>(sql`
+    const id = (
+      await exec.execute<{ id: string }>(
+        sql`
       insert into notifications (org_id, user_id, kind, title, body, href, created_by, updated_by)
       values (${args.orgId}, ${notice.userId}, ${notice.kind}, ${notice.title},
               ${notice.body ?? null}, ${notice.href ?? null},
               ${args.actorId}, ${args.actorId})
       returning id
-    `, "objects"))[0]?.id;
+    `,
+        "objects",
+      )
+    )[0]?.id;
     if (!id) {
       throw new RecruitingError(
         "REFUSED",
@@ -88,9 +95,12 @@ export async function userIdsForParties(
   partyIds: readonly string[],
 ): Promise<string[]> {
   if (partyIds.length === 0) return [];
-  const rows = await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(
+    sql`
     select id from users where org_id = ${orgId} and party_id = any(${pgUuidArray(partyIds)}::uuid[])
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.id);
 }
 
@@ -134,7 +144,10 @@ export async function enqueueRecruitingEmailJob(
 export function pgUuidArray(ids: readonly string[]): string {
   for (const [index, id] of ids.entries()) {
     if (!isUuid(id)) {
-      throw new RecruitingError("INVALID_INPUT", `array element ${index + 1} is not a valid UUID — pass ids, not names`);
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        `array element ${index + 1} is not a valid UUID — pass ids, not names`,
+      );
     }
   }
   return `{${ids.join(",")}}`;

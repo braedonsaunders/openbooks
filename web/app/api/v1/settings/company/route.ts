@@ -44,9 +44,11 @@ async function handleV1PATCH(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/settings/company", async (_auth, context) => {
     assertApplicationPermission(context, "admin.setup.manage");
     const body = updateCompanySettingsBody.parse(await readV1JsonObject(request));
-    const raw = (body.changes && typeof body.changes === "object" && !Array.isArray(body.changes)
-      ? body.changes
-      : body) as Record<string, unknown>;
+    const raw = (
+      body.changes && typeof body.changes === "object" && !Array.isArray(body.changes)
+        ? body.changes
+        : body
+    ) as Record<string, unknown>;
     const changes = { ...raw };
     delete changes.idempotencyKey;
     if (Object.keys(changes).length === 0) {
@@ -57,14 +59,17 @@ async function handleV1PATCH(request: Request): Promise<NextResponse> {
       operation: "company_settings.update",
       idempotencyKey: requireV1IdempotencyKey(request),
       request: { changes },
-      execute: async () => settleWrite(await updateCompanySettings(
-        {
-          orgId: context.authz.user.orgId,
-          id: context.authz.user.id,
-          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
-        },
-        changes,
-      )),
+      execute: async () =>
+        settleWrite(
+          await updateCompanySettings(
+            {
+              orgId: context.authz.user.orgId,
+              id: context.authz.user.id,
+              allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+            },
+            changes,
+          ),
+        ),
     });
     return { status: 200, body: outcome.value, replayed: outcome.replayed };
   });

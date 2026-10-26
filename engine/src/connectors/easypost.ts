@@ -41,19 +41,36 @@ function auth(ctx: CarrierContext): Record<string, string> {
   };
 }
 
-async function post(ctx: CarrierContext, path: string, body: unknown, describe: string): Promise<unknown> {
-  return callProvider("EasyPost", { ...ctx, baseUrl: base(ctx) }, path, {
-    method: "POST",
-    headers: auth(ctx),
-    body: JSON.stringify(body),
-  }, describe);
+async function post(
+  ctx: CarrierContext,
+  path: string,
+  body: unknown,
+  describe: string,
+): Promise<unknown> {
+  return callProvider(
+    "EasyPost",
+    { ...ctx, baseUrl: base(ctx) },
+    path,
+    {
+      method: "POST",
+      headers: auth(ctx),
+      body: JSON.stringify(body),
+    },
+    describe,
+  );
 }
 
 async function get(ctx: CarrierContext, path: string, describe: string): Promise<unknown> {
-  return callProvider("EasyPost", { ...ctx, baseUrl: base(ctx) }, path, {
-    method: "GET",
-    headers: auth(ctx),
-  }, describe);
+  return callProvider(
+    "EasyPost",
+    { ...ctx, baseUrl: base(ctx) },
+    path,
+    {
+      method: "GET",
+      headers: auth(ctx),
+    },
+    describe,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -95,7 +112,11 @@ function parcelPayload(parcel: CarrierParcel): Record<string, unknown> {
   return payload;
 }
 
-function customsPayload(items: CarrierCustomsItem[], contentsType: string | null, explanation: string | null): Record<string, unknown> {
+function customsPayload(
+  items: CarrierCustomsItem[],
+  contentsType: string | null,
+  explanation: string | null,
+): Record<string, unknown> {
   return {
     contents_type: contentsType ?? "merchandise",
     contents_explanation: explanation ?? "goods",
@@ -122,7 +143,8 @@ function mapRate(raw: unknown): CarrierRate {
     service: optStr(raw, "service") ?? "unknown",
     amount,
     currency,
-    deliveryDate: deliveryDate && /^\d{4}-\d{2}-\d{2}/.test(deliveryDate) ? deliveryDate.slice(0, 10) : null,
+    deliveryDate:
+      deliveryDate && /^\d{4}-\d{2}-\d{2}/.test(deliveryDate) ? deliveryDate.slice(0, 10) : null,
     deliveryDays: typeof days === "number" && Number.isInteger(days) && days >= 0 ? days : null,
   };
 }
@@ -145,20 +167,31 @@ function mapTracker(raw: unknown): CarrierTrackerState {
 /** EasyPost tracker states onto the hub vocabulary. */
 export function mapTrackerStatus(status: string): string {
   switch (status) {
-    case "pre_transit": return "pre_transit";
-    case "in_transit": return "in_transit";
-    case "out_for_delivery": return "out_for_delivery";
-    case "delivered": return "delivered";
-    case "return_to_sender": return "returned";
+    case "pre_transit":
+      return "pre_transit";
+    case "in_transit":
+      return "in_transit";
+    case "out_for_delivery":
+      return "out_for_delivery";
+    case "delivered":
+      return "delivered";
+    case "return_to_sender":
+      return "returned";
     case "failure":
-    case "error": return "exception";
-    case "cancelled": return "cancelled";
-    default: return "unknown";
+    case "error":
+      return "exception";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return "unknown";
   }
 }
 
 /** Parse one created shipment: its id plus every quoted rate. */
-export function parseShipmentRates(raw: unknown): { providerShipmentId: string; rates: CarrierRate[] } {
+export function parseShipmentRates(raw: unknown): {
+  providerShipmentId: string;
+  rates: CarrierRate[];
+} {
   if (!isRecord(raw)) throw new CarrierError("EasyPost shipment is not an object");
   const rates = raw["rates"];
   if (!Array.isArray(rates)) throw new CarrierError("EasyPost shipment carries no rates array");
@@ -166,7 +199,11 @@ export function parseShipmentRates(raw: unknown): { providerShipmentId: string; 
 }
 
 /** Parse a bought shipment: label artefacts plus the charged rate. */
-export function parseBoughtLabel(raw: unknown, providerShipmentId: string, providerRateId: string): CarrierBoughtLabel {
+export function parseBoughtLabel(
+  raw: unknown,
+  providerShipmentId: string,
+  providerRateId: string,
+): CarrierBoughtLabel {
   if (!isRecord(raw)) throw new CarrierError("EasyPost bought shipment is not an object");
   const label = isRecord(raw["postage_label"]) ? raw["postage_label"] : null;
   const selected = isRecord(raw["selected_rate"]) ? raw["selected_rate"] : null;
@@ -187,13 +224,17 @@ export function parseBoughtLabel(raw: unknown, providerShipmentId: string, provi
 export function parseAddressVerification(raw: unknown): CarrierAddressSuggestion {
   if (!isRecord(raw)) throw new CarrierError("EasyPost address answer is not an object");
   const verifications = isRecord(raw["verifications"]) ? raw["verifications"] : null;
-  const delivery = verifications && isRecord(verifications["delivery"]) ? verifications["delivery"] : null;
+  const delivery =
+    verifications && isRecord(verifications["delivery"]) ? verifications["delivery"] : null;
   if (!delivery) throw new CarrierError("EasyPost address answer carries no delivery verification");
   const success = delivery["success"] === true;
   const errors = Array.isArray(delivery["errors"]) ? delivery["errors"] : [];
   return {
     valid: success,
-    messages: errors.filter(isRecord).map((error) => optStr(error, "message") ?? "address error").slice(0, 10),
+    messages: errors
+      .filter(isRecord)
+      .map((error) => optStr(error, "message") ?? "address error")
+      .slice(0, 10),
     suggestion: null,
   };
 }
@@ -211,19 +252,36 @@ export const easyPostAdapter: CarrierAdapter = {
         options: { label_format: "PDF" },
       };
       if (req.customsItems.length > 0) {
-        shipment["customs_info"] = customsPayload(req.customsItems, req.customsContentsType, req.customsContentsExplanation);
+        shipment["customs_info"] = customsPayload(
+          req.customsItems,
+          req.customsContentsType,
+          req.customsContentsExplanation,
+        );
       }
       const raw = await post(ctx, "/v2/shipments", { shipment }, "rate shopping");
       const parsed = parseShipmentRates(raw);
-      options.push({ providerShipmentId: parsed.providerShipmentId, parcelIndexes: [parcelIndex], rates: parsed.rates });
+      options.push({
+        providerShipmentId: parsed.providerShipmentId,
+        parcelIndexes: [parcelIndex],
+        rates: parsed.rates,
+      });
     }
     return options;
   },
 
-  async buyLabel(ctx: CarrierContext, providerShipmentId: string, providerRateId: string): Promise<CarrierBoughtLabel> {
-    const raw = await post(ctx, `/v2/shipments/${encodeURIComponent(providerShipmentId)}/buy`, {
-      rate: { id: providerRateId },
-    }, "label purchase");
+  async buyLabel(
+    ctx: CarrierContext,
+    providerShipmentId: string,
+    providerRateId: string,
+  ): Promise<CarrierBoughtLabel> {
+    const raw = await post(
+      ctx,
+      `/v2/shipments/${encodeURIComponent(providerShipmentId)}/buy`,
+      {
+        rate: { id: providerRateId },
+      },
+      "label purchase",
+    );
     return parseBoughtLabel(raw, providerShipmentId, providerRateId);
   },
 
@@ -231,29 +289,53 @@ export const easyPostAdapter: CarrierAdapter = {
     ctx: CarrierContext,
     ref: { providerShipmentId: string; providerLabelId: string | null },
   ): Promise<{ accepted: boolean; rawStatus: string }> {
-    const raw = await post(ctx, `/v2/shipments/${encodeURIComponent(ref.providerShipmentId)}/refund`, {}, "label refund");
+    const raw = await post(
+      ctx,
+      `/v2/shipments/${encodeURIComponent(ref.providerShipmentId)}/refund`,
+      {},
+      "label refund",
+    );
     const status = isRecord(raw) ? (optStr(raw, "status") ?? "unknown") : "unknown";
     return { accepted: status === "refunded" || status === "submitted", rawStatus: status };
   },
 
-  async validateAddress(ctx: CarrierContext, address: CarrierAddress): Promise<CarrierAddressSuggestion> {
-    const raw = await post(ctx, "/v2/addresses", {
-      address: addressPayload(address),
-      verify: ["delivery"],
-    }, "address validation");
+  async validateAddress(
+    ctx: CarrierContext,
+    address: CarrierAddress,
+  ): Promise<CarrierAddressSuggestion> {
+    const raw = await post(
+      ctx,
+      "/v2/addresses",
+      {
+        address: addressPayload(address),
+        verify: ["delivery"],
+      },
+      "address validation",
+    );
     return parseAddressVerification(raw);
   },
 
   async getTracker(ctx: CarrierContext, ref: CarrierTrackerRef): Promise<CarrierTrackerState> {
     if (ref.trackerId) {
-      return mapTracker(await get(ctx, `/v2/trackers/${encodeURIComponent(ref.trackerId)}`, "tracker refresh"));
+      return mapTracker(
+        await get(ctx, `/v2/trackers/${encodeURIComponent(ref.trackerId)}`, "tracker refresh"),
+      );
     }
     if (ref.carrier && ref.trackingNumber) {
-      return mapTracker(await post(ctx, "/v2/trackers", {
-        tracker: { tracking_code: ref.trackingNumber, carrier: ref.carrier },
-      }, "tracker refresh"));
+      return mapTracker(
+        await post(
+          ctx,
+          "/v2/trackers",
+          {
+            tracker: { tracking_code: ref.trackingNumber, carrier: ref.carrier },
+          },
+          "tracker refresh",
+        ),
+      );
     }
-    throw new CarrierError("EasyPost tracker refresh needs a tracker id or a carrier plus tracking number");
+    throw new CarrierError(
+      "EasyPost tracker refresh needs a tracker id or a carrier plus tracking number",
+    );
   },
 
   parseInboundEvent(raw: unknown): CarrierInboundEvent | null {

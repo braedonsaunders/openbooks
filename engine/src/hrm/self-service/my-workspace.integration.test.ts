@@ -4,18 +4,19 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { listInbox } from "../../inbox/index.ts";
 import { db } from "../../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "../../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
 import {
   DB,
   enableHrm,
   linkPerson,
   mkEmployment,
   mkReporting,
-  mkReviewTemplate, seededContributionTerms, seedPlan, seedWindow,
-  setupHarness, withHarness
+  mkReviewTemplate,
+  seededContributionTerms,
+  seedPlan,
+  seedWindow,
+  setupHarness,
+  withHarness,
 } from "../../testing/hrm-harness.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import { BenefitsError } from "../benefits/errors.ts";
@@ -39,22 +40,74 @@ import {
 
 const MY_WORKSPACE_SPEC = {
   users: [
-    { key: "hrId", name: "HR-10 HR", handle: "hr10_hr", permissions: ["hrm.performance.read", "hrm.performance.manage", "hrm.benefits.manage"], link: "HR-10 HR Person" },
-    { key: "workerId", name: "HR-10 Worker", handle: "hr10_worker", permissions: ["hrm.self.read", "hrm.self.request"], link: "HR-10 Worker Person", partyKey: "workerParty" },
-    { key: "managerId", name: "HR-10 Manager", handle: "hr10_manager", permissions: ["hrm.self.read", "hrm.self.request"], link: "HR-10 Manager Person", partyKey: "managerParty" },
-    { key: "outsiderId", name: "HR-10 Outsider", handle: "hr10_outsider", permissions: ["hrm.self.read", "hrm.self.request"] },
-    { key: "noLinkId", name: "HR-10 NoLink", handle: "hr10_nolink", permissions: ["hrm.self.read", "hrm.self.request"] },
+    {
+      key: "hrId",
+      name: "HR-10 HR",
+      handle: "hr10_hr",
+      permissions: ["hrm.performance.read", "hrm.performance.manage", "hrm.benefits.manage"],
+      link: "HR-10 HR Person",
+    },
+    {
+      key: "workerId",
+      name: "HR-10 Worker",
+      handle: "hr10_worker",
+      permissions: ["hrm.self.read", "hrm.self.request"],
+      link: "HR-10 Worker Person",
+      partyKey: "workerParty",
+    },
+    {
+      key: "managerId",
+      name: "HR-10 Manager",
+      handle: "hr10_manager",
+      permissions: ["hrm.self.read", "hrm.self.request"],
+      link: "HR-10 Manager Person",
+      partyKey: "managerParty",
+    },
+    {
+      key: "outsiderId",
+      name: "HR-10 Outsider",
+      handle: "hr10_outsider",
+      permissions: ["hrm.self.read", "hrm.self.request"],
+    },
+    {
+      key: "noLinkId",
+      name: "HR-10 NoLink",
+      handle: "hr10_nolink",
+      permissions: ["hrm.self.read", "hrm.self.request"],
+    },
   ],
 } as const;
 
 async function setupWorkspaceHarness() {
   return setupHarness(MY_WORKSPACE_SPEC, async (base) => {
-    const workerEmployment = await mkEmployment(base.org.orgId, base.workerParty, base.org.subsidiaryId, {});
-    const managerEmployment = await mkEmployment(base.org.orgId, base.managerParty, base.org.subsidiaryId, {});
-    const outsiderParty = await linkPerson(base.org.orgId, base.outsiderId, "HR-10 Outsider Person");
-    const outsiderEmployment = await mkEmployment(base.org.orgId, outsiderParty, base.org.subsidiaryId, {});
+    const workerEmployment = await mkEmployment(
+      base.org.orgId,
+      base.workerParty,
+      base.org.subsidiaryId,
+      {},
+    );
+    const managerEmployment = await mkEmployment(
+      base.org.orgId,
+      base.managerParty,
+      base.org.subsidiaryId,
+      {},
+    );
+    const outsiderParty = await linkPerson(
+      base.org.orgId,
+      base.outsiderId,
+      "HR-10 Outsider Person",
+    );
+    const outsiderEmployment = await mkEmployment(
+      base.org.orgId,
+      outsiderParty,
+      base.org.subsidiaryId,
+      {},
+    );
     await mkReporting(base.org.orgId, workerEmployment, managerEmployment);
-    const templateId = await mkReviewTemplate(base.org.orgId, base.hrId, { name: "Annual review", scaleLabels: null });
+    const templateId = await mkReviewTemplate(base.org.orgId, base.hrId, {
+      name: "Annual review",
+      scaleLabels: null,
+    });
     const cycle = await createCycle({
       orgId: base.org.orgId,
       actorId: base.hrId,
@@ -68,313 +121,616 @@ async function setupWorkspaceHarness() {
   });
 }
 
-async function reviewRows(orgId: string, cycleId: string): Promise<Array<{ id: string; kind: string; status: string; reviewer: string; subject: string }>> {
-  return await db.execute<{ id: string; kind: string; status: string; reviewer: string; subject: string }>(sql`
+async function reviewRows(
+  orgId: string,
+  cycleId: string,
+): Promise<Array<{ id: string; kind: string; status: string; reviewer: string; subject: string }>> {
+  return await db.execute<{
+    id: string;
+    kind: string;
+    status: string;
+    reviewer: string;
+    subject: string;
+  }>(
+    sql`
     select id, kind, status,
            reviewer_party_id as reviewer, subject_party_id as subject
-      from hrm_reviews where org_id = ${orgId} and cycle_id = ${cycleId}`, "objects");
+      from hrm_reviews where org_id = ${orgId} and cycle_id = ${cycleId}`,
+    "objects",
+  );
 }
 
 async function answerIds(reviewId: string): Promise<string[]> {
-  return (await db.execute<{ id: string }>(sql`
-    select id from hrm_review_answers where review_id = ${reviewId} order by position`, "objects")).map((r) => r.id);
+  return (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from hrm_review_answers where review_id = ${reviewId} order by position`,
+      "objects",
+    )
+  ).map((r) => r.id);
 }
 
-test("an unlinked login gets the named NO_LINK refusal on every entry, never an empty list", { skip: !DB }, async () => {
-  await withHarness(() => setupWorkspaceHarness(), async (h) => {
-    for (const fn of [
-      () => getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.noLinkId }),
-      () => getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.noLinkId }),
-      () => loadManagerOwedReviews({ orgId: h.org.orgId, actorId: h.noLinkId }),
-      () => submitMySelfAssessment({ orgId: h.org.orgId, actorId: h.noLinkId, reviewId: randomUUID(), answers: [] }),
-      () => acknowledgeMyReview({ orgId: h.org.orgId, actorId: h.noLinkId, reviewId: randomUUID() }),
-      () => updateMyGoalProgress({ orgId: h.org.orgId, actorId: h.noLinkId, goalId: randomUUID(), progressPercent: 10 }),
-      () => electMyBenefit({ orgId: h.org.orgId, actorId: h.noLinkId, employmentId: h.workerEmployment, planId: randomUUID(), effectiveFrom: "2026-03-01" }),
-      () => changeMyBenefit({ orgId: h.org.orgId, actorId: h.noLinkId, enrollmentId: randomUUID(), changeDate: "2026-03-01", reason: "x" }),
-    ]) {
-      await assert.rejects(fn, (e: unknown) => {
-        assert.ok(e instanceof SelfServiceError, `expected SelfServiceError, got ${String(e)}`);
-        assert.equal(e.code, "NO_LINK");
-        assert.match(e.message, /Admin → Users → Link person/);
-        return true;
-      });
-    }
-  });
-});
-
-test("the workspace shows the owed self-assessment but never an unshared manager review", { skip: !DB }, async () => {
-  await withHarness(() => setupWorkspaceHarness(), async (h) => {
-    const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
-    assert.equal(workspace.cycles.length, 1);
-    const group = workspace.cycles[0]!;
-    assert.equal(group.name, "FY26 annual");
-    assert.ok(group.mySelf, "the instantiated self-assessment is owed");
-    assert.equal(group.mySelf!.kind, "self");
-    assert.equal(group.mySelf!.status, "pending");
-    assert.equal(group.sharedWithMe.length, 0, "the pending manager review is invisible to its subject");
-    // A second person's workspace names only their own slice: the
-    // outsider sees the same cycle with their own self-assessment and
-    // nothing of the worker's reviews.
-    const outsider = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.outsiderId });
-    assert.equal(outsider.cycles.length, 1);
-    assert.ok(outsider.cycles[0]!.mySelf, "the outsider owes their own self-assessment");
-    assert.equal(outsider.cycles[0]!.sharedWithMe.length, 0);
-    assert.ok(
-      outsider.cycles[0]!.mySelf!.id !== group.mySelf!.id,
-      "slices never cross subjects",
-    );
-  });
-});
-
-test("a shared manager review reaches the subject with calibration stripped", { skip: !DB }, async () => {
-  await withHarness(() => setupWorkspaceHarness(), async (h) => {
-    const rows = await reviewRows(h.org.orgId, h.cycleId);
-    const managerReview = rows.find((r) => r.kind === "manager" && r.subject === h.workerParty)!;
-    const managerAnswers = await answerIds(managerReview.id);
-    const { submitReview } = await import("../performance/reviews.ts");
-    await submitReview({
-      orgId: h.org.orgId, actorId: h.managerId, reviewId: managerReview.id,
-      answers: managerAnswers.map((answerId) => ({ answerId, rating: "4", text: "Solid delivery" })),
-      overallRating: "4",
-    });
-    await calibrateReview({ orgId: h.org.orgId, actorId: h.hrId, reviewId: managerReview.id, calibratedRating: "5", reason: "calibration round" });
-    await shareReview({ orgId: h.org.orgId, actorId: h.managerId, reviewId: managerReview.id });
-    const stored = (await db.execute<{ status: string; calibrated: string | null }>(sql`
-      select status, calibrated_rating::text as calibrated from hrm_reviews where id = ${managerReview.id}`, "objects"))[0]!;
-    assert.equal(stored.status, "shared");
-    assert.equal(stored.calibrated, "5.0000");
-    const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
-    const shared = workspace.cycles[0]!.sharedWithMe;
-    assert.equal(shared.length, 1);
-    assert.equal(shared[0]!.id, managerReview.id);
-    assert.ok(!("calibratedRating" in shared[0]!), "calibration never reaches the subject");
-    assert.ok(!("calibrationReason" in shared[0]!), "calibration reasons never reach the subject");
-    assert.ok(!("managerGapCount" in workspace.cycles[0]!), "the calibration gap count never reaches the subject");
-  });
-});
-
-test("submit and acknowledge ride the existing services with storage proof", { skip: !DB }, async () => {
-  await withHarness(() => setupWorkspaceHarness(), async (h) => {
-    const rows = await reviewRows(h.org.orgId, h.cycleId);
-    const selfReview = rows.find((r) => r.kind === "self" && r.subject === h.workerParty)!;
-    const ids = await answerIds(selfReview.id);
-    assert.ok(ids.length > 0, "openCycle snapshots the template answers");
-    const submitted = await submitMySelfAssessment({
-      orgId: h.org.orgId, actorId: h.workerId, reviewId: selfReview.id,
-      answers: ids.map((answerId) => ({ answerId, rating: "4", text: "Strong quarter" })),
-      overallRating: "4",
-    });
-    assert.equal(submitted.status, "submitted");
-    const storedSelf = (await db.execute<{ status: string; overall: string | null }>(sql`
-      select status, overall_rating::text as overall from hrm_reviews where id = ${selfReview.id}`, "objects"))[0]!;
-    assert.equal(storedSelf.status, "submitted");
-    assert.equal(storedSelf.overall, "4.0000");
-    // Another person's review never submits: the service's reviewer
-    // identity refuses, and the refusal names the remedy.
-    const outsiderSelf = rows.find((r) => r.kind === "self" && r.subject !== h.workerParty && r.subject !== h.managerParty);
-    if (outsiderSelf) {
-      await assert.rejects(
-        submitMySelfAssessment({ orgId: h.org.orgId, actorId: h.workerId, reviewId: outsiderSelf.id, answers: [] }),
-        (e: unknown) => {
-          assert.ok(e instanceof HrmPerformanceError);
-          assert.equal(e.code, "FORBIDDEN");
-          assert.match(e.message, /only its reviewer submits it/);
-          return true;
-        },
-      );
-    }
-    const managerReview = rows.find((r) => r.kind === "manager" && r.subject === h.workerParty)!;
-    const managerAnswers = await answerIds(managerReview.id);
-    const { submitReview: submitAsReviewer } = await import("../performance/reviews.ts");
-    await submitAsReviewer({
-      orgId: h.org.orgId, actorId: h.managerId, reviewId: managerReview.id,
-      answers: managerAnswers.map((answerId) => ({ answerId, rating: "4", text: "Solid delivery" })),
-      overallRating: "4",
-    });
-    await shareReview({ orgId: h.org.orgId, actorId: h.managerId, reviewId: managerReview.id });
-    const acknowledged = await acknowledgeMyReview({ orgId: h.org.orgId, actorId: h.workerId, reviewId: managerReview.id });
-    assert.equal(acknowledged.status, "acknowledged");
-    const storedAck = (await db.execute<{ status: string }>(sql`
-      select status from hrm_reviews where id = ${managerReview.id}`, "objects"))[0]!;
-    assert.equal(storedAck.status, "acknowledged");
-    // Acknowledging a review shared with someone else refuses by identity.
-    await assert.rejects(
-      acknowledgeMyReview({ orgId: h.org.orgId, actorId: h.outsiderId, reviewId: managerReview.id }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmPerformanceError);
-        assert.match(e.message, /only the subject acknowledges it/);
-        return true;
+test(
+  "an unlinked login gets the named NO_LINK refusal on every entry, never an empty list",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupWorkspaceHarness(),
+      async (h) => {
+        for (const fn of [
+          () => getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.noLinkId }),
+          () => getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.noLinkId }),
+          () => loadManagerOwedReviews({ orgId: h.org.orgId, actorId: h.noLinkId }),
+          () =>
+            submitMySelfAssessment({
+              orgId: h.org.orgId,
+              actorId: h.noLinkId,
+              reviewId: randomUUID(),
+              answers: [],
+            }),
+          () =>
+            acknowledgeMyReview({
+              orgId: h.org.orgId,
+              actorId: h.noLinkId,
+              reviewId: randomUUID(),
+            }),
+          () =>
+            updateMyGoalProgress({
+              orgId: h.org.orgId,
+              actorId: h.noLinkId,
+              goalId: randomUUID(),
+              progressPercent: 10,
+            }),
+          () =>
+            electMyBenefit({
+              orgId: h.org.orgId,
+              actorId: h.noLinkId,
+              employmentId: h.workerEmployment,
+              planId: randomUUID(),
+              effectiveFrom: "2026-03-01",
+            }),
+          () =>
+            changeMyBenefit({
+              orgId: h.org.orgId,
+              actorId: h.noLinkId,
+              enrollmentId: randomUUID(),
+              changeDate: "2026-03-01",
+              reason: "x",
+            }),
+        ]) {
+          await assert.rejects(fn, (e: unknown) => {
+            assert.ok(e instanceof SelfServiceError, `expected SelfServiceError, got ${String(e)}`);
+            assert.equal(e.code, "NO_LINK");
+            assert.match(e.message, /Admin → Users → Link person/);
+            return true;
+          });
+        }
       },
     );
-  });
-});
+  },
+);
 
-test("goal progress rides the existing service; another person's goal refuses", { skip: !DB }, async () => {
-  await withHarness(() => setupWorkspaceHarness(), async (h) => {
-    const goal = await createGoal({ orgId: h.org.orgId, actorId: h.workerId, employmentId: h.workerEmployment, title: "Ship the migration" });
-    const moved = await updateMyGoalProgress({ orgId: h.org.orgId, actorId: h.workerId, goalId: goal.id, progressPercent: 50, note: "halfway" });
-    assert.equal(moved.progressPercent, 50);
-    const stored = (await db.execute<{ progress: number; notes: string }>(sql`
+test(
+  "the workspace shows the owed self-assessment but never an unshared manager review",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupWorkspaceHarness(),
+      async (h) => {
+        const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
+        assert.equal(workspace.cycles.length, 1);
+        const group = workspace.cycles[0]!;
+        assert.equal(group.name, "FY26 annual");
+        assert.ok(group.mySelf, "the instantiated self-assessment is owed");
+        assert.equal(group.mySelf!.kind, "self");
+        assert.equal(group.mySelf!.status, "pending");
+        assert.equal(
+          group.sharedWithMe.length,
+          0,
+          "the pending manager review is invisible to its subject",
+        );
+        // A second person's workspace names only their own slice: the
+        // outsider sees the same cycle with their own self-assessment and
+        // nothing of the worker's reviews.
+        const outsider = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.outsiderId });
+        assert.equal(outsider.cycles.length, 1);
+        assert.ok(outsider.cycles[0]!.mySelf, "the outsider owes their own self-assessment");
+        assert.equal(outsider.cycles[0]!.sharedWithMe.length, 0);
+        assert.ok(
+          outsider.cycles[0]!.mySelf!.id !== group.mySelf!.id,
+          "slices never cross subjects",
+        );
+      },
+    );
+  },
+);
+
+test(
+  "a shared manager review reaches the subject with calibration stripped",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupWorkspaceHarness(),
+      async (h) => {
+        const rows = await reviewRows(h.org.orgId, h.cycleId);
+        const managerReview = rows.find(
+          (r) => r.kind === "manager" && r.subject === h.workerParty,
+        )!;
+        const managerAnswers = await answerIds(managerReview.id);
+        const { submitReview } = await import("../performance/reviews.ts");
+        await submitReview({
+          orgId: h.org.orgId,
+          actorId: h.managerId,
+          reviewId: managerReview.id,
+          answers: managerAnswers.map((answerId) => ({
+            answerId,
+            rating: "4",
+            text: "Solid delivery",
+          })),
+          overallRating: "4",
+        });
+        await calibrateReview({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          reviewId: managerReview.id,
+          calibratedRating: "5",
+          reason: "calibration round",
+        });
+        await shareReview({ orgId: h.org.orgId, actorId: h.managerId, reviewId: managerReview.id });
+        const stored = (
+          await db.execute<{ status: string; calibrated: string | null }>(
+            sql`
+      select status, calibrated_rating::text as calibrated from hrm_reviews where id = ${managerReview.id}`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(stored.status, "shared");
+        assert.equal(stored.calibrated, "5.0000");
+        const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
+        const shared = workspace.cycles[0]!.sharedWithMe;
+        assert.equal(shared.length, 1);
+        assert.equal(shared[0]!.id, managerReview.id);
+        assert.ok(!("calibratedRating" in shared[0]!), "calibration never reaches the subject");
+        assert.ok(
+          !("calibrationReason" in shared[0]!),
+          "calibration reasons never reach the subject",
+        );
+        assert.ok(
+          !("managerGapCount" in workspace.cycles[0]!),
+          "the calibration gap count never reaches the subject",
+        );
+      },
+    );
+  },
+);
+
+test(
+  "submit and acknowledge ride the existing services with storage proof",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupWorkspaceHarness(),
+      async (h) => {
+        const rows = await reviewRows(h.org.orgId, h.cycleId);
+        const selfReview = rows.find((r) => r.kind === "self" && r.subject === h.workerParty)!;
+        const ids = await answerIds(selfReview.id);
+        assert.ok(ids.length > 0, "openCycle snapshots the template answers");
+        const submitted = await submitMySelfAssessment({
+          orgId: h.org.orgId,
+          actorId: h.workerId,
+          reviewId: selfReview.id,
+          answers: ids.map((answerId) => ({ answerId, rating: "4", text: "Strong quarter" })),
+          overallRating: "4",
+        });
+        assert.equal(submitted.status, "submitted");
+        const storedSelf = (
+          await db.execute<{ status: string; overall: string | null }>(
+            sql`
+      select status, overall_rating::text as overall from hrm_reviews where id = ${selfReview.id}`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(storedSelf.status, "submitted");
+        assert.equal(storedSelf.overall, "4.0000");
+        // Another person's review never submits: the service's reviewer
+        // identity refuses, and the refusal names the remedy.
+        const outsiderSelf = rows.find(
+          (r) => r.kind === "self" && r.subject !== h.workerParty && r.subject !== h.managerParty,
+        );
+        if (outsiderSelf) {
+          await assert.rejects(
+            submitMySelfAssessment({
+              orgId: h.org.orgId,
+              actorId: h.workerId,
+              reviewId: outsiderSelf.id,
+              answers: [],
+            }),
+            (e: unknown) => {
+              assert.ok(e instanceof HrmPerformanceError);
+              assert.equal(e.code, "FORBIDDEN");
+              assert.match(e.message, /only its reviewer submits it/);
+              return true;
+            },
+          );
+        }
+        const managerReview = rows.find(
+          (r) => r.kind === "manager" && r.subject === h.workerParty,
+        )!;
+        const managerAnswers = await answerIds(managerReview.id);
+        const { submitReview: submitAsReviewer } = await import("../performance/reviews.ts");
+        await submitAsReviewer({
+          orgId: h.org.orgId,
+          actorId: h.managerId,
+          reviewId: managerReview.id,
+          answers: managerAnswers.map((answerId) => ({
+            answerId,
+            rating: "4",
+            text: "Solid delivery",
+          })),
+          overallRating: "4",
+        });
+        await shareReview({ orgId: h.org.orgId, actorId: h.managerId, reviewId: managerReview.id });
+        const acknowledged = await acknowledgeMyReview({
+          orgId: h.org.orgId,
+          actorId: h.workerId,
+          reviewId: managerReview.id,
+        });
+        assert.equal(acknowledged.status, "acknowledged");
+        const storedAck = (
+          await db.execute<{ status: string }>(
+            sql`
+      select status from hrm_reviews where id = ${managerReview.id}`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(storedAck.status, "acknowledged");
+        // Acknowledging a review shared with someone else refuses by identity.
+        await assert.rejects(
+          acknowledgeMyReview({
+            orgId: h.org.orgId,
+            actorId: h.outsiderId,
+            reviewId: managerReview.id,
+          }),
+          (e: unknown) => {
+            assert.ok(e instanceof HrmPerformanceError);
+            assert.match(e.message, /only the subject acknowledges it/);
+            return true;
+          },
+        );
+      },
+    );
+  },
+);
+
+test(
+  "goal progress rides the existing service; another person's goal refuses",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupWorkspaceHarness(),
+      async (h) => {
+        const goal = await createGoal({
+          orgId: h.org.orgId,
+          actorId: h.workerId,
+          employmentId: h.workerEmployment,
+          title: "Ship the migration",
+        });
+        const moved = await updateMyGoalProgress({
+          orgId: h.org.orgId,
+          actorId: h.workerId,
+          goalId: goal.id,
+          progressPercent: 50,
+          note: "halfway",
+        });
+        assert.equal(moved.progressPercent, 50);
+        const stored = (
+          await db.execute<{ progress: number; notes: string }>(
+            sql`
       select progress_percent as progress,
              (select count(*)::text from hrm_goal_updates where goal_id = ${goal.id}) as notes
-        from hrm_goals where id = ${goal.id}`, "objects"))[0]!;
-    assert.equal(stored.progress, 50);
-    assert.equal(stored.notes, "2", "creation plus the progress write both leave evidence");
-    const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
-    assert.ok(workspace.goals.some((g) => g.id === goal.id && g.progressPercent === 50));
-    const outsiderGoal = await createGoal({ orgId: h.org.orgId, actorId: h.outsiderId, employmentId: h.outsiderEmployment, title: "Theirs" });
-    await assert.rejects(
-      updateMyGoalProgress({ orgId: h.org.orgId, actorId: h.workerId, goalId: outsiderGoal.id, progressPercent: 10 }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmAuthorizationError, `expected HrmAuthorizationError, got ${String(e)}`);
-        return true;
+        from hrm_goals where id = ${goal.id}`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(stored.progress, 50);
+        assert.equal(stored.notes, "2", "creation plus the progress write both leave evidence");
+        const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
+        assert.ok(workspace.goals.some((g) => g.id === goal.id && g.progressPercent === 50));
+        const outsiderGoal = await createGoal({
+          orgId: h.org.orgId,
+          actorId: h.outsiderId,
+          employmentId: h.outsiderEmployment,
+          title: "Theirs",
+        });
+        await assert.rejects(
+          updateMyGoalProgress({
+            orgId: h.org.orgId,
+            actorId: h.workerId,
+            goalId: outsiderGoal.id,
+            progressPercent: 10,
+          }),
+          (e: unknown) => {
+            assert.ok(
+              e instanceof HrmAuthorizationError,
+              `expected HrmAuthorizationError, got ${String(e)}`,
+            );
+            return true;
+          },
+        );
+        const untouched = (
+          await db.execute<{ progress: number }>(
+            sql`
+      select progress_percent as progress from hrm_goals where id = ${outsiderGoal.id}`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(untouched.progress, 0, "the refused write moved nothing");
       },
     );
-    const untouched = (await db.execute<{ progress: number }>(sql`
-      select progress_percent as progress from hrm_goals where id = ${outsiderGoal.id}`, "objects"))[0]!;
-    assert.equal(untouched.progress, 0, "the refused write moved nothing");
-  });
-});
+  },
+);
 
-test("the manager owes pending reviews for direct reports in the open cycle", { skip: !DB }, async () => {
-  await withHarness(() => setupWorkspaceHarness(), async (h) => {
-    const owed = await loadManagerOwedReviews({ orgId: h.org.orgId, actorId: h.managerId });
-    assert.equal(owed.length, 1);
-    assert.equal(owed[0]!.employmentId, h.workerEmployment);
-    assert.equal(owed[0]!.kind, "manager");
-    assert.equal(owed[0]!.status, "pending");
-    assert.equal(owed[0]!.cycleName, "FY26 annual");
-    assert.match(owed[0]!.drawerHref, /\/hrm\/performance\?cycle=.*&review=/);
-    // A report-less caller owes nothing: empty is a fact, never a refusal.
-    assert.deepEqual(await loadManagerOwedReviews({ orgId: h.org.orgId, actorId: h.workerId }), []);
-  });
-});
+test(
+  "the manager owes pending reviews for direct reports in the open cycle",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupWorkspaceHarness(),
+      async (h) => {
+        const owed = await loadManagerOwedReviews({ orgId: h.org.orgId, actorId: h.managerId });
+        assert.equal(owed.length, 1);
+        assert.equal(owed[0]!.employmentId, h.workerEmployment);
+        assert.equal(owed[0]!.kind, "manager");
+        assert.equal(owed[0]!.status, "pending");
+        assert.equal(owed[0]!.cycleName, "FY26 annual");
+        assert.match(owed[0]!.drawerHref, /\/hrm\/performance\?cycle=.*&review=/);
+        // A report-less caller owes nothing: empty is a fact, never a refusal.
+        assert.deepEqual(
+          await loadManagerOwedReviews({ orgId: h.org.orgId, actorId: h.workerId }),
+          [],
+        );
+      },
+    );
+  },
+);
 
-test("self-service elects inside an open window on the self keys alone, with fixed native contribution terms", { skip: !DB }, async () => {
-  await withHarness(() => setupWorkspaceHarness(), async (h) => {
-    const planId = (await seedPlan(h.org.orgId, { name: "Health" })).planId;
-    const windowId = await seedWindow(h.org.orgId, { status: "open", opensOn: "2020-01-01", closesOn: "2030-12-31" });
-    const outOfScopeWindowId = await seedWindow(h.org.orgId, { status: "open", appliesTo: { employer_subsidiary_id: randomUUID() }, opensOn: "2020-01-01", closesOn: "2030-12-31" });
-    await db.execute(sql`
+test(
+  "self-service elects inside an open window on the self keys alone, with fixed native contribution terms",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupWorkspaceHarness(),
+      async (h) => {
+        const planId = (await seedPlan(h.org.orgId, { name: "Health" })).planId;
+        const windowId = await seedWindow(h.org.orgId, {
+          status: "open",
+          opensOn: "2020-01-01",
+          closesOn: "2030-12-31",
+        });
+        const outOfScopeWindowId = await seedWindow(h.org.orgId, {
+          status: "open",
+          appliesTo: { employer_subsidiary_id: randomUUID() },
+          opensOn: "2020-01-01",
+          closesOn: "2030-12-31",
+        });
+        await db.execute(sql`
       insert into hrm_benefit_dependents (org_id, employment_id, relationship, display_name, is_active)
       values (${h.org.orgId}, ${h.workerEmployment}, 'spouse', 'Alex Worker', true)`);
-    const elected = await electMyBenefit({
-      orgId: h.org.orgId, actorId: h.workerId, employmentId: h.workerEmployment,
-      planId, windowId, contributionTerms: await seededContributionTerms(h.org.orgId, planId), effectiveFrom: "2026-03-01",
-    });
-    assert.equal(elected.status, "active");
-    const stored = (await db.execute<{ employee: string; employer: string; currency: string }>(sql`
+        const elected = await electMyBenefit({
+          orgId: h.org.orgId,
+          actorId: h.workerId,
+          employmentId: h.workerEmployment,
+          planId,
+          windowId,
+          contributionTerms: await seededContributionTerms(h.org.orgId, planId),
+          effectiveFrom: "2026-03-01",
+        });
+        assert.equal(elected.status, "active");
+        const stored = (
+          await db.execute<{ employee: string; employer: string; currency: string }>(
+            sql`
       select employee_amount_per_period::text as employee,
              employer_amount_per_period::text as employer, currency
-        from hrm_benefit_enrollments where id = ${elected.id}`, "objects"))[0]!;
-    assert.deepEqual([stored.employee, stored.employer, stored.currency], [null, null, "USD"]);
-    const workspace = await getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
-    assert.ok(!(await listInbox({ orgId: h.org.orgId, actorId: h.workerId, asOf: new Date().toISOString() }, { kinds: ["hrm_benefit_enrollment_window"] })).some((item) => item.source.id === outOfScopeWindowId));
-    assert.equal(workspace.elections.length, 1);
-    assert.deepEqual(workspace.elections[0]!.contributionTerms.map(t => t.electedRate).sort(), ["250.0000000000", "500.0000000000"]);
-    assert.equal(workspace.openWindows.length, 1);
-    assert.equal(workspace.dependents.length, 1);
-    assert.equal(workspace.dependents[0]!.displayName, "Alex Worker");
-    assert.ok(workspace.plans.some((p) => p.id === planId));
-    // Another employment's elections never list: the outsider sees none.
-    const outsider = await getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.outsiderId });
-    assert.equal(outsider.elections.length, 0);
-    assert.equal(outsider.dependents.length, 0);
-  });
-});
+        from hrm_benefit_enrollments where id = ${elected.id}`,
+            "objects",
+          )
+        )[0]!;
+        assert.deepEqual([stored.employee, stored.employer, stored.currency], [null, null, "USD"]);
+        const workspace = await getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
+        assert.ok(
+          !(
+            await listInbox(
+              { orgId: h.org.orgId, actorId: h.workerId, asOf: new Date().toISOString() },
+              { kinds: ["hrm_benefit_enrollment_window"] },
+            )
+          ).some((item) => item.source.id === outOfScopeWindowId),
+        );
+        assert.equal(workspace.elections.length, 1);
+        assert.deepEqual(
+          workspace.elections[0]!.contributionTerms.map((t) => t.electedRate).sort(),
+          ["250.0000000000", "500.0000000000"],
+        );
+        assert.equal(workspace.openWindows.length, 1);
+        assert.equal(workspace.dependents.length, 1);
+        assert.equal(workspace.dependents[0]!.displayName, "Alex Worker");
+        assert.ok(workspace.plans.some((p) => p.id === planId));
+        // Another employment's elections never list: the outsider sees none.
+        const outsider = await getMyBenefitsWorkspace({
+          orgId: h.org.orgId,
+          actorId: h.outsiderId,
+        });
+        assert.equal(outsider.elections.length, 0);
+        assert.equal(outsider.dependents.length, 0);
+      },
+    );
+  },
+);
 
-test("a closed window refuses elect and change by name; another employment id refuses", { skip: !DB }, async () => {
-  await withHarness(() => setupWorkspaceHarness(), async (h) => {
-    const planId = (await seedPlan(h.org.orgId, { name: "Health" })).planId;
-    const closedId = await seedWindow(h.org.orgId, { status: "closed", opensOn: "2020-01-01", closesOn: "2030-12-31" });
-    // Electing against a closed window: the entry gate refuses by name.
-    await assert.rejects(
-      electMyBenefit({
-        orgId: h.org.orgId, actorId: h.workerId, employmentId: h.workerEmployment,
-        planId, windowId: closedId, effectiveFrom: "2026-03-01",
-      }),
-      (e: unknown) => {
-        assert.ok(e instanceof BenefitsError, `expected BenefitsError, got ${String(e)}`);
-        assert.equal(e.code, "REFUSED");
-        assert.match(e.message, /enrollment window is closed/);
-        return true;
-      },
-    );
-    // Electing with no window and no life event refuses the same way.
-    await assert.rejects(
-      electMyBenefit({
-        orgId: h.org.orgId, actorId: h.workerId, employmentId: h.workerEmployment,
-        planId, effectiveFrom: "2026-03-01",
-      }),
-      (e: unknown) => {
-        assert.ok(e instanceof BenefitsError);
-        assert.match(e.message, /no open window and no life event/);
-        return true;
-      },
-    );
-    // The hostile employment id: another person's employment never elects.
-    const openId = await seedWindow(h.org.orgId, { status: "open", opensOn: "2020-01-01", closesOn: "2030-12-31" });
-    await assert.rejects(
-      electMyBenefit({
-        orgId: h.org.orgId, actorId: h.workerId, employmentId: h.outsiderEmployment,
-        planId, contributionTerms: await seededContributionTerms(h.org.orgId, planId), windowId: openId, effectiveFrom: "2026-03-01",
-      }),
-      (e: unknown) => {
-        assert.ok(e instanceof HrmAuthorizationError, `expected HrmAuthorizationError, got ${String(e)}`);
-        assert.match(e.message, /only against your own employment/);
-        return true;
-      },
-    );
-    const none = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from hrm_benefit_enrollments where org_id = ${h.org.orgId}`, "objects"))[0]!.n;
-    assert.equal(none, "0", "every refused elect wrote nothing");
-    // A live election changes inside the window and refuses outside it.
-    const elected = await electMyBenefit({
-      orgId: h.org.orgId, actorId: h.workerId, employmentId: h.workerEmployment,
-      planId, contributionTerms: await seededContributionTerms(h.org.orgId, planId), windowId: openId, effectiveFrom: "2026-03-01",
-    });
-    await db.execute(sql`
+test(
+  "a closed window refuses elect and change by name; another employment id refuses",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupWorkspaceHarness(),
+      async (h) => {
+        const planId = (await seedPlan(h.org.orgId, { name: "Health" })).planId;
+        const closedId = await seedWindow(h.org.orgId, {
+          status: "closed",
+          opensOn: "2020-01-01",
+          closesOn: "2030-12-31",
+        });
+        // Electing against a closed window: the entry gate refuses by name.
+        await assert.rejects(
+          electMyBenefit({
+            orgId: h.org.orgId,
+            actorId: h.workerId,
+            employmentId: h.workerEmployment,
+            planId,
+            windowId: closedId,
+            effectiveFrom: "2026-03-01",
+          }),
+          (e: unknown) => {
+            assert.ok(e instanceof BenefitsError, `expected BenefitsError, got ${String(e)}`);
+            assert.equal(e.code, "REFUSED");
+            assert.match(e.message, /enrollment window is closed/);
+            return true;
+          },
+        );
+        // Electing with no window and no life event refuses the same way.
+        await assert.rejects(
+          electMyBenefit({
+            orgId: h.org.orgId,
+            actorId: h.workerId,
+            employmentId: h.workerEmployment,
+            planId,
+            effectiveFrom: "2026-03-01",
+          }),
+          (e: unknown) => {
+            assert.ok(e instanceof BenefitsError);
+            assert.match(e.message, /no open window and no life event/);
+            return true;
+          },
+        );
+        // The hostile employment id: another person's employment never elects.
+        const openId = await seedWindow(h.org.orgId, {
+          status: "open",
+          opensOn: "2020-01-01",
+          closesOn: "2030-12-31",
+        });
+        await assert.rejects(
+          electMyBenefit({
+            orgId: h.org.orgId,
+            actorId: h.workerId,
+            employmentId: h.outsiderEmployment,
+            planId,
+            contributionTerms: await seededContributionTerms(h.org.orgId, planId),
+            windowId: openId,
+            effectiveFrom: "2026-03-01",
+          }),
+          (e: unknown) => {
+            assert.ok(
+              e instanceof HrmAuthorizationError,
+              `expected HrmAuthorizationError, got ${String(e)}`,
+            );
+            assert.match(e.message, /only against your own employment/);
+            return true;
+          },
+        );
+        const none = (
+          await db.execute<{ n: string }>(
+            sql`
+      select count(*)::text as n from hrm_benefit_enrollments where org_id = ${h.org.orgId}`,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(none, "0", "every refused elect wrote nothing");
+        // A live election changes inside the window and refuses outside it.
+        const elected = await electMyBenefit({
+          orgId: h.org.orgId,
+          actorId: h.workerId,
+          employmentId: h.workerEmployment,
+          planId,
+          contributionTerms: await seededContributionTerms(h.org.orgId, planId),
+          windowId: openId,
+          effectiveFrom: "2026-03-01",
+        });
+        await db.execute(sql`
       update hrm_enrollment_windows set status = 'closed' where id = ${openId}`);
-    await assert.rejects(
-      changeMyBenefit({ orgId: h.org.orgId, actorId: h.workerId, enrollmentId: elected.id, changeDate: "2026-04-01", reason: "family grows" }),
-      (e: unknown) => {
-        assert.ok(e instanceof SelfServiceError);
-        assert.equal(e.code, "REFUSED");
-        assert.match(e.message, /no open enrollment window covers 2026-04-01/);
-        return true;
-      },
-    );
-    await db.execute(sql`
+        await assert.rejects(
+          changeMyBenefit({
+            orgId: h.org.orgId,
+            actorId: h.workerId,
+            enrollmentId: elected.id,
+            changeDate: "2026-04-01",
+            reason: "family grows",
+          }),
+          (e: unknown) => {
+            assert.ok(e instanceof SelfServiceError);
+            assert.equal(e.code, "REFUSED");
+            assert.match(e.message, /no open enrollment window covers 2026-04-01/);
+            return true;
+          },
+        );
+        await db.execute(sql`
       update hrm_enrollment_windows set status = 'open' where id = ${openId}`);
-    const changed = await changeMyBenefit({ orgId: h.org.orgId, actorId: h.workerId, enrollmentId: elected.id, changeDate: "2026-04-01", reason: "family grows" });
-    assert.equal(changed.status, "active");
-    const chain = (await db.execute<{ n: string }>(sql`
+        const changed = await changeMyBenefit({
+          orgId: h.org.orgId,
+          actorId: h.workerId,
+          enrollmentId: elected.id,
+          changeDate: "2026-04-01",
+          reason: "family grows",
+        });
+        assert.equal(changed.status, "active");
+        const chain = (
+          await db.execute<{ n: string }>(
+            sql`
       select count(*)::text as n from hrm_benefit_enrollments
-       where org_id = ${h.org.orgId} and employment_id = ${h.workerEmployment}`, "objects"))[0]!.n;
-    assert.equal(chain, "2", "the change ends the old row and opens the new one");
-    // Another person's enrollment never changes through this path.
-    await assert.rejects(
-      changeMyBenefit({ orgId: h.org.orgId, actorId: h.outsiderId, enrollmentId: changed.id, changeDate: "2026-05-01", reason: "spoof" }),
-      (e: unknown) => {
-        assert.ok(e instanceof SelfServiceError);
-        assert.equal(e.code, "FORBIDDEN");
-        return true;
+       where org_id = ${h.org.orgId} and employment_id = ${h.workerEmployment}`,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(chain, "2", "the change ends the old row and opens the new one");
+        // Another person's enrollment never changes through this path.
+        await assert.rejects(
+          changeMyBenefit({
+            orgId: h.org.orgId,
+            actorId: h.outsiderId,
+            enrollmentId: changed.id,
+            changeDate: "2026-05-01",
+            reason: "spoof",
+          }),
+          (e: unknown) => {
+            assert.ok(e instanceof SelfServiceError);
+            assert.equal(e.code, "FORBIDDEN");
+            return true;
+          },
+        );
       },
     );
-  });
-});
+  },
+);
 
-test("tab capabilities read facts: cycles and plans present here, absent on a fresh org", { skip: !DB }, async () => {
-  await withHarness(() => setupWorkspaceHarness(), async (h) => {
-    const caps = await selfWorkspaceCapabilities(h.org.orgId);
-    assert.equal(caps.hasReviewCycles, true);
-    assert.equal(caps.hasBenefitPlans, false);
-    const fresh = await createScratchOrg();
-    try {
-      await enableHrm(fresh.orgId);
-      assert.deepEqual(await selfWorkspaceCapabilities(fresh.orgId), { hasReviewCycles: false, hasBenefitPlans: false });
-    } finally {
-      await dropScratchOrg(fresh.orgId);
-    }
-  });
-});
+test(
+  "tab capabilities read facts: cycles and plans present here, absent on a fresh org",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupWorkspaceHarness(),
+      async (h) => {
+        const caps = await selfWorkspaceCapabilities(h.org.orgId);
+        assert.equal(caps.hasReviewCycles, true);
+        assert.equal(caps.hasBenefitPlans, false);
+        const fresh = await createScratchOrg();
+        try {
+          await enableHrm(fresh.orgId);
+          assert.deepEqual(await selfWorkspaceCapabilities(fresh.orgId), {
+            hasReviewCycles: false,
+            hasBenefitPlans: false,
+          });
+        } finally {
+          await dropScratchOrg(fresh.orgId);
+        }
+      },
+    );
+  },
+);

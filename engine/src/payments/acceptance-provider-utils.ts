@@ -47,7 +47,9 @@ export function jsonObject(value: unknown): Record<string, unknown> {
  * the HTTP status, never as a SyntaxError thrown from this line that
  * displaces it. An unparseable body reads as an empty bag, so `?? res.status`
  * is what the operator sees. */
-export async function fetchJsonBody(res: { json: () => Promise<unknown> }): Promise<Record<string, unknown>> {
+export async function fetchJsonBody(res: {
+  json: () => Promise<unknown>;
+}): Promise<Record<string, unknown>> {
   return jsonObject(await res.json().catch(() => null));
 }
 
@@ -85,17 +87,15 @@ export function resolveAcceptanceProviderApiBase(
   if (provider === "stripe") {
     if (host !== "api.stripe.com" || path !== "") throw invalidProviderEndpoint(provider);
   } else if (provider === "gocardless") {
-    if (
-      (host !== "api.gocardless.com" && host !== "api-sandbox.gocardless.com") ||
-      path !== ""
-    ) {
+    if ((host !== "api.gocardless.com" && host !== "api-sandbox.gocardless.com") || path !== "") {
       throw invalidProviderEndpoint(provider);
     }
   } else {
     const testEndpoint = host === "checkout-test.adyen.com" && /^\/v\d+$/.test(path);
     const liveEndpoint =
-      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-checkout-live(?:-(?:au|us|apse))?\.adyenpayments\.com$/.test(host) &&
-      /^\/checkout\/v\d+$/.test(path);
+      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-checkout-live(?:-(?:au|us|apse))?\.adyenpayments\.com$/.test(
+        host,
+      ) && /^\/checkout\/v\d+$/.test(path);
     if (!testEndpoint && !liveEndpoint) throw invalidProviderEndpoint(provider);
   }
   return `${endpoint.origin}${path}`;
@@ -146,7 +146,8 @@ export function resolveAdyenRecurringApiBase(configuredApiBase?: string): string
   }
   const host = endpoint.hostname.toLowerCase();
   const path = endpoint.pathname.replace(/\/+$/, "");
-  const testEndpoint = host === "pal-test.adyen.com" && /^\/pal\/servlet\/Recurring\/v\d+$/.test(path);
+  const testEndpoint =
+    host === "pal-test.adyen.com" && /^\/pal\/servlet\/Recurring\/v\d+$/.test(path);
   const liveEndpoint =
     /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-pal-live\.adyenpayments\.com$/.test(host) &&
     /^\/pal\/servlet\/Recurring\/v\d+$/.test(path);
@@ -155,7 +156,23 @@ export function resolveAdyenRecurringApiBase(configuredApiBase?: string): string
 }
 
 /** Adyen's currency table differs from Stripe/ISO for CLP, CVE, IDR, and ISK. */
-export const ADYEN_ZERO_DECIMAL = new Set(["CVE", "DJF", "GNF", "IDR", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
+export const ADYEN_ZERO_DECIMAL = new Set([
+  "CVE",
+  "DJF",
+  "GNF",
+  "IDR",
+  "JPY",
+  "KMF",
+  "KRW",
+  "PYG",
+  "RWF",
+  "UGX",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+]);
 
 export const ADYEN_THREE_DECIMAL = new Set(["BHD", "IQD", "JOD", "KWD", "OMR", "TND"]);
 
@@ -164,16 +181,19 @@ export function toMinorUnits(amount: string, currency: string): string {
   const units = toUnits(amount); // 1e4 scale
   const code = currency.toUpperCase();
   if (ZERO_DECIMAL_CURRENCIES.has(code)) {
-    if (units % 10_000n !== 0n) throw new PaymentAcceptanceError(`${currency} amounts must be whole units`);
+    if (units % 10_000n !== 0n)
+      throw new PaymentAcceptanceError(`${currency} amounts must be whole units`);
     return (units / 10_000n).toString();
   }
   // Stripe supports three-decimal currencies (e.g. BHD in fils): converting
   // them at two decimals would misstate every amount 10x.
   if (THREE_DECIMAL_CURRENCIES.has(code)) {
-    if (units % 10n !== 0n) throw new PaymentAcceptanceError(`amount ${amount} has sub-fils precision`);
+    if (units % 10n !== 0n)
+      throw new PaymentAcceptanceError(`amount ${amount} has sub-fils precision`);
     return (units / 10n).toString();
   }
-  if (units % 100n !== 0n) throw new PaymentAcceptanceError(`amount ${amount} has sub-cent precision`);
+  if (units % 100n !== 0n)
+    throw new PaymentAcceptanceError(`amount ${amount} has sub-cent precision`);
   return (units / 100n).toString();
 }
 
@@ -189,7 +209,9 @@ export function toAdyenMinorUnits(amount: string, currency: string): string {
   const divisor = 10n ** BigInt(4 - decimals);
   const units = toUnits(amount);
   if (units % divisor !== 0n) {
-    throw new PaymentAcceptanceError(`${currency} amounts cannot exceed ${decimals}-decimal minor-unit precision`);
+    throw new PaymentAcceptanceError(
+      `${currency} amounts cannot exceed ${decimals}-decimal minor-unit precision`,
+    );
   }
   return (units / divisor).toString();
 }
@@ -220,8 +242,7 @@ export function verifiedWebhook(events: WebhookEvent[]): WebhookVerification {
 /** Stable structured-log key for an event whose tenant transaction rolled
  * back. The emission happens outside that transaction so poison evidence is
  * not lost with the accounting writes it protects. */
-export const PAYMENT_WEBHOOK_EVENT_FAILURE_LOG_EVENT =
-  "payment_webhook.event_failed";
+export const PAYMENT_WEBHOOK_EVENT_FAILURE_LOG_EVENT = "payment_webhook.event_failed";
 
 export function logPaymentWebhookEventFailure(
   provider: AcceptanceProvider,
@@ -248,8 +269,7 @@ export function logPaymentWebhookEventFailure(
  * before any tenant context exists — so the emission carries the item's own
  * identity rather than an orgId.
  */
-export const PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT =
-  "payment_webhook.item_malformed";
+export const PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT = "payment_webhook.item_malformed";
 
 export function logPaymentWebhookItemMalformed(
   provider: AcceptanceProvider,

@@ -57,10 +57,7 @@ export function cleanGeneratedTitle(raw: unknown): string | null {
  * the first completed assistant turn renames — later turns leave the title
  * (generated or placeholder) alone.
  */
-export function shouldAttemptAutoTitle(
-  state: TitleState | null,
-  assistantTurns: number,
-): boolean {
+export function shouldAttemptAutoTitle(state: TitleState | null, assistantTurns: number): boolean {
   if (!state) return false;
   if (state.source === "user") return false;
   return assistantTurns === 1;
@@ -81,12 +78,15 @@ export async function readTitleState(
     `);
   } catch (error) {
     if (!isMissingMetadataColumn(error)) throw error;
-    const fallback = await db.execute<{ title: string }>(sql`
+    const fallback = await db.execute<{ title: string }>(
+      sql`
       select c.title
         from ai_conversations c
        where c.id = ${conversationId}
          and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
-    `, "objects");
+    `,
+      "objects",
+    );
     if (fallback.length === 0) return null;
     return { title: fallback[0]!.title, source: null };
   }
@@ -112,7 +112,8 @@ export async function writeAutoTitle(
   if (!clean) return false;
   const payload = JSON.stringify({ source: "auto", updatedAt: new Date().toISOString() });
   try {
-    const r = await db.execute(sql`
+    const r = await db.execute(
+      sql`
       update ai_conversations
          set title = ${clean}, updated_by = ${authz.user.id},
              metadata = coalesce(metadata, '{}'::jsonb)
@@ -120,17 +121,22 @@ export async function writeAutoTitle(
        where id = ${conversationId}
          and org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     return r.length > 0;
   } catch (error) {
     if (!isMissingMetadataColumn(error)) throw error;
-    const r = await db.execute(sql`
+    const r = await db.execute(
+      sql`
       update ai_conversations
          set title = ${clean}, updated_by = ${authz.user.id}
        where id = ${conversationId}
          and org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     return r.length > 0;
   }
 }

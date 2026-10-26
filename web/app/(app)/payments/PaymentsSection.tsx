@@ -1,12 +1,12 @@
-import { can, type Authz } from '@/lib/authz'
-import { getTranslations } from 'next-intl/server'
+import { can, type Authz } from "@/lib/authz";
+import { getTranslations } from "next-intl/server";
 import { PAYMENT_KIND_SIDE, type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
-import { RecordListView } from '../../../components/record-list-view'
-import { isUuid, mergeHref } from '../../../lib/list-params'
-import { NewPaymentButton } from './NewPaymentButton'
-import { PaymentDrawer } from './PaymentDrawer'
-import { loadPaymentFlyout } from './payment-flyout'
-import { pickString } from '../../../lib/list-params'
+import { RecordListView } from "../../../components/record-list-view";
+import { isUuid, mergeHref } from "../../../lib/list-params";
+import { NewPaymentButton } from "./NewPaymentButton";
+import { PaymentDrawer } from "./PaymentDrawer";
+import { loadPaymentFlyout } from "./payment-flyout";
+import { pickString } from "../../../lib/list-params";
 
 /**
  * Payment/receipt list, shared by /payments (vendor_payment) and /receipts
@@ -25,24 +25,25 @@ export async function PaymentsSection({
   canCreate,
   userRoles,
 }: {
-  sp: Record<string, string | string[] | undefined>
-  authz: Authz
-  basePath: string
-  kind: PaymentKind
-  orgId: string
-  userId: string
+  sp: Record<string, string | string[] | undefined>;
+  authz: Authz;
+  basePath: string;
+  kind: PaymentKind;
+  orgId: string;
+  userId: string;
   /** List-view customization (saved views) — never a creation gate. */
-  canManage: boolean
+  canManage: boolean;
   /** Payment creation (ap.pay / ar.pay by kind) — the single flag the New
    *  button and the ?paymentNew=1 drawer share, so neither is ever offered
    *  without the other. */
-  canCreate: boolean
-  userRoles: readonly string[]
+  canCreate: boolean;
+  userRoles: readonly string[];
 }) {
-  if (authz.user.orgId !== orgId || !can(authz, kind === 'vendor_payment' ? 'ap.pay' : 'ar.pay')) return null
-  const t = await getTranslations('payments')
-  const side = PAYMENT_KIND_SIDE[kind]
-  const newLabel = t('list.newLabel', { side })
+  if (authz.user.orgId !== orgId || !can(authz, kind === "vendor_payment" ? "ap.pay" : "ar.pay"))
+    return null;
+  const t = await getTranslations("payments");
+  const side = PAYMENT_KIND_SIDE[kind];
+  const newLabel = t("list.newLabel", { side });
 
   // -- flyout ---------------------------------------------------------------
   // Unsaved-create: ?paymentNew=1 opens an editable drawer on no persisted
@@ -52,8 +53,8 @@ export async function PaymentsSection({
   // never on list-view customization: a payer without manage rights must
   // still get the drawer the New button promises. The kind stays fixed by
   // this section's `kind` — the surface decides it.
-  const creating = pickString(sp.paymentNew) === '1' && canCreate
-  const paymentId = typeof sp.payment === 'string' && isUuid(sp.payment) ? sp.payment : undefined
+  const creating = pickString(sp.paymentNew) === "1" && canCreate;
+  const paymentId = typeof sp.payment === "string" && isUuid(sp.payment) ? sp.payment : undefined;
   // One shared resolution behind the drawer, whether it opens from this
   // list, a deep link or another record's reference (see payment-flyout).
   const flyout =
@@ -71,12 +72,14 @@ export async function PaymentsSection({
           // or bill opens the new payment for that party and document.
           prefill: creating
             ? {
-                partyId: typeof sp.partyId === 'string' && isUuid(sp.partyId) ? sp.partyId : undefined,
-                documentId: typeof sp.applyTo === 'string' && isUuid(sp.applyTo) ? sp.applyTo : undefined,
+                partyId:
+                  typeof sp.partyId === "string" && isUuid(sp.partyId) ? sp.partyId : undefined,
+                documentId:
+                  typeof sp.applyTo === "string" && isUuid(sp.applyTo) ? sp.applyTo : undefined,
               }
             : undefined,
         })
-      : null
+      : null;
   const closeHref = mergeHref(basePath, sp, {
     payment: undefined,
     paymentNew: undefined,
@@ -84,22 +87,29 @@ export async function PaymentsSection({
     form: undefined,
     partyId: undefined,
     applyTo: undefined,
-  })
+  });
   // Persisted receipts belong to the shared list host, including server deep
   // links. A separate server drawer would cover the host's second dialog.
-  const nativeDrawer = !creating && kind === 'customer_payment' && flyout?.mode === 'record'
-    ? { widget: 'payment-drawer' as const, drawer: {
-        flyout, basePath, closeHref, initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
-      } }
-    : null
-  let drawer: React.ReactNode = null
+  const nativeDrawer =
+    !creating && kind === "customer_payment" && flyout?.mode === "record"
+      ? {
+          widget: "payment-drawer" as const,
+          drawer: {
+            flyout,
+            basePath,
+            closeHref,
+            initialMode: pickString(sp.mode) === "edit" ? "edit" : "view",
+          },
+        }
+      : null;
+  let drawer: React.ReactNode = null;
   if (flyout && !nativeDrawer) {
-    const openPayment = flyout.mode === 'record' ? flyout.payment : null
+    const openPayment = flyout.mode === "record" ? flyout.payment : null;
     drawer = (
       <PaymentDrawer
         payment={flyout.payment}
-        key={flyout.mode === 'create' ? 'new-payment' : String(openPayment!.doc.id)}
-        initialMode={creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
+        key={flyout.mode === "create" ? "new-payment" : String(openPayment!.doc.id)}
+        initialMode={creating || pickString(sp.mode) === "edit" ? "edit" : "view"}
         initialOpenItems={flyout.initialOpenItems}
         parties={flyout.parties}
         bankAccounts={flyout.bankAccounts}
@@ -111,7 +121,7 @@ export async function PaymentsSection({
         createTitle={newLabel}
         storedValue={flyout.storedValue}
       />
-    )
+    );
   }
 
   return (
@@ -124,7 +134,11 @@ export async function PaymentsSection({
       sp={sp}
       drawer={drawer}
       nativeDrawer={nativeDrawer}
-      emptyAction={canCreate ? <NewPaymentButton kind={kind} basePath={basePath} label={newLabel} /> : undefined}
+      emptyAction={
+        canCreate ? (
+          <NewPaymentButton kind={kind} basePath={basePath} label={newLabel} />
+        ) : undefined
+      }
     />
-  )
+  );
 }

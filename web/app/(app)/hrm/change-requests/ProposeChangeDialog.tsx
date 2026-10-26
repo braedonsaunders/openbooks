@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Button, SearchSelect } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { ChangeRequestDrawer } from '../ChangeRequestDrawer'
-import { HireEmploymentDrawer } from '../HireEmploymentDrawer'
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Button, SearchSelect } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { ChangeRequestDrawer } from "../ChangeRequestDrawer";
+import { HireEmploymentDrawer } from "../HireEmploymentDrawer";
 
 /**
  * Propose-entry point for the change-request queue, opened from the page
@@ -31,72 +31,72 @@ export function ProposeChangeDialog({
   hireHref,
   hireLinkLabel,
 }: {
-  departmentOptions: { value: string; label: string }[]
-  employmentLabel: string
-  employmentPlaceholder: string
-  emptyLabel: string
-  requestFailed: string
-  closeHref: string
+  departmentOptions: { value: string; label: string }[];
+  employmentLabel: string;
+  employmentPlaceholder: string;
+  emptyLabel: string;
+  requestFailed: string;
+  closeHref: string;
   /** First-employment mode: no employment picker, the Hire drawer instead. */
-  hireMode?: boolean
+  hireMode?: boolean;
   /** Where the "hire someone without an employment" link navigates. */
-  hireHref?: string
-  hireLinkLabel?: string
+  hireHref?: string;
+  hireLinkLabel?: string;
 }) {
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const [employmentId, setEmploymentId] = useState('')
-  const [options, setOptions] = useState<{ value: string; label: string }[]>([])
-  const [query, setQuery] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [status, setStatus] = useState<string | undefined>(undefined)
-  const requestId = useRef(0)
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const [employmentId, setEmploymentId] = useState("");
+  const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<string | undefined>(undefined);
+  const requestId = useRef(0);
 
   const close = (): void => {
-    router.push(closeHref as never)
-  }
+    router.push(closeHref as never);
+  };
 
   useEffect(() => {
     // Hire mode never picks an employment — no employment fetch.
-    if (hireMode) return
-    const id = (requestId.current += 1)
-    const params = new URLSearchParams()
-    params.set('source', 'employments')
-    params.set('limit', '25')
-    if (query.trim()) params.set('q', query.trim())
-    if (employmentId) params.set('include', employmentId)
-    fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
+    if (hireMode) return;
+    const id = (requestId.current += 1);
+    const params = new URLSearchParams();
+    params.set("source", "employments");
+    params.set("limit", "25");
+    if (query.trim()) params.set("q", query.trim());
+    if (employmentId) params.set("include", employmentId);
+    fetch(`/api/hrm/options?${params.toString()}`, { method: "GET" })
       .then(async (res) => {
-        if (id !== requestId.current) return
+        if (id !== requestId.current) return;
         if (!res.ok) {
-          setStatus(await readApiErrorMessage(res, requestFailed))
-          setLoading(false)
-          return
+          setStatus(await readApiErrorMessage(res, requestFailed));
+          setLoading(false);
+          return;
         }
         const payload = (await res.json().catch(() => ({}))) as {
-          options?: { employmentId?: unknown; label?: unknown }[]
-        }
-        if (id !== requestId.current) return
-        const page = Array.isArray(payload.options) ? payload.options : []
-        const merged: { value: string; label: string }[] = []
+          options?: { employmentId?: unknown; label?: unknown }[];
+        };
+        if (id !== requestId.current) return;
+        const page = Array.isArray(payload.options) ? payload.options : [];
+        const merged: { value: string; label: string }[] = [];
         for (const row of page) {
-          if (typeof row.employmentId === 'string' && typeof row.label === 'string') {
-            merged.push({ value: row.employmentId, label: row.label })
+          if (typeof row.employmentId === "string" && typeof row.label === "string") {
+            merged.push({ value: row.employmentId, label: row.label });
           }
         }
         if (employmentId && !merged.some((option) => option.value === employmentId)) {
-          merged.push({ value: employmentId, label: employmentId })
+          merged.push({ value: employmentId, label: employmentId });
         }
-        setOptions(merged)
-        setStatus(undefined)
-        setLoading(false)
+        setOptions(merged);
+        setStatus(undefined);
+        setLoading(false);
       })
       .catch(() => {
-        if (id !== requestId.current) return
-        setStatus(requestFailed)
-        setLoading(false)
-      })
-  }, [query, employmentId, requestFailed, hireMode])
+        if (id !== requestId.current) return;
+        setStatus(requestFailed);
+        setLoading(false);
+      });
+  }, [query, employmentId, requestFailed, hireMode]);
 
   // Hire mode never picks an employment: the Hire drawer's own person
   // picker names someone with no employment record at all.
@@ -106,11 +106,11 @@ export function ProposeChangeDialog({
         departmentOptions={departmentOptions}
         onClose={close}
         onSaved={() => {
-          router.refresh()
-          close()
+          router.refresh();
+          close();
         }}
       />
-    )
+    );
   }
 
   if (employmentId) {
@@ -121,17 +121,24 @@ export function ProposeChangeDialog({
         departmentOptions={departmentOptions}
         onClose={close}
         onSaved={() => {
-          router.refresh()
-          close()
+          router.refresh();
+          close();
         }}
       />
-    )
+    );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true" aria-label={employmentLabel}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={employmentLabel}
+    >
       <div className="w-full max-w-md space-y-4 rounded-xl bg-white p-5 shadow-xl dark:bg-slate-900">
-        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{employmentLabel}</p>
+        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {employmentLabel}
+        </p>
         <SearchSelect
           id="queue-propose-employment"
           value={employmentId}
@@ -143,11 +150,11 @@ export function ProposeChangeDialog({
           remote
           loading={loading}
           statusMessage={status}
-          statusTone={status ? 'error' : 'muted'}
+          statusTone={status ? "error" : "muted"}
           onSearchChange={(next) => {
-            setQuery(next)
-            setLoading(true)
-            setStatus(undefined)
+            setQuery(next);
+            setLoading(true);
+            setStatus(undefined);
           }}
         />
         {status ? (
@@ -164,10 +171,10 @@ export function ProposeChangeDialog({
         ) : null}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={close}>
-            {tCommon('actions.cancel')}
+            {tCommon("actions.cancel")}
           </Button>
         </div>
       </div>
     </div>
-  )
+  );
 }

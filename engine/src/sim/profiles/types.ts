@@ -118,11 +118,7 @@ export interface UsageSubscriptionSpec {
 
 /** The five governed construction billing methods (project_types keys). */
 export type BillingMethod =
-  | "time_and_materials"
-  | "schedule_of_values"
-  | "fixed_price"
-  | "not_to_exceed"
-  | "cost_plus";
+  "time_and_materials" | "schedule_of_values" | "fixed_price" | "not_to_exceed" | "cost_plus";
 
 /**
  * A construction job in the seeded portfolio. The company runs a MIX of billing

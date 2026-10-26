@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadAgents, agentsSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadAgents, agentsSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('agents')
-  return { title: t('metaTitle') }
+  const t = await getTranslations("agents");
+  return { title: t("metaTitle") };
 }
 
 /**
@@ -14,8 +14,12 @@ export async function generateMetadata() {
  * pack, with keyboard triage, bulk actions, and the shared finding drawer.
  * Pack configuration lives in Setup → Agents.
  */
-export default async function AgentsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const sp = await searchParams
-  const data = await loadAgents(sp)
-  return <ModuleView spec={agentsSpec(data)} data={data} searchParams={sp} trusted />
+export default async function AgentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const data = await loadAgents(sp);
+  return <ModuleView spec={agentsSpec(data)} data={data} searchParams={sp} trusted />;
 }

@@ -5,7 +5,10 @@ import { resolvedCertificate } from "./conformance-support.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 
 const requirements = [
-  { key: "servicemember_present_under_orders", description: "the servicemember is in Hawaii under orders" },
+  {
+    key: "servicemember_present_under_orders",
+    description: "the servicemember is in Hawaii under orders",
+  },
   { key: "spouse_present_to_accompany", description: "the spouse is in Hawaii to accompany them" },
   { key: "same_non_hawaii_domicile", description: "they share a domicile outside Hawaii" },
 ] as const;
@@ -18,7 +21,8 @@ test("military-spouse exemption guard requires a filed certificate", () => {
     same_non_hawaii_domicile: "true",
   });
   assert.throws(
-    () => requireMilitarySpouseEligibility({ ...certificate, onFile: false }, "Hawaii", requirements),
+    () =>
+      requireMilitarySpouseEligibility({ ...certificate, onFile: false }, "Hawaii", requirements),
     /Hawaii military-spouse withholding exemption requires the filed state exemption certificate/,
   );
 });

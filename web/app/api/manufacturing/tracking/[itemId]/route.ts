@@ -19,10 +19,7 @@ export const GET = defineRoute({
         .strict()
         .safeParse(Object.fromEntries(new URL(request.url).searchParams));
       if (!query.success)
-        return Response.json(
-          { error: "Invalid tracking filters." },
-          { status: 400 },
-        );
+        return Response.json({ error: "Invalid tracking filters." }, { status: 400 });
       return Response.json(
         await manufacturingTracking(
           db,

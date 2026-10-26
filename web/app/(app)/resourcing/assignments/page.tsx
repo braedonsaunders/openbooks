@@ -10,5 +10,7 @@ export default async function ResourcingAssignments({
 }) {
   const sp = await searchParams;
   const data = await loadResourcingAssignmentsPage(sp);
-  return <ModuleView spec={resourcingAssignmentsSpec(data)} data={data} searchParams={sp} trusted />;
+  return (
+    <ModuleView spec={resourcingAssignmentsSpec(data)} data={data} searchParams={sp} trusted />
+  );
 }

@@ -42,7 +42,10 @@ export const webhookEndpoints = pgTable(
     url: text("url").notNull(),
     description: text("description").notNull().default(""),
     /** Subscribed event types. Empty receives nothing. */
-    events: text("events").array().notNull().default(sql`'{}'`),
+    events: text("events")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     status: text("status").notNull().default("active"),
     /** Current signing secret, sealed with purpose `webhook.endpoint.secret`. */
     secretSealed: text("secret_sealed").notNull(),
@@ -73,7 +76,9 @@ export const webhookEvents = pgTable(
     entityKind: text("entity_kind"),
     entityId: uuid("entity_id"),
     /** Snapshot of the public representation at emit time; totals in minor units with currency. */
-    payload: jsonb("payload").notNull().default(sql`'{}'`),
+    payload: jsonb("payload")
+      .notNull()
+      .default(sql`'{}'`),
     /** Collapses re-entrant replays onto one event row. */
     dedupeKey: text("dedupe_key").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
@@ -105,6 +110,9 @@ export const webhookDeliveries = pgTable(
   (t) => [
     uniqueIndex("webhook_deliveries_event_endpoint").on(t.orgId, t.eventId, t.endpointId),
     index("webhook_deliveries_due").on(t.status, t.nextAttemptAt),
-    check("webhook_deliveries_status_valid", sql`${t.status} IN ('pending', 'delivered', 'failed', 'dead')`),
+    check(
+      "webhook_deliveries_status_valid",
+      sql`${t.status} IN ('pending', 'delivered', 'failed', 'dead')`,
+    ),
   ],
 );

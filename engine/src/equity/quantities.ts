@@ -19,7 +19,14 @@ import { equityError, fig } from "./errors.ts";
 import type { EquityTermName } from "./refusals/terms.ts";
 
 export type { Rational };
-export { addRational, compareRational, divideRational, multiplyRational, rational, subtractRational };
+export {
+  addRational,
+  compareRational,
+  divideRational,
+  multiplyRational,
+  rational,
+  subtractRational,
+};
 
 /** Decimal places of a stored per-share price. */
 export const PRICE_SCALE = 10;
@@ -40,23 +47,33 @@ const DECIMAL_RE = /^(-)?(\d+)(?:\.(\d+))?$/;
  * coerced through a binary float or silently rounded on the way in.
  */
 export function parseDecimal(value: unknown, label: EquityTermName, maxScale: number): Rational {
-  const text = typeof value === "string" ? value.trim() : typeof value === "bigint" ? value.toString() : null;
+  const text =
+    typeof value === "string" ? value.trim() : typeof value === "bigint" ? value.toString() : null;
   const match = text === null ? null : DECIMAL_RE.exec(text);
-  if (!match) throw equityError("decimalInvalid", { label: fig.term(label), example: fig.decimal("1.25") });
+  if (!match)
+    throw equityError("decimalInvalid", { label: fig.term(label), example: fig.decimal("1.25") });
   const fraction = (match[3] ?? "").replace(/0+$/, "");
-  if (fraction.length > maxScale) throw equityError("decimalPrecision", { label: fig.term(label), places: fig.count(maxScale) });
+  if (fraction.length > maxScale)
+    throw equityError("decimalPrecision", { label: fig.term(label), places: fig.count(maxScale) });
   const units = BigInt(`${match[2]}${fraction}`) * (match[1] ? -1n : 1n);
   return rational(units, 10n ** BigInt(fraction.length));
 }
 
 /** A required stored value; a missing one refuses instead of becoming zero. */
-export function requireDecimal(value: string | null | undefined, label: EquityTermName, maxScale: number): Rational {
-  if (value === null || value === undefined || value === "") throw equityError("valueMissing", { label: fig.term(label) });
+export function requireDecimal(
+  value: string | null | undefined,
+  label: EquityTermName,
+  maxScale: number,
+): Rational {
+  if (value === null || value === undefined || value === "")
+    throw equityError("valueMissing", { label: fig.term(label) });
   return parseDecimal(value, label, maxScale);
 }
 
-export const parsePrice = (value: unknown, label: EquityTermName): Rational => parseDecimal(value, label, PRICE_SCALE);
-export const parseMoney = (value: unknown, label: EquityTermName): Rational => parseDecimal(value, label, MONEY_SCALE);
+export const parsePrice = (value: unknown, label: EquityTermName): Rational =>
+  parseDecimal(value, label, PRICE_SCALE);
+export const parseMoney = (value: unknown, label: EquityTermName): Rational =>
+  parseDecimal(value, label, MONEY_SCALE);
 
 /** A percentage (0–100 with four places) as the fraction it denotes. */
 export function parsePercent(value: unknown, label: EquityTermName): Rational {
@@ -65,8 +82,10 @@ export function parsePercent(value: unknown, label: EquityTermName): Rational {
 
 /** A whole, non-negative share count. */
 export function parseShares(value: unknown, label: EquityTermName): bigint {
-  const text = typeof value === "bigint" ? value.toString() : typeof value === "string" ? value.trim() : null;
-  if (text === null || !/^\d+$/.test(text)) throw equityError("sharesInvalid", { label: fig.term(label) });
+  const text =
+    typeof value === "bigint" ? value.toString() : typeof value === "string" ? value.trim() : null;
+  if (text === null || !/^\d+$/.test(text))
+    throw equityError("sharesInvalid", { label: fig.term(label) });
   return BigInt(text);
 }
 
@@ -89,7 +108,9 @@ export function quantize(value: Rational, scale: number, rule: RoundingRule): bi
 
 function floorDiv(numerator: bigint, denominator: bigint): bigint {
   const quotient = numerator / denominator;
-  return numerator % denominator !== 0n && numerator < 0n !== denominator < 0n ? quotient - 1n : quotient;
+  return numerator % denominator !== 0n && numerator < 0n !== denominator < 0n
+    ? quotient - 1n
+    : quotient;
 }
 
 /** Whole-share floor of a non-negative rational (fractions are paid in cash, never issued). */
@@ -124,17 +145,23 @@ export function formatPercent(fraction: Rational, scale = PERCENT_SCALE): string
  * currency's minor unit first: what a journal line for that currency carries.
  */
 export function ledgerUnits(value: Rational, currencyExponent: number): bigint {
-  return quantize(value, currencyExponent, "half_up") * 10n ** BigInt(MONEY_SCALE - currencyExponent);
+  return (
+    quantize(value, currencyExponent, "half_up") * 10n ** BigInt(MONEY_SCALE - currencyExponent)
+  );
 }
 
 /** Ledger units back to an exact rational. */
-export const fromLedgerUnits = (units: bigint): Rational => rational(units, 10n ** BigInt(MONEY_SCALE));
+export const fromLedgerUnits = (units: bigint): Rational =>
+  rational(units, 10n ** BigInt(MONEY_SCALE));
 
 export const sharesRational = (shares: bigint): Rational => rational(shares);
 export const isZero = (value: Rational): boolean => value.numerator === 0n;
 export const isNegative = (value: Rational): boolean => value.numerator < 0n;
-export const minRational = (a: Rational, b: Rational): Rational => (compareRational(a, b) <= 0 ? a : b);
-export const maxRational = (a: Rational, b: Rational): Rational => (compareRational(a, b) >= 0 ? a : b);
-export const sumRational = (values: readonly Rational[]): Rational => values.reduce(addRational, ZERO);
+export const minRational = (a: Rational, b: Rational): Rational =>
+  compareRational(a, b) <= 0 ? a : b;
+export const maxRational = (a: Rational, b: Rational): Rational =>
+  compareRational(a, b) >= 0 ? a : b;
+export const sumRational = (values: readonly Rational[]): Rational =>
+  values.reduce(addRational, ZERO);
 export const bigMin = (a: bigint, b: bigint): bigint => (a < b ? a : b);
 export const bigMax = (a: bigint, b: bigint): bigint => (a > b ? a : b);

@@ -4,7 +4,11 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/platform/db";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
 
 // Redeeming a live set-password link from a
 // browser on 127.0.0.1 answered 403 while localhost passed — the origin
@@ -31,7 +35,10 @@ registerHooks({
         export async function sendVia() { return { kind: 'sent', providerMessageId: 'isolated' }; }
       `);
     }
-    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
+    if (
+      parent.includes("auth-reset.ts") &&
+      specifier === "@openbooks/engine/delivery/email-config/module"
+    ) {
       return virtual(`
         const state = globalThis[Symbol.for('openbooks.password-reset-redeem-integration')];
         export async function resolveOrgEmailTransport() { return state.transport ? { provider: 'isolated' } : null; }
@@ -91,8 +98,16 @@ test("a live token redeems through the route from a cross-loopback Origin", asyn
     assert.equal(forged.status, 403);
 
     // The password actually took: the placeholder hash is gone.
-    const hash = await withBypassContext(async () => (await db.execute<{ password_hash: string }>(sql`
-        select password_hash from users where id = ${seeded.userId}`, "objects"))[0]!.password_hash);
+    const hash = await withBypassContext(
+      async () =>
+        (
+          await db.execute<{ password_hash: string }>(
+            sql`
+        select password_hash from users where id = ${seeded.userId}`,
+            "objects",
+          )
+        )[0]!.password_hash,
+    );
     assert.notEqual(hash, "unusable");
   } finally {
     await dropScratchOrg(seeded.org.orgId);

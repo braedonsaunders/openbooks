@@ -25,7 +25,8 @@ export const POST = defineRoute({
   body: settleBody,
   handler: async ({ authz: gate, params: routeParams, body }) => {
     const { id } = routeParams;
-    if (!isUuid(id)) return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
+    if (!isUuid(id))
+      return NextResponse.json({ error: "program id must be a uuid" }, { status: 400 });
     try {
       const settled = await settleIncentivePeriod({
         orgId: gate.user.orgId,

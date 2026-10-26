@@ -29,7 +29,12 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { issueSalesOrder } from "../sales/sales-orders.ts";
 import { fromMinorUnits } from "../payments/acceptance.ts";
-import { arePeriodModulesOpen, canonicalPeriodLabel, closeModuleForDocument, CloseError } from "../periods/period-policy.ts";
+import {
+  arePeriodModulesOpen,
+  canonicalPeriodLabel,
+  closeModuleForDocument,
+  CloseError,
+} from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
@@ -80,8 +85,6 @@ function minorToLedger(minor: bigint, currency: string): string {
 export function formatLedgerMinor(minor: bigint, currency: string): string {
   return fromMinorUnits(minor, currency);
 }
-
-
 
 interface ResolvedTax {
   jurisdiction: string;
@@ -160,10 +163,27 @@ function orderDateOf(order: ChannelOrderDetail): string {
 async function loadPostChannel(
   orgId: string,
   channelId: string,
-): Promise<{ name: string; kind: string; externalAccount: string; currency: string; subsidiaryId: string | null }> {
-  const row = (await db.execute<{ name: string; kind: string; external_account: string; currency: string; subsidiary_id: string | null }>(sql`
+): Promise<{
+  name: string;
+  kind: string;
+  externalAccount: string;
+  currency: string;
+  subsidiaryId: string | null;
+}> {
+  const row = (
+    await db.execute<{
+      name: string;
+      kind: string;
+      external_account: string;
+      currency: string;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select name, kind, external_account, currency, subsidiary_id from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${channelId}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new CommerceError(
       "channel_not_found",
@@ -172,7 +192,13 @@ async function loadPostChannel(
       { field: "channelId" },
     );
   }
-  return { name: row.name, kind: row.kind, externalAccount: row.external_account, currency: row.currency, subsidiaryId: row.subsidiary_id };
+  return {
+    name: row.name,
+    kind: row.kind,
+    externalAccount: row.external_account,
+    currency: row.currency,
+    subsidiaryId: row.subsidiary_id,
+  };
 }
 
 /**
@@ -191,15 +217,19 @@ async function resolveStockLocation(
   channelId: string,
   channelName: string,
 ): Promise<{ stockLocationId: string; fulfilledBy: "openbooks" | "storefront" }> {
-  const links = await db.execute<{ stock_location_id: string | null; fulfils_orders: boolean }>(sql`
+  const links = await db.execute<{ stock_location_id: string | null; fulfils_orders: boolean }>(
+    sql`
     select stock_location_id, fulfils_orders from sales_channel_locations
-     where org_id = ${orgId} and channel_id = ${channelId} and stock_location_id is not null`, "objects");
+     where org_id = ${orgId} and channel_id = ${channelId} and stock_location_id is not null`,
+    "objects",
+  );
   const fulfil = links
     .filter((link) => link.fulfils_orders && link.stock_location_id)
     .map((link) => link.stock_location_id!);
   if (fulfil.length === 1) return { stockLocationId: fulfil[0]!, fulfilledBy: "openbooks" };
   const mapped = links.map((link) => link.stock_location_id).filter((id): id is string => !!id);
-  if (fulfil.length === 0 && mapped.length === 1) return { stockLocationId: mapped[0]!, fulfilledBy: "storefront" };
+  if (fulfil.length === 0 && mapped.length === 1)
+    return { stockLocationId: mapped[0]!, fulfilledBy: "storefront" };
   park(
     "unmapped_location",
     mapped.length === 0
@@ -224,18 +254,28 @@ async function resolveItem(
       externalId: line.variantExternalId,
     });
     if (linked?.nativeTable === "items") {
-      const item = (await db.execute<{ id: string; income_account_id: string | null }>(sql`
+      const item = (
+        await db.execute<{ id: string; income_account_id: string | null }>(
+          sql`
         select id, income_account_id from items
-         where org_id = ${orgId} and id = ${linked.nativeId} and is_active`, "objects"))[0];
+         where org_id = ${orgId} and id = ${linked.nativeId} and is_active`,
+          "objects",
+        )
+      )[0];
       if (item) return { itemId: item.id, incomeAccountId: item.income_account_id };
     }
   }
   const sku = cleanText(line.sku);
   if (sku) {
-    const item = (await db.execute<{ id: string; income_account_id: string | null }>(sql`
+    const item = (
+      await db.execute<{ id: string; income_account_id: string | null }>(
+        sql`
       select id, income_account_id from items
        where org_id = ${orgId} and code = ${sku} and is_active
-       order by created_at limit 1`, "objects"))[0];
+       order by created_at limit 1`,
+        "objects",
+      )
+    )[0];
     if (item) return { itemId: item.id, incomeAccountId: item.income_account_id };
   }
   park(
@@ -246,7 +286,10 @@ async function resolveItem(
 }
 
 function sanitizeJurisdiction(jurisdiction: string, orderNumber: string): string {
-  const clean = jurisdiction.trim().toUpperCase().replaceAll(/[^A-Z0-9-]/g, "");
+  const clean = jurisdiction
+    .trim()
+    .toUpperCase()
+    .replaceAll(/[^A-Z0-9-]/g, "");
   if (!clean) {
     park(
       "tax_mismatch",
@@ -265,21 +308,37 @@ async function ensureChannelTaxCode(
   liabilityAccountId: string | null,
 ): Promise<string> {
   const code = `SHOP-${jurisdiction}`;
-  const existing = (await db.execute<{ id: string }>(sql`
-    select id from tax_codes where org_id = ${orgId} and code = ${code} limit 1`, "objects"))[0];
+  const existing = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from tax_codes where org_id = ${orgId} and code = ${code} limit 1`,
+      "objects",
+    )
+  )[0];
   if (existing) return existing.id;
   // A raced duplicate keeps the first row's meaning (same jurisdiction, same
   // liability), so re-read the winner instead of refusing a duplicate.
-  const inserted = await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into tax_codes (org_id, code, name, applies_to, collected_account_id, custom, created_by, updated_by)
     values (${orgId}, ${code}, ${`Storefront tax ${jurisdiction}`}, 'sale',
       ${liabilityAccountId}, '{}'::jsonb, ${actor}, ${actor})
     -- Concurrent tax-code creation reuses the code selected below instead of allocating a second identity.
     on conflict do nothing
-    returning id`, "objects");
-  const id = inserted[0]?.id ?? (await db.execute<{ id: string }>(sql`
-    select id from tax_codes where org_id = ${orgId} and code = ${code} limit 1`, "objects"))[0]?.id;
-  if (!id) throw new Error(`Tax code ${code} could not be ensured; the jurisdiction mapping was lost`);
+    returning id`,
+    "objects",
+  );
+  const id =
+    inserted[0]?.id ??
+    (
+      await db.execute<{ id: string }>(
+        sql`
+    select id from tax_codes where org_id = ${orgId} and code = ${code} limit 1`,
+        "objects",
+      )
+    )[0]?.id;
+  if (!id)
+    throw new Error(`Tax code ${code} could not be ensured; the jurisdiction mapping was lost`);
   return id;
 }
 
@@ -287,10 +346,15 @@ async function facilitatorMode(
   orgId: string,
   facilitatorName: string,
 ): Promise<{ accountId: string; mode: string } | null> {
-  const row = (await db.execute<{ clearing_account_id: string; collection_mode: string }>(sql`
+  const row = (
+    await db.execute<{ clearing_account_id: string; collection_mode: string }>(
+      sql`
     select clearing_account_id, collection_mode from marketplace_facilitators
      where org_id = ${orgId} and lower(name) = lower(${facilitatorName}) and is_active
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   return row ? { accountId: row.clearing_account_id, mode: row.collection_mode } : null;
 }
 
@@ -307,8 +371,13 @@ async function resolvePromotion(
 ): Promise<string | null> {
   const clean = cleanText(code);
   if (!clean) return null;
-  const existing = (await db.execute<{ id: string }>(sql`
-    select id from promotions where org_id = ${orgId} and lower(code) = lower(${clean}) limit 1`, "objects"))[0];
+  const existing = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from promotions where org_id = ${orgId} and lower(code) = lower(${clean}) limit 1`,
+      "objects",
+    )
+  )[0];
   if (existing) return existing.id;
   // Creating a promotion is an attributed merchandising act: the unattended
   // scan leaves the discount unlinked and the operator's replay creates it.
@@ -338,7 +407,11 @@ async function resolvePromotion(
   return promotion.id;
 }
 
-function parseQuantity(raw: string, orderNumber: string, title: string): { numerator: bigint; denominator: bigint; text: string } {
+function parseQuantity(
+  raw: string,
+  orderNumber: string,
+  title: string,
+): { numerator: bigint; denominator: bigint; text: string } {
   const match = /^(\d+)(?:\.(\d{1,8}))?$/.exec(raw.trim());
   if (!match) {
     park(
@@ -357,7 +430,11 @@ function parseQuantity(raw: string, orderNumber: string, title: string): { numer
     );
   }
   const denominator = 10n ** BigInt(frac.length);
-  return { numerator: whole * denominator + (frac === "" ? 0n : BigInt(frac)), denominator, text: raw.trim() };
+  return {
+    numerator: whole * denominator + (frac === "" ? 0n : BigInt(frac)),
+    denominator,
+    text: raw.trim(),
+  };
 }
 
 /** Line total in minor units, half-up on fractional quantities. */
@@ -396,7 +473,11 @@ async function resolveLineTaxes(
   line: ChannelOrderLine,
 ): Promise<{ taxes: ResolvedTax[]; acc: TaxAccumulators }> {
   const taxes: ResolvedTax[] = [];
-  const acc: TaxAccumulators = { merchantTaxMinor: 0n, marketplaceNetMinor: 0n, marketplaceGrossMinor: 0n };
+  const acc: TaxAccumulators = {
+    merchantTaxMinor: 0n,
+    marketplaceNetMinor: 0n,
+    marketplaceGrossMinor: 0n,
+  };
   for (const tax of line.taxLines) {
     const jurisdiction = sanitizeJurisdiction(tax.jurisdiction, order.externalNumber);
     const marketplace = tax.collectedBy.trim().toLowerCase() === "marketplace";
@@ -415,7 +496,13 @@ async function resolveLineTaxes(
       }
       netMode = facilitator.mode === "net";
     } else {
-      liabilityAccountId = await mappedAccount(orgId, order.channelId, "sales_tax_liability", jurisdiction, orderDateOf(order));
+      liabilityAccountId = await mappedAccount(
+        orgId,
+        order.channelId,
+        "sales_tax_liability",
+        jurisdiction,
+        orderDateOf(order),
+      );
     }
     const taxCodeId = await ensureChannelTaxCode(orgId, actor, jurisdiction, liabilityAccountId);
     taxes.push({
@@ -493,42 +580,64 @@ export async function resolveOrderForPosting(
       "Re-sync the order from the storefront so its tax lines agree with its tax total, then replay it.",
     );
   }
-  const { stockLocationId, fulfilledBy } = await resolveStockLocation(orgId, order.channelId, channel.name);
-  const customerPartyId = await resolveCustomer(orgId, actor, {
-    id: order.channelId,
-    kind: channel.kind,
-    name: channel.name,
-    currency: channel.currency,
-    externalAccount: channel.externalAccount,
-  }, {
-    externalId: order.externalId,
-    number: order.externalNumber,
-    customerExternalId: order.customerExternalId,
-    customerName: order.customerName,
-    customerEmail: order.customerEmail,
-    customerAddress: order.customerAddress,
-    tags: order.tags,
-    source: order.source,
-    shopCurrency: order.shopCurrency,
-    presentmentCurrency: order.presentmentCurrency,
-    subtotalMinor: order.subtotalMinor,
-    taxMinor: order.taxMinor,
-    shippingMinor: order.shippingMinor,
-    discountMinor: order.discountMinor,
-    totalMinor: order.totalMinor,
-    financialStatus: order.financialStatus,
-    fulfilmentStatus: order.fulfilmentStatus,
-    lines: order.lines,
-    shippingLines: order.shippingLines,
-    tenders: order.tenders,
-    orderedAt: order.orderedAt,
-    cancelledAt: order.cancelledAt,
-  }, policy.guestCustomerPartyId);
+  const { stockLocationId, fulfilledBy } = await resolveStockLocation(
+    orgId,
+    order.channelId,
+    channel.name,
+  );
+  const customerPartyId = await resolveCustomer(
+    orgId,
+    actor,
+    {
+      id: order.channelId,
+      kind: channel.kind,
+      name: channel.name,
+      currency: channel.currency,
+      externalAccount: channel.externalAccount,
+    },
+    {
+      externalId: order.externalId,
+      number: order.externalNumber,
+      customerExternalId: order.customerExternalId,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      customerAddress: order.customerAddress,
+      tags: order.tags,
+      source: order.source,
+      shopCurrency: order.shopCurrency,
+      presentmentCurrency: order.presentmentCurrency,
+      subtotalMinor: order.subtotalMinor,
+      taxMinor: order.taxMinor,
+      shippingMinor: order.shippingMinor,
+      discountMinor: order.discountMinor,
+      totalMinor: order.totalMinor,
+      financialStatus: order.financialStatus,
+      fulfilmentStatus: order.fulfilmentStatus,
+      lines: order.lines,
+      shippingLines: order.shippingLines,
+      tenders: order.tenders,
+      orderedAt: order.orderedAt,
+      cancelledAt: order.cancelledAt,
+    },
+    policy.guestCustomerPartyId,
+  );
   void runner;
   const revenueAccount = await mappedAccount(orgId, order.channelId, "revenue", "", documentDate);
   const discountAccount = await mappedAccount(orgId, order.channelId, "discount", "", documentDate);
-  const shippingAccount = await mappedAccount(orgId, order.channelId, "shipping_income", "", documentDate);
-  const giftLiabilityAccount = await mappedAccount(orgId, order.channelId, "gift_card_liability", "", documentDate);
+  const shippingAccount = await mappedAccount(
+    orgId,
+    order.channelId,
+    "shipping_income",
+    "",
+    documentDate,
+  );
+  const giftLiabilityAccount = await mappedAccount(
+    orgId,
+    order.channelId,
+    "gift_card_liability",
+    "",
+    documentDate,
+  );
 
   const lines: ResolvedLine[] = [];
   let merchantTaxMinor = 0n;
@@ -561,13 +670,20 @@ export async function resolveOrderForPosting(
         amountMinor: grossMinor,
         kind: "gift_issue",
         promotionId: null,
-        marketplaceFacilitator: taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
+        marketplaceFacilitator:
+          taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
         taxes,
       });
       giftIssues.push({ line, amountMinor: grossMinor });
       continue;
     }
-    const { itemId, incomeAccountId } = await resolveItem(orgId, channel.kind, channel.externalAccount, line, order.externalNumber);
+    const { itemId, incomeAccountId } = await resolveItem(
+      orgId,
+      channel.kind,
+      channel.externalAccount,
+      line,
+      order.externalNumber,
+    );
     // The line posts gross; the discount rides its own line below. The
     // kernel credits every line, so netting here would subtract it twice.
     if (line.discountMinor > grossMinor) {
@@ -591,13 +707,21 @@ export async function resolveOrderForPosting(
       amountMinor: grossMinor,
       kind: "product",
       promotionId: null,
-      marketplaceFacilitator: taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
+      marketplaceFacilitator:
+        taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
       taxes,
     });
     if (line.discountMinor > 0n) {
       const promotionId = await resolvePromotion(
-        orgId, actor, runner, line.discountCode ?? "", line.discountMinor,
-        order.shopCurrency, discountAccount, channel.name, policy.createPromotionOnMatchMiss,
+        orgId,
+        actor,
+        runner,
+        line.discountCode ?? "",
+        line.discountMinor,
+        order.shopCurrency,
+        discountAccount,
+        channel.name,
+        policy.createPromotionOnMatchMiss,
       );
       lines.push({
         title: `Discount${line.discountCode ? ` ${line.discountCode}` : ""} — ${line.title}`,
@@ -609,7 +733,8 @@ export async function resolveOrderForPosting(
         amountMinor: -line.discountMinor,
         kind: "discount",
         promotionId,
-        marketplaceFacilitator: taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
+        marketplaceFacilitator:
+          taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
         taxes: discountTaxes(taxes),
       });
     }
@@ -622,7 +747,18 @@ export async function resolveOrderForPosting(
         "Re-sync the order from the storefront so shipping never discounts past free, then replay it.",
       );
     }
-    const { taxes, acc } = await resolveLineTaxes(orgId, actor, order, { ...ship, sku: null, variantExternalId: null, quantity: "1", priceMinor: ship.amountMinor, discountMinor: 0n, giftCard: false, promotionId: null, discountCode: null, title: ship.title });
+    const { taxes, acc } = await resolveLineTaxes(orgId, actor, order, {
+      ...ship,
+      sku: null,
+      variantExternalId: null,
+      quantity: "1",
+      priceMinor: ship.amountMinor,
+      discountMinor: 0n,
+      giftCard: false,
+      promotionId: null,
+      discountCode: null,
+      title: ship.title,
+    });
     merchantTaxMinor += acc.merchantTaxMinor;
     marketplaceNetMinor += acc.marketplaceNetMinor;
     marketplaceGrossMinor += acc.marketplaceGrossMinor;
@@ -636,7 +772,8 @@ export async function resolveOrderForPosting(
       amountMinor: ship.amountMinor,
       kind: "shipping",
       promotionId: null,
-      marketplaceFacilitator: taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
+      marketplaceFacilitator:
+        taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
       taxes,
     });
     if (ship.discountMinor > 0n) {
@@ -650,7 +787,8 @@ export async function resolveOrderForPosting(
         amountMinor: -ship.discountMinor,
         kind: "discount",
         promotionId: null,
-        marketplaceFacilitator: taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
+        marketplaceFacilitator:
+          taxes.find((tax) => tax.collectedBy === "marketplace")?.facilitatorName ?? null,
         taxes: discountTaxes(taxes),
       });
     }
@@ -685,11 +823,17 @@ export async function resolveOrderForPosting(
         objectType: "gift_card",
         externalId: tender.giftCardExternalId,
       });
-      const card = linked?.nativeTable === "stored_value_accounts"
-        ? (await db.execute<{ id: string; balance_minor: string; currency: string }>(sql`
+      const card =
+        linked?.nativeTable === "stored_value_accounts"
+          ? (
+              await db.execute<{ id: string; balance_minor: string; currency: string }>(
+                sql`
             select id, balance_minor, currency from stored_value_accounts
-             where org_id = ${orgId} and id = ${linked.nativeId}`, "objects"))[0]
-        : undefined;
+             where org_id = ${orgId} and id = ${linked.nativeId}`,
+                "objects",
+              )
+            )[0]
+          : undefined;
       if (!card) {
         park(
           "unmapped_account",
@@ -709,24 +853,43 @@ export async function resolveOrderForPosting(
         // order waits for the rest like any short tender.
         tenderMinor += 0n;
         tenders.push({
-          gateway, accountId: giftLiabilityAccount, amount: "0", amountMinor: 0n,
-          giftCardAccountId: null, giftCardExternalId: tender.giftCardExternalId, reference: tender.authorizationRef,
+          gateway,
+          accountId: giftLiabilityAccount,
+          amount: "0",
+          amountMinor: 0n,
+          giftCardAccountId: null,
+          giftCardExternalId: tender.giftCardExternalId,
+          reference: tender.authorizationRef,
         });
         continue;
       }
       tenders.push({
-        gateway, accountId: giftLiabilityAccount,
-        amount: minorToLedger(amountMinor, order.shopCurrency), amountMinor,
-        giftCardAccountId: card.id, giftCardExternalId: tender.giftCardExternalId, reference: tender.authorizationRef,
+        gateway,
+        accountId: giftLiabilityAccount,
+        amount: minorToLedger(amountMinor, order.shopCurrency),
+        amountMinor,
+        giftCardAccountId: card.id,
+        giftCardExternalId: tender.giftCardExternalId,
+        reference: tender.authorizationRef,
       });
       tenderMinor += amountMinor;
       continue;
     }
-    const accountId = await mappedAccount(orgId, order.channelId, "gateway_clearing", gateway, documentDate);
+    const accountId = await mappedAccount(
+      orgId,
+      order.channelId,
+      "gateway_clearing",
+      gateway,
+      documentDate,
+    );
     tenders.push({
-      gateway, accountId,
-      amount: minorToLedger(amountMinor, order.shopCurrency), amountMinor,
-      giftCardAccountId: null, giftCardExternalId: null, reference: tender.authorizationRef,
+      gateway,
+      accountId,
+      amount: minorToLedger(amountMinor, order.shopCurrency),
+      amountMinor,
+      giftCardAccountId: null,
+      giftCardExternalId: null,
+      reference: tender.authorizationRef,
     });
     tenderMinor += amountMinor;
   }
@@ -842,12 +1005,21 @@ export async function postCashSaleDraft(
 
   // Idempotency is per kind: a governed sale's sibling sales order shares
   // the storefront order identity, so the lookup must not observe it.
-  const existing = (await db.execute<{ id: string; status: string; posted_entry_id: string | null }>(sql`
+  const existing = (
+    await db.execute<{ id: string; status: string; posted_entry_id: string | null }>(
+      sql`
     select id, status, posted_entry_id from documents
      where org_id = ${orgId} and kind = 'cash_sale'
-       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`, "objects"))[0];
+       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`,
+      "objects",
+    )
+  )[0];
   if (existing && existing.status === "posted" && existing.posted_entry_id) {
-    return { documentId: existing.id, documentNumber: "", journalEntryId: existing.posted_entry_id };
+    return {
+      documentId: existing.id,
+      documentNumber: "",
+      journalEntryId: existing.posted_entry_id,
+    };
   }
   const approved = existing?.status === "approved";
   let documentId: string;
@@ -862,7 +1034,8 @@ export async function postCashSaleDraft(
     }
   } else {
     const documentNumber = await allocateDocumentNumber(db, orgId, "cash_sale", "CS-");
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into documents
         (org_id, kind, document_number, party_id, subsidiary_id, document_date, currency,
          status, subtotal, tax_total, total, external_ref, external_source, source_channel_id, custom,
@@ -872,7 +1045,9 @@ export async function postCashSaleDraft(
         ${merchantSubtotalLedger}, ${merchantTax}, ${merchantTotal},
         ${draft.externalRef}, ${draft.provider}, ${draft.channelId},
         '{}'::jsonb, ${actor}, ${actor})
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     if (inserted.length !== 1) throw new Error("Cash sale insert returned an unexpected row count");
     documentId = inserted[0]!.id;
   }
@@ -890,14 +1065,18 @@ export async function postCashSaleDraft(
         amount: tender.amount,
         reference: tender.reference,
       }));
-    await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor, allowedSubsidiaryIds: null });
+    await replaceDocumentTenders(db, orgId, documentId, tenderInputs, {
+      actorId: actor,
+      allowedSubsidiaryIds: null,
+    });
     let lineNumber = 0;
     for (const line of draft.lines) {
       lineNumber += 1;
       const lineTaxMinor = line.taxes
         .filter((tax) => tax.collectedBy === "merchant" || !tax.facilitatorNetMode)
         .reduce((sum, tax) => sum + tax.amountMinor, 0n);
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into document_lines
           (org_id, document_id, line_number, item_id, account_id, description, quantity,
            unit_price, amount, tax_amount, promotion_id, marketplace_facilitator, stock_location_id,
@@ -906,8 +1085,11 @@ export async function postCashSaleDraft(
           ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
           ${minorToLedger(lineTaxMinor, currency)}, ${line.promotionId}, ${line.marketplaceFacilitator},
           ${line.itemId ? draft.stockLocationId : null}, ${actor}, ${actor})
-        returning id`, "objects");
-      if (inserted.length !== 1) throw new Error("Cash sale line insert returned an unexpected row count");
+        returning id`,
+        "objects",
+      );
+      if (inserted.length !== 1)
+        throw new Error("Cash sale line insert returned an unexpected row count");
       const lineId = inserted[0]!.id;
       if (line.kind === "gift_issue") giftLineIds.push(lineId);
       let sequence = 0;
@@ -926,12 +1108,22 @@ export async function postCashSaleDraft(
       }
     }
   } else {
-    const giftLineNumbers = draft.lines.flatMap((line, index) => line.kind === "gift_issue" ? [index + 1] : []);
+    const giftLineNumbers = draft.lines.flatMap((line, index) =>
+      line.kind === "gift_issue" ? [index + 1] : [],
+    );
     if (giftLineNumbers.length > 0) {
-      const rows = await db.execute<{ id: string; lineNumber: number; accountId: string | null; amount: string }>(sql`
+      const rows = await db.execute<{
+        id: string;
+        lineNumber: number;
+        accountId: string | null;
+        amount: string;
+      }>(
+        sql`
         select id, line_number as "lineNumber", account_id as "accountId", amount::text from document_lines
          where org_id = ${orgId} and document_id = ${documentId} and line_number = any(${`{${giftLineNumbers.join(",")}}`}::int[])
-         order by line_number`, "objects");
+         order by line_number`,
+        "objects",
+      );
       for (const lineNumber of giftLineNumbers) {
         const saved = rows.find((row) => row.lineNumber === lineNumber);
         const resolved = draft.lines[lineNumber - 1]!;
@@ -1009,12 +1201,20 @@ export async function postCashSaleDraft(
   return { documentId, documentNumber: "", journalEntryId };
 }
 
-async function findGiftCardProgram(orgId: string, currency: string): Promise<{ id: string } | null> {
-  const row = (await db.execute<{ id: string }>(sql`
+async function findGiftCardProgram(
+  orgId: string,
+  currency: string,
+): Promise<{ id: string } | null> {
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from stored_value_programs
      where org_id = ${orgId} and kind = 'gift_card' and is_active
        and (currency is null or currency = ${currency})
-     order by created_at limit 1`, "objects"))[0];
+     order by created_at limit 1`,
+      "objects",
+    )
+  )[0];
   return row ? { id: row.id } : null;
 }
 
@@ -1058,11 +1258,16 @@ async function summaryPostedForDay(
   day: string,
   currency: string,
 ): Promise<boolean> {
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from channel_daily_summaries
      where org_id = ${orgId} and channel_id = ${channelId}
        and summary_date = ${day} and currency = ${currency} and status = 'posted'
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   return !!row;
 }
 
@@ -1090,27 +1295,59 @@ export async function postChannelOrder(
         { field: "orderId" },
       );
     }
-    if (order.postingStatus === "posted" || order.postingStatus === "summarized" || order.postingStatus === "excluded") {
+    if (
+      order.postingStatus === "posted" ||
+      order.postingStatus === "summarized" ||
+      order.postingStatus === "excluded"
+    ) {
       return { status: order.postingStatus, documentId: order.postingDocumentId };
     }
     try {
       const outcome = await withOrgTransaction(orgId, async () => {
         await acquireOrgFeatureGateLock(db, orgId);
         if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
-          throw new CommerceError("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
+          throw new CommerceError(
+            "feature_off",
+            "Sales Channels is turned off for this organization.",
+            FEATURE_REMEDY,
+          );
         }
         const live = await loadChannelOrder(orgId, orderId);
         if (!live) throw new Error("Channel order left while it posted");
-        if (live.postingStatus === "posted" || live.postingStatus === "summarized" || live.postingStatus === "excluded") {
-          return { status: live.postingStatus, documentId: live.postingDocumentId, effectsDocumentId: null as string | null };
+        if (
+          live.postingStatus === "posted" ||
+          live.postingStatus === "summarized" ||
+          live.postingStatus === "excluded"
+        ) {
+          return {
+            status: live.postingStatus,
+            documentId: live.postingDocumentId,
+            effectsDocumentId: null as string | null,
+          };
         }
         const resolved = await resolveOrderForPosting(orgId, actor, db, live);
         if (!resolved.paid) {
-          if (!resolved.policy.unpaidCreatesSalesOrder) return { status: "pending", documentId: null as string | null, effectsDocumentId: null as string | null };
+          if (!resolved.policy.unpaidCreatesSalesOrder)
+            return {
+              status: "pending",
+              documentId: null as string | null,
+              effectsDocumentId: null as string | null,
+            };
           // Issuing is an operator-attributed approval act: the scan leaves
           // the order pending and the operator (or API caller) replays it.
-          if (!actor) return { status: "pending", documentId: null as string | null, effectsDocumentId: null as string | null };
-          await assertPostingPeriodOpen(orgId, "sales_order", resolved.subsidiaryId, resolved.documentDate, live.externalNumber);
+          if (!actor)
+            return {
+              status: "pending",
+              documentId: null as string | null,
+              effectsDocumentId: null as string | null,
+            };
+          await assertPostingPeriodOpen(
+            orgId,
+            "sales_order",
+            resolved.subsidiaryId,
+            resolved.documentDate,
+            live.externalNumber,
+          );
           const documentId = await postUnpaidSalesOrder(orgId, actor, resolved);
           await markOrderPosted(orgId, orderId, actor, documentId);
           return { status: "posted", documentId, effectsDocumentId: documentId };
@@ -1126,11 +1363,21 @@ export async function postChannelOrder(
             "Enable Cash sales in Company Settings → Features.",
           );
         }
-        await assertPostingPeriodOpen(orgId, "cash_sale", resolved.subsidiaryId, resolved.documentDate, live.externalNumber);
+        await assertPostingPeriodOpen(
+          orgId,
+          "cash_sale",
+          resolved.subsidiaryId,
+          resolved.documentDate,
+          live.externalNumber,
+        );
         if (resolved.policy.mode === "daily_summary" && !options.forcePerOrder) {
           const day = live.orderedAt.slice(0, 10);
           if (!(await summaryPostedForDay(orgId, live.channelId, day, live.shopCurrency))) {
-            return { status: "pending", documentId: null as string | null, effectsDocumentId: null as string | null };
+            return {
+              status: "pending",
+              documentId: null as string | null,
+              effectsDocumentId: null as string | null,
+            };
           }
         }
         // A storefront-fulfilled sale posts governed by its own sales
@@ -1140,16 +1387,38 @@ export async function postChannelOrder(
         // OpenBooks fulfils issues at posting, as before.
         const governIds =
           resolved.fulfilledBy === "storefront"
-            ? [(await buildSalesOrderDraft(orgId, actor, resolved, governedSalesOrderRef(resolved.order.externalId))).documentId]
+            ? [
+                (
+                  await buildSalesOrderDraft(
+                    orgId,
+                    actor,
+                    resolved,
+                    governedSalesOrderRef(resolved.order.externalId),
+                  )
+                ).documentId,
+              ]
             : [];
-        const built = await postCashSaleDraft(orgId, actor, draftCashSaleForOrder(resolved), `channel-order:${orderId}`,
-          governIds.length > 0 ? { governFromSalesOrderIds: governIds } : undefined);
+        const built = await postCashSaleDraft(
+          orgId,
+          actor,
+          draftCashSaleForOrder(resolved),
+          `channel-order:${orderId}`,
+          governIds.length > 0 ? { governFromSalesOrderIds: governIds } : undefined,
+        );
         if (!built.journalEntryId) {
           await linkOrderDocument(orgId, orderId, actor, built.documentId);
-          return { status: "pending", documentId: built.documentId, effectsDocumentId: null as string | null };
+          return {
+            status: "pending",
+            documentId: built.documentId,
+            effectsDocumentId: null as string | null,
+          };
         }
         await markOrderPosted(orgId, orderId, actor, built.documentId);
-        return { status: "posted", documentId: built.documentId, effectsDocumentId: built.documentId };
+        return {
+          status: "posted",
+          documentId: built.documentId,
+          effectsDocumentId: built.documentId,
+        };
       });
       if (outcome.effectsDocumentId) {
         await runPostDocumentEffects(outcome.effectsDocumentId, "draft", { actorId: actor });
@@ -1165,7 +1434,11 @@ export async function postChannelOrder(
       return { status: outcome.status, documentId: outcome.documentId };
     } catch (error) {
       if (error instanceof OrderPostException) {
-        await markOrderException(orgId, orderId, actor, { code: error.code, reason: error.message, remedy: error.remedy });
+        await markOrderException(orgId, orderId, actor, {
+          code: error.code,
+          reason: error.message,
+          remedy: error.remedy,
+        });
         return { status: "exception", documentId: null, code: error.code };
       }
       throw error;
@@ -1184,12 +1457,17 @@ async function findGoverningSalesOrder(
   provider: string,
   externalRef: string,
 ): Promise<{ id: string; status: string } | null> {
-  const row = (await db.execute<{ id: string; status: string }>(sql`
+  const row = (
+    await db.execute<{ id: string; status: string }>(
+      sql`
     select id, status from documents
      where org_id = ${orgId} and kind = 'sales_order'
        and external_source = ${provider} and external_ref = ${externalRef}
        and status != 'voided'
-     order by created_at desc limit 1`, "objects"))[0];
+     order by created_at desc limit 1`,
+      "objects",
+    )
+  )[0];
   return row ?? null;
 }
 
@@ -1211,13 +1489,17 @@ export async function buildSalesOrderDraft(
   if (reuse) return { documentId: reuse.id, preExisting: true };
   const documentNumber = await allocateDocumentNumber(db, orgId, "sales_order", "SO-");
   const currency = resolved.order.shopCurrency;
-  const docSubtotal = minorToLedger(resolved.lines.reduce((sum, line) => sum + line.amountMinor, 0n), currency);
+  const docSubtotal = minorToLedger(
+    resolved.lines.reduce((sum, line) => sum + line.amountMinor, 0n),
+    currency,
+  );
   const docTax = minorToLedger(resolved.merchantTaxMinor, currency);
   const docTotal = minorToLedger(
     resolved.lines.reduce((sum, line) => sum + line.amountMinor, 0n) + resolved.merchantTaxMinor,
     currency,
   );
-  const inserted = await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into documents
       (org_id, kind, document_number, party_id, subsidiary_id, document_date, currency,
        status, subtotal, tax_total, total, external_ref, external_source, source_channel_id,
@@ -1227,7 +1509,9 @@ export async function buildSalesOrderDraft(
       ${docSubtotal}, ${docTax}, ${docTotal},
       ${externalRef}, ${resolved.provider}, ${resolved.order.channelId},
       ${actor}, ${actor})
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (inserted.length !== 1) throw new Error("Sales order insert returned an unexpected row count");
   const documentId = inserted[0]!.id;
   let lineNumber = 0;
@@ -1236,7 +1520,8 @@ export async function buildSalesOrderDraft(
     const lineTaxMinor = line.taxes
       .filter((tax) => tax.collectedBy === "merchant" || !tax.facilitatorNetMode)
       .reduce((sum, tax) => sum + tax.amountMinor, 0n);
-    const insertedLine = await db.execute<{ id: string }>(sql`
+    const insertedLine = await db.execute<{ id: string }>(
+      sql`
       insert into document_lines
         (org_id, document_id, line_number, item_id, account_id, description, quantity,
          unit_price, amount, tax_amount, promotion_id, marketplace_facilitator, stock_location_id,
@@ -1245,8 +1530,11 @@ export async function buildSalesOrderDraft(
         ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
         ${minorToLedger(lineTaxMinor, currency)}, ${line.promotionId}, ${line.marketplaceFacilitator},
         ${line.itemId ? resolved.stockLocationId : null}, ${actor}, ${actor})
-      returning id`, "objects");
-    if (insertedLine.length !== 1) throw new Error("Sales order line insert returned an unexpected row count");
+      returning id`,
+      "objects",
+    );
+    if (insertedLine.length !== 1)
+      throw new Error("Sales order line insert returned an unexpected row count");
     const lineId = insertedLine[0]!.id;
     let sequence = 0;
     for (const tax of line.taxes) {
@@ -1270,19 +1558,38 @@ export async function buildSalesOrderDraft(
  * through the engine-owned boundary. An already-issued order is observed,
  * never issued twice.
  */
-async function postUnpaidSalesOrder(orgId: string, actor: string, resolved: ResolvedOrder): Promise<string> {
+async function postUnpaidSalesOrder(
+  orgId: string,
+  actor: string,
+  resolved: ResolvedOrder,
+): Promise<string> {
   // The open order keeps the storefront order identity: shipment chains
   // match it back to the channel order through this ref.
   const built = await buildSalesOrderDraft(orgId, actor, resolved, resolved.order.externalId);
   if (built.preExisting) {
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${built.documentId} and org_id = ${orgId}`, "objects"))[0]?.status;
+    const status = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from documents where id = ${built.documentId} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.status;
     if (status && status !== "draft") return built.documentId;
   }
-  const token = (await db.execute<{ updated_at: string }>(sql`
-    select revision_seq::text as updated_at from documents where id = ${built.documentId} and org_id = ${orgId}`, "objects"))[0];
+  const token = (
+    await db.execute<{ updated_at: string }>(
+      sql`
+    select revision_seq::text as updated_at from documents where id = ${built.documentId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!token) throw new Error("Sales order left while it issued");
-  await issueSalesOrder({ orgId, salesOrderId: built.documentId, actorId: actor, expectedUpdatedAt: token.updated_at });
+  await issueSalesOrder({
+    orgId,
+    salesOrderId: built.documentId,
+    actorId: actor,
+    expectedUpdatedAt: token.updated_at,
+  });
   return built.documentId;
 }
 
@@ -1306,4 +1613,3 @@ export async function postPendingChannelOrders(
     return { posted, parked, waiting };
   });
 }
-

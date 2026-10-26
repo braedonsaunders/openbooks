@@ -29,44 +29,77 @@ export interface ComponentCandidate {
  * though one level makes them structurally impossible: an operator who picks
  * a component's own parent deserves the precise reason.
  */
-export function assertComponentAttachable(parent: ComponentCandidate, child: ComponentCandidate): void {
+export function assertComponentAttachable(
+  parent: ComponentCandidate,
+  child: ComponentCandidate,
+): void {
   if (parent.id === child.id) {
     refuse("component_self", `asset ${child.assetNumber} cannot be a component of itself`);
   }
   if (parent.parentAssetId === child.id || child.childIds.includes(parent.id)) {
-    refuse("component_cycle", `asset ${parent.assetNumber} is already a component of ${child.assetNumber}; attaching would form a cycle`);
+    refuse(
+      "component_cycle",
+      `asset ${parent.assetNumber} is already a component of ${child.assetNumber}; attaching would form a cycle`,
+    );
   }
   if (parent.parentAssetId !== null) {
-    refuse("component_nesting", `asset ${parent.assetNumber} is itself a component; attach ${child.assetNumber} to its parent instead`);
+    refuse(
+      "component_nesting",
+      `asset ${parent.assetNumber} is itself a component; attach ${child.assetNumber} to its parent instead`,
+    );
   }
   if (child.childIds.length > 0) {
-    refuse("component_nesting", `asset ${child.assetNumber} owns components and cannot become a component`, {
-      remedy: "Detach its components first, or attach them directly to the new parent.",
-    });
+    refuse(
+      "component_nesting",
+      `asset ${child.assetNumber} owns components and cannot become a component`,
+      {
+        remedy: "Detach its components first, or attach them directly to the new parent.",
+      },
+    );
   }
   if (child.parentAssetId !== null && child.parentAssetId !== parent.id) {
-    refuse("component_already_attached", `asset ${child.assetNumber} is already a component of another asset`, {
-      remedy: "Detach it from its current parent first.",
-    });
+    refuse(
+      "component_already_attached",
+      `asset ${child.assetNumber} is already a component of another asset`,
+      {
+        remedy: "Detach it from its current parent first.",
+      },
+    );
   }
   if (parent.subsidiaryId !== child.subsidiaryId) {
-    refuse("component_cross_subsidiary", `asset ${child.assetNumber} belongs to a different legal entity than ${parent.assetNumber}`, {
-      remedy: "Transfer the asset to the parent's legal entity first; components always share their parent's entity.",
-    });
+    refuse(
+      "component_cross_subsidiary",
+      `asset ${child.assetNumber} belongs to a different legal entity than ${parent.assetNumber}`,
+      {
+        remedy:
+          "Transfer the asset to the parent's legal entity first; components always share their parent's entity.",
+      },
+    );
   }
   if (!(PARENT_OPEN_STATUSES as readonly string[]).includes(parent.status)) {
-    refuse("component_parent_status", `asset ${parent.assetNumber} is ${parent.status} and cannot take components`);
+    refuse(
+      "component_parent_status",
+      `asset ${parent.assetNumber} is ${parent.status} and cannot take components`,
+    );
   }
   if (!(COMPONENT_ATTACHABLE_STATUSES as readonly string[]).includes(child.status)) {
-    refuse("component_status", `asset ${child.assetNumber} is ${child.status} and cannot become a component`);
+    refuse(
+      "component_status",
+      `asset ${child.assetNumber} is ${child.status} and cannot become a component`,
+    );
   }
   if (parent.scheduledBookIds.length > 0 && child.scheduledBookIds.length > 0) {
     const parentBooks = [...new Set(parent.scheduledBookIds)].sort();
     const childBooks = [...new Set(child.scheduledBookIds)].sort();
     if (parentBooks.join(",") !== childBooks.join(",")) {
-      refuse("component_books_mismatch", `asset ${child.assetNumber} is depreciated in different accounting books than ${parent.assetNumber}`, {
-        remedy: "Rebuild both depreciation schedules so they cover the same active books, then attach again.",
-      });
+      refuse(
+        "component_books_mismatch",
+        `asset ${child.assetNumber} is depreciated in different accounting books than ${parent.assetNumber}`,
+        {
+          remedy:
+            "Rebuild both depreciation schedules so they cover the same active books, then attach again.",
+        },
+      );
     }
   }
 }
@@ -91,7 +124,13 @@ export interface BookRollup {
 export function rollUpCompound(rows: readonly BookValueRow[]): BookRollup[] {
   const byBook = new Map<string, BookRollup>();
   for (const row of rows) {
-    const current = byBook.get(row.bookId) ?? { bookId: row.bookId, cost: "0.0000", accumulated: "0.0000", carryingValue: "0.0000", assets: 0 };
+    const current = byBook.get(row.bookId) ?? {
+      bookId: row.bookId,
+      cost: "0.0000",
+      accumulated: "0.0000",
+      carryingValue: "0.0000",
+      assets: 0,
+    };
     byBook.set(row.bookId, {
       bookId: row.bookId,
       cost: add(current.cost, row.cost),
@@ -124,8 +163,13 @@ export function apportionProceeds(
     return amount > 0n ? amount : 0n;
   };
   let weights = assets.map((asset) => positive(asset.carryingValue));
-  if (weights.every((weight) => weight === 0n)) weights = assets.map((asset) => positive(asset.cost));
-  if (weights.every((weight) => weight === 0n)) weights = assets.map((_, index) => (index === 0 ? 1n : 0n));
+  if (weights.every((weight) => weight === 0n))
+    weights = assets.map((asset) => positive(asset.cost));
+  if (weights.every((weight) => weight === 0n))
+    weights = assets.map((_, index) => (index === 0 ? 1n : 0n));
   const parts = isZero(proceeds) ? assets.map(() => 0n) : apportion(cents, weights);
-  return assets.map((asset, index) => ({ assetId: asset.assetId, proceeds: fromUnits(parts[index]! * 100n) }));
+  return assets.map((asset, index) => ({
+    assetId: asset.assetId,
+    proceeds: fromUnits(parts[index]! * 100n),
+  }));
 }

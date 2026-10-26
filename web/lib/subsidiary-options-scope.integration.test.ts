@@ -1,11 +1,11 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { rootSubsidiary, subsidiaryOptions } = await import('./subsidiaries')
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { rootSubsidiary, subsidiaryOptions } = await import("./subsidiaries");
 
 /**
  * subsidiaryOptions feeds every subsidiary picker plus the consolidation
@@ -15,36 +15,53 @@ const { rootSubsidiary, subsidiaryOptions } = await import('./subsidiaries')
  * an unscoped list silently grafts another tenant's entities into this
  * org's pickers and consolidation subtrees.
  */
-test('subsidiaryOptions never lists another tenant under an org context', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await withBypass(() => createScratchOrg())
-  const orgB = await withBypass(() => createScratchOrg())
-  try {
-    const intruder = `Intruder ${randomUUID()}`
-    await withBypass(async () => {
-      await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${randomUUID()}, ${orgB.orgId}, ${orgB.subsidiaryId}, ${intruder}, 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`)
-    })
-    const options = await withOrgContext(orgA.orgId, () => subsidiaryOptions())
-    const names = options.map((o) => o.name)
-    assert.ok(names.length > 0, 'expected org A to list its own subsidiaries')
-    assert.ok(!names.includes(intruder), `org B subsidiary leaked into org A options: ${names.join(', ')}`)
-    const orgOf = await withBypass(async () => db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgA.orgId}`, 'objects'))
-    const own = new Set(orgOf.map((r) => r.id))
-    for (const o of options) assert.ok(own.has(o.id), `option ${o.id} (${o.name}) is not org A's`)
+test(
+  "subsidiaryOptions never lists another tenant under an org context",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const orgA = await withBypass(() => createScratchOrg());
+    const orgB = await withBypass(() => createScratchOrg());
+    try {
+      const intruder = `Intruder ${randomUUID()}`;
+      await withBypass(async () => {
+        await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${randomUUID()}, ${orgB.orgId}, ${orgB.subsidiaryId}, ${intruder}, 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+      });
+      const options = await withOrgContext(orgA.orgId, () => subsidiaryOptions());
+      const names = options.map((o) => o.name);
+      assert.ok(names.length > 0, "expected org A to list its own subsidiaries");
+      assert.ok(
+        !names.includes(intruder),
+        `org B subsidiary leaked into org A options: ${names.join(", ")}`,
+      );
+      const orgOf = await withBypass(async () =>
+        db.execute<{ id: string }>(
+          sql`
+      select id from subsidiaries where org_id = ${orgA.orgId}`,
+          "objects",
+        ),
+      );
+      const own = new Set(orgOf.map((r) => r.id));
+      for (const o of options)
+        assert.ok(own.has(o.id), `option ${o.id} (${o.name}) is not org A's`);
 
-    const root = await withBypass(() => rootSubsidiary(orgA.orgId))
-    assert.equal(root.id, orgA.subsidiaryId, 'root lookup must bind the requested organization under BYPASSRLS')
-    const explicitOptions = await withBypass(() => subsidiaryOptions(false, false, orgA.orgId))
-    assert.ok(explicitOptions.length > 0)
-    assert.ok(explicitOptions.every((option) => own.has(option.id)))
-    assert.deepEqual(
-      await withBypass(() => subsidiaryOptions()),
-      [],
-      'a helper with no explicit or ambient tenant must fail closed under BYPASSRLS',
-    )
-  } finally {
-    await withBypass(() => dropScratchOrg(orgA.orgId))
-    await withBypass(() => dropScratchOrg(orgB.orgId))
-  }
-})
+      const root = await withBypass(() => rootSubsidiary(orgA.orgId));
+      assert.equal(
+        root.id,
+        orgA.subsidiaryId,
+        "root lookup must bind the requested organization under BYPASSRLS",
+      );
+      const explicitOptions = await withBypass(() => subsidiaryOptions(false, false, orgA.orgId));
+      assert.ok(explicitOptions.length > 0);
+      assert.ok(explicitOptions.every((option) => own.has(option.id)));
+      assert.deepEqual(
+        await withBypass(() => subsidiaryOptions()),
+        [],
+        "a helper with no explicit or ambient tenant must fail closed under BYPASSRLS",
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(orgA.orgId));
+      await withBypass(() => dropScratchOrg(orgB.orgId));
+    }
+  },
+);

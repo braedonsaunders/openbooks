@@ -10,7 +10,10 @@ import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 /* ------------------------------------------------------------------ */
 
 export function budgetBaseJoins(allowedSubsidiaryIds?: ReadonlySet<string> | null): SQL {
-  const lineSubsidiaryFilter = subsidiaryVisibleFilter(sql`bl.subsidiary_id`, allowedSubsidiaryIds ?? null)
+  const lineSubsidiaryFilter = subsidiaryVisibleFilter(
+    sql`bl.subsidiary_id`,
+    allowedSubsidiaryIds ?? null,
+  );
   return sql`
     join accounting_books budget_book on budget_book.id=bs.book_id and budget_book.org_id=bs.org_id
     left join lateral (
@@ -18,7 +21,7 @@ export function budgetBaseJoins(allowedSubsidiaryIds?: ReadonlySet<string> | nul
         from budget_lines bl
         left join accounts a on a.id=bl.account_id and a.org_id=bl.org_id
        where bl.scenario_id=bs.id and bl.org_id=bs.org_id${lineSubsidiaryFilter}
-    ) budget_total on true`
+    ) budget_total on true`;
 }
 
 export const BUDGET_BUILT_IN_EXPR: Record<string, SQL> = {
@@ -29,7 +32,7 @@ export const BUDGET_BUILT_IN_EXPR: Record<string, SQL> = {
   status: sql`bs.status`,
   total_amount: sql`budget_total.amount`,
   updated: sql`to_char(bs.updated_at, 'YYYY-MM-DD HH24:MI')`,
-}
+};
 
 export const BUDGET_SORTS: Record<string, SQL> = {
   name: sql`bs.name`,
@@ -39,31 +42,40 @@ export const BUDGET_SORTS: Record<string, SQL> = {
   status: sql`bs.status`,
   total: sql`budget_total.amount`,
   updated: sql`bs.updated_at`,
-}
+};
 
 function budgetFilterPredicate(clause: FilterClause): SQL | null {
-  const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+  const value = Array.isArray(clause.value)
+    ? String(clause.value[0] ?? "")
+    : String(clause.value ?? "");
   const select = (column: SQL) => {
-    if (clause.operator === 'eq') return sql`${column} = ${value}`
-    if (clause.operator === 'ne') return sql`${column} <> ${value}`
-    if (clause.operator === 'in' || clause.operator === 'not_in') {
-      const values = (Array.isArray(clause.value) ? clause.value : [value]).map(String).filter(Boolean)
-      if (!values.length) return clause.operator === 'in' ? sql`false` : sql`true`
-      const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
-      return clause.operator === 'in' ? sql`${column}::text in (${list})` : sql`${column}::text not in (${list})`
+    if (clause.operator === "eq") return sql`${column} = ${value}`;
+    if (clause.operator === "ne") return sql`${column} <> ${value}`;
+    if (clause.operator === "in" || clause.operator === "not_in") {
+      const values = (Array.isArray(clause.value) ? clause.value : [value])
+        .map(String)
+        .filter(Boolean);
+      if (!values.length) return clause.operator === "in" ? sql`false` : sql`true`;
+      const list = sql.join(
+        values.map((item) => sql`${item}`),
+        sql`, `,
+      );
+      return clause.operator === "in"
+        ? sql`${column}::text in (${list})`
+        : sql`${column}::text not in (${list})`;
     }
-    return null
+    return null;
+  };
+  if (clause.key === "status") return select(sql`bs.status`);
+  if (clause.key === "kind") return select(sql`bs.kind`);
+  if (clause.key === "fiscal_year") return select(sql`bs.fiscal_year::text`);
+  if (clause.key === "book_id") {
+    const refused = uuidOrFalse(value);
+    if (refused) return refused;
+    if (clause.operator === "eq") return sql`bs.book_id = ${value}`;
+    if (clause.operator === "ne") return sql`bs.book_id <> ${value}`;
   }
-  if (clause.key === 'status') return select(sql`bs.status`)
-  if (clause.key === 'kind') return select(sql`bs.kind`)
-  if (clause.key === 'fiscal_year') return select(sql`bs.fiscal_year::text`)
-  if (clause.key === 'book_id') {
-    const refused = uuidOrFalse(value)
-    if (refused) return refused
-    if (clause.operator === 'eq') return sql`bs.book_id = ${value}`
-    if (clause.operator === 'ne') return sql`bs.book_id <> ${value}`
-  }
-  return null
+  return null;
 }
 
 /**
@@ -77,7 +89,7 @@ function budgetFilterPredicate(clause: FilterClause): SQL | null {
  * which scenarios exist for the caller.
  */
 export function budgetScenarioScopeFilter(allowedSubsidiaryIds: ReadonlySet<string>): SQL {
-  const scope = `{${[...allowedSubsidiaryIds].join(',')}}`
+  const scope = `{${[...allowedSubsidiaryIds].join(",")}}`;
   return sql`and not exists (
     select 1 from budget_lines bl
      where bl.org_id = bs.org_id and bl.scenario_id = bs.id
@@ -90,7 +102,7 @@ export function budgetScenarioScopeFilter(allowedSubsidiaryIds: ReadonlySet<stri
               and root.id = any(${scope}::uuid[])
          ))
        )
-  )`
+  )`;
 }
 
 export function budgetWhere(
@@ -99,25 +111,26 @@ export function budgetWhere(
   orgId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): SQL {
-  const parts: SQL[] = [sql`bs.org_id = ${orgId}`]
+  const parts: SQL[] = [sql`bs.org_id = ${orgId}`];
   if (allowedSubsidiaryIds !== undefined && allowedSubsidiaryIds !== null) {
-    parts.push(budgetScenarioScopeFilter(allowedSubsidiaryIds))
+    parts.push(budgetScenarioScopeFilter(allowedSubsidiaryIds));
   }
   for (const filter of view.filters) {
-    if (pushCustomFieldFilter(parts, filter, "bs")) continue
-    const predicate = budgetFilterPredicate(filter)
-    if (predicate) parts.push(sql`and ${predicate}`)
+    if (pushCustomFieldFilter(parts, filter, "bs")) continue;
+    const predicate = budgetFilterPredicate(filter);
+    if (predicate) parts.push(sql`and ${predicate}`);
   }
-  if (adhoc.filters?.status) parts.push(sql`and bs.status = ${adhoc.filters.status}`)
-  if (adhoc.filters?.kind) parts.push(sql`and bs.kind = ${adhoc.filters.kind}`)
-  if (adhoc.filters?.fiscal_year) parts.push(sql`and bs.fiscal_year::text = ${adhoc.filters.fiscal_year}`)
+  if (adhoc.filters?.status) parts.push(sql`and bs.status = ${adhoc.filters.status}`);
+  if (adhoc.filters?.kind) parts.push(sql`and bs.kind = ${adhoc.filters.kind}`);
+  if (adhoc.filters?.fiscal_year)
+    parts.push(sql`and bs.fiscal_year::text = ${adhoc.filters.fiscal_year}`);
   if (adhoc.filters?.book_id) {
-    const refused = uuidOrFalse(adhoc.filters.book_id)
-    parts.push(refused ? sql`and ${refused}` : sql`and bs.book_id = ${adhoc.filters.book_id}`)
+    const refused = uuidOrFalse(adhoc.filters.book_id);
+    parts.push(refused ? sql`and ${refused}` : sql`and bs.book_id = ${adhoc.filters.book_id}`);
   }
   if (adhoc.q) {
-    const query = `%${adhoc.q}%`
-    parts.push(sql`and (bs.name ilike ${query} or bs.description ilike ${query})`)
+    const query = `%${adhoc.q}%`;
+    parts.push(sql`and (bs.name ilike ${query} or bs.description ilike ${query})`);
   }
-  return sql.join(parts, sql` `)
+  return sql.join(parts, sql` `);
 }

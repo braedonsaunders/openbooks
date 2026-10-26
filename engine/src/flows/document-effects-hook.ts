@@ -16,11 +16,7 @@ import type { FlowExecCtx } from "./types.ts";
  */
 export interface FlowDocumentEffects {
   /** Post a subject and return the GL entry id (post_document action). */
-  postSubject(args: {
-    subjectKind: string;
-    subjectId: string;
-    ctx: FlowExecCtx;
-  }): Promise<string>;
+  postSubject(args: { subjectKind: string; subjectId: string; ctx: FlowExecCtx }): Promise<string>;
   /** Complete an approved requested void on a posted/approved document. */
   completeRequestedVoid(
     subjectId: string,
@@ -50,9 +46,7 @@ export class FlowDocumentEffectsNotInstalledError extends Error {
 
 let effects: FlowDocumentEffects | null = null;
 
-export function registerFlowDocumentEffects(
-  next: FlowDocumentEffects,
-): void {
+export function registerFlowDocumentEffects(next: FlowDocumentEffects): void {
   effects = next;
 }
 

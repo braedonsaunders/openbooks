@@ -37,17 +37,24 @@ const reportPath = args.get("report");
 const connectionString = process.env.OPENBOOKS_RESTORE_DB_URL;
 
 if (!input?.startsWith("/")) throw new Error("--in=<absolute-path> is required");
-if (manifestPath && !manifestPath.startsWith("/")) throw new Error("--manifest must be an absolute path");
+if (manifestPath && !manifestPath.startsWith("/"))
+  throw new Error("--manifest must be an absolute path");
 if ((!manifestPath && !suppliedSha256) || (manifestPath && suppliedSha256)) {
-  throw new Error("provide exactly one of --manifest=<absolute-path> or --sha256=<stored-backup-sha256>");
+  throw new Error(
+    "provide exactly one of --manifest=<absolute-path> or --sha256=<stored-backup-sha256>",
+  );
 }
 if (!reportPath?.startsWith("/")) throw new Error("--report=<absolute-path> is required");
 if (!expectedOrgId) throw new Error("--org=<uuid> is required");
 if (args.get("confirm-empty-target") !== expectedOrgId) {
-  throw new Error("--confirm-empty-target=<org-uuid> must exactly match --org; restore also refuses databases containing any organization");
+  throw new Error(
+    "--confirm-empty-target=<org-uuid> must exactly match --org; restore also refuses databases containing any organization",
+  );
 }
 if (!connectionString) {
-  throw new Error("OPENBOOKS_RESTORE_DB_URL is required and must identify the controlled schema-owner restore connection");
+  throw new Error(
+    "OPENBOOKS_RESTORE_DB_URL is required and must identify the controlled schema-owner restore connection",
+  );
 }
 if (existsSync(reportPath)) throw new Error(`refusing to overwrite restore report ${reportPath}`);
 

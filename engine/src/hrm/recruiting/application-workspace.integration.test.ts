@@ -1,22 +1,10 @@
 import assert from "node:assert/strict";
-import {
-  scopeMatrix,
-  scopeRow,
-  refusal,
-  type ScopeWorld,
-} from "../../testing/hrm-scope-matrix.ts";
+import { scopeMatrix, scopeRow, refusal, type ScopeWorld } from "../../testing/hrm-scope-matrix.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import { createRequisition, openRequisition } from "./requisitions.ts";
 import { createCandidate } from "./candidates.ts";
-import {
-  createApplication,
-  moveApplicationStage,
-  rejectApplication,
-} from "./applications.ts";
-import {
-  getApplicationWorkspace,
-  listApplicationWorklist,
-} from "./application-workspace.ts";
+import { createApplication, moveApplicationStage, rejectApplication } from "./applications.ts";
+import { getApplicationWorkspace, listApplicationWorklist } from "./application-workspace.ts";
 import { RecruitingError } from "./errors.ts";
 async function seed(w: ScopeWorld) {
   const base = { orgId: w.orgId, actorId: w.admin };
@@ -110,9 +98,7 @@ scopeMatrix([
       };
       const initial = await getApplicationWorkspace(base);
       const next = initial.requisition.stages.find(
-        (stage) =>
-          stage.id !== appA.stageId &&
-          !["hired", "rejected"].includes(stage.kind),
+        (stage) => stage.id !== appA.stageId && !["hired", "rejected"].includes(stage.kind),
       )!;
       const moved = await moveApplicationStage({
         ...base,
@@ -139,9 +125,7 @@ scopeMatrix([
       });
       assert.equal(reject.status, "rejected");
       const evidence = await getApplicationWorkspace(base);
-      assert.ok(
-        evidence.events.some((e) => e.reason === "Role requirements not met"),
-      );
+      assert.ok(evidence.events.some((e) => e.reason === "Role requirements not met"));
     },
   }),
 ]);

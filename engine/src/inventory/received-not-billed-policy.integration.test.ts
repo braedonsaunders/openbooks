@@ -12,8 +12,11 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  * order instead of debiting inventory a second time. Runs in a child with
  * React's server condition like the purchase-receipt counterpart.
  */
-test("received-not-billed resolves profile then company and never double-counts", { skip: !DB }, () => {
-  const source = `
+test(
+  "received-not-billed resolves profile then company and never double-counts",
+  { skip: !DB },
+  () => {
+    const source = `
     import { installEngineSeams } from "./engine/src/composition/install.ts";
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
@@ -198,20 +201,21 @@ test("received-not-billed resolves profile then company and never double-counts"
     console.log("RECEIVED-NOT-BILLED-POLICY");
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /RECEIVED-NOT-BILLED-POLICY/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /RECEIVED-NOT-BILLED-POLICY/);
+  },
+);

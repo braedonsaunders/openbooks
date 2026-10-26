@@ -14,7 +14,14 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
-import { identifyByPin, listKioskWorkers, listKioskWorkersInScope, registerKiosk, revokeKiosk, setWorkerPin } from "./kiosk.ts";
+import {
+  identifyByPin,
+  listKioskWorkers,
+  listKioskWorkersInScope,
+  registerKiosk,
+  revokeKiosk,
+  setWorkerPin,
+} from "./kiosk.ts";
 import { FieldTimeError } from "./errors.ts";
 import { ScopeNotFoundError, UnrestrictedScopeError } from "../../organization/subsidiary-scope.ts";
 
@@ -30,9 +37,14 @@ async function enableFieldTime(orgId: string): Promise<void> {
 
 function refusesCode(fn: () => Promise<unknown>): Promise<string> {
   return fn().then(
-    () => { throw new Error("expected a refusal"); },
+    () => {
+      throw new Error("expected a refusal");
+    },
     (error) => {
-      assert.ok(error instanceof FieldTimeError, `refusal is a FieldTimeError, got ${String(error)}`);
+      assert.ok(
+        error instanceof FieldTimeError,
+        `refusal is a FieldTimeError, got ${String(error)}`,
+      );
       return (error as FieldTimeError).code;
     },
   );
@@ -52,14 +64,19 @@ test("the terminal lists active employees only, with no silent cap", { skip: !DB
     const inactiveEmployee = randomUUID();
     await withOrg(org.orgId, async () => {
       const partyValues = [
-        ...employeeIds.map((id, index) => sql`(${id}, ${org.orgId}, 'person', ${`Worker ${String(index).padStart(4, "0")}`}, true)`),
+        ...employeeIds.map(
+          (id, index) =>
+            sql`(${id}, ${org.orgId}, 'person', ${`Worker ${String(index).padStart(4, "0")}`}, true)`,
+        ),
         sql`(${customer}, ${org.orgId}, 'customer', 'Acme Customer', true)`,
         sql`(${vendor}, ${org.orgId}, 'vendor', 'Supply Vendor', true)`,
         sql`(${terminated}, ${org.orgId}, 'person', 'Gone Worker', true)`,
         sql`(${inactiveEmployee}, ${org.orgId}, 'person', 'Dormant Worker', false)`,
       ];
       for (let at = 0; at < partyValues.length; at += 100) {
-        await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active) values ${sql.join(partyValues.slice(at, at + 100), sql`, `)}`);
+        await db.execute(
+          sql`insert into parties (id, org_id, kind, display_name, is_active) values ${sql.join(partyValues.slice(at, at + 100), sql`, `)}`,
+        );
       }
       // Employment ids are tracked alongside their parties — versions join
       // below by the same handle, never by read-back order.
@@ -67,34 +84,52 @@ test("the terminal lists active employees only, with no silent cap", { skip: !DB
       const terminatedEmployment = randomUUID();
       const inactiveEmployment = randomUUID();
       const employmentRows = [
-        ...employeeIds.map((id, index) => sql`(${employments[index]!.id}, ${org.orgId}, ${id}, ${org.subsidiaryId}, 1)`),
+        ...employeeIds.map(
+          (id, index) =>
+            sql`(${employments[index]!.id}, ${org.orgId}, ${id}, ${org.subsidiaryId}, 1)`,
+        ),
         sql`(${terminatedEmployment}, ${org.orgId}, ${terminated}, ${org.subsidiaryId}, 1)`,
         sql`(${inactiveEmployment}, ${org.orgId}, ${inactiveEmployee}, ${org.subsidiaryId}, 1)`,
       ];
       for (let at = 0; at < employmentRows.length; at += 100) {
-        await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values ${sql.join(employmentRows.slice(at, at + 100), sql`, `)}`);
+        await db.execute(
+          sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values ${sql.join(employmentRows.slice(at, at + 100), sql`, `)}`,
+        );
       }
       const versionRows = [
-        ...employments.map((employment) => sql`(${org.orgId}, ${employment.id}, 1, 'active', '2020-01-01'::date, null, now())`),
+        ...employments.map(
+          (employment) =>
+            sql`(${org.orgId}, ${employment.id}, 1, 'active', '2020-01-01'::date, null, now())`,
+        ),
         sql`(${org.orgId}, ${terminatedEmployment}, 1, 'terminated', '2020-01-01'::date, null, now())`,
         sql`(${org.orgId}, ${inactiveEmployment}, 1, 'active', '2020-01-01'::date, null, now())`,
       ];
       for (let at = 0; at < versionRows.length; at += 100) {
-        await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values ${sql.join(versionRows.slice(at, at + 100), sql`, `)}`);
+        await db.execute(
+          sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values ${sql.join(versionRows.slice(at, at + 100), sql`, `)}`,
+        );
       }
     });
     const workers = await listKioskWorkers(org.orgId);
     assert.equal(workers.length, COUNT, `expected all ${COUNT} active employees, no cap`);
     const visibleWorkers = await listKioskWorkersInScope(org.orgId, new Set([org.subsidiaryId]));
     assert.equal(visibleWorkers.length, COUNT, "the visible employer retains all eligible workers");
-    assert.deepEqual(await listKioskWorkersInScope(org.orgId, new Set()), [], "an empty employer scope reveals no workers");
+    assert.deepEqual(
+      await listKioskWorkersInScope(org.orgId, new Set()),
+      [],
+      "an empty employer scope reveals no workers",
+    );
     const names = new Set(workers.map((worker) => worker.name));
     assert.ok(!names.has("Acme Customer"), "customers must not appear");
     assert.ok(!names.has("Supply Vendor"), "vendors must not appear");
     assert.ok(!names.has("Gone Worker"), "terminated employments must not appear");
     assert.ok(!names.has("Dormant Worker"), "inactive parties must not appear");
     const sorted = [...workers.map((worker) => worker.name)].sort();
-    assert.deepEqual(workers.map((worker) => worker.name), sorted, "workers arrive name-ordered for the terminal");
+    assert.deepEqual(
+      workers.map((worker) => worker.name),
+      sorted,
+      "workers arrive name-ordered for the terminal",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -106,16 +141,32 @@ test("kiosk PIN identify and PIN set refuse non-employees", { skip: !DB }, async
     await enableFieldTime(org.orgId);
     const customer = randomUUID();
     const { kiosk } = await withOrg(org.orgId, async () => {
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${customer}, ${org.orgId}, 'customer', 'Acme Customer')`);
-      return registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Gate", allowedSubsidiaryIds: null });
+      await db.execute(
+        sql`insert into parties (id, org_id, kind, display_name) values (${customer}, ${org.orgId}, 'customer', 'Acme Customer')`,
+      );
+      return registerKiosk({
+        orgId: org.orgId,
+        actorUserId: randomUUID(),
+        name: "Gate",
+        allowedSubsidiaryIds: null,
+      });
     });
     assert.equal(
       await refusesCode(() => identifyByPin({ kiosk, employeePartyId: customer, pin: "0000" })),
       "not_employee",
     );
     assert.equal(
-      await refusesCode(() => withOrg(org.orgId, () =>
-        setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: customer, pin: "4821", allowedSubsidiaryIds: null }))),
+      await refusesCode(() =>
+        withOrg(org.orgId, () =>
+          setWorkerPin({
+            orgId: org.orgId,
+            actorUserId: randomUUID(),
+            employeePartyId: customer,
+            pin: "4821",
+            allowedSubsidiaryIds: null,
+          }),
+        ),
+      ),
       "not_employee",
     );
   } finally {
@@ -123,51 +174,97 @@ test("kiosk PIN identify and PIN set refuse non-employees", { skip: !DB }, async
   }
 });
 
-test("kiosk-wide actions refuse restricted scope and PIN resets require every active employer in scope", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await enableFieldTime(org.orgId);
-    const worker = randomUUID();
-    const employmentId = randomUUID();
-    const outsideEmploymentId = randomUUID();
-    const outsideSubsidiaryId = randomUUID();
-    await withOrg(org.orgId, async () => {
-      await db.execute(sql`
+test(
+  "kiosk-wide actions refuse restricted scope and PIN resets require every active employer in scope",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await enableFieldTime(org.orgId);
+      const worker = randomUUID();
+      const employmentId = randomUUID();
+      const outsideEmploymentId = randomUUID();
+      const outsideSubsidiaryId = randomUUID();
+      await withOrg(org.orgId, async () => {
+        await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${outsideSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Outside scope', 'USD', 'US')`);
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Scoped Worker')`);
-      await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${employmentId}, ${org.orgId}, ${worker}, ${org.subsidiaryId}, 1)`);
-      await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
-      await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${outsideEmploymentId}, ${org.orgId}, ${worker}, ${outsideSubsidiaryId}, 1)`);
-      await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${outsideEmploymentId}, 1, 'active', '2020-01-01'::date, null, now())`);
+        await db.execute(
+          sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Scoped Worker')`,
+        );
+        await db.execute(
+          sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${employmentId}, ${org.orgId}, ${worker}, ${org.subsidiaryId}, 1)`,
+        );
+        await db.execute(
+          sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`,
+        );
+        await db.execute(
+          sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${outsideEmploymentId}, ${org.orgId}, ${worker}, ${outsideSubsidiaryId}, 1)`,
+        );
+        await db.execute(
+          sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${outsideEmploymentId}, 1, 'active', '2020-01-01'::date, null, now())`,
+        );
 
-      await assert.rejects(
-        registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Restricted", allowedSubsidiaryIds: new Set([org.subsidiaryId]) }),
-        UnrestrictedScopeError,
-      );
-      const { kiosk } = await registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Scoped", allowedSubsidiaryIds: null });
-      await assert.rejects(
-        setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: worker, pin: "4821", allowedSubsidiaryIds: new Set() }),
-        ScopeNotFoundError,
-      );
-      assert.deepEqual(
-        await listKioskWorkersInScope(org.orgId, new Set([org.subsidiaryId])),
-        [],
-        "the PIN picker excludes workers with another active employer outside the actor's scope",
-      );
-      await assert.rejects(
-        setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: worker, pin: "4821", allowedSubsidiaryIds: new Set([org.subsidiaryId]) }),
-        ScopeNotFoundError,
-      );
-      await assert.rejects(
-        // An unassigned kiosk has org-wide effect and cannot be retired by a restricted actor.
-        revokeKiosk({ orgId: org.orgId, kioskId: kiosk.id, actorUserId: randomUUID(), allowedSubsidiaryIds: new Set([org.subsidiaryId]) }),
-        UnrestrictedScopeError,
-      );
-      const pins = (await db.execute<{ count: string }>(sql`select count(*)::text as count from worker_clock_pins where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects"))[0];
-      assert.equal(pins?.count, "0", "the refused PIN reset leaves no credential row");
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        await assert.rejects(
+          registerKiosk({
+            orgId: org.orgId,
+            actorUserId: randomUUID(),
+            name: "Restricted",
+            allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+          }),
+          UnrestrictedScopeError,
+        );
+        const { kiosk } = await registerKiosk({
+          orgId: org.orgId,
+          actorUserId: randomUUID(),
+          name: "Scoped",
+          allowedSubsidiaryIds: null,
+        });
+        await assert.rejects(
+          setWorkerPin({
+            orgId: org.orgId,
+            actorUserId: randomUUID(),
+            employeePartyId: worker,
+            pin: "4821",
+            allowedSubsidiaryIds: new Set(),
+          }),
+          ScopeNotFoundError,
+        );
+        assert.deepEqual(
+          await listKioskWorkersInScope(org.orgId, new Set([org.subsidiaryId])),
+          [],
+          "the PIN picker excludes workers with another active employer outside the actor's scope",
+        );
+        await assert.rejects(
+          setWorkerPin({
+            orgId: org.orgId,
+            actorUserId: randomUUID(),
+            employeePartyId: worker,
+            pin: "4821",
+            allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+          }),
+          ScopeNotFoundError,
+        );
+        await assert.rejects(
+          // An unassigned kiosk has org-wide effect and cannot be retired by a restricted actor.
+          revokeKiosk({
+            orgId: org.orgId,
+            kioskId: kiosk.id,
+            actorUserId: randomUUID(),
+            allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+          }),
+          UnrestrictedScopeError,
+        );
+        const pins = (
+          await db.execute<{ count: string }>(
+            sql`select count(*)::text as count from worker_clock_pins where org_id = ${org.orgId} and employee_party_id = ${worker}`,
+            "objects",
+          )
+        )[0];
+        assert.equal(pins?.count, "0", "the refused PIN reset leaves no credential row");
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

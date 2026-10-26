@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { complianceSpec, complianceTitle, loadCompliancePageData } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { complianceSpec, complianceTitle, loadCompliancePageData } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await complianceTitle() }
+  return { title: await complianceTitle() };
 }
 
 /**
@@ -16,9 +16,16 @@ export async function generateMetadata() {
 export default async function CompliancePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadCompliancePageData(sp)
-  return <ModuleView spec={complianceSpec(data, '/hrm/compliance')} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadCompliancePageData(sp);
+  return (
+    <ModuleView
+      spec={complianceSpec(data, "/hrm/compliance")}
+      data={data}
+      searchParams={sp}
+      trusted
+    />
+  );
 }

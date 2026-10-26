@@ -61,11 +61,7 @@ export function addOffsetDays(effectiveDate: string, offsetDays: number): CivilD
  * Overdue = due_on strictly before business today while still pending.
  * Done and skipped steps are never overdue, whatever their dates.
  */
-export function isStepOverdue(args: {
-  dueOn: string;
-  today: string;
-  status: string;
-}): boolean {
+export function isStepOverdue(args: { dueOn: string; today: string; status: string }): boolean {
   const dueOn = parseCivilDate(args.dueOn);
   const today = parseCivilDate(args.today);
   if (args.status === "done" || args.status === "skipped") return false;
@@ -237,7 +233,8 @@ export function resolveTemplateForEmployment(
 ): MatchableTemplate {
   const matching = templates.filter(
     (template) =>
-      (template.employerSubsidiaryId === null || template.employerSubsidiaryId === employment.employerSubsidiaryId) &&
+      (template.employerSubsidiaryId === null ||
+        template.employerSubsidiaryId === employment.employerSubsidiaryId) &&
       (template.departmentId === null || template.departmentId === employment.departmentId),
   );
   if (matching.length === 0) {

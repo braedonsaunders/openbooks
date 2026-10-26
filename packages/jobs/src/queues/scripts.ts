@@ -1,7 +1,7 @@
-import { Queue, type JobsOptions } from 'bullmq'
-import { getConnection } from '../connection'
+import { Queue, type JobsOptions } from "bullmq";
+import { getConnection } from "../connection";
 
-export const SCRIPTS_QUEUE = 'scripts'
+export const SCRIPTS_QUEUE = "scripts";
 
 /**
  * One background script run. Two kinds share the queue:
@@ -10,11 +10,11 @@ export const SCRIPTS_QUEUE = 'scripts'
  *   bulk      — a long-budget "Run now" job (extended timeout + row limits)
  */
 export type ScriptJobData = {
-  orgId: string
-  scriptId: string
-  kind: 'scheduled' | 'bulk'
+  orgId: string;
+  scriptId: string;
+  kind: "scheduled" | "bulk";
   /** Who pressed Run now (absent for cron ticks). */
-  actorId?: string
+  actorId?: string;
   /**
    * The caller's run key for interactive bulk runs. The worker
    * re-checks the durable claim under this key because BullMQ dedupe only
@@ -22,7 +22,7 @@ export type ScriptJobData = {
    * outcome instead of executing the script twice. Absent on scheduled runs
    * (occurrence keys) and on jobs enqueued before the key existed.
    */
-  idempotencyKey?: string
+  idempotencyKey?: string;
   /**
    * Immutable occurrence identity for scheduled runs (the scheduler's
    * occurrence key: script + scheduled fire time). The worker forwards it
@@ -30,16 +30,16 @@ export type ScriptJobData = {
    * occurrence replays instead of double-posting. Absent on bulk runs and
    * on jobs enqueued before the key existed.
    */
-  occurrenceKey?: string
+  occurrenceKey?: string;
   /**
    * The scheduler's dispatch-ledger row id for this occurrence. The worker
    * stamps it on its own script_runs row so recovery matches evidence
    * one-to-one by identity, never by timestamp.
    */
-  occurrenceRunId?: string
-}
+  occurrenceRunId?: string;
+};
 
-let scriptsQueue: Queue<ScriptJobData> | undefined
+let scriptsQueue: Queue<ScriptJobData> | undefined;
 
 export function getScriptsQueue(): Queue<ScriptJobData> {
   scriptsQueue ??= new Queue<ScriptJobData>(SCRIPTS_QUEUE, {
@@ -49,10 +49,10 @@ export function getScriptsQueue(): Queue<ScriptJobData> {
       removeOnComplete: { age: 7 * 24 * 3600 },
       removeOnFail: { age: 30 * 24 * 3600 },
     },
-  })
-  return scriptsQueue
+  });
+  return scriptsQueue;
 }
 
 export async function enqueueScriptRun(data: ScriptJobData, options?: JobsOptions) {
-  return getScriptsQueue().add(data.kind, data, options)
+  return getScriptsQueue().add(data.kind, data, options);
 }

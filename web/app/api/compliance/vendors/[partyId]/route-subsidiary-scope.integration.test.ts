@@ -18,9 +18,8 @@ stubModules({ navigation: true });
 const routeUrl = "./route.ts?compliance-vendor-scope-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures",
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { resolveAuthzByUserId } = await import("@/lib/authz-core");
 const { withAuthzContext } = await import("@/lib/authz-context");
 
@@ -36,11 +35,18 @@ async function seed(): Promise<Fixture> {
   return withBypass(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Compliance Manager", "compliance_manager");
-    const feature = await db.execute<{ id: string }>(sql`
+    const feature = await db.execute<{ id: string }>(
+      sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"subcontractorCompliance":true,"informationReturns":true}'::jsonb)
-       where id = ${org.orgId} returning id`, "objects");
-    assert.equal(feature.length, 1, "the native compliance feature must be enabled for this fixture");
+       where id = ${org.orgId} returning id`,
+      "objects",
+    );
+    assert.equal(
+      feature.length,
+      1,
+      "the native compliance feature must be enabled for this fixture",
+    );
     const branchId = randomUUID();
     const hiddenPartyId = randomUUID();
     await db.execute(sql`
@@ -60,19 +66,32 @@ async function seed(): Promise<Fixture> {
       values
         (${org.orgId}, ${hiddenPartyId}, '1099-MISC', 'individual',
          'sealed-original', '0000', 'ssn', false, false, ${actorId}, ${actorId})`);
-    return { orgId: org.orgId, rootSubsidiaryId: org.subsidiaryId, hiddenPartyId, actorId, authz: null };
+    return {
+      orgId: org.orgId,
+      rootSubsidiaryId: org.subsidiaryId,
+      hiddenPartyId,
+      actorId,
+      authz: null,
+    };
   });
 }
 
-async function authorize(fixture: Fixture, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<void> {
+async function authorize(
+  fixture: Fixture,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<void> {
   fixture.authz = await withOrgContext(fixture.orgId, async () => {
-    const restriction = allowedSubsidiaryIds === null
-      ? { mode: "all" }
-      : { mode: "list", subsidiaryIds: [...allowedSubsidiaryIds] };
-    const role = await db.execute<{ id: string }>(sql`
+    const restriction =
+      allowedSubsidiaryIds === null
+        ? { mode: "all" }
+        : { mode: "list", subsidiaryIds: [...allowedSubsidiaryIds] };
+    const role = await db.execute<{ id: string }>(
+      sql`
       update app_roles set permissions = '["compliance.manage"]'::jsonb,
         subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb
-       where org_id = ${fixture.orgId} and key = 'compliance_manager' returning id`, "objects");
+       where org_id = ${fixture.orgId} and key = 'compliance_manager' returning id`,
+      "objects",
+    );
     assert.equal(role.length, 1, "the fixture must configure its assigned native role");
     return resolveAuthzByUserId(fixture.orgId, fixture.actorId);
   });
@@ -81,107 +100,110 @@ async function authorize(fixture: Fixture, allowedSubsidiaryIds: ReadonlySet<str
   assert.deepEqual(fixture.authz.allowedSubsidiaryIds, allowedSubsidiaryIds);
 }
 
-function patch(
-  fixture: Fixture,
-  body: unknown,
-): Promise<Response> {
+function patch(fixture: Fixture, body: unknown): Promise<Response> {
   const authority = fixture.authz;
   assert.ok(authority, "resolve the fixture actor's current authority before calling the route");
   return withOrgContext(fixture.orgId, () =>
-    withAuthzContext(authority, () => PATCH(
-      new Request(`http://openbooks.test/api/compliance/vendors/${fixture.hiddenPartyId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-      { params: Promise.resolve({ partyId: fixture.hiddenPartyId }) },
-    )),
+    withAuthzContext(authority, () =>
+      PATCH(
+        new Request(`http://openbooks.test/api/compliance/vendors/${fixture.hiddenPartyId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ partyId: fixture.hiddenPartyId }) },
+      ),
+    ),
   );
 }
 
 async function tinState(fixture: Fixture): Promise<{ last4: string | null; type: string | null }> {
   return withOrgContext(fixture.orgId, async () => {
-    const result = await db.execute<{ last4: string | null; type: string | null }>(sql`
+    const result = await db.execute<{ last4: string | null; type: string | null }>(
+      sql`
       select tin_last4 as "last4", tin_type as "type" from vendor_roles
-       where org_id = ${fixture.orgId} and party_id = ${fixture.hiddenPartyId}`, "objects");
+       where org_id = ${fixture.orgId} and party_id = ${fixture.hiddenPartyId}`,
+      "objects",
+    );
     return result[0]!;
   });
 }
 
-test(
-  "a subsidiary-restricted compliance save cannot touch a hidden-entity vendor TIN",
-  async () => {
-    const fixture = await seed();
-    try {
-      await authorize(fixture, new Set([fixture.rootSubsidiaryId]));
-      const response = await patch(fixture, {
-        tin: "222-33-4444",
-        tinType: "ein",
-        reason: "smuggled TIN overwrite",
-      });
-      assert.equal(response.status, 404);
-      assert.deepEqual(await tinState(fixture), { last4: "0000", type: "ssn" });
+test("a subsidiary-restricted compliance save cannot touch a hidden-entity vendor TIN", async () => {
+  const fixture = await seed();
+  try {
+    await authorize(fixture, new Set([fixture.rootSubsidiaryId]));
+    const response = await patch(fixture, {
+      tin: "222-33-4444",
+      tinType: "ein",
+      reason: "smuggled TIN overwrite",
+    });
+    assert.equal(response.status, 404);
+    assert.deepEqual(await tinState(fixture), { last4: "0000", type: "ssn" });
 
-      // Unrestricted callers keep the established behavior.
-      await authorize(fixture, null);
-      const allowed = await patch(fixture, {
-        tin: "222-33-4444",
-        tinType: "ein",
-        reason: "W-9 reviewed by compliance",
-      });
-      assert.equal(allowed.status, 200);
-      assert.deepEqual(await tinState(fixture), { last4: "4444", type: "ein" });
-    } finally {
-      await dropScratchOrg(fixture.orgId);
-    }
-  },
-);
+    // Unrestricted callers keep the established behavior.
+    await authorize(fixture, null);
+    const allowed = await patch(fixture, {
+      tin: "222-33-4444",
+      tinType: "ein",
+      reason: "W-9 reviewed by compliance",
+    });
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(await tinState(fixture), { last4: "4444", type: "ein" });
+  } finally {
+    await dropScratchOrg(fixture.orgId);
+  }
+});
 
-test(
-  "a vendor TIN save audits secret-free before/after snapshots under the same lock",
-  async () => {
-    // The route locks vendor_roles, snapshots tin_present/tin_last4 without
-    // persisting ciphertext, and answers with row identity alone.
-    const fixture = await seed();
-    try {
-      await authorize(fixture, null);
-      const response = await patch(fixture, {
-        tin: "222-33-4444",
-        tinType: "ein",
-        reason: "W-9 reviewed by compliance",
-      });
-      assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), { partyId: fixture.hiddenPartyId });
+test("a vendor TIN save audits secret-free before/after snapshots under the same lock", async () => {
+  // The route locks vendor_roles, snapshots tin_present/tin_last4 without
+  // persisting ciphertext, and answers with row identity alone.
+  const fixture = await seed();
+  try {
+    await authorize(fixture, null);
+    const response = await patch(fixture, {
+      tin: "222-33-4444",
+      tinType: "ein",
+      reason: "W-9 reviewed by compliance",
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { partyId: fixture.hiddenPartyId });
 
-      const audits = await withOrgContext(fixture.orgId, () =>
-        db.execute<{
-          action: string;
-          actor: string;
-          changes: { reason: string; before: Record<string, unknown>; after: Record<string, unknown> };
-        }>(sql`
+    const audits = await withOrgContext(fixture.orgId, () =>
+      db.execute<{
+        action: string;
+        actor: string;
+        changes: {
+          reason: string;
+          before: Record<string, unknown>;
+          after: Record<string, unknown>;
+        };
+      }>(
+        sql`
           select action, actor_id as "actor", changes from audit_log
            where org_id = ${fixture.orgId} and table_name = 'vendor_roles'
              and row_id = ${fixture.hiddenPartyId}
-           order by at desc limit 1`, "objects"),
-      );
-      assert.equal(audits.length, 1, "the TIN save writes one audit row");
-      const entry = audits[0]!;
-      assert.equal(entry.action, "update");
-      assert.equal(entry.actor, fixture.actorId);
-      assert.equal(entry.changes.reason, "W-9 reviewed by compliance");
-      assert.equal(entry.changes.before["tin_last4"], "0000");
-      assert.equal(entry.changes.after["tin_last4"], "4444");
-      assert.equal(entry.changes.before["tin_present"], true);
-      assert.equal(entry.changes.after["tin_present"], true);
-      for (const snapshot of [entry.changes.before, entry.changes.after]) {
-        assert.ok(!("tin_encrypted" in snapshot), "no ciphertext key in the audit snapshot");
-      }
-      assert.ok(
-        !JSON.stringify(entry.changes).includes("sealed-original"),
-        "the prior ciphertext is not persisted in the trail",
-      );
-    } finally {
-      await dropScratchOrg(fixture.orgId);
+           order by at desc limit 1`,
+        "objects",
+      ),
+    );
+    assert.equal(audits.length, 1, "the TIN save writes one audit row");
+    const entry = audits[0]!;
+    assert.equal(entry.action, "update");
+    assert.equal(entry.actor, fixture.actorId);
+    assert.equal(entry.changes.reason, "W-9 reviewed by compliance");
+    assert.equal(entry.changes.before["tin_last4"], "0000");
+    assert.equal(entry.changes.after["tin_last4"], "4444");
+    assert.equal(entry.changes.before["tin_present"], true);
+    assert.equal(entry.changes.after["tin_present"], true);
+    for (const snapshot of [entry.changes.before, entry.changes.after]) {
+      assert.ok(!("tin_encrypted" in snapshot), "no ciphertext key in the audit snapshot");
     }
-  },
-);
+    assert.ok(
+      !JSON.stringify(entry.changes).includes("sealed-original"),
+      "the prior ciphertext is not persisted in the trail",
+    );
+  } finally {
+    await dropScratchOrg(fixture.orgId);
+  }
+});

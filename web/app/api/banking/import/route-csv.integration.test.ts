@@ -45,9 +45,8 @@ const routeUrl = "./route.ts?bank-import-csv-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const MAPPING = { date: 0, amount: 1, description: 2 };
 
@@ -92,144 +91,128 @@ function csvBody(accountId: string, text: string, mode: "preview" | "import") {
 }
 
 async function storedLineCount(orgId: string, accountId: string): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from bank_statement_lines
-     where org_id = ${orgId} and account_id = ${accountId}`, "objects");
+     where org_id = ${orgId} and account_id = ${accountId}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
-test(
-  "a plain column-header row previews with no skipped warning",
-  async () => {
-    const { org } = await fixture();
-    try {
-      const { status, json } = await post(
-        csvBody(
-          org.accounts.bank,
-          "Date,Amount,Description\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n",
-          "preview",
-        ),
-      );
-      assert.equal(status, 200, `expected 200: ${JSON.stringify(json)}`);
-      const body = json as {
-        imported: number;
-        skipped: unknown[];
-      };
-      assert.equal(body.imported, 2);
-      assert.deepEqual(body.skipped, []);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("a plain column-header row previews with no skipped warning", async () => {
+  const { org } = await fixture();
+  try {
+    const { status, json } = await post(
+      csvBody(
+        org.accounts.bank,
+        "Date,Amount,Description\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n",
+        "preview",
+      ),
+    );
+    assert.equal(status, 200, `expected 200: ${JSON.stringify(json)}`);
+    const body = json as {
+      imported: number;
+      skipped: unknown[];
+    };
+    assert.equal(body.imported, 2);
+    assert.deepEqual(body.skipped, []);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "a leading disclaimer row previews reported by code, never dropped",
-  async () => {
-    const { org } = await fixture();
-    try {
-      const { status, json } = await post(
-        csvBody(
-          org.accounts.bank,
-          "Bank export - confidential\n2026-07-01,12.50,salary\n",
-          "preview",
-        ),
-      );
-      assert.equal(status, 200, `expected 200: ${JSON.stringify(json)}`);
-      const body = json as {
-        imported: number;
-        skipped: unknown[];
-      };
-      assert.equal(body.imported, 1);
-      assert.deepEqual(body.skipped, [
-        { line: 1, code: "csv_metadata_row", dateCell: "Bank export - confidential" },
-      ]);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("a leading disclaimer row previews reported by code, never dropped", async () => {
+  const { org } = await fixture();
+  try {
+    const { status, json } = await post(
+      csvBody(
+        org.accounts.bank,
+        "Bank export - confidential\n2026-07-01,12.50,salary\n",
+        "preview",
+      ),
+    );
+    assert.equal(status, 200, `expected 200: ${JSON.stringify(json)}`);
+    const body = json as {
+      imported: number;
+      skipped: unknown[];
+    };
+    assert.equal(body.imported, 1);
+    assert.deepEqual(body.skipped, [
+      { line: 1, code: "csv_metadata_row", dateCell: "Bank export - confidential" },
+    ]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "a metadata preamble before the header imports data with each disclaimer reported",
-  async () => {
-    const { org } = await fixture();
-    try {
-      const { status, json } = await post(
-        csvBody(
-          org.accounts.bank,
-          "Bank export - confidential\nGenerated 2026-07-01\nDate,Amount,Description\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n",
-          "import",
-        ),
-      );
-      assert.equal(status, 200, `expected 200: ${JSON.stringify(json)}`);
-      const body = json as {
-        imported: number;
-        skipped: unknown[];
-        statementId: string | null;
-      };
-      assert.ok(body.statementId, "the preamble import must persist a statement");
-      assert.equal(body.imported, 2);
-      assert.deepEqual(body.skipped, [
-        { line: 1, code: "csv_metadata_row", dateCell: "Bank export - confidential" },
-        { line: 2, code: "csv_metadata_row", dateCell: "Generated 2026-07-01" },
-      ]);
-      assert.equal(await storedLineCount(org.orgId, org.accounts.bank), 2);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("a metadata preamble before the header imports data with each disclaimer reported", async () => {
+  const { org } = await fixture();
+  try {
+    const { status, json } = await post(
+      csvBody(
+        org.accounts.bank,
+        "Bank export - confidential\nGenerated 2026-07-01\nDate,Amount,Description\n2026-07-01,12.50,salary\n2026-07-02,-5.00,coffee\n",
+        "import",
+      ),
+    );
+    assert.equal(status, 200, `expected 200: ${JSON.stringify(json)}`);
+    const body = json as {
+      imported: number;
+      skipped: unknown[];
+      statementId: string | null;
+    };
+    assert.ok(body.statementId, "the preamble import must persist a statement");
+    assert.equal(body.imported, 2);
+    assert.deepEqual(body.skipped, [
+      { line: 1, code: "csv_metadata_row", dateCell: "Bank export - confidential" },
+      { line: 2, code: "csv_metadata_row", dateCell: "Generated 2026-07-01" },
+    ]);
+    assert.equal(await storedLineCount(org.orgId, org.accounts.bank), 2);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "a credit/debit-split CSV with a header previews with no skipped warning",
-  async () => {
-    // Regression: text in both money columns refused as a transaction, so
-    // every split-column import with a header broke at the API boundary.
-    const { org } = await fixture();
-    try {
-      const { status, json } = await post({
-        accountId: org.accounts.bank,
-        source: "csv",
-        text: "Date,Description,Credit,Debit\n2026-07-01,salary,100.00,\n2026-07-02,coffee,,5.00\n",
-        mapping: { date: 0, description: 1, amount: 2, debitAmount: 3 },
-        mode: "preview",
-      });
-      assert.equal(status, 200, `expected 200: ${JSON.stringify(json)}`);
-      const body = json as {
-        imported: number;
-        skipped: unknown[];
-      };
-      assert.equal(body.imported, 2);
-      assert.deepEqual(body.skipped, []);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("a credit/debit-split CSV with a header previews with no skipped warning", async () => {
+  // Regression: text in both money columns refused as a transaction, so
+  // every split-column import with a header broke at the API boundary.
+  const { org } = await fixture();
+  try {
+    const { status, json } = await post({
+      accountId: org.accounts.bank,
+      source: "csv",
+      text: "Date,Description,Credit,Debit\n2026-07-01,salary,100.00,\n2026-07-02,coffee,,5.00\n",
+      mapping: { date: 0, description: 1, amount: 2, debitAmount: 3 },
+      mode: "preview",
+    });
+    assert.equal(status, 200, `expected 200: ${JSON.stringify(json)}`);
+    const body = json as {
+      imported: number;
+      skipped: unknown[];
+    };
+    assert.equal(body.imported, 2);
+    assert.deepEqual(body.skipped, []);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "a transaction-looking first row is refused by name with nothing written",
-  async () => {
-    const { org } = await fixture();
-    try {
-      const { status, json } = await post(
-        csvBody(
-          org.accounts.bank,
-          "oops,12.50,salary\n2026-07-01,5.00,coffee\n",
-          "import",
-        ),
-      );
-      assert.equal(status, 422, `expected 422: ${JSON.stringify(json)}`);
-      const body = json as { error: string };
-      assert.match(body.error, /CSV row 1 looks like a transaction/);
-      assert.match(body.error, /remove the row|fix the date/);
-      assert.equal(await storedLineCount(org.orgId, org.accounts.bank), 0);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("a transaction-looking first row is refused by name with nothing written", async () => {
+  const { org } = await fixture();
+  try {
+    const { status, json } = await post(
+      csvBody(org.accounts.bank, "oops,12.50,salary\n2026-07-01,5.00,coffee\n", "import"),
+    );
+    assert.equal(status, 422, `expected 422: ${JSON.stringify(json)}`);
+    const body = json as { error: string };
+    assert.match(body.error, /CSV row 1 looks like a transaction/);
+    assert.match(body.error, /remove the row|fix the date/);
+    assert.equal(await storedLineCount(org.orgId, org.accounts.bank), 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

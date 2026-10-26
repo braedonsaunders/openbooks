@@ -9,8 +9,17 @@
  * the posting guard accepts.
  */
 export const NON_CASH_OFFSET_ACCOUNT_TYPES: readonly string[] = [
-  "asset_current_other", "asset_other", "liability_current_other", "liability_long_term",
-  "cogs", "expense", "expense_other",
+  "asset_current_other",
+  "asset_other",
+  "liability_current_other",
+  "liability_long_term",
+  "cogs",
+  "expense",
+  "expense_other",
 ];
 
-export const NON_CASH_CONTRA_EXPENSE_TYPES: readonly string[] = ["cogs", "expense", "expense_other"];
+export const NON_CASH_CONTRA_EXPENSE_TYPES: readonly string[] = [
+  "cogs",
+  "expense",
+  "expense_other",
+];

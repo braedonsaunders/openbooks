@@ -6,28 +6,16 @@ export interface DatedDepreciation {
   date: string;
   amount: string;
 }
-const day = (date: string) =>
-  BigInt(Date.parse(date + "T00:00:00Z") / 86400000);
-export function accruedDepreciation(
-  line: DatedDepreciation,
-  before: string,
-): string {
+const day = (date: string) => BigInt(Date.parse(date + "T00:00:00Z") / 86400000);
+export function accruedDepreciation(line: DatedDepreciation, before: string): string {
   const start = day(line.startsOn),
     end = day(line.date) + 1n,
     cutoff = day(before);
-  if (end <= start)
-    throw new Error("depreciation interval must contain service days");
+  if (end <= start) throw new Error("depreciation interval must contain service days");
   if (cutoff <= start) return "0.0000";
-  return mulRatio(
-    line.amount,
-    cutoff >= end ? end - start : cutoff - start,
-    end - start,
-  );
+  return mulRatio(line.amount, cutoff >= end ? end - start : cutoff - start, end - start);
 }
-export function splitDepreciationPlan(
-  plan: DatedDepreciation[],
-  before: string,
-) {
+export function splitDepreciationPlan(plan: DatedDepreciation[], before: string) {
   let accrued = "0.0000";
   const remaining: DatedDepreciation[] = [];
   for (const line of plan) {
@@ -43,7 +31,5 @@ export function splitDepreciationPlan(
   return { accrued, remaining };
 }
 export function nextCalendarDay(date: string) {
-  return new Date(Date.parse(date + "T00:00:00Z") + 86400000)
-    .toISOString()
-    .slice(0, 10);
+  return new Date(Date.parse(date + "T00:00:00Z") + 86400000).toISOString().slice(0, 10);
 }

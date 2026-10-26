@@ -13,7 +13,8 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -127,7 +128,10 @@ test("valid same-origin calls succeed: authentication, execute_kw, paginated sea
       method,
       args,
       kwargs:
-        service === "object" && method === "execute_kw" && typeof lastArg === "object" && lastArg !== null
+        service === "object" &&
+        method === "execute_kw" &&
+        typeof lastArg === "object" &&
+        lastArg !== null
           ? (lastArg as Record<string, unknown>)
           : undefined,
     });
@@ -140,7 +144,10 @@ test("valid same-origin calls succeed: authentication, execute_kw, paginated sea
     const page =
       offset === 0
         ? Array.from({ length: LIMIT }, (_, i) => ({ id: i + 1, name: `Partner ${i + 1}` }))
-        : [{ id: 501, name: "Partner 501" }, { id: 502, name: "Partner 502" }];
+        : [
+            { id: 501, name: "Partner 501" },
+            { id: 502, name: "Partner 502" },
+          ];
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: page }));
   });
@@ -202,7 +209,13 @@ test("valid same-origin calls succeed: authentication, execute_kw, paginated sea
 test("same-origin failures surface real errors instead of fake success", async () => {
   const cases: Array<{ status?: number; payload: string }> = [
     { status: 500, payload: "boom" },
-    { payload: JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: 200, message: "Access Denied" } }) },
+    {
+      payload: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        error: { code: 200, message: "Access Denied" },
+      }),
+    },
   ];
   for (const testCase of cases) {
     const odoo = createServer((_req, res) => {

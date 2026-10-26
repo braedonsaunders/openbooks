@@ -56,35 +56,72 @@ async function withOrg(run: (org: ScratchOrg, actor: string) => Promise<void>): 
   }
 }
 
-test("publishing an all-optional version refuses and leaves the draft unpublished", DB, async () => {
-  await withOrg(async (org, actor) => {
-    const planId = await seedPlan(org, actor);
-    const versionId = await createPlanVersion(org.orgId, actor, {
-      planId,
-      effectiveFrom: "2026-01-01",
-      components: [
-        { componentKey: "addon", name: "Add-on", unitPrice: "10.0000", incomeAccountId: org.accounts.revenue, isOptional: true },
-      ],
-    }, null);
-    await assert.rejects(publishPlanVersion(org.orgId, actor, versionId, null), /at least one required component/);
-    const status = (await db.execute<{ status: string }>(
-      sql`select status from subscription_plan_versions where id = ${versionId} and org_id = ${org.orgId}`, "objects",
-    ))[0]!.status;
-    assert.equal(status, "draft");
-  });
-});
+test(
+  "publishing an all-optional version refuses and leaves the draft unpublished",
+  DB,
+  async () => {
+    await withOrg(async (org, actor) => {
+      const planId = await seedPlan(org, actor);
+      const versionId = await createPlanVersion(
+        org.orgId,
+        actor,
+        {
+          planId,
+          effectiveFrom: "2026-01-01",
+          components: [
+            {
+              componentKey: "addon",
+              name: "Add-on",
+              unitPrice: "10.0000",
+              incomeAccountId: org.accounts.revenue,
+              isOptional: true,
+            },
+          ],
+        },
+        null,
+      );
+      await assert.rejects(
+        publishPlanVersion(org.orgId, actor, versionId, null),
+        /at least one required component/,
+      );
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`select status from subscription_plan_versions where id = ${versionId} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.status;
+      assert.equal(status, "draft");
+    });
+  },
+);
 
 test("a version with a required component still publishes", DB, async () => {
   await withOrg(async (org, actor) => {
     const planId = await seedPlan(org, actor);
-    const versionId = await createPlanVersion(org.orgId, actor, {
-      planId,
-      effectiveFrom: "2026-01-01",
-      components: [
-        { componentKey: "base", name: "Base", unitPrice: "100.0000", incomeAccountId: org.accounts.revenue },
-        { componentKey: "addon", name: "Add-on", unitPrice: "10.0000", incomeAccountId: org.accounts.revenue, isOptional: true },
-      ],
-    }, null);
+    const versionId = await createPlanVersion(
+      org.orgId,
+      actor,
+      {
+        planId,
+        effectiveFrom: "2026-01-01",
+        components: [
+          {
+            componentKey: "base",
+            name: "Base",
+            unitPrice: "100.0000",
+            incomeAccountId: org.accounts.revenue,
+          },
+          {
+            componentKey: "addon",
+            name: "Add-on",
+            unitPrice: "10.0000",
+            incomeAccountId: org.accounts.revenue,
+            isOptional: true,
+          },
+        ],
+      },
+      null,
+    );
     await publishPlanVersion(org.orgId, actor, versionId, null);
     const subscriptionId = await seedSubscription(org, actor, planId);
     await activateLifecycle(org.orgId, actor, {
@@ -93,41 +130,66 @@ test("a version with a required component still publishes", DB, async () => {
       termStartsOn: "2026-01-01",
       renewalPolicy: "none",
     });
-    const components = (await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from subscription_components where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`, "objects",
-    ))[0]!.n;
+    const components = (
+      await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from subscription_components where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(components, 1);
   });
 });
 
-test("activating a legacy all-optional published version refuses with nothing written", DB, async () => {
-  await withOrg(async (org, actor) => {
-    const planId = await seedPlan(org, actor);
-    // A version published before the publish guard existed: all optional,
-    // already published. Activation must refuse it rather than leave a
-    // subscription with zero billable components.
-    const versionId = await createPlanVersion(org.orgId, actor, {
-      planId,
-      effectiveFrom: "2026-01-01",
-      components: [
-        { componentKey: "addon", name: "Add-on", unitPrice: "10.0000", incomeAccountId: org.accounts.revenue, isOptional: true },
-      ],
-    }, null);
-    await db.execute(sql`update subscription_plan_versions set status = 'published', published_at = now(), published_by = ${actor} where id = ${versionId} and org_id = ${org.orgId}`);
-    const subscriptionId = await seedSubscription(org, actor, planId);
-    await assert.rejects(
-      activateLifecycle(org.orgId, actor, {
-        subscriptionId,
-        planVersionId: versionId,
-        termStartsOn: "2026-01-01",
-        renewalPolicy: "none",
-      }),
-      /no required components/,
-    );
-    const written = (await db.execute<{ lifecycles: number; components: number }>(sql`
+test(
+  "activating a legacy all-optional published version refuses with nothing written",
+  DB,
+  async () => {
+    await withOrg(async (org, actor) => {
+      const planId = await seedPlan(org, actor);
+      // A version published before the publish guard existed: all optional,
+      // already published. Activation must refuse it rather than leave a
+      // subscription with zero billable components.
+      const versionId = await createPlanVersion(
+        org.orgId,
+        actor,
+        {
+          planId,
+          effectiveFrom: "2026-01-01",
+          components: [
+            {
+              componentKey: "addon",
+              name: "Add-on",
+              unitPrice: "10.0000",
+              incomeAccountId: org.accounts.revenue,
+              isOptional: true,
+            },
+          ],
+        },
+        null,
+      );
+      await db.execute(
+        sql`update subscription_plan_versions set status = 'published', published_at = now(), published_by = ${actor} where id = ${versionId} and org_id = ${org.orgId}`,
+      );
+      const subscriptionId = await seedSubscription(org, actor, planId);
+      await assert.rejects(
+        activateLifecycle(org.orgId, actor, {
+          subscriptionId,
+          planVersionId: versionId,
+          termStartsOn: "2026-01-01",
+          renewalPolicy: "none",
+        }),
+        /no required components/,
+      );
+      const written = (
+        await db.execute<{ lifecycles: number; components: number }>(
+          sql`
       select (select count(*)::int from subscription_lifecycles where org_id = ${org.orgId} and subscription_id = ${subscriptionId}) as lifecycles,
              (select count(*)::int from subscription_components where org_id = ${org.orgId} and subscription_id = ${subscriptionId}) as components
-    `, "objects"))[0]!;
-    assert.deepEqual(written, { lifecycles: 0, components: 0 });
-  });
-});
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(written, { lifecycles: 0, components: 0 });
+    });
+  },
+);

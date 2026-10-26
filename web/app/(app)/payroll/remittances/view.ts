@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { PayrollError } from '@openbooks/engine/payroll/error'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { getTranslations } from "next-intl/server";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   page,
   pageHeader,
@@ -10,13 +10,13 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { pickString } from '../../../../lib/list-params'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { scopedRemittanceSummary } from '../../../../lib/payroll-scoped-views'
-import type { RemittanceGroup } from '@openbooks/engine/payroll/remittance'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { pickString } from "../../../../lib/list-params";
+import { groupTabs } from "../../../../components/module-home/group-tabs";
+import { scopedRemittanceSummary } from "../../../../lib/payroll-scoped-views";
+import type { RemittanceGroup } from "@openbooks/engine/payroll/remittance";
 
 /**
  * Payroll remittances, split into a loader and a spec.
@@ -43,86 +43,90 @@ import type { RemittanceGroup } from '@openbooks/engine/payroll/remittance'
  * answers 404 — a count is a disclosure, so the guard lives in the loader).
  */
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Default period: the previous calendar month on the org's business day (the PD7A rhythm). */
 function previousMonth(today: string): { from: string; to: string } {
-  const [year, month] = today.split("-").map(Number)
-  const prevMonth = month === 1 ? 12 : month! - 1
-  const prevYear = month === 1 ? year! - 1 : year!
-  const first = new Date(Date.UTC(prevYear, prevMonth - 1, 1))
-  const last = new Date(Date.UTC(prevYear, prevMonth, 0))
-  return { from: first.toISOString().slice(0, 10), to: last.toISOString().slice(0, 10) }
+  const [year, month] = today.split("-").map(Number);
+  const prevMonth = month === 1 ? 12 : month! - 1;
+  const prevYear = month === 1 ? year! - 1 : year!;
+  const first = new Date(Date.UTC(prevYear, prevMonth - 1, 1));
+  const last = new Date(Date.UTC(prevYear, prevMonth, 0));
+  return { from: first.toISOString().slice(0, 10), to: last.toISOString().slice(0, 10) };
 }
 
 export interface RemittancesData {
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof groupTabs>>
-  groups: RemittanceGroup[]
-  populationRefusal: string | null
-  from: string
-  to: string
-  canCreate: boolean
-  apNote: string
-  apLinkLabel: string
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof groupTabs>>;
+  groups: RemittanceGroup[];
+  populationRefusal: string | null;
+  from: string;
+  to: string;
+  canCreate: boolean;
+  apNote: string;
+  apLinkLabel: string;
 }
 
 export async function loadRemittances(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<RemittancesData> {
-  const authz = await requirePermission('payroll.read')
-  await requireFeatureEnabled(authz.user.orgId, 'payroll')
-  const t = await getTranslations('payroll.remittances')
-  const defaults = previousMonth(await businessToday(authz.user.orgId))
-  const from = DATE.test(pickString(sp.from) ?? '') ? (pickString(sp.from) as string) : defaults.from
-  const to = DATE.test(pickString(sp.to) ?? '') ? (pickString(sp.to) as string) : defaults.to
+  const authz = await requirePermission("payroll.read");
+  await requireFeatureEnabled(authz.user.orgId, "payroll");
+  const t = await getTranslations("payroll.remittances");
+  const defaults = previousMonth(await businessToday(authz.user.orgId));
+  const from = DATE.test(pickString(sp.from) ?? "")
+    ? (pickString(sp.from) as string)
+    : defaults.from;
+  const to = DATE.test(pickString(sp.to) ?? "") ? (pickString(sp.to) as string) : defaults.to;
 
   // Employer-level aggregate: refused outright for a caller whose scope
   // excludes any stub in the period, exactly as the JSON route answers.
-  let groups: RemittanceGroup[] | null = []
-  let populationRefusal: string | null = null
+  let groups: RemittanceGroup[] | null = [];
+  let populationRefusal: string | null = null;
   try {
-    groups = await scopedRemittanceSummary(authz, { from, to })
+    groups = await scopedRemittanceSummary(authz, { from, to });
   } catch (error) {
     // Expected payroll integrity refusals belong in the workspace, as in
     // the filing workspace. Unexpected failures still reach the error boundary.
-    if (!(error instanceof PayrollError)) throw error
-    populationRefusal = error.message
+    if (!(error instanceof PayrollError)) throw error;
+    populationRefusal = error.message;
   }
   if (!groups) {
-    const { notFound } = await import('next/navigation')
-    notFound()
-    throw new Error('unreachable')
+    const { notFound } = await import("next/navigation");
+    notFound();
+    throw new Error("unreachable");
   }
 
-  const moduleTabs = await groupTabs('payroll', '/payroll/remittances', { orgId: authz.user.orgId })
+  const moduleTabs = await groupTabs("payroll", "/payroll/remittances", {
+    orgId: authz.user.orgId,
+  });
 
   return {
-    title: t('title'),
-    description: t('description'),
+    title: t("title"),
+    description: t("description"),
     tabs: moduleTabs,
     groups,
     populationRefusal,
     from,
     to,
-    canCreate: !populationRefusal && can(authz, 'payroll.run'),
-    apNote: t('apNote'),
-    apLinkLabel: t('apLink'),
-  }
+    canCreate: !populationRefusal && can(authz, "payroll.run"),
+    apNote: t("apNote"),
+    apLinkLabel: t("apLink"),
+  };
 }
 
-const f = ref<RemittancesData>()
+const f = ref<RemittancesData>();
 
 export function remittancesSpec(data: RemittancesData): PageSpec {
   return page({
-    route: '/payroll/remittances',
-    layout: 'list',
+    route: "/payroll/remittances",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("module-home-tabs", { tabs: data.tabs })],
       }),
     ],
     body: [
@@ -130,17 +134,17 @@ export function remittancesSpec(data: RemittancesData): PageSpec {
       // the empty state. The groups travel verbatim; money and messages
       // resolve inside via useMoney/useTranslations, identically on both
       // paths, so no loader formatting can drift between the renders.
-      widgetBlock('remittance-cockpit', {
+      widgetBlock("remittance-cockpit", {
         groups: data.groups,
         populationRefusal: data.populationRefusal,
         from: data.from,
         to: data.to,
         canCreate: data.canCreate,
       }),
-      widgetBlock('remittance-ap-note', {
+      widgetBlock("remittance-ap-note", {
         note: data.apNote,
         linkLabel: data.apLinkLabel,
       }),
     ],
-  })
+  });
 }

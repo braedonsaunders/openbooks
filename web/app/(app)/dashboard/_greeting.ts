@@ -14,23 +14,23 @@ export function buildGreeting(
   timeZone: string,
   locale: string,
 ): string {
-  const hour = hourInZone(now, timeZone, locale)
-  const stem = hour < 12 ? copy.morning : hour < 17 ? copy.afternoon : copy.evening
-  const firstName = name?.trim().split(/\s+/)[0] ?? null
-  return firstName ? `${stem}, ${firstName}` : stem
+  const hour = hourInZone(now, timeZone, locale);
+  const stem = hour < 12 ? copy.morning : hour < 17 ? copy.afternoon : copy.evening;
+  const firstName = name?.trim().split(/\s+/)[0] ?? null;
+  return firstName ? `${stem}, ${firstName}` : stem;
 }
 
 function hourInZone(now: Date, timeZone: string, locale: string): number {
   try {
     const parts = new Intl.DateTimeFormat(locale, {
       timeZone,
-      hour: 'numeric',
+      hour: "numeric",
       hour12: false,
-    }).formatToParts(now)
-    const hour = Number(parts.find((part) => part.type === 'hour')?.value)
-    if (Number.isFinite(hour)) return hour % 24
+    }).formatToParts(now);
+    const hour = Number(parts.find((part) => part.type === "hour")?.value);
+    if (Number.isFinite(hour)) return hour % 24;
   } catch {
     // Unrecognized zone below.
   }
-  return now.getUTCHours()
+  return now.getUTCHours();
 }

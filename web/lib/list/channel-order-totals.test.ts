@@ -19,7 +19,11 @@ test("channel order totals price in the order's own currency", async () => {
 test("a channel order without a currency omits its total and names the gap", async () => {
   for (const shop_currency of [null, undefined, ""]) {
     const [row] = await enriched([{ total_minor: "200000", shop_currency }]);
-    assert.equal(row?.total, null, `currency ${String(shop_currency)} must not fall back to another currency`);
+    assert.equal(
+      row?.total,
+      null,
+      `currency ${String(shop_currency)} must not fall back to another currency`,
+    );
     assert.match(
       String(row?.totalError ?? ""),
       /currency/i,

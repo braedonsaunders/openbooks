@@ -16,7 +16,10 @@ import { cmp } from "../money/money.ts";
 
 const MONDAY = "2025-01-06";
 
-function weeklySeries(quantities: readonly (string | number)[], stockouts: readonly number[] = []): DemandWeek[] {
+function weeklySeries(
+  quantities: readonly (string | number)[],
+  stockouts: readonly number[] = [],
+): DemandWeek[] {
   return quantities.map((quantity, index) => ({
     weekStart: addCalendarDays(MONDAY, index * 7),
     quantity: String(quantity),
@@ -48,12 +51,16 @@ test("an annual seasonal series forecasts the seasonal shape within tolerance", 
   }
   const result = forecastDemand(weeklySeries(quantities), { horizonWeeks: 4 });
   assert.ok(
-    result.explanation.method === "seasonal_additive" || result.explanation.method === "seasonal_multiplicative",
+    result.explanation.method === "seasonal_additive" ||
+      result.explanation.method === "seasonal_multiplicative",
     `expected a seasonal method, got ${result.explanation.method}`,
   );
   // Weeks 104-107 sit outside the peak: the forecast must see the shape.
   for (const period of result.periods) {
-    assert.ok(within(period.quantity, "85", "115"), `off-peak forecast ${period.quantity} near 100`);
+    assert.ok(
+      within(period.quantity, "85", "115"),
+      `off-peak forecast ${period.quantity} near 100`,
+    );
   }
   assert.equal(result.explanation.seasonalPeakMonth, 11);
 });
@@ -65,7 +72,10 @@ test("a sparse intermittent series forecasts with Croston/SBA", () => {
   assert.equal(result.explanation.method, "croston_sba");
   assert.equal(result.periods[0]!.method, "croston_sba");
   // Croston rate 20/4 with the SBA (1 − α/2) correction: below the naive mean.
-  assert.ok(within(result.periods[0]!.quantity, "3", "5"), `croston level ${result.periods[0]!.quantity}`);
+  assert.ok(
+    within(result.periods[0]!.quantity, "3", "5"),
+    `croston level ${result.periods[0]!.quantity}`,
+  );
 });
 
 test("steady demand is not intermittent and averages flat", () => {
@@ -84,8 +94,18 @@ test("a measured promotion lift de-promotes history and uplifts planned promo we
     index === 8 || index === 9 || index === 14 || index === 15 ? 13 : 10,
   );
   const weeks = weeklySeries(quantities);
-  const windows = [{ code: "SPRING", startsOn: weeks[8]!.weekStart, endsOn: addCalendarDays(weeks[9]!.weekStart, 6) },
-    { code: "SPRING", startsOn: weeks[14]!.weekStart, endsOn: addCalendarDays(weeks[15]!.weekStart, 6) }];
+  const windows = [
+    {
+      code: "SPRING",
+      startsOn: weeks[8]!.weekStart,
+      endsOn: addCalendarDays(weeks[9]!.weekStart, 6),
+    },
+    {
+      code: "SPRING",
+      startsOn: weeks[14]!.weekStart,
+      endsOn: addCalendarDays(weeks[15]!.weekStart, 6),
+    },
+  ];
   const result = forecastDemand(weeks, { horizonWeeks: 4, promotionWindows: windows });
   assert.equal(result.explanation.promotionCode, "SPRING");
   assert.ok(
@@ -93,7 +113,10 @@ test("a measured promotion lift de-promotes history and uplifts planned promo we
     `lift ${result.explanation.promotionLiftFactor} near 1.3`,
   );
   // History is de-promoted before fitting: the base forecast stays near 10.
-  assert.ok(within(result.periods[0]!.quantity, "9", "11"), `base forecast ${result.periods[0]!.quantity}`);
+  assert.ok(
+    within(result.periods[0]!.quantity, "9", "11"),
+    `base forecast ${result.periods[0]!.quantity}`,
+  );
   const uplifted = forecastDemand(weeks, {
     horizonWeeks: 4,
     promotionWindows: windows,
@@ -110,7 +133,13 @@ test("promotion windows too thin to measure are ignored with a reason", () => {
   const lift = measurePromotionLift(
     weeks.map((week) => week.weekStart),
     weeks.map((week) => week.quantity),
-    [{ code: "ONE", startsOn: weeks[2]!.weekStart, endsOn: addCalendarDays(weeks[2]!.weekStart, 6) }],
+    [
+      {
+        code: "ONE",
+        startsOn: weeks[2]!.weekStart,
+        endsOn: addCalendarDays(weeks[2]!.weekStart, 6),
+      },
+    ],
   );
   assert.equal(lift.factor, null);
   assert.match(lift.ignoredReason!, /fewer than two/);

@@ -5,7 +5,11 @@ import test from "node:test";
 // three setup sections share one page URL (?row=new opened all three
 // drawers at once). Each section now reads its own drawer key.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/hrm/documents", scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/hrm/documents",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 const globals = globalThis as Record<string, unknown>;
 
 const React = await import("react");
@@ -16,13 +20,14 @@ Object.assign(globalThis, { React });
 // ref options, navigation, the server-only marker); translations ride the
 // REAL en catalogs and the registry, spec builders, and section/drawer
 // components are all real.
-const adminCatalog = (await import("../../../../messages/en/admin.json", { with: { type: "json" } })).default;
+const adminCatalog = (
+  await import("../../../../messages/en/admin.json", { with: { type: "json" } })
+).default;
 const allMessages = (await import("../../../../messages/en")).default;
 globals.__docSecCatalogs = { admin: adminCatalog };
 
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/navigation") {
       return {
         shortCircuit: true,
@@ -141,7 +146,9 @@ function planDb(plan: { rows: unknown[] }[]): void {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 /** Mount every section against the same URL params; count role=dialog per section. */
-async function renderSections(sp: Record<string, string>): Promise<{ counts: number[]; bodies: string[] }> {
+async function renderSections(
+  sp: Record<string, string>,
+): Promise<{ counts: number[]; bodies: string[] }> {
   const counts: number[] = [];
   const bodies: string[] = [];
   for (const section of SECTIONS) {
@@ -183,7 +190,11 @@ async function renderSections(sp: Record<string, string>): Promise<{ counts: num
       root.unmount();
     });
     host.remove();
-    assert.equal(document.querySelectorAll('[role="dialog"]').length, 0, "unmounting takes the drawer with it");
+    assert.equal(
+      document.querySelectorAll('[role="dialog"]').length,
+      0,
+      "unmounting takes the drawer with it",
+    );
   }
   return { counts, bodies };
 }
@@ -235,10 +246,30 @@ test("the documents spec gives each setup section its own drawer key", async () 
 // - render: exactly one drawer opens ------------------------------------------
 
 for (const [name, params, expected, message] of [
-  ["?template=new opens only the templates drawer", { template: "new" }, [1, 0, 0], "exactly one role=dialog mounts, in the templates section"],
-  ["?category=new opens only the categories drawer", { category: "new" }, [0, 1, 0], "exactly one role=dialog mounts, in the categories section"],
-  ["?retention=new opens only the retention drawer", { retention: "new" }, [0, 0, 1], "exactly one role=dialog mounts, in the retention section"],
-  ["the legacy bare ?row=new no longer fans out to every section", { row: "new" }, [0, 0, 0], "no section reads the shared key anymore"],
+  [
+    "?template=new opens only the templates drawer",
+    { template: "new" },
+    [1, 0, 0],
+    "exactly one role=dialog mounts, in the templates section",
+  ],
+  [
+    "?category=new opens only the categories drawer",
+    { category: "new" },
+    [0, 1, 0],
+    "exactly one role=dialog mounts, in the categories section",
+  ],
+  [
+    "?retention=new opens only the retention drawer",
+    { retention: "new" },
+    [0, 0, 1],
+    "exactly one role=dialog mounts, in the retention section",
+  ],
+  [
+    "the legacy bare ?row=new no longer fans out to every section",
+    { row: "new" },
+    [0, 0, 0],
+    "no section reads the shared key anymore",
+  ],
 ] as Array<[string, Record<string, string>, number[], string]>) {
   test(name, async () => {
     const { counts } = await renderSections(params);
@@ -253,7 +284,14 @@ test("document generation keeps the named API refusal in the dialog", async () =
   globals.fetch = async (_url: unknown, init?: { body?: unknown }) => {
     requests += 1;
     submitted = JSON.parse(String(init?.body));
-    return { ok: false, status: 409, json: async () => ({ error: "The document cannot be generated for this employment.", remedy: "Choose an active employment and try again." }) };
+    return {
+      ok: false,
+      status: 409,
+      json: async () => ({
+        error: "The document cannot be generated for this employment.",
+        remedy: "Choose an active employment and try again.",
+      }),
+    };
   };
   const host = document.createElement("div");
   document.body.append(host);
@@ -265,8 +303,11 @@ test("document generation keeps the named API refusal in the dialog", async () =
           <DocumentsGenerateDialog
             generate={{
               closeHref: "/hrm/documents",
-              templates: [{ value: "tpl-1", label: "Offer", category: "Employment", mergeFields: [] }],
-              people: [{ value: "party-1", label: "Ari Worker" }], categories: [],
+              templates: [
+                { value: "tpl-1", label: "Offer", category: "Employment", mergeFields: [] },
+              ],
+              people: [{ value: "party-1", label: "Ari Worker" }],
+              categories: [],
               labels: allMessages.hrm.documents.generate,
             }}
           />
@@ -278,30 +319,52 @@ test("document generation keeps the named API refusal in the dialog", async () =
     assert.equal(selects.length, 2, "template and person controls render");
     for (const [index, value] of ["tpl-1", "party-1"].entries()) {
       const select = selects[index] as HTMLSelectElement;
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")!.set!;
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLSelectElement.prototype,
+        "value",
+      )!.set!;
       setter.call(select, value);
       await act(async () => {
         select.dispatchEvent(new window.Event("change", { bubbles: true }));
       });
     }
     const title = document.querySelector("input") as HTMLInputElement;
-    const setTitle = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    const setTitle = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
     setTitle.call(title, "Employment letter");
     await act(async () => {
       title.dispatchEvent(new window.Event("input", { bubbles: true }));
       title.dispatchEvent(new window.Event("change", { bubbles: true }));
     });
     await act(async () => {
-      const submit = [...document.querySelectorAll("button")].find((button) => button.textContent === "Generate");
+      const submit = [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "Generate",
+      );
       assert.ok(submit, "the generation action renders");
       submit!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       submit!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       await tick();
     });
-    assert.deepEqual([requests, typeof submitted.idempotencyKey === "string" && submitted.idempotencyKey.length >= 8], [1, true], "a rapid double-click sends one generate command with a durable retry key");
+    assert.deepEqual(
+      [
+        requests,
+        typeof submitted.idempotencyKey === "string" && submitted.idempotencyKey.length >= 8,
+      ],
+      [1, true],
+      "a rapid double-click sends one generate command with a durable retry key",
+    );
     const body = document.body.textContent ?? "";
-    assert.ok(body.includes("The document cannot be generated for this employment.") && body.includes("Choose an active employment and try again."), "the API refusal and remedy are shown inline");
-    assert.ok(!body.includes("Generation failed."), "the named refusal does not collapse to the generic copy");
+    assert.ok(
+      body.includes("The document cannot be generated for this employment.") &&
+        body.includes("Choose an active employment and try again."),
+      "the API refusal and remedy are shown inline",
+    );
+    assert.ok(
+      !body.includes("Generation failed."),
+      "the named refusal does not collapse to the generic copy",
+    );
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -321,5 +384,8 @@ test("a direct link to a saved template reads the record back", async () => {
   };
   const { counts, bodies } = await renderSections({ template: "tpl-1" });
   assert.deepEqual(counts, [1, 0, 0], "exactly one role=dialog mounts, in the templates section");
-  assert.ok(bodies[0]?.includes("READBACK TEMPLATE") ?? false, "the drawer shows the saved record, not a blank form");
+  assert.ok(
+    bodies[0]?.includes("READBACK TEMPLATE") ?? false,
+    "the drawer shows the saved record, not a blank form",
+  );
 });

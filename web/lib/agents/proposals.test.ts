@@ -61,25 +61,33 @@ test("proposal resolution fails closed", () => {
   assert.equal(findingProposalCommand(authz, { proposedCommand: { tool: "", input: {} } }), null);
   // Unknown tool (e.g. an assistant-side tool name packs may propose).
   assert.equal(
-    findingProposalCommand(authz, { proposedCommand: { tool: "draft_journal_entry", input: {}, label: "Draft" } }),
+    findingProposalCommand(authz, {
+      proposedCommand: { tool: "draft_journal_entry", input: {}, label: "Draft" },
+    }),
     null,
   );
   // Read-only catalog tool.
   const readOnly = "get_vitals";
   assert.ok(applicationTool(readOnly)?.readOnly, "test premise: tool is read-only");
   assert.equal(
-    findingProposalCommand(authz, { proposedCommand: { tool: readOnly, input: {}, label: "List" } }),
+    findingProposalCommand(authz, {
+      proposedCommand: { tool: readOnly, input: {}, label: "List" },
+    }),
     null,
   );
   // Carried input that no longer validates.
   assert.equal(
-    findingProposalCommand(authz, { proposedCommand: { tool: "match_bank_line", input: {}, label: "Match" } }),
+    findingProposalCommand(authz, {
+      proposedCommand: { tool: "match_bank_line", input: {}, label: "Match" },
+    }),
     null,
   );
   // Viewer outside the tool's gate.
   const clerk = authzWith(["assistant.use"]);
   assert.equal(
-    findingProposalCommand(clerk, { proposedCommand: { tool: "match_bank_line", input: MATCH_INPUT, label: "Match" } }),
+    findingProposalCommand(clerk, {
+      proposedCommand: { tool: "match_bank_line", input: MATCH_INPUT, label: "Match" },
+    }),
     null,
   );
 });

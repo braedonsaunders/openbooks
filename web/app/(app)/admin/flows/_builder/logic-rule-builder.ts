@@ -1,10 +1,10 @@
-import type { FlowSubjectProfile, LogicRule } from '@openbooks/forms-core'
+import type { FlowSubjectProfile, LogicRule } from "@openbooks/forms-core";
 
-export type GroupOp = 'and' | 'or' | 'not'
+export type GroupOp = "and" | "or" | "not";
 
 export interface FieldPickerOption {
-  value: string
-  label: string
+  value: string;
+  label: string;
 }
 
 /**
@@ -14,11 +14,11 @@ export interface FieldPickerOption {
  * option value, so selection still stores exactly what the engine matches.
  */
 export function fieldPickerOptions(profile: FlowSubjectProfile): FieldPickerOption[] {
-  return profile.fields.map((f) => ({ value: f.key, label: f.label }))
+  return profile.fields.map((f) => ({ value: f.key, label: f.label }));
 }
-type SourceGroupOp = Exclude<GroupOp, 'not'>
+type SourceGroupOp = Exclude<GroupOp, "not">;
 
-export const defaultLeaf = (field: string): LogicRule => ({ op: 'isSet', field })
+export const defaultLeaf = (field: string): LogicRule => ({ op: "isSet", field });
 
 /** Build a group, retaining a source combinator when wrapping its children in NOT. */
 export function makeGroup(
@@ -27,14 +27,14 @@ export function makeGroup(
   fallbackField: string,
   previousOp?: SourceGroupOp,
 ): LogicRule {
-  if (op === 'not') {
+  if (op === "not") {
     if (children.length === 0 && previousOp === undefined) {
-      return { op: 'not', rule: defaultLeaf(fallbackField) }
+      return { op: "not", rule: defaultLeaf(fallbackField) };
     }
-    const rule = children.length === 1 ? children[0] : { op: previousOp ?? 'and', rules: children }
-    return { op: 'not', rule: rule ?? defaultLeaf(fallbackField) }
+    const rule = children.length === 1 ? children[0] : { op: previousOp ?? "and", rules: children };
+    return { op: "not", rule: rule ?? defaultLeaf(fallbackField) };
   }
-  return { op, rules: children }
+  return { op, rules: children };
 }
 
 /** Preserve entered decimal text and carry its numeric meaning independently of storage type. */

@@ -40,9 +40,13 @@ export const fxRevaluationRateEvidence = pgTable(
     subsidiaryId: uuid("subsidiary_id").notNull(),
     periodId: uuid("period_id").notNull(),
     accountId: uuid("account_id").notNull(),
-    transactionCurrency: text("transaction_currency").notNull().references(() => currencies.code),
+    transactionCurrency: text("transaction_currency")
+      .notNull()
+      .references(() => currencies.code),
     /** The currency the selected book measures this entity in. */
-    measurementCurrency: text("measurement_currency").notNull().references(() => currencies.code),
+    measurementCurrency: text("measurement_currency")
+      .notNull()
+      .references(() => currencies.code),
     /** Always the assigned period's final day; the guard proves it. */
     rateDate: date("rate_date").notNull(),
     rate: fxRate("rate"),
@@ -71,7 +75,12 @@ export const fxRevaluationRateEvidence = pgTable(
       .on(t.orgId, t.bookId, t.subsidiaryId, t.periodId, t.accountId, t.transactionCurrency)
       .where(sql`${t.supersedesId} is null`),
     index("fx_revaluation_rate_evidence_position").on(
-      t.orgId, t.bookId, t.subsidiaryId, t.periodId, t.accountId, t.transactionCurrency,
+      t.orgId,
+      t.bookId,
+      t.subsidiaryId,
+      t.periodId,
+      t.accountId,
+      t.transactionCurrency,
     ),
     foreignKey({
       name: "fx_revaluation_rate_evidence_book_fk",
@@ -103,10 +112,7 @@ export const fxRevaluationRateEvidence = pgTable(
       columns: [t.createdBy],
       foreignColumns: [users.id],
     }),
-    check(
-      "fx_revaluation_rate_evidence_rate_positive",
-      sql`${t.rate} > 0`,
-    ),
+    check("fx_revaluation_rate_evidence_rate_positive", sql`${t.rate} > 0`),
     check(
       "fx_revaluation_rate_evidence_currencies",
       sql`${t.transactionCurrency} ~ '^[A-Z]{3}$' and ${t.measurementCurrency} ~ '^[A-Z]{3}$'

@@ -21,7 +21,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.project-charge-post-permission-test')]
@@ -47,7 +47,11 @@ const mockAuthz = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "next/navigation") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export function redirect() {}",
+      };
     }
     if (
       specifier === "../../../lib/authz" &&
@@ -58,10 +62,7 @@ const hooks = registerHooks({
     // The route factory resolves its permission/feature gate lazily through
     // the @/lib/feature-gates alias at request time, so the hook must serve
     // the fixture session there too.
-    if (
-      specifier === "@/lib/feature-gates" &&
-      context.parentURL?.includes("/lib/api/route")
-    ) {
+    if (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route")) {
       return { url: "mock:project-charge-post-permission-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -78,9 +79,8 @@ const routeUrl = "./route.ts?project-charge-post-permission-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -96,10 +96,15 @@ async function seed(): Promise<Fixture> {
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"projects": true}'::jsonb)
      where id = ${org.orgId}`);
-  const projectId = (await db.execute<{ id: string }>(sql`
+  const projectId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into projects (org_id, name, is_active)
     values (${org.orgId}, 'Charge Project', true)
-    returning id`, "objects"))[0]!.id;
+    returning id`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     update items set expense_account_id = ${org.accounts.cogs}
      where id = ${org.items.service} and org_id = ${org.orgId}`);
@@ -116,29 +121,42 @@ async function postAs(
     allowedSubsidiaryIds: null,
   };
   try {
-    const response = await withOrgContext(fixture.orgId, () => POST(
-      new Request("http://openbooks.test/api/project-charges", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          projectId: fixture.projectId,
-          // Zero-cost line: posting is skipped for a zero total, so the
-          // observable contrast is submission — released (approved) versus
-          // never submitted (draft). A denied caller must never reach the
-          // submit/post lifecycle at all.
-          lines: [{ itemId: fixture.itemId, quantity: "1", costRate: "0", billRate: "0" }],
+    const response = await withOrgContext(fixture.orgId, () =>
+      POST(
+        new Request("http://openbooks.test/api/project-charges", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectId: fixture.projectId,
+            // Zero-cost line: posting is skipped for a zero total, so the
+            // observable contrast is submission — released (approved) versus
+            // never submitted (draft). A denied caller must never reach the
+            // submit/post lifecycle at all.
+            lines: [{ itemId: fixture.itemId, quantity: "1", costRate: "0", billRate: "0" }],
+          }),
         }),
-      }),
-    ));
-    return { status: response.status, json: (await response.json().catch(() => null)) as Record<string, unknown> };
+      ),
+    );
+    return {
+      status: response.status,
+      json: (await response.json().catch(() => null)) as Record<string, unknown>,
+    };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } };
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function chargeStatus(orgId: string, id: string): Promise<string | null> {
-  const rows = await withOrgContext(orgId, () => db.execute<{ status: string }>(sql`
-    select status from documents where org_id = ${orgId} and id = ${id}`, "objects"));
+  const rows = await withOrgContext(orgId, () =>
+    db.execute<{ status: string }>(
+      sql`
+    select status from documents where org_id = ${orgId} and id = ${id}`,
+      "objects",
+    ),
+  );
   return rows[0]?.status ?? null;
 }
 
@@ -146,7 +164,11 @@ test("POST with projects.manage but no gl.post saves a draft and names gl.post",
   const fixture = await withBypass(seed);
   try {
     const result = await postAs(fixture, ["projects.manage", "projects.read"]);
-    assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(
+      result.status,
+      200,
+      `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     assert.equal(result.json.posted, false);
     assert.match(String(result.json.postRefusal), /gl\.post/);
     assert.equal(await chargeStatus(fixture.orgId, String(result.json.id)), "draft");
@@ -159,7 +181,11 @@ test("POST with gl.post flows through submission as before", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await postAs(fixture, ["projects.manage", "projects.read", "gl.post"]);
-    assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(
+      result.status,
+      200,
+      `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     assert.equal(result.json.postRefusal, undefined);
     // Ungated submission releases the zero-total charge to approved; a zero
     // total posts nothing, so approved (not draft) is the flowing outcome.

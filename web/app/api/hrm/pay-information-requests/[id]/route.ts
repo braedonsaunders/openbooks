@@ -25,14 +25,9 @@ export const PUT = defineRoute({
     action: z.enum(["fulfil", "refuse"]),
     reason: z.string().trim().min(1).max(2000).nullable().optional(),
   }),
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid request" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid request" }, { status: 400 });
 
     try {
       if (body.action === "fulfil") {
@@ -43,8 +38,7 @@ export const PUT = defineRoute({
         });
         return NextResponse.json({ request });
       }
-      if (!body.reason)
-        return NextResponse.json({ error: "reason required" }, { status: 400 });
+      if (!body.reason) return NextResponse.json({ error: "reason required" }, { status: 400 });
       const request = await refusePayInformationRequest({
         orgId: gate.user.orgId,
         actorId: gate.user.id,

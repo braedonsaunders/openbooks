@@ -34,7 +34,8 @@ export function coerceScalar(
   // 422 leaking SQL text. Shape-check here so every writer fails closed with
   // a typed field error; tenant ownership is fenced by the caller.
   if (type === "string (uuid)") {
-    if (typeof raw !== "string" || !isUuid(raw)) return { ok: false, message: "must be a valid id" };
+    if (typeof raw !== "string" || !isUuid(raw))
+      return { ok: false, message: "must be a valid id" };
     return { ok: true, value: raw };
   }
   const base = type.split(" (")[0]; // "string (uuid)" → "string"
@@ -57,7 +58,8 @@ export function coerceScalar(
       return { ok: false, message: "must be a boolean" };
     }
     case "object": {
-      if (typeof raw !== "object" || Array.isArray(raw)) return { ok: false, message: "must be an object" };
+      if (typeof raw !== "object" || Array.isArray(raw))
+        return { ok: false, message: "must be an object" };
       return { ok: true, value: raw };
     }
     case "array": {

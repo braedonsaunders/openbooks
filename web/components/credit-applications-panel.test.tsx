@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // The control surface for settling a credit without cash. The engine is proven
 // against a real database in credit-settlement.integration.test.ts and the
@@ -43,13 +43,16 @@ function nativeSetValue(input: HTMLInputElement, value: string): void {
 type Sent = { url: string; method: string; body: unknown };
 
 /** Script the endpoints the panel talks to and record what it sent. */
-function scriptFetch(
-  routes: (url: string, method: string) => Response | null,
-): { sent: Sent[]; restore: () => void } {
+function scriptFetch(routes: (url: string, method: string) => Response | null): {
+  sent: Sent[];
+  restore: () => void;
+} {
   const sent: Sent[] = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     const method = init?.method ?? "GET";
     sent.push({
       url,
@@ -58,7 +61,12 @@ function scriptFetch(
     });
     return routes(url, method) ?? Response.json({});
   }) as typeof fetch;
-  return { sent, restore: () => { globalThis.fetch = prior; } };
+  return {
+    sent,
+    restore: () => {
+      globalThis.fetch = prior;
+    },
+  };
 }
 
 const stateBody = (open: string, settlements: unknown[] = []) =>
@@ -94,16 +102,17 @@ async function mount(canApply = true, source: "credit" | "payment" = "credit") {
       </NextIntlClientProvider>,
     );
   });
-  await act(async () => { await tick(); });
+  await act(async () => {
+    await tick();
+  });
   return { host, root };
 }
 
 function button(host: HTMLElement, label: string): HTMLButtonElement | null {
   return (
-    [...host.querySelectorAll("button")].find(
-      (b) => (b.textContent ?? "").trim() === label,
-    ) as HTMLButtonElement | undefined
-  ) ?? null;
+    ([...host.querySelectorAll("button")].find((b) => (b.textContent ?? "").trim() === label) as
+      HTMLButtonElement | undefined) ?? null
+  );
 }
 
 test("a credit with nothing left and nothing settled renders nothing", async () => {
@@ -111,7 +120,9 @@ test("a credit with nothing left and nothing settled renders nothing", async () 
   try {
     const { host, root } = await mount();
     assert.equal(host.textContent, "", "an exhausted credit must not show an empty panel");
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
@@ -123,18 +134,24 @@ test("an unposted credit renders nothing", async () => {
   try {
     const { host, root } = await mount();
     assert.equal(host.textContent, "");
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
 });
 
 test("a credit this reader cannot see renders nothing instead of an error", async () => {
-  const net = scriptFetch(() => new Response(JSON.stringify({ error: "not_found" }), { status: 404 }));
+  const net = scriptFetch(
+    () => new Response(JSON.stringify({ error: "not_found" }), { status: 404 }),
+  );
   try {
     const { host, root } = await mount();
     assert.equal(host.textContent, "");
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
@@ -166,8 +183,12 @@ test("applying sends the credit's own line and the entered amount", async () => 
     assert.match(host.textContent ?? "", /Credit applications/);
     assert.match(host.textContent ?? "", /250\.00 remaining/);
 
-    await act(async () => { button(host, "Apply to open items")!.click(); });
-    await act(async () => { await tick(); });
+    await act(async () => {
+      button(host, "Apply to open items")!.click();
+    });
+    await act(async () => {
+      await tick();
+    });
     assert.match(host.textContent ?? "", /INV-4001/, "the open item must be offered");
 
     const input = host.querySelector("input[type=number]") as HTMLInputElement;
@@ -176,8 +197,12 @@ test("applying sends the credit's own line and the entered amount", async () => 
     await act(async () => {
       nativeSetValue(input, "150");
     });
-    await act(async () => { button(host, "Apply credit")!.click(); });
-    await act(async () => { await tick(); });
+    await act(async () => {
+      button(host, "Apply credit")!.click();
+    });
+    await act(async () => {
+      await tick();
+    });
 
     const posted = net.sent.find((s) => s.method === "POST");
     assert.ok(posted, "Apply must POST");
@@ -196,7 +221,9 @@ test("applying sends the credit's own line and the entered amount", async () => 
         },
       ],
     });
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
@@ -206,25 +233,37 @@ test("an unreadable application blocks valid allocations in the same submit", as
   const net = scriptFetch((url) => {
     if (url.includes("/api/payments/open-items")) {
       return Response.json({
-        items: [INVOICE_LINE, APPLICATION].map((lineId) => ({ lineId, open: "90.0000", currency: "USD" })),
+        items: [INVOICE_LINE, APPLICATION].map((lineId) => ({
+          lineId,
+          open: "90.0000",
+          currency: "USD",
+        })),
       });
     }
     return stateBody("250.0000");
   });
   try {
     const { host, root } = await mount();
-    await act(async () => { button(host, "Apply to open items")!.click(); });
-    await act(async () => { await tick(); });
+    await act(async () => {
+      button(host, "Apply to open items")!.click();
+    });
+    await act(async () => {
+      await tick();
+    });
     const inputs = host.querySelectorAll("input[type=number]");
     await act(async () => {
       nativeSetValue(inputs[0] as HTMLInputElement, "10.00");
       nativeSetValue(inputs[1] as HTMLInputElement, "12.34567");
     });
-    await act(async () => { button(host, "Apply credit")!.click(); });
+    await act(async () => {
+      button(host, "Apply credit")!.click();
+    });
 
     assert.equal(net.sent.filter((s) => s.method === "POST").length, 0);
     assert.match(host.textContent ?? "", /Application amount allows at most 4 decimal places/);
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
@@ -237,8 +276,12 @@ test("a refused application shows the server's reason verbatim", async () => {
       return Response.json({
         items: [
           {
-            lineId: INVOICE_LINE, documentNumber: "INV-4003", entryNumber: "JE-3",
-            dueDate: null, open: "90.0000", currency: "USD",
+            lineId: INVOICE_LINE,
+            documentNumber: "INV-4003",
+            entryNumber: "JE-3",
+            dueDate: null,
+            open: "90.0000",
+            currency: "USD",
           },
         ],
       });
@@ -250,19 +293,29 @@ test("a refused application shows the server's reason verbatim", async () => {
   });
   try {
     const { host, root } = await mount();
-    await act(async () => { button(host, "Apply to open items")!.click(); });
-    await act(async () => { await tick(); });
+    await act(async () => {
+      button(host, "Apply to open items")!.click();
+    });
+    await act(async () => {
+      await tick();
+    });
     const input = host.querySelector("input[type=number]") as HTMLInputElement;
     await act(async () => {
       nativeSetValue(input, "10");
     });
-    await act(async () => { button(host, "Apply credit")!.click(); });
-    await act(async () => { await tick(); });
+    await act(async () => {
+      button(host, "Apply credit")!.click();
+    });
+    await act(async () => {
+      await tick();
+    });
 
     // The engine's refusal is the whole product of refusing; it must reach the
     // operator rather than being replaced by a generic failure.
     assert.match(host.textContent ?? "", new RegExp(refusal));
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
@@ -290,12 +343,18 @@ test("a settled credit lists what it paid and releases it by id", async () => {
     assert.match(host.textContent ?? "", /INV-4001/);
     assert.match(host.textContent ?? "", /2026-07-15/);
 
-    await act(async () => { button(host, "Release")!.click(); });
-    await act(async () => { await tick(); });
+    await act(async () => {
+      button(host, "Release")!.click();
+    });
+    await act(async () => {
+      await tick();
+    });
     const released = net.sent.find((s) => s.method === "DELETE");
     assert.ok(released, "Release must DELETE");
     assert.deepEqual(released.body, { applicationId: APPLICATION, side: "ar" });
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
@@ -310,7 +369,9 @@ test("F5-8: a dust remainder still shows the panel under exact math", async () =
     const { host, root } = await mount();
     assert.match(host.textContent ?? "", /Credit applications/);
     assert.match(host.textContent ?? "", /remaining/);
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
@@ -325,8 +386,12 @@ test("F5-8: an amount past ledger precision is refused in-panel, without a reque
       return Response.json({
         items: [
           {
-            lineId: INVOICE_LINE, documentNumber: "INV-4004", entryNumber: "JE-4",
-            dueDate: null, open: "90.0000", currency: "USD",
+            lineId: INVOICE_LINE,
+            documentNumber: "INV-4004",
+            entryNumber: "JE-4",
+            dueDate: null,
+            open: "90.0000",
+            currency: "USD",
           },
         ],
       });
@@ -335,18 +400,28 @@ test("F5-8: an amount past ledger precision is refused in-panel, without a reque
   });
   try {
     const { host, root } = await mount();
-    await act(async () => { button(host, "Apply to open items")!.click(); });
-    await act(async () => { await tick(); });
+    await act(async () => {
+      button(host, "Apply to open items")!.click();
+    });
+    await act(async () => {
+      await tick();
+    });
     const input = host.querySelector("input[type=number]") as HTMLInputElement;
     await act(async () => {
       nativeSetValue(input, "0.00006");
     });
-    await act(async () => { button(host, "Apply credit")!.click(); });
-    await act(async () => { await tick(); });
+    await act(async () => {
+      button(host, "Apply credit")!.click();
+    });
+    await act(async () => {
+      await tick();
+    });
 
     assert.equal(net.sent.filter((s) => s.method === "POST").length, 0);
     assert.match(host.textContent ?? "", /Application amount allows at most 4 decimal places/);
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
@@ -356,9 +431,13 @@ test("a reader without the pay permission sees the state but no controls", async
   const net = scriptFetch(() =>
     stateBody("100.0000", [
       {
-        applicationId: APPLICATION, documentId: null, documentNumber: "INV-4001",
-        documentKind: "customer_invoice", documentDate: "2026-07-01",
-        amount: "150.0000", appliedOn: "2026-07-15",
+        applicationId: APPLICATION,
+        documentId: null,
+        documentNumber: "INV-4001",
+        documentKind: "customer_invoice",
+        documentDate: "2026-07-01",
+        amount: "150.0000",
+        appliedOn: "2026-07-15",
       },
     ]),
   );
@@ -367,7 +446,9 @@ test("a reader without the pay permission sees the state but no controls", async
     assert.match(host.textContent ?? "", /INV-4001/);
     assert.equal(button(host, "Apply to open items"), null);
     assert.equal(button(host, "Release"), null);
-    await act(async () => { root.unmount(); });
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }
@@ -378,10 +459,21 @@ test("a receipt's unapplied cash is offered for application under its own title"
   try {
     const { host, root } = await mount(true, "payment");
     assert.ok((host.textContent ?? "").includes("Unapplied credit"), host.textContent ?? "");
-    assert.ok((host.textContent ?? "").includes("unapplied"), "the remaining figure names the unapplied cash");
-    assert.ok(button(host, "Apply to open items"), "the unapplied cash can be applied to the party's open items");
-    assert.ok(net.sent.some((call) => call.url.includes(`documentId=${DOC}`)), "the panel reads the payment's own settlement state");
-    await act(async () => { root.unmount(); });
+    assert.ok(
+      (host.textContent ?? "").includes("unapplied"),
+      "the remaining figure names the unapplied cash",
+    );
+    assert.ok(
+      button(host, "Apply to open items"),
+      "the unapplied cash can be applied to the party's open items",
+    );
+    assert.ok(
+      net.sent.some((call) => call.url.includes(`documentId=${DOC}`)),
+      "the panel reads the payment's own settlement state",
+    );
+    await act(async () => {
+      root.unmount();
+    });
   } finally {
     net.restore();
   }

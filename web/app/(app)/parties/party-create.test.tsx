@@ -99,9 +99,14 @@ function resetHarness() {
   globalThis.__partyCreateFetches = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     globalThis.__partyCreateFetches!.push({ url, init });
-    return Response.json({ party: { id: "33333333-3333-4333-8333-333333333333" } }, { status: 201 });
+    return Response.json(
+      { party: { id: "33333333-3333-4333-8333-333333333333" } },
+      { status: 201 },
+    );
   }) as typeof fetch;
   return () => {
     globalThis.fetch = prior;
@@ -162,12 +167,12 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
   // The setter must come from the element's own prototype: the input
   // setter throws on a textarea (and vice versa), which is exactly how the
   // Hire reason fill broke.
-  const proto = input instanceof window.HTMLTextAreaElement
-    ? window.HTMLTextAreaElement.prototype
-    : window.HTMLInputElement.prototype;
+  const proto =
+    input instanceof window.HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set as
-    | ((this: HTMLInputElement | HTMLTextAreaElement, value: string) => void)
-    | undefined;
+    ((this: HTMLInputElement | HTMLTextAreaElement, value: string) => void) | undefined;
   setter?.call(input, value);
   input.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
@@ -239,7 +244,10 @@ test("save stays disabled until named, then posts once with a stable idempotency
   const body = JSON.parse(String(posts[0]!.init?.body)) as Record<string, unknown>;
   assert.equal(body.displayName, "Acme Corp");
   assert.equal(body.isActive, true, "creates default to active");
-  assert.ok(!("expectedUpdatedAt" in body), "the PATCH concurrency token has no row to version on create");
+  assert.ok(
+    !("expectedUpdatedAt" in body),
+    "the PATCH concurrency token has no row to version on create",
+  );
   assert.deepEqual(globalThis.__partyCreateRouter!.replaces, [
     "/parties?party=33333333-3333-4333-8333-333333333333",
   ]);
@@ -250,9 +258,14 @@ test("a refused create pins its reason and stays editable without navigating", a
   t.after(restoreFetch);
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     globalThis.__partyCreateFetches!.push({ url, init });
-    return Response.json({ error: "That short code is already used by another party" }, { status: 422 });
+    return Response.json(
+      { error: "That short code is already used by another party" },
+      { status: 422 },
+    );
   }) as typeof fetch;
   const { unmount } = await renderDrawer();
   t.after(unmount);
@@ -275,7 +288,11 @@ test("a refused create pins its reason and stays editable without navigating", a
   assert.ok(alert, "the create refusal must pin as an alert, not vanish with the toast");
   assert.match(alert.textContent ?? "", /already used by another party/);
   assert.ok(buttonsNamed("Save").length > 0, "a refused create stays editable with values intact");
-  assert.deepEqual(globalThis.__partyCreateRouter!.replaces, [], "a refused create navigates nowhere");
+  assert.deepEqual(
+    globalThis.__partyCreateRouter!.replaces,
+    [],
+    "a refused create navigates nowhere",
+  );
 });
 
 test("the New button opens the unsaved drawer with zero writes", async (t) => {
@@ -304,7 +321,11 @@ test("the New button opens the unsaved drawer with zero writes", async (t) => {
   assert.deepEqual(globalThis.__partyCreateRouter!.pushes, [
     "/entities/customers?partyNew=1&role=customer",
   ]);
-  assert.equal(globalThis.__partyCreateFetches!.length, 0, "the button writes nothing — no draft POST");
+  assert.equal(
+    globalThis.__partyCreateFetches!.length,
+    0,
+    "the button writes nothing — no draft POST",
+  );
 });
 
 // /parties → New party → Kind Vendor → name → Save was refused with
@@ -322,7 +343,10 @@ test("choosing kind vendor creates the party with its vendor role in one step", 
   ) as HTMLSelectElement | undefined;
   assert.ok(kind, "the identity section must offer a kind select");
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")!.set!;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype,
+      "value",
+    )!.set!;
     setter.call(kind!, "vendor");
     kind!.dispatchEvent(new window.Event("change", { bubbles: true }));
     await tick();
@@ -355,7 +379,9 @@ test("new employee from an existing person patches the role and chains Hire on t
   const seen: { url: string; method: string; body: unknown }[] = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     const method = init?.method ?? "GET";
     let body: unknown = null;
     try {
@@ -365,7 +391,9 @@ test("new employee from an existing person patches the role and chains Hire on t
     }
     globalThis.__partyCreateFetches!.push({ url, init });
     if (url.startsWith("/api/hrm/options?source=employable-people")) {
-      return Response.json({ options: [{ partyId: "person-7", label: "Vendor Val", hasEmployeeRole: false }] });
+      return Response.json({
+        options: [{ partyId: "person-7", label: "Vendor Val", hasEmployeeRole: false }],
+      });
     }
     if (url.startsWith("/api/hrm/options?source=employer-subsidiaries")) {
       return Response.json({ options: [{ subsidiaryId: "sub-1", label: "Main Co" }] });
@@ -432,7 +460,9 @@ test("new employee from an existing person patches the role and chains Hire on t
     host.remove();
   });
   // Pick the existing person instead of naming a new party.
-  const trigger = document.querySelector('button[aria-label="Existing person"]') as HTMLButtonElement | null;
+  const trigger = document.querySelector(
+    'button[aria-label="Existing person"]',
+  ) as HTMLButtonElement | null;
   assert.ok(trigger, "the employee create form offers an existing person");
   await click(trigger);
   await tick();
@@ -451,7 +481,9 @@ test("new employee from an existing person patches the role and chains Hire on t
   await tick();
   await tick();
   await tick();
-  const rolePatch = seen.find((request) => request.url === "/api/parties/person-7" && request.method === "PATCH");
+  const rolePatch = seen.find(
+    (request) => request.url === "/api/parties/person-7" && request.method === "PATCH",
+  );
   assert.ok(rolePatch, "Save adds the employee role to the picked party");
   assert.equal(
     (rolePatch?.body as { roles?: { employee?: { enabled?: boolean } } })?.roles?.employee?.enabled,
@@ -459,7 +491,9 @@ test("new employee from an existing person patches the role and chains Hire on t
     "the role add enables the employee role",
   );
   assert.equal(
-    globalThis.__partyCreateFetches!.filter((f) => f.url === "/api/parties" && f.init?.method === "POST").length,
+    globalThis.__partyCreateFetches!.filter(
+      (f) => f.url === "/api/parties" && f.init?.method === "POST",
+    ).length,
     0,
     "no duplicate party is created",
   );
@@ -477,7 +511,9 @@ test("new employee from an existing person patches the role and chains Hire on t
   await tick();
   await tick();
   await tick();
-  const hire = seen.find((request) => request.url === "/api/hrm/employments" && request.method === "POST");
+  const hire = seen.find(
+    (request) => request.url === "/api/hrm/employments" && request.method === "POST",
+  );
   assert.ok(hire, "the Hire step posts the first employment");
   assert.equal(
     (hire?.body as { workerPartyId?: string })?.workerPartyId,
@@ -485,5 +521,7 @@ test("new employee from an existing person patches the role and chains Hire on t
     "the employment names the existing party",
   );
   // A recorded hire lands on the Employment tab for direct-deposit capture.
-  assert.deepEqual(globalThis.__partyCreateRouter!.replaces, ["/parties?party=person-7&partyTab=employment"]);
+  assert.deepEqual(globalThis.__partyCreateRouter!.replaces, [
+    "/parties?party=person-7&partyTab=employment",
+  ]);
 });

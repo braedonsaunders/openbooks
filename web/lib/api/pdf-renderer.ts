@@ -1,5 +1,9 @@
-import { NextResponse } from 'next/server'
-import { RendererUnavailableError, pdfRendererStatus, type PdfRendererStatus } from '@openbooks/pdf'
+import { NextResponse } from "next/server";
+import {
+  RendererUnavailableError,
+  pdfRendererStatus,
+  type PdfRendererStatus,
+} from "@openbooks/pdf";
 
 /**
  * The PDF renderer outage as a route refusal.
@@ -21,12 +25,12 @@ import { RendererUnavailableError, pdfRendererStatus, type PdfRendererStatus } f
  * carries `name: 'RendererUnavailableError'` and the message).
  */
 export function isRendererUnavailable(error: unknown): boolean {
-  if (error instanceof RendererUnavailableError) return true
+  if (error instanceof RendererUnavailableError) return true;
   return (
-    typeof error === 'object' &&
+    typeof error === "object" &&
     error !== null &&
-    (error as { name?: unknown }).name === 'RendererUnavailableError'
-  )
+    (error as { name?: unknown }).name === "RendererUnavailableError"
+  );
 }
 
 /**
@@ -35,18 +39,16 @@ export function isRendererUnavailable(error: unknown): boolean {
  * tried and the remedy (install Chromium or set PUPPETEER_EXECUTABLE_PATH).
  */
 export function rendererUnavailableResponse(error: unknown): NextResponse | null {
-  if (!isRendererUnavailable(error)) return null
-  console.error('[pdf] renderer unavailable', error)
+  if (!isRendererUnavailable(error)) return null;
+  console.error("[pdf] renderer unavailable", error);
   // The message rides on the object, not the prototype: a refusal that
   // crossed a serialization boundary is a plain object, not an Error, and
   // dropping its message would re-hide the path and the remedy.
   const carried =
-    typeof error === 'object' && error !== null
-      ? (error as { message?: unknown }).message
-      : null
+    typeof error === "object" && error !== null ? (error as { message?: unknown }).message : null;
   const message =
-    typeof carried === 'string' && carried.trim() !== '' ? carried : 'PDF renderer is unavailable'
-  return NextResponse.json({ error: message }, { status: 503 })
+    typeof carried === "string" && carried.trim() !== "" ? carried : "PDF renderer is unavailable";
+  return NextResponse.json({ error: message }, { status: 503 });
 }
 
 /**
@@ -57,8 +59,10 @@ export function rendererUnavailableResponse(error: unknown): NextResponse | null
  * call — a verifiably absent executable cannot render, so refusing early is
  * exact, and a present-but-broken binary still surfaces per-item messages.
  */
-export function rendererStatusResponse(status: PdfRendererStatus = pdfRendererStatus()): NextResponse | null {
-  if (status.available) return null
-  console.error('[pdf] renderer unavailable', status.message)
-  return NextResponse.json({ error: status.message }, { status: 503 })
+export function rendererStatusResponse(
+  status: PdfRendererStatus = pdfRendererStatus(),
+): NextResponse | null {
+  if (status.available) return null;
+  console.error("[pdf] renderer unavailable", status.message);
+  return NextResponse.json({ error: status.message }, { status: 503 });
 }

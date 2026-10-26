@@ -12,7 +12,12 @@ import { seedPayrollComponents } from "../run-setup.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
 import { upsertStatutoryRate } from "../statutory-rates.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../../testing/fixtures.ts";
 import { sealSecret } from "../../platform/secrets.ts";
 import { BR_PACK_RATES } from "./rates.ts";
 import { brInformeRows } from "./informe.ts";
@@ -93,26 +98,54 @@ async function brPayrollOrg(): Promise<Fixture> {
             'Matriz', null, true)`);
   // The establishment's own rates: CNAE risk 2%, neutral FAP, 5.8% terceiros.
   await upsertStatutoryRate({
-    orgId: org.orgId, actorId, rates: BR_PACK_RATES, rateKey: "br_rat",
-    region: "BR", filingAccountId, taxYear: 2025, values: { aliquota: "2" },
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
+    orgId: org.orgId,
+    actorId,
+    rates: BR_PACK_RATES,
+    rateKey: "br_rat",
+    region: "BR",
+    filingAccountId,
+    taxYear: 2025,
+    values: { aliquota: "2" },
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
   });
   await upsertStatutoryRate({
-    orgId: org.orgId, actorId, rates: BR_PACK_RATES, rateKey: "br_fap",
-    region: "BR", filingAccountId, taxYear: 2025, values: { fator: "1" },
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
+    orgId: org.orgId,
+    actorId,
+    rates: BR_PACK_RATES,
+    rateKey: "br_fap",
+    region: "BR",
+    filingAccountId,
+    taxYear: 2025,
+    values: { fator: "1" },
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
   });
   await upsertStatutoryRate({
-    orgId: org.orgId, actorId, rates: BR_PACK_RATES, rateKey: "br_terceiros",
-    region: "BR", filingAccountId, taxYear: 2025, values: { aliquota: "5.8" },
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
+    orgId: org.orgId,
+    actorId,
+    rates: BR_PACK_RATES,
+    rateKey: "br_terceiros",
+    region: "BR",
+    filingAccountId,
+    taxYear: 2025,
+    values: { aliquota: "5.8" },
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
   });
   // General-regime establishment: employer CPP accrues separately (LC
   // 123/2006 art. 18 §5-C). An unclassified establishment refuses by name;
   // the informe asserts employee figures, never the employer leg.
-  await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, subsidiaryId,
-    country: "BR", factKey: "br_regime_tributario", effectiveFrom: "2025-01-01",
-    value: "geral", changeReason: "test establishment under the general regime" });
+  await upsertPayrollEmployerFact({
+    orgId: org.orgId,
+    actorId,
+    subsidiaryId,
+    country: "BR",
+    factKey: "br_regime_tributario",
+    effectiveFrom: "2025-01-01",
+    value: "geral",
+    changeReason: "test establishment under the general regime",
+  });
 
   const employee = async (name: string, annualSalary: string, dependentes: number, cpf: string) => {
     const id = randomUUID();
@@ -149,12 +182,22 @@ async function runMonth(
   commit: boolean,
 ): Promise<void> {
   const run = await createPayRun({
-    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-    periodStart, periodEnd,
+    orgId: fx.orgId,
+    actorId: fx.actorId,
+    payScheduleId: fx.scheduleId,
+    periodStart,
+    periodEnd,
   });
-  assert.deepEqual((await calculatePayRun({
-    orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
-  })).errors, []);
+  assert.deepEqual(
+    (
+      await calculatePayRun({
+        orgId: fx.orgId,
+        documentId: run.documentId,
+        actorId: fx.actorId,
+      })
+    ).errors,
+    [],
+  );
   if (commit) {
     await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
   }
@@ -162,10 +205,7 @@ async function runMonth(
 
 /** Cent-exact money equality, whatever 2dp/4dp shape either side carries. */
 function moneyEqual(actual: string, expected: string, what: string): void {
-  assert.equal(
-    cmp(actual, expected), 0,
-    `${what}: expected ${expected}, got ${actual}`,
-  );
+  assert.equal(cmp(actual, expected), 0, `${what}: expected ${expected}, got ${actual}`);
 }
 
 test(
@@ -202,9 +242,13 @@ test(
 
       // The tie-out, by an independent query: the population must equal the
       // committed subledger's own sums, to the cent.
-      const ledger = (await db.execute<{
-        name: string; rendimentos: string; inss: string; irrf: string;
-      }>(sql`
+      const ledger = await db.execute<{
+        name: string;
+        rendimentos: string;
+        inss: string;
+        irrf: string;
+      }>(
+        sql`
         select p.display_name as name,
                sum(case when l.kind = 'earning' then l.amount else 0 end) as rendimentos,
                sum(case when l.kind = 'deduction' and pc.system_key = 'inss'
@@ -219,11 +263,17 @@ test(
           join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
          where s.org_id = ${fx.orgId} and s.tax_year = 2025 and s.country = 'BR'
          group by p.display_name
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(ledger.length, 2);
       for (const leg of ledger) {
         const row = byEmployee.get(leg.name)!;
-        moneyEqual(String(row.rendimentos), String(leg.rendimentos), `${leg.name} tie-out rendimentos`);
+        moneyEqual(
+          String(row.rendimentos),
+          String(leg.rendimentos),
+          `${leg.name} tie-out rendimentos`,
+        );
         moneyEqual(String(row.inss), String(leg.inss), `${leg.name} tie-out INSS`);
         moneyEqual(String(row.irrf), String(leg.irrf), `${leg.name} tie-out IRRF`);
       }
@@ -249,7 +299,9 @@ test(
       const slip = (await filing.slip!.build(fx.orgId, 2025, String(ana.rowId)))!;
       assert.equal(slip.formNumber, "IN RFB nº 2.060/2021 · Anexo I");
       assert.ok(
-        slip.headerFields.some((h) => h.label === "CPF do beneficiário" && h.value === "11144477735"),
+        slip.headerFields.some(
+          (h) => h.label === "CPF do beneficiário" && h.value === "11144477735",
+        ),
         "the slip identifies the beneficiary by the sealed CPF",
       );
       const box = (code: string) => slip.boxes.find((b) => b.code === code)!.value;
@@ -283,15 +335,9 @@ test(
       await runMonth(fx, "2025-04-01", "2025-04-30", true);
       const filing = yearEndFiling("BR", "informe");
       // 2024 is transcribed but this org paid nothing in it: no empty slip.
-      await assert.rejects(
-        filing.population(fx.orgId, 2024),
-        /no committed BR pay runs for 2024/,
-      );
+      await assert.rejects(filing.population(fx.orgId, 2024), /no committed BR pay runs for 2024/);
       // 2023 has no transcribed tables at all: refuse before reading a byte.
-      await assert.rejects(
-        brInformeRows(fx.orgId, 2023),
-        /2023.*has not been transcribed/,
-      );
+      await assert.rejects(brInformeRows(fx.orgId, 2023), /2023.*has not been transcribed/);
       // No row exists for this id.
       await assert.rejects(
         filing.slip!.build(fx.orgId, 2025, `${randomUUID()}:`),

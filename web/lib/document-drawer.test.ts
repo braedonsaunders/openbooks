@@ -1,12 +1,12 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
 // tsx compiles neighboring legacy JSX modules with the classic runtime when
 // this test starts from the repository root; provide that runtime explicitly.
-const React = await import('react')
+const React = await import("react");
 // The drawer's modules build JSX at import under the classic runtime.
-Object.assign(globalThis, { React })
-;(globalThis as typeof globalThis & { React: typeof React }).React = React
+Object.assign(globalThis, { React });
+(globalThis as typeof globalThis & { React: typeof React }).React = React;
 
 const {
   DOCUMENT_CHANGED_AFTER_OPEN,
@@ -16,142 +16,172 @@ const {
   reconcileCanonicalDraftRead,
   reconcilePersistedDocumentSnapshot,
   revisionFromSuccessfulDocumentSave,
-} = await import('../components/document-drawer.tsx')
+} = await import("../components/document-drawer.tsx");
 
-const OPENED_REVISION = '2026-08-24T12:34:56.123001Z'
-const SAVED_REVISION = '2026-08-24T12:34:56.123999Z'
-const CONCURRENT_REVISION = '2026-08-24T12:34:56.124777Z'
-const FALLBACK_MESSAGE = 'save failed fallback'
+const OPENED_REVISION = "2026-08-24T12:34:56.123001Z";
+const SAVED_REVISION = "2026-08-24T12:34:56.123999Z";
+const CONCURRENT_REVISION = "2026-08-24T12:34:56.124777Z";
+const FALLBACK_MESSAGE = "save failed fallback";
 
 // The three real interactive editors this slice fences. Their save routines
 // are the exact functions the drawers' Save buttons execute.
-const { saveExpenseReport } = await import('../app/(app)/expenses/ExpenseDrawer.tsx')
-const { saveJournalDraft } = await import('../app/(app)/journal/JournalDrawer.tsx')
-const { sendFieldTicketMutation, serializeGridRows } = await import('../app/(app)/field-tickets/FieldTicketDrawer.tsx')
+const { saveExpenseReport } = await import("../app/(app)/expenses/ExpenseDrawer.tsx");
+const { saveJournalDraft } = await import("../app/(app)/journal/JournalDrawer.tsx");
+const { sendFieldTicketMutation, serializeGridRows } =
+  await import("../app/(app)/field-tickets/FieldTicketDrawer.tsx");
 
-type RecordedRequest = { path: string; method: string; body: Record<string, unknown> }
+type RecordedRequest = { path: string; method: string; body: Record<string, unknown> };
 
 /** A fetch double standing in for the API's revision fence. Each handler gets
  *  the parsed request and answers with a status + JSON body. */
 function scriptedServer(
-  handlers: { match: (request: RecordedRequest) => boolean; respond: (request: RecordedRequest) => { status: number; body: unknown } }[],
+  handlers: {
+    match: (request: RecordedRequest) => boolean;
+    respond: (request: RecordedRequest) => { status: number; body: unknown };
+  }[],
 ): { transport: typeof fetch; requests: RecordedRequest[] } {
-  const requests: RecordedRequest[] = []
+  const requests: RecordedRequest[] = [];
   const transport = (async (path: string, init?: RequestInit) => {
     const request: RecordedRequest = {
       path: String(path),
-      method: String(init?.method ?? 'GET'),
+      method: String(init?.method ?? "GET"),
       body: init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {},
-    }
-    requests.push(request)
-    const handler = handlers.find((candidate) => candidate.match(request))
-    if (!handler) throw new Error(`unscripted request: ${request.method} ${request.path}`)
-    const response = handler.respond(request)
+    };
+    requests.push(request);
+    const handler = handlers.find((candidate) => candidate.match(request));
+    if (!handler) throw new Error(`unscripted request: ${request.method} ${request.path}`);
+    const response = handler.respond(request);
     return new Response(JSON.stringify(response.body), {
       status: response.status,
-      headers: { 'content-type': 'application/json' },
-    })
-  }) as typeof fetch
-  return { transport, requests }
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  return { transport, requests };
 }
 
 /** The exact conflict contract every fenced route returns on a stale token
  *  (mirrors lib/documents DOCUMENT_EDIT_REVISION_CONFLICT). */
 function staleConflict(): { status: number; body: unknown } {
-  return { status: 409, body: { error: DOCUMENT_CHANGED_AFTER_OPEN } }
+  return { status: 409, body: { error: DOCUMENT_CHANGED_AFTER_OPEN } };
 }
 
-test('the drawer retains the exact persisted revision without wall-clock synthesis', () => {
-  assert.equal(persistedDocumentRevision(OPENED_REVISION), OPENED_REVISION)
+test("the drawer retains the exact persisted revision without wall-clock synthesis", () => {
+  assert.equal(persistedDocumentRevision(OPENED_REVISION), OPENED_REVISION);
   for (const invalid of [
     undefined,
     null,
-    '',
-    '2026-08-24T12:34:56.123Z',
+    "",
+    "2026-08-24T12:34:56.123Z",
     new Date(OPENED_REVISION),
   ]) {
-    assert.throws(() => persistedDocumentRevision(invalid), /DOCUMENT_REVISION_REQUIRED/)
+    assert.throws(() => persistedDocumentRevision(invalid), /DOCUMENT_REVISION_REQUIRED/);
   }
-})
+});
 
-test('draft and correction saves forward the persisted revision as the sole token', () => {
-  const payload = { memo: 'edited', expectedUpdatedAt: 'payload-must-not-override-persisted-state' }
-  const draft = buildDocumentSaveRequest('doc-1', OPENED_REVISION, payload, false)
-  assert.equal(draft.path, '/api/documents/doc-1')
-  assert.equal(draft.method, 'PATCH')
-  assert.equal(draft.body.expectedUpdatedAt, OPENED_REVISION)
+test("draft and correction saves forward the persisted revision as the sole token", () => {
+  const payload = {
+    memo: "edited",
+    expectedUpdatedAt: "payload-must-not-override-persisted-state",
+  };
+  const draft = buildDocumentSaveRequest("doc-1", OPENED_REVISION, payload, false);
+  assert.equal(draft.path, "/api/documents/doc-1");
+  assert.equal(draft.method, "PATCH");
+  assert.equal(draft.body.expectedUpdatedAt, OPENED_REVISION);
 
-  const correction = buildDocumentSaveRequest('doc-1', OPENED_REVISION, payload, true, 'controller reason')
-  assert.equal(correction.path, '/api/documents/doc-1/correct')
-  assert.equal(correction.method, 'POST')
-  assert.equal(correction.body.expectedUpdatedAt, OPENED_REVISION)
-  assert.equal(correction.body.amendmentReason, 'controller reason')
-})
+  const correction = buildDocumentSaveRequest(
+    "doc-1",
+    OPENED_REVISION,
+    payload,
+    true,
+    "controller reason",
+  );
+  assert.equal(correction.path, "/api/documents/doc-1/correct");
+  assert.equal(correction.method, "POST");
+  assert.equal(correction.body.expectedUpdatedAt, OPENED_REVISION);
+  assert.equal(correction.body.amendmentReason, "controller reason");
+});
 
-test('a successful draft save refreshes the next write revision from the persisted response', () => {
+test("a successful draft save refreshes the next write revision from the persisted response", () => {
   const refreshed = revisionFromSuccessfulDocumentSave({
     doc: { updated_at: SAVED_REVISION },
-  })
-  assert.equal(refreshed, SAVED_REVISION)
+  });
+  assert.equal(refreshed, SAVED_REVISION);
   assert.equal(
-    buildDocumentSaveRequest('doc-1', refreshed, { memo: 'second edit' }, false).body.expectedUpdatedAt,
+    buildDocumentSaveRequest("doc-1", refreshed, { memo: "second edit" }, false).body
+      .expectedUpdatedAt,
     SAVED_REVISION,
-  )
-  assert.throws(() => revisionFromSuccessfulDocumentSave({ doc: {} }), /DOCUMENT_REVISION_REQUIRED/)
-})
+  );
+  assert.throws(
+    () => revisionFromSuccessfulDocumentSave({ doc: {} }),
+    /DOCUMENT_REVISION_REQUIRED/,
+  );
+});
 
-test('a clean refresh rehydrates form data and its exact token as one snapshot', () => {
-  const opened = new Set([OPENED_REVISION])
-  const current = { documentId: 'doc-1', revision: OPENED_REVISION, payload: { memo: 'A' } }
-  const incoming = { documentId: 'doc-1', revision: SAVED_REVISION, payload: { memo: 'B' } }
-  const refreshed = reconcilePersistedDocumentSnapshot(current, incoming, false, opened)
-  assert.deepEqual(refreshed, { snapshot: incoming, rehydrate: true })
+test("a clean refresh rehydrates form data and its exact token as one snapshot", () => {
+  const opened = new Set([OPENED_REVISION]);
+  const current = { documentId: "doc-1", revision: OPENED_REVISION, payload: { memo: "A" } };
+  const incoming = { documentId: "doc-1", revision: SAVED_REVISION, payload: { memo: "B" } };
+  const refreshed = reconcilePersistedDocumentSnapshot(current, incoming, false, opened);
+  assert.deepEqual(refreshed, { snapshot: incoming, rehydrate: true });
   assert.deepEqual(
-    buildDocumentSaveRequest('doc-1', refreshed.snapshot.revision, refreshed.snapshot.payload, false).body,
-    { memo: 'B', expectedUpdatedAt: SAVED_REVISION },
-    'the next save cannot pair stale A form values with the newer B token',
-  )
-})
+    buildDocumentSaveRequest(
+      "doc-1",
+      refreshed.snapshot.revision,
+      refreshed.snapshot.payload,
+      false,
+    ).body,
+    { memo: "B", expectedUpdatedAt: SAVED_REVISION },
+    "the next save cannot pair stale A form values with the newer B token",
+  );
+});
 
-test('a dirty refresh retains its opened snapshot so a stale save conflicts', () => {
-  const current = { documentId: 'doc-1', revision: OPENED_REVISION, payload: { memo: 'A' } }
-  const incoming = { documentId: 'doc-1', revision: SAVED_REVISION, payload: { memo: 'external B' } }
+test("a dirty refresh retains its opened snapshot so a stale save conflicts", () => {
+  const current = { documentId: "doc-1", revision: OPENED_REVISION, payload: { memo: "A" } };
+  const incoming = {
+    documentId: "doc-1",
+    revision: SAVED_REVISION,
+    payload: { memo: "external B" },
+  };
   const retained = reconcilePersistedDocumentSnapshot(
     current,
     incoming,
     true,
     new Set([OPENED_REVISION]),
-  )
-  assert.deepEqual(retained, { snapshot: current, rehydrate: false })
+  );
+  assert.deepEqual(retained, { snapshot: current, rehydrate: false });
   assert.equal(
-    buildDocumentSaveRequest('doc-1', retained.snapshot.revision, { memo: 'local edit' }, false)
+    buildDocumentSaveRequest("doc-1", retained.snapshot.revision, { memo: "local edit" }, false)
       .body.expectedUpdatedAt,
     OPENED_REVISION,
-    'the stale editor must send the token it opened, not bless itself with the external token',
-  )
-})
+    "the stale editor must send the token it opened, not bless itself with the external token",
+  );
+});
 
-test('cancel restores the saved baseline across delayed props and adopts an unseen refresh', () => {
-  const saved = { documentId: 'doc-1', revision: SAVED_REVISION, payload: { memo: 'saved B' } }
-  const delayed = { documentId: 'doc-1', revision: OPENED_REVISION, payload: { memo: 'old A' } }
+test("cancel restores the saved baseline across delayed props and adopts an unseen refresh", () => {
+  const saved = { documentId: "doc-1", revision: SAVED_REVISION, payload: { memo: "saved B" } };
+  const delayed = { documentId: "doc-1", revision: OPENED_REVISION, payload: { memo: "old A" } };
   const retained = reconcilePersistedDocumentSnapshot(
     saved,
     delayed,
     false,
     new Set([OPENED_REVISION, SAVED_REVISION]),
-  )
-  assert.deepEqual(retained, { snapshot: saved, rehydrate: false })
+  );
+  assert.deepEqual(retained, { snapshot: saved, rehydrate: false });
 
-  const externalRevision = '2026-08-24T12:34:56.124001Z'
-  const external = { documentId: 'doc-1', revision: externalRevision, payload: { memo: 'external C' } }
+  const externalRevision = "2026-08-24T12:34:56.124001Z";
+  const external = {
+    documentId: "doc-1",
+    revision: externalRevision,
+    payload: { memo: "external C" },
+  };
   const adopted = reconcilePersistedDocumentSnapshot(
     saved,
     external,
     false,
     new Set([OPENED_REVISION, SAVED_REVISION]),
-  )
-  assert.deepEqual(adopted, { snapshot: external, rehydrate: true })
-})
+  );
+  assert.deepEqual(adopted, { snapshot: external, rehydrate: true });
+});
 
 // ---------------------------------------------------------------------------
 // Interactive editors: the three real saves, driven end to end.
@@ -163,331 +193,391 @@ test('cancel restores the saved baseline across delayed props and adopts an unse
 // transport that mirrors the routes' fence contract.
 // ---------------------------------------------------------------------------
 
-test('the expense drawer save sends its opened token and refreshes it from the save response', async () => {
-  let storedRevision = OPENED_REVISION
+test("the expense drawer save sends its opened token and refreshes it from the save response", async () => {
+  let storedRevision = OPENED_REVISION;
   const { transport, requests } = scriptedServer([
     {
-      match: (request) => request.method === 'PATCH' && request.path === '/api/expenses/exp-1',
+      match: (request) => request.method === "PATCH" && request.path === "/api/expenses/exp-1",
       respond: (request) => {
-        if (request.body.expectedUpdatedAt !== storedRevision) return staleConflict()
-        storedRevision = SAVED_REVISION
+        if (request.body.expectedUpdatedAt !== storedRevision) return staleConflict();
+        storedRevision = SAVED_REVISION;
         return {
           status: 200,
-          body: { doc: { id: 'exp-1', memo: String(request.body.memo), updated_at: SAVED_REVISION }, lines: [] },
-        }
+          body: {
+            doc: { id: "exp-1", memo: String(request.body.memo), updated_at: SAVED_REVISION },
+            lines: [],
+          },
+        };
       },
     },
-  ])
+  ]);
 
   const first = await saveExpenseReport({
-    documentId: 'exp-1',
+    documentId: "exp-1",
     revision: OPENED_REVISION,
-    payload: { memo: 'client lunch', lines: [{ accountId: 'acc-1', amount: '42.00' }] },
+    payload: { memo: "client lunch", lines: [{ accountId: "acc-1", amount: "42.00" }] },
     fallbackMessage: FALLBACK_MESSAGE,
     transport,
-  })
+  });
 
-  assert.equal(first.status, 'saved')
-  if (first.status !== 'saved') return
-  assert.equal(first.revision, SAVED_REVISION, 'the next write token comes from the save response')
-  assert.deepEqual(first.saved.doc.updated_at, SAVED_REVISION)
-  assert.equal(requests.length, 1)
-  assert.equal(requests[0]!.body.expectedUpdatedAt, OPENED_REVISION, 'the opened exact token rides the PATCH')
-  assert.equal(requests[0]!.body.memo, 'client lunch')
+  assert.equal(first.status, "saved");
+  if (first.status !== "saved") return;
+  assert.equal(first.revision, SAVED_REVISION, "the next write token comes from the save response");
+  assert.deepEqual(first.saved.doc.updated_at, SAVED_REVISION);
+  assert.equal(requests.length, 1);
+  assert.equal(
+    requests[0]!.body.expectedUpdatedAt,
+    OPENED_REVISION,
+    "the opened exact token rides the PATCH",
+  );
+  assert.equal(requests[0]!.body.memo, "client lunch");
 
   // A second save chains the refreshed token — never the one it opened with.
   const second = await saveExpenseReport({
-    documentId: 'exp-1',
+    documentId: "exp-1",
     revision: first.revision,
-    payload: { memo: 'second edit' },
+    payload: { memo: "second edit" },
     fallbackMessage: FALLBACK_MESSAGE,
     transport,
-  })
-  assert.equal(second.status, 'saved')
-  assert.equal(requests[1]!.body.expectedUpdatedAt, SAVED_REVISION)
-})
+  });
+  assert.equal(second.status, "saved");
+  assert.equal(requests[1]!.body.expectedUpdatedAt, SAVED_REVISION);
+});
 
-test('the journal drawer save sends its opened token and refreshes it from the save response', async () => {
-  let storedRevision = OPENED_REVISION
+test("the journal drawer save sends its opened token and refreshes it from the save response", async () => {
+  let storedRevision = OPENED_REVISION;
   const { transport, requests } = scriptedServer([
     {
-      match: (request) => request.method === 'PATCH' && request.path === '/api/journals/je-1',
+      match: (request) => request.method === "PATCH" && request.path === "/api/journals/je-1",
       respond: (request) => {
-        if (request.body.expectedUpdatedAt !== storedRevision) return staleConflict()
-        storedRevision = SAVED_REVISION
+        if (request.body.expectedUpdatedAt !== storedRevision) return staleConflict();
+        storedRevision = SAVED_REVISION;
         return {
           status: 200,
-          body: { doc: { id: 'je-1', memo: String(request.body.memo), updated_at: SAVED_REVISION }, lines: [] },
-        }
+          body: {
+            doc: { id: "je-1", memo: String(request.body.memo), updated_at: SAVED_REVISION },
+            lines: [],
+          },
+        };
       },
     },
-  ])
+  ]);
 
   const first = await saveJournalDraft({
-    documentId: 'je-1',
+    documentId: "je-1",
     revision: OPENED_REVISION,
-    payload: { memo: 'accrual', referenceNumber: 'REF-9' },
+    payload: { memo: "accrual", referenceNumber: "REF-9" },
     fallbackMessage: FALLBACK_MESSAGE,
     transport,
-  })
+  });
 
-  assert.equal(first.status, 'saved')
-  if (first.status !== 'saved') return
-  assert.equal(first.revision, SAVED_REVISION, 'the next write token comes from the save response')
-  assert.equal(requests[0]!.method, 'PATCH')
-  assert.equal(requests[0]!.path, '/api/journals/je-1')
-  assert.equal(requests[0]!.body.expectedUpdatedAt, OPENED_REVISION)
+  assert.equal(first.status, "saved");
+  if (first.status !== "saved") return;
+  assert.equal(first.revision, SAVED_REVISION, "the next write token comes from the save response");
+  assert.equal(requests[0]!.method, "PATCH");
+  assert.equal(requests[0]!.path, "/api/journals/je-1");
+  assert.equal(requests[0]!.body.expectedUpdatedAt, OPENED_REVISION);
 
   const second = await saveJournalDraft({
-    documentId: 'je-1',
+    documentId: "je-1",
     revision: first.revision,
-    payload: { memo: 'accrual v2' },
+    payload: { memo: "accrual v2" },
     fallbackMessage: FALLBACK_MESSAGE,
     transport,
-  })
-  assert.equal(second.status, 'saved')
-  assert.equal(requests[1]!.body.expectedUpdatedAt, SAVED_REVISION)
-})
+  });
+  assert.equal(second.status, "saved");
+  assert.equal(requests[1]!.body.expectedUpdatedAt, SAVED_REVISION);
+});
 
-test('the field-ticket drawer sends expectedRevision on header and grid saves and refreshes from each response', async () => {
-  let storedRevision = OPENED_REVISION
+test("the field-ticket drawer sends expectedRevision on header and grid saves and refreshes from each response", async () => {
+  let storedRevision = OPENED_REVISION;
   const ticketBody = () => ({
-    id: 'ft-1',
-    documentNumber: 'FT-0001',
-    status: 'draft',
-    documentDate: '2026-08-24',
+    id: "ft-1",
+    documentNumber: "FT-0001",
+    status: "draft",
+    documentDate: "2026-08-24",
     referenceNumber: null,
     memo: null,
-    customerName: 'Customer',
-    projectId: 'proj-1',
-    projectName: 'Project',
-    foremanName: 'Foreman',
+    customerName: "Customer",
+    projectId: "proj-1",
+    projectName: "Project",
+    foremanName: "Foreman",
     revision: storedRevision,
-    fieldTicket: { period: 'weekly', periodStart: '2026-08-24', periodEnd: '2026-08-30', foremanPartyId: null },
+    fieldTicket: {
+      period: "weekly",
+      periodStart: "2026-08-24",
+      periodEnd: "2026-08-30",
+      foremanPartyId: null,
+    },
     entries: [],
     lines: [],
-    laborTotal: '0',
-    linesTotal: '0',
-    grandTotal: '0',
+    laborTotal: "0",
+    linesTotal: "0",
+    grandTotal: "0",
     links: [],
     billingRequests: [],
-  })
+  });
   const { transport, requests } = scriptedServer([
     {
-      match: (request) => request.path === '/api/field-tickets/ft-1',
+      match: (request) => request.path === "/api/field-tickets/ft-1",
       respond: (request) => {
-        if (request.body.expectedRevision !== storedRevision) return staleConflict()
-        storedRevision = SAVED_REVISION
-        return { status: 200, body: ticketBody() }
+        if (request.body.expectedRevision !== storedRevision) return staleConflict();
+        storedRevision = SAVED_REVISION;
+        return { status: 200, body: ticketBody() };
       },
     },
-  ])
+  ]);
 
   const header = await sendFieldTicketMutation({
-    ticketId: 'ft-1',
+    ticketId: "ft-1",
     revision: OPENED_REVISION,
-    method: 'PATCH',
-    body: { memo: 'poured footings' },
+    method: "PATCH",
+    body: { memo: "poured footings" },
     fallbackMessage: FALLBACK_MESSAGE,
     transport,
-  })
-  assert.equal(header.status, 'saved')
-  assert.equal(header.revision, SAVED_REVISION, 'refreshed from the top-level revision the route returns')
-  assert.equal(requests[0]!.method, 'PATCH')
-  assert.equal(requests[0]!.path, '/api/field-tickets/ft-1')
-  assert.equal(requests[0]!.body.expectedRevision, OPENED_REVISION, 'header save carries the exact token')
-  assert.equal(requests[0]!.body.memo, 'poured footings')
+  });
+  assert.equal(header.status, "saved");
+  assert.equal(
+    header.revision,
+    SAVED_REVISION,
+    "refreshed from the top-level revision the route returns",
+  );
+  assert.equal(requests[0]!.method, "PATCH");
+  assert.equal(requests[0]!.path, "/api/field-tickets/ft-1");
+  assert.equal(
+    requests[0]!.body.expectedRevision,
+    OPENED_REVISION,
+    "header save carries the exact token",
+  );
+  assert.equal(requests[0]!.body.memo, "poured footings");
 
   const grid = await sendFieldTicketMutation({
-    ticketId: 'ft-1',
+    ticketId: "ft-1",
     revision: header.saved.revision,
-    method: 'POST',
-    body: { action: 'save-grid', rows: [] },
+    method: "POST",
+    body: { action: "save-grid", rows: [] },
     fallbackMessage: FALLBACK_MESSAGE,
     transport,
-  })
-  assert.equal(grid.status, 'saved')
-  assert.equal(requests[1]!.method, 'POST')
-  assert.equal(requests[1]!.body.action, 'save-grid')
-  assert.equal(requests[1]!.body.expectedRevision, SAVED_REVISION, 'grid save chains the refreshed token')
-})
+  });
+  assert.equal(grid.status, "saved");
+  assert.equal(requests[1]!.method, "POST");
+  assert.equal(requests[1]!.body.action, "save-grid");
+  assert.equal(
+    requests[1]!.body.expectedRevision,
+    SAVED_REVISION,
+    "grid save chains the refreshed token",
+  );
+});
 
-test('a refused send-for-signature hands the server reason back instead of a fallback', async () => {
+test("a refused send-for-signature hands the server reason back instead of a fallback", async () => {
   // SIM Northstar has no email transport: the route 422s with the typed
   // FieldTicketError reason. The mutation must carry that reason to the
   // caller (toast + pinned dialog alert), never the generic fallback.
-  const refusal = 'Email delivery is not enabled for this organization. An administrator with setup access can choose a provider and turn delivery on in Admin → Email.'
+  const refusal =
+    "Email delivery is not enabled for this organization. An administrator with setup access can choose a provider and turn delivery on in Admin → Email.";
   const { transport, requests } = scriptedServer([
     {
-      match: (request) => request.path === '/api/field-tickets/ft-1',
+      match: (request) => request.path === "/api/field-tickets/ft-1",
       respond: () => ({ status: 422, body: { error: refusal } }),
     },
-  ])
+  ]);
   const result = await sendFieldTicketMutation({
-    ticketId: 'ft-1',
+    ticketId: "ft-1",
     revision: OPENED_REVISION,
-    method: 'POST',
-    body: { action: 'send-signature', to: 'customer@example.test', message: null },
+    method: "POST",
+    body: { action: "send-signature", to: "customer@example.test", message: null },
     fallbackMessage: FALLBACK_MESSAGE,
     transport,
-  })
-  assert.deepEqual(result, { status: 'error', message: refusal })
-  assert.equal(requests[0]!.body.action, 'send-signature')
-})
+  });
+  assert.deepEqual(result, { status: "error", message: refusal });
+  assert.equal(requests[0]!.body.action, "send-signature");
+});
 
-test('each editor surfaces a genuinely stale token as the server 409 and never retries or re-mints a token', async () => {
+test("each editor surfaces a genuinely stale token as the server 409 and never retries or re-mints a token", async () => {
   // The server holds CONCURRENT_REVISION; every editor only holds OPENED_REVISION.
   const { transport: conflictTransport } = scriptedServer([
     {
       match: () => true,
       respond: (request) =>
-        request.body.expectedUpdatedAt === CONCURRENT_REVISION || request.body.expectedRevision === CONCURRENT_REVISION
+        request.body.expectedUpdatedAt === CONCURRENT_REVISION ||
+        request.body.expectedRevision === CONCURRENT_REVISION
           ? { status: 200, body: {} }
           : staleConflict(),
     },
-  ])
+  ]);
 
   const expense = await saveExpenseReport({
-    documentId: 'exp-1',
+    documentId: "exp-1",
     revision: OPENED_REVISION,
-    payload: { memo: 'stale' },
+    payload: { memo: "stale" },
     fallbackMessage: FALLBACK_MESSAGE,
     transport: conflictTransport,
-  })
-  assert.deepEqual(expense, { status: 'conflict', message: DOCUMENT_CHANGED_AFTER_OPEN })
+  });
+  assert.deepEqual(expense, { status: "conflict", message: DOCUMENT_CHANGED_AFTER_OPEN });
 
   const journal = await saveJournalDraft({
-    documentId: 'je-1',
+    documentId: "je-1",
     revision: OPENED_REVISION,
-    payload: { memo: 'stale' },
+    payload: { memo: "stale" },
     fallbackMessage: FALLBACK_MESSAGE,
     transport: conflictTransport,
-  })
-  assert.deepEqual(journal, { status: 'conflict', message: DOCUMENT_CHANGED_AFTER_OPEN })
+  });
+  assert.deepEqual(journal, { status: "conflict", message: DOCUMENT_CHANGED_AFTER_OPEN });
 
   const ticket = await sendFieldTicketMutation({
-    ticketId: 'ft-1',
+    ticketId: "ft-1",
     revision: OPENED_REVISION,
-    method: 'PATCH',
-    body: { memo: 'stale' },
+    method: "PATCH",
+    body: { memo: "stale" },
     fallbackMessage: FALLBACK_MESSAGE,
     transport: conflictTransport,
-  })
-  assert.deepEqual(ticket, { status: 'conflict', message: DOCUMENT_CHANGED_AFTER_OPEN })
+  });
+  assert.deepEqual(ticket, { status: "conflict", message: DOCUMENT_CHANGED_AFTER_OPEN });
 
   // A missing token can never be manufactured client-side either.
   assert.throws(
-    () =>
-      buildDocumentSaveRequest('exp-1', '2026-08-24T12:34:56.123Z', { memo: 'lossy' }, false),
+    () => buildDocumentSaveRequest("exp-1", "2026-08-24T12:34:56.123Z", { memo: "lossy" }, false),
     /DOCUMENT_REVISION_REQUIRED/,
-  )
-})
+  );
+});
 
-test('the canonical snapshot loader pins the exact GET token and refuses lossy ones', async () => {
+test("the canonical snapshot loader pins the exact GET token and refuses lossy ones", async () => {
   const good = scriptedServer([
     {
-      match: (request) => request.method === 'GET' && request.path === '/api/expenses/exp-1',
+      match: (request) => request.method === "GET" && request.path === "/api/expenses/exp-1",
       respond: () => ({
         status: 200,
-        body: { doc: { id: 'exp-1', memo: 'server state', updated_at: CONCURRENT_REVISION }, lines: [] },
+        body: {
+          doc: { id: "exp-1", memo: "server state", updated_at: CONCURRENT_REVISION },
+          lines: [],
+        },
       }),
     },
-  ])
-  const snapshot = await loadDraftDocumentSnapshot('/api/expenses/exp-1', FALLBACK_MESSAGE, good.transport)
+  ]);
+  const snapshot = await loadDraftDocumentSnapshot(
+    "/api/expenses/exp-1",
+    FALLBACK_MESSAGE,
+    good.transport,
+  );
   assert.deepEqual(snapshot, {
-    documentId: 'exp-1',
+    documentId: "exp-1",
     revision: CONCURRENT_REVISION,
-    payload: { doc: { id: 'exp-1', memo: 'server state', updated_at: CONCURRENT_REVISION }, lines: [] },
-  })
+    payload: {
+      doc: { id: "exp-1", memo: "server state", updated_at: CONCURRENT_REVISION },
+      lines: [],
+    },
+  });
 
   const lossy = scriptedServer([
     {
       match: () => true,
-      respond: () => ({ status: 200, body: { doc: { id: 'exp-1', updated_at: new Date(CONCURRENT_REVISION) }, lines: [] } }),
+      respond: () => ({
+        status: 200,
+        body: { doc: { id: "exp-1", updated_at: new Date(CONCURRENT_REVISION) }, lines: [] },
+      }),
     },
-  ])
+  ]);
   await assert.rejects(
-    loadDraftDocumentSnapshot('/api/expenses/exp-1', FALLBACK_MESSAGE, lossy.transport),
+    loadDraftDocumentSnapshot("/api/expenses/exp-1", FALLBACK_MESSAGE, lossy.transport),
     /DOCUMENT_REVISION_REQUIRED/,
-  )
+  );
 
-  const broken = scriptedServer([{ match: () => true, respond: () => ({ status: 500, body: {} }) }])
+  const broken = scriptedServer([
+    { match: () => true, respond: () => ({ status: 500, body: {} }) },
+  ]);
   await assert.rejects(
-    loadDraftDocumentSnapshot('/api/expenses/exp-1', FALLBACK_MESSAGE, broken.transport),
+    loadDraftDocumentSnapshot("/api/expenses/exp-1", FALLBACK_MESSAGE, broken.transport),
     new RegExp(`^Error: ${FALLBACK_MESSAGE}$`),
-  )
-})
+  );
+});
 
-test('a canonical read adopts clean editors, pins unchanged dirty content, and conflicts on drifted content', () => {
+test("a canonical read adopts clean editors, pins unchanged dirty content, and conflicts on drifted content", () => {
   const current = {
-    documentId: 'exp-1',
+    documentId: "exp-1",
     revision: OPENED_REVISION,
-    payload: { doc: { id: 'exp-1', memo: 'opened', updated_at: new Date(OPENED_REVISION) }, lines: [] },
-  }
+    payload: {
+      doc: { id: "exp-1", memo: "opened", updated_at: new Date(OPENED_REVISION) },
+      lines: [],
+    },
+  };
   const sameContent = {
-    documentId: 'exp-1',
+    documentId: "exp-1",
     revision: CONCURRENT_REVISION,
-    payload: { doc: { id: 'exp-1', memo: 'opened', updated_at: CONCURRENT_REVISION }, lines: [] },
-  }
+    payload: { doc: { id: "exp-1", memo: "opened", updated_at: CONCURRENT_REVISION }, lines: [] },
+  };
   const movedOn = {
-    documentId: 'exp-1',
+    documentId: "exp-1",
     revision: CONCURRENT_REVISION,
-    payload: { doc: { id: 'exp-1', memo: 'edited elsewhere', updated_at: CONCURRENT_REVISION }, lines: [] },
-  }
+    payload: {
+      doc: { id: "exp-1", memo: "edited elsewhere", updated_at: CONCURRENT_REVISION },
+      lines: [],
+    },
+  };
 
-  assert.deepEqual(
-    reconcileCanonicalDraftRead({ current, incoming: movedOn, isDirty: false }),
-    { action: 'adopt', snapshot: movedOn },
-  )
+  assert.deepEqual(reconcileCanonicalDraftRead({ current, incoming: movedOn, isDirty: false }), {
+    action: "adopt",
+    snapshot: movedOn,
+  });
   // Clean and already current (newer token, same content): pin the token
   // WITHOUT resetting the form — adopting rebuilds row/object state with
   // fresh identities, which the dirty tracker would read as user edits and
   // prompt on close with nothing to discard.
   assert.deepEqual(
     reconcileCanonicalDraftRead({ current, incoming: sameContent, isDirty: false }),
-    { action: 'pin', revision: CONCURRENT_REVISION },
-  )
+    { action: "pin", revision: CONCURRENT_REVISION },
+  );
   // Dirty but nothing actually changed server-side (only Date→token shape):
   // keep the edits, take the exact token.
-  assert.deepEqual(
-    reconcileCanonicalDraftRead({ current, incoming: sameContent, isDirty: true }),
-    { action: 'pin', revision: CONCURRENT_REVISION },
-  )
+  assert.deepEqual(reconcileCanonicalDraftRead({ current, incoming: sameContent, isDirty: true }), {
+    action: "pin",
+    revision: CONCURRENT_REVISION,
+  });
   // Dirty AND the record moved: blessing stale edits with the newer token
   // would recreate silent last-write-wins.
-  assert.deepEqual(
-    reconcileCanonicalDraftRead({ current, incoming: movedOn, isDirty: true }),
-    { action: 'conflict', snapshot: movedOn },
-  )
-})
+  assert.deepEqual(reconcileCanonicalDraftRead({ current, incoming: movedOn, isDirty: true }), {
+    action: "conflict",
+    snapshot: movedOn,
+  });
+});
 
-
-test('field-ticket crew transport preserves exact decimal text and native refusals', async () => {
-  const rows = serializeGridRows([{
-    employeePartyId: 'employee-1', itemId: 'labor-1', projectTaskId: null,
-    cells: {
-      'regular|2026-04-01': '2',
-      'regular|2026-04-02': '2.1250',
-      'regular|2026-04-03': '9007199254740993.0001',
-      'regular|2026-04-04': '',
-      'regular|2026-04-05': '0.0000',
-      'regular|2026-04-06': '2.00001',
+test("field-ticket crew transport preserves exact decimal text and native refusals", async () => {
+  const rows = serializeGridRows([
+    {
+      employeePartyId: "employee-1",
+      itemId: "labor-1",
+      projectTaskId: null,
+      cells: {
+        "regular|2026-04-01": "2",
+        "regular|2026-04-02": "2.1250",
+        "regular|2026-04-03": "9007199254740993.0001",
+        "regular|2026-04-04": "",
+        "regular|2026-04-05": "0.0000",
+        "regular|2026-04-06": "2.00001",
+      },
     },
-  }])
+  ]);
   assert.deepEqual(rows[0]!.hours, {
-    '2026-04-01': '2', '2026-04-02': '2.125',
-    '2026-04-03': '9007199254740993.0001', '2026-04-06': '2.00001',
-  })
+    "2026-04-01": "2",
+    "2026-04-02": "2.125",
+    "2026-04-03": "9007199254740993.0001",
+    "2026-04-06": "2.00001",
+  });
   const transport = (async (_url: unknown, init?: RequestInit) => {
-    const body = JSON.parse(String(init?.body))
-    assert.equal(body.expectedRevision, OPENED_REVISION)
-    assert.deepEqual(body.rows, rows, 'JSON transport retains every exact spelling')
-    return Response.json({ error: 'Hours must be a number with at most 4 decimal places' }, { status: 422 })
-  }) as typeof fetch
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.expectedRevision, OPENED_REVISION);
+    assert.deepEqual(body.rows, rows, "JSON transport retains every exact spelling");
+    return Response.json(
+      { error: "Hours must be a number with at most 4 decimal places" },
+      { status: 422 },
+    );
+  }) as typeof fetch;
   const result = await sendFieldTicketMutation({
-    ticketId: 'ft-1', revision: OPENED_REVISION, method: 'POST',
-    body: { action: 'save-grid', rows }, transport,
-  })
-  assert.equal(result.status, 'error')
-  assert.match(result.status === 'error' ? result.message : '', /at most 4 decimal places/)
-})
+    ticketId: "ft-1",
+    revision: OPENED_REVISION,
+    method: "POST",
+    body: { action: "save-grid", rows },
+    transport,
+  });
+  assert.equal(result.status, "error");
+  assert.match(result.status === "error" ? result.message : "", /at most 4 decimal places/);
+});

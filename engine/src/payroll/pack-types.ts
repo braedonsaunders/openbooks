@@ -1,18 +1,23 @@
 /** Payroll pack declarations: slots, components, identifiers, holidays, jurisdictions, remittance schedules. Split from packs.ts (pure moves only). */
-import type { PAYROLL_COUNTRY_PACKS } from "./pack-registry"
-import { type ControlAccountRole } from "../records/control-accounts.ts"
-import { db } from "../platform/db.ts"
-import type { PayrollPackFilings } from "./filing-registry.ts"
-import type { LaborComplianceFileFormat, PayrollPackConstruction } from "./labor-compliance.ts"
-import { type PayrollPackCertificates } from "./certificates.ts"
-import { type PayrollPackReciprocity } from "./reciprocity.ts"
-import { type PayrollPackWithholding } from "./withholding-jurisdictions.ts"
-import type { PayrollEmployeeFact } from "./employee-facts.ts"
-import { type PayrollEmployerFact } from "./employer-facts.ts"
-import type { PayrollPackRates } from "./statutory-rates.ts"
-import type { PayrollEmployerLevyContext, PayrollEmployerLevyFactors, PayrollStatutoryComputeContext, PayrollWorkAllocation } from "./statutory-context.ts"
-import type { PayrollTaxYearSupport } from "./tax-years.ts"
-import type { PayrollPeriodOpeningTreatment } from "./period-opening-declaration.ts"
+import type { PAYROLL_COUNTRY_PACKS } from "./pack-registry";
+import { type ControlAccountRole } from "../records/control-accounts.ts";
+import { db } from "../platform/db.ts";
+import type { PayrollPackFilings } from "./filing-registry.ts";
+import type { LaborComplianceFileFormat, PayrollPackConstruction } from "./labor-compliance.ts";
+import { type PayrollPackCertificates } from "./certificates.ts";
+import { type PayrollPackReciprocity } from "./reciprocity.ts";
+import { type PayrollPackWithholding } from "./withholding-jurisdictions.ts";
+import type { PayrollEmployeeFact } from "./employee-facts.ts";
+import { type PayrollEmployerFact } from "./employer-facts.ts";
+import type { PayrollPackRates } from "./statutory-rates.ts";
+import type {
+  PayrollEmployerLevyContext,
+  PayrollEmployerLevyFactors,
+  PayrollStatutoryComputeContext,
+  PayrollWorkAllocation,
+} from "./statutory-context.ts";
+import type { PayrollTaxYearSupport } from "./tax-years.ts";
+import type { PayrollPeriodOpeningTreatment } from "./period-opening-declaration.ts";
 
 /**
  * What a statutory amount is computed FROM. This is the property — and the
@@ -119,8 +124,8 @@ export interface PayrollSupplementalPayTreatment {
 export type PayrollCoreTaxBaseKey = "income" | "nonPeriodic" | "pensionable" | "insurable";
 export type PayrollStateTaxBaseKey = `state:${string}:${"income" | "nonPeriodic"}`;
 export type PayrollTaxBaseKey = PayrollCoreTaxBaseKey | PayrollStateTaxBaseKey;
-export type PayrollTaxBases = Record<PayrollCoreTaxBaseKey, string>
-  & Partial<Record<PayrollStateTaxBaseKey, string>>;
+export type PayrollTaxBases = Record<PayrollCoreTaxBaseKey, string> &
+  Partial<Record<PayrollStateTaxBaseKey, string>>;
 
 /**
  * One pre-tax treatment in a pack's vocabulary: a `pay_components.tax_treatment`
@@ -256,10 +261,10 @@ export interface PayrollAggregateClassBands {
 export type PayrollAggregateRate =
   | { kind: "flat_percent"; percent: string }
   | {
-    kind: "marginal_bands";
-    bands?: readonly PayrollAggregateBand[];
-    classBands?: readonly PayrollAggregateClassBands[];
-  }
+      kind: "marginal_bands";
+      bands?: readonly PayrollAggregateBand[];
+      classBands?: readonly PayrollAggregateClassBands[];
+    }
   | { kind: "tenant_slot"; slotKey: string; percentField: string };
 
 /**
@@ -287,13 +292,13 @@ export type PayrollAggregateAllowance =
   | { kind: "employer_allowance"; amount: string }
   | { kind: "per_employee_cap"; amount: string }
   | {
-    kind: "accruing_allowance";
-    /** Subsidiary-scoped employer fact holding the annual allocated share. */
-    factKey: string;
-    /** Tax-year start the monthly accrual counts from (HMRC: April 6). */
-    yearStartMonth: number;
-    yearStartDay: number;
-  };
+      kind: "accruing_allowance";
+      /** Subsidiary-scoped employer fact holding the annual allocated share. */
+      factKey: string;
+      /** Tax-year start the monthly accrual counts from (HMRC: April 6). */
+      yearStartMonth: number;
+      yearStartDay: number;
+    };
 
 /**
  * One contribution levied on the employer aggregate. The stub lines it
@@ -790,7 +795,7 @@ export interface PayrollCountryPack {
    * OPTIONAL: a pack with no agency of its own to remit to on its own
    * timetable declares none (the US pack's federal deposits ride EFTPS).
    */
-   remittanceSchedules?: readonly PayrollRemittanceSchedule[];
+  remittanceSchedules?: readonly PayrollRemittanceSchedule[];
   /**
    * region code → the `tax_administration` calendar key whose holidays move
    * a statutory remittance deadline for a payroll worked WHOLLY in that
@@ -862,11 +867,33 @@ export interface PayrollCountryPack {
   /** Country-owned validation of the original statutory opening allocation. */
   openingLevySource?: {
     programKeys: readonly string[];
-    validateScope: (row: { programKey: string; region: string; subRegion: string; filingAccountId: string | null; federalAccountId: string | null }) => boolean;
+    validateScope: (row: {
+      programKey: string;
+      region: string;
+      subRegion: string;
+      filingAccountId: string | null;
+      federalAccountId: string | null;
+    }) => boolean;
     validateRequired: (rows: readonly { programKey: string; region: string }[]) => void;
-    validateOpening: (input: { orgId: string; subsidiaryId: string;
-      opening: { employeePartyId: string; taxYear: number; wcbAssessableYtd: string; ehtRemunerationYtd: string; insurableYtd: string };
-      allocations: readonly { programKey: string; region: string; subRegion: string; filingAccountId: string | null; federalAccountId: string | null; amount: string }[] }) => Promise<void>;
+    validateOpening: (input: {
+      orgId: string;
+      subsidiaryId: string;
+      opening: {
+        employeePartyId: string;
+        taxYear: number;
+        wcbAssessableYtd: string;
+        ehtRemunerationYtd: string;
+        insurableYtd: string;
+      };
+      allocations: readonly {
+        programKey: string;
+        region: string;
+        subRegion: string;
+        filingAccountId: string | null;
+        federalAccountId: string | null;
+        amount: string;
+      }[];
+    }) => Promise<void>;
   };
   /**
    * True when the pack's account-grouped periodic return files under the
@@ -1029,9 +1056,7 @@ export interface PayrollCountryPack {
    * Phase 8 — earnings-assessed employer-only levies the pack declares in its
    * statutory slots (WCB/EHT for CA). Absent when the pack levies none.
    */
-  applyEmployerLevies?: (
-    ctx: PayrollEmployerLevyContext,
-  ) => Promise<PayrollEmployerLevyFactors>;
+  applyEmployerLevies?: (ctx: PayrollEmployerLevyContext) => Promise<PayrollEmployerLevyFactors>;
   /**
    * Employer-aggregate levies: contributions assessed on the EMPLOYER as a
    * whole — its total payroll in scope, its sector or employer class, a
@@ -1047,9 +1072,7 @@ export interface PayrollCountryPack {
    * year it has not transcribed — the same doctrine as the tax-year
    * editions. LAZY (a closure over the tax year), like `openingYtdFields`.
    */
-  employerAggregateLevies?: (
-    taxYear: number,
-  ) => readonly PayrollEmployerAggregateLevy[];
+  employerAggregateLevies?: (taxYear: number) => readonly PayrollEmployerAggregateLevy[];
   /**
    * Request the common schedule/work-line hour facts in the statutory context.
    * A pack opts in only when its law prices an obligation against paid hours.
@@ -1076,9 +1099,7 @@ export interface PayrollCountryPack {
    * numeric(19,4), always 4 decimals from the pipeline): parse it with
    * money.ts, never a pack-local decimal regex.
    */
-  computeStatutory: (
-    ctx: PayrollStatutoryComputeContext,
-  ) => Promise<Record<string, string>>;
+  computeStatutory: (ctx: PayrollStatutoryComputeContext) => Promise<Record<string, string>>;
   /** Optional pack-owned producer of verified work allocations for jurisdiction rules. */
   loadWorkAllocations?: (
     tx: Pick<typeof db, "execute">,
@@ -1196,15 +1217,9 @@ export interface PayrollCountryPack {
  * traced "AL", because the name lived in a field this resolver did not
  * consult — one declaration, two readers, only one of them looking.
  */
-export function factorLabelForPack(
-  pack: PayrollCountryPack,
-  key: string,
-): string {
+export function factorLabelForPack(pack: PayrollCountryPack, key: string): string {
   return (
-    pack.factorLabels[key] ??
-    pack.describeFactor?.(key) ??
-    pack.regions.regionNames[key] ??
-    key
+    pack.factorLabels[key] ?? pack.describeFactor?.(key) ?? pack.regions.regionNames[key] ?? key
   );
 }
 
@@ -1233,7 +1248,6 @@ export interface PayrollTaxYearDefinition {
    */
   namedBy: "opening_year" | "closing_year";
 }
-
 
 /**
  * Which jurisdictions inside the country the pack's engine can actually
@@ -1269,7 +1283,6 @@ export interface PayrollRegionCoverage {
   /** Region-specific reason, where the general one would be misleading. */
   unsupportedReasons?: Readonly<Record<string, string>>;
 }
-
 
 // ---------------------------------------------------------------------------
 // Statutory holidays — the jurisdictional calendar
@@ -1383,10 +1396,7 @@ export interface PayrollWorkTriggeredHoliday {
  * model improves a re-reading of every jurisdiction instead of a widening of
  * one resolver.
  */
-export type PayrollHolidayDayCounting =
-  | "worked"
-  | "worked_or_earned_wages"
-  | "entitled_to_pay";
+export type PayrollHolidayDayCounting = "worked" | "worked_or_earned_wages" | "entitled_to_pay";
 
 /**
  * Where a lookback window ENDS — and it is not the same sentence everywhere.

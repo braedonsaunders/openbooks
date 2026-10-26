@@ -3,25 +3,25 @@ import {
   formatTaxIds,
   readCompanyAddress,
   readTaxIds,
-} from '@openbooks/engine/organization/company-identity'
+} from "@openbooks/engine/organization/company-identity";
 
 /** The organization columns every PDF loader reads for its seller block. */
 export type OrgIdentityRow = {
-  name: string
-  legal_name?: string | null
-  tax_ids?: unknown
-  company_address?: unknown
-}
+  name: string;
+  legal_name?: string | null;
+  tax_ids?: unknown;
+  company_address?: unknown;
+};
 
 /** Identifier schemes that are a VAT number or a company registration. */
-const VAT_SCHEMES = ['gb_vat', 'eu_vat'] as const
-const REGISTRATION_SCHEMES = ['gb_crn', 'registration'] as const
+const VAT_SCHEMES = ["gb_vat", "eu_vat"] as const;
+const REGISTRATION_SCHEMES = ["gb_crn", "registration"] as const;
 /**
  * Schemes that are a sales or GST registration number. Only these print on
  * the "Tax registration" line: a US employer identification number or a
  * generic tax ID is not a tax registration, so a US seller prints no such line.
  */
-const TAX_REGISTRATION_SCHEMES = ['ca_bn', 'ca_gst_hst', 'ca_qst', 'au_abn'] as const
+const TAX_REGISTRATION_SCHEMES = ["ca_bn", "ca_gst_hst", "ca_qst", "au_abn"] as const;
 
 /**
  * The seller block's merge values — the same on every record type, from the
@@ -33,12 +33,15 @@ const TAX_REGISTRATION_SCHEMES = ['ca_bn', 'ca_gst_hst', 'ca_qst', 'au_abn'] as 
  * invoice, so the printed and the electronic seller can never disagree.
  */
 export function orgIdentityMergeValues(org: OrgIdentityRow): Record<string, string> {
-  const address = formatCompanyAddress(readCompanyAddress(org.company_address))
-  const taxIds = readTaxIds(org.tax_ids)
-  const pick = (schemes: readonly string[]) => schemes.map((scheme) => taxIds[scheme]).find(Boolean) ?? ''
+  const address = formatCompanyAddress(readCompanyAddress(org.company_address));
+  const taxIds = readTaxIds(org.tax_ids);
+  const pick = (schemes: readonly string[]) =>
+    schemes.map((scheme) => taxIds[scheme]).find(Boolean) ?? "";
   const taxRegistrations = Object.fromEntries(
-    Object.entries(taxIds).filter(([scheme]) => (TAX_REGISTRATION_SCHEMES as readonly string[]).includes(scheme)),
-  )
+    Object.entries(taxIds).filter(([scheme]) =>
+      (TAX_REGISTRATION_SCHEMES as readonly string[]).includes(scheme),
+    ),
+  );
   return {
     org_name: org.name,
     org_legal_name: org.legal_name?.trim() || org.name,
@@ -48,5 +51,5 @@ export function orgIdentityMergeValues(org: OrgIdentityRow): Record<string, stri
     seller_vat_id: pick(VAT_SCHEMES),
     seller_tax_number: formatTaxIds(taxRegistrations),
     seller_legal_registration: pick(REGISTRATION_SCHEMES),
-  }
+  };
 }

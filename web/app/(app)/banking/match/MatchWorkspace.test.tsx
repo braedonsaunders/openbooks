@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
 
 // (rule-suggestion chip) + (add-journal dialog): both
 // refusal paths 422 with zero user feedback. The routes answer typed
@@ -7,14 +7,17 @@ import test, { type TestContext } from 'node:test'
 // res.json: an unreadable error body threw, the toast never fired, and the
 // failure went silent. The helper now mirrors the documents row-action
 // hardening — the read can never throw and a refusal always toasts.
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/banking/match?account=acc-1', scrollIntoView: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/banking/match?account=acc-1",
+  scrollIntoView: false,
+});
 
 const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
-  applyLineBody: '' as string,
-  createMatchBody: '' as string,
-}
+  applyLineBody: "" as string,
+  createMatchBody: "" as string,
+};
 Object.assign(globalThis, {
   __matchTestToasts: script.toasts,
   __matchTestRouter: {
@@ -24,48 +27,59 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__matchTestRouter}export function usePathname(){return "/banking/match"}export function useSearchParams(){return new URLSearchParams()}' })
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__matchTestRouter}export function usePathname(){return "/banking/match"}export function useSearchParams(){return new URLSearchParams()}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export const toast={success(m){globalThis.__matchTestToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__matchTestToasts.push({kind:"error",message:String(m)})},info(m){globalThis.__matchTestToasts.push({kind:"info",message:String(m)})}};export function Toaster(){return null}',
-      }
+      };
     }
-    if (specifier.endsWith('/lib/confirm')) {
+    if (specifier.endsWith("/lib/confirm")) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export async function confirmDialog(){return true};export async function promptDialog(){return null}',
-      }
+        url: "data:text/javascript,export async function confirmDialog(){return true};export async function promptDialog(){return null}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { MoneyProvider } = await import('../../../../components/money-provider')
-const { MatchWorkspace, matchSelectionMatchesScope } = await import('./MatchWorkspace')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { MoneyProvider } = await import("../../../../components/money-provider");
+const { MatchWorkspace, matchSelectionMatchesScope } = await import("./MatchWorkspace");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
-const STMT_ID = 'stmt-1'
-const OFFSET_ID = '019f0000-0000-4000-8000-000000000005'
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
+const STMT_ID = "stmt-1";
+const OFFSET_ID = "019f0000-0000-4000-8000-000000000005";
 
 const data = {
-  stmtRows: [{ id: STMT_ID, posted_on: '2026-06-15', amount: '-25.00', description: 'T05MATCH fee' }],
+  stmtRows: [
+    { id: STMT_ID, posted_on: "2026-06-15", amount: "-25.00", description: "T05MATCH fee" },
+  ],
   stmtTotal: 1,
   stmtParams: { page: 1, perPage: 25 },
   flaggedTotal: 0,
-  glRows: [] as { id: string; posting_date: string; entry_number: string; amount: string; memo: string | null; party: string | null }[],
+  glRows: [] as {
+    id: string;
+    posting_date: string;
+    entry_number: string;
+    amount: string;
+    memo: string | null;
+    party: string | null;
+  }[],
   glTotal: 0,
   glParams: { page: 1, perPage: 25 },
   reviewRows: [],
@@ -73,566 +87,789 @@ const data = {
   excludedRows: [],
   excludedTotal: 0,
   exParams: { page: 1, perPage: 25 },
-}
+};
 
-type WorkspaceData = NonNullable<Parameters<typeof MatchWorkspace>[0]['data']>
+type WorkspaceData = NonNullable<Parameters<typeof MatchWorkspace>[0]["data"]>;
 
 async function mountWorkspace(
   t: TestContext,
   fetchImpl: typeof fetch,
   dataOverride: WorkspaceData = data,
-  tab: 'match' | 'review' | 'excluded' = 'match',
+  tab: "match" | "review" | "excluded" = "match",
 ): Promise<void> {
-  const prior = globalThis.fetch
-  globalThis.fetch = fetchImpl
+  const prior = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
   t.after(() => {
-    globalThis.fetch = prior
-  })
+    globalThis.fetch = prior;
+  });
   // The picker dropdown portals to document.body, outside any host div —
   // and React only hears events that bubble through its root container — so
   // the root IS the body here. Portaled option clicks would otherwise never
   // reach React (the dialog peccadillo).
-  const rootHandle = createRoot(document.body)
+  const rootHandle = createRoot(document.body);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    for (const node of [...document.body.children]) node.remove()
-  })
-  script.toasts.length = 0
+      rootHandle.unmount();
+    });
+    for (const node of [...document.body.children]) node.remove();
+  });
+  script.toasts.length = 0;
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="CAD">
           <MatchWorkspace
-            accounts={[{ id: 'acc-1', label: '1000 Operating Cash' }]}
-            offsetAccounts={[{ id: OFFSET_ID, label: '6800 Bank & Merchant Fees' }]}
-            account={{ id: 'acc-1', label: '1000 Operating Cash' }}
-            session={{ id: 'rec-1', throughDate: '2026-09-10', statementBalance: '17070.01', currency: 'CAD' }}
+            accounts={[{ id: "acc-1", label: "1000 Operating Cash" }]}
+            offsetAccounts={[{ id: OFFSET_ID, label: "6800 Bank & Merchant Fees" }]}
+            account={{ id: "acc-1", label: "1000 Operating Cash" }}
+            session={{
+              id: "rec-1",
+              throughDate: "2026-09-10",
+              statementBalance: "17070.01",
+              currency: "CAD",
+            }}
             data={dataOverride}
-            totals={{ statementBalance: '17070.01', clearedBalance: '17070.01', difference: '0.00' }}
+            totals={{
+              statementBalance: "17070.01",
+              clearedBalance: "17070.01",
+              difference: "0.00",
+            }}
             currentParams={{}}
             tab={tab}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+    await tick();
+  });
 }
 
-function scriptedFetch(handlers: Record<string, (url: string, body?: string) => Response>): typeof fetch {
+function scriptedFetch(
+  handlers: Record<string, (url: string, body?: string) => Response>,
+): typeof fetch {
   return (async (url: unknown, init?: { method?: string; body?: string }) => {
-    const target = String(url)
+    const target = String(url);
     for (const [key, handler] of Object.entries(handlers)) {
-      if (target.includes(key)) return handler(target, init?.body)
+      if (target.includes(key)) return handler(target, init?.body);
     }
-    return Response.json({})
-  }) as typeof fetch
+    return Response.json({});
+  }) as typeof fetch;
 }
 
-const previewOk = () => Response.json({
-  matches: [{ action: 'categorize', ruleMode: 'suggest', ruleId: 'rule-1', ruleName: 'Fee rule', lineId: STMT_ID }],
-})
+const previewOk = () =>
+  Response.json({
+    matches: [
+      {
+        action: "categorize",
+        ruleMode: "suggest",
+        ruleId: "rule-1",
+        ruleName: "Fee rule",
+        lineId: STMT_ID,
+      },
+    ],
+  });
 
-test('the account SearchSelect is associated with its translated label', async (t) => {
-  assert.equal(matchSelectionMatchesScope('account-1:page-1', 'account-2:page-1'), false)
-  await mountWorkspace(t, scriptedFetch({ '/rules/preview': () => Response.json({ matches: [] }) }))
-  const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.trim() === 'Account')
-  assert.ok(label, 'account label renders')
-  assert.ok(label.control, 'account label controls the SearchSelect trigger')
-  assert.equal(label.control.getAttribute('aria-label'), 'Account')
-})
+test("the account SearchSelect is associated with its translated label", async (t) => {
+  assert.equal(matchSelectionMatchesScope("account-1:page-1", "account-2:page-1"), false);
+  await mountWorkspace(
+    t,
+    scriptedFetch({ "/rules/preview": () => Response.json({ matches: [] }) }),
+  );
+  const label = [...document.querySelectorAll("label")].find(
+    (candidate) => candidate.textContent?.trim() === "Account",
+  );
+  assert.ok(label, "account label renders");
+  assert.ok(label.control, "account label controls the SearchSelect trigger");
+  assert.equal(label.control.getAttribute("aria-label"), "Account");
+});
 
 function suggestionChip(): HTMLButtonElement {
-  const found = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Fee rule'))
-  assert.ok(found, 'the suggested-rule chip must render')
-  return found as HTMLButtonElement
+  const found = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Fee rule"),
+  );
+  assert.ok(found, "the suggested-rule chip must render");
+  return found as HTMLButtonElement;
 }
 
 function addJournalButton(): HTMLButtonElement {
-  const found = [...document.querySelectorAll('button[title]')].find((b) => b.getAttribute('title') === 'Add journal')
-  assert.ok(found, 'the row must offer Add journal')
-  return found as HTMLButtonElement
+  const found = [...document.querySelectorAll("button[title]")].find(
+    (b) => b.getAttribute("title") === "Add journal",
+  );
+  assert.ok(found, "the row must offer Add journal");
+  return found as HTMLButtonElement;
 }
 
 for (const [name, applyLine, expected, message] of [
   [
-    'a refused rule suggestion surfaces the server reason',
-    () => Response.json({ error: 'rule requires a mapped offset account' }, { status: 422 }),
-    'mapped offset account',
-    'the refusal must surface',
+    "a refused rule suggestion surfaces the server reason",
+    () => Response.json({ error: "rule requires a mapped offset account" }, { status: 422 }),
+    "mapped offset account",
+    "the refusal must surface",
   ],
   [
-    'an unreadable rule refusal still toasts',
-    () => new Response('', { status: 422 }),
+    "an unreadable rule refusal still toasts",
+    () => new Response("", { status: 422 }),
     null,
-    'an empty-body 422 must still toast',
+    "an empty-body 422 must still toast",
   ],
 ] as Array<[string, (url: string, body?: string) => Response, string | null, string]>) {
   test(name, async (t) => {
-    await mountWorkspace(t, scriptedFetch({
-      '/rules/preview': previewOk,
-      '/rules/apply-line': applyLine,
-    }))
+    await mountWorkspace(
+      t,
+      scriptedFetch({
+        "/rules/preview": previewOk,
+        "/rules/apply-line": applyLine,
+      }),
+    );
     await act(async () => {
-      suggestionChip().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-      await tick()
-      await tick()
-      await tick()
-    })
+      suggestionChip().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await tick();
+      await tick();
+      await tick();
+    });
     assert.ok(
       script.toasts.some(
-        (toast) => toast.kind === 'error' && (expected === null || toast.message.includes(expected)),
+        (toast) =>
+          toast.kind === "error" && (expected === null || toast.message.includes(expected)),
       ),
       `${message}, got ${JSON.stringify(script.toasts)}`,
-    )
-  })
+    );
+  });
 }
 
 // Both add-journal refusals drive the same dialog flow — open, pick the
 // offset, submit — and differ only in where the refusal must land.
 async function submitAddJournal(t: TestContext): Promise<HTMLButtonElement> {
-  await mountWorkspace(t, scriptedFetch({
-    '/rules/preview': () => Response.json({ matches: [] }),
-    '/create-match': () => Response.json({ error: 'offset account is not postable' }, { status: 422 }),
-  }))
+  await mountWorkspace(
+    t,
+    scriptedFetch({
+      "/rules/preview": () => Response.json({ matches: [] }),
+      "/create-match": () =>
+        Response.json({ error: "offset account is not postable" }, { status: 422 }),
+    }),
+  );
   await act(async () => {
-    addJournalButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
-  const dialogs = document.querySelectorAll('[role="dialog"]')
-  const dialog = dialogs[dialogs.length - 1] as HTMLElement
-  assert.ok(dialog, 'the add-journal dialog must open')
-  const trigger = dialog.querySelector('button[aria-haspopup="listbox"]')
-  assert.ok(trigger, 'the dialog must offer the offset picker')
+    addJournalButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 8; i++) await tick();
+  });
+  const dialogs = document.querySelectorAll('[role="dialog"]');
+  const dialog = dialogs[dialogs.length - 1] as HTMLElement;
+  assert.ok(dialog, "the add-journal dialog must open");
+  const trigger = dialog.querySelector('button[aria-haspopup="listbox"]');
+  assert.ok(trigger, "the dialog must offer the offset picker");
   await act(async () => {
-    trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-  })
-  const option = [...document.querySelectorAll('button[role="option"]')].find(
-    (b) => (b.textContent ?? '').includes('6800 Bank & Merchant Fees'),
-  )
-  assert.ok(option, 'the picker must list the offset account')
+    trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+    await tick();
+  });
+  const option = [...document.querySelectorAll('button[role="option"]')].find((b) =>
+    (b.textContent ?? "").includes("6800 Bank & Merchant Fees"),
+  );
+  assert.ok(option, "the picker must list the offset account");
   await act(async () => {
-    ;(option as HTMLElement).click()
-    await tick()
-    await tick()
-  })
-  const add = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add journal') as HTMLButtonElement | undefined
-  assert.ok(add, 'the dialog must offer Add journal once an offset is picked')
+    (option as HTMLElement).click();
+    await tick();
+    await tick();
+  });
+  const add = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Add journal",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(add, "the dialog must offer Add journal once an offset is picked");
   await act(async () => {
-    add.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-    await tick()
-  })
-  return add
+    add.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+    await tick();
+    await tick();
+  });
+  return add;
 }
 
-test('a refused add-journal surfaces the server reason', async (t) => {
-  const add = await submitAddJournal(t)
-  assert.equal(add.disabled, false, 'picking the offset must enable Add journal')
+test("a refused add-journal surfaces the server reason", async (t) => {
+  const add = await submitAddJournal(t);
+  assert.equal(add.disabled, false, "picking the offset must enable Add journal");
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'error' && toast.message.includes('not postable')),
+    script.toasts.some((toast) => toast.kind === "error" && toast.message.includes("not postable")),
     `the refusal must surface, got ${JSON.stringify(script.toasts)}`,
-  )
-})
+  );
+});
 
-test('a refused add-journal persists the reason inline and releases busy', async (t) => {
-  await submitAddJournal(t)
+test("a refused add-journal persists the reason inline and releases busy", async (t) => {
+  await submitAddJournal(t);
   // The dialog stays open (nothing matched) — but the typed refusal must
   // persist inline, not vanish with a transient toast .
-  const alert = document.querySelector('[role="alert"]')
-  assert.ok(alert, 'the refused dialog must persist a role=alert')
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the refused dialog must persist a role=alert");
   assert.ok(
-    (alert.textContent ?? '').includes('not postable'),
+    (alert.textContent ?? "").includes("not postable"),
     `the alert must carry the typed reason, got ${JSON.stringify(alert.textContent)}`,
-  )
-  const addAfter = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add journal') as HTMLButtonElement | undefined
-  assert.ok(addAfter, 'the dialog must still offer Add journal after the refusal')
-  assert.equal(addAfter.disabled, false, 'busy must release after the refusal')
-})
+  );
+  const addAfter = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Add journal",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(addAfter, "the dialog must still offer Add journal after the refusal");
+  assert.equal(addAfter.disabled, false, "busy must release after the refusal");
+});
 
-test('a flagged line shows its duplicate evidence with a clear action and a bulk exclude', async (t) => {
-  const calls: { url: string; body?: string }[] = []
+test("a flagged line shows its duplicate evidence with a clear action and a bulk exclude", async (t) => {
+  const calls: { url: string; body?: string }[] = [];
   const flaggedData = {
     ...data,
-    stmtRows: [{
-      id: STMT_ID,
-      posted_on: '2026-09-01',
-      amount: '-5.00',
-      description: 'COFFEE SHOP',
-      possible_duplicate_of: 'stmt-0',
-      dup_posted_on: '2026-09-01',
-      dup_amount: '-5.00',
-      dup_description: 'COFFEE SHOP',
-    }],
+    stmtRows: [
+      {
+        id: STMT_ID,
+        posted_on: "2026-09-01",
+        amount: "-5.00",
+        description: "COFFEE SHOP",
+        possible_duplicate_of: "stmt-0",
+        dup_posted_on: "2026-09-01",
+        dup_amount: "-5.00",
+        dup_description: "COFFEE SHOP",
+      },
+    ],
     flaggedTotal: 1,
-  }
-  await mountWorkspace(t, scriptedFetch({
-    '/rules/preview': () => Response.json({ matches: [] }),
-    '/statement-lines/stmt-1': (url, body) => {
-      calls.push({ url, body })
-      return Response.json({ ok: true })
-    },
-  }), flaggedData)
+  };
+  await mountWorkspace(
+    t,
+    scriptedFetch({
+      "/rules/preview": () => Response.json({ matches: [] }),
+      "/statement-lines/stmt-1": (url, body) => {
+        calls.push({ url, body });
+        return Response.json({ ok: true });
+      },
+    }),
+    flaggedData,
+  );
   assert.ok(
-    [...document.querySelectorAll('*')].some((el) => (el.textContent ?? '').includes('Possible duplicate')),
-    'the flagged row must carry its duplicate badge',
-  )
+    [...document.querySelectorAll("*")].some((el) =>
+      (el.textContent ?? "").includes("Possible duplicate"),
+    ),
+    "the flagged row must carry its duplicate badge",
+  );
   assert.ok(
-    [...document.querySelectorAll('*')].some((el) => (el.textContent ?? '').includes('2026-09-01')),
-    'the badge must name the earlier line it may duplicate',
-  )
-  const clear = [...document.querySelectorAll('button[title]')].find((b) => b.getAttribute('title') === 'Mark as not a duplicate')
-  assert.ok(clear, 'the flagged row must offer a clear action')
-  const bulk = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Exclude 1 duplicates'))
-  assert.ok(bulk, 'the toolbar must offer the bulk exclude with its count')
+    [...document.querySelectorAll("*")].some((el) => (el.textContent ?? "").includes("2026-09-01")),
+    "the badge must name the earlier line it may duplicate",
+  );
+  const clear = [...document.querySelectorAll("button[title]")].find(
+    (b) => b.getAttribute("title") === "Mark as not a duplicate",
+  );
+  assert.ok(clear, "the flagged row must offer a clear action");
+  const bulk = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("Exclude 1 duplicates"),
+  );
+  assert.ok(bulk, "the toolbar must offer the bulk exclude with its count");
   await act(async () => {
-    ;(clear as HTMLButtonElement).dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-    await tick()
-    await tick()
-  })
+    (clear as HTMLButtonElement).dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+    await tick();
+    await tick();
+  });
   assert.ok(
-    calls.some((c) => c.url.includes('/statement-lines/stmt-1') && (c.body ?? '').includes('clear-duplicate')),
+    calls.some(
+      (c) =>
+        c.url.includes("/statement-lines/stmt-1") && (c.body ?? "").includes("clear-duplicate"),
+    ),
     `clearing must call the clear action, got ${JSON.stringify(calls)}`,
-  )
+  );
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'success'),
+    script.toasts.some((toast) => toast.kind === "success"),
     `clearing must toast success, got ${JSON.stringify(script.toasts)}`,
-  )
-})
+  );
+});
 
 function correctLineButton(): HTMLButtonElement {
-  const found = [...document.querySelectorAll('button[title]')].find((b) => b.getAttribute('title') === 'Correct line')
-  assert.ok(found, 'the unmatched row must offer Correct line')
-  return found as HTMLButtonElement
+  const found = [...document.querySelectorAll("button[title]")].find(
+    (b) => b.getAttribute("title") === "Correct line",
+  );
+  assert.ok(found, "the unmatched row must offer Correct line");
+  return found as HTMLButtonElement;
 }
 
 function correctDialog(): HTMLElement {
-  const dialogs = document.querySelectorAll('[role="dialog"]')
-  const dialog = dialogs[dialogs.length - 1] as HTMLElement | undefined
-  assert.ok(dialog, 'the correct-line dialog must open')
+  const dialogs = document.querySelectorAll('[role="dialog"]');
+  const dialog = dialogs[dialogs.length - 1] as HTMLElement | undefined;
+  assert.ok(dialog, "the correct-line dialog must open");
   assert.ok(
-    (dialog.textContent ?? '').includes('Correct statement line'),
-    'the dialog names its purpose',
-  )
-  return dialog
+    (dialog.textContent ?? "").includes("Correct statement line"),
+    "the dialog names its purpose",
+  );
+  return dialog;
 }
 
 async function setInputValue(input: HTMLInputElement, value: string): Promise<void> {
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
-    setter.call(input, value)
-    input.dispatchEvent(new window.Event('input', { bubbles: true }))
-    await tick()
-  })
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(input, value);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
 }
 
-test('correcting a line sends the edited fields and toasts', async (t) => {
-  const calls: { url: string; body?: string }[] = []
-  await mountWorkspace(t, scriptedFetch({
-    '/rules/preview': () => Response.json({ matches: [] }),
-    '/statement-lines/stmt-1': (url, body) => {
-      calls.push({ url, body })
-      return Response.json({ ok: true })
-    },
-  }))
+test("correcting a line sends the edited fields and toasts", async (t) => {
+  const calls: { url: string; body?: string }[] = [];
+  await mountWorkspace(
+    t,
+    scriptedFetch({
+      "/rules/preview": () => Response.json({ matches: [] }),
+      "/statement-lines/stmt-1": (url, body) => {
+        calls.push({ url, body });
+        return Response.json({ ok: true });
+      },
+    }),
+  );
   await act(async () => {
-    correctLineButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 6; i++) await tick()
-  })
-  const dialog = correctDialog()
-  const amount = dialog.querySelector('#correct-line-amount') as HTMLInputElement | null
-  assert.ok(amount, 'the dialog edits the amount')
-  assert.equal(amount.value, '-25.00', 'the amount starts from the imported figure')
-  await setInputValue(amount, '25.00')
-  const save = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Correct line') as HTMLButtonElement | undefined
-  assert.ok(save, 'the dialog offers Correct line once edited')
+    correctLineButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 6; i++) await tick();
+  });
+  const dialog = correctDialog();
+  const amount = dialog.querySelector("#correct-line-amount") as HTMLInputElement | null;
+  assert.ok(amount, "the dialog edits the amount");
+  assert.equal(amount.value, "-25.00", "the amount starts from the imported figure");
+  await setInputValue(amount, "25.00");
+  const save = [...dialog.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Correct line",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(save, "the dialog offers Correct line once edited");
   await act(async () => {
-    save.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 6; i++) await tick()
-  })
+    save.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 6; i++) await tick();
+  });
   assert.ok(
-    calls.some((c) => c.url.includes('/statement-lines/stmt-1') && (c.body ?? '').includes('"action":"correct"') && (c.body ?? '').includes('"amount":"25.00"')),
+    calls.some(
+      (c) =>
+        c.url.includes("/statement-lines/stmt-1") &&
+        (c.body ?? "").includes('"action":"correct"') &&
+        (c.body ?? "").includes('"amount":"25.00"'),
+    ),
     `the save must call the correct action with the edited amount, got ${JSON.stringify(calls)}`,
-  )
+  );
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'success' && toast.message.includes('Line corrected')),
+    script.toasts.some(
+      (toast) => toast.kind === "success" && toast.message.includes("Line corrected"),
+    ),
     `the save must toast success, got ${JSON.stringify(script.toasts)}`,
-  )
-})
+  );
+});
 
-test('grouped selection posts both sides as one group', async (t) => {
-  const calls: { url: string; body?: string }[] = []
+test("grouped selection posts both sides as one group", async (t) => {
+  const calls: { url: string; body?: string }[] = [];
   const groupedData = {
     ...data,
     stmtRows: [
-      { id: 'stmt-a', posted_on: '2026-06-15', amount: '-25.00', description: 'Wire A' },
-      { id: 'stmt-b', posted_on: '2026-06-15', amount: '-25.00', description: 'Wire B' },
+      { id: "stmt-a", posted_on: "2026-06-15", amount: "-25.00", description: "Wire A" },
+      { id: "stmt-b", posted_on: "2026-06-15", amount: "-25.00", description: "Wire B" },
     ],
     stmtTotal: 2,
-    glRows: [{ id: 'gl-1', posting_date: '2026-06-14', entry_number: 'JE-1', amount: '-50.00', memo: null, party: null }],
+    glRows: [
+      {
+        id: "gl-1",
+        posting_date: "2026-06-14",
+        entry_number: "JE-1",
+        amount: "-50.00",
+        memo: null,
+        party: null,
+      },
+    ],
     glTotal: 1,
-  }
-  await mountWorkspace(t, scriptedFetch({
-    '/rules/preview': () => Response.json({ matches: [] }),
-    '/matches': (url, body) => {
-      calls.push({ url, body })
-      return Response.json({ ok: true, totals: { difference: '0.00' } })
-    },
-  }), groupedData)
-  const boxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
+  };
+  await mountWorkspace(
+    t,
+    scriptedFetch({
+      "/rules/preview": () => Response.json({ matches: [] }),
+      "/matches": (url, body) => {
+        calls.push({ url, body });
+        return Response.json({ ok: true, totals: { difference: "0.00" } });
+      },
+    }),
+    groupedData,
+  );
+  const boxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
   // Two bank lines plus one ledger line: every side of the group ticks.
-  assert.equal(boxes.length, 3, 'both bank lines and the ledger line offer checkboxes')
+  assert.equal(boxes.length, 3, "both bank lines and the ledger line offer checkboxes");
   await act(async () => {
-    for (const box of boxes) box.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 6; i++) await tick()
-  })
-  const summary = document.body.textContent ?? ''
-  assert.ok(summary.includes('vs GL'), 'the toolbar summarizes both sides of the grouped selection')
-  const match = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Match selected') as HTMLButtonElement | undefined
-  assert.ok(match, 'the toolbar offers Match selected')
-  assert.equal(match.disabled, false, 'a selected group enables Match selected')
-  await act(async () => {
-    match.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 6; i++) await tick()
-  })
-  const posted = calls.find((c) => c.url.includes('/matches'))
-  assert.ok(posted, 'matching must POST the session matches route')
-  const body = JSON.parse(posted.body ?? '{}') as { statementLineIds?: string[]; journalLineIds?: string[] }
-  assert.deepEqual([...(body.statementLineIds ?? [])].sort(), ['stmt-a', 'stmt-b'], 'both bank lines post as the group')
-  assert.deepEqual(body.journalLineIds, ['gl-1'], 'the ledger side posts with them')
+    for (const box of boxes) box.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 6; i++) await tick();
+  });
+  const summary = document.body.textContent ?? "";
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'success' && toast.message.includes('Matched')),
+    summary.includes("vs GL"),
+    "the toolbar summarizes both sides of the grouped selection",
+  );
+  const match = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Match selected",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(match, "the toolbar offers Match selected");
+  assert.equal(match.disabled, false, "a selected group enables Match selected");
+  await act(async () => {
+    match.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 6; i++) await tick();
+  });
+  const posted = calls.find((c) => c.url.includes("/matches"));
+  assert.ok(posted, "matching must POST the session matches route");
+  const body = JSON.parse(posted.body ?? "{}") as {
+    statementLineIds?: string[];
+    journalLineIds?: string[];
+  };
+  assert.deepEqual(
+    [...(body.statementLineIds ?? [])].sort(),
+    ["stmt-a", "stmt-b"],
+    "both bank lines post as the group",
+  );
+  assert.deepEqual(body.journalLineIds, ["gl-1"], "the ledger side posts with them");
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === "success" && toast.message.includes("Matched")),
     `the group match must toast success, got ${JSON.stringify(script.toasts)}`,
-  )
-})
+  );
+});
 
-test('a refused correction persists the server reason inline', async (t) => {
-  await mountWorkspace(t, scriptedFetch({
-    '/rules/preview': () => Response.json({ matches: [] }),
-    '/statement-lines/stmt-1': () => Response.json({ error: 'Only unmatched lines can be corrected — unmatch it first' }, { status: 422 }),
-  }))
+test("a refused correction persists the server reason inline", async (t) => {
+  await mountWorkspace(
+    t,
+    scriptedFetch({
+      "/rules/preview": () => Response.json({ matches: [] }),
+      "/statement-lines/stmt-1": () =>
+        Response.json(
+          { error: "Only unmatched lines can be corrected — unmatch it first" },
+          { status: 422 },
+        ),
+    }),
+  );
   await act(async () => {
-    correctLineButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 6; i++) await tick()
-  })
-  const dialog = correctDialog()
-  const amount = dialog.querySelector('#correct-line-amount') as HTMLInputElement | null
-  assert.ok(amount, 'the dialog edits the amount')
-  await setInputValue(amount, '25.00')
-  const save = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Correct line') as HTMLButtonElement | undefined
-  assert.ok(save, 'the dialog offers Correct line once edited')
+    correctLineButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 6; i++) await tick();
+  });
+  const dialog = correctDialog();
+  const amount = dialog.querySelector("#correct-line-amount") as HTMLInputElement | null;
+  assert.ok(amount, "the dialog edits the amount");
+  await setInputValue(amount, "25.00");
+  const save = [...dialog.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Correct line",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(save, "the dialog offers Correct line once edited");
   await act(async () => {
-    save.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 6; i++) await tick()
-  })
-  const alert = dialog.querySelector('[role="alert"]')
-  assert.ok(alert, 'the refused dialog must persist a role=alert')
+    save.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 6; i++) await tick();
+  });
+  const alert = dialog.querySelector('[role="alert"]');
+  assert.ok(alert, "the refused dialog must persist a role=alert");
   assert.ok(
-    (alert.textContent ?? '').includes('unmatch it first'),
+    (alert.textContent ?? "").includes("unmatch it first"),
     `the alert must carry the named remedy, got ${JSON.stringify(alert.textContent)}`,
-  )
-})
+  );
+});
 
-test('the match view links to the reconciliation workspace instead of signing off', async (t) => {
-  await mountWorkspace(t, scriptedFetch({ '/rules/preview': () => Response.json({ matches: [] }) }))
-  const link = document.querySelector('a[href="/banking/acc-1/reconcile/rec-1"]')
-  assert.ok(link, 'the toolbar must link to the session reconciliation workspace')
+test("the match view links to the reconciliation workspace instead of signing off", async (t) => {
+  await mountWorkspace(
+    t,
+    scriptedFetch({ "/rules/preview": () => Response.json({ matches: [] }) }),
+  );
+  const link = document.querySelector('a[href="/banking/acc-1/reconcile/rec-1"]');
+  assert.ok(link, "the toolbar must link to the session reconciliation workspace");
   assert.ok(
-    (link.textContent ?? '').includes('Open reconciliation workspace'),
+    (link.textContent ?? "").includes("Open reconciliation workspace"),
     `the link must name the workspace, got ${JSON.stringify(link.textContent)}`,
-  )
+  );
   assert.equal(
-    [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes('Sign off')),
+    [...document.querySelectorAll("button")].some((b) =>
+      (b.textContent ?? "").includes("Sign off"),
+    ),
     false,
-    'sign-off must not render in the match view',
-  )
+    "sign-off must not render in the match view",
+  );
   assert.ok(
-    (document.body.textContent ?? '').includes('Sign-off happens in the reconciliation workspace'),
-    'the view must name why sign-off lives elsewhere',
-  )
-})
+    (document.body.textContent ?? "").includes("Sign-off happens in the reconciliation workspace"),
+    "the view must name why sign-off lives elsewhere",
+  );
+});
 
-test('the review tab shows each automatic match\'s confidence and the reasons behind it', async (t) => {
-  await mountWorkspace(t, scriptedFetch({ '/rules/preview': () => Response.json({ matches: [] }) }), {
-    ...data,
-    reviewRows: [{
-      id: 'match-1',
-      statement_line_id: STMT_ID,
-      confidence: '0.6800',
-      match_reasons: [{ code: 'exact_amount' }, { code: 'date_lag', days: 4 }, { code: 'shared_counterparty', tokens: ['acme'] }],
-      stmt_date: '2026-06-15',
-      stmt_amount: '-25.00',
-      stmt_description: 'ACME fee',
-      entry_number: 'JE-1',
-    }],
-    reviewTotal: 1,
-  }, 'review')
-  const text = document.body.textContent ?? ''
-  assert.ok(text.includes('68%'), 'the confidence renders as an exact percentage')
-  for (const reason of ['Exact amount', 'Bank posted 4 days later', 'Payee words: acme']) {
-    assert.ok(text.includes(reason), `the reason "${reason}" renders`)
+test("the review tab shows each automatic match's confidence and the reasons behind it", async (t) => {
+  await mountWorkspace(
+    t,
+    scriptedFetch({ "/rules/preview": () => Response.json({ matches: [] }) }),
+    {
+      ...data,
+      reviewRows: [
+        {
+          id: "match-1",
+          statement_line_id: STMT_ID,
+          confidence: "0.6800",
+          match_reasons: [
+            { code: "exact_amount" },
+            { code: "date_lag", days: 4 },
+            { code: "shared_counterparty", tokens: ["acme"] },
+          ],
+          stmt_date: "2026-06-15",
+          stmt_amount: "-25.00",
+          stmt_description: "ACME fee",
+          entry_number: "JE-1",
+        },
+      ],
+      reviewTotal: 1,
+    },
+    "review",
+  );
+  const text = document.body.textContent ?? "";
+  assert.ok(text.includes("68%"), "the confidence renders as an exact percentage");
+  for (const reason of ["Exact amount", "Bank posted 4 days later", "Payee words: acme"]) {
+    assert.ok(text.includes(reason), `the reason "${reason}" renders`);
   }
-})
+});
 
-test('a history suggestion opens Add journal with the suggested account and why', async (t) => {
-  await mountWorkspace(t, scriptedFetch({ '/rules/preview': () => Response.json({ matches: [] }) }), {
-    ...data,
-    offsetSuggestions: {
-      [STMT_ID]: {
-        offsetAccountId: OFFSET_ID,
-        reasons: [{ code: 'history_payee', tokens: ['t05match'], matchedOn: '2026-05-15' }],
+test("a history suggestion opens Add journal with the suggested account and why", async (t) => {
+  await mountWorkspace(
+    t,
+    scriptedFetch({ "/rules/preview": () => Response.json({ matches: [] }) }),
+    {
+      ...data,
+      offsetSuggestions: {
+        [STMT_ID]: {
+          offsetAccountId: OFFSET_ID,
+          reasons: [{ code: "history_payee", tokens: ["t05match"], matchedOn: "2026-05-15" }],
+        },
       },
     },
-  })
-  const chip = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('From history: 6800 Bank & Merchant Fees'))
-  assert.ok(chip, 'the history suggestion names the account')
+  );
+  const chip = [...document.querySelectorAll("button")].find((b) =>
+    (b.textContent ?? "").includes("From history: 6800 Bank & Merchant Fees"),
+  );
+  assert.ok(chip, "the history suggestion names the account");
   await act(async () => {
-    chip.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
-  const dialogs = document.querySelectorAll('[role="dialog"]')
-  const dialog = dialogs[dialogs.length - 1] as HTMLElement
-  assert.ok(dialog, 'Add journal opens')
-  assert.ok((dialog.textContent ?? '').includes('Same payee (t05match) as the match of 2026-05-15'), 'the drawer shows why')
-  const add = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add journal') as HTMLButtonElement | undefined
-  assert.ok(add && !add.disabled, 'the suggested account is preselected, so Add journal is ready')
-})
+    chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 8; i++) await tick();
+  });
+  const dialogs = document.querySelectorAll('[role="dialog"]');
+  const dialog = dialogs[dialogs.length - 1] as HTMLElement;
+  assert.ok(dialog, "Add journal opens");
+  assert.ok(
+    (dialog.textContent ?? "").includes("Same payee (t05match) as the match of 2026-05-15"),
+    "the drawer shows why",
+  );
+  const add = [...dialog.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Add journal",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(add && !add.disabled, "the suggested account is preselected, so Add journal is ready");
+});
 
 const candidatesBody = {
-  side: 'ap',
-  amount: '25.0000',
-  currency: 'CAD',
-  proposals: [{
-    openLineIds: ['ol-1'],
-    partyId: 'party-1',
-    partyName: 'T05 Supplies',
-    total: '25.0000',
-    settlement: 'exact',
-    applied: { 'ol-1': '25.0000' },
-    onAccount: '0.0000',
-    reasons: [{ code: 'exact_open_balance' }, { code: 'shared_reference', reference: 'BILL-7' }],
-  }],
-  documents: [{
-    openLineId: 'ol-1', partyId: 'party-1', partyName: 'T05 Supplies', subsidiaryId: 'sub-1', documentNumber: 'BILL-7', entryNumber: 'JE-7',
-    documentKind: 'vendor_bill', dueDate: '2026-06-10', postingDate: '2026-06-01', transactionOpen: '25.0000', reasons: [{ code: 'exact_open_balance' }],
-    currency: 'CAD', lineEquivalent: null, settlementRate: null,
-  }],
+  side: "ap",
+  amount: "25.0000",
+  currency: "CAD",
+  proposals: [
+    {
+      openLineIds: ["ol-1"],
+      partyId: "party-1",
+      partyName: "T05 Supplies",
+      total: "25.0000",
+      settlement: "exact",
+      applied: { "ol-1": "25.0000" },
+      onAccount: "0.0000",
+      reasons: [{ code: "exact_open_balance" }, { code: "shared_reference", reference: "BILL-7" }],
+    },
+  ],
+  documents: [
+    {
+      openLineId: "ol-1",
+      partyId: "party-1",
+      partyName: "T05 Supplies",
+      subsidiaryId: "sub-1",
+      documentNumber: "BILL-7",
+      entryNumber: "JE-7",
+      documentKind: "vendor_bill",
+      dueDate: "2026-06-10",
+      postingDate: "2026-06-01",
+      transactionOpen: "25.0000",
+      reasons: [{ code: "exact_open_balance" }],
+      currency: "CAD",
+      lineEquivalent: null,
+      settlementRate: null,
+    },
+  ],
   exchangeRates: {},
   unappliedCredits: {},
   canWriteOff: true,
-}
+};
 
 const partialCandidatesBody = {
   ...candidatesBody,
-  proposals: [{
-    openLineIds: ['ol-2'],
-    partyId: 'party-1',
-    partyName: 'T05 Supplies',
-    total: '25.0000',
-    settlement: 'partial',
-    applied: { 'ol-2': '25.0000' },
-    onAccount: '0.0000',
-    reasons: [{ code: 'partial_open_balance', remaining: '15.0000' }, { code: 'shared_reference', reference: 'BILL-8' }],
-  }],
-  documents: [{
-    openLineId: 'ol-2', partyId: 'party-1', partyName: 'T05 Supplies', subsidiaryId: 'sub-1', documentNumber: 'BILL-8', entryNumber: 'JE-8',
-    documentKind: 'vendor_bill', dueDate: '2026-06-10', postingDate: '2026-06-01', transactionOpen: '40.0000', reasons: [],
-    currency: 'CAD', lineEquivalent: null, settlementRate: null,
-  }],
-}
+  proposals: [
+    {
+      openLineIds: ["ol-2"],
+      partyId: "party-1",
+      partyName: "T05 Supplies",
+      total: "25.0000",
+      settlement: "partial",
+      applied: { "ol-2": "25.0000" },
+      onAccount: "0.0000",
+      reasons: [
+        { code: "partial_open_balance", remaining: "15.0000" },
+        { code: "shared_reference", reference: "BILL-8" },
+      ],
+    },
+  ],
+  documents: [
+    {
+      openLineId: "ol-2",
+      partyId: "party-1",
+      partyName: "T05 Supplies",
+      subsidiaryId: "sub-1",
+      documentNumber: "BILL-8",
+      entryNumber: "JE-8",
+      documentKind: "vendor_bill",
+      dueDate: "2026-06-10",
+      postingDate: "2026-06-01",
+      transactionOpen: "40.0000",
+      reasons: [],
+      currency: "CAD",
+      lineEquivalent: null,
+      settlementRate: null,
+    },
+  ],
+};
 
-async function openSettleDrawer(t: TestContext, recordPayment: (url: string, body?: string) => Response, body: unknown = candidatesBody): Promise<HTMLElement> {
-  await mountWorkspace(t, scriptedFetch({
-    '/rules/preview': () => Response.json({ matches: [] }),
-    '/open-documents': () => Response.json(body),
-    '/record-payment': recordPayment,
-  }), { ...data, canRecordPayments: true })
-  const open = [...document.querySelectorAll('button[title]')].find((b) => b.getAttribute('title') === 'Open invoices or bills')
-  assert.ok(open, 'the row offers open invoices or bills')
+async function openSettleDrawer(
+  t: TestContext,
+  recordPayment: (url: string, body?: string) => Response,
+  body: unknown = candidatesBody,
+): Promise<HTMLElement> {
+  await mountWorkspace(
+    t,
+    scriptedFetch({
+      "/rules/preview": () => Response.json({ matches: [] }),
+      "/open-documents": () => Response.json(body),
+      "/record-payment": recordPayment,
+    }),
+    { ...data, canRecordPayments: true },
+  );
+  const open = [...document.querySelectorAll("button[title]")].find(
+    (b) => b.getAttribute("title") === "Open invoices or bills",
+  );
+  assert.ok(open, "the row offers open invoices or bills");
   await act(async () => {
-    open.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 8; i++) await tick()
-  })
-  const dialogs = document.querySelectorAll('[role="dialog"]')
-  const dialog = dialogs[dialogs.length - 1] as HTMLElement
-  assert.ok(dialog, 'the drawer opens')
-  assert.ok((dialog.textContent ?? '').includes('Open vendor bills'), 'money out proposes vendor bills')
-  assert.ok(/Reference BILL-\d/.test(dialog.textContent ?? ''), 'the proposal shows its reasons')
-  return dialog
+    open.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 8; i++) await tick();
+  });
+  const dialogs = document.querySelectorAll('[role="dialog"]');
+  const dialog = dialogs[dialogs.length - 1] as HTMLElement;
+  assert.ok(dialog, "the drawer opens");
+  assert.ok(
+    (dialog.textContent ?? "").includes("Open vendor bills"),
+    "money out proposes vendor bills",
+  );
+  assert.ok(/Reference BILL-\d/.test(dialog.textContent ?? ""), "the proposal shows its reasons");
+  return dialog;
 }
 
 async function clickRecord(dialog: HTMLElement): Promise<void> {
-  const record = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Record payment and match')
-  assert.ok(record, 'the proposal offers Record payment and match')
+  const record = [...dialog.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Record payment and match",
+  );
+  assert.ok(record, "the proposal offers Record payment and match");
   await act(async () => {
-    record.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 6; i++) await tick()
-  })
+    record.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 6; i++) await tick();
+  });
 }
 
-test('record payment and match sends the proposal with the balances the reviewer saw', async (t) => {
-  let posted: unknown = null
+test("record payment and match sends the proposal with the balances the reviewer saw", async (t) => {
+  let posted: unknown = null;
   const dialog = await openSettleDrawer(t, (_url, body) => {
-    posted = JSON.parse(body ?? 'null')
-    return Response.json({ ok: true, documentNumber: 'PAY-0042', effectsError: null })
-  })
-  await clickRecord(dialog)
-  assert.deepEqual(posted, { reconciliationId: 'rec-1', openLineIds: ['ol-1'], expectedOpen: { 'ol-1': '25.0000' } })
-  assert.ok(script.toasts.some((toast) => toast.kind === 'success' && toast.message.includes('PAY-0042')), JSON.stringify(script.toasts))
-})
-
-test('a refused record payment keeps the reason and remedy inline in the drawer', async (t) => {
-  const dialog = await openSettleDrawer(t, () => Response.json({
-    error: 'the GL period covering 2026-06-15 is closed',
-    remedy: 'Request a reopen of the period.',
-  }, { status: 422 }))
-  await clickRecord(dialog)
-  const alert = dialog.querySelector('[role="alert"]')
-  assert.ok(alert, 'the refusal persists inline')
-  assert.ok((alert.textContent ?? '').includes('is closed'), JSON.stringify(alert.textContent))
-  assert.ok(script.toasts.some((toast) => toast.kind === 'error'), 'the refusal also toasts')
-})
-
-test('a part payment opens the settlement review, and the reviewed amounts are what is recorded', async (t) => {
-  let posted: Record<string, unknown> | null = null
-  const dialog = await openSettleDrawer(t, (_url, body) => {
-    posted = JSON.parse(body ?? 'null')
-    return Response.json({ ok: true, documentNumber: 'PAY-0043', onAccount: '5.0000', writeOffTotal: '0.0000', effectsError: null })
-  }, partialCandidatesBody)
-  assert.ok((dialog.textContent ?? '').includes('15.00 stays open'), 'the part payment states what stays open')
-  const review = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Review settlement')
-  assert.ok(review, 'a part payment is reviewed before it is recorded')
-  await act(async () => {
-    review.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    for (let i = 0; i < 4; i++) await tick()
-  })
-  const amount = dialog.querySelector('input[aria-label="Amount applied to BILL-8"]') as HTMLInputElement | null
-  assert.ok(amount, 'each document takes an editable amount')
-  assert.equal(amount.value, '25.0000')
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
-    setter.call(amount, '20.00')
-    amount.dispatchEvent(new window.Event('input', { bubbles: true }))
-    for (let i = 0; i < 2; i++) await tick()
-  })
-  assert.ok((dialog.textContent ?? '').includes('stays with the vendor as a prepayment'), 'cash the bill does not take stays on account')
-  await clickRecord(dialog)
+    posted = JSON.parse(body ?? "null");
+    return Response.json({ ok: true, documentNumber: "PAY-0042", effectsError: null });
+  });
+  await clickRecord(dialog);
   assert.deepEqual(posted, {
-    reconciliationId: 'rec-1',
-    openLineIds: ['ol-2'],
-    expectedOpen: { 'ol-2': '40.0000' },
-    applied: { 'ol-2': '20.00' },
+    reconciliationId: "rec-1",
+    openLineIds: ["ol-1"],
+    expectedOpen: { "ol-1": "25.0000" },
+  });
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === "success" && toast.message.includes("PAY-0042")),
+    JSON.stringify(script.toasts),
+  );
+});
+
+test("a refused record payment keeps the reason and remedy inline in the drawer", async (t) => {
+  const dialog = await openSettleDrawer(t, () =>
+    Response.json(
+      {
+        error: "the GL period covering 2026-06-15 is closed",
+        remedy: "Request a reopen of the period.",
+      },
+      { status: 422 },
+    ),
+  );
+  await clickRecord(dialog);
+  const alert = dialog.querySelector('[role="alert"]');
+  assert.ok(alert, "the refusal persists inline");
+  assert.ok((alert.textContent ?? "").includes("is closed"), JSON.stringify(alert.textContent));
+  assert.ok(
+    script.toasts.some((toast) => toast.kind === "error"),
+    "the refusal also toasts",
+  );
+});
+
+test("a part payment opens the settlement review, and the reviewed amounts are what is recorded", async (t) => {
+  let posted: Record<string, unknown> | null = null;
+  const dialog = await openSettleDrawer(
+    t,
+    (_url, body) => {
+      posted = JSON.parse(body ?? "null");
+      return Response.json({
+        ok: true,
+        documentNumber: "PAY-0043",
+        onAccount: "5.0000",
+        writeOffTotal: "0.0000",
+        effectsError: null,
+      });
+    },
+    partialCandidatesBody,
+  );
+  assert.ok(
+    (dialog.textContent ?? "").includes("15.00 stays open"),
+    "the part payment states what stays open",
+  );
+  const review = [...dialog.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Review settlement",
+  );
+  assert.ok(review, "a part payment is reviewed before it is recorded");
+  await act(async () => {
+    review.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    for (let i = 0; i < 4; i++) await tick();
+  });
+  const amount = dialog.querySelector(
+    'input[aria-label="Amount applied to BILL-8"]',
+  ) as HTMLInputElement | null;
+  assert.ok(amount, "each document takes an editable amount");
+  assert.equal(amount.value, "25.0000");
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(amount, "20.00");
+    amount.dispatchEvent(new window.Event("input", { bubbles: true }));
+    for (let i = 0; i < 2; i++) await tick();
+  });
+  assert.ok(
+    (dialog.textContent ?? "").includes("stays with the vendor as a prepayment"),
+    "cash the bill does not take stays on account",
+  );
+  await clickRecord(dialog);
+  assert.deepEqual(posted, {
+    reconciliationId: "rec-1",
+    openLineIds: ["ol-2"],
+    expectedOpen: { "ol-2": "40.0000" },
+    applied: { "ol-2": "20.00" },
     writeOff: null,
     exchangeRate: null,
     settlementRates: null,
-  })
-  assert.ok(script.toasts.some((toast) => toast.message.includes('vendor prepayment')), JSON.stringify(script.toasts))
-})
+  });
+  assert.ok(
+    script.toasts.some((toast) => toast.message.includes("vendor prepayment")),
+    JSON.stringify(script.toasts),
+  );
+});

@@ -8,14 +8,14 @@
  * directly-unit-testable seam.
  */
 export const ATTACHABLE_TARGET_TABLES: ReadonlySet<string> = new Set([
-  'documents',
-  'parties',
-  'item_rate_versions',
-  'fixed_assets',
-  'compliance_records',
-  'lien_waivers',
-])
+  "documents",
+  "parties",
+  "item_rate_versions",
+  "fixed_assets",
+  "compliance_records",
+  "lien_waivers",
+]);
 
 export function isAttachableTargetTable(targetTable: string): boolean {
-  return ATTACHABLE_TARGET_TABLES.has(targetTable)
+  return ATTACHABLE_TARGET_TABLES.has(targetTable);
 }

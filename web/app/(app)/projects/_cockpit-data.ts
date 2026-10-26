@@ -1,23 +1,23 @@
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { recognitionAccounts } from '@openbooks/engine/projects/recognition'
-import { projectBudgetComparison } from '@openbooks/engine/projects/budget-baselines'
-import { projectTimeSummary, projectUnbilled } from '../../../lib/project-costing'
-import { resolveProjectFinancials } from '../../../lib/project-financials'
-import { loadProjectType } from '../../../lib/project-type'
-import { listBillableFieldTickets, listBillingRequests } from '../../../lib/billing-requests'
-import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
-import { availableToBill } from '../../../lib/project-available-to-bill'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { recognitionAccounts } from "@openbooks/engine/projects/recognition";
+import { projectBudgetComparison } from "@openbooks/engine/projects/budget-baselines";
+import { projectTimeSummary, projectUnbilled } from "../../../lib/project-costing";
+import { resolveProjectFinancials } from "../../../lib/project-financials";
+import { loadProjectType } from "../../../lib/project-type";
+import { listBillableFieldTickets, listBillingRequests } from "../../../lib/billing-requests";
+import { resolveInvoicingPreference } from "../../../lib/invoicing-preference";
+import { availableToBill } from "../../../lib/project-available-to-bill";
 // HR-20 begin: crew-today rows for the cockpit.
-import { crewToday } from '@openbooks/engine/hrm/field-time/reads'
+import { crewToday } from "@openbooks/engine/hrm/field-time/reads";
 // HR-20 end
-import { isFeatureEnabled } from '../../../lib/features'
-import { listScopedPartyOptions } from '../../../lib/scoped-options'
-import type { ProjectCockpitData } from './ProjectDrawer'
-import { formatMoney, mulPercent, sum } from '@openbooks/engine/money/money'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { activePostingPrimaryBookId } from '@openbooks/engine/platform/accounting-books'
-import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { isFeatureEnabled } from "../../../lib/features";
+import { listScopedPartyOptions } from "../../../lib/scoped-options";
+import type { ProjectCockpitData } from "./ProjectDrawer";
+import { formatMoney, mulPercent, sum } from "@openbooks/engine/money/money";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { activePostingPrimaryBookId } from "@openbooks/engine/platform/accounting-books";
+import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
 
 /**
  * Loads everything the project flyout's cockpit tabs need. The Financials tab is
@@ -30,43 +30,46 @@ import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
  * the driver hands back a string; numerics arrive as strings too.
  */
 type ChargeDocumentRow = {
-  id: string
-  documentNumber: string
-  documentDate: string
-  status: string
-  cost: string
-  billValue: string
-  lines: string | number
-  billed: boolean | null
-}
+  id: string;
+  documentNumber: string;
+  documentDate: string;
+  status: string;
+  cost: string;
+  billValue: string;
+  lines: string | number;
+  billed: boolean | null;
+};
 
 type ChargeItemRow = {
-  id: string
-  name: string
-  defaultCost: string | null
-  defaultRate: string | null
-}
+  id: string;
+  name: string;
+  defaultCost: string | null;
+  defaultRate: string | null;
+};
 
 type ChargeEquipmentRow = {
-  id: string
-  name: string
-  unitNumber: string
-  itemId: string | null
-}
+  id: string;
+  name: string;
+  unitNumber: string;
+  itemId: string | null;
+};
 
-type ChargeOperatorRow = { id: string; displayName: string }
+type ChargeOperatorRow = { id: string; displayName: string };
 
 type RecognitionStatusRow = {
-  contract_id: string | null
-  percent_complete: string | number | null
-  allocated_price: string | number | null
-  override_raw: string
-  recognized: string | number
-}
+  contract_id: string | null;
+  percent_complete: string | number | null;
+  allocated_price: string | number | null;
+  override_raw: string;
+  recognized: string | number;
+};
 export async function loadProjectCockpit(
   orgId: string,
   projectId: string,
-  options: { includeApplicationBilling?: boolean; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
+  options: {
+    includeApplicationBilling?: boolean;
+    allowedSubsidiaryIds?: ReadonlySet<string> | null;
+  } = {},
 ): Promise<ProjectCockpitData | null> {
   // The cockpit snapshot opens by re-locking the scope-checked
   // project row. A concurrent rehome then serializes on this lock instead of
@@ -75,26 +78,52 @@ export async function loadProjectCockpit(
   const scope = options.allowedSubsidiaryIds ?? null;
   // The contract value is read raw (nullable): a fixed-price project with no
   // contract must refuse by name, not be coerced to zero.
-  const locked = await db.execute<{ contractValue: string | null }>(sql`
+  const locked = await db.execute<{ contractValue: string | null }>(
+    sql`
     select id, contract_value::text as "contractValue" from projects where id = ${projectId} and org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
-      for share`, 'objects');
+      for share`,
+    "objects",
+  );
   if (!locked[0]) return null;
   const contractValue = locked[0].contractValue ?? null;
-  const [projectType, fieldTicketsEnabled, equipmentEnabled, inventoryEnabled, today, fieldTimeEnabled, primaryBookId] = await Promise.all([
+  const [
+    projectType,
+    fieldTicketsEnabled,
+    equipmentEnabled,
+    inventoryEnabled,
+    today,
+    fieldTimeEnabled,
+    primaryBookId,
+  ] = await Promise.all([
     loadProjectType(orgId, projectId),
-    isFeatureEnabled(orgId, 'fieldTickets'),
-    isFeatureEnabled(orgId, 'equipment'),
-    isFeatureEnabled(orgId, 'inventory'),
+    isFeatureEnabled(orgId, "fieldTickets"),
+    isFeatureEnabled(orgId, "equipment"),
+    isFeatureEnabled(orgId, "inventory"),
     businessToday(orgId),
     // HR-20: crew-today rides the fieldTime switch — off reads as nobody out.
-    isFeatureEnabled(orgId, 'fieldTime'),
+    isFeatureEnabled(orgId, "fieldTime"),
     // The recognized total must sum the SAME book the recognition run posts
     // to (active posting primary) — never the dead primary a bare
     // is_primary join would keep reading after deactivation.
     activePostingPrimaryBookId(orgId),
-  ])
-  const [financials, time, crewTodayRows, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, operatorRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
+  ]);
+  const [
+    financials,
+    time,
+    crewTodayRows,
+    unbilled,
+    billingRequests,
+    billableFieldTickets,
+    invoicing,
+    chargeRes,
+    itemRes,
+    equipmentRes,
+    operatorRes,
+    recognizedRes,
+    glRangeRes,
+    incomeAccountRes,
+  ] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
     projectTimeSummary(orgId, projectId),
     // HR-20: who is clocked in on this project right now.
@@ -103,7 +132,8 @@ export async function loadProjectCockpit(
     listBillingRequests(orgId, projectId),
     fieldTicketsEnabled ? listBillableFieldTickets(orgId, projectId) : Promise.resolve([]),
     resolveInvoicingPreference(orgId, projectId),
-    db.execute<ChargeDocumentRow>(sql`
+    db.execute<ChargeDocumentRow>(
+      sql`
       select d.id, d.document_number as "documentNumber", d.document_date as "documentDate", d.status,
              d.total::numeric(19,4) as cost,
              coalesce(sum(coalesce(dl.bill_amount, dl.amount * coalesce(nullif(dl.cost_multiplier,0),1))) filter (where dl.is_billable), 0)::numeric(19,4) as "billValue",
@@ -111,29 +141,38 @@ export async function loadProjectCockpit(
              bool_and(dl.billed_by_line_id is not null) filter (where dl.is_billable) as billed
         from documents d left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind = 'project_charge' and d.project_id = ${projectId}
-       group by d.id order by d.document_date desc, d.document_number desc`, 'objects'),
-    db.execute<ChargeItemRow>(sql`
+       group by d.id order by d.document_date desc, d.document_number desc`,
+      "objects",
+    ),
+    db.execute<ChargeItemRow>(
+      sql`
       select id, name, default_cost as "defaultCost", default_rate as "defaultRate"
         from items where org_id = ${orgId} and is_active
          ${inventoryEnabled ? sql`` : sql`and kind not in ('inventory', 'assembly', 'kit')`}
          ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
-       order by name limit 2000`, 'objects'),
+       order by name limit 2000`,
+      "objects",
+    ),
     equipmentEnabled
-      ? db.execute<ChargeEquipmentRow>(sql`
+      ? db.execute<ChargeEquipmentRow>(
+          sql`
       select id, name, unit_number as "unitNumber", charge_item_id as "itemId"
         from equipment_units where org_id = ${orgId} and status = 'active'
          and subsidiary_id = (select subsidiary_id from projects where id = ${projectId} and org_id = ${orgId})
-       order by unit_number limit 2000`, 'objects')
+       order by unit_number limit 2000`,
+          "objects",
+        )
       : Promise.resolve([]),
     // Operators an equipment charge can be attributed to: active employees
     // the caller may see. The org-wide join disclosed out-of-scope staff, so
     // this rides the scoped party options like every other party picker.
     equipmentEnabled
-      ? listScopedPartyOptions(orgId, scope, { role: 'employee', activeOnly: true }).then((rows) =>
+      ? listScopedPartyOptions(orgId, scope, { role: "employee", activeOnly: true }).then((rows) =>
           rows.map((row) => ({ id: row.id, displayName: row.display_name })),
         )
       : Promise.resolve([] as ChargeOperatorRow[]),
-    db.execute<RecognitionStatusRow>(sql`
+    db.execute<RecognitionStatusRow>(
+      sql`
       select c.id as contract_id, o.percent_complete, o.allocated_price,
              coalesce(p.custom->>'percentCompleteOverride', '') as override_raw,
              coalesce((select sum(l.recognized_amount)
@@ -144,55 +183,71 @@ export async function loadProjectCockpit(
         from projects p
         left join revenue_contracts c on c.org_id = p.org_id and c.project_id = p.id
        left join performance_obligations o on o.contract_id = c.id and o.org_id = c.org_id
-       where p.id = ${projectId} and p.org_id = ${orgId}`, 'objects'),
-    db.execute<{ from: string; to: string }>(sql`
+       where p.id = ${projectId} and p.org_id = ${orgId}`,
+      "objects",
+    ),
+    db.execute<{ from: string; to: string }>(
+      sql`
       select coalesce(min(e.posting_date), ${today})::text as "from",
              greatest(coalesce(max(e.posting_date), ${today}), ${today})::text as "to"
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId}
          and l.project_id = ${projectId}
-         and e.status in ('posted', 'reversed')`, 'objects'),
+         and e.status in ('posted', 'reversed')`,
+      "objects",
+    ),
     options.includeApplicationBilling
-      ? db.execute<{ id: string; number: string | null; name: string }>(sql`
+      ? db.execute<{ id: string; number: string | null; name: string }>(
+          sql`
           select id, number, name
             from accounts
            where org_id = ${orgId}
              and type in ('income', 'income_other')
              and is_active
-           order by number nulls last, name`, 'objects')
+           order by number nulls last, name`,
+          "objects",
+        )
       : Promise.resolve([]),
-  ])
+  ]);
 
   // Budget versus actual (the original sold budget, the working budget and
   // actuals to date); invoiced to date comes from the financials above.
-  const budget = await projectBudgetComparison(orgId, projectId, { allowedSubsidiaryIds: scope, includeInvoiced: false })
+  const budget = await projectBudgetComparison(orgId, projectId, {
+    allowedSubsidiaryIds: scope,
+    includeInvoiced: false,
+  });
 
-  const charges = chargeRes
-  const items = itemRes
-  const equipment = equipmentRes
-  const operators = operatorRes
+  const charges = chargeRes;
+  const items = itemRes;
+  const equipment = equipmentRes;
+  const operators = operatorRes;
 
   // Recognition status for the Financials tab card — shown for fixed-price /
   // percent-complete project types; posting stays with the central run.
-  const recRow = recognizedRes[0]
-  const recognitionPolicy = projectType.invoicingProfile.recognition
-  let recognition = null
-  if (recognitionPolicy === 'percent_complete_cost') {
-    const accts = await recognitionAccounts(orgId)
-    const contractValue = String(recRow?.allocated_price ?? financialsContractValue(financials.measures))
-    const pct = Number(recRow?.percent_complete ?? 0)
-    const overrideValue = recRow?.override_raw !== '' && recRow?.override_raw != null ? Number(recRow.override_raw) : null
+  const recRow = recognizedRes[0];
+  const recognitionPolicy = projectType.invoicingProfile.recognition;
+  let recognition = null;
+  if (recognitionPolicy === "percent_complete_cost") {
+    const accts = await recognitionAccounts(orgId);
+    const contractValue = String(
+      recRow?.allocated_price ?? financialsContractValue(financials.measures),
+    );
+    const pct = Number(recRow?.percent_complete ?? 0);
+    const overrideValue =
+      recRow?.override_raw !== "" && recRow?.override_raw != null
+        ? Number(recRow.override_raw)
+        : null;
     recognition = {
       contractId: (recRow?.contract_id as string | null) ?? null,
       contractValue,
       percentComplete: pct,
       overridden: overrideValue != null,
       overrideValue,
-      earned: mulPercent(contractValue, String(recRow?.percent_complete ?? '0')),
-      recognized: String(recRow?.recognized ?? '0'),
+      earned: mulPercent(contractValue, String(recRow?.percent_complete ?? "0")),
+      recognized: String(recRow?.recognized ?? "0"),
       accountsMapped: Boolean(accts.unbilledReceivable && accts.projectRevenue),
-    }
+    };
   }
 
   return {
@@ -202,8 +257,9 @@ export async function loadProjectCockpit(
       costByCategory: financials.costByCategory,
       costByAccount: financials.costByAccount,
       projectType: financials.projectType,
-      costBudgetApplies: projectType.financialProfile.totalPrice.method === 'not_to_exceed',
-      overheadIncludedInTotalCost: projectType.financialProfile.totalCost.components.includes('overhead'),
+      costBudgetApplies: projectType.financialProfile.totalPrice.method === "not_to_exceed",
+      overheadIncludedInTotalCost:
+        projectType.financialProfile.totalCost.components.includes("overhead"),
       pricingMethod: projectType.financialProfile.totalPrice.method,
       contractValue: financials.contractValue,
       budgetVsActual: {
@@ -213,7 +269,7 @@ export async function loadProjectCockpit(
         original: budget.totals.original,
         current: budget.totals.current,
         actual: { hours: budget.totals.actual.hours, cost: budget.totals.actual.cost },
-        invoicedToDate: String(financials.measures.invoiced_to_date ?? '0'),
+        invoicedToDate: String(financials.measures.invoiced_to_date ?? "0"),
         asOf: budget.asOf,
       },
     },
@@ -230,17 +286,20 @@ export async function loadProjectCockpit(
         billingMethod: projectType.billingMethod,
         ratesRevenue: unbilled.revenue,
         contractValue,
-        invoicedToDate: String(financials.measures.invoiced_to_date ?? '0'),
+        invoicedToDate: String(financials.measures.invoiced_to_date ?? "0"),
       }),
     },
-    billingRequests: billingRequests as ProjectCockpitData['billingRequests'],
-    billableFieldTickets: billableFieldTickets as ProjectCockpitData['billableFieldTickets'],
+    billingRequests: billingRequests as ProjectCockpitData["billingRequests"],
+    billableFieldTickets: billableFieldTickets as ProjectCockpitData["billableFieldTickets"],
     invoicing: {
       billingProcedure: invoicing.billingProcedure,
-      allowedBases: invoicing.allowedBases.filter((basis) => basis !== 'field_ticket' || fieldTicketsEnabled),
-      defaultBasis: invoicing.defaultBasis === 'field_ticket' && !fieldTicketsEnabled
-        ? invoicing.allowedBases.find((basis) => basis !== 'field_ticket') ?? 'date_range'
-        : invoicing.defaultBasis,
+      allowedBases: invoicing.allowedBases.filter(
+        (basis) => basis !== "field_ticket" || fieldTicketsEnabled,
+      ),
+      defaultBasis:
+        invoicing.defaultBasis === "field_ticket" && !fieldTicketsEnabled
+          ? (invoicing.allowedBases.find((basis) => basis !== "field_ticket") ?? "date_range")
+          : invoicing.defaultBasis,
       backupRequired: invoicing.backupRequired,
       backupType: invoicing.backupType,
       allowedBackupTypes: invoicing.allowedBackupTypes,
@@ -248,25 +307,27 @@ export async function loadProjectCockpit(
     },
     applicationIncomeAccounts: incomeAccountRes.map((account) => ({
       id: account.id,
-      label: [account.number, account.name].filter(Boolean).join(' · '),
+      label: [account.number, account.name].filter(Boolean).join(" · "),
     })),
-    charges: charges as ProjectCockpitData['charges'],
-    items: items as ProjectCockpitData['items'],
-    equipment: equipment as ProjectCockpitData['equipment'],
-    operators: operators as ProjectCockpitData['operators'],
+    charges: charges as ProjectCockpitData["charges"],
+    items: items as ProjectCockpitData["items"],
+    equipment: equipment as ProjectCockpitData["equipment"],
+    operators: operators as ProjectCockpitData["operators"],
     equipmentEnabled,
     absorption: {
-      recovered: formatMoney(sum(charges.filter((c) => c.status === 'posted').map((c) => String(c.cost))), 2),
+      recovered: formatMoney(
+        sum(charges.filter((c) => c.status === "posted").map((c) => String(c.cost))),
+        2,
+      ),
       billValue: formatMoney(sum(charges.map((c) => String(c.billValue))), 2),
     },
     recognition,
-    glRange: (glRangeRes[0]
-      ?? { from: today, to: today }),
-    transactions: financials.documents as ProjectCockpitData['transactions'],
-  }
+    glRange: glRangeRes[0] ?? { from: today, to: today },
+    transactions: financials.documents as ProjectCockpitData["transactions"],
+  };
 }
 
 /** Contract value fallback for projects not yet synced into a contract. */
 function financialsContractValue(measures: Record<string, string | number>): string {
-  return String(measures.total_price ?? 0)
+  return String(measures.total_price ?? 0);
 }

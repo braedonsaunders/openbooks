@@ -1,15 +1,26 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const preBilling: DocArticle = {
-  slug: 'pre-billing',
-  title: 'Pre-billing',
-  category: 'projects',
+  slug: "pre-billing",
+  title: "Pre-billing",
+  category: "projects",
   order: 5,
   summary:
-    'Turn unbilled project work into reviewed invoice packages: bill runs, adjustments and holds, approval through Flows, optional customer review in the portal, and delivery with backup.',
-  updated: '2026-10-07',
-  keywords: ['pre-billing', 'prebill', 'billing review', 'bill run', 'WIP', 'write-down', 'write-up', 'customer approval', 'purchase order', 'invoice backup'],
-  related: ['field-tickets', 'project-types', 'labor-pricing'],
+    "Turn unbilled project work into reviewed invoice packages: bill runs, adjustments and holds, approval through Flows, optional customer review in the portal, and delivery with backup.",
+  updated: "2026-10-07",
+  keywords: [
+    "pre-billing",
+    "prebill",
+    "billing review",
+    "bill run",
+    "WIP",
+    "write-down",
+    "write-up",
+    "customer approval",
+    "purchase order",
+    "invoice backup",
+  ],
+  related: ["field-tickets", "project-types", "labor-pricing"],
   body: `# Pre-billing
 
 Pre-billing is the review step between finished work and a customer invoice.
@@ -96,4 +107,4 @@ marks its source work billed, so nothing can be billed twice. Once the invoice
 is posted, **Send invoice** emails it with its backup packet attached and the
 card moves to **Sent**; it moves to **Paid** when its balance is cleared.
 `,
-}
+};

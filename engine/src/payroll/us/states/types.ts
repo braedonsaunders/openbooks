@@ -46,8 +46,14 @@ import type { PayrollStateTaxBaseKey } from "../../packs.ts";
  * `daily` covers the "Daily or Miscellaneous" column several states print.
  */
 export type UsStatePayPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly"
-  | "quarterly" | "semiannual" | "annual" | "daily";
+  | "weekly"
+  | "biweekly"
+  | "semimonthly"
+  | "monthly"
+  | "quarterly"
+  | "semiannual"
+  | "annual"
+  | "daily";
 
 /** Whether the supplemental amount shares the regular wage payment. */
 export type UsSupplementalPaymentTiming = "combined" | "separate";
@@ -115,8 +121,8 @@ export function evaluateUsNonresidentThreshold(
 ): UsNonresidentThresholdResult {
   const currentWages = allocation.sourceWagesCurrentPeriod;
   const priorWages = allocation.sourceWagesYearToDate;
-  const compare = (value: bigint, limit: bigint) => rule.crossing === ">"
-    ? value > limit : value >= limit;
+  const compare = (value: bigint, limit: bigint) =>
+    rule.crossing === ">" ? value > limit : value >= limit;
   let crossed: boolean;
   let wasCrossed: boolean;
   let current = 0n;
@@ -124,8 +130,8 @@ export function evaluateUsNonresidentThreshold(
   if (rule.measure === "service_days") {
     if (allocation.serviceDaysYearToDate == null || allocation.serviceDaysCurrentPeriod == null) {
       throw new PayrollError(
-        `${rule.label} needs verified calendar-year and current-period service days; `
-        + "record approved dated work or HR service-day evidence before calculating; refused by name",
+        `${rule.label} needs verified calendar-year and current-period service days; ` +
+          "record approved dated work or HR service-day evidence before calculating; refused by name",
       );
     }
     const daysBefore = allocation.serviceDaysYearToDate - allocation.serviceDaysCurrentPeriod;
@@ -134,26 +140,29 @@ export function evaluateUsNonresidentThreshold(
   } else {
     if (currentWages == null || priorWages == null) {
       throw new PayrollError(
-        `${rule.label} needs complete current and committed year-to-date source wages; `
-        + "record verified work allocation and establish source-wage history before calculating; refused by name",
+        `${rule.label} needs complete current and committed year-to-date source wages; ` +
+          "record verified work allocation and establish source-wage history before calculating; refused by name",
       );
     }
     current = U(currentWages);
     prior = U(priorWages);
     const limit = U(String(rule.threshold));
     if (!Number.isInteger(periodsPerYear) || periodsPerYear < 1 || periodsPerYear > 2000) {
-      throw new PayrollError(`${rule.label} needs a valid annual payroll frequency; refused by name`);
+      throw new PayrollError(
+        `${rule.label} needs a valid annual payroll frequency; refused by name`,
+      );
     }
     const cumulative = prior + current;
     const projected = rule.annualizeCurrentWages ? current * BigInt(periodsPerYear) : 0n;
-    crossed = compare(cumulative, limit)
-      || (rule.annualizeCurrentWages === true && compare(projected, limit));
+    crossed =
+      compare(cumulative, limit) ||
+      (rule.annualizeCurrentWages === true && compare(projected, limit));
     wasCrossed = compare(prior, limit);
   }
   if (crossed && (currentWages == null || priorWages == null)) {
     throw new PayrollError(
-      `${rule.label} catch-up needs complete current and committed year-to-date source wages; `
-      + "record verified work allocation and establish source-wage history before calculating; refused by name",
+      `${rule.label} catch-up needs complete current and committed year-to-date source wages; ` +
+        "record verified work allocation and establish source-wage history before calculating; refused by name",
     );
   }
   if (crossed && rule.measure === "service_days") {
@@ -161,12 +170,12 @@ export function evaluateUsNonresidentThreshold(
     prior = U(priorWages!);
   }
   const catchUp = crossed && !wasCrossed && rule.catchUpPriorWages && prior > 0n;
-  const periodsBeforeCurrent = allocation.periodsYearToDate == null
-    ? null : allocation.periodsYearToDate - 1;
+  const periodsBeforeCurrent =
+    allocation.periodsYearToDate == null ? null : allocation.periodsYearToDate - 1;
   if (catchUp && (!Number.isInteger(periodsBeforeCurrent) || periodsBeforeCurrent! < 1)) {
     throw new PayrollError(
-      `${rule.label} catch-up needs the count of prior committed payroll periods; `
-      + "restore the committed payroll history before calculating; refused by name",
+      `${rule.label} catch-up needs the count of prior committed payroll periods; ` +
+        "restore the committed payroll history before calculating; refused by name",
     );
   }
   return {
@@ -183,13 +192,13 @@ export function requireUsWageAllocation(
   region: string,
   subRegion: string | null,
 ): UsWageAllocation {
-  const matches = (allocations ?? []).filter((item) =>
-    item.region === region && item.subRegion === subRegion,
+  const matches = (allocations ?? []).filter(
+    (item) => item.region === region && item.subRegion === subRegion,
   );
   if (matches.length !== 1) {
     throw new PayrollError(
-      `${region}/${subRegion} needs exactly one current-period work allocation; found ${matches.length}. `
-      + "Record the work share from the employee's certified work-location facts or verified work records before calculating; refused by name",
+      `${region}/${subRegion} needs exactly one current-period work allocation; found ${matches.length}. ` +
+        "Record the work share from the employee's certified work-location facts or verified work records before calculating; refused by name",
     );
   }
   const allocation = matches[0]!;
@@ -198,14 +207,14 @@ export function requireUsWageAllocation(
     share = rate6(allocation.workShare);
   } catch {
     throw new PayrollError(
-      `${region}/${subRegion} work allocation must be an exact decimal share from 0 through 1; `
-      + "correct the verified work-share input before calculating; refused by name",
+      `${region}/${subRegion} work allocation must be an exact decimal share from 0 through 1; ` +
+        "correct the verified work-share input before calculating; refused by name",
     );
   }
   if (share < 0n || share > 1_000_000n || !allocation.source.trim()) {
     throw new PayrollError(
-      `${region}/${subRegion} work allocation is outside 0–1 or has no recorded source; `
-      + "correct the verified work-share input before calculating; refused by name",
+      `${region}/${subRegion} work allocation is outside 0–1 or has no recorded source; ` +
+        "correct the verified work-share input before calculating; refused by name",
     );
   }
   return allocation;
@@ -220,16 +229,16 @@ export function requireUsSourceWages(
   const allocation = requireUsWageAllocation(allocations, region, subRegion);
   if (allocation.sourceWagesCurrentPeriod == null) {
     throw new PayrollError(
-      `${region}/${subRegion} needs current-period source wages from the verified work allocation; `
-      + "record approved work-location time or an HR allocation before calculating; refused by name",
+      `${region}/${subRegion} needs current-period source wages from the verified work allocation; ` +
+        "record approved work-location time or an HR allocation before calculating; refused by name",
     );
   }
   try {
     U(allocation.sourceWagesCurrentPeriod);
   } catch {
     throw new PayrollError(
-      `${region}/${subRegion} source wages must be an exact non-negative decimal from payroll context; `
-      + "correct the work-location records before calculating; refused by name",
+      `${region}/${subRegion} source wages must be an exact non-negative decimal from payroll context; ` +
+        "correct the work-location records before calculating; refused by name",
     );
   }
   return allocation.sourceWagesCurrentPeriod;
@@ -244,8 +253,8 @@ export function requireUsResidentWithholdingFacts(
   const source = `${residenceRegion} resident withholding`;
   if (!facts) {
     throw new PayrollError(
-      `${source} needs verified out-of-region wages and same-period work-region taxes; `
-      + "supply the allocation and computed work-region taxes before calculating; refused by name",
+      `${source} needs verified out-of-region wages and same-period work-region taxes; ` +
+        "supply the allocation and computed work-region taxes before calculating; refused by name",
     );
   }
   try {
@@ -273,7 +282,9 @@ export function requireUsResidentWithholdingFacts(
       );
     }
   }
-  if (new Set(facts.workRegionTaxes.map((item) => item.region)).size !== facts.workRegionTaxes.length) {
+  if (
+    new Set(facts.workRegionTaxes.map((item) => item.region)).size !== facts.workRegionTaxes.length
+  ) {
     throw new PayrollError(
       `${source} received duplicate work-region tax facts; provide one computed amount per region for this period; refused by name`,
     );
@@ -282,8 +293,8 @@ export function requireUsResidentWithholdingFacts(
     const matches = facts.workRegionTaxes.filter((item) => item.region === creditAgainstRegion);
     if (matches.length !== 1) {
       throw new PayrollError(
-        `${source} needs exactly one computed ${creditAgainstRegion} tax amount for this period; `
-        + `found ${matches.length}. Compute that work-region withholding or correct its jurisdiction before calculating; refused by name`,
+        `${source} needs exactly one computed ${creditAgainstRegion} tax amount for this period; ` +
+          `found ${matches.length}. Compute that work-region withholding or correct its jurisdiction before calculating; refused by name`,
       );
     }
   }
@@ -304,8 +315,8 @@ export function resolveUsResidentWithholdingFacts(
   const regional = (allocations ?? []).filter((item) => item.subRegion === null);
   if (regional.length === 0) {
     throw new PayrollError(
-      `${residenceRegion} resident withholding needs verified region-level work allocations; `
-      + "record sourced work shares before calculating; refused by name",
+      `${residenceRegion} resident withholding needs verified region-level work allocations; ` +
+        "record sourced work shares before calculating; refused by name",
     );
   }
   const shares = new Map<string, bigint>();
@@ -313,8 +324,8 @@ export function resolveUsResidentWithholdingFacts(
   for (const allocation of regional) {
     if (!allocation.region || !allocation.source.trim() || shares.has(allocation.region)) {
       throw new PayrollError(
-        `${residenceRegion} resident withholding received an ambiguous or unsourced region allocation; `
-        + "record one sourced share per work region before calculating; refused by name",
+        `${residenceRegion} resident withholding received an ambiguous or unsourced region allocation; ` +
+          "record one sourced share per work region before calculating; refused by name",
       );
     }
     let share: bigint;
@@ -322,8 +333,8 @@ export function resolveUsResidentWithholdingFacts(
       share = rate6(allocation.workShare);
     } catch {
       throw new PayrollError(
-        `${allocation.region} work allocation must be an exact decimal share from 0 through 1; `
-        + "correct the verified work-share input before calculating; refused by name",
+        `${allocation.region} work allocation must be an exact decimal share from 0 through 1; ` +
+          "correct the verified work-share input before calculating; refused by name",
       );
     }
     if (share < 0n || share > 1_000_000n) {
@@ -336,8 +347,8 @@ export function resolveUsResidentWithholdingFacts(
   }
   if (totalShare !== 1_000_000n) {
     throw new PayrollError(
-      `${residenceRegion} resident withholding region shares must total exactly 1; `
-      + `received ${fromUnits(roundDiv(totalShare * 10_000n, 1_000_000n))}. Correct the sourced work allocations; refused by name`,
+      `${residenceRegion} resident withholding region shares must total exactly 1; ` +
+        `received ${fromUnits(roundDiv(totalShare * 10_000n, 1_000_000n))}. Correct the sourced work allocations; refused by name`,
     );
   }
 
@@ -360,8 +371,8 @@ export function resolveUsResidentWithholdingFacts(
   for (const tax of workRegionTaxes) {
     if (taxByRegion.has(tax.region)) {
       throw new PayrollError(
-        `${residenceRegion} resident withholding received duplicate ${tax.region} work-region tax facts; `
-        + "provide one actual computed amount per work region; refused by name",
+        `${residenceRegion} resident withholding received duplicate ${tax.region} work-region tax facts; ` +
+          "provide one actual computed amount per work region; refused by name",
       );
     }
     try {
@@ -376,8 +387,8 @@ export function resolveUsResidentWithholdingFacts(
   const missingTaxRegions = sourceRegions.filter((region) => !taxByRegion.has(region));
   if (missingTaxRegions.length > 0) {
     throw new PayrollError(
-      `${residenceRegion} resident withholding needs the same-period computed work-region tax for `
-      + `${missingTaxRegions.join(", ")}; compute those work-region assessments before calculating; refused by name`,
+      `${residenceRegion} resident withholding needs the same-period computed work-region tax for ` +
+        `${missingTaxRegions.join(", ")}; compute those work-region assessments before calculating; refused by name`,
     );
   }
   return {
@@ -393,16 +404,25 @@ export function resolveUsResidentWithholdingFacts(
 /** Pay periods per year → the printed period name, or null when there is none. */
 export function payPeriodFor(periodsPerYear: number): UsStatePayPeriod | null {
   switch (periodsPerYear) {
-    case 52: return "weekly";
-    case 26: return "biweekly";
-    case 24: return "semimonthly";
-    case 12: return "monthly";
-    case 4: return "quarterly";
-    case 2: return "semiannual";
-    case 1: return "annual";
+    case 52:
+      return "weekly";
+    case 26:
+      return "biweekly";
+    case 24:
+      return "semimonthly";
+    case 12:
+      return "monthly";
+    case 4:
+      return "quarterly";
+    case 2:
+      return "semiannual";
+    case 1:
+      return "annual";
     case 260:
-    case 365: return "daily";
-    default: return null;
+    case 365:
+      return "daily";
+    default:
+      return null;
   }
 }
 
@@ -662,15 +682,15 @@ export function refuseUntranscribedYear(
     .sort((a, b) => a - b);
   if (engine.editions.some((edition) => edition.year === year && edition.status === "draft")) {
     throw new PayrollError(
-      `the ${year} ${engine.label} withholding tables are not available in this pack version — `
-      + `a pay date in ${year} cannot be calculated; update the pack before paying into ${year}.`,
+      `the ${year} ${engine.label} withholding tables are not available in this pack version — ` +
+        `a pay date in ${year} cannot be calculated; update the pack before paying into ${year}.`,
     );
   }
   throw new PayrollError(
-    `the ${year} ${engine.label} withholding tables are not available in this pack version `
-    + (published.length > 0 ? `(loaded years: ${published.join(", ")}); ` : "; ")
-    + "update the pack. Never extrapolate the prior year: a state's brackets, allowance "
-    + "amounts and rates all move independently.",
+    `the ${year} ${engine.label} withholding tables are not available in this pack version ` +
+      (published.length > 0 ? `(loaded years: ${published.join(", ")}); ` : "; ") +
+      "update the pack. Never extrapolate the prior year: a state's brackets, allowance " +
+      "amounts and rates all move independently.",
   );
 }
 
@@ -680,10 +700,10 @@ export function refuseUnprintedPeriod(
   periodsPerYear: number,
 ): never {
   throw new PayrollError(
-    `${engine.label} publishes withholding tables for `
-    + `${(engine.printedPeriods ?? []).join(", ")} pay periods, and this payroll runs `
-    + `${periodsPerYear} periods a year. The state's method is a per-period TABLE lookup, not a `
-    + "formula, so there is nothing to scale: change the pay schedule to a published frequency, "
-    + "or contact support about a table for this one.",
+    `${engine.label} publishes withholding tables for ` +
+      `${(engine.printedPeriods ?? []).join(", ")} pay periods, and this payroll runs ` +
+      `${periodsPerYear} periods a year. The state's method is a per-period TABLE lookup, not a ` +
+      "formula, so there is nothing to scale: change the pay schedule to a published frequency, " +
+      "or contact support about a table for this one.",
   );
 }

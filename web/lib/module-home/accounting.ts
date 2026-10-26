@@ -1,11 +1,14 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { canonicalPeriodLabelSql, periodDisplayLabelSql } from '@openbooks/engine/periods/period-policy'
-import { getAuthz } from '../authz'
-import { statementBookExpr } from '../gl-summary'
-import { subsidiaryVisibleFilter } from '../subsidiaries'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { addCalendarDays, businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  canonicalPeriodLabelSql,
+  periodDisplayLabelSql,
+} from "@openbooks/engine/periods/period-policy";
+import { getAuthz } from "../authz";
+import { statementBookExpr } from "../gl-summary";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 
 /**
  * Accounting module home — one light round trip for the financial-control
@@ -17,17 +20,17 @@ import { subsidiaryVisibleFilter } from '../subsidiaries'
  */
 
 export interface AccountingHome {
-  access: AccountingHomeAccess
+  access: AccountingHomeAccess;
   close: {
-    runId: string | null
+    runId: string | null;
     /** The run's period, labelled as every period list labels it (see `accountingHome`). */
-    periodName: string | null
-    status: string | null
-    tasksDone: number
-    tasksTotal: number
+    periodName: string | null;
+    status: string | null;
+    tasksDone: number;
+    tasksTotal: number;
     /** 0–100, null when no run exists. */
-    progressPct: number | null
-  }
+    progressPct: number | null;
+  };
   /**
    * Whether close diagnostics are refused for this caller: they are
    * organization-wide, so restricted callers who hold close access get the
@@ -35,38 +38,38 @@ export interface AccountingHome {
    * run". False when the caller lacks close access (nothing to refuse) and
    * for unrestricted callers (the query above already sees every run).
    */
-  closeUnavailable: boolean
+  closeUnavailable: boolean;
   /**
    * The latest period carrying an organization-wide closed lock, labelled
    * like `close.periodName`, or null. Locks can close a period without any close run (autopilot, API), so
    * the progress above can read "no run" while periods are closed. Null for
    * restricted callers, who see the refusal instead.
    */
-  lastLockedPeriod: string | null
-  draftJournals: number
-  postedJournals7d: number
-  workItems: { critical: number; warning: number; info: number; total: number }
+  lastLockedPeriod: string | null;
+  draftJournals: number;
+  postedJournals7d: number;
+  workItems: { critical: number; warning: number; info: number; total: number };
   badges: {
-    accounts: number
-    budgets: number
-    assets: number
-  }
+    accounts: number;
+    budgets: number;
+    assets: number;
+  };
 }
 
 export interface AccountingHomeAccess {
-  gl: boolean
-  close: boolean
-  findings: boolean
-  accounts: boolean
-  budgets: boolean
-  assets: boolean
+  gl: boolean;
+  close: boolean;
+  findings: boolean;
+  accounts: boolean;
+  budgets: boolean;
+  assets: boolean;
 }
 
-type AccountingSubsidiaryScope = ReadonlySet<string> | null
+type AccountingSubsidiaryScope = ReadonlySet<string> | null;
 
 /** A run's targets do not narrow its organization-wide diagnostic population. */
 function closeRunScope(allowed: AccountingSubsidiaryScope) {
-  return allowed === null ? sql`` : sql` and false`
+  return allowed === null ? sql`` : sql` and false`;
 }
 
 /**
@@ -76,20 +79,20 @@ function closeRunScope(allowed: AccountingSubsidiaryScope) {
  * points at an entity outside the caller's set.
  */
 function budgetScope(orgId: string, allowed: AccountingSubsidiaryScope, scenario: SQL) {
-  if (allowed === null) return sql``
-  const ids = [...allowed]
-  if (ids.length === 0) return sql` and false`
-  const idArray = sql`${`{${ids.join(',')}}`}::uuid[]`
+  if (allowed === null) return sql``;
+  const ids = [...allowed];
+  if (ids.length === 0) return sql` and false`;
+  const idArray = sql`${`{${ids.join(",")}}`}::uuid[]`;
   const hidden = sql`(
     bl.subsidiary_id <> all(${idArray})
     or (ba.subsidiary_id is not null and ba.subsidiary_id <> all(${idArray}))
     or (bp.subsidiary_id is not null and bp.subsidiary_id <> all(${idArray}))
-  )`
+  )`;
   const visible = sql`(
     bl.subsidiary_id = any(${idArray})
     and (ba.subsidiary_id is null or ba.subsidiary_id = any(${idArray}))
     and (bp.subsidiary_id is null or bp.subsidiary_id = any(${idArray}))
-  )`
+  )`;
   return sql`
     and exists (
       select 1
@@ -106,7 +109,7 @@ function budgetScope(orgId: string, allowed: AccountingSubsidiaryScope, scenario
         left join projects bp on bp.id = bl.project_id and bp.org_id = bl.org_id
        where bl.org_id = ${orgId} and bl.scenario_id = ${scenario}
          and ${hidden}
-    )`
+    )`;
 }
 
 /** Continuous-close findings are polymorphic. Keep only findings whose
@@ -115,16 +118,16 @@ function budgetScope(orgId: string, allowed: AccountingSubsidiaryScope, scenario
  * are omitted for restricted readers.
  */
 function workItemScope(orgId: string, allowed: AccountingSubsidiaryScope) {
-  if (allowed === null) return sql``
-  const ids = [...allowed]
-  if (ids.length === 0) return sql` and false`
-  const idArray = sql`${`{${ids.join(',')}}`}::uuid[]`
+  if (allowed === null) return sql``;
+  const ids = [...allowed];
+  if (ids.length === 0) return sql` and false`;
+  const idArray = sql`${`{${ids.join(",")}}`}::uuid[]`;
   // Null-subsidiary (shared) account subjects fail closed for restricted
   // readers, matching the workbench resolver: a shared account aggregates
   // activity across every subsidiary, so counting it would leak B-only
   // activity into an A-scoped severity count.
-  const accountVisible = sql`(a.subsidiary_id = any(${idArray}))`
-  const documentVisible = sql`d.subsidiary_id = any(${idArray})`
+  const accountVisible = sql`(a.subsidiary_id = any(${idArray}))`;
+  const documentVisible = sql`d.subsidiary_id = any(${idArray})`;
   return sql` and (
     (w.subject_type = 'account' and exists (
       select 1 from accounts a
@@ -140,14 +143,21 @@ function workItemScope(orgId: string, allowed: AccountingSubsidiaryScope) {
       select 1 from documents d
        where d.org_id = ${orgId} and d.id = w.subject_id and ${documentVisible}
     ))
-    or (w.subject_type = 'budget' ${budgetScope(orgId, allowed, sql.raw('w.subject_id'))})
-  )`
+    or (w.subject_type = 'budget' ${budgetScope(orgId, allowed, sql.raw("w.subject_id"))})
+  )`;
 }
 
 export async function accountingHome(
   orgId: string,
   allowedSubsidiaryIds?: AccountingSubsidiaryScope,
-  access: AccountingHomeAccess = { gl: false, close: false, findings: false, accounts: false, budgets: false, assets: false },
+  access: AccountingHomeAccess = {
+    gl: false,
+    close: false,
+    findings: false,
+    accounts: false,
+    budgets: false,
+    assets: false,
+  },
   /**
    * The viewer's locale: periods then read as every period list labels them
    * (`P07 FY2026 · Jul 2026`). Without one they carry the locale-free
@@ -155,29 +165,37 @@ export async function accountingHome(
    */
   locale?: string,
 ): Promise<AccountingHome> {
-  const periodLabel = locale ? periodDisplayLabelSql(locale, 'p') : canonicalPeriodLabelSql('p')
+  const periodLabel = locale ? periodDisplayLabelSql(locale, "p") : canonicalPeriodLabelSql("p");
   // The accounting page historically supplied only orgId. Resolve the same
   // request authz here when that argument is omitted so direct callers cannot
   // accidentally turn a restricted page into an org-wide dashboard. Explicit
   // null remains the deliberate unrestricted/super-admin view; an absent
   // authz context fails closed.
-  let scope: AccountingSubsidiaryScope
+  let scope: AccountingSubsidiaryScope;
   if (allowedSubsidiaryIds !== undefined) {
-    scope = allowedSubsidiaryIds
+    scope = allowedSubsidiaryIds;
   } else {
-    const authz = await getAuthz()
-    scope = authz?.user.orgId === orgId ? authz.allowedSubsidiaryIds : new Set<string>()
+    const authz = await getAuthz();
+    scope = authz?.user.orgId === orgId ? authz.allowedSubsidiaryIds : new Set<string>();
   }
-  const ago7 = access.gl ? addCalendarDays(await businessToday(orgId), -7) : null
+  const ago7 = access.gl ? addCalendarDays(await businessToday(orgId), -7) : null;
   // Ledger hygiene counts read the primary posting book, like bank
   // reconciliation and the banking cockpit — a secondary book's postings
   // must not inflate the primary ledger's tiles. Drafts are documents, not
   // entries yet (the /journal list reads documents too), so the draft tile
   // counts draft journal documents with no book scope.
-  const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`
-  const [closeRes, countsRes, workRes, lockRes] = (await Promise.all([
+  const bookScope = sql` and je.book_id = ${statementBookExpr(orgId)}`;
+  const [closeRes, countsRes, workRes, lockRes] = await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
-    access.close ? db.execute<{ id: string; status: string; period_name: string; tasks_total: string; tasks_done: string }>(sql`
+    access.close
+      ? db.execute<{
+          id: string;
+          status: string;
+          period_name: string;
+          tasks_total: string;
+          tasks_done: string;
+        }>(
+          sql`
       select r.id, r.status, ${periodLabel} as period_name,
              coalesce(t.total, 0) as tasks_total,
              coalesce(t.done, 0) as tasks_done
@@ -191,32 +209,67 @@ export async function accountingHome(
          ${closeRunScope(scope)}
        order by r.created_at desc
        limit 1
-    `, 'objects') : Promise.resolve([]),
-    (access.gl || access.accounts || access.budgets || access.assets) ? db.execute(sql`
+    `,
+          "objects",
+        )
+      : Promise.resolve([]),
+    access.gl || access.accounts || access.budgets || access.assets
+      ? db.execute(
+          sql`
       select
-        ${access.gl ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'journal' and d.status = 'draft'
+        ${
+          access.gl
+            ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'journal' and d.status = 'draft'
           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}) as draft_journals,
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status in ('posted', 'reversed')
           and je.posting_date >= ${ago7!}
-          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}${bookScope}) as posted_7d` : sql`0 as draft_journals, 0 as posted_7d`},
-        ${access.accounts ? sql`(select count(*) from accounts a where a.org_id = ${orgId} and not a.is_summary and a.is_active
-          ${scope === null ? sql`` : [...scope].length
-            ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${[...scope].join(',')}}`}::uuid[]))`
-            : sql` and false`})` : sql`0`} as accounts,
-        ${access.budgets ? sql`(select count(*) from budget_scenarios b where b.org_id = ${orgId}
-          ${budgetScope(orgId, scope, sql.raw('b.id'))})` : sql`0`} as budgets,
-        ${access.assets ? sql`(select count(*) from fixed_assets f where f.org_id = ${orgId}
-          ${subsidiaryVisibleFilter(sql`f.subsidiary_id`, scope)})` : sql`0`} as assets
-    `, 'objects') : Promise.resolve([]),
+          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, scope)}${bookScope}) as posted_7d`
+            : sql`0 as draft_journals, 0 as posted_7d`
+        },
+        ${
+          access.accounts
+            ? sql`(select count(*) from accounts a where a.org_id = ${orgId} and not a.is_summary and a.is_active
+          ${
+            scope === null
+              ? sql``
+              : [...scope].length
+                ? sql` and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`
+                : sql` and false`
+          })`
+            : sql`0`
+        } as accounts,
+        ${
+          access.budgets
+            ? sql`(select count(*) from budget_scenarios b where b.org_id = ${orgId}
+          ${budgetScope(orgId, scope, sql.raw("b.id"))})`
+            : sql`0`
+        } as budgets,
+        ${
+          access.assets
+            ? sql`(select count(*) from fixed_assets f where f.org_id = ${orgId}
+          ${subsidiaryVisibleFilter(sql`f.subsidiary_id`, scope)})`
+            : sql`0`
+        } as assets
+    `,
+          "objects",
+        )
+      : Promise.resolve([]),
     // Continuous-close open findings by severity.
-    access.findings ? db.execute(sql`
+    access.findings
+      ? db.execute(
+          sql`
       select severity, count(*) as n from ai_work_items w
        where w.org_id = ${orgId} and w.status = 'open'
          ${workItemScope(orgId, scope)}
        group by severity
-    `, 'objects') : Promise.resolve([]),
+    `,
+          "objects",
+        )
+      : Promise.resolve([]),
     // Closed organization-wide locks on the primary book, newest period first.
-    access.close ? db.execute<{ period_name: string }>(sql`
+    access.close
+      ? db.execute<{ period_name: string }>(
+          sql`
       select ${periodLabel} as period_name
         from period_locks pl
         join accounting_periods p on p.id = pl.period_id and p.org_id = pl.org_id
@@ -225,18 +278,21 @@ export async function accountingHome(
          ${closeRunScope(scope)}
        order by p.ends_on desc
        limit 1
-    `, 'objects') : Promise.resolve([]),
-  ]))
+    `,
+          "objects",
+        )
+      : Promise.resolve([]),
+  ]);
 
-  const close = closeRes[0]
-  const counts = countsRes[0] ?? {}
-  const sev = new Map(workRes.map((r) => [String(r.severity), Number(r.n)]))
+  const close = closeRes[0];
+  const counts = countsRes[0] ?? {};
+  const sev = new Map(workRes.map((r) => [String(r.severity), Number(r.n)]));
   const workItems = {
-    critical: sev.get('critical') ?? 0,
-    warning: sev.get('warning') ?? 0,
-    info: sev.get('info') ?? 0,
+    critical: sev.get("critical") ?? 0,
+    warning: sev.get("warning") ?? 0,
+    info: sev.get("info") ?? 0,
     total: [...sev.values()].reduce((a, n) => a + n, 0),
-  }
+  };
 
   return {
     access,
@@ -247,9 +303,19 @@ export async function accountingHome(
           status: close.status,
           tasksDone: Number(close.tasks_done),
           tasksTotal: Number(close.tasks_total),
-          progressPct: Number(close.tasks_total) > 0 ? Math.round((Number(close.tasks_done) / Number(close.tasks_total)) * 100) : null,
+          progressPct:
+            Number(close.tasks_total) > 0
+              ? Math.round((Number(close.tasks_done) / Number(close.tasks_total)) * 100)
+              : null,
         }
-      : { runId: null, periodName: null, status: null, tasksDone: 0, tasksTotal: 0, progressPct: null },
+      : {
+          runId: null,
+          periodName: null,
+          status: null,
+          tasksDone: 0,
+          tasksTotal: 0,
+          progressPct: null,
+        },
     // Restricted callers who hold close access never see a run (the query
     // above matches nothing for them by construction) — say so by name
     // instead of reporting "no close run", exactly like the dashboard does.
@@ -266,5 +332,5 @@ export async function accountingHome(
       budgets: Number(counts.budgets ?? 0),
       assets: Number(counts.assets ?? 0),
     },
-  }
+  };
 }

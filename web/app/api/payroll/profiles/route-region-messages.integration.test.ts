@@ -1,31 +1,42 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __regionMessagesState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __regionMessagesState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next-intl/server') return virtual("export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}")
-    if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return virtual('export async function currentUser(){return null}')
+    if (specifier === "next-intl/server")
+      return virtual(
+        "export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}",
+      );
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return virtual("export async function currentUser(){return null}");
     // defineRoute loads the gate through the `@/` alias, so the double must
     // intercept that specifier as well as the route's direct import.
-    if (specifier === '../../../../lib/feature-gates' ||
-        (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
+    if (
+      specifier === "../../../../lib/feature-gates" ||
+      (specifier === "@/lib/feature-gates" && context.parentURL?.includes("/lib/api/route"))
+    )
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__regionMessagesState;
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { POST } = await import('./route')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { POST } = await import("./route");
 
 /**
  * The reported defect: saving a payroll profile with a missing or mistyped
@@ -37,98 +48,105 @@ const { POST } = await import('./route')
  */
 async function fixture() {
   return withBypassContext(async () => {
-    const org = await createScratchOrg()
-    state.orgId = org.orgId
-    state.actorId = await createScratchUser(org.orgId, 'Payroll clerk', 'admin')
-    const scheduleId = randomUUID()
+    const org = await createScratchOrg();
+    state.orgId = org.orgId;
+    state.actorId = await createScratchUser(org.orgId, "Payroll clerk", "admin");
+    const scheduleId = randomUUID();
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active, created_by, updated_by)
       values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-              ${state.actorId}, ${state.actorId})`)
-    const employeeId = randomUUID()
+              ${state.actorId}, ${state.actorId})`);
+    const employeeId = randomUUID();
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
-      values (${employeeId}, ${org.orgId}, 'person', 'Region Message Hire', true, '{}'::jsonb)`)
+      values (${employeeId}, ${org.orgId}, 'person', 'Region Message Hire', true, '{}'::jsonb)`);
     await db.execute(sql`
       insert into employee_roles (id, org_id, party_id, terminated_on)
-      values (${randomUUID()}, ${org.orgId}, ${employeeId}, null)`)
-    return { org, scheduleId, employeeId }
-  })
+      values (${randomUUID()}, ${org.orgId}, ${employeeId}, null)`);
+    return { org, scheduleId, employeeId };
+  });
 }
 
 const post = (body: unknown) =>
-  withOrgContext(state.orgId, () => POST(new Request('http://payroll.test/api', { method: 'POST', body: JSON.stringify(body) })))
+  withOrgContext(state.orgId, () =>
+    POST(new Request("http://payroll.test/api", { method: "POST", body: JSON.stringify(body) })),
+  );
 
-function profileBody(employeePartyId: string, scheduleId: string, country: string, province: string) {
-  return { employeePartyId, payScheduleId: scheduleId, country, province, payBasis: 'hourly' }
+function profileBody(
+  employeePartyId: string,
+  scheduleId: string,
+  country: string,
+  province: string,
+) {
+  return { employeePartyId, payScheduleId: scheduleId, country, province, payBasis: "hourly" };
 }
 
 async function errorOf(body: unknown): Promise<{ status: number; error: string }> {
-  const response = await post(body)
-  const payload = (await response.json()) as { error?: string }
-  return { status: response.status, error: payload.error ?? '' }
+  const response = await post(body);
+  const payload = (await response.json()) as { error?: string };
+  return { status: response.status, error: payload.error ?? "" };
 }
 
-test('AU profile with no state names the field, the valid states, and an example', async () => {
-  const { org, scheduleId, employeeId } = await fixture()
+test("AU profile with no state names the field, the valid states, and an example", async () => {
+  const { org, scheduleId, employeeId } = await fixture();
   try {
-    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'AU', ''))
-    assert.equal(status, 422)
-    assert.match(error, /No state on this AU payroll profile/)
-    assert.match(error, /NSW/)
-    assert.match(error, /VIC/)
-    assert.match(error, /\(e\.g\. NSW\)/)
+    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, "AU", ""));
+    assert.equal(status, 422);
+    assert.match(error, /No state on this AU payroll profile/);
+    assert.match(error, /NSW/);
+    assert.match(error, /VIC/);
+    assert.match(error, /\(e\.g\. NSW\)/);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('AU profile with an unknown state names the received value and the valid states', async () => {
-  const { org, scheduleId, employeeId } = await fixture()
+test("AU profile with an unknown state names the received value and the valid states", async () => {
+  const { org, scheduleId, employeeId } = await fixture();
   try {
-    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'AU', 'XX'))
-    assert.equal(status, 422)
-    assert.match(error, /Unknown state "XX"/)
-    assert.match(error, /NSW, VIC, QLD/)
+    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, "AU", "XX"));
+    assert.equal(status, 422);
+    assert.match(error, /Unknown state "XX"/);
+    assert.match(error, /NSW, VIC, QLD/);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('GB profile with no nation names the field and the four nations', async () => {
-  const { org, scheduleId, employeeId } = await fixture()
+test("GB profile with no nation names the field and the four nations", async () => {
+  const { org, scheduleId, employeeId } = await fixture();
   try {
-    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'GB', ''))
-    assert.equal(status, 422)
-    assert.match(error, /No nation on this GB payroll profile/)
-    assert.match(error, /ENG/)
-    assert.match(error, /\(e\.g\. ENG\)/)
+    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, "GB", ""));
+    assert.equal(status, 422);
+    assert.match(error, /No nation on this GB payroll profile/);
+    assert.match(error, /ENG/);
+    assert.match(error, /\(e\.g\. ENG\)/);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('GB profile with an unknown nation names the received value', async () => {
-  const { org, scheduleId, employeeId } = await fixture()
+test("GB profile with an unknown nation names the received value", async () => {
+  const { org, scheduleId, employeeId } = await fixture();
   try {
-    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'GB', 'XX'))
-    assert.equal(status, 422)
-    assert.match(error, /Unknown nation "XX"/)
-    assert.match(error, /ENG, SCT, WLS, NIR/)
+    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, "GB", "XX"));
+    assert.equal(status, 422);
+    assert.match(error, /Unknown nation "XX"/);
+    assert.match(error, /ENG, SCT, WLS, NIR/);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});
 
-test('IE profile with an unknown region names the received value and the single region', async () => {
-  const { org, scheduleId, employeeId } = await fixture()
+test("IE profile with an unknown region names the received value and the single region", async () => {
+  const { org, scheduleId, employeeId } = await fixture();
   try {
-    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, 'IE', 'DUBLIN'))
-    assert.equal(status, 422)
-    assert.match(error, /Unknown region "DUBLIN"/)
-    assert.match(error, /IE/)
+    const { status, error } = await errorOf(profileBody(employeeId, scheduleId, "IE", "DUBLIN"));
+    assert.equal(status, 422);
+    assert.match(error, /Unknown region "DUBLIN"/);
+    assert.match(error, /IE/);
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
-})
+});

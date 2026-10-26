@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import {
   grid,
   page,
@@ -12,30 +12,33 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { db } from '@openbooks/engine/platform/db'
-import { cmp, isZero } from '@openbooks/engine/money/money'
-import { AvailabilityRefusal, releasableBackorders } from '@openbooks/engine/inventory/availability'
-import { InventoryError } from '@openbooks/engine/inventory/contracts/module'
-import { purchaseReceiptQueue } from '@openbooks/engine/inventory/receiving-queue'
-import type { ReceiptQueueRow } from './ReceiptQueue'
-import { listStagedStock } from '@openbooks/engine/inventory/putaway'
-import { replenishmentProposals } from '@openbooks/engine/inventory/replenishment'
-import { warehouseStockTieOut } from '@openbooks/engine/inventory/warehouses'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { can, requirePermission } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../lib/features'
-import { availabilityEntityScope, availabilityRefusalText } from '../../../lib/availability-report'
-import { fulfillmentQueueCounts } from '../../../lib/fulfillment'
-import { pickString } from '../../../lib/list-params'
-import { getMoneyFormatter } from '@/lib/money-server'
-import type { ReportDrillTarget } from '@/lib/report-drill'
-import { warehouseGroupTabs } from '../../../components/module-home/group-tabs'
-import type { DirectoryItem } from '../../../components/module-home/ui'
-import type { StagedStockRowView } from './PutawayQueue'
-import type { WarehouseTieOutRowView } from './WarehousesPanel'
-import type { AttentionItem } from '../purchasing/sections'
+} from "@braedonsaunders/appkit-viewspec";
+import { db } from "@openbooks/engine/platform/db";
+import { cmp, isZero } from "@openbooks/engine/money/money";
+import {
+  AvailabilityRefusal,
+  releasableBackorders,
+} from "@openbooks/engine/inventory/availability";
+import { InventoryError } from "@openbooks/engine/inventory/contracts/module";
+import { purchaseReceiptQueue } from "@openbooks/engine/inventory/receiving-queue";
+import type { ReceiptQueueRow } from "./ReceiptQueue";
+import { listStagedStock } from "@openbooks/engine/inventory/putaway";
+import { replenishmentProposals } from "@openbooks/engine/inventory/replenishment";
+import { warehouseStockTieOut } from "@openbooks/engine/inventory/warehouses";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { can, requirePermission } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../lib/features";
+import { availabilityEntityScope, availabilityRefusalText } from "../../../lib/availability-report";
+import { fulfillmentQueueCounts } from "../../../lib/fulfillment";
+import { pickString } from "../../../lib/list-params";
+import { getMoneyFormatter } from "@/lib/money-server";
+import type { ReportDrillTarget } from "@/lib/report-drill";
+import { warehouseGroupTabs } from "../../../components/module-home/group-tabs";
+import type { DirectoryItem } from "../../../components/module-home/ui";
+import type { StagedStockRowView } from "./PutawayQueue";
+import type { WarehouseTieOutRowView } from "./WarehousesPanel";
+import type { AttentionItem } from "../purchasing/sections";
 
 /**
  * The warehouse cockpit, split into a loader and a spec like the purchasing
@@ -52,94 +55,103 @@ import type { AttentionItem } from '../purchasing/sections'
  * control balance of their own entities, never another's.
  */
 
-type Tabs = Awaited<ReturnType<typeof warehouseGroupTabs>>
+type Tabs = Awaited<ReturnType<typeof warehouseGroupTabs>>;
 
 export interface WarehouseData {
-  title: string
-  description: string
-  tabs: Tabs
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
-  canPost: boolean
-  canSetup: boolean
-  newLabel: string
-  activeLabel: string
-  activeValue: string
-  suspendedLabel: string
-  suspendedValue: string
-  stagedLabel: string
-  stagedValue: string
-  stagedTone: 'warning' | 'positive'
-  tieOutTitle: string
-  tieOutHint: string
-  rows: WarehouseTieOutRowView[]
-  layerTotalLabel: string
-  controlLabel: string
-  controlDrill: ReportDrillTarget | null
-  differenceLabel: string
-  differenceIsZero: boolean
-  queueTitle: string
-  queueHint: string
-  staged: StagedStockRowView[]
-  receipts:ReceiptQueueRow[]
-  supplyHint: string
-  availabilityTitle: string
-  availabilityPulse: SupplyPulse
-  replenishmentTitle: string
-  replenishmentPulse: SupplyPulse
-  supplyReady: boolean
-  supplyRefusal: AttentionItem[]
-  showSupplyRefusal: boolean
-  setupTitle: string
-  rulesTitle: string
+  title: string;
+  description: string;
+  tabs: Tabs;
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
+  canPost: boolean;
+  canSetup: boolean;
+  newLabel: string;
+  activeLabel: string;
+  activeValue: string;
+  suspendedLabel: string;
+  suspendedValue: string;
+  stagedLabel: string;
+  stagedValue: string;
+  stagedTone: "warning" | "positive";
+  tieOutTitle: string;
+  tieOutHint: string;
+  rows: WarehouseTieOutRowView[];
+  layerTotalLabel: string;
+  controlLabel: string;
+  controlDrill: ReportDrillTarget | null;
+  differenceLabel: string;
+  differenceIsZero: boolean;
+  queueTitle: string;
+  queueHint: string;
+  staged: StagedStockRowView[];
+  receipts: ReceiptQueueRow[];
+  supplyHint: string;
+  availabilityTitle: string;
+  availabilityPulse: SupplyPulse;
+  replenishmentTitle: string;
+  replenishmentPulse: SupplyPulse;
+  supplyReady: boolean;
+  supplyRefusal: AttentionItem[];
+  showSupplyRefusal: boolean;
+  setupTitle: string;
+  rulesTitle: string;
   /** Fulfillment on and the viewer can fulfil orders. */
-  showFulfillment: boolean
+  showFulfillment: boolean;
   /** Fulfillment on and the viewer manages setup: carriers are re-homed here. */
-  showCarriers: boolean
-  fulfillmentTitle: string
-  fulfillmentHint: string
-  fulfillmentQueue: DirectoryItem[]
-  carriersTitle: string
-  newDrawer: { locations: { id: string; name: string }[]; closeHref: string; canManageLocations: boolean } | null
-  showNewDrawer: boolean
+  showCarriers: boolean;
+  fulfillmentTitle: string;
+  fulfillmentHint: string;
+  fulfillmentQueue: DirectoryItem[];
+  carriersTitle: string;
+  newDrawer: {
+    locations: { id: string; name: string }[];
+    closeHref: string;
+    canManageLocations: boolean;
+  } | null;
+  showNewDrawer: boolean;
 }
 
 /** The purchasing cockpit's three-figure pulse with its report link. */
 type SupplyPulse = {
-  outstanding: string
-  overdue: string
-  dueNext7: string
-  overdueIsNegative: boolean
-  labels: { open: string; overdue: string; due7: string; cta: string }
-  href: string
-}
+  outstanding: string;
+  overdue: string;
+  dueNext7: string;
+  overdueIsNegative: boolean;
+  labels: { open: string; overdue: string; due7: string; cta: string };
+  href: string;
+};
 
 export async function loadWarehouse(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<WarehouseData> {
-  const authz = await requirePermission('items.read')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'warehousing')
-  const t = await getTranslations('warehouse')
-  const { money } = await getMoneyFormatter()
-  const subsidiaryIds = authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null
-  const canManage = can(authz, 'items.warehouses')
+  const authz = await requirePermission("items.read");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "warehousing");
+  const t = await getTranslations("warehouse");
+  const { money } = await getMoneyFormatter();
+  const subsidiaryIds = authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null;
+  const canManage = can(authz, "items.warehouses");
 
-  const tieOut = await warehouseStockTieOut(db, orgId, subsidiaryIds)
-  const staged = await listStagedStock(db, orgId, subsidiaryIds)
-  const receipts=await purchaseReceiptQueue(db,orgId,authz.allowedSubsidiaryIds)
-  const tabs = await warehouseGroupTabs(authz, '/warehouse')
-  const fulfillmentOn = await isFeatureEnabled(orgId, 'fulfillment')
-  const showFulfillment = fulfillmentOn && can(authz, 'orders.fulfill')
-  const queue = showFulfillment ? await fulfillmentQueueCounts(orgId, authz.allowedSubsidiaryIds) : null
-  const showNew = canManage && pickString(sp.warehouseNew) === '1'
+  const tieOut = await warehouseStockTieOut(db, orgId, subsidiaryIds);
+  const staged = await listStagedStock(db, orgId, subsidiaryIds);
+  const receipts = await purchaseReceiptQueue(db, orgId, authz.allowedSubsidiaryIds);
+  const tabs = await warehouseGroupTabs(authz, "/warehouse");
+  const fulfillmentOn = await isFeatureEnabled(orgId, "fulfillment");
+  const showFulfillment = fulfillmentOn && can(authz, "orders.fulfill");
+  const queue = showFulfillment
+    ? await fulfillmentQueueCounts(orgId, authz.allowedSubsidiaryIds)
+    : null;
+  const showNew = canManage && pickString(sp.warehouseNew) === "1";
   const locations = showNew
-    ? (await db.execute<{ id: string; name: string }>(sql`
-        select id, name from locations where org_id = ${orgId} and is_active order by name`, 'objects'))
-    : []
+    ? await db.execute<{ id: string; name: string }>(
+        sql`
+        select id, name from locations where org_id = ${orgId} and is_active order by name`,
+        "objects",
+      )
+    : [];
 
-  const warehouses = tieOut.rows.filter((row) => row.warehouseId !== null)
-  const today = await businessToday(orgId)
+  const warehouses = tieOut.rows.filter((row) => row.warehouseId !== null);
+  const today = await businessToday(orgId);
 
   // Supply figures for the reader's default legal entity. A refusal (an order
   // line in a unit the item cannot convert, malformed conversions, a kit
@@ -147,50 +159,62 @@ export async function loadWarehouse(
   // and links to the report that refuses the same way — a loader throw here
   // is the warehouse home's error page, so every typed inventory refusal
   // becomes the banner instead of escaping SSR.
-  const entity = await availabilityEntityScope(authz, undefined)
-  let supply: { stocked: number; short: number; releasable: number | null; reorder: number; unset: number; onOrder: number } | null = null
-  let supplyRefusal: string | null = null
+  const entity = await availabilityEntityScope(authz, undefined);
+  let supply: {
+    stocked: number;
+    short: number;
+    releasable: number | null;
+    reorder: number;
+    unset: number;
+    onOrder: number;
+  } | null = null;
+  let supplyRefusal: string | null = null;
   if (entity.selectedId) {
     try {
-      const lines = await replenishmentProposals(db, orgId, { subsidiaryId: entity.selectedId })
-      const releasable = fulfillmentOn ? await releasableBackorders(db, orgId, { subsidiaryId: entity.selectedId }) : null
+      const lines = await replenishmentProposals(db, orgId, { subsidiaryId: entity.selectedId });
+      const releasable = fulfillmentOn
+        ? await releasableBackorders(db, orgId, { subsidiaryId: entity.selectedId })
+        : null;
       supply = {
         stocked: lines.filter((line) => !isZero(line.onHand)).length,
         short: lines.filter((line) => cmp(line.onHand, line.committed) < 0).length,
         releasable: releasable ? new Set(releasable.map((line) => line.lineId)).size : null,
-        reorder: lines.filter((line) => line.status === 'reorder').length,
-        unset: lines.filter((line) => line.status === 'no_reorder_point' || line.status === 'points_inverted').length,
+        reorder: lines.filter((line) => line.status === "reorder").length,
+        unset: lines.filter(
+          (line) => line.status === "no_reorder_point" || line.status === "points_inverted",
+        ).length,
         onOrder: lines.filter((line) => !isZero(line.onOrder)).length,
-      }
+      };
     } catch (error) {
       // AvailabilityRefusal formats its remedy once; any other typed
       // inventory refusal already names its remedy in its message by house
       // rule, so it reads verbatim. Anything untyped still throws: masking
       // a programmer error as a data banner would hide it from the logs.
-      if (error instanceof AvailabilityRefusal) supplyRefusal = availabilityRefusalText(error)
-      else if (error instanceof InventoryError) supplyRefusal = error.message
-      else throw error
+      if (error instanceof AvailabilityRefusal) supplyRefusal = availabilityRefusalText(error);
+      else if (error instanceof InventoryError) supplyRefusal = error.message;
+      else throw error;
     }
   }
-  const entityLabel = entity.picker.find((option) => option.id === entity.selectedId)?.label ?? ''
+  const entityLabel = entity.picker.find((option) => option.id === entity.selectedId)?.label ?? "";
   return {
-    title: t('home.title'),
-    description: t('home.description'),
+    title: t("home.title"),
+    description: t("home.description"),
     tabs,
-    currentParams: sp,receipts,
+    currentParams: sp,
+    receipts,
     canManage,
-    canPost: can(authz, 'items.post'),
-    canSetup: can(authz, 'admin.setup.manage'),
-    newLabel: t('create.new'),
-    activeLabel: t('home.vitals.active'),
-    activeValue: String(warehouses.filter((row) => row.status === 'active').length),
-    suspendedLabel: t('home.vitals.suspended'),
-    suspendedValue: String(warehouses.filter((row) => row.status === 'suspended').length),
-    stagedLabel: t('home.vitals.staged'),
+    canPost: can(authz, "items.post"),
+    canSetup: can(authz, "admin.setup.manage"),
+    newLabel: t("create.new"),
+    activeLabel: t("home.vitals.active"),
+    activeValue: String(warehouses.filter((row) => row.status === "active").length),
+    suspendedLabel: t("home.vitals.suspended"),
+    suspendedValue: String(warehouses.filter((row) => row.status === "suspended").length),
+    stagedLabel: t("home.vitals.staged"),
     stagedValue: String(staged.length),
-    stagedTone: staged.length > 0 ? 'warning' : 'positive',
-    tieOutTitle: t('tieOut.title'),
-    tieOutHint: t('tieOut.hint'),
+    stagedTone: staged.length > 0 ? "warning" : "positive",
+    tieOutTitle: t("tieOut.title"),
+    tieOutHint: t("tieOut.hint"),
     rows: tieOut.rows.map((row) => ({
       warehouseId: row.warehouseId,
       code: row.code,
@@ -200,114 +224,141 @@ export async function loadWarehouse(
     })),
     layerTotalLabel: money(tieOut.layerTotal),
     controlLabel: money(tieOut.controlBalance),
-    controlDrill: tieOut.controlAccountIds.length > 0
-      ? { kind: 'ledger', label: t('tieOut.control'), accountIds: tieOut.controlAccountIds, to: today, mode: 'balance' }
-      : null,
+    controlDrill:
+      tieOut.controlAccountIds.length > 0
+        ? {
+            kind: "ledger",
+            label: t("tieOut.control"),
+            accountIds: tieOut.controlAccountIds,
+            to: today,
+            mode: "balance",
+          }
+        : null,
     differenceLabel: money(tieOut.difference),
     differenceIsZero: isZero(tieOut.difference),
-    queueTitle: t('putaway.title'),
-    queueHint: t('putaway.hint'),
+    queueTitle: t("putaway.title"),
+    queueHint: t("putaway.hint"),
     staged,
-    supplyHint: t('supply.hint', { entity: entityLabel }),
-    availabilityTitle: t('availability.title'),
+    supplyHint: t("supply.hint", { entity: entityLabel }),
+    availabilityTitle: t("availability.title"),
     availabilityPulse: {
       outstanding: String(supply?.stocked ?? 0),
       overdue: String(supply?.short ?? 0),
-      dueNext7: supply?.releasable === null || supply === null ? '—' : String(supply.releasable),
+      dueNext7: supply?.releasable === null || supply === null ? "—" : String(supply.releasable),
       overdueIsNegative: (supply?.short ?? 0) > 0,
       labels: {
-        open: t('supply.stocked'),
-        overdue: t('supply.short'),
-        due7: t('supply.releasable'),
-        cta: t('supply.openAvailability'),
+        open: t("supply.stocked"),
+        overdue: t("supply.short"),
+        due7: t("supply.releasable"),
+        cta: t("supply.openAvailability"),
       },
-      href: '/reports/availability',
+      href: "/reports/availability",
     },
-    replenishmentTitle: t('replenishment.title'),
+    replenishmentTitle: t("replenishment.title"),
     replenishmentPulse: {
       outstanding: String(supply?.reorder ?? 0),
       overdue: String(supply?.unset ?? 0),
       dueNext7: String(supply?.onOrder ?? 0),
       overdueIsNegative: (supply?.unset ?? 0) > 0,
       labels: {
-        open: t('supply.toReorder'),
-        overdue: t('supply.noPoints'),
-        due7: t('supply.onOrder'),
-        cta: t('supply.openReplenishment'),
+        open: t("supply.toReorder"),
+        overdue: t("supply.noPoints"),
+        due7: t("supply.onOrder"),
+        cta: t("supply.openReplenishment"),
       },
-      href: '/reports/replenishment',
+      href: "/reports/replenishment",
     },
     supplyReady: supply !== null,
-    supplyRefusal: supplyRefusal ? [{ tone: 'negative', text: supplyRefusal, href: '/reports/availability' }] : [],
+    supplyRefusal: supplyRefusal
+      ? [{ tone: "negative", text: supplyRefusal, href: "/reports/availability" }]
+      : [],
     showSupplyRefusal: supplyRefusal !== null,
-    setupTitle: t('setup.warehouses'),
-    rulesTitle: t('setup.rules'),
+    setupTitle: t("setup.warehouses"),
+    rulesTitle: t("setup.rules"),
     showFulfillment,
-    showCarriers: fulfillmentOn && can(authz, 'admin.setup.manage'),
-    fulfillmentTitle: t('fulfillment.title'),
-    fulfillmentHint: t('fulfillment.hint'),
+    showCarriers: fulfillmentOn && can(authz, "admin.setup.manage"),
+    fulfillmentTitle: t("fulfillment.title"),
+    fulfillmentHint: t("fulfillment.hint"),
     fulfillmentQueue: queue
       ? [
           {
-            href: '/picks?stage=open',
-            label: t('fulfillment.openPickLists'),
-            iconKey: 'list-checks',
+            href: "/picks?stage=open",
+            label: t("fulfillment.openPickLists"),
+            iconKey: "list-checks",
             badge: {
               value: String(queue.openPickLists),
-              hint: t('fulfillment.openPickListsHint'),
-              tone: queue.openPickLists > 0 ? 'warning' : 'positive',
+              hint: t("fulfillment.openPickListsHint"),
+              tone: queue.openPickLists > 0 ? "warning" : "positive",
             },
           },
           {
-            href: '/shipments?stage=open',
-            label: t('fulfillment.shipmentsToComplete'),
-            iconKey: 'truck',
+            href: "/shipments?stage=open",
+            label: t("fulfillment.shipmentsToComplete"),
+            iconKey: "truck",
             badge: {
               value: String(queue.shipmentsToComplete),
-              hint: t('fulfillment.shipmentsToCompleteHint'),
-              tone: queue.shipmentsToComplete > 0 ? 'warning' : 'positive',
+              hint: t("fulfillment.shipmentsToCompleteHint"),
+              tone: queue.shipmentsToComplete > 0 ? "warning" : "positive",
             },
           },
         ]
       : [],
-    carriersTitle: t('setup.carriers'),
-    newDrawer: showNew ? { locations, closeHref: '/warehouse', canManageLocations: can(authz, 'admin.setup.manage') } : null,
+    carriersTitle: t("setup.carriers"),
+    newDrawer: showNew
+      ? { locations, closeHref: "/warehouse", canManageLocations: can(authz, "admin.setup.manage") }
+      : null,
     showNewDrawer: showNew,
-  }
+  };
 }
 
-const f = ref<WarehouseData>()
+const f = ref<WarehouseData>();
 
 export function warehouseSpec(data: WarehouseData): PageSpec {
   return page({
-    route: '/warehouse',
-    layout: 'list',
+    route: "/warehouse",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-3",
         actions: [
-          widget('new-warehouse-button', { label: data.newLabel }, f('canManage')),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("new-warehouse-button", { label: data.newLabel }, f("canManage")),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
-      grid('flex flex-col gap-4', [
-        grid('grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3', [
-          statTile({ iconKey: 'package', accent: 'emerald', label: f('activeLabel'), value: f('activeValue') }),
-          statTile({ iconKey: 'triangle-alert', accent: 'amber', label: f('suspendedLabel'), value: f('suspendedValue') }),
-          statTile({ iconKey: 'clipboard', accent: 'sky', label: f('stagedLabel'), value: f('stagedValue'), tone: f('stagedTone') }),
+      grid("flex flex-col gap-4", [
+        grid("grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3", [
+          statTile({
+            iconKey: "package",
+            accent: "emerald",
+            label: f("activeLabel"),
+            value: f("activeValue"),
+          }),
+          statTile({
+            iconKey: "triangle-alert",
+            accent: "amber",
+            label: f("suspendedLabel"),
+            value: f("suspendedValue"),
+          }),
+          statTile({
+            iconKey: "clipboard",
+            accent: "sky",
+            label: f("stagedLabel"),
+            value: f("stagedValue"),
+            tone: f("stagedTone"),
+          }),
         ]),
-        grid('grid grid-cols-1 gap-5 lg:grid-cols-3', [
+        grid("grid grid-cols-1 gap-5 lg:grid-cols-3", [
           panel({
-            title: f('tieOutTitle'),
-            iconKey: 'building',
-            hint: f('tieOutHint'),
-            className: 'self-start lg:col-span-2',
+            title: f("tieOutTitle"),
+            iconKey: "building",
+            hint: f("tieOutHint"),
+            className: "self-start lg:col-span-2",
             blocks: [
-              widgetBlock('warehouses-panel', {
+              widgetBlock("warehouses-panel", {
                 rows: data.rows,
                 canManage: data.canManage,
                 currentParams: data.currentParams,
@@ -320,72 +371,99 @@ export function warehouseSpec(data: WarehouseData): PageSpec {
             ],
           }),
           panel({
-            title: f('queueTitle'),
-            iconKey: 'clipboard',
-            hint: f('queueHint'),
-            className: 'self-start',
-            blocks: [widgetBlock('warehouse-execution-queue', { rows: data.staged,receipts:data.receipts, canPost: data.canPost })],
+            title: f("queueTitle"),
+            iconKey: "clipboard",
+            hint: f("queueHint"),
+            className: "self-start",
+            blocks: [
+              widgetBlock("warehouse-execution-queue", {
+                rows: data.staged,
+                receipts: data.receipts,
+                canPost: data.canPost,
+              }),
+            ],
           }),
         ]),
-        grid('grid grid-cols-1 gap-5 lg:grid-cols-2', [
+        grid("grid grid-cols-1 gap-5 lg:grid-cols-2", [
           panel({
-            title: f('availabilityTitle'),
-            iconKey: 'package',
-            hint: f('supplyHint'),
-            className: 'self-start',
-            when: f('supplyReady'),
-            blocks: [widgetBlock('ap-pulse', data.availabilityPulse)],
+            title: f("availabilityTitle"),
+            iconKey: "package",
+            hint: f("supplyHint"),
+            className: "self-start",
+            when: f("supplyReady"),
+            blocks: [widgetBlock("ap-pulse", data.availabilityPulse)],
           }),
           panel({
-            title: f('replenishmentTitle'),
-            iconKey: 'clipboard',
-            hint: f('supplyHint'),
-            className: 'self-start',
-            when: f('supplyReady'),
-            blocks: [widgetBlock('ap-pulse', data.replenishmentPulse)],
+            title: f("replenishmentTitle"),
+            iconKey: "clipboard",
+            hint: f("supplyHint"),
+            className: "self-start",
+            when: f("supplyReady"),
+            blocks: [widgetBlock("ap-pulse", data.replenishmentPulse)],
           }),
           panel({
-            title: f('availabilityTitle'),
-            iconKey: 'triangle-alert',
-            hint: f('supplyHint'),
-            className: 'self-start lg:col-span-2',
-            when: f('showSupplyRefusal'),
-            blocks: [widgetBlock('attention-list', { items: data.supplyRefusal, allClear: '' })],
+            title: f("availabilityTitle"),
+            iconKey: "triangle-alert",
+            hint: f("supplyHint"),
+            className: "self-start lg:col-span-2",
+            when: f("showSupplyRefusal"),
+            blocks: [widgetBlock("attention-list", { items: data.supplyRefusal, allClear: "" })],
           }),
         ]),
         panel({
-          title: f('fulfillmentTitle'),
-          iconKey: 'list-checks',
-          hint: f('fulfillmentHint'),
-          when: f('showFulfillment'),
-          blocks: [widgetBlock('live-directory', { items: data.fulfillmentQueue })],
+          title: f("fulfillmentTitle"),
+          iconKey: "list-checks",
+          hint: f("fulfillmentHint"),
+          when: f("showFulfillment"),
+          blocks: [widgetBlock("live-directory", { items: data.fulfillmentQueue })],
         }),
         panel({
-          title: f('setupTitle'),
-          iconKey: 'settings',
-          when: f('canSetup'),
-          blocks: [widgetBlock('setup-section', { entityKey: 'warehouses', basePath: '/warehouse', rowParam: 'warehouse', sp: data.currentParams })],
+          title: f("setupTitle"),
+          iconKey: "settings",
+          when: f("canSetup"),
+          blocks: [
+            widgetBlock("setup-section", {
+              entityKey: "warehouses",
+              basePath: "/warehouse",
+              rowParam: "warehouse",
+              sp: data.currentParams,
+            }),
+          ],
         }),
         panel({
-          title: f('rulesTitle'),
-          iconKey: 'settings',
-          when: f('canSetup'),
-          blocks: [widgetBlock('setup-section', { entityKey: 'putaway-rules', basePath: '/warehouse', rowParam: 'rule', sp: data.currentParams })],
+          title: f("rulesTitle"),
+          iconKey: "settings",
+          when: f("canSetup"),
+          blocks: [
+            widgetBlock("setup-section", {
+              entityKey: "putaway-rules",
+              basePath: "/warehouse",
+              rowParam: "rule",
+              sp: data.currentParams,
+            }),
+          ],
         }),
         panel({
-          title: f('carriersTitle'),
-          iconKey: 'settings',
-          when: f('showCarriers'),
-          blocks: [widgetBlock('setup-section', { entityKey: 'carriers', basePath: '/warehouse', rowParam: 'carrier', sp: data.currentParams })],
+          title: f("carriersTitle"),
+          iconKey: "settings",
+          when: f("showCarriers"),
+          blocks: [
+            widgetBlock("setup-section", {
+              entityKey: "carriers",
+              basePath: "/warehouse",
+              rowParam: "carrier",
+              sp: data.currentParams,
+            }),
+          ],
         }),
       ]),
       {
-        ...widgetBlock('new-warehouse-drawer', {
+        ...widgetBlock("new-warehouse-drawer", {
           locations: data.newDrawer?.locations ?? [],
-          closeHref: data.newDrawer?.closeHref ?? '/warehouse',
+          closeHref: data.newDrawer?.closeHref ?? "/warehouse",
         }),
-        when: f('showNewDrawer'),
+        when: f("showNewDrawer"),
       },
     ],
-  })
+  });
 }

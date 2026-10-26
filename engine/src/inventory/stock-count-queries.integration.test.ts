@@ -5,11 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { receiveInventory } from "./movements.ts";
-import {
-  createStockCount,
-  recordCountedQuantity,
-  startStockCount,
-} from "./stock-counts.ts";
+import { createStockCount, recordCountedQuantity, startStockCount } from "./stock-counts.ts";
 import { listStockCounts } from "./stock-count-queries.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -84,8 +80,11 @@ test("offsetting variances stay visibly discrepant; no cross-item sum is shown",
       ],
     });
     await startStockCount(org.orgId, null, count.id);
-    const lines = await db.execute<{ id: string; item_id: string }>(sql`
-      select id, item_id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`, "objects");
+    const lines = await db.execute<{ id: string; item_id: string }>(
+      sql`
+      select id, item_id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`,
+      "objects",
+    );
     // −5 on one line, +5 on the other: a quantity sum would read 0.
     for (const line of lines) {
       await recordCountedQuantity(org.orgId, null, {
@@ -135,7 +134,11 @@ test("cursor and URL pages reach every row with totals and search evidence", asy
       for (const row of page.counts) {
         assert.ok(!seen.has(row.id), `count ${row.id} repeated across pages`);
         seen.add(row.id);
-        assert.equal(row.id, ids[position]!, `page ${pages} row ${position} must replay the seeded order`);
+        assert.equal(
+          row.id,
+          ids[position]!,
+          `page ${pages} row ${position} must replay the seeded order`,
+        );
         position += 1;
       }
       cursor = page.nextCursor;
@@ -149,7 +152,10 @@ test("cursor and URL pages reach every row with totals and search evidence", asy
 
     const numericPage = await listStockCounts(org.orgId, { page: 2, limit: 10 });
     assert.equal(numericPage.totalCount, 505);
-    assert.deepEqual(numericPage.counts.map((row) => row.id), ids.slice(10, 20));
+    assert.deepEqual(
+      numericPage.counts.map((row) => row.id),
+      ids.slice(10, 20),
+    );
     assert.equal(numericPage.nextCursor, null, "numeric paging does not mix in cursor state");
     const searched = await listStockCounts(org.orgId, { page: 1, limit: 10, search: org.date });
     assert.equal(searched.totalCount, 1, "literal date search counts only its matching rows");
@@ -162,7 +168,10 @@ test("cursor and URL pages reach every row with totals and search evidence", asy
 test("an invalid page cursor refuses instead of silently restarting", async () => {
   const org = await createScratchOrg();
   try {
-    await assert.rejects(listStockCounts(org.orgId, { cursor: "not-a-cursor" }), /page cursor is invalid/i);
+    await assert.rejects(
+      listStockCounts(org.orgId, { cursor: "not-a-cursor" }),
+      /page cursor is invalid/i,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

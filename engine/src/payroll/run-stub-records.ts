@@ -9,12 +9,32 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { requireDerivedQuantityEvidence } from "./derived-quantity.ts";
 import { PayrollError } from "./error.ts";
-import { resolveComponentStatutoryTreatments, requireComponentStatutoryTreatment } from "./component-statutory-treatment.ts";
+import {
+  resolveComponentStatutoryTreatments,
+  requireComponentStatutoryTreatment,
+} from "./component-statutory-treatment.ts";
 import { sum } from "../money/money.ts";
 import { addMoney, sumMoney, type Money } from "../money/brands.ts";
-import { jurisdictionKey, labourJurisdictionProblem, PayrollJurisdictionError, payrollJurisdictionDeclared, payrollPack, resolvePayrollStatutoryReportingCode, type PayrollAssessedOn } from "./packs.ts";
-import { resolveStatutoryHolidayPay, undeclaredJurisdictionHolidayConflict, type StatutoryHolidayEligibilityFacts, type StatutoryHolidayEarningLine } from "./holidays.ts";
-import { planMovementsForStub, recordEntitlementMovements, type EntitlementPlan } from "./entitlements.ts";
+import {
+  jurisdictionKey,
+  labourJurisdictionProblem,
+  PayrollJurisdictionError,
+  payrollJurisdictionDeclared,
+  payrollPack,
+  resolvePayrollStatutoryReportingCode,
+  type PayrollAssessedOn,
+} from "./packs.ts";
+import {
+  resolveStatutoryHolidayPay,
+  undeclaredJurisdictionHolidayConflict,
+  type StatutoryHolidayEligibilityFacts,
+  type StatutoryHolidayEarningLine,
+} from "./holidays.ts";
+import {
+  planMovementsForStub,
+  recordEntitlementMovements,
+  type EntitlementPlan,
+} from "./entitlements.ts";
 import { type EarningsAssessedLine } from "./limits.ts";
 import { payrollHourlyWage, type PayableRate } from "./rate.ts";
 import type { BankCashFundingSplit, BankCashPayDateValuation } from "./run-bank-cash-evidence.ts";
@@ -27,7 +47,8 @@ import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
  * carries no behavior, only shape.
  */
 /** Which rung of the expense-account resolution answered for a stub line. */
-export type ExpenseAccountSource = "item" | "component" | "department" | "org_default" | "entitlement_plan";
+export type ExpenseAccountSource =
+  "item" | "component" | "department" | "org_default" | "entitlement_plan";
 
 /**
  * Per-program applicability stamped from a component's effective-dated
@@ -50,20 +71,32 @@ export function programApplicabilityFromExclusions(
 }
 
 /** Stamp each component-backed earning with its pay-date treatment at the worker's compensation scope. */
-export async function stampEarningLineStatutoryTreatments(tx: Pick<typeof db, "execute">, input: {
-  orgId: string;
-  payDate: string;
-  workerCompGroupId: string | null;
-  lines: Line[];
-}): Promise<void> {
-  const componentIds = input.lines.filter(line => line.kind === "earning" && line.componentId !== null)
-    .map(line => line.componentId!);
+export async function stampEarningLineStatutoryTreatments(
+  tx: Pick<typeof db, "execute">,
+  input: {
+    orgId: string;
+    payDate: string;
+    workerCompGroupId: string | null;
+    lines: Line[];
+  },
+): Promise<void> {
+  const componentIds = input.lines
+    .filter((line) => line.kind === "earning" && line.componentId !== null)
+    .map((line) => line.componentId!);
   const treatments = await resolveComponentStatutoryTreatments(
-    tx, input.orgId, input.payDate, componentIds, input.workerCompGroupId,
+    tx,
+    input.orgId,
+    input.payDate,
+    componentIds,
+    input.workerCompGroupId,
   );
   for (const line of input.lines) {
     if (line.kind !== "earning" || line.componentId === null) continue;
-    const treatment = requireComponentStatutoryTreatment(line.componentId, treatments, input.payDate);
+    const treatment = requireComponentStatutoryTreatment(
+      line.componentId,
+      treatments,
+      input.payDate,
+    );
     line.programApplicability = programApplicabilityFromExclusions(treatment.program_exclusions);
     // A funding split separates how an earning is funded, never its
     // statutory policy: both portions keep the component's dated
@@ -94,18 +127,25 @@ export interface Line {
   // it lands on a line (divideMoney/allocateProportionally/entitlementMoneyValue
   // outputs, or roundMoney/mulPercent-closed values). Hours and rates stay
   // plain strings: they are quantities, not money.
-  description: string; hours?: string; rate?: string; amount: Money;
+  description: string;
+  hours?: string;
+  rate?: string;
+  amount: Money;
   /** Civil dates that substantiate when an earning amount was earned. */
-  earnedFrom?: string | null; earnedTo?: string | null;
+  earnedFrom?: string | null;
+  earnedTo?: string | null;
   /** Covered configuration dates for a recurring component or elected benefit; independent of when wages were earned. */
-  sourceEffectiveFrom?: string; sourceEffectiveTo?: string;
+  sourceEffectiveFrom?: string;
+  sourceEffectiveTo?: string;
   /** Only fixed amounts use the configuration window as their monetary denominator. */
   sourceProratedByCoverage?: boolean;
   /** Native one-off input identity distinguishes a top-up from recurring configuration. */
   runAdjustmentId?: string;
   /** Native claim of an independently approved unpaid holiday entitlement. */
   holidayAllocationId?: string;
-  projectId?: string | null; departmentId?: string | null; timeTypeId?: string | null;
+  projectId?: string | null;
+  departmentId?: string | null;
+  timeTypeId?: string | null;
   /** Service item the hours were worked on; only time-driven earning lines
    * carry one. Absent everywhere else — never inferred, never defaulted. */
   itemId?: string | null;
@@ -119,7 +159,9 @@ export interface Line {
   expenseAccountSource?: ExpenseAccountSource | null;
   expenseAccountEvidence?: { reason: string; reference: string } | null;
   sequence: number;
-  taxable?: boolean; pensionable?: boolean; insurable?: boolean;
+  taxable?: boolean;
+  pensionable?: boolean;
+  insurable?: boolean;
   /**
    * Per-program applicability for contribution programs the pack declares
    * (see `PayrollContributionProgram`): the earning type contributes to the
@@ -131,12 +173,19 @@ export interface Line {
    * carries no map and defaults to included, like the sibling flags.
    */
   programApplicability?: Record<string, boolean>;
-  vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;
+  vacationable?: boolean;
+  nonPeriodic?: boolean;
+  taxTreatment?: string;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
   /** Federal exemption class once the earning-component classification lands; absent until then. */
   statutoryExemptionCategory?: UsStatutoryExemptionCategory | null;
   statutoryReportingCategory?: string | null;
-  statutoryReportingCode?: { formCode: string; boxCode: string; code: string; label: string } | null;
+  statutoryReportingCode?: {
+    formCode: string;
+    boxCode: string;
+    code: string;
+    label: string;
+  } | null;
   accrualOnly?: boolean;
   /**
    * Set on every pack-emitted statutory line: what the country pack declares
@@ -268,8 +317,18 @@ export async function statutoryHolidayLinesForStub(
   },
 ): Promise<StatutoryHolidayEarningLine[]> {
   const {
-    orgId, documentId, employeePartyId, employeeName,
-    emp, country, subsidiaryId, province, periodStart, periodEnd, payRate, need,
+    orgId,
+    documentId,
+    employeePartyId,
+    employeeName,
+    emp,
+    country,
+    subsidiaryId,
+    province,
+    periodStart,
+    periodEnd,
+    payRate,
+    need,
     allowedSubsidiaryIds,
     holidayEligibility,
     periodRegularEarnings,
@@ -277,10 +336,15 @@ export async function statutoryHolidayLinesForStub(
     currentEarningLines,
   } = args;
   if (allowedSubsidiaryIds != null) {
-    const employee = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+    const employee = (
+      await tx.execute<{ subsidiary_id: string | null }>(
+        sql`
       select subsidiary_id from parties
        where org_id = ${orgId} and id = ${employeePartyId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!employee || !payrollSubsidiaryInScope(allowedSubsidiaryIds, employee.subsidiary_id)) {
       throw new PayrollError("employee not found");
     }
@@ -299,11 +363,18 @@ export async function statutoryHolidayLinesForStub(
   // exact substitution the attribute exists to prevent. The API validates it
   // with the same function (labourJurisdictionProblem), so reaching this is a
   // direct database write.
-  const employeeJurisdiction = resolveEmployeeJurisdiction({ country, province, emp, employeeName });
+  const employeeJurisdiction = resolveEmployeeJurisdiction({
+    country,
+    province,
+    emp,
+    employeeName,
+  });
   if (!payrollJurisdictionDeclared(employeeJurisdiction)) {
     const conflict = undeclaredJurisdictionHolidayConflict({
-      country, jurisdiction: employeeJurisdiction,
-      from: periodStart, to: periodEnd,
+      country,
+      jurisdiction: employeeJurisdiction,
+      from: periodStart,
+      to: periodEnd,
     });
     if (conflict) throw new PayrollError(conflict.message);
     return [];
@@ -330,7 +401,8 @@ export async function statutoryHolidayLinesForStub(
     salaried,
     hourlyRate: holidayRate,
     paidOnCommission: holidayEligibility?.[employeePartyId]?.paidOnCommission,
-    absentWithoutConsentByHoliday: holidayEligibility?.[employeePartyId]?.absentWithoutConsentByHoliday,
+    absentWithoutConsentByHoliday:
+      holidayEligibility?.[employeePartyId]?.absentWithoutConsentByHoliday,
     entitledDayAttestations: holidayEligibility?.[employeePartyId]?.entitledDayAttestations,
     periodRegularEarnings,
     occupationClass,
@@ -342,15 +414,32 @@ export async function statutoryHolidayLinesForStub(
 export async function insertPayStubRow(
   tx: Pick<typeof db, "execute">,
   stub: {
-    orgId: string; actorId: string; documentId: string; employeePartyId: string; employmentId: string;
-    country: string; filingAccountId: string | null; province: string; periodsPerYear: number; payDate: string; taxYear: number;
-    federalClaim: string; provincialClaim: string; currency: string | null;
-    gross: string; pensionable: string; insurable: string; net: string;
-    employerCost: string; vacationAccrued: string;
-    factors: Record<string, string>; paymentMethod: string;
+    orgId: string;
+    actorId: string;
+    documentId: string;
+    employeePartyId: string;
+    employmentId: string;
+    country: string;
+    filingAccountId: string | null;
+    province: string;
+    periodsPerYear: number;
+    payDate: string;
+    taxYear: number;
+    federalClaim: string;
+    provincialClaim: string;
+    currency: string | null;
+    gross: string;
+    pensionable: string;
+    insurable: string;
+    net: string;
+    employerCost: string;
+    vacationAccrued: string;
+    factors: Record<string, string>;
+    paymentMethod: string;
   },
 ): Promise<string> {
-  const inserted = (await tx.execute<{ id: string }>(sql`
+  const inserted = await tx.execute<{ id: string }>(
+    sql`
     insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, country, country_source, filing_account_id, filing_account_source, province,
                            periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
                            currency_code, gross, pensionable_earnings, insurable_earnings,
@@ -363,7 +452,9 @@ export async function insertPayStubRow(
             ${stub.paymentMethod},
             ${stub.actorId}, ${stub.actorId})
     returning id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return inserted[0]!.id;
 }
 
@@ -372,19 +463,24 @@ export async function insertPayStubLineRows(
   tx: Pick<typeof db, "execute">,
   args: { orgId: string; stubId: string; actorId: string; country: string; payDate: string },
   lines: readonly Line[],
-): Promise<Map<string,string>> {
-  const entitlementLineIds=new Map<string,string>();
+): Promise<Map<string, string>> {
+  const entitlementLineIds = new Map<string, string>();
   for (const line of lines) {
     requireDerivedQuantityEvidence(line);
-    const reporting = line.statutoryReportingCode ?? resolvePayrollStatutoryReportingCode(
-      args.country, line.statutoryReportingCategory, args.payDate,
-    );
+    const reporting =
+      line.statutoryReportingCode ??
+      resolvePayrollStatutoryReportingCode(
+        args.country,
+        line.statutoryReportingCategory,
+        args.payDate,
+      );
     // The expense stamp rides with the line it was resolved for: re-deriving
     // a draft deletes and reinserts these rows, so the expense immutability
     // guard (migration 0180) only ever fires on a committed run's history.
     // Lines without a stamp keep source 'unknown' with null account/evidence
     // and post through the unchanged component-then-default fallback.
-    const insertedLine = await tx.execute<{ id: string }>(sql`
+    const insertedLine = await tx.execute<{ id: string }>(
+      sql`
       insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, rate,
                                   earned_from, earned_to, derived_quantity, derived_rule_code,
                                   amount, project_id, department_id, time_type_id, item_id, sequence,
@@ -399,29 +495,59 @@ export async function insertPayStubLineRows(
               ${line.itemId ?? null}, ${line.sequence},
               ${line.expenseAccountId ?? null}, ${line.expenseAccountSource ?? "unknown"},
               ${line.expenseAccountEvidence ? JSON.stringify(line.expenseAccountEvidence) : null}::jsonb,
-              ${reporting ? JSON.stringify({
-                formCode: reporting.formCode, boxCode: reporting.boxCode,
-                code: reporting.code, label: reporting.label,
-              }) : null}::jsonb,
+              ${
+                reporting
+                  ? JSON.stringify({
+                      formCode: reporting.formCode,
+                      boxCode: reporting.boxCode,
+                      code: reporting.code,
+                      label: reporting.label,
+                    })
+                  : null
+              }::jsonb,
               ${line.paymentKind ?? "cash"}, ${line.nonCashAccountId ?? null},
               ${args.actorId}, ${args.actorId}) returning id
-    `, "objects");
-    if (!insertedLine[0]) throw new PayrollError("The calculated payroll line was not stored; retry calculation before committing.");
-    if (line.entitlementMovementKey && insertedLine[0]) entitlementLineIds.set(line.entitlementMovementKey,insertedLine[0].id);
+    `,
+      "objects",
+    );
+    if (!insertedLine[0])
+      throw new PayrollError(
+        "The calculated payroll line was not stored; retry calculation before committing.",
+      );
+    if (line.entitlementMovementKey && insertedLine[0])
+      entitlementLineIds.set(line.entitlementMovementKey, insertedLine[0].id);
     if (line.benefitAllocationId) {
       const persisted = insertedLine[0];
-      if (!persisted) throw new PayrollError('The recurring benefit payroll line was not stored — retry calculation before committing');
-      const linked = await tx.execute(sql`update pay_run_benefit_allocations set pay_stub_line_id=${persisted.id},amount=${line.amount},updated_by=${args.actorId},updated_at=now()
-        where org_id=${args.orgId} and id=${line.benefitAllocationId} and status='calculated' returning id`, "objects");
-      if (linked.length !== 1) throw new PayrollError('The recurring benefit allocation could not link to its native payroll line — retry calculation before committing');
+      if (!persisted)
+        throw new PayrollError(
+          "The recurring benefit payroll line was not stored — retry calculation before committing",
+        );
+      const linked = await tx.execute(
+        sql`update pay_run_benefit_allocations set pay_stub_line_id=${persisted.id},amount=${line.amount},updated_by=${args.actorId},updated_at=now()
+        where org_id=${args.orgId} and id=${line.benefitAllocationId} and status='calculated' returning id`,
+        "objects",
+      );
+      if (linked.length !== 1)
+        throw new PayrollError(
+          "The recurring benefit allocation could not link to its native payroll line — retry calculation before committing",
+        );
     }
     if (line.holidayAllocationId) {
       const persisted = insertedLine[0];
-      if (!persisted) throw new PayrollError("The approved holiday payroll line was not stored; retry calculation.");
-      const linked = await tx.execute(sql`update pay_run_holiday_allocations set pay_stub_line_id=${persisted.id},updated_by=${args.actorId},updated_at=now()
+      if (!persisted)
+        throw new PayrollError(
+          "The approved holiday payroll line was not stored; retry calculation.",
+        );
+      const linked = await tx.execute(
+        sql`update pay_run_holiday_allocations set pay_stub_line_id=${persisted.id},updated_by=${args.actorId},updated_at=now()
         where org_id=${args.orgId} and id=${line.holidayAllocationId} and status='calculated'
-          and amount=${line.amount} and hours=${line.hours ?? null} and rate=${line.rate ?? null} returning id`, "objects");
-      if (linked.length !== 1) throw new PayrollError("The approved holiday claim no longer matches its native payroll line; review payroll earning limits and recalculate.");
+          and amount=${line.amount} and hours=${line.hours ?? null} and rate=${line.rate ?? null} returning id`,
+        "objects",
+      );
+      if (linked.length !== 1)
+        throw new PayrollError(
+          "The approved holiday claim no longer matches its native payroll line; review payroll earning limits and recalculate.",
+        );
     }
   }
   return entitlementLineIds;
@@ -443,23 +569,30 @@ export async function insertPayStubLineRows(
 export async function persistEntitlementMovements(
   tx: Pick<typeof db, "execute">,
   args: {
-    orgId: string; actorId: string; documentId: string;
-    employeePartyIds: [string]; simulate: boolean; stubLineIds?: ReadonlyMap<string,string>;
+    orgId: string;
+    actorId: string;
+    documentId: string;
+    employeePartyIds: [string];
+    simulate: boolean;
+    stubLineIds?: ReadonlyMap<string, string>;
     movements: Awaited<ReturnType<typeof planMovementsForStub>>["movements"];
   },
 ): Promise<void> {
   if (args.simulate) return;
   await recordEntitlementMovements(tx, {
-    orgId: args.orgId, actorId: args.actorId, payRunDocumentId: args.documentId,
+    orgId: args.orgId,
+    actorId: args.actorId,
+    payRunDocumentId: args.documentId,
     employeePartyIds: args.employeePartyIds,
-    movements: args.movements, stubLineIds: args.stubLineIds,
+    movements: args.movements,
+    stubLineIds: args.stubLineIds,
   });
 }
 
 /** Gross earning base: every earning line that is real pay. Accrual-only
  * employer lines carry no employee money and stay out of every basis. */
 export const earningsBase = (lines: readonly Line[]): Money =>
-    sumMoney(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
+  sumMoney(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
 
 // Hours ACTUALLY WORKED — earning lines only, matching cappableHourLines and
 // the hourLines the per-hour fringe allocates across.
@@ -471,7 +604,7 @@ export const earningsBase = (lines: readonly Line[]): Money =>
 // per-hour fringes is the ordinary case in union construction, and the error
 // grew with every additional one.
 export const totalHours = (lines: readonly Line[]): string =>
-    sum(lines.filter((l) => l.kind === "earning" && l.hours).map((l) => l.hours!));
+  sum(lines.filter((l) => l.kind === "earning" && l.hours).map((l) => l.hours!));
 
 /**
  * The current earnings collapsed to one bucket per project/department — the
@@ -479,52 +612,61 @@ export const totalHours = (lines: readonly Line[]): string =>
  * bucket is deliberately included so an overhead share stays overhead
  * instead of being pushed onto whichever jobs happen to be on the stub.
  */
-export const earningJobBuckets = (lines: readonly Line[]): {
-  projectId: string | null; departmentId: string | null; weight: Money;
+export const earningJobBuckets = (
+  lines: readonly Line[],
+): {
+  projectId: string | null;
+  departmentId: string | null;
+  weight: Money;
 }[] => {
-    const byDimension = new Map<string, {
-      projectId: string | null; departmentId: string | null; weight: Money;
-    }>();
-    for (const line of lines) {
-      if (line.kind !== "earning" || line.accrualOnly) continue;
-      const key = `${line.projectId ?? ""}|${line.departmentId ?? ""}`;
-      const existing = byDimension.get(key);
-      if (existing) existing.weight = addMoney(existing.weight, line.amount);
-      else {
-        byDimension.set(key, {
-          projectId: line.projectId ?? null,
-          departmentId: line.departmentId ?? null,
-          weight: line.amount,
-        });
-      }
+  const byDimension = new Map<
+    string,
+    {
+      projectId: string | null;
+      departmentId: string | null;
+      weight: Money;
     }
-    return [...byDimension.values()];
+  >();
+  for (const line of lines) {
+    if (line.kind !== "earning" || line.accrualOnly) continue;
+    const key = `${line.projectId ?? ""}|${line.departmentId ?? ""}`;
+    const existing = byDimension.get(key);
+    if (existing) existing.weight = addMoney(existing.weight, line.amount);
+    else {
+      byDimension.set(key, {
+        projectId: line.projectId ?? null,
+        departmentId: line.departmentId ?? null,
+        weight: line.amount,
+      });
+    }
+  }
+  return [...byDimension.values()];
 };
 
 // Hours behind a capped basis. "Overtime or double time charged to a job is
 // exempt from the 40-hour cap" is a property of the hour, not of the
 // component, so the predicate lives here and the engine stays pure.
 export const cappableHourLines = (lines: readonly Line[]) =>
-    lines
-      .filter((l) => l.kind === "earning" && l.hours && !l.accrualOnly)
-      .map((l) => ({
-        hours: l.hours!,
-        amount: l.amount,
-        exemptFromHoursCap:
-          (l.classification === "overtime" || l.classification === "double_time")
-          && l.projectId != null,
-      }));
+  lines
+    .filter((l) => l.kind === "earning" && l.hours && !l.accrualOnly)
+    .map((l) => ({
+      hours: l.hours!,
+      amount: l.amount,
+      exemptFromHoursCap:
+        (l.classification === "overtime" || l.classification === "double_time") &&
+        l.projectId != null,
+    }));
 
 /** Every earnings-assessed line as the invariant check compares them. */
 export const earningsAssessedSnapshot = (lines: readonly Line[]): EarningsAssessedLine[] =>
-    lines
-      .filter((l) => l.assessedOn === "earnings")
-      .map((l) => ({
-        component: l.description,
-        amount: l.amount,
-        projectId: l.projectId ?? null,
-        departmentId: l.departmentId ?? null,
-      }));
+  lines
+    .filter((l) => l.assessedOn === "earnings")
+    .map((l) => ({
+      component: l.description,
+      amount: l.amount,
+      projectId: l.projectId ?? null,
+      departmentId: l.departmentId ?? null,
+    }));
 
 /**
  * Periodic earnings for one stub: salary divided by the period count, or the
@@ -546,17 +688,23 @@ export const earningsAssessedSnapshot = (lines: readonly Line[]): EarningsAssess
  */
 export function resolveEarningExpenseAccount(args: {
   item: {
-    id: string; name: string;
-    accountId: string | null; accountNumber: string | null; accountName: string | null;
+    id: string;
+    name: string;
+    accountId: string | null;
+    accountNumber: string | null;
+    accountName: string | null;
   } | null;
   component: { id: string; name: string; expenseAccountId: string | null };
   wageDefaultAccountId: string | null;
 }): {
-  accountId: string; source: ExpenseAccountSource; evidence: { reason: string; reference: string };
+  accountId: string;
+  source: ExpenseAccountSource;
+  evidence: { reason: string; reference: string };
 } | null {
   if (args.item?.accountId) {
-    const label = [args.item.accountNumber, args.item.accountName].filter(Boolean).join(" · ")
-      || args.item.accountId;
+    const label =
+      [args.item.accountNumber, args.item.accountName].filter(Boolean).join(" · ") ||
+      args.item.accountId;
     return {
       accountId: args.item.accountId,
       source: "item",
@@ -583,7 +731,8 @@ export function resolveEarningExpenseAccount(args: {
       accountId: args.wageDefaultAccountId,
       source: "org_default",
       evidence: {
-        reason: "neither the item nor the component names an expense account; org wage expense default answers",
+        reason:
+          "neither the item nor the component names an expense account; org wage expense default answers",
         reference: "orgs.settings.payroll.wageExpenseAccountId",
       },
     };
@@ -604,7 +753,9 @@ export async function employeeHomeDepartment(
   args: { orgId: string; employeePartyId: string; employmentId: string | null; onDate: string },
 ): Promise<string | null> {
   if (args.employmentId) {
-    const assigned = (await tx.execute<{ department_id: string | null }>(sql`
+    const assigned = (
+      await tx.execute<{ department_id: string | null }>(
+        sql`
       select department_id::text as department_id
         from employment_assignment_versions
        where org_id = ${args.orgId} and employment_id = ${args.employmentId}
@@ -613,13 +764,21 @@ export async function employeeHomeDepartment(
          and (effective_to is null or effective_to > ${args.onDate}::date)
        order by version_no desc
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (assigned?.department_id) return assigned.department_id;
   }
-  const role = (await tx.execute<{ department_id: string | null }>(sql`
+  const role = (
+    await tx.execute<{ department_id: string | null }>(
+      sql`
     select department_id::text as department_id from employee_roles
      where org_id = ${args.orgId} and party_id = ${args.employeePartyId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return role?.department_id ?? null;
 }
 
@@ -645,13 +804,20 @@ export function stampEntitlementSettlementAccounts(args: {
   for (const line of lines) {
     if (!line.entitlementSettlementPlanId) continue;
     if (line.kind !== "earning") {
-      throw new PayrollError(`${employeeName}'s "${line.description}" settles an entitlement bank but is not an earning line — recalculate after correcting the plan's payout and deposit components`);
+      throw new PayrollError(
+        `${employeeName}'s "${line.description}" settles an entitlement bank but is not an earning line — recalculate after correcting the plan's payout and deposit components`,
+      );
     }
     const plan = plans.find((candidate) => candidate.id === line.entitlementSettlementPlanId);
-    if (!plan) throw new PayrollError(`${employeeName}'s "${line.description}" settles an entitlement plan that is no longer active — reactivate the plan or remove the payout before recalculating`);
+    if (!plan)
+      throw new PayrollError(
+        `${employeeName}'s "${line.description}" settles an entitlement plan that is no longer active — reactivate the plan or remove the payout before recalculating`,
+      );
     if (!plan.liabilityAccountId) {
       if (plan.accrualComponentId) {
-        throw new PayrollError(`Entitlement plan ${plan.code} accrues a liability but names no liability account — set the plan's liability account before paying from its bank`);
+        throw new PayrollError(
+          `Entitlement plan ${plan.code} accrues a liability but names no liability account — set the plan's liability account before paying from its bank`,
+        );
       }
       continue;
     }
@@ -659,7 +825,9 @@ export function stampEntitlementSettlementAccounts(args: {
       const accrual = components.find((component) => component.id === plan.accrualComponentId);
       const credited = accrual?.liability_account_id ? String(accrual.liability_account_id) : null;
       if (credited && credited !== plan.liabilityAccountId) {
-        throw new PayrollError(`Entitlement plan ${plan.code} accrues to a different liability account than the plan names — align the accrual component's liability account with the plan's before paying from its bank`);
+        throw new PayrollError(
+          `Entitlement plan ${plan.code} accrues to a different liability account than the plan names — align the accrual component's liability account with the plan's before paying from its bank`,
+        );
       }
     }
     line.expenseAccountId = plan.liabilityAccountId;
@@ -687,17 +855,25 @@ export async function stampDepartmentExpenseAccounts(args: {
   payDate: string;
 }): Promise<void> {
   const { tx, orgId, lines, payDate } = args;
-  const targets = lines.filter((line) =>
-    line.departmentId != null && line.componentId != null
-    && line.expenseAccountSource !== "item");
+  const targets = lines.filter(
+    (line) =>
+      line.departmentId != null && line.componentId != null && line.expenseAccountSource !== "item",
+  );
   if (targets.length === 0) return;
-  const pairs = [...new Map(targets.map((line) => [
-    `${line.componentId}|${line.departmentId}`,
-    { componentId: line.componentId!, departmentId: line.departmentId! },
-  ])).values()];
+  const pairs = [
+    ...new Map(
+      targets.map((line) => [
+        `${line.componentId}|${line.departmentId}`,
+        { componentId: line.componentId!, departmentId: line.departmentId! },
+      ]),
+    ).values(),
+  ];
   const mappings = await tx.execute<{
-    pay_component_id: string; department_id: string; expense_account_id: string;
-  }>(sql`
+    pay_component_id: string;
+    department_id: string;
+    expense_account_id: string;
+  }>(
+    sql`
     select distinct on (m.pay_component_id, m.department_id)
            m.pay_component_id, m.department_id, m.expense_account_id
       from pay_component_department_expenses m
@@ -709,14 +885,16 @@ export async function stampDepartmentExpenseAccounts(args: {
        and m.effective_from <= ${payDate}::date
        and (m.effective_to is null or ${payDate}::date <= m.effective_to)
      order by m.pay_component_id, m.department_id, m.effective_from desc
-  `, "objects");
+  `,
+    "objects",
+  );
   // The exclusion constraint admits one active window per component,
   // department and date, so at most one row answers per pair; the
   // effective_from ordering is a belt-and-braces tiebreak that can only
   // fire on rows written around the constraint.
-  const byPair = new Map(mappings.map((row) => [
-    `${row.pay_component_id}|${row.department_id}`, row.expense_account_id,
-  ]));
+  const byPair = new Map(
+    mappings.map((row) => [`${row.pay_component_id}|${row.department_id}`, row.expense_account_id]),
+  );
   for (const line of targets) {
     const accountId = byPair.get(`${line.componentId}|${line.departmentId}`);
     if (!accountId) continue;

@@ -1,17 +1,15 @@
-import { NextResponse } from 'next/server'
-import { authorizeUrl, type XeroApp } from '@openbooks/engine/connectors/xero'
-import { SecretIntegrityError, unsealJson } from '@openbooks/engine/platform/secrets'
-import { getConnection } from '@openbooks/engine/sync/connection'
-import { defineRoute } from '@/lib/api/route'
-import { storageIdentityError } from '../../../_storage-identity'
+import { NextResponse } from "next/server";
+import { authorizeUrl, type XeroApp } from "@openbooks/engine/connectors/xero";
+import { SecretIntegrityError, unsealJson } from "@openbooks/engine/platform/secrets";
+import { getConnection } from "@openbooks/engine/sync/connection";
+import { defineRoute } from "@/lib/api/route";
+import { storageIdentityError } from "../../../_storage-identity";
 import {
   attachConnectionOauthCookie,
   connectionOauthRedirectUri,
   mintConnectionOauthState,
-} from '../../_flow'
+} from "../../_flow";
 import { notFound } from "@/lib/api/responses";
-
-
 
 /**
  * Begin the Xero consent flow for one connection. The Xero app creds live on
@@ -20,36 +18,48 @@ import { notFound } from "@/lib/api/responses";
  * is not a CSRF nonce.
  */
 export const GET = defineRoute({
-  permission: 'admin.setup.manage',
-  feature: { none: 'External accounting connections are controlled by setup permission and have no separate organization feature gate.' },
-  scope: 'unrestricted',
-  handler: async ({ request: req, authz: gate }) => {
-  const connectionId = new URL(req.url).searchParams.get('connectionId')
-  if (!connectionId) return NextResponse.json({ error: 'connectionId is required' }, { status: 400 })
-
-  const conn = await getConnection(gate.user.orgId, connectionId).catch((e) => {
-    if (storageIdentityError(e)) return null
-    throw e
-  })
-  if (!conn || conn.source !== 'xero') return notFound("record")
-  // A tampered credential reads as a missing one — re-enter it — never a 500.
-  let secret: { clientId?: string } | null = null
-  try {
-    secret = conn.secrets == null ? null : unsealJson<{ clientId?: string }>(conn.secrets, { orgId: gate.user.orgId, purpose: "connection.secrets" })
-  } catch (error) {
-    if (!(error instanceof SecretIntegrityError)) throw error
-  }
-  if (!secret?.clientId) {
-    return NextResponse.json({ error: 'connection has no Client ID — save the app credentials first' }, { status: 400 })
-  }
-  const app: XeroApp = {
-    clientId: secret.clientId,
-    clientSecret: '',
-    redirectUri: connectionOauthRedirectUri('xero'),
-  }
-  const { state, nonce } = mintConnectionOauthState(gate.user.orgId, connectionId)
-  const response = NextResponse.redirect(authorizeUrl(app, state))
-  attachConnectionOauthCookie(response, nonce)
-  return response
+  permission: "admin.setup.manage",
+  feature: {
+    none: "External accounting connections are controlled by setup permission and have no separate organization feature gate.",
   },
-})
+  scope: "unrestricted",
+  handler: async ({ request: req, authz: gate }) => {
+    const connectionId = new URL(req.url).searchParams.get("connectionId");
+    if (!connectionId)
+      return NextResponse.json({ error: "connectionId is required" }, { status: 400 });
+
+    const conn = await getConnection(gate.user.orgId, connectionId).catch((e) => {
+      if (storageIdentityError(e)) return null;
+      throw e;
+    });
+    if (!conn || conn.source !== "xero") return notFound("record");
+    // A tampered credential reads as a missing one — re-enter it — never a 500.
+    let secret: { clientId?: string } | null = null;
+    try {
+      secret =
+        conn.secrets == null
+          ? null
+          : unsealJson<{ clientId?: string }>(conn.secrets, {
+              orgId: gate.user.orgId,
+              purpose: "connection.secrets",
+            });
+    } catch (error) {
+      if (!(error instanceof SecretIntegrityError)) throw error;
+    }
+    if (!secret?.clientId) {
+      return NextResponse.json(
+        { error: "connection has no Client ID — save the app credentials first" },
+        { status: 400 },
+      );
+    }
+    const app: XeroApp = {
+      clientId: secret.clientId,
+      clientSecret: "",
+      redirectUri: connectionOauthRedirectUri("xero"),
+    };
+    const { state, nonce } = mintConnectionOauthState(gate.user.orgId, connectionId);
+    const response = NextResponse.redirect(authorizeUrl(app, state));
+    attachConnectionOauthCookie(response, nonce);
+    return response;
+  },
+});

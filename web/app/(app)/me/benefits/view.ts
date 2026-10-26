@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -18,10 +18,10 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { loadMeBenefits, type MeBenefitsData } from '../../../../lib/hrm/self-service'
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { loadMeBenefits, type MeBenefitsData } from "../../../../lib/hrm/self-service";
 
 /**
  * Me benefits — the person's current elections with the stored payroll
@@ -31,165 +31,221 @@ import { loadMeBenefits, type MeBenefitsData } from '../../../../lib/hrm/self-se
  * when the hrm feature gate is on and the actor holds hrm.self.read.
  */
 
-import { loadMyBenefitAwards, type MyBenefitAwardsData } from '../../../../lib/hrm/my-benefit-awards'
+import {
+  loadMyBenefitAwards,
+  type MyBenefitAwardsData,
+} from "../../../../lib/hrm/my-benefit-awards";
 
-export type MeBenefitsPageData = MeBenefitsData & MyBenefitAwardsData
-const f = ref<MeBenefitsPageData>()
+export type MeBenefitsPageData = MeBenefitsData & MyBenefitAwardsData;
+const f = ref<MeBenefitsPageData>();
 
 export function meBenefitsSpec(data: MeBenefitsPageData): PageSpec {
   return page({
-    route: '/me/benefits',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/me/benefits",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
-          widget('link-button', { href: f('electHref'), label: f('electLabel') }),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("link-button", { href: f("electHref"), label: f("electLabel") }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
       widgetBlock(
-        'empty-state',
+        "empty-state",
         {
-          title: data.refusal?.title ?? '',
+          title: data.refusal?.title ?? "",
           description: data.refusal?.message,
         },
-        f('refusal'),
+        f("refusal"),
       ),
       {
-        ...grid('flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4', [
-          widgetBlock('empty-state', { title: data.awardsRefusal?.title ?? '', description: data.awardsRefusal?.message }, f('awardsRefusal')),
-          ...(data.awardsRefusal ? [] : [
-          heading(2, f('awardsText.paidTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-          textBlock(f('awardsText.hint')),
-          registeredListTable('me_benefit_awards_paid', {
-            variant: 'app', rows: f('paidAwards'), rowKey: item('id'),
-            columns: [
-              column(f('awardsText.program'), text(item('programName'))),
-              column(f('awardsText.period'), text(item('periodLabel'))),
-              column(f('awardsText.value'), text(item('valueLabel')), { align: 'right', className: 'tabular-nums' }),
-              column(f('awardsText.status'), badge(item('statusLabel'), { variant: 'success' })),
-            ], empty: { title: f('awardsText.paidEmpty') },
-          }),
-          heading(2, f('awardsText.pendingTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-          registeredListTable('me_benefit_awards_pending', {
-            variant: 'app', rows: f('pendingAwards'), rowKey: item('id'),
-            columns: [
-              column(f('awardsText.program'), text(item('programName'))),
-              column(f('awardsText.period'), text(item('periodLabel'))),
-              column(f('awardsText.value'), text(item('valueLabel')), { align: 'right', className: 'tabular-nums' }),
-              column(f('awardsText.status'), badge(item('statusLabel'), { variant: 'warning' })),
-            ], empty: { title: f('awardsText.pendingEmpty') },
-          }),
-          heading(2, f('awardsText.reversedTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-          registeredListTable('me_benefit_awards_reversed', {
-            variant: 'app', rows: f('reversedAwards'), rowKey: item('id'),
-            columns: [
-              column(f('awardsText.program'), text(item('programName'))),
-              column(f('awardsText.period'), text(item('periodLabel'))),
-              column(f('awardsText.value'), text(item('valueLabel')), { align: 'right', className: 'tabular-nums' }),
-              column(f('awardsText.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-            ], empty: { title: f('awardsText.reversedEmpty') },
-          }),
-          ]),
+        ...grid("flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4", [
+          widgetBlock(
+            "empty-state",
+            { title: data.awardsRefusal?.title ?? "", description: data.awardsRefusal?.message },
+            f("awardsRefusal"),
+          ),
+          ...(data.awardsRefusal
+            ? []
+            : [
+                heading(
+                  2,
+                  f("awardsText.paidTitle"),
+                  "text-sm font-semibold text-slate-900 dark:text-slate-100",
+                ),
+                textBlock(f("awardsText.hint")),
+                registeredListTable("me_benefit_awards_paid", {
+                  variant: "app",
+                  rows: f("paidAwards"),
+                  rowKey: item("id"),
+                  columns: [
+                    column(f("awardsText.program"), text(item("programName"))),
+                    column(f("awardsText.period"), text(item("periodLabel"))),
+                    column(f("awardsText.value"), text(item("valueLabel")), {
+                      align: "right",
+                      className: "tabular-nums",
+                    }),
+                    column(
+                      f("awardsText.status"),
+                      badge(item("statusLabel"), { variant: "success" }),
+                    ),
+                  ],
+                  empty: { title: f("awardsText.paidEmpty") },
+                }),
+                heading(
+                  2,
+                  f("awardsText.pendingTitle"),
+                  "text-sm font-semibold text-slate-900 dark:text-slate-100",
+                ),
+                registeredListTable("me_benefit_awards_pending", {
+                  variant: "app",
+                  rows: f("pendingAwards"),
+                  rowKey: item("id"),
+                  columns: [
+                    column(f("awardsText.program"), text(item("programName"))),
+                    column(f("awardsText.period"), text(item("periodLabel"))),
+                    column(f("awardsText.value"), text(item("valueLabel")), {
+                      align: "right",
+                      className: "tabular-nums",
+                    }),
+                    column(
+                      f("awardsText.status"),
+                      badge(item("statusLabel"), { variant: "warning" }),
+                    ),
+                  ],
+                  empty: { title: f("awardsText.pendingEmpty") },
+                }),
+                heading(
+                  2,
+                  f("awardsText.reversedTitle"),
+                  "text-sm font-semibold text-slate-900 dark:text-slate-100",
+                ),
+                registeredListTable("me_benefit_awards_reversed", {
+                  variant: "app",
+                  rows: f("reversedAwards"),
+                  rowKey: item("id"),
+                  columns: [
+                    column(f("awardsText.program"), text(item("programName"))),
+                    column(f("awardsText.period"), text(item("periodLabel"))),
+                    column(f("awardsText.value"), text(item("valueLabel")), {
+                      align: "right",
+                      className: "tabular-nums",
+                    }),
+                    column(
+                      f("awardsText.status"),
+                      badge(item("statusLabel"), { variant: item("statusVariant") }),
+                    ),
+                  ],
+                  empty: { title: f("awardsText.reversedEmpty") },
+                }),
+              ]),
           // Elections and windows render as direct lists under house
           // headings — no panel repeats the section name. The monthly
           // hint rides above the elections list it explains.
-          heading(2, f('electionsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-          textBlock(f('monthlyHint')),
-          registeredListTable('me_benefits_elections', {
-            variant: 'app',
-            rows: f('elections'),
-            rowKey: item('id'),
+          heading(
+            2,
+            f("electionsTitle"),
+            "text-sm font-semibold text-slate-900 dark:text-slate-100",
+          ),
+          textBlock(f("monthlyHint")),
+          registeredListTable("me_benefits_elections", {
+            variant: "app",
+            rows: f("elections"),
+            rowKey: item("id"),
             columns: [
-              column(f('electionsColumns.plan'), text(item('planName'))),
-              column(f('electionsColumns.coverage'), text(item('coverageLabel'))),
+              column(f("electionsColumns.plan"), text(item("planName"))),
+              column(f("electionsColumns.coverage"), text(item("coverageLabel"))),
               column(
-                f('electionsColumns.status'),
-                badge(item('statusLabel'), { variant: item('statusVariant') }),
+                f("electionsColumns.status"),
+                badge(item("statusLabel"), { variant: item("statusVariant") }),
               ),
               column(
-                f('electionsColumns.effective'),
-                text(item('effectiveLabel'), { className: 'tabular-nums' }),
+                f("electionsColumns.effective"),
+                text(item("effectiveLabel"), { className: "tabular-nums" }),
               ),
               column(
-                f('electionsColumns.monthly'),
-                text(item('employeeAmount'), { className: 'tabular-nums' }),
-                { align: 'right', className: 'tabular-nums' },
+                f("electionsColumns.monthly"),
+                text(item("employeeAmount"), { className: "tabular-nums" }),
+                { align: "right", className: "tabular-nums" },
               ),
-              column('', link(item('changeLabel'), item('changeHref'))),
+              column("", link(item("changeLabel"), item("changeHref"))),
             ],
-            empty: { title: f('electionsEmpty'), description: f('electionsEmptyDescription') },
+            empty: { title: f("electionsEmpty"), description: f("electionsEmptyDescription") },
           }),
-          heading(2, f('windowsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
-          registeredListTable('me_benefits_windows', {
-            variant: 'app',
-            rows: f('windows'),
-            rowKey: item('id'),
+          heading(2, f("windowsTitle"), "text-sm font-semibold text-slate-900 dark:text-slate-100"),
+          registeredListTable("me_benefits_windows", {
+            variant: "app",
+            rows: f("windows"),
+            rowKey: item("id"),
             columns: [
-              column(f('windowsColumns.name'), text(item('name'))),
-              column(f('windowsColumns.kind'), text(item('kindLabel'))),
+              column(f("windowsColumns.name"), text(item("name"))),
+              column(f("windowsColumns.kind"), text(item("kindLabel"))),
               column(
-                f('windowsColumns.range'),
-                text(item('rangeLabel'), { className: 'tabular-nums' }),
+                f("windowsColumns.range"),
+                text(item("rangeLabel"), { className: "tabular-nums" }),
               ),
             ],
-            empty: { title: f('windowsEmpty'), description: f('windowsEmptyDescription') },
+            empty: { title: f("windowsEmpty"), description: f("windowsEmptyDescription") },
           }),
           // Dependents stay a facts table under the same house heading:
           // rows carry no stable identity (name plus relationship only),
           // so they cannot join the registered list, which requires
           // unique stable row ids.
-          heading(2, f('dependentsTitle'), 'text-sm font-semibold text-slate-900 dark:text-slate-100'),
+          heading(
+            2,
+            f("dependentsTitle"),
+            "text-sm font-semibold text-slate-900 dark:text-slate-100",
+          ),
           table({
-            variant: 'app',
-            rows: f('dependents'),
-            rowKey: item('displayName'),
+            variant: "app",
+            rows: f("dependents"),
+            rowKey: item("displayName"),
             columns: [
-              column(f('dependentsColumns.name'), text(item('displayName'))),
-              column(f('dependentsColumns.relationship'), text(item('relationship'))),
+              column(f("dependentsColumns.name"), text(item("displayName"))),
+              column(f("dependentsColumns.relationship"), text(item("relationship"))),
             ],
-            empty: { title: f('dependentsEmpty') },
+            empty: { title: f("dependentsEmpty") },
           }),
           widgetBlock(
-            'hrm-benefit-dialog',
+            "hrm-benefit-dialog",
             {
               dialog: data.dialog,
               closeHref: data.dialogCloseHref,
             },
-            f('dialogOpen'),
+            f("dialogOpen"),
           ),
           widgetBlock(
-            'hrm-benefit-change-dialog',
+            "hrm-benefit-change-dialog",
             {
               dialog: data.changeDialog,
               closeHref: data.dialogCloseHref,
             },
-            f('changeDialogOpen'),
+            f("changeDialogOpen"),
           ),
         ]),
-        when: f('hasContent'),
+        when: f("hasContent"),
       },
     ],
-  })
+  });
 }
 
 export async function loadMeBenefitsPage(
   sp: Record<string, string | undefined> = {},
 ): Promise<MeBenefitsPageData> {
-  const authz = await requirePermission('hrm.self.read')
-  await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  const data = await loadMeBenefits(authz, sp)
-  const awards = await loadMyBenefitAwards(authz)
-  return { ...data, ...awards }
+  const authz = await requirePermission("hrm.self.read");
+  await requireFeatureEnabled(authz.user.orgId, "hrm");
+  const data = await loadMeBenefits(authz, sp);
+  const awards = await loadMyBenefitAwards(authz);
+  return { ...data, ...awards };
 }
 
 export async function meBenefitsTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('me.benefits.title')
+  const t = await getTranslations("hrm");
+  return t("me.benefits.title");
 }

@@ -23,7 +23,9 @@ export function priceLeavePayrollInputs(
   for (const input of inputs) {
     if (input.kind === "payout") {
       if (hourlyWage === null) {
-        throw new LeavePayrollInputError("an approved leave payout has no effective wage rate — correct the employee's pay rate before calculating payroll");
+        throw new LeavePayrollInputError(
+          "an approved leave payout has no effective wage rate — correct the employee's pay rate before calculating payroll",
+        );
       }
       payouts.push({
         absenceDate: input.absenceDate,
@@ -33,7 +35,9 @@ export function priceLeavePayrollInputs(
       continue;
     }
     if (!input.entitlementPlanId) {
-      throw new LeavePayrollInputError("approved banked leave has no effective entitlement mapping — map the leave type to an active accruing hours plan other than Vacation, then recalculate payroll");
+      throw new LeavePayrollInputError(
+        "approved banked leave has no effective entitlement mapping — map the leave type to an active accruing hours plan other than Vacation, then recalculate payroll",
+      );
     }
     bankHours.set(
       input.entitlementPlanId,

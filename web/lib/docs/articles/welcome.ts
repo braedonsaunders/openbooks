@@ -1,13 +1,13 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const welcome: DocArticle = {
-  slug: 'welcome',
-  title: 'Welcome to OpenBooks',
-  category: 'getting-started',
+  slug: "welcome",
+  title: "Welcome to OpenBooks",
+  category: "getting-started",
   order: 1,
-  summary: 'What OpenBooks is, how the documentation is organized, and where to start.',
-  updated: '2026-07-19',
-  keywords: ['intro', 'overview', 'help', 'start'],
+  summary: "What OpenBooks is, how the documentation is organized, and where to start.",
+  updated: "2026-07-19",
+  keywords: ["intro", "overview", "help", "start"],
   body: `# Welcome to OpenBooks
 
 OpenBooks is a configurable accounting and operations platform. Core accounting
@@ -47,4 +47,4 @@ Every configuration workspace links to its documentation with a **Documentation*
 or **Learn more** link near the top of the page. The link opens the article for
 the applicable configuration area.
 `,
-}
+};

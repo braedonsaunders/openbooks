@@ -94,9 +94,7 @@ export const warehouseDefaults = pgTable(
   },
   (t) => [
     uniqueIndex("warehouse_defaults_org_id_id_unique").on(t.orgId, t.id),
-    unique("warehouse_defaults_org_company_unique")
-      .on(t.orgId, t.subsidiaryId)
-      .nullsNotDistinct(),
+    unique("warehouse_defaults_org_company_unique").on(t.orgId, t.subsidiaryId).nullsNotDistinct(),
   ],
 );
 

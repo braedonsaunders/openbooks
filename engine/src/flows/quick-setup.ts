@@ -18,8 +18,7 @@ import {
  */
 
 export type QuickApprovalApprover =
-  | { type: "user"; userId: string }
-  | { type: "role"; role: string };
+  { type: "user"; userId: string } | { type: "role"; role: string };
 
 export type QuickApprovalInput = {
   approver: QuickApprovalApprover;
@@ -38,11 +37,7 @@ export type QuickApprovalInput = {
 };
 
 export type QuickSetupRefusalCode =
-  | "bad-threshold"
-  | "no-amount-field"
-  | "unknown-role"
-  | "unknown-user"
-  | "bad-subject-scope";
+  "bad-threshold" | "no-amount-field" | "unknown-role" | "unknown-user" | "bad-subject-scope";
 
 export type QuickSetupResult =
   | { ok: true; graph: AutomationGraph; amountField: string | null }
@@ -99,7 +94,10 @@ function toAssignee(
     return { assignee: { type: "role", role: approver.role } };
   }
   if (!approver.userId.trim()) {
-    return { code: "unknown-user", message: "choose a specific approver — the approver cannot be blank" };
+    return {
+      code: "unknown-user",
+      message: "choose a specific approver — the approver cannot be blank",
+    };
   }
   if (users && !users.has(approver.userId)) {
     return {
@@ -150,7 +148,9 @@ export function buildQuickApprovalGraph(
     // limit — uuid shape, the entity cap, case canonicalization and
     // case-variant uniqueness all refuse here exactly as they do in the
     // ordinary flow editor, never through a second local check.
-    const parsed = flowGraphSubjectScopeSchema.safeParse({ subsidiaryIds: [...input.subsidiaryIds] });
+    const parsed = flowGraphSubjectScopeSchema.safeParse({
+      subsidiaryIds: [...input.subsidiaryIds],
+    });
     if (!parsed.success) {
       return {
         ok: false,
@@ -179,7 +179,11 @@ export function buildQuickApprovalGraph(
         schemaVersion: 1,
         ...(subjectScope ? { subjectScope } : {}),
         nodes: [
-          { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+          {
+            id: "trigger",
+            position: { x: 0, y: 0 },
+            data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+          },
           { id: "gate", position: { x: 260, y: 0 }, data: { kind: "gate", gate } },
         ],
         edges: [{ id: "e1", source: "trigger", target: "gate", sourceHandle: "next" }],
@@ -194,14 +198,23 @@ export function buildQuickApprovalGraph(
       schemaVersion: 1,
       ...(subjectScope ? { subjectScope } : {}),
       nodes: [
-        { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+        {
+          id: "trigger",
+          position: { x: 0, y: 0 },
+          data: { kind: "trigger", trigger: { trigger: "on_submit" } },
+        },
         {
           id: "condition",
           position: { x: 260, y: 0 },
           data: {
             kind: "condition",
             label: `Over ${input.threshold}`,
-            rule: { op: "gt", field: amountField, value: input.threshold, valueType: "number" as const },
+            rule: {
+              op: "gt",
+              field: amountField,
+              value: input.threshold,
+              valueType: "number" as const,
+            },
           },
         },
         { id: "gate", position: { x: 520, y: 0 }, data: { kind: "gate", gate } },

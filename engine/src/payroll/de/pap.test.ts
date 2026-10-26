@@ -32,10 +32,21 @@ import {
 /** Standard laufende-Bezüge inputs; each test overrides what it needs. */
 function std(over: Partial<DePapLaufendInput>): DePapLaufendInput {
   return {
-    lzz: 1, af: 0, f: 1,
-    alv: 0, krv: 0, pkv: 0, kvz: 2.9,
-    pvs: 0, pva: 0, r: 0,
-    lzzfreib: 0n, lzzhinzu: 0n, pkpv: 0n, pkpvagz: 0n, zkf: 0,
+    lzz: 1,
+    af: 0,
+    f: 1,
+    alv: 0,
+    krv: 0,
+    pkv: 0,
+    kvz: 2.9,
+    pvs: 0,
+    pva: 0,
+    r: 0,
+    lzzfreib: 0n,
+    lzzhinzu: 0n,
+    pkpv: 0n,
+    pkpvagz: 0n,
+    zkf: 0,
     ...over,
   } as DePapLaufendInput;
 }
@@ -140,11 +151,13 @@ test("agency golden: allgemeine Prüftabelle (43×6 cells, KVZ 2.90)", () => {
   let cells = 0;
   for (const [gross, ...want] of ALLGEMEINE) {
     STKL.forEach((stkl, i) => {
-      const out = computePapLaufend2026(std({
-        re4: BigInt(gross) * 100n,
-        stkl,
-        pvz: stkl === 2 ? 0 : 1,
-      }));
+      const out = computePapLaufend2026(
+        std({
+          re4: BigInt(gross) * 100n,
+          stkl,
+          pvz: stkl === 2 ? 0 : 1,
+        }),
+      );
       assert.equal(out.lstjahr, BigInt(want[i]!), `${gross} Kl.${stkl}`);
       cells += 1;
     });
@@ -156,13 +169,17 @@ test("agency golden: besondere Prüftabelle (43×6 cells, privat versichert)", (
   let cells = 0;
   for (const [gross, ...want] of BESONDERE) {
     STKL.forEach((stkl, i) => {
-      const out = computePapLaufend2026(std({
-        re4: BigInt(gross) * 100n,
-        stkl,
-        alv: 1, krv: 1, pkv: 1,
-        pkpv: stkl === 3 ? 5000000n : stkl === 6 ? 0n : 3000000n,
-        pvz: 1,
-      }));
+      const out = computePapLaufend2026(
+        std({
+          re4: BigInt(gross) * 100n,
+          stkl,
+          alv: 1,
+          krv: 1,
+          pkv: 1,
+          pkpv: stkl === 3 ? 5000000n : stkl === 6 ? 0n : 3000000n,
+          pvz: 1,
+        }),
+      );
       assert.equal(out.lstjahr, BigInt(want[i]!), `${gross} Kl.${stkl}`);
       cells += 1;
     });
@@ -272,9 +289,14 @@ test("sweep: tariff monotone, engine bounded on the LZZ×STKL grid", () => {
   for (const lzz of [1, 2, 3, 4] as const) {
     for (const stkl of STKL) {
       const per = lzz === 1 ? 1 : lzz === 2 ? 12 : lzz === 3 ? 52 : 360;
-      const out = computePapLaufend2026(std({
-        lzz, stkl, re4: 40000n, pvz: stkl === 2 ? 0 : 1,
-      }));
+      const out = computePapLaufend2026(
+        std({
+          lzz,
+          stkl,
+          re4: 40000n,
+          pvz: stkl === 2 ? 0 : 1,
+        }),
+      );
       assert.ok(out.lstlzz >= 0n && out.solzlzz >= 0n && out.bk >= 0n);
       assert.ok(out.lstlzz <= 40000n * BigInt(per), `period tax cannot exceed period pay`);
     }
@@ -282,10 +304,22 @@ test("sweep: tariff monotone, engine bounded on the LZZ×STKL grid", () => {
 });
 
 test("refusals name the untranscribed path", () => {
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, vbez: 100n })), /Versorgungsbez/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, alter1: 1 })), /Altersentlastungsbetrag/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, sonstb: 100n })), /sonstige Bez/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, jre4: 100n })), /sonstige Bez/);
+  assert.throws(
+    () => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, vbez: 100n })),
+    /Versorgungsbez/,
+  );
+  assert.throws(
+    () => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, alter1: 1 })),
+    /Altersentlastungsbetrag/,
+  );
+  assert.throws(
+    () => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, sonstb: 100n })),
+    /sonstige Bez/,
+  );
+  assert.throws(
+    () => computePapLaufend2026(std({ re4: 3000000n, stkl: 1, pvz: 1, jre4: 100n })),
+    /sonstige Bez/,
+  );
 });
 
 test("validators enforce PAP 3.1 plausibility", () => {
@@ -293,11 +327,26 @@ test("validators enforce PAP 3.1 plausibility", () => {
   assert.throws(() => computePapLaufend2026(std({ ...good, lzz: 5 as never })), /LZZ/);
   assert.throws(() => computePapLaufend2026(std({ ...good, stkl: 7 as never })), /STKL/);
   assert.throws(() => computePapLaufend2026(std({ ...good, re4: -1n })), /RE4/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 5, pvz: 1, zkf: 1 })), /ZKF/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 3, pvz: 1, af: 1 })), /Faktorverfahren/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 4, pvz: 1, af: 1, lzzfreib: 100n })), /Faktor/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 6, pvz: 1, lzzhinzu: 100n })), /VI/);
-  assert.throws(() => computePapLaufend2026(std({ re4: 3000000n, stkl: 4, pvz: 1, af: 1, f: 0 })), /\bF\b/);
+  assert.throws(
+    () => computePapLaufend2026(std({ re4: 3000000n, stkl: 5, pvz: 1, zkf: 1 })),
+    /ZKF/,
+  );
+  assert.throws(
+    () => computePapLaufend2026(std({ re4: 3000000n, stkl: 3, pvz: 1, af: 1 })),
+    /Faktorverfahren/,
+  );
+  assert.throws(
+    () => computePapLaufend2026(std({ re4: 3000000n, stkl: 4, pvz: 1, af: 1, lzzfreib: 100n })),
+    /Faktor/,
+  );
+  assert.throws(
+    () => computePapLaufend2026(std({ re4: 3000000n, stkl: 6, pvz: 1, lzzhinzu: 100n })),
+    /VI/,
+  );
+  assert.throws(
+    () => computePapLaufend2026(std({ re4: 3000000n, stkl: 4, pvz: 1, af: 1, f: 0 })),
+    /\bF\b/,
+  );
   assert.throws(() => computePapLaufend2026(std({ ...good, pva: 5 as never })), /PVA/);
   assert.throws(() => computePapLaufend2026(std({ ...good, kvz: -0.01 })), /KVZ/);
 });

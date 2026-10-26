@@ -10,7 +10,6 @@
 import type { CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
-
 export interface UtilizationAlert {
   type: "warning" | "danger";
   message: string;
@@ -37,11 +36,29 @@ export function utilizationStrings(t: CatalogMessageFn, locale: string): Utiliza
   return {
     locale,
     monthLabel: catalogMonthLabel(t),
-    displayGroupName: (name) => (name === null || name === undefined || name === "Unknown" ? t("utilization.labels.unknownName") : name),
-    displayEmployeeTitle: (title) => (title === null || title === undefined || title === "No Title" ? t("utilization.labels.noTitle") : title),
-    displayDepartmentName: (name) => (name === null || name === undefined || name === "Unknown" ? t("utilization.labels.unknownName") : name),
-    alertBelowTarget: (target) => ({ type: "warning", message: t("utilization.alerts.belowTarget", { target }) }),
-    alertCostSpike: (amount) => ({ type: "danger", message: t("utilization.alerts.costSpike", { amount }) }),
-    alertUnratedHours: (hours) => ({ type: "warning", message: t("utilization.alerts.unratedHours", { hours }) }),
+    displayGroupName: (name) =>
+      name === null || name === undefined || name === "Unknown"
+        ? t("utilization.labels.unknownName")
+        : name,
+    displayEmployeeTitle: (title) =>
+      title === null || title === undefined || title === "No Title"
+        ? t("utilization.labels.noTitle")
+        : title,
+    displayDepartmentName: (name) =>
+      name === null || name === undefined || name === "Unknown"
+        ? t("utilization.labels.unknownName")
+        : name,
+    alertBelowTarget: (target) => ({
+      type: "warning",
+      message: t("utilization.alerts.belowTarget", { target }),
+    }),
+    alertCostSpike: (amount) => ({
+      type: "danger",
+      message: t("utilization.alerts.costSpike", { amount }),
+    }),
+    alertUnratedHours: (hours) => ({
+      type: "warning",
+      message: t("utilization.alerts.unratedHours", { hours }),
+    }),
   };
 }

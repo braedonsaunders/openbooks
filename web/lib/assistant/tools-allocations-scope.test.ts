@@ -10,10 +10,7 @@ const { canRunTool } = await import("./gate.ts");
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-function fakeAuthz(
-  permissions: string[],
-  allowedSubsidiaryIds: Set<string> | null = null,
-): Authz {
+function fakeAuthz(permissions: string[], allowedSubsidiaryIds: Set<string> | null = null): Authz {
   const userId = "00000000-0000-4000-8000-000000000001";
   const orgId = "00000000-0000-4000-8000-000000000002";
   const user: SessionUser = {
@@ -64,7 +61,9 @@ test("preview_allocation refuses allocations.read without allocations.run or ass
     error: "forbidden",
   });
   assert.equal(
-    canRunTool(fakeAuthz(["assistant.use", "allocations.read", "assistant.write"]), tool, { allocations: true }),
+    canRunTool(fakeAuthz(["assistant.use", "allocations.read", "assistant.write"]), tool, {
+      allocations: true,
+    }),
     false,
     "assistant.write without allocations.run must not expose a persist",
   );
@@ -96,15 +95,23 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("get_allocation_rule")!.inputSchema.parse({ ruleId: "nope" }));
   byName.get("list_allocation_drivers")!.inputSchema.parse({});
   byName.get("preview_driver_vector")!.inputSchema.parse({ driverId: UUID, periodId: UUID });
-  byName.get("preview_driver_vector")!.inputSchema.parse({ driverKey: "headcount", period: "last_fiscal_quarter" });
+  byName
+    .get("preview_driver_vector")!
+    .inputSchema.parse({ driverKey: "headcount", period: "last_fiscal_quarter" });
   byName.get("preview_driver_vector")!.inputSchema.parse({});
-  assert.throws(() => byName.get("preview_driver_vector")!.inputSchema.parse({ period: "last Tuesday" }));
-  byName.get("preview_allocation")!.inputSchema.parse({ ruleKey: "sweep", period: "last_fiscal_quarter" });
+  assert.throws(() =>
+    byName.get("preview_driver_vector")!.inputSchema.parse({ period: "last Tuesday" }),
+  );
+  byName
+    .get("preview_allocation")!
+    .inputSchema.parse({ ruleKey: "sweep", period: "last_fiscal_quarter" });
   byName.get("preview_allocation")!.inputSchema.parse({ ruleId: UUID, periodId: UUID });
   byName.get("preview_allocation")!.inputSchema.parse({ ruleKey: "sweep" });
   byName.get("list_allocation_runs")!.inputSchema.parse({});
   byName.get("list_allocation_runs")!.inputSchema.parse({ status: "posted", limit: 10 });
-  assert.throws(() => byName.get("list_allocation_runs")!.inputSchema.parse({ status: "posted_draft" }));
+  assert.throws(() =>
+    byName.get("list_allocation_runs")!.inputSchema.parse({ status: "posted_draft" }),
+  );
   byName.get("explain_allocation")!.inputSchema.parse({ runId: UUID });
   byName.get("explain_allocation")!.inputSchema.parse({});
 });

@@ -1,11 +1,14 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { appBaseUrl } from "@openbooks/engine/flows/email-tokens";
-import { PaymentAcceptanceError, createCheckoutSession, paymentLinkOrgId } from "@openbooks/engine/payments/acceptance/operations";
+import {
+  PaymentAcceptanceError,
+  createCheckoutSession,
+  paymentLinkOrgId,
+} from "@openbooks/engine/payments/acceptance/operations";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -42,6 +45,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     // and hand them the id to quote back.
     const requestId = randomUUID();
     console.error(`pay checkout failed [requestId=${requestId}]`, e);
-    return NextResponse.json({ error: "failed to create checkout session", requestId }, { status: 500 });
+    return NextResponse.json(
+      { error: "failed to create checkout session", requestId },
+      { status: 500 },
+    );
   }
 }

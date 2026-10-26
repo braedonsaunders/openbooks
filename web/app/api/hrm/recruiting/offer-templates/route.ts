@@ -1,14 +1,14 @@
-import { defineRoute } from '@/lib/api/route'
-import { NextResponse } from 'next/server'
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
 import {
   createOfferTemplate,
   listOfferTemplates,
-} from '@openbooks/engine/hrm/recruiting/offers-signing'
+} from "@openbooks/engine/hrm/recruiting/offers-signing";
 
-import { recruitingErrorResponse } from '../_lib'
-import { createOfferTemplateBody } from './bodies'
+import { recruitingErrorResponse } from "../_lib";
+import { createOfferTemplateBody } from "./bodies";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Offer-template collection: GET lists templates, POST creates one
@@ -16,27 +16,26 @@ export const runtime = 'nodejs'
  * off — the Setup surface hides with the same switch.
  */
 export const GET = defineRoute({
-  permission: 'hrm.recruiting.read',
-  feature: 'hrmRecruiting',
+  permission: "hrm.recruiting.read",
+  feature: "hrmRecruiting",
   handler: async ({ request: req, authz: gate }) => {
     try {
-      const includeInactive =
-        new URL(req.url).searchParams.get('includeInactive') === '1'
+      const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
       const templates = await listOfferTemplates({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         includeInactive,
-      })
-      return NextResponse.json({ templates })
+      });
+      return NextResponse.json({ templates });
     } catch (e) {
-      return recruitingErrorResponse(e)
+      return recruitingErrorResponse(e);
     }
   },
-})
+});
 
 export const POST = defineRoute({
-  permission: 'hrm.recruiting.manage',
-  feature: 'hrmRecruiting',
+  permission: "hrm.recruiting.manage",
+  feature: "hrmRecruiting",
   body: createOfferTemplateBody,
   handler: async ({ authz: gate, body: body }) => {
     try {
@@ -46,10 +45,10 @@ export const POST = defineRoute({
         name: body.name,
         bodyTemplate: body.bodyTemplate,
         clauses: body.clauses,
-      })
-      return NextResponse.json({ template }, { status: 201 })
+      });
+      return NextResponse.json({ template }, { status: 201 });
     } catch (e) {
-      return recruitingErrorResponse(e)
+      return recruitingErrorResponse(e);
     }
   },
-})
+});

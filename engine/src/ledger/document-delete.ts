@@ -8,7 +8,15 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
-import { assertBillingReleasable, BillingReleaseRefusedError, releaseCamBillingProvenance, releaseBillingProvenance, releaseConvertedOrderQuantities, releaseVendorBillProvenance, releaseVendorRetainageProvenance } from "./billing-provenance.ts";
+import {
+  assertBillingReleasable,
+  BillingReleaseRefusedError,
+  releaseCamBillingProvenance,
+  releaseBillingProvenance,
+  releaseConvertedOrderQuantities,
+  releaseVendorBillProvenance,
+  releaseVendorRetainageProvenance,
+} from "./billing-provenance.ts";
 import { releaseCaptureMaterialization } from "../payables/ap-capture-service.ts";
 
 /**
@@ -17,7 +25,12 @@ import { releaseCaptureMaterialization } from "../payables/ap-capture-service.ts
  * books' evidence chain and must be cancelled/voided instead.
  */
 export class DeleteError extends Error {
-  constructor(message: string, readonly status = 422) { super(message); }
+  constructor(
+    message: string,
+    readonly status = 422,
+  ) {
+    super(message);
+  }
 }
 
 export async function deleteDocument(
@@ -33,14 +46,20 @@ export async function deleteDocument(
   },
 ): Promise<{ documentId: string }> {
   return db.transaction(async (tx) => {
-    const kind = (await tx.execute<{ kind: string }>(sql`
+    const kind = (
+      await tx.execute<{ kind: string }>(
+        sql`
       select kind from documents where id = ${documentId} and org_id = ${orgId}
-    `, "objects"))[0]?.kind
+    `,
+        "objects",
+      )
+    )[0]?.kind;
     if (kind === "vendor_payment" || kind === "customer_payment") {
       // Match payment edits/posting: run → instruction → document. Locking the
       // document first would deadlock against a run transition and miss a
       // live instruction added while delete waits on its deferred FK.
-      const candidates = await tx.execute<{ run_id: string; instruction_id: string }>(sql`
+      const candidates = await tx.execute<{ run_id: string; instruction_id: string }>(
+        sql`
         select run.id as run_id, instruction.id as instruction_id
           from payment_instructions instruction
           join payment_runs run on run.id = instruction.payment_run_id and run.org_id = instruction.org_id
@@ -49,15 +68,24 @@ export async function deleteDocument(
            and run.status in ('draft', 'pending_approval', 'approved', 'processing',
                               'generated', 'delivered', 'partially_failed')
          order by run.id, instruction.id
-      `, "objects")
-      const runIds = [...new Set(candidates.map((row) => row.run_id))].sort()
+      `,
+        "objects",
+      );
+      const runIds = [...new Set(candidates.map((row) => row.run_id))].sort();
       if (runIds.length > 0) {
-        await tx.execute(sql`select id from payment_runs where org_id = ${orgId} and id in ${runIds} order by id for update`)
-        await tx.execute(sql`select id from payment_instructions where org_id = ${orgId} and id in ${candidates.map((row) => row.instruction_id)} order by id for update`)
+        await tx.execute(
+          sql`select id from payment_runs where org_id = ${orgId} and id in ${runIds} order by id for update`,
+        );
+        await tx.execute(
+          sql`select id from payment_instructions where org_id = ${orgId} and id in ${candidates.map((row) => row.instruction_id)} order by id for update`,
+        );
       }
     }
     const [doc] = await tx
-      .select({ ...getTableColumns(schema.documents), revision: documentRevisionCounterSql(sql`revision_seq`) })
+      .select({
+        ...getTableColumns(schema.documents),
+        revision: documentRevisionCounterSql(sql`revision_seq`),
+      })
       .from(schema.documents)
       .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)))
       .for("update");
@@ -66,9 +94,12 @@ export async function deleteDocument(
     // precheck can authorize entity A while a concurrent A→B rehome lands
     // before this delete commits. Missing, cross-org, and out-of-scope
     // answer alike.
-    if (!subsidiaryScopeAllows(audit.allowedSubsidiaryIds, doc.subsidiaryId)) throw new ScopeNotFoundError();
+    if (!subsidiaryScopeAllows(audit.allowedSubsidiaryIds, doc.subsidiaryId))
+      throw new ScopeNotFoundError();
     if (doc.kind === "vendor_payment" || doc.kind === "customer_payment") {
-      const claim = (await tx.execute<{ runNumber: string; status: string }>(sql`
+      const claim = (
+        await tx.execute<{ runNumber: string; status: string }>(
+          sql`
         select run.run_number as "runNumber", run.status
           from payment_instructions instruction
           join payment_runs run on run.id = instruction.payment_run_id and run.org_id = instruction.org_id
@@ -77,17 +108,26 @@ export async function deleteDocument(
            and run.status in ('draft', 'pending_approval', 'approved', 'processing',
                               'generated', 'delivered', 'partially_failed')
          order by run.id, instruction.id limit 1
-      `, "objects"))[0]
+      `,
+          "objects",
+        )
+      )[0];
       if (claim) {
         throw new DeleteError(
           `payment is claimed by open payment run ${claim.runNumber} (${claim.status}) — ` +
             "reject, roll back, or cancel the run and re-plan the payment before deleting it",
-        )
+        );
       }
     }
-    if (audit.expectedUpdatedAt !== undefined &&
-        (!isDocumentRevisionToken(audit.expectedUpdatedAt) || audit.expectedUpdatedAt !== doc.revision)) {
-      throw new DeleteError("this document changed after you opened it; reload and review the latest revision", 409);
+    if (
+      audit.expectedUpdatedAt !== undefined &&
+      (!isDocumentRevisionToken(audit.expectedUpdatedAt) ||
+        audit.expectedUpdatedAt !== doc.revision)
+    ) {
+      throw new DeleteError(
+        "this document changed after you opened it; reload and review the latest revision",
+        409,
+      );
     }
     if (doc.status !== "draft") {
       throw new DeleteError(
@@ -101,14 +141,17 @@ export async function deleteDocument(
     // its source (a draft replacement at its posted source, a draft credit
     // at the invoice it corrects), so the draft on the from side stays
     // deletable; the link rows are removed with the document below.
-    const downstream = (await tx.execute<{ document_number: string }>(sql`
+    const downstream = await tx.execute<{ document_number: string }>(
+      sql`
       select d2.document_number
         from document_links dl
         join documents d2 on d2.id = dl.to_document_id and d2.org_id = dl.org_id
        where dl.from_document_id = ${documentId} and dl.org_id = ${doc.orgId}
          and dl.link_type not in ('reverses', 'corrects')
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (downstream[0]) {
       throw new DeleteError(
         `${doc.documentNumber} is the source of ${downstream[0].document_number} — remove the downstream document first`,
@@ -131,17 +174,29 @@ export async function deleteDocument(
     if (!before) throw new DeleteError("document not found");
 
     if (doc.kind === "customer_invoice" || doc.kind === "customer_credit") {
-      await releaseCamBillingProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
+      await releaseCamBillingProvenance(tx, doc.orgId, documentId, {
+        actorId: userId,
+        reason: audit.reason?.trim() || "draft_discarded",
+      });
     }
     if (doc.kind === "customer_invoice") {
-      await releaseBillingProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
+      await releaseBillingProvenance(tx, doc.orgId, documentId, {
+        actorId: userId,
+        reason: audit.reason?.trim() || "draft_discarded",
+      });
     }
     if (doc.kind === "vendor_bill") {
-      await releaseVendorBillProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
+      await releaseVendorBillProvenance(tx, doc.orgId, documentId, {
+        actorId: userId,
+        reason: audit.reason?.trim() || "draft_discarded",
+      });
       // The retainage release reservation must go before the document row it
       // references; the FK would otherwise reject the delete with 23503.
       // Voided bills keep their row as posted-history provenance instead.
-      await releaseVendorRetainageProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
+      await releaseVendorRetainageProvenance(tx, doc.orgId, documentId, {
+        actorId: userId,
+        reason: audit.reason?.trim() || "draft_discarded",
+      });
     }
     if (doc.kind === "vendor_bill" || doc.kind === "vendor_credit") {
       // The capture item points at this draft (RESTRICT); without releasing it
@@ -171,9 +226,15 @@ export async function deleteDocument(
                  'reason', ${audit.reason?.trim() || "draft_discarded"}::text),
                ${userId ?? null}
           from service_billings where org_id = ${doc.orgId} and invoice_document_id = ${documentId}`);
-      await tx.execute(sql`delete from service_billings where org_id = ${doc.orgId} and invoice_document_id = ${documentId}`);
-      await tx.execute(sql`delete from service_quote_lines where org_id = ${doc.orgId} and quote_document_id = ${documentId}`);
-      await tx.execute(sql`delete from service_quotes where org_id = ${doc.orgId} and quote_document_id = ${documentId}`);
+      await tx.execute(
+        sql`delete from service_billings where org_id = ${doc.orgId} and invoice_document_id = ${documentId}`,
+      );
+      await tx.execute(
+        sql`delete from service_quote_lines where org_id = ${doc.orgId} and quote_document_id = ${documentId}`,
+      );
+      await tx.execute(
+        sql`delete from service_quotes where org_id = ${doc.orgId} and quote_document_id = ${documentId}`,
+      );
     }
     await tx.execute(
       sql`delete from document_links where org_id = ${doc.orgId} and (from_document_id = ${documentId} or to_document_id = ${documentId})`,

@@ -1,8 +1,17 @@
 /** OFX statement parsing. Split from banking.ts (pure moves only). */
-import { BankingError, type ParsedStatementLine, type ParsedStatement, type StatementSourceContent } from "../banking-core"
-import { decodeStatementSourceText } from "../statement-encoding"
-import { decodeOfxEntities, assertRealDate, detectStatementBalanceRole, normalizeAmount } from "./shared"
-
+import {
+  BankingError,
+  type ParsedStatementLine,
+  type ParsedStatement,
+  type StatementSourceContent,
+} from "../banking-core";
+import { decodeStatementSourceText } from "../statement-encoding";
+import {
+  decodeOfxEntities,
+  assertRealDate,
+  detectStatementBalanceRole,
+  normalizeAmount,
+} from "./shared";
 
 /** First leaf value for `<TAG>value` (SGML, unclosed) or `<TAG>value</TAG>`. */
 function ofxValue(block: string, tag: string): string | undefined {

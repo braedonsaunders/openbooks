@@ -44,7 +44,11 @@ test("mergeResolvedEntities dedupes by kind+id with incoming first and caps", ()
     { kind: "project", id: "j1", label: "Job X" },
     { kind: "document", id: "d1", label: "BILL-1" },
   ]);
-  const many = Array.from({ length: 30 }, (_, i) => ({ kind: "party" as const, id: `p${i}`, label: `P${i}` }));
+  const many = Array.from({ length: 30 }, (_, i) => ({
+    kind: "party" as const,
+    id: `p${i}`,
+    label: `P${i}`,
+  }));
   assert.equal(mergeResolvedEntities([], many, 20).length, 20);
 });
 
@@ -114,7 +118,9 @@ test("parseSummaryModelOutput drops malformed entities and caps", () => {
 });
 
 test("parseSummaryModelOutput falls back to prose when the model ignores the schema", () => {
-  const parsed = parseSummaryModelOutput("The user asked about payroll and we checked two pay runs.");
+  const parsed = parseSummaryModelOutput(
+    "The user asked about payroll and we checked two pay runs.",
+  );
   assert.match(parsed.text, /payroll/);
   assert.deepEqual(parsed.entities, []);
 });

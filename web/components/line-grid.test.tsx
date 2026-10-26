@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // Structural edits must keep uncommitted quantities and tax overrides on
 // their own lines. Render the real grid and shared menus with real messages.
-await bootJsdomEnvironment({ url: 'http://localhost:4800/ap/bills', matchMediaMatches: false });
+await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 stubModules({
-  navigation: { pathname: '/ap/bills' },
+  navigation: { pathname: "/ap/bills" },
   extra: {
-    'next/link': 'export default function Link(p){return p.children}',
-    sonner: 'export const toast={success(){},error(){},warning(){}};export function Toaster(){return null}',
+    "next/link": "export default function Link(p){return p.children}",
+    sonner:
+      "export const toast={success(){},error(){},warning(){}};export function Toaster(){return null}",
   },
 });
 
@@ -23,7 +24,8 @@ const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../messages/en")).default;
 const { LineGrid } = await import("./line-grid");
 const businessDate = await import("./business-date-provider");
-type LineGridColumn<Row extends Record<string, unknown>> = import("./line-grid").LineGridColumn<Row>;
+type LineGridColumn<Row extends Record<string, unknown>> =
+  import("./line-grid").LineGridColumn<Row>;
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -50,16 +52,33 @@ test("editable cells are named by their column header and line number", async (t
   assert.equal(labels.length, 2, "each input references its column and row labels");
   const labelText = labels.map((id) => document.getElementById(id)?.textContent?.trim());
   assert.deepEqual(labelText, ["Qty", "Line 2 actions"]);
-  const selectors = [...host.querySelectorAll('div[data-lg-row="1"] button[aria-haspopup="listbox"]')];
+  const selectors = [
+    ...host.querySelectorAll('div[data-lg-row="1"] button[aria-haspopup="listbox"]'),
+  ];
   assert.equal(selectors.length, 2, "the search-select and select triggers render");
   for (const selector of selectors) {
     const selectorLabels = selector.getAttribute("aria-labelledby")?.split(/\s+/) ?? [];
     assert.equal(selectorLabels.length, 2, "each selector references its column and row labels");
-    assert.ok(selectorLabels.every((id) => document.getElementById(id)?.textContent?.trim()), "each selector label reference resolves");
+    assert.ok(
+      selectorLabels.every((id) => document.getElementById(id)?.textContent?.trim()),
+      "each selector label reference resolves",
+    );
   }
 });
 
-function Probe({ initial, compact = false, readOnly = false, withDistribution = false, hideRemove = false }: { initial: TestRow[]; compact?: boolean; readOnly?: boolean; withDistribution?: boolean; hideRemove?: boolean }) {
+function Probe({
+  initial,
+  compact = false,
+  readOnly = false,
+  withDistribution = false,
+  hideRemove = false,
+}: {
+  initial: TestRow[];
+  compact?: boolean;
+  readOnly?: boolean;
+  withDistribution?: boolean;
+  hideRemove?: boolean;
+}) {
   const [rows, setRows] = useState(initial);
   const apply = (next: TestRow[]) => {
     store.rows = next;
@@ -75,20 +94,46 @@ function Probe({ initial, compact = false, readOnly = false, withDistribution = 
       align: "right",
       computeTax: () => "0.0000",
       onTaxChange: (index, next) =>
-        apply(store.rows.map((r, j) => (j === index ? { ...r, taxAmount: next.taxAmount, taxOverridden: next.overridden } : r))),
+        apply(
+          store.rows.map((r, j) =>
+            j === index ? { ...r, taxAmount: next.taxAmount, taxOverridden: next.overridden } : r,
+          ),
+        ),
     },
-    { key: "category", label: "Category", width: "140px", type: "search-select", options: [{ value: "goods", label: "Goods" }] },
-    { key: "kind", label: "Kind", width: "120px", type: "select", options: [{ value: "expense", label: "Expense" }] },
+    {
+      key: "category",
+      label: "Category",
+      width: "140px",
+      type: "search-select",
+      options: [{ value: "goods", label: "Goods" }],
+    },
+    {
+      key: "kind",
+      label: "Kind",
+      width: "120px",
+      type: "select",
+      options: [{ value: "expense", label: "Expense" }],
+    },
     {
       key: "stockLocationId",
       label: "Warehouse",
       width: "150px",
       type: "select",
-      options: [{ value: "", label: "—" }, { value: "loc-1", label: "North" }],
+      options: [
+        { value: "", label: "—" },
+        { value: "loc-1", label: "North" },
+      ],
       isCellEditable: (row) => row.itemId === "stocked-item",
     },
   ];
-  if (compact) columns.push({ key: 'description', label: 'Details text', width: '120px', type: 'text', secondary: true });
+  if (compact)
+    columns.push({
+      key: "description",
+      label: "Details text",
+      width: "120px",
+      type: "text",
+      secondary: true,
+    });
   return (
     <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
       <LineGrid<TestRow>
@@ -98,27 +143,59 @@ function Probe({ initial, compact = false, readOnly = false, withDistribution = 
         hideRemove={hideRemove}
         getRowKey={(row) => row.clientKey}
         cloneRow={(row) => ({ ...row, clientKey: `copy-${row.clientKey}` })}
-        distribution={withDistribution ? {
-          groups: [], groupedIndexes: new Set(), chipOf: () => ({ kind: 'split' }),
-          menuKeysOf: () => ['split'], groupKeyOf: () => null,
-          onSplit: (index) => { store.splitIndex = index; },
-          onUnsplit: () => {}, onToggleLock: () => {}, onApplySuggestion: () => {}, onEditGroupTotal: () => {},
-        } : undefined}
+        distribution={
+          withDistribution
+            ? {
+                groups: [],
+                groupedIndexes: new Set(),
+                chipOf: () => ({ kind: "split" }),
+                menuKeysOf: () => ["split"],
+                groupKeyOf: () => null,
+                onSplit: (index) => {
+                  store.splitIndex = index;
+                },
+                onUnsplit: () => {},
+                onToggleLock: () => {},
+                onApplySuggestion: () => {},
+                onEditGroupTotal: () => {},
+              }
+            : undefined
+        }
         onRowsChange={(next) => apply(next)}
-        emptyRow={() => ({ clientKey: `new-${Date.now()}`, description: "", quantity: "", taxAmount: "", taxOverridden: false })}
+        emptyRow={() => ({
+          clientKey: `new-${Date.now()}`,
+          description: "",
+          quantity: "",
+          taxAmount: "",
+          taxOverridden: false,
+        })}
       />
     </NextIntlClientProvider>
   );
 }
 
-async function mount(initial: TestRow[], compact = false, readOnly = false, withDistribution = false, hideRemove = false) {
+async function mount(
+  initial: TestRow[],
+  compact = false,
+  readOnly = false,
+  withDistribution = false,
+  hideRemove = false,
+) {
   store.rows = initial;
   store.splitIndex = null;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => {
-    root.render(<Probe initial={initial} compact={compact} readOnly={readOnly} withDistribution={withDistribution} hideRemove={hideRemove} />);
+    root.render(
+      <Probe
+        initial={initial}
+        compact={compact}
+        readOnly={readOnly}
+        withDistribution={withDistribution}
+        hideRemove={hideRemove}
+      />,
+    );
     await tick();
   });
   await tick();
@@ -144,7 +221,10 @@ function cellInput(host: HTMLElement, row: number, col: number): HTMLInputElemen
 async function typeInto(input: HTMLInputElement, value: string) {
   await act(async () => {
     input.focus();
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
     setter.call(input, value);
     input.dispatchEvent(new window.Event("input", { bubbles: true }));
     await tick();
@@ -153,12 +233,19 @@ async function typeInto(input: HTMLInputElement, value: string) {
 }
 
 async function interact(action: () => void) {
-  await act(async () => { action(); await tick(); });
+  await act(async () => {
+    action();
+    await tick();
+  });
   await tick();
 }
 
 async function keydown(el: Element, init: KeyboardEventInit) {
-  await interact(() => { el.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init })); });
+  await interact(() => {
+    el.dispatchEvent(
+      new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
+    );
+  });
 }
 
 async function blur(el: HTMLInputElement) {
@@ -174,110 +261,186 @@ const line = (key: string, quantity: string): TestRow => ({
 });
 
 function menuAction(label: string): HTMLButtonElement {
-  const action = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
-    .find((button) => button.textContent?.trim() === label);
+  const action = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (button) => button.textContent?.trim() === label,
+  );
   assert.ok(action, `the shared context menu exposes ${label}`);
   return action;
 }
 
-test('the visible line action button removes the selected line and preserves its neighbours', async (t) => {
-  const { host, done } = await mount([line('a', '1'), line('b', '2'), line('c', '3')]);
+test("the visible line action button removes the selected line and preserves its neighbours", async (t) => {
+  const { host, done } = await mount([line("a", "1"), line("b", "2"), line("c", "3")]);
   t.after(done);
   const input = cellInput(host, 1, 0);
-  await typeInto(input, '7');
+  await typeInto(input, "7");
   const trigger = host.querySelector<HTMLButtonElement>('button[aria-label="Line 2 actions"]')!;
-  assert.equal(trigger.getAttribute('aria-haspopup'), 'menu');
-  await act(async () => { trigger.click(); await tick(); });
-  assert.equal(trigger.getAttribute('aria-expanded'), 'true');
-  await act(async () => { menuAction('Remove line').click(); await tick(); });
+  assert.equal(trigger.getAttribute("aria-haspopup"), "menu");
+  await act(async () => {
+    trigger.click();
+    await tick();
+  });
+  assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  await act(async () => {
+    menuAction("Remove line").click();
+    await tick();
+  });
   await blur(input);
-  assert.deepEqual(store.rows.map((row) => [row.clientKey, row.quantity]), [['a', '1'], ['c', '3']]);
+  assert.deepEqual(
+    store.rows.map((row) => [row.clientKey, row.quantity]),
+    [
+      ["a", "1"],
+      ["c", "3"],
+    ],
+  );
 });
 
-test('right-click opens line actions on an editable cell and the last line can be cleared', async (t) => {
-  const { host, done } = await mount([line('a', '1')]);
+test("right-click opens line actions on an editable cell and the last line can be cleared", async (t) => {
+  const { host, done } = await mount([line("a", "1")]);
   t.after(done);
   const input = cellInput(host, 0, 0);
   let nativeMenuAllowed = true;
   await act(async () => {
-    nativeMenuAllowed = input.dispatchEvent(new window.MouseEvent('contextmenu', {
-      bubbles: true, cancelable: true, clientX: 100, clientY: 100,
-    }));
+    nativeMenuAllowed = input.dispatchEvent(
+      new window.MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 100,
+        clientY: 100,
+      }),
+    );
     await tick();
   });
-  assert.equal(nativeMenuAllowed, false, 'the row opens the shared menu instead of the browser menu');
-  assert.equal(menuAction('Insert above').disabled, false);
-  assert.equal(menuAction('Duplicate').disabled, false);
-  await act(async () => { menuAction('Clear line').click(); await tick(); });
-  assert.equal(store.rows.length, 1, 'the minimum row remains');
-  assert.equal(store.rows[0]!.description, '');
-  assert.equal(store.rows[0]!.quantity, '');
+  assert.equal(
+    nativeMenuAllowed,
+    false,
+    "the row opens the shared menu instead of the browser menu",
+  );
+  assert.equal(menuAction("Insert above").disabled, false);
+  assert.equal(menuAction("Duplicate").disabled, false);
+  await act(async () => {
+    menuAction("Clear line").click();
+    await tick();
+  });
+  assert.equal(store.rows.length, 1, "the minimum row remains");
+  assert.equal(store.rows[0]!.description, "");
+  assert.equal(store.rows[0]!.quantity, "");
 });
 
-test('hideRemove preserves editable lines without offering menu or keyboard deletion', async (t) => {
-  const { host, done } = await mount([line('a', '1'), line('b', '2')], false, false, false, true);
+test("hideRemove preserves editable lines without offering menu or keyboard deletion", async (t) => {
+  const { host, done } = await mount([line("a", "1"), line("b", "2")], false, false, false, true);
   t.after(done);
   const input = cellInput(host, 0, 0);
-  await keydown(input, { key: 'Backspace', ctrlKey: true });
-  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a', 'b']);
+  await keydown(input, { key: "Backspace", ctrlKey: true });
+  assert.deepEqual(
+    store.rows.map((row) => row.clientKey),
+    ["a", "b"],
+  );
   const trigger = host.querySelector<HTMLButtonElement>('button[aria-label="Line 1 actions"]')!;
-  await act(async () => { trigger.click(); await tick(); });
-  assert.ok(menuAction('Insert above'), 'other line actions remain available');
-  assert.equal([...document.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent?.trim() === 'Remove line'), false);
-  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a', 'b']);
+  await act(async () => {
+    trigger.click();
+    await tick();
+  });
+  assert.ok(menuAction("Insert above"), "other line actions remain available");
+  assert.equal(
+    [...document.querySelectorAll('[role="menuitem"]')].some(
+      (item) => item.textContent?.trim() === "Remove line",
+    ),
+    false,
+  );
+  assert.deepEqual(
+    store.rows.map((row) => row.clientKey),
+    ["a", "b"],
+  );
 });
 
-test('a keyboard context menu keeps its target when the line is reordered', async (t) => {
-  const { host, done } = await mount([line('a', '1'), line('b', '2'), line('c', '3')]);
+test("a keyboard context menu keeps its target when the line is reordered", async (t) => {
+  const { host, done } = await mount([line("a", "1"), line("b", "2"), line("c", "3")]);
   t.after(done);
   const input = cellInput(host, 1, 0);
-  await keydown(input, { key: 'F10', shiftKey: true });
-  assert.ok(menuAction('Remove line'));
-  await keydown(input, { key: 'ArrowDown', altKey: true });
-  await act(async () => { menuAction('Remove line').click(); await tick(); });
-  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a', 'c'], 'actions follow the line identity');
+  await keydown(input, { key: "F10", shiftKey: true });
+  assert.ok(menuAction("Remove line"));
+  await keydown(input, { key: "ArrowDown", altKey: true });
+  await act(async () => {
+    menuAction("Remove line").click();
+    await tick();
+  });
+  assert.deepEqual(
+    store.rows.map((row) => row.clientKey),
+    ["a", "c"],
+    "actions follow the line identity",
+  );
 });
 
-test('read-only lines expose no editing actions or custom right-click menu', async (t) => {
-  const { host, done } = await mount([line('a', '1')], false, true);
+test("read-only lines expose no editing actions or custom right-click menu", async (t) => {
+  const { host, done } = await mount([line("a", "1")], false, true);
   t.after(done);
   assert.equal(host.querySelector('button[aria-haspopup="menu"]'), null);
   const row = host.querySelectorAll('[role="row"]')[1]!;
   let nativeMenuAllowed = false;
   await act(async () => {
-    nativeMenuAllowed = row.dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    nativeMenuAllowed = row.dispatchEvent(
+      new window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
     await tick();
   });
   assert.equal(nativeMenuAllowed, true);
   assert.equal(document.querySelector('[role="menu"]'), null);
-  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a']);
+  assert.deepEqual(
+    store.rows.map((row) => row.clientKey),
+    ["a"],
+  );
 });
 
-test('distribution actions and line removal share one context menu', async (t) => {
-  const { host, done } = await mount([line('a', '1'), line('b', '2')], false, false, true);
+test("distribution actions and line removal share one context menu", async (t) => {
+  const { host, done } = await mount([line("a", "1"), line("b", "2")], false, false, true);
   t.after(done);
-  const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')]
-    .filter((button) => button.textContent?.includes('Split…'))[1]!;
-  await act(async () => { trigger.click(); await tick(); });
+  const trigger = [...host.querySelectorAll<HTMLButtonElement>("button")].filter((button) =>
+    button.textContent?.includes("Split…"),
+  )[1]!;
+  await act(async () => {
+    trigger.click();
+    await tick();
+  });
   assert.equal(document.querySelectorAll('[role="menu"]').length, 1);
-  assert.ok(menuAction('Remove line'));
-  await act(async () => { menuAction('Split…').click(); await tick(); });
-  assert.equal(store.splitIndex, 1, 'splitting addresses the selected line');
-  assert.deepEqual(store.rows.map((row) => row.clientKey), ['a', 'b']);
+  assert.ok(menuAction("Remove line"));
+  await act(async () => {
+    menuAction("Split…").click();
+    await tick();
+  });
+  assert.equal(store.splitIndex, 1, "splitting addresses the selected line");
+  assert.deepEqual(
+    store.rows.map((row) => row.clientKey),
+    ["a", "b"],
+  );
 });
 
-test('optional columns expand on demand and populated values remain visible when collapsed', async (t) => {
-  const { host, done } = await mount([{ ...line('a', '1'), description: '' }], true);
+test("optional columns expand on demand and populated values remain visible when collapsed", async (t) => {
+  const { host, done } = await mount([{ ...line("a", "1"), description: "" }], true);
   t.after(done);
-  const hasDetails = () => [...host.querySelectorAll('[role="columnheader"]')].some((header) => header.textContent === 'Details text');
-  assert.equal(hasDetails(), false, 'empty optional columns start collapsed');
-  const toggle = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Details')!;
-  await act(async () => { toggle.click(); await tick(); });
+  const hasDetails = () =>
+    [...host.querySelectorAll('[role="columnheader"]')].some(
+      (header) => header.textContent === "Details text",
+    );
+  assert.equal(hasDetails(), false, "empty optional columns start collapsed");
+  const toggle = [...host.querySelectorAll("button")].find(
+    (button) => button.textContent === "Details",
+  )!;
+  await act(async () => {
+    toggle.click();
+    await tick();
+  });
   assert.equal(hasDetails(), true);
-  await typeInto(cellInput(host, 0, 5), 'Keep this description');
-  await act(async () => { toggle.click(); await tick(); });
-  assert.equal(hasDetails(), true, 'a populated column is never concealed');
-  assert.equal(store.rows[0]!.description, 'Keep this description', 'collapsing changes no transaction values');
+  await typeInto(cellInput(host, 0, 5), "Keep this description");
+  await act(async () => {
+    toggle.click();
+    await tick();
+  });
+  assert.equal(hasDetails(), true, "a populated column is never concealed");
+  assert.equal(
+    store.rows[0]!.description,
+    "Keep this description",
+    "collapsing changes no transaction values",
+  );
 });
 
 test("a row edit gate exposes the warehouse picker only on applicable lines", async (t) => {
@@ -287,10 +450,17 @@ test("a row edit gate exposes the warehouse picker only on applicable lines", as
   ]);
   t.after(done);
 
-  assert.ok(host.querySelector('[data-lg-row="0"][data-lg-col="4"] button'), "stocked line has an editable warehouse control");
+  assert.ok(
+    host.querySelector('[data-lg-row="0"][data-lg-col="4"] button'),
+    "stocked line has an editable warehouse control",
+  );
   const gated = host.querySelector('[data-lg-row="1"][data-lg-col="4"]');
   assert.ok(gated, "the gated row still renders the warehouse cell position");
-  assert.equal(gated.querySelector("button, input, select"), null, "the gated cell offers no control");
+  assert.equal(
+    gated.querySelector("button, input, select"),
+    null,
+    "the gated cell offers no control",
+  );
 });
 
 test("every declared column renders a cell on every row, gated or read-only", async (_t) => {
@@ -328,9 +498,16 @@ test("Alt+Up keeps the moved line's typed qty off its neighbour", async (t) => {
   assert.equal(rows.length, 3);
   assert.equal(rows[0]!.clientKey, "a");
   assert.equal(rows[1]!.clientKey, "c", "the edited line moves up");
-  assert.ok(String(rows[1]!.quantity).startsWith("9"), `the moved line keeps its typed qty, got ${rows[1]!.quantity}`);
+  assert.ok(
+    String(rows[1]!.quantity).startsWith("9"),
+    `the moved line keeps its typed qty, got ${rows[1]!.quantity}`,
+  );
   assert.equal(rows[2]!.clientKey, "b");
-  assert.equal(rows[2]!.quantity, "2", `the neighbour line keeps its qty, got ${rows[2]!.quantity}`);
+  assert.equal(
+    rows[2]!.quantity,
+    "2",
+    `the neighbour line keeps its qty, got ${rows[2]!.quantity}`,
+  );
 });
 
 test("Ctrl+Backspace keeps the surviving line's qty", async (t) => {
@@ -343,9 +520,16 @@ test("Ctrl+Backspace keeps the surviving line's qty", async (t) => {
   await blur(input);
   const rows = store.rows;
   assert.equal(rows.length, 2);
-  assert.deepEqual(rows.map((r) => r.clientKey), ["a", "c"]);
+  assert.deepEqual(
+    rows.map((r) => r.clientKey),
+    ["a", "c"],
+  );
   assert.equal(rows[0]!.quantity, "1");
-  assert.equal(rows[1]!.quantity, "3", `the line after the deletion keeps its qty, got ${rows[1]!.quantity}`);
+  assert.equal(
+    rows[1]!.quantity,
+    "3",
+    `the line after the deletion keeps its qty, got ${rows[1]!.quantity}`,
+  );
 });
 
 test("Alt+Down keeps an uncommitted tax override on its own line", async (t) => {
@@ -363,7 +547,10 @@ test("Alt+Down keeps an uncommitted tax override on its own line", async (t) => 
   assert.equal(rows[0]!.taxAmount, "");
   assert.equal(rows[1]!.clientKey, "a");
   assert.equal(rows[1]!.taxOverridden, true, "the moved line keeps its override");
-  assert.ok(String(rows[1]!.taxAmount).startsWith("5"), `the moved line keeps its override amount, got ${rows[1]!.taxAmount}`);
+  assert.ok(
+    String(rows[1]!.taxAmount).startsWith("5"),
+    `the moved line keeps its override amount, got ${rows[1]!.taxAmount}`,
+  );
 });
 
 test("opt-in selection renders checkboxes bound to row identities", async (t) => {
@@ -376,14 +563,21 @@ test("opt-in selection renders checkboxes bound to row identities", async (t) =>
     root.render(
       <NextIntlClientProvider locale="en" messages={messages}>
         <LineGrid<TestRow>
-          columns={[{ key: "quantity", label: "Qty", width: "110px", type: "decimal", decimalScale: 8 }]}
+          columns={[
+            { key: "quantity", label: "Qty", width: "110px", type: "decimal", decimalScale: 8 },
+          ]}
           rows={rows}
           onRowsChange={() => {}}
           emptyRow={() => line("z", "")}
           readOnly
           minRows={0}
           getRowKey={(row) => row.clientKey}
-          selection={{ selected: new Set(["a"]), onChange: (next) => { seen.push(next); } }}
+          selection={{
+            selected: new Set(["a"]),
+            onChange: (next) => {
+              seen.push(next);
+            },
+          }}
         />
       </NextIntlClientProvider>,
     );
@@ -423,7 +617,9 @@ async function mountTaxCell(computeTax: () => string, readOnly: boolean) {
       onTaxChange: () => {},
     },
   ];
-  const rows: TestRow[] = [{ clientKey: "l1", description: "untaxed", quantity: "1", taxAmount: "", taxOverridden: false }];
+  const rows: TestRow[] = [
+    { clientKey: "l1", description: "untaxed", quantity: "1", taxAmount: "", taxOverridden: false },
+  ];
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -434,7 +630,13 @@ async function mountTaxCell(computeTax: () => string, readOnly: boolean) {
           getRowKey={(row) => row.clientKey}
           cloneRow={(row) => ({ ...row })}
           onRowsChange={() => {}}
-          emptyRow={() => ({ clientKey: "new", description: "", quantity: "", taxAmount: "", taxOverridden: false })}
+          emptyRow={() => ({
+            clientKey: "new",
+            description: "",
+            quantity: "",
+            taxAmount: "",
+            taxOverridden: false,
+          })}
         />
       </NextIntlClientProvider>,
     );
@@ -512,9 +714,11 @@ function DatedProbe({ initial }: { initial: DatedRow[] }) {
   );
 }
 
-
 test("date columns read typed dates and keys, and keep the grid's row commands", async (t) => {
-  dated.rows = [{ clientKey: "a", workFrom: "2026-01-05" }, { clientKey: "b", workFrom: "" }];
+  dated.rows = [
+    { clientKey: "a", workFrom: "2026-01-05" },
+    { clientKey: "b", workFrom: "" },
+  ];
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -533,7 +737,11 @@ test("date columns read typed dates and keys, and keep the grid's row commands",
   const second = cellInput(host, 1, 0);
   await typeInto(second, "3/15");
   await blur(second);
-  assert.equal(dated.rows[1]!.workFrom, "2026-03-15", "a yearless entry reads in the business year");
+  assert.equal(
+    dated.rows[1]!.workFrom,
+    "2026-03-15",
+    "a yearless entry reads in the business year",
+  );
   await act(async () => second.focus());
   await keydown(second, { key: "+" });
   assert.equal(dated.rows[1]!.workFrom, "2026-03-16");
@@ -548,5 +756,12 @@ test("date columns read typed dates and keys, and keep the grid's row commands",
   const cell = host.querySelector('div[data-lg-row="1"][data-lg-col="0"]')!;
   await keydown(cell, { key: "ArrowUp", altKey: true });
   await blur(second);
-  assert.deepEqual(dated.rows.map((row) => [row.clientKey, row.workFrom]), [["b", "2026-04-01"], ["a", "2026-01-05"]], "Alt+Up moves the line with its typed date");
+  assert.deepEqual(
+    dated.rows.map((row) => [row.clientKey, row.workFrom]),
+    [
+      ["b", "2026-04-01"],
+      ["a", "2026-01-05"],
+    ],
+    "Alt+Up moves the line with its typed date",
+  );
 });

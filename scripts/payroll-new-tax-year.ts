@@ -46,10 +46,7 @@
  */
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import {
-  declaredPayrollTaxYears,
-  payrollTaxYearSupport,
-} from "@openbooks/engine/payroll/packs";
+import { declaredPayrollTaxYears, payrollTaxYearSupport } from "@openbooks/engine/payroll/packs";
 import type {
   PayrollEditionScaffold,
   PayrollTaxYearSupport,
@@ -69,7 +66,11 @@ interface Options {
 
 function parseArgs(argv: string[]): Options {
   const options: Options = {
-    country: null, year: null, dryRun: false, list: false, root: REPO_ROOT,
+    country: null,
+    year: null,
+    dryRun: false,
+    list: false,
+    root: REPO_ROOT,
   };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]!;
@@ -90,9 +91,7 @@ function parseArgs(argv: string[]): Options {
 
 /** `{year}` / `{priorYear}` substitution — the only templating there is. */
 function fill(template: string, year: number): string {
-  return template
-    .replaceAll("{year}", String(year))
-    .replaceAll("{priorYear}", String(year - 1));
+  return template.replaceAll("{year}", String(year)).replaceAll("{priorYear}", String(year - 1));
 }
 
 interface Written {
@@ -149,12 +148,11 @@ function rewriteBarrel(
       return `import { ${name} } from "./${entry}";\n`;
     })
     .join("");
-  const entries = modules.length === 0
-    ? ""
-    : `\n${modules.map(({ year }) => `  ${fill(barrel.exportName, year)},`).join("\n")}\n`;
-  const body = barrel.template
-    .replace("{imports}", imports)
-    .replace("{entries}", entries);
+  const entries =
+    modules.length === 0
+      ? ""
+      : `\n${modules.map(({ year }) => `  ${fill(barrel.exportName, year)},`).join("\n")}\n`;
+  const body = barrel.template.replace("{imports}", imports).replace("{entries}", entries);
   if (!dryRun) writeFileSync(absolute, body, "utf8");
   return { path: barrel.path, years: modules.map(({ year }) => year) };
 }
@@ -179,10 +177,12 @@ interface Scope {
  */
 function declaredScopes(support: PayrollTaxYearSupport, year: number): Scope[] {
   const publishedFor = (region: string | null): boolean =>
-    support.editions.some((edition) =>
-      edition.year === year
-      && edition.status === "published"
-      && (edition.region ?? null) === region);
+    support.editions.some(
+      (edition) =>
+        edition.year === year &&
+        edition.status === "published" &&
+        (edition.region ?? null) === region,
+    );
   return [
     { label: `${support.country} (country-wide)`, published: publishedFor(null) },
     ...support.regionsWithOwnTables.map((region) => ({
@@ -195,10 +195,16 @@ function declaredScopes(support: PayrollTaxYearSupport, year: number): Scope[] {
 function describe(support: PayrollTaxYearSupport): string {
   const published = support.editions
     .filter((edition) => edition.status === "published")
-    .map((edition) => `${edition.year} ${edition.label}${edition.region ? ` [${edition.region}]` : ""}`);
+    .map(
+      (edition) =>
+        `${edition.year} ${edition.label}${edition.region ? ` [${edition.region}]` : ""}`,
+    );
   const draft = support.editions
     .filter((edition) => edition.status === "draft")
-    .map((edition) => `${edition.year} ${edition.label}${edition.region ? ` [${edition.region}]` : ""}`);
+    .map(
+      (edition) =>
+        `${edition.year} ${edition.label}${edition.region ? ` [${edition.region}]` : ""}`,
+    );
   return [
     `${support.country}: ${support.ratesModule}`,
     `  published: ${published.join(", ") || "none"}`,
@@ -215,11 +221,18 @@ function main(): void {
   if (options.list || (!options.country && !options.year)) {
     console.log("Payroll packs and the tax years their statutory tables are loaded for:\n");
     for (const support of declaredPayrollTaxYears()) console.log(`${describe(support)}\n`);
-    console.log("Scaffold the next year:\n  npx tsx scripts/payroll-new-tax-year.ts --country CA --year 2027");
+    console.log(
+      "Scaffold the next year:\n  npx tsx scripts/payroll-new-tax-year.ts --country CA --year 2027",
+    );
     return;
   }
   if (!options.country) throw new Error("--country is required (e.g. --country CA)");
-  if (!options.year || !Number.isInteger(options.year) || options.year < 2000 || options.year > 2100) {
+  if (
+    !options.year ||
+    !Number.isInteger(options.year) ||
+    options.year < 2000 ||
+    options.year > 2100
+  ) {
     throw new Error("--year must be a tax year (e.g. --year 2027)");
   }
 
@@ -237,23 +250,23 @@ function main(): void {
   const list = (of: Scope[]): string => of.map((scope) => scope.label).join(", ");
   if (missingScopes.length === 0) {
     console.log(
-      `${options.country} already has PUBLISHED statutory tables for ${year}`
-      + `${scopes.length > 1 ? ` (${list(scopes)})` : ""}. Nothing to scaffold — `
-      + "a published edition is never overwritten by a generator.",
+      `${options.country} already has PUBLISHED statutory tables for ${year}` +
+        `${scopes.length > 1 ? ` (${list(scopes)})` : ""}. Nothing to scaffold — ` +
+        "a published edition is never overwritten by a generator.",
     );
     return;
   }
 
   console.log(
-    `Scaffolding ${options.country} ${year}${dryRun ? " (dry run)" : ""}`
-    + `${root === REPO_ROOT ? "" : ` under ${root}`}\n`,
+    `Scaffolding ${options.country} ${year}${dryRun ? " (dry run)" : ""}` +
+      `${root === REPO_ROOT ? "" : ` under ${root}`}\n`,
   );
   if (publishedScopes.length > 0) {
     // The published scope's own year module is already on disk, so the
     // `existsSync` skip below leaves it untouched — the promise holds.
     console.log(
-      `  ${year} is already PUBLISHED for ${list(publishedScopes)} and still missing for `
-      + `${list(missingScopes)}. Only the files that do not exist are written.\n`,
+      `  ${year} is already PUBLISHED for ${list(publishedScopes)} and still missing for ` +
+        `${list(missingScopes)}. Only the files that do not exist are written.\n`,
     );
   }
   const files = writeScaffoldFiles(support.scaffold, year, dryRun, root);
@@ -265,7 +278,9 @@ function main(): void {
   console.log("");
   for (const barrel of support.scaffold.barrels) {
     const { path, years } = rewriteBarrel(barrel, dryRun, root);
-    console.log(`  ${dryRun ? "would wire" : "wired   "} ${path} → ${years.join(", ") || "no year modules"}`);
+    console.log(
+      `  ${dryRun ? "would wire" : "wired   "} ${path} → ${years.join(", ") || "no year modules"}`,
+    );
   }
 
   console.log(`\nNext, in order:`);
@@ -273,8 +288,8 @@ function main(): void {
     console.log(`  ${index + 1}. ${fill(step, year)}`);
   });
   console.log(
-    `\nUntil then the ${year} edition is a DRAFT: every statutory engine refuses it by name, the `
-    + `pay-run pre-flight blocks a ${year} run; complete the pack's conformance steps above before publishing it.`,
+    `\nUntil then the ${year} edition is a DRAFT: every statutory engine refuses it by name, the ` +
+      `pay-run pre-flight blocks a ${year} run; complete the pack's conformance steps above before publishing it.`,
   );
 }
 

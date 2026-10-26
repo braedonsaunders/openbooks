@@ -1,20 +1,14 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button, FieldLabel, Select, UrlDrawer } from "@openbooks/ui";
-import type {
-  PlatformOrganization,
-  PlatformUser,
-} from "../../../../lib/platform-admin";
+import type { PlatformOrganization, PlatformUser } from "../../../../lib/platform-admin";
 import { grantAccessAction } from "../actions";
 
-type UserOption = Pick<
-  PlatformUser,
-  "id" | "name" | "email" | "orgName" | "orgId"
->;
+type UserOption = Pick<PlatformUser, "id" | "name" | "email" | "orgName" | "orgId">;
 
 export function GrantAccessForm({
   members,
@@ -31,8 +25,8 @@ export function GrantAccessForm({
   closeHref: string;
   defaultMemberUserId?: string;
 }) {
-  const t = useTranslations('platform.access.grant')
-  const router = useRouter()
+  const t = useTranslations("platform.access.grant");
+  const router = useRouter();
   const [memberUserId, setMemberUserId] = useState(defaultMemberUserId);
   const [orgId, setOrgId] = useState("");
   const [actingUserId, setActingUserId] = useState("");
@@ -54,8 +48,8 @@ export function GrantAccessForm({
         setActingUserId("");
         if (!defaultMemberUserId) setMemberUserId("");
         toast.success(t("success"));
-        router.replace(closeHref)
-        router.refresh()
+        router.replace(closeHref);
+        router.refresh();
       } catch {
         toast.error(t("requestFailed"));
       }
@@ -63,17 +57,20 @@ export function GrantAccessForm({
   }
 
   return (
-    <UrlDrawer open={open} closeHref={closeHref} size="lg" title={t('title')} description={t('description')}>
+    <UrlDrawer
+      open={open}
+      closeHref={closeHref}
+      size="lg"
+      title={t("title")}
+      description={t("description")}
+    >
       <form
         action={submit}
         className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_auto] lg:items-end"
       >
         <div className="space-y-1.5">
-          <FieldLabel
-            htmlFor="platform-member"
-            help={t('memberHelp')}
-          >
-            {t('member')}
+          <FieldLabel htmlFor="platform-member" help={t("memberHelp")}>
+            {t("member")}
           </FieldLabel>
           <Select
             id="platform-member"
@@ -83,7 +80,7 @@ export function GrantAccessForm({
             required
             searchable
           >
-            <option value="">{t('selectMember')}</option>
+            <option value="">{t("selectMember")}</option>
             {members.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name} · {user.email} ({user.orgName})
@@ -92,11 +89,8 @@ export function GrantAccessForm({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <FieldLabel
-            htmlFor="platform-target-org"
-            help={t('organizationHelp')}
-          >
-            {t('organization')}
+          <FieldLabel htmlFor="platform-target-org" help={t("organizationHelp")}>
+            {t("organization")}
           </FieldLabel>
           <Select
             id="platform-target-org"
@@ -109,7 +103,7 @@ export function GrantAccessForm({
             required
             searchable
           >
-            <option value="">{t('selectOrganization')}</option>
+            <option value="">{t("selectOrganization")}</option>
             {organizations.map((organization) => (
               <option key={organization.id} value={organization.id}>
                 {organization.name}
@@ -118,11 +112,8 @@ export function GrantAccessForm({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <FieldLabel
-            htmlFor="platform-acting-user"
-            help={t('actingUserHelp')}
-          >
-            {t('actingUser')}
+          <FieldLabel htmlFor="platform-acting-user" help={t("actingUserHelp")}>
+            {t("actingUser")}
           </FieldLabel>
           <Select
             id="platform-acting-user"
@@ -133,7 +124,7 @@ export function GrantAccessForm({
             required
             searchable
           >
-            <option value="">{t('selectActingUser')}</option>
+            <option value="">{t("selectActingUser")}</option>
             {eligibleActingUsers.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.name} · {user.email}
@@ -141,10 +132,7 @@ export function GrantAccessForm({
             ))}
           </Select>
         </div>
-        <Button
-          type="submit"
-          disabled={pending || !memberUserId || !orgId || !actingUserId}
-        >
+        <Button type="submit" disabled={pending || !memberUserId || !orgId || !actingUserId}>
           {pending ? t("granting") : t("submit")}
         </Button>
       </form>

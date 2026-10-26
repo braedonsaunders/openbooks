@@ -124,7 +124,11 @@ const ENTITY_B = "22222222-2222-4222-8222-222222222222";
 test("a selected legal entity becomes the graph's typed subject scope", () => {
   for (const input of [
     { approver: { type: "role", role: "admin" } as const, subsidiaryIds: [ENTITY_A.toUpperCase()] },
-    { approver: { type: "user", userId: "u-1" } as const, threshold: 10, subsidiaryIds: [ENTITY_A, ENTITY_B] },
+    {
+      approver: { type: "user", userId: "u-1" } as const,
+      threshold: 10,
+      subsidiaryIds: [ENTITY_A, ENTITY_B],
+    },
   ]) {
     const built = buildQuickApprovalGraph(PROFILE, input);
     assert.equal(built.ok, true);
@@ -148,7 +152,12 @@ test("no legal entity selected keeps organization-wide scope absent, not aliased
 });
 
 test("empty, blank and repeated legal entities are refused by name", () => {
-  for (const subsidiaryIds of [[], [""], [ENTITY_A, ENTITY_A], [ENTITY_A, ENTITY_A.toUpperCase()]]) {
+  for (const subsidiaryIds of [
+    [],
+    [""],
+    [ENTITY_A, ENTITY_A],
+    [ENTITY_A, ENTITY_A.toUpperCase()],
+  ]) {
     const built = buildQuickApprovalGraph(PROFILE, {
       approver: { type: "role", role: "admin" },
       subsidiaryIds,
@@ -161,8 +170,10 @@ test("empty, blank and repeated legal entities are refused by name", () => {
 });
 
 test("invalid, mixed and overlength legal entities refuse through the shared graph schema", () => {
-  const overlength = Array.from({ length: 101 }, (_, i) =>
-    `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`);
+  const overlength = Array.from(
+    { length: 101 },
+    (_, i) => `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`,
+  );
   for (const subsidiaryIds of [
     ["not-a-uuid"],
     [ENTITY_A, "not-a-uuid"],
@@ -198,5 +209,8 @@ test("self-approval prevention stays on unless the author explicitly opts out", 
   assert.equal(gate?.data.kind, "gate");
   if (gate?.data.kind !== "gate") return;
   assert.equal(gate.data.gate.preventSelfApproval, false);
-  assert.equal(pinnedGateAllowsSelfApproval({ submissionPolicy: { graph: off.graph } }, gate.id), true);
+  assert.equal(
+    pinnedGateAllowsSelfApproval({ submissionPolicy: { graph: off.graph } }, gate.id),
+    true,
+  );
 });

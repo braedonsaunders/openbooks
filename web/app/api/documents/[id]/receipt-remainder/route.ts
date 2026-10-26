@@ -1,28 +1,42 @@
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { NextResponse } from 'next/server';
-import { correctReceiptQuantity, correctReceiptRemainder } from '@openbooks/engine/inventory/receipt-void-dependents';
-import { getAuthz, can, guardSubsidiaryScope } from '../../../../../lib/authz';
-import { isFeatureEnabled } from '../../../../../lib/features';
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import {
+  correctReceiptQuantity,
+  correctReceiptRemainder,
+} from "@openbooks/engine/inventory/receipt-void-dependents";
+import { getAuthz, can, guardSubsidiaryScope } from "../../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../../lib/features";
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
-import { isUuid } from '../../../../../lib/list-params';
+import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
-import { readDocumentScope } from '@/lib/record-scope-reads'
+import { readDocumentScope } from "@/lib/record-scope-reads";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 const POSTBodySchema = z.object({
   reason: z.string().min(5).max(500),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   // Quantity correction for lines whose purchase-side count was wrong
   // while the customer keeps the goods: each line names the quantity the
   // vendor actually delivered. Omitted entirely for the legacy
   // whole-remainder correction of a phantom over-receipt.
-  lines: z.array(z.object({
-    receiptLineId: uuidString(),
-    correctedQuantity: z.string().min(1).max(50),
-  }).strict()).min(1).max(500).optional(),
+  lines: z
+    .array(
+      z
+        .object({
+          receiptLineId: uuidString(),
+          correctedQuantity: z.string().min(1).max(50),
+        })
+        .strict(),
+    )
+    .min(1)
+    .max(500)
+    .optional(),
 });
 
 /**
@@ -40,25 +54,28 @@ const POSTBodySchema = z.object({
  * refusal mapping with the operator's next step.
  */
 export const POST = defineRoute({
-  public: 'session',
+  public: "session",
   params: z.object({ id: z.string() }),
   body: POSTBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ params, body }) => {
     const authz = await getAuthz();
-    if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { id } = params as { id: string };
-    if (!isUuid(id)) return notFound('record');
+    if (!isUuid(id)) return notFound("record");
     const doc = await readDocumentScope(authz.user.orgId, id);
-    if (!doc || doc.kind !== 'purchase_receipt') return notFound('record');
+    if (!doc || doc.kind !== "purchase_receipt") return notFound("record");
     const denied = guardSubsidiaryScope(authz, doc.subsidiaryId);
     if (denied) return denied;
-    if (!(await isDocKindEnabled(authz.user.orgId, doc.kind))) return notFound('record');
-    if (!can(authz, 'goods_receipts.create')) {
-      return NextResponse.json({ error: 'missing permission: goods_receipts.create' }, { status: 403 });
+    if (!(await isDocKindEnabled(authz.user.orgId, doc.kind))) return notFound("record");
+    if (!can(authz, "goods_receipts.create")) {
+      return NextResponse.json(
+        { error: "missing permission: goods_receipts.create" },
+        { status: 403 },
+      );
     }
-    if ((await isFeatureEnabled(authz.user.orgId, 'inventory')) && !can(authz, 'items.reverse')) {
-      return NextResponse.json({ error: 'missing permission: items.reverse' }, { status: 403 });
+    if ((await isFeatureEnabled(authz.user.orgId, "inventory")) && !can(authz, "items.reverse")) {
+      return NextResponse.json({ error: "missing permission: items.reverse" }, { status: 403 });
     }
     const { reason, date, lines } = body as {
       reason: string;

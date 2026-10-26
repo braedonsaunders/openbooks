@@ -57,15 +57,15 @@ export async function automationsFeatureOn(orgId: string): Promise<boolean> {
   return hrmFeatureOn(orgId, "automations");
 }
 
-export async function hrmFeatureOn(
-  orgId: string,
-  key: string,
-): Promise<boolean> {
+export async function hrmFeatureOn(orgId: string, key: string): Promise<boolean> {
   const rows = await db.execute<{
     features: Record<string, boolean> | null;
-  }>(sql`
+  }>(
+    sql`
     select settings -> 'features' as features from orgs where id = ${orgId} limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const features = rows[0]?.features ?? {};
   return featureEnabled(features, key);
 }
@@ -109,18 +109,18 @@ async function requireAutomations(
   }
 }
 
-export async function listAutomations(
-  orgId: string,
-  actorId: string,
-): Promise<AutomationDTO[]> {
+export async function listAutomations(orgId: string, actorId: string): Promise<AutomationDTO[]> {
   await requireAutomations(orgId, actorId, "automations.read");
   return withOrg(orgId, async () => {
-    const rows = await db.execute<AutomationDTO>(sql`
+    const rows = await db.execute<AutomationDTO>(
+      sql`
       select id, org_id as "orgId", name, description, status, trigger, rules,
              conditions, actions, priority,
              last_run_at as "lastRunAt", error_message as "errorMessage", version
         from automations where org_id = ${orgId} order by name
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows;
   });
 }
@@ -162,7 +162,8 @@ export async function createAutomation(input: {
   const actions = parseAutomationActions(parsed.data.actions);
   assertPublishableAutomationActions(actions);
   return withOrgTransaction(input.orgId, async () => {
-    const rows = await db.execute<AutomationDTO>(sql`
+    const rows = await db.execute<AutomationDTO>(
+      sql`
       insert into automations
         (org_id, name, description, status, trigger, rules, conditions, actions, priority, created_by, updated_by)
       values (${input.orgId}, ${parsed.data.name}, ${parsed.data.description ?? null}, 'draft',
@@ -172,7 +173,9 @@ export async function createAutomation(input: {
       returning id, org_id as "orgId", name, description, status, trigger, rules,
                 conditions, actions, priority,
                 last_run_at as "lastRunAt", error_message as "errorMessage", version
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = rows[0];
     if (!row)
       throw new AutomationServiceError(
@@ -202,19 +205,17 @@ export async function updateAutomation(input: {
 }): Promise<AutomationDTO> {
   await requireAutomations(input.orgId, input.actorId, "automations.manage");
   return withOrgTransaction(input.orgId, async () => {
-    const current = await db.execute<{ version: number; status: string }>(sql`
+    const current = await db.execute<{ version: number; status: string }>(
+      sql`
       select version, status from automations where org_id = ${input.orgId} and id = ${input.automationId} for update
-    `, "objects");
+    `,
+      "objects",
+    );
     if (current.length === 0) {
-      throw new AutomationServiceError(
-        "automation not found — reload the list and try again",
-      );
+      throw new AutomationServiceError("automation not found — reload the list and try again");
     }
     const storedVersion = current[0]!.version;
-    if (
-      input.expectedVersion !== undefined &&
-      input.expectedVersion !== storedVersion
-    ) {
+    if (input.expectedVersion !== undefined && input.expectedVersion !== storedVersion) {
       throw new AutomationVersionConflictError(storedVersion);
     }
     const currentStatus = current[0]!.status;
@@ -225,13 +226,10 @@ export async function updateAutomation(input: {
     const patch: Record<string, string> = {};
     if (input.name !== undefined) {
       if (!input.name.trim())
-        throw new AutomationServiceError(
-          "the automation needs a non-blank name",
-        );
+        throw new AutomationServiceError("the automation needs a non-blank name");
       patch["name"] = input.name.trim();
     }
-    if (input.description !== undefined)
-      patch["description"] = input.description ?? "";
+    if (input.description !== undefined) patch["description"] = input.description ?? "";
     if (input.trigger !== undefined) {
       const trigger = parseAutomationTrigger(input.trigger);
       assertValidScheduleTrigger(trigger);
@@ -244,17 +242,15 @@ export async function updateAutomation(input: {
     if (input.rules !== undefined)
       patch["rules"] = JSON.stringify(parseAutomationRules(input.rules));
     if (input.conditions !== undefined)
-      patch["conditions"] = JSON.stringify(
-        parseAutomationConditions(input.conditions),
-      );
+      patch["conditions"] = JSON.stringify(parseAutomationConditions(input.conditions));
     if (input.actions !== undefined) {
       const actions = parseAutomationActions(input.actions);
       assertPublishableAutomationActions(actions);
       patch["actions"] = JSON.stringify(actions);
     }
-    if (input.priority !== undefined)
-      patch["priority"] = String(input.priority);
-    const rows = await db.execute<AutomationDTO>(sql`
+    if (input.priority !== undefined) patch["priority"] = String(input.priority);
+    const rows = await db.execute<AutomationDTO>(
+      sql`
       update automations
          set name = coalesce(${patch["name"] ?? null}::text, name),
              description = case when ${patch["description"] !== undefined} then ${patch["description"] ?? null}::text else description end,
@@ -269,7 +265,9 @@ export async function updateAutomation(input: {
       returning id, org_id as "orgId", name, description, status, trigger, rules,
                 conditions, actions, priority,
                 last_run_at as "lastRunAt", error_message as "errorMessage", version
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = rows[0];
     if (!row)
       throw new AutomationServiceError(
@@ -296,15 +294,16 @@ export async function setAutomationStatus(input: {
       trigger: unknown;
       actions: unknown;
       status: string;
-    }>(sql`
+    }>(
+      sql`
       select trigger, actions, status from automations
        where org_id = ${input.orgId} and id = ${input.automationId} for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = current[0];
     if (!row)
-      throw new AutomationServiceError(
-        "automation not found — reload the list and try again",
-      );
+      throw new AutomationServiceError("automation not found — reload the list and try again");
     if (input.status === "enabled") {
       // A broken recipe can never be enabled: re-validate on the way in.
       const trigger = parseAutomationTrigger(row.trigger);
@@ -314,7 +313,8 @@ export async function setAutomationStatus(input: {
       assertTriggerCanEnable(trigger);
       assertPublishableAutomationActions(parseAutomationActions(row.actions));
     }
-    const updated = await db.execute<AutomationDTO>(sql`
+    const updated = await db.execute<AutomationDTO>(
+      sql`
       update automations
          set status = ${input.status},
              error_message = case when ${input.status} = 'enabled' then null else error_message end,
@@ -323,7 +323,9 @@ export async function setAutomationStatus(input: {
       returning id, org_id as "orgId", name, description, status, trigger, rules,
                 conditions, actions, priority,
                 last_run_at as "lastRunAt", error_message as "errorMessage", version
-    `, "objects");
+    `,
+      "objects",
+    );
     const out = updated[0];
     if (!out)
       throw new AutomationServiceError(
@@ -351,14 +353,17 @@ export async function listAutomationRuns(
   await requireAutomations(orgId, actorId, "automations.read");
   const allowed = await resolveRunScope(orgId, actorId, allowedSubsidiaryIds);
   return withOrg(orgId, async () => {
-    const rows = await db.execute(sql`
+    const rows = await db.execute(
+      sql`
       select id, status, version, subject_kind as "subjectKind", subject_id as "subjectId",
              created_at as "createdAt"
         from automation_runs
        where org_id = ${orgId} and automation_id = ${automationId}
          and (${status ?? null}::text is null or status = ${status ?? null}::text)
        order by created_at desc limit 100
-    `, "objects");
+    `,
+      "objects",
+    );
     const runs = rows as {
       id: string;
       status: string;
@@ -379,10 +384,7 @@ export async function listAutomationRuns(
     const subsidiaries = await resolveRunSubjectSubsidiaries(orgId, runs);
     return runs
       .filter((run) =>
-        runSubjectVisible(
-          allowed,
-          runScopeFor(subsidiaries, run.subjectKind, run.subjectId),
-        ),
+        runSubjectVisible(allowed, runScopeFor(subsidiaries, run.subjectKind, run.subjectId)),
       )
       .map(contract);
   });
@@ -401,29 +403,21 @@ export async function getAutomationRun(
   // run — the uniform not-found below, never a scope disclosure.
   const allowed = await resolveRunScope(orgId, actorId, allowedSubsidiaryIds);
   return withOrg(orgId, async () => {
-    const rows = await db.execute(sql`
+    const rows = await db.execute(
+      sql`
       select id, automation_id as "automationId", version, trigger_payload as "triggerPayload",
              subject_kind as "subjectKind", subject_id as "subjectId", status,
              started_at as "startedAt", finished_at as "finishedAt", error, steps
         from automation_runs where org_id = ${orgId} and id = ${runId} limit 1
-    `, "objects");
-    const row = rows[0] as
-      { subjectKind: string | null; subjectId: string | null } | undefined;
-    if (!row)
-      throw new AutomationServiceError(
-        "run not found — reload the runs tab and try again",
-      );
+    `,
+      "objects",
+    );
+    const row = rows[0] as { subjectKind: string | null; subjectId: string | null } | undefined;
+    if (!row) throw new AutomationServiceError("run not found — reload the runs tab and try again");
     if (allowed !== null) {
       const subsidiaries = await resolveRunSubjectSubsidiaries(orgId, [row]);
-      if (
-        !runSubjectVisible(
-          allowed,
-          runScopeFor(subsidiaries, row.subjectKind, row.subjectId),
-        )
-      ) {
-        throw new AutomationServiceError(
-          "run not found — reload the runs tab and try again",
-        );
+      if (!runSubjectVisible(allowed, runScopeFor(subsidiaries, row.subjectKind, row.subjectId))) {
+        throw new AutomationServiceError("run not found — reload the runs tab and try again");
       }
     }
     return row;
@@ -449,8 +443,7 @@ export function automationRecipes(): {
     {
       key: "welcome_tasks",
       name: "Welcome tasks before start",
-      description:
-        "Three days before an employment starts, notify the manager to prepare.",
+      description: "Three days before an employment starts, notify the manager to prepare.",
       trigger: {
         kind: "date_relative",
         entity: "employment",
@@ -470,8 +463,7 @@ export function automationRecipes(): {
     {
       key: "probation_end",
       name: "Probation-end reminder",
-      description:
-        "A reminder to the manager when probation approaches its end.",
+      description: "A reminder to the manager when probation approaches its end.",
       trigger: {
         kind: "date_relative",
         entity: "employment",

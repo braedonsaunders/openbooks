@@ -4,16 +4,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createScratchUser,
-  dropScratchOrg,
-  seedApprovalFlow,
-} from "../testing/fixtures.ts";
+import { createScratchUser, dropScratchOrg, seedApprovalFlow } from "../testing/fixtures.ts";
 import { grantPermissions } from "../testing/hrm-harness.ts";
-import {
-  seedAdoption,
-  calculatedRun,
-} from "../payroll/filing-test-fixtures.ts";
+import { seedAdoption, calculatedRun } from "../payroll/filing-test-fixtures.ts";
 import { calculatePayRun } from "../payroll/run-calculation.ts";
 import { commitPayRun } from "../payroll/run-commit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -23,10 +16,7 @@ import {
   addProgramMembership,
   createBenefitProgram,
 } from "../hrm/benefits/programs.ts";
-import {
-  createBenefitAward,
-  submitBenefitAward,
-} from "../hrm/benefits/awards.ts";
+import { createBenefitAward, submitBenefitAward } from "../hrm/benefits/awards.ts";
 import { saveBenefitTransactionPolicy } from "../hrm/benefits/transaction-policy.ts";
 import {
   confirmAwardPayrollDelivery,
@@ -53,34 +43,29 @@ for (const transaction of [false, true])
           sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"hrm":true,"orders":true}'::jsonb) where id = ${fx.orgId}`,
         );
         installEngineSeams();
-        const approverId = await createScratchUser(
-          fx.orgId,
-          "Benefits Approver",
-          "admin",
-        );
+        const approverId = await createScratchUser(fx.orgId, "Benefits Approver", "admin");
         await grantPermissions(fx.orgId, fx.actorId, [
           "hrm.benefits.read",
           "hrm.benefits.manage",
           "gl.read",
           "ar.read",
         ]);
-        await grantPermissions(fx.orgId, approverId, [
-          "hrm.benefits.read",
-          "hrm.benefits.manage",
-        ]);
+        await grantPermissions(fx.orgId, approverId, ["hrm.benefits.read", "hrm.benefits.manage"]);
         await seedApprovalFlow(fx.orgId, {
           subjectKind: "hrm_benefit_award",
           assignees: [{ type: "user", userId: approverId }],
           mode: "any",
           preventSelfApproval: true,
         });
-        const component = (await db.execute<{ id: string }>(sql`
+        const component = (
+          await db.execute<{ id: string }>(
+            sql`
       select id from pay_components where org_id = ${fx.orgId} and system_key = 'bonus' and (country = 'CA' or country is null) order by country nulls last
-    `, "objects"))[0]!;
-        assert.ok(
-          component,
-          "the native payroll fixture has its Canadian bonus component",
-        );
+    `,
+            "objects",
+          )
+        )[0]!;
+        assert.ok(component, "the native payroll fixture has its Canadian bonus component");
         const created = await createBenefitProgram({
           orgId: fx.orgId,
           actorId: fx.actorId,
@@ -105,13 +90,13 @@ for (const transaction of [false, true])
             : {}),
         });
         if (transaction) {
-          const item = (await db.execute<{ id: string }>(
-              sql`select id from items where org_id=${fx.orgId} order by id limit 1`, "objects",
-            ))[0];
-          assert.ok(
-            item,
-            "the native fixture includes a commercial source item",
-          );
+          const item = (
+            await db.execute<{ id: string }>(
+              sql`select id from items where org_id=${fx.orgId} order by id limit 1`,
+              "objects",
+            )
+          )[0];
+          assert.ok(item, "the native fixture includes a commercial source item");
           await saveBenefitTransactionPolicy({
             orgId: fx.orgId,
             actorId: fx.actorId,
@@ -133,9 +118,7 @@ for (const transaction of [false, true])
                   effectiveTo: null,
                 },
               ],
-              limits: [
-                { groupId: fx.subsidiaryId, kind: "none", amount: null },
-              ],
+              limits: [{ groupId: fx.subsidiaryId, kind: "none", amount: null }],
             },
           });
           const documentId = randomUUID();
@@ -220,10 +203,13 @@ for (const transaction of [false, true])
           runDocumentId: input.documentId,
         });
         assert.equal(replay.award.status, "delivered");
-        const lines = await db.execute<{ amount: string }>(sql`
+        const lines = await db.execute<{ amount: string }>(
+          sql`
       select l.amount::text as amount from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
        where s.org_id=${fx.orgId} and s.pay_run_document_id=${input.documentId} and l.description=${`Benefit award ${award.id} (${program.code} 2026-07-05..2026-07-18)`}
-    `, "objects");
+    `,
+          "objects",
+        );
         assert.deepEqual(lines, [{ amount: "25.0000" }]);
         const statement = await employmentBenefitStatement({
           orgId: fx.orgId,
@@ -231,9 +217,7 @@ for (const transaction of [false, true])
           employmentId: fx.employmentId,
         });
         assert.equal(statement.paidAwards.length, 1);
-        assert.deepEqual(statement.paidTotals, [
-          { currency: "CAD", total: "25.0000" },
-        ]);
+        assert.deepEqual(statement.paidTotals, [{ currency: "CAD", total: "25.0000" }]);
         assert.equal(statement.payrollRecords.length, 1);
         assert.equal(
           statement.payrollRecords[0]!.gross,
@@ -241,8 +225,9 @@ for (const transaction of [false, true])
           "the award is already in payroll gross, never added to it twice",
         );
         const accounts = await db.execute<{ id: string; type: string }>(
-            sql`select id, type from accounts where org_id=${fx.orgId}`, "objects",
-          );
+          sql`select id, type from accounts where org_id=${fx.orgId}`,
+          "objects",
+        );
         const account = (type: string) => {
           const found = accounts.find((a) => a.type === type)?.id;
           assert.ok(found, `fixture has ${type} control account`);
@@ -260,9 +245,12 @@ for (const transaction of [false, true])
         });
         const revenueAccount = accounts.find((a) => a.type === "income")?.id;
         assert.ok(revenueAccount, "the native fixture has a revenue account");
-        const expenseAccount = (await db.execute<{ id: string }>(
-            sql`select settings#>>'{payroll,wageExpenseAccountId}' as id from orgs where id=${fx.orgId}`, "objects",
-          ))[0]!.id;
+        const expenseAccount = (
+          await db.execute<{ id: string }>(
+            sql`select settings#>>'{payroll,wageExpenseAccountId}' as id from orgs where id=${fx.orgId}`,
+            "objects",
+          )
+        )[0]!.id;
         const measure = () =>
           measureMoneySource(db, fx.orgId, fx.actorId, {
             metric: "net_profit",

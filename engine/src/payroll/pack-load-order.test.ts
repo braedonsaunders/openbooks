@@ -45,15 +45,24 @@ test("every registered pack loads before the registry is entered", () => {
     BR: BR_PAYROLL_PACK,
   } as const;
   assert.deepEqual(Object.keys(PAYROLL_COUNTRY_PACKS), [
-    "CA", "US", "GB", "DE", "FR", "IE", "AU", "IT", "NL", "ES", "SG", "JP", "PL", "BR",
+    "CA",
+    "US",
+    "GB",
+    "DE",
+    "FR",
+    "IE",
+    "AU",
+    "IT",
+    "NL",
+    "ES",
+    "SG",
+    "JP",
+    "PL",
+    "BR",
   ]);
   for (const [country, pack] of Object.entries(packs)) {
     assert.equal(pack.country, country, `${country} pack country`);
-    assert.equal(
-      PAYROLL_COUNTRY_PACKS[country]?.country,
-      country,
-      `${country} registry entry`,
-    );
+    assert.equal(PAYROLL_COUNTRY_PACKS[country]?.country, country, `${country} registry entry`);
   }
 });
 
@@ -86,7 +95,10 @@ test("no pack file imports a runtime binding out of packs.ts", () => {
     const walk = (at: string): void => {
       for (const entry of readdirSync(at, { withFileTypes: true })) {
         const path = join(at, entry.name);
-        if (entry.isDirectory()) { walk(path); continue; }
+        if (entry.isDirectory()) {
+          walk(path);
+          continue;
+        }
         if (!/\.[cm]?tsx?$/.test(entry.name)) continue;
         // Test files are leaf CONSUMERS: nothing imports them, so they cannot be
         // part of the registry's cycle. gb/pack.test.ts legitimately imports the
@@ -97,7 +109,10 @@ test("no pack file imports a runtime binding out of packs.ts", () => {
           if (/^\s*import\s+type\s/.test(line)) continue;
           const braced = /^\s*import\s*\{(.*)\}/.exec(line);
           const runtime = braced
-            ? braced[1]!.split(",").map((s) => s.trim()).filter((s) => s && !s.startsWith("type "))
+            ? braced[1]!
+                .split(",")
+                .map((s) => s.trim())
+                .filter((s) => s && !s.startsWith("type "))
             : [];
           if (runtime.length > 0) offenders.push(`${path}:${index + 1}: ${line.trim()}`);
         }
@@ -108,7 +123,7 @@ test("no pack file imports a runtime binding out of packs.ts", () => {
   assert.deepEqual(
     offenders,
     [],
-    "import runtime bindings from a leaf (payroll-error.ts), never from packs.ts:\n"
-      + offenders.join("\n"),
+    "import runtime bindings from a leaf (payroll-error.ts), never from packs.ts:\n" +
+      offenders.join("\n"),
   );
 });

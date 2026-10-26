@@ -1,17 +1,28 @@
-import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
 
-test('server renders share authority without retaining it across requests or verified frames', () => {
-  const result = spawnSync(process.execPath, [
-    '--no-concurrent-sparkplug', '--no-concurrent-recompilation',
-    '--conditions=react-server', '--import=tsx', '--input-type=module',
-  ], {
-    cwd: fileURLToPath(new URL('../', import.meta.url)),
-    encoding: 'utf8', timeout: 30_000,
-    env: { ...process.env, OPENBOOKS_DB_URL: '', TSX_TSCONFIG_PATH: fileURLToPath(new URL('../tsconfig.json', import.meta.url)) },
-    input: `
+test("server renders share authority without retaining it across requests or verified frames", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--no-concurrent-sparkplug",
+      "--no-concurrent-recompilation",
+      "--conditions=react-server",
+      "--import=tsx",
+      "--input-type=module",
+    ],
+    {
+      cwd: fileURLToPath(new URL("../", import.meta.url)),
+      encoding: "utf8",
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        OPENBOOKS_DB_URL: "",
+        TSX_TSCONFIG_PATH: fileURLToPath(new URL("../tsconfig.json", import.meta.url)),
+      },
+      input: `
       import assert from 'node:assert/strict';
       import {registerHooks, createRequire} from 'node:module';
       import {PassThrough} from 'node:stream';
@@ -96,7 +107,8 @@ test('server renders share authority without retaining it across requests or ver
       await render(() => probe('company-c'));
       assert.equal(state.reads,7,'a failed prior render must not poison the next request');
     `,
-  })
-  assert.equal(result.error, undefined)
-  assert.equal(result.status, 0, result.stderr || result.stdout)
-})
+    },
+  );
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});

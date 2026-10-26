@@ -37,11 +37,21 @@ function postgresCode(error) {
 
 async function seedTenant(client, label) {
   const t = {
-    orgId: randomUUID(), subsidiaryId: randomUUID(), employeeId: randomUUID(), employmentId: randomUUID(),
-    payScheduleId: randomUUID(), payRunDocumentId: randomUUID(), componentId: randomUUID(),
-    flowId: randomUUID(), flowRunId: randomUUID(), subjectId: randomUUID(),
-    accountId: randomUUID(), formatId: randomUUID(), profileId: randomUUID(),
-    paymentScheduleId: randomUUID(), paymentRunId: randomUUID(),
+    orgId: randomUUID(),
+    subsidiaryId: randomUUID(),
+    employeeId: randomUUID(),
+    employmentId: randomUUID(),
+    payScheduleId: randomUUID(),
+    payRunDocumentId: randomUUID(),
+    componentId: randomUUID(),
+    flowId: randomUUID(),
+    flowRunId: randomUUID(),
+    subjectId: randomUUID(),
+    accountId: randomUUID(),
+    formatId: randomUUID(),
+    profileId: randomUUID(),
+    paymentScheduleId: randomUUID(),
+    paymentRunId: randomUUID(),
   };
   await client.query(
     `insert into orgs (id, name, base_currency, country, settings, env_kind)
@@ -142,11 +152,13 @@ async function withCloneAuthority(client, work) {
 function insertGate(client, tenant, { flowId = tenant.flowId, runId = tenant.flowRunId } = {}) {
   const id = randomUUID();
   const nodeId = `gate-${id.slice(0, 8)}`;
-  return withCloneAuthority(client, () => client.query(
-    `insert into flow_gates (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key)
+  return withCloneAuthority(client, () =>
+    client.query(
+      `insert into flow_gates (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key)
      values ($1, $2, $3, $4, $5, 'vendor_bill', $6, 'Approve', $7)`,
-    [id, tenant.orgId, flowId, runId, nodeId, tenant.subjectId, `${runId}:${nodeId}`],
-  )).then(() => id);
+      [id, tenant.orgId, flowId, runId, nodeId, tenant.subjectId, `${runId}:${nodeId}`],
+    ),
+  ).then(() => id);
 }
 
 async function insertRow(client, table, values) {
@@ -169,69 +181,185 @@ async function insertRow(client, table, values) {
  */
 const POINTERS = [
   {
-    table: "flow_runs", column: "flow_id", constraint: "flow_runs_flow_id_fkey", parent: (t) => t.flowId, updateCode: "23514",
-    definition: "FOREIGN KEY (org_id, flow_id) REFERENCES flows(org_id, id) ON DELETE CASCADE DEFERRABLE",
-    insert: (c, t, ref) => insertRow(c, "flow_runs", { org_id: t.orgId, flow_id: ref, subject_kind: "vendor_bill", subject_id: randomUUID(), trigger: "manual" }),
+    table: "flow_runs",
+    column: "flow_id",
+    constraint: "flow_runs_flow_id_fkey",
+    parent: (t) => t.flowId,
+    updateCode: "23514",
+    definition:
+      "FOREIGN KEY (org_id, flow_id) REFERENCES flows(org_id, id) ON DELETE CASCADE DEFERRABLE",
+    insert: (c, t, ref) =>
+      insertRow(c, "flow_runs", {
+        org_id: t.orgId,
+        flow_id: ref,
+        subject_kind: "vendor_bill",
+        subject_id: randomUUID(),
+        trigger: "manual",
+      }),
   },
   {
-    table: "flow_locks", column: "flow_id", constraint: "flow_locks_flow_id_fkey", parent: (t) => t.flowId, updateCode: "23503",
-    definition: "FOREIGN KEY (org_id, flow_id) REFERENCES flows(org_id, id) ON DELETE CASCADE DEFERRABLE",
-    insert: (c, t, ref) => insertRow(c, "flow_locks", { org_id: t.orgId, subject_kind: "vendor_bill", subject_id: randomUUID(), flow_id: ref }),
+    table: "flow_locks",
+    column: "flow_id",
+    constraint: "flow_locks_flow_id_fkey",
+    parent: (t) => t.flowId,
+    updateCode: "23503",
+    definition:
+      "FOREIGN KEY (org_id, flow_id) REFERENCES flows(org_id, id) ON DELETE CASCADE DEFERRABLE",
+    insert: (c, t, ref) =>
+      insertRow(c, "flow_locks", {
+        org_id: t.orgId,
+        subject_kind: "vendor_bill",
+        subject_id: randomUUID(),
+        flow_id: ref,
+      }),
   },
   {
-    table: "flow_run_effects", column: "run_id", constraint: "flow_run_effects_run_id_fkey", parent: (t) => t.flowRunId, updateCode: "23503",
-    definition: "FOREIGN KEY (org_id, run_id) REFERENCES flow_runs(org_id, id) ON DELETE CASCADE DEFERRABLE",
-    insert: (c, t, ref) => insertRow(c, "flow_run_effects", { org_id: t.orgId, run_id: ref, effect_key: `effect-${randomUUID()}` }),
+    table: "flow_run_effects",
+    column: "run_id",
+    constraint: "flow_run_effects_run_id_fkey",
+    parent: (t) => t.flowRunId,
+    updateCode: "23503",
+    definition:
+      "FOREIGN KEY (org_id, run_id) REFERENCES flow_runs(org_id, id) ON DELETE CASCADE DEFERRABLE",
+    insert: (c, t, ref) =>
+      insertRow(c, "flow_run_effects", {
+        org_id: t.orgId,
+        run_id: ref,
+        effect_key: `effect-${randomUUID()}`,
+      }),
   },
   {
-    table: "flow_gates", column: "flow_id", constraint: "flow_gates_flow_id_fkey", parent: (t) => t.flowId, updateCode: "23514",
-    definition: "FOREIGN KEY (org_id, flow_id) REFERENCES flows(org_id, id) ON DELETE CASCADE DEFERRABLE",
+    table: "flow_gates",
+    column: "flow_id",
+    constraint: "flow_gates_flow_id_fkey",
+    parent: (t) => t.flowId,
+    updateCode: "23514",
+    definition:
+      "FOREIGN KEY (org_id, flow_id) REFERENCES flows(org_id, id) ON DELETE CASCADE DEFERRABLE",
     insert: (c, t, ref) => insertGate(c, t, { flowId: ref }),
   },
   {
-    table: "flow_gates", column: "run_id", constraint: "flow_gates_run_id_fkey", parent: (t) => t.flowRunId, updateCode: "23514",
-    definition: "FOREIGN KEY (org_id, run_id) REFERENCES flow_runs(org_id, id) ON DELETE CASCADE DEFERRABLE",
+    table: "flow_gates",
+    column: "run_id",
+    constraint: "flow_gates_run_id_fkey",
+    parent: (t) => t.flowRunId,
+    updateCode: "23514",
+    definition:
+      "FOREIGN KEY (org_id, run_id) REFERENCES flow_runs(org_id, id) ON DELETE CASCADE DEFERRABLE",
     insert: (c, t, ref) => insertGate(c, t, { runId: ref }),
   },
   {
-    table: "pay_run_adjustments", column: "pay_run_document_id", constraint: "pay_run_adjustments_run_fkey", parent: (t) => t.payRunDocumentId, updateCode: "23503",
-    definition: "FOREIGN KEY (org_id, pay_run_document_id) REFERENCES pay_runs(org_id, document_id) ON DELETE CASCADE DEFERRABLE",
-    insert: (c, t, ref) => insertRow(c, "pay_run_adjustments", { org_id: t.orgId, pay_run_document_id: ref, employee_party_id: t.employeeId, adjustment_type: "exclude" }),
+    table: "pay_run_adjustments",
+    column: "pay_run_document_id",
+    constraint: "pay_run_adjustments_run_fkey",
+    parent: (t) => t.payRunDocumentId,
+    updateCode: "23503",
+    definition:
+      "FOREIGN KEY (org_id, pay_run_document_id) REFERENCES pay_runs(org_id, document_id) ON DELETE CASCADE DEFERRABLE",
+    insert: (c, t, ref) =>
+      insertRow(c, "pay_run_adjustments", {
+        org_id: t.orgId,
+        pay_run_document_id: ref,
+        employee_party_id: t.employeeId,
+        adjustment_type: "exclude",
+      }),
   },
   {
-    table: "pay_run_adjustments", column: "component_id", constraint: "pay_run_adjustments_component_fkey", parent: (t) => t.componentId, updateCode: "23503",
-    definition: "FOREIGN KEY (org_id, component_id) REFERENCES pay_components(org_id, id) ON DELETE CASCADE DEFERRABLE",
-    insert: (c, t, ref) => insertRow(c, "pay_run_adjustments", {
-      org_id: t.orgId, pay_run_document_id: t.payRunDocumentId, employee_party_id: t.employeeId, adjustment_type: "line", component_id: ref, amount: "100.0000",
-    }),
+    table: "pay_run_adjustments",
+    column: "component_id",
+    constraint: "pay_run_adjustments_component_fkey",
+    parent: (t) => t.componentId,
+    updateCode: "23503",
+    definition:
+      "FOREIGN KEY (org_id, component_id) REFERENCES pay_components(org_id, id) ON DELETE CASCADE DEFERRABLE",
+    insert: (c, t, ref) =>
+      insertRow(c, "pay_run_adjustments", {
+        org_id: t.orgId,
+        pay_run_document_id: t.payRunDocumentId,
+        employee_party_id: t.employeeId,
+        adjustment_type: "line",
+        component_id: ref,
+        amount: "100.0000",
+      }),
   },
   {
-    table: "pay_run_holiday_assertions", column: "pay_run_document_id", constraint: "pay_run_holiday_assertions_run_fkey", parent: (t) => t.payRunDocumentId, updateCode: "23503",
-    definition: "FOREIGN KEY (org_id, pay_run_document_id) REFERENCES pay_runs(org_id, document_id) ON DELETE CASCADE DEFERRABLE",
-    insert: (c, t, ref) => insertRow(c, "pay_run_holiday_assertions", {
-      org_id: t.orgId, pay_run_document_id: ref, employee_party_id: t.employeeId, holiday_key: `holiday-${randomUUID()}`, holiday_date: "2026-07-01", absent_without_consent: false,
-    }),
+    table: "pay_run_holiday_assertions",
+    column: "pay_run_document_id",
+    constraint: "pay_run_holiday_assertions_run_fkey",
+    parent: (t) => t.payRunDocumentId,
+    updateCode: "23503",
+    definition:
+      "FOREIGN KEY (org_id, pay_run_document_id) REFERENCES pay_runs(org_id, document_id) ON DELETE CASCADE DEFERRABLE",
+    insert: (c, t, ref) =>
+      insertRow(c, "pay_run_holiday_assertions", {
+        org_id: t.orgId,
+        pay_run_document_id: ref,
+        employee_party_id: t.employeeId,
+        holiday_key: `holiday-${randomUUID()}`,
+        holiday_date: "2026-07-01",
+        absent_without_consent: false,
+      }),
   },
   {
-    table: "pay_stubs", column: "pay_run_document_id", constraint: "pay_stubs_pay_run_document_id_fkey", parent: (t) => t.payRunDocumentId, updateCode: "23503",
-    definition: "FOREIGN KEY (org_id, pay_run_document_id) REFERENCES pay_runs(org_id, document_id) ON DELETE CASCADE DEFERRABLE",
-    insert: (c, t, ref) => insertRow(c, "pay_stubs", {
-      org_id: t.orgId, pay_run_document_id: ref, employee_party_id: t.employeeId, employment_id: t.employmentId, province: "ON",
-      periods_per_year: 26, pay_date: "2026-07-21", tax_year: 2026, currency_code: "CAD", gross: "0", net_pay: "0",
-      pensionable_earnings: "0", insurable_earnings: "0", factors: "{}",
-    }),
+    table: "pay_stubs",
+    column: "pay_run_document_id",
+    constraint: "pay_stubs_pay_run_document_id_fkey",
+    parent: (t) => t.payRunDocumentId,
+    updateCode: "23503",
+    definition:
+      "FOREIGN KEY (org_id, pay_run_document_id) REFERENCES pay_runs(org_id, document_id) ON DELETE CASCADE DEFERRABLE",
+    insert: (c, t, ref) =>
+      insertRow(c, "pay_stubs", {
+        org_id: t.orgId,
+        pay_run_document_id: ref,
+        employee_party_id: t.employeeId,
+        employment_id: t.employmentId,
+        province: "ON",
+        periods_per_year: 26,
+        pay_date: "2026-07-21",
+        tax_year: 2026,
+        currency_code: "CAD",
+        gross: "0",
+        net_pay: "0",
+        pensionable_earnings: "0",
+        insurable_earnings: "0",
+        factors: "{}",
+      }),
   },
   {
-    table: "payment_runs", column: "source_schedule_id", constraint: "payment_runs_source_schedule_id_fkey", parent: (t) => t.paymentScheduleId, updateCode: "23503",
-    definition: "FOREIGN KEY (org_id, source_schedule_id) REFERENCES payment_schedules(org_id, id) DEFERRABLE",
-    insert: (c, t, ref) => insertRow(c, "payment_runs", { org_id: t.orgId, run_number: `RUN-${randomUUID()}`, bank_account_id: t.accountId, method: "eft", source_schedule_id: ref }),
+    table: "payment_runs",
+    column: "source_schedule_id",
+    constraint: "payment_runs_source_schedule_id_fkey",
+    parent: (t) => t.paymentScheduleId,
+    updateCode: "23503",
+    definition:
+      "FOREIGN KEY (org_id, source_schedule_id) REFERENCES payment_schedules(org_id, id) DEFERRABLE",
+    insert: (c, t, ref) =>
+      insertRow(c, "payment_runs", {
+        org_id: t.orgId,
+        run_number: `RUN-${randomUUID()}`,
+        bank_account_id: t.accountId,
+        method: "eft",
+        source_schedule_id: ref,
+      }),
   },
   {
-    table: "payment_schedules", column: "last_payment_run_id", constraint: "payment_schedules_last_payment_run_id_fkey", parent: (t) => t.paymentRunId, updateCode: "23503",
-    definition: "FOREIGN KEY (org_id, last_payment_run_id) REFERENCES payment_runs(org_id, id) DEFERRABLE",
-    insert: (c, t, ref) => insertRow(c, "payment_schedules", {
-      org_id: t.orgId, name: `Schedule ${randomUUID()}`, payment_bank_profile_id: t.profileId, cron: "0 8 * * 1", timezone: "UTC", last_payment_run_id: ref,
-    }),
+    table: "payment_schedules",
+    column: "last_payment_run_id",
+    constraint: "payment_schedules_last_payment_run_id_fkey",
+    parent: (t) => t.paymentRunId,
+    updateCode: "23503",
+    definition:
+      "FOREIGN KEY (org_id, last_payment_run_id) REFERENCES payment_runs(org_id, id) DEFERRABLE",
+    insert: (c, t, ref) =>
+      insertRow(c, "payment_schedules", {
+        org_id: t.orgId,
+        name: `Schedule ${randomUUID()}`,
+        payment_bank_profile_id: t.profileId,
+        cron: "0 8 * * 1",
+        timezone: "UTC",
+        last_payment_run_id: ref,
+      }),
   },
 ];
 
@@ -257,33 +385,57 @@ async function refuses(client, operation, code) {
   await client.query("rollback to savepoint refused_pointer");
 }
 
-test("every flow, payroll and payment tenant pointer is a validated composite key", { skip: !DB }, () => inTransaction(async (client) => {
-  for (const pointer of POINTERS) {
-    const result = await client.query(
-      `select contype, convalidated, pg_get_constraintdef(oid) as definition from pg_constraint
+test(
+  "every flow, payroll and payment tenant pointer is a validated composite key",
+  { skip: !DB },
+  () =>
+    inTransaction(async (client) => {
+      for (const pointer of POINTERS) {
+        const result = await client.query(
+          `select contype, convalidated, pg_get_constraintdef(oid) as definition from pg_constraint
         where conrelid = $1::regclass and conname = $2`,
-      [`public.${pointer.table}`, pointer.constraint],
-    );
-    assert.equal(result.rows.length, 1, `${pointer.constraint} must exist`);
-    assert.deepEqual(result.rows[0], { contype: "f", convalidated: true, definition: pointer.definition }, pointer.constraint);
-  }
-}));
+          [`public.${pointer.table}`, pointer.constraint],
+        );
+        assert.equal(result.rows.length, 1, `${pointer.constraint} must exist`);
+        assert.deepEqual(
+          result.rows[0],
+          { contype: "f", convalidated: true, definition: pointer.definition },
+          pointer.constraint,
+        );
+      }
+    }),
+);
 
 for (const pointer of POINTERS) {
-  test(`${pointer.table}.${pointer.column} accepts a same-tenant parent and refuses a cross-tenant one`, { skip: !DB }, () => inTransaction(async (client) => {
-    const tenant = await seedTenant(client, "A");
-    const other = await seedTenant(client, "B");
-    const id = await pointer.insert(client, tenant, pointer.parent(tenant));
-    const read = async () => (await client.query(`select org_id, ${pointer.column} as reference from ${pointer.table} where id = $1`, [id])).rows;
-    const stored = await read();
-    assert.deepEqual(stored, [{ org_id: tenant.orgId, reference: pointer.parent(tenant) }]);
+  test(
+    `${pointer.table}.${pointer.column} accepts a same-tenant parent and refuses a cross-tenant one`,
+    { skip: !DB },
+    () =>
+      inTransaction(async (client) => {
+        const tenant = await seedTenant(client, "A");
+        const other = await seedTenant(client, "B");
+        const id = await pointer.insert(client, tenant, pointer.parent(tenant));
+        const read = async () =>
+          (
+            await client.query(
+              `select org_id, ${pointer.column} as reference from ${pointer.table} where id = $1`,
+              [id],
+            )
+          ).rows;
+        const stored = await read();
+        assert.deepEqual(stored, [{ org_id: tenant.orgId, reference: pointer.parent(tenant) }]);
 
-    await refuses(client, () => pointer.insert(client, tenant, pointer.parent(other)), "23503");
-    await refuses(
-      client,
-      () => client.query(`update ${pointer.table} set ${pointer.column} = $1 where id = $2`, [pointer.parent(other), id]),
-      pointer.updateCode,
-    );
-    assert.deepEqual(await read(), stored, "a refused repointing leaves the row unchanged");
-  }));
+        await refuses(client, () => pointer.insert(client, tenant, pointer.parent(other)), "23503");
+        await refuses(
+          client,
+          () =>
+            client.query(`update ${pointer.table} set ${pointer.column} = $1 where id = $2`, [
+              pointer.parent(other),
+              id,
+            ]),
+          pointer.updateCode,
+        );
+        assert.deepEqual(await read(), stored, "a refused repointing leaves the row unchanged");
+      }),
+  );
 }

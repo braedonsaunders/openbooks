@@ -1,26 +1,33 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const taxConfiguration: DocArticle = {
-  slug: 'tax-configuration',
-  title: 'Tax Codes, Rates, and Groups',
-  category: 'administration',
+  slug: "tax-configuration",
+  title: "Tax Codes, Rates, and Groups",
+  category: "administration",
   order: 2,
   summary:
-    'Define how tax is selected and posted: calculation type, recoverability, inclusive pricing, effective-dated rates, and sequenced tax groups.',
-  updated: '2026-10-12',
+    "Define how tax is selected and posted: calculation type, recoverability, inclusive pricing, effective-dated rates, and sequenced tax groups.",
+  updated: "2026-10-12",
   keywords: [
-    'tax code',
-    'tax rate',
-    'tax group',
-    'calculation type',
-    'withholding',
-    'reverse charge',
-    'recoverable',
-    'price includes tax',
-    'compound',
-    'effective date',
+    "tax code",
+    "tax rate",
+    "tax group",
+    "calculation type",
+    "withholding",
+    "reverse charge",
+    "recoverable",
+    "price includes tax",
+    "compound",
+    "effective date",
   ],
-  related: ['tax-jurisdictions-and-nexus', 'tax-returns-and-boxes', 'setup-taxes-group', 'accounting-model', 'contractor-withholding', 'electronic-invoicing'],
+  related: [
+    "tax-jurisdictions-and-nexus",
+    "tax-returns-and-boxes",
+    "setup-taxes-group",
+    "accounting-model",
+    "contractor-withholding",
+    "electronic-invoicing",
+  ],
   body: `# Tax Codes, Rates, and Groups
 
 A **tax code** is the unit of tax configuration: it decides how tax is selected on
@@ -100,4 +107,4 @@ become a government filing. Configure those alongside your codes:
 Test a new code with a small transaction in an open period and review the
 generated tax lines before relying on it.
 `,
-}
+};

@@ -1,18 +1,18 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { redirect } from 'next/navigation'
-import { can, requirePermission } from '../../../../lib/authz'
-import { accessDeniedHref } from '../../../../lib/gate-targets'
-import { sentinelAccessDenied } from '../../../../lib/analytics/sentinel-access'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery } from '../../../../lib/report-filters'
-import { sentinelData } from '../../../../lib/analytics/sentinel-data'
-import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
-import { reportPeriodLabel } from '../../../../lib/format'
-import { sentinelStrings } from '../../../../lib/analytics/sentinel-strings'
-import type { SentinelView } from './SentinelView'
+import { getLocale, getTranslations } from "next-intl/server";
+import { frame, page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { redirect } from "next/navigation";
+import { can, requirePermission } from "../../../../lib/authz";
+import { accessDeniedHref } from "../../../../lib/gate-targets";
+import { sentinelAccessDenied } from "../../../../lib/analytics/sentinel-access";
+import { resolvePeriod } from "../../../../lib/periods";
+import { parseReportQuery } from "../../../../lib/report-filters";
+import { sentinelData } from "../../../../lib/analytics/sentinel-data";
+import { analyticsFiscalPeriodPicker } from "../../../../lib/analytics/fiscal-period-options";
+import { reportPeriodLabel } from "../../../../lib/format";
+import { sentinelStrings } from "../../../../lib/analytics/sentinel-strings";
+import type { SentinelView } from "./SentinelView";
 
 /**
  * Sentinel forensics, split into a loader and a spec.
@@ -37,65 +37,82 @@ import type { SentinelView } from './SentinelView'
  * findings, which is the whole point of the loader/spec split.
  */
 
-type ViewProps = Parameters<typeof SentinelView>[0]
+type ViewProps = Parameters<typeof SentinelView>[0];
 
 export interface SentinelData {
-  title: string
-  backLabel: string
-  periodLabel: string
+  title: string;
+  backLabel: string;
+  periodLabel: string;
   /** Named fiscal periods for the shared period picker (URL-addressable). */
-  extraPeriods: { id: string; label: string; from: string; to: string }[]
-  extraPeriodsLabel: string
-  data: ViewProps['data']
+  extraPeriods: { id: string; label: string; from: string; to: string }[];
+  extraPeriodsLabel: string;
+  data: ViewProps["data"];
   /** Threshold editing needs admin.setup.manage with unrestricted scope (the
    * config PUT's gate); reports.read-only and scoped callers get read-only. */
-  canConfigure: boolean
+  canConfigure: boolean;
 }
 
 export async function loadSentinel(sp: Record<string, string | undefined>): Promise<SentinelData> {
-  const t = await getTranslations('analytics.sentinel')
-  const authz = await requirePermission('reports.read')
+  const t = await getTranslations("analytics.sentinel");
+  const authz = await requirePermission("reports.read");
   // The house refusal names the missing requirement — the same
   // name the API maps to its 403 — never a silent bounce home.
-  const sentinelDenied = sentinelAccessDenied(authz)
-  if (sentinelDenied !== null) redirect(accessDeniedHref({ permission: sentinelDenied }))
+  const sentinelDenied = sentinelAccessDenied(authz);
+  if (sentinelDenied !== null) redirect(accessDeniedHref({ permission: sentinelDenied }));
 
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const q = parseReportQuery(sp);
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
 
   // Forensic sentences resolve through the analytics catalog in the request
   // locale — the same locale the statements use. Conformity travels as a
   // stable code in every language; the client maps codes to words.
-  const locale = await getLocale()
-  const [tc, picker] = await Promise.all([getTranslations('analytics'), analyticsFiscalPeriodPicker(authz.user.orgId, locale)])
+  const locale = await getLocale();
+  const [tc, picker] = await Promise.all([
+    getTranslations("analytics"),
+    analyticsFiscalPeriodPicker(authz.user.orgId, locale),
+  ]);
   // An accounting-period window reads as every period list labels it, in
   // the viewer's locale; custom windows read as their localized dates.
-  const periodLabel = reportPeriodLabel(period, locale)
-  const strings = sentinelStrings((key, values) => tc(key, values), locale)
-  const data = await sentinelData(authz.user.orgId, { from: period.from, to: period.to, label: periodLabel }, authz, strings)
+  const periodLabel = reportPeriodLabel(period, locale);
+  const strings = sentinelStrings((key, values) => tc(key, values), locale);
+  const data = await sentinelData(
+    authz.user.orgId,
+    { from: period.from, to: period.to, label: periodLabel },
+    authz,
+    strings,
+  );
 
   return {
-    title: t('title'),
-    backLabel: t('backToHub'),
+    title: t("title"),
+    backLabel: t("backToHub"),
     periodLabel,
     extraPeriods: picker.extraPeriods,
     extraPeriodsLabel: picker.extraPeriodsLabel,
     data,
-    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
-  }
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, "admin.setup.manage"),
+  };
 }
 
 export function sentinelSpec(data: SentinelData): PageSpec {
   return page({
-    route: '/analytics/sentinel',
-    layout: 'list',
+    route: "/analytics/sentinel",
+    layout: "list",
     header: [
-      frame('analytics-header', [widgetBlock('report-period-filter', { extraPeriods: data.extraPeriods, extraPeriodsLabel: data.extraPeriodsLabel })], {
-        title: data.title,
-        periodLabel: data.periodLabel,
-        backLabel: data.backLabel,
-      }),
+      frame(
+        "analytics-header",
+        [
+          widgetBlock("report-period-filter", {
+            extraPeriods: data.extraPeriods,
+            extraPeriodsLabel: data.extraPeriodsLabel,
+          }),
+        ],
+        {
+          title: data.title,
+          periodLabel: data.periodLabel,
+          backLabel: data.backLabel,
+        },
+      ),
     ],
-    body: [widgetBlock('sentinel-view', { data: data.data, canConfigure: data.canConfigure })],
-  })
+    body: [widgetBlock("sentinel-view", { data: data.data, canConfigure: data.canConfigure })],
+  });
 }

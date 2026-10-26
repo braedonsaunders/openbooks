@@ -14,17 +14,10 @@ export const POST = defineRoute({
   feature: "hrm",
   params: z.object({ id: z.string().min(1) }),
   body: saveProcessTemplateStepBody,
-  handler: async ({
-    authz: authz,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: authz, params: routeParams, body: body }) => {
     const id = routeParams.id;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "template id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "template id must be a uuid" }, { status: 400 });
     try {
       const step = await upsertProcessTemplateStep({
         orgId: authz.user.orgId,

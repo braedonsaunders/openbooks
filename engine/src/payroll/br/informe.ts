@@ -48,11 +48,13 @@ import { isUuid } from "../../platform/uuid.ts";
 export function brInformeYears(): number[] {
   // Both prior years carry two published editions (one per mid-year IRRF
   // table), so the year list dedupes — the informe is annual either way.
-  return [...new Set(
-    BR_TAX_YEARS.editions
-      .filter((edition) => edition.status === "published")
-      .map((edition) => edition.year),
-  )].sort((a, b) => a - b);
+  return [
+    ...new Set(
+      BR_TAX_YEARS.editions
+        .filter((edition) => edition.status === "published")
+        .map((edition) => edition.year),
+    ),
+  ].sort((a, b) => a - b);
 }
 
 /**
@@ -62,9 +64,9 @@ export function brInformeYears(): number[] {
 export function assertBrInformeYearSupported(taxYear: number): void {
   if (!brInformeYears().includes(taxYear)) {
     throw new PayrollError(
-      `BR payroll: tax year ${taxYear} has not been transcribed — the transcribed years are `
-      + `${brInformeYears().join(", ")}. `
-      + "This year is not yet supported by the BR pack; contact support.",
+      `BR payroll: tax year ${taxYear} has not been transcribed — the transcribed years are ` +
+        `${brInformeYears().join(", ")}. ` +
+        "This year is not yet supported by the BR pack; contact support.",
     );
   }
 }
@@ -92,14 +94,18 @@ export function brDependenteValue(taxYear: number): string {
 export function brInformeChannelNote(taxYear: number): string {
   assertBrInformeYearSupported(taxYear);
   if (taxYear === 2024) {
-    return "2024 facts still travel on the DIRF (IN RFB nº 1.990/2020; IN RFB nº 2.181/2024 "
-      + "postponed the extinction to facts from 1/1/2025), alongside the monthly eSocial and "
-      + "EFD-Reinf events.";
+    return (
+      "2024 facts still travel on the DIRF (IN RFB nº 1.990/2020; IN RFB nº 2.181/2024 " +
+      "postponed the extinction to facts from 1/1/2025), alongside the monthly eSocial and " +
+      "EFD-Reinf events."
+    );
   }
-  return `DIRF is extinta for ${taxYear} facts (IN RFB nº 2.163/2023 art. 3º §1º, as amended by IN RFB `
-    + "nº 2.181/2024 — substitution for facts from 1/1/2025): remuneration travels on eSocial "
-    + "event S-1210 and other-source withholding on the EFD-Reinf R-4000 series. The Comprovante "
-    + "owed to the employee is unchanged (IN RFB nº 2.060/2021).";
+  return (
+    `DIRF is extinta for ${taxYear} facts (IN RFB nº 2.163/2023 art. 3º §1º, as amended by IN RFB ` +
+    "nº 2.181/2024 — substitution for facts from 1/1/2025): remuneration travels on eSocial " +
+    "event S-1210 and other-source withholding on the EFD-Reinf R-4000 series. The Comprovante " +
+    "owed to the employee is unchanged (IN RFB nº 2.060/2021)."
+  );
 }
 
 /**
@@ -145,7 +151,8 @@ export async function brInformeRows(orgId: string, taxYear: number): Promise<BrI
   assertBrInformeYearSupported(taxYear);
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     with committed as (
       select s.*
         from pay_stubs s
@@ -173,25 +180,35 @@ export async function brInformeRows(orgId: string, taxYear: number): Promise<BrI
         on prof.org_id = ${orgId} and prof.employee_party_id = c.employee_party_id
      group by c.employee_party_id, p.display_name, c.filing_account_id
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new PayrollError(
-      `no committed BR pay runs for ${taxYear} — calculate and commit a BR pay run for the year `
-      + "before issuing Comprovantes de Rendimentos; a draft or uncommitted run never appears "
-      + "on a statutory filing",
+      `no committed BR pay runs for ${taxYear} — calculate and commit a BR pay run for the year ` +
+        "before issuing Comprovantes de Rendimentos; a draft or uncommitted run never appears " +
+        "on a statutory filing",
     );
   }
   // No ANY($array): a bare JavaScript array interpolates as a row
   // constructor, not a PostgreSQL array — filter in JS instead.
   const wanted = new Set(rows.map((row) => String(row.employee_party_id)));
-  const profiles = (await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(sql`
+  const profiles = await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(
+    sql`
     select employee_party_id, sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const cpfByEmployee = new Map(
     profiles
       .filter((row) => wanted.has(String(row.employee_party_id)))
-      .map((row) => [String(row.employee_party_id), row.sin_encrypted == null ? null : unsealSecret(row.sin_encrypted, { orgId, purpose: "payroll.employee.sin" })]),
+      .map((row) => [
+        String(row.employee_party_id),
+        row.sin_encrypted == null
+          ? null
+          : unsealSecret(row.sin_encrypted, { orgId, purpose: "payroll.employee.sin" }),
+      ]),
   );
   return rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
@@ -205,7 +222,10 @@ export async function brInformeRows(orgId: string, taxYear: number): Promise<BrI
   }));
 }
 
-export async function brInformePopulation(orgId: string, taxYear: number): Promise<PayrollFilingData> {
+export async function brInformePopulation(
+  orgId: string,
+  taxYear: number,
+): Promise<PayrollFilingData> {
   const slips = await brInformeRows(orgId, taxYear);
   const total = (pick: (slip: BrInformeRow) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
@@ -263,11 +283,11 @@ export async function brInformeSlip(
   rowId: string,
 ): Promise<PayrollFilingSlipData> {
   const slips = await brInformeRows(orgId, taxYear);
-  const slip = slips.find(
-    (s) => `${s.employeePartyId}:${s.filingAccountId ?? ""}` === rowId,
-  );
+  const slip = slips.find((s) => `${s.employeePartyId}:${s.filingAccountId ?? ""}` === rowId);
   if (!slip) {
-    throw new PayrollError(`no ${taxYear} Comprovante de Rendimentos matches the requested employee`);
+    throw new PayrollError(
+      `no ${taxYear} Comprovante de Rendimentos matches the requested employee`,
+    );
   }
   const account = filingAccountRef(slip.filingAccountId, await filingAccountsById(orgId));
   const dependente = brDependenteValue(taxYear);
@@ -278,9 +298,9 @@ export async function brInformeSlip(
   const cpfDigits = (slip.cpf ?? "").replace(/\D/g, "");
   if (!/^\d{11}$/.test(cpfDigits)) {
     throw new PayrollError(
-      `cannot furnish the ${taxYear} Comprovante de Rendimentos for ${slip.employeeName}: `
-      + `the beneficiary CPF is ${slip.cpf ? "invalid" : "missing"} — record or correct the 11-digit CPF `
-      + "on the employee payroll profile before furnishing (IN RFB nº 2.060/2021, Anexo I).",
+      `cannot furnish the ${taxYear} Comprovante de Rendimentos for ${slip.employeeName}: ` +
+        `the beneficiary CPF is ${slip.cpf ? "invalid" : "missing"} — record or correct the 11-digit CPF ` +
+        "on the employee payroll profile before furnishing (IN RFB nº 2.060/2021, Anexo I).",
     );
   }
   return {
@@ -299,9 +319,8 @@ export async function brInformeSlip(
       { label: "Ano-calendário", value: String(taxYear) },
       {
         label: "Dependentes (dedução IRRF, Lei 9.250/1995 art. 4º)",
-        value: slip.dependentes == null
-          ? "not on record"
-          : `${slip.dependentes} × R$ ${dependente}`,
+        value:
+          slip.dependentes == null ? "not on record" : `${slip.dependentes} × R$ ${dependente}`,
       },
     ],
     boxes: [
@@ -323,25 +342,25 @@ export async function brInformeSlip(
       },
     ],
     notes: [
-      "Each month was priced through the IRRF table in force for its pay month; the annual "
-      + "figures add months, never reprice them.",
-      "The dependent deduction (R$ 189,59 per dependent per month, Lei 9.250/1995 art. 4º) "
-      + "lives inside each month's IRRF — the count above is the cadastre count on record, "
-      + "not a repriced annual total.",
-      "Quadro 3, Linha 3 (previdência complementar/FAPI) is not produced — the pack prices no "
-      + "such contribution, so the subledger holds no total; complete it from the entidade's records.",
-      "Quadro 3, Linha 4 (pensão alimentícia) is not produced — br_pensao_mensal reduces the "
-      + "monthly IRRF base but is pushed as no stub line, so no annual paid total exists; complete "
-      + "it from the court-ordered payment records.",
-      "Quadro 4 (isentos e não tributáveis), Quadro 5 (tributação exclusiva, incl. 13º salário) "
-      + "and Quadro 6 (RRA) are not produced — the BR component vocabulary maps no exempt, "
-      + "exclusive-source or accumulated income (13º, férias and rescisão are named engine "
-      + "refusals); complete any such amount from its source records.",
-      "Quadro 7 health-plan and other complementary deductions are not produced — they are not "
-      + "in the BR component vocabulary; complete them from the operator/plan records.",
+      "Each month was priced through the IRRF table in force for its pay month; the annual " +
+        "figures add months, never reprice them.",
+      "The dependent deduction (R$ 189,59 per dependent per month, Lei 9.250/1995 art. 4º) " +
+        "lives inside each month's IRRF — the count above is the cadastre count on record, " +
+        "not a repriced annual total.",
+      "Quadro 3, Linha 3 (previdência complementar/FAPI) is not produced — the pack prices no " +
+        "such contribution, so the subledger holds no total; complete it from the entidade's records.",
+      "Quadro 3, Linha 4 (pensão alimentícia) is not produced — br_pensao_mensal reduces the " +
+        "monthly IRRF base but is pushed as no stub line, so no annual paid total exists; complete " +
+        "it from the court-ordered payment records.",
+      "Quadro 4 (isentos e não tributáveis), Quadro 5 (tributação exclusiva, incl. 13º salário) " +
+        "and Quadro 6 (RRA) are not produced — the BR component vocabulary maps no exempt, " +
+        "exclusive-source or accumulated income (13º, férias and rescisão are named engine " +
+        "refusals); complete any such amount from its source records.",
+      "Quadro 7 health-plan and other complementary deductions are not produced — they are not " +
+        "in the BR component vocabulary; complete them from the operator/plan records.",
       brInformeChannelNote(taxYear),
-      "Furnish to the beneficiary by the last business day of February following the "
-      + "ano-calendário (IN RFB nº 2.060/2021, art. 3º).",
+      "Furnish to the beneficiary by the last business day of February following the " +
+        "ano-calendário (IN RFB nº 2.060/2021, art. 3º).",
     ],
   };
 }

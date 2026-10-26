@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  MAX_RECOGNITION_TERM_MONTHS,
-  recognitionRulePolicyProblem,
-} from "./recognition-limits.ts";
+import { MAX_RECOGNITION_TERM_MONTHS, recognitionRulePolicyProblem } from "./recognition-limits.ts";
 
 test("an empty or fully valid policy is saveable", () => {
   assert.equal(recognitionRulePolicyProblem({}), null);
@@ -59,19 +56,13 @@ for (const periods of [-1, 0, 1201, "abc", 1.5, "12.5"]) {
 
 for (const offset of [-1, 1201, "abc", 0.5]) {
   test(`periodOffset ${JSON.stringify(offset)} is refused by field name`, () => {
-    assert.match(
-      recognitionRulePolicyProblem({ periodOffset: offset }) ?? "",
-      /periodOffset/,
-    );
+    assert.match(recognitionRulePolicyProblem({ periodOffset: offset }) ?? "", /periodOffset/);
   });
 }
 
 for (const days of [-2147483649, 2147483648, "abc", 1.5]) {
   test(`startOffsetDays ${JSON.stringify(days)} is refused by field name`, () => {
-    assert.match(
-      recognitionRulePolicyProblem({ startOffsetDays: days }) ?? "",
-      /startOffsetDays/,
-    );
+    assert.match(recognitionRulePolicyProblem({ startOffsetDays: days }) ?? "", /startOffsetDays/);
   });
 }
 

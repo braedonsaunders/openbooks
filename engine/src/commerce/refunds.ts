@@ -30,7 +30,12 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import { replaceDocumentTenders, type TenderInput } from "../sales/document-tenders.ts";
 import { fromMinorUnits, toMinorUnits } from "../payments/acceptance.ts";
-import { arePeriodModulesOpen, canonicalPeriodLabel, closeModuleForDocument, CloseError } from "../periods/period-policy.ts";
+import {
+  arePeriodModulesOpen,
+  canonicalPeriodLabel,
+  closeModuleForDocument,
+  CloseError,
+} from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
@@ -157,19 +162,33 @@ export interface ResolvedRefund {
 function parseQuantity(raw: string, label: string): { numerator: bigint; denominator: bigint } {
   const match = /^(\d+)(?:\.(\d{1,8}))?$/.exec(raw.trim());
   if (!match) {
-    park("tax_mismatch", `Refund ${label} carries an unreadable quantity.`, "Replay the refunds/create delivery from the storefront so every line arrives with a positive quantity, then post it again.");
+    park(
+      "tax_mismatch",
+      `Refund ${label} carries an unreadable quantity.`,
+      "Replay the refunds/create delivery from the storefront so every line arrives with a positive quantity, then post it again.",
+    );
   }
   const whole = BigInt(match[1]!);
   const frac = match[2] ?? "";
   if (whole === 0n && /^0*$/.test(frac)) {
-    park("tax_mismatch", `Refund ${label} has zero quantity.`, "Replay the refunds/create delivery from the storefront so every line arrives with a positive quantity, then post it again.");
+    park(
+      "tax_mismatch",
+      `Refund ${label} has zero quantity.`,
+      "Replay the refunds/create delivery from the storefront so every line arrives with a positive quantity, then post it again.",
+    );
   }
   const denominator = 10n ** BigInt(frac.length);
   return { numerator: whole * denominator + (frac === "" ? 0n : BigInt(frac)), denominator };
 }
 
 /** Half-up pro-rata share of a minor-unit amount by quantity ratio. */
-function prorate(amount: bigint, numerator: bigint, denominator: bigint, whole: bigint, wholeDenominator: bigint): bigint {
+function prorate(
+  amount: bigint,
+  numerator: bigint,
+  denominator: bigint,
+  whole: bigint,
+  wholeDenominator: bigint,
+): bigint {
   if (whole === 0n) return 0n;
   const top = 2n * amount * numerator * wholeDenominator + denominator * whole;
   const bottom = 2n * denominator * whole;
@@ -215,7 +234,8 @@ export function reviveRefundPayload(payload: Record<string, unknown>): ChannelRe
       variantExternalId: typeof line.variantExternalId === "string" ? line.variantExternalId : null,
       quantity: String(line.quantity ?? "0"),
       amountMinor: asMinorUnits(line.amountMinor ?? "0"),
-      taxMinor: line.taxMinor === undefined || line.taxMinor === null ? null : asMinorUnits(line.taxMinor),
+      taxMinor:
+        line.taxMinor === undefined || line.taxMinor === null ? null : asMinorUnits(line.taxMinor),
       // Payloads stored before per-line restock inherit the refund's flag.
       restock: typeof line.restock === "boolean" ? line.restock : payload.restock === true,
     })),
@@ -237,9 +257,20 @@ interface ChannelMeta {
 }
 
 async function loadRefundChannel(orgId: string, channelId: string): Promise<ChannelMeta> {
-  const row = (await db.execute<{ name: string; kind: string; external_account: string; currency: string; subsidiary_id: string | null }>(sql`
+  const row = (
+    await db.execute<{
+      name: string;
+      kind: string;
+      external_account: string;
+      currency: string;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select name, kind, external_account, currency, subsidiary_id from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${channelId}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new CommerceError(
       "channel_not_found",
@@ -248,7 +279,13 @@ async function loadRefundChannel(orgId: string, channelId: string): Promise<Chan
       { field: "channelId" },
     );
   }
-  return { name: row.name, kind: row.kind, externalAccount: row.external_account, currency: row.currency, subsidiaryId: row.subsidiary_id };
+  return {
+    name: row.name,
+    kind: row.kind,
+    externalAccount: row.external_account,
+    currency: row.currency,
+    subsidiaryId: row.subsidiary_id,
+  };
 }
 
 async function assertRefundPeriodOpen(
@@ -285,11 +322,18 @@ async function assertRefundPeriodOpen(
 }
 
 /** Money already returned for one order through posted cash refunds, in minor units. */
-async function priorRefundedTotalMinor(orgId: string, orderId: string, currency: string): Promise<bigint> {
-  const rows = await db.execute<{ total: string }>(sql`
+async function priorRefundedTotalMinor(
+  orgId: string,
+  orderId: string,
+  currency: string,
+): Promise<bigint> {
+  const rows = await db.execute<{ total: string }>(
+    sql`
     select total::text as total from documents
      where org_id = ${orgId} and kind = 'cash_refund' and status = 'posted'
-       and custom->>'channelOrderId' = ${orderId}`, "objects");
+       and custom->>'channelOrderId' = ${orderId}`,
+    "objects",
+  );
   let sum = 0n;
   for (const row of rows) {
     // Posted refund totals are exact ledger decimals, so the shared
@@ -308,9 +352,12 @@ async function priorRefundedQuantities(
   orgId: string,
   orderId: string,
 ): Promise<Map<string, { numerator: bigint; denominator: bigint }>> {
-  const rows = await db.execute<{ payload: Record<string, unknown> }>(sql`
+  const rows = await db.execute<{ payload: Record<string, unknown> }>(
+    sql`
     select payload from channel_order_events
-     where org_id = ${orgId} and order_id = ${orderId} and kind = 'refund' and posting_status = 'posted'`, "objects");
+     where org_id = ${orgId} and order_id = ${orderId} and kind = 'refund' and posting_status = 'posted'`,
+    "objects",
+  );
   const totals = new Map<string, { numerator: bigint; denominator: bigint }>();
   for (const row of rows) {
     if (!row.payload) continue;
@@ -340,7 +387,10 @@ function looseQuantity(raw: string): { numerator: bigint; denominator: bigint } 
   if (!match) return null;
   const frac = match[2] ?? "";
   const denominator = 10n ** BigInt(frac.length);
-  return { numerator: BigInt(match[1]!) * denominator + (frac === "" ? 0n : BigInt(frac)), denominator };
+  return {
+    numerator: BigInt(match[1]!) * denominator + (frac === "" ? 0n : BigInt(frac)),
+    denominator,
+  };
 }
 
 function addFractions(
@@ -418,15 +468,26 @@ export async function resolveRefundForPosting(
   let saleDocumentId: string | null = null;
   let saleAnonymous = false;
   if (order.postingDocumentId) {
-    const sale = (await db.execute<{ kind: string; status: string }>(sql`
-      select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`, "objects"))[0];
-    if (sale?.kind === "cash_sale" && sale.status === "posted") saleDocumentId = order.postingDocumentId;
+    const sale = (
+      await db.execute<{ kind: string; status: string }>(
+        sql`
+      select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`,
+        "objects",
+      )
+    )[0];
+    if (sale?.kind === "cash_sale" && sale.status === "posted")
+      saleDocumentId = order.postingDocumentId;
   }
   if (!saleDocumentId && order.summaryId) {
-    const summary = (await db.execute<{ posting_document_id: string | null }>(sql`
+    const summary = (
+      await db.execute<{ posting_document_id: string | null }>(
+        sql`
       select s.posting_document_id from channel_daily_summaries s
        join documents d on d.org_id = s.org_id and d.id = s.posting_document_id
-       where s.org_id = ${orgId} and s.id = ${order.summaryId} and d.status = 'posted'`, "objects"))[0];
+       where s.org_id = ${orgId} and s.id = ${order.summaryId} and d.status = 'posted'`,
+        "objects",
+      )
+    )[0];
     saleDocumentId = summary?.posting_document_id ?? null;
     saleAnonymous = saleDocumentId !== null;
   }
@@ -466,7 +527,9 @@ export async function resolveRefundForPosting(
     );
   }
   const resolved = await resolveOrderForPosting(orgId, actor, runner, order);
-  const productLines = resolved.lines.filter((line) => line.kind === "product" || line.kind === "gift_issue");
+  const productLines = resolved.lines.filter(
+    (line) => line.kind === "product" || line.kind === "gift_issue",
+  );
   const orderProductLines = order.lines;
   if (productLines.length !== orderProductLines.length) {
     throw new Error("Channel order resolution changed shape while its refund resolved");
@@ -475,14 +538,21 @@ export async function resolveRefundForPosting(
   const lines: RefundLineMatch[] = [];
   let splitCount = 0;
   for (const refundLine of refund.lines) {
-    const qty = parseQuantity(refundLine.quantity, `${refund.externalId} line "${refundLine.sku ?? "?"}"`);
+    const qty = parseQuantity(
+      refundLine.quantity,
+      `${refund.externalId} line "${refundLine.sku ?? "?"}"`,
+    );
     let matchIndex = -1;
     if (refundLine.variantExternalId) {
-      matchIndex = orderProductLines.findIndex((line) => line.variantExternalId === refundLine.variantExternalId);
+      matchIndex = orderProductLines.findIndex(
+        (line) => line.variantExternalId === refundLine.variantExternalId,
+      );
     }
     if (matchIndex < 0 && refundLine.sku) {
       const sku = refundLine.sku.trim().toUpperCase();
-      matchIndex = orderProductLines.findIndex((line) => (line.sku ?? "").trim().toUpperCase() === sku);
+      matchIndex = orderProductLines.findIndex(
+        (line) => (line.sku ?? "").trim().toUpperCase() === sku,
+      );
     }
     if (matchIndex < 0) {
       park(
@@ -493,7 +563,10 @@ export async function resolveRefundForPosting(
     }
     const orderLine = orderProductLines[matchIndex]!;
     const resolvedLine = productLines[matchIndex]!;
-    const orderQty = parseQuantity(orderLine.quantity, `order ${order.externalNumber} line "${orderLine.title}"`);
+    const orderQty = parseQuantity(
+      orderLine.quantity,
+      `order ${order.externalNumber} line "${orderLine.title}"`,
+    );
     const key = refundLineKey(orderLine.variantExternalId, orderLine.sku);
     if (exceedsOrdered(orderQty, priorQuantities.get(key), qty)) {
       const prior = priorQuantities.get(key);
@@ -505,16 +578,32 @@ export async function resolveRefundForPosting(
     }
     // Quantity-anchored reversal at booked prices: the storefront's line
     // amount must agree with its quantity, never the other way round.
-    const revenueMinor = prorate(resolvedLine.amountMinor, qty.numerator, qty.denominator, orderQty.numerator, orderQty.denominator);
+    const revenueMinor = prorate(
+      resolvedLine.amountMinor,
+      qty.numerator,
+      qty.denominator,
+      orderQty.numerator,
+      orderQty.denominator,
+    );
     const discountLines = resolved.lines.filter(
       (line) => line.kind === "discount" && line.title.endsWith(`— ${orderLine.title}`),
     );
     const discountTotal = discountLines.reduce((sum, line) => sum + line.amountMinor, 0n);
     // Discount lines post negative, so the share reverses the sign back to a
     // positive reversal magnitude.
-    const discountMinor = prorate(-discountTotal, qty.numerator, qty.denominator, orderQty.numerator, orderQty.denominator);
+    const discountMinor = prorate(
+      -discountTotal,
+      qty.numerator,
+      qty.denominator,
+      orderQty.numerator,
+      orderQty.denominator,
+    );
     const expectedNet = revenueMinor - discountMinor;
-    if (refundLine.amountMinor < 0n || (expectedNet >= 0n && (refundLine.amountMinor > expectedNet + 1n || refundLine.amountMinor < expectedNet - 1n))) {
+    if (
+      refundLine.amountMinor < 0n ||
+      (expectedNet >= 0n &&
+        (refundLine.amountMinor > expectedNet + 1n || refundLine.amountMinor < expectedNet - 1n))
+    ) {
       park(
         "tax_mismatch",
         `Refund ${refund.externalId} line "${orderLine.title}" states ${refundLine.amountMinor} for ${fractionText(qty)} units, but the booked net is ${expectedNet}.`,
@@ -546,26 +635,49 @@ export async function resolveRefundForPosting(
       } else {
         lineTaxes = [];
         let allocated = 0n;
-        const merchant = resolvedLine.taxes.filter((tax) => tax.collectedBy === "merchant" || !tax.facilitatorNetMode);
+        const merchant = resolvedLine.taxes.filter(
+          (tax) => tax.collectedBy === "merchant" || !tax.facilitatorNetMode,
+        );
         merchant.forEach((tax, index) => {
-          const share = index === merchant.length - 1
-            ? stated - allocated
-            : (2n * tax.amountMinor * stated + (merchantTaxTotal >= 0n ? merchantTaxTotal : -merchantTaxTotal)) / (2n * merchantTaxTotal);
+          const share =
+            index === merchant.length - 1
+              ? stated - allocated
+              : (2n * tax.amountMinor * stated +
+                  (merchantTaxTotal >= 0n ? merchantTaxTotal : -merchantTaxTotal)) /
+                (2n * merchantTaxTotal);
           allocated += share;
           lineTaxes.push({ ...tax, amountMinor: share });
         });
         merchantTaxMinor = stated;
       }
-      marketplaceNetMinor = prorate(marketplaceNetTotal, qty.numerator, qty.denominator, orderQty.numerator, orderQty.denominator);
+      marketplaceNetMinor = prorate(
+        marketplaceNetTotal,
+        qty.numerator,
+        qty.denominator,
+        orderQty.numerator,
+        orderQty.denominator,
+      );
     } else {
       lineTaxes = resolvedLine.taxes
         .filter((tax) => tax.collectedBy === "merchant" || !tax.facilitatorNetMode)
         .map((tax) => ({
           ...tax,
-          amountMinor: prorate(tax.amountMinor, qty.numerator, qty.denominator, orderQty.numerator, orderQty.denominator),
+          amountMinor: prorate(
+            tax.amountMinor,
+            qty.numerator,
+            qty.denominator,
+            orderQty.numerator,
+            orderQty.denominator,
+          ),
         }));
       merchantTaxMinor = lineTaxes.reduce((sum, tax) => sum + tax.amountMinor, 0n);
-      marketplaceNetMinor = prorate(marketplaceNetTotal, qty.numerator, qty.denominator, orderQty.numerator, orderQty.denominator);
+      marketplaceNetMinor = prorate(
+        marketplaceNetTotal,
+        qty.numerator,
+        qty.denominator,
+        orderQty.numerator,
+        orderQty.denominator,
+      );
     }
     splitCount += 1 + lineTaxes.length;
     lines.push({
@@ -596,7 +708,9 @@ export async function resolveRefundForPosting(
   let shippingAccountId = "";
   if (refund.shippingMinor > 0n) {
     // Zero-amount shipping lines carry no tax and take no share.
-    const shipLines = resolved.lines.filter((line) => line.kind === "shipping" && line.amountMinor > 0n);
+    const shipLines = resolved.lines.filter(
+      (line) => line.kind === "shipping" && line.amountMinor > 0n,
+    );
     const shipTotal = shipLines.reduce((sum, line) => sum + line.amountMinor, 0n);
     if (shipLines.length === 0 || shipTotal <= 0n) {
       park(
@@ -616,9 +730,10 @@ export async function resolveRefundForPosting(
     let allocatedShip = 0n;
     for (let shipIndex = 0; shipIndex < shipLines.length; shipIndex += 1) {
       const ship = shipLines[shipIndex]!;
-      const share = shipIndex === shipLines.length - 1
-        ? refund.shippingMinor - allocatedShip
-        : prorate(ship.amountMinor, refund.shippingMinor, shipTotal, 1n, 1n);
+      const share =
+        shipIndex === shipLines.length - 1
+          ? refund.shippingMinor - allocatedShip
+          : prorate(ship.amountMinor, refund.shippingMinor, shipTotal, 1n, 1n);
       allocatedShip += share;
       shippingMinor += share;
       if (share === 0n) continue;
@@ -629,7 +744,9 @@ export async function resolveRefundForPosting(
         }
         const taxShare = prorate(tax.amountMinor, share, ship.amountMinor, 1n, 1n);
         const match = shippingTaxes.find(
-          (candidate) => candidate.taxCodeId === tax.taxCodeId && (candidate.facilitatorName ?? "") === (tax.facilitatorName ?? ""),
+          (candidate) =>
+            candidate.taxCodeId === tax.taxCodeId &&
+            (candidate.facilitatorName ?? "") === (tax.facilitatorName ?? ""),
         );
         if (match) match.amountMinor += taxShare;
         else shippingTaxes.push({ ...tax, amountMinor: taxShare });
@@ -639,18 +756,32 @@ export async function resolveRefundForPosting(
     splitCount += 1 + shippingTaxes.length;
   } else {
     const shipLines = resolved.lines.filter((line) => line.kind === "shipping");
-    shippingAccountId = shipLines[0]?.accountId ?? await mappedAccount(orgId, order.channelId, "shipping_income", "", documentDate);
+    shippingAccountId =
+      shipLines[0]?.accountId ??
+      (await mappedAccount(orgId, order.channelId, "shipping_income", "", documentDate));
   }
-  const discountAccountId = await mappedAccount(orgId, order.channelId, "discount", "", documentDate);
+  const discountAccountId = await mappedAccount(
+    orgId,
+    order.channelId,
+    "discount",
+    "",
+    documentDate,
+  );
 
   // Tenders pay out per gateway: each refund transaction settles through the
   // gateway clearing its sale used, scaled to the merchant-booked total so
   // the document cross-foots exactly. A tender that entered on stored value
   // goes back onto the same card — the refund's post-commit effect tops it
   // up, exactly once per tender row.
-  const merchantComputed = lines.reduce((sum, line) => sum + line.revenueMinor - line.discountMinor + line.merchantTaxMinor, 0n)
-    + shippingMinor + shippingTaxMinor;
-  const marketplaceComputed = lines.reduce((sum, line) => sum + line.marketplaceNetMinor, 0n) + shippingMarketplaceNetMinor;
+  const merchantComputed =
+    lines.reduce(
+      (sum, line) => sum + line.revenueMinor - line.discountMinor + line.merchantTaxMinor,
+      0n,
+    ) +
+    shippingMinor +
+    shippingTaxMinor;
+  const marketplaceComputed =
+    lines.reduce((sum, line) => sum + line.marketplaceNetMinor, 0n) + shippingMarketplaceNetMinor;
   const residual = refund.totalMinor - marketplaceComputed - merchantComputed;
   let roundingMinor = 0n;
   let roundingAccountId: string | null = null;
@@ -684,16 +815,22 @@ export async function resolveRefundForPosting(
           "Re-sync the refund from the storefront so every payout names its gateway, then post it again.",
         );
       }
-      const share = index === refund.tenders.length - 1
-        ? merchantTotalMinor - allocated
-        : (2n * tender.amountMinor * merchantTotalMinor + (total >= 0n ? total : -total)) / (2n * total);
+      const share =
+        index === refund.tenders.length - 1
+          ? merchantTotalMinor - allocated
+          : (2n * tender.amountMinor * merchantTotalMinor + (total >= 0n ? total : -total)) /
+            (2n * total);
       allocated += share;
       if (share <= 0n) continue;
-      const orderTender = order.tenders.find(
-        (candidate) => candidate.gateway.toLowerCase() === gateway.toLowerCase() && candidate.giftCardExternalId,
-      ) ?? (gateway.toLowerCase() === "gift_card"
-        ? order.tenders.find((candidate) => candidate.giftCardExternalId)
-        : undefined);
+      const orderTender =
+        order.tenders.find(
+          (candidate) =>
+            candidate.gateway.toLowerCase() === gateway.toLowerCase() &&
+            candidate.giftCardExternalId,
+        ) ??
+        (gateway.toLowerCase() === "gift_card"
+          ? order.tenders.find((candidate) => candidate.giftCardExternalId)
+          : undefined);
       if (orderTender?.giftCardExternalId) {
         const linked = await findNative(orgId, {
           provider: channel.kind,
@@ -701,11 +838,17 @@ export async function resolveRefundForPosting(
           objectType: "gift_card",
           externalId: orderTender.giftCardExternalId,
         });
-        const card = linked?.nativeTable === "stored_value_accounts"
-          ? (await db.execute<{ id: string; currency: string }>(sql`
+        const card =
+          linked?.nativeTable === "stored_value_accounts"
+            ? (
+                await db.execute<{ id: string; currency: string }>(
+                  sql`
               select id, currency from stored_value_accounts
-               where org_id = ${orgId} and id = ${linked.nativeId}`, "objects"))[0]
-          : undefined;
+               where org_id = ${orgId} and id = ${linked.nativeId}`,
+                  "objects",
+                )
+              )[0]
+            : undefined;
         if (!card) {
           park(
             "unmapped_account",
@@ -723,7 +866,13 @@ export async function resolveRefundForPosting(
         tenders.push({ gateway, amountMinor: share, giftCardAccountId: card.id, accountId: null });
         continue;
       }
-      const accountId = await mappedAccount(orgId, order.channelId, "gateway_clearing", gateway, documentDate);
+      const accountId = await mappedAccount(
+        orgId,
+        order.channelId,
+        "gateway_clearing",
+        gateway,
+        documentDate,
+      );
       tenders.push({ gateway, amountMinor: share, giftCardAccountId: null, accountId });
     }
     const paid = tenders.reduce((sum, tender) => sum + tender.amountMinor, 0n);
@@ -769,7 +918,10 @@ interface RestockSlice {
 }
 
 /** Exact fraction to four-decimal stock units; louder than a rounding guess below shelf precision. */
-function toStockQuantity(fraction: { numerator: bigint; denominator: bigint }, label: string): string {
+function toStockQuantity(
+  fraction: { numerator: bigint; denominator: bigint },
+  label: string,
+): string {
   const scaled = fraction.numerator * 10_000n;
   const whole = scaled / fraction.denominator;
   if (scaled % fraction.denominator !== 0n) {
@@ -812,10 +964,17 @@ async function allocateRestockSlices(
   needText: string,
   label: string,
 ): Promise<{ slices: RestockSlice[]; stocked: boolean }> {
-  const item = (await runner.execute<{ kind: string }>(sql`
-    select kind from items where org_id = ${orgId} and id = ${movementItemId}`, "objects"))[0];
-  const stocked = !!item && (item.kind === "inventory" || item.kind === "assembly" || item.kind === "kit");
-  const candidates = await runner.execute<MovementRow>(sql`
+  const item = (
+    await runner.execute<{ kind: string }>(
+      sql`
+    select kind from items where org_id = ${orgId} and id = ${movementItemId}`,
+      "objects",
+    )
+  )[0];
+  const stocked =
+    !!item && (item.kind === "inventory" || item.kind === "assembly" || item.kind === "kit");
+  const candidates = await runner.execute<MovementRow>(
+    sql`
     select m.id, m.item_id as "itemId", m.stock_location_id as "stockLocationId",
            m.quantity::text as quantity, m.total_value::text as "totalValue",
            m.lot_id as "lotId", m.serial_id as "serialId", m.document_line_id as "documentLineId"
@@ -824,7 +983,9 @@ async function allocateRestockSlices(
      where m.org_id = ${orgId} and dl.document_id = ${saleDocumentId}
        and m.kind = 'issue' and m.status = 'posted'
        and m.item_id = ${movementItemId} and dl.item_id = ${saleLineItemId}
-     order by m.moved_at, m.id`, "objects");
+     order by m.moved_at, m.id`,
+    "objects",
+  );
   if (candidates.length === 0) {
     return { slices: [], stocked };
   }
@@ -912,12 +1073,17 @@ export async function buildCashRefundLines(
     const taxMinor = line.taxes
       .filter((tax) => tax.collectedBy === "merchant" || !tax.facilitatorNetMode)
       .reduce((sum, tax) => sum + tax.amountMinor, 0n);
-    lines.push({ ...line, taxAmount: minorToLedger(taxMinor, resolved.currency), taxes: line.taxes });
+    lines.push({
+      ...line,
+      taxAmount: minorToLedger(taxMinor, resolved.currency),
+      taxes: line.taxes,
+    });
   };
   for (const line of resolved.lines) {
-    const unitPrice = line.refundQuantity.denominator === 1n && line.refundQuantity.numerator > 0n
-      ? minorToLedger(line.revenueMinor / line.refundQuantity.numerator, resolved.currency)
-      : minorToLedger(line.revenueMinor, resolved.currency);
+    const unitPrice =
+      line.refundQuantity.denominator === 1n && line.refundQuantity.numerator > 0n
+        ? minorToLedger(line.revenueMinor / line.refundQuantity.numerator, resolved.currency)
+        : minorToLedger(line.revenueMinor, resolved.currency);
     const decimalQty = fractionToDecimalText(line.refundQuantity);
     if (!line.restock || !line.itemId) {
       // A commercial-only credit reverses money without naming an item: an
@@ -937,8 +1103,13 @@ export async function buildCashRefundLines(
         taxes: line.taxes,
       });
     } else {
-      const item = (await runner.execute<{ kind: string }>(sql`
-        select kind from items where org_id = ${orgId} and id = ${line.itemId}`, "objects"))[0];
+      const item = (
+        await runner.execute<{ kind: string }>(
+          sql`
+        select kind from items where org_id = ${orgId} and id = ${line.itemId}`,
+          "objects",
+        )
+      )[0];
       if (!item) {
         park(
           "unmapped_item",
@@ -947,16 +1118,36 @@ export async function buildCashRefundLines(
         );
       }
       if (item.kind === "kit") {
-        const components = await loadKitComponents(runner, orgId, line.itemId, resolved.documentDate);
+        const components = await loadKitComponents(
+          runner,
+          orgId,
+          line.itemId,
+          resolved.documentDate,
+        );
         const kitLabelText = await kitLabel(runner, orgId, line.itemId);
-        const kitQuantities = kitComponentQuantities(kitLabelText, quantity4dp(decimalQty), components);
-        const kitSources: Array<{ sourceIssueMovementId: string; lotId: string | null; serialId: string | null }> = [];
+        const kitQuantities = kitComponentQuantities(
+          kitLabelText,
+          quantity4dp(decimalQty),
+          components,
+        );
+        const kitSources: Array<{
+          sourceIssueMovementId: string;
+          lotId: string | null;
+          serialId: string | null;
+        }> = [];
         let kitLocation: string | null = null;
         for (const component of components) {
-          const need = kitQuantities.find((entry) => entry.componentItemId === component.componentItemId)!.quantity;
+          const need = kitQuantities.find(
+            (entry) => entry.componentItemId === component.componentItemId,
+          )!.quantity;
           const { slices, stocked } = await allocateRestockSlices(
-            orgId, runner, resolved.saleDocumentId, line.itemId, component.componentItemId,
-            need, `${resolved.externalId} kit "${line.title}"`,
+            orgId,
+            runner,
+            resolved.saleDocumentId,
+            line.itemId,
+            component.componentItemId,
+            need,
+            `${resolved.externalId} kit "${line.title}"`,
           );
           if (slices.length === 0) {
             if (!stocked) continue;
@@ -1017,10 +1208,18 @@ export async function buildCashRefundLines(
           });
         }
       } else {
-        const need = toStockQuantity(line.refundQuantity, `${resolved.externalId} line "${line.title}"`);
+        const need = toStockQuantity(
+          line.refundQuantity,
+          `${resolved.externalId} line "${line.title}"`,
+        );
         const { slices, stocked } = await allocateRestockSlices(
-          orgId, runner, resolved.saleDocumentId, line.itemId, line.itemId,
-          need, `${resolved.externalId} line "${line.title}"`,
+          orgId,
+          runner,
+          resolved.saleDocumentId,
+          line.itemId,
+          line.itemId,
+          need,
+          `${resolved.externalId} line "${line.title}"`,
         );
         if (slices.length === 0) {
           if (!stocked) {
@@ -1063,7 +1262,10 @@ export async function buildCashRefundLines(
             : (2n * line.revenueMinor * sliceUnits + needUnits) / (2n * needUnits);
           allocatedSlice += sliceAmount;
           push({
-            title: slices.length === 1 ? line.title : `${line.title} (return ${sliceIndex + 1}/${slices.length})`,
+            title:
+              slices.length === 1
+                ? line.title
+                : `${line.title} (return ${sliceIndex + 1}/${slices.length})`,
             itemId: line.itemId,
             accountId: line.accountId,
             quantity: slice.quantity,
@@ -1197,10 +1399,15 @@ export async function postCashRefundDraft(
   }
   // Idempotency is per kind: the lookup must not observe a sibling
   // document sharing the storefront identity under another kind.
-  const existing = (await db.execute<{ id: string; status: string; posted_entry_id: string | null }>(sql`
+  const existing = (
+    await db.execute<{ id: string; status: string; posted_entry_id: string | null }>(
+      sql`
     select id, status, posted_entry_id from documents
      where org_id = ${orgId} and kind = 'cash_refund'
-       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`, "objects"))[0];
+       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`,
+      "objects",
+    )
+  )[0];
   if (existing && existing.status === "posted" && existing.posted_entry_id) {
     return { documentId: existing.id, journalEntryId: existing.posted_entry_id };
   }
@@ -1217,7 +1424,8 @@ export async function postCashRefundDraft(
     }
   } else {
     const documentNumber = await allocateDocumentNumber(db, orgId, "cash_refund", "CR-");
-    const inserted = await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into documents
         (org_id, kind, document_number, party_id, subsidiary_id, document_date, currency,
          status, subtotal, tax_total, total, external_ref, external_source, source_channel_id, custom,
@@ -1228,8 +1436,11 @@ export async function postCashRefundDraft(
         ${draft.externalRef}, ${draft.provider}, ${draft.channelId},
         ${JSON.stringify({ channelOrderId: draft.orderId, channelRefundId: draft.refundId })}::jsonb,
         ${actor}, ${actor})
-      returning id`, "objects");
-    if (inserted.length !== 1) throw new Error("Cash refund insert returned an unexpected row count");
+      returning id`,
+      "objects",
+    );
+    if (inserted.length !== 1)
+      throw new Error("Cash refund insert returned an unexpected row count");
     documentId = inserted[0]!.id;
   }
   if (!approved) {
@@ -1245,11 +1456,15 @@ export async function postCashRefundDraft(
         amount: minorToLedger(tender.amountMinor, currency),
         reference: null,
       }));
-    await replaceDocumentTenders(db, orgId, documentId, tenderInputs, { actorId: actor, allowedSubsidiaryIds: null });
+    await replaceDocumentTenders(db, orgId, documentId, tenderInputs, {
+      actorId: actor,
+      allowedSubsidiaryIds: null,
+    });
     let lineNumber = 0;
     for (const line of draft.lines) {
       lineNumber += 1;
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into document_lines
           (org_id, document_id, line_number, item_id, account_id, description, quantity,
            unit_price, amount, tax_amount, promotion_id, marketplace_facilitator, stock_location_id,
@@ -1258,8 +1473,11 @@ export async function postCashRefundDraft(
           ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
           ${line.taxAmount}, ${line.promotionId}, ${line.marketplaceFacilitator},
           ${line.stockLocationId}, ${line.customJson}::jsonb, ${actor}, ${actor})
-        returning id`, "objects");
-      if (inserted.length !== 1) throw new Error("Cash refund line insert returned an unexpected row count");
+        returning id`,
+        "objects",
+      );
+      if (inserted.length !== 1)
+        throw new Error("Cash refund line insert returned an unexpected row count");
       const lineId = inserted[0]!.id;
       let sequence = 0;
       for (const tax of line.taxes) {
@@ -1330,59 +1548,101 @@ export async function postChannelRefund(
         { field: "eventId" },
       );
     }
-    if (event.postingStatus === "posted") return { status: "posted", documentId: event.postingDocumentId };
+    if (event.postingStatus === "posted")
+      return { status: "posted", documentId: event.postingDocumentId };
     if (event.postingStatus === "ignored") return { status: "ignored", documentId: null };
     try {
       const outcome = await withOrgTransaction(orgId, async () => {
         await acquireOrgFeatureGateLock(db, orgId);
         if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
-          throw new CommerceError("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
+          throw new CommerceError(
+            "feature_off",
+            "Sales Channels is turned off for this organization.",
+            FEATURE_REMEDY,
+          );
         }
         if (!(await lockAndCheckOrgFeature(db, orgId, "cashSales"))) {
-          throw new CommerceError("feature_off", "Cash sales is turned off for this organization.", "Enable Cash sales in Company Settings → Features.");
+          throw new CommerceError(
+            "feature_off",
+            "Cash sales is turned off for this organization.",
+            "Enable Cash sales in Company Settings → Features.",
+          );
         }
         const live = await loadChannelEvent(orgId, eventId);
         if (!live) throw new Error("Channel refund left while it posted");
         if (live.postingStatus === "posted") {
-          return { status: "posted", documentId: live.postingDocumentId, effectsDocumentId: null as string | null };
+          return {
+            status: "posted",
+            documentId: live.postingDocumentId,
+            effectsDocumentId: null as string | null,
+          };
         }
         if (live.postingStatus === "ignored") {
-          return { status: "ignored", documentId: null as string | null, effectsDocumentId: null as string | null };
+          return {
+            status: "ignored",
+            documentId: null as string | null,
+            effectsDocumentId: null as string | null,
+          };
         }
         const order = await loadChannelOrder(orgId, live.orderId);
         if (!order) throw new Error("Channel refund order left while it posted");
         const refund = reviveRefundPayload(live.payload);
-        const policy = await getPostingPolicy(orgId, order.channelId, refund.refundedAt.slice(0, 10));
+        const policy = await getPostingPolicy(
+          orgId,
+          order.channelId,
+          refund.refundedAt.slice(0, 10),
+        );
         if (policy.mode === "daily_summary") {
           // Summary mode never parks a refund behind its sale: a pending
           // order waits for tonight's batch, and tonight's refunds join it.
           if (order.postingStatus === "pending" || order.postingStatus === "exception") {
-            return { status: "pending", documentId: null as string | null, effectsDocumentId: null as string | null };
+            return {
+              status: "pending",
+              documentId: null as string | null,
+              effectsDocumentId: null as string | null,
+            };
           }
-          const shopToday = (await db.execute<{ day: string }>(sql`
-            select ((now() at time zone ${policy.cutoffTz})::date)::text as day`, "objects"))[0]!.day;
+          const shopToday = (
+            await db.execute<{ day: string }>(
+              sql`
+            select ((now() at time zone ${policy.cutoffTz})::date)::text as day`,
+              "objects",
+            )
+          )[0]!.day;
           if (refund.refundedAt.slice(0, 10) >= shopToday) {
-            return { status: "pending", documentId: null as string | null, effectsDocumentId: null as string | null };
+            return {
+              status: "pending",
+              documentId: null as string | null,
+              effectsDocumentId: null as string | null,
+            };
           }
         }
         const resolved = await resolveRefundForPosting(orgId, actor, db, order, refund, eventId);
         const lines = await buildCashRefundLines(orgId, db, resolved);
-        const merchantTaxMinor = lines.reduce((sum, line) => sum + BigInt(toMinorUnits(line.taxAmount, resolved.currency)), 0n);
-        const built = await postCashRefundDraft(orgId, actor, {
-          provider: resolved.provider,
-          externalRef: resolved.externalId,
-          channelId: resolved.channelId,
-          orderId: resolved.orderId,
-          refundId: resolved.externalId,
-          documentDate: resolved.documentDate,
-          currency: resolved.currency,
-          subsidiaryId: resolved.subsidiaryId,
-          partyId: resolved.partyId,
-          lines,
-          tenders: resolved.tenders,
-          merchantTaxMinor,
-          merchantTotalMinor: resolved.merchantTotalMinor,
-        }, `channel-refund:${eventId}`);
+        const merchantTaxMinor = lines.reduce(
+          (sum, line) => sum + BigInt(toMinorUnits(line.taxAmount, resolved.currency)),
+          0n,
+        );
+        const built = await postCashRefundDraft(
+          orgId,
+          actor,
+          {
+            provider: resolved.provider,
+            externalRef: resolved.externalId,
+            channelId: resolved.channelId,
+            orderId: resolved.orderId,
+            refundId: resolved.externalId,
+            documentDate: resolved.documentDate,
+            currency: resolved.currency,
+            subsidiaryId: resolved.subsidiaryId,
+            partyId: resolved.partyId,
+            lines,
+            tenders: resolved.tenders,
+            merchantTaxMinor,
+            merchantTotalMinor: resolved.merchantTotalMinor,
+          },
+          `channel-refund:${eventId}`,
+        );
         if (!built.journalEntryId) {
           // Approval-gated: hold the draft on the event without changing its
           // pending state, so the operator approves then replays.
@@ -1393,14 +1653,22 @@ export async function postChannelRefund(
           if (held.rowCount !== 1) {
             throw new Error("Channel refund hold matched no row; the event posted while it held");
           }
-          return { status: "pending", documentId: built.documentId, effectsDocumentId: null as string | null };
+          return {
+            status: "pending",
+            documentId: built.documentId,
+            effectsDocumentId: null as string | null,
+          };
         }
         await markChannelEventPosted(orgId, eventId, actor, built.documentId);
         await retireSiblingCancellations(orgId, order.id, actor);
         // A refunded cancellation completes the order's story: a governing
         // draft left behind closes with the refund that settled it.
         await maybeCloseGoverningOrder(orgId, actor, order.id);
-        return { status: "posted", documentId: built.documentId, effectsDocumentId: built.documentId };
+        return {
+          status: "posted",
+          documentId: built.documentId,
+          effectsDocumentId: built.documentId,
+        };
       });
       if (outcome.effectsDocumentId) {
         await runPostDocumentEffects(outcome.effectsDocumentId, "draft", { actorId: actor });
@@ -1425,7 +1693,11 @@ export async function postChannelRefund(
  * sibling cancellation retires as ignored. A parked (exception) cancellation
  * keeps its own row — it has a problem of its own to solve.
  */
-async function retireSiblingCancellations(orgId: string, orderId: string, actor: string | null): Promise<void> {
+async function retireSiblingCancellations(
+  orgId: string,
+  orderId: string,
+  actor: string | null,
+): Promise<void> {
   await db.execute(sql`
     update channel_order_events
        set posting_status = 'ignored', updated_by = ${actor}, updated_at = now()
@@ -1446,7 +1718,8 @@ export async function claimPendingRefundEvents(
   cutoffTz: string,
   limit = 100,
 ): Promise<string[]> {
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select e.id from channel_order_events e
      join channel_orders o on o.org_id = e.org_id and o.id = e.order_id
      where e.org_id = ${orgId} and e.channel_id = ${channelId} and e.kind = 'refund'
@@ -1455,7 +1728,9 @@ export async function claimPendingRefundEvents(
        and ((e.occurred_at at time zone ${cutoffTz})::date)::text = ${day}
      order by e.occurred_at
      limit ${limit}
-     for update of e skip locked`, "objects");
+     for update of e skip locked`,
+    "objects",
+  );
   return rows.map((row) => row.id);
 }
 
@@ -1485,10 +1760,18 @@ export async function postRefundBatchDocument(
     const outcome = await withOrgTransaction(orgId, async () => {
       await acquireOrgFeatureGateLock(db, orgId);
       if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
-        throw new CommerceError("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
+        throw new CommerceError(
+          "feature_off",
+          "Sales Channels is turned off for this organization.",
+          FEATURE_REMEDY,
+        );
       }
       if (!(await lockAndCheckOrgFeature(db, orgId, "cashSales"))) {
-        throw new CommerceError("feature_off", "Cash sales is turned off for this organization.", "Enable Cash sales in Company Settings → Features.");
+        throw new CommerceError(
+          "feature_off",
+          "Cash sales is turned off for this organization.",
+          "Enable Cash sales in Company Settings → Features.",
+        );
       }
       interface BatchedRefund {
         eventId: string;
@@ -1524,7 +1807,13 @@ export async function postRefundBatchDocument(
         }
       }
       if (batched.length === 0) {
-        return { status: "empty", documentId: null as string | null, posted, parked, effectsDocumentIds: [] as string[] };
+        return {
+          status: "empty",
+          documentId: null as string | null,
+          posted,
+          parked,
+          effectsDocumentIds: [] as string[],
+        };
       }
       // One document per customer: the return engine matches every restock
       // line's source customer against the document's party, so anonymous
@@ -1558,21 +1847,26 @@ export async function postRefundBatchDocument(
           throw new Error("Channel refund batch left while its tenders balanced");
         }
         const partyId = entries[0]!.resolved.saleAnonymous ? null : entries[0]!.resolved.partyId;
-        const built = await postCashRefundDraft(orgId, actor, {
-          provider: scope.provider,
-          externalRef: `channel-refunds:${scope.channelId}:${scope.day}:${scope.currency}:${key === "walkin" ? "walkin" : key.slice(0, 8)}`,
-          channelId: scope.channelId,
-          orderId: entries[0]!.orderId,
-          refundId: `batch:${scope.day}`,
-          documentDate: scope.day,
-          currency: scope.currency,
-          subsidiaryId: scope.subsidiaryId,
-          partyId,
-          lines,
-          tenders,
-          merchantTaxMinor,
-          merchantTotalMinor,
-        }, `channel-refunds:${scope.channelId}:${scope.day}:${scope.currency}`);
+        const built = await postCashRefundDraft(
+          orgId,
+          actor,
+          {
+            provider: scope.provider,
+            externalRef: `channel-refunds:${scope.channelId}:${scope.day}:${scope.currency}:${key === "walkin" ? "walkin" : key.slice(0, 8)}`,
+            channelId: scope.channelId,
+            orderId: entries[0]!.orderId,
+            refundId: `batch:${scope.day}`,
+            documentDate: scope.day,
+            currency: scope.currency,
+            subsidiaryId: scope.subsidiaryId,
+            partyId,
+            lines,
+            tenders,
+            merchantTaxMinor,
+            merchantTotalMinor,
+          },
+          `channel-refunds:${scope.channelId}:${scope.day}:${scope.currency}`,
+        );
         if (!built.journalEntryId) {
           for (const entry of entries) {
             const held = await db.execute<never>(sql`
@@ -1580,7 +1874,9 @@ export async function postRefundBatchDocument(
                  set posting_document_id = ${built.documentId}, updated_by = ${actor}, updated_at = now()
                where org_id = ${orgId} and id = ${entry.eventId} and posting_status = 'pending'`);
             if (held.rowCount !== 1) {
-              throw new Error("Channel refund batch hold matched no row; the event posted while it held");
+              throw new Error(
+                "Channel refund batch hold matched no row; the event posted while it held",
+              );
             }
           }
           gated = true;
@@ -1599,14 +1895,31 @@ export async function postRefundBatchDocument(
         await retireSiblingCancellations(orgId, orderId, actor);
       }
       if (gated) {
-        return { status: "pending", documentId: firstDocumentId, posted, parked, effectsDocumentIds: [] as string[] };
+        return {
+          status: "pending",
+          documentId: firstDocumentId,
+          posted,
+          parked,
+          effectsDocumentIds: [] as string[],
+        };
       }
-      return { status: "posted", documentId: firstDocumentId, posted, parked, effectsDocumentIds: effectDocumentIds };
+      return {
+        status: "posted",
+        documentId: firstDocumentId,
+        posted,
+        parked,
+        effectsDocumentIds: effectDocumentIds,
+      };
     });
     for (const documentId of outcome.effectsDocumentIds) {
       await runPostDocumentEffects(documentId, "draft", { actorId: actor });
     }
-    return { status: outcome.status, documentId: outcome.documentId, posted: outcome.posted, parked: outcome.parked };
+    return {
+      status: outcome.status,
+      documentId: outcome.documentId,
+      posted: outcome.posted,
+      parked: outcome.parked,
+    };
   });
 }
 
@@ -1622,16 +1935,26 @@ export async function postDueRefundBatchesForOrg(
 ): Promise<{ posted: number; parked: number }> {
   let posted = 0;
   let parked = 0;
-  const channels = await db.execute<{ channel_id: string }>(sql`
+  const channels = await db.execute<{ channel_id: string }>(
+    sql`
     select distinct e.channel_id from channel_order_events e
-     where e.org_id = ${orgId} and e.kind = 'refund' and e.posting_status = 'pending'`, "objects");
+     where e.org_id = ${orgId} and e.kind = 'refund' and e.posting_status = 'pending'`,
+    "objects",
+  );
   for (const channel of channels) {
-    const meta = (await db.execute<{ kind: string; subsidiary_id: string | null }>(sql`
-      select kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channel.channel_id}`, "objects"))[0];
+    const meta = (
+      await db.execute<{ kind: string; subsidiary_id: string | null }>(
+        sql`
+      select kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channel.channel_id}`,
+        "objects",
+      )
+    )[0];
     if (!meta) continue;
     let cutoffTz = "UTC";
     try {
-      const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
+      const today = (
+        await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects")
+      )[0]!.today;
       const policy = await getPostingPolicy(orgId, channel.channel_id, today);
       if (policy.mode !== "daily_summary") continue;
       cutoffTz = policy.cutoffTz;
@@ -1640,32 +1963,56 @@ export async function postDueRefundBatchesForOrg(
     }
     let shopToday: string;
     try {
-      shopToday = (await db.execute<{ day: string }>(sql`
-        select ((now() at time zone ${cutoffTz})::date)::text as day`, "objects"))[0]!.day;
+      shopToday = (
+        await db.execute<{ day: string }>(
+          sql`
+        select ((now() at time zone ${cutoffTz})::date)::text as day`,
+          "objects",
+        )
+      )[0]!.day;
     } catch {
       continue;
     }
     // The sweep only takes refunds whose sales already posted: refunds
     // behind still-pending orders join tonight's sales batch instead, so a
     // sales batch that has not run yet can never strand them as parked.
-    const days = await db.execute<{ day: string; currency: string }>(sql`
+    const days = await db.execute<{ day: string; currency: string }>(
+      sql`
       select distinct ((e.occurred_at at time zone ${cutoffTz})::date)::text as day, o.shop_currency as currency
         from channel_order_events e
         join channel_orders o on o.org_id = e.org_id and o.id = e.order_id
        where e.org_id = ${orgId} and e.channel_id = ${channel.channel_id}
          and e.kind = 'refund' and e.posting_status = 'pending'
-         and o.posting_status in ('posted', 'summarized')`, "objects");
+         and o.posting_status in ('posted', 'summarized')`,
+      "objects",
+    );
     for (const day of days) {
       if (day.day >= shopToday) continue;
-      const ids = await claimPendingRefundEvents(orgId, channel.channel_id, day.day, day.currency, cutoffTz);
+      const ids = await claimPendingRefundEvents(
+        orgId,
+        channel.channel_id,
+        day.day,
+        day.currency,
+        cutoffTz,
+      );
       if (ids.length === 0) continue;
-      const outcome = await postRefundBatchDocument(orgId, actor, {
-        channelId: channel.channel_id,
-        provider: meta.kind,
-        day: day.day,
-        currency: day.currency,
-        subsidiaryId: meta.subsidiary_id,
-      }, ids).catch(() => ({ status: "pending", documentId: null as string | null, posted: 0, parked: 0 }));
+      const outcome = await postRefundBatchDocument(
+        orgId,
+        actor,
+        {
+          channelId: channel.channel_id,
+          provider: meta.kind,
+          day: day.day,
+          currency: day.currency,
+          subsidiaryId: meta.subsidiary_id,
+        },
+        ids,
+      ).catch(() => ({
+        status: "pending",
+        documentId: null as string | null,
+        posted: 0,
+        parked: 0,
+      }));
       if (outcome.status === "posted") posted += outcome.posted;
       parked += outcome.parked;
     }

@@ -1,52 +1,43 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const STAMP = '2026-03-15'
-const evidenceKey = Symbol.for('openbooks.payroll-evidence-stamp-test')
-const evidenceState: { stamps: unknown[]; uploaded: unknown } = { stamps: [], uploaded: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[evidenceKey] = evidenceState
+const STAMP = "2026-03-15";
+const evidenceKey = Symbol.for("openbooks.payroll-evidence-stamp-test");
+const evidenceState: { stamps: unknown[]; uploaded: unknown } = { stamps: [], uploaded: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[evidenceKey] = evidenceState;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksEvidenceSqlText = sqlText
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksEvidenceSqlText = sqlText;
 
 // Absolute URL of pdf-lib: mock modules load from opaque `mock:` URLs with
 // no base, so bare specifiers inside them cannot resolve. Only pdf-lib is
 // imported there (to mint the tiny merged fixture); everything else the
 // package under test needs is captured or canned above.
-const pdfLibUrl = import.meta.resolve('pdf-lib')
+const pdfLibUrl = import.meta.resolve("pdf-lib");
 
 const mockSources = new Map<string, string>([
+  ["mock:intl", "export async function getTranslations() { return (key) => key }"],
+  ["mock:business-date", `export async function businessToday() { return '${STAMP}' }`],
+  ["mock:ensure-definitions", "export async function ensureReportDefinitions() {}"],
   [
-    'mock:intl',
-    'export async function getTranslations() { return (key) => key }',
-  ],
-  [
-    'mock:business-date',
-    `export async function businessToday() { return '${STAMP}' }`,
-  ],
-  [
-    'mock:ensure-definitions',
-    'export async function ensureReportDefinitions() {}',
-  ],
-  [
-    'mock:run-commit',
+    "mock:run-commit",
     'export async function previewPayRunGl() { return { debitTotal: "0.0000", legs: [] } }',
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-evidence-stamp-test')]
       const sqlText = globalThis.openbooksEvidenceSqlText
@@ -78,7 +69,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:report-run',
+    "mock:report-run",
     `
       export async function resolveDefinitionToExportData() {
         return { title: 'Evidence', dateRangeLabel: '', summary: [], groups: [] }
@@ -86,7 +77,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:report-pdf',
+    "mock:report-pdf",
     `
       import { PDFDocument } from '${pdfLibUrl}'
       const state = globalThis[Symbol.for('openbooks.payroll-evidence-stamp-test')]
@@ -104,7 +95,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:periods',
+    "mock:periods",
     `
       export async function resolvePeriod(preset, opts) {
         return { from: opts.customFrom, to: opts.customTo, label: '' }
@@ -112,7 +103,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:file-cabinet',
+    "mock:file-cabinet",
     `
       const state = globalThis[Symbol.for('openbooks.payroll-evidence-stamp-test')]
       export async function uploadAndAttach(input) {
@@ -121,51 +112,60 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['next-intl/server', 'mock:intl'],
-  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
-  ['@openbooks/engine/reports/ensure-report-definitions', 'mock:ensure-definitions'],
-  ['@openbooks/engine/payroll/run-commit', 'mock:run-commit'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['./report-run', 'mock:report-run'],
-  ['./report-pdf', 'mock:report-pdf'],
-  ['./periods', 'mock:periods'],
-  ['./file-cabinet', 'mock:file-cabinet'],
-])
+  ["next-intl/server", "mock:intl"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
+  ["@openbooks/engine/reports/ensure-report-definitions", "mock:ensure-definitions"],
+  ["@openbooks/engine/payroll/run-commit", "mock:run-commit"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["./report-run", "mock:report-run"],
+  ["./report-pdf", "mock:report-pdf"],
+  ["./periods", "mock:periods"],
+  ["./file-cabinet", "mock:file-cabinet"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const evidenceUrl = './payroll-evidence.ts?payroll-evidence-stamp'
-const { assemblePayRunEvidence } = (await import(evidenceUrl)) as typeof import('./payroll-evidence.ts')
-hooks.deregister()
+const evidenceUrl = "./payroll-evidence.ts?payroll-evidence-stamp";
+const { assemblePayRunEvidence } = (await import(
+  evidenceUrl
+)) as typeof import("./payroll-evidence.ts");
+hooks.deregister();
 
-const EXPECTED_STAMP = new Date(`${STAMP}T00:00:00Z`)
+const EXPECTED_STAMP = new Date(`${STAMP}T00:00:00Z`);
 
-test('every evidence PDF carries the org business day as its generation stamp', async () => {
-  evidenceState.stamps = []
-  evidenceState.uploaded = null
+test("every evidence PDF carries the org business day as its generation stamp", async () => {
+  evidenceState.stamps = [];
+  evidenceState.uploaded = null;
 
-  const result = await assemblePayRunEvidence('org-1', 'user-1', 'doc-1')
+  const result = await assemblePayRunEvidence("org-1", "user-1", "doc-1");
 
-  assert.equal(result.fileId, 'file-1')
-  assert.equal(typeof (evidenceState.uploaded as { executor?: unknown } | null)?.executor, 'object')
-  assert.equal(result.filename, 'RUN-7-payroll-evidence.pdf')
-  assert.deepEqual(result.parts, ['Payroll journal', 'Payroll register', 'GL preview RUN-7'])
-  assert.equal(evidenceState.stamps.length, 3, 'both definitions and the GL preview stamp their PDF')
+  assert.equal(result.fileId, "file-1");
+  assert.equal(
+    typeof (evidenceState.uploaded as { executor?: unknown } | null)?.executor,
+    "object",
+  );
+  assert.equal(result.filename, "RUN-7-payroll-evidence.pdf");
+  assert.deepEqual(result.parts, ["Payroll journal", "Payroll register", "GL preview RUN-7"]);
+  assert.equal(
+    evidenceState.stamps.length,
+    3,
+    "both definitions and the GL preview stamp their PDF",
+  );
   for (const stamp of evidenceState.stamps) {
-    assert.deepEqual(stamp, EXPECTED_STAMP)
+    assert.deepEqual(stamp, EXPECTED_STAMP);
   }
-})
+});

@@ -13,11 +13,13 @@ test("application search caps the real finder results at the caller's limit", as
   const alphaId = randomUUID();
   const longerId = randomUUID();
   try {
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${alphaId}, ${org.orgId}, 'customer', 'T1 Search Alpha', true, '{}'::jsonb),
              (${longerId}, ${org.orgId}, 'customer', 'T1 Search Alpha Beta', true, '{}'::jsonb)
-    `));
+    `),
+    );
     const context: ApplicationContext = {
       authz: {
         user: { orgId: org.orgId, id: randomUUID() } as ApplicationContext["authz"]["user"],
@@ -29,26 +31,32 @@ test("application search caps the real finder results at the caller's limit", as
       apiKeyId: null,
     };
 
-    const result = await withOrgContext(org.orgId, () => searchApplication(context, {
-      q: "T1 Search Alpha",
-      limit: 1,
-    }));
+    const result = await withOrgContext(org.orgId, () =>
+      searchApplication(context, {
+        q: "T1 Search Alpha",
+        limit: 1,
+      }),
+    );
 
     assert.deepEqual(result, {
       q: "T1 Search Alpha",
-      groups: [{
-        type: "contact",
-        labelKey: "contacts",
-        hits: [{
-          id: alphaId,
+      groups: [
+        {
           type: "contact",
-          title: "T1 Search Alpha",
-          subtitle: undefined,
-          href: `/parties?party=${alphaId}`,
-          iconKey: "users",
-          badge: undefined,
-        }],
-      }],
+          labelKey: "contacts",
+          hits: [
+            {
+              id: alphaId,
+              type: "contact",
+              title: "T1 Search Alpha",
+              subtitle: undefined,
+              href: `/parties?party=${alphaId}`,
+              iconKey: "users",
+              badge: undefined,
+            },
+          ],
+        },
+      ],
       total: 1,
     });
   } finally {

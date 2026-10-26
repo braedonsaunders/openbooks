@@ -13,7 +13,17 @@ const root = pathToFileURL(`${process.cwd()}/`).href;
 // restatement note — and the publish button previously sent no comment at
 // all, so a restatement died with a 422 and no way to comply.
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: { pathname: "/close", routerSource: "export function useRouter() { return { refresh() {}, push() {}, replace() {} } }" }, extra: { "next-intl": "export function useTranslations() { const t = (key) => key; t.has = () => true; return t }; export function useLocale() { return \"en\" }" } });
+stubModules({
+  navigation: {
+    pathname: "/close",
+    routerSource:
+      "export function useRouter() { return { refresh() {}, push() {}, replace() {} } }",
+  },
+  extra: {
+    "next-intl":
+      'export function useTranslations() { const t = (key) => key; t.has = () => true; return t }; export function useLocale() { return "en" }',
+  },
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "react" && context.parentURL?.startsWith("data:")) {
@@ -77,32 +87,20 @@ const closedRun = {
 // Tailwind `disabled:` variant classes contain the substring, so match the
 // rendered disabled attribute (followed by whitespace, `=""`, or the tag
 // close) on the publish button instead.
-const publishDisabled = (html: string) =>
-  /<button[^>]*\sdisabled(="")?[\s>]/.test(html);
+const publishDisabled = (html: string) => /<button[^>]*\sdisabled(="")?[\s>]/.test(html);
 
 test("first publication offers an optional note and stays enabled", () => {
-  const html = renderToStaticMarkup(
-    createElement(PublishStage, propsFor(closedRun) as never),
-  );
+  const html = renderToStaticMarkup(createElement(PublishStage, propsFor(closedRun) as never));
   assert.ok(html.includes("<textarea"), "publish must offer a note field");
-  assert.ok(
-    !publishDisabled(html),
-    "first publication without a note must stay enabled",
-  );
+  assert.ok(!publishDisabled(html), "first publication without a note must stay enabled");
 });
 
 test("re-publication requires a restatement note before enabling publish", () => {
   const html = renderToStaticMarkup(
-    createElement(
-      PublishStage,
-      propsFor({ ...closedRun, binder_hash: "v1hash" }) as never,
-    ),
+    createElement(PublishStage, propsFor({ ...closedRun, binder_hash: "v1hash" }) as never),
   );
   assert.ok(html.includes("<textarea"), "re-publish must offer a note field");
-  assert.ok(
-    publishDisabled(html),
-    "re-publish without a restatement note must stay disabled",
-  );
+  assert.ok(publishDisabled(html), "re-publish without a restatement note must stay disabled");
 });
 
 // reporting packages store reports as { slug } objects. The

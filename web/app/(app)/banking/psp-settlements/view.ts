@@ -1,16 +1,23 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { dateLabel } from '../../../../lib/format'
-import { db } from '@openbooks/engine/platform/db'
-import { page, pageHeader, frame, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { subsidiaryUiOptions } from '../../../../lib/subsidiaries'
-import { listScopedAccountOptions } from '../../../../lib/scoped-options'
-import { getMoneyFormatter } from '@/lib/money-server'
-import type { PspAccountOption, PspSettlementRow, PspSubsidiaryOption } from './sections'
+import { sql } from "drizzle-orm";
+import { getLocale, getTranslations } from "next-intl/server";
+import { dateLabel } from "../../../../lib/format";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  page,
+  pageHeader,
+  frame,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { subsidiaryUiOptions } from "../../../../lib/subsidiaries";
+import { listScopedAccountOptions } from "../../../../lib/scoped-options";
+import { getMoneyFormatter } from "@/lib/money-server";
+import type { PspAccountOption, PspSettlementRow, PspSubsidiaryOption } from "./sections";
 
 /**
  * PSP settlement import + batches, split into a loader and a spec.
@@ -31,133 +38,139 @@ import type { PspAccountOption, PspSettlementRow, PspSubsidiaryOption } from './
  * where they live natively. The loader resolves the read model only.
  */
 
-type SettlementStatus = 'draft' | 'posted' | 'void'
+type SettlementStatus = "draft" | "posted" | "void";
 
-const STATUS_MESSAGE: Record<SettlementStatus, 'draft' | 'posted' | 'voided'> = {
-  draft: 'draft',
-  posted: 'posted',
-  void: 'voided',
-}
+const STATUS_MESSAGE: Record<SettlementStatus, "draft" | "posted" | "voided"> = {
+  draft: "draft",
+  posted: "posted",
+  void: "voided",
+};
 
 export interface PspSettlementsStrings {
-  acceptanceNote: string
-  acceptanceLink: string
-  importTitle: string
-  providerLabel: string
-  externalRef: string
-  settlementDate: string
-  bankAccountId: string
-  bankAccountHint: string
-  feeAccountId: string
-  feeAccountHint: string
-  clearingAccountId: string
-  clearingAccountHint: string
-  subsidiaryLabel: string
-  noneLabel: string
-  payloadShapeHint: string
-  genericPayloadHint: string
-  accountPlaceholder: string
-  uploadPayload: string
-  invalidStripePayload: string
-  invalidGenericPayload: string
-  importDraft: string
-  recentBatches: string
-  reversalDate: string
-  reversalReason: string
-  reversalPlaceholder: string
-  colProvider: string
-  colNet: string
-  colFx: string
-  filterProviderLabel: string
-  filterAllProviders: string
-  reviewLinkLabel: string
-  reviewsHref: string
-  reviewPending: string | null
-  reverse: string
-  empty: string
-  referenceLabel: string
-  dateLabel: string
-  statusLabel: string
-  postLabel: string
-  loadingLabel: string
-  loadFailedLabel: string
-  retryLabel: string
+  acceptanceNote: string;
+  acceptanceLink: string;
+  importTitle: string;
+  providerLabel: string;
+  externalRef: string;
+  settlementDate: string;
+  bankAccountId: string;
+  bankAccountHint: string;
+  feeAccountId: string;
+  feeAccountHint: string;
+  clearingAccountId: string;
+  clearingAccountHint: string;
+  subsidiaryLabel: string;
+  noneLabel: string;
+  payloadShapeHint: string;
+  genericPayloadHint: string;
+  accountPlaceholder: string;
+  uploadPayload: string;
+  invalidStripePayload: string;
+  invalidGenericPayload: string;
+  importDraft: string;
+  recentBatches: string;
+  reversalDate: string;
+  reversalReason: string;
+  reversalPlaceholder: string;
+  colProvider: string;
+  colNet: string;
+  colFx: string;
+  filterProviderLabel: string;
+  filterAllProviders: string;
+  reviewLinkLabel: string;
+  reviewsHref: string;
+  reviewPending: string | null;
+  reverse: string;
+  empty: string;
+  referenceLabel: string;
+  dateLabel: string;
+  statusLabel: string;
+  postLabel: string;
+  loadingLabel: string;
+  loadFailedLabel: string;
+  retryLabel: string;
 }
 
 export interface PspSettlementsData {
-  title: string
-  description: string
+  title: string;
+  description: string;
   /** Loader-resolved banking.reconcile grant, never an Authz: the import
    *  form and the post/reverse buttons POST with banking.reconcile, so a
    *  read-only operator must not see them (F1T-9). */
-  canReconcile: boolean
-  strings: PspSettlementsStrings
-  rows: PspSettlementRow[]
-  subsidiaries: PspSubsidiaryOption[]
+  canReconcile: boolean;
+  strings: PspSettlementsStrings;
+  rows: PspSettlementRow[];
+  subsidiaries: PspSubsidiaryOption[];
   /** Postable chart accounts for the import form's house pickers — the same
    *  active/non-summary population the import validates against, so a picked
    *  account cannot strand the draft at posting. */
-  accounts: PspAccountOption[]
+  accounts: PspAccountOption[];
   /** Loader-resolved setup grant for the scheduled-pull toggles: flipping
    *  pullEnabled POSTs saveConfig with admin.setup.manage. */
-  canSetup: boolean
+  canSetup: boolean;
   /** Provider pull toggles, unrestricted callers only — the toggle writes
    *  org-wide provider configuration, never a subsidiary record. */
-  configs: { provider: string; displayName: string; pullEnabled: boolean }[]
+  configs: { provider: string; displayName: string; pullEnabled: boolean }[];
 }
 
 interface BatchRow extends Record<string, unknown> {
-  id: string
-  provider: string
-  externalRef: string
-  settlementDate: string
-  currency: string
-  netAmount: string
-  fxAmount: string
-  disputeAmount: string
-  sourceCurrency: string | null
-  status: string
+  id: string;
+  provider: string;
+  externalRef: string;
+  settlementDate: string;
+  currency: string;
+  netAmount: string;
+  fxAmount: string;
+  disputeAmount: string;
+  sourceCurrency: string | null;
+  status: string;
 }
 
 export async function loadPspSettlements(): Promise<PspSettlementsData> {
   // The house refusal names banking.read (F1T-10): a reader without it sees
   // /access-denied, never a silent bounce home.
-  const authz = await requirePermission('banking.read')
+  const authz = await requirePermission("banking.read");
   // Same gate as GET /api/psp/settlements: a disabled banking feature 404s
   // the surface, and banking.read guards the read model.
-  await requireFeatureEnabled(authz.user.orgId, 'banking')
-  const { money } = await getMoneyFormatter()
-  const t = await getTranslations('banking.pspSettlements')
-  const common = await getTranslations('common')
-  const locale = await getLocale()
+  await requireFeatureEnabled(authz.user.orgId, "banking");
+  const { money } = await getMoneyFormatter();
+  const t = await getTranslations("banking.pspSettlements");
+  const common = await getTranslations("common");
+  const locale = await getLocale();
 
   const subsidiaryFilter = authz.allowedSubsidiaryIds
     ? authz.allowedSubsidiaryIds.size > 0
-      ? sql` and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])`
+      ? sql` and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[])`
       : sql` and false`
-    : sql``
-  const batches = await db.execute<BatchRow>(sql`
+    : sql``;
+  const batches = await db.execute<BatchRow>(
+    sql`
     select id, provider, external_ref as "externalRef", status, currency, net_amount as "netAmount",
            fx_amount as "fxAmount", dispute_amount as "disputeAmount",
            source_currency as "sourceCurrency", settlement_date as "settlementDate"
       from psp_settlement_batches
      where org_id = ${authz.user.orgId}${subsidiaryFilter}
      order by settlement_date desc, created_at desc
-  `, 'objects')
+  `,
+    "objects",
+  );
   // Parked refunds and disputes waiting on an operator: the queue link names
   // the count so the work is visible before opening it.
-  const pendingReviews = await db.execute<{ count: string }>(sql`
+  const pendingReviews = await db.execute<{ count: string }>(
+    sql`
     select count(*)::text as count from payment_disputes
      where org_id = ${authz.user.orgId} and status = 'pending_review'
-  `, 'objects')
-  const pendingReviewCount = Number(pendingReviews[0]?.count ?? '0')
+  `,
+    "objects",
+  );
+  const pendingReviewCount = Number(pendingReviews[0]?.count ?? "0");
   // The import form's subsidiary picker: same flag gate and caller scope as
   // the document drawers. Empty keeps all subsidiary UI hidden
   // and the batch posts to the root like every other document.
-  const subsidiaryScope = await subsidiaryUiOptions(authz.user.orgId)
+  const subsidiaryScope = await subsidiaryUiOptions(authz.user.orgId);
   const subsidiaries = subsidiaryScope
     .filter((option) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(option.id))
-    .map((option) => ({ id: option.id, name: option.name, baseCurrency: option.baseCurrency }))
+    .map((option) => ({ id: option.id, name: option.name, baseCurrency: option.baseCurrency }));
   // The import form's house account pickers: exactly the population the
   // import validates (active, non-summary accounts of this org), labelled
   // `number · name` like every other account picker. The stored value stays
@@ -165,84 +178,87 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
   const accountRows = await listScopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
     activeOnly: true,
     postingOnly: true,
-  })
+  });
   const accounts = accountRows.map((a) => ({
     id: String(a.id),
-    label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
-  }))
+    label: `${a.number ? `${a.number} · ` : ""}${a.name}`,
+  }));
 
-  const settlementDateLabel = (value: string) => dateLabel(new Date(`${value}T12:00:00Z`), locale)
-  const isZeroAmount = (value: string) => Number(value) === 0
+  const settlementDateLabel = (value: string) => dateLabel(new Date(`${value}T12:00:00Z`), locale);
+  const isZeroAmount = (value: string) => Number(value) === 0;
 
   const providerConfigs = !authz.allowedSubsidiaryIds
-    ? (await db.execute<{ provider: string; displayName: string; pullEnabled: boolean }>(sql`
+    ? await db.execute<{ provider: string; displayName: string; pullEnabled: boolean }>(
+        sql`
         select provider, display_name as "displayName", pull_enabled as "pullEnabled"
           from psp_provider_configs
          where org_id = ${authz.user.orgId} and is_enabled
          order by provider
-      `, 'objects'))
-    : []
+      `,
+        "objects",
+      )
+    : [];
 
   return {
-    title: t('title'),
-    description: t('description'),
-    canReconcile: can(authz, 'banking.reconcile'),
-    canSetup: can(authz, 'admin.setup.manage'),
+    title: t("title"),
+    description: t("description"),
+    canReconcile: can(authz, "banking.reconcile"),
+    canSetup: can(authz, "admin.setup.manage"),
     configs: providerConfigs,
     strings: {
-      acceptanceNote: t('acceptanceNote'),
-      acceptanceLink: t('acceptanceLink'),
-      importTitle: t('importTitle'),
-      providerLabel: t('providerLabel'),
-      externalRef: t('externalRef'),
-      settlementDate: t('settlementDate'),
-      bankAccountId: t('bankAccountId'),
-      bankAccountHint: t('bankAccountHint'),
-      feeAccountId: t('feeAccountId'),
-      feeAccountHint: t('feeAccountHint'),
-      clearingAccountId: t('clearingAccountId'),
-      clearingAccountHint: t('clearingAccountHint'),
-      subsidiaryLabel: common('labels.subsidiary'),
-      noneLabel: common('labels.none'),
-      payloadShapeHint: t('payloadShapeHint'),
-      genericPayloadHint: t('genericPayloadHint'),
-      accountPlaceholder: t('accountPlaceholder'),
-      uploadPayload: t('uploadPayload'),
-      invalidStripePayload: t('invalidStripePayload'),
-      invalidGenericPayload: t('invalidGenericPayload'),
-      importDraft: t('importDraft'),
-      recentBatches: t('recentBatches'),
-      reversalDate: t('reversalDate'),
-      reversalReason: t('reversalReason'),
-      reversalPlaceholder: t('reversalPlaceholder'),
-      colProvider: t('colProvider'),
-      colNet: t('colNet'),
-      colFx: t('colFx'),
-      filterProviderLabel: t('filterProviderLabel'),
-      filterAllProviders: t('filterAllProviders'),
-      reviewLinkLabel: t('reviewLinkLabel'),
-      reviewsHref: '/banking/psp-settlements/reviews',
+      acceptanceNote: t("acceptanceNote"),
+      acceptanceLink: t("acceptanceLink"),
+      importTitle: t("importTitle"),
+      providerLabel: t("providerLabel"),
+      externalRef: t("externalRef"),
+      settlementDate: t("settlementDate"),
+      bankAccountId: t("bankAccountId"),
+      bankAccountHint: t("bankAccountHint"),
+      feeAccountId: t("feeAccountId"),
+      feeAccountHint: t("feeAccountHint"),
+      clearingAccountId: t("clearingAccountId"),
+      clearingAccountHint: t("clearingAccountHint"),
+      subsidiaryLabel: common("labels.subsidiary"),
+      noneLabel: common("labels.none"),
+      payloadShapeHint: t("payloadShapeHint"),
+      genericPayloadHint: t("genericPayloadHint"),
+      accountPlaceholder: t("accountPlaceholder"),
+      uploadPayload: t("uploadPayload"),
+      invalidStripePayload: t("invalidStripePayload"),
+      invalidGenericPayload: t("invalidGenericPayload"),
+      importDraft: t("importDraft"),
+      recentBatches: t("recentBatches"),
+      reversalDate: t("reversalDate"),
+      reversalReason: t("reversalReason"),
+      reversalPlaceholder: t("reversalPlaceholder"),
+      colProvider: t("colProvider"),
+      colNet: t("colNet"),
+      colFx: t("colFx"),
+      filterProviderLabel: t("filterProviderLabel"),
+      filterAllProviders: t("filterAllProviders"),
+      reviewLinkLabel: t("reviewLinkLabel"),
+      reviewsHref: "/banking/psp-settlements/reviews",
       reviewPending:
-        pendingReviewCount > 0 ? t('reviewPending', { count: pendingReviewCount }) : null,
-      reverse: t('reverse'),
-      empty: t('empty'),
-      referenceLabel: common('labels.reference'),
-      dateLabel: common('labels.date'),
-      statusLabel: common('labels.status'),
-      postLabel: common('actions.post'),
-      loadingLabel: common('feedback.loading'),
-      loadFailedLabel: common('feedback.loadFailed'),
-      retryLabel: common('actions.retry'),
+        pendingReviewCount > 0 ? t("reviewPending", { count: pendingReviewCount }) : null,
+      reverse: t("reverse"),
+      empty: t("empty"),
+      referenceLabel: common("labels.reference"),
+      dateLabel: common("labels.date"),
+      statusLabel: common("labels.status"),
+      postLabel: common("actions.post"),
+      loadingLabel: common("feedback.loading"),
+      loadFailedLabel: common("feedback.loadFailed"),
+      retryLabel: common("actions.retry"),
     },
     subsidiaries,
     accounts,
     rows: batches.map((b) => {
-      const currency = String(b.currency)
-      const fxAmount = String(b.fxAmount)
-      const disputeAmount = String(b.disputeAmount)
+      const currency = String(b.currency);
+      const fxAmount = String(b.fxAmount);
+      const disputeAmount = String(b.disputeAmount);
       return {
         id: String(b.id),
-        provider: b.provider as PspSettlementRow['provider'],
+        provider: b.provider as PspSettlementRow["provider"],
         providerLabel: t(`providers.${b.provider}`),
         externalRef: String(b.externalRef),
         settlementDate: settlementDateLabel(String(b.settlementDate).slice(0, 10)),
@@ -251,39 +267,39 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
         fxAmount: isZeroAmount(fxAmount) ? null : money(fxAmount, { currency }),
         disputeBadge: isZeroAmount(disputeAmount)
           ? null
-          : t('disputeBadge', { amount: money(disputeAmount, { currency }) }),
+          : t("disputeBadge", { amount: money(disputeAmount, { currency }) }),
         sourceCurrency: b.sourceCurrency,
         // `common`, not the page namespace: the client component resolves this
         // label from common.status.*, and the page namespace has no status keys
         // at all — so the page namespace renders the raw key path.
         statusLabel: common(`status.${STATUS_MESSAGE[b.status as SettlementStatus]}`),
         status: b.status as SettlementStatus,
-      }
+      };
     }),
-  }
+  };
 }
 
-const f = ref<PspSettlementsData>()
+const f = ref<PspSettlementsData>();
 
 export function pspSettlementsSpec(data: PspSettlementsData): PageSpec {
   return page({
-    route: '/banking/psp-settlements',
+    route: "/banking/psp-settlements",
     // List chrome outside (sticky PageHeader), PageContainer scroll shell
     // inside — the native page nests exactly this pair.
-    layout: 'list',
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
       }),
     ],
     body: [
       frame(
-        'page-container',
+        "page-container",
         [
           // No wrapper: the frame already carries `space-y-6`, and a second
           // div here is markup the native page does not have.
-          widgetBlock('psp-settlements', {
+          widgetBlock("psp-settlements", {
             // No `acceptanceHref`: the workspace hardcodes that route itself,
             // so passing it here reached nothing. Wiring the route through
             // properly is a separate cleanup — this only stops pretending it
@@ -297,8 +313,8 @@ export function pspSettlementsSpec(data: PspSettlementsData): PageSpec {
             initialConfigs: data.configs,
           }),
         ],
-        { className: 'space-y-6' },
+        { className: "space-y-6" },
       ),
     ],
-  })
+  });
 }

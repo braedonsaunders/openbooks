@@ -1,7 +1,7 @@
-import 'server-only'
-import type { Authz } from '@/lib/authz'
-import type { ResolvedPeriod } from '@/lib/periods'
-import type { CashPosition } from '@/lib/cash/cash-position'
+import "server-only";
+import type { Authz } from "@/lib/authz";
+import type { ResolvedPeriod } from "@/lib/periods";
+import type { CashPosition } from "@/lib/cash/cash-position";
 
 /**
  * What every dashboard widget reader receives. Readers for widgets extracted
@@ -11,18 +11,18 @@ import type { CashPosition } from '@/lib/cash/cash-position'
  * disagree.
  */
 export type DashboardWidgetContext = {
-  authz: Authz
-  orgId: string
+  authz: Authz;
+  orgId: string;
   /** The org's business date (its configured time zone). */
-  today: string
+  today: string;
   /** Subsidiary ids for readers taking a list; undefined when unrestricted. */
-  subsidiaryIds: string[] | undefined
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  subsidiaryIds: string[] | undefined;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   /**
    * The period an Analytics dashboard opens on, resolved once per request
    * through the organization's fiscal calendar.
    */
-  period: () => Promise<ResolvedPeriod>
+  period: () => Promise<ResolvedPeriod>;
   /**
    * The Cash Flow position for the org's configured horizon, scope and AP
    * capacity settings — resolved once per request and shared by the runway
@@ -31,12 +31,12 @@ export type DashboardWidgetContext = {
    * exactly that to its own refusal); anything else still throws. Absent
    * only for callers that read no cash field.
    */
-  cashPosition?: () => Promise<CashPosition>
-}
+  cashPosition?: () => Promise<CashPosition>;
+};
 
 /**
  * A widget value that may be unavailable. An unavailable value carries the
  * reason, already translated, so the tile can say WHY it shows no figure —
  * an absent figure never renders as zero.
  */
-export type WidgetValue<T> = { available: true; value: T } | { available: false; reason: string }
+export type WidgetValue<T> = { available: true; value: T } | { available: false; reason: string };

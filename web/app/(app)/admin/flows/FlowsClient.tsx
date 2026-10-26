@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import { useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Plus, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, SearchSelect, cn } from '@openbooks/ui'
-import { ApiResponseError, apiJson } from '../../../../lib/api-error'
-import { confirmDialog } from '../../../../lib/confirm'
+import { useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button, Drawer, Input, Label, SearchSelect, cn } from "@openbooks/ui";
+import { ApiResponseError, apiJson } from "../../../../lib/api-error";
+import { confirmDialog } from "../../../../lib/confirm";
 
 /**
  * Client bits of the flows list: the New Flow drawer (name + subject kind
@@ -15,27 +15,27 @@ import { confirmDialog } from '../../../../lib/confirm'
  */
 
 type ProfileOption = {
-  subjectKind: string
-  label?: string
-  labelKey?: string
-  group?: string
-}
+  subjectKind: string;
+  label?: string;
+  labelKey?: string;
+  group?: string;
+};
 
 export function NewFlowButton() {
-  const t = useTranslations('admin.flows')
-  const tSubjects = useTranslations('customization.recordTypes')
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const params = useSearchParams()
-  const [subjectKind, setSubjectKind] = useState(params.get('subject') ?? '')
-  const [weekdayPreset, setWeekdayPreset] = useState(false)
-  const [profiles, setProfiles] = useState<ProfileOption[] | null>(null)
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("admin.flows");
+  const tSubjects = useTranslations("customization.recordTypes");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const params = useSearchParams();
+  const [subjectKind, setSubjectKind] = useState(params.get("subject") ?? "");
+  const [weekdayPreset, setWeekdayPreset] = useState(false);
+  const [profiles, setProfiles] = useState<ProfileOption[] | null>(null);
+  const [busy, setBusy] = useState(false);
   function openDrawer() {
-    setOpen(true)
+    setOpen(true);
     if (profiles === null) {
-      fetch('/api/admin/flows/profiles')
+      fetch("/api/admin/flows/profiles")
         .then((r) => (r.ok ? r.json() : { profiles: [] }))
         .then((d) =>
           setProfiles(
@@ -47,92 +47,85 @@ export function NewFlowButton() {
             })),
           ),
         )
-        .catch(() => setProfiles([]))
+        .catch(() => setProfiles([]));
     }
   }
 
   async function create() {
-    setBusy(true)
+    setBusy(true);
     try {
       const data = await apiJson<{ id: string }>(
-        '/api/admin/flows',
+        "/api/admin/flows",
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: name.trim(),
             subjectKind,
-            ...(subjectKind === 'schedule_board' && params.get('board')
+            ...(subjectKind === "schedule_board" && params.get("board")
               ? {
-                  boardId: params.get('board'),
-                  ...(weekdayPreset
-                    ? { schedulePreset: 'weekday-morning-afternoon' }
-                    : {}),
+                  boardId: params.get("board"),
+                  ...(weekdayPreset ? { schedulePreset: "weekday-morning-afternoon" } : {}),
                 }
               : {}),
           }),
         },
-        t('new.failed'),
-      )
-      router.push(`/admin/flows/${data.id}`)
+        t("new.failed"),
+      );
+      router.push(`/admin/flows/${data.id}`);
     } catch (error) {
-      toast.error(
-        error instanceof ApiResponseError ? error.message : t('new.failed'),
-      )
+      toast.error(error instanceof ApiResponseError ? error.message : t("new.failed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   return (
     <>
       <Button onClick={openDrawer}>
-        <Plus size={15} /> {t('new.button')}
+        <Plus size={15} /> {t("new.button")}
       </Button>
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
         size="sm"
-        title={t('new.title')}
-        description={t('new.description')}
+        title={t("new.title")}
+        description={t("new.description")}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button
-              disabled={busy || !name.trim() || !subjectKind}
-              onClick={create}
-            >
-              {t('new.create')}
+            <Button disabled={busy || !name.trim() || !subjectKind} onClick={create}>
+              {t("new.create")}
             </Button>
           </div>
         }
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>{t('new.name')}</Label>
+            <Label>{t("new.name")}</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t('new.namePlaceholder')}
+              placeholder={t("new.namePlaceholder")}
               autoFocus
             />
           </div>
-          {subjectKind === 'schedule_board' && params.get('board') ? (
+          {subjectKind === "schedule_board" && params.get("board") ? (
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={weekdayPreset}
                 onChange={(event) => setWeekdayPreset(event.target.checked)}
               />
-              {t('new.scheduleWeekdayPreset')}
+              {t("new.scheduleWeekdayPreset")}
             </label>
           ) : null}
           <div className="space-y-1.5">
-            <Label>{t('new.subject')}</Label>
+            <Label>{t("new.subject")}</Label>
             <SearchSelect
               value={subjectKind}
               options={(profiles ?? [])
                 .map((p) => {
-                  const groupKey = `new.groups.${p.group ?? 'other'}` as const
+                  const groupKey = `new.groups.${p.group ?? "other"}` as const;
                   return {
                     value: p.subjectKind,
                     label:
@@ -141,17 +134,11 @@ export function NewFlowButton() {
                         : (p.label ?? p.subjectKind),
                     // Unknown future groups fall back to Other so the picker
                     // never renders an ungrouped row.
-                    group: t.has(groupKey as never)
-                      ? t(groupKey as never)
-                      : t('new.groups.other'),
-                  }
+                    group: t.has(groupKey as never) ? t(groupKey as never) : t("new.groups.other"),
+                  };
                 })
-                .sort(
-                  (a, b) =>
-                    a.group.localeCompare(b.group) ||
-                    a.label.localeCompare(b.label),
-                )}
-              placeholder={t('new.subjectPlaceholder')}
+                .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label))}
+              placeholder={t("new.subjectPlaceholder")}
               loading={profiles === null}
               onChange={setSubjectKind}
             />
@@ -159,7 +146,7 @@ export function NewFlowButton() {
         </div>
       </Drawer>
     </>
-  )
+  );
 }
 
 export function FlowRowActions({
@@ -168,82 +155,74 @@ export function FlowRowActions({
   enabled,
   updatedAt,
 }: {
-  id: string
-  name: string
-  enabled: boolean
-  updatedAt: string
+  id: string;
+  name: string;
+  enabled: boolean;
+  updatedAt: string;
 }) {
-  const t = useTranslations('admin.flows')
-  const router = useRouter()
-  const [isEnabled, setIsEnabled] = useState(enabled)
-  const [revision, setRevision] = useState(updatedAt)
-  const [busy, setBusy] = useState(false)
-  const saving = useRef(false)
+  const t = useTranslations("admin.flows");
+  const router = useRouter();
+  const [isEnabled, setIsEnabled] = useState(enabled);
+  const [revision, setRevision] = useState(updatedAt);
+  const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
 
   async function toggle() {
-    if (saving.current) return
-    saving.current = true
-    setBusy(true)
-    const next = !isEnabled
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
+    const next = !isEnabled;
     try {
       const data = await apiJson<{ updatedAt: string; enabled?: unknown }>(
         `/api/admin/flows/${id}`,
         {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ enabled: next, expectedUpdatedAt: revision }),
         },
-        t('actions.updateFailed'),
-      )
+        t("actions.updateFailed"),
+      );
       // Render the persisted flag the server returns — the switch shows the
       // stored state even if it differs from the optimistic next.
-      setIsEnabled(typeof data.enabled === 'boolean' ? data.enabled : next)
-      setRevision(data.updatedAt)
-      router.refresh()
+      setIsEnabled(typeof data.enabled === "boolean" ? data.enabled : next);
+      setRevision(data.updatedAt);
+      router.refresh();
     } catch (error) {
-      toast.error(
-        error instanceof ApiResponseError
-          ? error.message
-          : t('actions.updateFailed'),
-      )
+      toast.error(error instanceof ApiResponseError ? error.message : t("actions.updateFailed"));
     } finally {
-      saving.current = false
-      setBusy(false)
+      saving.current = false;
+      setBusy(false);
     }
   }
 
   async function remove() {
-    if (saving.current) return
-    saving.current = true
-    setBusy(true)
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
     try {
       const ok = await confirmDialog({
-        title: t('actions.deleteConfirmTitle'),
-        message: t('actions.deleteConfirm', { name }),
-        confirmLabel: t('actions.delete'),
-        tone: 'danger',
-      })
-      if (!ok) return
+        title: t("actions.deleteConfirmTitle"),
+        message: t("actions.deleteConfirm", { name }),
+        confirmLabel: t("actions.delete"),
+        tone: "danger",
+      });
+      if (!ok) return;
       await apiJson<unknown>(
         `/api/admin/flows/${id}`,
         {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ expectedUpdatedAt: revision }),
         },
-        t('actions.deleteFailed'),
-      )
-      toast.success(t('actions.deleted'))
-      router.refresh()
+        t("actions.deleteFailed"),
+      );
+      toast.success(t("actions.deleted"));
+      router.refresh();
     } catch (error) {
-      toast.error(
-        error instanceof ApiResponseError
-          ? error.message
-          : t('actions.deleteFailed'),
-      )
+      toast.error(error instanceof ApiResponseError ? error.message : t("actions.deleteFailed"));
     } finally {
-      saving.current = false
-      setBusy(false)
+      saving.current = false;
+      setBusy(false);
     }
   }
 
@@ -254,23 +233,23 @@ export function FlowRowActions({
         role="switch"
         disabled={busy}
         aria-checked={isEnabled}
-        title={isEnabled ? t('actions.disable') : t('actions.enable')}
+        title={isEnabled ? t("actions.disable") : t("actions.enable")}
         onClick={toggle}
         className={cn(
-          'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition',
-          isEnabled ? 'bg-teal-500' : 'bg-slate-300 dark:bg-slate-600',
+          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition",
+          isEnabled ? "bg-teal-500" : "bg-slate-300 dark:bg-slate-600",
         )}
       >
         <span
           className={cn(
-            'inline-block h-4 w-4 transform rounded-full bg-white shadow transition',
-            isEnabled ? 'translate-x-4' : 'translate-x-0.5',
+            "inline-block h-4 w-4 transform rounded-full bg-white shadow transition",
+            isEnabled ? "translate-x-4" : "translate-x-0.5",
           )}
         />
       </button>
       <button
         type="button"
-        title={t('actions.delete')}
+        title={t("actions.delete")}
         disabled={busy}
         onClick={remove}
         className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
@@ -278,5 +257,5 @@ export function FlowRowActions({
         <Trash2 size={15} />
       </button>
     </div>
-  )
+  );
 }

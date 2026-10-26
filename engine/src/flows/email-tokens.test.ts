@@ -32,10 +32,16 @@ test("a token round-trips its claims", () => {
 });
 
 test("a tampered payload is rejected (signature no longer matches)", () => {
-  const token = createEmailActionToken({ gateId: "gate-1", decision: "approved", assigneeUserId: "user-1" });
+  const token = createEmailActionToken({
+    gateId: "gate-1",
+    decision: "approved",
+    assigneeUserId: "user-1",
+  });
   const [payload, sigHex] = token.split(".");
   // Re-pack a different gate id with the ORIGINAL signature.
-  const forged = Buffer.from("gate-2|approved|user-1|" + (Date.now() + 60_000), "utf8").toString("base64url");
+  const forged = Buffer.from("gate-2|approved|user-1|" + (Date.now() + 60_000), "utf8").toString(
+    "base64url",
+  );
   assert.equal(verifyEmailActionToken(`${forged}.${sigHex}`), null);
   void payload;
 });

@@ -3,15 +3,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
-import {
-  DB,
-  seedPerson,
-  setupHarness,
-  withHarness,
-} from "../testing/hrm-harness.ts";
+import { type ScratchOrg } from "../testing/fixtures.ts";
+import { DB, seedPerson, setupHarness, withHarness } from "../testing/hrm-harness.ts";
 import { HrmDocumentsError } from "./documents/errors.ts";
 import {
   acknowledgeDocument,
@@ -38,15 +31,29 @@ import { saveTemplate } from "./documents/templates.ts";
  * back from storage, never from service returns alone.
  */
 
-
 const DOCUMENTS_FEATURES = ["hrm", "hrmDocuments"] as const;
 
 const DOCUMENTS_SPEC = {
   features: DOCUMENTS_FEATURES,
   users: [
-    { key: "hrId", name: "HR Admin", handle: "hr_admin", permissions: ["hrm.documents.read", "hrm.documents.manage"] },
-    { key: "employeeId", name: "Eddie Employee", handle: "employee_self", permissions: ["hrm.self.read"] },
-    { key: "managerId", name: "Mira Manager", handle: "manager_self", permissions: ["hrm.self.read"] },
+    {
+      key: "hrId",
+      name: "HR Admin",
+      handle: "hr_admin",
+      permissions: ["hrm.documents.read", "hrm.documents.manage"],
+    },
+    {
+      key: "employeeId",
+      name: "Eddie Employee",
+      handle: "employee_self",
+      permissions: ["hrm.self.read"],
+    },
+    {
+      key: "managerId",
+      name: "Mira Manager",
+      handle: "manager_self",
+      permissions: ["hrm.self.read"],
+    },
   ],
 } as const;
 
@@ -68,11 +75,17 @@ async function makeTemplate(org: ScratchOrg, hrId: string, signerRoles: string[]
 async function setupDocumentsHarness() {
   return setupHarness(DOCUMENTS_SPEC, async (base) => {
     const hr = await seedPerson(base.org.orgId, base.org.subsidiaryId, "HR Admin");
-    await db.execute(sql`update users set party_id = ${hr.partyId} where id = ${base.hrId} and org_id = ${base.org.orgId}`);
+    await db.execute(
+      sql`update users set party_id = ${hr.partyId} where id = ${base.hrId} and org_id = ${base.org.orgId}`,
+    );
     const employee = await seedPerson(base.org.orgId, base.org.subsidiaryId, "Eddie Employee");
-    await db.execute(sql`update users set party_id = ${employee.partyId} where id = ${base.employeeId} and org_id = ${base.org.orgId}`);
+    await db.execute(
+      sql`update users set party_id = ${employee.partyId} where id = ${base.employeeId} and org_id = ${base.org.orgId}`,
+    );
     const manager = await seedPerson(base.org.orgId, base.org.subsidiaryId, "Mira Manager");
-    await db.execute(sql`update users set party_id = ${manager.partyId} where id = ${base.managerId} and org_id = ${base.org.orgId}`);
+    await db.execute(
+      sql`update users set party_id = ${manager.partyId} where id = ${base.managerId} and org_id = ${base.org.orgId}`,
+    );
     await db.execute(sql`
       insert into reporting_relationships
         (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from, recorded_at)
@@ -80,7 +93,10 @@ async function setupDocumentsHarness() {
               ${randomUUID()}, 1, '2020-01-01'::date, now())
     `);
     // The declared category vocabulary templates must name.
-    for (const [key, label] of [["contract", "Contracts"], ["policy", "Policies"]] as const) {
+    for (const [key, label] of [
+      ["contract", "Contracts"],
+      ["policy", "Policies"],
+    ] as const) {
       await saveCategory({ orgId: base.org.orgId, actorId: base.hrId, key, label });
     }
     return {
@@ -93,210 +109,316 @@ async function setupDocumentsHarness() {
   });
 }
 
-test("generate, send, ordered sign completes with evidence and a signed PDF version", { skip: !DB }, async () => {
-  await withHarness(() => setupDocumentsHarness(), async (h) => {
-  const templateId = await makeTemplate(h.org, h.hrId, ["employee", "manager", "hr"]);
-  const { document, mergePreview } = await generateDocument({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
-    templateId,
-    employmentId: h.employmentId,
-    partyId: h.employeePartyId,
-    title: "Offer letter",
-    today: "2026-09-21",
-  });
-  assert.equal(document.status, "draft");
-  assert.ok(document.fileId);
-  assert.match(mergePreview.employee_name, /Eddie Employee/);
-  // The stored file is a real PDF with one version.
-  const versions = (await db.execute<{ n: string }>(sql`
+test(
+  "generate, send, ordered sign completes with evidence and a signed PDF version",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setupDocumentsHarness(),
+      async (h) => {
+        const templateId = await makeTemplate(h.org, h.hrId, ["employee", "manager", "hr"]);
+        const { document, mergePreview } = await generateDocument({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          templateId,
+          employmentId: h.employmentId,
+          partyId: h.employeePartyId,
+          title: "Offer letter",
+          today: "2026-09-21",
+        });
+        assert.equal(document.status, "draft");
+        assert.ok(document.fileId);
+        assert.match(mergePreview.employee_name, /Eddie Employee/);
+        // The stored file is a real PDF with one version.
+        const versions = (
+          await db.execute<{ n: string }>(
+            sql`
     select count(*) as n from file_versions where file_id = ${document.fileId!}
-  `, "objects"))[0]!.n;
-  assert.equal(versions, "1");
+  `,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(versions, "1");
 
-  const sent = await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id });
-  assert.equal(sent.document.status, "sent");
-  assert.equal(sent.deliveries.length, 3);
-  assert.deepEqual(
-    sent.deliveries.map((d) => d.partyId),
-    [h.employeePartyId, h.managerPartyId, h.hrPartyId],
-  );
-  const [employeeToken, managerToken, hrToken] = sent.deliveries.map((d) => d.token);
+        const sent = await sendDocument({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          documentId: document.id,
+        });
+        assert.equal(sent.document.status, "sent");
+        assert.equal(sent.deliveries.length, 3);
+        assert.deepEqual(
+          sent.deliveries.map((d) => d.partyId),
+          [h.employeePartyId, h.managerPartyId, h.hrPartyId],
+        );
+        const [employeeToken, managerToken, hrToken] = sent.deliveries.map((d) => d.token);
 
-  // Out-of-order signing is refused by name (manager before employee).
-  await assert.rejects(
-    signTokenDocument({ token: managerToken!, name: "Mira Manager" }),
-    (e: unknown) => e instanceof HrmDocumentsError && e.code === "REFUSED" && /in order/.test(e.message),
-  );
+        // Out-of-order signing is refused by name (manager before employee).
+        await assert.rejects(
+          signTokenDocument({ token: managerToken!, name: "Mira Manager" }),
+          (e: unknown) =>
+            e instanceof HrmDocumentsError && e.code === "REFUSED" && /in order/.test(e.message),
+        );
 
-  // Viewing flips pending → viewed with an event, read back from storage.
-  const viewed = await readTokenDocument(employeeToken!);
-  assert.equal(viewed.document.id, document.id);
-  const viewedRow = (await db.execute<{ status: string }>(sql`
+        // Viewing flips pending → viewed with an event, read back from storage.
+        const viewed = await readTokenDocument(employeeToken!);
+        assert.equal(viewed.document.id, document.id);
+        const viewedRow = (
+          await db.execute<{ status: string }>(
+            sql`
     select status from hrm_document_signers where document_id = ${document.id} and ord = 0
-  `, "objects"))[0]!;
-  assert.equal(viewedRow.status, "viewed");
+  `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(viewedRow.status, "viewed");
 
-  const signed1 = await signTokenDocument({ token: employeeToken!, name: "Eddie Employee", ip: "10.0.0.1", userAgent: "test-agent" });
-  assert.equal(signed1.status, "partially_signed");
-  const signed2 = await signTokenDocument({ token: managerToken!, name: "Mira Manager" });
-  assert.equal(signed2.status, "partially_signed");
-  const done = await signTokenDocument({ token: hrToken!, name: "HR Admin" });
-  assert.equal(done.status, "signed");
-  assert.ok(done.completedAt);
+        const signed1 = await signTokenDocument({
+          token: employeeToken!,
+          name: "Eddie Employee",
+          ip: "10.0.0.1",
+          userAgent: "test-agent",
+        });
+        assert.equal(signed1.status, "partially_signed");
+        const signed2 = await signTokenDocument({ token: managerToken!, name: "Mira Manager" });
+        assert.equal(signed2.status, "partially_signed");
+        const done = await signTokenDocument({ token: hrToken!, name: "HR Admin" });
+        assert.equal(done.status, "signed");
+        assert.ok(done.completedAt);
 
-  // Evidence hash recorded for every signer, read back from storage.
-  const evidence = await db.execute<{ role: string; evidence: { documentHash: string; ipHash: string | null } }>(sql`
+        // Evidence hash recorded for every signer, read back from storage.
+        const evidence = await db.execute<{
+          role: string;
+          evidence: { documentHash: string; ipHash: string | null };
+        }>(
+          sql`
     select role, evidence from hrm_document_signers
      where document_id = ${document.id} order by ord
-  `, "objects");
-  assert.equal(evidence.length, 3);
-  for (const row of evidence) {
-    assert.match(row.evidence.documentHash, /^[0-9a-f]{64}$/);
-  }
-  assert.ok(evidence[0]!.evidence.ipHash);
+  `,
+          "objects",
+        );
+        assert.equal(evidence.length, 3);
+        for (const row of evidence) {
+          assert.match(row.evidence.documentHash, /^[0-9a-f]{64}$/);
+        }
+        assert.ok(evidence[0]!.evidence.ipHash);
 
-  // The signed PDF appended a second file version; retain_until stored.
-  const versionsAfter = (await db.execute<{ n: string }>(sql`
+        // The signed PDF appended a second file version; retain_until stored.
+        const versionsAfter = (
+          await db.execute<{ n: string }>(
+            sql`
     select count(*) as n from file_versions where file_id = ${document.fileId!}
-  `, "objects"))[0]!.n;
-  assert.equal(versionsAfter, "2");
-  const stored = (await db.execute<{ status: string; retain_until: string | null }>(sql`
+  `,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(versionsAfter, "2");
+        const stored = (
+          await db.execute<{ status: string; retain_until: string | null }>(
+            sql`
     select status, retain_until::text as retain_until from hrm_documents where id = ${document.id}
-  `, "objects"))[0]!;
-  assert.equal(stored.status, "signed");
+  `,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(stored.status, "signed");
 
-  // Token replay after completion is refused, never double-counted.
-  await assert.rejects(
-    signTokenDocument({ token: employeeToken!, name: "Eddie Employee" }),
-    (e: unknown) => e instanceof HrmDocumentsError && /once/.test(e.message),
-  );
-  const signEvents = (await db.execute<{ n: string }>(sql`
+        // Token replay after completion is refused, never double-counted.
+        await assert.rejects(
+          signTokenDocument({ token: employeeToken!, name: "Eddie Employee" }),
+          (e: unknown) => e instanceof HrmDocumentsError && /once/.test(e.message),
+        );
+        const signEvents = (
+          await db.execute<{ n: string }>(
+            sql`
     select count(*) as n from hrm_document_events where document_id = ${document.id} and kind = 'signed'
-  `, "objects"))[0]!.n;
-  assert.equal(signEvents, "3");
-  });
-});
+  `,
+            "objects",
+          )
+        )[0]!.n;
+        assert.equal(signEvents, "3");
+      },
+    );
+  },
+);
 
 test("a foreign actor cannot read another person's document", { skip: !DB }, async () => {
-  await withHarness(() => setupDocumentsHarness(), async (h) => {
-  const templateId = await makeTemplate(h.org, h.hrId, ["employee"]);
-  const { document } = await generateDocument({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
-    templateId,
-    employmentId: h.employmentId,
-    partyId: h.employeePartyId,
-    title: "Private letter",
-    today: "2026-09-21",
-  });
-  // The manager is not the subject and holds no HR grant.
-  await assert.rejects(
-    readDocumentFile({ orgId: h.org.orgId, actorId: h.managerId, documentId: document.id }),
-    (e: unknown) => e instanceof HrmDocumentsError && e.code === "FORBIDDEN",
+  await withHarness(
+    () => setupDocumentsHarness(),
+    async (h) => {
+      const templateId = await makeTemplate(h.org, h.hrId, ["employee"]);
+      const { document } = await generateDocument({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        templateId,
+        employmentId: h.employmentId,
+        partyId: h.employeePartyId,
+        title: "Private letter",
+        today: "2026-09-21",
+      });
+      // The manager is not the subject and holds no HR grant.
+      await assert.rejects(
+        readDocumentFile({ orgId: h.org.orgId, actorId: h.managerId, documentId: document.id }),
+        (e: unknown) => e instanceof HrmDocumentsError && e.code === "FORBIDDEN",
+      );
+      // The subject reads their own file through the self grant.
+      const own = await readDocumentFile({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        documentId: document.id,
+      });
+      assert.ok(own.bytes.length > 0);
+      // Me listing is fenced to the own party.
+      const mine = await listOwnDocuments({ orgId: h.org.orgId, actorId: h.employeeId });
+      assert.equal(mine.partyId, h.employeePartyId);
+      assert.ok(mine.documents.some((d) => d.id === document.id));
+      const hrList = await listDocuments({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        partyId: h.employeePartyId,
+      });
+      assert.ok(hrList.some((d) => d.id === document.id));
+    },
   );
-  // The subject reads their own file through the self grant.
-  const own = await readDocumentFile({ orgId: h.org.orgId, actorId: h.employeeId, documentId: document.id });
-  assert.ok(own.bytes.length > 0);
-  // Me listing is fenced to the own party.
-  const mine = await listOwnDocuments({ orgId: h.org.orgId, actorId: h.employeeId });
-  assert.equal(mine.partyId, h.employeePartyId);
-  assert.ok(mine.documents.some((d) => d.id === document.id));
-  const hrList = await listDocuments({ orgId: h.org.orgId, actorId: h.hrId, partyId: h.employeePartyId });
-  assert.ok(hrList.some((d) => d.id === document.id));
-  });
 });
 
 test("decline, void, acknowledge, and legal hold follow their rules", { skip: !DB }, async () => {
-  await withHarness(() => setupDocumentsHarness(), async (h) => {
-  const templateId = await makeTemplate(h.org, h.hrId, ["employee"]);
-  const { document } = await generateDocument({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
-    templateId,
-    employmentId: h.employmentId,
-    partyId: h.employeePartyId,
-    title: "Declinable",
-    today: "2026-09-21",
-  });
-  const sent = await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id });
-  const declined = await declineTokenDocument({ token: sent.deliveries[0]!.token, reason: "Wrong start date" });
-  assert.equal(declined.status, "declined");
-  const ackTpl = await saveTemplate({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
-    name: `Policy ${randomUUID().slice(0, 8)}`,
-    categoryKey: "policy",
-    bodyTemplate: "Policy for {{employee_name}}.",
-    mergeFields: ["employee_name"],
-    requiresSignature: false,
-    signerRoles: [],
-    acknowledgmentOnly: true,
-  });
-  const ack = await generateDocument({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
-    templateId: ackTpl.id,
-    employmentId: h.employmentId,
-    partyId: h.employeePartyId,
-    title: "Handbook",
-    today: "2026-09-21",
-  });
-  await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: ack.document.id });
-  const acked = await acknowledgeDocument({ orgId: h.org.orgId, actorId: h.employeeId, documentId: ack.document.id });
-  assert.equal(acked.status, "acknowledged");
-  await assert.rejects(
-    voidDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: ack.document.id, reason: "oops" }),
-    (e: unknown) => e instanceof HrmDocumentsError && /history/.test(e.message),
-  );
-  // A draft voids with its reason stored.
-  const draft2 = await generateDocument({
-    orgId: h.org.orgId,
-    actorId: h.hrId,
-    templateId,
-    employmentId: h.employmentId,
-    partyId: h.employeePartyId,
-    title: "Void me",
-    today: "2026-09-21",
-  });
-  const voided = await voidDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: draft2.document.id, reason: "Issued in error" });
-  assert.equal(voided.status, "voided");
-  const reason = (await db.execute<{ void_reason: string }>(sql`
+  await withHarness(
+    () => setupDocumentsHarness(),
+    async (h) => {
+      const templateId = await makeTemplate(h.org, h.hrId, ["employee"]);
+      const { document } = await generateDocument({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        templateId,
+        employmentId: h.employmentId,
+        partyId: h.employeePartyId,
+        title: "Declinable",
+        today: "2026-09-21",
+      });
+      const sent = await sendDocument({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        documentId: document.id,
+      });
+      const declined = await declineTokenDocument({
+        token: sent.deliveries[0]!.token,
+        reason: "Wrong start date",
+      });
+      assert.equal(declined.status, "declined");
+      const ackTpl = await saveTemplate({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        name: `Policy ${randomUUID().slice(0, 8)}`,
+        categoryKey: "policy",
+        bodyTemplate: "Policy for {{employee_name}}.",
+        mergeFields: ["employee_name"],
+        requiresSignature: false,
+        signerRoles: [],
+        acknowledgmentOnly: true,
+      });
+      const ack = await generateDocument({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        templateId: ackTpl.id,
+        employmentId: h.employmentId,
+        partyId: h.employeePartyId,
+        title: "Handbook",
+        today: "2026-09-21",
+      });
+      await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: ack.document.id });
+      const acked = await acknowledgeDocument({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        documentId: ack.document.id,
+      });
+      assert.equal(acked.status, "acknowledged");
+      await assert.rejects(
+        voidDocument({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          documentId: ack.document.id,
+          reason: "oops",
+        }),
+        (e: unknown) => e instanceof HrmDocumentsError && /history/.test(e.message),
+      );
+      // A draft voids with its reason stored.
+      const draft2 = await generateDocument({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        templateId,
+        employmentId: h.employmentId,
+        partyId: h.employeePartyId,
+        title: "Void me",
+        today: "2026-09-21",
+      });
+      const voided = await voidDocument({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        documentId: draft2.document.id,
+        reason: "Issued in error",
+      });
+      assert.equal(voided.status, "voided");
+      const reason = (
+        await db.execute<{ void_reason: string }>(
+          sql`
     select void_reason from hrm_documents where id = ${draft2.document.id}
-  `, "objects"))[0]!;
-  assert.equal(reason.void_reason, "Issued in error");
-  // Legal hold toggles and lands in the audit log.
-  const held = await setLegalHold({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id, hold: true });
-  assert.equal(held.legalHold, true);
-  const audit = (await db.execute<{ n: string }>(sql`
+  `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(reason.void_reason, "Issued in error");
+      // Legal hold toggles and lands in the audit log.
+      const held = await setLegalHold({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        documentId: document.id,
+        hold: true,
+      });
+      assert.equal(held.legalHold, true);
+      const audit = (
+        await db.execute<{ n: string }>(
+          sql`
     select count(*) as n from audit_log
      where org_id = ${h.org.orgId} and table_name = 'hrm_documents' and row_id = ${document.id} and action = 'legal_hold_on'
-  `, "objects"))[0]!.n;
-  assert.equal(audit, "1");
-  const detail = await getDocumentDetail({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id });
-  assert.ok(detail.events.some((e) => e.kind === "sent"));
-  assert.equal(detail.signers.length, 1);
-  });
+  `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(audit, "1");
+      const detail = await getDocumentDetail({
+        orgId: h.org.orgId,
+        actorId: h.hrId,
+        documentId: document.id,
+      });
+      assert.ok(detail.events.some((e) => e.kind === "sent"));
+      assert.equal(detail.signers.length, 1);
+    },
+  );
 });
 
 test("documents refuse while the hrmDocuments feature is off", { skip: !DB }, async () => {
-  await withHarness(() => setupDocumentsHarness(), async (h) => {
-  await db.execute(sql`
+  await withHarness(
+    () => setupDocumentsHarness(),
+    async (h) => {
+      await db.execute(sql`
     update orgs
        set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmDocuments}', 'false'::jsonb, true)
      where id = ${h.org.orgId}
   `);
-  await assert.rejects(
-    generateDocument({
-      orgId: h.org.orgId,
-      actorId: h.hrId,
-      templateId: randomUUID(),
-      employmentId: h.employmentId,
-      partyId: h.employeePartyId,
-      title: "Blocked",
-      today: "2026-09-21",
-    }),
-    (e: unknown) => e instanceof HrmDocumentsError && e.code === "REFUSED" && /hrmDocuments/.test(e.message),
+      await assert.rejects(
+        generateDocument({
+          orgId: h.org.orgId,
+          actorId: h.hrId,
+          templateId: randomUUID(),
+          employmentId: h.employmentId,
+          partyId: h.employeePartyId,
+          title: "Blocked",
+          today: "2026-09-21",
+        }),
+        (e: unknown) =>
+          e instanceof HrmDocumentsError && e.code === "REFUSED" && /hrmDocuments/.test(e.message),
+      );
+    },
   );
-  });
 });

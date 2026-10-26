@@ -1,22 +1,22 @@
-import 'server-only'
+import "server-only";
 
-import { NextResponse } from 'next/server'
-import { isFeatureEnabled } from './features'
-import { requireFeatureEnabled } from './feature-gates'
+import { NextResponse } from "next/server";
+import { isFeatureEnabled } from "./features";
+import { requireFeatureEnabled } from "./feature-gates";
 
 /** Page-boundary enforcement for every Projects-domain surface. Navigation
  * hiding is presentation only; this guard is the authoritative control. A
  * disabled Projects module explains itself on the shared feature-required
  * page, which names the switch and who can turn it on. */
 export async function requireProjectsFeature(orgId: string): Promise<void> {
-  await requireFeatureEnabled(orgId, 'projects')
+  await requireFeatureEnabled(orgId, "projects");
 }
 
 /** API-boundary enforcement for every Projects-domain mutation and query. A
  * disabled module is deliberately indistinguishable from an unavailable API. */
 export async function guardProjectsFeature(orgId: string): Promise<NextResponse | null> {
-  if (await isFeatureEnabled(orgId, 'projects')) return null
-  return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+  if (await isFeatureEnabled(orgId, "projects")) return null;
+  return NextResponse.json({ error: "projects feature is disabled" }, { status: 404 });
 }
 
 /**
@@ -26,7 +26,6 @@ export async function guardProjectsFeature(orgId: string): Promise<NextResponse 
  * hiding the tab.
  */
 export async function guardProjectSchedulingFeature(orgId: string): Promise<NextResponse | null> {
-  if (await isFeatureEnabled(orgId, 'projectScheduling')) return null
-  return NextResponse.json({ error: 'project scheduling feature is disabled' }, { status: 404 })
+  if (await isFeatureEnabled(orgId, "projectScheduling")) return null;
+  return NextResponse.json({ error: "project scheduling feature is disabled" }, { status: 404 });
 }
-

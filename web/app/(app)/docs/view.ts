@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { categoriesWithArticles, getArticle, type DocArticle } from '../../../lib/docs'
-import type { DocArticleSummary, DocsHomeContent } from './sections'
+import { getTranslations } from "next-intl/server";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { categoriesWithArticles, getArticle, type DocArticle } from "../../../lib/docs";
+import type { DocArticleSummary, DocsHomeContent } from "./sections";
 
 /**
  * Documentation home, split into a loader and a spec.
@@ -23,15 +23,15 @@ import type { DocArticleSummary, DocsHomeContent } from './sections'
  */
 
 export interface DocsData {
-  content: DocsHomeContent
+  content: DocsHomeContent;
 }
 
 function articleSummary({ slug, title, summary }: DocArticle): DocArticleSummary {
-  return { slug, title, summary }
+  return { slug, title, summary };
 }
 
 export async function loadDocsHome(): Promise<DocsData> {
-  const t = await getTranslations('docs')
+  const t = await getTranslations("docs");
   const groups = categoriesWithArticles().map(({ category, articles }) => ({
     category: {
       ...category,
@@ -39,46 +39,46 @@ export async function loadDocsHome(): Promise<DocsData> {
       description: t(category.descriptionKey),
     },
     articles: articles.map(articleSummary),
-  }))
-  const startHere = ['welcome', 'quick-start', 'migration-and-cutover']
+  }));
+  const startHere = ["welcome", "quick-start", "migration-and-cutover"]
     .map(getArticle)
     .filter((article): article is NonNullable<typeof article> => Boolean(article))
-    .map(articleSummary)
-  const switching = groups.find(({ category }) => category.key === 'switching')?.articles ?? []
+    .map(articleSummary);
+  const switching = groups.find(({ category }) => category.key === "switching")?.articles ?? [];
 
   return {
     content: {
-      eyebrow: t('home.eyebrow'),
-      title: t('home.title'),
-      subtitle: t('home.subtitle'),
-      startHere: t('home.startHere'),
-      stepLabels: startHere.map((_, index) => t('home.step', { number: index + 1 })),
-      switchingTitle: t('home.switchingTitle'),
-      switchingSubtitle: t('home.switchingSubtitle'),
-      browseTitle: t('home.browseTitle'),
-      browseSubtitle: t('home.browseSubtitle'),
-      articleCount: t('home.articleCount', {
+      eyebrow: t("home.eyebrow"),
+      title: t("home.title"),
+      subtitle: t("home.subtitle"),
+      startHere: t("home.startHere"),
+      stepLabels: startHere.map((_, index) => t("home.step", { number: index + 1 })),
+      switchingTitle: t("home.switchingTitle"),
+      switchingSubtitle: t("home.switchingSubtitle"),
+      browseTitle: t("home.browseTitle"),
+      browseSubtitle: t("home.browseSubtitle"),
+      articleCount: t("home.articleCount", {
         count: groups.reduce((sum, group) => sum + group.articles.length, 0),
       }),
       startHereArticles: startHere,
-      switchingShortTitles: switching.map((article) => article.title.replace('Coming from ', '')),
+      switchingShortTitles: switching.map((article) => article.title.replace("Coming from ", "")),
       switchingArticles: switching,
       groups,
     },
-  }
+  };
 }
 
 export function docsHomeSpec(data: DocsData): PageSpec {
   return page({
-    route: '/docs',
+    route: "/docs",
     // The docs home owns its own centered container; a list layout would
     // nest it in a second shell.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      widgetBlock('docs-home', {
+      widgetBlock("docs-home", {
         content: data.content,
       }),
     ],
-  })
+  });
 }

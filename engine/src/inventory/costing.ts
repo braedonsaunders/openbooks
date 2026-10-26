@@ -62,7 +62,11 @@ export function extendCost(quantity: string, unitCost: string): string {
  * covers every positive quantity, so no input reaches it today — kept
  * typed so a future rounding change still refuses by name.
  */
-export function exactCostFragments(quantity: string, value: string, sourceUnitCost?: string): { quantity: string; unitCost: string }[] {
+export function exactCostFragments(
+  quantity: string,
+  value: string,
+  sourceUnitCost?: string,
+): { quantity: string; unitCost: string }[] {
   const q = toUnits(quantity);
   const v = toUnits(value);
   if (q <= 0n || v < 0n) {
@@ -78,7 +82,8 @@ export function exactCostFragments(quantity: string, value: string, sourceUnitCo
   const lowValue = mulUnits(q, lowRate);
   if (lowValue === v) return [{ quantity: fromUnits(q), unitCost: fromUnits(lowRate) }];
   const highRate = lowRate + 1n;
-  if (mulUnits(q, highRate) === v) return [{ quantity: fromUnits(q), unitCost: fromUnits(highRate) }];
+  if (mulUnits(q, highRate) === v)
+    return [{ quantity: fromUnits(q), unitCost: fromUnits(highRate) }];
   // One whole unit at the adjacent rate adds exactly one 4dp money unit.
   // The high-rate fragment has integral quantity, so splitting the low-rate
   // extension introduces no additional rounding. An unrepresentable single
@@ -145,7 +150,8 @@ export function sameInventoryUnit(
   right: string | null | undefined,
   baseUnit: string | null | undefined,
 ): boolean {
-  const fold = (unit: string | null | undefined) => normalizeInventoryUnit(unit) || normalizeInventoryUnit(baseUnit);
+  const fold = (unit: string | null | undefined) =>
+    normalizeInventoryUnit(unit) || normalizeInventoryUnit(baseUnit);
   return fold(left) === fold(right);
 }
 
@@ -171,8 +177,15 @@ export function toExactBaseQuantity(
   item?: ConversionItemRef,
 ): string {
   const exact = canonicalDecimal(quantity, 8);
-  if (exact === null) throw new InventoryError(`${lineLabel} quantity must be exact decimal text with at most eight places`);
-  return multiplyDecimal(exact, inventoryConversionFactor(unit, conversions, baseUnit, lineLabel, item), 12);
+  if (exact === null)
+    throw new InventoryError(
+      `${lineLabel} quantity must be exact decimal text with at most eight places`,
+    );
+  return multiplyDecimal(
+    exact,
+    inventoryConversionFactor(unit, conversions, baseUnit, lineLabel, item),
+    12,
+  );
 }
 
 /** Directed stock quantities must fit the stored scale without changing the document quantity. */
@@ -215,15 +228,18 @@ function inventoryConversionFactor(
     conversions[trimmed] ??
     conversions[folded] ??
     (() => {
-      const key = Object.keys(conversions).find(
-        (candidate) => candidate.toLowerCase() === folded,
-      );
+      const key = Object.keys(conversions).find((candidate) => candidate.toLowerCase() === folded);
       return key === undefined ? undefined : conversions[key];
     })();
   // Both refusals below carry the item identity the document drawer offers
   // as a link to the item's Inventory costing section; the message still
   // names the section in words for surfaces that render text only.
-  const details = { itemId: item?.id ?? null, itemName: item?.name ?? null, unit: trimmed, baseUnit };
+  const details = {
+    itemId: item?.id ?? null,
+    itemName: item?.name ?? null,
+    unit: trimmed,
+    baseUnit,
+  };
   if (typeof factor !== "number" || !Number.isFinite(factor) || factor <= 0) {
     throw new UnitConversionError(
       `${lineLabel} is raised in unit "${trimmed}" with no conversion to the item's base unit "${baseUnit}" — ` +
@@ -277,7 +293,11 @@ export interface FifoResult {
  * (the item's last/standard cost) — perpetual inventory may go negative, and
  * the caller books that against a to-be-trued-up layer. `quantity` must be > 0.
  */
-export function consumeFifo(layers: CostLayer[], quantity: string, fallbackUnitCost: string): FifoResult {
+export function consumeFifo(
+  layers: CostLayer[],
+  quantity: string,
+  fallbackUnitCost: string,
+): FifoResult {
   let need = toUnits(quantity);
   if (need <= 0n) {
     return { consumptions: [], totalCost: "0", shortfallQuantity: "0", shortfallCost: "0" };
@@ -334,7 +354,11 @@ export interface MovingAverageState {
 }
 
 /** Receive into a moving-average pool: value and quantity both grow. */
-export function receiveMovingAverage(state: MovingAverageState, quantity: string, unitCost: string): MovingAverageState {
+export function receiveMovingAverage(
+  state: MovingAverageState,
+  quantity: string,
+  unitCost: string,
+): MovingAverageState {
   const q = toUnits(state.quantity) + toUnits(quantity);
   const v = toUnits(state.value) + mulUnits(toUnits(quantity), toUnits(unitCost));
   return { quantity: fromUnits(q), value: fromUnits(v) };
@@ -353,7 +377,10 @@ export interface MovingAverageIssue {
  * value-proportional so the remaining value never drifts. Issuing the entire
  * quantity drains the value to exactly zero.
  */
-export function issueMovingAverage(state: MovingAverageState, quantity: string): MovingAverageIssue {
+export function issueMovingAverage(
+  state: MovingAverageState,
+  quantity: string,
+): MovingAverageIssue {
   const onQty = toUnits(state.quantity);
   const onVal = toUnits(state.value);
   const issQty = toUnits(quantity);
@@ -385,7 +412,11 @@ export interface StandardReceipt {
 }
 
 /** Receive at standard cost; the actual-vs-standard delta is a PPV. */
-export function receiveStandard(quantity: string, actualUnitCost: string, standardCost: string): StandardReceipt {
+export function receiveStandard(
+  quantity: string,
+  actualUnitCost: string,
+  standardCost: string,
+): StandardReceipt {
   const q = toUnits(quantity);
   const std = toUnits(standardCost);
   const act = toUnits(actualUnitCost);

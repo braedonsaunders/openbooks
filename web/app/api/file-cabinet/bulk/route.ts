@@ -15,18 +15,20 @@ import {
 import { inDbTransaction } from "@openbooks/engine/platform/db";
 import { fileViewer } from "../lib";
 const itemIds = z.array(uuidString("selection ids must be valid UUIDs")).max(500).default([]);
-const postBodySchema = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("delete"), fileIds: itemIds, folderIds: itemIds }),
-  z.strictObject({
-    action: z.literal("move"),
-    fileIds: itemIds,
-    folderIds: itemIds,
-    targetFolderId: uuidString("targetFolderId must be a valid id"),
-  }),
-]).refine(
-  (body) => body.fileIds.length > 0 || body.folderIds.length > 0,
-  "select at least one file or folder",
-);
+const postBodySchema = z
+  .discriminatedUnion("action", [
+    z.strictObject({ action: z.literal("delete"), fileIds: itemIds, folderIds: itemIds }),
+    z.strictObject({
+      action: z.literal("move"),
+      fileIds: itemIds,
+      folderIds: itemIds,
+      targetFolderId: uuidString("targetFolderId must be a valid id"),
+    }),
+  ])
+  .refine(
+    (body) => body.fileIds.length > 0 || body.folderIds.length > 0,
+    "select at least one file or folder",
+  );
 
 export const runtime = "nodejs";
 
@@ -56,12 +58,7 @@ export const POST = defineRoute({
     const targetFolderId = routeBody.action === "move" ? routeBody.targetFolderId : null;
     if (targetFolderId !== null) {
       // Destination needs Editor+.
-      if (
-        !accessAtLeast(
-          await folderAccessLevel(orgId, viewer, targetFolderId),
-          "editor",
-        )
-      ) {
+      if (!accessAtLeast(await folderAccessLevel(orgId, viewer, targetFolderId), "editor")) {
         return NextResponse.json({ error: "forbidden" }, { status: 403 });
       }
     }
@@ -71,12 +68,7 @@ export const POST = defineRoute({
       let skipped = 0;
       const results: BulkItemResult[] = [];
       const audit = { actorId: gate.user.id, executor: tx, viewer };
-      const record = (
-        id: string,
-        kind: "file" | "folder",
-        ok: boolean,
-        error?: string,
-      ) => {
+      const record = (id: string, kind: "file" | "folder", ok: boolean, error?: string) => {
         if (ok) done++;
         else skipped++;
         results.push(error ? { id, kind, ok, error } : { id, kind, ok });
@@ -84,9 +76,7 @@ export const POST = defineRoute({
 
       if (action === "move") {
         for (const id of fileIds) {
-          if (
-            !accessAtLeast(await fileAccessLevel(orgId, viewer, id), "editor")
-          ) {
+          if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), "editor")) {
             record(id, "file", false, "forbidden");
             continue;
           }
@@ -95,12 +85,7 @@ export const POST = defineRoute({
           else record(id, "file", false, "failed");
         }
         for (const id of folderIds) {
-          if (
-            !accessAtLeast(
-              await folderAccessLevel(orgId, viewer, id),
-              "manager",
-            )
-          ) {
+          if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), "manager")) {
             record(id, "folder", false, "forbidden");
             continue;
           }
@@ -111,24 +96,16 @@ export const POST = defineRoute({
       } else {
         // delete → trash
         for (const id of fileIds) {
-          if (
-            !accessAtLeast(await fileAccessLevel(orgId, viewer, id), "manager")
-          ) {
+          if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), "manager")) {
             record(id, "file", false, "forbidden");
             continue;
           }
           if (await deleteFile(orgId, id, audit)) record(id, "file", true);
-          else if (await isRetainedFileEvidence(orgId, id))
-            record(id, "file", false, "retained");
+          else if (await isRetainedFileEvidence(orgId, id)) record(id, "file", false, "retained");
           else record(id, "file", false, "failed");
         }
         for (const id of folderIds) {
-          if (
-            !accessAtLeast(
-              await folderAccessLevel(orgId, viewer, id),
-              "manager",
-            )
-          ) {
+          if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), "manager")) {
             record(id, "folder", false, "forbidden");
             continue;
           }
@@ -139,9 +116,7 @@ export const POST = defineRoute({
               id,
               "folder",
               false,
-              res.reason === "not found"
-                ? "not_found"
-                : (res.reason ?? "failed"),
+              res.reason === "not found" ? "not_found" : (res.reason ?? "failed"),
             );
         }
       }

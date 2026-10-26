@@ -51,7 +51,7 @@
  * pass whose only job is the move. `PayrollCertificate.storage` is the honest
  * record of which certificates are on which side of that line.
  */
-import {isIsoCalendarDate} from "../platform/business-date.ts";
+import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { PayrollError } from "./error.ts";
 import { normalizeDecimal } from "../money/money.ts";
 
@@ -147,9 +147,7 @@ export interface PayrollCertificateChoice {
  * certificates that predate this model (the W-4 and the TD1 family). It is a
  * read mapping over storage that already exists.
  */
-export type PayrollCertificateStorage =
-  | { kind: "row" }
-  | { kind: "column"; column: string };
+export type PayrollCertificateStorage = { kind: "row" } | { kind: "column"; column: string };
 
 export interface PayrollCertificateField {
   /** Stable key inside the answers object. Unique within the certificate. */
@@ -158,9 +156,9 @@ export interface PayrollCertificateField {
   label: string;
   kind: PayrollCertificateFieldKind;
   /** Optional semantic format for a code answer, enforced at save and read. */
-  format?:"iso_date";
-  minLength?:number;
-  maxLength?:number;
+  format?: "iso_date";
+  minLength?: number;
+  maxLength?: number;
   /** Required for `choice`. */
   choices?: readonly PayrollCertificateChoice[];
   /** Required for `amount`: the canonical scale answers are stored at. */
@@ -244,14 +242,14 @@ export interface PayrollCertificate {
    */
   validity?:
     | {
-      kind: "calendar_year_end";
-      appliesWhen?: { field: string; values: readonly string[] };
-    }
+        kind: "calendar_year_end";
+        appliesWhen?: { field: string; values: readonly string[] };
+      }
     | {
-      kind: "following_year_date";
-      monthDay: `${number}${number}-${number}${number}`;
-      appliesWhen?: { field: string; values: readonly string[] };
-    };
+        kind: "following_year_date";
+        monthDay: `${number}${number}-${number}${number}`;
+        appliesWhen?: { field: string; values: readonly string[] };
+      };
   /** The publication or statute the form and its fields come from. */
   citation: string;
   /** One sentence for the operator: when does an employee file this? */
@@ -265,7 +263,7 @@ export interface PayrollCertificate {
    */
   storage: "profile_columns" | "certificate_rows";
   /** Employer policy elections cannot reinterpret already committed payroll. */
-  protectCommittedHistory?:boolean;
+  protectCommittedHistory?: boolean;
   /**
    * Field keys this certificate once stored and no longer reads, each with
    * the field that replaced it. A stored row still carrying a retired answer
@@ -357,8 +355,8 @@ export function registerPayrollCertificates(
   const other = options.builtIn ? EXTRA : BUILT_INS;
   if (other.has(declaration.country) || (target.has(declaration.country) && !options.builtIn)) {
     throw new PayrollCertificateError(
-      `payroll certificates for ${declaration.country} are already declared — a country has `
-      + "exactly one certificate declaration",
+      `payroll certificates for ${declaration.country} are already declared — a country has ` +
+        "exactly one certificate declaration",
     );
   }
   const keys = declaration.certificates.map((certificate) => certificate.key);
@@ -386,9 +384,11 @@ export function packCertificates(country: string): PayrollPackCertificates {
   const declared = declaredPayrollCertificates().find((entry) => entry.country === country);
   if (!declared) {
     throw new PayrollCertificateError(
-      `the ${country || "(unset)"} payroll pack declares no tax certificates — a pack must `
-      + "declare the forms its employees file to set their withholding. Declared for: "
-      + (declaredPayrollCertificates().map((entry) => entry.country).join(", ") || "none"),
+      `the ${country || "(unset)"} payroll pack declares no tax certificates — a pack must ` +
+        "declare the forms its employees file to set their withholding. Declared for: " +
+        (declaredPayrollCertificates()
+          .map((entry) => entry.country)
+          .join(", ") || "none"),
     );
   }
   return declared;
@@ -402,7 +402,10 @@ export function packCertificates(country: string): PayrollPackCertificates {
  * column on one certificate family, and the thirteen provincial TD1s share
  * their three columns deliberately, with identical shapes.
  */
-export function profileColumnField(country: string, column: string): PayrollCertificateField | null {
+export function profileColumnField(
+  country: string,
+  column: string,
+): PayrollCertificateField | null {
   for (const certificate of packCertificates(country).certificates) {
     for (const field of certificate.fields) {
       if (field.storage?.kind === "column" && field.storage.column === column) {
@@ -455,9 +458,9 @@ export function regionWithholdingCertificate(
   if (!region) return null;
   for (const certificate of packCertificates(country).certificates) {
     if (
-      certificate.scope.level === "region"
-      && certificate.scope.region === region
-      && certificate.purpose === "withholding"
+      certificate.scope.level === "region" &&
+      certificate.scope.region === region &&
+      certificate.purpose === "withholding"
     ) {
       return certificate;
     }
@@ -471,8 +474,8 @@ export function payrollCertificate(country: string, key: string): PayrollCertifi
   const found = pack.certificates.find((certificate) => certificate.key === key);
   if (!found) {
     throw new PayrollCertificateError(
-      `the ${country} payroll pack declares no "${key}" tax certificate — it declares `
-      + (pack.certificates.map((certificate) => certificate.key).join(", ") || "none"),
+      `the ${country} payroll pack declares no "${key}" tax certificate — it declares ` +
+        (pack.certificates.map((certificate) => certificate.key).join(", ") || "none"),
     );
   }
   return found;
@@ -504,14 +507,17 @@ export function certificateDeclarationProblem(certificate: PayrollCertificate): 
   }
   const keys = certificate.fields.map((field) => field.key);
   if (new Set(keys).size !== keys.length) return "the certificate repeats a field key";
-  const allColumns = certificate.fields.length > 0
-    && certificate.fields.every((field) => field.storage?.kind === "column");
+  const allColumns =
+    certificate.fields.length > 0 &&
+    certificate.fields.every((field) => field.storage?.kind === "column");
   if (certificate.storage === "profile_columns" && !allColumns) {
     return "declared as profile_columns but not every field names a column";
   }
-  if (certificate.storage === "certificate_rows"
-    && certificate.fields.length > 0
-    && certificate.fields.every((field) => field.storage?.kind === "column")) {
+  if (
+    certificate.storage === "certificate_rows" &&
+    certificate.fields.length > 0 &&
+    certificate.fields.every((field) => field.storage?.kind === "column")
+  ) {
     return "declared as certificate_rows but has no row-backed fields";
   }
   for (const field of certificate.fields) {
@@ -551,20 +557,24 @@ export function certificateAnswersProblem(
   const byKey = new Map(certificate.fields.map((field) => [field.key, field]));
   for (const key of Object.keys(answers)) {
     if (!byKey.has(key)) {
-      return `"${key}" is not a field of ${certificate.form} — it declares `
-        + (certificate.fields.map((field) => field.key).join(", ") || "no fields");
+      return (
+        `"${key}" is not a field of ${certificate.form} — it declares ` +
+        (certificate.fields.map((field) => field.key).join(", ") || "no fields")
+      );
     }
   }
   for (const field of certificate.fields) {
     const raw = answers[field.key];
     if (raw === undefined || raw === null || raw === "") {
-      if (field.required && field.default == null) return `"${field.key}" is required on ${certificate.form}`;
+      if (field.required && field.default == null)
+        return `"${field.key}" is required on ${certificate.form}`;
       continue;
     }
     if (typeof raw !== "string") return `"${field.key}" must be a string answer`;
     const value = raw.trim();
     if (value === "") {
-      if (field.required && field.default == null) return `"${field.key}" is required on ${certificate.form}`;
+      if (field.required && field.default == null)
+        return `"${field.key}" is required on ${certificate.form}`;
       continue;
     }
     const problem = fieldAnswerProblem(certificate, field, value);
@@ -602,8 +612,9 @@ function fieldAnswerProblem(
   const at = `${certificate.form} · ${field.label}`;
   if (field.kind === "choice") {
     if (!field.choices!.some((choice) => choice.value === value)) {
-      return `${at}: "${value}" is not one of `
-        + field.choices!.map((choice) => choice.value).join(", ");
+      return (
+        `${at}: "${value}" is not one of ` + field.choices!.map((choice) => choice.value).join(", ")
+      );
     }
     return null;
   }
@@ -616,8 +627,10 @@ function fieldAnswerProblem(
   if (field.kind === "count") {
     if (!/^\d+$/.test(value)) return `${at}: "${value}" is not a whole count`;
     const count = Number(value);
-    if (field.min != null && count < Number(field.min)) return `${at}: ${count} is below the declared minimum ${field.min}`;
-    if (field.max != null && count > Number(field.max)) return `${at}: ${count} is above the declared maximum ${field.max}`;
+    if (field.min != null && count < Number(field.min))
+      return `${at}: ${count} is below the declared minimum ${field.min}`;
+    if (field.max != null && count > Number(field.max))
+      return `${at}: ${count} is above the declared maximum ${field.max}`;
     return null;
   }
   if (field.kind === "amount") {
@@ -631,27 +644,37 @@ function fieldAnswerProblem(
     // way so "10" and "10.00" compare equal.
     if (field.min != null) {
       const bound = normalizeDecimal(field.min, field.decimals!);
-      if (compareScaled(canonical, bound) < 0) return `${at}: ${value} is below the declared minimum ${field.min}`;
+      if (compareScaled(canonical, bound) < 0)
+        return `${at}: ${value} is below the declared minimum ${field.min}`;
     }
     if (field.max != null) {
       const bound = normalizeDecimal(field.max, field.decimals!);
-      if (compareScaled(canonical, bound) > 0) return `${at}: ${value} is above the declared maximum ${field.max}`;
+      if (compareScaled(canonical, bound) > 0)
+        return `${at}: ${value} is above the declared maximum ${field.max}`;
     }
     return null;
   }
-  if(field.minLength!==undefined&&value.length<field.minLength)return `${at}: explain the decision in at least ${field.minLength} characters`;
-  if(field.maxLength!==undefined&&value.length>field.maxLength)return `${at}: keep the explanation within ${field.maxLength} characters`;
-  if(field.format==="iso_date"&&!isIsoCalendarDate(value))return `${at}: "${value}" must be a real date in YYYY-MM-DD — correct the date before saving`;
+  if (field.minLength !== undefined && value.length < field.minLength)
+    return `${at}: explain the decision in at least ${field.minLength} characters`;
+  if (field.maxLength !== undefined && value.length > field.maxLength)
+    return `${at}: keep the explanation within ${field.maxLength} characters`;
+  if (field.format === "iso_date" && !isIsoCalendarDate(value))
+    return `${at}: "${value}" must be a real date in YYYY-MM-DD — correct the date before saving`;
   // `code`: the answer IS the jurisdiction/member code — free text, nonempty
   // (emptiness is "unanswered" and handled above).
   return null;
 }
 
 function fieldDeclarationProblem(field: PayrollCertificateField): string | null {
-  if((field.minLength!==undefined||field.maxLength!==undefined)&&field.kind!=="code")return "text length bounds apply only to a code field";
-  if(field.format&&field.kind!=="code")return "a semantic code format applies only to a code field";
-  if (!field.help) return "every certificate field needs help text — the operator is reading a "
-    + "tax form they did not write";
+  if ((field.minLength !== undefined || field.maxLength !== undefined) && field.kind !== "code")
+    return "text length bounds apply only to a code field";
+  if (field.format && field.kind !== "code")
+    return "a semantic code format applies only to a code field";
+  if (!field.help)
+    return (
+      "every certificate field needs help text — the operator is reading a " +
+      "tax form they did not write"
+    );
   if (field.kind === "choice") {
     if (!field.choices || field.choices.length === 0) return "a choice field must declare choices";
     const values = field.choices.map((choice) => choice.value);
@@ -670,12 +693,16 @@ function fieldDeclarationProblem(field: PayrollCertificateField): string | null 
   }
   if (field.subRegion) {
     if (field.kind !== "code" && field.kind !== "flag") {
-      return `a ${field.kind} field cannot name a sub-region — an allowance count or a dollar `
-        + "amount is not a jurisdiction";
+      return (
+        `a ${field.kind} field cannot name a sub-region — an allowance count or a dollar ` +
+        "amount is not a jurisdiction"
+      );
     }
     if (field.kind === "flag" && !field.subRegion.code) {
-      return "a flag field that names a sub-region must say WHICH one (subRegion.code) — its "
-        + "answer is a yes, not a code";
+      return (
+        "a flag field that names a sub-region must say WHICH one (subRegion.code) — its " +
+        "answer is a yes, not a code"
+      );
     }
     if (field.kind === "code" && field.subRegion.code) {
       return "a code field's ANSWER is the sub-region code, so it must not also declare one";
@@ -785,9 +812,15 @@ export type ProfileColumns = Record<string, unknown>;
 export function emptyResolvedCertificate(label = "no certificate"): ResolvedCertificate {
   return {
     certificate: {
-      key: "", form: "(none)", label, scope: { level: "country" },
-      purpose: "withholding", citation: label, summary: label,
-      fields: [], storage: "certificate_rows",
+      key: "",
+      form: "(none)",
+      label,
+      scope: { level: "country" },
+      purpose: "withholding",
+      citation: label,
+      summary: label,
+      fields: [],
+      storage: "certificate_rows",
     },
     onFile: false,
     effectiveFrom: null,
@@ -839,9 +872,10 @@ export function resolveCertificate(input: {
       // applies instead of carrying a stale exemption forward.
       if (!row.effectiveFrom) return false;
       const year = Number(row.effectiveFrom.slice(0, 4));
-      const validThrough = certificate.validity.kind === "calendar_year_end"
-        ? `${year}-12-31`
-        : `${year + 1}-${certificate.validity.monthDay}`;
+      const validThrough =
+        certificate.validity.kind === "calendar_year_end"
+          ? `${year}-12-31`
+          : `${year + 1}-${certificate.validity.monthDay}`;
       return asOf <= validThrough;
     })
     .sort((a, b) => (a.effectiveFrom ?? "").localeCompare(b.effectiveFrom ?? ""));
@@ -851,12 +885,10 @@ export function resolveCertificate(input: {
   const missing: string[] = [];
   for (const field of certificate.fields) {
     const fromRow = current?.answers?.[field.key];
-    const fromColumn = field.storage?.kind === "column"
-      ? columnAnswer(profile, field.storage.column)
-      : null;
-    const answer = fromRow != null && fromRow !== ""
-      ? fromRow
-      : fromColumn ?? field.default ?? null;
+    const fromColumn =
+      field.storage?.kind === "column" ? columnAnswer(profile, field.storage.column) : null;
+    const answer =
+      fromRow != null && fromRow !== "" ? fromRow : (fromColumn ?? field.default ?? null);
     answers[field.key] = answer;
     if (answer == null && field.required) missing.push(field.key);
   }
@@ -864,8 +896,10 @@ export function resolveCertificate(input: {
   // A column-backed certificate is "on file" when the employee has actually
   // answered something — otherwise every US employee would appear to hold a
   // signed W-4 the day the country column defaulted.
-  const columnAnswered = certificate.fields.some((field) =>
-    field.storage?.kind === "column" && columnAnswer(profile, field.storage.column) != null);
+  const columnAnswered = certificate.fields.some(
+    (field) =>
+      field.storage?.kind === "column" && columnAnswer(profile, field.storage.column) != null,
+  );
 
   return {
     certificate,
@@ -895,11 +929,15 @@ export function retiredCertificateAnswerProblem(
     if (old == null || old === "") continue;
     const current = stored[retired.replacedBy];
     if (current != null && current !== "") continue;
-    const field = resolved.certificate.fields.find((candidate) => candidate.key === retired.replacedBy);
+    const field = resolved.certificate.fields.find(
+      (candidate) => candidate.key === retired.replacedBy,
+    );
     const label = field?.label ?? retired.replacedBy;
-    return `${employeeName}'s ${resolved.certificate.label} still holds ${old} under the retired `
-      + `"${retired.key}" answer and no "${label}". Its value is not carried into "${label}" because `
-      + `${retired.notCarriedBecause}. Re-declare "${label}" on the employee's Payroll tab before calculating.`;
+    return (
+      `${employeeName}'s ${resolved.certificate.label} still holds ${old} under the retired ` +
+      `"${retired.key}" answer and no "${label}". Its value is not carried into "${label}" because ` +
+      `${retired.notCarriedBecause}. Re-declare "${label}" on the employee's Payroll tab before calculating.`
+    );
   }
   return null;
 }
@@ -952,9 +990,9 @@ export function revalidateStoredCertificates(input: {
         region: row.region ?? null,
         subRegion: row.subRegion ?? null,
         message:
-          `"${row.certificateKey}" is on file for this employee but the ${country} payroll pack `
-          + "declares no such certificate — it is ignored. "
-          + "File the certificate the pack declares, or correct the profile if the employee moved packs.",
+          `"${row.certificateKey}" is on file for this employee but the ${country} payroll pack ` +
+          "declares no such certificate — it is ignored. " +
+          "File the certificate the pack declares, or correct the profile if the employee moved packs.",
       });
       continue;
     }
@@ -965,55 +1003,65 @@ export function revalidateStoredCertificates(input: {
     if (level === "country") {
       if (rowRegion !== null || rowSubRegion !== null) {
         mismatched.push({
-          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          certificateKey: row.certificateKey,
+          region: rowRegion,
+          subRegion: rowSubRegion,
           message:
-            `"${declared.form}" is a country-level certificate and carries no region, but this row `
-            + `is filed for ${rowRegion ?? rowSubRegion} — it is ignored. `
-            + "File the certificate without a region, or correct the profile if the employee moved.",
+            `"${declared.form}" is a country-level certificate and carries no region, but this row ` +
+            `is filed for ${rowRegion ?? rowSubRegion} — it is ignored. ` +
+            "File the certificate without a region, or correct the profile if the employee moved.",
         });
         continue;
       }
     } else if (level === "region") {
       if (rowRegion !== scopeRegion) {
         mismatched.push({
-          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          certificateKey: row.certificateKey,
+          region: rowRegion,
+          subRegion: rowSubRegion,
           message:
-            `"${declared.form}" files for region "${scopeRegion}", but this row is filed for `
-            + `"${rowRegion ?? "(no region)"}" — it is ignored. `
-            + "File the certificate for its own region, or correct the profile if the employee moved.",
+            `"${declared.form}" files for region "${scopeRegion}", but this row is filed for ` +
+            `"${rowRegion ?? "(no region)"}" — it is ignored. ` +
+            "File the certificate for its own region, or correct the profile if the employee moved.",
         });
         continue;
       }
       if (!inScopeRegion) {
         mismatched.push({
-          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          certificateKey: row.certificateKey,
+          region: rowRegion,
+          subRegion: rowSubRegion,
           message:
-            `"${declared.form}" is scoped to ${scopeRegion}, but this employee now works in `
-            + `${workRegion} and resides in ${residenceRegion} — it is ignored. `
-            + "Correct the profile regions if they are wrong, or file the certificate "
-            + "the employee's own region declares.",
+            `"${declared.form}" is scoped to ${scopeRegion}, but this employee now works in ` +
+            `${workRegion} and resides in ${residenceRegion} — it is ignored. ` +
+            "Correct the profile regions if they are wrong, or file the certificate " +
+            "the employee's own region declares.",
         });
         continue;
       }
     } else {
       if (rowRegion !== scopeRegion || rowSubRegion !== scopeSubRegion) {
         mismatched.push({
-          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          certificateKey: row.certificateKey,
+          region: rowRegion,
+          subRegion: rowSubRegion,
           message:
-            `"${declared.form}" files for "${scopeRegion ?? ""}/${scopeSubRegion ?? ""}", but this row `
-            + `is filed for "${rowRegion ?? "(no region)"}/${rowSubRegion ?? "(no sub-region)"}" — it is ignored. `
-            + "File the certificate for its own jurisdiction, or correct the profile if the employee moved.",
+            `"${declared.form}" files for "${scopeRegion ?? ""}/${scopeSubRegion ?? ""}", but this row ` +
+            `is filed for "${rowRegion ?? "(no region)"}/${rowSubRegion ?? "(no sub-region)"}" — it is ignored. ` +
+            "File the certificate for its own jurisdiction, or correct the profile if the employee moved.",
         });
         continue;
       }
       if (!inScopeRegion) {
         mismatched.push({
-          certificateKey: row.certificateKey, region: rowRegion, subRegion: rowSubRegion,
+          certificateKey: row.certificateKey,
+          region: rowRegion,
+          subRegion: rowSubRegion,
           message:
-            `"${declared.form}" is scoped to ${scopeRegion}, but this employee now works in `
-            + `${workRegion} and resides in ${residenceRegion} — it is ignored. `
-            + "Correct the profile regions if they are wrong, or file the certificate "
-            + "the employee's own region declares.",
+            `"${declared.form}" is scoped to ${scopeRegion}, but this employee now works in ` +
+            `${workRegion} and resides in ${residenceRegion} — it is ignored. ` +
+            "Correct the profile regions if they are wrong, or file the certificate " +
+            "the employee's own region declares.",
         });
         continue;
       }
@@ -1033,17 +1081,14 @@ export function revalidateStoredCertificates(input: {
  * did `Number(answers.allowances)` would silently withhold from zero for
  * `"two"`, and would accept `"3.5"` allowances.
  */
-export function certificateChoice(
-  resolved: ResolvedCertificate,
-  key: string,
-): string | null {
+export function certificateChoice(resolved: ResolvedCertificate, key: string): string | null {
   const field = declaredField(resolved, key, "choice");
   const value = resolved.answers[key] ?? null;
   if (value == null) return null;
   if (!field.choices!.some((choice) => choice.value === value)) {
     throw new PayrollCertificateError(
-      `${resolved.certificate.form} ${field.label}: "${value}" is not one of `
-      + field.choices!.map((choice) => choice.value).join(", "),
+      `${resolved.certificate.form} ${field.label}: "${value}" is not one of ` +
+        field.choices!.map((choice) => choice.value).join(", "),
     );
   }
   return value;
@@ -1055,21 +1100,21 @@ export function certificateCount(resolved: ResolvedCertificate, key: string): nu
   if (value == null || value === "") return null;
   if (!/^\d+$/.test(value.trim())) {
     throw new PayrollCertificateError(
-      `${resolved.certificate.form} ${field.label}: "${value}" is not a whole number of `
-      + "allowances",
+      `${resolved.certificate.form} ${field.label}: "${value}" is not a whole number of ` +
+        "allowances",
     );
   }
   const count = Number(value.trim());
   if (field.min != null && count < Number(field.min)) {
     throw new PayrollCertificateError(
-      `${resolved.certificate.form} ${field.label}: ${count} is below the declared minimum `
-      + field.min,
+      `${resolved.certificate.form} ${field.label}: ${count} is below the declared minimum ` +
+        field.min,
     );
   }
   if (field.max != null && count > Number(field.max)) {
     throw new PayrollCertificateError(
-      `${resolved.certificate.form} ${field.label}: ${count} is above the declared maximum `
-      + field.max,
+      `${resolved.certificate.form} ${field.label}: ${count} is above the declared maximum ` +
+        field.max,
     );
   }
   return count;
@@ -1088,8 +1133,8 @@ export function certificateAmount(resolved: ResolvedCertificate, key: string): s
     return normalizeDecimal(value, field.decimals!);
   } catch (error) {
     throw new PayrollCertificateError(
-      `${resolved.certificate.form} ${field.label}: `
-      + (error instanceof Error ? error.message : String(error)),
+      `${resolved.certificate.form} ${field.label}: ` +
+        (error instanceof Error ? error.message : String(error)),
     );
   }
 }
@@ -1114,8 +1159,8 @@ function declaredField(
   const field = resolved.certificate.fields.find((declared) => declared.key === key);
   if (!field) {
     throw new PayrollCertificateError(
-      `${resolved.certificate.form} declares no "${key}" field — it declares `
-      + (resolved.certificate.fields.map((declared) => declared.key).join(", ") || "none"),
+      `${resolved.certificate.form} declares no "${key}" field — it declares ` +
+        (resolved.certificate.fields.map((declared) => declared.key).join(", ") || "none"),
     );
   }
   if (field.kind !== kind) {

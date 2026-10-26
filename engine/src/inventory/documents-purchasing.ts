@@ -1,4 +1,4 @@
-import { resolveAgencyPosting } from './drop-ship-agency.ts';
+import { resolveAgencyPosting } from "./drop-ship-agency.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, cmp, isZero, mulRate, neg } from "../money/money.ts";
@@ -8,11 +8,27 @@ import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { BillLinesUnmatchedError, InventoryError, type Runner } from "./contracts.ts";
 import { assertDocumentLinesUntracked } from "./tracking.ts";
-import { assertInventoryOffHoldsNoStock, assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
+import {
+  assertInventoryOffHoldsNoStock,
+  assertMovementOwner,
+  inventoryFeatureEnabled,
+} from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, lockInventoryPosition } from "./position.ts";
+import {
+  primaryBookId,
+  periodForDate,
+  subsidiaryCurrency,
+  lockInventoryPosition,
+} from "./position.ts";
 import { receiveInventory } from "./movements.ts";
-import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
+import {
+  loadDocumentInventoryLines,
+  unprofiledInventoryLines,
+  assertNoUnprofiledInventoryLines,
+  inventoryPostingEffectKey,
+  isJsonRecord,
+  type DocumentInventoryLine,
+} from "./document-lines.ts";
 import { kitLabel, kitNoStockRefusal } from "./kits.ts";
 import {
   billLinePurchaseOrderLineId,
@@ -22,7 +38,10 @@ import {
   unifiedUnbilledCover,
   type MatchablePurchaseOrderLine,
 } from "./bill-matchable-lines.ts";
-import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from "../records/control-accounts.ts";
+import {
+  receivedNotBilledMissingMessage,
+  resolveReceivedNotBilledAccount,
+} from "../records/control-accounts.ts";
 import { lineRequiresReceipt } from "../records/stock-receipt.ts";
 
 /**
@@ -62,10 +81,7 @@ export async function resolveBillInventoryAccounts(
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
   const map = new Map<string, string>();
   for (const l of lines) {
-    if (
-      lineRequiresReceipt(l.itemKind) &&
-      billLinePurchaseOrderLineId(l.custom) !== null
-    ) {
+    if (lineRequiresReceipt(l.itemKind) && billLinePurchaseOrderLineId(l.custom) !== null) {
       map.set(
         l.lineId,
         await requireLineRnbAccount(
@@ -94,13 +110,21 @@ export async function assertBillReceiptsPostable(
   documentId: string,
 ): Promise<void> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) {
-    await assertInventoryOffHoldsNoStock(runner as Runner, orgId,
-      (await loadDocumentInventoryLines(runner as Runner, orgId, documentId)).map((line) => line.itemId), "bill");
+    await assertInventoryOffHoldsNoStock(
+      runner as Runner,
+      orgId,
+      (await loadDocumentInventoryLines(runner as Runner, orgId, documentId)).map(
+        (line) => line.itemId,
+      ),
+      "bill",
+    );
     return;
   }
   assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
-  const agency = await resolveAgencyPosting(runner,orgId,documentId);
-  const lines = (await loadDocumentInventoryLines(runner, orgId, documentId)).filter(line=>!agency.has(line.lineId));
+  const agency = await resolveAgencyPosting(runner, orgId, documentId);
+  const lines = (await loadDocumentInventoryLines(runner, orgId, documentId)).filter(
+    (line) => !agency.has(line.lineId),
+  );
   // Kits hold no stock: the post-commit receipt would die inside the drain
   // after the bill's journal has committed, so refuse before posting with
   // the components named as the receivable side.
@@ -117,15 +141,21 @@ export async function assertBillReceiptsPostable(
     carrier: "vendor-bill lines",
     remedy: "receive the goods on a goods receipt naming the lot or serial instead",
   });
-  const profiles = (await runner.execute<{
+  const profiles = await runner.execute<{
     item_id: string;
     tracking: string;
     standard_cost: string | null;
-  }>(sql`
+  }>(
+    sql`
     select item_id, tracking, standard_cost
       from item_inventory_profiles
      where org_id = ${orgId}
-       and item_id in (${sql.join(lines.map((line) => sql`${line.itemId}`), sql`, `)})`, "objects"));
+       and item_id in (${sql.join(
+         lines.map((line) => sql`${line.itemId}`),
+         sql`, `,
+       )})`,
+    "objects",
+  );
   const byItem = new Map(profiles.map((row) => [row.item_id, row]));
   for (const line of lines) {
     const functionalAmount = mulRate(line.amount, line.fxRate);
@@ -136,14 +166,10 @@ export async function assertBillReceiptsPostable(
       // standard value is the variance, not quantity × a rounded rate. A
       // rounded precheck could pass a line the engine then refuses
       // post-commit — after the bill's GL has posted without stock.
-      const standardUnitCost = profile.standard_cost
-        ?? (isZero(line.quantity)
-          ? "0"
-          : unitCostPerQuantity(functionalAmount, line.quantity)!);
-      const variance = add(
-        functionalAmount,
-        neg(extendCost(line.quantity, standardUnitCost)),
-      );
+      const standardUnitCost =
+        profile.standard_cost ??
+        (isZero(line.quantity) ? "0" : unitCostPerQuantity(functionalAmount, line.quantity)!);
+      const variance = add(functionalAmount, neg(extendCost(line.quantity, standardUnitCost)));
       if (!isZero(variance)) {
         await requireLineRnbAccount(
           runner,
@@ -180,20 +206,24 @@ export async function autoMatchBillLinesToOrders(
   const lines = await loadDocumentInventoryLines(runner as Runner, orgId, documentId);
   const manual = lines.filter(
     (line) =>
-      lineRequiresReceipt(line.itemKind) &&
-      billLinePurchaseOrderLineId(line.custom) === null,
+      lineRequiresReceipt(line.itemKind) && billLinePurchaseOrderLineId(line.custom) === null,
   );
   if (manual.length === 0) return { matched: [] };
-  const bill = (await runner.execute<{
-    id: string;
-    document_number: string;
-    status: string;
-    party_id: string | null;
-    subsidiary_id: string | null;
-  }>(sql`
+  const bill = (
+    await runner.execute<{
+      id: string;
+      document_number: string;
+      status: string;
+      party_id: string | null;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select id, document_number, status, party_id, subsidiary_id from documents
      where id = ${documentId} and org_id = ${orgId} and kind = 'vendor_bill'
-     for update`, "objects"))[0];
+     for update`,
+      "objects",
+    )
+  )[0];
   if (!bill) {
     throw new InventoryError("vendor bill not found while checking purchase-order matching");
   }
@@ -204,11 +234,20 @@ export async function autoMatchBillLinesToOrders(
   // so plan against the bill lines' raw document quantities, not the
   // base-converted posting quantities the loader carries.
   const rawQuantities = new Map(
-    (await runner.execute<{ id: string; quantity: string }>(sql`
+    (
+      await runner.execute<{ id: string; quantity: string }>(
+        sql`
       select id, quantity::text as quantity from document_lines
-       where org_id = ${orgId} and document_id = ${documentId}`, "objects")).map((row) => [row.id, row.quantity]),
+       where org_id = ${orgId} and document_id = ${documentId}`,
+        "objects",
+      )
+    ).map((row) => [row.id, row.quantity]),
   );
-  const planned: { line: DocumentInventoryLine; candidate: MatchablePurchaseOrderLine; cover: string }[] = [];
+  const planned: {
+    line: DocumentInventoryLine;
+    candidate: MatchablePurchaseOrderLine;
+    cover: string;
+  }[] = [];
   for (const line of manual) {
     const candidates = await matchablePurchaseOrderLines(runner, orgId, {
       itemId: line.itemId,
@@ -233,15 +272,35 @@ export async function autoMatchBillLinesToOrders(
   // same header-before-lines order conversion uses, so a concurrent
   // conversion of the same order serializes instead of deadlocking.
   const poIds = [...new Set(planned.map((row) => row.candidate.purchaseOrderId))].sort();
-  const poHeaders = await runner.execute<{ id: string; status: string; document_number: string }>(sql`
+  const poHeaders = await runner.execute<{ id: string; status: string; document_number: string }>(
+    sql`
     select id, status, document_number from documents
      where org_id = ${orgId} and id = any(${`{${poIds.join(",")}}`}::uuid[])
      order by id
-     for update`, "objects");
+     for update`,
+    "objects",
+  );
   if (poHeaders.length !== poIds.length) {
     throw new InventoryError("a purchase order changed while the bill was being matched");
   }
-  const byPoLine = new Map<string, { id: string; document_id: string; status: string; document_number: string; party_id: string | null; subsidiary_id: string | null; line_number: number; item_id: string | null; unit: string | null; quantity: string; quantity_fulfilled: string; quantity_billed: string; quantity_cancelled: string }>();
+  const byPoLine = new Map<
+    string,
+    {
+      id: string;
+      document_id: string;
+      status: string;
+      document_number: string;
+      party_id: string | null;
+      subsidiary_id: string | null;
+      line_number: number;
+      item_id: string | null;
+      unit: string | null;
+      quantity: string;
+      quantity_fulfilled: string;
+      quantity_billed: string;
+      quantity_cancelled: string;
+    }
+  >();
   const poLineRows = await runner.execute<{
     id: string;
     document_id: string;
@@ -256,7 +315,8 @@ export async function autoMatchBillLinesToOrders(
     quantity_fulfilled: string;
     quantity_billed: string;
     quantity_cancelled: string;
-  }>(sql`
+  }>(
+    sql`
     select l.id, d.id as document_id, d.status, d.document_number, d.party_id, d.subsidiary_id,
            l.line_number, l.item_id, l.unit,
            l.quantity::text as quantity, l.quantity_fulfilled::text as quantity_fulfilled,
@@ -265,15 +325,22 @@ export async function autoMatchBillLinesToOrders(
       join documents d on d.id = l.document_id and d.org_id = l.org_id
      where l.org_id = ${orgId} and l.id = any(${`{${planned.map((row) => row.candidate.purchaseOrderLineId).join(",")}}`}::uuid[])
      order by l.document_id, l.id
-     for update of l`, "objects");
+     for update of l`,
+    "objects",
+  );
   for (const row of poLineRows) byPoLine.set(row.id, row);
   const reopened: string[] = [];
   const reopenForWrites = async (id: string, status: string, label: string) => {
     if (status !== "approved") return;
-    const reopenedRow = (await runner.execute<{ id: string }>(sql`
+    const reopenedRow = (
+      await runner.execute<{ id: string }>(
+        sql`
       update documents set status = 'draft', updated_at = now(), updated_by = ${actorId}
        where id = ${id} and org_id = ${orgId} and status = 'approved'
-      returning id`, "objects"))[0];
+      returning id`,
+        "objects",
+      )
+    )[0];
     if (!reopenedRow) throw new InventoryError(`${label} changed while the bill was being matched`);
     reopened.push(id);
   };
@@ -284,7 +351,8 @@ export async function autoMatchBillLinesToOrders(
   const matched: { billLineId: string; purchaseOrderLineId: string; quantity: string }[] = [];
   for (const row of planned) {
     const poLine = byPoLine.get(row.candidate.purchaseOrderLineId);
-    if (!poLine) throw new InventoryError("a purchase-order line changed while the bill was being matched");
+    if (!poLine)
+      throw new InventoryError("a purchase-order line changed while the bill was being matched");
     if (poLine.status !== "approved") {
       throw new InventoryError(
         `purchase order ${poLine.document_number} is ${poLine.status} — only an approved order can be matched`,
@@ -295,7 +363,9 @@ export async function autoMatchBillLinesToOrders(
     }
     const poEntityId = await resolveEntityScope(runner, orgId, poLine.subsidiary_id);
     if ((bill.party_id ?? null) !== (poLine.party_id ?? null) || entityId !== poEntityId) {
-      throw new InventoryError("a purchase order changed to a different vendor or legal entity while the bill was being matched");
+      throw new InventoryError(
+        "a purchase order changed to a different vendor or legal entity while the bill was being matched",
+      );
     }
     const billUnits = toQuantityUnits(row.cover);
     const orderedOpen =
@@ -323,43 +393,68 @@ export async function autoMatchBillLinesToOrders(
         `purchase order ${poLine.document_number} line ${poLine.line_number} changed while the bill was being matched`,
       );
     }
-    const advanced = (await runner.execute<{ id: string }>(sql`
+    const advanced = (
+      await runner.execute<{ id: string }>(
+        sql`
       update document_lines set quantity_billed = quantity_billed + ${row.cover}, updated_at = now(), updated_by = ${actorId}
        where id = ${poLine.id} and org_id = ${orgId}
          and quantity_billed + ${row.cover} <= ${orderedNetOfCancelledSql("document_lines")}
-      returning id`, "objects"))[0];
+      returning id`,
+        "objects",
+      )
+    )[0];
     if (!advanced) {
       throw new InventoryError("a purchase-order line changed while the bill was being matched");
     }
     // The next bill line may target this same order line. Carry forward the
     // quantity written above so its ordered and received cover is current.
-    poLine.quantity_billed = fromQuantityUnits(
-      toQuantityUnits(poLine.quantity_billed) + billUnits,
-    );
-    const bag = (isJsonRecord(row.line.custom) ? { ...row.line.custom } : {}) as Record<string, unknown>;
+    poLine.quantity_billed = fromQuantityUnits(toQuantityUnits(poLine.quantity_billed) + billUnits);
+    const bag = (isJsonRecord(row.line.custom) ? { ...row.line.custom } : {}) as Record<
+      string,
+      unknown
+    >;
     bag.purchaseOrderLineId = poLine.id;
     bag.convertedFrom = { documentId: poLine.document_id, lineId: poLine.id, quantity: row.cover };
-    const stamped = (await runner.execute<{ id: string }>(sql`
+    const stamped = (
+      await runner.execute<{ id: string }>(
+        sql`
       update document_lines set custom = ${JSON.stringify(bag)}::jsonb, updated_at = now(), updated_by = ${actorId}
        where id = ${row.line.lineId} and org_id = ${orgId}
-      returning id`, "objects"))[0];
+      returning id`,
+        "objects",
+      )
+    )[0];
     if (!stamped) throw new InventoryError("a bill line changed while the bill was being matched");
-    const edge = (await runner.execute<{ id: string }>(sql`
+    const edge = (
+      await runner.execute<{ id: string }>(
+        sql`
       select id from document_links
        where org_id = ${orgId} and from_document_id = ${poLine.document_id}
-         and to_document_id = ${documentId} and link_type = 'bills'`, "objects"))[0];
+         and to_document_id = ${documentId} and link_type = 'bills'`,
+        "objects",
+      )
+    )[0];
     if (!edge) {
       await runner.execute(sql`
         insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by)
         values (${orgId}, ${poLine.document_id}, ${documentId}, 'bills', ${actorId})`);
     }
-    matched.push({ billLineId: row.line.lineId, purchaseOrderLineId: poLine.id, quantity: row.cover });
+    matched.push({
+      billLineId: row.line.lineId,
+      purchaseOrderLineId: poLine.id,
+      quantity: row.cover,
+    });
   }
   for (const id of reopened) {
-    const restored = (await runner.execute<{ id: string }>(sql`
+    const restored = (
+      await runner.execute<{ id: string }>(
+        sql`
       update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
        where id = ${id} and org_id = ${orgId} and status = 'draft'
-      returning id`, "objects"))[0];
+      returning id`,
+        "objects",
+      )
+    )[0];
     if (!restored) throw new InventoryError("a document changed while the bill was being matched");
   }
   await runner.execute(sql`
@@ -394,28 +489,37 @@ async function assertManualBillLinesMatched(
 ): Promise<void> {
   const manual = lines.filter(
     (line) =>
-      lineRequiresReceipt(line.itemKind) &&
-      billLinePurchaseOrderLineId(line.custom) === null,
+      lineRequiresReceipt(line.itemKind) && billLinePurchaseOrderLineId(line.custom) === null,
   );
   if (manual.length === 0) return;
-  const bill = (await runner.execute<{
-    party_id: string | null;
-    subsidiary_id: string | null;
-  }>(sql`
+  const bill = (
+    await runner.execute<{
+      party_id: string | null;
+      subsidiary_id: string | null;
+    }>(
+      sql`
     select party_id, subsidiary_id from documents
-     where id = ${documentId} and org_id = ${orgId}`, "objects"))[0];
+     where id = ${documentId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   if (!bill) {
     throw new InventoryError("vendor bill not found while checking purchase-order matching");
   }
   let first: DocumentInventoryLine | null = null;
   let orders: MatchablePurchaseOrderLine[] = [];
   for (const line of manual) {
-    const matchable = await matchablePurchaseOrderLines(runner, orgId, {
-      itemId: line.itemId,
-      unit: line.unit,
-      partyId: bill.party_id,
-      subsidiaryId: bill.subsidiary_id,
-    }, { includeUnreceived: true });
+    const matchable = await matchablePurchaseOrderLines(
+      runner,
+      orgId,
+      {
+        itemId: line.itemId,
+        unit: line.unit,
+        partyId: bill.party_id,
+        subsidiaryId: bill.subsidiary_id,
+      },
+      { includeUnreceived: true },
+    );
     if (matchable.length > 0) {
       first = line;
       orders = matchable;
@@ -427,8 +531,11 @@ async function assertManualBillLinesMatched(
   const itemLabel = primary!.itemCode ?? primary!.itemName;
   const numbers = [...new Set(orders.map((order) => order.purchaseOrderNumber))];
   const more =
-    orders.length > 1 ? ` (and ${orders.length - 1} more open line${orders.length > 2 ? "s" : ""})` : "";
-  const ordersLabel = numbers.length > 1 ? `purchase orders ${numbers.join(", ")}` : `purchase order ${numbers[0]}`;
+    orders.length > 1
+      ? ` (and ${orders.length - 1} more open line${orders.length > 2 ? "s" : ""})`
+      : "";
+  const ordersLabel =
+    numbers.length > 1 ? `purchase orders ${numbers.join(", ")}` : `purchase order ${numbers[0]}`;
   throw new BillLinesUnmatchedError(
     `vendor-bill line ${first.lineNumber} (${itemLabel}) is stock still open on ${ordersLabel} line ${primary!.purchaseOrderLineNumber}${more}: match the bill to its purchase-order line so it clears received-not-billed instead of receiving the stock again — billing unmatched stock now and receiving it later counts it twice`,
     toQuantityUnits(primary!.billableQuantity) > 0n
@@ -453,30 +560,42 @@ export async function applyBillInventoryReceipts(
   subsidiaryId: string,
 ): Promise<number> {
   if (!(await inventoryFeatureEnabled(runner, orgId))) {
-    await assertInventoryOffHoldsNoStock(runner as Runner, orgId,
-      (await loadDocumentInventoryLines(runner as Runner, orgId, documentId)).map((line) => line.itemId), "bill");
+    await assertInventoryOffHoldsNoStock(
+      runner as Runner,
+      orgId,
+      (await loadDocumentInventoryLines(runner as Runner, orgId, documentId)).map(
+        (line) => line.itemId,
+      ),
+      "bill",
+    );
     return 0;
   }
   // Posted agency evidence survives later feature and configuration changes.
   // This drain owes no stock receipt for those immutable vendor-bill lines.
-  const agency = new Set((await runner.execute<{id:string}>(sql`select document_line_id as id from drop_ship_agent_allocations where org_id=${orgId} and document_id=${documentId} and kind='vendor_bill'`, "objects")).map(row=>row.id));
-  const lines = (await loadDocumentInventoryLines(runner, orgId, documentId)).filter(line=>!agency.has(line.lineId));
+  const agency = new Set(
+    (
+      await runner.execute<{ id: string }>(
+        sql`select document_line_id as id from drop_ship_agent_allocations where org_id=${orgId} and document_id=${documentId} and kind='vendor_bill'`,
+        "objects",
+      )
+    ).map((row) => row.id),
+  );
+  const lines = (await loadDocumentInventoryLines(runner, orgId, documentId)).filter(
+    (line) => !agency.has(line.lineId),
+  );
   for (const key of [
-    ...new Set(
-      lines.map((line) => `${line.itemId}:${line.stockLocationId}`),
-    ),
+    ...new Set(lines.map((line) => `${line.itemId}:${line.stockLocationId}`)),
   ].sort()) {
     const separator = key.indexOf(":");
-    await lockInventoryPosition(
-      runner,
-      key.slice(0, separator),
-      key.slice(separator + 1),
-    );
+    await lockInventoryPosition(runner, key.slice(0, separator), key.slice(separator + 1));
   }
   let count = 0;
   for (const line of lines) {
-    const seen = (await runner.execute(sql`
-      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${line.lineId} and kind = 'receipt' limit 1`, "objects"));
+    const seen = await runner.execute(
+      sql`
+      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${line.lineId} and kind = 'receipt' limit 1`,
+      "objects",
+    );
     if (seen[0]) continue;
     // A bill line drawn from a purchase-order line that a goods receipt
     // already brought into stock must not receive it again: the receipt
@@ -488,7 +607,15 @@ export async function applyBillInventoryReceipts(
     if (purchaseOrderLineId) {
       const live = await livePurchaseOrderLineReceipts(runner, orgId, purchaseOrderLineId);
       if (toQuantityUnits(live.quantity) > 0n) {
-        await settleReceivedBillLineVariance(runner, orgId, actorId, line, live, date, subsidiaryId);
+        await settleReceivedBillLineVariance(
+          runner,
+          orgId,
+          actorId,
+          line,
+          live,
+          date,
+          subsidiaryId,
+        );
         count++;
         continue;
       }
@@ -497,11 +624,16 @@ export async function applyBillInventoryReceipts(
       // returned or the receipt was voided after the match, so bringing
       // them in here would count stock the order no longer holds.
       if (lineRequiresReceipt(line.itemKind)) {
-        const purchaseOrder = (await runner.execute<{ document_number: string; line_number: number }>(sql`
+        const purchaseOrder = (
+          await runner.execute<{ document_number: string; line_number: number }>(
+            sql`
           select d.document_number, dl.line_number
             from document_lines dl
             join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-           where dl.id = ${purchaseOrderLineId} and dl.org_id = ${orgId}`, "objects"))[0];
+           where dl.id = ${purchaseOrderLineId} and dl.org_id = ${orgId}`,
+            "objects",
+          )
+        )[0];
         const orderLabel = purchaseOrder
           ? `purchase order ${purchaseOrder.document_number} line ${purchaseOrder.line_number}`
           : `its purchase-order line`;
@@ -563,10 +695,7 @@ async function settleReceivedBillLineVariance(
   const expected =
     cmp(line.quantity, received.quantity) === 0
       ? received.value
-      : extendCost(
-          line.quantity,
-          unitCostPerQuantity(received.value, received.quantity) ?? "0",
-        );
+      : extendCost(line.quantity, unitCostPerQuantity(received.value, received.quantity) ?? "0");
   const functionalAmount = mulRate(line.amount, line.fxRate);
   const variance = add(functionalAmount, neg(expected));
   if (isZero(variance)) return;
@@ -576,8 +705,11 @@ async function settleReceivedBillLineVariance(
     );
   }
   const entryNumber = `INV-PPV-${line.lineId}`;
-  const existing = (await runner.execute(sql`
-    select 1 from journal_entries where org_id = ${orgId} and entry_number = ${entryNumber} limit 1`, "objects"));
+  const existing = await runner.execute(
+    sql`
+    select 1 from journal_entries where org_id = ${orgId} and entry_number = ${entryNumber} limit 1`,
+    "objects",
+  );
   if (existing[0]) return;
   const period = await periodForDate(orgId, date, runner);
   if (!period) throw new InventoryError(`no accounting period for ${date}`);
@@ -609,18 +741,26 @@ async function settleReceivedBillLineVariance(
 
 export const PURCHASE_RECEIPT_DOCUMENT_KIND = "purchase_receipt";
 
-function purchaseReceiptEvidence(
-  line: DocumentInventoryLine,
-): { sourceLineId: string; lotId: string | null; serialId: string | null } {
+function purchaseReceiptEvidence(line: DocumentInventoryLine): {
+  sourceLineId: string;
+  lotId: string | null;
+  serialId: string | null;
+} {
   const evidence = isJsonRecord(line.custom) ? line.custom.receipt : null;
   const label = `goods-receipt line ${line.lineNumber} (item ${line.itemId})`;
-  if (!isJsonRecord(evidence) || typeof evidence.sourceLineId !== "string" || !evidence.sourceLineId) {
+  if (
+    !isJsonRecord(evidence) ||
+    typeof evidence.sourceLineId !== "string" ||
+    !evidence.sourceLineId
+  ) {
     throw new InventoryError(`${label} requires immutable receipt evidence`);
   }
   const lotId = evidence.lotId ?? null;
   const serialId = evidence.serialId ?? null;
-  if (lotId !== null && typeof lotId !== "string") throw new InventoryError(`${label} has malformed lot evidence`);
-  if (serialId !== null && typeof serialId !== "string") throw new InventoryError(`${label} has malformed serial evidence`);
+  if (lotId !== null && typeof lotId !== "string")
+    throw new InventoryError(`${label} has malformed lot evidence`);
+  if (serialId !== null && typeof serialId !== "string")
+    throw new InventoryError(`${label} has malformed serial evidence`);
   return { sourceLineId: evidence.sourceLineId, lotId, serialId };
 }
 
@@ -643,7 +783,8 @@ export async function applyPurchaseReceiptInventory(
     throw new InventoryError("Inventory is disabled");
   }
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
-  if (lines.length === 0) throw new InventoryError("a goods receipt must carry at least one stock line");
+  if (lines.length === 0)
+    throw new InventoryError("a goods receipt must carry at least one stock line");
   const ctx = await loadSubsidiaryContext(runner, orgId);
   const movementSubsidiaryId = subsidiaryId ?? ctx.rootId;
   assertMovementOwner(ctx, movementSubsidiaryId);
@@ -670,10 +811,13 @@ export async function applyPurchaseReceiptInventory(
   }
   let count = 0;
   for (const line of lines) {
-    const seen = (await runner.execute(sql`
+    const seen = await runner.execute(
+      sql`
       select 1 from inventory_movements
        where org_id = ${orgId} and document_line_id = ${line.lineId} and kind = 'receipt'
-       limit 1`, "objects"));
+       limit 1`,
+      "objects",
+    );
     if (seen[0]) continue;
     const evidence = purchaseReceiptEvidence(line);
     await receiveInventory(orgId, actorId, {
@@ -714,14 +858,6 @@ export async function applyInventoryReceiptsForBill(
   subsidiaryId: string,
 ): Promise<number> {
   return db.transaction((tx) =>
-    applyBillInventoryReceipts(
-      tx,
-      orgId,
-      actorId,
-      documentId,
-      billEntryId,
-      date,
-      subsidiaryId,
-    ),
+    applyBillInventoryReceipts(tx, orgId, actorId, documentId, billEntryId, date, subsidiaryId),
   );
 }

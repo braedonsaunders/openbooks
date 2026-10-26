@@ -7,7 +7,12 @@ import { createDirectDebitRun } from "./direct-debit.ts";
 import { db, withBypass, withOrgTransaction, withOrgContext } from "../platform/db.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  grantScratchPermissions,
+  dropScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -16,7 +21,7 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
   try {
     const options = await withOrgTransaction(org.orgId, async () => {
       const actorId = await createScratchUser(org.orgId, "Collection Operator", "accountant");
-      await grantScratchPermissions(org.orgId,actorId,["parties.manage"]);
+      await grantScratchPermissions(org.orgId, actorId, ["parties.manage"]);
       const formatId = randomUUID();
       const profileId = randomUUID();
       const partyBankAccountId = randomUUID();
@@ -37,8 +42,17 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
         values
           (${profileId}, ${org.orgId}, 'Duplicate collection profile', ${org.accounts.bank},
            ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA', ${actorId}, ${actorId})`);
-      await seedApprovedBankAccountFixture({id:partyBankAccountId,orgId:org.orgId,actorId,partyId:org.customerId,
-        bankName:'Customer bank',country:'CA',currency:'CAD',routing:{},lastFour:'1234'});
+      await seedApprovedBankAccountFixture({
+        id: partyBankAccountId,
+        orgId: org.orgId,
+        actorId,
+        partyId: org.customerId,
+        bankName: "Customer bank",
+        country: "CA",
+        currency: "CAD",
+        routing: {},
+        lastFour: "1234",
+      });
       await db.execute(sql`
         insert into payment_mandates
           (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference,
@@ -98,10 +112,11 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
       });
 
       await assert.rejects(
-        () => createDirectDebitRun({
-          ...options.base,
-          invoiceDocumentIds: [options.invoiceAId, options.invoiceBId],
-        }),
+        () =>
+          createDirectDebitRun({
+            ...options.base,
+            invoiceDocumentIds: [options.invoiceAId, options.invoiceBId],
+          }),
         (error: unknown) => {
           assert.ok(error instanceof PaymentError);
           assert.equal(
@@ -117,7 +132,7 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
         invoiceDocumentIds: [options.invoiceAId],
       });
 
-      const runs = (await db.execute<{
+      const runs = await db.execute<{
         id: string;
         status: string;
         item_count: number;
@@ -125,7 +140,8 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
         receipt_count: number;
         failed_event_count: number;
         source_document_ids: string[];
-      }>(sql`
+      }>(
+        sql`
         select run.id, run.status,
                (select count(*)::int from payment_run_items item
                  where item.org_id = run.org_id and item.payment_run_id = run.id) as item_count,
@@ -148,7 +164,9 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
            and run.direction = 'inbound'
            and run.purpose = 'customer_collections'
          order by run.status, run.id
-      `, "objects"));
+      `,
+        "objects",
+      );
 
       assert.equal(runs.length, 3);
       const failed = runs.find((run) => run.status === "cancelled");
@@ -192,34 +210,46 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
   }
 });
 
-test("direct-debit collection uses the transaction-ledger open, not base divided by rate", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const ids = await withOrgTransaction(org.orgId, async () => {
-      const actorId = await createScratchUser(org.orgId, "FX Collection Operator", "accountant");
-      await grantScratchPermissions(org.orgId,actorId,["parties.manage"]);
-      const formatId = randomUUID();
-      const profileId = randomUUID();
-      const partyBankAccountId = randomUUID();
-      const mandateId = randomUUID();
-      const invoiceId = randomUUID();
+test(
+  "direct-debit collection uses the transaction-ledger open, not base divided by rate",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const ids = await withOrgTransaction(org.orgId, async () => {
+        const actorId = await createScratchUser(org.orgId, "FX Collection Operator", "accountant");
+        await grantScratchPermissions(org.orgId, actorId, ["parties.manage"]);
+        const formatId = randomUUID();
+        const profileId = randomUUID();
+        const partyBankAccountId = randomUUID();
+        const mandateId = randomUUID();
+        const invoiceId = randomUUID();
 
-      await db.execute(sql`
+        await db.execute(sql`
         insert into payment_formats
           (id, org_id, code, name, rail, direction, country, currency, created_by, updated_by)
         values
           (${formatId}, ${org.orgId}, 'SEPA-DD-FX-OPEN', 'SEPA debit FX open test',
            'sepa_debit', 'debit', 'DE', 'USD', ${actorId}, ${actorId})`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into payment_bank_profiles
           (id, org_id, name, bank_account_id, subsidiary_id, payment_format_id,
            currency, country, created_by, updated_by)
         values
           (${profileId}, ${org.orgId}, 'FX collection profile', ${org.accounts.bank},
            ${org.subsidiaryId}, ${formatId}, 'USD', 'DE', ${actorId}, ${actorId})`);
-      await seedApprovedBankAccountFixture({id:partyBankAccountId,orgId:org.orgId,actorId,partyId:org.customerId,
-        bankName:'Customer bank',country:'DE',currency:'USD',routing:{},lastFour:'1234'});
-      await db.execute(sql`
+        await seedApprovedBankAccountFixture({
+          id: partyBankAccountId,
+          orgId: org.orgId,
+          actorId,
+          partyId: org.customerId,
+          bankName: "Customer bank",
+          country: "DE",
+          currency: "USD",
+          routing: {},
+          lastFour: "1234",
+        });
+        await db.execute(sql`
         insert into payment_mandates
           (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference,
            status, signed_on, valid_from, created_by, updated_by)
@@ -227,11 +257,11 @@ test("direct-debit collection uses the transaction-ledger open, not base divided
           (${mandateId}, ${org.orgId}, ${org.customerId}, ${partyBankAccountId},
            'sepa', 'MANDATE-FX-OPEN', 'active', ${org.date}, ${org.date},
            ${actorId}, ${actorId})`);
-      // 1000.00 USD at 0.8765 posts a base leg of 876.5000. A 0.10 partial
-      // extinguishes round(876.5000 * 0.10 / 1000) = 0.0877 of base, leaving
-      // 876.4123 — and round(876.4123 / 0.8765, 4) = 999.8999, NOT the
-      // ledger's transaction open of 999.9000.
-      await db.execute(sql`
+        // 1000.00 USD at 0.8765 posts a base leg of 876.5000. A 0.10 partial
+        // extinguishes round(876.5000 * 0.10 / 1000) = 0.0877 of base, leaving
+        // 876.4123 — and round(876.4123 / 0.8765, 4) = 999.8999, NOT the
+        // ledger's transaction open of 999.9000.
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, subsidiary_id, party_id,
            document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
@@ -239,59 +269,73 @@ test("direct-debit collection uses the transaction-ledger open, not base divided
           (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-FX-OPEN',
            ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'USD', '0.8765',
            '1000', '0', '1000', ${actorId})`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, account_id, quantity, unit_price,
            amount, tax_amount, tax_input_amount)
         values
           (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '1000',
            '1000', '0', '1000')`);
-      await db.execute(sql`
+        await db.execute(sql`
         update documents set status = 'approved', updated_at = now()
          where id = ${invoiceId} and org_id = ${org.orgId}`);
-      const invoiceEntryId = await postDocument(invoiceId, {
-        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-      });
-      const openLineId = (await db.execute<{ id: string }>(sql`
+        const invoiceEntryId = await postDocument(invoiceId, {
+          control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+        });
+        const openLineId = (
+          await db.execute<{ id: string }>(
+            sql`
         select id from journal_lines
          where entry_id = ${invoiceEntryId} and org_id = ${org.orgId} and is_open_item
-      `, "objects"))[0]!.id;
-      return { actorId, profileId, invoiceId, openLineId };
-    });
-
-    await withOrgContext(org.orgId, async () => {
-      const { createPaymentDocument, updateDraftPayment } = await import("./payment-documents.ts"), { postPaymentWithApplications } = await import("./payment-posting.ts"), { sameCurrencyAllocation } = await import("./settlement-policy.ts");
-      const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null,
-        orgId: org.orgId,
-        kind: "customer_payment",
-        createdBy: ids.actorId,
-        partyId: org.customerId,
-        bankAccountId: org.accounts.bank,
-        subsidiaryId: org.subsidiaryId,
-        documentDate: org.date,
-        currency: "USD",
-        fxRate: "0.8765",
+      `,
+            "objects",
+          )
+        )[0]!.id;
+        return { actorId, profileId, invoiceId, openLineId };
       });
-      await updateDraftPayment(receipt.id, {
-        partyId: org.customerId,
-        bankAccountId: org.accounts.bank,
-        allocations: [sameCurrencyAllocation(ids.openLineId, "0.1")],
-      }, ids.actorId, org.orgId,
-  { allowedSubsidiaryIds: null },
-);
-      await db.execute(sql`
+
+      await withOrgContext(org.orgId, async () => {
+        const { createPaymentDocument, updateDraftPayment } =
+            await import("./payment-documents.ts"),
+          { postPaymentWithApplications } = await import("./payment-posting.ts"),
+          { sameCurrencyAllocation } = await import("./settlement-policy.ts");
+        const receipt = await createPaymentDocument({
+          allowedSubsidiaryIds: null,
+          orgId: org.orgId,
+          kind: "customer_payment",
+          createdBy: ids.actorId,
+          partyId: org.customerId,
+          bankAccountId: org.accounts.bank,
+          subsidiaryId: org.subsidiaryId,
+          documentDate: org.date,
+          currency: "USD",
+          fxRate: "0.8765",
+        });
+        await updateDraftPayment(
+          receipt.id,
+          {
+            partyId: org.customerId,
+            bankAccountId: org.accounts.bank,
+            allocations: [sameCurrencyAllocation(ids.openLineId, "0.1")],
+          },
+          ids.actorId,
+          org.orgId,
+          { allowedSubsidiaryIds: null },
+        );
+        await db.execute(sql`
         update documents set status = 'approved', submitted_by = ${ids.actorId}, submitted_at = now()
          where id = ${receipt.id} and org_id = ${org.orgId}`);
-      await postPaymentWithApplications(receipt.id, undefined, ids.actorId);
+        await postPaymentWithApplications(receipt.id, undefined, ids.actorId);
 
-      await createDirectDebitRun({
-        orgId: org.orgId,
-        createdBy: ids.actorId,
-        paymentBankProfileId: ids.profileId,
-        invoiceDocumentIds: [ids.invoiceId],
-        scheduledFor: org.date,
-      });
-      const items = (await db.execute<{ gross: string; payment: string; instruction: string }>(sql`
+        await createDirectDebitRun({
+          orgId: org.orgId,
+          createdBy: ids.actorId,
+          paymentBankProfileId: ids.profileId,
+          invoiceDocumentIds: [ids.invoiceId],
+          scheduledFor: org.date,
+        });
+        const items = await db.execute<{ gross: string; payment: string; instruction: string }>(
+          sql`
         select item.gross_amount::text as gross, item.payment_amount::text as payment,
                (select instruction.amount::text from payment_instructions instruction
                  where instruction.org_id = item.org_id
@@ -299,12 +343,19 @@ test("direct-debit collection uses the transaction-ledger open, not base divided
                  limit 1) as instruction
           from payment_run_items item
          where item.org_id = ${org.orgId} and item.source_document_id = ${ids.invoiceId}
-      `, "objects"));
-      // The ledger's transaction open is 1000 - 0.10 = 999.90; dividing the
-      // rounded base back by the rate must never shrink (or grow) it.
-      assert.deepEqual(items[0], { gross: "999.9000", payment: "999.9000", instruction: "999.9000" });
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+          "objects",
+        );
+        // The ledger's transaction open is 1000 - 0.10 = 999.90; dividing the
+        // rounded base back by the rate must never shrink (or grow) it.
+        assert.deepEqual(items[0], {
+          gross: "999.9000",
+          payment: "999.9000",
+          instruction: "999.9000",
+        });
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

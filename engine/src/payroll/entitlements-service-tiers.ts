@@ -16,9 +16,13 @@ const at = parseIsoDate;
 export function monthsOfService(hiredOn: string, onDate: string): number {
   const hired = at(hiredOn);
   const asked = at(onDate);
-  let months = (asked.getUTCFullYear() - hired.getUTCFullYear()) * 12
-    + (asked.getUTCMonth() - hired.getUTCMonth());
-  const anniversaryDay = Math.min(hired.getUTCDate(), daysInCivilMonth(asked.getUTCFullYear(), asked.getUTCMonth() + 1));
+  let months =
+    (asked.getUTCFullYear() - hired.getUTCFullYear()) * 12 +
+    (asked.getUTCMonth() - hired.getUTCMonth());
+  const anniversaryDay = Math.min(
+    hired.getUTCDate(),
+    daysInCivilMonth(asked.getUTCFullYear(), asked.getUTCMonth() + 1),
+  );
   if (asked.getUTCDate() < anniversaryDay) months -= 1;
   return months;
 }
@@ -77,7 +81,8 @@ export function resolveServiceTiersFrom(
   const planAccrualValues = new Map<string, string>();
   const componentEligibility = new Map<string, boolean>();
   const planAnnualDays = new Map<string, string>();
-  if (months === null) return { hiredOn, months, planAccrualValues, componentEligibility, planAnnualDays };
+  if (months === null)
+    return { hiredOn, months, planAccrualValues, componentEligibility, planAnnualDays };
 
   const byPlan = new Map<string, ServiceTierRow[]>();
   const byComponent = new Map<string, ServiceTierRow[]>();
@@ -93,8 +98,12 @@ export function resolveServiceTiersFrom(
     }
   }
   const scopedLadder = (list: ServiceTierRow[]): ServiceTierRow[] => {
-    const employerRows = employerSubsidiaryId ? list.filter((row) => row.isActive && row.employerSubsidiaryId === employerSubsidiaryId) : [];
-    return employerRows.length > 0 ? employerRows : list.filter((row) => row.employerSubsidiaryId == null);
+    const employerRows = employerSubsidiaryId
+      ? list.filter((row) => row.isActive && row.employerSubsidiaryId === employerSubsidiaryId)
+      : [];
+    return employerRows.length > 0
+      ? employerRows
+      : list.filter((row) => row.employerSubsidiaryId == null);
   };
   for (const [planId, list] of byPlan) {
     const tier = pickServiceTier(scopedLadder(list), months);

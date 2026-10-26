@@ -102,18 +102,11 @@ export const flowRuns = pgTable(
     subjectId: uuid("subject_id").notNull(),
     /** The trigger kind that fired: 'on_submit', 'scheduled', 'manual', … */
     trigger: text("trigger").notNull(),
-    status: text("status", { enum: FLOW_RUN_STATUSES })
-      .notNull()
-      .default("running"),
+    status: text("status", { enum: FLOW_RUN_STATUSES }).notNull().default("running"),
     error: text("error"),
     /** Snapshot of the evaluation values (record fields, …) at run start. */
-    context: jsonb("context")
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default({}),
-    startedAt: timestamp("started_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    context: jsonb("context").$type<Record<string, unknown>>().notNull().default({}),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     /**
      * Deterministic retry identity for scheduled firings:
@@ -163,13 +156,8 @@ export const flowRunEffects = pgTable(
     orgId: orgRef(),
     runId: uuid("run_id").notNull(),
     effectKey: text("effect_key").notNull(),
-    detail: jsonb("detail")
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default({}),
-    completedAt: timestamp("completed_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    detail: jsonb("detail").$type<Record<string, unknown>>().notNull().default({}),
+    completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
     ...auditColumns,
   },
   (t) => [
@@ -208,12 +196,8 @@ export const flowGates = pgTable(
     assigneeRole: text("assignee_role"),
     /** Same for all sibling rows of one gate node instance: `${runId}:${nodeId}`. */
     groupKey: text("group_key").notNull(),
-    quorum: text("quorum", { enum: FLOW_GATE_QUORUMS })
-      .notNull()
-      .default("any"),
-    status: text("status", { enum: FLOW_GATE_STATUSES })
-      .notNull()
-      .default("pending"),
+    quorum: text("quorum", { enum: FLOW_GATE_QUORUMS }).notNull().default("any"),
+    status: text("status", { enum: FLOW_GATE_STATUSES }).notNull().default("pending"),
     signatureRequired: boolean("signature_required").notNull().default(false),
     /** Typed e-signature captured when a signature-required gate is approved. */
     signature: text("signature"),
@@ -247,11 +231,7 @@ export const flowGates = pgTable(
       columns: [t.orgId, t.escalatedFromGateId],
       foreignColumns: [t.orgId, t.id],
     }),
-    uniqueIndex("flow_gates_run_node_assignee").on(
-      t.runId,
-      t.nodeId,
-      t.assigneeUserId,
-    ),
+    uniqueIndex("flow_gates_run_node_assignee").on(t.runId, t.nodeId, t.assigneeUserId),
     index("flow_gates_assignee").on(t.orgId, t.status, t.assigneeUserId),
     index("flow_gates_subject").on(t.orgId, t.subjectKind, t.subjectId),
     index("flow_gates_remind").on(t.orgId, t.status, t.remindAt),
@@ -379,12 +359,6 @@ export const flowSubmissions = pgTable(
   },
   (t) => [
     uniqueIndex("flow_submissions_org_id_id_unique").on(t.orgId, t.id),
-    index("flow_submissions_subject").on(
-      t.orgId,
-      t.subjectKind,
-      t.subjectId,
-      t.createdAt,
-      t.id,
-    ),
+    index("flow_submissions_subject").on(t.orgId, t.subjectKind, t.subjectId, t.createdAt, t.id),
   ],
 );

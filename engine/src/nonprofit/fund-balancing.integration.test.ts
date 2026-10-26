@@ -10,7 +10,12 @@ import { postEntry, type PostEntryInput } from "../journal/post-entry.ts";
 import { createFund, getFund, listFunds, setFundPair } from "./funds.ts";
 import { NonprofitError, NonprofitPostingError } from "./errors.ts";
 import { provisionFundAccounting } from "./provision.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -19,7 +24,12 @@ function fundDimensions(fundId: string): { fund: string } {
   return { fund: fundId };
 }
 
-function giftEntry(org: ScratchOrg, entryNumber: string, operatingId: string, restrictedId: string): PostEntryInput {
+function giftEntry(
+  org: ScratchOrg,
+  entryNumber: string,
+  operatingId: string,
+  restrictedId: string,
+): PostEntryInput {
   return {
     orgId: org.orgId,
     bookId: org.bookId,
@@ -52,25 +62,38 @@ async function postDirect(org: ScratchOrg, input: PostEntryInput) {
   return withOrgTransaction(org.orgId, () => postEntry(db, input));
 }
 
-async function account(org: ScratchOrg, actorId: string, type: "asset_current_other" | "liability_current_other", name: string): Promise<string> {
+async function account(
+  org: ScratchOrg,
+  actorId: string,
+  type: "asset_current_other" | "liability_current_other",
+  name: string,
+): Promise<string> {
   const number = `F${randomUUID().replaceAll("-", "").slice(0, 10)}`;
-  const result = await db.execute<{ id: string }>(sql`
+  const result = await db.execute<{ id: string }>(
+    sql`
     insert into accounts
       (org_id, number, name, type, is_summary, is_active, required_dimensions, created_by, updated_by)
     values (${org.orgId}, ${number}, ${name}, ${type}, false, true, '[]'::jsonb, ${actorId}, ${actorId})
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   assert.equal(result.length, 1);
   return result[0]!.id;
 }
 
 async function entryFundBalances(orgId: string, entryId: string) {
-  return await withOrgContext(orgId, () => db.execute<{ fundId: string; total: string; lineCount: number }>(sql`
+  return await withOrgContext(orgId, () =>
+    db.execute<{ fundId: string; total: string; lineCount: number }>(
+      sql`
     select extra_dims->>'fund' as "fundId", sum(amount)::text as total, count(*)::int as "lineCount"
       from journal_lines
      where org_id = ${orgId} and entry_id = ${entryId}
      group by extra_dims->>'fund' order by extra_dims->>'fund'
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
 }
 
 async function assertBalancedByFund(orgId: string, entryId: string, expectedFunds = 2) {
@@ -80,25 +103,32 @@ async function assertBalancedByFund(orgId: string, entryId: string, expectedFund
   assert.ok(rows.every((row) => row.lineCount === 2));
 }
 
-test("fund balancing stays data-driven and fund postings use configured interfund pairs", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  let actors: string | undefined;
-  try {
-    await assert.rejects(
-      createFund({
-        orgId: org.orgId,
-        code: "OFF-CHECK",
-        name: "Disabled setup check",
-        kind: "operating",
-        restrictionClass: "without_donor_restrictions",
-      }),
-      (error) => error instanceof NonprofitError && error.code === "feature_off" &&
-        error.message.includes("fundAccounting") && error.remedy.includes("Company Settings → Features"),
-    );
+test(
+  "fund balancing stays data-driven and fund postings use configured interfund pairs",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let actors: string | undefined;
+    try {
+      await assert.rejects(
+        createFund({
+          orgId: org.orgId,
+          code: "OFF-CHECK",
+          name: "Disabled setup check",
+          kind: "operating",
+          restrictionClass: "without_donor_restrictions",
+        }),
+        (error) =>
+          error instanceof NonprofitError &&
+          error.code === "feature_off" &&
+          error.message.includes("fundAccounting") &&
+          error.remedy.includes("Company Settings → Features"),
+      );
 
-    actors = await withBypass(() => createScratchUser(org.orgId, "Fund Controller", "admin"));
-    await withOrgContext(org.orgId, async () => {
-      const changed = await db.execute<{ id: string }>(sql`
+      actors = await withBypass(() => createScratchUser(org.orgId, "Fund Controller", "admin"));
+      await withOrgContext(org.orgId, async () => {
+        const changed = await db.execute<{ id: string }>(
+          sql`
         update orgs
            set settings = jsonb_set(
              coalesce(settings, '{}'::jsonb), '{features}',
@@ -107,75 +137,80 @@ test("fund balancing stays data-driven and fund postings use configured interfun
            )
          where id = ${org.orgId}
         returning id
-      `, "objects");
-      assert.equal(changed.length, 1);
-    });
-    const classifications = {
-      OPERATING: { kind: "operating" as const, restrictionClass: "without_donor_restrictions" },
-    };
-    const provision = () => provisionFundAccounting({
-      orgId: org.orgId,
-      defaultFund: { code: "OPERATING", name: "Operating Fund" },
-      classifications,
-      actorId: actors,
-    });
-    const initial = await provision();
-    const restricted = await createFund({
-      orgId: org.orgId,
-      code: "SCHOLARSHIP",
-      name: "Youth Scholarship Fund",
-      kind: "restricted",
-      restrictionClass: "with_donor_restrictions",
-      actorId: actors,
-    });
-    const operatingId = initial.defaultFundId;
-    const dueFromAccount = await withOrgContext(org.orgId, () =>
-      account(org, actors!, "asset_current_other", "Due from other funds"),
-    );
-    const dueToAccount = await withOrgContext(org.orgId, () =>
-      account(org, actors!, "liability_current_other", "Due to other funds"),
-    );
+      `,
+          "objects",
+        );
+        assert.equal(changed.length, 1);
+      });
+      const classifications = {
+        OPERATING: { kind: "operating" as const, restrictionClass: "without_donor_restrictions" },
+      };
+      const provision = () =>
+        provisionFundAccounting({
+          orgId: org.orgId,
+          defaultFund: { code: "OPERATING", name: "Operating Fund" },
+          classifications,
+          actorId: actors,
+        });
+      const initial = await provision();
+      const restricted = await createFund({
+        orgId: org.orgId,
+        code: "SCHOLARSHIP",
+        name: "Youth Scholarship Fund",
+        kind: "restricted",
+        restrictionClass: "with_donor_restrictions",
+        actorId: actors,
+      });
+      const operatingId = initial.defaultFundId;
+      const dueFromAccount = await withOrgContext(org.orgId, () =>
+        account(org, actors!, "asset_current_other", "Due from other funds"),
+      );
+      const dueToAccount = await withOrgContext(org.orgId, () =>
+        account(org, actors!, "liability_current_other", "Due to other funds"),
+      );
 
-    clearBalancingLegProviders();
-    const unmatched = giftEntry(org, `FUND-BEFORE-${randomUUID()}`, operatingId, restricted.id);
+      clearBalancingLegProviders();
+      const unmatched = giftEntry(org, `FUND-BEFORE-${randomUUID()}`, operatingId, restricted.id);
 
-    const reprovisioned = await provisionFundAccounting({
-      orgId: org.orgId,
-      defaultFund: { code: "OPERATING", name: "Operating Fund" },
-      classifications: {
-        OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" },
-        SCHOLARSHIP: { kind: "restricted", restrictionClass: "with_donor_restrictions" },
-      },
-      actorId: actors,
-    });
-    assert.equal(reprovisioned.segmentId, initial.segmentId);
-    assert.equal(reprovisioned.defaultFundId, operatingId);
-    assert.equal(reprovisioned.historicalUnbalancedEntryCount, 0);
+      const reprovisioned = await provisionFundAccounting({
+        orgId: org.orgId,
+        defaultFund: { code: "OPERATING", name: "Operating Fund" },
+        classifications: {
+          OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" },
+          SCHOLARSHIP: { kind: "restricted", restrictionClass: "with_donor_restrictions" },
+        },
+        actorId: actors,
+      });
+      assert.equal(reprovisioned.segmentId, initial.segmentId);
+      assert.equal(reprovisioned.defaultFundId, operatingId);
+      assert.equal(reprovisioned.historicalUnbalancedEntryCount, 0);
 
-    installEngineSeams();
-    await assert.rejects(
-      postDirect(org, { ...unmatched, entryNumber: `FUND-NO-PAIR-${randomUUID()}` }),
-      (error) => error instanceof NonprofitPostingError &&
-        error.code === "interfund_pair_missing" &&
-        error.message.includes("SCHOLARSHIP") && error.message.includes("OPERATING") &&
-        error.remedy.includes("Setup → Nonprofit → Interfund pairs"),
-    );
+      installEngineSeams();
+      await assert.rejects(
+        postDirect(org, { ...unmatched, entryNumber: `FUND-NO-PAIR-${randomUUID()}` }),
+        (error) =>
+          error instanceof NonprofitPostingError &&
+          error.code === "interfund_pair_missing" &&
+          error.message.includes("SCHOLARSHIP") &&
+          error.message.includes("OPERATING") &&
+          error.remedy.includes("Setup → Nonprofit → Interfund pairs"),
+      );
 
-    await setFundPair({
-      orgId: org.orgId,
-      fromFundId: restricted.id,
-      toFundId: operatingId,
-      dueFromAccountId: dueFromAccount,
-      dueToAccountId: dueToAccount,
-      actorId: actors,
-      reason: "Pair restricted and operating funds for balancing-leg assertions",
-    });
-    const gift = await postDirect(org, { ...unmatched, entryNumber: `GIFT-${randomUUID()}` });
-    await assertBalancedByFund(org.orgId, gift.entryId);
+      await setFundPair({
+        orgId: org.orgId,
+        fromFundId: restricted.id,
+        toFundId: operatingId,
+        dueFromAccountId: dueFromAccount,
+        dueToAccountId: dueToAccount,
+        actorId: actors,
+        reason: "Pair restricted and operating funds for balancing-leg assertions",
+      });
+      const gift = await postDirect(org, { ...unmatched, entryNumber: `GIFT-${randomUUID()}` });
+      await assertBalancedByFund(org.orgId, gift.entryId);
 
-    const documentId = randomUUID();
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`
+      const documentId = randomUUID();
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, subsidiary_id, party_id,
            document_date, currency, subtotal, tax_total, total, created_by)
@@ -183,7 +218,7 @@ test("fund balancing stays data-driven and fund postings use configured interfun
           (${documentId}, ${org.orgId}, 'journal', 'draft', ${`JRN-${documentId}`},
            ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', 100, 0, 100, ${actors})
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, account_id, subsidiary_id, amount,
            quantity, unit_price, tax_amount, tax_input_amount, extra_dims)
@@ -193,163 +228,294 @@ test("fund balancing stays data-driven and fund postings use configured interfun
           (${org.orgId}, ${documentId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId},
            -100, 1, -100, 0, -100, ${JSON.stringify(fundDimensions(restricted.id))}::jsonb)
       `);
-      const approved = await db.execute<{ id: string }>(sql`
+        const approved = await db.execute<{ id: string }>(
+          sql`
         update documents set status = 'approved'
          where org_id = ${org.orgId} and id = ${documentId}
         returning id
-      `, "objects");
-      assert.equal(approved.length, 1);
-    });
-    const documentEntry = await withOrgContext(org.orgId, () =>
-      postDocument(documentId, {
-        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-      }, { deferEffects: true }),
-    );
-    await assertBalancedByFund(org.orgId, documentEntry);
+      `,
+          "objects",
+        );
+        assert.equal(approved.length, 1);
+      });
+      const documentEntry = await withOrgContext(org.orgId, () =>
+        postDocument(
+          documentId,
+          {
+            control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+          },
+          { deferEffects: true },
+        ),
+      );
+      await assertBalancedByFund(org.orgId, documentEntry);
 
-    const fundless = await postDirect(org, {
-      ...giftEntry(org, `FUND-DEFAULT-${randomUUID()}`, operatingId, operatingId),
-      lines: [
-        { accountId: org.accounts.bank, amount: "25.0000", currency: "CAD" },
-        { accountId: org.accounts.cogs, amount: "-25.0000", currency: "CAD" },
-      ],
-    });
-    const stamped = await entryFundBalances(org.orgId, fundless.entryId);
-    assert.deepEqual(stamped.map((row) => row.fundId), [operatingId]);
-    assert.equal(stamped[0]!.lineCount, 2);
-
-    await withOrgContext(org.orgId, async () => {
-      const result = await db.execute<{ id: string }>(sql`
-        update accounts set required_dimensions = '["fund"]'::jsonb
-         where org_id = ${org.orgId} and id = ${org.accounts.bank}
-        returning id
-      `, "objects");
-      assert.equal(result.length, 1);
-    });
-    await assert.rejects(
-      postDirect(org, {
-        ...giftEntry(org, `FUND-REQUIRED-${randomUUID()}`, operatingId, operatingId),
+      const fundless = await postDirect(org, {
+        ...giftEntry(org, `FUND-DEFAULT-${randomUUID()}`, operatingId, operatingId),
         lines: [
           { accountId: org.accounts.bank, amount: "25.0000", currency: "CAD" },
           { accountId: org.accounts.cogs, amount: "-25.0000", currency: "CAD" },
         ],
-      }),
-      (error) => {
-        const wrapped = error as Error & { cause?: { message?: string } };
-        return /requires segment fund/.test(`${wrapped.message} ${wrapped.cause?.message ?? ""}`);
-      },
-    );
+      });
+      const stamped = await entryFundBalances(org.orgId, fundless.entryId);
+      assert.deepEqual(
+        stamped.map((row) => row.fundId),
+        [operatingId],
+      );
+      assert.equal(stamped[0]!.lineCount, 2);
 
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.execute(sql`
+      await withOrgContext(org.orgId, async () => {
+        const result = await db.execute<{ id: string }>(
+          sql`
+        update accounts set required_dimensions = '["fund"]'::jsonb
+         where org_id = ${org.orgId} and id = ${org.accounts.bank}
+        returning id
+      `,
+          "objects",
+        );
+        assert.equal(result.length, 1);
+      });
+      await assert.rejects(
+        postDirect(org, {
+          ...giftEntry(org, `FUND-REQUIRED-${randomUUID()}`, operatingId, operatingId),
+          lines: [
+            { accountId: org.accounts.bank, amount: "25.0000", currency: "CAD" },
+            { accountId: org.accounts.cogs, amount: "-25.0000", currency: "CAD" },
+          ],
+        }),
+        (error) => {
+          const wrapped = error as Error & { cause?: { message?: string } };
+          return /requires segment fund/.test(`${wrapped.message} ${wrapped.cause?.message ?? ""}`);
+        },
+      );
+
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.execute(sql`
         update funds set restriction_class = 'without_donor_restrictions'
          where org_id = ${org.orgId} and id = ${restricted.id}
-      `)),
-      (error) => {
-        const wrapped = error as Error & { cause?: { message?: string } };
-        return /fund SCHOLARSHIP restriction class cannot change while \d+ posted journal lines carry it/.test(
-          `${wrapped.message} ${wrapped.cause?.message ?? ""}`,
-        );
-      },
-    );
-    await assert.rejects(
-      withOrgContext(org.orgId, () => db.execute(sql`
+      `),
+        ),
+        (error) => {
+          const wrapped = error as Error & { cause?: { message?: string } };
+          return /fund SCHOLARSHIP restriction class cannot change while \d+ posted journal lines carry it/.test(
+            `${wrapped.message} ${wrapped.cause?.message ?? ""}`,
+          );
+        },
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          db.execute(sql`
         update segment_definitions set is_balancing = false
          where org_id = ${org.orgId} and id = ${initial.segmentId}
-      `)),
-      (error) => {
-        const wrapped = error as Error & { cause?: { message?: string } };
-        return /segment fund cannot stop balancing while \d+ posted journal lines carry it/.test(
-          `${wrapped.message} ${wrapped.cause?.message ?? ""}`,
-        );
-      },
-    );
-  } finally {
-    clearBalancingLegProviders();
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `),
+        ),
+        (error) => {
+          const wrapped = error as Error & { cause?: { message?: string } };
+          return /segment fund cannot stop balancing while \d+ posted journal lines carry it/.test(
+            `${wrapped.message} ${wrapped.cause?.message ?? ""}`,
+          );
+        },
+      );
+    } finally {
+      clearBalancingLegProviders();
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a non-balancing fund segment with unbalanced posted history refuses to become the balancing fund segment", { skip: !DB }, async (t) => {
-  const org = await withBypass(() => createScratchOrg());
-  t.after(() => dropScratchOrg(org.orgId));
-  const actorId = await withBypass(() => createScratchUser(org.orgId, "Fund Controller", "admin"));
-  const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`, "objects"));
-  assert.equal(enabled.length, 1);
-  // An operator-defined reporting segment keyed "fund" that never balanced.
-  const segment = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+test(
+  "a non-balancing fund segment with unbalanced posted history refuses to become the balancing fund segment",
+  { skip: !DB },
+  async (t) => {
+    const org = await withBypass(() => createScratchOrg());
+    t.after(() => dropScratchOrg(org.orgId));
+    const actorId = await withBypass(() =>
+      createScratchUser(org.orgId, "Fund Controller", "admin"),
+    );
+    const enabled = await withOrgContext(org.orgId, () =>
+      db.execute<{ id: string }>(
+        sql`
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`,
+        "objects",
+      ),
+    );
+    assert.equal(enabled.length, 1);
+    // An operator-defined reporting segment keyed "fund" that never balanced.
+    const segment = await withOrgContext(org.orgId, () =>
+      db.execute<{ id: string }>(
+        sql`
     insert into segment_definitions (org_id, key, name, plural_name, source_kind, is_balancing, created_by, updated_by)
     values (${org.orgId}, 'fund', 'Fund', 'Funds', 'custom', false, ${actorId}, ${actorId})
-    returning id`, "objects"));
-  assert.equal(segment.length, 1);
-  const values = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    returning id`,
+        "objects",
+      ),
+    );
+    assert.equal(segment.length, 1);
+    const values = await withOrgContext(org.orgId, () =>
+      db.execute<{ id: string }>(
+        sql`
     insert into segment_values (org_id, segment_id, code, name, created_by, updated_by)
     values (${org.orgId}, ${segment[0]!.id}, 'OPERATING', 'Operating Fund', ${actorId}, ${actorId}),
            (${org.orgId}, ${segment[0]!.id}, 'SCHOLARSHIP', 'Youth Scholarship Fund', ${actorId}, ${actorId})
-    returning id`, "objects"));
-  assert.equal(values.length, 2);
-  clearBalancingLegProviders();
-  const posted = await postDirect(org, giftEntry(org, `FUND-UNBALANCED-${randomUUID()}`, values[0]!.id, values[1]!.id));
-  assert.equal(posted.lines.length, 2);
+    returning id`,
+        "objects",
+      ),
+    );
+    assert.equal(values.length, 2);
+    clearBalancingLegProviders();
+    const posted = await postDirect(
+      org,
+      giftEntry(org, `FUND-UNBALANCED-${randomUUID()}`, values[0]!.id, values[1]!.id),
+    );
+    assert.equal(posted.lines.length, 2);
 
-  await assert.rejects(
-    provisionFundAccounting({
-      orgId: org.orgId,
-      defaultFund: { code: "OPERATING", name: "Operating Fund" },
-      classifications: {
-        OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" },
-        SCHOLARSHIP: { kind: "restricted", restrictionClass: "with_donor_restrictions" },
-      },
-      actorId,
-    }),
-    (error) => error instanceof NonprofitError && error.code === "fund_history_unbalanced" &&
-      error.status === 409 && error.message.startsWith("1 posted journal entry does not balance by fund"),
-  );
-  const after = await withOrgContext(org.orgId, () => db.execute<{ isBalancing: boolean; funds: number }>(sql`
+    await assert.rejects(
+      provisionFundAccounting({
+        orgId: org.orgId,
+        defaultFund: { code: "OPERATING", name: "Operating Fund" },
+        classifications: {
+          OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" },
+          SCHOLARSHIP: { kind: "restricted", restrictionClass: "with_donor_restrictions" },
+        },
+        actorId,
+      }),
+      (error) =>
+        error instanceof NonprofitError &&
+        error.code === "fund_history_unbalanced" &&
+        error.status === 409 &&
+        error.message.startsWith("1 posted journal entry does not balance by fund"),
+    );
+    const after = await withOrgContext(org.orgId, () =>
+      db.execute<{ isBalancing: boolean; funds: number }>(
+        sql`
     select d.is_balancing as "isBalancing",
            (select count(*)::int from funds f where f.org_id = d.org_id) as funds
-      from segment_definitions d where d.org_id = ${org.orgId} and d.key = 'fund'`, "objects"));
-  assert.deepEqual(after[0], { isBalancing: false, funds: 0 });
-});
+      from segment_definitions d where d.org_id = ${org.orgId} and d.key = 'fund'`,
+        "objects",
+      ),
+    );
+    assert.deepEqual(after[0], { isBalancing: false, funds: 0 });
+  },
+);
 
-test("fund readers return the drawer projection with same-org isolation", { skip: !DB }, async (t) => {
-  const org = await withBypass(() => createScratchOrg());
-  t.after(() => dropScratchOrg(org.orgId));
-  const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`, "objects"));
-  assert.equal(enabled.length, 1);
-  const foreign = await withBypass(() => createScratchOrg());
-  t.after(() => dropScratchOrg(foreign.orgId));
-  const foreignEnabled = await withOrgContext(foreign.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${foreign.orgId} returning id`, "objects"));
-  assert.equal(foreignEnabled.length, 1);
-  await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "ZZ", name: "Alpha" },
-    classifications: { ZZ: { kind: "operating", restrictionClass: "without_donor_restrictions" } } });
-  const parent = await createFund({ orgId: org.orgId, code: "MM", name: "Mike",
-    kind: "operating", restrictionClass: "without_donor_restrictions" });
-  const second = await createFund({ orgId: org.orgId, code: "AA", name: "Zulu", custom: { reader: "funds" },
-    kind: "operating", restrictionClass: "without_donor_restrictions", parentId: parent.id,
-    subsidiaryId: org.subsidiaryId, subsidiaryIncludeChildren: false });
-  const page = await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId }));
-  assert.deepEqual(page.funds.map((fund) => fund.code), ["ZZ", "MM", "AA"]);
-  assert.equal(page.total, 3);
-  const found = await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id }));
-  assert.deepEqual(found, { id: second.id, code: "AA", name: "Zulu", kind: "operating",
-    restrictionClass: "without_donor_restrictions", budgetaryControl: "off", isActive: true, parentId: parent.id,
-    subsidiaryId: org.subsidiaryId, subsidiaryIncludeChildren: false, custom: { reader: "funds" } });
-  assert.equal(await withOrgContext(foreign.orgId, () => getFund({ orgId: foreign.orgId, fundId: second.id })), null);
-  assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: randomUUID() })), null);
-  assert.equal((await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 101 }))).funds.length, 3);
-  await assert.rejects(withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 0 })), /at least 1/);
-  const reclassified = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update segment_definitions set source_kind='builtin', storage_column='subsidiary_id' where org_id=${org.orgId} and key='fund' returning id`, "objects"));
-  assert.equal(reclassified.length, 1);
-  assert.equal((await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId }))).total, 0);
-  assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id })), null);
-  const disabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings = jsonb_set(settings, '{features,fundAccounting}', 'false'::jsonb, true) where id = ${org.orgId} returning id`, "objects"));
-  assert.equal(disabled.length, 1);
-  await assert.rejects(withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId })), /fundAccounting/);
-  await assert.rejects(withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id })), /fundAccounting/);
-});
+test(
+  "fund readers return the drawer projection with same-org isolation",
+  { skip: !DB },
+  async (t) => {
+    const org = await withBypass(() => createScratchOrg());
+    t.after(() => dropScratchOrg(org.orgId));
+    const enabled = await withOrgContext(org.orgId, () =>
+      db.execute<{ id: string }>(
+        sql`
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`,
+        "objects",
+      ),
+    );
+    assert.equal(enabled.length, 1);
+    const foreign = await withBypass(() => createScratchOrg());
+    t.after(() => dropScratchOrg(foreign.orgId));
+    const foreignEnabled = await withOrgContext(foreign.orgId, () =>
+      db.execute<{ id: string }>(
+        sql`
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${foreign.orgId} returning id`,
+        "objects",
+      ),
+    );
+    assert.equal(foreignEnabled.length, 1);
+    await provisionFundAccounting({
+      orgId: org.orgId,
+      defaultFund: { code: "ZZ", name: "Alpha" },
+      classifications: {
+        ZZ: { kind: "operating", restrictionClass: "without_donor_restrictions" },
+      },
+    });
+    const parent = await createFund({
+      orgId: org.orgId,
+      code: "MM",
+      name: "Mike",
+      kind: "operating",
+      restrictionClass: "without_donor_restrictions",
+    });
+    const second = await createFund({
+      orgId: org.orgId,
+      code: "AA",
+      name: "Zulu",
+      custom: { reader: "funds" },
+      kind: "operating",
+      restrictionClass: "without_donor_restrictions",
+      parentId: parent.id,
+      subsidiaryId: org.subsidiaryId,
+      subsidiaryIncludeChildren: false,
+    });
+    const page = await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId }));
+    assert.deepEqual(
+      page.funds.map((fund) => fund.code),
+      ["ZZ", "MM", "AA"],
+    );
+    assert.equal(page.total, 3);
+    const found = await withOrgContext(org.orgId, () =>
+      getFund({ orgId: org.orgId, fundId: second.id }),
+    );
+    assert.deepEqual(found, {
+      id: second.id,
+      code: "AA",
+      name: "Zulu",
+      kind: "operating",
+      restrictionClass: "without_donor_restrictions",
+      budgetaryControl: "off",
+      isActive: true,
+      parentId: parent.id,
+      subsidiaryId: org.subsidiaryId,
+      subsidiaryIncludeChildren: false,
+      custom: { reader: "funds" },
+    });
+    assert.equal(
+      await withOrgContext(foreign.orgId, () =>
+        getFund({ orgId: foreign.orgId, fundId: second.id }),
+      ),
+      null,
+    );
+    assert.equal(
+      await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: randomUUID() })),
+      null,
+    );
+    assert.equal(
+      (await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 101 }))).funds
+        .length,
+      3,
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 0 })),
+      /at least 1/,
+    );
+    const reclassified = await withOrgContext(org.orgId, () =>
+      db.execute<{ id: string }>(
+        sql`
+    update segment_definitions set source_kind='builtin', storage_column='subsidiary_id' where org_id=${org.orgId} and key='fund' returning id`,
+        "objects",
+      ),
+    );
+    assert.equal(reclassified.length, 1);
+    assert.equal((await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId }))).total, 0);
+    assert.equal(
+      await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id })),
+      null,
+    );
+    const disabled = await withOrgContext(org.orgId, () =>
+      db.execute<{ id: string }>(
+        sql`
+    update orgs set settings = jsonb_set(settings, '{features,fundAccounting}', 'false'::jsonb, true) where id = ${org.orgId} returning id`,
+        "objects",
+      ),
+    );
+    assert.equal(disabled.length, 1);
+    await assert.rejects(
+      withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId })),
+      /fundAccounting/,
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id })),
+      /fundAccounting/,
+    );
+  },
+);

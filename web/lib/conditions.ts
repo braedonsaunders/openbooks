@@ -8,41 +8,41 @@
  * own. No app-specific coupling — labels are passed in, not looked up here.
  */
 
-export type FieldKind = 'text' | 'number' | 'enum' | 'date' | 'flow'
+export type FieldKind = "text" | "number" | "enum" | "date" | "flow";
 
 /** How the value input behaves for a given operator. */
-export type ValueShape = 'none' | 'text' | 'number' | 'range' | 'date' | 'enum' | 'flow'
+export type ValueShape = "none" | "text" | "number" | "range" | "date" | "enum" | "flow";
 
 export interface OperatorDef {
-  key: string
+  key: string;
   /** Display label; the consumer localizes and passes it through the catalog. */
-  label: string
-  value: ValueShape
+  label: string;
+  value: ValueShape;
 }
 
 export interface FieldDef {
-  key: string
-  label: string
-  kind: FieldKind
+  key: string;
+  label: string;
+  kind: FieldKind;
   /** For `enum`/`flow` fields — the selectable options (value + label). */
-  options?: { value: string; label: string }[]
+  options?: { value: string; label: string }[];
   /** Placeholder for text/number/date value inputs. */
-  placeholder?: string
+  placeholder?: string;
 }
 
 export interface Condition {
-  field: string
-  op: string
-  value?: string | number | [number, number]
+  field: string;
+  op: string;
+  value?: string | number | [number, number];
 }
 
 export interface ConditionGroup {
-  combinator: 'and' | 'or'
-  rules: (Condition | ConditionGroup)[]
+  combinator: "and" | "or";
+  rules: (Condition | ConditionGroup)[];
 }
 
 export function isConditionGroup(n: Condition | ConditionGroup): n is ConditionGroup {
-  return Array.isArray((n as ConditionGroup).rules)
+  return Array.isArray((n as ConditionGroup).rules);
 }
 
 /**
@@ -51,53 +51,53 @@ export function isConditionGroup(n: Condition | ConditionGroup): n is ConditionG
  */
 export const OPERATORS_BY_KIND: Record<FieldKind, OperatorDef[]> = {
   text: [
-    { key: 'contains', label: 'contains', value: 'text' },
-    { key: 'notContains', label: 'does not contain', value: 'text' },
-    { key: 'equals', label: 'is exactly', value: 'text' },
-    { key: 'startsWith', label: 'starts with', value: 'text' },
-    { key: 'endsWith', label: 'ends with', value: 'text' },
-    { key: 'isBlank', label: 'is blank', value: 'none' },
+    { key: "contains", label: "contains", value: "text" },
+    { key: "notContains", label: "does not contain", value: "text" },
+    { key: "equals", label: "is exactly", value: "text" },
+    { key: "startsWith", label: "starts with", value: "text" },
+    { key: "endsWith", label: "ends with", value: "text" },
+    { key: "isBlank", label: "is blank", value: "none" },
   ],
   number: [
-    { key: 'eq', label: '=', value: 'number' },
-    { key: 'ne', label: '≠', value: 'number' },
-    { key: 'gt', label: '>', value: 'number' },
-    { key: 'gte', label: '≥', value: 'number' },
-    { key: 'lt', label: '<', value: 'number' },
-    { key: 'lte', label: '≤', value: 'number' },
-    { key: 'between', label: 'between', value: 'range' },
+    { key: "eq", label: "=", value: "number" },
+    { key: "ne", label: "≠", value: "number" },
+    { key: "gt", label: ">", value: "number" },
+    { key: "gte", label: "≥", value: "number" },
+    { key: "lt", label: "<", value: "number" },
+    { key: "lte", label: "≤", value: "number" },
+    { key: "between", label: "between", value: "range" },
   ],
   date: [
-    { key: 'on', label: 'on', value: 'date' },
-    { key: 'before', label: 'before', value: 'date' },
-    { key: 'after', label: 'after', value: 'date' },
-    { key: 'withinDays', label: 'within last N days', value: 'number' },
+    { key: "on", label: "on", value: "date" },
+    { key: "before", label: "before", value: "date" },
+    { key: "after", label: "after", value: "date" },
+    { key: "withinDays", label: "within last N days", value: "number" },
   ],
-  enum: [{ key: 'equals', label: 'is', value: 'enum' }],
-  flow: [{ key: 'is', label: 'is', value: 'flow' }],
-}
+  enum: [{ key: "equals", label: "is", value: "enum" }],
+  flow: [{ key: "is", label: "is", value: "flow" }],
+};
 
 /** Operators valid for a field's kind, with optional label overrides. */
 export function operatorsForField(
   field: FieldDef | undefined,
   operatorLabels?: Record<string, string>,
 ): OperatorDef[] {
-  const ops = field ? OPERATORS_BY_KIND[field.kind] : []
-  if (!operatorLabels) return ops
-  return ops.map((o) => ({ ...o, label: operatorLabels[o.key] ?? o.label }))
+  const ops = field ? OPERATORS_BY_KIND[field.kind] : [];
+  if (!operatorLabels) return ops;
+  return ops.map((o) => ({ ...o, label: operatorLabels[o.key] ?? o.label }));
 }
 
 /** The value shape an operator expects (drives the input rendered). */
 export function valueShapeFor(field: FieldDef | undefined, op: string): ValueShape {
-  const ops = field ? OPERATORS_BY_KIND[field.kind] : []
-  return ops.find((o) => o.key === op)?.value ?? 'none'
+  const ops = field ? OPERATORS_BY_KIND[field.kind] : [];
+  return ops.find((o) => o.key === op)?.value ?? "none";
 }
 
 /** An empty condition seeded to a field's first valid operator. */
 export function newCondition(catalog: FieldDef[]): Condition {
-  const field = catalog[0]
-  const op = field ? (OPERATORS_BY_KIND[field.kind][0]?.key ?? 'contains') : 'contains'
-  return { field: field?.key ?? '', op, value: '' }
+  const field = catalog[0];
+  const op = field ? (OPERATORS_BY_KIND[field.kind][0]?.key ?? "contains") : "contains";
+  return { field: field?.key ?? "", op, value: "" };
 }
 
 /**
@@ -112,11 +112,11 @@ export function summarizeGroup(
   depth = 0,
 ): string {
   const parts = (group.rules ?? []).map((n) => {
-    if (isConditionGroup(n)) return `(${summarizeGroup(n, catalog, labels, depth + 1)})`
-    return summarizeCondition(n, catalog, labels.operatorLabels)
-  })
-  const join = group.combinator === 'or' ? ` ${labels.or} ` : ` ${labels.and} `
-  return parts.filter(Boolean).join(join)
+    if (isConditionGroup(n)) return `(${summarizeGroup(n, catalog, labels, depth + 1)})`;
+    return summarizeCondition(n, catalog, labels.operatorLabels);
+  });
+  const join = group.combinator === "or" ? ` ${labels.or} ` : ` ${labels.and} `;
+  return parts.filter(Boolean).join(join);
 }
 
 export function summarizeCondition(
@@ -124,15 +124,16 @@ export function summarizeCondition(
   catalog: FieldDef[],
   operatorLabels?: Record<string, string>,
 ): string {
-  const field = catalog.find((f) => f.key === cond.field)
-  const fieldLabel = field?.label ?? cond.field
-  const opLabel = operatorLabels?.[cond.op] ?? cond.op
-  const shape = valueShapeFor(field, cond.op)
-  if (shape === 'none') return `${fieldLabel} ${opLabel}`
-  let valueLabel: string
-  if (Array.isArray(cond.value)) valueLabel = `${cond.value[0]}–${cond.value[1]}`
-  else if ((field?.kind === 'enum' || field?.kind === 'flow') && field.options) {
-    valueLabel = field.options.find((o) => o.value === cond.value)?.label ?? String(cond.value ?? '')
-  } else valueLabel = String(cond.value ?? '')
-  return `${fieldLabel} ${opLabel} ${valueLabel}`.trim()
+  const field = catalog.find((f) => f.key === cond.field);
+  const fieldLabel = field?.label ?? cond.field;
+  const opLabel = operatorLabels?.[cond.op] ?? cond.op;
+  const shape = valueShapeFor(field, cond.op);
+  if (shape === "none") return `${fieldLabel} ${opLabel}`;
+  let valueLabel: string;
+  if (Array.isArray(cond.value)) valueLabel = `${cond.value[0]}–${cond.value[1]}`;
+  else if ((field?.kind === "enum" || field?.kind === "flow") && field.options) {
+    valueLabel =
+      field.options.find((o) => o.value === cond.value)?.label ?? String(cond.value ?? "");
+  } else valueLabel = String(cond.value ?? "");
+  return `${fieldLabel} ${opLabel} ${valueLabel}`.trim();
 }

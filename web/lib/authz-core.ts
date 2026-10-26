@@ -3,7 +3,10 @@ import "server-only";
 import { cache } from "react";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "@openbooks/engine/platform/database";
-import { denyInactiveExtensionPermissions, extensionPermissionAvailability } from "@openbooks/engine/organization/authority";
+import {
+  denyInactiveExtensionPermissions,
+  extensionPermissionAvailability,
+} from "@openbooks/engine/organization/authority";
 import type { SessionUser } from "./auth";
 import { permissionSetCovers, resolveEffectivePermissions } from "./permissions";
 import { allowedSubsidiaryIds } from "./subsidiaries";
@@ -17,30 +20,41 @@ export interface Authz {
 }
 
 /** Resolve current grants for a verified active identity, including scheduled execution. */
-export async function resolveUserAuthz(user: SessionUser, runner: SqlExecutor = db): Promise<Authz> {
+export async function resolveUserAuthz(
+  user: SessionUser,
+  runner: SqlExecutor = db,
+): Promise<Authz> {
   const modulePermissions = await extensionPermissionAvailability(user.orgId, runner);
   const inactivePermissions = modulePermissions.inactive;
   // Super admins hold every permission in whatever org they're currently in.
   if (user.isSuperAdmin) {
-    return { user, permissions: denyInactiveExtensionPermissions(new Set<string>(["*"]), inactivePermissions), allowedSubsidiaryIds: null };
+    return {
+      user,
+      permissions: denyInactiveExtensionPermissions(new Set<string>(["*"]), inactivePermissions),
+      allowedSubsidiaryIds: null,
+    };
   }
   // Sequential reads: callers inside an org transaction pass its single
   // pg client as runner, so fanning out queues concurrent queries on it.
-  const assignments = await runner.execute<{ permissions: string[] }>(sql`
+  const assignments = await runner.execute<{ permissions: string[] }>(
+    sql`
       select r.permissions
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-       where a.user_id = ${user.id} and a.org_id = ${user.orgId}`, "objects")
-  const overrides = await runner.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+       where a.user_id = ${user.id} and a.org_id = ${user.orgId}`,
+    "objects",
+  );
+  const overrides = await runner.execute<{ permission: string; effect: "grant" | "deny" }>(
+    sql`
       select permission, effect
         from user_permission_overrides
-       where user_id = ${user.id} and org_id = ${user.orgId}`, "objects")
-  const allowedSubs = await allowedSubsidiaryIds(user.id, user.orgId, runner)
+       where user_id = ${user.id} and org_id = ${user.orgId}`,
+    "objects",
+  );
+  const allowedSubs = await allowedSubsidiaryIds(user.id, user.orgId, runner);
   const permissions = resolveEffectivePermissions({
     additionalKnownPermissions: modulePermissions.active,
-    rolePermissionSets: assignments.map((r) =>
-      Array.isArray(r.permissions) ? r.permissions : [],
-    ),
+    rolePermissionSets: assignments.map((r) => (Array.isArray(r.permissions) ? r.permissions : [])),
     overrides,
   });
   denyInactiveExtensionPermissions(permissions, inactivePermissions);
@@ -53,30 +67,43 @@ export async function resolveUserAuthz(user: SessionUser, runner: SqlExecutor = 
  * Deactivation or revocation fails closed — null means "no authority", and
  * callers must treat null as holding no permission.
  */
-export async function resolveAuthzByUserId(orgId: string, userId: string, runner: SqlExecutor = db): Promise<Authz | null> {
+export async function resolveAuthzByUserId(
+  orgId: string,
+  userId: string,
+  runner: SqlExecutor = db,
+): Promise<Authz | null> {
   // List sections, drawers and actions of one server render each re-resolve
   // the viewer; they share one snapshot per render, like getAuthz. A caller's
   // transaction runner always resolves on its own client.
   return runner === db ? renderAuthzByUserId(orgId, userId) : authzByUserId(orgId, userId, runner);
 }
 
-const renderAuthzByUserId = cache((orgId: string, userId: string) => authzByUserId(orgId, userId, db));
+const renderAuthzByUserId = cache((orgId: string, userId: string) =>
+  authzByUserId(orgId, userId, db),
+);
 
-async function authzByUserId(orgId: string, userId: string, runner: SqlExecutor): Promise<Authz | null> {
-  const row=await actorPrincipal(runner,orgId,userId);
+async function authzByUserId(
+  orgId: string,
+  userId: string,
+  runner: SqlExecutor,
+): Promise<Authz | null> {
+  const row = await actorPrincipal(runner, orgId, userId);
   if (!row?.isActive) return null;
-  return resolveUserAuthz({
-    id: row.id,
-    email: row.email,
-    name: row.name,
-    orgId,
-    roles: [],
-    envKind: "production",
-    productionOrgId: orgId,
-    homeUserId: row.id,
-    homeOrgId: row.orgId,
-    isSuperAdmin: row.isSuperAdmin,
-  }, runner);
+  return resolveUserAuthz(
+    {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      orgId,
+      roles: [],
+      envKind: "production",
+      productionOrgId: orgId,
+      homeUserId: row.id,
+      homeOrgId: row.orgId,
+      isSuperAdmin: row.isSuperAdmin,
+    },
+    runner,
+  );
 }
 
 /** Wildcard-aware permission check (`ap.*` covers `ap.post`, `*` covers all). */

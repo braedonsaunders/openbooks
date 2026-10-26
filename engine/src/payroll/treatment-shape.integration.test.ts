@@ -51,8 +51,14 @@ test(
       for (const treatment of [...LEGACY_TREATMENTS, ...PACK_DECLARED_TREATMENTS]) {
         await insertComponent(org.orgId, `TREAT-${treatment}`, treatment);
       }
-      const stored = await withBypassContext(async () => await db.execute<{ tax_treatment: string }>(sql`
-        select tax_treatment from pay_components where org_id = ${org.orgId} and code like 'TREAT-%'`, "objects"));
+      const stored = await withBypassContext(
+        async () =>
+          await db.execute<{ tax_treatment: string }>(
+            sql`
+        select tax_treatment from pay_components where org_id = ${org.orgId} and code like 'TREAT-%'`,
+            "objects",
+          ),
+      );
       assert.equal(stored.length, LEGACY_TREATMENTS.length + PACK_DECLARED_TREATMENTS.length);
       assert.ok(
         stored.some((row) => row.tax_treatment === "salary_sacrifice"),

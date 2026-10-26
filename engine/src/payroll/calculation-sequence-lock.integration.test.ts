@@ -12,7 +12,10 @@ import { seedPayrollComponents } from "./run-setup.ts";
 import { US_PACK_RATES } from "./us/rates.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
 import {
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 import { seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 
@@ -40,14 +43,22 @@ const PAY_DATE = "2026-07-21";
 const PERIOD_START = "2026-07-05";
 const PERIOD_END = "2026-07-18";
 
-async function holdOpen(): Promise<{ query: (text: string, values?: unknown[]) => Promise<unknown>; done: () => Promise<void> }> {
+async function holdOpen(): Promise<{
+  query: (text: string, values?: unknown[]) => Promise<unknown>;
+  done: () => Promise<void>;
+}> {
   const pool = new Pool({ connectionString: process.env.OPENBOOKS_DB_URL!, max: 1 });
   const client = await pool.connect();
   await client.query("BEGIN");
   return {
     query: (text: string, values?: unknown[]) => client.query(text, values),
     done: async () => {
-      try { await client.query("COMMIT"); } finally { client.release(); await pool.end(); }
+      try {
+        await client.query("COMMIT");
+      } finally {
+        client.release();
+        await pool.end();
+      }
     },
   };
 }
@@ -58,7 +69,10 @@ async function withHangGuard<T>(label: string, work: Promise<T>): Promise<T> {
     return await Promise.race([
       work,
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${label} is blocked behind a held lock`)), 60_000);
+        timer = setTimeout(
+          () => reject(new Error(`${label} is blocked behind a held lock`)),
+          60_000,
+        );
       }),
     ]);
   } finally {
@@ -66,7 +80,11 @@ async function withHangGuard<T>(label: string, work: Promise<T>): Promise<T> {
   }
 }
 
-interface Fixture { orgId: string; actorId: string; documentId: string }
+interface Fixture {
+  orgId: string;
+  actorId: string;
+  documentId: string;
+}
 
 async function calculableOrg(): Promise<Fixture> {
   const org = await createScratchOrg();
@@ -106,26 +124,49 @@ async function calculableOrg(): Promise<Fixture> {
             '{}'::jsonb, false, true, '{}'::jsonb)`);
   const einAccountId = await seedUsEinAccount(org.orgId, actorId, subsidiaryId, "12-3456789");
   const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, "CA", {
-    federalAccountId: einAccountId, subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    federalAccountId: einAccountId,
+    subsidiaryId,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
     sourceReference: "CA original employer registration",
   });
   await upsertStatutoryRate({
-    orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-    region: "CA", filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
+    orgId: org.orgId,
+    actorId,
+    rates: US_PACK_RATES,
+    rateKey: "us_sui",
+    region: "CA",
+    filingAccountId,
+    taxYear: 2026,
+    values: { rate: "0.03", wageBase: "7000" },
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
   });
   await upsertStatutoryRate({
-    orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-    region: "CA", filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
+    orgId: org.orgId,
+    actorId,
+    rates: US_PACK_RATES,
+    rateKey: "us_futa",
+    region: "CA",
+    filingAccountId: null,
+    taxYear: 2026,
+    values: { rate: "0.006" },
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
   });
   // A deficit UI reserve balance is ETT-exempt: no leg posts, and these
   // tests (numbering contention, never ETT) assert none of it.
   await upsertStatutoryRate({
-    orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_ca_ett",
-    region: "CA", filingAccountId: null, taxYear: 2026,
+    orgId: org.orgId,
+    actorId,
+    rates: US_PACK_RATES,
+    rateKey: "us_ca_ett",
+    region: "CA",
+    filingAccountId: null,
+    taxYear: 2026,
     values: { reserveBalance: "-100.00" },
-    sourceCitation: "Test rate notice", reason: "test fixture rate",
+    sourceCitation: "Test rate notice",
+    reason: "test fixture rate",
   });
   const scheduleId = randomUUID();
   await db.execute(sql`
@@ -162,8 +203,12 @@ async function calculableOrg(): Promise<Fixture> {
             '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
             ${actorId}, ${actorId})`);
   const run = await createPayRun({
-    orgId: org.orgId, actorId, payScheduleId: scheduleId,
-    periodStart: PERIOD_START, periodEnd: PERIOD_END, payDate: PAY_DATE,
+    orgId: org.orgId,
+    actorId,
+    payScheduleId: scheduleId,
+    periodStart: PERIOD_START,
+    periodEnd: PERIOD_END,
+    payDate: PAY_DATE,
   });
   return { orgId: org.orgId, actorId, documentId: run.documentId };
 }
@@ -180,17 +225,19 @@ describe("calculation-holds-no-sequence-lock", { skip: !DB }, () => {
       // calculation allocates no number, so it needs neither.
       await holder.query(
         `insert into number_sequences as s (org_id, document_kind, prefix, next_number, padding, allocated_through) ` +
-        `values ($1, 'vendor_payment', 'AP-', 1, 5, 0) ` +
-        `on conflict on constraint sequences_org_kind_sub do update set next_number = s.next_number + 1 ` +
-        `where s.org_id = $1 returning prefix`,
+          `values ($1, 'vendor_payment', 'AP-', 1, 5, 0) ` +
+          `on conflict on constraint sequences_org_kind_sub do update set next_number = s.next_number + 1 ` +
+          `where s.org_id = $1 returning prefix`,
         [fx.orgId],
       );
       await holder.query(
         `update number_sequences set next_number = next_number where org_id = $1 and document_kind = 'pay_run'`,
         [fx.orgId],
       );
-      const result = await withHangGuard("pay-run calculation",
-        calculatePayRun({ orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId }));
+      const result = await withHangGuard(
+        "pay-run calculation",
+        calculatePayRun({ orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId }),
+      );
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
     } finally {
@@ -210,8 +257,10 @@ describe("calculation-holds-no-sequence-lock", { skip: !DB }, () => {
         `select document_id from pay_runs where org_id = $1 and document_id = $2 for update`,
         [fx.orgId, fx.documentId],
       );
-      const number = await withHangGuard("concurrent document numbering",
-        allocateDocumentNumber(db, fx.orgId, "vendor_payment", "AP-"));
+      const number = await withHangGuard(
+        "concurrent document numbering",
+        allocateDocumentNumber(db, fx.orgId, "vendor_payment", "AP-"),
+      );
       assert.match(number, /^AP-\d+$/);
     } finally {
       await holder.done();
@@ -225,13 +274,22 @@ describe("calculation-holds-no-sequence-lock", { skip: !DB }, () => {
       // The defaults that end the shared-prefix ambiguity: the run created
       // above numbers PR-00001, and the only sequence row in the org is the
       // run's own — the calculation allocates nothing further.
-      const rows = await db.execute<{ document_kind: string; prefix: string; document_number: string }>(sql`
+      const rows = await db.execute<{
+        document_kind: string;
+        prefix: string;
+        document_number: string;
+      }>(
+        sql`
         select s.document_kind, s.prefix, d.document_number
           from number_sequences s
           join pay_runs r on r.org_id = s.org_id and r.document_id = ${fx.documentId}
           join documents d on d.org_id = r.org_id and d.id = r.document_id
-         where s.org_id = ${fx.orgId}`, "objects");
-      assert.deepEqual(rows, [{ document_kind: "pay_run", prefix: "PR-", document_number: "PR-00001" }]);
+         where s.org_id = ${fx.orgId}`,
+        "objects",
+      );
+      assert.deepEqual(rows, [
+        { document_kind: "pay_run", prefix: "PR-", document_number: "PR-00001" },
+      ]);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

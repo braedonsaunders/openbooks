@@ -1,6 +1,6 @@
-import Link from 'next/link'
-import { Alert, AlertDescription, Badge, Button } from '@openbooks/ui'
-import { HomePanel } from '../../../components/module-home/client'
+import Link from "next/link";
+import { Alert, AlertDescription, Badge, Button } from "@openbooks/ui";
+import { HomePanel } from "../../../components/module-home/client";
 
 /**
  * The compliance cockpit's bespoke panel bodies, extracted from the page.
@@ -18,25 +18,19 @@ import { HomePanel } from '../../../components/module-home/client'
  */
 
 export interface BlockedBillItem {
-  documentId: string
-  documentNumber: string
-  billHref: string
-  vendorName: string
-  decisionLabel: string
-  decisionVariant: 'destructive' | 'warning'
-  reasons: string
-  openBalance: string
+  documentId: string;
+  documentNumber: string;
+  billHref: string;
+  vendorName: string;
+  decisionLabel: string;
+  decisionVariant: "destructive" | "warning";
+  reasons: string;
+  openBalance: string;
 }
 
-export function BlockedBillsSection({
-  rows,
-  empty,
-}: {
-  rows: BlockedBillItem[]
-  empty: string
-}) {
+export function BlockedBillsSection({ rows, empty }: { rows: BlockedBillItem[]; empty: string }) {
   if (rows.length === 0) {
-    return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{empty}</p>
+    return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{empty}</p>;
   }
   return (
     <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -51,9 +45,13 @@ export function BlockedBillsSection({
               >
                 {bill.documentNumber}
               </Link>
-              <span className="truncate text-sm text-slate-500 dark:text-slate-400">{bill.vendorName}</span>
+              <span className="truncate text-sm text-slate-500 dark:text-slate-400">
+                {bill.vendorName}
+              </span>
             </div>
-            <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{bill.reasons}</p>
+            <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+              {bill.reasons}
+            </p>
           </div>
           <span className="shrink-0 text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
             {bill.openBalance}
@@ -61,27 +59,27 @@ export function BlockedBillsSection({
         </li>
       ))}
     </ul>
-  )
+  );
 }
 
 export interface ExpiringVendorItem {
-  partyId: string
-  vendorHref: string
-  vendorName: string
-  stateLabel: string
-  stateVariant: 'success' | 'warning' | 'destructive' | 'secondary'
-  nextExpiry: string | null
+  partyId: string;
+  vendorHref: string;
+  vendorName: string;
+  stateLabel: string;
+  stateVariant: "success" | "warning" | "destructive" | "secondary";
+  nextExpiry: string | null;
 }
 
 export function ExpiringVendorsSection({
   rows,
   empty,
 }: {
-  rows: ExpiringVendorItem[]
-  empty: string
+  rows: ExpiringVendorItem[];
+  empty: string;
 }) {
   if (rows.length === 0) {
-    return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{empty}</p>
+    return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{empty}</p>;
   }
   return (
     <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -95,32 +93,34 @@ export function ExpiringVendorsSection({
           </Link>
           <div className="flex shrink-0 items-center gap-2">
             <Badge variant={row.stateVariant}>{row.stateLabel}</Badge>
-            <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{row.nextExpiry}</span>
+            <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+              {row.nextExpiry}
+            </span>
           </div>
         </li>
       ))}
     </ul>
-  )
+  );
 }
 
 export interface OutstandingWaiverItem {
-  id: string
-  waiverHref: string
-  waiverNumber: string
-  context: string
-  statusLabel: string
-  throughDate: string
+  id: string;
+  waiverHref: string;
+  waiverNumber: string;
+  context: string;
+  statusLabel: string;
+  throughDate: string;
 }
 
 export function OutstandingWaiversSection({
   rows,
   empty,
 }: {
-  rows: OutstandingWaiverItem[]
-  empty: string
+  rows: OutstandingWaiverItem[];
+  empty: string;
 }) {
   if (rows.length === 0) {
-    return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{empty}</p>
+    return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{empty}</p>;
   }
   return (
     <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -137,20 +137,22 @@ export function OutstandingWaiversSection({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Badge variant="warning">{waiver.statusLabel}</Badge>
-            <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{waiver.throughDate}</span>
+            <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+              {waiver.throughDate}
+            </span>
           </div>
         </li>
       ))}
     </ul>
-  )
+  );
 }
 
 export interface ReadinessQueueItem {
-  partyId: string
-  vendorHref: string
-  vendorName: string
-  issue: string
-  paidThisYear: string
+  partyId: string;
+  vendorHref: string;
+  vendorName: string;
+  issue: string;
+  paidThisYear: string;
 }
 
 /**
@@ -163,9 +165,9 @@ export function ComplianceSetupBanner({
   actionHref,
   actionLabel,
 }: {
-  prompt: string
-  actionHref: string
-  actionLabel: string
+  prompt: string;
+  actionHref: string;
+  actionLabel: string;
 }) {
   return (
     <Alert className="mb-4">
@@ -176,7 +178,7 @@ export function ComplianceSetupBanner({
         </Button>
       </AlertDescription>
     </Alert>
-  )
+  );
 }
 
 /**
@@ -193,12 +195,12 @@ export function WaiversPanel({
   rows,
   empty,
 }: {
-  title: string
-  hint: string
-  actionHref: string
-  actionLabel: string
-  rows: OutstandingWaiverItem[]
-  empty: string
+  title: string;
+  hint: string;
+  actionHref: string;
+  actionLabel: string;
+  rows: OutstandingWaiverItem[];
+  empty: string;
 }) {
   return (
     <HomePanel
@@ -214,7 +216,7 @@ export function WaiversPanel({
     >
       <OutstandingWaiversSection rows={rows} empty={empty} />
     </HomePanel>
-  )
+  );
 }
 
 export function ReadinessPanel({
@@ -225,12 +227,12 @@ export function ReadinessPanel({
   rows,
   empty,
 }: {
-  title: string
-  hint: string
-  actionHref: string
-  actionLabel: string
-  rows: ReadinessQueueItem[]
-  empty: string
+  title: string;
+  hint: string;
+  actionHref: string;
+  actionLabel: string;
+  rows: ReadinessQueueItem[];
+  empty: string;
 }) {
   return (
     <HomePanel
@@ -246,18 +248,18 @@ export function ReadinessPanel({
     >
       <ReadinessQueueSection rows={rows} empty={empty} />
     </HomePanel>
-  )
+  );
 }
 
 export function ReadinessQueueSection({
   rows,
   empty,
 }: {
-  rows: ReadinessQueueItem[]
-  empty: string
+  rows: ReadinessQueueItem[];
+  empty: string;
 }) {
   if (rows.length === 0) {
-    return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{empty}</p>
+    return <p className="p-4 text-sm text-slate-500 dark:text-slate-400">{empty}</p>;
   }
   return (
     <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -278,5 +280,5 @@ export function ReadinessQueueSection({
         </li>
       ))}
     </ul>
-  )
+  );
 }

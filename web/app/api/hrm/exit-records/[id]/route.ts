@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  getExitRecord,
-  updateExitRecord,
-} from "@openbooks/engine/hrm/performance/exits";
+import { getExitRecord, updateExitRecord } from "@openbooks/engine/hrm/performance/exits";
 
 import { isUuid } from "../../../../../lib/list-params";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
@@ -24,11 +21,7 @@ export const GET = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json(
-        { error: "invalid exit record" },
-        { status: 400 },
-      );
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid exit record" }, { status: 400 });
     try {
       const exit = await getExitRecord({
         orgId: gate.user.orgId,
@@ -47,17 +40,9 @@ export const PATCH = defineRoute({
   feature: "hrm",
   params: z.object({ id: z.string().min(1) }),
   body: patchExitBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json(
-        { error: "invalid exit record" },
-        { status: 400 },
-      );
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid exit record" }, { status: 400 });
 
     try {
       const exit = await updateExitRecord({
@@ -67,24 +52,14 @@ export const PATCH = defineRoute({
         expectedRevision: body.expectedRevision,
         ...(body.reason !== undefined ? { reason: body.reason } : {}),
         ...(body.reasonKind ? { reasonKind: body.reasonKind } : {}),
-        ...(body.isVoluntary !== undefined
-          ? { isVoluntary: body.isVoluntary }
-          : {}),
-        ...(body.isRegrettable !== undefined
-          ? { isRegrettable: body.isRegrettable }
-          : {}),
-        ...(body.wouldRehire !== undefined
-          ? { wouldRehire: body.wouldRehire }
-          : {}),
-        ...(body.interviewHeldOn !== undefined
-          ? { interviewHeldOn: body.interviewHeldOn }
-          : {}),
+        ...(body.isVoluntary !== undefined ? { isVoluntary: body.isVoluntary } : {}),
+        ...(body.isRegrettable !== undefined ? { isRegrettable: body.isRegrettable } : {}),
+        ...(body.wouldRehire !== undefined ? { wouldRehire: body.wouldRehire } : {}),
+        ...(body.interviewHeldOn !== undefined ? { interviewHeldOn: body.interviewHeldOn } : {}),
         ...(body.interviewerPartyId !== undefined
           ? { interviewerPartyId: body.interviewerPartyId }
           : {}),
-        ...(body.destination !== undefined
-          ? { destination: body.destination }
-          : {}),
+        ...(body.destination !== undefined ? { destination: body.destination } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
       });
       return NextResponse.json({ exit });

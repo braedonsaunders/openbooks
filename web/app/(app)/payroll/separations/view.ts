@@ -1,16 +1,23 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
-import { orgFilingYearOptions } from '@openbooks/engine/payroll/yearend'
-import { notFound } from 'next/navigation'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { pickString } from '../../../../lib/list-params'
-import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
+import { getTranslations } from "next-intl/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import type { YearEndFilingSection } from "@openbooks/engine/payroll/yearend";
+import { orgFilingYearOptions } from "@openbooks/engine/payroll/yearend";
+import { notFound } from "next/navigation";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { groupTabs } from "../../../../components/module-home/group-tabs";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { pickString } from "../../../../lib/list-params";
+import { scopedYearEndFilings } from "../../../../lib/payroll-scoped-views";
 
 /**
  * The separations cockpit, split into a loader and a spec.
@@ -53,41 +60,43 @@ import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
  */
 
 export interface SeparationsData {
-  title: string
-  description: string
-  viewTabs: Awaited<ReturnType<typeof groupTabs>>
-  year: number
-  years: number[]
-  sections: YearEndFilingSection[]
-  canFile: boolean
+  title: string;
+  description: string;
+  viewTabs: Awaited<ReturnType<typeof groupTabs>>;
+  year: number;
+  years: number[];
+  sections: YearEndFilingSection[];
+  canFile: boolean;
 }
 
 export async function loadSeparations(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<SeparationsData> {
-  const authz = await requirePermission('payroll.read')
-  await requireFeatureEnabled(authz.user.orgId, 'payroll')
-  const t = await getTranslations('payroll.separations')
+  const authz = await requirePermission("payroll.read");
+  await requireFeatureEnabled(authz.user.orgId, "payroll");
+  const t = await getTranslations("payroll.separations");
   // Same pack-derived offered years as the year-end cockpit (one shared
   // workspace, one derivation): the current tax year and declared editions of
   // the installed packs plus the org's own payroll data — never the calendar
   // year. The first offered year is the default.
-  const today = await businessToday(authz.user.orgId)
-  const years = await orgFilingYearOptions(authz.user.orgId, today)
-  const requested = Number(pickString(sp.year))
-  const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : years[0]!
+  const today = await businessToday(authz.user.orgId);
+  const years = await orgFilingYearOptions(authz.user.orgId, today);
+  const requested = Number(pickString(sp.year));
+  const year =
+    Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : years[0]!;
 
-  const filings = await scopedYearEndFilings(authz, year)
-  if (!filings) notFound()
+  const filings = await scopedYearEndFilings(authz, year);
+  if (!filings) notFound();
   const sections = filings.filter(
-    (filing) => filing.cadence === 'separation' && (filing.installed || filing.data.rows.length > 0),
-  )
+    (filing) =>
+      filing.cadence === "separation" && (filing.installed || filing.data.rows.length > 0),
+  );
 
-  const viewTabs = await groupTabs('payroll', '/payroll/separations', { orgId: authz.user.orgId })
+  const viewTabs = await groupTabs("payroll", "/payroll/separations", { orgId: authz.user.orgId });
 
   return {
-    title: t('title'),
-    description: t('description'),
+    title: t("title"),
+    description: t("description"),
     viewTabs,
     year,
     years,
@@ -95,21 +104,21 @@ export async function loadSeparations(
     // The electronic file is a filing act (payroll.run): a read-only caller
     // reads every separation but is never offered the download. The route
     // refuses it; the workspace gates it so it is never offered.
-    canFile: can(authz, 'payroll.run'),
-  }
+    canFile: can(authz, "payroll.run"),
+  };
 }
 
-const f = ref<SeparationsData>()
+const f = ref<SeparationsData>();
 
 export function separationsSpec(data: SeparationsData): PageSpec {
   return page({
-    route: '/payroll/separations',
-    layout: 'list',
+    route: "/payroll/separations",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: data.viewTabs })],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("module-home-tabs", { tabs: data.viewTabs })],
       }),
     ],
     body: [
@@ -119,12 +128,12 @@ export function separationsSpec(data: SeparationsData): PageSpec {
       // state, fetch mutations and every conditional pair; the spec only
       // names where it lives. Props are flat and exactly the component's
       // destructured signature `{ year, years, sections }`.
-      widgetBlock('separations-workspace', {
-        year: f('year'),
-        years: f('years'),
-        sections: f('sections'),
-        canFile: f('canFile'),
+      widgetBlock("separations-workspace", {
+        year: f("year"),
+        years: f("years"),
+        sections: f("sections"),
+        canFile: f("canFile"),
       }),
     ],
-  })
+  });
 }

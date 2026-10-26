@@ -1,28 +1,37 @@
-'use client'
+"use client";
 
-import { customFieldVisible, type CustomFieldViewer } from '@openbooks/customization'
-import type { LineGridColumn, LineGridOption } from './line-grid'
-import { CustomFieldInput } from './custom-field-input'
+import { customFieldVisible, type CustomFieldViewer } from "@openbooks/customization";
+import type { LineGridColumn, LineGridOption } from "./line-grid";
+import { CustomFieldInput } from "./custom-field-input";
 
 /** Client-safe shape of a custom field definition (see lib/custom-fields). */
 export interface CustomFieldDefClient {
-  key: string
-  label: string
-  fieldType: 'text' | 'long_text' | 'number' | 'currency' | 'date' | 'boolean' | 'select' | 'multi_select' | 'reference'
+  key: string;
+  label: string;
+  fieldType:
+    | "text"
+    | "long_text"
+    | "number"
+    | "currency"
+    | "date"
+    | "boolean"
+    | "select"
+    | "multi_select"
+    | "reference";
   config: {
-    options?: string[]
-    helpText?: string
-    placeholder?: string
-    defaultValue?: unknown
-    min?: number | string
-    max?: number | string
-    showInList?: boolean
-    referenceTable?: string
-    referenceFilter?: Record<string, string>
-    displayMode?: 'normal' | 'always' | 'hidden' | 'disabled' | 'readonly'
-    allowedRoles?: string[]
-  }
-  isRequired: boolean
+    options?: string[];
+    helpText?: string;
+    placeholder?: string;
+    defaultValue?: unknown;
+    min?: number | string;
+    max?: number | string;
+    showInList?: boolean;
+    referenceTable?: string;
+    referenceFilter?: Record<string, string>;
+    displayMode?: "normal" | "always" | "hidden" | "disabled" | "readonly";
+    allowedRoles?: string[];
+  };
+  isRequired: boolean;
 }
 
 /**
@@ -38,15 +47,15 @@ export function CustomFieldInputs({
   readOnly = false,
   viewer,
 }: {
-  defs: CustomFieldDefClient[]
-  values: Record<string, unknown>
-  onChange: (values: Record<string, unknown>) => void
-  readOnly?: boolean
-  viewer?: CustomFieldViewer | null
+  defs: CustomFieldDefClient[];
+  values: Record<string, unknown>;
+  onChange: (values: Record<string, unknown>) => void;
+  readOnly?: boolean;
+  viewer?: CustomFieldViewer | null;
 }) {
-  const visibleDefs = viewer ? defs.filter((def) => customFieldVisible(def, viewer)) : defs
-  if (visibleDefs.length === 0) return null
-  const set = (key: string, v: unknown) => onChange({ ...values, [key]: v })
+  const visibleDefs = viewer ? defs.filter((def) => customFieldVisible(def, viewer)) : defs;
+  if (visibleDefs.length === 0) return null;
+  const set = (key: string, v: unknown) => onChange({ ...values, [key]: v });
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -60,7 +69,7 @@ export function CustomFieldInputs({
         />
       ))}
     </div>
-  )
+  );
 }
 
 /**
@@ -75,42 +84,61 @@ export function customFieldColumns<Row extends Record<string, unknown>>(
 ): LineGridColumn<Row>[] {
   return defs
     .filter((d) => !viewer || customFieldVisible(d, viewer))
-    .filter((d) => d.config.displayMode !== 'hidden')
+    .filter((d) => d.config.displayMode !== "hidden")
     .map((def) => {
-      const base = { key: `cf_${def.key}`, label: def.label, help: def.config.helpText, required: def.isRequired }
-      if (def.config.displayMode === 'disabled' || def.config.displayMode === 'readonly') {
-        return { ...base, width: 'minmax(120px,1fr)', type: 'readonly' as const, render: (row: Row) => {
-          const value = row[base.key]
-          return Array.isArray(value) ? value.join(', ') : String(value ?? '')
-        } }
+      const base = {
+        key: `cf_${def.key}`,
+        label: def.label,
+        help: def.config.helpText,
+        required: def.isRequired,
+      };
+      if (def.config.displayMode === "disabled" || def.config.displayMode === "readonly") {
+        return {
+          ...base,
+          width: "minmax(120px,1fr)",
+          type: "readonly" as const,
+          render: (row: Row) => {
+            const value = row[base.key];
+            return Array.isArray(value) ? value.join(", ") : String(value ?? "");
+          },
+        };
       }
       switch (def.fieldType) {
-        case 'select':
+        case "select":
           return {
             ...base,
-            width: '130px',
-            type: 'select' as const,
-            options: [{ value: '', label: '—' }, ...(def.config.options ?? []).map((o): LineGridOption => ({ value: o, label: o }))],
-          }
-        case 'multi_select':
+            width: "130px",
+            type: "select" as const,
+            options: [
+              { value: "", label: "—" },
+              ...(def.config.options ?? []).map((o): LineGridOption => ({ value: o, label: o })),
+            ],
+          };
+        case "multi_select":
           return {
             ...base,
-            width: '160px',
-            type: 'text' as const,
+            width: "160px",
+            type: "text" as const,
             placeholder: def.label,
-          }
-        case 'number':
-          return { ...base, width: '110px', type: 'decimal' as const, decimalScale: 8, align: 'right' as const }
-        case 'currency':
-          return { ...base, width: '110px', type: 'amount' as const, align: 'right' as const }
-        case 'date':
-          return { ...base, width: '130px', type: 'date' as const }
-        case 'boolean':
-          return { ...base, width: '70px', type: 'text' as const }
-        case 'reference':
-          return { ...base, width: '160px', type: 'text' as const }
+          };
+        case "number":
+          return {
+            ...base,
+            width: "110px",
+            type: "decimal" as const,
+            decimalScale: 8,
+            align: "right" as const,
+          };
+        case "currency":
+          return { ...base, width: "110px", type: "amount" as const, align: "right" as const };
+        case "date":
+          return { ...base, width: "130px", type: "date" as const };
+        case "boolean":
+          return { ...base, width: "70px", type: "text" as const };
+        case "reference":
+          return { ...base, width: "160px", type: "text" as const };
         default:
-          return { ...base, width: 'minmax(120px,1fr)', type: 'text' as const }
+          return { ...base, width: "minmax(120px,1fr)", type: "text" as const };
       }
-    })
+    });
 }

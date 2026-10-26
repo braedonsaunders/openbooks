@@ -8,7 +8,10 @@ import test from "node:test";
 
 // jsdom first: the workspace reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/features", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/setup/features",
+  matchMediaMatches: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { pathToFileURL } = await import("node:url");
@@ -46,7 +49,8 @@ const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
 const { createTranslator } = await import("next-intl");
 const { LOCALE_CODES } = await import("../../../../../i18n/config");
-const { FEATURE_CATEGORIES, FEATURE_GROUPS } = await import("@openbooks/engine/organization/feature-catalog");
+const { FEATURE_CATEGORIES, FEATURE_GROUPS } =
+  await import("@openbooks/engine/organization/feature-catalog");
 const messages = (await import("../../../../../messages/fr")).default;
 const { FeaturesWorkspace } = await import("./FeaturesWorkspace");
 
@@ -59,12 +63,24 @@ async function renderWorkspace() {
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      <NextIntlClientProvider locale="fr" messages={messages} timeZone="UTC" onError={(error) => { throw error; }}>
+      <NextIntlClientProvider
+        locale="fr"
+        messages={messages}
+        timeZone="UTC"
+        onError={(error) => {
+          throw error;
+        }}
+      >
         <FeaturesWorkspace
           features={[
             { key: "bankFeeds", category: "finance", enabled: true, requiresAll: ["banking"] },
             { key: "banking", category: "finance", enabled: false },
-            { key: "fixedAssets", category: "finance", enabled: true, recommends: ["multiCurrency"] },
+            {
+              key: "fixedAssets",
+              category: "finance",
+              enabled: true,
+              recommends: ["multiCurrency"],
+            },
             { key: "multiCurrency", category: "finance", enabled: false },
             { key: "queryConsole", category: "platform", enabled: false },
           ]}
@@ -88,24 +104,45 @@ test("requires and recommends reasons render translated with catalog titles", as
   const { unmount } = await renderWorkspace();
   t.after(unmount);
   const text = document.body.textContent ?? "";
-  assert.match(document.querySelector('[data-feature-summary]')?.textContent ?? '', /1 sur 5 activées/,
-    "the company summary includes Platform and counts effective dependencies, independent of the Finance body");
-  assert.match(text, /Requiert Banque\./, "the missing requirement must read French with the catalog title");
+  assert.match(
+    document.querySelector("[data-feature-summary]")?.textContent ?? "",
+    /1 sur 5 activées/,
+    "the company summary includes Platform and counts effective dependencies, independent of the Finance body",
+  );
+  assert.match(
+    text,
+    /Requiert Banque\./,
+    "the missing requirement must read French with the catalog title",
+  );
   assert.match(
     text,
     /Fonctionne mieux avec Multidevise\./,
     "the missing recommendation must read French with the catalog title",
   );
   assert.ok(!/Requires /.test(text), "no English Requires template may leak into the French page");
-  assert.ok(!/Works best with /.test(text), "no English Works best with template may leak into the French page");
-  assert.match(text, /Autres fonctionnalités/, "ungrouped features have a translated fallback heading");
+  assert.ok(
+    !/Works best with /.test(text),
+    "no English Works best with template may leak into the French page",
+  );
+  assert.match(
+    text,
+    /Autres fonctionnalités/,
+    "ungrouped features have a translated fallback heading",
+  );
 });
 
 test("all shipped locales resolve feature areas and group headings without missing messages", async () => {
   const groupKeys = new Set([...Object.values(FEATURE_GROUPS).flat(), "other"]);
   for (const locale of LOCALE_CODES) {
     const catalog = (await import(`../../../../../messages/${locale}/index.ts`)).default;
-    const t = createTranslator({ locale, messages: catalog, namespace: "admin", onError: (error) => { throw error; } });
+    const t = createTranslator({
+      locale,
+      messages: catalog,
+      namespace: "admin",
+      onError: (error) => {
+        throw error;
+      },
+    });
     for (const category of FEATURE_CATEGORIES) {
       assert.ok(t(`setup.features.categories.${category}`).trim(), `${locale}: ${category}`);
     }
@@ -119,7 +156,8 @@ test("search finds a feature on another tab, accent-insensitively, and clearing 
   const { unmount } = await renderWorkspace();
   t.after(unmount);
   const title = "Console de requêtes";
-  const rendered = () => [...document.querySelectorAll('[role="switch"]')].map((sw) => sw.getAttribute("aria-label"));
+  const rendered = () =>
+    [...document.querySelectorAll('[role="switch"]')].map((sw) => sw.getAttribute("aria-label"));
   assert.ok(!rendered().includes(title), "a Platform feature stays off the Finance tab");
   const input = document.querySelector('input[type="search"]') as HTMLInputElement;
   const type = async (value: string) => {
@@ -137,7 +175,14 @@ test("search finds a feature on another tab, accent-insensitively, and clearing 
     "matches are grouped under their tab name",
   );
   await type("introuvable");
-  assert.match(document.body.textContent ?? "", /introuvable/, "an empty search names the query it could not match");
+  assert.match(
+    document.body.textContent ?? "",
+    /introuvable/,
+    "an empty search names the query it could not match",
+  );
   await type("");
-  assert.ok(rendered().includes("Banque") && !rendered().includes(title), "a cleared search returns to the active tab");
+  assert.ok(
+    rendered().includes("Banque") && !rendered().includes(title),
+    "a cleared search returns to the active tab",
+  );
 });

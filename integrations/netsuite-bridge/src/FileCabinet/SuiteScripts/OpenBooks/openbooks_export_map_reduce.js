@@ -3,18 +3,20 @@
  * @NScriptType MapReduceScript
  * @NModuleScope SameAccount
  */
-define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, search) => {
+define(["N/file", "N/query", "N/runtime", "N/search"], (file, query, runtime, search) => {
   const SCHEMA_VERSION = 1;
-  const JOB_PARAMETER = 'custscript_openbooks_export_job_id';
-  const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
+  const JOB_PARAMETER = "custscript_openbooks_export_job_id";
+  const MARKER_PATH = "SuiteScripts/OpenBooks/Jobs/bridge-marker.json";
   const jobsFolder = () => file.load({ id: MARKER_PATH }).folder;
   const normalize = (value) => {
-    if (value == null || typeof value === 'string' || typeof value === 'boolean') return value;
-    if (typeof value === 'number') return String(value);
+    if (value == null || typeof value === "string" || typeof value === "boolean") return value;
+    if (typeof value === "number") return String(value);
     if (Array.isArray(value)) return value.map(normalize);
-    if (typeof value === 'object') {
+    if (typeof value === "object") {
       const out = {};
-      Object.keys(value).forEach((key) => { out[key] = normalize(value[key]); });
+      Object.keys(value).forEach((key) => {
+        out[key] = normalize(value[key]);
+      });
       return out;
     }
     return String(value);
@@ -22,8 +24,8 @@ define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, se
 
   const currentJobId = () => {
     const value = runtime.getCurrentScript().getParameter({ name: JOB_PARAMETER });
-    if (typeof value !== 'string' || !/^[A-Za-z0-9_.:-]{1,160}$/.test(value)) {
-      throw new Error('OpenBooks export task is missing its job identity');
+    if (typeof value !== "string" || !/^[A-Za-z0-9_.:-]{1,160}$/.test(value)) {
+      throw new Error("OpenBooks export task is missing its job identity");
     }
     return value;
   };
@@ -31,26 +33,34 @@ define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, se
   const getInputData = () => {
     const jobId = currentJobId();
     return search.create({
-      type: 'file',
-      filters: [['folder', 'anyof', jobsFolder()], 'AND', ['name', 'startswith', `ob-request-${jobId}-`]],
-      columns: ['internalid', 'name'],
+      type: "file",
+      filters: [
+        ["folder", "anyof", jobsFolder()],
+        "AND",
+        ["name", "startswith", `ob-request-${jobId}-`],
+      ],
+      columns: ["internalid", "name"],
     });
   };
 
-  const saveJson = (name, body) => file.create({
-    name,
-    fileType: file.Type.JSON,
-    contents: JSON.stringify(body),
-    folder: jobsFolder(),
-    isOnline: false,
-  }).save();
+  const saveJson = (name, body) =>
+    file
+      .create({
+        name,
+        fileType: file.Type.JSON,
+        contents: JSON.stringify(body),
+        folder: jobsFolder(),
+        isOnline: false,
+      })
+      .save();
 
   const map = (context) => {
     const searchResult = JSON.parse(context.value);
     const requestFile = file.load({ id: searchResult.id });
     const request = JSON.parse(requestFile.getContents());
     const jobId = String(request.jobId);
-    if (jobId !== currentJobId()) throw new Error('OpenBooks export request does not belong to this task');
+    if (jobId !== currentJobId())
+      throw new Error("OpenBooks export request does not belong to this task");
     const partId = String(request.partId);
     try {
       const queryOptions = {
@@ -65,7 +75,7 @@ define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, se
       let chunkIndex = 0;
       const flush = () => {
         if (buffered.length === 0) return;
-        const name = `ob-chunk-${jobId}-${partId}-${String(chunkIndex).padStart(6, '0')}.json`;
+        const name = `ob-chunk-${jobId}-${partId}-${String(chunkIndex).padStart(6, "0")}.json`;
         const id = saveJson(name, {
           schemaVersion: SCHEMA_VERSION,
           jobId,
@@ -90,14 +100,18 @@ define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, se
         }).length;
         // Consolidate SuiteQL pages to reduce RESTlet round-trips, while
         // staying comfortably below the 9 MB authenticated read limit.
-        if (buffered.length > 0 && (candidate.length > 5000 || candidateBytes > 3 * 1024 * 1024)) flush();
+        if (buffered.length > 0 && (candidate.length > 5000 || candidateBytes > 3 * 1024 * 1024))
+          flush();
         buffered.push(...values);
         if (buffered.length >= 5000) flush();
       });
       flush();
       requestFile.name = `ob-complete-${jobId}-${partId}.json`;
       requestFile.save();
-      context.write({ key: jobId, value: JSON.stringify({ partId, status: 'complete', rows, chunks }) });
+      context.write({
+        key: jobId,
+        value: JSON.stringify({ partId, status: "complete", rows, chunks }),
+      });
     } catch (error) {
       saveJson(`ob-error-${jobId}-${partId}.json`, {
         schemaVersion: SCHEMA_VERSION,
@@ -107,7 +121,10 @@ define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, se
       });
       requestFile.name = `ob-failed-${jobId}-${partId}.json`;
       requestFile.save();
-      context.write({ key: jobId, value: JSON.stringify({ partId, status: 'failed', rows: 0, chunks: [] }) });
+      context.write({
+        key: jobId,
+        value: JSON.stringify({ partId, status: "failed", rows: 0, chunks: [] }),
+      });
     }
   };
 
@@ -116,7 +133,7 @@ define(['N/file', 'N/query', 'N/runtime', 'N/search'], (file, query, runtime, se
     saveJson(`ob-summary-${context.key}.json`, {
       schemaVersion: SCHEMA_VERSION,
       jobId: context.key,
-      status: parts.every((part) => part.status === 'complete') ? 'complete' : 'failed',
+      status: parts.every((part) => part.status === "complete") ? "complete" : "failed",
       rows: parts.reduce((sum, part) => sum + part.rows, 0),
       parts,
       finishedAt: new Date().toISOString(),

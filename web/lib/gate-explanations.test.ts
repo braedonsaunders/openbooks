@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { stubModules, withPlatformDbTestSurface } from '../testing/stub-modules.ts'
+import { stubModules, withPlatformDbTestSurface } from "../testing/stub-modules.ts";
 
 // Consolidated shared behavior for every "exists but gated" refusal; each
 // case below pins its explanation page. A gated route names its feature or
@@ -56,14 +56,29 @@ const hooks = registerHooks({
       /lib\/authz(-core)?\.ts$/.test(context.parentURL ?? "")
     ) {
       const source = specifier === "./auth" ? AUTH_MOCK : SUBSIDIARIES_MOCK;
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(source) };
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript," + encodeURIComponent(source),
+      };
     }
     if (specifier.endsWith("/extension-permission-availability.ts")) {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(AVAILABILITY_MOCK) };
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript," + encodeURIComponent(AVAILABILITY_MOCK),
+      };
     }
     // authz-core reads grants through the public database facade.
-    if (specifier === "@openbooks/engine/platform/db" || specifier === "@openbooks/engine/platform/database") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(DB_MOCK) };
+    if (
+      specifier === "@openbooks/engine/platform/db" ||
+      specifier === "@openbooks/engine/platform/database"
+    ) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript," + encodeURIComponent(DB_MOCK),
+      };
     }
     if (
       (specifier === "./cash/core" || specifier === "./cash/open-items") &&
@@ -84,7 +99,11 @@ const hooks = registerHooks({
       (context.parentURL?.includes("lib/feature-gates.ts") ||
         context.parentURL?.includes("lib/compliance.ts"))
     ) {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(FEATURES_MOCK) };
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript," + encodeURIComponent(FEATURES_MOCK),
+      };
     }
     return nextResolve(specifier, context);
   },
@@ -95,7 +114,8 @@ const { featureRequiredHref, parseFeatureRequiredParam, accessDeniedHref } =
 const { requirePermission } = await import("./authz.ts");
 const { requireSuperAdmin } = await import("./super-admin.ts");
 const { requireFeatureEnabled } = await import("./feature-gates.ts");
-const { requireComplianceFeature, requireInformationReturnsFeature, requireLienWaiverFeature } = await import("./compliance.ts");
+const { requireComplianceFeature, requireInformationReturnsFeature, requireLienWaiverFeature } =
+  await import("./compliance.ts");
 test.after(() => hooks.deregister());
 
 function fakeUser(isSuperAdmin: boolean): NonNullable<typeof globalThis.__gateUser> {
@@ -230,7 +250,10 @@ const webDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const messagesDir = join(webDir, "messages");
 const shellCatalog = (locale: string): Record<string, unknown> =>
-  JSON.parse(readFileSync(join(messagesDir, locale, "shell.json"), "utf8")) as Record<string, unknown>;
+  JSON.parse(readFileSync(join(messagesDir, locale, "shell.json"), "utf8")) as Record<
+    string,
+    unknown
+  >;
 const KEYS = [
   "featureOffTitle",
   "featureOffDescription",
@@ -253,7 +276,10 @@ for (const locale of ["de", "es", "fr", "ja", "pt-BR", "zh"]) {
     for (const key of KEYS) {
       const value: unknown = routeState[key];
       assert.equal(typeof value, "string", `${locale} routeState.${key} must be a string`);
-      assert.ok((value as string).trim().length > 0, `${locale} routeState.${key} must not be empty`);
+      assert.ok(
+        (value as string).trim().length > 0,
+        `${locale} routeState.${key} must not be empty`,
+      );
       assert.notEqual(value, english[key], `${locale} routeState.${key} must not be English`);
     }
   });

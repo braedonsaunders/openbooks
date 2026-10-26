@@ -1,4 +1,4 @@
-import { canonicalDecimal } from '@openbooks/engine/money/decimal'
+import { canonicalDecimal } from "@openbooks/engine/money/decimal";
 
 /**
  * Exact conversions between operator majors ("120.50") and storage minors
@@ -10,20 +10,20 @@ import { canonicalDecimal } from '@openbooks/engine/money/decimal'
  */
 
 export function minorToMajor(minor: string | number | bigint, exponent: number): string | null {
-  let units: bigint
+  let units: bigint;
   try {
-    units = typeof minor === 'bigint' ? minor : BigInt(String(minor).trim())
+    units = typeof minor === "bigint" ? minor : BigInt(String(minor).trim());
   } catch {
-    return null
+    return null;
   }
-  if (!Number.isInteger(exponent) || exponent < 0 || exponent > 4) return null
-  const negative = units < 0n
-  const digits = (negative ? -units : units).toString()
-  if (exponent === 0) return `${negative ? '-' : ''}${digits}`
-  const padded = digits.padStart(exponent + 1, '0')
-  const head = padded.slice(0, -exponent)
-  const tail = padded.slice(-exponent)
-  return `${negative ? '-' : ''}${head}.${tail}`
+  if (!Number.isInteger(exponent) || exponent < 0 || exponent > 4) return null;
+  const negative = units < 0n;
+  const digits = (negative ? -units : units).toString();
+  if (exponent === 0) return `${negative ? "-" : ""}${digits}`;
+  const padded = digits.padStart(exponent + 1, "0");
+  const head = padded.slice(0, -exponent);
+  const tail = padded.slice(-exponent);
+  return `${negative ? "-" : ""}${head}.${tail}`;
 }
 
 /**
@@ -32,11 +32,13 @@ export function minorToMajor(minor: string | number | bigint, exponent: number):
  * (decimalNullRefusal/moneyRefusal) instead of inventing advice here.
  */
 export function majorToMinor(major: string, exponent: number): string | null {
-  if (!Number.isInteger(exponent) || exponent < 0 || exponent > 4) return null
-  const canonical = canonicalDecimal(major, exponent)
-  if (canonical == null) return null
-  const negative = canonical.startsWith('-')
-  const [whole, fraction = ''] = canonical.replace(/^[+-]/, '').split('.')
-  const minor = BigInt(whole || '0') * 10n ** BigInt(exponent) + BigInt((fraction + '0'.repeat(exponent)).slice(0, exponent) || '0')
-  return (negative ? '-' : '') + minor.toString()
+  if (!Number.isInteger(exponent) || exponent < 0 || exponent > 4) return null;
+  const canonical = canonicalDecimal(major, exponent);
+  if (canonical == null) return null;
+  const negative = canonical.startsWith("-");
+  const [whole, fraction = ""] = canonical.replace(/^[+-]/, "").split(".");
+  const minor =
+    BigInt(whole || "0") * 10n ** BigInt(exponent) +
+    BigInt((fraction + "0".repeat(exponent)).slice(0, exponent) || "0");
+  return (negative ? "-" : "") + minor.toString();
 }

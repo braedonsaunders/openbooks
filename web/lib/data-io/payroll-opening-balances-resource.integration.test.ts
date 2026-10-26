@@ -5,17 +5,13 @@ import test from "node:test";
 // The resource imports the `server-only` marker, which the shared test
 // preset stubs. Same dynamic-import pattern as the data-io
 // payroll-opening-entitlements suite.
-const { payrollOpeningBalancesResource } = (await import(
-  "./payroll-opening-balances-resource.ts"
-)) as typeof import("./payroll-opening-balances-resource.ts");
+const { payrollOpeningBalancesResource } =
+  (await import("./payroll-opening-balances-resource.ts")) as typeof import("./payroll-opening-balances-resource.ts");
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-const {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  seedFlowActors,
-} = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 /**
  * Opening-balance import guards: the resource used to save each file row
@@ -56,22 +52,31 @@ async function seedEmployee(
 }
 
 async function openingCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from payroll_opening_balances where org_id = ${orgId}`, "objects"));
+  const rows = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from payroll_opening_balances where org_id = ${orgId}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
 async function auditActions(orgId: string): Promise<string[]> {
-  const rows = (await db.execute<{ action: string }>(sql`
+  const rows = await db.execute<{ action: string }>(
+    sql`
     select action from audit_log
      where org_id = ${orgId} and table_name = 'payroll_opening_balances'
-     order by id`, "objects"));
+     order by id`,
+    "objects",
+  );
   return rows.map((r) => r.action);
 }
 
 async function storedTaxable(orgId: string): Promise<string | null> {
-  const rows = (await db.execute<{ taxable_ytd: string }>(sql`
-    select taxable_ytd from payroll_opening_balances where org_id = ${orgId}`, "objects"));
+  const rows = await db.execute<{ taxable_ytd: string }>(
+    sql`
+    select taxable_ytd from payroll_opening_balances where org_id = ${orgId}`,
+    "objects",
+  );
   return rows[0]?.taxable_ytd ?? null;
 }
 
@@ -88,14 +93,14 @@ test(
     await seedEmployee(org.orgId, actorId, "Aldo Rossi", "ALDO01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     const ctx = {
-      orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      actorId,
+      dryRun: true,
+      allowedSubsidiaryIds: null,
     };
     // Same employee twice under two spellings (name, then code): keying on
     // the raw cell would miss this, so the guard must use the RESOLVED id.
-    const rows = [
-      carryIn("Aldo Rossi", "50000", "8000"),
-      carryIn("ALDO01", "60000", "9000"),
-    ];
+    const rows = [carryIn("Aldo Rossi", "50000", "8000"), carryIn("ALDO01", "60000", "9000")];
     try {
       const preview = await resource.write(rows, "insert", ctx);
       assert.equal(preview.created, 0);
@@ -137,12 +142,12 @@ test(
     await seedEmployee(org.orgId, actorId, "Bianca Neri", "BIA01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     const ctx = {
-      orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      actorId,
+      dryRun: true,
+      allowedSubsidiaryIds: null,
     };
-    const rows = [
-      carryIn("Bianca Neri", "50000", "8000"),
-      carryIn("Bianca Neri", "50000", "8000"),
-    ];
+    const rows = [carryIn("Bianca Neri", "50000", "8000"), carryIn("Bianca Neri", "50000", "8000")];
     try {
       const preview = await resource.write(rows, "insert", ctx);
       assert.equal(preview.failed, 2);
@@ -171,15 +176,15 @@ test(
     const resource = payrollOpeningBalancesResource(org.orgId);
     // Empty allow-list: every employee is outside the caller's scope.
     const ctx = {
-      orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: new Set<string>(),
+      orgId: org.orgId,
+      actorId,
+      dryRun: true,
+      allowedSubsidiaryIds: new Set<string>(),
     };
     // Two spellings of one hidden employee: scope runs before duplicate
     // grouping, so both rows fail closed with scope errors rather than
     // disclosing through a duplicate error that the name resolves.
-    const rows = [
-      carryIn("Elsa Gialli", "50000", "8000"),
-      carryIn("ELS01", "60000", "9000"),
-    ];
+    const rows = [carryIn("Elsa Gialli", "50000", "8000"), carryIn("ELS01", "60000", "9000")];
     try {
       const preview = await resource.write(rows, "insert", ctx);
       assert.equal(preview.failed, 2);
@@ -219,7 +224,10 @@ test(
     await seedEmployee(org.orgId, actorId, "Carlo Bianchi", "CAR01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     const ctx = {
-      orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      actorId,
+      dryRun: true,
+      allowedSubsidiaryIds: null,
     };
     const rows = [{ employee: "Carlo Bianchi", taxYear: 2026 }];
     try {
@@ -252,20 +260,22 @@ test(
     await seedEmployee(org.orgId, actorId, "Dora Verdi", "DOR01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     const ctx = {
-      orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      actorId,
+      dryRun: true,
+      allowedSubsidiaryIds: null,
     };
     try {
-      const preview = await resource.write(
-        [carryIn("Dora Verdi", "50000", "8000")], "insert", ctx,
-      );
+      const preview = await resource.write([carryIn("Dora Verdi", "50000", "8000")], "insert", ctx);
       assert.deepEqual(preview.errors, []);
       assert.equal(preview.created, 1);
       assert.equal(preview.updated, 0);
       assert.equal(await openingCount(org.orgId), 0);
 
-      const committed = await resource.write(
-        [carryIn("Dora Verdi", "50000", "8000")], "insert", { ...ctx, dryRun: false },
-      );
+      const committed = await resource.write([carryIn("Dora Verdi", "50000", "8000")], "insert", {
+        ...ctx,
+        dryRun: false,
+      });
       assert.deepEqual(committed.errors, []);
       assert.equal(committed.created, 1);
       assert.equal(await openingCount(org.orgId), 1);
@@ -276,14 +286,17 @@ test(
       // and commit agree it is an update, storage is gone, and the delete is
       // audited with what it removed.
       const clearPreview = await resource.write(
-        [{ employee: "Dora Verdi", taxYear: 2026 }], "upsert", ctx,
+        [{ employee: "Dora Verdi", taxYear: 2026 }],
+        "upsert",
+        ctx,
       );
       assert.deepEqual(clearPreview.errors, []);
       assert.equal(clearPreview.updated, 1);
 
-      const cleared = await resource.write(
-        [{ employee: "Dora Verdi", taxYear: 2026 }], "upsert", { ...ctx, dryRun: false },
-      );
+      const cleared = await resource.write([{ employee: "Dora Verdi", taxYear: 2026 }], "upsert", {
+        ...ctx,
+        dryRun: false,
+      });
       assert.deepEqual(cleared.errors, []);
       assert.equal(cleared.updated, 1);
       assert.equal(await openingCount(org.orgId), 0);
@@ -303,16 +316,23 @@ test(
     await seedEmployee(org.orgId, actorId, "Felix Blanc", "FEL01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     const ctx = {
-      orgId: org.orgId, actorId, dryRun: false, allowedSubsidiaryIds: null,
+      orgId: org.orgId,
+      actorId,
+      dryRun: false,
+      allowedSubsidiaryIds: null,
     };
     try {
       // The declared program is a column: the CA pack's qpip program arrives
       // as `program:qpip` labeled from the declaration.
       const columnKeys = (await resource.columns()).map((c) => c.key);
-      assert.ok(columnKeys.includes("program:qpip"), "the declared program is an importable column");
+      assert.ok(
+        columnKeys.includes("program:qpip"),
+        "the declared program is an importable column",
+      );
       const committed = await resource.write(
         [{ employee: "FEL01", taxYear: 2026, "program:qpip": "12000" }],
-        "insert", ctx,
+        "insert",
+        ctx,
       );
       assert.deepEqual(committed.errors, []);
       assert.equal(committed.created, 1);
@@ -326,7 +346,8 @@ test(
       // would write a carry-in no slip reader can observe.
       const refused = await resource.write(
         [{ employee: "FEL01", taxYear: 2026, "program:qpiq": "100" }],
-        "insert", ctx,
+        "insert",
+        ctx,
       );
       assert.equal(refused.failed, 1);
       assert.match(refused.errors[0]!.message, /"qpiq" is not a declared contribution program/);
@@ -336,26 +357,48 @@ test(
   },
 );
 
-test('opening imports retain adoption rationale and source reference while exports omit those command inputs', {skip:!DB}, async () => {
-  const org=await withBypassContext(()=>createScratchOrg())
-  try {
-    const actorId=(await withBypassContext(()=>seedFlowActors(org.orgId))).adminId
-    await seedEmployee(org.orgId,actorId,'Carry-in worker','CARRY01')
-    const resource=payrollOpeningBalancesResource(org.orgId)
-    assert.ok((await resource.fields()).some(field=>field.key==='auditReason'))
-    assert.ok(!(await resource.columns()).some(field=>field.key==='auditReason'||field.key==='sourceReference'))
-    const row={...carryIn('CARRY01','100.25','0'),auditReason:'Retain reviewed adoption basis',sourceReference:'register:annual-2026'}
-    const ctx={orgId:org.orgId,actorId,dryRun:false,allowedSubsidiaryIds:null}
-    const saved=await resource.write([row],'insert',ctx)
-    assert.deepEqual(saved.errors,[])
-    const audit=(await db.execute<{changes:Record<string,unknown>}>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='payroll_opening_balances' order by id desc limit 1`, "objects"))[0]!
-    assert.equal(audit.changes.reason,row.auditReason)
-    assert.equal(audit.changes.sourceReference,row.sourceReference)
-    for(const dryRun of [true,false]) {
-      const refused=await resource.write([{...row,auditReason:' '}],'upsert',{...ctx,dryRun})
-      assert.equal(refused.failed,1)
-      assert.equal(refused.updated,0)
+test(
+  "opening imports retain adoption rationale and source reference while exports omit those command inputs",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+      await seedEmployee(org.orgId, actorId, "Carry-in worker", "CARRY01");
+      const resource = payrollOpeningBalancesResource(org.orgId);
+      assert.ok((await resource.fields()).some((field) => field.key === "auditReason"));
+      assert.ok(
+        !(await resource.columns()).some(
+          (field) => field.key === "auditReason" || field.key === "sourceReference",
+        ),
+      );
+      const row = {
+        ...carryIn("CARRY01", "100.25", "0"),
+        auditReason: "Retain reviewed adoption basis",
+        sourceReference: "register:annual-2026",
+      };
+      const ctx = { orgId: org.orgId, actorId, dryRun: false, allowedSubsidiaryIds: null };
+      const saved = await resource.write([row], "insert", ctx);
+      assert.deepEqual(saved.errors, []);
+      const audit = (
+        await db.execute<{ changes: Record<string, unknown> }>(
+          sql`select changes from audit_log where org_id=${org.orgId} and table_name='payroll_opening_balances' order by id desc limit 1`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(audit.changes.reason, row.auditReason);
+      assert.equal(audit.changes.sourceReference, row.sourceReference);
+      for (const dryRun of [true, false]) {
+        const refused = await resource.write([{ ...row, auditReason: " " }], "upsert", {
+          ...ctx,
+          dryRun,
+        });
+        assert.equal(refused.failed, 1);
+        assert.equal(refused.updated, 0);
+      }
+      assert.equal(await storedTaxable(org.orgId), "100.2500");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
-    assert.equal(await storedTaxable(org.orgId),'100.2500')
-  } finally {await dropScratchOrgReporting(org.orgId)}
-})
+  },
+);

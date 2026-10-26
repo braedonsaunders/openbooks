@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Building2, KeyRound, Mail, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@openbooks/ui";
-import { useTranslations } from 'next-intl'
+import { useTranslations } from "next-intl";
 
 export type PlatformTileIconKey = "building-2" | "users" | "key-round" | "mail";
 
@@ -20,7 +20,7 @@ const TILE_ICONS: Record<PlatformTileIconKey, LucideIcon> = {
  * carries no data — so the registry entry takes no props.
  */
 export function PlatformNotice() {
-  const t = useTranslations('platform.notice')
+  const t = useTranslations("platform.notice");
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/60 dark:bg-amber-950/25">
       <div className="flex items-start gap-3">
@@ -28,12 +28,8 @@ export function PlatformNotice() {
           <ShieldCheck size={20} />
         </span>
         <div>
-          <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">
-            {t('title')}
-          </p>
-          <p className="mt-0.5 text-sm text-amber-800 dark:text-amber-300">
-            {t('description')}
-          </p>
+          <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">{t("title")}</p>
+          <p className="mt-0.5 text-sm text-amber-800 dark:text-amber-300">{t("description")}</p>
         </div>
       </div>
     </div>
@@ -66,10 +62,7 @@ export function PlatformTile({
   const Icon = TILE_ICONS[iconKey];
   return (
     <Link href={href as never} className="group">
-      <Card
-        interactive
-        className="h-full hover:border-amber-300 dark:hover:border-amber-800"
-      >
+      <Card interactive className="h-full hover:border-amber-300 dark:hover:border-amber-800">
         <CardContent className="flex h-full flex-col p-4">
           <div className="flex items-start justify-between gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800/60">
@@ -79,12 +72,8 @@ export function PlatformTile({
               {stat}
             </span>
           </div>
-          <h2 className="mt-4 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {title}
-          </h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-            {description}
-          </p>
+          <h2 className="mt-4 text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>
           <p className="mt-auto pt-4 text-xs font-medium text-amber-700 dark:text-amber-300">
             {detail}
           </p>

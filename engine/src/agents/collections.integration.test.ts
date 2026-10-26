@@ -26,14 +26,25 @@ test(
       const today = await withBypassContext(() => businessToday(org.orgId));
       const actors = await seedFlowActors(org.orgId);
       const party = await seedParty(org.orgId, "Late Credit Customer");
-      const invoiceId = await seedInvoice(org, party, "INV-LATE-LEG", minusDays(today, 45), "5000.00");
-      const targetLine = (await db.execute<{ id: string }>(sql`
+      const invoiceId = await seedInvoice(
+        org,
+        party,
+        "INV-LATE-LEG",
+        minusDays(today, 45),
+        "5000.00",
+      );
+      const targetLine = (
+        await db.execute<{ id: string }>(
+          sql`
         select line.id
           from documents document
           join journal_lines line on line.entry_id = document.posted_entry_id
            and line.org_id = document.org_id and line.account_id = ${org.accounts.ar}
          where document.id = ${invoiceId} and document.org_id = ${org.orgId}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
 
       // A posted credit memo has an older due date than its invoice target.
       // The old OR join counted this application twice and used that source
@@ -57,10 +68,17 @@ test(
                (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId},
                 '100', 'CAD', '100', '1', ${party}, ${sourceDueDate}, false)
       `);
-      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`);
-      const sourceLine = (await db.execute<{ id: string }>(sql`
+      await db.execute(
+        sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`,
+      );
+      const sourceLine = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from journal_lines where entry_id = ${entryId} and line_number = 1 and org_id = ${org.orgId}
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       await db.execute(sql`
         insert into applications
           (org_id, from_line_id, to_line_id, amount, source_amount,
@@ -76,7 +94,10 @@ test(
       const findings = await withBypassContext(() =>
         collectionsFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("collections")),
       );
-      const customer = findings.find((finding) => finding.findingType === "overdue_customer_balance" && finding.subjectId === party);
+      const customer = findings.find(
+        (finding) =>
+          finding.findingType === "overdue_customer_balance" && finding.subjectId === party,
+      );
       assert.ok(customer);
       assert.equal(customer.summary.latePayments, 1);
       assert.equal(customer.summary.worstLateDays, 44);
@@ -94,8 +115,8 @@ function minusDays(iso: string, days: number): string {
 
 async function seedParty(orgId: string, name: string): Promise<string> {
   const id = randomUUID();
-  await withBypassContext(
-    () => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
       insert into parties (id, org_id, kind, display_name)
       values (${id}, ${orgId}, 'customer', ${name})`),
   );
@@ -103,7 +124,14 @@ async function seedParty(orgId: string, name: string): Promise<string> {
 }
 
 async function seedInvoice(
-  org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; date: string; accounts: Record<string, string> },
+  org: {
+    orgId: string;
+    bookId: string;
+    subsidiaryId: string;
+    periodId: string;
+    date: string;
+    accounts: Record<string, string>;
+  },
   partyId: string,
   number: string,
   dueDate: string,
@@ -112,8 +140,8 @@ async function seedInvoice(
 ): Promise<string> {
   const id = randomUUID();
   const entryId = randomUUID();
-  await withBypassContext(
-    () => db.transaction(async (tx) => {
+  await withBypassContext(() =>
+    db.transaction(async (tx) => {
       await tx.execute(sql`insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
         values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entryId}, ${org.date}, ${org.periodId}, 'draft', 'manual')`);
@@ -121,7 +149,9 @@ async function seedInvoice(
         (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, party_id, due_date, is_open_item)
         values (${org.orgId}, ${entryId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${total}, 'CAD', ${total}, 1, ${partyId}, ${dueDate}, true),
                (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${`-${total}`}, 'CAD', ${`-${total}`}, 1, ${partyId}, ${dueDate}, false)`);
-      await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
+      await tx.execute(
+        sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`,
+      );
       await tx.execute(sql`
         insert into documents
           (id, org_id, subsidiary_id, kind, status, document_number, document_date, due_date,
@@ -168,7 +198,11 @@ test(
       const byType = (type: string) => findings.filter((finding) => finding.findingType === type);
 
       const overdue = byType("overdue_customer_balance");
-      assert.equal(overdue.length, 2, "big + hold debtors; small is below the floor, current is not overdue");
+      assert.equal(
+        overdue.length,
+        2,
+        "big + hold debtors; small is below the floor, current is not overdue",
+      );
       assert.ok(
         overdue.every((finding) => finding.materiality !== "99999.00"),
         "the other tenant's arrears never leak in",
@@ -185,7 +219,9 @@ test(
       assert.equal(second.severity, "critical", "45-day-old arrears escalate");
       assert.match(String(second.summary.reminderDraft), /Big Debtor/);
       assert.ok(
-        second.evidence.some((item) => item.kind === "overdue_invoice" && item.sourceType === "document"),
+        second.evidence.some(
+          (item) => item.kind === "overdue_invoice" && item.sourceType === "document",
+        ),
         "overdue invoices ride along as evidence",
       );
 
@@ -214,8 +250,8 @@ test(
       const today = await withBypassContext(() => businessToday(org.orgId));
       const party = await seedParty(org.orgId, "Persistent Debtor");
       await seedInvoice(org, party, "INV-P1", minusDays(today, 40), "2500.00");
-      await withBypassContext(
-        () => db.execute(sql`
+      await withBypassContext(() =>
+        db.execute(sql`
           insert into ai_agent_policies (org_id, agent_key, enabled, materiality_threshold)
           values (${org.orgId}, 'collections', true, 1000)`),
       );
@@ -233,10 +269,13 @@ test(
       assert.equal(run.status, "completed");
       assert.equal(run.detected, 1);
 
-      const items = await withBypassContext(
-        () => db.execute<{ finding_type: string; materiality: string }>(sql`
+      const items = await withBypassContext(() =>
+        db.execute<{ finding_type: string; materiality: string }>(
+          sql`
           select finding_type, materiality::text
-            from ai_work_items where org_id = ${org.orgId} and agent_key = 'collections'`, "objects"),
+            from ai_work_items where org_id = ${org.orgId} and agent_key = 'collections'`,
+          "objects",
+        ),
       );
       assert.equal(items.length, 1);
       assert.equal(items[0]!.finding_type, "overdue_customer_balance");

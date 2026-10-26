@@ -34,14 +34,36 @@ import type { Province } from "./rates.ts";
 
 /** Every T4127 province code, plus ZZ (employment outside any province). */
 const CA_PROVINCES: readonly Province[] = [
-  "AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT", "ZZ",
+  "AB",
+  "BC",
+  "MB",
+  "NB",
+  "NL",
+  "NS",
+  "NT",
+  "NU",
+  "ON",
+  "PE",
+  "QC",
+  "SK",
+  "YT",
+  "ZZ",
 ];
 
 const PROVINCE_NAMES: Readonly<Record<string, string>> = {
-  AB: "Alberta", BC: "British Columbia", MB: "Manitoba", NB: "New Brunswick",
-  NL: "Newfoundland and Labrador", NS: "Nova Scotia", NT: "Northwest Territories",
-  NU: "Nunavut", ON: "Ontario", PE: "Prince Edward Island", QC: "Québec",
-  SK: "Saskatchewan", YT: "Yukon",
+  AB: "Alberta",
+  BC: "British Columbia",
+  MB: "Manitoba",
+  NB: "New Brunswick",
+  NL: "Newfoundland and Labrador",
+  NS: "Nova Scotia",
+  NT: "Northwest Territories",
+  NU: "Nunavut",
+  ON: "Ontario",
+  PE: "Prince Edward Island",
+  QC: "Québec",
+  SK: "Saskatchewan",
+  YT: "Yukon",
   ZZ: "employment outside Canada",
 };
 
@@ -59,11 +81,14 @@ const PROVINCE_NAMES: Readonly<Record<string, string>> = {
 const ADDITIONAL_TAX: PayrollCertificateField = {
   key: "additional_tax_per_period",
   label: "Additional tax to be deducted (per pay period)",
-  kind: "amount", decimals: 4, min: "0",
+  kind: "amount",
+  decimals: 4,
+  min: "0",
   storage: { kind: "column", column: "additional_tax_per_period" },
-  help: "The TD1's \"Additional tax to be deducted\" — an amount the employee asks to have "
-    + "withheld from EVERY pay in addition to the calculated tax (T4127 factor L). It is a "
-    + "per-period amount, not an annual one.",
+  help:
+    'The TD1\'s "Additional tax to be deducted" — an amount the employee asks to have ' +
+    "withheld from EVERY pay in addition to the calculated tax (T4127 factor L). It is a " +
+    "per-period amount, not an annual one.",
 };
 
 /**
@@ -83,65 +108,95 @@ const TD1: PayrollCertificate = {
   purpose: "withholding",
   citation: "CRA Form TD1 (2026); T4127 Payroll Deductions Formulas, 123rd edition",
   summary:
-    "Filed on hire and whenever the employee's credits change. It sets the federal claim amount "
-    + "(factor TC), the deductions authorized by a tax services office, and any extra tax the "
-    + "employee wants withheld each pay.",
+    "Filed on hire and whenever the employee's credits change. It sets the federal claim amount " +
+    "(factor TC), the deductions authorized by a tax services office, and any extra tax the " +
+    "employee wants withheld each pay.",
   storage: "profile_columns",
   fields: [
     {
-      key: "federal_claim_code", label: "Total claim amount — claim code", kind: "count",
-      min: "0", max: "10", storage: { kind: "column", column: "federal_claim_code" },
-      help: "The CRA's claim code 0–10, from the TD1 total. Code 1 is the basic personal amount "
-        + "alone and is what an employee who files nothing is withheld at; code 0 claims no "
-        + "credits at all, which is not the same thing.",
+      key: "federal_claim_code",
+      label: "Total claim amount — claim code",
+      kind: "count",
+      min: "0",
+      max: "10",
+      storage: { kind: "column", column: "federal_claim_code" },
+      help:
+        "The CRA's claim code 0–10, from the TD1 total. Code 1 is the basic personal amount " +
+        "alone and is what an employee who files nothing is withheld at; code 0 claims no " +
+        "credits at all, which is not the same thing.",
     },
     {
-      key: "federal_claim_amount", label: "Total claim amount — exact dollars",
-      kind: "amount", decimals: 4, min: "0",
+      key: "federal_claim_amount",
+      label: "Total claim amount — exact dollars",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       storage: { kind: "column", column: "federal_claim_amount" },
-      help: "The exact TD1 total, which OVERRIDES the claim code when both are present. The code "
-        + "is a band; the amount is what the employee actually claimed, and T4127 factor TC uses "
-        + "it directly.",
+      help:
+        "The exact TD1 total, which OVERRIDES the claim code when both are present. The code " +
+        "is a band; the amount is what the employee actually claimed, and T4127 factor TC uses " +
+        "it directly.",
     },
     {
-      key: "prescribed_zone_deduction", label: "Prescribed zone deduction (annual)",
-      kind: "amount", decimals: 4, min: "0",
+      key: "prescribed_zone_deduction",
+      label: "Prescribed zone deduction (annual)",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       storage: { kind: "column", column: "prescribed_zone_deduction" },
-      help: "The annual living-in-a-prescribed-zone deduction from the TD1 (T4127 factor HD). "
-        + "Northern residents only.",
+      help:
+        "The annual living-in-a-prescribed-zone deduction from the TD1 (T4127 factor HD). " +
+        "Northern residents only.",
     },
     {
-      key: "authorized_annual_deductions", label: "Deductions authorized by a tax services office",
-      kind: "amount", decimals: 4, min: "0",
+      key: "authorized_annual_deductions",
+      label: "Deductions authorized by a tax services office",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       storage: { kind: "column", column: "authorized_annual_deductions" },
-      help: "Annual deductions a tax services office has authorized in a letter to the employee "
-        + "(T4127 factor F2) — alimony, child support, employment expenses. Only with the letter.",
+      help:
+        "Annual deductions a tax services office has authorized in a letter to the employee " +
+        "(T4127 factor F2) — alimony, child support, employment expenses. Only with the letter.",
     },
     {
-      key: "authorized_federal_credits", label: "Federal tax credits authorized in a letter",
-      kind: "amount", decimals: 4, min: "0",
+      key: "authorized_federal_credits",
+      label: "Federal tax credits authorized in a letter",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       storage: { kind: "column", column: "authorized_federal_credits" },
-      help: "Federal non-refundable credits a tax services office has authorized (T4127 factor "
-        + "K3) — most often foreign tax credits.",
+      help:
+        "Federal non-refundable credits a tax services office has authorized (T4127 factor " +
+        "K3) — most often foreign tax credits.",
     },
     ADDITIONAL_TAX,
     {
-      key: "tax_exempt", label: "No income tax is to be withheld", kind: "flag",
+      key: "tax_exempt",
+      label: "No income tax is to be withheld",
+      kind: "flag",
       storage: { kind: "column", column: "tax_exempt" },
-      help: "Claim code E, a CRA letter of authority, or Indian Act section 87 exempt employment. "
-        + "Income tax only: CPP and EI still apply unless they are separately exempt.",
+      help:
+        "Claim code E, a CRA letter of authority, or Indian Act section 87 exempt employment. " +
+        "Income tax only: CPP and EI still apply unless they are separately exempt.",
     },
     {
-      key: "cpp_exempt", label: "Exempt from CPP/QPP contributions", kind: "flag",
+      key: "cpp_exempt",
+      label: "Exempt from CPP/QPP contributions",
+      kind: "flag",
       storage: { kind: "column", column: "cpp_exempt" },
-      help: "Under 18, over 70, in receipt of a CPP/QPP retirement pension with a CPT30 election "
-        + "on file, or employment the Canada Pension Plan does not cover.",
+      help:
+        "Under 18, over 70, in receipt of a CPP/QPP retirement pension with a CPT30 election " +
+        "on file, or employment the Canada Pension Plan does not cover.",
     },
     {
-      key: "ei_exempt", label: "Exempt from EI premiums", kind: "flag",
+      key: "ei_exempt",
+      label: "Exempt from EI premiums",
+      kind: "flag",
       storage: { kind: "column", column: "ei_exempt" },
-      help: "Non-arm's-length employment the Canada Employment Insurance Commission has ruled "
-        + "uninsurable, or a controlling shareholder.",
+      help:
+        "Non-arm's-length employment the Canada Employment Insurance Commission has ruled " +
+        "uninsurable, or a controlling shareholder.",
     },
   ],
 };
@@ -166,9 +221,7 @@ function provincialCertificate(province: string): PayrollCertificate {
   return {
     key: `ca_td1_${province}`,
     form: quebec ? "TP-1015.3-V" : `TD1${province}`,
-    label: quebec
-      ? "Source Deductions Return (Québec)"
-      : `Personal Tax Credits Return (${name})`,
+    label: quebec ? "Source Deductions Return (Québec)" : `Personal Tax Credits Return (${name})`,
     scope: { level: "region", region: province },
     purpose: "withholding",
     // Québec identifies the claim by an AMOUNT (TP-1015.3-V line 10); every
@@ -180,11 +233,11 @@ function provincialCertificate(province: string): PayrollCertificate {
       ? "Revenu Québec Form TP-1015.3-V (2026); TP-1015.F-V Formulas to Calculate Source Deductions"
       : `CRA Form TD1${province} (2026); T4127 Payroll Deductions Formulas, 123rd edition`,
     summary: quebec
-      ? "Québec's own source deductions return, filed with the employer in addition to the "
-        + "federal TD1. It sets the total deduction AMOUNT the TP-1015 provincial calculation "
-        + "uses (line 10); a Québec employee files BOTH forms."
-      : `Sets the ${name} claim amount the provincial half of the T4127 calculation uses `
-        + "(factor TCP). An employee who files nothing is withheld at the basic personal amount.",
+      ? "Québec's own source deductions return, filed with the employer in addition to the " +
+        "federal TD1. It sets the total deduction AMOUNT the TP-1015 provincial calculation " +
+        "uses (line 10); a Québec employee files BOTH forms."
+      : `Sets the ${name} claim amount the provincial half of the T4127 calculation uses ` +
+        "(factor TCP). An employee who files nothing is withheld at the basic personal amount.",
     // Ontario's TD1ON additionally has employee-filed dependant counts, so it
     // is served through certificate rows while the existing columns remain
     // fallback reads for its original claim fields.
@@ -197,89 +250,163 @@ function provincialCertificate(province: string): PayrollCertificate {
       // input no engine reads, so it is not declared there.
       ...(quebec
         ? []
-        : [{
-            key: "provincial_claim_code",
-            label: "Total claim amount — claim code",
-            kind: "count" as const, min: "0", max: "10",
-            storage: { kind: "column" as const, column: "provincial_claim_code" },
-            help: "The provincial claim code 0–10. It is NOT necessarily the same code as the federal "
-              + "one: the provinces set their own basic personal amounts and credits.",
-          } satisfies PayrollCertificateField]),
+        : [
+            {
+              key: "provincial_claim_code",
+              label: "Total claim amount — claim code",
+              kind: "count" as const,
+              min: "0",
+              max: "10",
+              storage: { kind: "column" as const, column: "provincial_claim_code" },
+              help:
+                "The provincial claim code 0–10. It is NOT necessarily the same code as the federal " +
+                "one: the provinces set their own basic personal amounts and credits.",
+            } satisfies PayrollCertificateField,
+          ]),
       {
         key: "provincial_claim_amount",
         label: quebec ? "Deduction amount — exact dollars" : "Total claim amount — exact dollars",
-        kind: "amount", decimals: 4, min: "0",
+        kind: "amount",
+        decimals: 4,
+        min: "0",
         storage: { kind: "column", column: "provincial_claim_amount" },
         help: quebec
-          ? "The exact total deduction from line 10 of the TP-1015.3-V. Québec identifies the claim by "
-            + "this amount, not a claim code (TP-1015 variable E)."
-          : "The exact total from the form, which OVERRIDES the code when both are present "
-            + "(T4127 factor TCP).",
+          ? "The exact total deduction from line 10 of the TP-1015.3-V. Québec identifies the claim by " +
+            "this amount, not a claim code (TP-1015 variable E)."
+          : "The exact total from the form, which OVERRIDES the code when both are present " +
+            "(T4127 factor TCP).",
       },
       {
         key: "authorized_provincial_credits",
         label: "Provincial tax credits authorized in a letter",
-        kind: "amount", decimals: 4, min: "0",
+        kind: "amount",
+        decimals: 4,
+        min: "0",
         storage: { kind: "column", column: "authorized_provincial_credits" },
-        help: "Provincial or territorial non-refundable credits an authority has authorized in "
-          + "writing (T4127 factor K3P). Only with the letter.",
+        help:
+          "Provincial or territorial non-refundable credits an authority has authorized in " +
+          "writing (T4127 factor K3P). Only with the letter.",
       },
-      ...(ontario ? [
-        {
-          key: "disabled_dependants",
-          label: "Eligible dependants with a disability — count",
-          kind: "count" as const, min: "0", max: "1000", default: "0",
-          help: "The number of eligible dependants with a disability claimed on TD1ON. This count "
-            + "feeds the Ontario tax reduction (T4127 factor Y) and is effective-dated with the "
-            + "employee's filed TD1ON.",
-        },
-        {
-          key: "dependants_under_19",
-          label: "Eligible dependants under 19 — count",
-          kind: "count" as const, min: "0", max: "1000", default: "0",
-          help: "The number of eligible dependants under age 19 claimed on TD1ON. This count feeds "
-            + "the Ontario tax reduction (T4127 factor Y) and is effective-dated with the "
-            + "employee's filed TD1ON.",
-        },
-      ] : []),
-      ...(quebec ? [
-        {
-          key: "ftq_shares_per_period",
-          label: "FTQ class A share purchases per pay period",
-          kind: "amount" as const, decimals: 4, min: "0",
-          help: "Employee-authorized per-period purchase amount for eligible FTQ class A shares, "
-            + "where the employee is the first purchaser. TP-1015 factors Q and LCF use this amount.",
-        },
-        {
-          key: "fondaction_shares_per_period",
-          label: "Fondaction class A/B share purchases per pay period",
-          kind: "amount" as const, decimals: 4, min: "0",
-          help: "Employee-authorized per-period purchase amount for eligible Fondaction class A or B "
-            + "shares, where the employee is the first purchaser. TP-1015 factors Q1 and LCF use this amount.",
-        },
-      ] : []),
+      ...(ontario
+        ? [
+            {
+              key: "disabled_dependants",
+              label: "Eligible dependants with a disability — count",
+              kind: "count" as const,
+              min: "0",
+              max: "1000",
+              default: "0",
+              help:
+                "The number of eligible dependants with a disability claimed on TD1ON. This count " +
+                "feeds the Ontario tax reduction (T4127 factor Y) and is effective-dated with the " +
+                "employee's filed TD1ON.",
+            },
+            {
+              key: "dependants_under_19",
+              label: "Eligible dependants under 19 — count",
+              kind: "count" as const,
+              min: "0",
+              max: "1000",
+              default: "0",
+              help:
+                "The number of eligible dependants under age 19 claimed on TD1ON. This count feeds " +
+                "the Ontario tax reduction (T4127 factor Y) and is effective-dated with the " +
+                "employee's filed TD1ON.",
+            },
+          ]
+        : []),
+      ...(quebec
+        ? [
+            {
+              key: "ftq_shares_per_period",
+              label: "FTQ class A share purchases per pay period",
+              kind: "amount" as const,
+              decimals: 4,
+              min: "0",
+              help:
+                "Employee-authorized per-period purchase amount for eligible FTQ class A shares, " +
+                "where the employee is the first purchaser. TP-1015 factors Q and LCF use this amount.",
+            },
+            {
+              key: "fondaction_shares_per_period",
+              label: "Fondaction class A/B share purchases per pay period",
+              kind: "amount" as const,
+              decimals: 4,
+              min: "0",
+              help:
+                "Employee-authorized per-period purchase amount for eligible Fondaction class A or B " +
+                "shares, where the employee is the first purchaser. TP-1015 factors Q1 and LCF use this amount.",
+            },
+          ]
+        : []),
     ],
   };
 }
 
 /** Employer election under the CRA guide, retained through the same dated
  * and audited record editor as withholding notices. It is not an employee tax form. */
-const CA_METHOD:PayrollCertificate={
-  protectCommittedHistory:true,key:"ca_t4127_method",form:"CRA T4127",label:"Employer withholding method election",scope:{level:"country"},purpose:"withholding",
-  citation:"CRA T4127 Chapter 5 — cumulative averaging and Special Situations",
-  summary:"Record the employer’s elected method, reset date and verified carry-in history. The effective date starts a new averaging window; contribution ceilings continue for the whole calendar year.",
-  storage:"certificate_rows",fields:[
-    {key:"reason",label:"Reason and supporting record",kind:"code",required:true,minLength:8,maxLength:2000,help:"Explain the employer’s method election or reset, and identify any verified imported-history report. Kept with the dated audit evidence."},
-    {key:"method",label:"Withholding method",kind:"choice",required:true,choices:[{value:"option1",label:"Option 1 — periodic"},{value:"option2",label:"Option 2 — cumulative averaging"}],help:"Absent election uses the periodic method. Option 2 projects accumulated income over elapsed scheduled periods."},
-    {key:"window_start",label:"Averaging window starts (YYYY-MM-DD)",kind:"code",format:"iso_date",help:"Optional earlier window start for complete imported history. Leave blank to reset on this record’s effective date. A new calendar year resets the window automatically."},
-    {key:"opening_history_through",label:"Imported averaging history through (YYYY-MM-DD)",kind:"code",format:"iso_date",help:"Set only when continuing the prior provider’s averaging window. Enter the last included pay date and complete the Canada averaging fields in Payroll → Opening Balances."},
-    {key:"opening_history_complete",label:"Imported averaging history has been verified",kind:"flag",help:"Confirm that every averaging opening field, including genuine zero amounts, matches the prior provider’s report for this window. Annual CPP/EI opening balances remain separate."},
-  ]
+const CA_METHOD: PayrollCertificate = {
+  protectCommittedHistory: true,
+  key: "ca_t4127_method",
+  form: "CRA T4127",
+  label: "Employer withholding method election",
+  scope: { level: "country" },
+  purpose: "withholding",
+  citation: "CRA T4127 Chapter 5 — cumulative averaging and Special Situations",
+  summary:
+    "Record the employer’s elected method, reset date and verified carry-in history. The effective date starts a new averaging window; contribution ceilings continue for the whole calendar year.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "reason",
+      label: "Reason and supporting record",
+      kind: "code",
+      required: true,
+      minLength: 8,
+      maxLength: 2000,
+      help: "Explain the employer’s method election or reset, and identify any verified imported-history report. Kept with the dated audit evidence.",
+    },
+    {
+      key: "method",
+      label: "Withholding method",
+      kind: "choice",
+      required: true,
+      choices: [
+        { value: "option1", label: "Option 1 — periodic" },
+        { value: "option2", label: "Option 2 — cumulative averaging" },
+      ],
+      help: "Absent election uses the periodic method. Option 2 projects accumulated income over elapsed scheduled periods.",
+    },
+    {
+      key: "window_start",
+      label: "Averaging window starts (YYYY-MM-DD)",
+      kind: "code",
+      format: "iso_date",
+      help: "Optional earlier window start for complete imported history. Leave blank to reset on this record’s effective date. A new calendar year resets the window automatically.",
+    },
+    {
+      key: "opening_history_through",
+      label: "Imported averaging history through (YYYY-MM-DD)",
+      kind: "code",
+      format: "iso_date",
+      help: "Set only when continuing the prior provider’s averaging window. Enter the last included pay date and complete the Canada averaging fields in Payroll → Opening Balances.",
+    },
+    {
+      key: "opening_history_complete",
+      label: "Imported averaging history has been verified",
+      kind: "flag",
+      help: "Confirm that every averaging opening field, including genuine zero amounts, matches the prior provider’s report for this window. Annual CPP/EI opening balances remain separate.",
+    },
+  ],
 };
 
 const CA_CERTIFICATES: PayrollPackCertificates = {
   country: "CA",
-  certificates: [TD1, CA_METHOD, ...CA_PROVINCES.filter((p) => p !== "ZZ").map(provincialCertificate)],
+  certificates: [
+    TD1,
+    CA_METHOD,
+    ...CA_PROVINCES.filter((p) => p !== "ZZ").map(provincialCertificate),
+  ],
 };
 
 // ===========================================================================
@@ -325,10 +452,10 @@ function caRegion(province: string): PayrollRegionWithholding {
     subRegions: [],
     subRegionConflictRule: "both",
     citation: quebec
-      ? "Revenu Québec TP-1015.F-V, Formulas to Calculate Source Deductions and Contributions; "
-        + "Taxation Act (Québec)"
-      : "CRA T4127, Payroll Deductions Formulas (123rd edition); Income Tax Act s. 153(1) and "
-        + "Income Tax Regulations part I",
+      ? "Revenu Québec TP-1015.F-V, Formulas to Calculate Source Deductions and Contributions; " +
+        "Taxation Act (Québec)"
+      : "CRA T4127, Payroll Deductions Formulas (123rd edition); Income Tax Act s. 153(1) and " +
+        "Income Tax Regulations part I",
   };
 }
 

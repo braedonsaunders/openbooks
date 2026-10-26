@@ -1,13 +1,13 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { useRouter } from 'next/navigation'
-import { Button, EmptyState, Input, Label, Select } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
-import { DateField } from '../../../../components/date-field'
+import Link from "next/link";
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
+import { Button, EmptyState, Input, Label, Select } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { useDirtyUrlDrawer } from "../../../../components/dirty-url-drawer";
+import { DateField } from "../../../../components/date-field";
 
 /**
  * The cycle create form inside the cycle dialog. Fields are the house form
@@ -16,68 +16,66 @@ import { DateField } from '../../../../components/date-field'
  * to the new cycle's own drawer.
  */
 export interface CycleCreateProps {
-  closeHref: string
+  closeHref: string;
   scopeOptions?: {
-    subsidiaries: { value: string; label: string }[]
-    departments: { value: string; label: string; subsidiaryId: string | null }[]
-    unrestricted: boolean
-  }
-  templates: { value: string; label: string }[]
-  initialTemplateId?: string
-  emptyTemplates: string
-  templateLabel: string
-  nameLabel: string
-  startLabel: string
-  endLabel: string
-  submitLabel: string
-  cancelLabel: string
-  setupHint: string
-  setupHref: string | null
-  failed: string
+    subsidiaries: { value: string; label: string }[];
+    departments: { value: string; label: string; subsidiaryId: string | null }[];
+    unrestricted: boolean;
+  };
+  templates: { value: string; label: string }[];
+  initialTemplateId?: string;
+  emptyTemplates: string;
+  templateLabel: string;
+  nameLabel: string;
+  startLabel: string;
+  endLabel: string;
+  submitLabel: string;
+  cancelLabel: string;
+  setupHint: string;
+  setupHref: string | null;
+  failed: string;
 }
 
 export function CycleCreateForm(props: CycleCreateProps) {
-  const router = useRouter()
-  const t = useTranslations('hrm.talentWorkspace')
-  const [selfDue, setSelfDue] = useState(''),
-    [managerDue, setManagerDue] = useState('')
+  const router = useRouter();
+  const t = useTranslations("hrm.talentWorkspace");
+  const [selfDue, setSelfDue] = useState(""),
+    [managerDue, setManagerDue] = useState("");
   const [subsidiary, setSubsidiary] = useState(
-    props.scopeOptions?.unrestricted
-      ? ''
-      : (props.scopeOptions?.subsidiaries[0]?.value ?? ''),
-  )
-  const [department, setDepartment] = useState('')
-  const [requireManagerReviews, setRequireManagerReviews] = useState(true)
-  const [templateId, setTemplateId] = useState(props.initialTemplateId ?? '')
-  const [name, setName] = useState('')
-  const [periodStart, setPeriodStart] = useState('')
-  const [periodEnd, setPeriodEnd] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+    props.scopeOptions?.unrestricted ? "" : (props.scopeOptions?.subsidiaries[0]?.value ?? ""),
+  );
+  const [department, setDepartment] = useState("");
+  const [requireManagerReviews, setRequireManagerReviews] = useState(true);
+  const [templateId, setTemplateId] = useState(props.initialTemplateId ?? "");
+  const [name, setName] = useState("");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const close = useDirtyUrlDrawer(
-    name !== '' ||
-      templateId !== (props.initialTemplateId ?? '') ||
-      periodStart !== '' ||
-      periodEnd !== '' ||
-      selfDue !== '' ||
-      managerDue !== '' ||
-      department !== '' ||
+    name !== "" ||
+      templateId !== (props.initialTemplateId ?? "") ||
+      periodStart !== "" ||
+      periodEnd !== "" ||
+      selfDue !== "" ||
+      managerDue !== "" ||
+      department !== "" ||
       !requireManagerReviews ||
       subsidiary !==
         (props.scopeOptions?.unrestricted
-          ? ''
-          : (props.scopeOptions?.subsidiaries[0]?.value ?? '')),
+          ? ""
+          : (props.scopeOptions?.subsidiaries[0]?.value ?? "")),
     busy,
-  )
+  );
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
     try {
-      const res = await fetch('/api/hrm/review-cycles', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const res = await fetch("/api/hrm/review-cycles", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           templateId,
           name: name.trim(),
@@ -91,26 +89,26 @@ export function CycleCreateForm(props: CycleCreateProps) {
             department_id: department || null,
           },
         }),
-      })
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, props.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, props.failed));
+        setBusy(false);
+        return;
       }
       const payload = (await res.json().catch(() => ({}))) as {
-        cycle?: { id?: unknown }
-      }
-      const id = typeof payload.cycle?.id === 'string' ? payload.cycle.id : null
+        cycle?: { id?: unknown };
+      };
+      const id = typeof payload.cycle?.id === "string" ? payload.cycle.id : null;
       if (id === null) {
-        setError(props.failed)
-        setBusy(false)
-        return
+        setError(props.failed);
+        setBusy(false);
+        return;
       }
-      router.push(`/hrm/performance?tab=cycles&cycle=${id}`)
-      router.refresh()
+      router.push(`/hrm/performance?tab=cycles&cycle=${id}`);
+      router.refresh();
     } catch {
-      setError(props.failed)
-      setBusy(false)
+      setError(props.failed);
+      setBusy(false);
     }
   }
 
@@ -133,10 +131,7 @@ export function CycleCreateForm(props: CycleCreateProps) {
             ))}
           </Select>
         ) : (
-          <EmptyState
-            title={props.templateLabel}
-            description={props.emptyTemplates}
-          />
+          <EmptyState title={props.templateLabel} description={props.emptyTemplates} />
         )}
         {props.setupHref ? (
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -144,8 +139,8 @@ export function CycleCreateForm(props: CycleCreateProps) {
               className="underline"
               href={props.setupHref}
               onClick={(event) => {
-                event.preventDefault()
-                void close(props.setupHref ?? undefined)
+                event.preventDefault();
+                void close(props.setupHref ?? undefined);
               }}
             >
               {props.setupHint}
@@ -155,12 +150,7 @@ export function CycleCreateForm(props: CycleCreateProps) {
       </div>
       <div>
         <Label htmlFor="cycle-name">{props.nameLabel}</Label>
-        <Input
-          id="cycle-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
+        <Input id="cycle-name" value={name} onChange={(e) => setName(e.target.value)} required />
       </div>
       <div>
         <Label htmlFor="cycle-start">{props.startLabel}</Label>
@@ -182,15 +172,11 @@ export function CycleCreateForm(props: CycleCreateProps) {
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <Label htmlFor="self-due">{t('selfDue')}</Label>
-          <DateField
-            id="self-due"
-            value={selfDue}
-            onChange={(value) => setSelfDue(value)}
-          />
+          <Label htmlFor="self-due">{t("selfDue")}</Label>
+          <DateField id="self-due" value={selfDue} onChange={(value) => setSelfDue(value)} />
         </div>
         <div>
-          <Label htmlFor="manager-due">{t('managerDue')}</Label>
+          <Label htmlFor="manager-due">{t("managerDue")}</Label>
           <DateField
             id="manager-due"
             value={managerDue}
@@ -201,18 +187,16 @@ export function CycleCreateForm(props: CycleCreateProps) {
       {props.scopeOptions && (
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="cycle-subsidiary">{t('legalEntity')}</Label>
+            <Label htmlFor="cycle-subsidiary">{t("legalEntity")}</Label>
             <Select
               id="cycle-subsidiary"
               value={subsidiary}
               onChange={(e) => {
-                setSubsidiary(e.target.value)
-                setDepartment('')
+                setSubsidiary(e.target.value);
+                setDepartment("");
               }}
             >
-              {props.scopeOptions.unrestricted && (
-                <option value="">{t('allEntities')}</option>
-              )}
+              {props.scopeOptions.unrestricted && <option value="">{t("allEntities")}</option>}
               {props.scopeOptions.subsidiaries.map((s) => (
                 <option key={s.value} value={s.value}>
                   {s.label}
@@ -221,13 +205,13 @@ export function CycleCreateForm(props: CycleCreateProps) {
             </Select>
           </div>
           <div>
-            <Label htmlFor="cycle-department">{t('department')}</Label>
+            <Label htmlFor="cycle-department">{t("department")}</Label>
             <Select
               id="cycle-department"
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
             >
-              <option value="">{t('allDepartments')}</option>
+              <option value="">{t("allDepartments")}</option>
               {props.scopeOptions.departments
                 .filter((d) => !subsidiary || d.subsidiaryId === subsidiary)
                 .map((d) => (
@@ -245,9 +229,9 @@ export function CycleCreateForm(props: CycleCreateProps) {
           checked={requireManagerReviews}
           onChange={(e) => setRequireManagerReviews(e.target.checked)}
         />
-        {t('requireManager')}
+        {t("requireManager")}
       </label>
-      <p className="text-xs text-slate-500">{t('createThenLaunch')}</p>
+      <p className="text-xs text-slate-500">{t("createThenLaunch")}</p>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
@@ -256,16 +240,14 @@ export function CycleCreateForm(props: CycleCreateProps) {
       <div className="flex gap-2">
         <Button
           type="submit"
-          disabled={
-            busy || !templateId || !name.trim() || !periodStart || !periodEnd
-          }
+          disabled={busy || !templateId || !name.trim() || !periodStart || !periodEnd}
         >
-          {t('saveDraft')}
+          {t("saveDraft")}
         </Button>
         <Button type="button" variant="outline" onClick={() => void close()}>
           {props.cancelLabel}
         </Button>
       </div>
     </form>
-  )
+  );
 }

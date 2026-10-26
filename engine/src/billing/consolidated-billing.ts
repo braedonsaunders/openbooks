@@ -32,13 +32,17 @@ import { accountingPreferences } from "../organization/accounting-preferences.ts
  */
 
 export class ConsolidatedBillingError extends Error {
-  constructor(message: string, readonly status = 422) {
+  constructor(
+    message: string,
+    readonly status = 422,
+  ) {
     super(message);
     this.name = "ConsolidatedBillingError";
   }
 }
 
-const FEATURE_REMEDY = "Turn on Consolidated billing under Company Settings → Features, then retry.";
+const FEATURE_REMEDY =
+  "Turn on Consolidated billing under Company Settings → Features, then retry.";
 
 export type ConsolidationGrouping = "by_child" | "by_subscription" | "by_product";
 
@@ -93,19 +97,26 @@ export async function resolveEffectiveBillingParties(
   override: SubscriptionPartyOverride | null = null,
 ): Promise<EffectiveBillingParties> {
   if (!(await orgFeatureEnabled(orgId, "consolidatedBilling"))) return IDENTITY(servicePartyId);
-  const service = (await db.execute<{ id: string }>(sql`
+  const service = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from parties where org_id = ${orgId} and id = ${servicePartyId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!service) {
     throw new ConsolidatedBillingError(
       `customer ${servicePartyId} does not belong to this organization — bill the subscription from a customer of this organization`,
     );
   }
-  const rel = (await db.execute<{
-    billToPartyId: string;
-    payerPartyId: string;
-    groupId: string | null;
-  }>(sql`
+  const rel = (
+    await db.execute<{
+      billToPartyId: string;
+      payerPartyId: string;
+      groupId: string | null;
+    }>(
+      sql`
     select bill_to_party_id as "billToPartyId", payer_party_id as "payerPartyId",
            consolidation_group_id as "groupId"
       from customer_billing_relationships
@@ -114,13 +125,24 @@ export async function resolveEffectiveBillingParties(
        and (effective_to is null or effective_to >= ${billingDate})
      order by effective_from desc, id desc
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const billToPartyId = override?.billToPartyId ?? rel?.billToPartyId ?? servicePartyId;
   const payerPartyId = override?.payerPartyId ?? rel?.payerPartyId ?? servicePartyId;
-  for (const [role, partyId] of [["bill-to", billToPartyId], ["payer", payerPartyId]] as const) {
-    const party = (await db.execute<{ id: string }>(sql`
+  for (const [role, partyId] of [
+    ["bill-to", billToPartyId],
+    ["payer", payerPartyId],
+  ] as const) {
+    const party = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from parties where org_id = ${orgId} and id = ${partyId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!party) {
       throw new ConsolidatedBillingError(
         `the ${role} party ${partyId} does not belong to this organization — point the billing relationship at a party of this organization before billing`,
@@ -129,10 +151,15 @@ export async function resolveEffectiveBillingParties(
   }
   let consolidationGroupId: string | null = null;
   if (rel?.groupId) {
-    const group = (await db.execute<{ id: string; payerPartyId: string; isActive: boolean }>(sql`
+    const group = (
+      await db.execute<{ id: string; payerPartyId: string; isActive: boolean }>(
+        sql`
       select id, payer_party_id as "payerPartyId", is_active as "isActive"
         from consolidation_groups where org_id = ${orgId} and id = ${rel.groupId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (group?.isActive && group.payerPartyId === payerPartyId) consolidationGroupId = group.id;
   }
   return { servicePartyId, billToPartyId, payerPartyId, consolidationGroupId };
@@ -144,12 +171,17 @@ export async function loadConsolidationGroup(
   groupId: string,
   runner: SqlExecutor = db,
 ): Promise<ConsolidationGroup> {
-  const group = (await runner.execute<ConsolidationGroup>(sql`
+  const group = (
+    await runner.execute<ConsolidationGroup>(
+      sql`
     select id, code, name, payer_party_id as "payerPartyId",
            billing_subsidiary_id as "billingSubsidiaryId", cadence,
            cutoff_day as "cutoffDay", grouping, template, is_active as "isActive"
       from consolidation_groups where org_id = ${orgId} and id = ${groupId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!group) {
     throw new ConsolidatedBillingError(
       `consolidation group ${groupId} does not exist in this organization — choose a group from the consolidation setup before running`,
@@ -169,10 +201,17 @@ export function consolidationPeriodFor(
 ): { periodStart: string; periodEnd: string } {
   const [yRaw, mRaw, dRaw] = invoiceDate.split("-").map(Number);
   if (
-    !Number.isSafeInteger(yRaw) || !Number.isSafeInteger(mRaw) || !Number.isSafeInteger(dRaw) ||
-    mRaw! < 1 || mRaw! > 12 || dRaw! < 1 || dRaw! > daysInCivilMonth(yRaw!, mRaw!)
+    !Number.isSafeInteger(yRaw) ||
+    !Number.isSafeInteger(mRaw) ||
+    !Number.isSafeInteger(dRaw) ||
+    mRaw! < 1 ||
+    mRaw! > 12 ||
+    dRaw! < 1 ||
+    dRaw! > daysInCivilMonth(yRaw!, mRaw!)
   ) {
-    throw new ConsolidatedBillingError(`cannot place ${invoiceDate} in a consolidation period — bill with a valid ISO date`);
+    throw new ConsolidatedBillingError(
+      `cannot place ${invoiceDate} in a consolidation period — bill with a valid ISO date`,
+    );
   }
   const y = yRaw!;
   const m = mRaw!;
@@ -185,10 +224,12 @@ export function consolidationPeriodFor(
     return { periodStart: start, periodEnd: addCalendarDays(start, 6) };
   }
   const pad = (n: number): string => String(n).padStart(2, "0");
-  const at = (year: number, month: number): string => `${String(year).padStart(4, "0")}-${pad(month)}-${pad(group.cutoffDay)}`;
+  const at = (year: number, month: number): string =>
+    `${String(year).padStart(4, "0")}-${pad(month)}-${pad(group.cutoffDay)}`;
   const prev = m === 1 ? { y: y - 1, m: 12 } : { y, m: m - 1 };
   const next = m === 12 ? { y: y + 1, m: 1 } : { y, m: m + 1 };
-  if (d >= group.cutoffDay) return { periodStart: at(y, m), periodEnd: addCalendarDays(at(next.y, next.m), -1) };
+  if (d >= group.cutoffDay)
+    return { periodStart: at(y, m), periodEnd: addCalendarDays(at(next.y, next.m), -1) };
   return { periodStart: at(prev.y, prev.m), periodEnd: addCalendarDays(at(y, m), -1) };
 }
 
@@ -206,12 +247,19 @@ export async function resolveConsolidationEntities(
   servicePartyId: string,
   payerPartyId: string,
 ): Promise<{ billingSubsidiaryId: string; serviceSubsidiaryId: string }> {
-  const parties = await db.execute<{ id: string; subsidiaryId: string | null; trustedSubsidiaryId: string | null }>(sql`
+  const parties = await db.execute<{
+    id: string;
+    subsidiaryId: string | null;
+    trustedSubsidiaryId: string | null;
+  }>(
+    sql`
     select p.id, p.subsidiary_id as "subsidiaryId",
            (select s.id from subsidiaries s
              where s.id = p.subsidiary_id and s.org_id = ${orgId} and s.is_active) as "trustedSubsidiaryId"
       from parties p where p.org_id = ${orgId} and p.id in (${servicePartyId}, ${payerPartyId})
-  `, "objects");
+  `,
+    "objects",
+  );
   const byId = new Map(parties.map((p) => [p.id, p]));
   const service = byId.get(servicePartyId);
   const payer = byId.get(payerPartyId);
@@ -223,32 +271,51 @@ export async function resolveConsolidationEntities(
   if (service.subsidiaryId !== null && service.trustedSubsidiaryId === null) {
     throw new ConsolidatedBillingError(
       "the service customer is assigned to a subsidiary that is not active in this organization — " +
-      "reassign the customer to an active subsidiary (or clear the assignment for an org-wide customer) before consolidating",
+        "reassign the customer to an active subsidiary (or clear the assignment for an org-wide customer) before consolidating",
     );
   }
-  const rootId = (await db.execute<{ id: string }>(sql`
+  const rootId = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1
-  `, "objects"))[0]?.id;
+  `,
+      "objects",
+    )
+  )[0]?.id;
   if (group.billingSubsidiaryId) {
-    const billing = (await db.execute<{ id: string }>(sql`
+    const billing = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from subsidiaries where org_id = ${orgId} and id = ${group.billingSubsidiaryId} and is_active
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!billing) {
       throw new ConsolidatedBillingError(
         `consolidation group "${group.code ?? group.billingSubsidiaryId}" bills through a subsidiary that is not active in this organization — ` +
-        "point the group at an active billing subsidiary under the consolidation setup before running",
+          "point the group at an active billing subsidiary under the consolidation setup before running",
       );
     }
-    if (!rootId) throw new ConsolidatedBillingError("this organization has no root subsidiary — create the entity structure before consolidating");
-    return { billingSubsidiaryId: billing.id, serviceSubsidiaryId: service.trustedSubsidiaryId ?? rootId };
+    if (!rootId)
+      throw new ConsolidatedBillingError(
+        "this organization has no root subsidiary — create the entity structure before consolidating",
+      );
+    return {
+      billingSubsidiaryId: billing.id,
+      serviceSubsidiaryId: service.trustedSubsidiaryId ?? rootId,
+    };
   }
   if (payer.subsidiaryId !== null && payer.trustedSubsidiaryId === null) {
     throw new ConsolidatedBillingError(
       "the payer is assigned to a subsidiary that is not active in this organization — " +
-      "reassign the payer to an active subsidiary (or clear the assignment for an org-wide payer) before consolidating",
+        "reassign the payer to an active subsidiary (or clear the assignment for an org-wide payer) before consolidating",
     );
   }
-  if (!rootId) throw new ConsolidatedBillingError("this organization has no root subsidiary — create the entity structure before consolidating");
+  if (!rootId)
+    throw new ConsolidatedBillingError(
+      "this organization has no root subsidiary — create the entity structure before consolidating",
+    );
   return {
     billingSubsidiaryId: payer.trustedSubsidiaryId ?? rootId,
     serviceSubsidiaryId: service.trustedSubsidiaryId ?? rootId,
@@ -294,7 +361,12 @@ export async function resolveSubscriptionBillingTarget(
   billingDate: string,
   override: SubscriptionPartyOverride | null,
 ): Promise<SubscriptionBillingTarget> {
-  const parties = await resolveEffectiveBillingParties(orgId, serviceCustomerId, billingDate, override);
+  const parties = await resolveEffectiveBillingParties(
+    orgId,
+    serviceCustomerId,
+    billingDate,
+    override,
+  );
   if (!parties.consolidationGroupId) {
     const entities = await resolveConsolidationEntities(
       orgId,
@@ -308,7 +380,9 @@ export async function resolveSubscriptionBillingTarget(
       servicePartyId: parties.servicePartyId,
       headerSubsidiaryId: entities.billingSubsidiaryId,
       lineSubsidiaryId:
-        entities.serviceSubsidiaryId !== entities.billingSubsidiaryId ? entities.serviceSubsidiaryId : null,
+        entities.serviceSubsidiaryId !== entities.billingSubsidiaryId
+          ? entities.serviceSubsidiaryId
+          : null,
       consolidation: null,
     };
   }
@@ -316,7 +390,12 @@ export async function resolveSubscriptionBillingTarget(
   // Validates the payer and the group's billing entity now (fail fast at
   // billing time, not at the run) and resolves the service entity the draft
   // header keeps.
-  const entities = await resolveConsolidationEntities(orgId, group, parties.servicePartyId, parties.payerPartyId);
+  const entities = await resolveConsolidationEntities(
+    orgId,
+    group,
+    parties.servicePartyId,
+    parties.payerPartyId,
+  );
   const period = consolidationPeriodFor(group, billingDate);
   return {
     payerPartyId: parties.payerPartyId,
@@ -324,7 +403,11 @@ export async function resolveSubscriptionBillingTarget(
     servicePartyId: parties.servicePartyId,
     headerSubsidiaryId: entities.serviceSubsidiaryId,
     lineSubsidiaryId: null,
-    consolidation: { groupId: group.id, periodStart: period.periodStart, periodEnd: period.periodEnd },
+    consolidation: {
+      groupId: group.id,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+    },
   };
 }
 
@@ -346,14 +429,24 @@ async function replayConsolidationRuns(
 ): Promise<ConsolidationRunResult[]> {
   const results: ConsolidationRunResult[] = [];
   for (const guard of priorRuns) {
-    const superseded = (await db.execute<{ id: string }>(sql`
+    const superseded = (
+      await db.execute<{ id: string }>(
+        sql`
       select l.from_document_id as id from document_links l
        where l.org_id = ${orgId} and l.to_document_id = ${guard.invoiceId} and l.link_type = 'created_from'
-    `, "objects")).map((row) => row.id);
-    const totals = (await db.execute<{ subtotal: string; taxTotal: string; total: string }>(sql`
+    `,
+        "objects",
+      )
+    ).map((row) => row.id);
+    const totals = (
+      await db.execute<{ subtotal: string; taxTotal: string; total: string }>(
+        sql`
       select subtotal::text as subtotal, tax_total::text as "taxTotal", total::text as total
         from documents where org_id = ${orgId} and id = ${guard.invoiceId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!totals) {
       throw new ConsolidatedBillingError(
         `consolidation for ${periodStart} through ${periodEnd} points to a missing invoice — restore the invoice record before re-running`,
@@ -466,31 +559,64 @@ function orderLines(lines: PendingLine[], grouping: ConsolidationGrouping): Pend
 }
 
 /** Consolidation is a cross-entity command; operator authority must cover the organization. */
-async function lockConsolidationCommandAuthority(orgId: string, opts: ConsolidationRunOptions): Promise<void> {
+async function lockConsolidationCommandAuthority(
+  orgId: string,
+  opts: ConsolidationRunOptions,
+): Promise<void> {
   if (opts.allowedSubsidiaryIds !== undefined && opts.allowedSubsidiaryIds !== null) {
-    throw new ConsolidatedBillingError("Consolidated billing requires unrestricted legal-entity access.", 404);
+    throw new ConsolidatedBillingError(
+      "Consolidated billing requires unrestricted legal-entity access.",
+      404,
+    );
   }
   // Scheduled native runs have no operator principal and never auto-post.
   if (opts.actorId === undefined || opts.actorId === null) {
-    if (opts.autoPost) throw new ConsolidatedBillingError("Choose an authorized operator before posting consolidated invoices.", 404);
+    if (opts.autoPost)
+      throw new ConsolidatedBillingError(
+        "Choose an authorized operator before posting consolidated invoices.",
+        404,
+      );
     return;
   }
   // An unparseable operator identity refuses as unknown rather than leaking
   // the driver's uuid syntax error through a typed command boundary.
   if (!isUuid(opts.actorId)) {
-    throw new ConsolidatedBillingError("Consolidated billing is unavailable for this operator.", 404);
+    throw new ConsolidatedBillingError(
+      "Consolidated billing is unavailable for this operator.",
+      404,
+    );
   }
-  const actor = await lockActorIdentity(db,orgId,opts.actorId);
-  if (!actor) throw new ConsolidatedBillingError("Consolidated billing is unavailable for this operator.", 404);
+  const actor = await lockActorIdentity(db, orgId, opts.actorId);
+  if (!actor)
+    throw new ConsolidatedBillingError(
+      "Consolidated billing is unavailable for this operator.",
+      404,
+    );
   try {
-    const scope = await lockActorCommandAuthority(db, orgId, opts.actorId, null, "documents.manage");
+    const scope = await lockActorCommandAuthority(
+      db,
+      orgId,
+      opts.actorId,
+      null,
+      "documents.manage",
+    );
     if (scope !== null) throw new ScopeNotFoundError();
     if (opts.autoPost) {
-      const postingScope = await lockActorCommandAuthority(db, orgId, opts.actorId, null, "ar.post");
+      const postingScope = await lockActorCommandAuthority(
+        db,
+        orgId,
+        opts.actorId,
+        null,
+        "ar.post",
+      );
       if (postingScope !== null) throw new ScopeNotFoundError();
     }
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) throw new ConsolidatedBillingError("Consolidated billing is unavailable for this operator.", 404);
+    if (error instanceof ScopeNotFoundError)
+      throw new ConsolidatedBillingError(
+        "Consolidated billing is unavailable for this operator.",
+        404,
+      );
     throw error;
   }
 }
@@ -521,7 +647,9 @@ export async function runConsolidationGroup(
   const actorId = opts.actorId ?? null;
   return withOrg(orgId, async () => {
     if (!(await lockAndCheckOrgFeature(db, orgId, "consolidatedBilling"))) {
-      throw new ConsolidatedBillingError(`Consolidated billing is turned off for this organization. ${FEATURE_REMEDY}`);
+      throw new ConsolidatedBillingError(
+        `Consolidated billing is turned off for this organization. ${FEATURE_REMEDY}`,
+      );
     }
     await lockConsolidationCommandAuthority(orgId, opts);
     const lockKey = `consolidation:${orgId}:${groupId}:${periodStart}:${periodEnd}`;
@@ -532,17 +660,31 @@ export async function runConsolidationGroup(
         `consolidation group "${group.code}" is inactive — reactivate the group under the consolidation setup before running`,
       );
     }
-    const { billingSubsidiaryId } = await resolveConsolidationEntities(orgId, group, group.payerPartyId, group.payerPartyId);
+    const { billingSubsidiaryId } = await resolveConsolidationEntities(
+      orgId,
+      group,
+      group.payerPartyId,
+      group.payerPartyId,
+    );
 
-    const priorRuns = await db.execute<{ runId: string; invoiceId: string; documentNumber: string; currency: string }>(sql`
+    const priorRuns = await db.execute<{
+      runId: string;
+      invoiceId: string;
+      documentNumber: string;
+      currency: string;
+    }>(
+      sql`
       select r.id as "runId", r.invoice_id as "invoiceId", d.document_number as "documentNumber", r.currency
         from consolidation_runs r join documents d on d.org_id = r.org_id and d.id = r.invoice_id
        where r.org_id = ${orgId} and r.group_id = ${groupId}
          and r.period_start = ${periodStart}::date and r.period_end = ${periodEnd}::date
          and r.billing_subsidiary_id = ${billingSubsidiaryId}
        order by r.currency
-    `, "objects");
-    const drafts = await db.execute<PendingDraft>(sql`
+    `,
+      "objects",
+    );
+    const drafts = await db.execute<PendingDraft>(
+      sql`
       with locked_drafts as materialized (
         select d.* from documents d
          where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'draft'
@@ -559,23 +701,32 @@ export async function runConsolidationGroup(
              nullif(d.custom->>'subscriptionId', '') as "subscriptionId"
         from locked_drafts d
        order by d.document_date, d.document_number, d.id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!drafts.length) {
       if (!priorRuns.length) {
         throw new ConsolidatedBillingError(
           `consolidation group "${group.code}" has no pending charges for ${periodStart} through ${periodEnd} — ` +
-          "bill the grouped subscriptions first (their invoices collect here as pending drafts), then run again",
+            "bill the grouped subscriptions first (their invoices collect here as pending drafts), then run again",
         );
       }
       // A completed bucket holds no pending drafts — the drafts were
       // superseded by the run itself. Replay every committed invoice.
-      return replayConsolidationRuns(orgId, groupId, periodStart, periodEnd, billingSubsidiaryId, priorRuns);
+      return replayConsolidationRuns(
+        orgId,
+        groupId,
+        periodStart,
+        periodEnd,
+        billingSubsidiaryId,
+        priorRuns,
+      );
     }
     for (const draft of drafts) {
       if (draft.partyId !== group.payerPartyId) {
         throw new ConsolidatedBillingError(
           `invoice ${draft.documentNumber} is addressed to another payer — ` +
-          "review the group's payer and effective billing relationships, then align the group with its source charges before running consolidation",
+            "review the group's payer and effective billing relationships, then align the group with its source charges before running consolidation",
         );
       }
     }
@@ -589,26 +740,41 @@ export async function runConsolidationGroup(
 
     const guarded = new Map(priorRuns.map((run) => [run.currency, run]));
     const results: ConsolidationRunResult[] = [];
-    const billingEntity = (await db.execute<{ baseCurrency: string }>(sql`
+    const billingEntity = (
+      await db.execute<{ baseCurrency: string }>(
+        sql`
       select base_currency as "baseCurrency" from subsidiaries
        where org_id = ${orgId} and id = ${billingSubsidiaryId} and is_active
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!billingEntity) {
       throw new ConsolidatedBillingError(
         "The billing subsidiary is no longer active in this organization — choose an active billing subsidiary and retry.",
       );
     }
-    for (const [currency, bucket] of [...byCurrency.entries()].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    for (const [currency, bucket] of [...byCurrency.entries()].sort(([a], [b]) =>
+      a < b ? -1 : 1,
+    )) {
       const guard = guarded.get(currency);
       if (guard) {
         results.push(
-          ...(await replayConsolidationRuns(orgId, groupId, periodStart, periodEnd, billingSubsidiaryId, [guard])),
+          ...(await replayConsolidationRuns(
+            orgId,
+            groupId,
+            periodStart,
+            periodEnd,
+            billingSubsidiaryId,
+            [guard],
+          )),
         );
         continue;
       }
 
       const draftIds = bucket.map((d) => d.id);
-      const lines = await db.execute<PendingLine>(sql`
+      const lines = await db.execute<PendingLine>(
+        sql`
         select l.id, l.document_id as "documentId", l.line_number as "lineNumber",
                l.item_id as "itemId", l.account_id as "accountId", l.description,
                l.quantity::text as quantity, l.unit_price::text as "unitPrice",
@@ -623,7 +789,9 @@ export async function runConsolidationGroup(
           left join parties p on p.org_id = l.org_id and p.id = l.service_party_id
          where l.org_id = ${orgId} and l.document_id = any(${uuidArray(draftIds)}::uuid[])
          order by l.document_id, l.line_number
-      `, "objects");
+      `,
+        "objects",
+      );
       const missing = bucket.filter((d) => !lines.some((l) => l.documentId === d.id));
       if (missing.length) {
         throw new ConsolidatedBillingError(
@@ -632,7 +800,9 @@ export async function runConsolidationGroup(
       }
       const unserviced = lines.filter((l) => !l.servicePartyId);
       if (unserviced.length) {
-        const draftNo = bucket.find((d) => d.id === unserviced[0]!.documentId)?.documentNumber ?? unserviced[0]!.documentId;
+        const draftNo =
+          bucket.find((d) => d.id === unserviced[0]!.documentId)?.documentNumber ??
+          unserviced[0]!.documentId;
         throw new ConsolidatedBillingError(
           `invoice ${draftNo} has lines without a service party — re-bill those charges through a payer hierarchy relationship before consolidating`,
         );
@@ -642,23 +812,38 @@ export async function runConsolidationGroup(
       // UUID order. orderLines then groups stably (first-seen group wins).
       const draftPosition = new Map(draftIds.map((id, index) => [id, index]));
       const inDraftOrder = [...lines].sort(
-        (a, b) => draftPosition.get(a.documentId)! - draftPosition.get(b.documentId)! || a.lineNumber - b.lineNumber,
+        (a, b) =>
+          draftPosition.get(a.documentId)! - draftPosition.get(b.documentId)! ||
+          a.lineNumber - b.lineNumber,
       );
       const ordered = orderLines(inDraftOrder, group.grouping);
 
-      const rateType = (await accountingPreferences(db, orgId, billingSubsidiaryId, periodEnd)).postingRateType;
-      const fxRate = await lookupExchangeRate(db, orgId, currency, billingEntity.baseCurrency, periodEnd, rateType);
+      const rateType = (await accountingPreferences(db, orgId, billingSubsidiaryId, periodEnd))
+        .postingRateType;
+      const fxRate = await lookupExchangeRate(
+        db,
+        orgId,
+        currency,
+        billingEntity.baseCurrency,
+        periodEnd,
+        rateType,
+      );
       if (fxRate === null) {
         throw new ConsolidatedBillingError(
           `No ${rateType} exchange rate converts ${currency} to ${billingEntity.baseCurrency} on or before ${periodEnd} — enter the dated quote in Setup → Exchange rates, then retry consolidation.`,
         );
       }
 
-      const sums = (await db.execute<{ subtotal: string; taxTotal: string; total: string }>(sql`
+      const sums = (
+        await db.execute<{ subtotal: string; taxTotal: string; total: string }>(
+          sql`
         select sum(amount)::text as subtotal, sum(tax_amount)::text as "taxTotal",
                sum(amount + tax_amount)::text as total
           from document_lines where org_id = ${orgId} and document_id = any(${uuidArray(draftIds)}::uuid[])
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!sums?.subtotal || !sums.taxTotal || !sums.total) {
         throw new ConsolidatedBillingError(
           `could not total the pending charges for ${periodStart} through ${periodEnd} — reload the drafts and retry`,
@@ -667,7 +852,8 @@ export async function runConsolidationGroup(
 
       const billToPartyId = bucket[0]!.billToPartyId ?? group.payerPartyId;
       const documentNumber = await allocateDocumentNumber(db, orgId, "customer_invoice", "INV-");
-      const created = (await db.execute<{ id: string }>(sql`
+      const created = await db.execute<{ id: string }>(
+        sql`
         insert into documents (org_id, kind, document_number, party_id, document_date, due_date, currency, fx_rate, status,
                                subsidiary_id, memo, subtotal, tax_total, total, custom, created_by)
         values (${orgId}, 'customer_invoice', ${documentNumber}, ${group.payerPartyId}, ${periodEnd},
@@ -687,7 +873,9 @@ export async function runConsolidationGroup(
                   ...(group.template ? { template: group.template } : {}),
                 })}::jsonb, ${actorId})
         returning id
-      `, "objects"));
+      `,
+        "objects",
+      );
       const invoiceId = created[0]!.id;
 
       const draftSubsidiary = new Map(bucket.map((d) => [d.id, d.subsidiaryId]));
@@ -699,8 +887,10 @@ export async function runConsolidationGroup(
         // posting time (refusing by name when no pair is configured). Same
         // entity stays null and defaults to the header, exactly as before.
         const serviceSubsidiary = draftSubsidiary.get(line.documentId) ?? null;
-        const lineSubsidiary = serviceSubsidiary && serviceSubsidiary !== billingSubsidiaryId ? serviceSubsidiary : null;
-        const inserted = (await db.execute<{ id: string }>(sql`
+        const lineSubsidiary =
+          serviceSubsidiary && serviceSubsidiary !== billingSubsidiaryId ? serviceSubsidiary : null;
+        const inserted = await db.execute<{ id: string }>(
+          sql`
           insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity,
                 unit_price, amount, tax_code_id, tax_group_id, tax_input_amount, tax_amount, tax_overridden,
                 subsidiary_id, party_id, service_party_id, custom, is_billable, created_by)
@@ -710,7 +900,9 @@ export async function runConsolidationGroup(
                 ${lineSubsidiary}, ${line.servicePartyId}, ${line.servicePartyId},
                 ${JSON.stringify(line.custom ?? {})}::jsonb, true, ${actorId})
           returning id
-        `, "objects"));
+        `,
+          "objects",
+        );
         const newLineId = inserted[0]!.id;
         await db.execute(sql`
           insert into document_line_tax_components
@@ -732,7 +924,8 @@ export async function runConsolidationGroup(
       }
 
       for (const draft of bucket) {
-        const superseded = await db.execute(sql`
+        const superseded = await db.execute(
+          sql`
           update documents
              set custom = coalesce(custom, '{}'::jsonb) || ${JSON.stringify({
                consolidationStatus: "superseded",
@@ -741,7 +934,9 @@ export async function runConsolidationGroup(
                  updated_at = now(), updated_by = ${actorId}
            where org_id = ${orgId} and id = ${draft.id} and status = 'draft'
           returning id
-        `, "objects");
+        `,
+          "objects",
+        );
         if (superseded.length !== 1) {
           throw new ConsolidatedBillingError(
             `invoice ${draft.documentNumber} changed during collection — reload the consolidation group and retry`,
@@ -755,13 +950,16 @@ export async function runConsolidationGroup(
         `);
       }
 
-      const run = (await db.execute<{ id: string }>(sql`
+      const run = await db.execute<{ id: string }>(
+        sql`
         insert into consolidation_runs
           (org_id, group_id, period_start, period_end, currency, billing_subsidiary_id, invoice_id, created_by, updated_by)
         values (${orgId}, ${groupId}, ${periodStart}::date, ${periodEnd}::date,
                 ${currency}, ${billingSubsidiaryId}, ${invoiceId}, ${actorId}, ${actorId})
         returning id
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (run.length !== 1) {
         throw new ConsolidatedBillingError(
           `consolidation for ${periodStart} through ${periodEnd} changed before its guard could be recorded — reload and retry`,
@@ -770,15 +968,22 @@ export async function runConsolidationGroup(
 
       let posted = false;
       if (opts.autoPost) {
-        const submission = await submitAndReleaseIfUngated("customer_invoice", invoiceId, actorId,
-          { source: actorId === null ? "schedule" : "api" });
+        const submission = await submitAndReleaseIfUngated("customer_invoice", invoiceId, actorId, {
+          source: actorId === null ? "schedule" : "api",
+        });
         if (submission.flowError) {
-          throw new ConsolidatedBillingError(`approval could not be routed: ${submission.flowError}`);
+          throw new ConsolidatedBillingError(
+            `approval could not be routed: ${submission.flowError}`,
+          );
         }
         if (!submission.gated) {
-          await postDocument(invoiceId, { control: await loadRequiredControlAccounts(orgId) }, {
-            audit: { actorId, source: "consolidation_run" },
-          });
+          await postDocument(
+            invoiceId,
+            { control: await loadRequiredControlAccounts(orgId) },
+            {
+              audit: { actorId, source: "consolidation_run" },
+            },
+          );
           posted = true;
         }
       }
@@ -820,7 +1025,12 @@ export interface ConsolidationScanResult {
  * without taking the other groups down.
  */
 export async function runDueConsolidations(asOf?: string): Promise<ConsolidationScanResult> {
-  const result: ConsolidationScanResult = { consolidated: 0, replayed: 0, failed: 0, orgErrors: [] };
+  const result: ConsolidationScanResult = {
+    consolidated: 0,
+    replayed: 0,
+    failed: 0,
+    orgErrors: [],
+  };
   // Simulation (and other tenant-scoped callers) run this helper while an
   // ambient org context is active. Keep that context as a hard candidate
   // boundary even though the scheduler's unscoped invocation legitimately
@@ -830,20 +1040,27 @@ export async function runDueConsolidations(asOf?: string): Promise<Consolidation
   const orgScope = scopedOrgId ? sql`and g.org_id = ${scopedOrgId}` : sql``;
   // bypass: scheduler-tick — the unscoped scan finds active groups across
   // every production organization.
-  const groups = await withBypass(async () =>
-    await db.execute<{ orgId: string; groupId: string; cadence: string; cutoffDay: number }>(sql`
+  const groups = await withBypass(
+    async () =>
+      await db.execute<{ orgId: string; groupId: string; cadence: string; cutoffDay: number }>(
+        sql`
       select g.org_id as "orgId", g.id as "groupId",
              g.cadence as "cadence", g.cutoff_day as "cutoffDay"
         from consolidation_groups g
        where g.is_active ${orgScope}
-       order by g.org_id, g.id`, "objects"));
+       order by g.org_id, g.id`,
+        "objects",
+      ),
+  );
   const gated = new Map<string, boolean>();
   const orgToday = new Map<string, string>();
   const dateFailed = new Set<string>();
   for (const group of groups) {
     let enabled = gated.get(group.orgId);
     if (enabled === undefined) {
-      enabled = await withOrg(group.orgId, () => orgFeatureEnabled(group.orgId, "consolidatedBilling"));
+      enabled = await withOrg(group.orgId, () =>
+        orgFeatureEnabled(group.orgId, "consolidatedBilling"),
+      );
       gated.set(group.orgId, enabled);
     }
     if (!enabled || dateFailed.has(group.orgId)) continue;
@@ -855,7 +1072,10 @@ export async function runDueConsolidations(asOf?: string): Promise<Consolidation
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         result.failed += 1;
-        result.orgErrors.push({ orgId: group.orgId, error: `business day unavailable: ${message}` });
+        result.orgErrors.push({
+          orgId: group.orgId,
+          error: `business day unavailable: ${message}`,
+        });
         dateFailed.add(group.orgId);
         continue;
       }
@@ -891,21 +1111,31 @@ async function consolidateDueBuckets(
   result: ConsolidationScanResult,
 ): Promise<void> {
   const shape = { cadence: group.cadence as "weekly" | "monthly", cutoffDay: group.cutoffDay };
-  const pendings = await db.execute<{ documentDate: string }>(sql`
+  const pendings = await db.execute<{ documentDate: string }>(
+    sql`
     select distinct d.document_date::text as "documentDate"
       from documents d
      where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'draft'
        and d.custom->>'consolidationStatus' = 'pending_consolidation'
        and d.custom->>'consolidationGroupId' = ${group.groupId}
-     order by 1`, "objects");
+     order by 1`,
+    "objects",
+  );
   const buckets = new Map<string, { periodStart: string; periodEnd: string }>();
   for (const pending of pendings) {
     const bucket = consolidationPeriodFor(shape, pending.documentDate);
     if (bucket.periodEnd < today) buckets.set(`${bucket.periodStart}/${bucket.periodEnd}`, bucket);
   }
-  const ordered = [...buckets.values()].sort((a, b) => (a.periodStart < b.periodStart ? -1 : 1)).slice(0, 12);
+  const ordered = [...buckets.values()]
+    .sort((a, b) => (a.periodStart < b.periodStart ? -1 : 1))
+    .slice(0, 12);
   for (const bucket of ordered) {
-    const runs = await runConsolidationGroup(orgId, group.groupId, bucket.periodStart, bucket.periodEnd);
+    const runs = await runConsolidationGroup(
+      orgId,
+      group.groupId,
+      bucket.periodStart,
+      bucket.periodEnd,
+    );
     for (const run of runs) {
       if (run.replayed) result.replayed += 1;
       else result.consolidated += 1;

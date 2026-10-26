@@ -10,7 +10,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
@@ -32,7 +32,9 @@ export const bomComponents = pgTable(
     assemblyItemId: uuid("assembly_item_id").notNull(),
     componentItemId: uuid("component_item_id").notNull(),
     quantityPer: money("quantity_per").notNull(),
-    quantityBasis: text("quantity_basis",{enum:["per_unit","per_batch","per_formula"]}).notNull().default("per_unit"),
+    quantityBasis: text("quantity_basis", { enum: ["per_unit", "per_batch", "per_formula"] })
+      .notNull()
+      .default("per_unit"),
     formulaOutputQuantity: money("formula_output_quantity").notNull().default("1"),
     sortOrder: integer("sort_order").notNull().default(0),
     ...auditColumns,
@@ -44,8 +46,14 @@ export const bomComponents = pgTable(
     outputCostWeight: money("output_cost_weight"),
   },
   (t) => [
-    check("bom_components_output_cost_weight",sql`${t.outputCostWeight} is null or (${t.isByproduct} and ${t.outputCostWeight}>0)`),
-    check("bom_components_quantity_basis",sql`${t.quantityBasis} in ('per_unit','per_batch','per_formula') and ${t.formulaOutputQuantity}>0 and (${t.quantityBasis}='per_formula' or ${t.formulaOutputQuantity}=1) and (not ${t.isByproduct} or ${t.quantityBasis}<>'per_batch')`),
+    check(
+      "bom_components_output_cost_weight",
+      sql`${t.outputCostWeight} is null or (${t.isByproduct} and ${t.outputCostWeight}>0)`,
+    ),
+    check(
+      "bom_components_quantity_basis",
+      sql`${t.quantityBasis} in ('per_unit','per_batch','per_formula') and ${t.formulaOutputQuantity}>0 and (${t.quantityBasis}='per_formula' or ${t.formulaOutputQuantity}=1) and (not ${t.isByproduct} or ${t.quantityBasis}<>'per_batch')`,
+    ),
     check(
       "bom_components_effective_range_check",
       sql`${t.effectiveFrom} is null or ${t.effectiveTo} is null or ${t.effectiveTo} > ${t.effectiveFrom}`,
@@ -70,17 +78,24 @@ export const stockLocations = pgTable(
     locationId: uuid("location_id").notNull(), // → locations dimension
     parentId: uuid("parent_id"), // bin hierarchy: zone → aisle → bin
     code: text("code").notNull(), // "A-03-14"
-    kind: text("kind", { enum: ["warehouse", "zone", "bin", "staging", "transit", "quarantine", "subcontract"] })
+    kind: text("kind", {
+      enum: ["warehouse", "zone", "bin", "staging", "transit", "quarantine", "subcontract"],
+    })
       .notNull()
       .default("bin"),
-    inventoryOwnership: text("inventory_ownership",{enum:["owned","vendor","customer"]}).notNull().default("owned"),
+    inventoryOwnership: text("inventory_ownership", { enum: ["owned", "vendor", "customer"] })
+      .notNull()
+      .default("owned"),
     ownerPartyId: uuid("owner_party_id"),
     custodianPartyId: uuid("custodian_party_id"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
   (t) => [
-    check("stock_location_subcontract_custody",sql`(${t.kind}='subcontract')=(${t.custodianPartyId} is not null) and (${t.kind}<>'subcontract' or ${t.inventoryOwnership}='owned')`),
+    check(
+      "stock_location_subcontract_custody",
+      sql`(${t.kind}='subcontract')=(${t.custodianPartyId} is not null) and (${t.kind}<>'subcontract' or ${t.inventoryOwnership}='owned')`,
+    ),
     uniqueIndex("stock_locations_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("stock_locations_org_code").on(t.orgId, t.locationId, t.code),
     uniqueIndex("stock_locations_org_warehouse_code")
@@ -115,7 +130,9 @@ export const serials = pgTable(
     serialNumber: text("serial_number").notNull(),
     lotId: uuid("lot_id"),
     holdReason: text("hold_reason"),
-    status: text("status", { enum: ["registered", "in_stock", "committed", "shipped", "returned", "scrapped"] })
+    status: text("status", {
+      enum: ["registered", "in_stock", "committed", "shipped", "returned", "scrapped"],
+    })
       .notNull()
       .default("in_stock"),
     currentStockLocationId: uuid("current_stock_location_id"),
@@ -150,7 +167,19 @@ export const inventoryMovements = pgTable(
     subsidiaryId: uuid("subsidiary_id").notNull(),
     itemId: uuid("item_id").notNull(),
     kind: text("kind", {
-      enum: ["receipt", "issue", "transfer_out", "transfer_in", "adjustment", "count", "assembly_build", "assembly_consume", "assembly_disassembly", "assembly_recovery", "return"],
+      enum: [
+        "receipt",
+        "issue",
+        "transfer_out",
+        "transfer_in",
+        "adjustment",
+        "count",
+        "assembly_build",
+        "assembly_consume",
+        "assembly_disassembly",
+        "assembly_recovery",
+        "return",
+      ],
     }).notNull(),
     movedAt: timestamp("moved_at", { withTimezone: true }).notNull(),
     stockLocationId: uuid("stock_location_id").notNull(),
@@ -171,12 +200,14 @@ export const inventoryMovements = pgTable(
      *  a source movement; the source row itself remains immutable. */
     reversesMovementId: uuid("reverses_movement_id"),
     reversalReason: text("reversal_reason"),
-    status: text("status", { enum: ["pending", "posted"] }).notNull().default("pending"),
+    status: text("status", { enum: ["pending", "posted"] })
+      .notNull()
+      .default("pending"),
     memo: text("memo"),
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("inventory_movements_org_id_identity").on(t.orgId,t.id),
+    uniqueIndex("inventory_movements_org_id_identity").on(t.orgId, t.id),
     index("inv_moves_item_loc").on(t.itemId, t.stockLocationId),
     index("inv_moves_doc_line").on(t.documentLineId),
     uniqueIndex("inventory_movements_org_idempotency")
@@ -203,12 +234,28 @@ export const inventoryMovements = pgTable(
 );
 
 /** Immutable physical operation evidence, including quantity-only recovery. */
-export const assemblyDisassemblies = pgTable('assembly_disassemblies', {
-  id: uuid('id').primaryKey().notNull(), orgId: orgRef(), subsidiaryId: uuid('subsidiary_id').notNull(), bookId: uuid('book_id').notNull(),
-  buildMovementId: uuid('build_movement_id').notNull(), quantity: money('quantity').notNull(), withdrawnValue: money('withdrawn_value').notNull(),
-  movedOn: date('moved_on').notNull(), reason: text('reason').notNull(), components: jsonb('components').notNull(),
-  journalEntryId: uuid('journal_entry_id'), createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(), createdBy: uuid('created_by').notNull(),
-}, t => [uniqueIndex('assembly_disassemblies_org_id_id').on(t.orgId,t.id),index('assembly_disassemblies_source').on(t.orgId,t.buildMovementId,t.movedOn,t.id)]);
+export const assemblyDisassemblies = pgTable(
+  "assembly_disassemblies",
+  {
+    id: uuid("id").primaryKey().notNull(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    bookId: uuid("book_id").notNull(),
+    buildMovementId: uuid("build_movement_id").notNull(),
+    quantity: money("quantity").notNull(),
+    withdrawnValue: money("withdrawn_value").notNull(),
+    movedOn: date("moved_on").notNull(),
+    reason: text("reason").notNull(),
+    components: jsonb("components").notNull(),
+    journalEntryId: uuid("journal_entry_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+  },
+  (t) => [
+    uniqueIndex("assembly_disassemblies_org_id_id").on(t.orgId, t.id),
+    index("assembly_disassemblies_source").on(t.orgId, t.buildMovementId, t.movedOn, t.id),
+  ],
+);
 
 export const stockCountLines = pgTable(
   "stock_count_lines",
@@ -225,7 +272,7 @@ export const stockCountLines = pgTable(
     secondCountedQuantity: money("second_counted_quantity"),
     firstCountedBy: uuid("first_counted_by"),
     secondCountedBy: uuid("second_counted_by"),
-    secondCountedAt: timestamp("second_counted_at",{withTimezone:true}),
+    secondCountedAt: timestamp("second_counted_at", { withTimezone: true }),
     expectedQuantity: money("expected_quantity").notNull(),
     countedQuantity: money("counted_quantity"),
     adjustmentMovementId: uuid("adjustment_movement_id"),
@@ -249,7 +296,10 @@ export const stockCountLines = pgTable(
       .where(sql`NOT ${t.isPreGuardLegacy}`),
     // A physical count is never negative; NULL stays legal for uncounted
     // lines. Marked pre-guard rows are preserved as evidence (0299).
-    check("stock_count_lines_counted_nonnegative", sql`${t.countedQuantity} IS NULL OR ${t.countedQuantity} >= 0 OR ${t.isPreGuardLegacy}`),
+    check(
+      "stock_count_lines_counted_nonnegative",
+      sql`${t.countedQuantity} IS NULL OR ${t.countedQuantity} >= 0 OR ${t.isPreGuardLegacy}`,
+    ),
   ],
 );
 
@@ -268,7 +318,7 @@ export interface AssemblyBomRevisionEvidence {
     componentItemId: string;
     quantityPer: string;
     sortOrder: number;
-    quantityBasis?:"per_unit"|"per_batch"|"per_formula";
-    formulaOutputQuantity?:string;
+    quantityBasis?: "per_unit" | "per_batch" | "per_formula";
+    formulaOutputQuantity?: string;
   }>;
 }

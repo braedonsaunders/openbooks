@@ -6,7 +6,7 @@ import {
   currencyExponent,
   minorUnitsToCanonical,
   scheduleForAsset,
-} from '@openbooks/engine/revenue'
+} from "@openbooks/engine/revenue";
 import "server-only";
 
 import { getLocale, getTranslations } from "next-intl/server";
@@ -100,7 +100,10 @@ export interface ContractCostsData {
   onAssets: boolean;
 }
 
-function contractCostAssetVisibility(alias: "a" | "asset", allowed: ReadonlySet<string> | null): SQL {
+function contractCostAssetVisibility(
+  alias: "a" | "asset",
+  allowed: ReadonlySet<string> | null,
+): SQL {
   if (allowed === null) return sql``;
   const table = sql.raw(alias);
   return sql`and (
@@ -136,22 +139,24 @@ async function loadAssetPayload(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   locale: string,
 ): Promise<ContractCostAssetPayload | null> {
-  const row = (await db.execute<{
-    id: string;
-    contract_id: string | null;
-    contract_number: string | null;
-    customer: string | null;
-    sales_rep: string | null;
-    cost_type: string;
-    amount_minor: string;
-    currency: string;
-    capitalized_on: string;
-    amort_start_on: string;
-    amort_end_on: string;
-    method: string;
-    status: string;
-    capitalize_entry_id: string | null;
-  }>(sql`
+  const row = (
+    await db.execute<{
+      id: string;
+      contract_id: string | null;
+      contract_number: string | null;
+      customer: string | null;
+      sales_rep: string | null;
+      cost_type: string;
+      amount_minor: string;
+      currency: string;
+      capitalized_on: string;
+      amort_start_on: string;
+      amort_end_on: string;
+      method: string;
+      status: string;
+      capitalize_entry_id: string | null;
+    }>(
+      sql`
     select a.id, a.revenue_contract_id as contract_id, c.contract_number,
            customer.display_name as customer, rep.display_name as sales_rep,
            a.cost_type, a.amount_minor::text, a.currency,
@@ -163,7 +168,10 @@ async function loadAssetPayload(
       left join parties customer on customer.org_id = a.org_id and customer.id = a.customer_party_id
       left join parties rep on rep.org_id = a.org_id and rep.id = a.rep_party_id
      where a.org_id = ${orgId} and a.id = ${assetId}
-       ${contractCostAssetVisibility("a", allowedSubsidiaryIds)}`, "objects"))[0];
+       ${contractCostAssetVisibility("a", allowedSubsidiaryIds)}`,
+      "objects",
+    )
+  )[0];
   if (!row) return null;
   // The asset prices in its own currency through the shared ISO exponent:
   // a missing registry row refuses by name (the registry is read-only, so
@@ -172,16 +180,32 @@ async function loadAssetPayload(
   const exponent = await currencyExponent(db, row.currency);
   const schedule = await scheduleForAsset(db, orgId, assetId);
   const periodNames = new Map(
-    (await db.execute<{ id: string; name: string }>(sql`
+    (
+      await db.execute<{ id: string; name: string }>(
+        sql`
       select p.id, ${periodDisplayLabelSql(locale, "p")} as name
-        from accounting_periods p where p.org_id = ${orgId}`, "objects")).map((p) => [p.id, p.name]),
+        from accounting_periods p where p.org_id = ${orgId}`,
+        "objects",
+      )
+    ).map((p) => [p.id, p.name]),
   );
   const postedByPeriod = new Map(
-    (await db.execute<{ period_id: string; entry_id: string }>(sql`
+    (
+      await db.execute<{ period_id: string; entry_id: string }>(
+        sql`
       select period_id, journal_entry_id as entry_id from contract_cost_amortization
-       where org_id = ${orgId} and asset_id = ${assetId}`, "objects")).map((r) => [r.period_id, r.entry_id]),
+       where org_id = ${orgId} and asset_id = ${assetId}`,
+        "objects",
+      )
+    ).map((r) => [r.period_id, r.entry_id]),
   );
-  const entries = await db.execute<{ id: string; origin: string; posting_date: string; period_name: string }>(sql`
+  const entries = await db.execute<{
+    id: string;
+    origin: string;
+    posting_date: string;
+    period_name: string;
+  }>(
+    sql`
     select distinct je.id, je.origin, je.posting_date::text, ${periodDisplayLabelSql(locale, "p")} as period_name
       from journal_entries je
       join journal_lines jl on jl.org_id = je.org_id and jl.entry_id = je.id
@@ -192,7 +216,9 @@ async function loadAssetPayload(
        and jl.contributor_ref = ${assetId}
       and je.status in ('posted', 'reversed')
       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, allowedSubsidiaryIds)}
-     order by je.posting_date`, "objects");
+     order by je.posting_date`,
+    "objects",
+  );
   return {
     asset: {
       id: row.id,
@@ -224,7 +250,12 @@ async function loadAssetPayload(
       posted: line.periodId ? postedByPeriod.has(line.periodId) : false,
       entryId: line.periodId ? (postedByPeriod.get(line.periodId) ?? null) : null,
     })),
-    entries: entries.map((e) => ({ id: e.id, origin: e.origin, postingDate: e.posting_date, periodName: e.period_name })),
+    entries: entries.map((e) => ({
+      id: e.id,
+      origin: e.origin,
+      postingDate: e.posting_date,
+      periodName: e.period_name,
+    })),
   };
 }
 
@@ -247,23 +278,35 @@ export async function loadContractCosts(
     is_adjustment: boolean;
     starts_on: string;
     ends_on: string;
-  }>(sql`
+  }>(
+    sql`
     select id, fiscal_year, period_number, is_adjustment, starts_on::text as starts_on, ends_on::text as ends_on
       from accounting_periods p
      where p.org_id = ${orgId} and not p.is_adjustment
-       ${authz.allowedSubsidiaryIds === null ? sql`` : sql`and exists (
+       ${
+         authz.allowedSubsidiaryIds === null
+           ? sql``
+           : sql`and exists (
          select 1 from subsidiaries s
           where s.org_id = p.org_id and s.fiscal_calendar_id = p.fiscal_calendar_id
             ${subsidiaryVisibleFilter(sql`s.id`, authz.allowedSubsidiaryIds)}
-       )`}
-     order by p.starts_on desc`, "objects");
+       )`
+       }
+     order by p.starts_on desc`,
+    "objects",
+  );
   const selectedPeriodId =
     typeof sp.period === "string" && isUuid(sp.period) && periods.some((p) => p.id === sp.period)
       ? sp.period
       : (periods[0]?.id ?? null);
 
-  const org = (await db.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${orgId}`, "objects"))[0];
+  const org = (
+    await db.execute<{ base_currency: string }>(
+      sql`
+    select base_currency from orgs where id = ${orgId}`,
+      "objects",
+    )
+  )[0];
   // The workspace totals in the organization's own base currency — never a
   // USD guess. The column is NOT NULL, so an empty read means this account
   // cannot see the organization at all (missing or out of scope), not that
@@ -272,7 +315,8 @@ export async function loadContractCosts(
   if (!org) {
     throw new ContractCostError("This organization is not available to the current account.", {
       code: "contract_cost_org_unavailable",
-      remedy: "Sign in with an account that belongs to this organization, or ask an administrator for access, then reopen the contract-cost workspace.",
+      remedy:
+        "Sign in with an account that belongs to this organization, or ask an administrator for access, then reopen the contract-cost workspace.",
     });
   }
   const baseCurrency = org.base_currency;
@@ -281,7 +325,9 @@ export async function loadContractCosts(
   // The balance includes posted and reversed history so reversals offset
   // their original entries, and reads only the primary book. Scale with
   // numeric power to preserve exact minor units without float exponentiation.
-  const balance = (await db.execute<{ carrying: string }>(sql`
+  const balance = (
+    await db.execute<{ carrying: string }>(
+      sql`
     select coalesce(round(sum(jl.amount * power(10::numeric, cur.minor_units))), 0)::text as carrying
       from journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
@@ -290,9 +336,14 @@ export async function loadContractCosts(
      where jl.org_id = ${orgId}
        and jl.contributor_kind = 'contract_cost_asset'
        and je.status in ('posted', 'reversed')
-       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, authz.allowedSubsidiaryIds)}`, "objects"))[0];
+       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, authz.allowedSubsidiaryIds)}`,
+      "objects",
+    )
+  )[0];
   const amortized = selectedPeriodId
-    ? (await db.execute<{ total: string }>(sql`
+    ? (
+        await db.execute<{ total: string }>(
+          sql`
         select coalesce(sum(amort.amount_minor), 0)::text as total
           from contract_cost_amortization amort
           join journal_entries je on je.org_id = amort.org_id and je.id = amort.journal_entry_id
@@ -303,14 +354,22 @@ export async function loadContractCosts(
               where a.org_id = amort.org_id
                 and a.id = amort.asset_id
                 ${contractCostAssetVisibility("a", authz.allowedSubsidiaryIds)}
-           )`, "objects"))[0]
+           )`,
+          "objects",
+        )
+      )[0]
     : null;
 
   const activeAssets = Number(
-    (await db.execute<{ n: string }>(sql`
+    (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from contract_cost_assets a
        where a.org_id = ${orgId} and a.status = 'active'
-         ${contractCostAssetVisibility("a", authz.allowedSubsidiaryIds)}`, "objects"))[0]?.n ?? "0",
+         ${contractCostAssetVisibility("a", authz.allowedSubsidiaryIds)}`,
+        "objects",
+      )
+    )[0]?.n ?? "0",
   );
 
   const attention: ContractCostAttentionRow[] = (
@@ -323,28 +382,37 @@ export async function loadContractCosts(
     capitalizedOn: item.capitalizedOn,
   }));
 
-  const contracts = await db.execute<{ id: string; number: string; customer: string }>(sql`
+  const contracts = await db.execute<{ id: string; number: string; customer: string }>(
+    sql`
     select c.id, c.contract_number as number, coalesce(p.display_name, '') as customer
       from revenue_contracts c
       left join parties p on p.org_id = c.org_id and p.id = c.customer_id
      where c.org_id = ${orgId} and c.status = 'active'
        ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-     order by c.contract_number`, "objects");
+     order by c.contract_number`,
+    "objects",
+  );
 
   // The capitalize and import pickers offer the same postable accounts every
   // company-settings picker offers, narrowed to the expense and liability
   // types an original commission expense can sit in.
   const expenseAccounts = (await loadAccounts(orgId, authz.allowedSubsidiaryIds))
-    .filter((account) => account.accountType?.startsWith('expense') || account.accountType?.startsWith('liability'))
-    .map(({value,label}) => ({value,label}));
+    .filter(
+      (account) =>
+        account.accountType?.startsWith("expense") || account.accountType?.startsWith("liability"),
+    )
+    .map(({ value, label }) => ({ value, label }));
 
-  const policy = (await db.execute<{
-    basis: string;
-    practical_expedient: boolean;
-    customer_life_months: number | null;
-    asset_account_id: string | null;
-    amortization_expense_account_id: string | null;
-  }>(sql`
+  const policy =
+    (
+      await db.execute<{
+        basis: string;
+        practical_expedient: boolean;
+        customer_life_months: number | null;
+        asset_account_id: string | null;
+        amortization_expense_account_id: string | null;
+      }>(
+        sql`
     select policy.basis, policy.practical_expedient, policy.customer_life_months,
            asset_account.id as asset_account_id, expense_account.id as amortization_expense_account_id
       from contract_cost_policies policy
@@ -353,12 +421,16 @@ export async function loadContractCosts(
       left join accounts expense_account on expense_account.org_id = policy.org_id and expense_account.id = policy.amortization_expense_account_id
        ${subsidiaryVisibleFilter(sql`expense_account.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
      where policy.org_id = ${orgId} and policy.effective_from <= current_date
-     order by policy.effective_from desc limit 1`, "objects"))[0] ?? null;
+     order by policy.effective_from desc limit 1`,
+        "objects",
+      )
+    )[0] ?? null;
 
   const assetId = typeof sp.asset === "string" ? sp.asset : undefined;
-  const payload = assetId && isUuid(assetId)
-    ? await loadAssetPayload(assetId, orgId, authz.allowedSubsidiaryIds, locale)
-    : null;
+  const payload =
+    assetId && isUuid(assetId)
+      ? await loadAssetPayload(assetId, orgId, authz.allowedSubsidiaryIds, locale)
+      : null;
   // Attention and assets are sibling views behind URL tabs: one body shows
   // at a time. An open drawer forces its assets list; otherwise attention
   // leads while actionable.
@@ -450,7 +522,7 @@ const f = ref<ContractCostsData>();
 
 export function contractCostsSpec(data: ContractCostsData): PageSpec {
   return page({
-    route: '/revenue/contract-costs',
+    route: "/revenue/contract-costs",
     layout: "list",
     header: [
       pageHeader({
@@ -458,22 +530,34 @@ export function contractCostsSpec(data: ContractCostsData): PageSpec {
         description: f("description"),
         actions: [
           widget("module-home-tabs", { tabs: data.tabs }),
-          widget("run-amortization", {
-            periods: data.periods,
-            selectedPeriodId: data.selectedPeriodId,
-            activeAssets: data.activeAssets,
-          }, f("canManage")),
-          widget("capitalize-cost", {
-            contracts: data.contracts,
-            expenseAccounts: data.expenseAccounts,
-            policy: data.policy,
-            baseCurrency: data.baseCurrency,
-          }, f("canManage")),
-          widget("import-commissions", {
-            contracts: data.contracts,
-            expenseAccounts: data.expenseAccounts,
-            baseCurrency: data.baseCurrency,
-          }, f("canManage")),
+          widget(
+            "run-amortization",
+            {
+              periods: data.periods,
+              selectedPeriodId: data.selectedPeriodId,
+              activeAssets: data.activeAssets,
+            },
+            f("canManage"),
+          ),
+          widget(
+            "capitalize-cost",
+            {
+              contracts: data.contracts,
+              expenseAccounts: data.expenseAccounts,
+              policy: data.policy,
+              baseCurrency: data.baseCurrency,
+            },
+            f("canManage"),
+          ),
+          widget(
+            "import-commissions",
+            {
+              contracts: data.contracts,
+              expenseAccounts: data.expenseAccounts,
+              baseCurrency: data.baseCurrency,
+            },
+            f("canManage"),
+          ),
         ],
       }),
     ],

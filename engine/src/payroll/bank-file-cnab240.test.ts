@@ -96,23 +96,51 @@ const cnabInputs = (): PayRunBankFileInputs => ({
   },
   credits: [
     {
-      stubId: "s1", employeePartyId: "p1", employeeName: "ADA AZEVEDO", amount: "2500.0000",
+      stubId: "s1",
+      employeePartyId: "p1",
+      employeeName: "ADA AZEVEDO",
+      amount: "2500.0000",
       employeeNumber: "EMP-0001",
-      routing: { banco: "001", agencia: "4321", agenciaDv: "2", contaDv: "3", cpfCnpj: "11144477735" },
+      routing: {
+        banco: "001",
+        agencia: "4321",
+        agenciaDv: "2",
+        contaDv: "3",
+        cpfCnpj: "11144477735",
+      },
       accountNumber: "987654",
       cnab240: {
-        bancoFavorecido: "001", agencia: "04321", agenciaDv: "2", contaDv: "3", dac: null,
-        inscricaoTipo: "1", inscricaoNumero: "11144477735",
+        bancoFavorecido: "001",
+        agencia: "04321",
+        agenciaDv: "2",
+        contaDv: "3",
+        dac: null,
+        inscricaoTipo: "1",
+        inscricaoNumero: "11144477735",
       },
     },
     {
-      stubId: "s2", employeePartyId: "p2", employeeName: "BO BRAGA", amount: "1821.5000",
+      stubId: "s2",
+      employeePartyId: "p2",
+      employeeName: "BO BRAGA",
+      amount: "1821.5000",
       employeeNumber: "EMP-0002",
-      routing: { banco: "237", agencia: "123", agenciaDv: "4", contaDv: "5", cpfCnpj: "12345678909" },
+      routing: {
+        banco: "237",
+        agencia: "123",
+        agenciaDv: "4",
+        contaDv: "5",
+        cpfCnpj: "12345678909",
+      },
       accountNumber: "1234567",
       cnab240: {
-        bancoFavorecido: "237", agencia: "00123", agenciaDv: "4", contaDv: "5", dac: null,
-        inscricaoTipo: "1", inscricaoNumero: "12345678909",
+        bancoFavorecido: "237",
+        agencia: "00123",
+        agenciaDv: "4",
+        contaDv: "5",
+        dac: null,
+        inscricaoTipo: "1",
+        inscricaoNumero: "12345678909",
       },
     },
   ],
@@ -231,7 +259,9 @@ test("the golden header de arquivo carries the convênio, debit account, NSA and
 });
 
 test("same-bank and TED credits ride separate lotes with their own forma, câmara and trailer totals", () => {
-  const records = renderCnab().content.split("\r\n").filter((line) => line.length > 0);
+  const records = renderCnab()
+    .content.split("\r\n")
+    .filter((line) => line.length > 0);
   const lote1Header = records[1]!;
   const lote2Header = records[5]!;
   // 9:C operação, 10–11 tipo 30 (salários), 12–13 forma, 14–16 lote layout 045.
@@ -253,11 +283,16 @@ test("same-bank and TED credits ride separate lotes with their own forma, câmar
   // Trailer de arquivo: 18–23 lote count, 24–29 whole-file record count.
   assert.equal(records[9]!.slice(17, 23), "000002");
   assert.equal(records[9]!.slice(23, 29), "000010");
-  assert.deepEqual(readTrailerTotals("cnab240", renderCnab().content), { totalCents: 432150n, count: 2 });
+  assert.deepEqual(readTrailerTotals("cnab240", renderCnab().content), {
+    totalCents: 432150n,
+    count: 2,
+  });
 });
 
 test("the golden Segmento A money bytes sit at the manual's offsets", () => {
-  const records = renderCnab().content.split("\r\n").filter((line) => line.length > 0);
+  const records = renderCnab()
+    .content.split("\r\n")
+    .filter((line) => line.length > 0);
   const segA = records[2]!;
   // Bradesco Multipag p.23: 24–28 agência, 29 DV, 30–41 conta, 42 DV, 43 DAC,
   // 44–73 nome, 74–93 seu número, 94–101 data, 102–104 moeda, 105–119 zeros,
@@ -299,19 +334,21 @@ test("the manual's Segmento A positions reproduce through the shared builder", (
     nsa: "000001",
     creationDateTime: "2026-08-14T09:30:00",
     paymentDate: "2026-08-21",
-    payments: [{
-      amountCents: 150050n,
-      bancoFavorecido: "341",
-      agencia: "7777",
-      agenciaDv: "1",
-      conta: "12345678",
-      contaDv: "9",
-      dac: null,
-      favorecidoNome: "Beneficiaria SA",
-      inscricaoTipo: "2",
-      inscricaoNumero: "11222333000181",
-      seuNumero: "NF-1001",
-    }],
+    payments: [
+      {
+        amountCents: 150050n,
+        bancoFavorecido: "341",
+        agencia: "7777",
+        agenciaDv: "1",
+        conta: "12345678",
+        contaDv: "9",
+        dac: null,
+        favorecidoNome: "Beneficiaria SA",
+        inscricaoTipo: "2",
+        inscricaoNumero: "11222333000181",
+        seuNumero: "NF-1001",
+      },
+    ],
   });
   const lines = mine.split("\r\n").filter((line) => line.length > 0);
   // Single TED payment: header arquivo + header lote + A + B + trailer lote + trailer arquivo.
@@ -390,7 +427,9 @@ test("payroll's CNAB 240 output equals the shared AP builder's output for the sa
 test("accented names map to the channel without shifting any field", () => {
   const inputs = cnabInputs();
   inputs.credits[0]!.employeeName = "JOSÉ AÇÃO";
-  const segA = renderCnab(inputs).content.split("\r\n").filter((l) => l.length > 0)[2]!;
+  const segA = renderCnab(inputs)
+    .content.split("\r\n")
+    .filter((l) => l.length > 0)[2]!;
   assert.equal(segA.length, 240);
   assert.equal(segA.slice(43, 73), "JOSE ACAO".padEnd(30, " "));
 });
@@ -398,14 +437,20 @@ test("accented names map to the channel without shifting any field", () => {
 test("a name with no ASCII spelling is refused by name, never blanked into the channel", () => {
   const inputs = cnabInputs();
   inputs.credits[0]!.employeeName = "JOSÉ 王";
-  assert.throws(() => renderCnab(inputs), (error: Error) =>
-    /favorecido name "JOSÉ 王" contains "王"/.test(error.message) && /Edit the payee's name/.test(error.message));
+  assert.throws(
+    () => renderCnab(inputs),
+    (error: Error) =>
+      /favorecido name "JOSÉ 王" contains "王"/.test(error.message) &&
+      /Edit the payee's name/.test(error.message),
+  );
 });
 
 test("a second TED check digit rides position 43 verbatim, blank otherwise", () => {
   const inputs = cnabInputs();
   inputs.credits[1]!.cnab240 = { ...inputs.credits[1]!.cnab240!, dac: "7" };
-  const records = renderCnab(inputs).content.split("\r\n").filter((l) => l.length > 0);
+  const records = renderCnab(inputs)
+    .content.split("\r\n")
+    .filter((l) => l.length > 0);
   assert.equal(records[6]!.slice(42, 43), "7");
   assert.equal(records[2]!.slice(42, 43), " ");
 });
@@ -415,7 +460,11 @@ test("a second TED check digit rides position 43 verbatim, blank otherwise", () 
 /* ------------------------------------------------------------------ */
 
 test("a missing bank code names the employee and the cheque fallback", () => {
-  const resolved = resolveCnab240Creditor("ADA AZEVEDO", { agencia: "4321", agenciaDv: "2", contaDv: "3", cpfCnpj: "11144477735" }, "987654");
+  const resolved = resolveCnab240Creditor(
+    "ADA AZEVEDO",
+    { agencia: "4321", agenciaDv: "2", contaDv: "3", cpfCnpj: "11144477735" },
+    "987654",
+  );
   if (resolved.ok) assert.fail("a missing bank code must not resolve");
   assert.match(resolved.reason, /ADA AZEVEDO/);
   assert.match(resolved.reason, /3-digit bank code/);
@@ -513,7 +562,8 @@ test("a credit that reaches the renderer without a resolved address is refused, 
   assert.throws(
     () => renderCnab(inputs),
     (error: Error) =>
-      error instanceof PayrollError && /ADA AZEVEDO.*no validated destino address/.test(error.message),
+      error instanceof PayrollError &&
+      /ADA AZEVEDO.*no validated destino address/.test(error.message),
   );
 });
 
@@ -533,7 +583,9 @@ test("an unconfigured CNAB originator is refused by name rather than emitting by
           versaoLayoutArquivo: "",
         },
       }),
-    (error: Error) => error instanceof PaymentError && /CNAB 240 originator settings are invalid/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError &&
+      /CNAB 240 originator settings are invalid/.test(error.message),
   );
 });
 
@@ -557,7 +609,8 @@ test("a CNAB profile cannot render another format — the mismatch names cnab240
           timeZone: "UTC",
         },
       ),
-    (error: Error) => error instanceof PayrollError && /originates cnab240, not sepa/.test(error.message),
+    (error: Error) =>
+      error instanceof PayrollError && /originates cnab240, not sepa/.test(error.message),
   );
 });
 
@@ -604,7 +657,8 @@ test("a file total past the 15-digit centavos field is refused, not silently unb
 test("a CNAB file with no readable trailer de arquivo is refused, not tied to another rail's record", () => {
   assert.throws(
     () => readTrailerTotals("cnab240", "00100000" + " ".repeat(232) + "\r\n"),
-    (error: Error) => error instanceof PayrollError && /no readable trailer de arquivo/.test(error.message),
+    (error: Error) =>
+      error instanceof PayrollError && /no readable trailer de arquivo/.test(error.message),
   );
 });
 
@@ -734,60 +788,76 @@ async function cnabProfileOrg(secrets: Record<string, unknown>) {
   return { orgId: org.orgId, profileId };
 }
 
-test("a cnab240_bb_credit bank profile is listed for payroll and resolves its originator", { skip: !DB }, async () => {
-  const fx = await cnabProfileOrg({
-    cnpjEmpresa: "12345678000195",
-    convenio: "123456789",
-    agencia: "1234",
-    agenciaDv: "0",
-    conta: "123456",
-    contaDv: "1",
-    nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-    versaoLayoutArquivo: "087",
-  });
-  // Reachable: the operator's picker sees the profile, on the cnab240 format,
-  // fully configured — the "No originating bank profile is set up" dead end
-  // from the BR persona run is gone for this rail.
-  const profiles = await payrollBankProfiles(fx.orgId);
-  assert.deepEqual(
-    profiles.map((p) => ({ name: p.name, format: p.format, currency: p.currency, configured: p.configured })),
-    [{
-      name: "Payroll direct deposit (CNAB 240 BB)",
-      format: "cnab240",
-      currency: "BRL",
-      configured: true,
-    }],
-  );
-  const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
-  if (!resolved.ok) assert.fail(`expected a configured CNAB originator: ${resolved.missing.join(", ")}`);
-  assert.equal(resolved.format, "cnab240");
-  assert.equal(resolved.config.currency, "BRL");
-  assert.deepEqual(resolved.config.cnab240bb, {
-    cnpjEmpresa: "12345678000195",
-    convenio: "123456789",
-    agencia: "1234",
-    agenciaDv: "0",
-    conta: "123456",
-    contaDv: "1",
-    nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-    versaoLayoutArquivo: "087",
-  });
-});
+test(
+  "a cnab240_bb_credit bank profile is listed for payroll and resolves its originator",
+  { skip: !DB },
+  async () => {
+    const fx = await cnabProfileOrg({
+      cnpjEmpresa: "12345678000195",
+      convenio: "123456789",
+      agencia: "1234",
+      agenciaDv: "0",
+      conta: "123456",
+      contaDv: "1",
+      nomeEmpresa: "EMPRESA EXEMPLO LTDA",
+      versaoLayoutArquivo: "087",
+    });
+    // Reachable: the operator's picker sees the profile, on the cnab240 format,
+    // fully configured — the "No originating bank profile is set up" dead end
+    // from the BR persona run is gone for this rail.
+    const profiles = await payrollBankProfiles(fx.orgId);
+    assert.deepEqual(
+      profiles.map((p) => ({
+        name: p.name,
+        format: p.format,
+        currency: p.currency,
+        configured: p.configured,
+      })),
+      [
+        {
+          name: "Payroll direct deposit (CNAB 240 BB)",
+          format: "cnab240",
+          currency: "BRL",
+          configured: true,
+        },
+      ],
+    );
+    const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
+    if (!resolved.ok)
+      assert.fail(`expected a configured CNAB originator: ${resolved.missing.join(", ")}`);
+    assert.equal(resolved.format, "cnab240");
+    assert.equal(resolved.config.currency, "BRL");
+    assert.deepEqual(resolved.config.cnab240bb, {
+      cnpjEmpresa: "12345678000195",
+      convenio: "123456789",
+      agencia: "1234",
+      agenciaDv: "0",
+      conta: "123456",
+      contaDv: "1",
+      nomeEmpresa: "EMPRESA EXEMPLO LTDA",
+      versaoLayoutArquivo: "087",
+    });
+  },
+);
 
-test("a cnab240 profile with a malformed convênio is listed as not configured, naming it", { skip: !DB }, async () => {
-  const fx = await cnabProfileOrg({
-    cnpjEmpresa: "12345678000195",
-    convenio: "bogus",
-    agencia: "1234",
-    agenciaDv: "0",
-    conta: "123456",
-    contaDv: "1",
-    nomeEmpresa: "EMPRESA EXEMPLO LTDA",
-    versaoLayoutArquivo: "087",
-  });
-  const profiles = await payrollBankProfiles(fx.orgId);
-  assert.equal(profiles[0]?.configured, false);
-  const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
-  if (resolved.ok) assert.fail("a malformed convênio must not resolve");
-  assert.match(resolved.missing.join(", "), /convenio/);
-});
+test(
+  "a cnab240 profile with a malformed convênio is listed as not configured, naming it",
+  { skip: !DB },
+  async () => {
+    const fx = await cnabProfileOrg({
+      cnpjEmpresa: "12345678000195",
+      convenio: "bogus",
+      agencia: "1234",
+      agenciaDv: "0",
+      conta: "123456",
+      contaDv: "1",
+      nomeEmpresa: "EMPRESA EXEMPLO LTDA",
+      versaoLayoutArquivo: "087",
+    });
+    const profiles = await payrollBankProfiles(fx.orgId);
+    assert.equal(profiles[0]?.configured, false);
+    const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
+    if (resolved.ok) assert.fail("a malformed convênio must not resolve");
+    assert.match(resolved.missing.join(", "), /convenio/);
+  },
+);

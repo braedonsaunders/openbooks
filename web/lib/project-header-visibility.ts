@@ -9,17 +9,17 @@
  * switches; only foreman moved to the shared set.
  */
 export interface ProjectPresentationFlags {
-  showSite: boolean
-  showForeman: boolean
-  showCustomerPo: boolean
+  showSite: boolean;
+  showForeman: boolean;
+  showCustomerPo: boolean;
 }
 
 export function profileHidesProjectHeaderField(
   key: string,
   presentation: ProjectPresentationFlags | null | undefined,
 ): boolean {
-  if (!presentation) return false
-  if (key === 'site_jurisdiction' && !presentation.showSite) return true
-  if (key === 'customer_po_number' && !presentation.showCustomerPo) return true
-  return false
+  if (!presentation) return false;
+  if (key === "site_jurisdiction" && !presentation.showSite) return true;
+  if (key === "customer_po_number" && !presentation.showCustomerPo) return true;
+  return false;
 }

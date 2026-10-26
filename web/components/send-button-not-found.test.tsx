@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 // The invoice send dialog printed the record-PDF boundary's raw machine code
 // ("PDF not_found"): the uniform 404 stays { error: "not_found" } by design
@@ -66,7 +66,10 @@ async function openComposer() {
   const toInput = document.querySelector("#send-to") as HTMLInputElement | null;
   assert.ok(toInput, "the recipient field must render");
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
     setter.call(toInput, "billing@t404.example");
     toInput.dispatchEvent(new window.Event("input", { bubbles: true }));
     await tick();
@@ -79,7 +82,9 @@ test("a not_found send failure shows the localized message with retry, never the
   (globalThis as Record<string, unknown>).__sendNotFoundPosts = 0;
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const _url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const _url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (init?.method === "POST") {
       (globalThis as Record<string, unknown>).__sendNotFoundPosts =
         Number((globalThis as Record<string, unknown>).__sendNotFoundPosts ?? 0) + 1;
@@ -102,8 +107,16 @@ test("a not_found send failure shows the localized message with retry, never the
       });
       const alert = document.querySelector('[role="alert"]');
       assert.ok(alert, "the failure pins inside the dialog");
-      assert.doesNotMatch(alert!.textContent ?? "", /not_found/, "the raw machine code never renders");
-      assert.match(alert!.textContent ?? "", /Could not send the email/, "the localized failure renders instead");
+      assert.doesNotMatch(
+        alert!.textContent ?? "",
+        /not_found/,
+        "the raw machine code never renders",
+      );
+      assert.match(
+        alert!.textContent ?? "",
+        /Could not send the email/,
+        "the localized failure renders instead",
+      );
       const retry = buttonsNamed("Retry")[0];
       assert.ok(retry, "the failure offers a retry");
       await act(async () => {
@@ -133,7 +146,9 @@ test("an actionable send refusal still reads verbatim beside the retry", async (
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === "POST") {
       return new Response(
-        JSON.stringify({ error: "no recipient email — add an email address to the customer first" }),
+        JSON.stringify({
+          error: "no recipient email — add an email address to the customer first",
+        }),
         { status: 422, headers: { "Content-Type": "application/json" } },
       );
     }

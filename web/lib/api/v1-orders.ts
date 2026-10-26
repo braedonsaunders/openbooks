@@ -144,7 +144,11 @@ function fullOrderInput(body: Record<string, unknown>, idempotencyKey: string): 
 }
 
 /** Convert an issued order — same writer as the order-cycle convert action. */
-export function v1ConvertOrder(request: Request, typeKey: string, id: string): Promise<NextResponse> {
+export function v1ConvertOrder(
+  request: Request,
+  typeKey: string,
+  id: string,
+): Promise<NextResponse> {
   const key = orderTypeKey(typeKey);
   return withV1Request(request, `api/v1/${key}/:id/convert`, async (_auth, context) => {
     const body = await readV1JsonObject(request);
@@ -156,8 +160,10 @@ export function v1ConvertOrder(request: Request, typeKey: string, id: string): P
     const outcome = await convertApplicationOrder(context, {
       documentId: id,
       targetKind: body.targetKind,
-      expectedUpdatedAt: typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : undefined,
-      creditOverrideReason: typeof body.creditOverrideReason === "string" ? body.creditOverrideReason : undefined,
+      expectedUpdatedAt:
+        typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : undefined,
+      creditOverrideReason:
+        typeof body.creditOverrideReason === "string" ? body.creditOverrideReason : undefined,
       idempotencyKey: requireV1IdempotencyKey(request),
       expectedKind: ORDER_TYPE_KIND[key],
     });

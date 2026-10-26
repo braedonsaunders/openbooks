@@ -7,11 +7,15 @@
  * Pure: no database, no translations, no components.
  */
 export type NecEmptyCause =
-  | { kind: 'vendors'; vendors: { partyId: string; name: string; total: string }[] }
-  | { kind: 'unposted'; count: number; total: string }
-  | null
+  | { kind: "vendors"; vendors: { partyId: string; name: string; total: string }[] }
+  | { kind: "unposted"; count: number; total: string }
+  | null;
 
-const VENDOR_CAUSES = new Set(['unflagged_over_threshold', 'missing_tin', 'missing_form_assignment'])
+const VENDOR_CAUSES = new Set([
+  "unflagged_over_threshold",
+  "missing_tin",
+  "missing_form_assignment",
+]);
 
 export function necEmptyCause(args: {
   exceptions: { kind: string; partyId: string | null; partyName: string; amount?: string }[];
@@ -21,9 +25,13 @@ export function necEmptyCause(args: {
   for (const exception of args.exceptions) {
     if (!exception.partyId || !VENDOR_CAUSES.has(exception.kind)) continue;
     if (vendors.length >= 3) break;
-    vendors.push({ partyId: exception.partyId, name: exception.partyName, total: exception.amount ?? '0' });
+    vendors.push({
+      partyId: exception.partyId,
+      name: exception.partyName,
+      total: exception.amount ?? "0",
+    });
   }
-  if (vendors.length > 0) return { kind: 'vendors', vendors };
-  if (args.unposted && args.unposted.count > 0) return { kind: 'unposted', ...args.unposted };
+  if (vendors.length > 0) return { kind: "vendors", vendors };
+  if (args.unposted && args.unposted.count > 0) return { kind: "unposted", ...args.unposted };
   return null;
 }

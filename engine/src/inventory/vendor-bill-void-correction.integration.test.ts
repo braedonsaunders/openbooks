@@ -12,10 +12,7 @@ import {
   dropScratchOrg,
 } from "@openbooks/engine/testing/fixtures";
 import { postDocument } from "@openbooks/engine/ledger/posting-document";
-import {
-  DocumentVoidError,
-  requestDocumentVoid,
-} from "@openbooks/engine/ledger/document-void";
+import { DocumentVoidError, requestDocumentVoid } from "@openbooks/engine/ledger/document-void";
 import {
   createOrderDraft,
   fulfillSalesOrder,
@@ -50,7 +47,12 @@ async function seedOrg(): Promise<Seed> {
     update item_inventory_profiles set unit_conversions = '{"lb": 1}'::jsonb
      where org_id = ${org.orgId} and item_id = ${org.items.fifo}
   `);
-  const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${org.orgId}`, "objects"))[0]!.c;
+  const currency = (
+    await db.execute<{ c: string }>(
+      sql`select base_currency as c from orgs where id = ${org.orgId}`,
+      "objects",
+    )
+  )[0]!.c;
   return {
     orgId: org.orgId,
     actorId,
@@ -70,8 +72,17 @@ async function seedOrg(): Promise<Seed> {
   };
 }
 
-async function seedApprovedPo(seed: Seed, quantity: string): Promise<{ orderId: string; lineId: string }> {
-  const order = await createOrderDraft(seed.orgId, seed.actorId, "purchase_order", randomUUID(), null);
+async function seedApprovedPo(
+  seed: Seed,
+  quantity: string,
+): Promise<{ orderId: string; lineId: string }> {
+  const order = await createOrderDraft(
+    seed.orgId,
+    seed.actorId,
+    "purchase_order",
+    randomUUID(),
+    null,
+  );
   const lineId = randomUUID();
   const amount = `${Number(quantity) * 6}`;
   await db.execute(sql`
@@ -90,7 +101,10 @@ async function seedApprovedPo(seed: Seed, quantity: string): Promise<{ orderId: 
   return { orderId: order.id, lineId };
 }
 
-async function seedDrawerBill(seed: Seed, quantity: string): Promise<{ billId: string; lineId: string }> {
+async function seedDrawerBill(
+  seed: Seed,
+  quantity: string,
+): Promise<{ billId: string; lineId: string }> {
   const billId = randomUUID();
   const amount = `${Number(quantity) * 6}`;
   await db.execute(sql`
@@ -110,7 +124,9 @@ async function seedDrawerBill(seed: Seed, quantity: string): Promise<{ billId: s
             'Grain', ${quantity}, 'lb', '6', ${amount}, '0',
             ${seed.location}, '{}'::jsonb)
   `);
-  await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${seed.orgId}`);
+  await db.execute(
+    sql`update documents set status = 'approved' where id = ${billId} and org_id = ${seed.orgId}`,
+  );
   return { billId, lineId };
 }
 
@@ -128,16 +144,26 @@ async function seedDoubleReceipt(seed: Seed, quantity: string) {
 }
 
 async function onHand(seed: Seed): Promise<string> {
-  return (await db.execute<{ q: string }>(sql`
+  return (
+    await db.execute<{ q: string }>(
+      sql`
     select coalesce(sum(quantity), 0)::text as q from inventory_movements
-     where org_id = ${seed.orgId} and status = 'posted' and item_id = ${seed.fifo}`, "objects"))[0]!.q;
+     where org_id = ${seed.orgId} and status = 'posted' and item_id = ${seed.fifo}`,
+      "objects",
+    )
+  )[0]!.q;
 }
 
 async function balanceOfAll(seed: Seed, accountId: string): Promise<string> {
-  return (await db.execute<{ amount: string }>(sql`
+  return (
+    await db.execute<{ amount: string }>(
+      sql`
     select coalesce(sum(l.amount), 0)::text as amount from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-     where l.org_id = ${seed.orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`, "objects"))[0]!.amount;
+     where l.org_id = ${seed.orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`,
+      "objects",
+    )
+  )[0]!.amount;
 }
 
 async function seedFulfillment(seed: Seed, quantity: string): Promise<string> {
@@ -173,44 +199,79 @@ async function seedFulfillment(seed: Seed, quantity: string): Promise<string> {
  * matched to its order then clears received-not-billed. This is the
  * operator path for already-posted double receipts.
  */
-test("voiding a double-receipt bill reverses its stock, then a matched rebill clears", { skip: !DB }, async () => {
-  const seed = await seedOrg();
-  try {
-    const { po, bill } = await seedDoubleReceipt(seed, "40");
-    assert.equal(toUnits(await onHand(seed)), toUnits("80"), "bill plus receipt count the stock twice");
+test(
+  "voiding a double-receipt bill reverses its stock, then a matched rebill clears",
+  { skip: !DB },
+  async () => {
+    const seed = await seedOrg();
+    try {
+      const { po, bill } = await seedDoubleReceipt(seed, "40");
+      assert.equal(
+        toUnits(await onHand(seed)),
+        toUnits("80"),
+        "bill plus receipt count the stock twice",
+      );
 
-    const voided = await requestDocumentVoid({
-      documentId: bill.billId,
-      orgId: seed.orgId,
-      actorId: seed.actorId,
-      reason: REASON,
-      reversalDate: seed.date,
-    });
-    assert.equal(voided.status, "voided");
-    assert.equal(toUnits(await onHand(seed)), toUnits("40"), "only the goods-receipt stock stands");
-    assert.equal(toUnits(await balanceOfAll(seed, seed.asset)), toUnits("240"), "inventory keeps the receipt cost");
-    assert.equal(toUnits(await balanceOfAll(seed, seed.clearing)), toUnits("-240"), "received-not-billed awaits the rebill");
-    assert.equal(toUnits(await balanceOfAll(seed, seed.ap)), toUnits("0"), "the payable is gone");
+      const voided = await requestDocumentVoid({
+        documentId: bill.billId,
+        orgId: seed.orgId,
+        actorId: seed.actorId,
+        reason: REASON,
+        reversalDate: seed.date,
+      });
+      assert.equal(voided.status, "voided");
+      assert.equal(
+        toUnits(await onHand(seed)),
+        toUnits("40"),
+        "only the goods-receipt stock stands",
+      );
+      assert.equal(
+        toUnits(await balanceOfAll(seed, seed.asset)),
+        toUnits("240"),
+        "inventory keeps the receipt cost",
+      );
+      assert.equal(
+        toUnits(await balanceOfAll(seed, seed.clearing)),
+        toUnits("-240"),
+        "received-not-billed awaits the rebill",
+      );
+      assert.equal(toUnits(await balanceOfAll(seed, seed.ap)), toUnits("0"), "the payable is gone");
 
-    // The rebill matches its order and clears received-not-billed.
-    const rebill = await seedDrawerBill(seed, "40");
-    const { matchVendorBillLines } = await import("@openbooks/engine/payables/vendor-bill-matching");
-    await withOrg(seed.orgId, () => matchVendorBillLines({
-      orgId: seed.orgId,
-      billId: rebill.billId,
-      actorId: seed.actorId,
-      matches: [{ billLineId: rebill.lineId, purchaseOrderLineId: po.lineId }],
-    }));
-    await postDocument(rebill.billId, { control: { ar: seed.ar, ap: seed.ap, bank: seed.bank } });
+      // The rebill matches its order and clears received-not-billed.
+      const rebill = await seedDrawerBill(seed, "40");
+      const { matchVendorBillLines } =
+        await import("@openbooks/engine/payables/vendor-bill-matching");
+      await withOrg(seed.orgId, () =>
+        matchVendorBillLines({
+          orgId: seed.orgId,
+          billId: rebill.billId,
+          actorId: seed.actorId,
+          matches: [{ billLineId: rebill.lineId, purchaseOrderLineId: po.lineId }],
+        }),
+      );
+      await postDocument(rebill.billId, { control: { ar: seed.ar, ap: seed.ap, bank: seed.bank } });
 
-    assert.equal(toUnits(await onHand(seed)), toUnits("40"), "the matched rebill moves no stock");
-    assert.equal(toUnits(await balanceOfAll(seed, seed.clearing)), toUnits("0"), "received-not-billed clears");
-    assert.equal(toUnits(await balanceOfAll(seed, seed.ap)), toUnits("-240"), "the payable returns");
-    assert.equal(toUnits(await balanceOfAll(seed, seed.asset)), toUnits("240"), "inventory keeps the receipt cost");
-  } finally {
-    await dropScratchOrg(seed.orgId);
-  }
-});
+      assert.equal(toUnits(await onHand(seed)), toUnits("40"), "the matched rebill moves no stock");
+      assert.equal(
+        toUnits(await balanceOfAll(seed, seed.clearing)),
+        toUnits("0"),
+        "received-not-billed clears",
+      );
+      assert.equal(
+        toUnits(await balanceOfAll(seed, seed.ap)),
+        toUnits("-240"),
+        "the payable returns",
+      );
+      assert.equal(
+        toUnits(await balanceOfAll(seed, seed.asset)),
+        toUnits("240"),
+        "inventory keeps the receipt cost",
+      );
+    } finally {
+      await dropScratchOrg(seed.orgId);
+    }
+  },
+);
 
 /**
  * The void refuses — with the consumers and their native reverse paths —
@@ -236,8 +297,13 @@ test("voiding a double-receipt bill refuses when its stock was sold", { skip: !D
     assert.ok(failure instanceof DocumentVoidError, "consumed stock blocks the void");
     assert.match(failure.message, /downstream consumption/);
     assert.match(failure.message, /sales fulfillment/);
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${bill.billId}`, "objects"))[0]!.status;
+    const status = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from documents where id = ${bill.billId}`,
+        "objects",
+      )
+    )[0]!.status;
     assert.equal(status, "posted", "the refused void leaves the bill posted");
     assert.equal(toUnits(await onHand(seed)), toUnits("20"), "no stock moved");
   } finally {

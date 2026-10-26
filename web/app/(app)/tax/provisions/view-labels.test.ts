@@ -1,10 +1,10 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import { readFileSync } from 'node:fs'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import test from 'node:test'
-import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config";
 
 // The provision run list built its year/version cells with hardcoded
 // English template literals (`FY${year}` / `v${version}`), so every locale
@@ -15,29 +15,35 @@ import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 // web/messages/<locale>/tax.json and substitutes {year}/{version), so a
 // hardcoded prefix fails every non-English locale.
 
-const dir = dirname(fileURLToPath(import.meta.url))
-const MESSAGES = join(dir, '..', '..', '..', '..', 'messages')
+const dir = dirname(fileURLToPath(import.meta.url));
+const MESSAGES = join(dir, "..", "..", "..", "..", "messages");
 
-const stateKey = Symbol.for('openbooks.tax-provisions-labels-test')
+const stateKey = Symbol.for("openbooks.tax-provisions-labels-test");
 interface LabelState {
-  messages: Record<string, unknown>
-  restricted: boolean
-  canCompute: boolean
-  noRuns: boolean
-  selectedRunId: string | null
+  messages: Record<string, unknown>;
+  restricted: boolean;
+  canCompute: boolean;
+  noRuns: boolean;
+  selectedRunId: string | null;
 }
-const labelState: LabelState = { messages: {}, restricted: false, canCompute: true, noRuns: false, selectedRunId: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = labelState
+const labelState: LabelState = {
+  messages: {},
+  restricted: false,
+  canCompute: true,
+  noRuns: false,
+  selectedRunId: null,
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = labelState;
 
 const RUN = {
-  id: '11111111-1111-4111-8111-111111111111',
+  id: "11111111-1111-4111-8111-111111111111",
   fiscalYear: 2025,
   version: 2,
-  status: 'posted',
-  totalExpense: '1234.56',
+  status: "posted",
+  totalExpense: "1234.56",
   effectiveRatePercent: null,
-  createdAt: '2026-01-15T00:00:00.000Z',
-}
+  createdAt: "2026-01-15T00:00:00.000Z",
+};
 
 const authzMock = `
       export async function requirePermission() {
@@ -45,7 +51,7 @@ const authzMock = `
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.restricted ? ['sub-1'] : null, permissions: ['reports.read', 'reports.create'] }
       }
       export function can() { return globalThis[Symbol.for('openbooks.tax-provisions-labels-test')].canCompute }
-    `
+    `;
 const intlMock = `
       const state = globalThis[Symbol.for('openbooks.tax-provisions-labels-test')]
       export async function getTranslations(namespace) {
@@ -57,13 +63,13 @@ const intlMock = `
           return out
         }
       }
-    `
-const moneyMock = `export async function getMoneyFormatter() { return { money: (value) => String(value) } }`
+    `;
+const moneyMock = `export async function getMoneyFormatter() { return { money: (value) => String(value) } }`;
 
 const mockSources = new Map<string, string>([
-  ['mock:data', `export async function orgInfo() { return { base_currency: 'USD' } }`],
+  ["mock:data", `export async function orgInfo() { return { base_currency: 'USD' } }`],
   [
-    'mock:provision',
+    "mock:provision",
     `
       export async function listProvisionRuns() { const state = globalThis[Symbol.for('openbooks.tax-provisions-labels-test')]; return state.noRuns ? [] : [${JSON.stringify(RUN)}] }
       export async function getProvisionRun(_orgId, id) {
@@ -82,7 +88,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:viewspec',
+    "mock:viewspec",
     `
       export function page(spec) { return spec }
       export function pageHeader(header) { return header }
@@ -91,107 +97,110 @@ const mockSources = new Map<string, string>([
       export function widgetBlock(kind, props) { return { kind, ...props } }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['../../../../lib/data', 'mock:data'],
-  ['@openbooks/engine/tax-returns/income-tax-provision', 'mock:provision'],
-  ['../../../../../lib/data', 'mock:data'],
-  ['@braedonsaunders/appkit-viewspec', 'mock:viewspec'],
-])
+  ["../../../../lib/data", "mock:data"],
+  ["@openbooks/engine/tax-returns/income-tax-provision", "mock:provision"],
+  ["../../../../../lib/data", "mock:data"],
+  ["@braedonsaunders/appkit-viewspec", "mock:viewspec"],
+]);
 
-const { stubModules } = await import('../../../../testing/stub-modules')
+const { stubModules } = await import("../../../../testing/stub-modules");
 stubModules({
   navigation: false,
   intl: intlMock,
   authz: authzMock,
-  features: { enabled: ['crossBorderTax'] },
+  features: { enabled: ["crossBorderTax"] },
   extra: {
-    '@/lib/money-server': moneyMock,
+    "@/lib/money-server": moneyMock,
   },
-})
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const viewUrl = './view.ts?provisions-labels-test'
-const { loadTaxProvisions, taxProvisionsSpec } = (await import(viewUrl)) as typeof import('./view.ts')
-hooks.deregister()
+const viewUrl = "./view.ts?provisions-labels-test";
+const { loadTaxProvisions, taxProvisionsSpec } = (await import(
+  viewUrl
+)) as typeof import("./view.ts");
+hooks.deregister();
 
 function provisionsOf(locale: string): Record<string, string> {
-  const tax = JSON.parse(readFileSync(join(MESSAGES, locale, 'tax.json'), 'utf8')) as Record<
+  const tax = JSON.parse(readFileSync(join(MESSAGES, locale, "tax.json"), "utf8")) as Record<
     string,
     unknown
-  >
-  return (tax.provisions ?? {}) as Record<string, string>
+  >;
+  return (tax.provisions ?? {}) as Record<string, string>;
 }
 
 for (const locale of LOCALES) {
   test(`${locale} renders the run year/version through the catalog patterns`, async () => {
-    const provisions = provisionsOf(locale)
-    for (const key of ['fiscalYearLabel', 'versionLabel'] as const) {
-      assert.ok(provisions[key], `${locale} is missing tax.provisions.${key}`)
+    const provisions = provisionsOf(locale);
+    for (const key of ["fiscalYearLabel", "versionLabel"] as const) {
+      assert.ok(provisions[key], `${locale} is missing tax.provisions.${key}`);
     }
     labelState.messages = {
-      tax: JSON.parse(readFileSync(join(MESSAGES, locale, 'tax.json'), 'utf8')),
-    }
+      tax: JSON.parse(readFileSync(join(MESSAGES, locale, "tax.json"), "utf8")),
+    };
 
-    const data = await loadTaxProvisions()
-    assert.equal(data.rows.length, 1)
-    assert.equal(data.rows[0]!.href, `/tax/provisions?run=${RUN.id}`)
+    const data = await loadTaxProvisions();
+    assert.equal(data.rows.length, 1);
+    assert.equal(data.rows[0]!.href, `/tax/provisions?run=${RUN.id}`);
     assert.equal(
       data.rows[0]!.fiscalYearLabel,
-      String(provisions.fiscalYearLabel)
-        .replaceAll('{year}', String(RUN.fiscalYear)),
+      String(provisions.fiscalYearLabel).replaceAll("{year}", String(RUN.fiscalYear)),
       `${locale} must render the fiscal-year cell from the catalog pattern`,
-    )
+    );
     assert.equal(
       data.rows[0]!.versionLabel,
-      String(provisions.versionLabel).replaceAll('{version}', String(RUN.version)),
+      String(provisions.versionLabel).replaceAll("{version}", String(RUN.version)),
       `${locale} must render the version cell from the catalog pattern`,
-    )
-  })
+    );
+  });
 }
 
-test('a restricted reader sees the no-grant empty state without a compute action', async () => {
-  const previous = { ...labelState }
+test("a restricted reader sees the no-grant empty state without a compute action", async () => {
+  const previous = { ...labelState };
   try {
-    labelState.messages = { tax: JSON.parse(readFileSync(join(MESSAGES, 'en', 'tax.json'), 'utf8')) }
-    labelState.restricted = true
-    labelState.canCompute = false
-    labelState.noRuns = true
+    labelState.messages = {
+      tax: JSON.parse(readFileSync(join(MESSAGES, "en", "tax.json"), "utf8")),
+    };
+    labelState.restricted = true;
+    labelState.canCompute = false;
+    labelState.noRuns = true;
 
-    const data = await loadTaxProvisions()
-    assert.equal(data.rows.length, 0)
-    assert.equal(data.canCompute, false)
+    const data = await loadTaxProvisions();
+    assert.equal(data.rows.length, 0);
+    assert.equal(data.canCompute, false);
     assert.equal(
       data.emptyText,
-      'No provision runs yet. Only preparers with organization-wide report creation access can compute the first provision.',
-    )
+      "No provision runs yet. Only preparers with organization-wide report creation access can compute the first provision.",
+    );
 
-    const spec = taxProvisionsSpec(data)
-    assert.equal(JSON.stringify(spec.header).includes('provision-compute-button'), false)
+    const spec = taxProvisionsSpec(data);
+    assert.equal(JSON.stringify(spec.header).includes("provision-compute-button"), false);
   } finally {
-    Object.assign(labelState, previous)
+    Object.assign(labelState, previous);
   }
-})
+});
 
-test('the selected provision opens in the list URL and closes back to the same list context', async () => {
-  labelState.messages = { tax: JSON.parse(readFileSync(join(MESSAGES, 'en', 'tax.json'), 'utf8')) }
-  const data = await loadTaxProvisions({ run: RUN.id, page: '2' })
+test("the selected provision opens in the list URL and closes back to the same list context", async () => {
+  labelState.messages = { tax: JSON.parse(readFileSync(join(MESSAGES, "en", "tax.json"), "utf8")) };
+  const data = await loadTaxProvisions({ run: RUN.id, page: "2" });
 
-  assert.equal(labelState.selectedRunId, RUN.id)
-  assert.equal(data.drawerOpen, true)
-  assert.equal(data.drawer?.closeHref, '/tax/provisions?page=2')
-  assert.equal(data.rows[0]?.href, `/tax/provisions?run=${RUN.id}&page=2`)
-})
+  assert.equal(labelState.selectedRunId, RUN.id);
+  assert.equal(data.drawerOpen, true);
+  assert.equal(data.drawer?.closeHref, "/tax/provisions?page=2");
+  assert.equal(data.rows[0]?.href, `/tax/provisions?run=${RUN.id}&page=2`);
+});

@@ -8,15 +8,17 @@ type IdempotencyHarness = Awaited<ReturnType<typeof buildIdempotencyHarness>>;
 async function buildIdempotencyHarness() {
   const { sql } = await import("drizzle-orm");
   const { randomUUID } = await import("node:crypto");
-  const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-  const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-    "@openbooks/engine/testing/fixtures"
-  );
+  const { db, pool, withBypassContext, withOrgContext } =
+    await import("@openbooks/engine/platform/db");
+  const { createScratchOrg, createScratchUser, dropScratchOrg } =
+    await import("@openbooks/engine/testing/fixtures");
   const { requestDocumentVoid } = await import("@openbooks/engine/ledger/document-void");
   const { executeIdempotent } = await import("./idempotency.ts");
 
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Idempotent Void Controller", "admin"));
+  const actorId = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Idempotent Void Controller", "admin"),
+  );
   const context: ApplicationContext = {
     authz: {
       user: { id: actorId, orgId: org.orgId } as ApplicationContext["authz"]["user"],
@@ -30,7 +32,8 @@ async function buildIdempotencyHarness() {
 
   async function seedApprovedQuote(documentNumber: string): Promise<string> {
     const documentId = randomUUID();
-    await withBypassContext(() => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into documents
         (id, org_id, kind, document_number, party_id, subsidiary_id,
          document_date, currency, status, created_by)
@@ -39,7 +42,8 @@ async function buildIdempotencyHarness() {
         ${org.customerId}, ${org.subsidiaryId}, ${org.date}, 'CAD',
         'approved', ${actorId}
       )
-    `));
+    `),
+    );
     return documentId;
   }
 
@@ -49,24 +53,30 @@ async function buildIdempotencyHarness() {
       // the same gates as /api/query — queryConsole + sql.execute — not
       // scripts alone. Leaving queryConsole off is a fixture gap, not a
       // pool or idempotency failure.
-      const enabled = await db.execute<{ id: string }>(sql`
+      const enabled = await db.execute<{ id: string }>(
+        sql`
         update orgs
            set settings = jsonb_set(
              jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb, true),
              '{features,queryConsole}', 'true'::jsonb, true)
          where id = ${org.orgId}
          returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (!enabled[0]) {
         throw new Error(`scripts/queryConsole feature write matched 0 rows for org ${org.orgId}`);
       }
-      const granted = await db.execute<{ id: string }>(sql`
+      const granted = await db.execute<{ id: string }>(
+        sql`
         update app_roles
            set permissions = coalesce(permissions, '[]'::jsonb) || '["sql.execute"]'::jsonb
          where org_id = ${org.orgId}
            and id in (select role_id from role_assignments where org_id = ${org.orgId} and user_id = ${actorId})
          returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (!granted[0]) {
         throw new Error(`sql.execute grant matched 0 roles for actor ${actorId}`);
       }
@@ -85,7 +95,9 @@ async function buildIdempotencyHarness() {
   }
 
   async function countRows(query: ReturnType<typeof sql>): Promise<number> {
-    const result = await withOrgContext(org.orgId, () => db.execute<{ count: number }>(query, "objects"));
+    const result = await withOrgContext(org.orgId, () =>
+      db.execute<{ count: number }>(query, "objects"),
+    );
     return Number(result[0]!.count);
   }
 
@@ -156,14 +168,17 @@ test("a duplicate waits out an in-flight attempt without pinning a pool client, 
     // only footprint is short-lived reads that leave no idle-in-transaction
     // session behind.
     await new Promise((resolve) => setTimeout(resolve, 80));
-    const pinned = await h.db.execute<{ pinned: number }>(h.sql`
+    const pinned = await h.db.execute<{ pinned: number }>(
+      h.sql`
       select count(*)::int as pinned
         from pg_stat_activity
        where datname = current_database()
          and state = 'idle in transaction'
          and xact_start < clock_timestamp() - interval '50 milliseconds'
          and pid <> pg_backend_pid()
-    `, "objects");
+    `,
+      "objects",
+    );
     const waitingClients = h.pool.waitingCount;
 
     gate.openRelease();
@@ -176,7 +191,11 @@ test("a duplicate waits out an in-flight attempt without pinning a pool client, 
     }
     assert.equal(duplicateOutcome.status, "fulfilled");
     if (duplicateOutcome.status === "fulfilled") {
-      assert.equal(duplicateOutcome.value.replayed, true, "the duplicate replays the committed response");
+      assert.equal(
+        duplicateOutcome.value.replayed,
+        true,
+        "the duplicate replays the committed response",
+      );
       assert.deepEqual(duplicateOutcome.value.value, leaderValue);
     }
     assert.ok(
@@ -312,9 +331,9 @@ test("a duplicate gives up with a conflict once the rival wait budget lapses", a
         rivalWaitBudgetMs: 120,
       }),
       (error: unknown) =>
-        error instanceof Error
-        && (error as { code?: string }).code === "conflict"
-        && /still in progress/.test(error.message),
+        error instanceof Error &&
+        (error as { code?: string }).code === "conflict" &&
+        /still in progress/.test(error.message),
     );
 
     gate.openRelease();
@@ -388,8 +407,16 @@ test("a duplicate-key void storm stays exact-once and leaves the request pool re
     settled = true;
 
     assert.equal(outcomes.length, K);
-    assert.equal(outcomes.filter((outcome) => !outcome.replayed).length, 1, "exactly one claimant executes");
-    assert.equal(outcomes.filter((outcome) => outcome.replayed).length, K - 1, "every duplicate replays");
+    assert.equal(
+      outcomes.filter((outcome) => !outcome.replayed).length,
+      1,
+      "exactly one claimant executes",
+    );
+    assert.equal(
+      outcomes.filter((outcome) => outcome.replayed).length,
+      K - 1,
+      "every duplicate replays",
+    );
     assert.ok(outcomes.every((outcome) => outcome.value.status === "voided"));
 
     assert.ok(canaryLatencies.length >= 3, "canaries sampled during the storm");
@@ -400,9 +427,14 @@ test("a duplicate-key void storm stays exact-once and leaves the request pool re
     );
 
     const { withOrgContext: scopedRead } = await import("@openbooks/engine/platform/db");
-    const status = await scopedRead(h.org.orgId, () => h.db.execute<{ status: string; void_requested_at: Date | null }>(h.sql`
+    const status = await scopedRead(h.org.orgId, () =>
+      h.db.execute<{ status: string; void_requested_at: Date | null }>(
+        h.sql`
       select status, void_requested_at from documents where id = ${documentId}
-    `, "objects"));
+    `,
+        "objects",
+      ),
+    );
     assert.deepEqual(status[0], { status: "voided", void_requested_at: null });
     assert.equal(
       await h.countRows(h.sql`

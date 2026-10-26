@@ -59,13 +59,34 @@
  *     --source-dir ../source --report-dir upgrade-report
  */
 import { spawn } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { releaseMigrationPlan } from "../migration-baseline-plan.mjs";
-import { loadConfig, readCandidateBaseline, readSourceTreeBaseline, sourceUpgradeRefusal, validateConfig } from "./plan.mjs";
-import { candidateHarnessOrgIds, compareSnapshots, fingerprintColumnsOf, snapshotLedger } from "./ledger.mjs";
+import {
+  loadConfig,
+  readCandidateBaseline,
+  readSourceTreeBaseline,
+  sourceUpgradeRefusal,
+  validateConfig,
+} from "./plan.mjs";
+import {
+  candidateHarnessOrgIds,
+  compareSnapshots,
+  fingerprintColumnsOf,
+  snapshotLedger,
+} from "./ledger.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CANDIDATE = resolve(HERE, "..", "..");
@@ -103,7 +124,8 @@ export function maskDatabaseUrl(value) {
 }
 
 export function phaseLogPath(reportDir, phase, stream) {
-  if (stream !== "stdout" && stream !== "stderr") throw new Error(`unknown log stream ${JSON.stringify(stream)}`);
+  if (stream !== "stdout" && stream !== "stderr")
+    throw new Error(`unknown log stream ${JSON.stringify(stream)}`);
   if (!/^[a-z0-9-]+$/.test(phase)) throw new Error(`unsafe phase name ${JSON.stringify(phase)}`);
   return join(reportDir, `${phase}.${stream}.log`);
 }
@@ -132,7 +154,9 @@ function appendPhaseLog(stream, chunk) {
     appendFileSync(phaseLogPath(phaseLogSink.dir, phaseLogSink.name, stream), chunk);
   } catch (error) {
     phaseLogError = error instanceof Error ? error : new Error(String(error));
-    console.error(`[rehearse] phase evidence log failed for ${phaseLogSink.name}.${stream}: ${phaseLogError.message}`);
+    console.error(
+      `[rehearse] phase evidence log failed for ${phaseLogSink.name}.${stream}: ${phaseLogError.message}`,
+    );
   }
 }
 
@@ -185,23 +209,27 @@ export function run(phase, command, args, { cwd, env = {}, onLine } = {}) {
         return;
       }
       if (code === 0) {
-        reject(new PhaseRefusal(
-          phase,
-          `phase evidence log failed: ${logError.message}`,
-          { stdout, stderr },
-          { cause: logError },
-        ));
+        reject(
+          new PhaseRefusal(
+            phase,
+            `phase evidence log failed: ${logError.message}`,
+            { stdout, stderr },
+            { cause: logError },
+          ),
+        );
         return;
       }
       const tail = tailLines(stderr) || tailLines(stdout);
       const outcome = `${invocation} exited ${code ?? signal}`;
       const logNote = logError ? `; phase evidence log also failed: ${logError.message}` : "";
-      reject(new PhaseRefusal(
-        phase,
-        tail ? `${outcome}: ${tail}${logNote}` : `${outcome}${logNote}`,
-        { stdout, stderr },
-        { cause: logError ?? (stderr || stdout || undefined) },
-      ));
+      reject(
+        new PhaseRefusal(
+          phase,
+          tail ? `${outcome}: ${tail}${logNote}` : `${outcome}${logNote}`,
+          { stdout, stderr },
+          { cause: logError ?? (stderr || stdout || undefined) },
+        ),
+      );
     });
   });
 }
@@ -217,7 +245,10 @@ async function withClient(connectionString, fn) {
 }
 
 function lastJsonLine(phase, stdout) {
-  const lines = stdout.trim().split("\n").filter((line) => line.trim().startsWith("{"));
+  const lines = stdout
+    .trim()
+    .split("\n")
+    .filter((line) => line.trim().startsWith("{"));
   if (lines.length === 0) throw new PhaseRefusal(phase, "printed no JSON result");
   return JSON.parse(lines.at(-1));
 }
@@ -235,7 +266,9 @@ export function findingKeys(findings) {
  */
 export function preUpgradeDumpName(sourceTag, candidateSha, stamp) {
   const safe = (value, fallback) => {
-    const text = String(value ?? "").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
+    const text = String(value ?? "")
+      .replace(/[^A-Za-z0-9._-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
     return text.length > 0 ? text : fallback;
   };
   return `pre-${safe(sourceTag, "untagged")}-${safe(candidateSha, "candidate")}-${safe(stamp, "nostamp")}.dump`;
@@ -269,33 +302,65 @@ function sourceRuntimeEnv() {
 
 async function seedSim(step, sourceDir) {
   const env = sourceRuntimeEnv();
-  const provisioned = await run("seed", "npm", [
-    "--prefix", "engine", "run", "--silent", "sim", "--",
-    "provision", "--profile", step.profile, "--seed", step.seed, "--start", step.start, "--end", step.end,
-  ], { cwd: sourceDir, env });
+  const provisioned = await run(
+    "seed",
+    "npm",
+    [
+      "--prefix",
+      "engine",
+      "run",
+      "--silent",
+      "sim",
+      "--",
+      "provision",
+      "--profile",
+      step.profile,
+      "--seed",
+      step.seed,
+      "--start",
+      step.start,
+      "--end",
+      step.end,
+    ],
+    { cwd: sourceDir, env },
+  );
   const runDir = JSON.parse(provisioned).runDir;
-  if (typeof runDir !== "string" || runDir.length === 0) throw new PhaseRefusal("seed", "sim provision returned no runDir");
-  await run("seed", "npm", ["--prefix", "engine", "run", "--silent", "sim", "--", step.mode, runDir], {
-    cwd: sourceDir,
-    env,
-  });
-  const manifestPath = isAbsolute(runDir) ? join(runDir, "manifest.json") : join(sourceDir, "engine", runDir, "manifest.json");
+  if (typeof runDir !== "string" || runDir.length === 0)
+    throw new PhaseRefusal("seed", "sim provision returned no runDir");
+  await run(
+    "seed",
+    "npm",
+    ["--prefix", "engine", "run", "--silent", "sim", "--", step.mode, runDir],
+    {
+      cwd: sourceDir,
+      env,
+    },
+  );
+  const manifestPath = isAbsolute(runDir)
+    ? join(runDir, "manifest.json")
+    : join(sourceDir, "engine", runDir, "manifest.json");
   const orgId = JSON.parse(readFileSync(manifestPath, "utf8")).orgId;
   if (!orgId) throw new PhaseRefusal("seed", `sim manifest ${manifestPath} has no orgId`);
   return [orgId];
 }
 
 async function seedSamples(sourceDir) {
-  const stdout = await run("seed", "npm", ["--prefix", "engine", "run", "--silent", "samples", "--", "prepare"], {
-    cwd: sourceDir,
-    env: sourceRuntimeEnv(),
-  });
+  const stdout = await run(
+    "seed",
+    "npm",
+    ["--prefix", "engine", "run", "--silent", "samples", "--", "prepare"],
+    {
+      cwd: sourceDir,
+      env: sourceRuntimeEnv(),
+    },
+  );
   const orgIds = stdout
     .split("\n")
     .filter((line) => line.trim().startsWith("{"))
     .map((line) => JSON.parse(line).templateOrgId)
     .filter(Boolean);
-  if (orgIds.length === 0) throw new PhaseRefusal("seed", "the source release prepared no sample-company templates");
+  if (orgIds.length === 0)
+    throw new PhaseRefusal("seed", "the source release prepared no sample-company templates");
   return orgIds;
 }
 
@@ -314,16 +379,27 @@ async function seedSamples(sourceDir) {
  */
 async function seedWithSeeder(step, sourceDir) {
   const file = join(HERE, "seeders", `${step.name}.ts`);
-  if (!existsSync(file)) throw new PhaseRefusal("seed", `seeder ${step.name} does not exist at ${file}`);
+  if (!existsSync(file))
+    throw new PhaseRefusal("seed", `seeder ${step.name} does not exist at ${file}`);
   const targetDir = join(sourceDir, "engine", "src", "upgrade-rehearsal-seed");
   mkdirSync(targetDir, { recursive: true });
   copyFileSync(file, join(targetDir, `${step.name}.ts`));
-  const stdout = await run("seed", "npx", ["tsx", join("engine", "src", "upgrade-rehearsal-seed", `${step.name}.ts`), ...(step.args ?? [])], {
-    cwd: sourceDir,
-    env: { ...sourceRuntimeEnv(), OPENBOOKS_SEED_DB_URL: requireEnv("OPENBOOKS_DB_URL") },
-  });
+  const stdout = await run(
+    "seed",
+    "npx",
+    [
+      "tsx",
+      join("engine", "src", "upgrade-rehearsal-seed", `${step.name}.ts`),
+      ...(step.args ?? []),
+    ],
+    {
+      cwd: sourceDir,
+      env: { ...sourceRuntimeEnv(), OPENBOOKS_SEED_DB_URL: requireEnv("OPENBOOKS_DB_URL") },
+    },
+  );
   const orgIds = lastJsonLine("seed", stdout).orgIds;
-  if (!Array.isArray(orgIds) || orgIds.length === 0) throw new PhaseRefusal("seed", `seeder ${step.name} reported no orgIds`);
+  if (!Array.isArray(orgIds) || orgIds.length === 0)
+    throw new PhaseRefusal("seed", `seeder ${step.name} reported no orgIds`);
   return orgIds;
 }
 
@@ -347,14 +423,19 @@ async function applySourceOracleOverlay(datasetId, overlay, sourceDir) {
       try {
         bytes = readFileSync(from);
       } catch {
-        throw new PhaseRefusal("seed", `dataset ${datasetId} oracle overlay: ${file} is missing from the candidate tree`);
+        throw new PhaseRefusal(
+          "seed",
+          `dataset ${datasetId} oracle overlay: ${file} is missing from the candidate tree`,
+        );
       }
       const hadOriginal = existsSync(to);
       const backup = hadOriginal ? readFileSync(to) : null;
       mkdirSync(dirname(to), { recursive: true });
       writeFileSync(to, bytes);
       applied.push({ file, hadOriginal, backup });
-      console.log(`upgrade rehearsal: dataset ${datasetId} oracle overlay ${file} from ${overlay.sha.slice(0, 12)} (${hadOriginal ? "replaced" : "added"})`);
+      console.log(
+        `upgrade rehearsal: dataset ${datasetId} oracle overlay ${file} from ${overlay.sha.slice(0, 12)} (${hadOriginal ? "replaced" : "added"})`,
+      );
     }
   } catch (error) {
     // A half-applied overlay is worse than none: roll back what landed before
@@ -363,8 +444,12 @@ async function applySourceOracleOverlay(datasetId, overlay, sourceDir) {
     try {
       await restoreSourceOracleOverlay(datasetId, { applied }, sourceDir);
     } catch (rollbackError) {
-      const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-      throw new PhaseRefusal("seed", `dataset ${datasetId} oracle overlay failed (${message}) and rollback failed (${rollbackMessage}): the source tree may be dirty`);
+      const rollbackMessage =
+        rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+      throw new PhaseRefusal(
+        "seed",
+        `dataset ${datasetId} oracle overlay failed (${message}) and rollback failed (${rollbackMessage}): the source tree may be dirty`,
+      );
     }
     throw error;
   }
@@ -378,10 +463,15 @@ async function restoreSourceOracleOverlay(datasetId, state, sourceDir) {
       if (entry.hadOriginal) writeFileSync(to, entry.backup);
       else unlinkSync(to);
     } catch (error) {
-      throw new PhaseRefusal("seed", `dataset ${datasetId} oracle overlay: could not restore ${entry.file}: ${(error instanceof Error ? error.message : String(error))}`);
+      throw new PhaseRefusal(
+        "seed",
+        `dataset ${datasetId} oracle overlay: could not restore ${entry.file}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
-  console.log(`upgrade rehearsal: dataset ${datasetId} oracle overlay removed (source tree restored)`);
+  console.log(
+    `upgrade rehearsal: dataset ${datasetId} oracle overlay removed (source tree restored)`,
+  );
 }
 
 async function seed(dataset, sourceDir) {
@@ -400,7 +490,9 @@ async function seed(dataset, sourceDir) {
   }
   return {
     orgIds,
-    oracleOverlay: overlaid ? { sha: overlaid.sha, files: overlaid.files, reason: overlaid.reason } : null,
+    oracleOverlay: overlaid
+      ? { sha: overlaid.sha, files: overlaid.files, reason: overlaid.reason }
+      : null,
   };
 }
 
@@ -423,18 +515,33 @@ export async function harness(phase, treeDir, orgIds, tolerated = new Set(), env
   // workflow. Its evidence must name its own commit, not the ambient CI SHA.
   const commit = (await run(phase, "git", ["rev-parse", "HEAD"], { cwd: treeDir })).trim();
   if (!/^[a-f0-9]{40}$/.test(commit)) {
-    throw new PhaseRefusal(phase, "the harness checkout has no full commit — check out the declared release before verification");
+    throw new PhaseRefusal(
+      phase,
+      "the harness checkout has no full commit — check out the declared release before verification",
+    );
   }
   const evidenceEnv = { ...env, OPENBOOKS_SOURCE_SHA: commit };
   const toleratedRuns = [];
   for (const orgId of orgIds) {
     try {
-      await run(phase, "npm", ["--prefix", "engine", "run", "--silent", "harness", "--", orgId], { cwd: treeDir, env: evidenceEnv });
+      await run(phase, "npm", ["--prefix", "engine", "run", "--silent", "harness", "--", orgId], {
+        cwd: treeDir,
+        env: evidenceEnv,
+      });
     } catch (error) {
-      if (tolerated.size === 0 || !(error instanceof PhaseRefusal) || error.cause instanceof Error || typeof error.details?.stdout !== "string") throw error;
+      if (
+        tolerated.size === 0 ||
+        !(error instanceof PhaseRefusal) ||
+        error.cause instanceof Error ||
+        typeof error.details?.stdout !== "string"
+      )
+        throw error;
       const { failed, unexpected } = classifyHarnessFailures(error.details.stdout, tolerated);
       if (failed.length === 0 || unexpected.length > 0) {
-        throw new PhaseRefusal(phase, `harness failed on org ${orgId}: ${unexpected.join(", ") || "non-zero exit with no FAIL line"}`);
+        throw new PhaseRefusal(
+          phase,
+          `harness failed on org ${orgId}: ${unexpected.join(", ") || "non-zero exit with no FAIL line"}`,
+        );
       }
       toleratedRuns.push({ orgId, tolerated: failed });
     }
@@ -447,7 +554,11 @@ async function timedBootstrap(phase, env = {}) {
   let open = null;
   const started = performance.now();
   const close = (at) => {
-    if (open) migrations.push({ filename: open.filename, seconds: Number(((at - open.at) / 1000).toFixed(3)) });
+    if (open)
+      migrations.push({
+        filename: open.filename,
+        seconds: Number(((at - open.at) / 1000).toFixed(3)),
+      });
     open = null;
   };
   await run(phase, "npx", ["tsx", "scripts/bootstrap.ts"], {
@@ -470,7 +581,9 @@ async function timedBootstrap(phase, env = {}) {
 
 function candidateMigrationPlan() {
   const directory = join(CANDIDATE, "schema", "migrations");
-  const generated = readdirSync(join(directory, "generated")).filter((file) => file.endsWith(".sql")).sort();
+  const generated = readdirSync(join(directory, "generated"))
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
   return releaseMigrationPlan(directory, generated);
 }
 
@@ -492,7 +605,10 @@ function refuseCodes(findings) {
 
 async function appliedFilenames(dbUrl) {
   return withClient(dbUrl, async (client) =>
-    (await client.query("select filename from public._applied_migrations order by filename")).rows.map((row) => row.filename));
+    (
+      await client.query("select filename from public._applied_migrations order by filename")
+    ).rows.map((row) => row.filename),
+  );
 }
 
 /**
@@ -528,12 +644,14 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, ledgerBefo
         cwd: CANDIDATE,
       });
     } catch (error) {
-      if (!(error instanceof PhaseRefusal) || typeof error.details?.stdout !== "string") throw error;
+      if (!(error instanceof PhaseRefusal) || typeof error.details?.stdout !== "string")
+        throw error;
       stdout = error.details.stdout;
     }
     const result = lastJsonLine("preflight", stdout);
     writeFileSync(join(reportDir, reportName), `${JSON.stringify(result, null, 2)}\n`);
-    if (typeof result.error === "string") throw new PhaseRefusal("preflight", `upgrade check could not run: ${result.error}`);
+    if (typeof result.error === "string")
+      throw new PhaseRefusal("preflight", `upgrade check could not run: ${result.error}`);
     return result;
   };
   const first = await checkJson("preflight.json");
@@ -571,12 +689,18 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, ledgerBefo
     if (!(error instanceof PhaseRefusal)) throw error;
     const stdout = error.details?.stdout ?? "";
     if (!/migration preflight/i.test(stdout)) {
-      throw new PhaseRefusal("preflight", `bootstrap failed, but not on a migration preflight: ${error.message}`);
+      throw new PhaseRefusal(
+        "preflight",
+        `bootstrap failed, but not on a migration preflight: ${error.message}`,
+      );
     }
     refused = true;
   }
   if (!refused) {
-    throw new PhaseRefusal("preflight", "expected bootstrap to refuse on the preflight findings, but it applied cleanly");
+    throw new PhaseRefusal(
+      "preflight",
+      "expected bootstrap to refuse on the preflight findings, but it applied cleanly",
+    );
   }
 
   const appliedAfter = await appliedFilenames(dbUrl);
@@ -587,15 +711,21 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, ledgerBefo
       `the refused bootstrap changed _applied_migrations: ${ledgerDrift.join(", ") || "rows removed"}`,
     );
   }
-  const after = await withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(before) }));
+  const after = await withClient(dbUrl, (client) =>
+    snapshotLedger(client, { columns: fingerprintColumnsOf(before) }),
+  );
   const differences = compareSnapshots(before, after);
   if (differences.length > 0) {
-    throw new PhaseRefusal("preflight", `the refused bootstrap moved the ledger fingerprint: ${differences.length} difference(s)`);
+    throw new PhaseRefusal(
+      "preflight",
+      `the refused bootstrap moved the ledger fingerprint: ${differences.length} difference(s)`,
+    );
   }
 
   for (const remedy of dataset.remedies ?? []) {
     const sqlPath = join(CANDIDATE, remedy.sql);
-    if (!existsSync(sqlPath)) throw new PhaseRefusal("preflight", `remedy file ${remedy.sql} does not exist`);
+    if (!existsSync(sqlPath))
+      throw new PhaseRefusal("preflight", `remedy file ${remedy.sql} does not exist`);
     const sqlText = readFileSync(sqlPath, "utf8");
     await withClient(dbUrl, async (client) => {
       await client.query(sqlText);
@@ -604,7 +734,10 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, ledgerBefo
   const second = await checkJson("preflight-after-remedies.json");
   const stillRefusing = refuseFindings(second);
   if (stillRefusing.length > 0) {
-    throw new PhaseRefusal("preflight", `remedies did not clear the check: ${refuseCodes(stillRefusing).join(", ")}`);
+    throw new PhaseRefusal(
+      "preflight",
+      `remedies did not clear the check: ${refuseCodes(stillRefusing).join(", ")}`,
+    );
   }
   summary.notices = [...noticeFindings(first), ...noticeFindings(second)];
   return summary;
@@ -676,7 +809,11 @@ async function main() {
   if (!dataset) throw new PhaseRefusal("config", `unknown dataset ${datasetId}`);
   // Refuse a source that cannot upgrade into this candidate before any
   // database is touched: its cell could only rehearse a refusal.
-  const ineligible = sourceUpgradeRefusal(process.env.UPGRADE_SOURCE_TAG, readCandidateBaseline(), readSourceTreeBaseline(sourceDir));
+  const ineligible = sourceUpgradeRefusal(
+    process.env.UPGRADE_SOURCE_TAG,
+    readCandidateBaseline(),
+    readSourceTreeBaseline(sourceDir),
+  );
   if (ineligible) throw new PhaseRefusal("config", ineligible);
 
   const dbUrl = requireEnv("OPENBOOKS_DB_URL");
@@ -706,7 +843,8 @@ async function main() {
     refusals: [],
     ok: false,
   };
-  const writeReport = () => writeFileSync(join(reportDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  const writeReport = () =>
+    writeFileSync(join(reportDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
 
   const phase = async (name, fn) => {
     const started = performance.now();
@@ -714,10 +852,18 @@ async function main() {
     setPhaseLogSink(reportDir, name);
     try {
       const result = await fn();
-      report.phases.push({ name, ok: true, seconds: Number(((performance.now() - started) / 1000).toFixed(3)) });
+      report.phases.push({
+        name,
+        ok: true,
+        seconds: Number(((performance.now() - started) / 1000).toFixed(3)),
+      });
       return result;
     } catch (error) {
-      report.phases.push({ name, ok: false, seconds: Number(((performance.now() - started) / 1000).toFixed(3)) });
+      report.phases.push({
+        name,
+        ok: false,
+        seconds: Number(((performance.now() - started) / 1000).toFixed(3)),
+      });
       if (error instanceof PhaseRefusal) throw error;
       throw new PhaseRefusal(
         name,
@@ -732,18 +878,32 @@ async function main() {
   };
 
   try {
-    await phase("reference-install", () => run("reference-install", "npx", ["tsx", "scripts/bootstrap.ts"], { cwd: CANDIDATE, env: referenceEnv }));
-    const reference = await phase("reference-catalog", () => catalogSnapshot("reference-catalog", referenceEnv));
+    await phase("reference-install", () =>
+      run("reference-install", "npx", ["tsx", "scripts/bootstrap.ts"], {
+        cwd: CANDIDATE,
+        env: referenceEnv,
+      }),
+    );
+    const reference = await phase("reference-catalog", () =>
+      catalogSnapshot("reference-catalog", referenceEnv),
+    );
     writeFileSync(join(reportDir, "catalog-reference.json"), reference);
 
-    await phase("source-install", () => run("source-install", "npx", ["tsx", "scripts/bootstrap.ts"], { cwd: sourceDir }));
+    await phase("source-install", () =>
+      run("source-install", "npx", ["tsx", "scripts/bootstrap.ts"], { cwd: sourceDir }),
+    );
     const seeded = await phase("seed", () => seed(dataset, sourceDir));
     report.seededOrgs = seeded.orgIds;
     report.oracleOverlay = seeded.oracleOverlay;
-    const sourceEntry = config.sources.find((candidate) => candidate.tag === process.env.UPGRADE_SOURCE_TAG);
-    const toleratedAtSource = new Set((sourceEntry?.knownHarnessDefects ?? []).map((defect) => defect.check));
+    const sourceEntry = config.sources.find(
+      (candidate) => candidate.tag === process.env.UPGRADE_SOURCE_TAG,
+    );
+    const toleratedAtSource = new Set(
+      (sourceEntry?.knownHarnessDefects ?? []).map((defect) => defect.check),
+    );
     report.toleratedSourceHarness = await phase("source-harness", () =>
-      harness("source-harness", sourceDir, report.seededOrgs, toleratedAtSource));
+      harness("source-harness", sourceDir, report.seededOrgs, toleratedAtSource),
+    );
 
     const before = await phase("snapshot-before", () => withClient(dbUrl, snapshotLedger));
     writeFileSync(join(reportDir, "ledger-before.json"), `${JSON.stringify(before, null, 2)}\n`);
@@ -758,25 +918,54 @@ async function main() {
       await phase("baseline-backup", async () => {
         const file = join(reportDir, "before-baseline-adoption.dump");
         await run("baseline-backup", "pg_dump", ["-Fc", dbUrl, "-f", file]);
-        if (statSync(file).size === 0) throw new PhaseRefusal("baseline-backup", "the baseline backup is empty");
+        if (statSync(file).size === 0)
+          throw new PhaseRefusal("baseline-backup", "the baseline backup is empty");
         const list = await run("baseline-backup", "pg_restore", ["--list", file]);
-        if (!list.split("\n").some((line) => line.trim() && !line.startsWith(";"))) throw new PhaseRefusal("baseline-backup", "the baseline backup contains no archive entries");
+        if (!list.split("\n").some((line) => line.trim() && !line.startsWith(";")))
+          throw new PhaseRefusal(
+            "baseline-backup",
+            "the baseline backup contains no archive entries",
+          );
       });
       await phase("baseline-adoption", async () => {
         const database = decodeURIComponent(new URL(dbUrl).pathname.slice(1));
-        const args = ["--import", "tsx", "scripts/adopt-migration-baseline.mts", "--database", database];
+        const args = [
+          "--import",
+          "tsx",
+          "scripts/adopt-migration-baseline.mts",
+          "--database",
+          database,
+        ];
         const env = { OPENBOOKS_BASELINE_TARGET_URL: dbUrl };
         await run("baseline-adoption", "node", [...args, "--check"], { cwd: CANDIDATE, env });
-        await run("baseline-adoption", "node", [...args, "--apply", "--actor", "release-verification", "--reason", "Verified previous-release upgrade and baseline cutover", "--backup", join(reportDir, "before-baseline-adoption.dump")], { cwd: CANDIDATE, env });
+        await run(
+          "baseline-adoption",
+          "node",
+          [
+            ...args,
+            "--apply",
+            "--actor",
+            "release-verification",
+            "--reason",
+            "Verified previous-release upgrade and baseline cutover",
+            "--backup",
+            join(reportDir, "before-baseline-adoption.dump"),
+          ],
+          { cwd: CANDIDATE, env },
+        );
       });
-      report.baselineAdoption = { filename: plan.baseline.filename, sha256: plan.baseline.baselineSha256 };
+      report.baselineAdoption = {
+        filename: plan.baseline.filename,
+        sha256: plan.baseline.baselineSha256,
+      };
     }
     // Adoption appends the baseline identity, so refusal-without-change and
     // the pending list are judged against the ledger the upgrade starts from.
     const ledgerBeforeUpgrade = await appliedFilenames(dbUrl);
 
     report.preflight = await phase("preflight", () =>
-      runPreflightPhase(dataset, reportDir, { dbUrl, before, ledgerBeforeUpgrade }));
+      runPreflightPhase(dataset, reportDir, { dbUrl, before, ledgerBeforeUpgrade }),
+    );
 
     // Remedies change data on purpose, and an operator runs them BEFORE
     // upgrading. From here the parity baseline is the remedied install, and
@@ -785,51 +974,87 @@ async function main() {
     let baseline = before;
     if ((dataset.remedies ?? []).length > 0) {
       baseline = await phase("snapshot-after-remedies", () =>
-        withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(before) })));
-      writeFileSync(join(reportDir, "ledger-after-remedies.json"), `${JSON.stringify(baseline, null, 2)}\n`);
+        withClient(dbUrl, (client) =>
+          snapshotLedger(client, { columns: fingerprintColumnsOf(before) }),
+        ),
+      );
+      writeFileSync(
+        join(reportDir, "ledger-after-remedies.json"),
+        `${JSON.stringify(baseline, null, 2)}\n`,
+      );
       await phase("source-harness-after-remedies", () =>
-        harness("source-harness-after-remedies", sourceDir, report.seededOrgs, toleratedAtSource));
+        harness("source-harness-after-remedies", sourceDir, report.seededOrgs, toleratedAtSource),
+      );
     }
 
     report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade"));
-    report.upgrade.pending = candidateMigrationFilenames().filter((file) => !ledgerBeforeUpgrade.includes(file));
+    report.upgrade.pending = candidateMigrationFilenames().filter(
+      (file) => !ledgerBeforeUpgrade.includes(file),
+    );
     report.upgrade.migrations.sort((left, right) => right.seconds - left.seconds);
     // Timing evidence names the exact bytes it measured: the digest the
     // ledger recorded for each applied migration.
-    const recorded = await withClient(dbUrl, async (client) =>
-      new Map((await client.query("select filename, sha256 from public._applied_migrations")).rows.map((row) => [row.filename, row.sha256])));
-    for (const migration of report.upgrade.migrations) migration.sha256 = recorded.get(migration.filename) ?? null;
+    const recorded = await withClient(
+      dbUrl,
+      async (client) =>
+        new Map(
+          (await client.query("select filename, sha256 from public._applied_migrations")).rows.map(
+            (row) => [row.filename, row.sha256],
+          ),
+        ),
+    );
+    for (const migration of report.upgrade.migrations)
+      migration.sha256 = recorded.get(migration.filename) ?? null;
 
     await phase("ledger-complete", async () => {
-      const applied = await withClient(dbUrl, async (client) =>
-        new Set((await client.query("select filename from public._applied_migrations")).rows.map((row) => row.filename)));
+      const applied = await withClient(
+        dbUrl,
+        async (client) =>
+          new Set(
+            (await client.query("select filename from public._applied_migrations")).rows.map(
+              (row) => row.filename,
+            ),
+          ),
+      );
       const missing = candidateMigrationFilenames().filter((file) => !applied.has(file));
-      if (missing.length > 0) throw new PhaseRefusal("ledger-complete", `not recorded as applied: ${missing.join(", ")}`);
+      if (missing.length > 0)
+        throw new PhaseRefusal("ledger-complete", `not recorded as applied: ${missing.join(", ")}`);
     });
 
     await phase("idempotent", async () => {
       const again = await timedBootstrap("idempotent");
       if (again.migrations.length > 0) {
-        throw new PhaseRefusal("idempotent", `a second bootstrap applied ${again.migrations.map((m) => m.filename).join(", ")}`);
+        throw new PhaseRefusal(
+          "idempotent",
+          `a second bootstrap applied ${again.migrations.map((m) => m.filename).join(", ")}`,
+        );
       }
     });
 
     const after = await phase("snapshot-after", () =>
-      withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(baseline) })));
+      withClient(dbUrl, (client) =>
+        snapshotLedger(client, { columns: fingerprintColumnsOf(baseline) }),
+      ),
+    );
     writeFileSync(join(reportDir, "ledger-after.json"), `${JSON.stringify(after, null, 2)}\n`);
     await phase("ledger-parity", async () => {
       const differences = compareSnapshots(baseline, after);
       if (differences.length > 0) {
         report.refusals.push(...differences.slice(0, 200));
-        throw new PhaseRefusal("ledger-parity", `${differences.length} ledger difference(s) across the upgrade`);
+        throw new PhaseRefusal(
+          "ledger-parity",
+          `${differences.length} ledger difference(s) across the upgrade`,
+        );
       }
     });
 
     await phase("candidate-harness", () =>
-      harness("candidate-harness", CANDIDATE, candidateHarnessOrgIds(report.seededOrgs, after)));
+      harness("candidate-harness", CANDIDATE, candidateHarnessOrgIds(report.seededOrgs, after)),
+    );
 
     report.assertions = await phase("assertions", () =>
-      runAssertionsPhase(datasetId, reportDir, { seededOrgs: report.seededOrgs }));
+      runAssertionsPhase(datasetId, reportDir, { seededOrgs: report.seededOrgs }),
+    );
 
     // The production release cannot migrate without a verified dump, so the
     // rehearsal proves the same discipline on every release: a pg_dump -Fc
@@ -837,15 +1062,24 @@ async function main() {
     // upgraded-vs-fresh catalog diff. Either step failing refuses the cell.
     await phase("snapshot-backup", async () => {
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const file = join(reportDir, preUpgradeDumpName(report.source, report.candidate ?? "candidate", stamp));
+      const file = join(
+        reportDir,
+        preUpgradeDumpName(report.source, report.candidate ?? "candidate", stamp),
+      );
       await run("snapshot-backup", "pg_dump", ["-Fc", dbUrl, "-f", file]);
       const bytes = statSync(file).size;
-      if (bytes === 0) throw new PhaseRefusal("snapshot-backup", `dump ${file} is empty; refusing the rehearsal`);
+      if (bytes === 0)
+        throw new PhaseRefusal("snapshot-backup", `dump ${file} is empty; refusing the rehearsal`);
       const list = await run("snapshot-backup", "pg_restore", ["--list", file]);
       writeFileSync(join(reportDir, "dump-list.txt"), list);
-      const entries = list.split("\n").filter((line) => line.trim().length > 0 && !line.trim().startsWith(";")).length;
+      const entries = list
+        .split("\n")
+        .filter((line) => line.trim().length > 0 && !line.trim().startsWith(";")).length;
       if (entries === 0) {
-        throw new PhaseRefusal("snapshot-backup", `pg_restore --list of ${file} names no archive entries; refusing the rehearsal`);
+        throw new PhaseRefusal(
+          "snapshot-backup",
+          `pg_restore --list of ${file} names no archive entries; refusing the rehearsal`,
+        );
       }
       report.backup = { file, bytes, entries };
       console.log(`upgrade rehearsal: verified pre-upgrade dump ${file} (${entries} entries)`);
@@ -854,14 +1088,27 @@ async function main() {
     await phase("catalog", async () => {
       const actual = await catalogSnapshot("catalog", {});
       writeFileSync(join(reportDir, "catalog-upgraded.json"), actual);
-      const comparison = JSON.parse(await run("catalog", "node", [
-        "scripts/compare-schema-catalogs.mjs",
-        join(reportDir, "catalog-upgraded.json"),
-        join(reportDir, "catalog-reference.json"),
-      ], { cwd: CANDIDATE }));
-      writeFileSync(join(reportDir, "catalog-comparison.json"), `${JSON.stringify(comparison, null, 2)}\n`);
+      const comparison = JSON.parse(
+        await run(
+          "catalog",
+          "node",
+          [
+            "scripts/compare-schema-catalogs.mjs",
+            join(reportDir, "catalog-upgraded.json"),
+            join(reportDir, "catalog-reference.json"),
+          ],
+          { cwd: CANDIDATE },
+        ),
+      );
+      writeFileSync(
+        join(reportDir, "catalog-comparison.json"),
+        `${JSON.stringify(comparison, null, 2)}\n`,
+      );
       if (comparison.equivalent !== true) {
-        throw new PhaseRefusal("catalog", "the upgraded schema differs from a fresh install (see catalog-comparison.json)");
+        throw new PhaseRefusal(
+          "catalog",
+          "the upgraded schema differs from a fresh install (see catalog-comparison.json)",
+        );
       }
     });
 
@@ -895,7 +1142,10 @@ export function summarize(report) {
     ...report.phases.map((p) => `| ${p.name} | ${p.ok ? "ok" : "REFUSED"} | ${p.seconds} |`),
   ];
   if (report.baselineAdoption) {
-    lines.push("", `Adopted release baseline ${report.baselineAdoption.filename} (sha256 ${report.baselineAdoption.sha256.slice(0, 8)}) before the upgrade.`);
+    lines.push(
+      "",
+      `Adopted release baseline ${report.baselineAdoption.filename} (sha256 ${report.baselineAdoption.sha256.slice(0, 8)}) before the upgrade.`,
+    );
   }
   if (report.upgrade && report.upgrade.migrations.length === 0) {
     lines.push("", `Upgrade applied no migrations in ${report.upgrade.seconds}s.`);
@@ -906,8 +1156,12 @@ export function summarize(report) {
       "",
       "| migration | sha256[:8] | seconds |",
       "|---|---|---|",
-      ...report.upgrade.migrations.slice(0, 10).map((m) =>
-        `| ${m.filename} | ${typeof m.sha256 === "string" ? m.sha256.slice(0, 8) : "unrecorded"} | ${m.seconds} |`),
+      ...report.upgrade.migrations
+        .slice(0, 10)
+        .map(
+          (m) =>
+            `| ${m.filename} | ${typeof m.sha256 === "string" ? m.sha256.slice(0, 8) : "unrecorded"} | ${m.seconds} |`,
+        ),
     );
   }
   if (report.oracleOverlay) {
@@ -921,11 +1175,20 @@ export function summarize(report) {
       "",
       "Source-harness failures tolerated as declared known defects of the source release (the candidate harness re-checks with no tolerance):",
       "",
-      ...report.toleratedSourceHarness.map((entry) => `- org ${entry.orgId}: ${entry.tolerated.join(", ")}`),
+      ...report.toleratedSourceHarness.map(
+        (entry) => `- org ${entry.orgId}: ${entry.tolerated.join(", ")}`,
+      ),
     );
   }
   if (report.refusals.length > 0) {
-    lines.push("", "Ledger differences (first 20):", "", "```json", JSON.stringify(report.refusals.slice(0, 20), null, 2), "```");
+    lines.push(
+      "",
+      "Ledger differences (first 20):",
+      "",
+      "```json",
+      JSON.stringify(report.refusals.slice(0, 20), null, 2),
+      "```",
+    );
   }
   if (report.preflight?.notices?.length > 0) {
     const codes = [...new Set(report.preflight.notices.map((notice) => notice.code))].sort();

@@ -1,34 +1,37 @@
-import { withPlatformDbTestSurface } from '../../../../../testing/stub-modules'
-import assert from 'node:assert/strict'
-import { canonicalEngineSpecifier, isEngineModuleImport } from '../../../../../testing/engine-resolve-hooks.ts'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
-import { NextResponse } from 'next/server'
+import { withPlatformDbTestSurface } from "../../../../../testing/stub-modules";
+import assert from "node:assert/strict";
+import {
+  canonicalEngineSpecifier,
+  isEngineModuleImport,
+} from "../../../../../testing/engine-resolve-hooks.ts";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
+import { NextResponse } from "next/server";
 
-const PARTY_ID = '00000000-0000-4000-8000-000000000001'
-const TRUNCATED_REVISION = '2026-08-31T12:34:56.789Z'
-const ACCOUNT_ID = '00000000-0000-4000-8000-000000000002'
-const ACTUAL_UPDATED_AT = '2026-08-31T12:34:56.789123Z'
+const PARTY_ID = "00000000-0000-4000-8000-000000000001";
+const TRUNCATED_REVISION = "2026-08-31T12:34:56.789Z";
+const ACCOUNT_ID = "00000000-0000-4000-8000-000000000002";
+const ACTUAL_UPDATED_AT = "2026-08-31T12:34:56.789123Z";
 
 interface RouteState {
-  insertedBankId: string | null
-  operation: 'patch' | 'delete'
-  allowedSubsidiaryIds: Set<string> | null
-  partySubsidiary: string | null
-  rehomeAfterPreflight: boolean
-  inFlightPayment: boolean
-  liveMandate: boolean
-  updatedAt: string
-  queries: string[]
-  updateParams: unknown[][]
-  auditCalls: number
-  auditParams: unknown[][]
+  insertedBankId: string | null;
+  operation: "patch" | "delete";
+  allowedSubsidiaryIds: Set<string> | null;
+  partySubsidiary: string | null;
+  rehomeAfterPreflight: boolean;
+  inFlightPayment: boolean;
+  liveMandate: boolean;
+  updatedAt: string;
+  queries: string[];
+  updateParams: unknown[][];
+  auditCalls: number;
+  auditParams: unknown[][];
 }
 
-const stateKey = Symbol.for('openbooks.bank-accounts-route-test')
+const stateKey = Symbol.for("openbooks.bank-accounts-route-test");
 const state: RouteState = {
   insertedBankId: null,
-  operation: 'patch',
+  operation: "patch",
   allowedSubsidiaryIds: null,
   partySubsidiary: null,
   rehomeAfterPreflight: false,
@@ -39,13 +42,14 @@ const state: RouteState = {
   updateParams: [],
   auditCalls: 0,
   auditParams: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksBankAccountsNextResponse = NextResponse
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksBankAccountsNextResponse =
+  NextResponse;
 
 const mockSources = new Map<string, string>([
   [
-    'authz',
+    "authz",
     `
       const NextResponse = globalThis.openbooksBankAccountsNextResponse
       export async function guardPermission() {
@@ -69,13 +73,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'features',
+    "features",
     `
       export async function isFeatureEnabled() { return true }
     `,
   ],
   [
-    'countries',
+    "countries",
     `
       export function normalizeCountryCode(value) {
         if (typeof value !== 'string') return null
@@ -85,25 +89,22 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'payments',
+    "payments",
     `
       export class PaymentError extends Error {}
       export function encryptAccountNumber(value) { return 'encrypted:' + value }
     `,
   ],
+  ["bank-account-adapter", `export const BANK_ACCOUNT_SUBJECT_KIND = 'party_bank_account'`],
   [
-    'bank-account-adapter',
-    `export const BANK_ACCOUNT_SUBJECT_KIND = 'party_bank_account'`,
-  ],
-  [
-    'business-date',
+    "business-date",
     `
       export async function businessToday() { return '2026-10-09' }
       export async function businessTodayInTx() { return '2026-10-09' }
     `,
   ],
   [
-    'db',
+    "db",
     `
       import {AsyncLocalStorage} from 'node:async_hooks';
       const transactionScope=new AsyncLocalStorage();
@@ -130,7 +131,7 @@ const mockSources = new Map<string, string>([
         })
       }
       export async function withOrgTransaction(orgId, work) { return transactionScope.run({orgId,executor:db},work) }
-      import * as schema from '${import.meta.resolve('@openbooks/schema')}';export {schema}
+      import * as schema from '${import.meta.resolve("@openbooks/schema")}';export {schema}
       export async function withOrg(_orgId, work) { return work() }
       export async function withOrgContext(_orgId, work) { return work() }
       export async function withBypass(work) { return work() }
@@ -194,251 +195,282 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
-mockSources.set('db',withPlatformDbTestSurface(mockSources.get('db')!))
+mockSources.set("db", withPlatformDbTestSurface(mockSources.get("db")!));
 
-const selfUrl = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${selfUrl}?bank-accounts-mock=${name}`
+const selfUrl = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${selfUrl}?bank-accounts-mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ['@/lib/authz', mockUrl('authz')],
-  ['../../../../../lib/authz', mockUrl('authz')],
-  ['../../../../../lib/features', mockUrl('features')],
-  ['../../../../../lib/countries', mockUrl('countries')],
-  ['@openbooks/engine/platform/db', mockUrl('db')],
-  ['@openbooks/engine/payments/payment-accounts', mockUrl('payments')],
-  ['@openbooks/engine/payments/payment-contracts', mockUrl('payments')],
-  ['@openbooks/engine/payments/payment-documents', mockUrl('payments')],
-  ['@openbooks/engine/payments-core/payment-errors', mockUrl('payments')],
-  ['@openbooks/engine/payments/payment-posting', mockUrl('payments')],
-  ['@openbooks/engine/payments/payment-queries', mockUrl('payments')],
-  ['@openbooks/engine/testing/payments/payment-return', mockUrl('payments')],
-  ['@openbooks/engine/testing/payments-core/rail-cpa005', mockUrl('payments')],
-  ['@openbooks/engine/testing/payments-core/rail-nacha', mockUrl('payments')],
-  ['@openbooks/engine/testing/payments-core/rail-sepa', mockUrl('payments')],
-  ['@openbooks/engine/testing/payments-core/rail-cemtex', mockUrl('payments')],
-  ['@openbooks/engine/payments-core/rail-settings', mockUrl('payments')],
-  ['@openbooks/engine/payments/run-cancellation', mockUrl('payments')],
-  ['@openbooks/engine/payments/run-creation', mockUrl('payments')],
-  ['@openbooks/engine/testing/payments/run-files', mockUrl('payments')],
-  ['@openbooks/engine/payments/run-posting', mockUrl('payments')],
-  ['@openbooks/engine/payments/run-readiness', mockUrl('payments')],
-  ['@openbooks/engine/payments/settlement-policy', mockUrl('payments')],
-  ['@openbooks/engine/platform/business-date/module', mockUrl('business-date')],
-])
+  ["@/lib/authz", mockUrl("authz")],
+  ["../../../../../lib/authz", mockUrl("authz")],
+  ["../../../../../lib/features", mockUrl("features")],
+  ["../../../../../lib/countries", mockUrl("countries")],
+  ["@openbooks/engine/platform/db", mockUrl("db")],
+  ["@openbooks/engine/payments/payment-accounts", mockUrl("payments")],
+  ["@openbooks/engine/payments/payment-contracts", mockUrl("payments")],
+  ["@openbooks/engine/payments/payment-documents", mockUrl("payments")],
+  ["@openbooks/engine/payments-core/payment-errors", mockUrl("payments")],
+  ["@openbooks/engine/payments/payment-posting", mockUrl("payments")],
+  ["@openbooks/engine/payments/payment-queries", mockUrl("payments")],
+  ["@openbooks/engine/testing/payments/payment-return", mockUrl("payments")],
+  ["@openbooks/engine/testing/payments-core/rail-cpa005", mockUrl("payments")],
+  ["@openbooks/engine/testing/payments-core/rail-nacha", mockUrl("payments")],
+  ["@openbooks/engine/testing/payments-core/rail-sepa", mockUrl("payments")],
+  ["@openbooks/engine/testing/payments-core/rail-cemtex", mockUrl("payments")],
+  ["@openbooks/engine/payments-core/rail-settings", mockUrl("payments")],
+  ["@openbooks/engine/payments/run-cancellation", mockUrl("payments")],
+  ["@openbooks/engine/payments/run-creation", mockUrl("payments")],
+  ["@openbooks/engine/testing/payments/run-files", mockUrl("payments")],
+  ["@openbooks/engine/payments/run-posting", mockUrl("payments")],
+  ["@openbooks/engine/payments/run-readiness", mockUrl("payments")],
+  ["@openbooks/engine/payments/settlement-policy", mockUrl("payments")],
+  ["@openbooks/engine/platform/business-date/module", mockUrl("business-date")],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/platform/db')) return {url:mockUrl('db'),shortCircuit:true};
-    const mocked = mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? '')
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (isEngineModuleImport(specifier, context.parentURL, "@openbooks/engine/platform/db"))
+      return { url: mockUrl("db"), shortCircuit: true };
+    const mocked =
+      mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? "");
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const parsed = new URL(url)
-    if (parsed.searchParams.has('bank-accounts-mock')) {
-      const source = mockSources.get(parsed.searchParams.get('bank-accounts-mock') ?? '')
-      if (source !== undefined) return { format: 'module', source, shortCircuit: true }
+    const parsed = new URL(url);
+    if (parsed.searchParams.has("bank-accounts-mock")) {
+      const source = mockSources.get(parsed.searchParams.get("bank-accounts-mock") ?? "");
+      if (source !== undefined) return { format: "module", source, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?bank-accounts-route-test'
-const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-after(() => hooks.deregister())
+const routeUrl = "./route.ts?bank-accounts-route-test";
+const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
+after(() => hooks.deregister());
 
-function reset(operation: RouteState['operation']): void {
-  state.insertedBankId = null
-  state.operation = operation
-  state.allowedSubsidiaryIds = null
-  state.partySubsidiary = null
-  state.rehomeAfterPreflight = false
-  state.inFlightPayment = false
-  state.liveMandate = false
-  state.updatedAt = ACTUAL_UPDATED_AT
-  state.queries = []
-  state.updateParams = []
-  state.auditCalls = 0
-  state.auditParams = []
+function reset(operation: RouteState["operation"]): void {
+  state.insertedBankId = null;
+  state.operation = operation;
+  state.allowedSubsidiaryIds = null;
+  state.partySubsidiary = null;
+  state.rehomeAfterPreflight = false;
+  state.inFlightPayment = false;
+  state.liveMandate = false;
+  state.updatedAt = ACTUAL_UPDATED_AT;
+  state.queries = [];
+  state.updateParams = [];
+  state.auditCalls = 0;
+  state.auditParams = [];
 }
 
-function request(method: 'PATCH' | 'DELETE', body: Record<string, unknown>): Promise<Response> {
-  return (method === 'PATCH' ? PATCH : DELETE)(
-    new Request(`http://openbooks.test/api/parties/${PARTY_ID}/bank-accounts?accountId=${ACCOUNT_ID}`, {
-      method,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
+function request(method: "PATCH" | "DELETE", body: Record<string, unknown>): Promise<Response> {
+  return (method === "PATCH" ? PATCH : DELETE)(
+    new Request(
+      `http://openbooks.test/api/parties/${PARTY_ID}/bank-accounts?accountId=${ACCOUNT_ID}`,
+      {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
     { params: Promise.resolve({ id: PARTY_ID }) },
-  )
+  );
 }
 
-test('PATCH rejects account numbers shorter than four characters', async () => {
-  reset('patch')
-  const response = await request('PATCH', {
-    accountNumber: '12',
-    changeReason: 'replace account',
+test("PATCH rejects account numbers shorter than four characters", async () => {
+  reset("patch");
+  const response = await request("PATCH", {
+    accountNumber: "12",
+    changeReason: "replace account",
     expectedUpdatedAt: ACTUAL_UPDATED_AT,
-  })
+  });
 
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'accountNumber required',
-    issues: [{ path: 'accountNumber', message: 'accountNumber required' }],
-  })
-  assert.equal(state.updateParams.length, 0)
-})
+    error: "accountNumber required",
+    issues: [{ path: "accountNumber", message: "accountNumber required" }],
+  });
+  assert.equal(state.updateParams.length, 0);
+});
 
-test('PATCH applies an edit directly when no approval flow listens', async () => {
-  reset('patch')
-  const response = await request('PATCH', {
-    accountNumber: '987654321',
-    changeReason: 'replace account',
+test("PATCH applies an edit directly when no approval flow listens", async () => {
+  reset("patch");
+  const response = await request("PATCH", {
+    accountNumber: "987654321",
+    changeReason: "replace account",
     expectedUpdatedAt: ACTUAL_UPDATED_AT,
-  })
+  });
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     id: ACCOUNT_ID,
-    approvalStatus: 'approved',
-    changedFields: ['accountNumber'],
-  })
-  assert.equal(state.updateParams.length, 2)
-  assert.ok(state.updateParams[0]?.includes('4321'))
-  assert.equal(state.auditCalls, 2)
-  assert.equal(state.queries.filter(query=>query.includes('insert into flow_submissions')).length,1)
-})
+    approvalStatus: "approved",
+    changedFields: ["accountNumber"],
+  });
+  assert.equal(state.updateParams.length, 2);
+  assert.ok(state.updateParams[0]?.includes("4321"));
+  assert.equal(state.auditCalls, 2);
+  assert.equal(
+    state.queries.filter((query) => query.includes("insert into flow_submissions")).length,
+    1,
+  );
+});
 
-
-test('POST applies new bank details directly when no approval flow listens', async () => {
-  reset('patch')
+test("POST applies new bank details directly when no approval flow listens", async () => {
+  reset("patch");
   const response = await POST(
     new Request(`http://openbooks.test/api/parties/${PARTY_ID}/bank-accounts`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ bankName: 'Meridian Bank', accountNumber: '987654321' }),
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bankName: "Meridian Bank", accountNumber: "987654321" }),
     }),
     { params: Promise.resolve({ id: PARTY_ID }) },
-  )
+  );
 
-  assert.equal(response.status, 201)
-  assert.deepEqual(await response.json(), { id: '00000000-0000-4000-8000-000000000003', approvalStatus: 'approved' })
-  assert.equal(state.queries.filter(query=>query.includes('insert into flow_submissions')).length,1)
-  assert.equal(state.auditCalls, 1)
-})
-
-test('DELETE accepts the exact six-digit revision and attributes the retirement', async () => {
-  reset('delete')
-  const response = await request('DELETE', {
-    retirementReason: 'account retired',
-    expectedUpdatedAt: ACTUAL_UPDATED_AT,
-  })
-
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { ok: true })
-  assert.equal(state.updateParams.length, 1)
-  assert.ok(state.updateParams[0]?.includes(ACTUAL_UPDATED_AT))
-  assert.equal(state.auditCalls, 1)
-  assert.ok(state.auditParams[0]?.includes('00000000-0000-4000-8000-00000000b002'))
-})
-
-test('DELETE refuses a stale revision before touching the row', async () => {
-  reset('delete')
-  const response = await request('DELETE', {
-    retirementReason: 'account retired',
-    expectedUpdatedAt: '2026-08-31T12:34:55.789Z',
-  })
-
-  assert.equal(response.status, 409)
+  assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), {
-    error: 'these bank details changed or were already retired; reload and review the latest revision',
-  })
-  assert.equal(state.updateParams.length, 0)
-  assert.equal(state.auditCalls, 0)
-})
+    id: "00000000-0000-4000-8000-000000000003",
+    approvalStatus: "approved",
+  });
+  assert.equal(
+    state.queries.filter((query) => query.includes("insert into flow_submissions")).length,
+    1,
+  );
+  assert.equal(state.auditCalls, 1);
+});
 
-test('PATCH rejects a millisecond-truncated revision before touching the row', async () => {
-  reset('patch')
-  const response = await request('PATCH', {
-    bankName: 'Updated bank',
-    changeReason: 'replace account',
+test("DELETE accepts the exact six-digit revision and attributes the retirement", async () => {
+  reset("delete");
+  const response = await request("DELETE", {
+    retirementReason: "account retired",
+    expectedUpdatedAt: ACTUAL_UPDATED_AT,
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
+  assert.equal(state.updateParams.length, 1);
+  assert.ok(state.updateParams[0]?.includes(ACTUAL_UPDATED_AT));
+  assert.equal(state.auditCalls, 1);
+  assert.ok(state.auditParams[0]?.includes("00000000-0000-4000-8000-00000000b002"));
+});
+
+test("DELETE refuses a stale revision before touching the row", async () => {
+  reset("delete");
+  const response = await request("DELETE", {
+    retirementReason: "account retired",
+    expectedUpdatedAt: "2026-08-31T12:34:55.789Z",
+  });
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error:
+      "these bank details changed or were already retired; reload and review the latest revision",
+  });
+  assert.equal(state.updateParams.length, 0);
+  assert.equal(state.auditCalls, 0);
+});
+
+test("PATCH rejects a millisecond-truncated revision before touching the row", async () => {
+  reset("patch");
+  const response = await request("PATCH", {
+    bankName: "Updated bank",
+    changeReason: "replace account",
     expectedUpdatedAt: TRUNCATED_REVISION,
-  })
+  });
 
-  assert.equal(response.status, 409)
-  assert.equal(state.updateParams.length, 0)
-})
+  assert.equal(response.status, 409);
+  assert.equal(state.updateParams.length, 0);
+});
 
-test('DELETE requires the same canonical revision format as PATCH', async () => {
-  reset('delete')
-  const response = await request('DELETE', {
-    retirementReason: 'account retired',
-    expectedUpdatedAt: '2026-08-31T08:34:56.789123-04:00',
-  })
+test("DELETE requires the same canonical revision format as PATCH", async () => {
+  reset("delete");
+  const response = await request("DELETE", {
+    retirementReason: "account retired",
+    expectedUpdatedAt: "2026-08-31T08:34:56.789123-04:00",
+  });
 
-  assert.equal(response.status, 409)
-  assert.equal(state.updateParams.length, 0)
-})
+  assert.equal(response.status, 409);
+  assert.equal(state.updateParams.length, 0);
+});
 
 // This table is the complete set of bank-account mutations that refuse on
 // payment dependencies. Exercising every row keeps a new PATCH/DELETE refusal
 // from reintroducing the scope-check-before-lock ordering bug.
 const dependencyRefusalPaths = [
   {
-    method: 'PATCH' as const,
-    operation: 'patch' as const,
+    method: "PATCH" as const,
+    operation: "patch" as const,
     requestBody: {
-      bankName: 'Updated bank',
-      changeReason: 'replace account',
+      bankName: "Updated bank",
+      changeReason: "replace account",
       expectedUpdatedAt: ACTUAL_UPDATED_AT,
     },
-    dependencyQuery: 'from payment_instructions',
-    refusalBody: { error: 'cancel in-flight payment instructions referencing these bank details before editing them' },
-    blockDependency() { state.inFlightPayment = true },
+    dependencyQuery: "from payment_instructions",
+    refusalBody: {
+      error:
+        "cancel in-flight payment instructions referencing these bank details before editing them",
+    },
+    blockDependency() {
+      state.inFlightPayment = true;
+    },
   },
   {
-    method: 'DELETE' as const,
-    operation: 'delete' as const,
+    method: "DELETE" as const,
+    operation: "delete" as const,
     requestBody: {
-      retirementReason: 'account retired',
+      retirementReason: "account retired",
       expectedUpdatedAt: ACTUAL_UPDATED_AT,
     },
-    dependencyQuery: 'from payment_mandates',
-    refusalBody: { error: 'cancel in-flight payment instructions and revoke live mandates before retiring these bank details' },
-    blockDependency() { state.liveMandate = true },
+    dependencyQuery: "from payment_mandates",
+    refusalBody: {
+      error:
+        "cancel in-flight payment instructions and revoke live mandates before retiring these bank details",
+    },
+    blockDependency() {
+      state.liveMandate = true;
+    },
   },
-]
+];
 
 for (const path of dependencyRefusalPaths) {
   test(`${path.method} hides dependency refusal after the party is rehomed out of scope`, async () => {
-    reset(path.operation)
-    state.allowedSubsidiaryIds = new Set(['sub-A'])
-    state.partySubsidiary = 'sub-A'
-    state.rehomeAfterPreflight = true
-    path.blockDependency()
+    reset(path.operation);
+    state.allowedSubsidiaryIds = new Set(["sub-A"]);
+    state.partySubsidiary = "sub-A";
+    state.rehomeAfterPreflight = true;
+    path.blockDependency();
 
-    const response = await request(path.method, path.requestBody)
+    const response = await request(path.method, path.requestBody);
 
-    assert.equal(response.status, 404)
-    assert.deepEqual(await response.json(), { error: 'party not found' })
-    assert.equal(state.queries.some((query) => query.includes(path.dependencyQuery)), false)
-    assert.equal(state.updateParams.length, 0)
-  })
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: "party not found" });
+    assert.equal(
+      state.queries.some((query) => query.includes(path.dependencyQuery)),
+      false,
+    );
+    assert.equal(state.updateParams.length, 0);
+  });
 
   test(`${path.method} returns its dependency remedy after locking the in-scope party`, async () => {
-    reset(path.operation)
-    state.allowedSubsidiaryIds = new Set(['sub-A'])
-    state.partySubsidiary = 'sub-A'
-    path.blockDependency()
+    reset(path.operation);
+    state.allowedSubsidiaryIds = new Set(["sub-A"]);
+    state.partySubsidiary = "sub-A";
+    path.blockDependency();
 
-    const response = await request(path.method, path.requestBody)
+    const response = await request(path.method, path.requestBody);
 
-    assert.equal(response.status, 422)
-    assert.deepEqual(await response.json(), path.refusalBody)
-    const lockIndex = state.queries.findIndex((query) => /from parties/i.test(query) && /for update/i.test(query))
-    const dependencyIndex = state.queries.findIndex((query) => query.includes(path.dependencyQuery))
-    assert.ok(lockIndex >= 0 && dependencyIndex > lockIndex)
-    assert.equal(state.updateParams.length, 0)
-  })
+    assert.equal(response.status, 422);
+    assert.deepEqual(await response.json(), path.refusalBody);
+    const lockIndex = state.queries.findIndex(
+      (query) => /from parties/i.test(query) && /for update/i.test(query),
+    );
+    const dependencyIndex = state.queries.findIndex((query) =>
+      query.includes(path.dependencyQuery),
+    );
+    assert.ok(lockIndex >= 0 && dependencyIndex > lockIndex);
+    assert.equal(state.updateParams.length, 0);
+  });
 }

@@ -207,8 +207,8 @@ const SONDERAUSGABEN_PAUSCHBETRAG = 36n;
 
 function fail(what: string): never {
   throw new PayrollPackError(
-    `DE PAP 2026 (BMF Programmablaufplan für den Lohnsteuerabzug 2026, `
-    + `Stand 12.11.2025): invalid Eingangsparameter ${what}`,
+    `DE PAP 2026 (BMF Programmablaufplan für den Lohnsteuerabzug 2026, ` +
+      `Stand 12.11.2025): invalid Eingangsparameter ${what}`,
   );
 }
 
@@ -252,10 +252,7 @@ export function papUptab26(x: Euro, kztab: 1 | 2): Euro {
     st = divFloor((y * 91451n + 1400n * 100000000n) * y, 100000000000000n);
   } else if (x < 69879n) {
     const y = (x - 17799n) * 100n; // Y × 1e6
-    st = divFloor(
-      (y * 1731n + 2397n * 10000000n) * y + 103487n * 100000000000n,
-      10000000000000n,
-    );
+    st = divFloor((y * 1731n + 2397n * 10000000n) * y + 103487n * 100000000000n, 10000000000000n);
   } else if (x < 277826n) {
     st = divFloor(42n * x - 1113563n, 100n);
   } else {
@@ -308,37 +305,41 @@ export function papMst56(xEuro: Euro): Euro {
 /** Versorgungsbezüge (MRE4 TAB1–TAB3) are transcribed nowhere: refuse. */
 export function dePapVersorgungsbezuegeRefusal(): PayrollPackError {
   return new PayrollPackError(
-    `DE PAP 2026: Versorgungsbezüge (VBEZ/VBS/STERBE) not implemented — `
-    + `the MRE4 Versorgungsfreibetrag tables TAB1–TAB3 (§19 Abs. 2 EStG) are `
-    + `not transcribed in this pack version — this pay type is not yet supported by the DE pack; `
-    + `contact support. Refused by name.`,
+    `DE PAP 2026: Versorgungsbezüge (VBEZ/VBS/STERBE) not implemented — ` +
+      `the MRE4 Versorgungsfreibetrag tables TAB1–TAB3 (§19 Abs. 2 EStG) are ` +
+      `not transcribed in this pack version — this pay type is not yet supported by the DE pack; ` +
+      `contact support. Refused by name.`,
   );
 }
 
 /** Altersentlastungsbetrag (MRE4ALTE TAB4–TAB5) is transcribed nowhere. */
 export function dePapAltersentlastungsbetragRefusal(): PayrollPackError {
   return new PayrollPackError(
-    `DE PAP 2026: Altersentlastungsbetrag (ALTER1/AJAHR) not implemented — `
-    + `the MRE4ALTE tables TAB4–TAB5 (§24a EStG) are not transcribed in this pack version — `
-    + `this pay type is not yet supported by the DE pack; contact support. Refused by name.`,
+    `DE PAP 2026: Altersentlastungsbetrag (ALTER1/AJAHR) not implemented — ` +
+      `the MRE4ALTE tables TAB4–TAB5 (§24a EStG) are not transcribed in this pack version — ` +
+      `this pay type is not yet supported by the DE pack; contact support. Refused by name.`,
   );
 }
 
 /** Sonstige Bezüge (MSONST/STSMIN/MSOLZSTS) are transcribed nowhere. */
 export function dePapSonstigeBezuegeRefusal(): PayrollPackError {
   return new PayrollPackError(
-    `DE PAP 2026: sonstige Bezüge (SONSTB/JRE4/MBV, §39b Abs. 3 EStG) not `
-    + `implemented — MSONST/MOSONST/MRE4SONST/STSMIN/MSOLZSTS are not `
-    + `transcribed in this pack version — this pay type is not yet supported by the DE pack; `
-    + `contact support. Refused by name.`,
+    `DE PAP 2026: sonstige Bezüge (SONSTB/JRE4/MBV, §39b Abs. 3 EStG) not ` +
+      `implemented — MSONST/MOSONST/MRE4SONST/STSMIN/MSOLZSTS are not ` +
+      `transcribed in this pack version — this pay type is not yet supported by the DE pack; ` +
+      `contact support. Refused by name.`,
   );
 }
 
 function assertLaufendScope(input: DePapLaufendInput): void {
   if (
-    (input.vbez ?? 0n) !== 0n || (input.vbezm ?? 0n) !== 0n || (input.vbezs ?? 0n) !== 0n
-    || (input.vbs ?? 0n) !== 0n || (input.vjahr ?? 0) !== 0 || (input.zmbv ?? 0) !== 0
-    || (input.sterbe ?? 0n) !== 0n
+    (input.vbez ?? 0n) !== 0n ||
+    (input.vbezm ?? 0n) !== 0n ||
+    (input.vbezs ?? 0n) !== 0n ||
+    (input.vbs ?? 0n) !== 0n ||
+    (input.vjahr ?? 0) !== 0 ||
+    (input.zmbv ?? 0) !== 0 ||
+    (input.sterbe ?? 0n) !== 0n
   ) {
     throw dePapVersorgungsbezuegeRefusal();
   }
@@ -346,9 +347,14 @@ function assertLaufendScope(input: DePapLaufendInput): void {
     throw dePapAltersentlastungsbetragRefusal();
   }
   if (
-    (input.sonstb ?? 0n) !== 0n || (input.sonstent ?? 0n) !== 0n || (input.jre4 ?? 0n) !== 0n
-    || (input.jre4ent ?? 0n) !== 0n || (input.jvbez ?? 0n) !== 0n || (input.jfreib ?? 0n) !== 0n
-    || (input.jhinzu ?? 0n) !== 0n || (input.mbv ?? 0n) !== 0n
+    (input.sonstb ?? 0n) !== 0n ||
+    (input.sonstent ?? 0n) !== 0n ||
+    (input.jre4 ?? 0n) !== 0n ||
+    (input.jre4ent ?? 0n) !== 0n ||
+    (input.jvbez ?? 0n) !== 0n ||
+    (input.jfreib ?? 0n) !== 0n ||
+    (input.jhinzu ?? 0n) !== 0n ||
+    (input.mbv ?? 0n) !== 0n
   ) {
     throw dePapSonstigeBezuegeRefusal();
   }
@@ -363,8 +369,24 @@ function assertLaufendScope(input: DePapLaufendInput): void {
 export function computePapLaufend2026(input: DePapLaufendInput): DePapLaufendResult {
   assertLaufendScope(input);
   const {
-    lzz, re4, stkl, zkf, af, f, alv, krv, pkv, kvz,
-    pvs, pvz, pva, r, lzzfreib, lzzhinzu, pkpv, pkpvagz,
+    lzz,
+    re4,
+    stkl,
+    zkf,
+    af,
+    f,
+    alv,
+    krv,
+    pkv,
+    kvz,
+    pvs,
+    pvz,
+    pva,
+    r,
+    lzzfreib,
+    lzzhinzu,
+    pkpv,
+    pkpvagz,
   } = input;
 
   /* --- Plausibilität (PAP 3.1: Vorprogramme des Arbeitgebers) --- */
@@ -383,16 +405,24 @@ export function computePapLaufend2026(input: DePapLaufendInput): DePapLaufendRes
     fail(`ZKF is only defined for Steuerklassen I–IV, got STKL ${stkl} with ZKF ${zkf}`);
   }
   if (af !== 0 && af !== 1) fail(`AF must be 0|1, got ${af}`);
-  if (af === 1 && stkl !== 4) fail(`Faktorverfahren (AF = 1) only in Steuerklasse IV, got STKL ${stkl}`);
+  if (af === 1 && stkl !== 4)
+    fail(`Faktorverfahren (AF = 1) only in Steuerklasse IV, got STKL ${stkl}`);
   if (af === 1 && lzzfreib !== 0n) {
     fail(`no Freibetrag beside the Faktor (AF = 1 with LZZFREIB ${lzzfreib})`);
   }
-  if (stkl === 6 && lzzhinzu !== 0n) fail(`STKL VI admits no Hinzurechnungsbetrag, got ${lzzhinzu}`);
+  if (stkl === 6 && lzzhinzu !== 0n)
+    fail(`STKL VI admits no Hinzurechnungsbetrag, got ${lzzhinzu}`);
   if (!Number.isFinite(f) || f <= 0 || Math.round(f * 1000) !== f * 1000) {
     fail(`F must be positive with three decimals, got ${f}`);
   }
   const fThousandths = BigInt(af === 0 ? 1000 : Math.round(f * 1000));
-  for (const [name, v] of [["ALV", alv], ["KRV", krv], ["PKV", pkv], ["PVS", pvs], ["PVZ", pvz]] as const) {
+  for (const [name, v] of [
+    ["ALV", alv],
+    ["KRV", krv],
+    ["PKV", pkv],
+    ["PVS", pvs],
+    ["PVZ", pvz],
+  ] as const) {
     if (v !== 0 && v !== 1) fail(`${name} must be 0|1, got ${v}`);
   }
   if (!isInt(pva) || pva < 0 || pva > 4) fail(`PVA must be 0..4, got ${pva}`);
@@ -468,9 +498,7 @@ export function computePapLaufend2026(input: DePapLaufendInput): DePapLaufendRes
   const ztabfb = efa + anp + sap;
 
   /* --- UPEVP (Vorsorgepauschale) --- */
-  const vspr = krv === 1
-    ? 0n
-    : (minBigInt(zre4vp, BBGRVALV) * 930n) / 10000n;
+  const vspr = krv === 1 ? 0n : (minBigInt(zre4vp, BBGRVALV) * 930n) / 10000n;
   const capKv = minBigInt(zre4vp, BBGKVPV);
   let vspkvpv: Cents;
   if (pkv === 0) {
@@ -536,7 +564,16 @@ export function computePapLaufend2026(input: DePapLaufendInput): DePapLaufendRes
   const bk = r > 0 ? anteil(jbmg * 100n) : 0n;
 
   return {
-    lstlzz, solzlzz, bk, lstjahr, jbmg, solzj,
-    zve: first.zve, st: first.st, vsp, vfrb, wvfrb,
+    lstlzz,
+    solzlzz,
+    bk,
+    lstjahr,
+    jbmg,
+    solzj,
+    zve: first.zve,
+    st: first.st,
+    vsp,
+    vfrb,
+    wvfrb,
   };
 }

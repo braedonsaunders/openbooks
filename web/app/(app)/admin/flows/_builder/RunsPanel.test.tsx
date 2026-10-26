@@ -1,17 +1,21 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
 // the flow Runs tab is read-only — a failed run shows its error
 // but offers no path to re-drive it. Failed rows must offer a Retry that
 // POSTs the runs retry endpoint and toasts the outcome.
-const { bootJsdomEnvironment } = await import('../../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/flows/flow-1', scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/flows/flow-1",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   retryPosts: [] as string[],
   retryStatus: 200 as number,
-}
+};
 Object.assign(globalThis, {
   __runsRetryToasts: script.toasts,
   __runsRetryRouter: {
@@ -21,123 +25,126 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__runsRetryRouter}' })
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../../../testing/stub-modules");
+stubModules({ navigation: "export function useRouter(){return globalThis.__runsRetryRouter}" });
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export const toast={success(m){globalThis.__runsRetryToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__runsRetryToasts.push({kind:"error",message:String(m)})}};export function Toaster(){return null}',
-      }
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../../messages/en')).default
-const { RunsPanel } = await import('./RunsPanel')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../../messages/en")).default;
+const { RunsPanel } = await import("./RunsPanel");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
-const RUN_ID = '019f0000-0000-4000-8000-000000000007'
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
+const RUN_ID = "019f0000-0000-4000-8000-000000000007";
 
 const runs = [
   {
     id: RUN_ID,
-    subject_kind: 'party_bank_account',
-    subject_id: 'acc-7',
-    trigger: 'on_create',
-    status: 'failed',
+    subject_kind: "party_bank_account",
+    subject_id: "acc-7",
+    trigger: "on_create",
+    status: "failed",
     error: 'gate (gate "Approval" resolved to zero assignees)',
-    started_at: '2026-09-10T12:00:00.000Z',
-    finished_at: '2026-09-10T12:00:01.000Z',
+    started_at: "2026-09-10T12:00:00.000Z",
+    finished_at: "2026-09-10T12:00:01.000Z",
   },
   {
-    id: '019f0000-0000-4000-8000-000000000008',
-    subject_kind: 'party_bank_account',
-    subject_id: 'acc-8',
-    trigger: 'on_create',
-    status: 'waiting',
+    id: "019f0000-0000-4000-8000-000000000008",
+    subject_kind: "party_bank_account",
+    subject_id: "acc-8",
+    trigger: "on_create",
+    status: "waiting",
     error: null,
-    started_at: '2026-09-10T12:05:00.000Z',
+    started_at: "2026-09-10T12:05:00.000Z",
     finished_at: null,
   },
-]
+];
 
 async function mount() {
-  script.toasts.length = 0
-  script.retryPosts.length = 0
+  script.toasts.length = 0;
+  script.retryPosts.length = 0;
   globalThis.fetch = (async (url: unknown) => {
-    const href = String(url)
-    script.retryPosts.push(href)
-    if (script.retryStatus === 200) return Response.json({ runId: RUN_ID, status: 'waiting', gatesCreated: 1 })
-    return Response.json({ error: 'only the latest run for this record can be retried' }, { status: 422 })
-  }) as typeof fetch
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    const href = String(url);
+    script.retryPosts.push(href);
+    if (script.retryStatus === 200)
+      return Response.json({ runId: RUN_ID, status: "waiting", gatesCreated: 1 });
+    return Response.json(
+      { error: "only the latest run for this record can be retried" },
+      { status: 422 },
+    );
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <RunsPanel runs={runs} />
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  return { host, root }
+    );
+    await tick();
+  });
+  return { host, root };
 }
 
 function retryButtons() {
-  return [...document.querySelectorAll('button')].filter(
-    (b) => (b.textContent ?? '').trim() === 'Retry',
-  ) as HTMLButtonElement[]
+  return [...document.querySelectorAll("button")].filter(
+    (b) => (b.textContent ?? "").trim() === "Retry",
+  ) as HTMLButtonElement[];
 }
 
-test('only failed runs offer retry, and retry re-drives the run', async (t) => {
-  script.retryStatus = 200
-  const { host, root } = await mount()
+test("only failed runs offer retry, and retry re-drives the run", async (t) => {
+  script.retryStatus = 200;
+  const { host, root } = await mount();
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  assert.equal(retryButtons().length, 1, 'exactly the failed row must offer Retry')
+      root.unmount();
+    });
+    host.remove();
+  });
+  assert.equal(retryButtons().length, 1, "exactly the failed row must offer Retry");
   await act(async () => {
-    retryButtons()[0]!.click()
-    await tick()
-    await tick()
-  })
-  assert.deepEqual(script.retryPosts, [`/api/flows/runs/${RUN_ID}/retry`])
+    retryButtons()[0]!.click();
+    await tick();
+    await tick();
+  });
+  assert.deepEqual(script.retryPosts, [`/api/flows/runs/${RUN_ID}/retry`]);
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'success'),
+    script.toasts.some((toast) => toast.kind === "success"),
     `the retry must toast success, got ${JSON.stringify(script.toasts)}`,
-  )
-})
+  );
+});
 
-test('a refused retry surfaces the typed reason', async (t) => {
-  script.retryStatus = 422
-  const { host, root } = await mount()
+test("a refused retry surfaces the typed reason", async (t) => {
+  script.retryStatus = 422;
+  const { host, root } = await mount();
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
+      root.unmount();
+    });
+    host.remove();
+  });
   await act(async () => {
-    retryButtons()[0]!.click()
-    await tick()
-    await tick()
-  })
-  const errors = script.toasts.filter((toast) => toast.kind === 'error')
-  assert.equal(errors.length, 1, 'a refused retry must toast once')
-  assert.match(errors[0]!.message, /only the latest run/)
-})
+    retryButtons()[0]!.click();
+    await tick();
+    await tick();
+  });
+  const errors = script.toasts.filter((toast) => toast.kind === "error");
+  assert.equal(errors.length, 1, "a refused retry must toast once");
+  assert.match(errors[0]!.message, /only the latest run/);
+});

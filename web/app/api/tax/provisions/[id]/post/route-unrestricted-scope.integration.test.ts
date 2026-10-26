@@ -23,7 +23,10 @@ registerHooks({
     // The route factory imports the same alias lazily at request time from
     // its own module URL, so it never matches the route-directory guard.
     // Match the alias exactly so the factory gate uses this test's session.
-    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/tax/provisions/"))) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/tax/provisions/"))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -52,9 +55,8 @@ registerHooks({
 
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 const post = (id: string) =>
@@ -68,8 +70,8 @@ test("provision-post oracle: restricted callers get the named 403 for existing a
     const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     state.user = { orgId: org.orgId, id: adminId };
     const runId = randomUUID();
-    await withBypassContext(
-      () => db.execute(sql`insert into tax_provision_runs(id,org_id,fiscal_year,period_from,period_to,snapshot_hash,payload,created_by,updated_by)
+    await withBypassContext(() =>
+      db.execute(sql`insert into tax_provision_runs(id,org_id,fiscal_year,period_from,period_to,snapshot_hash,payload,created_by,updated_by)
         values (${runId},${org.orgId},2026,'2026-01-01','2026-12-31','hash-1','{}'::jsonb,${adminId},${adminId})`),
     );
 

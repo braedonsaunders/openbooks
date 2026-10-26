@@ -4,13 +4,17 @@ import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
-  var __foremanPickerRouter: { pushes: string[]; replaces: string[]; refreshes: number } | undefined;
+  var __foremanPickerRouter:
+    { pushes: string[]; replaces: string[]; refreshes: number } | undefined;
 }
 
 // The foreman picker offers the same internal people as the manager
 // picker — never customers, vendors, or companies — so a choice here
 // always survives the write path's shared predicate.
-await bootJsdomEnvironment({ url: "http://localhost:4800/projects?projectNew=1", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/projects?projectNew=1",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: {
@@ -121,7 +125,16 @@ test("the foreman picker lists internal people, not customers or vendors", async
   });
   await tick();
   const options = [...document.querySelectorAll('[role="option"]')].map((o) => o.textContent ?? "");
-  assert.ok(options.some((label) => label.includes("Sam Staff")), `staff are offered (${JSON.stringify(options)})`);
-  assert.ok(!options.some((label) => label.includes("Acme Customer")), "customers are not offered as foreman");
-  assert.ok(!options.some((label) => label.includes("Vera Vendor")), "vendors are not offered as foreman");
+  assert.ok(
+    options.some((label) => label.includes("Sam Staff")),
+    `staff are offered (${JSON.stringify(options)})`,
+  );
+  assert.ok(
+    !options.some((label) => label.includes("Acme Customer")),
+    "customers are not offered as foreman",
+  );
+  assert.ok(
+    !options.some((label) => label.includes("Vera Vendor")),
+    "vendors are not offered as foreman",
+  );
 });

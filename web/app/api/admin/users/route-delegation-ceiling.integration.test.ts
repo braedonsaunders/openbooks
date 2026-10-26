@@ -6,10 +6,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/platform/db";
 import { actorAllowedSubsidiaryIds } from "@openbooks/engine/organization/actor-subsidiaries";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "@openbooks/engine/testing/fixtures";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 import { UNUSABLE_PASSWORD_HASH } from "./invite";
 
 // Delegation-ceiling suite for /api/admin/users against the real schema.
@@ -42,8 +39,10 @@ registerHooks({
       url: "data:text/javascript," + encodeURIComponent(source),
     });
     const parent = String(context.parentURL ?? "");
-    if ((specifier === "../../../../lib/authz" && parent.includes("/api/admin/users/route.ts"))
-      || (specifier === "@/lib/authz" && parent.includes("/web/lib/api/route.ts"))) {
+    if (
+      (specifier === "../../../../lib/authz" && parent.includes("/api/admin/users/route.ts")) ||
+      (specifier === "@/lib/authz" && parent.includes("/web/lib/api/route.ts"))
+    ) {
       return virtual(`
         export { subsidiaryScopeAllows } from '${pathToFileURL(process.cwd() + "/").href}engine/src/organization/subsidiary-scope.ts';
         const state = globalThis[Symbol.for('openbooks.admin-users-delegation-ceiling')];
@@ -74,7 +73,10 @@ registerHooks({
         }
       `);
     }
-    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
+    if (
+      parent.includes("auth-reset.ts") &&
+      specifier === "@openbooks/engine/delivery/email-config/module"
+    ) {
       return virtual(`
         export async function resolveOrgEmailTransport() { return { provider: 'isolated' }; }
         export async function insertEmailLog(row) { return 'isolated-log'; }
@@ -126,22 +128,36 @@ async function seed(): Promise<Fixture> {
       values (${subB}, ${orgId}, ${subA}, 'Hidden entity', 'CAD', 'CA')
     `);
     const mk = async (key: string, restriction: object) =>
-      (await db.execute<{ id: string }>(sql`
+      (
+        await db.execute<{ id: string }>(
+          sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
         values (${orgId}, ${key}, ${key}, false, '[]'::jsonb, ${JSON.stringify(restriction)}::jsonb)
         returning id
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
     const heldId = await mk(`held_${tag}`, { mode: "list", subsidiaryIds: [subA.toLowerCase()] });
     await db.execute(sql`
       update app_roles set permissions = '["admin.users.manage"]'::jsonb where id = ${heldId}`);
     const wideId = await mk(`wide_${tag}`, { mode: "all" });
     const baseId = await mk(`base_${tag}`, { mode: "list", subsidiaryIds: [subA.toLowerCase()] });
     const extraId = await mk(`extra_${tag}`, { mode: "list", subsidiaryIds: [subA.toLowerCase()] });
-    const leafHeldId = await mk(`leafheld_${tag}`, { mode: "list", subsidiaryIds: [subB.toLowerCase()] });
+    const leafHeldId = await mk(`leafheld_${tag}`, {
+      mode: "list",
+      subsidiaryIds: [subB.toLowerCase()],
+    });
     await db.execute(sql`
       update app_roles set permissions = '["admin.users.manage"]'::jsonb where id = ${leafHeldId}`);
-    const leafSubId = await mk(`leafsub_${tag}`, { mode: "subtree", subsidiaryId: subB.toLowerCase() });
-    const leafBaseId = await mk(`leafbase_${tag}`, { mode: "list", subsidiaryIds: [subB.toLowerCase()] });
+    const leafSubId = await mk(`leafsub_${tag}`, {
+      mode: "subtree",
+      subsidiaryId: subB.toLowerCase(),
+    });
+    const leafBaseId = await mk(`leafbase_${tag}`, {
+      mode: "list",
+      subsidiaryIds: [subB.toLowerCase()],
+    });
     for (const [uid, name, roleId] of [
       [actorId, "Ceiling actor", heldId],
       [leafActorId, "Leaf actor", leafHeldId],
@@ -165,7 +181,15 @@ async function seed(): Promise<Fixture> {
     allowedSubsidiaryIds: new Set([subA.toLowerCase()]),
   };
   state.deliveries.length = 0;
-  return { orgId, subA: subA.toLowerCase(), subB: subB.toLowerCase(), actorId, leafActorId, targetId, ...ids };
+  return {
+    orgId,
+    subA: subA.toLowerCase(),
+    subB: subB.toLowerCase(),
+    actorId,
+    leafActorId,
+    targetId,
+    ...ids,
+  };
 }
 
 async function teardown(f: Fixture): Promise<void> {
@@ -219,7 +243,9 @@ test("assign refuses a distinct unrestricted empty-permission role and the targe
     assert.deepEqual(await assignmentsOf(f, f.targetId), [f.baseId], "no assignment was written");
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
     assert.deepEqual(await targetLens(f), before, "real derived target lens is unchanged");
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("assign inside the lens succeeds", async () => {
@@ -228,7 +254,9 @@ test("assign inside the lens succeeds", async () => {
     const res = await post({ action: "assign", userId: f.targetId, roleId: f.extraId });
     assert.equal(res.status, 200, await res.text());
     assert.ok((await assignmentsOf(f, f.targetId)).includes(f.extraId));
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("assign refuses an open subtree matching today's enumeration", async () => {
@@ -249,7 +277,9 @@ test("assign refuses an open subtree matching today's enumeration", async () => 
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
     const control = await post({ action: "assign", userId: f.targetId, roleId: f.leafBaseId });
     assert.equal(control.status, 200, await control.text());
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("invite with an all-scope role refuses before any user or issuance exists", async () => {
@@ -259,13 +289,18 @@ test("invite with an all-scope role refuses before any user or issuance exists",
     const auditsBefore = await auditCount(f);
     const res = await post({ action: "invite", email, roleId: f.wideId });
     assert.equal(res.status, 403, await res.text());
-    const row = await withBypass(() => db.execute(
-      sql`select id from users where org_id = ${f.orgId} and lower(email) = ${email}`, "objects",
-    ));
+    const row = await withBypass(() =>
+      db.execute(
+        sql`select id from users where org_id = ${f.orgId} and lower(email) = ${email}`,
+        "objects",
+      ),
+    );
     assert.equal(row.length, 0, "no user was created");
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
     assert.equal(state.deliveries.length, 0, "no delivery was issued");
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("invite with an in-lens role succeeds", async () => {
@@ -282,7 +317,9 @@ test("invite with an in-lens role succeeds", async () => {
     });
     assert.ok(row.rows[0], "invited user exists");
     assert.deepEqual(await assignmentsOf(f, row.rows[0]!.id), [f.extraId]);
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 async function seedPending(f: Fixture, tag: string, roleId: string): Promise<string> {
@@ -309,7 +346,9 @@ test("resend-invite refuses for a target whose stored roles exceed the lens", as
     assert.equal(res.status, 403, await res.text());
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
     assert.equal(state.deliveries.length, 0, "no delivery was issued");
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("resend-invite inside the lens succeeds", async () => {
@@ -318,36 +357,46 @@ test("resend-invite inside the lens succeeds", async () => {
   try {
     const res = await post({ action: "resend-invite", userId: pending });
     assert.equal(res.status, 200, await res.text());
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("resend-invite refuses a grant override above the ceiling before issuance", async () => {
   const f = await seed();
   const pending = await seedPending(f, "overridepending", f.baseId);
   try {
-    await withBypass(() => db.execute(sql`
+    await withBypass(() =>
+      db.execute(sql`
       insert into user_permission_overrides (org_id, user_id, permission, effect)
       values (${f.orgId}, ${pending}, 'gl.post', 'grant')
-    `));
+    `),
+    );
     const auditsBefore = await auditCount(f);
     const res = await post({ action: "resend-invite", userId: pending });
     assert.equal(res.status, 403, await res.text());
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
     assert.equal(state.deliveries.length, 0, "no delivery was issued");
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("resend-invite does not treat a deny override as a grant", async () => {
   const f = await seed();
   const pending = await seedPending(f, "denypending", f.baseId);
   try {
-    await withBypass(() => db.execute(sql`
+    await withBypass(() =>
+      db.execute(sql`
       insert into user_permission_overrides (org_id, user_id, permission, effect)
       values (${f.orgId}, ${pending}, 'gl.post', 'deny')
-    `));
+    `),
+    );
     const res = await post({ action: "resend-invite", userId: pending });
     assert.equal(res.status, 200, await res.text());
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 async function seedInactive(f: Fixture, tag: string, roleId: string): Promise<string> {
@@ -375,7 +424,9 @@ test("reactivation refuses a stored all-scope union and stays inactive without a
     assert.equal(await isActive(f, inactive), false, "account stays inactive");
     assert.deepEqual(await assignmentsOf(f, inactive), [f.wideId], "assignments untouched");
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("reactivation inside the lens succeeds", async () => {
@@ -385,7 +436,9 @@ test("reactivation inside the lens succeeds", async () => {
     const res = await post({ action: "set-active", userId: inactive, isActive: true });
     assert.equal(res.status, 200, await res.text());
     assert.equal(await isActive(f, inactive), true);
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("reactivation refuses a grant override above the ceiling but honours a deny", async () => {
@@ -409,7 +462,9 @@ test("reactivation refuses a grant override above the ceiling but honours a deny
     const ok = await post({ action: "set-active", userId: denied, isActive: true });
     assert.equal(ok.status, 200, await ok.text());
     assert.equal(await isActive(f, denied), true, "deny override causes no false refusal");
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("reactivation unions every assignment: a wide role past fifty still refuses", async () => {
@@ -422,12 +477,17 @@ test("reactivation unions every assignment: a wide role past fifty still refuses
       values (${inactive}, ${f.orgId}, ${`many-${tag}@scratch.test`}, 'many', 'x', false)
     `);
     for (let i = 0; i < 55; i++) {
-      const roleId = (await db.execute<{ id: string }>(sql`
+      const roleId = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
         values (${f.orgId}, ${`many_${tag}_${i}`}, ${`many ${i}`}, false, '[]'::jsonb,
                 ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA] })}::jsonb)
         returning id
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       await db.execute(sql`
         insert into role_assignments (org_id, user_id, role_id)
         values (${f.orgId}, ${inactive}, ${roleId})
@@ -442,7 +502,9 @@ test("reactivation unions every assignment: a wide role past fifty still refuses
     const res = await post({ action: "set-active", userId: inactive, isActive: true });
     assert.equal(res.status, 403, await res.text());
     assert.equal(await isActive(f, inactive), false);
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("re-affirming an active wider user and deactivating need no new authority", async () => {
@@ -454,5 +516,7 @@ test("re-affirming an active wider user and deactivating need no new authority",
     const off = await post({ action: "set-active", userId: pending, isActive: false });
     assert.equal(off.status, 200, await off.text());
     assert.equal(await isActive(f, pending), false);
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });

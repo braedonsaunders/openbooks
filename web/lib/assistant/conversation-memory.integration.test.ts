@@ -33,11 +33,16 @@ function userAuthz(orgId: string, userId: string): Authz {
 
 async function seedUser(orgId: string, userId: string): Promise<void> {
   // Users activate only once they hold a role (enforce_user_active_role_assignment).
-  const roleId = (await db.execute<{ id: string }>(sql`
+  const roleId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into app_roles (org_id, key, name, is_built_in, permissions)
     values (${orgId}, ${`memory-${userId.slice(0, 8)}`}, 'Memory User', false, '[]'::jsonb)
     returning id
-  `, "objects"))[0]!.id;
+  `,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into users (id, org_id, email, name, password_hash, is_active)
     values (${userId}, ${orgId}, ${`memory-${userId.slice(0, 8)}@scratch.test`}, 'Memory User', 'x', false)
@@ -50,11 +55,14 @@ async function seedUser(orgId: string, userId: string): Promise<void> {
 }
 
 async function seedConversation(orgId: string, userId: string): Promise<string> {
-  const r = await db.execute<{ id: string }>(sql`
+  const r = await db.execute<{ id: string }>(
+    sql`
     insert into ai_conversations (org_id, user_id, scope, title, created_by, updated_by)
     values (${orgId}, ${userId}, 'assistant', 'Memory test', ${userId}, ${userId})
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   return r[0]!.id;
 }
 
@@ -73,7 +81,9 @@ test("conversation memory round-trips and stays owner-scoped", DB_ONLY, async ()
 
     const written = await writeConversationSummary(owner, conversationId, {
       text: "Discussed overdue bills for Customer A.",
-      entities: [{ kind: "party", id: "11111111-1111-4111-8111-111111111111", label: "Customer A" }],
+      entities: [
+        { kind: "party", id: "11111111-1111-4111-8111-111111111111", label: "Customer A" },
+      ],
       turnsCovered: 8,
     });
     assert.equal(written, true);
@@ -113,9 +123,12 @@ test("conversation memory round-trips and stays owner-scoped", DB_ONLY, async ()
     const second = await readConversationSummary(owner, conversationId);
     assert.equal(second?.text, "Moved on to payroll.");
     assert.equal(second?.turnsCovered, 16);
-    const raw = await db.execute<{ metadata: unknown }>(sql`
+    const raw = await db.execute<{ metadata: unknown }>(
+      sql`
       select metadata from ai_conversations where id = ${conversationId}
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.equal((raw[0]!.metadata as { pinned_tab: string }).pinned_tab, "inbox");
   } finally {
     await dropScratchOrg(org.orgId);

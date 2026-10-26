@@ -2,11 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { laborFxQuote, laborFxRate } from "./labor-costing.ts";
 
 /**
@@ -30,27 +26,38 @@ async function withOrg(fn: (org: ScratchOrg) => Promise<void>): Promise<void> {
   }
 }
 
-async function seedFx(orgId: string, from: string, to: string, asOf: string, rate: string, source = "manual"): Promise<void> {
+async function seedFx(
+  orgId: string,
+  from: string,
+  to: string,
+  asOf: string,
+  rate: string,
+  source = "manual",
+): Promise<void> {
   await db.execute(sql`
     insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
     values (${orgId}, ${from}, ${to}, ${asOf}::date, 'spot', ${rate}, ${source})
   `);
 }
 
-test("laborFxRate resolves direct, prefers newer, and refuses nothing itself", { skip: !DB }, async () => {
-  await withOrg(async (org) => {
-    await seedFx(org.orgId, "USD", "CAD", "2025-01-01", "1.35", "bank");
-    await seedFx(org.orgId, "USD", "CAD", "2024-06-01", "1.25");
-    // Newest on-or-before wins; future coverage never leaks back.
-    assert.equal(await laborFxRate(org.orgId, "USD", "CAD", "2025-04-01"), "1.3500000000");
-    assert.equal(await laborFxRate(org.orgId, "USD", "CAD", "2024-12-31"), "1.2500000000");
-    assert.equal(await laborFxRate(org.orgId, "USD", "CAD", "2024-05-31"), null);
-    // Same currency converts 1:1 with no quote row.
-    assert.equal(await laborFxRate(org.orgId, "CAD", "CAD", "2025-04-01"), "1");
-    // Missing coverage is null — the caller names the remedy.
-    assert.equal(await laborFxRate(org.orgId, "EUR", "CAD", "2025-04-01"), null);
-  });
-});
+test(
+  "laborFxRate resolves direct, prefers newer, and refuses nothing itself",
+  { skip: !DB },
+  async () => {
+    await withOrg(async (org) => {
+      await seedFx(org.orgId, "USD", "CAD", "2025-01-01", "1.35", "bank");
+      await seedFx(org.orgId, "USD", "CAD", "2024-06-01", "1.25");
+      // Newest on-or-before wins; future coverage never leaks back.
+      assert.equal(await laborFxRate(org.orgId, "USD", "CAD", "2025-04-01"), "1.3500000000");
+      assert.equal(await laborFxRate(org.orgId, "USD", "CAD", "2024-12-31"), "1.2500000000");
+      assert.equal(await laborFxRate(org.orgId, "USD", "CAD", "2024-05-31"), null);
+      // Same currency converts 1:1 with no quote row.
+      assert.equal(await laborFxRate(org.orgId, "CAD", "CAD", "2025-04-01"), "1");
+      // Missing coverage is null — the caller names the remedy.
+      assert.equal(await laborFxRate(org.orgId, "EUR", "CAD", "2025-04-01"), null);
+    });
+  },
+);
 
 test("laborFxRate inverts once, exactly, and direct wins ties", { skip: !DB }, async () => {
   await withOrg(async (org) => {
@@ -68,9 +75,19 @@ test("laborFxQuote carries the winning evidence, oriented", { skip: !DB }, async
   await withOrg(async (org) => {
     await seedFx(org.orgId, "USD", "CAD", "2025-01-01", "1.35", "bank");
     const direct = await laborFxQuote(org.orgId, "USD", "CAD", "2025-04-01");
-    assert.deepEqual(direct, { rate: "1.3500000000", asOf: "2025-01-01", source: "bank", inverse: false });
+    assert.deepEqual(direct, {
+      rate: "1.3500000000",
+      asOf: "2025-01-01",
+      source: "bank",
+      inverse: false,
+    });
     const inverse = await laborFxQuote(org.orgId, "CAD", "USD", "2025-04-01");
-    assert.deepEqual(inverse, { rate: "0.7407407407", asOf: "2025-01-01", source: "bank", inverse: true });
+    assert.deepEqual(inverse, {
+      rate: "0.7407407407",
+      asOf: "2025-01-01",
+      source: "bank",
+      inverse: true,
+    });
     // Same currency needs no quote; missing coverage is null.
     assert.equal(await laborFxQuote(org.orgId, "CAD", "CAD", "2025-04-01"), null);
     assert.equal(await laborFxQuote(org.orgId, "EUR", "CAD", "2025-04-01"), null);

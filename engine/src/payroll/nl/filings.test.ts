@@ -13,7 +13,8 @@ import { NL_PAYROLL_PACK } from "./pack.ts";
  * this before authorizing a byte, so a foreign grammar must read as null,
  * never as someone's employee.
  */
-const jaaropgaaf = () => NL_PAYROLL_PACK.filings().yearEnd.find((filing) => filing.key === "jaaropgaaf")!;
+const jaaropgaaf = () =>
+  NL_PAYROLL_PACK.filings().yearEnd.find((filing) => filing.key === "jaaropgaaf")!;
 
 test("BSNs require nine digits and the 11-proef", () => {
   assert.equal(isValidBsn("111222333"), true);
@@ -30,7 +31,8 @@ test("a jaaropgaaf row id parses to the employee that owns it", () => {
   // leg identifies the statement, never a second owner.
   const employment = randomUUID();
   assert.deepEqual(jaaropgaaf().parseRowId(`${employee}:${employment}`), {
-    employees: [employee], accounts: [],
+    employees: [employee],
+    accounts: [],
   });
 });
 

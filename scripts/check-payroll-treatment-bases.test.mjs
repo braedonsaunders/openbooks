@@ -56,7 +56,11 @@ test("consumption through either channel passes, and comments do not count", () 
   });
   try {
     const findings = scanPayrollPacks(root, {});
-    assert.equal(findings.length, 1, `expected only the comment-only pack to fail: ${findings.join("; ")}`);
+    assert.equal(
+      findings.length,
+      1,
+      `expected only the comment-only pack to fail: ${findings.join("; ")}`,
+    );
     assert.match(findings[0], /^cc\//);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -70,7 +74,11 @@ test("earnings-only packs and missing declarations behave", () => {
   });
   try {
     const findings = scanPayrollPacks(root, {});
-    assert.equal(findings.length, 1, `expected only the undeclared pack to fail: ${findings.join("; ")}`);
+    assert.equal(
+      findings.length,
+      1,
+      `expected only the undeclared pack to fail: ${findings.join("; ")}`,
+    );
     assert.match(findings[0], /declares no deductionTreatments/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -90,10 +98,15 @@ test("allowlist entries need reasons, fire only for gaps, and never go stale", (
     assert.deepEqual(scanPayrollPacks(root, { ff: "engine prices off gross" }), []);
     // Reasonless: fails.
     const noReason = scanPayrollPacks(root, { ff: "" });
-    assert.deepEqual(noReason, ['ff is allowlisted without a reason — allowlist entries carry a reason']);
+    assert.deepEqual(noReason, [
+      "ff is allowlisted without a reason — allowlist entries carry a reason",
+    ]);
     // Stale (aa consumes but is listed): fails.
     const stale = scanPayrollPacks(root, { ff: "engine prices off gross", aa: "old gap" });
-    assert.ok(stale.some((finding) => /stale entry/.test(finding)), `stale entry must fail: ${stale.join("; ")}`);
+    assert.ok(
+      stale.some((finding) => /stale entry/.test(finding)),
+      `stale entry must fail: ${stale.join("; ")}`,
+    );
     // Unknown directory: fails.
     const unknown = scanPayrollPacks(root, { ff: "engine prices off gross", xx: "nothing" });
     assert.ok(unknown.some((finding) => /names no payroll pack directory/.test(finding)));

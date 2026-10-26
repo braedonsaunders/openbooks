@@ -23,10 +23,17 @@ export interface RenderedEInvoice {
 }
 
 function fileToken(value: string): string {
-  return value.normalize("NFKD").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 120);
+  return value
+    .normalize("NFKD")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, 120);
 }
 
-export function renderEInvoiceXml(inv: EInvoice, options: { strict?: boolean } = {}): RenderedEInvoice {
+export function renderEInvoiceXml(
+  inv: EInvoice,
+  options: { strict?: boolean } = {},
+): RenderedEInvoice {
   const strict = options.strict ?? true;
   if (strict) {
     const findings = validateEInvoice(inv);
@@ -35,6 +42,7 @@ export function renderEInvoiceXml(inv: EInvoice, options: { strict?: boolean } =
   const profile = getEInvoiceProfile(inv.profile);
   if (!profile) throw new Error(`"${String(inv.profile)}" is not a supported e-invoice profile`);
   const xml = profile.syntax === "cii" ? renderCii(inv, profile) : renderUbl(inv, profile);
-  const fileName = profile.hybrid?.attachmentFileName ?? `${fileToken(inv.number) || "einvoice"}.xml`;
+  const fileName =
+    profile.hybrid?.attachmentFileName ?? `${fileToken(inv.number) || "einvoice"}.xml`;
   return { xml, fileName, mediaType: "application/xml" };
 }

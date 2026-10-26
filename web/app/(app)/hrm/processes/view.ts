@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -15,13 +15,10 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import {
-  loadProcessesPage,
-  type ProcessesPageData,
-} from '../../../../lib/hrm/processes-page'
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { loadProcessesPage, type ProcessesPageData } from "../../../../lib/hrm/processes-page";
 
 /**
  * Process checklists — the /hrm sibling tab for employment starts, ends,
@@ -38,40 +35,40 @@ import {
  * otherwise.
  */
 
-const f = ref<ProcessesPageData>()
-const item = field
+const f = ref<ProcessesPageData>();
+const item = field;
 
 export function processesSpec(data: ProcessesPageData): PageSpec {
   return page({
-    route: '/hrm/processes',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/hrm/processes",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
           widget(
-            'link-button',
-            { href: f('newHref'), label: f('newChecklistLabel'), iconKey: 'plus' },
-            f('canManage'),
+            "link-button",
+            { href: f("newHref"), label: f("newChecklistLabel"), iconKey: "plus" },
+            f("canManage"),
           ),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
-      grid('flex h-full min-h-0 flex-col gap-4', [
-        widgetBlock('list-toolbar', {
-          basePath: '/hrm/processes',
+      grid("flex h-full min-h-0 flex-col gap-4", [
+        widgetBlock("list-toolbar", {
+          basePath: "/hrm/processes",
           currentParams: data.currentParams,
           filters: [
             {
-              paramKey: 'segment',
+              paramKey: "segment",
               label: data.segmentsLabel,
               hideAll: true,
-              defaultValue: 'open',
+              defaultValue: "open",
               options: data.segmentOptions,
             },
           ],
@@ -79,63 +76,56 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
         // No panel around the table. The page is already titled "Process
         // checklists"; a card headed "Checklists" under it names the same
         // thing twice and buys a second border for it.
-        registeredListTable('hrm_processes', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
-          empty: { title: f('empty') },
+        registeredListTable("hrm_processes", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
+          empty: { title: f("empty") },
           columns: [
-            column(
-              data.columns.employee,
-              link(item('workerName'), item('href')),
-            ),
-            column(data.columns.kind, text(item('kindLabel'))),
+            column(data.columns.employee, link(item("workerName"), item("href"))),
+            column(data.columns.kind, text(item("kindLabel"))),
             column(
               data.columns.status,
-              badge(item('statusLabel'), { variant: item('statusVariant') }),
+              badge(item("statusLabel"), { variant: item("statusVariant") }),
             ),
-            column(data.columns.effective, text(item('effectiveDate')), {
-              className: 'tabular-nums',
+            column(data.columns.effective, text(item("effectiveDate")), {
+              className: "tabular-nums",
             }),
             column(
               data.columns.progress,
-              text(item('progressLabel'), {
+              text(item("progressLabel"), {
                 suffix: {
-                  field: item('overdueBadge'),
+                  field: item("overdueBadge"),
                   className:
-                    'ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300',
+                    "ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300",
                 },
               }),
-              { align: 'right', className: 'tabular-nums' },
+              { align: "right", className: "tabular-nums" },
             ),
-            column(data.columns.nextAction,text(item('nextActionLabel'),{fallback:'—'})),
-            column(
-              data.columns.nextDue,
-              text(item('nextDueOn'), { fallback: '—' }),
-              {
-                align: 'right',
-                className: 'tabular-nums',
-              },
-            ),
+            column(data.columns.nextAction, text(item("nextActionLabel"), { fallback: "—" })),
+            column(data.columns.nextDue, text(item("nextDueOn"), { fallback: "—" }), {
+              align: "right",
+              className: "tabular-nums",
+            }),
           ],
         }),
       ]),
       // URL-backed drawer, portaled to <body> wherever it renders.
       {
-        ...widgetBlock('hrm-process-drawer', { drawer: data.drawer }),
-        when: f('drawerOpen'),
+        ...widgetBlock("hrm-process-drawer", { drawer: data.drawer }),
+        when: f("drawerOpen"),
       },
       // HR-21: the shared evidence-draft drawer (?draft=<kind>:<id>).
       {
-        ...widgetBlock('hrm-ai-draft-drawer', { draft: data.draftDrawer }),
-        when: f('draftDrawerOpen'),
+        ...widgetBlock("hrm-ai-draft-drawer", { draft: data.draftDrawer }),
+        when: f("draftDrawerOpen"),
       },
       {
-        ...widgetBlock('hrm-process-create', { create: data.create }),
-        when: f('create'),
+        ...widgetBlock("hrm-process-create", { create: data.create }),
+        when: f("create"),
       },
     ],
-  })
+  });
 }
 
 export async function loadProcessesRoute(
@@ -143,12 +133,12 @@ export async function loadProcessesRoute(
 ): Promise<ProcessesPageData> {
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
-  const authz = await requirePermission('hrm.process.read')
-  await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  return loadProcessesPage(authz, sp)
+  const authz = await requirePermission("hrm.process.read");
+  await requireFeatureEnabled(authz.user.orgId, "hrm");
+  return loadProcessesPage(authz, sp);
 }
 
 export async function processesTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('processes.title')
+  const t = await getTranslations("hrm");
+  return t("processes.title");
 }

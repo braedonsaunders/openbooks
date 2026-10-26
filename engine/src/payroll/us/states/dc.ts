@@ -96,9 +96,7 @@
  */
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../../money/payroll-decimal.ts";
-import {
-  certificateCount, certificateFlag, type PayrollCertificate,
-} from "../../certificates.ts";
+import { certificateCount, certificateFlag, type PayrollCertificate } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
@@ -109,13 +107,23 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/dc.ts";
 
 /** Every period FR-230 prints percentage-method tables for (Table 1 + pp. 10–11). */
 const DC_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly",
-  "quarterly", "semiannual", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "semiannual",
+  "annual",
+  "daily",
 ];
 
 export interface DcBracket {
@@ -189,18 +197,20 @@ const DC_EDITIONS_BY_YEAR: Record<number, DcYearRates> = {
   [DC_RATES_2026.year]: DC_RATES_2026,
 };
 
-export const DC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "OTR Tax Notice 2022-08 method on the post-2021 rate schedule",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "FR-230 (Rev. 11/17) percentage of wages paid method (p. 9); OTR Tax Notice 2022-08 "
-    + "(10/17/2022) substituting the current rate schedule and the federal allowance amount; OTR "
-    + "\"DC Individual and Fiduciary Income Tax Rates\" schedule for tax years beginning after "
-    + "12/31/2021; IRS Publication 15-T (2026), Worksheet 1A line 1k ($4,300 per allowance)",
-  status: "published",
-  region: "DC",
-}];
+export const DC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "OTR Tax Notice 2022-08 method on the post-2021 rate schedule",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "FR-230 (Rev. 11/17) percentage of wages paid method (p. 9); OTR Tax Notice 2022-08 " +
+      "(10/17/2022) substituting the current rate schedule and the federal allowance amount; OTR " +
+      '"DC Individual and Fiduciary Income Tax Rates" schedule for tax years beginning after ' +
+      "12/31/2021; IRS Publication 15-T (2026), Worksheet 1A line 1k ($4,300 per allowance)",
+    status: "published",
+    region: "DC",
+  },
+];
 
 /**
  * The divisor FR-230's tables are scaled on: the pay periods in the year,
@@ -271,15 +281,17 @@ function compute(
     const d4a = input.certificateFor?.(DC_NONRESIDENT_CERTIFICATE.key);
     if (d4a?.onFile) {
       const statedResidence = d4a.answers.permanent_residence_region;
-      if (!input.residenceRegion || input.residenceRegion === "DC"
-        || statedResidence !== input.residenceRegion) {
+      if (
+        !input.residenceRegion ||
+        input.residenceRegion === "DC" ||
+        statedResidence !== input.residenceRegion
+      ) {
         throw new PayrollError(
           "DC Form D-4A does not match the employee's current residence region. Reconcile the signed form with the employee's residence profile before calculating; refused by name",
         );
       }
       const daysInDc = certificateCount(d4a, "days_in_dc");
-      if (daysInDc == null || (daysInDc >= 183
-        && !certificateFlag(d4a, "military_spouse"))) {
+      if (daysInDc == null || (daysInDc >= 183 && !certificateFlag(d4a, "military_spouse"))) {
         throw new PayrollError(
           "DC Form D-4A requires a current-year certification of fewer than 183 DC residence days, unless the employee qualifies as a servicemember's spouse. Update the signed D-4A or withhold under the applicable DC rules; refused by name",
         );
@@ -303,9 +315,7 @@ function compute(
   // defaults to zero allowances — withholding on the full wage, the
   // fail-closed choice (the Illinois precedent, not an OTR rule).
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
-  const perAllowance = divIntCents(
-    U(rates.allowanceAnnual), dcDivisorForPeriod(period, P),
-  );
+  const perAllowance = divIntCents(U(rates.allowanceAnnual), dcDivisorForPeriod(period, P));
   trace("DC_ALLOWANCE_PER_PERIOD", perAllowance);
   const allowance = mulInt(perAllowance, allowances);
   trace("DC_ALLOWANCE", allowance);
@@ -316,8 +326,8 @@ function compute(
   // (wages − allowance) is floored at zero above: the tables print no
   // negative and a negative would refund tax never withheld.
   const scaled = dcScaledBrackets(rates, period, P);
-  const bracket = scaled.find((candidate) =>
-    candidate.notOver === null || taxable <= candidate.notOver,
+  const bracket = scaled.find(
+    (candidate) => candidate.notOver === null || taxable <= candidate.notOver,
   );
   if (!bracket) {
     // Unreachable: the top bracket has no ceiling, so every taxable amount
@@ -352,8 +362,8 @@ export function dcOpflWithholding(payDate: string, coveredWages: string): string
   const rate = rates.opflRate;
   if (rate == null) {
     throw new PayrollError(
-      `District of Columbia Paid Family Leave has no transcribed employer rate for ${rates.year}. `
-      + "This year is not yet supported by the US pack; contact support — refused by name",
+      `District of Columbia Paid Family Leave has no transcribed employer rate for ${rates.year}. ` +
+        "This year is not yet supported by the US pack; contact support — refused by name",
     );
   }
   return D(mulRateCents(U(coveredWages), rate));
@@ -408,34 +418,36 @@ export const DC_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "DC" },
   purpose: "withholding",
   citation:
-    "FR-230 (Rev. 11/17) pp. 2–3 (D-4/D-4A); OTR Tax Notice 2022-08 (10/17/2022); "
-    + "IRS Publication 15-T (2026), Worksheet 1A line 1k",
+    "FR-230 (Rev. 11/17) pp. 2–3 (D-4/D-4A); OTR Tax Notice 2022-08 (10/17/2022); " +
+    "IRS Publication 15-T (2026), Worksheet 1A line 1k",
   summary:
-    "Sets the number of D-4 withholding allowances. FR-230 requires a D-4 of every DC "
-    + "resident employee on hire. Each allowance is worth the federal allowance amount "
-    + "($4,300 in 2026) under Notice 2022-08; the standard deduction is not used in the "
-    + "withholding calculation (FR-230 p. 5).",
+    "Sets the number of D-4 withholding allowances. FR-230 requires a D-4 of every DC " +
+    "resident employee on hire. Each allowance is worth the federal allowance amount " +
+    "($4,300 in 2026) under Notice 2022-08; the standard deduction is not used in the " +
+    "withholding calculation (FR-230 p. 5).",
   storage: "certificate_rows",
   fields: [
     {
       key: "allowances",
       label: "D-4 — Withholding allowances claimed",
       kind: "count",
-      min: "0", max: "99", default: "0",
+      min: "0",
+      max: "99",
+      default: "0",
       help:
-        "Number of withholding allowances on the D-4, each worth $4,300 a year in 2026 "
-        + "(Notice 2022-08 + Pub 15-T line 1k). Default zero: FR-230 requires a D-4 but states "
-        + "no no-certificate rule, so without one the engine withholds on the full wage rather "
-        + "than assuming allowances — the fail-closed choice, not an OTR rule.",
+        "Number of withholding allowances on the D-4, each worth $4,300 a year in 2026 " +
+        "(Notice 2022-08 + Pub 15-T line 1k). Default zero: FR-230 requires a D-4 but states " +
+        "no no-certificate rule, so without one the engine withholds on the full wage rather " +
+        "than assuming allowances — the fail-closed choice, not an OTR rule.",
     },
     {
       key: "exempt",
       label: "Exempt from DC withholding",
       kind: "flag",
       help:
-        "FR-230 p. 5: a servicemember spouse whose wages are exempt from District income tax "
-        + "under federal law may file a D-4 claiming exemption from withholding. The only D-4 "
-        + "exemption the booklet names.",
+        "FR-230 p. 5: a servicemember spouse whose wages are exempt from District income tax " +
+        "under federal law may file a D-4 claiming exemption from withholding. The only D-4 " +
+        "exemption the booklet names.",
     },
   ],
 };
@@ -449,11 +461,11 @@ export const DC_NONRESIDENT_CERTIFICATE: PayrollCertificate = {
   purpose: "non_residence",
   validity: { kind: "calendar_year_end" },
   citation:
-    "DC OTR Form D-4A (Rev. 12/2016), Certificate of Nonresidence in the District of Columbia, "
-    + "and instructions; https://otr.cfo.dc.gov/sites/default/files/dc/sites/otr/publication/attachments/2016%20D-4A.pdf",
+    "DC OTR Form D-4A (Rev. 12/2016), Certificate of Nonresidence in the District of Columbia, " +
+    "and instructions; https://otr.cfo.dc.gov/sites/default/files/dc/sites/otr/publication/attachments/2016%20D-4A.pdf",
   summary:
-    "A nonresident's signed D-4A stops DC withholding for the tax year when permanent residence "
-    + "is outside DC and the employee will not reside in DC for 183 days or more. The form is not reciprocity.",
+    "A nonresident's signed D-4A stops DC withholding for the tax year when permanent residence " +
+    "is outside DC and the employee will not reside in DC for 183 days or more. The form is not reciprocity.",
   storage: "certificate_rows",
   fields: [
     {
@@ -467,7 +479,9 @@ export const DC_NONRESIDENT_CERTIFICATE: PayrollCertificate = {
       key: "days_in_dc",
       label: "Days the employee expects to reside in DC this tax year",
       kind: "count",
-      min: "0", max: "366", required: true,
+      min: "0",
+      max: "366",
+      required: true,
       help: "The signed D-4A certifies fewer than 183 days of DC residence, unless the employee is a servicemember's spouse.",
     },
     {
@@ -498,6 +512,6 @@ export const DC_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "FR-230 (Rev. 11/17); OTR Tax Notice 2022-08 (10/17/2022); OTR \"DC Individual and "
-    + "Fiduciary Income Tax Rates\"; DC Code § 47-1812.08(b)(1)",
+    'FR-230 (Rev. 11/17); OTR Tax Notice 2022-08 (10/17/2022); OTR "DC Individual and ' +
+    'Fiduciary Income Tax Rates"; DC Code § 47-1812.08(b)(1)',
 };

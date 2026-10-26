@@ -1,13 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  check,
-  foreignKey,
-  index,
-  integer,
-  pgTable,
-  text,
-  uniqueIndex
-} from "drizzle-orm/pg-core";
+import { check, foreignKey, index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { orgs } from "./core";
 import { auditColumns, id, orgRef } from "./helpers";
 

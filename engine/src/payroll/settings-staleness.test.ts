@@ -9,38 +9,46 @@ const snapshot = (before: Record<string, unknown>, after: Record<string, unknown
 });
 
 test("a net-pay settlement clearing designation does not stale payroll amounts", () => {
-  assert.equal(orgSettingsAuditAffectsCalculation(snapshot(
-    {},
-    { netPaySettlementClearing: [{ accountId: "clearing", effectiveFrom: "2026-01-01" }] },
-  )), false);
+  assert.equal(
+    orgSettingsAuditAffectsCalculation(
+      snapshot(
+        {},
+        { netPaySettlementClearing: [{ accountId: "clearing", effectiveFrom: "2026-01-01" }] },
+      ),
+    ),
+    false,
+  );
 });
 
 test("a posting-account edit does not stale a calculated run", () => {
   assert.equal(
-    orgSettingsAuditAffectsCalculation(snapshot(
-      { netPayAccountId: "acct-a", burdenExpenseAccountId: "acct-b" },
-      { netPayAccountId: "acct-c", burdenExpenseAccountId: "acct-d" },
-    )),
+    orgSettingsAuditAffectsCalculation(
+      snapshot(
+        { netPayAccountId: "acct-a", burdenExpenseAccountId: "acct-b" },
+        { netPayAccountId: "acct-c", burdenExpenseAccountId: "acct-d" },
+      ),
+    ),
     false,
   );
 });
 
 test("wages-to and statutory liability destinations are posting-only", () => {
   assert.equal(
-    orgSettingsAuditAffectsCalculation(snapshot(
-      { wagesTo: "expense", netPayAccountId: "acct-a" },
-      { wagesTo: "labor_clearing", netPayAccountId: "acct-b" },
-    )),
+    orgSettingsAuditAffectsCalculation(
+      snapshot(
+        { wagesTo: "expense", netPayAccountId: "acct-a" },
+        { wagesTo: "labor_clearing", netPayAccountId: "acct-b" },
+      ),
+    ),
     false,
   );
 });
 
 test("a remittance vendor edit does not stale a calculated run", () => {
   assert.equal(
-    orgSettingsAuditAffectsCalculation(snapshot(
-      { craRemittancePartyId: "vendor-a" },
-      { craRemittancePartyId: "vendor-b" },
-    )),
+    orgSettingsAuditAffectsCalculation(
+      snapshot({ craRemittancePartyId: "vendor-a" }, { craRemittancePartyId: "vendor-b" }),
+    ),
     false,
   );
 });
@@ -58,38 +66,45 @@ test("a labor clearing change saved with the labor costing form does not stale a
 
 test("a control account change alone does not stale a calculated run", () => {
   assert.equal(
-    orgSettingsAuditAffectsCalculation({ controlAccounts: [{ laborClearing: "acct-a" }, { laborClearing: "acct-b" }] }),
+    orgSettingsAuditAffectsCalculation({
+      controlAccounts: [{ laborClearing: "acct-a" }, { laborClearing: "acct-b" }],
+    }),
     false,
   );
 });
 
 test("a supplemental tax method change stales a calculated run", () => {
   assert.equal(
-    orgSettingsAuditAffectsCalculation(snapshot(
-      { supplementalTaxMethod: "period_cumulative" },
-      { supplementalTaxMethod: "per_run" },
-    )),
+    orgSettingsAuditAffectsCalculation(
+      snapshot(
+        { supplementalTaxMethod: "period_cumulative" },
+        { supplementalTaxMethod: "per_run" },
+      ),
+    ),
     true,
   );
 });
 
 test("the wage expense default stales a calculated run, because calculation stamps it on lines", () => {
   assert.equal(
-    orgSettingsAuditAffectsCalculation(snapshot(
-      { wageExpenseAccountId: "acct-a" },
-      { wageExpenseAccountId: "acct-b" },
-    )),
+    orgSettingsAuditAffectsCalculation(
+      snapshot({ wageExpenseAccountId: "acct-a" }, { wageExpenseAccountId: "acct-b" }),
+    ),
     true,
   );
 });
 
 test("a country pack or holiday rule change stales a calculated run", () => {
   assert.equal(
-    orgSettingsAuditAffectsCalculation(snapshot({ countries: ["CA"] }, { countries: ["CA", "US"] })),
+    orgSettingsAuditAffectsCalculation(
+      snapshot({ countries: ["CA"] }, { countries: ["CA", "US"] }),
+    ),
     true,
   );
   assert.equal(
-    orgSettingsAuditAffectsCalculation(snapshot({ statutoryHolidayPay: false }, { statutoryHolidayPay: true })),
+    orgSettingsAuditAffectsCalculation(
+      snapshot({ statutoryHolidayPay: false }, { statutoryHolidayPay: true }),
+    ),
     true,
   );
 });
@@ -106,10 +121,12 @@ test("a labor costing rate change stales a calculated run", () => {
 
 test("a payroll snapshot that mixes posting and calculation keys stales the run", () => {
   assert.equal(
-    orgSettingsAuditAffectsCalculation(snapshot(
-      { netPayAccountId: "acct-a", eftFallbackToCheque: true },
-      { netPayAccountId: "acct-b", eftFallbackToCheque: false },
-    )),
+    orgSettingsAuditAffectsCalculation(
+      snapshot(
+        { netPayAccountId: "acct-a", eftFallbackToCheque: true },
+        { netPayAccountId: "acct-b", eftFallbackToCheque: false },
+      ),
+    ),
     true,
   );
 });

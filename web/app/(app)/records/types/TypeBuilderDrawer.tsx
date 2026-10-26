@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   ArrowDown,
   ArrowUp,
@@ -13,14 +13,14 @@ import {
   Plus,
   Rows3,
   Trash2,
-} from 'lucide-react'
-import { toast } from 'sonner'
+} from "lucide-react";
+import { toast } from "sonner";
 import {
   type FieldType,
   type FormField,
   type FormSection,
   type FormulaExpression,
-} from '@openbooks/forms-core'
+} from "@openbooks/forms-core";
 import {
   Badge,
   Button,
@@ -31,55 +31,55 @@ import {
   Textarea,
   UrlDrawer,
   cn,
-} from '@openbooks/ui'
-import { confirmDialog } from '@/lib/confirm'
-import { promptDialog } from '@/lib/prompt'
-import { refusalMessageFromBody } from '@/lib/api-error'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { ICON_KEYS, NavIcon } from '../../../../components/sidebar-nav'
+} from "@openbooks/ui";
+import { confirmDialog } from "@/lib/confirm";
+import { promptDialog } from "@/lib/prompt";
+import { refusalMessageFromBody } from "@/lib/api-error";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { ICON_KEYS, NavIcon } from "../../../../components/sidebar-nav";
 import {
   RECORD_FIELD_TYPES,
   describeIssue,
   normalizeSectionsInput,
   slugifyFieldId,
   slugifyTypeKey,
-} from '../../../../lib/record-schema'
+} from "../../../../lib/record-schema";
 
 export type RecordTypePayload = {
-  id: string
-  key: string
-  name: string
-  pluralName: string
-  iconKey: string
-  description: string | null
-  fields: unknown
-  status: 'draft' | 'published' | 'archived'
-  showInNav: boolean
-  allowedRoles: string[] | null
-  sortOrder: number
+  id: string;
+  key: string;
+  name: string;
+  pluralName: string;
+  iconKey: string;
+  description: string | null;
+  fields: unknown;
+  status: "draft" | "published" | "archived";
+  showInNav: boolean;
+  allowedRoles: string[] | null;
+  sortOrder: number;
   /**
    * Exact persisted revision loaded with this type. Autosave echoes it as
    * expectedUpdatedAt; a missing or stale token is a 409, not last-write-wins.
    */
-  updated_at: string
-}
+  updated_at: string;
+};
 
-type Issue = { path: Array<string | number>; message: string }
+type Issue = { path: Array<string | number>; message: string };
 
-const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
-  published: 'success',
-  draft: 'secondary',
-  archived: 'outline',
-}
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline"> = {
+  published: "success",
+  draft: "secondary",
+  archived: "outline",
+};
 
-const field = 'space-y-1.5'
+const field = "space-y-1.5";
 
 /** Coerce the stored definition into sections; seed one header group for a
  * brand-new (empty) type so the builder always has somewhere to add fields. */
 function initialSections(stored: unknown): FormSection[] {
-  const sections = normalizeSectionsInput(stored) as FormSection[]
-  if (sections.length > 0) return sections
-  return [{ id: 'details', title: 'Details', fields: [] }]
+  const sections = normalizeSectionsInput(stored) as FormSection[];
+  if (sections.length > 0) return sections;
+  return [{ id: "details", title: "Details", fields: [] }];
 }
 
 /**
@@ -98,42 +98,42 @@ export function TypeBuilderDrawer({
   roles,
   createMode = false,
 }: {
-  type: RecordTypePayload
-  roles: { key: string; name: string }[]
-  createMode?: boolean
+  type: RecordTypePayload;
+  roles: { key: string; name: string }[];
+  createMode?: boolean;
 }) {
-  const router = useRouter()
-  const t = useTranslations('records')
-  const tc = useTranslations('common')
-  const isDraft = type.status === 'draft'
+  const router = useRouter();
+  const t = useTranslations("records");
+  const tc = useTranslations("common");
+  const isDraft = type.status === "draft";
   // One stable idempotency key per drawer session: a double-clicked Save (or
   // a retried request) resolves to the same type instead of a duplicate.
-  const requestIdRef = useRef<string | null>(null)
+  const requestIdRef = useRef<string | null>(null);
 
-  const [name, setName] = useState(type.name)
-  const [pluralName, setPluralName] = useState(type.pluralName)
-  const [key, setKey] = useState(type.key)
-  const [keyTouched, setKeyTouched] = useState(!isDraft || type.key !== slugifyTypeKey(type.name))
+  const [name, setName] = useState(type.name);
+  const [pluralName, setPluralName] = useState(type.pluralName);
+  const [key, setKey] = useState(type.key);
+  const [keyTouched, setKeyTouched] = useState(!isDraft || type.key !== slugifyTypeKey(type.name));
   const [pluralTouched, setPluralTouched] = useState(
     createMode ? false : type.pluralName !== `${type.name}s`,
-  )
-  const [iconKey, setIconKey] = useState(type.iconKey)
-  const [description, setDescription] = useState(type.description ?? '')
-  const [showInNav, setShowInNav] = useState(type.showInNav)
-  const [sortOrder, setSortOrder] = useState(type.sortOrder)
-  const [allowedRoles, setAllowedRoles] = useState<string[]>(type.allowedRoles ?? [])
-  const [sections, setSections] = useState<FormSection[]>(() => initialSections(type.fields))
-  const [expanded, setExpanded] = useState<string | null>(null)
-  const [issues, setIssues] = useState<Issue[]>([])
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved')
-  const [busy, setBusy] = useState(false)
+  );
+  const [iconKey, setIconKey] = useState(type.iconKey);
+  const [description, setDescription] = useState(type.description ?? "");
+  const [showInNav, setShowInNav] = useState(type.showInNav);
+  const [sortOrder, setSortOrder] = useState(type.sortOrder);
+  const [allowedRoles, setAllowedRoles] = useState<string[]>(type.allowedRoles ?? []);
+  const [sections, setSections] = useState<FormSection[]>(() => initialSections(type.fields));
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "dirty">("saved");
+  const [busy, setBusy] = useState(false);
 
-  const fieldCount = sections.reduce((n, s) => n + s.fields.length, 0)
+  const fieldCount = sections.reduce((n, s) => n + s.fields.length, 0);
 
   function rename(nextName: string) {
-    setName(nextName)
-    if (isDraft && !keyTouched) setKey(slugifyTypeKey(nextName))
-    if (!pluralTouched) setPluralName(nextName ? `${nextName}s` : '')
+    setName(nextName);
+    if (isDraft && !keyTouched) setKey(slugifyTypeKey(nextName));
+    if (!pluralTouched) setPluralName(nextName ? `${nextName}s` : "");
   }
 
   // -- autosave ---------------------------------------------------------------
@@ -150,257 +150,288 @@ export function TypeBuilderDrawer({
       // The API's `fields` body carries the full section structure.
       fields: sections,
     }),
-    [name, pluralName, key, iconKey, description, showInNav, sortOrder, allowedRoles, sections, isDraft],
-  )
+    [
+      name,
+      pluralName,
+      key,
+      iconKey,
+      description,
+      showInNav,
+      sortOrder,
+      allowedRoles,
+      sections,
+      isDraft,
+    ],
+  );
   // Echo the revision this drawer loaded. Keep it off the payload memo so a
   // successful save can advance the token without retriggering autosave.
-  const loadedUpdatedAt = useRef(type.updated_at)
+  const loadedUpdatedAt = useRef(type.updated_at);
   useEffect(() => {
-    loadedUpdatedAt.current = type.updated_at
-  }, [type.updated_at])
+    loadedUpdatedAt.current = type.updated_at;
+  }, [type.updated_at]);
   // The debounced PATCH, extracted so closing with a pending edit can flush
   // it first: true when the server accepts the edits.
   // A network failure lands back on dirty with the translated message —
   // never stuck on Saving with Publish disabled.
   const persistEdits = useCallback(async (): Promise<boolean> => {
-    setSaveState('saving')
+    setSaveState("saving");
     try {
       const res = await fetch(`/api/records/types/${type.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...payload,
           expectedUpdatedAt: loadedUpdatedAt.current,
         }),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of the bare `error` field.
       if (!res.ok) {
-        setSaveState('dirty')
-        let message = t('typeBuilder.autosaveFailed')
+        setSaveState("dirty");
+        let message = t("typeBuilder.autosaveFailed");
         try {
-          const data = await res.json()
-          message = refusalMessageFromBody(data, { fallback: message }) ?? message
+          const data = await res.json();
+          message = refusalMessageFromBody(data, { fallback: message }) ?? message;
         } catch {
           // A parse failure must not hide the refuse or invent a success.
         }
-        toast.error(message)
-        return false
+        toast.error(message);
+        return false;
       }
-      const data = (await res.json()) as { issues?: Issue[]; type?: { updated_at?: string } }
-      if (typeof data.type?.updated_at === 'string') {
-        loadedUpdatedAt.current = data.type.updated_at
+      const data = (await res.json()) as { issues?: Issue[]; type?: { updated_at?: string } };
+      if (typeof data.type?.updated_at === "string") {
+        loadedUpdatedAt.current = data.type.updated_at;
       }
-      setIssues(data.issues ?? [])
-      setSaveState('saved')
-      router.refresh()
-      return true
+      setIssues(data.issues ?? []);
+      setSaveState("saved");
+      router.refresh();
+      return true;
     } catch {
-      setSaveState('dirty')
-      toast.error(t('typeBuilder.autosaveFailed'))
-      return false
+      setSaveState("dirty");
+      toast.error(t("typeBuilder.autosaveFailed"));
+      return false;
     }
-  }, [payload, router, t, type.id])
-  const saveStateRef = useRef(saveState)
+  }, [payload, router, t, type.id]);
+  const saveStateRef = useRef(saveState);
   useEffect(() => {
-    saveStateRef.current = saveState
-  }, [saveState])
+    saveStateRef.current = saveState;
+  }, [saveState]);
   // Closing with a debounced edit still pending must not drop it: flush the
   // save first. If the flush fails, name the loss and keep the builder open
   // on refusal instead of silently discarding the edit.
   const beforeClose = useCallback(async (): Promise<boolean> => {
-    if (createMode || saveStateRef.current !== 'dirty') return true
-    if (await persistEdits()) return true
+    if (createMode || saveStateRef.current !== "dirty") return true;
+    if (await persistEdits()) return true;
     return confirmDialog({
-      message: tc('feedback.unsavedChanges'),
-      confirmLabel: tc('confirm.discardChanges'),
-      tone: 'danger',
-    })
-  }, [createMode, persistEdits, tc])
-  const first = useRef(true)
+      message: tc("feedback.unsavedChanges"),
+      confirmLabel: tc("confirm.discardChanges"),
+      tone: "danger",
+    });
+  }, [createMode, persistEdits, tc]);
+  const first = useRef(true);
   useEffect(() => {
     // Create mode is local-only until Save: no revision exists to echo and no
     // row exists to autosave into, so the debounced PATCH never arms.
-    if (createMode) return
+    if (createMode) return;
     if (first.current) {
-      first.current = false
-      return
+      first.current = false;
+      return;
     }
-    setSaveState('dirty')
+    setSaveState("dirty");
     const timer = setTimeout(() => {
-      void persistEdits()
-    }, 600)
-    return () => clearTimeout(timer)
-  }, [createMode, payload, persistEdits])
+      void persistEdits();
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [createMode, payload, persistEdits]);
 
   // -- id allocation (section + field ids share one namespace) ----------------
   function takenIds(): Set<string> {
-    const taken = new Set<string>()
+    const taken = new Set<string>();
     for (const s of sections) {
-      taken.add(s.id)
-      for (const f of s.fields) taken.add(f.id)
+      taken.add(s.id);
+      for (const f of s.fields) taken.add(f.id);
     }
-    return taken
+    return taken;
   }
   function uniqueId(base: string, fallback: string): string {
-    const taken = takenIds()
-    let id = base || fallback
-    for (let n = 2; taken.has(id); n++) id = `${base || fallback}_${n}`
-    return id
+    const taken = takenIds();
+    let id = base || fallback;
+    for (let n = 2; taken.has(id); n++) id = `${base || fallback}_${n}`;
+    return id;
   }
 
   // -- section operations -----------------------------------------------------
   function addSection(repeating: boolean) {
-    const title = repeating ? t('typeBuilder.lineListDefaultTitle') : t('typeBuilder.sectionDefaultTitle')
+    const title = repeating
+      ? t("typeBuilder.lineListDefaultTitle")
+      : t("typeBuilder.sectionDefaultTitle");
     const next: FormSection = {
-      id: uniqueId(slugifyFieldId(title), repeating ? 'line_items' : 'section'),
+      id: uniqueId(slugifyFieldId(title), repeating ? "line_items" : "section"),
       title,
       fields: [],
       ...(repeating ? { repeating: true } : {}),
-    }
-    setSections((ss) => [...ss, next])
+    };
+    setSections((ss) => [...ss, next]);
   }
 
   const updateSection = (id: string, patch: Partial<FormSection>) =>
-    setSections((ss) => ss.map((s) => (s.id === id ? ({ ...s, ...patch } as FormSection) : s)))
+    setSections((ss) => ss.map((s) => (s.id === id ? ({ ...s, ...patch } as FormSection) : s)));
 
   const moveSection = (index: number, dir: -1 | 1) =>
     setSections((ss) => {
-      const j = index + dir
-      if (j < 0 || j >= ss.length) return ss
-      const next = [...ss]
-      const [s] = next.splice(index, 1)
-      next.splice(j, 0, s!)
-      return next
-    })
+      const j = index + dir;
+      if (j < 0 || j >= ss.length) return ss;
+      const next = [...ss];
+      const [s] = next.splice(index, 1);
+      next.splice(j, 0, s!);
+      return next;
+    });
 
   async function removeSection(s: FormSection) {
     const ok = await confirmDialog({
-      message: t('typeBuilder.removeSectionConfirm', { title: s.title ?? s.id }),
-      tone: 'danger',
-    })
-    if (ok) setSections((ss) => ss.filter((x) => x.id !== s.id))
+      message: t("typeBuilder.removeSectionConfirm", { title: s.title ?? s.id }),
+      tone: "danger",
+    });
+    if (ok) setSections((ss) => ss.filter((x) => x.id !== s.id));
   }
 
   // -- field operations (scoped to a section) ---------------------------------
   function addField(sectionId: string, fieldType: FieldType) {
-    const label = t(`fieldTypes.${fieldType}.label`)
+    const label = t(`fieldTypes.${fieldType}.label`);
     const next: FormField = {
-      id: uniqueId(slugifyFieldId(label), 'field'),
+      id: uniqueId(slugifyFieldId(label), "field"),
       type: fieldType,
       label,
-      ...(fieldType === 'select' || fieldType === 'multi_select' || fieldType === 'radio'
-        ? { validation: { options: [{ value: 'option_1', label: t('typeBuilder.optionPlaceholder', { n: 1 }) }] } }
+      ...(fieldType === "select" || fieldType === "multi_select" || fieldType === "radio"
+        ? {
+            validation: {
+              options: [{ value: "option_1", label: t("typeBuilder.optionPlaceholder", { n: 1 }) }],
+            },
+          }
         : {}),
-      ...(fieldType === 'formula'
-        ? { formula: { kind: 'sum', of: [] } as FormulaExpression, config: { format: 'number' } }
+      ...(fieldType === "formula"
+        ? { formula: { kind: "sum", of: [] } as FormulaExpression, config: { format: "number" } }
         : {}),
-    }
-    setSections((ss) => ss.map((s) => (s.id === sectionId ? { ...s, fields: [...s.fields, next] } : s)))
-    setExpanded(`${sectionId}:${next.id}`)
+    };
+    setSections((ss) =>
+      ss.map((s) => (s.id === sectionId ? { ...s, fields: [...s.fields, next] } : s)),
+    );
+    setExpanded(`${sectionId}:${next.id}`);
   }
 
   const updateField = (sectionId: string, id: string, patch: Partial<FormField>) =>
     setSections((ss) =>
       ss.map((s) =>
         s.id === sectionId
-          ? { ...s, fields: s.fields.map((f) => (f.id === id ? ({ ...f, ...patch } as FormField) : f)) }
+          ? {
+              ...s,
+              fields: s.fields.map((f) => (f.id === id ? ({ ...f, ...patch } as FormField) : f)),
+            }
           : s,
       ),
-    )
+    );
 
   const moveField = (sectionId: string, index: number, dir: -1 | 1) =>
     setSections((ss) =>
       ss.map((s) => {
-        if (s.id !== sectionId) return s
-        const j = index + dir
-        if (j < 0 || j >= s.fields.length) return s
-        const next = [...s.fields]
-        const [f] = next.splice(index, 1)
-        next.splice(j, 0, f!)
-        return { ...s, fields: next }
+        if (s.id !== sectionId) return s;
+        const j = index + dir;
+        if (j < 0 || j >= s.fields.length) return s;
+        const next = [...s.fields];
+        const [f] = next.splice(index, 1);
+        next.splice(j, 0, f!);
+        return { ...s, fields: next };
       }),
-    )
+    );
 
   async function removeField(sectionId: string, f: FormField) {
     const ok = await confirmDialog({
-      message: t('typeBuilder.removeFieldConfirm', { label: f.label }),
-      tone: 'danger',
-    })
+      message: t("typeBuilder.removeFieldConfirm", { label: f.label }),
+      tone: "danger",
+    });
     if (ok) {
       setSections((ss) =>
-        ss.map((s) => (s.id === sectionId ? { ...s, fields: s.fields.filter((x) => x.id !== f.id) } : s)),
-      )
+        ss.map((s) =>
+          s.id === sectionId ? { ...s, fields: s.fields.filter((x) => x.id !== f.id) } : s,
+        ),
+      );
     }
   }
 
   // -- lifecycle actions ------------------------------------------------------
-  async function lifecycle(action: 'publish' | 'archive') {
+  async function lifecycle(action: "publish" | "archive") {
     // Publish/archive transitions are audited with an operator reason; the
     // server refuses a reasonless transition, so collect it up front. Cancel
     // or an empty reason writes nothing.
     const reason = await promptDialog({
-      title: action === 'publish' ? t('typeBuilder.publish') : t('typeBuilder.archive'),
-      label: tc('amendment.reason'),
-      placeholder: tc('amendment.placeholder'),
-      confirmLabel: action === 'publish' ? t('typeBuilder.publish') : t('typeBuilder.archive'),
-    })
-    if (!reason) return
-    if (action === 'archive') {
+      title: action === "publish" ? t("typeBuilder.publish") : t("typeBuilder.archive"),
+      label: tc("amendment.reason"),
+      placeholder: tc("amendment.placeholder"),
+      confirmLabel: action === "publish" ? t("typeBuilder.publish") : t("typeBuilder.archive"),
+    });
+    if (!reason) return;
+    if (action === "archive") {
       const ok = await confirmDialog({
-        message: t('typeBuilder.archiveConfirm', { name }),
-        tone: 'danger',
-      })
-      if (!ok) return
+        message: t("typeBuilder.archiveConfirm", { name }),
+        tone: "danger",
+      });
+      if (!ok) return;
     }
-    setBusy(true)
+    setBusy(true);
     try {
       const res = await fetch(`/api/records/types/${type.id}/publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, reason }),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of the bare `error` field.
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string; issues?: Issue[] } | null
-        toast.error(refusalMessageFromBody(body, { fallback: `${t('typeBuilder.actionFailed')} (status ${res.status})` }) ?? `${t('typeBuilder.actionFailed')} (status ${res.status})`)
-        if (Array.isArray(body?.issues)) setIssues(body.issues)
-        return
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+          issues?: Issue[];
+        } | null;
+        toast.error(
+          refusalMessageFromBody(body, {
+            fallback: `${t("typeBuilder.actionFailed")} (status ${res.status})`,
+          }) ?? `${t("typeBuilder.actionFailed")} (status ${res.status})`,
+        );
+        if (Array.isArray(body?.issues)) setIssues(body.issues);
+        return;
       }
       toast.success(
-        action === 'publish'
-          ? t('typeBuilder.publishedToast', { name, key })
-          : t('typeBuilder.archivedToast'),
-      )
-      router.refresh()
+        action === "publish"
+          ? t("typeBuilder.publishedToast", { name, key })
+          : t("typeBuilder.archivedToast"),
+      );
+      router.refresh();
     } catch {
-      toast.error(t('typeBuilder.actionFailed'))
+      toast.error(t("typeBuilder.actionFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function destroy() {
     const ok = await confirmDialog({
-      message: t('typeBuilder.deleteConfirm', { name }),
-      tone: 'danger',
-    })
-    if (!ok) return
-    setBusy(true)
+      message: t("typeBuilder.deleteConfirm", { name }),
+      tone: "danger",
+    });
+    if (!ok) return;
+    setBusy(true);
     try {
-      const res = await fetch(`/api/records/types/${type.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/records/types/${type.id}`, { method: "DELETE" });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, tc('feedback.deleteFailed')))
-        return
+        toast.error(await readApiErrorMessage(res, tc("feedback.deleteFailed")));
+        return;
       }
-      toast.success(t('typeBuilder.draftDeleted'))
-      router.push('/records/types')
-      router.refresh()
+      toast.success(t("typeBuilder.draftDeleted"));
+      router.push("/records/types");
+      router.refresh();
     } catch {
-      toast.error(tc('feedback.deleteFailed'))
+      toast.error(tc("feedback.deleteFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -408,15 +439,15 @@ export function TypeBuilderDrawer({
   async function createType() {
     // The Save button stays disabled until a name exists, so this is only a
     // backstop against a programmatic call — never the visible refusal path.
-    if (!name.trim()) return
-    setBusy(true)
-    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    if (!name.trim()) return;
+    setBusy(true);
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID();
     try {
-      const res = await fetch('/api/records/types', {
-        method: 'POST',
+      const res = await fetch("/api/records/types", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': requestIdRef.current,
+          "Content-Type": "application/json",
+          "Idempotency-Key": requestIdRef.current,
         },
         body: JSON.stringify({
           name: name.trim(),
@@ -429,39 +460,42 @@ export function TypeBuilderDrawer({
           allowedRoles: allowedRoles.length > 0 ? allowedRoles : null,
           fields: sections,
         }),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of the bare `error` field.
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: unknown; issues?: Issue[] }
-        if (Array.isArray(data.issues)) setIssues(data.issues)
-        toast.error(refusalMessageFromBody(data, { fallback: t('createFailed') }) ?? t('createFailed'))
-        return
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown; issues?: Issue[] };
+        if (Array.isArray(data.issues)) setIssues(data.issues);
+        toast.error(
+          refusalMessageFromBody(data, { fallback: t("createFailed") }) ?? t("createFailed"),
+        );
+        return;
       }
-      const data = (await res.json()) as { id?: unknown }
-      if (typeof data.id !== 'string' || !data.id) {
-        toast.error(t('createFailed'))
-        return
+      const data = (await res.json()) as { id?: unknown };
+      if (typeof data.id !== "string" || !data.id) {
+        toast.error(t("createFailed"));
+        return;
       }
-      toast.success(t('typeBuilder.allSaved'))
-      router.replace(`/records/types?type=${data.id}`)
-      router.refresh()
+      toast.success(t("typeBuilder.allSaved"));
+      router.replace(`/records/types?type=${data.id}`);
+      router.refresh();
     } catch {
-      toast.error(t('createFailed'))
+      toast.error(t("createFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
-  const canPublish = !createMode && saveState === 'saved' && !busy && fieldCount > 0 && issues.length === 0
+  const canPublish =
+    !createMode && saveState === "saved" && !busy && fieldCount > 0 && issues.length === 0;
   const publishBlockedReason =
     fieldCount === 0
-      ? t('typeBuilder.publishNeedsField')
+      ? t("typeBuilder.publishNeedsField")
       : issues.length > 0
-        ? t('typeBuilder.publishResolveIssues')
-        : saveState !== 'saved'
-          ? t('typeBuilder.publishNeedsSave')
-          : undefined
+        ? t("typeBuilder.publishResolveIssues")
+        : saveState !== "saved"
+          ? t("typeBuilder.publishNeedsSave")
+          : undefined;
 
   return (
     <UrlDrawer
@@ -472,41 +506,47 @@ export function TypeBuilderDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <NavIcon iconKey={iconKey} size={16} className="text-slate-500 dark:text-slate-400" />
-          <span>{name || t('typeBuilder.fallbackTitle')}</span>
-          <Badge variant={STATUS_VARIANT[type.status] ?? 'secondary'}>
+          <span>{name || t("typeBuilder.fallbackTitle")}</span>
+          <Badge variant={STATUS_VARIANT[type.status] ?? "secondary"}>
             {t(`typeStatus.${type.status}`)}
           </Badge>
         </span>
       }
       description={
         isDraft
-          ? t('typeBuilder.descriptionDraft')
-          : type.status === 'published'
-            ? t('typeBuilder.descriptionPublished')
-            : t('typeBuilder.descriptionArchived')
+          ? t("typeBuilder.descriptionDraft")
+          : type.status === "published"
+            ? t("typeBuilder.descriptionPublished")
+            : t("typeBuilder.descriptionArchived")
       }
       headerActions={
         createMode ? null : (
           <>
             {isDraft ? (
               <Button variant="ghost" disabled={busy} onClick={destroy}>
-                <Trash2 size={14} /> {t('typeBuilder.deleteDraft')}
+                <Trash2 size={14} /> {t("typeBuilder.deleteDraft")}
               </Button>
             ) : null}
-            {type.status === 'published' ? (
+            {type.status === "published" ? (
               <>
                 <Button variant="outline" asChild>
-                  <Link href={(`/records/${key}`)}>
-                    <ExternalLink size={14} /> {t('typeBuilder.openModule')}
+                  <Link href={`/records/${key}`}>
+                    <ExternalLink size={14} /> {t("typeBuilder.openModule")}
                   </Link>
                 </Button>
-                <Button variant="outline" disabled={busy} onClick={() => lifecycle('archive')}>
-                  {t('typeBuilder.archive')}
+                <Button variant="outline" disabled={busy} onClick={() => lifecycle("archive")}>
+                  {t("typeBuilder.archive")}
                 </Button>
               </>
             ) : (
-              <Button disabled={!canPublish} onClick={() => lifecycle('publish')} title={!canPublish ? publishBlockedReason : undefined}>
-                {type.status === 'archived' ? t('typeBuilder.publishAgain') : t('typeBuilder.publish')}
+              <Button
+                disabled={!canPublish}
+                onClick={() => lifecycle("publish")}
+                title={!canPublish ? publishBlockedReason : undefined}
+              >
+                {type.status === "archived"
+                  ? t("typeBuilder.publishAgain")
+                  : t("typeBuilder.publish")}
               </Button>
             )}
           </>
@@ -515,24 +555,30 @@ export function TypeBuilderDrawer({
       footer={
         createMode ? (
           <div className="flex w-full items-center justify-between gap-3">
-            <span className="text-xs text-slate-500 dark:text-slate-400">{t('typeBuilder.unsaved')}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {t("typeBuilder.unsaved")}
+            </span>
             <div className="flex items-center gap-2">
-              <Button variant="outline" disabled={busy} onClick={() => router.push('/records/types')}>
-                {tc('actions.cancel')}
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => router.push("/records/types")}
+              >
+                {tc("actions.cancel")}
               </Button>
               <Button disabled={busy || !name.trim()} onClick={createType}>
-                {tc('actions.save')}
+                {tc("actions.save")}
               </Button>
             </div>
           </div>
         ) : (
           <div className="flex w-full items-center gap-3">
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {saveState === 'saved'
-                ? t('typeBuilder.allSaved')
-                : saveState === 'saving'
-                  ? tc('actions.saving')
-                  : t('typeBuilder.unsaved')}
+              {saveState === "saved"
+                ? t("typeBuilder.allSaved")
+                : saveState === "saving"
+                  ? tc("actions.saving")
+                  : t("typeBuilder.unsaved")}
             </span>
           </div>
         )
@@ -542,14 +588,14 @@ export function TypeBuilderDrawer({
         {issues.length > 0 ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
             <p className="font-medium">
-              {t('typeBuilder.resolveIssues', { count: issues.length })}
+              {t("typeBuilder.resolveIssues", { count: issues.length })}
             </p>
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
               {issues.slice(0, 6).map((issue, i) => (
                 <li key={i}>{describeIssue(issue)}</li>
               ))}
               {issues.length > 6 ? (
-                <li>{t('typeBuilder.moreIssues', { count: issues.length - 6 })}</li>
+                <li>{t("typeBuilder.moreIssues", { count: issues.length - 6 })}</li>
               ) : null}
             </ul>
           </div>
@@ -557,47 +603,51 @@ export function TypeBuilderDrawer({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className={field}>
-            <Label>{t('typeBuilder.nameLabel')}</Label>
-            <Input value={name} onChange={(e) => rename(e.target.value)} placeholder={t('typeBuilder.namePlaceholder')} />
-          </div>
-          <div className={field}>
-            <Label>{t('typeBuilder.pluralLabel')}</Label>
+            <Label>{t("typeBuilder.nameLabel")}</Label>
             <Input
-              value={pluralName}
-              onChange={(e) => {
-                setPluralTouched(true)
-                setPluralName(e.target.value)
-              }}
-              placeholder={t('typeBuilder.pluralPlaceholder')}
+              value={name}
+              onChange={(e) => rename(e.target.value)}
+              placeholder={t("typeBuilder.namePlaceholder")}
             />
           </div>
           <div className={field}>
-            <Label>{t('typeBuilder.keyLabel')}</Label>
+            <Label>{t("typeBuilder.pluralLabel")}</Label>
+            <Input
+              value={pluralName}
+              onChange={(e) => {
+                setPluralTouched(true);
+                setPluralName(e.target.value);
+              }}
+              placeholder={t("typeBuilder.pluralPlaceholder")}
+            />
+          </div>
+          <div className={field}>
+            <Label>{t("typeBuilder.keyLabel")}</Label>
             <Input
               value={key}
               disabled={!isDraft}
               className="font-mono text-[13px]"
               onChange={(e) => {
-                setKeyTouched(true)
-                setKey(e.target.value)
+                setKeyTouched(true);
+                setKey(e.target.value);
               }}
             />
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {isDraft
-                ? t('typeBuilder.keyHelpDraft', { key: key || '…' })
-                : t('typeBuilder.keyHelpPinned', { key })}
+                ? t("typeBuilder.keyHelpDraft", { key: key || "…" })
+                : t("typeBuilder.keyHelpPinned", { key })}
             </p>
           </div>
           <div className={field}>
-            <Label>{t('typeBuilder.iconLabel')}</Label>
+            <Label>{t("typeBuilder.iconLabel")}</Label>
             <IconPicker value={iconKey} onChange={setIconKey} />
           </div>
-          <div className={cn(field, 'sm:col-span-2')}>
-            <Label>{tc('labels.description')}</Label>
+          <div className={cn(field, "sm:col-span-2")}>
+            <Label>{tc("labels.description")}</Label>
             <Textarea
               value={description}
               rows={2}
-              placeholder={t('typeBuilder.descriptionPlaceholder')}
+              placeholder={t("typeBuilder.descriptionPlaceholder")}
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
@@ -612,11 +662,11 @@ export function TypeBuilderDrawer({
                 onChange={(e) => setShowInNav(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
               />
-              {t('typeBuilder.showInNav')}
+              {t("typeBuilder.showInNav")}
             </label>
             {showInNav ? (
               <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                {t('typeBuilder.navOrder')}
+                {t("typeBuilder.navOrder")}
                 <Input
                   type="number"
                   value={String(sortOrder)}
@@ -627,10 +677,10 @@ export function TypeBuilderDrawer({
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <Label>{t('typeBuilder.audienceLabel')}</Label>
+            <Label>{t("typeBuilder.audienceLabel")}</Label>
             <div className="flex flex-wrap gap-1.5">
               {roles.map((r) => {
-                const on = allowedRoles.includes(r.key)
+                const on = allowedRoles.includes(r.key);
                 return (
                   <button
                     key={r.key}
@@ -641,21 +691,21 @@ export function TypeBuilderDrawer({
                       setAllowedRoles((rs) => (on ? rs.filter((x) => x !== r.key) : [...rs, r.key]))
                     }
                     className={cn(
-                      'rounded-md border px-2.5 py-1 text-sm transition-colors',
+                      "rounded-md border px-2.5 py-1 text-sm transition-colors",
                       on
-                        ? 'border-teal-300 bg-teal-50 font-medium text-teal-800 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600',
+                        ? "border-teal-300 bg-teal-50 font-medium text-teal-800 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600",
                     )}
                   >
                     {r.name}
                   </button>
-                )
+                );
               })}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {allowedRoles.length === 0
-                ? t('typeBuilder.audienceOpen')
-                : t('typeBuilder.audienceRestricted')}
+                ? t("typeBuilder.audienceOpen")
+                : t("typeBuilder.audienceRestricted")}
             </p>
           </div>
         </div>
@@ -663,19 +713,19 @@ export function TypeBuilderDrawer({
         {/* -- Sections -------------------------------------------------------- */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label>{t('typeBuilder.sectionsLabel')}</Label>
+            <Label>{t("typeBuilder.sectionsLabel")}</Label>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => addSection(false)}>
-                <Plus size={14} /> {t('typeBuilder.addSection')}
+                <Plus size={14} /> {t("typeBuilder.addSection")}
               </Button>
               <Button variant="outline" size="sm" onClick={() => addSection(true)}>
-                <ListPlus size={14} /> {t('typeBuilder.addLineList')}
+                <ListPlus size={14} /> {t("typeBuilder.addLineList")}
               </Button>
             </div>
           </div>
           {sections.length === 0 ? (
             <p className="rounded-md border border-dashed border-slate-200 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              {t('typeBuilder.noSections')}
+              {t("typeBuilder.noSections")}
             </p>
           ) : (
             <div className="space-y-3">
@@ -702,7 +752,7 @@ export function TypeBuilderDrawer({
         </div>
       </div>
     </UrlDrawer>
-  )
+  );
 }
 
 // --- Section card -------------------------------------------------------------
@@ -722,35 +772,35 @@ function SectionCard({
   onMoveField,
   onRemoveField,
 }: {
-  section: FormSection
-  index: number
-  count: number
-  sections: FormSection[]
-  expanded: string | null
-  setExpanded: (v: string | null | ((cur: string | null) => string | null)) => void
-  onSectionChange: (patch: Partial<FormSection>) => void
-  onMoveSection: (dir: -1 | 1) => void
-  onRemoveSection: () => void
-  onAddField: (t: FieldType) => void
-  onFieldChange: (fieldId: string, patch: Partial<FormField>) => void
-  onMoveField: (index: number, dir: -1 | 1) => void
-  onRemoveField: (f: FormField) => void
+  section: FormSection;
+  index: number;
+  count: number;
+  sections: FormSection[];
+  expanded: string | null;
+  setExpanded: (v: string | null | ((cur: string | null) => string | null)) => void;
+  onSectionChange: (patch: Partial<FormSection>) => void;
+  onMoveSection: (dir: -1 | 1) => void;
+  onRemoveSection: () => void;
+  onAddField: (t: FieldType) => void;
+  onFieldChange: (fieldId: string, patch: Partial<FormField>) => void;
+  onMoveField: (index: number, dir: -1 | 1) => void;
+  onRemoveField: (f: FormField) => void;
 }) {
-  const t = useTranslations('records')
-  const repeating = Boolean(s.repeating)
-  const num = (v: unknown) => (typeof v === 'number' ? String(v) : '')
+  const t = useTranslations("records");
+  const repeating = Boolean(s.repeating);
+  const num = (v: unknown) => (typeof v === "number" ? String(v) : "");
   const parseRows = (str: string) => {
-    const n = Math.trunc(Number(str))
-    return str.trim() !== '' && Number.isFinite(n) && n >= 0 ? n : undefined
-  }
+    const n = Math.trunc(Number(str));
+    return str.trim() !== "" && Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
 
   return (
     <div
       className={cn(
-        'rounded-lg border p-3',
+        "rounded-lg border p-3",
         repeating
-          ? 'border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/50 dark:bg-indigo-950/20'
-          : 'border-slate-200 dark:border-slate-800',
+          ? "border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/50 dark:bg-indigo-950/20"
+          : "border-slate-200 dark:border-slate-800",
       )}
     >
       <div className="flex items-center gap-2">
@@ -758,21 +808,41 @@ function SectionCard({
           <Rows3 size={15} className="shrink-0 text-indigo-500 dark:text-indigo-400" />
         ) : null}
         <Input
-          value={s.title ?? ''}
-          placeholder={t('typeBuilder.sectionTitlePlaceholder')}
+          value={s.title ?? ""}
+          placeholder={t("typeBuilder.sectionTitlePlaceholder")}
           className="h-8 flex-1 font-medium"
           onChange={(e) => onSectionChange({ title: e.target.value || undefined })}
         />
-        <Badge variant={repeating ? 'secondary' : 'outline'}>
-          {repeating ? t('typeBuilder.lineListBadge') : t('typeBuilder.headerBadge')}
+        <Badge variant={repeating ? "secondary" : "outline"}>
+          {repeating ? t("typeBuilder.lineListBadge") : t("typeBuilder.headerBadge")}
         </Badge>
-        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.moveUp')} disabled={index === 0} onClick={() => onMoveSection(-1)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t("typeBuilder.moveUp")}
+          disabled={index === 0}
+          onClick={() => onMoveSection(-1)}
+        >
           <ArrowUp size={14} />
         </Button>
-        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.moveDown')} disabled={index === count - 1} onClick={() => onMoveSection(1)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t("typeBuilder.moveDown")}
+          disabled={index === count - 1}
+          onClick={() => onMoveSection(1)}
+        >
           <ArrowDown size={14} />
         </Button>
-        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.removeSection')} onClick={onRemoveSection}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t("typeBuilder.removeSection")}
+          onClick={onRemoveSection}
+        >
           <Trash2 size={14} />
         </Button>
       </div>
@@ -780,7 +850,7 @@ function SectionCard({
       {repeating ? (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            {t('typeBuilder.minRows')}
+            {t("typeBuilder.minRows")}
             <Input
               inputMode="numeric"
               value={num(s.minRows)}
@@ -789,7 +859,7 @@ function SectionCard({
             />
           </label>
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-            {t('typeBuilder.maxRows')}
+            {t("typeBuilder.maxRows")}
             <Input
               inputMode="numeric"
               value={num(s.maxRows)}
@@ -803,13 +873,13 @@ function SectionCard({
       <div className="mt-3 space-y-1.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-            {repeating ? t('typeBuilder.columnsLabel') : t('typeBuilder.fieldsLabel')}
+            {repeating ? t("typeBuilder.columnsLabel") : t("typeBuilder.fieldsLabel")}
           </span>
           <AddFieldButton onAdd={onAddField} />
         </div>
         {s.fields.length === 0 ? (
           <p className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            {repeating ? t('typeBuilder.noColumns') : t('typeBuilder.noFields')}
+            {repeating ? t("typeBuilder.noColumns") : t("typeBuilder.noFields")}
           </p>
         ) : (
           <div className="space-y-1.5">
@@ -834,13 +904,13 @@ function SectionCard({
         )}
       </div>
     </div>
-  )
+  );
 }
 
 // --- Icon picker ---------------------------------------------------------------
 
 function IconPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(false);
   return (
     <Popover
       open={open}
@@ -866,14 +936,14 @@ function IconPicker({ value, onChange }: { value: string; onChange: (v: string) 
             type="button"
             title={k}
             onClick={() => {
-              onChange(k)
-              setOpen(false)
+              onChange(k);
+              setOpen(false);
             }}
             className={cn(
-              'flex h-9 items-center justify-center rounded transition-colors',
+              "flex h-9 items-center justify-center rounded transition-colors",
               k === value
-                ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-300'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                ? "bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-300"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
             )}
           >
             <NavIcon iconKey={k} size={16} />
@@ -881,14 +951,14 @@ function IconPicker({ value, onChange }: { value: string; onChange: (v: string) 
         ))}
       </div>
     </Popover>
-  )
+  );
 }
 
 // --- Add-field palette ------------------------------------------------------------
 
 export function AddFieldButton({ onAdd }: { onAdd: (t: FieldType) => void }) {
-  const t = useTranslations('records')
-  const [open, setOpen] = useState(false)
+  const t = useTranslations("records");
+  const [open, setOpen] = useState(false);
   return (
     <Popover
       open={open}
@@ -897,7 +967,7 @@ export function AddFieldButton({ onAdd }: { onAdd: (t: FieldType) => void }) {
       className="w-72 p-1"
       trigger={
         <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
-          <Plus size={14} /> {t('typeBuilder.addField')}
+          <Plus size={14} /> {t("typeBuilder.addField")}
         </Button>
       }
     >
@@ -907,8 +977,8 @@ export function AddFieldButton({ onAdd }: { onAdd: (t: FieldType) => void }) {
             key={fieldType}
             type="button"
             onClick={() => {
-              onAdd(fieldType)
-              setOpen(false)
+              onAdd(fieldType);
+              setOpen(false);
             }}
             className="flex w-full flex-col items-start rounded px-2 py-1.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
           >
@@ -922,7 +992,7 @@ export function AddFieldButton({ onAdd }: { onAdd: (t: FieldType) => void }) {
         ))}
       </div>
     </Popover>
-  )
+  );
 }
 
 // --- Field row + config panel --------------------------------------------------------
@@ -939,18 +1009,18 @@ export function FieldRow({
   onMove,
   onRemove,
 }: {
-  field: FormField
-  index: number
-  count: number
-  sections: FormSection[]
-  ownerSectionId: string
-  expanded: boolean
-  onToggle: () => void
-  onChange: (patch: Partial<FormField>) => void
-  onMove: (dir: -1 | 1) => void
-  onRemove: () => void
+  field: FormField;
+  index: number;
+  count: number;
+  sections: FormSection[];
+  ownerSectionId: string;
+  expanded: boolean;
+  onToggle: () => void;
+  onChange: (patch: Partial<FormField>) => void;
+  onMove: (dir: -1 | 1) => void;
+  onRemove: () => void;
 }) {
-  const t = useTranslations('records')
+  const t = useTranslations("records");
   return (
     <div className="rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center gap-2 px-2.5 py-2">
@@ -962,28 +1032,43 @@ export function FieldRow({
         >
           <ChevronDown
             size={14}
-            className={cn('shrink-0 text-slate-400 transition-transform', expanded && 'rotate-180')}
+            className={cn("shrink-0 text-slate-400 transition-transform", expanded && "rotate-180")}
           />
           <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
             {f.label}
-            {f.required || f.validation?.required ? <span className="ml-0.5 text-red-500">*</span> : null}
+            {f.required || f.validation?.required ? (
+              <span className="ml-0.5 text-red-500">*</span>
+            ) : null}
           </span>
           <Badge variant="outline">{t(`fieldTypes.${f.type}.label`)}</Badge>
         </button>
-        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.moveUp')} disabled={index === 0} onClick={() => onMove(-1)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t("typeBuilder.moveUp")}
+          disabled={index === 0}
+          onClick={() => onMove(-1)}
+        >
           <ArrowUp size={14} />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={t('typeBuilder.moveDown')}
+          aria-label={t("typeBuilder.moveDown")}
           disabled={index === count - 1}
           onClick={() => onMove(1)}
         >
           <ArrowDown size={14} />
         </Button>
-        <Button type="button" variant="ghost" size="icon" aria-label={t('typeBuilder.removeField')} onClick={onRemove}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t("typeBuilder.removeField")}
+          onClick={onRemove}
+        >
           <Trash2 size={14} />
         </Button>
       </div>
@@ -991,26 +1076,26 @@ export function FieldRow({
         <div className="space-y-3 border-t border-slate-100 px-3 py-3 dark:border-slate-800">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className={field}>
-              <Label>{t('typeBuilder.fieldLabel')}</Label>
+              <Label>{t("typeBuilder.fieldLabel")}</Label>
               <Input value={f.label} onChange={(e) => onChange({ label: e.target.value })} />
             </div>
             <div className={field}>
-              <Label>{t('typeBuilder.fieldId')}</Label>
+              <Label>{t("typeBuilder.fieldId")}</Label>
               <Input value={f.id} disabled className="font-mono text-[13px]" />
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {t('typeBuilder.fieldIdHelp')}
+                {t("typeBuilder.fieldIdHelp")}
               </p>
             </div>
-            <div className={cn(field, 'sm:col-span-2')}>
-              <Label>{t('typeBuilder.helpText')}</Label>
+            <div className={cn(field, "sm:col-span-2")}>
+              <Label>{t("typeBuilder.helpText")}</Label>
               <Input
-                value={f.helpText ?? ''}
-                placeholder={t('typeBuilder.helpTextPlaceholder')}
+                value={f.helpText ?? ""}
+                placeholder={t("typeBuilder.helpTextPlaceholder")}
                 onChange={(e) => onChange({ helpText: e.target.value || undefined })}
               />
             </div>
           </div>
-          {f.type !== 'formula' ? (
+          {f.type !== "formula" ? (
             <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
               <input
                 type="checkbox"
@@ -1018,7 +1103,7 @@ export function FieldRow({
                 onChange={(e) => onChange({ required: e.target.checked || undefined })}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
               />
-              {t('typeBuilder.requiredToActivate')}
+              {t("typeBuilder.requiredToActivate")}
             </label>
           ) : null}
           <TypeSpecificConfig
@@ -1030,7 +1115,7 @@ export function FieldRow({
         </div>
       ) : null}
     </div>
-  )
+  );
 }
 
 function TypeSpecificConfig({
@@ -1039,35 +1124,35 @@ function TypeSpecificConfig({
   ownerSectionId,
   onChange,
 }: {
-  field: FormField
-  sections: FormSection[]
-  ownerSectionId: string
-  onChange: (patch: Partial<FormField>) => void
+  field: FormField;
+  sections: FormSection[];
+  ownerSectionId: string;
+  onChange: (patch: Partial<FormField>) => void;
 }) {
-  const t = useTranslations('records.typeBuilder')
+  const t = useTranslations("records.typeBuilder");
   const setConfig = (patch: Record<string, unknown>) => {
-    const next = { ...(f.config ?? {}), ...patch }
-    for (const [k, v] of Object.entries(patch)) if (v === undefined) delete next[k]
-    onChange({ config: Object.keys(next).length > 0 ? next : undefined })
-  }
+    const next = { ...(f.config ?? {}), ...patch };
+    for (const [k, v] of Object.entries(patch)) if (v === undefined) delete next[k];
+    onChange({ config: Object.keys(next).length > 0 ? next : undefined });
+  };
 
   switch (f.type) {
-    case 'select':
-    case 'multi_select':
-    case 'radio':
-      return <ChoiceOptionsEditor field={f} onChange={onChange} />
-    case 'number':
-    case 'currency':
-    case 'percentage': {
-      const num = (v: unknown) => (typeof v === 'number' ? String(v) : '')
+    case "select":
+    case "multi_select":
+    case "radio":
+      return <ChoiceOptionsEditor field={f} onChange={onChange} />;
+    case "number":
+    case "currency":
+    case "percentage": {
+      const num = (v: unknown) => (typeof v === "number" ? String(v) : "");
       const parse = (s: string) => {
-        const n = Number(s)
-        return s.trim() !== '' && Number.isFinite(n) ? n : undefined
-      }
+        const n = Number(s);
+        return s.trim() !== "" && Number.isFinite(n) ? n : undefined;
+      };
       return (
         <div className="grid gap-3 sm:grid-cols-3">
           <div className={field}>
-            <Label>{t('minimum')}</Label>
+            <Label>{t("minimum")}</Label>
             <Input
               inputMode="decimal"
               defaultValue={num(f.config?.min)}
@@ -1075,65 +1160,65 @@ function TypeSpecificConfig({
             />
           </div>
           <div className={field}>
-            <Label>{t('maximum')}</Label>
+            <Label>{t("maximum")}</Label>
             <Input
               inputMode="decimal"
               defaultValue={num(f.config?.max)}
               onChange={(e) => setConfig({ max: parse(e.target.value) })}
             />
           </div>
-          {f.type === 'number' ? (
+          {f.type === "number" ? (
             <div className={field}>
-              <Label>{t('unit')}</Label>
+              <Label>{t("unit")}</Label>
               <Input
-                defaultValue={typeof f.config?.unit === 'string' ? f.config.unit : ''}
-                placeholder={t('unitPlaceholder')}
+                defaultValue={typeof f.config?.unit === "string" ? f.config.unit : ""}
+                placeholder={t("unitPlaceholder")}
                 onChange={(e) => setConfig({ unit: e.target.value || undefined })}
               />
             </div>
           ) : null}
         </div>
-      )
+      );
     }
-    case 'rating': {
+    case "rating": {
       const max =
-        typeof f.config?.max === 'number' && Number.isInteger(f.config.max) ? f.config.max : 5
+        typeof f.config?.max === "number" && Number.isInteger(f.config.max) ? f.config.max : 5;
       return (
-        <div className={cn(field, 'max-w-40')}>
-          <Label>{t('ratingScale')}</Label>
+        <div className={cn(field, "max-w-40")}>
+          <Label>{t("ratingScale")}</Label>
           <Input
             type="number"
             min={1}
             max={10}
             value={String(max)}
             onChange={(e) => {
-              const n = Math.trunc(Number(e.target.value))
-              setConfig({ max: Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 5 })
+              const n = Math.trunc(Number(e.target.value));
+              setConfig({ max: Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 5 });
             }}
           />
         </div>
-      )
+      );
     }
-    case 'party': {
-      const kind = typeof f.config?.partyKind === 'string' ? f.config.partyKind : 'any'
+    case "party": {
+      const kind = typeof f.config?.partyKind === "string" ? f.config.partyKind : "any";
       return (
-        <div className={cn(field, 'max-w-60')}>
-          <Label>{t('partyKind')}</Label>
+        <div className={cn(field, "max-w-60")}>
+          <Label>{t("partyKind")}</Label>
           <SearchSelect
             options={[
-              { value: 'any', label: t('partyAny') },
-              { value: 'customer', label: t('partyCustomers') },
-              { value: 'vendor', label: t('partyVendors') },
-              { value: 'employee', label: t('partyEmployees') },
+              { value: "any", label: t("partyAny") },
+              { value: "customer", label: t("partyCustomers") },
+              { value: "vendor", label: t("partyVendors") },
+              { value: "employee", label: t("partyEmployees") },
             ]}
             value={kind}
-            onChange={(v) => setConfig({ partyKind: v === 'any' ? undefined : v })}
-            ariaLabel={t('partyKind')}
+            onChange={(v) => setConfig({ partyKind: v === "any" ? undefined : v })}
+            ariaLabel={t("partyKind")}
           />
         </div>
-      )
+      );
     }
-    case 'formula':
+    case "formula":
       return (
         <FormulaBuilder
           field={f}
@@ -1142,9 +1227,9 @@ function TypeSpecificConfig({
           onChange={onChange}
           setConfig={setConfig}
         />
-      )
+      );
     default:
-      return null
+      return null;
   }
 }
 
@@ -1154,26 +1239,26 @@ function ChoiceOptionsEditor({
   field: f,
   onChange,
 }: {
-  field: FormField
-  onChange: (patch: Partial<FormField>) => void
+  field: FormField;
+  onChange: (patch: Partial<FormField>) => void;
 }) {
-  const t = useTranslations('records.typeBuilder')
-  const options = f.validation?.options ?? []
+  const t = useTranslations("records.typeBuilder");
+  const options = f.validation?.options ?? [];
   const setOptions = (next: { value: string; label: string }[]) =>
-    onChange({ validation: { ...(f.validation ?? {}), options: next } })
+    onChange({ validation: { ...(f.validation ?? {}), options: next } });
 
   return (
     <div className="space-y-1.5">
-      <Label>{t('options')}</Label>
+      <Label>{t("options")}</Label>
       {options.map((o, i) => (
         <div key={i} className="flex items-center gap-2">
           <Input
             value={o.label}
-            placeholder={t('optionPlaceholder', { n: i + 1 })}
+            placeholder={t("optionPlaceholder", { n: i + 1 })}
             onChange={(e) => {
-              const next = [...options]
-              next[i] = { ...o, label: e.target.value }
-              setOptions(next)
+              const next = [...options];
+              next[i] = { ...o, label: e.target.value };
+              setOptions(next);
             }}
           />
           <span className="w-36 shrink-0 truncate font-mono text-xs text-slate-400 dark:text-slate-500">
@@ -1183,7 +1268,7 @@ function ChoiceOptionsEditor({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label={t('removeOption')}
+            aria-label={t("removeOption")}
             disabled={options.length === 1}
             onClick={() => setOptions(options.filter((_, j) => j !== i))}
           >
@@ -1196,19 +1281,17 @@ function ChoiceOptionsEditor({
         variant="outline"
         size="sm"
         onClick={() => {
-          const taken = new Set(options.map((o) => o.value))
-          let value = `option_${options.length + 1}`
-          for (let n = options.length + 2; taken.has(value); n++) value = `option_${n}`
-          setOptions([...options, { value, label: '' }])
+          const taken = new Set(options.map((o) => o.value));
+          let value = `option_${options.length + 1}`;
+          for (let n = options.length + 2; taken.has(value); n++) value = `option_${n}`;
+          setOptions([...options, { value, label: "" }]);
         }}
       >
-        <Plus size={14} /> {t('addOption')}
+        <Plus size={14} /> {t("addOption")}
       </Button>
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        {t('optionsHelp')}
-      </p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">{t("optionsHelp")}</p>
     </div>
-  )
+  );
 }
 
 // --- Formula builder ---------------------------------------------------------------
@@ -1220,73 +1303,85 @@ function ChoiceOptionsEditor({
 // tree (the evaluator and validator support it fully); a tree this builder
 // can't decompose is rebuilt from scratch on the first edit.
 
-type SimpleOp = 'sum' | 'product' | 'subtract' | 'divide' | 'min' | 'max' | 'concat'
-type RollupAgg = 'sum' | 'count' | 'avg' | 'min' | 'max'
+type SimpleOp = "sum" | "product" | "subtract" | "divide" | "min" | "max" | "concat";
+type RollupAgg = "sum" | "count" | "avg" | "min" | "max";
 type Operand =
-  | { kind: 'field'; fieldKey: string }
-  | { kind: 'literal'; value: string }
-  | { kind: 'rollup'; agg: RollupAgg; sectionKey: string; rowFieldKey: string }
+  | { kind: "field"; fieldKey: string }
+  | { kind: "literal"; value: string }
+  | { kind: "rollup"; agg: RollupAgg; sectionKey: string; rowFieldKey: string };
 
 // Operation values only — labels come from records.typeBuilder.formula.ops.<value>.
-const OP_VALUES: SimpleOp[] = ['sum', 'subtract', 'product', 'divide', 'min', 'max', 'concat']
-const NUMERIC_ROW_TYPES = ['number', 'currency', 'percentage', 'rating', 'formula']
+const OP_VALUES: SimpleOp[] = ["sum", "subtract", "product", "divide", "min", "max", "concat"];
+const NUMERIC_ROW_TYPES = ["number", "currency", "percentage", "rating", "formula"];
 
-function rollupToExpr(o: Extract<Operand, { kind: 'rollup' }>): FormulaExpression {
-  return o.agg === 'count'
-    ? { kind: 'count_section', sectionKey: o.sectionKey }
-    : { kind: `${o.agg}_section` as const, sectionKey: o.sectionKey, rowFieldKey: o.rowFieldKey }
+function rollupToExpr(o: Extract<Operand, { kind: "rollup" }>): FormulaExpression {
+  return o.agg === "count"
+    ? { kind: "count_section", sectionKey: o.sectionKey }
+    : { kind: `${o.agg}_section` as const, sectionKey: o.sectionKey, rowFieldKey: o.rowFieldKey };
 }
 
-function decompose(expr: FormulaExpression | undefined): { op: SimpleOp; operands: Operand[] } | null {
-  if (!expr) return { op: 'sum', operands: [] }
+function decompose(
+  expr: FormulaExpression | undefined,
+): { op: SimpleOp; operands: Operand[] } | null {
+  if (!expr) return { op: "sum", operands: [] };
   const toOperand = (e: FormulaExpression): Operand | null => {
-    if (e.kind === 'field_ref') return { kind: 'field', fieldKey: e.fieldKey }
-    if (e.kind === 'literal') return { kind: 'literal', value: String(e.value) }
-    if (e.kind === 'count_section') return { kind: 'rollup', agg: 'count', sectionKey: e.sectionKey, rowFieldKey: '' }
+    if (e.kind === "field_ref") return { kind: "field", fieldKey: e.fieldKey };
+    if (e.kind === "literal") return { kind: "literal", value: String(e.value) };
+    if (e.kind === "count_section")
+      return { kind: "rollup", agg: "count", sectionKey: e.sectionKey, rowFieldKey: "" };
     if (
-      e.kind === 'sum_section' ||
-      e.kind === 'avg_section' ||
-      e.kind === 'min_section' ||
-      e.kind === 'max_section'
+      e.kind === "sum_section" ||
+      e.kind === "avg_section" ||
+      e.kind === "min_section" ||
+      e.kind === "max_section"
     ) {
-      const agg = e.kind.replace('_section', '') as RollupAgg
-      return { kind: 'rollup', agg, sectionKey: e.sectionKey, rowFieldKey: e.rowFieldKey }
+      const agg = e.kind.replace("_section", "") as RollupAgg;
+      return { kind: "rollup", agg, sectionKey: e.sectionKey, rowFieldKey: e.rowFieldKey };
     }
-    return null
+    return null;
+  };
+  if (
+    expr.kind === "sum" ||
+    expr.kind === "product" ||
+    expr.kind === "min" ||
+    expr.kind === "max" ||
+    expr.kind === "concat"
+  ) {
+    const operands = expr.of.map(toOperand);
+    if (operands.some((o) => o === null)) return null;
+    return { op: expr.kind, operands: operands as Operand[] };
   }
-  if (expr.kind === 'sum' || expr.kind === 'product' || expr.kind === 'min' || expr.kind === 'max' || expr.kind === 'concat') {
-    const operands = expr.of.map(toOperand)
-    if (operands.some((o) => o === null)) return null
-    return { op: expr.kind, operands: operands as Operand[] }
+  if (expr.kind === "subtract" || expr.kind === "divide") {
+    const left = toOperand(expr.left);
+    const right = toOperand(expr.right);
+    if (!left || !right) return null;
+    return { op: expr.kind, operands: [left, right] };
   }
-  if (expr.kind === 'subtract' || expr.kind === 'divide') {
-    const left = toOperand(expr.left)
-    const right = toOperand(expr.right)
-    if (!left || !right) return null
-    return { op: expr.kind, operands: [left, right] }
-  }
-  return null
+  return null;
 }
 
 function compose(op: SimpleOp, operands: Operand[], numeric: boolean): FormulaExpression {
   const toExpr = (o: Operand): FormulaExpression =>
-    o.kind === 'field'
-      ? { kind: 'field_ref', fieldKey: o.fieldKey }
-      : o.kind === 'rollup'
+    o.kind === "field"
+      ? { kind: "field_ref", fieldKey: o.fieldKey }
+      : o.kind === "rollup"
         ? rollupToExpr(o)
         : {
-            kind: 'literal',
-            value: numeric && o.value.trim() !== '' && Number.isFinite(Number(o.value)) ? Number(o.value) : o.value,
-          }
-  if (op === 'subtract' || op === 'divide') {
-    const [left, right] = operands
+            kind: "literal",
+            value:
+              numeric && o.value.trim() !== "" && Number.isFinite(Number(o.value))
+                ? Number(o.value)
+                : o.value,
+          };
+  if (op === "subtract" || op === "divide") {
+    const [left, right] = operands;
     return {
       kind: op,
-      left: left ? toExpr(left) : { kind: 'literal', value: 0 },
-      right: right ? toExpr(right) : { kind: 'literal', value: 0 },
-    }
+      left: left ? toExpr(left) : { kind: "literal", value: 0 },
+      right: right ? toExpr(right) : { kind: "literal", value: 0 },
+    };
   }
-  return { kind: op, of: operands.map(toExpr) }
+  return { kind: op, of: operands.map(toExpr) };
 }
 
 function FormulaBuilder({
@@ -1296,36 +1391,36 @@ function FormulaBuilder({
   onChange,
   setConfig,
 }: {
-  field: FormField
-  sections: FormSection[]
-  ownerSectionId: string
-  onChange: (patch: Partial<FormField>) => void
-  setConfig: (patch: Record<string, unknown>) => void
+  field: FormField;
+  sections: FormSection[];
+  ownerSectionId: string;
+  onChange: (patch: Partial<FormField>) => void;
+  setConfig: (patch: Record<string, unknown>) => void;
 }) {
-  const t = useTranslations('records.typeBuilder.formula')
-  const decomposed = useMemo(() => decompose(f.formula), [f.formula])
-  const [advancedReplaced, setAdvancedReplaced] = useState(false)
-  const state = decomposed ?? { op: 'sum' as SimpleOp, operands: [] }
-  const format = typeof f.config?.format === 'string' ? f.config.format : 'number'
+  const t = useTranslations("records.typeBuilder.formula");
+  const decomposed = useMemo(() => decompose(f.formula), [f.formula]);
+  const [advancedReplaced, setAdvancedReplaced] = useState(false);
+  const state = decomposed ?? { op: "sum" as SimpleOp, operands: [] };
+  const format = typeof f.config?.format === "string" ? f.config.format : "number";
 
-  const ownerSection = sections.find((s) => s.id === ownerSectionId)
-  const ownerRepeating = Boolean(ownerSection?.repeating)
+  const ownerSection = sections.find((s) => s.id === ownerSectionId);
+  const ownerRepeating = Boolean(ownerSection?.repeating);
 
   // Field refs: header value fields, plus (for a row formula) its own section's
   // sibling row fields. Join-text can reference any field; arithmetic sticks to
   // numeric-valued fields. Self-reference is excluded (lint rejects it too).
   const referencable = useMemo(() => {
-    const out: FormField[] = []
+    const out: FormField[] = [];
     for (const s of sections) {
-      const inScope = !s.repeating || s.id === ownerSectionId
-      if (!inScope) continue
+      const inScope = !s.repeating || s.id === ownerSectionId;
+      if (!inScope) continue;
       for (const x of s.fields) {
-        if (x.id === f.id) continue
-        if (state.op === 'concat' || NUMERIC_ROW_TYPES.includes(x.type)) out.push(x)
+        if (x.id === f.id) continue;
+        if (state.op === "concat" || NUMERIC_ROW_TYPES.includes(x.type)) out.push(x);
       }
     }
-    return out
-  }, [sections, ownerSectionId, f.id, state.op])
+    return out;
+  }, [sections, ownerSectionId, f.id, state.op]);
 
   // Rollups aggregate a repeating line list. Only offered on a HEADER formula
   // (a row formula rolling up its own list would be circular); the linter still
@@ -1333,74 +1428,78 @@ function FormulaBuilder({
   const rollupSections = useMemo(
     () => (ownerRepeating ? [] : sections.filter((s) => s.repeating)),
     [sections, ownerRepeating],
-  )
-  const rollupAvailable = rollupSections.length > 0 && state.op !== 'concat'
+  );
+  const rollupAvailable = rollupSections.length > 0 && state.op !== "concat";
 
   const operandKindOptions = useMemo(() => {
     const opts = [
-      { value: 'field', label: t('operandField') },
-      { value: 'literal', label: t('operandConstant') },
-    ]
-    if (rollupAvailable) opts.push({ value: 'rollup', label: t('operandRollup') })
-    return opts
-  }, [rollupAvailable, t])
+      { value: "field", label: t("operandField") },
+      { value: "literal", label: t("operandConstant") },
+    ];
+    if (rollupAvailable) opts.push({ value: "rollup", label: t("operandRollup") });
+    return opts;
+  }, [rollupAvailable, t]);
 
   const commit = (op: SimpleOp, operands: Operand[]) => {
     const fixed =
-      op === 'subtract' || op === 'divide'
+      op === "subtract" || op === "divide"
         ? [
-            operands[0] ?? { kind: 'literal' as const, value: '0' },
-            operands[1] ?? { kind: 'literal' as const, value: '0' },
+            operands[0] ?? { kind: "literal" as const, value: "0" },
+            operands[1] ?? { kind: "literal" as const, value: "0" },
           ]
-        : operands
-    onChange({ formula: compose(op, fixed, op !== 'concat') })
-  }
+        : operands;
+    onChange({ formula: compose(op, fixed, op !== "concat") });
+  };
 
   const newOperand = (): Operand =>
-    referencable[0] ? { kind: 'field', fieldKey: referencable[0].id } : { kind: 'literal', value: '' }
+    referencable[0]
+      ? { kind: "field", fieldKey: referencable[0].id }
+      : { kind: "literal", value: "" };
 
   return (
     <div className="space-y-2 rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/30">
       {!decomposed && !advancedReplaced ? (
-        <p className="text-xs text-amber-700 dark:text-amber-300">{t('advancedWarning')}</p>
+        <p className="text-xs text-amber-700 dark:text-amber-300">{t("advancedWarning")}</p>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className={field}>
-          <Label>{t('operation')}</Label>
+          <Label>{t("operation")}</Label>
           <SearchSelect
             options={OP_VALUES.map((op) => ({ value: op, label: t(`ops.${op}`) }))}
             value={state.op}
             onChange={(v) => {
-              setAdvancedReplaced(true)
-              commit(v as SimpleOp, state.operands)
+              setAdvancedReplaced(true);
+              commit(v as SimpleOp, state.operands);
             }}
-            ariaLabel={t('operationAria')}
+            ariaLabel={t("operationAria")}
           />
         </div>
         <div className={field}>
-          <Label>{t('displayAs')}</Label>
+          <Label>{t("displayAs")}</Label>
           <SearchSelect
             options={[
-              { value: 'number', label: t('formatNumber') },
-              { value: 'currency', label: t('formatCurrency') },
-              { value: 'percentage', label: t('formatPercentage') },
-              { value: 'text', label: t('formatText') },
+              { value: "number", label: t("formatNumber") },
+              { value: "currency", label: t("formatCurrency") },
+              { value: "percentage", label: t("formatPercentage") },
+              { value: "text", label: t("formatText") },
             ]}
             value={format}
             onChange={(v) => setConfig({ format: v })}
-            ariaLabel={t('formatAria')}
+            ariaLabel={t("formatAria")}
           />
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label>{state.op === 'subtract' || state.op === 'divide' ? t('leftRight') : t('operands')}</Label>
+        <Label>
+          {state.op === "subtract" || state.op === "divide" ? t("leftRight") : t("operands")}
+        </Label>
         {state.operands.map((o, i) => {
           const update = (next: Operand) => {
-            const operands = [...state.operands]
-            operands[i] = next
-            setAdvancedReplaced(true)
-            commit(state.op, operands)
-          }
+            const operands = [...state.operands];
+            operands[i] = next;
+            setAdvancedReplaced(true);
+            commit(state.op, operands);
+          };
           return (
             <div key={i} className="flex flex-wrap items-center gap-2">
               <SearchSelect
@@ -1408,72 +1507,75 @@ function FormulaBuilder({
                 options={operandKindOptions}
                 value={o.kind}
                 onChange={(v) => {
-                  if (v === 'field') update({ kind: 'field', fieldKey: referencable[0]?.id ?? '' })
-                  else if (v === 'rollup')
+                  if (v === "field") update({ kind: "field", fieldKey: referencable[0]?.id ?? "" });
+                  else if (v === "rollup")
                     update({
-                      kind: 'rollup',
-                      agg: 'sum',
-                      sectionKey: rollupSections[0]?.id ?? '',
-                      rowFieldKey: '',
-                    })
-                  else update({ kind: 'literal', value: '' })
+                      kind: "rollup",
+                      agg: "sum",
+                      sectionKey: rollupSections[0]?.id ?? "",
+                      rowFieldKey: "",
+                    });
+                  else update({ kind: "literal", value: "" });
                 }}
-                ariaLabel={t('operandKindAria')}
+                ariaLabel={t("operandKindAria")}
               />
-              {o.kind === 'field' ? (
+              {o.kind === "field" ? (
                 <SearchSelect
                   className="min-w-40 flex-1"
                   options={referencable.map((x) => ({ value: x.id, label: x.label }))}
                   value={o.fieldKey}
-                  onChange={(v) => update({ kind: 'field', fieldKey: v })}
-                  placeholder={t('pickFieldPlaceholder')}
-                  ariaLabel={t('operandFieldAria')}
+                  onChange={(v) => update({ kind: "field", fieldKey: v })}
+                  placeholder={t("pickFieldPlaceholder")}
+                  ariaLabel={t("operandFieldAria")}
                 />
-              ) : o.kind === 'rollup' ? (
+              ) : o.kind === "rollup" ? (
                 <RollupOperand operand={o} rollupSections={rollupSections} onChange={update} />
               ) : (
                 <Input
                   className="min-w-40 flex-1"
-                  inputMode={state.op === 'concat' ? 'text' : 'decimal'}
+                  inputMode={state.op === "concat" ? "text" : "decimal"}
                   value={o.value}
-                  placeholder={state.op === 'concat' ? t('textPlaceholder') : '0'}
-                  onChange={(e) => update({ kind: 'literal', value: e.target.value })}
+                  placeholder={state.op === "concat" ? t("textPlaceholder") : "0"}
+                  onChange={(e) => update({ kind: "literal", value: e.target.value })}
                 />
               )}
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={t('removeOperand')}
+                aria-label={t("removeOperand")}
                 onClick={() => {
-                  setAdvancedReplaced(true)
-                  commit(state.op, state.operands.filter((_, j) => j !== i))
+                  setAdvancedReplaced(true);
+                  commit(
+                    state.op,
+                    state.operands.filter((_, j) => j !== i),
+                  );
                 }}
               >
                 <Trash2 size={14} />
               </Button>
             </div>
-          )
+          );
         })}
-        {(state.op === 'subtract' || state.op === 'divide') && state.operands.length >= 2 ? null : (
+        {(state.op === "subtract" || state.op === "divide") && state.operands.length >= 2 ? null : (
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => {
-              setAdvancedReplaced(true)
-              commit(state.op, [...state.operands, newOperand()])
+              setAdvancedReplaced(true);
+              commit(state.op, [...state.operands, newOperand()]);
             }}
           >
-            <Plus size={14} /> {t('addOperand')}
+            <Plus size={14} /> {t("addOperand")}
           </Button>
         )}
         {state.operands.length === 0 ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('operandsHelp')}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("operandsHelp")}</p>
         ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 /** Aggregate + line-list + column pickers for a single rollup operand. */
@@ -1482,46 +1584,46 @@ function RollupOperand({
   rollupSections,
   onChange,
 }: {
-  operand: Extract<Operand, { kind: 'rollup' }>
-  rollupSections: FormSection[]
-  onChange: (next: Operand) => void
+  operand: Extract<Operand, { kind: "rollup" }>;
+  rollupSections: FormSection[];
+  onChange: (next: Operand) => void;
 }) {
-  const t = useTranslations('records.typeBuilder.formula')
-  const section = rollupSections.find((s) => s.id === o.sectionKey)
-  const columns = (section?.fields ?? []).filter((x) => NUMERIC_ROW_TYPES.includes(x.type))
+  const t = useTranslations("records.typeBuilder.formula");
+  const section = rollupSections.find((s) => s.id === o.sectionKey);
+  const columns = (section?.fields ?? []).filter((x) => NUMERIC_ROW_TYPES.includes(x.type));
   return (
     <div className="flex min-w-40 flex-1 flex-wrap items-center gap-2">
       <SearchSelect
         className="w-28 shrink-0"
         options={[
-          { value: 'sum', label: t('rollupSum') },
-          { value: 'count', label: t('rollupCount') },
-          { value: 'avg', label: t('rollupAvg') },
-          { value: 'min', label: t('rollupMin') },
-          { value: 'max', label: t('rollupMax') },
+          { value: "sum", label: t("rollupSum") },
+          { value: "count", label: t("rollupCount") },
+          { value: "avg", label: t("rollupAvg") },
+          { value: "min", label: t("rollupMin") },
+          { value: "max", label: t("rollupMax") },
         ]}
         value={o.agg}
         onChange={(v) => onChange({ ...o, agg: v as RollupAgg })}
-        ariaLabel={t('rollupAggAria')}
+        ariaLabel={t("rollupAggAria")}
       />
       <SearchSelect
         className="min-w-32 flex-1"
         options={rollupSections.map((s) => ({ value: s.id, label: s.title ?? s.id }))}
         value={o.sectionKey}
-        onChange={(v) => onChange({ ...o, sectionKey: v, rowFieldKey: '' })}
-        placeholder={t('rollupSectionPlaceholder')}
-        ariaLabel={t('rollupSectionAria')}
+        onChange={(v) => onChange({ ...o, sectionKey: v, rowFieldKey: "" })}
+        placeholder={t("rollupSectionPlaceholder")}
+        ariaLabel={t("rollupSectionAria")}
       />
-      {o.agg === 'count' ? null : (
+      {o.agg === "count" ? null : (
         <SearchSelect
           className="min-w-32 flex-1"
           options={columns.map((x) => ({ value: x.id, label: x.label }))}
           value={o.rowFieldKey}
           onChange={(v) => onChange({ ...o, rowFieldKey: v })}
-          placeholder={t('rollupColumnPlaceholder')}
-          ariaLabel={t('rollupColumnAria')}
+          placeholder={t("rollupColumnPlaceholder")}
+          ariaLabel={t("rollupColumnAria")}
         />
       )}
     </div>
-  )
+  );
 }

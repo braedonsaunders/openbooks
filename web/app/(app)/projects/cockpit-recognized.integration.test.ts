@@ -9,14 +9,11 @@ import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 // is_active AND posts_gl. After the primary book was deactivated the card
 // kept summing the dead book and disagreed with the run. The card now sums
 // the same shared active posting primary the run posts to.
-const { loadProjectCockpit } = (await import("./_cockpit-data.ts")) as typeof import(
-  "./_cockpit-data.ts"
-);
+const { loadProjectCockpit } =
+  (await import("./_cockpit-data.ts")) as typeof import("./_cockpit-data.ts");
 
 const { db, withOrgTransaction } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 const fixedPrice = BUILTIN_PROJECT_TYPES.find((t) => t.key === "fixed_price")!;
 
@@ -55,7 +52,9 @@ test("the cockpit sums the live primary book, never a deactivated one", async ()
       insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
       values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, 250, 'CAD', 250, '1'),
              (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.ap}, ${org.subsidiaryId}, -250, 'CAD', -250, '1')`);
-    await db.execute(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+    await db.execute(
+      sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`,
+    );
     await db.execute(sql`
       insert into recognition_schedules (id, org_id, obligation_id, book_id, total_amount)
       values (${scheduleId}, ${org.orgId}, ${obligationId}, ${org.bookId}, 1000)`);
@@ -71,12 +70,16 @@ test("the cockpit sums the live primary book, never a deactivated one", async ()
 
     // The project page loads the cockpit inside the transaction that holds the
     // project header lock; every cockpit read must join it rather than refuse.
-    const locked = (await withOrgTransaction(org.orgId, () => loadProjectCockpit(org.orgId, projectId)))!;
+    const locked = (await withOrgTransaction(org.orgId, () =>
+      loadProjectCockpit(org.orgId, projectId),
+    ))!;
     assert.equal(locked.financials.contractValue, live.financials.contractValue);
     assert.equal(locked.recognition?.recognized, "250.0000");
 
     // A project outside the caller scope reads as absent.
-    const hidden = await loadProjectCockpit(org.orgId, projectId, { allowedSubsidiaryIds: new Set([randomUUID()]) });
+    const hidden = await loadProjectCockpit(org.orgId, projectId, {
+      allowedSubsidiaryIds: new Set([randomUUID()]),
+    });
     assert.equal(hidden, null);
 
     // Deactivate the primary book: the run can no longer post there, so the

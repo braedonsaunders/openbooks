@@ -6,10 +6,7 @@ import {
   type FlowSubjectProfile,
 } from "@openbooks/forms-core";
 import { getFlowAdapter } from "./registry.ts";
-import {
-  scheduledTriggerCrons,
-  invalidScheduledTriggerCronReason,
-} from "./scheduled.ts";
+import { scheduledTriggerCrons, invalidScheduledTriggerCronReason } from "./scheduled.ts";
 import {
   BANK_ACCOUNT_ENGINE_MANAGED_RELEASE_STATUSES,
   BANK_ACCOUNT_SUBJECT_KIND,
@@ -33,9 +30,7 @@ export function lintFlowGraphForSubject(
   subjectKind: string,
   graph: unknown,
   profileOverride?: FlowSubjectProfile,
-):
-  | { ok: true; graph: AutomationGraph; errors: [] }
-  | { ok: false; errors: string[] } {
+): { ok: true; graph: AutomationGraph; errors: [] } | { ok: false; errors: string[] } {
   const adapter = getFlowAdapter(subjectKind);
   if (!adapter) return { ok: false, errors: [`unknown flow subject kind "${subjectKind}"`] };
 
@@ -79,17 +74,13 @@ export function lintFlowGraphForSubject(
         node.data.action.action === "change_status" &&
         engineManagedReleaseStatuses.has(node.data.action.to)
       ) {
-        const subjectLabel =
-          subjectKind === BANK_ACCOUNT_SUBJECT_KIND ? "bank-detail" : "document";
+        const subjectLabel = subjectKind === BANK_ACCOUNT_SUBJECT_KIND ? "bank-detail" : "document";
         errors.push(
           `node "${node.id}": change_status to "${node.data.action.to}" is not allowed — ` +
             `${subjectLabel} approval release is engine-enforced; remove this node`,
         );
       }
-      if (
-        node.data.kind === "trigger" &&
-        node.data.trigger.trigger === "before_post"
-      ) {
+      if (node.data.kind === "trigger" && node.data.trigger.trigger === "before_post") {
         const reachable = new Set<string>();
         const queue = [...(outgoing.get(node.id) ?? [])];
         while (queue.length > 0) {
@@ -99,8 +90,7 @@ export function lintFlowGraphForSubject(
           queue.push(...(outgoing.get(id) ?? []));
         }
         const gateNode = parsed.data.nodes.find(
-          (candidate) =>
-            reachable.has(candidate.id) && candidate.data.kind === "gate",
+          (candidate) => reachable.has(candidate.id) && candidate.data.kind === "gate",
         );
         if (gateNode) {
           errors.push(
@@ -120,19 +110,14 @@ export function lintFlowGraphForSubject(
   for (const node of parsed.data.nodes) {
     if (node.data.kind !== "trigger" || node.data.trigger.trigger !== "scheduled") continue;
     const trigger = node.data.trigger;
-    if (
-      (trigger.clockSchedule || subjectKind === "schedule_board") &&
-      !trigger.tz
-    )
+    if ((trigger.clockSchedule || subjectKind === "schedule_board") && !trigger.tz)
       errors.push(`node "${node.id}": choose an explicit timer timezone`);
     if (subjectKind === "schedule_board" && !trigger.select)
-      errors.push(
-        `node "${node.id}": schedule board delivery requires native record selection`,
-      );
+      errors.push(`node "${node.id}": schedule board delivery requires native record selection`);
     for (const cron of scheduledTriggerCrons(trigger)) {
       const reason = invalidScheduledTriggerCronReason(cron, trigger.tz);
       if (reason)
-      errors.push(`node "${node.id}": ${reason} — remove or fix this trigger before enabling`);
+        errors.push(`node "${node.id}": ${reason} — remove or fix this trigger before enabling`);
     }
   }
 

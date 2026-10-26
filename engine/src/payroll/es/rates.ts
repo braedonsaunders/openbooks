@@ -407,12 +407,12 @@ export interface EsEdition {
 }
 
 const CITATION_EARLY =
-  "AEAT ALGORITMO_2026.pdf (09-09-2026 SGTT), aplicable 1 de enero–9 de septiembre de 2026; "
-  + "Orden PJC/297/2026 (BOE-A-2026-7296, BOE 31-3-2026, efectos 1-1-2026)";
+  "AEAT ALGORITMO_2026.pdf (09-09-2026 SGTT), aplicable 1 de enero–9 de septiembre de 2026; " +
+  "Orden PJC/297/2026 (BOE-A-2026-7296, BOE 31-3-2026, efectos 1-1-2026)";
 const CITATION_SEPT =
-  "AEAT Algoritmo Retenciones-2026_10sept.pdf (10-09-2026 SGTT), aplicable desde el 10 de "
-  + "septiembre de 2026 (RD-Ley 23/2026, D.A. 57ª: La Palma); "
-  + "Orden PJC/297/2026 (BOE-A-2026-7296, BOE 31-3-2026, efectos 1-1-2026)";
+  "AEAT Algoritmo Retenciones-2026_10sept.pdf (10-09-2026 SGTT), aplicable desde el 10 de " +
+  "septiembre de 2026 (RD-Ley 23/2026, D.A. 57ª: La Palma); " +
+  "Orden PJC/297/2026 (BOE-A-2026-7296, BOE 31-3-2026, efectos 1-1-2026)";
 
 const EDITION_2026_EARLY: EsEdition = {
   edition: "2026-early",
@@ -441,8 +441,8 @@ export function ratesForPayDate(payDate: string): EsEdition {
   }
   if (payDate < "2026-01-01" || payDate > "2026-12-31") {
     throw new PayrollError(
-      `ES payroll: no tables for pay date ${payDate} — rates for ${payDate.slice(0, 4)} aren't `
-      + "available in this pack version; update the pack",
+      `ES payroll: no tables for pay date ${payDate} — rates for ${payDate.slice(0, 4)} aren't ` +
+        "available in this pack version; update the pack",
     );
   }
   return payDate < "2026-09-10" ? EDITION_2026_EARLY : EDITION_2026;
@@ -460,7 +460,8 @@ export const ES_TAX_YEARS: PayrollTaxYearSupport = {
     },
     {
       year: 2026,
-      label: "2026 IRPF retention algorithm (September edition: La Palma D.A. 57ª from 10 September)",
+      label:
+        "2026 IRPF retention algorithm (September edition: La Palma D.A. 57ª from 10 September)",
       effectiveFrom: "2026-09-10",
       citation: CITATION_SEPT,
       status: "published",
@@ -472,16 +473,17 @@ export const ES_TAX_YEARS: PayrollTaxYearSupport = {
     files: [
       {
         path: ES_RATES_MODULE,
-        purpose: "AEAT retention algorithm editions + TGSS contribution bases/tipos, versioned by year",
+        purpose:
+          "AEAT retention algorithm editions + TGSS contribution bases/tipos, versioned by year",
         template:
-          "Transcribe the AEAT ALGORITMO for {year} (Sede/Programas_ayuda/Retenciones/{year}/) "
-          + "and the TGSS Orden de cotización for {year}, beside the {priorYear} edition.",
+          "Transcribe the AEAT ALGORITMO for {year} (Sede/Programas_ayuda/Retenciones/{year}/) " +
+          "and the TGSS Orden de cotización for {year}, beside the {priorYear} edition.",
       },
     ],
     barrels: [],
     steps: [
-      "Fetch the AEAT ALGORITMO for the year from Sede/Programas_ayuda/Retenciones and transcribe "
-        + "the situación-familiar brackets, TABLA 1 exclusion limits, and hijos reductions.",
+      "Fetch the AEAT ALGORITMO for the year from Sede/Programas_ayuda/Retenciones and transcribe " +
+        "the situación-familiar brackets, TABLA 1 exclusion limits, and hijos reductions.",
       "Transcribe the TGSS Orden de cotización (bases mínimas/máximas, tipos empresa/trabajador, MEI).",
       "Transcribe or explicitly refuse the foral tables (Navarra; Álava/Araba, Gipuzkoa, Bizkaia).",
       "Add golden stubs and flip the pack to installable.",

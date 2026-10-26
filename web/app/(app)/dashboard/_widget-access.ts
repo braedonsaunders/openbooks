@@ -1,144 +1,147 @@
-import type { Authz } from '@/lib/authz'
-import { isUuid } from '@/lib/list-params'
-import { permissionSetCovers } from '@/lib/permissions'
-import { WIDGETS } from './_widget-registry'
-import { isAppWidgetId } from '@/lib/apps/surfaces'
-import { ANALYTICS_DASHBOARD_MAP, analyticsDashboardDenied } from '@/lib/analytics/dashboard-catalog'
+import type { Authz } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
+import { permissionSetCovers } from "@/lib/permissions";
+import { WIDGETS } from "./_widget-registry";
+import { isAppWidgetId } from "@/lib/apps/surfaces";
+import {
+  ANALYTICS_DASHBOARD_MAP,
+  analyticsDashboardDenied,
+} from "@/lib/analytics/dashboard-catalog";
 
-const GL = ['gl.read']
-const AP = ['ap.read', 'ap.approve']
-const BANKING = ['banking.read']
-const INSIGHTS = ['insights.read', 'reports.read']
+const GL = ["gl.read"];
+const AP = ["ap.read", "ap.approve"];
+const BANKING = ["banking.read"];
+const INSIGHTS = ["insights.read", "reports.read"];
 
 const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
-  'kpi-journal-lines': GL,
-  'kpi-accounts-active': GL,
-  'kpi-entries-today': GL,
-  'kpi-ledger-balance': GL,
-  'kpi-cash-balance': GL,
-  'kpi-open-receivables': ['ar.read'],
-  'kpi-overdue-receivables': ['ar.read'],
-  'kpi-open-payables': ['ap.read'],
-  'kpi-overdue-payables': ['ap.read'],
+  "kpi-journal-lines": GL,
+  "kpi-accounts-active": GL,
+  "kpi-entries-today": GL,
+  "kpi-ledger-balance": GL,
+  "kpi-cash-balance": GL,
+  "kpi-open-receivables": ["ar.read"],
+  "kpi-overdue-receivables": ["ar.read"],
+  "kpi-open-payables": ["ap.read"],
+  "kpi-overdue-payables": ["ap.read"],
   // P&L tiles read the P&L report reader over the caller's subsidiary scope —
   // the same doorway as /reports/pnl, which needs the ledger grant.
-  'kpi-revenue-mtd': GL,
-  'kpi-expenses-mtd': GL,
-  'kpi-net-income-mtd': GL,
-  'kpi-gross-margin-mtd': GL,
-  'kpi-expected-receipts-30d': ['ar.read'],
-  'kpi-bills-due-30d': ['ap.read'],
-  'list-top-customers': ['ar.read'],
-  'list-top-vendors': ['ap.read'],
+  "kpi-revenue-mtd": GL,
+  "kpi-expenses-mtd": GL,
+  "kpi-net-income-mtd": GL,
+  "kpi-gross-margin-mtd": GL,
+  "kpi-expected-receipts-30d": ["ar.read"],
+  "kpi-bills-due-30d": ["ap.read"],
+  "list-top-customers": ["ar.read"],
+  "list-top-vendors": ["ap.read"],
   // The runway discloses cash trajectory and burn — the banking doorway,
   // not the ledger one. A viewer holds gl.read (sees today's cash balance)
   // but not banking.read (no forecast): the stricter grant wins, so the
   // tile never shows a projection to a caller denied the cockpit.
-  'kpi-cash-runway': ['banking.read'],
-  'kpi-items-to-reconcile': BANKING,
-  'kpi-expenses-awaiting-approval': ['expenses.read'],
-  'resourcing-pulse': ['resourcing.read'],
-  'list-close-readiness': ['close.run'],
-  'kpi-pending-approvals': AP,
-  'kpi-agent-findings': ['assistant.use'],
-  'list-recent-entries': GL,
-  'list-pending-approvals': AP,
-  'personal-inbox': AP,
+  "kpi-cash-runway": ["banking.read"],
+  "kpi-items-to-reconcile": BANKING,
+  "kpi-expenses-awaiting-approval": ["expenses.read"],
+  "resourcing-pulse": ["resourcing.read"],
+  "list-close-readiness": ["close.run"],
+  "kpi-pending-approvals": AP,
+  "kpi-agent-findings": ["assistant.use"],
+  "list-recent-entries": GL,
+  "list-pending-approvals": AP,
+  "personal-inbox": AP,
   // Deliberately public: quick-action shortcuts carry no org data, and the
   // in-progress list is scoped to the caller's own drafts (created_by =
   // self) in the loader. An empty array is an EXPLICIT open decision — the
   // registry-agreement test refuses a WIDGETS id with no entry at all, which
   // is how an ungated tile used to ship through the fallthrough below.
-  'personal-in-progress': [],
-  'personal-actions': [],
+  "personal-in-progress": [],
+  "personal-actions": [],
   // HR-15 persona tiles: own/team-scoped reads with null-absent data.
-  'inbox-list': [],
-  'pay-tile': [],
+  "inbox-list": [],
+  "pay-tile": [],
   // The balances card opens My leave, which files leave under
   // hrm.leave.request (a self-service grant on every built-in role); a
   // custom role without it gets no card that leads to a refusal.
-  'balance-tile': ['hrm.leave.request'],
-  'whos-out-strip': [],
-  'home-upcoming': [],
-  'celebrations-list': [],
-  'announcements-card': [],
+  "balance-tile": ["hrm.leave.request"],
+  "whos-out-strip": [],
+  "home-upcoming": [],
+  "celebrations-list": [],
+  "announcements-card": [],
   // The ask box opens the assistant, so it shows only where the assistant
   // would admit the caller (the same assistant.use the /assistant route needs).
-  'home-ask': ['assistant.use'],
-  'team-approvals': [],
-  'team-steps': [],
-  'team-nudges': [],
-  'team-headcount': [],
-  'team-quals': [],
+  "home-ask": ["assistant.use"],
+  "team-approvals": [],
+  "team-steps": [],
+  "team-nudges": [],
+  "team-headcount": [],
+  "team-quals": [],
   // Admin-rail tiles gate on the admin persona (grants, not role names).
   // The marker below is resolved in canSeeWidget, not a permission key.
-  'admin-attention': ['admin.setup.manage'],
-  'workflow-errors': ['admin.setup.manage'],
-  'admin-calendar': ['admin.setup.manage'],
+  "admin-attention": ["admin.setup.manage"],
+  "workflow-errors": ["admin.setup.manage"],
+  "admin-calendar": ["admin.setup.manage"],
   // Widgets extracted from an Analytics dashboard list reports.read, the
   // base grant every dashboard needs; canSeeWidget then applies the source
   // dashboard's whole rule (its permission and subsidiary scope).
   // ── Analytics: financial ratios and health (Financial Health) ──────────
-  'ratios-profitability': ['reports.read'],
-  'ratios-liquidity': ['reports.read'],
-  'ratios-solvency': ['reports.read'],
-  'ratios-efficiency': ['reports.read'],
-  'ratios-operating': ['reports.read'],
-  'kpi-ratio-current': ['reports.read'],
-  'kpi-ratio-quick': ['reports.read'],
-  'kpi-working-capital': ['reports.read'],
-  'kpi-ratio-debt-equity': ['reports.read'],
-  'kpi-ratio-interest-coverage': ['reports.read'],
-  'kpi-ratio-roe': ['reports.read'],
-  'kpi-ratio-roic': ['reports.read'],
-  'kpi-ratio-operating-margin': ['reports.read'],
-  'kpi-ratio-net-margin': ['reports.read'],
-  'health-score': ['reports.read'],
-  'list-health-insights': ['reports.read'],
-  'chart-revenue-trend': ['reports.read'],
-  'chart-margin-trend': ['reports.read'],
-  'budget-variance': ['reports.read'],
+  "ratios-profitability": ["reports.read"],
+  "ratios-liquidity": ["reports.read"],
+  "ratios-solvency": ["reports.read"],
+  "ratios-efficiency": ["reports.read"],
+  "ratios-operating": ["reports.read"],
+  "kpi-ratio-current": ["reports.read"],
+  "kpi-ratio-quick": ["reports.read"],
+  "kpi-working-capital": ["reports.read"],
+  "kpi-ratio-debt-equity": ["reports.read"],
+  "kpi-ratio-interest-coverage": ["reports.read"],
+  "kpi-ratio-roe": ["reports.read"],
+  "kpi-ratio-roic": ["reports.read"],
+  "kpi-ratio-operating-margin": ["reports.read"],
+  "kpi-ratio-net-margin": ["reports.read"],
+  "health-score": ["reports.read"],
+  "list-health-insights": ["reports.read"],
+  "chart-revenue-trend": ["reports.read"],
+  "chart-margin-trend": ["reports.read"],
+  "budget-variance": ["reports.read"],
 
   // ── Analytics: cash (Cash Flow) ─────────────────────────────────────────
-  'kpi-cash-lowest-point': ['reports.read'],
-  'kpi-cash-burn': ['reports.read'],
-  'kpi-cash-coverage': ['reports.read'],
-  'kpi-cash-settlement-days': ['reports.read'],
-  'chart-cash-forecast': ['reports.read'],
+  "kpi-cash-lowest-point": ["reports.read"],
+  "kpi-cash-burn": ["reports.read"],
+  "kpi-cash-coverage": ["reports.read"],
+  "kpi-cash-settlement-days": ["reports.read"],
+  "chart-cash-forecast": ["reports.read"],
 
   // ── Analytics: customers (Customer Intelligence) ───────────────────────
   // Customer figures, like the top-customers list: AR visibility, not GL.
-  'kpi-customer-concentration': ['ar.read'],
-  'kpi-customers-at-risk': ['ar.read'],
-  'list-customers-at-risk': ['ar.read'],
+  "kpi-customer-concentration": ["ar.read"],
+  "kpi-customers-at-risk": ["ar.read"],
+  "list-customers-at-risk": ["ar.read"],
 
   // ── Analytics: vendors and spend (Vendor Performance, Spend Velocity) ──
-  'kpi-vendor-concentration': ['reports.read'],
-  'kpi-vendor-payment-performance': ['reports.read'],
-  'kpi-spend-velocity': ['reports.read'],
+  "kpi-vendor-concentration": ["reports.read"],
+  "kpi-vendor-payment-performance": ["reports.read"],
+  "kpi-spend-velocity": ["reports.read"],
 
   // ── Analytics: projects (True Cost, Utilization) ───────────────────────
-  'kpi-utilization': ['reports.read'],
-  'kpi-overhead-absorption': ['reports.read'],
+  "kpi-utilization": ["reports.read"],
+  "kpi-overhead-absorption": ["reports.read"],
 
   // ── Analytics: risk (Sentinel) ──────────────────────────────────────────
-  'kpi-forensic-risk': ['reports.read'],
-  'kpi-duplicate-payments': ['reports.read'],
+  "kpi-forensic-risk": ["reports.read"],
+  "kpi-duplicate-payments": ["reports.read"],
 
-  'spotlight-financial-health': ['reports.read'],
-  'spotlight-cashflow': ['reports.read'],
-  'spotlight-receivables-intelligence': ['reports.read'],
-  'spotlight-customer-intelligence': ['reports.read'],
-  'spotlight-vendor-performance': ['reports.read'],
-  'spotlight-spend-velocity': ['reports.read'],
-  'spotlight-true-cost': ['reports.read'],
-  'spotlight-utilization': ['reports.read'],
-  'spotlight-sentinel': ['reports.read'],
-}
+  "spotlight-financial-health": ["reports.read"],
+  "spotlight-cashflow": ["reports.read"],
+  "spotlight-receivables-intelligence": ["reports.read"],
+  "spotlight-customer-intelligence": ["reports.read"],
+  "spotlight-vendor-performance": ["reports.read"],
+  "spotlight-spend-velocity": ["reports.read"],
+  "spotlight-true-cost": ["reports.read"],
+  "spotlight-utilization": ["reports.read"],
+  "spotlight-sentinel": ["reports.read"],
+};
 
 function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly string[]): boolean {
   // Wildcard-aware, so '*' and module-level grants like 'gl.*' count.
-  return required.some((p) => permissionSetCovers(permissions, p))
+  return required.some((p) => permissionSetCovers(permissions, p));
 }
 
 /**
@@ -149,7 +152,7 @@ function hasAnyPermission(permissions: ReadonlySet<string>, required: readonly s
  * people manager's home into an accounting dashboard.
  */
 export function hasFinancialWorkspace(authz: Authz): boolean {
-  return hasAnyPermission(authz.permissions, ['gl.read', 'ar.read', 'ap.read', 'ap.approve'])
+  return hasAnyPermission(authz.permissions, ["gl.read", "ar.read", "ap.read", "ap.approve"]);
 }
 
 /**
@@ -158,46 +161,50 @@ export function hasFinancialWorkspace(authz: Authz): boolean {
  * with the persona layout resolution (_persona.ts).
  */
 export function hasAdminPersona(authz: Authz): boolean {
-  if (hasAnyPermission(authz.permissions, ['admin.setup.manage'])) return true
-  if (hasAnyPermission(authz.permissions, ['payroll.manage'])) return true
+  if (hasAnyPermission(authz.permissions, ["admin.setup.manage"])) return true;
+  if (hasAnyPermission(authz.permissions, ["payroll.manage"])) return true;
   for (const permission of authz.permissions) {
-    if (permission === '*' || permission === 'hrm.*') return true
-    if (permission.startsWith('hrm.') && permission.endsWith('.manage')) return true
+    if (permission === "*" || permission === "hrm.*") return true;
+    if (permission.startsWith("hrm.") && permission.endsWith(".manage")) return true;
   }
-  return false
+  return false;
 }
 
 /** Admin-rail tiles resolve through the persona, not a single grant. */
-const ADMIN_PERSONA_WIDGETS = new Set(['admin-attention', 'workflow-errors', 'admin-calendar'])
+const ADMIN_PERSONA_WIDGETS = new Set(["admin-attention", "workflow-errors", "admin-calendar"]);
 const ADMIN_WIDGET_DOMAIN_PERMISSIONS: Record<string, readonly string[]> = {
-  'admin-attention': ['hrm.employment.read', 'payroll.manage', 'banking.read', 'close.run'],
-  'workflow-errors': ['flows.manage'],
-  'admin-calendar': ['reports.read', 'payroll.manage'],
-}
+  "admin-attention": ["hrm.employment.read", "payroll.manage", "banking.read", "close.run"],
+  "workflow-errors": ["flows.manage"],
+  "admin-calendar": ["reports.read", "payroll.manage"],
+};
 
 function canSeeAdminWidget(authz: Authz, id: string): boolean {
-  const domainPermissions = ADMIN_WIDGET_DOMAIN_PERMISSIONS[id]
-  return authz.allowedSubsidiaryIds === null &&
+  const domainPermissions = ADMIN_WIDGET_DOMAIN_PERMISSIONS[id];
+  return (
+    authz.allowedSubsidiaryIds === null &&
     hasAdminPersona(authz) &&
-    Boolean(domainPermissions?.some((permission) => hasAnyPermission(authz.permissions, [permission])))
+    Boolean(
+      domainPermissions?.some((permission) => hasAnyPermission(authz.permissions, [permission])),
+    )
+  );
 }
 
 /** An extract of an Analytics dashboard is visible exactly when the dashboard's grants are held. */
 function canSeeAnalyticsWidget(authz: Authz, source: string): boolean {
-  const dashboard = ANALYTICS_DASHBOARD_MAP[source]
-  return !!dashboard && analyticsDashboardDenied(authz, dashboard) === null
+  const dashboard = ANALYTICS_DASHBOARD_MAP[source];
+  return !!dashboard && analyticsDashboardDenied(authz, dashboard) === null;
 }
 
 export function canSeeWidget(authz: Authz, id: string): boolean {
-  if (ADMIN_PERSONA_WIDGETS.has(id)) return canSeeAdminWidget(authz, id)
-  const source = WIDGETS[id]?.analyticsSource
-  if (source && !canSeeAnalyticsWidget(authz, source)) return false
-  const required = WIDGET_PERMISSIONS[id]
+  if (ADMIN_PERSONA_WIDGETS.has(id)) return canSeeAdminWidget(authz, id);
+  const source = WIDGETS[id]?.analyticsSource;
+  if (source && !canSeeAnalyticsWidget(authz, source)) return false;
+  const required = WIDGET_PERMISSIONS[id];
   // An empty entry is a reviewed public tile (see above), not a missing one.
-  if (required) return required.length === 0 || hasAnyPermission(authz.permissions, required)
-  if (id in WIDGETS) return true
-  if (isAppWidgetId(id)) return hasAnyPermission(authz.permissions, ['apps.use'])
-  return isUuid(id) && canSeeInsightCards(authz)
+  if (required) return required.length === 0 || hasAnyPermission(authz.permissions, required);
+  if (id in WIDGETS) return true;
+  if (isAppWidgetId(id)) return hasAnyPermission(authz.permissions, ["apps.use"]);
+  return isUuid(id) && canSeeInsightCards(authz);
 }
 
 /**
@@ -206,5 +213,5 @@ export function canSeeWidget(authz: Authz, id: string): boolean {
  * silently drop cards the user can see (see saveDashboardLayout).
  */
 export function canSeeInsightCards(authz: Authz): boolean {
-  return hasAnyPermission(authz.permissions, INSIGHTS)
+  return hasAnyPermission(authz.permissions, INSIGHTS);
 }

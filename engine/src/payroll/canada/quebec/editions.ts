@@ -6,7 +6,4 @@ import { QC_RATES_2024 } from "./rates-2024.ts";
 import { QC_RATES_2025 } from "./rates-2025.ts";
 import type { QcEditionRates } from "./rates.ts";
 
-export const QC_EXTRA_EDITIONS: readonly QcEditionRates[] = [
-  QC_RATES_2024,
-  QC_RATES_2025,
-];
+export const QC_EXTRA_EDITIONS: readonly QcEditionRates[] = [QC_RATES_2024, QC_RATES_2025];

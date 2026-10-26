@@ -2,14 +2,9 @@
 // (pre-submit) and the server route (authoritative) so the two can never
 // disagree about what a valid response is.
 
-import {
-  evaluateLogicRule,
-  type EvalContext,
-  type FieldValueMap,
-  type RowMap,
-} from './evaluator'
-import { FIELD_TYPES, isResponseValueField, type FileMeta } from './field-types'
-import { UUID_RE } from './identifiers'
+import { evaluateLogicRule, type EvalContext, type FieldValueMap, type RowMap } from "./evaluator";
+import { FIELD_TYPES, isResponseValueField, type FileMeta } from "./field-types";
+import { UUID_RE } from "./identifiers";
 import {
   canonicalDecimal,
   compareExactDecimals,
@@ -17,14 +12,14 @@ import {
   parseExactDecimalParts,
   renderExactDecimal,
   type ExactDecimal,
-} from './decimals'
+} from "./decimals";
 import {
   textValidationHardLimit,
   type FieldType,
   type FormField,
   type FormSchemaV1,
   type FormSection,
-} from './schema'
+} from "./schema";
 
 export type ValidationError = {
   /**
@@ -32,62 +27,62 @@ export type ValidationError = {
    * composite key convention `${sectionId}.${rowIndex}.${fieldId}` so they
    * land on the right row input in the UI.
    */
-  fieldId: string
-  sectionId?: string
-  message: string
-}
+  fieldId: string;
+  sectionId?: string;
+  message: string;
+};
 
-const MAX_REPEATING_ROWS = 500
-const MAX_SELECTIONS = 100
-const MAX_FILES = 50
-const MAX_SIGNATURE_LENGTH = 200
-const MAX_NUMERIC_ABS = 1_000_000_000
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/
+const MAX_REPEATING_ROWS = 500;
+const MAX_SELECTIONS = 100;
+const MAX_FILES = 50;
+const MAX_SIGNATURE_LENGTH = 200;
+const MAX_NUMERIC_ABS = 1_000_000_000;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
 
 function isValidCalendarDate(value: string): boolean {
-  const year = Number(value.slice(0, 4))
-  const month = Number(value.slice(5, 7))
-  const day = Number(value.slice(8, 10))
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
 
-  if (month < 1 || month > 12 || day < 1) return false
+  if (month < 1 || month > 12 || day < 1) return false;
 
-  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-  if (month === 2 && (year % 4 === 0 && year % 100 !== 0 || year % 400 === 0)) {
-    return day <= 29
+  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month === 2 && ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0)) {
+    return day <= 29;
   }
-  return day <= daysInMonth[month - 1]!
+  return day <= daysInMonth[month - 1]!;
 }
 
 function isEmpty(v: unknown): boolean {
-  if (v === undefined || v === null) return true
-  if (typeof v === 'string' && v.trim() === '') return true
-  if (Array.isArray(v) && v.length === 0) return true
-  return false
+  if (v === undefined || v === null) return true;
+  if (typeof v === "string" && v.trim() === "") return true;
+  if (Array.isArray(v) && v.length === 0) return true;
+  return false;
 }
 
 function isFileMeta(v: unknown): v is FileMeta {
   return (
-    typeof v === 'object' &&
+    typeof v === "object" &&
     v !== null &&
-    typeof (v as FileMeta).name === 'string' &&
+    typeof (v as FileMeta).name === "string" &&
     (v as FileMeta).name.length > 0 &&
     (v as FileMeta).name.length <= 1_000 &&
-    typeof (v as FileMeta).size === 'number' &&
+    typeof (v as FileMeta).size === "number" &&
     Number.isFinite((v as FileMeta).size) &&
     (v as FileMeta).size >= 0 &&
-    typeof (v as FileMeta).type === 'string' &&
+    typeof (v as FileMeta).type === "string" &&
     (v as FileMeta).type.length <= 500
-  )
+  );
 }
 
 /** Default decimal scale of a currency field: money is two places. */
-const CURRENCY_SCALE = 2
+const CURRENCY_SCALE = 2;
 
-const MAX_NUMERIC_PARTS: ExactDecimal = { units: BigInt(MAX_NUMERIC_ABS), scale: 0 }
-const MIN_NUMERIC_PARTS: ExactDecimal = { units: -BigInt(MAX_NUMERIC_ABS), scale: 0 }
+const MAX_NUMERIC_PARTS: ExactDecimal = { units: BigInt(MAX_NUMERIC_ABS), scale: 0 };
+const MIN_NUMERIC_PARTS: ExactDecimal = { units: -BigInt(MAX_NUMERIC_ABS), scale: 0 };
 
-type ExactNumericInput = { text: string; parts: ExactDecimal } | { error: string }
+type ExactNumericInput = { text: string; parts: ExactDecimal } | { error: string };
 
 /**
  * Measure a number/currency/percentage submission exactly. Currency accepts
@@ -100,219 +95,221 @@ function exactNumericInput(
   value: unknown,
   scale: number | undefined,
 ): ExactNumericInput {
-  if (type === 'currency') {
-    const places = scale ?? CURRENCY_SCALE
-    if (typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value))) {
-      return { error: 'Must be a number' }
+  if (type === "currency") {
+    const places = scale ?? CURRENCY_SCALE;
+    if (typeof value !== "string" && (typeof value !== "number" || !Number.isFinite(value))) {
+      return { error: "Must be a number" };
     }
-    const canonical = canonicalDecimal(value, places)
+    const canonical = canonicalDecimal(value, places);
     if (canonical === null) {
-      return typeof value === 'string'
+      return typeof value === "string"
         ? { error: `Must be an exact decimal amount with at most ${places} decimal places` }
-        : { error: `Must have at most ${places} decimal places` }
+        : { error: `Must have at most ${places} decimal places` };
     }
-    return { text: canonical, parts: parseExactDecimalParts(canonical)! }
+    return { text: canonical, parts: parseExactDecimalParts(canonical)! };
   }
-  if (typeof value !== 'number' || !Number.isFinite(value)) return { error: 'Must be a number' }
-  if (scale === undefined) return { text: String(value), parts: exactDecimalOfNumber(value)! }
-  const parts = exactDecimalOfNumber(value)
-  if (!parts || parts.scale > scale) return { error: `Must have at most ${scale} decimal places` }
-  return { text: renderExactDecimal(parts.units, parts.scale), parts }
+  if (typeof value !== "number" || !Number.isFinite(value)) return { error: "Must be a number" };
+  if (scale === undefined) return { text: String(value), parts: exactDecimalOfNumber(value)! };
+  const parts = exactDecimalOfNumber(value);
+  if (!parts || parts.scale > scale) return { error: `Must have at most ${scale} decimal places` };
+  return { text: renderExactDecimal(parts.units, parts.scale), parts };
 }
 
 /** Exact comparison against a configured bound (bounds are plain numbers). */
 function compareToBound(input: { text: string; parts: ExactDecimal }, bound: number): -1 | 0 | 1 {
-  const boundParts = exactDecimalOfNumber(bound)
-  if (boundParts) return compareExactDecimals(input.parts, boundParts)
-  const n = Number(input.text)
-  return n < bound ? -1 : n > bound ? 1 : 0
+  const boundParts = exactDecimalOfNumber(bound);
+  if (boundParts) return compareExactDecimals(input.parts, boundParts);
+  const n = Number(input.text);
+  return n < bound ? -1 : n > bound ? 1 : 0;
 }
 
 /** Validate ONE field's value. Returns error messages (empty = valid). */
 function fieldValueErrors(field: FormField, value: unknown): string[] {
-  const errors: string[] = []
-  const validation = field.validation
-  const custom = validation?.message
+  const errors: string[] = [];
+  const validation = field.validation;
+  const custom = validation?.message;
 
-  const fail = (message: string) => errors.push(custom ?? message)
+  const fail = (message: string) => errors.push(custom ?? message);
 
   switch (field.type) {
-    case 'text':
-    case 'long_text': {
-      if (typeof value !== 'string') {
-        fail('Must be text')
-        break
+    case "text":
+    case "long_text": {
+      if (typeof value !== "string") {
+        fail("Must be text");
+        break;
       }
-      const hardLimit = textValidationHardLimit(field.type) ?? 10_000
-      if (value.length > hardLimit) fail(`Must be no longer than ${hardLimit} characters`)
+      const hardLimit = textValidationHardLimit(field.type) ?? 10_000;
+      if (value.length > hardLimit) fail(`Must be no longer than ${hardLimit} characters`);
       if (validation?.minLength !== undefined && value.length < validation.minLength) {
-        fail(`Must be at least ${validation.minLength} characters`)
+        fail(`Must be at least ${validation.minLength} characters`);
       }
       if (validation?.maxLength !== undefined && value.length > validation.maxLength) {
-        fail(`Must be no longer than ${validation.maxLength} characters`)
+        fail(`Must be no longer than ${validation.maxLength} characters`);
       }
       if (validation?.pattern) {
         // Patterns are constrained to a ReDoS-safe subset at design time
         // (see validationPatternError); execution here is bounded.
         try {
-          if (!new RegExp(validation.pattern).test(value)) fail('Does not match the required format')
+          if (!new RegExp(validation.pattern).test(value))
+            fail("Does not match the required format");
         } catch {
           /* invalid pattern rejected at design time; ignore */
         }
       }
-      break
+      break;
     }
 
-    case 'number':
-    case 'currency':
-    case 'percentage': {
+    case "number":
+    case "currency":
+    case "percentage": {
       // Money and measured values are exact decimals, never binary floats. A
       // currency value must be an exact decimal string within the field's
       // scale (a submitted number is measured through the same parser and
       // refused over-scale); a number or percentage value must fit its
       // declared scale when one is declared. Over-precision is refused by
       // name — silently rounding it would store an amount nobody typed.
-      const scale = field.validation?.scale ?? (field.type === 'currency' ? CURRENCY_SCALE : undefined)
-      const input = exactNumericInput(field.type, value, scale)
-      if ('error' in input) {
-        fail(input.error)
-        break
+      const scale =
+        field.validation?.scale ?? (field.type === "currency" ? CURRENCY_SCALE : undefined);
+      const input = exactNumericInput(field.type, value, scale);
+      if ("error" in input) {
+        fail(input.error);
+        break;
       }
       if (
         compareExactDecimals(input.parts, MAX_NUMERIC_PARTS) > 0 ||
         compareExactDecimals(input.parts, MIN_NUMERIC_PARTS) < 0
       ) {
-        fail('Number is out of range')
+        fail("Number is out of range");
       }
-      const configMin = typeof field.config?.min === 'number' ? field.config.min : undefined
-      const configMax = typeof field.config?.max === 'number' ? field.config.max : undefined
+      const configMin = typeof field.config?.min === "number" ? field.config.min : undefined;
+      const configMax = typeof field.config?.max === "number" ? field.config.max : undefined;
       if (configMin !== undefined && compareToBound(input, configMin) < 0) {
-        fail(`Must be at least ${configMin}`)
+        fail(`Must be at least ${configMin}`);
       }
       if (configMax !== undefined && compareToBound(input, configMax) > 0) {
-        fail(`Must be no more than ${configMax}`)
+        fail(`Must be no more than ${configMax}`);
       }
       if (validation?.min !== undefined && compareToBound(input, validation.min) < 0) {
-        fail(`Must be at least ${validation.min}`)
+        fail(`Must be at least ${validation.min}`);
       }
       if (validation?.max !== undefined && compareToBound(input, validation.max) > 0) {
-        fail(`Must be no more than ${validation.max}`)
+        fail(`Must be no more than ${validation.max}`);
       }
-      break
+      break;
     }
 
-    case 'rating': {
-      if (typeof value !== 'number' || !Number.isFinite(value)) {
-        fail('Must be a number')
-        break
+    case "rating": {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        fail("Must be a number");
+        break;
       }
-      if (Math.abs(value) > MAX_NUMERIC_ABS) fail('Number is out of range')
+      if (Math.abs(value) > MAX_NUMERIC_ABS) fail("Number is out of range");
       const scaleMax =
-        typeof field.config?.max === 'number' && Number.isInteger(field.config.max)
+        typeof field.config?.max === "number" && Number.isInteger(field.config.max)
           ? field.config.max
-          : 5
+          : 5;
       if (!Number.isInteger(value) || value < 1 || value > scaleMax) {
-        fail(`Must be a whole number between 1 and ${scaleMax}`)
+        fail(`Must be a whole number between 1 and ${scaleMax}`);
       }
       if (validation?.min !== undefined && value < validation.min) {
-        fail(`Must be at least ${validation.min}`)
+        fail(`Must be at least ${validation.min}`);
       }
       if (validation?.max !== undefined && value > validation.max) {
-        fail(`Must be no more than ${validation.max}`)
+        fail(`Must be no more than ${validation.max}`);
       }
-      break
+      break;
     }
 
-    case 'date': {
+    case "date": {
       if (
-        typeof value !== 'string' ||
+        typeof value !== "string" ||
         !DATE_RE.test(value) ||
         !isValidCalendarDate(value) ||
         Number.isNaN(Date.parse(value))
       ) {
-        fail('Must be a valid date (yyyy-mm-dd)')
+        fail("Must be a valid date (yyyy-mm-dd)");
       }
-      break
+      break;
     }
 
-    case 'datetime': {
+    case "datetime": {
       if (
-        typeof value !== 'string' ||
+        typeof value !== "string" ||
         !DATETIME_RE.test(value) ||
         !isValidCalendarDate(value) ||
         Number.isNaN(Date.parse(value))
       ) {
-        fail('Must be a valid date and time')
+        fail("Must be a valid date and time");
       }
-      break
+      break;
     }
 
-    case 'select':
-    case 'radio': {
-      if (typeof value !== 'string') {
-        fail('Must be a single choice')
-        break
+    case "select":
+    case "radio": {
+      if (typeof value !== "string") {
+        fail("Must be a single choice");
+        break;
       }
-      const options = validation?.options ?? []
-      if (!options.some((o) => o.value === value)) fail('Is not one of the allowed options')
-      break
+      const options = validation?.options ?? [];
+      if (!options.some((o) => o.value === value)) fail("Is not one of the allowed options");
+      break;
     }
 
-    case 'multi_select': {
+    case "multi_select": {
       if (!Array.isArray(value)) {
-        fail('Must be a list of choices')
-        break
+        fail("Must be a list of choices");
+        break;
       }
-      if (value.length > MAX_SELECTIONS) fail(`No more than ${MAX_SELECTIONS} selections`)
-      const options = validation?.options ?? []
-      const allowed = new Set(options.map((o) => o.value))
-      if (value.some((v) => typeof v !== 'string' || !allowed.has(v))) {
-        fail('Contains a value that is not one of the allowed options')
+      if (value.length > MAX_SELECTIONS) fail(`No more than ${MAX_SELECTIONS} selections`);
+      const options = validation?.options ?? [];
+      const allowed = new Set(options.map((o) => o.value));
+      if (value.some((v) => typeof v !== "string" || !allowed.has(v))) {
+        fail("Contains a value that is not one of the allowed options");
       }
-      if (new Set(value).size !== value.length) fail('Contains duplicate selections')
-      break
+      if (new Set(value).size !== value.length) fail("Contains duplicate selections");
+      break;
     }
 
-    case 'signature': {
+    case "signature": {
       // v1: typed-name attestation string. Canvas signatures come later.
-      if (typeof value !== 'string' || value.trim().length === 0) {
-        fail('Type your full name to sign')
+      if (typeof value !== "string" || value.trim().length === 0) {
+        fail("Type your full name to sign");
       } else if (value.length > MAX_SIGNATURE_LENGTH) {
-        fail(`Must be no longer than ${MAX_SIGNATURE_LENGTH} characters`)
+        fail(`Must be no longer than ${MAX_SIGNATURE_LENGTH} characters`);
       }
-      break
+      break;
     }
 
-    case 'file': {
+    case "file": {
       // v1: metadata-only array [{ name, size, type }] — no binary upload.
       if (!Array.isArray(value)) {
-        fail('Must be a list of files')
-        break
+        fail("Must be a list of files");
+        break;
       }
-      if (value.length > MAX_FILES) fail(`No more than ${MAX_FILES} files`)
-      if (!value.every(isFileMeta)) fail('Contains an invalid file entry')
-      break
+      if (value.length > MAX_FILES) fail(`No more than ${MAX_FILES} files`);
+      if (!value.every(isFileMeta)) fail("Contains an invalid file entry");
+      break;
     }
 
-    case 'gl_account':
-    case 'party': {
-      if (typeof value !== 'string' || !UUID_RE.test(value)) {
-        fail(`Must reference a ${FIELD_TYPES[field.type].label.toLowerCase()}`)
+    case "gl_account":
+    case "party": {
+      if (typeof value !== "string" || !UUID_RE.test(value)) {
+        fail(`Must reference a ${FIELD_TYPES[field.type].label.toLowerCase()}`);
       }
-      break
+      break;
     }
 
-    case 'formula':
+    case "formula":
       // Computed server-side from field.formula; any submitted value for a
       // formula field is ignored by the write path, never validated here.
-      break
+      break;
   }
 
-  return errors
+  return errors;
 }
 
 function effectiveRequired(field: FormField): boolean {
-  return Boolean(field.required || field.validation?.required)
+  return Boolean(field.required || field.validation?.required);
 }
 
 /**
@@ -331,33 +328,33 @@ export function validateResponse(
   schema: FormSchemaV1,
   values: FieldValueMap,
   rows: RowMap,
-  stage: 'draft' | 'submit' = 'submit',
+  stage: "draft" | "submit" = "submit",
 ): ValidationError[] {
-  const errors: ValidationError[] = []
-  const ctx: EvalContext = { values, rows }
+  const errors: ValidationError[] = [];
+  const ctx: EvalContext = { values, rows };
 
   const sectionVisible = (section: FormSection): boolean =>
-    !section.showIf || evaluateLogicRule(section.showIf, ctx)
+    !section.showIf || evaluateLogicRule(section.showIf, ctx);
 
   for (const section of schema.sections) {
-    const visible = sectionVisible(section)
+    const visible = sectionVisible(section);
 
     if (section.repeating) {
-      const sectionRows = rows[section.id] ?? []
+      const sectionRows = rows[section.id] ?? [];
       if (!Array.isArray(sectionRows)) {
-        errors.push({ fieldId: section.id, sectionId: section.id, message: 'Rows must be a list' })
-        continue
+        errors.push({ fieldId: section.id, sectionId: section.id, message: "Rows must be a list" });
+        continue;
       }
       if (sectionRows.length > MAX_REPEATING_ROWS) {
         errors.push({
           fieldId: section.id,
           sectionId: section.id,
           message: `No more than ${MAX_REPEATING_ROWS} rows`,
-        })
-        continue
+        });
+        continue;
       }
       if (
-        stage === 'submit' &&
+        stage === "submit" &&
         visible &&
         section.minRows !== undefined &&
         sectionRows.length < section.minRows
@@ -365,47 +362,47 @@ export function validateResponse(
         errors.push({
           fieldId: section.id,
           sectionId: section.id,
-          message: `Add at least ${section.minRows} row${section.minRows === 1 ? '' : 's'}`,
-        })
+          message: `Add at least ${section.minRows} row${section.minRows === 1 ? "" : "s"}`,
+        });
       }
       if (section.maxRows !== undefined && sectionRows.length > section.maxRows) {
         errors.push({
           fieldId: section.id,
           sectionId: section.id,
           message: `No more than ${section.maxRows} rows`,
-        })
+        });
       }
 
       sectionRows.forEach((row, rowIndex) => {
         // A null (or otherwise non-object) row is a shape error naming the
         // row — reading fields off it would throw a TypeError and answer a
         // 500 for a payload problem the filler can fix.
-        if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+        if (row === null || typeof row !== "object" || Array.isArray(row)) {
           errors.push({
             fieldId: `${section.id}.${rowIndex}`,
             sectionId: section.id,
-            message: 'Row must be an object of field values',
-          })
-          return
+            message: "Row must be an object of field values",
+          });
+          return;
         }
         // Row fields evaluate visibility against top-level values merged with
         // the row's own values (sibling fields shadow top-level ids).
-        const rowCtx: EvalContext = { values: { ...values, ...row }, rows }
-        const rowFieldIds = new Set(section.fields.map((field) => field.id))
+        const rowCtx: EvalContext = { values: { ...values, ...row }, rows };
+        const rowFieldIds = new Set(section.fields.map((field) => field.id));
         for (const field of section.fields) {
-          if (!isResponseValueField(field.type)) continue
+          if (!isResponseValueField(field.type)) continue;
           const fieldVisible =
-            visible && (!field.showIf || evaluateLogicRule(field.showIf, rowCtx))
-          const value = (row as FieldValueMap)[field.id]
-          const key = `${section.id}.${rowIndex}.${field.id}`
+            visible && (!field.showIf || evaluateLogicRule(field.showIf, rowCtx));
+          const value = (row as FieldValueMap)[field.id];
+          const key = `${section.id}.${rowIndex}.${field.id}`;
           if (isEmpty(value)) {
-            if (stage === 'submit' && fieldVisible && effectiveRequired(field)) {
-              errors.push({ fieldId: key, sectionId: section.id, message: 'Required' })
+            if (stage === "submit" && fieldVisible && effectiveRequired(field)) {
+              errors.push({ fieldId: key, sectionId: section.id, message: "Required" });
             }
-            continue
+            continue;
           }
           for (const message of fieldValueErrors(field, value)) {
-            errors.push({ fieldId: key, sectionId: section.id, message })
+            errors.push({ fieldId: key, sectionId: section.id, message });
           }
         }
         // Unknown keys inside rows are refused exactly like unknown
@@ -415,47 +412,47 @@ export function validateResponse(
             errors.push({
               fieldId: `${section.id}.${rowIndex}.${key}`,
               sectionId: section.id,
-              message: 'Unknown field',
-            })
+              message: "Unknown field",
+            });
           }
         }
-      })
-      continue
+      });
+      continue;
     }
 
     for (const field of section.fields) {
-      if (!isResponseValueField(field.type)) continue
-      const fieldVisible = visible && (!field.showIf || evaluateLogicRule(field.showIf, ctx))
-      const value = values[field.id]
+      if (!isResponseValueField(field.type)) continue;
+      const fieldVisible = visible && (!field.showIf || evaluateLogicRule(field.showIf, ctx));
+      const value = values[field.id];
       if (isEmpty(value)) {
-        if (stage === 'submit' && fieldVisible && effectiveRequired(field)) {
-          errors.push({ fieldId: field.id, sectionId: section.id, message: 'Required' })
+        if (stage === "submit" && fieldVisible && effectiveRequired(field)) {
+          errors.push({ fieldId: field.id, sectionId: section.id, message: "Required" });
         }
-        continue
+        continue;
       }
       for (const message of fieldValueErrors(field, value)) {
-        errors.push({ fieldId: field.id, sectionId: section.id, message })
+        errors.push({ fieldId: field.id, sectionId: section.id, message });
       }
     }
   }
 
   // Reject unknown top-level keys so responses can't be stuffed with
   // arbitrary payload (the jsonb column would happily store it).
-  const knownIds = new Set<string>()
+  const knownIds = new Set<string>();
   for (const section of schema.sections) {
-    if (section.repeating) knownIds.add(section.id)
-    else for (const field of section.fields) knownIds.add(field.id)
+    if (section.repeating) knownIds.add(section.id);
+    else for (const field of section.fields) knownIds.add(field.id);
   }
   for (const key of Object.keys(values)) {
     if (!knownIds.has(key)) {
-      errors.push({ fieldId: key, message: 'Unknown field' })
+      errors.push({ fieldId: key, message: "Unknown field" });
     }
   }
   for (const key of Object.keys(rows)) {
     if (!knownIds.has(key)) {
-      errors.push({ fieldId: key, message: 'Unknown repeating section' })
+      errors.push({ fieldId: key, message: "Unknown repeating section" });
     }
   }
 
-  return errors
+  return errors;
 }

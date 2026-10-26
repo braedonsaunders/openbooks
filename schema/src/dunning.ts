@@ -7,7 +7,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
@@ -59,8 +59,13 @@ export const statementBatchRuns = pgTable(
     periodTo: date("period_to").notNull(),
     filters: jsonb("filters").$type<Record<string, unknown>>().notNull().default({}),
     recipientCount: integer("recipient_count").notNull().default(0),
-    status: text("status", { enum: ["queued", "sending", "done"] }).notNull().default("queued"),
-    authorizationSnapshot: jsonb("authorization_snapshot").$type<Record<string, unknown>>().notNull().default({}),
+    status: text("status", { enum: ["queued", "sending", "done"] })
+      .notNull()
+      .default("queued"),
+    authorizationSnapshot: jsonb("authorization_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     ...auditColumns,
   },
   (t) => [index("statement_batch_runs_org_created").on(t.orgId, t.createdAt)],

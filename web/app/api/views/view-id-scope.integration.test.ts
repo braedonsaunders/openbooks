@@ -37,12 +37,7 @@ interface ViewRouteState {
 const PAY_STUBS_ID = "00000000-0000-4000-8000-0000000000aa";
 const LEDGER_ID = "00000000-0000-4000-8000-0000000000bb";
 
-function viewRow(
-  id: string,
-  entity: string,
-  columns: string[],
-  name: string,
-): ViewRow {
+function viewRow(id: string, entity: string, columns: string[], name: string): ViewRow {
   return {
     id,
     org_id: "org-1",
@@ -261,5 +256,8 @@ test("PATCH persists a pay_stubs plan when the caller holds payroll.read", async
   );
   assert.equal(res.status, 200);
   assert.equal(state.updates.length, 1);
-  assert.equal((state.updates[0]?.patch.query as { entity?: string } | undefined)?.entity, "pay_stubs");
+  assert.equal(
+    (state.updates[0]?.patch.query as { entity?: string } | undefined)?.entity,
+    "pay_stubs",
+  );
 });

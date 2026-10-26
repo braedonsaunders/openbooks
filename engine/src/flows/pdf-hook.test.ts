@@ -8,10 +8,11 @@ import { flowPdfTemplateMeta } from "./pdf-hook.ts";
 // saved template, hash alone for a starter render.
 
 test("a templated attachment flattens to string meta fields", () => {
-  assert.deepEqual(
-    flowPdfTemplateMeta({ id: "template-1", revision: 3, hash: "abc123" }),
-    { pdfTemplateId: "template-1", pdfTemplateRevision: "3", pdfTemplateHash: "abc123" },
-  );
+  assert.deepEqual(flowPdfTemplateMeta({ id: "template-1", revision: 3, hash: "abc123" }), {
+    pdfTemplateId: "template-1",
+    pdfTemplateRevision: "3",
+    pdfTemplateHash: "abc123",
+  });
 });
 
 test("a starter attachment keeps only its content hash", () => {

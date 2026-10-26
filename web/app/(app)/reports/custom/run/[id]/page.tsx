@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../../../components/viewspec/module-view'
-import { loadReportRun, reportRunSpec } from './view'
+import { ModuleView } from "../../../../../../components/viewspec/module-view";
+import { loadReportRun, reportRunSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * A saved query report IS a regular report: this screen is the exact native
@@ -13,11 +13,11 @@ export default async function ReportRunPage({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>
-  searchParams: Promise<Record<string, string | undefined>>
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const { id } = await params
-  const data = await loadReportRun(id, sp)
-  return <ModuleView spec={reportRunSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const { id } = await params;
+  const data = await loadReportRun(id, sp);
+  return <ModuleView spec={reportRunSpec(data)} data={data} searchParams={sp} trusted />;
 }

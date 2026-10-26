@@ -7,13 +7,7 @@
  * points at before writing a new one.
  */
 export type LeaveErrorCode =
-  | "INVALID_INPUT"
-  | "NOT_FOUND"
-  | "BAD_STATE"
-  | "STALE_RUN"
-  | "NO_FLOW"
-  | "FLOW_ERROR"
-  | "REFUSED";
+  "INVALID_INPUT" | "NOT_FOUND" | "BAD_STATE" | "STALE_RUN" | "NO_FLOW" | "FLOW_ERROR" | "REFUSED";
 
 export class LeaveError extends Error {
   readonly code: LeaveErrorCode;

@@ -1,11 +1,11 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
-import pg from 'pg'
-import { NextResponse } from 'next/server'
-import { stubModules } from '../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import pg from "pg";
+import { NextResponse } from "next/server";
+import { stubModules } from "../testing/stub-modules.ts";
 
 // The three production surfaces under test import the real authz layer (cookie
 // sessions) and `server-only`. Swap those two boundaries for a scratch-org
@@ -15,18 +15,20 @@ stubModules({ navigation: {}, intl: false, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', format: 'module', shortCircuit: true }
+    if (specifier.endsWith("/lib/authz"))
+      return { url: "mock:authz", format: "module", shortCircuit: true };
     // The project routes declare permission plus a feature key, so the route
     // factory lazily imports `@/lib/feature-gates` at request time from its
     // own module URL. Serve the same scratch-org session there, keeping the
     // real feature-state check so disable/enable refusals still behave.
-    if (specifier === '@/lib/feature-gates') return { url: 'mock:feature-gates', format: 'module', shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (specifier === "@/lib/feature-gates")
+      return { url: "mock:feature-gates", format: "module", shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:authz') {
+    if (url === "mock:authz") {
       return {
-        format: 'module',
+        format: "module",
         shortCircuit: true,
         source: `
           const state = globalThis[Symbol.for('openbooks.feature-gating-test')]
@@ -42,11 +44,11 @@ registerHooks({
             return authz.allowedSubsidiaryIds === null || ids.every((id) => id !== null && id !== undefined && authz.allowedSubsidiaryIds.has(id))
           }
         `,
-      }
+      };
     }
-    if (url === 'mock:feature-gates') {
+    if (url === "mock:feature-gates") {
       return {
-        format: 'module',
+        format: "module",
         shortCircuit: true,
         source: `
           const gate = globalThis[Symbol.for('openbooks.feature-gating-gate')]
@@ -59,112 +61,123 @@ registerHooks({
             return authz
           }
         `,
-      }
+      };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
-
+});
 
 // --- Live interleavings -------------------------------------------------------
 
-const DB = !!process.env.OPENBOOKS_DB_URL
+const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Tracked<T> {
-  settled: boolean
-  value: T | null
-  error: unknown
+  settled: boolean;
+  value: T | null;
+  error: unknown;
 }
 
 /** Settle instead of throw: a racing refusal IS one of the outcomes. */
 function track<T>(promise: Promise<T>): Tracked<T> {
-  const t: Tracked<T> = { settled: false, value: null, error: null }
+  const t: Tracked<T> = { settled: false, value: null, error: null };
   promise.then(
     (value) => {
-      t.value = value
-      t.settled = true
+      t.value = value;
+      t.settled = true;
     },
     (error) => {
-      t.error = error
-      t.settled = true
+      t.error = error;
+      t.settled = true;
     },
-  )
-  return t
+  );
+  return t;
 }
 
 /** Unwrap a tracked request outcome, surfacing an unexpected rejection with
  * its cause instead of a null dereference at the assertion site. */
 function outcome<T>(t: Tracked<T>, label: string): T {
-  assert.ok(t.settled, `${label} never settled`)
+  assert.ok(t.settled, `${label} never settled`);
   if (t.error !== null) {
-    throw new Error(`${label} rejected unexpectedly`, { cause: t.error })
+    throw new Error(`${label} rejected unexpectedly`, { cause: t.error });
   }
-  return t.value as T
+  return t.value as T;
 }
 
 /** Condition wait with zero fixed delays: pump the event loop until the
  * probe holds, so the interleaving is observed, never timed. */
 async function waitForInterleaving(what: string, probe: () => Promise<boolean>): Promise<void> {
-  const deadline = Date.now() + 20_000
+  const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
-    if (await probe()) return
-    await new Promise((resolve) => setImmediate(resolve))
+    if (await probe()) return;
+    await new Promise((resolve) => setImmediate(resolve));
   }
-  const activity = await db.execute(sql`
+  const activity = await db.execute(
+    sql`
     select pid, state, wait_event_type, left(query, 160) as query
-      from pg_stat_activity where datname = current_database()`, 'objects')
-  assert.fail(`timed out waiting for ${what}; backends: ${JSON.stringify(activity)}`)
+      from pg_stat_activity where datname = current_database()`,
+    "objects",
+  );
+  assert.fail(`timed out waiting for ${what}; backends: ${JSON.stringify(activity)}`);
 }
 
 /** A dedicated connection holding locks ACROSS another session's open
  * transaction — the rendezvous that turns concurrency into an ordering. */
 async function openLockSession(): Promise<pg.Client> {
-  const client = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL })
-  await client.connect()
-  await client.query('begin')
-  await client.query("select set_config('app.bypass_rls', 'on', true)")
-  return client
+  const client = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+  await client.connect();
+  await client.query("begin");
+  await client.query("select set_config('app.bypass_rls', 'on', true)");
+  return client;
 }
 
 async function closeLockSession(client: pg.Client | undefined): Promise<void> {
-  if (!client) return
-  await client.query('rollback').catch(() => undefined)
-  await client.end().catch(() => undefined)
+  if (!client) return;
+  await client.query("rollback").catch(() => undefined);
+  await client.end().catch(() => undefined);
 }
 
 /** The fence key split into the unsigned (classid, objid) halves pg_locks shows. */
 async function fenceHalves(key: string): Promise<{ classid: bigint; objid: bigint }> {
-  const r = (await db.execute<{ key: string }>(sql`select hashtextextended(${key}, 0)::text as key`, 'objects'))
-  const wide = BigInt.asUintN(64, BigInt(r[0]!.key))
-  return { classid: wide >> 32n, objid: wide & 0xffffffffn }
+  const r = await db.execute<{ key: string }>(
+    sql`select hashtextextended(${key}, 0)::text as key`,
+    "objects",
+  );
+  const wide = BigInt.asUintN(64, BigInt(r[0]!.key));
+  return { classid: wide >> 32n, objid: wide & 0xffffffffn };
 }
 
 /** A backend queued on THIS org's feature-gate fence. */
 async function fenceQueued(fence: { classid: bigint; objid: bigint }): Promise<boolean> {
-  return (await fenceQueueDepth(fence)) > 0
+  return (await fenceQueueDepth(fence)) > 0;
 }
 
 /** How many backends are queued on THIS org's feature-gate fence. */
 async function fenceQueueDepth(fence: { classid: bigint; objid: bigint }): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from pg_locks
      where locktype = 'advisory' and granted = false
-       and classid::bigint = ${fence.classid} and objid::bigint = ${fence.objid}`, 'objects'))
-  return r[0]!.n
+       and classid::bigint = ${fence.classid} and objid::bigint = ${fence.objid}`,
+    "objects",
+  );
+  return r[0]!.n;
 }
 
 /** Any backend other than ours and the holder is parked on a lock. */
 async function someBackendParked(): Promise<boolean> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from pg_stat_activity
      where datname = current_database()
        and wait_event_type = 'Lock'
-       and pid <> pg_backend_pid()`, 'objects'))
-  return (r[0]?.n ?? 0) > 0
+       and pid <> pg_backend_pid()`,
+    "objects",
+  );
+  return (r[0]?.n ?? 0) > 0;
 }
 
-const state = { orgId: '', userId: '' }
-;(globalThis as Record<symbol, unknown>)[Symbol.for('openbooks.feature-gating-test')] = state
+const state = { orgId: "", userId: "" };
+(globalThis as Record<symbol, unknown>)[Symbol.for("openbooks.feature-gating-test")] = state;
 
 /**
  * The production fence identity (`featureGateLockKey`, web/lib/features.ts),
@@ -173,274 +186,384 @@ const state = { orgId: '', userId: '' }
  * activation both applying), not on an import. The structural test above pins
  * the exact literal in the production source, so the two cannot drift.
  */
-const featureGateLockKey = (orgId: string): string => `openbooks:feature-gate:${orgId}`
+const featureGateLockKey = (orgId: string): string => `openbooks:feature-gate:${orgId}`;
 
-const { db, env } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { isFeatureEnabled } = await import('./features.ts')
+const { db, env } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { isFeatureEnabled } = await import("./features.ts");
 // The factory gate double above answers at request time; hand it the real
 // responder and the real feature check before any route is imported.
-;(globalThis as Record<symbol, unknown>)[Symbol.for('openbooks.feature-gating-gate')] = { NextResponse, isFeatureEnabled }
-const { PUT: putFeaturesRoute } = await import('../app/api/admin/setup/features/route.ts') as {
-  PUT: (req: Request) => Promise<Response>
-}
-const { PATCH: patchProjectRoute } = await import('../app/api/projects/[id]/route.ts') as {
-  PATCH: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>
-}
-const { POST: postProjectRoute } = await import('../app/api/projects/route.ts') as typeof import('../app/api/projects/route.ts')
+(globalThis as Record<symbol, unknown>)[Symbol.for("openbooks.feature-gating-gate")] = {
+  NextResponse,
+  isFeatureEnabled,
+};
+const { PUT: putFeaturesRoute } = (await import("../app/api/admin/setup/features/route.ts")) as {
+  PUT: (req: Request) => Promise<Response>;
+};
+const { PATCH: patchProjectRoute } = (await import("../app/api/projects/[id]/route.ts")) as {
+  PATCH: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>;
+};
+const { POST: postProjectRoute } =
+  (await import("../app/api/projects/route.ts")) as typeof import("../app/api/projects/route.ts");
 
 /** Disabling `projects` must also disable `timeTracking` in the same request:
  * the registry default leaves timeTracking resolved-on, and the toggle route
  * refuses to leave a stored-on child silently suppressed by its parent. */
-const DISABLE_PROJECTS = { timeTracking: false, projects: false }
+const DISABLE_PROJECTS = { timeTracking: false, projects: false };
 
 function putFeatures(features: Record<string, boolean>): Promise<Response> {
-  return putFeaturesRoute(new Request('http://openbooks.test/api/admin/setup/features', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ features }),
-  }))
+  return putFeaturesRoute(
+    new Request("http://openbooks.test/api/admin/setup/features", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ features }),
+    }),
+  );
 }
 
 function activateProject(id: string): Promise<Response> {
-  return patchProjectRoute(new Request(`http://openbooks.test/api/projects/${id}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: 'Rig 12', isActive: true }),
-  }), { params: Promise.resolve({ id }) })
+  return patchProjectRoute(
+    new Request(`http://openbooks.test/api/projects/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Rig 12", isActive: true }),
+    }),
+    { params: Promise.resolve({ id }) },
+  );
 }
 
 function createProject(): Promise<Response> {
-  return postProjectRoute(new Request('http://openbooks.test/api/projects', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'Idempotency-Key': randomUUID() },
-    body: JSON.stringify({ name: 'Feature gate test project', isActive: false }),
-  }))
+  return postProjectRoute(
+    new Request("http://openbooks.test/api/projects", {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": randomUUID() },
+      body: JSON.stringify({ name: "Feature gate test project", isActive: false }),
+    }),
+  );
 }
 
 async function storedFeatures(orgId: string): Promise<string> {
-  const r = (await db.execute<{ f: string }>(sql`
-    select coalesce(settings->'features', '{}'::jsonb)::text as f from orgs where id = ${orgId}`, 'objects'))
-  return r[0]!.f
+  const r = await db.execute<{ f: string }>(
+    sql`
+    select coalesce(settings->'features', '{}'::jsonb)::text as f from orgs where id = ${orgId}`,
+    "objects",
+  );
+  return r[0]!.f;
 }
 
 async function projectRow(projectId: string): Promise<{
-  is_active: boolean
-  status: string
-  name: string
-  updated_at: string
+  is_active: boolean;
+  status: string;
+  name: string;
+  updated_at: string;
 }> {
-  const r = (await db.execute<{
-    is_active: boolean
-    status: string
-    name: string
-    updated_at: string
-  }>(sql`
+  const r = await db.execute<{
+    is_active: boolean;
+    status: string;
+    name: string;
+    updated_at: string;
+  }>(
+    sql`
     select is_active, status, name, updated_at::text as updated_at
-      from projects where id = ${projectId}`, 'objects'))
-  return r[0]!
+      from projects where id = ${projectId}`,
+    "objects",
+  );
+  return r[0]!;
 }
 
 async function featureToggleAudits(orgId: string): Promise<number> {
-  const r = (await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'orgs' and action = 'update'
-       and changes->'after' ? 'features'`, 'objects'))
-  return r[0]!.n
+       and changes->'after' ? 'features'`,
+    "objects",
+  );
+  return r[0]!.n;
 }
 
 async function startScenario() {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.userId = await createScratchUser(org.orgId, 'Feature Gate Controller', 'admin')
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  state.userId = await createScratchUser(org.orgId, "Feature Gate Controller", "admin");
   try {
-    assert.equal(await isFeatureEnabled(org.orgId, 'projects'), true, 'scratch org starts with projects enabled')
+    assert.equal(
+      await isFeatureEnabled(org.orgId, "projects"),
+      true,
+      "scratch org starts with projects enabled",
+    );
   } catch (error) {
-    await dropScratchOrg(org.orgId)
-    throw error
+    await dropScratchOrg(org.orgId);
+    throw error;
   }
-  return org
+  return org;
 }
 
 // --- Structural contract (runs everywhere, no database needed) ---------------
 
-test('serial order disable-then-activate: the disable applies, the stale-guard activation is refused', { skip: !DB }, async () => {
-  const org = await startScenario()
-  try {
-    const created = await createProject()
-    assert.equal(created.status, 201)
-    const projectId = ((await created.json()) as { project: { id: string } }).project.id
+test(
+  "serial order disable-then-activate: the disable applies, the stale-guard activation is refused",
+  { skip: !DB },
+  async () => {
+    const org = await startScenario();
+    try {
+      const created = await createProject();
+      assert.equal(created.status, 201);
+      const projectId = ((await created.json()) as { project: { id: string } }).project.id;
 
-    const disable = await putFeatures(DISABLE_PROJECTS)
-    assert.equal(disable.status, 200, 'a disable with no blocker must succeed')
-    assert.equal(await isFeatureEnabled(org.orgId, 'projects'), false)
+      const disable = await putFeatures(DISABLE_PROJECTS);
+      assert.equal(disable.status, 200, "a disable with no blocker must succeed");
+      assert.equal(await isFeatureEnabled(org.orgId, "projects"), false);
 
-    // The activation's entry-guard read happened while the feature was still
-    // on in earlier requests; here it fires AFTER the disable committed, so
-    // the entry guard itself refuses — and the project stays inactive.
-    const patch = await activateProject(projectId)
-    assert.equal(patch.status, 404)
+      // The activation's entry-guard read happened while the feature was still
+      // on in earlier requests; here it fires AFTER the disable committed, so
+      // the entry guard itself refuses — and the project stays inactive.
+      const patch = await activateProject(projectId);
+      assert.equal(patch.status, 404);
 
-    const row = await projectRow(projectId)
-    assert.equal(row.is_active, false, 'refused activation must leave the project inactive')
-    assert.equal(row.name, 'Feature gate test project', 'refused activation must not touch the row')
-    assert.equal(await featureToggleAudits(org.orgId), 1, 'exactly the successful disable audited')
-  } finally {
-    await dropScratchOrg(org.orgId)
-  }
-})
-
-test('serial order activate-then-disable: the activation applies, the disable is blocked by its own now-true blocker', { skip: !DB }, async () => {
-  const org = await startScenario()
-  let holder: pg.Client | undefined
-  try {
-    const created = await createProject()
-    assert.equal(created.status, 201)
-    const projectId = ((await created.json()) as { project: { id: string } }).project.id
-
-    // Park the activation behind the fence, then release it: the activation
-    // lands whole while the feature is still on (the allow side).
-    holder = await openLockSession()
-    await holder.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [featureGateLockKey(org.orgId)])
-    const fence = await fenceHalves(featureGateLockKey(org.orgId))
-    const patchPromise = activateProject(projectId)
-    const patch = track(patchPromise)
-    await waitForInterleaving(
-      'the activation to queue on the feature-gate fence or finish',
-      async () => patch.settled || fenceQueued(fence),
-    )
-    await closeLockSession(holder)
-    holder = undefined
-
-    const patchResponse = await patchPromise
-    assert.ok(patch.settled, 'the parked activation finished once the fence freed')
-    assert.equal(patchResponse.status, 200, 'activating while the feature is enabled must succeed')
-
-    const featuresBefore = await storedFeatures(org.orgId)
-    const auditsBefore = await featureToggleAudits(org.orgId)
-    const disable = await putFeatures(DISABLE_PROJECTS)
-    assert.equal(disable.status, 409)
-    assert.deepEqual(await disable.json(), { error: 'feature-blocked', key: 'projects' })
-
-    assert.equal(await isFeatureEnabled(org.orgId, 'projects'), true, 'the blocked disable must not flip the gate')
-    assert.equal(await storedFeatures(org.orgId), featuresBefore, 'the losing disable writes nothing')
-    assert.equal(await featureToggleAudits(org.orgId), auditsBefore, 'the losing disable audits nothing')
-    const row = await projectRow(projectId)
-    assert.equal(row.is_active, true, 'feature on with its active dependent: the consistent branch')
-  } finally {
-    await closeLockSession(holder)
-    await dropScratchOrg(org.orgId)
-  }
-})
-
-test('project creation joins the fence: it queues behind a held feature-gate lock before inserting', { skip: !DB }, async () => {
-  const org = await startScenario()
-  let holder: pg.Client | undefined
-  try {
-    holder = await openLockSession()
-    await holder.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [featureGateLockKey(org.orgId)])
-
-    const creation = track(createProject())
-    const fence = await fenceHalves(featureGateLockKey(org.orgId))
-    await waitForInterleaving(
-      'project creation to queue on the feature-gate fence (create participates in the lock contract)',
-      async () => !creation.settled && fenceQueued(fence),
-    )
-
-    // Nothing may exist yet while the fence is held: the insert cannot have
-    // jumped the gate.
-    const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from projects where org_id = ${org.orgId}`, 'objects'))[0]!.n
-    assert.equal(before, 0, 'no project row may appear while another session holds the fence')
-
-    await closeLockSession(holder)
-    holder = undefined
-
-    await waitForInterleaving('project creation to finish after release', async () => creation.settled)
-    const response = creation.value as Response
-    assert.equal(response.status, 201)
-    const row = await projectRow(((await response.json()) as { project: { id: string } }).project.id)
-    assert.equal(row.is_active, false, 'the requested initial state is inactive')
-    assert.equal(row.name, 'Feature gate test project')
-  } finally {
-    await closeLockSession(holder)
-    await dropScratchOrg(org.orgId)
-  }
-})
-
-test('adversarial interleave: a disable parked mid-flight and an activation landing cannot both apply', { skip: !DB }, async () => {
-  const org = await startScenario()
-  let holder: pg.Client | undefined
-  try {
-    const created = await createProject()
-    const projectId = ((await created.json()) as { project: { id: string } }).project.id
-
-    // Hold BOTH serialization points the two generations of this code use:
-    // the feature-gate fence (post-fix) and the orgs row the toggle updates
-    // (which a pre-fence toggle parks on AFTER its unfenced blocker check).
-    holder = await openLockSession()
-    await holder.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [featureGateLockKey(org.orgId)])
-    await holder.query('select id from orgs where id = $1 for update', [org.orgId])
-
-    const featuresBefore = await storedFeatures(org.orgId)
-    const auditsBefore = await featureToggleAudits(org.orgId)
-    const rowBefore = await projectRow(projectId)
-    const fence = await fenceHalves(featureGateLockKey(org.orgId))
-
-    const disablePromise = putFeatures(DISABLE_PROJECTS)
-    const disable = track(disablePromise)
-    await waitForInterleaving(
-      'the disable to park behind the held locks (blockers not yet evaluated under the fence)',
-      async () => !disable.settled && someBackendParked(),
-    )
-
-    // Fire the activation INTO that pause: exactly the window where the old
-    // pre-transaction blocker check let both operations apply. Wait until it
-    // has either landed (the pre-fence world) or parked behind the disable on
-    // the fence (queue depth 2), so the release always finds both past their
-    // entry guards.
-    const activatePromise = activateProject(projectId)
-    const activate = track(activatePromise)
-    await waitForInterleaving(
-      'the activation to queue on the fence or land',
-      async () => activate.settled || (await fenceQueueDepth(fence)) >= 2,
-    )
-
-    await closeLockSession(holder)
-    holder = undefined
-
-    await Promise.all([disablePromise.catch(() => undefined), activatePromise.catch(() => undefined)])
-    const disableResponse = outcome(disable, 'the disable request')
-    const activateResponse = outcome(activate, 'the activation request')
-    const featureOn = await isFeatureEnabled(org.orgId, 'projects')
-    const row = await projectRow(projectId)
-
-    if (disableResponse.status === 200) {
-      // Disable won the fence: the queued activation must have been refused
-      // by the in-transaction gate re-check, leaving no active dependent.
-      assert.equal(activateResponse.status, 404,
-        'an activation queued behind a winning disable must be refused, not applied')
-      assert.equal(featureOn, false)
-      assert.equal(row.is_active, false, 'the refused activation must leave the project inactive')
-      assert.equal(row.updated_at, rowBefore.updated_at, 'the refused activation wrote nothing')
-      assert.equal(await featureToggleAudits(org.orgId), auditsBefore + 1, 'only the winning disable audited')
-    } else {
-      // Activation won the fence: the disable's blockers, re-evaluated under
-      // the fence against committed reality, must refuse it whole.
-      assert.equal(disableResponse.status, 409)
-      assert.deepEqual(await disableResponse.json(), { error: 'feature-blocked', key: 'projects' })
-      assert.equal(activateResponse.status, 200)
-      assert.equal(featureOn, true)
-      assert.equal(row.is_active, true, 'activation landed with the feature still enabled')
-      assert.equal(await storedFeatures(org.orgId), featuresBefore, 'the losing disable writes nothing')
-      assert.equal(await featureToggleAudits(org.orgId), auditsBefore, 'the losing disable audits nothing')
+      const row = await projectRow(projectId);
+      assert.equal(row.is_active, false, "refused activation must leave the project inactive");
+      assert.equal(
+        row.name,
+        "Feature gate test project",
+        "refused activation must not touch the row",
+      );
+      assert.equal(
+        await featureToggleAudits(org.orgId),
+        1,
+        "exactly the successful disable audited",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-    assert.ok(
-      !(featureOn === false && row.is_active === true),
-      `invariant violated: feature off with an active dependent project (disable=${disableResponse.status}, activate=${activateResponse.status})`,
-    )
-  } finally {
-    await closeLockSession(holder)
-    await dropScratchOrg(org.orgId)
-  }
-})
+  },
+);
+
+test(
+  "serial order activate-then-disable: the activation applies, the disable is blocked by its own now-true blocker",
+  { skip: !DB },
+  async () => {
+    const org = await startScenario();
+    let holder: pg.Client | undefined;
+    try {
+      const created = await createProject();
+      assert.equal(created.status, 201);
+      const projectId = ((await created.json()) as { project: { id: string } }).project.id;
+
+      // Park the activation behind the fence, then release it: the activation
+      // lands whole while the feature is still on (the allow side).
+      holder = await openLockSession();
+      await holder.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+        featureGateLockKey(org.orgId),
+      ]);
+      const fence = await fenceHalves(featureGateLockKey(org.orgId));
+      const patchPromise = activateProject(projectId);
+      const patch = track(patchPromise);
+      await waitForInterleaving(
+        "the activation to queue on the feature-gate fence or finish",
+        async () => patch.settled || fenceQueued(fence),
+      );
+      await closeLockSession(holder);
+      holder = undefined;
+
+      const patchResponse = await patchPromise;
+      assert.ok(patch.settled, "the parked activation finished once the fence freed");
+      assert.equal(
+        patchResponse.status,
+        200,
+        "activating while the feature is enabled must succeed",
+      );
+
+      const featuresBefore = await storedFeatures(org.orgId);
+      const auditsBefore = await featureToggleAudits(org.orgId);
+      const disable = await putFeatures(DISABLE_PROJECTS);
+      assert.equal(disable.status, 409);
+      assert.deepEqual(await disable.json(), { error: "feature-blocked", key: "projects" });
+
+      assert.equal(
+        await isFeatureEnabled(org.orgId, "projects"),
+        true,
+        "the blocked disable must not flip the gate",
+      );
+      assert.equal(
+        await storedFeatures(org.orgId),
+        featuresBefore,
+        "the losing disable writes nothing",
+      );
+      assert.equal(
+        await featureToggleAudits(org.orgId),
+        auditsBefore,
+        "the losing disable audits nothing",
+      );
+      const row = await projectRow(projectId);
+      assert.equal(
+        row.is_active,
+        true,
+        "feature on with its active dependent: the consistent branch",
+      );
+    } finally {
+      await closeLockSession(holder);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "project creation joins the fence: it queues behind a held feature-gate lock before inserting",
+  { skip: !DB },
+  async () => {
+    const org = await startScenario();
+    let holder: pg.Client | undefined;
+    try {
+      holder = await openLockSession();
+      await holder.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+        featureGateLockKey(org.orgId),
+      ]);
+
+      const creation = track(createProject());
+      const fence = await fenceHalves(featureGateLockKey(org.orgId));
+      await waitForInterleaving(
+        "project creation to queue on the feature-gate fence (create participates in the lock contract)",
+        async () => !creation.settled && fenceQueued(fence),
+      );
+
+      // Nothing may exist yet while the fence is held: the insert cannot have
+      // jumped the gate.
+      const before = (
+        await db.execute<{ n: number }>(
+          sql`
+      select count(*)::int as n from projects where org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(before, 0, "no project row may appear while another session holds the fence");
+
+      await closeLockSession(holder);
+      holder = undefined;
+
+      await waitForInterleaving(
+        "project creation to finish after release",
+        async () => creation.settled,
+      );
+      const response = creation.value as Response;
+      assert.equal(response.status, 201);
+      const row = await projectRow(
+        ((await response.json()) as { project: { id: string } }).project.id,
+      );
+      assert.equal(row.is_active, false, "the requested initial state is inactive");
+      assert.equal(row.name, "Feature gate test project");
+    } finally {
+      await closeLockSession(holder);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "adversarial interleave: a disable parked mid-flight and an activation landing cannot both apply",
+  { skip: !DB },
+  async () => {
+    const org = await startScenario();
+    let holder: pg.Client | undefined;
+    try {
+      const created = await createProject();
+      const projectId = ((await created.json()) as { project: { id: string } }).project.id;
+
+      // Hold BOTH serialization points the two generations of this code use:
+      // the feature-gate fence (post-fix) and the orgs row the toggle updates
+      // (which a pre-fence toggle parks on AFTER its unfenced blocker check).
+      holder = await openLockSession();
+      await holder.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
+        featureGateLockKey(org.orgId),
+      ]);
+      await holder.query("select id from orgs where id = $1 for update", [org.orgId]);
+
+      const featuresBefore = await storedFeatures(org.orgId);
+      const auditsBefore = await featureToggleAudits(org.orgId);
+      const rowBefore = await projectRow(projectId);
+      const fence = await fenceHalves(featureGateLockKey(org.orgId));
+
+      const disablePromise = putFeatures(DISABLE_PROJECTS);
+      const disable = track(disablePromise);
+      await waitForInterleaving(
+        "the disable to park behind the held locks (blockers not yet evaluated under the fence)",
+        async () => !disable.settled && someBackendParked(),
+      );
+
+      // Fire the activation INTO that pause: exactly the window where the old
+      // pre-transaction blocker check let both operations apply. Wait until it
+      // has either landed (the pre-fence world) or parked behind the disable on
+      // the fence (queue depth 2), so the release always finds both past their
+      // entry guards.
+      const activatePromise = activateProject(projectId);
+      const activate = track(activatePromise);
+      await waitForInterleaving(
+        "the activation to queue on the fence or land",
+        async () => activate.settled || (await fenceQueueDepth(fence)) >= 2,
+      );
+
+      await closeLockSession(holder);
+      holder = undefined;
+
+      await Promise.all([
+        disablePromise.catch(() => undefined),
+        activatePromise.catch(() => undefined),
+      ]);
+      const disableResponse = outcome(disable, "the disable request");
+      const activateResponse = outcome(activate, "the activation request");
+      const featureOn = await isFeatureEnabled(org.orgId, "projects");
+      const row = await projectRow(projectId);
+
+      if (disableResponse.status === 200) {
+        // Disable won the fence: the queued activation must have been refused
+        // by the in-transaction gate re-check, leaving no active dependent.
+        assert.equal(
+          activateResponse.status,
+          404,
+          "an activation queued behind a winning disable must be refused, not applied",
+        );
+        assert.equal(featureOn, false);
+        assert.equal(
+          row.is_active,
+          false,
+          "the refused activation must leave the project inactive",
+        );
+        assert.equal(row.updated_at, rowBefore.updated_at, "the refused activation wrote nothing");
+        assert.equal(
+          await featureToggleAudits(org.orgId),
+          auditsBefore + 1,
+          "only the winning disable audited",
+        );
+      } else {
+        // Activation won the fence: the disable's blockers, re-evaluated under
+        // the fence against committed reality, must refuse it whole.
+        assert.equal(disableResponse.status, 409);
+        assert.deepEqual(await disableResponse.json(), {
+          error: "feature-blocked",
+          key: "projects",
+        });
+        assert.equal(activateResponse.status, 200);
+        assert.equal(featureOn, true);
+        assert.equal(row.is_active, true, "activation landed with the feature still enabled");
+        assert.equal(
+          await storedFeatures(org.orgId),
+          featuresBefore,
+          "the losing disable writes nothing",
+        );
+        assert.equal(
+          await featureToggleAudits(org.orgId),
+          auditsBefore,
+          "the losing disable audits nothing",
+        );
+      }
+      assert.ok(
+        !(featureOn === false && row.is_active === true),
+        `invariant violated: feature off with an active dependent project (disable=${disableResponse.status}, activate=${activateResponse.status})`,
+      );
+    } finally {
+      await closeLockSession(holder);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

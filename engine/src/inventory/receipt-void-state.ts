@@ -66,14 +66,17 @@ export async function lockReceiptInventoryPositions(
   orgId: string,
   receiptId: string,
 ): Promise<void> {
-  const positions = await runner.execute<{ item_id: string; stock_location_id: string }>(sql`
+  const positions = await runner.execute<{ item_id: string; stock_location_id: string }>(
+    sql`
     select distinct item_id, stock_location_id
       from inventory_movements
      where org_id = ${orgId} and document_line_id in (
        select id from document_lines where org_id = ${orgId} and document_id = ${receiptId}
      ) and kind = 'receipt' and status = 'posted'
      order by item_id, stock_location_id
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const position of positions) {
     await lockInventoryPosition(runner, position.item_id, position.stock_location_id);
   }
@@ -85,7 +88,8 @@ export async function liveReceiptMovements(
   orgId: string,
   receiptId: string,
 ): Promise<LiveReceiptMovement[]> {
-  return await runner.execute<LiveReceiptMovement>(sql`
+  return await runner.execute<LiveReceiptMovement>(
+    sql`
     select m.id, m.item_id, i.code as item_code, i.name as item_name,
            m.quantity::text as received, m.lot_id, m.serial_id,
            m.document_line_id, m.stock_location_id, m.subsidiary_id
@@ -99,7 +103,9 @@ export async function liveReceiptMovements(
           where reversal.org_id = m.org_id
             and reversal.reverses_movement_id = m.id
        )
-     order by m.id`, "objects");
+     order by m.id`,
+    "objects",
+  );
 }
 
 interface LayerRow {
@@ -122,13 +128,16 @@ export async function layerCover(
     movement_id: string;
     consumed: string;
     remainder: string;
-  }>(sql`
+  }>(
+    sql`
     select l.source_movement_id as movement_id,
            coalesce(sum(l.original_quantity - l.remaining_quantity), 0)::text as consumed,
            coalesce(sum(l.remaining_quantity), 0)::text as remainder
       from cost_layers l
      where l.org_id = ${orgId} and l.source_movement_id = any(${idArr}::uuid[])
-     group by l.source_movement_id`, "objects");
+     group by l.source_movement_id`,
+    "objects",
+  );
   for (const row of rows) {
     layered.add(row.movement_id);
     cover.set(row.movement_id, row);
@@ -159,7 +168,8 @@ export async function liveConsumptions(
 ): Promise<ConsumptionRow[]> {
   if (movementIds.length === 0) return [];
   const idArr = `{${movementIds.join(",")}}`;
-  return await runner.execute<ConsumptionRow>(sql`
+  return await runner.execute<ConsumptionRow>(
+    sql`
     select c.cost_layer_id, c.issue_movement_id,
            c.quantity::text as consumed_quantity,
            m.kind as issue_kind, m.quantity::text as issue_quantity,
@@ -177,7 +187,9 @@ export async function liveConsumptions(
           where reversal.org_id = c.org_id
             and reversal.reverses_movement_id = c.issue_movement_id
        )
-     order by c.created_at, c.cost_layer_id`, "objects");
+     order by c.created_at, c.cost_layer_id`,
+    "objects",
+  );
 }
 
 export function reversibleDependent(
@@ -198,8 +210,7 @@ export function reversibleDependent(
     return {
       reversible: true,
       sourceDocument,
-      reverseAction:
-        `Void ${sourceDocument.number} (the sales fulfillment), then void this receipt`,
+      reverseAction: `Void ${sourceDocument.number} (the sales fulfillment), then void this receipt`,
     };
   }
   // A posted invoice's sale is legitimate history with no void path: the

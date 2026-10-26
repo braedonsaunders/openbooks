@@ -17,8 +17,7 @@ export const PATCH = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params, body }) => {
     const { id } = params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid job level" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid job level" }, { status: 400 });
     try {
       const level = await updateJobLevel({
         orgId: gate.user.orgId,
@@ -27,9 +26,7 @@ export const PATCH = defineRoute({
         name: body.name ?? null,
         rank: body.rank ?? null,
         equalValueCriteria:
-          body.equalValueCriteria === undefined
-            ? undefined
-            : (body.equalValueCriteria ?? null),
+          body.equalValueCriteria === undefined ? undefined : (body.equalValueCriteria ?? null),
         isActive: body.isActive ?? null,
         reason: body.reason,
       });

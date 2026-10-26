@@ -24,10 +24,18 @@ test("guideline tenure remains decimal across leap days and the early-year bound
   assert.equal(exactGuidelineTenure("2024-02-28", "2024-03-01"), "0.005475701574264203");
   assert.equal(exactGuidelineTenure("0099-12-31", "0100-01-01"), "0.002737850787132101");
   assert.equal(exactGuidelineTenure("2026-04-02", "2026-04-01"), "0.000000000000000000");
-  assert.equal(evaluateExactFormula("tenure_years * 365.25", {
-    rating: null, compaRatio: "1", tenureYears: exactGuidelineTenure("2024-02-28", "2024-03-01"),
-  }), "2.000000");
-  assert.throws(() => exactGuidelineTenure("2025-02-29", "2026-04-01"), /valid YYYY-MM-DD calendar date/);
+  assert.equal(
+    evaluateExactFormula("tenure_years * 365.25", {
+      rating: null,
+      compaRatio: "1",
+      tenureYears: exactGuidelineTenure("2024-02-28", "2024-03-01"),
+    }),
+    "2.000000",
+  );
+  assert.throws(
+    () => exactGuidelineTenure("2025-02-29", "2026-04-01"),
+    /valid YYYY-MM-DD calendar date/,
+  );
 });
 
 describe("compa-ratio", () => {
@@ -46,19 +54,25 @@ describe("compa-ratio", () => {
   });
 
   test("non-decimal rates are refused, never coerced", () => {
-    assert.throws(() => compaRatio("abc", "100000"), (e: unknown) => {
-      assert.ok(e instanceof CompensationError);
-      assert.match(e.message, /rate "abc" is not a finite decimal/);
-      return true;
-    });
+    assert.throws(
+      () => compaRatio("abc", "100000"),
+      (e: unknown) => {
+        assert.ok(e instanceof CompensationError);
+        assert.match(e.message, /rate "abc" is not a finite decimal/);
+        return true;
+      },
+    );
   });
 
   test("zero target refuses by name instead of dividing", () => {
-    assert.throws(() => compaRatio("85000", "0"), (e: unknown) => {
-      assert.ok(e instanceof CompensationError);
-      assert.match(e.message, /band target 0 is not positive/);
-      return true;
-    });
+    assert.throws(
+      () => compaRatio("85000", "0"),
+      (e: unknown) => {
+        assert.ok(e instanceof CompensationError);
+        assert.match(e.message, /band target 0 is not positive/);
+        return true;
+      },
+    );
   });
 
   test("placement names the side of the range", () => {
@@ -86,19 +100,71 @@ describe("compa-ratio", () => {
 describe("matrix guideline", () => {
   test("incomplete draft matrices refuse pricing by name and declared cells validate exactly", () => {
     validateMatrixGuideline({});
-    assert.throws(() => resolveMatrixGuideline({} as MatrixGuideline, null, "1"), /matrix has no rows.*declare at least one performance bucket/);
-    assert.throws(() => validateMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { exceeds: { q3: { min: "1", max: "3" } } } }), /undeclared performance row "exceeds"/);
-    assert.throws(() => validateMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { meets: { q4: { min: "1", max: "3" } } } }), /undeclared quartile "q4"/);
-    assert.throws(() => validateMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { meets: { q3: { min: "3", max: "1" } } } }), /"meets" \/ q3.*minimum above its maximum/);
-    assert.throws(() => validateMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { meets: { q3: { min: "1,25", max: "3" } } } }), /as "1.25"/);
-    assert.deepEqual(resolveMatrixGuideline({ rows: ["meets"], cols: ["q3"], cells: { meets: { q3: { min: "1.25", max: "3" } } } }, "meets", "1"), { min: "1.25", max: "3" });
+    assert.throws(
+      () => resolveMatrixGuideline({} as MatrixGuideline, null, "1"),
+      /matrix has no rows.*declare at least one performance bucket/,
+    );
+    assert.throws(
+      () =>
+        validateMatrixGuideline({
+          rows: ["meets"],
+          cols: ["q3"],
+          cells: { exceeds: { q3: { min: "1", max: "3" } } },
+        }),
+      /undeclared performance row "exceeds"/,
+    );
+    assert.throws(
+      () =>
+        validateMatrixGuideline({
+          rows: ["meets"],
+          cols: ["q3"],
+          cells: { meets: { q4: { min: "1", max: "3" } } },
+        }),
+      /undeclared quartile "q4"/,
+    );
+    assert.throws(
+      () =>
+        validateMatrixGuideline({
+          rows: ["meets"],
+          cols: ["q3"],
+          cells: { meets: { q3: { min: "3", max: "1" } } },
+        }),
+      /"meets" \/ q3.*minimum above its maximum/,
+    );
+    assert.throws(
+      () =>
+        validateMatrixGuideline({
+          rows: ["meets"],
+          cols: ["q3"],
+          cells: { meets: { q3: { min: "1,25", max: "3" } } },
+        }),
+      /as "1.25"/,
+    );
+    assert.deepEqual(
+      resolveMatrixGuideline(
+        { rows: ["meets"], cols: ["q3"], cells: { meets: { q3: { min: "1.25", max: "3" } } } },
+        "meets",
+        "1",
+      ),
+      { min: "1.25", max: "3" },
+    );
   });
   const matrix = {
     rows: ["exceeds", "meets"],
     cols: ["q1", "q2", "q3", "q4"],
     cells: {
-      exceeds: { q1: { min: 5, max: 8 }, q2: { min: 4, max: 6 }, q3: { min: 3, max: 5 }, q4: { min: 0, max: 3 } },
-      meets: { q1: { min: 3, max: 5 }, q2: { min: 2, max: 4 }, q3: { min: 1, max: 3 }, q4: { min: 0, max: 2 } },
+      exceeds: {
+        q1: { min: 5, max: 8 },
+        q2: { min: 4, max: 6 },
+        q3: { min: 3, max: 5 },
+        q4: { min: 0, max: 3 },
+      },
+      meets: {
+        q1: { min: 3, max: 5 },
+        q2: { min: 2, max: 4 },
+        q3: { min: 1, max: 3 },
+        q4: { min: 0, max: 2 },
+      },
     },
     unratedRow: "meets",
   };
@@ -118,7 +184,10 @@ describe("matrix guideline", () => {
 
   test("a missing cell refuses by name", () => {
     const hollow = { ...matrix, cells: { ...matrix.cells, meets: {} } };
-    assert.throws(() => resolveMatrixGuideline(hollow, null, "0.75"), /no usable cell for performance "meets" in quartile q1/);
+    assert.throws(
+      () => resolveMatrixGuideline(hollow, null, "0.75"),
+      /no usable cell for performance "meets" in quartile q1/,
+    );
   });
 
   test("a missing quartile column refuses instead of pricing from the first column", () => {
@@ -139,34 +208,77 @@ describe("matrix guideline", () => {
 
 describe("formula evaluator", () => {
   test("arithmetic with precedence over the three variables", () => {
-    assert.equal(evaluateFormula("rating * 2 + compa_ratio", { rating: 3, compaRatio: 0.9, tenureYears: 2 }), 6.9);
-    assert.equal(evaluateFormula("2 * (rating + 1)", { rating: 3, compaRatio: 1, tenureYears: 1 }), 8);
-    assert.equal(evaluateFormula("clamp(rating + tenure_years, 0, 6)", { rating: 4, compaRatio: 1, tenureYears: 5 }), 6);
-    assert.equal(evaluateFormula("max(rating, 3) + min(compa_ratio, 1)", { rating: 2, compaRatio: 1.2, tenureYears: 0 }), 4);
+    assert.equal(
+      evaluateFormula("rating * 2 + compa_ratio", { rating: 3, compaRatio: 0.9, tenureYears: 2 }),
+      6.9,
+    );
+    assert.equal(
+      evaluateFormula("2 * (rating + 1)", { rating: 3, compaRatio: 1, tenureYears: 1 }),
+      8,
+    );
+    assert.equal(
+      evaluateFormula("clamp(rating + tenure_years, 0, 6)", {
+        rating: 4,
+        compaRatio: 1,
+        tenureYears: 5,
+      }),
+      6,
+    );
+    assert.equal(
+      evaluateFormula("max(rating, 3) + min(compa_ratio, 1)", {
+        rating: 2,
+        compaRatio: 1.2,
+        tenureYears: 0,
+      }),
+      4,
+    );
   });
 
   test("an unknown identifier refuses by name", () => {
-    assert.throws(() => evaluateFormula("salary * 2", { rating: 3, compaRatio: 1, tenureYears: 1 }), /names "salary".*available inputs are rating, compa_ratio, tenure_years.*choose a declared input/);
+    assert.throws(
+      () => evaluateFormula("salary * 2", { rating: 3, compaRatio: 1, tenureYears: 1 }),
+      /names "salary".*available inputs are rating, compa_ratio, tenure_years.*choose a declared input/,
+    );
   });
 
   test("a function that does not exist refuses", () => {
-    assert.throws(() => evaluateFormula("pow(rating, 2)", { rating: 3, compaRatio: 1, tenureYears: 1 }), /calls "pow".*available functions are min, max, clamp.*choose one/);
+    assert.throws(
+      () => evaluateFormula("pow(rating, 2)", { rating: 3, compaRatio: 1, tenureYears: 1 }),
+      /calls "pow".*available functions are min, max, clamp.*choose one/,
+    );
   });
 
   test("property access is not an expression", () => {
-    assert.throws(() => evaluateFormula("rating.toString", { rating: 3, compaRatio: 1, tenureYears: 1 }), /contains "\."/);
+    assert.throws(
+      () => evaluateFormula("rating.toString", { rating: 3, compaRatio: 1, tenureYears: 1 }),
+      /contains "\."/,
+    );
   });
 
   test("division by zero refuses instead of yielding Infinity", () => {
-    assert.throws(() => evaluateFormula("rating / (compa_ratio - compa_ratio)", { rating: 3, compaRatio: 1, tenureYears: 1 }), /divides by zero/);
+    assert.throws(
+      () =>
+        evaluateFormula("rating / (compa_ratio - compa_ratio)", {
+          rating: 3,
+          compaRatio: 1,
+          tenureYears: 1,
+        }),
+      /divides by zero/,
+    );
   });
 
   test("a formula needing a rating refuses for an unrated line", () => {
-    assert.throws(() => evaluateFormula("rating * 2", { rating: null, compaRatio: 1, tenureYears: 1 }), /needs a rating but this line has no shared review/);
+    assert.throws(
+      () => evaluateFormula("rating * 2", { rating: null, compaRatio: 1, tenureYears: 1 }),
+      /needs a rating but this line has no shared review/,
+    );
   });
 
   test("an empty formula refuses", () => {
-    assert.throws(() => evaluateFormula("  ", { rating: 3, compaRatio: 1, tenureYears: 1 }), /formula is empty/);
+    assert.throws(
+      () => evaluateFormula("  ", { rating: 3, compaRatio: 1, tenureYears: 1 }),
+      /formula is empty/,
+    );
   });
 
   test("stored guidelines carry exact inputs and round only once to six places", () => {
@@ -178,9 +290,27 @@ describe("formula evaluator", () => {
   });
 
   test("conditional guidelines use comparisons and keep missing ratings explicit", () => {
-    assert.equal(evaluateExactFormula("if(compa_ratio < 1, 5, 3)", { rating: null, compaRatio: "0.9", tenureYears: "2" }), "5.000000");
-    assert.throws(() => evaluateExactFormula("if(compa_ratio < 1, 5, rating)", { rating: null, compaRatio: "0.9", tenureYears: "2" }), /needs a rating.*share a review/);
-    assert.throws(() => validateGuidelineFormula("compa_ratio < 1"), /must produce a numeric percent/);
+    assert.equal(
+      evaluateExactFormula("if(compa_ratio < 1, 5, 3)", {
+        rating: null,
+        compaRatio: "0.9",
+        tenureYears: "2",
+      }),
+      "5.000000",
+    );
+    assert.throws(
+      () =>
+        evaluateExactFormula("if(compa_ratio < 1, 5, rating)", {
+          rating: null,
+          compaRatio: "0.9",
+          tenureYears: "2",
+        }),
+      /needs a rating.*share a review/,
+    );
+    assert.throws(
+      () => validateGuidelineFormula("compa_ratio < 1"),
+      /must produce a numeric percent/,
+    );
     validateGuidelineFormula("if(compa_ratio < 1, 5, 3)");
   });
 
@@ -188,15 +318,45 @@ describe("formula evaluator", () => {
     assert.equal(exactReviewRating(null), null);
     assert.equal(exactReviewRating("3.50"), "3.5");
     assert.throws(() => exactReviewRating("NaN"), /shared review rating.*not a number/);
-    assert.throws(() => evaluateExactFormula("rating * 2", { rating: exactReviewRating(null), compaRatio: "1", tenureYears: "2" }), /needs a rating.*share a review/);
+    assert.throws(
+      () =>
+        evaluateExactFormula("rating * 2", {
+          rating: exactReviewRating(null),
+          compaRatio: "1",
+          tenureYears: "2",
+        }),
+      /needs a rating.*share a review/,
+    );
   });
 
   test("unreadable exact inputs and oversized stored guideline results refuse", () => {
-    assert.throws(() => evaluateExactFormula("compa_ratio", { rating: null, compaRatio: "0,95", tenureYears: "2" }), /as "0.95"/);
-    assert.throws(() => evaluateExactFormula("10000000000000", { rating: null, compaRatio: "1", tenureYears: "2" }), /result exceeds 13 whole digits/);
-    assert.throws(() => evaluateFormula("rating", { rating: NaN, compaRatio: 1, tenureYears: 2 }), /inputs are not finite/);
-    assert.throws(() => evaluateExactFormula("clamp(3, 10, 1)", { rating: null, compaRatio: "1", tenureYears: "2" }), /lower bound above its upper bound/);
-    assert.throws(() => validateGuidelineFormula("10000000000000"), /result exceeds 13 whole digits/);
+    assert.throws(
+      () =>
+        evaluateExactFormula("compa_ratio", { rating: null, compaRatio: "0,95", tenureYears: "2" }),
+      /as "0.95"/,
+    );
+    assert.throws(
+      () =>
+        evaluateExactFormula("10000000000000", { rating: null, compaRatio: "1", tenureYears: "2" }),
+      /result exceeds 13 whole digits/,
+    );
+    assert.throws(
+      () => evaluateFormula("rating", { rating: NaN, compaRatio: 1, tenureYears: 2 }),
+      /inputs are not finite/,
+    );
+    assert.throws(
+      () =>
+        evaluateExactFormula("clamp(3, 10, 1)", {
+          rating: null,
+          compaRatio: "1",
+          tenureYears: "2",
+        }),
+      /lower bound above its upper bound/,
+    );
+    assert.throws(
+      () => validateGuidelineFormula("10000000000000"),
+      /result exceeds 13 whole digits/,
+    );
     assert.throws(() => validateGuidelineFormula("1 / 0"), /divides by zero/);
   });
 });
@@ -268,10 +428,38 @@ describe("ordinary least squares", () => {
 describe("unexplained gap fit", () => {
   test("constant controls drop to the raw group gap, named group_only", () => {
     const fitted = fitUnexplainedGap([
-      { groupIsA: true, tenureYears: 5, levelRank: 3, hoursBasis: 2080, subsidiaryIdx: 0, logRate: Math.log(100000) },
-      { groupIsA: true, tenureYears: 5, levelRank: 3, hoursBasis: 2080, subsidiaryIdx: 0, logRate: Math.log(100000) },
-      { groupIsA: false, tenureYears: 5, levelRank: 3, hoursBasis: 2080, subsidiaryIdx: 0, logRate: Math.log(80000) },
-      { groupIsA: false, tenureYears: 5, levelRank: 3, hoursBasis: 2080, subsidiaryIdx: 0, logRate: Math.log(80000) },
+      {
+        groupIsA: true,
+        tenureYears: 5,
+        levelRank: 3,
+        hoursBasis: 2080,
+        subsidiaryIdx: 0,
+        logRate: Math.log(100000),
+      },
+      {
+        groupIsA: true,
+        tenureYears: 5,
+        levelRank: 3,
+        hoursBasis: 2080,
+        subsidiaryIdx: 0,
+        logRate: Math.log(100000),
+      },
+      {
+        groupIsA: false,
+        tenureYears: 5,
+        levelRank: 3,
+        hoursBasis: 2080,
+        subsidiaryIdx: 0,
+        logRate: Math.log(80000),
+      },
+      {
+        groupIsA: false,
+        tenureYears: 5,
+        levelRank: 3,
+        hoursBasis: 2080,
+        subsidiaryIdx: 0,
+        logRate: Math.log(80000),
+      },
     ]);
     assert.equal(fitted.method, "group_only");
     assert.ok(Math.abs(fitted.unexplainedGapPct! - 25) < 0.001, `gap ${fitted.unexplainedGapPct}`);
@@ -279,10 +467,38 @@ describe("unexplained gap fit", () => {
 
   test("balanced tenure partials out, named ols_log_rate", () => {
     const fitted = fitUnexplainedGap([
-      { groupIsA: true, tenureYears: 2, levelRank: 3, hoursBasis: 2080, subsidiaryIdx: 0, logRate: Math.log(100000) },
-      { groupIsA: true, tenureYears: 6, levelRank: 3, hoursBasis: 2080, subsidiaryIdx: 0, logRate: Math.log(100000) },
-      { groupIsA: false, tenureYears: 2, levelRank: 3, hoursBasis: 2080, subsidiaryIdx: 0, logRate: Math.log(80000) },
-      { groupIsA: false, tenureYears: 6, levelRank: 3, hoursBasis: 2080, subsidiaryIdx: 0, logRate: Math.log(80000) },
+      {
+        groupIsA: true,
+        tenureYears: 2,
+        levelRank: 3,
+        hoursBasis: 2080,
+        subsidiaryIdx: 0,
+        logRate: Math.log(100000),
+      },
+      {
+        groupIsA: true,
+        tenureYears: 6,
+        levelRank: 3,
+        hoursBasis: 2080,
+        subsidiaryIdx: 0,
+        logRate: Math.log(100000),
+      },
+      {
+        groupIsA: false,
+        tenureYears: 2,
+        levelRank: 3,
+        hoursBasis: 2080,
+        subsidiaryIdx: 0,
+        logRate: Math.log(80000),
+      },
+      {
+        groupIsA: false,
+        tenureYears: 6,
+        levelRank: 3,
+        hoursBasis: 2080,
+        subsidiaryIdx: 0,
+        logRate: Math.log(80000),
+      },
     ]);
     assert.equal(fitted.method, "ols_log_rate");
     assert.ok(Math.abs(fitted.unexplainedGapPct! - 25) < 0.001, `gap ${fitted.unexplainedGapPct}`);
@@ -290,7 +506,14 @@ describe("unexplained gap fit", () => {
 
   test("a single-sided category cannot fit", () => {
     const fitted = fitUnexplainedGap([
-      { groupIsA: true, tenureYears: 2, levelRank: 3, hoursBasis: 2080, subsidiaryIdx: 0, logRate: Math.log(100000) },
+      {
+        groupIsA: true,
+        tenureYears: 2,
+        levelRank: 3,
+        hoursBasis: 2080,
+        subsidiaryIdx: 0,
+        logRate: Math.log(100000),
+      },
     ]);
     assert.equal(fitted.unexplainedGapPct, null);
     assert.equal(fitted.method, "insufficient_data");

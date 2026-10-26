@@ -6,7 +6,8 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __payToasts: { kind: string; message: string }[] | undefined;
-  var __payRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
+  var __payRouter:
+    { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
   var __payConfirmCalls: { title: string; message: string; confirmLabel: string }[] | undefined;
 }
 
@@ -73,7 +74,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -123,17 +126,19 @@ async function mountPayment(
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale={locale} messages={localeMessages} timeZone="UTC">
-        <BusinessDateProvider today="2026-07-15"><MoneyProvider currency="USD">
-          <PaymentDrawer
-            payment={{ doc, bankAccountId, allocations: allocations as never, applied: [] }}
-            initialOpenItems={initialOpenItems as never}
-            parties={[]}
-            bankAccounts={[]}
-            side="ap"
-            basePath="/ap/payments"
-            initialMode={initialMode as never}
-          />
-        </MoneyProvider></BusinessDateProvider>
+        <BusinessDateProvider today="2026-07-15">
+          <MoneyProvider currency="USD">
+            <PaymentDrawer
+              payment={{ doc, bankAccountId, allocations: allocations as never, applied: [] }}
+              initialOpenItems={initialOpenItems as never}
+              parties={[]}
+              bankAccounts={[]}
+              side="ap"
+              basePath="/ap/payments"
+              initialMode={initialMode as never}
+            />
+          </MoneyProvider>
+        </BusinessDateProvider>
       </NextIntlClientProvider>,
     );
     await tick();
@@ -184,7 +189,11 @@ test("a refused delete pins the reason instead of toasting into the void", async
   await tick();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the delete refusal must pin as an alert, not vanish with the toast");
-  assert.match(alert.textContent ?? "", /Payment has allocations applied/, "the alert must carry the server reason");
+  assert.match(
+    alert.textContent ?? "",
+    /Payment has allocations applied/,
+    "the alert must carry the server reason",
+  );
   const toasts = globalThis.__payToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "error" && /allocations applied/.test(toast.message)),
@@ -236,7 +245,10 @@ test("a refused void sends the drawer revision and pins the server reason", asyn
   const restoreFetch = scriptFetch((url, init) => {
     if (url === `/api/documents/${doc.id}/void` && init?.method === "POST") {
       voidBody = JSON.parse(String(init.body));
-      return Response.json({ error: "The posting period is closed; use an open period." }, { status: 409 });
+      return Response.json(
+        { error: "The posting period is closed; use an open period." },
+        { status: 409 },
+      );
     }
     if (url.includes("/api/flows/record-state")) return approvalFixture();
     return null;
@@ -249,15 +261,24 @@ test("a refused void sends the drawer revision and pins the server reason", asyn
   assert.ok(voidAction, "a posted payment offers the controlled void action");
   await click(voidAction);
   assert.deepEqual(voidBody, { reason: "duplicate payment", expectedUpdatedAt: doc.updated_at });
-  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /posting period is closed/i);
+  assert.match(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /posting period is closed/i,
+  );
   assert.ok(
-    (globalThis.__payToasts ?? []).some((toast) => toast.kind === "error" && /posting period is closed/i.test(toast.message)),
+    (globalThis.__payToasts ?? []).some(
+      (toast) => toast.kind === "error" && /posting period is closed/i.test(toast.message),
+    ),
     "the server refusal is also announced as an error toast",
   );
   await click(buttonsNamed("Actions")[0]!);
   const retry = buttonsNamed("Void")[0];
   assert.ok(retry);
-  assert.equal(retry.disabled, false, "a refused void releases its action for correction and retry");
+  assert.equal(
+    retry.disabled,
+    false,
+    "a refused void releases its action for correction and retry",
+  );
 });
 
 test("a non-JSON post refusal keeps its fallback visible and releases the action", async (t) => {
@@ -266,7 +287,10 @@ test("a non-JSON post refusal keeps its fallback visible and releases the action
   const restoreFetch = scriptFetch((url, init) => {
     if (url === "/api/payments/post-with-applications" && init?.method === "POST") {
       postBody = JSON.parse(String(init.body));
-      return new Response("upstream proxy error", { status: 422, headers: { "content-type": "text/html" } });
+      return new Response("upstream proxy error", {
+        status: 422,
+        headers: { "content-type": "text/html" },
+      });
     }
     if (url.includes("/api/flows/record-state")) return approvalFixture();
     return null;
@@ -288,44 +312,49 @@ test("a non-JSON post refusal keeps its fallback visible and releases the action
     transactionApplied: "0.00",
     transactionOpen: "250.00",
   };
-  const { unmount } = await mountPayment(
-    doc,
-    [item],
-    undefined,
-    "bank-account-1",
-    [{
+  const { unmount } = await mountPayment(doc, [item], undefined, "bank-account-1", [
+    {
       openLineId: "invoice-line-1",
       sourceTransactionAmount: "250.00",
       targetTransactionAmount: "250.00",
       settlementRate: "1",
       settlementRateSource: "same_currency",
       settlementRateReference: "same currency",
-    }],
-  );
+    },
+  ]);
   t.after(unmount);
   const actions = buttonsNamed("Actions")[0];
   assert.ok(actions);
   await click(actions);
-  const post = [...document.querySelectorAll("button")].find((button) => /Pay & post/.test(button.textContent ?? "")) as HTMLButtonElement | undefined;
+  const post = [...document.querySelectorAll("button")].find((button) =>
+    /Pay & post/.test(button.textContent ?? ""),
+  ) as HTMLButtonElement | undefined;
   assert.ok(post, "a valid draft payment offers Pay & post");
   assert.equal(post.disabled, false);
   await click(post);
   assert.deepEqual(postBody, {
     documentId: doc.id,
     expectedUpdatedAt: doc.updated_at,
-    allocations: [{
-      openLineId: "invoice-line-1",
-      sourceTransactionAmount: "250.0000",
-      targetTransactionAmount: "250.0000",
-      settlementRate: "1",
-      settlementRateSource: "same_currency",
-      settlementRateReference: "same currency",
-    }],
+    allocations: [
+      {
+        openLineId: "invoice-line-1",
+        sourceTransactionAmount: "250.0000",
+        targetTransactionAmount: "250.0000",
+        settlementRate: "1",
+        settlementRateSource: "same_currency",
+        settlementRateReference: "same currency",
+      },
+    ],
   });
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Posting failed/);
-  assert.doesNotMatch(document.querySelector('[role="alert"]')?.textContent ?? "", /SyntaxError|Unexpected token/);
+  assert.doesNotMatch(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /SyntaxError|Unexpected token/,
+  );
   assert.ok(
-    (globalThis.__payToasts ?? []).some((toast) => toast.kind === "error" && /Posting failed/.test(toast.message)),
+    (globalThis.__payToasts ?? []).some(
+      (toast) => toast.kind === "error" && /Posting failed/.test(toast.message),
+    ),
     "the refused post remains announced after its persistent alert is rendered",
   );
   assert.equal(post.disabled, false, "the action is available again after the non-JSON refusal");
@@ -351,24 +380,47 @@ test("the drawer title shows the business reference instead of a sync handle", a
 test("delete confirmation text reaches the real drawer in every locale", async () => {
   const { LOCALES } = await import("../../../i18n/config.ts");
   for (const { code: locale } of LOCALES) {
-    const localeMessages = locale === "en"
-      ? messages
-      : (await import(`../../../messages/${locale}/index.ts`)).default as typeof messages;
+    const localeMessages =
+      locale === "en"
+        ? messages
+        : ((await import(`../../../messages/${locale}/index.ts`)).default as typeof messages);
     const strings = localeMessages as unknown as {
       common: { labels: { actions: string }; actions: { delete: string } };
-      payments: { drawer: { deleteConfirmTitle: string; deleteConfirmBody: string; deleteConfirmAction: string } };
+      payments: {
+        drawer: {
+          deleteConfirmTitle: string;
+          deleteConfirmBody: string;
+          deleteConfirmAction: string;
+        };
+      };
     };
-    const restoreFetch = scriptFetch((url) => url.includes("/api/flows/record-state") ? approvalFixture() : null);
-    const { unmount } = await mountPayment(DRAFT_DOC(), [], undefined, null, [], locale, localeMessages);
+    const restoreFetch = scriptFetch((url) =>
+      url.includes("/api/flows/record-state") ? approvalFixture() : null,
+    );
+    const { unmount } = await mountPayment(
+      DRAFT_DOC(),
+      [],
+      undefined,
+      null,
+      [],
+      locale,
+      localeMessages,
+    );
     try {
       await click(buttonsNamed(strings.common.labels.actions)[0]!);
       await click(buttonsNamed(strings.common.actions.delete)[0]!);
-      assert.deepEqual(globalThis.__payConfirmCalls, [{
-        title: strings.payments.drawer.deleteConfirmTitle,
-        message: strings.payments.drawer.deleteConfirmBody,
-        confirmLabel: strings.payments.drawer.deleteConfirmAction,
-        tone: "danger",
-      }], `${locale} confirmation should resolve from the drawer catalog`);
+      assert.deepEqual(
+        globalThis.__payConfirmCalls,
+        [
+          {
+            title: strings.payments.drawer.deleteConfirmTitle,
+            message: strings.payments.drawer.deleteConfirmBody,
+            confirmLabel: strings.payments.drawer.deleteConfirmAction,
+            tone: "danger",
+          },
+        ],
+        `${locale} confirmation should resolve from the drawer catalog`,
+      );
     } finally {
       await unmount();
       restoreFetch();
@@ -386,23 +438,27 @@ test("a refused auto-apply pins instead of toasting into the void", async (t) =>
     return null;
   });
   t.after(restoreFetch);
-  const { unmount } = await mountPayment(doc, [
-    {
-      lineId: "l1",
-      entryNumber: "BILL-1",
-      postingDate: "2026-09-01",
-      dueDate: null,
-      documentNumber: "BILL-1",
-      documentKind: "vendor_bill",
-      referenceNumber: null,
-      amount: "250.00",
-      applied: "0.00",
-      open: "250.00",
-      currency: "USD",
-      transactionAmount: "250.00",
-      transactionOpen: "250.00",
-    },
-  ], "edit");
+  const { unmount } = await mountPayment(
+    doc,
+    [
+      {
+        lineId: "l1",
+        entryNumber: "BILL-1",
+        postingDate: "2026-09-01",
+        dueDate: null,
+        documentNumber: "BILL-1",
+        documentKind: "vendor_bill",
+        referenceNumber: null,
+        amount: "250.00",
+        applied: "0.00",
+        open: "250.00",
+        currency: "USD",
+        transactionAmount: "250.00",
+        transactionOpen: "250.00",
+      },
+    ],
+    "edit",
+  );
   t.after(unmount);
   const apply = buttonsNamed("Auto-apply")[0];
   assert.ok(apply, "edit mode with open items must offer Auto-apply");
@@ -410,73 +466,198 @@ test("a refused auto-apply pins instead of toasting into the void", async (t) =>
   await tick();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the auto-apply refusal must pin as an alert, not vanish with the toast");
-  assert.match(alert.textContent ?? "", /No open items in USD/, "the alert must carry the server reason");
+  assert.match(
+    alert.textContent ?? "",
+    /No open items in USD/,
+    "the alert must carry the server reason",
+  );
 });
 
 test("changing the payment date hides prior-date FX evidence while new rates load", async (t) => {
   const doc = { ...DRAFT_DOC(), document_date: "2026-09-17" };
-  const item = { lineId: "bill-fx", entryNumber: "BILL-FX", postingDate: "2026-09-01", dueDate: null, documentNumber: "BILL-FX", documentKind: "vendor_bill", referenceNumber: null, amount: "100.00", applied: "0.00", open: "100.00", currency: "EUR", transactionAmount: "100.00", transactionApplied: "0.00", transactionOpen: "100.00" };
-  const restoreFetch = scriptFetch((url) => url.includes("/settlement-rates") ? Response.json({ rates: [{ id: "fx-old", toCurrency: "EUR", rate: "0.80", asOf: "2026-09-17", source: "daily" }] }) : null);
+  const item = {
+    lineId: "bill-fx",
+    entryNumber: "BILL-FX",
+    postingDate: "2026-09-01",
+    dueDate: null,
+    documentNumber: "BILL-FX",
+    documentKind: "vendor_bill",
+    referenceNumber: null,
+    amount: "100.00",
+    applied: "0.00",
+    open: "100.00",
+    currency: "EUR",
+    transactionAmount: "100.00",
+    transactionApplied: "0.00",
+    transactionOpen: "100.00",
+  };
+  const restoreFetch = scriptFetch((url) =>
+    url.includes("/settlement-rates")
+      ? Response.json({
+          rates: [
+            { id: "fx-old", toCurrency: "EUR", rate: "0.80", asOf: "2026-09-17", source: "daily" },
+          ],
+        })
+      : null,
+  );
   t.after(restoreFetch);
-  const { unmount } = await mountPayment(doc, [item], "edit", null, [{ openLineId: "bill-fx", sourceTransactionAmount: "125.00", targetTransactionAmount: "100.00", settlementRate: "0.80", settlementRateSource: "provider", settlementRateReference: "daily · 2026-09-17", settlementFxRateId: "fx-old" }]);
+  const { unmount } = await mountPayment(doc, [item], "edit", null, [
+    {
+      openLineId: "bill-fx",
+      sourceTransactionAmount: "125.00",
+      targetTransactionAmount: "100.00",
+      settlementRate: "0.80",
+      settlementRateSource: "provider",
+      settlementRateReference: "daily · 2026-09-17",
+      settlementFxRateId: "fx-old",
+    },
+  ]);
   t.after(unmount);
-  const date = document.querySelector('input[data-date-field]') as HTMLInputElement;
-  const evidence = [...document.querySelectorAll("select")].find((select) => [...select.options].some((option) => option.textContent?.includes("2026-09-17")));
+  const date = document.querySelector("input[data-date-field]") as HTMLInputElement;
+  const evidence = [...document.querySelectorAll("select")].find((select) =>
+    [...select.options].some((option) => option.textContent?.includes("2026-09-17")),
+  );
   assert.ok(evidence, "the initially fetched FX evidence renders");
   globalThis.fetch = (async () => new Promise<Response>(() => {})) as typeof fetch;
   await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(date, "2026-09-18");
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(
+      date,
+      "2026-09-18",
+    );
     date.dispatchEvent(new window.Event("input", { bubbles: true }));
     date.dispatchEvent(new window.Event("change", { bubbles: true }));
     await tick();
   });
-  assert.equal([...evidence.options].some((option) => option.textContent?.includes("2026-09-17")), false);
+  assert.equal(
+    [...evidence.options].some((option) => option.textContent?.includes("2026-09-17")),
+    false,
+  );
 });
 
-test('opening another prefilled payment resets the header, applications and failed-request identity', async (t) => {
+test("opening another prefilled payment resets the header, applications and failed-request identity", async (t) => {
   const submitted: { body: Record<string, unknown>; key: string | null }[] = [];
-  const bank = randomUUID(), entity = randomUUID(), firstParty = randomUUID(), nextParty = randomUUID();
+  const bank = randomUUID(),
+    entity = randomUUID(),
+    firstParty = randomUUID(),
+    nextParty = randomUUID();
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === '/api/payments' && init?.method === 'POST') {
-      submitted.push({body:JSON.parse(String(init.body)),key:new Headers(init.headers).get('Idempotency-Key')});
-      return Response.json({error:'Payment service temporarily unavailable'}, {status:503});
+    if (url === "/api/payments" && init?.method === "POST") {
+      submitted.push({
+        body: JSON.parse(String(init.body)),
+        key: new Headers(init.headers).get("Idempotency-Key"),
+      });
+      return Response.json({ error: "Payment service temporarily unavailable" }, { status: 503 });
     }
-    if (url.includes('/funding-accounts')) return Response.json({accounts:[{id:bank,number:'1000',name:'Bank'}]});
-    if (url.includes('/api/flows/record-state')) return approvalFixture();
+    if (url.includes("/funding-accounts"))
+      return Response.json({ accounts: [{ id: bank, number: "1000", name: "Bank" }] });
+    if (url.includes("/api/flows/record-state")) return approvalFixture();
     return null;
   });
   t.after(restoreFetch);
   globalThis.__payToasts = [];
-  globalThis.__payRouter = {push(){}, replace() {},refresh(){}};
-  const host = document.createElement('div'); document.body.appendChild(host);
+  globalThis.__payRouter = { push() {}, replace() {}, refresh() {} };
+  const host = document.createElement("div");
+  document.body.appendChild(host);
   const root = createRoot(host);
-  t.after(async()=>{await act(async()=>root.unmount());host.remove()});
-  const render = async (party: string, line: string, amount: string, date: string, reference: string) => {
-    await act(async()=>{
-      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><BusinessDateProvider today="2026-07-15"><MoneyProvider currency="USD">
-        <PaymentDrawer createMode payment={{doc:{id:'',kind:'vendor_payment',status:'draft',currency:'USD',party_id:party,subsidiary_id:entity,document_date:date,reference_number:reference,updated_at:'',total:'0'},bankAccountId:bank,applied:[],allocations:[{openLineId:line,sourceTransactionAmount:amount,targetTransactionAmount:amount,settlementRate:'1',settlementRateSource:'same_currency',settlementRateReference:'same transaction currency'}]}}
-          initialOpenItems={[{lineId:line,entryNumber:line,postingDate:date,dueDate:null,documentNumber:line,documentKind:'vendor_bill',referenceNumber:null,amount,applied:'0',open:amount,currency:'USD',transactionAmount:amount,transactionApplied:'0',transactionOpen:amount}]}
-          parties={[{id:firstParty,display_name:'Rent vendor'},{id:nextParty,display_name:'Utility vendor'}]} bankAccounts={[{id:bank,number:'1000',name:'Bank'}]} side="ap" basePath="/payments" />
-      </MoneyProvider></BusinessDateProvider></NextIntlClientProvider>);
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+  const render = async (
+    party: string,
+    line: string,
+    amount: string,
+    date: string,
+    reference: string,
+  ) => {
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <BusinessDateProvider today="2026-07-15">
+            <MoneyProvider currency="USD">
+              <PaymentDrawer
+                createMode
+                payment={{
+                  doc: {
+                    id: "",
+                    kind: "vendor_payment",
+                    status: "draft",
+                    currency: "USD",
+                    party_id: party,
+                    subsidiary_id: entity,
+                    document_date: date,
+                    reference_number: reference,
+                    updated_at: "",
+                    total: "0",
+                  },
+                  bankAccountId: bank,
+                  applied: [],
+                  allocations: [
+                    {
+                      openLineId: line,
+                      sourceTransactionAmount: amount,
+                      targetTransactionAmount: amount,
+                      settlementRate: "1",
+                      settlementRateSource: "same_currency",
+                      settlementRateReference: "same transaction currency",
+                    },
+                  ],
+                }}
+                initialOpenItems={[
+                  {
+                    lineId: line,
+                    entryNumber: line,
+                    postingDate: date,
+                    dueDate: null,
+                    documentNumber: line,
+                    documentKind: "vendor_bill",
+                    referenceNumber: null,
+                    amount,
+                    applied: "0",
+                    open: amount,
+                    currency: "USD",
+                    transactionAmount: amount,
+                    transactionApplied: "0",
+                    transactionOpen: amount,
+                  },
+                ]}
+                parties={[
+                  { id: firstParty, display_name: "Rent vendor" },
+                  { id: nextParty, display_name: "Utility vendor" },
+                ]}
+                bankAccounts={[{ id: bank, number: "1000", name: "Bank" }]}
+                side="ap"
+                basePath="/payments"
+              />
+            </MoneyProvider>
+          </BusinessDateProvider>
+        </NextIntlClientProvider>,
+      );
       await tick();
     });
     await tick();
   };
-  await render(firstParty,'rent-line','4800.00','2026-07-05','RENT-JULY');
-  await click(buttonsNamed('Save')[0]!);
-  await render(nextParty,'utility-line','405.90','2026-07-20','UTILITY-JULY');
-  await click(buttonsNamed('Save')[0]!);
-  assert.equal(submitted.length,2);
-  assert.equal(submitted[0]!.body.partyId,firstParty);
-  assert.equal(submitted[1]!.body.partyId,nextParty);
-  assert.equal(submitted[1]!.body.documentDate,'2026-07-20');
-  assert.equal(submitted[1]!.body.referenceNumber,'UTILITY-JULY');
-  assert.deepEqual((submitted[1]!.body.allocations as {openLineId:string}[]).map(a=>a.openLineId),['utility-line']);
+  await render(firstParty, "rent-line", "4800.00", "2026-07-05", "RENT-JULY");
+  await click(buttonsNamed("Save")[0]!);
+  await render(nextParty, "utility-line", "405.90", "2026-07-20", "UTILITY-JULY");
+  await click(buttonsNamed("Save")[0]!);
+  assert.equal(submitted.length, 2);
+  assert.equal(submitted[0]!.body.partyId, firstParty);
+  assert.equal(submitted[1]!.body.partyId, nextParty);
+  assert.equal(submitted[1]!.body.documentDate, "2026-07-20");
+  assert.equal(submitted[1]!.body.referenceNumber, "UTILITY-JULY");
+  assert.deepEqual(
+    (submitted[1]!.body.allocations as { openLineId: string }[]).map((a) => a.openLineId),
+    ["utility-line"],
+  );
   assert.ok(submitted[0]!.key && submitted[1]!.key);
-  assert.notEqual(submitted[0]!.key,submitted[1]!.key);
-  await render(nextParty,'august-utility-line','430.00','2026-08-20','UTILITY-AUGUST');
-  await click(buttonsNamed('Save')[0]!);
-  assert.equal(submitted[2]!.body.referenceNumber,'UTILITY-AUGUST');
-  assert.deepEqual((submitted[2]!.body.allocations as {openLineId:string}[]).map(a=>a.openLineId),['august-utility-line']);
-  assert.notEqual(submitted[1]!.key,submitted[2]!.key);
+  assert.notEqual(submitted[0]!.key, submitted[1]!.key);
+  await render(nextParty, "august-utility-line", "430.00", "2026-08-20", "UTILITY-AUGUST");
+  await click(buttonsNamed("Save")[0]!);
+  assert.equal(submitted[2]!.body.referenceNumber, "UTILITY-AUGUST");
+  assert.deepEqual(
+    (submitted[2]!.body.allocations as { openLineId: string }[]).map((a) => a.openLineId),
+    ["august-utility-line"],
+  );
+  assert.notEqual(submitted[1]!.key, submitted[2]!.key);
 });

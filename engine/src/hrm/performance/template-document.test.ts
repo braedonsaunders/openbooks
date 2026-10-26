@@ -39,10 +39,7 @@ test("authoring drafts may be incomplete but every published form has a usable r
   );
   const ready = document();
   ready.sections[0]!.questions[0]!.prompt = "";
-  assert.throws(
-    () => validateReviewTemplateDocument(ready, true),
-    /Give every question a prompt/,
-  );
+  assert.throws(() => validateReviewTemplateDocument(ready, true), /Give every question a prompt/);
 });
 test("section and question identifiers are distinct valid UUIDs and configured metadata survives validation", () => {
   const valid = document(),
@@ -50,28 +47,16 @@ test("section and question identifiers are distinct valid UUIDs and configured m
   assert.equal(read.sections[0]!.weight, "1.5");
   assert.equal(read.sections[0]!.competencyId, valid.sections[0]!.competencyId);
   valid.sections[0]!.questions[0]!.id = valid.sections[0]!.id;
-  assert.throws(
-    () => validateReviewTemplateDocument(valid, true),
-    /distinct identifier/,
-  );
+  assert.throws(() => validateReviewTemplateDocument(valid, true), /distinct identifier/);
   valid.sections[0]!.questions[0]!.id = "invalid";
-  assert.throws(
-    () => validateReviewTemplateDocument(valid, true),
-    /distinct identifier/,
-  );
+  assert.throws(() => validateReviewTemplateDocument(valid, true), /distinct identifier/);
 });
 test("invalid exact-decimal weights and rating scales refuse before a form can publish", () => {
   const value = document();
   value.sections[0]!.weight = "1,5";
-  assert.throws(
-    () => validateReviewTemplateDocument(value, true),
-    /non-negative decimal/,
-  );
+  assert.throws(() => validateReviewTemplateDocument(value, true), /non-negative decimal/);
   value.sections[0]!.weight = "1.12345";
-  assert.throws(
-    () => validateReviewTemplateDocument(value, true),
-    /four decimal places/,
-  );
+  assert.throws(() => validateReviewTemplateDocument(value, true), /four decimal places/);
   value.sections[0]!.weight = "1";
   value.ratingScale.max = "0";
   assert.throws(() => validateReviewTemplateDocument(value, true), /inverted/);

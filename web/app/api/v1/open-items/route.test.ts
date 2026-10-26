@@ -37,9 +37,11 @@ stubModules({
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
 
 test("GET /api/v1/open-items forwards side, asOf, partyId, and limit", async () => {
-  const response = await GET(new Request(
-    "http://openbooks.test/api/v1/open-items?side=ar&asOf=2026-09-01&partyId=p1&limit=10",
-  ));
+  const response = await GET(
+    new Request(
+      "http://openbooks.test/api/v1/open-items?side=ar&asOf=2026-09-01&partyId=p1&limit=10",
+    ),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.input, {
     side: "ar",

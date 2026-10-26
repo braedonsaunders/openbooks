@@ -1,15 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  releasePickWave,
-  setPickDispatchPolicy,
-} from "@openbooks/engine/sales/pick-execution";
+import { releasePickWave, setPickDispatchPolicy } from "@openbooks/engine/sales/pick-execution";
 import { defineRoute } from "@/lib/api/route";
 import { uuidId } from "@/lib/api/json";
-import {
-  executionKey,
-  warehouseExecutionResponse,
-} from "@/lib/api/warehouse-execution";
+import { executionKey, warehouseExecutionResponse } from "@/lib/api/warehouse-execution";
 const body = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("release"),

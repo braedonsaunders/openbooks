@@ -26,7 +26,9 @@ function install(response: () => Response): Harness & { restore: () => void } {
     harness.requests.push({ url: String(input), init });
     return response();
   }) as typeof fetch;
-  (globalThis as { window?: unknown }).window = { location: { assign: (url: string) => harness.assigned.push(url) } };
+  (globalThis as { window?: unknown }).window = {
+    location: { assign: (url: string) => harness.assigned.push(url) },
+  };
   return {
     ...harness,
     restore: () => {
@@ -47,7 +49,10 @@ test("a refused switch keeps the tab where it is and names the refusal", async (
   ] as const) {
     const harness = install(() => Response.json({ error }, { status }));
     try {
-      const failure = await switchWorkspace(ORG).then(() => null, (caught: unknown) => caught);
+      const failure = await switchWorkspace(ORG).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
       assert.ok(failure instanceof WorkspaceSwitchError);
       assert.equal(failure.refusal, refusal);
       assert.equal(failure.status, status);
@@ -82,7 +87,13 @@ test("a successful switch posts to the endpoint, announces the workspace and loa
 
 test("the destination after a switch stays on this origin", () => {
   assert.equal(safeWorkspaceReturnTo("/payroll/separations"), "/payroll/separations");
-  for (const target of ["//outside.test", "/\\outside.test", "https://outside.test", "/\noutside", ""]) {
+  for (const target of [
+    "//outside.test",
+    "/\\outside.test",
+    "https://outside.test",
+    "/\noutside",
+    "",
+  ]) {
     assert.equal(safeWorkspaceReturnTo(target), "/", JSON.stringify(target));
   }
 });

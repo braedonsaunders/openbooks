@@ -82,7 +82,10 @@ const INVOICE = "11111111-1111-4111-8111-111111111111";
 
 test("POST /api/v1/stored-value/redeem posts the receipt and carries the idempotency key", async () => {
   routeState.calls.length = 0;
-  const response = await post({ code: "ABCD-EFGH", amount: "40.00", invoiceId: INVOICE }, "redeem-key-1");
+  const response = await post(
+    { code: "ABCD-EFGH", amount: "40.00", invoiceId: INVOICE },
+    "redeem-key-1",
+  );
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), {
     status: "posted",
@@ -106,7 +109,10 @@ test("POST /api/v1/stored-value/redeem requires the Idempotency-Key header", asy
 
 test("POST /api/v1/stored-value/redeem refuses an overdraft with the usable refusal", async () => {
   routeState.calls.length = 0;
-  const response = await post({ code: "BROKE", amount: "40.00", invoiceId: INVOICE }, "redeem-key-2");
+  const response = await post(
+    { code: "BROKE", amount: "40.00", invoiceId: INVOICE },
+    "redeem-key-2",
+  );
   assert.equal(response.status, 409);
   const body = (await response.json()) as { error: string; message: string };
   assert.equal(body.error, "stored_value_insufficient_balance");

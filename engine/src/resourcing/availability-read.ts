@@ -39,7 +39,10 @@ interface AbsenceRow extends AvailabilityAbsence {
 }
 
 function list(values: readonly string[]) {
-  return sql.join(values.map((value) => sql`${value}`), sql`, `);
+  return sql.join(
+    values.map((value) => sql`${value}`),
+    sql`, `,
+  );
 }
 
 function scopePredicate(allowedSubsidiaryIds: ReadonlySet<string> | null) {
@@ -122,7 +125,8 @@ export async function readAvailability(
     profile_country: string | null;
     profile_province: string | null;
     labour_jurisdiction: string | null;
-  }>(sql`
+  }>(
+    sql`
     select p.id as party_id, p.display_name,
            er.job_title, er.trade_id, er.department_id, p.subsidiary_id,
            s.country as subsidiary_country,
@@ -137,7 +141,9 @@ export async function readAvailability(
        and p.id in (${requestedIds})
        ${scopePredicate(allowedSubsidiaryIds)}
      order by p.id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (employeeRows.length === 0) return [];
 
   const employees: EmployeeAvailabilityScope[] = employeeRows.map((row) => ({
@@ -156,12 +162,14 @@ export async function readAvailability(
   const ids = list(visibleEmployeeIds);
   const schedules = await loadWorkSchedules(db, orgId, allowedSubsidiaryIds);
   const settings = await laborCostingSettings(orgId);
-  const absenceRows = (await db.execute<{
-    id: string;
-    employee_party_id: string;
-    on_date: string;
-    hours: string;
-  }>(sql`
+  const absenceRows = (
+    await db.execute<{
+      id: string;
+      employee_party_id: string;
+      on_date: string;
+      hours: string;
+    }>(
+      sql`
     select a.id, e.worker_party_id as employee_party_id,
            a.on_date::text as on_date, a.hours::text as hours
       from hrm_absences a
@@ -170,14 +178,23 @@ export async function readAvailability(
        and e.worker_party_id in (${ids})
        and a.on_date >= ${firstSunday} and a.on_date <= ${lastSaturday}
      order by e.worker_party_id, a.on_date, a.id
-  `, "objects")).map((row) => ({
-    id: row.id,
-    employeePartyId: row.employee_party_id,
-    onDate: row.on_date,
-    hours: row.hours,
-  } satisfies AbsenceRow));
+  `,
+      "objects",
+    )
+  ).map(
+    (row) =>
+      ({
+        id: row.id,
+        employeePartyId: row.employee_party_id,
+        onDate: row.on_date,
+        hours: row.hours,
+      }) satisfies AbsenceRow,
+  );
 
-  const jurisdictionByEmployee = new Map<string, { jurisdiction: string | null; reason?: string }>();
+  const jurisdictionByEmployee = new Map<
+    string,
+    { jurisdiction: string | null; reason?: string }
+  >();
   const jurisdictionSet = new Set<string>();
   for (const employee of employees) {
     const result = resolveHolidayJurisdiction(employee);
@@ -188,12 +205,15 @@ export async function readAvailability(
   const holidaysByJurisdiction = new Map<string, ObservedHoliday[]>();
   for (const jurisdiction of jurisdictionSet) {
     const overrides = await loadHolidayOverrides(db, orgId, jurisdiction);
-    holidaysByJurisdiction.set(jurisdiction, resolveObservedHolidays({
+    holidaysByJurisdiction.set(
       jurisdiction,
-      from: firstSunday,
-      to: lastSaturday,
-      overrides,
-    }));
+      resolveObservedHolidays({
+        jurisdiction,
+        from: firstSunday,
+        to: lastSaturday,
+        overrides,
+      }),
+    );
   }
 
   const absenceByEmployee = new Map<string, AbsenceRow[]>();
@@ -208,32 +228,34 @@ export async function readAvailability(
     const holidayResult = jurisdictionByEmployee.get(employee.partyId)!;
     const holidayInput = holidayResult.jurisdiction
       ? {
-        applied: true,
-        jurisdiction: holidayResult.jurisdiction,
-        dates: holidaysByJurisdiction.get(holidayResult.jurisdiction) ?? [],
-      }
+          applied: true,
+          jurisdiction: holidayResult.jurisdiction,
+          dates: holidaysByJurisdiction.get(holidayResult.jurisdiction) ?? [],
+        }
       : {
-        applied: false,
-        jurisdiction: null,
-        reason: holidayResult.reason ?? "Holiday jurisdiction could not be resolved.",
-        dates: [],
-      };
+          applied: false,
+          jurisdiction: null,
+          reason: holidayResult.reason ?? "Holiday jurisdiction could not be resolved.",
+          dates: [],
+        };
     const employeeAbsences = absenceByEmployee.get(employee.partyId) ?? [];
     for (const weekStart of weekStarts) {
-      output.push(computeAvailabilityForWeek({
-        employeePartyId: employee.partyId,
-        weekStart,
-        scheduleScope: {
-          jobTitle: employee.jobTitle,
-          tradeId: employee.tradeId,
-          departmentId: employee.departmentId,
-          subsidiaryId: employee.subsidiaryId,
-        },
-        schedules,
-        annualHours: settings.annualHours,
-        holidays: holidayInput,
-        absences: employeeAbsences,
-      }));
+      output.push(
+        computeAvailabilityForWeek({
+          employeePartyId: employee.partyId,
+          weekStart,
+          scheduleScope: {
+            jobTitle: employee.jobTitle,
+            tradeId: employee.tradeId,
+            departmentId: employee.departmentId,
+            subsidiaryId: employee.subsidiaryId,
+          },
+          schedules,
+          annualHours: settings.annualHours,
+          holidays: holidayInput,
+          absences: employeeAbsences,
+        }),
+      );
     }
   }
   return output;

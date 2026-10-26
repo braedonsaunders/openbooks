@@ -1,9 +1,9 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks'
-import type { SessionUser } from '../../../lib/auth'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks";
+import type { SessionUser } from "../../../lib/auth";
 
 // An existing party whose kind outlived its role row (a legacy
 // orphan) is repaired by saving the role-bearing kind WITH its role enabled
@@ -12,60 +12,61 @@ import type { SessionUser } from '../../../lib/auth'
 // bypassing it. Auth follows the update-controls pattern: currentUser reads
 // the stubbed session, and every route call runs under withOrgContext.
 
-const session: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __partyKindRoleRepairSession: session })
+const session: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __partyKindRoleRepairSession: session });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export async function currentUser(){return globalThis.__partyKindRoleRepairSession.user}',
-      }
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__partyKindRoleRepairSession.user}",
+      };
     }
-    const engineUrl = resolveEngineSpecifier(specifier)
-    if (engineUrl) return next(engineUrl, context)
-    return next(specifier, context)
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return next(engineUrl, context);
+    return next(specifier, context);
   },
-})
+});
 
-const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/testing/fixtures'
-)
-const { PATCH, GET } = await import('./[id]/route.ts')
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { PATCH, GET } = await import("./[id]/route.ts");
 
-const params = (id: string) => ({ params: Promise.resolve({ id }) })
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const patchRequest = (body: unknown) =>
-  new Request('http://audit.local', { method: 'PATCH', body: JSON.stringify(body) })
+  new Request("http://audit.local", { method: "PATCH", body: JSON.stringify(body) });
 
-type Ctx = { orgId: string; actor: string }
+type Ctx = { orgId: string; actor: string };
 
 async function fixture(): Promise<Ctx & { cleanup: () => Promise<void> }> {
-  const org = await withBypassContext(() => createScratchOrg())
-  const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Role repairer', 'reviewer'))
+  const org = await withBypassContext(() => createScratchOrg());
+  const actor = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Role repairer", "reviewer"),
+  );
   await withBypassContext(() =>
     db.execute(
       sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`,
     ),
-  )
+  );
   session.user = {
     id: actor,
     orgId: org.orgId,
-    name: 'Repairer',
-    email: 'repairer@example.test',
+    name: "Repairer",
+    email: "repairer@example.test",
     roles: [],
     isSuperAdmin: false,
-    envKind: 'production',
+    envKind: "production",
     productionOrgId: org.orgId,
     homeOrgId: org.orgId,
     homeUserId: actor,
-  }
-  return { orgId: org.orgId, actor, cleanup: () => dropScratchOrg(org.orgId) }
+  };
+  return { orgId: org.orgId, actor, cleanup: () => dropScratchOrg(org.orgId) };
 }
 
 async function insertCompanyParty(ctx: Ctx, name: string): Promise<string> {
-  const id = randomUUID()
+  const id = randomUUID();
   await withBypassContext(() =>
     db.execute(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom, created_by, updated_by)
@@ -74,23 +75,30 @@ async function insertCompanyParty(ctx: Ctx, name: string): Promise<string> {
        where s.org_id = ${ctx.orgId} and s.parent_id is null
        limit 1
     `),
-  )
-  return id
+  );
+  return id;
 }
 
 async function revision(orgId: string, partyId: string): Promise<string> {
-  const res = await withOrgContext(orgId, () => GET(new Request('http://audit.local'), params(partyId)))
-  assert.equal(res.status, 200)
-  return (await res.json()).party.updated_at as string
+  const res = await withOrgContext(orgId, () =>
+    GET(new Request("http://audit.local"), params(partyId)),
+  );
+  assert.equal(res.status, 200);
+  return (await res.json()).party.updated_at as string;
 }
 
-async function roleCount(orgId: string, table: 'vendor_roles' | 'customer_roles', partyId: string): Promise<number> {
+async function roleCount(
+  orgId: string,
+  table: "vendor_roles" | "customer_roles",
+  partyId: string,
+): Promise<number> {
   const result = await withBypassContext(() =>
     db.execute<{ count: string }>(
-      sql`select count(*)::text as count from ${sql.raw(table)} where org_id = ${orgId} and party_id = ${partyId} and is_active`, 'objects',
+      sql`select count(*)::text as count from ${sql.raw(table)} where org_id = ${orgId} and party_id = ${partyId} and is_active`,
+      "objects",
     ),
-  )
-  return Number(result[0]?.count ?? '0')
+  );
+  return Number(result[0]?.count ?? "0");
 }
 
 async function patchKind(
@@ -98,50 +106,79 @@ async function patchKind(
   partyId: string,
   patchBody: Record<string, unknown>,
 ): Promise<{ status: number; text: string }> {
-  const expectedUpdatedAt = await revision(ctx.orgId, partyId)
+  const expectedUpdatedAt = await revision(ctx.orgId, partyId);
   const res = await withOrgContext(ctx.orgId, () =>
     PATCH(patchRequest({ ...patchBody, expectedUpdatedAt }), params(partyId)),
-  )
-  return { status: res.status, text: await res.text() }
+  );
+  return { status: res.status, text: await res.text() };
 }
 
-test('PATCH repairs an orphan company party to kind vendor with its role', async () => {
-  const ctx = await fixture()
+test("PATCH repairs an orphan company party to kind vendor with its role", async () => {
+  const ctx = await fixture();
   try {
-    const partyId = await insertCompanyParty(ctx, 'Acme Industrial Supply')
-    assert.equal(await roleCount(ctx.orgId, 'vendor_roles', partyId), 0, 'the orphan starts with no vendor role')
+    const partyId = await insertCompanyParty(ctx, "Acme Industrial Supply");
+    assert.equal(
+      await roleCount(ctx.orgId, "vendor_roles", partyId),
+      0,
+      "the orphan starts with no vendor role",
+    );
 
-    const first = await patchKind(ctx, partyId, { kind: 'vendor', roles: { vendor: { enabled: true } } })
-    assert.equal(first.status, 200, `the repair PATCH must succeed, got ${first.text}`)
+    const first = await patchKind(ctx, partyId, {
+      kind: "vendor",
+      roles: { vendor: { enabled: true } },
+    });
+    assert.equal(first.status, 200, `the repair PATCH must succeed, got ${first.text}`);
     const kind = await withBypassContext(() =>
       db.execute<{ kind: string }>(
-        sql`select kind from parties where id = ${partyId} and org_id = ${ctx.orgId}`, 'objects',
+        sql`select kind from parties where id = ${partyId} and org_id = ${ctx.orgId}`,
+        "objects",
       ),
-    )
-    assert.equal(kind[0]?.kind, 'vendor', 'the kind is now vendor')
-    assert.equal(await roleCount(ctx.orgId, 'vendor_roles', partyId), 1, 'the canonical vendor role now exists')
+    );
+    assert.equal(kind[0]?.kind, "vendor", "the kind is now vendor");
+    assert.equal(
+      await roleCount(ctx.orgId, "vendor_roles", partyId),
+      1,
+      "the canonical vendor role now exists",
+    );
 
-    const second = await patchKind(ctx, partyId, { kind: 'vendor', roles: { vendor: { enabled: true } } })
-    assert.equal(second.status, 200, 'repeating the repair is idempotent')
-    assert.equal(await roleCount(ctx.orgId, 'vendor_roles', partyId), 1, 'no duplicate role row is created')
+    const second = await patchKind(ctx, partyId, {
+      kind: "vendor",
+      roles: { vendor: { enabled: true } },
+    });
+    assert.equal(second.status, 200, "repeating the repair is idempotent");
+    assert.equal(
+      await roleCount(ctx.orgId, "vendor_roles", partyId),
+      1,
+      "no duplicate role row is created",
+    );
   } finally {
-    session.user = null
-    await ctx.cleanup()
+    session.user = null;
+    await ctx.cleanup();
   }
-})
+});
 
-test('PATCH repairs an orphan company party to kind customer with its role', async () => {
-  const ctx = await fixture()
+test("PATCH repairs an orphan company party to kind customer with its role", async () => {
+  const ctx = await fixture();
   try {
-    const partyId = await insertCompanyParty(ctx, 'Acme Industrial Buyer')
-    const first = await patchKind(ctx, partyId, { kind: 'customer', roles: { customer: { enabled: true } } })
-    assert.equal(first.status, 200, `the repair PATCH must succeed, got ${first.text}`)
-    assert.equal(await roleCount(ctx.orgId, 'customer_roles', partyId), 1, 'the canonical customer role now exists')
+    const partyId = await insertCompanyParty(ctx, "Acme Industrial Buyer");
+    const first = await patchKind(ctx, partyId, {
+      kind: "customer",
+      roles: { customer: { enabled: true } },
+    });
+    assert.equal(first.status, 200, `the repair PATCH must succeed, got ${first.text}`);
+    assert.equal(
+      await roleCount(ctx.orgId, "customer_roles", partyId),
+      1,
+      "the canonical customer role now exists",
+    );
 
-    const second = await patchKind(ctx, partyId, { kind: 'customer', roles: { customer: { enabled: true } } })
-    assert.equal(second.status, 200, 'repeating the repair is idempotent')
+    const second = await patchKind(ctx, partyId, {
+      kind: "customer",
+      roles: { customer: { enabled: true } },
+    });
+    assert.equal(second.status, 200, "repeating the repair is idempotent");
   } finally {
-    session.user = null
-    await ctx.cleanup()
+    session.user = null;
+    await ctx.cleanup();
   }
-})
+});

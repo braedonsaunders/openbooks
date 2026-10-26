@@ -32,7 +32,13 @@ async function withCloseRun(
   const fixture = await createScratchOrg();
   try {
     const actors = await seedFlowActors(fixture.orgId);
-    for (const actorId of [actors.submitterId, actors.approver1Id, actors.approver2Id, actors.adminId, actors.outsiderId])
+    for (const actorId of [
+      actors.submitterId,
+      actors.approver1Id,
+      actors.approver2Id,
+      actors.adminId,
+      actors.outsiderId,
+    ])
       await grantScratchPermissions(fixture.orgId, actorId, ["close.run", "close.approve"]);
     await db.execute(sql`
       update orgs
@@ -45,9 +51,19 @@ async function withCloseRun(
        where id = ${fixture.orgId}
     `);
     const defaults = await ensureCloseDefaults(fixture.orgId, actors.submitterId);
-    assert.equal((await db.execute(sql`select id from flows where org_id=${fixture.orgId}
-      and subject_kind='close_run'`, "objects")).length, 0, "close provisioning does not author a tenant workflow");
-    const inserted = (await db.execute<{ id: string }>(sql`
+    assert.equal(
+      (
+        await db.execute(
+          sql`select id from flows where org_id=${fixture.orgId}
+      and subject_kind='close_run'`,
+          "objects",
+        )
+      ).length,
+      0,
+      "close provisioning does not author a tenant workflow",
+    );
+    const inserted = await db.execute<{ id: string }>(
+      sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
          current_stage, target_close_date, scope, started_at, started_by, created_by, updated_by)
@@ -55,7 +71,9 @@ async function withCloseRun(
               ${defaults.reportingPackageId}, 'in_progress', 'review', '2026-08-05',
               '{}'::jsonb, now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     await fn(fixture, actors, inserted[0]!.id);
   } finally {
     await db.transaction(async (tx) => {
@@ -90,105 +108,203 @@ async function closeStatus(runId: string): Promise<{
   approvedBy: string | null;
   approvedAt: Date | null;
 }> {
-  const result = (await db.execute<{ status: string; approvedBy: string | null; approvedAt: Date | null }>(sql`
+  const result = await db.execute<{
+    status: string;
+    approvedBy: string | null;
+    approvedAt: Date | null;
+  }>(
+    sql`
     select status, approved_by as "approvedBy", approved_at as "approvedAt"
       from close_runs where id = ${runId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return result[0]!;
 }
 
-test("close approval is flow-routed, forbids the initiator, and reopens after ledger change", { skip: !DB }, async () => {
-  await withCloseRun(async (fixture, actors, runId) => {
-    await seedApprovalFlow(fixture.orgId, {
-      subjectKind: "close_run",
-      assignees: [
-        { type: "user", userId: actors.submitterId },
-        { type: "user", userId: actors.approver1Id },
-      ],
-      mode: "any",
-      preventSelfApproval: true,
-      gateTitle: "Final close review",
-    });
+test(
+  "close approval is flow-routed, forbids the initiator, and reopens after ledger change",
+  { skip: !DB },
+  async () => {
+    await withCloseRun(async (fixture, actors, runId) => {
+      await seedApprovalFlow(fixture.orgId, {
+        subjectKind: "close_run",
+        assignees: [
+          { type: "user", userId: actors.submitterId },
+          { type: "user", userId: actors.approver1Id },
+        ],
+        mode: "any",
+        preventSelfApproval: true,
+        gateTitle: "Final close review",
+      });
 
-    const submitted = await requestCloseApproval(fixture.orgId, runId, actors.submitterId);
-    assert.equal(submitted.approvals, 1);
-    assert.equal((await closeStatus(runId)).status, "review");
+      const submitted = await requestCloseApproval(fixture.orgId, runId, actors.submitterId);
+      assert.equal(submitted.approvals, 1);
+      assert.equal((await closeStatus(runId)).status, "review");
 
-    const gates = (await db.execute<{ id: string; assigneeUserId: string }>(sql`
+      const gates = await db.execute<{ id: string; assigneeUserId: string }>(
+        sql`
       select id, assignee_user_id as "assigneeUserId" from flow_gates
        where subject_kind = 'close_run' and subject_id = ${runId} and status = 'pending'
-    `, "objects"));
-    assert.equal(gates.some((gate) => gate.assigneeUserId === actors.submitterId), false);
+    `,
+        "objects",
+      );
+      assert.equal(
+        gates.some((gate) => gate.assigneeUserId === actors.submitterId),
+        false,
+      );
 
-    const independentGate = gates.find((gate) => gate.assigneeUserId === actors.approver1Id)!;
-    await decideGate({ gateId: independentGate.id, decision: "approved", userId: actors.approver1Id });
-    const approved = await closeStatus(runId);
-    assert.equal(approved.status, "approved");
-    assert.equal(approved.approvedBy, actors.approver1Id);
-    assert.ok(approved.approvedAt);
+      const independentGate = gates.find((gate) => gate.assigneeUserId === actors.approver1Id)!;
+      await decideGate({
+        gateId: independentGate.id,
+        decision: "approved",
+        userId: actors.approver1Id,
+      });
+      const approved = await closeStatus(runId);
+      assert.equal(approved.status, "approved");
+      assert.equal(approved.approvedBy, actors.approver1Id);
+      assert.ok(approved.approvedAt);
 
-    const signoffs = (await db.execute<{ count: number }>(sql`
+      const signoffs = await db.execute<{ count: number }>(
+        sql`
       select count(*)::int as count from close_signoffs
        where run_id = ${runId} and decision = 'approved'
-    `, "objects"));
-    assert.equal(signoffs[0]!.count, 1);
+    `,
+        "objects",
+      );
+      assert.equal(signoffs[0]!.count, 1);
 
-    await seedDraftDocument(fixture.orgId, {
-      kind: "journal",
-      createdBy: actors.submitterId,
-      number: "AFTER-APPROVAL",
+      await seedDraftDocument(fixture.orgId, {
+        kind: "journal",
+        createdBy: actors.submitterId,
+        number: "AFTER-APPROVAL",
+      });
+      await refreshCloseRun(fixture.orgId, runId, actors.submitterId);
+      const reopened = await closeStatus(runId);
+      assert.equal(reopened.status, "in_progress");
+      assert.equal(reopened.approvedBy, null);
+      assert.equal(reopened.approvedAt, null);
     });
-    await refreshCloseRun(fixture.orgId, runId, actors.submitterId);
-    const reopened = await closeStatus(runId);
-    assert.equal(reopened.status, "in_progress");
-    assert.equal(reopened.approvedBy, null);
-    assert.equal(reopened.approvedAt, null);
-  });
-});
+  },
+);
 
-test("a frozen solo close gate releases with a ledger fingerprint and signoff", { skip: !DB }, async () => {
-  await withCloseRun(async (fixture, actors, runId) => {
-    const { flowId } = await seedApprovalFlow(fixture.orgId, { subjectKind: "close_run",
-      assignees: [{ type: "user", userId: actors.submitterId }], mode: "any", preventSelfApproval: false });
-    const before = await db.execute(sql`select id,graph from flows where org_id=${fixture.orgId} and id=${flowId}`, "objects");
-    await ensureCloseDefaults(fixture.orgId, actors.submitterId);
-    assert.deepEqual(await db.execute(sql`select id,graph from flows where org_id=${fixture.orgId} and subject_kind='close_run'`, "objects"), before);
-    assert.equal((await requestCloseApproval(fixture.orgId, runId, actors.submitterId)).approvals, 1);
-    const [gate] = await db.execute<{ id: string; run_id: string }>(sql`
+test(
+  "a frozen solo close gate releases with a ledger fingerprint and signoff",
+  { skip: !DB },
+  async () => {
+    await withCloseRun(async (fixture, actors, runId) => {
+      const { flowId } = await seedApprovalFlow(fixture.orgId, {
+        subjectKind: "close_run",
+        assignees: [{ type: "user", userId: actors.submitterId }],
+        mode: "any",
+        preventSelfApproval: false,
+      });
+      const before = await db.execute(
+        sql`select id,graph from flows where org_id=${fixture.orgId} and id=${flowId}`,
+        "objects",
+      );
+      await ensureCloseDefaults(fixture.orgId, actors.submitterId);
+      assert.deepEqual(
+        await db.execute(
+          sql`select id,graph from flows where org_id=${fixture.orgId} and subject_kind='close_run'`,
+          "objects",
+        ),
+        before,
+      );
+      assert.equal(
+        (await requestCloseApproval(fixture.orgId, runId, actors.submitterId)).approvals,
+        1,
+      );
+      const [gate] = await db.execute<{ id: string; run_id: string }>(
+        sql`
       select id,run_id from flow_gates where org_id=${fixture.orgId} and subject_kind='close_run'
-        and subject_id=${runId} and status='pending'`, "objects");
-    assert.ok(gate);
-    await assert.rejects(finalizeCloseFlowApproval({ orgId: fixture.orgId, runId,
-      actorId: actors.submitterId, outcome: "approved", approvalRunId: gate.run_id }), /Complete the configured close Flow gates/);
-    await db.execute(sql`update flows set graph=jsonb_set(graph,'{nodes,1,data,gate,preventSelfApproval}','true'::jsonb)
+        and subject_id=${runId} and status='pending'`,
+        "objects",
+      );
+      assert.ok(gate);
+      await assert.rejects(
+        finalizeCloseFlowApproval({
+          orgId: fixture.orgId,
+          runId,
+          actorId: actors.submitterId,
+          outcome: "approved",
+          approvalRunId: gate.run_id,
+        }),
+        /Complete the configured close Flow gates/,
+      );
+      await db.execute(sql`update flows set graph=jsonb_set(graph,'{nodes,1,data,gate,preventSelfApproval}','true'::jsonb)
       where org_id=${fixture.orgId} and id=${flowId}`);
-    await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
-    assert.equal((await closeStatus(runId)).approvedBy, actors.submitterId);
-    const signoffs = await db.execute<{ signed_by: string; data_fingerprint: string | null }>(sql`
+      await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
+      assert.equal((await closeStatus(runId)).approvedBy, actors.submitterId);
+      const signoffs = await db.execute<{ signed_by: string; data_fingerprint: string | null }>(
+        sql`
       select signed_by,data_fingerprint from close_signoffs where org_id=${fixture.orgId}
-        and run_id=${runId} and decision='approved'`, "objects");
-    assert.equal(signoffs.length, 1);
-    assert.equal(signoffs[0]!.signed_by, actors.submitterId);
-    assert.ok(signoffs[0]!.data_fingerprint);
-    const proof = { orgId: fixture.orgId, subjectKind: "close_run", subjectId: runId,
-      actorId: actors.submitterId, outcome: "approved" as const, approvalRunId: gate.run_id };
-    assert.equal(await completedGateAllowsSelfApproval(db, proof), true);
-    assert.equal(await completedGateAllowsSelfApproval(db, { ...proof, subjectId: fixture.periodId }), false);
-    assert.equal(await completedGateAllowsSelfApproval(db, { ...proof, actorId: actors.approver1Id }), false);
-    assert.equal(await completedGateAllowsSelfApproval(db, { ...proof, subjectKind: "outbound_payment_run" }), false);
-  });
-});
+        and run_id=${runId} and decision='approved'`,
+        "objects",
+      );
+      assert.equal(signoffs.length, 1);
+      assert.equal(signoffs[0]!.signed_by, actors.submitterId);
+      assert.ok(signoffs[0]!.data_fingerprint);
+      const proof = {
+        orgId: fixture.orgId,
+        subjectKind: "close_run",
+        subjectId: runId,
+        actorId: actors.submitterId,
+        outcome: "approved" as const,
+        approvalRunId: gate.run_id,
+      };
+      assert.equal(await completedGateAllowsSelfApproval(db, proof), true);
+      assert.equal(
+        await completedGateAllowsSelfApproval(db, { ...proof, subjectId: fixture.periodId }),
+        false,
+      );
+      assert.equal(
+        await completedGateAllowsSelfApproval(db, { ...proof, actorId: actors.approver1Id }),
+        false,
+      );
+      assert.equal(
+        await completedGateAllowsSelfApproval(db, {
+          ...proof,
+          subjectKind: "outbound_payment_run",
+        }),
+        false,
+      );
+    });
+  },
+);
 
-test("an unconfigured close releases under the tenant zero-gate policy without creating a flow", { skip: !DB }, async () => {
-  await withCloseRun(async (fixture, actors, runId) => {
-    assert.deepEqual(await requestCloseApproval(fixture.orgId, runId, actors.submitterId), { approvals: 0 });
-    assert.equal((await closeStatus(runId)).status, "approved");
-    assert.equal((await db.execute(sql`select id from flow_gates where org_id=${fixture.orgId}
-      and subject_kind='close_run' and subject_id=${runId}`, "objects")).length, 0);
-    assert.equal((await db.execute(sql`select id from flows where org_id=${fixture.orgId}
-      and subject_kind='close_run'`, "objects")).length, 0);
-  });
-});
+test(
+  "an unconfigured close releases under the tenant zero-gate policy without creating a flow",
+  { skip: !DB },
+  async () => {
+    await withCloseRun(async (fixture, actors, runId) => {
+      assert.deepEqual(await requestCloseApproval(fixture.orgId, runId, actors.submitterId), {
+        approvals: 0,
+      });
+      assert.equal((await closeStatus(runId)).status, "approved");
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from flow_gates where org_id=${fixture.orgId}
+      and subject_kind='close_run' and subject_id=${runId}`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from flows where org_id=${fixture.orgId}
+      and subject_kind='close_run'`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
+    });
+  },
+);
 
 test("a close flow can require four independent approvals", { skip: !DB }, async () => {
   await withCloseRun(async (fixture, actors, runId) => {
@@ -203,10 +319,13 @@ test("a close flow can require four independent approvals", { skip: !DB }, async
     const submitted = await requestCloseApproval(fixture.orgId, runId, actors.submitterId);
     assert.equal(submitted.approvals, 4);
 
-    const gates = (await db.execute<{ id: string; assigneeUserId: string }>(sql`
+    const gates = await db.execute<{ id: string; assigneeUserId: string }>(
+      sql`
       select id, assignee_user_id as "assigneeUserId" from flow_gates
        where subject_kind = 'close_run' and subject_id = ${runId} and status = 'pending'
-    `, "objects"));
+    `,
+      "objects",
+    );
     for (const approverId of approvers) {
       const gate = gates.find((row) => row.assigneeUserId === approverId)!;
       await decideGate({ gateId: gate.id, decision: "approved", userId: approverId });

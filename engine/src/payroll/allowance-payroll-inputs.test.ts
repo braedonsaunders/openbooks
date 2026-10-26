@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseMoney } from "../money/brands.ts";
-import { priceAllowancePayrollInputs, type AllowancePayrollInput } from "./allowance-payroll-inputs.ts";
+import {
+  priceAllowancePayrollInputs,
+  type AllowancePayrollInput,
+} from "./allowance-payroll-inputs.ts";
 
 function input(overrides: Partial<AllowancePayrollInput> = {}): AllowancePayrollInput {
   return {
@@ -21,13 +24,15 @@ function input(overrides: Partial<AllowancePayrollInput> = {}): AllowancePayroll
 }
 
 test("approved allowance amounts become exact component earnings on their coverage date", () => {
-  assert.deepEqual(priceAllowancePayrollInputs([input()], "CAD"), [{
-    id: "input-a",
-    entryKind: "per_diem",
-    payComponentId: "component-a",
-    amount: "125.3750",
-    coverageDate: "2026-10-01",
-  }]);
+  assert.deepEqual(priceAllowancePayrollInputs([input()], "CAD"), [
+    {
+      id: "input-a",
+      entryKind: "per_diem",
+      payComponentId: "component-a",
+      amount: "125.3750",
+      coverageDate: "2026-10-01",
+    },
+  ]);
 });
 
 test("an allowance currency mismatch refuses instead of silently converting or paying", () => {

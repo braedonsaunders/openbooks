@@ -2,10 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
-import {
-  cancelInterview,
-  completeInterview,
-} from "@openbooks/engine/hrm/recruiting/interviews";
+import { cancelInterview, completeInterview } from "@openbooks/engine/hrm/recruiting/interviews";
 
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";
@@ -23,14 +20,9 @@ export const PATCH = defineRoute({
   feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: patchInterviewBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid interview" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid interview" }, { status: 400 });
 
     try {
       if (body.action === "complete") {

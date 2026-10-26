@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadMePage, meSpec, meTitle } from './view'
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadMePage, meSpec, meTitle } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await meTitle() }
+  return { title: await meTitle() };
 }
 
 /**
@@ -16,9 +16,16 @@ export async function generateMetadata() {
 export default async function MePage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadMePage(sp)
-  return <ModuleView spec={meSpec(data)} data={data} searchParams={sp as Record<string, string | string[] | undefined>} trusted />
+  const sp = await searchParams;
+  const data = await loadMePage(sp);
+  return (
+    <ModuleView
+      spec={meSpec(data)}
+      data={data}
+      searchParams={sp as Record<string, string | string[] | undefined>}
+      trusted
+    />
+  );
 }

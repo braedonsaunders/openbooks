@@ -22,9 +22,10 @@ import { wholeDigits } from "./money.ts";
  * the echo — a refusal has to be readable in a toast.
  */
 export function suppliedValue(raw: unknown): string {
-  if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw)
-  if (typeof raw !== 'string') return Array.isArray(raw) ? 'a list' : `a ${raw === null ? 'null' : typeof raw}`
-  return raw.length > 40 ? `${raw.slice(0, 40)}… (${raw.length} characters)` : raw
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  if (typeof raw !== "string")
+    return Array.isArray(raw) ? "a list" : `a ${raw === null ? "null" : typeof raw}`;
+  return raw.length > 40 ? `${raw.slice(0, 40)}… (${raw.length} characters)` : raw;
 }
 
 /**
@@ -41,35 +42,39 @@ export function suppliedValue(raw: unknown): string {
  * full — how Excel renders a large figure), or no number at all.
  */
 export type DecimalNullCause =
-  | { cause: 'json-number' }
-  | { cause: 'scale'; decimals: number }
-  | { cause: 'separator'; separator: string }
-  | { cause: 'decimal-comma'; dotted: string }
-  | { cause: 'ambiguous-comma'; grouped: string; dotted: string }
-  | { cause: 'currency'; symbol: string }
-  | { cause: 'scientific' }
-  | { cause: 'not-a-number' }
+  | { cause: "json-number" }
+  | { cause: "scale"; decimals: number }
+  | { cause: "separator"; separator: string }
+  | { cause: "decimal-comma"; dotted: string }
+  | { cause: "ambiguous-comma"; grouped: string; dotted: string }
+  | { cause: "currency"; symbol: string }
+  | { cause: "scientific" }
+  | { cause: "not-a-number" };
 
 // Same grammar as canonicalDecimal (exact-decimal.ts): plain digits with an
 // optional fraction, or a leading-dot fraction. A plain shape that reaches
 // the classifier was refused for scale by construction.
-const PLAIN_DECIMAL = /^([+-]?)(\d+(?:\.(\d*))?|\.(\d+))$/
-const GROUPING_SEPARATORS = [',', '_', "'", '\u2019', ' ', '\u00a0', '\u2009']
-const GROUPING_DISPLAY: Record<string, string> = { ' ': 'space', '\u00a0': 'non-breaking space', '\u2009': 'thin space' }
-const CURRENCY_SYMBOLS = ['$', '€', '£', '¥', '₹', '₩']
+const PLAIN_DECIMAL = /^([+-]?)(\d+(?:\.(\d*))?|\.(\d+))$/;
+const GROUPING_SEPARATORS = [",", "_", "'", "\u2019", " ", "\u00a0", "\u2009"];
+const GROUPING_DISPLAY: Record<string, string> = {
+  " ": "space",
+  "\u00a0": "non-breaking space",
+  "\u2009": "thin space",
+};
+const CURRENCY_SYMBOLS = ["$", "€", "£", "¥", "₹", "₩"];
 
 export function decimalNullCause(raw: unknown): DecimalNullCause {
   // JSON numbers have already crossed IEEE-754. Even an integer cannot prove
   // the original spelling or precision, so require the caller to resend it
   // as decimal text instead of classifying String(raw).
-  if (typeof raw === 'number') return { cause: 'json-number' }
-  if (typeof raw !== 'string') return { cause: 'not-a-number' }
-  const text = String(raw).trim()
-  const plain = PLAIN_DECIMAL.exec(text)
+  if (typeof raw === "number") return { cause: "json-number" };
+  if (typeof raw !== "string") return { cause: "not-a-number" };
+  const text = String(raw).trim();
+  const plain = PLAIN_DECIMAL.exec(text);
   // A plain shape with an acceptable scale would not have refused, so a plain
   // shape here is over scale by construction.
-  if (plain) return { cause: 'scale', decimals: (plain[3] ?? plain[4] ?? '').length }
-  const ungrouped = text.replace(/[,_'\u2019\s\u00a0\u2009]/g, '')
+  if (plain) return { cause: "scale", decimals: (plain[3] ?? plain[4] ?? "").length };
+  const ungrouped = text.replace(/[,_'\u2019\s\u00a0\u2009]/g, "");
   if (ungrouped !== text && PLAIN_DECIMAL.test(ungrouped)) {
     // When a dot and a comma both appear, the last one is the decimal
     // point — true across essentially every locale, so it is a rule rather
@@ -77,27 +82,27 @@ export function decimalNullCause(raw: unknown): DecimalNullCause {
     // standard money format in DE, IT, ES, NL, BR and PT): strip the dots
     // and read the comma as the point. "1,234.56" keeps the grouping
     // message below, unchanged.
-    if (text.includes('.') && text.includes(',') && text.lastIndexOf(',') > text.lastIndexOf('.')) {
-      const dotted = text.replace(/\./g, '').replace(',', '.')
+    if (text.includes(".") && text.includes(",") && text.lastIndexOf(",") > text.lastIndexOf(".")) {
+      const dotted = text.replace(/\./g, "").replace(",", ".");
       // Any tail length: a too-long tail rewrites to a plain figure the
       // scale branch then refuses honestly ("1.234,56789" -> "1234.56789"
       // -> at most 4 places), instead of guessing here.
-      if (/^([+-]?\d+)\.(\d+)$/.test(dotted)) return { cause: 'decimal-comma', dotted }
+      if (/^([+-]?\d+)\.(\d+)$/.test(dotted)) return { cause: "decimal-comma", dotted };
     }
     // A comma is two readings, not one: seven installed packs are
     // decimal-comma locales, so "12,34" is twelve-thirty-four written
     // correctly, and "remove the comma" would store 1234 — a 100x error.
     // Read the comma before reaching for the grouping verb. Only a comma can
     // be a decimal point; every other separator is grouping by construction.
-    if (!/[,_'\u2019\s\u00a0\u2009]/.test(text.replace(/,/g, ''))) {
-      const decimalComma = /^([+-]?\d+),(\d{1,2})$/.exec(text)
-      if (decimalComma) return { cause: 'decimal-comma', dotted: text.replace(',', '.') }
+    if (!/[,_'\u2019\s\u00a0\u2009]/.test(text.replace(/,/g, ""))) {
+      const decimalComma = /^([+-]?\d+),(\d{1,2})$/.exec(text);
+      if (decimalComma) return { cause: "decimal-comma", dotted: text.replace(",", ".") };
       // One comma with any other tail ("1,234", "12,") is genuinely
       // ambiguous: name both readings rather than picking one. A decimal
       // point or repeated three-digit groups would have settled it, and
       // neither is here.
-      if (!text.includes('.') && (text.match(/,/g) ?? []).length === 1) {
-        return { cause: 'ambiguous-comma', grouped: ungrouped, dotted: text.replace(',', '.') }
+      if (!text.includes(".") && (text.match(/,/g) ?? []).length === 1) {
+        return { cause: "ambiguous-comma", grouped: ungrouped, dotted: text.replace(",", ".") };
       }
     }
     // A decimal comma can arrive with its own grouping ("1 234,56",
@@ -106,18 +111,18 @@ export function decimalNullCause(raw: unknown): DecimalNullCause {
     // the decimals folded into the whole — wrong money in two steps. Strip
     // every grouping char but the comma: if that reads as a decimal comma,
     // the comma was the decimal point.
-    const commaKept = text.replace(/[_'\u2019\s\u00a0\u2009]/g, '')
+    const commaKept = text.replace(/[_'\u2019\s\u00a0\u2009]/g, "");
     if (commaKept !== text && /^([+-]?\d+),(\d{1,2})$/.test(commaKept)) {
-      return { cause: 'decimal-comma', dotted: commaKept.replace(',', '.') }
+      return { cause: "decimal-comma", dotted: commaKept.replace(",", ".") };
     }
-    const separator = GROUPING_SEPARATORS.find((candidate) => text.includes(candidate)) ?? ','
-    return { cause: 'separator', separator: GROUPING_DISPLAY[separator] ?? separator }
+    const separator = GROUPING_SEPARATORS.find((candidate) => text.includes(candidate)) ?? ",";
+    return { cause: "separator", separator: GROUPING_DISPLAY[separator] ?? separator };
   }
-  if (!/\d/.test(text)) return { cause: 'not-a-number' }
-  const symbol = CURRENCY_SYMBOLS.find((candidate) => text.includes(candidate))
-  if (symbol) return { cause: 'currency', symbol }
-  if (/[0-9][eE][+-]?[0-9]/.test(text)) return { cause: 'scientific' }
-  return { cause: 'not-a-number' }
+  if (!/\d/.test(text)) return { cause: "not-a-number" };
+  const symbol = CURRENCY_SYMBOLS.find((candidate) => text.includes(candidate));
+  if (symbol) return { cause: "currency", symbol };
+  if (/[0-9][eE][+-]?[0-9]/.test(text)) return { cause: "scientific" };
+  return { cause: "not-a-number" };
 }
 
 /**
@@ -139,7 +144,7 @@ export function decimalNullCause(raw: unknown): DecimalNullCause {
 export function moneyRefusal(
   field: string,
   raw: unknown,
-  noun = 'an amount',
+  noun = "an amount",
   maxScale = 4,
   maxWholeDigits = 15,
 ): string {
@@ -150,33 +155,38 @@ export function moneyRefusal(
   return decimalNullRefusal(field, noun, raw, maxScale);
 }
 
-export function decimalNullRefusal(field: string, noun: string, raw: unknown, maxScale: number): string {
-  const shown = `"${suppliedValue(raw)}"`
-  const cause = decimalNullCause(raw)
+export function decimalNullRefusal(
+  field: string,
+  noun: string,
+  raw: unknown,
+  maxScale: number,
+): string {
+  const shown = `"${suppliedValue(raw)}"`;
+  const cause = decimalNullCause(raw);
   switch (cause.cause) {
-    case 'json-number':
-      return `${field} must be sent as a decimal string, not a JSON number — re-enter the amount as text and try again`
-    case 'scale':
-      return `${field} allows at most ${maxScale} decimal places — got ${cause.decimals} in ${shown}; round to fewer decimals and try again`
-    case 'separator':
-      return `${field} must not contain a thousands separator — remove ${cause.separator} from ${shown} and try again, using "." for decimals`
-    case 'decimal-comma':
-      return `${field} must use "." as the decimal point — write ${shown} as "${cause.dotted}" and try again`
-    case 'ambiguous-comma':
-      return `${field} is ambiguous — ${shown} could mean ${cause.grouped} (thousands separator) or ${cause.dotted} (decimal comma); retype it in plain digits with "." for decimals`
-    case 'currency':
-      return `${field} must not contain a currency symbol — remove ${cause.symbol} from ${shown} and try again`
-    case 'scientific':
-      return `${field} must be written out in full, not in scientific notation — expand ${shown} to plain digits and try again`
-    case 'not-a-number':
-      return `${field} must be ${noun} — ${shown} is not a number`
+    case "json-number":
+      return `${field} must be sent as a decimal string, not a JSON number — re-enter the amount as text and try again`;
+    case "scale":
+      return `${field} allows at most ${maxScale} decimal places — got ${cause.decimals} in ${shown}; round to fewer decimals and try again`;
+    case "separator":
+      return `${field} must not contain a thousands separator — remove ${cause.separator} from ${shown} and try again, using "." for decimals`;
+    case "decimal-comma":
+      return `${field} must use "." as the decimal point — write ${shown} as "${cause.dotted}" and try again`;
+    case "ambiguous-comma":
+      return `${field} is ambiguous — ${shown} could mean ${cause.grouped} (thousands separator) or ${cause.dotted} (decimal comma); retype it in plain digits with "." for decimals`;
+    case "currency":
+      return `${field} must not contain a currency symbol — remove ${cause.symbol} from ${shown} and try again`;
+    case "scientific":
+      return `${field} must be written out in full, not in scientific notation — expand ${shown} to plain digits and try again`;
+    case "not-a-number":
+      return `${field} must be ${noun} — ${shown} is not a number`;
   }
 }
 
 /** The grouping and decimal separators of the locale a value was written in. */
 export interface LocaleSeparators {
-  group: string
-  decimal: string
+  group: string;
+  decimal: string;
 }
 
 /**
@@ -184,13 +194,13 @@ export interface LocaleSeparators {
  * ambiguity naming both readings, a scale refusal, or no number at all.
  */
 export type LocaleDecimalReading =
-  | { kind: 'value'; value: string }
-  | { kind: 'ambiguous'; grouped: string; dotted: string }
-  | { kind: 'scale'; decimals: number }
-  | { kind: 'unreadable' }
+  | { kind: "value"; value: string }
+  | { kind: "ambiguous"; grouped: string; dotted: string }
+  | { kind: "scale"; decimals: number }
+  | { kind: "unreadable" };
 
-const SPACE_GROUPS = [' ', '\u00a0', '\u202f', '\u2009']
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const SPACE_GROUPS = [" ", "\u00a0", "\u202f", "\u2009"];
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Read an amount typed where the viewer's locale is known, e.g. a field that
@@ -204,29 +214,36 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\
  * in a locale grouping with "."), it names both instead of choosing: a wrong
  * guess there is a thousandfold money error.
  */
-export function readLocaleDecimal(raw: string, separators: LocaleSeparators, maxScale: number): LocaleDecimalReading {
-  const text = raw.trim()
+export function readLocaleDecimal(
+  raw: string,
+  separators: LocaleSeparators,
+  maxScale: number,
+): LocaleDecimalReading {
+  const text = raw.trim();
   const groups = SPACE_GROUPS.includes(separators.group)
     ? SPACE_GROUPS
-    : separators.group === '\u2019' ? ['\u2019', "'"] : [separators.group]
-  const group = `(?:${groups.map(escapeRegExp).join('|')})`
-  const decimal = escapeRegExp(separators.decimal)
-  const shape = new RegExp(`^([+-]?)(\\d{1,3}(?:${group}\\d{3})+|\\d+)?(?:${decimal}(\\d+))?$`)
-  const match = separators.decimal === separators.group ? null : shape.exec(text)
-  let localized: string | null = null
-  let localizedScale: number | null = null
+    : separators.group === "\u2019"
+      ? ["\u2019", "'"]
+      : [separators.group];
+  const group = `(?:${groups.map(escapeRegExp).join("|")})`;
+  const decimal = escapeRegExp(separators.decimal);
+  const shape = new RegExp(`^([+-]?)(\\d{1,3}(?:${group}\\d{3})+|\\d+)?(?:${decimal}(\\d+))?$`);
+  const match = separators.decimal === separators.group ? null : shape.exec(text);
+  let localized: string | null = null;
+  let localizedScale: number | null = null;
   if (match && (match[2] !== undefined || match[3] !== undefined)) {
-    const whole = (match[2] ?? '0').replace(new RegExp(group, 'g'), '')
-    const plain = `${match[1]}${whole}${match[3] !== undefined ? `.${match[3]}` : ''}`
-    localized = canonicalDecimal(plain, maxScale)
-    if (localized === null) localizedScale = match[3]?.length ?? 0
+    const whole = (match[2] ?? "0").replace(new RegExp(group, "g"), "");
+    const plain = `${match[1]}${whole}${match[3] !== undefined ? `.${match[3]}` : ""}`;
+    localized = canonicalDecimal(plain, maxScale);
+    if (localized === null) localizedScale = match[3]?.length ?? 0;
   }
-  const dotted = canonicalDecimal(text, maxScale)
-  if (localized !== null && dotted !== null && compareDecimal(localized, dotted) !== 0) return { kind: 'ambiguous', grouped: localized, dotted }
-  if (localized !== null) return { kind: 'value', value: localized }
-  if (dotted !== null) return { kind: 'value', value: dotted }
-  if (localizedScale !== null) return { kind: 'scale', decimals: localizedScale }
-  const cause = text === '' ? null : decimalNullCause(text)
-  if (cause?.cause === 'scale') return { kind: 'scale', decimals: cause.decimals }
-  return { kind: 'unreadable' }
+  const dotted = canonicalDecimal(text, maxScale);
+  if (localized !== null && dotted !== null && compareDecimal(localized, dotted) !== 0)
+    return { kind: "ambiguous", grouped: localized, dotted };
+  if (localized !== null) return { kind: "value", value: localized };
+  if (dotted !== null) return { kind: "value", value: dotted };
+  if (localizedScale !== null) return { kind: "scale", decimals: localizedScale };
+  const cause = text === "" ? null : decimalNullCause(text);
+  if (cause?.cause === "scale") return { kind: "scale", decimals: cause.decimals };
+  return { kind: "unreadable" };
 }

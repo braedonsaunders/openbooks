@@ -56,14 +56,17 @@ export async function listActionReasons(
     );
   }
   return withOrg(orgId, async () => {
-    const rows = await db.execute<ActionReasonRow>(sql`
+    const rows = await db.execute<ActionReasonRow>(
+      sql`
       select id, action, reason_code as "reasonCode", label,
              requires_comment as "requiresComment", is_active as "isActive"
         from hrm_action_reasons
        where org_id = ${orgId}
          and (${action ?? null}::text is null or action = ${action ?? null}::text)
        order by action, reason_code
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows;
   });
 }
@@ -91,7 +94,8 @@ export async function upsertActionReason(input: {
     );
   }
   return withOrg(input.orgId, async () => {
-    const rows = await db.execute<ActionReasonRow>(sql`
+    const rows = await db.execute<ActionReasonRow>(
+      sql`
       insert into hrm_action_reasons (org_id, action, reason_code, label, requires_comment, is_active, created_by, updated_by)
       values (${input.orgId}, ${parsed.data.action}, ${parsed.data.reasonCode},
               ${parsed.data.label}, ${parsed.data.requiresComment}, ${parsed.data.isActive},
@@ -103,12 +107,15 @@ export async function upsertActionReason(input: {
                     updated_by = excluded.updated_by, updated_at = now()
       returning id, action, reason_code as "reasonCode", label,
                 requires_comment as "requiresComment", is_active as "isActive"
-    `, "objects");
+    `,
+      "objects",
+    );
     // ON CONFLICT here is the Setup upsert contract (same key = same
     // code, revised label): the conflict is expected and the row is
     // re-read via RETURNING, never silently dropped.
     const row = rows[0];
-    if (!row) throw new ActionReasonError("the reason code write matched no row — reload and try again");
+    if (!row)
+      throw new ActionReasonError("the reason code write matched no row — reload and try again");
     return row;
   });
 }
@@ -122,11 +129,14 @@ export async function upsertActionReason(input: {
 export async function actionReasonsRequired(orgId: string): Promise<boolean> {
   if (!(await hrmFeatureOn(orgId, "hrm"))) return false;
   return withOrg(orgId, async () => {
-    const rows = await db.execute<{ one: number }>(sql`
+    const rows = await db.execute<{ one: number }>(
+      sql`
       select 1 as one from hrm_action_reasons
        where org_id = ${orgId} and is_active
        limit 1
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.length > 0;
   });
 }
@@ -155,12 +165,15 @@ export async function validateSubmitActionReason(input: {
     );
   }
   const rows = await withOrg(input.orgId, () =>
-    db.execute<{ requiresComment: boolean }>(sql`
+    db.execute<{ requiresComment: boolean }>(
+      sql`
       select requires_comment as "requiresComment" from hrm_action_reasons
        where org_id = ${input.orgId} and action = ${input.action}
          and reason_code = ${input.reasonCode} and is_active
        limit 1
-    `, "objects"),
+    `,
+      "objects",
+    ),
   );
   if (rows.length === 0) {
     throw new ActionReasonError(

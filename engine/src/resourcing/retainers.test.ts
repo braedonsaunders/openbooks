@@ -10,13 +10,19 @@ import {
 } from "./retainers.ts";
 
 test("a week straddling month-end allocates cents across entries and months", () => {
-  const priced = priceHoursDrawdown([
-    { id: "may-entry", workedOn: "2026-05-31", hours: "2.5000" },
-    { id: "june-entry-one", workedOn: "2026-06-01", hours: "3.2500" },
-    { id: "june-entry-two", workedOn: "2026-06-02", hours: "1.3333" },
-  ], "137.50");
+  const priced = priceHoursDrawdown(
+    [
+      { id: "may-entry", workedOn: "2026-05-31", hours: "2.5000" },
+      { id: "june-entry-one", workedOn: "2026-06-01", hours: "3.2500" },
+      { id: "june-entry-two", workedOn: "2026-06-02", hours: "1.3333" },
+    ],
+    "137.50",
+  );
 
-  assert.deepEqual(priced.byEntry.map(({ amount }) => amount), ["343.7500", "446.8700", "183.3300"]);
+  assert.deepEqual(
+    priced.byEntry.map(({ amount }) => amount),
+    ["343.7500", "446.8700", "183.3300"],
+  );
   assert.deepEqual(priced.byMonth, { "2026-05": "343.7500", "2026-06": "630.2000" });
   assert.equal(priced.total, "973.9500");
   assert.equal(priced.hours, "7.0833");
@@ -54,7 +60,10 @@ test("a retainer with an outstanding balance cannot close", () => {
       return true;
     },
   );
-  assert.deepEqual(balanceOf({ totalAmount: "10.0000", currency: "CAD" }, [{ amount: "10.0000" }]), { amount: "0.0000", currency: "CAD" });
+  assert.deepEqual(
+    balanceOf({ totalAmount: "10.0000", currency: "CAD" }, [{ amount: "10.0000" }]),
+    { amount: "0.0000", currency: "CAD" },
+  );
 });
 
 test("active retainers exhaust at zero and expire after their end date", () => {
@@ -62,5 +71,8 @@ test("active retainers exhaust at zero and expire after their end date", () => {
   assert.equal(nextRetainerState(active, "0.0000", "2026-03-01"), "exhausted");
   assert.equal(nextRetainerState(active, "10.0000", "2026-04-01"), "expired");
   assert.equal(nextRetainerState(active, "10.0000", "2026-03-31"), "active");
-  assert.equal(nextRetainerState({ state: "expired", endsOn: active.endsOn }, "10.0000", "2026-04-01"), "expired");
+  assert.equal(
+    nextRetainerState({ state: "expired", endsOn: active.endsOn }, "10.0000", "2026-04-01"),
+    "expired",
+  );
 });

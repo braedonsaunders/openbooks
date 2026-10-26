@@ -27,25 +27,31 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 ensureShopifyAdapterRegistered();
 
 async function setupShop(org: ScratchOrg, actor: string): Promise<string> {
-  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true, cashSales: true, storedValue: true, promotions: true })}::jsonb, true) where id = ${org.orgId}`);
-  const created = await withBypass(() => createChannel(org.orgId, actor, {
-    kind: "shopify",
-    name: "Test Shop",
-    currency: "CAD",
-    externalAccount: "test.myshopify.com",
-    secrets: { accessToken: "shpat_test", mode: "token" },
-    webhookSecret: "whsec_test",
-    settings: {},
-  }));
+  await db.execute(
+    sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true, cashSales: true, storedValue: true, promotions: true })}::jsonb, true) where id = ${org.orgId}`,
+  );
+  const created = await withBypass(() =>
+    createChannel(org.orgId, actor, {
+      kind: "shopify",
+      name: "Test Shop",
+      currency: "CAD",
+      externalAccount: "test.myshopify.com",
+      secrets: { accessToken: "shpat_test", mode: "token" },
+      webhookSecret: "whsec_test",
+      settings: {},
+    }),
+  );
   const channelId = created.channel.id;
   await withBypass(() => retryChannel(org.orgId, actor, channelId, "test"));
   await withBypass(() => markChannelActive(org.orgId, actor, channelId));
-  await withBypass(() => setPostingPolicy(org.orgId, actor, {
-    channelId,
-    mode: "per_order",
-    createPromotionOnMatchMiss: true,
-    effectiveFrom: org.date,
-  }));
+  await withBypass(() =>
+    setPostingPolicy(org.orgId, actor, {
+      channelId,
+      mode: "per_order",
+      createPromotionOnMatchMiss: true,
+      effectiveFrom: org.date,
+    }),
+  );
   const extra: Array<[string, string, string, string]> = [
     ["clearing", "1015", "Shopify Clearing", "asset_bank"],
     ["discount", "4020", "Sales Discounts", "expense"],
@@ -54,10 +60,15 @@ async function setupShop(org: ScratchOrg, actor: string): Promise<string> {
   ];
   const accounts: Record<string, string> = {};
   for (const [key, number, name, type] of extra) {
-    accounts[key] = (await db.execute<{ id: string }>(sql`
+    accounts[key] = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-      returning id`, "objects"))[0]!.id;
+      returning id`,
+        "objects",
+      )
+    )[0]!.id;
   }
   const maps: Array<[string, string, string]> = [
     ["gateway_clearing", "shopify_payments", accounts.clearing!],
@@ -68,20 +79,39 @@ async function setupShop(org: ScratchOrg, actor: string): Promise<string> {
     ["sales_tax_liability", "NY", org.accounts.taxOutput],
   ];
   for (const [role, key, accountId] of maps) {
-    await withBypass(() => upsertAccountMap(org.orgId, actor, { channelId, role, key, accountId, effectiveFrom: org.date }));
+    await withBypass(() =>
+      upsertAccountMap(org.orgId, actor, {
+        channelId,
+        role,
+        key,
+        accountId,
+        effectiveFrom: org.date,
+      }),
+    );
   }
-  await withBypass(() => upsertChannelLocation(org.orgId, actor, {
-    channelId,
-    externalLocationId: "wh-1",
-    externalName: "Warehouse",
-    stockLocationId: org.stockLocationId,
-    fulfilsOrders: true,
-  }));
-  await db.execute(sql`update items set code = 'TEE-RED-M' where id = ${org.items.fifo} and org_id = ${org.orgId}`);
-  await withBypass(() => receiveInventory(org.orgId, actor, {
-    itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
-    subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-  }));
+  await withBypass(() =>
+    upsertChannelLocation(org.orgId, actor, {
+      channelId,
+      externalLocationId: "wh-1",
+      externalName: "Warehouse",
+      stockLocationId: org.stockLocationId,
+      fulfilsOrders: true,
+    }),
+  );
+  await db.execute(
+    sql`update items set code = 'TEE-RED-M' where id = ${org.items.fifo} and org_id = ${org.orgId}`,
+  );
+  await withBypass(() =>
+    receiveInventory(org.orgId, actor, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "2",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+    }),
+  );
   return channelId;
 }
 
@@ -102,13 +132,22 @@ function shopifyOrder(): Record<string, unknown> {
     customer: { id: 9001, first_name: "Bob", last_name: "Norman", email: "bob@example.com" },
     line_items: [
       {
-        title: "Red Tee — M", sku: "TEE-RED-M", variant_id: 8001, quantity: 2, price: "25.00",
+        title: "Red Tee — M",
+        sku: "TEE-RED-M",
+        variant_id: 8001,
+        quantity: 2,
+        price: "25.00",
         discount_allocations: [],
         tax_lines: [{ title: "NY", price: "4.31", rate: 0.08625 }],
       },
     ],
     shipping_lines: [
-      { title: "Standard", price: "6.00", discounted_price: "6.00", tax_lines: [{ title: "NY", price: "0.52", rate: 0.08625 }] },
+      {
+        title: "Standard",
+        price: "6.00",
+        discounted_price: "6.00",
+        tax_lines: [{ title: "NY", price: "0.52", rate: 0.08625 }],
+      },
     ],
     payment_gateway_names: ["shopify_payments"],
     discount_codes: [],
@@ -134,48 +173,91 @@ test(
   async () => {
     const org = await withBypass(() => createScratchOrg());
     try {
-      const actor = await withBypass(() => createScratchUser(org.orgId, "shopify routing", "shopify_routing"));
+      const actor = await withBypass(() =>
+        createScratchUser(org.orgId, "shopify routing", "shopify_routing"),
+      );
       const channelId = await setupShop(org, actor);
       const adapter = channelAdapter("shopify");
-      const first = await adapter.handleEvent(delivery(org.orgId, channelId, "orders/create", shopifyOrder()));
+      const first = await adapter.handleEvent(
+        delivery(org.orgId, channelId, "orders/create", shopifyOrder()),
+      );
       assert.equal(first.action, "processed");
       const ref = first.resultRef as { postingStatus?: string; documentId?: string | null };
       assert.equal(ref.postingStatus, "posted");
       assert.ok(ref.documentId, "paid order posts its cash sale immediately");
-      const rows = await db.execute<{ id: string; posting_status: string; posting_document_id: string | null }>(sql`
+      const rows = await db.execute<{
+        id: string;
+        posting_status: string;
+        posting_document_id: string | null;
+      }>(
+        sql`
         select id, posting_status, posting_document_id from channel_orders
-         where org_id = ${org.orgId} and channel_id = ${channelId} and external_id = '7001'`, "objects");
+         where org_id = ${org.orgId} and channel_id = ${channelId} and external_id = '7001'`,
+        "objects",
+      );
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.posting_status, "posted");
       assert.equal(rows[0]!.posting_document_id, ref.documentId);
-      const repeat = await adapter.handleEvent(delivery(org.orgId, channelId, "orders/create", shopifyOrder()));
+      const repeat = await adapter.handleEvent(
+        delivery(org.orgId, channelId, "orders/create", shopifyOrder()),
+      );
       assert.equal((repeat.resultRef as { documentId?: string }).documentId, ref.documentId);
-      const again = (await db.execute<{ count: string }>(sql`
+      const again = (
+        await db.execute<{ count: string }>(
+          sql`
         select count(*)::text as count from channel_orders
-         where org_id = ${org.orgId} and channel_id = ${channelId} and external_id = '7001'`, "objects"))[0]!.count;
+         where org_id = ${org.orgId} and channel_id = ${channelId} and external_id = '7001'`,
+          "objects",
+        )
+      )[0]!.count;
       assert.equal(again, "1");
-      const refund = await adapter.handleEvent(delivery(org.orgId, channelId, "refunds/create", {
-        id: 8101, order_id: 7001, created_at: "2026-07-16T12:00:00Z",
-        refund_line_items: [{ quantity: 2, subtotal: "50.00", total_tax: "4.83", restock: false,
-          line_item: { id: 1, variant_id: 8001, sku: "TEE-RED-M" } }],
-        order_adjustments: [{ kind: "shipping_refund", amount: "6.00" }],
-        transactions: [{ gateway: "shopify_payments", amount: "60.83" }],
-      }));
+      const refund = await adapter.handleEvent(
+        delivery(org.orgId, channelId, "refunds/create", {
+          id: 8101,
+          order_id: 7001,
+          created_at: "2026-07-16T12:00:00Z",
+          refund_line_items: [
+            {
+              quantity: 2,
+              subtotal: "50.00",
+              total_tax: "4.83",
+              restock: false,
+              line_item: { id: 1, variant_id: 8001, sku: "TEE-RED-M" },
+            },
+          ],
+          order_adjustments: [{ kind: "shipping_refund", amount: "6.00" }],
+          transactions: [{ gateway: "shopify_payments", amount: "60.83" }],
+        }),
+      );
       const refundRef = refund.resultRef as { eventId?: string; orderExternalId?: string };
-      assert.equal(refundRef.orderExternalId, "7001", "the refund id cannot replace its parent order id");
-      const event = (await db.execute<{ order_id: string; payload: { shopCurrency?: string; totalMinor?: string } }>(sql`
+      assert.equal(
+        refundRef.orderExternalId,
+        "7001",
+        "the refund id cannot replace its parent order id",
+      );
+      const event = (
+        await db.execute<{
+          order_id: string;
+          payload: { shopCurrency?: string; totalMinor?: string };
+        }>(
+          sql`
         select order_id, payload from channel_order_events
-         where org_id = ${org.orgId} and id = ${refundRef.eventId}`, "objects"))[0];
+         where org_id = ${org.orgId} and id = ${refundRef.eventId}`,
+          "objects",
+        )
+      )[0];
       assert.equal(event?.order_id, rows[0]!.id);
       assert.equal(event?.payload.totalMinor, "6083");
       for (const topic of ["refunds/create", "fulfillments/create"]) {
-        await assert.rejects(() => adapter.handleEvent(delivery(org.orgId, channelId, topic, { id: 7001 })),
+        await assert.rejects(
+          () => adapter.handleEvent(delivery(org.orgId, channelId, topic, { id: 7001 })),
           (error: unknown) => {
             assert.ok(error instanceof CommerceError);
             assert.equal(error.code, "shopify_order_unreadable");
             assert.match(error.message, /no order id/);
             return true;
-          });
+          },
+        );
       }
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
@@ -189,14 +271,23 @@ test(
   async () => {
     const org = await withBypass(() => createScratchOrg());
     try {
-      const actor = await withBypass(() => createScratchUser(org.orgId, "shopify routing", "shopify_routing"));
+      const actor = await withBypass(() =>
+        createScratchUser(org.orgId, "shopify routing", "shopify_routing"),
+      );
       const channelId = await setupShop(org, actor);
       const adapter = channelAdapter("shopify");
       await assert.rejects(
-        () => adapter.handleEvent(delivery(org.orgId, channelId, "refunds/create", {
-          id: 8101, order_id: 4242, created_at: "2026-07-16T12:00:00Z", note: null,
-          refund_line_items: [], transactions: [{ gateway: "shopify_payments", amount: "60.83" }],
-        })),
+        () =>
+          adapter.handleEvent(
+            delivery(org.orgId, channelId, "refunds/create", {
+              id: 8101,
+              order_id: 4242,
+              created_at: "2026-07-16T12:00:00Z",
+              note: null,
+              refund_line_items: [],
+              transactions: [{ gateway: "shopify_payments", amount: "60.83" }],
+            }),
+          ),
         (error: unknown) => {
           assert.ok(error instanceof CommerceError);
           assert.equal(error.code, "channel_order_unknown");
@@ -206,7 +297,9 @@ test(
         },
         "a refund without its order refuses instead of parking nowhere",
       );
-      const payout = await adapter.handleEvent(delivery(org.orgId, channelId, "shopify_payments/payouts", { id: "p1" }));
+      const payout = await adapter.handleEvent(
+        delivery(org.orgId, channelId, "shopify_payments/payouts", { id: "p1" }),
+      );
       assert.equal(payout.action, "ignored");
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
@@ -214,28 +307,78 @@ test(
   },
 );
 
-test("unattended Shopify sync retains its source and waits for the tenant's configured cash-sale gate", {skip:!DB}, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    installEngineSeams();
-    const author = await createScratchUser(org.orgId,"Storefront connector operator","shopify_operator");
-    const reviewer = await createScratchUser(org.orgId,"Storefront reviewer","shopify_reviewer");
-    await grantScratchPermissions(org.orgId,reviewer,["cash_sales.post"]);
-    const channelId = await setupShop(org,author);
-    await seedApprovalFlow(org.orgId,{subjectKind:"cash_sale",assignees:[{type:"user",userId:reviewer}],mode:"all"});
-    const adapter=channelAdapter("shopify");
-    const pending=await adapter.handleEvent(delivery(org.orgId,channelId,"orders/create",shopifyOrder()));
-    const ref=pending.resultRef as {postingStatus:string;documentId:string};
-    assert.equal(ref.postingStatus,"pending");assert.ok(ref.documentId);
-    const receipt=(await db.execute<{actor_id:string|null;source:string}>(sql`select actor_id,context->>'event_source' as source
-      from flow_submissions where org_id=${org.orgId} and subject_id=${ref.documentId}`, "objects"))[0];
-    assert.deepEqual(receipt,{actor_id:null,source:"sync"});
-    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`, "objects")).length,0);
-    const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${ref.documentId} and status='pending'`, "objects"))[0];
-    assert.ok(gate);await decideGate({gateId:gate.id,userId:reviewer,decision:"approved"});
-    const posted=await adapter.handleEvent(delivery(org.orgId,channelId,"orders/create",shopifyOrder()));
-    assert.equal((posted.resultRef as {postingStatus:string}).postingStatus,"posted");
-    await adapter.handleEvent(delivery(org.orgId,channelId,"orders/create",shopifyOrder()));
-    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`, "objects")).length,1);
-  } finally {await dropScratchOrg(org.orgId);}
-});
+test(
+  "unattended Shopify sync retains its source and waits for the tenant's configured cash-sale gate",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      installEngineSeams();
+      const author = await createScratchUser(
+        org.orgId,
+        "Storefront connector operator",
+        "shopify_operator",
+      );
+      const reviewer = await createScratchUser(
+        org.orgId,
+        "Storefront reviewer",
+        "shopify_reviewer",
+      );
+      await grantScratchPermissions(org.orgId, reviewer, ["cash_sales.post"]);
+      const channelId = await setupShop(org, author);
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "cash_sale",
+        assignees: [{ type: "user", userId: reviewer }],
+        mode: "all",
+      });
+      const adapter = channelAdapter("shopify");
+      const pending = await adapter.handleEvent(
+        delivery(org.orgId, channelId, "orders/create", shopifyOrder()),
+      );
+      const ref = pending.resultRef as { postingStatus: string; documentId: string };
+      assert.equal(ref.postingStatus, "pending");
+      assert.ok(ref.documentId);
+      const receipt = (
+        await db.execute<{ actor_id: string | null; source: string }>(
+          sql`select actor_id,context->>'event_source' as source
+      from flow_submissions where org_id=${org.orgId} and subject_id=${ref.documentId}`,
+          "objects",
+        )
+      )[0];
+      assert.deepEqual(receipt, { actor_id: null, source: "sync" });
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`,
+            "objects",
+          )
+        ).length,
+        0,
+      );
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${ref.documentId} and status='pending'`,
+          "objects",
+        )
+      )[0];
+      assert.ok(gate);
+      await decideGate({ gateId: gate.id, userId: reviewer, decision: "approved" });
+      const posted = await adapter.handleEvent(
+        delivery(org.orgId, channelId, "orders/create", shopifyOrder()),
+      );
+      assert.equal((posted.resultRef as { postingStatus: string }).postingStatus, "posted");
+      await adapter.handleEvent(delivery(org.orgId, channelId, "orders/create", shopifyOrder()));
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`,
+            "objects",
+          )
+        ).length,
+        1,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

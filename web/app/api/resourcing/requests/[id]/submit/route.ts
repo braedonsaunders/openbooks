@@ -9,10 +9,13 @@ export const POST = defineRoute({
   permission: "resourcing.manage",
   feature: "resourceRequests",
   params: Params,
-  handler: async ({ authz, params }) => Response.json(await submitResourceRequest({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    requestId: params.id,
-  })),
+  handler: async ({ authz, params }) =>
+    Response.json(
+      await submitResourceRequest({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        requestId: params.id,
+      }),
+    ),
 });

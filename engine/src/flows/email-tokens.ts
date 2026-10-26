@@ -99,7 +99,10 @@ export function appBaseUrl(): string {
 }
 
 /** The pair of one-click links for one gate row's assignee. */
-export function emailActionUrls(gateId: string, assigneeUserId: string): {
+export function emailActionUrls(
+  gateId: string,
+  assigneeUserId: string,
+): {
   approveUrl: string;
   rejectUrl: string;
 } {

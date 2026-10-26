@@ -1,74 +1,92 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import type { SessionUser } from '../auth'
-import { stubModules } from '../../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import type { SessionUser } from "../auth";
+import { stubModules } from "../../testing/stub-modules.ts";
 
-const state: { user: SessionUser | null } = { user: null }
-Object.assign(globalThis, { __fileScope: state })
+const state: { user: SessionUser | null } = { user: null };
+Object.assign(globalThis, { __fileScope: state });
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
-registerHooks({ resolve(specifier, context, nextResolve) {
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__fileScope.user}' }
-  return nextResolve(specifier, context)
-} })
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__fileScope.user}",
+      };
+    return nextResolve(specifier, context);
+  },
+});
 
-const { sql } = await import('drizzle-orm')
-const { db, env, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { getAuthz } = await import('../authz')
-const { executeAssistantTool } = await import('./registry')
+const { sql } = await import("drizzle-orm");
+const { db, env, withBypassContext, withOrgContext } =
+  await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { getAuthz } = await import("../authz");
+const { executeAssistantTool } = await import("./registry");
 
-test('assistant file tools hide record-folder files outside the caller fence', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => (createScratchOrg()))
-  // createScratchUser seeds app_roles outside any bypass of its own; scope
-  // the call (and every seed write below) explicitly now that importing the
-  // assistant modules has replaced the ambient test bypass process-wide.
-  const actor = await withBypassContext(() => createScratchUser(org.orgId, 'File scope prober', 'file_scope_prober'))
-  const hidden = randomUUID()
-  const hiddenDoc = randomUUID()
-  const folderId = randomUUID()
-  const fileId = randomUUID()
-  await withBypassContext(async () => {
-    await db.execute(sql`update app_roles
-      set permissions=${JSON.stringify(['documents.read', 'assistant.use'])}::jsonb,
-          subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
-      where org_id=${org.orgId} and key='file_scope_prober'`)
-    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-      values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden File Branch','CAD','CA')`)
-    await db.execute(sql`insert into documents(id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate)
-      values (${hiddenDoc}, ${org.orgId}, 'customer_invoice', 'draft', 'HIDDEN-FILE-1', ${hidden}, ${org.customerId}, ${org.date}, 'CAD', 1)`)
-    await db.execute(sql`insert into folders (id, org_id, parent_folder_id, name, is_system, record_table, record_id)
-      values (${folderId}, ${org.orgId}, null, 'documents / hidden', true, 'documents', ${hiddenDoc})`)
-    await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes)
-      values (${fileId}, ${org.orgId}, ${folderId}, 'hidden-file-evidence.txt', 'text/plain', 8)`)
-    await db.execute(sql`insert into resource_grants (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by, updated_by) values (${org.orgId}, 'file', ${fileId}, 'user', ${actor}, 'viewer', ${actor}, ${actor})`)
-  })
-  state.user = {
-    id: actor,
-    orgId: org.orgId,
-    name: 'File scope prober',
-    email: 'file-scope@scratch.test',
-    roles: [],
-    isSuperAdmin: false,
-    envKind: 'production',
-    productionOrgId: org.orgId,
-    homeOrgId: org.orgId,
-    homeUserId: actor,
-  }
-  try {
-    await withOrgContext(org.orgId, async () => {
-      const authz = await getAuthz()
-      assert.ok(authz)
-      const listed = await executeAssistantTool(authz, 'list_files', { query: 'hidden-file-evidence' })
-      assert.ok(listed.ok, JSON.stringify(listed))
-      assert.deepEqual((listed.data as { items: unknown[] }).items, [])
-      const one = await executeAssistantTool(authz, 'get_file', { id: fileId })
-      assert.equal(one.ok, false)
-    })
-  } finally {
-    state.user = null
-    await dropScratchOrg(org.orgId)
-  }
-})
+test(
+  "assistant file tools hide record-folder files outside the caller fence",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    // createScratchUser seeds app_roles outside any bypass of its own; scope
+    // the call (and every seed write below) explicitly now that importing the
+    // assistant modules has replaced the ambient test bypass process-wide.
+    const actor = await withBypassContext(() =>
+      createScratchUser(org.orgId, "File scope prober", "file_scope_prober"),
+    );
+    const hidden = randomUUID();
+    const hiddenDoc = randomUUID();
+    const folderId = randomUUID();
+    const fileId = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`update app_roles
+      set permissions=${JSON.stringify(["documents.read", "assistant.use"])}::jsonb,
+          subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+      where org_id=${org.orgId} and key='file_scope_prober'`);
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+      values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden File Branch','CAD','CA')`);
+      await db.execute(sql`insert into documents(id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate)
+      values (${hiddenDoc}, ${org.orgId}, 'customer_invoice', 'draft', 'HIDDEN-FILE-1', ${hidden}, ${org.customerId}, ${org.date}, 'CAD', 1)`);
+      await db.execute(sql`insert into folders (id, org_id, parent_folder_id, name, is_system, record_table, record_id)
+      values (${folderId}, ${org.orgId}, null, 'documents / hidden', true, 'documents', ${hiddenDoc})`);
+      await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+      values (${fileId}, ${org.orgId}, ${folderId}, 'hidden-file-evidence.txt', 'text/plain', 8)`);
+      await db.execute(
+        sql`insert into resource_grants (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by, updated_by) values (${org.orgId}, 'file', ${fileId}, 'user', ${actor}, 'viewer', ${actor}, ${actor})`,
+      );
+    });
+    state.user = {
+      id: actor,
+      orgId: org.orgId,
+      name: "File scope prober",
+      email: "file-scope@scratch.test",
+      roles: [],
+      isSuperAdmin: false,
+      envKind: "production",
+      productionOrgId: org.orgId,
+      homeOrgId: org.orgId,
+      homeUserId: actor,
+    };
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const authz = await getAuthz();
+        assert.ok(authz);
+        const listed = await executeAssistantTool(authz, "list_files", {
+          query: "hidden-file-evidence",
+        });
+        assert.ok(listed.ok, JSON.stringify(listed));
+        assert.deepEqual((listed.data as { items: unknown[] }).items, []);
+        const one = await executeAssistantTool(authz, "get_file", { id: fileId });
+        assert.equal(one.ok, false);
+      });
+    } finally {
+      state.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

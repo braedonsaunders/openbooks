@@ -9,16 +9,18 @@ import { defineRoute } from "@/lib/api/route";
 import { idempotentResourcingCreate } from "../_idempotent";
 import { validateDemandCustomValues } from "./_custom";
 
-const Body = z.object({
-  departmentId: uuidString(),
-  jobTitle: z.string(),
-  firstWeek: z.string(),
-  lastWeek: z.string(),
-  hoursPerWeek: z.string(),
-  note: z.string().nullable().optional(),
-  opportunityId: uuidString().nullable().optional(),
-  custom: z.record(z.string(), z.json()).optional(),
-}).strict();
+const Body = z
+  .object({
+    departmentId: uuidString(),
+    jobTitle: z.string(),
+    firstWeek: z.string(),
+    lastWeek: z.string(),
+    hoursPerWeek: z.string(),
+    note: z.string().nullable().optional(),
+    opportunityId: uuidString().nullable().optional(),
+    custom: z.record(z.string(), z.json()).optional(),
+  })
+  .strict();
 const Params = z.object({}).strict();
 
 export const POST = defineRoute({
@@ -37,17 +39,30 @@ export const POST = defineRoute({
         request,
         table: "res_demand_lines",
         match,
-        create: (id, requestId, savedMatch) => createDemandLine({
-          ...body,
-          custom: custom.cleaned,
-          orgId: authz.user.orgId,
-          actorId: authz.user.id,
-          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-        }, { id, requestId, match: savedMatch }),
-        load: async () => (await db.select().from(resDemandLines).where(and(
-          eq(resDemandLines.orgId, authz.user.orgId),
-          eq(resDemandLines.id, request.headers.get("Idempotency-Key")!.trim()),
-        )).limit(1))[0] ?? null,
+        create: (id, requestId, savedMatch) =>
+          createDemandLine(
+            {
+              ...body,
+              custom: custom.cleaned,
+              orgId: authz.user.orgId,
+              actorId: authz.user.id,
+              allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+            },
+            { id, requestId, match: savedMatch },
+          ),
+        load: async () =>
+          (
+            await db
+              .select()
+              .from(resDemandLines)
+              .where(
+                and(
+                  eq(resDemandLines.orgId, authz.user.orgId),
+                  eq(resDemandLines.id, request.headers.get("Idempotency-Key")!.trim()),
+                ),
+              )
+              .limit(1)
+          )[0] ?? null,
       });
       return created(row);
     });

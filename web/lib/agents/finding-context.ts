@@ -48,7 +48,9 @@ export async function loadFindingContext(
     );
   }
   if (item.evidence.length > MAX_EVIDENCE_LINES) {
-    lines.push(`- …and ${item.evidence.length - MAX_EVIDENCE_LINES} more evidence rows (use get_continuous_close_finding).`);
+    lines.push(
+      `- …and ${item.evidence.length - MAX_EVIDENCE_LINES} more evidence rows (use get_continuous_close_finding).`,
+    );
   }
   return {
     section: lines.join("\n"),

@@ -25,7 +25,10 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount, certificateFlag,
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
+  certificateFlag,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
@@ -39,15 +42,25 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ne.ts";
 const NE_9N_KEY = "us_ne_9n";
 
 export type NeFilingStatus = "single" | "married";
 
 const NE_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly",
-  "quarterly", "semiannual", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "semiannual",
+  "annual",
+  "daily",
 ];
 
 interface NeBracket {
@@ -101,17 +114,19 @@ const NE_EDITIONS_BY_YEAR: Record<number, NeYearRates> = {
   [NE_RATES_2026.year]: NE_RATES_2026,
 };
 
-export const NE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Nebraska Circular EN (2026) — percentage method",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Nebraska Department of Revenue, Circular EN for wages paid on or after "
-    + "January 1, 2026 — Table 7 annual percentage method, $2,440 allowance, "
-    + "Weekly Wage Bracket Single 0-allowance $500–$510 cell ($14.38)",
-  status: "published",
-  region: "NE",
-}];
+export const NE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Nebraska Circular EN (2026) — percentage method",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Nebraska Department of Revenue, Circular EN for wages paid on or after " +
+      "January 1, 2026 — Table 7 annual percentage method, $2,440 allowance, " +
+      "Weekly Wage Bracket Single 0-allowance $500–$510 cell ($14.38)",
+    status: "published",
+    region: "NE",
+  },
+];
 
 export function neAnnualTax(taxable: bigint, married: boolean, rates: NeYearRates): bigint {
   if (taxable <= 0n) return 0n;
@@ -133,8 +148,8 @@ function compute(
 
   if (input.employerEmployeeCount == null) {
     throw new PayrollError(
-      "Nebraska employer employee count is required to determine whether the "
-      + "special withholding procedure applies; payroll must resolve it from the paying legal entity",
+      "Nebraska employer employee count is required to determine whether the " +
+        "special withholding procedure applies; payroll must resolve it from the paying legal entity",
     );
   }
   const employerEmployeeCount = input.employerEmployeeCount;
@@ -145,7 +160,8 @@ function compute(
   }
   const specialProcedure = employerEmployeeCount > 24;
   const lesserWithholdingDocumented = certificateFlag(
-    input.certificate, "lesser_withholding_documented",
+    input.certificate,
+    "lesser_withholding_documented",
   );
   trace("NE_EMPLOYER_EMPLOYEE_COUNT", U(String(employerEmployeeCount)));
   trace("NE_SPECIAL_PROCEDURE", specialProcedure ? 1n : 0n);
@@ -153,7 +169,8 @@ function compute(
 
   // No W-4 / W-4N: "withhold as if the employee was single and claimed no
   // withholding allowances regardless" of marital status.
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as NeFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single") as NeFilingStatus;
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -176,9 +193,10 @@ function compute(
     throw new PayrollError("Nebraska tax-qualified deductions cannot be negative");
   }
   const specialMinimumBase = max0(wages - taxQualifiedDeductions);
-  const specialMinimum = specialProcedure && !lesserWithholdingDocumented
-    ? mulRateCents(specialMinimumBase, SPECIAL_MINIMUM_RATE)
-    : 0n;
+  const specialMinimum =
+    specialProcedure && !lesserWithholdingDocumented
+      ? mulRateCents(specialMinimumBase, SPECIAL_MINIMUM_RATE)
+      : 0n;
   trace("NE_SPECIAL_MINIMUM_BASE", specialMinimumBase);
   trace("NE_TAX_QUALIFIED_DEDUCTIONS", taxQualifiedDeductions);
   trace("NE_SPECIAL_MINIMUM", specialMinimum);
@@ -195,26 +213,32 @@ function compute(
       const percentage = certificateAmount(form9n, "nebraska_wages_percentage");
       if (percentage == null || U(percentage) > U("100")) {
         throw new PayrollError(
-          "Nebraska Form 9N needs a Nebraska wage percentage from 0 through 100; "
-          + "correct the filed allocation before calculating — refused by name",
+          "Nebraska Form 9N needs a Nebraska wage percentage from 0 through 100; " +
+            "correct the filed allocation before calculating — refused by name",
         );
       }
       allocationRate = pctToRate(percentage);
-    } else if ((input.wageAllocations ?? []).some((item) =>
-      item.region === "NE" && item.subRegion === null)) {
+    } else if (
+      (input.wageAllocations ?? []).some((item) => item.region === "NE" && item.subRegion === null)
+    ) {
       allocationRate = requireUsWageAllocation(input.wageAllocations, "NE", null).workShare;
     }
     factors.NE_NONRESIDENT_ALLOCATION = allocationRate;
   }
-  const sourcedPeriodTax = input.basis === "nonresident"
-    ? mulRateCents(periodTax, allocationRate) : periodTax;
-  const sourcedMinimum = input.basis === "nonresident"
-    ? mulRateCents(specialMinimum, allocationRate) : specialMinimum;
+  const sourcedPeriodTax =
+    input.basis === "nonresident" ? mulRateCents(periodTax, allocationRate) : periodTax;
+  const sourcedMinimum =
+    input.basis === "nonresident" ? mulRateCents(specialMinimum, allocationRate) : specialMinimum;
   if (input.basis === "nonresident") trace("NE_NONRESIDENT_TAX", sourcedPeriodTax);
   const sourcedOrdinary = sourcedPeriodTax + extra;
-  const total = input.basis === "nonresident"
-    ? (sourcedOrdinary > sourcedMinimum ? sourcedOrdinary : sourcedMinimum)
-    : (ordinary > specialMinimum ? ordinary : specialMinimum);
+  const total =
+    input.basis === "nonresident"
+      ? sourcedOrdinary > sourcedMinimum
+        ? sourcedOrdinary
+        : sourcedMinimum
+      : ordinary > specialMinimum
+        ? ordinary
+        : specialMinimum;
   trace("NE_WITHHELD", total);
 
   return {
@@ -249,7 +273,12 @@ export const NE_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const NE_STATE_ENGINE = defineStateEngine({
-  state: { state: "NE", label: "Nebraska income tax", printedPeriods: NE_PERIODS, fixedPeriodsOnly: true },
+  state: {
+    state: "NE",
+    label: "Nebraska income tax",
+    printedPeriods: NE_PERIODS,
+    fixedPeriodsOnly: true,
+  },
   editions: pairStateRateEditions(Object.values(NE_EDITIONS_BY_YEAR), NE_TAX_YEAR_EDITIONS),
   compute: compute,
 });
@@ -263,7 +292,8 @@ export const NE_WITHHOLDING: UsStateWithholdingEngine = {
   printedPeriods: NE_PERIODS,
   supportingCertificateKeys: [NE_9N_KEY],
   taxableWageBases: {
-    income: "state:US:NE:income", nonPeriodic: "state:US:NE:nonPeriodic",
+    income: "state:US:NE:income",
+    nonPeriodic: "state:US:NE:nonPeriodic",
   },
   compute: NE_STATE_ENGINE.compute,
 };
@@ -287,14 +317,14 @@ export const NE_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "NE" },
   purpose: "withholding",
   citation:
-    "Nebraska Department of Revenue, Circular EN for wages paid on or after "
-    + "January 1, 2026; Form W-4N. A federal Form W-4 on file may be used for "
-    + "the same marital status and allowance count.",
+    "Nebraska Department of Revenue, Circular EN for wages paid on or after " +
+    "January 1, 2026; Form W-4N. A federal Form W-4 on file may be used for " +
+    "the same marital status and allowance count.",
   summary:
-    "Sets Nebraska marital status and withholding allowances. If the employee "
-    + "does not furnish a W-4N or federal W-4, Circular EN requires withholding "
-    + "as single with no allowances. Employers with more than 24 employees must "
-    + "also retain supporting documentation for any lesser withholding amount.",
+    "Sets Nebraska marital status and withholding allowances. If the employee " +
+    "does not furnish a W-4N or federal W-4, Circular EN requires withholding " +
+    "as single with no allowances. Employers with more than 24 employees must " +
+    "also retain supporting documentation for any lesser withholding amount.",
   storage: "certificate_rows",
   fields: [
     {
@@ -307,9 +337,9 @@ export const NE_CERTIFICATE: PayrollCertificate = {
         { value: "married", label: "Married (including surviving spouse)" },
       ],
       help:
-        "Circular EN Table 7 uses Single (including head of household) or "
-        + "Married (including surviving spouse). Default Single is the "
-        + "publication's own rule when no W-4 / W-4N is on file.",
+        "Circular EN Table 7 uses Single (including head of household) or " +
+        "Married (including surviving spouse). Default Single is the " +
+        "publication's own rule when no W-4 / W-4N is on file.",
     },
     {
       key: "allowances",
@@ -319,8 +349,8 @@ export const NE_CERTIFICATE: PayrollCertificate = {
       max: "99",
       default: "0",
       help:
-        "Each allowance is $2,440 a year. Default zero is Circular EN's "
-        + "missing-form rule (single, no allowance).",
+        "Each allowance is $2,440 a year. Default zero is Circular EN's " +
+        "missing-form rule (single, no allowance).",
     },
     {
       key: "additional_per_period",
@@ -329,28 +359,28 @@ export const NE_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "An employee may request additional Nebraska withholding on Form W-4N. "
-        + "Added AFTER the percentage method is de-annualized.",
+        "An employee may request additional Nebraska withholding on Form W-4N. " +
+        "Added AFTER the percentage method is de-annualized.",
     },
     {
       key: "exempt",
       label: "Exempt from Nebraska withholding",
       kind: "flag",
       help:
-        "A current exempt claim normally withholds zero. For an employer with "
-        + "more than 24 employees, Circular EN requires at least 1.5% unless "
-        + "the employee records supporting documentation below.",
+        "A current exempt claim normally withholds zero. For an employer with " +
+        "more than 24 employees, Circular EN requires at least 1.5% unless " +
+        "the employee records supporting documentation below.",
     },
     {
       key: "lesser_withholding_documented",
       label: "Documentation supporting lesser Nebraska withholding",
       kind: "flag",
       help:
-        "Check only when the employee has supplied satisfactory supporting "
-        + "documentation (for example dependents, marital status, or itemized "
-        + "deductions) justifying less than the 1.5% special minimum. The "
-        + "documentation permits the ordinary percentage-method result, "
-        + "including an exempt claim, for employers with more than 24 employees.",
+        "Check only when the employee has supplied satisfactory supporting " +
+        "documentation (for example dependents, marital status, or itemized " +
+        "deductions) justifying less than the 1.5% special minimum. The " +
+        "documentation permits the ordinary percentage-method result, " +
+        "including an exempt claim, for employers with more than 24 employees.",
     },
   ],
 };
@@ -368,24 +398,26 @@ export const NE_9N_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "NE" },
   purpose: "withholding",
   citation:
-    "Nebraska Department of Revenue, Circular EN for wages paid on or after "
-    + "January 1, 2026, Nonresident Employees, General Rule; Form 9N",
+    "Nebraska Department of Revenue, Circular EN for wages paid on or after " +
+    "January 1, 2026, Nonresident Employees, General Rule; Form 9N",
   summary:
-    "Reports the percentage of a nonresident employee's wages subject to Nebraska "
-    + "withholding. The employer calculates withholding on total wages first, then "
-    + "multiplies by this percentage. Without a 9N (or adequate work records), "
-    + "Nebraska withholding applies to total wages.",
+    "Reports the percentage of a nonresident employee's wages subject to Nebraska " +
+    "withholding. The employer calculates withholding on total wages first, then " +
+    "multiplies by this percentage. Without a 9N (or adequate work records), " +
+    "Nebraska withholding applies to total wages.",
   storage: "certificate_rows",
-  fields: [{
-    key: "nebraska_wages_percentage",
-    label: "Percentage of wages subject to Nebraska withholding",
-    kind: "amount",
-    decimals: 4,
-    min: "0",
-    max: "100",
-    required: true,
-    help: "Enter the Form 9N percentage of the employee's wages subject to Nebraska income tax withholding.",
-  }],
+  fields: [
+    {
+      key: "nebraska_wages_percentage",
+      label: "Percentage of wages subject to Nebraska withholding",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      max: "100",
+      required: true,
+      help: "Enter the Form 9N percentage of the employee's wages subject to Nebraska income tax withholding.",
+    },
+  ],
 };
 
 export const NE_REGION: PayrollRegionWithholding = {
@@ -404,6 +436,6 @@ export const NE_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Nebraska Department of Revenue, Circular EN for wages paid on or after "
-    + "January 1, 2026; Form W-4N",
+    "Nebraska Department of Revenue, Circular EN for wages paid on or after " +
+    "January 1, 2026; Form W-4N",
 };

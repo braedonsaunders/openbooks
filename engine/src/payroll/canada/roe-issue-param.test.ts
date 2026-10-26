@@ -39,8 +39,5 @@ test("a truncated escape is an invalid selection, not an unhandled throw", () =>
 });
 
 test("an overlong decoded comment is still refused by name", () => {
-  assert.throws(
-    () => parseRoeIssueParam(`${EMPLOYEE}:K:${"x".repeat(161)}`),
-    /comment too long/,
-  );
+  assert.throws(() => parseRoeIssueParam(`${EMPLOYEE}:K:${"x".repeat(161)}`), /comment too long/);
 });

@@ -4,7 +4,13 @@ const KR_VAT_RETURN_2026: TaxReturnPack = {
   code: "KR_VAT_RETURN",
   name: "VAT Return (부가가치세 신고) — filed through NTS Hometax",
   country: "KR",
-  jurisdiction: { code: "KR", name: "Korea — national VAT territory", country: "KR", level: "country", taxType: "vat" },
+  jurisdiction: {
+    code: "KR",
+    name: "Korea — national VAT territory",
+    country: "KR",
+    level: "country",
+    taxType: "vat",
+  },
   // Korea's taxable period is SEMI-ANNUAL, but every general taxable person
   // lodges QUARTERLY: a preliminary return for the first quarter of each
   // half-year (Jan-Mar, Jul-Sep) plus a finalized return for the second
@@ -15,18 +21,48 @@ const KR_VAT_RETURN_2026: TaxReturnPack = {
   submissionChannel: "portal_manual",
   governmentFormat: "portal_entry",
   submissionUrl: "https://nts.go.kr/english/na/ntt/selectNttInfo.do?nttSn=78081&mi=",
-  watermark: "Working copy — confirm general vs simplified taxpayer status and taxable-period mapping, then file through NTS Hometax",
+  watermark:
+    "Working copy — confirm general vs simplified taxpayer status and taxable-period mapping, then file through NTS Hometax",
   // The English NTS material describes the return's LINES (output tax on
   // taxable supplies, zero-rated supplies, input tax, tax payable or
   // refundable) but publishes no numeric line numbers, so the line NAMES are
   // used as codes. Inventing numeric codes would be worse than naming them.
   boxes: [
-    { lineCode: "OUTPUT_TAX", label: "Output tax on taxable supplies at 10%", sign: -1, sequence: 10 },
-    { lineCode: "ZERO_RATED_SUPPLIES", label: "Zero-rated supplies — exports and qualifying overseas services at 0%", sign: 1, sequence: 20 },
+    {
+      lineCode: "OUTPUT_TAX",
+      label: "Output tax on taxable supplies at 10%",
+      sign: -1,
+      sequence: 10,
+    },
+    {
+      lineCode: "ZERO_RATED_SUPPLIES",
+      label: "Zero-rated supplies — exports and qualifying overseas services at 0%",
+      sign: 1,
+      sequence: 20,
+    },
     { lineCode: "INPUT_TAX", label: "Input tax deductible from output tax", sign: 1, sequence: 30 },
-    { lineCode: "TAX_PAYABLE_REFUNDABLE", label: "Tax payable (refundable) — output tax minus input tax", sign: 1, sequence: 40 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 50, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 60, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "TAX_PAYABLE_REFUNDABLE",
+      label: "Tax payable (refundable) — output tax minus input tax",
+      sign: 1,
+      sequence: 40,
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label: "OpenBooks workpaper — output VAT from the ledger, all configured rates",
+      sign: -1,
+      sequence: 50,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — input VAT from the ledger, all configured rates",
+      sign: 1,
+      sequence: 60,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
   ],
 };
 
@@ -75,13 +111,15 @@ export const KOREA_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "nts_vat_filing_periods",
-      title: "NTS — VAT taxable period and filing schedule (semi-annual period, quarterly preliminary and finalized returns)",
+      title:
+        "NTS — VAT taxable period and filing schedule (semi-annual period, quarterly preliminary and finalized returns)",
       url: "https://nts.go.kr/english/na/ntt/selectNttInfo.do?nttSn=78081&mi=",
       asOf: "2026-08-01",
     },
     {
       id: "moef_korean_taxation_2024",
-      title: "MOEF — KOREAN TAXATION 2024: VAT rate 10%, zero-rating for exports etc. with refundable input tax, output-minus-input calculation (applicability, not origin)",
+      title:
+        "MOEF — KOREAN TAXATION 2024: VAT rate 10%, zero-rating for exports etc. with refundable input tax, output-minus-input calculation (applicability, not origin)",
       url: "https://mofe.go.kr/com/cmm/fms/FileDown.do?atchFileId=ATCH_000000000028183&fileSn=1",
       asOf: "2026-09-18",
     },
@@ -95,14 +133,18 @@ export const KOREA_TAX_PACK: CountryTaxPackDefinition = {
         name: "Korea VAT standard rate",
         ratePercent: "10",
         role: "standard",
-        rates: [{ ratePercent: "10", effectiveFrom: "2024-01-01", sourceId: "moef_korean_taxation_2024" }],
+        rates: [
+          { ratePercent: "10", effectiveFrom: "2024-01-01", sourceId: "moef_korean_taxation_2024" },
+        ],
       },
       {
         code: "KR-VAT-ZERO",
         name: "Korea VAT zero rate — exports and qualifying overseas services",
         ratePercent: "0",
         role: "zero",
-        rates: [{ ratePercent: "0", effectiveFrom: "2024-01-01", sourceId: "moef_korean_taxation_2024" }],
+        rates: [
+          { ratePercent: "0", effectiveFrom: "2024-01-01", sourceId: "moef_korean_taxation_2024" },
+        ],
       },
     ],
   },

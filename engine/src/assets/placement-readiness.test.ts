@@ -62,13 +62,20 @@ test("a missing in-service date is the only field named when everything else is 
 test("a straight-line asset needs a useful life unless the category or book policy supplies one", () => {
   assert.deepEqual(missing(complete({ usefulLifeMonths: null })), ["useful_life_months"]);
   assert.deepEqual(
-    missing(complete({ usefulLifeMonths: null }), { category: { ...CATEGORY, defaultLifeMonths: 60 } }),
+    missing(complete({ usefulLifeMonths: null }), {
+      category: { ...CATEGORY, defaultLifeMonths: 60 },
+    }),
     [],
     "the category default life is the effective life the build uses",
   );
   assert.deepEqual(
     missing(complete({ usefulLifeMonths: null }), {
-      policy: { method: "straight_line", depreciationMethodId: null, lifeMonths: 36, unitsTotal: null },
+      policy: {
+        method: "straight_line",
+        depreciationMethodId: null,
+        lifeMonths: 36,
+        unitsTotal: null,
+      },
     }),
     [],
     "a primary-book policy life overrides the asset",
@@ -76,32 +83,36 @@ test("a straight-line asset needs a useful life unless the category or book poli
 });
 
 test("manual depreciation needs no useful life, but a tenant formula always does", () => {
+  assert.deepEqual(missing(complete({ depreciationMethod: "manual", usefulLifeMonths: null })), []);
   assert.deepEqual(
-    missing(complete({ depreciationMethod: "manual", usefulLifeMonths: null })),
-    [],
-  );
-  assert.deepEqual(
-    missing(complete({ depreciationMethodId: "11111111-1111-4111-8111-111111111111", usefulLifeMonths: null })),
+    missing(
+      complete({
+        depreciationMethodId: "11111111-1111-4111-8111-111111111111",
+        usefulLifeMonths: null,
+      }),
+    ),
     ["useful_life_months"],
   );
 });
 
 test("units-of-production requires positive expected lifetime units", () => {
   const units = complete({ depreciationMethod: "units_of_production", usefulLifeMonths: null });
-  assert.deepEqual(missing({ ...units, depreciationUnitsTotal: null }), ["depreciation_units_total"]);
-  assert.deepEqual(missing({ ...units, depreciationUnitsTotal: "0" }), ["depreciation_units_total"]);
+  assert.deepEqual(missing({ ...units, depreciationUnitsTotal: null }), [
+    "depreciation_units_total",
+  ]);
+  assert.deepEqual(missing({ ...units, depreciationUnitsTotal: "0" }), [
+    "depreciation_units_total",
+  ]);
   assert.deepEqual(missing({ ...units, depreciationUnitsTotal: "50000" }), []);
 });
 
 test("an opening amount and its as-of date are both-or-neither", () => {
-  assert.deepEqual(
-    missing(complete({ openingAccumulated: "3000.0000", openingAsOf: null })),
-    ["opening_accumulated_as_of"],
-  );
-  assert.deepEqual(
-    missing(complete({ openingAccumulated: null, openingAsOf: "2025-12-31" })),
-    ["opening_accumulated_depreciation"],
-  );
+  assert.deepEqual(missing(complete({ openingAccumulated: "3000.0000", openingAsOf: null })), [
+    "opening_accumulated_as_of",
+  ]);
+  assert.deepEqual(missing(complete({ openingAccumulated: null, openingAsOf: "2025-12-31" })), [
+    "opening_accumulated_depreciation",
+  ]);
 });
 
 test("a missing category is named as missing", () => {

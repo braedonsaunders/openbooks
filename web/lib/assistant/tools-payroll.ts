@@ -67,7 +67,13 @@ const listPayRuns: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["payroll.read"] },
   feature: "payroll",
   inputSchema: z.object({
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum pay runs to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum pay runs to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
@@ -75,13 +81,16 @@ const listPayRuns: AssistantToolDef = {
     }
     const a = raw as { limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
-    const runs = (await db.execute<Record<string, unknown>>(sql`
+    const runs = await db.execute<Record<string, unknown>>(
+      sql`
       ${PAY_RUN_SELECT}
        where r.org_id = ${authz.user.orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
          ${payrollRunPopulationScopeFilter(authz.user.orgId, sql`r.document_id`, authz.allowedSubsidiaryIds)}
        order by r.pay_date desc, d.document_number desc
        limit ${limit}
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: { returned: runs.length, runs: runs.map(payRunRow), href: "/payroll/runs" },
@@ -102,18 +111,28 @@ const getPayRun: AssistantToolDef = {
       return { ok: false, error: "payroll_feature_disabled" };
     }
     const a = raw as { documentId: string };
-    const runs = (await db.execute<Record<string, unknown>>(sql`
+    const runs = await db.execute<Record<string, unknown>>(
+      sql`
       ${PAY_RUN_SELECT}
        where r.org_id = ${authz.user.orgId} and r.document_id = ${a.documentId}
          ${payrollRunPopulationScopeFilter(authz.user.orgId, sql`r.document_id`, authz.allowedSubsidiaryIds)}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const run = runs[0];
     // A run outside the caller's legal-entity scope is indistinguishable from
     // a missing one — the answer the JSON route gives.
-    if (!run || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, run.subsidiary_id as string | null)) {
+    if (
+      !run ||
+      !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, run.subsidiary_id as string | null)
+    ) {
       return { ok: false, error: "pay_run_not_found" };
     }
-    const readiness = await payRunReadiness(authz.user.orgId, a.documentId, authz.allowedSubsidiaryIds);
+    const readiness = await payRunReadiness(
+      authz.user.orgId,
+      a.documentId,
+      authz.allowedSubsidiaryIds,
+    );
     const items = capList(
       readiness.items.map((item) => ({
         severity: item.severity,
@@ -236,7 +255,13 @@ const listPayrollEmployees: AssistantToolDef = {
   feature: "payroll",
   inputSchema: z.object({
     query: z.string().max(100).optional().describe("Match employee name"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum employees to return (default 50)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe("Maximum employees to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
@@ -249,7 +274,8 @@ const listPayrollEmployees: AssistantToolDef = {
     // exemptions, additional withholding) and the sealed government-id
     // columns on this table are deliberately not selected.
     const asOf = await orgToday(authz.user.orgId);
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select prof.id, prof.employee_party_id, p.display_name as employee_name,
              prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province,
              prof.pay_basis, prof.is_active, prof.stub_delivery, prof.payment_method,
@@ -266,7 +292,9 @@ const listPayrollEmployees: AssistantToolDef = {
          ${like ? sql` and p.display_name ilike ${like}` : sql``}
        order by p.display_name
        limit ${limit}
-    `, "objects"));
+    `,
+      "objects",
+    );
     return {
       ok: true,
       data: {
@@ -301,17 +329,22 @@ const payrollEntitlements: AssistantToolDef = {
   feature: "payroll",
   inputSchema: z.object({
     employeePartyId: uuidInput,
-    asOfDate: dateInput.optional().describe("Entitlement balances as of this date; defaults to today"),
+    asOfDate: dateInput
+      .optional()
+      .describe("Entitlement balances as of this date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "payroll"))) {
       return { ok: false, error: "payroll_feature_disabled" };
     }
     const a = raw as { employeePartyId: string; asOfDate?: string };
-    const exists = (await db.execute<{ display_name: string }>(sql`
+    const exists = await db.execute<{ display_name: string }>(
+      sql`
       select display_name from parties
        where org_id = ${authz.user.orgId} and id = ${a.employeePartyId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!exists[0]) return { ok: false, error: "employee_not_found" };
     if (await guardPayrollEmployees(authz, [a.employeePartyId])) {
       return { ok: false, error: "employee_not_found" };

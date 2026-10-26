@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { clearDeletedConversations } from "./sidebar-state";
-import { stubModules } from '../../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
+import { stubModules } from "../../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../../testing/jsdom-env.ts";
 
 declare global {
   var __assistantTestRouter:
-    | { push(url: string): void; refresh(): void; replace(): void; prefetch(): void }
-    | undefined;
+    { push(url: string): void; refresh(): void; replace(): void; prefetch(): void } | undefined;
   var __assistantTestConfirm: boolean | undefined;
 }
 
@@ -16,7 +15,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/assistant", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__assistantTestRouter}export function usePathname(){return \'/assistant\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__assistantTestRouter}export function usePathname(){return '/assistant'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -56,7 +63,11 @@ const runSnapshots = new Map<string, { status: string; parts: unknown[]; revisio
 
 function sseChat(conversationId: string, runId: string): ChatHandle {
   let controller!: ReadableStreamDefaultController<Uint8Array>;
-  const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; } });
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+    },
+  });
   const encoder = new TextEncoder();
   const handle: ChatHandle = {
     response: new Response(stream, {
@@ -71,11 +82,18 @@ function sseChat(conversationId: string, runId: string): ChatHandle {
         validate(value: unknown): Promise<{ success: boolean }>;
       };
       const parsed = await schema().validate(chunk);
-      assert.ok(parsed.success, `mock SSE chunk must satisfy the UI-message schema: ${JSON.stringify(chunk)}`);
+      assert.ok(
+        parsed.success,
+        `mock SSE chunk must satisfy the UI-message schema: ${JSON.stringify(chunk)}`,
+      );
       controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
     },
     close() {
-      try { controller.close(); } catch { /* already closed */ }
+      try {
+        controller.close();
+      } catch {
+        /* already closed */
+      }
     },
   };
   openChats.set(conversationId, handle);
@@ -85,7 +103,9 @@ function sseChat(conversationId: string, runId: string): ChatHandle {
 function installFetch(conversationIds: { a: string; b: string }) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     const method = (init?.method ?? "GET").toUpperCase();
     if (url.endsWith("/api/assistant/chat") && method === "POST") {
       const body = JSON.parse(String(init?.body ?? "{}")) as { conversationId?: string | null };
@@ -102,7 +122,12 @@ function installFetch(conversationIds: { a: string; b: string }) {
       const snapshot = runSnapshots.get(decodeURIComponent(runMatch[1]!));
       if (!snapshot) return Response.json({ run: null });
       return Response.json({
-        run: { runId: decodeURIComponent(runMatch[1]!), status: snapshot.status, parts: snapshot.parts, revision: snapshot.revision },
+        run: {
+          runId: decodeURIComponent(runMatch[1]!),
+          status: snapshot.status,
+          parts: snapshot.parts,
+          revision: snapshot.revision,
+        },
       });
     }
     if (url.endsWith("/api/assistant/conversations")) {
@@ -124,7 +149,9 @@ function installFetch(conversationIds: { a: string; b: string }) {
     }
     throw new Error(`unexpected fetch in assistant workbench test: ${method} ${url}`);
   }) as typeof fetch;
-  return () => { globalThis.fetch = prior; };
+  return () => {
+    globalThis.fetch = prior;
+  };
 }
 
 type WorkbenchProps = {
@@ -135,8 +162,12 @@ type WorkbenchProps = {
 
 function mountWorkbench() {
   globalThis.__assistantTestRouter = {
-    push(url: string) { routerCalls.push(`push:${url}`); },
-    refresh() { routerCalls.push("refresh"); },
+    push(url: string) {
+      routerCalls.push(`push:${url}`);
+    },
+    refresh() {
+      routerCalls.push("refresh");
+    },
     replace() {},
     prefetch() {},
   };
@@ -162,7 +193,9 @@ function mountWorkbench() {
     host,
     render,
     async unmount() {
-      await act(async () => { root.unmount(); });
+      await act(async () => {
+        root.unmount();
+      });
       host.remove();
     },
   };
@@ -172,9 +205,8 @@ async function sendPrompt(host: HTMLElement, text: string) {
   const box = host.querySelector("textarea") as HTMLTextAreaElement;
   assert.ok(box, "composer textarea must render");
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set as
-      | ((this: HTMLTextAreaElement, value: string) => void)
-      | undefined;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")
+      ?.set as ((this: HTMLTextAreaElement, value: string) => void) | undefined;
     setter?.call(box, text);
     box.dispatchEvent(new window.Event("input", { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -246,13 +278,19 @@ test("an in-flight turn survives switching chats, keyed by conversation", async 
   await view.render({ conversations: summaries(a, b), activeId: b, initialMessages: bTranscript });
   const onB = view.host.textContent ?? "";
   assert.ok(onB.includes("b-answer"), "switching must show chat B's transcript");
-  assert.ok(!onB.includes("Checking the books"), "chat A's in-flight turn must not leak into chat B");
+  assert.ok(
+    !onB.includes("Checking the books"),
+    "chat A's in-flight turn must not leak into chat B",
+  );
 
   // Return to A while its turn still streams: the live progress must be there.
   await view.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
   const backOnA = view.host.textContent ?? "";
   assert.ok(backOnA.includes("Checking the books"), "returning must rehydrate the in-flight text");
-  assert.ok(backOnA.includes("Ran a profit & loss"), "returning must rehydrate the in-progress tool use");
+  assert.ok(
+    backOnA.includes("Ran a profit & loss"),
+    "returning must rehydrate the in-progress tool use",
+  );
 
   // Finish the turn while viewing: the completed answer folds into the base.
   await pump(a, [
@@ -263,7 +301,10 @@ test("an in-flight turn survives switching chats, keyed by conversation", async 
   openChats.get(a)?.close();
   await act(tick);
   const done = view.host.textContent ?? "";
-  assert.ok(done.includes("Checking the books — done."), "the finished answer must land in the viewing chat");
+  assert.ok(
+    done.includes("Checking the books — done."),
+    "the finished answer must land in the viewing chat",
+  );
   openChats.delete(a);
 });
 
@@ -313,8 +354,15 @@ test("a completed-while-away turn is adopted on return and converges", async (t)
   await view.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
   await act(tick);
   const backOnA = view.host.textContent ?? "";
-  assert.ok(backOnA.includes("Tallying — finished away."), "returning must show the away-completed turn");
-  assert.equal((backOnA.match(/Tallying — finished away\./g) ?? []).length, 1, "the converged turn must render exactly once");
+  assert.ok(
+    backOnA.includes("Tallying — finished away."),
+    "returning must show the away-completed turn",
+  );
+  assert.equal(
+    (backOnA.match(/Tallying — finished away\./g) ?? []).length,
+    1,
+    "the converged turn must render exactly once",
+  );
 });
 
 test("a reload reattaches to the live run via its event log", async (t) => {
@@ -346,7 +394,9 @@ test("a reload reattaches to the live run via its event log", async (t) => {
   // Fresh mount (page reload): the persisted snapshot shows, then the follow
   // poll adopts the newer server revision.
   const view = mountWorkbench();
-  t.after(async () => { await view.unmount(); });
+  t.after(async () => {
+    await view.unmount();
+  });
   await view.render({
     conversations: summaries(a, b),
     activeId: a,
@@ -421,7 +471,11 @@ test("stopping a turn hits the explicit abort endpoint and clears reading", asyn
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   });
-  assert.equal(view.host.querySelector('[role="status"]'), null, "the streaming indicator must clear after stop");
+  assert.equal(
+    view.host.querySelector('[role="status"]'),
+    null,
+    "the streaming indicator must clear after stop",
+  );
   openChats.delete(a);
 });
 
@@ -469,7 +523,10 @@ test("deleting another conversation mid-stream leaves the active turn untouched"
   assert.ok(deletedConversations.includes(b), "chat B must be deleted");
   assert.ok(!deletedConversations.includes(a), "chat A must not be deleted");
   const after = view.host.textContent ?? "";
-  assert.ok(after.includes("Checking the books"), "the active in-flight turn must survive deleting another chat");
+  assert.ok(
+    after.includes("Checking the books"),
+    "the active in-flight turn must survive deleting another chat",
+  );
   assert.ok(view.host.querySelector('[role="status"]'), "the streaming indicator must still show");
   openChats.get(a)?.close();
   openChats.delete(a);
@@ -501,7 +558,9 @@ function sidebarTitles(host: HTMLElement): string[] {
 test("complete history renders beyond twenty chats and shrinks after deleting and refreshing", async (t) => {
   clearDeletedConversations();
   const history = Array.from({ length: 45 }, (_, index) => ({
-    id: randomUUID(), title: `History chat ${index + 1}`, updatedAt: new Date().toISOString(),
+    id: randomUUID(),
+    title: `History chat ${index + 1}`,
+    updatedAt: new Date().toISOString(),
   }));
   const restoreFetch = installFetch({ a: history[0]!.id, b: history[1]!.id });
   const view = mountWorkbench();
@@ -511,13 +570,26 @@ test("complete history renders beyond twenty chats and shrinks after deleting an
     clearDeletedConversations();
   });
   await view.render({ conversations: history, activeId: null, initialMessages: [] });
-  assert.deepEqual(sidebarTitles(view.host), history.map((chat) => chat.title));
+  assert.deepEqual(
+    sidebarTitles(view.host),
+    history.map((chat) => chat.title),
+  );
   await openRowMenuAndDelete(view.host, history[0]!.title);
   const remaining = history.slice(1);
-  assert.deepEqual(sidebarTitles(view.host), remaining.map((chat) => chat.title));
+  assert.deepEqual(
+    sidebarTitles(view.host),
+    remaining.map((chat) => chat.title),
+  );
   await view.render({ conversations: remaining, activeId: null, initialMessages: [] });
-  assert.equal(sidebarTitles(view.host).length, 44, "refresh must not refill a hidden twenty-chat window");
-  assert.ok(sidebarTitles(view.host).includes("History chat 45"), "the oldest chat must already be rendered");
+  assert.equal(
+    sidebarTitles(view.host).length,
+    44,
+    "refresh must not refill a hidden twenty-chat window",
+  );
+  assert.ok(
+    sidebarTitles(view.host).includes("History chat 45"),
+    "the oldest chat must already be rendered",
+  );
 });
 
 /** A delete confirmed in the chat menu must survive switching chats. */
@@ -538,11 +610,17 @@ test("a deleted thread stays gone when the next chat arrives with a stale server
     clearDeletedConversations();
   });
   await first.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
-  assert.ok(sidebarTitles(first.host).some((s) => s.includes("Chat B")), "chat B must start listed");
+  assert.ok(
+    sidebarTitles(first.host).some((s) => s.includes("Chat B")),
+    "chat B must start listed",
+  );
 
   await openRowMenuAndDelete(first.host, "Chat B");
   assert.ok(deletedConversations.includes(b), "chat B must be deleted server-side");
-  assert.ok(!sidebarTitles(first.host).some((s) => s.includes("Chat B")), "chat B must leave the sidebar");
+  assert.ok(
+    !sidebarTitles(first.host).some((s) => s.includes("Chat B")),
+    "chat B must leave the sidebar",
+  );
 
   // Switch chats: App Router may remount the panel with a stale prefetched
   // payload that still carries the deleted thread. It must not come back.
@@ -556,7 +634,10 @@ test("a deleted thread stays gone when the next chat arrives with a stale server
     !sidebarTitles(second.host).some((s) => s.includes("Chat B")),
     "a stale server list must not resurrect the deleted thread after switching chats",
   );
-  assert.ok(sidebarTitles(second.host).some((s) => s.includes("Chat A")), "the surviving chat must stay listed");
+  assert.ok(
+    sidebarTitles(second.host).some((s) => s.includes("Chat A")),
+    "the surviving chat must stay listed",
+  );
 });
 
 test("a stale sidebar refetch on the same view must not resurrect a deleted thread", async (t) => {
@@ -604,8 +685,13 @@ test("the sidebar removes the thread optimistically while the delete is in fligh
     resolveDelete = resolve;
   });
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (url.includes("/api/assistant/conversations/") && (init?.method ?? "GET").toUpperCase() === "DELETE") {
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (
+      url.includes("/api/assistant/conversations/") &&
+      (init?.method ?? "GET").toUpperCase() === "DELETE"
+    ) {
       return gate;
     }
     return innerFetch(input, init);
@@ -646,8 +732,13 @@ test("a failed delete restores the row and surfaces the error", async (t) => {
   const restoreFetch = installFetch({ a, b });
   const innerFetch = globalThis.fetch;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (url.includes("/api/assistant/conversations/") && (init?.method ?? "GET").toUpperCase() === "DELETE") {
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (
+      url.includes("/api/assistant/conversations/") &&
+      (init?.method ?? "GET").toUpperCase() === "DELETE"
+    ) {
       return Promise.resolve(Response.json({ error: "boom" }, { status: 500 }));
     }
     return innerFetch(input, init);
@@ -663,7 +754,10 @@ test("a failed delete restores the row and surfaces the error", async (t) => {
   });
   await view.render({ conversations: summaries(a, b), activeId: a, initialMessages: [] });
   await openRowMenuAndDelete(view.host, "Chat B");
-  assert.ok(sidebarTitles(view.host).some((s) => s.includes("Chat B")), "a failed delete must restore the row");
+  assert.ok(
+    sidebarTitles(view.host).some((s) => s.includes("Chat B")),
+    "a failed delete must restore the row",
+  );
   assert.ok(
     (view.host.textContent ?? "").includes("boom"),
     "a failed delete must surface the server's reason",

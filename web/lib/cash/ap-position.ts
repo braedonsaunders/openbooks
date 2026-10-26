@@ -108,9 +108,14 @@ export function groupByVendor(items: OpenItem[], asOf: Date): VendorPayable[] {
   const map = new Map<string, VendorPayable>();
   for (const it of items) {
     const key = it.partyId ?? "__none__";
-    const cur =
-      map.get(key) ??
-      { partyId: it.partyId, partyName: it.partyName, amount: ZERO_MONEY, count: 0, overdue: ZERO_MONEY, oldestDue: null as string | null };
+    const cur = map.get(key) ?? {
+      partyId: it.partyId,
+      partyName: it.partyName,
+      amount: ZERO_MONEY,
+      count: 0,
+      overdue: ZERO_MONEY,
+      oldestDue: null as string | null,
+    };
     cur.amount = addMoney(cur.amount, it.remaining);
     cur.count += 1;
     // Past-due follows the shared aging rule: an item with no due date ages
@@ -148,9 +153,22 @@ export async function apPosition(
   const subIds = allowedSubsidiaryIds === null ? undefined : [...allowedSubsidiaryIds];
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
-  const exactApSettings: ApSettings = { ...apSettings, weeklyCap: normalizeMoneyValue(String(apSettings.weeklyCap)) };
+  const exactApSettings: ApSettings = {
+    ...apSettings,
+    weeklyCap: normalizeMoneyValue(String(apSettings.weeklyCap)),
+  };
 
-  const [apItems, arItems, apStats, arStats, banks, catConfigs, model, fiscalStart, fiscalCalendar] = await Promise.all([
+  const [
+    apItems,
+    arItems,
+    apStats,
+    arStats,
+    banks,
+    catConfigs,
+    model,
+    fiscalStart,
+    fiscalCalendar,
+  ] = await Promise.all([
     openItems(orgId, "ap", asOfIso, subIds),
     openItems(orgId, "ar", asOfIso, subIds),
     paymentStats("ap", asOfIso, subIds, orgId),
@@ -166,12 +184,28 @@ export async function apPosition(
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end, model);
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end, model, true);
   const weekTotals = (byWeek: Map<string, { amount: string }[]>): Record<string, string> =>
-    Object.fromEntries([...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]));
-  const catContext = { arWeekly: weekTotals(ar.byWeek), apWeekly: weekTotals(ap.byWeek), cashStart: startingCash, model, subIds, fiscalStartMonth: fiscalStart, fiscalPeriods: fiscalCalendar?.periods ?? null };
-  const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
+    Object.fromEntries(
+      [...byWeek.entries()].map(([k, es]) => [k, sumMoney(es.map((e) => e.amount))]),
+    );
+  const catContext = {
+    arWeekly: weekTotals(ar.byWeek),
+    apWeekly: weekTotals(ap.byWeek),
+    cashStart: startingCash,
+    model,
+    subIds,
+    fiscalStartMonth: fiscalStart,
+    fiscalPeriods: fiscalCalendar?.periods ?? null,
+  };
+  const visibleConfigs = catConfigs.filter((c) =>
+    isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds),
+  );
   // A refusing category contributes zeros and names its reason; the rest of
   // the forecast still renders. Anything else still throws.
-  const categories = await Promise.all(visibleConfigs.map((c) => forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
+  const categories = await Promise.all(
+    visibleConfigs.map((c) =>
+      forecastCategoryOrUnavailable(orgId, c, asOfIso, grid.weekStarts, catContext, locale),
+    ),
+  );
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,
@@ -184,11 +218,16 @@ export async function apPosition(
 
   const summary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg, ap.unplaced);
   const current = summary.buckets.find((b) => b.index === 0)?.amount ?? ZERO_MONEY;
-  const overdue = compareMoney(summary.outstanding, current) > 0 ? subtractMoney(summary.outstanding, current) : ZERO_MONEY;
+  const overdue =
+    compareMoney(summary.outstanding, current) > 0
+      ? subtractMoney(summary.outstanding, current)
+      : ZERO_MONEY;
   const overdueCount = overdueItemCount(apItems, grid.asOf);
 
   const weeks: ApWeek[] = grid.weekStarts.map((k, i) => {
-    const entries = (ap.byWeek.get(k) ?? []).slice().sort((a, b) => compareMoney(b.amount, a.amount));
+    const entries = (ap.byWeek.get(k) ?? [])
+      .slice()
+      .sort((a, b) => compareMoney(b.amount, a.amount));
     const w = timeline.weeks[i]!;
     return {
       weekStart: k,
@@ -205,8 +244,17 @@ export async function apPosition(
   // Same +30d cut-off as the dashboard tile (see ar-position): a
   // cut-off-bounded schedule feeds this figure, never the grid-bounded
   // entries the weekly grid can truncate short of day 30.
-  const cutoffSchedule = scheduleForecast(apItems, apStats, grid.asOf, grid.start, addDays(grid.asOf, 30), model);
-  const dueNext30 = sumMoney(cutoffSchedule.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount));
+  const cutoffSchedule = scheduleForecast(
+    apItems,
+    apStats,
+    grid.asOf,
+    grid.start,
+    addDays(grid.asOf, 30),
+    model,
+  );
+  const dueNext30 = sumMoney(
+    cutoffSchedule.entries.filter((e) => e.predictedDate <= cutoff30).map((e) => e.amount),
+  );
 
   // Pay-priority worklist: oldest due first, then most overdue, then largest.
   const worklist = ap.entries
@@ -220,7 +268,8 @@ export async function apPosition(
     .slice(0, 12);
 
   const firstWeek = timeline.weeks[0];
-  const scheduling = compareMoney(exactApSettings.weeklyCap, ZERO_MONEY) > 0 || exactApSettings.restrictToSafe;
+  const scheduling =
+    compareMoney(exactApSettings.weeklyCap, ZERO_MONEY) > 0 || exactApSettings.restrictToSafe;
   const recommended = firstWeek?.apEntries ?? [];
   const payPlan: PayRunPlan = {
     weeklyCap: exactApSettings.weeklyCap,

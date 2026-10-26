@@ -48,10 +48,7 @@ export interface AppRequest {
 export interface AppStorageAdapter {
   get(key: string, namespace: string): Promise<unknown>;
   set(key: string, value: unknown, namespace: string): Promise<void>;
-  list(
-    prefix: string,
-    namespace: string,
-  ): Promise<{ key: string; value: unknown }[]>;
+  list(prefix: string, namespace: string): Promise<{ key: string; value: unknown }[]>;
   delete(key: string, namespace: string): Promise<void>;
 }
 
@@ -141,9 +138,7 @@ export function isHostStackExhaustion(error: unknown): boolean {
 }
 
 export function isHostVmUnfreeableSignal(error: unknown): boolean {
-  return (
-    error instanceof WebAssembly.RuntimeError || isHostStackExhaustion(error)
-  );
+  return error instanceof WebAssembly.RuntimeError || isHostStackExhaustion(error);
 }
 
 export async function runAppEndpoint(opts: {
@@ -177,7 +172,9 @@ export async function runAppEndpoint(opts: {
    * The adapter promise remains handled after the race settles; if it resolves
    * later, it cannot resume QuickJS or start another host operation.
    */
-  const withHostDeadline = async <T>(operation: () => Promise<T>): Promise<T | typeof HOST_TIMEOUT> => {
+  const withHostDeadline = async <T>(
+    operation: () => Promise<T>,
+  ): Promise<T | typeof HOST_TIMEOUT> => {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) {
       sealed = true;
@@ -218,7 +215,9 @@ export async function runAppEndpoint(opts: {
   // the envelope rolls back or commits (see engine/src/apps/invocations.ts).
   let sealed = false;
   const refuseIfSealed = (): { error: ReturnType<typeof vm.newError> } | null =>
-    sealed ? { error: vm.newError("host API closed: the endpoint outcome was already determined") } : null;
+    sealed
+      ? { error: vm.newError("host API closed: the endpoint outcome was already determined") }
+      : null;
 
   let vmDisposed = false;
   let cleanupDeferred = false;
@@ -247,15 +246,11 @@ export async function runAppEndpoint(opts: {
   };
 
   /** Charge units; throw a governance error handle when over budget. */
-  const charge = (
-    cost: number,
-  ): { error: ReturnType<typeof vm.newError> } | null => {
+  const charge = (cost: number): { error: ReturnType<typeof vm.newError> } | null => {
     units += cost;
     if (units > budget)
       return {
-        error: vm.newError(
-          `${GOVERNANCE}governance budget exceeded (${units}/${budget} units)`,
-        ),
+        error: vm.newError(`${GOVERNANCE}governance budget exceeded (${units}/${budget} units)`),
       };
     return null;
   };
@@ -271,148 +266,110 @@ export async function runAppEndpoint(opts: {
       logSink.append(() => args.map((a) => JSON.stringify(vm.dump(a))).join(" "));
     });
 
-    const storageGet = vm.newAsyncifiedFunction(
-      "__storage_get",
-      async (keyH, nsH) => {
-        const closed = refuseIfSealed();
-        if (closed) return closed;
-        const over = charge(COST.storageGet);
-        if (over) return over;
-        const value = await withHostDeadline(() =>
-          adapters.storage.get(
-            String(vm.dump(keyH)),
-            String(vm.dump(nsH) ?? "default"),
-          ),
-        );
-        if (value === HOST_TIMEOUT) return timeoutError();
-        return vm.newString(JSON.stringify(value ?? null));
-      },
-    );
-    const storageSet = vm.newAsyncifiedFunction(
-      "__storage_set",
-      async (keyH, valH, nsH) => {
-        const closed = refuseIfSealed();
-        if (closed) return closed;
-        const over = charge(COST.storageSet);
-        if (over) return over;
-        const raw = vm.dump(valH);
-        const result = await withHostDeadline(() =>
-          adapters.storage.set(
-            String(vm.dump(keyH)),
-            raw === undefined ? null : JSON.parse(String(raw)),
-            String(vm.dump(nsH) ?? "default"),
-          ),
-        );
-        if (result === HOST_TIMEOUT) return timeoutError();
-        return vm.undefined;
-      },
-    );
-    const storageList = vm.newAsyncifiedFunction(
-      "__storage_list",
-      async (prefixH, nsH) => {
-        const closed = refuseIfSealed();
-        if (closed) return closed;
-        const over = charge(COST.storageList);
-        if (over) return over;
-        const rows = await withHostDeadline(() =>
-          adapters.storage.list(
-            String(vm.dump(prefixH) ?? ""),
-            String(vm.dump(nsH) ?? "default"),
-          ),
-        );
-        if (rows === HOST_TIMEOUT) return timeoutError();
-        return vm.newString(JSON.stringify(rows));
-      },
-    );
-    const storageDelete = vm.newAsyncifiedFunction(
-      "__storage_delete",
-      async (keyH, nsH) => {
-        const closed = refuseIfSealed();
-        if (closed) return closed;
-        const over = charge(COST.storageDelete);
-        if (over) return over;
-        const result = await withHostDeadline(() =>
-          adapters.storage.delete(
-            String(vm.dump(keyH)),
-            String(vm.dump(nsH) ?? "default"),
-          ),
-        );
-        if (result === HOST_TIMEOUT) return timeoutError();
-        return vm.undefined;
-      },
-    );
+    const storageGet = vm.newAsyncifiedFunction("__storage_get", async (keyH, nsH) => {
+      const closed = refuseIfSealed();
+      if (closed) return closed;
+      const over = charge(COST.storageGet);
+      if (over) return over;
+      const value = await withHostDeadline(() =>
+        adapters.storage.get(String(vm.dump(keyH)), String(vm.dump(nsH) ?? "default")),
+      );
+      if (value === HOST_TIMEOUT) return timeoutError();
+      return vm.newString(JSON.stringify(value ?? null));
+    });
+    const storageSet = vm.newAsyncifiedFunction("__storage_set", async (keyH, valH, nsH) => {
+      const closed = refuseIfSealed();
+      if (closed) return closed;
+      const over = charge(COST.storageSet);
+      if (over) return over;
+      const raw = vm.dump(valH);
+      const result = await withHostDeadline(() =>
+        adapters.storage.set(
+          String(vm.dump(keyH)),
+          raw === undefined ? null : JSON.parse(String(raw)),
+          String(vm.dump(nsH) ?? "default"),
+        ),
+      );
+      if (result === HOST_TIMEOUT) return timeoutError();
+      return vm.undefined;
+    });
+    const storageList = vm.newAsyncifiedFunction("__storage_list", async (prefixH, nsH) => {
+      const closed = refuseIfSealed();
+      if (closed) return closed;
+      const over = charge(COST.storageList);
+      if (over) return over;
+      const rows = await withHostDeadline(() =>
+        adapters.storage.list(String(vm.dump(prefixH) ?? ""), String(vm.dump(nsH) ?? "default")),
+      );
+      if (rows === HOST_TIMEOUT) return timeoutError();
+      return vm.newString(JSON.stringify(rows));
+    });
+    const storageDelete = vm.newAsyncifiedFunction("__storage_delete", async (keyH, nsH) => {
+      const closed = refuseIfSealed();
+      if (closed) return closed;
+      const over = charge(COST.storageDelete);
+      if (over) return over;
+      const result = await withHostDeadline(() =>
+        adapters.storage.delete(String(vm.dump(keyH)), String(vm.dump(nsH) ?? "default")),
+      );
+      if (result === HOST_TIMEOUT) return timeoutError();
+      return vm.undefined;
+    });
 
-    const recordsList = vm.newAsyncifiedFunction(
-      "__records_list",
-      async (typeH, filtersH) => {
-        const closed = refuseIfSealed();
-        if (closed) return closed;
-        if (!adapters.records)
-          return {
-            error: vm.newError(
-              `${FORBIDDEN}records.read not granted to this app`,
-            ),
-          };
-        const over = charge(COST.recordsList);
-        if (over) return over;
-        const filtersRaw = vm.dump(filtersH);
-        const filters = filtersRaw ? JSON.parse(String(filtersRaw)) : {};
-        const rows = await withHostDeadline(() =>
-          adapters.records!.list(String(vm.dump(typeH)), filters),
-        );
-        if (rows === HOST_TIMEOUT) return timeoutError();
-        return vm.newString(JSON.stringify(rows));
-      },
-    );
-    const recordsGet = vm.newAsyncifiedFunction(
-      "__records_get",
-      async (typeH, idH) => {
-        const closed = refuseIfSealed();
-        if (closed) return closed;
-        if (!adapters.records)
-          return {
-            error: vm.newError(
-              `${FORBIDDEN}records.read not granted to this app`,
-            ),
-          };
-        const over = charge(COST.recordsGet);
-        if (over) return over;
-        const row = await withHostDeadline(() =>
-          adapters.records!.get(String(vm.dump(typeH)), String(vm.dump(idH))),
-        );
-        if (row === HOST_TIMEOUT) return timeoutError();
-        return vm.newString(JSON.stringify(row ?? null));
-      },
-    );
+    const recordsList = vm.newAsyncifiedFunction("__records_list", async (typeH, filtersH) => {
+      const closed = refuseIfSealed();
+      if (closed) return closed;
+      if (!adapters.records)
+        return {
+          error: vm.newError(`${FORBIDDEN}records.read not granted to this app`),
+        };
+      const over = charge(COST.recordsList);
+      if (over) return over;
+      const filtersRaw = vm.dump(filtersH);
+      const filters = filtersRaw ? JSON.parse(String(filtersRaw)) : {};
+      const rows = await withHostDeadline(() =>
+        adapters.records!.list(String(vm.dump(typeH)), filters),
+      );
+      if (rows === HOST_TIMEOUT) return timeoutError();
+      return vm.newString(JSON.stringify(rows));
+    });
+    const recordsGet = vm.newAsyncifiedFunction("__records_get", async (typeH, idH) => {
+      const closed = refuseIfSealed();
+      if (closed) return closed;
+      if (!adapters.records)
+        return {
+          error: vm.newError(`${FORBIDDEN}records.read not granted to this app`),
+        };
+      const over = charge(COST.recordsGet);
+      if (over) return over;
+      const row = await withHostDeadline(() =>
+        adapters.records!.get(String(vm.dump(typeH)), String(vm.dump(idH))),
+      );
+      if (row === HOST_TIMEOUT) return timeoutError();
+      return vm.newString(JSON.stringify(row ?? null));
+    });
 
-    const journalCreate = vm.newAsyncifiedFunction(
-      "__journal_create",
-      async (inputH, postH) => {
-        const closed = refuseIfSealed();
-        if (closed) return closed;
-        if (!adapters.journal)
-          return {
-            error: vm.newError(`${FORBIDDEN}gl.post not granted to this app`),
-          };
-        const post = vm.dump(postH) === true;
-        const over = charge(post ? COST.journalPost : COST.journalDraft);
-        if (over) return over;
-        try {
-          const input = JSON.parse(String(vm.dump(inputH)));
-          const result = await withHostDeadline(() =>
-            adapters.journal!.create(input, post),
-          );
-          if (result === HOST_TIMEOUT) return timeoutError();
-          return vm.newString(JSON.stringify(result));
-        } catch (e) {
-          return {
-            error: vm.newError(
-              `journal.create failed: ${(e as Error).message}`,
-            ),
-          };
-        }
-      },
-    );
+    const journalCreate = vm.newAsyncifiedFunction("__journal_create", async (inputH, postH) => {
+      const closed = refuseIfSealed();
+      if (closed) return closed;
+      if (!adapters.journal)
+        return {
+          error: vm.newError(`${FORBIDDEN}gl.post not granted to this app`),
+        };
+      const post = vm.dump(postH) === true;
+      const over = charge(post ? COST.journalPost : COST.journalDraft);
+      if (over) return over;
+      try {
+        const input = JSON.parse(String(vm.dump(inputH)));
+        const result = await withHostDeadline(() => adapters.journal!.create(input, post));
+        if (result === HOST_TIMEOUT) return timeoutError();
+        return vm.newString(JSON.stringify(result));
+      } catch (e) {
+        return {
+          error: vm.newError(`journal.create failed: ${(e as Error).message}`),
+        };
+      }
+    });
 
     const platformCall = (
       name: string,
@@ -447,7 +404,9 @@ export async function runAppEndpoint(opts: {
       if (!adapters.platform?.query) throw new Error("platform query unavailable");
       return adapters.platform.query(JSON.parse(String(plan)));
     });
-    const platformSchema = platformCall("__platform_schema", COST.platformSchema, () => adapters.platform!.schema());
+    const platformSchema = platformCall("__platform_schema", COST.platformSchema, () =>
+      adapters.platform!.schema(),
+    );
     const platformList = platformCall("__platform_list", COST.platformList, (typeH, optionsH) =>
       adapters.platform!.list(String(typeH), optionsH ? JSON.parse(String(optionsH)) : {}),
     );
@@ -457,8 +416,15 @@ export async function runAppEndpoint(opts: {
     const platformCreate = platformCall("__platform_create", COST.platformCreate, (typeH, bodyH) =>
       adapters.platform!.create(String(typeH), bodyH ? JSON.parse(String(bodyH)) : {}),
     );
-    const platformUpdate = platformCall("__platform_update", COST.platformUpdate, (typeH, idH, bodyH) =>
-      adapters.platform!.update(String(typeH), String(idH), bodyH ? JSON.parse(String(bodyH)) : {}),
+    const platformUpdate = platformCall(
+      "__platform_update",
+      COST.platformUpdate,
+      (typeH, idH, bodyH) =>
+        adapters.platform!.update(
+          String(typeH),
+          String(idH),
+          bodyH ? JSON.parse(String(bodyH)) : {},
+        ),
     );
     const platformDelete = platformCall("__platform_delete", COST.platformDelete, (typeH, idH) =>
       adapters.platform!.delete(String(typeH), String(idH)),
@@ -572,14 +538,11 @@ export async function runAppEndpoint(opts: {
         // completion; disposing a suspended WASM stack would be unsafe.
         sealed = true;
         cleanupDeferred = true;
-        void evalPromise.then(
-          (lateResult) => {
-            if (lateResult.error) lateResult.error.dispose();
-            else lateResult.value.dispose();
-            disposeVm();
-          },
-          disposeVm,
-        );
+        void evalPromise.then((lateResult) => {
+          if (lateResult.error) lateResult.error.dispose();
+          else lateResult.value.dispose();
+          disposeVm();
+        }, disposeVm);
         return {
           status: "timeout",
           error: "execution timed out",
@@ -612,9 +575,7 @@ export async function runAppEndpoint(opts: {
       const err = vm.dump(result.error);
       result.error.dispose();
       const msg =
-        typeof err === "object" && err && "message" in err
-          ? String((err).message)
-          : String(err);
+        typeof err === "object" && err && "message" in err ? String(err.message) : String(err);
       if (msg.startsWith(FORBIDDEN)) {
         return {
           status: "forbidden",
@@ -653,8 +614,7 @@ export async function runAppEndpoint(opts: {
 
     const raw = vm.dump(result.value);
     result.value.dispose();
-    const parsed =
-      typeof raw === "string" && raw !== "null" ? JSON.parse(raw) : null;
+    const parsed = typeof raw === "string" && raw !== "null" ? JSON.parse(raw) : null;
     const response = normalizeResponse(parsed);
     return {
       status: "ok",
@@ -678,9 +638,7 @@ export async function runAppEndpoint(opts: {
     }
     return {
       status: "error",
-      error: isHostStackExhaustion(e)
-        ? GUEST_STACK_OVERFLOW_MESSAGE
-        : (e as Error).message,
+      error: isHostStackExhaustion(e) ? GUEST_STACK_OVERFLOW_MESSAGE : (e as Error).message,
       logs,
       units,
       durationMs: Date.now() - started,
@@ -692,12 +650,7 @@ export async function runAppEndpoint(opts: {
 
 /** A handler may return `{ status, body }` or a bare value (→ 200 with body). */
 function normalizeResponse(out: unknown): { status: number; body: unknown } {
-  if (
-    out &&
-    typeof out === "object" &&
-    "status" in (out) &&
-    typeof (out).status === "number"
-  ) {
+  if (out && typeof out === "object" && "status" in out && typeof out.status === "number") {
     const o = out as { status: number; body?: unknown };
     return { status: o.status, body: "body" in o ? o.body : null };
   }

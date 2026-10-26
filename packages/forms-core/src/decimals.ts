@@ -9,12 +9,12 @@
 // an existing JSON number or an explicitly supplied scientific spelling.
 
 /** An exact decimal as scaled units plus its scale (fraction digits). */
-export type ExactDecimal = { units: bigint; scale: number }
+export type ExactDecimal = { units: bigint; scale: number };
 
-const EXACT_DECIMAL_RE = /^([+-]?)(\d+(?:\.\d*)?|\.\d+)(?:[eE]([+-]?\d+))?$/
+const EXACT_DECIMAL_RE = /^([+-]?)(\d+(?:\.\d*)?|\.\d+)(?:[eE]([+-]?\d+))?$/;
 
 /** Cap exact scientific expansion so a hostile exponent cannot force a giant allocation. */
-const MAX_EXACT_EXPONENT = 10_000
+const MAX_EXACT_EXPONENT = 10_000;
 
 /**
  * Parse exact decimal text (plain or scientific) into scaled units, or null
@@ -23,38 +23,38 @@ const MAX_EXACT_EXPONENT = 10_000
  * — never coerced through Number.
  */
 export function parseExactDecimalParts(raw: string, allowScientific = true): ExactDecimal | null {
-  const match = EXACT_DECIMAL_RE.exec(raw.trim())
-  if (!match || (!allowScientific && match[3] !== undefined)) return null
-  const negative = match[1] === '-'
-  const [intPart = '', fracPart = ''] = match[2]!.split('.')
-  const exponent = match[3] === undefined ? 0 : Number(match[3])
-  if (!Number.isSafeInteger(exponent) || Math.abs(exponent) > MAX_EXACT_EXPONENT) return null
-  let digits = `${intPart}${fracPart}`.replace(/^0+/, '') || '0'
-  let scale = fracPart.length - exponent
+  const match = EXACT_DECIMAL_RE.exec(raw.trim());
+  if (!match || (!allowScientific && match[3] !== undefined)) return null;
+  const negative = match[1] === "-";
+  const [intPart = "", fracPart = ""] = match[2]!.split(".");
+  const exponent = match[3] === undefined ? 0 : Number(match[3]);
+  if (!Number.isSafeInteger(exponent) || Math.abs(exponent) > MAX_EXACT_EXPONENT) return null;
+  let digits = `${intPart}${fracPart}`.replace(/^0+/, "") || "0";
+  let scale = fracPart.length - exponent;
   if (scale < 0) {
-    digits += '0'.repeat(-scale)
-    scale = 0
+    digits += "0".repeat(-scale);
+    scale = 0;
   }
-  const units = BigInt(digits)
-  return { units: negative ? -units : units, scale }
+  const units = BigInt(digits);
+  return { units: negative ? -units : units, scale };
 }
 
 /** Exact decimal content of a finite JS number ("1e-7" expands exactly). */
 export function exactDecimalOfNumber(value: number): ExactDecimal | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null
-  return parseExactDecimalParts(String(value))
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return parseExactDecimalParts(String(value));
 }
 
 /** Render scaled units as canonical trimmed decimal text ("-0" becomes "0"). */
 export function renderExactDecimal(units: bigint, scale: number): string {
-  const negative = units < 0n
-  const digits = (negative ? -units : units).toString()
-  if (scale === 0) return `${negative && digits !== '0' ? '-' : ''}${digits}`
-  const padded = digits.padStart(scale + 1, '0')
-  const whole = padded.slice(0, -scale).replace(/^0+(?=\d)/, '') || '0'
-  const fraction = padded.slice(-scale).replace(/0+$/, '')
-  const zero = whole === '0' && fraction === ''
-  return `${negative && !zero ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`
+  const negative = units < 0n;
+  const digits = (negative ? -units : units).toString();
+  if (scale === 0) return `${negative && digits !== "0" ? "-" : ""}${digits}`;
+  const padded = digits.padStart(scale + 1, "0");
+  const whole = padded.slice(0, -scale).replace(/^0+(?=\d)/, "") || "0";
+  const fraction = padded.slice(-scale).replace(/0+$/, "");
+  const zero = whole === "0" && fraction === "";
+  return `${negative && !zero ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
 /**
@@ -65,13 +65,13 @@ export function renderExactDecimal(units: bigint, scale: number): string {
  */
 export function canonicalDecimal(value: unknown, maxScale = 4): string | null {
   const parts =
-    typeof value === 'number'
+    typeof value === "number"
       ? exactDecimalOfNumber(value)
-      : typeof value === 'string'
+      : typeof value === "string"
         ? parseExactDecimalParts(value)
-        : null
-  if (!parts || maxScale < 0 || parts.scale > maxScale) return null
-  return renderExactDecimal(parts.units, parts.scale)
+        : null;
+  if (!parts || maxScale < 0 || parts.scale > maxScale) return null;
+  return renderExactDecimal(parts.units, parts.scale);
 }
 
 /**
@@ -79,14 +79,15 @@ export function canonicalDecimal(value: unknown, maxScale = 4): string | null {
  * crossed IEEE-754 and cannot recover the operator's original spelling.
  */
 export function canonicalPlainDecimal(value: unknown, maxScale = 4): string | null {
-  if (typeof value !== 'string') return null
-  const parts = parseExactDecimalParts(value, false)
-  if (!parts || maxScale < 0 || parts.scale > maxScale) return null
-  return renderExactDecimal(parts.units, parts.scale)
+  if (typeof value !== "string") return null;
+  const parts = parseExactDecimalParts(value, false);
+  if (!parts || maxScale < 0 || parts.scale > maxScale) return null;
+  return renderExactDecimal(parts.units, parts.scale);
 }
 
 /** Exact comparison of two parsed decimals (no float crossing). */
 export function compareExactDecimals(left: ExactDecimal, right: ExactDecimal): -1 | 0 | 1 {
-  const difference = left.units * 10n ** BigInt(right.scale) - right.units * 10n ** BigInt(left.scale)
-  return difference < 0n ? -1 : difference > 0n ? 1 : 0
+  const difference =
+    left.units * 10n ** BigInt(right.scale) - right.units * 10n ** BigInt(left.scale);
+  return difference < 0n ? -1 : difference > 0n ? 1 : 0;
 }

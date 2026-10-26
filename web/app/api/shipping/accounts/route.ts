@@ -1,38 +1,41 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { db } from '@openbooks/engine/platform/database'
-import { connectShippingAccount, listShippingAccounts } from '@openbooks/engine/sales/shipping-labels'
-import { defineRoute } from '@/lib/api/route'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { db } from "@openbooks/engine/platform/database";
+import {
+  connectShippingAccount,
+  listShippingAccounts,
+} from "@openbooks/engine/sales/shipping-labels";
+import { defineRoute } from "@/lib/api/route";
 
 /** Carrier accounts with their health. Keys never leave sealed. */
 export const GET = defineRoute({
-  permission: 'shipping.manage',
-  feature: 'shippingHub',
-  scope: 'unrestricted',
+  permission: "shipping.manage",
+  feature: "shippingHub",
+  scope: "unrestricted",
   handler: async ({ authz }) => {
-    const accounts = await listShippingAccounts(db, authz.user.orgId)
-    return NextResponse.json({ accounts })
+    const accounts = await listShippingAccounts(db, authz.user.orgId);
+    return NextResponse.json({ accounts });
   },
-})
+});
 
 const connectBody = z.object({
   accountId: uuidString().nullable().optional(),
   name: z.string().min(1).max(120),
-  provider: z.enum(['easypost', 'shippo']),
-  mode: z.enum(['test', 'live']),
+  provider: z.enum(["easypost", "shippo"]),
+  mode: z.enum(["test", "live"]),
   apiKey: z.string().max(500).nullable().optional(),
   makeDefault: z.boolean().optional(),
-})
+});
 
 /**
  * Connect (or reconnect) a carrier account; the key is sealed on the way in.
  * A new account answers with its relay secret exactly once.
  */
 export const POST = defineRoute({
-  permission: 'shipping.manage',
-  feature: 'shippingHub',
-  scope: 'unrestricted',
+  permission: "shipping.manage",
+  feature: "shippingHub",
+  scope: "unrestricted",
   body: connectBody,
   handler: async ({ authz, body }) => {
     const connected = await db.transaction((tx) =>
@@ -44,7 +47,7 @@ export const POST = defineRoute({
         apiKey: body.apiKey,
         makeDefault: body.makeDefault,
       }),
-    )
-    return NextResponse.json({ connected })
+    );
+    return NextResponse.json({ connected });
   },
-})
+});

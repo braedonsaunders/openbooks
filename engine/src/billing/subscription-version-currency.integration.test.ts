@@ -47,30 +47,43 @@ async function seedSubscription(org: ScratchOrg, actor: string, planId: string):
   return subscriptionId;
 }
 
-async function seedVersion(org: ScratchOrg, actor: string, planId: string, currency: string | null): Promise<string> {
-  const versionId = await createPlanVersion(org.orgId, actor, {
-    planId,
-    effectiveFrom: "2026-01-01",
-    billingTiming: "advance",
-    currency: currency ?? undefined,
-    components: [
-      {
-        componentKey: "fee",
-        name: "Fee",
-        quantity: "1",
-        unitPrice: "100.0000",
-        incomeAccountId: org.accounts.revenue,
-      },
-    ],
-  }, null);
+async function seedVersion(
+  org: ScratchOrg,
+  actor: string,
+  planId: string,
+  currency: string | null,
+): Promise<string> {
+  const versionId = await createPlanVersion(
+    org.orgId,
+    actor,
+    {
+      planId,
+      effectiveFrom: "2026-01-01",
+      billingTiming: "advance",
+      currency: currency ?? undefined,
+      components: [
+        {
+          componentKey: "fee",
+          name: "Fee",
+          quantity: "1",
+          unitPrice: "100.0000",
+          incomeAccountId: org.accounts.revenue,
+        },
+      ],
+    },
+    null,
+  );
   await publishPlanVersion(org.orgId, actor, versionId, null);
   return versionId;
 }
 
 async function invoiceCurrency(orgId: string, invoiceId: string): Promise<string> {
-  return (await db.execute<{ currency: string }>(
-    sql`select currency from documents where id = ${invoiceId} and org_id = ${orgId}`, "objects",
-  ))[0]!.currency;
+  return (
+    await db.execute<{ currency: string }>(
+      sql`select currency from documents where id = ${invoiceId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!.currency;
 }
 
 async function withOrg(run: (org: ScratchOrg, actor: string) => Promise<void>): Promise<void> {
@@ -99,30 +112,37 @@ test("a USD to EUR version activates and invoices in EUR", DB, async () => {
   });
 });
 
-test("a mid-term currency change on a billed subscription is refused at activation", DB, async () => {
-  await withOrg(async (org, actor) => {
-    const planId = await seedUsdPlan(org, actor);
-    const subscriptionId = await seedSubscription(org, actor, planId);
-    const first = await billSubscriptionNow(org.orgId, subscriptionId, { actorId: actor }, null);
-    assert.equal(await invoiceCurrency(org.orgId, first.invoiceId), "USD");
-    const versionId = await seedVersion(org, actor, planId, "EUR");
-    // The new term starts at the unbilled boundary so the activation
-    // exercises the currency guard, not the billed-service overlap guard.
-    await assert.rejects(
-      activateLifecycle(org.orgId, actor, {
-        subscriptionId,
-        planVersionId: versionId,
-        termStartsOn: "2026-02-01",
-        renewalPolicy: "none",
-      }),
-      /cannot change mid-contract/,
-    );
-    const lifecycles = (await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from subscription_lifecycles where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`, "objects",
-    ))[0]!.n;
-    assert.equal(lifecycles, 0);
-  });
-});
+test(
+  "a mid-term currency change on a billed subscription is refused at activation",
+  DB,
+  async () => {
+    await withOrg(async (org, actor) => {
+      const planId = await seedUsdPlan(org, actor);
+      const subscriptionId = await seedSubscription(org, actor, planId);
+      const first = await billSubscriptionNow(org.orgId, subscriptionId, { actorId: actor }, null);
+      assert.equal(await invoiceCurrency(org.orgId, first.invoiceId), "USD");
+      const versionId = await seedVersion(org, actor, planId, "EUR");
+      // The new term starts at the unbilled boundary so the activation
+      // exercises the currency guard, not the billed-service overlap guard.
+      await assert.rejects(
+        activateLifecycle(org.orgId, actor, {
+          subscriptionId,
+          planVersionId: versionId,
+          termStartsOn: "2026-02-01",
+          renewalPolicy: "none",
+        }),
+        /cannot change mid-contract/,
+      );
+      const lifecycles = (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from subscription_lifecycles where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(lifecycles, 0);
+    });
+  },
+);
 
 test("activating the same-currency version on a billed subscription still works", DB, async () => {
   await withOrg(async (org, actor) => {
@@ -145,22 +165,29 @@ test("a version without a currency falls back to the plan currency", DB, async (
     // Legacy versions can carry no currency of their own; billing then uses
     // the base plan's code rather than failing or guessing. Published
     // versions are trigger-immutable, so the null is set while draft.
-    const draftId = await createPlanVersion(org.orgId, actor, {
-      planId,
-      effectiveFrom: "2026-01-01",
-      billingTiming: "advance",
-      currency: "EUR",
-      components: [
-        {
-          componentKey: "fee",
-          name: "Fee",
-          quantity: "1",
-          unitPrice: "100.0000",
-          incomeAccountId: org.accounts.revenue,
-        },
-      ],
-    }, null);
-    await db.execute(sql`update subscription_plan_versions set currency_code = null where id = ${draftId} and org_id = ${org.orgId}`);
+    const draftId = await createPlanVersion(
+      org.orgId,
+      actor,
+      {
+        planId,
+        effectiveFrom: "2026-01-01",
+        billingTiming: "advance",
+        currency: "EUR",
+        components: [
+          {
+            componentKey: "fee",
+            name: "Fee",
+            quantity: "1",
+            unitPrice: "100.0000",
+            incomeAccountId: org.accounts.revenue,
+          },
+        ],
+      },
+      null,
+    );
+    await db.execute(
+      sql`update subscription_plan_versions set currency_code = null where id = ${draftId} and org_id = ${org.orgId}`,
+    );
     await publishPlanVersion(org.orgId, actor, draftId, null);
     const versionId = draftId;
     const subscriptionId = await seedSubscription(org, actor, planId);

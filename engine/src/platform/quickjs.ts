@@ -42,7 +42,9 @@ export function createGuestLogSink(lines: string[]): { append(render: () => stri
   let bytes = 0;
   let closed = false;
   const close = (): void => {
-    lines.push(`ob.log truncated after ${GUEST_LOG_MAX_ENTRIES} entries / ${GUEST_LOG_MAX_BYTES} bytes`);
+    lines.push(
+      `ob.log truncated after ${GUEST_LOG_MAX_ENTRIES} entries / ${GUEST_LOG_MAX_BYTES} bytes`,
+    );
     closed = true;
   };
   return {

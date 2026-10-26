@@ -1,8 +1,8 @@
-import 'server-only'
-import {listApplicationWorklist} from '@openbooks/engine/hrm/recruiting'
+import "server-only";
+import { listApplicationWorklist } from "@openbooks/engine/hrm/recruiting";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -16,18 +16,18 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+} from "@braedonsaunders/appkit-viewspec";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   getCandidateDetail,
   getOfferDetail,
   getRequisitionDetail,
   listRequisitions,
-} from '@openbooks/engine/hrm/recruiting/recruiting-read'
-import { listActiveJobDescriptions } from '@openbooks/engine/hrm/recruiting/job-descriptions'
-import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
-import { can, requirePermission, type Authz } from '../../../../lib/authz'
+} from "@openbooks/engine/hrm/recruiting/recruiting-read";
+import { listActiveJobDescriptions } from "@openbooks/engine/hrm/recruiting/job-descriptions";
+import { hrmGroupTabs } from "../../../../components/module-home/group-tabs";
+import { can, requirePermission, type Authz } from "../../../../lib/authz";
 
 /**
  * Funnel move display gate: the org-wide manage grant, or the hiring
@@ -41,41 +41,29 @@ async function canMoveFunnel(
   requisitionId: string,
   canManage: boolean,
 ): Promise<boolean> {
-  if (canManage) return true
+  if (canManage) return true;
   try {
-    await requireOwnRequisitionForHiringManager(
-      db,
-      authz.user.orgId,
-      authz.user.id,
-      requisitionId,
-    )
-    return true
+    await requireOwnRequisitionForHiringManager(db, authz.user.orgId, authz.user.id, requisitionId);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isUuid, setupSectionParams } from '../../../../lib/list-params'
-import { recruitingHref } from '../../../../lib/hrm/workspace-href'
-import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { isUuid, setupSectionParams } from "../../../../lib/list-params";
+import { recruitingHref } from "../../../../lib/hrm/workspace-href";
+import { SETUP_ENTITY_BY_KEY } from "../../../../lib/setup/registry";
 import {
   loadAiDraftButton,
   loadAiDraftDrawer,
   type AiDraftDrawerData,
-} from '../../../../lib/hrm/ai-rails'
-import {
-  rootSubsidiary,
-  subsidiaryUiOptions,
-} from '../../../../lib/subsidiaries'
-import { businessTimeZone } from '@openbooks/engine/platform/business-date/module'
-import { requireOwnRequisitionForHiringManager } from '@openbooks/engine/hrm/authorization'
-import type { RecruitingCreateProps } from './RecruitingCreateForm'
-import type {
-  CandidateDrawerData,
-  OfferDrawerData,
-  RequisitionDrawerData,
-} from './sections'
-import { drawerTitleKind } from './drawer-title'
+} from "../../../../lib/hrm/ai-rails";
+import { rootSubsidiary, subsidiaryUiOptions } from "../../../../lib/subsidiaries";
+import { businessTimeZone } from "@openbooks/engine/platform/business-date/module";
+import { requireOwnRequisitionForHiringManager } from "@openbooks/engine/hrm/authorization";
+import type { RecruitingCreateProps } from "./RecruitingCreateForm";
+import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from "./sections";
+import { drawerTitleKind } from "./drawer-title";
 import {
   hrefForDepth,
   isRecruitingAbsence,
@@ -99,7 +87,7 @@ import {
   type PostingDrawerExtra,
   type PoolDrawer,
   type ConsentStatus,
-} from './depth-view'
+} from "./depth-view";
 
 /**
  * Recruiting tab: requisitions as a shared `table` block with a shared
@@ -112,129 +100,145 @@ import {
  * otherwise, the same gate the route-gate scanner reads on the cockpit.
  */
 
-const STATUSES = ['draft', 'open', 'on_hold', 'filled', 'cancelled'] as const
-const APPLICATION_STATUSES = ['active', 'rejected', 'withdrawn', 'hired'] as const
-type ApplicationStatusFilter = (typeof APPLICATION_STATUSES)[number] | 'all'
+const STATUSES = ["draft", "open", "on_hold", "filled", "cancelled"] as const;
+const APPLICATION_STATUSES = ["active", "rejected", "withdrawn", "hired"] as const;
+type ApplicationStatusFilter = (typeof APPLICATION_STATUSES)[number] | "all";
 
 function isApplicationStatusFilter(value: string | undefined): value is ApplicationStatusFilter {
-  return value === 'all' || (value !== undefined && (APPLICATION_STATUSES as readonly string[]).includes(value))
+  return (
+    value === "all" ||
+    (value !== undefined && (APPLICATION_STATUSES as readonly string[]).includes(value))
+  );
 }
 
 export interface RecruitingRow {
-  id: string
-  number: string
-  title: string
-  position: string | null
-  department: string | null
-  headcount: string
-  hiringManager: string | null
-  opened: string | null
-  status: string
-  statusLabel: string
-  statusVariant:
-    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
-  href: string
+  id: string;
+  number: string;
+  title: string;
+  position: string | null;
+  department: string | null;
+  headcount: string;
+  hiringManager: string | null;
+  opened: string | null;
+  status: string;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
+  href: string;
 }
 
 export interface RecruitingPageData {
-  title: string
-  description: string
-  tabs: { href: string; label: string; active?: boolean }[]
+  title: string;
+  description: string;
+  tabs: { href: string; label: string; active?: boolean }[];
   /** hrm.recruiting.manage: the header's New requisition button and the create form. */
-  canManage: boolean
-  showCreate: boolean
-  setupHref: string | null
-  setupLabel: string
+  canManage: boolean;
+  showCreate: boolean;
+  setupHref: string | null;
+  setupLabel: string;
   poolCreate: {
-    title: string
-    closeHref: string
-    nameLabel: string
-    descriptionLabel: string
-    submitLabel: string
-    failed: string
-  } | null
-  addLabel: string
+    title: string;
+    closeHref: string;
+    nameLabel: string;
+    descriptionLabel: string;
+    submitLabel: string;
+    failed: string;
+  } | null;
+  addLabel: string;
   /** The create form through the URL (`?requisition=new`). */
-  addHref: string
-  basePath: string
-  segmentsLabel: string
-  allLabel: string
-  segmentOptions: { value: string; label: string; count: number }[]
-  currentParams: Record<string, string | string[] | undefined>
+  addHref: string;
+  basePath: string;
+  segmentsLabel: string;
+  allLabel: string;
+  segmentOptions: { value: string; label: string; count: number }[];
+  currentParams: Record<string, string | string[] | undefined>;
   columns: {
-    number: string
-    title: string
-    position: string
-    department: string
-    headcount: string
-    hiringManager: string
-    opened: string
-    status: string
-  }
-  applicationRows: {id:string;candidate:string;opening:string;stage:string;status:string;source:string|null;appliedOn:string;owner:string|null;href:string}[]
-  applicationColumns:Record<string,string>
-  applicationFilters:{paramKey:string;label:string;allLabel:string;options:{value:string;label:string}[]}[]
-  applicationSelection:{id:string;candidate:string;opening:string;href:string}|null
-  rows: RecruitingRow[]
-  empty: string
-  totalLabel: string
-  totals: { headcount: string; filled: string }
+    number: string;
+    title: string;
+    position: string;
+    department: string;
+    headcount: string;
+    hiringManager: string;
+    opened: string;
+    status: string;
+  };
+  applicationRows: {
+    id: string;
+    candidate: string;
+    opening: string;
+    stage: string;
+    status: string;
+    source: string | null;
+    appliedOn: string;
+    owner: string | null;
+    href: string;
+  }[];
+  applicationColumns: Record<string, string>;
+  applicationFilters: {
+    paramKey: string;
+    label: string;
+    allLabel: string;
+    options: { value: string; label: string }[];
+  }[];
+  applicationSelection: { id: string; candidate: string; opening: string; href: string } | null;
+  rows: RecruitingRow[];
+  empty: string;
+  totalLabel: string;
+  totals: { headcount: string; filled: string };
   // The active depth view and its table payload (null on Openings).
-  tab: DepthTab
+  tab: DepthTab;
   /** The status filter's own label — never the strip's. */
-  statusLabel: string
-  depthRows:
-    InterviewTabRow[] | OfferTabRow[] | PostingTabRow[] | PoolTabRow[] | null
-  depthColumns: Record<string, string> | null
-  depthEmpty: string
+  statusLabel: string;
+  depthRows: InterviewTabRow[] | OfferTabRow[] | PostingTabRow[] | PoolTabRow[] | null;
+  depthColumns: Record<string, string> | null;
+  depthEmpty: string;
   /** Registry keys of the Setup sections rehomed under this tab (feature-gated). */
-  setupSections: string[]
-  drawerOpen: boolean
-  draftDrawer: AiDraftDrawerData | null
-  draftDrawerOpen: boolean
+  setupSections: string[];
+  drawerOpen: boolean;
+  draftDrawer: AiDraftDrawerData | null;
+  draftDrawerOpen: boolean;
   drawer: {
-    closeHref: string
-    title: string
-    description: string | null
-    requisition: RequisitionDrawerData | null
-    candidate: CandidateDrawerData | null
-    offer: OfferDrawerData | null
+    closeHref: string;
+    title: string;
+    description: string | null;
+    requisition: RequisitionDrawerData | null;
+    candidate: CandidateDrawerData | null;
+    offer: OfferDrawerData | null;
     // HR-18: depth drawer payloads (null unless their param opened).
-    interview: InterviewDrawer | null
-    offerExtra: OfferDrawerExtra | null
-    postingExtra: PostingDrawerExtra | null
-    pool: PoolDrawer | null
-    consents: ConsentStatus | null
-    missingDetail: string | null
+    interview: InterviewDrawer | null;
+    offerExtra: OfferDrawerExtra | null;
+    postingExtra: PostingDrawerExtra | null;
+    pool: PoolDrawer | null;
+    consents: ConsentStatus | null;
+    missingDetail: string | null;
     /**
      * Drawer load failure (anything but a typed absence or scope
      * refusal): the message with a retry link back to the same drawer —
      * never the uniform "no longer exists".
      */
     detailError: {
-      message: string
-      retryHref: string
-      retryLabel: string
-    } | null
-    create?: RecruitingCreateProps | null
-  } | null
+      message: string;
+      retryHref: string;
+      retryLabel: string;
+    } | null;
+    create?: RecruitingCreateProps | null;
+  } | null;
 }
 
-const f = field
-const item = field
+const f = field;
+const item = field;
 
-function statusVariant(status: string): RecruitingRow['statusVariant'] {
+function statusVariant(status: string): RecruitingRow["statusVariant"] {
   switch (status) {
-    case 'open':
-      return 'success'
-    case 'on_hold':
-      return 'warning'
-    case 'cancelled':
-      return 'destructive'
-    case 'filled':
-      return 'default'
+    case "open":
+      return "success";
+    case "on_hold":
+      return "warning";
+    case "cancelled":
+      return "destructive";
+    case "filled":
+      return "default";
     default:
-      return 'secondary'
+      return "secondary";
   }
 }
 
@@ -245,69 +249,64 @@ function statusVariant(status: string): RecruitingRow['statusVariant'] {
  * fields exactly like the openings table above it.
  */
 function depthTable(data: RecruitingPageData) {
-  const columns = data.depthColumns ?? {}
-  const keys = Object.keys(columns)
-  const [first, ...rest] = keys
+  const columns = data.depthColumns ?? {};
+  const keys = Object.keys(columns);
+  const [first, ...rest] = keys;
   const chipKey = (key: string): string | null => {
-    if (key === 'scorecards') return 'scorecardsVariant'
-    if (key === 'signature') return 'signatureVariant'
-    if (key === 'status') return 'statusVariant'
-    return null
-  }
-  return registeredListTable('hrm_recruiting_depth_rows', {
-    variant: 'app',
-    rows: f('depthRows'),
-    rowKey: item('id'),
-    empty: { title: f('depthEmpty') },
+    if (key === "scorecards") return "scorecardsVariant";
+    if (key === "signature") return "signatureVariant";
+    if (key === "status") return "statusVariant";
+    return null;
+  };
+  return registeredListTable("hrm_recruiting_depth_rows", {
+    variant: "app",
+    rows: f("depthRows"),
+    rowKey: item("id"),
+    empty: { title: f("depthEmpty") },
     columns: [
-      ...(first
-        ? [column(columns[first]!, link(item(first), item('href')))]
-        : []),
+      ...(first ? [column(columns[first]!, link(item(first), item("href")))] : []),
       ...rest.map((key) => {
-        const variantKey = chipKey(key)
+        const variantKey = chipKey(key);
         return variantKey
-          ? column(
-              columns[key]!,
-              badge(item(key), { variant: item(variantKey) }),
-            )
-          : column(columns[key]!, text(item(key), { fallback: '—' }))
+          ? column(columns[key]!, badge(item(key), { variant: item(variantKey) }))
+          : column(columns[key]!, text(item(key), { fallback: "—" }));
       }),
     ],
-  })
+  });
 }
 
 export function recruitingSpec(data: RecruitingPageData): PageSpec {
   return page({
-    route: '/hrm/recruiting',
-    layout: 'list',
+    route: "/hrm/recruiting",
+    layout: "list",
     // Whole-page scroll in normal block flow: the register tables stack
     // above rehomed setup sections with no internal scroll panel, so a
     // viewport-height flex lock would collapse the tables under the
     // sections and let them paint over the row links (CK-32b).
-    bodyClassName: 'space-y-4',
+    bodyClassName: "space-y-4",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
           // The primary action first, the strip last — the house order on
           // every list page, so the switcher never moves between siblings.
           widget(
-            'link-button',
-            { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
-            f('showCreate'),
+            "link-button",
+            { href: f("addHref"), label: f("addLabel"), iconKey: "plus" },
+            f("showCreate"),
           ),
           ...(data.setupHref
             ? [
-                widget('plain-link-button', {
+                widget("plain-link-button", {
                   href: data.setupHref,
                   label: data.setupLabel,
-                  variant: 'outline',
+                  variant: "outline",
                 }),
               ]
             : []),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
@@ -316,18 +315,18 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
       // collapses below its rows and the setup sections spread below
       // paint over the overflowed row links (CK-32b). A single-column
       // grid cannot shrink under its content. The page scrolls as a whole.
-      grid('grid gap-4', [
+      grid("grid gap-4", [
         // Openings and the enabled depth views are tabs on the Hiring strip
         // under the page header; only Openings has a status filter.
-        ...(data.tab === 'openings'
+        ...(data.tab === "openings"
           ? [
-              grid('flex shrink-0 flex-wrap items-center gap-3', [
-                widgetBlock('list-toolbar', {
-                  basePath: '/hrm/recruiting',
+              grid("flex shrink-0 flex-wrap items-center gap-3", [
+                widgetBlock("list-toolbar", {
+                  basePath: "/hrm/recruiting",
                   currentParams: data.currentParams,
                   filters: [
                     {
-                      paramKey: 'status',
+                      paramKey: "status",
                       label: data.statusLabel,
                       allLabel: data.allLabel,
                       options: data.segmentOptions,
@@ -337,95 +336,107 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
               ]),
             ]
           : []),
-        ...(data.tab === 'applications' ? [
-          widgetBlock('list-toolbar',{basePath:'/hrm/recruiting',currentParams:data.currentParams,filters:data.applicationFilters}),
-          registeredListTable('hrm_application_worklist',{variant:'app',rows:f('applicationRows'),rowKey:item('id'),empty:{title:f('empty')},columns:[column(data.applicationColumns.candidate!,link(item('candidate'),item('href'))),...['opening','stage','status','source','appliedOn','owner'].map(key=>column(data.applicationColumns[key]!,text(item(key),{fallback:'—'})))]})
-        ] : data.tab === 'openings'
+        ...(data.tab === "applications"
           ? [
-              registeredListTable('hrm_recruiting_rows', {
-                variant: 'app',
-                rows: f('rows'),
-                rowKey: item('id'),
-                empty: { title: f('empty') },
-                trailing:
-                  data.rows.length > 0
-                    ? [
-                        spanRow({
-                          label: f('totalLabel'),
-                          labelColSpan: 5,
-                          cells: [
-                            {
-                              cell: text(f('totals.headcount')),
-                              align: 'right',
-                              className: 'font-semibold tabular-nums',
-                            },
-                            {
-                              cell: text(f('totals.filled')),
-                              align: 'right',
-                              className: 'font-semibold tabular-nums',
-                            },
-                          ],
-                        }),
-                      ]
-                    : undefined,
+              widgetBlock("list-toolbar", {
+                basePath: "/hrm/recruiting",
+                currentParams: data.currentParams,
+                filters: data.applicationFilters,
+              }),
+              registeredListTable("hrm_application_worklist", {
+                variant: "app",
+                rows: f("applicationRows"),
+                rowKey: item("id"),
+                empty: { title: f("empty") },
                 columns: [
-                  column(
-                    data.columns.number,
-                    link(item('number'), item('href')),
-                  ),
-                  column(data.columns.title, text(item('title'))),
-                  column(
-                    data.columns.position,
-                    text(item('position'), { fallback: '—' }),
-                  ),
-                  column(
-                    data.columns.department,
-                    text(item('department'), { fallback: '—' }),
-                  ),
-                  column(data.columns.headcount, text(item('headcount')), {
-                    align: 'right',
-                    className: 'tabular-nums',
-                  }),
-                  column(
-                    data.columns.hiringManager,
-                    text(item('hiringManager'), { fallback: '—' }),
-                  ),
-                  column(
-                    data.columns.opened,
-                    text(item('opened'), { fallback: '—' }),
-                  ),
-                  column(
-                    data.columns.status,
-                    badge(item('statusLabel'), {
-                      variant: item('statusVariant'),
-                    }),
+                  column(data.applicationColumns.candidate!, link(item("candidate"), item("href"))),
+                  ...["opening", "stage", "status", "source", "appliedOn", "owner"].map((key) =>
+                    column(data.applicationColumns[key]!, text(item(key), { fallback: "—" })),
                   ),
                 ],
               }),
             ]
-          : [depthTable(data)]),
+          : data.tab === "openings"
+            ? [
+                registeredListTable("hrm_recruiting_rows", {
+                  variant: "app",
+                  rows: f("rows"),
+                  rowKey: item("id"),
+                  empty: { title: f("empty") },
+                  trailing:
+                    data.rows.length > 0
+                      ? [
+                          spanRow({
+                            label: f("totalLabel"),
+                            labelColSpan: 5,
+                            cells: [
+                              {
+                                cell: text(f("totals.headcount")),
+                                align: "right",
+                                className: "font-semibold tabular-nums",
+                              },
+                              {
+                                cell: text(f("totals.filled")),
+                                align: "right",
+                                className: "font-semibold tabular-nums",
+                              },
+                            ],
+                          }),
+                        ]
+                      : undefined,
+                  columns: [
+                    column(data.columns.number, link(item("number"), item("href"))),
+                    column(data.columns.title, text(item("title"))),
+                    column(data.columns.position, text(item("position"), { fallback: "—" })),
+                    column(data.columns.department, text(item("department"), { fallback: "—" })),
+                    column(data.columns.headcount, text(item("headcount")), {
+                      align: "right",
+                      className: "tabular-nums",
+                    }),
+                    column(
+                      data.columns.hiringManager,
+                      text(item("hiringManager"), { fallback: "—" }),
+                    ),
+                    column(data.columns.opened, text(item("opened"), { fallback: "—" })),
+                    column(
+                      data.columns.status,
+                      badge(item("statusLabel"), {
+                        variant: item("statusVariant"),
+                      }),
+                    ),
+                  ],
+                }),
+              ]
+            : [depthTable(data)]),
       ]),
-      ...(data.poolCreate
-        ? [widgetBlock('hrm-pool-create', { create: data.poolCreate })]
+      ...(data.poolCreate ? [widgetBlock("hrm-pool-create", { create: data.poolCreate })] : []),
+      ...(data.applicationSelection
+        ? [
+            widgetBlock("hrm-application-review", {
+              selection: data.applicationSelection,
+              queue: data.applicationRows,
+              closeHref: recruitingHref(data.currentParams),
+              canManage: data.canManage,
+            }),
+          ]
         : []),
-      ...(data.applicationSelection?[widgetBlock('hrm-application-review',{selection:data.applicationSelection,queue:data.applicationRows,closeHref:recruitingHref(data.currentParams),canManage:data.canManage})]:[]),
       // URL-backed drawers, portaled to <body> wherever they render.
       {
-        ...widgetBlock('hrm-recruiting-drawer', { drawer: data.drawer }),
-        when: f('drawerOpen'),
+        ...widgetBlock("hrm-recruiting-drawer", { drawer: data.drawer }),
+        when: f("drawerOpen"),
       },
       // HR-21: the shared evidence-draft drawer (?draft=<kind>:<id>).
       {
-        ...widgetBlock('hrm-ai-draft-drawer', { draft: data.draftDrawer }),
-        when: f('draftDrawerOpen'),
+        ...widgetBlock("hrm-ai-draft-drawer", { draft: data.draftDrawer }),
+        when: f("draftDrawerOpen"),
       },
     ],
-  })
+  });
 }
 
 export async function recruitingTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('recruiting.title')
+  const t = await getTranslations("hrm");
+  return t("recruiting.title");
 }
 
 export async function loadRecruitingPage(
@@ -434,82 +445,120 @@ export async function loadRecruitingPage(
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
   // Recruiting rides the HRM parent and is on wherever HRM is, by default.
-  const authz = await requirePermission('hrm.recruiting.read')
-  await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  await requireFeatureEnabled(authz.user.orgId, 'hrmRecruiting')
-  const t = await getTranslations('hrm')
-  const tw = await getTranslations('hrm.talentWorkspace')
-  const tc = await getTranslations('common')
-  const tabs = await hrmGroupTabs(authz, '/hrm/recruiting')
+  const authz = await requirePermission("hrm.recruiting.read");
+  await requireFeatureEnabled(authz.user.orgId, "hrm");
+  await requireFeatureEnabled(authz.user.orgId, "hrmRecruiting");
+  const t = await getTranslations("hrm");
+  const tw = await getTranslations("hrm.talentWorkspace");
+  const tc = await getTranslations("common");
+  const tabs = await hrmGroupTabs(authz, "/hrm/recruiting");
   const status =
-    typeof sp.status === 'string' &&
-    (STATUSES as readonly string[]).includes(sp.status)
+    typeof sp.status === "string" && (STATUSES as readonly string[]).includes(sp.status)
       ? sp.status
-      : null
-  const requestedApplicationStatus = sp.applicationStatus
-  const applicationStatus: ApplicationStatusFilter = isApplicationStatusFilter(requestedApplicationStatus)
+      : null;
+  const requestedApplicationStatus = sp.applicationStatus;
+  const applicationStatus: ApplicationStatusFilter = isApplicationStatusFilter(
+    requestedApplicationStatus,
+  )
     ? requestedApplicationStatus
-    : 'active'
-  const opening = sp.opening && isUuid(sp.opening) ? sp.opening : undefined
-  const stage = sp.stage && isUuid(sp.stage) ? sp.stage : undefined
+    : "active";
+  const opening = sp.opening && isUuid(sp.opening) ? sp.opening : undefined;
+  const stage = sp.stage && isUuid(sp.stage) ? sp.stage : undefined;
   // Route sub-tabs. An unknown tab param falls back to Openings.
-  const tab: DepthTab = resolveDepthTab(sp.tab??(sp.requisition||sp.candidate||sp.offer?'openings':undefined))
+  const tab: DepthTab = resolveDepthTab(
+    sp.tab ?? (sp.requisition || sp.candidate || sp.offer ? "openings" : undefined),
+  );
   // Drawer hrefs preserve the depth tab, the status filter, and the
   // rehomed setup-section params through the ONE shared helper — closing a
   // drawer returns to the same tab/filter instead of the default view.
   const preservedParams = {
     ...(status ? { status } : {}),
-    ...(tab === 'applications' ? { applicationStatus, opening, stage } : {}),
+    ...(tab === "applications" ? { applicationStatus, opening, stage } : {}),
     tab,
     ...setupSectionParams(sp),
-  }
-  const canManage = can(authz, 'hrm.recruiting.manage')
-  const creating = sp.requisition === 'new' && canManage
+  };
+  const canManage = can(authz, "hrm.recruiting.manage");
+  const creating = sp.requisition === "new" && canManage;
   const requisitionId =
-    typeof sp.requisition === 'string' &&
-    sp.requisition.length > 0 &&
-    sp.requisition !== 'new'
+    typeof sp.requisition === "string" && sp.requisition.length > 0 && sp.requisition !== "new"
       ? sp.requisition
-      : null
+      : null;
   const candidateId =
-    typeof sp.candidate === 'string' && sp.candidate.length > 0
-      ? sp.candidate
-      : null
-  const offerId =
-    typeof sp.offer === 'string' && sp.offer.length > 0 ? sp.offer : null
+    typeof sp.candidate === "string" && sp.candidate.length > 0 ? sp.candidate : null;
+  const offerId = typeof sp.offer === "string" && sp.offer.length > 0 ? sp.offer : null;
 
-  const applicationSource = tab === 'applications'
-    ? await listApplicationWorklist({
-        orgId: authz.user.orgId,
-        actorId: authz.user.id,
-        status: applicationStatus === 'all' ? undefined : applicationStatus,
-        opening,
-        stage,
-      })
-    : []
-  const filterSource = tab === 'applications' && (opening || stage)
-    ? await listApplicationWorklist({
-        orgId: authz.user.orgId,
-        actorId: authz.user.id,
-        status: applicationStatus === 'all' ? undefined : applicationStatus,
-      })
-    : applicationSource
-  const applicationRows=applicationSource.map(row=>({...row,status:tw(`applicationStatuses.${row.status}`),href:recruitingHref(preservedParams,{application:row.id})}))
-  const uniqueOptions=(key:'opening'|'stage',idKey:'requisitionId'|'stageId')=>Array.from(new Map(filterSource.map(row=>[row[idKey],{value:row[idKey],label:row[key]}])).values())
-  const applicationFilters=[{paramKey:'applicationStatus',label:tw('status'),allLabel:tw('active'),options:['all','rejected','withdrawn','hired'].map(value=>({value,label:value==='all'?tw('allApplications'):tw(`applicationStatuses.${value}`)}))},{paramKey:'opening',label:tw('opening'),allLabel:tw('allOpenings'),options:uniqueOptions('opening','requisitionId')},{paramKey:'stage',label:tw('stage'),allLabel:tw('allStages'),options:uniqueOptions('stage','stageId')}]
-  const applicationSelection=tab==='applications'&&sp.application?(applicationRows.find(row=>row.id===sp.application)??{id:sp.application,candidate:tw('application'),opening:'',href:recruitingHref(preservedParams,{application:sp.application})}):null
+  const applicationSource =
+    tab === "applications"
+      ? await listApplicationWorklist({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          status: applicationStatus === "all" ? undefined : applicationStatus,
+          opening,
+          stage,
+        })
+      : [];
+  const filterSource =
+    tab === "applications" && (opening || stage)
+      ? await listApplicationWorklist({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          status: applicationStatus === "all" ? undefined : applicationStatus,
+        })
+      : applicationSource;
+  const applicationRows = applicationSource.map((row) => ({
+    ...row,
+    status: tw(`applicationStatuses.${row.status}`),
+    href: recruitingHref(preservedParams, { application: row.id }),
+  }));
+  const uniqueOptions = (key: "opening" | "stage", idKey: "requisitionId" | "stageId") =>
+    Array.from(
+      new Map(
+        filterSource.map((row) => [row[idKey], { value: row[idKey], label: row[key] }]),
+      ).values(),
+    );
+  const applicationFilters = [
+    {
+      paramKey: "applicationStatus",
+      label: tw("status"),
+      allLabel: tw("active"),
+      options: ["all", "rejected", "withdrawn", "hired"].map((value) => ({
+        value,
+        label: value === "all" ? tw("allApplications") : tw(`applicationStatuses.${value}`),
+      })),
+    },
+    {
+      paramKey: "opening",
+      label: tw("opening"),
+      allLabel: tw("allOpenings"),
+      options: uniqueOptions("opening", "requisitionId"),
+    },
+    {
+      paramKey: "stage",
+      label: tw("stage"),
+      allLabel: tw("allStages"),
+      options: uniqueOptions("stage", "stageId"),
+    },
+  ];
+  const applicationSelection =
+    tab === "applications" && sp.application
+      ? (applicationRows.find((row) => row.id === sp.application) ?? {
+          id: sp.application,
+          candidate: tw("application"),
+          opening: "",
+          href: recruitingHref(preservedParams, { application: sp.application }),
+        })
+      : null;
   const requisitions =
-    tab === 'openings'
+    tab === "openings"
       ? await listRequisitions({
           orgId: authz.user.orgId,
           actorId: authz.user.id,
           ...(status ? { status } : {}),
         })
-      : []
-  const counts = new Map<string, number>()
-  for (const row of requisitions)
-    counts.set(row.status, (counts.get(row.status) ?? 0) + 1)
-  const statusLabel = (value: string): string => t(`recruiting.status.${value}`)
+      : [];
+  const counts = new Map<string, number>();
+  for (const row of requisitions) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+  const statusLabel = (value: string): string => t(`recruiting.status.${value}`);
 
   const rows: RecruitingRow[] = requisitions.map((row) => ({
     id: row.id,
@@ -524,36 +573,36 @@ export async function loadRecruitingPage(
     statusLabel: statusLabel(row.status),
     statusVariant: statusVariant(row.status),
     href: recruitingHref(preservedParams, { status, requisition: row.id }),
-  }))
+  }));
 
   // The drawers resolve through the canonical read service (PII redaction
   // included); an id that no longer resolves renders the named absence.
-  let requisition: RequisitionDrawerData | null = null
-  let candidate: CandidateDrawerData | null = null
-  let offer: OfferDrawerData | null = null
-  let missingDetail: string | null = null
-  let detailError: NonNullable<
-    NonNullable<RecruitingPageData['drawer']>['detailError']
-  > | null = null
+  let requisition: RequisitionDrawerData | null = null;
+  let candidate: CandidateDrawerData | null = null;
+  let offer: OfferDrawerData | null = null;
+  let missingDetail: string | null = null;
+  let detailError: NonNullable<NonNullable<RecruitingPageData["drawer"]>["detailError"]> | null =
+    null;
   const drawerLoadError = (retryHref: string) => ({
-    message: t('recruiting.drawer.loadFailed'),
+    message: t("recruiting.drawer.loadFailed"),
     retryHref,
-    retryLabel: tc('actions.retry'),
-  })
+    retryLabel: tc("actions.retry"),
+  });
   // One shared "Draft from evidence" label for both draft hosts; null
   // (Human resources off, or no assistant access) hides both buttons.
-  const draftLabel = await loadAiDraftButton(authz)
+  const draftLabel = await loadAiDraftButton(authz);
   if (requisitionId) {
     try {
       const detail = await getRequisitionDetail({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         requisitionId,
-      })
+      });
       // Panel candidates: employees (parties holding an employment) inside
       // the viewer's subsidiary scope — ids, never labels; out-of-scope
       // holders stay absent rather than leaking existence.
-      const employeeRows = await db.execute<{ id: string; name: string }>(sql`
+      const employeeRows = await db.execute<{ id: string; name: string }>(
+        sql`
         select p.id::text as id, p.display_name as name
           from worker_employments e
           join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
@@ -561,39 +610,43 @@ export async function loadRecruitingPage(
            ${
              authz.allowedSubsidiaryIds
                ? sql`and e.employer_subsidiary_id in (${sql.join(
-                   [...authz.allowedSubsidiaryIds].map(
-                     (id) => sql`${id}::uuid`,
-                   ),
+                   [...authz.allowedSubsidiaryIds].map((id) => sql`${id}::uuid`),
                    sql`, `,
                  )})`
                : sql``
            }
-         order by p.display_name limit 200`, 'objects')
+         order by p.display_name limit 200`,
+        "objects",
+      );
       // The offer draft inherits the opening's legal entity: resolve its
       // display name (never the raw id) plus the authorized employers the
       // caller may instead choose. The POST route stays authoritative.
-      const offerEmployerName = (await db.execute<{ name: string }>(sql`
+      const offerEmployerName = (
+        await db.execute<{ name: string }>(
+          sql`
         select name from subsidiaries
          where org_id = ${authz.user.orgId}::uuid and id = ${detail.employerSubsidiaryId}
-         limit 1`, 'objects'))[0]?.name
+         limit 1`,
+          "objects",
+        )
+      )[0]?.name;
       if (!offerEmployerName) {
         throw new Error(
           `requisition ${detail.requisitionNumber} names an employer outside this organization`,
-        )
+        );
       }
-      const offerVisible = await subsidiaryUiOptions(authz.user.orgId)
+      const offerVisible = await subsidiaryUiOptions(authz.user.orgId);
       const offerScoped = offerVisible.filter(
         (option) =>
-          authz.allowedSubsidiaryIds === null ||
-          authz.allowedSubsidiaryIds.has(option.id),
-      )
+          authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id),
+      );
       let offerEmployerOptions = offerScoped.map((option) => ({
         value: option.id,
         label: option.name,
-      }))
+      }));
       if (offerEmployerOptions.length === 0 && offerVisible.length === 0) {
-        const root = await rootSubsidiary(authz.user.orgId)
-        offerEmployerOptions = [{ value: root.id, label: root.name }]
+        const root = await rootSubsidiary(authz.user.orgId);
+        offerEmployerOptions = [{ value: root.id, label: root.name }];
       }
       requisition = {
         ...detail,
@@ -604,111 +657,103 @@ export async function loadRecruitingPage(
               label: draftLabel,
             }
           : null,
-        stageLabels: Object.fromEntries(
-          detail.stages.map((stage) => [stage.id, stage.name]),
-        ),
-        statusLabels: Object.fromEntries(
-          STATUSES.map((value) => [value, statusLabel(value)]),
-        ),
+        stageLabels: Object.fromEntries(detail.stages.map((stage) => [stage.id, stage.name])),
+        statusLabels: Object.fromEntries(STATUSES.map((value) => [value, statusLabel(value)])),
         labels: {
-          pipeline: t('recruiting.drawer.pipeline'),
-          applications: t('recruiting.drawer.applications'),
-          noApplications: t('recruiting.drawer.noApplications'),
-          candidate: t('recruiting.drawer.candidate'),
-          stage: t('recruiting.drawer.stage'),
-          applied: t('recruiting.drawer.applied'),
-          lastEvent: t('recruiting.drawer.lastEvent'),
-          interviews: t('recruiting.drawer.interviews'),
-          offer: t('recruiting.drawer.offer'),
-          timeToFill: t('recruiting.drawer.timeToFill'),
-          days: t('recruiting.drawer.days'),
-          attachTitle: t('recruiting.attach.title'),
-          attachName: t('recruiting.attach.name'),
-          attachEmail: t('recruiting.attach.email'),
-          attachPhone: t('recruiting.attach.phone'),
-          attachSubmit: t('recruiting.attach.submit'),
-          attachFailed: t('recruiting.attach.failed'),
-          attachMergedNote: t('recruiting.attach.mergedNote'),
-          moveTitle: t('recruiting.move.title'),
-          moveSubmit: t('recruiting.move.submit'),
-          moveFailed: t('recruiting.move.failed'),
-          rejectTitle: t('recruiting.attach.rejectTitle'),
-          rejectReason: t('recruiting.attach.rejectReason'),
-          rejectSubmit: t('recruiting.move.reject'),
-          rejectFailed: t('recruiting.move.failed'),
-          withdrawLabel: t('recruiting.move.withdraw'),
-          withdrawFailed: t('recruiting.move.failed'),
-          interviewTitle: t('recruiting.interview.title'),
-          interviewKind: t('recruiting.interview.kind'),
-          interviewWhen: t('recruiting.interview.when'),
-          interviewDuration: t('recruiting.interview.duration'),
-          interviewLocation: t('recruiting.interview.location'),
-          interviewPanel: t('recruiting.interview.panel'),
-          interviewSubmit: t('recruiting.interview.submit'),
-          interviewFailed: t('recruiting.interview.failed'),
-          interviewInvalidTime: t('recruiting.depth.invalidTime'),
-          completeTitle: t('recruiting.interview.completeTitle'),
-          completeOutcome: t('recruiting.interview.outcome'),
-          completeFeedback: t('recruiting.interview.feedback'),
-          completeSubmit: t('recruiting.interview.completeSubmit'),
-          completeFailed: t('recruiting.interview.failed'),
-          cancelLabel: t('recruiting.interview.cancel'),
-          offerTitle: t('recruiting.offerCard.title'),
-          offerEmployer: t('recruiting.offerCard.employer'),
-          offerJob: t('recruiting.offerCard.job'),
-          offerStart: t('recruiting.offerCard.start'),
-          offerAmount: t('recruiting.offerCard.amount'),
-          offerCurrency: t('recruiting.offerCard.currency'),
-          offerBasis: t('recruiting.offerCard.basis'),
-          offerExpires: t('recruiting.offerCard.expires'),
-          offerSubmit: t('recruiting.offerCard.submit'),
-          offerFailed: t('recruiting.offerCard.failed'),
-          offerSend: t('recruiting.offerActions.send'),
-          offerAccept: t('recruiting.offerActions.accept'),
-          offerDecline: t('recruiting.offerActions.decline'),
-          offerWithdraw: t('recruiting.offerActions.withdraw'),
-          offerReason: t('recruiting.offerActions.reason'),
-          offerActionFailed: t('recruiting.offerActions.failed'),
-          description: t('recruiting.drawer.description'),
+          pipeline: t("recruiting.drawer.pipeline"),
+          applications: t("recruiting.drawer.applications"),
+          noApplications: t("recruiting.drawer.noApplications"),
+          candidate: t("recruiting.drawer.candidate"),
+          stage: t("recruiting.drawer.stage"),
+          applied: t("recruiting.drawer.applied"),
+          lastEvent: t("recruiting.drawer.lastEvent"),
+          interviews: t("recruiting.drawer.interviews"),
+          offer: t("recruiting.drawer.offer"),
+          timeToFill: t("recruiting.drawer.timeToFill"),
+          days: t("recruiting.drawer.days"),
+          attachTitle: t("recruiting.attach.title"),
+          attachName: t("recruiting.attach.name"),
+          attachEmail: t("recruiting.attach.email"),
+          attachPhone: t("recruiting.attach.phone"),
+          attachSubmit: t("recruiting.attach.submit"),
+          attachFailed: t("recruiting.attach.failed"),
+          attachMergedNote: t("recruiting.attach.mergedNote"),
+          moveTitle: t("recruiting.move.title"),
+          moveSubmit: t("recruiting.move.submit"),
+          moveFailed: t("recruiting.move.failed"),
+          rejectTitle: t("recruiting.attach.rejectTitle"),
+          rejectReason: t("recruiting.attach.rejectReason"),
+          rejectSubmit: t("recruiting.move.reject"),
+          rejectFailed: t("recruiting.move.failed"),
+          withdrawLabel: t("recruiting.move.withdraw"),
+          withdrawFailed: t("recruiting.move.failed"),
+          interviewTitle: t("recruiting.interview.title"),
+          interviewKind: t("recruiting.interview.kind"),
+          interviewWhen: t("recruiting.interview.when"),
+          interviewDuration: t("recruiting.interview.duration"),
+          interviewLocation: t("recruiting.interview.location"),
+          interviewPanel: t("recruiting.interview.panel"),
+          interviewSubmit: t("recruiting.interview.submit"),
+          interviewFailed: t("recruiting.interview.failed"),
+          interviewInvalidTime: t("recruiting.depth.invalidTime"),
+          completeTitle: t("recruiting.interview.completeTitle"),
+          completeOutcome: t("recruiting.interview.outcome"),
+          completeFeedback: t("recruiting.interview.feedback"),
+          completeSubmit: t("recruiting.interview.completeSubmit"),
+          completeFailed: t("recruiting.interview.failed"),
+          cancelLabel: t("recruiting.interview.cancel"),
+          offerTitle: t("recruiting.offerCard.title"),
+          offerEmployer: t("recruiting.offerCard.employer"),
+          offerJob: t("recruiting.offerCard.job"),
+          offerStart: t("recruiting.offerCard.start"),
+          offerAmount: t("recruiting.offerCard.amount"),
+          offerCurrency: t("recruiting.offerCard.currency"),
+          offerBasis: t("recruiting.offerCard.basis"),
+          offerExpires: t("recruiting.offerCard.expires"),
+          offerSubmit: t("recruiting.offerCard.submit"),
+          offerFailed: t("recruiting.offerCard.failed"),
+          offerSend: t("recruiting.offerActions.send"),
+          offerAccept: t("recruiting.offerActions.accept"),
+          offerDecline: t("recruiting.offerActions.decline"),
+          offerWithdraw: t("recruiting.offerActions.withdraw"),
+          offerReason: t("recruiting.offerActions.reason"),
+          offerActionFailed: t("recruiting.offerActions.failed"),
+          description: t("recruiting.drawer.description"),
         },
         postingLabels: {
-          heading: t('recruiting.postingContent.description'),
-          title: t('recruiting.postingContent.title'),
-          employmentKind: t('recruiting.postingContent.employmentKind'),
-          description: t('recruiting.postingContent.description'),
-          empty: t('recruiting.postingContent.empty'),
+          heading: t("recruiting.postingContent.description"),
+          title: t("recruiting.postingContent.title"),
+          employmentKind: t("recruiting.postingContent.employmentKind"),
+          description: t("recruiting.postingContent.description"),
+          empty: t("recruiting.postingContent.empty"),
           source: detail.jobDescriptionName
-            ? t('recruiting.postingContent.source', { name: detail.jobDescriptionName })
-            : '',
-          copyTitle: t('recruiting.postingContent.copyTitle'),
-          copyDescription: t('recruiting.postingContent.copyDescription'),
-          copied: t('recruiting.postingContent.copied'),
-          copyFailed: t('recruiting.postingContent.copyFailed'),
-          edit: t('recruiting.postingContent.edit'),
-          save: t('recruiting.postingContent.save'),
-          cancel: t('recruiting.postingContent.cancel'),
-          failed: t('recruiting.postingContent.failed'),
+            ? t("recruiting.postingContent.source", { name: detail.jobDescriptionName })
+            : "",
+          copyTitle: t("recruiting.postingContent.copyTitle"),
+          copyDescription: t("recruiting.postingContent.copyDescription"),
+          copied: t("recruiting.postingContent.copied"),
+          copyFailed: t("recruiting.postingContent.copyFailed"),
+          edit: t("recruiting.postingContent.edit"),
+          save: t("recruiting.postingContent.save"),
+          cancel: t("recruiting.postingContent.cancel"),
+          failed: t("recruiting.postingContent.failed"),
         },
         lifecycle: {
           canManage,
           labels: {
-            title: t('recruiting.lifecycle.title'),
-            open: t('recruiting.lifecycle.open'),
-            hold: t('recruiting.lifecycle.hold'),
-            resume: t('recruiting.lifecycle.resume'),
-            cancel: t('recruiting.lifecycle.cancel'),
-            reason: t('recruiting.lifecycle.reasonLabel'),
-            failed: t('recruiting.lifecycle.failed'),
+            title: t("recruiting.lifecycle.title"),
+            open: t("recruiting.lifecycle.open"),
+            hold: t("recruiting.lifecycle.hold"),
+            resume: t("recruiting.lifecycle.resume"),
+            cancel: t("recruiting.lifecycle.cancel"),
+            reason: t("recruiting.lifecycle.reasonLabel"),
+            failed: t("recruiting.lifecycle.failed"),
           },
         },
         // Funnel move rides the manage grant or the hiring manager's own
         // requisition — the same authority the move endpoint enforces, so
         // the Move control reaches exactly the hands that can use it.
-        canMoveApplications: await canMoveFunnel(
-          authz,
-          requisitionId,
-          canManage,
-        ),
+        canMoveApplications: await canMoveFunnel(authz, requisitionId, canManage),
         offerEmployer: {
           value: detail.employerSubsidiaryId,
           label: offerEmployerName,
@@ -719,33 +764,31 @@ export async function loadRecruitingPage(
           label: option.name,
         })),
         timeZone: await businessTimeZone(authz.user.orgId),
-        kindOptions: ['phone', 'video', 'onsite', 'panel', 'assessment'].map(
-          (value) => ({
-            value,
-            label: t(`recruiting.interviewKind.${value}`),
-          }),
-        ),
-        outcomeOptions: ['advance', 'hold', 'reject'].map((value) => ({
+        kindOptions: ["phone", "video", "onsite", "panel", "assessment"].map((value) => ({
+          value,
+          label: t(`recruiting.interviewKind.${value}`),
+        })),
+        outcomeOptions: ["advance", "hold", "reject"].map((value) => ({
           value,
           label: t(`recruiting.interviewOutcome.${value}`),
         })),
-        basisOptions: ['hourly', 'annual'].map((value) => ({
+        basisOptions: ["hourly", "annual"].map((value) => ({
           value,
           label: t(`recruiting.basis.${value}`),
         })),
         candidateOptions: [],
-      }
+      };
     } catch (error) {
       // A typed absence or scope refusal reads as "no longer visible"
       // (never confirming existence); anything else — including the
       // employer-integrity refusal above — is a load failure with a
       // retry back to the same drawer.
       if (isRecruitingAbsence(error)) {
-        missingDetail = t('recruiting.drawer.missing')
+        missingDetail = t("recruiting.drawer.missing");
       } else {
         detailError = drawerLoadError(
           recruitingHref(preservedParams, { requisition: requisitionId }),
-        )
+        );
       }
     }
   } else if (candidateId) {
@@ -754,7 +797,7 @@ export async function loadRecruitingPage(
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         candidateId,
-      })
+      });
       candidate = {
         ...detail,
         canManage,
@@ -764,31 +807,29 @@ export async function loadRecruitingPage(
         })),
         closeHref: recruitingHref(preservedParams, { status }),
         labels: {
-          applications: t('recruiting.drawer.applications'),
-          interviews: t('recruiting.drawer.interviews'),
-          email: t('recruiting.candidate.email'),
-          phone: t('recruiting.candidate.phone'),
-          source: t('recruiting.candidate.source'),
+          applications: t("recruiting.drawer.applications"),
+          interviews: t("recruiting.drawer.interviews"),
+          email: t("recruiting.candidate.email"),
+          phone: t("recruiting.candidate.phone"),
+          source: t("recruiting.candidate.source"),
         },
-        outcomeOptions: ['advance', 'hold', 'reject'].map((value) => ({
+        outcomeOptions: ["advance", "hold", "reject"].map((value) => ({
           value,
           label: t(`recruiting.interviewOutcome.${value}`),
         })),
         actionLabels: {
-          outcome: t('recruiting.interview.outcome'),
-          feedback: t('recruiting.interview.feedback'),
-          submit: t('recruiting.interview.completeSubmit'),
-          cancel: t('recruiting.interview.cancel'),
-          failed: t('recruiting.interview.failed'),
+          outcome: t("recruiting.interview.outcome"),
+          feedback: t("recruiting.interview.feedback"),
+          submit: t("recruiting.interview.completeSubmit"),
+          cancel: t("recruiting.interview.cancel"),
+          failed: t("recruiting.interview.failed"),
         },
-      }
+      };
     } catch (error) {
       if (isRecruitingAbsence(error)) {
-        missingDetail = t('recruiting.drawer.missing')
+        missingDetail = t("recruiting.drawer.missing");
       } else {
-        detailError = drawerLoadError(
-          recruitingHref(preservedParams, { candidate: candidateId }),
-        )
+        detailError = drawerLoadError(recruitingHref(preservedParams, { candidate: candidateId }));
       }
     }
   } else if (offerId) {
@@ -797,26 +838,27 @@ export async function loadRecruitingPage(
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         offerId,
-      })
+      });
       // The saved offer's legal entity: resolve the persisted employer's
       // display name (never the raw id) so the reviewer sees which entity
       // employs the candidate. Fail closed like the requisition branch.
-      const offerEmployerName = (await db.execute<{ name: string }>(sql`
+      const offerEmployerName = (
+        await db.execute<{ name: string }>(
+          sql`
         select name from subsidiaries
          where org_id = ${authz.user.orgId}::uuid and id = ${detail.employerSubsidiaryId}
-         limit 1`, 'objects'))[0]?.name
-      if (!offerEmployerName) {
-        throw new Error(
-          `offer ${offerId} names an employer outside this organization`,
+         limit 1`,
+          "objects",
         )
+      )[0]?.name;
+      if (!offerEmployerName) {
+        throw new Error(`offer ${offerId} names an employer outside this organization`);
       }
       offer = {
         ...detail,
         canManage,
         statusLabel: t(`recruiting.offerStatus.${detail.status}`),
-        effectiveStatusLabel: t(
-          `recruiting.offerStatus.${detail.effectiveStatus}`,
-        ),
+        effectiveStatusLabel: t(`recruiting.offerStatus.${detail.effectiveStatus}`),
         employerName: offerEmployerName,
         closeHref: recruitingHref(preservedParams, { status }),
         draft: draftLabel
@@ -826,23 +868,21 @@ export async function loadRecruitingPage(
             }
           : null,
         labels: {
-          employer: t('recruiting.drawer.employer'),
-          send: t('recruiting.offerActions.send'),
-          accept: t('recruiting.offerActions.accept'),
-          decline: t('recruiting.offerActions.decline'),
-          withdraw: t('recruiting.offerActions.withdraw'),
-          reason: t('recruiting.offerActions.reason'),
-          failed: t('recruiting.offerActions.failed'),
-          addBankAccount: t('recruiting.offerActions.addBankAccount'),
+          employer: t("recruiting.drawer.employer"),
+          send: t("recruiting.offerActions.send"),
+          accept: t("recruiting.offerActions.accept"),
+          decline: t("recruiting.offerActions.decline"),
+          withdraw: t("recruiting.offerActions.withdraw"),
+          reason: t("recruiting.offerActions.reason"),
+          failed: t("recruiting.offerActions.failed"),
+          addBankAccount: t("recruiting.offerActions.addBankAccount"),
         },
-      }
+      };
     } catch (error) {
       if (isRecruitingAbsence(error)) {
-        missingDetail = t('recruiting.drawer.missing')
+        missingDetail = t("recruiting.drawer.missing");
       } else {
-        detailError = drawerLoadError(
-          recruitingHref(preservedParams, { offer: offerId }),
-        )
+        detailError = drawerLoadError(recruitingHref(preservedParams, { offer: offerId }));
       }
     }
   }
@@ -852,65 +892,49 @@ export async function loadRecruitingPage(
   // gains versions + signature state; ?tab=postings&posting= the
   // disposition log; ?tab=pools&pool= members + rediscovery.
   const interviewParam =
-    typeof sp.interview === 'string' && sp.interview.length > 0
-      ? sp.interview
-      : null
-  const postingParam =
-    typeof sp.posting === 'string' && sp.posting.length > 0 ? sp.posting : null
-  const poolParam =
-    typeof sp.pool === 'string' && sp.pool.length > 0 ? sp.pool : null
-  let interview: InterviewDrawer | null = null
-  let offerExtra: OfferDrawerExtra | null = null
-  let postingExtra: PostingDrawerExtra | null = null
-  let pool: PoolDrawer | null = null
-  let consents: ConsentStatus | null = null
+    typeof sp.interview === "string" && sp.interview.length > 0 ? sp.interview : null;
+  const postingParam = typeof sp.posting === "string" && sp.posting.length > 0 ? sp.posting : null;
+  const poolParam = typeof sp.pool === "string" && sp.pool.length > 0 ? sp.pool : null;
+  let interview: InterviewDrawer | null = null;
+  let offerExtra: OfferDrawerExtra | null = null;
+  let postingExtra: PostingDrawerExtra | null = null;
+  let pool: PoolDrawer | null = null;
+  let consents: ConsentStatus | null = null;
   if (interviewParam && !requisitionId && !candidateId && !offerId) {
     try {
-      interview = await loadInterviewDrawer(authz, t, tab, interviewParam)
+      interview = await loadInterviewDrawer(authz, t, tab, interviewParam);
     } catch (error) {
       // The depth loaders return null on typed absence and throw on
       // anything else: absence reads as "no longer visible", failures
       // as a load error with a retry back to the same drawer.
       if (!isRecruitingAbsence(error)) {
-        detailError = drawerLoadError(
-          hrefForDepth(tab, { interview: interviewParam }),
-        )
+        detailError = drawerLoadError(hrefForDepth(tab, { interview: interviewParam }));
       }
     }
-    if (!interview && !detailError)
-      missingDetail = t('recruiting.drawer.missing')
+    if (!interview && !detailError) missingDetail = t("recruiting.drawer.missing");
   }
   if (offer && offerId) {
     try {
-      offerExtra = await loadOfferDrawerExtra(authz, t, offerId)
+      offerExtra = await loadOfferDrawerExtra(authz, t, offerId);
     } catch (error) {
       if (!isRecruitingAbsence(error)) {
-        detailError = drawerLoadError(hrefForDepth(tab, { offer: offerId }))
+        detailError = drawerLoadError(hrefForDepth(tab, { offer: offerId }));
       }
     }
   }
-  if (
-    postingParam &&
-    !requisitionId &&
-    !candidateId &&
-    !offerId &&
-    !interviewParam
-  ) {
+  if (postingParam && !requisitionId && !candidateId && !offerId && !interviewParam) {
     try {
-      postingExtra = await loadPostingDrawerExtra(authz, t, postingParam)
+      postingExtra = await loadPostingDrawerExtra(authz, t, postingParam);
     } catch (error) {
       if (!isRecruitingAbsence(error)) {
-        detailError = drawerLoadError(
-          hrefForDepth(tab, { posting: postingParam }),
-        )
+        detailError = drawerLoadError(hrefForDepth(tab, { posting: postingParam }));
       }
     }
-    if (!postingExtra && !detailError)
-      missingDetail = t('recruiting.drawer.missing')
+    if (!postingExtra && !detailError) missingDetail = t("recruiting.drawer.missing");
   }
   if (
     poolParam &&
-    poolParam !== 'new' &&
+    poolParam !== "new" &&
     !requisitionId &&
     !candidateId &&
     !offerId &&
@@ -918,29 +942,27 @@ export async function loadRecruitingPage(
     !postingParam
   ) {
     try {
-      pool = await loadPoolDrawer(authz, t, poolParam)
+      pool = await loadPoolDrawer(authz, t, poolParam);
     } catch (error) {
       if (!isRecruitingAbsence(error)) {
-        detailError = drawerLoadError(hrefForDepth(tab, { pool: poolParam }))
+        detailError = drawerLoadError(hrefForDepth(tab, { pool: poolParam }));
       }
     }
-    if (!pool && !detailError) missingDetail = t('recruiting.drawer.missing')
+    if (!pool && !detailError) missingDetail = t("recruiting.drawer.missing");
   }
   if (candidate) {
-    consents = await loadConsentStatus(authz, t, candidateId!)
+    consents = await loadConsentStatus(authz, t, candidateId!);
   }
 
   // The create form's inputs, resolved here so nothing but strings and ids
   // cross into the client: the visible employers plus the active
   // departments a new opening may name.
-  let create: RecruitingCreateProps | null = null
+  let create: RecruitingCreateProps | null = null;
   if (creating) {
-    const visible = await subsidiaryUiOptions(authz.user.orgId)
+    const visible = await subsidiaryUiOptions(authz.user.orgId);
     const scoped = visible.filter(
-      (option) =>
-        authz.allowedSubsidiaryIds === null ||
-        authz.allowedSubsidiaryIds.has(option.id),
-    )
+      (option) => authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id),
+    );
     // The employer picker shows NAMES, never ids: a single-entity org
     // (picker off, nothing visible) creates against its named root, while a
     // caller scoped out of every visible entity is refused by name — never
@@ -948,26 +970,29 @@ export async function loadRecruitingPage(
     let employers = scoped.map((option) => ({
       value: option.id,
       label: option.name,
-    }))
-    let employerRefusal: string | null = null
+    }));
+    let employerRefusal: string | null = null;
     if (employers.length === 0) {
       if (visible.length === 0) {
-        const root = await rootSubsidiary(authz.user.orgId)
-        employers = [{ value: root.id, label: root.name }]
+        const root = await rootSubsidiary(authz.user.orgId);
+        employers = [{ value: root.id, label: root.name }];
       } else {
-        employerRefusal = t('recruiting.create.noEmployer')
+        employerRefusal = t("recruiting.create.noEmployer");
       }
     }
-    const departmentRows = await db.execute<{ id: string; name: string }>(sql`
+    const departmentRows = await db.execute<{ id: string; name: string }>(
+      sql`
       select id::text as id, name from departments
        where org_id = ${authz.user.orgId}::uuid and is_active
-       order by name`, 'objects')
+       order by name`,
+      "objects",
+    );
     const jobDescriptions = await listActiveJobDescriptions({
       orgId: authz.user.orgId,
       actorId: authz.user.id,
-    })
+    });
     create = {
-      basePath: '/hrm/recruiting',
+      basePath: "/hrm/recruiting",
       employers,
       employerRefusal,
       departments: departmentRows.map((row) => ({
@@ -981,91 +1006,80 @@ export async function loadRecruitingPage(
         description: entry.description,
       })),
       labels: {
-        title: t('recruiting.create.titleField'),
-        jobDescription: t('recruiting.create.jobDescription'),
-        noJobDescription: t('recruiting.create.noJobDescription'),
-        jobDescriptionNote: t('recruiting.create.jobDescriptionNote'),
-        description: t('recruiting.create.description'),
-        employer: t('recruiting.create.employer'),
-        department: t('recruiting.create.department'),
-        noDepartment: t('recruiting.create.noDepartment'),
-        headcount: t('recruiting.create.headcount'),
-        targetStart: t('recruiting.create.targetStart'),
-        submit: t('recruiting.create.submit'),
-        failed: t('recruiting.create.failed'),
+        title: t("recruiting.create.titleField"),
+        jobDescription: t("recruiting.create.jobDescription"),
+        noJobDescription: t("recruiting.create.noJobDescription"),
+        jobDescriptionNote: t("recruiting.create.jobDescriptionNote"),
+        description: t("recruiting.create.description"),
+        employer: t("recruiting.create.employer"),
+        department: t("recruiting.create.department"),
+        noDepartment: t("recruiting.create.noDepartment"),
+        headcount: t("recruiting.create.headcount"),
+        targetStart: t("recruiting.create.targetStart"),
+        submit: t("recruiting.create.submit"),
+        failed: t("recruiting.create.failed"),
       },
-    }
+    };
   }
 
-  const headcountTotal = requisitions.reduce(
-    (total, row) => total + row.headcount,
-    0,
-  )
-  const filledTotal = requisitions.reduce(
-    (total, row) => total + row.filledCount,
-    0,
-  )
+  const headcountTotal = requisitions.reduce((total, row) => total + row.headcount, 0);
+  const filledTotal = requisitions.reduce((total, row) => total + row.filledCount, 0);
   // HR-18: depth tab tables resolve here, beside the openings rows, so the
   // spec branches on data it already holds.
   const depthRows =
-    tab === 'interviews'
+    tab === "interviews"
       ? await loadInterviewsTab(authz, t, tab)
-      : tab === 'offers'
+      : tab === "offers"
         ? await loadOffersTab(authz, t, tab)
-        : tab === 'postings'
+        : tab === "postings"
           ? await loadPostingsTab(authz, t, tab)
-          : tab === 'pools'
+          : tab === "pools"
             ? await loadPoolsTab(authz, t, tab)
-            : null
+            : null;
   const depthColumns: Record<string, string> | null =
-    tab === 'interviews'
+    tab === "interviews"
       ? {
-          candidate: t('recruiting.depth.columns.candidate'),
-          requisition: t('recruiting.depth.columns.requisition'),
-          kind: t('recruiting.depth.columns.kind'),
-          when: t('recruiting.depth.columns.when'),
-          slots: t('recruiting.depth.columns.slots'),
-          scorecards: t('recruiting.depth.columns.scorecards'),
+          candidate: t("recruiting.depth.columns.candidate"),
+          requisition: t("recruiting.depth.columns.requisition"),
+          kind: t("recruiting.depth.columns.kind"),
+          when: t("recruiting.depth.columns.when"),
+          slots: t("recruiting.depth.columns.slots"),
+          scorecards: t("recruiting.depth.columns.scorecards"),
         }
-      : tab === 'offers'
+      : tab === "offers"
         ? {
-            candidate: t('recruiting.depth.columns.candidate'),
-            job: t('recruiting.depth.columns.job'),
-            status: t('recruiting.depth.columns.status'),
-            signature: t('recruiting.depth.columns.signature'),
-            versions: t('recruiting.depth.columns.versions'),
+            candidate: t("recruiting.depth.columns.candidate"),
+            job: t("recruiting.depth.columns.job"),
+            status: t("recruiting.depth.columns.status"),
+            signature: t("recruiting.depth.columns.signature"),
+            versions: t("recruiting.depth.columns.versions"),
           }
-        : tab === 'postings'
+        : tab === "postings"
           ? {
-              board: t('recruiting.depth.columns.board'),
-              opening: t('recruiting.depth.columns.requisition'),
-              status: t('recruiting.depth.columns.status'),
-              applies: t('recruiting.depth.columns.applies'),
+              board: t("recruiting.depth.columns.board"),
+              opening: t("recruiting.depth.columns.requisition"),
+              status: t("recruiting.depth.columns.status"),
+              applies: t("recruiting.depth.columns.applies"),
             }
-          : tab === 'pools'
+          : tab === "pools"
             ? {
-                name: t('recruiting.depth.columns.name'),
-                members: t('recruiting.depth.columns.members'),
+                name: t("recruiting.depth.columns.name"),
+                members: t("recruiting.depth.columns.members"),
               }
-            : null
+            : null;
   // The Setup lists rehomed under this tab. Unknown keys stay absent
   // rather than rendering a section the registry cannot serve.
-  const SETUP_BY_TAB: Record<
-    Exclude<DepthTab, 'applications'>,
-    readonly string[]
-  > = {
-    openings: ['hrm-job-descriptions'],
-    interviews: ['hrm-interview-kits', 'hrm-interviewer-pools'],
-    offers: ['hrm-offer-templates'],
+  const SETUP_BY_TAB: Record<Exclude<DepthTab, "applications">, readonly string[]> = {
+    openings: ["hrm-job-descriptions"],
+    interviews: ["hrm-interview-kits", "hrm-interviewer-pools"],
+    offers: ["hrm-offer-templates"],
     postings: [],
-    pools: ['hrm-retention-rules'],
-  }
+    pools: ["hrm-retention-rules"],
+  };
   const setupSections: string[] =
-    tab === 'applications'
+    tab === "applications"
       ? []
-      : SETUP_BY_TAB[tab].filter((entityKey) =>
-          SETUP_ENTITY_BY_KEY.has(entityKey),
-        )
+      : SETUP_BY_TAB[tab].filter((entityKey) => SETUP_ENTITY_BY_KEY.has(entityKey));
   const drawerOpen =
     requisition !== null ||
     candidate !== null ||
@@ -1075,14 +1089,14 @@ export async function loadRecruitingPage(
     pool !== null ||
     missingDetail !== null ||
     detailError !== null ||
-    create !== null
+    create !== null;
   // CK-23b: which record owns the drawer title. Computed once here so the
   // pure drawerTitleKind branch (unit-tested) decides, while the translated
   // keys below stay literal for i18n extraction.
   const titleKind = drawerTitleKind({
     hasOffer: offer !== null,
     hasCandidate: candidate !== null,
-  })
+  });
   // HR-21: the shared evidence-draft drawer. No host field is editable
   // here, so Insert copies to the clipboard (the drawer's own fallback).
   const drawerBase = requisitionId
@@ -1091,50 +1105,49 @@ export async function loadRecruitingPage(
       ? recruitingHref(preservedParams, { status, candidate: candidateId })
       : offerId
         ? recruitingHref(preservedParams, { status, offer: offerId })
-        : recruitingHref(preservedParams, { status })
+        : recruitingHref(preservedParams, { status });
   const draftDrawer = await loadAiDraftDrawer({
-    draftParam: typeof sp.draft === 'string' ? sp.draft : null,
+    draftParam: typeof sp.draft === "string" ? sp.draft : null,
     closeHref: drawerBase,
-    fieldId: '',
-  })
+    fieldId: "",
+  });
   return {
-    title: t('recruiting.title'),
-    description: tab==='applications'?tw('applicationsDescription'):t(`recruiting.workspace.${tab}`),
+    title: t("recruiting.title"),
+    description:
+      tab === "applications" ? tw("applicationsDescription") : t(`recruiting.workspace.${tab}`),
     tabs,
     canManage,
-    showCreate: canManage && (tab === 'applications'||tab === 'openings' || tab === 'pools'),
+    showCreate: canManage && (tab === "applications" || tab === "openings" || tab === "pools"),
     setupHref:
-      can(authz, 'admin.setup.manage') && setupSections[0]
+      can(authz, "admin.setup.manage") && setupSections[0]
         ? `/admin/setup/${setupSections[0]}`
         : null,
-    setupLabel: t('recruiting.workspace.configure'),
+    setupLabel: t("recruiting.workspace.configure"),
     poolCreate:
-      canManage && tab === 'pools' && poolParam === 'new'
+      canManage && tab === "pools" && poolParam === "new"
         ? {
-            title: t('recruiting.workspace.newPool'),
-            closeHref: hrefForDepth('pools', {}),
-            nameLabel: t('recruiting.depth.columns.name'),
-            descriptionLabel: t('recruiting.workspace.poolDescription'),
-            submitLabel: t('recruiting.workspace.newPool'),
-            failed: t('performance.actionFailed'),
+            title: t("recruiting.workspace.newPool"),
+            closeHref: hrefForDepth("pools", {}),
+            nameLabel: t("recruiting.depth.columns.name"),
+            descriptionLabel: t("recruiting.workspace.poolDescription"),
+            submitLabel: t("recruiting.workspace.newPool"),
+            failed: t("performance.actionFailed"),
           }
         : null,
-    addLabel: t(
-      tab === 'pools' ? 'recruiting.workspace.newPool' : 'recruiting.add',
-    ),
+    addLabel: t(tab === "pools" ? "recruiting.workspace.newPool" : "recruiting.add"),
     addHref:
-      tab === 'pools'
-        ? hrefForDepth('pools', { pool: 'new' })
-        : recruitingHref(preservedParams, { status, requisition: 'new' }),
-    basePath: '/hrm/recruiting',
+      tab === "pools"
+        ? hrefForDepth("pools", { pool: "new" })
+        : recruitingHref(preservedParams, { status, requisition: "new" }),
+    basePath: "/hrm/recruiting",
     tab,
-    statusLabel: tc('labels.status'),
+    statusLabel: tc("labels.status"),
     depthRows,
     depthColumns,
-    depthEmpty: t('recruiting.depth.empty'),
+    depthEmpty: t("recruiting.depth.empty"),
     setupSections,
-    segmentsLabel: t('recruiting.segmentsLabel'),
-    allLabel: t('recruiting.statusAll'),
+    segmentsLabel: t("recruiting.segmentsLabel"),
+    allLabel: t("recruiting.statusAll"),
     segmentOptions: STATUSES.map((value) => ({
       value,
       label: statusLabel(value),
@@ -1143,19 +1156,27 @@ export async function loadRecruitingPage(
     // Retain the workspace and filter when a work record opens or closes.
     currentParams: preservedParams,
     columns: {
-      number: t('recruiting.columns.number'),
-      title: t('recruiting.columns.title'),
-      position: t('recruiting.columns.position'),
-      department: t('recruiting.columns.department'),
-      headcount: t('recruiting.columns.headcount'),
-      hiringManager: t('recruiting.columns.hiringManager'),
-      opened: t('recruiting.columns.opened'),
-      status: t('recruiting.columns.status'),
+      number: t("recruiting.columns.number"),
+      title: t("recruiting.columns.title"),
+      position: t("recruiting.columns.position"),
+      department: t("recruiting.columns.department"),
+      headcount: t("recruiting.columns.headcount"),
+      hiringManager: t("recruiting.columns.hiringManager"),
+      opened: t("recruiting.columns.opened"),
+      status: t("recruiting.columns.status"),
     },
-    applicationRows,applicationFilters,applicationSelection,applicationColumns:Object.fromEntries(['candidate','opening','stage','status','source','appliedOn','owner'].map(key=>[key,tw(key==='appliedOn'?'applied':key)])),
+    applicationRows,
+    applicationFilters,
+    applicationSelection,
+    applicationColumns: Object.fromEntries(
+      ["candidate", "opening", "stage", "status", "source", "appliedOn", "owner"].map((key) => [
+        key,
+        tw(key === "appliedOn" ? "applied" : key),
+      ]),
+    ),
     rows,
-    empty: tab==='applications'?tw('noApplications'):t('recruiting.empty'),
-    totalLabel: t('recruiting.total'),
+    empty: tab === "applications" ? tw("noApplications") : t("recruiting.empty"),
+    totalLabel: t("recruiting.total"),
     totals: { headcount: String(headcountTotal), filled: String(filledTotal) },
     drawerOpen,
     draftDrawer,
@@ -1169,16 +1190,16 @@ export async function loadRecruitingPage(
           // extraction. An open offer or candidate drawer is titled for
           // its own record, never for the requisition.
           title:
-            titleKind === 'offer' && offer
-              ? t('recruiting.drawer.offerTitle', {
+            titleKind === "offer" && offer
+              ? t("recruiting.drawer.offerTitle", {
                   employer: offer.employerName,
                 })
-              : titleKind === 'candidate' && candidate
-                ? t('recruiting.drawer.candidateTitle', {
+              : titleKind === "candidate" && candidate
+                ? t("recruiting.drawer.candidateTitle", {
                     name: candidate.displayName,
                   })
-                : t('recruiting.drawer.title', {
-                    number: requisition?.requisitionNumber ?? '',
+                : t("recruiting.drawer.title", {
+                    number: requisition?.requisitionNumber ?? "",
                   }),
           description: null,
           requisition,
@@ -1195,5 +1216,5 @@ export async function loadRecruitingPage(
           ...(create ? { create } : {}),
         }
       : null,
-  }
+  };
 }

@@ -52,7 +52,13 @@ export async function payRunApprovalState(
   documentId: string,
   executor: Executor = db,
 ): Promise<PayRunApprovalState> {
-  const rows = (await executor.execute<{ status: string; submitted: boolean; open_gates: number; policies: number }>(sql`
+  const rows = await executor.execute<{
+    status: string;
+    submitted: boolean;
+    open_gates: number;
+    policies: number;
+  }>(
+    sql`
     select d.status,
            d.submitted_at is not null as submitted,
            (select count(*)::int from flow_gates g
@@ -64,7 +70,9 @@ export async function payRunApprovalState(
                and ${flowGraphAdmitsSubjectSql(sql`f.graph`, sql`d.subsidiary_id`)}) as policies
       from documents d
      where d.org_id = ${orgId} and d.id = ${documentId} and d.kind = 'pay_run'
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = rows[0];
   if (!row) throw new PayrollError("pay run not found");
   const outstandingGates = Number(row.open_gates ?? 0);
@@ -72,15 +80,16 @@ export async function payRunApprovalState(
   const policyExists = Number(row.policies ?? 0) > 0;
   // `approved` / `posted` are release states in their own right: the document
   // adapter only reaches them through the approval lifecycle.
-  const submitted =
-    row.submitted === true || row.status === "approved" || row.status === "posted";
+  const submitted = row.submitted === true || row.status === "approved" || row.status === "posted";
   return {
     documentStatus: row.status,
     pending,
     outstandingGates,
     policyExists,
     submitted,
-    released: !pending && (row.status === "approved" || row.status === "posted" || (!policyExists && !row.submitted)),
+    released:
+      !pending &&
+      (row.status === "approved" || row.status === "posted" || (!policyExists && !row.submitted)),
   };
 }
 
@@ -143,28 +152,41 @@ export async function payRunRejection(
   documentId: string,
   executor: Executor = db,
 ): Promise<PayRunRejection | null> {
-  const state = await executor.execute<{ status: string; run_status: string }>(sql`
+  const state = await executor.execute<{ status: string; run_status: string }>(
+    sql`
     select d.status, r.run_status
       from documents d
       join pay_runs r on r.document_id = d.id and r.org_id = d.org_id
      where d.org_id = ${orgId} and d.id = ${documentId} and d.kind = 'pay_run'
-  `, "objects");
+  `,
+    "objects",
+  );
   const run = state[0];
   if (!run) throw new PayrollError("pay run not found");
   if (run.status !== "draft" || run.run_status === "committed") return null;
-  const rows = await executor.execute<{ decided_by_name: string | null; decided_at: Date | string | null; comment: string | null }>(sql`
+  const rows = await executor.execute<{
+    decided_by_name: string | null;
+    decided_at: Date | string | null;
+    comment: string | null;
+  }>(
+    sql`
     select decider.name as decided_by_name, g.decided_at, g.comment
       from flow_gates g
       left join users decider on decider.id = g.decided_by and decider.org_id = g.org_id
      where ${currentRejectionPredicate(sql`${orgId}`, sql`${documentId}`)}
      order by g.decided_at desc nulls last, g.id desc
      limit 1
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = rows[0];
   if (!row) return null;
-  const decidedAt = row.decided_at instanceof Date
-    ? row.decided_at.toISOString()
-    : row.decided_at == null ? "" : new Date(String(row.decided_at)).toISOString();
+  const decidedAt =
+    row.decided_at instanceof Date
+      ? row.decided_at.toISOString()
+      : row.decided_at == null
+        ? ""
+        : new Date(String(row.decided_at)).toISOString();
   const reason = row.comment?.trim() || null;
   return {
     rejectedBy: row.decided_by_name ?? null,
@@ -240,61 +262,79 @@ export async function recalculateStaleApprovedPayRun(
   input: RecalculateApprovedPayRunInput,
 ): Promise<RecalculatedApprovedPayRun> {
   const { orgId, documentId, actorId } = input;
-  return withOrgTransaction(orgId, async () => {
-    for (const permission of ["payroll.run", PAY_RUN_WORKFLOW_PERMISSIONS.approve]) {
-      if (!(await actorHasPermission(db, orgId, actorId, permission))) {
-        throw new PayrollError(`missing permission: ${permission}`);
+  return withOrgTransaction(
+    orgId,
+    async () => {
+      for (const permission of ["payroll.run", PAY_RUN_WORKFLOW_PERMISSIONS.approve]) {
+        if (!(await actorHasPermission(db, orgId, actorId, permission))) {
+          throw new PayrollError(`missing permission: ${permission}`);
+        }
       }
-    }
-    const actorScope = await actorAllowedSubsidiaryIds(db, orgId, actorId);
-    const allowedSubsidiaryIds = actorScope === null
-      ? input.allowedSubsidiaryIds
-      : input.allowedSubsidiaryIds == null
-        ? actorScope
-        : new Set([...actorScope].filter((id) => input.allowedSubsidiaryIds!.has(id)));
-    const locked = (await db.execute<{ status: string; subsidiary_id: string | null; run_status: string }>(sql`
+      const actorScope = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+      const allowedSubsidiaryIds =
+        actorScope === null
+          ? input.allowedSubsidiaryIds
+          : input.allowedSubsidiaryIds == null
+            ? actorScope
+            : new Set([...actorScope].filter((id) => input.allowedSubsidiaryIds!.has(id)));
+      const locked = (
+        await db.execute<{ status: string; subsidiary_id: string | null; run_status: string }>(
+          sql`
       select d.status, d.subsidiary_id, r.run_status
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
-    `, "objects"))[0];
-    if (!locked || !payrollSubsidiaryInScope(allowedSubsidiaryIds, locked.subsidiary_id)) {
-      throw new PayrollError("pay run not found");
-    }
-    if (locked.run_status === "committed") {
-      throw new PayrollError("pay run is already committed — void it and run the period again to correct its figures");
-    }
-    if (locked.status !== "approved") {
-      throw new PayrollError(refusalForDocumentStatus(locked.status));
-    }
-    const staleness = await payRunStaleness(orgId, documentId, db, allowedSubsidiaryIds);
-    if (!staleness.stale) {
-      throw new PayrollError("the approved run's inputs have not changed since it was approved — there is nothing to recalculate");
-    }
+    `,
+          "objects",
+        )
+      )[0];
+      if (!locked || !payrollSubsidiaryInScope(allowedSubsidiaryIds, locked.subsidiary_id)) {
+        throw new PayrollError("pay run not found");
+      }
+      if (locked.run_status === "committed") {
+        throw new PayrollError(
+          "pay run is already committed — void it and run the period again to correct its figures",
+        );
+      }
+      if (locked.status !== "approved") {
+        throw new PayrollError(refusalForDocumentStatus(locked.status));
+      }
+      const staleness = await payRunStaleness(orgId, documentId, db, allowedSubsidiaryIds);
+      if (!staleness.stale) {
+        throw new PayrollError(
+          "the approved run's inputs have not changed since it was approved — there is nothing to recalculate",
+        );
+      }
 
-    let returned;
-    try {
-      returned = await returnDocumentToDraft({
-        documentId,
+      let returned;
+      try {
+        returned = await returnDocumentToDraft({
+          documentId,
+          orgId,
+          actorId,
+          reason: `Inputs changed since approval (${staleness.reasons.join(", ")})`,
+          allowedSubsidiaryIds,
+        });
+      } catch (error) {
+        if (error instanceof ReturnToDraftError) throw new PayrollError(error.message);
+        throw error;
+      }
+
+      const calculation = await calculatePayRun({
         orgId,
+        documentId,
         actorId,
-        reason: `Inputs changed since approval (${staleness.reasons.join(", ")})`,
+        dryRun: false,
         allowedSubsidiaryIds,
       });
-    } catch (error) {
-      if (error instanceof ReturnToDraftError) throw new PayrollError(error.message);
-      throw error;
-    }
-
-    const calculation = await calculatePayRun({
-      orgId, documentId, actorId, dryRun: false, allowedSubsidiaryIds,
-    });
-    return {
-      calculation,
-      reasons: staleness.reasons,
-      supersededRunIds: returned.supersededRunIds,
-      cancelledRunIds: returned.cancelledRunIds,
-    };
-  }, { isolationLevel: "REPEATABLE READ" });
+      return {
+        calculation,
+        reasons: staleness.reasons,
+        supersededRunIds: returned.supersededRunIds,
+        cancelledRunIds: returned.cancelledRunIds,
+      };
+    },
+    { isolationLevel: "REPEATABLE READ" },
+  );
 }

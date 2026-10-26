@@ -21,19 +21,22 @@ import { signProposal, type JournalLinePreview, type JournalPreview } from "./pr
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const journalDraftSchema = z.object({
-  documentDate: z.string().regex(ISO_DATE, "YYYY-MM-DD").optional()
-    .describe("Defaults to today"),
-  memo: z.string().max(500).optional()
-    .describe("Memo posted on the draft document"),
+  documentDate: z.string().regex(ISO_DATE, "YYYY-MM-DD").optional().describe("Defaults to today"),
+  memo: z.string().max(500).optional().describe("Memo posted on the draft document"),
   lines: z
     .array(
       z.object({
-        account: z.string().max(120)
+        account: z
+          .string()
+          .max(120)
           .describe("Account number (preferred, e.g. '5100') or exact account name"),
         description: z.string().max(200).optional(),
         // The money kernel's decimal grammar (canonicalDecimal); the handler
         // still refuses more than four places with its own message.
-        amount: z.string().max(40).regex(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/, "decimal")
+        amount: z
+          .string()
+          .max(40)
+          .regex(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/, "decimal")
           .describe("Signed base amount: positive = debit, negative = credit"),
       }),
     )
@@ -81,14 +84,17 @@ const draftJournalEntry: AssistantToolDef = {
     for (let index = 0; index < a.lines.length; index++) {
       const l = a.lines[index]!;
       const key = l.account.trim();
-      const r = (await db.execute<{ id: string; number: string | null; name: string }>(sql`
+      const r = await db.execute<{ id: string; number: string | null; name: string }>(
+        sql`
         select id, number, name from accounts
          where org_id = ${authz.user.orgId} and is_active and not is_summary
            ${subsidiaryVisibleFilter(sql`accounts.subsidiary_id`, authz.allowedSubsidiaryIds)}
            and (number = ${key} or lower(name) = lower(${key}))
          order by (number = ${key}) desc
          limit 2
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (r.length === 0) {
         return { ok: false, error: `account not found: "${key}" — use find_accounts to locate it` };
       }

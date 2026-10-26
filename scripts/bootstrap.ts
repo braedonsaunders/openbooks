@@ -1,13 +1,38 @@
-import { ensureRetirementBackupAccess } from "./bootstrap/retirement-backup-access.ts"
-import { runtimeDatabaseConfig, bypassDatabaseConfig } from "./bootstrap-paths"
-import { assertConstrainedSchemaOwnerMigrationRole, requireRuntimeLoginRole, requireBypassLoginRole, ensureRuntimeRoleExists, ensureBypassRoleExists, ensureBypassObjectGrants, ensureBypassDatabaseRole, ensureRuntimeDatabaseRole, verifyRuntimeDatabaseRole, transferTestOwnershipToRuntimeRole, ensureReadRole } from "./bootstrap/database-roles"
-import { runUpgradeCheckMain, migrate } from "./bootstrap/migrate"
-import { ensureOrg, seedCurrencies, ensureRootSubsidiary, seedRoles, alignAdministratorRole, seedAdmin, ensureFirstPlatformAdmin } from "./bootstrap/seed"
-import { sql } from "drizzle-orm"
-import { precreatedRolesEnabled, verifyPrecreatedRoles, verifyPrecreatedObjectAccess, verifyRuntimeOwnership } from "./bootstrap-roles.ts"
-import { db, env, longPool, pool, withBypassContext } from "@openbooks/engine/platform/db"
-import { provisionOrganizationDefaults } from "@openbooks/engine/provisioning/organization-provisioning"
-import { provisionPayrollPackDefaults } from "@openbooks/engine/payroll/run-setup"
+import { ensureRetirementBackupAccess } from "./bootstrap/retirement-backup-access.ts";
+import { runtimeDatabaseConfig, bypassDatabaseConfig } from "./bootstrap-paths";
+import {
+  assertConstrainedSchemaOwnerMigrationRole,
+  requireRuntimeLoginRole,
+  requireBypassLoginRole,
+  ensureRuntimeRoleExists,
+  ensureBypassRoleExists,
+  ensureBypassObjectGrants,
+  ensureBypassDatabaseRole,
+  ensureRuntimeDatabaseRole,
+  verifyRuntimeDatabaseRole,
+  transferTestOwnershipToRuntimeRole,
+  ensureReadRole,
+} from "./bootstrap/database-roles";
+import { runUpgradeCheckMain, migrate } from "./bootstrap/migrate";
+import {
+  ensureOrg,
+  seedCurrencies,
+  ensureRootSubsidiary,
+  seedRoles,
+  alignAdministratorRole,
+  seedAdmin,
+  ensureFirstPlatformAdmin,
+} from "./bootstrap/seed";
+import { sql } from "drizzle-orm";
+import {
+  precreatedRolesEnabled,
+  verifyPrecreatedRoles,
+  verifyPrecreatedObjectAccess,
+  verifyRuntimeOwnership,
+} from "./bootstrap-roles.ts";
+import { db, env, longPool, pool, withBypassContext } from "@openbooks/engine/platform/db";
+import { provisionOrganizationDefaults } from "@openbooks/engine/provisioning/organization-provisioning";
+import { provisionPayrollPackDefaults } from "@openbooks/engine/payroll/run-setup";
 
 async function main(): Promise<void> {
   const verifyBackupAccess = process.argv.includes("--verify");
@@ -16,7 +41,9 @@ async function main(): Promise<void> {
   }
   const backupAccessOnly = process.argv.includes("--retirement-backup-access-only");
   if (backupAccessOnly && process.argv.includes("--check")) {
-    throw new Error("Retirement backup access provisioning cannot be combined with migration or check options");
+    throw new Error(
+      "Retirement backup access provisioning cannot be combined with migration or check options",
+    );
   }
   if (process.argv.includes("--check")) {
     // Strictly read-only: this path takes no advisory lock (it must not
@@ -47,8 +74,7 @@ async function main(): Promise<void> {
   const precreated = precreatedRolesEnabled(env);
   const runtimeConfig = runtimeDatabaseConfig();
   const bypassConfig = bypassDatabaseConfig();
-  const constrainedSchemaOwnerMigration =
-    env.OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION === "1";
+  const constrainedSchemaOwnerMigration = env.OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION === "1";
   const restoreTarget = env.OPENBOOKS_RESTORE_TARGET === "1";
   if (restoreTarget && constrainedSchemaOwnerMigration) {
     throw new Error(
@@ -75,12 +101,20 @@ async function main(): Promise<void> {
     console.log("[bootstrap] starting");
     if (backupAccessOnly) {
       if (!bypassConfig || bypassConfig.roleName === runtimeConfig?.roleName) {
-        throw new Error("Retirement backup access requires OPENBOOKS_BYPASS_DB_URL naming a dedicated login distinct from the runtime login");
+        throw new Error(
+          "Retirement backup access requires OPENBOOKS_BYPASS_DB_URL naming a dedicated login distinct from the runtime login",
+        );
       }
-      const installed = await ensureRetirementBackupAccess(lockClient, bypassConfig.roleName, { verifyOnly: verifyBackupAccess });
-      if (!installed && !verifyBackupAccess) throw new Error("Retirement authority is not installed; no backup grants were changed");
-      console.log(installed ? "[bootstrap] retirement backup SELECT access verified; no migrations or seeds executed"
-        : "[bootstrap] retirement authority is not installed; no private backup grants required");
+      const installed = await ensureRetirementBackupAccess(lockClient, bypassConfig.roleName, {
+        verifyOnly: verifyBackupAccess,
+      });
+      if (!installed && !verifyBackupAccess)
+        throw new Error("Retirement authority is not installed; no backup grants were changed");
+      console.log(
+        installed
+          ? "[bootstrap] retirement backup SELECT access verified; no migrations or seeds executed"
+          : "[bootstrap] retirement authority is not installed; no private backup grants required",
+      );
       return;
     }
     // Bootstrap is the one intentional installation-wide maintenance boundary.
@@ -92,9 +126,7 @@ async function main(): Promise<void> {
     await withBypassContext(async () => {
       if (constrainedSchemaOwnerMigration) {
         if (!runtimeConfig) {
-          throw new Error(
-            "constrained schema-owner migration requires OPENBOOKS_RUNTIME_DB_URL",
-          );
+          throw new Error("constrained schema-owner migration requires OPENBOOKS_RUNTIME_DB_URL");
         }
         await assertConstrainedSchemaOwnerMigrationRole(runtimeConfig);
         // The runtime login must already exist (this login cannot create
@@ -107,7 +139,9 @@ async function main(): Promise<void> {
         await requireRuntimeLoginRole(runtimeConfig);
         if (bypassConfig) await requireBypassLoginRole(bypassConfig);
         await migrate();
-        const payrollOrganizations = await pool.query<{ id: string }>("select id from orgs order by created_at");
+        const payrollOrganizations = await pool.query<{ id: string }>(
+          "select id from orgs order by created_at",
+        );
         for (const { id } of payrollOrganizations.rows) await provisionPayrollPackDefaults(id);
         await ensureRuntimeDatabaseRole(runtimeConfig, true);
         // The constrained login owns the schema, so it can converge the
@@ -168,9 +202,9 @@ async function main(): Promise<void> {
       }
       await seedCurrencies();
       if (restoreTarget) {
-        const organizations = (await db.execute<{ count: number }>(
+        const organizations = await db.execute<{ count: number }>(
           sql`select count(*)::int as count from orgs`,
-        ));
+        );
         if (organizations.rows[0]?.count !== 0) {
           throw new Error(
             "OPENBOOKS_RESTORE_TARGET requires a new database with zero organizations",
@@ -182,9 +216,9 @@ async function main(): Promise<void> {
         return;
       }
       const primaryOrgId = await ensureOrg();
-      const organizations = (await db.execute<{ id: string }>(
+      const organizations = await db.execute<{ id: string }>(
         sql`select id from orgs order by created_at`,
-      ));
+      );
       for (const { id: orgId } of organizations.rows) {
         await ensureRootSubsidiary(orgId);
         await seedRoles(orgId);
@@ -200,8 +234,7 @@ async function main(): Promise<void> {
         );
       }
       if (runtimeConfig) await transferTestOwnershipToRuntimeRole(runtimeConfig);
-      if (runtimeConfig)
-        await verifyRuntimeDatabaseRole(runtimeConfig, primaryOrgId);
+      if (runtimeConfig) await verifyRuntimeDatabaseRole(runtimeConfig, primaryOrgId);
     });
     console.log("[bootstrap] done");
   } finally {

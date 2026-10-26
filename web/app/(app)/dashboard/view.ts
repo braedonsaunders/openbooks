@@ -1,11 +1,11 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { getAuthz } from '../../../lib/authz'
+import { getLocale, getTranslations } from "next-intl/server";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { getAuthz } from "../../../lib/authz";
 
-import { businessTimeZone } from '@openbooks/engine/platform/business-date/module'
-import { buildGreeting } from './_greeting'
+import { businessTimeZone } from "@openbooks/engine/platform/business-date/module";
+import { buildGreeting } from "./_greeting";
 
 /**
  * The home dashboard, split into a loader and a spec.
@@ -31,37 +31,43 @@ import { buildGreeting } from './_greeting'
  */
 
 export interface DashboardData {
-  greeting: string
-  name: string | null
+  greeting: string;
+  name: string | null;
 }
 
 export async function loadDashboard(): Promise<DashboardData | null> {
-  const t = await getTranslations('dashboard')
-  const locale = await getLocale()
-  const authz = await getAuthz()
-  if (!authz) return null
+  const t = await getTranslations("dashboard");
+  const locale = await getLocale();
+  const authz = await getAuthz();
+  if (!authz) return null;
 
   // Layout resolution, the `canSeeWidget` filter and the stale-node prune all
   // live in the slot now — they need the session, and re-deriving them there
   // is what keeps them out of the spec.
   return {
-    greeting: buildGreeting(new Date(), authz.user.name, {
-      morning: t('greeting.morning'),
-      afternoon: t('greeting.afternoon'),
-      evening: t('greeting.evening'),
-    }, await businessTimeZone(authz.user.orgId), locale),
+    greeting: buildGreeting(
+      new Date(),
+      authz.user.name,
+      {
+        morning: t("greeting.morning"),
+        afternoon: t("greeting.afternoon"),
+        evening: t("greeting.evening"),
+      },
+      await businessTimeZone(authz.user.orgId),
+      locale,
+    ),
     name: authz.user.name,
-  }
+  };
 }
 
 export function dashboardSpec(data: DashboardData): PageSpec {
   return page({
-    route: '/dashboard',
-    layout: 'list',
-    bodyClassName: 'flex min-h-full min-h-0 flex-col gap-4',
-    header: [widgetBlock('dashboard-header', { greeting: data.greeting, name: data.name })],
+    route: "/dashboard",
+    layout: "list",
+    bodyClassName: "flex min-h-full min-h-0 flex-col gap-4",
+    header: [widgetBlock("dashboard-header", { greeting: data.greeting, name: data.name })],
     // The same cockpit layout as Customers, AR, and AP, with the user's
     // configured widget canvas and its authorized actions resolved by the host.
-    body: [widgetBlock('dashboard-grid')],
-  })
+    body: [widgetBlock("dashboard-grid")],
+  });
 }

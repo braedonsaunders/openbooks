@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 /**
  * Tiny client-side motion wrappers shared by page layouts and embedded
@@ -7,23 +7,23 @@
  * layout tree into a Client Component.
  */
 
-import * as React from 'react'
-import { motion, useReducedMotion } from 'framer-motion'
-import { cn } from '@openbooks/ui'
-import { useRouteEntranceAnimated } from './route-transitions'
+import * as React from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { cn } from "@openbooks/ui";
+import { useRouteEntranceAnimated } from "./route-transitions";
 
 export function FadeInHeader({
   children,
   className,
 }: {
-  children: React.ReactNode
-  className?: string
+  children: React.ReactNode;
+  className?: string;
 }) {
-  const reduce = useReducedMotion()
+  const reduce = useReducedMotion();
   // A page mounted by a navigation, or arriving in place of its
   // placeholder, enters with the route transition; a second fade here would
   // leave the incoming snapshot transparent.
-  const routeEntrance = useRouteEntranceAnimated()
+  const routeEntrance = useRouteEntranceAnimated();
   return (
     <motion.div
       data-page-motion
@@ -34,30 +34,30 @@ export function FadeInHeader({
     >
       {children}
     </motion.div>
-  )
+  );
 }
 
 export function FadeInBody({
   children,
   className,
 }: {
-  children: React.ReactNode
-  className?: string
+  children: React.ReactNode;
+  className?: string;
 }) {
-  const reduce = useReducedMotion()
+  const reduce = useReducedMotion();
   // A page mounted by a navigation, or arriving in place of its
   // placeholder, enters with the route transition; a second fade here would
   // leave the incoming snapshot transparent.
-  const routeEntrance = useRouteEntranceAnimated()
+  const routeEntrance = useRouteEntranceAnimated();
   return (
     <motion.div
       data-page-motion
       initial={reduce || routeEntrance ? false : { opacity: 0, y: 2 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: 0.05, ease: [0.22, 0.61, 0.36, 1] }}
-      className={cn('h-full', className)}
+      className={cn("h-full", className)}
     >
       {children}
     </motion.div>
-  )
+  );
 }

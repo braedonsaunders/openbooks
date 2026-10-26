@@ -3,7 +3,10 @@ import test from "node:test";
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return {push(){},refresh(){},replace(){}}}", intl: true });
+stubModules({
+  navigation: "export function useRouter(){return {push(){},refresh(){},replace(){}}}",
+  intl: true,
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "sonner") {

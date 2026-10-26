@@ -1,10 +1,16 @@
-'use client'
+"use client";
 
-import { useLocale, useTranslations } from 'next-intl'
-import { RISK_SCORE_BANDS } from '@/lib/analytics/sentinel-scoring'
-import { Copy, ShieldAlert } from 'lucide-react'
-import { useMoney } from '@/components/money-provider'
-import { CardShell, MetricTile, UnavailableRow, type MetricTone, type WidgetCardProps } from './_widget-tiles'
+import { useLocale, useTranslations } from "next-intl";
+import { RISK_SCORE_BANDS } from "@/lib/analytics/sentinel-scoring";
+import { Copy, ShieldAlert } from "lucide-react";
+import { useMoney } from "@/components/money-provider";
+import {
+  CardShell,
+  MetricTile,
+  UnavailableRow,
+  type MetricTone,
+  type WidgetCardProps,
+} from "./_widget-tiles";
 
 /**
  * Render cases for the dashboard widgets extracted from Sentinel. WidgetCard
@@ -18,71 +24,83 @@ import { CardShell, MetricTile, UnavailableRow, type MetricTone, type WidgetCard
 function scoreTone(score: number, partial: boolean): MetricTone {
   // A partial score never reads healthy: neutral slate until every scoring
   // source is configured, matching the gauge.
-  if (partial) return 'slate'
-  if (score >= RISK_SCORE_BANDS.high) return 'rose'
-  if (score >= RISK_SCORE_BANDS.elevated) return 'orange'
-  if (score >= RISK_SCORE_BANDS.moderate) return 'amber'
-  return 'emerald'
+  if (partial) return "slate";
+  if (score >= RISK_SCORE_BANDS.high) return "rose";
+  if (score >= RISK_SCORE_BANDS.elevated) return "orange";
+  if (score >= RISK_SCORE_BANDS.moderate) return "amber";
+  return "emerald";
 }
 
 export function RiskWidgetCard({ widgetId, data }: WidgetCardProps): React.ReactNode {
-  const t = useTranslations('dashboard')
-  const locale = useLocale()
-  const { money } = useMoney()
+  const t = useTranslations("dashboard");
+  const locale = useLocale();
+  const { money } = useMoney();
   switch (widgetId) {
-    case 'kpi-forensic-risk': {
-      const tile = data.forensicRisk
-      if (tile === null) return null
+    case "kpi-forensic-risk": {
+      const tile = data.forensicRisk;
+      if (tile === null) return null;
       if (!tile.available) {
         return (
-          <CardShell title={t('widgets.forensicRisk')} icon={<ShieldAlert size={15} />} href="/analytics/sentinel">
+          <CardShell
+            title={t("widgets.forensicRisk")}
+            icon={<ShieldAlert size={15} />}
+            href="/analytics/sentinel"
+          >
             <UnavailableRow reason={tile.reason} />
           </CardShell>
-        )
+        );
       }
-      const risk = tile.value
-      const hint = t('widgets.forensicRiskHint', {
+      const risk = tile.value;
+      const hint = t("widgets.forensicRiskHint", {
         flagged: risk.flagged,
         value: money(risk.value, { currency: risk.currency }),
         period: risk.periodLabel,
-      })
+      });
       return (
         <MetricTile
           icon={<ShieldAlert size={15} />}
-          label={t('widgets.forensicRisk')}
+          label={t("widgets.forensicRisk")}
           value={String(risk.score)}
           href="/analytics/sentinel"
           tone={scoreTone(risk.score, risk.excluded.length > 0)}
-          hint={risk.excluded.length > 0 ? `${hint} ${t('widgets.forensicRiskExcluded', { detectors: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(risk.excluded) })}` : hint}
+          hint={
+            risk.excluded.length > 0
+              ? `${hint} ${t("widgets.forensicRiskExcluded", { detectors: new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(risk.excluded) })}`
+              : hint
+          }
         />
-      )
+      );
     }
-    case 'kpi-duplicate-payments': {
-      const tile = data.duplicatePayments
-      if (tile === null) return null
+    case "kpi-duplicate-payments": {
+      const tile = data.duplicatePayments;
+      if (tile === null) return null;
       if (!tile.available) {
         return (
-          <CardShell title={t('widgets.duplicatePayments')} icon={<Copy size={15} />} href="/analytics/sentinel">
+          <CardShell
+            title={t("widgets.duplicatePayments")}
+            icon={<Copy size={15} />}
+            href="/analytics/sentinel"
+          >
             <UnavailableRow reason={tile.reason} />
           </CardShell>
-        )
+        );
       }
-      const dup = tile.value
+      const dup = tile.value;
       return (
         <MetricTile
           icon={<Copy size={15} />}
-          label={t('widgets.duplicatePayments')}
+          label={t("widgets.duplicatePayments")}
           value={String(dup.groups)}
           href="/analytics/sentinel"
-          tone={dup.groups > 0 ? 'amber' : 'emerald'}
-          hint={t('widgets.duplicatePaymentsHint', {
+          tone={dup.groups > 0 ? "amber" : "emerald"}
+          hint={t("widgets.duplicatePaymentsHint", {
             value: money(dup.value, { currency: dup.currency }),
             period: dup.periodLabel,
           })}
         />
-      )
+      );
     }
     default:
-      return null
+      return null;
   }
 }

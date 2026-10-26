@@ -28,12 +28,16 @@ import {
 
 const DIGITS = 80n;
 const SCALE = 10n ** DIGITS;
-const PI = fixedFromDecimal("3.14159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798");
+const PI = fixedFromDecimal(
+  "3.14159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798",
+);
 const NORMAL_TAIL_LIMIT = 13n * SCALE;
 
 function fixedFromDecimal(text: string): bigint {
   const [whole = "0", fraction = ""] = text.split(".");
-  return BigInt(whole) * SCALE + BigInt((fraction + "0".repeat(Number(DIGITS))).slice(0, Number(DIGITS)));
+  return (
+    BigInt(whole) * SCALE + BigInt((fraction + "0".repeat(Number(DIGITS))).slice(0, Number(DIGITS)))
+  );
 }
 
 function fixedFromRational(value: Rational): bigint {
@@ -73,7 +77,11 @@ function exp(x: bigint): bigint {
 }
 
 function ln(x: bigint): bigint {
-  if (x <= 0n) throw equityError("valuationLogarithmUndefined", { sharePrice: fig.term("grantSharePrice"), exercisePrice: fig.term("exercisePrice") });
+  if (x <= 0n)
+    throw equityError("valuationLogarithmUndefined", {
+      sharePrice: fig.term("grantSharePrice"),
+      exercisePrice: fig.term("exercisePrice"),
+    });
   let k = 0n;
   let m = x;
   while (m >= 2n * SCALE) {
@@ -145,11 +153,36 @@ export function blackScholesCall(inputs: BlackScholesInputs): BlackScholesResult
   const t = parsePrice(inputs.expectedTermYears, "expectedTermYears");
   const q = parsePercent(inputs.dividendYieldPercent, "dividendYieldPercent");
   const zero = rational(0n);
-  if (compareRational(s, zero) <= 0) throw equityError("valuationSharePriceNotPositive", { field: fig.term("grantSharePrice") }, { field: "valuation" });
-  if (compareRational(k, zero) < 0) throw equityError("valuationExercisePriceNegative", { field: fig.term("exercisePrice") }, { field: "valuation" });
-  if (compareRational(sigma, zero) <= 0) throw equityError("valuationVolatilityNotPositive", { field: fig.term("volatilityPercent") }, { field: "valuation" });
-  if (compareRational(t, zero) <= 0) throw equityError("valuationTermNotPositive", { field: fig.term("expectedTermYears") }, { field: "valuation" });
-  if (compareRational(q, zero) < 0) throw equityError("valuationDividendYieldNegative", { field: fig.term("dividendYieldPercent") }, { field: "valuation" });
+  if (compareRational(s, zero) <= 0)
+    throw equityError(
+      "valuationSharePriceNotPositive",
+      { field: fig.term("grantSharePrice") },
+      { field: "valuation" },
+    );
+  if (compareRational(k, zero) < 0)
+    throw equityError(
+      "valuationExercisePriceNegative",
+      { field: fig.term("exercisePrice") },
+      { field: "valuation" },
+    );
+  if (compareRational(sigma, zero) <= 0)
+    throw equityError(
+      "valuationVolatilityNotPositive",
+      { field: fig.term("volatilityPercent") },
+      { field: "valuation" },
+    );
+  if (compareRational(t, zero) <= 0)
+    throw equityError(
+      "valuationTermNotPositive",
+      { field: fig.term("expectedTermYears") },
+      { field: "valuation" },
+    );
+  if (compareRational(q, zero) < 0)
+    throw equityError(
+      "valuationDividendYieldNegative",
+      { field: fig.term("dividendYieldPercent") },
+      { field: "valuation" },
+    );
   const S = fixedFromRational(s);
   const K = fixedFromRational(k);
   const sig = fixedFromRational(sigma);
@@ -157,12 +190,14 @@ export function blackScholesCall(inputs: BlackScholesInputs): BlackScholesResult
   const T = fixedFromRational(t);
   const yieldRate = fixedFromRational(q);
   const discountedShare = mul(S, exp(-mul(yieldRate, T)));
-  if (K === 0n) return { fairValue: formatPrice(toRationalFixed(discountedShare)), d1: null, d2: null };
+  if (K === 0n)
+    return { fairValue: formatPrice(toRationalFixed(discountedShare)), d1: null, d2: null };
   const volRoot = mul(sig, sqrt(T));
   const drift = mul(rate - yieldRate + mul(sig, sig) / 2n, T);
   const d1 = div(ln(div(S, K)) + drift, volRoot);
   const d2 = d1 - volRoot;
-  const value = mul(discountedShare, normalCdf(d1)) - mul(mul(K, exp(-mul(rate, T))), normalCdf(d2));
+  const value =
+    mul(discountedShare, normalCdf(d1)) - mul(mul(K, exp(-mul(rate, T))), normalCdf(d2));
   return {
     fairValue: formatPrice(toRationalFixed(value > 0n ? value : 0n)),
     d1: formatPrice(toRationalFixed(d1)),

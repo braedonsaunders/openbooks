@@ -1,5 +1,9 @@
-import { canonicalDecimal, divideDecimal, isPositiveDecimal } from '@openbooks/engine/money/decimal'
-import { mulDecimal, neg, sum } from '@openbooks/engine/money/money'
+import {
+  canonicalDecimal,
+  divideDecimal,
+  isPositiveDecimal,
+} from "@openbooks/engine/money/decimal";
+import { mulDecimal, neg, sum } from "@openbooks/engine/money/money";
 
 /** Return ROI as a one-decimal percentage string, using only exact decimals. */
 export function equipmentRoiPercent(
@@ -9,14 +13,9 @@ export function equipmentRoiPercent(
   depreciation: string,
   purchasePrice: string,
 ): string {
-  const purchase = canonicalDecimal(purchasePrice, 4)
-  if (purchase === null || !isPositiveDecimal(purchase)) return '0.0'
+  const purchase = canonicalDecimal(purchasePrice, 4);
+  if (purchase === null || !isPositiveDecimal(purchase)) return "0.0";
 
-  const netReturn = sum([
-    billedRevenue,
-    neg(recovery),
-    neg(directCosts),
-    neg(depreciation),
-  ])
-  return divideDecimal(mulDecimal(netReturn, '100'), purchase, 1)
+  const netReturn = sum([billedRevenue, neg(recovery), neg(directCosts), neg(depreciation)]);
+  return divideDecimal(mulDecimal(netReturn, "100"), purchase, 1);
 }

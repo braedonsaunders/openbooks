@@ -43,9 +43,7 @@ type OidcRuntime = typeof globalThis & {
 };
 const runtime = globalThis as OidcRuntime;
 
-function config(
-  environment: Record<string, string | undefined> = process.env,
-): OidcConfig | null {
+function config(environment: Record<string, string | undefined> = process.env): OidcConfig | null {
   // Live reads: db.ts snapshots the environment at module evaluation, so
   // snapshot reads miss values assigned after that import.
   const issuer = environment.OPENBOOKS_OIDC_ISSUER?.trim().replace(/\/+$/, "");
@@ -59,7 +57,12 @@ function config(
       "OPENBOOKS_APP_URL must use HTTPS when OIDC is enabled unless NODE_ENV is explicitly development or test",
     );
   }
-  return { issuer, clientId, clientSecret: environment.OPENBOOKS_OIDC_CLIENT_SECRET?.trim() || null, appUrl };
+  return {
+    issuer,
+    clientId,
+    clientSecret: environment.OPENBOOKS_OIDC_CLIENT_SECRET?.trim() || null,
+    appUrl,
+  };
 }
 
 export function oidcEnabled(
@@ -115,7 +118,11 @@ function assertSecureEndpoint(
 function oidcFetch(url: string | URL, init: RequestInit): Promise<Response> {
   const target = new URL(url);
   if (isNonProductionLoopback(target)) return fetch(target, { ...init, redirect: "error" });
-  return guardedFetch(target, { ...init, redirect: "error" }, { maxResponseBytes: OIDC_MAX_RESPONSE_BYTES });
+  return guardedFetch(
+    target,
+    { ...init, redirect: "error" },
+    { maxResponseBytes: OIDC_MAX_RESPONSE_BYTES },
+  );
 }
 
 const OIDC_MAX_RESPONSE_BYTES = 1_000_000;
@@ -125,7 +132,8 @@ async function readOidcResponse(response: Response, label: string): Promise<stri
   const limit = OIDC_MAX_RESPONSE_BYTES;
   const reader = response.body?.getReader();
   try {
-    if (Number(response.headers.get("content-length")) > limit) throw new Error(`${label} is too large`);
+    if (Number(response.headers.get("content-length")) > limit)
+      throw new Error(`${label} is too large`);
     if (!reader) return "";
     const decoder = new TextDecoder();
     let bytes = 0;
@@ -155,7 +163,8 @@ async function fetchJson(url: string): Promise<Record<string, unknown>> {
   if (!response.ok) throw new Error(`OIDC endpoint returned ${response.status}`);
   const text = await readOidcResponse(response, "OIDC response");
   const result = JSON.parse(text);
-  if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("OIDC response is invalid");
+  if (!result || typeof result !== "object" || Array.isArray(result))
+    throw new Error("OIDC response is invalid");
   return result as Record<string, unknown>;
 }
 
@@ -169,14 +178,20 @@ async function discovery(configuration: OidcConfig): Promise<Discovery> {
     token_endpoint: String(raw.token_endpoint ?? ""),
     jwks_uri: String(raw.jwks_uri ?? ""),
     token_endpoint_auth_methods_supported: Array.isArray(raw.token_endpoint_auth_methods_supported)
-      ? raw.token_endpoint_auth_methods_supported.filter((item): item is string => typeof item === "string")
+      ? raw.token_endpoint_auth_methods_supported.filter(
+          (item): item is string => typeof item === "string",
+        )
       : undefined,
   };
   if (value.issuer !== configuration.issuer) throw new Error("OIDC discovery issuer mismatch");
   assertSecureEndpoint(value.authorization_endpoint, "OIDC authorization endpoint");
   assertSecureEndpoint(value.token_endpoint, "OIDC token endpoint");
   assertSecureEndpoint(value.jwks_uri, "OIDC JWKS endpoint");
-  runtime.__openbooksOidcDiscovery = { key: configuration.issuer, value, expiresAt: Date.now() + 60 * 60 * 1000 };
+  runtime.__openbooksOidcDiscovery = {
+    key: configuration.issuer,
+    value,
+    expiresAt: Date.now() + 60 * 60 * 1000,
+  };
   return value;
 }
 
@@ -185,7 +200,10 @@ async function jwks(url: string): Promise<Record<string, unknown>[]> {
   if (cached?.key === url && cached.expiresAt > Date.now()) return cached.value;
   const raw = await fetchJson(url);
   if (!Array.isArray(raw.keys)) throw new Error("OIDC JWKS has no keys array");
-  const keys = raw.keys.filter((item): item is Record<string, unknown> => !!item && typeof item === "object" && !Array.isArray(item));
+  const keys = raw.keys.filter(
+    (item): item is Record<string, unknown> =>
+      !!item && typeof item === "object" && !Array.isArray(item),
+  );
   runtime.__openbooksOidcJwks = { key: url, value: keys, expiresAt: Date.now() + 10 * 60 * 1000 };
   return keys;
 }
@@ -214,14 +232,15 @@ function decodeFlow(value: string | undefined): OidcFlow | null {
   try {
     const flow = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as OidcFlow;
     if (
-      !flow
-      || typeof flow.state !== "string"
-      || typeof flow.nonce !== "string"
-      || typeof flow.verifier !== "string"
-      || typeof flow.returnTo !== "string"
-      || !Number.isSafeInteger(flow.expiresEpoch)
-      || flow.expiresEpoch < Date.now() / 1000
-    ) return null;
+      !flow ||
+      typeof flow.state !== "string" ||
+      typeof flow.nonce !== "string" ||
+      typeof flow.verifier !== "string" ||
+      typeof flow.returnTo !== "string" ||
+      !Number.isSafeInteger(flow.expiresEpoch) ||
+      flow.expiresEpoch < Date.now() / 1000
+    )
+      return null;
     return { ...flow, returnTo: safeReturnTo(flow.returnTo) };
   } catch {
     return null;
@@ -236,7 +255,9 @@ function oauthFormEncode(value: string): string {
   return encodeURIComponent(value).replace(/%20/g, "+");
 }
 
-export async function beginOidcAuthorization(returnToValue: string | null): Promise<{ url: string; flowCookie: string }> {
+export async function beginOidcAuthorization(
+  returnToValue: string | null,
+): Promise<{ url: string; flowCookie: string }> {
   const configuration = config();
   if (!configuration) throw new Error("OIDC is not configured");
   const metadata = await discovery(configuration);
@@ -285,8 +306,10 @@ export async function completeOidcAuthorization(input: {
     "Content-Type": "application/x-www-form-urlencoded",
   };
   if (configuration.clientSecret) {
-    if (metadata.token_endpoint_auth_methods_supported?.includes("client_secret_post")
-      && !metadata.token_endpoint_auth_methods_supported.includes("client_secret_basic")) {
+    if (
+      metadata.token_endpoint_auth_methods_supported?.includes("client_secret_post") &&
+      !metadata.token_endpoint_auth_methods_supported.includes("client_secret_basic")
+    ) {
       body.set("client_secret", configuration.clientSecret);
     } else {
       headers.Authorization = `Basic ${Buffer.from(`${oauthFormEncode(configuration.clientId)}:${oauthFormEncode(configuration.clientSecret)}`).toString("base64")}`;
@@ -302,7 +325,8 @@ export async function completeOidcAuthorization(input: {
   if (!response.ok) throw new Error(`OIDC token exchange returned ${response.status}`);
   const tokenText = await readOidcResponse(response, "OIDC token response");
   const tokens = JSON.parse(tokenText) as { id_token?: unknown };
-  if (typeof tokens.id_token !== "string" || tokens.id_token.length > 64_000) throw new Error("OIDC response has no valid ID token");
+  if (typeof tokens.id_token !== "string" || tokens.id_token.length > 64_000)
+    throw new Error("OIDC response has no valid ID token");
   let keys = await jwks(metadata.jwks_uri);
   let claims = verifyOidcIdToken({
     idToken: tokens.id_token,

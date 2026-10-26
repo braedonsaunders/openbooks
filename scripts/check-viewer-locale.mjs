@@ -99,13 +99,13 @@ function discoverWebSources() {
     .split("\0")
     .filter(Boolean)
     .filter(
-      (file) =>
-        !/\.test\.[tj]sx?$/.test(file) && !/\.d\.tsx?$/.test(file) && file !== SELF_PATH,
+      (file) => !/\.test\.[tj]sx?$/.test(file) && !/\.d\.tsx?$/.test(file) && file !== SELF_PATH,
     );
 }
 
 function isEnUsLiteral(node) {
-  return !!node && (
+  return (
+    !!node &&
     (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
     node.text === "en-US"
   );
@@ -136,31 +136,48 @@ function enclosingFunctionName(node) {
 }
 
 function intlLocaleCall(node) {
-  const callee =
-    (ts.isCallExpression(node) || ts.isNewExpression(node)) ? node.expression : null;
+  const callee = ts.isCallExpression(node) || ts.isNewExpression(node) ? node.expression : null;
   if (!callee || !ts.isPropertyAccessExpression(callee)) return false;
   const method = callee.name.text;
   if (/^toLocale(?:String|DateString|TimeString)$/.test(method)) return "method";
   if (
-    ts.isIdentifier(callee.expression) && callee.expression.text === "Intl" &&
-    ["DateTimeFormat", "NumberFormat", "RelativeTimeFormat", "Collator", "PluralRules", "DisplayNames", "ListFormat"].includes(method)
-  ) return "constructor";
+    ts.isIdentifier(callee.expression) &&
+    callee.expression.text === "Intl" &&
+    [
+      "DateTimeFormat",
+      "NumberFormat",
+      "RelativeTimeFormat",
+      "Collator",
+      "PluralRules",
+      "DisplayNames",
+      "ListFormat",
+    ].includes(method)
+  )
+    return "constructor";
   return null;
 }
 
 function isMissingLocale(node) {
-  return !node || (ts.isIdentifier(node) && node.text === "undefined") || node.kind === ts.SyntaxKind.NullKeyword;
+  return (
+    !node ||
+    (ts.isIdentifier(node) && node.text === "undefined") ||
+    node.kind === ts.SyntaxKind.NullKeyword
+  );
 }
 
 function isPinnedLocale(node) {
-  return !!node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
-    (node.text === "en-US" || node.text === "en-CA");
+  return (
+    !!node &&
+    (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+    (node.text === "en-US" || node.text === "en-CA")
+  );
 }
 
 export function scanSource(text, filePath) {
   const source = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true);
   const violations = [];
-  const requireExplicitViewerLocale = filePath.startsWith("web/app/") || filePath.startsWith("web/components/");
+  const requireExplicitViewerLocale =
+    filePath.startsWith("web/app/") || filePath.startsWith("web/components/");
   const visit = (node) => {
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
       const callKind = intlLocaleCall(node);
@@ -168,15 +185,19 @@ export function scanSource(text, filePath) {
         const first = node.arguments?.[0];
         const pinned = requireExplicitViewerLocale ? isPinnedLocale(first) : isEnUsLiteral(first);
         if ((requireExplicitViewerLocale && isMissingLocale(first)) || pinned) {
-        const { line } = source.getLineAndCharacterOfPosition((first ?? node.expression).getStart(source));
-        violations.push({ path: filePath, fn: enclosingFunctionName(node), line: line + 1 });
+          const { line } = source.getLineAndCharacterOfPosition(
+            (first ?? node.expression).getStart(source),
+          );
+          violations.push({ path: filePath, fn: enclosingFunctionName(node), line: line + 1 });
         }
       }
     }
     if (
       (ts.isParameter(node) || ts.isBindingElement(node)) &&
       node.initializer &&
-      (requireExplicitViewerLocale ? isPinnedLocale(node.initializer) : isEnUsLiteral(node.initializer))
+      (requireExplicitViewerLocale
+        ? isPinnedLocale(node.initializer)
+        : isEnUsLiteral(node.initializer))
     ) {
       const { line } = source.getLineAndCharacterOfPosition(node.initializer.getStart(source));
       violations.push({ path: filePath, fn: enclosingFunctionName(node), line: line + 1 });

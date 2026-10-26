@@ -67,8 +67,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmBenefitsEnrollmentIdRouteNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmBenefitsEnrollmentIdRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -78,22 +79,23 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-benefits-enrollment-id";
-  const idRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-benefits-enrollment-id";
+const idRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const ENROLLMENT_ID = "00000000-0000-4000-8000-000000000051";
 const ctx = { params: Promise.resolve({ id: ENROLLMENT_ID }) };
@@ -115,14 +117,19 @@ function patchRequest(body: unknown): Request {
 
 test("PATCH refuses a manual approval action; human decisions use native Approvals", async () => {
   reset();
-  assert.equal((await idRoute!.PATCH(patchRequest({action:'approve'}),ctx)).status,400);
-  assert.equal(routeState.calls.length,0);
+  assert.equal((await idRoute!.PATCH(patchRequest({ action: "approve" }), ctx)).status, 400);
+  assert.equal(routeState.calls.length, 0);
 });
 
 test("PATCH changes with date, contribution class, and reason", async () => {
   reset();
   const res = await idRoute!.PATCH(
-    patchRequest({ action: "change", changeDate: "2026-04-01", classKey: "family", reason: "new child" }),
+    patchRequest({
+      action: "change",
+      changeDate: "2026-04-01",
+      classKey: "family",
+      reason: "new child",
+    }),
     ctx,
   );
   assert.equal(res.status, 200);
@@ -143,32 +150,66 @@ test("PATCH changes with date, contribution class, and reason", async () => {
 
 test("PATCH ends and cancels with reasons", async () => {
   reset();
-  const ended = await idRoute!.PATCH(patchRequest({ action: "end", endedOn: "2026-06-15", reason: "left plan" }), ctx);
+  const ended = await idRoute!.PATCH(
+    patchRequest({ action: "end", endedOn: "2026-06-15", reason: "left plan" }),
+    ctx,
+  );
   assert.equal(ended.status, 200);
   assert.deepEqual(routeState.calls[0]!.fn, "ended");
   reset();
-  const cancelled = await idRoute!.PATCH(patchRequest({ action: "cancel", reason: "withdrew" }), ctx);
+  const cancelled = await idRoute!.PATCH(
+    patchRequest({ action: "cancel", reason: "withdrew" }),
+    ctx,
+  );
   assert.equal(cancelled.status, 200);
   assert.deepEqual(routeState.calls[0]!.fn, "cancelled");
 });
 
 test("PATCH refuses reason-less and dateless bodies with 400", async () => {
   reset();
-  assert.equal((await idRoute!.PATCH(patchRequest({ action: "end", reason: "  " }), ctx)).status, 400);
-  assert.equal((await idRoute!.PATCH(patchRequest({ action: "withdraw_unused", reason: "  " }), ctx)).status, 400);
-  assert.equal((await idRoute!.PATCH(patchRequest({ action: "change", reason: "x" }), ctx)).status, 400);
+  assert.equal(
+    (await idRoute!.PATCH(patchRequest({ action: "end", reason: "  " }), ctx)).status,
+    400,
+  );
+  assert.equal(
+    (await idRoute!.PATCH(patchRequest({ action: "withdraw_unused", reason: "  " }), ctx)).status,
+    400,
+  );
+  assert.equal(
+    (await idRoute!.PATCH(patchRequest({ action: "change", reason: "x" }), ctx)).status,
+    400,
+  );
   assert.equal((await idRoute!.PATCH(patchRequest({ action: "frobnicate" }), ctx)).status, 400);
   assert.equal(routeState.calls.length, 0, "the service never runs on a rejected boundary");
 });
 
 test("PATCH withdraws unused coverage through the governed service with actor and reason", async () => {
   reset();
-  const response = await idRoute!.PATCH(patchRequest({ action: "withdraw_unused", reason: "Incorrect contribution basis" }), ctx);
+  const response = await idRoute!.PATCH(
+    patchRequest({ action: "withdraw_unused", reason: "Incorrect contribution basis" }),
+    ctx,
+  );
   assert.equal(response.status, 200);
-  assert.deepEqual(routeState.calls, [{ fn: "withdrawn", args: { orgId: "org-1", actorId: "user-1", enrollmentId: ENROLLMENT_ID, reason: "Incorrect contribution basis" } }]);
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "withdrawn",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        enrollmentId: ENROLLMENT_ID,
+        reason: "Incorrect contribution basis",
+      },
+    },
+  ]);
   reset();
-  routeState.serviceThrow = new BenefitsError("REFUSED", "This coverage has payroll allocation history — use a dated successor");
-  const refused = await idRoute!.PATCH(patchRequest({ action: "withdraw_unused", reason: "Incorrect contribution basis" }), ctx);
+  routeState.serviceThrow = new BenefitsError(
+    "REFUSED",
+    "This coverage has payroll allocation history — use a dated successor",
+  );
+  const refused = await idRoute!.PATCH(
+    patchRequest({ action: "withdraw_unused", reason: "Incorrect contribution basis" }),
+    ctx,
+  );
   assert.equal(refused.status, 422);
   assert.match((await refused.json()).error, /payroll allocation history/);
 });

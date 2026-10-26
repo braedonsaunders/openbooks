@@ -67,8 +67,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmBenefitsWindowOpenRouteNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmBenefitsWindowOpenRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
@@ -76,21 +77,28 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/hrm/benefits/windows", "mock:service"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier) ?? (specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-benefits-window-open";
-  const openRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "./features"
+          ? "mock:features"
+          : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-benefits-window-open";
+const openRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
 
 const WINDOW_ID = "00000000-0000-4000-8000-000000000031";
 const ctx = { params: Promise.resolve({ id: WINDOW_ID }) };

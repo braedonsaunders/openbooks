@@ -84,7 +84,10 @@ export async function listFormats(
   const pack = await packForOrg(exec, orgId);
   return {
     packName: pack.name,
-    formats: laborComplianceFilesFor(pack).map((format) => ({ key: format.key, label: format.label })),
+    formats: laborComplianceFilesFor(pack).map((format) => ({
+      key: format.key,
+      label: format.label,
+    })),
   };
 }
 
@@ -129,7 +132,8 @@ export async function resolveCertifiedEmployment(
   workedOn: string,
   employerSubsidiaryId?: string,
 ): Promise<string> {
-  const matches = await exec.execute<{ id: string }>(sql`
+  const matches = await exec.execute<{ id: string }>(
+    sql`
     select distinct w.id::text as id
       from worker_employments w
       join worker_employment_versions v
@@ -140,7 +144,9 @@ export async function resolveCertifiedEmployment(
        and (v.effective_to is null or v.effective_to > ${workedOn}::date)
        and v.status in ('active', 'on_leave')
      order by w.id::text
-  `, "objects");
+  `,
+    "objects",
+  );
   if (matches.length === 1) return matches[0]!.id;
   if (matches.length === 0) {
     throw new HrmConstructionError(
@@ -185,16 +191,23 @@ export function allocateCertifiedPayAmounts<T extends CertifiedPaidTimeBucket>(
 ): Array<T & { deductions: string; net: string }> {
   if (buckets.length === 0) {
     if (toUnits(totals.deductions) !== 0n || toUnits(totals.net) !== 0n) {
-      throw new HrmConstructionError("Payroll amounts require positive paid hours before certified payroll can be allocated.");
+      throw new HrmConstructionError(
+        "Payroll amounts require positive paid hours before certified payroll can be allocated.",
+      );
     }
     return [];
   }
   const hourUnits = buckets.map((bucket) => toUnits(bucket.hours));
   if (hourUnits.some((hours) => hours <= 0n)) {
-    throw new HrmConstructionError("Paid time must have positive hours before certified payroll amounts can be allocated.");
+    throw new HrmConstructionError(
+      "Paid time must have positive hours before certified payroll amounts can be allocated.",
+    );
   }
   const totalHours = hourUnits.reduce((total, hours) => total + hours, 0n);
-  const remainderIndex = hourUnits.reduce((best, hours, index) => hours > hourUnits[best]! ? index : best, 0);
+  const remainderIndex = hourUnits.reduce(
+    (best, hours, index) => (hours > hourUnits[best]! ? index : best),
+    0,
+  );
   const allocate = (amount: string): string[] => {
     const totalUnits = toUnits(amount);
     const shares = hourUnits.map((hours) => (totalUnits * hours) / totalHours);
@@ -204,7 +217,11 @@ export function allocateCertifiedPayAmounts<T extends CertifiedPaidTimeBucket>(
   };
   const deductions = allocate(totals.deductions);
   const net = allocate(totals.net);
-  return buckets.map((bucket, index) => ({ ...bucket, deductions: deductions[index]!, net: net[index]! }));
+  return buckets.map((bucket, index) => ({
+    ...bucket,
+    deductions: deductions[index]!,
+    net: net[index]!,
+  }));
 }
 
 async function buildPayload(
@@ -214,10 +231,19 @@ async function buildPayload(
   projectId: string,
   weekEnding: string,
 ): Promise<PayloadBuild> {
-  const project = (await exec.execute<{ name: string; custom: Record<string, unknown>; subsidiaryId: string | null }>(sql`
+  const project = (
+    await exec.execute<{
+      name: string;
+      custom: Record<string, unknown>;
+      subsidiaryId: string | null;
+    }>(
+      sql`
       select name, custom, subsidiary_id::text as "subsidiaryId"
         from projects where org_id = ${orgId}::uuid and id = ${projectId}::uuid
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!project) {
     throw new HrmConstructionError(
       `Project ${projectId} does not exist in this organization — generate the report for one of its projects.`,
@@ -229,7 +255,8 @@ async function buildPayload(
     );
   }
   const weekStart = weekStartOf(weekEnding);
-  const postedRuns = await exec.execute<{ documentId: string }>(sql`
+  const postedRuns = await exec.execute<{ documentId: string }>(
+    sql`
       select r.document_id::text as "documentId"
         from pay_runs r
         join documents d on d.org_id = r.org_id and d.id = r.document_id
@@ -238,13 +265,21 @@ async function buildPayload(
          and d.subsidiary_id = ${project.subsidiaryId}::uuid
          and r.period_start <= ${weekEnding}::date and r.period_end >= ${weekStart}::date
        order by r.period_start, r.document_id
-    `, "objects");
+    `,
+    "objects",
+  );
   if (postedRuns.length === 0) {
     throw new HrmConstructionError(
       `No posted pay run covers the week ending ${weekEnding} — post the week's pay run before generating the certified report.`,
     );
   }
-  const approvedDays = await exec.execute<{ partyId: string; displayName: string; workedOn: string; hours: string }>(sql`
+  const approvedDays = await exec.execute<{
+    partyId: string;
+    displayName: string;
+    workedOn: string;
+    hours: string;
+  }>(
+    sql`
       select te.employee_party_id::text as "partyId",
              coalesce(p.display_name, te.employee_party_id::text) as "displayName",
              te.worked_on::text as "workedOn", sum(te.hours)::text as hours
@@ -255,7 +290,9 @@ async function buildPayload(
          and te.status = 'approved'
        group by te.employee_party_id, p.display_name, te.worked_on
        order by p.display_name, te.worked_on
-    `, "objects");
+    `,
+    "objects",
+  );
   if (approvedDays.length === 0) {
     throw new HrmConstructionError(
       `Project ${project.name} has no approved time in the week ending ${weekEnding} — approve the timesheet before generating the certified report.`,
@@ -265,9 +302,17 @@ async function buildPayload(
   // document was posted. A same-org run for another worker or legal entity
   // cannot satisfy this project's attestation.
   const paidDays = await exec.execute<{
-      runDocumentId: string; periodStart: string; periodEnd: string;
-      partyId: string; employmentId: string; displayName: string; workedOn: string; projectId: string | null; hours: string;
-    }>(sql`
+    runDocumentId: string;
+    periodStart: string;
+    periodEnd: string;
+    partyId: string;
+    employmentId: string;
+    displayName: string;
+    workedOn: string;
+    projectId: string | null;
+    hours: string;
+  }>(
+    sql`
       select r.document_id::text as "runDocumentId",
              r.period_start::text as "periodStart", r.period_end::text as "periodEnd",
              te.employee_party_id::text as "partyId", s.employment_id::text as "employmentId",
@@ -290,7 +335,9 @@ async function buildPayload(
        group by r.document_id, r.period_start, r.period_end, te.employee_party_id, s.employment_id,
                 p.display_name, te.worked_on, te.project_id
        order by r.period_start, te.employee_party_id, te.worked_on, te.project_id
-    `, "objects");
+    `,
+    "objects",
+  );
   const paidHoursByDay = new Map<string, string>();
   for (const day of paidDays) {
     const key = `${day.partyId}:${day.workedOn}`;
@@ -311,7 +358,13 @@ async function buildPayload(
       `No posted pay run covers approved project time for the week ending ${weekEnding} — commit and post the pay run for the project's workers before generating the certified report.`,
     );
   }
-  const stubs = await exec.execute<{ runDocumentId: string; partyId: string; deductions: string; net: string }>(sql`
+  const stubs = await exec.execute<{
+    runDocumentId: string;
+    partyId: string;
+    deductions: string;
+    net: string;
+  }>(
+    sql`
       select s.pay_run_document_id::text as "runDocumentId", s.employee_party_id::text as "partyId",
              (s.gross - s.net_pay)::text as deductions, s.net_pay::text as net
         from pay_stubs s
@@ -320,11 +373,20 @@ async function buildPayload(
        where s.org_id = ${orgId}::uuid
          and s.pay_run_document_id = any(${`{${runDocumentIds.join(",")}}`}::uuid[])
        order by r.period_start, s.employee_party_id
-    `, "objects");
-  const stubByRunAndParty = new Map(stubs.map((stub) => [`${stub.runDocumentId}:${stub.partyId}`, stub]));
+    `,
+    "objects",
+  );
+  const stubByRunAndParty = new Map(
+    stubs.map((stub) => [`${stub.runDocumentId}:${stub.partyId}`, stub]),
+  );
   const allPaidTime = await exec.execute<{
-      runDocumentId: string; partyId: string; workedOn: string; projectId: string | null; hours: string;
-    }>(sql`
+    runDocumentId: string;
+    partyId: string;
+    workedOn: string;
+    projectId: string | null;
+    hours: string;
+  }>(
+    sql`
       select r.document_id::text as "runDocumentId", te.employee_party_id::text as "partyId",
              te.worked_on::text as "workedOn", te.project_id::text as "projectId",
              sum(te.hours)::text as hours
@@ -343,7 +405,9 @@ async function buildPayload(
        group by r.document_id, te.employee_party_id, te.worked_on, te.project_id
        having sum(te.hours) > 0
        order by r.document_id, te.employee_party_id, te.worked_on, te.project_id nulls first
-    `, "objects");
+    `,
+    "objects",
+  );
   const paidTimeByRunAndParty = new Map<string, typeof allPaidTime>();
   for (const bucket of allPaidTime) {
     const key = `${bucket.runDocumentId}:${bucket.partyId}`;
@@ -359,7 +423,10 @@ async function buildPayload(
         `A paid time batch has no posted worker stub — resolve the payroll posting before generating certified payroll.`,
       );
     }
-    const allocated = allocateCertifiedPayAmounts(buckets, { deductions: stub.deductions, net: stub.net });
+    const allocated = allocateCertifiedPayAmounts(buckets, {
+      deductions: stub.deductions,
+      net: stub.net,
+    });
     for (let index = 0; index < buckets.length; index += 1) {
       const bucket = buckets[index]!;
       allocationByRunAndBucket.set(
@@ -368,10 +435,18 @@ async function buildPayload(
       );
     }
   }
-  const paidDaysByWorkerAndDate = new Map<string, {
-    partyId: string; employmentId: string; displayName: string; workedOn: string; hours: string;
-    deductions: string; net: string;
-  }>();
+  const paidDaysByWorkerAndDate = new Map<
+    string,
+    {
+      partyId: string;
+      employmentId: string;
+      displayName: string;
+      workedOn: string;
+      hours: string;
+      deductions: string;
+      net: string;
+    }
+  >();
   for (const day of paidDays) {
     const allocation = allocationByRunAndBucket.get(
       `${day.runDocumentId}:${day.partyId}:${day.workedOn}:${day.projectId ?? ""}`,
@@ -385,31 +460,52 @@ async function buildPayload(
     const existing = paidDaysByWorkerAndDate.get(key);
     if (existing) {
       if (existing.employmentId !== day.employmentId) {
-        throw new HrmConstructionError(`${day.displayName}'s paid hours on ${day.workedOn} identify more than one employment — review the posted payroll employment evidence before generating certified payroll.`);
+        throw new HrmConstructionError(
+          `${day.displayName}'s paid hours on ${day.workedOn} identify more than one employment — review the posted payroll employment evidence before generating certified payroll.`,
+        );
       }
       existing.hours = sum([existing.hours, day.hours]);
       existing.deductions = sum([existing.deductions, allocation.deductions]);
       existing.net = sum([existing.net, allocation.net]);
     } else {
       paidDaysByWorkerAndDate.set(key, {
-        partyId: day.partyId, employmentId: day.employmentId, displayName: day.displayName, workedOn: day.workedOn,
-        hours: day.hours, deductions: allocation.deductions, net: allocation.net,
+        partyId: day.partyId,
+        employmentId: day.employmentId,
+        displayName: day.displayName,
+        workedOn: day.workedOn,
+        hours: day.hours,
+        deductions: allocation.deductions,
+        net: allocation.net,
       });
     }
   }
-  const days = [...paidDaysByWorkerAndDate.values()].sort((left, right) =>
-    left.displayName.localeCompare(right.displayName)
-      || left.workedOn.localeCompare(right.workedOn)
-      || left.partyId.localeCompare(right.partyId));
+  const days = [...paidDaysByWorkerAndDate.values()].sort(
+    (left, right) =>
+      left.displayName.localeCompare(right.displayName) ||
+      left.workedOn.localeCompare(right.workedOn) ||
+      left.partyId.localeCompare(right.partyId),
+  );
   const orgName =
-    (await exec.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}::uuid`, "objects"))[0]?.name ??
-    "Organization";
+    (
+      await exec.execute<{ name: string }>(
+        sql`select name from orgs where id = ${orgId}::uuid`,
+        "objects",
+      )
+    )[0]?.name ?? "Organization";
   const rows: LaborComplianceReportRow[] = [];
   const scheduleIds = new Set<string>();
   for (const day of days) {
-    const employmentId = await resolveCertifiedEmployment(exec, orgId, day.partyId, day.workedOn, project.subsidiaryId);
+    const employmentId = await resolveCertifiedEmployment(
+      exec,
+      orgId,
+      day.partyId,
+      day.workedOn,
+      project.subsidiaryId,
+    );
     if (employmentId !== day.employmentId) {
-      throw new HrmConstructionError(`${day.displayName}'s employment history on ${day.workedOn} does not match the posted payroll employment — review the employment history before generating certified payroll.`);
+      throw new HrmConstructionError(
+        `${day.displayName}'s employment history on ${day.workedOn} does not match the posted payroll employment — review the employment history before generating certified payroll.`,
+      );
     }
     const assignment = await classificationAsOf(exec, orgId, employmentId, day.workedOn);
     if (!assignment) {
@@ -417,7 +513,9 @@ async function buildPayload(
         `Employment ${employmentId} has no work classification effective ${day.workedOn} — assign one before generating the certified report.`,
       );
     }
-    const classification = (await exec.execute<{ code: string; name: string }>(sql`
+    const classification = (
+      await exec.execute<{ code: string; name: string }>(
+        sql`
         select code, name from hrm_work_classifications
          where org_id = ${orgId}::uuid and id = (
            select classification_id from hrm_employment_classifications
@@ -425,7 +523,10 @@ async function buildPayload(
               and effective_from <= ${day.workedOn}::date
               and (effective_to is null or effective_to >= ${day.workedOn}::date)
             order by effective_from desc limit 1)
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!classification) {
       throw new HrmConstructionError(
         `Employment ${employmentId} has no work classification effective ${day.workedOn} — assign one before generating the certified report.`,
@@ -509,7 +610,12 @@ async function renderAndFile(
     rendered.contentType,
     rendered.body,
   );
-  return { fileId, filename: rendered.filename, contentType: rendered.contentType, body: rendered.body };
+  return {
+    fileId,
+    filename: rendered.filename,
+    contentType: rendered.contentType,
+    body: rendered.body,
+  };
 }
 
 async function fileInProjectFolder(
@@ -524,31 +630,48 @@ async function fileInProjectFolder(
   const projectId = (built as { projectId?: string }).projectId;
   let folderId: string | null = null;
   if (projectId) {
-    const folder = (await exec.execute<{ id: string }>(sql`
+    const folder = (
+      await exec.execute<{ id: string }>(
+        sql`
         select id::text as id from folders
          where org_id = ${orgId}::uuid and record_table = 'projects' and record_id = ${projectId}::uuid
            and not is_inactive
          order by is_system desc limit 1
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     folderId = folder ? String(folder.id) : null;
     if (!folderId) {
-      const created = (await exec.execute<{ id: string }>(sql`
+      const created = (
+        await exec.execute<{ id: string }>(
+          sql`
           insert into folders (org_id, name, is_system, system_kind, record_table, record_id, created_by)
           values (${orgId}::uuid, 'Project files', true, 'project', 'projects', ${projectId}::uuid, ${actorId}::uuid)
           returning id::text as id
-        `, "objects"))[0];
+        `,
+          "objects",
+        )
+      )[0];
       if (!created) {
-        throw new HrmConstructionError("The project's file folder could not be created — the report was not filed.");
+        throw new HrmConstructionError(
+          "The project's file folder could not be created — the report was not filed.",
+        );
       }
       folderId = String(created.id);
     }
   }
   if (!folderId) {
-    const fallback = (await exec.execute<{ id: string }>(sql`
+    const fallback = (
+      await exec.execute<{ id: string }>(
+        sql`
         select id::text as id from folders
          where org_id = ${orgId}::uuid and parent_folder_id is null and not is_inactive
          order by name limit 1
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!fallback) {
       throw new HrmConstructionError(
         "The organization has no file folder to hold the rendered report — create one before generating.",
@@ -559,21 +682,37 @@ async function fileInProjectFolder(
   const bytes = Buffer.from(body, "utf8");
   const hash = createHash("sha256").update(bytes).digest("hex");
   const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1) : null;
-  const file = (await exec.execute<{ id: string }>(sql`
+  const file = (
+    await exec.execute<{ id: string }>(
+      sql`
       insert into files (org_id, folder_id, name, extension, file_type, content_type, size_bytes,
                          storage_kind, content_hash, source_system, created_by, updated_by)
       values (${orgId}::uuid, ${folderId}::uuid, ${filename}, ${extension}, 'compliance',
               ${contentType}, ${bytes.length}, 'db', ${hash}, 'hrm-construction',
               ${actorId}::uuid, ${actorId}::uuid)
       returning id::text as id
-    `, "objects"))[0];
-  if (!file) throw new HrmConstructionError("The rendered report could not be filed — no file row was written.");
-  const version = (await exec.execute<{ id: string }>(sql`
+    `,
+      "objects",
+    )
+  )[0];
+  if (!file)
+    throw new HrmConstructionError(
+      "The rendered report could not be filed — no file row was written.",
+    );
+  const version = (
+    await exec.execute<{ id: string }>(
+      sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind, content_hash, created_by)
       values (${String(file.id)}::uuid, 1, ${bytes.length}, ${contentType}, 'db', ${hash}, ${actorId}::uuid)
       returning id::text as id
-    `, "objects"))[0];
-  if (!version) throw new HrmConstructionError("The rendered report could not be filed — no version row was written.");
+    `,
+      "objects",
+    )
+  )[0];
+  if (!version)
+    throw new HrmConstructionError(
+      "The rendered report could not be filed — no version row was written.",
+    );
   await exec.execute(sql`
     insert into file_blobs (version_id, bytes)
     values (${String(version.id)}::uuid, ${`\\x${bytes.toString("hex")}`}::bytea)
@@ -607,7 +746,9 @@ async function insertRun(
     rendered: input.rendered,
   };
   try {
-    const created = (await exec.execute<{ id: string }>(sql`
+    const created = (
+      await exec.execute<{ id: string }>(
+        sql`
         insert into hrm_certified_payroll_runs
           (org_id, project_id, week_ending, schedule_id, status, payroll_run_document_ids,
            payload, format_key, file_id, generated_at, amends_run_id, created_by, updated_by)
@@ -616,8 +757,12 @@ async function insertRun(
                 ${JSON.stringify(payload)}::jsonb, ${input.formatKey}, ${input.fileId}::uuid,
                 now(), ${input.amendsRunId}::uuid, ${actorId}::uuid, ${actorId}::uuid)
         returning id::text as id
-      `, "objects"))[0];
-    if (!created) throw new HrmConstructionError("The certified run was not recorded — no row was written.");
+      `,
+        "objects",
+      )
+    )[0];
+    if (!created)
+      throw new HrmConstructionError("The certified run was not recorded — no row was written.");
     return loadRun(exec, orgId, String(created.id));
   } catch (error) {
     if (error instanceof HrmConstructionError) throw error;
@@ -627,8 +772,13 @@ async function insertRun(
   }
 }
 
-export async function loadRun(exec: SqlExecutor, orgId: string, runId: string): Promise<CertifiedRun> {
-  const row = (await exec.execute<{
+export async function loadRun(
+  exec: SqlExecutor,
+  orgId: string,
+  runId: string,
+): Promise<CertifiedRun> {
+  const row = (
+    await exec.execute<{
       id: string;
       projectId: string | null;
       weekEnding: string;
@@ -637,14 +787,18 @@ export async function loadRun(exec: SqlExecutor, orgId: string, runId: string): 
       generatedAt: string | null;
       submittedAt: string | null;
       amendsRunId: string | null;
-    }>(sql`
+    }>(
+      sql`
       select id::text as id, project_id::text as "projectId", week_ending::text as "weekEnding",
              status, format_key as "formatKey",
              generated_at::text as "generatedAt", submitted_at::text as "submittedAt",
              amends_run_id::text as "amendsRunId"
         from hrm_certified_payroll_runs
        where org_id = ${orgId}::uuid and id = ${runId}::uuid
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw runNotFound(runId);
   }
@@ -676,15 +830,16 @@ export async function listRuns(
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.read");
   const projectFilter = projectId ? sql`and r.project_id = ${projectId}::uuid` : sql``;
   const rows = await exec.execute<{
-      id: string;
-      projectId: string | null;
-      weekEnding: string;
-      status: string;
-      formatKey: string;
-      generatedAt: string | null;
-      submittedAt: string | null;
-      amendsRunId: string | null;
-    }>(sql`
+    id: string;
+    projectId: string | null;
+    weekEnding: string;
+    status: string;
+    formatKey: string;
+    generatedAt: string | null;
+    submittedAt: string | null;
+    amendsRunId: string | null;
+  }>(
+    sql`
       select r.id::text as id, r.project_id::text as "projectId", r.week_ending::text as "weekEnding",
              r.status, r.format_key as "formatKey",
              r.generated_at::text as "generatedAt", r.submitted_at::text as "submittedAt",
@@ -695,7 +850,9 @@ export async function listRuns(
          ${projectFilter}
          ${allowed === null ? sql`` : sql`and p.subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}
        order by r.week_ending desc
-    `, "objects");
+    `,
+    "objects",
+  );
   return rows;
 }
 
@@ -705,7 +862,13 @@ export async function listRuns(
  */
 export async function generate(
   exec: SqlExecutor,
-  input: { orgId: string; actorId: string; projectId: string; weekEnding: string; formatKey: string },
+  input: {
+    orgId: string;
+    actorId: string;
+    projectId: string;
+    weekEnding: string;
+    formatKey: string;
+  },
 ): Promise<CertifiedRun> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
@@ -720,26 +883,26 @@ export async function generate(
   // project row while the payload builds.
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
   return withOrgTransaction(orgId, async () => {
-  await assertProjectInScope(exec, orgId, projectId, allowed, "share");
-  const pack = await packForOrg(exec, orgId);
-  if (laborComplianceFilesFor(pack).length === 0) {
-    throw new HrmConstructionError(
-      `The ${pack.name} payroll pack declares no labor-compliance files — generation refuses by name rather than borrowing another pack's form.`,
-    );
-  }
-  const built = await buildPayload(exec, orgId, actorId, projectId, weekEnding);
-  (built as { projectId?: string }).projectId = projectId;
-  const rendered = await renderAndFile(exec, orgId, actorId, pack, formatKey, built, weekEnding);
-  return insertRun(exec, orgId, actorId, {
-    projectId,
-    weekEnding,
-    scheduleId: built.scheduleIds.length === 1 ? built.scheduleIds[0]! : null,
-    formatKey,
-    built,
-    rendered,
-    fileId: rendered.fileId,
-    amendsRunId: null,
-  });
+    await assertProjectInScope(exec, orgId, projectId, allowed, "share");
+    const pack = await packForOrg(exec, orgId);
+    if (laborComplianceFilesFor(pack).length === 0) {
+      throw new HrmConstructionError(
+        `The ${pack.name} payroll pack declares no labor-compliance files — generation refuses by name rather than borrowing another pack's form.`,
+      );
+    }
+    const built = await buildPayload(exec, orgId, actorId, projectId, weekEnding);
+    (built as { projectId?: string }).projectId = projectId;
+    const rendered = await renderAndFile(exec, orgId, actorId, pack, formatKey, built, weekEnding);
+    return insertRun(exec, orgId, actorId, {
+      projectId,
+      weekEnding,
+      scheduleId: built.scheduleIds.length === 1 ? built.scheduleIds[0]! : null,
+      formatKey,
+      built,
+      rendered,
+      fileId: rendered.fileId,
+      amendsRunId: null,
+    });
   });
 }
 
@@ -757,11 +920,16 @@ export async function submitRun(
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
   const denied = `Certified run ${runId} cannot be submitted — it does not exist here or is not generated.`;
   return withOrgTransaction(orgId, async () => {
-    const run = (await exec.execute<{ status: string; projectId: string | null }>(sql`
+    const run = (
+      await exec.execute<{ status: string; projectId: string | null }>(
+        sql`
         select status, project_id::text as "projectId" from hrm_certified_payroll_runs
          where org_id = ${orgId}::uuid and id = ${runId}::uuid
          for update
-      `, "objects"))[0];
+      `,
+        "objects",
+      )
+    )[0];
     if (!run) {
       throw new HrmConstructionError(denied);
     }
@@ -804,41 +972,51 @@ export async function amendRun(
   // run's own not-found shape — never the project's.
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
   return withOrgTransaction(orgId, async () => {
-  const source = await loadRun(exec, orgId, runId);
-  if (!source.projectId) {
-    throw new HrmConstructionError(`Certified run ${runId} names no project — amendments need a project to rebuild.`);
-  }
-  try {
-    await assertProjectInScope(exec, orgId, source.projectId, allowed, "share");
-  } catch (error) {
-    if (error instanceof HrmConstructionError) throw runNotFound(runId);
-    throw error;
-  }
-  if (source.status !== "submitted" && source.status !== "generated") {
-    throw new HrmConstructionError(
-      `Certified run ${runId} is ${source.status} — only generated or submitted runs amend.`,
+    const source = await loadRun(exec, orgId, runId);
+    if (!source.projectId) {
+      throw new HrmConstructionError(
+        `Certified run ${runId} names no project — amendments need a project to rebuild.`,
+      );
+    }
+    try {
+      await assertProjectInScope(exec, orgId, source.projectId, allowed, "share");
+    } catch (error) {
+      if (error instanceof HrmConstructionError) throw runNotFound(runId);
+      throw error;
+    }
+    if (source.status !== "submitted" && source.status !== "generated") {
+      throw new HrmConstructionError(
+        `Certified run ${runId} is ${source.status} — only generated or submitted runs amend.`,
+      );
+    }
+    const pack = await packForOrg(exec, orgId);
+    const built = await buildPayload(exec, orgId, actorId, source.projectId, source.weekEnding);
+    (built as { projectId?: string }).projectId = source.projectId;
+    const rendered = await renderAndFile(
+      exec,
+      orgId,
+      actorId,
+      pack,
+      source.formatKey,
+      built,
+      source.weekEnding,
     );
-  }
-  const pack = await packForOrg(exec, orgId);
-  const built = await buildPayload(exec, orgId, actorId, source.projectId, source.weekEnding);
-  (built as { projectId?: string }).projectId = source.projectId;
-  const rendered = await renderAndFile(exec, orgId, actorId, pack, source.formatKey, built, source.weekEnding);
-  const amended = await insertRun(exec, orgId, actorId, {
-    projectId: source.projectId,
-    weekEnding: source.weekEnding,
-    scheduleId: null,
-    formatKey: source.formatKey,
-    built,
-    rendered,
-    fileId: rendered.fileId,
-    amendsRunId: runId,
-  });
-  await exec.execute(sql`
+    const amended = await insertRun(exec, orgId, actorId, {
+      projectId: source.projectId,
+      weekEnding: source.weekEnding,
+      scheduleId: null,
+      formatKey: source.formatKey,
+      built,
+      rendered,
+      fileId: rendered.fileId,
+      amendsRunId: runId,
+    });
+    await exec.execute(sql`
     update hrm_certified_payroll_runs
        set status = 'amended', updated_by = ${actorId}::uuid, updated_at = now()
      where org_id = ${orgId}::uuid and id = ${runId}::uuid
   `);
-  return amended;
+    return amended;
   });
 }
 
@@ -874,39 +1052,57 @@ export async function projectComplianceSummary(
   // filing leak through A's cockpit.
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.read");
   await assertProjectInScope(exec, orgId, project, allowed);
-  const schedules = await exec.execute<{ id: string; name: string; kind: string }>(sql`
+  const schedules = await exec.execute<{ id: string; name: string; kind: string }>(
+    sql`
       select id::text as id, name, kind from hrm_rate_schedules
        where org_id = ${orgId}::uuid and is_active
          and (applies_to->'project_ids' is null
               or applies_to->'project_ids' @> to_jsonb(${project}::text))
        order by name
-    `, "objects");
-  const openFindings = (await exec.execute<{ n: string }>(sql`
+    `,
+    "objects",
+  );
+  const openFindings = (
+    await exec.execute<{ n: string }>(
+      sql`
       select count(*)::text as n from hrm_compliance_findings
        where org_id = ${orgId}::uuid and status = 'open'
          and project_id is not distinct from ${project}::uuid
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   // "This week" is the org's business week, never the UTC day's.
   const weekEnd = weekEndingSunday(await businessToday(orgId));
-  const breach = (await exec.execute<{ id: string }>(sql`
+  const breach = (
+    await exec.execute<{ id: string }>(
+      sql`
       select id from hrm_compliance_findings
        where org_id = ${orgId}::uuid and kind = 'ratio_breach' and status = 'open'
          and project_id is not distinct from ${project}::uuid
          and worked_on >= (${weekEnd}::date - interval '6 days') and worked_on <= ${weekEnd}::date
        limit 1
-    `, "objects"))[0];
-  const lastRun = (await exec.execute<{
+    `,
+      "objects",
+    )
+  )[0];
+  const lastRun = (
+    await exec.execute<{
       id: string;
       weekEnding: string;
       status: string;
       formatKey: string;
-    }>(sql`
+    }>(
+      sql`
       select id::text as id, week_ending::text as "weekEnding", status,
              format_key as "formatKey"
         from hrm_certified_payroll_runs
        where org_id = ${orgId}::uuid and project_id is not distinct from ${project}::uuid
        order by week_ending desc limit 1
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   return {
     schedules,
     openFindings: Number(openFindings?.n ?? 0),
@@ -953,10 +1149,17 @@ export async function downloadRun(
     }
     throw error;
   }
-  const row = (await exec.execute<{ payload: { rendered?: { filename: string; contentType: string; body: string } } }>(sql`
+  const row = (
+    await exec.execute<{
+      payload: { rendered?: { filename: string; contentType: string; body: string } };
+    }>(
+      sql`
       select payload from hrm_certified_payroll_runs
        where org_id = ${orgId}::uuid and id = ${runId}::uuid
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   const rendered = row?.payload?.rendered;
   if (!rendered) {
     throw new HrmConstructionError(

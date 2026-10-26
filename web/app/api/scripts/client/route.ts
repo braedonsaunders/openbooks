@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { isFeatureEnabled } from '@/lib/features'
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { isFeatureEnabled } from "@/lib/features";
 
 /**
  * Client-script delivery: the active 'client' scripts for a document kind
@@ -11,27 +11,30 @@ import { isFeatureEnabled } from '@/lib/features'
  * the user's own browser, never in the host page.
  */
 export const GET = defineRoute({
-  public: 'session',
+  public: "session",
   handler: async ({ request: req, authz }) => {
-  if (!(await isFeatureEnabled(authz.user.orgId, 'scripts'))) {
-    // Feature-off is a normal empty state, not "not found": the client
-    // loader calls this endpoint on every save, and browsers log failed
-    // fetches to the console however they are handled.
-    return NextResponse.json({ scripts: [] })
-  }
+    if (!(await isFeatureEnabled(authz.user.orgId, "scripts"))) {
+      // Feature-off is a normal empty state, not "not found": the client
+      // loader calls this endpoint on every save, and browsers log failed
+      // fetches to the console however they are handled.
+      return NextResponse.json({ scripts: [] });
+    }
 
-  const url = new URL(req.url)
-  const kind = url.searchParams.get('documentKind') ?? ''
+    const url = new URL(req.url);
+    const kind = url.searchParams.get("documentKind") ?? "";
 
-  const r = (await db.execute<{ id: string; name: string; source: string }>(sql`
+    const r = await db.execute<{ id: string; name: string; source: string }>(
+      sql`
     select id, name, source
       from user_scripts
      where org_id = ${authz.user.orgId}
        and trigger_point = 'client'
        and is_active
        and (document_kind is null or document_kind = ${kind})
-     order by sort_order, name`, 'objects'))
+     order by sort_order, name`,
+      "objects",
+    );
 
-  return NextResponse.json({ scripts: r })
+    return NextResponse.json({ scripts: r });
   },
-})
+});

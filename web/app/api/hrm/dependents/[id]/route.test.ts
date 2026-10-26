@@ -71,8 +71,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmBenefitsDependentIdRouteNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmBenefitsDependentIdRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -80,21 +81,28 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/hrm/benefits/dependents", "mock:service"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier) ?? (specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-benefits-dependent-id";
-  const idRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "./features"
+          ? "mock:features"
+          : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-benefits-dependent-id";
+const idRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
 
 const DEPENDENT_ID = "00000000-0000-4000-8000-000000000081";
 const ctx = { params: Promise.resolve({ id: DEPENDENT_ID }) };
@@ -116,11 +124,20 @@ function patchRequest(body: unknown): Request {
 
 test("PATCH updates descriptors without moving identity", async () => {
   reset();
-  const res = await idRoute!.PATCH(patchRequest({ action: "update", displayName: "Alex R. Partner" }), ctx);
+  const res = await idRoute!.PATCH(
+    patchRequest({ action: "update", displayName: "Alex R. Partner" }),
+    ctx,
+  );
   assert.equal(res.status, 200);
   assert.deepEqual(routeState.calls[0], {
     fn: "update",
-    args: { orgId: "org-1", actorId: "user-1", dependentId: DEPENDENT_ID, displayName: "Alex R. Partner", birthDate: undefined },
+    args: {
+      orgId: "org-1",
+      actorId: "user-1",
+      dependentId: DEPENDENT_ID,
+      displayName: "Alex R. Partner",
+      birthDate: undefined,
+    },
   });
 });
 
@@ -130,13 +147,19 @@ test("PATCH deactivates; blank names are 400", async () => {
   assert.equal(res.status, 200);
   assert.deepEqual(routeState.calls[0]!.fn, "deactivate");
   reset();
-  assert.equal((await idRoute!.PATCH(patchRequest({ action: "update", displayName: "  " }), ctx)).status, 400);
+  assert.equal(
+    (await idRoute!.PATCH(patchRequest({ action: "update", displayName: "  " }), ctx)).status,
+    400,
+  );
   assert.equal(routeState.calls.length, 0);
 });
 
 test("PATCH maps computed refusals with message intact", async () => {
   reset();
-  routeState.serviceThrow = new BenefitsError("REFUSED", "dependent not found in this organization — reload and retry");
+  routeState.serviceThrow = new BenefitsError(
+    "REFUSED",
+    "dependent not found in this organization — reload and retry",
+  );
   const refused = await idRoute!.PATCH(patchRequest({ action: "deactivate" }), ctx);
   assert.equal(refused.status, 422);
   const body = (await refused.json()) as { error: string };

@@ -1,12 +1,4 @@
-import {
-  pgTable,
-  uuid,
-  text,
-  date,
-  integer,
-  numeric,
-  timestamp,
-} from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, date, integer, numeric, timestamp } from "drizzle-orm/pg-core";
 import { id, orgRef, money, auditColumns } from "./helpers";
 
 export const inventoryCountPolicies = pgTable("inventory_count_policies", {
@@ -33,7 +25,9 @@ export const purchaseOverReceiptTolerances = pgTable("purchase_over_receipt_tole
   orgId: orgRef(),
   itemCategory: text("item_category"),
   tolerancePercent: numeric("tolerance_percent", { precision: 9, scale: 4 }).notNull().default("0"),
-  toleranceQuantity: numeric("tolerance_quantity", { precision: 28, scale: 8 }).notNull().default("0"),
+  toleranceQuantity: numeric("tolerance_quantity", { precision: 28, scale: 8 })
+    .notNull()
+    .default("0"),
   reason: text("reason").notNull(),
   effectiveFrom: date("effective_from").notNull(),
   effectiveTo: date("effective_to"),
@@ -67,8 +61,6 @@ export const consignmentEvents = pgTable("consignment_events", {
   toStockId: uuid("to_stock_id"),
   receiptMovementId: uuid("receipt_movement_id"),
   reason: text("reason").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdBy: uuid("created_by").notNull(),
 });

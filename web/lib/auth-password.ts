@@ -26,12 +26,13 @@ function scryptAsync(
 ): Promise<Buffer> {
   const maxmem = Math.max(32 * 1024 * 1024, 128 * options.N * options.r + 1024 * 1024);
   return passwordKdfExecutor.run(
-    () => new Promise((resolve, reject) => {
-      scrypt(password, salt, length, { ...options, maxmem }, (error, derivedKey) => {
-        if (error) reject(error);
-        else resolve(derivedKey);
-      });
-    }),
+    () =>
+      new Promise((resolve, reject) => {
+        scrypt(password, salt, length, { ...options, maxmem }, (error, derivedKey) => {
+          if (error) reject(error);
+          else resolve(derivedKey);
+        });
+      }),
   );
 }
 
@@ -55,17 +56,18 @@ function parsePasswordHash(stored: string): ParsedPasswordHash | null {
   const p = Number(versioned[3]);
   // Bound database-controlled work factors before allocating KDF memory.
   if (
-    !Number.isSafeInteger(N)
-    || N < 16_384
-    || N > 262_144
-    || (N & (N - 1)) !== 0
-    || !Number.isSafeInteger(r)
-    || r < 1
-    || r > 16
-    || !Number.isSafeInteger(p)
-    || p < 1
-    || p > 4
-  ) return null;
+    !Number.isSafeInteger(N) ||
+    N < 16_384 ||
+    N > 262_144 ||
+    (N & (N - 1)) !== 0 ||
+    !Number.isSafeInteger(r) ||
+    r < 1 ||
+    r > 16 ||
+    !Number.isSafeInteger(p) ||
+    p < 1 ||
+    p > 4
+  )
+    return null;
   return {
     salt: Buffer.from(versioned[4]!, "hex"),
     expected: Buffer.from(versioned[5]!, "hex"),
@@ -105,15 +107,15 @@ export async function verifyPassword(
     }
     throw error;
   }
-  const valid = actual.length === parsed.expected.length
-    && timingSafeEqual(actual, parsed.expected);
+  const valid =
+    actual.length === parsed.expected.length && timingSafeEqual(actual, parsed.expected);
   return {
     valid,
-    needsRehash: valid && (
-      parsed.legacy
-      || parsed.N !== RECOMMENDED_N
-      || parsed.r !== RECOMMENDED_R
-      || parsed.p !== RECOMMENDED_P
-    ),
+    needsRehash:
+      valid &&
+      (parsed.legacy ||
+        parsed.N !== RECOMMENDED_N ||
+        parsed.r !== RECOMMENDED_R ||
+        parsed.p !== RECOMMENDED_P),
   };
 }

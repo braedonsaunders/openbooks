@@ -51,10 +51,8 @@ const routeUrl = "./route.ts?asset-delete-scope-test";
 const { DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, pool } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -68,7 +66,9 @@ async function seedScopedAssets(): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const hidden = randomUUID();
-  await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`);
+  await db.execute(
+    sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`,
+  );
   const categoryId = randomUUID();
   await db.execute(sql`
     insert into asset_categories
@@ -100,9 +100,12 @@ async function seedScopedAssets(): Promise<Fixture> {
 }
 
 async function assetCount(orgId: string, assetId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from fixed_assets where org_id = ${orgId} and id = ${assetId}`, "objects",
-  ))[0]!.n;
+  return (
+    await db.execute<{ n: number }>(
+      sql`select count(*)::int as n from fixed_assets where org_id = ${orgId} and id = ${assetId}`,
+      "objects",
+    )
+  )[0]!.n;
 }
 
 const deleteCall = (assetId: string) =>
@@ -110,57 +113,76 @@ const deleteCall = (assetId: string) =>
     params: Promise.resolve({ id: assetId }),
   });
 
-test(
-  "asset DELETE refuses an out-of-scope draft and deletes an in-scope one",
-  async () => {
-    const fixture = await seedScopedAssets();
-    try {
-      const refused = await deleteCall(fixture.assetB);
-      assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
-      assert.equal(await assetCount(fixture.orgId, fixture.assetB), 1, "the refused delete must keep the asset");
+test("asset DELETE refuses an out-of-scope draft and deletes an in-scope one", async () => {
+  const fixture = await seedScopedAssets();
+  try {
+    const refused = await deleteCall(fixture.assetB);
+    assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
+    assert.equal(
+      await assetCount(fixture.orgId, fixture.assetB),
+      1,
+      "the refused delete must keep the asset",
+    );
 
-      const deleted = await deleteCall(fixture.assetA);
-      assert.equal(deleted.status, 200, JSON.stringify(await deleted.clone().json()));
-      assert.equal(await assetCount(fixture.orgId, fixture.assetA), 0, "the in-scope draft must be gone");
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
-    }
-  },
-);
+    const deleted = await deleteCall(fixture.assetA);
+    assert.equal(deleted.status, 200, JSON.stringify(await deleted.clone().json()));
+    assert.equal(
+      await assetCount(fixture.orgId, fixture.assetA),
+      0,
+      "the in-scope draft must be gone",
+    );
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
-test(
-  "asset DELETE waits on an asset rehome in flight instead of racing it",
-  async () => {
-    const fixture = await seedScopedAssets();
-    const writer = await pool.connect();
-    let pending: Promise<Response> | undefined;
-    try {
-      await writer.query("begin");
-      await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)");
-      const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
-      await writer.query("update fixed_assets set subsidiary_id=$1 where id=$2", [fixture.hidden, fixture.assetA]);
-      pending = deleteCall(fixture.assetA);
-      let blocked = false;
-      for (let n = 0; n < 200; n++) {
-        blocked = !!((await pool.query("select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))", [pid])).rowCount);
-        if (blocked) break;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-      assert.ok(blocked, "the delete waits on the locked asset instead of deleting the pre-rehome row");
-      await writer.query("commit");
-      const response = await pending;
-      assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));
-      assert.equal(await assetCount(fixture.orgId, fixture.assetA), 1, "the delete refused after the rehome keeps the asset");
-    } finally {
-      await writer.query("rollback").catch(() => {});
-      await pending?.catch(() => {});
-      writer.release();
-      routeState.authz = null;
-      await dropScratchOrgReporting(fixture.orgId);
+test("asset DELETE waits on an asset rehome in flight instead of racing it", async () => {
+  const fixture = await seedScopedAssets();
+  const writer = await pool.connect();
+  let pending: Promise<Response> | undefined;
+  try {
+    await writer.query("begin");
+    await writer.query(
+      "select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)",
+    );
+    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!
+      .pid;
+    await writer.query("update fixed_assets set subsidiary_id=$1 where id=$2", [
+      fixture.hidden,
+      fixture.assetA,
+    ]);
+    pending = deleteCall(fixture.assetA);
+    let blocked = false;
+    for (let n = 0; n < 200; n++) {
+      blocked = !!(
+        await pool.query("select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))", [
+          pid,
+        ])
+      ).rowCount;
+      if (blocked) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
-  },
-);
+    assert.ok(
+      blocked,
+      "the delete waits on the locked asset instead of deleting the pre-rehome row",
+    );
+    await writer.query("commit");
+    const response = await pending;
+    assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));
+    assert.equal(
+      await assetCount(fixture.orgId, fixture.assetA),
+      1,
+      "the delete refused after the rehome keeps the asset",
+    );
+  } finally {
+    await writer.query("rollback").catch(() => {});
+    await pending?.catch(() => {});
+    writer.release();
+    routeState.authz = null;
+    await dropScratchOrgReporting(fixture.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

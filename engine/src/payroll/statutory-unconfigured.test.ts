@@ -4,7 +4,11 @@ import test from "node:test";
 import { AU_PACK_RATES } from "./au/rates.ts";
 import { CA_PACK_RATES } from "./canada/rates.ts";
 import {
-  declaredPackRates, packSlotAppliesToPopulation, payrollPack, PayrollPackError, setPackSlotAccount,
+  declaredPackRates,
+  packSlotAppliesToPopulation,
+  payrollPack,
+  PayrollPackError,
+  setPackSlotAccount,
 } from "./packs.ts";
 import {
   assertConfiguredStatutoryRates,
@@ -50,8 +54,7 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
   for (const pack of declaredPackRates()) {
     for (const slot of pack.slots) {
       assert.ok(
-        slot.whenUnconfigured === "refuse"
-          || slot.whenUnconfigured === "zero",
+        slot.whenUnconfigured === "refuse" || slot.whenUnconfigured === "zero",
         `${pack.country}/${slot.key} answers whenUnconfigured`,
       );
       answers.set(`${pack.country}/${slot.key}`, slot.whenUnconfigured);
@@ -59,7 +62,10 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
   }
   // The decided core of this change, read back as data.
   assert.deepEqual(
-    [...answers.entries()].filter(([, answer]) => answer === "refuse").map(([key]) => key).sort(),
+    [...answers.entries()]
+      .filter(([, answer]) => answer === "refuse")
+      .map(([key]) => key)
+      .sort(),
     [
       "AU/au_workers_comp",
       "BR/br_fap",
@@ -86,14 +92,27 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
     ],
   );
   assert.deepEqual(
-    [...answers.entries()].filter(([, answer]) => answer === "zero").map(([key]) => key).sort(),
-    ["FR/fr_allocfam", "GB/gb_employment_allowance", "US/us_futa", "US/us_pa_lst", "US/us_vt_ccce", "US/us_wa_pfml"],
+    [...answers.entries()]
+      .filter(([, answer]) => answer === "zero")
+      .map(([key]) => key)
+      .sort(),
+    [
+      "FR/fr_allocfam",
+      "GB/gb_employment_allowance",
+      "US/us_futa",
+      "US/us_pa_lst",
+      "US/us_vt_ccce",
+      "US/us_wa_pfml",
+    ],
   );
 });
 
 test("TX SUI with nothing configured refuses with the detector's sentence", () => {
   const resolution = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [],
+    country: "US",
+    taxYear: 2026,
+    pack: US_PACK_RATES,
+    rows: [],
   });
   const account = randomUUID();
   const point = { region: "TX", filingAccountId: account };
@@ -104,8 +123,7 @@ test("TX SUI with nothing configured refuses with the detector's sentence", () =
   assert.throws(
     () => assertConfiguredStatutoryRates(resolution, point, "Tex Worker"),
     (error: unknown) =>
-      error instanceof Error
-      && error.message === `Tex Worker: ${detected!.message}`,
+      error instanceof Error && error.message === `Tex Worker: ${detected!.message}`,
     "the refusal reuses the detector's message verbatim, prefixed by the employee",
   );
 });
@@ -125,16 +143,21 @@ test("SUI rates on other accounts do not pass the EIN-assigned employee", () => 
     ],
   });
   assert.throws(
-    () => assertConfiguredStatutoryRates(
-      resolution, { region: "TX", filingAccountId: ein }, "Tex Worker",
-    ),
+    () =>
+      assertConfiguredStatutoryRates(
+        resolution,
+        { region: "TX", filingAccountId: ein },
+        "Tex Worker",
+      ),
     /Tex Worker: no State unemployment \(SUI\) rate is configured for TX · the assigned filing account in 2026/,
     "three good rates elsewhere still refuse for this employee",
   );
   // …while the employee assigned to the account the rate is linked to pays.
   assert.doesNotThrow(() =>
     assertConfiguredStatutoryRates(
-      resolution, { region: "TX", filingAccountId: txSui }, "Tex Worker",
+      resolution,
+      { region: "TX", filingAccountId: txSui },
+      "Tex Worker",
     ),
   );
 });
@@ -148,25 +171,38 @@ test("a resolving SUI rate computes — no refusal", () => {
     rows: [row("us_sui", "TX", account, { rate: "0.027", wageBase: "9000" })],
   });
   assert.doesNotThrow(() =>
-    assertConfiguredStatutoryRates(resolution, { region: "TX", filingAccountId: account }, "Tex Worker"),
+    assertConfiguredStatutoryRates(
+      resolution,
+      { region: "TX", filingAccountId: account },
+      "Tex Worker",
+    ),
   );
 });
 
 test("QC HSF unconfigured refuses; ON refuses on its own EHT instead", () => {
   const resolution = buildResolution({
-    country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [],
+    country: "CA",
+    taxYear: 2026,
+    pack: CA_PACK_RATES,
+    rows: [],
   });
   assert.throws(
-    () => assertConfiguredStatutoryRates(
-      resolution, { region: "QC", filingAccountId: null }, "Jean Tremblay",
-    ),
+    () =>
+      assertConfiguredStatutoryRates(
+        resolution,
+        { region: "QC", filingAccountId: null },
+        "Jean Tremblay",
+      ),
     /Jean Tremblay: no Health services fund is configured for QC in 2026 — nothing is being accrued for it/,
   );
   // ON's own levy is the EHT now, so bare-ON names it.
   assert.throws(
-    () => assertConfiguredStatutoryRates(
-      resolution, { region: "ON", filingAccountId: null }, "Ontario Worker",
-    ),
+    () =>
+      assertConfiguredStatutoryRates(
+        resolution,
+        { region: "ON", filingAccountId: null },
+        "Ontario Worker",
+      ),
     /Ontario Worker: no Employer health tax is configured for ON in 2026/,
   );
 });
@@ -175,12 +211,18 @@ test("EHT in Ontario unconfigured refuses — unknown liability, not zero", () =
   // Per RSO 1990 c E.11, the rate turns on the employer's own
   // Ontario remuneration, which no pack can know — explicit zero excepted.
   const resolution = buildResolution({
-    country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [],
+    country: "CA",
+    taxYear: 2026,
+    pack: CA_PACK_RATES,
+    rows: [],
   });
   assert.throws(
-    () => assertConfiguredStatutoryRates(
-      resolution, { region: "ON", filingAccountId: null }, "Ontario Worker",
-    ),
+    () =>
+      assertConfiguredStatutoryRates(
+        resolution,
+        { region: "ON", filingAccountId: null },
+        "Ontario Worker",
+      ),
     /Ontario Worker: no Employer health tax is configured for ON in 2026 — nothing is being accrued for it/,
   );
 });
@@ -195,12 +237,17 @@ test("account slots apply by population: QC-only slots absent for ON, demanded w
   for (const key of ["qc_income_tax", "qpip", "hsf"]) {
     assert.equal(packSlotAppliesToPopulation(slot(key), "CA", on), false, `${key} inert for ON`);
     assert.equal(packSlotAppliesToPopulation(slot(key), "CA", qc), true, `${key} live for QC`);
-    assert.equal(packSlotAppliesToPopulation(slot(key), "CA", mixed), true, `${key} live for mixed`);
+    assert.equal(
+      packSlotAppliesToPopulation(slot(key), "CA", mixed),
+      true,
+      `${key} live for mixed`,
+    );
   }
   assert.equal(packSlotAppliesToPopulation(slot("eht"), "CA", on), true, "EHT live for ON");
   assert.equal(
     packSlotAppliesToPopulation(slot("eht"), "CA", new Map([["CA", new Set(["AB"])]])),
-    false, "EHT inert where no levying province works",
+    false,
+    "EHT inert where no levying province works",
   );
   for (const key of ["income_tax", "cpp", "ei", "vacation", "wcb"]) {
     assert.equal(packSlotAppliesToPopulation(slot(key), "CA", on), true, `${key} everywhere`);
@@ -228,7 +275,8 @@ test("account slots demand when the population's region is undeclared", () => {
   }
   assert.equal(
     packSlotAppliesToPopulation(slot("hsf"), "CA", new Map([["CA", new Set(["AB"])]])),
-    false, "HSF inert for declared-but-inapplicable AB",
+    false,
+    "HSF inert for declared-but-inapplicable AB",
   );
 });
 
@@ -237,31 +285,36 @@ test("mapping an unknown slot refuses as a pack error, not a bare Error", async 
   // a bare Error escape as a 500: an unknown slot key is a client mistake,
   // not a server failure. The lookup throws before any database write, so no
   // fixture is needed — and the sweep holds: packs.ts throws no bare Errors.
-  await assert.rejects(
-    setPackSlotAccount("org", "actor", "CA", "NOPE", null),
-    (error: unknown) => {
-      assert.ok(error instanceof PayrollPackError, `threw ${(error as Error)?.constructor?.name}`);
-      assert.match((error as Error).message, /unknown payroll pack slot CA\/NOPE/);
-      return true;
-    },
-  );
+  await assert.rejects(setPackSlotAccount("org", "actor", "CA", "NOPE", null), (error: unknown) => {
+    assert.ok(error instanceof PayrollPackError, `threw ${(error as Error)?.constructor?.name}`);
+    assert.match((error as Error).message, /unknown payroll pack slot CA\/NOPE/);
+    return true;
+  });
 });
 
 test("zero slots keep today's behaviour when unconfigured", () => {
   const au = buildResolution({
-    country: "AU", taxYear: 2026, pack: AU_PACK_RATES, rows: [],
+    country: "AU",
+    taxYear: 2026,
+    pack: AU_PACK_RATES,
+    rows: [],
   });
-  assert.throws(() =>
-    assertConfiguredStatutoryRates(au, { region: "NSW", filingAccountId: null }, "Sydney Worker"),
+  assert.throws(
+    () =>
+      assertConfiguredStatutoryRates(au, { region: "NSW", filingAccountId: null }, "Sydney Worker"),
     /Sydney Worker: no Workers' compensation premium is configured for NSW in 2026/,
   );
   const us = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [],
+    country: "US",
+    taxYear: 2026,
+    pack: US_PACK_RATES,
+    rows: [],
   });
   // us_futa is `zero`: the detector still reports it (readiness stays
   // advisory-complete) but the money path never refuses on it.
   assert.ok(
-    unconfiguredStatutoryRates(us, [{ region: "TX", filingAccountId: null }])
-      .some((item) => item.slotKey === "us_futa"),
+    unconfiguredStatutoryRates(us, [{ region: "TX", filingAccountId: null }]).some(
+      (item) => item.slotKey === "us_futa",
+    ),
   );
 });

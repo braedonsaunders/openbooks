@@ -1,17 +1,17 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
-import { stubModules } from '../../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { bootJsdomEnvironment } from "../../../../testing/jsdom-env";
+import { stubModules } from "../../../../testing/stub-modules";
 
 // F4T2-9 (an empty name persisted the LOCALIZED `builder.untitled`, which no
 // sentinel check recognizes — an "untitled" board in another language sailed
 // through the publish gate): the stored name is the canonical sentinel and
 // the dialog still shows the localized placeholder.
-await bootJsdomEnvironment({ url: 'http://localhost:4800/insights/dashboards' })
+await bootJsdomEnvironment({ url: "http://localhost:4800/insights/dashboards" });
 
 declare global {
-  var __dashToasts: { kind: string; message: string; description?: string }[]
-  var __dashPosted: Record<string, unknown>[] | undefined
+  var __dashToasts: { kind: string; message: string; description?: string }[];
+  var __dashPosted: Record<string, unknown>[] | undefined;
 }
 
 Object.assign(globalThis, {
@@ -24,89 +24,91 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
+});
 stubModules({
   navigation: {
-    source: 'export function useRouter(){return globalThis.__dashTestRouter}',
+    source: "export function useRouter(){return globalThis.__dashTestRouter}",
   },
   intl: false,
   authz: false,
   features: false,
   extra: {
-    'next/link': 'export default function Link(p){return p.children}',
+    "next/link": "export default function Link(p){return p.children}",
     sonner:
       "export const toast={success(m){(globalThis.__dashToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__dashToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const { NewDashboardButton } = await import('./NewDashboardButton')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const { NewDashboardButton } = await import("./NewDashboardButton");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 async function mount(locale: string) {
-  const messages = (await import(`../../../../messages/${locale}`)).default
-  ;(globalThis as Record<string, unknown>).__dashToasts = []
-  ;(globalThis as Record<string, unknown>).__dashPosted = []
+  const messages = (await import(`../../../../messages/${locale}`)).default;
+  (globalThis as Record<string, unknown>).__dashToasts = [];
+  (globalThis as Record<string, unknown>).__dashPosted = [];
   globalThis.fetch = (async (_url: unknown, init?: { body?: unknown }) => {
-    ;(globalThis.__dashPosted ?? []).push(
-      JSON.parse(String((init as { body?: string } | undefined)?.body ?? '{}')),
-    )
-    return Response.json({ id: 'dash-1' })
-  }) as typeof fetch
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    (globalThis.__dashPosted ?? []).push(
+      JSON.parse(String((init as { body?: string } | undefined)?.body ?? "{}")),
+    );
+    return Response.json({ id: "dash-1" });
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale={locale} messages={messages} timeZone="UTC">
         <NewDashboardButton />
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  return { host, root }
+    );
+    await tick();
+  });
+  return { host, root };
 }
 
 function findButton(scope: ParentNode, label: string): HTMLButtonElement {
-  const btn = [...scope.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === label,
-  ) as HTMLButtonElement | undefined
-  assert.ok(btn, `must offer a ${label} button`)
-  return btn
+  const btn = [...scope.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === label,
+  ) as HTMLButtonElement | undefined;
+  assert.ok(btn, `must offer a ${label} button`);
+  return btn;
 }
 
-test('an empty name persists the canonical sentinel, not the localized display string (F4T2-9)', async (t) => {
-  const { host, root } = await mount('de')
+test("an empty name persists the canonical sentinel, not the localized display string (F4T2-9)", async (t) => {
+  const { host, root } = await mount("de");
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
+      root.unmount();
+    });
+    host.remove();
+  });
   await act(async () => {
-    findButton(host, 'Neues Dashboard').click()
-    await tick()
-    await tick()
-  })
+    findButton(host, "Neues Dashboard").click();
+    await tick();
+    await tick();
+  });
   // The dialog shows the localized placeholder while storing the sentinel.
-  const nameInput = document.body.querySelector('input#new-dashboard-name') as HTMLInputElement | null
-  assert.ok(nameInput, 'the dialog must offer the name field')
-  assert.equal(nameInput.placeholder, 'Management-Überblick')
+  const nameInput = document.body.querySelector(
+    "input#new-dashboard-name",
+  ) as HTMLInputElement | null;
+  assert.ok(nameInput, "the dialog must offer the name field");
+  assert.equal(nameInput.placeholder, "Management-Überblick");
   await act(async () => {
-    findButton(document.body, 'Erstellen').click()
-    await tick()
-    await tick()
-    await tick()
-  })
-  assert.equal(globalThis.__dashPosted?.length, 1, 'saving posts once')
+    findButton(document.body, "Erstellen").click();
+    await tick();
+    await tick();
+    await tick();
+  });
+  assert.equal(globalThis.__dashPosted?.length, 1, "saving posts once");
   assert.equal(
     (globalThis.__dashPosted?.[0] as { name?: unknown })?.name,
-    'Untitled dashboard',
-    'the stored name is the canonical sentinel the publish gate recognizes',
-  )
-})
+    "Untitled dashboard",
+    "the stored name is the canonical sentinel the publish gate recognizes",
+  );
+});

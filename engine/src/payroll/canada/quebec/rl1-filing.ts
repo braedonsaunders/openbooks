@@ -51,7 +51,11 @@ export function parseRl1RowId(rowId: string): PayrollFilingRowScope | null {
 }
 
 /** One employee's RL-1, box by box — the form's own codes and French titles. */
-async function rl1Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function rl1Slip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const slips = await rl1Slips(orgId, taxYear);
   const slip = slips.find((s) => s.employeePartyId === rowId);
   if (!slip) {
@@ -86,11 +90,11 @@ export function rl1Filing(): PayrollYearEndFiling {
     label: "RL-1 slips (Revenu Québec)",
     cadence: "annual",
     description:
-      "Revenus d'emploi et revenus divers — the Québec-side year-end slip a QC "
-      + "employee receives alongside their T4. Boxes A, B.A/B.B (QPP), C (EI), "
-      + "E (Québec income tax), F (union dues), G/I (QPP/QPIP eligible salary) "
-      + "and H (QPIP) are built from committed stubs. "
-      + RL1_UNSUPPORTED_BOXES,
+      "Revenus d'emploi et revenus divers — the Québec-side year-end slip a QC " +
+      "employee receives alongside their T4. Boxes A, B.A/B.B (QPP), C (EI), " +
+      "E (Québec income tax), F (union dues), G/I (QPP/QPIP eligible salary) " +
+      "and H (QPIP) are built from committed stubs. " +
+      RL1_UNSUPPORTED_BOXES,
     emptyText: "No committed Québec pay stubs for this year.",
     population: (orgId, taxYear) => rl1Population(orgId, taxYear),
     parseRowId: parseRl1RowId,

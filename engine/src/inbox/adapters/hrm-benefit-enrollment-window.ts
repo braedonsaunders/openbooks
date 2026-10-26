@@ -35,7 +35,8 @@ export const hrmBenefitEnrollmentWindowAdapter: InboxAdapter = {
     });
     if (employmentIds.length === 0) return [];
     const ids = [...employmentIds];
-    const rows = await db.execute<WindowRow>(sql`
+    const rows = await db.execute<WindowRow>(
+      sql`
       select w.id, w.name, w.closes_on::text as closes_on
         from hrm_enrollment_windows w
        where w.org_id = ${ctx.orgId}
@@ -73,7 +74,9 @@ export const hrmBenefitEnrollmentWindowAdapter: InboxAdapter = {
               and e.status in ('elected', 'approved', 'pending_approval'))
        order by w.closes_on, w.id
        limit 20
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((row) => {
       const dueAt = new Date(`${row.closes_on}T00:00:00Z`).toISOString();
       return {

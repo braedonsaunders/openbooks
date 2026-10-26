@@ -13,7 +13,9 @@ function decodeJson(segment: string): JsonObject | null {
   if (!segment || segment.length > 64_000) return null;
   try {
     const value = JSON.parse(Buffer.from(segment, "base64url").toString("utf8"));
-    return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : null;
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as JsonObject)
+      : null;
   } catch {
     return null;
   }
@@ -46,12 +48,14 @@ export function verifyOidcIdToken(input: {
   const jwk = input.keys.find((candidate) => {
     const expectedKeyType = algorithm === "ES256" ? "EC" : "RSA";
     const expectedCurve = algorithm === "ES256" ? "P-256" : undefined;
-    return candidate.kid === keyId
-      && (!candidate.alg || candidate.alg === algorithm)
-      && candidate.kty === expectedKeyType
-      && (!expectedCurve || candidate.crv === expectedCurve)
-      && (!candidate.use || candidate.use === "sig")
-      && (!Array.isArray(candidate.key_ops) || candidate.key_ops.includes("verify"));
+    return (
+      candidate.kid === keyId &&
+      (!candidate.alg || candidate.alg === algorithm) &&
+      candidate.kty === expectedKeyType &&
+      (!expectedCurve || candidate.crv === expectedCurve) &&
+      (!candidate.use || candidate.use === "sig") &&
+      (!Array.isArray(candidate.key_ops) || candidate.key_ops.includes("verify"))
+    );
   });
   if (!jwk) return null;
   let key;
@@ -62,11 +66,12 @@ export function verifyOidcIdToken(input: {
   }
   const data = Buffer.from(`${headerSegment}.${payloadSegment}`);
   const signature = Buffer.from(signatureSegment, "base64url");
-  const keyOptions = algorithm === "PS256"
-    ? { key, padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: 32 }
-    : algorithm === "ES256"
-      ? { key, dsaEncoding: "ieee-p1363" as const }
-      : key;
+  const keyOptions =
+    algorithm === "PS256"
+      ? { key, padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: 32 }
+      : algorithm === "ES256"
+        ? { key, dsaEncoding: "ieee-p1363" as const }
+        : key;
   if (!verifySignature("sha256", data, keyOptions, signature)) return null;
 
   const now = input.nowEpoch ?? Math.floor(Date.now() / 1000);
@@ -76,25 +81,28 @@ export function verifyOidcIdToken(input: {
   const email = stringClaim(claims.email);
   const expiresAt = typeof claims.exp === "number" ? claims.exp : NaN;
   const issuedAt = typeof claims.iat === "number" ? claims.iat : NaN;
-  const notBefore = claims.nbf === undefined ? null : typeof claims.nbf === "number" ? claims.nbf : NaN;
-  const audience = typeof claims.aud === "string"
-    ? [claims.aud]
-    : Array.isArray(claims.aud) && claims.aud.every((entry) => typeof entry === "string")
-      ? claims.aud as string[]
-      : [];
+  const notBefore =
+    claims.nbf === undefined ? null : typeof claims.nbf === "number" ? claims.nbf : NaN;
+  const audience =
+    typeof claims.aud === "string"
+      ? [claims.aud]
+      : Array.isArray(claims.aud) && claims.aud.every((entry) => typeof entry === "string")
+        ? (claims.aud as string[])
+        : [];
   if (
-    issuer !== input.issuer
-    || !subject
-    || nonce !== input.nonce
-    || !email
-    || claims.email_verified !== true
-    || !audience.includes(input.clientId)
-    || !Number.isFinite(expiresAt)
-    || expiresAt < now - 60
-    || !Number.isFinite(issuedAt)
-    || issuedAt > now + 60
-    || (notBefore !== null && (!Number.isFinite(notBefore) || notBefore > now + 60))
-  ) return null;
+    issuer !== input.issuer ||
+    !subject ||
+    nonce !== input.nonce ||
+    !email ||
+    claims.email_verified !== true ||
+    !audience.includes(input.clientId) ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt < now - 60 ||
+    !Number.isFinite(issuedAt) ||
+    issuedAt > now + 60 ||
+    (notBefore !== null && (!Number.isFinite(notBefore) || notBefore > now + 60))
+  )
+    return null;
   if (audience.length > 1 && claims.azp !== input.clientId) return null;
   return { issuer, subject, email, emailVerified: true };
 }

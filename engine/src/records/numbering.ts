@@ -147,9 +147,14 @@ async function inferSingleIssuedPrefix(
   orgId: string,
   documentKind: string,
 ): Promise<string | null> {
-  const numbers = (await exec.execute<{ n: string }>(sql`
+  const numbers = (
+    await exec.execute<{ n: string }>(
+      sql`
     select document_number as n from documents
-     where org_id = ${orgId} and kind = ${documentKind}`, "objects")).map((r) => r.n);
+     where org_id = ${orgId} and kind = ${documentKind}`,
+      "objects",
+    )
+  ).map((r) => r.n);
   const prefixes = new Set<string>();
   for (const n of numbers) {
     const match = n.match(/^(.*\D)(\d+)$/);
@@ -167,13 +172,16 @@ async function issuedMax(
   documentKind: string,
   prefix: string,
 ): Promise<number> {
-  const issued = (await exec.execute<{ mx: number }>(sql`
+  const issued = await exec.execute<{ mx: number }>(
+    sql`
     select coalesce(max(substring(document_number from length(${prefix}) + 1)::bigint), 0) as mx
       from documents
      where org_id = ${orgId}
        and kind = ${documentKind}
        and starts_with(document_number, ${prefix})
-       and substring(document_number from length(${prefix}) + 1) ~ '^[0-9]+$'`, "objects"));
+       and substring(document_number from length(${prefix}) + 1) ~ '^[0-9]+$'`,
+    "objects",
+  );
   return Number(issued[0]?.mx ?? 0);
 }
 
@@ -198,27 +206,43 @@ export async function reconcileDocumentSequences(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<ReconciledSequence[]> {
-  const kinds = (await exec.execute<{ document_kind: string }>(sql`
+  const kinds = (
+    await exec.execute<{ document_kind: string }>(
+      sql`
     select distinct document_kind from (
       select document_kind from number_sequences where org_id = ${orgId}
       union
       select kind as document_kind from documents where org_id = ${orgId}
-    ) kinds`, "objects")).map((r) => r.document_kind);
+    ) kinds`,
+      "objects",
+    )
+  ).map((r) => r.document_kind);
 
   const reconciled: ReconciledSequence[] = [];
   for (const kind of kinds) {
-    const existing = (await exec.execute<{ prefix: string; next_number: number }>(sql`
+    const existing = (
+      await exec.execute<{ prefix: string; next_number: number }>(
+        sql`
       select prefix, next_number from number_sequences
-       where org_id = ${orgId} and document_kind = ${kind}`, "objects"))[0];
-    const prefix = existing?.prefix ?? CANONICAL_PREFIXES[kind] ?? (await inferSingleIssuedPrefix(exec, orgId, kind));
+       where org_id = ${orgId} and document_kind = ${kind}`,
+        "objects",
+      )
+    )[0];
+    const prefix =
+      existing?.prefix ??
+      CANONICAL_PREFIXES[kind] ??
+      (await inferSingleIssuedPrefix(exec, orgId, kind));
     if (!prefix) continue;
-    const issued = (await exec.execute<{ mx: number }>(sql`
+    const issued = await exec.execute<{ mx: number }>(
+      sql`
       select coalesce(max(substring(document_number from length(${prefix}) + 1)::bigint), 0) as mx
         from documents
        where org_id = ${orgId}
          and kind = ${kind}
          and starts_with(document_number, ${prefix})
-         and substring(document_number from length(${prefix}) + 1) ~ '^[0-9]+$'`, "objects"));
+         and substring(document_number from length(${prefix}) + 1) ~ '^[0-9]+$'`,
+      "objects",
+    );
     const floor = Number(issued[0]?.mx ?? 0);
     if (existing) {
       if (floor > existing.next_number) {
@@ -226,7 +250,11 @@ export async function reconcileDocumentSequences(
           update number_sequences set next_number = ${floor}
            where org_id = ${orgId} and document_kind = ${kind}`);
       }
-      reconciled.push({ documentKind: kind, prefix, nextNumber: Math.max(existing.next_number, floor) });
+      reconciled.push({
+        documentKind: kind,
+        prefix,
+        nextNumber: Math.max(existing.next_number, floor),
+      });
     } else if (floor > 0) {
       await exec.execute(sql`
         insert into number_sequences (org_id, document_kind, prefix, next_number, allocated_through)
@@ -259,17 +287,22 @@ export async function findDocumentNumberSeriesCollisions(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<DocumentNumberSeriesCollision[]> {
-  const rows = await exec.execute<{ document_kind: string; prefix: string; padding: number }>(sql`
+  const rows = await exec.execute<{ document_kind: string; prefix: string; padding: number }>(
+    sql`
     select document_kind, prefix, padding from number_sequences
      where org_id = ${orgId}
-     order by prefix, padding, document_kind`, "objects");
+     order by prefix, padding, document_kind`,
+    "objects",
+  );
   const collisions: DocumentNumberSeriesCollision[] = [];
   for (let index = 1; index < rows.length; index += 1) {
     const previous = rows[index - 1]!;
     const current = rows[index]!;
-    if (current.document_kind !== previous.document_kind
-      && current.prefix === previous.prefix
-      && Number(current.padding) === Number(previous.padding)) {
+    if (
+      current.document_kind !== previous.document_kind &&
+      current.prefix === previous.prefix &&
+      Number(current.padding) === Number(previous.padding)
+    ) {
       collisions.push({
         kinds: [previous.document_kind, current.document_kind],
         prefix: current.prefix,
@@ -290,11 +323,14 @@ export async function collidingSequenceKind(
   orgId: string,
   input: { documentKind: string; prefix: string; padding: number },
 ): Promise<string | null> {
-  const rows = await exec.execute<{ document_kind: string }>(sql`
+  const rows = await exec.execute<{ document_kind: string }>(
+    sql`
     select document_kind from number_sequences
      where org_id = ${orgId} and document_kind <> ${input.documentKind}
        and prefix = ${input.prefix} and padding = ${input.padding}
-     order by document_kind limit 1`, "objects");
+     order by document_kind limit 1`,
+    "objects",
+  );
   return rows[0]?.document_kind ?? null;
 }
 
@@ -312,14 +348,17 @@ export async function allocateDocumentNumber(
   // Read-then-insert races still converge: the upsert serializes writers on
   // the row lock and every writer draws a distinct number.
   const floor = await issuedMax(exec, orgId, documentKind, prefix);
-  const seq = await exec.execute<{ prefix: string; next_number: number; padding: number }>(sql`
+  const seq = await exec.execute<{ prefix: string; next_number: number; padding: number }>(
+    sql`
     insert into number_sequences (org_id, document_kind, prefix, next_number, allocated_through)
     values (${orgId}, ${documentKind}, ${prefix}, ${floor > 0 ? floor + 1 : 1}, ${floor > 0 ? floor : 0})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     where number_sequences.org_id = ${orgId}
     returning prefix, next_number, padding
-  `, "objects");
+  `,
+    "objects",
+  );
   const s = seq[0]!;
   return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 }

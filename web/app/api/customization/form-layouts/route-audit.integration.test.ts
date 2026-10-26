@@ -16,7 +16,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.form-layout-audit-test')]
@@ -34,7 +34,8 @@ const mockAuthz = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      (specifier.endsWith("lib/authz") && context.parentURL?.includes("customization/form-layouts")) ||
+      (specifier.endsWith("lib/authz") &&
+        context.parentURL?.includes("customization/form-layouts")) ||
       (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
     ) {
       return { url: "mock:form-layout-audit-authz", shortCircuit: true };
@@ -56,9 +57,7 @@ const member = (await import(memberUrl)) as typeof import("./[id]/route.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
 const { defaultFormLayout } = await import("@openbooks/customization");
-const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
 
 async function seed(): Promise<{ orgId: string }> {
   const org = await createScratchOrg();
@@ -71,72 +70,89 @@ async function seed(): Promise<{ orgId: string }> {
   return { orgId: org.orgId };
 }
 
-async function auditFor(orgId: string, rowId: string): Promise<{ action: string; changes: unknown }[]> {
-  const r = await db.execute<{ action: string; changes: unknown }>(sql`
+async function auditFor(
+  orgId: string,
+  rowId: string,
+): Promise<{ action: string; changes: unknown }[]> {
+  const r = await db.execute<{ action: string; changes: unknown }>(
+    sql`
     select action, changes from audit_log
-     where org_id = ${orgId} and table_name = 'form_layouts' and row_id = ${rowId}`, "objects");
+     where org_id = ${orgId} and table_name = 'form_layouts' and row_id = ${rowId}`,
+    "objects",
+  );
   return r;
 }
 
-test(
-  "form-layout writes audit full before/after snapshots",
-  async () => {
-    const { orgId } = await seed();
-    const created = await POST(
-      new Request("http://localhost/api/customization/form-layouts", {
-        method: "POST",
-        body: JSON.stringify({
-          recordType: "vendor_bill",
-          name: "Audit Me",
-          layout: defaultFormLayout("vendor_bill"),
-          isDefault: true,
-        }),
+test("form-layout writes audit full before/after snapshots", async () => {
+  const { orgId } = await seed();
+  const created = await POST(
+    new Request("http://localhost/api/customization/form-layouts", {
+      method: "POST",
+      body: JSON.stringify({
+        recordType: "vendor_bill",
+        name: "Audit Me",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: true,
       }),
-    );
-    assert.equal(created.status, 200);
-    const { id } = (await created.json()) as { id: string };
+    }),
+  );
+  assert.equal(created.status, 200);
+  const { id } = (await created.json()) as { id: string };
 
-    const inserts = await auditFor(orgId, id);
-    assert.equal(inserts.length, 1);
-    const insertChanges = inserts[0]!.changes as { before: unknown; after: Record<string, unknown> };
-    assert.equal(insertChanges.before, null);
-    // Snapshots are raw to_jsonb row images, so flags keep their
-    // snake_case column names (is_default, not isDefault).
-    assert.equal(insertChanges.after.name, "Audit Me");
-    assert.equal(insertChanges.after.is_default, true);
-    assert.equal((insertChanges.after.layout as { schemaVersion: number }).schemaVersion, 1);
+  const inserts = await auditFor(orgId, id);
+  assert.equal(inserts.length, 1);
+  const insertChanges = inserts[0]!.changes as { before: unknown; after: Record<string, unknown> };
+  assert.equal(insertChanges.before, null);
+  // Snapshots are raw to_jsonb row images, so flags keep their
+  // snake_case column names (is_default, not isDefault).
+  assert.equal(insertChanges.after.name, "Audit Me");
+  assert.equal(insertChanges.after.is_default, true);
+  assert.equal((insertChanges.after.layout as { schemaVersion: number }).schemaVersion, 1);
 
-    const patched = await member.PATCH(
-      new Request(`http://localhost/api/customization/form-layouts/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ name: "Audited" }),
-      }),
-      { params: Promise.resolve({ id }) },
-    );
-    assert.equal(patched.status, 200);
+  const patched = await member.PATCH(
+    new Request(`http://localhost/api/customization/form-layouts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: "Audited" }),
+    }),
+    { params: Promise.resolve({ id }) },
+  );
+  assert.equal(patched.status, 200);
 
-    const updates = (await auditFor(orgId, id)).filter((row) => row.action === "update");
-    assert.equal(updates.length, 1);
-    const updateChanges = updates[0]!.changes as { before: Record<string, unknown>; after: Record<string, unknown> };
-    assert.equal(updateChanges.before.name, "Audit Me");
-    assert.equal(updateChanges.after.name, "Audited");
-    assert.ok(typeof updateChanges.before.layout === "object" && updateChanges.before.layout !== null);
-    assert.ok(typeof updateChanges.after.layout === "object" && updateChanges.after.layout !== null);
-    assert.equal(updateChanges.after.is_default, true, "untouched flags must survive in the after-image");
+  const updates = (await auditFor(orgId, id)).filter((row) => row.action === "update");
+  assert.equal(updates.length, 1);
+  const updateChanges = updates[0]!.changes as {
+    before: Record<string, unknown>;
+    after: Record<string, unknown>;
+  };
+  assert.equal(updateChanges.before.name, "Audit Me");
+  assert.equal(updateChanges.after.name, "Audited");
+  assert.ok(
+    typeof updateChanges.before.layout === "object" && updateChanges.before.layout !== null,
+  );
+  assert.ok(typeof updateChanges.after.layout === "object" && updateChanges.after.layout !== null);
+  assert.equal(
+    updateChanges.after.is_default,
+    true,
+    "untouched flags must survive in the after-image",
+  );
 
-    const deleted = await member.DELETE(new Request(`http://localhost/api/customization/form-layouts/${id}`, {
+  const deleted = await member.DELETE(
+    new Request(`http://localhost/api/customization/form-layouts/${id}`, {
       method: "DELETE",
-    }), { params: Promise.resolve({ id }) });
-    assert.equal(deleted.status, 200);
+    }),
+    { params: Promise.resolve({ id }) },
+  );
+  assert.equal(deleted.status, 200);
 
-    const deletes = (await auditFor(orgId, id)).filter((row) => row.action === "delete");
-    assert.equal(deletes.length, 1);
-    const deleteChanges = deletes[0]!.changes as { before: Record<string, unknown>; after: unknown };
-    assert.equal(deleteChanges.before.name, "Audited");
-    assert.ok(typeof deleteChanges.before.layout === "object" && deleteChanges.before.layout !== null);
-    assert.equal(deleteChanges.after, null);
-  },
-);
+  const deletes = (await auditFor(orgId, id)).filter((row) => row.action === "delete");
+  assert.equal(deletes.length, 1);
+  const deleteChanges = deletes[0]!.changes as { before: Record<string, unknown>; after: unknown };
+  assert.equal(deleteChanges.before.name, "Audited");
+  assert.ok(
+    typeof deleteChanges.before.layout === "object" && deleteChanges.before.layout !== null,
+  );
+  assert.equal(deleteChanges.after, null);
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

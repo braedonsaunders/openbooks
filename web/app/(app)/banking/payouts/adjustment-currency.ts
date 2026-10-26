@@ -8,5 +8,5 @@ export function adjustmentCurrency(
   lineCurrency: string | null | undefined,
   batchCurrency: string | null | undefined,
 ): string | null {
-  return lineCurrency ?? batchCurrency ?? null
+  return lineCurrency ?? batchCurrency ?? null;
 }

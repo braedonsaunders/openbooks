@@ -1,10 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  readV1JsonObject,
-  withV1Request,
-} from "../../../../../lib/api/v1-request";
+import { readV1JsonObject, withV1Request } from "../../../../../lib/api/v1-request";
 import { lookupStoredValueBalance } from "../../../../../lib/application/stored-value";
 
 const lookupBody = z.looseObject({

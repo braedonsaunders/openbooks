@@ -88,23 +88,31 @@ export interface ConversionResult {
   shares: bigint;
 }
 
-const isPostMoney = (terms: ConvertibleTerms): boolean => terms.kind === "safe" && terms.safeType === "post_money";
+const isPostMoney = (terms: ConvertibleTerms): boolean =>
+  terms.kind === "safe" && terms.safeType === "post_money";
 
 function capOf(instrument: ConvertingInstrument): Rational | null {
   if (instrument.cap !== undefined) return instrument.cap;
-  return instrument.terms.valuationCap ? parseMoney(instrument.terms.valuationCap, "valuationCap") : null;
+  return instrument.terms.valuationCap
+    ? parseMoney(instrument.terms.valuationCap, "valuationCap")
+    : null;
 }
 
 function discountedPrice(terms: ConvertibleTerms, roundPrice: Rational): Rational | null {
   if (!terms.discountPercent) return null;
-  return multiplyRational(roundPrice, subtractRational(ONE, parsePercent(terms.discountPercent, "discountPercent")));
+  return multiplyRational(
+    roundPrice,
+    subtractRational(ONE, parsePercent(terms.discountPercent, "discountPercent")),
+  );
 }
 
 /** Combined ownership the capped post-money SAFEs promise (amount / cap, summed). */
 export function postMoneyClaim(instruments: readonly ConvertingInstrument[]): Rational {
-  return sumRational(instruments
-    .filter((instrument) => isPostMoney(instrument.terms) && capOf(instrument))
-    .map((instrument) => divideRational(instrument.amount, capOf(instrument)!)));
+  return sumRational(
+    instruments
+      .filter((instrument) => isPostMoney(instrument.terms) && capOf(instrument))
+      .map((instrument) => divideRational(instrument.amount, capOf(instrument)!)),
+  );
 }
 
 /** The lower of the round price and the discounted price: the price before any cap. */
@@ -129,7 +137,11 @@ export function companyCapitalization(
 ): Rational {
   const claim = postMoneyClaim(instruments);
   if (compareRational(claim, MAX_POST_MONEY_CLAIM) >= 0) {
-    throw equityError("postMoneyOverclaim", { limit: fig.percent("95"), principal: fig.term("principal"), cap: fig.term("valuationCap") });
+    throw equityError("postMoneyOverclaim", {
+      limit: fig.percent("95"),
+      principal: fig.term("principal"),
+      cap: fig.term("valuationCap"),
+    });
   }
   const preRound = rational(preRoundFullyDiluted);
   const binding = new Set<string>();
@@ -141,15 +153,26 @@ export function companyCapitalization(
       if (isPostMoney(instrument.terms) && cap && binding.has(instrument.terms.id)) {
         bindingClaim = addRational(bindingClaim, divideRational(instrument.amount, cap));
       } else {
-        fixed = addRational(fixed, divideRational(instrument.amount, preRoundPrice(instrument, roundPrice, preRound)));
+        fixed = addRational(
+          fixed,
+          divideRational(instrument.amount, preRoundPrice(instrument, roundPrice, preRound)),
+        );
       }
     }
-    const capitalization = divideRational(addRational(preRound, fixed), subtractRational(ONE, bindingClaim));
+    const capitalization = divideRational(
+      addRational(preRound, fixed),
+      subtractRational(ONE, bindingClaim),
+    );
     let grew = false;
     for (const instrument of instruments) {
       const cap = capOf(instrument);
       if (!isPostMoney(instrument.terms) || !cap || binding.has(instrument.terms.id)) continue;
-      if (compareRational(divideRational(cap, capitalization), uncappedPrice(instrument.terms, roundPrice)) <= 0) {
+      if (
+        compareRational(
+          divideRational(cap, capitalization),
+          uncappedPrice(instrument.terms, roundPrice),
+        ) <= 0
+      ) {
         binding.add(instrument.terms.id);
         grew = true;
       }
@@ -166,11 +189,18 @@ export function exactConversionShares(
   preRoundFullyDiluted: bigint,
 ): Rational {
   if (instruments.length === 0) return ZERO;
-  return subtractRational(companyCapitalization(instruments, roundPrice, preRoundFullyDiluted), rational(preRoundFullyDiluted));
+  return subtractRational(
+    companyCapitalization(instruments, roundPrice, preRoundFullyDiluted),
+    rational(preRoundFullyDiluted),
+  );
 }
 
 /** Price of an instrument whose cap (if any) divides by the pre-round capitalization or does not bind. */
-function preRoundPrice(instrument: ConvertingInstrument, roundPrice: Rational, preRound: Rational): Rational {
+function preRoundPrice(
+  instrument: ConvertingInstrument,
+  roundPrice: Rational,
+  preRound: Rational,
+): Rational {
   const { terms } = instrument;
   const price = uncappedPrice(terms, roundPrice);
   const cap = capOf(instrument);
@@ -182,7 +212,10 @@ function preRoundPrice(instrument: ConvertingInstrument, roundPrice: Rational, p
 function recordedPrice(price: Rational): Rational {
   const units = quantize(price, PRICE_SCALE, "half_up");
   if (units <= 0n) {
-    throw equityError("conversionPriceZero", { cap: fig.term("valuationCap"), discount: fig.term("discountPercent") });
+    throw equityError("conversionPriceZero", {
+      cap: fig.term("valuationCap"),
+      discount: fig.term("discountPercent"),
+    });
   }
   return rational(units, 10n ** BigInt(PRICE_SCALE));
 }
@@ -208,7 +241,9 @@ export function convertAtRound(
     const capPrice = cap
       ? isPostMoney(terms)
         ? divideRational(cap, capitalization)
-        : preRound.numerator > 0n ? divideRational(cap, preRound) : null
+        : preRound.numerator > 0n
+          ? divideRational(cap, preRound)
+          : null
       : null;
     let exact = roundPrice;
     let pricedBy: ConversionResult["pricedBy"] = "round";
@@ -221,7 +256,13 @@ export function convertAtRound(
       pricedBy = "cap";
     }
     const price = recordedPrice(exact);
-    return { securityId: terms.id, amount: instrument.amount, price, pricedBy, shares: floorShares(divideRational(instrument.amount, price)) };
+    return {
+      securityId: terms.id,
+      amount: instrument.amount,
+      price,
+      pricedBy,
+      shares: floorShares(divideRational(instrument.amount, price)),
+    };
   });
   return { conversions, companyCapitalization: capitalization };
 }

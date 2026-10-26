@@ -18,7 +18,11 @@ test("rebate cost attestation hides an out-of-scope document currency", { skip: 
   const org = await createScratchOrg();
   try {
     const actorId = await withBypassContext(async () => {
-      const actor = await createScratchUser(org.orgId, "Scoped accountant", "rebate_scope_accountant");
+      const actor = await createScratchUser(
+        org.orgId,
+        "Scoped accountant",
+        "rebate_scope_accountant",
+      );
       await grantScratchPermissions(org.orgId, actor, ["ar.post"]);
       await db.execute(sql`
         update app_roles

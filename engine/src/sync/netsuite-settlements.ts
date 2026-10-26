@@ -1,6 +1,11 @@
 import { fromUnits, toUnits } from "../money/money.ts";
 import { netSuiteCurrencyIso } from "./netsuite-native.ts";
-import { applicationLinksDigest, settlementDigest, type SettlementObservation, type SettlementExclusion } from "./settlement-observation.ts";
+import {
+  applicationLinksDigest,
+  settlementDigest,
+  type SettlementObservation,
+  type SettlementExclusion,
+} from "./settlement-observation.ts";
 import type { SourceApplicationLink } from "./source.ts";
 
 export interface NsApplicationLink {
@@ -53,16 +58,25 @@ type Query = <T>(query: string) => Promise<T[]>;
 export async function readNetSuiteSettlements(
   query: Query,
   options: { sourceAccount: string; bookRef: string; baseCurrency: string; refs?: string[] },
-): Promise<{ applications: SourceApplicationLink[]; observation: SettlementObservation; payerDigests: Map<string, string> }> {
-  if (!options.sourceAccount.trim() || !/^\d+$/.test(options.bookRef)
-      || (options.refs && (!options.refs.length || options.refs.some(ref => !/^\d+$/.test(ref))))) {
+): Promise<{
+  applications: SourceApplicationLink[];
+  observation: SettlementObservation;
+  payerDigests: Map<string, string>;
+}> {
+  if (
+    !options.sourceAccount.trim() ||
+    !/^\d+$/.test(options.bookRef) ||
+    (options.refs && (!options.refs.length || options.refs.some((ref) => !/^\d+$/.test(ref))))
+  ) {
     throw new Error("NetSuite settlement source account, book, or reference scope is invalid");
   }
   const refs = options.refs ? [...new Set(options.refs)].sort() : undefined;
-  const scoped = refs ? ` AND (${Array.from({ length: Math.ceil(refs.length / 150) }, (_, index) => {
-    const ids = refs.slice(index * 150, (index + 1) * 150).join(",");
-    return `n.nextdoc IN (${ids}) OR n.previousdoc IN (${ids})`;
-  }).join(" OR ")})` : "";
+  const scoped = refs
+    ? ` AND (${Array.from({ length: Math.ceil(refs.length / 150) }, (_, index) => {
+        const ids = refs.slice(index * 150, (index + 1) * 150).join(",");
+        return `n.nextdoc IN (${ids}) OR n.previousdoc IN (${ids})`;
+      }).join(" OR ")})`
+    : "";
   const predicate = `n.linktype='Payment'${scoped}`;
   const countQuery = `SELECT COUNT(*) AS n FROM nexttransactionlinelink n WHERE ${predicate}`;
   const rowsQuery = `SELECT n.previousdoc,n.previousline,n.nextdoc,n.nextline,n.foreignamount,
@@ -86,9 +100,15 @@ export async function readNetSuiteSettlements(
     const rows = await query<{ n: string | number }>(countQuery);
     const stated = rows[0]?.n;
     const count = Number(stated);
-    if (rows.length !== 1 || (typeof stated !== "number" && (typeof stated !== "string" || !/^\d+$/.test(stated)))
-        || !Number.isSafeInteger(count) || count < 0) {
-      throw new Error("NetSuite application graph count is unavailable; settlements were not reconciled");
+    if (
+      rows.length !== 1 ||
+      (typeof stated !== "number" && (typeof stated !== "string" || !/^\d+$/.test(stated))) ||
+      !Number.isSafeInteger(count) ||
+      count < 0
+    ) {
+      throw new Error(
+        "NetSuite application graph count is unavailable; settlements were not reconciled",
+      );
     }
     return count;
   };
@@ -97,47 +117,69 @@ export async function readNetSuiteSettlements(
   const readRows = async () => {
     const rows = await query<NsApplicationLink>(rowsQuery);
     if (rows.length !== count || uniqueNetSuiteApplicationLinks(rows).length !== count) {
-      throw new Error("NetSuite application graph is incomplete or changed during reading; settlements were not reconciled");
+      throw new Error(
+        "NetSuite application graph is incomplete or changed during reading; settlements were not reconciled",
+      );
     }
     return rows;
   };
   const rows = await readRows();
   const graphDigest = settlementDigest(rows);
   // Cardinality cannot detect same-count edits to amounts, accounts, or lifecycle.
-  if (settlementDigest(await readRows()) !== graphDigest || await readCount() !== count) {
-    throw new Error("NetSuite application graph changed during reading; settlements were not reconciled");
+  if (settlementDigest(await readRows()) !== graphDigest || (await readCount()) !== count) {
+    throw new Error(
+      "NetSuite application graph changed during reading; settlements were not reconciled",
+    );
   }
   const eligible: NsApplicationLink[] = [];
   const nonpostingRefs = new Set<string>();
   const exclusions: SettlementExclusion[] = [];
   for (const link of rows) {
     const label = `${link.nextdoc}:${link.nextline}→${link.previousdoc}:${link.previousline}`;
-    if (![link.previousdoc, link.previousline, link.nextdoc, link.nextline].every(value => String(value ?? "").trim())) {
-      throw new Error("NetSuite settlement link identity is unavailable; restore source access and retry the sync");
+    if (
+      ![link.previousdoc, link.previousline, link.nextdoc, link.nextline].every((value) =>
+        String(value ?? "").trim(),
+      )
+    ) {
+      throw new Error(
+        "NetSuite settlement link identity is unavailable; restore source access and retry the sync",
+      );
     }
     if (link.foreignamount == null || String(link.foreignamount).trim() === "") {
-      throw new Error(`NetSuite settlement ${label} has no source amount; restore source access and retry the sync`);
+      throw new Error(
+        `NetSuite settlement ${label} has no source amount; restore source access and retry the sync`,
+      );
     }
     if (toUnits(link.foreignamount) <= 0n) continue;
-    if (!["T", "F"].includes(link.payposting ?? "") || !["T", "F"].includes(link.appposting ?? "")) {
-      throw new Error(`NetSuite settlement ${label} has unknown endpoint posting state; restore source transaction access and retry the sync`);
+    if (
+      !["T", "F"].includes(link.payposting ?? "") ||
+      !["T", "F"].includes(link.appposting ?? "")
+    ) {
+      throw new Error(
+        `NetSuite settlement ${label} has unknown endpoint posting state; restore source transaction access and retry the sync`,
+      );
     }
     if (link.payposting === "F" || link.appposting === "F") {
       if (link.payposting === "F") nonpostingRefs.add(String(link.nextdoc));
       if (link.appposting === "F") nonpostingRefs.add(String(link.previousdoc));
       exclusions.push({
-        paymentRef: String(link.nextdoc), appliedRef: String(link.previousdoc),
-        paymentLineRef: String(link.nextline), appliedLineRef: String(link.previousline),
+        paymentRef: String(link.nextdoc),
+        appliedRef: String(link.previousdoc),
+        paymentLineRef: String(link.nextline),
+        appliedLineRef: String(link.previousline),
         amount: fromUnits(toUnits(link.foreignamount)),
         paymentPosting: link.payposting === "F" ? "F" : "T",
         appliedPosting: link.appposting === "F" ? "F" : "T",
-        paymentStatus: link.paystatus ?? null, appliedStatus: link.appstatus ?? null,
+        paymentStatus: link.paystatus ?? null,
+        appliedStatus: link.appstatus ?? null,
         reason: link.payposting === "F" ? "nonposting_payment" : "nonposting_target",
       });
       continue;
     }
     if (!String(link.payaccount ?? "").trim() || !String(link.appaccount ?? "").trim()) {
-      throw new Error(`NetSuite settlement control-account identity is unavailable for posted link ${label} in book ${options.bookRef}; restore source accounting-line access or correct the source transaction, then retry the sync`);
+      throw new Error(
+        `NetSuite settlement control-account identity is unavailable for posted link ${label} in book ${options.bookRef}; restore source accounting-line access or correct the source transaction, then retry the sync`,
+      );
     }
     eligible.push(link);
   }
@@ -153,12 +195,20 @@ export async function readNetSuiteSettlements(
     applications,
     payerDigests: new Map([...rowsByPayer].map(([ref, group]) => [ref, settlementDigest(group)])),
     observation: {
-      version: 1, source: "netsuite", sourceAccount: options.sourceAccount, bookRef: options.bookRef,
+      version: 1,
+      source: "netsuite",
+      sourceAccount: options.sourceAccount,
+      bookRef: options.bookRef,
       scope: refs ? { kind: "references", refs } : { kind: "all" },
-      consistency: "repeated_read", observedFrom, observedThrough: new Date().toISOString(),
-      rawLinks: count, eligibleLinks: applications.length, graphDigest,
+      consistency: "repeated_read",
+      observedFrom,
+      observedThrough: new Date().toISOString(),
+      rawLinks: count,
+      eligibleLinks: applications.length,
+      graphDigest,
       applicationsDigest: applicationLinksDigest(applications),
-      nonpostingRefs: [...nonpostingRefs].sort(), exclusions,
+      nonpostingRefs: [...nonpostingRefs].sort(),
+      exclusions,
     },
   };
 }
@@ -177,7 +227,10 @@ export async function readNetSuiteSettlements(
  * value stays empty so the reconciler refuses the link instead of settling
  * a guess.
  */
-export function toSourceApplicationLinks(rows: NsApplicationLink[], baseCurrency: string): SourceApplicationLink[] {
+export function toSourceApplicationLinks(
+  rows: NsApplicationLink[],
+  baseCurrency: string,
+): SourceApplicationLink[] {
   return uniqueNetSuiteApplicationLinks(rows)
     .filter((link) => link.foreignamount != null && toUnits(link.foreignamount) > 0n)
     .map((link) => {
@@ -188,11 +241,12 @@ export function toSourceApplicationLinks(rows: NsApplicationLink[], baseCurrency
         amount: String(link.foreignamount),
         currency: netSuiteCurrencyIso(link.paycurrency) ?? (stated ? "" : baseCurrency),
         rate: link.payexrate ?? null,
-        ...(link.payaccount != null || link.appaccount != null ? {
-          paymentAccountRef: String(link.payaccount ?? ""),
-          appliedAccountRef: String(link.appaccount ?? ""),
-        } : {}),
+        ...(link.payaccount != null || link.appaccount != null
+          ? {
+              paymentAccountRef: String(link.payaccount ?? ""),
+              appliedAccountRef: String(link.appaccount ?? ""),
+            }
+          : {}),
       };
     });
 }
-

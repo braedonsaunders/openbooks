@@ -95,31 +95,87 @@ export function stripCode(src) {
     const c = src[i];
     const nx = src[i + 1];
     if (state === "code") {
-      if (c === "/" && nx === "/") { state = "line"; out += "  "; i += 2; continue; }
-      if (c === "/" && nx === "*") { state = "block"; out += "  "; i += 2; continue; }
-      if (c === "'" || c === '"') { state = "str"; quote = c; out += c; i++; continue; }
-      if (c === "`") { state = "tpl"; out += c; i++; continue; }
-      out += c; i++; continue;
+      if (c === "/" && nx === "/") {
+        state = "line";
+        out += "  ";
+        i += 2;
+        continue;
+      }
+      if (c === "/" && nx === "*") {
+        state = "block";
+        out += "  ";
+        i += 2;
+        continue;
+      }
+      if (c === "'" || c === '"') {
+        state = "str";
+        quote = c;
+        out += c;
+        i++;
+        continue;
+      }
+      if (c === "`") {
+        state = "tpl";
+        out += c;
+        i++;
+        continue;
+      }
+      out += c;
+      i++;
+      continue;
     }
     if (state === "line") {
-      if (c === "\n") { state = "code"; out += "\n"; } else { out += " "; }
-      i++; continue;
+      if (c === "\n") {
+        state = "code";
+        out += "\n";
+      } else {
+        out += " ";
+      }
+      i++;
+      continue;
     }
     if (state === "block") {
-      if (c === "*" && nx === "/") { state = "code"; out += "  "; i += 2; }
-      else { out += c === "\n" ? "\n" : " "; i++; }
+      if (c === "*" && nx === "/") {
+        state = "code";
+        out += "  ";
+        i += 2;
+      } else {
+        out += c === "\n" ? "\n" : " ";
+        i++;
+      }
       continue;
     }
     if (state === "str") {
-      if (c === "\\") { out += "  "; i += 2; continue; }
-      if (c === quote) { state = "code"; out += c; i++; continue; }
-      out += c === "\n" ? "\n" : " "; i++; continue;
+      if (c === "\\") {
+        out += "  ";
+        i += 2;
+        continue;
+      }
+      if (c === quote) {
+        state = "code";
+        out += c;
+        i++;
+        continue;
+      }
+      out += c === "\n" ? "\n" : " ";
+      i++;
+      continue;
     }
     // Template: blank literal spans, splice `${...}` code back in.
-    if (c === "\\") { out += "  "; i += 2; continue; }
-    if (c === "`") { state = "code"; out += c; i++; continue; }
+    if (c === "\\") {
+      out += "  ";
+      i += 2;
+      continue;
+    }
+    if (c === "`") {
+      state = "code";
+      out += c;
+      i++;
+      continue;
+    }
     if (c === "$" && nx === "{") {
-      out += "  "; i += 2;
+      out += "  ";
+      i += 2;
       let depth = 1;
       let inner = "";
       while (i < n && depth > 0) {
@@ -132,7 +188,8 @@ export function stripCode(src) {
       out += inner;
       continue;
     }
-    out += c === "\n" ? "\n" : " "; i++;
+    out += c === "\n" ? "\n" : " ";
+    i++;
   }
   return out;
 }
@@ -156,16 +213,40 @@ export function stripComments(src) {
     const c = src[i];
     const nx = src[i + 1];
     if (state === "code") {
-      if (c === "/" && nx === "/") { state = "line"; out += "  "; i += 2; continue; }
-      if (c === "/" && nx === "*") { state = "block"; out += "  "; i += 2; continue; }
-      out += c; i++; continue;
+      if (c === "/" && nx === "/") {
+        state = "line";
+        out += "  ";
+        i += 2;
+        continue;
+      }
+      if (c === "/" && nx === "*") {
+        state = "block";
+        out += "  ";
+        i += 2;
+        continue;
+      }
+      out += c;
+      i++;
+      continue;
     }
     if (state === "line") {
-      if (c === "\n") { state = "code"; out += "\n"; } else { out += " "; }
-      i++; continue;
+      if (c === "\n") {
+        state = "code";
+        out += "\n";
+      } else {
+        out += " ";
+      }
+      i++;
+      continue;
     }
-    if (c === "*" && nx === "/") { state = "code"; out += "  "; i += 2; }
-    else { out += c === "\n" ? "\n" : " "; i++; }
+    if (c === "*" && nx === "/") {
+      state = "code";
+      out += "  ";
+      i += 2;
+    } else {
+      out += c === "\n" ? "\n" : " ";
+      i++;
+    }
   }
   return out;
 }
@@ -176,8 +257,14 @@ function skipStringLiteral(t, i) {
   i++;
   while (i < t.length) {
     const c = t[i];
-    if (q === "`" && c === "$" && t[i + 1] === "{") { i = skipBalanced(t, i + 1); continue; }
-    if (c === "\\") { i += 2; continue; }
+    if (q === "`" && c === "$" && t[i + 1] === "{") {
+      i = skipBalanced(t, i + 1);
+      continue;
+    }
+    if (c === "\\") {
+      i += 2;
+      continue;
+    }
     if (c === q) return i + 1;
     i++;
   }
@@ -189,7 +276,10 @@ function skipBalanced(t, i) {
   let depth = 0;
   while (i < t.length) {
     const c = t[i];
-    if (c === '"' || c === "'" || c === "`") { i = skipStringLiteral(t, i); continue; }
+    if (c === '"' || c === "'" || c === "`") {
+      i = skipStringLiteral(t, i);
+      continue;
+    }
     if (c === "{") depth++;
     if (c === "}") {
       depth--;
@@ -215,9 +305,14 @@ export function extractRegistryKeys(sourcesText, entitySourcesText) {
   return keys;
 }
 
-export function loadRegisteredKeys(readFile = (file) => readFileSync(join(repoRoot(), file), "utf8")) {
+export function loadRegisteredKeys(
+  readFile = (file) => readFileSync(join(repoRoot(), file), "utf8"),
+) {
   const keys = extractRegistryKeys(readFile(DOC_SOURCES_PATH), readFile(ENTITY_SOURCES_PATH));
-  const prepared = extractRegistryKeys(readFile(PREPARED_SOURCES_PATH), readFile(PREPARED_SOURCES_PATH));
+  const prepared = extractRegistryKeys(
+    readFile(PREPARED_SOURCES_PATH),
+    readFile(PREPARED_SOURCES_PATH),
+  );
   return new Set([...keys, ...prepared]);
 }
 
@@ -228,7 +323,11 @@ function rendersSharedSetupList(path, text, stripped) {
     const imports = /import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g;
     for (const match of code.matchAll(imports)) {
       const source = match[2];
-      const resolved = source.startsWith("@/") ? `web/${source.slice(2)}` : source.startsWith(".") ? posix.normalize(posix.join(posix.dirname(path), source)) : source;
+      const resolved = source.startsWith("@/")
+        ? `web/${source.slice(2)}`
+        : source.startsWith(".")
+          ? posix.normalize(posix.join(posix.dirname(path), source))
+          : source;
       if (resolved.replace(/\.tsx?$/, "") !== target) continue;
       for (const binding of match[1].split(",")) {
         const names = binding.trim().split(/\s+as\s+/);
@@ -239,8 +338,10 @@ function rendersSharedSetupList(path, text, stripped) {
     }
     return false;
   }
-  return renderedImport("SetupEntitySection", "web/app/(app)/admin/setup/[entity]/SetupEntitySection")
-    && renderedImport("ListPageLayout", "web/components/page-layout");
+  return (
+    renderedImport("SetupEntitySection", "web/app/(app)/admin/setup/[entity]/SetupEntitySection") &&
+    renderedImport("ListPageLayout", "web/components/page-layout")
+  );
 }
 
 const NATIVE_DATE_PATTERNS = [
@@ -274,7 +375,11 @@ export function scanNativeDateInputs(path, text) {
     pattern.lastIndex = 0;
     let match;
     while ((match = pattern.exec(code))) {
-      violations.push({ rule: "native-date-input", path, line: lineOf(code, match.index + (match[0].length - match[0].trimStart().length)) });
+      violations.push({
+        rule: "native-date-input",
+        path,
+        line: lineOf(code, match.index + (match[0].length - match[0].trimStart().length)),
+      });
     }
   }
   // The scheduling surface's dates fall back to the native input unless the
@@ -314,8 +419,18 @@ export function scanText(path, text, registeredKeys = new Set()) {
   }
   if (/(^|\/)page\.tsx$/.test(path) && path.startsWith("web/app/(app)/")) {
     // A redirect-only route renders no user-facing surface to compose.
-    const redirectOnly=/import\s*\{[^}]*\bredirect\b[^}]*\}\s*from\s*['"]next\/navigation['"]/.test(stripComments(text)) && /\bredirect\s*\(/.test(stripped) && !/<(?:[A-Za-z][\w.:-]*)(?=[\s/>])|<>/.test(stripped);
-    if (!redirectOnly && !rendersSharedSetupList(path, text, stripped) && !/^\s*import\s[^;]*\bModuleView\b/m.test(stripped) && !/<(?:EntityListView|RecordListView)(?=[\s/>])/.test(stripped)) {
+    const redirectOnly =
+      /import\s*\{[^}]*\bredirect\b[^}]*\}\s*from\s*['"]next\/navigation['"]/.test(
+        stripComments(text),
+      ) &&
+      /\bredirect\s*\(/.test(stripped) &&
+      !/<(?:[A-Za-z][\w.:-]*)(?=[\s/>])|<>/.test(stripped);
+    if (
+      !redirectOnly &&
+      !rendersSharedSetupList(path, text, stripped) &&
+      !/^\s*import\s[^;]*\bModuleView\b/m.test(stripped) &&
+      !/<(?:EntityListView|RecordListView)(?=[\s/>])/.test(stripped)
+    ) {
       violations.push({ rule: "bespoke-page", path, line: 1 });
     }
   }
@@ -341,7 +456,8 @@ export function scanText(path, text, registeredKeys = new Set()) {
         if (c === "{") depth++;
         if (c === "}") depth--;
         if (c === ">" && depth === 0) break;
-        attrs += c; i++;
+        attrs += c;
+        i++;
       }
       const propNames = LIST_KEY_PROPS.join("|");
       const propRe = new RegExp(
@@ -363,7 +479,15 @@ export function scanText(path, text, registeredKeys = new Set()) {
 function discoverScopeFiles() {
   return execFileSync(
     "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "web/app/(app)", "web/components"],
+    [
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "web/app/(app)",
+      "web/components",
+    ],
     { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   )
     .split("\0")
@@ -381,7 +505,17 @@ function discoverScopeFiles() {
 function discoverDateScopeFiles() {
   return execFileSync(
     "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "web/app", "web/components", "web/lib", "packages"],
+    [
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "web/app",
+      "web/components",
+      "web/lib",
+      "packages",
+    ],
     { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   )
     .split("\0")
@@ -409,7 +543,8 @@ export function loadAllowlist(readFile = (file) => readFileSync(join(repoRoot(),
       if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
         throw new Error(`${ALLOWLIST_PATH}: ${entry.path} carries no reviewed reason`);
       }
-      if (seen.has(entry.path)) throw new Error(`${ALLOWLIST_PATH} contains duplicate entry ${entry.path}`);
+      if (seen.has(entry.path))
+        throw new Error(`${ALLOWLIST_PATH} contains duplicate entry ${entry.path}`);
       seen.add(entry.path);
     }
   }
@@ -434,7 +569,8 @@ export function sharedPageComposition(file, text, readSource, seen = new Set()) 
   const visited = new Set([...seen, file]);
   const code = stripComments(text);
   const rendered = stripCode(text);
-  let shell = false, body = false;
+  let shell = false,
+    body = false;
   const terminals = new Map([
     ["web/components/page-layout", { shell: true, body: false }],
     ["web/components/paged-table", { shell: false, body: true }],
@@ -443,27 +579,44 @@ export function sharedPageComposition(file, text, readSource, seen = new Set()) 
   ]);
   for (const match of code.matchAll(/import\s*\{([^{}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
     const specifier = match[2];
-    const target = specifier.startsWith("@/") ? `web/${specifier.slice(2)}`
-      : specifier.startsWith(".") ? posix.normalize(posix.join(posix.dirname(file), specifier)) : null;
+    const target = specifier.startsWith("@/")
+      ? `web/${specifier.slice(2)}`
+      : specifier.startsWith(".")
+        ? posix.normalize(posix.join(posix.dirname(file), specifier))
+        : null;
     if (!target || !target.startsWith("web/")) continue;
     const key = target.replace(/\.tsx?$/, "");
     for (const binding of match[1].split(",")) {
-      const names = binding.trim().split(/\s+as\s+/), symbol = names[0], local = names[1] ?? symbol;
-      if (!/^[A-Z]\w*$/.test(local) || !new RegExp(`<${local}(?=[\\s/< >])`).test(rendered)) continue;
+      const names = binding.trim().split(/\s+as\s+/),
+        symbol = names[0],
+        local = names[1] ?? symbol;
+      if (!/^[A-Z]\w*$/.test(local) || !new RegExp(`<${local}(?=[\\s/< >])`).test(rendered))
+        continue;
       const terminal = terminals.get(key);
       if (terminal) {
-        if (key.endsWith("page-layout") && !["ListPageLayout", "DetailPageLayout"].includes(symbol)) continue;
+        if (key.endsWith("page-layout") && !["ListPageLayout", "DetailPageLayout"].includes(symbol))
+          continue;
         // A generic unregistered table is not a registered list proof.
-        if (key.endsWith("paged-table") && !new RegExp(`<${local}(?:<[^>]+>)?(?=[\\s/>])[^>]*\\bsource\\s*=`, "s").test(code)) continue;
-        shell ||= terminal.shell; body ||= terminal.body;
+        if (
+          key.endsWith("paged-table") &&
+          !new RegExp(`<${local}(?:<[^>]+>)?(?=[\\s/>])[^>]*\\bsource\\s*=`, "s").test(code)
+        )
+          continue;
+        shell ||= terminal.shell;
+        body ||= terminal.body;
         continue;
       }
       for (const extension of ["", ".tsx", ".ts"]) {
         let child;
-        try { child = readSource(target + extension); } catch { continue; }
+        try {
+          child = readSource(target + extension);
+        } catch {
+          continue;
+        }
         if (typeof child !== "string") continue;
         const proof = sharedPageComposition(target + extension, child, readSource, visited);
-        shell ||= proof.shell; body ||= proof.body;
+        shell ||= proof.shell;
+        body ||= proof.body;
         break;
       }
     }
@@ -482,11 +635,14 @@ export function auditRepository(files, registeredKeys, readFile) {
       continue;
     }
     const found = scanText(file, text, registeredKeys);
-    const proof = found.some(violation => violation.rule === "bespoke-page")
+    const proof = found.some((violation) => violation.rule === "bespoke-page")
       ? sharedPageComposition(file, text, (child) => readFile(join(root, child), "utf8"))
       : { shell: false, body: false };
-    violations.push(...found.filter((violation) =>
-      violation.rule !== "bespoke-page" || !proof.shell || !proof.body));
+    violations.push(
+      ...found.filter(
+        (violation) => violation.rule !== "bespoke-page" || !proof.shell || !proof.body,
+      ),
+    );
   }
   return violations;
 }
@@ -517,10 +673,8 @@ export function main() {
     process.exitCode = 1;
     return;
   }
-  const violations = auditRepository(
-    discoverScopeFiles(),
-    registered,
-    (abs) => readFileSync(abs, "utf8"),
+  const violations = auditRepository(discoverScopeFiles(), registered, (abs) =>
+    readFileSync(abs, "utf8"),
   );
 
   const nativeDates = [];
@@ -544,9 +698,13 @@ export function main() {
 
   const byRule = (rule) => violations.filter((v) => v.rule === rule);
   const tablePaths = [...new Set(byRule("raw-table").map((v) => v.path))].sort();
-  const dialogPaths = [...new Set(
-    violations.filter((v) => v.rule === "dialog" || v.rule === "window-dialog").map((v) => v.path),
-  )].sort();
+  const dialogPaths = [
+    ...new Set(
+      violations
+        .filter((v) => v.rule === "dialog" || v.rule === "window-dialog")
+        .map((v) => v.path),
+    ),
+  ].sort();
   const bespokePaths = [...new Set(byRule("bespoke-page").map((v) => v.path))].sort();
   const unknownKeys = byRule("unknown-list-key");
 
@@ -559,9 +717,24 @@ export function main() {
     for (const v of unknownKeys) console.error(`  ${v.path}:${v.line} unregistered key "${v.key}"`);
   }
   const sections = [
-    ["tables", tablePaths, allowlist.tables, "raw <table>. Compose the shared table layer (PagedTable or RecordListView for lists, the ReportTable primitives for reports, Table in @openbooks/ui) instead of a lowercase <table>"],
-    ["dialogWindow", dialogPaths, allowlist.dialogWindow, "<dialog> or window.confirm/prompt/alert. Route the confirmation through the shared promptDialog flow in web/lib/prompt.tsx"],
-    ["bespokePages", bespokePaths, allowlist.bespokePages, "page.tsx without ModuleView or a native registered list. Compose the shared page machinery"],
+    [
+      "tables",
+      tablePaths,
+      allowlist.tables,
+      "raw <table>. Compose the shared table layer (PagedTable or RecordListView for lists, the ReportTable primitives for reports, Table in @openbooks/ui) instead of a lowercase <table>",
+    ],
+    [
+      "dialogWindow",
+      dialogPaths,
+      allowlist.dialogWindow,
+      "<dialog> or window.confirm/prompt/alert. Route the confirmation through the shared promptDialog flow in web/lib/prompt.tsx",
+    ],
+    [
+      "bespokePages",
+      bespokePaths,
+      allowlist.bespokePages,
+      "page.tsx without ModuleView or a native registered list. Compose the shared page machinery",
+    ],
   ];
   for (const [name, paths, entries, remedy] of sections) {
     const { fresh, stale } = reconcileFiles(paths, entries);
@@ -572,7 +745,9 @@ export function main() {
     }
     if (stale.length > 0) {
       failed = true;
-      console.error(`FAIL "${name}" entries no longer violate (fixed — remove from ${ALLOWLIST_PATH}):`);
+      console.error(
+        `FAIL "${name}" entries no longer violate (fixed — remove from ${ALLOWLIST_PATH}):`,
+      );
       for (const entry of stale) console.error(`  ${entry.path}`);
     }
   }

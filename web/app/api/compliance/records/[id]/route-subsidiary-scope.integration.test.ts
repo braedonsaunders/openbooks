@@ -12,10 +12,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "", allowedSubsidiaryIds: null as ReadonlySet<string> | null };
 Object.assign(globalThis, { __compliancePatchScopeState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function getAuthz() {
@@ -39,7 +45,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PATCH } = await import("./route.ts");
 
 async function fixture() {
@@ -53,31 +60,55 @@ async function fixture() {
   const hiddenProjectId = randomUUID();
   const visibleProjectId = randomUUID();
   const classId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
     values (${hiddenPartyId},${org.orgId},'vendor','Hidden vendor',${branchId},true,'{}'::jsonb),
-           (${visiblePartyId},${org.orgId},'vendor','Visible vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`
+           (${visiblePartyId},${org.orgId},'vendor','Visible vendor',${org.subsidiaryId},true,'{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into compliance_classes (id, org_id, code, name, lien_waiver_enforcement, default_information_return, created_by, updated_by)
-    values (${classId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
+    values (${classId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into vendor_roles (org_id, party_id, compliance_class_id, created_by, updated_by)
     values (${org.orgId}, ${hiddenPartyId}, ${classId}, ${actorId}, ${actorId}),
-           (${org.orgId}, ${visiblePartyId}, ${classId}, ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+           (${org.orgId}, ${visiblePartyId}, ${classId}, ${actorId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
     values (${hiddenProjectId},${org.orgId},${branchId},'HID','Hidden project',${org.customerId},'active',true,'{}'::jsonb),
-           (${visibleProjectId},${org.orgId},${org.subsidiaryId},'VIS','Visible project',${org.customerId},'active',true,'{}'::jsonb)`));
-  const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+           (${visibleProjectId},${org.orgId},${org.subsidiaryId},'VIS','Visible project',${org.customerId},'active',true,'{}'::jsonb)`),
+  );
+  const requirementId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
     insert into compliance_requirements (org_id, code, name, category, class_id, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', ${classId}, 'block_payment', ${actorId}, ${actorId})
-    returning id`, "objects")))[0]!.id;
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
   const recordFor = async (partyId: string, projectId: string) =>
-    (await withBypassContext(() => db.execute<{ id: string }>(sql`
+    (
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
       insert into compliance_records (org_id, party_id, requirement_id, project_id, effective_from, coverage_amount, created_by, updated_by)
       values (${org.orgId}, ${partyId}, ${requirementId}, ${projectId}, '2026-01-01', '1000000.00', ${actorId}, ${actorId})
-      returning id`, "objects")))[0]!.id;
+      returning id`,
+          "objects",
+        ),
+      )
+    )[0]!.id;
   return {
     org,
     hiddenRecordId: await recordFor(hiddenPartyId, visibleProjectId),
@@ -100,7 +131,11 @@ const patch = (recordId: string, body: unknown) =>
 
 async function coverageOf(recordId: string): Promise<string> {
   const rows = await withBypassContext(() =>
-    db.execute<{ coverage_amount: string }>(sql`select coverage_amount from compliance_records where id = ${recordId}`, "objects"));
+    db.execute<{ coverage_amount: string }>(
+      sql`select coverage_amount from compliance_records where id = ${recordId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.coverage_amount;
 }
 

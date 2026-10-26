@@ -12,23 +12,20 @@ import test from "node:test";
 import { cmp } from "../../money/money.ts";
 import { PayrollError } from "../error.ts";
 import { resolveCertificate } from "../certificates.ts";
-import { EMPTY_EMPLOYER_LEVY_FACTORS, type PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import {
+  EMPTY_EMPLOYER_LEVY_FACTORS,
+  type PayrollStatutoryComputeContext,
+} from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";
-import {
-  ItPayrollRefusal,
-  computeItStatutoryWithRates,
-} from "./compute-statutory.ts";
+import { ItPayrollRefusal, computeItStatutoryWithRates } from "./compute-statutory.ts";
 import { IT_PACK_FILINGS } from "./filings.ts";
 import { IT_JURISDICTIONS } from "./jurisdictions.ts";
 import { IT_PAYROLL_PACK } from "./pack.ts";
 import { IT_PACK_RATES, IT_TAX_YEARS } from "./rates.ts";
 import { IT_REGION_CODES } from "./regions.ts";
 import { IT_WITHHOLDING } from "./withholding.ts";
-import {
-  jurisdictionKey,
-  payrollJurisdictionDeclared,
-} from "../packs.ts";
+import { jurisdictionKey, payrollJurisdictionDeclared } from "../packs.ts";
 import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
 test("IT pack is installable for 2025, computes in EUR on the calendar year", () => {
@@ -45,16 +42,20 @@ test("IT pack is installable for 2025, computes in EUR on the calendar year", ()
 
 test("statutory slots name IRPEF, both addizionali, and both INPS shares", () => {
   const slots = IT_PAYROLL_PACK.statutorySlots;
-  assert.deepEqual(slots.map((slot) => slot.key), [
-    "irpef",
-    "sostitutive",
-    "addizionale_regionale",
-    "addizionale_comunale",
-    "inps",
-  ]);
+  assert.deepEqual(
+    slots.map((slot) => slot.key),
+    ["irpef", "sostitutive", "addizionale_regionale", "addizionale_comunale", "inps"],
+  );
   const byKey = new Map(slots.map((slot) => [slot.key, slot]));
   const sostitutive = byKey.get("sostitutive")?.components ?? [];
-  assert.deepEqual(sostitutive.map((c) => [c.systemKey, c.kind, c.assessedOn]), [["sostitutiva_rinnovi", "deduction", "earnings"], ["sostitutiva_turni", "deduction", "earnings"], ["sostitutiva_premi", "deduction", "earnings"]]);
+  assert.deepEqual(
+    sostitutive.map((c) => [c.systemKey, c.kind, c.assessedOn]),
+    [
+      ["sostitutiva_rinnovi", "deduction", "earnings"],
+      ["sostitutiva_turni", "deduction", "earnings"],
+      ["sostitutiva_premi", "deduction", "earnings"],
+    ],
+  );
   assert.equal(byKey.get("irpef")?.components[0]?.systemKey, "income_tax");
   assert.equal(byKey.get("addizionale_regionale")?.components[0]?.systemKey, "regional_surtax");
   assert.equal(byKey.get("addizionale_comunale")?.components[0]?.systemKey, "municipal_surtax");
@@ -62,7 +63,10 @@ test("statutory slots name IRPEF, both addizionali, and both INPS shares", () =>
     assert.equal(byKey.get(key)?.components[0]?.assessedOn, "taxable_income", key);
   }
   const inps = byKey.get("inps")?.components ?? [];
-  assert.deepEqual(inps.map((c) => c.kind), ["deduction", "employer_contribution"]);
+  assert.deepEqual(
+    inps.map((c) => c.kind),
+    ["deduction", "employer_contribution"],
+  );
   for (const component of inps) {
     assert.equal(component.assessedOn, "earnings", component.code);
     assert.equal(component.systemKey, "inps", component.code);
@@ -73,21 +77,27 @@ test("statutory slots name IRPEF, both addizionali, and both INPS shares", () =>
   // pushes refunds through declared credit rows because the remittance only
   // nets credit-KIND components.
   const irpef = byKey.get("irpef")?.components ?? [];
-  assert.deepEqual(irpef.map((c) => c.code), ["IRPEF", "CONG-IRPEF", "TI", "SOMMA", "SPECIALE"]);
+  assert.deepEqual(
+    irpef.map((c) => c.code),
+    ["IRPEF", "CONG-IRPEF", "TI", "SOMMA", "SPECIALE"],
+  );
   for (const component of irpef.slice(1)) {
     assert.equal(component.kind, "credit", component.code);
     assert.equal(component.assessedOn, "earnings", component.code);
     assert.equal(component.remittance, "tax_authority", component.code);
   }
-  assert.deepEqual(irpef.slice(1).map((c) => c.systemKey), ["income_tax", "ti_payout", "somma_payout", "speciale_payout"]);
+  assert.deepEqual(
+    irpef.slice(1).map((c) => c.systemKey),
+    ["income_tax", "ti_payout", "somma_payout", "speciale_payout"],
+  );
 });
 
 test("tenant-entered surtax slots: regionale per region, comunale per sub-region", () => {
   assert.equal(IT_PACK_RATES.country, "IT");
-  assert.deepEqual(IT_PACK_RATES.slots.map((s) => s.key), [
-    "it_addizionale_regionale",
-    "it_addizionale_comunale",
-  ]);
+  assert.deepEqual(
+    IT_PACK_RATES.slots.map((s) => s.key),
+    ["it_addizionale_regionale", "it_addizionale_comunale"],
+  );
   const [reg, com] = IT_PACK_RATES.slots;
   assert.equal(reg!.scope, "region");
   assert.deepEqual(reg!.systemKeys, ["regional_surtax"]);
@@ -162,11 +172,13 @@ test("missing post-1995 seniority stays unknown and refuses when it changes IVS 
   // IVS seniority gate: an unanswered term refuses first, by design.
   const certificate = resolveCertificate({
     certificate: IT_CERTIFICATES.certificates.find((c) => c.key === "it_detrazioni")!,
-    stored: [{
-      certificateKey: "it_detrazioni",
-      answers: { tempo_determinato: "false" },
-      effectiveFrom: "2026-01-01",
-    }],
+    stored: [
+      {
+        certificateKey: "it_detrazioni",
+        answers: { tempo_determinato: "false" },
+        effectiveFrom: "2026-01-01",
+      },
+    ],
   });
   assert.equal(certificate.answers["anzianita_post_1995"], null);
   const { ctx: base } = fakeCtx({ taxYear: 2026 });
@@ -177,9 +189,12 @@ test("missing post-1995 seniority stays unknown and refuses when it changes IVS 
     certificateFor: () => certificate,
   } as PayrollStatutoryComputeContext;
   await assert.rejects(
-    () => computeItStatutoryWithRates(highBase, {
-      regionalRate: "1.23", municipalRate: "0.8", municipalExemption: null,
-    }),
+    () =>
+      computeItStatutoryWithRates(highBase, {
+        regionalRate: "1.23",
+        municipalRate: "0.8",
+        municipalExemption: null,
+      }),
     /IVS base.*122295.*anzianita_post_1995/,
   );
 });
@@ -209,7 +224,10 @@ function fakeCtx(overrides: {
   pensionableNonPeriodic?: string;
   region?: string;
   answers?: Record<string, string | null>;
-}): { ctx: PayrollStatutoryComputeContext; pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] } {
+}): {
+  ctx: PayrollStatutoryComputeContext;
+  pushed: { systemKey: string; kind: string; amount: string; sequence: number }[];
+} {
   const pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] = [];
   const answers = overrides.answers ?? {
     domicilio_comune: "H501",
@@ -222,8 +240,11 @@ function fakeCtx(overrides: {
     altri_familiari_a_carico: null,
   };
   const ctx = {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     taxYear: overrides.taxYear ?? 2025,
     income: overrides.income ?? "2500.00",
     nonPeriodic: overrides.nonPeriodic ?? "0",
@@ -260,12 +281,12 @@ function fakeCtx(overrides: {
     certificateFor: (key) =>
       key === "it_detrazioni"
         ? {
-          certificate: IT_CERTIFICATES.certificates.find((c) => c.key === "it_detrazioni")!,
-          onFile: true,
-          effectiveFrom: null,
-          answers,
-          missing: [],
-        }
+            certificate: IT_CERTIFICATES.certificates.find((c) => c.key === "it_detrazioni")!,
+            onFile: true,
+            effectiveFrom: null,
+            answers,
+            missing: [],
+          }
         : null,
     bool: (value) => value === "true",
     assertRegionSupported: () => {},
@@ -342,7 +363,10 @@ test("monthly adapter prices the surtax advance instead of refusing without bala
   const regional = pushed.find((line) => line.systemKey === "regional_surtax");
   const municipal = pushed.find((line) => line.systemKey === "municipal_surtax");
   assert.ok(regional && cmp(regional.amount, "0") !== 0, "the regional advance prices, never zero");
-  assert.ok(municipal && cmp(municipal.amount, "0") !== 0, "the municipal advance prices, never zero");
+  assert.ok(
+    municipal && cmp(municipal.amount, "0") !== 0,
+    "the municipal advance prices, never zero",
+  );
   assert.equal(result.ADDREG, regional!.amount);
   assert.equal(result.ADDCOM, municipal!.amount);
 });
@@ -351,7 +375,10 @@ test("CU is populated with a slip; the 770 stays declared and refused", async ()
   assert.equal(IT_PACK_FILINGS.country, "IT");
   assert.deepEqual(
     IT_PACK_FILINGS.yearEnd.map((filing) => [filing.key, filing.cadence]),
-    [["cu", "annual"], ["770", "annual"]],
+    [
+      ["cu", "annual"],
+      ["770", "annual"],
+    ],
   );
   const cu = IT_PACK_FILINGS.yearEnd.find((filing) => filing.key === "cu")!;
   assert.ok(cu.slip, "the CU declares its employee slip builder");

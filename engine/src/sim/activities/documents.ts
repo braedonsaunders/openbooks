@@ -46,13 +46,18 @@ export function postingDeps(world: SimOrg): PostingDeps {
       // Route employee reimbursements to their configured control account —
       // the kernel falls back to AP when this is omitted, which would strand
       // expense reports outside the employee-payable subledger the org wired.
-      ...(world.accounts.employeePayable ? { employeePayable: world.accounts.employeePayable } : {}),
+      ...(world.accounts.employeePayable
+        ? { employeePayable: world.accounts.employeePayable }
+        : {}),
     },
   };
 }
 
 /** Insert a document header + lines as a DRAFT (not posted). Returns its id. */
-export async function createDraftDocument(world: SimOrg, input: CreateDocInput): Promise<{ documentId: string; total: string }> {
+export async function createDraftDocument(
+  world: SimOrg,
+  input: CreateDocInput,
+): Promise<{ documentId: string; total: string }> {
   const total = sum(input.lines.map((l) => l.amount));
   const [doc] = await db
     .insert(schema.documents)
@@ -110,7 +115,9 @@ export async function releaseDraftIfUngated(
       createdBy: schema.documents.createdBy,
     })
     .from(schema.documents)
-    .where(sql`${schema.documents.id} = ${documentId} and ${schema.documents.orgId} = ${world.orgId}`);
+    .where(
+      sql`${schema.documents.id} = ${documentId} and ${schema.documents.orgId} = ${world.orgId}`,
+    );
   if (!doc) throw new Error("simulation document not found");
   if (doc.status === "approved") return actorId ?? doc.createdBy ?? world.actors.admin;
   if (doc.status !== "draft") {
@@ -170,8 +177,19 @@ export async function collectibleOpenItems(
   side: "ar" | "ap",
   kindsOverride?: string[],
 ): Promise<OpenItemRow[]> {
-  const kinds = kindsOverride ?? (side === "ar" ? ["customer_invoice", "customer_credit"] : ["vendor_bill", "vendor_credit"]);
-  const rows = (await db.execute<{ line_id: string; document_id: string; kind: string; due_date: string | null; expected_pay_date: string | null; custom: Record<string, unknown>; open: string }>(sql`
+  const kinds =
+    kindsOverride ??
+    (side === "ar" ? ["customer_invoice", "customer_credit"] : ["vendor_bill", "vendor_credit"]);
+  const rows = await db.execute<{
+    line_id: string;
+    document_id: string;
+    kind: string;
+    due_date: string | null;
+    expected_pay_date: string | null;
+    custom: Record<string, unknown>;
+    open: string;
+  }>(
+    sql`
     with lines as (
       select l.id as line_id, d.id as document_id, d.kind, d.due_date, d.expected_pay_date, d.custom, l.amount,
              coalesce((
@@ -181,12 +199,17 @@ export async function collectibleOpenItems(
         from documents d
         join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
        where d.org_id = ${orgId} and d.party_id = ${partyId} and d.status = 'posted'
-         and d.kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)})
+         and d.kind in (${sql.join(
+           kinds.map((k) => sql`${k}`),
+           sql`, `,
+         )})
     )
     select line_id, document_id, kind, due_date, expected_pay_date, custom,
            (abs(amount) - applied)::text as open
       from lines
-     where abs(amount) - applied > 0.005`, "objects"));
+     where abs(amount) - applied > 0.005`,
+    "objects",
+  );
   return rows.map((r) => ({
     lineId: r.line_id,
     documentId: r.document_id,

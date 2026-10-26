@@ -1,41 +1,81 @@
 /** Tracked migration apply, preflight gate, upgrade check, and the payment-link seal. Split from scripts/bootstrap.ts (pure moves only). */
-import { repoRoot, migrationsDir, sha256 } from "../bootstrap-paths"
-import { applyRowLevelSecurity } from "./database-roles"
-import { generatedMigrationFiles } from "./migration-files"
-import { readFileSync, readdirSync } from "node:fs"
-import pg from "pg"
-import { join } from "node:path"
-import { sealLegacyPaymentLinkTokens } from "@openbooks/engine/payments/payment-link-seal"
-import { requireDataKey } from "@openbooks/engine/platform/secrets"
-import { sql } from "drizzle-orm"
-import { db, env, pool } from "@openbooks/engine/platform/db"
-import { connectMigrationClient, describeBootstrapMigrationFailure, executeMigrationAttempt, executeMigrationBody, isLockNotAvailable, migrationLockConfig, migrationRetryDelayMs, migrationRunsWithoutTransaction, releaseMigrationClient, sanitizeMigrationContent } from "../bootstrap-migration-client.ts"
-import { assertReadOnlyPreflight, earlierPendingCreatesObject, evaluatePreflight, formatFinding, preflightDecisionFor, preflightDirFor, preflightStatementTimeoutMs, readNoneReason, readPreflightSql, validateFindingRows, type PreflightFinding } from "../migration-preflight.ts"
-import { assertBaselineHistory, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
-import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts"
-import { migrationBusinessOwnerRole, migrationRequiresMaintenanceAuthority } from "../migration-owner-authority.ts"
+import { repoRoot, migrationsDir, sha256 } from "../bootstrap-paths";
+import { applyRowLevelSecurity } from "./database-roles";
+import { generatedMigrationFiles } from "./migration-files";
+import { readFileSync, readdirSync } from "node:fs";
+import pg from "pg";
+import { join } from "node:path";
+import { sealLegacyPaymentLinkTokens } from "@openbooks/engine/payments/payment-link-seal";
+import { requireDataKey } from "@openbooks/engine/platform/secrets";
+import { sql } from "drizzle-orm";
+import { db, env, pool } from "@openbooks/engine/platform/db";
+import {
+  connectMigrationClient,
+  describeBootstrapMigrationFailure,
+  executeMigrationAttempt,
+  executeMigrationBody,
+  isLockNotAvailable,
+  migrationLockConfig,
+  migrationRetryDelayMs,
+  migrationRunsWithoutTransaction,
+  releaseMigrationClient,
+  sanitizeMigrationContent,
+} from "../bootstrap-migration-client.ts";
+import {
+  assertReadOnlyPreflight,
+  earlierPendingCreatesObject,
+  evaluatePreflight,
+  formatFinding,
+  preflightDecisionFor,
+  preflightDirFor,
+  preflightStatementTimeoutMs,
+  readNoneReason,
+  readPreflightSql,
+  validateFindingRows,
+  type PreflightFinding,
+} from "../migration-preflight.ts";
+import { assertBaselineHistory, releaseMigrationPlan } from "../migration-baseline-plan.mjs";
+import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts";
+import {
+  migrationBusinessOwnerRole,
+  migrationRequiresMaintenanceAuthority,
+} from "../migration-owner-authority.ts";
 
 /** Business DDL retains the installation's restricted owner. Catalog and
  * private-authority publishers keep the maintenance session's authority. */
 async function provisionedSchemaOwnerRole(client: pg.PoolClient): Promise<string | undefined> {
-  const row = (await client.query<{ owner: string; privileged: boolean; current: string }>(`select
+  const row = (
+    await client.query<{ owner: string; privileged: boolean; current: string }>(`select
       n.nspowner::regrole::text as owner, current_user::text as current,
       coalesce((select rolsuper from pg_roles where rolname=session_user), false) as privileged
-    from pg_namespace n where n.nspname='public'`)).rows[0];
+    from pg_namespace n where n.nspname='public'`)
+  ).rows[0];
   if (!row?.privileged) return undefined;
   if (env.OPENBOOKS_PRECREATED_ROLES === "1") {
-    const provisioned = (await client.query<{ owner: string; safe: boolean }>(`select r.rolname as owner,
+    const provisioned = (
+      await client.query<{ owner: string; safe: boolean }>(`select r.rolname as owner,
       not (r.rolsuper or r.rolbypassrls or r.rolcreatedb or r.rolcreaterole or r.rolreplication) as safe
-      from pg_database d join pg_roles r on r.oid=d.datdba where d.datname=current_database()`)).rows[0];
-    if (!provisioned?.safe) throw new Error("Host-managed installation requires a restricted database owner distinct from its maintenance administrator");
+      from pg_database d join pg_roles r on r.oid=d.datdba where d.datname=current_database()`)
+    ).rows[0];
+    if (!provisioned?.safe)
+      throw new Error(
+        "Host-managed installation requires a restricted database owner distinct from its maintenance administrator",
+      );
     return provisioned.owner;
   }
-  const established = (await client.query<{ owner: string; safe: boolean; isolated: boolean }>(`select r.rolname as owner,
+  const established = (
+    await client.query<{
+      owner: string;
+      safe: boolean;
+      isolated: boolean;
+    }>(`select r.rolname as owner,
       not (r.rolsuper or r.rolbypassrls or r.rolcreatedb or r.rolcreaterole or r.rolreplication) as safe,
       not pg_has_role(b.relowner,a.relowner,'MEMBER') as isolated
     from pg_class b join pg_roles r on r.oid=b.relowner cross join pg_class a
-    where b.oid=to_regclass('public.orgs') and a.oid=to_regclass('tenant_retirement.runs')`)).rows[0];
-  if (established?.safe && established.isolated && established.owner !== row.current) return established.owner;
+    where b.oid=to_regclass('public.orgs') and a.oid=to_regclass('tenant_retirement.runs')`)
+  ).rows[0];
+  if (established?.safe && established.isolated && established.owner !== row.current)
+    return established.owner;
   if (row.owner !== "openbooks_schema_owner" || row.current === row.owner) return undefined;
   return row.owner;
 }
@@ -83,17 +123,36 @@ async function executeTrackedMigration(
         transactional,
         lock,
         digest,
-        beforeBody: deferredPreflight ? async migrationClient => {
-          assertReadOnlyPreflight(deferredPreflight.filename, deferredPreflight.sql);
-          await migrationClient.query(`set local statement_timeout = ${preflightStatementTimeoutMs(env)}`);
-          const result = await migrationClient.query<Record<string, unknown>>(deferredPreflight.sql);
-          const findings = validateFindingRows(deferredPreflight.filename, deferredPreflight.ordinal, result.rows);
-          printPreflightFindings(findings);
-          const codes = findings.filter(finding => finding.severity === "refuse").map(finding => finding.code);
-          if (codes.length) throw new Error(`[bootstrap] migration preflight ${filename} refuses this upgrade (${[...new Set(codes)].join(", ")}); this migration and its ledger record were not applied`);
-          await migrationClient.query("set local statement_timeout = 0");
-        } : undefined,
-        schemaOwnerRole: migrationBusinessOwnerRole(filename,digest,await provisionedSchemaOwnerRole(client)),
+        beforeBody: deferredPreflight
+          ? async (migrationClient) => {
+              assertReadOnlyPreflight(deferredPreflight.filename, deferredPreflight.sql);
+              await migrationClient.query(
+                `set local statement_timeout = ${preflightStatementTimeoutMs(env)}`,
+              );
+              const result = await migrationClient.query<Record<string, unknown>>(
+                deferredPreflight.sql,
+              );
+              const findings = validateFindingRows(
+                deferredPreflight.filename,
+                deferredPreflight.ordinal,
+                result.rows,
+              );
+              printPreflightFindings(findings);
+              const codes = findings
+                .filter((finding) => finding.severity === "refuse")
+                .map((finding) => finding.code);
+              if (codes.length)
+                throw new Error(
+                  `[bootstrap] migration preflight ${filename} refuses this upgrade (${[...new Set(codes)].join(", ")}); this migration and its ledger record were not applied`,
+                );
+              await migrationClient.query("set local statement_timeout = 0");
+            }
+          : undefined,
+        schemaOwnerRole: migrationBusinessOwnerRole(
+          filename,
+          digest,
+          await provisionedSchemaOwnerRole(client),
+        ),
         executeBody: executeMigrationBody,
       });
       return;
@@ -102,9 +161,9 @@ async function executeTrackedMigration(
       if (isLockNotAvailable(err) && attempt < lock.maxAttempts) {
         const backoffMs = migrationRetryDelayMs(lock, attempt);
         console.log(
-          `[bootstrap] ${filename} could not acquire a lock on attempt `
-            + `${attempt}/${lock.maxAttempts} (lock_timeout ${lock.lockTimeoutMs}ms); `
-            + `retrying in ${backoffMs}ms`,
+          `[bootstrap] ${filename} could not acquire a lock on attempt ` +
+            `${attempt}/${lock.maxAttempts} (lock_timeout ${lock.lockTimeoutMs}ms); ` +
+            `retrying in ${backoffMs}ms`,
         );
         await new Promise<void>((resolve) => setTimeout(resolve, backoffMs));
         continue;
@@ -123,9 +182,9 @@ async function applyTracked(
   deferredPreflight?: DeferredPreflight,
 ): Promise<boolean> {
   const digest = sha256(content);
-  const seen = (await db.execute<{ sha256: string }>(sql`
+  const seen = await db.execute<{ sha256: string }>(sql`
     select sha256 from public._applied_migrations where filename = ${filename}
-  `));
+  `);
   const recordedRow = seen.rows[0];
   if (recordedRow) {
     if (recordedRow.sha256 !== digest) {
@@ -254,8 +313,8 @@ async function evaluatePendingMigrations(
       if (decision.kind === "missing") {
         report.missingDecisions.push(item.filename);
         console.log(
-          `[bootstrap] migration preflight: ${item.filename} has no decision file; `
-            + `add schema/migrations/preflight/${item.file.replace(/\.sql$/, ".sql")} or .none`,
+          `[bootstrap] migration preflight: ${item.filename} has no decision file; ` +
+            `add schema/migrations/preflight/${item.file.replace(/\.sql$/, ".sql")} or .none`,
         );
         continue;
       }
@@ -288,14 +347,19 @@ async function evaluatePendingMigrations(
       if (evaluation.status === "deferred") {
         if (!earlierPendingCreatesObject(evaluation.reason, earlierContents, sqlText)) {
           throw new Error(
-            `[bootstrap] migration preflight ${item.filename} cannot evaluate: ${evaluation.reason}; `
-              + `no earlier pending migration creates that object, so this is not a deferral — fix the preflight or the schema`,
+            `[bootstrap] migration preflight ${item.filename} cannot evaluate: ${evaluation.reason}; ` +
+              `no earlier pending migration creates that object, so this is not a deferral — fix the preflight or the schema`,
           );
         }
-        report.deferred.push({ file: item.file, filename: item.filename, ordinal: item.ordinal, sql: sqlText });
+        report.deferred.push({
+          file: item.file,
+          filename: item.filename,
+          ordinal: item.ordinal,
+          sql: sqlText,
+        });
         console.log(
-          `[bootstrap] migration preflight ${item.filename} is deferred: it needs an object an earlier `
-            + `pending migration creates, so it runs at apply time (${evaluation.reason})`,
+          `[bootstrap] migration preflight ${item.filename} is deferred: it needs an object an earlier ` +
+            `pending migration creates, so it runs at apply time (${evaluation.reason})`,
         );
         continue;
       }
@@ -323,9 +387,9 @@ function throwOnMissingDecisions(report: PendingPreflightReport): void {
   if (report.missingDecisions.length === 0) return;
   const missing = [...report.missingDecisions].sort();
   throw new Error(
-    `[bootstrap] ${missing.length} pending migration(s) have no preflight decision file: ${missing.join(", ")}. `
-      + `Add schema/migrations/preflight/<basename>.sql or <basename>.none for each; `
-      + `see docs/operations/upgrades.md#migration-preflights. No migration was applied.`,
+    `[bootstrap] ${missing.length} pending migration(s) have no preflight decision file: ${missing.join(", ")}. ` +
+      `Add schema/migrations/preflight/<basename>.sql or <basename>.none for each; ` +
+      `see docs/operations/upgrades.md#migration-preflights. No migration was applied.`,
   );
 }
 
@@ -349,8 +413,8 @@ async function runPreflightGate(
   if (refusals.length > 0) {
     const codes = [...new Set(refusals.map((finding) => finding.code))].sort().join(", ");
     throw new Error(
-      `[bootstrap] migration preflights refuse this upgrade (${codes}). Every finding above names its remedy; `
-        + `resolve them, then re-run bootstrap. No migration was applied.`,
+      `[bootstrap] migration preflights refuse this upgrade (${codes}). Every finding above names its remedy; ` +
+        `resolve them, then re-run bootstrap. No migration was applied.`,
     );
   }
   if (report.findings.length > 0) {
@@ -374,13 +438,19 @@ async function runDeferredPreflight(
 ): Promise<void> {
   const client = await connectMigrationClient();
   try {
-    const evaluation = await evaluatePreflight(client, deferred.filename, deferred.ordinal, deferred.sql, {
-      statementTimeoutMs: preflightStatementTimeoutMs(env),
-    });
+    const evaluation = await evaluatePreflight(
+      client,
+      deferred.filename,
+      deferred.ordinal,
+      deferred.sql,
+      {
+        statementTimeoutMs: preflightStatementTimeoutMs(env),
+      },
+    );
     if (evaluation.status === "deferred") {
       throw new Error(
-        `[bootstrap] migration preflight ${deferred.filename} still cannot see its objects at apply time `
-          + `(${evaluation.reason}); the earlier migration that should create them did not`,
+        `[bootstrap] migration preflight ${deferred.filename} still cannot see its objects at apply time ` +
+          `(${evaluation.reason}); the earlier migration that should create them did not`,
       );
     }
     printPreflightFindings(evaluation.findings);
@@ -389,12 +459,13 @@ async function runDeferredPreflight(
     const codes = [...new Set(refusals.map((finding) => finding.code))].sort().join(", ");
     const applied = appliedThisRun.length > 0 ? appliedThisRun.join(", ") : "(none)";
     throw new Error(
-      `[bootstrap] migration preflight ${deferred.filename} refuses this upgrade (${codes}). `
-        + `Migrations already applied in this run: ${applied}. Every finding above names its remedy; `
-        + `resolve them, then re-run bootstrap.`,
+      `[bootstrap] migration preflight ${deferred.filename} refuses this upgrade (${codes}). ` +
+        `Migrations already applied in this run: ${applied}. Every finding above names its remedy; ` +
+        `resolve them, then re-run bootstrap.`,
     );
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("[bootstrap] migration preflight")) throw error;
+    if (error instanceof Error && error.message.startsWith("[bootstrap] migration preflight"))
+      throw error;
     throw new Error(
       `[bootstrap] migration preflight ${deferred.filename} failed to evaluate at apply time: ${
         error instanceof Error ? error.message : String(error)
@@ -459,15 +530,17 @@ export async function runUpgradeCheckMain(json: boolean): Promise<number> {
     }
     if (result.evaluated.length > 0 && !result.leastPrivilege) {
       console.log(
-        "[bootstrap] upgrade check ran as the connecting role because SET LOCAL ROLE openbooks_read was refused; "
-          + "grant the check login membership in openbooks_read to prove least privilege",
+        "[bootstrap] upgrade check ran as the connecting role because SET LOCAL ROLE openbooks_read was refused; " +
+          "grant the check login membership in openbooks_read to prove least privilege",
       );
     }
   };
   if (freshInstall) {
     emit();
     if (!json) {
-      console.log("[bootstrap] upgrade check: empty installation history and schema; nothing to preflight");
+      console.log(
+        "[bootstrap] upgrade check: empty installation history and schema; nothing to preflight",
+      );
     }
     return 0;
   }
@@ -514,11 +587,24 @@ export async function migrate(): Promise<void> {
   // A legacy database must prove adoption before role refresh, preflights or
   // schema writes can reinterpret its installation history.
   const freshInstall = await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
-  const recordedBeforeApply = ledgerPreexisted ? await readAppliedMigrationFilenames() : new Set<string>();
-  const maintenance = plan.filenames.filter(filename => !recordedBeforeApply.has(filename) && migrationRequiresMaintenanceAuthority(filename));
-  if (maintenance.length && !(await pool.query<{ privileged: boolean }>(
-    "select rolsuper as privileged from pg_roles where rolname=session_user")).rows[0]?.privileged) {
-    throw new Error(`[bootstrap] pending migrations require the database host's PostgreSQL maintenance administrator (${maintenance.join(", ")}); run this native bootstrap with that administrator as OPENBOOKS_MIGRATION_DB_URL, retaining the restricted runtime and database-owner roles. No migration was applied.`);
+  const recordedBeforeApply = ledgerPreexisted
+    ? await readAppliedMigrationFilenames()
+    : new Set<string>();
+  const maintenance = plan.filenames.filter(
+    (filename) =>
+      !recordedBeforeApply.has(filename) && migrationRequiresMaintenanceAuthority(filename),
+  );
+  if (
+    maintenance.length &&
+    !(
+      await pool.query<{ privileged: boolean }>(
+        "select rolsuper as privileged from pg_roles where rolname=session_user",
+      )
+    ).rows[0]?.privileged
+  ) {
+    throw new Error(
+      `[bootstrap] pending migrations require the database host's PostgreSQL maintenance administrator (${maintenance.join(", ")}); run this native bootstrap with that administrator as OPENBOOKS_MIGRATION_DB_URL, retaining the restricted runtime and database-owner roles. No migration was applied.`,
+    );
   }
   await db.execute(sql`
     create table if not exists public._applied_migrations (
@@ -531,8 +617,13 @@ export async function migrate(): Promise<void> {
     const client = await connectMigrationClient();
     try {
       const owner = await provisionedSchemaOwnerRole(client);
-      if (owner) await client.query(`alter table public._applied_migrations owner to ${pg.escapeIdentifier(owner)}`);
-    } finally { await releaseMigrationClient(client); }
+      if (owner)
+        await client.query(
+          `alter table public._applied_migrations owner to ${pg.escapeIdentifier(owner)}`,
+        );
+    } finally {
+      await releaseMigrationClient(client);
+    }
   }
 
   const applied = await readAppliedMigrationFilenames();
@@ -540,7 +631,9 @@ export async function migrate(): Promise<void> {
   await ensureRetirementAuthorityOwnership();
   let deferred: DeferredPreflight[] = [];
   if (freshInstall) {
-    console.log("[bootstrap] fresh install: empty installation history and schema; nothing to preflight");
+    console.log(
+      "[bootstrap] fresh install: empty installation history and schema; nothing to preflight",
+    );
   } else {
     deferred = await runPreflightGate(pending, readUnappliedContents(plan.filenames, applied));
   }
@@ -550,8 +643,17 @@ export async function migrate(): Promise<void> {
     const content = readFileSync(join(migrationsDir, filename), "utf8");
     const deferredPreflight = deferred.find((candidate) => candidate.filename === filename);
     const transactional = !migrationRunsWithoutTransaction(content);
-    if (deferredPreflight && !transactional) await runDeferredPreflight(deferredPreflight, appliedThisRun);
-    if (await applyTracked("migration", filename, content, transactional ? deferredPreflight : undefined)) appliedThisRun.push(filename);
+    if (deferredPreflight && !transactional)
+      await runDeferredPreflight(deferredPreflight, appliedThisRun);
+    if (
+      await applyTracked(
+        "migration",
+        filename,
+        content,
+        transactional ? deferredPreflight : undefined,
+      )
+    )
+      appliedThisRun.push(filename);
     // The baseline is applied with maintenance authority; every business
     // object then passes to the business owner before forward migrations run.
     if (filename === plan.baseline?.filename) await ensureRetirementAuthorityOwnership();
@@ -564,7 +666,10 @@ export async function migrate(): Promise<void> {
   await ensureRetirementAuthorityOwnership();
 }
 
-async function assertReleaseBaselineReady(baseline: ReturnType<typeof releaseMigrationPlan>["baseline"], ledgerExists: boolean): Promise<boolean> {
+async function assertReleaseBaselineReady(
+  baseline: ReturnType<typeof releaseMigrationPlan>["baseline"],
+  ledgerExists: boolean,
+): Promise<boolean> {
   const recorded = ledgerExists
     ? (await pool.query("select filename, sha256 from public._applied_migrations")).rows
     : [];

@@ -38,7 +38,8 @@ export async function listApplicationRoleParties(
     and p.is_active
     and ${ROLE_CONDITIONS[role]}
     ${like ? sql` and (p.display_name ilike ${like} or p.short_code ilike ${like} or p.email ilike ${like})` : sql``}`;
-  const rows = await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select p.id, p.display_name, p.short_code, p.email, p.phone, p.is_active,
            cr.credit_limit::text as credit_limit, cr.currency as customer_currency, cr.is_on_hold as customer_on_hold,
            vr.currency as vendor_currency, vr.is_on_hold as vendor_on_hold, vr.payment_method,
@@ -50,7 +51,9 @@ export async function listApplicationRoleParties(
      where ${where}
      order by p.display_name
      limit ${limit}
-  `, "objects");
+  `,
+    "objects",
+  );
   return {
     role,
     parties: rows.map((row) => {
@@ -67,7 +70,8 @@ export async function listApplicationRoleParties(
           ...base,
           currency: row.customer_currency,
           isOnHold: row.customer_on_hold,
-          creditLimit: row.credit_limit == null ? null : normalizeMoneyValue(String(row.credit_limit)),
+          creditLimit:
+            row.credit_limit == null ? null : normalizeMoneyValue(String(row.credit_limit)),
         };
       }
       if (role === "vendor") {

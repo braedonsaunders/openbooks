@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { ChevronDown, Check } from 'lucide-react'
-import { Button, Popover, cn } from '@openbooks/ui'
-import { buildHref, pickString } from '../lib/list-params'
-import { readApiErrorMessage } from '../lib/api-error'
-import { menuArrowKeys } from './menu-a11y'
-import type { ListViewRow } from '../lib/customization/resolve'
-import { displayListViewName } from '../lib/customization/display'
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { ChevronDown, Check } from "lucide-react";
+import { Button, Popover, cn } from "@openbooks/ui";
+import { buildHref, pickString } from "../lib/list-params";
+import { readApiErrorMessage } from "../lib/api-error";
+import { menuArrowKeys } from "./menu-a11y";
+import type { ListViewRow } from "../lib/customization/resolve";
+import { displayListViewName } from "../lib/customization/display";
 
 /**
  * Saved-list-view picker for a record list page. Lists the views available to
@@ -28,38 +28,38 @@ export function ViewsMenu({
   currentParams,
   canManage,
 }: {
-  available: ListViewRow[]
-  currentId: string | null
-  currentName: string
-  recordType: string
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
+  available: ListViewRow[];
+  currentId: string | null;
+  currentName: string;
+  recordType: string;
+  basePath: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
 }) {
-  const t = useTranslations('customization.views')
-  const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const q = pickString(currentParams.q)
-  const manageScope = canManage ? 'all' : 'user'
+  const t = useTranslations("customization.views");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const q = pickString(currentParams.q);
+  const manageScope = canManage ? "all" : "user";
 
   const setDefault = async (viewId: string | null) => {
-    setBusy(true)
+    setBusy(true);
     try {
-      const res = await fetch('/api/customization/list-preferences', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/customization/list-preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recordType, viewId }),
-      })
-      if (res.ok) toast.success(viewId ? t('setDefaultDone') : t('clearDefaultDone'))
-      else toast.error(await readApiErrorMessage(res, t('setDefaultFailed')))
+      });
+      if (res.ok) toast.success(viewId ? t("setDefaultDone") : t("clearDefaultDone"));
+      else toast.error(await readApiErrorMessage(res, t("setDefaultFailed")));
     } catch {
-      toast.error(t('setDefaultFailed'))
+      toast.error(t("setDefaultFailed"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-    router.refresh()
-  }
+    router.refresh();
+  };
 
   return (
     <Popover
@@ -76,15 +76,15 @@ export function ViewsMenu({
           aria-expanded={open}
           aria-haspopup="menu"
         >
-          <span className="text-xs text-slate-500 dark:text-slate-400">{t('label')}</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">{t("label")}</span>
           <span className="max-w-[12rem] truncate font-medium">{currentName}</span>
           <ChevronDown size={14} className="text-slate-400" />
         </Button>
       }
     >
-      <div className="py-1 text-sm" role="menu" aria-label={t('label')} onKeyDown={menuArrowKeys}>
+      <div className="py-1 text-sm" role="menu" aria-label={t("label")} onKeyDown={menuArrowKeys}>
         {available.length === 0 ? (
-          <div className="px-3 py-2 text-slate-500">{t('none')}</div>
+          <div className="px-3 py-2 text-slate-500">{t("none")}</div>
         ) : (
           available.map((v) => (
             <Link
@@ -93,16 +93,22 @@ export function ViewsMenu({
               role="menuitem"
               onClick={() => setOpen(false)}
               className={cn(
-                'flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/60',
-                v.id === currentId && 'text-teal-700 dark:text-teal-300',
+                "flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800/60",
+                v.id === currentId && "text-teal-700 dark:text-teal-300",
               )}
             >
-              <span className="flex-1 truncate">{displayListViewName(v.name, t('defaultName'))}</span>
-              {v.scope === 'org' ? (
-                <span className="text-[10px] uppercase tracking-wide text-slate-400">{t('orgBadge')}</span>
+              <span className="flex-1 truncate">
+                {displayListViewName(v.name, t("defaultName"))}
+              </span>
+              {v.scope === "org" ? (
+                <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                  {t("orgBadge")}
+                </span>
               ) : null}
               {v.isDefault ? (
-                <span className="text-[10px] uppercase tracking-wide text-slate-400">{t('defaultBadge')}</span>
+                <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                  {t("defaultBadge")}
+                </span>
               ) : null}
               {v.id === currentId ? <Check size={14} /> : null}
             </Link>
@@ -116,7 +122,7 @@ export function ViewsMenu({
             onClick={() => setDefault(currentId)}
             className="w-full px-3 py-1.5 text-left text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800/60"
           >
-            {t('setDefault')}
+            {t("setDefault")}
           </button>
           <button
             type="button"
@@ -125,7 +131,7 @@ export function ViewsMenu({
             onClick={() => setDefault(null)}
             className="w-full px-3 py-1.5 text-left text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800/60"
           >
-            {t('useSystemDefault')}
+            {t("useSystemDefault")}
           </button>
           <Link
             href={`/admin/customization?recordType=${encodeURIComponent(recordType)}&tab=views&view=new&scope=${manageScope}`}
@@ -133,7 +139,7 @@ export function ViewsMenu({
             onClick={() => setOpen(false)}
             className="block px-3 py-1.5 text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60"
           >
-            {t('newView')}
+            {t("newView")}
           </Link>
           <Link
             href={`/admin/customization?recordType=${encodeURIComponent(recordType)}&tab=views&scope=${manageScope}`}
@@ -141,10 +147,10 @@ export function ViewsMenu({
             onClick={() => setOpen(false)}
             className="block px-3 py-1.5 text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60"
           >
-            {t('manage')}
+            {t("manage")}
           </Link>
         </div>
       </div>
     </Popover>
-  )
+  );
 }

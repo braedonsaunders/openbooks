@@ -50,9 +50,7 @@ import { enqueueStorageCleanupStandalone } from "../platform/storage-cleanup.ts"
 
 export type EmailQueuedJobProbe = (jobId: string) => Promise<unknown>;
 
-export type RemoveStagedAttachments = (
-  attachments: EmailAttachment[] | undefined,
-) => Promise<void>;
+export type RemoveStagedAttachments = (attachments: EmailAttachment[] | undefined) => Promise<void>;
 
 export type UncertainEnqueueSettlement = {
   outcome: "already-queued";

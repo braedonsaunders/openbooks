@@ -18,11 +18,7 @@ export async function hasFlowDecisionAuthority(input: {
   const permission = adapter?.decisionPermission
     ? await adapter.decisionPermission(subjectId, userId)
     : adapter?.permissions?.approve;
-  if (
-    !adapter ||
-    !permission ||
-    !(await actorHasPermission(db, orgId, userId, permission))
-  )
+  if (!adapter || !permission || !(await actorHasPermission(db, orgId, userId, permission)))
     return false;
   const scope = await actorAllowedSubsidiaryIds(db, orgId, userId);
   if (scope === null) return true;
